@@ -88,7 +88,10 @@ function fmt_datetime(?string $d): string {
 
 // --- Kg biçimle ---
 function fmt_kg($v): string {
-    return number_format((float)$v, 3, ',', '.');
+    $s = number_format((float)$v, 3, ',', '.');
+    $s = rtrim($s, '0');
+    $s = rtrim($s, ',');
+    return $s;
 }
 
 function fmt_money($v): string {
