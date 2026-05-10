@@ -309,26 +309,22 @@ render_header('Kayıt #' . $id, $print);
         </tbody>
         <tfoot>
         <tr class="totals-row">
-            <td colspan="7" class="right strong">TOPLAM</td>
+            <td class="right strong">TOPLAM</td>
+            <td class="num strong">
+                <?= (int)$tot['toplam_kasa'] ?>
+                <?php if (!empty($kasa_breakdown)): ?>
+                <div style="font-size:.72rem;font-weight:normal;margin-top:3px;line-height:1.5;white-space:nowrap">
+                    <?php foreach ($kasa_breakdown as $name => $adet): ?>
+                    <div><?= h($name) ?>: <b><?= $adet ?></b></div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </td>
+            <td colspan="5"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_dara'])) ?></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_net'])) ?></td>
         </tr>
-        <tr>
-            <td colspan="7" class="right muted">Toplam Kasa Adeti</td>
-            <td class="num strong" colspan="3"><?= (int)$tot['toplam_kasa'] ?></td>
-        </tr>
-        <?php if (count($kasa_breakdown) > 0): ?>
-        <tr class="subrow">
-            <td colspan="7" class="right muted">Cinse Göre</td>
-            <td colspan="3" class="muted" style="font-size:.8rem; padding:4px 12px;">
-                <?= implode(' &nbsp;·&nbsp; ', array_map(
-                    fn($n, $a) => '<strong>' . h($n) . '</strong>: ' . $a,
-                    array_keys($kasa_breakdown), $kasa_breakdown
-                )) ?>
-            </td>
-        </tr>
-        <?php endif; ?>
         </tfoot>
     </table>
 </div>
@@ -371,22 +367,21 @@ render_header('Kayıt #' . $id, $print);
         </div>
     <?php endforeach; ?>
     <div class="totals view-totals-mobile">
-        <div><span>Toplam Kasa</span><strong><?= (int)$tot['toplam_kasa'] ?></strong></div>
+        <div>
+            <span>Toplam Kasa</span>
+            <strong><?= (int)$tot['toplam_kasa'] ?></strong>
+            <?php if (!empty($kasa_breakdown)): ?>
+            <div style="font-size:.75rem;font-weight:normal;margin-top:2px;line-height:1.5">
+                <?php foreach ($kasa_breakdown as $name => $adet): ?>
+                <div><?= h($name) ?>: <b><?= $adet ?></b></div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div>
         <div><span>Toplam Brüt</span><strong><?= h(fmt_kg($tot['toplam_brut'])) ?></strong></div>
         <div><span>Toplam Dara</span><strong><?= h(fmt_kg($tot['toplam_dara'])) ?></strong></div>
         <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg($tot['toplam_net'])) ?></strong></div>
     </div>
-    <?php if (!empty($kasa_breakdown)): ?>
-    <div class="kasa-breakdown-block">
-        <div class="kasa-breakdown-title">Kasa Cinsi Dağılımı</div>
-        <?php foreach ($kasa_breakdown as $name => $adet): ?>
-            <div class="kasa-breakdown-row">
-                <span><?= h($name) ?></span>
-                <strong><?= $adet ?> kasa</strong>
-            </div>
-        <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
 </div>
 </section>
 
