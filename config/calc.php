@@ -19,8 +19,10 @@ require_once __DIR__ . '/db.php';
  *   - materials: [['material_id'=>x, 'quantity'=>n], ...]
  * @return array Hesaplanmış satır + materials (her birinde total_dara_kg dolu)
  */
-function round_half(float $n): float {
-    return round($n * 2) / 2;
+if (!function_exists('round_half')) {
+    function round_half(float $n): float {
+        return round($n * 2) / 2;
+    }
 }
 
 function compute_pallet_row(array $row): array {
