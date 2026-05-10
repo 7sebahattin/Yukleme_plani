@@ -44,6 +44,9 @@
         if (!isFinite(n)) n = 0;
         return n.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
     }
+    function roundHalf(n) {
+        return Math.round(n * 2) / 2;
+    }
     function parseNum(v) {
         if (v === null || v === undefined || v === '') return 0;
         if (typeof v === 'number') return isFinite(v) ? v : 0;
@@ -255,7 +258,7 @@
             const qty  = parseNum(mr.querySelector('.mat-qty').value);
             extra += (unit * qty) || 0;
         });
-        return ka * kasaUnit + paletUnit + extra;
+        return roundHalf(ka * kasaUnit + paletUnit + extra);
     }
 
     function recompute(rowEl) {
@@ -288,8 +291,13 @@
     }
 
     function addNewPallet() {
-        const prefill = getPrefillFromLastRow();
-        if (prefill) prefill.palet_no = rowCounter + 1;
+        const prefill = getPrefillFromLastRow() || {};
+        prefill.palet_no = rowCounter + 1;
+        // Ürün cinsi ve depo her zaman Genel Bilgilerden gelir
+        const urunEl = document.getElementById('genelUrun');
+        const depoEl = document.getElementById('genelDepo');
+        if (urunEl) prefill.urun_cinsi = urunEl.value;
+        if (depoEl) prefill.depo = depoEl.value;
         const r = createPalletRow(prefill);
         const focusTarget = r.querySelector('.kasa-adeti');
         focusTarget.focus();

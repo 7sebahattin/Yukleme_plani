@@ -61,7 +61,11 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
             </label>
             <label>Ürün
-                <input type="text" name="urun" value="<?= h($record['urun'] ?? '') ?>">
+                <input type="text" name="urun" id="genelUrun" value="<?= h($record['urun'] ?? '') ?>">
+            </label>
+            <label>Depo <small class="muted">(palet varsayılanı)</small>
+                <input type="text" name="depo_varsayilan" id="genelDepo"
+                       value="<?= h($pallets[0]['depo'] ?? '') ?>" placeholder="Depo">
             </label>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
@@ -121,7 +125,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet</button>
     </div>
 
-    <p class="muted small-note">* işaretli alanlar zorunludur (Kasa Adeti, Brüt KG, Kasa Cinsi, Palet Tipi). Yeni palet eklendiğinde önceki paletin değerleri (kasa adeti ve brüt kg hariç) otomatik kopyalanır.</p>
+    <p class="muted small-note">* işaretli alanlar zorunludur. Yeni palet eklendiğinde Ürün Cinsi ve Depo Genel Bilgilerden, diğer alanlar önceki paletten kopyalanır (kasa adeti ve brüt kg hariç).</p>
 
     <div class="pallets-table-head pc-only">
         <div>Palet No</div>
