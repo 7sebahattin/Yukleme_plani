@@ -447,8 +447,8 @@ input.num, select.num { text-align: right; }
     border-bottom: 1px solid var(--border);
 }
 
-/* PC tablo */
-.view-table-wrap { display: none; }
+/* PC tablo — mobilde kesinlikle gizle */
+.view-table-wrap { display: none !important; }
 .view-cards { display: flex; flex-direction: column; gap: 12px; }
 
 .print-table {
@@ -493,6 +493,9 @@ input.num, select.num { text-align: right; }
     margin-bottom: 8px;
 }
 .vc-grid > div { display: flex; flex-direction: column; word-break: break-word; }
+/* Etiket ve değerin alt alta görünmesi için zorunlu */
+.vc-grid > div > span,
+.vc-grid > div > strong { display: block; }
 .vc-grid > .span-2 { grid-column: span 2; }
 .vc-grid span { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
 .vc-grid strong { font-size: .92rem; }
@@ -580,7 +583,7 @@ input.num, select.num { text-align: right; }
     .info-grid { grid-template-columns: repeat(4, 1fr); }
 
     /* Görüntüleme: PC'de tablo, mobil kart yerine */
-    .view-table-wrap { display: block; overflow-x: auto; }
+    .view-table-wrap { display: block !important; overflow-x: auto; }
     .view-cards { display: none; }
 
     /* Palet tablosu — başlık */
@@ -932,8 +935,14 @@ body.print-mode .topbar { display: none; }
 .asya-signatures .line { border-top: 1px solid #000; height: 1px; }
 
 /* Ekranda da düzgün gösterim için */
+body.print-mode .container {
+    overflow-x: auto;
+    padding-left: 0;
+    padding-right: 0;
+}
 body.print-mode .asya-sheet {
     max-width: 1100px;
+    min-width: 750px; /* dar ekranda yatay kaydırma sağlar */
     margin: 0 auto;
     border: 1px solid #ccc;
     box-shadow: var(--shadow);
