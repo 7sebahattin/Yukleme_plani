@@ -42,7 +42,12 @@
 
     function fmtKg(n) {
         if (!isFinite(n)) n = 0;
-        return n.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+        let s = n.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+        s = s.replace(/,(\d+)$/, (_, dec) => {
+            const t = dec.replace(/0+$/, '');
+            return t ? ',' + t : '';
+        });
+        return s;
     }
     function roundHalf(n) {
         return Math.round(n * 2) / 2;

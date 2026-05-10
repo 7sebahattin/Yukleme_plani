@@ -360,6 +360,10 @@ input.num, select.num { text-align: right; }
 .material-row select { min-height: 38px; padding: 6px 8px; font-size: .9rem; }
 .material-row input { min-height: 38px; padding: 6px 8px; font-size: .9rem; text-align: right; }
 
+/* Zorunlu alanlar — arka plan vurgusu */
+input.kasa-adeti { background-color: #e8f4fd !important; }
+input.brut-kg    { background-color: #e8f8f0 !important; }
+
 /* Toplamlar (mavi alan) */
 .totals {
     display: grid;
@@ -857,6 +861,7 @@ body.print-mode .topbar { display: none; }
     height: 16px;
     padding: 1px 3px;
     font-size: 8pt;
+    text-align: center !important;
 }
 .asya-pallets td.small { font-size: 7pt; }
 .asya-pallets .row-no {
@@ -940,7 +945,7 @@ body.print-mode .topbar { display: none; }
 }
 .asya-bottom td {
     height: 18px;
-    text-align: right;
+    text-align: center;
     padding: 2px 4px;
 }
 .asya-bottom .bot-label {
@@ -1000,7 +1005,7 @@ body.print-mode .asya-sheet {
     .asya-info th { font-size: 7pt; padding: 0px 4px; }
     .asya-info td { font-size: 7.5pt; padding: 0px 4px; min-height: 11px; }
     .asya-pallets th { font-size: 6.5pt; padding: 1px; }
-    .asya-pallets td { height: 11px; padding: 0px 2px; font-size: 7pt; line-height: 1; }
+    .asya-pallets td { height: 11px; padding: 0px 2px; font-size: 7pt; line-height: 1; text-align: center !important; }
     .asya-pallets td.small { font-size: 6.5pt; }
     .asya-stok { font-size: 6.5pt; }
     .asya-stok .stok-name { font-size: 6.5pt; padding: 0px 3px; }
