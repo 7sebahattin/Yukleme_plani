@@ -144,7 +144,7 @@ function render_header(string $title, bool $print_mode = false): void {
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <meta name="csrf-token" content="<?= h($token) ?>">
     <title><?= h($title) ?> · Yükleme Planı</title>
-    <link rel="stylesheet" href="assets/style.css?v=4">
+    <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
 <body class="<?= $print_mode ? 'print-mode' : '' ?>">
 <?php if (!$print_mode): ?>
