@@ -225,18 +225,15 @@ foreach ($pallets as $p) {
 }
 $urun_keys = array_slice(array_keys($urun_groups), 0, 4);
 
-render_header('Kayıt #' . $id, $print);
+render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 
 <?php if (!$print): ?>
 <?php render_flash(); ?>
 <div class="page-head">
-    <div>
-        <h1>Kayıt #<?= (int)$record['id'] ?></h1>
-        <p class="muted">Oluşturma: <?= h(fmt_datetime($record['created_at'])) ?>
-            · Güncelleme: <?= h(fmt_datetime($record['updated_at'])) ?></p>
-    </div>
+    <div></div>
     <div class="page-head-actions">
+        <button id="kalanOpenBtn" class="btn">Kalan Palet Hesapla</button>
         <a href="index.php" class="btn btn-ghost">← Liste</a>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">Düzenle</a>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">Yazdır</a>
@@ -577,6 +574,119 @@ render_header('Kayıt #' . $id, $print);
     </div>
 
 </div>
+<?php endif; ?>
+
+<?php if (!$print): ?>
+<!-- ============================================================
+     KALAN PALET HESAPLAMA MODAL
+     ============================================================ -->
+<script>window.KALAN_RECORD_ID = <?= (int)$id ?>;</script>
+
+<div id="kalanModal" hidden role="dialog" aria-modal="true" aria-labelledby="kalanModalTitle">
+  <div class="kalan-panel">
+
+    <div class="kalan-header">
+      <h2 id="kalanModalTitle">Kalan Palet Hesaplama</h2>
+      <button class="kalan-close" aria-label="Kapat">✕</button>
+    </div>
+
+    <!-- 1) Hedef -->
+    <div class="kalan-section">
+      <p class="kalan-section-title">Hedef</p>
+      <div class="kalan-target-row">
+        <div class="kalan-field">
+          <label for="kalanTargetKg">Hedef Toplam Kilo (kg)</label>
+          <input id="kalanTargetKg" class="kalan-input" type="number" step="0.001" min="0" placeholder="örn. 25000">
+        </div>
+        <div class="kalan-field">
+          <label for="kalanTargetPc">Hedef Palet Sayısı</label>
+          <input id="kalanTargetPc" class="kalan-input" type="number" min="0" step="1" placeholder="örn. 26">
+        </div>
+        <div>
+          <button id="kalanSaveTarget" class="kalan-btn kalan-btn-ghost">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2) Mevcut Durum -->
+    <div class="kalan-section">
+      <p class="kalan-section-title">Mevcut Durum</p>
+      <div id="kalanStatus" class="kalan-stat-grid">
+        <div class="kalan-stat"><span>Yükleniyor…</span></div>
+      </div>
+    </div>
+
+    <!-- 3) Kasa Tipi Ortalamaları -->
+    <div class="kalan-section">
+      <p class="kalan-section-title">Kasa Tipi Ortalamaları</p>
+      <div class="kalan-table-wrap">
+        <table class="kalan-table">
+          <thead>
+            <tr>
+              <th>Kasa Adeti</th>
+              <th>Ort. kg / Palet</th>
+              <th>Kaynak</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="kalanCrateRows">
+            <tr><td colspan="4" class="muted center" style="padding:12px">Yükleniyor…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Yeni kasa ekle formu -->
+      <div id="kalanCrateAdd" hidden class="kalan-add-form">
+        <div class="kalan-field">
+          <label for="kalanNewCount">Kasa Adeti</label>
+          <input id="kalanNewCount" class="kalan-input" type="number" min="1" step="1" placeholder="örn. 90">
+        </div>
+        <div class="kalan-field">
+          <label for="kalanNewAvg">Ort. kg / Palet</label>
+          <input id="kalanNewAvg" class="kalan-input" type="number" step="0.1" min="1" placeholder="örn. 970">
+        </div>
+        <button id="kalanConfirmAdd" class="kalan-btn kalan-btn-primary">Ekle</button>
+        <button id="kalanCancelAdd" class="kalan-btn kalan-btn-ghost">İptal</button>
+      </div>
+
+      <div class="kalan-actions">
+        <button id="kalanAddCrate" class="kalan-btn kalan-btn-ghost">+ Kasa Tipi Ekle</button>
+        <button id="kalanAutoAll" class="kalan-btn kalan-btn-ghost">⟳ Tümünü Otomatik Hesapla</button>
+      </div>
+    </div>
+
+    <!-- 4) Hesapla -->
+    <div class="kalan-section">
+      <p class="kalan-section-title">Kombinasyon Hesapla</p>
+      <button id="kalanCalcBtn" class="kalan-btn kalan-btn-primary" style="width:100%">Hesapla</button>
+    </div>
+
+    <!-- 5) Sonuçlar -->
+    <div id="kalanResults" hidden class="kalan-section">
+      <p class="kalan-section-title">Önerilen Plan</p>
+      <div id="kalanBestPlan"></div>
+
+      <p class="kalan-section-title" style="margin-top:18px">Tüm Kombinasyonlar</p>
+      <div class="kalan-table-wrap">
+        <table class="kalan-table kalan-combos-table">
+          <thead>
+            <tr>
+              <th class="combo-cell">Kombinasyon</th>
+              <th class="num">Tahmini kg</th>
+              <th class="num">Final kg</th>
+              <th class="num">Fark</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="kalanCombosBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- .kalan-panel -->
+</div><!-- #kalanModal -->
+
+<script src="assets/kalan.js"></script>
 <?php endif; ?>
 
 <?php render_footer($print); ?>
