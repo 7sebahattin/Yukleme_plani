@@ -7,6 +7,13 @@
 
 declare(strict_types=1);
 
+// En yakın 0.5'e yuvarlama (calc.php ile paylaşılan mantık)
+if (!function_exists('round_half')) {
+    function round_half(float $n): float {
+        return round($n * 2) / 2;
+    }
+}
+
 // --- HTML kaçışı ---
 function h($v): string {
     return htmlspecialchars((string)($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
