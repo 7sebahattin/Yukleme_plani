@@ -46,6 +46,14 @@ unset($p);
 $tot = record_totals($id);
 $type_labels = definition_types();
 
+// Kasa cinsi dağılımı (toplam kasa yanında göstermek için)
+$kasa_breakdown = [];
+foreach ($pallets as $p) {
+    if (!(int)$p['kasa_adeti']) continue;
+    $name = trim((string)($p['kasa_cinsi_adi'] ?? '')) ?: '—';
+    $kasa_breakdown[$name] = ($kasa_breakdown[$name] ?? 0) + (int)$p['kasa_adeti'];
+}
+
 function kasa_label(?string $name, $kg): string {
     if (!$name) return '—';
     return $name . ' (' . number_format((float)$kg, 3, ',', '.') . ' kg)';
@@ -305,6 +313,17 @@ render_header('Kayıt #' . $id, $print);
             <td colspan="7" class="right muted">Toplam Kasa Adeti</td>
             <td class="num strong" colspan="3"><?= (int)$tot['toplam_kasa'] ?></td>
         </tr>
+        <?php if (count($kasa_breakdown) > 0): ?>
+        <tr class="subrow">
+            <td colspan="7" class="right muted">Cinse Göre</td>
+            <td colspan="3" class="muted" style="font-size:.8rem; padding:4px 12px;">
+                <?= implode(' &nbsp;·&nbsp; ', array_map(
+                    fn($n, $a) => '<strong>' . h($n) . '</strong>: ' . $a,
+                    array_keys($kasa_breakdown), $kasa_breakdown
+                )) ?>
+            </td>
+        </tr>
+        <?php endif; ?>
         </tfoot>
     </table>
 </div>
@@ -352,6 +371,17 @@ render_header('Kayıt #' . $id, $print);
         <div><span>Toplam Dara</span><strong><?= h(fmt_kg($tot['toplam_dara'])) ?></strong></div>
         <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg($tot['toplam_net'])) ?></strong></div>
     </div>
+    <?php if (!empty($kasa_breakdown)): ?>
+    <div class="kasa-breakdown-block">
+        <div class="kasa-breakdown-title">Kasa Cinsi Dağılımı</div>
+        <?php foreach ($kasa_breakdown as $name => $adet): ?>
+            <div class="kasa-breakdown-row">
+                <span><?= h($name) ?></span>
+                <strong><?= $adet ?> kasa</strong>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 </div>
 </section>
 

@@ -19,6 +19,10 @@ require_once __DIR__ . '/db.php';
  *   - materials: [['material_id'=>x, 'quantity'=>n], ...]
  * @return array Hesaplanmış satır + materials (her birinde total_dara_kg dolu)
  */
+function round_half(float $n): float {
+    return round($n * 2) / 2;
+}
+
 function compute_pallet_row(array $row): array {
     $kasa_adeti = intval_safe($row['kasa_adeti'] ?? 0);
     $brut       = num($row['brut_kg'] ?? 0);
@@ -77,7 +81,7 @@ function compute_pallet_row(array $row): array {
     }
     unset($m);
 
-    $dara = round($kasa_dara_total + $palet_dara_total + $extra_total, 3);
+    $dara = round_half($kasa_dara_total + $palet_dara_total + $extra_total);
     $net  = round(max(0, $brut - $dara), 3);
 
     return [
