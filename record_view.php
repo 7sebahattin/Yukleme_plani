@@ -130,6 +130,18 @@ foreach ($pallets as $p) {
     }
 }
 
+// Alt blok: palet tipi adını dinamik oluştur
+$palet_tipi_names = [];
+foreach ($stok_use as $def_id => $u) {
+    $d = $defs_by_id[$def_id] ?? null;
+    if ($d && $d['type'] === 'palet_tipi') {
+        $palet_tipi_names[] = mb_strtoupper($d['name'], 'UTF-8');
+    }
+}
+$palet_bottom_label = !empty($palet_tipi_names)
+    ? implode(' / ', array_unique($palet_tipi_names)) . '<br><small style="font-size:6pt;font-weight:normal">+ ŞAP. KÖŞ. DARA</small>'
+    : 'PALET / ŞAP. KÖŞ. DARA';
+
 // 26 satır için pallets'i doldur (boş satırlar için null bırak)
 $grid_rows = 26;
 $pallets_grid = [];
@@ -541,7 +553,7 @@ render_header('Kayıt #' . $id, $print);
     <table class="asya-bottom" style="table-layout:auto">
         <tr>
             <th class="bot-label">TOPLAM</th>
-            <th>PALET / ŞAP. KÖŞ. DARA</th>
+            <th><?= $palet_bottom_label ?></th>
             <?php foreach ($kasa_dara_breakdown as $k): ?>
             <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA DARA<br>
                 <small style="font-size:6pt;font-weight:normal"><?= (int)$k['adet'] ?> ADET</small></th>
