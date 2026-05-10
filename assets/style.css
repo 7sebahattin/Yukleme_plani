@@ -945,7 +945,7 @@ body.print-mode .topbar { display: none; }
 }
 .asya-bottom td {
     height: 18px;
-    text-align: center;
+    text-align: center !important;
     padding: 2px 4px;
 }
 .asya-bottom .bot-label {

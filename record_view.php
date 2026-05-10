@@ -141,8 +141,8 @@ foreach ($stok_use as $def_id => $u) {
     }
 }
 $palet_bottom_label = !empty($palet_tipi_names)
-    ? implode(' / ', array_unique($palet_tipi_names)) . ' DARA<br><small style="font-size:6pt;font-weight:normal">' . $palet_tipi_total_adet . ' ADET</small><br><small style="font-size:5.5pt;font-weight:normal">+ ŞAP. KÖŞ.</small>'
-    : 'PALET / ŞAP. KÖŞ. DARA';
+    ? implode(' / ', array_unique($palet_tipi_names)) . '<br><small style="font-size:6pt;font-weight:normal">' . $palet_tipi_total_adet . ' ADET</small>'
+    : 'PALET';
 
 // 26 satır için pallets'i doldur (boş satırlar için null bırak)
 $grid_rows = 26;
@@ -557,15 +557,15 @@ render_header('Kayıt #' . $id, $print);
             <th class="bot-label">TOPLAM</th>
             <th><?= $palet_bottom_label ?></th>
             <?php foreach ($kasa_dara_breakdown as $k): ?>
-            <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA DARA<br>
+            <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA<br>
                 <small style="font-size:6pt;font-weight:normal"><?= (int)$k['adet'] ?> ADET</small></th>
             <?php endforeach; ?>
         </tr>
         <tr>
-            <td class="bot-label-empty"></td>
-            <td class="num"><?= h(fmt_kg($palet_sapka_kose_dara)) ?></td>
+            <td class="bot-label" style="font-weight:700;text-align:center">DARA</td>
+            <td class="num"><?= h(fmt_kg(round_half($palet_sapka_kose_dara))) ?></td>
             <?php foreach ($kasa_dara_breakdown as $k): ?>
-            <td class="num"><?= h(fmt_kg($k['kg'])) ?></td>
+            <td class="num"><?= h(fmt_kg(round_half((float)$k['kg']))) ?></td>
             <?php endforeach; ?>
         </tr>
     </table>
