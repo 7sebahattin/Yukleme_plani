@@ -336,7 +336,7 @@ render_header('Kayıt #' . $id, $print);
             </td>
             <td colspan="5"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
-            <td class="num strong"><?= h(fmt_kg($tot['toplam_dara'])) ?></td>
+            <td class="num strong"><?= h(fmt_kg(round_half((float)$tot['toplam_dara']))) ?></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_net'])) ?></td>
         </tr>
         </tfoot>
@@ -393,7 +393,7 @@ render_header('Kayıt #' . $id, $print);
             <?php endif; ?>
         </div>
         <div><span>Toplam Brüt</span><strong><?= h(fmt_kg($tot['toplam_brut'])) ?></strong></div>
-        <div><span>Toplam Dara</span><strong><?= h(fmt_kg($tot['toplam_dara'])) ?></strong></div>
+        <div><span>Toplam Dara</span><strong><?= h(fmt_kg(round_half((float)$tot['toplam_dara']))) ?></strong></div>
         <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg($tot['toplam_net'])) ?></strong></div>
     </div>
 </div>
@@ -523,7 +523,7 @@ render_header('Kayıt #' . $id, $print);
                     <tr>
                         <td class="stok-name"><?= h($label) ?></td>
                         <td class="stok-val"><?= h($adet_str) ?></td>
-                        <td class="stok-val"><?= $r['kg'] > 0 ? h(fmt_kg($r['kg'])) : '' ?></td>
+                        <td class="stok-val"><?= $r['kg'] > 0 ? h(fmt_kg(round_half($r['kg']))) : '' ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
@@ -534,7 +534,7 @@ render_header('Kayıt #' . $id, $print);
                 <tr><th class="th-banner" colspan="2">GENEL TOPLAM</th></tr>
                 <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
-                <tr><th>DARA</th><td class="num"><?= h(fmt_kg($tot['toplam_dara'])) ?></td></tr>
+                <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round_half((float)$tot['toplam_dara']))) ?></td></tr>
                 <tr><th>NET</th><td class="num strong"><?= h(fmt_kg($tot['toplam_net'])) ?></td></tr>
 
                 <?php for ($i = 0; $i < 4; $i++):
@@ -544,7 +544,7 @@ render_header('Kayıt #' . $id, $print);
                     <tr><th class="urun-banner" colspan="2">ÜRÜN / <?= $i + 1 ?><?= $key ? ' — ' . h($key) : '' ?></th></tr>
                     <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                     <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
-                    <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg($g['dara'])) : '' ?></td></tr>
+                    <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round_half($g['dara']))) : '' ?></td></tr>
                     <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg($g['net'])) : '' ?></td></tr>
                 <?php endfor; ?>
             </table>
