@@ -136,7 +136,7 @@
                     <input type="text" name="pallets[${idx}][size]" value="${escAttr(d.size || '')}" placeholder="Size" data-tab>
                 </label>
                 <label><span class="lbl-text">Brüt KG *</span>
-                    <input type="text" inputmode="decimal" name="pallets[${idx}][brut_kg]" value="${escAttr(d.brut_kg || '')}" placeholder="Brüt kg" class="num brut-kg req" data-tab required>
+                    <input type="text" inputmode="decimal" name="pallets[${idx}][brut_kg]" value="${escAttr(d.brut_kg !== '' && d.brut_kg != null ? (parseNum(d.brut_kg) || '') : '')}" placeholder="Brüt kg" class="num brut-kg req" data-tab required>
                 </label>
                 <label><span class="lbl-text">Kasa Cinsi *</span>
                     <select name="pallets[${idx}][kasa_cinsi_id]" class="kasa-cinsi req" data-tab required>

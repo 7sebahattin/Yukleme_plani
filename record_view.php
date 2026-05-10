@@ -56,7 +56,7 @@ foreach ($pallets as $p) {
 
 function kasa_label(?string $name, $kg): string {
     if (!$name) return '—';
-    return $name . ' (' . number_format((float)$kg, 3, ',', '.') . ' kg)';
+    return $name . ' (' . fmt_kg($kg) . ' kg)';
 }
 
 // ====== Stok çıkışları (yazdırma şablonu için) ======
@@ -130,16 +130,18 @@ foreach ($pallets as $p) {
     }
 }
 
-// Alt blok: palet tipi adını dinamik oluştur
+// Alt blok: palet tipi adını ve adetini dinamik oluştur
 $palet_tipi_names = [];
+$palet_tipi_total_adet = 0;
 foreach ($stok_use as $def_id => $u) {
     $d = $defs_by_id[$def_id] ?? null;
     if ($d && $d['type'] === 'palet_tipi') {
-        $palet_tipi_names[] = mb_strtoupper($d['name'], 'UTF-8');
+        $palet_tipi_names[] = h(mb_strtoupper($d['name'], 'UTF-8'));
+        $palet_tipi_total_adet += (int)$u['adet'];
     }
 }
 $palet_bottom_label = !empty($palet_tipi_names)
-    ? implode(' / ', array_unique($palet_tipi_names)) . '<br><small style="font-size:6pt;font-weight:normal">+ ŞAP. KÖŞ. DARA</small>'
+    ? implode(' / ', array_unique($palet_tipi_names)) . ' DARA<br><small style="font-size:6pt;font-weight:normal">' . $palet_tipi_total_adet . ' ADET</small><br><small style="font-size:5.5pt;font-weight:normal">+ ŞAP. KÖŞ.</small>'
     : 'PALET / ŞAP. KÖŞ. DARA';
 
 // 26 satır için pallets'i doldur (boş satırlar için null bırak)
