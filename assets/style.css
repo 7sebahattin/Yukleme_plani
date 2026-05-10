@@ -1032,3 +1032,194 @@ body.print-mode .asya-sheet {
     .asya-sheet { page-break-after: avoid; }
     @page { size: A4 portrait; margin: 4mm; }
 }
+
+/* =========================================================
+   Kalan Palet Hesaplama — Modal
+   ========================================================= */
+
+/* Overlay */
+#kalanModal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1000;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 20px 12px 40px;
+    overflow-y: auto;
+}
+#kalanModal[hidden] { display: none; }
+
+/* Panel */
+.kalan-panel {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    width: 100%; max-width: 700px;
+    padding: 24px;
+    position: relative;
+}
+
+.kalan-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+}
+.kalan-header h2 { font-size: 1.15rem; font-weight: 700; margin: 0; }
+.kalan-close {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.4rem; color: var(--muted); line-height: 1;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+}
+.kalan-close:hover { background: var(--bg); color: var(--text); }
+
+/* Section titles */
+.kalan-section { margin-bottom: 22px; }
+.kalan-section-title {
+    font-size: .85rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--muted);
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Target row */
+.kalan-target-row {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+}
+.kalan-field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px; }
+.kalan-field label { font-size: .82rem; font-weight: 600; color: var(--muted); }
+.kalan-input {
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 7px 10px; font-size: .95rem; width: 100%;
+    background: var(--card); color: var(--text);
+}
+.kalan-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(29,108,240,.12); }
+
+/* Status grid */
+.kalan-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.kalan-stat {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 2px;
+}
+.kalan-stat span  { font-size: .78rem; color: var(--muted); }
+.kalan-stat strong { font-size: 1rem; font-weight: 700; }
+.kalan-stat-wide { grid-column: 1 / -1; }
+
+/* Crate table */
+.kalan-table-wrap { overflow-x: auto; }
+.kalan-table {
+    width: 100%; border-collapse: collapse; font-size: .9rem;
+}
+.kalan-table th {
+    background: var(--bg); font-weight: 600; font-size: .8rem;
+    text-align: left; padding: 7px 10px;
+    border-bottom: 2px solid var(--border);
+}
+.kalan-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.kalan-table tr:last-child td { border-bottom: none; }
+.crate-count-cell { font-weight: 700; font-size: 1rem; }
+.crate-avg-input  { width: 100px; }
+.crate-actions-cell { white-space: nowrap; }
+.kalan-icon-btn {
+    background: none; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px; cursor: pointer; font-size: .9rem;
+    color: var(--muted);
+}
+.kalan-icon-btn:hover { background: var(--bg); color: var(--text); }
+
+/* Source badge */
+.kalan-src {
+    font-size: .75rem; padding: 2px 7px; border-radius: 20px; font-weight: 600;
+}
+.kalan-src-auto   { background: var(--primary-soft); color: var(--primary); }
+.kalan-src-manual { background: var(--warn-soft);    color: var(--warn); }
+
+/* Add-crate form */
+.kalan-add-form {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px dashed var(--border-strong);
+}
+.kalan-add-form .kalan-field { min-width: 110px; }
+
+/* Action rows */
+.kalan-actions {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+/* Buttons */
+.kalan-btn {
+    padding: 8px 16px; border-radius: var(--radius-sm);
+    font-size: .9rem; font-weight: 600; cursor: pointer; border: none;
+    transition: background .15s, opacity .15s;
+}
+.kalan-btn-primary  { background: var(--primary); color: #fff; }
+.kalan-btn-primary:hover { background: var(--primary-dark); }
+.kalan-btn-primary:disabled { opacity: .55; cursor: default; }
+.kalan-btn-ghost {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-strong);
+}
+.kalan-btn-ghost:hover { background: var(--border); }
+.kalan-btn-success { background: var(--success); color: #fff; }
+.kalan-btn-success:hover { filter: brightness(.92); }
+
+/* Best plan card */
+.kalan-best-inner {
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    border-left: 4px solid currentColor;
+}
+.kalan-best-combo {
+    font-size: 1.05rem; font-weight: 700; margin-bottom: 10px;
+}
+.kalan-best-stats {
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: .9rem;
+}
+.kalan-best-stats span { color: var(--muted); }
+.kalan-best-stats strong { font-weight: 700; }
+
+/* Combo cell */
+.combo-part strong { font-size: 1rem; }
+.combo-sep { color: var(--muted); margin: 0 2px; }
+
+/* Pos/neg */
+.kalan-pos { color: var(--success); }
+.kalan-neg { color: var(--danger); }
+
+/* Status badges */
+.kalan-status-badge {
+    font-size: .75rem; padding: 2px 8px; border-radius: 20px; font-weight: 700;
+}
+.kalan-great { background: var(--success-soft); color: var(--success); border-color: var(--success); }
+.kalan-good  { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.kalan-ok    { background: var(--warn-soft);    color: var(--warn);    border-color: var(--warn); }
+.kalan-warn  { background: var(--danger-soft);  color: var(--danger);  border-color: var(--danger); }
+
+/* Results combos table */
+.kalan-combos-table { font-size: .88rem; }
+.kalan-combos-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.kalan-combos-table .combo-cell { min-width: 180px; }
+
+/* Responsive */
+@media (max-width: 480px) {
+    .kalan-panel { padding: 16px; }
+    .kalan-stat-grid { grid-template-columns: 1fr 1fr; }
+    .kalan-target-row { flex-direction: column; }
+    .kalan-best-stats { flex-direction: column; gap: 6px; }
+    .kalan-combos-table .combo-cell { min-width: 120px; }
+    #kalanModal { padding: 0; align-items: flex-end; }
+    .kalan-panel { border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; overflow-y: auto; }
+}
+
+@media print { #kalanModal { display: none !important; } }
