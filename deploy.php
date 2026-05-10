@@ -14,6 +14,31 @@ function log_msg(string $msg): void {
     file_put_contents($logfile, '[' . date('Y-m-d H:i:s') . '] ' . $msg . "\n", FILE_APPEND);
 }
 
+/**
+ * config/db.php'yi günceller ama DB kimlik bilgilerini (HOST/NAME/USER/PASS) korur.
+ */
+function smart_merge_db(string $dest_path, string $new_content): void {
+    if (!file_exists($dest_path)) {
+        file_put_contents($dest_path, $new_content);
+        log_msg('  config/db.php oluşturuldu (yeni)');
+        return;
+    }
+    $old = file_get_contents($dest_path);
+    // Sunucudaki DB sabitlerini çıkart
+    $keys = ['DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'];
+    foreach ($keys as $k) {
+        if (preg_match("/define\s*\(\s*['\"]$k['\"]\s*,\s*['\"]([^'\"]*)['\"/", $old, $m)) {
+            $new_content = preg_replace(
+                "/define\s*\(\s*['\"]$k['\"]\s*,\s*['\"][^'\"]*['\"]/",
+                "define('$k', '" . addslashes($m[1]) . "'",
+                $new_content
+            );
+        }
+    }
+    file_put_contents($dest_path, $new_content);
+    log_msg('  config/db.php güncellendi (DB bilgileri korundu)');
+}
+
 // Payload oku
 $payload = (string)file_get_contents('php://input');
 if ($payload === '') {
@@ -117,8 +142,8 @@ $prefix    = $repo_name . '-main/';          // Yukleme_plani-main/
 $protected = [
     'deploy.php',
     'deploy.log',
-    'config/db.php',
     '.htaccess',
+    // config/db.php → smart_merge_db ile ayrıca işlenir (DB bilgileri korunur)
 ];
 
 $work_dir = __DIR__;
@@ -145,8 +170,14 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
 
     // Korunan dosya mı?
     if (in_array($rel, $protected, true)) {
-        log_msg("  KORUMA: $rel atlandı");
-        $skipped++;
+        // config/db.php için sadece DB ayarlarını koruyarak geri kalan kısmı güncelle
+        if ($rel === 'config/db.php') {
+            smart_merge_db($work_dir . '/config/db.php', $zip->getFromIndex($i));
+            $updated++;
+        } else {
+            log_msg("  KORUMA: $rel atlandı");
+            $skipped++;
+        }
         continue;
     }
 
