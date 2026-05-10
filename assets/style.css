@@ -362,7 +362,7 @@ input.num, select.num { text-align: right; }
 
 /* Zorunlu alanlar — arka plan vurgusu */
 input.kasa-adeti { background-color: #e8f4fd !important; }
-input.brut-kg    { background-color: #e8f8f0 !important; }
+input.brut-kg    { background-color: #fff3e0 !important; }
 
 /* Toplamlar (mavi alan) */
 .totals {
