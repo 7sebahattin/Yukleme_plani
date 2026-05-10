@@ -183,17 +183,22 @@ function stok_satir_topla(array $stok_use, array $defs_by_id, array $allowed_typ
     return ['adet' => $adet, 'kg' => $kg];
 }
 
-// Bottom-row özel kasa dara toplamları (şablonda alt sırada özel kutular var)
-$h5_dara   = kasa_dara_for_label('h-5', $pallets, $defs_by_id);
-$h9_dara   = kasa_dara_for_label('h-9 ', $pallets, $defs_by_id);  // h-9 (h-9.5 hariç)
-$h95_dara  = kasa_dara_for_label('h-9,5', $pallets, $defs_by_id);
-$h85_dara  = kasa_dara_for_label('h-8,5', $pallets, $defs_by_id);
-$h10_dara  = kasa_dara_for_label('h-10', $pallets, $defs_by_id);
-$dara30x40 = kasa_dara_for_label('30x40', $pallets, $defs_by_id);
-// h-9 ile h-9,5 ayrımı için: h-9 dara'dan h-9,5'i çıkar
-$h9_only_dara = max(0, $h9_dara - $h95_dara);
+// Bottom-row özel kasa dara toplamları (artık kullanılmıyor, dinamik yapıya geçildi)
+// Eski statik hesaplamalar kaldırıldı
 
-// Ürün cinslerine göre alt toplamlar (en fazla 4 ürün)
+// Dinamik kasa cinsi dara dağılımı — yazdırma alt bloku için
+$kasa_dara_breakdown = [];
+foreach ($stok_use as $def_id => $u) {
+    $d = $defs_by_id[$def_id] ?? null;
+    if (!$d || $d['type'] !== 'kasa_cinsi') continue;
+    $kasa_dara_breakdown[] = [
+        'name' => $d['name'],
+        'adet' => (int)$u['adet'],
+        'kg'   => (float)$u['kg'],
+    ];
+}
+
+// Palet+Şapka+Köşebent dara toplamı (sabit sütun, korunuyor)
 $urun_groups = [];
 foreach ($pallets as $p) {
     $u = trim($p['urun_cinsi'] ?? '');
@@ -538,26 +543,21 @@ render_header('Kayıt #' . $id, $print);
     </div>
 
     <!-- ============= ALT BLOK: Toplam dara satırı ============= -->
-    <table class="asya-bottom">
+    <table class="asya-bottom" style="table-layout:auto">
         <tr>
             <th class="bot-label">TOPLAM</th>
             <th>PALET / ŞAP. KÖŞ. DARA</th>
-            <th>H-5 KASA DARA</th>
-            <th>H-9 KASA DARA</th>
-            <th>H-10 KASA DARA</th>
-            <th>30X40 KASA DARA</th>
-            <th>H-8,5 KASA DARA</th>
-            <th>H-9,5 KASA DARA</th>
+            <?php foreach ($kasa_dara_breakdown as $k): ?>
+            <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA DARA<br>
+                <small style="font-size:6pt;font-weight:normal"><?= (int)$k['adet'] ?> ADET</small></th>
+            <?php endforeach; ?>
         </tr>
         <tr>
             <td class="bot-label-empty"></td>
             <td class="num"><?= h(fmt_kg($palet_sapka_kose_dara)) ?></td>
-            <td class="num"><?= h(fmt_kg($h5_dara)) ?></td>
-            <td class="num"><?= h(fmt_kg($h9_only_dara)) ?></td>
-            <td class="num"><?= h(fmt_kg($h10_dara)) ?></td>
-            <td class="num"><?= h(fmt_kg($dara30x40)) ?></td>
-            <td class="num"><?= h(fmt_kg($h85_dara)) ?></td>
-            <td class="num"><?= h(fmt_kg($h95_dara)) ?></td>
+            <?php foreach ($kasa_dara_breakdown as $k): ?>
+            <td class="num"><?= h(fmt_kg($k['kg'])) ?></td>
+            <?php endforeach; ?>
         </tr>
     </table>
 
