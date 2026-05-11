@@ -745,68 +745,73 @@ body.print-mode .topbar { display: none; }
 
 /* ====== Üst blok ====== */
 .asya-top {
+    border: 1px solid #ccc;
+    margin-bottom: 0;
+}
+.asya-brand-full {
+    text-align: center;
+    font-size: 13pt;
+    font-weight: 800;
+    letter-spacing: .05em;
+    padding: 4px;
+    border-bottom: 1px solid #ccc;
+}
+.asya-top-body {
     display: grid;
     grid-template-columns: 60% 40%;
     gap: 0;
-    margin-bottom: 0;
 }
 
-.asya-info { width: 100%; font-size: 9pt; }
+.asya-info { width: 100%; font-size: 9pt; border: none; }
 .asya-info th {
     background: #fff;
     font-weight: 700;
     text-align: left;
-    width: 38%;
-    padding: 4px 6px;
-    font-size: 8.5pt;
+    padding: 3px 6px;
+    font-size: 8pt;
+    white-space: nowrap;
 }
 .asya-info td {
-    padding: 4px 6px;
-    min-height: 18px;
-    font-size: 9pt;
+    padding: 3px 6px;
+    min-height: 16px;
+    font-size: 8.5pt;
 }
+.avans-th { border-left: 1px solid #ccc !important; }
+.avans-td { width: 60px; }
 
 .asya-right-top {
     display: flex;
     flex-direction: column;
-    border: 1px solid #000;
-    border-left: none; /* bilgi tablosuyla birleşsin */
+    border-left: 1px solid #ccc;
 }
-.asya-brand {
-    text-align: center;
-    font-size: 14pt;
-    font-weight: 800;
-    letter-spacing: .05em;
-    padding: 4px;
-    border-bottom: 1px solid #000;
-}
-.asya-avans-row, .asya-alici-urun, .asya-marka-row {
+.asya-marka-row {
     display: grid;
-    border-bottom: 1px solid #000;
+    grid-template-columns: 1fr 1fr 1fr;
+    border-bottom: 1px solid #ccc;
 }
-.asya-avans-row { grid-template-columns: 1fr; }
-.asya-alici-urun { grid-template-columns: 1fr 1fr; }
-.asya-marka-row { grid-template-columns: 1fr 1fr 1fr; border-bottom: none; }
+.asya-alici-cell, .asya-urun-cell {
+    border-bottom: 1px solid #ccc;
+    border-right: none;
+}
 
 .cell-pair, .marka-cell {
     display: flex;
     flex-direction: column;
     padding: 3px 6px;
-    border-right: 1px solid #000;
+    border-right: 1px solid #ccc;
     min-height: 20px;
 }
-.asya-alici-urun .cell-pair:last-child,
-.asya-marka-row .marka-cell:last-child { border-right: none; }
-.asya-avans-row .cell-pair { border-right: none; }
+.asya-alici-cell, .asya-urun-cell { border-right: none; }
+.marka-cell:last-child { border-right: none; }
 .cell-pair span, .marka-cell span {
-    font-size: 7.5pt;
+    font-size: 7pt;
     color: #444;
     font-weight: 700;
     letter-spacing: .03em;
 }
 .cell-pair strong, .marka-cell strong {
-    font-size: 9pt;
-    min-height: 16px;
+    font-size: 8.5pt;
+    min-height: 14px;
     padding-top: 2px;
 }
 .marka-cell {
@@ -815,26 +820,64 @@ body.print-mode .topbar { display: none; }
     padding: 2px 4px;
     background: #f0f0f0 !important;
 }
-.marka-cell strong { font-weight: 700; font-size: 8pt; }
+.marka-cell strong { font-weight: 700; font-size: 7.5pt; }
 
 .asya-etiket {
     flex: 1;
-    border-bottom: 1px solid #000;
-    padding: 6px;
+    padding: 4px;
     display: flex;
     flex-direction: column;
-    min-height: 80px;
+    align-items: center;
+    justify-content: center;
+    min-height: 70px;
+    position: relative;
+    overflow: hidden;
 }
-.etiket-label {
+.etiket-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    flex: 1;
+}
+.etiket-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 18pt;
     font-weight: 800;
-    text-align: center;
-    letter-spacing: .08em;
-    padding: 18px 0;
+    letter-spacing: .1em;
+    color: #bbb;
+    flex: 1;
+    width: 100%;
 }
-.etiket-content {
-    font-size: 9pt;
-    text-align: center;
+.etiket-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding-top: 4px;
+    width: 100%;
+    justify-content: center;
+}
+.etiket-upload-btn {
+    cursor: pointer;
+    font-size: .78rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    border: 1px solid var(--primary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.etiket-clear-btn {
+    cursor: pointer;
+    font-size: .78rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    font-weight: 600;
 }
 
 /* ====== Orta blok ====== */
@@ -998,6 +1041,15 @@ body.print-mode .asya-sheet {
         background: #f0f0f0 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
+    .asya-top { border-color: #000; }
+    .asya-brand-full { border-color: #000; font-size: 12pt; }
+    .asya-right-top { border-color: #000; }
+    .asya-marka-row { border-color: #000; }
+    .asya-alici-cell, .asya-urun-cell { border-color: #000; }
+    .cell-pair, .marka-cell { border-color: #000; }
+    .avans-th { border-color: #000 !important; }
+    .etiket-img { display: block !important; }
+    .etiket-placeholder { color: #ccc; }
     .asya-pallets .row-no {
         background: #f6f6f6 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
