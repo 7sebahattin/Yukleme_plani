@@ -21,7 +21,7 @@ require_once __DIR__ . '/db.php';
  */
 if (!function_exists('round_half')) {
     function round_half(float $n): float {
-        return round($n * 2) / 2;
+        return (float)round($n);
     }
 }
 
