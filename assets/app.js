@@ -298,11 +298,22 @@
                     </div>
                     ${metaParts.length ? `<div class="pc-meta">${escHtml(metaParts.join(' · '))}${matCount ? ' · +' + matCount + ' malzeme' : ''}</div>` : ''}
                 </div>
-                <div class="pc-actions">
-                    <button type="button" class="btn btn-sm" data-edit="${i}" title="Düzenle">✎ Düzenle</button>
-                    <button type="button" class="btn btn-sm btn-danger" data-del="${i}" title="Sil">✕</button>
+                <div class="pc-kebab-wrap">
+                    <button type="button" class="pc-kebab" title="İşlemler">⋮</button>
+                    <div class="pc-dropdown" hidden>
+                        <button type="button" data-edit="${i}">✎ Düzenle</button>
+                        <button type="button" class="pc-drop-danger" data-del="${i}">✕ Sil</button>
+                    </div>
                 </div>`;
 
+            const kebabBtn = card.querySelector('.pc-kebab');
+            const dropdown = card.querySelector('.pc-dropdown');
+            kebabBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                const wasOpen = !dropdown.hidden;
+                document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
+                dropdown.hidden = wasOpen;
+            });
             card.querySelector('[data-edit]').addEventListener('click', () => openModal(i));
             card.querySelector('[data-del]').addEventListener('click', () => {
                 if (confirm(`Palet ${i + 1} silinecek. Emin misiniz?`)) {
@@ -381,6 +392,11 @@
 
     /* Overlay tıklama → kapat */
     pmOverlay?.addEventListener('click', e => { if (e.target === pmOverlay) closeModal(); });
+
+    /* Dışarı tıklama → açık kebab dropdown'ı kapat */
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
+    });
 
     /* Escape → kapat */
     document.addEventListener('keydown', e => {
