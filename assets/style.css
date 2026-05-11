@@ -1489,13 +1489,38 @@ body.print-mode .asya-sheet {
 }
 .pc-stats strong { color: var(--text); font-weight: 600; }
 .pc-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
-.pc-actions {
-    display: flex; flex-direction: column; gap: 5px;
-    flex-shrink: 0; align-items: stretch;
+.pc-kebab-wrap {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
 }
-@media (min-width: 480px) {
-    .pc-actions { flex-direction: row; align-items: flex-start; }
+.pc-kebab {
+    background: none; border: none; cursor: pointer;
+    font-size: 1.4rem; line-height: 1; letter-spacing: .05em;
+    color: var(--muted); padding: 0 6px;
+    border-radius: var(--radius-sm);
 }
+.pc-kebab:hover { background: var(--bg); color: var(--text); }
+.pc-dropdown {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 200;
+    min-width: 140px;
+    overflow: hidden;
+}
+.pc-dropdown button {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 11px 14px;
+    background: none; border: none; cursor: pointer;
+    font-size: .9rem; text-align: left;
+    color: var(--text); font-family: inherit;
+}
+.pc-dropdown button:hover { background: var(--bg); }
+.pc-drop-danger { color: var(--danger) !important; }
+.pc-drop-danger:hover { background: var(--danger-soft) !important; }
 
 /* Boş durum */
 .pc-empty {
