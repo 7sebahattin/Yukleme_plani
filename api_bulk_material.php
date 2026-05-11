@@ -2,7 +2,8 @@
 // =========================================================
 // api_bulk_material.php
 // Seçili paletlere toplu malzeme ekler, dara/net yeniden hesaplar.
-// POST: { csrf, record_id, material_id, quantity, pallet_ids[] }
+// POST: { csrf, record_id, pallet_ids[], materials:[{material_id,quantity}] }
+//   ya da eski format: { ..., material_id, quantity }
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -16,31 +17,46 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$body        = json_decode(file_get_contents('php://input'), true) ?? [];
+$body       = json_decode(file_get_contents('php://input'), true) ?? [];
 csrf_check($body['csrf'] ?? null);
 
-$record_id   = (int)($body['record_id']   ?? 0);
-$material_id = (int)($body['material_id'] ?? 0);
-$quantity    = num($body['quantity']    ?? 0);
-$pallet_ids  = array_values(array_unique(array_map('intval', (array)($body['pallet_ids'] ?? []))));
+$record_id  = (int)($body['record_id'] ?? 0);
+$pallet_ids = array_values(array_unique(array_map('intval', (array)($body['pallet_ids'] ?? []))));
 
-if ($record_id <= 0 || $material_id <= 0 || $quantity <= 0 || empty($pallet_ids)) {
+// Eski (tekli) format → yeni array formatına çevir
+if (!empty($body['material_id'])) {
+    $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => num($body['quantity'] ?? 1)]];
+} else {
+    $materials_input = [];
+    foreach ((array)($body['materials'] ?? []) as $m) {
+        $mid = (int)($m['material_id'] ?? 0);
+        $qty = num($m['quantity'] ?? 1);
+        if ($mid > 0 && $qty > 0) $materials_input[] = ['material_id' => $mid, 'quantity' => $qty];
+    }
+}
+
+if ($record_id <= 0 || empty($materials_input) || empty($pallet_ids)) {
     echo json_encode(['error' => 'Eksik veya geçersiz parametre']);
     exit;
 }
 
-// Malzeme aktif mi?
-$st = db()->prepare("SELECT id, unit_dara_kg FROM material_definitions WHERE id=? AND is_active=1");
-$st->execute([$material_id]);
-$mat = $st->fetch();
-if (!$mat) {
-    echo json_encode(['error' => 'Malzeme bulunamadı']);
-    exit;
+// Tüm malzemelerin aktif olduğunu doğrula
+$mat_ids = array_values(array_unique(array_column($materials_input, 'material_id')));
+$place   = implode(',', array_fill(0, count($mat_ids), '?'));
+$st      = db()->prepare("SELECT id, unit_dara_kg FROM material_definitions WHERE id IN ($place) AND is_active=1");
+$st->execute($mat_ids);
+$mats_db = array_column($st->fetchAll(), null, 'id');
+
+foreach ($materials_input as $m) {
+    if (!isset($mats_db[$m['material_id']])) {
+        echo json_encode(['error' => 'Malzeme bulunamadı: #' . $m['material_id']]);
+        exit;
+    }
 }
 
 // Sadece bu kayda ait paletleri işle
-$place     = implode(',', array_fill(0, count($pallet_ids), '?'));
-$st        = db()->prepare("SELECT id FROM loading_pallets WHERE id IN ($place) AND loading_record_id=?");
+$place2    = implode(',', array_fill(0, count($pallet_ids), '?'));
+$st        = db()->prepare("SELECT id FROM loading_pallets WHERE id IN ($place2) AND loading_record_id=?");
 $st->execute(array_merge($pallet_ids, [$record_id]));
 $valid_ids = array_column($st->fetchAll(), 'id');
 
@@ -53,26 +69,33 @@ $pdo = db();
 $pdo->beginTransaction();
 
 try {
-    $unit_kg = num($mat['unit_dara_kg']);
-
     foreach ($valid_ids as $pid) {
-        // Malzeme zaten var mı? → üstüne ekle
-        $st_chk = $pdo->prepare("SELECT id, quantity FROM pallet_materials WHERE loading_pallet_id=? AND material_id=?");
-        $st_chk->execute([$pid, $material_id]);
-        $existing = $st_chk->fetch();
+        foreach ($materials_input as $m) {
+            $mid     = $m['material_id'];
+            $qty     = $m['quantity'];
+            $unit_kg = num($mats_db[$mid]['unit_dara_kg']);
 
-        if ($existing) {
-            $new_qty  = round(num($existing['quantity']) + $quantity, 3);
-            $new_dara = round($unit_kg * $new_qty, 3);
-            $pdo->prepare("UPDATE pallet_materials SET quantity=?, total_dara_kg=? WHERE id=?")
-                ->execute([$new_qty, $new_dara, (int)$existing['id']]);
-        } else {
-            $dara = round($unit_kg * $quantity, 3);
-            $pdo->prepare("INSERT INTO pallet_materials (loading_pallet_id, material_id, quantity, total_dara_kg) VALUES (?,?,?,?)")
-                ->execute([$pid, $material_id, $quantity, $dara]);
+            $st_chk = $pdo->prepare(
+                "SELECT id, quantity FROM pallet_materials WHERE loading_pallet_id=? AND material_id=?"
+            );
+            $st_chk->execute([$pid, $mid]);
+            $existing = $st_chk->fetch();
+
+            if ($existing) {
+                $new_qty  = round(num($existing['quantity']) + $qty, 3);
+                $new_dara = round($unit_kg * $new_qty, 3);
+                $pdo->prepare("UPDATE pallet_materials SET quantity=?, total_dara_kg=? WHERE id=?")
+                    ->execute([$new_qty, $new_dara, (int)$existing['id']]);
+            } else {
+                $dara = round($unit_kg * $qty, 3);
+                $pdo->prepare(
+                    "INSERT INTO pallet_materials (loading_pallet_id, material_id, quantity, total_dara_kg)
+                     VALUES (?,?,?,?)"
+                )->execute([$pid, $mid, $qty, $dara]);
+            }
         }
 
-        // Tüm malzemeleri yeniden al ve dara/net hesapla
+        // Dara/net yeniden hesapla
         $st_p = $pdo->prepare("SELECT * FROM loading_pallets WHERE id=?");
         $st_p->execute([$pid]);
         $pallet = $st_p->fetch();
@@ -80,7 +103,7 @@ try {
         $st_m = $pdo->prepare("SELECT material_id, quantity FROM pallet_materials WHERE loading_pallet_id=?");
         $st_m->execute([$pid]);
         $mats = array_map(
-            fn($m) => ['material_id' => $m['material_id'], 'quantity' => $m['quantity']],
+            fn($mi) => ['material_id' => $mi['material_id'], 'quantity' => $mi['quantity']],
             $st_m->fetchAll()
         );
 
