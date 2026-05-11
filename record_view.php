@@ -451,6 +451,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                             📷 Fotoğraf Ekle
                             <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
                         </label>
+                        <button id="etiketFitBtn" class="etiket-ctrl-btn" style="display:none">⊞ Doldur</button>
                         <button id="etiketClear" class="etiket-clear-btn" style="display:none">✕</button>
                     </div>
                 </div>
@@ -684,47 +685,110 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
 <script>
 (function () {
-    var KEY = 'etiket_img_<?= (int)$id ?>';
+    var KEY    = 'etiket_<?= (int)$id ?>';
     var imgEl  = document.getElementById('etiketImg');
     var ph     = document.getElementById('etiketPlaceholder');
     var inp    = document.getElementById('etiketInput');
     var clrBtn = document.getElementById('etiketClear');
+    var fitBtn = document.getElementById('etiketFitBtn');
 
-    function show(src) {
+    // { src, fit:'contain'|'cover', px:50, py:50 }
+    var s = { src: '', fit: 'contain', px: 50, py: 50 };
+
+    function applyStyle() {
         if (!imgEl) return;
-        imgEl.src = src;
+        imgEl.style.objectFit     = s.fit;
+        imgEl.style.objectPosition = s.px + '% ' + s.py + '%';
+        imgEl.classList.toggle('cover-mode', s.fit === 'cover');
+        if (fitBtn) fitBtn.textContent = s.fit === 'contain' ? '⊞ Doldur' : '⊡ Sığdır';
+    }
+
+    function persist() { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e) {} }
+
+    function showPhoto() {
+        if (!imgEl) return;
+        imgEl.src = s.src;
         imgEl.style.display = 'block';
+        applyStyle();
         if (ph)     ph.style.display     = 'none';
         if (clrBtn) clrBtn.style.display = 'inline-block';
+        if (fitBtn) fitBtn.style.display = 'inline-block';
     }
-    function clear() {
+
+    function clearPhoto() {
+        s = { src: '', fit: 'contain', px: 50, py: 50 };
         if (!imgEl) return;
-        imgEl.src = '';
-        imgEl.style.display = 'none';
+        imgEl.src = ''; imgEl.style.display = 'none';
+        imgEl.classList.remove('cover-mode');
         if (ph)     ph.style.display     = 'flex';
         if (clrBtn) clrBtn.style.display = 'none';
+        if (fitBtn) fitBtn.style.display = 'none';
         try { localStorage.removeItem(KEY); } catch(e) {}
     }
 
-    try {
-        var saved = localStorage.getItem(KEY);
-        if (saved) show(saved);
-    } catch(e) {}
+    // Load saved (backward-compat: old key was 'etiket_img_ID' plain data-URL)
+    (function load() {
+        try {
+            var raw = localStorage.getItem(KEY)
+                   || localStorage.getItem('etiket_img_<?= (int)$id ?>');
+            if (!raw) return;
+            if (raw.charAt(0) === '{') {
+                var p = JSON.parse(raw);
+                if (p && p.src) { s = p; showPhoto(); }
+            } else if (raw.indexOf('data:') === 0) {
+                s.src = raw; showPhoto(); persist();
+            }
+        } catch(e) {}
+    })();
 
-    if (inp) {
-        inp.addEventListener('change', function () {
-            var file = this.files[0];
-            if (!file) return;
-            var r = new FileReader();
-            r.onload = function (e) {
-                var src = e.target.result;
-                try { localStorage.setItem(KEY, src); } catch(e) {}
-                show(src);
-            };
-            r.readAsDataURL(file);
-        });
+    // File input
+    if (inp) inp.addEventListener('change', function () {
+        var file = this.files[0];
+        if (!file) return;
+        var r = new FileReader();
+        r.onload = function (ev) {
+            s.src = ev.target.result; s.px = 50; s.py = 50;
+            showPhoto(); persist();
+        };
+        r.readAsDataURL(file);
+    });
+
+    if (clrBtn) clrBtn.addEventListener('click', clearPhoto);
+
+    if (fitBtn) fitBtn.addEventListener('click', function () {
+        s.fit = s.fit === 'contain' ? 'cover' : 'contain';
+        if (s.fit === 'contain') { s.px = 50; s.py = 50; }
+        applyStyle(); persist();
+    });
+
+    // Drag to reposition (cover mode only)
+    var drag = false, ox, oy, opx, opy;
+
+    function onDown(cx, cy) {
+        if (s.fit !== 'cover' || !imgEl) return;
+        drag = true; ox = cx; oy = cy; opx = s.px; opy = s.py;
     }
-    if (clrBtn) clrBtn.addEventListener('click', clear);
+    function onMove(cx, cy) {
+        if (!drag || !imgEl) return;
+        var rect = imgEl.getBoundingClientRect();
+        s.px = Math.max(0, Math.min(100, opx - (cx - ox) / rect.width  * 100));
+        s.py = Math.max(0, Math.min(100, opy - (cy - oy) / rect.height * 100));
+        applyStyle();
+    }
+    function onUp() { if (drag) { drag = false; persist(); } }
+
+    if (imgEl) {
+        imgEl.addEventListener('mousedown',  function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
+        document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
+        document.addEventListener('mouseup',   onUp);
+        imgEl.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 1) { onDown(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+        }, { passive: false });
+        imgEl.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 1) { onMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
+        }, { passive: false });
+        imgEl.addEventListener('touchend', onUp);
+    }
 })();
 </script>
 

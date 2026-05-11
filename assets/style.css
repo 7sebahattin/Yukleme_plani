@@ -823,22 +823,28 @@ body.print-mode .topbar { display: none; }
 .marka-cell strong { font-weight: 700; font-size: 7.5pt; }
 
 .asya-etiket {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;        /* flex overflow fix — kritik */
     padding: 4px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 70px;
     position: relative;
     overflow: hidden;
 }
 .etiket-img {
-    max-width: 100%;
-    max-height: 100%;
+    flex: 1 1 0;
+    min-height: 0;        /* flex overflow fix */
+    width: 100%;
     object-fit: contain;
-    flex: 1;
+    object-position: 50% 50%;
+    cursor: default;
+    -webkit-user-drag: none;
+    user-select: none;
 }
+.etiket-img.cover-mode { cursor: grab; }
+.etiket-img.cover-mode:active { cursor: grabbing; }
 .etiket-placeholder {
     display: flex;
     align-items: center;
@@ -857,6 +863,7 @@ body.print-mode .topbar { display: none; }
     padding-top: 4px;
     width: 100%;
     justify-content: center;
+    flex-shrink: 0;
 }
 .etiket-upload-btn {
     cursor: pointer;
@@ -866,6 +873,17 @@ body.print-mode .topbar { display: none; }
     background: var(--primary-soft);
     color: var(--primary);
     border: 1px solid var(--primary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.etiket-ctrl-btn {
+    cursor: pointer;
+    font-size: .78rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--warn-soft);
+    color: var(--warn);
+    border: 1px solid var(--warn);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -1048,7 +1066,8 @@ body.print-mode .asya-sheet {
     .asya-alici-cell, .asya-urun-cell { border-color: #000; }
     .cell-pair, .marka-cell { border-color: #000; }
     .avans-th { border-color: #000 !important; }
-    .etiket-img { display: block !important; }
+    .asya-etiket { min-height: 0; overflow: hidden; }
+    .etiket-img { display: block !important; width: 100% !important; height: 100% !important; min-height: 0; }
     .etiket-placeholder { color: #ccc; }
     .asya-pallets .row-no {
         background: #f6f6f6 !important;
