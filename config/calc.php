@@ -83,7 +83,7 @@ function compute_pallet_row(array $row): array {
     }
     unset($m);
 
-    $dara = round_half($kasa_dara_total + $palet_dara_total + $extra_total);
+    $dara = round($kasa_dara_total + $palet_dara_total + $extra_total, 3);
     $net  = round(max(0, $brut - $dara), 3);
 
     return [
