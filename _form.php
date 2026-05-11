@@ -125,8 +125,6 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
     </div>
 
-    <p class="muted small-note">Yeni palet eklendiğinde Ürün Cinsi ve Depo Genel Bilgilerden, diğer alanlar önceki paletten kopyalanır.</p>
-
     <div id="palletList" class="pallet-cards"></div>
 
     <!-- Toplamlar (mavi alan) -->
@@ -180,7 +178,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         </label>
         <label class="pm-label">
           <span>Kasa Adeti *</span>
-          <input type="text" inputmode="numeric" id="pmKasaAdeti" class="num" placeholder="örn. 120">
+          <input type="text" inputmode="numeric" id="pmKasaAdeti" class="num kasa-adeti" placeholder="örn. 120">
         </label>
         <label class="pm-label">
           <span>Size</span>
@@ -188,7 +186,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         </label>
         <label class="pm-label">
           <span>Brüt KG *</span>
-          <input type="text" inputmode="decimal" id="pmBrutKg" class="num" placeholder="örn. 1250">
+          <input type="text" inputmode="decimal" id="pmBrutKg" class="num brut-kg" placeholder="örn. 1250">
         </label>
         <label class="pm-label pm-span2">
           <span>Kasa Cinsi *</span>
