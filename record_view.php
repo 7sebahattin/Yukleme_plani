@@ -352,11 +352,11 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                 <div class="vc-kasa"><?= (int)$p['kasa_adeti'] ?> kasa</div>
             </div>
             <div class="vc-grid">
-                <div><span>Size</span><strong><?= h($p['size'] ?: '—') ?></strong></div>
                 <div><span>Ürün Cinsi</span><strong><?= h($p['urun_cinsi'] ?: '—') ?></strong></div>
+                <div><span>Depo</span><strong><?= h($p['depo'] ?: '—') ?></strong></div>
                 <div class="span-2"><span>Kasa Cinsi</span><strong><?= h(kasa_label($p['kasa_cinsi_adi'], $p['kasa_cinsi_kg'])) ?></strong></div>
                 <div class="span-2"><span>Palet Tipi</span><strong><?= h(kasa_label($p['palet_tipi_adi'], $p['palet_tipi_kg'])) ?></strong></div>
-                <div><span>Depo</span><strong><?= h($p['depo'] ?: '—') ?></strong></div>
+                <?php if ($p['size']): ?><div class="span-2"><span>Size</span><strong><?= h($p['size']) ?></strong></div><?php endif; ?>
             </div>
             <?php if (!empty($p['materials'])): ?>
                 <div class="vc-materials">
