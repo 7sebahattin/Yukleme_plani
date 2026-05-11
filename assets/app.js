@@ -136,7 +136,7 @@
             const qty  = parseNum(mr.querySelector('.mat-qty').value);
             extra += (unit * qty) || 0;
         });
-        return roundHalf(ka * kasaUnit + paletUnit + extra);
+        return ka * kasaUnit + paletUnit + extra;
     }
     function updateModalCalc() {
         const brut = parseNum(pmBrutKg.value);
@@ -289,7 +289,7 @@
                 if (mat) extra += mat.unit * parseNum(m.quantity);
             });
         }
-        return roundHalf(ka * (kasaItem?.unit || 0) + (paletItem?.unit || 0) + extra);
+        return ka * (kasaItem?.unit || 0) + (paletItem?.unit || 0) + extra;
     }
 
     /* ── Kart listesini render et ── */
@@ -362,7 +362,7 @@
         });
         document.getElementById('totKasa').textContent = String(totKasa);
         document.getElementById('totBrut').textContent = fmtKg(totBrut);
-        document.getElementById('totDara').textContent = fmtKg(totDara);
+        document.getElementById('totDara').textContent = fmtKg(Math.round(totDara));
         document.getElementById('totNet').textContent  = fmtKg(totNet);
     }
 
