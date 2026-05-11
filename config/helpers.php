@@ -7,10 +7,10 @@
 
 declare(strict_types=1);
 
-// En yakın 0.5'e yuvarlama (calc.php ile paylaşılan mantık)
+// En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
 if (!function_exists('round_half')) {
     function round_half(float $n): float {
-        return round($n * 2) / 2;
+        return (float)round($n);
     }
 }
 
