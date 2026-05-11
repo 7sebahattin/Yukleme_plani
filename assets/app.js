@@ -1,35 +1,31 @@
 /* =========================================================
-   Yükleme Planı - app.js (v2)
-   - Palet satırı dinamik ekle/sil
-   - Yeni palet, önceki palet doluysa onun değerlerini KOPYALAR
-     (kasa adeti ve brüt kg hariç — onlar boş kalır)
-   - Anlık dara, net, alt toplam (sadece en alttaki mavi alanda)
-   - Zorunlu alanlar: brüt kg, kasa adeti, kasa cinsi, palet tipi
-   - Genel/Nakliye bilgileri açılır/kapanır kart
+   Yükleme Planı - app.js (v3)
+   Modal-tabanlı palet ekleme/düzenleme
    ========================================================= */
 (function () {
     'use strict';
 
-    const formEl = document.getElementById('recordForm');
-
-    // ============== Açılır/kapanır kart bölümleri ==============
+    /* ── Açılır/kapanır kart bölümleri ── */
     document.querySelectorAll('.collapsible-card').forEach(card => {
         const head = card.querySelector('.card-head-toggle');
         if (!head) return;
-        head.addEventListener('click', (e) => {
+        head.addEventListener('click', e => {
             if (e.target.closest('input, select, textarea, button')) return;
             card.classList.toggle('collapsed');
         });
     });
 
+    const formEl = document.getElementById('recordForm');
     if (!formEl) return;
 
-    const MATERIALS = JSON.parse(document.getElementById('materialsData').textContent || '{}');
-    const KASA_LIST = JSON.parse(document.getElementById('kasaCinsiData').textContent || '[]');
-    const PALET_LIST = JSON.parse(document.getElementById('paletTipiData').textContent || '[]');
+    /* ── Statik veriler ── */
+    const MATERIALS  = JSON.parse(document.getElementById('materialsData').textContent  || '{}');
+    const KASA_LIST  = JSON.parse(document.getElementById('kasaCinsiData').textContent  || '[]');
+    const PALET_LIST = JSON.parse(document.getElementById('paletTipiData').textContent  || '[]');
     const TYPE_LABELS = JSON.parse(document.getElementById('materialTypesData').textContent || '{}');
-    let palletsInit = JSON.parse(document.getElementById('palletsInit').textContent || '[]');
+    const palletsInit = JSON.parse(document.getElementById('palletsInit').textContent   || '[]');
 
+    /* Materials tip grupları */
     const matsByType = {};
     Object.keys(MATERIALS).forEach(id => {
         const m = MATERIALS[id];
@@ -37,9 +33,7 @@
         matsByType[m.type].push({ id: parseInt(id, 10), name: m.name, unit: m.unit });
     });
 
-    const list = document.getElementById('palletList');
-    let rowCounter = 0;
-
+    /* ── Yardımcı fonksiyonlar ── */
     function fmtKg(n) {
         if (!isFinite(n)) n = 0;
         let s = n.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -49,9 +43,7 @@
         });
         return s;
     }
-    function roundHalf(n) {
-        return Math.round(n);
-    }
+    function roundHalf(n) { return Math.round(n); }
     function parseNum(v) {
         if (v === null || v === undefined || v === '') return 0;
         if (typeof v === 'number') return isFinite(v) ? v : 0;
@@ -63,231 +55,276 @@
         const n = parseInt(String(v || '0').replace(/[^\d-]/g, ''), 10);
         return isFinite(n) ? n : 0;
     }
-    function escAttr(s) {
+    function escHtml(s) {
         return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-            .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    /* ── Durum ── */
+    let pallets = [];
+    let editingIdx = -1; /* -1 = yeni, 0+ = mevcut */
+
+    /* ── DOM referansları ── */
+    const cardContainer = document.getElementById('palletList');
+    const pmOverlay  = document.getElementById('pmOverlay');
+    const pmTitle    = document.getElementById('pmTitle');
+    const pmDara     = document.getElementById('pmDara');
+    const pmNet      = document.getElementById('pmNet');
+    const pmPaletNo  = document.getElementById('pmPaletNo');
+    const pmKasaAdeti = document.getElementById('pmKasaAdeti');
+    const pmSize     = document.getElementById('pmSize');
+    const pmBrutKg   = document.getElementById('pmBrutKg');
+    const pmKasaCinsi = document.getElementById('pmKasaCinsi');
+    const pmPaletTipi = document.getElementById('pmPaletTipi');
+    const pmUrunCinsi = document.getElementById('pmUrunCinsi');
+    const pmDepo     = document.getElementById('pmDepo');
+    const pmMatList  = document.getElementById('pmMaterialsList');
+
+    /* ── Select seçenekleri oluştur ── */
     function buildOptions(items, selectedId, placeholder) {
-        let html = `<option value="">${placeholder || '-- seçiniz --'}</option>`;
+        let html = `<option value="">${placeholder}</option>`;
         items.forEach(it => {
             const sel = String(it.id) === String(selectedId) ? ' selected' : '';
-            html += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escAttr(it.name)} (${fmtKg(it.unit)} kg)</option>`;
+            html += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtKg(it.unit)} kg)</option>`;
         });
         return html;
     }
 
-    // Önceki paletten kopyalanacak veriyi çıkart
-    function getPrefillFromLastRow() {
-        const rows = list.querySelectorAll('.pallet-row');
-        if (!rows.length) return null;
-        const last = rows[rows.length - 1];
-        const ka = parseInt2(last.querySelector('.kasa-adeti').value);
-        const br = parseNum(last.querySelector('.brut-kg').value);
-        const kc = last.querySelector('.kasa-cinsi').value;
-        const pt = last.querySelector('.palet-tipi').value;
-        if (!ka && !br && !kc && !pt) return null;
-
-        const materials = [];
-        last.querySelectorAll('.material-row').forEach(mr => {
-            const mid = mr.querySelector('.mat-select').value;
-            const qty = mr.querySelector('.mat-qty').value;
-            if (mid) materials.push({ material_id: mid, quantity: qty });
-        });
-
-        return {
-            palet_no: '',
-            kasa_adeti: '',
-            size: last.querySelector('input[name*="[size]"]').value,
-            brut_kg: '',
-            kasa_cinsi_id: kc,
-            palet_tipi_id: pt,
-            urun_cinsi: last.querySelector('input[name*="[urun_cinsi]"]').value,
-            depo: last.querySelector('input[name*="[depo]"]').value,
-            materials: materials,
-        };
-    }
-
-    function createPalletRow(data) {
-        rowCounter++;
-        const idx = rowCounter;
-        const d = data || {};
-
-        const wrap = document.createElement('div');
-        wrap.className = 'pallet-row';
-        wrap.dataset.idx = idx;
-
-        const paletNoVal = (d.palet_no !== '' && d.palet_no != null) ? d.palet_no : idx;
-
-        wrap.innerHTML = `
-            <div class="pallet-row-head">
-                <span class="pallet-num">Palet #<span class="row-no">${idx}</span></span>
-                <button type="button" class="btn btn-sm btn-danger btn-icon row-remove" title="Sil">×</button>
-            </div>
-            <div class="pallet-fields">
-                <label><span class="lbl-text">Palet No</span>
-                    <input type="text" name="pallets[${idx}][palet_no]" value="${escAttr(paletNoVal)}" placeholder="Palet No" data-tab>
-                </label>
-                <label><span class="lbl-text">Kasa Adeti *</span>
-                    <input type="text" inputmode="numeric" name="pallets[${idx}][kasa_adeti]" value="${escAttr(d.kasa_adeti || '')}" placeholder="Kasa adet" class="num kasa-adeti req" data-tab required>
-                </label>
-                <label><span class="lbl-text">Size</span>
-                    <input type="text" name="pallets[${idx}][size]" value="${escAttr(d.size || '')}" placeholder="Size" data-tab>
-                </label>
-                <label><span class="lbl-text">Brüt KG *</span>
-                    <input type="text" inputmode="decimal" name="pallets[${idx}][brut_kg]" value="${escAttr(d.brut_kg !== '' && d.brut_kg != null ? (parseNum(d.brut_kg) || '') : '')}" placeholder="Brüt kg" class="num brut-kg req" data-tab required>
-                </label>
-                <label><span class="lbl-text">Kasa Cinsi *</span>
-                    <select name="pallets[${idx}][kasa_cinsi_id]" class="kasa-cinsi req" data-tab required>
-                        ${buildOptions(KASA_LIST, d.kasa_cinsi_id, '-- kasa cinsi --')}
-                    </select>
-                </label>
-                <label><span class="lbl-text">Palet Tipi *</span>
-                    <select name="pallets[${idx}][palet_tipi_id]" class="palet-tipi req" data-tab required>
-                        ${buildOptions(PALET_LIST, d.palet_tipi_id, '-- palet tipi --')}
-                    </select>
-                </label>
-                <label><span class="lbl-text">Ürün Cinsi</span>
-                    <input type="text" name="pallets[${idx}][urun_cinsi]" value="${escAttr(d.urun_cinsi || '')}" placeholder="Ürün cinsi" data-tab>
-                </label>
-                <label><span class="lbl-text">Depo</span>
-                    <input type="text" name="pallets[${idx}][depo]" value="${escAttr(d.depo || '')}" placeholder="Depo" data-tab>
-                </label>
-                <div class="pf-dara" data-role="dara" title="Dara KG">0,000</div>
-                <div class="pf-net" data-role="net" title="Net KG">0,000</div>
-                <div class="pf-action">
-                    <button type="button" class="btn btn-sm btn-ghost btn-icon row-remove pc-only-inline" title="Sil">×</button>
-                </div>
-            </div>
-
-            <div class="materials-block">
-                <div class="materials-block-head">
-                    <span>Ek malzemeler / dara kalemleri</span>
-                    <button type="button" class="btn btn-sm add-material">+ Malzeme</button>
-                </div>
-                <div class="materials-list"></div>
-            </div>
-        `;
-
-        list.appendChild(wrap);
-
-        if (Array.isArray(d.materials)) {
-            d.materials.forEach(m => addMaterial(wrap, m));
-        }
-
-        bindRow(wrap);
-        recompute(wrap);
-        return wrap;
-    }
-
-    function addMaterial(rowEl, data) {
-        const idx = rowEl.dataset.idx;
-        const d = data || {};
-        const list = rowEl.querySelector('.materials-list');
-        const m = document.createElement('div');
-        m.className = 'material-row';
-
-        let opts = '<option value="">-- malzeme seçiniz --</option>';
-        Object.keys(matsByType).sort().forEach(t => {
-            if (t === 'kasa_cinsi' || t === 'palet_tipi') return;
-            const label = TYPE_LABELS[t] || t;
-            opts += `<optgroup label="${escAttr(label)}">`;
-            matsByType[t].forEach(it => {
-                const sel = String(it.id) === String(d.material_id) ? ' selected' : '';
-                opts += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escAttr(it.name)} (${fmtKg(it.unit)} kg)</option>`;
-            });
-            opts += '</optgroup>';
-        });
-
-        m.innerHTML = `
-            <select name="pallets[${idx}][materials][][material_id]" class="mat-select" data-tab>${opts}</select>
-            <input type="text" inputmode="decimal" class="num mat-qty" data-tab
-                   name="pallets[${idx}][materials][][quantity]"
-                   value="${escAttr(d.quantity || 1)}" placeholder="Adet">
-            <button type="button" class="btn btn-sm btn-ghost btn-icon mat-remove" title="Sil">×</button>
-        `;
-        list.appendChild(m);
-
-        m.querySelector('.mat-select').addEventListener('change', () => recompute(rowEl));
-        m.querySelector('.mat-qty').addEventListener('input', () => recompute(rowEl));
-        m.querySelector('.mat-remove').addEventListener('click', () => {
-            m.remove();
-            recompute(rowEl);
-        });
-    }
-
-    function bindRow(rowEl) {
-        rowEl.querySelectorAll('input, select').forEach(el => {
-            el.addEventListener('input', () => {
-                el.classList.remove('error');
-                recompute(rowEl);
-            });
-            el.addEventListener('change', () => {
-                el.classList.remove('error');
-                recompute(rowEl);
-            });
-        });
-        rowEl.querySelectorAll('.row-remove').forEach(btn => {
-            btn.addEventListener('click', () => {
-                if (list.children.length === 1) {
-                    if (!confirm('Son palet satırı silinecek. Emin misiniz?')) return;
-                }
-                rowEl.remove();
-                renumber();
-                recomputeAll();
-            });
-        });
-        rowEl.querySelector('.add-material').addEventListener('click', () => addMaterial(rowEl));
-    }
-
-    function renumber() {
-        let i = 0;
-        list.querySelectorAll('.pallet-row').forEach(r => {
-            i++;
-            r.querySelector('.row-no').textContent = i;
-        });
-    }
-
-    function rowDara(r) {
-        const kSel = r.querySelector('.kasa-cinsi');
-        const pSel = r.querySelector('.palet-tipi');
-        const kasaUnit  = parseNum(kSel.options[kSel.selectedIndex]?.dataset.unit || 0);
-        const paletUnit = parseNum(pSel.options[pSel.selectedIndex]?.dataset.unit || 0);
-        const ka = parseInt2(r.querySelector('.kasa-adeti').value);
+    /* ── Modal dara/net hesapla ── */
+    function calcModalDara() {
+        const ka = parseInt2(pmKasaAdeti.value);
+        const kasaOpt  = pmKasaCinsi.options[pmKasaCinsi.selectedIndex];
+        const paletOpt = pmPaletTipi.options[pmPaletTipi.selectedIndex];
+        const kasaUnit  = parseNum(kasaOpt?.dataset.unit  || 0);
+        const paletUnit = parseNum(paletOpt?.dataset.unit || 0);
         let extra = 0;
-        r.querySelectorAll('.material-row').forEach(mr => {
-            const sel = mr.querySelector('.mat-select');
-            const opt = sel.options[sel.selectedIndex];
-            const unit = parseNum(opt?.dataset.unit || 0);
+        pmMatList.querySelectorAll('.pm-mat-row').forEach(mr => {
+            const sel  = mr.querySelector('.mat-select');
+            const unit = parseNum(sel.options[sel.selectedIndex]?.dataset.unit || 0);
             const qty  = parseNum(mr.querySelector('.mat-qty').value);
             extra += (unit * qty) || 0;
         });
         return roundHalf(ka * kasaUnit + paletUnit + extra);
     }
-
-    function recompute(rowEl) {
-        const brut = parseNum(rowEl.querySelector('.brut-kg').value);
-        const dara = rowDara(rowEl);
+    function updateModalCalc() {
+        const brut = parseNum(pmBrutKg.value);
+        const dara = calcModalDara();
         const net  = Math.max(0, brut - dara);
-        rowEl.querySelector('[data-role="dara"]').textContent = fmtKg(dara);
-        rowEl.querySelector('[data-role="net"]').textContent  = fmtKg(net);
+        pmDara.textContent = fmtKg(dara);
+        pmNet.textContent  = fmtKg(net);
+    }
+
+    /* ── Modal malzeme satırı ── */
+    function addModalMaterial(data) {
+        const d = data || {};
+        const row = document.createElement('div');
+        row.className = 'pm-mat-row material-row';
+
+        let opts = '<option value="">-- malzeme seçiniz --</option>';
+        Object.keys(matsByType).sort().forEach(t => {
+            if (t === 'kasa_cinsi' || t === 'palet_tipi') return;
+            const label = TYPE_LABELS[t] || t;
+            opts += `<optgroup label="${escHtml(label)}">`;
+            matsByType[t].forEach(it => {
+                const sel = String(it.id) === String(d.material_id) ? ' selected' : '';
+                opts += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtKg(it.unit)} kg)</option>`;
+            });
+            opts += '</optgroup>';
+        });
+
+        row.innerHTML = `
+            <select class="mat-select">${opts}</select>
+            <input type="text" inputmode="decimal" class="num mat-qty"
+                   value="${escHtml(d.quantity || 1)}" placeholder="Adet">
+            <button type="button" class="btn btn-sm btn-ghost btn-icon mat-remove" title="Sil">×</button>
+        `;
+        pmMatList.appendChild(row);
+        row.querySelector('.mat-select').addEventListener('change', updateModalCalc);
+        row.querySelector('.mat-qty').addEventListener('input', updateModalCalc);
+        row.querySelector('.mat-remove').addEventListener('click', () => {
+            row.remove();
+            updateModalCalc();
+        });
+    }
+
+    /* ── Modal aç ── */
+    function openModal(idx) {
+        editingIdx = idx;
+        const isNew = idx === -1;
+        pmTitle.textContent = isNew ? 'Yeni Palet Ekle' : `Palet ${idx + 1} Düzenle`;
+
+        /* Alanları sıfırla */
+        pmPaletNo.value  = '';
+        pmKasaAdeti.value = '';
+        pmSize.value     = '';
+        pmBrutKg.value   = '';
+        pmUrunCinsi.value = '';
+        pmDepo.value     = '';
+        pmMatList.innerHTML = '';
+        [pmKasaAdeti, pmBrutKg, pmKasaCinsi, pmPaletTipi].forEach(el => el.classList.remove('error'));
+
+        if (isNew) {
+            const last = pallets[pallets.length - 1];
+            pmPaletNo.value = String(pallets.length + 1);
+            pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, last?.kasa_cinsi_id || '', '-- kasa cinsi seçiniz --');
+            pmPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || '', '-- palet tipi seçiniz --');
+            if (last) {
+                pmSize.value = last.size || '';
+                if (Array.isArray(last.materials)) last.materials.forEach(m => addModalMaterial(m));
+            }
+            const urunEl = document.getElementById('genelUrun');
+            const depoEl = document.getElementById('genelDepo');
+            if (urunEl) pmUrunCinsi.value = urunEl.value;
+            if (depoEl) pmDepo.value = depoEl.value;
+        } else {
+            const p = pallets[idx];
+            pmPaletNo.value  = p.palet_no || '';
+            pmKasaAdeti.value = p.kasa_adeti !== '' && p.kasa_adeti != null ? p.kasa_adeti : '';
+            pmSize.value     = p.size || '';
+            pmBrutKg.value   = p.brut_kg !== '' && p.brut_kg != null ? parseNum(p.brut_kg) || '' : '';
+            pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, p.kasa_cinsi_id, '-- kasa cinsi seçiniz --');
+            pmPaletTipi.innerHTML = buildOptions(PALET_LIST, p.palet_tipi_id, '-- palet tipi seçiniz --');
+            pmUrunCinsi.value = p.urun_cinsi || '';
+            pmDepo.value     = p.depo || '';
+            if (Array.isArray(p.materials)) p.materials.forEach(m => addModalMaterial(m));
+        }
+
+        updateModalCalc();
+        pmOverlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => pmKasaAdeti.focus(), 80);
+    }
+
+    function closeModal() {
+        pmOverlay.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    /* ── Modal kaydet ── */
+    function saveModal() {
+        const ka = parseInt2(pmKasaAdeti.value);
+        const br = parseNum(pmBrutKg.value);
+        const kc = pmKasaCinsi.value;
+        const pt = pmPaletTipi.value;
+
+        [pmKasaAdeti, pmBrutKg, pmKasaCinsi, pmPaletTipi].forEach(el => el.classList.remove('error'));
+        let err = false;
+        if (!ka) { pmKasaAdeti.classList.add('error'); err = true; }
+        if (!br) { pmBrutKg.classList.add('error');   err = true; }
+        if (!kc) { pmKasaCinsi.classList.add('error'); err = true; }
+        if (!pt) { pmPaletTipi.classList.add('error'); err = true; }
+        if (err) { alert('Kasa adeti, Brüt KG, Kasa Cinsi ve Palet Tipi zorunludur.'); return; }
+
+        const materials = [];
+        pmMatList.querySelectorAll('.pm-mat-row').forEach(mr => {
+            const mid = mr.querySelector('.mat-select').value;
+            const qty = parseNum(mr.querySelector('.mat-qty').value);
+            if (mid) materials.push({ material_id: mid, quantity: qty });
+        });
+
+        const p = {
+            palet_no:     pmPaletNo.value.trim() || String(editingIdx === -1 ? pallets.length + 1 : editingIdx + 1),
+            kasa_adeti:   ka,
+            size:         pmSize.value.trim(),
+            brut_kg:      br,
+            kasa_cinsi_id: kc,
+            palet_tipi_id: pt,
+            urun_cinsi:   pmUrunCinsi.value.trim(),
+            depo:         pmDepo.value.trim(),
+            materials:    materials,
+        };
+
+        if (editingIdx === -1) {
+            pallets.push(p);
+        } else {
+            pallets[editingIdx] = p;
+        }
+
+        renderCards();
         recomputeTotals();
+        closeModal();
     }
-    function recomputeAll() {
-        list.querySelectorAll('.pallet-row').forEach(r => recompute(r));
+
+    /* ── Palet dara (kart ve toplam için) ── */
+    function calcPalletDara(p) {
+        const ka = parseInt2(p.kasa_adeti);
+        const kasaItem  = KASA_LIST.find(k => String(k.id) === String(p.kasa_cinsi_id));
+        const paletItem = PALET_LIST.find(k => String(k.id) === String(p.palet_tipi_id));
+        let extra = 0;
+        if (Array.isArray(p.materials)) {
+            p.materials.forEach(m => {
+                const mat = MATERIALS[m.material_id];
+                if (mat) extra += mat.unit * parseNum(m.quantity);
+            });
+        }
+        return roundHalf(ka * (kasaItem?.unit || 0) + (paletItem?.unit || 0) + extra);
     }
+
+    /* ── Kart listesini render et ── */
+    function renderCards() {
+        if (!pallets.length) {
+            cardContainer.innerHTML = `
+                <div class="pc-empty" id="pcEmpty" role="button" tabindex="0">
+                    <div class="pc-empty-icon">📦</div>
+                    <div class="pc-empty-text">Henüz palet yok.<br>Eklemek için tıklayın veya <strong>+ Yeni Palet Ekle</strong> butonunu kullanın.</div>
+                </div>`;
+            document.getElementById('pcEmpty')?.addEventListener('click', () => openModal(-1));
+            return;
+        }
+
+        cardContainer.innerHTML = '';
+        pallets.forEach((p, i) => {
+            const dara = calcPalletDara(p);
+            const net  = Math.max(0, parseNum(p.brut_kg) - dara);
+            const kasaName  = KASA_LIST.find(k => String(k.id) === String(p.kasa_cinsi_id))?.name || '';
+            const paletName = PALET_LIST.find(k => String(k.id) === String(p.palet_tipi_id))?.name || '';
+
+            const card = document.createElement('div');
+            card.className = 'pallet-card';
+
+            const metaParts = [kasaName, paletName].filter(Boolean);
+            const matCount  = p.materials?.length || 0;
+
+            card.innerHTML = `
+                <div class="pc-num">${i + 1}</div>
+                <div class="pc-body">
+                    <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>
+                    <div class="pc-stats">
+                        <span><strong>${p.kasa_adeti}</strong> kasa</span>
+                        <span>Brüt <strong>${fmtKg(parseNum(p.brut_kg))}</strong></span>
+                        <span>Dara <strong>${fmtKg(dara)}</strong></span>
+                        <span>Net <strong class="strong">${fmtKg(net)}</strong></span>
+                    </div>
+                    ${metaParts.length ? `<div class="pc-meta">${escHtml(metaParts.join(' · '))}${matCount ? ' · +' + matCount + ' malzeme' : ''}</div>` : ''}
+                </div>
+                <div class="pc-actions">
+                    <button type="button" class="btn btn-sm" data-edit="${i}" title="Düzenle">✎ Düzenle</button>
+                    <button type="button" class="btn btn-sm btn-danger" data-del="${i}" title="Sil">✕</button>
+                </div>`;
+
+            card.querySelector('[data-edit]').addEventListener('click', () => openModal(i));
+            card.querySelector('[data-del]').addEventListener('click', () => {
+                if (confirm(`Palet ${i + 1} silinecek. Emin misiniz?`)) {
+                    pallets.splice(i, 1);
+                    renderCards();
+                    recomputeTotals();
+                }
+            });
+            cardContainer.appendChild(card);
+        });
+    }
+
+    /* ── Alt toplamlar ── */
     function recomputeTotals() {
         let totKasa = 0, totBrut = 0, totDara = 0, totNet = 0;
-        list.querySelectorAll('.pallet-row').forEach(r => {
-            const ka = parseInt2(r.querySelector('.kasa-adeti').value);
-            const br = parseNum(r.querySelector('.brut-kg').value);
-            const dara = rowDara(r);
-            const net  = Math.max(0, br - dara);
-            totKasa += ka;
+        pallets.forEach(p => {
+            const br   = parseNum(p.brut_kg);
+            const dara = calcPalletDara(p);
+            totKasa += parseInt2(p.kasa_adeti);
             totBrut += br;
             totDara += dara;
-            totNet  += net;
+            totNet  += Math.max(0, br - dara);
         });
         document.getElementById('totKasa').textContent = String(totKasa);
         document.getElementById('totBrut').textContent = fmtKg(totBrut);
@@ -295,89 +332,104 @@
         document.getElementById('totNet').textContent  = fmtKg(totNet);
     }
 
-    function addNewPallet() {
-        const prefill = getPrefillFromLastRow() || {};
-        prefill.palet_no = rowCounter + 1;
-        // Ürün cinsi ve depo her zaman Genel Bilgilerden gelir
-        const urunEl = document.getElementById('genelUrun');
-        const depoEl = document.getElementById('genelDepo');
-        if (urunEl) prefill.urun_cinsi = urunEl.value;
-        if (depoEl) prefill.depo = depoEl.value;
-        const r = createPalletRow(prefill);
-        const focusTarget = r.querySelector('.kasa-adeti');
-        focusTarget.focus();
-        r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    /* ── Hidden input'lar oluştur (form submit'te çağrılır) ── */
+    function generateHiddenInputs() {
+        formEl.querySelectorAll('.pallet-hidden').forEach(el => el.remove());
+        const frag = document.createDocumentFragment();
+        pallets.forEach((p, idx) => {
+            const n = idx + 1;
+            const scalar = {
+                palet_no: p.palet_no, kasa_adeti: p.kasa_adeti, size: p.size,
+                brut_kg: p.brut_kg, kasa_cinsi_id: p.kasa_cinsi_id,
+                palet_tipi_id: p.palet_tipi_id, urun_cinsi: p.urun_cinsi, depo: p.depo,
+            };
+            Object.keys(scalar).forEach(k => {
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.className = 'pallet-hidden';
+                inp.name = `pallets[${n}][${k}]`;
+                inp.value = scalar[k] ?? '';
+                frag.appendChild(inp);
+            });
+            if (Array.isArray(p.materials)) {
+                p.materials.forEach(m => {
+                    ['material_id', 'quantity'].forEach(k => {
+                        const inp = document.createElement('input');
+                        inp.type = 'hidden'; inp.className = 'pallet-hidden';
+                        inp.name = `pallets[${n}][materials][][${k}]`;
+                        inp.value = m[k] ?? '';
+                        frag.appendChild(inp);
+                    });
+                });
+            }
+        });
+        formEl.appendChild(frag);
     }
 
-    document.getElementById('addPalletBtn').addEventListener('click', addNewPallet);
-    const bottomBtn = document.getElementById('addPalletBtnBottom');
-    if (bottomBtn) bottomBtn.addEventListener('click', addNewPallet);
+    /* ── Event listeners ── */
+    document.getElementById('addPalletBtn')?.addEventListener('click', () => openModal(-1));
+    document.getElementById('pmClose')?.addEventListener('click', closeModal);
+    document.getElementById('pmCancel')?.addEventListener('click', closeModal);
+    document.getElementById('pmSave')?.addEventListener('click', saveModal);
+    document.getElementById('pmAddMaterial')?.addEventListener('click', () => addModalMaterial());
 
-    formEl.addEventListener('keydown', e => {
-        if (e.key !== 'Enter') return;
-        const t = e.target;
-        if (!t.matches('input[data-tab], select[data-tab]')) return;
-        if (t.tagName === 'TEXTAREA') return;
-        e.preventDefault();
-        const fields = Array.from(formEl.querySelectorAll('input[data-tab], select[data-tab]'));
-        const i = fields.indexOf(t);
-        if (i >= 0 && i < fields.length - 1) fields[i + 1].focus();
+    /* Canlı hesap */
+    [pmKasaAdeti, pmBrutKg, pmKasaCinsi, pmPaletTipi].forEach(el => {
+        if (!el) return;
+        el.addEventListener('input',  updateModalCalc);
+        el.addEventListener('change', updateModalCalc);
     });
 
-    formEl.addEventListener('submit', e => {
-        let firstError = null;
-        let errorRowIdx = null;
-        let hasAny = false;
+    /* Overlay tıklama → kapat */
+    pmOverlay?.addEventListener('click', e => { if (e.target === pmOverlay) closeModal(); });
 
-        list.querySelectorAll('.pallet-row').forEach((r, idx) => {
-            const ka = parseInt2(r.querySelector('.kasa-adeti').value);
-            const br = parseNum(r.querySelector('.brut-kg').value);
-            const kc = r.querySelector('.kasa-cinsi').value;
-            const pt = r.querySelector('.palet-tipi').value;
+    /* Escape → kapat */
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && pmOverlay?.style.display !== 'none') closeModal();
+    });
 
-            const isEmpty = !ka && !br && !kc && !pt;
-            if (isEmpty) return;
-
-            hasAny = true;
-            r.querySelectorAll('.req').forEach(el => el.classList.remove('error'));
-
-            const adetEl = r.querySelector('.kasa-adeti');
-            const brutEl = r.querySelector('.brut-kg');
-            const kcEl   = r.querySelector('.kasa-cinsi');
-            const ptEl   = r.querySelector('.palet-tipi');
-
-            if (!ka) { adetEl.classList.add('error'); firstError = firstError || adetEl; if (errorRowIdx == null) errorRowIdx = idx + 1; }
-            if (!br) { brutEl.classList.add('error'); firstError = firstError || brutEl; if (errorRowIdx == null) errorRowIdx = idx + 1; }
-            if (!kc) { kcEl.classList.add('error');   firstError = firstError || kcEl;   if (errorRowIdx == null) errorRowIdx = idx + 1; }
-            if (!pt) { ptEl.classList.add('error');   firstError = firstError || ptEl;   if (errorRowIdx == null) errorRowIdx = idx + 1; }
-        });
-
-        if (firstError) {
+    /* Modal içi Enter → sonraki alan */
+    pmOverlay?.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+        const focusable = Array.from(pmOverlay.querySelectorAll('input, select'));
+        const i = focusable.indexOf(e.target);
+        if (i >= 0 && i < focusable.length - 1) {
             e.preventDefault();
-            alert(`Palet #${errorRowIdx}: Kasa adeti, Brüt KG, Kasa Cinsi ve Palet Tipi zorunludur.`);
-            firstError.focus();
-            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
+            focusable[i + 1].focus();
         }
+    });
 
-        if (!hasAny) {
-            if (!confirm('Hiç palet satırı doldurulmadı. Yine de kaydedilsin mi?')) {
+    /* Form gönder */
+    formEl.addEventListener('submit', e => {
+        if (!pallets.length) {
+            if (!confirm('Hiç palet satırı yok. Yine de kaydedilsin mi?')) {
                 e.preventDefault();
+                return;
             }
         }
+        generateHiddenInputs();
     });
 
+    /* ── Mevcut paletleri yükle ── */
     if (palletsInit && palletsInit.length) {
         palletsInit.forEach(p => {
-            if (Array.isArray(p.materials)) {
-                p.materials = p.materials.map(m => ({
+            pallets.push({
+                palet_no:      p.palet_no      || '',
+                kasa_adeti:    p.kasa_adeti    || '',
+                size:          p.size          || '',
+                brut_kg:       p.brut_kg       != null ? p.brut_kg : '',
+                kasa_cinsi_id: p.kasa_cinsi_id || '',
+                palet_tipi_id: p.palet_tipi_id || '',
+                urun_cinsi:    p.urun_cinsi    || '',
+                depo:          p.depo          || '',
+                materials: Array.isArray(p.materials) ? p.materials.map(m => ({
                     material_id: m.material_id,
-                    quantity: m.quantity,
-                }));
-            }
-            createPalletRow(p);
+                    quantity:    m.quantity,
+                })) : [],
+            });
         });
-    } else {
-        createPalletRow();
     }
+
+    renderCards();
+    recomputeTotals();
 })();

@@ -122,30 +122,12 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 <section class="card">
     <div class="card-head">
         <h2>Yükleme Planı (Paletler)</h2>
-        <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet</button>
+        <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
     </div>
 
-    <p class="muted small-note">* işaretli alanlar zorunludur. Yeni palet eklendiğinde Ürün Cinsi ve Depo Genel Bilgilerden, diğer alanlar önceki paletten kopyalanır (kasa adeti ve brüt kg hariç).</p>
+    <p class="muted small-note">Yeni palet eklendiğinde Ürün Cinsi ve Depo Genel Bilgilerden, diğer alanlar önceki paletten kopyalanır.</p>
 
-    <div class="pallets-table-head pc-only">
-        <div>Palet No</div>
-        <div>Kasa Adeti *</div>
-        <div>Size</div>
-        <div>Brüt KG *</div>
-        <div>Kasa Cinsi *</div>
-        <div>Palet Tipi *</div>
-        <div>Ürün Cinsi</div>
-        <div>Depo</div>
-        <div class="num">Dara KG</div>
-        <div class="num">Net KG</div>
-        <div></div>
-    </div>
-
-    <div id="palletList" class="pallet-list"></div>
-
-    <button type="button" class="btn btn-primary btn-block mobile-only" id="addPalletBtnBottom">
-        + Yeni Palet Ekle
-    </button>
+    <div id="palletList" class="pallet-cards"></div>
 
     <!-- Toplamlar (mavi alan) -->
     <div class="totals">
@@ -168,3 +150,76 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 <script id="palletsInit" type="application/json"><?= json_encode($pallets, JSON_UNESCAPED_UNICODE) ?></script>
 
 </form>
+
+<!-- ── PALET EKLEME / DÜZENLEME MODAL ── -->
+<div id="pmOverlay" class="pm-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pmTitle">
+  <div class="pm-dialog">
+    <div class="pm-header">
+      <h2 class="pm-title" id="pmTitle">Yeni Palet Ekle</h2>
+      <button type="button" class="pm-close" id="pmClose" aria-label="Kapat">✕</button>
+    </div>
+    <div class="pm-body">
+
+      <!-- Canlı hesap özeti -->
+      <div class="pm-calc">
+        <div class="pm-calc-item">
+          <div class="pm-calc-label">Dara KG</div>
+          <div class="pm-calc-val" id="pmDara">0</div>
+        </div>
+        <div class="pm-calc-item">
+          <div class="pm-calc-label">Net KG</div>
+          <div class="pm-calc-val pm-calc-net" id="pmNet">0,000</div>
+        </div>
+      </div>
+
+      <!-- Alanlar: 2 kolonlu grid -->
+      <div class="pm-grid">
+        <label class="pm-label">
+          <span>Palet No</span>
+          <input type="text" id="pmPaletNo" placeholder="Palet No">
+        </label>
+        <label class="pm-label">
+          <span>Kasa Adeti *</span>
+          <input type="text" inputmode="numeric" id="pmKasaAdeti" class="num" placeholder="örn. 120">
+        </label>
+        <label class="pm-label">
+          <span>Size</span>
+          <input type="text" id="pmSize" placeholder="Size">
+        </label>
+        <label class="pm-label">
+          <span>Brüt KG *</span>
+          <input type="text" inputmode="decimal" id="pmBrutKg" class="num" placeholder="örn. 1250">
+        </label>
+        <label class="pm-label pm-span2">
+          <span>Kasa Cinsi *</span>
+          <select id="pmKasaCinsi"><option value="">-- kasa cinsi seçiniz --</option></select>
+        </label>
+        <label class="pm-label pm-span2">
+          <span>Palet Tipi *</span>
+          <select id="pmPaletTipi"><option value="">-- palet tipi seçiniz --</option></select>
+        </label>
+        <label class="pm-label">
+          <span>Ürün Cinsi</span>
+          <input type="text" id="pmUrunCinsi" placeholder="Ürün cinsi">
+        </label>
+        <label class="pm-label">
+          <span>Depo</span>
+          <input type="text" id="pmDepo" placeholder="Depo">
+        </label>
+      </div>
+
+      <!-- Ek malzemeler -->
+      <div class="materials-block" style="margin-top:16px">
+        <div class="materials-block-head">
+          <span>Ek malzemeler / dara kalemleri</span>
+          <button type="button" class="btn btn-sm" id="pmAddMaterial">+ Malzeme</button>
+        </div>
+        <div id="pmMaterialsList"></div>
+      </div>
+    </div>
+    <div class="pm-footer">
+      <button type="button" class="btn btn-ghost" id="pmCancel">İptal</button>
+      <button type="button" class="btn btn-primary" id="pmSave">Kaydet</button>
+    </div>
+  </div>
+</div>
