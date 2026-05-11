@@ -1541,4 +1541,35 @@ body.print-mode .asya-sheet {
 
 @media print { .pm-overlay { display: none !important; } }
 
+/* ── Toplu malzeme çıkışı modal ── */
+.bm-pallets-head {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-bottom: 4px;
+}
+.bm-pallet-list {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+}
+.bm-check-label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; cursor: pointer;
+    font-size: .9rem; user-select: none;
+}
+.bm-check-label:hover { background: var(--bg); }
+.bm-check-label input[type="checkbox"] {
+    width: 17px; height: 17px; min-height: unset;
+    flex-shrink: 0; accent-color: var(--primary);
+}
+.bm-check-label span.muted { margin-left: auto; font-size: .8rem; }
+.bm-dara-preview {
+    font-size: .85rem; color: var(--primary);
+    font-weight: 600; align-self: flex-end; padding-bottom: 10px;
+}
+.bm-status { font-size: .85rem; min-height: 1.4em; margin-top: 2px; }
+
 @media print { #kalanModal { display: none !important; } }
