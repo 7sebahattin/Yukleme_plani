@@ -571,27 +571,6 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
 <?php if (!$print): ?>
 <!-- ============================================================
-     ETİKET CROP OVERLAY
-     ============================================================ -->
-<div id="etiketCropOverlay" style="display:none">
-  <div class="crop-img-area">
-    <div class="crop-img-wrap" id="cropWrap">
-      <img id="cropSrc" class="crop-src-img" alt="">
-      <div id="cropBox" class="crop-box">
-        <div class="crop-handle" data-c="tl"></div>
-        <div class="crop-handle" data-c="tr"></div>
-        <div class="crop-handle" data-c="bl"></div>
-        <div class="crop-handle" data-c="br"></div>
-      </div>
-    </div>
-  </div>
-  <div class="crop-footer">
-    <button id="cropConfirm" class="crop-btn crop-btn-ok">✓ Onayla</button>
-    <button id="cropCancel"  class="crop-btn crop-btn-no">İptal</button>
-  </div>
-</div>
-
-<!-- ============================================================
      KALAN PALET HESAPLAMA MODAL
      ============================================================ -->
 <script>window.KALAN_RECORD_ID = <?= (int)$id ?>;</script>
@@ -703,6 +682,25 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 <script src="assets/kalan.js"></script>
 <?php endif; ?>
 
+<!-- ETİKET CROP OVERLAY — her iki modda da DOM'da olmalı (JS erişimi için) -->
+<div id="etiketCropOverlay" style="display:none">
+  <div class="crop-img-area">
+    <div class="crop-img-wrap" id="cropWrap">
+      <img id="cropSrc" class="crop-src-img" alt="">
+      <div id="cropBox" class="crop-box">
+        <div class="crop-handle" data-c="tl"></div>
+        <div class="crop-handle" data-c="tr"></div>
+        <div class="crop-handle" data-c="bl"></div>
+        <div class="crop-handle" data-c="br"></div>
+      </div>
+    </div>
+  </div>
+  <div class="crop-footer">
+    <button id="cropConfirm" class="crop-btn crop-btn-ok">✓ Onayla</button>
+    <button id="cropCancel"  class="crop-btn crop-btn-no">İptal</button>
+  </div>
+</div>
+
 <script>
 (function () {
     /* ─── Etiket alanı ─── */
@@ -731,7 +729,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                || localStorage.getItem('etiket_img_<?= (int)$id ?>');
         if (raw) {
             var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-            if (src) showPhoto(src);
+            if (src && src.indexOf('data:') === 0) showPhoto(src);
         }
     } catch(e) {}
 
