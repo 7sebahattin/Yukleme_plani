@@ -451,8 +451,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                             📷 Fotoğraf Ekle
                             <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
                         </label>
-                        <button id="etiketFitBtn" class="etiket-ctrl-btn" style="display:none">⊞ Doldur</button>
-                        <button id="etiketClear" class="etiket-clear-btn" style="display:none">✕</button>
+                        <button id="etiketClear" class="etiket-clear-btn" style="display:none">✕ Kaldır</button>
                     </div>
                 </div>
             </div>
@@ -572,6 +571,27 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
 <?php if (!$print): ?>
 <!-- ============================================================
+     ETİKET CROP OVERLAY
+     ============================================================ -->
+<div id="etiketCropOverlay" style="display:none">
+  <div class="crop-img-area">
+    <div class="crop-img-wrap" id="cropWrap">
+      <img id="cropSrc" class="crop-src-img" alt="">
+      <div id="cropBox" class="crop-box">
+        <div class="crop-handle" data-c="tl"></div>
+        <div class="crop-handle" data-c="tr"></div>
+        <div class="crop-handle" data-c="bl"></div>
+        <div class="crop-handle" data-c="br"></div>
+      </div>
+    </div>
+  </div>
+  <div class="crop-footer">
+    <button id="cropConfirm" class="crop-btn crop-btn-ok">✓ Onayla</button>
+    <button id="cropCancel"  class="crop-btn crop-btn-no">İptal</button>
+  </div>
+</div>
+
+<!-- ============================================================
      KALAN PALET HESAPLAMA MODAL
      ============================================================ -->
 <script>window.KALAN_RECORD_ID = <?= (int)$id ?>;</script>
@@ -685,110 +705,154 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
 <script>
 (function () {
+    /* ─── Etiket alanı ─── */
     var KEY    = 'etiket_<?= (int)$id ?>';
     var imgEl  = document.getElementById('etiketImg');
     var ph     = document.getElementById('etiketPlaceholder');
     var inp    = document.getElementById('etiketInput');
     var clrBtn = document.getElementById('etiketClear');
-    var fitBtn = document.getElementById('etiketFitBtn');
 
-    // { src, fit:'contain'|'cover', px:50, py:50 }
-    var s = { src: '', fit: 'contain', px: 50, py: 50 };
-
-    function applyStyle() {
+    function showPhoto(src) {
         if (!imgEl) return;
-        imgEl.style.objectFit     = s.fit;
-        imgEl.style.objectPosition = s.px + '% ' + s.py + '%';
-        imgEl.classList.toggle('cover-mode', s.fit === 'cover');
-        if (fitBtn) fitBtn.textContent = s.fit === 'contain' ? '⊞ Doldur' : '⊡ Sığdır';
-    }
-
-    function persist() { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch(e) {} }
-
-    function showPhoto() {
-        if (!imgEl) return;
-        imgEl.src = s.src;
-        imgEl.style.display = 'block';
-        applyStyle();
+        imgEl.src = src; imgEl.style.display = 'block';
         if (ph)     ph.style.display     = 'none';
         if (clrBtn) clrBtn.style.display = 'inline-block';
-        if (fitBtn) fitBtn.style.display = 'inline-block';
     }
-
     function clearPhoto() {
-        s = { src: '', fit: 'contain', px: 50, py: 50 };
-        if (!imgEl) return;
-        imgEl.src = ''; imgEl.style.display = 'none';
-        imgEl.classList.remove('cover-mode');
+        if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
         if (ph)     ph.style.display     = 'flex';
         if (clrBtn) clrBtn.style.display = 'none';
-        if (fitBtn) fitBtn.style.display = 'none';
         try { localStorage.removeItem(KEY); } catch(e) {}
     }
 
-    // Load saved (backward-compat: old key was 'etiket_img_ID' plain data-URL)
-    (function load() {
-        try {
-            var raw = localStorage.getItem(KEY)
-                   || localStorage.getItem('etiket_img_<?= (int)$id ?>');
-            if (!raw) return;
-            if (raw.charAt(0) === '{') {
-                var p = JSON.parse(raw);
-                if (p && p.src) { s = p; showPhoto(); }
-            } else if (raw.indexOf('data:') === 0) {
-                s.src = raw; showPhoto(); persist();
-            }
-        } catch(e) {}
-    })();
-
-    // File input
-    if (inp) inp.addEventListener('change', function () {
-        var file = this.files[0];
-        if (!file) return;
-        var r = new FileReader();
-        r.onload = function (ev) {
-            s.src = ev.target.result; s.px = 50; s.py = 50;
-            showPhoto(); persist();
-        };
-        r.readAsDataURL(file);
-    });
+    /* Kayıtlı fotoğrafı yükle (geriye dönük uyum: eski key + plain data-URL) */
+    try {
+        var raw = localStorage.getItem(KEY)
+               || localStorage.getItem('etiket_img_<?= (int)$id ?>');
+        if (raw) {
+            var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
+            if (src) showPhoto(src);
+        }
+    } catch(e) {}
 
     if (clrBtn) clrBtn.addEventListener('click', clearPhoto);
 
-    if (fitBtn) fitBtn.addEventListener('click', function () {
-        s.fit = s.fit === 'contain' ? 'cover' : 'contain';
-        if (s.fit === 'contain') { s.px = 50; s.py = 50; }
-        applyStyle(); persist();
+    /* ─── Crop overlay ─── */
+    var overlay  = document.getElementById('etiketCropOverlay');
+    var cropSrc  = document.getElementById('cropSrc');
+    var cropBox  = document.getElementById('cropBox');
+    var btnOk    = document.getElementById('cropConfirm');
+    var btnNo    = document.getElementById('cropCancel');
+    var cs       = { x:0, y:0, w:0, h:0 }; /* px relative to cropSrc */
+    var MIN      = 30;
+
+    function renderBox() {
+        if (!cropBox) return;
+        cropBox.style.left   = cs.x + 'px';
+        cropBox.style.top    = cs.y + 'px';
+        cropBox.style.width  = cs.w + 'px';
+        cropBox.style.height = cs.h + 'px';
+    }
+    function initBox() {
+        var pad = 24;
+        var w = cropSrc.offsetWidth, h = cropSrc.offsetHeight;
+        cs = { x: pad, y: pad, w: w - pad*2, h: h - pad*2 };
+        renderBox();
+    }
+
+    function openCrop(dataUrl) {
+        if (!overlay) return;
+        overlay.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        cropSrc.onload = function () {
+            requestAnimationFrame(initBox);
+        };
+        cropSrc.src = dataUrl;
+    }
+    function closeCrop() {
+        if (!overlay) return;
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    /* Sürükleme */
+    var active = null, sx, sy, sc;
+    function xy(e) {
+        var t = e.touches ? e.touches[0] : e;
+        return { x: t.clientX, y: t.clientY };
+    }
+    function imgRect() { return cropSrc.getBoundingClientRect(); }
+
+    function pointerDown(e) {
+        var c = (e.target.dataset || {}).c;
+        active = c || null;
+        var p = xy(e);
+        sx = p.x; sy = p.y;
+        sc = { x: cs.x, y: cs.y, w: cs.w, h: cs.h };
+        e.preventDefault();
+    }
+    function pointerMove(e) {
+        if (!active && active !== '') return;
+        var p = xy(e), r = imgRect();
+        var dx = p.x - sx, dy = p.y - sy;
+        var c = Object.assign({}, sc);
+        var iw = cropSrc.offsetWidth, ih = cropSrc.offsetHeight;
+
+        if (!active) { /* no handle – shouldn't happen but guard */ return; }
+
+        if (active.indexOf('l') >= 0) {
+            var nx = Math.max(0, Math.min(c.x + c.w - MIN, c.x + dx));
+            c.w = c.x + c.w - nx; c.x = nx;
+        }
+        if (active.indexOf('r') >= 0) {
+            c.w = Math.max(MIN, Math.min(iw - c.x, c.w + dx));
+        }
+        if (active.indexOf('t') >= 0) {
+            var ny = Math.max(0, Math.min(c.y + c.h - MIN, c.y + dy));
+            c.h = c.y + c.h - ny; c.y = ny;
+        }
+        if (active.indexOf('b') >= 0) {
+            c.h = Math.max(MIN, Math.min(ih - c.y, c.h + dy));
+        }
+        cs = c; renderBox();
+        e.preventDefault();
+    }
+    function pointerUp() { active = null; }
+
+    if (cropBox) {
+        cropBox.addEventListener('mousedown',  pointerDown);
+        cropBox.addEventListener('touchstart', pointerDown, { passive: false });
+    }
+    document.addEventListener('mousemove',  pointerMove);
+    document.addEventListener('mouseup',    pointerUp);
+    document.addEventListener('touchmove',  pointerMove, { passive: false });
+    document.addEventListener('touchend',   pointerUp);
+
+    /* Onayla → canvas crop */
+    if (btnOk) btnOk.addEventListener('click', function () {
+        var iw = cropSrc.offsetWidth,  ih = cropSrc.offsetHeight;
+        var nw = cropSrc.naturalWidth, nh = cropSrc.naturalHeight;
+        var sx = cs.x / iw * nw, sy = cs.y / ih * nh;
+        var sw = cs.w / iw * nw, sh = cs.h / ih * nh;
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(sw); cv.height = Math.round(sh);
+        cv.getContext('2d').drawImage(cropSrc, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+        var out = cv.toDataURL('image/jpeg', 0.92);
+        try { localStorage.setItem(KEY, out); } catch(e) {}
+        showPhoto(out);
+        closeCrop();
     });
+    if (btnNo) btnNo.addEventListener('click', closeCrop);
 
-    // Drag to reposition (cover mode only)
-    var drag = false, ox, oy, opx, opy;
-
-    function onDown(cx, cy) {
-        if (s.fit !== 'cover' || !imgEl) return;
-        drag = true; ox = cx; oy = cy; opx = s.px; opy = s.py;
-    }
-    function onMove(cx, cy) {
-        if (!drag || !imgEl) return;
-        var rect = imgEl.getBoundingClientRect();
-        s.px = Math.max(0, Math.min(100, opx - (cx - ox) / rect.width  * 100));
-        s.py = Math.max(0, Math.min(100, opy - (cy - oy) / rect.height * 100));
-        applyStyle();
-    }
-    function onUp() { if (drag) { drag = false; persist(); } }
-
-    if (imgEl) {
-        imgEl.addEventListener('mousedown',  function(e) { onDown(e.clientX, e.clientY); e.preventDefault(); });
-        document.addEventListener('mousemove', function(e) { onMove(e.clientX, e.clientY); });
-        document.addEventListener('mouseup',   onUp);
-        imgEl.addEventListener('touchstart', function(e) {
-            if (e.touches.length === 1) { onDown(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
-        }, { passive: false });
-        imgEl.addEventListener('touchmove', function(e) {
-            if (e.touches.length === 1) { onMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }
-        }, { passive: false });
-        imgEl.addEventListener('touchend', onUp);
-    }
+    /* Dosya seçilince crop aç */
+    if (inp) inp.addEventListener('change', function () {
+        var file = this.files[0];
+        if (!file) return;
+        var rd = new FileReader();
+        rd.onload = function (ev) { openCrop(ev.target.result); };
+        rd.readAsDataURL(file);
+        this.value = ''; /* tekrar aynı dosya seçilebilsin */
+    });
 })();
 </script>
 
