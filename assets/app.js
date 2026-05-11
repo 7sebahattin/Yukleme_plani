@@ -15,6 +15,18 @@
         });
     });
 
+    /* ── Kebab dropdown — tüm sayfalarda, event delegation ── */
+    document.addEventListener('click', e => {
+        if (e.target.closest('.pc-kebab')) {
+            const dd = e.target.closest('.pc-kebab').nextElementSibling;
+            const wasOpen = !dd.hidden;
+            document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
+            dd.hidden = wasOpen;
+        } else {
+            document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
+        }
+    });
+
     const formEl = document.getElementById('recordForm');
     if (!formEl) return;
 
@@ -306,14 +318,6 @@
                     </div>
                 </div>`;
 
-            const kebabBtn = card.querySelector('.pc-kebab');
-            const dropdown = card.querySelector('.pc-dropdown');
-            kebabBtn.addEventListener('click', e => {
-                e.stopPropagation();
-                const wasOpen = !dropdown.hidden;
-                document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
-                dropdown.hidden = wasOpen;
-            });
             card.querySelector('[data-edit]').addEventListener('click', () => openModal(i));
             card.querySelector('[data-del]').addEventListener('click', () => {
                 if (confirm(`Palet ${i + 1} silinecek. Emin misiniz?`)) {
@@ -392,11 +396,6 @@
 
     /* Overlay tıklama → kapat */
     pmOverlay?.addEventListener('click', e => { if (e.target === pmOverlay) closeModal(); });
-
-    /* Dışarı tıklama → açık kebab dropdown'ı kapat */
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
-    });
 
     /* Escape → kapat */
     document.addEventListener('keydown', e => {

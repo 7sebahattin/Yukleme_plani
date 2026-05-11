@@ -95,10 +95,14 @@ render_header('Kayıtlar');
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <a class="btn btn-sm btn-ghost" href="record_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-                        <a class="btn btn-sm btn-danger"
-                           href="record_delete.php?id=<?= (int)$r['id'] ?>"
-                           onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">Sil</a>
+                        <div class="pc-kebab-wrap">
+                            <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
+                            <div class="pc-dropdown" hidden>
+                                <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
+                                <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                                   onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                            </div>
+                        </div>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -114,6 +118,14 @@ render_header('Kayıtlar');
                     <div>
                         <strong>#<?= (int)$r['id'] ?> · <?= h($r['firma'] ?: '—') ?></strong>
                         <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
+                    </div>
+                    <div class="pc-kebab-wrap">
+                        <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
+                        <div class="pc-dropdown" hidden>
+                            <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
+                            <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
+                               onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                        </div>
                     </div>
                 </div>
                 <div class="record-card-body">
@@ -131,10 +143,6 @@ render_header('Kayıtlar');
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                    <a class="btn btn-sm btn-ghost" href="record_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-                    <a class="btn btn-sm btn-danger"
-                       href="record_delete.php?id=<?= (int)$r['id'] ?>"
-                       onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">Sil</a>
                 </div>
             </div>
         <?php endforeach; ?>
