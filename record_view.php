@@ -404,66 +404,59 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
     <!-- ============= ÜST BLOK: Genel bilgiler + ETİKET + Marka ============= -->
     <div class="asya-top">
-        <!-- Sol: Genel bilgi alanları -->
-        <table class="asya-info">
-            <tr><th>FİRMA</th><td><?= h($record['firma']) ?></td></tr>
-            <tr><th>BÖLGE</th><td><?= h($record['bolge']) ?></td></tr>
-            <tr><th>PARTİ NO</th><td><?= h($record['parti_no']) ?></td></tr>
-            <tr><th>GÜMRÜK</th><td><?= h($record['gumruk']) ?></td></tr>
-            <tr><th>NAKLİYE BEDELİ</th><td><?= h($record['nakliye_bedeli'] > 0 ? fmt_money($record['nakliye_bedeli']) : '') ?></td></tr>
-            <tr><th>ŞOFÖR ADI</th><td><?= h($record['sofor_adi']) ?></td></tr>
-            <tr><th>FATURA NO</th><td><?= h($record['fatura_no']) ?></td></tr>
-            <tr><th>CASUS NO</th><td><?= h($record['casus_no']) ?></td></tr>
-            <tr><th>ÖN PLAKA NO</th><td><?= h($record['on_plaka']) ?></td></tr>
-            <tr><th>ARKA PLAKA NO</th><td><?= h($record['arka_plaka']) ?></td></tr>
-            <tr><th>NAKLİYE ŞİRKETİ</th><td><?= h($record['nakliye_sirketi']) ?></td></tr>
-            <tr><th>TELEFON</th><td><?= h($record['telefon']) ?></td></tr>
-            <tr><th>TARİH</th><td><?= h(fmt_date($record['tarih'])) ?></td></tr>
-        </table>
+        <div class="asya-brand-full">ASYA FRESH</div>
+        <div class="asya-top-body">
+            <!-- Sol: Genel bilgi alanları -->
+            <table class="asya-info">
+                <tr><th>FİRMA</th><td colspan="3"><?= h($record['firma']) ?></td></tr>
+                <tr><th>BÖLGE</th><td colspan="3"><?= h($record['bolge']) ?></td></tr>
+                <tr><th>PARTİ NO</th><td colspan="3"><?= h($record['parti_no']) ?></td></tr>
+                <tr><th>GÜMRÜK</th><td colspan="3"><?= h($record['gumruk']) ?></td></tr>
+                <tr>
+                    <th>NAKLİYE BEDELİ</th>
+                    <td><?= h($record['nakliye_bedeli'] > 0 ? fmt_money($record['nakliye_bedeli']) : '') ?></td>
+                    <th class="avans-th">AVANS</th>
+                    <td class="avans-td"><?= h($record['avans'] > 0 ? fmt_money($record['avans']) : '') ?></td>
+                </tr>
+                <tr><th>ŞOFÖR ADI</th><td colspan="3"><?= h($record['sofor_adi']) ?></td></tr>
+                <tr><th>FATURA NO</th><td colspan="3"><?= h($record['fatura_no']) ?></td></tr>
+                <tr><th>CASUS NO</th><td colspan="3"><?= h($record['casus_no']) ?></td></tr>
+                <tr><th>ÖN PLAKA NO</th><td colspan="3"><?= h($record['on_plaka']) ?></td></tr>
+                <tr><th>ARKA PLAKA NO</th><td colspan="3"><?= h($record['arka_plaka']) ?></td></tr>
+                <tr><th>NAKLİYE ŞİRKETİ</th><td colspan="3"><?= h($record['nakliye_sirketi']) ?></td></tr>
+                <tr><th>TELEFON</th><td colspan="3"><?= h($record['telefon']) ?></td></tr>
+                <tr><th>TARİH</th><td colspan="3"><?= h(fmt_date($record['tarih'])) ?></td></tr>
+            </table>
 
-        <!-- Sağ: ASYA FRESH başlığı + AVANS + ALICI + ÜRÜN + ETİKET + MARKA -->
-        <div class="asya-right-top">
-            <div class="asya-brand">ASYA FRESH</div>
-
-            <div class="asya-avans-row">
-                <div class="cell-pair">
-                    <span>AVANS</span>
-                    <strong><?= h($record['avans'] > 0 ? fmt_money($record['avans']) : '') ?></strong>
+            <!-- Sağ: MARKA + ALICI + ÜRÜN + ETİKET -->
+            <div class="asya-right-top">
+                <div class="asya-marka-row">
+                    <div class="marka-cell"><span>ASYA</span><strong>MARKA</strong></div>
+                    <div class="marka-cell"><span>URAL</span><strong>MARKA</strong></div>
+                    <div class="marka-cell"><span>URAS</span><strong>MARKA</strong></div>
                 </div>
-            </div>
-
-            <div class="asya-alici-urun">
-                <div class="cell-pair">
+                <div class="cell-pair asya-alici-cell">
                     <span>ALICI</span>
                     <strong><?= h($record['alici']) ?></strong>
                 </div>
-                <div class="cell-pair">
+                <div class="cell-pair asya-urun-cell">
                     <span>ÜRÜN</span>
                     <strong><?= h($record['urun']) ?></strong>
                 </div>
-            </div>
-
-            <div class="asya-etiket">
-                <div class="etiket-label">ETİKET</div>
-                <div class="etiket-content"><?= h($record['etiket']) ?></div>
-            </div>
-
-            <div class="asya-marka-row">
-                <div class="marka-cell">
-                    <span>ASYA</span>
-                    <strong>MARKA</strong>
-                </div>
-                <div class="marka-cell">
-                    <span>URAL</span>
-                    <strong>MARKA</strong>
-                </div>
-                <div class="marka-cell">
-                    <span>URAS</span>
-                    <strong>MARKA</strong>
+                <div class="asya-etiket">
+                    <img id="etiketImg" class="etiket-img" alt="" style="display:none">
+                    <div id="etiketPlaceholder" class="etiket-placeholder">ETİKET</div>
+                    <div class="etiket-actions no-print">
+                        <label class="etiket-upload-btn">
+                            📷 Fotoğraf Ekle
+                            <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
+                        </label>
+                        <button id="etiketClear" class="etiket-clear-btn" style="display:none">✕</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
+        </div><!-- .asya-top-body -->
+    </div><!-- .asya-top -->
 
     <!-- ============= ORTA BLOK: Yükleme planı tablosu + Stok çıkışları ============= -->
     <div class="asya-middle">
@@ -688,5 +681,51 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
 <script src="assets/kalan.js"></script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var KEY = 'etiket_img_<?= (int)$id ?>';
+    var imgEl  = document.getElementById('etiketImg');
+    var ph     = document.getElementById('etiketPlaceholder');
+    var inp    = document.getElementById('etiketInput');
+    var clrBtn = document.getElementById('etiketClear');
+
+    function show(src) {
+        if (!imgEl) return;
+        imgEl.src = src;
+        imgEl.style.display = 'block';
+        if (ph)     ph.style.display     = 'none';
+        if (clrBtn) clrBtn.style.display = 'inline-block';
+    }
+    function clear() {
+        if (!imgEl) return;
+        imgEl.src = '';
+        imgEl.style.display = 'none';
+        if (ph)     ph.style.display     = 'flex';
+        if (clrBtn) clrBtn.style.display = 'none';
+        try { localStorage.removeItem(KEY); } catch(e) {}
+    }
+
+    try {
+        var saved = localStorage.getItem(KEY);
+        if (saved) show(saved);
+    } catch(e) {}
+
+    if (inp) {
+        inp.addEventListener('change', function () {
+            var file = this.files[0];
+            if (!file) return;
+            var r = new FileReader();
+            r.onload = function (e) {
+                var src = e.target.result;
+                try { localStorage.setItem(KEY, src); } catch(e) {}
+                show(src);
+            };
+            r.readAsDataURL(file);
+        });
+    }
+    if (clrBtn) clrBtn.addEventListener('click', clear);
+})();
+</script>
 
 <?php render_footer($print); ?>
