@@ -16,16 +16,35 @@
     });
 
     /* ── Kebab dropdown — tüm sayfalarda, event delegation ── */
+    function closeAllDropdowns() {
+        document.querySelectorAll('.pc-dropdown').forEach(d => {
+            d.hidden = true;
+            d.style.cssText = '';
+        });
+    }
     document.addEventListener('click', e => {
-        if (e.target.closest('.pc-kebab')) {
-            const dd = e.target.closest('.pc-kebab').nextElementSibling;
+        const btn = e.target.closest('.pc-kebab');
+        if (btn) {
+            const dd = btn.nextElementSibling;
             const wasOpen = !dd.hidden;
-            document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
-            dd.hidden = wasOpen;
+            closeAllDropdowns();
+            if (!wasOpen) {
+                // .table-wrap has overflow-x:auto which clips absolute children → use fixed
+                if (btn.closest('.table-wrap')) {
+                    const r = btn.getBoundingClientRect();
+                    dd.style.position = 'fixed';
+                    dd.style.top = (r.bottom + 4) + 'px';
+                    dd.style.right = (window.innerWidth - r.right) + 'px';
+                    dd.style.left = 'auto';
+                }
+                dd.hidden = false;
+            }
         } else {
-            document.querySelectorAll('.pc-dropdown').forEach(d => { d.hidden = true; });
+            closeAllDropdowns();
         }
     });
+    // Close on scroll (fixed dropdowns stay in place otherwise)
+    window.addEventListener('scroll', closeAllDropdowns, true);
 
     const formEl = document.getElementById('recordForm');
     if (!formEl) return;

@@ -47,9 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id = (int)($_POST['id'] ?? 0);
             // Güvenli silme: kullanılıyorsa sadece pasifleştir
             $st = db()->prepare("SELECT
-                (SELECT COUNT(*) FROM loading_pallets WHERE kasa_cinsi_id=:i OR palet_tipi_id=:i)
-                + (SELECT COUNT(*) FROM pallet_materials WHERE material_id=:i) AS used");
-            $st->execute([':i' => $id]);
+                (SELECT COUNT(*) FROM loading_pallets WHERE kasa_cinsi_id=? OR palet_tipi_id=?)
+                + (SELECT COUNT(*) FROM pallet_materials WHERE material_id=?) AS used");
+            $st->execute([$id, $id, $id]);
             $used = (int)$st->fetchColumn();
             if ($used > 0) {
                 db()->prepare("UPDATE material_definitions SET is_active=0 WHERE id=:i")
