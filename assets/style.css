@@ -1572,4 +1572,55 @@ body.print-mode .asya-sheet {
 }
 .bm-status { font-size: .85rem; min-height: 1.4em; margin-top: 2px; }
 
+/* ── BM Tabs ── */
+.bm-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    margin: 0 -20px;
+    padding: 0 20px;
+}
+.bm-tab-btn {
+    background: none; border: none; cursor: pointer;
+    padding: 11px 16px; font-size: .9rem; font-weight: 500;
+    color: var(--muted); border-bottom: 2px solid transparent;
+    margin-bottom: -1px; font-family: inherit;
+}
+.bm-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.bm-panel { margin-bottom: 4px; }
+
+/* ── Şablon listesi ── */
+.bm-tpl-list { margin-bottom: 10px; }
+.bm-tpl-empty { padding: 16px 0; color: var(--muted); font-size: .88rem; }
+.bm-tpl-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 13px;
+    margin-bottom: 7px;
+}
+.bm-tpl-info  { flex: 1; min-width: 0; }
+.bm-tpl-name  { font-weight: 600; font-size: .92rem; margin-bottom: 3px; }
+.bm-tpl-items { font-size: .8rem; color: var(--muted); line-height: 1.4; }
+.bm-tpl-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: flex-start; }
+
+/* ── Şablon oluşturma formu ── */
+.bm-create-form {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-top: 10px;
+}
+.bm-create-form h4 { margin: 0 0 12px; font-size: .92rem; }
+.bm-tpl-mat-rows { margin-bottom: 8px; }
+.bm-tpl-mat-row {
+    display: grid;
+    grid-template-columns: 1fr 90px 34px;
+    gap: 6px; margin-bottom: 6px; align-items: center;
+}
+.bm-tpl-mat-row select, .bm-tpl-mat-row input { min-height: 36px; font-size: .88rem; }
+.tpl-row-del { padding: 0; width: 34px; text-align: center; }
+
 @media print { #kalanModal { display: none !important; } }

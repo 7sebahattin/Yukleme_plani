@@ -101,6 +101,26 @@ CREATE TABLE IF NOT EXISTS pallet_materials (
     INDEX idx_pm_pallet (loading_pallet_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ---------------------------------------------------------
+-- 5) Malzeme şablonları
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS material_templates (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS material_template_items (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    template_id INT NOT NULL,
+    material_id INT NOT NULL,
+    quantity    DECIMAL(10,3) NOT NULL DEFAULT 1,
+    CONSTRAINT fk_mti_tpl FOREIGN KEY (template_id)
+        REFERENCES material_templates(id) ON DELETE CASCADE,
+    CONSTRAINT fk_mti_mat FOREIGN KEY (material_id)
+        REFERENCES material_definitions(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =========================================================
 -- ÖRNEK / BAŞLANGIÇ TANIMLARI
 -- =========================================================

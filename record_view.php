@@ -695,39 +695,71 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
       <h2 class="pm-title" id="bmTitle">Malzeme Çıkışı Ekle</h2>
       <button type="button" class="pm-close" id="bmClose" aria-label="Kapat">✕</button>
     </div>
+
+    <!-- Tab bar -->
+    <div class="bm-tabs">
+      <button type="button" class="bm-tab-btn active" data-tab="single">Malzeme Ekle</button>
+      <button type="button" class="bm-tab-btn" data-tab="tpl">Şablonlar</button>
+    </div>
+
     <div class="pm-body">
 
-      <div class="pm-grid" style="margin-bottom:16px">
-        <label class="pm-label pm-span2">
-          <span>Malzeme *</span>
-          <select id="bmMaterial">
-            <option value="">-- malzeme seçiniz --</option>
-            <?php
-            $bm_by_type = [];
-            foreach ($bm_materials as $m) {
-                if ($m['type'] === 'kasa_cinsi' || $m['type'] === 'palet_tipi') continue;
-                $bm_by_type[$m['type']][] = $m;
-            }
-            foreach ($bm_by_type as $btype => $blist):
-                $blabel = $type_labels[$btype] ?? $btype;
-            ?>
-            <optgroup label="<?= h($blabel) ?>">
-              <?php foreach ($blist as $bm): ?>
-              <option value="<?= (int)$bm['id'] ?>"><?= h($bm['name']) ?> (<?= h(fmt_kg($bm['unit_dara_kg'])) ?> kg)</option>
+      <!-- ── Tek malzeme paneli ── -->
+      <div class="bm-panel" id="bmPanelSingle">
+        <div class="pm-grid" style="margin-bottom:12px">
+          <label class="pm-label pm-span2">
+            <span>Malzeme *</span>
+            <select id="bmMaterial">
+              <option value="">-- malzeme seçiniz --</option>
+              <?php
+              $bm_by_type = [];
+              foreach ($bm_materials as $m) {
+                  if ($m['type'] === 'kasa_cinsi' || $m['type'] === 'palet_tipi') continue;
+                  $bm_by_type[$m['type']][] = $m;
+              }
+              foreach ($bm_by_type as $btype => $blist):
+                  $blabel = $type_labels[$btype] ?? $btype;
+              ?>
+              <optgroup label="<?= h($blabel) ?>">
+                <?php foreach ($blist as $bm): ?>
+                <option value="<?= (int)$bm['id'] ?>" data-unit="<?= h($bm['unit_dara_kg']) ?>"><?= h($bm['name']) ?> (<?= h(fmt_kg($bm['unit_dara_kg'])) ?> kg)</option>
+                <?php endforeach; ?>
+              </optgroup>
               <?php endforeach; ?>
-            </optgroup>
-            <?php endforeach; ?>
-          </select>
-        </label>
-        <label class="pm-label">
-          <span>Adet *</span>
-          <input type="text" inputmode="decimal" id="bmQty" value="1" placeholder="Adet" class="num">
-        </label>
-        <div class="pm-label" style="justify-content:flex-end;padding-top:4px">
-          <span id="bmDaraPreview" class="bm-dara-preview"></span>
+            </select>
+          </label>
+          <label class="pm-label">
+            <span>Adet *</span>
+            <input type="text" inputmode="decimal" id="bmQty" value="1" placeholder="Adet" class="num">
+          </label>
+          <div class="pm-label" style="justify-content:flex-end;padding-top:4px">
+            <span id="bmDaraPreview" class="bm-dara-preview"></span>
+          </div>
         </div>
       </div>
 
+      <!-- ── Şablonlar paneli ── -->
+      <div class="bm-panel" id="bmPanelTpl" hidden>
+        <div id="bmTplList" class="bm-tpl-list"></div>
+        <button type="button" class="btn btn-sm" id="bmTplNewBtn">+ Yeni Şablon Oluştur</button>
+
+        <div id="bmTplForm" class="bm-create-form" hidden>
+          <h4>Yeni Şablon</h4>
+          <label class="pm-label" style="margin-bottom:10px">
+            <span>Şablon Adı *</span>
+            <input type="text" id="bmTplName" placeholder="Ör: İhracat Seti">
+          </label>
+          <div id="bmTplMatRows" class="bm-tpl-mat-rows"></div>
+          <button type="button" class="btn btn-sm btn-ghost" id="bmTplAddRow" style="margin-bottom:12px">+ Satır Ekle</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm btn-primary" id="bmTplSaveBtn">Kaydet</button>
+            <button type="button" class="btn btn-sm btn-ghost"   id="bmTplCancelBtn">Vazgeç</button>
+          </div>
+          <p id="bmTplStatus" class="bm-status" style="margin-top:6px"></p>
+        </div>
+      </div>
+
+      <!-- ── Palet seçimi (her iki modda ortak) ── -->
       <div class="bm-pallets-head">
         <label class="bm-check-label">
           <input type="checkbox" id="bmAll" checked>
@@ -747,6 +779,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 
       <p id="bmStatus" class="bm-status"></p>
     </div>
+
     <div class="pm-footer">
       <button type="button" class="btn btn-ghost" id="bmCancel">İptal</button>
       <button type="button" class="btn btn-primary" id="bmApply">Uygula</button>
@@ -759,69 +792,78 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 <script>
 /* ── Toplu Malzeme Çıkışı Modal ── */
 (function () {
+    var CSRF     = document.querySelector('meta[name="csrf-token"]').content;
+    var REC_ID   = <?= (int)$id ?>;
+
     var overlay  = document.getElementById('bmOverlay');
     var openBtn  = document.getElementById('bmOpenBtn');
-    var closeBtn = document.getElementById('bmClose');
-    var cancelBtn= document.getElementById('bmCancel');
-    var applyBtn = document.getElementById('bmApply');
-    var allCb    = document.getElementById('bmAll');
-    var matSel   = document.getElementById('bmMaterial');
-    var qtyInp   = document.getElementById('bmQty');
     var statusEl = document.getElementById('bmStatus');
-    var preview  = document.getElementById('bmDaraPreview');
+    var allCb    = document.getElementById('bmAll');
+    var applyBtn = document.getElementById('bmApply');
 
-    /* Malzeme birim ağırlıkları (optgroup'lardan) */
-    function getUnit() {
-        var opt = matSel.options[matSel.selectedIndex];
-        return opt && opt.dataset.unit ? parseFloat(opt.dataset.unit) : 0;
-    }
-
-    /* Dara önizlemesi */
-    function updatePreview() {
-        var unit = getUnit();
-        var qty  = parseFloat(String(qtyInp.value).replace(',', '.')) || 0;
-        if (unit && qty) {
-            preview.textContent = 'Dara: ' + (Math.round(unit * qty * 1000) / 1000).toLocaleString('tr-TR', {minimumFractionDigits:0, maximumFractionDigits:3}) + ' kg';
-        } else { preview.textContent = ''; }
-    }
-    matSel.addEventListener('change', updatePreview);
-    qtyInp.addEventListener('input',  updatePreview);
-
-    /* Malzeme seçeneklerine data-unit ekle (PHP'den gelen değerleri JS'e taşı) */
+    /* ── PHP malzeme listesi (şablon formu için) ── */
     <?php
-    $bm_unit_map = [];
+    $bm_mat_list = [];
     foreach ($bm_materials as $m) {
         if ($m['type'] === 'kasa_cinsi' || $m['type'] === 'palet_tipi') continue;
-        $bm_unit_map[(int)$m['id']] = (float)$m['unit_dara_kg'];
+        $bm_mat_list[] = [
+            'id'   => (int)$m['id'],
+            'name' => $m['name'],
+            'type' => $type_labels[$m['type']] ?? $m['type'],
+            'unit' => (float)$m['unit_dara_kg'],
+        ];
     }
     ?>
-    var BM_UNITS = <?= json_encode($bm_unit_map) ?>;
-    Array.from(matSel.options).forEach(function(opt) {
-        if (opt.value && BM_UNITS[opt.value] !== undefined) {
-            opt.dataset.unit = BM_UNITS[opt.value];
-        }
+    var BM_MATS = <?= json_encode($bm_mat_list) ?>;
+
+    /* ── Yardımcılar ── */
+    function parseN(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
+    function fmtN(n)   {
+        var s = n.toLocaleString('tr-TR', {minimumFractionDigits:0, maximumFractionDigits:3});
+        return s;
+    }
+    function esc(s)    { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function getSelectedPalletIds() {
+        var ids = [];
+        document.querySelectorAll('.bm-pallet-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+        return ids;
+    }
+
+    /* ── Tab yönetimi ── */
+    var activeTab = 'single';
+    document.querySelectorAll('.bm-tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            activeTab = btn.dataset.tab;
+            document.querySelectorAll('.bm-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById('bmPanelSingle').hidden = (activeTab !== 'single');
+            document.getElementById('bmPanelTpl').hidden    = (activeTab !== 'tpl');
+            applyBtn.style.display = (activeTab === 'single') ? '' : 'none';
+            if (activeTab === 'tpl') loadTemplates();
+        });
     });
 
-    function open() {
+    /* ── Açma/Kapama ── */
+    function openModal() {
         overlay.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         statusEl.textContent = '';
-        matSel.focus();
+        // Şablonlar aktifse yükle
+        if (activeTab === 'tpl') loadTemplates();
     }
-    function close() {
+    function closeModal() {
         overlay.style.display = 'none';
         document.body.style.overflow = '';
     }
-
-    if (openBtn)  openBtn.addEventListener('click', open);
-    if (closeBtn) closeBtn.addEventListener('click', close);
-    if (cancelBtn)cancelBtn.addEventListener('click', close);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    document.getElementById('bmClose').addEventListener('click', closeModal);
+    document.getElementById('bmCancel').addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && overlay.style.display !== 'none') close();
+        if (e.key === 'Escape' && overlay.style.display !== 'none') closeModal();
     });
 
-    /* Tümünü seç/kaldır */
+    /* ── Palet seçimi ── */
     allCb.addEventListener('change', function() {
         document.querySelectorAll('.bm-pallet-cb').forEach(function(cb) { cb.checked = allCb.checked; });
         updateCount();
@@ -829,41 +871,46 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
     function updateCount() {
         var total   = document.querySelectorAll('.bm-pallet-cb').length;
         var checked = document.querySelectorAll('.bm-pallet-cb:checked').length;
-        allCb.checked       = total === checked;
-        allCb.indeterminate = checked > 0 && checked < total;
+        allCb.checked       = (total === checked);
+        allCb.indeterminate = (checked > 0 && checked < total);
         allCb.closest('label').querySelector('span.muted').textContent = '(' + checked + ' palet seçildi)';
     }
-    document.querySelectorAll('.bm-pallet-cb').forEach(function(cb) {
-        cb.addEventListener('change', updateCount);
-    });
+    document.querySelectorAll('.bm-pallet-cb').forEach(function(cb) { cb.addEventListener('change', updateCount); });
 
-    /* Uygula */
+    /* ── Tek malzeme: dara önizlemesi ── */
+    var matSel  = document.getElementById('bmMaterial');
+    var qtyInp  = document.getElementById('bmQty');
+    var preview = document.getElementById('bmDaraPreview');
+    function updatePreview() {
+        var opt  = matSel.options[matSel.selectedIndex];
+        var unit = opt && opt.dataset.unit ? parseN(opt.dataset.unit) : 0;
+        var qty  = parseN(qtyInp.value);
+        preview.textContent = (unit && qty) ? 'Dara: ' + fmtN(unit * qty) + ' kg' : '';
+    }
+    matSel.addEventListener('change', updatePreview);
+    qtyInp.addEventListener('input',  updatePreview);
+
+    /* ── Tek malzeme: Uygula ── */
     applyBtn.addEventListener('click', function() {
         var mid = parseInt(matSel.value);
-        var qty = parseFloat(String(qtyInp.value).replace(',', '.'));
-        if (!mid) { alert('Malzeme seçiniz.'); return; }
-        if (!qty || qty <= 0) { alert('Geçerli bir adet giriniz.'); return; }
+        var qty = parseN(qtyInp.value);
+        if (!mid)       { alert('Malzeme seçiniz.'); return; }
+        if (qty <= 0)   { alert('Geçerli bir adet giriniz.'); return; }
+        var ids = getSelectedPalletIds();
+        if (!ids.length){ alert('En az bir palet seçiniz.'); return; }
+        sendMaterials([{material_id: mid, quantity: qty}], ids, applyBtn);
+    });
 
-        var ids = [];
-        document.querySelectorAll('.bm-pallet-cb:checked').forEach(function(cb) {
-            ids.push(parseInt(cb.value));
-        });
-        if (!ids.length) { alert('En az bir palet seçiniz.'); return; }
-
-        applyBtn.disabled = true;
+    /* ── API: malzeme gönder ── */
+    function sendMaterials(materials, palletIds, triggerBtn) {
+        if (triggerBtn) triggerBtn.disabled = true;
         statusEl.textContent = 'Uygulanıyor…';
         statusEl.style.color = 'var(--muted)';
 
         fetch('api_bulk_material.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                csrf: document.querySelector('meta[name="csrf-token"]').content,
-                record_id: <?= (int)$id ?>,
-                material_id: mid,
-                quantity: qty,
-                pallet_ids: ids
-            })
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csrf: CSRF, record_id: REC_ID, materials: materials, pallet_ids: palletIds})
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -872,17 +919,193 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                 statusEl.style.color = 'var(--success)';
                 setTimeout(function() { location.reload(); }, 900);
             } else {
-                applyBtn.disabled = false;
+                if (triggerBtn) triggerBtn.disabled = false;
                 statusEl.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata');
                 statusEl.style.color = 'var(--danger)';
             }
         })
         .catch(function() {
-            applyBtn.disabled = false;
+            if (triggerBtn) triggerBtn.disabled = false;
             statusEl.textContent = 'Bağlantı hatası.';
             statusEl.style.color = 'var(--danger)';
         });
+    }
+
+    /* ════════════════════════════════════
+       ŞABLONLAR
+    ════════════════════════════════════ */
+    var tplListEl   = document.getElementById('bmTplList');
+    var tplNewBtn   = document.getElementById('bmTplNewBtn');
+    var tplForm     = document.getElementById('bmTplForm');
+    var tplNameInp  = document.getElementById('bmTplName');
+    var tplRowsCont = document.getElementById('bmTplMatRows');
+    var tplAddRow   = document.getElementById('bmTplAddRow');
+    var tplSaveBtn  = document.getElementById('bmTplSaveBtn');
+    var tplCancelBtn= document.getElementById('bmTplCancelBtn');
+    var tplStatus   = document.getElementById('bmTplStatus');
+
+    /* Malzeme select seçeneği oluştur */
+    function buildMatSelect(selectedId) {
+        var sel = document.createElement('select');
+        sel.className = 'tpl-mat-sel';
+        var emptyOpt = document.createElement('option');
+        emptyOpt.value = ''; emptyOpt.textContent = '-- seçiniz --';
+        sel.appendChild(emptyOpt);
+
+        // Gruplanmış
+        var groups = {};
+        BM_MATS.forEach(function(m) {
+            if (!groups[m.type]) groups[m.type] = [];
+            groups[m.type].push(m);
+        });
+        Object.keys(groups).forEach(function(gname) {
+            var og = document.createElement('optgroup');
+            og.label = gname;
+            groups[gname].forEach(function(m) {
+                var opt = document.createElement('option');
+                opt.value = m.id;
+                opt.dataset.unit = m.unit;
+                opt.textContent = m.name + ' (' + fmtN(m.unit) + ' kg)';
+                if (String(m.id) === String(selectedId)) opt.selected = true;
+                og.appendChild(opt);
+            });
+            sel.appendChild(og);
+        });
+        return sel;
+    }
+
+    /* Şablon satırı ekle */
+    function addTplRow(matId, qty) {
+        var row = document.createElement('div');
+        row.className = 'bm-tpl-mat-row';
+        var sel = buildMatSelect(matId || '');
+        var qtyInpR = document.createElement('input');
+        qtyInpR.type = 'text'; qtyInpR.inputMode = 'decimal';
+        qtyInpR.className = 'tpl-mat-qty num'; qtyInpR.value = qty || 1; qtyInpR.placeholder = 'Adet';
+        var delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'btn btn-sm btn-ghost tpl-row-del'; delBtn.textContent = '✕';
+        delBtn.addEventListener('click', function() { row.remove(); });
+        row.appendChild(sel); row.appendChild(qtyInpR); row.appendChild(delBtn);
+        tplRowsCont.appendChild(row);
+    }
+
+    tplAddRow.addEventListener('click', function() { addTplRow(); });
+
+    /* Formu aç/kapat */
+    tplNewBtn.addEventListener('click', function() {
+        tplForm.hidden = false;
+        tplNewBtn.hidden = true;
+        tplNameInp.value = '';
+        tplRowsCont.innerHTML = '';
+        tplStatus.textContent = '';
+        addTplRow(); // Başlangıçta 1 boş satır
+        tplNameInp.focus();
     });
+    tplCancelBtn.addEventListener('click', function() {
+        tplForm.hidden = true;
+        tplNewBtn.hidden = false;
+    });
+
+    /* Şablon kaydet */
+    tplSaveBtn.addEventListener('click', function() {
+        var name = tplNameInp.value.trim();
+        if (!name) { tplStatus.textContent = 'Şablon adı gerekli.'; tplStatus.style.color = 'var(--danger)'; return; }
+        var items = [];
+        tplRowsCont.querySelectorAll('.bm-tpl-mat-row').forEach(function(row) {
+            var mid = parseInt(row.querySelector('.tpl-mat-sel').value);
+            var qty = parseN(row.querySelector('.tpl-mat-qty').value);
+            if (mid && qty > 0) items.push({material_id: mid, quantity: qty});
+        });
+        if (!items.length) { tplStatus.textContent = 'En az bir malzeme ekleyin.'; tplStatus.style.color = 'var(--danger)'; return; }
+
+        tplSaveBtn.disabled = true;
+        tplStatus.textContent = 'Kaydediliyor…'; tplStatus.style.color = 'var(--muted)';
+
+        fetch('api_templates.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csrf: CSRF, action: 'save', name: name, items: items})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            tplSaveBtn.disabled = false;
+            if (data.ok) {
+                tplForm.hidden = true; tplNewBtn.hidden = false;
+                tplStatus.textContent = '';
+                loadTemplates();
+            } else {
+                tplStatus.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata');
+                tplStatus.style.color = 'var(--danger)';
+            }
+        })
+        .catch(function() {
+            tplSaveBtn.disabled = false;
+            tplStatus.textContent = 'Bağlantı hatası.'; tplStatus.style.color = 'var(--danger)';
+        });
+    });
+
+    /* Şablon listesini yükle */
+    function loadTemplates() {
+        tplListEl.innerHTML = '<div class="bm-tpl-empty">Yükleniyor…</div>';
+        fetch('api_templates.php')
+        .then(function(r) { return r.json(); })
+        .then(function(list) { renderTemplates(list); })
+        .catch(function() { tplListEl.innerHTML = '<div class="bm-tpl-empty">Yüklenemedi.</div>'; });
+    }
+
+    /* Şablon listesini render et */
+    function renderTemplates(list) {
+        if (!list.length) {
+            tplListEl.innerHTML = '<div class="bm-tpl-empty">Henüz şablon yok. "Yeni Şablon Oluştur" ile başlayın.</div>';
+            return;
+        }
+        tplListEl.innerHTML = '';
+        list.forEach(function(tpl) {
+            var itemsText = tpl.items.map(function(it) {
+                return esc(it.material_name) + ' ×' + fmtN(parseN(it.quantity));
+            }).join(', ');
+
+            var card = document.createElement('div');
+            card.className = 'bm-tpl-card';
+            card.innerHTML =
+                '<div class="bm-tpl-info">' +
+                  '<div class="bm-tpl-name">' + esc(tpl.name) + '</div>' +
+                  '<div class="bm-tpl-items">' + (itemsText || '<em>—</em>') + '</div>' +
+                '</div>' +
+                '<div class="bm-tpl-actions">' +
+                  '<button class="btn btn-sm btn-primary" data-apply="' + tpl.id + '">Uygula</button>' +
+                  '<button class="btn btn-sm btn-ghost tpl-del-btn" data-del="' + tpl.id + '">Sil</button>' +
+                '</div>';
+
+            card.querySelector('[data-apply]').addEventListener('click', function() {
+                var ids = getSelectedPalletIds();
+                if (!ids.length) { alert('En az bir palet seçiniz.'); return; }
+                var materials = tpl.items.map(function(it) {
+                    return {material_id: parseInt(it.material_id), quantity: parseN(it.quantity)};
+                });
+                sendMaterials(materials, ids, this);
+            });
+
+            card.querySelector('[data-del]').addEventListener('click', function() {
+                if (!confirm('"' + tpl.name + '" şablonu silinsin mi?')) return;
+                var btn = this;
+                btn.disabled = true;
+                fetch('api_templates.php', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({csrf: CSRF, action: 'delete', id: tpl.id})
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.ok) loadTemplates();
+                    else { btn.disabled = false; alert('Hata: ' + data.error); }
+                })
+                .catch(function() { btn.disabled = false; });
+            });
+
+            tplListEl.appendChild(card);
+        });
+    }
 })();
 </script>
 <?php endif; ?>
