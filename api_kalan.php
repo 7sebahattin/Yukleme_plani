@@ -97,12 +97,15 @@ switch ($action) {
 
     // ---- Veritabanından otomatik ortalama hesapla ----
     case 'auto_avg':
-        $cc = (int)($_GET['crate_count'] ?? 0);
+        $cc  = (int)($_GET['crate_count'] ?? 0);
+        $rid = (int)($_GET['record_id']   ?? 0);
         if (!$cc) err('Kasa adedi gerekli');
+        if (!$rid) err('record_id gerekli');
 
         $st = db()->prepare("SELECT COUNT(*) AS cnt, AVG(brut_kg) AS avg_kg
-                             FROM loading_pallets WHERE kasa_adeti=? AND brut_kg > 0");
-        $st->execute([$cc]);
+                             FROM loading_pallets
+                             WHERE kasa_adeti=? AND brut_kg > 0 AND loading_record_id=?");
+        $st->execute([$cc, $rid]);
         $row = $st->fetch();
 
         if ((int)$row['cnt'] === 0) {

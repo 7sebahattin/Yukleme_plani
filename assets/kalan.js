@@ -162,10 +162,10 @@
     }
 
     async function autoCalcCrate(cc) {
-        const d = await api('auto_avg', { crate_count: cc });
+        const d = await api('auto_avg', { crate_count: cc, record_id: RECORD_ID });
         if (!d.ok) return;
         if (!d.found) {
-            alert(`${cc} kasa adedi için veritabanında geçmiş kayıt bulunamadı.\nLütfen ortalama kg'ı manuel girin.`);
+            alert(`${cc} kasa adedi için bu kayıtta palet bulunamadı.\nLütfen ortalama kg'ı manuel girin.`);
             return;
         }
         await api('save_crate', { crate_count: cc, avg_kg: d.avg_kg, source_type: 'auto' }, 'POST');

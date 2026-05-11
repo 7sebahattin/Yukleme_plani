@@ -313,7 +313,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                 <td><?= h($p['urun_cinsi']) ?></td>
                 <td><?= h($p['depo']) ?></td>
                 <td class="num"><?= h(fmt_kg($p['brut_kg'])) ?></td>
-                <td class="num"><?= h(fmt_kg($p['dara_kg'])) ?></td>
+                <td class="num"><?= h(fmt_kg(round_half((float)$p['dara_kg']))) ?></td>
                 <td class="num strong"><?= h(fmt_kg($p['net_kg'])) ?></td>
             </tr>
         <?php endforeach; ?>
@@ -372,7 +372,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
             <?php endif; ?>
             <div class="vc-totals">
                 <div><span>Brüt</span><strong><?= h(fmt_kg($p['brut_kg'])) ?></strong></div>
-                <div><span>Dara</span><strong><?= h(fmt_kg($p['dara_kg'])) ?></strong></div>
+                <div><span>Dara</span><strong><?= h(fmt_kg(round_half((float)$p['dara_kg']))) ?></strong></div>
                 <div><span>Net</span><strong class="strong"><?= h(fmt_kg($p['net_kg'])) ?></strong></div>
             </div>
         </div>
