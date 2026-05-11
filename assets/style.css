@@ -1493,6 +1493,8 @@ body.print-mode .asya-sheet {
     position: relative;
     flex-shrink: 0;
     align-self: flex-start;
+    display: inline-block;
+    vertical-align: middle;
 }
 .pc-kebab {
     background: none; border: none; cursor: pointer;
@@ -1511,14 +1513,15 @@ body.print-mode .asya-sheet {
     min-width: 140px;
     overflow: hidden;
 }
-.pc-dropdown button {
+.pc-dropdown button, .pc-dropdown a {
     display: flex; align-items: center; gap: 8px;
     width: 100%; padding: 11px 14px;
     background: none; border: none; cursor: pointer;
     font-size: .9rem; text-align: left;
     color: var(--text); font-family: inherit;
+    text-decoration: none;
 }
-.pc-dropdown button:hover { background: var(--bg); }
+.pc-dropdown button:hover, .pc-dropdown a:hover { background: var(--bg); }
 .pc-drop-danger { color: var(--danger) !important; }
 .pc-drop-danger:hover { background: var(--danger-soft) !important; }
 
