@@ -8,7 +8,8 @@ require_once __DIR__ . '/config/db.php';
 $rows = [];
 try {
     $rows = db()->query(
-        "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi, tartim1, tartim2, created_at
+        "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
+                palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2, created_at
          FROM kantar_fisleri
          ORDER BY created_at DESC, id DESC
          LIMIT 500"
@@ -47,21 +48,26 @@ render_flash();
             <th>Plaka</th>
             <th>Firma</th>
             <th>Malın Cinsi</th>
+            <th class="num">Palet</th>
+            <th class="num">Kasa</th>
             <th class="num">Net KG</th>
             <th class="actions-col">İşlemler</th>
         </tr>
         </thead>
         <tbody>
         <?php foreach ($rows as $r):
-            $net = (float)$r['tartim1'] - (float)$r['tartim2'];
+            $net        = (float)$r['tartim1'] - (float)$r['tartim2'];
+            $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
         ?>
             <tr>
                 <td><strong>#<?= (int)$r['id'] ?></strong></td>
                 <td><?= h($r['fis_no'] ?: '—') ?></td>
-                <td><?= h($r['giris_tarih'] ?: fmt_datetime($r['created_at'])) ?></td>
+                <td><?= h($giris_disp) ?></td>
                 <td><?= h($r['plaka'] ?: '—') ?></td>
                 <td><?= h($r['firma_adi'] ?: '—') ?></td>
                 <td><?= h($r['malin_cinsi'] ?? '—') ?></td>
+                <td class="num"><?= $r['palet_sayisi'] ? (int)$r['palet_sayisi'] : '—' ?></td>
+                <td class="num"><?= $r['kasa_sayisi']  ? (int)$r['kasa_sayisi']  : '—' ?></td>
                 <td class="num strong"><?= $net > 0 ? fmt_kg($net) . ' kg' : '—' ?></td>
                 <td class="actions-col">
                     <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
@@ -75,20 +81,24 @@ render_flash();
 <!-- Mobil: kart -->
 <div class="card-list mobile-only">
     <?php foreach ($rows as $r):
-        $net = (float)$r['tartim1'] - (float)$r['tartim2'];
+        $net        = (float)$r['tartim1'] - (float)$r['tartim2'];
+        $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
     ?>
     <div class="record-card">
         <div class="record-card-head">
             <div>
                 <strong>#<?= (int)$r['id'] ?><?= $r['fis_no'] ? ' · ' . h($r['fis_no']) : '' ?></strong>
-                <div class="muted"><?= h($r['giris_tarih'] ?: fmt_datetime($r['created_at'])) ?></div>
+                <div class="muted"><?= h($giris_disp) ?></div>
             </div>
         </div>
         <div class="record-card-body">
             <?php if ($r['plaka']): ?><div><span class="lbl">Plaka:</span> <?= h($r['plaka']) ?></div><?php endif; ?>
             <?php if ($r['firma_adi']): ?><div><span class="lbl">Firma:</span> <?= h($r['firma_adi']) ?></div><?php endif; ?>
+            <?php if ($r['kasa_cinsi']): ?><div><span class="lbl">Kasa Cinsi:</span> <?= h($r['kasa_cinsi']) ?></div><?php endif; ?>
         </div>
         <div class="record-card-totals">
+            <?php if ($r['palet_sayisi']): ?><div><span>Palet</span><strong><?= (int)$r['palet_sayisi'] ?></strong></div><?php endif; ?>
+            <?php if ($r['kasa_sayisi']): ?><div><span>Kasa</span><strong><?= (int)$r['kasa_sayisi'] ?></strong></div><?php endif; ?>
             <div><span>Net KG</span><strong class="strong"><?= $net > 0 ? fmt_kg($net) : '—' ?></strong></div>
         </div>
         <div class="record-card-actions">

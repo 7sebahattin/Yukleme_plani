@@ -49,14 +49,14 @@ $fis_id   = (int)($fis['id'] ?? 0);
             <label>Firma Adı
                 <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>">
             </label>
-            <label>Giriş Tarih / Saat
-                <input type="text" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
-            </label>
-            <label>Çıkış Tarih / Saat
-                <input type="text" name="cikis_tarih" value="<?= h($fis['cikis_tarih'] ?? '') ?>">
-            </label>
             <label>Operatör
                 <input type="text" name="operator_adi" value="<?= h($fis['operator_adi'] ?? '') ?>">
+            </label>
+            <label>Giriş Tarih / Saat
+                <input type="datetime-local" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
+            </label>
+            <label>Çıkış Tarih / Saat
+                <input type="datetime-local" name="cikis_tarih" value="<?= h($fis['cikis_tarih'] ?? '') ?>">
             </label>
             <label>Malın Cinsi
                 <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>">
@@ -67,8 +67,22 @@ $fis_id   = (int)($fis['id'] ?? 0);
             <label>Gittiği Yer
                 <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
             </label>
-            <label class="span-2">Açıklama
+            <label>Palet Sayısı
+                <input type="text" inputmode="numeric" name="palet_sayisi"
+                       class="num" value="<?= h($fis['palet_sayisi'] ?? '') ?>" placeholder="Palet">
+            </label>
+            <label>Kasa Sayısı
+                <input type="text" inputmode="numeric" name="kasa_sayisi"
+                       class="num" value="<?= h($fis['kasa_sayisi'] ?? '') ?>" placeholder="Kasa">
+            </label>
+            <label class="span-2">Kasa Cinsi
+                <input type="text" name="kasa_cinsi" value="<?= h($fis['kasa_cinsi'] ?? '') ?>" placeholder="">
+            </label>
+            <label class="span-2">Açıklama 1
                 <input type="text" name="aciklama" value="<?= h($fis['aciklama'] ?? '') ?>">
+            </label>
+            <label class="span-2">Açıklama 2
+                <input type="text" name="aciklama2" value="<?= h($fis['aciklama2'] ?? '') ?>">
             </label>
         </div>
     </div>
