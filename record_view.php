@@ -9,12 +9,12 @@ require_once __DIR__ . '/config/db.php';
 
 $id = (int)($_GET['id'] ?? 0);
 $print = !empty($_GET['print']);
-if ($id <= 0) { set_flash('error', 'Geçersiz kayıt.'); header('Location: index.php'); exit; }
+if ($id <= 0) { set_flash('error', 'Geçersiz kayıt.'); header('Location: records.php'); exit; }
 
 $st = db()->prepare("SELECT * FROM loading_records WHERE id=:id");
 $st->execute([':id' => $id]);
 $record = $st->fetch();
-if (!$record) { set_flash('error', 'Kayıt bulunamadı.'); header('Location: index.php'); exit; }
+if (!$record) { set_flash('error', 'Kayıt bulunamadı.'); header('Location: records.php'); exit; }
 
 $st = db()->prepare("
     SELECT p.*,
@@ -238,7 +238,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
     <div class="page-head-actions">
         <button id="kalanOpenBtn" class="btn">Kalan Palet Hesapla</button>
         <button id="bmOpenBtn" class="btn">+ Malzeme Çıkışı</button>
-        <a href="index.php" class="btn btn-ghost">← Liste</a>
+        <a href="records.php" class="btn btn-ghost">← Liste</a>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">Düzenle</a>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">Yazdır</a>
     </div>

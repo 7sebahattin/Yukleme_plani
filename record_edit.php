@@ -10,7 +10,7 @@ require_once __DIR__ . '/config/calc.php';
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
     set_flash('error', 'Geçersiz kayıt.');
-    header('Location: index.php'); exit;
+    header('Location: records.php'); exit;
 }
 
 // POST işlem
@@ -128,7 +128,7 @@ $st->execute([':id' => $id]);
 $record = $st->fetch();
 if (!$record) {
     set_flash('error', 'Kayıt bulunamadı.');
-    header('Location: index.php'); exit;
+    header('Location: records.php'); exit;
 }
 
 $st = db()->prepare("SELECT * FROM loading_pallets WHERE loading_record_id=:r ORDER BY sira_no, id");

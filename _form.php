@@ -32,7 +32,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 <div class="page-head">
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
-        <a href="index.php" class="btn btn-ghost">İptal</a>
+        <a href="records.php" class="btn btn-ghost">İptal</a>
         <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
     </div>
 </div>
@@ -137,7 +137,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 </section>
 
 <div class="form-foot">
-    <a href="index.php" class="btn btn-ghost">İptal</a>
+    <a href="records.php" class="btn btn-ghost">İptal</a>
     <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
 </div>
 
