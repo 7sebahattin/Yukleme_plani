@@ -203,6 +203,21 @@ Yeni özellik eklerken şunları kontrol et:
 
 ---
 
+## Z-index Mimarisi
+
+| Katman | z-index | Neden |
+|---|---|---|
+| Topbar (sticky) | 100 | Sayfa içeriğinin üstünde |
+| Kebab dropdown | 200 | Kartların üstünde |
+| Bottom nav | 500 | Her şeyin üstünde (sabit nav) |
+| Palet modal (.pm-overlay) | 600 | Bottom nav'ın üstünde olmalı |
+| Kalan modal (#kalanModal) | 1000 | En üstte |
+| Etiket crop overlay | 3000 | Print modal |
+
+**Kural:** Yeni modal/overlay eklerken z-index ≥ 600 kullan (bottom nav 500'dür).
+
+---
+
 ## Yaygın Hatalar
 
 | Hata | Sebep | Çözüm |
