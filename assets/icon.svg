@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1d6cf0"/>
+  <!-- top face -->
+  <polygon points="256,108 400,188 256,268 112,188" fill="rgba(255,255,255,0.95)"/>
+  <!-- left face -->
+  <polygon points="112,196 112,352 256,432 256,276" fill="rgba(255,255,255,0.60)"/>
+  <!-- right face -->
+  <polygon points="256,276 256,432 400,352 400,196" fill="rgba(255,255,255,0.80)"/>
+  <!-- center divider top -->
+  <line x1="256" y1="108" x2="256" y2="268" stroke="rgba(29,108,240,0.4)" stroke-width="4"/>
+</svg>

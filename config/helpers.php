@@ -120,12 +120,20 @@ function definition_types(): array {
 // --- Ortak header/footer parçaları ---
 function render_header(string $title, bool $print_mode = false): void {
     $token = csrf_token();
+    $cur = basename($_SERVER['PHP_SELF'] ?? '');
     ?><!doctype html>
 <html lang="tr">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="csrf-token" content="<?= h($token) ?>">
+    <meta name="theme-color" content="#1d6cf0">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Yükleme">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/icon.svg">
     <title><?= h($title) ?> · Yükleme Planı</title>
     <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
@@ -138,20 +146,58 @@ function render_header(string $title, bool $print_mode = false): void {
             <span class="brand-text">Yükleme Planı</span>
         </a>
         <nav class="topnav">
-            <a href="records.php">Yüklemeler</a>
-            <a href="cikmalar.php">Çıkmalar</a>
-            <a href="definitions.php">Tanımlar</a>
+            <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
+            <a href="cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <a href="definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
     </div>
 </header>
 <?php endif; ?>
 <main class="container">
 <?php
+    // PWA service worker kaydı
+    if (!$print_mode): ?>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+}
+</script>
+<?php endif;
 }
 
 function render_footer(bool $print_mode = false): void {
     if (!$print_mode) {
-        echo '</main><script src="assets/app.js"></script></body></html>';
+        $cur = basename($_SERVER['PHP_SELF'] ?? '');
+        $is_home     = in_array($cur, ['index.php', '']);
+        $is_records  = in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
+        $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']);
+        $is_defs     = $cur === 'definitions.php';
+        echo '</main>';
+        ?>
+<nav class="bottomnav" role="navigation" aria-label="Ana gezinme">
+    <a href="index.php" class="bottomnav-item<?= $is_home ? ' active' : '' ?>">
+        <span class="bottomnav-icon">🏠</span>
+        <span class="bottomnav-label">Ana Sayfa</span>
+    </a>
+    <a href="records.php" class="bottomnav-item<?= $is_records ? ' active' : '' ?>">
+        <span class="bottomnav-icon">📋</span>
+        <span class="bottomnav-label">Yüklemeler</span>
+    </a>
+    <a href="record_new.php" class="bottomnav-item bottomnav-add">
+        <span class="bottomnav-add-circle">＋</span>
+        <span class="bottomnav-label">Yeni</span>
+    </a>
+    <a href="cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
+        <span class="bottomnav-icon">🚚</span>
+        <span class="bottomnav-label">Çıkmalar</span>
+    </a>
+    <a href="definitions.php" class="bottomnav-item<?= $is_defs ? ' active' : '' ?>">
+        <span class="bottomnav-icon">⚙️</span>
+        <span class="bottomnav-label">Tanımlar</span>
+    </a>
+</nav>
+<?php
+        echo '<script src="assets/app.js"></script></body></html>';
     } else {
         echo '</main></body></html>';
     }

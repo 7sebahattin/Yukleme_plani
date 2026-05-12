@@ -2,6 +2,11 @@
    Yükleme Planı - mobil öncelikli stil (v2)
    ========================================================= */
 
+/* ── Global overflow fix ── */
+html { overflow-x: hidden; scroll-behavior: smooth; }
+body { overflow-x: hidden; }
+* { -webkit-tap-highlight-color: transparent; }
+
 :root {
     --bg: #f4f6fa;
     --card: #ffffff;
@@ -32,6 +37,7 @@ html, body {
                  "Helvetica Neue", Arial, sans-serif;
     font-size: 15px; line-height: 1.45;
     -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: contain;
 }
 
 a { color: var(--primary); text-decoration: none; }
@@ -72,8 +78,9 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
     border-radius: var(--radius-sm); font-weight: 500;
 }
 .topnav a:hover { background: rgba(255,255,255,0.1); text-decoration: none; }
+.topnav a.active { background: rgba(255,255,255,0.18); }
 
-.container { max-width: 1500px; margin: 0 auto; padding: 16px 14px 80px; }
+.container { max-width: 1500px; margin: 0 auto; padding: 16px 14px calc(80px + env(safe-area-inset-bottom, 0px)); }
 
 .page-head {
     display: flex; align-items: center; justify-content: space-between;
@@ -176,6 +183,14 @@ input:focus, select:focus, textarea:focus {
     outline: 2px solid var(--primary);
     outline-offset: -1px;
     border-color: var(--primary);
+}
+/* iOS zoom önleme: input font-size min 16px */
+@media (max-width: 767px) {
+    input[type="text"], input[type="search"], input[type="tel"],
+    input[type="date"], input[type="number"], select, textarea {
+        font-size: 16px;
+    }
+    .topnav { display: none; }
 }
 input.error, select.error {
     border-color: var(--danger) !important;
@@ -1737,3 +1752,63 @@ body.print-mode .asya-sheet {
 
 /* Toplam satırı */
 .kantar-toplam-row td { background: var(--bg); border-top: 2px solid var(--border-strong); }
+
+/* =========================================================
+   Bottom Navigation (mobil uygulama navigation bar)
+   ========================================================= */
+.bottomnav {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 500;
+    background: var(--text);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 6px 0;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 767px) {
+    .bottomnav { display: flex; }
+}
+
+.bottomnav-item {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    color: rgba(255,255,255,0.5);
+    text-decoration: none;
+    font-size: .68rem; font-weight: 500;
+    transition: color .15s;
+    min-width: 0;
+    position: relative;
+}
+.bottomnav-item:hover, .bottomnav-item:focus { color: rgba(255,255,255,0.9); text-decoration: none; }
+.bottomnav-item.active { color: #5b9eff; }
+.bottomnav-item.active .bottomnav-icon { transform: translateY(-1px); }
+
+.bottomnav-icon { font-size: 1.35rem; line-height: 1; display: block; transition: transform .15s; }
+.bottomnav-label { font-size: .64rem; line-height: 1; white-space: nowrap; }
+
+/* Ortadaki "Yeni" butonu — yükseltilmiş daire */
+.bottomnav-add {
+    color: #fff;
+    flex-shrink: 0;
+}
+.bottomnav-add-circle {
+    display: flex; align-items: center; justify-content: center;
+    width: 48px; height: 48px;
+    background: var(--primary);
+    border-radius: 50%;
+    font-size: 1.6rem; font-weight: 300; line-height: 1;
+    color: #fff;
+    margin-top: -20px;
+    box-shadow: 0 4px 12px rgba(29,108,240,0.5);
+    transition: background .15s, transform .15s;
+}
+.bottomnav-add:hover .bottomnav-add-circle { background: var(--primary-dark); transform: scale(1.08); }
+.bottomnav-add .bottomnav-label { color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+/* Print modda bottom nav gizle */
+@media print { .bottomnav { display: none !important; } }
