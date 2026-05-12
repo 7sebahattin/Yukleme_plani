@@ -4,7 +4,6 @@
 // Kantar create + edit ortak form partial.
 // Beklenen değişkenler:
 //   $fis          - fiş alanları (dizi); create'de boş dizi
-//   $gruplar      - kantar_gruplar satırları (dizi)
 //   $form_action  - form action URL
 //   $title        - sayfa başlığı
 //   $submit_label - submit buton etiketi
@@ -13,7 +12,6 @@
 
 $is_edit = $is_edit ?? false;
 $fis     = $fis ?? [];
-$gruplar = $gruplar ?? [];
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="kantarForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -25,6 +23,7 @@ $gruplar = $gruplar ?? [];
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
         <a href="kantar.php" class="btn btn-ghost">İptal</a>
+        <button type="button" class="btn" id="hesaplaAcBtn">⚖ Hesapla</button>
         <?php if ($is_edit): ?>
         <a href="kantar_delete.php?id=<?= (int)$fis['id'] ?>"
            class="btn btn-danger"
@@ -111,44 +110,10 @@ $gruplar = $gruplar ?? [];
     </div>
 </section>
 
-<!-- ══════════════ HESAPLAMA PARAMETRELERİ ══════════════ -->
-<section class="card">
-    <div class="card-head">
-        <h2>Hesaplama</h2>
-        <button type="button" class="btn btn-primary" id="hesaplaAcBtn">⚖ Hesapla</button>
-    </div>
-    <div class="card-body">
-        <div class="grid" style="margin-bottom:12px">
-            <label>Toplam Palet Sayısı
-                <input type="text" name="toplam_palet" id="fToplamPalet"
-                       inputmode="numeric" class="num"
-                       value="<?= h($fis['toplam_palet'] ?? '') ?>" placeholder="Palet">
-            </label>
-            <label>Kasa Darası <small class="muted">(kg/kasa)</small>
-                <input type="text" name="kasa_dara" id="fKasaDara"
-                       inputmode="decimal" class="num"
-                       value="<?= h($fis['kasa_dara'] ?? '') ?>" placeholder="2">
-            </label>
-            <label>Palet Darası <small class="muted">(kg/palet)</small>
-                <input type="text" name="palet_dara" id="fPaletDara"
-                       inputmode="decimal" class="num"
-                       value="<?= h($fis['palet_dara'] ?? '') ?>" placeholder="30">
-            </label>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <strong style="font-size:.9rem">Gruplar</strong>
-            <button type="button" class="btn btn-sm btn-primary" id="addFormGrupBtn">+ Grup Ekle</button>
-        </div>
-        <div id="formGruplar"></div>
-        <p id="paletUyari" class="kantar-uyari" style="display:none"></p>
-    </div>
-</section>
-
 <div class="form-foot">
     <a href="kantar.php" class="btn btn-ghost">İptal</a>
+    <button type="button" class="btn" id="hesaplaAcBtn2">⚖ Hesapla</button>
     <?php if ($is_edit): ?>
-    <button type="button" class="btn btn-primary" id="hesaplaAcBtn2">⚖ Hesapla</button>
     <a href="kantar_delete.php?id=<?= (int)$fis['id'] ?>"
        class="btn btn-danger"
        onclick="return confirm('Bu fiş kalıcı olarak silinecek. Emin misiniz?')">Sil</a>
@@ -195,8 +160,6 @@ $gruplar = $gruplar ?? [];
   </div>
 </div>
 
-<script id="kantarGruplarInit" type="application/json"><?= json_encode(array_values($gruplar), JSON_UNESCAPED_UNICODE) ?></script>
-
 <script>
 (function () {
 
@@ -234,68 +197,6 @@ function calcNet() {
 document.getElementById('tartim1').addEventListener('input', calcNet);
 document.getElementById('tartim2').addEventListener('input', calcNet);
 calcNet();
-
-/* ── Form gruplar ── */
-var formGrupSay = 0;
-
-function addFormGrup(ad, palet, kasa) {
-    var idx = formGrupSay++;
-    var div = document.createElement('div');
-    div.className = 'kantar-grup-row';
-    div.innerHTML =
-        '<div class="kantar-grup-header">' +
-            '<span class="kantar-grup-no">' + (formGrupSay) + '. Grup</span>' +
-            '<button type="button" class="btn btn-ghost btn-sm kantar-del-btn">✕ Sil</button>' +
-        '</div>' +
-        '<div class="kantar-grup-body">' +
-            '<label class="kantar-lbl"><span>Grup Adı</span>' +
-                '<input type="text" name="gruplar[' + idx + '][grup_adi]"' +
-                ' class="kantar-ad-input" value="' + esc(ad != null ? ad : '') + '" placeholder="Grup adı">' +
-            '</label>' +
-            '<label class="kantar-lbl"><span>Palet Sayısı</span>' +
-                '<input type="text" name="gruplar[' + idx + '][palet_sayisi]"' +
-                ' class="kantar-palet-input num" inputmode="numeric" value="' + esc(palet != null ? palet : '') + '" placeholder="Palet">' +
-            '</label>' +
-            '<label class="kantar-lbl"><span>Kasa Adedi</span>' +
-                '<input type="text" name="gruplar[' + idx + '][kasa_adedi]"' +
-                ' class="kantar-kasa-input num" inputmode="numeric" value="' + esc(kasa != null ? kasa : '') + '" placeholder="Kasa">' +
-            '</label>' +
-        '</div>';
-    div.querySelector('.kantar-del-btn').addEventListener('click', function () {
-        div.remove();
-        checkFormPalet();
-    });
-    div.querySelector('.kantar-palet-input').addEventListener('input', checkFormPalet);
-    document.getElementById('formGruplar').appendChild(div);
-    checkFormPalet();
-}
-
-function checkFormPalet() {
-    var tp = parseNum(document.getElementById('fToplamPalet').value);
-    if (!tp) { document.getElementById('paletUyari').style.display = 'none'; return; }
-    var grupToplam = Array.from(document.querySelectorAll('#formGruplar .kantar-palet-input'))
-        .reduce(function(s, el) { return s + parseNum(el.value); }, 0);
-    var el = document.getElementById('paletUyari');
-    if (grupToplam > 0 && Math.abs(grupToplam - tp) > 0.001) {
-        el.textContent = '⚠ Grup palet toplamı (' + fmt(grupToplam) + ') toplam palet sayısıyla (' + fmt(tp) + ') eşleşmiyor.';
-        el.style.display = '';
-    } else {
-        el.style.display = 'none';
-    }
-}
-
-document.getElementById('fToplamPalet').addEventListener('input', checkFormPalet);
-document.getElementById('addFormGrupBtn').addEventListener('click', function () { addFormGrup(); });
-
-/* Init gruplar */
-var initGruplar = JSON.parse(document.getElementById('kantarGruplarInit').textContent);
-if (initGruplar && initGruplar.length) {
-    initGruplar.forEach(function(g) {
-        addFormGrup(g.grup_adi, g.palet_sayisi, g.kasa_adedi);
-    });
-} else {
-    addFormGrup(); addFormGrup();
-}
 
 /* ── Modal grup ── */
 var mGrupSay = 0;
@@ -351,27 +252,13 @@ function openModal() {
     var t1  = parseNum(document.getElementById('tartim1').value);
     var t2  = parseNum(document.getElementById('tartim2').value);
     var net = t1 - t2;
-    if (net > 0) document.getElementById('mToplamBrut').value = String(net);
-
-    document.getElementById('mToplamPalet').value = document.getElementById('fToplamPalet').value;
-    document.getElementById('mKasaDara').value    = document.getElementById('fKasaDara').value;
-    document.getElementById('mPaletDara').value   = document.getElementById('fPaletDara').value;
-
-    /* Formdaki grupları kopyala */
-    document.getElementById('mGrupList').innerHTML = '';
-    mGrupSay = 0;
-    Array.from(document.querySelectorAll('#formGruplar .kantar-grup-row')).forEach(function(row) {
-        var ad    = row.querySelector('.kantar-ad-input').value;
-        var palet = row.querySelector('.kantar-palet-input').value;
-        var kasa  = row.querySelector('.kantar-kasa-input').value;
-        if (parseNum(palet) > 0 || parseNum(kasa) > 0 || ad.trim()) {
-            addModalGrup(ad, palet, kasa);
-        }
-    });
+    if (net > 0) {
+        document.getElementById('mToplamBrut').value = String(net);
+    }
+    /* Gruplar yoksa 2 boş grup ekle */
     if (!document.getElementById('mGrupList').children.length) {
         addModalGrup(); addModalGrup();
     }
-
     document.getElementById('mSonuc').innerHTML = '';
     document.getElementById('mPaletUyari').style.display = 'none';
     document.getElementById('kantarModal').style.display = 'flex';
@@ -384,13 +271,12 @@ function closeModal() {
 }
 
 document.getElementById('hesaplaAcBtn').addEventListener('click', openModal);
+document.getElementById('hesaplaAcBtn2').addEventListener('click', openModal);
 document.getElementById('kantarModalKapat').addEventListener('click', closeModal);
 document.getElementById('kantarModalKapat2').addEventListener('click', closeModal);
 document.getElementById('kantarModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
-var btn2 = document.getElementById('hesaplaAcBtn2');
-if (btn2) btn2.addEventListener('click', openModal);
 
 /* ── Hesapla ── */
 document.getElementById('mHesaplaBtn').addEventListener('click', function () {
