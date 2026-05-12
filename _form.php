@@ -178,7 +178,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         </label>
         <label class="pm-label">
           <span>Kasa Adeti *</span>
-          <input type="text" inputmode="numeric" id="pmKasaAdeti" class="num kasa-adeti" placeholder="örn. 120">
+          <input type="text" inputmode="numeric" id="pmKasaAdeti" class="num kasa-adeti" placeholder="Kasa">
         </label>
         <label class="pm-label">
           <span>Size</span>
@@ -186,7 +186,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         </label>
         <label class="pm-label">
           <span>Brüt KG *</span>
-          <input type="text" inputmode="decimal" id="pmBrutKg" class="num brut-kg" placeholder="örn. 1250">
+          <input type="text" inputmode="decimal" id="pmBrutKg" class="num brut-kg" placeholder="Brüt">
         </label>
         <label class="pm-label pm-span2">
           <span>Kasa Cinsi *</span>
