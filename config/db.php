@@ -26,16 +26,32 @@ function db(): PDO {
         ];
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $opts);
-            // Auto-migration: type kolonu yoksa ekle (PHP 7+ uyumlu)
-            try {
-                $has_type = $pdo->query("SHOW COLUMNS FROM loading_records LIKE 'type'")->fetchColumn();
-                if (!$has_type) {
-                    $pdo->exec("ALTER TABLE loading_records ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
-                }
-            } catch (PDOException $e) { /* tablo henüz yok */ }
         } catch (PDOException $e) {
             http_response_code(500);
             die('Veritabanı bağlantı hatası: ' . htmlspecialchars($e->getMessage()));
+        }
+
+        // Auto-migration: loading_records tablosu varsa type kolonu eksikse ekle
+        $table_exists = false;
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            $table_exists = true;
+        } catch (PDOException $e) { /* tablo yok, fresh install */ }
+
+        if ($table_exists) {
+            $has_col = (bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'type'")->fetchColumn();
+            if (!$has_col) {
+                try {
+                    $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
+                } catch (PDOException $mig_e) {
+                    http_response_code(500);
+                    die(
+                        '<p><b>Veritabanı güncelleme hatası:</b> ' . htmlspecialchars($mig_e->getMessage()) . '</p>'
+                        . '<p>Lütfen veritabanı yönetim panelinden (phpMyAdmin vb.) şu SQL\'i çalıştırın:</p>'
+                        . '<pre>ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT \'yukleme\';</pre>'
+                    );
+                }
+            }
         }
     }
     return $pdo;
