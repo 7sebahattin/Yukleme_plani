@@ -26,7 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $fields = [
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
-        'malin_cinsi', 'geldigi_yer', 'gittigi_yer', 'aciklama',
+        'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
+        'palet_sayisi', 'kasa_cinsi', 'kasa_sayisi',
+        'aciklama', 'aciklama2',
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
     foreach ($fields as $k) {
@@ -41,7 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             "UPDATE kantar_fisleri SET
              fis_no=?, plaka=?, firma_adi=?, giris_tarih=?, cikis_tarih=?, operator_adi=?,
-             malin_cinsi=?, geldigi_yer=?, gittigi_yer=?, aciklama=?,
+             malin_cinsi=?, geldigi_yer=?, gittigi_yer=?,
+             palet_sayisi=?, kasa_cinsi=?, kasa_sayisi=?,
+             aciklama=?, aciklama2=?,
              tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?
              WHERE id=?"
         )->execute([
@@ -54,7 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fis['malin_cinsi'],
             $fis['geldigi_yer'],
             $fis['gittigi_yer'],
+            (int)$fis['palet_sayisi'],
+            $fis['kasa_cinsi'],
+            (int)$fis['kasa_sayisi'],
             $fis['aciklama'],
+            $fis['aciklama2'],
             $t1,
             $fis['alibi1'],
             $t2,

@@ -271,6 +271,13 @@ function render_flash(): void {
             `kasa_adedi`   INT NOT NULL DEFAULT 0,
             FOREIGN KEY (`fis_id`) REFERENCES `kantar_fisleri`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 3) kantar_fisleri yeni kolonlar
+        $kf_cols = $pdo->query("SHOW COLUMNS FROM `kantar_fisleri`")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('aciklama2',    $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `aciklama2`    TEXT");
+        if (!in_array('palet_sayisi', $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_sayisi` INT NOT NULL DEFAULT 0");
+        if (!in_array('kasa_cinsi',   $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_cinsi`   VARCHAR(200) NOT NULL DEFAULT ''");
+        if (!in_array('kasa_sayisi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_sayisi`  INT NOT NULL DEFAULT 0");
     } catch (PDOException $e) {}
 })();
 
