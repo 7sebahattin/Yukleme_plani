@@ -225,16 +225,53 @@ function render_flash(): void {
 }
 
 // --- Tek seferlik otomatik migrasyon ---
-// db.php'nin eski sürümde olduğu sunucularda da çalışsın diye burada tutulur.
 (function () {
     try {
         $pdo = db();
-        $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0"); // tablo yoksa exception, atla
-        $has = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'type'")->fetchColumn();
-        if (!$has) {
-            $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
-        }
-    } catch (PDOException $e) { /* tablo henüz yok ya da yetki yok — geç */ }
+        // 1) loading_records.type kolonu
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            $has = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'type'")->fetchColumn();
+            if (!$has) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
+            }
+        } catch (PDOException $e) {}
+
+        // 2) Kantar tabloları
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `kantar_fisleri` (
+            `id`           INT AUTO_INCREMENT PRIMARY KEY,
+            `fis_no`       VARCHAR(50)  NOT NULL DEFAULT '',
+            `giris_tarih`  VARCHAR(40)  NOT NULL DEFAULT '',
+            `cikis_tarih`  VARCHAR(40)  NOT NULL DEFAULT '',
+            `plaka`        VARCHAR(30)  NOT NULL DEFAULT '',
+            `firma_adi`    VARCHAR(120) NOT NULL DEFAULT '',
+            `malin_cinsi`  VARCHAR(200) NOT NULL DEFAULT '',
+            `geldigi_yer`  VARCHAR(200) NOT NULL DEFAULT '',
+            `gittigi_yer`  VARCHAR(100) NOT NULL DEFAULT '',
+            `aciklama`     TEXT,
+            `operator_adi` VARCHAR(100) NOT NULL DEFAULT '',
+            `tartim1`      DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `alibi1`       VARCHAR(30)  NOT NULL DEFAULT '',
+            `tartim2`      DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `alibi2`       VARCHAR(30)  NOT NULL DEFAULT '',
+            `net_kg`       DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `toplam_palet` INT          NOT NULL DEFAULT 0,
+            `kasa_dara`    DECIMAL(10,3) NOT NULL DEFAULT 0,
+            `palet_dara`   DECIMAL(10,3) NOT NULL DEFAULT 0,
+            `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `kantar_gruplar` (
+            `id`           INT AUTO_INCREMENT PRIMARY KEY,
+            `fis_id`       INT NOT NULL,
+            `sira`         INT NOT NULL DEFAULT 0,
+            `grup_adi`     VARCHAR(100) NOT NULL DEFAULT '',
+            `palet_sayisi` INT NOT NULL DEFAULT 0,
+            `kasa_adedi`   INT NOT NULL DEFAULT 0,
+            FOREIGN KEY (`fis_id`) REFERENCES `kantar_fisleri`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (PDOException $e) {}
 })();
 
 // --- Bir kaydın özet toplamlarını çek ---
