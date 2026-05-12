@@ -145,6 +145,7 @@ unset($p);
 $form_action  = 'record_edit.php';
 $title        = 'Kayıt Düzenle #' . $id;
 $submit_label = 'Güncelle';
+$cancel_url   = ($record['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'records.php';
 
 render_header($title);
 render_flash();

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS loading_records (
     arka_plaka      VARCHAR(30)  NOT NULL DEFAULT '',
     nakliye_sirketi VARCHAR(150) NOT NULL DEFAULT '',
     telefon         VARCHAR(40)  NOT NULL DEFAULT '',
+    type            VARCHAR(20)  NOT NULL DEFAULT 'yukleme',
     tarih           DATE         NULL,
     alici           VARCHAR(150) NOT NULL DEFAULT '',
     urun            VARCHAR(150) NOT NULL DEFAULT '',

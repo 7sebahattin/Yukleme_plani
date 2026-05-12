@@ -139,6 +139,7 @@ function render_header(string $title, bool $print_mode = false): void {
         </a>
         <nav class="topnav">
             <a href="records.php">Kayıtlar</a>
+            <a href="cikmalar.php">Çıkmalar</a>
             <a href="definitions.php">Tanımlar</a>
         </nav>
     </div>
