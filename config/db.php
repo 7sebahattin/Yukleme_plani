@@ -26,6 +26,10 @@ function db(): PDO {
         ];
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $opts);
+            // Auto-migration: type kolonu yoksa ekle
+            try {
+                $pdo->exec("ALTER TABLE loading_records ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
+            } catch (PDOException) { /* zaten var */ }
         } catch (PDOException $e) {
             http_response_code(500);
             die('Veritabanı bağlantı hatası: ' . htmlspecialchars($e->getMessage()));

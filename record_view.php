@@ -16,6 +16,8 @@ $st->execute([':id' => $id]);
 $record = $st->fetch();
 if (!$record) { set_flash('error', 'Kayıt bulunamadı.'); header('Location: records.php'); exit; }
 
+$list_url = ($record['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'records.php';
+
 $st = db()->prepare("
     SELECT p.*,
            kc.name AS kasa_cinsi_adi,
@@ -238,7 +240,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
     <div class="page-head-actions">
         <button id="kalanOpenBtn" class="btn">Kalan Palet Hesapla</button>
         <button id="bmOpenBtn" class="btn">+ Malzeme Çıkışı</button>
-        <a href="records.php" class="btn btn-ghost">← Liste</a>
+        <a href="<?= h($list_url) ?>" class="btn btn-ghost">← Liste</a>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">Düzenle</a>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">Yazdır</a>
     </div>

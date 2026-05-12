@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// records.php - Yükleme kayıt listesi
+// cikmalar.php - Çıkma kayıt listesi
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -16,7 +16,7 @@ $sql = "SELECT r.*,
                           LEFT JOIN material_definitions m ON m.id = p2.kasa_cinsi_id
                           WHERE p2.loading_record_id = r.id LIMIT 1), '') AS ilk_kasa_cinsi
         FROM loading_records r
-        WHERE r.type = 'yukleme' ";
+        WHERE r.type = 'cikma' ";
 $params = [];
 if ($q !== '') {
     $sql .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.alici LIKE :q
@@ -30,16 +30,16 @@ $st = db()->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll();
 
-render_header('Kayıtlar');
+render_header('Çıkmalar');
 ?>
 <?php render_flash(); ?>
 
 <div class="page-head">
     <div>
-        <h1>Yükleme Kayıtları</h1>
+        <h1>Çıkmalar</h1>
         <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
     </div>
-    <a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
+    <a href="cikma_create.php" class="btn btn-primary btn-lg">+ Yeni Çıkma</a>
 </div>
 
 <form method="get" class="search-row">
@@ -47,14 +47,14 @@ render_header('Kayıtlar');
            placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
     <button class="btn">Ara</button>
     <?php if ($q !== ''): ?>
-        <a href="records.php" class="btn btn-ghost">Temizle</a>
+        <a href="cikmalar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
 </form>
 
 <?php if (empty($rows)): ?>
     <div class="empty">
-        <p>Henüz kayıt yok.</p>
-        <a href="record_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
+        <p>Henüz çıkma kaydı yok.</p>
+        <a href="cikma_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
     </div>
 <?php else: ?>
 

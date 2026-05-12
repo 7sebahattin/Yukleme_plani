@@ -8,8 +8,8 @@ require_once __DIR__ . '/config/db.php';
 // Özet sayaçlar
 $stats = db()->query("
     SELECT
-        (SELECT COUNT(*) FROM loading_records) AS toplam_kayit,
-        (SELECT COALESCE(SUM(kasa_adeti),0) FROM loading_pallets) AS toplam_kasa,
+        (SELECT COUNT(*) FROM loading_records WHERE type='yukleme') AS toplam_kayit,
+        (SELECT COUNT(*) FROM loading_records WHERE type='cikma')   AS toplam_cikma,
         (SELECT COUNT(*) FROM material_definitions WHERE is_active=1) AS tanim_sayisi
 ")->fetch();
 
@@ -38,6 +38,14 @@ render_flash();
     <a href="record_create.php" class="home-card">
         <div class="home-card-icon" style="background:#e7f6ee">➕</div>
         <div class="home-card-title">Yeni Kayıt</div>
+    </a>
+
+    <a href="cikmalar.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdecea">🚚</div>
+        <div class="home-card-title">Çıkmalar</div>
+        <?php if ($stats['toplam_cikma'] > 0): ?>
+        <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>
+        <?php endif; ?>
     </a>
 
     <a href="definitions.php" class="home-card">

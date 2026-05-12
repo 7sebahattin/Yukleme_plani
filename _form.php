@@ -32,7 +32,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 <div class="page-head">
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
-        <a href="records.php" class="btn btn-ghost">İptal</a>
+        <a href="<?= h($cancel_url ?? 'records.php') ?>" class="btn btn-ghost">İptal</a>
         <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
     </div>
 </div>
