@@ -2,9 +2,11 @@
    Yükleme Planı - mobil öncelikli stil (v2)
    ========================================================= */
 
-/* ── Global overflow fix ── */
-html { overflow-x: hidden; scroll-behavior: smooth; }
-body { overflow-x: hidden; }
+/* ── Global overflow fix ──
+   overflow-x:clip yerine hidden kullanmak html'de dikey scroll'u kilitler
+   (özellikle iOS Safari). clip kullan: yatay taşmayı keser ama scroll eksenini etkilemez. */
+html { overflow-x: clip; scroll-behavior: smooth; }
+body { overflow-x: clip; position: relative; }
 * { -webkit-tap-highlight-color: transparent; }
 
 :root {
