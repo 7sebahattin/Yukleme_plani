@@ -340,7 +340,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
             <td colspan="5"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
             <td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
-            <td class="num strong"><?= h(fmt_kg($tot['toplam_net'])) ?></td>
+            <td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
         </tr>
         </tfoot>
     </table>
@@ -397,7 +397,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
         </div>
         <div><span>Toplam Brüt</span><strong><?= h(fmt_kg($tot['toplam_brut'])) ?></strong></div>
         <div><span>Toplam Dara</span><strong><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></strong></div>
-        <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg($tot['toplam_net'])) ?></strong></div>
+        <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></strong></div>
     </div>
 </div>
 </section>
@@ -532,7 +532,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                 <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
-                <tr><th>NET</th><td class="num strong"><?= h(fmt_kg($tot['toplam_net'])) ?></td></tr>
+                <tr><th>NET</th><td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
 
                 <?php for ($i = 0; $i < 4; $i++):
                     $key = $urun_keys[$i] ?? null;
@@ -542,7 +542,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
                     <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                     <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                     <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
-                    <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg($g['net'])) : '' ?></td></tr>
+                    <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
                 <?php endfor; ?>
             </table>
         </div>

@@ -363,7 +363,7 @@
         document.getElementById('totKasa').textContent = String(totKasa);
         document.getElementById('totBrut').textContent = fmtKg(totBrut);
         document.getElementById('totDara').textContent = fmtKg(Math.round(totDara));
-        document.getElementById('totNet').textContent  = fmtKg(totNet);
+        document.getElementById('totNet').textContent  = fmtKg(Math.round(totNet));
     }
 
     /* ── Hidden input'lar oluştur (form submit'te çağrılır) ── */
