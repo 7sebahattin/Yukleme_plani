@@ -29,13 +29,13 @@ render_flash();
 
     <a href="records.php" class="home-card">
         <div class="home-card-icon" style="background:#eaf1ff">📋</div>
-        <div class="home-card-title">Kayıtlar</div>
+        <div class="home-card-title">Yüklemeler</div>
         <?php if ($stats['toplam_kayit'] > 0): ?>
         <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
         <?php endif; ?>
     </a>
 
-    <a href="record_create.php" class="home-card">
+    <a href="record_new.php" class="home-card">
         <div class="home-card-icon" style="background:#e7f6ee">➕</div>
         <div class="home-card-title">Yeni Kayıt</div>
     </a>

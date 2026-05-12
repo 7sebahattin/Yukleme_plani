@@ -138,7 +138,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <span class="brand-text">Yükleme Planı</span>
         </a>
         <nav class="topnav">
-            <a href="records.php">Kayıtlar</a>
+            <a href="records.php">Yüklemeler</a>
             <a href="cikmalar.php">Çıkmalar</a>
             <a href="definitions.php">Tanımlar</a>
         </nav>
