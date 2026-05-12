@@ -178,6 +178,19 @@ function render_flash(): void {
     }
 }
 
+// --- Tek seferlik otomatik migrasyon ---
+// db.php'nin eski sürümde olduğu sunucularda da çalışsın diye burada tutulur.
+(function () {
+    try {
+        $pdo = db();
+        $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0"); // tablo yoksa exception, atla
+        $has = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'type'")->fetchColumn();
+        if (!$has) {
+            $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
+        }
+    } catch (PDOException $e) { /* tablo henüz yok ya da yetki yok — geç */ }
+})();
+
 // --- Bir kaydın özet toplamlarını çek ---
 function record_totals(int $record_id): array {
     $st = db()->prepare("SELECT
