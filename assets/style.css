@@ -961,11 +961,29 @@ body.print-mode .topbar { display: none; }
 /* =========================================================
    ETİKET Crop Overlay
    ========================================================= */
-#etiketCropOverlay {
+#etiketCropOverlay, #kantarCropOverlay {
     position: fixed; inset: 0; z-index: 3000;
     background: #000;
     display: flex; flex-direction: column;
 }
+
+/* ── Kantar fiş görseli ── */
+.kantar-img-area {
+    width: 100%; min-height: 180px;
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; margin-bottom: 12px;
+    background: var(--bg); cursor: pointer;
+    transition: border-color .15s;
+}
+.kantar-img-area:hover { border-color: var(--primary); }
+.kantar-img-display { max-width: 100%; max-height: 400px; display: block; }
+.kantar-img-ph {
+    color: var(--muted); font-size: .9rem;
+    text-align: center; padding: 24px; pointer-events: none;
+}
+.kantar-img-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .crop-img-area {
     flex: 1; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
@@ -1015,7 +1033,7 @@ body.print-mode .topbar { display: none; }
 .crop-btn-no { background: #333; color: #ccc; }
 .crop-btn-no:hover { background: #444; }
 
-@media print { #etiketCropOverlay { display: none !important; } }
+@media print { #etiketCropOverlay, #kantarCropOverlay { display: none !important; } }
 
 /* ====== Orta blok ====== */
 .asya-middle {
