@@ -1682,3 +1682,58 @@ body.print-mode .asya-sheet {
 .tpl-row-del { padding: 0; width: 34px; text-align: center; }
 
 @media print { #kalanModal { display: none !important; } }
+
+/* =========================================================
+   Kantar Hesaplama
+   ========================================================= */
+.kantar-hesapla-row { margin: 16px 0 24px; }
+
+/* Grup satırı */
+.kantar-grup-row {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+}
+.kantar-grup-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.kantar-grup-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+}
+.kantar-grup-no { font-size: .82rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+.kantar-grup-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.kantar-grup-body .kantar-lbl:first-child { grid-column: span 2; }
+@media (min-width: 560px) {
+    .kantar-grup-body { grid-template-columns: 2fr 1fr 1fr; }
+    .kantar-grup-body .kantar-lbl:first-child { grid-column: auto; }
+}
+
+.kantar-lbl { display: flex; flex-direction: column; gap: 4px; }
+.kantar-lbl > span { font-size: .82rem; font-weight: 600; color: var(--muted); }
+.kantar-lbl input { margin-top: 0; }
+
+/* Uyarı */
+.kantar-uyari {
+    color: var(--danger); font-size: .86rem; font-weight: 600;
+    background: #fdecea; border-radius: var(--radius-sm);
+    padding: 8px 12px; margin-top: 12px;
+}
+
+/* Özet kutusu (palet başı ortalama) */
+.kantar-ozet {
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;
+    background: var(--primary-soft); border-radius: var(--radius);
+    padding: 14px 18px; margin: 16px 0 12px;
+}
+.kantar-ozet-lbl { font-weight: 600; color: var(--text); font-size: .92rem; }
+.kantar-ozet-val { font-size: 1.2rem; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
+
+/* Tablo net sütunu */
+.kantar-net { color: var(--primary); font-weight: 700; }
+
+/* Toplam satırı */
+.kantar-toplam-row td { background: var(--bg); border-top: 2px solid var(--border-strong); }
