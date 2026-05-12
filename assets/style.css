@@ -1755,6 +1755,60 @@ body.print-mode .asya-sheet {
 /* Toplam satırı */
 .kantar-toplam-row td { background: var(--bg); border-top: 2px solid var(--border-strong); }
 
+/* Tartım satırları */
+.kantar-tartim-wrap {
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.kantar-tartim-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #fff;
+}
+.kantar-tartim-no {
+    font-size: .82rem; font-weight: 700; color: var(--muted);
+    min-width: 72px; white-space: nowrap;
+}
+.kantar-tartim-fields {
+    display: flex; align-items: center; gap: 8px; flex: 1;
+}
+.kantar-tartim-input {
+    flex: 1; max-width: 140px;
+    font-size: 1.1rem !important; font-weight: 600;
+    text-align: right;
+}
+.kantar-tartim-unit {
+    font-size: .85rem; color: var(--muted); font-weight: 500; min-width: 20px;
+}
+.kantar-alibi {
+    flex: 1; max-width: 110px;
+    font-size: .85rem !important; color: var(--muted);
+}
+.kantar-net-satir {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px;
+    background: var(--primary-soft);
+}
+.kantar-net-lbl {
+    font-size: .85rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: .06em;
+}
+.kantar-net-val {
+    font-size: 1.4rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.kantar-net-pozitif { color: var(--primary) !important; }
+
+/* Sonuçta fiş özet şeridi */
+.kantar-fis-ozet {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 10px 14px; margin: 12px 0 6px;
+    font-size: .84rem; color: var(--muted);
+}
+.kantar-fis-ozet em { font-style: normal; font-weight: 600; color: var(--text); margin-right: 3px; }
+
 /* =========================================================
    Bottom Navigation (mobil uygulama navigation bar)
    ========================================================= */

@@ -58,7 +58,7 @@ render_flash();
 
     <a href="kantar.php" class="home-card">
         <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
-        <div class="home-card-title">Kantar Hesaplama</div>
+        <div class="home-card-title">Kantar</div>
     </a>
 
 </div>
