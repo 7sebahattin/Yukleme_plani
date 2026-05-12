@@ -1827,6 +1827,78 @@ body.print-mode .asya-sheet {
 }
 .kantar-fis-ozet em { font-style: normal; font-weight: 600; color: var(--text); margin-right: 3px; }
 
+/* ── Hesaplama modal bölüm başlıkları ── */
+.kh-section { margin-bottom: 20px; }
+.kh-section-title {
+    font-size: .78rem; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+    margin-bottom: 10px;
+}
+.kh-divider { border: 0; border-top: 1px solid var(--border); margin: 20px 0 16px; }
+
+/* ── Sonuç kartları ── */
+.kh-result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.kh-result-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+}
+.kh-result-lbl {
+    font-size: .72rem; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+    margin-bottom: 4px;
+}
+.kh-result-val {
+    font-size: 1.2rem; font-weight: 700;
+    color: var(--text); font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+.kh-result-sub {
+    font-size: .75rem; color: var(--muted); margin-top: 3px; line-height: 1.3;
+}
+.kh-result-net {
+    grid-column: span 2;
+    background: var(--primary-soft);
+    border-color: var(--primary);
+}
+.kh-result-net .kh-result-val {
+    font-size: 1.7rem; color: var(--primary);
+}
+@media (min-width: 480px) {
+    .kh-result-net { grid-column: auto; }
+}
+
+/* ── Yazdırma: sadece hesaplama sonucu ── */
+@media print {
+    body.kh-print > *:not(#kantarModal) { display: none !important; }
+    body.kh-print #kantarModal {
+        display: block !important;
+        position: static !important;
+        background: white !important;
+        z-index: auto !important;
+        animation: none !important;
+    }
+    body.kh-print .pm-dialog {
+        box-shadow: none !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        animation: none !important;
+    }
+    body.kh-print .pm-close { display: none !important; }
+    body.kh-print .pm-body > *:not(#mSonucAlani) { display: none !important; }
+    body.kh-print #mSonucAlani { display: block !important; }
+    body.kh-print #kantarModalFooter,
+    body.kh-print #kantarPrintFooter { display: none !important; }
+    body.kh-print .pm-body { overflow: visible !important; padding: 24px !important; }
+    body.kh-print .kh-result-net { border: 2px solid var(--primary) !important; }
+}
+
 /* =========================================================
    Bottom Navigation (mobil uygulama navigation bar)
    ========================================================= */

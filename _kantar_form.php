@@ -8,11 +8,15 @@
 //   $title        - sayfa başlığı
 //   $submit_label - submit buton etiketi
 //   $is_edit      - bool (edit modunda resim + Sil butonu gösterilir)
+//   $kasa_list    - get_definitions_by_type('kasa_cinsi') sonucu
+//   $palet_list   - get_definitions_by_type('palet_tipi') sonucu
 // =========================================================
 
-$is_edit  = $is_edit ?? false;
-$fis      = $fis ?? [];
-$fis_id   = (int)($fis['id'] ?? 0);
+$is_edit    = $is_edit    ?? false;
+$fis        = $fis        ?? [];
+$fis_id     = (int)($fis['id'] ?? 0);
+$kasa_list  = $kasa_list  ?? [];
+$palet_list = $palet_list ?? [];
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="kantarForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -68,21 +72,39 @@ $fis_id   = (int)($fis['id'] ?? 0);
                 <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
             </label>
             <label>Palet Sayısı
-                <input type="text" inputmode="numeric" name="palet_sayisi"
+                <input type="text" inputmode="numeric" name="palet_sayisi" id="kantarPaletSayisi"
                        class="num" value="<?= h($fis['palet_sayisi'] ?? '') ?>" placeholder="Palet">
             </label>
+            <label>Palet Cinsi
+                <select name="palet_cinsi" id="kantarPaletCinsi">
+                    <option value="">— Seçin —</option>
+                    <?php foreach ($palet_list as $kd): ?>
+                    <option value="<?= h($kd['name']) ?>"
+                            data-dara="<?= (float)$kd['unit_dara_kg'] ?>"
+                            <?= ($fis['palet_cinsi'] ?? '') === $kd['name'] ? 'selected' : '' ?>>
+                        <?= h($kd['name']) ?><?= $kd['unit_dara_kg'] > 0 ? ' (' . fmt_kg($kd['unit_dara_kg']) . ' kg)' : '' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <label>Kasa Sayısı
-                <input type="text" inputmode="numeric" name="kasa_sayisi"
+                <input type="text" inputmode="numeric" name="kasa_sayisi" id="kantarKasaSayisi"
                        class="num" value="<?= h($fis['kasa_sayisi'] ?? '') ?>" placeholder="Kasa">
             </label>
-            <label class="span-2">Kasa Cinsi
-                <input type="text" name="kasa_cinsi" value="<?= h($fis['kasa_cinsi'] ?? '') ?>" placeholder="">
+            <label>Kasa Cinsi
+                <select name="kasa_cinsi" id="kantarKasaCinsi">
+                    <option value="">— Seçin —</option>
+                    <?php foreach ($kasa_list as $kd): ?>
+                    <option value="<?= h($kd['name']) ?>"
+                            data-dara="<?= (float)$kd['unit_dara_kg'] ?>"
+                            <?= ($fis['kasa_cinsi'] ?? '') === $kd['name'] ? 'selected' : '' ?>>
+                        <?= h($kd['name']) ?><?= $kd['unit_dara_kg'] > 0 ? ' (' . fmt_kg($kd['unit_dara_kg']) . ' kg)' : '' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
             </label>
-            <label class="span-2">Açıklama 1
+            <label class="span-2">Açıklama
                 <input type="text" name="aciklama" value="<?= h($fis['aciklama'] ?? '') ?>">
-            </label>
-            <label class="span-2">Açıklama 2
-                <input type="text" name="aciklama2" value="<?= h($fis['aciklama2'] ?? '') ?>">
             </label>
         </div>
     </div>
@@ -161,35 +183,69 @@ $fis_id   = (int)($fis['id'] ?? 0);
 <div id="kantarModal" class="pm-overlay" style="display:none" role="dialog" aria-modal="true">
   <div class="pm-dialog">
     <div class="pm-header">
-      <h2 class="pm-title">Palet / Kasa Hesaplama</h2>
+      <h2 class="pm-title">Ayrı Hesaplama</h2>
       <button type="button" class="pm-close" id="kantarModalKapat" aria-label="Kapat">✕</button>
     </div>
     <div class="pm-body">
-      <div class="grid" style="margin-bottom:12px">
-        <label>Toplam Brüt KG
-            <input type="text" id="mToplamBrut" inputmode="decimal" class="num" placeholder="Brüt KG">
-        </label>
-        <label>Toplam Palet Sayısı
-            <input type="text" id="mToplamPalet" inputmode="numeric" class="num" placeholder="Palet">
-        </label>
-        <label>Kasa Darası <small class="muted">(kg/kasa)</small>
-            <input type="text" id="mKasaDara" inputmode="decimal" class="num" placeholder="2">
-        </label>
-        <label>Palet Darası <small class="muted">(kg/palet)</small>
-            <input type="text" id="mPaletDara" inputmode="decimal" class="num" placeholder="30">
-        </label>
+      <div class="kh-section">
+        <div class="kh-section-title">Tartım Bilgileri</div>
+        <div class="grid">
+          <label>Toplam Brüt KG
+            <input type="text" id="mToplamBrut" inputmode="decimal" class="num" placeholder="0">
+          </label>
+          <label>Toplam Palet Sayısı
+            <input type="text" id="mToplamPalet" inputmode="numeric" class="num" placeholder="0">
+          </label>
+          <label>Toplam Kasa Sayısı
+            <input type="text" id="mToplamKasa" inputmode="numeric" class="num" placeholder="0">
+          </label>
+        </div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <strong style="font-size:.9rem">Gruplar</strong>
-        <button type="button" class="btn btn-sm btn-primary" id="mAddGrupBtn">+ Grup Ekle</button>
+      <div class="kh-section">
+        <div class="kh-section-title">Dara Bilgileri</div>
+        <div class="grid">
+          <label>Kasa Darası <small class="muted">(kg/kasa)</small>
+            <input type="text" id="mKasaDara" inputmode="decimal" class="num" placeholder="0">
+          </label>
+          <label>Palet Darası <small class="muted">(kg/palet)</small>
+            <input type="text" id="mPaletDara" inputmode="decimal" class="num" placeholder="0">
+          </label>
+        </div>
       </div>
-      <div id="mGrupList"></div>
-      <p id="mPaletUyari" class="kantar-uyari" style="display:none"></p>
-      <div id="mSonuc" style="margin-top:16px"></div>
+      <div id="mSonucAlani" style="display:none">
+        <div class="kh-divider"></div>
+        <div class="kh-section-title">Hesaplama Sonucu</div>
+        <div class="kh-result-grid">
+          <div class="kh-result-card">
+            <div class="kh-result-lbl">Toplam Kasa Darası</div>
+            <div class="kh-result-val" id="rKasaDara">—</div>
+            <div class="kh-result-sub" id="rKasaDaraSub"></div>
+          </div>
+          <div class="kh-result-card">
+            <div class="kh-result-lbl">Toplam Palet Darası</div>
+            <div class="kh-result-val" id="rPaletDara">—</div>
+            <div class="kh-result-sub" id="rPaletDaraSub"></div>
+          </div>
+          <div class="kh-result-card">
+            <div class="kh-result-lbl">Toplam Dara</div>
+            <div class="kh-result-val" id="rToplamDara">—</div>
+          </div>
+          <div class="kh-result-card kh-result-net">
+            <div class="kh-result-lbl">NET Kilo</div>
+            <div class="kh-result-val" id="rNetKg">—</div>
+            <div class="kh-result-sub" id="rNetSub"></div>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="pm-footer">
+    <div class="pm-footer" id="kantarModalFooter">
       <button type="button" class="btn btn-ghost" id="kantarModalKapat2">Kapat</button>
       <button type="button" class="btn btn-primary" id="mHesaplaBtn">Hesapla</button>
+    </div>
+    <div class="pm-footer" id="kantarPrintFooter" style="display:none">
+      <button type="button" class="btn btn-ghost" id="kantarModalKapat3">Kapat</button>
+      <button type="button" class="btn" id="mYenidenBtn">← Yeniden Hesapla</button>
+      <button type="button" class="btn btn-primary" id="mRaporYazdir">🖨 Raporu Yazdır</button>
     </div>
   </div>
 </div>
@@ -227,9 +283,6 @@ function fmt(n) {
     var parts = s.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.length > 1 ? parts[0] + ',' + parts[1] : parts[0];
-}
-function esc(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ─── NET hesapla ─── */
@@ -274,7 +327,6 @@ function clearPhoto() {
     try { localStorage.removeItem(IMG_KEY); } catch(e) {}
 }
 
-/* Kaydedilmiş görseli yükle */
 try {
     var raw = localStorage.getItem(IMG_KEY);
     if (raw) {
@@ -322,7 +374,6 @@ function closeCrop() {
     document.body.style.overflow = '';
 }
 
-/* Sürükleme */
 var active = null, sx, sy, sc;
 function xy(e) {
     var t = e.touches ? e.touches[0] : e;
@@ -384,62 +435,44 @@ imgInput.addEventListener('change', function() {
 /* ══════════════════════════════════════════
    HESAPLAMA MODAL
    ══════════════════════════════════════════ */
-var mGrupSay = 0;
+var kantarKasaDaraKg  = 0;
+var kantarPaletDaraKg = 0;
 
-function addModalGrup(ad, palet, kasa) {
-    mGrupSay++;
-    var div = document.createElement('div');
-    div.className = 'kantar-grup-row';
-    div.innerHTML =
-        '<div class="kantar-grup-header">' +
-            '<span class="kantar-grup-no">' + mGrupSay + '. Grup</span>' +
-            '<button type="button" class="btn btn-ghost btn-sm kantar-del-btn">✕ Sil</button>' +
-        '</div>' +
-        '<div class="kantar-grup-body">' +
-            '<label class="kantar-lbl"><span>Grup Adı</span>' +
-                '<input type="text" class="kantar-ad-input" value="' + esc(ad != null ? ad : '') + '" placeholder="Grup adı">' +
-            '</label>' +
-            '<label class="kantar-lbl"><span>Palet Sayısı</span>' +
-                '<input type="text" class="kantar-palet-input num" inputmode="numeric" value="' + esc(palet != null ? palet : '') + '" placeholder="Palet">' +
-            '</label>' +
-            '<label class="kantar-lbl"><span>Kasa Adedi</span>' +
-                '<input type="text" class="kantar-kasa-input num" inputmode="numeric" value="' + esc(kasa != null ? kasa : '') + '" placeholder="Kasa">' +
-            '</label>' +
-        '</div>';
-    div.querySelector('.kantar-del-btn').addEventListener('click', function() { div.remove(); checkModalPalet(); });
-    div.querySelector('.kantar-palet-input').addEventListener('input', checkModalPalet);
-    document.getElementById('mGrupList').appendChild(div);
-    checkModalPalet();
+var kasaCinsiSel  = document.getElementById('kantarKasaCinsi');
+var paletCinsiSel = document.getElementById('kantarPaletCinsi');
+
+function getOptDara(sel) {
+    if (!sel || sel.selectedIndex < 0) return 0;
+    return parseFloat(sel.options[sel.selectedIndex].getAttribute('data-dara') || 0) || 0;
 }
 
-function checkModalPalet() {
-    var tp = parseNum(document.getElementById('mToplamPalet').value);
-    if (!tp) { document.getElementById('mPaletUyari').style.display = 'none'; return; }
-    var gt = Array.from(document.querySelectorAll('#mGrupList .kantar-palet-input'))
-                  .reduce(function(s,el){ return s + parseNum(el.value); }, 0);
-    var el = document.getElementById('mPaletUyari');
-    if (gt > 0 && Math.abs(gt - tp) > 0.001) {
-        el.textContent = '⚠ Grup palet toplamı (' + fmt(gt) + ') toplam palet sayısıyla (' + fmt(tp) + ') eşleşmiyor.';
-        el.style.display = '';
-    } else {
-        el.style.display = 'none';
-    }
+if (kasaCinsiSel) {
+    kasaCinsiSel.addEventListener('change', function() { kantarKasaDaraKg = getOptDara(this); });
+    kantarKasaDaraKg = getOptDara(kasaCinsiSel);
 }
-
-document.getElementById('mToplamPalet').addEventListener('input', checkModalPalet);
-document.getElementById('mAddGrupBtn').addEventListener('click', function() { addModalGrup(); });
+if (paletCinsiSel) {
+    paletCinsiSel.addEventListener('change', function() { kantarPaletDaraKg = getOptDara(this); });
+    kantarPaletDaraKg = getOptDara(paletCinsiSel);
+}
 
 function openHesaplaModal() {
-    var t1 = parseNum(document.getElementById('tartim1').value);
-    var t2 = parseNum(document.getElementById('tartim2').value);
+    var t1  = parseNum(document.getElementById('tartim1').value);
+    var t2  = parseNum(document.getElementById('tartim2').value);
     var net = t1 - t2;
-    if (net > 0) document.getElementById('mToplamBrut').value = String(net);
-    if (!document.getElementById('mGrupList').children.length) {
-        addModalGrup(); addModalGrup();
-    }
-    document.getElementById('mSonuc').innerHTML = '';
-    document.getElementById('mPaletUyari').style.display = 'none';
-    document.getElementById('kantarModal').style.display = 'flex';
+    if (net > 0) document.getElementById('mToplamBrut').value = fmt(net);
+
+    var paletEl = document.getElementById('kantarPaletSayisi');
+    var kasaEl  = document.getElementById('kantarKasaSayisi');
+    if (paletEl && paletEl.value) document.getElementById('mToplamPalet').value = paletEl.value;
+    if (kasaEl  && kasaEl.value)  document.getElementById('mToplamKasa').value  = kasaEl.value;
+
+    if (kantarKasaDaraKg  > 0) document.getElementById('mKasaDara').value  = fmt(kantarKasaDaraKg);
+    if (kantarPaletDaraKg > 0) document.getElementById('mPaletDara').value = fmt(kantarPaletDaraKg);
+
+    document.getElementById('mSonucAlani').style.display       = 'none';
+    document.getElementById('kantarModalFooter').style.display  = '';
+    document.getElementById('kantarPrintFooter').style.display  = 'none';
+    document.getElementById('kantarModal').style.display        = 'flex';
     document.body.style.overflow = 'hidden';
 }
 function closeHesaplaModal() {
@@ -447,66 +480,62 @@ function closeHesaplaModal() {
     document.body.style.overflow = '';
 }
 
-document.getElementById('hesaplaAcBtn').addEventListener('click', openHesaplaModal);
+document.getElementById('hesaplaAcBtn').addEventListener('click',  openHesaplaModal);
 document.getElementById('hesaplaAcBtn2').addEventListener('click', openHesaplaModal);
-document.getElementById('kantarModalKapat').addEventListener('click', closeHesaplaModal);
+document.getElementById('kantarModalKapat').addEventListener('click',  closeHesaplaModal);
 document.getElementById('kantarModalKapat2').addEventListener('click', closeHesaplaModal);
+document.getElementById('kantarModalKapat3').addEventListener('click', closeHesaplaModal);
 document.getElementById('kantarModal').addEventListener('click', function(e) {
     if (e.target === this) closeHesaplaModal();
 });
 
+document.getElementById('mYenidenBtn').addEventListener('click', function() {
+    document.getElementById('mSonucAlani').style.display       = 'none';
+    document.getElementById('kantarModalFooter').style.display  = '';
+    document.getElementById('kantarPrintFooter').style.display  = 'none';
+});
+
 document.getElementById('mHesaplaBtn').addEventListener('click', function() {
-    var toplamBrut  = parseNum(document.getElementById('mToplamBrut').value);
-    var toplamPalet = parseNum(document.getElementById('mToplamPalet').value);
-    var kasaDara    = parseNum(document.getElementById('mKasaDara').value);
-    var paletDara   = parseNum(document.getElementById('mPaletDara').value);
+    var brut  = parseNum(document.getElementById('mToplamBrut').value);
+    var palet = parseNum(document.getElementById('mToplamPalet').value);
+    var kasa  = parseNum(document.getElementById('mToplamKasa').value);
+    var kasaD = parseNum(document.getElementById('mKasaDara').value);
+    var palD  = parseNum(document.getElementById('mPaletDara').value);
 
-    if (!toplamBrut || !toplamPalet) { alert('Lütfen toplam brüt kg ve toplam palet sayısını girin.'); return; }
+    if (brut  <= 0) { alert('Toplam Brüt KG boş veya sıfır olamaz.'); return; }
+    if (palet <= 0) { alert('Toplam Palet Sayısı boş veya sıfır olamaz.'); return; }
+    if (kasa  <= 0) { alert('Toplam Kasa Sayısı boş veya sıfır olamaz.'); return; }
+    if (kasaD  < 0) { alert('Kasa darası negatif olamaz.'); return; }
+    if (palD   < 0) { alert('Palet darası negatif olamaz.'); return; }
 
-    var gruplar = Array.from(document.querySelectorAll('#mGrupList .kantar-grup-row')).map(function(r) {
-        return {
-            ad:    r.querySelector('.kantar-ad-input').value.trim() || '—',
-            palet: parseNum(r.querySelector('.kantar-palet-input').value),
-            kasa:  parseNum(r.querySelector('.kantar-kasa-input').value),
-        };
-    }).filter(function(g){ return g.palet > 0 || g.kasa > 0; });
+    var totKasaDara  = kasa  * kasaD;
+    var totPaletDara = palet * palD;
+    var totDara      = totKasaDara + totPaletDara;
+    var netKg        = brut - totDara;
 
-    if (!gruplar.length) { alert('Lütfen en az bir grup için palet veya kasa adedi girin.'); return; }
+    document.getElementById('rKasaDara').textContent     = fmt(totKasaDara)  + ' kg';
+    document.getElementById('rKasaDaraSub').textContent  = fmt(kasa)  + ' kasa × ' + fmt(kasaD) + ' kg';
+    document.getElementById('rPaletDara').textContent    = fmt(totPaletDara) + ' kg';
+    document.getElementById('rPaletDaraSub').textContent = fmt(palet) + ' palet × ' + fmt(palD) + ' kg';
+    document.getElementById('rToplamDara').textContent   = fmt(totDara)  + ' kg';
+    document.getElementById('rNetKg').textContent        = fmt(netKg)   + ' kg';
+    document.getElementById('rNetSub').textContent       = fmt(brut) + ' − ' + fmt(totDara) + ' = ' + fmt(netKg) + ' kg';
 
-    var paletBasiOrt = toplamBrut / toplamPalet;
-    var totBrut=0,totKDara=0,totPDara=0,totDara=0,totNet=0,totPalet=0,totKasa=0,satirlar='';
+    document.getElementById('mSonucAlani').style.display       = '';
+    document.getElementById('kantarModalFooter').style.display  = 'none';
+    document.getElementById('kantarPrintFooter').style.display  = '';
 
-    gruplar.forEach(function(g) {
-        var brut=g.palet*paletBasiOrt, kDara=g.kasa*kasaDara, pDara=g.palet*paletDara, tdara=kDara+pDara, net=brut-tdara;
-        totBrut+=brut; totKDara+=kDara; totPDara+=pDara; totDara+=tdara; totNet+=net; totPalet+=g.palet; totKasa+=g.kasa;
-        satirlar += '<tr><td><strong>'+esc(g.ad)+'</strong></td>' +
-            '<td class="num">'+fmt(g.palet)+'</td><td class="num">'+fmt(g.kasa)+'</td>' +
-            '<td class="num">'+fmt(brut)+'</td><td class="num">'+fmt(kDara)+'</td>' +
-            '<td class="num">'+fmt(pDara)+'</td><td class="num">'+fmt(tdara)+'</td>' +
-            '<td class="num kantar-net">'+fmt(net)+'</td></tr>';
-    });
+    setTimeout(function() {
+        document.querySelector('#kantarModal .pm-body').scrollTo({ top: 9999, behavior: 'smooth' });
+    }, 50);
+});
 
-    document.getElementById('mSonuc').innerHTML =
-        '<div class="kantar-ozet">' +
-            '<span class="kantar-ozet-lbl">Palet başı ortalama brüt</span>' +
-            '<span class="kantar-ozet-val">'+fmt(paletBasiOrt)+' kg</span>' +
-        '</div>' +
-        '<div class="table-wrap" style="margin-top:10px">' +
-        '<table class="data-table"><thead><tr>' +
-            '<th>Grup</th><th class="num">Palet</th><th class="num">Kasa</th>' +
-            '<th class="num">Brüt</th><th class="num">K.Dara</th>' +
-            '<th class="num">P.Dara</th><th class="num">Top.Dara</th><th class="num">Net KG</th>' +
-        '</tr></thead><tbody>'+satirlar+'</tbody>' +
-        '<tfoot><tr class="kantar-toplam-row">' +
-            '<td><strong>TOPLAM</strong></td>' +
-            '<td class="num"><strong>'+fmt(totPalet)+'</strong></td>' +
-            '<td class="num"><strong>'+fmt(totKasa)+'</strong></td>' +
-            '<td class="num"><strong>'+fmt(totBrut)+'</strong></td>' +
-            '<td class="num"><strong>'+fmt(totKDara)+'</strong></td>' +
-            '<td class="num"><strong>'+fmt(totPDara)+'</strong></td>' +
-            '<td class="num"><strong>'+fmt(totDara)+'</strong></td>' +
-            '<td class="num kantar-net"><strong>'+fmt(totNet)+'</strong></td>' +
-        '</tr></tfoot></table></div>';
+document.getElementById('mRaporYazdir').addEventListener('click', function() {
+    document.body.classList.add('kh-print');
+    window.print();
+    window.addEventListener('afterprint', function() {
+        document.body.classList.remove('kh-print');
+    }, { once: true });
 });
 
 })();
