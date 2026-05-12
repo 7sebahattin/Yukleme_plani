@@ -56,6 +56,11 @@ render_flash();
         <?php endif; ?>
     </a>
 
+    <a href="kantar.php" class="home-card">
+        <div class="home-card-icon" style="background:#f0faf4">⚖️</div>
+        <div class="home-card-title">Kantar Hesaplama</div>
+    </a>
+
 </div>
 
 <?php render_footer(); ?>
