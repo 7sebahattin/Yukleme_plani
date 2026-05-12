@@ -19,6 +19,9 @@ if (!$fis) {
     header('Location: kantar.php'); exit;
 }
 
+$kasa_list  = get_definitions_by_type('kasa_cinsi');
+$palet_list = get_definitions_by_type('palet_tipi');
+
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -27,8 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fields = [
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
-        'palet_sayisi', 'kasa_cinsi', 'kasa_sayisi',
-        'aciklama', 'aciklama2',
+        'palet_sayisi', 'palet_cinsi', 'kasa_cinsi', 'kasa_sayisi',
+        'aciklama',
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
     foreach ($fields as $k) {
@@ -40,13 +43,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $t2  = num($fis['tartim2']);
         $net = max(0, $t1 - $t2);
 
+        $kasa_dara_val  = 0.0;
+        $palet_dara_val = 0.0;
+        foreach ($kasa_list  as $kd) { if ($kd['name'] === $fis['kasa_cinsi'])  { $kasa_dara_val  = (float)$kd['unit_dara_kg']; break; } }
+        foreach ($palet_list as $kd) { if ($kd['name'] === $fis['palet_cinsi']) { $palet_dara_val = (float)$kd['unit_dara_kg']; break; } }
+
         db()->prepare(
             "UPDATE kantar_fisleri SET
              fis_no=?, plaka=?, firma_adi=?, giris_tarih=?, cikis_tarih=?, operator_adi=?,
              malin_cinsi=?, geldigi_yer=?, gittigi_yer=?,
-             palet_sayisi=?, kasa_cinsi=?, kasa_sayisi=?,
-             aciklama=?, aciklama2=?,
-             tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?
+             palet_sayisi=?, palet_cinsi=?, kasa_cinsi=?, kasa_sayisi=?,
+             aciklama=?,
+             tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?,
+             kasa_dara=?, palet_dara=?
              WHERE id=?"
         )->execute([
             $fis['fis_no'],
@@ -59,15 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fis['geldigi_yer'],
             $fis['gittigi_yer'],
             (int)$fis['palet_sayisi'],
+            $fis['palet_cinsi'],
             $fis['kasa_cinsi'],
             (int)$fis['kasa_sayisi'],
             $fis['aciklama'],
-            $fis['aciklama2'],
             $t1,
             $fis['alibi1'],
             $t2,
             $fis['alibi2'],
             $net,
+            $kasa_dara_val,
+            $palet_dara_val,
             $id,
         ]);
 
