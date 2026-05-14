@@ -85,7 +85,8 @@ render_header('Kayıtlar');
                 $durum = $r['durum'] ?? '';
             ?>
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
-                    data-record-id="<?= (int)$r['id'] ?>">
+                    data-record-id="<?= (int)$r['id'] ?>"
+                    data-durum="<?= h($durum) ?>">
                     <td><strong>#<?= (int)$r['id'] ?></strong></td>
                     <td><?= h(fmt_datetime($r['created_at'])) ?></td>
                     <td><?= h($r['firma']) ?></td>
@@ -101,20 +102,20 @@ render_header('Kayıtlar');
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+                        <?php if ($durum !== 'yuklendi'): ?>
                         <button type="button"
-                                class="btn btn-sm btn-durum-islendi<?= ($durum === 'islendi' || $durum === 'yuklendi') ? ' durum-done' : '' ?>"
-                                data-durum-action="islendi"
-                                <?= ($durum === 'islendi' || $durum === 'yuklendi') ? 'disabled' : '' ?>
-                                style="<?= $durum === 'yuklendi' ? 'display:none' : '' ?>">
-                            <?= ($durum === 'islendi' || $durum === 'yuklendi') ? '✓ İşlendi' : 'İşlendi' ?>
+                                class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
+                                data-durum-action="islendi">
+                            <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşlendi' ?>
                         </button>
+                        <?php endif; ?>
+                        <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
-                                data-durum-action="yuklendi"
-                                <?= $durum === 'yuklendi' ? 'disabled' : '' ?>
-                                style="<?= $durum !== 'islendi' ? 'display:none' : '' ?>">
+                                data-durum-action="yuklendi">
                             <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yüklendi' ?>
                         </button>
+                        <?php endif; ?>
                         <div class="pc-kebab-wrap">
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
@@ -136,11 +137,13 @@ render_header('Kayıtlar');
             $durum = $r['durum'] ?? '';
         ?>
             <div class="record-card<?= $durum ? ' durum-' . h($durum) : '' ?>"
-                 data-record-id="<?= (int)$r['id'] ?>">
+                 data-record-id="<?= (int)$r['id'] ?>"
+                 data-durum="<?= h($durum) ?>">
                 <div class="record-card-head">
                     <div>
                         <strong>Parti No: <?= h($r['parti_no'] ?: '—') ?></strong>
-                        <div class="muted"><?= h($r['firma'] ?: '—') ?> · <?= h(fmt_datetime($r['created_at'])) ?></div>
+                        <div class="record-card-firma"><?= h($r['firma'] ?: '—') ?></div>
+                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
@@ -165,24 +168,18 @@ render_header('Kayıtlar');
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+                    <?php if ($durum !== 'yuklendi'): ?>
                     <button type="button"
-                            class="btn btn-sm btn-durum-islendi<?= ($durum === 'islendi' || $durum === 'yuklendi') ? ' durum-done' : '' ?>"
-                            data-durum-action="islendi"
-                            <?= ($durum === 'islendi' || $durum === 'yuklendi') ? 'disabled' : '' ?>
-                            style="<?= $durum === 'yuklendi' ? 'display:none' : '' ?>">
-                        <?= ($durum === 'islendi' || $durum === 'yuklendi') ? '✓ İşlendi' : 'İşlendi' ?>
+                            class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
+                            data-durum-action="islendi">
+                        <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşlendi' ?>
                     </button>
-                    <?php if ($durum === 'islendi'): ?>
+                    <?php endif; ?>
+                    <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
                     <button type="button"
-                            class="btn btn-sm btn-durum-yuklendi"
+                            class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
                             data-durum-action="yuklendi">
-                        Yüklendi
-                    </button>
-                    <?php elseif ($durum === 'yuklendi'): ?>
-                    <button type="button"
-                            class="btn btn-sm btn-durum-yuklendi durum-done"
-                            data-durum-action="yuklendi" disabled>
-                        ✓ Yüklendi
+                        <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yüklendi' ?>
                     </button>
                     <?php endif; ?>
                 </div>
@@ -202,52 +199,76 @@ render_header('Kayıtlar');
         var container = btn.closest('[data-record-id]');
         if (!container) return;
 
-        var id     = container.dataset.recordId;
-        var action = btn.dataset.durumAction;
+        var action       = btn.dataset.durumAction;
+        var currentDurum = container.dataset.durum || '';
+        var targetDurum, msg;
+
+        if (action === 'islendi') {
+            if (currentDurum === 'islendi') {
+                msg = 'İşlendi iptal edilsin mi?';
+                targetDurum = '';
+            } else {
+                msg = 'Ürün işlendi mi?';
+                targetDurum = 'islendi';
+            }
+        } else if (action === 'yuklendi') {
+            if (currentDurum === 'yuklendi') {
+                msg = 'Yüklendi iptal edilsin mi?';
+                targetDurum = 'islendi';
+            } else {
+                msg = 'Ürün yüklendi mi?';
+                targetDurum = 'yuklendi';
+            }
+        } else { return; }
+
+        if (!confirm(msg)) return;
         btn.disabled = true;
 
         fetch('record_durum.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'id=' + encodeURIComponent(id) + '&durum=' + encodeURIComponent(action) + '&csrf=' + encodeURIComponent(csrf)
+            body: 'id=' + encodeURIComponent(container.dataset.recordId)
+                + '&durum=' + encodeURIComponent(targetDurum)
+                + '&csrf='  + encodeURIComponent(csrf)
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-            if (!data.ok) { alert(data.msg || 'Hata oluştu.'); btn.disabled = false; return; }
+            btn.disabled = false;
+            if (!data.ok) { alert(data.msg || 'Hata oluştu.'); return; }
 
+            container.dataset.durum = data.durum;
+            var isTR = container.tagName === 'TR';
             container.classList.remove('durum-islendi', 'durum-yuklendi', 'tr-islendi', 'tr-yuklendi');
-            if (data.durum === 'islendi') {
-                container.classList.add(container.tagName === 'TR' ? 'tr-islendi' : 'durum-islendi');
-            } else if (data.durum === 'yuklendi') {
-                container.classList.add(container.tagName === 'TR' ? 'tr-yuklendi' : 'durum-yuklendi');
-            }
+            if (data.durum === 'islendi') container.classList.add(isTR ? 'tr-islendi' : 'durum-islendi');
+            if (data.durum === 'yuklendi') container.classList.add(isTR ? 'tr-yuklendi' : 'durum-yuklendi');
 
             var islendiBtn  = container.querySelector('[data-durum-action="islendi"]');
             var yuklendiBtn = container.querySelector('[data-durum-action="yuklendi"]');
+            var actionsEl   = islendiBtn ? islendiBtn.parentNode : (yuklendiBtn ? yuklendiBtn.parentNode : null);
 
-            if (data.durum === 'islendi') {
-                if (islendiBtn) {
-                    islendiBtn.textContent = '✓ İşlendi';
-                    islendiBtn.classList.add('durum-done');
-                    islendiBtn.disabled = true;
-                }
-                if (yuklendiBtn) {
-                    yuklendiBtn.style.display = '';
-                } else {
+            if (data.durum === '') {
+                if (islendiBtn) { islendiBtn.textContent = 'İşlendi'; islendiBtn.classList.remove('durum-done'); islendiBtn.style.display = ''; }
+                if (yuklendiBtn) yuklendiBtn.remove();
+            } else if (data.durum === 'islendi') {
+                if (!islendiBtn && actionsEl) {
                     var nb = document.createElement('button');
-                    nb.type = 'button';
-                    nb.className = 'btn btn-sm btn-durum-yuklendi';
-                    nb.dataset.durumAction = 'yuklendi';
-                    nb.textContent = 'Yüklendi';
-                    (islendiBtn ? islendiBtn.parentNode : container).appendChild(nb);
+                    nb.type = 'button'; nb.className = 'btn btn-sm btn-durum-islendi durum-done';
+                    nb.dataset.durumAction = 'islendi'; nb.textContent = '✓ İşlendi';
+                    actionsEl.appendChild(nb);
+                } else if (islendiBtn) {
+                    islendiBtn.textContent = '✓ İşlendi'; islendiBtn.classList.add('durum-done'); islendiBtn.style.display = '';
+                }
+                if (!yuklendiBtn && actionsEl) {
+                    var ny = document.createElement('button');
+                    ny.type = 'button'; ny.className = 'btn btn-sm btn-durum-yuklendi';
+                    ny.dataset.durumAction = 'yuklendi'; ny.textContent = 'Yüklendi';
+                    actionsEl.appendChild(ny);
+                } else if (yuklendiBtn) {
+                    yuklendiBtn.textContent = 'Yüklendi'; yuklendiBtn.classList.remove('durum-done'); yuklendiBtn.style.display = '';
                 }
             } else if (data.durum === 'yuklendi') {
-                if (islendiBtn) islendiBtn.style.display = 'none';
-                if (yuklendiBtn) {
-                    yuklendiBtn.textContent = '✓ Yüklendi';
-                    yuklendiBtn.classList.add('durum-done');
-                    yuklendiBtn.disabled = true;
-                }
+                if (islendiBtn) islendiBtn.remove();
+                if (yuklendiBtn) { yuklendiBtn.textContent = '✓ Yüklendi'; yuklendiBtn.classList.add('durum-done'); yuklendiBtn.style.display = ''; }
             }
         })
         .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
