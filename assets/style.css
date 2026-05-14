@@ -686,6 +686,13 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 
 .view-totals-mobile { margin-top: 4px; }
 
+/* Toplam Dara / Net — turuncu vurgu */
+.totals .tot-orange { background: rgba(245, 158, 11, 0.88); border-radius: 8px; padding: 6px 4px; margin: -6px -4px; }
+.print-table .totals-row .tot-orange { background: #f59e0b !important; color: #fff; }
+
+/* View ekranı 5-alan özet grid */
+.info-grid-view5 { grid-template-columns: 1fr 1fr; }
+
 .kasa-breakdown-block {
     margin-top: 8px;
     background: var(--card);
