@@ -8,10 +8,11 @@ require_once __DIR__ . '/config/db.php';
 $q = trim((string)($_GET['q'] ?? ''));
 
 $sql = "SELECT r.*,
-               (SELECT COALESCE(SUM(p.kasa_adeti),0) FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_kasa,
-               (SELECT COALESCE(SUM(p.brut_kg),0)    FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_brut,
-               (SELECT COALESCE(SUM(p.dara_kg),0)    FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_dara,
-               (SELECT COALESCE(SUM(p.net_kg),0)     FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_net,
+               (SELECT COUNT(*)                          FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_palet,
+               (SELECT COALESCE(SUM(p.kasa_adeti),0)    FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_kasa,
+               (SELECT COALESCE(SUM(p.brut_kg),0)       FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_brut,
+               (SELECT COALESCE(SUM(p.dara_kg),0)       FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_dara,
+               (SELECT COALESCE(SUM(p.net_kg),0)        FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_net,
                COALESCE((SELECT m.name FROM loading_pallets p2
                           LEFT JOIN material_definitions m ON m.id = p2.kasa_cinsi_id
                           WHERE p2.loading_record_id = r.id LIMIT 1), '') AS ilk_kasa_cinsi
@@ -71,6 +72,7 @@ render_header('Çıkmalar');
                 <th>Ürün</th>
                 <th>Parti No</th>
                 <th>Plaka</th>
+                <th class="num">Palet</th>
                 <th class="num">Kasa</th>
                 <th class="num">Brüt</th>
                 <th class="num">Dara</th>
@@ -79,8 +81,11 @@ render_header('Çıkmalar');
             </tr>
             </thead>
             <tbody>
-            <?php foreach ($rows as $r): ?>
-                <tr>
+            <?php foreach ($rows as $r):
+                $durum = $r['durum'] ?? '';
+            ?>
+                <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
+                    data-record-id="<?= (int)$r['id'] ?>">
                     <td><strong>#<?= (int)$r['id'] ?></strong></td>
                     <td><?= h(fmt_datetime($r['created_at'])) ?></td>
                     <td><?= h($r['firma']) ?></td>
@@ -89,12 +94,27 @@ render_header('Çıkmalar');
                     <td><?= h($r['urun']) ?></td>
                     <td><?= h($r['parti_no']) ?></td>
                     <td><?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></td>
+                    <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_dara']) ?></td>
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+                        <button type="button"
+                                class="btn btn-sm btn-durum-islendi<?= ($durum === 'islendi' || $durum === 'yuklendi') ? ' durum-done' : '' ?>"
+                                data-durum-action="islendi"
+                                <?= ($durum === 'islendi' || $durum === 'yuklendi') ? 'disabled' : '' ?>
+                                style="<?= $durum === 'yuklendi' ? 'display:none' : '' ?>">
+                            <?= ($durum === 'islendi' || $durum === 'yuklendi') ? '✓ İşlendi' : 'İşlendi' ?>
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
+                                data-durum-action="yuklendi"
+                                <?= $durum === 'yuklendi' ? 'disabled' : '' ?>
+                                style="<?= $durum !== 'islendi' ? 'display:none' : '' ?>">
+                            <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yüklendi' ?>
+                        </button>
                         <div class="pc-kebab-wrap">
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
@@ -112,12 +132,15 @@ render_header('Çıkmalar');
 
     <!-- Mobil: kart -->
     <div class="card-list mobile-only">
-        <?php foreach ($rows as $r): ?>
-            <div class="record-card">
+        <?php foreach ($rows as $r):
+            $durum = $r['durum'] ?? '';
+        ?>
+            <div class="record-card<?= $durum ? ' durum-' . h($durum) : '' ?>"
+                 data-record-id="<?= (int)$r['id'] ?>">
                 <div class="record-card-head">
                     <div>
-                        <strong>#<?= (int)$r['id'] ?> · <?= h($r['firma'] ?: '—') ?></strong>
-                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
+                        <strong>Parti No: <?= h($r['parti_no'] ?: '—') ?></strong>
+                        <div class="muted"><?= h($r['firma'] ?: '—') ?> · <?= h(fmt_datetime($r['created_at'])) ?></div>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
@@ -129,25 +152,107 @@ render_header('Çıkmalar');
                     </div>
                 </div>
                 <div class="record-card-body">
-                    <div><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div>
-                    <div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div>
-                    <div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div>
-                    <div><span class="lbl">Parti No:</span> <?= h($r['parti_no']) ?></div>
-                    <div><span class="lbl">Plaka:</span> <?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></div>
+                    <?php if ($r['alici']): ?><div><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div><?php endif; ?>
+                    <?php if ($r['bolge']): ?><div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div><?php endif; ?>
+                    <?php if ($r['urun']): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div><?php endif; ?>
+                    <?php $plaka = trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /'); ?>
+                    <?php if ($plaka): ?><div><span class="lbl">Plaka:</span> <?= h($plaka) ?></div><?php endif; ?>
                 </div>
                 <div class="record-card-totals">
+                    <div><span>Palet</span><strong><?= (int)$r['toplam_palet'] ?></strong></div>
                     <div><span>Kasa</span><strong><?= (int)$r['toplam_kasa'] ?></strong></div>
                     <div><span>Brüt</span><strong><?= fmt_kg($r['toplam_brut']) ?></strong></div>
-                    <div><span>Dara</span><strong><?= fmt_kg($r['toplam_dara']) ?></strong></div>
-                    <div><span>Net</span><strong class="strong"><?= fmt_kg($r['toplam_net']) ?></strong></div>
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+                    <button type="button"
+                            class="btn btn-sm btn-durum-islendi<?= ($durum === 'islendi' || $durum === 'yuklendi') ? ' durum-done' : '' ?>"
+                            data-durum-action="islendi"
+                            <?= ($durum === 'islendi' || $durum === 'yuklendi') ? 'disabled' : '' ?>
+                            style="<?= $durum === 'yuklendi' ? 'display:none' : '' ?>">
+                        <?= ($durum === 'islendi' || $durum === 'yuklendi') ? '✓ İşlendi' : 'İşlendi' ?>
+                    </button>
+                    <?php if ($durum === 'islendi'): ?>
+                    <button type="button"
+                            class="btn btn-sm btn-durum-yuklendi"
+                            data-durum-action="yuklendi">
+                        Yüklendi
+                    </button>
+                    <?php elseif ($durum === 'yuklendi'): ?>
+                    <button type="button"
+                            class="btn btn-sm btn-durum-yuklendi durum-done"
+                            data-durum-action="yuklendi" disabled>
+                        ✓ Yüklendi
+                    </button>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
     </div>
 
 <?php endif; ?>
+
+<script>
+(function () {
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-durum-action]');
+        if (!btn) return;
+        var container = btn.closest('[data-record-id]');
+        if (!container) return;
+
+        var id     = container.dataset.recordId;
+        var action = btn.dataset.durumAction;
+        btn.disabled = true;
+
+        fetch('record_durum.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'id=' + encodeURIComponent(id) + '&durum=' + encodeURIComponent(action) + '&csrf=' + encodeURIComponent(csrf)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.ok) { alert(data.msg || 'Hata oluştu.'); btn.disabled = false; return; }
+
+            container.classList.remove('durum-islendi', 'durum-yuklendi', 'tr-islendi', 'tr-yuklendi');
+            if (data.durum === 'islendi') {
+                container.classList.add(container.tagName === 'TR' ? 'tr-islendi' : 'durum-islendi');
+            } else if (data.durum === 'yuklendi') {
+                container.classList.add(container.tagName === 'TR' ? 'tr-yuklendi' : 'durum-yuklendi');
+            }
+
+            var islendiBtn  = container.querySelector('[data-durum-action="islendi"]');
+            var yuklendiBtn = container.querySelector('[data-durum-action="yuklendi"]');
+
+            if (data.durum === 'islendi') {
+                if (islendiBtn) {
+                    islendiBtn.textContent = '✓ İşlendi';
+                    islendiBtn.classList.add('durum-done');
+                    islendiBtn.disabled = true;
+                }
+                if (yuklendiBtn) {
+                    yuklendiBtn.style.display = '';
+                } else {
+                    var nb = document.createElement('button');
+                    nb.type = 'button';
+                    nb.className = 'btn btn-sm btn-durum-yuklendi';
+                    nb.dataset.durumAction = 'yuklendi';
+                    nb.textContent = 'Yüklendi';
+                    (islendiBtn ? islendiBtn.parentNode : container).appendChild(nb);
+                }
+            } else if (data.durum === 'yuklendi') {
+                if (islendiBtn) islendiBtn.style.display = 'none';
+                if (yuklendiBtn) {
+                    yuklendiBtn.textContent = '✓ Yüklendi';
+                    yuklendiBtn.classList.add('durum-done');
+                    yuklendiBtn.disabled = true;
+                }
+            }
+        })
+        .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
+    });
+})();
+</script>
 
 <?php render_footer(); ?>
