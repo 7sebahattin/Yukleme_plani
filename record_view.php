@@ -230,6 +230,9 @@ $urun_keys = array_slice(array_keys($urun_groups), 0, 4);
 // Toplu malzeme ekleme modalı için aktif malzemeleri çek
 $bm_materials = get_all_active_materials();
 
+$depo_values = array_unique(array_filter(array_map('trim', array_column($pallets, 'depo'))));
+$depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
+
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 
@@ -263,27 +266,14 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
         <div class="ph-title">YÜKLEME PLANI</div>
         <div class="ph-sub">Kayıt #<?= (int)$record['id'] ?></div>
     </div>
-    <div class="ph-right">
-        <div><strong>Tarih:</strong> <?= h(fmt_date($record['tarih'])) ?></div>
-        <div><strong>Parti No:</strong> <?= h($record['parti_no']) ?></div>
-    </div>
 </div>
 
-<div class="info-grid">
+<div class="info-grid info-grid-view5">
     <div><span class="lbl">Firma</span><strong><?= h($record['firma']) ?></strong></div>
-    <div><span class="lbl">Bölge</span><strong><?= h($record['bolge']) ?></strong></div>
-    <div><span class="lbl">Alıcı</span><strong><?= h($record['alici']) ?></strong></div>
+    <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
+    <div><span class="lbl">Parti No</span><strong><?= h($record['parti_no']) ?></strong></div>
     <div><span class="lbl">Ürün</span><strong><?= h($record['urun']) ?></strong></div>
-    <div><span class="lbl">Etiket / Marka</span><strong><?= h($record['etiket']) ?></strong></div>
-    <div><span class="lbl">Gümrük</span><strong><?= h($record['gumruk']) ?></strong></div>
-    <div><span class="lbl">Fatura No</span><strong><?= h($record['fatura_no']) ?></strong></div>
-    <div><span class="lbl">Casus No</span><strong><?= h($record['casus_no']) ?></strong></div>
-    <div><span class="lbl">Nakliye Şirketi</span><strong><?= h($record['nakliye_sirketi']) ?></strong></div>
-    <div><span class="lbl">Şoför</span><strong><?= h($record['sofor_adi']) ?></strong></div>
-    <div><span class="lbl">Telefon</span><strong><?= h($record['telefon']) ?></strong></div>
-    <div><span class="lbl">Plaka</span><strong><?= h(trim($record['on_plaka'] . ' / ' . $record['arka_plaka'], ' /')) ?></strong></div>
-    <div><span class="lbl">Nakliye Bedeli</span><strong><?= h(fmt_money($record['nakliye_bedeli'])) ?></strong></div>
-    <div><span class="lbl">Avans</span><strong><?= h(fmt_money($record['avans'])) ?></strong></div>
+    <div><span class="lbl">Depo</span><strong><?= h($depo_str) ?></strong></div>
 </div>
 
 <h3 class="section-title">Yükleme Planı</h3>
@@ -339,8 +329,8 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
             </td>
             <td colspan="5"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
-            <td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
-            <td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
+            <td class="num strong tot-orange"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
+            <td class="num strong tot-orange"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
         </tr>
         </tfoot>
     </table>
@@ -396,8 +386,8 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
             <?php endif; ?>
         </div>
         <div><span>Toplam Brüt</span><strong><?= h(fmt_kg($tot['toplam_brut'])) ?></strong></div>
-        <div><span>Toplam Dara</span><strong><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></strong></div>
-        <div><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></strong></div>
+        <div class="tot-orange"><span>Toplam Dara</span><strong><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></strong></div>
+        <div class="tot-orange"><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></strong></div>
     </div>
 </div>
 </section>
