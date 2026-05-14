@@ -204,6 +204,7 @@ input.num, select.num { text-align: right; }
 .search-row input[type="search"] { flex: 1; min-width: 180px; }
 .form-foot {
     flex-direction: row; justify-content: flex-end; gap: 8px; margin-top: 16px;
+    flex-wrap: wrap;
 }
 .form-foot.inline { margin-top: 8px; }
 
@@ -1829,6 +1830,9 @@ body.print-mode .asya-sheet {
 
 /* ── Hesaplama modal bölüm başlıkları ── */
 .kh-section { margin-bottom: 20px; }
+.kh-gruplar-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 0;
+}
 .kh-section-title {
     font-size: .78rem; font-weight: 700;
     color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
@@ -1891,7 +1895,7 @@ body.print-mode .asya-sheet {
         animation: none !important;
     }
     body.kh-print .pm-close { display: none !important; }
-    body.kh-print .pm-body > *:not(#mSonucAlani) { display: none !important; }
+    body.kh-print .pm-body > .kh-section { display: none !important; }
     body.kh-print #mSonucAlani { display: block !important; }
     body.kh-print #kantarModalFooter,
     body.kh-print #kantarPrintFooter { display: none !important; }
