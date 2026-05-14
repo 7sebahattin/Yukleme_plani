@@ -17,6 +17,12 @@ $fis        = $fis        ?? [];
 $fis_id     = (int)($fis['id'] ?? 0);
 $kasa_list  = $kasa_list  ?? [];
 $palet_list = $palet_list ?? [];
+
+// DB'den gelen DECIMAL değerlerini Türkçe formata çevir (parseNum ile uyumlu)
+function fmt_tartim($v): string {
+    $f = (float)$v;
+    return $f > 0 ? fmt_kg($f) : '';
+}
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="kantarForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -28,7 +34,7 @@ $palet_list = $palet_list ?? [];
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
         <a href="kantar.php" class="btn btn-ghost">İptal</a>
-        <button type="button" class="btn" id="hesaplaAcBtn">Ayrı Hesaplama Yap</button>
+        <button type="button" class="btn" id="hesaplaAcBtn">Palet / Kasa Hesabı</button>
         <?php if ($is_edit): ?>
         <a href="kantar_delete.php?id=<?= $fis_id ?>"
            class="btn btn-danger"
@@ -120,7 +126,7 @@ $palet_list = $palet_list ?? [];
                 <div class="kantar-tartim-fields">
                     <input type="text" name="tartim1" id="tartim1" inputmode="decimal"
                            class="num kantar-tartim-input"
-                           value="<?= h($fis['tartim1'] ?? '') ?>" placeholder="">
+                           value="<?= h(fmt_tartim($fis['tartim1'] ?? '')) ?>" placeholder="">
                     <span class="kantar-tartim-unit">kg</span>
                     <input type="text" name="alibi1" class="kantar-alibi"
                            placeholder="Alibi No"
@@ -132,7 +138,7 @@ $palet_list = $palet_list ?? [];
                 <div class="kantar-tartim-fields">
                     <input type="text" name="tartim2" id="tartim2" inputmode="decimal"
                            class="num kantar-tartim-input"
-                           value="<?= h($fis['tartim2'] ?? '') ?>" placeholder="">
+                           value="<?= h(fmt_tartim($fis['tartim2'] ?? '')) ?>" placeholder="">
                     <span class="kantar-tartim-unit">kg</span>
                     <input type="text" name="alibi2" class="kantar-alibi"
                            placeholder="Alibi No"
@@ -169,7 +175,7 @@ $palet_list = $palet_list ?? [];
 
 <div class="form-foot">
     <a href="kantar.php" class="btn btn-ghost">İptal</a>
-    <button type="button" class="btn" id="hesaplaAcBtn2">Ayrı Hesaplama Yap</button>
+    <button type="button" class="btn" id="hesaplaAcBtn2">Palet / Kasa Hesabı</button>
     <?php if ($is_edit): ?>
     <a href="kantar_delete.php?id=<?= $fis_id ?>"
        class="btn btn-danger"
@@ -179,64 +185,43 @@ $palet_list = $palet_list ?? [];
 </div>
 </form>
 
-<!-- ══════════════ HESAPLAMA MODAL ══════════════ -->
+<!-- ══════════════ PALET/KASA HESAPLAMA MODAL ══════════════ -->
 <div id="kantarModal" class="pm-overlay" style="display:none" role="dialog" aria-modal="true">
-  <div class="pm-dialog">
+  <div class="pm-dialog" style="max-width:680px">
     <div class="pm-header">
-      <h2 class="pm-title">Ayrı Hesaplama</h2>
+      <h2 class="pm-title">Palet / Kasa Kilo Hesabı</h2>
       <button type="button" class="pm-close" id="kantarModalKapat" aria-label="Kapat">✕</button>
     </div>
     <div class="pm-body">
+      <!-- Genel bilgiler -->
       <div class="kh-section">
-        <div class="kh-section-title">Tartım Bilgileri</div>
+        <div class="kh-section-title">Genel Bilgiler</div>
         <div class="grid">
           <label>Toplam Brüt KG
-            <input type="text" id="mToplamBrut" inputmode="decimal" class="num" placeholder="0">
+            <input type="text" id="mToplamBrut" inputmode="decimal" class="num" placeholder="17.240">
           </label>
           <label>Toplam Palet Sayısı
-            <input type="text" id="mToplamPalet" inputmode="numeric" class="num" placeholder="0">
+            <input type="text" id="mToplamPalet" inputmode="numeric" class="num" placeholder="16">
           </label>
-          <label>Toplam Kasa Sayısı
-            <input type="text" id="mToplamKasa" inputmode="numeric" class="num" placeholder="0">
-          </label>
-        </div>
-      </div>
-      <div class="kh-section">
-        <div class="kh-section-title">Dara Bilgileri</div>
-        <div class="grid">
           <label>Kasa Darası <small class="muted">(kg/kasa)</small>
-            <input type="text" id="mKasaDara" inputmode="decimal" class="num" placeholder="0">
+            <input type="text" id="mKasaDara" inputmode="decimal" class="num" placeholder="2">
           </label>
           <label>Palet Darası <small class="muted">(kg/palet)</small>
-            <input type="text" id="mPaletDara" inputmode="decimal" class="num" placeholder="0">
+            <input type="text" id="mPaletDara" inputmode="decimal" class="num" placeholder="30">
           </label>
         </div>
       </div>
-      <div id="mSonucAlani" style="display:none">
-        <div class="kh-divider"></div>
-        <div class="kh-section-title">Hesaplama Sonucu</div>
-        <div class="kh-result-grid">
-          <div class="kh-result-card">
-            <div class="kh-result-lbl">Toplam Kasa Darası</div>
-            <div class="kh-result-val" id="rKasaDara">—</div>
-            <div class="kh-result-sub" id="rKasaDaraSub"></div>
-          </div>
-          <div class="kh-result-card">
-            <div class="kh-result-lbl">Toplam Palet Darası</div>
-            <div class="kh-result-val" id="rPaletDara">—</div>
-            <div class="kh-result-sub" id="rPaletDaraSub"></div>
-          </div>
-          <div class="kh-result-card">
-            <div class="kh-result-lbl">Toplam Dara</div>
-            <div class="kh-result-val" id="rToplamDara">—</div>
-          </div>
-          <div class="kh-result-card kh-result-net">
-            <div class="kh-result-lbl">NET Kilo</div>
-            <div class="kh-result-val" id="rNetKg">—</div>
-            <div class="kh-result-sub" id="rNetSub"></div>
-          </div>
+      <!-- Gruplar -->
+      <div class="kh-section">
+        <div class="kh-gruplar-header">
+          <div class="kh-section-title" style="margin-bottom:0">Gruplar</div>
+          <button type="button" class="btn btn-sm btn-primary" id="mAddGrupBtn">+ Grup Ekle</button>
         </div>
+        <div id="mGrupList" style="margin-top:10px"></div>
+        <p id="mPaletUyari" class="kantar-uyari" style="display:none"></p>
       </div>
+      <!-- Sonuç -->
+      <div id="mSonucAlani" style="display:none"></div>
     </div>
     <div class="pm-footer" id="kantarModalFooter">
       <button type="button" class="btn btn-ghost" id="kantarModalKapat2">Kapat</button>
@@ -283,6 +268,9 @@ function fmt(n) {
     var parts = s.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.length > 1 ? parts[0] + ',' + parts[1] : parts[0];
+}
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 /* ─── NET hesapla ─── */
@@ -433,10 +421,11 @@ imgInput.addEventListener('change', function() {
 });
 
 /* ══════════════════════════════════════════
-   HESAPLAMA MODAL
+   PALET/KASA HESAPLAMA MODAL
    ══════════════════════════════════════════ */
 var kantarKasaDaraKg  = 0;
 var kantarPaletDaraKg = 0;
+var mGrupSay = 0;
 
 var kasaCinsiSel  = document.getElementById('kantarKasaCinsi');
 var paletCinsiSel = document.getElementById('kantarPaletCinsi');
@@ -445,7 +434,6 @@ function getOptDara(sel) {
     if (!sel || sel.selectedIndex < 0) return 0;
     return parseFloat(sel.options[sel.selectedIndex].getAttribute('data-dara') || 0) || 0;
 }
-
 if (kasaCinsiSel) {
     kasaCinsiSel.addEventListener('change', function() { kantarKasaDaraKg = getOptDara(this); });
     kantarKasaDaraKg = getOptDara(kasaCinsiSel);
@@ -454,6 +442,50 @@ if (paletCinsiSel) {
     paletCinsiSel.addEventListener('change', function() { kantarPaletDaraKg = getOptDara(this); });
     kantarPaletDaraKg = getOptDara(paletCinsiSel);
 }
+
+function addModalGrup(ad, palet, kasa) {
+    mGrupSay++;
+    var no = mGrupSay;
+    var div = document.createElement('div');
+    div.className = 'kantar-grup-row';
+    div.innerHTML =
+        '<div class="kantar-grup-header">' +
+            '<span class="kantar-grup-no">' + no + '. Grup</span>' +
+            '<button type="button" class="btn btn-ghost btn-sm kantar-del-btn">✕ Sil</button>' +
+        '</div>' +
+        '<div class="kantar-grup-body">' +
+            '<label class="kantar-lbl"><span>Grup Adı</span>' +
+                '<input type="text" class="kantar-ad-input" value="' + esc(ad != null ? ad : '') + '" placeholder="Örn: CK">' +
+            '</label>' +
+            '<label class="kantar-lbl"><span>Palet Sayısı</span>' +
+                '<input type="text" class="kantar-palet-input num" inputmode="numeric" value="' + esc(palet != null ? palet : '') + '" placeholder="0">' +
+            '</label>' +
+            '<label class="kantar-lbl"><span>Kasa Adedi</span>' +
+                '<input type="text" class="kantar-kasa-input num" inputmode="numeric" value="' + esc(kasa != null ? kasa : '') + '" placeholder="0">' +
+            '</label>' +
+        '</div>';
+    div.querySelector('.kantar-del-btn').addEventListener('click', function() { div.remove(); checkModalPalet(); });
+    div.querySelector('.kantar-palet-input').addEventListener('input', checkModalPalet);
+    document.getElementById('mGrupList').appendChild(div);
+    checkModalPalet();
+}
+
+function checkModalPalet() {
+    var tp = parseNum(document.getElementById('mToplamPalet').value);
+    var el = document.getElementById('mPaletUyari');
+    if (!tp) { el.style.display = 'none'; return; }
+    var gt = Array.from(document.querySelectorAll('#mGrupList .kantar-palet-input'))
+                  .reduce(function(s, inp) { return s + parseNum(inp.value); }, 0);
+    if (gt > 0 && Math.abs(gt - tp) > 0.001) {
+        el.textContent = '⚠ Grup palet toplamı (' + fmt(gt) + ') toplam palet sayısıyla (' + fmt(tp) + ') eşleşmiyor.';
+        el.style.display = '';
+    } else {
+        el.style.display = 'none';
+    }
+}
+
+document.getElementById('mToplamPalet').addEventListener('input', checkModalPalet);
+document.getElementById('mAddGrupBtn').addEventListener('click', function() { addModalGrup(); });
 
 function openHesaplaModal() {
     var t1  = parseNum(document.getElementById('tartim1').value);
@@ -464,15 +496,19 @@ function openHesaplaModal() {
     var paletEl = document.getElementById('kantarPaletSayisi');
     var kasaEl  = document.getElementById('kantarKasaSayisi');
     if (paletEl && paletEl.value) document.getElementById('mToplamPalet').value = paletEl.value;
-    if (kasaEl  && kasaEl.value)  document.getElementById('mToplamKasa').value  = kasaEl.value;
 
     if (kantarKasaDaraKg  > 0) document.getElementById('mKasaDara').value  = fmt(kantarKasaDaraKg);
     if (kantarPaletDaraKg > 0) document.getElementById('mPaletDara').value = fmt(kantarPaletDaraKg);
 
-    document.getElementById('mSonucAlani').style.display       = 'none';
-    document.getElementById('kantarModalFooter').style.display  = '';
-    document.getElementById('kantarPrintFooter').style.display  = 'none';
-    document.getElementById('kantarModal').style.display        = 'flex';
+    if (!document.getElementById('mGrupList').children.length) {
+        addModalGrup(); addModalGrup();
+    }
+    document.getElementById('mSonucAlani').innerHTML = '';
+    document.getElementById('mSonucAlani').style.display = 'none';
+    document.getElementById('mPaletUyari').style.display = 'none';
+    document.getElementById('kantarModalFooter').style.display = '';
+    document.getElementById('kantarPrintFooter').style.display = 'none';
+    document.getElementById('kantarModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
 }
 function closeHesaplaModal() {
@@ -496,34 +532,87 @@ document.getElementById('mYenidenBtn').addEventListener('click', function() {
 });
 
 document.getElementById('mHesaplaBtn').addEventListener('click', function() {
-    var brut  = parseNum(document.getElementById('mToplamBrut').value);
-    var palet = parseNum(document.getElementById('mToplamPalet').value);
-    var kasa  = parseNum(document.getElementById('mToplamKasa').value);
-    var kasaD = parseNum(document.getElementById('mKasaDara').value);
-    var palD  = parseNum(document.getElementById('mPaletDara').value);
+    var toplamBrut  = parseNum(document.getElementById('mToplamBrut').value);
+    var toplamPalet = parseNum(document.getElementById('mToplamPalet').value);
+    var kasaDara    = parseNum(document.getElementById('mKasaDara').value);
+    var paletDara   = parseNum(document.getElementById('mPaletDara').value);
 
-    if (brut  <= 0) { alert('Toplam Brüt KG boş veya sıfır olamaz.'); return; }
-    if (palet <= 0) { alert('Toplam Palet Sayısı boş veya sıfır olamaz.'); return; }
-    if (kasa  <= 0) { alert('Toplam Kasa Sayısı boş veya sıfır olamaz.'); return; }
-    if (kasaD  < 0) { alert('Kasa darası negatif olamaz.'); return; }
-    if (palD   < 0) { alert('Palet darası negatif olamaz.'); return; }
+    if (!toplamBrut)  { alert('Lütfen toplam brüt KG değerini girin.'); return; }
+    if (!toplamPalet) { alert('Lütfen toplam palet sayısını girin.'); return; }
+    if (kasaDara  < 0) { alert('Kasa darası negatif olamaz.'); return; }
+    if (paletDara < 0) { alert('Palet darası negatif olamaz.'); return; }
 
-    var totKasaDara  = kasa  * kasaD;
-    var totPaletDara = palet * palD;
-    var totDara      = totKasaDara + totPaletDara;
-    var netKg        = brut - totDara;
+    var gruplar = Array.from(document.querySelectorAll('#mGrupList .kantar-grup-row')).map(function(r) {
+        return {
+            ad:    r.querySelector('.kantar-ad-input').value.trim() || '—',
+            palet: parseNum(r.querySelector('.kantar-palet-input').value),
+            kasa:  parseNum(r.querySelector('.kantar-kasa-input').value),
+        };
+    }).filter(function(g) { return g.palet > 0 || g.kasa > 0; });
 
-    document.getElementById('rKasaDara').textContent     = fmt(totKasaDara)  + ' kg';
-    document.getElementById('rKasaDaraSub').textContent  = fmt(kasa)  + ' kasa × ' + fmt(kasaD) + ' kg';
-    document.getElementById('rPaletDara').textContent    = fmt(totPaletDara) + ' kg';
-    document.getElementById('rPaletDaraSub').textContent = fmt(palet) + ' palet × ' + fmt(palD) + ' kg';
-    document.getElementById('rToplamDara').textContent   = fmt(totDara)  + ' kg';
-    document.getElementById('rNetKg').textContent        = fmt(netKg)   + ' kg';
-    document.getElementById('rNetSub').textContent       = fmt(brut) + ' − ' + fmt(totDara) + ' = ' + fmt(netKg) + ' kg';
+    if (!gruplar.length) { alert('Lütfen en az bir grup için palet veya kasa adedi girin.'); return; }
 
-    document.getElementById('mSonucAlani').style.display       = '';
-    document.getElementById('kantarModalFooter').style.display  = 'none';
-    document.getElementById('kantarPrintFooter').style.display  = '';
+    var paletBasiOrt = toplamBrut / toplamPalet;
+    var totBrut = 0, totKDara = 0, totPDara = 0, totDara = 0, totNet = 0, totPalet = 0, totKasa = 0;
+    var satirlar = '';
+
+    gruplar.forEach(function(g) {
+        var brut  = g.palet * paletBasiOrt;
+        var kDara = g.kasa  * kasaDara;
+        var pDara = g.palet * paletDara;
+        var tdara = kDara + pDara;
+        var net   = brut - tdara;
+        totBrut  += brut;  totKDara += kDara; totPDara += pDara;
+        totDara  += tdara; totNet   += net;
+        totPalet += g.palet; totKasa += g.kasa;
+        satirlar +=
+            '<tr>' +
+            '<td><strong>' + esc(g.ad) + '</strong></td>' +
+            '<td class="num">' + fmt(g.palet) + '</td>' +
+            '<td class="num">' + fmt(g.kasa)  + '</td>' +
+            '<td class="num">' + fmt(brut)    + '</td>' +
+            '<td class="num">' + fmt(kDara)   + '</td>' +
+            '<td class="num">' + fmt(pDara)   + '</td>' +
+            '<td class="num">' + fmt(tdara)   + '</td>' +
+            '<td class="num kantar-net">' + fmt(net) + '</td>' +
+            '</tr>';
+    });
+
+    var html =
+        '<div class="kantar-ozet">' +
+            '<span class="kantar-ozet-lbl">Palet başı ortalama brüt</span>' +
+            '<span class="kantar-ozet-val">' + fmt(paletBasiOrt) + ' kg</span>' +
+        '</div>' +
+        '<div class="table-wrap" style="margin-top:10px">' +
+        '<table class="data-table">' +
+        '<thead><tr>' +
+            '<th>Grup</th>' +
+            '<th class="num">Palet</th>' +
+            '<th class="num">Kasa</th>' +
+            '<th class="num">Brüt KG</th>' +
+            '<th class="num">K.Dara</th>' +
+            '<th class="num">P.Dara</th>' +
+            '<th class="num">Top.Dara</th>' +
+            '<th class="num">Net KG</th>' +
+        '</tr></thead>' +
+        '<tbody>' + satirlar + '</tbody>' +
+        '<tfoot><tr class="kantar-toplam-row">' +
+            '<td><strong>TOPLAM</strong></td>' +
+            '<td class="num"><strong>' + fmt(totPalet) + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totKasa)  + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totBrut)  + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totKDara) + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totPDara) + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totDara)  + '</strong></td>' +
+            '<td class="num kantar-net"><strong>' + fmt(totNet) + '</strong></td>' +
+        '</tr></tfoot>' +
+        '</table></div>';
+
+    var sonuc = document.getElementById('mSonucAlani');
+    sonuc.innerHTML = html;
+    sonuc.style.display = '';
+    document.getElementById('kantarModalFooter').style.display = 'none';
+    document.getElementById('kantarPrintFooter').style.display = '';
 
     setTimeout(function() {
         document.querySelector('#kantarModal .pm-body').scrollTo({ top: 9999, behavior: 'smooth' });
