@@ -149,53 +149,5 @@ $cancel_url   = ($record['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'r
 
 render_header($title);
 render_flash();
-
-$durum = $record['durum'] ?? '';
-
-$durum_labels = ['' => 'Beklemede', 'islendi' => 'İşlendi', 'yuklendi' => 'Yüklendi'];
-?>
-
-<!-- ── Kayıt Durumu ── -->
-<section class="card" style="margin-bottom:16px">
-    <div class="card-head">
-        <h2>📋 Kayıt Durumu</h2>
-        <span class="durum-edit-badge durum-edit-badge-<?= h($durum ?: 'beklemede') ?>">
-            <?= h($durum_labels[$durum] ?? 'Beklemede') ?>
-        </span>
-    </div>
-    <div class="card-body">
-        <p class="muted" style="margin:0 0 12px">Hatalı durum kaydını aşağıdan düzeltin:</p>
-        <div class="durum-btn-group">
-            <button type="button"
-                    class="btn btn-sm durum-opt<?= $durum === '' ? ' durum-opt-active durum-opt-beklemede' : '' ?>"
-                    onclick="setDurum('')">Beklemede</button>
-            <button type="button"
-                    class="btn btn-sm durum-opt<?= $durum === 'islendi' ? ' durum-opt-active durum-opt-islendi' : '' ?>"
-                    onclick="setDurum('islendi')">İşlendi</button>
-            <button type="button"
-                    class="btn btn-sm durum-opt<?= $durum === 'yuklendi' ? ' durum-opt-active durum-opt-yuklendi' : '' ?>"
-                    onclick="setDurum('yuklendi')">Yüklendi</button>
-        </div>
-    </div>
-</section>
-
-<script>
-function setDurum(durum) {
-    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    fetch('record_durum.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=<?= $id ?>&durum=' + encodeURIComponent(durum) + '&csrf=' + encodeURIComponent(csrf) + '&force=1'
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.ok) { location.reload(); }
-        else { alert(data.msg || 'Hata oluştu.'); }
-    })
-    .catch(function() { alert('Bağlantı hatası.'); });
-}
-</script>
-
-<?php
 include __DIR__ . '/_form.php';
 render_footer();
