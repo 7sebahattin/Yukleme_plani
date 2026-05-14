@@ -235,6 +235,10 @@ function render_flash(): void {
             if (!$has) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
             }
+            $has_durum = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'durum'")->fetchColumn();
+            if (!$has_durum) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `durum` VARCHAR(20) NOT NULL DEFAULT ''");
+            }
         } catch (PDOException $e) {}
 
         // 2) Kantar tabloları

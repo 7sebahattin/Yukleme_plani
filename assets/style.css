@@ -335,7 +335,7 @@ input.num, select.num { text-align: right; }
 .record-card-body .lbl { color: var(--muted); font-size: .8rem; }
 .record-card-totals {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
     background: var(--primary-soft);
     padding: 8px;
@@ -348,6 +348,46 @@ input.num, select.num { text-align: right; }
 .record-card-totals span { color: var(--muted); font-size: .75rem; }
 .record-card-totals strong { font-size: .95rem; }
 .record-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ── Kart durum renkleri ── */
+.record-card.durum-islendi {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+.record-card.durum-islendi .record-card-totals {
+    background: rgba(245,158,11,.12);
+}
+.record-card.durum-yuklendi {
+    border-color: #10b981;
+    background: #f0fdf4;
+}
+.record-card.durum-yuklendi .record-card-totals {
+    background: rgba(16,185,129,.12);
+}
+
+/* ── PC tablo durum satırı ── */
+.data-table tr.tr-islendi > td { background: #fffbeb; }
+.data-table tr.tr-yuklendi > td { background: #f0fdf4; }
+
+/* ── Durum butonları ── */
+.btn-durum-islendi {
+    background: #f59e0b; color: #fff;
+    border-color: #f59e0b;
+}
+.btn-durum-islendi:hover:not(:disabled) { background: #d97706; border-color: #d97706; }
+.btn-durum-islendi.durum-done {
+    background: #d97706; border-color: #d97706;
+    opacity: .85;
+}
+.btn-durum-yuklendi {
+    background: #10b981; color: #fff;
+    border-color: #10b981;
+}
+.btn-durum-yuklendi:hover:not(:disabled) { background: #059669; border-color: #059669; }
+.btn-durum-yuklendi.durum-done {
+    background: #059669; border-color: #059669;
+    opacity: .85;
+}
 
 /* =========================================================
    Palet listesi (form)
