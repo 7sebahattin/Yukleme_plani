@@ -349,6 +349,25 @@ input.num, select.num { text-align: right; }
 .record-card-totals strong { font-size: .95rem; }
 .record-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
+/* ── Düzenleme sayfası durum kartı ── */
+.durum-btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.durum-opt { border: 2px solid var(--border-strong); color: var(--muted); background: var(--bg); }
+.durum-opt:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+
+.durum-opt-active.durum-opt-beklemede { border-color: var(--border-strong); color: var(--text); background: #fff; font-weight: 700; }
+.durum-opt-active.durum-opt-islendi  { border-color: #f59e0b; color: #fff; background: #f59e0b; font-weight: 700; }
+.durum-opt-active.durum-opt-yuklendi { border-color: #10b981; color: #fff; background: #10b981; font-weight: 700; }
+
+.durum-edit-badge {
+    display: inline-flex; align-items: center;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: .78rem; font-weight: 700; letter-spacing: .02em;
+}
+.durum-edit-badge-beklemede { background: var(--bg); border: 1px solid var(--border-strong); color: var(--muted); }
+.durum-edit-badge-islendi   { background: #fef3c7; border: 1px solid #f59e0b; color: #92400e; }
+.durum-edit-badge-yuklendi  { background: #d1fae5; border: 1px solid #10b981; color: #065f46; }
+
 /* ── Kart durum renkleri ── */
 .record-card.durum-islendi {
     border-color: #f59e0b;
