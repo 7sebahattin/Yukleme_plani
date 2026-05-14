@@ -25,12 +25,15 @@ if ($id <= 0 || !in_array($durum, ['islendi', 'yuklendi', ''], true)) {
 }
 
 if ($durum === 'yuklendi') {
-    $st = db()->prepare("SELECT durum FROM loading_records WHERE id = ?");
-    $st->execute([$id]);
-    $row = $st->fetch();
-    if (!$row || $row['durum'] !== 'islendi') {
-        echo json_encode(['ok' => false, 'msg' => 'Önce İşlendi yapılmalı.']);
-        exit;
+    $force = !empty($_POST['force']);
+    if (!$force) {
+        $st = db()->prepare("SELECT durum FROM loading_records WHERE id = ?");
+        $st->execute([$id]);
+        $row = $st->fetch();
+        if (!$row || $row['durum'] !== 'islendi') {
+            echo json_encode(['ok' => false, 'msg' => 'Önce İşlendi yapılmalı.']);
+            exit;
+        }
     }
 }
 
