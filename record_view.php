@@ -261,17 +261,21 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
      ============================================================ -->
 <section class="print-sheet view-sheet">
 
-<div class="print-header">
-    <div class="ph-left">
-        <div class="ph-title">YÜKLEME PLANI</div>
-        <div class="ph-sub">Kayıt #<?= (int)$record['id'] ?></div>
+<div class="view-hdr-card">
+    <div class="view-hdr-main">
+        <div class="view-hdr-firma"><?= h($record['firma'] ?: '—') ?></div>
+        <div class="view-hdr-parti">Parti No: <strong><?= h($record['parti_no'] ?: '—') ?></strong></div>
+    </div>
+    <div class="view-hdr-meta">
+        <div><span>Oluşturulma:</span> <?= h(fmt_datetime($record['created_at'])) ?></div>
+        <?php if (!empty($record['updated_at']) && $record['updated_at'] !== $record['created_at']): ?>
+        <div><span>Son düzenleme:</span> <?= h(fmt_datetime($record['updated_at'])) ?></div>
+        <?php endif; ?>
     </div>
 </div>
 
-<div class="info-grid info-grid-view5">
-    <div><span class="lbl">Firma</span><strong><?= h($record['firma']) ?></strong></div>
+<div class="info-grid">
     <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
-    <div><span class="lbl">Parti No</span><strong><?= h($record['parti_no']) ?></strong></div>
     <div><span class="lbl">Ürün</span><strong><?= h($record['urun']) ?></strong></div>
     <div><span class="lbl">Depo</span><strong><?= h($depo_str) ?></strong></div>
 </div>

@@ -131,8 +131,8 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
     <div class="totals">
         <div><span>Toplam Kasa</span><strong id="totKasa">0</strong></div>
         <div><span>Toplam Brüt</span><strong id="totBrut">0,000</strong></div>
-        <div><span>Toplam Dara</span><strong id="totDara">0,000</strong></div>
-        <div><span>Toplam Net</span><strong class="strong" id="totNet">0,000</strong></div>
+        <div class="tot-orange"><span>Toplam Dara</span><strong id="totDara">0,000</strong></div>
+        <div class="tot-orange"><span>Toplam Net</span><strong class="strong" id="totNet">0,000</strong></div>
     </div>
 </section>
 
@@ -221,3 +221,29 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+    var dirty = false;
+    var form = document.querySelector('form[method="post"]');
+    if (!form) return;
+
+    form.addEventListener('input',  function () { dirty = true; });
+    form.addEventListener('change', function () { dirty = true; });
+    form.addEventListener('submit', function () { dirty = false; });
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('#pmSave') ||
+            e.target.closest('#addPalletBtn') ||
+            e.target.closest('[data-del]')) {
+            dirty = true;
+        }
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        if (!dirty) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+})();
+</script>

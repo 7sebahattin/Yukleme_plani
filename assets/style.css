@@ -690,8 +690,33 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .totals .tot-orange { background: rgba(245, 158, 11, 0.88); border-radius: 8px; padding: 6px 4px; margin: -6px -4px; }
 .print-table .totals-row .tot-orange { background: #f59e0b !important; color: #fff; }
 
-/* View ekranı 5-alan özet grid */
-.info-grid-view5 { grid-template-columns: 1fr 1fr; }
+/* View ekranı başlık kartı */
+.view-hdr-card {
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+    border-bottom: 2px solid var(--text);
+}
+.view-hdr-firma {
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1.2;
+}
+.view-hdr-parti {
+    font-size: .95rem;
+    color: var(--muted);
+    margin-top: 3px;
+}
+.view-hdr-parti strong { color: var(--text); }
+.view-hdr-meta {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 20px;
+    font-size: .78rem;
+    color: var(--muted);
+}
+.view-hdr-meta span { font-weight: 600; color: var(--text); }
 
 .kasa-breakdown-block {
     margin-top: 8px;
