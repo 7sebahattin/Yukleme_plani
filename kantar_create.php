@@ -36,6 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($kasa_list  as $kd) { if ($kd['name'] === $fis['kasa_cinsi'])  { $kasa_dara_val  = (float)$kd['unit_dara_kg']; break; } }
         foreach ($palet_list as $kd) { if ($kd['name'] === $fis['palet_cinsi']) { $palet_dara_val = (float)$kd['unit_dara_kg']; break; } }
 
+        $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
+        $foto_val = (str_starts_with($foto_raw, 'data:image/')) ? $foto_raw : null;
+
         db()->prepare(
             "INSERT INTO kantar_fisleri
              (fis_no, plaka, firma_adi, giris_tarih, cikis_tarih, operator_adi,
@@ -43,8 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               palet_sayisi, palet_cinsi, kasa_cinsi, kasa_sayisi,
               aciklama,
               tartim1, alibi1, tartim2, alibi2, net_kg,
-              kasa_dara, palet_dara)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+              kasa_dara, palet_dara, foto_data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )->execute([
             $fis['fis_no'],
             strtoupper($fis['plaka']),
@@ -67,10 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $net,
             $kasa_dara_val,
             $palet_dara_val,
+            $foto_val,
         ]);
         $fis_id = (int)db()->lastInsertId();
         set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');
-        header('Location: kantar_edit.php?id=' . $fis_id);
+        header('Location: kantar_view.php?id=' . $fis_id);
         exit;
 
     } catch (Throwable $e) {

@@ -175,6 +175,7 @@ function fmt_tartim($v): string {
         </div>
     </div>
 </section>
+<input type="hidden" name="foto_data" id="kantarFotoDataInput" value="">
 
 <div class="form-foot">
     <a href="kantar.php" class="btn btn-ghost">İptal</a>
@@ -298,11 +299,13 @@ calcNet();
    FİŞ GÖRSELİ + CROP
    ══════════════════════════════════════════ */
 var IMG_KEY    = 'kantar_img_<?= $fis_id ?>';
+var DB_FOTO    = <?= json_encode($fis['foto_data'] ?? null) ?>;
 var imgArea    = document.getElementById('kantarImgArea');
 var imgDisplay = document.getElementById('kantarImgDisplay');
 var imgPh      = document.getElementById('kantarImgPh');
 var imgInput   = document.getElementById('kantarImgInput');
 var imgKaldir  = document.getElementById('kantarImgKaldir');
+var fotoInput  = document.getElementById('kantarFotoDataInput');
 
 function showPhoto(src) {
     imgDisplay.src = src;
@@ -318,13 +321,17 @@ function clearPhoto() {
     try { localStorage.removeItem(IMG_KEY); } catch(e) {}
 }
 
-try {
-    var raw = localStorage.getItem(IMG_KEY);
-    if (raw) {
-        var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-        if (src && src.indexOf('data:') === 0) showPhoto(src);
-    }
-} catch(e) {}
+/* localStorage önce, yoksa DB'den yükle */
+(function () {
+    try {
+        var raw = localStorage.getItem(IMG_KEY);
+        if (raw) {
+            var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
+            if (src && src.indexOf('data:') === 0) { showPhoto(src); return; }
+        }
+    } catch(e) {}
+    if (DB_FOTO && DB_FOTO.indexOf('data:') === 0) showPhoto(DB_FOTO);
+})();
 
 imgArea.addEventListener('click', function(e) {
     if (e.target === imgKaldir || imgKaldir.contains(e.target)) return;
@@ -333,6 +340,7 @@ imgArea.addEventListener('click', function(e) {
 imgKaldir.addEventListener('click', function(e) {
     e.stopPropagation();
     clearPhoto();
+    if (fotoInput) fotoInput.value = '__clear__';
 });
 
 /* ── Crop ── */
@@ -409,6 +417,7 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
     cv.getContext('2d').drawImage(cropSrc, ox, oy, ow, oh, 0, 0, cv.width, cv.height);
     var out = cv.toDataURL('image/jpeg', 0.92);
     try { localStorage.setItem(IMG_KEY, out); } catch(e) {}
+    if (fotoInput) fotoInput.value = out;
     showPhoto(out);
     closeCrop();
 });
