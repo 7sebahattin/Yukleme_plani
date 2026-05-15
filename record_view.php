@@ -236,16 +236,25 @@ $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 
+<?php
+if (($record['type'] ?? 'yukleme') === 'cikma') {
+    $GLOBALS['_nav_cikma_hint'] = true;
+}
+?>
 <?php if (!$print): ?>
 <?php render_flash(); ?>
-<div class="page-head">
-    <div></div>
-    <div class="page-head-actions">
-        <button id="kalanOpenBtn" class="btn">Kalan Palet Hesapla</button>
-        <button id="bmOpenBtn" class="btn">+ Malzeme Çıkışı</button>
-        <a href="<?= h($list_url) ?>" class="btn btn-ghost">← Liste</a>
-        <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">Düzenle</a>
-        <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">Yazdır</a>
+<div class="page-head rv-head">
+    <a href="<?= h($list_url) ?>" class="btn btn-ghost rv-back">← Liste</a>
+    <div class="rv-actions">
+        <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
+        <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
+        <div class="pc-kebab-wrap">
+            <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
+            <div class="pc-dropdown" hidden>
+                <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>
+                <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
+            </div>
+        </div>
     </div>
 </div>
 <?php else: ?>
@@ -710,7 +719,7 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
               <?php
               $bm_by_type = [];
               foreach ($bm_materials as $m) {
-                  if ($m['type'] === 'kasa_cinsi' || $m['type'] === 'palet_tipi') continue;
+                  if (in_array($m['type'], ['kasa_cinsi', 'palet_tipi', 'firma', 'depo', 'urun'])) continue;
                   $bm_by_type[$m['type']][] = $m;
               }
               foreach ($bm_by_type as $btype => $blist):

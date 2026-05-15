@@ -98,6 +98,9 @@ function get_all_active_materials(): array {
 // --- Tanım türü etiketleri (tek kaynak) ---
 function definition_types(): array {
     return [
+        'firma'         => 'Firma',
+        'depo'          => 'Depo',
+        'urun'          => 'Ürün',
         'kasa_cinsi'    => 'Kasa Cinsi',
         'palet_tipi'    => 'Palet Tipi',
         'sapka'         => 'Şapka',
@@ -131,10 +134,10 @@ function render_header(string $title, bool $print_mode = false): void {
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Yükleme">
+    <meta name="apple-mobile-web-app-title" content="Asya Fresh">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="assets/icon.svg">
-    <title><?= h($title) ?> · Yükleme Planı</title>
+    <title><?= h($title) ?> · Asya Fresh</title>
     <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
 <body class="<?= $print_mode ? 'print-mode' : '' ?>">
@@ -142,8 +145,8 @@ function render_header(string $title, bool $print_mode = false): void {
 <header class="topbar">
     <div class="topbar-inner">
         <a href="index.php" class="brand">
-            <span class="brand-logo">📦</span>
-            <span class="brand-text">Yükleme Planı</span>
+            <span class="brand-logo">🌿</span>
+            <span class="brand-text">Asya Fresh</span>
         </a>
         <nav class="topnav">
             <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
@@ -169,8 +172,9 @@ function render_footer(bool $print_mode = false): void {
     if (!$print_mode) {
         $cur = basename($_SERVER['PHP_SELF'] ?? '');
         $is_home     = in_array($cur, ['index.php', '']);
-        $is_records  = in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
-        $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']);
+        $_cikma_hint = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
+        $is_records  = !$_cikma_hint && in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
+        $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']) || $_cikma_hint;
         $is_defs     = $cur === 'definitions.php';
         $is_notes    = $cur === 'notes.php';
         echo '</main>';
@@ -495,7 +499,43 @@ function render_flash(): void {
         if (!in_array('palet_cinsi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_cinsi`  VARCHAR(200) NOT NULL DEFAULT ''");
         if (!in_array('foto_data',    $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `foto_data`    MEDIUMTEXT NULL DEFAULT NULL");
 
-        // 4) dev_notes tablosu
+        // 4) Depo/Ürün tanımlarını normalize et
+        try {
+            $norm = function(string $s): string {
+                return preg_replace('/\s+/', '', strtolower(strtr($s,
+                    ['İ'=>'i','Ş'=>'s','Ç'=>'c','Ğ'=>'g','Ü'=>'u','Ö'=>'o','ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']
+                )));
+            };
+            foreach ($pdo->query("SELECT id, name FROM material_definitions WHERE type='depo'")->fetchAll() as $dr) {
+                if ($norm($dr['name']) === 'cihat') {
+                    $pdo->prepare("UPDATE material_definitions SET name='Karaman Cihat' WHERE id=?")->execute([$dr['id']]);
+                }
+            }
+            // Remove exact duplicates keeping first
+            $depo_rows = $pdo->query("SELECT id, name FROM material_definitions WHERE type='depo' ORDER BY id")->fetchAll();
+            $seen = [];
+            foreach ($depo_rows as $dr) {
+                $k = $norm($dr['name']);
+                if (isset($seen[$k])) {
+                    try { $pdo->prepare("DELETE FROM material_definitions WHERE id=?")->execute([$dr['id']]); } catch(Exception $e2) {}
+                } else { $seen[$k] = true; }
+            }
+            foreach ($pdo->query("SELECT id, name FROM material_definitions WHERE type='urun'")->fetchAll() as $ur) {
+                if ($norm($ur['name']) === 'kayisi') {
+                    $pdo->prepare("UPDATE material_definitions SET name='Kayısı' WHERE id=?")->execute([$ur['id']]);
+                }
+            }
+            $urun_rows = $pdo->query("SELECT id, name FROM material_definitions WHERE type='urun' ORDER BY id")->fetchAll();
+            $seen2 = [];
+            foreach ($urun_rows as $ur) {
+                $k = $norm($ur['name']);
+                if (isset($seen2[$k])) {
+                    try { $pdo->prepare("DELETE FROM material_definitions WHERE id=?")->execute([$ur['id']]); } catch(Exception $e2) {}
+                } else { $seen2[$k] = true; }
+            }
+        } catch(PDOException $e) {}
+
+        // 5) dev_notes tablosu
         $pdo->exec("CREATE TABLE IF NOT EXISTS `dev_notes` (
             `id`         INT AUTO_INCREMENT PRIMARY KEY,
             `page_url`   VARCHAR(255) NOT NULL DEFAULT '',

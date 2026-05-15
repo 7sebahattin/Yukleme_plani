@@ -8,6 +8,9 @@
 $kasa_cinsi_list = get_definitions_by_type('kasa_cinsi');
 $palet_tipi_list = get_definitions_by_type('palet_tipi');
 $all_materials   = get_all_active_materials();
+$firma_list      = get_definitions_by_type('firma');
+$urun_list       = get_definitions_by_type('urun');
+$depo_list       = get_definitions_by_type('depo');
 $type_labels     = definition_types();
 
 $mat_js = [];
@@ -46,7 +49,8 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
     <div class="card-body">
         <div class="grid">
             <label>Firma
-                <input type="text" name="firma" value="<?= h($record['firma'] ?? '') ?>">
+                <input type="text" name="firma" value="<?= h($record['firma'] ?? '') ?>" list="firmaList" autocomplete="off">
+                <datalist id="firmaList"><?php foreach ($firma_list as $f): ?><option value="<?= h($f['name']) ?>"><?php endforeach; ?></datalist>
             </label>
             <label>Bölge
                 <input type="text" name="bolge" value="<?= h($record['bolge'] ?? '') ?>">
@@ -61,11 +65,13 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
             </label>
             <label>Ürün
-                <input type="text" name="urun" id="genelUrun" value="<?= h($record['urun'] ?? '') ?>">
+                <input type="text" name="urun" id="genelUrun" value="<?= h($record['urun'] ?? '') ?>" list="urunList" autocomplete="off">
+                <datalist id="urunList"><?php foreach ($urun_list as $u): ?><option value="<?= h($u['name']) ?>"><?php endforeach; ?></datalist>
             </label>
             <label>Depo <small class="muted">(palet varsayılanı)</small>
                 <input type="text" name="depo_varsayilan" id="genelDepo"
-                       value="<?= h($pallets[0]['depo'] ?? '') ?>" placeholder="Depo">
+                       value="<?= h($pallets[0]['depo'] ?? '') ?>" placeholder="Depo" list="depoList" autocomplete="off">
+                <datalist id="depoList"><?php foreach ($depo_list as $d): ?><option value="<?= h($d['name']) ?>"><?php endforeach; ?></datalist>
             </label>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">

@@ -154,7 +154,7 @@
 
         let opts = '<option value="">-- malzeme seçiniz --</option>';
         Object.keys(matsByType).sort().forEach(t => {
-            if (t === 'kasa_cinsi' || t === 'palet_tipi') return;
+            if (['kasa_cinsi','palet_tipi','firma','depo','urun'].includes(t)) return;
             const label = TYPE_LABELS[t] || t;
             opts += `<optgroup label="${escHtml(label)}">`;
             matsByType[t].forEach(it => {
