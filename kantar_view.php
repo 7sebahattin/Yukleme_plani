@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// kantar_view.php - Kantar fişi görüntüle
+// kantar_view.php - Kantar fişi görüntüle + yazdır
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -22,19 +22,106 @@ if (!$fis) {
 $t1  = (float)($fis['tartim1'] ?? 0);
 $t2  = (float)($fis['tartim2'] ?? 0);
 $net = max(0.0, $t1 - $t2);
-$giris_disp = $fis['giris_tarih'] ? fmt_datetime($fis['giris_tarih']) : fmt_datetime($fis['created_at']);
 
 render_header('Kantar Fişi #' . $id);
 render_flash();
 ?>
 
-<div class="page-head">
+<style>
+@media print {
+    .topbar, .bottomnav, .page-head, .flash,
+    .kv-no-print { display: none !important; }
+
+    body, .container { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+    .container { padding-bottom: 0 !important; }
+
+    .kv-print-header {
+        display: flex !important;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-bottom: 2px solid #000;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+    }
+    .kv-print-h-title { font-size: 18pt; font-weight: 700; }
+    .kv-print-h-sub   { font-size: 10pt; color: #555; margin-top: 2px; }
+    .kv-print-h-right { text-align: right; font-size: 10pt; line-height: 1.6; }
+
+    /* Fotoğraf: sayfanın yarısını kaplayacak şekilde */
+    .kv-photo-card {
+        border: none !important;
+        box-shadow: none !important;
+        margin-bottom: 12px !important;
+        page-break-inside: avoid;
+    }
+    .kv-photo-wrap {
+        background: #fff !important;
+        min-height: unset !important;
+        justify-content: flex-start !important;
+    }
+    .kv-photo {
+        max-height: 45vh !important;
+        width: auto !important;
+        max-width: 100% !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .kv-photo-ph { display: none !important; }
+
+    /* Veri kartları */
+    .card {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        margin-bottom: 10px !important;
+        page-break-inside: avoid;
+    }
+    .card-head { border-bottom: 1px solid #ccc !important; padding: 6px 12px !important; }
+    .card-head h2 { font-size: 10pt !important; }
+    .card-body { padding: 10px 12px !important; }
+
+    .info-grid { font-size: 9.5pt; gap: 6px 14px; }
+    .info-grid .lbl { font-size: 7pt; }
+    .info-grid strong { font-size: 10pt; }
+
+    .kv-tartim-row { padding: 5px 10px; }
+    .kv-tartim-val { font-size: 12pt; }
+
+    .kv-net-box {
+        background: #1a56db !important;
+        color: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .kv-net-val { font-size: 20pt !important; }
+}
+</style>
+
+<!-- Yazdırma başlığı (sadece print modunda görünür) -->
+<div class="kv-print-header" style="display:none">
+    <div>
+        <div class="kv-print-h-title">⚖️ KANTAR FİŞİ<?= $fis['fis_no'] ? ' · ' . h($fis['fis_no']) : '' ?></div>
+        <?php if ($fis['firma_adi']): ?>
+        <div class="kv-print-h-sub"><?= h($fis['firma_adi']) ?><?= $fis['plaka'] ? ' · ' . h($fis['plaka']) : '' ?></div>
+        <?php endif; ?>
+    </div>
+    <div class="kv-print-h-right">
+        <?php if ($fis['giris_tarih']): ?>
+        <div><strong>Giriş:</strong> <?= h(fmt_datetime($fis['giris_tarih'])) ?></div>
+        <?php endif; ?>
+        <?php if ($fis['cikis_tarih']): ?>
+        <div><strong>Çıkış:</strong> <?= h(fmt_datetime($fis['cikis_tarih'])) ?></div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<div class="page-head kv-no-print">
     <div>
         <h1>⚖️ Kantar Fişi <?= $fis['fis_no'] ? '· ' . h($fis['fis_no']) : '#' . $id ?></h1>
     </div>
     <div class="page-head-actions">
         <a href="kantar.php" class="btn btn-ghost">← Liste</a>
         <a href="kantar_edit.php?id=<?= $id ?>" class="btn">Düzenle</a>
+        <button onclick="window.print()" class="btn btn-primary">🖨 Yazdır</button>
     </div>
 </div>
 
@@ -43,7 +130,7 @@ render_flash();
     <div class="kv-photo-wrap">
         <img id="kvImg" class="kv-photo" alt="Kantar fişi görseli" style="display:none">
         <div id="kvImgPh" class="kv-photo-ph">
-            📷<br><span>Bu cihazda bu fiş için görsel yok</span>
+            📷<br><span>Bu fiş için henüz görsel eklenmemiş</span>
         </div>
     </div>
 </section>
@@ -145,7 +232,6 @@ render_flash();
         if (ph) ph.style.display = 'none';
     }
 
-    /* localStorage önce, sonra DB */
     try {
         var raw = localStorage.getItem(KEY);
         if (raw) {
