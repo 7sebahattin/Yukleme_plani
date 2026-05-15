@@ -5,7 +5,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
-$q = trim((string)($_GET['q'] ?? ''));
+$q            = trim((string)($_GET['q'] ?? ''));
+$durum_filter = trim((string)($_GET['durum'] ?? ''));
+if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
 
 $sql = "SELECT r.*,
                (SELECT COUNT(*)                          FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_palet,
@@ -24,6 +26,10 @@ if ($q !== '') {
               OR r.parti_no LIKE :q OR r.on_plaka LIKE :q OR r.arka_plaka LIKE :q
               OR r.urun LIKE :q) ";
     $params[':q'] = '%' . $q . '%';
+}
+if ($durum_filter !== '') {
+    $sql .= " AND r.durum = :durum ";
+    $params[':durum'] = $durum_filter;
 }
 $sql .= " ORDER BY r.id DESC LIMIT 500";
 
@@ -44,13 +50,28 @@ render_header('Çıkmalar');
 </div>
 
 <form method="get" class="search-row">
+    <?php if ($durum_filter !== ''): ?>
+    <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
+    <?php endif; ?>
     <input type="search" name="q" value="<?= h($q) ?>"
            placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
     <button class="btn">Ara</button>
-    <?php if ($q !== ''): ?>
+    <?php if ($q !== '' || $durum_filter !== ''): ?>
         <a href="cikmalar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
 </form>
+
+<?php
+$q_part = $q !== '' ? '&q=' . urlencode($q) : '';
+?>
+<div class="filter-pills">
+    <a href="cikmalar.php<?= $q_part ? '?' . ltrim($q_part, '&') : '' ?>"
+       class="pill<?= $durum_filter === '' ? ' active' : '' ?>">Tümü</a>
+    <a href="cikmalar.php?durum=islendi<?= $q_part ?>"
+       class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
+    <a href="cikmalar.php?durum=yuklendi<?= $q_part ?>"
+       class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
+</div>
 
 <?php if (empty($rows)): ?>
     <div class="empty">

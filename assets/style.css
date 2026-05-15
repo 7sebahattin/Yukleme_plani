@@ -531,6 +531,8 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     font-size: .85rem;
 }
 .pill.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pill.active-islendi { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+.pill.active-yuklendi { background: #10b981; color: #fff; border-color: #10b981; }
 .pill:hover { text-decoration: none; }
 
 .def-card {
