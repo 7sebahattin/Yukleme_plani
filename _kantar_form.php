@@ -168,8 +168,12 @@ function fmt_tartim($v): string {
         </div>
         <div class="kantar-img-actions">
             <label class="btn">
-                📷 Fotoğraf / Belge Ekle
+                📷 Kamera
                 <input type="file" id="kantarImgInput" accept="image/*" capture="environment" style="display:none">
+            </label>
+            <label class="btn">
+                🖼 Galeriden Seç
+                <input type="file" id="kantarImgInputGallery" accept="image/*" style="display:none">
             </label>
             <button type="button" id="kantarImgKaldir" class="btn btn-danger" style="display:none">✕ Kaldır</button>
         </div>
@@ -303,9 +307,10 @@ var DB_FOTO    = <?= json_encode($fis['foto_data'] ?? null) ?>;
 var imgArea    = document.getElementById('kantarImgArea');
 var imgDisplay = document.getElementById('kantarImgDisplay');
 var imgPh      = document.getElementById('kantarImgPh');
-var imgInput   = document.getElementById('kantarImgInput');
-var imgKaldir  = document.getElementById('kantarImgKaldir');
-var fotoInput  = document.getElementById('kantarFotoDataInput');
+var imgInput        = document.getElementById('kantarImgInput');
+var imgInputGallery = document.getElementById('kantarImgInputGallery');
+var imgKaldir       = document.getElementById('kantarImgKaldir');
+var fotoInput       = document.getElementById('kantarFotoDataInput');
 
 function showPhoto(src) {
     imgDisplay.src = src;
@@ -423,14 +428,16 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
 });
 document.getElementById('kantarCropNo').addEventListener('click', closeCrop);
 
-imgInput.addEventListener('change', function() {
-    var file = this.files[0];
+function handleFileSelect(input) {
+    var file = input.files[0];
     if (!file) return;
     var rd = new FileReader();
     rd.onload = function(ev) { openCrop(ev.target.result); };
     rd.readAsDataURL(file);
-    this.value = '';
-});
+    input.value = '';
+}
+imgInput.addEventListener('change', function() { handleFileSelect(this); });
+if (imgInputGallery) imgInputGallery.addEventListener('change', function() { handleFileSelect(this); });
 
 /* ══════════════════════════════════════════
    PALET/KASA HESAPLAMA MODAL
