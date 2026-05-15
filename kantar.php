@@ -70,6 +70,7 @@ render_flash();
                 <td class="num"><?= $r['kasa_sayisi']  ? (int)$r['kasa_sayisi']  : '—' ?></td>
                 <td class="num strong"><?= $net > 0 ? fmt_kg($net) . ' kg' : '—' ?></td>
                 <td class="actions-col">
+                    <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                     <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
                 </td>
             </tr>
@@ -102,6 +103,7 @@ render_flash();
             <div><span>Net KG</span><strong class="strong"><?= $net > 0 ? fmt_kg($net) : '—' ?></strong></div>
         </div>
         <div class="record-card-actions">
+            <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
             <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
         </div>
     </div>
