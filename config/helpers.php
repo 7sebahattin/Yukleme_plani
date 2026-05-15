@@ -151,6 +151,7 @@ function render_header(string $title, bool $print_mode = false): void {
         <nav class="topnav">
             <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
             <a href="cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <a href="reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
             <a href="definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
     </div>

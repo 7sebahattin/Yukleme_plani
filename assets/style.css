@@ -2288,3 +2288,75 @@ body.notes-modal-open { overflow: hidden; }
     background: #10b981; color: #fff; border-color: #10b981;
 }
 .btn-success:hover { background: #059669; border-color: #059669; }
+
+/* ── Reports (reports.php) ── */
+.rpt-head { align-items: flex-start; gap: 10px; }
+.rpt-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rpt-title h1 { margin: 0; }
+.rpt-title .muted { font-size: .85rem; margin: 0; }
+.rpt-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+
+.rpt-filter-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
+}
+.rpt-filter-form { display: flex; flex-wrap: wrap; gap: 10px; }
+.rpt-filter-group {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
+}
+.rpt-filter-group label,
+.rpt-search-label {
+    display: flex; flex-direction: column; gap: 3px;
+    font-size: .82rem; font-weight: 500; color: var(--muted);
+}
+.rpt-filter-group input,
+.rpt-filter-group select {
+    padding: 7px 10px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); font-size: .9rem;
+    background: var(--bg); color: var(--text); min-width: 120px;
+}
+.rpt-filter-actions {
+    display: flex; gap: 6px; align-items: flex-end; margin-top: auto;
+}
+
+.rpt-summary {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
+}
+.rpt-sum-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 2px; min-width: 90px;
+}
+.rpt-sum-item span { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.rpt-sum-item strong { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rpt-sum-highlight { border-color: var(--primary); }
+.rpt-sum-highlight strong { color: var(--primary); }
+
+.rpt-table td, .rpt-table th { white-space: nowrap; }
+.rpt-table .totals-row td,
+.rpt-table tfoot td { font-weight: 700; background: var(--bg); border-top: 2px solid var(--border-strong); }
+
+.rpt-badge {
+    display: inline-block; padding: 2px 7px;
+    border-radius: 20px; font-size: .78rem; font-weight: 600; white-space: nowrap;
+}
+.badge-islendi  { background: #fef3c7; color: #92400e; }
+.badge-yuklendi { background: #d1fae5; color: #065f46; }
+
+@media (max-width: 767px) {
+    .rpt-filter-group input,
+    .rpt-filter-group select { font-size: 16px; min-width: 100px; }
+    .rpt-summary { gap: 6px; }
+    .rpt-sum-item { padding: 8px 10px; min-width: 80px; }
+}
+
+@media print {
+    .topbar, .bottomnav,
+    .rpt-head .rpt-actions,
+    .rpt-filter-card,
+    .rpt-no-print { display: none !important; }
+    body, .container { background: #fff !important; padding: 0 !important; }
+    .rpt-summary { border: 1px solid #ccc !important; }
+    .data-table { font-size: 8pt; }
+    .table-wrap { overflow: visible !important; }
+}

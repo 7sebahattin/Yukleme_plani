@@ -56,6 +56,11 @@ render_flash();
         <div class="home-card-title">Kantar</div>
     </a>
 
+    <a href="reports.php" class="home-card">
+        <div class="home-card-icon" style="background:#faf0ff">📊</div>
+        <div class="home-card-title">Raporlar</div>
+    </a>
+
 </div>
 
 <?php render_footer(); ?>
