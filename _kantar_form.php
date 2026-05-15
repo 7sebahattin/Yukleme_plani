@@ -34,6 +34,9 @@ function fmt_tartim($v): string {
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
         <a href="kantar.php" class="btn btn-ghost">İptal</a>
+        <?php if ($is_edit): ?>
+        <a href="kantar_view.php?id=<?= $fis_id ?>" class="btn btn-ghost">Görüntüle</a>
+        <?php endif; ?>
         <button type="button" class="btn" id="hesaplaAcBtn">Palet / Kasa Hesabı</button>
         <?php if ($is_edit): ?>
         <a href="kantar_delete.php?id=<?= $fis_id ?>"

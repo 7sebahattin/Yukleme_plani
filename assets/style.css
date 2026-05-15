@@ -583,6 +583,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     word-break: break-word;
 }
 .info-grid .lbl { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+.info-grid .span-2 { grid-column: span 2; }
 
 .section-title {
     font-weight: 700; font-size: 1rem;
@@ -1065,6 +1066,36 @@ body.print-mode .topbar { display: none; }
 }
 
 /* ── Kantar fiş görseli ── */
+/* ── Kantar View sayfası ── */
+.kv-photo-card { padding: 0; overflow: hidden; }
+.kv-photo-wrap { width: 100%; background: #111; min-height: 200px; display: flex; align-items: center; justify-content: center; }
+.kv-photo { width: 100%; max-height: 70vh; object-fit: contain; display: block; }
+.kv-photo-ph {
+    color: #aaa; text-align: center; padding: 40px 20px;
+    font-size: .95rem; line-height: 1.8;
+}
+.kv-photo-ph span { font-size: .82rem; color: #888; }
+.kv-tartim-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.kv-tartim-row {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+.kv-tartim-label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; min-width: 80px; }
+.kv-tartim-val { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kv-tartim-unit { font-size: .82rem; font-weight: 400; color: var(--muted); }
+.kv-tartim-alibi { font-size: .8rem; color: var(--muted); margin-left: auto; }
+.kv-net-box {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--primary); color: #fff;
+    border-radius: var(--radius);
+    padding: 14px 18px;
+}
+.kv-net-label { font-size: .85rem; opacity: .85; letter-spacing: .06em; font-weight: 600; }
+.kv-net-val { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
 .kantar-img-area {
     width: 100%; min-height: 180px;
     border: 2px dashed var(--border-strong);

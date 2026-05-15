@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
 
         set_flash('success', 'Fiş güncellendi.');
-        header('Location: kantar_edit.php?id=' . $id);
+        header('Location: kantar_view.php?id=' . $id);
         exit;
 
     } catch (Throwable $e) {
