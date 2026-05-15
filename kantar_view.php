@@ -23,6 +23,14 @@ $t1  = (float)($fis['tartim1'] ?? 0);
 $t2  = (float)($fis['tartim2'] ?? 0);
 $net = max(0.0, $t1 - $t2);
 
+$kasa_say     = (int)($fis['kasa_sayisi']  ?? 0);
+$palet_say    = (int)($fis['palet_sayisi'] ?? 0);
+$kasa_dara_u  = (float)($fis['kasa_dara']  ?? 0);
+$palet_dara_u = (float)($fis['palet_dara'] ?? 0);
+$brut_hesap   = $net;
+$dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
+$net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
+
 render_header('Kantar Fişi #' . $id);
 render_flash();
 ?>
@@ -214,6 +222,14 @@ render_flash();
         <div class="kv-net-box">
             <div class="kv-net-label">NET KG</div>
             <div class="kv-net-val"><?= fmt_kg($net) ?></div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($dara_hesap > 0): ?>
+        <div class="kv-nd-box">
+            <div class="kv-nd-row"><span class="kv-nd-lbl">Brüt (Tartım Neti)</span><strong class="kv-nd-val"><?= fmt_kg($brut_hesap) ?> kg</strong></div>
+            <div class="kv-nd-row"><span class="kv-nd-lbl">Dara</span><strong class="kv-nd-val"><?= fmt_kg($dara_hesap) ?> kg</strong></div>
+            <div class="kv-nd-row kv-nd-net"><span class="kv-nd-lbl">Net KG</span><strong class="kv-nd-val kv-nd-net-val"><?= fmt_kg($net_hesap) ?> kg</strong></div>
         </div>
         <?php endif; ?>
     </div>

@@ -127,14 +127,14 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                         <button type="button"
                                 class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                                 data-durum-action="islendi">
-                            <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşlendi' ?>
+                            <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
                         </button>
                         <?php endif; ?>
                         <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
                                 data-durum-action="yuklendi">
-                            <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yüklendi' ?>
+                            <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
                         </button>
                         <?php endif; ?>
                         <div class="pc-kebab-wrap">
@@ -193,14 +193,14 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <button type="button"
                             class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                             data-durum-action="islendi">
-                        <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşlendi' ?>
+                        <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
                     </button>
                     <?php endif; ?>
                     <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
                     <button type="button"
                             class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
                             data-durum-action="yuklendi">
-                        <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yüklendi' ?>
+                        <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
                     </button>
                     <?php endif; ?>
                 </div>
@@ -268,7 +268,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
             var actionsEl   = islendiBtn ? islendiBtn.parentNode : (yuklendiBtn ? yuklendiBtn.parentNode : null);
 
             if (data.durum === '') {
-                if (islendiBtn) { islendiBtn.textContent = 'İşlendi'; islendiBtn.classList.remove('durum-done'); islendiBtn.style.display = ''; }
+                if (islendiBtn) { islendiBtn.textContent = 'İşle'; islendiBtn.classList.remove('durum-done'); islendiBtn.style.display = ''; }
                 if (yuklendiBtn) yuklendiBtn.remove();
             } else if (data.durum === 'islendi') {
                 if (!islendiBtn && actionsEl) {
@@ -282,10 +282,10 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 if (!yuklendiBtn && actionsEl) {
                     var ny = document.createElement('button');
                     ny.type = 'button'; ny.className = 'btn btn-sm btn-durum-yuklendi';
-                    ny.dataset.durumAction = 'yuklendi'; ny.textContent = 'Yüklendi';
+                    ny.dataset.durumAction = 'yuklendi'; ny.textContent = 'Yükle';
                     actionsEl.appendChild(ny);
                 } else if (yuklendiBtn) {
-                    yuklendiBtn.textContent = 'Yüklendi'; yuklendiBtn.classList.remove('durum-done'); yuklendiBtn.style.display = '';
+                    yuklendiBtn.textContent = 'Yükle'; yuklendiBtn.classList.remove('durum-done'); yuklendiBtn.style.display = '';
                 }
             } else if (data.durum === 'yuklendi') {
                 if (islendiBtn) islendiBtn.remove();

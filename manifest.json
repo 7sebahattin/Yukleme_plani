@@ -1,7 +1,7 @@
 {
-  "name": "Yükleme Planı",
-  "short_name": "Yükleme",
-  "description": "Palet ve kasa yükleme planı yönetimi",
+  "name": "Asya Fresh",
+  "short_name": "Asya",
+  "description": "Asya Fresh yükleme planı ve kayıt yönetimi",
   "start_url": "./index.php",
   "scope": "./",
   "display": "standalone",

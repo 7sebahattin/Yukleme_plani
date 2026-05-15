@@ -18,9 +18,9 @@ render_flash();
 ?>
 
 <div class="home-hero">
-    <div class="home-hero-icon">📦</div>
+    <div class="home-hero-icon">🌿</div>
     <div>
-        <h1 class="home-hero-title">Yükleme Planı</h1>
+        <h1 class="home-hero-title">Asya Fresh</h1>
         <p class="home-hero-sub">Ne yapmak istersiniz?</p>
     </div>
 </div>
@@ -28,20 +28,15 @@ render_flash();
 <div class="home-grid">
 
     <a href="records.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff">📋</div>
+        <div class="home-card-icon" style="background:#eaf1ff">🚚</div>
         <div class="home-card-title">Yüklemeler</div>
         <?php if ($stats['toplam_kayit'] > 0): ?>
         <div class="home-card-badge"><?= (int)$stats['toplam_kayit'] ?></div>
         <?php endif; ?>
     </a>
 
-    <a href="record_new.php" class="home-card">
-        <div class="home-card-icon" style="background:#e7f6ee">➕</div>
-        <div class="home-card-title">Yeni Kayıt</div>
-    </a>
-
     <a href="cikmalar.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea">🚚</div>
+        <div class="home-card-icon" style="background:#fdecea">📋</div>
         <div class="home-card-title">Çıkmalar</div>
         <?php if ($stats['toplam_cikma'] > 0): ?>
         <div class="home-card-badge" style="background:var(--danger)"><?= (int)$stats['toplam_cikma'] ?></div>

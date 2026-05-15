@@ -153,6 +153,13 @@ function fmt_tartim($v): string {
                 <span class="kantar-net-val" id="fisNetKg">—</span>
             </div>
         </div>
+
+        <!-- Brüt / Dara / Net hesap özeti (otomatik güncellenir) -->
+        <div id="kantarNetHesap" class="kantar-net-hesap" style="display:none">
+            <div class="knh-row"><span>Brüt (Tartım Neti)</span><strong id="knhBrut">—</strong></div>
+            <div class="knh-row"><span>Dara (Kasa + Palet)</span><strong id="knhDara">—</strong></div>
+            <div class="knh-row knh-net-row"><span>Net KG</span><strong id="knhNet">—</strong></div>
+        </div>
     </div>
 </section>
 
@@ -238,6 +245,7 @@ function fmt_tartim($v): string {
     <div class="pm-footer" id="kantarPrintFooter" style="display:none">
       <button type="button" class="btn btn-ghost" id="kantarModalKapat3">Kapat</button>
       <button type="button" class="btn" id="mYenidenBtn">← Yeniden Hesapla</button>
+      <button type="button" class="btn btn-success" id="mIsleBtn">✓ Kantar Fişine İşle</button>
       <button type="button" class="btn btn-primary" id="mRaporYazdir">🖨 Raporu Yazdır</button>
     </div>
   </div>
@@ -295,9 +303,29 @@ function calcNet() {
         el.className = 'kantar-net-val';
     }
 }
-document.getElementById('tartim1').addEventListener('input', calcNet);
-document.getElementById('tartim2').addEventListener('input', calcNet);
+document.getElementById('tartim1').addEventListener('input', function() { calcNet(); updateLiveCalc(); });
+document.getElementById('tartim2').addEventListener('input', function() { calcNet(); updateLiveCalc(); });
 calcNet();
+
+/* ─── Brüt / Dara / Net canlı hesap ─── */
+function updateLiveCalc() {
+    var t1  = parseNum(document.getElementById('tartim1').value);
+    var t2  = parseNum(document.getElementById('tartim2').value);
+    var brut = t1 - t2;
+    var kasaSay  = parseNum((document.getElementById('kantarKasaSayisi')  || {}).value || 0);
+    var paletSay = parseNum((document.getElementById('kantarPaletSayisi') || {}).value || 0);
+    var dara = kasaSay * kantarKasaDaraKg + paletSay * kantarPaletDaraKg;
+    var net  = brut - dara;
+    var calcEl = document.getElementById('kantarNetHesap');
+    if (brut > 0 && dara > 0) {
+        document.getElementById('knhBrut').textContent = fmt(brut) + ' kg';
+        document.getElementById('knhDara').textContent = fmt(dara) + ' kg';
+        document.getElementById('knhNet').textContent  = fmt(net)  + ' kg';
+        calcEl.style.display = '';
+    } else {
+        calcEl.style.display = 'none';
+    }
+}
 
 /* ══════════════════════════════════════════
    FİŞ GÖRSELİ + CROP
@@ -445,6 +473,7 @@ if (imgInputGallery) imgInputGallery.addEventListener('change', function() { han
 var kantarKasaDaraKg  = 0;
 var kantarPaletDaraKg = 0;
 var mGrupSay = 0;
+var mLastCalc = { palet: 0, kasa: 0 };
 
 var kasaCinsiSel  = document.getElementById('kantarKasaCinsi');
 var paletCinsiSel = document.getElementById('kantarPaletCinsi');
@@ -454,13 +483,18 @@ function getOptDara(sel) {
     return parseFloat(sel.options[sel.selectedIndex].getAttribute('data-dara') || 0) || 0;
 }
 if (kasaCinsiSel) {
-    kasaCinsiSel.addEventListener('change', function() { kantarKasaDaraKg = getOptDara(this); });
+    kasaCinsiSel.addEventListener('change', function() { kantarKasaDaraKg = getOptDara(this); updateLiveCalc(); });
     kantarKasaDaraKg = getOptDara(kasaCinsiSel);
 }
 if (paletCinsiSel) {
-    paletCinsiSel.addEventListener('change', function() { kantarPaletDaraKg = getOptDara(this); });
+    paletCinsiSel.addEventListener('change', function() { kantarPaletDaraKg = getOptDara(this); updateLiveCalc(); });
     kantarPaletDaraKg = getOptDara(paletCinsiSel);
 }
+var _kasaSayEl  = document.getElementById('kantarKasaSayisi');
+var _paletSayEl = document.getElementById('kantarPaletSayisi');
+if (_kasaSayEl)  _kasaSayEl.addEventListener('input',  updateLiveCalc);
+if (_paletSayEl) _paletSayEl.addEventListener('input', updateLiveCalc);
+updateLiveCalc();
 
 function addModalGrup(ad, palet, kasa) {
     mGrupSay++;
@@ -627,6 +661,8 @@ document.getElementById('mHesaplaBtn').addEventListener('click', function() {
         '</tr></tfoot>' +
         '</table></div>';
 
+    mLastCalc = { palet: totPalet, kasa: totKasa };
+
     var sonuc = document.getElementById('mSonucAlani');
     sonuc.innerHTML = html;
     sonuc.style.display = '';
@@ -636,6 +672,15 @@ document.getElementById('mHesaplaBtn').addEventListener('click', function() {
     setTimeout(function() {
         document.querySelector('#kantarModal .pm-body').scrollTo({ top: 9999, behavior: 'smooth' });
     }, 50);
+});
+
+document.getElementById('mIsleBtn').addEventListener('click', function() {
+    var paletEl = document.getElementById('kantarPaletSayisi');
+    var kasaEl  = document.getElementById('kantarKasaSayisi');
+    if (paletEl && mLastCalc.palet > 0) paletEl.value = Math.round(mLastCalc.palet);
+    if (kasaEl  && mLastCalc.kasa  > 0) kasaEl.value  = Math.round(mLastCalc.kasa);
+    updateLiveCalc();
+    closeHesaplaModal();
 });
 
 document.getElementById('mRaporYazdir').addEventListener('click', function() {
