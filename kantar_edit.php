@@ -48,16 +48,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($kasa_list  as $kd) { if ($kd['name'] === $fis['kasa_cinsi'])  { $kasa_dara_val  = (float)$kd['unit_dara_kg']; break; } }
         foreach ($palet_list as $kd) { if ($kd['name'] === $fis['palet_cinsi']) { $palet_dara_val = (float)$kd['unit_dara_kg']; break; } }
 
-        db()->prepare(
-            "UPDATE kantar_fisleri SET
-             fis_no=?, plaka=?, firma_adi=?, giris_tarih=?, cikis_tarih=?, operator_adi=?,
-             malin_cinsi=?, geldigi_yer=?, gittigi_yer=?,
-             palet_sayisi=?, palet_cinsi=?, kasa_cinsi=?, kasa_sayisi=?,
-             aciklama=?,
-             tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?,
-             kasa_dara=?, palet_dara=?
-             WHERE id=?"
-        )->execute([
+        $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
+        $foto_sql = '';
+        $foto_val = null;
+        if ($foto_raw === '__clear__') {
+            $foto_sql = ', foto_data=NULL';
+        } elseif (str_starts_with($foto_raw, 'data:image/')) {
+            $foto_sql = ', foto_data=?';
+            $foto_val = $foto_raw;
+        }
+
+        $params = [
             $fis['fis_no'],
             strtoupper($fis['plaka']),
             $fis['firma_adi'],
@@ -79,8 +80,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $net,
             $kasa_dara_val,
             $palet_dara_val,
-            $id,
-        ]);
+        ];
+        if ($foto_val !== null) $params[] = $foto_val;
+        $params[] = $id;
+
+        db()->prepare(
+            "UPDATE kantar_fisleri SET
+             fis_no=?, plaka=?, firma_adi=?, giris_tarih=?, cikis_tarih=?, operator_adi=?,
+             malin_cinsi=?, geldigi_yer=?, gittigi_yer=?,
+             palet_sayisi=?, palet_cinsi=?, kasa_cinsi=?, kasa_sayisi=?,
+             aciklama=?,
+             tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?,
+             kasa_dara=?, palet_dara=?
+             {$foto_sql}
+             WHERE id=?"
+        )->execute($params);
 
         set_flash('success', 'Fiş güncellendi.');
         header('Location: kantar_view.php?id=' . $id);

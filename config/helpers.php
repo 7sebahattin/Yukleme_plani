@@ -283,6 +283,7 @@ function render_flash(): void {
         if (!in_array('kasa_cinsi',   $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_cinsi`   VARCHAR(200) NOT NULL DEFAULT ''");
         if (!in_array('kasa_sayisi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_sayisi`  INT NOT NULL DEFAULT 0");
         if (!in_array('palet_cinsi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_cinsi`  VARCHAR(200) NOT NULL DEFAULT ''");
+        if (!in_array('foto_data',    $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `foto_data`    MEDIUMTEXT NULL DEFAULT NULL");
     } catch (PDOException $e) {}
 })();
 

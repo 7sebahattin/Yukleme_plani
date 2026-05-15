@@ -134,20 +134,26 @@ render_flash();
 
 <script>
 (function () {
-    var KEY = 'kantar_img_<?= $id ?>';
+    var KEY     = 'kantar_img_<?= $id ?>';
+    var DB_FOTO = <?= json_encode($fis['foto_data'] ?? null) ?>;
+    var img = document.getElementById('kvImg');
+    var ph  = document.getElementById('kvImgPh');
+
+    function showPhoto(src) {
+        img.src = src;
+        img.style.display = 'block';
+        if (ph) ph.style.display = 'none';
+    }
+
+    /* localStorage önce, sonra DB */
     try {
         var raw = localStorage.getItem(KEY);
         if (raw) {
             var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-            if (src && src.indexOf('data:') === 0) {
-                var img = document.getElementById('kvImg');
-                var ph  = document.getElementById('kvImgPh');
-                img.src = src;
-                img.style.display = 'block';
-                if (ph) ph.style.display = 'none';
-            }
+            if (src && src.indexOf('data:') === 0) { showPhoto(src); return; }
         }
     } catch(e) {}
+    if (DB_FOTO && DB_FOTO.indexOf('data:') === 0) showPhoto(DB_FOTO);
 })();
 </script>
 
