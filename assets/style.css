@@ -1933,17 +1933,21 @@ body.print-mode .asya-sheet {
 }
 .grup-row-inputs {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     padding: 8px 10px;
-    flex-wrap: wrap;
     background: #fff;
 }
 .grup-row-inputs .grup-ad {
-    flex: 1;
-    min-width: 120px;
+    width: 100%;
+    margin-top: 0 !important;
 }
-.grup-row-inputs label {
+.grup-row-numfields {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.grup-row-numfields label {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -1951,11 +1955,14 @@ body.print-mode .asya-sheet {
     font-weight: 600;
     color: var(--muted);
     white-space: nowrap;
+    flex: 1;
+    margin: 0;
 }
-.grup-row-inputs label input {
-    width: 70px;
+.grup-row-numfields label input {
+    flex: 1;
+    min-width: 0;
     text-align: right;
-    margin-top: 0;
+    margin-top: 0 !important;
 }
 .grup-calc-bar {
     display: flex;
@@ -1996,19 +2003,6 @@ body.print-mode .asya-sheet {
 .grup-calc-net-val {
     color: var(--primary) !important;
     font-size: 1rem !important;
-}
-/* Paletsiz mod: sadece kasa darası */
-.grup-calc-bar.paletsiz-mod {
-    background: #fafafa;
-    opacity: .75;
-}
-.grup-calc-bar.paletsiz-mod::after {
-    content: 'sadece kasa';
-    font-size: .65rem;
-    color: #9ca3af;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    margin-left: auto;
 }
 .grup-sum-row {
     border: 1px solid var(--primary);
