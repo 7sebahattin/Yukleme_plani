@@ -73,6 +73,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $foto_val,
         ]);
         $fis_id = (int)db()->lastInsertId();
+
+        // Fiş no boşsa ID'yi kullan; çakışma varsa "-2", "-3" şeklinde benzersiz yap
+        if ($fis['fis_no'] === '') {
+            $base   = (string)$fis_id;
+            $try    = $base;
+            $suffix = 1;
+            $chk    = db()->prepare("SELECT COUNT(*) FROM kantar_fisleri WHERE fis_no = ? AND id != ?");
+            do {
+                $chk->execute([$try, $fis_id]);
+                if ((int)$chk->fetchColumn() === 0) break;
+                $try = $base . '-' . (++$suffix);
+            } while (true);
+            db()->prepare("UPDATE kantar_fisleri SET fis_no = ? WHERE id = ?")->execute([$try, $fis_id]);
+        }
+
         // Grupları kaydet
         if (!empty($_POST['gruplar']) && is_array($_POST['gruplar'])) {
             $gst = db()->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi) VALUES (?,?,?,?,?)");

@@ -382,6 +382,10 @@ function fmt(n) {
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.length > 1 ? parts[0] + ',' + parts[1] : parts[0];
 }
+/* Gruplandırma için tam sayıya yuvarlama (≥0,5 → 1 yukarı) */
+function fmtRound(n) {
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -420,16 +424,16 @@ function _updateGrupCalc() {
         var dara  = palet * paletDaraU + kasa * kasaDaraU;
         var net   = Math.max(0, brut - dara);
         totBrut += brut; totDara += dara; totNet += net;
-        r.querySelector('.gc-brut').textContent = fmt(brut) + ' kg';
-        r.querySelector('.gc-dara').textContent = fmt(dara) + ' kg';
-        r.querySelector('.gc-net').textContent  = fmt(net)  + ' kg';
+        r.querySelector('.gc-brut').textContent = fmtRound(brut) + ' kg';
+        r.querySelector('.gc-dara').textContent = fmtRound(dara) + ' kg';
+        r.querySelector('.gc-net').textContent  = fmtRound(net)  + ' kg';
     });
     var sumEl = document.getElementById('grupSumRow');
     if (sumEl && rows.length > 1) {
         sumEl.style.display = '';
-        sumEl.querySelector('.gc-brut').textContent = fmt(totBrut) + ' kg';
-        sumEl.querySelector('.gc-dara').textContent = fmt(totDara) + ' kg';
-        sumEl.querySelector('.gc-net').textContent  = fmt(totNet)  + ' kg';
+        sumEl.querySelector('.gc-brut').textContent = fmtRound(totBrut) + ' kg';
+        sumEl.querySelector('.gc-dara').textContent = fmtRound(totDara) + ' kg';
+        sumEl.querySelector('.gc-net').textContent  = fmtRound(totNet)  + ' kg';
     } else if (sumEl) {
         sumEl.style.display = 'none';
     }
@@ -476,7 +480,7 @@ if (_grupToggle) {
         if (!open) {
             _grupSection.style.display = '';
             _grupToggle.textContent = '🗂 Gruplandırmayı Kaldır';
-            if (!_grupList.querySelectorAll('.grup-form-row').length) { _addGrupRow(); _addGrupRow(); }
+            if (!_grupList.querySelectorAll('.grup-form-row').length) { _addGrupRow(); }
         } else {
             if (_grupList.querySelectorAll('.grup-form-row').length && !confirm('Grupları kaldırmak istediğinizden emin misiniz?')) return;
             _grupList.innerHTML = '';
@@ -854,13 +858,13 @@ document.getElementById('mHesaplaBtn').addEventListener('click', function() {
         satirlar +=
             '<tr>' +
             '<td><strong>' + esc(g.ad) + '</strong></td>' +
-            '<td class="num">' + fmt(g.palet) + '</td>' +
-            '<td class="num">' + fmt(g.kasa)  + '</td>' +
-            '<td class="num">' + fmt(brut)    + '</td>' +
-            '<td class="num">' + fmt(kDara)   + '</td>' +
-            '<td class="num">' + fmt(pDara)   + '</td>' +
-            '<td class="num">' + fmt(tdara)   + '</td>' +
-            '<td class="num kantar-net">' + fmt(net) + '</td>' +
+            '<td class="num">' + fmt(g.palet)    + '</td>' +
+            '<td class="num">' + fmt(g.kasa)     + '</td>' +
+            '<td class="num">' + fmtRound(brut)  + '</td>' +
+            '<td class="num">' + fmtRound(kDara) + '</td>' +
+            '<td class="num">' + fmtRound(pDara) + '</td>' +
+            '<td class="num">' + fmtRound(tdara) + '</td>' +
+            '<td class="num kantar-net">' + fmtRound(net) + '</td>' +
             '</tr>';
     });
 
@@ -884,13 +888,13 @@ document.getElementById('mHesaplaBtn').addEventListener('click', function() {
         '<tbody>' + satirlar + '</tbody>' +
         '<tfoot><tr class="kantar-toplam-row">' +
             '<td><strong>TOPLAM</strong></td>' +
-            '<td class="num"><strong>' + fmt(totPalet) + '</strong></td>' +
-            '<td class="num"><strong>' + fmt(totKasa)  + '</strong></td>' +
-            '<td class="num"><strong>' + fmt(totBrut)  + '</strong></td>' +
-            '<td class="num"><strong>' + fmt(totKDara) + '</strong></td>' +
-            '<td class="num"><strong>' + fmt(totPDara) + '</strong></td>' +
-            '<td class="num"><strong>' + fmt(totDara)  + '</strong></td>' +
-            '<td class="num kantar-net"><strong>' + fmt(totNet) + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totPalet)      + '</strong></td>' +
+            '<td class="num"><strong>' + fmt(totKasa)       + '</strong></td>' +
+            '<td class="num"><strong>' + fmtRound(totBrut)  + '</strong></td>' +
+            '<td class="num"><strong>' + fmtRound(totKDara) + '</strong></td>' +
+            '<td class="num"><strong>' + fmtRound(totPDara) + '</strong></td>' +
+            '<td class="num"><strong>' + fmtRound(totDara)  + '</strong></td>' +
+            '<td class="num kantar-net"><strong>' + fmtRound(totNet) + '</strong></td>' +
         '</tr></tfoot>' +
         '</table></div>';
 

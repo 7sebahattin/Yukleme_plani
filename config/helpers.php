@@ -22,12 +22,14 @@ function h($v): string {
 // --- Sayı parse (virgül/nokta tolere) ---
 function num($v): float {
     if ($v === null || $v === '') return 0.0;
-    if (is_numeric($v)) return (float)$v;
     $s = str_replace([' ', "\xc2\xa0"], '', (string)$v);
     // Türkçe format: nokta=binler ayırıcı, virgül=ondalık (ör. "1.234,560")
+    // is_numeric kısa yolu kullanılmaz: "40.960" → is_numeric=true → 40.96 (yanlış!)
     if (str_contains($s, ',')) {
         $s = str_replace('.', '', $s); // binler noktasını sil
         $s = str_replace(',', '.', $s); // ondalık virgülü → nokta
+    } else {
+        $s = str_replace('.', '', $s); // nokta her zaman binler ayracıdır (ör. "40.960" → 40960)
     }
     return is_numeric($s) ? (float)$s : 0.0;
 }
