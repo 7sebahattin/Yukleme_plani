@@ -574,6 +574,10 @@ function clearPhoto() {
 
 /* localStorage önce, yoksa DB endpoint'ten yükle */
 (function () {
+    <?php if (!$is_edit): ?>
+    /* Yeni fiş: önceki oturumdan kalan fotoğrafı temizle */
+    try { localStorage.removeItem(IMG_KEY); } catch(e) {}
+    <?php else: ?>
     try {
         var raw = localStorage.getItem(IMG_KEY);
         if (raw) {
@@ -582,6 +586,7 @@ function clearPhoto() {
         }
     } catch(e) {}
     if (DB_FOTO_URL) showPhoto(DB_FOTO_URL);
+    <?php endif; ?>
 })();
 
 imgArea.addEventListener('click', function(e) {
