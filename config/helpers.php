@@ -356,16 +356,12 @@ function render_footer(bool $print_mode = false): void {
             var id  = parseInt(checkBtn.dataset.id, 10);
             var row = listEl.querySelector('.notes-row[data-note-id="' + id + '"]');
             checkBtn.disabled = true;
-            postJson('note_update.php', { action: 'toggle', id: id })
+            postJson('note_update.php', { action: 'delete', id: id })
                 .then(function (d) {
-                    checkBtn.disabled = false;
-                    if (!d.ok) { alert(d.msg || 'Hata'); return; }
-                    if (d.done) {
-                        row.classList.add('notes-done');
-                        checkBtn.textContent = '↩'; checkBtn.title = 'Geri Al';
-                    } else {
-                        row.classList.remove('notes-done');
-                        checkBtn.textContent = '✓'; checkBtn.title = 'Tamamlandı';
+                    if (!d.ok) { checkBtn.disabled = false; alert(d.msg || 'Hata'); return; }
+                    row.remove();
+                    if (!listEl.querySelector('.notes-row')) {
+                        listEl.innerHTML = '<div class="notes-empty">Bekleyen not yok.</div>';
                     }
                 });
         }
@@ -512,7 +508,7 @@ function render_flash(): void {
         if (!in_array('palet_cinsi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_cinsi`  VARCHAR(200) NOT NULL DEFAULT ''");
         if (!in_array('foto_data',    $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `foto_data`    MEDIUMTEXT NULL DEFAULT NULL");
 
-        // 4) Depo/Ürün tanımlarını normalize et
+        // 4) Depo/Ürün tanımlarını normalize et + loading_pallets.depo normalize
         try {
             $norm = function(string $s): string {
                 return preg_replace('/\s+/', '', strtolower(strtr($s,
@@ -545,6 +541,10 @@ function render_flash(): void {
                 if (isset($seen2[$k])) {
                     try { $pdo->prepare("DELETE FROM material_definitions WHERE id=?")->execute([$ur['id']]); } catch(Exception $e2) {}
                 } else { $seen2[$k] = true; }
+            }
+            // loading_pallets.depo normalize (Cihat / CİHAT → Karaman Cihat)
+            foreach (['Cihat','CİHAT','CIHAT','cihat','cİhat'] as $old_depo) {
+                $pdo->prepare("UPDATE loading_pallets SET depo='Karaman Cihat' WHERE depo=?")->execute([$old_depo]);
             }
         } catch(PDOException $e) {}
 

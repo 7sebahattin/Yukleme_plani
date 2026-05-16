@@ -25,6 +25,13 @@ csrf_check($data['csrf'] ?? null);
 $action = (string)($data['action'] ?? '');
 $id     = (int)($data['id'] ?? 0);
 
+if ($action === 'delete_all_done') {
+    $cnt = (int)db()->query("SELECT COUNT(*) FROM dev_notes WHERE done=1")->fetchColumn();
+    db()->exec("DELETE FROM dev_notes WHERE done=1");
+    echo json_encode(['ok' => true, 'deleted' => $cnt]);
+    exit;
+}
+
 if ($id <= 0) {
     echo json_encode(['ok' => false, 'msg' => 'Geçersiz ID.']);
     exit;

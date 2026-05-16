@@ -23,7 +23,7 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
         <?php if ($done_count > 0): ?>
-        <button id="toggleDoneBtn" class="btn btn-ghost btn-sm">Tamamlananları Göster (<?= $done_count ?>)</button>
+        <button id="deleteDoneBtn" class="btn btn-danger btn-sm">🗑 Tamamlananları Sil (<?= $done_count ?>)</button>
         <?php endif; ?>
         <button id="notesCopyAllBtn" class="btn btn-primary">📋 Claude için Kopyala</button>
     </div>
@@ -46,9 +46,9 @@ render_flash();
             <span class="notes-item-text"><?= nl2br(h($n['note'])) ?></span>
         </div>
         <div class="notes-item-actions">
-            <button class="btn btn-sm notes-toggle-btn" data-note-id="<?= (int)$n['id'] ?>">
-                <?= $n['done'] ? '↩ Geri Al' : '✓ Tamamlandı' ?>
-            </button>
+            <?php if (!$n['done']): ?>
+            <button class="btn btn-sm btn-success notes-done-btn" data-note-id="<?= (int)$n['id'] ?>">✓ Tamamlandı</button>
+            <?php endif; ?>
             <button class="btn btn-sm btn-ghost notes-del-btn" data-note-id="<?= (int)$n['id'] ?>">✕ Sil</button>
         </div>
     </div>
@@ -60,19 +60,21 @@ render_flash();
 (function () {
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-    // Tamamlananları başlangıçta gizle
-    var showDone = false;
+    // Tamamlananları gizle
     document.querySelectorAll('.notes-done').forEach(function (el) { el.hidden = true; });
 
-    var toggleDoneBtn = document.getElementById('toggleDoneBtn');
-    if (toggleDoneBtn) {
-        toggleDoneBtn.addEventListener('click', function () {
-            showDone = !showDone;
-            document.querySelectorAll('.notes-done').forEach(function (el) { el.hidden = !showDone; });
-            var cnt = document.querySelectorAll('.notes-done').length;
-            toggleDoneBtn.textContent = showDone
-                ? 'Tamamlananları Gizle (' + cnt + ')'
-                : 'Tamamlananları Göster (' + cnt + ')';
+    // Tamamlananları toplu sil
+    var deleteDoneBtn = document.getElementById('deleteDoneBtn');
+    if (deleteDoneBtn) {
+        deleteDoneBtn.addEventListener('click', function () {
+            if (!confirm('Tüm tamamlanan notlar kalıcı olarak silinsin mi?')) return;
+            deleteDoneBtn.disabled = true;
+            postJson('note_update.php', { action: 'delete_all_done', id: 0 })
+                .then(function (d) {
+                    if (!d.ok) { deleteDoneBtn.disabled = false; alert(d.msg || 'Hata'); return; }
+                    document.querySelectorAll('.notes-done').forEach(function (el) { el.remove(); });
+                    deleteDoneBtn.remove();
+                });
         });
     }
 
@@ -86,24 +88,18 @@ render_flash();
     }
 
     document.addEventListener('click', function (e) {
-        var toggleBtn = e.target.closest('.notes-toggle-btn');
-        var delBtn    = e.target.closest('.notes-del-btn');
+        var doneBtn = e.target.closest('.notes-done-btn');
+        var delBtn  = e.target.closest('.notes-del-btn');
 
-        if (toggleBtn) {
-            var id   = parseInt(toggleBtn.dataset.noteId, 10);
+        if (doneBtn) {
+            var id   = parseInt(doneBtn.dataset.noteId, 10);
             var item = document.querySelector('.notes-item[data-note-id="' + id + '"]');
-            toggleBtn.disabled = true;
+            doneBtn.disabled = true;
             postJson('note_update.php', { action: 'toggle', id: id })
                 .then(function (d) {
-                    toggleBtn.disabled = false;
-                    if (!d.ok) { alert(d.msg || 'Hata'); return; }
-                    if (d.done) {
-                        item.classList.add('notes-done');
-                        toggleBtn.textContent = '↩ Geri Al';
-                    } else {
-                        item.classList.remove('notes-done');
-                        toggleBtn.textContent = '✓ Tamamlandı';
-                    }
+                    if (!d.ok) { doneBtn.disabled = false; alert(d.msg || 'Hata'); return; }
+                    item.hidden = true;
+                    item.classList.add('notes-done');
                 });
         }
 
