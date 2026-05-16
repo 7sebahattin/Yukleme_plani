@@ -14,6 +14,29 @@ $depo_list       = get_definitions_by_type('depo');
 $bolge_list      = get_definitions_by_type('bolge');
 $type_labels     = definition_types();
 
+// Stored values for selects (may not be in definitions list)
+$_firma_names  = array_column($firma_list,  'name');
+$_urun_names   = array_column($urun_list,   'name');
+$_depo_names   = array_column($depo_list,   'name');
+$_bolge_names  = array_column($bolge_list,  'name');
+$_cur_firma    = $record['firma']         ?? '';
+$_cur_urun     = $record['urun']          ?? '';
+$_cur_depo     = $pallets[0]['depo']      ?? '';
+$_cur_bolge    = $record['bolge']         ?? '';
+
+// Helper: render select with optional legacy value
+function sel_opt(string $name, string $stored, array $names): string {
+    $out = '<option value="">-- seçiniz --</option>';
+    if ($stored !== '' && !in_array($stored, $names, true)) {
+        $out .= '<option value="'.htmlspecialchars($stored, ENT_QUOTES).'" selected>'.htmlspecialchars($stored, ENT_QUOTES).'</option>';
+    }
+    foreach ($names as $n) {
+        $sel = $stored === $n ? ' selected' : '';
+        $out .= '<option value="'.htmlspecialchars($n, ENT_QUOTES).'"'.$sel.'>'.htmlspecialchars($n, ENT_QUOTES).'</option>';
+    }
+    return $out;
+}
+
 $mat_js = [];
 foreach ($all_materials as $m) {
     $mat_js[(int)$m['id']] = [
@@ -50,12 +73,10 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
     <div class="card-body">
         <div class="grid">
             <label>Firma
-                <input type="text" name="firma" value="<?= h($record['firma'] ?? '') ?>" list="firmaList">
-                <datalist id="firmaList"><?php foreach ($firma_list as $f): ?><option value="<?= h($f['name']) ?>"><?php endforeach; ?></datalist>
+                <select name="firma"><?= sel_opt('firma', $_cur_firma, $_firma_names) ?></select>
             </label>
             <label>Bölge
-                <input type="text" name="bolge" value="<?= h($record['bolge'] ?? '') ?>" list="bolgeList">
-                <datalist id="bolgeList"><?php foreach ($bolge_list as $b): ?><option value="<?= h($b['name']) ?>"><?php endforeach; ?></datalist>
+                <select name="bolge"><?= sel_opt('bolge', $_cur_bolge, $_bolge_names) ?></select>
             </label>
             <label>Parti No
                 <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>">
@@ -67,13 +88,10 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
             </label>
             <label>Ürün
-                <input type="text" name="urun" id="genelUrun" value="<?= h($record['urun'] ?? '') ?>" list="urunList">
-                <datalist id="urunList"><?php foreach ($urun_list as $u): ?><option value="<?= h($u['name']) ?>"><?php endforeach; ?></datalist>
+                <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
             </label>
             <label>Depo <small class="muted">(palet varsayılanı)</small>
-                <input type="text" name="depo_varsayilan" id="genelDepo"
-                       value="<?= h($pallets[0]['depo'] ?? '') ?>" placeholder="Depo" list="depoList">
-                <datalist id="depoList"><?php foreach ($depo_list as $d): ?><option value="<?= h($d['name']) ?>"><?php endforeach; ?></datalist>
+                <select name="depo_varsayilan" id="genelDepo"><?= sel_opt('depo', $_cur_depo, $_depo_names) ?></select>
             </label>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
@@ -154,6 +172,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 <script id="paletTipiData" type="application/json"><?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'name'=>$r['name'],'unit'=>(float)$r['unit_dara_kg']], $palet_tipi_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="materialTypesData" type="application/json"><?= json_encode($type_labels, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="palletsInit" type="application/json"><?= json_encode($pallets, JSON_UNESCAPED_UNICODE) ?></script>
+<script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
 
 </form>
 
@@ -208,9 +227,9 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
           <span>Ürün Cinsi</span>
           <input type="text" id="pmUrunCinsi" placeholder="Ürün cinsi">
         </label>
-        <label class="pm-label">
+        <label class="pm-label pm-span2">
           <span>Depo</span>
-          <input type="text" id="pmDepo" placeholder="Depo">
+          <select id="pmDepo"><option value="">-- Depo seçiniz --</option></select>
         </label>
       </div>
 
