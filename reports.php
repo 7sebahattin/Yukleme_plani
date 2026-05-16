@@ -62,6 +62,30 @@ function rpt_date_filter(string &$sql, array &$p, string $col, string $from, str
     if ($to   !== '') { $sql .= " AND $col <= :dt"; $p[':dt'] = $to;   }
 }
 
+// Türkçe karakter duyarsız normalleştirme (KAYISI → kayısı gibi birleştirmek için)
+function rpt_norm(string $s): string {
+    return mb_strtolower(strtr($s, [
+        'İ'=>'i', 'I'=>'ı', 'Ş'=>'ş', 'Ğ'=>'ğ', 'Ü'=>'ü', 'Ö'=>'ö', 'Ç'=>'ç',
+    ]), 'UTF-8');
+}
+
+function rpt_merge_rows(array $rows, string $key_col, array $sum_int, array $sum_float): array {
+    $merged  = [];
+    $key_map = [];
+    foreach ($rows as $row) {
+        $key = rpt_norm((string)($row[$key_col] ?? ''));
+        if (!isset($key_map[$key])) {
+            $key_map[$key] = count($merged);
+            $merged[] = $row;
+        } else {
+            $idx = $key_map[$key];
+            foreach ($sum_int   as $c) $merged[$idx][$c] = (int)($merged[$idx][$c] ?? 0) + (int)($row[$c] ?? 0);
+            foreach ($sum_float as $c) $merged[$idx][$c] = (float)($merged[$idx][$c] ?? 0) + (float)($row[$c] ?? 0);
+        }
+    }
+    return $merged;
+}
+
 if ($type === 'yukleme' || $type === 'cikma') {
     $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
@@ -116,6 +140,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $sql .= " GROUP BY p.depo ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
+    $rows = rpt_merge_rows($rows, 'depo',
+        ['kayit_sayisi','toplam_kasa'],
+        ['toplam_brut','toplam_dara','toplam_net']);
     $cols = ['depo','kayit_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net','ilk_tarih','son_tarih'];
     foreach ($rows as $r) {
         $totals['toplam_kasa'] = ($totals['toplam_kasa'] ?? 0) + (float)$r['toplam_kasa'];
@@ -139,6 +166,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $sql .= " GROUP BY r.urun ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
+    // Türkçe karakter nedeniyle aynı ürün farklı satır olarak görünebilir — birleştir
+    $rows = rpt_merge_rows($rows, 'urun',
+        ['kayit_sayisi','palet_sayisi','toplam_kasa'],
+        ['toplam_brut','toplam_net']);
     $cols = ['urun','kayit_sayisi','palet_sayisi','toplam_kasa','toplam_brut','toplam_net'];
     foreach ($rows as $r) {
         $totals['toplam_kasa'] = ($totals['toplam_kasa'] ?? 0) + (float)$r['toplam_kasa'];
@@ -164,6 +195,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $sql .= " GROUP BY r.firma ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
+    // Aynı firma farklı büyük/küçük harf ile kaydedilmiş olabilir — birleştir
+    $rows = rpt_merge_rows($rows, 'firma',
+        ['toplam_kayit','yukleme_sayisi','cikma_sayisi','toplam_kasa'],
+        ['toplam_brut','toplam_net']);
     $cols = ['firma','toplam_kayit','yukleme_sayisi','cikma_sayisi','toplam_kasa','toplam_brut','toplam_net','ilk_tarih','son_tarih'];
     foreach ($rows as $r) {
         $totals['toplam_kasa'] = ($totals['toplam_kasa'] ?? 0) + (float)$r['toplam_kasa'];
@@ -443,7 +478,8 @@ render_flash();
             $v = $r[$c] ?? '';
             if ($c === 'durum') {
                 $cls = $v === 'islendi' ? 'badge-islendi' : ($v === 'yuklendi' ? 'badge-yuklendi' : '');
-                echo '<td>' . ($v ? '<span class="rpt-badge '.$cls.'">'.h($c==='durum'&&$v==='islendi'?'İşlendi':($v==='yuklendi'?'Yüklendi':'')).'</span>' : '<span class="muted">—</span>') . '</td>';
+                $lbl = $v === 'islendi' ? 'İşlendi' : ($v === 'yuklendi' ? 'Yüklendi' : h($v));
+                echo '<td>' . ($v !== '' ? '<span class="rpt-badge '.$cls.'">'.$lbl.'</span>' : '<span class="muted">—</span>') . '</td>';
             } elseif ($c === 'is_active') {
                 echo '<td>' . ($v ? '<span class="rpt-badge badge-yuklendi">Aktif</span>' : '<span class="muted">Pasif</span>') . '</td>';
             } elseif ($c === 'material_type') {

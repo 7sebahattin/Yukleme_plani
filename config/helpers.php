@@ -100,6 +100,7 @@ function definition_types(): array {
     return [
         'firma'         => 'Firma',
         'depo'          => 'Depo',
+        'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
         'kasa_cinsi'    => 'Kasa Cinsi',
         'palet_tipi'    => 'Palet Tipi',
@@ -247,7 +248,7 @@ function render_footer(bool $print_mode = false): void {
     if (!modal || !openBtn) return;
 
     var pageUrl  = window.location.pathname + (window.location.search || '');
-    var pageName = (document.title || '').replace(' · Yükleme Planı', '').trim();
+    var pageName = (document.title || '').replace(' · Asya Fresh', '').trim();
 
     function postJson(url, body) {
         body.csrf = csrf;
@@ -288,9 +289,20 @@ function render_footer(bool $print_mode = false): void {
                     listEl.innerHTML = '<div class="notes-empty">Henüz not yok.</div>';
                     return;
                 }
+                var doneCount = 0;
                 d.notes.forEach(function (n) {
+                    if (parseInt(n.done, 10) === 1) { doneCount++; return; }
                     listEl.appendChild(renderNote(n));
                 });
+                if (!listEl.children.length) {
+                    listEl.innerHTML = '<div class="notes-empty">Bekleyen not yok.</div>';
+                }
+                if (doneCount > 0) {
+                    var inf = document.createElement('div');
+                    inf.className = 'notes-done-info';
+                    inf.textContent = doneCount + ' tamamlanan not gizlendi';
+                    listEl.appendChild(inf);
+                }
             })
             .catch(function () {
                 listEl.innerHTML = '<div class="notes-empty">Yüklenemedi.</div>';

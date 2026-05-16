@@ -9,6 +9,8 @@ $rows = db()->query(
     "SELECT id, page_url, page_name, note, done, created_at
      FROM dev_notes ORDER BY done ASC, id DESC"
 )->fetchAll();
+$done_count = count(array_filter($rows, fn($r) => (int)$r['done'] === 1));
+$open_count = count($rows) - $done_count;
 
 render_header('Notlar');
 render_flash();
@@ -17,9 +19,14 @@ render_flash();
 <div class="page-head">
     <div>
         <h1>📝 Notlar</h1>
-        <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
+        <p class="muted"><?= $open_count ?> açık<?= $done_count > 0 ? ' · ' . $done_count . ' tamamlanan' : '' ?></p>
     </div>
-    <button id="notesCopyAllBtn" class="btn btn-primary">📋 Claude için Kopyala</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <?php if ($done_count > 0): ?>
+        <button id="toggleDoneBtn" class="btn btn-ghost btn-sm">Tamamlananları Göster (<?= $done_count ?>)</button>
+        <?php endif; ?>
+        <button id="notesCopyAllBtn" class="btn btn-primary">📋 Claude için Kopyala</button>
+    </div>
 </div>
 
 <?php if (empty($rows)): ?>
@@ -52,6 +59,22 @@ render_flash();
 <script>
 (function () {
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    // Tamamlananları başlangıçta gizle
+    var showDone = false;
+    document.querySelectorAll('.notes-done').forEach(function (el) { el.hidden = true; });
+
+    var toggleDoneBtn = document.getElementById('toggleDoneBtn');
+    if (toggleDoneBtn) {
+        toggleDoneBtn.addEventListener('click', function () {
+            showDone = !showDone;
+            document.querySelectorAll('.notes-done').forEach(function (el) { el.hidden = !showDone; });
+            var cnt = document.querySelectorAll('.notes-done').length;
+            toggleDoneBtn.textContent = showDone
+                ? 'Tamamlananları Gizle (' + cnt + ')'
+                : 'Tamamlananları Göster (' + cnt + ')';
+        });
+    }
 
     function postJson(url, body) {
         body.csrf = csrf;
