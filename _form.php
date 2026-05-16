@@ -179,7 +179,7 @@ $form_is_cikma = $form_is_cikma ?? false;
 </section>
 
 <div class="form-foot">
-    <a href="records.php" class="btn btn-ghost">İptal</a>
+    <a href="<?= h($cancel_url ?? 'records.php') ?>" class="btn btn-ghost">İptal</a>
     <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
 </div>
 
