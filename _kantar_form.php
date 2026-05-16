@@ -407,40 +407,18 @@ function _updateGrupCalc() {
     var paletDaraU = _getPaletDaraUnit();
     var rows = _grupList.querySelectorAll('.grup-form-row');
 
-    // 1. Paletsiz kasaların tare toplamını brütten çıkar
-    var paletsizKasaDara = 0;
-    rows.forEach(function(r) {
-        var palet = parseNum(r.querySelector('.grup-palet').value);
-        var kasa  = parseNum(r.querySelector('.grup-kasa').value);
-        if (palet === 0 && kasa > 0) paletsizKasaDara += kasa * kasaDaraU;
-    });
-    var paletBrutPool = Math.max(0, brutTotal - paletsizKasaDara);
-
-    // 2. Toplam palet (sadece paleti olan gruplar)
-    var totPalet = 0;
-    rows.forEach(function(r) {
-        var p = parseNum(r.querySelector('.grup-palet').value);
-        if (p > 0) totPalet += p;
-    });
+    // Toplam kasa → kasa başı brüt ağırlığı
+    var totKasa = 0;
+    rows.forEach(function(r) { totKasa += parseNum(r.querySelector('.grup-kasa').value); });
+    var brutPerKasa = totKasa > 0 ? brutTotal / totKasa : 0;
 
     var totBrut = 0, totDara = 0, totNet = 0;
     rows.forEach(function(r) {
         var palet = parseNum(r.querySelector('.grup-palet').value);
         var kasa  = parseNum(r.querySelector('.grup-kasa').value);
-        var brut, dara, net;
-        var calcBar = r.querySelector('.grup-calc-bar');
-        if (palet === 0 && kasa > 0) {
-            // Paletsiz grup: sadece kasa darası, brüt = kasa tare, net = 0
-            brut = kasa * kasaDaraU;
-            dara = brut;
-            net  = 0;
-            if (calcBar) calcBar.classList.add('paletsiz-mod');
-        } else {
-            brut = totPalet > 0 ? (palet / totPalet) * paletBrutPool : 0;
-            dara = palet * paletDaraU + kasa * kasaDaraU;
-            net  = Math.max(0, brut - dara);
-            if (calcBar) calcBar.classList.remove('paletsiz-mod');
-        }
+        var brut  = kasa * brutPerKasa;
+        var dara  = palet * paletDaraU + kasa * kasaDaraU;
+        var net   = Math.max(0, brut - dara);
         totBrut += brut; totDara += dara; totNet += net;
         r.querySelector('.gc-brut').textContent = fmt(brut) + ' kg';
         r.querySelector('.gc-dara').textContent = fmt(dara) + ' kg';
@@ -465,9 +443,11 @@ function _addGrupRow(ad, palet, kasa) {
     row.innerHTML =
         '<div class="grup-row-inputs">' +
             '<input type="text" name="gruplar[' + n + '][grup_adi]" class="grup-ad" placeholder="Firma / grup adı" value="' + esc(ad || '') + '">' +
-            '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
-            '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
-            '<button type="button" class="grup-del-btn" title="Sil">✕</button>' +
+            '<div class="grup-row-numfields">' +
+                '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
+                '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
+                '<button type="button" class="grup-del-btn" title="Sil">✕</button>' +
+            '</div>' +
         '</div>' +
         '<div class="grup-calc-bar">' +
             '<div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>' +
