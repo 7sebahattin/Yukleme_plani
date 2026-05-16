@@ -3,6 +3,7 @@
 // _form.php (v2)
 // Kayıt formu (create ve edit ortak kullanır)
 //   $record / $pallets / $form_action / $title / $submit_label
+//   $form_is_cikma — true ise nakliye + bazı genel alanlar gizlenir
 // =========================================================
 
 $kasa_cinsi_list = get_definitions_by_type('kasa_cinsi');
@@ -49,8 +50,9 @@ foreach ($all_materials as $m) {
 }
 
 // Düzenleme modunda kartları başlangıçta kapalı aç (özet daha önemli)
-$is_edit_mode = !empty($record['id']);
+$is_edit_mode  = !empty($record['id']);
 $collapsed_class = $is_edit_mode ? ' collapsed' : '';
+$form_is_cikma = $form_is_cikma ?? false;
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="recordForm" class="record-form" novalidate>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -82,15 +84,19 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <select name="bolge"><?= sel_opt('bolge', $_cur_bolge, $_bolge_names) ?></select>
                 <?php if (empty($_bolge_names)): ?><small class="muted">Tanımlar → Bölgeler'den ekleyin</small><?php endif; ?>
             </label>
+            <?php if (!$form_is_cikma): ?>
             <label>Parti No
                 <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>">
             </label>
+            <?php endif; ?>
             <label>Tarih
                 <input type="date" name="tarih" value="<?= h($record['tarih'] ?? '') ?>">
             </label>
+            <?php if (!$form_is_cikma): ?>
             <label>Alıcı
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
             </label>
+            <?php endif; ?>
             <label>Ürün
                 <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
                 <?php if (empty($_urun_names)): ?><small class="muted">Tanımlar → Ürünler'den ekleyin</small><?php endif; ?>
@@ -99,6 +105,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <select name="depo_varsayilan" id="genelDepo"><?= sel_opt('depo', $_cur_depo, $_depo_names) ?></select>
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>
+            <?php if (!$form_is_cikma): ?>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
             </label>
@@ -111,11 +118,13 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
             <label>Casus No
                 <input type="text" name="casus_no" value="<?= h($record['casus_no'] ?? '') ?>">
             </label>
+            <?php endif; ?>
         </div>
     </div>
 </section>
 
-<!-- ============== NAKLİYE BİLGİLERİ (açılır) ============== -->
+<!-- ============== NAKLİYE BİLGİLERİ (açılır) — yükleme'de göster ============== -->
+<?php if (!$form_is_cikma): ?>
 <section class="card collapsible-card<?= $collapsed_class ?>">
     <div class="card-head card-head-toggle">
         <h2>Nakliye Bilgileri</h2>
@@ -149,6 +158,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         </div>
     </div>
 </section>
+<?php endif; ?>
 
 <!-- ============== YÜKLEME PLANI / PALETLER ============== -->
 <section class="card">
