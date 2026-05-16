@@ -187,7 +187,14 @@ $form_is_cikma = $form_is_cikma ?? false;
 <script id="kasaCinsiData" type="application/json"><?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'name'=>$r['name'],'unit'=>(float)$r['unit_dara_kg']], $kasa_cinsi_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="paletTipiData" type="application/json"><?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'name'=>$r['name'],'unit'=>(float)$r['unit_dara_kg']], $palet_tipi_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="materialTypesData" type="application/json"><?= json_encode($type_labels, JSON_UNESCAPED_UNICODE) ?></script>
-<script id="palletsInit" type="application/json"><?= json_encode($pallets, JSON_UNESCAPED_UNICODE) ?></script>
+<script id="palletsInit" type="application/json"><?= json_encode(
+    array_map(fn($p) => array_merge($p, [
+        'brut_kg'    => isset($p['brut_kg'])    ? (float)$p['brut_kg']    : null,
+        'dara_kg'    => isset($p['dara_kg'])    ? (float)$p['dara_kg']    : null,
+        'net_kg'     => isset($p['net_kg'])     ? (float)$p['net_kg']     : null,
+        'kasa_adeti' => isset($p['kasa_adeti']) ? (int)  $p['kasa_adeti'] : null,
+    ]), $pallets),
+    JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
 
 </form>
