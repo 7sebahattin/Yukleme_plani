@@ -358,24 +358,45 @@ render_flash();
         </section>
 
         <?php if (!empty($gruplar)):
-            // Toplam palet sayısını gruplardan hesapla
-            $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
+            // Paletsiz kasaların dara toplamını brütten ayır
+            $paletsiz_kasa_dara = 0.0;
+            foreach ($gruplar as $g) {
+                if ((int)$g['palet_sayisi'] === 0 && (int)$g['kasa_adedi'] > 0) {
+                    $paletsiz_kasa_dara += (int)$g['kasa_adedi'] * $kasa_dara_u;
+                }
+            }
+            $palet_brut_pool = max(0.0, $net - $paletsiz_kasa_dara);
+
+            // Toplam palet: sadece paleti olan gruplardan
+            $tot_palet_only = 0;
+            foreach ($gruplar as $g) {
+                if ((int)$g['palet_sayisi'] > 0) $tot_palet_only += (int)$g['palet_sayisi'];
+            }
+
             $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
             $grup_tot_brut  = 0.0;
             $grup_tot_dara  = 0.0;
             $grup_tot_net   = 0.0;
             $grup_rows      = [];
             foreach ($gruplar as $g) {
-                $gp    = (int)$g['palet_sayisi'];
-                $gk    = (int)$g['kasa_adedi'];
-                $gbrut = $grup_tot_palet > 0 ? ($gp / $grup_tot_palet) * $net : 0.0;
-                $gdara = $gp * $palet_dara_u + $gk * $kasa_dara_u;
-                $gnet  = max(0.0, $gbrut - $gdara);
+                $gp = (int)$g['palet_sayisi'];
+                $gk = (int)$g['kasa_adedi'];
+                if ($gp === 0 && $gk > 0) {
+                    // Paletsiz grup: sadece kasa darası, brüt = kasa tare, net = 0
+                    $gbrut = $gk * $kasa_dara_u;
+                    $gdara = $gbrut;
+                    $gnet  = 0.0;
+                } else {
+                    $gbrut = $tot_palet_only > 0 ? ($gp / $tot_palet_only) * $palet_brut_pool : 0.0;
+                    $gdara = $gp * $palet_dara_u + $gk * $kasa_dara_u;
+                    $gnet  = max(0.0, $gbrut - $gdara);
+                }
                 $grup_tot_brut += $gbrut;
                 $grup_tot_dara += $gdara;
                 $grup_tot_net  += $gnet;
                 $grup_rows[] = ['ad' => $g['grup_adi'], 'palet' => $gp, 'kasa' => $gk,
-                                'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet];
+                                'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet,
+                                'paletsiz' => ($gp === 0 && $gk > 0)];
             }
         ?>
         <!-- Gruplandırma -->
@@ -393,13 +414,13 @@ render_flash();
                     </tr></thead>
                     <tbody>
                     <?php foreach ($grup_rows as $gr): ?>
-                        <tr>
-                            <td><?= h($gr['ad']) ?></td>
-                            <td><?= $gr['palet'] ?></td>
+                        <tr<?= $gr['paletsiz'] ? ' class="paletsiz-grup-row"' : '' ?>>
+                            <td><?= h($gr['ad']) ?><?= $gr['paletsiz'] ? ' <small style="color:#9ca3af;font-weight:400">(kasa)</small>' : '' ?></td>
+                            <td><?= $gr['palet'] ?: '—' ?></td>
                             <td><?= $gr['kasa'] ?></td>
-                            <td><?= fmt_kg($gr['brut']) ?></td>
+                            <td style="<?= $gr['paletsiz'] ? 'color:#9ca3af' : '' ?>"><?= fmt_kg($gr['brut']) ?></td>
                             <td><?= fmt_kg($gr['dara']) ?></td>
-                            <td class="kv-grup-net"><?= fmt_kg($gr['net']) ?></td>
+                            <td class="kv-grup-net"><?= $gr['paletsiz'] ? '0' : fmt_kg($gr['net']) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>

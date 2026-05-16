@@ -406,16 +406,41 @@ function _updateGrupCalc() {
     var kasaDaraU  = _getKasaDaraUnit();
     var paletDaraU = _getPaletDaraUnit();
     var rows = _grupList.querySelectorAll('.grup-form-row');
+
+    // 1. Paletsiz kasaların tare toplamını brütten çıkar
+    var paletsizKasaDara = 0;
+    rows.forEach(function(r) {
+        var palet = parseNum(r.querySelector('.grup-palet').value);
+        var kasa  = parseNum(r.querySelector('.grup-kasa').value);
+        if (palet === 0 && kasa > 0) paletsizKasaDara += kasa * kasaDaraU;
+    });
+    var paletBrutPool = Math.max(0, brutTotal - paletsizKasaDara);
+
+    // 2. Toplam palet (sadece paleti olan gruplar)
     var totPalet = 0;
-    rows.forEach(function(r) { totPalet += parseNum(r.querySelector('.grup-palet').value); });
+    rows.forEach(function(r) {
+        var p = parseNum(r.querySelector('.grup-palet').value);
+        if (p > 0) totPalet += p;
+    });
 
     var totBrut = 0, totDara = 0, totNet = 0;
     rows.forEach(function(r) {
         var palet = parseNum(r.querySelector('.grup-palet').value);
         var kasa  = parseNum(r.querySelector('.grup-kasa').value);
-        var brut  = totPalet > 0 ? (palet / totPalet) * brutTotal : 0;
-        var dara  = palet * paletDaraU + kasa * kasaDaraU;
-        var net   = Math.max(0, brut - dara);
+        var brut, dara, net;
+        var calcBar = r.querySelector('.grup-calc-bar');
+        if (palet === 0 && kasa > 0) {
+            // Paletsiz grup: sadece kasa darası, brüt = kasa tare, net = 0
+            brut = kasa * kasaDaraU;
+            dara = brut;
+            net  = 0;
+            if (calcBar) calcBar.classList.add('paletsiz-mod');
+        } else {
+            brut = totPalet > 0 ? (palet / totPalet) * paletBrutPool : 0;
+            dara = palet * paletDaraU + kasa * kasaDaraU;
+            net  = Math.max(0, brut - dara);
+            if (calcBar) calcBar.classList.remove('paletsiz-mod');
+        }
         totBrut += brut; totDara += dara; totNet += net;
         r.querySelector('.gc-brut').textContent = fmt(brut) + ' kg';
         r.querySelector('.gc-dara').textContent = fmt(dara) + ' kg';
