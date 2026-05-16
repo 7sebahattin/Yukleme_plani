@@ -36,41 +36,46 @@ render_flash();
 ?>
 
 <style>
+@page { size: A4 portrait; margin: 8mm; }
 @media print {
     .topbar, .bottomnav, .page-head, .flash,
     .kv-no-print { display: none !important; }
 
+    html, body { font-size: 9pt !important; }
     body, .container { background: #fff !important; padding: 0 !important; margin: 0 !important; }
-    .container { padding-bottom: 0 !important; }
+    .container { padding-bottom: 0 !important; max-width: 100% !important; }
 
     .kv-print-header {
         display: flex !important;
         justify-content: space-between;
         align-items: flex-start;
         border-bottom: 2px solid #000;
-        padding-bottom: 8px;
-        margin-bottom: 12px;
+        padding-bottom: 5px;
+        margin-bottom: 6px;
     }
-    .kv-print-h-title { font-size: 18pt; font-weight: 700; }
-    .kv-print-h-sub   { font-size: 10pt; color: #555; margin-top: 2px; }
-    .kv-print-h-right { text-align: right; font-size: 10pt; line-height: 1.6; }
+    .kv-print-h-title { font-size: 13pt; font-weight: 700; }
+    .kv-print-h-sub   { font-size: 8pt; color: #555; margin-top: 1px; }
+    .kv-print-h-right { text-align: right; font-size: 8pt; line-height: 1.5; }
 
-    /* Fotoğraf: sayfanın yarısını kaplayacak şekilde */
+    /* Fotoğraf: sabit mm ile sınırla */
     .kv-photo-card {
         border: none !important;
         box-shadow: none !important;
-        margin-bottom: 12px !important;
+        margin-bottom: 6px !important;
+        padding: 0 !important;
         page-break-inside: avoid;
     }
     .kv-photo-wrap {
         background: #fff !important;
         min-height: unset !important;
+        padding: 0 !important;
         justify-content: flex-start !important;
     }
     .kv-photo {
-        max-height: 45vh !important;
+        max-height: 85mm !important;
         width: auto !important;
         max-width: 100% !important;
+        display: block !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
@@ -78,29 +83,52 @@ render_flash();
 
     /* Veri kartları */
     .card {
-        border: 1px solid #ccc !important;
+        border: 1px solid #bbb !important;
         box-shadow: none !important;
-        margin-bottom: 10px !important;
+        margin-bottom: 6px !important;
         page-break-inside: avoid;
     }
-    .card-head { border-bottom: 1px solid #ccc !important; padding: 6px 12px !important; }
-    .card-head h2 { font-size: 10pt !important; }
-    .card-body { padding: 10px 12px !important; }
+    .card-head { border-bottom: 1px solid #bbb !important; padding: 3px 8px !important; }
+    .card-head h2 { font-size: 8.5pt !important; font-weight: 700; margin: 0 !important; }
+    .card-body { padding: 6px 8px !important; }
 
-    .info-grid { font-size: 9.5pt; gap: 6px 14px; }
-    .info-grid .lbl { font-size: 7pt; }
-    .info-grid strong { font-size: 10pt; }
+    /* info-grid: 3 kolon — daha az satır */
+    .info-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 4px 10px !important;
+        font-size: 8.5pt !important;
+    }
+    .info-grid > div { min-width: 0; }
+    .info-grid .span-2 { grid-column: span 2; }
+    .info-grid .lbl { font-size: 6.5pt; text-transform: uppercase; letter-spacing: .02em; color: #666; display: block; }
+    .info-grid strong { font-size: 8.5pt; display: block; }
 
-    .kv-tartim-row { padding: 5px 10px; }
-    .kv-tartim-val { font-size: 12pt; }
+    /* Tartımlar */
+    .kv-tartim-list { display: flex; gap: 8px; }
+    .kv-tartim-row { flex: 1; padding: 4px 8px; font-size: 8pt; }
+    .kv-tartim-label { font-size: 7pt; color: #555; }
+    .kv-tartim-val { font-size: 11pt; font-weight: 700; }
+    .kv-tartim-alibi { font-size: 7pt; color: #555; }
 
     .kv-net-box {
         background: #1a56db !important;
         color: #fff !important;
+        padding: 5px 12px !important;
+        margin-top: 5px !important;
+        border-radius: 4px;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
-    .kv-net-val { font-size: 20pt !important; }
+    .kv-net-label { font-size: 8pt !important; }
+    .kv-net-val { font-size: 16pt !important; font-weight: 700 !important; }
+
+    .kv-nd-box { margin-top: 5px !important; }
+    .kv-nd-row { padding: 3px 0 !important; font-size: 8pt !important; }
+    .kv-nd-net { border-top: 1px solid #ccc; margin-top: 2px; padding-top: 4px !important; }
 }
 </style>
 
@@ -135,7 +163,7 @@ render_flash();
 
 <!-- ── Fiş Görseli ── -->
 <?php $has_foto = !empty($fis['foto_data']); ?>
-<section class="card kv-photo-card">
+<section class="card kv-photo-card<?= $has_foto ? '' : ' kv-no-print' ?>">
     <div class="kv-photo-wrap">
         <?php if ($has_foto): ?>
         <img class="kv-photo" src="kantar_foto.php?id=<?= $id ?>" alt="Kantar fişi görseli">
