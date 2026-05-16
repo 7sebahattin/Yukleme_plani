@@ -22,9 +22,7 @@ $sql = "SELECT r.*,
         WHERE r.type = 'cikma' ";
 $params = [];
 if ($q !== '') {
-    $sql .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.alici LIKE :q
-              OR r.parti_no LIKE :q OR r.on_plaka LIKE :q OR r.arka_plaka LIKE :q
-              OR r.urun LIKE :q) ";
+    $sql .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.urun LIKE :q) ";
     $params[':q'] = '%' . $q . '%';
 }
 if ($durum_filter !== '') {
@@ -54,7 +52,7 @@ render_header('Çıkmalar');
     <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
     <?php endif; ?>
     <input type="search" name="q" value="<?= h($q) ?>"
-           placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
+           placeholder="Firma, bölge, ürün..." autocomplete="off">
     <button class="btn">Ara</button>
     <?php if ($q !== '' || $durum_filter !== ''): ?>
         <a href="cikmalar.php" class="btn btn-ghost">Temizle</a>
@@ -85,14 +83,12 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
         <table class="data-table">
             <thead>
             <tr>
-                <th>ID</th>
-                <th>Tarih/Saat</th>
+                <th>Tarih</th>
+                <th>Oluşturma</th>
+                <th>Son Düzenleme</th>
                 <th>Firma</th>
                 <th>Bölge</th>
-                <th>Alıcı</th>
                 <th>Ürün</th>
-                <th>Parti No</th>
-                <th>Plaka</th>
                 <th class="num">Palet</th>
                 <th class="num">Kasa</th>
                 <th class="num">Brüt</th>
@@ -108,14 +104,12 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>">
-                    <td><strong>#<?= (int)$r['id'] ?></strong></td>
-                    <td><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
+                    <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
                     <td><?= h($r['firma']) ?></td>
                     <td><?= h($r['bolge']) ?></td>
-                    <td><?= h($r['alici']) ?></td>
                     <td><?= h($r['urun']) ?></td>
-                    <td><?= h($r['parti_no']) ?></td>
-                    <td><?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
@@ -162,9 +156,11 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                  data-durum="<?= h($durum) ?>">
                 <div class="record-card-head">
                     <div>
-                        <strong>Parti No: <?= h($r['parti_no'] ?: '—') ?></strong>
-                        <div class="record-card-firma"><?= h($r['firma'] ?: '—') ?></div>
-                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
+                        <strong><?= h($r['firma'] ?: '—') ?></strong>
+                        <?php if ($r['tarih']): ?>
+                        <div class="record-card-firma"><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></div>
+                        <?php endif; ?>
+                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?><?= $r['updated_at'] ? ' · Düz: ' . h(fmt_datetime($r['updated_at'])) : '' ?></div>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
@@ -176,11 +172,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     </div>
                 </div>
                 <div class="record-card-body">
-                    <?php if ($r['alici']): ?><div><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div><?php endif; ?>
                     <?php if ($r['bolge']): ?><div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div><?php endif; ?>
                     <?php if ($r['urun']): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div><?php endif; ?>
-                    <?php $plaka = trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /'); ?>
-                    <?php if ($plaka): ?><div><span class="lbl">Plaka:</span> <?= h($plaka) ?></div><?php endif; ?>
                 </div>
                 <div class="record-card-totals">
                     <div><span>Palet</span><strong><?= (int)$r['toplam_palet'] ?></strong></div>

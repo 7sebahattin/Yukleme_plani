@@ -85,8 +85,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
         <table class="data-table">
             <thead>
             <tr>
-                <th>ID</th>
-                <th>Tarih/Saat</th>
+                <th>Oluşturma</th>
+                <th>Son Düzenleme</th>
                 <th>Firma</th>
                 <th>Bölge</th>
                 <th>Alıcı</th>
@@ -108,8 +108,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>">
-                    <td><strong>#<?= (int)$r['id'] ?></strong></td>
-                    <td><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
                     <td><?= h($r['firma']) ?></td>
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['alici']) ?></td>
@@ -162,9 +162,9 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                  data-durum="<?= h($durum) ?>">
                 <div class="record-card-head">
                     <div>
-                        <strong>Parti No: <?= h($r['parti_no'] ?: '—') ?></strong>
-                        <div class="record-card-firma"><?= h($r['firma'] ?: '—') ?></div>
-                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
+                        <strong><?= h($r['firma'] ?: ($r['parti_no'] ?: '—')) ?></strong>
+                        <?php if ($r['parti_no']): ?><div class="record-card-firma">Parti: <?= h($r['parti_no']) ?></div><?php endif; ?>
+                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?><?= $r['updated_at'] ? ' · Düz: ' . h(fmt_datetime($r['updated_at'])) : '' ?></div>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>

@@ -469,6 +469,10 @@ function render_flash(): void {
             if (!$has_durum) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `durum` VARCHAR(20) NOT NULL DEFAULT ''");
             }
+            $has_upd = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'updated_at'")->fetchColumn();
+            if (!$has_upd) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP");
+            }
         } catch (PDOException $e) {}
 
         // 2) Kantar tabloları
