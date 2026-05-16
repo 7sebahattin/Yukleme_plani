@@ -330,8 +330,8 @@ function updateLiveCalc() {
 /* ══════════════════════════════════════════
    FİŞ GÖRSELİ + CROP
    ══════════════════════════════════════════ */
-var IMG_KEY    = 'kantar_img_<?= $fis_id ?>';
-var DB_FOTO    = <?= json_encode($fis['foto_data'] ?? null) ?>;
+var IMG_KEY      = 'kantar_img_<?= $fis_id ?>';
+var DB_FOTO_URL  = <?= ($fis_id > 0 && !empty($fis['foto_data'])) ? json_encode('kantar_foto.php?id=' . $fis_id) : 'null' ?>;
 var imgArea    = document.getElementById('kantarImgArea');
 var imgDisplay = document.getElementById('kantarImgDisplay');
 var imgPh      = document.getElementById('kantarImgPh');
@@ -354,7 +354,7 @@ function clearPhoto() {
     try { localStorage.removeItem(IMG_KEY); } catch(e) {}
 }
 
-/* localStorage önce, yoksa DB'den yükle */
+/* localStorage önce, yoksa DB endpoint'ten yükle */
 (function () {
     try {
         var raw = localStorage.getItem(IMG_KEY);
@@ -363,7 +363,7 @@ function clearPhoto() {
             if (src && src.indexOf('data:') === 0) { showPhoto(src); return; }
         }
     } catch(e) {}
-    if (DB_FOTO && DB_FOTO.indexOf('data:') === 0) showPhoto(DB_FOTO);
+    if (DB_FOTO_URL) showPhoto(DB_FOTO_URL);
 })();
 
 imgArea.addEventListener('click', function(e) {
@@ -448,7 +448,17 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
     var cv = document.createElement('canvas');
     cv.width = Math.round(ow); cv.height = Math.round(oh);
     cv.getContext('2d').drawImage(cropSrc, ox, oy, ow, oh, 0, 0, cv.width, cv.height);
-    var out = cv.toDataURL('image/jpeg', 0.92);
+    // Cap at 1600px to keep file size manageable
+    var MAX_PX = 1600;
+    if (cv.width > MAX_PX || cv.height > MAX_PX) {
+        var ratio = Math.min(MAX_PX / cv.width, MAX_PX / cv.height);
+        var cv2 = document.createElement('canvas');
+        cv2.width = Math.round(cv.width * ratio);
+        cv2.height = Math.round(cv.height * ratio);
+        cv2.getContext('2d').drawImage(cv, 0, 0, cv2.width, cv2.height);
+        cv = cv2;
+    }
+    var out = cv.toDataURL('image/jpeg', 0.75);
     try { localStorage.setItem(IMG_KEY, out); } catch(e) {}
     if (fotoInput) fotoInput.value = out;
     showPhoto(out);
