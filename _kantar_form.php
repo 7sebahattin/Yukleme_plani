@@ -19,9 +19,14 @@ $kasa_list  = $kasa_list  ?? [];
 $palet_list = $palet_list ?? [];
 
 // DB'den gelen DECIMAL değerlerini Türkçe formata çevir (parseNum ile uyumlu)
+// Her zaman ondalık virgül içerir → "41.420,0" — num() eski/yeni sürümde doğru çalışır
 function fmt_tartim($v): string {
     $f = (float)$v;
-    return $f > 0 ? fmt_kg($f) : '';
+    if ($f <= 0) return '';
+    $s = number_format($f, 3, ',', '.');
+    $s = rtrim($s, '0');
+    if (str_ends_with($s, ',')) $s .= '0'; // "41.420," → "41.420,0"
+    return $s;
 }
 
 // Mevcut gruplar (edit modunda DB'den)
