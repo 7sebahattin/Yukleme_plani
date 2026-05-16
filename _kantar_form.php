@@ -23,6 +23,39 @@ function fmt_tartim($v): string {
     $f = (float)$v;
     return $f > 0 ? fmt_kg($f) : '';
 }
+
+// Otomatik tamamlama / seçim listeleri
+$_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
+$_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
+$_kf_op_hist       = array_column(db()->query("SELECT DISTINCT operator_adi FROM kantar_fisleri WHERE operator_adi!='' ORDER BY operator_adi")->fetchAll(), 'operator_adi');
+$_firma_def_names  = array_column(get_definitions_by_type('firma'), 'name');
+$_urun_names       = array_column(get_definitions_by_type('urun'),  'name');
+$_bolge_names      = array_column(get_definitions_by_type('bolge'), 'name');
+$_depo_names_kf    = array_column(get_definitions_by_type('depo'),  'name');
+// Firma: tanımlar + geçmiş kantar girişleri birleşik
+$_all_firma = array_values(array_unique(array_merge($_firma_def_names, $_kf_firma_hist)));
+sort($_all_firma);
+
+if (!function_exists('kf_sel_opt')) {
+    function kf_sel_opt(string $stored, array $names, string $ph = '-- seçiniz --'): string {
+        $out = '<option value="">' . htmlspecialchars($ph, ENT_QUOTES) . '</option>';
+        if ($stored !== '' && !in_array($stored, $names, true)) {
+            $out .= '<option value="' . htmlspecialchars($stored, ENT_QUOTES) . '" selected>' . htmlspecialchars($stored, ENT_QUOTES) . '</option>';
+        }
+        foreach ($names as $n) {
+            $sel = $stored === $n ? ' selected' : '';
+            $out .= '<option value="' . htmlspecialchars($n, ENT_QUOTES) . '"' . $sel . '>' . htmlspecialchars($n, ENT_QUOTES) . '</option>';
+        }
+        return $out;
+    }
+}
+function kf_datalist(string $id, array $items): string {
+    $out = '<datalist id="' . htmlspecialchars($id, ENT_QUOTES) . '">';
+    foreach ($items as $v) {
+        $out .= '<option value="' . htmlspecialchars($v, ENT_QUOTES) . '">';
+    }
+    return $out . '</datalist>';
+}
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="kantarForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -56,14 +89,26 @@ function fmt_tartim($v): string {
                 <input type="text" name="fis_no" value="<?= h($fis['fis_no'] ?? '') ?>">
             </label>
             <label>Plaka No
-                <input type="text" name="plaka" value="<?= h($fis['plaka'] ?? '') ?>"
-                       style="text-transform:uppercase">
+                <?= kf_datalist('kfPlakaDl', $_kf_plaka_hist) ?>
+                <input type="text" name="plaka" list="kfPlakaDl"
+                       value="<?= h($fis['plaka'] ?? '') ?>" style="text-transform:uppercase"
+                       autocomplete="off">
+                <?php if (empty($_kf_plaka_hist)): ?>
+                <small class="muted">Henüz kayıtlı plaka yok</small>
+                <?php endif; ?>
             </label>
             <label>Firma Adı
+                <?php if (!empty($_all_firma)): ?>
+                <select name="firma_adi"><?= kf_sel_opt($fis['firma_adi'] ?? '', $_all_firma) ?></select>
+                <?php else: ?>
                 <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>">
+                <small class="muted"><a href="definitions.php?type=firma">Tanımlar → Firmalar'dan ekleyin</a></small>
+                <?php endif; ?>
             </label>
             <label>Operatör
-                <input type="text" name="operator_adi" value="<?= h($fis['operator_adi'] ?? '') ?>">
+                <?= kf_datalist('kfOpDl', $_kf_op_hist) ?>
+                <input type="text" name="operator_adi" list="kfOpDl"
+                       value="<?= h($fis['operator_adi'] ?? '') ?>" autocomplete="off">
             </label>
             <label>Giriş Tarih / Saat
                 <input type="datetime-local" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
@@ -72,13 +117,28 @@ function fmt_tartim($v): string {
                 <input type="datetime-local" name="cikis_tarih" value="<?= h($fis['cikis_tarih'] ?? '') ?>">
             </label>
             <label>Malın Cinsi
+                <?php if (!empty($_urun_names)): ?>
+                <select name="malin_cinsi"><?= kf_sel_opt($fis['malin_cinsi'] ?? '', $_urun_names) ?></select>
+                <?php else: ?>
                 <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>">
+                <small class="muted"><a href="definitions.php?type=urun">Tanımlar → Ürünler'den ekleyin</a></small>
+                <?php endif; ?>
             </label>
             <label>Geldiği Yer
+                <?php if (!empty($_bolge_names)): ?>
+                <select name="geldigi_yer"><?= kf_sel_opt($fis['geldigi_yer'] ?? '', $_bolge_names) ?></select>
+                <?php else: ?>
                 <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>">
+                <small class="muted"><a href="definitions.php?type=bolge">Tanımlar → Bölgeler'den ekleyin</a></small>
+                <?php endif; ?>
             </label>
             <label>Gittiği Yer
+                <?php if (!empty($_depo_names_kf)): ?>
+                <select name="gittigi_yer"><?= kf_sel_opt($fis['gittigi_yer'] ?? '', $_depo_names_kf) ?></select>
+                <?php else: ?>
                 <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
+                <small class="muted"><a href="definitions.php?type=depo">Tanımlar → Depolar'dan ekleyin</a></small>
+                <?php endif; ?>
             </label>
             <label>Palet Sayısı
                 <input type="text" inputmode="numeric" name="palet_sayisi" id="kantarPaletSayisi"

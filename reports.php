@@ -111,7 +111,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $sql .= " GROUP BY r.id ORDER BY r.id DESC LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
-    $cols = ['id','tarih','firma','bolge','alici','urun','parti_no','on_plaka','arka_plaka','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    $cols = ['id','tarih','firma','bolge','alici','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     foreach ($rows as $r) {
         $totals['palet_sayisi']   = ($totals['palet_sayisi']   ?? 0) + (int)$r['palet_sayisi'];
         $totals['toplam_kasa']    = ($totals['toplam_kasa']    ?? 0) + (int)$r['toplam_kasa'];
@@ -124,6 +124,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
 } elseif ($type === 'depo') {
     $sql = "SELECT p.depo,
                    COUNT(DISTINCT r.id)          AS kayit_sayisi,
+                   COUNT(p.id)                   AS palet_sayisi,
                    SUM(p.kasa_adeti)             AS toplam_kasa,
                    ROUND(SUM(p.brut_kg),3)       AS toplam_brut,
                    ROUND(SUM(p.dara_kg),3)       AS toplam_dara,
@@ -141,12 +142,13 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
     $rows = rpt_merge_rows($rows, 'depo',
-        ['kayit_sayisi','toplam_kasa'],
+        ['kayit_sayisi','palet_sayisi','toplam_kasa'],
         ['toplam_brut','toplam_dara','toplam_net']);
-    $cols = ['depo','kayit_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net','ilk_tarih','son_tarih'];
+    $cols = ['depo','kayit_sayisi','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net','ilk_tarih','son_tarih'];
     foreach ($rows as $r) {
-        $totals['toplam_kasa'] = ($totals['toplam_kasa'] ?? 0) + (float)$r['toplam_kasa'];
-        $totals['toplam_net']  = ($totals['toplam_net']  ?? 0) + (float)$r['toplam_net'];
+        $totals['toplam_kasa']  = ($totals['toplam_kasa']  ?? 0) + (float)$r['toplam_kasa'];
+        $totals['palet_sayisi'] = ($totals['palet_sayisi'] ?? 0) + (int)$r['palet_sayisi'];
+        $totals['toplam_net']   = ($totals['toplam_net']   ?? 0) + (float)$r['toplam_net'];
     }
 
 } elseif ($type === 'urun') {

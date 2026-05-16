@@ -178,6 +178,7 @@ function render_footer(bool $print_mode = false): void {
         $is_records  = !$_cikma_hint && in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
         $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']) || $_cikma_hint;
         $is_defs     = $cur === 'definitions.php';
+        $is_reports  = $cur === 'reports.php';
         $is_notes    = $cur === 'notes.php';
         echo '</main>';
         ?>
@@ -198,9 +199,9 @@ function render_footer(bool $print_mode = false): void {
         <span class="bottomnav-icon">🚚</span>
         <span class="bottomnav-label">Çıkmalar</span>
     </a>
-    <a href="definitions.php" class="bottomnav-item<?= $is_defs ? ' active' : '' ?>">
-        <span class="bottomnav-icon">⚙️</span>
-        <span class="bottomnav-label">Tanımlar</span>
+    <a href="reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
+        <span class="bottomnav-icon">📊</span>
+        <span class="bottomnav-label">Raporlar</span>
     </a>
 </nav>
 
