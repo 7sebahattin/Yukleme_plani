@@ -1728,6 +1728,7 @@ body.print-mode .asya-sheet {
     font-size: .83rem; color: var(--muted);
 }
 .pc-stats strong { color: var(--text); font-weight: 600; }
+.pc-stats strong.pc-warn { color: #ef4444; font-weight: 700; }
 .pc-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
 .pc-kebab-wrap {
     position: relative;

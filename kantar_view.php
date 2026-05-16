@@ -134,12 +134,16 @@ render_flash();
 </div>
 
 <!-- ── Fiş Görseli ── -->
+<?php $has_foto = !empty($fis['foto_data']); ?>
 <section class="card kv-photo-card">
     <div class="kv-photo-wrap">
-        <img id="kvImg" class="kv-photo" alt="Kantar fişi görseli" style="display:none">
-        <div id="kvImgPh" class="kv-photo-ph">
+        <?php if ($has_foto): ?>
+        <img class="kv-photo" src="kantar_foto.php?id=<?= $id ?>" alt="Kantar fişi görseli">
+        <?php else: ?>
+        <div class="kv-photo-ph">
             📷<br><span>Bu fiş için henüz görsel eklenmemiş</span>
         </div>
+        <?php endif; ?>
     </div>
 </section>
 
@@ -234,29 +238,5 @@ render_flash();
         <?php endif; ?>
     </div>
 </section>
-
-<script>
-(function () {
-    var KEY     = 'kantar_img_<?= $id ?>';
-    var DB_FOTO = <?= json_encode($fis['foto_data'] ?? null) ?>;
-    var img = document.getElementById('kvImg');
-    var ph  = document.getElementById('kvImgPh');
-
-    function showPhoto(src) {
-        img.src = src;
-        img.style.display = 'block';
-        if (ph) ph.style.display = 'none';
-    }
-
-    try {
-        var raw = localStorage.getItem(KEY);
-        if (raw) {
-            var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-            if (src && src.indexOf('data:') === 0) { showPhoto(src); return; }
-        }
-    } catch(e) {}
-    if (DB_FOTO && DB_FOTO.indexOf('data:') === 0) showPhoto(DB_FOTO);
-})();
-</script>
 
 <?php render_footer(); ?>

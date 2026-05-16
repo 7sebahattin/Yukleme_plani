@@ -95,7 +95,7 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
                 <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
                 <?php if (empty($_urun_names)): ?><small class="muted">Tanımlar → Ürünler'den ekleyin</small><?php endif; ?>
             </label>
-            <label>Depo <small class="muted">(palet varsayılanı)</small>
+            <label>Depo
                 <select name="depo_varsayilan" id="genelDepo"><?= sel_opt('depo', $_cur_depo, $_depo_names) ?></select>
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>

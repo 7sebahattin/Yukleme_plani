@@ -292,9 +292,9 @@
         closeModal();
 
         if (isNew) {
-            const cards = cardContainer.querySelectorAll('.pallet-card');
-            if (cards.length) {
-                setTimeout(() => cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+            const foot = document.querySelector('.form-foot');
+            if (foot) {
+                setTimeout(() => foot.scrollIntoView({ behavior: 'smooth', block: 'end' }), 80);
             }
         }
     }
@@ -327,11 +327,26 @@
         }
 
         cardContainer.innerHTML = '';
+
+        // Anomaly detection: flag values >30% from average (only with 2+ pallets)
+        const _n = pallets.length;
+        let avgKasa = 0, avgBrut = 0;
+        if (_n > 1) {
+            pallets.forEach(p => { avgKasa += parseInt2(p.kasa_adeti); avgBrut += parseNum(p.brut_kg); });
+            avgKasa /= _n;
+            avgBrut /= _n;
+        }
+
         pallets.forEach((p, i) => {
             const dara = calcPalletDara(p);
             const net  = Math.max(0, parseNum(p.brut_kg) - dara);
             const kasaName  = KASA_LIST.find(k => String(k.id) === String(p.kasa_cinsi_id))?.name || '';
             const paletName = PALET_LIST.find(k => String(k.id) === String(p.palet_tipi_id))?.name || '';
+
+            const ka = parseInt2(p.kasa_adeti);
+            const br = parseNum(p.brut_kg);
+            const kasaWarn = avgKasa > 0 && Math.abs(ka - avgKasa) / avgKasa > 0.30;
+            const brutWarn = avgBrut > 0 && Math.abs(br - avgBrut) / avgBrut > 0.30;
 
             const card = document.createElement('div');
             card.className = 'pallet-card';
@@ -344,8 +359,8 @@
                 <div class="pc-body">
                     <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>
                     <div class="pc-stats">
-                        <span><strong>${p.kasa_adeti}</strong> kasa</span>
-                        <span>Brüt <strong>${fmtKg(parseNum(p.brut_kg))}</strong></span>
+                        <span><strong${kasaWarn ? ' class="pc-warn"' : ''}>${p.kasa_adeti}</strong> kasa</span>
+                        <span>Brüt <strong${brutWarn ? ' class="pc-warn"' : ''}>${fmtKg(br)}</strong></span>
                         <span>Dara <strong>${fmtKg(dara)}</strong></span>
                         <span>Net <strong class="strong">${fmtKg(net)}</strong></span>
                     </div>
