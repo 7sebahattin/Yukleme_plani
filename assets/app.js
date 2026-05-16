@@ -266,7 +266,8 @@
             materials:    materials,
         };
 
-        if (editingIdx === -1) {
+        const isNew = editingIdx === -1;
+        if (isNew) {
             pallets.push(p);
         } else {
             pallets[editingIdx] = p;
@@ -275,6 +276,13 @@
         renderCards();
         recomputeTotals();
         closeModal();
+
+        if (isNew) {
+            const cards = cardContainer.querySelectorAll('.pallet-card');
+            if (cards.length) {
+                setTimeout(() => cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+            }
+        }
     }
 
     /* ── Palet dara (kart ve toplam için) ── */
@@ -347,6 +355,14 @@
             });
             cardContainer.appendChild(card);
         });
+
+        // Alt + yeni palet ekle butonu
+        const addBottom = document.createElement('button');
+        addBottom.type = 'button';
+        addBottom.className = 'btn btn-primary pallet-add-bottom';
+        addBottom.textContent = '+ Yeni Palet Ekle';
+        addBottom.addEventListener('click', () => openModal(-1));
+        cardContainer.appendChild(addBottom);
     }
 
     /* ── Alt toplamlar ── */

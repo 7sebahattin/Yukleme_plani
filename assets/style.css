@@ -2360,3 +2360,76 @@ body.notes-modal-open { overflow: hidden; }
     .data-table { font-size: 8pt; }
     .table-wrap { overflow: visible !important; }
 }
+
+/* ── Definitions — tab navigation ── */
+.def-tabs {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
+}
+.def-tab {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 14px; border-radius: 20px; font-size: .85rem; font-weight: 500;
+    background: var(--card); border: 1px solid var(--border);
+    color: var(--text); text-decoration: none; white-space: nowrap;
+    transition: background .15s, border-color .15s;
+}
+.def-tab:hover { background: var(--bg); border-color: var(--primary); }
+.def-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* ── Definitions — category section rows ── */
+.def-cat-list { display: flex; flex-direction: column; }
+.def-cat-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.def-cat-row:last-child { border-bottom: none; }
+.def-row-inactive { opacity: .55; }
+.def-cat-form {
+    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+}
+.def-cat-icon { font-size: 1.1rem; flex-shrink: 0; }
+.def-cat-name {
+    flex: 1; min-width: 0; padding: 6px 8px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    font-size: .9rem; background: var(--bg); color: var(--text);
+}
+.def-cat-name:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+.def-usage-chip {
+    display: inline-block; padding: 2px 7px; border-radius: 12px;
+    background: #e0f2fe; color: #0369a1; font-size: .75rem; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0;
+}
+.def-row-switch { flex-shrink: 0; }
+.def-del-btn { flex-shrink: 0; }
+
+/* ── Definitions — add form row ── */
+.def-add-form { display: flex; flex-direction: column; gap: 0; }
+.def-add-row {
+    display: flex; gap: 8px; align-items: center;
+}
+.def-add-row input {
+    flex: 1; padding: 8px 12px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    font-size: .95rem; background: var(--bg); color: var(--text);
+}
+.def-add-row input:focus { outline: 2px solid var(--primary); }
+
+@media (max-width: 767px) {
+    .def-cat-row { flex-wrap: wrap; gap: 6px; }
+    .def-cat-form { flex-wrap: wrap; }
+    .def-cat-name { font-size: 16px; }
+    .def-add-row input { font-size: 16px; }
+}
+
+/* ── Pallet form — bottom add button ── */
+.pallet-add-bottom {
+    display: block; width: 100%; margin-top: 10px;
+    padding: 12px; font-size: .95rem; text-align: center;
+    border-radius: var(--radius); cursor: pointer;
+}
+
+/* ── Notes — hidden done info ── */
+.notes-done-info {
+    text-align: center; font-size: .8rem; color: var(--muted);
+    padding: 8px; border-top: 1px solid var(--border);
+    margin-top: 4px;
+}
