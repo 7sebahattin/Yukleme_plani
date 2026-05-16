@@ -7,11 +7,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
 
 $record = [
-    'firma' => '', 'bolge' => '', 'parti_no' => '', 'gumruk' => '',
-    'nakliye_bedeli' => '', 'avans' => '',
-    'sofor_adi' => '', 'fatura_no' => '', 'casus_no' => '',
-    'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '',
-    'tarih' => date('Y-m-d'), 'alici' => '', 'urun' => '', 'etiket' => '',
+    'firma' => '', 'bolge' => '', 'urun' => '',
+    'tarih' => date('Y-m-d'),
 ];
 $pallets = [];
 
@@ -24,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $record[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
-    if ($record['firma'] === '' && $record['alici'] === '' && $record['parti_no'] === '') {
-        $errors[] = 'Firma, alıcı veya parti no alanlarından en az biri doldurulmalı.';
+    if ($record['firma'] === '' && $record['tarih'] === '') {
+        $errors[] = 'Firma veya tarih alanlarından en az biri doldurulmalı.';
     }
 
     $raw_pallets = $_POST['pallets'] ?? [];
@@ -51,33 +48,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             $st = $pdo->prepare(
-                "INSERT INTO loading_records
-                 (type, firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
-                  fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket)
-                 VALUES
-                 ('cikma', :firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
-                  :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket)"
+                "INSERT INTO loading_records (type, firma, bolge, urun, tarih)
+                 VALUES ('cikma', :firma, :bolge, :urun, :tarih)"
             );
             $st->execute([
-                ':firma'           => $record['firma'],
-                ':bolge'           => $record['bolge'],
-                ':parti_no'        => $record['parti_no'],
-                ':gumruk'          => $record['gumruk'],
-                ':nakliye_bedeli'  => num($record['nakliye_bedeli']),
-                ':avans'           => num($record['avans']),
-                ':sofor_adi'       => $record['sofor_adi'],
-                ':fatura_no'       => $record['fatura_no'],
-                ':casus_no'        => $record['casus_no'],
-                ':on_plaka'        => $record['on_plaka'],
-                ':arka_plaka'      => $record['arka_plaka'],
-                ':nakliye_sirketi' => $record['nakliye_sirketi'],
-                ':telefon'         => $record['telefon'],
-                ':tarih'           => $record['tarih'] ?: null,
-                ':alici'           => $record['alici'],
-                ':urun'            => $record['urun'],
-                ':etiket'          => $record['etiket'],
+                ':firma' => $record['firma'],
+                ':bolge' => $record['bolge'],
+                ':urun'  => $record['urun'],
+                ':tarih' => $record['tarih'] ?: null,
             ]);
             $rec_id = (int)$pdo->lastInsertId();
 
@@ -134,10 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pallets = $computed;
 }
 
-$form_action  = 'cikma_create.php';
-$title        = 'Yeni Çıkma Kaydı';
-$submit_label = 'Kaydet';
-$cancel_url   = 'cikmalar.php';
+$form_action   = 'cikma_create.php';
+$title         = 'Yeni Çıkma Kaydı';
+$submit_label  = 'Kaydet';
+$cancel_url    = 'cikmalar.php';
+$form_is_cikma = true;
 
 render_header($title);
 
