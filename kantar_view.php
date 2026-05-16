@@ -31,6 +31,7 @@ $brut_hesap   = $net;
 $dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
 $net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
 $has_foto     = !empty($fis['foto_data']);
+$gruplar      = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira")->fetchAll() ?: [];
 
 render_header('Kantar Fişi #' . $id);
 render_flash();
@@ -344,6 +345,31 @@ render_flash();
                 <?php endif; ?>
             </div>
         </section>
+
+        <?php if (!empty($gruplar)): ?>
+        <!-- Gruplandırma -->
+        <section class="card">
+            <div class="card-head"><h2>🗂 Gruplandırma</h2></div>
+            <div class="card-body" style="padding:0">
+                <table class="data-table" style="margin:0">
+                    <thead><tr>
+                        <th>Grup</th>
+                        <th class="num">Palet</th>
+                        <th class="num">Kasa</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($gruplar as $g): ?>
+                        <tr>
+                            <td><strong><?= h($g['grup_adi']) ?></strong></td>
+                            <td class="num"><?= (int)$g['palet_sayisi'] ?></td>
+                            <td class="num"><?= (int)$g['kasa_adedi'] ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <?php endif; ?>
 
     </div><!-- /kv-print-col-right -->
 </div><!-- /kv-print-body -->

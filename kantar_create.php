@@ -73,6 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $foto_val,
         ]);
         $fis_id = (int)db()->lastInsertId();
+        // Grupları kaydet
+        if (!empty($_POST['gruplar']) && is_array($_POST['gruplar'])) {
+            $gst = db()->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi) VALUES (?,?,?,?,?)");
+            $sira = 0;
+            foreach ($_POST['gruplar'] as $g) {
+                $ga = trim((string)($g['grup_adi'] ?? ''));
+                if ($ga === '') continue;
+                $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0)]);
+            }
+        }
         set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');
         header('Location: kantar_view.php?id=' . $fis_id);
         exit;

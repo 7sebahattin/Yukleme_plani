@@ -24,7 +24,11 @@ function num($v): float {
     if ($v === null || $v === '') return 0.0;
     if (is_numeric($v)) return (float)$v;
     $s = str_replace([' ', "\xc2\xa0"], '', (string)$v);
-    $s = str_replace(',', '.', $s);
+    // Türkçe format: nokta=binler ayırıcı, virgül=ondalık (ör. "1.234,560")
+    if (str_contains($s, ',')) {
+        $s = str_replace('.', '', $s); // binler noktasını sil
+        $s = str_replace(',', '.', $s); // ondalık virgülü → nokta
+    }
     return is_numeric($s) ? (float)$s : 0.0;
 }
 

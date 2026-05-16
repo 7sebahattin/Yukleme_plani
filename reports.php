@@ -89,6 +89,9 @@ function rpt_merge_rows(array $rows, string $key_col, array $sum_int, array $sum
 if ($type === 'yukleme' || $type === 'cikma') {
     $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
+                   (SELECT p2.depo FROM loading_pallets p2
+                    WHERE p2.loading_record_id = r.id AND p2.depo != ''
+                    ORDER BY p2.id LIMIT 1)          AS depo,
                    COUNT(p.id)                       AS palet_sayisi,
                    COALESCE(SUM(p.kasa_adeti),0)     AS toplam_kasa,
                    COALESCE(SUM(p.brut_kg),0)        AS toplam_brut,
@@ -111,7 +114,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $sql .= " GROUP BY r.id ORDER BY r.id DESC LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
-    $cols = ['id','tarih','firma','bolge','alici','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    if ($type === 'yukleme') {
+        $cols = ['id','tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    } else { // cikma — alıcı yok, depo var
+        $cols = ['id','tarih','firma','bolge','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    }
     foreach ($rows as $r) {
         $totals['palet_sayisi']   = ($totals['palet_sayisi']   ?? 0) + (int)$r['palet_sayisi'];
         $totals['toplam_kasa']    = ($totals['toplam_kasa']    ?? 0) + (int)$r['toplam_kasa'];
