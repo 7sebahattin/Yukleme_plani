@@ -35,7 +35,7 @@ $st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gru
 $st_g->execute([$id]);
 $gruplar = $st_g->fetchAll() ?: [];
 
-render_header('Kantar Fişi #' . $id);
+render_header('Kantar Fişi #' . ($fis['fis_no'] ?: $id));
 render_flash();
 ?>
 
@@ -384,9 +384,9 @@ render_flash();
                                 <td><?= h($gr['ad']) ?></td>
                                 <td><?= $gr['palet'] ?: '—' ?></td>
                                 <td><?= $gr['kasa'] ?></td>
-                                <td><?= fmt_kg($gr['brut']) ?></td>
-                                <td><?= fmt_kg($gr['dara']) ?></td>
-                                <td class="kv-grup-net"><?= fmt_kg($gr['net']) ?></td>
+                                <td><?= number_format(round($gr['brut']), 0, ',', '.') ?></td>
+                                <td><?= number_format(round($gr['dara']), 0, ',', '.') ?></td>
+                                <td class="kv-grup-net"><?= number_format(round($gr['net']), 0, ',', '.') ?></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -395,9 +395,9 @@ render_flash();
                             <td>TOPLAM</td>
                             <td><?= $grup_tot_palet ?: '—' ?></td>
                             <td><?= $grup_tot_kasa ?></td>
-                            <td><?= fmt_kg($grup_tot_brut) ?></td>
-                            <td><?= fmt_kg($grup_tot_dara) ?></td>
-                            <td class="kv-grup-net"><?= fmt_kg($grup_tot_net) ?></td>
+                            <td><?= number_format(round($grup_tot_brut), 0, ',', '.') ?></td>
+                            <td><?= number_format(round($grup_tot_dara), 0, ',', '.') ?></td>
+                            <td class="kv-grup-net"><?= number_format(round($grup_tot_net), 0, ',', '.') ?></td>
                         </tr></tfoot>
                         <?php endif; ?>
                     </table>
