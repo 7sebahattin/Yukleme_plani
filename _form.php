@@ -24,17 +24,19 @@ $_cur_urun     = $record['urun']          ?? '';
 $_cur_depo     = $pallets[0]['depo']      ?? '';
 $_cur_bolge    = $record['bolge']         ?? '';
 
-// Helper: render select with optional legacy value
-function sel_opt(string $name, string $stored, array $names): string {
-    $out = '<option value="">-- seçiniz --</option>';
-    if ($stored !== '' && !in_array($stored, $names, true)) {
-        $out .= '<option value="'.htmlspecialchars($stored, ENT_QUOTES).'" selected>'.htmlspecialchars($stored, ENT_QUOTES).'</option>';
+// Helper: render select options with optional legacy value fallback
+if (!function_exists('sel_opt')) {
+    function sel_opt(string $name, string $stored, array $names): string {
+        $out = '<option value="">-- seçiniz --</option>';
+        if ($stored !== '' && !in_array($stored, $names, true)) {
+            $out .= '<option value="'.htmlspecialchars($stored, ENT_QUOTES).'" selected>'.htmlspecialchars($stored, ENT_QUOTES).'</option>';
+        }
+        foreach ($names as $n) {
+            $sel = $stored === $n ? ' selected' : '';
+            $out .= '<option value="'.htmlspecialchars($n, ENT_QUOTES).'"'.$sel.'>'.htmlspecialchars($n, ENT_QUOTES).'</option>';
+        }
+        return $out;
     }
-    foreach ($names as $n) {
-        $sel = $stored === $n ? ' selected' : '';
-        $out .= '<option value="'.htmlspecialchars($n, ENT_QUOTES).'"'.$sel.'>'.htmlspecialchars($n, ENT_QUOTES).'</option>';
-    }
-    return $out;
 }
 
 $mat_js = [];
@@ -74,9 +76,11 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
         <div class="grid">
             <label>Firma
                 <select name="firma"><?= sel_opt('firma', $_cur_firma, $_firma_names) ?></select>
+                <?php if (empty($_firma_names)): ?><small class="muted">Tanımlar → Firmalar'dan ekleyin</small><?php endif; ?>
             </label>
             <label>Bölge
                 <select name="bolge"><?= sel_opt('bolge', $_cur_bolge, $_bolge_names) ?></select>
+                <?php if (empty($_bolge_names)): ?><small class="muted">Tanımlar → Bölgeler'den ekleyin</small><?php endif; ?>
             </label>
             <label>Parti No
                 <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>">
@@ -89,9 +93,11 @@ $collapsed_class = $is_edit_mode ? ' collapsed' : '';
             </label>
             <label>Ürün
                 <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
+                <?php if (empty($_urun_names)): ?><small class="muted">Tanımlar → Ürünler'den ekleyin</small><?php endif; ?>
             </label>
             <label>Depo <small class="muted">(palet varsayılanı)</small>
                 <select name="depo_varsayilan" id="genelDepo"><?= sel_opt('depo', $_cur_depo, $_depo_names) ?></select>
+                <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
