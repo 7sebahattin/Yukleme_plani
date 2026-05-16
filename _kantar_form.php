@@ -24,6 +24,10 @@ function fmt_tartim($v): string {
     return $f > 0 ? fmt_kg($f) : '';
 }
 
+// Mevcut gruplar (edit modunda DB'den)
+$_grup_list = $fis_id > 0
+    ? db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira")->fetchAll()
+    : [];
 // Otomatik tamamlama / seçim listeleri
 $_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
 $_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
@@ -178,6 +182,25 @@ function kf_datalist(string $id, array $items): string {
         </div>
     </div>
 </section>
+
+<!-- ══════════════ GRUPLANDIRMA ══════════════ -->
+<div class="grup-toggle-bar">
+    <button type="button" id="grupToggleBtn" class="btn btn-ghost btn-sm">🗂 Gruplandırma Ekle</button>
+</div>
+
+<section class="card" id="grupSection"<?= empty($_grup_list) ? ' style="display:none"' : '' ?>>
+    <div class="card-head">
+        <h2>🗂 Gruplandırma</h2>
+        <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
+    </div>
+    <div class="card-body">
+        <p class="muted" style="margin-bottom:10px;font-size:.85rem">Her grup için ad ve palet/kasa adedini girin.</p>
+        <div id="grupFormList"></div>
+    </div>
+</section>
+
+<script id="grupInitData" type="application/json"><?= json_encode(
+    array_values($_grup_list), JSON_UNESCAPED_UNICODE) ?></script>
 
 <!-- ══════════════ TARTIMLAR ══════════════ -->
 <section class="card">
@@ -348,6 +371,61 @@ function fmt(n) {
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+/* ─── Gruplandırma ─── */
+var _grupSay = 0;
+var _grupSection    = document.getElementById('grupSection');
+var _grupToggleBtn  = document.getElementById('grupToggleBtn');
+var _grupFormList   = document.getElementById('grupFormList');
+
+function _addGrupRow(ad, palet, kasa) {
+    _grupSay++;
+    var n = _grupSay;
+    var row = document.createElement('div');
+    row.className = 'grup-form-row';
+    row.innerHTML =
+        '<input type="text" name="gruplar[' + n + '][grup_adi]" placeholder="Grup adı (ör: CK, ASY)" value="' + esc(ad || '') + '" style="flex:1;min-width:120px">' +
+        '<label class="grup-form-lbl">Palet <input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" placeholder="0" class="num" value="' + (palet != null ? palet : '') + '" style="width:65px"></label>' +
+        '<label class="grup-form-lbl">Kasa <input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" placeholder="0" class="num" value="' + (kasa != null ? kasa : '') + '" style="width:65px"></label>' +
+        '<button type="button" class="grup-del-btn" title="Sil">✕</button>';
+    row.querySelector('.grup-del-btn').addEventListener('click', function() {
+        row.remove();
+        if (!_grupFormList.children.length) {
+            _grupSection.style.display = 'none';
+            _grupToggleBtn.textContent = '🗂 Gruplandırma Ekle';
+        }
+    });
+    _grupFormList.appendChild(row);
+}
+
+if (_grupToggleBtn) {
+    _grupToggleBtn.addEventListener('click', function() {
+        var visible = _grupSection.style.display !== 'none';
+        if (!visible) {
+            _grupSection.style.display = '';
+            _grupToggleBtn.textContent = '🗂 Gruplandırmayı Kaldır';
+            if (!_grupFormList.children.length) { _addGrupRow(); _addGrupRow(); }
+        } else {
+            if (_grupFormList.children.length && !confirm('Grupları kaldırmak istediğinizden emin misiniz?')) return;
+            _grupFormList.innerHTML = '';
+            _grupSection.style.display = 'none';
+            _grupToggleBtn.textContent = '🗂 Gruplandırma Ekle';
+        }
+    });
+}
+if (document.getElementById('addGrupBtn')) {
+    document.getElementById('addGrupBtn').addEventListener('click', function() { _addGrupRow(); });
+}
+
+// Edit modunda DB'den gelen grupları yükle
+(function() {
+    var init = JSON.parse((document.getElementById('grupInitData') || {}).textContent || '[]');
+    if (init.length) {
+        _grupSection.style.display = '';
+        _grupToggleBtn.textContent = '🗂 Gruplandırmayı Kaldır';
+        init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi); });
+    }
+})();
 
 /* ─── NET hesapla ─── */
 function calcNet() {
