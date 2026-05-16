@@ -1997,6 +1997,19 @@ body.print-mode .asya-sheet {
     color: var(--primary) !important;
     font-size: 1rem !important;
 }
+/* Paletsiz mod: sadece kasa darası */
+.grup-calc-bar.paletsiz-mod {
+    background: #fafafa;
+    opacity: .75;
+}
+.grup-calc-bar.paletsiz-mod::after {
+    content: 'sadece kasa';
+    font-size: .65rem;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-left: auto;
+}
 .grup-sum-row {
     border: 1px solid var(--primary);
     border-radius: var(--radius);
