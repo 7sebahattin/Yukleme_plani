@@ -145,8 +145,8 @@ $chk_st = $pdo->prepare(
 );
 
 $ins_rec = $pdo->prepare(
-    "INSERT INTO loading_records (type, tarih, firma, bolge, urun, is_islendi, is_yuklendi)
-     VALUES ('cikma', ?, ?, '', '', 0, 0)"
+    "INSERT INTO loading_records (type, tarih, firma, bolge, urun)
+     VALUES ('cikma', ?, ?, '', '')"
 );
 
 $ins_pal = $pdo->prepare(
