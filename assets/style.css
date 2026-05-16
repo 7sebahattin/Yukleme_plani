@@ -73,7 +73,7 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
     display: flex; align-items: center; gap: 8px;
 }
 .brand:hover { text-decoration: none; }
-.brand-logo { font-size: 1.4rem; }
+.brand-logo { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .topnav { display: flex; gap: 4px; }
 .topnav a {
     color: #fff; padding: 8px 14px;

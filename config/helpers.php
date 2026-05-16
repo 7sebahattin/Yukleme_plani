@@ -141,7 +141,7 @@ function render_header(string $title, bool $print_mode = false): void {
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Asya Fresh">
     <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="assets/icon.svg">
+    <link rel="apple-touch-icon" href="assets/logo.jpg">
     <title><?= h($title) ?> · Asya Fresh</title>
     <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
@@ -150,7 +150,7 @@ function render_header(string $title, bool $print_mode = false): void {
 <header class="topbar">
     <div class="topbar-inner">
         <a href="index.php" class="brand">
-            <span class="brand-logo">🌿</span>
+            <img src="assets/logo.jpg" class="brand-logo" alt="">
             <span class="brand-text">Asya Fresh</span>
         </a>
         <nav class="topnav">
