@@ -31,7 +31,9 @@ $brut_hesap   = $net;
 $dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
 $net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
 $has_foto     = !empty($fis['foto_data']);
-$gruplar      = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira")->fetchAll() ?: [];
+$st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+$st_g->execute([$id]);
+$gruplar = $st_g->fetchAll() ?: [];
 
 render_header('Kantar Fişi #' . $id);
 render_flash();
@@ -185,6 +187,15 @@ render_flash();
     .kv-nd-lbl { color: #555; }
     .kv-nd-val { font-weight: 600; }
     .kv-nd-net-val { font-size: 9pt !important; }
+
+    /* Gruplandırma tablosu */
+    .kv-grup-table { width: 100%; border-collapse: collapse; font-size: 7pt; }
+    .kv-grup-table th { font-size: 6pt; text-transform: uppercase; letter-spacing:.04em; color:#555; font-weight:700; text-align:right; border-bottom:1px solid #bbb; padding: 2px 4px; }
+    .kv-grup-table th:first-child { text-align:left; }
+    .kv-grup-table td { padding: 2px 4px; border-bottom: 1px solid #e5e7eb; text-align:right; font-variant-numeric:tabular-nums; }
+    .kv-grup-table td:first-child { text-align:left; font-weight:600; }
+    .kv-grup-table tfoot td { border-top: 1.5px solid #374151; font-weight:700; background:#f5f5f5 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .kv-grup-net { color: #1a56db !important; font-weight:800 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
 </style>
 
@@ -346,26 +357,62 @@ render_flash();
             </div>
         </section>
 
-        <?php if (!empty($gruplar)): ?>
+        <?php if (!empty($gruplar)):
+            // Toplam palet sayısını gruplardan hesapla
+            $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
+            $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
+            $grup_tot_brut  = 0.0;
+            $grup_tot_dara  = 0.0;
+            $grup_tot_net   = 0.0;
+            $grup_rows      = [];
+            foreach ($gruplar as $g) {
+                $gp    = (int)$g['palet_sayisi'];
+                $gk    = (int)$g['kasa_adedi'];
+                $gbrut = $grup_tot_palet > 0 ? ($gp / $grup_tot_palet) * $net : 0.0;
+                $gdara = $gp * $palet_dara_u + $gk * $kasa_dara_u;
+                $gnet  = max(0.0, $gbrut - $gdara);
+                $grup_tot_brut += $gbrut;
+                $grup_tot_dara += $gdara;
+                $grup_tot_net  += $gnet;
+                $grup_rows[] = ['ad' => $g['grup_adi'], 'palet' => $gp, 'kasa' => $gk,
+                                'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet];
+            }
+        ?>
         <!-- Gruplandırma -->
         <section class="card">
             <div class="card-head"><h2>🗂 Gruplandırma</h2></div>
             <div class="card-body" style="padding:0">
-                <table class="data-table" style="margin:0">
+                <table class="kv-grup-table">
                     <thead><tr>
                         <th>Grup</th>
-                        <th class="num">Palet</th>
-                        <th class="num">Kasa</th>
+                        <th>Palet</th>
+                        <th>Kasa</th>
+                        <th>Brüt KG</th>
+                        <th>Dara KG</th>
+                        <th>Net KG</th>
                     </tr></thead>
                     <tbody>
-                    <?php foreach ($gruplar as $g): ?>
+                    <?php foreach ($grup_rows as $gr): ?>
                         <tr>
-                            <td><strong><?= h($g['grup_adi']) ?></strong></td>
-                            <td class="num"><?= (int)$g['palet_sayisi'] ?></td>
-                            <td class="num"><?= (int)$g['kasa_adedi'] ?></td>
+                            <td><?= h($gr['ad']) ?></td>
+                            <td><?= $gr['palet'] ?></td>
+                            <td><?= $gr['kasa'] ?></td>
+                            <td><?= fmt_kg($gr['brut']) ?></td>
+                            <td><?= fmt_kg($gr['dara']) ?></td>
+                            <td class="kv-grup-net"><?= fmt_kg($gr['net']) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
+                    <?php if (count($grup_rows) > 1): ?>
+                    <tfoot><tr>
+                        <td>TOPLAM</td>
+                        <td><?= $grup_tot_palet ?></td>
+                        <td><?= $grup_tot_kasa ?></td>
+                        <td><?= fmt_kg($grup_tot_brut) ?></td>
+                        <td><?= fmt_kg($grup_tot_dara) ?></td>
+                        <td class="kv-grup-net"><?= fmt_kg($grup_tot_net) ?></td>
+                    </tr></tfoot>
+                    <?php endif; ?>
                 </table>
             </div>
         </section>

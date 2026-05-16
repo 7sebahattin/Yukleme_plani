@@ -25,9 +25,13 @@ function fmt_tartim($v): string {
 }
 
 // Mevcut gruplar (edit modunda DB'den)
-$_grup_list = $fis_id > 0
-    ? db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira")->fetchAll()
-    : [];
+if ($fis_id > 0) {
+    $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+    $_st_g->execute([$fis_id]);
+    $_grup_list = $_st_g->fetchAll();
+} else {
+    $_grup_list = [];
+}
 // Otomatik tamamlama / seçim listeleri
 $_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
 $_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
@@ -194,8 +198,18 @@ function kf_datalist(string $id, array $items): string {
         <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
     </div>
     <div class="card-body">
-        <p class="muted" style="margin-bottom:10px;font-size:.85rem">Her grup için ad ve palet/kasa adedini girin.</p>
+        <p class="muted" style="margin-bottom:10px;font-size:.85rem">
+            Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
+        </p>
         <div id="grupFormList"></div>
+        <div id="grupSumRow" class="grup-sum-row" style="display:none">
+            <span class="grup-sum-lbl">Toplam</span>
+            <div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>
+            <span class="grup-calc-op">−</span>
+            <div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>
+            <span class="grup-calc-op">=</span>
+            <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
+        </div>
     </div>
 </section>
 
@@ -372,11 +386,51 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ─── Gruplandırma ─── */
-var _grupSay = 0;
-var _grupSection    = document.getElementById('grupSection');
-var _grupToggleBtn  = document.getElementById('grupToggleBtn');
-var _grupFormList   = document.getElementById('grupFormList');
+/* ─── Gruplandırma (canlı hesap) ─── */
+var _grupSay     = 0;
+var _grupSection = document.getElementById('grupSection');
+var _grupToggle  = document.getElementById('grupToggleBtn');
+var _grupList    = document.getElementById('grupFormList');
+
+function _getKasaDaraUnit() { return getOptDara(document.getElementById('kantarKasaCinsi')); }
+function _getPaletDaraUnit(){ return getOptDara(document.getElementById('kantarPaletCinsi')); }
+function _getBrut() {
+    var t1 = parseNum(document.getElementById('tartim1').value);
+    var t2 = parseNum(document.getElementById('tartim2').value);
+    return Math.max(0, t1 - t2);
+}
+
+function _updateGrupCalc() {
+    if (!_grupList) return;
+    var brutTotal  = _getBrut();
+    var kasaDaraU  = _getKasaDaraUnit();
+    var paletDaraU = _getPaletDaraUnit();
+    var rows = _grupList.querySelectorAll('.grup-form-row');
+    var totPalet = 0;
+    rows.forEach(function(r) { totPalet += parseNum(r.querySelector('.grup-palet').value); });
+
+    var totBrut = 0, totDara = 0, totNet = 0;
+    rows.forEach(function(r) {
+        var palet = parseNum(r.querySelector('.grup-palet').value);
+        var kasa  = parseNum(r.querySelector('.grup-kasa').value);
+        var brut  = totPalet > 0 ? (palet / totPalet) * brutTotal : 0;
+        var dara  = palet * paletDaraU + kasa * kasaDaraU;
+        var net   = Math.max(0, brut - dara);
+        totBrut += brut; totDara += dara; totNet += net;
+        r.querySelector('.gc-brut').textContent = fmt(brut) + ' kg';
+        r.querySelector('.gc-dara').textContent = fmt(dara) + ' kg';
+        r.querySelector('.gc-net').textContent  = fmt(net)  + ' kg';
+    });
+    var sumEl = document.getElementById('grupSumRow');
+    if (sumEl && rows.length > 1) {
+        sumEl.style.display = '';
+        sumEl.querySelector('.gc-brut').textContent = fmt(totBrut) + ' kg';
+        sumEl.querySelector('.gc-dara').textContent = fmt(totDara) + ' kg';
+        sumEl.querySelector('.gc-net').textContent  = fmt(totNet)  + ' kg';
+    } else if (sumEl) {
+        sumEl.style.display = 'none';
+    }
+}
 
 function _addGrupRow(ad, palet, kasa) {
     _grupSay++;
@@ -384,45 +438,66 @@ function _addGrupRow(ad, palet, kasa) {
     var row = document.createElement('div');
     row.className = 'grup-form-row';
     row.innerHTML =
-        '<input type="text" name="gruplar[' + n + '][grup_adi]" placeholder="Grup adı (ör: CK, ASY)" value="' + esc(ad || '') + '" style="flex:1;min-width:120px">' +
-        '<label class="grup-form-lbl">Palet <input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" placeholder="0" class="num" value="' + (palet != null ? palet : '') + '" style="width:65px"></label>' +
-        '<label class="grup-form-lbl">Kasa <input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" placeholder="0" class="num" value="' + (kasa != null ? kasa : '') + '" style="width:65px"></label>' +
-        '<button type="button" class="grup-del-btn" title="Sil">✕</button>';
+        '<div class="grup-row-inputs">' +
+            '<input type="text" name="gruplar[' + n + '][grup_adi]" class="grup-ad" placeholder="Firma / grup adı" value="' + esc(ad || '') + '">' +
+            '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
+            '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
+            '<button type="button" class="grup-del-btn" title="Sil">✕</button>' +
+        '</div>' +
+        '<div class="grup-calc-bar">' +
+            '<div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>' +
+            '<span class="grup-calc-op">−</span>' +
+            '<div class="grup-calc-item"><span class="grup-calc-lbl">Dara</span><strong class="gc-dara grup-calc-val">—</strong></div>' +
+            '<span class="grup-calc-op">=</span>' +
+            '<div class="grup-calc-item grup-calc-net-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-net-val">—</strong></div>' +
+        '</div>';
     row.querySelector('.grup-del-btn').addEventListener('click', function() {
         row.remove();
-        if (!_grupFormList.children.length) {
+        _updateGrupCalc();
+        if (!_grupList.querySelectorAll('.grup-form-row').length) {
             _grupSection.style.display = 'none';
-            _grupToggleBtn.textContent = '🗂 Gruplandırma Ekle';
+            _grupToggle.textContent = '🗂 Gruplandırma Ekle';
         }
     });
-    _grupFormList.appendChild(row);
+    row.querySelector('.grup-palet').addEventListener('input', _updateGrupCalc);
+    row.querySelector('.grup-kasa').addEventListener('input', _updateGrupCalc);
+    _grupList.appendChild(row);
+    _updateGrupCalc();
 }
 
-if (_grupToggleBtn) {
-    _grupToggleBtn.addEventListener('click', function() {
-        var visible = _grupSection.style.display !== 'none';
-        if (!visible) {
+if (_grupToggle) {
+    _grupToggle.addEventListener('click', function() {
+        var open = _grupSection.style.display !== 'none';
+        if (!open) {
             _grupSection.style.display = '';
-            _grupToggleBtn.textContent = '🗂 Gruplandırmayı Kaldır';
-            if (!_grupFormList.children.length) { _addGrupRow(); _addGrupRow(); }
+            _grupToggle.textContent = '🗂 Gruplandırmayı Kaldır';
+            if (!_grupList.querySelectorAll('.grup-form-row').length) { _addGrupRow(); _addGrupRow(); }
         } else {
-            if (_grupFormList.children.length && !confirm('Grupları kaldırmak istediğinizden emin misiniz?')) return;
-            _grupFormList.innerHTML = '';
+            if (_grupList.querySelectorAll('.grup-form-row').length && !confirm('Grupları kaldırmak istediğinizden emin misiniz?')) return;
+            _grupList.innerHTML = '';
             _grupSection.style.display = 'none';
-            _grupToggleBtn.textContent = '🗂 Gruplandırma Ekle';
+            _grupToggle.textContent = '🗂 Gruplandırma Ekle';
         }
     });
 }
-if (document.getElementById('addGrupBtn')) {
-    document.getElementById('addGrupBtn').addEventListener('click', function() { _addGrupRow(); });
-}
+document.getElementById('addGrupBtn')?.addEventListener('click', function() { _addGrupRow(); });
+
+// Tartım ve cinsi değişince canlı güncelle
+['tartim1','tartim2'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', _updateGrupCalc);
+});
+['kantarKasaCinsi','kantarPaletCinsi'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', _updateGrupCalc);
+});
 
 // Edit modunda DB'den gelen grupları yükle
 (function() {
     var init = JSON.parse((document.getElementById('grupInitData') || {}).textContent || '[]');
     if (init.length) {
         _grupSection.style.display = '';
-        _grupToggleBtn.textContent = '🗂 Gruplandırmayı Kaldır';
+        _grupToggle.textContent = '🗂 Gruplandırmayı Kaldır';
         init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi); });
     }
 })();

@@ -1925,18 +1925,99 @@ body.print-mode .asya-sheet {
 .grup-toggle-bar { margin: 4px 0 8px; }
 .grup-form-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    overflow: hidden;
 }
-.grup-form-lbl {
+.grup-row-inputs {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: .88rem;
+    gap: 8px;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+    background: #fff;
+}
+.grup-row-inputs .grup-ad {
+    flex: 1;
+    min-width: 120px;
+}
+.grup-row-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--muted);
     white-space: nowrap;
 }
+.grup-row-inputs label input {
+    width: 70px;
+    text-align: right;
+    margin-top: 0;
+}
+.grup-calc-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #f8faff;
+    border-top: 1px solid var(--border);
+    padding: 6px 10px;
+}
+.grup-calc-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+}
+.grup-calc-lbl {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    line-height: 1.2;
+}
+.grup-calc-val {
+    font-size: .92rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #374151;
+}
+.grup-calc-op {
+    font-size: 1.1rem;
+    color: var(--muted);
+    padding: 0 4px;
+    line-height: 1;
+    align-self: flex-end;
+    padding-bottom: 2px;
+}
+.grup-calc-net-item { }
+.grup-calc-net-val {
+    color: var(--primary) !important;
+    font-size: 1rem !important;
+}
+.grup-sum-row {
+    border: 1px solid var(--primary);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    margin-top: 4px;
+    background: #eff6ff;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+.grup-sum-row .grup-sum-lbl {
+    font-size: .8rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    flex: 0 0 auto;
+    margin-right: 8px;
+}
+.grup-sum-row .grup-calc-item { flex: 1; }
+.grup-sum-row .grup-calc-val { color: var(--primary); }
 .grup-del-btn {
     background: none;
     border: 1px solid #fca5a5;
@@ -1948,6 +2029,16 @@ body.print-mode .asya-sheet {
     flex-shrink: 0;
 }
 .grup-del-btn:hover { background: #fee2e2; }
+
+/* Gruplandırma hesap tablosu (view sayfası) */
+.kv-grup-table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+.kv-grup-table th, .kv-grup-table td { padding: 3px 6px; border-bottom: 1px solid #e5e7eb; }
+.kv-grup-table th { font-size: 6.5pt; text-transform: uppercase; letter-spacing:.04em; color:#555; font-weight:700; text-align:right; }
+.kv-grup-table th:first-child, .kv-grup-table td:first-child { text-align:left; }
+.kv-grup-table td { text-align:right; font-variant-numeric:tabular-nums; }
+.kv-grup-table td:first-child { text-align:left; font-weight:600; }
+.kv-grup-table tfoot td { border-top: 2px solid #374151; font-weight:700; background:#f9fafb; }
+.kv-grup-net { color: var(--primary, #1a56db); font-weight:800 !important; }
 
 /* Tartım satırları */
 .kantar-tartim-wrap {
