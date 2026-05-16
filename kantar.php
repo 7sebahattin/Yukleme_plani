@@ -11,7 +11,7 @@ try {
         "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
                 palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2, created_at
          FROM kantar_fisleri
-         ORDER BY created_at DESC, id DESC
+         ORDER BY CAST(fis_no AS UNSIGNED) DESC, id DESC
          LIMIT 500"
     )->fetchAll();
 } catch (PDOException $e) {}
@@ -60,7 +60,7 @@ render_flash();
             $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
         ?>
             <tr>
-                <td><strong>#<?= (int)$r['id'] ?></strong></td>
+                <td><strong>#<?= h($r['fis_no'] ?: (string)$r['id']) ?></strong></td>
                 <td><?= h($r['fis_no'] ?: '—') ?></td>
                 <td><?= h($giris_disp) ?></td>
                 <td><?= h($r['plaka'] ?: '—') ?></td>
@@ -88,7 +88,7 @@ render_flash();
     <div class="record-card">
         <div class="record-card-head">
             <div>
-                <strong>#<?= (int)$r['id'] ?><?= $r['fis_no'] ? ' · ' . h($r['fis_no']) : '' ?></strong>
+                <strong>#<?= h($r['fis_no'] ?: (string)$r['id']) ?></strong>
                 <div class="muted"><?= h($giris_disp) ?></div>
             </div>
         </div>
