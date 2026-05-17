@@ -17,6 +17,7 @@ $f_depo    = trim($_GET['depo']      ?? '');
 $f_plaka   = trim($_GET['plaka']     ?? '');
 $f_mtype   = trim($_GET['mat_type']  ?? '');
 $f_q       = trim($_GET['q']         ?? '');
+$f_sort    = trim($_GET['sort']      ?? 'tarih');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
@@ -111,13 +112,21 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $p[':q'] = '%'.$f_q.'%';
     }
     rpt_date_filter($sql, $p, 'r.tarih', $f_from, $f_to);
-    $sql .= " GROUP BY r.id ORDER BY r.id DESC LIMIT 2000";
+    $sort_map = [
+        'tarih' => 'r.tarih DESC, r.id DESC',
+        'firma' => 'r.firma ASC, r.tarih DESC',
+        'durum' => 'r.durum ASC, r.tarih DESC',
+        'palet' => 'palet_sayisi DESC, r.tarih DESC',
+        'net'   => 'toplam_net DESC',
+    ];
+    $order_by = $sort_map[$f_sort] ?? 'r.tarih DESC, r.id DESC';
+    $sql .= " GROUP BY r.id ORDER BY $order_by LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
     if ($type === 'yukleme') {
-        $cols = ['id','tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+        $cols = ['tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     } else { // cikma — alıcı yok, depo var
-        $cols = ['id','tarih','firma','bolge','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+        $cols = ['tarih','firma','bolge','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     }
     foreach ($rows as $r) {
         $totals['palet_sayisi']   = ($totals['palet_sayisi']   ?? 0) + (int)$r['palet_sayisi'];
@@ -304,6 +313,7 @@ $csv_params = array_filter([
     'plaka'     => $f_plaka,
     'mat_type'  => $f_mtype,
     'q'         => $f_q,
+    'sort'      => ($f_sort !== 'tarih') ? $f_sort : '',
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
 
@@ -424,6 +434,17 @@ render_flash();
     <?php if (in_array($type, ['yukleme','cikma','kantar'], true)): ?>
     <div class="rpt-filter-group">
         <label class="rpt-search-label">Genel Arama<input type="text" name="q" value="<?= h($f_q) ?>" placeholder="Firma, parti, alıcı..."></label>
+        <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
+        <label>Sıralama
+            <select name="sort">
+                <option value="tarih" <?= $f_sort==='tarih'?'selected':'' ?>>Tarih</option>
+                <option value="firma" <?= $f_sort==='firma'?'selected':'' ?>>Firma</option>
+                <option value="durum" <?= $f_sort==='durum'?'selected':'' ?>>Durum</option>
+                <option value="palet" <?= $f_sort==='palet'?'selected':'' ?>>Palet Sayısı</option>
+                <option value="net"   <?= $f_sort==='net'  ?'selected':'' ?>>Net KG</option>
+            </select>
+        </label>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
@@ -500,6 +521,9 @@ render_flash();
             } elseif ($c === 'arka_plaka') {
                 // skip, handled with on_plaka
                 continue;
+            } elseif (in_array($c, ['toplam_dara','toplam_net'], true)) {
+                $rv = round((float)$v);
+                echo '<td class="num">' . ($rv != 0 ? h(fmt_kg($rv)) : '<span class="muted">—</span>') . '</td>';
             } elseif (in_array($c, $num_cols, true)) {
                 echo '<td class="num">' . (($v != 0) ? h(fmt_kg((float)$v)) : '<span class="muted">—</span>') . '</td>';
             } elseif (in_array($c, $int_cols, true)) {
@@ -536,7 +560,13 @@ render_flash();
             if ($i === 1) { echo '<td class="right strong">TOPLAM</td>'; continue; }
             if (isset($totals[$c])):
                 $is_int = in_array($c, $int_cols, true);
-                echo '<td class="num strong">' . ($is_int ? number_format((int)$totals[$c], 0, ',', '.') : fmt_kg((float)$totals[$c])) . '</td>';
+                if (in_array($c, ['toplam_dara','toplam_net'], true)) {
+                    echo '<td class="num strong">' . fmt_kg(round((float)$totals[$c])) . '</td>';
+                } elseif ($is_int) {
+                    echo '<td class="num strong">' . number_format((int)$totals[$c], 0, ',', '.') . '</td>';
+                } else {
+                    echo '<td class="num strong">' . fmt_kg((float)$totals[$c]) . '</td>';
+                }
             else:
                 echo '<td></td>';
             endif;
