@@ -165,35 +165,41 @@ $form_is_cikma = $form_is_cikma ?? false;
     <div class="card-head">
         <h2>Yükleme Planı (Paletler)</h2>
         <div style="display:flex;gap:8px">
-            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Ekle</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Giriş</button>
             <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
         </div>
     </div>
 
-    <!-- Toplu Ekleme Paneli -->
+    <!-- Toplu Giriş — Excel Tablo -->
     <div id="topluPanel" class="toplu-panel" style="display:none">
         <div class="toplu-panel-head">
-            <strong>Toplu Palet Ekle</strong>
-            <span class="muted" id="topluCount"></span>
-            <button type="button" id="topluKapat" class="btn btn-sm btn-ghost" style="margin-left:auto">✕ Kapat</button>
+            <strong>Toplu Palet Girişi</strong>
+            <span class="muted" id="topluCount" style="font-size:.82rem"></span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+                <button type="button" id="topluSatirEkle" class="btn btn-sm btn-ghost">+ Satır</button>
+                <button type="button" id="topluListeyeEkle" class="btn btn-sm btn-primary">✓ Listeye Ekle</button>
+                <button type="button" id="topluKapat" class="btn btn-sm btn-ghost">✕</button>
+            </div>
         </div>
-        <div class="toplu-fields">
-            <label>Palet No<input type="text" id="tpPaletNo" autocomplete="off"></label>
-            <label>Kasa Adeti<input type="number" id="tpKasaAdeti" inputmode="numeric" min="1" autocomplete="off"></label>
-            <label>Brüt KG<input type="text" id="tpBrutKg" inputmode="decimal" placeholder="0,000" autocomplete="off"></label>
-            <label>Size<input type="text" id="tpSize" autocomplete="off"></label>
-            <label>Kasa Cinsi<select id="tpKasaCinsi"></select></label>
-            <label>Palet Tipi<select id="tpPaletTipi"></select></label>
-            <label>Depo<select id="tpDepo"></select></label>
-            <label>Ürün Cinsi<input type="text" id="tpUrunCinsi" autocomplete="off"></label>
+        <div class="toplu-tablo-wrap">
+            <table class="toplu-tablo">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Kasa Adeti</th>
+                        <th>Brüt KG</th>
+                        <th>Kasa Cinsi</th>
+                        <th>Palet Tipi</th>
+                        <th>Depo</th>
+                        <th class="tp-num">Dara</th>
+                        <th class="tp-num">Net</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="topluTbody"></tbody>
+            </table>
         </div>
-        <div class="toplu-calc">
-            Dara: <strong id="tpDara">0,000</strong> &nbsp;·&nbsp; Net: <strong id="tpNet">0,000</strong>
-        </div>
-        <div class="toplu-actions">
-            <button type="button" id="topluEkleBtn" class="btn btn-primary">Ekle →</button>
-            <span class="muted" style="font-size:.82rem">Enter ile boş alana geç, son alandan Ekle</span>
-        </div>
+        <p class="muted" style="font-size:.78rem;margin:6px 0 0">Enter → aynı sütunda alt satıra geç &nbsp;·&nbsp; Tab → sağ hücre</p>
     </div>
 
     <div id="palletList" class="pallet-cards"></div>
