@@ -495,6 +495,111 @@
         generateHiddenInputs();
     });
 
+    /* ── Toplu Ekleme Paneli ── */
+    (function () {
+        const panel     = document.getElementById('topluPanel');
+        const acBtn     = document.getElementById('topluAcBtn');
+        const kapatBtn  = document.getElementById('topluKapat');
+        const ekleBtn   = document.getElementById('topluEkleBtn');
+        const countEl   = document.getElementById('topluCount');
+        const tpPaletNo  = document.getElementById('tpPaletNo');
+        const tpKasa     = document.getElementById('tpKasaAdeti');
+        const tpBrut     = document.getElementById('tpBrutKg');
+        const tpSize     = document.getElementById('tpSize');
+        const tpKasaCinsi = document.getElementById('tpKasaCinsi');
+        const tpPaletTipi = document.getElementById('tpPaletTipi');
+        const tpDepo     = document.getElementById('tpDepo');
+        const tpUrun     = document.getElementById('tpUrunCinsi');
+        const tpDara     = document.getElementById('tpDara');
+        const tpNet      = document.getElementById('tpNet');
+        if (!panel || !acBtn) return;
+
+        const tpInputs = [tpPaletNo, tpKasa, tpBrut, tpSize, tpKasaCinsi, tpPaletTipi, tpDepo, tpUrun];
+        let addedCount = 0;
+
+        function tpCalc() {
+            const ka = parseInt2(tpKasa.value);
+            const kasaUnit  = parseNum(tpKasaCinsi.options[tpKasaCinsi.selectedIndex]?.dataset.unit || 0);
+            const paletUnit = parseNum(tpPaletTipi.options[tpPaletTipi.selectedIndex]?.dataset.unit || 0);
+            const dara = ka * kasaUnit + paletUnit;
+            const net  = Math.max(0, parseNum(tpBrut.value) - dara);
+            tpDara.textContent = fmtKg(dara);
+            tpNet.textContent  = fmtKg(net);
+        }
+
+        function fillFromLast() {
+            const last = pallets[pallets.length - 1];
+            tpPaletNo.value = String(pallets.length + 1);
+            tpKasaCinsi.innerHTML = buildOptions(KASA_LIST,  last?.kasa_cinsi_id || '', '-- seçiniz --');
+            tpPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || '', '-- seçiniz --');
+            tpDepo.innerHTML      = buildTextOptions(DEPO_LIST, last?.depo || (document.getElementById('genelDepo') || {}).value || '', '-- seçiniz --');
+            tpKasa.value = last?.kasa_adeti || '';
+            tpSize.value = last?.size || '';
+            tpUrun.value = last?.urun_cinsi || '';
+            tpBrut.value = '';
+            tpCalc();
+        }
+
+        acBtn.addEventListener('click', () => {
+            panel.style.display = '';
+            fillFromLast();
+            setTimeout(() => (tpBrut.value === '' ? tpBrut : tpKasa).focus(), 60);
+        });
+
+        kapatBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+
+        // Canlı hesap
+        [tpKasa, tpBrut, tpKasaCinsi, tpPaletTipi].forEach(el => {
+            el.addEventListener('input', tpCalc);
+            el.addEventListener('change', tpCalc);
+        });
+
+        // Enter → sonraki BOŞ alana geç, yoksa Ekle
+        panel.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            if (e.target.tagName === 'TEXTAREA') return;
+            e.preventDefault();
+            const cur = e.target;
+            const idx = tpInputs.indexOf(cur);
+            // idx'den sonraki boş alanı bul
+            for (let i = idx + 1; i < tpInputs.length; i++) {
+                if (!tpInputs[i].value) { tpInputs[i].focus(); return; }
+            }
+            // Tümü dolu (veya son alan) → ekle
+            ekleBtn.click();
+        });
+
+        ekleBtn.addEventListener('click', () => {
+            const ka = parseInt2(tpKasa.value);
+            const br = parseNum(tpBrut.value);
+            const kc = tpKasaCinsi.value;
+            const pt = tpPaletTipi.value;
+            if (!ka || !br || !kc || !pt) {
+                alert('Kasa adeti, Brüt KG, Kasa Cinsi ve Palet Tipi zorunludur.');
+                (!ka ? tpKasa : !br ? tpBrut : !kc ? tpKasaCinsi : tpPaletTipi).focus();
+                return;
+            }
+            const last = pallets[pallets.length - 1];
+            pallets.push({
+                palet_no:      tpPaletNo.value.trim() || String(pallets.length + 1),
+                kasa_adeti:    ka,
+                size:          tpSize.value.trim(),
+                brut_kg:       br,
+                kasa_cinsi_id: kc,
+                palet_tipi_id: pt,
+                urun_cinsi:    tpUrun.value.trim(),
+                depo:          tpDepo.value.trim(),
+                materials:     Array.isArray(last?.materials) ? last.materials.map(m => ({...m})) : [],
+            });
+            renderCards();
+            recomputeTotals();
+            addedCount++;
+            countEl.textContent = addedCount + ' palet eklendi';
+            fillFromLast();
+            setTimeout(() => tpBrut.focus(), 40);
+        });
+    })();
+
     /* ── Mevcut paletleri yükle ── */
     if (palletsInit && palletsInit.length) {
         palletsInit.forEach(p => {

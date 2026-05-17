@@ -164,7 +164,36 @@ $form_is_cikma = $form_is_cikma ?? false;
 <section class="card">
     <div class="card-head">
         <h2>Yükleme Planı (Paletler)</h2>
-        <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
+        <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Ekle</button>
+            <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
+        </div>
+    </div>
+
+    <!-- Toplu Ekleme Paneli -->
+    <div id="topluPanel" class="toplu-panel" style="display:none">
+        <div class="toplu-panel-head">
+            <strong>Toplu Palet Ekle</strong>
+            <span class="muted" id="topluCount"></span>
+            <button type="button" id="topluKapat" class="btn btn-sm btn-ghost" style="margin-left:auto">✕ Kapat</button>
+        </div>
+        <div class="toplu-fields">
+            <label>Palet No<input type="text" id="tpPaletNo" autocomplete="off"></label>
+            <label>Kasa Adeti<input type="number" id="tpKasaAdeti" inputmode="numeric" min="1" autocomplete="off"></label>
+            <label>Brüt KG<input type="text" id="tpBrutKg" inputmode="decimal" placeholder="0,000" autocomplete="off"></label>
+            <label>Size<input type="text" id="tpSize" autocomplete="off"></label>
+            <label>Kasa Cinsi<select id="tpKasaCinsi"></select></label>
+            <label>Palet Tipi<select id="tpPaletTipi"></select></label>
+            <label>Depo<select id="tpDepo"></select></label>
+            <label>Ürün Cinsi<input type="text" id="tpUrunCinsi" autocomplete="off"></label>
+        </div>
+        <div class="toplu-calc">
+            Dara: <strong id="tpDara">0,000</strong> &nbsp;·&nbsp; Net: <strong id="tpNet">0,000</strong>
+        </div>
+        <div class="toplu-actions">
+            <button type="button" id="topluEkleBtn" class="btn btn-primary">Ekle →</button>
+            <span class="muted" style="font-size:.82rem">Enter ile boş alana geç, son alandan Ekle</span>
+        </div>
     </div>
 
     <div id="palletList" class="pallet-cards"></div>

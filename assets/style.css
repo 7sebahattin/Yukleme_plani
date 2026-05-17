@@ -2685,6 +2685,60 @@ body.notes-modal-open { overflow: hidden; }
 .record-card-firma { font-size: .82rem; color: var(--muted); }
 .record-card-tarih { font-size: .8em; font-weight: 400; color: var(--muted); }
 
+/* ── Toplu Ekle Paneli ── */
+.toplu-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: #f8fafc;
+    padding: 12px 14px;
+    margin: 0 0 12px;
+}
+.toplu-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+.toplu-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.toplu-fields label {
+    display: flex;
+    flex-direction: column;
+    font-size: .8rem;
+    color: var(--muted);
+    gap: 3px;
+}
+.toplu-fields input,
+.toplu-fields select {
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: .9rem;
+    background: #fff;
+}
+.toplu-calc {
+    font-size: .85rem;
+    color: var(--muted);
+    margin-bottom: 8px;
+}
+.toplu-calc strong { color: var(--text); }
+.toplu-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+@media (max-width: 767px) {
+    .toplu-fields { grid-template-columns: repeat(2, 1fr); }
+    .toplu-fields input,
+    .toplu-fields select { font-size: 16px; }
+}
+
 @media (max-width: 767px) {
     .hesap-quick-grid { grid-template-columns: repeat(3, 1fr); }
     .hesap-stat-grid  { grid-template-columns: repeat(2, 1fr); }
