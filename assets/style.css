@@ -2036,6 +2036,52 @@ body.print-mode .asya-sheet {
     flex-shrink: 0;
 }
 .grup-del-btn:hover { background: #fee2e2; }
+.grup-ozel-lbl {
+    flex: 0 0 auto !important;
+    font-size: .78rem !important;
+    color: var(--primary) !important;
+    cursor: pointer;
+    user-select: none;
+    margin-left: auto !important;
+    gap: 4px !important;
+}
+.grup-ozel-lbl input[type=checkbox] {
+    width: auto !important;
+    flex: none !important;
+    cursor: pointer;
+    accent-color: var(--primary);
+    margin-top: 0 !important;
+}
+.grup-ozel-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #f0f4ff;
+    border-top: 1px dashed var(--primary);
+}
+.grup-ozel-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
+    flex: 1;
+    margin: 0;
+}
+.grup-ozel-inputs label input {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+    margin-top: 0 !important;
+}
+.grup-ozel-inputs label small {
+    color: var(--muted);
+    font-weight: normal;
+    font-size: .72rem;
+}
 
 /* Gruplandırma hesap tablosu (view sayfası) */
 .kv-grup-table { width: 100%; border-collapse: collapse; font-size: 8pt; }

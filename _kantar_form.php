@@ -444,8 +444,10 @@ function _updateGrupCalc() {
     rows.forEach(function(r) {
         var palet      = parseNum(r.querySelector('.grup-palet').value);
         var kasa       = parseNum(r.querySelector('.grup-kasa').value);
-        var kasaDaraU  = parseNum(r.querySelector('.grup-kasa-dara').value);
-        var paletDaraU = parseNum(r.querySelector('.grup-palet-dara').value);
+        var ozelCb     = r.querySelector('.grup-ozel-cb');
+        var isOzel     = ozelCb && ozelCb.checked;
+        var kasaDaraU  = isOzel ? parseNum(r.querySelector('.grup-kasa-dara').value) : _getKasaDaraUnit();
+        var paletDaraU = isOzel ? parseNum(r.querySelector('.grup-palet-dara').value) : _getPaletDaraUnit();
         var brut  = kasa * brutPerKasa;
         var dara  = palet * paletDaraU + kasa * kasaDaraU;
         var net   = Math.max(0, brut - dara);
@@ -468,9 +470,7 @@ function _updateGrupCalc() {
 function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
     _grupSay++;
     var n = _grupSay;
-    // Dara varsayılanları: parametre > global giriş kutusu > boş
-    var defKd = kasaDara  != null ? kasaDara  : parseNum((document.getElementById('grupKasaDara')  || {}).value || 0);
-    var defPd = paletDara != null ? paletDara : parseNum((document.getElementById('grupPaletDara') || {}).value || 0);
+    var isOzel = (parseNum(kasaDara) > 0 || parseNum(paletDara) > 0);
     var row = document.createElement('div');
     row.className = 'grup-form-row';
     row.innerHTML =
@@ -479,10 +479,19 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
             '<div class="grup-row-numfields">' +
                 '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
                 '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
-                '<label>K.Dara<input type="text" inputmode="decimal" name="gruplar[' + n + '][kasa_dara_kg]" class="num grup-kasa-dara" placeholder="0" value="' + (defKd > 0 ? fmt(defKd) : '') + '"></label>' +
-                '<label>P.Dara<input type="text" inputmode="decimal" name="gruplar[' + n + '][palet_dara_kg]" class="num grup-palet-dara" placeholder="0" value="' + (defPd > 0 ? fmt(defPd) : '') + '"></label>' +
+                '<label class="grup-ozel-lbl" title="Bu grup için farklı kasa/palet darası kullan">' +
+                    '<input type="checkbox" class="grup-ozel-cb"' + (isOzel ? ' checked' : '') + '> Özel Dara' +
+                '</label>' +
                 '<button type="button" class="grup-del-btn" title="Sil">✕</button>' +
             '</div>' +
+        '</div>' +
+        '<div class="grup-ozel-inputs"' + (isOzel ? '' : ' style="display:none"') + '>' +
+            '<label>K.Dara <small>(kg/kasa)</small>' +
+                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][kasa_dara_kg]" class="num grup-kasa-dara" placeholder="0" value="' + (parseNum(kasaDara) > 0 ? fmt(parseNum(kasaDara)) : '') + '">' +
+            '</label>' +
+            '<label>P.Dara <small>(kg/palet)</small>' +
+                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][palet_dara_kg]" class="num grup-palet-dara" placeholder="0" value="' + (parseNum(paletDara) > 0 ? fmt(parseNum(paletDara)) : '') + '">' +
+            '</label>' +
         '</div>' +
         '<div class="grup-calc-bar">' +
             '<div class="grup-calc-item"><span class="grup-calc-lbl">Brüt</span><strong class="gc-brut grup-calc-val">—</strong></div>' +
@@ -491,6 +500,24 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
             '<span class="grup-calc-op">=</span>' +
             '<div class="grup-calc-item grup-calc-net-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-net-val">—</strong></div>' +
         '</div>';
+
+    var ozelDiv = row.querySelector('.grup-ozel-inputs');
+    var ozelCb  = row.querySelector('.grup-ozel-cb');
+    var kdInp   = row.querySelector('.grup-kasa-dara');
+    var pdInp   = row.querySelector('.grup-palet-dara');
+
+    ozelCb.addEventListener('change', function() {
+        if (this.checked) {
+            ozelDiv.style.display = '';
+            if (!kdInp.value) { var g = _getKasaDaraUnit();  if (g > 0) kdInp.value = fmt(g); }
+            if (!pdInp.value) { var g2 = _getPaletDaraUnit(); if (g2 > 0) pdInp.value = fmt(g2); }
+        } else {
+            ozelDiv.style.display = 'none';
+            kdInp.value = ''; pdInp.value = '';
+        }
+        _updateGrupCalc();
+    });
+
     row.querySelector('.grup-del-btn').addEventListener('click', function() {
         row.remove();
         _updateGrupCalc();
@@ -501,8 +528,8 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
     });
     row.querySelector('.grup-palet').addEventListener('input', _updateGrupCalc);
     row.querySelector('.grup-kasa').addEventListener('input', _updateGrupCalc);
-    row.querySelector('.grup-kasa-dara').addEventListener('input', _updateGrupCalc);
-    row.querySelector('.grup-palet-dara').addEventListener('input', _updateGrupCalc);
+    kdInp.addEventListener('input', _updateGrupCalc);
+    pdInp.addEventListener('input', _updateGrupCalc);
     _grupList.appendChild(row);
     _updateGrupCalc();
 }
