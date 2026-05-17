@@ -203,6 +203,14 @@ function kf_datalist(string $id, array $items): string {
         <button type="button" id="addGrupBtn" class="btn btn-sm btn-primary">+ Grup Ekle</button>
     </div>
     <div class="card-body">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+            <label style="flex:1;min-width:130px">Kasa Darası <small class="muted">(kg/kasa)</small>
+                <input type="text" id="grupKasaDara" inputmode="decimal" class="num" placeholder="0">
+            </label>
+            <label style="flex:1;min-width:130px">Palet Darası <small class="muted">(kg/palet)</small>
+                <input type="text" id="grupPaletDara" inputmode="decimal" class="num" placeholder="0">
+            </label>
+        </div>
         <p class="muted" style="margin-bottom:10px;font-size:.85rem">
             Her firma/grup için palet ve kasa adetini girin. Brüt, toplam palet oranına göre dağıtılır.
         </p>
@@ -401,8 +409,14 @@ var _grupSection = document.getElementById('grupSection');
 var _grupToggle  = document.getElementById('grupToggleBtn');
 var _grupList    = document.getElementById('grupFormList');
 
-function _getKasaDaraUnit() { return getOptDara(document.getElementById('kantarKasaCinsi')); }
-function _getPaletDaraUnit(){ return getOptDara(document.getElementById('kantarPaletCinsi')); }
+function _getKasaDaraUnit() {
+    var el = document.getElementById('grupKasaDara');
+    return el ? parseNum(el.value) : getOptDara(document.getElementById('kantarKasaCinsi'));
+}
+function _getPaletDaraUnit() {
+    var el = document.getElementById('grupPaletDara');
+    return el ? parseNum(el.value) : getOptDara(document.getElementById('kantarPaletCinsi'));
+}
 function _getBrut() {
     var t1 = parseNum(document.getElementById('tartim1').value);
     var t2 = parseNum(document.getElementById('tartim2').value);
@@ -503,8 +517,28 @@ document.getElementById('addGrupBtn')?.addEventListener('click', function() { _a
 });
 ['kantarKasaCinsi','kantarPaletCinsi'].forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) el.addEventListener('change', _updateGrupCalc);
+    if (!el) return;
+    el.addEventListener('change', function() {
+        var dara = getOptDara(this);
+        var inp = document.getElementById(id === 'kantarKasaCinsi' ? 'grupKasaDara' : 'grupPaletDara');
+        if (inp && dara > 0) inp.value = fmt(dara);
+        _updateGrupCalc();
+    });
 });
+// Grup dara kutularındaki manual giriş canlı hesabı tetikler
+['grupKasaDara','grupPaletDara'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', _updateGrupCalc);
+});
+// Başlangıçta cinsi seçimine göre dara kutularını doldur
+(function() {
+    var kasaDara  = getOptDara(document.getElementById('kantarKasaCinsi'));
+    var paletDara = getOptDara(document.getElementById('kantarPaletCinsi'));
+    var kInp = document.getElementById('grupKasaDara');
+    var pInp = document.getElementById('grupPaletDara');
+    if (kInp && kasaDara  > 0) kInp.value  = fmt(kasaDara);
+    if (pInp && paletDara > 0) pInp.value = fmt(paletDara);
+})();
 
 // Edit modunda DB'den gelen grupları yükle
 (function() {
