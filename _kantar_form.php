@@ -31,7 +31,7 @@ function fmt_tartim($v): string {
 
 // Mevcut gruplar (edit modunda DB'den)
 if ($fis_id > 0) {
-    $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+    $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
     $_st_g->execute([$fis_id]);
     $_grup_list = $_st_g->fetchAll();
 } else {
@@ -426,8 +426,6 @@ function _getBrut() {
 function _updateGrupCalc() {
     if (!_grupList) return;
     var brutTotal  = _getBrut();
-    var kasaDaraU  = _getKasaDaraUnit();
-    var paletDaraU = _getPaletDaraUnit();
     var rows = _grupList.querySelectorAll('.grup-form-row');
 
     // Toplam kasa → kasa başı brüt ağırlığı
@@ -437,8 +435,10 @@ function _updateGrupCalc() {
 
     var totBrut = 0, totDara = 0, totNet = 0;
     rows.forEach(function(r) {
-        var palet = parseNum(r.querySelector('.grup-palet').value);
-        var kasa  = parseNum(r.querySelector('.grup-kasa').value);
+        var palet      = parseNum(r.querySelector('.grup-palet').value);
+        var kasa       = parseNum(r.querySelector('.grup-kasa').value);
+        var kasaDaraU  = parseNum(r.querySelector('.grup-kasa-dara').value);
+        var paletDaraU = parseNum(r.querySelector('.grup-palet-dara').value);
         var brut  = kasa * brutPerKasa;
         var dara  = palet * paletDaraU + kasa * kasaDaraU;
         var net   = Math.max(0, brut - dara);
@@ -458,9 +458,12 @@ function _updateGrupCalc() {
     }
 }
 
-function _addGrupRow(ad, palet, kasa) {
+function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
     _grupSay++;
     var n = _grupSay;
+    // Dara varsayılanları: parametre > global giriş kutusu > boş
+    var defKd = kasaDara  != null ? kasaDara  : parseNum((document.getElementById('grupKasaDara')  || {}).value || 0);
+    var defPd = paletDara != null ? paletDara : parseNum((document.getElementById('grupPaletDara') || {}).value || 0);
     var row = document.createElement('div');
     row.className = 'grup-form-row';
     row.innerHTML =
@@ -469,6 +472,8 @@ function _addGrupRow(ad, palet, kasa) {
             '<div class="grup-row-numfields">' +
                 '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
                 '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
+                '<label>K.Dara<input type="text" inputmode="decimal" name="gruplar[' + n + '][kasa_dara_kg]" class="num grup-kasa-dara" placeholder="0" value="' + (defKd > 0 ? fmt(defKd) : '') + '"></label>' +
+                '<label>P.Dara<input type="text" inputmode="decimal" name="gruplar[' + n + '][palet_dara_kg]" class="num grup-palet-dara" placeholder="0" value="' + (defPd > 0 ? fmt(defPd) : '') + '"></label>' +
                 '<button type="button" class="grup-del-btn" title="Sil">✕</button>' +
             '</div>' +
         '</div>' +
@@ -489,6 +494,8 @@ function _addGrupRow(ad, palet, kasa) {
     });
     row.querySelector('.grup-palet').addEventListener('input', _updateGrupCalc);
     row.querySelector('.grup-kasa').addEventListener('input', _updateGrupCalc);
+    row.querySelector('.grup-kasa-dara').addEventListener('input', _updateGrupCalc);
+    row.querySelector('.grup-palet-dara').addEventListener('input', _updateGrupCalc);
     _grupList.appendChild(row);
     _updateGrupCalc();
 }
@@ -546,7 +553,7 @@ document.getElementById('addGrupBtn')?.addEventListener('click', function() { _a
     if (init.length) {
         _grupSection.style.display = '';
         _grupToggle.textContent = '🗂 Gruplandırmayı Kaldır';
-        init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi); });
+        init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi, g.kasa_dara_kg, g.palet_dara_kg); });
     }
 })();
 
