@@ -514,7 +514,7 @@
         const tpNet      = document.getElementById('tpNet');
         if (!panel || !acBtn) return;
 
-        const tpInputs = [tpPaletNo, tpKasa, tpBrut, tpSize, tpKasaCinsi, tpPaletTipi, tpDepo, tpUrun];
+        const tpInputs = [tpPaletNo, tpKasa, tpBrut, tpKasaCinsi, tpPaletTipi, tpDepo, tpUrun];
         let addedCount = 0;
 
         function tpCalc() {
@@ -574,11 +574,6 @@
             const br = parseNum(tpBrut.value);
             const kc = tpKasaCinsi.value;
             const pt = tpPaletTipi.value;
-            if (!ka || !br || !kc || !pt) {
-                alert('Kasa adeti, Brüt KG, Kasa Cinsi ve Palet Tipi zorunludur.');
-                (!ka ? tpKasa : !br ? tpBrut : !kc ? tpKasaCinsi : tpPaletTipi).focus();
-                return;
-            }
             const last = pallets[pallets.length - 1];
             pallets.push({
                 palet_no:      tpPaletNo.value.trim() || String(pallets.length + 1),
