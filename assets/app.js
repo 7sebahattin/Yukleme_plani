@@ -697,6 +697,156 @@
         });
     })();
 
+    /* ── Excel İmport ── */
+    (function () {
+        const panel       = document.getElementById('excelPanel');
+        const acBtn       = document.getElementById('excelAcBtn');
+        const kapatBtn    = document.getElementById('excelKapat');
+        const fileInp     = document.getElementById('excelFile');
+        const dropZone    = document.getElementById('excelDropZone');
+        const previewWrap = document.getElementById('excelPreviewWrap');
+        const tbody       = document.getElementById('excelTbody');
+        const rowCountEl  = document.getElementById('excelRowCount');
+        const ekleBtn     = document.getElementById('excelListeyeEkle');
+        const kcSel       = document.getElementById('excelKasaCinsi');
+        const ptSel       = document.getElementById('excelPaletTipi');
+        const depSel      = document.getElementById('excelDepo');
+        const urunInp     = document.getElementById('excelUrunCinsi');
+        if (!panel || !acBtn) return;
+
+        // Toplu alanların seçeneklerini doldur
+        function initSelects() {
+            const lp = pallets[pallets.length - 1];
+            kcSel.innerHTML  = buildOptions(KASA_LIST,  lp?.kasa_cinsi_id || '', '— seçiniz —');
+            ptSel.innerHTML  = buildOptions(PALET_LIST, lp?.palet_tipi_id || '', '— seçiniz —');
+            depSel.innerHTML = buildTextOptions(DEPO_LIST,
+                lp?.depo || (document.getElementById('genelDepo') || {}).value || '', '— seçiniz —');
+        }
+
+        // Sütun adı normalize
+        function normKey(s) {
+            return String(s).toLowerCase()
+                .replace(/[\s_\-]/g, '')
+                .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s')
+                .replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c');
+        }
+        const KEY_MAP = {
+            'paletno':'palet_no','no':'palet_no','#':'palet_no','sira':'palet_no',
+            'kasaadeti':'kasa_adeti','kasa':'kasa_adeti','adet':'kasa_adeti','kasaadet':'kasa_adeti',
+            'brutkg':'brut_kg','brut':'brut_kg','kg':'brut_kg','brutkilogram':'brut_kg',
+            'size':'size','boyut':'size',
+        };
+
+        // Excel parse
+        function parseWorkbook(wb) {
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const raw = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            if (raw.length < 2) return [];
+            const headers = raw[0].map(h => normKey(String(h)));
+            const colOf = {};
+            headers.forEach((h, i) => { if (KEY_MAP[h]) colOf[KEY_MAP[h]] = i; });
+            const rows = [];
+            for (let r = 1; r < raw.length; r++) {
+                const row = raw[r];
+                if (!row.some(v => v !== '' && v !== null && v !== undefined)) continue;
+                const g = key => (colOf[key] !== undefined ? row[colOf[key]] : '') ?? '';
+                rows.push({
+                    palet_no:   String(g('palet_no') || rows.length + 1).trim(),
+                    kasa_adeti: String(g('kasa_adeti')).replace(',', '.').trim(),
+                    brut_kg:    String(g('brut_kg')).replace(',', '.').trim(),
+                    size:       String(g('size') || '').trim(),
+                });
+            }
+            return rows;
+        }
+
+        // Önizleme tablosunu çiz
+        function renderPreview(rows) {
+            tbody.innerHTML = '';
+            rows.forEach((row, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td class="tp-no-td"><span class="tp-no">' + (pallets.length + i + 1) + '</span></td>' +
+                    '<td><input type="text"   class="tp-cell" data-f="palet_no"   value="' + escHtml(row.palet_no)   + '" style="width:55px"></td>' +
+                    '<td><input type="number" class="tp-cell" data-f="kasa_adeti" value="' + escHtml(row.kasa_adeti) + '" style="width:75px"></td>' +
+                    '<td><input type="text"   class="tp-cell" data-f="brut_kg"    value="' + escHtml(row.brut_kg)    + '" inputmode="decimal" style="width:85px"></td>' +
+                    '<td><button type="button" class="btn btn-sm btn-ghost tp-del">✕</button></td>';
+                tr.querySelector('.tp-del').addEventListener('click', function () {
+                    tr.remove();
+                    rowCountEl.textContent = tbody.querySelectorAll('tr').length;
+                });
+                tbody.appendChild(tr);
+            });
+            rowCountEl.textContent = rows.length;
+            previewWrap.style.display = rows.length ? '' : 'none';
+        }
+
+        function processFile(file) {
+            if (!window.XLSX) { alert('Excel kütüphanesi yüklenmedi, sayfayı yenileyin.'); return; }
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const wb = window.XLSX.read(e.target.result, { type: 'array' });
+                    const rows = parseWorkbook(wb);
+                    if (!rows.length) { alert('Veri bulunamadı. Başlık satırlarını kontrol edin (Palet No, Kasa Adeti, Brüt KG).'); return; }
+                    renderPreview(rows);
+                } catch (err) { alert('Dosya okunamadı: ' + err.message); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        acBtn.addEventListener('click', () => {
+            if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+            // diğer paneli kapat
+            const tp = document.getElementById('topluPanel');
+            if (tp) tp.style.display = 'none';
+            initSelects();
+            tbody.innerHTML = '';
+            previewWrap.style.display = 'none';
+            panel.style.display = '';
+        });
+        kapatBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+
+        dropZone.addEventListener('click', () => fileInp.click());
+        dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault(); dropZone.classList.remove('drag-over');
+            if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+        });
+        fileInp.addEventListener('change', () => {
+            if (fileInp.files[0]) processFile(fileInp.files[0]);
+            fileInp.value = '';
+        });
+
+        ekleBtn.addEventListener('click', () => {
+            const trs = Array.from(tbody.querySelectorAll('tr'));
+            if (!trs.length) return;
+            const kc   = kcSel.value;
+            const pt   = ptSel.value;
+            const dep  = depSel.value;
+            const urun = urunInp.value.trim();
+            const lastP = pallets[pallets.length - 1];
+            trs.forEach(tr => {
+                const g = f => tr.querySelector('[data-f=' + f + ']').value;
+                pallets.push({
+                    palet_no:      g('palet_no') || String(pallets.length + 1),
+                    kasa_adeti:    parseInt2(g('kasa_adeti')),
+                    size:          '',
+                    brut_kg:       parseNum(g('brut_kg')),
+                    kasa_cinsi_id: kc,
+                    palet_tipi_id: pt,
+                    urun_cinsi:    urun,
+                    depo:          dep,
+                    materials:     Array.isArray(lastP?.materials) ? lastP.materials.map(m => ({...m})) : [],
+                });
+            });
+            renderCards();
+            recomputeTotals();
+            panel.style.display = 'none';
+        });
+    })();
+
     /* ── Mevcut paletleri yükle ── */
     if (palletsInit && palletsInit.length) {
         palletsInit.forEach(p => {

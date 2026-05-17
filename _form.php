@@ -164,9 +164,53 @@ $form_is_cikma = $form_is_cikma ?? false;
 <section class="card">
     <div class="card-head">
         <h2>Yükleme Planı (Paletler)</h2>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
             <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Giriş</button>
             <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
+        </div>
+    </div>
+
+    <!-- Excel Yükleme Paneli -->
+    <div id="excelPanel" class="toplu-panel" style="display:none">
+        <div class="toplu-panel-head">
+            <strong>📥 Excel'den Yükle</strong>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                <a href="excel_ornek_palet.php" class="btn btn-sm btn-ghost" download>⬇ Örnek İndir</a>
+                <button type="button" id="excelKapat" class="btn btn-sm btn-ghost">✕</button>
+            </div>
+        </div>
+        <label id="excelDropZone" class="excel-drop-zone" for="excelFile">
+            <span>📂 Excel dosyasını buraya sürükleyin veya tıklayın</span>
+            <small>.xlsx &nbsp;·&nbsp; .xls &nbsp;·&nbsp; .csv</small>
+        </label>
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none">
+
+        <div id="excelPreviewWrap" style="display:none">
+            <div class="toplu-tablo-wrap" style="margin-top:10px">
+                <table class="toplu-tablo">
+                    <thead><tr>
+                        <th>#</th><th>Palet No</th><th>Kasa Adeti</th><th>Brüt KG</th><th></th>
+                    </tr></thead>
+                    <tbody id="excelTbody"></tbody>
+                </table>
+            </div>
+
+            <div class="excel-bulk-section">
+                <strong style="font-size:.85rem">Tüm Satırlara Uygula:</strong>
+                <div class="excel-bulk-grid">
+                    <label>Kasa Cinsi<select id="excelKasaCinsi"></select></label>
+                    <label>Palet Tipi<select id="excelPaletTipi"></select></label>
+                    <label>Depo<select id="excelDepo"></select></label>
+                    <label>Ürün Cinsi<input type="text" id="excelUrunCinsi" placeholder="—" autocomplete="off"></label>
+                </div>
+            </div>
+
+            <div class="toplu-actions" style="margin-top:10px">
+                <button type="button" id="excelListeyeEkle" class="btn btn-primary">
+                    ✓ Listeye Ekle (<span id="excelRowCount">0</span> palet)
+                </button>
+            </div>
         </div>
     </div>
 
@@ -231,6 +275,7 @@ $form_is_cikma = $form_is_cikma ?? false;
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 </form>
 

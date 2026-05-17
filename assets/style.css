@@ -2750,6 +2750,61 @@ body.notes-modal-open { overflow: hidden; }
     .tp-cell { font-size: 16px; }
 }
 
+/* ── Excel Import Paneli ── */
+.excel-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: border-color .2s, background .2s;
+    margin-bottom: 2px;
+}
+.excel-drop-zone span { font-size: .95rem; font-weight: 600; color: var(--text); }
+.excel-drop-zone small { font-size: .78rem; }
+.excel-drop-zone:hover,
+.excel-drop-zone.drag-over { border-color: var(--primary); background: #eff6ff; }
+
+.excel-bulk-section {
+    background: #f0f4ff;
+    border: 1px solid #c7d7f5;
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin-top: 10px;
+}
+.excel-bulk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.excel-bulk-grid label {
+    display: flex;
+    flex-direction: column;
+    font-size: .78rem;
+    color: var(--muted);
+    gap: 3px;
+}
+.excel-bulk-grid select,
+.excel-bulk-grid input {
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: .88rem;
+    background: #fff;
+}
+@media (max-width: 767px) {
+    .excel-bulk-grid { grid-template-columns: repeat(2, 1fr); }
+    .excel-bulk-grid select,
+    .excel-bulk-grid input { font-size: 16px; }
+}
+
 @media (max-width: 767px) {
     .hesap-quick-grid { grid-template-columns: repeat(3, 1fr); }
     .hesap-stat-grid  { grid-template-columns: repeat(2, 1fr); }
