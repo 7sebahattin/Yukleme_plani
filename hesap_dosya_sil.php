@@ -32,8 +32,6 @@ if (file_exists($path)) @unlink($path);
 db()->prepare("DELETE FROM account_files WHERE id=?")->execute([$id]);
 
 // has_files güncelle
-$cnt = (int)db()->prepare("SELECT COUNT(*) FROM account_files WHERE transaction_id=?")->execute([$f['transaction_id']]) &&
-       db()->prepare("SELECT COUNT(*) FROM account_files WHERE transaction_id=?")->execute([$f['transaction_id']]) ?:0;
 $cnt_st = db()->prepare("SELECT COUNT(*) FROM account_files WHERE transaction_id=?");
 $cnt_st->execute([$f['transaction_id']]);
 $cnt = (int)$cnt_st->fetchColumn();
