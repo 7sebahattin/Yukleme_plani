@@ -40,7 +40,7 @@ if ($durum_filter !== '') {
 }
 $sql .= " ORDER BY
     CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
-    COALESCE(r.tarih,'9999-99-99') ASC,
+    COALESCE(r.tarih,'0000-00-00') DESC,
     r.id DESC
 LIMIT 500";
 
@@ -98,6 +98,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
             <tr>
                 <th>Tarih</th>
                 <th>Oluşturma</th>
+                <th>Son Düzenleme</th>
                 <th>Firma</th>
                 <th>Bölge</th>
                 <th>Alıcı</th>
@@ -121,6 +122,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     data-durum="<?= h($durum) ?>">
                     <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
                     <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
                     <td>
                         <?= h($r['firma']) ?>
                         <?php $ft = fmt_tarih_tr($r['tarih']); if ($ft): ?>
