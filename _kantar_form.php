@@ -31,9 +31,16 @@ function fmt_tartim($v): string {
 
 // Mevcut gruplar (edit modunda DB'den)
 if ($fis_id > 0) {
-    $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
-    $_st_g->execute([$fis_id]);
-    $_grup_list = $_st_g->fetchAll();
+    try {
+        $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+        $_st_g->execute([$fis_id]);
+        $_grup_list = $_st_g->fetchAll();
+    } catch (PDOException $e) {
+        // Kolon henüz yoksa (migration bekleniyor) — dara 0 ile yükle
+        $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+        $_st_g->execute([$fis_id]);
+        $_grup_list = array_map(fn($r) => array_merge($r, ['kasa_dara_kg' => 0, 'palet_dara_kg' => 0]), $_st_g->fetchAll());
+    }
 } else {
     $_grup_list = [];
 }
@@ -622,19 +629,14 @@ function clearPhoto() {
     try { localStorage.removeItem(IMG_KEY); } catch(e) {}
 }
 
-/* localStorage önce, yoksa DB endpoint'ten yükle */
+/* Görsel yükleme: edit modunda her açılışta localStorage temizle → DB'den göster */
 (function () {
     <?php if (!$is_edit): ?>
     /* Yeni fiş: önceki oturumdan kalan fotoğrafı temizle */
     try { localStorage.removeItem(IMG_KEY); } catch(e) {}
     <?php else: ?>
-    try {
-        var raw = localStorage.getItem(IMG_KEY);
-        if (raw) {
-            var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-            if (src && src.indexOf('data:') === 0) { showPhoto(src); return; }
-        }
-    } catch(e) {}
+    /* Düzenle: stale cache engellemek için localStorage'ı temizle, DB'den yükle */
+    try { localStorage.removeItem(IMG_KEY); } catch(e) {}
     if (DB_FOTO_URL) showPhoto(DB_FOTO_URL);
     <?php endif; ?>
 })();
