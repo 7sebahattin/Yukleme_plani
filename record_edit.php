@@ -17,25 +17,35 @@ if ($id <= 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
+    // Kayıt tipini önceden öğren (UPDATE SQL'i buna göre seçmek için)
+    $type_row = db()->prepare("SELECT type FROM loading_records WHERE id=:id");
+    $type_row->execute([':id' => $id]);
+    $edit_type = $type_row->fetchColumn() ?: 'yukleme';
+    $edit_is_cikma = $edit_type === 'cikma';
+
     $record = [
         'firma'           => trim((string)($_POST['firma'] ?? '')),
         'bolge'           => trim((string)($_POST['bolge'] ?? '')),
-        'parti_no'        => trim((string)($_POST['parti_no'] ?? '')),
-        'gumruk'          => trim((string)($_POST['gumruk'] ?? '')),
-        'nakliye_bedeli'  => num($_POST['nakliye_bedeli'] ?? 0),
-        'avans'           => num($_POST['avans'] ?? 0),
-        'sofor_adi'       => trim((string)($_POST['sofor_adi'] ?? '')),
-        'fatura_no'       => trim((string)($_POST['fatura_no'] ?? '')),
-        'casus_no'        => trim((string)($_POST['casus_no'] ?? '')),
-        'on_plaka'        => trim((string)($_POST['on_plaka'] ?? '')),
-        'arka_plaka'      => trim((string)($_POST['arka_plaka'] ?? '')),
-        'nakliye_sirketi' => trim((string)($_POST['nakliye_sirketi'] ?? '')),
-        'telefon'         => trim((string)($_POST['telefon'] ?? '')),
         'tarih'           => trim((string)($_POST['tarih'] ?? '')) ?: null,
-        'alici'           => trim((string)($_POST['alici'] ?? '')),
         'urun'            => trim((string)($_POST['urun'] ?? '')),
-        'etiket'          => trim((string)($_POST['etiket'] ?? '')),
     ];
+    if (!$edit_is_cikma) {
+        $record += [
+            'parti_no'        => trim((string)($_POST['parti_no'] ?? '')),
+            'gumruk'          => trim((string)($_POST['gumruk'] ?? '')),
+            'nakliye_bedeli'  => num($_POST['nakliye_bedeli'] ?? 0),
+            'avans'           => num($_POST['avans'] ?? 0),
+            'sofor_adi'       => trim((string)($_POST['sofor_adi'] ?? '')),
+            'fatura_no'       => trim((string)($_POST['fatura_no'] ?? '')),
+            'casus_no'        => trim((string)($_POST['casus_no'] ?? '')),
+            'on_plaka'        => trim((string)($_POST['on_plaka'] ?? '')),
+            'arka_plaka'      => trim((string)($_POST['arka_plaka'] ?? '')),
+            'nakliye_sirketi' => trim((string)($_POST['nakliye_sirketi'] ?? '')),
+            'telefon'         => trim((string)($_POST['telefon'] ?? '')),
+            'alici'           => trim((string)($_POST['alici'] ?? '')),
+            'etiket'          => trim((string)($_POST['etiket'] ?? '')),
+        ];
+    }
 
     $raw = $_POST['pallets'] ?? [];
     if (!is_array($raw)) $raw = [];
@@ -58,16 +68,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo = db();
         $pdo->beginTransaction();
 
-        $st = $pdo->prepare(
-            "UPDATE loading_records SET
-                firma=:firma, bolge=:bolge, parti_no=:parti_no, gumruk=:gumruk,
-                nakliye_bedeli=:nakliye_bedeli, avans=:avans, sofor_adi=:sofor_adi,
-                fatura_no=:fatura_no, casus_no=:casus_no,
-                on_plaka=:on_plaka, arka_plaka=:arka_plaka,
-                nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket
-             WHERE id=:id"
-        );
+        if ($edit_is_cikma) {
+            $st = $pdo->prepare(
+                "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun
+                 WHERE id=:id"
+            );
+        } else {
+            $st = $pdo->prepare(
+                "UPDATE loading_records SET
+                    firma=:firma, bolge=:bolge, parti_no=:parti_no, gumruk=:gumruk,
+                    nakliye_bedeli=:nakliye_bedeli, avans=:avans, sofor_adi=:sofor_adi,
+                    fatura_no=:fatura_no, casus_no=:casus_no,
+                    on_plaka=:on_plaka, arka_plaka=:arka_plaka,
+                    nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
+                    tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket
+                 WHERE id=:id"
+            );
+        }
         $st->execute(array_merge($record, [':id' => $id]));
 
         // Paletleri sıfırdan yaz
