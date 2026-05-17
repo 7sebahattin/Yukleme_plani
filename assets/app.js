@@ -495,103 +495,205 @@
         generateHiddenInputs();
     });
 
-    /* ── Toplu Ekleme Paneli ── */
+    /* ── Toplu Giriş — Excel Tablo ── */
     (function () {
-        const panel     = document.getElementById('topluPanel');
-        const acBtn     = document.getElementById('topluAcBtn');
-        const kapatBtn  = document.getElementById('topluKapat');
-        const ekleBtn   = document.getElementById('topluEkleBtn');
-        const countEl   = document.getElementById('topluCount');
-        const tpPaletNo  = document.getElementById('tpPaletNo');
-        const tpKasa     = document.getElementById('tpKasaAdeti');
-        const tpBrut     = document.getElementById('tpBrutKg');
-        const tpSize     = document.getElementById('tpSize');
-        const tpKasaCinsi = document.getElementById('tpKasaCinsi');
-        const tpPaletTipi = document.getElementById('tpPaletTipi');
-        const tpDepo     = document.getElementById('tpDepo');
-        const tpUrun     = document.getElementById('tpUrunCinsi');
-        const tpDara     = document.getElementById('tpDara');
-        const tpNet      = document.getElementById('tpNet');
-        if (!panel || !acBtn) return;
+        const panel          = document.getElementById('topluPanel');
+        const acBtn          = document.getElementById('topluAcBtn');
+        const kapatBtn       = document.getElementById('topluKapat');
+        const satirEkleBtn   = document.getElementById('topluSatirEkle');
+        const listeyeEkleBtn = document.getElementById('topluListeyeEkle');
+        const tbody          = document.getElementById('topluTbody');
+        const countEl        = document.getElementById('topluCount');
+        if (!panel || !acBtn || !tbody) return;
 
-        const tpInputs = [tpPaletNo, tpKasa, tpBrut, tpKasaCinsi, tpPaletTipi, tpDepo, tpUrun];
-        let addedCount = 0;
-
-        function tpCalc() {
-            const ka = parseInt2(tpKasa.value);
-            const kasaUnit  = parseNum(tpKasaCinsi.options[tpKasaCinsi.selectedIndex]?.dataset.unit || 0);
-            const paletUnit = parseNum(tpPaletTipi.options[tpPaletTipi.selectedIndex]?.dataset.unit || 0);
-            const dara = ka * kasaUnit + paletUnit;
-            const net  = Math.max(0, parseNum(tpBrut.value) - dara);
-            tpDara.textContent = fmtKg(dara);
-            tpNet.textContent  = fmtKg(net);
+        /* Önceki satırdan veya son paletten veri al */
+        function refData() {
+            const rows = tbody.querySelectorAll('tr');
+            if (rows.length) {
+                const last = rows[rows.length - 1];
+                return {
+                    kasa_adeti:    last.querySelector('[data-key=kasa_adeti]').value,
+                    kasa_cinsi_id: last.querySelector('[data-key=kasa_cinsi_id]').value,
+                    palet_tipi_id: last.querySelector('[data-key=palet_tipi_id]').value,
+                    depo:          last.querySelector('[data-key=depo]').value,
+                };
+            }
+            const lp = pallets[pallets.length - 1];
+            return lp || {};
         }
 
-        function fillFromLast() {
-            const last = pallets[pallets.length - 1];
-            tpPaletNo.value = String(pallets.length + 1);
-            tpKasaCinsi.innerHTML = buildOptions(KASA_LIST,  last?.kasa_cinsi_id || '', '-- seçiniz --');
-            tpPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || '', '-- seçiniz --');
-            tpDepo.innerHTML      = buildTextOptions(DEPO_LIST, last?.depo || (document.getElementById('genelDepo') || {}).value || '', '-- seçiniz --');
-            tpKasa.value = last?.kasa_adeti || '';
-            tpSize.value = last?.size || '';
-            tpUrun.value = last?.urun_cinsi || '';
-            tpBrut.value = '';
-            tpCalc();
+        /* Satır dara/net hesapla */
+        function calcRow(tr) {
+            const ka       = parseInt2(tr.querySelector('[data-key=kasa_adeti]').value);
+            const kcSel    = tr.querySelector('[data-key=kasa_cinsi_id]');
+            const ptSel    = tr.querySelector('[data-key=palet_tipi_id]');
+            const kasaUnit = parseNum(kcSel.options[kcSel.selectedIndex]?.dataset.unit || 0);
+            const palUnit  = parseNum(ptSel.options[ptSel.selectedIndex]?.dataset.unit || 0);
+            const dara     = ka * kasaUnit + palUnit;
+            const net      = Math.max(0, parseNum(tr.querySelector('[data-key=brut_kg]').value) - dara);
+            tr.querySelector('.tp-dara').textContent = fmtKg(dara);
+            tr.querySelector('.tp-net').textContent  = fmtKg(net);
         }
 
+        /* Satır no güncelle */
+        function updateNos() {
+            tbody.querySelectorAll('tr').forEach((tr, i) => {
+                tr.querySelector('.tp-no').textContent = pallets.length + i + 1;
+            });
+        }
+
+        /* Yeni satır oluştur */
+        function addRow(from) {
+            from = from || {};
+            const rowCount = tbody.querySelectorAll('tr').length;
+            const tr = document.createElement('tr');
+
+            // # (salt-okunur)
+            const noTd = document.createElement('td');
+            noTd.className = 'tp-no-td';
+            const noSpan = document.createElement('span');
+            noSpan.className = 'tp-no';
+            noSpan.textContent = pallets.length + rowCount + 1;
+            noTd.appendChild(noSpan);
+            tr.appendChild(noTd);
+
+            // Kasa Adeti
+            const kaTd = document.createElement('td');
+            const kaInp = document.createElement('input');
+            kaInp.type = 'number'; kaInp.inputMode = 'numeric';
+            kaInp.dataset.key = 'kasa_adeti';
+            kaInp.className = 'tp-cell';
+            kaInp.value = from.kasa_adeti || '';
+            kaTd.appendChild(kaInp);
+            tr.appendChild(kaTd);
+
+            // Brüt KG
+            const brutTd = document.createElement('td');
+            const brutInp = document.createElement('input');
+            brutInp.type = 'text'; brutInp.inputMode = 'decimal';
+            brutInp.dataset.key = 'brut_kg';
+            brutInp.className = 'tp-cell';
+            brutInp.value = '';
+            brutTd.appendChild(brutInp);
+            tr.appendChild(brutTd);
+
+            // Kasa Cinsi
+            const kcTd = document.createElement('td');
+            const kcSel = document.createElement('select');
+            kcSel.dataset.key = 'kasa_cinsi_id';
+            kcSel.className = 'tp-cell';
+            kcSel.innerHTML = buildOptions(KASA_LIST, from.kasa_cinsi_id || '', '—');
+            kcTd.appendChild(kcSel);
+            tr.appendChild(kcTd);
+
+            // Palet Tipi
+            const ptTd = document.createElement('td');
+            const ptSel = document.createElement('select');
+            ptSel.dataset.key = 'palet_tipi_id';
+            ptSel.className = 'tp-cell';
+            ptSel.innerHTML = buildOptions(PALET_LIST, from.palet_tipi_id || '', '—');
+            ptTd.appendChild(ptSel);
+            tr.appendChild(ptTd);
+
+            // Depo
+            const depTd = document.createElement('td');
+            const depSel = document.createElement('select');
+            depSel.dataset.key = 'depo';
+            depSel.className = 'tp-cell';
+            depSel.innerHTML = buildTextOptions(DEPO_LIST, from.depo || (document.getElementById('genelDepo') || {}).value || '', '—');
+            depTd.appendChild(depSel);
+            tr.appendChild(depTd);
+
+            // Dara (hesap)
+            const daraTd = document.createElement('td');
+            daraTd.className = 'tp-dara tp-num';
+            daraTd.textContent = '—';
+            tr.appendChild(daraTd);
+
+            // Net (hesap)
+            const netTd = document.createElement('td');
+            netTd.className = 'tp-net tp-num';
+            netTd.textContent = '—';
+            tr.appendChild(netTd);
+
+            // Sil
+            const silTd = document.createElement('td');
+            const silBtn = document.createElement('button');
+            silBtn.type = 'button'; silBtn.className = 'btn btn-sm btn-ghost tp-del';
+            silBtn.textContent = '✕';
+            silBtn.addEventListener('click', () => { tr.remove(); updateNos(); });
+            silTd.appendChild(silBtn);
+            tr.appendChild(silTd);
+
+            // Canlı hesap
+            [kaInp, brutInp, kcSel, ptSel].forEach(el => {
+                el.addEventListener('input', () => calcRow(tr));
+                el.addEventListener('change', () => calcRow(tr));
+            });
+
+            tbody.appendChild(tr);
+            calcRow(tr);
+            return tr;
+        }
+
+        /* Panel aç */
         acBtn.addEventListener('click', () => {
+            if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
             panel.style.display = '';
-            fillFromLast();
-            setTimeout(() => (tpBrut.value === '' ? tpBrut : tpKasa).focus(), 60);
+            tbody.innerHTML = '';
+            const first = addRow(refData());
+            setTimeout(() => first.querySelector('[data-key=brut_kg]').focus(), 60);
         });
 
         kapatBtn.addEventListener('click', () => { panel.style.display = 'none'; });
 
-        // Canlı hesap
-        [tpKasa, tpBrut, tpKasaCinsi, tpPaletTipi].forEach(el => {
-            el.addEventListener('input', tpCalc);
-            el.addEventListener('change', tpCalc);
+        /* + Satır */
+        satirEkleBtn.addEventListener('click', () => {
+            const tr = addRow(refData());
+            setTimeout(() => tr.querySelector('[data-key=brut_kg]').focus(), 40);
         });
 
-        // Enter → sonraki BOŞ alana geç, yoksa Ekle
-        panel.addEventListener('keydown', function (e) {
+        /* Enter → aynı sütunda alt satıra */
+        tbody.addEventListener('keydown', function (e) {
             if (e.key !== 'Enter') return;
-            if (e.target.tagName === 'TEXTAREA') return;
             e.preventDefault();
-            const cur = e.target;
-            const idx = tpInputs.indexOf(cur);
-            // idx'den sonraki boş alanı bul
-            for (let i = idx + 1; i < tpInputs.length; i++) {
-                if (!tpInputs[i].value) { tpInputs[i].focus(); return; }
-            }
-            // Tümü dolu (veya son alan) → ekle
-            ekleBtn.click();
+            const cell = e.target;
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const curRow = cell.closest('tr');
+            const rowIdx = rows.indexOf(curRow);
+            const cells = Array.from(curRow.querySelectorAll('.tp-cell'));
+            const colIdx = cells.indexOf(cell);
+
+            let nextRow = rows[rowIdx + 1];
+            if (!nextRow) nextRow = addRow(refData());
+
+            const nextCells = Array.from(nextRow.querySelectorAll('.tp-cell'));
+            setTimeout(() => (nextCells[colIdx] || nextCells[0]).focus(), 20);
         });
 
-        ekleBtn.addEventListener('click', () => {
-            const ka = parseInt2(tpKasa.value);
-            const br = parseNum(tpBrut.value);
-            const kc = tpKasaCinsi.value;
-            const pt = tpPaletTipi.value;
-            const last = pallets[pallets.length - 1];
-            pallets.push({
-                palet_no:      tpPaletNo.value.trim() || String(pallets.length + 1),
-                kasa_adeti:    ka,
-                size:          tpSize.value.trim(),
-                brut_kg:       br,
-                kasa_cinsi_id: kc,
-                palet_tipi_id: pt,
-                urun_cinsi:    tpUrun.value.trim(),
-                depo:          tpDepo.value.trim(),
-                materials:     Array.isArray(last?.materials) ? last.materials.map(m => ({...m})) : [],
+        /* Listeye Ekle */
+        listeyeEkleBtn.addEventListener('click', () => {
+            let added = 0;
+            const lastP = pallets[pallets.length - 1];
+            tbody.querySelectorAll('tr').forEach((tr, i) => {
+                pallets.push({
+                    palet_no:      String(pallets.length + 1),
+                    kasa_adeti:    parseInt2(tr.querySelector('[data-key=kasa_adeti]').value),
+                    size:          '',
+                    brut_kg:       parseNum(tr.querySelector('[data-key=brut_kg]').value),
+                    kasa_cinsi_id: tr.querySelector('[data-key=kasa_cinsi_id]').value,
+                    palet_tipi_id: tr.querySelector('[data-key=palet_tipi_id]').value,
+                    urun_cinsi:    '',
+                    depo:          tr.querySelector('[data-key=depo]').value,
+                    materials:     Array.isArray(lastP?.materials) ? lastP.materials.map(m => ({...m})) : [],
+                });
+                added++;
             });
             renderCards();
             recomputeTotals();
-            addedCount++;
-            countEl.textContent = addedCount + ' palet eklendi';
-            fillFromLast();
-            setTimeout(() => tpBrut.focus(), 40);
+            tbody.innerHTML = '';
+            countEl.textContent = added + ' palet listeye eklendi ✓';
+            setTimeout(() => panel.style.display = 'none', 800);
         });
     })();
 

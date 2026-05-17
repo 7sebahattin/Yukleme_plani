@@ -2685,58 +2685,69 @@ body.notes-modal-open { overflow: hidden; }
 .record-card-firma { font-size: .82rem; color: var(--muted); }
 .record-card-tarih { font-size: .8em; font-weight: 400; color: var(--muted); }
 
-/* ── Toplu Ekle Paneli ── */
+/* ── Toplu Giriş Paneli ── */
 .toplu-panel {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: #f8fafc;
-    padding: 12px 14px;
+    padding: 10px 12px;
     margin: 0 0 12px;
 }
 .toplu-panel-head {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     flex-wrap: wrap;
 }
-.toplu-fields {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 8px;
-    margin-bottom: 8px;
+.toplu-tablo-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 4px;
 }
-.toplu-fields label {
-    display: flex;
-    flex-direction: column;
+.toplu-tablo {
+    border-collapse: collapse;
+    min-width: 600px;
+    width: 100%;
+    font-size: .88rem;
+}
+.toplu-tablo th {
+    background: #e8edf2;
+    padding: 5px 7px;
+    text-align: left;
+    font-weight: 600;
     font-size: .8rem;
-    color: var(--muted);
-    gap: 3px;
+    white-space: nowrap;
+    border-bottom: 2px solid var(--border);
 }
-.toplu-fields input,
-.toplu-fields select {
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: .9rem;
+.toplu-tablo td {
+    padding: 3px 4px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+.tp-no-td { text-align: center; width: 32px; }
+.tp-no { color: var(--muted); font-size: .8rem; }
+.tp-cell {
+    width: 100%;
+    padding: 5px 7px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: .88rem;
+    background: transparent;
+    box-sizing: border-box;
+}
+.tp-cell:focus {
+    border-color: var(--primary);
     background: #fff;
+    outline: none;
 }
-.toplu-calc {
-    font-size: .85rem;
-    color: var(--muted);
-    margin-bottom: 8px;
-}
-.toplu-calc strong { color: var(--text); }
-.toplu-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
+.toplu-tablo input.tp-cell { min-width: 80px; }
+.toplu-tablo select.tp-cell { min-width: 120px; }
+.tp-num { text-align: right; white-space: nowrap; font-size: .82rem; color: var(--muted); padding-right: 8px; }
+.tp-del { opacity: .5; }
+.tp-del:hover { opacity: 1; }
 @media (max-width: 767px) {
-    .toplu-fields { grid-template-columns: repeat(2, 1fr); }
-    .toplu-fields input,
-    .toplu-fields select { font-size: 16px; }
+    .tp-cell { font-size: 16px; }
 }
 
 @media (max-width: 767px) {
