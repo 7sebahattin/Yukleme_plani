@@ -5,6 +5,13 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
+function fmt_tarih_tr(?string $d): string {
+    if (!$d) return '';
+    static $ay = ['','Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+    $ts = strtotime($d);
+    return $ts ? (int)date('j', $ts) . ' ' . $ay[(int)date('n', $ts)] : '';
+}
+
 $q            = trim((string)($_GET['q'] ?? ''));
 $durum_filter = trim((string)($_GET['durum'] ?? ''));
 if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
@@ -31,7 +38,11 @@ if ($durum_filter !== '') {
     $sql .= " AND r.durum = :durum ";
     $params[':durum'] = $durum_filter;
 }
-$sql .= " ORDER BY r.id DESC LIMIT 500";
+$sql .= " ORDER BY
+    CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
+    COALESCE(r.tarih,'9999-99-99') ASC,
+    r.id DESC
+LIMIT 500";
 
 $st = db()->prepare($sql);
 $st->execute($params);
@@ -85,8 +96,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
         <table class="data-table">
             <thead>
             <tr>
+                <th>Tarih</th>
                 <th>Oluşturma</th>
-                <th>Son Düzenleme</th>
                 <th>Firma</th>
                 <th>Bölge</th>
                 <th>Alıcı</th>
@@ -108,9 +119,14 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>">
+                    <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
                     <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
-                    <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
-                    <td><?= h($r['firma']) ?></td>
+                    <td>
+                        <?= h($r['firma']) ?>
+                        <?php $ft = fmt_tarih_tr($r['tarih']); if ($ft): ?>
+                        <div class="muted" style="font-size:.75rem"><?= h($ft) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['alici']) ?></td>
                     <td><?= h($r['urun']) ?></td>
@@ -162,9 +178,13 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                  data-durum="<?= h($durum) ?>">
                 <div class="record-card-head">
                     <div>
-                        <strong><?= h($r['firma'] ?: ($r['parti_no'] ?: '—')) ?></strong>
+                        <?php
+                            $firma_label = $r['firma'] ?: ($r['parti_no'] ?: '—');
+                            $ft = fmt_tarih_tr($r['tarih']);
+                        ?>
+                        <strong><?= h($firma_label) ?><?= $ft ? ' <span class="record-card-tarih">· ' . h($ft) . '</span>' : '' ?></strong>
                         <?php if ($r['parti_no']): ?><div class="record-card-firma">Parti: <?= h($r['parti_no']) ?></div><?php endif; ?>
-                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?><?= $r['updated_at'] ? ' · Düz: ' . h(fmt_datetime($r['updated_at'])) : '' ?></div>
+                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
