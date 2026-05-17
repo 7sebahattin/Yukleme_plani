@@ -573,6 +573,43 @@ function render_flash(): void {
             `done`       TINYINT(1) NOT NULL DEFAULT 0,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 6) Hesap modülü tabloları
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `account_transactions` (
+            `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+            `transaction_date`       DATE NOT NULL,
+            `transaction_time`       TIME NOT NULL DEFAULT '00:00:00',
+            `type`                   ENUM('gelir','gider','havale','nakit') NOT NULL,
+            `category`               VARCHAR(100) NOT NULL DEFAULT '',
+            `amount`                 DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            `currency`               VARCHAR(5) NOT NULL DEFAULT 'TRY',
+            `payment_method`         VARCHAR(30) NOT NULL DEFAULT 'nakit',
+            `person_company`         VARCHAR(200) NOT NULL DEFAULT '',
+            `description`            TEXT NOT NULL DEFAULT '',
+            `document_no`            VARCHAR(100) NOT NULL DEFAULT '',
+            `has_invoice`            TINYINT(1) NOT NULL DEFAULT 0,
+            `is_for_company`         TINYINT(1) NOT NULL DEFAULT 1,
+            `is_given_to_accountant` TINYINT(1) NOT NULL DEFAULT 0,
+            `notes`                  TEXT NOT NULL DEFAULT '',
+            `has_files`              TINYINT(1) NOT NULL DEFAULT 0,
+            `created_at`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at`             TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            INDEX `idx_date` (`transaction_date`),
+            INDEX `idx_type` (`type`),
+            INDEX `idx_accountant` (`is_given_to_accountant`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `account_files` (
+            `id`             INT AUTO_INCREMENT PRIMARY KEY,
+            `transaction_id` INT NOT NULL,
+            `file_name`      VARCHAR(255) NOT NULL,
+            `original_name`  VARCHAR(255) NOT NULL DEFAULT '',
+            `file_type`      VARCHAR(50) NOT NULL DEFAULT '',
+            `file_size`      INT NOT NULL DEFAULT 0,
+            `uploaded_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_tid` (`transaction_id`),
+            CONSTRAINT `fk_af_tid` FOREIGN KEY (`transaction_id`)
+                REFERENCES `account_transactions`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     } catch (PDOException $e) {}
 })();
 

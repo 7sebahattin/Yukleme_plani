@@ -14,10 +14,15 @@ $stats = db()->query("
 ")->fetch();
 
 // Hesap modülü özet
-$hesap_bugun = db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
-    WHERE transaction_date = CURDATE() AND type IN ('gider','nakit')")->fetchColumn();
-$hesap_bekleyen = db()->query("SELECT COUNT(*) FROM account_transactions
-    WHERE is_given_to_accountant = 0")->fetchColumn();
+try {
+    $hesap_bugun = db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
+        WHERE transaction_date = CURDATE() AND type IN ('gider','nakit')")->fetchColumn();
+    $hesap_bekleyen = db()->query("SELECT COUNT(*) FROM account_transactions
+        WHERE is_given_to_accountant = 0")->fetchColumn();
+} catch (PDOException $e) {
+    $hesap_bugun = 0;
+    $hesap_bekleyen = 0;
+}
 
 render_header('Ana Sayfa');
 render_flash();
