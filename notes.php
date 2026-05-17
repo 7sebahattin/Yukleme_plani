@@ -60,8 +60,7 @@ render_flash();
 (function () {
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-    // Tamamlananları gizle
-    document.querySelectorAll('.notes-done').forEach(function (el) { el.hidden = true; });
+    // Tamamlananlar Tümü görünümünde gösterilir (gizlenmez)
 
     // Tamamlananları toplu sil
     var deleteDoneBtn = document.getElementById('deleteDoneBtn');
@@ -98,8 +97,8 @@ render_flash();
             postJson('note_update.php', { action: 'toggle', id: id })
                 .then(function (d) {
                     if (!d.ok) { doneBtn.disabled = false; alert(d.msg || 'Hata'); return; }
-                    item.hidden = true;
                     item.classList.add('notes-done');
+                    doneBtn.remove();
                 });
         }
 

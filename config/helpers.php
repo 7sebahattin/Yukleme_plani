@@ -368,12 +368,25 @@ function render_footer(bool $print_mode = false): void {
             var id  = parseInt(checkBtn.dataset.id, 10);
             var row = listEl.querySelector('.notes-row[data-note-id="' + id + '"]');
             checkBtn.disabled = true;
-            postJson('note_update.php', { action: 'delete', id: id })
+            postJson('note_update.php', { action: 'toggle', id: id })
                 .then(function (d) {
                     if (!d.ok) { checkBtn.disabled = false; alert(d.msg || 'Hata'); return; }
+                    // done=1 → gizle (Son Notlar sadece actif olanları gösterir)
                     row.remove();
-                    if (!listEl.querySelector('.notes-row')) {
+                    var remaining = listEl.querySelectorAll('.notes-row');
+                    var doneInf = listEl.querySelector('.notes-done-info');
+                    if (!remaining.length) {
                         listEl.innerHTML = '<div class="notes-empty">Bekleyen not yok.</div>';
+                    } else {
+                        if (doneInf) {
+                            var prev = parseInt(doneInf.textContent, 10) || 0;
+                            doneInf.textContent = (prev + 1) + ' tamamlanan not gizlendi';
+                        } else {
+                            var inf = document.createElement('div');
+                            inf.className = 'notes-done-info';
+                            inf.textContent = '1 tamamlanan not gizlendi';
+                            listEl.appendChild(inf);
+                        }
                     }
                 });
         }
