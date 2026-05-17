@@ -166,7 +166,7 @@ $form_is_cikma = $form_is_cikma ?? false;
         <h2>Yükleme Planı (Paletler)</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Giriş</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
             <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
         </div>
     </div>
@@ -217,11 +217,11 @@ $form_is_cikma = $form_is_cikma ?? false;
     <!-- Toplu Giriş — Excel Tablo -->
     <div id="topluPanel" class="toplu-panel" style="display:none">
         <div class="toplu-panel-head">
-            <strong>Toplu Palet Girişi</strong>
+            <strong>Toplu Palet Düzenleme</strong>
             <span class="muted" id="topluCount" style="font-size:.82rem"></span>
             <div style="margin-left:auto;display:flex;gap:8px">
                 <button type="button" id="topluSatirEkle" class="btn btn-sm btn-ghost">+ Satır</button>
-                <button type="button" id="topluListeyeEkle" class="btn btn-sm btn-primary">✓ Listeye Ekle</button>
+                <button type="button" id="topluListeyeEkle" class="btn btn-sm btn-primary">✓ Kaydet</button>
                 <button type="button" id="topluKapat" class="btn btn-sm btn-ghost">✕</button>
             </div>
         </div>
