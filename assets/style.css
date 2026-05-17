@@ -2683,6 +2683,7 @@ body.notes-modal-open { overflow: hidden; }
 }
 
 .record-card-firma { font-size: .82rem; color: var(--muted); }
+.record-card-tarih { font-size: .8em; font-weight: 400; color: var(--muted); }
 
 @media (max-width: 767px) {
     .hesap-quick-grid { grid-template-columns: repeat(3, 1fr); }
