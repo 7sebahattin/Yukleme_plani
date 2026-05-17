@@ -177,7 +177,6 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 </div>
                 <div class="record-card-totals">
                     <div><span>Palet</span><strong><?= (int)$r['toplam_palet'] ?></strong></div>
-                    <div><span>Kasa</span><strong><?= (int)$r['toplam_kasa'] ?></strong></div>
                     <div><span>Brüt</span><strong><?= fmt_kg($r['toplam_brut']) ?></strong></div>
                     <div><span>Net</span><strong><?= fmt_kg($r['toplam_net']) ?></strong></div>
                 </div>
