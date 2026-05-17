@@ -66,18 +66,18 @@ function compute_pallet_row(array $row): array {
 
     // Kasa darası
     $kasa_unit = $kasa_cinsi_id && isset($defs_by_id[$kasa_cinsi_id])
-        ? num($defs_by_id[$kasa_cinsi_id]['unit_dara_kg']) : 0;
+        ? (float)$defs_by_id[$kasa_cinsi_id]['unit_dara_kg'] : 0;
     $kasa_dara_total = $kasa_adeti * $kasa_unit;
 
     // Palet darası
     $palet_dara_total = $palet_tipi_id && isset($defs_by_id[$palet_tipi_id])
-        ? num($defs_by_id[$palet_tipi_id]['unit_dara_kg']) : 0;
+        ? (float)$defs_by_id[$palet_tipi_id]['unit_dara_kg'] : 0;
 
     // Diğer malzeme daraları
     $extra_total = 0.0;
     foreach ($materials as &$m) {
         $unit = isset($defs_by_id[$m['material_id']])
-            ? num($defs_by_id[$m['material_id']]['unit_dara_kg']) : 0;
+            ? (float)$defs_by_id[$m['material_id']]['unit_dara_kg'] : 0;
         $m['total_dara_kg'] = round($unit * $m['quantity'], 3);
         $extra_total += $m['total_dara_kg'];
     }
