@@ -186,6 +186,7 @@ function render_footer(bool $print_mode = false): void {
         $is_defs     = $cur === 'definitions.php';
         $is_reports  = $cur === 'reports.php';
         $is_notes    = $cur === 'notes.php';
+        $is_hesap    = str_starts_with($cur, 'hesap');
         echo '</main>';
         ?>
 <nav class="bottomnav" role="navigation" aria-label="Ana gezinme">
@@ -208,6 +209,10 @@ function render_footer(bool $print_mode = false): void {
     <a href="reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
         <span class="bottomnav-icon">📊</span>
         <span class="bottomnav-label">Raporlar</span>
+    </a>
+    <a href="hesap.php" class="bottomnav-item<?= $is_hesap ? ' active' : '' ?>">
+        <span class="bottomnav-icon">💰</span>
+        <span class="bottomnav-label">Hesap</span>
     </a>
 </nav>
 

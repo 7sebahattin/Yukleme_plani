@@ -13,6 +13,12 @@ $stats = db()->query("
         (SELECT COUNT(*) FROM material_definitions WHERE is_active=1) AS tanim_sayisi
 ")->fetch();
 
+// Hesap modülü özet
+$hesap_bugun = db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
+    WHERE transaction_date = CURDATE() AND type IN ('gider','nakit')")->fetchColumn();
+$hesap_bekleyen = db()->query("SELECT COUNT(*) FROM account_transactions
+    WHERE is_given_to_accountant = 0")->fetchColumn();
+
 render_header('Ana Sayfa');
 render_flash();
 ?>
@@ -59,6 +65,17 @@ render_flash();
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
         <div class="home-card-title">Raporlar</div>
+    </a>
+
+    <a href="hesap.php" class="home-card">
+        <div class="home-card-icon" style="background:#fff3e0">💰</div>
+        <div class="home-card-title">Hesap</div>
+        <?php if ($hesap_bekleyen > 0): ?>
+        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$hesap_bekleyen ?></div>
+        <?php endif; ?>
+        <?php if ($hesap_bugun > 0): ?>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Bugün: <?= number_format((float)$hesap_bugun,2,',','.') ?>₺</div>
+        <?php endif; ?>
     </a>
 
 </div>
