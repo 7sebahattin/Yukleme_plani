@@ -703,7 +703,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .vc-totals span { color: var(--muted); font-size: .72rem; }
 .vc-totals strong { font-variant-numeric: tabular-nums; font-size: .95rem; }
 .vc-totals .strong { color: var(--success); font-size: 1.05rem; }
-.vc-brut-val { color: #ef4444 !important; }
+.vc-totals > div:first-child strong { color: #ef4444; }
 
 .view-totals-mobile { margin-top: 4px; }
 
