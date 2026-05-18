@@ -380,7 +380,7 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
                 </div>
             <?php endif; ?>
             <div class="vc-totals">
-                <div><span>Brüt</span><strong><?= h(fmt_kg($p['brut_kg'])) ?></strong></div>
+                <div><span>Brüt</span><strong class="vc-brut-val"><?= h(fmt_kg($p['brut_kg'])) ?></strong></div>
                 <div><span>Dara</span><strong><?= h(fmt_kg($p['dara_kg'])) ?></strong></div>
                 <div><span>Net</span><strong class="strong"><?= h(fmt_kg($p['net_kg'])) ?></strong></div>
             </div>
