@@ -648,7 +648,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     border-bottom: 1px solid var(--border);
 }
 .vc-no { font-weight: 700; color: var(--primary); }
-.vc-kasa { font-size: .9rem; color: var(--muted); font-weight: 600; }
+.vc-kasa { font-size: .9rem; color: #f97316; font-weight: 700; }
 .vc-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -703,6 +703,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .vc-totals span { color: var(--muted); font-size: .72rem; }
 .vc-totals strong { font-variant-numeric: tabular-nums; font-size: .95rem; }
 .vc-totals .strong { color: var(--success); font-size: 1.05rem; }
+.vc-brut-val { color: #ef4444 !important; }
 
 .view-totals-mobile { margin-top: 4px; }
 
