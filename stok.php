@@ -29,13 +29,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $save_error = 'Sayım KG negatif olamaz.';
     } else {
         // Sistem kalan KG'sini POST filtrelerine göre sunucuda hesapla
+        // Kantar (ham giriş) — parti no kantar tarafını etkilemez
         $pk_where = [];  $pk_p = [];
         if ($pf_tarih_bas !== '') { $pk_where[] = "giris_tarih >= ?";   $pk_p[] = $pf_tarih_bas; }
         if ($pf_tarih_bit !== '') { $pk_where[] = "giris_tarih <= ?";   $pk_p[] = $pf_tarih_bit . ' 23:59:59'; }
         if ($pf_firma     !== '') { $pk_where[] = "firma_adi LIKE ?";   $pk_p[] = '%' . $pf_firma . '%'; }
         if ($pf_urun      !== '') { $pk_where[] = "malin_cinsi LIKE ?"; $pk_p[] = '%' . $pf_urun . '%'; }
         if ($pf_depo      !== '') { $pk_where[] = "depo LIKE ?";        $pk_p[] = '%' . $pf_depo . '%'; }
-        if ($pf_parti     !== '') { $pk_where[] = "parti_no LIKE ?";    $pk_p[] = '%' . $pf_parti . '%'; }
         $pk_where_sql = $pk_where ? 'WHERE ' . implode(' AND ', $pk_where) : '';
 
         $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $pk_where_sql");
@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             JOIN loading_records lr ON lp.loading_record_id = lr.id $pl_where_sql");
         $st->execute($pl_p);
         $post_cikan   = (float)$st->fetchColumn();
+        // Formula: ham giriş − toplam çıkış (= teorik kalan)
         $post_kalan   = $post_gelen - $post_cikan;
         $post_diff    = $counted_kg - $post_kalan;
 
@@ -95,7 +96,7 @@ $f_parti     = trim($_GET['parti']     ?? '');
 $sayim_kg    = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
 $is_csv      = isset($_GET['csv']);
 
-// ── Gelen (kantar_fisleri) ────────────────────────────────
+// ── Ham Giriş (kantar_fisleri) — parti no kantar tarafını etkilemez ──
 $k_where  = [];
 $k_params = [];
 if ($f_tarih_bas !== '') { $k_where[] = "giris_tarih >= ?";   $k_params[] = $f_tarih_bas; }
@@ -103,14 +104,14 @@ if ($f_tarih_bit !== '') { $k_where[] = "giris_tarih <= ?";   $k_params[] = $f_t
 if ($f_firma     !== '') { $k_where[] = "firma_adi LIKE ?";   $k_params[] = '%' . $f_firma . '%'; }
 if ($f_urun      !== '') { $k_where[] = "malin_cinsi LIKE ?"; $k_params[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' . $f_depo . '%'; }
-if ($f_parti     !== '') { $k_where[] = "parti_no LIKE ?";    $k_params[] = '%' . $f_parti . '%'; }
+// NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
 $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $k_where_sql");
 $st->execute($k_params);
 $gelen_kg = (float)$st->fetchColumn();
 
-// ── Çıkan (loading_pallets + loading_records) ─────────────
+// ── Çıkışlar (loading_pallets + loading_records) ───────────
 $l_where  = ["lr.type IN ('yukleme','cikma')"];
 $l_params = [];
 if ($f_tarih_bas !== '') { $l_where[] = "lr.tarih >= ?";        $l_params[] = $f_tarih_bas; }
@@ -121,13 +122,7 @@ if ($f_depo      !== '') { $l_where[] = "lp.depo LIKE ?";       $l_params[] = '%
 if ($f_parti     !== '') { $l_where[] = "lr.parti_no LIKE ?";   $l_params[] = '%' . $f_parti . '%'; }
 $l_where_sql = 'WHERE ' . implode(' AND ', $l_where);
 
-$st = $pdo->prepare("SELECT COALESCE(SUM(lp.net_kg),0)
-    FROM loading_pallets lp
-    JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql");
-$st->execute($l_params);
-$cikan_kg = (float)$st->fetchColumn();
-
-// Yükleme / Çıkma kırılımı
+// Yükleme / Çıkma kırılımı (tek sorgu)
 $st = $pdo->prepare("SELECT lr.type, COALESCE(SUM(lp.net_kg),0) AS kg
     FROM loading_pallets lp
     JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql GROUP BY lr.type");
@@ -139,14 +134,20 @@ foreach ($st->fetchAll() as $row) {
     }
 }
 
-$kalan_kg   = $gelen_kg - $cikan_kg;
-$sayim_fark = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
+$yukleme_kg    = $cikan_kirilim['yukleme'];
+$fire_cikma_kg = $cikan_kirilim['cikma'];
+$cikan_kg      = $yukleme_kg + $fire_cikma_kg;
+// Ham giriş − yüklenen iyi ürün − fire/çıkma = teorik kalan
+$kalan_kg      = $gelen_kg - $yukleme_kg - $fire_cikma_kg;
+$sayim_fark    = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
 
 // ── Hareket satırları ─────────────────────────────────────
 $st = $pdo->prepare("SELECT
     giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
-    malin_cinsi AS urun, depo AS depo, '' AS bolge, parti_no AS parti,
-    net_kg, CONCAT('KNT-', fis_no) AS ref_no
+    malin_cinsi AS urun, depo AS depo, '' AS bolge, '' AS parti,
+    net_kg AS brut_kg, 0 AS dara_kg, net_kg,
+    id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
+    CONCAT('KNT-', fis_no) AS ref_no
   FROM kantar_fisleri $k_where_sql
   ORDER BY giris_tarih DESC, id DESC LIMIT 300");
 $st->execute($k_params);
@@ -155,7 +156,9 @@ $kantar_rows = $st->fetchAll();
 $st = $pdo->prepare("SELECT
     lr.tarih AS tarih, lr.type AS yon, lr.firma AS firma,
     lp.urun_cinsi AS urun, lp.depo AS depo, lr.bolge AS bolge,
-    lr.parti_no AS parti, lp.net_kg, lr.parti_no AS ref_no, lr.id AS lr_id
+    lr.parti_no AS parti, lp.brut_kg, lp.dara_kg, lp.net_kg,
+    NULL AS kantar_id, lr.id AS lr_id, lr.cikis_nedeni,
+    lr.parti_no AS ref_no
   FROM loading_pallets lp
   JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql
   ORDER BY lr.tarih DESC, lr.id DESC LIMIT 300");
@@ -197,8 +200,6 @@ try {
          'kantar fişinde mal cinsi boş.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE depo = ''",
          'kantar fişinde depo boş — depo filtresiyle eşleşmez. Düzenleyin.', 'kantar.php'],
-        ["SELECT COUNT(*) FROM kantar_fisleri WHERE parti_no = ''",
-         'kantar fişinde parti no boş — parti filtresiyle eşleşmez. Düzenleyin.', 'kantar.php'],
         ['SELECT COUNT(*) FROM loading_pallets WHERE net_kg = 0',
          'palet satırının net KG sıfır.', 'records.php'],
         ["SELECT COUNT(*) FROM loading_pallets WHERE urun_cinsi = ''",
@@ -250,19 +251,23 @@ if ($is_csv) {
         ['# Başlangıç', $f_tarih_bas ?: '—'], ['# Bitiş', $f_tarih_bit ?: '—'],
         ['# Firma', $f_firma ?: 'Hepsi'],     ['# Ürün',  $f_urun  ?: 'Hepsi'],
         ['# Depo',  $f_depo  ?: 'Hepsi'],     ['# Parti', $f_parti ?: 'Hepsi'],
-        ['# Gelen KG', number_format($gelen_kg, 3, ',', '.')],
-        ['# Çıkan KG', number_format($cikan_kg, 3, ',', '.')],
-        ['# Kalan KG', number_format($kalan_kg, 3, ',', '.')],
+        ['# Ham Giriş KG', number_format($gelen_kg, 3, ',', '.')],
+        ['# Yüklenen İyi Ürün KG', number_format($yukleme_kg, 3, ',', '.')],
+        ['# Fire/Çıkma KG', number_format($fire_cikma_kg, 3, ',', '.')],
+        ['# Teorik Kalan KG', number_format($kalan_kg, 3, ',', '.')],
         ['#', ''],
     ];
     foreach ($meta as $r) { fputcsv($out, $r, ';', '"', '\\'); }
-    fputcsv($out, ['Tarih', 'Yön', 'Firma', 'Ürün', 'Depo', 'Bölge', 'Parti No', 'Net KG', 'Ref No'], ';', '"', '\\');
+    fputcsv($out, ['Tarih', 'Hareket', 'Firma', 'Ürün', 'Depo', 'Parti No', 'Çıkış Nedeni', 'Brüt KG', 'Dara KG', 'Net KG'], ';', '"', '\\');
     foreach ($hareket_rows as $r) {
-        $yon = match ($r['yon']) { 'gelen' => 'Gelen', 'cikma' => 'Çıkma', default => 'Yükleme' };
+        $yon = match ($r['yon']) { 'gelen' => 'Ham Giriş (Kantar)', 'cikma' => 'Fire/Çıkma', default => 'Yükleme (İyi Ürün)' };
         fputcsv($out, [
             $r['tarih'], $yon, $r['firma'], $r['urun'],
-            $r['depo'], $r['bolge'], $r['parti'] ?? '',
-            number_format((float)$r['net_kg'], 3, ',', '.'), $r['ref_no'],
+            $r['depo'], $r['yon'] !== 'gelen' ? ($r['parti'] ?? '') : '',
+            $r['yon'] !== 'gelen' ? ($r['cikis_nedeni'] ?? '') : '',
+            number_format((float)$r['brut_kg'], 3, ',', '.'),
+            number_format((float)$r['dara_kg'], 3, ',', '.'),
+            number_format((float)$r['net_kg'], 3, ',', '.'),
         ], ';', '"', '\\');
     }
     fclose($out);
@@ -293,11 +298,18 @@ render_flash();
 <!-- ── Filtre Bilgi Notu ─────────────────────────────────── -->
 <div class="stok-info-box">
     <span class="stok-info-icon">ℹ️</span>
-    <span>Stok hesabı seçilen filtrelere göre hesaplanır.
-    Kantar girişleri artık <strong>depo</strong> ve <strong>parti no</strong> alanlarına sahiptir.
-    Eski kayıtlarda bu alanlar boş olabilir — depo/parti filtresi aktifken bu eski girişler hesaba <em>dahil edilmez</em>.
-    Eski kayıtları güncellemek için <a href="kantar.php">Kantar Fişleri</a> listesinden düzenleyin.</span>
+    <span><strong>Stok formülü:</strong> Ham Giriş (kantar) &minus; Yüklenen İyi Ürün &minus; Fire/Çıkma = Teorik Kalan.
+    Kantar girişleri parti numarasına bağlı değildir; <strong>parti filtresi yalnızca yükleme ve çıkma kayıtlarını filtreler</strong>, ham girişi etkilemez.
+    Eski kantar kayıtlarında <em>depo</em> boş olabilir — depo filtresi aktifken bu girişler hesaba dahil edilmez.
+    Eski kantar fişlerini düzenlemek için <a href="kantar.php">Kantar Fişleri</a> listesini kullanın.</span>
 </div>
+<?php if ($f_parti !== ''): ?>
+<div class="stok-uyari-box" style="margin-bottom:14px;display:flex;gap:8px;align-items:flex-start">
+    <span>⚠️</span>
+    <span><strong>Parti no filtresi aktif:</strong> Ham giriş (kantar) <em>partiye göre filtrelenmez</em>; yalnızca yükleme/çıkma kayıtları bu filtreden etkilenir.
+    Bu nedenle gösterilen teorik kalan, sadece ilgili partinin çıkışlarını baz alır — doğru bir gerçek stok hesabı değildir.</span>
+</div>
+<?php endif; ?>
 
 <!-- ── Filtre Formu ──────────────────────────────────────── -->
 <div class="card" style="margin-bottom:14px">
@@ -376,41 +388,33 @@ render_flash();
 </details>
 <?php endif; ?>
 
-<!-- ── Özet Kartları ─────────────────────────────────────── -->
-<div class="stok-ozet-grid">
+<!-- ── Özet Kartları (6 kart) ────────────────────────────── -->
+<div class="stok-ozet-grid stok-ozet-grid-6">
     <div class="stok-kart stok-kart-gelen">
-        <div class="stok-kart-label">Gelen</div>
+        <div class="stok-kart-label">Ham Giriş</div>
         <div class="stok-kart-val"><?= fmt_kg($gelen_kg) ?> <small>kg</small></div>
         <div class="stok-kart-sub">Kantar girişi</div>
     </div>
-    <div class="stok-kart stok-kart-cikan">
-        <div class="stok-kart-label">Çıkan</div>
-        <div class="stok-kart-val"><?= fmt_kg($cikan_kg) ?> <small>kg</small></div>
-        <div class="stok-kart-sub" style="display:flex;flex-direction:column;gap:2px">
-            <?php if ($cikan_kirilim['yukleme'] > 0): ?>
-            <span>↳ Yükleme: <?= fmt_kg($cikan_kirilim['yukleme']) ?> kg</span>
-            <?php endif; ?>
-            <?php if ($cikan_kirilim['cikma'] > 0): ?>
-            <span>↳ Çıkma: <?= fmt_kg($cikan_kirilim['cikma']) ?> kg</span>
-            <?php endif; ?>
-            <?php if ($cikan_kirilim['yukleme'] == 0 && $cikan_kirilim['cikma'] == 0): ?>
-            <span>Yükleme + Çıkma</span>
-            <?php endif; ?>
-        </div>
+    <div class="stok-kart stok-kart-yukleme">
+        <div class="stok-kart-label">Yüklenen İyi Ürün</div>
+        <div class="stok-kart-val"><?= fmt_kg($yukleme_kg) ?> <small>kg</small></div>
+        <div class="stok-kart-sub">Yükleme çıkışı</div>
+    </div>
+    <div class="stok-kart stok-kart-fire">
+        <div class="stok-kart-label">Fire / Kötü / Çıkma</div>
+        <div class="stok-kart-val"><?= fmt_kg($fire_cikma_kg) ?> <small>kg</small></div>
+        <div class="stok-kart-sub">Çıkma kayıtları</div>
     </div>
     <div class="stok-kart stok-kart-kalan">
-        <div class="stok-kart-label">Sistem Kalan</div>
+        <div class="stok-kart-label">Teorik Kalan</div>
         <div class="stok-kart-val <?= $kalan_kg < 0 ? 'stok-negatif' : '' ?>"><?= fmt_kg($kalan_kg) ?> <small>kg</small></div>
-        <div class="stok-kart-sub">Gelen − Çıkan</div>
+        <div class="stok-kart-sub">Giriş − İyi − Fire</div>
     </div>
     <div class="stok-kart stok-kart-sayim">
-        <div class="stok-kart-label">Sayım Farkı</div>
+        <div class="stok-kart-label">Fiziki Sayım</div>
         <div class="stok-kart-val">
-            <?php if ($sayim_fark !== null): ?>
-            <span class="<?= $sayim_fark > 0 ? 'stok-pozitif' : ($sayim_fark < 0 ? 'stok-negatif' : '') ?>">
-                <?= ($sayim_fark >= 0 ? '+' : '') . fmt_kg($sayim_fark) ?>
-            </span>
-            <small>kg</small>
+            <?php if ($sayim_kg !== null): ?>
+            <span><?= fmt_kg($sayim_kg) ?></span><small> kg</small>
             <?php else: ?>
             <span class="stok-sayim-gir">—</span>
             <?php endif; ?>
@@ -424,7 +428,7 @@ render_flash();
                 <input type="hidden" name="depo"      value="<?= h($f_depo) ?>">
                 <input type="hidden" name="parti"     value="<?= h($f_parti) ?>">
                 <label class="stok-sayim-label">
-                    <span>Sayım:</span>
+                    <span>Gir:</span>
                     <input type="number" name="sayim_kg" id="stokSayimInput" step="0.001"
                         class="form-control stok-sayim-input"
                         value="<?= $sayim_kg !== null ? h((string)$sayim_kg) : '' ?>"
@@ -433,6 +437,20 @@ render_flash();
                 </label>
             </form>
         </div>
+    </div>
+    <div class="stok-kart stok-kart-fark">
+        <div class="stok-kart-label">Sayım Farkı</div>
+        <div class="stok-kart-val">
+            <?php if ($sayim_fark !== null): ?>
+            <span class="<?= $sayim_fark > 0 ? 'stok-pozitif' : ($sayim_fark < 0 ? 'stok-negatif' : '') ?>">
+                <?= ($sayim_fark >= 0 ? '+' : '') . fmt_kg($sayim_fark) ?>
+            </span>
+            <small>kg</small>
+            <?php else: ?>
+            <span class="stok-sayim-gir">—</span>
+            <?php endif; ?>
+        </div>
+        <div class="stok-kart-sub">Sayım − Teorik Kalan</div>
     </div>
 </div>
 
@@ -493,35 +511,70 @@ render_flash();
             <thead>
                 <tr>
                     <th>Tarih</th>
-                    <th>Yön</th>
+                    <th>Hareket</th>
                     <th>Firma</th>
-                    <th>Ürün</th>
-                    <th class="stok-hide-sm">Depo / Bölge</th>
-                    <th class="stok-hide-sm">Parti / Ref</th>
+                    <th class="stok-hide-sm">Ürün</th>
+                    <th class="stok-hide-sm">Depo</th>
+                    <th class="stok-hide-sm">Parti</th>
+                    <th class="stok-hide-sm">Çıkış Nedeni</th>
+                    <th class="stok-hide-sm" style="text-align:right">Brüt KG</th>
+                    <th class="stok-hide-sm" style="text-align:right">Dara KG</th>
                     <th style="text-align:right">Net KG</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
             <?php foreach ($hareket_rows as $r):
                 $yon         = $r['yon'];
-                $badge_class = $yon === 'gelen' ? 'badge-gelen' : 'badge-cikan';
+                $is_gelen    = $yon === 'gelen';
+                $badge_class = $is_gelen ? 'badge-gelen' : ($yon === 'cikma' ? 'badge-fire' : 'badge-cikan');
                 $badge_label = match ($yon) {
-                    'gelen'  => 'Gelen',
-                    'cikma'  => 'Çıkma',
+                    'gelen'  => 'Ham Giriş',
+                    'cikma'  => 'Fire/Çıkma',
                     default  => 'Yükleme',
                 };
-                $depo_bolge = trim(implode(' / ', array_filter([(string)$r['depo'], (string)$r['bolge']])));
-                $kg_color   = $yon === 'gelen' ? 'var(--success)' : 'var(--danger)';
+                $badge_sub = match ($yon) {
+                    'gelen'  => 'Kantar',
+                    'cikma'  => 'Çıkma',
+                    default  => 'İyi Ürün',
+                };
+                $kg_color   = $is_gelen ? 'var(--success)' : 'var(--danger)';
+                $link_url   = $is_gelen
+                    ? ($r['kantar_id'] ? 'kantar_view.php?id=' . (int)$r['kantar_id'] : null)
+                    : ($r['lr_id']     ? 'record_view.php?id='  . (int)$r['lr_id']    : null);
             ?>
                 <tr>
                     <td style="white-space:nowrap"><?= h(fmt_date($r['tarih'])) ?></td>
-                    <td><span class="stok-badge <?= $badge_class ?>"><?= $badge_label ?></span></td>
+                    <td>
+                        <span class="stok-badge <?= $badge_class ?>"><?= $badge_label ?></span>
+                        <div style="font-size:.72rem;color:var(--muted)"><?= $badge_sub ?></div>
+                    </td>
                     <td><?= h($r['firma']) ?></td>
-                    <td><?= h($r['urun']) ?></td>
-                    <td class="stok-hide-sm"><?= h($depo_bolge) ?></td>
-                    <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)"><?= h($r['ref_no']) ?></td>
+                    <td class="stok-hide-sm"><?= h($r['urun']) ?></td>
+                    <td class="stok-hide-sm"><?= h($r['depo'] ?: '—') ?></td>
+                    <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)">
+                        <?= $is_gelen ? '—' : h($r['parti'] ?: '—') ?>
+                    </td>
+                    <td class="stok-hide-sm">
+                        <?php if (!$is_gelen && !empty($r['cikis_nedeni'])): ?>
+                        <span class="cikis-nedeni-badge" style="font-size:.78rem"><?= h($r['cikis_nedeni']) ?></span>
+                        <?php else: ?>
+                        <?= $is_gelen ? '—' : '<span style="color:var(--muted)">—</span>' ?>
+                        <?php endif; ?>
+                    </td>
+                    <td class="stok-hide-sm" style="text-align:right;color:var(--muted)">
+                        <?= (float)$r['brut_kg'] > 0 ? h(fmt_kg($r['brut_kg'])) : '—' ?>
+                    </td>
+                    <td class="stok-hide-sm" style="text-align:right;color:var(--muted)">
+                        <?= (float)$r['dara_kg'] > 0 ? h(fmt_kg($r['dara_kg'])) : '—' ?>
+                    </td>
                     <td style="text-align:right;font-weight:700;color:<?= $kg_color ?>;white-space:nowrap">
-                        <?= $yon !== 'gelen' ? '−' : '+' ?><?= h(fmt_kg($r['net_kg'])) ?>
+                        <?= $is_gelen ? '+' : '−' ?><?= h(fmt_kg($r['net_kg'])) ?>
+                    </td>
+                    <td style="white-space:nowrap">
+                        <?php if ($link_url): ?>
+                        <a href="<?= h($link_url) ?>" class="btn btn-sm" style="padding:2px 8px;font-size:.78rem">↗</a>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

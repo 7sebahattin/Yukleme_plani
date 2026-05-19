@@ -10,7 +10,7 @@ try {
     $rows = db()->query(
         "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
                 palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2,
-                depo, parti_no, created_at
+                depo, created_at
          FROM kantar_fisleri
          ORDER BY CAST(fis_no AS UNSIGNED) DESC, id DESC
          LIMIT 500"
@@ -52,7 +52,6 @@ render_flash();
             <th class="num">Palet</th>
             <th class="num">Kasa</th>
             <th>Depo</th>
-            <th>Parti</th>
             <th class="num">Net KG</th>
             <th class="actions-col">İşlemler</th>
         </tr>
@@ -72,7 +71,6 @@ render_flash();
                 <td class="num"><?= $r['palet_sayisi'] ? (int)$r['palet_sayisi'] : '—' ?></td>
                 <td class="num"><?= $r['kasa_sayisi']  ? (int)$r['kasa_sayisi']  : '—' ?></td>
                 <td><?= h($r['depo'] ?: '—') ?></td>
-                <td style="font-size:.82rem;color:var(--muted)"><?= h($r['parti_no'] ?: '—') ?></td>
                 <td class="num strong"><?= $net > 0 ? fmt_kg($net) . ' kg' : '—' ?></td>
                 <td class="actions-col">
                     <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>

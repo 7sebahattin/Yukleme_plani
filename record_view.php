@@ -273,7 +273,17 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
 <div class="view-hdr-card">
     <div class="view-hdr-main">
         <div class="view-hdr-firma"><?= h($record['firma'] ?: '—') ?></div>
+        <?php if (($record['type'] ?? 'yukleme') === 'cikma'): ?>
+        <div class="view-hdr-parti">
+            <?php if (!empty($record['cikis_nedeni'])): ?>
+            <span class="cikis-nedeni-badge"><?= h($record['cikis_nedeni']) ?></span>
+            <?php else: ?>
+            <span class="muted" style="font-size:.85rem">Çıkış Nedeni: —</span>
+            <?php endif; ?>
+        </div>
+        <?php else: ?>
         <div class="view-hdr-parti">Parti No: <strong><?= h($record['parti_no'] ?: '—') ?></strong></div>
+        <?php endif; ?>
     </div>
     <div class="view-hdr-meta">
         <div><span>Oluşturulma:</span> <?= h(fmt_datetime($record['created_at'])) ?></div>
@@ -287,6 +297,9 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
     <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
     <div><span class="lbl">Ürün</span><strong><?= h($record['urun']) ?></strong></div>
     <div><span class="lbl">Depo</span><strong><?= h($depo_str) ?></strong></div>
+    <?php if (($record['type'] ?? 'yukleme') === 'cikma' && !empty($record['cikis_nedeni'])): ?>
+    <div><span class="lbl">Çıkış Nedeni</span><strong><span class="cikis-nedeni-badge"><?= h($record['cikis_nedeni']) ?></span></strong></div>
+    <?php endif; ?>
 </div>
 
 <h3 class="section-title">Yükleme Planı</h3>

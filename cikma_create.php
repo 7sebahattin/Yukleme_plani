@@ -8,7 +8,7 @@ require_once __DIR__ . '/config/calc.php';
 
 $record = [
     'firma' => '', 'bolge' => '', 'urun' => '',
-    'tarih' => date('Y-m-d'),
+    'tarih' => date('Y-m-d'), 'cikis_nedeni' => '',
 ];
 $pallets = [];
 
@@ -48,14 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->beginTransaction();
 
             $st = $pdo->prepare(
-                "INSERT INTO loading_records (type, firma, bolge, urun, tarih)
-                 VALUES ('cikma', :firma, :bolge, :urun, :tarih)"
+                "INSERT INTO loading_records (type, firma, bolge, urun, tarih, cikis_nedeni)
+                 VALUES ('cikma', :firma, :bolge, :urun, :tarih, :cikis_nedeni)"
             );
             $st->execute([
-                ':firma' => $record['firma'],
-                ':bolge' => $record['bolge'],
-                ':urun'  => $record['urun'],
-                ':tarih' => $record['tarih'] ?: null,
+                ':firma'        => $record['firma'],
+                ':bolge'        => $record['bolge'],
+                ':urun'         => $record['urun'],
+                ':tarih'        => $record['tarih'] ?: null,
+                ':cikis_nedeni' => $record['cikis_nedeni'],
             ]);
             $rec_id = (int)$pdo->lastInsertId();
 

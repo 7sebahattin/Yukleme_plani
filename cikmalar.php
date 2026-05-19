@@ -89,6 +89,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <th>Firma</th>
                 <th>Bölge</th>
                 <th>Ürün</th>
+                <th>Çıkış Nedeni</th>
                 <th class="num">Palet</th>
                 <th class="num">Kasa</th>
                 <th class="num">Brüt</th>
@@ -110,6 +111,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <td><?= h($r['firma']) ?></td>
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['urun']) ?></td>
+                    <td><?php $cn = trim($r['cikis_nedeni'] ?? ''); if ($cn !== ''): ?><span class="cikis-nedeni-badge"><?= h($cn) ?></span><?php else: ?>—<?php endif; ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
@@ -174,6 +176,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <div class="record-card-body">
                     <?php if ($r['bolge']): ?><div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div><?php endif; ?>
                     <?php if ($r['urun']): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div><?php endif; ?>
+                    <?php $cn = trim($r['cikis_nedeni'] ?? ''); if ($cn !== ''): ?><div><span class="lbl">Çıkış Nedeni:</span> <span class="cikis-nedeni-badge"><?= h($cn) ?></span></div><?php endif; ?>
                 </div>
                 <div class="record-card-totals">
                     <div><span>Palet</span><strong><?= (int)$r['toplam_palet'] ?></strong></div>
