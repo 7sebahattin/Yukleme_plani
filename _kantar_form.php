@@ -234,6 +234,8 @@ function kf_datalist(string $id, array $items): string {
     </div>
 </section>
 
+<script id="firmaListData" type="application/json"><?= json_encode(
+    array_values($_firma_def_names), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="grupInitData" type="application/json"><?= json_encode(
     array_values($_grup_list), JSON_UNESCAPED_UNICODE) ?></script>
 
@@ -411,6 +413,24 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+/* ─── Firma listesi (SELECT için) ─── */
+var _firmaList = JSON.parse((document.getElementById('firmaListData') || {}).textContent || '[]');
+function _buildFirmaSelect(fieldName, storedVal) {
+    var sel = '<select name="' + fieldName + '" class="grup-ad">';
+    sel += '<option value="">— firma seç —</option>';
+    var found = false;
+    _firmaList.forEach(function(f) {
+        var isMatch = storedVal && storedVal.trim().toLowerCase() === f.toLowerCase();
+        if (isMatch) found = true;
+        sel += '<option value="' + esc(f) + '"' + (isMatch ? ' selected' : '') + '>' + esc(f) + '</option>';
+    });
+    if (storedVal && storedVal.trim() !== '' && !found) {
+        sel += '<option value="' + esc(storedVal) + '" selected>' + esc(storedVal) + ' (tanımsız)</option>';
+    }
+    sel += '</select>';
+    return sel;
+}
+
 /* ─── Gruplandırma (canlı hesap) ─── */
 var _grupSay     = 0;
 var _grupSection = document.getElementById('grupSection');
@@ -466,11 +486,14 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
     _grupSay++;
     var n = _grupSay;
     var isOzel = (parseNum(kasaDara) > 0 || parseNum(paletDara) > 0);
+    var adHtml = _firmaList.length
+        ? _buildFirmaSelect('gruplar[' + n + '][grup_adi]', ad || '')
+        : '<input type="text" name="gruplar[' + n + '][grup_adi]" class="grup-ad" placeholder="Firma / grup adı" value="' + esc(ad || '') + '">';
     var row = document.createElement('div');
     row.className = 'grup-form-row';
     row.innerHTML =
         '<div class="grup-row-inputs">' +
-            '<input type="text" name="gruplar[' + n + '][grup_adi]" class="grup-ad" placeholder="Firma / grup adı" value="' + esc(ad || '') + '">' +
+            adHtml +
             '<div class="grup-row-numfields">' +
                 '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
                 '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
