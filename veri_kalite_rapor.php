@@ -1,13 +1,19 @@
 <?php
 // =========================================================
 // veri_kalite_rapor.php — Geçici veri kalitesi raporu
-// Kullanım: tarayıcıdan aç veya php cli: php veri_kalite_rapor.php
-// Kullandıktan sonra sunucudan SİLİN.
+// Tarayıcı: ?key=asya2024  |  CLI: php veri_kalite_rapor.php
+// Rapor gösterildikten sonra kendini siler.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
 $is_cli = PHP_SAPI === 'cli';
+
+// ── Erişim kontrolü (tarayıcı modunda) ───────────────────
+if (!$is_cli && ($_GET['key'] ?? '') !== 'asya2024') {
+    http_response_code(403);
+    die('Erişim reddedildi. ?key= parametresi gerekli.');
+}
 $pdo    = db();
 
 // ── Yardımcı: tablo / metin çıktısı ──────────────────────
@@ -248,12 +254,18 @@ section('8. Çıkış Nedeni Boş Çıkma Kayıtları', $total, $rows, [
     'duzeltme_linki' => 'Düzeltme Linki',
 ], $is_cli);
 
-// ── Özet ─────────────────────────────────────────────────
+// ── Self-delete ───────────────────────────────────────────
+$self = __FILE__;
+$deleted = @unlink($self);
+
 if (!$is_cli) {
+    $del_msg = $deleted
+        ? '<span style="color:#065f46;font-weight:700">✓ Bu dosya sunucudan silindi.</span>'
+        : '<span style="color:#991b1b">⚠ Dosya silinemedi — manuel silin: <code>rm veri_kalite_rapor.php</code></span>';
     echo '<hr style="margin:24px 0;border-color:#e5e7eb">
-<p style="font-size:12px;color:#9ca3af">Bu dosyayı kullandıktan sonra sunucudan silin: <code>rm veri_kalite_rapor.php</code></p>
+<p style="font-size:12px">' . $del_msg . '</p>
 </body></html>';
 } else {
     echo "\n=== RAPOR TAMAM ===\n";
-    echo "NOT: Bu dosyayi kullandiktan sonra silin: rm veri_kalite_rapor.php\n\n";
+    echo ($deleted ? "Dosya silindi: $self\n" : "UYARI: Dosya silinemedi — manuel silin: rm veri_kalite_rapor.php\n") . "\n";
 }
