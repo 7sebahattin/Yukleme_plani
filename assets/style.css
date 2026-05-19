@@ -2864,15 +2864,18 @@ body.notes-modal-open { overflow: hidden; }
 /* =========================================================
    Stok Takip (stok.php)
    ========================================================= */
-.stok-filter-form  { display: flex; flex-direction: column; gap: 10px; }
-.stok-filter-row   { display: flex; flex-wrap: wrap; gap: 10px; }
-.stok-filter-actions { display: flex; gap: 8px; }
+.stok-filter-form    { display: flex; flex-direction: column; gap: 10px; }
+.stok-filter-row     { display: flex; flex-wrap: wrap; gap: 10px; }
+.stok-filter-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.stok-fg       { flex: 1; min-width: 140px; }
+.stok-fg-wide  { flex: 1.5; min-width: 150px; }
 
 .stok-ozet-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
-    margin-bottom: 4px;
+    margin-bottom: 12px;
 }
 @media (min-width: 640px) { .stok-ozet-grid { grid-template-columns: repeat(4, 1fr); } }
 
@@ -2880,21 +2883,21 @@ body.notes-modal-open { overflow: hidden; }
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px 14px 14px;
+    padding: 14px 12px 12px;
     box-shadow: var(--shadow);
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex; flex-direction: column; gap: 3px;
+    min-width: 0;
 }
 .stok-kart-label {
-    font-size: .75rem; font-weight: 700; text-transform: uppercase;
+    font-size: .72rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: .05em; color: var(--muted);
 }
 .stok-kart-val {
-    font-size: 1.45rem; font-weight: 800; line-height: 1.1;
+    font-size: 1.35rem; font-weight: 800; line-height: 1.15;
+    word-break: break-all;
 }
-.stok-kart-val small { font-size: .75rem; font-weight: 500; color: var(--muted); }
-.stok-kart-sub {
-    font-size: .75rem; color: var(--muted);
-}
+.stok-kart-val small { font-size: .72rem; font-weight: 500; color: var(--muted); }
+.stok-kart-sub       { font-size: .72rem; color: var(--muted); }
 
 .stok-kart-gelen  { border-top: 3px solid var(--success); }
 .stok-kart-cikan  { border-top: 3px solid var(--danger); }
@@ -2905,23 +2908,24 @@ body.notes-modal-open { overflow: hidden; }
 .stok-kart-cikan .stok-kart-val { color: var(--danger); }
 .stok-kart-kalan .stok-kart-val { color: var(--primary); }
 
-.stok-negatif { color: var(--danger) !important; }
+.stok-negatif { color: var(--danger)  !important; }
 .stok-pozitif { color: var(--success) !important; }
-.stok-sayim-gir { color: var(--muted); font-weight: 400; font-size: 1.1rem; }
+.stok-sayim-gir { color: var(--muted); font-weight: 400; font-size: 1rem; }
 
-.stok-sayim-input {
-    width: 90px !important; padding: 4px 8px !important;
-    font-size: .85rem !important; text-align: right;
+.stok-sayim-form  { margin-top: 4px; }
+.stok-sayim-label {
+    display: flex; align-items: center; gap: 5px;
+    white-space: nowrap; flex-wrap: nowrap;
 }
-@media (max-width: 767px) {
-    .stok-sayim-input { font-size: 16px !important; }
-    .stok-kart-val    { font-size: 1.2rem; }
+.stok-sayim-input {
+    width: 80px !important; padding: 4px 6px !important;
+    font-size: .83rem !important; text-align: right; min-width: 0;
 }
 
 .stok-badge {
     display: inline-block;
     padding: 2px 8px; border-radius: 999px;
-    font-size: .75rem; font-weight: 700;
+    font-size: .75rem; font-weight: 700; white-space: nowrap;
 }
 .badge-gelen { background: #d1fae5; color: #065f46; }
 .badge-cikan { background: #fee2e2; color: #991b1b; }
@@ -2929,9 +2933,33 @@ body.notes-modal-open { overflow: hidden; }
 .stok-uyari-box {
     background: #fffbeb; border: 1px solid #fcd34d;
     border-radius: var(--radius); padding: 10px 14px;
-    margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 12px;
 }
-.stok-uyari-row { font-size: .85rem; color: #92400e; }
+.stok-uyari-detay { display: block; }
+.stok-uyari-row   { font-size: .84rem; color: #92400e; }
 
+.stok-info-box {
+    background: #f0f7ff; border: 1px solid #bfdbfe;
+    border-radius: var(--radius); padding: 10px 14px;
+    margin-bottom: 12px; font-size: .83rem; color: #1e40af;
+    display: flex; gap: 8px; align-items: flex-start;
+}
+.stok-info-icon { flex-shrink: 0; }
+
+.stok-table-head {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 8px;
+}
 .stok-table td, .stok-table th { padding: 8px 10px; }
-@media (max-width: 599px) { .hide-xs { display: none !important; } }
+
+@media (max-width: 767px) {
+    .stok-sayim-input { font-size: 16px !important; }
+    .stok-kart-val    { font-size: 1.1rem; }
+    .stok-fg, .stok-fg-wide { flex: 1 1 calc(50% - 5px); min-width: 130px; }
+}
+@media (max-width: 480px) {
+    .stok-fg, .stok-fg-wide { flex: 1 1 100%; }
+}
+@media (max-width: 599px) { .stok-hide-sm { display: none !important; } }
