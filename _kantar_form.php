@@ -192,6 +192,21 @@ function kf_datalist(string $id, array $items): string {
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label>Depo <small class="muted">(stok için)</small>
+                <?php if (!empty($_depo_names_kf)): ?>
+                <select name="depo"><?= kf_sel_opt($fis['depo'] ?? '', $_depo_names_kf, '— Seçin —') ?></select>
+                <?php else: ?>
+                <input type="text" name="depo" value="<?= h($fis['depo'] ?? '') ?>"
+                    placeholder="Depoya yönlendiriliyor">
+                <small class="muted"><a href="definitions.php?type=depo">Tanımlar → Depolar'dan ekleyin</a></small>
+                <?php endif; ?>
+            </label>
+            <label>Parti No <small class="muted">(stok için)</small>
+                <?= kf_datalist('kfPartDl', array_column(db()->query("SELECT DISTINCT parti_no FROM loading_records WHERE parti_no!='' ORDER BY parti_no DESC LIMIT 100")->fetchAll(), 'parti_no')) ?>
+                <input type="text" name="parti_no" list="kfPartDl"
+                       value="<?= h($fis['parti_no'] ?? '') ?>"
+                       placeholder="Yükleme parti nosu" autocomplete="off">
+            </label>
             <label class="span-2">Açıklama
                 <input type="text" name="aciklama" value="<?= h($fis['aciklama'] ?? '') ?>">
             </label>

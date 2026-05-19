@@ -13,7 +13,7 @@ $fis = [
     'giris_tarih' => '', 'cikis_tarih' => '', 'operator_adi' => '',
     'malin_cinsi' => '', 'geldigi_yer' => '', 'gittigi_yer' => '',
     'palet_sayisi' => '', 'palet_cinsi' => '', 'kasa_cinsi' => '', 'kasa_sayisi' => '',
-    'aciklama' => '',
+    'aciklama' => '', 'depo' => '', 'parti_no' => '',
     'tartim1' => '', 'alibi1' => '',
     'tartim2' => '', 'alibi2' => '',
 ];
@@ -44,10 +44,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              (fis_no, plaka, firma_adi, giris_tarih, cikis_tarih, operator_adi,
               malin_cinsi, geldigi_yer, gittigi_yer,
               palet_sayisi, palet_cinsi, kasa_cinsi, kasa_sayisi,
-              aciklama,
+              aciklama, depo, parti_no,
               tartim1, alibi1, tartim2, alibi2, net_kg,
               kasa_dara, palet_dara, foto_data)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )->execute([
             $fis['fis_no'],
             strtoupper($fis['plaka']),
@@ -63,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fis['kasa_cinsi'],
             (int)$fis['kasa_sayisi'],
             $fis['aciklama'],
+            $fis['depo'],
+            $fis['parti_no'],
             $t1,
             $fis['alibi1'],
             $t2,
