@@ -3083,3 +3083,6 @@ body.notes-modal-open { overflow: hidden; }
     background: #ffedd5; color: #9a3412;
     border: 1px solid #fed7aa;
 }
+
+/* ── Zorunlu alan yıldızı ────────────────────────────────── */
+.req { color: #ef4444; font-weight: 700; margin-left: 2px; }

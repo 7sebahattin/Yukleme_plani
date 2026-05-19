@@ -696,3 +696,65 @@ function record_totals(int $record_id): array {
         'toplam_net'   => 0,
     ];
 }
+
+// ── Metin Normalleştirme ──────────────────────────────────
+// Baş/son boşluk sil, çoklu boşluğu teke düşür, title case uygula.
+// Türkçe karakterleri bozmaz; tamamen büyük/küçük yapmaz.
+function normalize_text(string $v): string {
+    $v = trim($v);
+    if ($v === '') return '';
+    $v = preg_replace('/\s+/u', ' ', $v);
+    return mb_convert_case($v, MB_CASE_TITLE, 'UTF-8');
+}
+
+function normalize_firma(string $v): string { return normalize_text($v); }
+function normalize_urun(string $v): string  { return normalize_text($v); }
+function normalize_depo(string $v): string  { return normalize_text($v); }
+
+// ── Tanım Tablosuna Otomatik Ekle ────────────────────────
+// Case-insensitive kontrol; aynı isim iki kez eklenmez.
+// type: 'firma' | 'depo' | 'urun'
+function ensure_definition(string $type, string $name): void {
+    if ($name === '') return;
+    try {
+        $pdo = db();
+        $st  = $pdo->prepare(
+            "SELECT id FROM material_definitions WHERE type = ? AND LOWER(name) = LOWER(?) LIMIT 1"
+        );
+        $st->execute([$type, $name]);
+        if (!$st->fetchColumn()) {
+            $pdo->prepare(
+                "INSERT INTO material_definitions (type, name, dara_kg, is_active) VALUES (?, ?, 0, 1)"
+            )->execute([$type, $name]);
+        }
+    } catch (PDOException $e) {}
+}
+
+// ── Palet Satırı Validasyonu ──────────────────────────────
+// $computed: compute_pallet_row() çıktıları dizisi
+// Döner: hata mesajları dizisi (boş ise sorun yok)
+function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false): array {
+    $errs = [];
+    if (empty($computed)) {
+        $errs[] = 'En az bir palet satırı girilmelidir.';
+        return $errs;
+    }
+    foreach ($computed as $i => $p) {
+        $n = $i + 1;
+        if (trim((string)($p['depo'] ?? '')) === '') {
+            $errs[] = $n . '. paletin deposu zorunludur.';
+        }
+        if ((float)($p['net_kg'] ?? 0) <= 0) {
+            $errs[] = $n . '. paletin net KG değeri sıfırdan büyük olmalıdır (brüt > dara).';
+        }
+        if ($require_urun_cinsi && trim((string)($p['urun_cinsi'] ?? '')) === '') {
+            $errs[] = $n . '. paletin ürün cinsi zorunludur.';
+        }
+    }
+    return $errs;
+}
+
+// ── İzin Verilen Çıkış Nedenleri ─────────────────────────
+function cikis_nedeni_listesi(): array {
+    return ['Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
+}

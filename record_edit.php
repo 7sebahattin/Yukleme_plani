@@ -13,6 +13,9 @@ if ($id <= 0) {
     header('Location: records.php'); exit;
 }
 
+$errors  = [];
+$pallets = [];
+
 // POST işlem
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
@@ -20,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Kayıt tipini önceden öğren (UPDATE SQL'i buna göre seçmek için)
     $type_row = db()->prepare("SELECT type FROM loading_records WHERE id=:id");
     $type_row->execute([':id' => $id]);
-    $edit_type = $type_row->fetchColumn() ?: 'yukleme';
+    $edit_type     = $type_row->fetchColumn() ?: 'yukleme';
     $edit_is_cikma = $edit_type === 'cikma';
 
     $record = [
@@ -67,101 +70,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $computed[] = compute_pallet_row($rp);
     }
 
-    try {
-        $pdo = db();
-        $pdo->beginTransaction();
+    // Normalize
+    $record['firma'] = normalize_firma($record['firma']);
+    $record['urun']  = normalize_urun($record['urun']);
 
-        if ($edit_is_cikma) {
-            $st = $pdo->prepare(
-                "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun,
-                    cikis_nedeni=:cikis_nedeni
-                 WHERE id=:id"
-            );
-        } else {
-            $st = $pdo->prepare(
-                "UPDATE loading_records SET
-                    firma=:firma, bolge=:bolge, parti_no=:parti_no, gumruk=:gumruk,
-                    nakliye_bedeli=:nakliye_bedeli, avans=:avans, sofor_adi=:sofor_adi,
-                    fatura_no=:fatura_no, casus_no=:casus_no,
-                    on_plaka=:on_plaka, arka_plaka=:arka_plaka,
-                    nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                    tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket
-                 WHERE id=:id"
-            );
+    // Validate
+    if (empty($record['tarih'])) $errors[] = 'Tarih zorunludur.';
+    if ($record['firma'] === '')  $errors[] = 'Firma zorunludur.';
+    if ($record['urun']  === '')  $errors[] = 'Ürün zorunludur.';
+    if ($edit_is_cikma) {
+        $_cn_izin = cikis_nedeni_listesi();
+        if (($record['cikis_nedeni'] ?? '') === '' || !in_array($record['cikis_nedeni'], $_cn_izin, true)) {
+            $errors[] = 'Çıkış nedeni seçilmelidir.';
         }
-        $st->execute(array_merge($record, [':id' => $id]));
-
-        // Paletleri sıfırdan yaz
-        $pdo->prepare("DELETE FROM loading_pallets WHERE loading_record_id=:r")
-            ->execute([':r' => $id]); // pallet_materials cascade ile silinir
-
-        $st_p = $pdo->prepare(
-            "INSERT INTO loading_pallets
-             (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
-              kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no)
-             VALUES
-             (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc, :dp, :sn)"
-        );
-        $st_m = $pdo->prepare(
-            "INSERT INTO pallet_materials
-             (loading_pallet_id, material_id, quantity, total_dara_kg)
-             VALUES (:p, :m, :q, :t)"
-        );
-        foreach ($computed as $i => $p) {
-            $st_p->execute([
-                ':r'  => $id,
-                ':pno'=> $p['palet_no'],
-                ':ka' => $p['kasa_adeti'],
-                ':sz' => $p['size'],
-                ':br' => $p['brut_kg'],
-                ':da' => $p['dara_kg'],
-                ':nt' => $p['net_kg'],
-                ':kc' => $p['kasa_cinsi_id'],
-                ':pt' => $p['palet_tipi_id'],
-                ':uc' => $p['urun_cinsi'],
-                ':dp' => $p['depo'],
-                ':sn' => $i,
-            ]);
-            $pid = (int)$pdo->lastInsertId();
-            foreach ($p['materials'] as $m) {
-                $st_m->execute([
-                    ':p' => $pid,
-                    ':m' => $m['material_id'],
-                    ':q' => $m['quantity'],
-                    ':t' => $m['total_dara_kg'],
-                ]);
-            }
-        }
-
-        $pdo->commit();
-        set_flash('success', 'Kayıt güncellendi.');
-        header('Location: record_view.php?id=' . $id);
-        exit;
-    } catch (Throwable $e) {
-        if (db()->inTransaction()) db()->rollBack();
-        set_flash('error', 'Güncelleme hatası: ' . $e->getMessage());
     }
+    $errors = array_merge($errors, validate_pallet_rows($computed));
+
+    if (empty($errors)) {
+        ensure_definition('firma', $record['firma']);
+        ensure_definition('urun',  $record['urun']);
+        foreach ($computed as $p) {
+            if (!empty($p['depo'])) ensure_definition('depo', $p['depo']);
+        }
+    }
+
+    if (empty($errors)) {
+        try {
+            $pdo = db();
+            $pdo->beginTransaction();
+
+            if ($edit_is_cikma) {
+                $st = $pdo->prepare(
+                    "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun,
+                        cikis_nedeni=:cikis_nedeni
+                     WHERE id=:id"
+                );
+            } else {
+                $st = $pdo->prepare(
+                    "UPDATE loading_records SET
+                        firma=:firma, bolge=:bolge, parti_no=:parti_no, gumruk=:gumruk,
+                        nakliye_bedeli=:nakliye_bedeli, avans=:avans, sofor_adi=:sofor_adi,
+                        fatura_no=:fatura_no, casus_no=:casus_no,
+                        on_plaka=:on_plaka, arka_plaka=:arka_plaka,
+                        nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
+                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket
+                     WHERE id=:id"
+                );
+            }
+            $st->execute(array_merge($record, [':id' => $id]));
+
+            // Paletleri sıfırdan yaz
+            $pdo->prepare("DELETE FROM loading_pallets WHERE loading_record_id=:r")
+                ->execute([':r' => $id]); // pallet_materials cascade ile silinir
+
+            $st_p = $pdo->prepare(
+                "INSERT INTO loading_pallets
+                 (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
+                  kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no)
+                 VALUES
+                 (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc, :dp, :sn)"
+            );
+            $st_m = $pdo->prepare(
+                "INSERT INTO pallet_materials
+                 (loading_pallet_id, material_id, quantity, total_dara_kg)
+                 VALUES (:p, :m, :q, :t)"
+            );
+            foreach ($computed as $i => $p) {
+                $st_p->execute([
+                    ':r'  => $id,
+                    ':pno'=> $p['palet_no'],
+                    ':ka' => $p['kasa_adeti'],
+                    ':sz' => $p['size'],
+                    ':br' => $p['brut_kg'],
+                    ':da' => $p['dara_kg'],
+                    ':nt' => $p['net_kg'],
+                    ':kc' => $p['kasa_cinsi_id'],
+                    ':pt' => $p['palet_tipi_id'],
+                    ':uc' => $p['urun_cinsi'],
+                    ':dp' => $p['depo'],
+                    ':sn' => $i,
+                ]);
+                $pid = (int)$pdo->lastInsertId();
+                foreach ($p['materials'] as $m) {
+                    $st_m->execute([
+                        ':p' => $pid,
+                        ':m' => $m['material_id'],
+                        ':q' => $m['quantity'],
+                        ':t' => $m['total_dara_kg'],
+                    ]);
+                }
+            }
+
+            $pdo->commit();
+            set_flash('success', 'Kayıt güncellendi.');
+            header('Location: record_view.php?id=' . $id);
+            exit;
+        } catch (Throwable $e) {
+            if (db()->inTransaction()) db()->rollBack();
+            $errors[] = 'Güncelleme hatası: ' . $e->getMessage();
+        }
+    }
+
+    // POST hata durumu: gönderilen değerleri form için hazırla
+    $record['id']   = $id;
+    $record['type'] = $edit_type;
+    $pallets = $computed;
 }
 
-// GET — kayıt yükle
-$st = db()->prepare("SELECT * FROM loading_records WHERE id=:id");
-$st->execute([':id' => $id]);
-$record = $st->fetch();
-if (!$record) {
-    set_flash('error', 'Kayıt bulunamadı.');
-    header('Location: records.php'); exit;
-}
+// GET — kayıt yükle (POST hata durumunda atlanır)
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $st = db()->prepare("SELECT * FROM loading_records WHERE id=:id");
+    $st->execute([':id' => $id]);
+    $record = $st->fetch();
+    if (!$record) {
+        set_flash('error', 'Kayıt bulunamadı.');
+        header('Location: records.php'); exit;
+    }
 
-$st = db()->prepare("SELECT * FROM loading_pallets WHERE loading_record_id=:r ORDER BY sira_no, id");
-$st->execute([':r' => $id]);
-$pallets = $st->fetchAll();
+    $st = db()->prepare("SELECT * FROM loading_pallets WHERE loading_record_id=:r ORDER BY sira_no, id");
+    $st->execute([':r' => $id]);
+    $pallets = $st->fetchAll();
 
-$st_pm = db()->prepare("SELECT * FROM pallet_materials WHERE loading_pallet_id=:p");
-foreach ($pallets as &$p) {
-    $st_pm->execute([':p' => $p['id']]);
-    $p['materials'] = $st_pm->fetchAll();
+    $st_pm = db()->prepare("SELECT * FROM pallet_materials WHERE loading_pallet_id=:p");
+    foreach ($pallets as &$p) {
+        $st_pm->execute([':p' => $p['id']]);
+        $p['materials'] = $st_pm->fetchAll();
+    }
+    unset($p);
 }
-unset($p);
 
 $form_action  = 'record_edit.php';
 $title        = 'Kayıt Düzenle #' . $id;
@@ -171,5 +207,8 @@ $form_is_cikma = ($record['type'] ?? 'yukleme') === 'cikma';
 
 render_header($title);
 render_flash();
+foreach ($errors as $errMsg) {
+    echo '<div class="flash flash-error">' . h($errMsg) . '</div>';
+}
 include __DIR__ . '/_form.php';
 render_footer();

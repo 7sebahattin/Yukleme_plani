@@ -25,10 +25,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $record[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
-    // Mantık: en az bir genel alan dolu olsun
-    if ($record['firma'] === '' && $record['alici'] === '' && $record['parti_no'] === '') {
-        $errors[] = 'Firma, alıcı veya parti no alanlarından en az biri doldurulmalı.';
-    }
+    $record['firma'] = normalize_firma($record['firma']);
+    $record['urun']  = normalize_urun($record['urun']);
+    if ($record['tarih'] === '') $errors[] = 'Tarih zorunludur.';
+    if ($record['firma'] === '') $errors[] = 'Firma zorunludur.';
+    if ($record['urun']  === '') $errors[] = 'Ürün zorunludur.';
 
     // Paletler
     $raw_pallets = $_POST['pallets'] ?? [];
@@ -47,6 +48,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         if ($is_empty) continue;
         $computed[] = compute_pallet_row($rp);
+    }
+
+    $errors = array_merge($errors, validate_pallet_rows($computed));
+    if (empty($errors)) {
+        ensure_definition('firma', $record['firma']);
+        ensure_definition('urun',  $record['urun']);
+        foreach ($computed as $p) {
+            if (!empty($p['depo'])) ensure_definition('depo', $p['depo']);
+        }
     }
 
     if (empty($errors)) {

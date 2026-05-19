@@ -117,7 +117,7 @@ function kf_datalist(string $id, array $items): string {
                 <small class="muted">Henüz kayıtlı plaka yok</small>
                 <?php endif; ?>
             </label>
-            <label>Firma Adı
+            <label>Firma Adı <span class="req">*</span>
                 <?php if (!empty($_all_firma)): ?>
                 <select name="firma_adi"><?= kf_sel_opt($fis['firma_adi'] ?? '', $_all_firma) ?></select>
                 <?php else: ?>
@@ -130,13 +130,13 @@ function kf_datalist(string $id, array $items): string {
                 <input type="text" name="operator_adi" list="kfOpDl"
                        value="<?= h($fis['operator_adi'] ?? '') ?>" autocomplete="off">
             </label>
-            <label>Giriş Tarih / Saat
+            <label>Giriş Tarih / Saat <span class="req">*</span>
                 <input type="datetime-local" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
             </label>
             <label>Çıkış Tarih / Saat
                 <input type="datetime-local" name="cikis_tarih" value="<?= h($fis['cikis_tarih'] ?? '') ?>">
             </label>
-            <label>Malın Cinsi
+            <label>Malın Cinsi <span class="req">*</span>
                 <?php if (!empty($_urun_names)): ?>
                 <select name="malin_cinsi"><?= kf_sel_opt($fis['malin_cinsi'] ?? '', $_urun_names) ?></select>
                 <?php else: ?>
@@ -192,7 +192,7 @@ function kf_datalist(string $id, array $items): string {
                     <?php endforeach; ?>
                 </select>
             </label>
-            <label>Depo <small class="muted">(stok için)</small>
+            <label>Depo <span class="req">*</span> <small class="muted">(stok için)</small>
                 <?php if (!empty($_depo_names_kf)): ?>
                 <select name="depo"><?= kf_sel_opt($fis['depo'] ?? '', $_depo_names_kf, '— Seçin —') ?></select>
                 <?php else: ?>
@@ -243,7 +243,7 @@ function kf_datalist(string $id, array $items): string {
     <div class="card-body">
         <div class="kantar-tartim-wrap">
             <div class="kantar-tartim-row">
-                <div class="kantar-tartim-no">1. Tartım</div>
+                <div class="kantar-tartim-no">1. Tartım <span class="req">*</span></div>
                 <div class="kantar-tartim-fields">
                     <input type="text" name="tartim1" id="tartim1" inputmode="decimal"
                            class="num kantar-tartim-input"
@@ -255,7 +255,7 @@ function kf_datalist(string $id, array $items): string {
                 </div>
             </div>
             <div class="kantar-tartim-row">
-                <div class="kantar-tartim-no">2. Tartım</div>
+                <div class="kantar-tartim-no">2. Tartım <span class="req">*</span></div>
                 <div class="kantar-tartim-fields">
                     <input type="text" name="tartim2" id="tartim2" inputmode="decimal"
                            class="num kantar-tartim-input"
