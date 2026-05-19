@@ -24,6 +24,19 @@ try {
     $hesap_bekleyen = 0;
 }
 
+// Stok özet (bugün)
+try {
+    $stok_gelen_bugun = (float)db()->query("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri
+        WHERE giris_tarih >= CURDATE()")->fetchColumn();
+    $stok_cikan_bugun = (float)db()->query("SELECT COALESCE(SUM(lp.net_kg),0)
+        FROM loading_pallets lp
+        JOIN loading_records lr ON lp.loading_record_id = lr.id
+        WHERE lr.type IN ('yukleme','cikma') AND lr.tarih = CURDATE()")->fetchColumn();
+} catch (PDOException $e) {
+    $stok_gelen_bugun = 0.0;
+    $stok_cikan_bugun = 0.0;
+}
+
 render_header('Ana Sayfa');
 render_flash();
 ?>
@@ -80,6 +93,21 @@ render_flash();
         <?php endif; ?>
         <?php if ($hesap_bugun > 0): ?>
         <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Bugün: <?= number_format((float)$hesap_bugun,2,',','.') ?>₺</div>
+        <?php endif; ?>
+    </a>
+
+    <a href="stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f5e9">📦</div>
+        <div class="home-card-title">Stok</div>
+        <?php if ($stok_gelen_bugun > 0 || $stok_cikan_bugun > 0): ?>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:2px;text-align:center">
+            <?php if ($stok_gelen_bugun > 0): ?>
+            <span style="color:var(--success)">↑<?= fmt_kg($stok_gelen_bugun) ?>kg</span>
+            <?php endif; ?>
+            <?php if ($stok_cikan_bugun > 0): ?>
+            <span style="color:var(--danger)"> ↓<?= fmt_kg($stok_cikan_bugun) ?>kg</span>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
     </a>
 
