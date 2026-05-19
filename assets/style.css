@@ -3047,6 +3047,34 @@ body.notes-modal-open { overflow: hidden; }
 .dkk-card-detail { font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
 .dkk-card-link   { margin-top: 2px; }
 
+/* ── Detaylı Veri Kalite Raporu ─────────────────────────── */
+.dkk-detail-wrap  { margin-bottom: 14px; }
+.dkk-detail-bar   { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.dkk-toggle-btn   { background: #f3f4f6; border: 1px solid var(--border); color: #374151; font-weight: 600; }
+.dkk-toggle-btn:hover { background: #e5e7eb; }
+
+.dkk-detail-section { display: flex; flex-direction: column; gap: 12px; }
+
+.dkk-detail-group {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: #fff; overflow: hidden;
+}
+.dkk-detail-group-kritik { border-left: 3px solid #f87171; }
+.dkk-detail-group-orta   { border-left: 3px solid #fb923c; }
+.dkk-detail-group-dusuk  { border-left: 3px solid #facc15; }
+
+.dkk-detail-group-head {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 9px 14px; background: #f9fafb;
+    border-bottom: 1px solid var(--border);
+}
+.dkk-detail-group-title { font-weight: 600; font-size: .88rem; flex: 1; min-width: 160px; }
+.dkk-detail-group-total { font-size: .82rem; color: var(--muted); }
+.dkk-ilk20 { font-style: italic; }
+
+.dkk-detail-table td, .dkk-detail-table th { padding: 7px 10px; }
+.dkk-id { font-weight: 700; color: var(--muted); font-size: .82rem; }
+
 /* ── Çıkış Nedeni Badge ──────────────────────────────────── */
 .cikis-nedeni-badge {
     display: inline-block;

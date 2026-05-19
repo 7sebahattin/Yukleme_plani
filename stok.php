@@ -95,6 +95,7 @@ $f_depo      = trim($_GET['depo']      ?? '');
 $f_parti     = trim($_GET['parti']     ?? '');
 $sayim_kg    = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
 $is_csv      = isset($_GET['csv']);
+$is_dkk_csv  = isset($_GET['dkk_csv']);
 
 // ── Ham Giriş (kantar_fisleri) — parti no kantar tarafını etkilemez ──
 $k_where  = [];
@@ -186,84 +187,166 @@ try {
     $gecmis_sayimlar = $st->fetchAll();
 } catch (PDOException $e) {}
 
-// ── Stok Doğruluk Kontrolü ───────────────────────────────
+// ── Stok Doğruluk Kontrolü — WHERE blokları (CSV + özet + detay paylaşır) ──
+$k_extra = $k_where_sql ? $k_where_sql . ' AND ' : 'WHERE ';
+
+$qc_lp_where  = ["lr.type IN ('yukleme','cikma')"];
+$qc_lp_params = [];
+if ($f_tarih_bas !== '') { $qc_lp_where[] = "lr.tarih >= ?";        $qc_lp_params[] = $f_tarih_bas; }
+if ($f_tarih_bit !== '') { $qc_lp_where[] = "lr.tarih <= ?";        $qc_lp_params[] = $f_tarih_bit; }
+if ($f_firma     !== '') { $qc_lp_where[] = "lr.firma LIKE ?";      $qc_lp_params[] = '%' . $f_firma . '%'; }
+if ($f_urun      !== '') { $qc_lp_where[] = "lp.urun_cinsi LIKE ?"; $qc_lp_params[] = '%' . $f_urun . '%'; }
+if ($f_depo      !== '') { $qc_lp_where[] = "lp.depo LIKE ?";       $qc_lp_params[] = '%' . $f_depo . '%'; }
+$qc_lp_sql = 'WHERE ' . implode(' AND ', $qc_lp_where);
+
+$qc_lr_where  = ["type IN ('yukleme','cikma')"];
+$qc_lr_params = [];
+if ($f_tarih_bas !== '') { $qc_lr_where[] = "tarih >= ?";   $qc_lr_params[] = $f_tarih_bas; }
+if ($f_tarih_bit !== '') { $qc_lr_where[] = "tarih <= ?";   $qc_lr_params[] = $f_tarih_bit; }
+if ($f_firma     !== '') { $qc_lr_where[] = "firma LIKE ?"; $qc_lr_params[] = '%' . $f_firma . '%'; }
+$qc_lr_sql = 'WHERE ' . implode(' AND ', $qc_lr_where);
+
+$qc_cn_where  = ["type = 'cikma'"];
+$qc_cn_params = [];
+if ($f_tarih_bas !== '') { $qc_cn_where[] = "tarih >= ?";   $qc_cn_params[] = $f_tarih_bas; }
+if ($f_tarih_bit !== '') { $qc_cn_where[] = "tarih <= ?";   $qc_cn_params[] = $f_tarih_bit; }
+if ($f_firma     !== '') { $qc_cn_where[] = "firma LIKE ?"; $qc_cn_params[] = '%' . $f_firma . '%'; }
+$qc_cn_sql = 'WHERE ' . implode(' AND ', $qc_cn_where);
+
+// [count_sql, params, label, severity, url, url_label, detail_msg]
+$check_defs = [
+    ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0",
+     $k_params, 'Net KG sıfır — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     'Stok hesabına 0 kg giriyor; tartım eksik veya hatalı.'],
+    ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''",
+     $k_params, 'Deposu boş — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     'Depo filtresiyle eşleşmez; depo bazlı stoktan hariç kalır.'],
+    ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')",
+     $k_params, 'Tarihi boş/hatalı — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
+     'Tarih filtresi bu girişleri atlayabilir; döneme dahil edilemez.'],
+    ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''",
+     $k_params, 'Mal cinsi boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
+     'Ürün filtresiyle eşleşmez.'],
+    ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''",
+     $k_params, 'Firması boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
+     'Firma filtresiyle eşleşmez.'],
+    ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.net_kg = 0",
+     $qc_lp_params, 'Net KG sıfır — yükleme/çıkma paleti', 'kritik', 'records.php', 'Yüklemeler',
+     'Çıkış hesabına 0 kg katkısı var; brüt veya dara girişi eksik.'],
+    ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.depo = ''",
+     $qc_lp_params, 'Deposu boş — yükleme/çıkma paleti', 'kritik', 'records.php', 'Yüklemeler',
+     'Depo filtresiyle eşleşmez; depo bazlı stoktan düşmez.'],
+    ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.urun_cinsi = ''",
+     $qc_lp_params, 'Ürün cinsi boş — yükleme/çıkma paleti', 'orta', 'records.php', 'Yüklemeler',
+     'Ürün filtresiyle eşleşmez.'],
+    ["SELECT COUNT(*) FROM loading_records $qc_lr_sql AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)",
+     $qc_lr_params, 'Paletsiz yükleme/çıkma kaydı', 'kritik', 'records.php', 'Yüklemeler',
+     'Palet satırı yok; çıkış hesabına dahil edilemiyor.'],
+    ["SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''",
+     $qc_cn_params, 'Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'cikmalar.php', 'Çıkmalar',
+     'Fire veya kötü ürün sebebi girilmemiş.'],
+];
+
+// ── Özet sayılar ─────────────────────────────────────────
 $quality_checks = [];
-try {
-    // Kantar sorgularına mevcut filtreyi ekle
-    $k_extra = $k_where_sql ? $k_where_sql . ' AND ' : 'WHERE ';
+foreach ($check_defs as $chk) {
+    [$sql, $params, $label, $severity, $url, $url_label, $detail] = $chk;
+    try {
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $n = (int)$st->fetchColumn();
+        if ($n > 0) {
+            $quality_checks[] = compact('n', 'label', 'severity', 'url', 'url_label', 'detail');
+        }
+    } catch (PDOException $e) {}
+}
 
-    // Yükleme/çıkma palet kontrolleri — tarih/firma/urun/depo (parti hariç)
-    $qc_lp_where  = ["lr.type IN ('yukleme','cikma')"];
-    $qc_lp_params = [];
-    if ($f_tarih_bas !== '') { $qc_lp_where[] = "lr.tarih >= ?";        $qc_lp_params[] = $f_tarih_bas; }
-    if ($f_tarih_bit !== '') { $qc_lp_where[] = "lr.tarih <= ?";        $qc_lp_params[] = $f_tarih_bit; }
-    if ($f_firma     !== '') { $qc_lp_where[] = "lr.firma LIKE ?";      $qc_lp_params[] = '%' . $f_firma . '%'; }
-    if ($f_urun      !== '') { $qc_lp_where[] = "lp.urun_cinsi LIKE ?"; $qc_lp_params[] = '%' . $f_urun . '%'; }
-    if ($f_depo      !== '') { $qc_lp_where[] = "lp.depo LIKE ?";       $qc_lp_params[] = '%' . $f_depo . '%'; }
-    $qc_lp_sql = 'WHERE ' . implode(' AND ', $qc_lp_where);
+// ── Detay kayıtları (ilk 20 / grup) ──────────────────────
+// Her entry: label, severity, total, rows, url_label
+// row sütunları: id, tarih, firma, urun, depo, net_kg, fix_link
+$quality_detail = [];
+$qd_defs = [
+    // [label, severity, url_label, count_sql, c_params, rows_sql, r_params]
+    ['Net KG sıfır — kantar fişi', 'kritik', 'Kantar Fişleri',
+     "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0", $k_params,
+     "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
+             depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
+      FROM kantar_fisleri {$k_extra}net_kg = 0 ORDER BY id DESC LIMIT 20", $k_params],
+    ['Deposu boş — kantar fişi', 'kritik', 'Kantar Fişleri',
+     "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''", $k_params,
+     "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
+             depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
+      FROM kantar_fisleri {$k_extra}depo = '' ORDER BY id DESC LIMIT 20", $k_params],
+    ['Tarihi boş/hatalı — kantar fişi', 'kritik', 'Kantar Fişleri',
+     "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')", $k_params,
+     "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
+             depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
+      FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')
+      ORDER BY id DESC LIMIT 20", $k_params],
+    ['Mal cinsi boş — kantar fişi', 'orta', 'Kantar Fişleri',
+     "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''", $k_params,
+     "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
+             depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
+      FROM kantar_fisleri {$k_extra}malin_cinsi = '' ORDER BY id DESC LIMIT 20", $k_params],
+    ['Firması boş — kantar fişi', 'orta', 'Kantar Fişleri',
+     "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''", $k_params,
+     "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
+             depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
+      FROM kantar_fisleri {$k_extra}firma_adi = '' ORDER BY id DESC LIMIT 20", $k_params],
+    ['Net KG sıfır — yükleme/çıkma paleti', 'kritik', 'Yüklemeler',
+     "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.net_kg = 0", $qc_lp_params,
+     "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
+             lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
+      FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
+      $qc_lp_sql AND lp.net_kg = 0 ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+    ['Deposu boş — yükleme/çıkma paleti', 'kritik', 'Yüklemeler',
+     "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.depo = ''", $qc_lp_params,
+     "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
+             lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
+      FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
+      $qc_lp_sql AND lp.depo = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+    ['Ürün cinsi boş — yükleme/çıkma paleti', 'orta', 'Yüklemeler',
+     "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.urun_cinsi = ''", $qc_lp_params,
+     "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
+             lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
+      FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
+      $qc_lp_sql AND lp.urun_cinsi = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+    ['Paletsiz yükleme/çıkma kaydı', 'kritik', 'Yüklemeler',
+     "SELECT COUNT(*) FROM loading_records $qc_lr_sql AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)", $qc_lr_params,
+     "SELECT id, tarih, firma, urun, bolge AS depo, 0 AS net_kg,
+             CONCAT('record_edit.php?id=', id) AS fix_link
+      FROM loading_records $qc_lr_sql
+        AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)
+      ORDER BY id DESC LIMIT 20", $qc_lr_params],
+    ['Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'Çıkmalar',
+     "SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''", $qc_cn_params,
+     "SELECT id, tarih, firma, urun, '' AS depo,
+             (SELECT COALESCE(SUM(lp.net_kg),0) FROM loading_pallets lp WHERE lp.loading_record_id = loading_records.id) AS net_kg,
+             CONCAT('record_edit.php?id=', id) AS fix_link
+      FROM loading_records $qc_cn_sql AND cikis_nedeni = ''
+      ORDER BY id DESC LIMIT 20", $qc_cn_params],
+];
 
-    // Yükleme/çıkma kayıt kontrolleri (palet JOIN olmadan) — tarih/firma
-    $qc_lr_where  = ["type IN ('yukleme','cikma')"];
-    $qc_lr_params = [];
-    if ($f_tarih_bas !== '') { $qc_lr_where[] = "tarih >= ?";   $qc_lr_params[] = $f_tarih_bas; }
-    if ($f_tarih_bit !== '') { $qc_lr_where[] = "tarih <= ?";   $qc_lr_params[] = $f_tarih_bit; }
-    if ($f_firma     !== '') { $qc_lr_where[] = "firma LIKE ?"; $qc_lr_params[] = '%' . $f_firma . '%'; }
-    $qc_lr_sql = 'WHERE ' . implode(' AND ', $qc_lr_where);
-
-    // Çıkma-specific kontroller — tarih/firma
-    $qc_cn_where  = ["type = 'cikma'"];
-    $qc_cn_params = [];
-    if ($f_tarih_bas !== '') { $qc_cn_where[] = "tarih >= ?";   $qc_cn_params[] = $f_tarih_bas; }
-    if ($f_tarih_bit !== '') { $qc_cn_where[] = "tarih <= ?";   $qc_cn_params[] = $f_tarih_bit; }
-    if ($f_firma     !== '') { $qc_cn_where[] = "firma LIKE ?"; $qc_cn_params[] = '%' . $f_firma . '%'; }
-    $qc_cn_sql = 'WHERE ' . implode(' AND ', $qc_cn_where);
-
-    $check_defs = [
-        // [sql, params, label, severity, url, url_label, detail]
-        ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0",
-         $k_params, 'Net KG sıfır — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
-         'Stok hesabına 0 kg giriyor; tartım eksik veya hatalı.'],
-        ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''",
-         $k_params, 'Deposu boş — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
-         'Depo filtresiyle eşleşmez; depo bazlı stoktan hariç kalır.'],
-        ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')",
-         $k_params, 'Tarihi boş/hatalı — kantar fişi', 'kritik', 'kantar.php', 'Kantar Fişleri',
-         'Tarih filtresi bu girişleri atlayabilir; döneme dahil edilemez.'],
-        ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''",
-         $k_params, 'Mal cinsi boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
-         'Ürün filtresiyle eşleşmez.'],
-        ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''",
-         $k_params, 'Firması boş — kantar fişi', 'orta', 'kantar.php', 'Kantar Fişleri',
-         'Firma filtresiyle eşleşmez.'],
-        ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.net_kg = 0",
-         $qc_lp_params, 'Net KG sıfır — yükleme/çıkma paleti', 'kritik', 'records.php', 'Yüklemeler',
-         'Çıkış hesabına 0 kg katkısı var; brüt veya dara girişi eksik.'],
-        ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.depo = ''",
-         $qc_lp_params, 'Deposu boş — yükleme/çıkma paleti', 'kritik', 'records.php', 'Yüklemeler',
-         'Depo filtresiyle eşleşmez; depo bazlı stoktan düşmez.'],
-        ["SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.urun_cinsi = ''",
-         $qc_lp_params, 'Ürün cinsi boş — yükleme/çıkma paleti', 'orta', 'records.php', 'Yüklemeler',
-         'Ürün filtresiyle eşleşmez.'],
-        ["SELECT COUNT(*) FROM loading_records $qc_lr_sql AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)",
-         $qc_lr_params, 'Paletsiz yükleme/çıkma kaydı', 'kritik', 'records.php', 'Yüklemeler',
-         'Palet satırı yok; çıkış hesabına dahil edilemiyor.'],
-        ["SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''",
-         $qc_cn_params, 'Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'cikmalar.php', 'Çıkmalar',
-         'Fire veya kötü ürün sebebi girilmemiş.'],
-    ];
-
-    foreach ($check_defs as $chk) {
-        [$sql, $params, $label, $severity, $url, $url_label, $detail] = $chk;
-        try {
-            $st = $pdo->prepare($sql);
-            $st->execute($params);
-            $n = (int)$st->fetchColumn();
-            if ($n > 0) {
-                $quality_checks[] = compact('n', 'label', 'severity', 'url', 'url_label', 'detail');
-            }
-        } catch (PDOException $e) {}
-    }
-} catch (PDOException $e) {}
+foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows_sql, $rows_params]) {
+    try {
+        $st = $pdo->prepare($cnt_sql);
+        $st->execute($cnt_params);
+        $total = (int)$st->fetchColumn();
+        $rows  = [];
+        if ($total > 0) {
+            $st2 = $pdo->prepare($rows_sql);
+            $st2->execute($rows_params);
+            $rows = $st2->fetchAll();
+        }
+        $quality_detail[] = [
+            'label'     => $qdlabel,
+            'severity'  => $qdsev,
+            'url_label' => $qdurlabel,
+            'total'     => $total,
+            'rows'      => $rows,
+        ];
+    } catch (PDOException $e) {}
+}
 
 // ── Dropdown listeleri ────────────────────────────────────
 try {
@@ -288,7 +371,33 @@ try {
     $parti_list = $pdo->query("SELECT DISTINCT parti_no FROM loading_records WHERE parti_no != '' ORDER BY parti_no DESC LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) { $parti_list = []; }
 
-// ── CSV export ────────────────────────────────────────────
+// ── Veri Kalite Raporu CSV export ────────────────────────
+if ($is_dkk_csv) {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="veri_kalite_raporu_' . date('Y-m-d') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, "\xEF\xBB\xBF");
+    fputcsv($out, ['# Veri Kalite Raporu', date('d.m.Y H:i')], ';', '"', '\\');
+    fputcsv($out, ['#', ''], ';', '"', '\\');
+    foreach ($quality_detail as $grp) {
+        if ($grp['total'] === 0) continue;
+        fputcsv($out, ['### ' . $grp['label'], 'Toplam: ' . $grp['total']], ';', '"', '\\');
+        fputcsv($out, ['ID', 'Tarih', 'Firma', 'Ürün / Mal Cinsi', 'Depo', 'Net KG', 'Düzeltme Linki'], ';', '"', '\\');
+        foreach ($grp['rows'] as $r) {
+            fputcsv($out, [
+                $r['id'], $r['tarih'] ?? '', $r['firma'] ?? '',
+                $r['urun'] ?? '', $r['depo'] ?? '',
+                number_format((float)($r['net_kg'] ?? 0), 3, ',', '.'),
+                $r['fix_link'] ?? '',
+            ], ';', '"', '\\');
+        }
+        fputcsv($out, ['', ''], ';', '"', '\\');
+    }
+    fclose($out);
+    exit;
+}
+
+// ── Stok Hareketi CSV export ──────────────────────────────
 if ($is_csv) {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="stok_hareket_' . date('Y-m-d') . '.csv"');
@@ -485,6 +594,82 @@ $dkk_label_map = ['kritik' => 'Kritik', 'orta' => 'Orta', 'dusuk' => 'Düşük']
     </div>
     <?php endif; ?>
 </div>
+
+<?php
+// Sorunlu grupları say (detay bölümü için)
+$dkk_sorunlu = array_filter($quality_detail, fn($g) => $g['total'] > 0);
+$dkk_detail_url = '?' . http_build_query(array_filter([
+    'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit,
+    'firma' => $f_firma, 'urun' => $f_urun, 'depo' => $f_depo,
+    'parti' => $f_parti, 'dkk_csv' => '1',
+], fn($v) => $v !== ''));
+?>
+<?php if (!empty($dkk_sorunlu)): ?>
+<!-- ── Detaylı Veri Kalite Raporu ────────────────────────── -->
+<div class="dkk-detail-wrap">
+    <div class="dkk-detail-bar">
+        <button type="button" class="btn btn-sm dkk-toggle-btn" id="dkkToggleBtn"
+                onclick="dkkToggle()">
+            🔍 Detaylı Veri Kalite Raporunu Göster
+        </button>
+        <a href="<?= h($dkk_detail_url) ?>" class="btn btn-sm btn-ghost">⬇ Kalite Raporu CSV</a>
+    </div>
+    <div id="dkkDetail" class="dkk-detail-section" hidden>
+        <?php foreach ($dkk_sorunlu as $grp): ?>
+        <?php if ($grp['total'] === 0) continue; ?>
+        <div class="dkk-detail-group dkk-detail-group-<?= h($grp['severity']) ?>">
+            <div class="dkk-detail-group-head">
+                <span class="dkk-badge dkk-badge-<?= h($grp['severity']) ?>"><?= $dkk_label_map[$grp['severity']] ?? $grp['severity'] ?></span>
+                <span class="dkk-detail-group-title"><?= h($grp['label']) ?></span>
+                <span class="dkk-detail-group-total">
+                    Toplam <strong><?= $grp['total'] ?></strong> kayıt
+                    <?= $grp['total'] > 20 ? ' <span class="dkk-ilk20">(ilk 20 gösteriliyor)</span>' : '' ?>
+                </span>
+            </div>
+            <?php if (!empty($grp['rows'])): ?>
+            <div class="table-wrap">
+                <table class="data-table dkk-detail-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tarih</th>
+                            <th>Firma</th>
+                            <th>Ürün / Mal Cinsi</th>
+                            <th>Depo</th>
+                            <th class="num">Net KG</th>
+                            <th>Düzelt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($grp['rows'] as $row): ?>
+                        <tr>
+                            <td class="dkk-id"><?= (int)$row['id'] ?></td>
+                            <td><?= h($row['tarih'] ?? '—') ?></td>
+                            <td><?= h($row['firma'] ?? '—') ?></td>
+                            <td><?= h($row['urun'] !== '' ? $row['urun'] : '—') ?></td>
+                            <td><?= h($row['depo'] !== '' ? $row['depo'] : '—') ?></td>
+                            <td class="num"><?= number_format((float)($row['net_kg'] ?? 0), 3, ',', '.') ?></td>
+                            <td><a href="<?= h($row['fix_link']) ?>" class="btn btn-sm btn-ghost">Düzelt →</a></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+<script>
+function dkkToggle() {
+    var el  = document.getElementById('dkkDetail');
+    var btn = document.getElementById('dkkToggleBtn');
+    var hidden = el.hidden;
+    el.hidden = !hidden;
+    btn.textContent = hidden ? '▲ Detaylı Veri Kalite Raporunu Gizle' : '🔍 Detaylı Veri Kalite Raporunu Göster';
+}
+</script>
+<?php endif; ?>
 
 <!-- ── Özet Kartları (6 kart) ────────────────────────────── -->
 <div class="stok-ozet-grid stok-ozet-grid-6">
