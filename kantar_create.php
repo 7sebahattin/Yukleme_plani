@@ -26,7 +26,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fis[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
-    try {
+    // ── Normalleştir ──────────────────────────────────────
+    $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
+    $fis['malin_cinsi'] = normalize_urun($fis['malin_cinsi']);
+    $fis['depo']        = normalize_depo($fis['depo']);
+
+    // ── Zorunlu alan kontrolü ─────────────────────────────
+    if ($fis['giris_tarih'] === '') $errors[] = 'Giriş tarihi zorunludur.';
+    if ($fis['firma_adi']   === '') $errors[] = 'Firma adı zorunludur.';
+    if ($fis['malin_cinsi'] === '') $errors[] = 'Mal cinsi zorunludur.';
+    if ($fis['depo']        === '') $errors[] = 'Depo zorunludur.';
+    $_t1c = num($fis['tartim1']);
+    $_t2c = num($fis['tartim2']);
+    if (max(0.0, $_t1c - $_t2c) <= 0) {
+        $errors[] = 'Net KG sıfırdan büyük olmalıdır (1. tartım > 2. tartım).';
+    }
+
+    if (empty($errors)) {
+        // Yeni firma/mal cinsi/depo tanımı yoksa otomatik ekle
+        ensure_definition('firma', $fis['firma_adi']);
+        ensure_definition('urun',  $fis['malin_cinsi']);
+        ensure_definition('depo',  $fis['depo']);
+    }
+
+    if (empty($errors)) try {
         $t1  = num($fis['tartim1']);
         $t2  = num($fis['tartim2']);
         $net = max(0, $t1 - $t2);
@@ -106,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     } catch (Throwable $e) {
         $errors[] = 'Kayıt hatası: ' . $e->getMessage();
-    }
+    } // end if empty($errors) try
 }
 
 $form_action  = 'kantar_create.php';

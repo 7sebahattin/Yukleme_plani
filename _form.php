@@ -76,7 +76,7 @@ $form_is_cikma = $form_is_cikma ?? false;
     </div>
     <div class="card-body">
         <div class="grid">
-            <label>Firma
+            <label>Firma <span class="req">*</span>
                 <select name="firma"><?= sel_opt('firma', $_cur_firma, $_firma_names) ?></select>
                 <?php if (empty($_firma_names)): ?><small class="muted">Tanımlar → Firmalar'dan ekleyin</small><?php endif; ?>
             </label>
@@ -89,11 +89,11 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>">
             </label>
             <?php endif; ?>
-            <label>Tarih
+            <label>Tarih <span class="req">*</span>
                 <input type="date" name="tarih" value="<?= h($record['tarih'] ?? '') ?>">
             </label>
             <?php if ($form_is_cikma): ?>
-            <label>Çıkış Nedeni
+            <label>Çıkış Nedeni <span class="req">*</span>
                 <select name="cikis_nedeni">
                     <option value="">-- seçiniz --</option>
                     <?php foreach (['Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'] as $_cn): ?>
@@ -110,7 +110,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
             </label>
             <?php endif; ?>
-            <label>Ürün
+            <label>Ürün <span class="req">*</span>
                 <select name="urun" id="genelUrun"><?= sel_opt('urun', $_cur_urun, $_urun_names) ?></select>
                 <?php if (empty($_urun_names)): ?><small class="muted">Tanımlar → Ürünler'den ekleyin</small><?php endif; ?>
             </label>
@@ -344,7 +344,7 @@ $form_is_cikma = $form_is_cikma ?? false;
           <input type="text" id="pmUrunCinsi" placeholder="Ürün cinsi">
         </label>
         <label class="pm-label pm-span2">
-          <span>Depo</span>
+          <span>Depo <span class="req">*</span></span>
           <select id="pmDepo"><option value="">-- Depo seçiniz --</option></select>
         </label>
       </div>

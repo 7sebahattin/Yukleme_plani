@@ -21,8 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $record[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
-    if ($record['firma'] === '' && $record['tarih'] === '') {
-        $errors[] = 'Firma veya tarih alanlarından en az biri doldurulmalı.';
+    $record['firma'] = normalize_firma($record['firma']);
+    $record['urun']  = normalize_urun($record['urun']);
+    if ($record['tarih']        === '') $errors[] = 'Tarih zorunludur.';
+    if ($record['firma']        === '') $errors[] = 'Firma zorunludur.';
+    if ($record['urun']         === '') $errors[] = 'Ürün zorunludur.';
+    $_cn_izin = cikis_nedeni_listesi();
+    if ($record['cikis_nedeni'] === '' || !in_array($record['cikis_nedeni'], $_cn_izin, true)) {
+        $errors[] = 'Çıkış nedeni seçilmelidir.';
     }
 
     $raw_pallets = $_POST['pallets'] ?? [];
@@ -40,6 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         if ($is_empty) continue;
         $computed[] = compute_pallet_row($rp);
+    }
+
+    $errors = array_merge($errors, validate_pallet_rows($computed));
+    if (empty($errors)) {
+        ensure_definition('firma', $record['firma']);
+        ensure_definition('urun',  $record['urun']);
+        foreach ($computed as $p) {
+            if (!empty($p['depo'])) ensure_definition('depo', $p['depo']);
+        }
     }
 
     if (empty($errors)) {
