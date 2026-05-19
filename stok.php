@@ -17,19 +17,17 @@ $f_parti     = trim($_GET['parti']     ?? '');
 $sayim_kg    = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
 $is_csv      = isset($_GET['csv']);
 
-// Kantar parti/depo filtresiyle eşleşemiyor — bu filtreler aktifse kantar gelen'den hariç tutulur
-$kantar_haric = $f_parti !== '';
-
-// ── Gelen (kantar_fisleri) ────────────────────────────────
-// NOT: Depo filtresi kantar'a uygulanmaz (kantar'da depo alanı yok).
-//      Parti filtresi kantar'a uygulanamaz → kantar hariç tutulur.
+// Kantar artık depo ve parti_no alanlarına sahip — filtreler uygulanabilir
 $k_where  = [];
 $k_params = [];
 if ($f_tarih_bas !== '') { $k_where[] = "giris_tarih >= ?";   $k_params[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $k_where[] = "giris_tarih <= ?";   $k_params[] = $f_tarih_bit . ' 23:59:59'; }
 if ($f_firma     !== '') { $k_where[] = "firma_adi LIKE ?";   $k_params[] = '%' . $f_firma . '%'; }
 if ($f_urun      !== '') { $k_where[] = "malin_cinsi LIKE ?"; $k_params[] = '%' . $f_urun . '%'; }
-$k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
+if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' . $f_depo . '%'; }
+if ($f_parti     !== '') { $k_where[] = "parti_no LIKE ?";    $k_params[] = '%' . $f_parti . '%'; }
+$k_where_sql  = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
+$kantar_haric = false; // Artık hariç tutma yok — eski kayıtlar boş depo/parti ile kaldığı için uyarı gösterilir
 
 if (!$kantar_haric) {
     $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $k_where_sql");
@@ -74,18 +72,14 @@ $kalan_kg   = $gelen_kg - $cikan_kg;
 $sayim_fark = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
 
 // ── Hareket satırları ─────────────────────────────────────
-if (!$kantar_haric) {
-    $st = $pdo->prepare("SELECT
-        giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
-        malin_cinsi AS urun, '' AS depo, '' AS bolge, '' AS parti,
-        net_kg, CONCAT('KNT-', fis_no) AS ref_no
-      FROM kantar_fisleri $k_where_sql
-      ORDER BY giris_tarih DESC, id DESC LIMIT 300");
-    $st->execute($k_params);
-    $kantar_rows = $st->fetchAll();
-} else {
-    $kantar_rows = [];
-}
+$st = $pdo->prepare("SELECT
+    giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
+    malin_cinsi AS urun, depo AS depo, '' AS bolge, parti_no AS parti,
+    net_kg, CONCAT('KNT-', fis_no) AS ref_no
+  FROM kantar_fisleri $k_where_sql
+  ORDER BY giris_tarih DESC, id DESC LIMIT 300");
+$st->execute($k_params);
+$kantar_rows = $st->fetchAll();
 
 $st = $pdo->prepare("SELECT
     lr.tarih AS tarih, lr.type AS yon, lr.firma AS firma,
@@ -120,6 +114,12 @@ try {
          'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE malin_cinsi = ''",
          'kantar fişinde mal cinsi boş.',
+         'kantar.php'],
+        ["SELECT COUNT(*) FROM kantar_fisleri WHERE depo = ''",
+         'kantar fişinde depo bilgisi boş — depo filtresiyle bu girişler eşleşmez. Düzenleyerek depo ekleyin.',
+         'kantar.php'],
+        ["SELECT COUNT(*) FROM kantar_fisleri WHERE parti_no = ''",
+         'kantar fişinde parti no boş — parti filtresiyle bu girişler eşleşmez. Düzenleyerek parti no ekleyin.',
          'kantar.php'],
         ['SELECT COUNT(*) FROM loading_pallets WHERE net_kg = 0',
          'palet satırının net KG değeri sıfır.',
@@ -230,8 +230,9 @@ render_header('Stok Takip');
 <div class="stok-info-box">
     <span class="stok-info-icon">ℹ️</span>
     <span>Stok hesabı seçilen filtrelere göre hesaplanır.
-    <strong>Depo filtresi</strong> yalnızca çıkan tarafına uygulanır — kantar girişlerinde depo bilgisi bulunmaz, dolayısıyla gelen KG depo filtresiyle değişmez.
-    <strong>Parti filtresi</strong> aktifken kantar girişleri eşleştirilemez ve gelen KG = 0 gösterilir.</span>
+    Kantar girişleri artık <strong>depo</strong> ve <strong>parti no</strong> alanlarına sahiptir.
+    Eski kayıtlarda bu alanlar boş olabilir — depo/parti filtresi aktifken bu eski girişler hesaba <em>dahil edilmez</em>.
+    Eski kayıtları güncellemek için <a href="kantar.php">Kantar Fişleri</a> listesinden düzenleyin.</span>
 </div>
 
 <!-- ── Filtre Formu ──────────────────────────────────────── -->
@@ -295,18 +296,6 @@ render_header('Stok Takip');
     </form>
 </div>
 
-<?php if ($kantar_haric): ?>
-<div class="stok-uyari-box" style="border-color:#f97316;background:#fff7ed">
-    <div class="stok-uyari-row" style="color:#9a3412">⚠️ <strong>Parti filtresi aktif:</strong> Kantar kayıtlarında parti numarası bulunmaz. Gelen KG = 0 gösteriliyor. Kalan KG hesabı yalnızca yükleme/çıkma kayıtları üzerinden hesaplanmıştır.</div>
-</div>
-<?php endif; ?>
-
-<?php if ($f_depo !== ''): ?>
-<div class="stok-uyari-box" style="border-color:#3b82f6;background:#eff6ff;margin-bottom:14px">
-    <div class="stok-uyari-row" style="color:#1e40af">ℹ️ <strong>Depo filtresi aktif:</strong> Gelen KG yalnızca tarih/firma/ürün filtrelerine göre hesaplanır (kantar'da depo bilgisi yok). Çıkan KG ise seçilen depoya göre filtrelenmiştir.</div>
-</div>
-<?php endif; ?>
-
 <?php if (!empty($uyari_data)): ?>
 <!-- ── Eksik Veri Uyarıları ──────────────────────────────── -->
 <details class="stok-uyari-box stok-uyari-detay">
@@ -329,7 +318,7 @@ render_header('Stok Takip');
     <div class="stok-kart stok-kart-gelen">
         <div class="stok-kart-label">Gelen</div>
         <div class="stok-kart-val"><?= fmt_kg($gelen_kg) ?> <small>kg</small></div>
-        <div class="stok-kart-sub">Kantar girişi<?= $kantar_haric ? ' <em>(hariç)</em>' : '' ?></div>
+        <div class="stok-kart-sub">Kantar girişi</div>
     </div>
     <div class="stok-kart stok-kart-cikan">
         <div class="stok-kart-label">Çıkan</div>

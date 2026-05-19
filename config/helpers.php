@@ -532,6 +532,9 @@ function render_flash(): void {
         if (!in_array('kasa_sayisi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_sayisi`  INT NOT NULL DEFAULT 0");
         if (!in_array('palet_cinsi',  $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_cinsi`  VARCHAR(200) NOT NULL DEFAULT ''");
         if (!in_array('foto_data',    $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `foto_data`    MEDIUMTEXT NULL DEFAULT NULL");
+        // depo + parti_no: stok eşleştirme için
+        if (!in_array('depo',     $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `depo`     VARCHAR(150) NOT NULL DEFAULT ''");
+        if (!in_array('parti_no', $kf_cols)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `parti_no` VARCHAR(80)  NOT NULL DEFAULT ''");
 
         // kantar_gruplar yeni kolonlar (per-grup dara) — ayrı try/catch: üst catch'e düşmesini engeller
         try {
@@ -596,6 +599,8 @@ function render_flash(): void {
                 ['kantar_fisleri', 'idx_kf_firma',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_firma`      (`firma_adi`)"],
                 ['kantar_fisleri', 'idx_kf_malin',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_malin`      (`malin_cinsi`(100))"],
                 ['kantar_fisleri', 'idx_kf_tarih',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_tarih`      (`giris_tarih`)"],
+                ['kantar_fisleri', 'idx_kf_depo',       "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_depo`       (`depo`(80))"],
+                ['kantar_fisleri', 'idx_kf_parti_no',   "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_parti_no`   (`parti_no`(40))"],
                 ['loading_records','idx_lr_type',       "ALTER TABLE `loading_records` ADD INDEX `idx_lr_type`       (`type`)"],
                 ['loading_pallets','idx_lp_depo',       "ALTER TABLE `loading_pallets` ADD INDEX `idx_lp_depo`       (`depo`(80))"],
                 ['loading_pallets','idx_lp_urun_cinsi', "ALTER TABLE `loading_pallets` ADD INDEX `idx_lp_urun_cinsi` (`urun_cinsi`(80))"],

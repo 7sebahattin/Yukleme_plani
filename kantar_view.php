@@ -297,6 +297,12 @@ render_flash();
                         <?php if ($fis['kasa_cinsi']): ?>
                         <div><span class="lbl">Kasa Cinsi</span><strong><?= h($fis['kasa_cinsi']) ?></strong></div>
                         <?php endif; ?>
+                        <?php if ($fis['depo'] ?? ''): ?>
+                        <div><span class="lbl">Depo</span><strong><?= h($fis['depo']) ?></strong></div>
+                        <?php endif; ?>
+                        <?php if ($fis['parti_no'] ?? ''): ?>
+                        <div><span class="lbl">Parti No</span><strong><?= h($fis['parti_no']) ?></strong></div>
+                        <?php endif; ?>
                         <?php if ($fis['aciklama'] ?? ''): ?>
                         <div class="span-2"><span class="lbl">Açıklama</span><strong><?= h($fis['aciklama']) ?></strong></div>
                         <?php endif; ?>
