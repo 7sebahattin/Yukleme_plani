@@ -159,6 +159,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
             <a href="cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
             <a href="reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
+            <a href="stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Stok</a>
             <a href="definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
     </div>
@@ -589,7 +590,26 @@ function render_flash(): void {
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // 6) Hesap modülü tabloları
+        // 6) Stok sorgu indeksleri (idempotent)
+        try {
+            $idx_checks = [
+                ['kantar_fisleri', 'idx_kf_firma',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_firma`      (`firma_adi`)"],
+                ['kantar_fisleri', 'idx_kf_malin',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_malin`      (`malin_cinsi`(100))"],
+                ['kantar_fisleri', 'idx_kf_tarih',      "ALTER TABLE `kantar_fisleri` ADD INDEX `idx_kf_tarih`      (`giris_tarih`)"],
+                ['loading_records','idx_lr_type',       "ALTER TABLE `loading_records` ADD INDEX `idx_lr_type`       (`type`)"],
+                ['loading_pallets','idx_lp_depo',       "ALTER TABLE `loading_pallets` ADD INDEX `idx_lp_depo`       (`depo`(80))"],
+                ['loading_pallets','idx_lp_urun_cinsi', "ALTER TABLE `loading_pallets` ADD INDEX `idx_lp_urun_cinsi` (`urun_cinsi`(80))"],
+            ];
+            foreach ($idx_checks as [$tbl, $key, $alter]) {
+                $st = $pdo->prepare("SHOW INDEX FROM `$tbl` WHERE Key_name = ?");
+                $st->execute([$key]);
+                if ($st->rowCount() === 0) {
+                    try { $pdo->exec($alter); } catch (PDOException $ie) {}
+                }
+            }
+        } catch (PDOException $e) {}
+
+        // 7) Hesap modülü tabloları
         $pdo->exec("CREATE TABLE IF NOT EXISTS `account_transactions` (
             `id`                     INT AUTO_INCREMENT PRIMARY KEY,
             `transaction_date`       DATE NOT NULL,
