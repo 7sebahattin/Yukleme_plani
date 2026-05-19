@@ -1,13 +1,91 @@
 <?php
 // =========================================================
-// stok.php — Depo Stok Takibi
+// stok.php — Depo Stok Takibi + Sayım Kayıtları
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
 $pdo = db();
 
-// ── Filtreler ─────────────────────────────────────────────
+// ── Sayım Kaydet (POST) ───────────────────────────────────
+$save_error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_count') {
+    csrf_check($_POST['csrf'] ?? null);
+
+    $pf_tarih_bas = trim($_POST['pf_tarih_bas'] ?? '');
+    $pf_tarih_bit = trim($_POST['pf_tarih_bit'] ?? '');
+    $pf_firma     = trim($_POST['pf_firma']     ?? '');
+    $pf_urun      = trim($_POST['pf_urun']      ?? '');
+    $pf_depo      = trim($_POST['pf_depo']      ?? '');
+    $pf_parti     = trim($_POST['pf_parti']     ?? '');
+    $counted_raw  = trim($_POST['counted_kg']   ?? '');
+    $note         = trim($_POST['note']         ?? '');
+
+    $counted_kg = is_numeric($counted_raw) ? (float)$counted_raw : null;
+
+    if ($counted_kg === null) {
+        $save_error = 'Sayım KG sayısal bir değer olmalıdır.';
+    } elseif ($counted_kg < 0) {
+        $save_error = 'Sayım KG negatif olamaz.';
+    } else {
+        // Sistem kalan KG'sini POST filtrelerine göre sunucuda hesapla
+        $pk_where = [];  $pk_p = [];
+        if ($pf_tarih_bas !== '') { $pk_where[] = "giris_tarih >= ?";   $pk_p[] = $pf_tarih_bas; }
+        if ($pf_tarih_bit !== '') { $pk_where[] = "giris_tarih <= ?";   $pk_p[] = $pf_tarih_bit . ' 23:59:59'; }
+        if ($pf_firma     !== '') { $pk_where[] = "firma_adi LIKE ?";   $pk_p[] = '%' . $pf_firma . '%'; }
+        if ($pf_urun      !== '') { $pk_where[] = "malin_cinsi LIKE ?"; $pk_p[] = '%' . $pf_urun . '%'; }
+        if ($pf_depo      !== '') { $pk_where[] = "depo LIKE ?";        $pk_p[] = '%' . $pf_depo . '%'; }
+        if ($pf_parti     !== '') { $pk_where[] = "parti_no LIKE ?";    $pk_p[] = '%' . $pf_parti . '%'; }
+        $pk_where_sql = $pk_where ? 'WHERE ' . implode(' AND ', $pk_where) : '';
+
+        $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $pk_where_sql");
+        $st->execute($pk_p);
+        $post_gelen = (float)$st->fetchColumn();
+
+        $pl_where  = ["lr.type IN ('yukleme','cikma')"];  $pl_p = [];
+        if ($pf_tarih_bas !== '') { $pl_where[] = "lr.tarih >= ?";        $pl_p[] = $pf_tarih_bas; }
+        if ($pf_tarih_bit !== '') { $pl_where[] = "lr.tarih <= ?";        $pl_p[] = $pf_tarih_bit; }
+        if ($pf_firma     !== '') { $pl_where[] = "lr.firma LIKE ?";      $pl_p[] = '%' . $pf_firma . '%'; }
+        if ($pf_urun      !== '') { $pl_where[] = "lp.urun_cinsi LIKE ?"; $pl_p[] = '%' . $pf_urun . '%'; }
+        if ($pf_depo      !== '') { $pl_where[] = "lp.depo LIKE ?";       $pl_p[] = '%' . $pf_depo . '%'; }
+        if ($pf_parti     !== '') { $pl_where[] = "lr.parti_no LIKE ?";   $pl_p[] = '%' . $pf_parti . '%'; }
+        $pl_where_sql = 'WHERE ' . implode(' AND ', $pl_where);
+
+        $st = $pdo->prepare("SELECT COALESCE(SUM(lp.net_kg),0)
+            FROM loading_pallets lp
+            JOIN loading_records lr ON lp.loading_record_id = lr.id $pl_where_sql");
+        $st->execute($pl_p);
+        $post_cikan   = (float)$st->fetchColumn();
+        $post_kalan   = $post_gelen - $post_cikan;
+        $post_diff    = $counted_kg - $post_kalan;
+
+        try {
+            $pdo->prepare("INSERT INTO stock_counts
+                (count_date, firma, urun, depo, parti_no, system_kg, counted_kg, diff_kg, note)
+                VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)"
+            )->execute([
+                $pf_firma, $pf_urun, $pf_depo, $pf_parti,
+                round($post_kalan,   3),
+                round($counted_kg,   3),
+                round($post_diff,    3),
+                $note !== '' ? $note : null,
+            ]);
+            set_flash('success', 'Sayım kaydedildi. Sistem: ' . fmt_kg($post_kalan) . ' kg · Sayım: ' . fmt_kg($counted_kg) . ' kg · Fark: ' . ($post_diff >= 0 ? '+' : '') . fmt_kg($post_diff) . ' kg');
+            $rp = array_filter([
+                'tarih_bas' => $pf_tarih_bas, 'tarih_bit' => $pf_tarih_bit,
+                'firma'     => $pf_firma,     'urun'      => $pf_urun,
+                'depo'      => $pf_depo,      'parti'     => $pf_parti,
+                'sayim_kg'  => (string)$counted_kg,
+            ], fn($v) => $v !== '');
+            header('Location: stok.php' . ($rp ? '?' . http_build_query($rp) : ''));
+            exit;
+        } catch (PDOException $e) {
+            $save_error = 'Kayıt hatası: ' . $e->getMessage();
+        }
+    }
+}
+
+// ── Filtreler (GET) ───────────────────────────────────────
 $f_tarih_bas = trim($_GET['tarih_bas'] ?? '');
 $f_tarih_bit = trim($_GET['tarih_bit'] ?? '');
 $f_firma     = trim($_GET['firma']     ?? '');
@@ -17,7 +95,7 @@ $f_parti     = trim($_GET['parti']     ?? '');
 $sayim_kg    = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
 $is_csv      = isset($_GET['csv']);
 
-// Kantar artık depo ve parti_no alanlarına sahip — filtreler uygulanabilir
+// ── Gelen (kantar_fisleri) ────────────────────────────────
 $k_where  = [];
 $k_params = [];
 if ($f_tarih_bas !== '') { $k_where[] = "giris_tarih >= ?";   $k_params[] = $f_tarih_bas; }
@@ -26,16 +104,11 @@ if ($f_firma     !== '') { $k_where[] = "firma_adi LIKE ?";   $k_params[] = '%' 
 if ($f_urun      !== '') { $k_where[] = "malin_cinsi LIKE ?"; $k_params[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' . $f_depo . '%'; }
 if ($f_parti     !== '') { $k_where[] = "parti_no LIKE ?";    $k_params[] = '%' . $f_parti . '%'; }
-$k_where_sql  = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
-$kantar_haric = false; // Artık hariç tutma yok — eski kayıtlar boş depo/parti ile kaldığı için uyarı gösterilir
+$k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
-if (!$kantar_haric) {
-    $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $k_where_sql");
-    $st->execute($k_params);
-    $gelen_kg = (float)$st->fetchColumn();
-} else {
-    $gelen_kg = 0.0;
-}
+$st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $k_where_sql");
+$st->execute($k_params);
+$gelen_kg = (float)$st->fetchColumn();
 
 // ── Çıkan (loading_pallets + loading_records) ─────────────
 $l_where  = ["lr.type IN ('yukleme','cikma')"];
@@ -50,16 +123,14 @@ $l_where_sql = 'WHERE ' . implode(' AND ', $l_where);
 
 $st = $pdo->prepare("SELECT COALESCE(SUM(lp.net_kg),0)
     FROM loading_pallets lp
-    JOIN loading_records lr ON lp.loading_record_id = lr.id
-    $l_where_sql");
+    JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql");
 $st->execute($l_params);
 $cikan_kg = (float)$st->fetchColumn();
 
 // Yükleme / Çıkma kırılımı
 $st = $pdo->prepare("SELECT lr.type, COALESCE(SUM(lp.net_kg),0) AS kg
     FROM loading_pallets lp
-    JOIN loading_records lr ON lp.loading_record_id = lr.id
-    $l_where_sql GROUP BY lr.type");
+    JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql GROUP BY lr.type");
 $st->execute($l_params);
 $cikan_kirilim = ['yukleme' => 0.0, 'cikma' => 0.0];
 foreach ($st->fetchAll() as $row) {
@@ -86,55 +157,58 @@ $st = $pdo->prepare("SELECT
     lp.urun_cinsi AS urun, lp.depo AS depo, lr.bolge AS bolge,
     lr.parti_no AS parti, lp.net_kg, lr.parti_no AS ref_no, lr.id AS lr_id
   FROM loading_pallets lp
-  JOIN loading_records lr ON lp.loading_record_id = lr.id
-  $l_where_sql
+  JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql
   ORDER BY lr.tarih DESC, lr.id DESC LIMIT 300");
 $st->execute($l_params);
 $loading_rows = $st->fetchAll();
 
-// Birleştir ve tarihe göre sırala (yeniden eskiye)
 $hareket_rows = array_merge($kantar_rows, $loading_rows);
 usort($hareket_rows, function ($a, $b) {
     $cmp = strcmp((string)($b['tarih'] ?? ''), (string)($a['tarih'] ?? ''));
     return $cmp !== 0 ? $cmp : strcmp($b['yon'] ?? '', $a['yon'] ?? '');
 });
 
-// ── Eksik veri kontrolü (uyarılar) ───────────────────────
+// ── Geçmiş sayımlar ───────────────────────────────────────
+$gecmis_sayimlar = [];
+try {
+    $sc_where  = [];
+    $sc_params = [];
+    if ($f_firma !== '') { $sc_where[] = "firma LIKE ?";    $sc_params[] = '%' . $f_firma . '%'; }
+    if ($f_urun  !== '') { $sc_where[] = "urun LIKE ?";     $sc_params[] = '%' . $f_urun . '%'; }
+    if ($f_depo  !== '') { $sc_where[] = "depo LIKE ?";     $sc_params[] = '%' . $f_depo . '%'; }
+    if ($f_parti !== '') { $sc_where[] = "parti_no LIKE ?"; $sc_params[] = '%' . $f_parti . '%'; }
+    $sc_where_sql = $sc_where ? 'WHERE ' . implode(' AND ', $sc_where) : '';
+    $st = $pdo->prepare("SELECT * FROM stock_counts $sc_where_sql ORDER BY count_date DESC, id DESC LIMIT 20");
+    $st->execute($sc_params);
+    $gecmis_sayimlar = $st->fetchAll();
+} catch (PDOException $e) {}
+
+// ── Eksik veri kontrolü ───────────────────────────────────
 $uyari_data = [];
 try {
     $chk = [
         ['SELECT COUNT(*) FROM kantar_fisleri WHERE net_kg = 0',
-         'kantar fişinin net KG değeri sıfır.',
-         'kantar.php'],
+         'kantar fişinin net KG değeri sıfır.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}'",
-         "kantar fişinin giriş tarihi YYYY-AA-GG formatında değil — tarih filtresi bu kayıtları atlayabilir.",
-         'kantar.php'],
+         'kantar fişinin giriş tarihi YYYY-AA-GG formatında değil — tarih filtresi atlayabilir.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE firma_adi = ''",
-         'kantar fişinde firma alanı boş.',
-         'kantar.php'],
+         'kantar fişinde firma boş.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE malin_cinsi = ''",
-         'kantar fişinde mal cinsi boş.',
-         'kantar.php'],
+         'kantar fişinde mal cinsi boş.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE depo = ''",
-         'kantar fişinde depo bilgisi boş — depo filtresiyle bu girişler eşleşmez. Düzenleyerek depo ekleyin.',
-         'kantar.php'],
+         'kantar fişinde depo boş — depo filtresiyle eşleşmez. Düzenleyin.', 'kantar.php'],
         ["SELECT COUNT(*) FROM kantar_fisleri WHERE parti_no = ''",
-         'kantar fişinde parti no boş — parti filtresiyle bu girişler eşleşmez. Düzenleyerek parti no ekleyin.',
-         'kantar.php'],
+         'kantar fişinde parti no boş — parti filtresiyle eşleşmez. Düzenleyin.', 'kantar.php'],
         ['SELECT COUNT(*) FROM loading_pallets WHERE net_kg = 0',
-         'palet satırının net KG değeri sıfır.',
-         'records.php'],
+         'palet satırının net KG sıfır.', 'records.php'],
         ["SELECT COUNT(*) FROM loading_pallets WHERE urun_cinsi = ''",
-         'palet satırında ürün cinsi boş.',
-         'records.php'],
+         'palet satırında ürün cinsi boş.', 'records.php'],
         ["SELECT COUNT(*) FROM loading_pallets WHERE depo = ''",
-         'palet satırında depo bilgisi boş.',
-         'records.php'],
+         'palet satırında depo boş.', 'records.php'],
         ["SELECT COUNT(*) FROM loading_records lr
             WHERE lr.type IN ('yukleme','cikma')
               AND NOT EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)",
-         'yükleme/çıkma kaydının palet satırı yok — bu kayıtlar çıkanda görünmez.',
-         'records.php'],
+         'yükleme/çıkma kaydının palet satırı yok — çıkanda görünmez.', 'records.php'],
     ];
     foreach ($chk as [$sql, $msg, $url]) {
         $n = (int)$pdo->query($sql)->fetchColumn();
@@ -170,50 +244,40 @@ if ($is_csv) {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="stok_hareket_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
-    fprintf($out, "\xEF\xBB\xBF"); // UTF-8 BOM
-
-    // Filtre bilgisi
-    $filtre_satirlari = [
-        ['# Rapor', 'Depo Stok Hareketi'],
-        ['# Tarih', date('d.m.Y H:i')],
-        ['# Başlangıç', $f_tarih_bas ?: '—'],
-        ['# Bitiş',     $f_tarih_bit ?: '—'],
-        ['# Firma',     $f_firma     ?: 'Hepsi'],
-        ['# Ürün',      $f_urun      ?: 'Hepsi'],
-        ['# Depo',      $f_depo      ?: 'Hepsi'],
-        ['# Parti No',  $f_parti     ?: 'Hepsi'],
-        ['# Gelen KG',  number_format($gelen_kg, 3, ',', '.')],
-        ['# Çıkan KG',  number_format($cikan_kg, 3, ',', '.')],
-        ['# Kalan KG',  number_format($kalan_kg, 3, ',', '.')],
+    fprintf($out, "\xEF\xBB\xBF");
+    $meta = [
+        ['# Rapor', 'Depo Stok Hareketi'], ['# Tarih', date('d.m.Y H:i')],
+        ['# Başlangıç', $f_tarih_bas ?: '—'], ['# Bitiş', $f_tarih_bit ?: '—'],
+        ['# Firma', $f_firma ?: 'Hepsi'],     ['# Ürün',  $f_urun  ?: 'Hepsi'],
+        ['# Depo',  $f_depo  ?: 'Hepsi'],     ['# Parti', $f_parti ?: 'Hepsi'],
+        ['# Gelen KG', number_format($gelen_kg, 3, ',', '.')],
+        ['# Çıkan KG', number_format($cikan_kg, 3, ',', '.')],
+        ['# Kalan KG', number_format($kalan_kg, 3, ',', '.')],
         ['#', ''],
     ];
-    foreach ($filtre_satirlari as $sat) {
-        fputcsv($out, $sat, ';', '"', '\\');
-    }
-
+    foreach ($meta as $r) { fputcsv($out, $r, ';', '"', '\\'); }
     fputcsv($out, ['Tarih', 'Yön', 'Firma', 'Ürün', 'Depo', 'Bölge', 'Parti No', 'Net KG', 'Ref No'], ';', '"', '\\');
     foreach ($hareket_rows as $r) {
-        $yon = match ($r['yon']) {
-            'gelen'  => 'Gelen',
-            'cikma'  => 'Çıkma',
-            default  => 'Yükleme',
-        };
+        $yon = match ($r['yon']) { 'gelen' => 'Gelen', 'cikma' => 'Çıkma', default => 'Yükleme' };
         fputcsv($out, [
             $r['tarih'], $yon, $r['firma'], $r['urun'],
             $r['depo'], $r['bolge'], $r['parti'] ?? '',
-            number_format((float)$r['net_kg'], 3, ',', '.'),
-            $r['ref_no'],
+            number_format((float)$r['net_kg'], 3, ',', '.'), $r['ref_no'],
         ], ';', '"', '\\');
     }
     fclose($out);
     exit;
 }
 
-// Aktif filtre var mı?
 $herhangi_filtre = $f_tarih_bas || $f_tarih_bit || $f_firma || $f_urun || $f_depo || $f_parti;
 
 render_header('Stok Takip');
+render_flash();
 ?>
+
+<?php if ($save_error !== ''): ?>
+<div class="flash flash-error"><?= h($save_error) ?></div>
+<?php endif; ?>
 
 <div class="page-head">
     <h2 class="page-title">📦 Depo Stok Takibi</h2>
@@ -226,7 +290,7 @@ render_header('Stok Takip');
     ], fn($v) => $v !== ''))) ?>" class="btn btn-sm btn-ghost">⬇ CSV</a>
 </div>
 
-<!-- ── Filtre Eşleşme Notu ───────────────────────────────── -->
+<!-- ── Filtre Bilgi Notu ─────────────────────────────────── -->
 <div class="stok-info-box">
     <span class="stok-info-icon">ℹ️</span>
     <span>Stok hesabı seçilen filtrelere göre hesaplanır.
@@ -297,7 +361,6 @@ render_header('Stok Takip');
 </div>
 
 <?php if (!empty($uyari_data)): ?>
-<!-- ── Eksik Veri Uyarıları ──────────────────────────────── -->
 <details class="stok-uyari-box stok-uyari-detay">
     <summary style="cursor:pointer;font-weight:700;font-size:.88rem;color:#92400e">
         ⚠️ <?= count($uyari_data) ?> eksik veri uyarısı — tıklayın
@@ -336,13 +399,13 @@ render_header('Stok Takip');
         </div>
     </div>
     <div class="stok-kart stok-kart-kalan">
-        <div class="stok-kart-label">Kalan</div>
+        <div class="stok-kart-label">Sistem Kalan</div>
         <div class="stok-kart-val <?= $kalan_kg < 0 ? 'stok-negatif' : '' ?>"><?= fmt_kg($kalan_kg) ?> <small>kg</small></div>
         <div class="stok-kart-sub">Gelen − Çıkan</div>
     </div>
     <div class="stok-kart stok-kart-sayim">
         <div class="stok-kart-label">Sayım Farkı</div>
-        <div class="stok-kart-val" id="stok-sayim-fark-val">
+        <div class="stok-kart-val">
             <?php if ($sayim_fark !== null): ?>
             <span class="<?= $sayim_fark > 0 ? 'stok-pozitif' : ($sayim_fark < 0 ? 'stok-negatif' : '') ?>">
                 <?= ($sayim_fark >= 0 ? '+' : '') . fmt_kg($sayim_fark) ?>
@@ -372,6 +435,49 @@ render_header('Stok Takip');
         </div>
     </div>
 </div>
+
+<?php if ($sayim_kg !== null): ?>
+<!-- ── Sayım Kaydet Formu ─────────────────────────────────── -->
+<div class="card sc-kaydet-card">
+    <div class="sc-kaydet-head">
+        <div>
+            <strong>📋 Sayımı Kaydet</strong>
+            <span class="sc-kaydet-ozet">
+                Sistem: <strong><?= fmt_kg($kalan_kg) ?> kg</strong>
+                · Sayım: <strong><?= fmt_kg($sayim_kg) ?> kg</strong>
+                · Fark: <strong class="<?= $sayim_fark >= 0 ? 'stok-pozitif' : 'stok-negatif' ?>"><?= ($sayim_fark >= 0 ? '+' : '') . fmt_kg($sayim_fark) ?> kg</strong>
+            </span>
+        </div>
+    </div>
+    <form method="post" action="stok.php" class="sc-kaydet-form">
+        <input type="hidden" name="csrf"        value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action"      value="save_count">
+        <input type="hidden" name="pf_tarih_bas" value="<?= h($f_tarih_bas) ?>">
+        <input type="hidden" name="pf_tarih_bit" value="<?= h($f_tarih_bit) ?>">
+        <input type="hidden" name="pf_firma"    value="<?= h($f_firma) ?>">
+        <input type="hidden" name="pf_urun"     value="<?= h($f_urun) ?>">
+        <input type="hidden" name="pf_depo"     value="<?= h($f_depo) ?>">
+        <input type="hidden" name="pf_parti"    value="<?= h($f_parti) ?>">
+        <div class="sc-kaydet-row">
+            <div class="form-group" style="flex:1;min-width:130px">
+                <label class="form-label">Sayım KG</label>
+                <input type="number" name="counted_kg" step="0.001" min="0"
+                    class="form-control" required
+                    value="<?= h((string)$sayim_kg) ?>" placeholder="0.000">
+            </div>
+            <div class="form-group" style="flex:3;min-width:200px">
+                <label class="form-label">Not <small class="muted">(isteğe bağlı)</small></label>
+                <input type="text" name="note" class="form-control"
+                    placeholder="ör. Depo A rafı sayıldı, 5 kg fire var...">
+            </div>
+            <div class="form-group sc-kaydet-btn-wrap">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary">💾 Kaydet</button>
+            </div>
+        </div>
+    </form>
+</div>
+<?php endif; ?>
 
 <!-- ── Hareket Tablosu ───────────────────────────────────── -->
 <div class="card" style="margin-top:16px;padding:0">
@@ -424,5 +530,56 @@ render_header('Stok Takip');
     </div>
     <?php endif; ?>
 </div>
+
+<!-- ── Geçmiş Sayımlar ───────────────────────────────────── -->
+<?php if (!empty($gecmis_sayimlar)): ?>
+<div class="card" style="margin-top:20px;padding:0">
+    <div class="stok-table-head">
+        <span style="font-weight:700;font-size:.97rem">📋 Geçmiş Sayımlar</span>
+        <span style="font-size:.82rem;color:var(--muted)"><?= count($gecmis_sayimlar) ?> kayıt (son 20)</span>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table stok-table sc-history-table">
+            <thead>
+                <tr>
+                    <th>Tarih</th>
+                    <th class="stok-hide-sm">Firma</th>
+                    <th class="stok-hide-sm">Ürün</th>
+                    <th class="stok-hide-sm">Depo</th>
+                    <th class="stok-hide-sm">Parti</th>
+                    <th style="text-align:right">Sistem KG</th>
+                    <th style="text-align:right">Sayım KG</th>
+                    <th style="text-align:right">Fark</th>
+                    <th class="stok-hide-sm">Not</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($gecmis_sayimlar as $sc):
+                $diff      = (float)$sc['diff_kg'];
+                $diff_cls  = $diff > 0 ? 'sc-fark-fazla' : ($diff < 0 ? 'sc-fark-eksik' : 'sc-fark-sifir');
+                $diff_lbl  = $diff > 0 ? 'Fazla' : ($diff < 0 ? 'Eksik' : 'Eşit');
+            ?>
+                <tr>
+                    <td style="white-space:nowrap"><?= h(fmt_date($sc['count_date'])) ?></td>
+                    <td class="stok-hide-sm"><?= h($sc['firma'] ?: '—') ?></td>
+                    <td class="stok-hide-sm"><?= h($sc['urun'] ?: '—') ?></td>
+                    <td class="stok-hide-sm"><?= h($sc['depo'] ?: '—') ?></td>
+                    <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)"><?= h($sc['parti_no'] ?: '—') ?></td>
+                    <td style="text-align:right"><?= h(fmt_kg($sc['system_kg'])) ?></td>
+                    <td style="text-align:right;font-weight:700"><?= h(fmt_kg($sc['counted_kg'])) ?></td>
+                    <td style="text-align:right">
+                        <span class="sc-fark-badge <?= $diff_cls ?>">
+                            <?= $diff > 0 ? '+' : '' ?><?= h(fmt_kg($diff)) ?>
+                            <small><?= $diff_lbl ?></small>
+                        </span>
+                    </td>
+                    <td class="stok-hide-sm" style="font-size:.82rem;color:var(--muted)"><?= h($sc['note'] ?? '') ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php render_footer(); ?>
