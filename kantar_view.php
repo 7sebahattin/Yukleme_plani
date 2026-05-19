@@ -31,7 +31,7 @@ $brut_hesap   = $net;
 $dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
 $net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
 $has_foto     = !empty($fis['foto_data']);
-$st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+$st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
 $st_g->execute([$id]);
 $gruplar = $st_g->fetchAll() ?: [];
 
@@ -356,11 +356,13 @@ render_flash();
                 $grup_tot_net   = 0.0;
                 $grup_rows      = [];
                 foreach ($gruplar as $g) {
-                    $gp    = (int)$g['palet_sayisi'];
-                    $gk    = (int)$g['kasa_adedi'];
-                    $gbrut = $gk * $brut_per_kasa;
-                    $gdara = $gp * $palet_dara_u + $gk * $kasa_dara_u;
-                    $gnet  = max(0.0, $gbrut - $gdara);
+                    $gp          = (int)$g['palet_sayisi'];
+                    $gk          = (int)$g['kasa_adedi'];
+                    $gbrut       = $gk * $brut_per_kasa;
+                    $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $kasa_dara_u;
+                    $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $palet_dara_u;
+                    $gdara       = $gp * $gpalet_dara + $gk * $gkasa_dara;
+                    $gnet        = max(0.0, $gbrut - $gdara);
                     $grup_tot_brut += $gbrut;
                     $grup_tot_dara += $gdara;
                     $grup_tot_net  += $gnet;

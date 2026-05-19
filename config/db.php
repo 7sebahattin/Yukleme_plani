@@ -93,6 +93,14 @@ function db(): PDO {
                     REFERENCES `account_transactions`(`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         }
+        // Kantar grubu firma adı migrasyonu (bilinen alias → canonical)
+        try {
+            $pdo->query("SELECT 1 FROM `kantar_gruplar` LIMIT 0");
+            // asya → Asya Fresh
+            $pdo->exec("UPDATE `kantar_gruplar` SET grup_adi = 'Asya Fresh' WHERE LOWER(grup_adi) = 'asya'");
+            // ck, cihat → Cihat Karaköse
+            $pdo->exec("UPDATE `kantar_gruplar` SET grup_adi = 'Cihat Karaköse' WHERE LOWER(grup_adi) IN ('ck', 'cihat')");
+        } catch (PDOException $_gm) { /* kantar_gruplar yoksa veya hata — sessizce geç */ }
     }
     return $pdo;
 }

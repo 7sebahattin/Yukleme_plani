@@ -76,6 +76,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli
                 $hd_ok = true;
             } catch (PDOException $e) { $hd_error = 'Güncelleme hatası: ' . $e->getMessage(); }
         }
+    } elseif ($fix_type === 'grup' && $fix_field === 'grup_adi') {
+        $fix_val = normalize_firma($fix_val);
+        $_firma_def_check = $pdo->query("SELECT LOWER(name) FROM material_definitions WHERE type='firma'")->fetchAll(PDO::FETCH_COLUMN);
+        if ($fix_val === '' || !in_array(mb_strtolower($fix_val, 'UTF-8'), $_firma_def_check, true)) {
+            $hd_error = 'Lütfen tanımlı bir firma seçin.';
+        } else {
+            try {
+                $pdo->prepare("UPDATE kantar_gruplar SET grup_adi = ? WHERE id = ?")
+                    ->execute([$fix_val, $fix_id]);
+                $hd_ok = true;
+            } catch (PDOException $e) { $hd_error = 'Güncelleme hatası: ' . $e->getMessage(); }
+        }
     } else {
         $hd_error = 'İzin verilmeyen işlem.';
     }
@@ -130,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         if ($pf_depo      !== '') { $pk_where[] = "depo LIKE ?";        $pk_p[] = '%' . $pf_depo . '%'; }
         $pk_where_sql = $pk_where ? 'WHERE ' . implode(' AND ', $pk_where) : '';
 
-        $st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $pk_where_sql");
+        $st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara)),0) FROM kantar_fisleri $pk_where_sql");
         $st->execute($pk_p);
         $post_gelen = (float)$st->fetchColumn();
 
@@ -200,7 +212,7 @@ if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' 
 // NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
-$st = $pdo->prepare("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri $k_where_sql");
+$st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara)),0) FROM kantar_fisleri $k_where_sql");
 $st->execute($k_params);
 $gelen_kg = (float)$st->fetchColumn();
 
@@ -238,7 +250,8 @@ $sayim_fark    = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
 $st = $pdo->prepare("SELECT
     giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
     malin_cinsi AS urun, depo AS depo, '' AS bolge, '' AS parti,
-    net_kg AS brut_kg, 0 AS dara_kg, net_kg,
+    net_kg AS brut_kg, (kasa_sayisi * kasa_dara + palet_sayisi * palet_dara) AS dara_kg,
+    GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara) AS net_kg,
     id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
     CONCAT('KNT-', fis_no) AS ref_no
   FROM kantar_fisleri $k_where_sql
@@ -337,6 +350,9 @@ $check_defs = [
     ["SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''",
      $qc_cn_params, 'Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'cikmalar.php', 'Çıkmalar',
      'Fire veya kötü ürün sebebi girilmemiş.'],
+    ["SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')",
+     [], 'Tanımsız firma adı — kantar grubu', 'orta', 'kantar.php', 'Kantar',
+     'Grup firma adı tanımlı firma listesinde yok; stok firma filtresiyle eşleşmeyebilir.'],
 ];
 
 // ── Özet sayılar ─────────────────────────────────────────
@@ -428,6 +444,16 @@ $qd_defs = [
       FROM loading_records $qc_cn_sql AND cikis_nedeni = ''
       ORDER BY id DESC LIMIT 20", $qc_cn_params,
      'lr', 'cikis_nedeni'],
+    ['Tanımsız firma adı — kantar grubu', 'orta', 'Kantar',
+     "SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')",
+     [],
+     "SELECT kg.id, kf.giris_tarih AS tarih, kg.grup_adi AS firma, kf.malin_cinsi AS urun,
+             kf.depo, 0 AS net_kg, CONCAT('kantar_edit.php?id=', kf.id) AS fix_link
+      FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id
+      WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')
+      ORDER BY kg.id DESC LIMIT 20",
+     [],
+     'grup', 'grup_adi'],
 ];
 
 foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows_sql, $rows_params, $fix_type, $fix_field]) {
@@ -471,6 +497,10 @@ try {
 try {
     $depo_list = $pdo->query("SELECT name FROM material_definitions WHERE type='depo' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) { $depo_list = []; }
+
+try {
+    $_def_firma_list = $pdo->query("SELECT name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $e) { $_def_firma_list = []; }
 
 try {
     $parti_list = $pdo->query("SELECT DISTINCT parti_no FROM loading_records WHERE parti_no != '' ORDER BY parti_no DESC LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
@@ -791,6 +821,13 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                                 <?php elseif ($grp['fix_field'] === 'firma_adi'): ?>
                                 <input type="text" name="fix_val" class="hd-input"
                                        list="hd-dl-firma" placeholder="Firma adı" autocomplete="off" required>
+                                <?php elseif ($grp['fix_field'] === 'grup_adi'): ?>
+                                <select name="fix_val" class="hd-select" required>
+                                    <option value="">— firma seç —</option>
+                                    <?php foreach ($_def_firma_list as $_gf): ?>
+                                    <option value="<?= h($_gf) ?>"><?= h($_gf) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                                 <?php else: ?>
                                 <input type="text" name="fix_val" class="hd-input"
                                        list="hd-dl-urun" placeholder="Ürün" autocomplete="off" required>
