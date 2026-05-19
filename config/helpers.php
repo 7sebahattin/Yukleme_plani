@@ -487,6 +487,10 @@ function render_flash(): void {
             if (!$has_upd) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP");
             }
+            $has_cn = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'cikis_nedeni'")->fetchColumn();
+            if (!$has_cn) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `cikis_nedeni` VARCHAR(80) NOT NULL DEFAULT ''");
+            }
         } catch (PDOException $e) {}
 
         // 2) Kantar tabloları
@@ -650,6 +654,26 @@ function render_flash(): void {
             CONSTRAINT `fk_af_tid` FOREIGN KEY (`transaction_id`)
                 REFERENCES `account_transactions`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 8) Stok sayım tablosu
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `stock_counts` (
+            `id`         INT AUTO_INCREMENT PRIMARY KEY,
+            `count_date` DATE NOT NULL,
+            `firma`      VARCHAR(150) NOT NULL DEFAULT '',
+            `urun`       VARCHAR(150) NOT NULL DEFAULT '',
+            `depo`       VARCHAR(150) NOT NULL DEFAULT '',
+            `parti_no`   VARCHAR(80)  NOT NULL DEFAULT '',
+            `system_kg`  DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `counted_kg` DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `diff_kg`    DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `note`       TEXT NULL,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_sc_date`    (`count_date`),
+            INDEX `idx_sc_firma`   (`firma`(80)),
+            INDEX `idx_sc_urun`    (`urun`(80)),
+            INDEX `idx_sc_depo`    (`depo`(80)),
+            INDEX `idx_sc_parti`   (`parti_no`(40))
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     } catch (PDOException $e) {}
 })();
 

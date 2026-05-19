@@ -92,6 +92,19 @@ $form_is_cikma = $form_is_cikma ?? false;
             <label>Tarih
                 <input type="date" name="tarih" value="<?= h($record['tarih'] ?? '') ?>">
             </label>
+            <?php if ($form_is_cikma): ?>
+            <label>Çıkış Nedeni
+                <select name="cikis_nedeni">
+                    <option value="">-- seçiniz --</option>
+                    <?php foreach (['Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'] as $_cn): ?>
+                    <option value="<?= h($_cn) ?>"
+                        <?= ($record['cikis_nedeni'] ?? '') === $_cn ? 'selected' : '' ?>>
+                        <?= h($_cn) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <?php endif; ?>
             <?php if (!$form_is_cikma): ?>
             <label>Alıcı
                 <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">

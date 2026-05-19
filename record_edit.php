@@ -29,6 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'tarih'           => trim((string)($_POST['tarih'] ?? '')) ?: null,
         'urun'            => trim((string)($_POST['urun'] ?? '')),
     ];
+    if ($edit_is_cikma) {
+        $record['cikis_nedeni'] = trim((string)($_POST['cikis_nedeni'] ?? ''));
+    }
     if (!$edit_is_cikma) {
         $record += [
             'parti_no'        => trim((string)($_POST['parti_no'] ?? '')),
@@ -70,7 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($edit_is_cikma) {
             $st = $pdo->prepare(
-                "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun
+                "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun,
+                    cikis_nedeni=:cikis_nedeni
                  WHERE id=:id"
             );
         } else {
