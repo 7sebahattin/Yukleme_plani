@@ -3086,3 +3086,15 @@ body.notes-modal-open { overflow: hidden; }
 
 /* ── Zorunlu alan yıldızı ────────────────────────────────── */
 .req { color: #ef4444; font-weight: 700; margin-left: 2px; }
+
+/* ── Hızlı Düzelt satır içi formu ───────────────────────── */
+.hd-fix-cell { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.hd-form { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.hd-select, .hd-input {
+    font-size: .78rem; padding: 4px 6px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: #fff; color: var(--text);
+    max-width: 130px; height: 30px; box-sizing: border-box;
+}
+.hd-input { width: 120px; }
+.hd-save-btn { padding: 4px 9px !important; height: 30px; min-width: 0; }

@@ -7,6 +7,98 @@ require_once __DIR__ . '/config/db.php';
 
 $pdo = db();
 
+// ── Hızlı Düzelt (POST) ──────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli_duzelt') {
+    csrf_check($_POST['csrf'] ?? null);
+
+    $fix_type  = trim($_POST['fix_type']  ?? '');
+    $fix_field = trim($_POST['fix_field'] ?? '');
+    $fix_id    = (int)($_POST['fix_id']   ?? 0);
+    $fix_val   = trim($_POST['fix_val']   ?? '');
+
+    $allowed_kantar = ['depo', 'giris_tarih', 'malin_cinsi', 'firma_adi'];
+    $allowed_palet  = ['depo', 'urun_cinsi'];
+    $allowed_lr     = ['cikis_nedeni'];
+
+    $hd_ok    = false;
+    $hd_error = '';
+
+    if ($fix_id <= 0) {
+        $hd_error = 'Geçersiz kayıt ID.';
+    } elseif ($fix_type === 'kantar' && in_array($fix_field, $allowed_kantar, true)) {
+        if ($fix_field === 'firma_adi')   $fix_val = normalize_firma($fix_val);
+        if ($fix_field === 'malin_cinsi') $fix_val = normalize_urun($fix_val);
+        if ($fix_field === 'depo')        $fix_val = normalize_depo($fix_val);
+        if ($fix_val === '' && $fix_field !== 'giris_tarih') {
+            $hd_error = 'Değer boş olamaz.';
+        } elseif ($fix_field === 'giris_tarih' && $fix_val !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}/', $fix_val)) {
+            $hd_error = 'Geçersiz tarih formatı.';
+        } else {
+            try {
+                $sql_map = [
+                    'depo'        => "UPDATE kantar_fisleri SET depo = ? WHERE id = ?",
+                    'giris_tarih' => "UPDATE kantar_fisleri SET giris_tarih = ? WHERE id = ?",
+                    'malin_cinsi' => "UPDATE kantar_fisleri SET malin_cinsi = ? WHERE id = ?",
+                    'firma_adi'   => "UPDATE kantar_fisleri SET firma_adi = ? WHERE id = ?",
+                ];
+                $pdo->prepare($sql_map[$fix_field])->execute([$fix_val, $fix_id]);
+                if ($fix_field === 'firma_adi'   && $fix_val !== '') ensure_definition('firma', $fix_val);
+                if ($fix_field === 'malin_cinsi' && $fix_val !== '') ensure_definition('urun',  $fix_val);
+                if ($fix_field === 'depo'        && $fix_val !== '') ensure_definition('depo',  $fix_val);
+                $hd_ok = true;
+            } catch (PDOException $e) { $hd_error = 'Güncelleme hatası: ' . $e->getMessage(); }
+        }
+    } elseif ($fix_type === 'palet' && in_array($fix_field, $allowed_palet, true)) {
+        if ($fix_field === 'depo')       $fix_val = normalize_depo($fix_val);
+        if ($fix_field === 'urun_cinsi') $fix_val = normalize_urun($fix_val);
+        if ($fix_val === '') {
+            $hd_error = 'Değer boş olamaz.';
+        } else {
+            try {
+                $sql_map = [
+                    'depo'       => "UPDATE loading_pallets SET depo = ? WHERE id = ?",
+                    'urun_cinsi' => "UPDATE loading_pallets SET urun_cinsi = ? WHERE id = ?",
+                ];
+                $pdo->prepare($sql_map[$fix_field])->execute([$fix_val, $fix_id]);
+                if ($fix_field === 'depo')       ensure_definition('depo', $fix_val);
+                if ($fix_field === 'urun_cinsi') ensure_definition('urun', $fix_val);
+                $hd_ok = true;
+            } catch (PDOException $e) { $hd_error = 'Güncelleme hatası: ' . $e->getMessage(); }
+        }
+    } elseif ($fix_type === 'lr' && in_array($fix_field, $allowed_lr, true)) {
+        $_cn_list = cikis_nedeni_listesi();
+        if ($fix_field === 'cikis_nedeni' && !in_array($fix_val, $_cn_list, true)) {
+            $hd_error = 'Geçersiz çıkış nedeni.';
+        } else {
+            try {
+                $pdo->prepare("UPDATE loading_records SET cikis_nedeni = ? WHERE id = ?")
+                    ->execute([$fix_val, $fix_id]);
+                $hd_ok = true;
+            } catch (PDOException $e) { $hd_error = 'Güncelleme hatası: ' . $e->getMessage(); }
+        }
+    } else {
+        $hd_error = 'İzin verilmeyen işlem.';
+    }
+
+    if ($hd_ok) {
+        set_flash('success', 'Kayıt güncellendi (#' . $fix_id . ').');
+    } else {
+        set_flash('error', $hd_error ?: 'Bilinmeyen hata.');
+    }
+
+    $redir = array_filter([
+        'tarih_bas' => $_POST['pf_tarih_bas'] ?? '',
+        'tarih_bit' => $_POST['pf_tarih_bit'] ?? '',
+        'firma'     => $_POST['pf_firma']     ?? '',
+        'urun'      => $_POST['pf_urun']      ?? '',
+        'depo'      => $_POST['pf_depo']      ?? '',
+        'parti'     => $_POST['pf_parti']     ?? '',
+        'dkk_open'  => '1',
+    ], fn($v) => $v !== '');
+    header('Location: stok.php?' . http_build_query($redir));
+    exit;
+}
+
 // ── Sayım Kaydet (POST) ───────────────────────────────────
 $save_error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_count') {
@@ -262,72 +354,83 @@ foreach ($check_defs as $chk) {
 }
 
 // ── Detay kayıtları (ilk 20 / grup) ──────────────────────
-// Her entry: label, severity, total, rows, url_label
+// Her entry: label, severity, total, rows, url_label, fix_type, fix_field
 // row sütunları: id, tarih, firma, urun, depo, net_kg, fix_link
+// fix_type: 'kantar'|'palet'|'lr'|null; fix_field: DB kolon adı|null
 $quality_detail = [];
 $qd_defs = [
-    // [label, severity, url_label, count_sql, c_params, rows_sql, r_params]
+    // [label, severity, url_label, count_sql, c_params, rows_sql, r_params, fix_type, fix_field]
     ['Net KG sıfır — kantar fişi', 'kritik', 'Kantar Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
-      FROM kantar_fisleri {$k_extra}net_kg = 0 ORDER BY id DESC LIMIT 20", $k_params],
+      FROM kantar_fisleri {$k_extra}net_kg = 0 ORDER BY id DESC LIMIT 20", $k_params,
+     null, null],
     ['Deposu boş — kantar fişi', 'kritik', 'Kantar Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}depo = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
-      FROM kantar_fisleri {$k_extra}depo = '' ORDER BY id DESC LIMIT 20", $k_params],
+      FROM kantar_fisleri {$k_extra}depo = '' ORDER BY id DESC LIMIT 20", $k_params,
+     'kantar', 'depo'],
     ['Tarihi boş/hatalı — kantar fişi', 'kritik', 'Kantar Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
       FROM kantar_fisleri {$k_extra}(giris_tarih = '' OR giris_tarih NOT REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}')
-      ORDER BY id DESC LIMIT 20", $k_params],
+      ORDER BY id DESC LIMIT 20", $k_params,
+     'kantar', 'giris_tarih'],
     ['Mal cinsi boş — kantar fişi', 'orta', 'Kantar Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}malin_cinsi = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
-      FROM kantar_fisleri {$k_extra}malin_cinsi = '' ORDER BY id DESC LIMIT 20", $k_params],
+      FROM kantar_fisleri {$k_extra}malin_cinsi = '' ORDER BY id DESC LIMIT 20", $k_params,
+     'kantar', 'malin_cinsi'],
     ['Firması boş — kantar fişi', 'orta', 'Kantar Fişleri',
      "SELECT COUNT(*) FROM kantar_fisleri {$k_extra}firma_adi = ''", $k_params,
      "SELECT id, giris_tarih AS tarih, firma_adi AS firma, malin_cinsi AS urun,
              depo, net_kg, CONCAT('kantar_edit.php?id=', id) AS fix_link
-      FROM kantar_fisleri {$k_extra}firma_adi = '' ORDER BY id DESC LIMIT 20", $k_params],
+      FROM kantar_fisleri {$k_extra}firma_adi = '' ORDER BY id DESC LIMIT 20", $k_params,
+     'kantar', 'firma_adi'],
     ['Net KG sıfır — yükleme/çıkma paleti', 'kritik', 'Yüklemeler',
      "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.net_kg = 0", $qc_lp_params,
      "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
              lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
       FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
-      $qc_lp_sql AND lp.net_kg = 0 ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+      $qc_lp_sql AND lp.net_kg = 0 ORDER BY lp.id DESC LIMIT 20", $qc_lp_params,
+     null, null],
     ['Deposu boş — yükleme/çıkma paleti', 'kritik', 'Yüklemeler',
      "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.depo = ''", $qc_lp_params,
      "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
              lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
       FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
-      $qc_lp_sql AND lp.depo = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+      $qc_lp_sql AND lp.depo = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params,
+     'palet', 'depo'],
     ['Ürün cinsi boş — yükleme/çıkma paleti', 'orta', 'Yüklemeler',
      "SELECT COUNT(*) FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id $qc_lp_sql AND lp.urun_cinsi = ''", $qc_lp_params,
      "SELECT lp.id AS id, lr.tarih, lr.firma, lp.urun_cinsi AS urun,
              lp.depo, lp.net_kg, CONCAT('record_edit.php?id=', lr.id) AS fix_link
       FROM loading_pallets lp JOIN loading_records lr ON lp.loading_record_id = lr.id
-      $qc_lp_sql AND lp.urun_cinsi = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params],
+      $qc_lp_sql AND lp.urun_cinsi = '' ORDER BY lp.id DESC LIMIT 20", $qc_lp_params,
+     'palet', 'urun_cinsi'],
     ['Paletsiz yükleme/çıkma kaydı', 'kritik', 'Yüklemeler',
      "SELECT COUNT(*) FROM loading_records $qc_lr_sql AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)", $qc_lr_params,
      "SELECT id, tarih, firma, urun, bolge AS depo, 0 AS net_kg,
              CONCAT('record_edit.php?id=', id) AS fix_link
       FROM loading_records $qc_lr_sql
         AND NOT EXISTS (SELECT 1 FROM loading_pallets WHERE loading_record_id = loading_records.id)
-      ORDER BY id DESC LIMIT 20", $qc_lr_params],
+      ORDER BY id DESC LIMIT 20", $qc_lr_params,
+     null, null],
     ['Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'Çıkmalar',
      "SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''", $qc_cn_params,
      "SELECT id, tarih, firma, urun, '' AS depo,
              (SELECT COALESCE(SUM(lp.net_kg),0) FROM loading_pallets lp WHERE lp.loading_record_id = loading_records.id) AS net_kg,
              CONCAT('record_edit.php?id=', id) AS fix_link
       FROM loading_records $qc_cn_sql AND cikis_nedeni = ''
-      ORDER BY id DESC LIMIT 20", $qc_cn_params],
+      ORDER BY id DESC LIMIT 20", $qc_cn_params,
+     'lr', 'cikis_nedeni'],
 ];
 
-foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows_sql, $rows_params]) {
+foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows_sql, $rows_params, $fix_type, $fix_field]) {
     try {
         $st = $pdo->prepare($cnt_sql);
         $st->execute($cnt_params);
@@ -344,6 +447,8 @@ foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows
             'url_label' => $qdurlabel,
             'total'     => $total,
             'rows'      => $rows,
+            'fix_type'  => $fix_type,
+            'fix_field' => $fix_field,
         ];
     } catch (PDOException $e) {}
 }
@@ -615,8 +720,11 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
         <a href="<?= h($dkk_detail_url) ?>" class="btn btn-sm btn-ghost">⬇ Kalite Raporu CSV</a>
     </div>
     <div id="dkkDetail" class="dkk-detail-section" hidden>
+        <datalist id="hd-dl-firma"><?php foreach ($firma_list as $fv): ?><option value="<?= h($fv) ?>"><?php endforeach; ?></datalist>
+        <datalist id="hd-dl-urun"><?php foreach ($urun_list as $uv): ?><option value="<?= h($uv) ?>"><?php endforeach; ?></datalist>
         <?php foreach ($dkk_sorunlu as $grp): ?>
         <?php if ($grp['total'] === 0) continue; ?>
+        <?php $_has_fix = !empty($grp['fix_type']) && !empty($grp['fix_field']); ?>
         <div class="dkk-detail-group dkk-detail-group-<?= h($grp['severity']) ?>">
             <div class="dkk-detail-group-head">
                 <span class="dkk-badge dkk-badge-<?= h($grp['severity']) ?>"><?= $dkk_label_map[$grp['severity']] ?? $grp['severity'] ?></span>
@@ -624,6 +732,7 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                 <span class="dkk-detail-group-total">
                     Toplam <strong><?= $grp['total'] ?></strong> kayıt
                     <?= $grp['total'] > 20 ? ' <span class="dkk-ilk20">(ilk 20 gösteriliyor)</span>' : '' ?>
+                    <?= $_has_fix ? ' · <em>Her satırda hızlı düzelt</em>' : '' ?>
                 </span>
             </div>
             <?php if (!empty($grp['rows'])): ?>
@@ -637,7 +746,7 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                             <th>Ürün / Mal Cinsi</th>
                             <th>Depo</th>
                             <th class="num">Net KG</th>
-                            <th>Düzelt</th>
+                            <th><?= $_has_fix ? 'Hızlı Düzelt / Git' : 'Git' ?></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -649,7 +758,48 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                             <td><?= h($row['urun'] !== '' ? $row['urun'] : '—') ?></td>
                             <td><?= h($row['depo'] !== '' ? $row['depo'] : '—') ?></td>
                             <td class="num"><?= number_format((float)($row['net_kg'] ?? 0), 3, ',', '.') ?></td>
-                            <td><a href="<?= h($row['fix_link']) ?>" class="btn btn-sm btn-ghost">Düzelt →</a></td>
+                            <td class="hd-fix-cell">
+                            <?php if ($_has_fix): ?>
+                            <form method="post" action="stok.php" class="hd-form">
+                                <input type="hidden" name="csrf"       value="<?= h(csrf_token()) ?>">
+                                <input type="hidden" name="action"     value="hizli_duzelt">
+                                <input type="hidden" name="fix_type"   value="<?= h($grp['fix_type']) ?>">
+                                <input type="hidden" name="fix_field"  value="<?= h($grp['fix_field']) ?>">
+                                <input type="hidden" name="fix_id"     value="<?= (int)$row['id'] ?>">
+                                <input type="hidden" name="pf_tarih_bas" value="<?= h($f_tarih_bas) ?>">
+                                <input type="hidden" name="pf_tarih_bit" value="<?= h($f_tarih_bit) ?>">
+                                <input type="hidden" name="pf_firma"   value="<?= h($f_firma) ?>">
+                                <input type="hidden" name="pf_urun"    value="<?= h($f_urun) ?>">
+                                <input type="hidden" name="pf_depo"    value="<?= h($f_depo) ?>">
+                                <input type="hidden" name="pf_parti"   value="<?= h($f_parti) ?>">
+                                <?php if ($grp['fix_field'] === 'depo'): ?>
+                                <select name="fix_val" class="hd-select" required>
+                                    <option value="">— depo seç —</option>
+                                    <?php foreach ($depo_list as $dv): ?>
+                                    <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php elseif ($grp['fix_field'] === 'cikis_nedeni'): ?>
+                                <select name="fix_val" class="hd-select" required>
+                                    <option value="">— seç —</option>
+                                    <?php foreach (cikis_nedeni_listesi() as $cn): ?>
+                                    <option value="<?= h($cn) ?>"><?= h($cn) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <?php elseif ($grp['fix_field'] === 'giris_tarih'): ?>
+                                <input type="datetime-local" name="fix_val" class="hd-input" required>
+                                <?php elseif ($grp['fix_field'] === 'firma_adi'): ?>
+                                <input type="text" name="fix_val" class="hd-input"
+                                       list="hd-dl-firma" placeholder="Firma adı" autocomplete="off" required>
+                                <?php else: ?>
+                                <input type="text" name="fix_val" class="hd-input"
+                                       list="hd-dl-urun" placeholder="Ürün" autocomplete="off" required>
+                                <?php endif; ?>
+                                <button type="submit" class="btn btn-sm btn-primary hd-save-btn" title="Kaydet">✓</button>
+                            </form>
+                            <?php endif; ?>
+                            <a href="<?= h($row['fix_link']) ?>" class="btn btn-sm btn-ghost">→</a>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -668,6 +818,16 @@ function dkkToggle() {
     el.hidden = !hidden;
     btn.textContent = hidden ? '▲ Detaylı Veri Kalite Raporunu Gizle' : '🔍 Detaylı Veri Kalite Raporunu Göster';
 }
+(function () {
+    if (new URLSearchParams(location.search).get('dkk_open') === '1') {
+        var el  = document.getElementById('dkkDetail');
+        var btn = document.getElementById('dkkToggleBtn');
+        if (el && btn) {
+            el.hidden = false;
+            btn.textContent = '▲ Detaylı Veri Kalite Raporunu Gizle';
+        }
+    }
+})();
 </script>
 <?php endif; ?>
 
