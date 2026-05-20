@@ -251,9 +251,6 @@ function kf_datalist(string $id, array $items): string {
                            class="num kantar-tartim-input"
                            value="<?= h(fmt_tartim($fis['tartim1'] ?? '')) ?>" placeholder="">
                     <span class="kantar-tartim-unit">kg</span>
-                    <input type="text" name="alibi1" class="kantar-alibi"
-                           placeholder="Alibi No"
-                           value="<?= h($fis['alibi1'] ?? '') ?>">
                 </div>
             </div>
             <div class="kantar-tartim-row">
@@ -263,9 +260,6 @@ function kf_datalist(string $id, array $items): string {
                            class="num kantar-tartim-input"
                            value="<?= h(fmt_tartim($fis['tartim2'] ?? '')) ?>" placeholder="">
                     <span class="kantar-tartim-unit">kg</span>
-                    <input type="text" name="alibi2" class="kantar-alibi"
-                           placeholder="Alibi No"
-                           value="<?= h($fis['alibi2'] ?? '') ?>">
                 </div>
             </div>
             <div class="kantar-net-satir">
@@ -666,8 +660,15 @@ function clearPhoto() {
     <?php endif; ?>
 })();
 
+var _imgBusy = false;
+window.addEventListener('blur', function() { _imgBusy = true; });
+window.addEventListener('focus', function() { setTimeout(function() { _imgBusy = false; }, 1000); });
+
 imgArea.addEventListener('click', function(e) {
     if (e.target === imgKaldir || imgKaldir.contains(e.target)) return;
+    if (_imgBusy) return;
+    _imgBusy = true;
+    setTimeout(function() { _imgBusy = false; }, 3000);
     imgInput.click();
 });
 imgKaldir.addEventListener('click', function(e) {
@@ -767,6 +768,7 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
 document.getElementById('kantarCropNo').addEventListener('click', closeCrop);
 
 function handleFileSelect(input) {
+    _imgBusy = false;
     var file = input.files[0];
     if (!file) return;
     var rd = new FileReader();

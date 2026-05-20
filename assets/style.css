@@ -1947,6 +1947,7 @@ body.print-mode .asya-sheet {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
 }
 .grup-row-numfields label {
     display: flex;
@@ -1957,6 +1958,7 @@ body.print-mode .asya-sheet {
     color: var(--muted);
     white-space: nowrap;
     flex: 1;
+    min-width: 100px;
     margin: 0;
 }
 .grup-row-numfields label input {
@@ -1964,6 +1966,10 @@ body.print-mode .asya-sheet {
     min-width: 0;
     text-align: right;
     margin-top: 0 !important;
+}
+@media (max-width: 479px) {
+    .grup-row-numfields label:not(.grup-ozel-lbl) { flex: 0 0 calc(50% - 4px); }
+    .grup-ozel-lbl { flex: 1; }
 }
 .grup-calc-bar {
     display: flex;
