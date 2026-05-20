@@ -661,14 +661,23 @@ function clearPhoto() {
 })();
 
 var _imgBusy = false;
-window.addEventListener('blur', function() { _imgBusy = true; });
-window.addEventListener('focus', function() { setTimeout(function() { _imgBusy = false; }, 1000); });
+var _imgBusyTimer = null;
+
+/* Kamera iptal edilince (focus dönerse ama change gelmezse) kilidi aç */
+window.addEventListener('focus', function() {
+    if (_imgBusy && !imgInput.disabled) {
+        clearTimeout(_imgBusyTimer);
+        _imgBusyTimer = setTimeout(function() { _imgBusy = false; }, 2000);
+    }
+});
 
 imgArea.addEventListener('click', function(e) {
     if (e.target === imgKaldir || imgKaldir.contains(e.target)) return;
-    if (_imgBusy) return;
+    if (_imgBusy || imgInput.disabled) return;
     _imgBusy = true;
-    setTimeout(function() { _imgBusy = false; }, 3000);
+    clearTimeout(_imgBusyTimer);
+    /* 2 dakika fallback — kamera çok uzun açık kaldıysa veya blur/focus gelmezse */
+    _imgBusyTimer = setTimeout(function() { _imgBusy = false; }, 120000);
     imgInput.click();
 });
 imgKaldir.addEventListener('click', function(e) {
@@ -768,14 +777,29 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
 document.getElementById('kantarCropNo').addEventListener('click', closeCrop);
 
 function handleFileSelect(input) {
+    clearTimeout(_imgBusyTimer);
     var file = input.files[0];
-    if (!file) return;
+    if (!file) { _imgBusy = false; return; }
+    /* Fotoğraf seçildi — inputları devre dışı bırak; kameranın
+       kapanış anındaki sahte dokunuşların kamerayı yeniden açmasını engelle */
+    imgInput.disabled = true;
+    if (imgInputGallery) imgInputGallery.disabled = true;
     var rd = new FileReader();
     rd.onload = function(ev) {
         input.value = '';
+        _imgBusy = false;
         openCrop(ev.target.result);
+        /* 1 saniye sonra inputları tekrar etkinleştir */
+        setTimeout(function() {
+            imgInput.disabled = false;
+            if (imgInputGallery) imgInputGallery.disabled = false;
+        }, 1000);
     };
-    rd.onerror = function() { _imgBusy = false; };
+    rd.onerror = function() {
+        _imgBusy = false;
+        imgInput.disabled = false;
+        if (imgInputGallery) imgInputGallery.disabled = false;
+    };
     rd.readAsDataURL(file);
 }
 imgInput.addEventListener('change', function() { handleFileSelect(this); });
