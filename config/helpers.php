@@ -967,7 +967,7 @@ function ensure_definition(string $type, string $name): void {
         $st->execute([$type, $name]);
         if (!$st->fetchColumn()) {
             $pdo->prepare(
-                "INSERT INTO material_definitions (type, name, dara_kg, is_active) VALUES (?, ?, 0, 1)"
+                "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"
             )->execute([$type, $name]);
         }
     } catch (PDOException $e) {}

@@ -74,6 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
 
+    // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et
+    foreach ($computed as &$p) {
+        if ($p['urun_cinsi'] === '') {
+            $p['urun_cinsi'] = $record['urun'];
+        } else {
+            $p['urun_cinsi'] = normalize_urun($p['urun_cinsi']);
+        }
+    }
+    unset($p);
+
     // Validate
     if (empty($record['tarih'])) $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '')  $errors[] = 'Firma zorunludur.';
@@ -90,7 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ensure_definition('firma', $record['firma']);
         ensure_definition('urun',  $record['urun']);
         foreach ($computed as $p) {
-            if (!empty($p['depo'])) ensure_definition('depo', $p['depo']);
+            if (!empty($p['depo']))       ensure_definition('depo', $p['depo']);
+            if (!empty($p['urun_cinsi'])) ensure_definition('urun', $p['urun_cinsi']);
         }
     }
 

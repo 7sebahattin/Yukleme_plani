@@ -96,7 +96,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <label>Çıkış Nedeni <span class="req">*</span>
                 <select name="cikis_nedeni">
                     <option value="">-- seçiniz --</option>
-                    <?php foreach (['Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'] as $_cn): ?>
+                    <?php foreach (cikis_nedeni_listesi() as $_cn): ?>
                     <option value="<?= h($_cn) ?>"
                         <?= ($record['cikis_nedeni'] ?? '') === $_cn ? 'selected' : '' ?>>
                         <?= h($_cn) ?>
@@ -215,7 +215,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                     <label>Kasa Cinsi<select id="excelKasaCinsi"></select></label>
                     <label>Palet Tipi<select id="excelPaletTipi"></select></label>
                     <label>Depo<select id="excelDepo"></select></label>
-                    <label>Ürün Cinsi<input type="text" id="excelUrunCinsi" placeholder="—" autocomplete="off"></label>
+                    <label>Ürün Cinsi<select id="excelUrunCinsi"><option value="">—</option></select></label>
                 </div>
             </div>
 
@@ -289,6 +289,7 @@ $form_is_cikma = $form_is_cikma ?? false;
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
+<script id="urunListData" type="application/json"><?= json_encode($_urun_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 </form>
@@ -342,7 +343,7 @@ $form_is_cikma = $form_is_cikma ?? false;
         </label>
         <label class="pm-label">
           <span>Ürün Cinsi</span>
-          <input type="text" id="pmUrunCinsi" placeholder="Ürün cinsi">
+          <select id="pmUrunCinsi"><option value="">-- ürün cinsi seçiniz --</option></select>
         </label>
         <label class="pm-label pm-span2">
           <span>Depo <span class="req">*</span></span>
