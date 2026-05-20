@@ -235,7 +235,7 @@ function kf_datalist(string $id, array $items): string {
 </section>
 
 <script id="firmaListData" type="application/json"><?= json_encode(
-    array_values($_firma_def_names), JSON_UNESCAPED_UNICODE) ?></script>
+    array_values($_all_firma), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="grupInitData" type="application/json"><?= json_encode(
     array_values($_grup_list), JSON_UNESCAPED_UNICODE) ?></script>
 

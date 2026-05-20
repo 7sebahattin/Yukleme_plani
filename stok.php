@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         if ($pf_depo      !== '') { $pk_where[] = "depo LIKE ?";        $pk_p[] = '%' . $pf_depo . '%'; }
         $pk_where_sql = $pk_where ? 'WHERE ' . implode(' AND ', $pk_where) : '';
 
-        $st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara)),0) FROM kantar_fisleri $pk_where_sql");
+        $st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0))),0) FROM kantar_fisleri $pk_where_sql");
         $st->execute($pk_p);
         $post_gelen = (float)$st->fetchColumn();
 
@@ -212,7 +212,7 @@ if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' 
 // NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
-$st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara)),0) FROM kantar_fisleri $k_where_sql");
+$st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0))),0) FROM kantar_fisleri $k_where_sql");
 $st->execute($k_params);
 $gelen_kg = (float)$st->fetchColumn();
 
@@ -250,8 +250,9 @@ $sayim_fark    = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
 $st = $pdo->prepare("SELECT
     giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
     malin_cinsi AS urun, depo AS depo, '' AS bolge, '' AS parti,
-    net_kg AS brut_kg, (kasa_sayisi * kasa_dara + palet_sayisi * palet_dara) AS dara_kg,
-    GREATEST(0, net_kg - kasa_sayisi * kasa_dara - palet_sayisi * palet_dara) AS net_kg,
+    net_kg AS brut_kg,
+    (COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) + COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0)) AS dara_kg,
+    GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0)) AS net_kg,
     id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
     CONCAT('KNT-', fis_no) AS ref_no
   FROM kantar_fisleri $k_where_sql
