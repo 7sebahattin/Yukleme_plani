@@ -693,7 +693,7 @@ if ($is_csv) {
 
 $herhangi_filtre = $f_tarih_bas || $f_tarih_bit || $f_firma || $f_urun || $f_depo || $f_parti;
 
-render_header('Stok Takip');
+render_header('Ürün Stok');
 render_flash();
 ?>
 
@@ -702,7 +702,7 @@ render_flash();
 <?php endif; ?>
 
 <div class="page-head">
-    <h2 class="page-title">📦 Depo Stok Takibi</h2>
+    <h2 class="page-title">📦 Ürün Stok</h2>
     <a href="stok.php?<?= h(http_build_query(array_filter([
         'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit,
         'firma' => $f_firma, 'urun' => $f_urun, 'depo' => $f_depo,

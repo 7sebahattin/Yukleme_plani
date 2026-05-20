@@ -159,7 +159,8 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
             <a href="cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
             <a href="reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
-            <a href="stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Stok</a>
+            <a href="stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
+            <a href="malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
             <a href="definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
     </div>
@@ -655,7 +656,37 @@ function render_flash(): void {
                 REFERENCES `account_transactions`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // 8) Stok sayım tablosu
+        // 8) Malzeme stok hareketleri
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `material_stock_movements` (
+            `id`               INT AUTO_INCREMENT PRIMARY KEY,
+            `movement_date`    DATE NOT NULL,
+            `movement_type`    ENUM('giris','sevk','kullanim','duzeltme') NOT NULL DEFAULT 'giris',
+            `material_id`      INT NULL,
+            `material_name`    VARCHAR(200) NOT NULL DEFAULT '',
+            `material_type`    VARCHAR(50)  NOT NULL DEFAULT '',
+            `depo`             VARCHAR(150) NOT NULL DEFAULT '',
+            `quantity`         DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `unit`             VARCHAR(20)  NOT NULL DEFAULT 'adet',
+            `unit_dara_kg`     DECIMAL(10,3) NOT NULL DEFAULT 0,
+            `total_dara_kg`    DECIMAL(12,3) NOT NULL DEFAULT 0,
+            `source_type`      VARCHAR(30)  NOT NULL DEFAULT '',
+            `source_id`        INT NULL,
+            `source_detail_id` INT NULL,
+            `belge_no`         VARCHAR(100) NOT NULL DEFAULT '',
+            `firma`            VARCHAR(200) NOT NULL DEFAULT '',
+            `note`             TEXT NULL,
+            `created_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at`       TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            INDEX `idx_msm_date`    (`movement_date`),
+            INDEX `idx_msm_type`    (`movement_type`),
+            INDEX `idx_msm_mat`     (`material_id`),
+            INDEX `idx_msm_matname` (`material_name`(100)),
+            INDEX `idx_msm_mattype` (`material_type`(30)),
+            INDEX `idx_msm_depo`    (`depo`(80)),
+            INDEX `idx_msm_source`  (`source_type`, `source_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // 9) Stok sayım tablosu
         $pdo->exec("CREATE TABLE IF NOT EXISTS `stock_counts` (
             `id`         INT AUTO_INCREMENT PRIMARY KEY,
             `count_date` DATE NOT NULL,
@@ -752,6 +783,52 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
         }
     }
     return $errs;
+}
+
+// ── Malzeme Stok: Yükleme kullanımını senkronize et ──────
+// Yükleme kaydı kaydedildikten/güncellendikten sonra çağrılır.
+// pallet_materials → material_stock_movements (kullanim) idempotent sync.
+function sync_malzeme_kullanim(int $loading_record_id): void {
+    try {
+        $pdo = db();
+        // material_stock_movements tablosu yoksa çık
+        $pdo->query("SELECT 1 FROM `material_stock_movements` LIMIT 0");
+
+        $pdo->prepare(
+            "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
+        )->execute([$loading_record_id]);
+
+        $rows = $pdo->prepare("
+            SELECT pm.loading_pallet_id, pm.material_id, pm.quantity, pm.total_dara_kg,
+                   md.name AS mat_name, md.type AS mat_type, md.unit_dara_kg,
+                   lp.depo, lr.tarih AS lr_tarih
+            FROM pallet_materials pm
+            JOIN material_definitions md ON md.id = pm.material_id
+            JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+            JOIN loading_records lr ON lr.id = lp.loading_record_id
+            WHERE lp.loading_record_id = ?
+            ORDER BY pm.loading_pallet_id, pm.id
+        ");
+        $rows->execute([$loading_record_id]);
+
+        $ins = $pdo->prepare("
+            INSERT INTO material_stock_movements
+                (movement_date, movement_type, material_id, material_name, material_type,
+                 depo, quantity, unit, unit_dara_kg, total_dara_kg,
+                 source_type, source_id, source_detail_id)
+            VALUES (?, 'kullanim', ?, ?, ?, ?, ?, 'adet', ?, ?, 'loading', ?, ?)
+        ");
+        foreach ($rows->fetchAll() as $r) {
+            if ((float)$r['quantity'] <= 0) continue;
+            $ins->execute([
+                $r['lr_tarih'] ?: date('Y-m-d'),
+                $r['material_id'], $r['mat_name'], $r['mat_type'],
+                $r['depo'], $r['quantity'],
+                $r['unit_dara_kg'], $r['total_dara_kg'],
+                $loading_record_id, $r['loading_pallet_id'],
+            ]);
+        }
+    } catch (PDOException $e) {}
 }
 
 // ── İzin Verilen Çıkış Nedenleri ─────────────────────────

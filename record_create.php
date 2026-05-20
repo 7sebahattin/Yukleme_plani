@@ -135,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
+            sync_malzeme_kullanim($rec_id);
             set_flash('success', 'Kayıt başarıyla oluşturuldu (#' . $rec_id . ').');
             header('Location: record_view.php?id=' . $rec_id);
             exit;

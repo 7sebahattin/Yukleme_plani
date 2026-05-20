@@ -79,7 +79,7 @@ render_flash();
 
     <a href="stok.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f5e9">📦</div>
-        <div class="home-card-title">Stok</div>
+        <div class="home-card-title">Ürün Stok</div>
         <?php if ($stok_gelen_bugun > 0 || $stok_cikan_bugun > 0): ?>
         <div style="font-size:.7rem;color:var(--muted);margin-top:2px;text-align:center">
             <?php if ($stok_gelen_bugun > 0): ?>
@@ -90,6 +90,11 @@ render_flash();
             <?php endif; ?>
         </div>
         <?php endif; ?>
+    </a>
+
+    <a href="malzeme_stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e3f2fd">🗃️</div>
+        <div class="home-card-title">Malzeme Stok</div>
     </a>
 
     <a href="hesap.php" class="home-card">

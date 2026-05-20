@@ -162,6 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
+            sync_malzeme_kullanim($id);
             set_flash('success', 'Kayıt güncellendi.');
             header('Location: record_view.php?id=' . $id);
             exit;
