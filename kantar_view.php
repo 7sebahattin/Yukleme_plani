@@ -162,7 +162,7 @@ render_flash();
     .kv-net-box {
         background: #e85d04 !important;
         color: #fff !important;
-        padding: 4px 8px !important;
+        padding: 2px 6px !important;
         margin-top: 4px !important;
         border-radius: 3px;
         display: flex;
@@ -171,8 +171,8 @@ render_flash();
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    .kv-net-label { font-size: 7pt !important; font-weight: 600; letter-spacing: .05em; }
-    .kv-net-val { font-size: 14pt !important; font-weight: 700 !important; }
+    .kv-net-label { font-size: 6pt !important; font-weight: 600; letter-spacing: .05em; }
+    .kv-net-val { font-size: 8pt !important; font-weight: 700 !important; }
 
     .kv-nd-box { margin-top: 4px !important; border: 1px solid #ddd; border-radius: 3px; }
     .kv-nd-row {
@@ -184,10 +184,11 @@ render_flash();
         border-bottom: 1px solid #eee;
     }
     .kv-nd-row:last-child { border-bottom: none; }
-    .kv-nd-net { background: #f0f4ff; font-weight: 700; }
+    .kv-nd-net { background: #1a56db !important; color: #fff !important; font-weight: 700; padding: 4px 8px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .kv-nd-net .kv-nd-lbl { color: rgba(255,255,255,.8) !important; }
     .kv-nd-lbl { color: #555; }
     .kv-nd-val { font-weight: 600; }
-    .kv-nd-net-val { font-size: 8.5pt !important; }
+    .kv-nd-net-val { font-size: 13pt !important; }
 
     /* ── Gruplandırma tablosu ── */
     .kv-grup-table { width: 100%; border-collapse: collapse; font-size: 6.5pt; }
