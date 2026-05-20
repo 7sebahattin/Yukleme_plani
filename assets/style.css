@@ -3113,3 +3113,36 @@ body.notes-modal-open { overflow: hidden; }
 }
 .hd-input { width: 120px; }
 .hd-save-btn { padding: 4px 9px !important; height: 30px; min-width: 0; }
+
+/* ── Malzeme Stok ────────────────────────────────────────── */
+.badge-duzeltme { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+@media (min-width: 640px)  { .stok-ozet-grid-4 { grid-template-columns: repeat(4, 1fr); } }
+
+.ms-form-wrap { }
+.ms-form-tabs {
+    display: flex; gap: 0; margin-bottom: -1px; position: relative; z-index: 1;
+}
+.ms-tab-btn {
+    padding: 9px 20px; font-size: .9rem; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--surface-2); color: var(--muted);
+    transition: background .15s, color .15s;
+}
+.ms-tab-btn:hover { background: #f0f4ff; color: var(--primary); }
+.ms-tab-btn.ms-tab-active { background: #fff; color: var(--primary); border-color: var(--border); }
+
+.ms-form-card { border-radius: 0 var(--radius) var(--radius) var(--radius); margin-top: 0; }
+
+.ms-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 14px;
+}
+.ms-form-full { grid-column: 1 / -1; }
+@media (max-width: 599px) {
+    .ms-form-grid { grid-template-columns: 1fr; }
+    .ms-form-full { grid-column: 1; }
+}
+@media (min-width: 1024px) {
+    .ms-form-grid { grid-template-columns: repeat(3, 1fr); }
+}
