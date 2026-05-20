@@ -1111,10 +1111,10 @@ body.print-mode .topbar { display: none; }
     display: flex; align-items: center; justify-content: space-between;
     background: #e85d04; color: #fff;
     border-radius: var(--radius);
-    padding: 14px 18px;
+    padding: 7px 14px;
 }
-.kv-net-label { font-size: .85rem; opacity: .85; letter-spacing: .06em; font-weight: 600; }
-.kv-net-val { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kv-net-label { font-size: .78rem; opacity: .85; letter-spacing: .06em; font-weight: 600; }
+.kv-net-val { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .kantar-img-area {
     width: 100%; min-height: 180px;
@@ -2456,9 +2456,9 @@ body.notes-modal-open { overflow: hidden; }
 .kv-nd-row:last-child { border-bottom: none; }
 .kv-nd-lbl { color: var(--muted, #6b7280); }
 .kv-nd-val { font-weight: 600; }
-.kv-nd-net { background: #1a56db; color: #fff; }
+.kv-nd-net { background: #1a56db; color: #fff; padding: 14px 18px; }
 .kv-nd-net .kv-nd-lbl { color: rgba(255,255,255,.8); }
-.kv-nd-net-val { font-size: 1.1rem; }
+.kv-nd-net-val { font-size: 1.8rem; }
 
 @media print {
     .kv-nd-box {
