@@ -56,6 +56,7 @@
     const TYPE_LABELS = JSON.parse(document.getElementById('materialTypesData').textContent || '{}');
     const palletsInit = JSON.parse(document.getElementById('palletsInit').textContent   || '[]');
     const DEPO_LIST  = JSON.parse((document.getElementById('depoListData') || {}).textContent || '[]');
+    const URUN_LIST  = JSON.parse((document.getElementById('urunListData') || {}).textContent || '[]');
 
     /* Materials tip grupları */
     const matsByType = {};
@@ -216,12 +217,12 @@
             pmPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || '', '-- palet tipi seçiniz --');
             const depoDefault = (document.getElementById('genelDepo') || {}).value || '';
             pmDepo.innerHTML = buildTextOptions(DEPO_LIST, depoDefault, '-- Depo seçiniz --');
+            const urunDefault = (document.getElementById('genelUrun') || {}).value || last?.urun_cinsi || '';
+            pmUrunCinsi.innerHTML = buildTextOptions(URUN_LIST, urunDefault, '-- ürün cinsi seçiniz --');
             if (last) {
                 pmSize.value = last.size || '';
                 if (Array.isArray(last.materials)) last.materials.forEach(m => addModalMaterial(m));
             }
-            const urunEl = document.getElementById('genelUrun');
-            if (urunEl) pmUrunCinsi.value = urunEl.value;
         } else {
             const p = pallets[idx];
             pmPaletNo.value  = p.palet_no || '';
@@ -231,7 +232,7 @@
             pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, p.kasa_cinsi_id, '-- kasa cinsi seçiniz --');
             pmPaletTipi.innerHTML = buildOptions(PALET_LIST, p.palet_tipi_id, '-- palet tipi seçiniz --');
             pmDepo.innerHTML = buildTextOptions(DEPO_LIST, p.depo || '', '-- Depo seçiniz --');
-            pmUrunCinsi.value = p.urun_cinsi || '';
+            pmUrunCinsi.innerHTML = buildTextOptions(URUN_LIST, p.urun_cinsi || '', '-- ürün cinsi seçiniz --');
             if (Array.isArray(p.materials)) p.materials.forEach(m => addModalMaterial(m));
         }
 
@@ -450,6 +451,11 @@
         const newDepo = this.value;
         pallets.forEach(p => { p.depo = newDepo; });
     });
+    // Genel Ürün değişince tüm paletlere yansıt
+    document.getElementById('genelUrun')?.addEventListener('change', function () {
+        const newUrun = this.value;
+        pallets.forEach(p => { p.urun_cinsi = newUrun; });
+    });
 
     document.getElementById('addPalletBtn')?.addEventListener('click', () => openModal(-1));
     document.getElementById('pmClose')?.addEventListener('click', closeModal);
@@ -609,12 +615,11 @@
 
             // Ürün Cinsi
             const urunTd2 = document.createElement('td');
-            const urunInp2 = document.createElement('input');
-            urunInp2.type = 'text';
+            const urunInp2 = document.createElement('select');
             urunInp2.dataset.key = 'urun_cinsi';
             urunInp2.className = 'tp-cell';
-            urunInp2.placeholder = '—';
-            urunInp2.value = from.urun_cinsi || '';
+            urunInp2.innerHTML = buildTextOptions(URUN_LIST,
+                from.urun_cinsi || (document.getElementById('genelUrun') || {}).value || '', '—');
             urunTd2.appendChild(urunInp2);
             tr.appendChild(urunTd2);
 
@@ -745,6 +750,8 @@
             ptSel.innerHTML  = buildOptions(PALET_LIST, lp?.palet_tipi_id || '', '— seçiniz —');
             depSel.innerHTML = buildTextOptions(DEPO_LIST,
                 lp?.depo || (document.getElementById('genelDepo') || {}).value || '', '— seçiniz —');
+            if (urunInp) urunInp.innerHTML = buildTextOptions(URUN_LIST,
+                lp?.urun_cinsi || (document.getElementById('genelUrun') || {}).value || '', '— seçiniz —');
         }
 
         // Sütun adı normalize

@@ -50,12 +50,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $computed[] = compute_pallet_row($rp);
     }
 
+    // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et
+    foreach ($computed as &$p) {
+        if ($p['urun_cinsi'] === '') {
+            $p['urun_cinsi'] = $record['urun'];
+        } else {
+            $p['urun_cinsi'] = normalize_urun($p['urun_cinsi']);
+        }
+    }
+    unset($p);
+
     $errors = array_merge($errors, validate_pallet_rows($computed));
     if (empty($errors)) {
         ensure_definition('firma', $record['firma']);
         ensure_definition('urun',  $record['urun']);
         foreach ($computed as $p) {
-            if (!empty($p['depo'])) ensure_definition('depo', $p['depo']);
+            if (!empty($p['depo']))       ensure_definition('depo', $p['depo']);
+            if (!empty($p['urun_cinsi'])) ensure_definition('urun', $p['urun_cinsi']);
         }
     }
 

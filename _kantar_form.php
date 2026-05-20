@@ -18,14 +18,14 @@ $fis_id     = (int)($fis['id'] ?? 0);
 $kasa_list  = $kasa_list  ?? [];
 $palet_list = $palet_list ?? [];
 
-// DB'den gelen DECIMAL değerlerini Türkçe formata çevir (parseNum ile uyumlu)
-// Her zaman ondalık virgül içerir → "41.420,0" — num() eski/yeni sürümde doğru çalışır
+// DB'den gelen DECIMAL değerlerini input-safe formata çevir: ondalık virgül, binlik ayırıcı YOK
+// Örn: 13960.5 → "13960,5" | 13960.0 → "13960" | 0.48 → "0,48"
 function fmt_tartim($v): string {
     $f = (float)$v;
     if ($f <= 0) return '';
-    $s = number_format($f, 3, ',', '.');
-    $s = rtrim($s, '0');
-    if (str_ends_with($s, ',')) $s .= '0'; // "41.420," → "41.420,0"
+    $s = number_format($f, 3, ',', '');  // "13960,000" — no thousands dot
+    $s = rtrim($s, '0');                  // "13960,"
+    if (str_ends_with($s, ',')) $s = rtrim($s, ','); // "13960"
     return $s;
 }
 
@@ -39,9 +39,11 @@ if ($fis_id > 0) {
         $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi$sel_extra FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
         $_st_g->execute([$fis_id]);
         $_grup_list = array_map(function($r) {
-            $r['kasa_dara_kg'] = $r['kasa_dara_kg'] ?? 0;
-            $r['palet_dara_kg'] = $r['palet_dara_kg'] ?? 0;
-            $r['brut_kg'] = $r['brut_kg'] ?? 0;
+            $r['palet_sayisi']  = (int)  ($r['palet_sayisi']  ?? 0);
+            $r['kasa_adedi']    = (int)  ($r['kasa_adedi']    ?? 0);
+            $r['kasa_dara_kg']  = (float)($r['kasa_dara_kg']  ?? 0);
+            $r['palet_dara_kg'] = (float)($r['palet_dara_kg'] ?? 0);
+            $r['brut_kg']       = (float)($r['brut_kg']       ?? 0);
             return $r;
         }, $_st_g->fetchAll());
     } catch (PDOException $e) {
@@ -396,7 +398,23 @@ function kf_datalist(string $id, array $items): string {
 
 /* ─── Yardımcılar ─── */
 function parseNum(s) {
-    s = String(s == null ? '' : s).trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    if (s == null || s === '') return 0;
+    s = String(s).trim().replace(/[\s ]/g, '');
+    if (!s) return 0;
+    if (s.indexOf(',') >= 0) {
+        // Turkish: comma = decimal separator, dots are thousands
+        s = s.replace(/\./g, '').replace(',', '.');
+    } else if (s.indexOf('.') >= 0) {
+        var pts = s.split('.');
+        if (pts.length > 2) {
+            // Multiple dots → all thousands separators
+            s = s.replace(/\./g, '');
+        } else if (pts[1] && pts[1].length === 3) {
+            // Single dot + exactly 3 digits → thousands separator ("13.960" → 13960)
+            s = s.replace('.', '');
+        }
+        // else: decimal dot ("0.48", "13960.5") → leave as-is
+    }
     var n = parseFloat(s);
     return isNaN(n) ? 0 : n;
 }
@@ -405,6 +423,12 @@ function fmt(n) {
     var parts = s.split('.');
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return parts.length > 1 ? parts[0] + ',' + parts[1] : parts[0];
+}
+/* Input alanları için: ondalık virgül, binlik ayırıcı YOK ("13960,5", "0,48", "13960") */
+function fmtInput(n) {
+    if (!n) return '';
+    var s = (Math.round(n * 1000) / 1000).toFixed(3).replace(/\.?0+$/, '');
+    return s.replace('.', ',');
 }
 /* Gruplandırma için tam sayıya yuvarlama (≥0,5 → 1 yukarı) */
 function fmtRound(n) {
@@ -525,7 +549,7 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara, brutKg) {
             '<div class="grup-row-numfields">' +
                 '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
                 '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
-                '<label class="grup-brut-lbl" title="Boş bırakılırsa toplam tartım netinden otomatik hesaplanır">Brüt<input type="text" inputmode="decimal" name="gruplar[' + n + '][brut_kg]" class="num grup-brut" placeholder="Otomatik" value="' + (brutVal > 0 ? fmt(brutVal) : '') + '"></label>' +
+                '<label class="grup-brut-lbl" title="Boş bırakılırsa toplam tartım netinden otomatik hesaplanır">Brüt<input type="text" inputmode="decimal" name="gruplar[' + n + '][brut_kg]" class="num grup-brut" placeholder="Otomatik" value="' + (brutVal > 0 ? fmtInput(brutVal) : '') + '"></label>' +
                 '<label class="grup-ozel-lbl" title="Bu grup için farklı kasa/palet darası kullan">' +
                     '<input type="checkbox" class="grup-ozel-cb"' + (isOzel ? ' checked' : '') + '> Özel Dara' +
                 '</label>' +
@@ -534,10 +558,10 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara, brutKg) {
         '</div>' +
         '<div class="grup-ozel-inputs"' + (isOzel ? '' : ' style="display:none"') + '>' +
             '<label>K.Dara <small>(kg/kasa)</small>' +
-                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][kasa_dara_kg]" class="num grup-kasa-dara" placeholder="0" value="' + (parseNum(kasaDara) > 0 ? fmt(parseNum(kasaDara)) : '') + '">' +
+                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][kasa_dara_kg]" class="num grup-kasa-dara" placeholder="0" value="' + (parseNum(kasaDara) > 0 ? fmtInput(parseNum(kasaDara)) : '') + '">' +
             '</label>' +
             '<label>P.Dara <small>(kg/palet)</small>' +
-                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][palet_dara_kg]" class="num grup-palet-dara" placeholder="0" value="' + (parseNum(paletDara) > 0 ? fmt(parseNum(paletDara)) : '') + '">' +
+                '<input type="text" inputmode="decimal" name="gruplar[' + n + '][palet_dara_kg]" class="num grup-palet-dara" placeholder="0" value="' + (parseNum(paletDara) > 0 ? fmtInput(parseNum(paletDara)) : '') + '">' +
             '</label>' +
         '</div>' +
         '<div class="grup-calc-bar">' +
@@ -556,8 +580,8 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara, brutKg) {
     ozelCb.addEventListener('change', function() {
         if (this.checked) {
             ozelDiv.style.display = '';
-            if (!kdInp.value) { var g = _getKasaDaraUnit();  if (g > 0) kdInp.value = fmt(g); }
-            if (!pdInp.value) { var g2 = _getPaletDaraUnit(); if (g2 > 0) pdInp.value = fmt(g2); }
+            if (!kdInp.value) { var g = _getKasaDaraUnit();  if (g > 0) kdInp.value = fmtInput(g); }
+            if (!pdInp.value) { var g2 = _getPaletDaraUnit(); if (g2 > 0) pdInp.value = fmtInput(g2); }
         } else {
             ozelDiv.style.display = 'none';
             kdInp.value = ''; pdInp.value = '';
