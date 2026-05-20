@@ -169,8 +169,17 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 }
 .grid label.span-2 { grid-column: span 1; }
 .grid label, .form-foot {
-    display: flex; flex-direction: column; gap: 4px;
     font-size: .85rem; color: var(--muted); font-weight: 500;
+}
+/* label blok: metin + .req yıldızı inline akar, input/select altta */
+.grid label {
+    display: block;
+}
+.grid label > input, .grid label > select, .grid label > textarea, .grid label > small {
+    display: block; margin-top: 4px;
+}
+.form-foot {
+    display: flex; flex-direction: column; gap: 4px;
 }
 input[type="text"], input[type="search"], input[type="tel"],
 input[type="date"], input[type="number"], select, textarea {
