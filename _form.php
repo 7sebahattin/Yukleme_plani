@@ -248,6 +248,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                         <th>Kasa Cinsi</th>
                         <th>Palet Tipi</th>
                         <th>Depo</th>
+                        <th>Ürün</th>
                         <th class="tp-num">Dara</th>
                         <th class="tp-num">Net</th>
                         <th></th>

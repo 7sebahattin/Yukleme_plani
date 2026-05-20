@@ -518,6 +518,7 @@
                     kasa_cinsi_id: last.querySelector('[data-key=kasa_cinsi_id]').value,
                     palet_tipi_id: last.querySelector('[data-key=palet_tipi_id]').value,
                     depo:          last.querySelector('[data-key=depo]').value,
+                    urun_cinsi:    last.querySelector('[data-key=urun_cinsi]').value,
                 };
             }
             return pallets[pallets.length - 1] || {};
@@ -605,6 +606,17 @@
             depSel.innerHTML = buildTextOptions(DEPO_LIST, from.depo || (document.getElementById('genelDepo') || {}).value || '', '—');
             depTd.appendChild(depSel);
             tr.appendChild(depTd);
+
+            // Ürün Cinsi
+            const urunTd2 = document.createElement('td');
+            const urunInp2 = document.createElement('input');
+            urunInp2.type = 'text';
+            urunInp2.dataset.key = 'urun_cinsi';
+            urunInp2.className = 'tp-cell';
+            urunInp2.placeholder = '—';
+            urunInp2.value = from.urun_cinsi || '';
+            urunTd2.appendChild(urunInp2);
+            tr.appendChild(urunTd2);
 
             // Dara
             const daraTd = document.createElement('td');
@@ -700,6 +712,7 @@
                 base.kasa_cinsi_id = tr.querySelector('[data-key=kasa_cinsi_id]').value;
                 base.palet_tipi_id = tr.querySelector('[data-key=palet_tipi_id]').value;
                 base.depo          = tr.querySelector('[data-key=depo]').value;
+                base.urun_cinsi    = tr.querySelector('[data-key=urun_cinsi]').value.trim() || base.urun_cinsi || '';
                 pallets.push(base);
             });
             renderCards();
