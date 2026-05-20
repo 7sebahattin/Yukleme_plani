@@ -768,13 +768,15 @@ document.getElementById('kantarCropOk').addEventListener('click', function() {
 document.getElementById('kantarCropNo').addEventListener('click', closeCrop);
 
 function handleFileSelect(input) {
-    _imgBusy = false;
     var file = input.files[0];
     if (!file) return;
     var rd = new FileReader();
-    rd.onload = function(ev) { openCrop(ev.target.result); };
+    rd.onload = function(ev) {
+        input.value = '';
+        openCrop(ev.target.result);
+    };
+    rd.onerror = function() { _imgBusy = false; };
     rd.readAsDataURL(file);
-    input.value = '';
 }
 imgInput.addEventListener('change', function() { handleFileSelect(this); });
 if (imgInputGallery) imgInputGallery.addEventListener('change', function() { handleFileSelect(this); });
