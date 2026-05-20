@@ -115,13 +115,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Grupları kaydet
         if (!empty($_POST['gruplar']) && is_array($_POST['gruplar'])) {
-            $gst = db()->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg) VALUES (?,?,?,?,?,?,?)");
+            $gst = db()->prepare("INSERT INTO kantar_gruplar (fis_id, sira, grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg) VALUES (?,?,?,?,?,?,?,?)");
             $sira = 0;
             foreach ($_POST['gruplar'] as $g) {
                 $ga = normalize_firma(trim((string)($g['grup_adi'] ?? '')));
                 if ($ga === '') continue;
                 ensure_definition('firma', $ga);
-                $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0')]);
+                $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
         set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');

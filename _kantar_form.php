@@ -32,14 +32,20 @@ function fmt_tartim($v): string {
 // Mevcut gruplar (edit modunda DB'den)
 if ($fis_id > 0) {
     try {
-        $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+        $kg_cols = array_column(db()->query("SHOW COLUMNS FROM `kantar_gruplar`")->fetchAll(), 'Field');
+        $has_dara = in_array('kasa_dara_kg', $kg_cols);
+        $has_brut = in_array('brut_kg', $kg_cols);
+        $sel_extra = ($has_dara ? ', kasa_dara_kg, palet_dara_kg' : '') . ($has_brut ? ', brut_kg' : '');
+        $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi$sel_extra FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
         $_st_g->execute([$fis_id]);
-        $_grup_list = $_st_g->fetchAll();
+        $_grup_list = array_map(function($r) {
+            $r['kasa_dara_kg'] = $r['kasa_dara_kg'] ?? 0;
+            $r['palet_dara_kg'] = $r['palet_dara_kg'] ?? 0;
+            $r['brut_kg'] = $r['brut_kg'] ?? 0;
+            return $r;
+        }, $_st_g->fetchAll());
     } catch (PDOException $e) {
-        // Kolon henüz yoksa (migration bekleniyor) — dara 0 ile yükle
-        $_st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
-        $_st_g->execute([$fis_id]);
-        $_grup_list = array_map(fn($r) => array_merge($r, ['kasa_dara_kg' => 0, 'palet_dara_kg' => 0]), $_st_g->fetchAll());
+        $_grup_list = [];
     }
 } else {
     $_grup_list = [];
@@ -231,6 +237,7 @@ function kf_datalist(string $id, array $items): string {
             <span class="grup-calc-op">=</span>
             <div class="grup-calc-item"><span class="grup-calc-lbl">Net KG</span><strong class="gc-net grup-calc-val grup-calc-net-val">—</strong></div>
         </div>
+        <div id="grupSapmaRow" class="grup-sapma-row" style="display:none"></div>
     </div>
 </section>
 
@@ -263,7 +270,7 @@ function kf_datalist(string $id, array $items): string {
                 </div>
             </div>
             <div class="kantar-net-satir">
-                <span class="kantar-net-lbl">NET</span>
+                <span class="kantar-net-lbl">Tartım Net</span>
                 <span class="kantar-net-val" id="fisNetKg">—</span>
             </div>
         </div>
@@ -441,30 +448,35 @@ function _getBrut() {
 
 function _updateGrupCalc() {
     if (!_grupList) return;
-    var brutTotal  = _getBrut();
+    var tartimNet = _getBrut();           // tartım1 − tartım2
     var rows = _grupList.querySelectorAll('.grup-form-row');
 
-    // Toplam kasa → kasa başı brüt ağırlığı
+    // Toplam kasa (otomatik dağıtım için)
     var totKasa = 0;
     rows.forEach(function(r) { totKasa += parseNum(r.querySelector('.grup-kasa').value); });
-    var brutPerKasa = totKasa > 0 ? brutTotal / totKasa : 0;
+    var brutPerKasa = totKasa > 0 ? tartimNet / totKasa : 0;
 
     var totBrut = 0, totDara = 0, totNet = 0;
     rows.forEach(function(r) {
         var palet      = parseNum(r.querySelector('.grup-palet').value);
         var kasa       = parseNum(r.querySelector('.grup-kasa').value);
+        var manualBrut = parseNum(r.querySelector('.grup-brut').value);
         var ozelCb     = r.querySelector('.grup-ozel-cb');
         var isOzel     = ozelCb && ozelCb.checked;
         var kasaDaraU  = isOzel ? parseNum(r.querySelector('.grup-kasa-dara').value) : _getKasaDaraUnit();
         var paletDaraU = isOzel ? parseNum(r.querySelector('.grup-palet-dara').value) : _getPaletDaraUnit();
-        var brut  = kasa * brutPerKasa;
-        var dara  = palet * paletDaraU + kasa * kasaDaraU;
-        var net   = Math.max(0, brut - dara);
+        var isManual   = manualBrut > 0;
+        var brut       = isManual ? manualBrut : (kasa * brutPerKasa);
+        var dara       = palet * paletDaraU + kasa * kasaDaraU;
+        var net        = Math.max(0, brut - dara);
         totBrut += brut; totDara += dara; totNet += net;
-        r.querySelector('.gc-brut').textContent = fmtRound(brut) + ' kg';
+        var brutEl = r.querySelector('.gc-brut');
+        brutEl.textContent = fmtRound(brut) + ' kg';
+        brutEl.style.color = isManual ? 'var(--primary,#1d6cf0)' : '';
         r.querySelector('.gc-dara').textContent = fmtRound(dara) + ' kg';
         r.querySelector('.gc-net').textContent  = fmtRound(net)  + ' kg';
     });
+
     var sumEl = document.getElementById('grupSumRow');
     if (sumEl && rows.length > 1) {
         sumEl.style.display = '';
@@ -474,12 +486,34 @@ function _updateGrupCalc() {
     } else if (sumEl) {
         sumEl.style.display = 'none';
     }
+
+    // Sapma: toplam brüt vs tartım neti
+    var sapmaEl = document.getElementById('grupSapmaRow');
+    if (sapmaEl && rows.length > 0 && tartimNet > 0) {
+        var sapma = Math.round(totBrut) - Math.round(tartimNet);
+        if (Math.abs(sapma) >= 1) {
+            var sign = sapma > 0 ? '+' : '';
+            var cls  = sapma > 0 ? 'sapma-fazla' : 'sapma-eksik';
+            sapmaEl.style.display = '';
+            sapmaEl.innerHTML =
+                '<span class="grup-sapma-lbl">Tartım Neti: <strong>' + fmt(tartimNet) + ' kg</strong></span>' +
+                '<span class="grup-sapma-sep">·</span>' +
+                '<span class="grup-sapma-lbl">Toplam Brüt: <strong>' + fmtRound(totBrut) + ' kg</strong></span>' +
+                '<span class="grup-sapma-sep">·</span>' +
+                '<span class="grup-sapma-badge ' + cls + '">' + sign + sapma + ' kg sapma</span>';
+        } else {
+            sapmaEl.style.display = 'none';
+        }
+    } else if (sapmaEl) {
+        sapmaEl.style.display = 'none';
+    }
 }
 
-function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
+function _addGrupRow(ad, palet, kasa, kasaDara, paletDara, brutKg) {
     _grupSay++;
     var n = _grupSay;
     var isOzel = (parseNum(kasaDara) > 0 || parseNum(paletDara) > 0);
+    var brutVal = brutKg != null ? parseNum(brutKg) : 0;
     var adHtml = _firmaList.length
         ? _buildFirmaSelect('gruplar[' + n + '][grup_adi]', ad || '')
         : '<input type="text" name="gruplar[' + n + '][grup_adi]" class="grup-ad" placeholder="Firma / grup adı" value="' + esc(ad || '') + '">';
@@ -491,6 +525,7 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
             '<div class="grup-row-numfields">' +
                 '<label>Palet<input type="text" inputmode="numeric" name="gruplar[' + n + '][palet_sayisi]" class="num grup-palet" placeholder="0" value="' + (palet != null ? palet : '') + '"></label>' +
                 '<label>Kasa<input type="text" inputmode="numeric" name="gruplar[' + n + '][kasa_adedi]" class="num grup-kasa" placeholder="0" value="' + (kasa != null ? kasa : '') + '"></label>' +
+                '<label class="grup-brut-lbl" title="Boş bırakılırsa toplam tartım netinden otomatik hesaplanır">Brüt<input type="text" inputmode="decimal" name="gruplar[' + n + '][brut_kg]" class="num grup-brut" placeholder="Otomatik" value="' + (brutVal > 0 ? fmt(brutVal) : '') + '"></label>' +
                 '<label class="grup-ozel-lbl" title="Bu grup için farklı kasa/palet darası kullan">' +
                     '<input type="checkbox" class="grup-ozel-cb"' + (isOzel ? ' checked' : '') + '> Özel Dara' +
                 '</label>' +
@@ -540,6 +575,7 @@ function _addGrupRow(ad, palet, kasa, kasaDara, paletDara) {
     });
     row.querySelector('.grup-palet').addEventListener('input', _updateGrupCalc);
     row.querySelector('.grup-kasa').addEventListener('input', _updateGrupCalc);
+    row.querySelector('.grup-brut').addEventListener('input', _updateGrupCalc);
     kdInp.addEventListener('input', _updateGrupCalc);
     pdInp.addEventListener('input', _updateGrupCalc);
     _grupList.appendChild(row);
@@ -579,7 +615,7 @@ document.getElementById('addGrupBtn')?.addEventListener('click', function() { _a
     if (init.length) {
         _grupSection.style.display = '';
         _grupToggle.textContent = '🗂 Gruplandırmayı Kaldır';
-        init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi, g.kasa_dara_kg, g.palet_dara_kg); });
+        init.forEach(function(g) { _addGrupRow(g.grup_adi, g.palet_sayisi, g.kasa_adedi, g.kasa_dara_kg, g.palet_dara_kg, g.brut_kg); });
     }
 })();
 

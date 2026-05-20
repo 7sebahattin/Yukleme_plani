@@ -546,6 +546,7 @@ function render_flash(): void {
             $kg_cols = $pdo->query("SHOW COLUMNS FROM `kantar_gruplar`")->fetchAll(PDO::FETCH_COLUMN);
             if (!in_array('kasa_dara_kg',  $kg_cols)) $pdo->exec("ALTER TABLE `kantar_gruplar` ADD COLUMN `kasa_dara_kg`  DECIMAL(10,3) NOT NULL DEFAULT 0");
             if (!in_array('palet_dara_kg', $kg_cols)) $pdo->exec("ALTER TABLE `kantar_gruplar` ADD COLUMN `palet_dara_kg` DECIMAL(10,3) NOT NULL DEFAULT 0");
+            if (!in_array('brut_kg',       $kg_cols)) $pdo->exec("ALTER TABLE `kantar_gruplar` ADD COLUMN `brut_kg`       DECIMAL(12,3) NOT NULL DEFAULT 0");
         } catch (PDOException $e) {}
 
         // 4) Depo/Ürün tanımlarını normalize et + loading_pallets.depo normalize
