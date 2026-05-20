@@ -1109,7 +1109,7 @@ body.print-mode .topbar { display: none; }
 .kv-tartim-alibi { font-size: .8rem; color: var(--muted); margin-left: auto; }
 .kv-net-box {
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--primary); color: #fff;
+    background: #e85d04; color: #fff;
     border-radius: var(--radius);
     padding: 14px 18px;
 }

@@ -160,7 +160,7 @@ render_flash();
     .kv-tartim-alibi { font-size: 6pt; color: #666; }
 
     .kv-net-box {
-        background: #1a56db !important;
+        background: #e85d04 !important;
         color: #fff !important;
         padding: 4px 8px !important;
         margin-top: 4px !important;
@@ -340,7 +340,7 @@ render_flash();
                     <?php if ($dara_hesap > 0): ?>
                     <div class="kv-nd-box">
                         <div class="kv-nd-row"><span class="kv-nd-lbl">Brüt (Tartım Neti)</span><strong class="kv-nd-val"><?= fmt_kg($brut_hesap) ?> kg</strong></div>
-                        <div class="kv-nd-row"><span class="kv-nd-lbl">Dara</span><strong class="kv-nd-val"><?= fmt_kg($dara_hesap) ?> kg</strong></div>
+                        <div class="kv-nd-row"><span class="kv-nd-lbl">Kasa+Palet Dara</span><strong class="kv-nd-val"><?= fmt_kg($dara_hesap) ?> kg</strong></div>
                         <div class="kv-nd-row kv-nd-net"><span class="kv-nd-lbl">Net KG</span><strong class="kv-nd-val kv-nd-net-val"><?= fmt_kg($net_hesap) ?> kg</strong></div>
                     </div>
                     <?php endif; ?>

@@ -134,17 +134,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     } else {
         // Sistem kalan KG'sini POST filtrelerine göre sunucuda hesapla
         // Kantar (ham giriş) — parti no kantar tarafını etkilemez
-        $pk_where = [];  $pk_p = [];
-        if ($pf_tarih_bas !== '') { $pk_where[] = "giris_tarih >= ?";   $pk_p[] = $pf_tarih_bas; }
-        if ($pf_tarih_bit !== '') { $pk_where[] = "giris_tarih <= ?";   $pk_p[] = $pf_tarih_bit . ' 23:59:59'; }
-        if ($pf_firma     !== '') { $pk_where[] = "firma_adi LIKE ?";   $pk_p[] = '%' . $pf_firma . '%'; }
-        if ($pf_urun      !== '') { $pk_where[] = "malin_cinsi LIKE ?"; $pk_p[] = '%' . $pf_urun . '%'; }
-        if ($pf_depo      !== '') { $pk_where[] = "depo LIKE ?";        $pk_p[] = '%' . $pf_depo . '%'; }
-        $pk_where_sql = $pk_where ? 'WHERE ' . implode(' AND ', $pk_where) : '';
+        // Base kantar conditions (tarih/urun/depo — both grouped and ungrouped share these)
+        $pk_base = []; $pk_base_p = [];
+        if ($pf_tarih_bas !== '') { $pk_base[] = "kf.giris_tarih >= ?";   $pk_base_p[] = $pf_tarih_bas; }
+        if ($pf_tarih_bit !== '') { $pk_base[] = "kf.giris_tarih <= ?";   $pk_base_p[] = $pf_tarih_bit . ' 23:59:59'; }
+        if ($pf_urun      !== '') { $pk_base[] = "kf.malin_cinsi LIKE ?"; $pk_base_p[] = '%' . $pf_urun . '%'; }
+        if ($pf_depo      !== '') { $pk_base[] = "kf.depo LIKE ?";        $pk_base_p[] = '%' . $pf_depo . '%'; }
+        // Grouped: firma filter on grup_adi
+        $pk_gk = $pk_base; $pk_gk_p = $pk_base_p;
+        if ($pf_firma !== '') { $pk_gk[] = "kg.grup_adi LIKE ?"; $pk_gk_p[] = '%' . $pf_firma . '%'; }
+        $pk_gk_sql = $pk_gk ? 'WHERE ' . implode(' AND ', $pk_gk) : '';
+        // Ungrouped: firma filter on firma_adi + no kantar_gruplar rows
+        $pk_uk = $pk_base; $pk_uk_p = $pk_base_p;
+        if ($pf_firma !== '') { $pk_uk[] = "kf.firma_adi LIKE ?"; $pk_uk_p[] = '%' . $pf_firma . '%'; }
+        $pk_uk[] = "NOT EXISTS (SELECT 1 FROM kantar_gruplar kgx WHERE kgx.fis_id = kf.id)";
+        $pk_uk_sql = 'WHERE ' . implode(' AND ', $pk_uk);
 
-        $st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0))),0) FROM kantar_fisleri $pk_where_sql");
-        $st->execute($pk_p);
+        $st = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN tot.total_kasa > 0 THEN GREATEST(0,
+            COALESCE(kf.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+            - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+            - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi
+            ) ELSE 0 END),0)
+            FROM kantar_gruplar kg
+            JOIN kantar_fisleri kf ON kg.fis_id=kf.id
+            JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
+            $pk_gk_sql");
+        $st->execute($pk_gk_p);
         $post_gelen = (float)$st->fetchColumn();
+        $st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0,
+            COALESCE(kf.net_kg,0)-COALESCE(kf.kasa_sayisi,0)*COALESCE(kf.kasa_dara,0)-COALESCE(kf.palet_sayisi,0)*COALESCE(kf.palet_dara,0)
+            )),0) FROM kantar_fisleri kf $pk_uk_sql");
+        $st->execute($pk_uk_p);
+        $post_gelen += (float)$st->fetchColumn();
 
         $pl_where  = ["lr.type IN ('yukleme','cikma')"];  $pl_p = [];
         if ($pf_tarih_bas !== '') { $pl_where[] = "lr.tarih >= ?";        $pl_p[] = $pf_tarih_bas; }
@@ -212,9 +233,36 @@ if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' 
 // NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
-$st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0))),0) FROM kantar_fisleri $k_where_sql");
-$st->execute($k_params);
+// Grouped/ungrouped split: firma filter differs (grup_adi vs firma_adi)
+$gk_base = []; $gk_base_p = [];
+if ($f_tarih_bas !== '') { $gk_base[] = "kf.giris_tarih >= ?";   $gk_base_p[] = $f_tarih_bas; }
+if ($f_tarih_bit !== '') { $gk_base[] = "kf.giris_tarih <= ?";   $gk_base_p[] = $f_tarih_bit . ' 23:59:59'; }
+if ($f_urun      !== '') { $gk_base[] = "kf.malin_cinsi LIKE ?"; $gk_base_p[] = '%' . $f_urun . '%'; }
+if ($f_depo      !== '') { $gk_base[] = "kf.depo LIKE ?";        $gk_base_p[] = '%' . $f_depo . '%'; }
+$gk_conds = $gk_base; $gk_p = $gk_base_p;
+if ($f_firma !== '') { $gk_conds[] = "kg.grup_adi LIKE ?"; $gk_p[] = '%' . $f_firma . '%'; }
+$gk_sql = $gk_conds ? 'WHERE ' . implode(' AND ', $gk_conds) : '';
+$uk_conds = $gk_base; $uk_p = $gk_base_p;
+if ($f_firma !== '') { $uk_conds[] = "kf.firma_adi LIKE ?"; $uk_p[] = '%' . $f_firma . '%'; }
+$uk_conds[] = "NOT EXISTS (SELECT 1 FROM kantar_gruplar kgx WHERE kgx.fis_id = kf.id)";
+$uk_sql = 'WHERE ' . implode(' AND ', $uk_conds);
+
+$st = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN tot.total_kasa > 0 THEN GREATEST(0,
+    COALESCE(kf.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+    - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+    - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi
+    ) ELSE 0 END),0)
+    FROM kantar_gruplar kg
+    JOIN kantar_fisleri kf ON kg.fis_id=kf.id
+    JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
+    $gk_sql");
+$st->execute($gk_p);
 $gelen_kg = (float)$st->fetchColumn();
+$st = $pdo->prepare("SELECT COALESCE(SUM(GREATEST(0,
+    COALESCE(kf.net_kg,0)-COALESCE(kf.kasa_sayisi,0)*COALESCE(kf.kasa_dara,0)-COALESCE(kf.palet_sayisi,0)*COALESCE(kf.palet_dara,0)
+    )),0) FROM kantar_fisleri kf $uk_sql");
+$st->execute($uk_p);
+$gelen_kg += (float)$st->fetchColumn();
 
 // ── Çıkışlar (loading_pallets + loading_records) ───────────
 $l_where  = ["lr.type IN ('yukleme','cikma')"];
@@ -247,18 +295,40 @@ $kalan_kg      = $gelen_kg - $yukleme_kg - $fire_cikma_kg;
 $sayim_fark    = $sayim_kg !== null ? ($sayim_kg - $kalan_kg) : null;
 
 // ── Hareket satırları ─────────────────────────────────────
+// Grouped kantar rows: one row per group, firma = grup_adi
 $st = $pdo->prepare("SELECT
-    giris_tarih AS tarih, 'gelen' AS yon, firma_adi AS firma,
-    malin_cinsi AS urun, depo AS depo, '' AS bolge, '' AS parti,
-    net_kg AS brut_kg,
-    (COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) + COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0)) AS dara_kg,
-    GREATEST(0, net_kg - COALESCE(kasa_sayisi,0) * COALESCE(kasa_dara,0) - COALESCE(palet_sayisi,0) * COALESCE(palet_dara,0)) AS net_kg,
-    id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
-    CONCAT('KNT-', fis_no) AS ref_no
-  FROM kantar_fisleri $k_where_sql
-  ORDER BY giris_tarih DESC, id DESC LIMIT 300");
-$st->execute($k_params);
+    kf.giris_tarih AS tarih, 'gelen' AS yon, kg.grup_adi AS firma,
+    kf.malin_cinsi AS urun, kf.depo AS depo, '' AS bolge, '' AS parti,
+    kf.net_kg AS brut_kg,
+    (COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+     + COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi) AS dara_kg,
+    CASE WHEN tot.total_kasa > 0 THEN GREATEST(0,
+        COALESCE(kf.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+        - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+        - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi
+    ) ELSE 0 END AS net_kg,
+    kf.id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
+    CONCAT('KNT-', kf.fis_no) AS ref_no
+  FROM kantar_gruplar kg
+  JOIN kantar_fisleri kf ON kg.fis_id=kf.id
+  JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
+  $gk_sql
+  ORDER BY kf.giris_tarih DESC, kf.id DESC, kg.sira ASC LIMIT 300");
+$st->execute($gk_p);
 $kantar_rows = $st->fetchAll();
+// Ungrouped kantar rows: single row per fiş, firma = firma_adi
+$st = $pdo->prepare("SELECT
+    kf.giris_tarih AS tarih, 'gelen' AS yon, kf.firma_adi AS firma,
+    kf.malin_cinsi AS urun, kf.depo AS depo, '' AS bolge, '' AS parti,
+    kf.net_kg AS brut_kg,
+    (COALESCE(kf.kasa_sayisi,0)*COALESCE(kf.kasa_dara,0)+COALESCE(kf.palet_sayisi,0)*COALESCE(kf.palet_dara,0)) AS dara_kg,
+    GREATEST(0, COALESCE(kf.net_kg,0)-COALESCE(kf.kasa_sayisi,0)*COALESCE(kf.kasa_dara,0)-COALESCE(kf.palet_sayisi,0)*COALESCE(kf.palet_dara,0)) AS net_kg,
+    kf.id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
+    CONCAT('KNT-', kf.fis_no) AS ref_no
+  FROM kantar_fisleri kf $uk_sql
+  ORDER BY kf.giris_tarih DESC, kf.id DESC LIMIT 300");
+$st->execute($uk_p);
+$kantar_rows = array_merge($kantar_rows, $st->fetchAll());
 
 $st = $pdo->prepare("SELECT
     lr.tarih AS tarih, lr.type AS yon, lr.firma AS firma,
@@ -354,6 +424,23 @@ $check_defs = [
     ["SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')",
      [], 'Tanımsız firma adı — kantar grubu', 'orta', 'kantar.php', 'Kantar',
      'Grup firma adı tanımlı firma listesinde yok; stok firma filtresiyle eşleşmeyebilir.'],
+    ["SELECT COUNT(*) FROM (
+        SELECT kg.fis_id,
+            GREATEST(0, MAX(COALESCE(kf.net_kg,0))
+                - MAX(COALESCE(kf.kasa_sayisi,0))*MAX(COALESCE(kf.kasa_dara,0))
+                - MAX(COALESCE(kf.palet_sayisi,0))*MAX(COALESCE(kf.palet_dara,0))) AS fis_net,
+            SUM(CASE WHEN tot.total_kasa>0 THEN GREATEST(0,
+                COALESCE(kf.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+                - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+                - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi
+            ) ELSE 0 END) AS grup_total
+        FROM kantar_gruplar kg
+        JOIN kantar_fisleri kf ON kg.fis_id=kf.id
+        JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
+        GROUP BY kg.fis_id
+     ) _t WHERE ABS(_t.fis_net - _t.grup_total) > 0.5",
+     [], 'Gruplandırma toplamı uyuşmazlığı', 'kritik', 'kantar.php', 'Kantar',
+     'Grup net kg toplamı fiş ürün netinden 0.5 kg\'dan fazla sapıyor; stok hesabı tutarsız.'],
 ];
 
 // ── Özet sayılar ─────────────────────────────────────────
@@ -455,6 +542,43 @@ $qd_defs = [
       ORDER BY kg.id DESC LIMIT 20",
      [],
      'grup', 'grup_adi'],
+    ['Gruplandırma toplamı uyuşmazlığı', 'kritik', 'Kantar',
+     "SELECT COUNT(*) FROM (
+        SELECT kg.fis_id,
+            GREATEST(0, MAX(COALESCE(kf.net_kg,0))
+                - MAX(COALESCE(kf.kasa_sayisi,0))*MAX(COALESCE(kf.kasa_dara,0))
+                - MAX(COALESCE(kf.palet_sayisi,0))*MAX(COALESCE(kf.palet_dara,0))) AS fis_net,
+            SUM(CASE WHEN tot.total_kasa>0 THEN GREATEST(0,
+                COALESCE(kf.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+                - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf.kasa_dara,0))*kg.kasa_adedi
+                - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf.palet_dara,0))*kg.palet_sayisi
+            ) ELSE 0 END) AS grup_total
+        FROM kantar_gruplar kg
+        JOIN kantar_fisleri kf ON kg.fis_id=kf.id
+        JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
+        GROUP BY kg.fis_id
+     ) _t WHERE ABS(_t.fis_net - _t.grup_total) > 0.5", [],
+     "SELECT kf.id, kf.giris_tarih AS tarih, kf.firma_adi AS firma, kf.malin_cinsi AS urun,
+             kf.depo, kf.net_kg, CONCAT('kantar_edit.php?id=', kf.id) AS fix_link
+      FROM (
+        SELECT kg.fis_id,
+            GREATEST(0, MAX(COALESCE(kf2.net_kg,0))
+                - MAX(COALESCE(kf2.kasa_sayisi,0))*MAX(COALESCE(kf2.kasa_dara,0))
+                - MAX(COALESCE(kf2.palet_sayisi,0))*MAX(COALESCE(kf2.palet_dara,0))) AS fis_net,
+            SUM(CASE WHEN tot.total_kasa>0 THEN GREATEST(0,
+                COALESCE(kf2.net_kg,0)*kg.kasa_adedi/tot.total_kasa
+                - COALESCE(NULLIF(kg.kasa_dara_kg,0),COALESCE(kf2.kasa_dara,0))*kg.kasa_adedi
+                - COALESCE(NULLIF(kg.palet_dara_kg,0),COALESCE(kf2.palet_dara,0))*kg.palet_sayisi
+            ) ELSE 0 END) AS grup_total
+        FROM kantar_gruplar kg
+        JOIN kantar_fisleri kf2 ON kg.fis_id=kf2.id
+        JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf2.id
+        GROUP BY kg.fis_id
+      ) _t
+      JOIN kantar_fisleri kf ON kf.id=_t.fis_id
+      WHERE ABS(_t.fis_net - _t.grup_total) > 0.5
+      ORDER BY kf.id DESC LIMIT 20", [],
+     null, null],
 ];
 
 foreach ($qd_defs as [$qdlabel, $qdsev, $qdurlabel, $cnt_sql, $cnt_params, $rows_sql, $rows_params, $fix_type, $fix_field]) {
