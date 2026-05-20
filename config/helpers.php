@@ -721,7 +721,7 @@ function render_flash(): void {
                     $st->execute([$type, $name]);
                     $id = $st->fetchColumn();
                     if ($id) return (int)$id;
-                    $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, dara_kg, is_active) VALUES (?,?,?,0,1)")
+                    $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
                         ->execute([$type, $name, $unit_dara]);
                     return (int)$pdo->lastInsertId();
                 };
