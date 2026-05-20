@@ -706,6 +706,217 @@ function render_flash(): void {
             INDEX `idx_sc_depo`    (`depo`(80)),
             INDEX `idx_sc_parti`   (`parti_no`(40))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // 10) ÇIKMALAR-3 veri aktarımı (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            $imp_chk = (int)$pdo->query(
+                "SELECT COUNT(*) FROM `loading_records` WHERE `fatura_no` = 'IMPORT_CIKMALAR_3'"
+            )->fetchColumn();
+
+            if ($imp_chk === 0) {
+                // Materyal tanımlarını güvence altına al ve ID'lerini al
+                $imp_def = function(PDO $pdo, string $type, string $name, float $unit_dara): int {
+                    $st = $pdo->prepare("SELECT id FROM material_definitions WHERE type=? AND LOWER(name)=LOWER(?) LIMIT 1");
+                    $st->execute([$type, $name]);
+                    $id = $st->fetchColumn();
+                    if ($id) return (int)$id;
+                    $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, dara_kg, is_active) VALUES (?,?,?,0,1)")
+                        ->execute([$type, $name, $unit_dara]);
+                    return (int)$pdo->lastInsertId();
+                };
+
+                $imp_ids = [
+                    'std_palet'  => $imp_def($pdo, 'palet_tipi', 'Standart Palet',  30.0),
+                    'ihr_palet'  => $imp_def($pdo, 'palet_tipi', 'İhracat Palet',   18.0),
+                    'c10'        => $imp_def($pdo, 'kasa_cinsi', 'C-10 Mavi',        0.48),
+                    'k65'        => $imp_def($pdo, 'kasa_cinsi', 'Plastik (K-65)',   2.0),
+                    'ayakli'     => $imp_def($pdo, 'kasa_cinsi', 'Ayaklı Kasa',      0.5),
+                ];
+                $imp_def($pdo, 'firma', 'Karaman Cihat', 0.0);
+
+                // [excel_row, tarih, palet_tipi_name, palet_unit_dara, kasa_cinsi_name, kasa_adeti, kasa_unit_dara, brut_kg, cikis_turu]
+                // palet_tipi_name='' → no palet (row 114)
+                $imp_rows = [
+                    [  2,'2026-05-03','Standart Palet',30.0,'Plastik (K-65)', 36,2.0, 1000.0,'ÇIKMA'],
+                    [  3,'2026-05-03','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  715.0,'ÇIKMA'],
+                    [  4,'2026-05-03','Standart Palet',30.0,'Plastik (K-65)', 36,2.0, 1000.0,'ÇIKMA'],
+                    [  5,'2026-05-03','Standart Palet',30.0,'Plastik (K-65)', 21,2.0,  607.0,'ÇIKMA'],
+                    [  6,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  745.0,'ÇIKMA'],
+                    [  7,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  681.0,'ÇIKMA'],
+                    [  8,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 20,2.0,  448.0,'ÇIKMA'],
+                    [  9,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  669.0,'ÇIKMA'],
+                    [ 10,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 16,2.0,  387.0,'ÇIKMA'],
+                    [ 11,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 21,2.0,  476.0,'ÇIKMA'],
+                    [ 12,'2026-05-06','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  738.0,'ÇIKMA'],
+                    [ 13,'2026-05-06','İhracat Palet', 18.0,'C-10 Mavi',      59,0.48, 574.0,'KÜÇÜK BOY (2.)'],
+                    [ 14,'2026-05-07','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  826.0,'ÇIKMA'],
+                    [ 15,'2026-05-07','Standart Palet',30.0,'Plastik (K-65)', 24,2.0,  564.0,'ÇIKMA'],
+                    [ 16,'2026-05-07','İhracat Palet', 18.0,'C-10 Mavi',      57,0.48, 594.0,'KÜÇÜK BOY (2.)'],
+                    [ 17,'2026-05-08','Standart Palet',30.0,'Plastik (K-65)', 29,2.0,  620.0,'ÇIKMA'],
+                    [ 18,'2026-05-08','Standart Palet',30.0,'Plastik (K-65)', 34,2.0,  724.0,'ÇIKMA'],
+                    [ 19,'2026-05-08','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48,1033.0,'KÜÇÜK BOY (2.)'],
+                    [ 20,'2026-05-08','İhracat Palet', 18.0,'C-10 Mavi',      14,0.48, 144.0,'KÜÇÜK BOY (2.)'],
+                    [ 21,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  710.0,'ÇIKMA'],
+                    [ 22,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  803.0,'ÇIKMA'],
+                    [ 23,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  780.0,'ÇIKMA'],
+                    [ 24,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  790.0,'ÇIKMA'],
+                    [ 25,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  787.0,'ÇIKMA'],
+                    [ 26,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 42,2.0,  851.0,'ÇIKMA'],
+                    [ 27,'2026-05-09','Standart Palet',30.0,'Plastik (K-65)', 28,2.0,  628.0,'ÇIKMA'],
+                    [ 28,'2026-05-10','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48, 998.0,'KÜÇÜK BOY (2.)'],
+                    [ 29,'2026-05-10','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48, 995.0,'KÜÇÜK BOY (2.)'],
+                    [ 30,'2026-05-10','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48, 997.0,'KÜÇÜK BOY (2.)'],
+                    [ 31,'2026-05-10','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  785.0,'ÇIKMA'],
+                    [ 32,'2026-05-10','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  764.0,'ÇIKMA'],
+                    [ 33,'2026-05-10','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  788.0,'ÇIKMA'],
+                    [ 34,'2026-05-10','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  777.0,'ÇIKMA'],
+                    [ 35,'2026-05-10','Standart Palet',30.0,'Plastik (K-65)', 42,2.0,  858.0,'ÇIKMA'],
+                    [ 36,'2026-05-10','İhracat Palet', 18.0,'C-10 Mavi',      28,0.48, 282.0,'KÜÇÜK BOY (2.)'],
+                    [ 37,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 37,2.0,  735.0,'ÇIKMA'],
+                    [ 38,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  710.0,'ÇIKMA'],
+                    [ 39,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  666.0,'ÇIKMA'],
+                    [ 40,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 32,2.0,  655.0,'ÇIKMA'],
+                    [ 41,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 24,2.0,  540.0,'ÇIKMA'],
+                    [ 42,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 19,2.0,  391.0,'ÇIKMA'],
+                    [ 43,'2026-05-11','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  905.0,'ÇIKMA'],
+                    [ 44,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 18,2.0,  479.0,'KÜÇÜK BOY (2.)'],
+                    [ 45,'2026-05-12','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48,1033.0,'KÜÇÜK BOY (2.)'],
+                    [ 46,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  707.0,'ÇIKMA'],
+                    [ 47,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  690.0,'ÇIKMA'],
+                    [ 48,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 34,2.0,  706.0,'ÇIKMA'],
+                    [ 49,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 24,2.0,  593.0,'ÇIKMA'],
+                    [ 50,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 21,2.0,  455.0,'ÇIKMA'],
+                    [ 51,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 32,2.0,  679.0,'ÇIKMA'],
+                    [ 52,'2026-05-12','İhracat Palet', 18.0,'C-10 Mavi',      75,0.48, 777.0,'KÜÇÜK BOY (2.)'],
+                    [ 53,'2026-05-12','Standart Palet',30.0,'Plastik (K-65)', 14,2.0,  364.0,'KÜÇÜK BOY (2.)'],
+                    [ 54,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  784.0,'ÇIKMA'],
+                    [ 55,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  749.0,'ÇIKMA'],
+                    [ 56,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  635.0,'ÇIKMA'],
+                    [ 57,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  740.0,'ÇIKMA'],
+                    [ 58,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  776.0,'ÇIKMA'],
+                    [ 59,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  626.0,'ÇIKMA'],
+                    [ 60,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 36,2.0,  775.0,'ÇIKMA'],
+                    [ 61,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 23,2.0,  564.0,'ÇIKMA'],
+                    [ 62,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 17,2.0,  367.0,'ÇIKMA'],
+                    [ 63,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 21,2.0,  461.0,'ÇIKMA'],
+                    [ 64,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)',  9,2.0,  200.0,'ÇIKMA'],
+                    [ 65,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  676.0,'ÇIKMA'],
+                    [ 66,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 23,2.0,  586.0,'KÜÇÜK BOY (2.)'],
+                    [ 67,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 13,2.0,  317.0,'KÜÇÜK BOY (2.)'],
+                    [ 68,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  638.0,'ÇIKMA'],
+                    [ 69,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  677.0,'ÇIKMA'],
+                    [ 70,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  663.0,'ÇIKMA'],
+                    [ 71,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 34,2.0,  743.0,'ÇIKMA'],
+                    [ 72,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 31,2.0,  688.0,'ÇIKMA'],
+                    [ 73,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 15,2.0,  358.0,'ÇIKMA'],
+                    [ 74,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 21,2.0,  475.0,'ÇIKMA'],
+                    [ 75,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  698.0,'KÜÇÜK BOY (2.)'],
+                    [ 76,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 30,2.0,  690.0,'KÜÇÜK BOY (2.)'],
+                    [ 77,'2026-05-13','Standart Palet',30.0,'Plastik (K-65)', 18,2.0,  367.0,'KÜÇÜK BOY (2.)'],
+                    [ 78,'2026-05-15','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1064.0,'ÇIKMA'],
+                    [ 79,'2026-05-15','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1076.0,'ÇIKMA'],
+                    [ 80,'2026-05-15','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1041.0,'ÇIKMA'],
+                    [ 81,'2026-05-15','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1048.0,'ÇIKMA'],
+                    [ 82,'2026-05-16','İhracat Palet', 18.0,'C-10 Mavi',     100,0.48,1038.0,'KÜÇÜK BOY (2.)'],
+                    [ 83,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1053.0,'ÇIKMA'],
+                    [ 84,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1054.0,'ÇIKMA'],
+                    [ 85,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1020.0,'ÇIKMA'],
+                    [ 86,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1060.0,'ÇIKMA'],
+                    [ 87,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1049.0,'ÇIKMA'],
+                    [ 88,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1063.0,'ÇIKMA'],
+                    [ 89,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1058.0,'ÇIKMA'],
+                    [ 90,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1031.0,'ÇIKMA'],
+                    [ 91,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1030.0,'ÇIKMA'],
+                    [ 92,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1036.0,'ÇIKMA'],
+                    [ 93,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1021.0,'ÇIKMA'],
+                    [ 94,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1011.0,'ÇIKMA'],
+                    [ 95,'2026-05-16','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1017.0,'ÇIKMA'],
+                    [ 96,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1004.0,'KÜÇÜK BOY (2.)'],
+                    [ 97,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1033.0,'ÇIKMA'],
+                    [ 98,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1014.0,'KÜÇÜK BOY (2.)'],
+                    [ 99,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1102.0,'ÇIKMA'],
+                    [100,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1103.0,'ÇIKMA'],
+                    [101,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1110.0,'ÇIKMA'],
+                    [102,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1109.0,'ÇIKMA'],
+                    [103,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1084.0,'ÇIKMA'],
+                    [104,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1094.0,'ÇIKMA'],
+                    [105,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1098.0,'ÇIKMA'],
+                    [106,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1066.0,'ÇIKMA'],
+                    [107,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1012.0,'ÇIKMA'],
+                    [108,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1019.0,'ÇIKMA'],
+                    [109,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1036.0,'ÇIKMA'],
+                    [110,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1051.0,'ÇIKMA'],
+                    [111,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   110,0.5, 1150.0,'ÇIKMA'],
+                    [112,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   110,0.5, 1157.0,'ÇIKMA'],
+                    [113,'2026-05-18','İhracat Palet', 18.0,'Ayaklı Kasa',   100,0.5, 1038.0,'ÇIKMA'],
+                    [114,'2026-05-18','',               0.0,'Plastik (K-65)',158,2.0, 3643.0,'MEYSU'],
+                ];
+
+                // Palet/kasa adı → material_definition ID eşlemesi
+                $imp_palet_map = [
+                    'Standart Palet' => $imp_ids['std_palet'],
+                    'İhracat Palet'  => $imp_ids['ihr_palet'],
+                ];
+                $imp_kasa_map = [
+                    'Plastik (K-65)' => $imp_ids['k65'],
+                    'C-10 Mavi'      => $imp_ids['c10'],
+                    'Ayaklı Kasa'    => $imp_ids['ayakli'],
+                ];
+
+                // Grupla: (tarih + cikis_turu) → bir loading_record
+                $imp_groups = [];
+                foreach ($imp_rows as $r) {
+                    $key = $r[1] . '|' . $r[8]; // tarih|cikis_turu
+                    if (!isset($imp_groups[$key])) {
+                        $imp_groups[$key] = ['tarih' => $r[1], 'tur' => $r[8], 'rows' => []];
+                    }
+                    $imp_groups[$key]['rows'][] = $r;
+                }
+
+                $pdo->beginTransaction();
+
+                $st_rec = $pdo->prepare(
+                    "INSERT INTO loading_records (type, firma, urun, tarih, cikis_nedeni, fatura_no)
+                     VALUES ('cikma', 'Karaman Cihat', '', ?, ?, 'IMPORT_CIKMALAR_3')"
+                );
+                $st_pal = $pdo->prepare(
+                    "INSERT INTO loading_pallets
+                     (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
+                      kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+                );
+
+                foreach ($imp_groups as $g) {
+                    $st_rec->execute([$g['tarih'], $g['tur']]);
+                    $rec_id = (int)$pdo->lastInsertId();
+                    foreach ($g['rows'] as $i => $r) {
+                        // r: [excel_row, tarih, palet_name, palet_dara, kasa_name, kasa_cnt, kasa_dara, brut, tur]
+                        $palet_name = $r[2];
+                        $palet_dara = (float)$r[3];
+                        $kasa_name  = $r[4];
+                        $kasa_cnt   = (int)$r[5];
+                        $kasa_dara  = (float)$r[6];
+                        $brut       = (float)$r[7];
+
+                        $palet_id = $palet_name !== '' ? ($imp_palet_map[$palet_name] ?? null) : null;
+                        $kasa_id  = $kasa_name  !== '' ? ($imp_kasa_map[$kasa_name]  ?? null) : null;
+
+                        $dara = round($kasa_cnt * $kasa_dara + ($palet_id ? $palet_dara : 0.0), 3);
+                        $net  = round(max(0.0, $brut - $dara), 3);
+
+                        $st_pal->execute([
+                            $rec_id, (string)$r[0], $kasa_cnt, '', $brut, $dara, $net,
+                            $kasa_id, $palet_id, '', 'Karaman Cihat', $i,
+                        ]);
+                    }
+                }
+
+                $pdo->commit();
+            }
+        } catch (PDOException $_imp_e) {
+            try { if ($pdo->inTransaction()) $pdo->rollBack(); } catch (Exception $_) {}
+        }
     } catch (PDOException $e) {}
 })();
 
@@ -834,5 +1045,5 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
 
 // ── İzin Verilen Çıkış Nedenleri ─────────────────────────
 function cikis_nedeni_listesi(): array {
-    return ['Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
+    return ['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
 }
