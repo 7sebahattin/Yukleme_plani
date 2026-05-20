@@ -41,14 +41,6 @@ render_header('Ana Sayfa');
 render_flash();
 ?>
 
-<div class="home-hero">
-    <div class="home-hero-icon">🌿</div>
-    <div>
-        <h1 class="home-hero-title">Asya Fresh</h1>
-        <p class="home-hero-sub">Ne yapmak istersiniz?</p>
-    </div>
-</div>
-
 <div class="home-grid">
 
     <a href="records.php" class="home-card">
@@ -85,17 +77,6 @@ render_flash();
         <div class="home-card-title">Raporlar</div>
     </a>
 
-    <a href="hesap.php" class="home-card">
-        <div class="home-card-icon" style="background:#fff3e0">💰</div>
-        <div class="home-card-title">Hesap</div>
-        <?php if ($hesap_bekleyen > 0): ?>
-        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$hesap_bekleyen ?></div>
-        <?php endif; ?>
-        <?php if ($hesap_bugun > 0): ?>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Bugün: <?= number_format((float)$hesap_bugun,2,',','.') ?>₺</div>
-        <?php endif; ?>
-    </a>
-
     <a href="stok.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f5e9">📦</div>
         <div class="home-card-title">Stok</div>
@@ -108,6 +89,17 @@ render_flash();
             <span style="color:var(--danger)"> ↓<?= fmt_kg($stok_cikan_bugun) ?>kg</span>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
+    </a>
+
+    <a href="hesap.php" class="home-card">
+        <div class="home-card-icon" style="background:#fff3e0">💰</div>
+        <div class="home-card-title">Hesap</div>
+        <?php if ($hesap_bekleyen > 0): ?>
+        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$hesap_bekleyen ?></div>
+        <?php endif; ?>
+        <?php if ($hesap_bugun > 0): ?>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Bugün: <?= number_format((float)$hesap_bugun,2,',','.') ?>₺</div>
         <?php endif; ?>
     </a>
 
