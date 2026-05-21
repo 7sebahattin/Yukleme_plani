@@ -368,9 +368,9 @@
                     <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>
                     <div class="pc-stats">
                         <span><strong${kasaWarn ? ' class="pc-warn"' : ''}>${p.kasa_adeti}</strong> kasa</span>
-                        <span>Brüt <strong${brutWarn ? ' class="pc-warn"' : ''}>${fmtKg(br)}</strong></span>
-                        <span>Dara <strong>${fmtKg(dara)}</strong></span>
-                        <span>Net <strong class="strong">${fmtKg(net)}</strong></span>
+                        <span>Brüt <strong${brutWarn ? ' class="pc-warn"' : ''}>${fmtKg(Math.round(br))}</strong></span>
+                        <span>Dara <strong>${fmtKg(Math.round(dara))}</strong></span>
+                        <span>Net <strong class="strong">${fmtKg(Math.round(net))}</strong></span>
                     </div>
                     ${metaParts.length ? `<div class="pc-meta">${escHtml(metaParts.join(' · '))}${matCount ? ' · +' + matCount + ' malzeme' : ''}</div>` : ''}
                 </div>
@@ -414,7 +414,7 @@
             totNet  += Math.max(0, br - dara);
         });
         document.getElementById('totKasa').textContent = String(totKasa);
-        document.getElementById('totBrut').textContent = fmtKg(totBrut);
+        document.getElementById('totBrut').textContent = fmtKg(Math.round(totBrut));
         document.getElementById('totDara').textContent = fmtKg(Math.round(totDara));
         document.getElementById('totNet').textContent  = fmtKg(Math.round(totNet));
     }
@@ -550,8 +550,8 @@
             const palUnit  = parseNum(ptSel.options[ptSel.selectedIndex]?.dataset.unit || 0);
             const dara     = ps * palUnit + ka * kasaUnit;
             const net      = Math.max(0, parseNum(tr.querySelector('[data-key=brut_kg]').value) - dara);
-            tr.querySelector('.tp-dara').textContent = fmtKg(dara);
-            tr.querySelector('.tp-net').textContent  = fmtKg(net);
+            tr.querySelector('.tp-dara').textContent = fmtKg(Math.round(dara));
+            tr.querySelector('.tp-net').textContent  = fmtKg(Math.round(net));
         }
 
         /* Satır no güncelle (1'den başlar) */
