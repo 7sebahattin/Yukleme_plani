@@ -520,6 +520,7 @@
             if (rows.length) {
                 const last = rows[rows.length - 1];
                 return {
+                    palet_sayisi:  last.querySelector('[data-key=palet_sayisi]').value,
                     kasa_adeti:    last.querySelector('[data-key=kasa_adeti]').value,
                     kasa_cinsi_id: last.querySelector('[data-key=kasa_cinsi_id]').value,
                     palet_tipi_id: last.querySelector('[data-key=palet_tipi_id]').value,
@@ -532,12 +533,13 @@
 
         /* Satır dara/net hesapla */
         function calcRow(tr) {
+            const ps       = Math.max(1, parseInt2(tr.querySelector('[data-key=palet_sayisi]').value) || 1);
             const ka       = parseInt2(tr.querySelector('[data-key=kasa_adeti]').value);
             const kcSel    = tr.querySelector('[data-key=kasa_cinsi_id]');
             const ptSel    = tr.querySelector('[data-key=palet_tipi_id]');
             const kasaUnit = parseNum(kcSel.options[kcSel.selectedIndex]?.dataset.unit || 0);
             const palUnit  = parseNum(ptSel.options[ptSel.selectedIndex]?.dataset.unit || 0);
-            const dara     = ka * kasaUnit + palUnit;
+            const dara     = ps * palUnit + ka * kasaUnit;
             const net      = Math.max(0, parseNum(tr.querySelector('[data-key=brut_kg]').value) - dara);
             tr.querySelector('.tp-dara').textContent = fmtKg(dara);
             tr.querySelector('.tp-net').textContent  = fmtKg(net);
@@ -565,6 +567,17 @@
             noSpan.textContent = rowCount + 1;
             noTd.appendChild(noSpan);
             tr.appendChild(noTd);
+
+            // Palet Sayisi
+            const psTd = document.createElement('td');
+            const psInp = document.createElement('input');
+            psInp.type = 'number'; psInp.inputMode = 'numeric'; psInp.min = '1';
+            psInp.dataset.key = 'palet_sayisi';
+            psInp.className = 'tp-cell';
+            psInp.style.width = '52px';
+            psInp.value = (from.palet_sayisi != null && from.palet_sayisi !== '') ? from.palet_sayisi : '1';
+            psTd.appendChild(psInp);
+            tr.appendChild(psTd);
 
             // Kasa Adeti
             const kaTd = document.createElement('td');
@@ -644,7 +657,7 @@
             silTd.appendChild(silBtn);
             tr.appendChild(silTd);
 
-            [kaInp, brutInp, kcSel, ptSel].forEach(el => {
+            [psInp, kaInp, brutInp, kcSel, ptSel].forEach(el => {
                 el.addEventListener('input',  () => calcRow(tr));
                 el.addEventListener('change', () => calcRow(tr));
             });
@@ -707,18 +720,58 @@
         /* Kaydet: pallets[] tablodaki verilerle güncelle */
         kaydetBtn.addEventListener('click', () => {
             pallets = [];
-            tbody.querySelectorAll('tr').forEach((tr, i) => {
+            tbody.querySelectorAll('tr').forEach((tr, _i) => {
                 const oIdx = tr.dataset.origIdx !== undefined ? parseInt(tr.dataset.origIdx, 10) : -1;
-                const base = (oIdx >= 0 && origPallets[oIdx])
-                    ? Object.assign({}, origPallets[oIdx])
-                    : { palet_no: String(i + 1), size: '', urun_cinsi: '', materials: [] };
-                base.kasa_adeti    = parseInt2(tr.querySelector('[data-key=kasa_adeti]').value);
-                base.brut_kg       = parseNum(tr.querySelector('[data-key=brut_kg]').value);
-                base.kasa_cinsi_id = tr.querySelector('[data-key=kasa_cinsi_id]').value;
-                base.palet_tipi_id = tr.querySelector('[data-key=palet_tipi_id]').value;
-                base.depo          = tr.querySelector('[data-key=depo]').value;
-                base.urun_cinsi    = tr.querySelector('[data-key=urun_cinsi]').value.trim() || base.urun_cinsi || '';
-                pallets.push(base);
+                const origBase = (oIdx >= 0 && origPallets[oIdx])
+                    ? Object.assign({}, origPallets[oIdx], {
+                        materials: Array.isArray(origPallets[oIdx].materials)
+                            ? origPallets[oIdx].materials.map(m => Object.assign({}, m)) : []
+                      })
+                    : { size: '', urun_cinsi: '', materials: [] };
+
+                const ps            = Math.max(1, parseInt2(tr.querySelector('[data-key=palet_sayisi]').value) || 1);
+                const totalKasa     = parseInt2(tr.querySelector('[data-key=kasa_adeti]').value);
+                const totalBrut     = parseNum(tr.querySelector('[data-key=brut_kg]').value);
+                const kasa_cinsi_id = tr.querySelector('[data-key=kasa_cinsi_id]').value;
+                const palet_tipi_id = tr.querySelector('[data-key=palet_tipi_id]').value;
+                const depo          = tr.querySelector('[data-key=depo]').value;
+                const urun_cinsi    = tr.querySelector('[data-key=urun_cinsi]').value.trim() || origBase.urun_cinsi || '';
+
+                if (ps <= 1) {
+                    origBase.palet_no      = String(pallets.length + 1);
+                    origBase.kasa_adeti    = totalKasa;
+                    origBase.brut_kg       = totalBrut;
+                    origBase.kasa_cinsi_id = kasa_cinsi_id;
+                    origBase.palet_tipi_id = palet_tipi_id;
+                    origBase.depo          = depo;
+                    origBase.urun_cinsi    = urun_cinsi;
+                    pallets.push(origBase);
+                } else {
+                    // Palet sayısı > 1: kasa ve brütü N satıra dağıt
+                    const baseKasa  = Math.floor(totalKasa / ps);
+                    const extraRows = totalKasa - baseKasa * ps; // ilk N satır +1 kasa alır
+                    let brutAccum   = 0;
+                    const brutPerPalet = Math.round(totalBrut / ps * 1000) / 1000;
+                    for (let j = 0; j < ps; j++) {
+                        const isLast   = (j === ps - 1);
+                        const thisKasa = (j < extraRows) ? baseKasa + 1 : baseKasa;
+                        const thisBrut = isLast
+                            ? Math.round((totalBrut - brutAccum) * 1000) / 1000
+                            : brutPerPalet;
+                        if (!isLast) brutAccum += brutPerPalet;
+                        pallets.push({
+                            palet_no:      String(pallets.length + 1),
+                            size:          '',
+                            urun_cinsi:    urun_cinsi,
+                            materials:     [],
+                            kasa_adeti:    thisKasa,
+                            brut_kg:       thisBrut,
+                            kasa_cinsi_id: kasa_cinsi_id,
+                            palet_tipi_id: palet_tipi_id,
+                            depo:          depo,
+                        });
+                    }
+                }
             });
             renderCards();
             recomputeTotals();
