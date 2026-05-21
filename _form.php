@@ -243,6 +243,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <thead>
                     <tr>
                         <th>#</th>
+                        <th>Palet</th>
                         <th>Kasa Adeti</th>
                         <th>Brüt KG</th>
                         <th>Kasa Cinsi</th>
