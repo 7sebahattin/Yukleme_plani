@@ -475,10 +475,15 @@ function _updateGrupCalc() {
     var tartimNet = _getBrut();           // tartım1 − tartım2
     var rows = _grupList.querySelectorAll('.grup-form-row');
 
-    // Toplam kasa (otomatik dağıtım için)
-    var totKasa = 0;
-    rows.forEach(function(r) { totKasa += parseNum(r.querySelector('.grup-kasa').value); });
-    var brutPerKasa = totKasa > 0 ? tartimNet / totKasa : 0;
+    // İki geçiş: önce manuel brütleri ve oto kasaları topla
+    var manualBrutSum = 0, autoKasaSum = 0;
+    rows.forEach(function(r) {
+        var mb = parseNum(r.querySelector('.grup-brut').value);
+        if (mb > 0) { manualBrutSum += mb; }
+        else        { autoKasaSum  += parseNum(r.querySelector('.grup-kasa').value); }
+    });
+    var autoBrutPool = Math.max(0, tartimNet - manualBrutSum);
+    var brutPerKasa  = autoKasaSum > 0 ? autoBrutPool / autoKasaSum : 0;
 
     var totBrut = 0, totDara = 0, totNet = 0;
     rows.forEach(function(r) {
