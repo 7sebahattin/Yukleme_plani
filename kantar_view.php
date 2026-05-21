@@ -31,7 +31,7 @@ $brut_hesap   = $net;
 $dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
 $net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
 $has_foto     = !empty($fis['foto_data']);
-$st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
+$st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
 $st_g->execute([$id]);
 $gruplar = $st_g->fetchAll() ?: [];
 
@@ -351,7 +351,16 @@ render_flash();
             <?php if (!empty($gruplar)):
                 $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
                 $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
-                $brut_per_kasa  = $grup_tot_kasa > 0 ? $net / $grup_tot_kasa : 0.0;
+                // Two-pass: manual brüt groups first, then distribute remainder to auto groups
+                $manual_brut_sum = 0.0;
+                $auto_kasa_sum   = 0;
+                foreach ($gruplar as $g) {
+                    $gb = (float)($g['brut_kg'] ?? 0);
+                    if ($gb > 0) { $manual_brut_sum += $gb; }
+                    else         { $auto_kasa_sum   += (int)$g['kasa_adedi']; }
+                }
+                $auto_brut_pool = max(0.0, $net - $manual_brut_sum);
+                $brut_per_kasa  = $auto_kasa_sum > 0 ? $auto_brut_pool / $auto_kasa_sum : 0.0;
                 $grup_tot_brut  = 0.0;
                 $grup_tot_dara  = 0.0;
                 $grup_tot_net   = 0.0;
@@ -359,7 +368,8 @@ render_flash();
                 foreach ($gruplar as $g) {
                     $gp          = (int)$g['palet_sayisi'];
                     $gk          = (int)$g['kasa_adedi'];
-                    $gbrut       = $gk * $brut_per_kasa;
+                    $gb          = (float)($g['brut_kg'] ?? 0);
+                    $gbrut       = $gb > 0 ? $gb : ($gk * $brut_per_kasa);
                     $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $kasa_dara_u;
                     $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $palet_dara_u;
                     $gdara       = $gp * $gpalet_dara + $gk * $gkasa_dara;
@@ -368,7 +378,8 @@ render_flash();
                     $grup_tot_dara += $gdara;
                     $grup_tot_net  += $gnet;
                     $grup_rows[] = ['ad' => $g['grup_adi'], 'palet' => $gp, 'kasa' => $gk,
-                                    'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet];
+                                    'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet,
+                                    'is_manual' => $gb > 0];
                 }
             ?>
             <!-- Gruplandırma -->
