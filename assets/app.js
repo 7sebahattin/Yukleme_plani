@@ -76,6 +76,13 @@
         });
         return s;
     }
+    /* Sayıyı input-uyumlu formata çevir: virgül ondalık, binler ayracı yok ("1045,273")
+       PHP num() noktayı binler ayracı sanır — hidden input'ta bu format gerekli */
+    function fmtInput(n) {
+        if (!n || !isFinite(n)) return '';
+        const s = (Math.round(n * 1000) / 1000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+        return s.replace('.', ',');
+    }
     function roundHalf(n) { return Math.round(n); }
     function parseNum(v) {
         if (v === null || v === undefined || v === '') return 0;
@@ -228,7 +235,7 @@
             pmPaletNo.value  = p.palet_no || '';
             pmKasaAdeti.value = p.kasa_adeti !== '' && p.kasa_adeti != null ? p.kasa_adeti : '';
             pmSize.value     = p.size || '';
-            pmBrutKg.value   = p.brut_kg !== '' && p.brut_kg != null ? parseNum(p.brut_kg) || '' : '';
+            pmBrutKg.value   = (p.brut_kg > 0) ? fmtInput(p.brut_kg) : '';
             pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, p.kasa_cinsi_id, '-- kasa cinsi seçiniz --');
             pmPaletTipi.innerHTML = buildOptions(PALET_LIST, p.palet_tipi_id, '-- palet tipi seçiniz --');
             pmDepo.innerHTML = buildTextOptions(DEPO_LIST, p.depo || '', '-- Depo seçiniz --');
@@ -420,7 +427,9 @@
             const n = idx + 1;
             const scalar = {
                 palet_no: p.palet_no, kasa_adeti: p.kasa_adeti, size: p.size,
-                brut_kg: p.brut_kg, kasa_cinsi_id: p.kasa_cinsi_id,
+                // fmtInput: PHP num() nokta=binler ayracı sayar; virgüllü gönder
+                brut_kg: (p.brut_kg > 0) ? fmtInput(p.brut_kg) : '',
+                kasa_cinsi_id: p.kasa_cinsi_id,
                 palet_tipi_id: p.palet_tipi_id, urun_cinsi: p.urun_cinsi, depo: p.depo,
             };
             Object.keys(scalar).forEach(k => {
@@ -595,7 +604,7 @@
             brutInp.type = 'text'; brutInp.inputMode = 'decimal';
             brutInp.dataset.key = 'brut_kg';
             brutInp.className = 'tp-cell';
-            brutInp.value = from.brut_kg != null && from.brut_kg !== '' ? (parseNum(from.brut_kg) || '') : '';
+            brutInp.value = (from.brut_kg > 0) ? fmtInput(from.brut_kg) : '';
             brutTd.appendChild(brutInp);
             tr.appendChild(brutTd);
 
