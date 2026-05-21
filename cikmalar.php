@@ -41,7 +41,7 @@ render_header('Çıkmalar');
 
 <div class="page-head">
     <div>
-        <h1>Çıkmalar</h1>
+        <h1 style="color:#9b1c1c">Çıkmalar</h1>
         <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
     </div>
     <a href="cikma_create.php" class="btn btn-primary btn-lg">+ Yeni Çıkma</a>

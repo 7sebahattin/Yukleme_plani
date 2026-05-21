@@ -54,7 +54,7 @@ render_header('Kayıtlar');
 
 <div class="page-head">
     <div>
-        <h1>Yükleme Kayıtları</h1>
+        <h1 style="color:#166534">Yükleme Kayıtları</h1>
         <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
     </div>
     <a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
