@@ -962,6 +962,7 @@
                 palet_tipi_id: p.palet_tipi_id || '',
                 urun_cinsi:    p.urun_cinsi    || '',
                 depo:          p.depo          || '',
+                islendi:       !!p.islendi,
                 materials: Array.isArray(p.materials) ? p.materials.map(m => ({
                     material_id: m.material_id,
                     quantity:    m.quantity,
