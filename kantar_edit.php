@@ -5,6 +5,31 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
+if (!function_exists('_parse_kp_rows')) {
+    function _parse_kp_rows(mixed $raw, array $kasa_list, array $palet_list): array {
+        $rows = []; $kasa_tot = 0.0; $palet_tot = 0.0;
+        $first_kasa = ''; $first_palet = '';
+        $tot_kasa_say = 0; $tot_palet_say = 0;
+        if (is_array($raw)) {
+            foreach ($raw as $row) {
+                $tip   = in_array($row['tip'] ?? '', ['kasa','palet']) ? $row['tip'] : 'kasa';
+                $cinsi = trim((string)($row['cinsi'] ?? ''));
+                $sayisi = max(0, (int)($row['sayisi'] ?? 0));
+                if ($cinsi === '' || $sayisi <= 0) continue;
+                $birim = 0.0;
+                $list  = $tip === 'kasa' ? $kasa_list : $palet_list;
+                foreach ($list as $kd) { if ($kd['name'] === $cinsi) { $birim = (float)$kd['unit_dara_kg']; break; } }
+                $rows[] = ['tip' => $tip, 'cinsi' => $cinsi, 'sayisi' => $sayisi, 'birim_dara_kg' => $birim];
+                if ($tip === 'kasa') { $kasa_tot += $sayisi * $birim; $tot_kasa_say += $sayisi; if ($first_kasa === '') $first_kasa = $cinsi; }
+                else                 { $palet_tot += $sayisi * $birim; $tot_palet_say += $sayisi; if ($first_palet === '') $first_palet = $cinsi; }
+            }
+        }
+        $kasa_unit  = $tot_kasa_say  > 0 ? round($kasa_tot  / $tot_kasa_say,  3) : 0.0;
+        $palet_unit = $tot_palet_say > 0 ? round($palet_tot / $tot_palet_say, 3) : 0.0;
+        return [$rows, $kasa_tot, $palet_tot, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_unit, $palet_unit];
+    }
+}
+
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if ($id <= 0) {
     set_flash('error', 'Geçersiz fiş.');
@@ -30,7 +55,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fields = [
         'fis_no', 'plaka', 'firma_adi', 'giris_tarih', 'cikis_tarih', 'operator_adi',
         'malin_cinsi', 'geldigi_yer', 'gittigi_yer',
-        'palet_sayisi', 'palet_cinsi', 'kasa_cinsi', 'kasa_sayisi',
         'aciklama', 'depo', 'parti_no',
         'tartim1', 'alibi1', 'tartim2', 'alibi2',
     ];
@@ -65,10 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $t2  = num($fis['tartim2']);
         $net = max(0, $t1 - $t2);
 
-        $kasa_dara_val  = 0.0;
-        $palet_dara_val = 0.0;
-        foreach ($kasa_list  as $kd) { if ($kd['name'] === $fis['kasa_cinsi'])  { $kasa_dara_val  = (float)$kd['unit_dara_kg']; break; } }
-        foreach ($palet_list as $kd) { if ($kd['name'] === $fis['palet_cinsi']) { $palet_dara_val = (float)$kd['unit_dara_kg']; break; } }
+        [$kp_rows, $kasa_tot_dara, $palet_tot_dara, $first_kasa, $first_palet, $tot_kasa_say, $tot_palet_say, $kasa_dara_val, $palet_dara_val] = _parse_kp_rows($_POST['kp_rows'] ?? [], $kasa_list, $palet_list);
 
         $foto_raw = trim((string)($_POST['foto_data'] ?? ''));
         $foto_sql = '';
@@ -90,10 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fis['malin_cinsi'],
             $fis['geldigi_yer'],
             $fis['gittigi_yer'],
-            (int)$fis['palet_sayisi'],
-            $fis['palet_cinsi'],
-            $fis['kasa_cinsi'],
-            (int)$fis['kasa_sayisi'],
+            $tot_palet_say,
+            $first_palet,
+            $first_kasa,
+            $tot_kasa_say,
             $fis['aciklama'],
             $fis['depo'],
             $fis['parti_no'],
@@ -104,6 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $net,
             $kasa_dara_val,
             $palet_dara_val,
+            $kasa_tot_dara,
+            $palet_tot_dara,
         ];
         if ($foto_val !== null) $params[] = $foto_val;
         $params[] = $id;
@@ -115,10 +138,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              palet_sayisi=?, palet_cinsi=?, kasa_cinsi=?, kasa_sayisi=?,
              aciklama=?, depo=?, parti_no=?,
              tartim1=?, alibi1=?, tartim2=?, alibi2=?, net_kg=?,
-             kasa_dara=?, palet_dara=?
+             kasa_dara=?, palet_dara=?, kasa_dara_total=?, palet_dara_total=?
              {$foto_sql}
              WHERE id=?"
         )->execute($params);
+
+        // Kasa/palet satırları: sil + yeniden ekle
+        db()->prepare("DELETE FROM kantar_kasa_palet_satir WHERE fis_id=?")->execute([$id]);
+        if (!empty($kp_rows)) {
+            $kp_st = db()->prepare("INSERT INTO kantar_kasa_palet_satir (fis_id, tip, cinsi, sayisi, birim_dara_kg) VALUES (?,?,?,?,?)");
+            foreach ($kp_rows as $row) {
+                $kp_st->execute([$id, $row['tip'], $row['cinsi'], $row['sayisi'], $row['birim_dara_kg']]);
+            }
+        }
 
         // Grupları güncelle (mevcut sil → yeniden ekle)
         db()->prepare("DELETE FROM kantar_gruplar WHERE fis_id = ?")->execute([$id]);

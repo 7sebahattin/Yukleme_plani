@@ -557,6 +557,24 @@ function render_flash(): void {
             }
         } catch (PDOException $e) {}
 
+        // kantar_kasa_palet_satir — çok-tip kasa/palet desteği
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `kantar_kasa_palet_satir` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `fis_id`        INT NOT NULL,
+                `tip`           VARCHAR(10) NOT NULL DEFAULT 'kasa',
+                `cinsi`         VARCHAR(150) NOT NULL DEFAULT '',
+                `sayisi`        INT NOT NULL DEFAULT 0,
+                `birim_dara_kg` DECIMAL(10,3) NOT NULL DEFAULT 0,
+                INDEX `idx_kps_fis` (`fis_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $e) {}
+        try {
+            $kf_cols2 = $pdo->query("SHOW COLUMNS FROM `kantar_fisleri`")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('kasa_dara_total',  $kf_cols2)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `kasa_dara_total`  DECIMAL(12,3) NOT NULL DEFAULT 0");
+            if (!in_array('palet_dara_total', $kf_cols2)) $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `palet_dara_total` DECIMAL(12,3) NOT NULL DEFAULT 0");
+        } catch (PDOException $e) {}
+
         // 4) Depo/Ürün tanımlarını normalize et + loading_pallets.depo normalize
         try {
             $norm = function(string $s): string {

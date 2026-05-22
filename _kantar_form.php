@@ -52,6 +52,30 @@ if ($fis_id > 0) {
 } else {
     $_grup_list = [];
 }
+
+// Mevcut kasa/palet satırları (edit: yeni tablodan; fallback: eski tek alanlar)
+$_kp_rows = [];
+if ($fis_id > 0) {
+    try {
+        $_kp_st = db()->prepare("SELECT tip, cinsi, sayisi, birim_dara_kg FROM kantar_kasa_palet_satir WHERE fis_id=? ORDER BY id");
+        $_kp_st->execute([$fis_id]);
+        $_kp_rows = array_map(fn($r) => ['tip' => $r['tip'], 'cinsi' => $r['cinsi'], 'sayisi' => (int)$r['sayisi'], 'birim_dara_kg' => (float)$r['birim_dara_kg']], $_kp_st->fetchAll());
+    } catch (PDOException $e) { $_kp_rows = []; }
+    if (empty($_kp_rows)) {
+        if ((int)($fis['kasa_sayisi'] ?? 0) > 0 || !empty($fis['kasa_cinsi'])) {
+            $_kp_rows[] = ['tip' => 'kasa', 'cinsi' => $fis['kasa_cinsi'] ?? '', 'sayisi' => (int)($fis['kasa_sayisi'] ?? 0), 'birim_dara_kg' => (float)($fis['kasa_dara'] ?? 0)];
+        }
+        if ((int)($fis['palet_sayisi'] ?? 0) > 0 || !empty($fis['palet_cinsi'])) {
+            $_kp_rows[] = ['tip' => 'palet', 'cinsi' => $fis['palet_cinsi'] ?? '', 'sayisi' => (int)($fis['palet_sayisi'] ?? 0), 'birim_dara_kg' => (float)($fis['palet_dara'] ?? 0)];
+        }
+    }
+} elseif (!empty($_POST['kp_rows']) && is_array($_POST['kp_rows'])) {
+    foreach ($_POST['kp_rows'] as $row) {
+        $t = in_array($row['tip'] ?? '', ['kasa', 'palet']) ? $row['tip'] : 'kasa';
+        $_kp_rows[] = ['tip' => $t, 'cinsi' => trim((string)($row['cinsi'] ?? '')), 'sayisi' => (int)($row['sayisi'] ?? 0), 'birim_dara_kg' => 0];
+    }
+}
+
 // Otomatik tamamlama / seçim listeleri
 $_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
 $_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
@@ -168,38 +192,24 @@ function kf_datalist(string $id, array $items): string {
                 <small class="muted"><a href="definitions.php?type=depo">Tanımlar → Depolar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
-            <label>Palet Sayısı
-                <input type="text" inputmode="numeric" name="palet_sayisi" id="kantarPaletSayisi"
-                       class="num" value="<?= h($fis['palet_sayisi'] ?? '') ?>" placeholder="Palet">
-            </label>
-            <label>Palet Cinsi
-                <select name="palet_cinsi" id="kantarPaletCinsi">
-                    <option value="">— Seçin —</option>
-                    <?php foreach ($palet_list as $kd): ?>
-                    <option value="<?= h($kd['name']) ?>"
-                            data-dara="<?= (float)$kd['unit_dara_kg'] ?>"
-                            <?= ($fis['palet_cinsi'] ?? '') === $kd['name'] ? 'selected' : '' ?>>
-                        <?= h($kd['name']) ?><?= $kd['unit_dara_kg'] > 0 ? ' (' . fmt_kg($kd['unit_dara_kg']) . ' kg)' : '' ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label>Kasa Sayısı
-                <input type="text" inputmode="numeric" name="kasa_sayisi" id="kantarKasaSayisi"
-                       class="num" value="<?= h($fis['kasa_sayisi'] ?? '') ?>" placeholder="Kasa">
-            </label>
-            <label>Kasa Cinsi
-                <select name="kasa_cinsi" id="kantarKasaCinsi">
-                    <option value="">— Seçin —</option>
-                    <?php foreach ($kasa_list as $kd): ?>
-                    <option value="<?= h($kd['name']) ?>"
-                            data-dara="<?= (float)$kd['unit_dara_kg'] ?>"
-                            <?= ($fis['kasa_cinsi'] ?? '') === $kd['name'] ? 'selected' : '' ?>>
-                        <?= h($kd['name']) ?><?= $kd['unit_dara_kg'] > 0 ? ' (' . fmt_kg($kd['unit_dara_kg']) . ' kg)' : '' ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
+            <!-- Palet Türleri -->
+            <div class="span-2 kp-section">
+                <div class="kp-section-head">
+                    <span class="kp-section-title">Palet Türleri</span>
+                    <button type="button" id="addPaletRowBtn" class="btn btn-sm">+ Palet Ekle</button>
+                </div>
+                <div id="paletRowList" class="kp-row-list"></div>
+                <div class="kp-total-row">Palet Dara Toplamı: <strong id="paletDaraTotal">—</strong></div>
+            </div>
+            <!-- Kasa Türleri -->
+            <div class="span-2 kp-section">
+                <div class="kp-section-head">
+                    <span class="kp-section-title">Kasa Türleri</span>
+                    <button type="button" id="addKasaRowBtn" class="btn btn-sm">+ Kasa Ekle</button>
+                </div>
+                <div id="kasaRowList" class="kp-row-list"></div>
+                <div class="kp-total-row">Kasa Dara Toplamı: <strong id="kasaDaraTotal">—</strong></div>
+            </div>
             <label>Depo <span class="req">*</span> <small class="muted">(stok için)</small>
                 <?php if (!empty($_depo_names_kf)): ?>
                 <select name="depo"><?= kf_sel_opt($fis['depo'] ?? '', $_depo_names_kf, '— Seçin —') ?></select>
@@ -247,6 +257,9 @@ function kf_datalist(string $id, array $items): string {
     array_values($_all_firma), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="grupInitData" type="application/json"><?= json_encode(
     array_values($_grup_list), JSON_UNESCAPED_UNICODE) ?></script>
+<script id="kasaListData"  type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $kasa_list),  JSON_UNESCAPED_UNICODE) ?></script>
+<script id="paletListData" type="application/json"><?= json_encode(array_map(fn($k) => ['name' => $k['name'], 'dara' => (float)$k['unit_dara_kg']], $palet_list), JSON_UNESCAPED_UNICODE) ?></script>
+<script id="kpInitData"    type="application/json"><?= json_encode(array_values($_kp_rows), JSON_UNESCAPED_UNICODE) ?></script>
 
 <!-- ══════════════ TARTIMLAR ══════════════ -->
 <section class="card">
@@ -462,8 +475,10 @@ var _grupSection = document.getElementById('grupSection');
 var _grupToggle  = document.getElementById('grupToggleBtn');
 var _grupList    = document.getElementById('grupFormList');
 
-function _getKasaDaraUnit()  { return getOptDara(document.getElementById('kantarKasaCinsi')); }
-function _getPaletDaraUnit() { return getOptDara(document.getElementById('kantarPaletCinsi')); }
+var _effKasaDaraU  = 0;
+var _effPaletDaraU = 0;
+function _getKasaDaraUnit()  { return _effKasaDaraU; }
+function _getPaletDaraUnit() { return _effPaletDaraU; }
 function _getBrut() {
     var t1 = parseNum(document.getElementById('tartim1').value);
     var t2 = parseNum(document.getElementById('tartim2').value);
@@ -628,14 +643,10 @@ if (_grupToggle) {
 }
 document.getElementById('addGrupBtn')?.addEventListener('click', function() { _addGrupRow(); });
 
-// Tartım ve cinsi değişince canlı güncelle
+// Tartım değişince grupları da güncelle
 ['tartim1','tartim2'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', _updateGrupCalc);
-});
-['kantarKasaCinsi','kantarPaletCinsi'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) el.addEventListener('change', _updateGrupCalc);
 });
 
 // Edit modunda DB'den gelen grupları yükle
@@ -667,13 +678,13 @@ document.getElementById('tartim2').addEventListener('input', function() { calcNe
 calcNet();
 
 /* ─── Brüt / Dara / Net canlı hesap ─── */
+var kantarKasaDaraTotal  = 0;
+var kantarPaletDaraTotal = 0;
 function updateLiveCalc() {
     var t1  = parseNum(document.getElementById('tartim1').value);
     var t2  = parseNum(document.getElementById('tartim2').value);
     var brut = t1 - t2;
-    var kasaSay  = parseNum((document.getElementById('kantarKasaSayisi')  || {}).value || 0);
-    var paletSay = parseNum((document.getElementById('kantarPaletSayisi') || {}).value || 0);
-    var dara = kasaSay * kantarKasaDaraKg + paletSay * kantarPaletDaraKg;
+    var dara = kantarKasaDaraTotal + kantarPaletDaraTotal;
     var net  = brut - dara;
     var calcEl = document.getElementById('kantarNetHesap');
     if (brut > 0 && dara > 0) {
@@ -871,32 +882,100 @@ imgInput.addEventListener('change', function() { handleFileSelect(this); });
 if (imgInputGallery) imgInputGallery.addEventListener('change', function() { handleFileSelect(this); });
 
 /* ══════════════════════════════════════════
+   KASA / PALET ÇOK-SATIR
+   ══════════════════════════════════════════ */
+var _kpCount = 0;
+var _kasaTotSayisi = 0, _paletTotSayisi = 0;
+var _kasaListData  = JSON.parse((document.getElementById('kasaListData')  || {}).textContent || '[]');
+var _paletListData = JSON.parse((document.getElementById('paletListData') || {}).textContent || '[]');
+
+function _buildKpSelect(tip, selectedVal, name) {
+    var list = tip === 'kasa' ? _kasaListData : _paletListData;
+    var html = '<select name="' + name + '" class="kp-cinsi"><option value="">— seç —</option>';
+    list.forEach(function(item) {
+        html += '<option value="' + esc(item.name) + '" data-dara="' + item.dara + '"' +
+                (item.name === (selectedVal || '') ? ' selected' : '') + '>' +
+                esc(item.name) + (item.dara > 0 ? ' (' + fmt(item.dara) + ' kg)' : '') + '</option>';
+    });
+    return html + '</select>';
+}
+
+function _addKpRow(tip, cinsi, sayisi) {
+    _kpCount++;
+    var n = _kpCount;
+    var div = document.createElement('div');
+    div.className = 'kp-row';
+    div.innerHTML =
+        '<input type="hidden" name="kp_rows[' + n + '][tip]" value="' + esc(tip) + '">' +
+        _buildKpSelect(tip, cinsi, 'kp_rows[' + n + '][cinsi]') +
+        '<input type="text" inputmode="numeric" name="kp_rows[' + n + '][sayisi]" class="num kp-sayisi" placeholder="Adet" value="' + esc(sayisi != null ? String(sayisi) : '') + '">' +
+        '<span class="kp-calc">× <span class="kp-birim-val">0</span> kg = <strong class="kp-toplam-val">0 kg</strong></span>' +
+        '<button type="button" class="kp-del-btn" title="Sil">✕</button>';
+    var targetList = tip === 'palet' ? document.getElementById('paletRowList') : document.getElementById('kasaRowList');
+    if (!targetList) return;
+    targetList.appendChild(div);
+    var sel     = div.querySelector('.kp-cinsi');
+    var sayInp  = div.querySelector('.kp-sayisi');
+    var birimEl = div.querySelector('.kp-birim-val');
+    var totEl   = div.querySelector('.kp-toplam-val');
+    function updateKpRow() {
+        var opt  = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
+        var dara = opt ? (parseFloat(opt.getAttribute('data-dara') || 0) || 0) : 0;
+        var say  = parseInt(sayInp.value, 10) || 0;
+        birimEl.textContent = fmt(dara);
+        totEl.textContent   = fmtRound(say * dara) + ' kg';
+        _computeKpTotals();
+    }
+    sel.addEventListener('change', updateKpRow);
+    sayInp.addEventListener('input', updateKpRow);
+    div.querySelector('.kp-del-btn').addEventListener('click', function() { div.remove(); _computeKpTotals(); });
+    updateKpRow();
+}
+
+function _computeKpTotals() {
+    var kd = 0, ks = 0, pd = 0, ps = 0;
+    document.querySelectorAll('#kasaRowList .kp-row').forEach(function(row) {
+        var sel = row.querySelector('.kp-cinsi');
+        var opt = sel && sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
+        var dara = opt ? (parseFloat(opt.getAttribute('data-dara') || 0) || 0) : 0;
+        var say  = parseInt(row.querySelector('.kp-sayisi').value, 10) || 0;
+        kd += say * dara; ks += say;
+    });
+    document.querySelectorAll('#paletRowList .kp-row').forEach(function(row) {
+        var sel = row.querySelector('.kp-cinsi');
+        var opt = sel && sel.selectedIndex > 0 ? sel.options[sel.selectedIndex] : null;
+        var dara = opt ? (parseFloat(opt.getAttribute('data-dara') || 0) || 0) : 0;
+        var say  = parseInt(row.querySelector('.kp-sayisi').value, 10) || 0;
+        pd += say * dara; ps += say;
+    });
+    kantarKasaDaraTotal  = kd; kantarPaletDaraTotal = pd;
+    _kasaTotSayisi = ks;  _paletTotSayisi = ps;
+    _effKasaDaraU  = ks > 0 ? kd / ks : 0;
+    _effPaletDaraU = ps > 0 ? pd / ps : 0;
+    var kEl = document.getElementById('kasaDaraTotal');
+    var pEl = document.getElementById('paletDaraTotal');
+    if (kEl) kEl.textContent = fmtRound(kd) + ' kg';
+    if (pEl) pEl.textContent = fmtRound(pd) + ' kg';
+    updateLiveCalc();
+    _updateGrupCalc();
+}
+
+document.getElementById('addKasaRowBtn')?.addEventListener('click',  function() { _addKpRow('kasa'); });
+document.getElementById('addPaletRowBtn')?.addEventListener('click', function() { _addKpRow('palet'); });
+
+(function() {
+    var init = JSON.parse((document.getElementById('kpInitData') || {}).textContent || '[]');
+    init.forEach(function(r) { _addKpRow(r.tip, r.cinsi, r.sayisi); });
+    if (!document.querySelectorAll('#kasaRowList  .kp-row').length) _addKpRow('kasa');
+    if (!document.querySelectorAll('#paletRowList .kp-row').length) _addKpRow('palet');
+    _computeKpTotals();
+})();
+
+/* ══════════════════════════════════════════
    PALET/KASA HESAPLAMA MODAL
    ══════════════════════════════════════════ */
-var kantarKasaDaraKg  = 0;
-var kantarPaletDaraKg = 0;
 var mGrupSay = 0;
 var mLastCalc = { palet: 0, kasa: 0 };
-
-var kasaCinsiSel  = document.getElementById('kantarKasaCinsi');
-var paletCinsiSel = document.getElementById('kantarPaletCinsi');
-
-function getOptDara(sel) {
-    if (!sel || sel.selectedIndex < 0) return 0;
-    return parseFloat(sel.options[sel.selectedIndex].getAttribute('data-dara') || 0) || 0;
-}
-if (kasaCinsiSel) {
-    kasaCinsiSel.addEventListener('change', function() { kantarKasaDaraKg = getOptDara(this); updateLiveCalc(); });
-    kantarKasaDaraKg = getOptDara(kasaCinsiSel);
-}
-if (paletCinsiSel) {
-    paletCinsiSel.addEventListener('change', function() { kantarPaletDaraKg = getOptDara(this); updateLiveCalc(); });
-    kantarPaletDaraKg = getOptDara(paletCinsiSel);
-}
-var _kasaSayEl  = document.getElementById('kantarKasaSayisi');
-var _paletSayEl = document.getElementById('kantarPaletSayisi');
-if (_kasaSayEl)  _kasaSayEl.addEventListener('input',  updateLiveCalc);
-if (_paletSayEl) _paletSayEl.addEventListener('input', updateLiveCalc);
 updateLiveCalc();
 
 function addModalGrup(ad, palet, kasa) {
@@ -949,12 +1028,9 @@ function openHesaplaModal() {
     var net = t1 - t2;
     if (net > 0) document.getElementById('mToplamBrut').value = fmt(net);
 
-    var paletEl = document.getElementById('kantarPaletSayisi');
-    var kasaEl  = document.getElementById('kantarKasaSayisi');
-    if (paletEl && paletEl.value) document.getElementById('mToplamPalet').value = paletEl.value;
-
-    if (kantarKasaDaraKg  > 0) document.getElementById('mKasaDara').value  = fmt(kantarKasaDaraKg);
-    if (kantarPaletDaraKg > 0) document.getElementById('mPaletDara').value = fmt(kantarPaletDaraKg);
+    if (_paletTotSayisi > 0) document.getElementById('mToplamPalet').value = String(_paletTotSayisi);
+    if (_effKasaDaraU  > 0) document.getElementById('mKasaDara').value  = fmt(_effKasaDaraU);
+    if (_effPaletDaraU > 0) document.getElementById('mPaletDara').value = fmt(_effPaletDaraU);
 
     if (!document.getElementById('mGrupList').children.length) {
         addModalGrup(); addModalGrup();
@@ -1078,11 +1154,6 @@ document.getElementById('mHesaplaBtn').addEventListener('click', function() {
 });
 
 document.getElementById('mIsleBtn').addEventListener('click', function() {
-    var paletEl = document.getElementById('kantarPaletSayisi');
-    var kasaEl  = document.getElementById('kantarKasaSayisi');
-    if (paletEl && mLastCalc.palet > 0) paletEl.value = Math.round(mLastCalc.palet);
-    if (kasaEl  && mLastCalc.kasa  > 0) kasaEl.value  = Math.round(mLastCalc.kasa);
-    updateLiveCalc();
     closeHesaplaModal();
 });
 

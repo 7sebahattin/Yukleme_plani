@@ -23,13 +23,28 @@ $t1  = (float)($fis['tartim1'] ?? 0);
 $t2  = (float)($fis['tartim2'] ?? 0);
 $net = max(0.0, $t1 - $t2);
 
-$kasa_say     = (int)($fis['kasa_sayisi']  ?? 0);
-$palet_say    = (int)($fis['palet_sayisi'] ?? 0);
-$kasa_dara_u  = (float)($fis['kasa_dara']  ?? 0);
-$palet_dara_u = (float)($fis['palet_dara'] ?? 0);
-$brut_hesap   = $net;
-$dara_hesap   = $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
-$net_hesap    = max(0.0, $brut_hesap - $dara_hesap);
+$kasa_say          = (int)($fis['kasa_sayisi']      ?? 0);
+$palet_say         = (int)($fis['palet_sayisi']     ?? 0);
+$kasa_dara_u       = (float)($fis['kasa_dara']      ?? 0);
+$palet_dara_u      = (float)($fis['palet_dara']     ?? 0);
+$kasa_dara_total   = (float)($fis['kasa_dara_total']  ?? 0);
+$palet_dara_total  = (float)($fis['palet_dara_total'] ?? 0);
+$brut_hesap = $net;
+$dara_hesap = ($kasa_dara_total > 0 || $palet_dara_total > 0)
+    ? $kasa_dara_total + $palet_dara_total
+    : $kasa_say * $kasa_dara_u + $palet_say * $palet_dara_u;
+$net_hesap  = max(0.0, $brut_hesap - $dara_hesap);
+// Efektif birim dara — gruplandırma fallback için
+$eff_kasa_dara_u  = ($kasa_dara_total > 0 && $kasa_say  > 0) ? $kasa_dara_total  / $kasa_say  : $kasa_dara_u;
+$eff_palet_dara_u = ($palet_dara_total > 0 && $palet_say > 0) ? $palet_dara_total / $palet_say : $palet_dara_u;
+
+// Kp satırları (çok-tip kasa/palet)
+$kp_rows_view = [];
+try {
+    $st_kp = db()->prepare("SELECT tip, cinsi, sayisi, birim_dara_kg FROM kantar_kasa_palet_satir WHERE fis_id=? ORDER BY id");
+    $st_kp->execute([$id]);
+    $kp_rows_view = $st_kp->fetchAll();
+} catch (PDOException $e) {}
 $has_foto     = !empty($fis['foto_data']);
 $st_g = db()->prepare("SELECT grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg FROM kantar_gruplar WHERE fis_id = ? ORDER BY sira");
 $st_g->execute([$id]);
@@ -286,17 +301,15 @@ render_flash();
                         <?php if ($fis['gittigi_yer']): ?>
                         <div><span class="lbl">Gittiği Yer</span><strong><?= h($fis['gittigi_yer']) ?></strong></div>
                         <?php endif; ?>
-                        <?php if ($palet_say): ?>
-                        <div><span class="lbl">Palet Sayısı</span><strong><?= $palet_say ?></strong></div>
-                        <?php endif; ?>
-                        <?php if ($fis['palet_cinsi'] ?? ''): ?>
-                        <div><span class="lbl">Palet Cinsi</span><strong><?= h($fis['palet_cinsi']) ?></strong></div>
-                        <?php endif; ?>
-                        <?php if ($kasa_say): ?>
-                        <div><span class="lbl">Kasa Sayısı</span><strong><?= $kasa_say ?></strong></div>
-                        <?php endif; ?>
-                        <?php if ($fis['kasa_cinsi']): ?>
-                        <div><span class="lbl">Kasa Cinsi</span><strong><?= h($fis['kasa_cinsi']) ?></strong></div>
+                        <?php if (!empty($kp_rows_view)): ?>
+                            <?php foreach ($kp_rows_view as $kpr): ?>
+                            <div><span class="lbl"><?= $kpr['tip'] === 'palet' ? 'Palet' : 'Kasa' ?>: <?= h($kpr['cinsi']) ?></span><strong><?= number_format((int)$kpr['sayisi']) ?> adet</strong></div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <?php if ($palet_say): ?><div><span class="lbl">Palet Sayısı</span><strong><?= $palet_say ?></strong></div><?php endif; ?>
+                            <?php if ($fis['palet_cinsi'] ?? ''): ?><div><span class="lbl">Palet Cinsi</span><strong><?= h($fis['palet_cinsi']) ?></strong></div><?php endif; ?>
+                            <?php if ($kasa_say): ?><div><span class="lbl">Kasa Sayısı</span><strong><?= $kasa_say ?></strong></div><?php endif; ?>
+                            <?php if ($fis['kasa_cinsi']): ?><div><span class="lbl">Kasa Cinsi</span><strong><?= h($fis['kasa_cinsi']) ?></strong></div><?php endif; ?>
                         <?php endif; ?>
                         <?php if ($fis['depo'] ?? ''): ?>
                         <div><span class="lbl">Depo</span><strong><?= h($fis['depo']) ?></strong></div>
@@ -370,8 +383,8 @@ render_flash();
                     $gk          = (int)$g['kasa_adedi'];
                     $gb          = (float)($g['brut_kg'] ?? 0);
                     $gbrut       = $gb > 0 ? $gb : ($gk * $brut_per_kasa);
-                    $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $kasa_dara_u;
-                    $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $palet_dara_u;
+                    $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $eff_kasa_dara_u;
+                    $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $eff_palet_dara_u;
                     $gdara       = $gp * $gpalet_dara + $gk * $gkasa_dara;
                     $gnet        = max(0.0, $gbrut - $gdara);
                     $grup_tot_brut += $gbrut;
