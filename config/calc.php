@@ -97,6 +97,7 @@ function compute_pallet_row(array $row): array {
         'palet_tipi_id' => $palet_tipi_id,
         'urun_cinsi'    => trim((string)($row['urun_cinsi'] ?? '')),
         'depo'          => trim((string)($row['depo'] ?? '')),
+        'islendi'       => !empty($row['islendi']) ? 1 : 0,
         'materials'     => $materials,
     ];
 }

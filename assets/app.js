@@ -440,6 +440,7 @@
                 brut_kg: (p.brut_kg > 0) ? fmtInput(p.brut_kg) : '',
                 kasa_cinsi_id: p.kasa_cinsi_id,
                 palet_tipi_id: p.palet_tipi_id, urun_cinsi: p.urun_cinsi, depo: p.depo,
+                islendi: p.islendi ? 1 : 0,
             };
             Object.keys(scalar).forEach(k => {
                 const inp = document.createElement('input');

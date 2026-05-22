@@ -109,9 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st_p = $pdo->prepare(
                 "INSERT INTO loading_pallets
                  (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
-                  kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no)
+                  kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no, islendi)
                  VALUES
-                 (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc, :dp, :sn)"
+                 (:r, :pno, :ka, :sz, :br, :da, :nt, :kc, :pt, :uc, :dp, :sn, :is)"
             );
             $st_m = $pdo->prepare(
                 "INSERT INTO pallet_materials
@@ -133,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':uc' => $p['urun_cinsi'],
                     ':dp' => $p['depo'],
                     ':sn' => $i,
+                    ':is' => $p['islendi'] ?? 0,
                 ]);
                 $pid = (int)$pdo->lastInsertId();
                 foreach ($p['materials'] as $m) {
