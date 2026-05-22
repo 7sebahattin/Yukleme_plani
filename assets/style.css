@@ -3200,3 +3200,18 @@ body.notes-modal-open { overflow: hidden; }
 @media (min-width: 1024px) {
     .ms-form-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ── Kantar: Çok-tip Kasa/Palet Satırları ── */
+.kp-section { margin-top: 8px; }
+.kp-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.kp-section-title { font-size: .85rem; font-weight: 600; color: var(--text-muted, #6b7280); text-transform: uppercase; letter-spacing: .04em; }
+.kp-row-list { display: flex; flex-direction: column; gap: 6px; }
+.kp-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: var(--bg-subtle, #f9fafb); border: 1px solid var(--border, #e5e7eb); border-radius: 6px; padding: 6px 8px; }
+.kp-row .kp-cinsi { flex: 1 1 140px; min-width: 120px; font-size: .9rem; }
+.kp-row .kp-sayisi { width: 80px; flex-shrink: 0; }
+.kp-calc { font-size: .82rem; color: var(--text-muted, #6b7280); white-space: nowrap; }
+.kp-toplam-val { color: var(--text, #111); }
+.kp-del-btn { background: none; border: 1px solid #d1d5db; border-radius: 4px; color: #9ca3af; cursor: pointer; font-size: .75rem; padding: 2px 6px; flex-shrink: 0; }
+.kp-del-btn:hover { border-color: #ef4444; color: #ef4444; }
+.kp-total-row { font-size: .82rem; color: var(--text-muted, #6b7280); text-align: right; margin-top: 4px; }
+.kp-total-row strong { color: var(--text, #111); }
