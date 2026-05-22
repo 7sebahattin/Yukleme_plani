@@ -442,7 +442,7 @@ function render_footer(bool $print_mode = false): void {
 })();
 </script>
 <?php
-        echo '<script src="assets/app.js"></script></body></html>';
+        echo '<script src="assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
     } else {
         echo '</main></body></html>';
     }
