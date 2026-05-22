@@ -288,6 +288,7 @@ $form_is_cikma = $form_is_cikma ?? false;
         'dara_kg'    => isset($p['dara_kg'])    ? (float)$p['dara_kg']    : null,
         'net_kg'     => isset($p['net_kg'])     ? (float)$p['net_kg']     : null,
         'kasa_adeti' => isset($p['kasa_adeti']) ? (int)  $p['kasa_adeti'] : null,
+        'islendi'    => !empty($p['islendi'])   ? true                    : false,
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>

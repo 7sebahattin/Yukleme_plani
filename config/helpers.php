@@ -549,6 +549,14 @@ function render_flash(): void {
             if (!in_array('brut_kg',       $kg_cols)) $pdo->exec("ALTER TABLE `kantar_gruplar` ADD COLUMN `brut_kg`       DECIMAL(12,3) NOT NULL DEFAULT 0");
         } catch (PDOException $e) {}
 
+        // loading_pallets.islendi — palet başına işlendi işareti
+        try {
+            $lp_cols = $pdo->query("SHOW COLUMNS FROM `loading_pallets`")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('islendi', $lp_cols)) {
+                $pdo->exec("ALTER TABLE `loading_pallets` ADD COLUMN `islendi` TINYINT(1) NOT NULL DEFAULT 0");
+            }
+        } catch (PDOException $e) {}
+
         // 4) Depo/Ürün tanımlarını normalize et + loading_pallets.depo normalize
         try {
             $norm = function(string $s): string {
