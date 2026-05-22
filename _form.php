@@ -180,6 +180,7 @@ $form_is_cikma = $form_is_cikma ?? false;
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
             <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu İşle</button>
             <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
         </div>
     </div>
