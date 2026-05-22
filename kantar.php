@@ -28,7 +28,10 @@ render_flash();
         <p class="muted">Toplam <?= count($rows) ?> fiş</p>
         <?php endif; ?>
     </div>
-    <a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Kantar Fişi</a>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <a href="kantar_raporu.php" class="btn btn-ghost btn-sm">📊 Rapor</a>
+        <a href="kantar_create.php" class="btn btn-primary btn-lg">+ Yeni Kantar Fişi</a>
+    </div>
 </div>
 
 <?php if (empty($rows)): ?>
