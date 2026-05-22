@@ -105,6 +105,15 @@ render_flash();
         <input type="file" id="impFile" accept=".xlsx,.xls,.csv" style="display:none">
     </div>
     <div id="step1Msg" class="imp-msg" hidden></div>
+
+    <!-- Sheet seçimi: dosya yüklendikten sonra görünür -->
+    <div id="sheetPickWrap" hidden style="margin-top:14px">
+        <div class="form-group" style="max-width:400px">
+            <label class="form-label">Hangi sayfayı aktaracaksınız?</label>
+            <select id="sheetPick" class="form-control"></select>
+        </div>
+        <button type="button" class="btn btn-primary" id="sheetPickBtn" style="margin-top:8px">Bu Sayfayı Kullan →</button>
+    </div>
 </div>
 
 <!-- ── ADIM 2: Sütun Eşleştirme ── -->
@@ -255,6 +264,8 @@ render_flash();
         if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
     });
 
+    var loadedWb = null; // workbook object kept for sheet switching
+
     function processFile(f) {
         var msg = document.getElementById('step1Msg');
         msg.hidden = false;
@@ -262,26 +273,63 @@ render_flash();
         var reader = new FileReader();
         reader.onload = function (ev) {
             try {
-                var wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
-                var ws = wb.Sheets[wb.SheetNames[0]];
-                var raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-                excelRows = raw.filter(function (r) {
-                    return r.some(function (c) { return c !== '' && c !== null; });
+                loadedWb = XLSX.read(ev.target.result, { type: 'array', cellDates: false });
+
+                var names  = loadedWb.SheetNames;
+                var pick   = document.getElementById('sheetPick');
+                var wrap   = document.getElementById('sheetPickWrap');
+
+                pick.innerHTML = '';
+                names.forEach(function (n, i) {
+                    var opt = document.createElement('option');
+                    opt.value = i;
+                    opt.textContent = (i + 1) + '. ' + n;
+                    // Auto-select sheet whose name contains "giriş", "çıkış", "stok"
+                    var nl = n.toLowerCase()
+                        .replace(/ğ/g,'g').replace(/ü/g,'u').replace(/ş/g,'s')
+                        .replace(/ı/g,'i').replace(/ö/g,'o').replace(/ç/g,'c');
+                    if (/giris|cikis|stok/.test(nl)) opt.selected = true;
+                    pick.appendChild(opt);
                 });
-                if (excelRows.length < 2) {
-                    msg.textContent = '⚠ Dosyada yeterli veri bulunamadı (en az 1 başlık + 1 satır gerekli).';
-                    return;
+
+                if (names.length === 1) {
+                    // Tek sayfa — doğrudan devam et
+                    msg.textContent = '✓ Tek sayfa okundu — ' + f.name;
+                    loadSheet(0);
+                } else {
+                    msg.textContent = '✓ ' + names.length + ' sayfa bulundu — ' + f.name;
+                    wrap.hidden = false;
                 }
-                msg.textContent = '✓ ' + (excelRows.length - 1) + ' satır okundu — ' + f.name;
-                buildColMap();
-                renderStep2();
-                goStep(2);
             } catch (e) {
                 msg.textContent = '⚠ Dosya okunamadı: ' + e.message;
             }
         };
         reader.readAsArrayBuffer(f);
     }
+
+    function loadSheet(sheetIdx) {
+        var msg = document.getElementById('step1Msg');
+        if (!loadedWb) return;
+        var ws  = loadedWb.Sheets[loadedWb.SheetNames[sheetIdx]];
+        var raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        excelRows = raw.filter(function (r) {
+            return r.some(function (c) { return c !== '' && c !== null; });
+        });
+        if (excelRows.length < 2) {
+            msg.textContent = '⚠ Seçilen sayfada yeterli veri yok (en az 1 başlık + 1 satır gerekli).';
+            return;
+        }
+        msg.textContent = '✓ "' + loadedWb.SheetNames[sheetIdx] + '" sayfasından ' + (excelRows.length - 1) + ' satır okundu.';
+        document.getElementById('sheetPickWrap').hidden = true;
+        buildColMap();
+        renderStep2();
+        goStep(2);
+    }
+
+    document.getElementById('sheetPickBtn').addEventListener('click', function () {
+        var idx = parseInt(document.getElementById('sheetPick').value) || 0;
+        loadSheet(idx);
+    });
 
     // ── Adım 2: Sütun eşleştirme ────────────────────────────
     var FIELDS = [
