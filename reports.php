@@ -42,8 +42,9 @@ function col_label(string $c): string {
         'depo'=>'Depo','kayit_sayisi'=>'Kayıt Sayısı','ilk_tarih'=>'İlk Tarih','son_tarih'=>'Son Tarih',
         'toplam_kayit'=>'Toplam Kayıt','yukleme_sayisi'=>'Yükleme','cikma_sayisi'=>'Çıkma',
         'material_type'=>'Tür','material_name'=>'Malzeme','unit_dara_kg'=>'Birim Dara (kg)',
-        'toplam_adet'=>'Toplam Adet','toplam_dara_kg'=>'Toplam Dara KG',
+        'toplam_adet'=>'Yükl. Adet','toplam_dara_kg'=>'Yükl. Dara KG',
         'kullanim_sayisi'=>'Kullanım','is_active'=>'Aktif',
+        'stok_giris'=>'Stok Giriş','stok_sevk'=>'Stok Sevk','stok_mevcut'=>'Stok Mevcut',
         'fis_no'=>'Fiş No','giris_tarih'=>'Giriş','cikis_tarih'=>'Çıkış',
         'firma_adi'=>'Firma','plaka'=>'Plaka','malin_cinsi'=>'Malın Cinsi',
         'tartim1'=>'1.Tartım','tartim2'=>'2.Tartım','net_kg'=>'Net KG',
@@ -226,21 +227,45 @@ if ($type === 'yukleme' || $type === 'cikma') {
 } elseif ($type === 'malzeme') {
     $sql = "SELECT md.type AS material_type, md.name AS material_name,
                    md.unit_dara_kg, md.is_active,
-                   COALESCE(COUNT(pm.id),0)            AS kullanim_sayisi,
-                   COALESCE(SUM(pm.quantity),0)        AS toplam_adet,
-                   ROUND(COALESCE(SUM(pm.total_dara_kg),0),3) AS toplam_dara_kg
+                   COALESCE(pm_s.kullanim_sayisi, 0)             AS kullanim_sayisi,
+                   COALESCE(pm_s.toplam_adet, 0)                 AS toplam_adet,
+                   COALESCE(ROUND(pm_s.toplam_dara_kg, 3), 0)   AS toplam_dara_kg,
+                   COALESCE(ms_g.stok_giris, 0)                  AS stok_giris,
+                   COALESCE(ms_s.stok_sevk,  0)                  AS stok_sevk,
+                   COALESCE(ms_g.stok_giris, 0) - COALESCE(ms_s.stok_sevk, 0) AS stok_mevcut
             FROM material_definitions md
-            LEFT JOIN pallet_materials pm ON pm.material_id = md.id
+            LEFT JOIN (
+                SELECT material_id,
+                       COUNT(id)          AS kullanim_sayisi,
+                       SUM(quantity)      AS toplam_adet,
+                       SUM(total_dara_kg) AS toplam_dara_kg
+                FROM pallet_materials WHERE material_id IS NOT NULL GROUP BY material_id
+            ) pm_s ON pm_s.material_id = md.id
+            LEFT JOIN (
+                SELECT material_id, SUM(quantity) AS stok_giris
+                FROM material_stock_movements
+                WHERE movement_type = 'giris' AND material_id IS NOT NULL
+                GROUP BY material_id
+            ) ms_g ON ms_g.material_id = md.id
+            LEFT JOIN (
+                SELECT material_id, SUM(quantity) AS stok_sevk
+                FROM material_stock_movements
+                WHERE movement_type = 'sevk' AND material_id IS NOT NULL
+                GROUP BY material_id
+            ) ms_s ON ms_s.material_id = md.id
             WHERE md.type NOT IN ('firma','depo','urun')";
     $p = [];
     if ($f_mtype !== '') { $sql .= " AND md.type = :mtype"; $p[':mtype'] = $f_mtype; }
     if ($f_q     !== '') { $sql .= " AND md.name LIKE :q";  $p[':q']     = '%'.$f_q.'%'; }
-    $sql .= " GROUP BY md.id ORDER BY md.type, md.name LIMIT 1000";
+    $sql .= " ORDER BY md.type, md.name LIMIT 1000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
-    $cols = ['material_type','material_name','unit_dara_kg','toplam_adet','toplam_dara_kg','kullanim_sayisi','is_active'];
+    $cols = ['material_type','material_name','unit_dara_kg','stok_giris','stok_sevk','stok_mevcut','toplam_adet','toplam_dara_kg','kullanim_sayisi','is_active'];
     foreach ($rows as $r) {
         $totals['toplam_dara_kg'] = ($totals['toplam_dara_kg'] ?? 0) + (float)$r['toplam_dara_kg'];
+        $totals['stok_giris']     = ($totals['stok_giris']     ?? 0) + (float)$r['stok_giris'];
+        $totals['stok_sevk']      = ($totals['stok_sevk']      ?? 0) + (float)$r['stok_sevk'];
+        $totals['stok_mevcut']    = ($totals['stok_mevcut']    ?? 0) + (float)$r['stok_mevcut'];
     }
 
 } elseif ($type === 'kantar') {
@@ -499,7 +524,7 @@ render_flash();
     </tr>
     </thead>
     <tbody>
-    <?php $num_cols = ['toplam_brut','toplam_dara','toplam_net','toplam_kasa','toplam_adet','toplam_dara_kg','unit_dara_kg','net_kg','tartim1','tartim2','nakliye_bedeli','avans','toplam_brut']; ?>
+    <?php $num_cols = ['toplam_brut','toplam_dara','toplam_net','toplam_kasa','toplam_adet','toplam_dara_kg','unit_dara_kg','net_kg','tartim1','tartim2','nakliye_bedeli','avans','toplam_brut','stok_giris','stok_sevk']; ?>
     <?php $int_cols = ['id','palet_sayisi','kayit_sayisi','kullanim_sayisi','toplam_kayit','yukleme_sayisi','cikma_sayisi','kasa_sayisi','palet_sayisi']; ?>
     <?php foreach ($rows as $r): ?>
     <tr>
@@ -510,6 +535,10 @@ render_flash();
                 $cls = $v === 'islendi' ? 'badge-islendi' : ($v === 'yuklendi' ? 'badge-yuklendi' : '');
                 $lbl = $v === 'islendi' ? 'İşlendi' : ($v === 'yuklendi' ? 'Yüklendi' : h($v));
                 echo '<td>' . ($v !== '' ? '<span class="rpt-badge '.$cls.'">'.$lbl.'</span>' : '<span class="muted">—</span>') . '</td>';
+            } elseif ($c === 'stok_mevcut') {
+                $sv = (float)$v;
+                $color = $sv < 0 ? ' style="color:#dc2626;font-weight:700"' : ($sv > 0 ? ' style="font-weight:600"' : '');
+                echo '<td class="num"' . $color . '>' . h(fmt_kg($sv)) . '</td>';
             } elseif ($c === 'is_active') {
                 echo '<td>' . ($v ? '<span class="rpt-badge badge-yuklendi">Aktif</span>' : '<span class="muted">Pasif</span>') . '</td>';
             } elseif ($c === 'material_type') {
