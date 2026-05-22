@@ -391,10 +391,10 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
             <thead>
                 <tr>
                     <th>Fiş No</th>
-                    <th>Tarih</th>
+                    <th class="kr-col-tarih">Tarih</th>
                     <th>Plaka</th>
                     <th class="kr-col-malin">Malın Cinsi</th>
-                    <th>Firma / Grup</th>
+                    <th class="kr-col-firma">Firma / Grup</th>
                     <th class="kr-col-depo">Depo</th>
                     <th class="num">Palet</th>
                     <th class="num">Kasa</th>
@@ -447,7 +447,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                         <?php if ($f['depo']): ?><span class="kr-depo-chip"><?= h($f['depo']) ?></span><?php endif; ?>
                         <span class="<?= ($d['is_manual']??false)?'kr-tag-elle':'kr-tag-oto' ?>"><?= ($d['is_manual']??false)?'elle':'oto' ?></span>
                     </td>
-                    <td><strong><?= h($d['firma']) ?></strong></td>
+                    <td class="kr-col-firma"><strong><?= h($d['firma']) ?></strong></td>
                     <td class="kr-col-depo"><?= h($f['depo']?:'—') ?></td>
                     <td class="num"><?= $d['palet']?:0 ?></td>
                     <td class="num"><?= $d['kasa'] ?></td>
@@ -460,10 +460,10 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                 $d = $dist[0]; ?>
                 <tr class="kr-row-tek">
                     <td><a href="<?= $fis_url ?>" class="kr-fis-link">#<?= h($f['fis_no']?:(string)$f['id']) ?></a></td>
-                    <td><?= h($tarih_d) ?></td>
+                    <td class="kr-col-tarih"><?= h($tarih_d) ?></td>
                     <td><?= h($f['plaka']?:'—') ?></td>
                     <td class="kr-col-malin"><?= h($f['malin_cinsi']?:'—') ?><?= $f['parti_no'] ? '<br><small class="muted">'.h($f['parti_no']).'</small>' : '' ?></td>
-                    <td><strong><?= h($d['firma']) ?></strong></td>
+                    <td class="kr-col-firma"><strong><?= h($d['firma']) ?></strong></td>
                     <td class="kr-col-depo"><?= h($f['depo']?:'—') ?></td>
                     <td class="num"><?= $d['palet']?:0 ?></td>
                     <td class="num"><?= $d['kasa'] ?></td>
@@ -625,10 +625,14 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 
 /* Tablo genel */
 .kr-table { border-collapse:collapse; }
+.kr-table th { white-space: nowrap; }
+.kr-col-firma { white-space: nowrap; }
 
 /* Sütun gizleme — dar ekranlarda */
 @media (max-width:600px) {
-    .kr-col-malin, .kr-col-depo, .kr-col-dara { display:none; }
+    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih { display:none; }
+    .kr-grup-head-inner { flex-direction:column; gap:3px; }
+    .kr-grup-head-totals { font-size:.78rem; gap:5px; }
 }
 
 /* Tek-firma satırı */
@@ -716,7 +720,8 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
     .data-table th { font-size:6pt !important; padding:2px 3px !important; background:#f5f5f5 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .data-table td { padding:2px 3px !important; }
 
-    .kr-col-malin, .kr-col-depo, .kr-col-dara { display:table-cell !important; }
+    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih { display:table-cell !important; }
+    .kr-col-firma { white-space:normal; }
 
     .kr-grup-head-cell { padding:4px 6px !important; }
     .kr-grup-head-totals { font-size:7pt !important; gap:6px !important; }
