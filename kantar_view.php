@@ -365,15 +365,16 @@ render_flash();
                 $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
                 $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
                 // Two-pass: manual brüt groups first, then distribute remainder to auto groups
+                // Dağıtım ağırlığı = kasa + palet (sadece kasa kullanmak palet-only gruplara 0 brüt verir)
                 $manual_brut_sum = 0.0;
-                $auto_kasa_sum   = 0;
+                $auto_weight_sum = 0;
                 foreach ($gruplar as $g) {
                     $gb = (float)($g['brut_kg'] ?? 0);
                     if ($gb > 0) { $manual_brut_sum += $gb; }
-                    else         { $auto_kasa_sum   += (int)$g['kasa_adedi']; }
+                    else         { $auto_weight_sum += (int)$g['kasa_adedi'] + (int)$g['palet_sayisi']; }
                 }
                 $auto_brut_pool = max(0.0, $net - $manual_brut_sum);
-                $brut_per_kasa  = $auto_kasa_sum > 0 ? $auto_brut_pool / $auto_kasa_sum : 0.0;
+                $brut_per_unit  = $auto_weight_sum > 0 ? $auto_brut_pool / $auto_weight_sum : 0.0;
                 $grup_tot_brut  = 0.0;
                 $grup_tot_dara  = 0.0;
                 $grup_tot_net   = 0.0;
@@ -382,7 +383,7 @@ render_flash();
                     $gp          = (int)$g['palet_sayisi'];
                     $gk          = (int)$g['kasa_adedi'];
                     $gb          = (float)($g['brut_kg'] ?? 0);
-                    $gbrut       = $gb > 0 ? $gb : ($gk * $brut_per_kasa);
+                    $gbrut       = $gb > 0 ? $gb : (($gp + $gk) * $brut_per_unit);
                     $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $eff_kasa_dara_u;
                     $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $eff_palet_dara_u;
                     $gdara       = $gp * $gpalet_dara + $gk * $gkasa_dara;
