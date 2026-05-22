@@ -439,7 +439,7 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
                 <div class="form-group">
                     <label class="form-label">Miktar <span class="req">*</span></label>
                     <input type="number" name="mv_qty" class="form-control" required
-                           min="0.001" step="1" placeholder="0">
+                           min="0.001" step="any" placeholder="0">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Birim</label>
@@ -512,7 +512,7 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
                 <div class="form-group">
                     <label class="form-label">Miktar <span class="req">*</span></label>
                     <input type="number" name="mv_qty" class="form-control" required
-                           min="0.001" step="1" placeholder="0">
+                           min="0.001" step="any" placeholder="0">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Birim</label>
