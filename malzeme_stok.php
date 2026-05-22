@@ -423,9 +423,9 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
                 </div>
                 <div class="form-group">
                     <label class="form-label">Malzeme Adı <span class="req">*</span></label>
-                    <input type="text" name="mv_mat_name" class="form-control" required
-                           list="giris-name-list" placeholder="Malzeme adı" autocomplete="off">
-                    <datalist id="giris-name-list"></datalist>
+                    <select name="mv_mat_name" id="girisMatName" class="form-control" required>
+                        <option value="">— önce tür seçin —</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Depo</label>
@@ -496,9 +496,9 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
                 </div>
                 <div class="form-group">
                     <label class="form-label">Malzeme Adı <span class="req">*</span></label>
-                    <input type="text" name="mv_mat_name" class="form-control" required
-                           list="sevk-name-list" placeholder="Malzeme adı" autocomplete="off">
-                    <datalist id="sevk-name-list"></datalist>
+                    <select name="mv_mat_name" id="sevkMatName" class="form-control" required>
+                        <option value="">— önce tür seçin —</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Depo</label>
@@ -637,17 +637,19 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
 var msNamesData = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 
 function msUpdateNames(form) {
-    var sel      = document.getElementById(form === 'giris' ? 'girisMatType' : 'sevkMatType');
-    var dlId     = form === 'giris' ? 'giris-name-list' : 'sevk-name-list';
-    var dl       = document.getElementById(dlId);
-    var matType  = sel ? sel.value : '';
+    var typeSel  = document.getElementById(form === 'giris' ? 'girisMatType' : 'sevkMatType');
+    var nameSel  = document.getElementById(form === 'giris' ? 'girisMatName' : 'sevkMatName');
+    if (!typeSel || !nameSel) return;
+    var matType  = typeSel.value;
     var names    = msNamesData[matType] || [];
-    dl.innerHTML = '';
+    nameSel.innerHTML = '<option value="">— seçiniz —</option>';
     names.forEach(function(n) {
         var opt = document.createElement('option');
         opt.value = n;
-        dl.appendChild(opt);
+        opt.textContent = n;
+        nameSel.appendChild(opt);
     });
+    nameSel.disabled = names.length === 0;
 }
 
 function msTab(tab) {
