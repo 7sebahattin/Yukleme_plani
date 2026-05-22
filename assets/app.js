@@ -362,8 +362,12 @@
             const metaParts = [kasaName, paletName].filter(Boolean);
             const matCount  = p.materials?.length || 0;
 
+            const _done = !!p.islendi;
             card.innerHTML = `
-                <div class="pc-num">${i + 1}</div>
+                <div class="pc-num-wrap">
+                    <div class="pc-num${_done ? ' pc-num-done' : ''}">${i + 1}</div>
+                    <button type="button" class="pc-isle-btn${_done ? ' active' : ''}" data-isle="${i}" title="${_done ? 'İşlendi — geri al' : 'İşlendi işaretle'}">✓</button>
+                </div>
                 <div class="pc-body">
                     <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>
                     <div class="pc-stats">
@@ -383,6 +387,11 @@
                 </div>`;
 
             card.querySelector('[data-edit]').addEventListener('click', () => openModal(i));
+            card.querySelector('[data-isle]').addEventListener('click', () => {
+                pallets[i].islendi = !pallets[i].islendi;
+                renderCards();
+                recomputeTotals();
+            });
             card.querySelector('[data-del]').addEventListener('click', () => {
                 if (confirm(`Palet ${i + 1} silinecek. Emin misiniz?`)) {
                     pallets.splice(i, 1);
@@ -959,6 +968,14 @@
             });
         });
     }
+
+    /* ── Toplu İşle ── */
+    document.getElementById('topluIsleBtn')?.addEventListener('click', () => {
+        const allDone = pallets.length > 0 && pallets.every(p => p.islendi);
+        pallets.forEach(p => { p.islendi = !allDone; });
+        renderCards();
+        recomputeTotals();
+    });
 
     renderCards();
     recomputeTotals();
