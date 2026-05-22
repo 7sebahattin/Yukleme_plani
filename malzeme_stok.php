@@ -257,11 +257,14 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
 
 <div class="page-head">
     <h2 class="page-title">🗃️ Malzeme Stok</h2>
-    <a href="?<?= h(http_build_query(array_filter([
-        'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit,
-        'mat_type' => $f_mat_type,  'mat_name'  => $f_mat_name,
-        'depo' => $f_depo, 'csv' => '1',
-    ], fn($v) => $v !== ''))) ?>" class="btn btn-sm btn-ghost">⬇ CSV</a>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <a href="malzeme_stok_import.php" class="btn btn-sm btn-secondary">📥 Excel Aktar</a>
+        <a href="?<?= h(http_build_query(array_filter([
+            'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit,
+            'mat_type' => $f_mat_type,  'mat_name'  => $f_mat_name,
+            'depo' => $f_depo, 'csv' => '1',
+        ], fn($v) => $v !== ''))) ?>" class="btn btn-sm btn-ghost">⬇ CSV</a>
+    </div>
 </div>
 
 <!-- ── Filtre formu ───────────────────────────────────────── -->

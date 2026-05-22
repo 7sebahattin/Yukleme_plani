@@ -108,6 +108,8 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn-danger:hover { background: #b53535; border-color: #b53535; }
+.btn-secondary { background: var(--success); color: #fff; border-color: var(--success); }
+.btn-secondary:hover { background: #17824c; border-color: #17824c; color: #fff; }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: rgba(0,0,0,0.04); }
 .btn-sm { padding: 6px 10px; font-size: .85rem; min-height: 34px; }
@@ -3215,3 +3217,58 @@ body.notes-modal-open { overflow: hidden; }
 .kp-del-btn:hover { border-color: #ef4444; color: #ef4444; }
 .kp-total-row { font-size: .82rem; color: var(--text-muted, #6b7280); text-align: right; margin-top: 4px; }
 .kp-total-row strong { color: var(--text, #111); }
+
+/* ── Excel Stok Aktarımı ───────────────────────────────── */
+.imp-steps-bar {
+    display: flex; gap: 0; margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+}
+.imp-step-ind {
+    padding: 8px 18px; font-size: .85rem; font-weight: 600;
+    color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px;
+    transition: color .15s, border-color .15s;
+}
+.imp-step-ind.active { color: var(--primary); border-color: var(--primary); }
+.imp-step-ind.done   { color: var(--success); }
+
+.imp-step { animation: fadeIn .15s ease; }
+
+.imp-dropzone {
+    border: 2px dashed var(--border-strong); border-radius: var(--radius);
+    padding: 40px 24px; text-align: center; cursor: pointer;
+    background: var(--bg); transition: border-color .2s, background .2s;
+    margin-bottom: 12px;
+}
+.imp-dropzone.imp-drag-over {
+    border-color: var(--primary); background: var(--primary-soft);
+}
+.imp-dz-icon  { font-size: 2.5rem; margin-bottom: 8px; }
+.imp-dz-text  { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; }
+.imp-dz-sub   { color: var(--muted); font-size: .88rem; margin-bottom: 14px; }
+
+.imp-msg {
+    padding: 10px 14px; border-radius: var(--radius-sm);
+    background: var(--success-soft); color: var(--success);
+    font-size: .9rem; margin-top: 8px;
+}
+
+.imp-hint { font-size: .85rem; color: var(--muted); margin: 0 0 12px; }
+
+.imp-col-map-tbl td, .imp-col-map-tbl th { vertical-align: middle; }
+.imp-sample { color: var(--muted); font-size: .82rem; max-width: 200px; word-break: break-all; }
+
+.imp-urun-tbl td, .imp-urun-tbl th { vertical-align: middle; }
+
+.imp-row-warn { background: var(--warn-soft) !important; }
+
+.imp-warn {
+    background: var(--warn-soft); border: 1px solid #fde68a;
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    font-size: .88rem; color: var(--warn); margin: 12px 0;
+}
+
+.imp-nav {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 20px; flex-wrap: wrap;
+}
+.imp-nav .btn-primary { margin-left: auto; }
