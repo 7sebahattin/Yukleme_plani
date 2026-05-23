@@ -962,7 +962,7 @@ body.print-mode .topbar { display: none; }
 }
 .asya-top-body {
     display: grid;
-    grid-template-columns: 60% 40%;
+    grid-template-columns: 55% 45%;
     gap: 0;
 }
 
@@ -993,8 +993,18 @@ body.print-mode .topbar { display: none; }
     grid-template-columns: 1fr 1fr 1fr;
     border-bottom: 1px solid #ccc;
 }
-.asya-alici-cell, .asya-urun-cell {
+/* ALICI + ÜRÜN yan yana tek satır */
+.asya-alici-urun-row {
+    display: grid;
+    grid-template-columns: 60% 40%;
     border-bottom: 1px solid #ccc;
+}
+.asya-alici-cell {
+    border-bottom: none;
+    border-right: 1px solid #ccc;
+}
+.asya-urun-cell {
+    border-bottom: none;
     border-right: none;
 }
 
@@ -1005,7 +1015,8 @@ body.print-mode .topbar { display: none; }
     border-right: 1px solid #ccc;
     min-height: 20px;
 }
-.asya-alici-cell, .asya-urun-cell { border-right: none; }
+.asya-alici-cell { border-right: 1px solid #ccc; }
+.asya-urun-cell  { border-right: none; }
 .marka-cell:last-child { border-right: none; }
 .cell-pair span, .marka-cell span {
     font-size: 7pt;
@@ -1359,6 +1370,8 @@ body.print-mode .asya-sheet {
     .asya-brand-full { border-color: #000; font-size: 12pt; }
     .asya-right-top { border-color: #000; }
     .asya-marka-row { border-color: #000; }
+    .asya-alici-urun-row { border-color: #000; border-bottom-color: #000; }
+    .asya-alici-cell { border-right-color: #000; }
     .asya-alici-cell, .asya-urun-cell { border-color: #000; }
     .cell-pair, .marka-cell { border-color: #000; }
     .avans-th { border-color: #000 !important; }

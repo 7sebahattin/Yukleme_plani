@@ -452,13 +452,15 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
                     <div class="marka-cell"><span>URAL</span><strong>MARKA</strong></div>
                     <div class="marka-cell"><span>URAS</span><strong>MARKA</strong></div>
                 </div>
-                <div class="cell-pair asya-alici-cell">
-                    <span>ALICI</span>
-                    <strong><?= h($record['alici']) ?></strong>
-                </div>
-                <div class="cell-pair asya-urun-cell">
-                    <span>ÜRÜN</span>
-                    <strong><?= h($record['urun']) ?></strong>
+                <div class="asya-alici-urun-row">
+                    <div class="cell-pair asya-alici-cell">
+                        <span>ALICI</span>
+                        <strong><?= h($record['alici']) ?></strong>
+                    </div>
+                    <div class="cell-pair asya-urun-cell">
+                        <span>ÜRÜN</span>
+                        <strong><?= h($record['urun']) ?></strong>
+                    </div>
                 </div>
                 <div class="asya-etiket">
                     <img id="etiketImg" class="etiket-img" alt="" style="display:none">
@@ -549,7 +551,7 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
                     $key = $urun_keys[$i] ?? null;
                     $g = $key ? $urun_groups[$key] : null;
                 ?>
-                    <tr><th class="urun-banner" colspan="2">ÜRÜN / <?= $i + 1 ?><?= $key ? ' — ' . h($key) : '' ?></th></tr>
+                    <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : 'ÜRÜN / ' . ($i + 1) ?></th></tr>
                     <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                     <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                     <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
