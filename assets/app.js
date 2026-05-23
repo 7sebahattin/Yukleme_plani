@@ -312,14 +312,8 @@
         const ka = parseInt2(p.kasa_adeti);
         const kasaItem  = KASA_LIST.find(k => String(k.id) === String(p.kasa_cinsi_id));
         const paletItem = PALET_LIST.find(k => String(k.id) === String(p.palet_tipi_id));
-        let extra = 0;
-        if (Array.isArray(p.materials)) {
-            p.materials.forEach(m => {
-                const mat = MATERIALS[m.material_id];
-                if (mat) extra += mat.unit * parseNum(m.quantity);
-            });
-        }
-        return ka * (kasaItem?.unit || 0) + (paletItem?.unit || 0) + extra;
+        // Malzeme daraları net hesabına dahil edilmez
+        return ka * (kasaItem?.unit || 0) + (paletItem?.unit || 0);
     }
 
     /* ── Kart listesini render et ── */

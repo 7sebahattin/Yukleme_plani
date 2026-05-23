@@ -86,12 +86,12 @@ foreach ($pallets as $p) {
         $stok_use[$kid]['adet'] += 1;
         $stok_use[$kid]['kg']   += (float)($defs_by_id[$kid]['unit_dara_kg'] ?? 0);
     }
-    // 3) Ek malzemeler: pallet_materials.quantity
+    // 3) Ek malzemeler: pallet_materials.quantity (kg: unit × adet, total_dara_kg artık 0)
     foreach ($p['materials'] as $m) {
         $kid = (int)$m['def_id'];
         if (!isset($stok_use[$kid])) $stok_use[$kid] = ['adet' => 0, 'kg' => 0];
         $stok_use[$kid]['adet'] += (float)$m['quantity'];
-        $stok_use[$kid]['kg']   += (float)$m['total_dara_kg'];
+        $stok_use[$kid]['kg']   += (float)$m['material_unit'] * (float)$m['quantity'];
     }
 }
 
@@ -125,11 +125,7 @@ foreach ($pallets as $p) {
     if ($p['palet_tipi_id']) {
         $palet_sapka_kose_dara += (float)($defs_by_id[(int)$p['palet_tipi_id']]['unit_dara_kg'] ?? 0);
     }
-    foreach ($p['materials'] as $m) {
-        if (in_array($m['material_type'], ['sapka', 'kosebent'])) {
-            $palet_sapka_kose_dara += (float)$m['total_dara_kg'];
-        }
-    }
+    // Malzeme daraları artık net hesabına dahil edilmez
 }
 
 // Alt blok: palet tipi adını ve adetini dinamik oluştur
@@ -382,12 +378,11 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
             </div>
             <?php if (!empty($p['materials'])): ?>
                 <div class="vc-materials">
-                    <div class="vc-mat-title">Ekstra Dara Kalemleri</div>
+                    <div class="vc-mat-title">Malzemeler</div>
                     <?php foreach ($p['materials'] as $m): ?>
                         <div class="vc-mat">
                             <span><?= h(($type_labels[$m['material_type']] ?? '') . ' / ' . $m['material_name']) ?>
-                                  (<?= h(fmt_kg($m['material_unit'])) ?> kg) × <?= h(fmt_kg($m['quantity'])) ?></span>
-                            <strong><?= h(fmt_kg($m['total_dara_kg'])) ?> kg</strong>
+                                  × <?= h(fmt_kg($m['quantity'])) ?></span>
                         </div>
                     <?php endforeach; ?>
                 </div>
