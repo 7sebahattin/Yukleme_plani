@@ -512,53 +512,51 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
             </tbody>
         </table>
 
-        <!-- Sağ: Stok Çıkışları + Genel Toplam + Ürün toplamları -->
-        <div class="asya-right-mid">
-            <table class="asya-stok">
-                <thead>
-                <tr><th class="th-banner" colspan="3">STOK ÇIKIŞLARI</th></tr>
+        <!-- Stok Çıkışları (ayrı sütun) -->
+        <table class="asya-stok">
+            <thead>
+            <tr><th class="th-banner" colspan="3">STOK ÇIKIŞLARI</th></tr>
+            <tr>
+                <th class="stok-name"></th>
+                <th class="stok-adet">ADET / KG</th>
+                <th class="stok-empty"></th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($stok_rows as $sr):
+                [$key, $label, $allowed, $match] = $sr;
+                $r = stok_satir_topla($stok_use, $defs_by_id, $allowed, $match);
+                if ($r['adet'] <= 0) continue;
+                $adet_str = rtrim(rtrim(number_format($r['adet'], 3, ',', '.'), '0'), ',');
+            ?>
                 <tr>
-                    <th class="stok-name"></th>
-                    <th class="stok-adet">ADET / KG</th>
-                    <th class="stok-empty"></th>
+                    <td class="stok-name"><?= h($label) ?></td>
+                    <td class="stok-val"><?= h($adet_str) ?></td>
+                    <td class="stok-val"><?= $r['kg'] > 0 ? h(fmt_kg(round($r['kg']))) : '' ?></td>
                 </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($stok_rows as $sr):
-                    [$key, $label, $allowed, $match] = $sr;
-                    $r = stok_satir_topla($stok_use, $defs_by_id, $allowed, $match);
-                    if ($r['adet'] <= 0) continue;
-                    $adet_str = rtrim(rtrim(number_format($r['adet'], 3, ',', '.'), '0'), ',');
-                ?>
-                    <tr>
-                        <td class="stok-name"><?= h($label) ?></td>
-                        <td class="stok-val"><?= h($adet_str) ?></td>
-                        <td class="stok-val"><?= $r['kg'] > 0 ? h(fmt_kg(round($r['kg']))) : '' ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
 
-            <!-- Genel Toplam + Ürün/1..4 -->
-            <table class="asya-totals">
-                <tr><th class="th-banner" colspan="2">GENEL TOPLAM</th></tr>
-                <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
-                <tr><th>BRÜT</th><td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
-                <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
-                <tr><th>NET</th><td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
+        <!-- Genel Toplam + Ürün/1..4 (ayrı sütun) -->
+        <table class="asya-totals">
+            <tr><th class="th-banner" colspan="2">GENEL TOPLAM</th></tr>
+            <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
+            <tr><th>BRÜT</th><td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
+            <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
+            <tr><th>NET</th><td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
 
-                <?php for ($i = 0; $i < 4; $i++):
-                    $key = $urun_keys[$i] ?? null;
-                    $g = $key ? $urun_groups[$key] : null;
-                ?>
-                    <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : 'ÜRÜN / ' . ($i + 1) ?></th></tr>
-                    <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
-                    <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
-                    <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
-                    <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
-                <?php endfor; ?>
-            </table>
-        </div>
+            <?php for ($i = 0; $i < 4; $i++):
+                $key = $urun_keys[$i] ?? null;
+                $g = $key ? $urun_groups[$key] : null;
+            ?>
+                <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : 'ÜRÜN / ' . ($i + 1) ?></th></tr>
+                <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
+                <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
+                <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
+                <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
+            <?php endfor; ?>
+        </table>
     </div>
 
     <!-- ============= ALT BLOK: Toplam dara satırı ============= -->

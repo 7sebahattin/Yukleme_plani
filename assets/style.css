@@ -1205,12 +1205,13 @@ body.print-mode .topbar { display: none; }
 
 @media print { #etiketCropOverlay, #kantarCropOverlay { display: none !important; } }
 
-/* ====== Orta blok ====== */
+/* ====== Orta blok — 3 sütun: palet | stok | toplamlar ====== */
 .asya-middle {
     display: grid;
-    grid-template-columns: 64% 36%;
+    grid-template-columns: 59% 20% 21%;
     gap: 0;
     margin-top: 0;
+    align-items: start;
 }
 
 /* Palet tablosu */
@@ -1245,12 +1246,7 @@ body.print-mode .topbar { display: none; }
 .asya-pallets .w-net  { width: 48px; }
 
 /* Stok çıkışları */
-.asya-right-mid {
-    display: flex;
-    flex-direction: column;
-    border-left: none;
-}
-.asya-stok { font-size: 7.5pt; }
+.asya-stok { font-size: 7.5pt; vertical-align: top; }
 .asya-stok th {
     font-size: 7.5pt;
     text-align: center;
@@ -1276,6 +1272,7 @@ body.print-mode .topbar { display: none; }
 .asya-totals {
     margin-top: 0;
     font-size: 8pt;
+    vertical-align: top;
 }
 .asya-totals th {
     background: #fff !important;
