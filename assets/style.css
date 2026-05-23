@@ -1267,6 +1267,7 @@ body.print-mode .topbar { display: none; }
     padding: 1px 3px;
     width: 25%;
 }
+.asya-stok tr.stok-filler td { height: 13px; padding: 0; }
 
 /* Genel toplam */
 .asya-totals {
@@ -1390,6 +1391,7 @@ body.print-mode .asya-sheet {
     .asya-stok { font-size: 6.5pt; }
     .asya-stok .stok-name { font-size: 6.5pt; padding: 0px 3px; }
     .asya-stok .stok-val { height: 10px; font-size: 6.5pt; padding: 0px 2px; }
+    .asya-stok tr.stok-filler td { height: 11px; padding: 0; }
     .asya-totals th { font-size: 7.5pt; padding: 0px 3px; height: 11px; font-weight: 700; }
     .asya-totals td { font-size: 8pt; padding: 0px 3px; height: 11px; font-weight: 600; }
     .asya-totals .urun-banner { font-size: 7pt; padding: 1px 0; font-weight: 700; }
