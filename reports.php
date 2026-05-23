@@ -293,7 +293,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
 }
 
 // ── CSV Export ──────────────────────────────────────────
-if ($type !== '' && $export === 'csv') {
+if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
     $filename = 'rapor_' . $type . '_' . date('Y-m-d') . '.csv';
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -302,7 +302,7 @@ if ($type !== '' && $export === 'csv') {
     $fp = fopen('php://output', 'w');
 
     // Yüklemeler / Çıkmalar → palet bazında tam detay (limit yok)
-    if (in_array($type, ['yukleme', 'cikma'], true)) {
+    if (in_array($type, ['yukleme', 'cikma'], true) && $export === 'csv') {
         $det_sql = "
             SELECT
                 lr.id            AS kayit_id,
@@ -447,6 +447,9 @@ $csv_params = array_filter([
     'sort'      => ($f_sort !== 'tarih') ? $f_sort : '',
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
+$csv_summary_params = $csv_params;
+$csv_summary_params['export'] = 'csv_summary';
+$csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ' Raporu' : 'Raporlar';
 render_header($page_title);
@@ -494,7 +497,12 @@ render_flash();
     </div>
     <div class="rpt-actions rpt-no-print">
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
+        <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
+        <a href="<?= h($csv_summary_url) ?>" class="btn btn-sm">⬇ Özet Excel</a>
+        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Detay Excel</a>
+        <?php else: ?>
         <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Excel/CSV</a>
+        <?php endif; ?>
     </div>
 </div>
 
