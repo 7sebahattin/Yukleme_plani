@@ -58,6 +58,7 @@ function col_label(string $c): string {
 $rows  = [];
 $cols  = [];
 $totals = [];
+$islendi_totals = null;
 
 function rpt_date_filter(string &$sql, array &$p, string $col, string $from, string $to): void {
     if ($from !== '') { $sql .= " AND $col >= :df"; $p[':df'] = $from; }
@@ -137,6 +138,32 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $totals['toplam_net']     = ($totals['toplam_net']     ?? 0) + (float)$r['toplam_net'];
         $totals['nakliye_bedeli'] = ($totals['nakliye_bedeli'] ?? 0) + (float)$r['nakliye_bedeli'];
     }
+
+    // İşaretli / İşaretsiz palet ayrımı
+    $sp = "SELECT
+        COALESCE(SUM(CASE WHEN p.islendi=1 THEN 1 ELSE 0 END),0)              AS is_palet,
+        COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.kasa_adeti ELSE 0 END),0)   AS is_kasa,
+        COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg ELSE 0 END),0)      AS is_brut,
+        COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg ELSE 0 END),0)      AS is_dara,
+        COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg ELSE 0 END),0)       AS is_net,
+        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN 1 ELSE 0 END),0)             AS nis_palet,
+        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)  AS nis_kasa,
+        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg ELSE 0 END),0)     AS nis_brut,
+        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg ELSE 0 END),0)     AS nis_dara,
+        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg ELSE 0 END),0)      AS nis_net
+        FROM loading_records r
+        LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
+        WHERE r.type = :rtype2";
+    $sp2 = [':rtype2' => $type];
+    if ($f_firma !== '') { $sp .= " AND r.firma LIKE :firma2"; $sp2[':firma2'] = '%'.$f_firma.'%'; }
+    if ($f_durum !== '') { $sp .= " AND r.durum = :durum2";    $sp2[':durum2'] = $f_durum; }
+    if ($f_urun  !== '') { $sp .= " AND r.urun  LIKE :urun2";  $sp2[':urun2']  = '%'.$f_urun.'%'; }
+    if ($f_bolge !== '') { $sp .= " AND r.bolge LIKE :bolge2"; $sp2[':bolge2'] = '%'.$f_bolge.'%'; }
+    if ($f_q     !== '') { $sp .= " AND (r.firma LIKE :q2 OR r.parti_no LIKE :q2 OR r.alici LIKE :q2 OR r.urun LIKE :q2)"; $sp2[':q2'] = '%'.$f_q.'%'; }
+    if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
+    if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
+    $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
+    $islendi_totals = $sp_st->fetch() ?: null;
 
 } elseif ($type === 'depo') {
     $sql = "SELECT p.depo,
@@ -452,6 +479,9 @@ $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ' Raporu' : 'Raporlar';
+$filter_firma_list = get_definitions_by_type('firma');
+$filter_urun_list  = get_definitions_by_type('urun');
+$filter_bolge_list = get_definitions_by_type('bolge');
 render_header($page_title);
 render_flash();
 ?>
@@ -520,16 +550,25 @@ render_flash();
 
     <?php if (in_array($type, ['yukleme','cikma','firma','urun'], true)): ?>
     <div class="rpt-filter-group">
-        <label>Firma<input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma ara..."></label>
+        <label>Firma
+            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma" autocomplete="off">
+            <datalist id="dl-firma"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f['name']) ?>"><?php endforeach; ?></datalist>
+        </label>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
-        <label>Ürün<input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün ara..."></label>
+        <label>Ürün
+            <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün seç veya yaz..." list="dl-urun" autocomplete="off">
+            <datalist id="dl-urun"><?php foreach ($filter_urun_list as $_u): ?><option value="<?= h($_u['name']) ?>"><?php endforeach; ?></datalist>
+        </label>
         <?php endif; ?>
     </div>
     <?php endif; ?>
 
     <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
     <div class="rpt-filter-group">
-        <label>Bölge<input type="text" name="bolge" value="<?= h($f_bolge) ?>" placeholder="Bölge..."></label>
+        <label>Bölge
+            <input type="text" name="bolge" value="<?= h($f_bolge) ?>" placeholder="Bölge seç veya yaz..." list="dl-bolge" autocomplete="off">
+            <datalist id="dl-bolge"><?php foreach ($filter_bolge_list as $_b): ?><option value="<?= h($_b['name']) ?>"><?php endforeach; ?></datalist>
+        </label>
         <label>Durum
             <select name="durum">
                 <option value="">Tümü</option>
@@ -620,6 +659,44 @@ render_flash();
     <div class="rpt-sum-item"><span>Nakliye Bedeli</span><strong><?= fmt_money($totals['nakliye_bedeli']) ?></strong></div>
     <?php endif; ?>
 </div>
+<?php endif; ?>
+
+<?php if (!empty($islendi_totals) && in_array($type, ['yukleme','cikma'], true)): ?>
+<div id="islendiRptWrap" style="margin-top:6px">
+    <button type="button" id="islendiRptToggle" class="islendi-ozet-toggle rpt-no-print">▸ İşaretli / İşaretsiz Palet Ayrımı</button>
+    <div id="islendiRptPanel" class="islendi-ozet-panel" style="display:none">
+        <div class="islendi-ozet-grid">
+            <div class="islendi-ozet-section islendi-ozet-done">
+                <div class="islendi-ozet-head">✓ İşaretli Paletler</div>
+                <div class="islendi-ozet-row"><span>Palet</span><strong><?= number_format((int)$islendi_totals['is_palet'],0,',','.') ?></strong></div>
+                <div class="islendi-ozet-row"><span>Kasa</span><strong><?= number_format((int)$islendi_totals['is_kasa'],0,',','.') ?></strong></div>
+                <div class="islendi-ozet-row"><span>Brüt KG</span><strong><?= fmt_kg((float)$islendi_totals['is_brut']) ?></strong></div>
+                <div class="islendi-ozet-row"><span>Dara KG</span><strong><?= fmt_kg(round((float)$islendi_totals['is_dara'])) ?></strong></div>
+                <div class="islendi-ozet-row"><span>Net KG</span><strong><?= fmt_kg(round((float)$islendi_totals['is_net'])) ?></strong></div>
+            </div>
+            <div class="islendi-ozet-section islendi-ozet-pending">
+                <div class="islendi-ozet-head">○ İşaretsiz Paletler</div>
+                <div class="islendi-ozet-row"><span>Palet</span><strong><?= number_format((int)$islendi_totals['nis_palet'],0,',','.') ?></strong></div>
+                <div class="islendi-ozet-row"><span>Kasa</span><strong><?= number_format((int)$islendi_totals['nis_kasa'],0,',','.') ?></strong></div>
+                <div class="islendi-ozet-row"><span>Brüt KG</span><strong><?= fmt_kg((float)$islendi_totals['nis_brut']) ?></strong></div>
+                <div class="islendi-ozet-row"><span>Dara KG</span><strong><?= fmt_kg(round((float)$islendi_totals['nis_dara'])) ?></strong></div>
+                <div class="islendi-ozet-row"><span>Net KG</span><strong><?= fmt_kg(round((float)$islendi_totals['nis_net'])) ?></strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    var btn=document.getElementById('islendiRptToggle');
+    var panel=document.getElementById('islendiRptPanel');
+    if(!btn||!panel)return;
+    btn.addEventListener('click',function(){
+        var open=panel.style.display!=='none';
+        panel.style.display=open?'none':'block';
+        btn.textContent=(open?'▸':'▾')+' İşaretli / İşaretsiz Palet Ayrımı';
+    });
+})();
+</script>
 <?php endif; ?>
 
 <!-- ── Tablo ── -->
