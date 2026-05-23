@@ -551,14 +551,13 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
 
             <?php for ($i = 0; $i < 4; $i++):
                 $key = $urun_keys[$i] ?? null;
-                if (!$key) continue;
-                $g = $urun_groups[$key];
+                $g   = $key ? $urun_groups[$key] : null;
             ?>
-                <tr><th class="urun-banner" colspan="2"><?= h(mb_strtoupper($key, 'UTF-8')) ?></th></tr>
+                <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : '' ?></th></tr>
                 <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
-                <tr><th>NET</th><td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
+                <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
             <?php endfor; ?>
         </table>
     </div>
