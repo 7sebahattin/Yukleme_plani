@@ -720,6 +720,32 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 
 /* Toplam Dara / Net — turuncu vurgu */
 .totals .tot-orange { background: rgba(245, 158, 11, 0.88); border-radius: 8px; padding: 6px 4px; margin: -6px -4px; }
+
+/* ── İşaretli / İşaretsiz Ayrım Paneli ── */
+#islendiOzetWrap { margin-top: 10px; }
+.islendi-ozet-toggle {
+    width: 100%; background: none; border: none; text-align: left;
+    cursor: pointer; font-size: .82rem; color: var(--muted);
+    padding: 5px 8px; border-radius: 6px; transition: background .15s;
+}
+.islendi-ozet-toggle:hover { background: rgba(0,0,0,.06); }
+.islendi-ozet-panel {
+    margin-top: 4px; padding: 8px;
+    background: var(--card-bg); border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.islendi-ozet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.islendi-ozet-section { border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+.islendi-ozet-head { padding: 6px 8px; font-size: .8rem; font-weight: 700; text-align: center; }
+.islendi-ozet-done .islendi-ozet-head { background: rgba(34,197,94,.15); color: var(--success,#22c55e); }
+.islendi-ozet-pending .islendi-ozet-head { background: rgba(245,158,11,.15); color: #d97706; }
+.islendi-ozet-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 3px 8px; font-size: .82rem;
+}
+.islendi-ozet-row:nth-child(odd) { background: rgba(0,0,0,.025); }
+.islendi-ozet-row span { color: var(--muted); }
+.islendi-ozet-row strong { font-variant-numeric: tabular-nums; }
 .print-table .totals-row .tot-orange { background: #f59e0b !important; color: #fff; }
 
 /* View ekranı başlık kartı */

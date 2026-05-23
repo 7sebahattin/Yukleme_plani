@@ -271,6 +271,33 @@ $form_is_cikma = $form_is_cikma ?? false;
         <div class="tot-orange"><span>Toplam Dara</span><strong id="totDara">0,000</strong></div>
         <div class="tot-orange"><span>Toplam Net</span><strong class="strong" id="totNet">0,000</strong></div>
     </div>
+
+    <?php if ($is_edit_mode): ?>
+    <!-- İşaretli / İşaretsiz ayrım özeti (sadece düzenleme modunda) -->
+    <div id="islendiOzetWrap">
+        <button type="button" id="islendiOzetToggle" class="islendi-ozet-toggle">▸ İşaretli / İşaretsiz Ayrım</button>
+        <div id="islendiOzetPanel" class="islendi-ozet-panel" style="display:none">
+            <div class="islendi-ozet-grid">
+                <div class="islendi-ozet-section islendi-ozet-done">
+                    <div class="islendi-ozet-head">✓ İşaretli Paletler</div>
+                    <div class="islendi-ozet-row"><span>Palet</span><strong id="isAdet">0</strong></div>
+                    <div class="islendi-ozet-row"><span>Kasa</span><strong id="isKasa">0</strong></div>
+                    <div class="islendi-ozet-row"><span>Brüt KG</span><strong id="isBrut">0,000</strong></div>
+                    <div class="islendi-ozet-row"><span>Dara KG</span><strong id="isDara">0,000</strong></div>
+                    <div class="islendi-ozet-row"><span>Net KG</span><strong id="isNet">0,000</strong></div>
+                </div>
+                <div class="islendi-ozet-section islendi-ozet-pending">
+                    <div class="islendi-ozet-head">○ İşaretsiz Paletler</div>
+                    <div class="islendi-ozet-row"><span>Palet</span><strong id="nisAdet">0</strong></div>
+                    <div class="islendi-ozet-row"><span>Kasa</span><strong id="nisKasa">0</strong></div>
+                    <div class="islendi-ozet-row"><span>Brüt KG</span><strong id="nisBrut">0,000</strong></div>
+                    <div class="islendi-ozet-row"><span>Dara KG</span><strong id="nisDara">0,000</strong></div>
+                    <div class="islendi-ozet-row"><span>Net KG</span><strong id="nisNet">0,000</strong></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </section>
 
 <div class="form-foot">
@@ -392,6 +419,18 @@ $form_is_cikma = $form_is_cikma ?? false;
         if (!dirty) return;
         e.preventDefault();
         e.returnValue = '';
+    });
+})();
+</script>
+<script>
+(function () {
+    var btn   = document.getElementById('islendiOzetToggle');
+    var panel = document.getElementById('islendiOzetPanel');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', function () {
+        var open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        btn.textContent = (open ? '▸' : '▾') + ' İşaretli / İşaretsiz Ayrım';
     });
 })();
 </script>
