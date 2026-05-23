@@ -293,19 +293,125 @@ if ($type === 'yukleme' || $type === 'cikma') {
 }
 
 // ── CSV Export ──────────────────────────────────────────
-if ($type !== '' && $export === 'csv' && !empty($rows)) {
+if ($type !== '' && $export === 'csv') {
     $filename = 'rapor_' . $type . '_' . date('Y-m-d') . '.csv';
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     header('Cache-Control: no-cache, must-revalidate');
     echo "\xEF\xBB\xBF";
     $fp = fopen('php://output', 'w');
+
+    // Yüklemeler / Çıkmalar → palet bazında tam detay (limit yok)
+    if (in_array($type, ['yukleme', 'cikma'], true)) {
+        $det_sql = "
+            SELECT
+                lr.id            AS kayit_id,
+                lr.tarih,
+                lr.firma,
+                lr.bolge,
+                lr.alici,
+                lr.urun          AS kayit_urun,
+                lr.parti_no,
+                lr.on_plaka,
+                lr.arka_plaka,
+                lr.durum,
+                lr.sofor_adi,
+                lr.nakliye_sirketi,
+                COALESCE(lr.nakliye_bedeli,0) AS nakliye_bedeli,
+                COALESCE(lr.avans,0)          AS avans,
+                COALESCE(lp.sira_no+1,'')     AS sira,
+                COALESCE(lp.palet_no,'')      AS palet_no,
+                COALESCE(lp.kasa_adeti,0)     AS kasa_adeti,
+                COALESCE(mk.name,'')          AS kasa_cinsi,
+                COALESCE(mp.name,'')          AS palet_tipi,
+                COALESCE(lp.urun_cinsi,'')    AS palet_urun,
+                COALESCE(lp.depo,'')          AS depo,
+                COALESCE(lp.brut_kg,0)        AS brut_kg,
+                COALESCE(lp.dara_kg,0)        AS dara_kg,
+                COALESCE(lp.net_kg,0)         AS net_kg,
+                GROUP_CONCAT(
+                    CASE WHEN mmat.name IS NOT NULL
+                    THEN CONCAT(mmat.name, ' x', CAST(pm.quantity AS CHAR))
+                    END
+                    ORDER BY pm.id SEPARATOR ' | '
+                ) AS malzemeler,
+                lr.created_at
+            FROM loading_records lr
+            LEFT JOIN loading_pallets lp ON lp.loading_record_id = lr.id
+            LEFT JOIN material_definitions mk   ON mk.id   = lp.kasa_cinsi_id
+            LEFT JOIN material_definitions mp   ON mp.id   = lp.palet_tipi_id
+            LEFT JOIN pallet_materials pm       ON pm.loading_pallet_id = lp.id
+            LEFT JOIN material_definitions mmat ON mmat.id = pm.material_id
+            WHERE lr.type = :rtype";
+        $det_p = [':rtype' => $type];
+        if ($f_firma !== '') { $det_sql .= " AND lr.firma LIKE :firma"; $det_p[':firma'] = '%'.$f_firma.'%'; }
+        if ($f_durum !== '') { $det_sql .= " AND lr.durum = :durum";    $det_p[':durum'] = $f_durum; }
+        if ($f_urun  !== '') { $det_sql .= " AND lr.urun  LIKE :urun";  $det_p[':urun']  = '%'.$f_urun.'%'; }
+        if ($f_bolge !== '') { $det_sql .= " AND lr.bolge LIKE :bolge"; $det_p[':bolge'] = '%'.$f_bolge.'%'; }
+        if ($f_q     !== '') {
+            $det_sql .= " AND (lr.firma LIKE :q OR lr.parti_no LIKE :q OR lr.alici LIKE :q OR lr.urun LIKE :q)";
+            $det_p[':q'] = '%'.$f_q.'%';
+        }
+        rpt_date_filter($det_sql, $det_p, 'lr.tarih', $f_from, $f_to);
+        $det_sql .= " GROUP BY lr.id, lp.id ORDER BY lr.tarih DESC, lr.id DESC, lp.sira_no ASC";
+
+        $det_st = db()->prepare($det_sql);
+        $det_st->execute($det_p);
+        $det_rows = $det_st->fetchAll();
+
+        $det_cols = [
+            'kayit_id'         => 'Kayıt ID',
+            'tarih'            => 'Tarih',
+            'firma'            => 'Firma',
+            'bolge'            => 'Bölge',
+            'alici'            => 'Alıcı',
+            'kayit_urun'       => 'Ürün (Kayıt)',
+            'parti_no'         => 'Parti No',
+            'on_plaka'         => 'Ön Plaka',
+            'arka_plaka'       => 'Arka Plaka',
+            'durum'            => 'Durum',
+            'sofor_adi'        => 'Şoför',
+            'nakliye_sirketi'  => 'Nakliye Şirketi',
+            'nakliye_bedeli'   => 'Nakliye Bedeli',
+            'avans'            => 'Avans',
+            'sira'             => 'Palet Sıra',
+            'palet_no'         => 'Palet No',
+            'kasa_adeti'       => 'Kasa Adeti',
+            'kasa_cinsi'       => 'Kasa Cinsi',
+            'palet_tipi'       => 'Palet Tipi',
+            'palet_urun'       => 'Ürün Cinsi',
+            'depo'             => 'Depo',
+            'brut_kg'          => 'Brüt KG',
+            'dara_kg'          => 'Dara KG',
+            'net_kg'           => 'Net KG',
+            'malzemeler'       => 'Malzemeler',
+            'created_at'       => 'Oluşturulma',
+        ];
+        $float_cols = ['brut_kg','dara_kg','net_kg','nakliye_bedeli','avans'];
+
+        fputcsv($fp, array_values($det_cols), ';');
+        foreach ($det_rows as $r) {
+            $line = [];
+            foreach (array_keys($det_cols) as $c) {
+                $v = $r[$c] ?? '';
+                if (in_array($c, $float_cols, true))
+                    $v = str_replace('.', ',', number_format((float)$v, 3, '.', ''));
+                $line[] = $v;
+            }
+            fputcsv($fp, $line, ';');
+        }
+        fclose($fp);
+        exit;
+    }
+
+    // Diğer rapor türleri → özet CSV (mevcut davranış)
+    if (empty($rows)) { fclose($fp); exit; }
     fputcsv($fp, array_map('col_label', $cols), ';');
     foreach ($rows as $r) {
         $line = [];
         foreach ($cols as $c) {
             $v = $r[$c] ?? '';
-            if (in_array($c, ['toplam_brut','toplam_dara','toplam_net','toplam_dara_kg','toplam_brut','net_kg','tartim1','tartim2','unit_dara_kg'], true)) {
+            if (in_array($c, ['toplam_brut','toplam_dara','toplam_net','toplam_dara_kg','net_kg','tartim1','tartim2','unit_dara_kg'], true)) {
                 $v = str_replace('.', ',', (string)$v);
             }
             $line[] = $v;
