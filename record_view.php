@@ -518,8 +518,7 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
             <tr><th class="th-banner" colspan="3">STOK ÇIKIŞLARI</th></tr>
             <tr>
                 <th class="stok-name"></th>
-                <th class="stok-adet">ADET / KG</th>
-                <th class="stok-empty"></th>
+                <th class="stok-adet" colspan="2">ADET / KG</th>
             </tr>
             </thead>
             <tbody>
@@ -552,9 +551,10 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
 
             <?php for ($i = 0; $i < 4; $i++):
                 $key = $urun_keys[$i] ?? null;
-                $g = $key ? $urun_groups[$key] : null;
+                if (!$key) continue;
+                $g = $urun_groups[$key];
             ?>
-                <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : 'ÜRÜN / ' . ($i + 1) ?></th></tr>
+                <tr><th class="urun-banner" colspan="2"><?= h(mb_strtoupper($key, 'UTF-8')) ?></th></tr>
                 <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
