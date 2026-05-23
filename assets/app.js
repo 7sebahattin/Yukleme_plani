@@ -408,18 +408,41 @@
     /* ── Alt toplamlar ── */
     function recomputeTotals() {
         let totKasa = 0, totBrut = 0, totDara = 0, totNet = 0;
+        let isAdet=0,  isKasa=0,  isBrut=0,  isDara=0,  isNet=0;
+        let nisAdet=0, nisKasa=0, nisBrut=0, nisDara=0, nisNet=0;
         pallets.forEach(p => {
             const br   = parseNum(p.brut_kg);
             const dara = calcPalletDara(p);
-            totKasa += parseInt2(p.kasa_adeti);
+            const net  = Math.max(0, br - dara);
+            const ka   = parseInt2(p.kasa_adeti);
+            totKasa += ka;
             totBrut += br;
             totDara += dara;
-            totNet  += Math.max(0, br - dara);
+            totNet  += net;
+            if (p.islendi) {
+                isAdet++; isKasa+=ka; isBrut+=br; isDara+=dara; isNet+=net;
+            } else {
+                nisAdet++; nisKasa+=ka; nisBrut+=br; nisDara+=dara; nisNet+=net;
+            }
         });
         document.getElementById('totKasa').textContent = String(totKasa);
         document.getElementById('totBrut').textContent = fmtKg(Math.round(totBrut));
         document.getElementById('totDara').textContent = fmtKg(Math.round(totDara));
         document.getElementById('totNet').textContent  = fmtKg(Math.round(totNet));
+        // İşaretli / İşaretsiz ayrım (sadece edit modunda mevcut)
+        const elIsAdet = document.getElementById('isAdet');
+        if (elIsAdet) {
+            document.getElementById('isAdet').textContent  = String(isAdet);
+            document.getElementById('isKasa').textContent  = String(isKasa);
+            document.getElementById('isBrut').textContent  = fmtKg(Math.round(isBrut));
+            document.getElementById('isDara').textContent  = fmtKg(Math.round(isDara));
+            document.getElementById('isNet').textContent   = fmtKg(Math.round(isNet));
+            document.getElementById('nisAdet').textContent = String(nisAdet);
+            document.getElementById('nisKasa').textContent = String(nisKasa);
+            document.getElementById('nisBrut').textContent = fmtKg(Math.round(nisBrut));
+            document.getElementById('nisDara').textContent = fmtKg(Math.round(nisDara));
+            document.getElementById('nisNet').textContent  = fmtKg(Math.round(nisNet));
+        }
     }
 
     /* ── Hidden input'lar oluştur (form submit'te çağrılır) ── */
