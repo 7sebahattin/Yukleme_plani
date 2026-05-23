@@ -1298,6 +1298,10 @@ body.print-mode .topbar { display: none; }
     padding: 2px;
     font-weight: 700;
 }
+.asya-totals .urun-banner-empty {
+    height: 26px;
+    min-height: 26px;
+}
 
 /* ====== Alt blok ====== */
 .asya-bottom {
@@ -1395,6 +1399,7 @@ body.print-mode .asya-sheet {
     .asya-totals th { font-size: 7.5pt; padding: 0px 3px; height: 11px; font-weight: 700; }
     .asya-totals td { font-size: 8pt; padding: 0px 3px; height: 11px; font-weight: 600; }
     .asya-totals .urun-banner { font-size: 7pt; padding: 1px 0; font-weight: 700; }
+    .asya-totals .urun-banner-empty { height: 20px; min-height: 20px; }
     .asya-bottom th { font-size: 6pt; padding: 1px; }
     .asya-bottom td { height: 12px; padding: 0px 3px; font-size: 6.5pt; }
     .asya-brand { font-size: 10pt; padding: 1px; }
