@@ -553,7 +553,7 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
                 $key = $urun_keys[$i] ?? null;
                 $g   = $key ? $urun_groups[$key] : null;
             ?>
-                <tr><th class="urun-banner" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : '' ?></th></tr>
+                <tr><th class="urun-banner<?= $key ? '' : ' urun-banner-empty' ?>" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : '' ?></th></tr>
                 <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
