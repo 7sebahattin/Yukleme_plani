@@ -526,8 +526,9 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
             <?php foreach ($stok_rows as $sr):
                 [$key, $label, $allowed, $match] = $sr;
                 $r = stok_satir_topla($stok_use, $defs_by_id, $allowed, $match);
-                if ($r['adet'] <= 0) continue;
-                $adet_str = rtrim(rtrim(number_format($r['adet'], 3, ',', '.'), '0'), ',');
+                $adet_str = $r['adet'] > 0
+                    ? rtrim(rtrim(number_format($r['adet'], 3, ',', '.'), '0'), ',')
+                    : '';
             ?>
                 <tr>
                     <td class="stok-name"><?= h($label) ?></td>

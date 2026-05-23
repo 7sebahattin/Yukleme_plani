@@ -1211,7 +1211,7 @@ body.print-mode .topbar { display: none; }
     grid-template-columns: 59% 20% 21%;
     gap: 0;
     margin-top: 0;
-    align-items: start;
+    align-items: stretch;
 }
 
 /* Palet tablosu */
@@ -1246,7 +1246,7 @@ body.print-mode .topbar { display: none; }
 .asya-pallets .w-net  { width: 48px; }
 
 /* Stok çıkışları */
-.asya-stok { font-size: 7.5pt; vertical-align: top; }
+.asya-stok { font-size: 7.5pt; vertical-align: top; height: 100%; }
 .asya-stok th {
     font-size: 7.5pt;
     text-align: center;
@@ -1271,28 +1271,31 @@ body.print-mode .topbar { display: none; }
 /* Genel toplam */
 .asya-totals {
     margin-top: 0;
-    font-size: 8pt;
+    font-size: 9pt;
     vertical-align: top;
+    height: 100%;
 }
 .asya-totals th {
     background: #fff !important;
     font-weight: 700;
     text-align: left;
-    padding: 3px 6px;
-    width: 35%;
-    font-size: 8pt;
+    padding: 3px 5px;
+    width: 38%;
+    font-size: 9pt;
 }
 .asya-totals td {
     text-align: right;
-    padding: 3px 6px;
-    height: 14px;
-    font-size: 8.5pt;
+    padding: 3px 5px;
+    height: 15px;
+    font-size: 10pt;
+    font-weight: 600;
 }
 .asya-totals .urun-banner {
     background: #f0f0f0 !important;
     text-align: center;
-    font-size: 7.5pt;
+    font-size: 8pt;
     padding: 2px;
+    font-weight: 700;
 }
 
 /* ====== Alt blok ====== */
@@ -1387,8 +1390,9 @@ body.print-mode .asya-sheet {
     .asya-stok { font-size: 6.5pt; }
     .asya-stok .stok-name { font-size: 6.5pt; padding: 0px 3px; }
     .asya-stok .stok-val { height: 10px; font-size: 6.5pt; padding: 0px 2px; }
-    .asya-totals th, .asya-totals td { font-size: 6.5pt; padding: 0px 4px; height: 10px; }
-    .asya-totals .urun-banner { font-size: 6pt; padding: 0px; }
+    .asya-totals th { font-size: 7.5pt; padding: 0px 3px; height: 11px; font-weight: 700; }
+    .asya-totals td { font-size: 8pt; padding: 0px 3px; height: 11px; font-weight: 600; }
+    .asya-totals .urun-banner { font-size: 7pt; padding: 1px 0; font-weight: 700; }
     .asya-bottom th { font-size: 6pt; padding: 1px; }
     .asya-bottom td { height: 12px; padding: 0px 3px; font-size: 6.5pt; }
     .asya-brand { font-size: 10pt; padding: 1px; }
