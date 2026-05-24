@@ -517,12 +517,97 @@ render_flash();
 ?>
 
 <style>
+/* Rapor sayfası yazdırma — @page en üst seviyede olmalı */
+@page { size: A4 landscape; margin: 8mm; }
+
 @media print {
-    .topbar,.bottomnav,.rpt-head .rpt-actions,.rpt-filter-card,.rpt-no-print{display:none!important}
-    body,.container{background:#fff!important;padding:0!important}
-    .rpt-summary{border:1px solid #ccc!important}
-    .data-table{font-size:8pt}
-    .table-wrap{overflow:visible!important}
+    /* Gizle */
+    .topbar, .bottomnav,
+    .rpt-head .rpt-actions,
+    .rpt-filter-card,
+    .rpt-no-print,
+    #islendiRptWrap { display: none !important; }
+
+    /* Tam genişlik */
+    html, body { background: #fff !important; margin: 0 !important; }
+    .container {
+        padding: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+    }
+
+    /* Özet kutu */
+    .rpt-summary {
+        border: 1px solid #ccc !important;
+        margin: 0 0 8px !important;
+        padding: 5px 8px !important;
+        gap: 4px !important;
+        flex-wrap: wrap;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .rpt-sum-item { padding: 3px 8px !important; min-width: 55px; }
+    .rpt-sum-item span  { font-size: 6pt !important; }
+    .rpt-sum-item strong{ font-size: 8pt !important; }
+    .rpt-sum-highlight  { background: rgba(37,99,235,.08) !important; border-radius: 4px; }
+
+    /* Başlık */
+    .rpt-head { margin-bottom: 6px; }
+    .rpt-title h1 { font-size: 11pt !important; margin: 0 !important; }
+    .rpt-title p  { font-size: 8pt !important;  margin: 1px 0 !important; }
+
+    /* Tablo sarıcı */
+    .table-wrap {
+        overflow: visible !important;
+        border: 1px solid #ccc !important;
+        border-radius: 0 !important;
+        width: 100%;
+    }
+
+    /* Tablo genel */
+    .data-table {
+        font-size: 6.5pt !important;
+        width: 100%;
+        border-collapse: collapse !important;
+        table-layout: auto;
+    }
+    .data-table th {
+        font-size: 6pt !important;
+        padding: 3px 4px !important;
+        white-space: nowrap;
+        background: #f0f0f0 !important;
+        position: static !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .data-table td {
+        padding: 3px 4px !important;
+        white-space: nowrap;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        border-bottom: 1px solid #e8e8e8 !important;
+    }
+    .data-table tr:hover td { background: #fff !important; }
+    .data-table tr.tr-islendi > td  { background: #fffde7 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .data-table tr.tr-yuklendi > td { background: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* Toplam satırı */
+    .totals-row td {
+        background: #fffbcc !important;
+        font-weight: 700 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+
+    /* Badge'ler */
+    .rpt-badge {
+        border: 1px solid #999 !important;
+        padding: 1px 3px !important;
+        border-radius: 2px !important;
+        font-size: 6pt !important;
+        background: #fff !important;
+    }
+    .badge-islendi  { border-color: #d97706 !important; color: #d97706 !important; }
+    .badge-yuklendi { border-color: #16a34a !important; color: #16a34a !important; }
 }
 </style>
 
