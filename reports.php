@@ -18,6 +18,7 @@ $f_plaka   = trim($_GET['plaka']     ?? '');
 $f_mtype   = trim($_GET['mat_type']  ?? '');
 $f_q       = trim($_GET['q']         ?? '');
 $f_sort    = trim($_GET['sort']      ?? 'tarih');
+$f_palet_islendi = trim($_GET['palet_islendi'] ?? '');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
@@ -109,6 +110,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_durum !== '') { $sql .= " AND r.durum = :durum";    $p[':durum'] = $f_durum; }
     if ($f_urun  !== '') { $sql .= " AND r.urun  LIKE :urun";  $p[':urun']  = '%'.$f_urun.'%'; }
     if ($f_bolge !== '') { $sql .= " AND r.bolge LIKE :bolge"; $p[':bolge'] = '%'.$f_bolge.'%'; }
+    if ($f_depo  !== '') { $sql .= " AND p.depo  LIKE :depo";  $p[':depo']  = '%'.$f_depo.'%'; }
     if ($f_q     !== '') {
         $sql .= " AND (r.firma LIKE :q OR r.parti_no LIKE :q OR r.alici LIKE :q OR r.urun LIKE :q)";
         $p[':q'] = '%'.$f_q.'%';
@@ -122,7 +124,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
         'net'   => 'toplam_net DESC',
     ];
     $order_by = $sort_map[$f_sort] ?? 'r.tarih DESC, r.id DESC';
-    $sql .= " GROUP BY r.id ORDER BY $order_by LIMIT 2000";
+    $sql .= " GROUP BY r.id";
+    if ($f_palet_islendi === 'hepsi')   $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = COUNT(p.id)";
+    if ($f_palet_islendi === 'hicbiri') $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = 0";
+    $sql .= " ORDER BY $order_by LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
     if ($type === 'yukleme') {
@@ -159,9 +164,12 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_durum !== '') { $sp .= " AND r.durum = :durum2";    $sp2[':durum2'] = $f_durum; }
     if ($f_urun  !== '') { $sp .= " AND r.urun  LIKE :urun2";  $sp2[':urun2']  = '%'.$f_urun.'%'; }
     if ($f_bolge !== '') { $sp .= " AND r.bolge LIKE :bolge2"; $sp2[':bolge2'] = '%'.$f_bolge.'%'; }
+    if ($f_depo  !== '') { $sp .= " AND p.depo  LIKE :depo2";  $sp2[':depo2']  = '%'.$f_depo.'%'; }
     if ($f_q     !== '') { $sp .= " AND (r.firma LIKE :q2 OR r.parti_no LIKE :q2 OR r.alici LIKE :q2 OR r.urun LIKE :q2)"; $sp2[':q2'] = '%'.$f_q.'%'; }
     if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
     if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
+    if ($f_palet_islendi === 'hepsi')   { $sp .= " GROUP BY r.id HAVING COUNT(p.id)>0 AND SUM(p.islendi)=COUNT(p.id)"; }
+    elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(p.id)>0 AND SUM(p.islendi)=0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
     $islendi_totals = $sp_st->fetch() ?: null;
 
@@ -459,19 +467,20 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
 
 // ── CSV URL helper ──────────────────────────────────────
 $csv_params = array_filter([
-    'type'      => $type,
-    'export'    => 'csv',
-    'date_from' => $f_from,
-    'date_to'   => $f_to,
-    'firma'     => $f_firma,
-    'durum'     => $f_durum,
-    'urun'      => $f_urun,
-    'bolge'     => $f_bolge,
-    'depo'      => $f_depo,
-    'plaka'     => $f_plaka,
-    'mat_type'  => $f_mtype,
-    'q'         => $f_q,
-    'sort'      => ($f_sort !== 'tarih') ? $f_sort : '',
+    'type'           => $type,
+    'export'         => 'csv',
+    'date_from'      => $f_from,
+    'date_to'        => $f_to,
+    'firma'          => $f_firma,
+    'durum'          => $f_durum,
+    'urun'           => $f_urun,
+    'bolge'          => $f_bolge,
+    'depo'           => $f_depo,
+    'plaka'          => $f_plaka,
+    'mat_type'       => $f_mtype,
+    'q'              => $f_q,
+    'sort'           => ($f_sort !== 'tarih') ? $f_sort : '',
+    'palet_islendi'  => $f_palet_islendi,
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
 $csv_summary_params = $csv_params;
@@ -479,9 +488,10 @@ $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ' Raporu' : 'Raporlar';
-$filter_firma_list = get_definitions_by_type('firma');
-$filter_urun_list  = get_definitions_by_type('urun');
-$filter_bolge_list = get_definitions_by_type('bolge');
+$filter_firma_list = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$filter_urun_list  = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_bolge_list = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_depo_list  = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 render_header($page_title);
 render_flash();
 ?>
@@ -552,12 +562,12 @@ render_flash();
     <div class="rpt-filter-group">
         <label>Firma
             <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma" autocomplete="off">
-            <datalist id="dl-firma"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f['name']) ?>"><?php endforeach; ?></datalist>
+            <datalist id="dl-firma"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
         </label>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
         <label>Ürün
             <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün seç veya yaz..." list="dl-urun" autocomplete="off">
-            <datalist id="dl-urun"><?php foreach ($filter_urun_list as $_u): ?><option value="<?= h($_u['name']) ?>"><?php endforeach; ?></datalist>
+            <datalist id="dl-urun"><?php foreach ($filter_urun_list as $_u): ?><option value="<?= h($_u) ?>"><?php endforeach; ?></datalist>
         </label>
         <?php endif; ?>
     </div>
@@ -567,14 +577,26 @@ render_flash();
     <div class="rpt-filter-group">
         <label>Bölge
             <input type="text" name="bolge" value="<?= h($f_bolge) ?>" placeholder="Bölge seç veya yaz..." list="dl-bolge" autocomplete="off">
-            <datalist id="dl-bolge"><?php foreach ($filter_bolge_list as $_b): ?><option value="<?= h($_b['name']) ?>"><?php endforeach; ?></datalist>
+            <datalist id="dl-bolge"><?php foreach ($filter_bolge_list as $_b): ?><option value="<?= h($_b) ?>"><?php endforeach; ?></datalist>
         </label>
-        <label>Durum
+        <label>Depo
+            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="Depo seç veya yaz..." list="dl-depo" autocomplete="off">
+            <datalist id="dl-depo"><?php foreach ($filter_depo_list as $_d): ?><option value="<?= h($_d) ?>"><?php endforeach; ?></datalist>
+        </label>
+    </div>
+    <div class="rpt-filter-group">
+        <label>Kayıt Durumu
             <select name="durum">
-                <option value="">Tümü</option>
                 <option value="" <?= $f_durum==='' ? 'selected':'' ?>>Tümü</option>
                 <option value="islendi"  <?= $f_durum==='islendi' ? 'selected':'' ?>>İşlendi</option>
                 <option value="yuklendi" <?= $f_durum==='yuklendi'? 'selected':'' ?>>Yüklendi</option>
+            </select>
+        </label>
+        <label>Palet İşaret Durumu
+            <select name="palet_islendi">
+                <option value=""        <?= $f_palet_islendi===''        ? 'selected':'' ?>>Tümü</option>
+                <option value="hepsi"   <?= $f_palet_islendi==='hepsi'   ? 'selected':'' ?>>Tümü İşaretli</option>
+                <option value="hicbiri" <?= $f_palet_islendi==='hicbiri' ? 'selected':'' ?>>Hiç İşaretli Değil</option>
             </select>
         </label>
     </div>
@@ -582,14 +604,23 @@ render_flash();
 
     <?php if ($type === 'depo'): ?>
     <div class="rpt-filter-group">
-        <label>Depo<input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="Depo adı..."></label>
-        <label>Firma<input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma..."></label>
+        <label>Depo
+            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="Depo seç veya yaz..." list="dl-depo2" autocomplete="off">
+            <datalist id="dl-depo2"><?php foreach ($filter_depo_list as $_d): ?><option value="<?= h($_d) ?>"><?php endforeach; ?></datalist>
+        </label>
+        <label>Firma
+            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma2" autocomplete="off">
+            <datalist id="dl-firma2"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
+        </label>
     </div>
     <?php endif; ?>
 
     <?php if ($type === 'kantar'): ?>
     <div class="rpt-filter-group">
-        <label>Firma<input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma..."></label>
+        <label>Firma
+            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma3" autocomplete="off">
+            <datalist id="dl-firma3"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
+        </label>
         <label>Plaka<input type="text" name="plaka" value="<?= h($f_plaka) ?>" placeholder="Plaka..."></label>
     </div>
     <?php endif; ?>
