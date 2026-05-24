@@ -91,26 +91,40 @@ function rpt_merge_rows(array $rows, string $key_col, array $sum_int, array $sum
 }
 
 if ($type === 'yukleme' || $type === 'cikma') {
+    // Palet işaret durumuna göre aggregate sütunları değişir
+    if ($f_palet_islendi === 'isaretli') {
+        $agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi=1 THEN 1 END),0)";
+        $agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.kasa_adeti ELSE 0 END),0)";
+        $agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg    ELSE 0 END),0)";
+        $agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg    ELSE 0 END),0)";
+        $agg_net   = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg     ELSE 0 END),0)";
+    } else {
+        $agg_palet = "COUNT(p.id)";
+        $agg_kasa  = "COALESCE(SUM(p.kasa_adeti),0)";
+        $agg_brut  = "COALESCE(SUM(p.brut_kg),0)";
+        $agg_dara  = "COALESCE(SUM(p.dara_kg),0)";
+        $agg_net   = "COALESCE(SUM(p.net_kg),0)";
+    }
     $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
                    (SELECT p2.depo FROM loading_pallets p2
                     WHERE p2.loading_record_id = r.id AND p2.depo != ''
-                    ORDER BY p2.id LIMIT 1)          AS depo,
-                   COUNT(p.id)                       AS palet_sayisi,
-                   COALESCE(SUM(p.kasa_adeti),0)     AS toplam_kasa,
-                   COALESCE(SUM(p.brut_kg),0)        AS toplam_brut,
-                   COALESCE(SUM(p.dara_kg),0)        AS toplam_dara,
-                   COALESCE(SUM(p.net_kg),0)         AS toplam_net,
+                    ORDER BY p2.id LIMIT 1)  AS depo,
+                   {$agg_palet}              AS palet_sayisi,
+                   {$agg_kasa}               AS toplam_kasa,
+                   {$agg_brut}               AS toplam_brut,
+                   {$agg_dara}               AS toplam_dara,
+                   {$agg_net}                AS toplam_net,
                    r.created_at
             FROM loading_records r
             LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
             WHERE r.type = :rtype";
     $p = [':rtype' => $type];
-    if ($f_firma !== '') { $sql .= " AND r.firma LIKE :firma"; $p[':firma'] = '%'.$f_firma.'%'; }
-    if ($f_durum !== '') { $sql .= " AND r.durum = :durum";    $p[':durum'] = $f_durum; }
-    if ($f_urun  !== '') { $sql .= " AND r.urun  LIKE :urun";  $p[':urun']  = '%'.$f_urun.'%'; }
-    if ($f_bolge !== '') { $sql .= " AND r.bolge LIKE :bolge"; $p[':bolge'] = '%'.$f_bolge.'%'; }
-    if ($f_depo  !== '') { $sql .= " AND p.depo  LIKE :depo";  $p[':depo']  = '%'.$f_depo.'%'; }
+    if ($f_firma !== '') { $sql .= " AND r.firma = :firma"; $p[':firma'] = $f_firma; }
+    if ($f_durum !== '') { $sql .= " AND r.durum = :durum"; $p[':durum'] = $f_durum; }
+    if ($f_urun  !== '') { $sql .= " AND r.urun  = :urun";  $p[':urun']  = $f_urun;  }
+    if ($f_bolge !== '') { $sql .= " AND r.bolge = :bolge"; $p[':bolge'] = $f_bolge; }
+    if ($f_depo  !== '') { $sql .= " AND p.depo  = :depo";  $p[':depo']  = $f_depo;  }
     if ($f_q     !== '') {
         $sql .= " AND (r.firma LIKE :q OR r.parti_no LIKE :q OR r.alici LIKE :q OR r.urun LIKE :q)";
         $p[':q'] = '%'.$f_q.'%';
@@ -125,8 +139,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     ];
     $order_by = $sort_map[$f_sort] ?? 'r.tarih DESC, r.id DESC';
     $sql .= " GROUP BY r.id";
-    if ($f_palet_islendi === 'hepsi')   $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = COUNT(p.id)";
-    if ($f_palet_islendi === 'hicbiri') $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = 0";
+    if ($f_palet_islendi === 'isaretli') $sql .= " HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END) > 0";
+    if ($f_palet_islendi === 'hicbiri')  $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = 0";
     $sql .= " ORDER BY $order_by LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -160,15 +174,15 @@ if ($type === 'yukleme' || $type === 'cikma') {
         LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
         WHERE r.type = :rtype2";
     $sp2 = [':rtype2' => $type];
-    if ($f_firma !== '') { $sp .= " AND r.firma LIKE :firma2"; $sp2[':firma2'] = '%'.$f_firma.'%'; }
-    if ($f_durum !== '') { $sp .= " AND r.durum = :durum2";    $sp2[':durum2'] = $f_durum; }
-    if ($f_urun  !== '') { $sp .= " AND r.urun  LIKE :urun2";  $sp2[':urun2']  = '%'.$f_urun.'%'; }
-    if ($f_bolge !== '') { $sp .= " AND r.bolge LIKE :bolge2"; $sp2[':bolge2'] = '%'.$f_bolge.'%'; }
-    if ($f_depo  !== '') { $sp .= " AND p.depo  LIKE :depo2";  $sp2[':depo2']  = '%'.$f_depo.'%'; }
+    if ($f_firma !== '') { $sp .= " AND r.firma = :firma2"; $sp2[':firma2'] = $f_firma; }
+    if ($f_durum !== '') { $sp .= " AND r.durum = :durum2"; $sp2[':durum2'] = $f_durum; }
+    if ($f_urun  !== '') { $sp .= " AND r.urun  = :urun2";  $sp2[':urun2']  = $f_urun;  }
+    if ($f_bolge !== '') { $sp .= " AND r.bolge = :bolge2"; $sp2[':bolge2'] = $f_bolge; }
+    if ($f_depo  !== '') { $sp .= " AND p.depo  = :depo2";  $sp2[':depo2']  = $f_depo;  }
     if ($f_q     !== '') { $sp .= " AND (r.firma LIKE :q2 OR r.parti_no LIKE :q2 OR r.alici LIKE :q2 OR r.urun LIKE :q2)"; $sp2[':q2'] = '%'.$f_q.'%'; }
     if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
     if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
-    if ($f_palet_islendi === 'hepsi')   { $sp .= " GROUP BY r.id HAVING COUNT(p.id)>0 AND SUM(p.islendi)=COUNT(p.id)"; }
+    if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END)>0"; }
     elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(p.id)>0 AND SUM(p.islendi)=0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
     $islendi_totals = $sp_st->fetch() ?: null;
@@ -561,13 +575,21 @@ render_flash();
     <?php if (in_array($type, ['yukleme','cikma','firma','urun'], true)): ?>
     <div class="rpt-filter-group">
         <label>Firma
-            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma" autocomplete="off">
-            <datalist id="dl-firma"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
+            <select name="firma">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_firma_list as $_f): ?>
+                <option value="<?= h($_f) ?>" <?= $f_firma===$_f?'selected':'' ?>><?= h($_f) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
         <label>Ürün
-            <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün seç veya yaz..." list="dl-urun" autocomplete="off">
-            <datalist id="dl-urun"><?php foreach ($filter_urun_list as $_u): ?><option value="<?= h($_u) ?>"><?php endforeach; ?></datalist>
+            <select name="urun">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_urun_list as $_u): ?>
+                <option value="<?= h($_u) ?>" <?= $f_urun===$_u?'selected':'' ?>><?= h($_u) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <?php endif; ?>
     </div>
@@ -576,12 +598,20 @@ render_flash();
     <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
     <div class="rpt-filter-group">
         <label>Bölge
-            <input type="text" name="bolge" value="<?= h($f_bolge) ?>" placeholder="Bölge seç veya yaz..." list="dl-bolge" autocomplete="off">
-            <datalist id="dl-bolge"><?php foreach ($filter_bolge_list as $_b): ?><option value="<?= h($_b) ?>"><?php endforeach; ?></datalist>
+            <select name="bolge">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_bolge_list as $_b): ?>
+                <option value="<?= h($_b) ?>" <?= $f_bolge===$_b?'selected':'' ?>><?= h($_b) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <label>Depo
-            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="Depo seç veya yaz..." list="dl-depo" autocomplete="off">
-            <datalist id="dl-depo"><?php foreach ($filter_depo_list as $_d): ?><option value="<?= h($_d) ?>"><?php endforeach; ?></datalist>
+            <select name="depo">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_depo_list as $_d): ?>
+                <option value="<?= h($_d) ?>" <?= $f_depo===$_d?'selected':'' ?>><?= h($_d) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
     </div>
     <div class="rpt-filter-group">
@@ -592,11 +622,11 @@ render_flash();
                 <option value="yuklendi" <?= $f_durum==='yuklendi'? 'selected':'' ?>>Yüklendi</option>
             </select>
         </label>
-        <label>Palet İşaret Durumu
+        <label>Palet İşaret
             <select name="palet_islendi">
-                <option value=""        <?= $f_palet_islendi===''        ? 'selected':'' ?>>Tümü</option>
-                <option value="hepsi"   <?= $f_palet_islendi==='hepsi'   ? 'selected':'' ?>>Tümü İşaretli</option>
-                <option value="hicbiri" <?= $f_palet_islendi==='hicbiri' ? 'selected':'' ?>>Hiç İşaretli Değil</option>
+                <option value=""         <?= $f_palet_islendi===''         ? 'selected':'' ?>>Tümü</option>
+                <option value="isaretli" <?= $f_palet_islendi==='isaretli' ? 'selected':'' ?>>İşaretli Paletler</option>
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Hiç İşaretli Değil</option>
             </select>
         </label>
     </div>
@@ -605,12 +635,20 @@ render_flash();
     <?php if ($type === 'depo'): ?>
     <div class="rpt-filter-group">
         <label>Depo
-            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="Depo seç veya yaz..." list="dl-depo2" autocomplete="off">
-            <datalist id="dl-depo2"><?php foreach ($filter_depo_list as $_d): ?><option value="<?= h($_d) ?>"><?php endforeach; ?></datalist>
+            <select name="depo">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_depo_list as $_d): ?>
+                <option value="<?= h($_d) ?>" <?= $f_depo===$_d?'selected':'' ?>><?= h($_d) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <label>Firma
-            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma2" autocomplete="off">
-            <datalist id="dl-firma2"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
+            <select name="firma">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_firma_list as $_f): ?>
+                <option value="<?= h($_f) ?>" <?= $f_firma===$_f?'selected':'' ?>><?= h($_f) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
     </div>
     <?php endif; ?>
@@ -618,8 +656,12 @@ render_flash();
     <?php if ($type === 'kantar'): ?>
     <div class="rpt-filter-group">
         <label>Firma
-            <input type="text" name="firma" value="<?= h($f_firma) ?>" placeholder="Firma seç veya yaz..." list="dl-firma3" autocomplete="off">
-            <datalist id="dl-firma3"><?php foreach ($filter_firma_list as $_f): ?><option value="<?= h($_f) ?>"><?php endforeach; ?></datalist>
+            <select name="firma">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_firma_list as $_f): ?>
+                <option value="<?= h($_f) ?>" <?= $f_firma===$_f?'selected':'' ?>><?= h($_f) ?></option>
+                <?php endforeach; ?>
+            </select>
         </label>
         <label>Plaka<input type="text" name="plaka" value="<?= h($f_plaka) ?>" placeholder="Plaka..."></label>
     </div>
