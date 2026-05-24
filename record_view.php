@@ -383,6 +383,9 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
                         <div class="vc-mat">
                             <span><?= h(($type_labels[$m['material_type']] ?? '') . ' / ' . $m['material_name']) ?>
                                   × <?= h(fmt_kg($m['quantity'])) ?></span>
+                            <?php if (!$print): ?>
+                            <button type="button" class="vc-mat-del" data-pmid="<?= (int)$m['id'] ?>" title="Malzemeyi sil">✕</button>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -1122,6 +1125,25 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
             tplListEl.appendChild(card);
         });
     }
+
+    /* ── Malzeme sil ── */
+    document.querySelectorAll('.vc-mat-del').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('Bu malzemeyi paletden silmek istediğinizden emin misiniz?')) return;
+            btn.disabled = true;
+            fetch('api_bulk_material.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({csrf: CSRF, record_id: REC_ID, action: 'delete', pm_id: parseInt(btn.dataset.pmid)})
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) { location.reload(); }
+                else { alert('Hata: ' + (data.error || 'Bilinmeyen hata')); btn.disabled = false; }
+            })
+            .catch(function() { alert('Bağlantı hatası.'); btn.disabled = false; });
+        });
+    });
 })();
 </script>
 <?php endif; ?>
