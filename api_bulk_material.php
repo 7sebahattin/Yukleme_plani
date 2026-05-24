@@ -23,6 +23,58 @@ csrf_check($body['csrf'] ?? null);
 $record_id  = (int)($body['record_id'] ?? 0);
 $pallet_ids = array_values(array_unique(array_map('intval', (array)($body['pallet_ids'] ?? []))));
 
+// ── Malzeme sil ──────────────────────────────────────────────────
+if (($body['action'] ?? '') === 'delete') {
+    $pm_id = (int)($body['pm_id'] ?? 0);
+    if ($pm_id <= 0 || $record_id <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'Geçersiz parametre']); exit;
+    }
+    $st = db()->prepare(
+        "SELECT pm.id, pm.loading_pallet_id FROM pallet_materials pm
+         JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+         WHERE pm.id = ? AND lp.loading_record_id = ?"
+    );
+    $st->execute([$pm_id, $record_id]);
+    $pm_row = $st->fetch();
+    if (!$pm_row) {
+        echo json_encode(['ok' => false, 'error' => 'Malzeme bulunamadı']); exit;
+    }
+    $pid = (int)$pm_row['loading_pallet_id'];
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE FROM pallet_materials WHERE id = ?")->execute([$pm_id]);
+        $st_p = $pdo->prepare("SELECT * FROM loading_pallets WHERE id=?");
+        $st_p->execute([$pid]);
+        $pallet = $st_p->fetch();
+        $st_m = $pdo->prepare("SELECT material_id, quantity FROM pallet_materials WHERE loading_pallet_id=?");
+        $st_m->execute([$pid]);
+        $mats = array_map(
+            fn($mi) => ['material_id' => $mi['material_id'], 'quantity' => $mi['quantity']],
+            $st_m->fetchAll()
+        );
+        $computed = compute_pallet_row([
+            'palet_no'      => $pallet['palet_no'],
+            'kasa_adeti'    => $pallet['kasa_adeti'],
+            'size'          => $pallet['size'],
+            'brut_kg'       => $pallet['brut_kg'],
+            'kasa_cinsi_id' => $pallet['kasa_cinsi_id'],
+            'palet_tipi_id' => $pallet['palet_tipi_id'],
+            'urun_cinsi'    => $pallet['urun_cinsi'],
+            'depo'          => $pallet['depo'],
+            'materials'     => $mats,
+        ]);
+        $pdo->prepare("UPDATE loading_pallets SET dara_kg=?, net_kg=? WHERE id=?")
+            ->execute([$computed['dara_kg'], $computed['net_kg'], $pid]);
+        $pdo->commit();
+        echo json_encode(['ok' => true]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // Eski (tekli) format → yeni array formatına çevir
 if (!empty($body['material_id'])) {
     $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => num($body['quantity'] ?? 1)]];

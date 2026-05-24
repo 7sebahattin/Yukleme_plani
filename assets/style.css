@@ -699,6 +699,12 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .vc-mat:last-child { border-bottom: none; }
 .vc-mat span { flex: 1; color: var(--text); }
 .vc-mat strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vc-mat-del {
+    background: none; border: none; cursor: pointer; padding: 2px 5px;
+    border-radius: 4px; color: var(--muted); font-size: .72rem; line-height: 1;
+    flex-shrink: 0; transition: color .15s, background .15s;
+}
+.vc-mat-del:hover { color: var(--danger, #dc2626); background: rgba(220,38,38,.1); }
 
 .vc-totals {
     display: grid;
