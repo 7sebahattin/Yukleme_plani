@@ -927,6 +927,9 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 /* =========================================================
    YAZDIRMA
    ========================================================= */
+/* Genel varsayılan: A4 yatay. Sayfa özel @page kuralları kendi <style> bloğunda override eder. */
+@page { size: A4 landscape; margin: 12mm; }
+
 @media print {
     body { background: #fff; }
     .topbar, .page-head, .page-head-actions, .no-print, .filter-pills,
@@ -939,7 +942,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     /* Yazdırmada tablo göster, kartları gizle */
     .view-table-wrap { display: block !important; }
     .view-cards { display: none !important; }
-    @page { size: A4 landscape; margin: 12mm; }
 }
 
 body.print-mode .topbar { display: none; }
@@ -1450,7 +1452,6 @@ body.print-mode .asya-sheet {
     }
     .asya-signatures span { font-size: 7pt; margin-bottom: 12px; }
     .asya-sheet { page-break-after: avoid; }
-    @page { size: A4 portrait; margin: 4mm; }
 }
 
 /* =========================================================
