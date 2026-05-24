@@ -231,7 +231,9 @@ $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
-
+<?php if ($print): ?>
+<style>@page { size: A4 portrait; margin: 4mm; }</style>
+<?php endif; ?>
 <?php
 if (($record['type'] ?? 'yukleme') === 'cikma') {
     $GLOBALS['_nav_cikma_hint'] = true;

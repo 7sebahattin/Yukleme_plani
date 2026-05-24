@@ -694,9 +694,9 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 .kr-print-header { display:none; }
 
 /* ── Baskı ──────────────────────────────────────────────── */
-@media print {
-    @page { size: A4 landscape; margin: 8mm; }
+@page { size: A4 landscape; margin: 8mm; }
 
+@media print {
     .topbar, .bottomnav, .kr-no-print { display:none !important; }
     .kr-print-header { display:block !important; margin-bottom:5mm; }
 
