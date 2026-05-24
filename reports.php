@@ -98,6 +98,12 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg    ELSE 0 END),0)";
         $agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg    ELSE 0 END),0)";
         $agg_net   = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg     ELSE 0 END),0)";
+    } elseif ($f_palet_islendi === 'hicbiri') {
+        $agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi!=1 THEN 1 END),0)";
+        $agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)";
+        $agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg    ELSE 0 END),0)";
+        $agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg    ELSE 0 END),0)";
+        $agg_net   = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg     ELSE 0 END),0)";
     } else {
         $agg_palet = "COUNT(p.id)";
         $agg_kasa  = "COALESCE(SUM(p.kasa_adeti),0)";
@@ -139,8 +145,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     ];
     $order_by = $sort_map[$f_sort] ?? 'r.tarih DESC, r.id DESC';
     $sql .= " GROUP BY r.id";
-    if ($f_palet_islendi === 'isaretli') $sql .= " HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END) > 0";
-    if ($f_palet_islendi === 'hicbiri')  $sql .= " HAVING COUNT(p.id) > 0 AND SUM(p.islendi) = 0";
+    if ($f_palet_islendi === 'isaretli') $sql .= " HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END) > 0";
+    if ($f_palet_islendi === 'hicbiri')  $sql .= " HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END) > 0";
     $sql .= " ORDER BY $order_by LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -182,8 +188,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_q     !== '') { $sp .= " AND (r.firma LIKE :q2 OR r.parti_no LIKE :q2 OR r.alici LIKE :q2 OR r.urun LIKE :q2)"; $sp2[':q2'] = '%'.$f_q.'%'; }
     if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
     if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
-    if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END)>0"; }
-    elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(p.id)>0 AND SUM(p.islendi)=0"; }
+    if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END)>0"; }
+    elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END)>0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
     $islendi_totals = $sp_st->fetch() ?: null;
 
