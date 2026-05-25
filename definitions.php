@@ -7,9 +7,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
 $type_labels = definition_types();
-$cat_types   = ['firma', 'depo', 'bolge', 'urun', 'geldigi_yer', 'gittigi_yer'];
-$cat_labels  = ['firma' => 'Firmalar', 'depo' => 'Depolar', 'bolge' => 'Bölgeler', 'urun' => 'Ürünler', 'geldigi_yer' => 'Geldiği Yer', 'gittigi_yer' => 'Gittiği Yer'];
-$cat_icons   = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'geldigi_yer' => '📍', 'gittigi_yer' => '🚩'];
+$cat_types   = ['firma', 'depo', 'bolge', 'urun', 'lokasyon'];
+$cat_labels  = ['firma' => 'Firmalar', 'depo' => 'Depolar', 'bolge' => 'Bölgeler', 'urun' => 'Ürünler', 'lokasyon' => 'Lokasyonlar'];
+$cat_icons   = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'lokasyon' => '📍'];
 $mat_types   = array_filter($type_labels, fn($k) => !in_array($k, $cat_types, true), ARRAY_FILTER_USE_KEY);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -88,8 +88,7 @@ if ($is_cat) {
         'depo'        => "SELECT depo, COUNT(DISTINCT loading_record_id) FROM loading_pallets WHERE depo != '' GROUP BY depo",
         'urun'        => "SELECT urun, COUNT(*) FROM loading_records WHERE urun != '' GROUP BY urun",
         'bolge'       => "SELECT bolge, COUNT(*) FROM loading_records WHERE bolge != '' GROUP BY bolge",
-        'geldigi_yer' => "SELECT geldigi_yer, COUNT(*) FROM kantar_fisleri WHERE geldigi_yer != '' GROUP BY geldigi_yer",
-        'gittigi_yer' => "SELECT gittigi_yer, COUNT(*) FROM kantar_fisleri WHERE gittigi_yer != '' GROUP BY gittigi_yer",
+        'lokasyon'    => "SELECT name, COUNT(*) FROM (SELECT geldigi_yer AS name FROM kantar_fisleri WHERE geldigi_yer!='' UNION ALL SELECT gittigi_yer FROM kantar_fisleri WHERE gittigi_yer!='') t GROUP BY name",
         default       => null,
     };
     if ($uq) $usage_by_name = db()->query($uq)->fetchAll(PDO::FETCH_KEY_PAIR);
@@ -138,8 +137,7 @@ render_flash();
                     'depo'        => 'Depo adı (örn: Merkez Depo)',
                     'bolge'       => 'Bölge adı (örn: İç Anadolu)',
                     'urun'        => 'Ürün adı (örn: Kayısı)',
-                    'geldigi_yer' => 'Nereden geldiği (örn: Malatya Bahçesi)',
-                    'gittigi_yer' => 'Nereye gittiği (örn: Soğuk Hava Deposu)',
+                    'lokasyon'    => 'Lokasyon adı (örn: Malatya Bahçesi, Soğuk Hava Deposu)',
                     default       => 'Ad...'
                 } ?>" required autocomplete="off">
                 <button class="btn btn-primary">+ Ekle</button>
