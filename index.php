@@ -13,6 +13,11 @@ $stats = db()->query("
         (SELECT COUNT(*) FROM material_definitions WHERE is_active=1) AS tanim_sayisi
 ")->fetch();
 
+// HKS taslak sayısı
+try {
+    $hks_taslak = (int)db()->query("SELECT COUNT(*) FROM hks_notifications WHERE status='draft'")->fetchColumn();
+} catch (PDOException $e) { $hks_taslak = 0; }
+
 // Hesap modülü özet
 try {
     $hesap_bugun = db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
@@ -95,6 +100,14 @@ render_flash();
     <a href="malzeme_stok.php" class="home-card">
         <div class="home-card-icon" style="background:#e3f2fd">🗃️</div>
         <div class="home-card-title">Malzeme Stok</div>
+    </a>
+
+    <a href="hks/index.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
+        <div class="home-card-title">Hal Bildirimi</div>
+        <?php if ($hks_taslak > 0): ?>
+        <div class="home-card-badge" style="background:#6366f1"><?= (int)$hks_taslak ?></div>
+        <?php endif; ?>
     </a>
 
     <a href="hesap.php" class="home-card">

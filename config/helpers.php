@@ -128,10 +128,18 @@ function definition_types(): array {
     ];
 }
 
+// Subdirectory-safe base URL (kök için '', hks/ için '../', vb.)
+function base_url(): string {
+    $dir   = dirname($_SERVER['SCRIPT_NAME'] ?? '/');
+    $depth = ($dir === '/' || $dir === '') ? 0 : substr_count(trim($dir, '/'), '/') + 1;
+    return $depth > 0 ? str_repeat('../', $depth) : '';
+}
+
 // --- Ortak header/footer parçaları ---
 function render_header(string $title, bool $print_mode = false): void {
     $token = csrf_token();
-    $cur = basename($_SERVER['PHP_SELF'] ?? '');
+    $cur   = basename($_SERVER['PHP_SELF'] ?? '');
+    $base  = base_url();
     ?><!doctype html>
 <html lang="tr">
 <head>
@@ -143,34 +151,34 @@ function render_header(string $title, bool $print_mode = false): void {
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Asya Fresh">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="assets/logo.jpg">
+    <link rel="manifest" href="<?= $base ?>manifest.json">
+    <link rel="apple-touch-icon" href="<?= $base ?>assets/logo.jpg">
     <title><?= h($title) ?> · Asya Fresh</title>
-    <link rel="stylesheet" href="assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
+    <link rel="stylesheet" href="<?= $base ?>assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
 <body class="<?= $print_mode ? 'print-mode' : '' ?>">
 <?php if (!$print_mode): ?>
 <header class="topbar">
     <div class="topbar-inner">
-        <a href="index.php" class="brand">
-            <img src="assets/logo.jpg" class="brand-logo" alt="">
+        <a href="<?= $base ?>index.php" class="brand">
+            <img src="<?= $base ?>assets/logo.jpg" class="brand-logo" alt="">
             <span class="brand-text">Asya Fresh</span>
         </a>
         <nav class="topnav">
-            <a href="records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
-            <a href="cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
-            <a href="reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
-            <a href="stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
-            <a href="malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
-            <a href="definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
+            <a href="<?= $base ?>records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
+            <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
+            <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
+            <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
+            <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
     </div>
 </header>
 <?php endif; ?>
 <main class="container">
 <?php
-    // PWA service worker kaydı
-    if (!$print_mode): ?>
+    // PWA service worker kaydı (sadece kök seviyesinde)
+    if (!$print_mode && $base === ''): ?>
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(function(){});
@@ -181,7 +189,8 @@ if ('serviceWorker' in navigator) {
 
 function render_footer(bool $print_mode = false): void {
     if (!$print_mode) {
-        $cur = basename($_SERVER['PHP_SELF'] ?? '');
+        $cur         = basename($_SERVER['PHP_SELF'] ?? '');
+        $base        = base_url();
         $is_home     = in_array($cur, ['index.php', '']);
         $_cikma_hint = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
         $is_records  = !$_cikma_hint && in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
@@ -192,11 +201,11 @@ function render_footer(bool $print_mode = false): void {
         echo '</main>';
         ?>
 <nav class="bottomnav" role="navigation" aria-label="Ana gezinme">
-    <a href="index.php" class="bottomnav-item<?= $is_home ? ' active' : '' ?>">
+    <a href="<?= $base ?>index.php" class="bottomnav-item<?= $is_home ? ' active' : '' ?>">
         <span class="bottomnav-icon">🏠</span>
         <span class="bottomnav-label">Ana Sayfa</span>
     </a>
-    <a href="records.php" class="bottomnav-item<?= $is_records ? ' active' : '' ?>">
+    <a href="<?= $base ?>records.php" class="bottomnav-item<?= $is_records ? ' active' : '' ?>">
         <span class="bottomnav-icon">📋</span>
         <span class="bottomnav-label">Yüklemeler</span>
     </a>
@@ -204,11 +213,11 @@ function render_footer(bool $print_mode = false): void {
         <span class="bottomnav-notes-circle">📝</span>
         <span class="bottomnav-label">Not</span>
     </button>
-    <a href="cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
+    <a href="<?= $base ?>cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
         <span class="bottomnav-icon">🚚</span>
         <span class="bottomnav-label">Çıkmalar</span>
     </a>
-    <a href="reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
+    <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
         <span class="bottomnav-icon">📊</span>
         <span class="bottomnav-label">Raporlar</span>
     </a>
@@ -220,7 +229,7 @@ function render_footer(bool $print_mode = false): void {
         <div class="notes-modal-head">
             <span class="notes-modal-title">📝 Not Ekle</span>
             <div class="notes-modal-head-actions">
-                <a href="notes.php" class="btn btn-sm btn-ghost">Tümü →</a>
+                <a href="<?= $base ?>notes.php" class="btn btn-sm btn-ghost">Tümü →</a>
                 <button type="button" id="notesCloseBtn" class="notes-close-btn" aria-label="Kapat">✕</button>
             </div>
         </div>
@@ -245,7 +254,8 @@ function render_footer(bool $print_mode = false): void {
 
 <script>
 (function () {
-    var csrf  = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrf    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var baseUrl = <?= json_encode($base) ?>;
     var modal = document.getElementById('notesModal');
     var openBtn  = document.getElementById('notesOpenBtn');
     var closeBtn = document.getElementById('notesCloseBtn');
@@ -291,7 +301,7 @@ function render_footer(bool $print_mode = false): void {
 
     function loadNotes() {
         listEl.innerHTML = '<div class="notes-loading">Yükleniyor…</div>';
-        fetch('note_save.php')
+        fetch(baseUrl + 'note_save.php')
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 listEl.innerHTML = '';
@@ -342,7 +352,7 @@ function render_footer(bool $print_mode = false): void {
         var note = textarea.value.trim();
         if (!note) { textarea.focus(); return; }
         saveBtn.disabled = true;
-        postJson('note_save.php', { page_url: pageUrl, page_name: pageName, note: note })
+        postJson(baseUrl + 'note_save.php', { page_url: pageUrl, page_name: pageName, note: note })
             .then(function (d) {
                 saveBtn.disabled = false;
                 if (!d.ok) { alert(d.msg || 'Hata'); return; }
@@ -443,7 +453,7 @@ function render_footer(bool $print_mode = false): void {
 })();
 </script>
 <?php
-        echo '<script src="assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
+        echo '<script src="' . base_url() . 'assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
     } else {
         echo '</main></body></html>';
     }
