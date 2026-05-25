@@ -80,12 +80,11 @@ if ($fis_id > 0) {
 $_kf_firma_hist    = array_column(db()->query("SELECT DISTINCT firma_adi FROM kantar_fisleri WHERE firma_adi!='' ORDER BY firma_adi")->fetchAll(), 'firma_adi');
 $_kf_plaka_hist    = array_column(db()->query("SELECT DISTINCT plaka FROM kantar_fisleri WHERE plaka!='' ORDER BY plaka")->fetchAll(), 'plaka');
 $_kf_op_hist       = array_column(db()->query("SELECT DISTINCT operator_adi FROM kantar_fisleri WHERE operator_adi!='' ORDER BY operator_adi")->fetchAll(), 'operator_adi');
-$_firma_def_names  = array_column(get_definitions_by_type('firma'),       'name');
-$_urun_names       = array_column(get_definitions_by_type('urun'),        'name');
-$_bolge_names      = array_column(get_definitions_by_type('bolge'),       'name');
-$_depo_names_kf    = array_column(get_definitions_by_type('depo'),        'name');
-$_geldigi_names    = array_column(get_definitions_by_type('geldigi_yer'), 'name');
-$_gittigi_names    = array_column(get_definitions_by_type('gittigi_yer'), 'name');
+$_firma_def_names  = array_column(get_definitions_by_type('firma'),    'name');
+$_urun_names       = array_column(get_definitions_by_type('urun'),     'name');
+$_bolge_names      = array_column(get_definitions_by_type('bolge'),    'name');
+$_depo_names_kf    = array_column(get_definitions_by_type('depo'),     'name');
+$_lokasyon_names   = array_column(get_definitions_by_type('lokasyon'), 'name');
 // Firma: tanımlar + geçmiş kantar girişleri birleşik
 $_all_firma = array_values(array_unique(array_merge($_firma_def_names, $_kf_firma_hist)));
 sort($_all_firma);
@@ -179,19 +178,19 @@ function kf_datalist(string $id, array $items): string {
                 <?php endif; ?>
             </label>
             <label>Geldiği Yer
-                <?php if (!empty($_geldigi_names)): ?>
-                <select name="geldigi_yer"><?= kf_sel_opt($fis['geldigi_yer'] ?? '', $_geldigi_names) ?></select>
+                <?php if (!empty($_lokasyon_names)): ?>
+                <select name="geldigi_yer"><?= kf_sel_opt($fis['geldigi_yer'] ?? '', $_lokasyon_names) ?></select>
                 <?php else: ?>
                 <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>">
-                <small class="muted"><a href="definitions.php?type=geldigi_yer">Tanımlar → Geldiği Yer'den ekleyin</a></small>
+                <small class="muted"><a href="definitions.php?type=lokasyon">Tanımlar → Lokasyonlar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
             <label>Gittiği Yer
-                <?php if (!empty($_gittigi_names)): ?>
-                <select name="gittigi_yer"><?= kf_sel_opt($fis['gittigi_yer'] ?? '', $_gittigi_names) ?></select>
+                <?php if (!empty($_lokasyon_names)): ?>
+                <select name="gittigi_yer"><?= kf_sel_opt($fis['gittigi_yer'] ?? '', $_lokasyon_names) ?></select>
                 <?php else: ?>
                 <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
-                <small class="muted"><a href="definitions.php?type=gittigi_yer">Tanımlar → Gittiği Yer'den ekleyin</a></small>
+                <small class="muted"><a href="definitions.php?type=lokasyon">Tanımlar → Lokasyonlar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
             <!-- Palet Türleri -->
