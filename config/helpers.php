@@ -108,6 +108,8 @@ function definition_types(): array {
         'depo'          => 'Depo',
         'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
+        'geldigi_yer'   => 'Geldiği Yer',
+        'gittigi_yer'   => 'Gittiği Yer',
         'kasa_cinsi'    => 'Kasa Cinsi',
         'palet_tipi'    => 'Palet Tipi',
         'sapka'         => 'Şapka',

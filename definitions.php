@@ -7,9 +7,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 
 $type_labels = definition_types();
-$cat_types   = ['firma', 'depo', 'bolge', 'urun'];
-$cat_labels  = ['firma' => 'Firmalar', 'depo' => 'Depolar', 'bolge' => 'Bölgeler', 'urun' => 'Ürünler'];
-$cat_icons   = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿'];
+$cat_types   = ['firma', 'depo', 'bolge', 'urun', 'geldigi_yer', 'gittigi_yer'];
+$cat_labels  = ['firma' => 'Firmalar', 'depo' => 'Depolar', 'bolge' => 'Bölgeler', 'urun' => 'Ürünler', 'geldigi_yer' => 'Geldiği Yer', 'gittigi_yer' => 'Gittiği Yer'];
+$cat_icons   = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'geldigi_yer' => '📍', 'gittigi_yer' => '🚩'];
 $mat_types   = array_filter($type_labels, fn($k) => !in_array($k, $cat_types, true), ARRAY_FILTER_USE_KEY);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -84,11 +84,13 @@ foreach ($defs as $d) $grouped[$d['type']][] = $d;
 $usage_by_name = [];
 if ($is_cat) {
     $uq = match($filter) {
-        'firma' => "SELECT firma, COUNT(*) FROM loading_records WHERE firma != '' GROUP BY firma",
-        'depo'  => "SELECT depo, COUNT(DISTINCT loading_record_id) FROM loading_pallets WHERE depo != '' GROUP BY depo",
-        'urun'  => "SELECT urun, COUNT(*) FROM loading_records WHERE urun != '' GROUP BY urun",
-        'bolge' => "SELECT bolge, COUNT(*) FROM loading_records WHERE bolge != '' GROUP BY bolge",
-        default => null,
+        'firma'       => "SELECT firma, COUNT(*) FROM loading_records WHERE firma != '' GROUP BY firma",
+        'depo'        => "SELECT depo, COUNT(DISTINCT loading_record_id) FROM loading_pallets WHERE depo != '' GROUP BY depo",
+        'urun'        => "SELECT urun, COUNT(*) FROM loading_records WHERE urun != '' GROUP BY urun",
+        'bolge'       => "SELECT bolge, COUNT(*) FROM loading_records WHERE bolge != '' GROUP BY bolge",
+        'geldigi_yer' => "SELECT geldigi_yer, COUNT(*) FROM kantar_fisleri WHERE geldigi_yer != '' GROUP BY geldigi_yer",
+        'gittigi_yer' => "SELECT gittigi_yer, COUNT(*) FROM kantar_fisleri WHERE gittigi_yer != '' GROUP BY gittigi_yer",
+        default       => null,
     };
     if ($uq) $usage_by_name = db()->query($uq)->fetchAll(PDO::FETCH_KEY_PAIR);
 }
@@ -132,11 +134,13 @@ render_flash();
             <input type="hidden" name="unit_dara_kg" value="0">
             <div class="def-add-row">
                 <input type="text" name="name" placeholder="<?= match($filter) {
-                    'firma' => 'Firma adı (örn: Karaman Cihat)',
-                    'depo'  => 'Depo adı (örn: Merkez Depo)',
-                    'bolge' => 'Bölge adı (örn: İç Anadolu)',
-                    'urun'  => 'Ürün adı (örn: Kayısı)',
-                    default => 'Ad...'
+                    'firma'       => 'Firma adı (örn: Karaman Cihat)',
+                    'depo'        => 'Depo adı (örn: Merkez Depo)',
+                    'bolge'       => 'Bölge adı (örn: İç Anadolu)',
+                    'urun'        => 'Ürün adı (örn: Kayısı)',
+                    'geldigi_yer' => 'Nereden geldiği (örn: Malatya Bahçesi)',
+                    'gittigi_yer' => 'Nereye gittiği (örn: Soğuk Hava Deposu)',
+                    default       => 'Ad...'
                 } ?>" required autocomplete="off">
                 <button class="btn btn-primary">+ Ekle</button>
             </div>
