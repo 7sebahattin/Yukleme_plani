@@ -114,7 +114,7 @@ render_flash();
         <a href="stock.php" class="btn btn-ghost">📦 Stok</a>
         <a href="settings.php" class="btn btn-ghost">Ayarlar</a>
         <a href="create_purchase.php" class="btn btn-ghost btn-lg">+ Alış</a>
-        <a href="create_sales.php" class="btn btn-primary btn-lg">+ Satış</a>
+        <a href="shipment.php" class="btn btn-primary btn-lg">⚡ Hızlı Sevk</a>
     </div>
 </div>
 
@@ -133,7 +133,7 @@ render_flash();
     <p>Henüz HKS bildirimi yok.</p>
     <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px">
         <a href="create_purchase.php" class="btn btn-ghost">+ Alış Bildirimi</a>
-        <a href="create_sales.php" class="btn btn-primary">+ Satış Bildirimi</a>
+        <a href="shipment.php" class="btn btn-primary">⚡ Hızlı Sevk</a>
     </div>
 </div>
 <?php else: ?>
