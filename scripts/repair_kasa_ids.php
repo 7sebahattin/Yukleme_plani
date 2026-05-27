@@ -1,35 +1,17 @@
 <?php
 // =========================================================
 // repair_kasa_ids.php — Çıkma paletlerinde eksik kasa_cinsi_id / palet_tipi_id düzelt
-//
-// Ne yapar:
-//  1) K-65, C-10, AYAKLI kasa tanımları yoksa material_definitions'a ekler
-//  2) 30 kg / 18 kg palet tanımı yoksa ekler
-//  3) loading_pallets'ta NULL olan kasa_cinsi_id / palet_tipi_id'yi günceller
-//     (sadece NULL olanlara dokunur — kullanıcı elle düzeltmiş olabilir)
-//
-// Çalıştırmak: ?run=1
+// WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:
+//   php scripts/repair_kasa_ids.php
 // =========================================================
 declare(strict_types=1);
 
-if (($_GET['run'] ?? '') !== '1') {
-    echo '<!doctype html><html><head><meta charset="utf-8"><title>Kasa ID Onarımı</title></head><body>';
-    echo '<h2>Çıkma Kasa ID Onarım Scripti</h2>';
-    echo '<p>Bu script, excel importundan kaynaklanan eksik <code>kasa_cinsi_id</code> ve <code>palet_tipi_id</code> değerlerini düzeltir.</p>';
-    echo '<ul>
-        <li><strong>K-65</strong> kasa cinsi → 2,00 kg/kasa dara</li>
-        <li><strong>C-10</strong> kasa cinsi → 0,48 kg/kasa dara</li>
-        <li><strong>AYAKLI</strong> kasa cinsi → 0,50 kg/kasa dara</li>
-        <li><strong>Palet 30 kg</strong> ve <strong>Palet 18 kg</strong> tanımları</li>
-    </ul>';
-    echo '<p>Sadece <code>kasa_cinsi_id = NULL</code> ve <code>palet_tipi_id = NULL</code> olan paletlere dokunur.</p>';
-    echo '<p><a href="?run=1" style="background:#1a56db;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none">▶ Çalıştır</a></p>';
-    echo '</body></html>';
-    exit;
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
 }
 
-require_once __DIR__ . '/config/db.php';
-header('Content-Type: text/html; charset=utf-8');
+require_once __DIR__ . '/../config/db.php';
 
 $pdo = db();
 $log = [];
@@ -53,7 +35,6 @@ function ensure_material(PDO $pdo, string $type, string $name, float $unit): int
 }
 
 function ensure_palet_by_unit(PDO $pdo, string $name, float $unit): int {
-    // Palet tipi birim ağırlığına göre eşleştir (isim fark etmez)
     $st = $pdo->prepare(
         "SELECT id FROM material_definitions
          WHERE type='palet_tipi' AND ABS(unit_dara_kg - :u) < 0.01 AND is_active=1
@@ -70,10 +51,6 @@ function ensure_palet_by_unit(PDO $pdo, string $name, float $unit): int {
     return (int)$pdo->lastInsertId();
 }
 
-// Kasa birimleri Excel verisinden türetildi:
-// K-65:   (dara - palet_dara) / kasa_adeti = (102 - 30) / 36 = 2.00 kg/kasa
-// C-10:   (dara - palet_dara) / kasa_adeti = (46.32 - 18) / 59 ≈ 0.48 kg/kasa
-// AYAKLI: (dara - palet_dara) / kasa_adeti = (68 - 18) / 100 = 0.50 kg/kasa
 $kasa_defs = [
     'K-65'   => ['unit' => 2.00,  'label' => 'K-65'],
     'C-10'   => ['unit' => 0.48,  'label' => 'C-10'],
@@ -90,15 +67,14 @@ $palet_ids = [];
 foreach ($kasa_defs as $key => $def) {
     $id = ensure_material($pdo, 'kasa_cinsi', $def['label'], $def['unit']);
     $kasa_ids[$key] = $id;
-    $log[] = "✅ Kasa: {$def['label']} (ID=$id, birim={$def['unit']} kg/kasa)";
+    $log[] = "OK Kasa: {$def['label']} (ID=$id, birim={$def['unit']} kg/kasa)";
 }
 foreach ($palet_defs as $kg => $name) {
     $id = ensure_palet_by_unit($pdo, $name, (float)$kg);
     $palet_ids[$kg] = $id;
-    $log[] = "✅ Palet: $name (ID=$id, {$kg} kg)";
+    $log[] = "OK Palet: $name (ID=$id, {$kg} kg)";
 }
 
-// ── Excel verisi (import_cikmalar.php ile aynı) ──────────────────────────────
 $excel_rows = [
     ['2026-05-03', '1 (30 kg)', 'K-65',   36, 1000.0,  102.0,   898.0,   'MEYSU'],
     ['2026-05-03', '1 (30 kg)', 'K-65',   36,  715.0,  102.0,   613.0,   'MEYSU'],
@@ -190,7 +166,6 @@ foreach ($excel_rows as $row) {
     $groups[$key][] = $row;
 }
 
-// ── Palet tipi ID'sini palet_desc'ten çıkar ──────────────────────────────────
 function get_palet_id(string $desc, array $palet_ids): ?int {
     if (preg_match('/\((\d+)\s*kg\)/i', $desc, $m)) {
         $kg = (int)$m[1];
@@ -199,7 +174,6 @@ function get_palet_id(string $desc, array $palet_ids): ?int {
     return null;
 }
 
-// ── Her grup için kayıt bul ve paletleri güncelle ───────────────────────────
 $find_rec = $pdo->prepare(
     "SELECT id FROM loading_records
      WHERE type='cikma' AND tarih=? AND firma=?"
@@ -222,7 +196,7 @@ foreach ($groups as $key => $rows) {
     $find_rec->execute([$tarih, $cikma_tur]);
     $rec_id = $find_rec->fetchColumn();
     if (!$rec_id) {
-        $log[] = "⚠️ Kayıt bulunamadı: $tarih / $cikma_tur";
+        $log[] = "UYARI Kayıt bulunamadı: $tarih / $cikma_tur";
         continue;
     }
 
@@ -230,8 +204,7 @@ foreach ($groups as $key => $rows) {
     $db_pallets = $get_pallets->fetchAll();
 
     if (count($db_pallets) !== count($rows)) {
-        $log[] = "⚠️ Palet sayısı uyuşmuyor (Kayıt #$rec_id): Excel=" . count($rows) . ", DB=" . count($db_pallets);
-        // Yine de eşleşebilenleri güncelle
+        $log[] = "UYARI Palet sayısı uyuşmuyor (Kayıt #$rec_id): Excel=" . count($rows) . ", DB=" . count($db_pallets);
     }
 
     $updated_this = 0;
@@ -242,7 +215,6 @@ foreach ($groups as $key => $rows) {
         $new_kasa_id  = $kasa_ids[strtoupper(trim($tur))] ?? null;
         $new_palet_id = get_palet_id($palet_desc, $palet_ids);
 
-        // Sadece NULL olanları güncelle (elle girilmiş değerlere dokunma)
         $needs_update = ($pal['kasa_cinsi_id'] === null && $new_kasa_id !== null)
                      || ($pal['palet_tipi_id'] === null && $new_palet_id !== null);
 
@@ -261,35 +233,15 @@ foreach ($groups as $key => $rows) {
 
     if ($updated_this > 0) {
         $updated_records++;
-        $log[] = "✅ Kayıt #$rec_id ($tarih / $cikma_tur): $updated_this palet güncellendi";
+        $log[] = "OK Kayıt #$rec_id ($tarih / $cikma_tur): $updated_this palet güncellendi";
     } else {
-        $log[] = "— Kayıt #$rec_id ($tarih / $cikma_tur): güncelleme gerekmedi";
+        $log[] = "-- Kayıt #$rec_id ($tarih / $cikma_tur): güncelleme gerekmedi";
     }
 }
 
-// ── Çıktı ───────────────────────────────────────────────────────────────────
-echo '<!doctype html><html><head><meta charset="utf-8"><title>Kasa ID Onarımı</title>';
-echo '<style>body{font-family:sans-serif;max-width:800px;margin:20px auto;padding:0 16px}
-li{margin:4px 0}
-.ok{color:#166534} .warn{color:#92400e} .dash{color:#6b7280}
-.summary{background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:16px}
-</style></head><body>';
-echo '<h2>🔧 Çıkma Kasa ID Onarımı — Sonuç</h2>';
-echo '<div class="summary">';
-echo "<strong>Material definitions:</strong> K-65, C-10, Ayaklı, Palet 30 kg, Palet 18 kg &nbsp;|&nbsp; ";
-echo "<strong>Güncellenen kayıt:</strong> $updated_records &nbsp;|&nbsp; ";
-echo "<strong>Güncellenen palet:</strong> $updated_pallets &nbsp;|&nbsp; ";
-echo "<strong>Atlanan (zaten dolu):</strong> $skipped_pallets";
-echo '</div>';
-echo '<ul>';
 foreach ($log as $line) {
-    if (str_starts_with($line, '✅')) $cls = 'ok';
-    elseif (str_starts_with($line, '⚠')) $cls = 'warn';
-    else $cls = 'dash';
-    echo '<li class="'.$cls.'">'.htmlspecialchars($line, ENT_QUOTES, 'UTF-8').'</li>';
+    echo $line . PHP_EOL;
 }
-echo '</ul>';
-echo '<p><strong>Tamamlandı.</strong></p>';
-echo '<p>Artık çıkma kayıtlarını düzenlediğinizde net KG doğru hesaplanacaktır.</p>';
-echo '<p><a href="cikmalar.php">→ Çıkmalar listesine git</a></p>';
-echo '</body></html>';
+echo PHP_EOL;
+echo "Güncellenen kayıt: $updated_records | Güncellenen palet: $updated_pallets | Atlanan (zaten dolu): $skipped_pallets" . PHP_EOL;
+echo 'Tamamlandı.' . PHP_EOL;

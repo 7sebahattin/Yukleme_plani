@@ -101,6 +101,16 @@ function db(): PDO {
             // ck, cihat → Cihat Karaköse
             $pdo->exec("UPDATE `kantar_gruplar` SET grup_adi = 'Cihat Karaköse' WHERE LOWER(grup_adi) IN ('ck', 'cihat')");
         } catch (PDOException $_gm) { /* kantar_gruplar yoksa veya hata — sessizce geç */ }
+
+        // Performans indexleri — idempotent (duplicate key veya tablo yok → sessizce geçilir)
+        foreach ([
+            "ALTER TABLE `loading_records` ADD INDEX `idx_type` (`type`)",
+            "ALTER TABLE `loading_records` ADD INDEX `idx_tarih_type` (`tarih`, `type`)",
+            "ALTER TABLE `material_stock_movements` ADD INDEX `idx_source` (`source_type`, `source_id`)",
+            "ALTER TABLE `material_stock_movements` ADD INDEX `idx_material_id` (`material_id`)",
+        ] as $_idx_sql) {
+            try { $pdo->exec($_idx_sql); } catch (PDOException $_e) { /* var veya tablo yok */ }
+        }
     }
     return $pdo;
 }
