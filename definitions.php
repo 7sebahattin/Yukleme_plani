@@ -20,12 +20,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($action === 'create') {
             $type = (string)($_POST['type'] ?? '');
-            $name = trim((string)($_POST['name'] ?? ''));
+            $name = normalize_text_v2((string)($_POST['name'] ?? ''));
             $unit = num($_POST['unit_dara_kg'] ?? 0);
             if (!isset($type_labels[$type]) || $name === '') throw new RuntimeException('Tür ve isim zorunlu.');
-            $dup = db()->prepare("SELECT id FROM material_definitions WHERE type=? AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
-            $dup->execute([$type, $name]);
-            if ($dup->fetchColumn()) throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
+            $existing = db()->prepare("SELECT name FROM material_definitions WHERE type = ?");
+            $existing->execute([$type]);
+            foreach ($existing->fetchAll(PDO::FETCH_COLUMN) as $n) {
+                if (normalize_text_v2($n) === $name) {
+                    throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
+                }
+            }
             db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
                 ->execute([$type, $name, $unit]);
             set_flash('success', '"' . $name . '" eklendi.');
