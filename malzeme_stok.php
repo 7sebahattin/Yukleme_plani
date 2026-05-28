@@ -7,6 +7,34 @@ require_once __DIR__ . '/config/db.php';
 
 $pdo = db();
 
+// ── Audit özet (sadece COUNT — panel kapalıyken sorgular çalışmaz) ──
+$_audit_counts = null;
+function ms_audit_counts(PDO $pdo): array {
+    $r = ['orphan' => 0, 'dup_exact' => 0, 'dup_norm' => 0, 'total' => 0];
+    try {
+        if (audit_tbl_ms('material_stock_movements') && audit_tbl_ms('loading_records')) {
+            $r['orphan'] = (int)$pdo->query("SELECT COUNT(*) FROM material_stock_movements m
+                WHERE m.source_type='loading' AND m.source_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM loading_records r WHERE r.id=m.source_id)"
+            )->fetchColumn();
+        }
+        if (audit_tbl_ms('material_definitions')) {
+            $r['dup_exact'] = (int)$pdo->query("SELECT COUNT(*) FROM (
+                SELECT 1 FROM material_definitions GROUP BY type, name HAVING COUNT(*) > 1
+            ) x")->fetchColumn();
+            $r['dup_norm'] = (int)$pdo->query("SELECT COUNT(*) FROM (
+                SELECT 1 FROM material_definitions GROUP BY type, LOWER(TRIM(name)) HAVING COUNT(*) > 1
+            ) x")->fetchColumn();
+        }
+        $r['total'] = $r['orphan'] + $r['dup_exact'] + $r['dup_norm'];
+    } catch (PDOException $e) {}
+    return $r;
+}
+function audit_tbl_ms(string $t): bool {
+    try { db()->query("SELECT 1 FROM `$t` LIMIT 0"); return true; }
+    catch (PDOException $e) { return false; }
+}
+
 // Material types tracked in this module (all except firma/depo/bolge/urun)
 function ms_material_types(): array {
     $skip = ['firma', 'depo', 'bolge', 'urun'];
@@ -635,6 +663,53 @@ $mat_dusuk_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] <
     </div>
     <?php endif; ?>
 </div>
+
+<?php
+// Audit sayımlarını yükle (panel açılınca değil, sayfa yüklenince — ama sadece 3 COUNT sorgu)
+$_ac = ms_audit_counts($pdo);
+$_ac_badge = $_ac['total'] > 0 ? 'badge-err' : 'badge-ok';
+$_ac_txt   = $_ac['total'] > 0
+    ? '⚠ ' . $_ac['total'] . ' sorun'
+    : '✓ Temiz';
+?>
+<details class="card" style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+    <summary style="cursor:pointer;padding:11px 16px;background:var(--card-bg,#fff);display:flex;align-items:center;gap:10px;list-style:none;user-select:none;font-weight:600">
+        🔍 Sistem Audit
+        <span class="<?= $_ac_badge ?>" style="font-size:.75rem;padding:2px 10px;border-radius:20px;font-weight:700;margin-left:auto;
+            background:<?= $_ac['total'] > 0 ? '#fee2e2' : '#d1fae5' ?>;
+            color:<?= $_ac['total'] > 0 ? '#991b1b' : '#065f46' ?>">
+            <?= h($_ac_txt) ?>
+        </span>
+    </summary>
+    <div style="padding:14px 16px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px">
+            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+                <div style="font-size:.75rem;color:var(--text-muted)">Yetim stok hareketi</div>
+                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['orphan'] > 0 ? '#dc2626' : '#16a34a' ?>">
+                    <?= $_ac['orphan'] ?>
+                </div>
+            </div>
+            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+                <div style="font-size:.75rem;color:var(--text-muted)">Birebir duplicate tanım</div>
+                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['dup_exact'] > 0 ? '#dc2626' : '#16a34a' ?>">
+                    <?= $_ac['dup_exact'] ?>
+                </div>
+            </div>
+            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+                <div style="font-size:.75rem;color:var(--text-muted)">Normalize duplicate tanım</div>
+                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['dup_norm'] > 0 ? '#dc2626' : '#16a34a' ?>">
+                    <?= $_ac['dup_norm'] ?>
+                </div>
+            </div>
+        </div>
+        <?php if ($_ac['total'] > 0): ?>
+        <p style="font-size:.83rem;color:#b45309;background:#fffbeb;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:10px">
+            ⚠ Sorunlu kayıtlar tespit edildi. Detay ve CSV için Detaylı Audit sayfasını açın.
+        </p>
+        <?php endif; ?>
+        <a href="audit.php" class="btn btn-ghost btn-sm">→ Detaylı Audit &amp; CSV</a>
+    </div>
+</details>
 
 <script>
 var msNamesData = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
