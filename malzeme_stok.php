@@ -995,7 +995,7 @@ $_ms_audit_has_detail = array_filter($_ms_audit_details, fn($d) => $d['cnt'] > 0
                             <td><?= h($_arow['material_name'] ?? '—') ?></td>
                             <td><?= h($_arow['movement_type'] ?? '—') ?></td>
                             <td><?= h($_arow['depo'] ?: '—') ?></td>
-                            <td><?= number_format((float)($_arow['quantity'] ?? 0), 2, ',', '.') ?> <?= h($_arow['unit'] ?? '') ?></td>
+                            <td><?= number_format((int)round((float)($_arow['quantity'] ?? 0)), 0, '', '.') ?> <?= h($_arow['unit'] ?? '') ?></td>
                         </tr>
                         <?php endforeach; ?>
                         </tbody>

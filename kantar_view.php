@@ -62,6 +62,21 @@ render_flash();
 .kv-pb-left,
 .kv-pb-right { display: contents; }
 
+/* Sapma uyarısı — ekran */
+.kv-sapma-uyari {
+    background: rgba(239,68,68,.09);
+    border: 1px solid rgba(239,68,68,.35);
+    border-radius: var(--radius, 6px);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: .88rem;
+    color: #7f1d1d;
+}
+.kv-sapma-detail {
+    display: flex; gap: 12px; margin-top: 6px;
+    flex-wrap: wrap; font-size: .82rem; color: #6b1414;
+}
+
 /* ── PRINT ── */
 @page { size: A4 portrait; margin: 8mm; }
 @media print {
@@ -213,6 +228,16 @@ render_flash();
     .kv-grup-table td:first-child { text-align:left; font-weight:600; }
     .kv-grup-table tfoot td { border-top: 1.5px solid #374151; font-weight:700; background:#f5f5f5 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .kv-grup-net { color: #1a56db !important; font-weight:800 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+    /* Sapma uyarısı — print */
+    .kv-sapma-uyari {
+        background: #fef2f2 !important; border: 1pt solid #ef4444 !important;
+        padding: 3px 6px !important; margin-bottom: 3px !important;
+        font-size: 6.5pt !important; color: #7f1d1d !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        page-break-inside: avoid;
+    }
+    .kv-sapma-detail { font-size: 6pt !important; margin-top: 2px !important; gap: 6px !important; }
 }
 </style>
 
@@ -364,60 +389,55 @@ render_flash();
             <?php if (!empty($gruplar)):
                 $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
                 $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
-                // Two-pass: manual brüt groups first, then distribute remainder to auto groups
-                // Dağıtım ağırlığı = kasa + palet (sadece kasa kullanmak palet-only gruplara 0 brüt verir)
-                $manual_brut_sum = 0.0;
-                $auto_weight_sum = 0;
-                foreach ($gruplar as $g) {
-                    $gb = (float)($g['brut_kg'] ?? 0);
-                    if ($gb > 0) { $manual_brut_sum += $gb; }
-                    else         { $auto_weight_sum += (int)$g['kasa_adedi'] + (int)$g['palet_sayisi']; }
-                }
-                $auto_brut_pool = max(0.0, $net - $manual_brut_sum);
-                $brut_per_unit  = $auto_weight_sum > 0 ? $auto_brut_pool / $auto_weight_sum : 0.0;
-                $grup_tot_brut  = 0.0;
-                $grup_tot_dara  = 0.0;
-                $grup_tot_net   = 0.0;
-                $grup_rows      = [];
-                foreach ($gruplar as $g) {
-                    $gp          = (int)$g['palet_sayisi'];
-                    $gk          = (int)$g['kasa_adedi'];
-                    $gb          = (float)($g['brut_kg'] ?? 0);
-                    $gbrut       = $gb > 0 ? $gb : (($gp + $gk) * $brut_per_unit);
-                    $gkasa_dara  = (float)($g['kasa_dara_kg']  ?? 0) ?: $eff_kasa_dara_u;
-                    $gpalet_dara = (float)($g['palet_dara_kg'] ?? 0) ?: $eff_palet_dara_u;
-                    $gdara       = $gp * $gpalet_dara + $gk * $gkasa_dara;
-                    $gnet        = max(0.0, $gbrut - $gdara);
-                    $grup_tot_brut += $gbrut;
-                    $grup_tot_dara += $gdara;
-                    $grup_tot_net  += $gnet;
-                    $grup_rows[] = ['ad' => $g['grup_adi'], 'palet' => $gp, 'kasa' => $gk,
-                                    'brut' => $gbrut, 'dara' => $gdara, 'net' => $gnet,
-                                    'is_manual' => $gb > 0];
-                }
+                $kc             = kantar_calc($fis);
+                $grup_rows      = kantar_grup_dist($gruplar, $kc['brut'], $kc['eff_kdu'], $kc['eff_pdu']);
+                $grup_tot_brut  = array_sum(array_column($grup_rows, 'brut_kg'));
+                $grup_tot_dara  = array_sum(array_column($grup_rows, 'dara_kg'));
+                $grup_tot_net   = array_sum(array_column($grup_rows, 'net_kg'));
+                $grup_sapma     = abs($grup_tot_net - $kc['net']);
             ?>
+            <?php if ($grup_sapma > 1.0): ?>
+            <div class="kv-sapma-uyari">
+                <strong>⚠ Sapma Uyarısı:</strong>
+                Grup toplamı ile fiş neti arasında fark var. Stok dağılımı hatalı görünebilir.
+                <div class="kv-sapma-detail">
+                    <span>Fiş neti: <strong><?= fmt_kg($kc['net']) ?> kg</strong></span>
+                    <span>Grup toplamı: <strong><?= fmt_kg($grup_tot_net) ?> kg</strong></span>
+                    <span>Fark: <strong><?= fmt_kg($grup_sapma) ?> kg</strong></span>
+                </div>
+            </div>
+            <?php endif; ?>
             <!-- Gruplandırma -->
             <section class="card">
                 <div class="card-head"><h2>🗂 Gruplandırma</h2></div>
                 <div class="card-body" style="padding:0">
                     <table class="kv-grup-table">
                         <thead><tr>
-                            <th>Grup</th>
+                            <th>Grup / Firma</th>
                             <th>Palet</th>
                             <th>Kasa</th>
                             <th>Brüt KG</th>
                             <th>Dara KG</th>
                             <th>Net KG</th>
+                            <th>Oran</th>
                         </tr></thead>
                         <tbody>
-                        <?php foreach ($grup_rows as $gr): ?>
+                        <?php foreach ($grup_rows as $gr):
+                            $gr_oran = $grup_tot_net > 0 ? round($gr['net_kg'] / $grup_tot_net * 100, 1) : 0;
+                        ?>
                             <tr>
-                                <td><?= h($gr['ad']) ?></td>
+                                <td>
+                                    <?= h($gr['firma']) ?>
+                                    <div class="kv-no-print" style="font-size:.72rem;color:#6b7280;margin-top:1px">
+                                        ham giriş · <?= h($fis['depo'] ?: '—') ?>
+                                    </div>
+                                </td>
                                 <td><?= $gr['palet'] ?: '—' ?></td>
                                 <td><?= $gr['kasa'] ?></td>
-                                <td><?= number_format(round($gr['brut']), 0, ',', '.') ?></td>
-                                <td><?= number_format(round($gr['dara']), 0, ',', '.') ?></td>
-                                <td class="kv-grup-net"><?= number_format(round($gr['net']), 0, ',', '.') ?></td>
+                                <td><?= number_format(round($gr['brut_kg']), 0, ',', '.') ?></td>
+                                <td><?= number_format(round($gr['dara_kg']), 0, ',', '.') ?></td>
+                                <td class="kv-grup-net"><?= number_format(round($gr['net_kg']), 0, ',', '.') ?></td>
+                                <td><?= $gr_oran ?>%</td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -429,6 +449,7 @@ render_flash();
                             <td><?= number_format(round($grup_tot_brut), 0, ',', '.') ?></td>
                             <td><?= number_format(round($grup_tot_dara), 0, ',', '.') ?></td>
                             <td class="kv-grup-net"><?= number_format(round($grup_tot_net), 0, ',', '.') ?></td>
+                            <td>100%</td>
                         </tr></tfoot>
                         <?php endif; ?>
                     </table>

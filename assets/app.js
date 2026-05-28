@@ -69,12 +69,9 @@
     /* ── Yardımcı fonksiyonlar ── */
     function fmtKg(n) {
         if (!isFinite(n)) n = 0;
-        let s = n.toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-        s = s.replace(/,(\d+)$/, (_, dec) => {
-            const t = dec.replace(/0+$/, '');
-            return t ? ',' + t : '';
-        });
-        return s;
+        n = Math.round(n);
+        if (n < 0) return '-' + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     }
     /* Sayıyı input-uyumlu formata çevir: virgül ondalık, binler ayracı yok ("1045,273")
        PHP num() noktayı binler ayracı sanır — hidden input'ta bu format gerekli */
