@@ -104,7 +104,7 @@ function mysql_args(bool $with_db = true, string $db_override = ''): string {
     $h  = escapeshellarg(DB_HOST);
     $u  = escapeshellarg(DB_USER);
     $p  = DB_PASS !== '' ? ' -p' . escapeshellarg(DB_PASS) : '';
-    return "-h $h -u $u$p" . ($with_db ? ' ' . escapeshellarg($db) : '');
+    return "--default-character-set=utf8mb4 -h $h -u $u$p" . ($with_db ? ' ' . escapeshellarg($db) : '');
 }
 
 function run_cmd(string $cmd, string &$out, string &$err): int {
@@ -372,7 +372,7 @@ if (stg_tbl($pdo, 'normalize_migration_queue') && stg_tbl($pdo, 'material_defini
         INNER JOIN normalize_migration_queue q
             ON q.target_id = md.id
         WHERE q.status = 'approved' AND q.will_change = 1
-          AND md.name != q.v2_value
+          AND CONVERT(md.name USING utf8mb4) != CONVERT(q.v2_value USING utf8mb4)
     ")->fetchColumn();
     chk("İsim güncellemeleri uygulandı mı?", $name_mismatch === 0,
         $name_mismatch > 0 ? "$name_mismatch satırda isim hâlâ eski!" : "tümü güncellendi");

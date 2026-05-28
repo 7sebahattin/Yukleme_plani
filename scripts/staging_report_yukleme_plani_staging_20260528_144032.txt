@@ -1,0 +1,37 @@
+Sprint 9 — Normalize Migration Staging Report
+Tarih: 2026-05-28 14:40:33
+Staging DB: yukleme_plani_staging
+Forward SQL: scripts/forward_migration_20260528_174023.sql
+Rollback SQL: scripts/rollback_migration_20260528_174023.sql
+
+PRE-MIGRATION:
+  material_definitions : 25
+  U+0307 sayısı        : 0
+
+POST-MIGRATION:
+  material_definitions : 25
+  U+0307 sayısı        : 0
+
+FORWARD SQL İSTATİSTİKLER:
+  material_definitions UPDATE : 9
+  FK taşıma UPDATE            : 0
+  material_definitions DELETE : 0
+
+DOĞRULAMA SONUÇLARI:
+  [GEÇTI] U+0307 temizlendi mi? — 0 satır
+  [GEÇTI] Onaylı dup'lar silindi mi? — tümü silindi
+  [GEÇTI] İsim güncellemeleri uygulandı mı? — tümü güncellendi
+  [GEÇTI] Yeni duplicate yok mu? — duplicate yok
+  [GEÇTI] FK loading_pallets.kasa_cinsi_id sağlam mı? — sağlam
+  [GEÇTI] FK loading_pallets.palet_tipi_id sağlam mı? — sağlam
+  [GEÇTI] FK pallet_materials.material_id sağlam mı? — sağlam
+  [GEÇTI] FK material_stock_movements.material_id sağlam mı? — sağlam
+  [GEÇTI] loading_records.firma doluluk — 1 distinct firma
+  [GEÇTI] loading_pallets.depo doluluk — 1 distinct depo
+  [GEÇTI] loading_pallets → loading_records FK sağlam mı? — sağlam
+  [GEÇTI] material_stock_movements tutarlılığı — toplam 0 hareket, 0 null material_id
+
+ROLLBACK: ÇALIŞIYOR
+PRODUCTION HAZIR: EVET
+
+Backup: /home/user/Yukleme_plani/scripts/staging_backup_yukleme_plani_staging_20260528_144032.sql
