@@ -797,26 +797,26 @@ function normalize_text_v2(string $v): string {
     return implode(' ', $words);
 }
 
-function normalize_firma(string $v): string { return normalize_text($v); }
-function normalize_urun(string $v): string  { return normalize_text($v); }
-function normalize_depo(string $v): string  { return normalize_text($v); }
+function normalize_firma(string $v): string { return normalize_text_v2($v); }
+function normalize_urun(string $v): string  { return normalize_text_v2($v); }
+function normalize_depo(string $v): string  { return normalize_text_v2($v); }
 
 // ── Tanım Tablosuna Otomatik Ekle ────────────────────────
 // Case-insensitive kontrol; aynı isim iki kez eklenmez.
 // type: 'firma' | 'depo' | 'urun'
 function ensure_definition(string $type, string $name): void {
+    $name = normalize_text_v2($name);
     if ($name === '') return;
     try {
         $pdo = db();
-        $st  = $pdo->prepare(
-            "SELECT id FROM material_definitions WHERE type = ? AND LOWER(name) = LOWER(?) LIMIT 1"
-        );
-        $st->execute([$type, $name]);
-        if (!$st->fetchColumn()) {
-            $pdo->prepare(
-                "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"
-            )->execute([$type, $name]);
+        $st  = $pdo->prepare("SELECT name FROM material_definitions WHERE type = ?");
+        $st->execute([$type]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            if (normalize_text_v2($n) === $name) return;
         }
+        $pdo->prepare(
+            "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"
+        )->execute([$type, $name]);
     } catch (PDOException $e) {}
 }
 
