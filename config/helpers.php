@@ -797,9 +797,9 @@ function normalize_text_v2(string $v): string {
     return implode(' ', $words);
 }
 
-function normalize_firma(string $v): string { return normalize_text($v); }
-function normalize_urun(string $v): string  { return normalize_text($v); }
-function normalize_depo(string $v): string  { return normalize_text($v); }
+function normalize_firma(string $v): string { return normalize_text_v2($v); }
+function normalize_urun(string $v): string  { return normalize_text_v2($v); }
+function normalize_depo(string $v): string  { return normalize_text_v2($v); }
 
 // ── Tanım Tablosuna Otomatik Ekle ────────────────────────
 // Case-insensitive kontrol; aynı isim iki kez eklenmez.
