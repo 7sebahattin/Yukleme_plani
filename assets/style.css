@@ -3466,3 +3466,19 @@ body.notes-modal-open { overflow: hidden; }
     .stok-pg { flex-direction:column; align-items:flex-start; }
     .stok-pg-info { font-size:.78rem; }
 }
+
+/* ── Sprint 19: Malzeme Stok negatif uyarı + ozet vurgusu ── */
+.ms-neg-uyari {
+    background:rgba(239,68,68,.07);
+    border:1px solid rgba(239,68,68,.25);
+    border-radius:var(--radius);
+    padding:12px 16px;
+    margin-bottom:14px;
+}
+.ms-neg-uyari-head { font-weight:600; color:#7f1d1d; font-size:.9rem; margin-bottom:8px; }
+.ms-neg-table { width:100%; font-size:.82rem; border-collapse:collapse; }
+.ms-neg-table th { text-align:left; color:var(--muted); font-weight:500; padding:2px 8px; }
+.ms-neg-table td { padding:3px 8px; }
+.ms-neg-table .num { text-align:right; }
+.ms-row-negatif { background:rgba(239,68,68,.05); }
+.ms-row-negatif td { border-bottom-color:rgba(239,68,68,.15); }
