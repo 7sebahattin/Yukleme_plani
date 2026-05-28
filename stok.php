@@ -988,7 +988,7 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                             <td><?= h($row['firma'] ?? '—') ?></td>
                             <td><?= h($row['urun'] !== '' ? $row['urun'] : '—') ?></td>
                             <td><?= h($row['depo'] !== '' ? $row['depo'] : '—') ?></td>
-                            <td class="num"><?= number_format((float)($row['net_kg'] ?? 0), 3, ',', '.') ?></td>
+                            <td class="num"><?= fmt_kg((float)($row['net_kg'] ?? 0)) ?></td>
                             <td class="hd-fix-cell">
                             <?php if ($_has_fix): ?>
                             <form method="post" action="stok.php" class="hd-form">

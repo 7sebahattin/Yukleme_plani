@@ -72,12 +72,9 @@ function fmt_datetime(?string $d): string {
     return date('d.m.Y H:i', $ts);
 }
 
-// --- Kg biçimle: sondaki gereksiz sıfırları kaldır ---
+// --- Kg biçimle: tam sayıya yuvarla, nokta binlik ayraç ---
 function fmt_kg($v): string {
-    $s = number_format((float)$v, 3, ',', '.');
-    $s = rtrim($s, '0');
-    $s = rtrim($s, ',');
-    return $s;
+    return number_format((int)round((float)$v), 0, '', '.');
 }
 
 function fmt_money($v): string {
