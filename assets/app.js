@@ -87,7 +87,18 @@
     function parseNum(v) {
         if (v === null || v === undefined || v === '') return 0;
         if (typeof v === 'number') return isFinite(v) ? v : 0;
-        const s = String(v).replace(/\s/g, '').replace(',', '.');
+        let s = String(v).replace(/\s/g, '');
+        const hasComma = s.includes(',');
+        const hasDot   = s.includes('.');
+        if (hasComma && hasDot) {
+            if (s.lastIndexOf('.') > s.lastIndexOf(',')) {
+                s = s.replaceAll(',', '');          // "13,960.5" → İngilizce: virgül=binler
+            } else {
+                s = s.replaceAll('.', '').replace(',', '.'); // "13.960,5" → Türkçe: nokta=binler
+            }
+        } else if (hasComma) {
+            s = s.replace(',', '.');                // "13960,5" → Türkçe ondalık
+        }
         const n = parseFloat(s);
         return isFinite(n) ? n : 0;
     }

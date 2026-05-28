@@ -1,0 +1,12 @@
+# uploads/ — PHP çalıştırma ve script execution tamamen kapalı
+# Sadece statik dosya servis (indirme/görüntüleme) aktif
+
+php_flag engine off
+php_flag cgi.force_redirect off
+AddType application/octet-stream .php .php3 .php4 .php5 .phtml .pl .py .cgi .asp .aspx .sh
+Options -ExecCGI -Indexes
+RemoveHandler .php .phtml .php3 .php4 .php5
+
+# CGI handler'ları kaldır
+RemoveType application/x-httpd-php
+RemoveType application/x-httpd-php-source

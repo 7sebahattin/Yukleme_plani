@@ -1,0 +1,6 @@
+# scripts/ — Tüm web erişimi kapalı
+# Bu klasördeki dosyalar yalnızca CLI (komut satırı) ile çalıştırılabilir.
+# Web üzerinden erişim tamamen engellendi.
+
+Order deny,allow
+Deny from all

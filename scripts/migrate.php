@@ -1,16 +1,12 @@
 <?php
 // =========================================================
 // migrate.php - Tek seferlik veritabanı güncelleme
-// Kullandıktan sonra silmeyi unutmayın.
+// WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:
+//   php scripts/migrate.php
 // =========================================================
 declare(strict_types=1);
 
-if ($_GET['run'] ?? '' !== '1') {
-    echo '<p>Çalıştırmak için: <a href="?run=1">?run=1</a> ekleyin.</p>';
-    exit;
-}
-
-require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/../config/db.php';
 
 $pdo = db();
 $log = [];
@@ -55,12 +51,7 @@ try {
     $log[] = '❌ material_template_items hatası: ' . $e->getMessage();
 }
 
-header('Content-Type: text/html; charset=utf-8');
-echo '<!doctype html><html><head><meta charset="utf-8"><title>Migrasyon</title></head><body>';
-echo '<h2>Migrasyon Sonucu</h2><ul>';
 foreach ($log as $line) {
-    echo '<li>' . htmlspecialchars($line, ENT_QUOTES, 'UTF-8') . '</li>';
+    echo $line . PHP_EOL;
 }
-echo '</ul>';
-echo '<p><strong>Tamamlandı.</strong> Bu dosyayı (migrate.php) sunucudan silin.</p>';
-echo '</body></html>';
+echo 'Tamamlandı.' . PHP_EOL;

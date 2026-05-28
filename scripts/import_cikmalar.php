@@ -1,25 +1,17 @@
 <?php
 // =========================================================
 // import_cikmalar.php - Excel çıkma verilerini DB'ye aktar
-// Tek seferlik kullanım. Sonradan silmeyi unutmayın.
-// Çalıştırmak için: ?run=1
+// WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:
+//   php scripts/import_cikmalar.php
 // =========================================================
 declare(strict_types=1);
 
-if (($_GET['run'] ?? '') !== '1') {
-    echo '<!doctype html><html><head><meta charset="utf-8"><title>İçe Aktar</title></head><body>';
-    echo '<h2>Çıkma Verisi İçe Aktarma</h2>';
-    echo '<p>Bu script Excel\'den alınan 80 palet satırını veritabanına ekler.</p>';
-    echo '<p>Gruplama: aynı tarih + aynı çıkma türü → tek kayıt, birden fazla palet.</p>';
-    echo '<p><strong>Çakışma koruması:</strong> Aynı tarih+firma+type\'ı olan kayıt varsa atlanır.</p>';
-    echo '<p><a href="?run=1" style="background:#1a56db;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none">Çalıştır</a></p>';
-    echo '</body></html>';
-    exit;
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
 }
 
-require_once __DIR__ . '/config/db.php';
-
-header('Content-Type: text/html; charset=utf-8');
+require_once __DIR__ . '/../config/db.php';
 
 // ── Ham Excel verisi (tarih, palet_desc, tur, kasa, brut, dara, net, cikma_tur) ──
 $excel_rows = [
@@ -112,8 +104,8 @@ $created_records = 0;
 $created_pallets = 0;
 
 // ── material_definitions önbelleği ──
-$kasa_map  = [];  // 'K-65' → id
-$palet_map = [];  // 30 → id (unit_dara_kg)
+$kasa_map  = [];
+$palet_map = [];
 
 $kasa_rows = $pdo->query(
     "SELECT id, name FROM material_definitions WHERE type = 'kasa_cinsi' AND is_active = 1"
@@ -138,7 +130,6 @@ foreach ($excel_rows as $row) {
     $groups[$key][] = $row;
 }
 
-// ── Mevcut kayıt çakışması kontrolü için ──
 $chk_st = $pdo->prepare(
     "SELECT COUNT(*) FROM loading_records
      WHERE type = 'cikma' AND tarih = ? AND firma = ?"
@@ -159,10 +150,9 @@ $ins_pal = $pdo->prepare(
 foreach ($groups as $key => $rows) {
     [$tarih, $cikma_tur] = explode('|', $key, 2);
 
-    // Çakışma kontrolü
     $chk_st->execute([$tarih, $cikma_tur]);
     if ((int)$chk_st->fetchColumn() > 0) {
-        $log[] = "⚠️ Atlandı (zaten var): $tarih / $cikma_tur (" . count($rows) . " palet)";
+        $log[] = "ATLANDI (zaten var): $tarih / $cikma_tur (" . count($rows) . " palet)";
         $skipped++;
         continue;
     }
@@ -178,10 +168,8 @@ foreach ($groups as $key => $rows) {
         foreach ($rows as $row) {
             [$tarih2, $palet_desc, $tur, $kasa, $brut, $dara, $net, $cikma_tur2] = $row;
 
-            // Kasa cinsi ID
             $kasa_id = $kasa_map[strtoupper(trim($tur))] ?? null;
 
-            // Palet tipi ID — "1 (30 kg)" → 30 kg
             $palet_id = null;
             if (preg_match('/\((\d+)\s*kg\)/i', $palet_desc, $m)) {
                 $palet_kg = (int)$m[1];
@@ -190,46 +178,31 @@ foreach ($groups as $key => $rows) {
 
             $ins_pal->execute([
                 $rec_id,
-                $sira + 1,   // palet_no
+                $sira + 1,
                 $kasa,
                 $brut,
                 $dara,
                 $net,
                 $kasa_id,
                 $palet_id,
-                $sira,       // sira_no
+                $sira,
             ]);
             $created_pallets++;
             $sira++;
         }
 
         $pdo->commit();
-        $log[] = "✅ Eklendi: $tarih / $cikma_tur → {$sira} palet (Kayıt #$rec_id)";
+        $log[] = "OK Eklendi: $tarih / $cikma_tur → {$sira} palet (Kayıt #$rec_id)";
 
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $log[] = "❌ Hata ($tarih / $cikma_tur): " . $e->getMessage();
+        $log[] = "HATA ($tarih / $cikma_tur): " . $e->getMessage();
     }
 }
 
-echo '<!doctype html><html><head><meta charset="utf-8"><title>İçe Aktarma</title>';
-echo '<style>body{font-family:sans-serif;max-width:800px;margin:20px auto;padding:0 16px}
-li{margin:4px 0}
-.ok{color:#166534} .warn{color:#92400e} .err{color:#991b1b}
-.summary{background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:16px}
-</style></head><body>';
-echo '<h2>⚖️ Çıkma Verisi İçe Aktarma — Sonuç</h2>';
-echo '<div class="summary">';
-echo "<strong>Oluşturulan kayıt:</strong> $created_records &nbsp;|&nbsp; ";
-echo "<strong>Oluşturulan palet:</strong> $created_pallets &nbsp;|&nbsp; ";
-echo "<strong>Atlanan grup:</strong> $skipped";
-echo '</div>';
-echo '<ul>';
 foreach ($log as $line) {
-    $cls = str_starts_with($line, '✅') ? 'ok' : (str_starts_with($line, '⚠') ? 'warn' : 'err');
-    echo '<li class="'.$cls.'">'.htmlspecialchars($line, ENT_QUOTES, 'UTF-8').'</li>';
+    echo $line . PHP_EOL;
 }
-echo '</ul>';
-echo '<p><strong>Tamamlandı.</strong> Bu dosyayı (import_cikmalar.php) sunucudan silin.</p>';
-echo '<p><a href="cikmalar.php">→ Çıkmalar listesine git</a></p>';
-echo '</body></html>';
+echo PHP_EOL;
+echo "Oluşturulan kayıt: $created_records | Oluşturulan palet: $created_pallets | Atlanan grup: $skipped" . PHP_EOL;
+echo 'Tamamlandı.' . PHP_EOL;
