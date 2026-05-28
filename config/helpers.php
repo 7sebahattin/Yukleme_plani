@@ -777,6 +777,26 @@ function normalize_text(string $v): string {
     return mb_convert_case($v, MB_CASE_TITLE, 'UTF-8');
 }
 
+// Turkish-safe title case — avoids U+0307 combining dot that MB_CASE_TITLE produces for İ.
+// Correctly handles i→İ and ı→I at word boundaries.
+function normalize_text_v2(string $v): string {
+    $v = trim($v);
+    if ($v === '') return '';
+    $v = preg_replace('/\s+/u', ' ', $v);
+    $v = str_replace(['I', 'İ'], ['ı', 'i'], $v);
+    $v = mb_strtolower($v, 'UTF-8');
+    $words = explode(' ', $v);
+    $words = array_map(function(string $w): string {
+        if ($w === '') return '';
+        $first = mb_substr($w, 0, 1, 'UTF-8');
+        $rest  = mb_substr($w, 1, null, 'UTF-8');
+        if ($first === 'i') return 'İ' . $rest;
+        if ($first === 'ı') return 'I' . $rest;
+        return mb_strtoupper($first, 'UTF-8') . $rest;
+    }, $words);
+    return implode(' ', $words);
+}
+
 function normalize_firma(string $v): string { return normalize_text($v); }
 function normalize_urun(string $v): string  { return normalize_text($v); }
 function normalize_depo(string $v): string  { return normalize_text($v); }
@@ -817,6 +837,12 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
         if ((float)($p['net_kg'] ?? 0) <= 0) {
             $errs[] = $n . '. paletin net KG değeri sıfırdan büyük olmalıdır (brüt > dara).';
         }
+        if (empty($p['kasa_cinsi_id'])) {
+            $errs[] = $n . '. paletin kasa cinsi seçilmelidir.';
+        }
+        if (empty($p['palet_tipi_id'])) {
+            $errs[] = $n . '. paletin palet tipi seçilmelidir.';
+        }
         if ($require_urun_cinsi && trim((string)($p['urun_cinsi'] ?? '')) === '') {
             $errs[] = $n . '. paletin ürün cinsi zorunludur.';
         }
@@ -833,10 +859,6 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
         // material_stock_movements tablosu yoksa çık
         $pdo->query("SELECT 1 FROM `material_stock_movements` LIMIT 0");
 
-        $pdo->prepare(
-            "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
-        )->execute([$loading_record_id]);
-
         $rows = $pdo->prepare("
             SELECT pm.loading_pallet_id, pm.material_id, pm.quantity, pm.total_dara_kg,
                    md.name AS mat_name, md.type AS mat_type, md.unit_dara_kg,
@@ -849,23 +871,34 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
             ORDER BY pm.loading_pallet_id, pm.id
         ");
         $rows->execute([$loading_record_id]);
+        $all = $rows->fetchAll();
 
-        $ins = $pdo->prepare("
-            INSERT INTO material_stock_movements
-                (movement_date, movement_type, material_id, material_name, material_type,
-                 depo, quantity, unit, unit_dara_kg, total_dara_kg,
-                 source_type, source_id, source_detail_id)
-            VALUES (?, 'kullanim', ?, ?, ?, ?, ?, 'adet', ?, ?, 'loading', ?, ?)
-        ");
-        foreach ($rows->fetchAll() as $r) {
-            if ((float)$r['quantity'] <= 0) continue;
-            $ins->execute([
-                $r['lr_tarih'] ?: date('Y-m-d'),
-                $r['material_id'], $r['mat_name'], $r['mat_type'],
-                $r['depo'], $r['quantity'],
-                $r['unit_dara_kg'], $r['total_dara_kg'],
-                $loading_record_id, $r['loading_pallet_id'],
-            ]);
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare(
+                "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
+            )->execute([$loading_record_id]);
+
+            $ins = $pdo->prepare("
+                INSERT INTO material_stock_movements
+                    (movement_date, movement_type, material_id, material_name, material_type,
+                     depo, quantity, unit, unit_dara_kg, total_dara_kg,
+                     source_type, source_id, source_detail_id)
+                VALUES (?, 'kullanim', ?, ?, ?, ?, ?, 'adet', ?, ?, 'loading', ?, ?)
+            ");
+            foreach ($all as $r) {
+                if ((float)$r['quantity'] <= 0) continue;
+                $ins->execute([
+                    $r['lr_tarih'] ?: date('Y-m-d'),
+                    $r['material_id'], $r['mat_name'], $r['mat_type'],
+                    $r['depo'], $r['quantity'],
+                    $r['unit_dara_kg'], $r['total_dara_kg'],
+                    $loading_record_id, $r['loading_pallet_id'],
+                ]);
+            }
+            $pdo->commit();
+        } catch (PDOException $e) {
+            $pdo->rollBack();
         }
     } catch (PDOException $e) {}
 }

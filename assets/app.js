@@ -230,10 +230,13 @@
 
         if (isNew) {
             const last = pallets[pallets.length - 1];
+            const lsKasa  = localStorage.getItem('pm_kasa_cinsi_id') || '';
+            const lsPalet = localStorage.getItem('pm_palet_tipi_id') || '';
+            const lsDepo  = localStorage.getItem('pm_depo') || '';
             pmPaletNo.value = String(pallets.length + 1);
-            pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, last?.kasa_cinsi_id || '', '-- kasa cinsi seçiniz --');
-            pmPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || '', '-- palet tipi seçiniz --');
-            const depoDefault = (document.getElementById('genelDepo') || {}).value || '';
+            pmKasaCinsi.innerHTML = buildOptions(KASA_LIST, last?.kasa_cinsi_id || lsKasa, '-- kasa cinsi seçiniz --');
+            pmPaletTipi.innerHTML = buildOptions(PALET_LIST, last?.palet_tipi_id || lsPalet, '-- palet tipi seçiniz --');
+            const depoDefault = (document.getElementById('genelDepo') || {}).value || last?.depo || lsDepo;
             pmDepo.innerHTML = buildTextOptions(DEPO_LIST, depoDefault, '-- Depo seçiniz --');
             const urunDefault = (document.getElementById('genelUrun') || {}).value || last?.urun_cinsi || '';
             pmUrunCinsi.innerHTML = buildTextOptions(URUN_LIST, urunDefault, '-- ürün cinsi seçiniz --');
@@ -305,6 +308,12 @@
         } else {
             pallets[editingIdx] = p;
         }
+
+        try {
+            if (kc) localStorage.setItem('pm_kasa_cinsi_id', kc);
+            if (pt) localStorage.setItem('pm_palet_tipi_id', pt);
+            if (p.depo) localStorage.setItem('pm_depo', p.depo);
+        } catch (_) {}
 
         renderCards();
         recomputeTotals();
