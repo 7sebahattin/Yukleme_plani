@@ -7,6 +7,24 @@ require_once __DIR__ . '/config/db.php';
 
 $pdo = db();
 
+function stok_url(array $override = [], array $drop = []): string {
+    global $f_tarih_bas, $f_tarih_bit, $f_firma, $f_urun, $f_depo, $f_parti,
+           $f_hareket_tipi, $hareket_page;
+    $base = [
+        'tarih_bas'    => $f_tarih_bas    ?? '',
+        'tarih_bit'    => $f_tarih_bit    ?? '',
+        'firma'        => $f_firma        ?? '',
+        'urun'         => $f_urun         ?? '',
+        'depo'         => $f_depo         ?? '',
+        'parti'        => $f_parti        ?? '',
+        'hareket_tipi' => $f_hareket_tipi ?? '',
+        'hareket_page' => (isset($hareket_page) && $hareket_page > 1) ? (string)$hareket_page : '',
+    ];
+    foreach ($override as $k => $v) { $base[$k] = (string)$v; }
+    foreach ($drop as $k) { unset($base[$k]); }
+    return 'stok.php' . (($q = array_filter($base, fn($v) => $v !== '')) ? '?' . http_build_query($q) : '');
+}
+
 // ── Hızlı Düzelt (POST) ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli_duzelt') {
     csrf_check($_POST['csrf'] ?? null);
@@ -218,9 +236,11 @@ $f_firma     = trim($_GET['firma']     ?? '');
 $f_urun      = trim($_GET['urun']      ?? '');
 $f_depo      = trim($_GET['depo']      ?? '');
 $f_parti     = trim($_GET['parti']     ?? '');
-$sayim_kg    = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
-$is_csv      = isset($_GET['csv']);
-$is_dkk_csv  = isset($_GET['dkk_csv']);
+$sayim_kg       = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
+$is_csv         = isset($_GET['csv']);
+$is_dkk_csv     = isset($_GET['dkk_csv']);
+$f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
+if (!in_array($f_hareket_tipi, ['gelen', 'yukleme', 'cikma', ''], true)) $f_hareket_tipi = '';
 
 // ── Ham Giriş (kantar_fisleri) — parti no kantar tarafını etkilemez ──
 $k_where  = [];
@@ -313,7 +333,7 @@ $st = $pdo->prepare("SELECT
   JOIN kantar_fisleri kf ON kg.fis_id=kf.id
   JOIN (SELECT fis_id,SUM(kasa_adedi) AS total_kasa FROM kantar_gruplar GROUP BY fis_id) tot ON tot.fis_id=kf.id
   $gk_sql
-  ORDER BY kf.giris_tarih DESC, kf.id DESC, kg.sira ASC LIMIT 300");
+  ORDER BY kf.giris_tarih DESC, kf.id DESC, kg.sira ASC LIMIT 5000");
 $st->execute($gk_p);
 $kantar_rows = $st->fetchAll();
 // Ungrouped kantar rows: single row per fiş, firma = firma_adi
@@ -326,7 +346,7 @@ $st = $pdo->prepare("SELECT
     kf.id AS kantar_id, NULL AS lr_id, '' AS cikis_nedeni,
     CONCAT('KNT-', kf.fis_no) AS ref_no
   FROM kantar_fisleri kf $uk_sql
-  ORDER BY kf.giris_tarih DESC, kf.id DESC LIMIT 300");
+  ORDER BY kf.giris_tarih DESC, kf.id DESC LIMIT 5000");
 $st->execute($uk_p);
 $kantar_rows = array_merge($kantar_rows, $st->fetchAll());
 
@@ -338,7 +358,7 @@ $st = $pdo->prepare("SELECT
     lr.parti_no AS ref_no
   FROM loading_pallets lp
   JOIN loading_records lr ON lp.loading_record_id = lr.id $l_where_sql
-  ORDER BY lr.tarih DESC, lr.id DESC LIMIT 300");
+  ORDER BY lr.tarih DESC, lr.id DESC LIMIT 5000");
 $st->execute($l_params);
 $loading_rows = $st->fetchAll();
 
@@ -347,6 +367,10 @@ usort($hareket_rows, function ($a, $b) {
     $cmp = strcmp((string)($b['tarih'] ?? ''), (string)($a['tarih'] ?? ''));
     return $cmp !== 0 ? $cmp : strcmp($b['yon'] ?? '', $a['yon'] ?? '');
 });
+if ($f_hareket_tipi !== '') {
+    $hareket_rows = array_values(array_filter($hareket_rows, fn($r) => $r['yon'] === $f_hareket_tipi));
+}
+$hareket_total = count($hareket_rows);
 
 // ── Geçmiş sayımlar ───────────────────────────────────────
 $gecmis_sayimlar = [];
@@ -708,7 +732,23 @@ if ($is_csv) {
     exit;
 }
 
-$herhangi_filtre = $f_tarih_bas || $f_tarih_bit || $f_firma || $f_urun || $f_depo || $f_parti;
+// Sayfalama — CSV tüm satırları alır, display sayfalanır
+$hareket_per_page    = 100;
+$hareket_page        = max(1, (int)($_GET['hareket_page'] ?? 1));
+$hareket_total_pages = max(1, (int)ceil($hareket_total / $hareket_per_page));
+$hareket_page        = min($hareket_page, $hareket_total_pages);
+$hareket_page_rows   = array_slice($hareket_rows, ($hareket_page - 1) * $hareket_per_page, $hareket_per_page);
+
+// Özet kart renk durumu
+$kalan_state = $kalan_kg < 0 ? 'negatif' : ($kalan_kg == 0.0 ? 'sifir' : 'pozitif');
+
+// Kantar depo boş uyarısı için sayı
+$_depo_bos_cnt = 0;
+foreach ($quality_checks as $_qc) {
+    if (str_contains($_qc['label'], 'Deposu boş — kantar')) { $_depo_bos_cnt = $_qc['n']; break; }
+}
+
+$herhangi_filtre = $f_tarih_bas !== '' || $f_tarih_bit !== '' || $f_firma !== '' || $f_urun !== '' || $f_depo !== '' || $f_parti !== '' || $f_hareket_tipi !== '';
 
 render_header('Ürün Stok');
 render_flash();
@@ -737,9 +777,16 @@ render_flash();
     Eski kantar kayıtlarında <em>depo</em> boş olabilir — depo filtresi aktifken bu girişler hesaba dahil edilmez.
     Eski kantar fişlerini düzenlemek için <a href="kantar.php">Kantar Fişleri</a> listesini kullanın.</span>
 </div>
+<?php if ($_depo_bos_cnt > 0): ?>
+<div class="stok-uyari-box stok-uyari-depo" style="margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+    <span>⚠</span>
+    <span><strong><?= $_depo_bos_cnt ?> kantar fişinde depo boş</strong> — depo filtresi aktifken bu girişler hesaba dahil edilmez.
+    Düzeltmek için <a href="stok.php?dkk_open=1<?= $f_firma !== '' ? '&firma=' . urlencode($f_firma) : '' ?>">Veri Kalite Raporunu</a> açın.</span>
+</div>
+<?php endif; ?>
 <?php if ($f_parti !== ''): ?>
-<div class="stok-uyari-box" style="margin-bottom:14px;display:flex;gap:8px;align-items:flex-start">
-    <span>⚠️</span>
+<div class="stok-uyari-box" style="margin-bottom:10px;display:flex;gap:8px;align-items:flex-start">
+    <span>⚠</span>
     <span><strong>Parti no filtresi aktif:</strong> Ham giriş (kantar) <em>partiye göre filtrelenmez</em>; yalnızca yükleme/çıkma kayıtları bu filtreden etkilenir.
     Bu nedenle gösterilen teorik kalan, sadece ilgili partinin çıkışlarını baz alır — doğru bir gerçek stok hesabı değildir.</span>
 </div>
@@ -804,6 +851,18 @@ render_flash();
             <?php endif; ?>
         </div>
     </form>
+</div>
+
+<!-- ── Hareket Tipi Filtresi ─────────────────────────────── -->
+<div class="stok-mv-filter-row">
+    <a href="<?= stok_url(['hareket_tipi' => '', 'hareket_page' => '']) ?>"
+       class="pill<?= $f_hareket_tipi === '' ? ' active' : '' ?>">Tümü</a>
+    <a href="<?= stok_url(['hareket_tipi' => 'gelen', 'hareket_page' => '']) ?>"
+       class="pill<?= $f_hareket_tipi === 'gelen' ? ' active' : '' ?>">Kantar Giriş</a>
+    <a href="<?= stok_url(['hareket_tipi' => 'yukleme', 'hareket_page' => '']) ?>"
+       class="pill<?= $f_hareket_tipi === 'yukleme' ? ' active' : '' ?>">Yükleme Çıkış</a>
+    <a href="<?= stok_url(['hareket_tipi' => 'cikma', 'hareket_page' => '']) ?>"
+       class="pill<?= $f_hareket_tipi === 'cikma' ? ' active' : '' ?>">Çıkma / Fire</a>
 </div>
 
 <?php
@@ -1027,10 +1086,10 @@ function dkkToggle() {
         <div class="stok-kart-val"><?= fmt_kg($fire_cikma_kg) ?> <small>kg</small></div>
         <div class="stok-kart-sub">Çıkma kayıtları</div>
     </div>
-    <div class="stok-kart stok-kart-kalan">
-        <div class="stok-kart-label">Teorik Kalan</div>
-        <div class="stok-kart-val <?= $kalan_kg < 0 ? 'stok-negatif' : '' ?>"><?= fmt_kg($kalan_kg) ?> <small>kg</small></div>
-        <div class="stok-kart-sub">Giriş − İyi − Fire</div>
+    <div class="stok-kart stok-kart-kalan stok-kart-kalan-<?= $kalan_state ?>">
+        <div class="stok-kart-label">Teorik Kalan<?= $kalan_state === 'negatif' ? ' ⚠' : '' ?></div>
+        <div class="stok-kart-val stok-kalan-<?= $kalan_state ?>"><?= fmt_kg($kalan_kg) ?> <small>kg</small></div>
+        <div class="stok-kart-sub"><?= $kalan_state === 'negatif' ? 'Eksik — veri hatası olabilir' : 'Giriş − İyi − Fire' ?></div>
     </div>
     <div class="stok-kart stok-kart-sayim">
         <div class="stok-kart-label">Fiziki Sayım</div>
@@ -1123,9 +1182,12 @@ function dkkToggle() {
 <div class="card" style="margin-top:16px;padding:0">
     <div class="stok-table-head">
         <span style="font-weight:700;font-size:.97rem">Hareketler</span>
-        <span style="font-size:.82rem;color:var(--muted)"><?= count($hareket_rows) ?> kayıt<?= count($hareket_rows) >= 300 ? ' (ilk 300)' : '' ?></span>
+        <span style="font-size:.82rem;color:var(--muted)">
+            <?= $hareket_total ?> hareket<?= $hareket_total >= 5000 ? ' (max 5000)' : '' ?>
+            <?php if ($hareket_total_pages > 1): ?> · Sayfa <?= $hareket_page ?>/<?= $hareket_total_pages ?><?php endif; ?>
+        </span>
     </div>
-    <?php if (empty($hareket_rows)): ?>
+    <?php if (empty($hareket_page_rows)): ?>
     <div style="padding:32px;text-align:center;color:var(--muted)">Filtre kriterlerine uygun hareket yok.</div>
     <?php else: ?>
     <div class="table-wrap">
@@ -1146,7 +1208,7 @@ function dkkToggle() {
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($hareket_rows as $r):
+            <?php foreach ($hareket_page_rows as $r):
                 $yon         = $r['yon'];
                 $is_gelen    = $yon === 'gelen';
                 $badge_class = $is_gelen ? 'badge-gelen' : ($yon === 'cikma' ? 'badge-fire' : 'badge-cikan');
@@ -1203,6 +1265,32 @@ function dkkToggle() {
             </tbody>
         </table>
     </div>
+    <?php if ($hareket_total_pages > 1): ?>
+    <div class="stok-pg">
+        <span class="stok-pg-info">Toplam <?= $hareket_total ?> hareket · Sayfa <?= $hareket_page ?> / <?= $hareket_total_pages ?></span>
+        <div class="stok-pg-btns">
+            <?php if ($hareket_page > 1): ?>
+            <a href="<?= stok_url(['hareket_page' => $hareket_page - 1]) ?>" class="btn btn-sm">← Önceki</a>
+            <?php endif; ?>
+            <?php
+            $prev_ellipsis = false;
+            for ($pg = 1; $pg <= $hareket_total_pages; $pg++):
+                $show = $pg === 1 || $pg === $hareket_total_pages || abs($pg - $hareket_page) <= 2;
+                if (!$show):
+                    if (!$prev_ellipsis): $prev_ellipsis = true; ?><span class="stok-pg-ellipsis">…</span><?php endif;
+                    continue;
+                endif;
+                $prev_ellipsis = false;
+            ?>
+            <a href="<?= stok_url(['hareket_page' => $pg]) ?>"
+               class="btn btn-sm<?= $pg === $hareket_page ? ' btn-primary' : '' ?>"><?= $pg ?></a>
+            <?php endfor; ?>
+            <?php if ($hareket_page < $hareket_total_pages): ?>
+            <a href="<?= stok_url(['hareket_page' => $hareket_page + 1]) ?>" class="btn btn-sm">Sonraki →</a>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 </div>
 
