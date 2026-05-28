@@ -206,7 +206,7 @@ render_flash();
 
 <!-- Sticky özet bar — kart dolu olunca çıkar -->
 <div id="sp-bar"
-     style="display:none;position:fixed;bottom:calc(60px + env(safe-area-inset-bottom,0px));left:0;right:0;background:var(--primary);color:#fff;padding:10px 16px;z-index:450;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 -2px 10px rgba(0,0,0,.18)">
+     style="display:none;position:fixed;bottom:calc(60px + env(safe-area-inset-bottom,0px));left:0;right:0;background:var(--primary);color:#fff;padding:10px 16px;z-index:550;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 -2px 10px rgba(0,0,0,.18)">
     <span id="sp-bar-text" style="font-weight:600;font-size:.9rem"></span>
     <button type="button" onclick="spBarSubmit()"
             style="background:#fff;color:var(--primary);border:none;padding:8px 18px;border-radius:20px;font-weight:700;cursor:pointer;font-size:.88rem;white-space:nowrap">

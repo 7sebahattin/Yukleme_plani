@@ -20,6 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $list_url = $rec_type === 'cikma' ? 'cikmalar.php' : 'records.php';
 
     try {
+        // Malzeme stok hareketlerini önce temizle (FK CASCADE kapsamı dışında)
+        db()->prepare(
+            "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
+        )->execute([$id]);
         db()->prepare("DELETE FROM loading_records WHERE id=:id")->execute([':id' => $id]);
         set_flash('success', 'Kayıt silindi (#' . $id . ').');
     } catch (Throwable $e) {
