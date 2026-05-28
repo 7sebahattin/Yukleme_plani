@@ -36,10 +36,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } elseif ($action === 'update') {
             $id        = (int)($_POST['id'] ?? 0);
-            $name      = trim((string)($_POST['name'] ?? ''));
+            $name      = normalize_text_v2((string)($_POST['name'] ?? ''));
             $unit      = num($_POST['unit_dara_kg'] ?? 0);
             $is_active = !empty($_POST['is_active']) ? 1 : 0;
             if ($id <= 0 || $name === '') throw new RuntimeException('Geçersiz veri.');
+            $row = db()->prepare("SELECT type FROM material_definitions WHERE id = ?");
+            $row->execute([$id]);
+            $type = (string)($row->fetchColumn() ?: '');
+            if ($type !== '') {
+                $others = db()->prepare("SELECT name FROM material_definitions WHERE type = ? AND id != ?");
+                $others->execute([$type, $id]);
+                foreach ($others->fetchAll(PDO::FETCH_COLUMN) as $n) {
+                    if (normalize_text_v2($n) === $name) {
+                        throw new RuntimeException('Bu türde aynı isimde başka bir tanım zaten var.');
+                    }
+                }
+            }
             db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
                 ->execute([$name, $unit, $is_active, $id]);
             set_flash('success', 'Güncellendi.');
