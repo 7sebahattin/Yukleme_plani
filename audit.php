@@ -333,4 +333,100 @@ foreach ($section_order as $key):
 </details>
 <?php endforeach; ?>
 
+<?php
+// ── Normalize Simülasyonu ──────────────────────────────────
+if ($has_md):
+    $norm_rows = $pdo->query("
+        SELECT id, type, name FROM material_definitions ORDER BY type, name LIMIT 300
+    ")->fetchAll();
+
+    // Unicode risk detection helper
+    function au_unicode_risk(string $s): array {
+        $flags = [];
+        if (preg_match('/\x{0307}/u', $s))       $flags[] = 'U+0307 birleştirici nokta';
+        if (preg_match('/\x{200B}/u', $s))        $flags[] = 'sıfır genişlikli boşluk';
+        if (preg_match('/\x{200C}|\x{200D}/u', $s)) $flags[] = 'ZWNJ/ZWJ';
+        if (preg_match('/\x{FEFF}/u', $s))        $flags[] = 'BOM';
+        if (preg_match('/[^\x00-\x7F\xC0-\xFF\x{0100}-\x{024F}\x{011E}\x{011F}\x{0130}\x{0131}\x{015E}\x{015F}]/u', $s))
+            $flags[] = 'olağandışı unicode';
+        return $flags;
+    }
+
+    $sim_changed = 0; $sim_risk = 0;
+    $sim_rows = [];
+    foreach ($norm_rows as $r) {
+        $v1 = normalize_text($r['name']);
+        $v2 = normalize_text_v2($r['name']);
+        $risk = au_unicode_risk($r['name']);
+        $risk_v1 = au_unicode_risk($v1);
+        $changed_v1 = ($v1 !== $r['name']);
+        $changed_v2 = ($v2 !== $r['name']);
+        $diff_v1_v2 = ($v1 !== $v2);
+        $has_risk = !empty($risk) || !empty($risk_v1);
+        if ($diff_v1_v2 || $has_risk) {
+            $sim_rows[] = [
+                'id'       => $r['id'],
+                'type'     => $r['type'],
+                'mevcut'   => $r['name'],
+                'v1'       => $v1,
+                'v2'       => $v2,
+                'risk'     => implode(', ', array_merge($risk, $risk_v1)),
+                'changed'  => $diff_v1_v2 || $changed_v1 || $changed_v2,
+            ];
+            if ($diff_v1_v2) $sim_changed++;
+            if ($has_risk) $sim_risk++;
+        }
+    }
+    $sim_badge = ($sim_changed > 0 || $sim_risk > 0) ? 'b-warn' : 'b-ok';
+    $sim_badge_txt = ($sim_changed > 0 || $sim_risk > 0)
+        ? $sim_changed . ' farklı, ' . $sim_risk . ' riskli'
+        : '✓ Temiz';
+?>
+<details class="au-sec" <?= ($sim_changed > 0 || $sim_risk > 0) ? 'open' : '' ?>>
+    <summary>
+        Normalize Simülasyonu (v1 vs v2)
+        <span class="au-badge <?= $sim_badge ?>"><?= h($sim_badge_txt) ?></span>
+    </summary>
+    <div class="au-body">
+        <div class="au-risk"><strong>ℹ Bilgi:</strong>
+            <code>normalize_text()</code> (v1) — MB_CASE_TITLE kullanır; Türkçe büyük harf İ için U+0307 combining dot üretebilir.<br>
+            <code>normalize_text_v2()</code> (v2) — Türkçe i/ı/İ/I kurallarını doğru işler, combining char üretmez.<br>
+            Bu tablo yalnızca v1 ≠ v2 veya unicode riski olan kayıtları gösterir.
+        </div>
+        <?php if (empty($sim_rows)): ?>
+        <p class="au-empty">✓ Mevcut kayıtlarda v1/v2 farkı veya unicode riski bulunamadı.</p>
+        <?php else: ?>
+        <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px">
+            <?= count($sim_rows) ?> kayıt gösteriliyor
+            (<?= count($norm_rows) ?> toplam içinden, yalnızca farklı/riskli olanlar)
+        </div>
+        <div class="au-tbl-wrap">
+        <table class="au-tbl">
+            <thead><tr>
+                <th>ID</th><th>Tür</th><th>Mevcut</th>
+                <th>v1 (mevcut normalize)</th><th>v2 (yeni normalize)</th><th>Unicode Riski</th>
+            </tr></thead>
+            <tbody>
+            <?php foreach ($sim_rows as $sr): ?>
+            <tr>
+                <td><?= (int)$sr['id'] ?></td>
+                <td><?= h($sr['type']) ?></td>
+                <td><?= h($sr['mevcut']) ?></td>
+                <td style="<?= $sr['v1'] !== $sr['mevcut'] ? 'background:#fef3c7' : '' ?>">
+                    <?= h($sr['v1']) ?>
+                </td>
+                <td style="<?= $sr['v2'] !== $sr['v1'] ? 'background:#d1fae5' : '' ?>">
+                    <?= h($sr['v2']) ?>
+                </td>
+                <td style="color:#b91c1c;font-size:.75rem"><?= h($sr['risk']) ?></td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</details>
+<?php endif; ?>
+
 <?php render_footer();

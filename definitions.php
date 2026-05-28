@@ -23,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name = trim((string)($_POST['name'] ?? ''));
             $unit = num($_POST['unit_dara_kg'] ?? 0);
             if (!isset($type_labels[$type]) || $name === '') throw new RuntimeException('Tür ve isim zorunlu.');
+            $dup = db()->prepare("SELECT id FROM material_definitions WHERE type=? AND LOWER(TRIM(name))=LOWER(TRIM(?)) LIMIT 1");
+            $dup->execute([$type, $name]);
+            if ($dup->fetchColumn()) throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
             db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
                 ->execute([$type, $name, $unit]);
             set_flash('success', '"' . $name . '" eklendi.');

@@ -227,9 +227,9 @@ $k_where  = [];
 $k_params = [];
 if ($f_tarih_bas !== '') { $k_where[] = "giris_tarih >= ?";   $k_params[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $k_where[] = "giris_tarih <= ?";   $k_params[] = $f_tarih_bit . ' 23:59:59'; }
-if ($f_firma     !== '') { $k_where[] = "firma_adi LIKE ?";   $k_params[] = '%' . $f_firma . '%'; }
-if ($f_urun      !== '') { $k_where[] = "malin_cinsi LIKE ?"; $k_params[] = '%' . $f_urun . '%'; }
-if ($f_depo      !== '') { $k_where[] = "depo LIKE ?";        $k_params[] = '%' . $f_depo . '%'; }
+if ($f_firma     !== '') { $k_where[] = "LOWER(TRIM(firma_adi)) LIKE LOWER(?)";   $k_params[] = '%' . $f_firma . '%'; }
+if ($f_urun      !== '') { $k_where[] = "LOWER(TRIM(malin_cinsi)) LIKE LOWER(?)"; $k_params[] = '%' . $f_urun . '%'; }
+if ($f_depo      !== '') { $k_where[] = "LOWER(TRIM(depo)) LIKE LOWER(?)";        $k_params[] = '%' . $f_depo . '%'; }
 // NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
@@ -237,13 +237,13 @@ $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 $gk_base = []; $gk_base_p = [];
 if ($f_tarih_bas !== '') { $gk_base[] = "kf.giris_tarih >= ?";   $gk_base_p[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $gk_base[] = "kf.giris_tarih <= ?";   $gk_base_p[] = $f_tarih_bit . ' 23:59:59'; }
-if ($f_urun      !== '') { $gk_base[] = "kf.malin_cinsi LIKE ?"; $gk_base_p[] = '%' . $f_urun . '%'; }
-if ($f_depo      !== '') { $gk_base[] = "kf.depo LIKE ?";        $gk_base_p[] = '%' . $f_depo . '%'; }
+if ($f_urun      !== '') { $gk_base[] = "LOWER(TRIM(kf.malin_cinsi)) LIKE LOWER(?)"; $gk_base_p[] = '%' . $f_urun . '%'; }
+if ($f_depo      !== '') { $gk_base[] = "LOWER(TRIM(kf.depo)) LIKE LOWER(?)";        $gk_base_p[] = '%' . $f_depo . '%'; }
 $gk_conds = $gk_base; $gk_p = $gk_base_p;
-if ($f_firma !== '') { $gk_conds[] = "kg.grup_adi LIKE ?"; $gk_p[] = '%' . $f_firma . '%'; }
+if ($f_firma !== '') { $gk_conds[] = "LOWER(TRIM(kg.grup_adi)) LIKE LOWER(?)"; $gk_p[] = '%' . $f_firma . '%'; }
 $gk_sql = $gk_conds ? 'WHERE ' . implode(' AND ', $gk_conds) : '';
 $uk_conds = $gk_base; $uk_p = $gk_base_p;
-if ($f_firma !== '') { $uk_conds[] = "kf.firma_adi LIKE ?"; $uk_p[] = '%' . $f_firma . '%'; }
+if ($f_firma !== '') { $uk_conds[] = "LOWER(TRIM(kf.firma_adi)) LIKE LOWER(?)"; $uk_p[] = '%' . $f_firma . '%'; }
 $uk_conds[] = "NOT EXISTS (SELECT 1 FROM kantar_gruplar kgx WHERE kgx.fis_id = kf.id)";
 $uk_sql = 'WHERE ' . implode(' AND ', $uk_conds);
 
@@ -269,9 +269,9 @@ $l_where  = ["lr.type IN ('yukleme','cikma')"];
 $l_params = [];
 if ($f_tarih_bas !== '') { $l_where[] = "lr.tarih >= ?";        $l_params[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $l_where[] = "lr.tarih <= ?";        $l_params[] = $f_tarih_bit; }
-if ($f_firma     !== '') { $l_where[] = "lr.firma LIKE ?";      $l_params[] = '%' . $f_firma . '%'; }
-if ($f_urun      !== '') { $l_where[] = "lp.urun_cinsi LIKE ?"; $l_params[] = '%' . $f_urun . '%'; }
-if ($f_depo      !== '') { $l_where[] = "lp.depo LIKE ?";       $l_params[] = '%' . $f_depo . '%'; }
+if ($f_firma     !== '') { $l_where[] = "LOWER(TRIM(lr.firma)) LIKE LOWER(?)";      $l_params[] = '%' . $f_firma . '%'; }
+if ($f_urun      !== '') { $l_where[] = "LOWER(TRIM(lp.urun_cinsi)) LIKE LOWER(?)"; $l_params[] = '%' . $f_urun . '%'; }
+if ($f_depo      !== '') { $l_where[] = "LOWER(TRIM(lp.depo)) LIKE LOWER(?)";       $l_params[] = '%' . $f_depo . '%'; }
 if ($f_parti     !== '') { $l_where[] = "lr.parti_no LIKE ?";   $l_params[] = '%' . $f_parti . '%'; }
 $l_where_sql = 'WHERE ' . implode(' AND ', $l_where);
 
