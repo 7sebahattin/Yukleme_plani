@@ -14,6 +14,249 @@ function audit_tbl(string $t): bool {
     catch (PDOException $e) { return false; }
 }
 
+// ── NMQ: Normalize Migration Queue yardımcıları ─────────────────
+// UPDATE/DELETE çalıştırmaz — sadece review + queue yönetimi.
+
+function nmq_uc(string $s): array {
+    $f = [];
+    if (preg_match('/\x{0307}/u',           $s)) $f[] = 'U+0307';
+    if (preg_match('/\x{200B}/u',           $s)) $f[] = 'ZWSP';
+    if (preg_match('/[\x{200C}\x{200D}]/u', $s)) $f[] = 'ZWJ';
+    if (preg_match('/\x{FEFF}/u',           $s)) $f[] = 'BOM';
+    return $f;
+}
+
+function nmq_fk(PDO $p, int $id, string $type): array {
+    static $mat = ['sapka','kosebent','serit','casus','kasa_etiketi','minti',
+                   'kenar_kartonu','taban_kagidi','sale','viyol','kose_karton',
+                   'kraft_kagit','file','diger'];
+    $r = ['lp_kasa'=>0,'lp_palet'=>0,'pm'=>0,'msm'=>0];
+    try {
+        if ($type === 'kasa_cinsi' && audit_tbl('loading_pallets')) {
+            $st = $p->prepare("SELECT COUNT(*) FROM loading_pallets WHERE kasa_cinsi_id=?");
+            $st->execute([$id]); $r['lp_kasa'] = (int)$st->fetchColumn();
+        }
+        if ($type === 'palet_tipi' && audit_tbl('loading_pallets')) {
+            $st = $p->prepare("SELECT COUNT(*) FROM loading_pallets WHERE palet_tipi_id=?");
+            $st->execute([$id]); $r['lp_palet'] = (int)$st->fetchColumn();
+        }
+        if (in_array($type, $mat) && audit_tbl('pallet_materials')) {
+            $st = $p->prepare("SELECT COUNT(*) FROM pallet_materials WHERE material_id=?");
+            $st->execute([$id]); $r['pm'] = (int)$st->fetchColumn();
+        }
+        if (audit_tbl('material_stock_movements')) {
+            $st = $p->prepare("SELECT COUNT(*) FROM material_stock_movements WHERE material_id=?");
+            $st->execute([$id]); $r['msm'] = (int)$st->fetchColumn();
+        }
+    } catch (PDOException $e) {}
+    $r['total'] = $r['lp_kasa'] + $r['lp_palet'] + $r['pm'] + $r['msm'];
+    return $r;
+}
+
+function nmq_ensure_table(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `normalize_migration_queue` (
+        `id`            INT AUTO_INCREMENT PRIMARY KEY,
+        `target_id`     INT NOT NULL,
+        `mat_type`      VARCHAR(40)  NOT NULL DEFAULT '',
+        `current_value` VARCHAR(500) NOT NULL DEFAULT '',
+        `v2_value`      VARCHAR(500) NOT NULL DEFAULT '',
+        `will_change`   TINYINT(1)   NOT NULL DEFAULT 0,
+        `is_merge`      TINYINT(1)   NOT NULL DEFAULT 0,
+        `is_survivor`   TINYINT(1)   NOT NULL DEFAULT 0,
+        `surviving_id`  INT          NULL DEFAULT NULL,
+        `dup_id`        INT          NULL DEFAULT NULL,
+        `fk_lp_kasa`    INT          NOT NULL DEFAULT 0,
+        `fk_lp_palet`   INT          NOT NULL DEFAULT 0,
+        `fk_pm`         INT          NOT NULL DEFAULT 0,
+        `fk_msm`        INT          NOT NULL DEFAULT 0,
+        `fk_total`      INT          NOT NULL DEFAULT 0,
+        `u0307`         TINYINT(1)   NOT NULL DEFAULT 0,
+        `unicode_flags` VARCHAR(200) NOT NULL DEFAULT '',
+        `risk_level`    ENUM('DÜŞÜK','ORTA','YÜKSEK') NOT NULL DEFAULT 'DÜŞÜK',
+        `status`        ENUM('pending','approved','excluded') NOT NULL DEFAULT 'pending',
+        `reviewed_at`   TIMESTAMP NULL DEFAULT NULL,
+        `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uniq_target` (`target_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function nmq_run_refresh(PDO $pdo): int {
+    if (!audit_tbl('material_definitions')) return 0;
+    nmq_ensure_table($pdo);
+
+    $all = $pdo->query("SELECT id, type, name FROM material_definitions ORDER BY id")->fetchAll();
+
+    // v2 normalize + duplicate gruplarını bul
+    $groups = [];
+    foreach ($all as $r) {
+        $v2 = normalize_text_v2($r['name']);
+        $k  = $r['type'] . '||' . mb_strtolower(trim($v2), 'UTF-8');
+        $groups[$k]['type']      = $r['type'];
+        $groups[$k]['v2']        = $v2;
+        $groups[$k]['members'][] = ['id' => (int)$r['id'], 'name' => $r['name']];
+    }
+
+    // Merge gruplarında surviving_id seç (en fazla FK → surviving)
+    $merge_map = [];
+    foreach ($groups as $g) {
+        if (count($g['members']) < 2) continue;
+        $mwf = [];
+        foreach ($g['members'] as $m) {
+            $m['fk'] = nmq_fk($pdo, $m['id'], $g['type']);
+            $mwf[]   = $m;
+        }
+        usort($mwf, fn($a, $b) =>
+            $b['fk']['total'] !== $a['fk']['total']
+                ? $b['fk']['total'] - $a['fk']['total']
+                : $a['id'] - $b['id']
+        );
+        $surv_id = $mwf[0]['id'];
+        foreach ($mwf as $pos => $m) {
+            $merge_map[$m['id']] = [
+                'is_merge'    => 1,
+                'is_survivor' => ($pos === 0) ? 1 : 0,
+                'surviving_id'=> $surv_id,
+                'dup_id'      => ($pos === 0) ? null : $m['id'],
+                'fk'          => $m['fk'],
+            ];
+        }
+    }
+
+    // status/reviewed_at korunur — analiz verileri güncellenir
+    $ins = $pdo->prepare("
+        INSERT INTO normalize_migration_queue
+            (target_id, mat_type, current_value, v2_value, will_change,
+             is_merge, is_survivor, surviving_id, dup_id,
+             fk_lp_kasa, fk_lp_palet, fk_pm, fk_msm, fk_total,
+             u0307, unicode_flags, risk_level, status, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',NOW())
+        ON DUPLICATE KEY UPDATE
+            mat_type=VALUES(mat_type), current_value=VALUES(current_value),
+            v2_value=VALUES(v2_value), will_change=VALUES(will_change),
+            is_merge=VALUES(is_merge), is_survivor=VALUES(is_survivor),
+            surviving_id=VALUES(surviving_id), dup_id=VALUES(dup_id),
+            fk_lp_kasa=VALUES(fk_lp_kasa), fk_lp_palet=VALUES(fk_lp_palet),
+            fk_pm=VALUES(fk_pm), fk_msm=VALUES(fk_msm), fk_total=VALUES(fk_total),
+            u0307=VALUES(u0307), unicode_flags=VALUES(unicode_flags),
+            risk_level=VALUES(risk_level)
+    ");
+
+    $n = 0;
+    foreach ($all as $r) {
+        $id  = (int)$r['id'];
+        $v2  = normalize_text_v2($r['name']);
+        $mm  = $merge_map[$id] ?? [
+            'is_merge'=>0, 'is_survivor'=>0, 'surviving_id'=>null, 'dup_id'=>null,
+            'fk' => nmq_fk($pdo, $id, $r['type']),
+        ];
+        $will_change = ($v2 !== $r['name']) ? 1 : 0;
+        // Yalnızca değişecek veya merge olan (ama adı değişmeyen survivor değil) kayıtları al
+        if (!$will_change && !$mm['is_merge']) continue;
+        if ($mm['is_survivor'] && !$will_change) continue;
+
+        $uf    = array_values(array_unique(array_merge(nmq_uc($r['name']), nmq_uc($v2))));
+        $u0307 = (int)in_array('U+0307', $uf);
+        $fk    = $mm['fk'];
+        $risk  = (!$mm['is_survivor'] && $mm['is_merge'] && $fk['total'] > 0)
+                    ? 'YÜKSEK' : ($mm['is_merge'] ? 'ORTA' : 'DÜŞÜK');
+
+        $ins->execute([
+            $id, $r['type'], $r['name'], $v2, $will_change,
+            $mm['is_merge'], $mm['is_survivor'], $mm['surviving_id'], $mm['dup_id'],
+            $fk['lp_kasa'], $fk['lp_palet'], $fk['pm'], $fk['msm'], $fk['total'],
+            $u0307, implode(', ', $uf), $risk,
+        ]);
+        $n++;
+    }
+
+    // Artık material_definitions'ta olmayan kayıtları temizle
+    if (!empty($all)) {
+        $ids = implode(',', array_map(fn($r) => (int)$r['id'], $all));
+        $pdo->exec("DELETE FROM normalize_migration_queue WHERE target_id NOT IN ($ids)");
+    }
+    return $n;
+}
+
+// ── NMQ POST İşlemleri ────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $nmq_act = (string)($_POST['action'] ?? '');
+
+    if ($nmq_act === 'nmq_set_status') {
+        // AJAX endpoint — JSON döner
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            csrf_check($_POST['csrf'] ?? null);
+            $qid    = (int)($_POST['queue_id'] ?? 0);
+            $status = (string)($_POST['status'] ?? '');
+            if ($qid <= 0 || !in_array($status, ['pending','approved','excluded'], true)) {
+                throw new RuntimeException('Geçersiz parametre.');
+            }
+            nmq_ensure_table($pdo);
+            $pdo->prepare(
+                "UPDATE normalize_migration_queue SET status=?, reviewed_at=NOW() WHERE id=?"
+            )->execute([$status, $qid]);
+            echo json_encode(['ok' => true, 'id' => $qid, 'status' => $status]);
+        } catch (Throwable $e) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    if ($nmq_act === 'nmq_refresh') {
+        csrf_check($_POST['csrf'] ?? null);
+        try {
+            $n = nmq_run_refresh($pdo);
+            set_flash('success', "Normalize analizi tamamlandı — $n kayıt inceleme kuyruğuna alındı.");
+        } catch (Throwable $e) {
+            set_flash('error', 'Analiz hatası: ' . $e->getMessage());
+        }
+        header('Location: audit.php#nmq-section');
+        exit;
+    }
+
+    if ($nmq_act === 'nmq_bulk_approve') {
+        csrf_check($_POST['csrf'] ?? null);
+        try {
+            nmq_ensure_table($pdo);
+            $scope = (($_POST['scope'] ?? '') === 'all') ? 'all' : 'safe';
+            $cond  = ($scope === 'all') ? '' : 'AND fk_total = 0';
+            $pdo->exec(
+                "UPDATE normalize_migration_queue SET status='approved', reviewed_at=NOW()
+                 WHERE status='pending' $cond"
+            );
+            set_flash('success', 'Toplu onay tamamlandı.');
+        } catch (Throwable $e) {
+            set_flash('error', $e->getMessage());
+        }
+        header('Location: audit.php#nmq-section');
+        exit;
+    }
+}
+
+// ── NMQ verilerini yükle ─────────────────────────────────────
+$nmq_rows   = [];
+$nmq_exists = audit_tbl('normalize_migration_queue');
+$nmq_types  = [];
+$nmq_counts = ['pending' => 0, 'approved' => 0, 'excluded' => 0, 'total' => 0];
+
+if ($nmq_exists) {
+    $nmq_rows = $pdo->query("
+        SELECT id, target_id, mat_type, current_value, v2_value, will_change,
+               is_merge, is_survivor, surviving_id, dup_id,
+               fk_lp_kasa, fk_lp_palet, fk_pm, fk_msm, fk_total,
+               u0307, unicode_flags, risk_level, status, reviewed_at
+        FROM normalize_migration_queue
+        ORDER BY FIELD(risk_level,'YÜKSEK','ORTA','DÜŞÜK'), mat_type, target_id
+    ")->fetchAll();
+    foreach ($nmq_rows as $r) {
+        $nmq_types[$r['mat_type']] = true;
+        $nmq_counts[$r['status']]++;
+        $nmq_counts['total']++;
+    }
+    ksort($nmq_types);
+}
+
 $has_msm = audit_tbl('material_stock_movements');
 $has_md  = audit_tbl('material_definitions');
 $has_lr  = audit_tbl('loading_records');
@@ -428,5 +671,315 @@ if ($has_md):
     </div>
 </details>
 <?php endif; ?>
+
+<?php
+// ── NMQ: Normalize Migration Review bölümü ───────────────────
+$nmq_pending  = $nmq_counts['pending'];
+$nmq_approved = $nmq_counts['approved'];
+$nmq_excluded = $nmq_counts['excluded'];
+$nmq_total    = $nmq_counts['total'];
+$nmq_badge_cls = $nmq_pending > 0 ? 'b-warn' : ($nmq_total > 0 ? 'b-ok' : 'b-info');
+$nmq_badge_txt = $nmq_total === 0
+    ? 'Analiz yapılmadı'
+    : ($nmq_pending > 0 ? "$nmq_pending bekliyor" : '✓ Tümü incelendi');
+?>
+<style>
+.nmq-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.nmq-filters{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;
+             background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:10px}
+.nmq-filters label{display:flex;align-items:center;gap:4px;font-size:.8rem;cursor:pointer;white-space:nowrap}
+.nmq-filters select,.nmq-filters input[type=text]{font-size:.8rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px}
+.nmq-counter{font-size:.83rem;color:#64748b;margin-bottom:10px}
+.nmq-counter strong{color:#1e293b}
+.nmq-tbl td{vertical-align:middle}
+.nmq-role{font-size:.73rem;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.role-dup{background:#fee2e2;color:#991b1b}
+.role-upd{background:#dbeafe;color:#1e40af}
+.nmq-fk{font-size:.71rem;display:flex;flex-wrap:wrap;gap:3px}
+.nmq-fk-chip{padding:1px 7px;background:#fef3c7;color:#92400e;border-radius:8px;white-space:nowrap}
+.nmq-status{font-size:.73rem;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.st-pending{background:#fef9c3;color:#854d0e}
+.st-approved{background:#d1fae5;color:#065f46}
+.st-excluded{background:#f1f5f9;color:#64748b}
+.nmq-btns{display:flex;gap:4px;flex-wrap:nowrap}
+.nmq-btn{font-size:.74rem;padding:3px 9px;border-radius:5px;border:1px solid;cursor:pointer;
+          font-weight:600;background:#fff;transition:opacity .15s}
+.nmq-btn:disabled{opacity:.4;cursor:default}
+.nmq-btn-ok{border-color:#10b981;color:#065f46}
+.nmq-btn-ok:hover:not(:disabled){background:#d1fae5}
+.nmq-btn-ex{border-color:#94a3b8;color:#475569}
+.nmq-btn-ex:hover:not(:disabled){background:#f1f5f9}
+.nmq-btn-rst{border-color:#e2e8f0;color:#94a3b8;font-size:.68rem}
+.nmq-btn-rst:hover:not(:disabled){background:#f8fafc}
+tr[data-status=approved]{background:#f0fdf4}
+tr[data-status=excluded]{background:#f8fafc;opacity:.65}
+.nmq-hidden{display:none}
+.u307-flag{font-size:.68rem;background:#fee2e2;color:#991b1b;border-radius:4px;
+            padding:1px 5px;margin-left:4px;font-family:monospace}
+</style>
+
+<details class="au-sec" id="nmq-section" <?= $nmq_pending > 0 ? 'open' : '' ?>>
+<summary>
+    🔬 Normalize Migration Review
+    <span class="au-badge <?= $nmq_badge_cls ?>" style="margin-left:auto"><?= h($nmq_badge_txt) ?></span>
+</summary>
+<div class="au-body">
+
+<?php /* ── Henüz analiz yapılmamış ── */ if (!$nmq_exists || $nmq_total === 0): ?>
+<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">
+    Analiz henüz çalıştırılmadı veya değişiklik gerektiren kayıt yok.<br>
+    <em>«Analizi Başlat»</em> butonu <code>material_definitions</code> tablosunu tarar,
+    normalize_text_v2() farklarını ve FK merge ihtiyaçlarını tespit eder.
+    Hiçbir veri değiştirmez.
+</p>
+<form method="post">
+    <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="nmq_refresh">
+    <button type="submit" class="btn btn-lg">▶ Analizi Başlat</button>
+</form>
+
+<?php else: ?>
+
+<?php /* ── Araç çubuğu ── */ ?>
+<div class="nmq-toolbar">
+    <form method="post" style="display:contents">
+        <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="nmq_refresh">
+        <button type="submit" class="btn btn-sm btn-ghost" title="Analizi yeniden çalıştır">↻ Yenile</button>
+    </form>
+    <?php if ($nmq_pending > 0): ?>
+    <form method="post" style="display:contents">
+        <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="nmq_bulk_approve">
+        <input type="hidden" name="scope"  value="safe">
+        <button type="submit" class="btn btn-sm btn-ghost"
+                title="fk_total=0 olan tüm bekleyen kayıtları onayla"
+                onclick="return confirm('FK etkisi olmayan tüm bekleyen kayıtlar onaylanacak. Devam edilsin mi?')">
+            ✓ FK-siz hepsini onayla
+        </button>
+    </form>
+    <form method="post" style="display:contents">
+        <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="nmq_bulk_approve">
+        <input type="hidden" name="scope"  value="all">
+        <button type="submit" class="btn btn-sm btn-ghost" style="color:#dc2626;border-color:#dc2626"
+                title="FK etkisi olanlar dahil tüm bekleyenler"
+                onclick="return confirm('FK etkisi olanlar dahil TÜM bekleyen kayıtlar onaylanacak. Emin misiniz?')">
+            ✓✓ Tümünü onayla
+        </button>
+    </form>
+    <?php endif; ?>
+</div>
+
+<?php /* ── Sayaçlar ── */ ?>
+<div class="nmq-counter">
+    <strong id="nmqCntPending"><?= $nmq_pending ?></strong> bekliyor &nbsp;·&nbsp;
+    <strong id="nmqCntApproved"><?= $nmq_approved ?></strong> onaylı &nbsp;·&nbsp;
+    <strong id="nmqCntExcluded"><?= $nmq_excluded ?></strong> hariç &nbsp;·&nbsp;
+    toplam <?= $nmq_total ?>
+</div>
+
+<?php /* ── Filtreler ── */ ?>
+<div class="nmq-filters">
+    <label>Type:
+        <select id="nmqFType" onchange="nmqFilter()">
+            <option value="">Tümü</option>
+            <?php foreach (array_keys($nmq_types) as $t): ?>
+            <option value="<?= h($t) ?>"><?= h($t) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label><input type="checkbox" id="nmqFMerge" onchange="nmqFilter()"> Sadece Merge</label>
+    <label><input type="checkbox" id="nmqFU307"  onchange="nmqFilter()"> Sadece U+0307</label>
+    <label><input type="checkbox" id="nmqFRisk"  onchange="nmqFilter()"> Sadece Yüksek Risk</label>
+    <label>Durum:
+        <select id="nmqFStatus" onchange="nmqFilter()">
+            <option value="">Tümü</option>
+            <option value="pending">Bekliyor</option>
+            <option value="approved">Onaylı</option>
+            <option value="excluded">Hariç</option>
+        </select>
+    </label>
+    <button onclick="nmqResetFilters()" class="btn btn-sm btn-ghost" style="padding:2px 8px;font-size:.75rem">× Sıfırla</button>
+    <span id="nmqFilterNote" style="font-size:.75rem;color:#94a3b8;margin-left:4px"></span>
+</div>
+
+<?php /* ── Tablo ── */ ?>
+<div class="au-tbl-wrap">
+<table class="au-tbl nmq-tbl" id="nmqTable">
+    <thead><tr>
+        <th>ID</th>
+        <th>Type</th>
+        <th>Mevcut Değer</th>
+        <th>V2 Sonucu</th>
+        <th>Rol</th>
+        <th>Surviving / Dup</th>
+        <th>FK Etkisi</th>
+        <th>Risk</th>
+        <th>Durum</th>
+        <th>Karar</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($nmq_rows as $r):
+        $role_lbl = '';
+        $role_cls = '';
+        if ($r['is_merge'] && !$r['is_survivor']) {
+            $role_lbl = '⬇ Merge-Dup';
+            $role_cls = 'role-dup';
+        } else {
+            $role_lbl = '✎ İsim Güncelle';
+            $role_cls = 'role-upd';
+        }
+        $fk_chips = [];
+        if ($r['fk_lp_kasa'] > 0)  $fk_chips[] = $r['fk_lp_kasa'] . ' kasa_cinsi';
+        if ($r['fk_lp_palet'] > 0) $fk_chips[] = $r['fk_lp_palet'] . ' palet_tipi';
+        if ($r['fk_pm'] > 0)       $fk_chips[] = $r['fk_pm'] . ' malzeme';
+        if ($r['fk_msm'] > 0)      $fk_chips[] = $r['fk_msm'] . ' stok-hrkts';
+        $risk_cls = ['YÜKSEK'=>'b-err','ORTA'=>'b-warn','DÜŞÜK'=>'b-info'][$r['risk_level']] ?? 'b-info';
+        $st_cls   = ['pending'=>'st-pending','approved'=>'st-approved','excluded'=>'st-excluded'][$r['status']] ?? '';
+        $st_lbl   = ['pending'=>'⏳ Bekliyor','approved'=>'✓ Onaylı','excluded'=>'✗ Hariç'][$r['status']] ?? $r['status'];
+    ?>
+    <tr data-qid="<?= (int)$r['id'] ?>"
+        data-type="<?= h($r['mat_type']) ?>"
+        data-merge="<?= $r['is_merge'] ?>"
+        data-u307="<?= $r['u0307'] ?>"
+        data-risk="<?= h($r['risk_level']) ?>"
+        data-status="<?= h($r['status']) ?>">
+        <td style="font-size:.75rem;color:#94a3b8">#<?= (int)$r['target_id'] ?></td>
+        <td><code style="font-size:.75rem"><?= h($r['mat_type']) ?></code></td>
+        <td>
+            <?= h($r['current_value']) ?>
+            <?php if ($r['u0307']): ?><span class="u307-flag" title="<?= h($r['unicode_flags']) ?>">U+0307</span><?php endif; ?>
+        </td>
+        <td><strong><?= h($r['v2_value']) ?></strong></td>
+        <td><span class="nmq-role <?= $role_cls ?>"><?= h($role_lbl) ?></span></td>
+        <td style="font-size:.75rem;color:#64748b">
+            <?php if ($r['is_merge']): ?>
+                <?php if (!$r['is_survivor']): ?>
+                surv: <strong>#<?= (int)$r['surviving_id'] ?></strong><br>
+                dup: <strong>#<?= (int)$r['dup_id'] ?></strong>
+                <?php endif; ?>
+            <?php else: ?>—<?php endif; ?>
+        </td>
+        <td>
+            <?php if (empty($fk_chips)): ?>
+            <span style="color:#94a3b8;font-size:.75rem">—</span>
+            <?php else: ?>
+            <div class="nmq-fk">
+                <?php foreach ($fk_chips as $chip): ?>
+                <span class="nmq-fk-chip"><?= h($chip) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </td>
+        <td><span class="au-badge <?= $risk_cls ?>"><?= h($r['risk_level']) ?></span></td>
+        <td><span class="nmq-status <?= $st_cls ?>" id="nmqSt<?= (int)$r['id'] ?>"><?= h($st_lbl) ?></span></td>
+        <td>
+            <div class="nmq-btns">
+                <button class="nmq-btn nmq-btn-ok"
+                        <?= $r['status'] === 'approved' ? 'disabled' : '' ?>
+                        onclick="nmqAction(this,<?= (int)$r['id'] ?>,'approved')">✓ Onayla</button>
+                <button class="nmq-btn nmq-btn-ex"
+                        <?= $r['status'] === 'excluded' ? 'disabled' : '' ?>
+                        onclick="nmqAction(this,<?= (int)$r['id'] ?>,'excluded')">✗ Hariç</button>
+                <button class="nmq-btn nmq-btn-rst"
+                        <?= $r['status'] === 'pending' ? 'disabled' : '' ?>
+                        onclick="nmqAction(this,<?= (int)$r['id'] ?>,'pending')" title="Kararı sıfırla">↺</button>
+            </div>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+
+<input type="hidden" id="nmqCsrf" value="<?= h(csrf_token()) ?>">
+
+<script>
+(function(){
+const csrf   = document.getElementById('nmqCsrf').value;
+const tbl    = document.getElementById('nmqTable');
+const cntP   = document.getElementById('nmqCntPending');
+const cntA   = document.getElementById('nmqCntApproved');
+const cntE   = document.getElementById('nmqCntExcluded');
+const note   = document.getElementById('nmqFilterNote');
+const STATUS_LABELS = {pending:'⏳ Bekliyor', approved:'✓ Onaylı', excluded:'✗ Hariç'};
+const STATUS_CLS    = {pending:'st-pending', approved:'st-approved', excluded:'st-excluded'};
+
+function nmqFilter() {
+    const fType   = document.getElementById('nmqFType').value;
+    const fMerge  = document.getElementById('nmqFMerge').checked;
+    const fU307   = document.getElementById('nmqFU307').checked;
+    const fRisk   = document.getElementById('nmqFRisk').checked;
+    const fStatus = document.getElementById('nmqFStatus').value;
+    let vis = 0;
+    tbl.querySelectorAll('tbody tr').forEach(function(tr) {
+        const d = tr.dataset;
+        const show = (!fType   || d.type   === fType)
+                  && (!fMerge  || d.merge  === '1')
+                  && (!fU307   || d.u307   === '1')
+                  && (!fRisk   || d.risk   === 'YÜKSEK')
+                  && (!fStatus || d.status === fStatus);
+        tr.classList.toggle('nmq-hidden', !show);
+        if (show) vis++;
+    });
+    const total = tbl.querySelectorAll('tbody tr').length;
+    note.textContent = (vis < total) ? vis + '/' + total + ' satır gösteriliyor' : '';
+}
+window.nmqFilter = nmqFilter;
+
+window.nmqResetFilters = function() {
+    document.getElementById('nmqFType').value   = '';
+    document.getElementById('nmqFMerge').checked = false;
+    document.getElementById('nmqFU307').checked  = false;
+    document.getElementById('nmqFRisk').checked  = false;
+    document.getElementById('nmqFStatus').value  = '';
+    nmqFilter();
+};
+
+window.nmqAction = function(btn, qid, newStatus) {
+    btn.disabled = true;
+    const row = document.querySelector('tr[data-qid="'+qid+'"]');
+    const oldStatus = row ? row.dataset.status : '';
+    fetch(window.location.pathname, {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({action:'nmq_set_status',csrf:csrf,queue_id:qid,status:newStatus})
+    })
+    .then(function(res){ return res.json(); })
+    .then(function(data) {
+        if (data.ok && row) {
+            row.dataset.status = newStatus;
+            const badge = document.getElementById('nmqSt' + qid);
+            if (badge) {
+                badge.textContent  = STATUS_LABELS[newStatus] || newStatus;
+                badge.className    = 'nmq-status ' + (STATUS_CLS[newStatus] || '');
+            }
+            // Buton durumlarını güncelle
+            const btns = row.querySelectorAll('.nmq-btn');
+            btns[0].disabled = (newStatus === 'approved');
+            btns[1].disabled = (newStatus === 'excluded');
+            btns[2].disabled = (newStatus === 'pending');
+            // Sayaç güncelle
+            if (oldStatus && cntP && cntA && cntE) {
+                const map = {pending:cntP, approved:cntA, excluded:cntE};
+                if (map[oldStatus]) map[oldStatus].textContent = Math.max(0, parseInt(map[oldStatus].textContent||0) - 1);
+                if (map[newStatus]) map[newStatus].textContent = parseInt(map[newStatus].textContent||0) + 1;
+            }
+            // Filtre varsa yeniden uygula
+            nmqFilter();
+        } else {
+            alert(data.error || 'Hata oluştu.');
+            btn.disabled = false;
+        }
+    })
+    .catch(function(){ alert('Bağlantı hatası.'); btn.disabled = false; });
+};
+})();
+</script>
+
+<?php endif; ?>
+</div>
+</details>
 
 <?php render_footer();
