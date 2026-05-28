@@ -81,50 +81,6 @@ if (!empty($fisleri)) {
     } catch (PDOException $e) {}
 }
 
-// ── Hesap yardımcıları ────────────────────────────────────
-function kf_calc(array $fis): array {
-    $t1  = (float)($fis['tartim1'] ?? 0);
-    $t2  = (float)($fis['tartim2'] ?? 0);
-    $brut = max(0.0, $t1 - $t2);
-    $ks  = (int)($fis['kasa_sayisi']  ?? 0);
-    $ps  = (int)($fis['palet_sayisi'] ?? 0);
-    $kdt = (float)($fis['kasa_dara_total']  ?? 0);
-    $pdt = (float)($fis['palet_dara_total'] ?? 0);
-    $kdu = (float)($fis['kasa_dara']  ?? 0);
-    $pdu = (float)($fis['palet_dara'] ?? 0);
-    $dara = ($kdt > 0 || $pdt > 0) ? $kdt + $pdt : $ks * $kdu + $ps * $pdu;
-    $net  = max(0.0, $brut - $dara);
-    $eff_kdu = ($kdt > 0 && $ks > 0) ? $kdt / $ks : $kdu;
-    $eff_pdu = ($pdt > 0 && $ps > 0) ? $pdt / $ps : $pdu;
-    return ['brut'=>$brut,'dara'=>$dara,'net'=>$net,
-            'eff_kdu'=>$eff_kdu,'eff_pdu'=>$eff_pdu,'kasa_say'=>$ks,'palet_say'=>$ps];
-}
-
-function kf_grup_dist(array $gruplar, float $brut, float $eff_kdu, float $eff_pdu): array {
-    $manual_sum = 0.0; $auto_weight = 0;
-    foreach ($gruplar as $g) {
-        $gb = (float)($g['brut_kg'] ?? 0);
-        if ($gb > 0) $manual_sum  += $gb;
-        else         $auto_weight += (int)$g['kasa_adedi'] + (int)$g['palet_sayisi'];
-    }
-    $auto_pool = max(0.0, $brut - $manual_sum);
-    $per_unit  = $auto_weight > 0 ? $auto_pool / $auto_weight : 0.0;
-    $rows = [];
-    foreach ($gruplar as $g) {
-        $gp    = (int)$g['palet_sayisi'];
-        $gk    = (int)$g['kasa_adedi'];
-        $gb    = (float)($g['brut_kg'] ?? 0);
-        $gbrut = $gb > 0 ? $gb : (($gp + $gk) * $per_unit);
-        $gkd   = (float)($g['kasa_dara_kg']  ?? 0) ?: $eff_kdu;
-        $gpd   = (float)($g['palet_dara_kg'] ?? 0) ?: $eff_pdu;
-        $gdara = $gp * $gpd + $gk * $gkd;
-        $gnet  = max(0.0, $gbrut - $gdara);
-        $rows[] = ['firma'=>$g['grup_adi']?:'—','palet'=>$gp,'kasa'=>$gk,
-                   'brut_kg'=>$gbrut,'dara_kg'=>$gdara,'net_kg'=>$gnet,'is_manual'=>$gb>0];
-    }
-    return $rows;
-}
-
 // Firma özetine kasa/palet tiplerini ekler (orantılı dağıtım)
 function fo_add_types(string $fk, array $kp_rows, int $grp_kasa, int $grp_palet,
                       int $fis_kasa_total, int $fis_palet_total, array &$firma_ozet): void {
@@ -149,7 +105,7 @@ $toplam_kasa     = $toplam_palet = $toplam_fis = $toplam_grup_fis = 0;
 
 foreach ($fisleri as $fis) {
     $fid      = (int)$fis['id'];
-    $c        = kf_calc($fis);
+    $c        = kantar_calc($fis);
     $gruplar  = $grup_map[$fid] ?? [];
     $kp_rows  = $kp_map[$fid]   ?? [];
     $has_grup = !empty($gruplar);
@@ -211,7 +167,8 @@ foreach ($fisleri as $fis) {
                                 'brut_kg'=>$c['brut'],'dara_kg'=>$c['dara'],'net_kg'=>$c['net'],'is_manual'=>false]]];
     } else {
         $toplam_grup_fis++;
-        $dist = kf_grup_dist($gruplar, $c['brut'], $c['eff_kdu'], $c['eff_pdu']);
+        $dist        = kantar_grup_dist($gruplar, $c['brut'], $c['eff_kdu'], $c['eff_pdu']);
+        $rapor_sapma = abs(array_sum(array_column($dist, 'net_kg')) - $c['net']);
         if ($f_firma !== '')
             $dist = array_values(array_filter($dist, fn($d) => $d['firma'] === $f_firma));
         foreach ($dist as $d) {
@@ -230,7 +187,7 @@ foreach ($fisleri as $fis) {
                              $fis_kasa_kp, $fis_palet_kp, $firma_ozet);
             }
         }
-        $entries[] = ['fis'=>$fis,'calc'=>$c,'has_grup'=>true,'kp_rows'=>$kp_rows,'dist'=>$dist];
+        $entries[] = ['fis'=>$fis,'calc'=>$c,'has_grup'=>true,'kp_rows'=>$kp_rows,'dist'=>$dist,'sapma'=>$rapor_sapma];
     }
 }
 
@@ -359,6 +316,12 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 <div class="empty"><p>Kriterlere uyan kantar fişi bulunamadı.</p></div>
 <?php else: ?>
 
+<?php if (count($fisleri) >= 2000): ?>
+<div class="kr-limit-uyari kr-no-print">
+    ℹ Bu rapor en fazla 2.000 fiş gösterir. Daha kesin sonuç için tarih aralığı filtresi kullanın.
+</div>
+<?php endif; ?>
+
 <!-- Özet şerit -->
 <div class="kr-stat-strip kr-no-print">
     <?php foreach ([
@@ -436,6 +399,14 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                             <?php foreach ($kp_rows as $kp): ?>
                             <span class="kr-kp-chip"><?= $kp['tip']==='palet'?'▪':'▫' ?> <?= h($kp['cinsi']) ?> ×<?= (int)$kp['sayisi'] ?><?= $kp['birim_dara_kg']>0?' ('.fmt_kg($kp['birim_dara_kg']).'kg)':'' ?></span>
                             <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
+                        <?php if (($e['sapma'] ?? 0) > 1.0): ?>
+                        <div class="kr-sapma-uyari">
+                            ⚠ Grup toplamı ile fiş neti arasında
+                            <strong><?= fmt_kg($e['sapma']) ?> kg</strong> fark var.
+                            Stok dağılımı hatalı görünebilir.
+                            <span class="kr-sapma-nums">Fiş neti: <?= fmt_kg($c['net']) ?> kg</span>
                         </div>
                         <?php endif; ?>
                     </td>
@@ -690,6 +661,21 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 .kr-fo-card-types { margin-top:6px; display:flex; flex-wrap:wrap; gap:4px; }
 .kr-fo-total { background:#f1f5f9; border-color:#cbd5e1; }
 
+/* Sapma uyarısı */
+.kr-sapma-uyari {
+    font-size:.82rem; color:#7f1d1d;
+    background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3);
+    border-radius:4px; padding:4px 10px; margin-top:5px; display:inline-block;
+}
+.kr-sapma-nums { margin-left:8px; opacity:.75; }
+
+/* LIMIT uyarısı */
+.kr-limit-uyari {
+    background:rgba(59,130,246,.07); border:1px solid rgba(59,130,246,.22);
+    border-radius:var(--radius); padding:8px 14px; font-size:.86rem;
+    color:#1e40af; margin-bottom:10px;
+}
+
 /* Print header — ekranda gizli */
 .kr-print-header { display:none; }
 
@@ -735,6 +721,11 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 
     .table-wrap { overflow:visible !important; }
     a { color:#000 !important; text-decoration:none !important; }
+    .kr-sapma-uyari {
+        background:#fef2f2 !important; border:1pt solid #ef4444 !important;
+        padding:2px 6px !important; font-size:6pt !important; color:#7f1d1d !important;
+        -webkit-print-color-adjust:exact; print-color-adjust:exact; display:block;
+    }
 }
 </style>
 

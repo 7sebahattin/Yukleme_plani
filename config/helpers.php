@@ -903,6 +903,65 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
     } catch (PDOException $e) {}
 }
 
+// ── Kantar Hesaplama ─────────────────────────────────────
+// Tek kaynak: kantar_view.php ve kantar_raporu.php ortak kullanır.
+
+function kantar_calc(array $fis): array {
+    $t1   = (float)($fis['tartim1'] ?? 0);
+    $t2   = (float)($fis['tartim2'] ?? 0);
+    $brut = max(0.0, $t1 - $t2);
+    $ks   = (int)($fis['kasa_sayisi']  ?? 0);
+    $ps   = (int)($fis['palet_sayisi'] ?? 0);
+    $kdt  = (float)($fis['kasa_dara_total']  ?? 0);
+    $pdt  = (float)($fis['palet_dara_total'] ?? 0);
+    $kdu  = (float)($fis['kasa_dara']  ?? 0);
+    $pdu  = (float)($fis['palet_dara'] ?? 0);
+    $dara = ($kdt > 0 || $pdt > 0) ? $kdt + $pdt : $ks * $kdu + $ps * $pdu;
+    $net  = max(0.0, $brut - $dara);
+    return [
+        'brut'      => $brut,
+        'dara'      => $dara,
+        'net'       => $net,
+        'eff_kdu'   => ($kdt > 0 && $ks > 0) ? $kdt / $ks : $kdu,
+        'eff_pdu'   => ($pdt > 0 && $ps > 0) ? $pdt / $ps : $pdu,
+        'kasa_say'  => $ks,
+        'palet_say' => $ps,
+    ];
+}
+
+function kantar_grup_dist(array $gruplar, float $brut, float $eff_kdu, float $eff_pdu): array {
+    $manual_sum  = 0.0;
+    $auto_weight = 0;
+    foreach ($gruplar as $g) {
+        $gb = (float)($g['brut_kg'] ?? 0);
+        if ($gb > 0) $manual_sum  += $gb;
+        else         $auto_weight += (int)$g['kasa_adedi'] + (int)$g['palet_sayisi'];
+    }
+    $auto_pool = max(0.0, $brut - $manual_sum);
+    $per_unit  = $auto_weight > 0 ? $auto_pool / $auto_weight : 0.0;
+    $rows = [];
+    foreach ($gruplar as $g) {
+        $gp    = (int)$g['palet_sayisi'];
+        $gk    = (int)$g['kasa_adedi'];
+        $gb    = (float)($g['brut_kg'] ?? 0);
+        $gbrut = $gb > 0 ? $gb : (($gp + $gk) * $per_unit);
+        $gkd   = (float)($g['kasa_dara_kg']  ?? 0) ?: $eff_kdu;
+        $gpd   = (float)($g['palet_dara_kg'] ?? 0) ?: $eff_pdu;
+        $gdara = $gp * $gpd + $gk * $gkd;
+        $gnet  = max(0.0, $gbrut - $gdara);
+        $rows[] = [
+            'firma'     => $g['grup_adi'] ?: '—',
+            'palet'     => $gp,
+            'kasa'      => $gk,
+            'brut_kg'   => $gbrut,
+            'dara_kg'   => $gdara,
+            'net_kg'    => $gnet,
+            'is_manual' => $gb > 0,
+        ];
+    }
+    return $rows;
+}
+
 // ── İzin Verilen Çıkış Nedenleri ─────────────────────────
 function cikis_nedeni_listesi(): array {
     return ['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
