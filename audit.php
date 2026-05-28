@@ -101,7 +101,7 @@ function nmq_ensure_table(PDO $pdo): void {
         `reviewed_at`   TIMESTAMP NULL DEFAULT NULL,
         `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY `uniq_target` (`target_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci");
 }
 
 function nmq_run_refresh(PDO $pdo): int {
