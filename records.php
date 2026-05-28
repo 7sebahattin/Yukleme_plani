@@ -149,12 +149,26 @@ render_flash();
         <?php endif; ?>
     </div>
 
-    <div class="date-filter-row">
+    <!-- Mobil: toggle chip (desktop'ta gizli) -->
+    <?php $has_date = $tarih_bas !== '' || $tarih_bit !== ''; ?>
+    <button type="button"
+            class="rec-date-toggle<?= $has_date ? ' has-filter' : '' ?>"
+            id="recDateToggle">
+        <span>📅 <?php if ($has_date): ?><?= $tarih_bas ? h(date('d.m', strtotime($tarih_bas))) : '?' ?> — <?= $tarih_bit ? h(date('d.m', strtotime($tarih_bit))) : '?' ?><?php else: ?>Tarih filtresi<?php endif; ?></span>
+        <span class="rec-date-toggle-chev">▾</span>
+    </button>
+
+    <!-- Tarih filtresi paneli: mobilde collapsible, desktop'ta her zaman görünür -->
+    <div class="date-filter-panel<?= $has_date ? ' rec-open' : '' ?>" id="recDatePanel">
         <label class="date-filter-lbl">Tarih:</label>
-        <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
-        <span class="date-sep">—</span>
-        <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
+        <div class="date-pair">
+            <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
+            <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
+        </div>
         <button class="btn btn-sm">Filtrele</button>
+        <?php if ($has_date): ?>
+        <a href="records.php<?= $q !== '' ? '?q='.urlencode($q) : '' ?>" class="btn btn-sm btn-ghost">Tarihi Temizle</a>
+        <?php endif; ?>
     </div>
 </form>
 
@@ -376,6 +390,19 @@ render_flash();
 <?php endif; ?>
 
 <script>
+(function () {
+    // Tarih filtresi toggle (mobil)
+    var dateToggle = document.getElementById('recDateToggle');
+    var datePanel  = document.getElementById('recDatePanel');
+    if (dateToggle && datePanel) {
+        if (datePanel.classList.contains('rec-open')) dateToggle.classList.add('panel-open');
+        dateToggle.addEventListener('click', function () {
+            var open = datePanel.classList.toggle('rec-open');
+            dateToggle.classList.toggle('panel-open', open);
+        });
+    }
+})();
+
 (function () {
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 

@@ -3388,6 +3388,55 @@ body.notes-modal-open { overflow: hidden; }
     color:inherit;
 }
 
+/* ---- Tarih filtresi panel (yeni collapsible yapı) ---- */
+.date-filter-panel {
+    display: flex; gap: 8px; margin-bottom: 8px;
+    flex-wrap: wrap; align-items: center;
+}
+.date-filter-panel input[type="date"] {
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-size: .9rem;
+    background: var(--card);
+    color: inherit;
+}
+.date-pair { display: contents; }
+.rec-date-toggle { display: none; }
+
+@media (max-width: 767px) {
+    .rec-date-toggle {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; padding: 9px 14px; margin-bottom: 8px;
+        background: var(--card); border: 1px solid var(--border-strong);
+        border-radius: 20px; font-size: .85rem; color: var(--muted);
+        cursor: pointer; text-align: left;
+    }
+    .rec-date-toggle.has-filter {
+        border-color: var(--primary); color: var(--primary);
+        background: rgba(37,99,235,.06); font-weight: 600;
+    }
+    .rec-date-toggle-chev { transition: transform .2s; font-size: .75rem; flex-shrink: 0; }
+    .rec-date-toggle.panel-open .rec-date-toggle-chev { transform: rotate(180deg); }
+
+    .date-filter-panel {
+        display: none; flex-direction: column; gap: 8px;
+        margin-bottom: 10px; padding: 10px 12px;
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius);
+    }
+    .date-filter-panel.rec-open { display: flex; }
+    .date-filter-panel .date-filter-lbl { display: none; }
+    .date-filter-panel .date-sep { display: none; }
+    .date-pair {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    }
+    .date-filter-panel input[type="date"] {
+        font-size: 16px; width: 100%; padding: 9px 10px;
+        background: var(--card-bg);
+    }
+}
+
 /* Sayfalama */
 .rec-pagination {
     display:flex; align-items:center; gap:10px;
