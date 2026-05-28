@@ -3367,3 +3367,118 @@ body.notes-modal-open { overflow: hidden; }
 @media (max-width:767px) {
     .hks-form-grid input, .hks-form-grid select, .hks-form-grid textarea { font-size:16px; }
 }
+
+/* =========================================================
+   Sprint 17 — Yükleme Kayıtları İyileştirme
+   ========================================================= */
+
+/* Tarih filtresi */
+.date-filter-row {
+    display:flex; gap:8px; margin-bottom:8px;
+    flex-wrap:wrap; align-items:center;
+}
+.date-filter-lbl { font-size:.85rem; color:var(--muted); white-space:nowrap; }
+.date-sep { color:var(--muted); }
+.date-filter-row input[type="date"] {
+    padding:7px 10px;
+    border:1px solid var(--border-strong);
+    border-radius:var(--radius);
+    font-size:.9rem;
+    background:var(--card);
+    color:inherit;
+}
+
+/* Sayfalama */
+.rec-pagination {
+    display:flex; align-items:center; gap:10px;
+    margin-top:16px; flex-wrap:wrap;
+}
+.rec-pagination-info { color:var(--muted); font-size:.85rem; flex:1; }
+.rec-pagination-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.rec-pg-ellipsis { color:var(--muted); padding:0 4px; align-self:center; }
+
+/* Mobil kart — dara/net satırı */
+.record-card-dara-net {
+    display:flex; gap:8px; padding:4px 8px;
+    background:var(--primary-soft);
+    border-radius:var(--radius-sm);
+    margin-bottom:6px;
+}
+.rcdn-item {
+    display:flex; flex-direction:column;
+    align-items:center; flex:1; font-size:.82rem;
+}
+.rcdn-item span { color:var(--muted); font-size:.72rem; }
+.rcdn-item strong { font-size:.9rem; }
+.rcdn-net strong { font-size:1.05rem; font-weight:700; color:var(--primary); }
+
+.record-card.durum-islendi .record-card-dara-net  { background:rgba(245,158,11,.12); }
+.record-card.durum-islendi  .rcdn-net strong      { color:#92400e; }
+.record-card.durum-yuklendi .record-card-dara-net { background:rgba(16,185,129,.12); }
+.record-card.durum-yuklendi .rcdn-net strong      { color:#065f46; }
+
+/* Filtre satırı ayraç */
+.pill-sep { width:1px; background:var(--border-strong); margin:0 2px; align-self:stretch; }
+
+@media (max-width:767px) {
+    .date-filter-row input[type="date"] { font-size:16px; }
+}
+
+/* =========================================================
+   Sprint 18B — Ürün Stok Kullanılabilirlik
+   ========================================================= */
+
+/* Hareket tipi filtresi satırı */
+.stok-mv-filter-row {
+    display:flex; flex-wrap:wrap; gap:6px;
+    margin:8px 0 14px;
+}
+
+/* Sayfalama */
+.stok-pg {
+    display:flex; align-items:center; flex-wrap:wrap;
+    gap:10px; padding:12px 16px; border-top:1px solid var(--border);
+}
+.stok-pg-info { color:var(--muted); font-size:.84rem; flex:1; min-width:120px; }
+.stok-pg-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.stok-pg-ellipsis { color:var(--muted); padding:0 4px; align-self:center; }
+
+/* Teorik Kalan kart durumları */
+.stok-kart-kalan-negatif { border-top-color:var(--danger) !important; background:rgba(239,68,68,.07); }
+.stok-kart-kalan-sifir   { border-top-color:#f59e0b !important; background:rgba(245,158,11,.07); }
+
+.stok-kalan-negatif { color:var(--danger)  !important; }
+.stok-kalan-sifir   { color:#b45309 !important; }
+.stok-kalan-pozitif { color:#7c3aed; }
+
+/* Depo boş kantar uyarısı */
+.stok-uyari-depo {
+    background:rgba(239,68,68,.08);
+    border:1px solid rgba(239,68,68,.3);
+    border-radius:var(--radius);
+    padding:10px 14px;
+    font-size:.88rem;
+    color:#7f1d1d;
+}
+.stok-uyari-depo a { color:#b91c1c; font-weight:600; }
+
+@media (max-width:599px) {
+    .stok-pg { flex-direction:column; align-items:flex-start; }
+    .stok-pg-info { font-size:.78rem; }
+}
+
+/* ── Sprint 19: Malzeme Stok negatif uyarı + ozet vurgusu ── */
+.ms-neg-uyari {
+    background:rgba(239,68,68,.07);
+    border:1px solid rgba(239,68,68,.25);
+    border-radius:var(--radius);
+    padding:12px 16px;
+    margin-bottom:14px;
+}
+.ms-neg-uyari-head { font-weight:600; color:#7f1d1d; font-size:.9rem; margin-bottom:8px; }
+.ms-neg-table { width:100%; font-size:.82rem; border-collapse:collapse; }
+.ms-neg-table th { text-align:left; color:var(--muted); font-weight:500; padding:2px 8px; }
+.ms-neg-table td { padding:3px 8px; }
+.ms-neg-table .num { text-align:right; }
+.ms-row-negatif { background:rgba(239,68,68,.05); }
+.ms-row-negatif td { border-bottom-color:rgba(239,68,68,.15); }

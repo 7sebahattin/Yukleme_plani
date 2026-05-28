@@ -1,6 +1,7 @@
 <?php
 // =========================================================
 // records.php - Yükleme kayıt listesi
+// Sprint 17: tarih filtresi, sayfalama, JOIN sorgusu, mobil net KG
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -12,82 +13,179 @@ function fmt_tarih_tr(?string $d): string {
     return $ts ? (int)date('j', $ts) . ' ' . $ay[(int)date('n', $ts)] : '';
 }
 
-$q            = trim((string)($_GET['q'] ?? ''));
-$durum_filter = trim((string)($_GET['durum'] ?? ''));
-if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
+function valid_date(string $d): bool {
+    return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
+}
 
-$sql = "SELECT r.*,
-               (SELECT COUNT(*)                          FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_palet,
-               (SELECT COALESCE(SUM(p.kasa_adeti),0)    FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_kasa,
-               (SELECT COALESCE(SUM(p.brut_kg),0)       FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_brut,
-               (SELECT COALESCE(SUM(p.dara_kg),0)       FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_dara,
-               (SELECT COALESCE(SUM(p.net_kg),0)        FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_net,
-               COALESCE((SELECT m.name FROM loading_pallets p2
-                          LEFT JOIN material_definitions m ON m.id = p2.kasa_cinsi_id
-                          WHERE p2.loading_record_id = r.id LIMIT 1), '') AS ilk_kasa_cinsi
-        FROM loading_records r
-        WHERE r.type = 'yukleme' ";
+// Tüm filtreleri koruyarak URL üret
+function rec_url(array $override = [], array $drop = []): string {
+    global $q, $durum_filter, $tarih_bas, $tarih_bit, $page;
+    $p = [
+        'q'         => $q,
+        'durum'     => $durum_filter,
+        'tarih_bas' => $tarih_bas,
+        'tarih_bit' => $tarih_bit,
+        'page'      => $page > 1 ? (string)$page : '',
+    ];
+    foreach ($override as $k => $v) $p[$k] = $v;
+    foreach ($drop    as $k)       unset($p[$k]);
+    $p = array_filter($p, fn($v) => $v !== '' && $v !== null);
+    return 'records.php' . ($p ? '?' . http_build_query($p) : '');
+}
+
+const REC_PER_PAGE = 50;
+
+// ── GET parametreleri ──────────────────────────────────────
+$q            = trim((string)($_GET['q']         ?? ''));
+$durum_filter = trim((string)($_GET['durum']     ?? ''));
+$tarih_bas    = trim((string)($_GET['tarih_bas'] ?? ''));
+$tarih_bit    = trim((string)($_GET['tarih_bit'] ?? ''));
+$page         = max(1, (int)($_GET['page'] ?? 1));
+
+if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
+if ($tarih_bas !== '' && !valid_date($tarih_bas)) $tarih_bas = '';
+if ($tarih_bit !== '' && !valid_date($tarih_bit)) $tarih_bit = '';
+
+// Hızlı tarih sabitleri
+$today       = date('Y-m-d');
+$week_start  = date('Y-m-d', strtotime('monday this week'));
+$month_start = date('Y-m-d', strtotime('first day of this month'));
+
+// Hangi hızlı buton aktif?
+$quick_active = '';
+if ($tarih_bas === $today && $tarih_bit === $today)                           $quick_active = 'bugun';
+elseif ($tarih_bas === $week_start && $tarih_bit === $today)                  $quick_active = 'hafta';
+elseif ($tarih_bas === $month_start && $tarih_bit === $today)                 $quick_active = 'ay';
+elseif ($tarih_bas === '' && $tarih_bit === '')                               $quick_active = 'tumü';
+
+// ── WHERE koşulları ────────────────────────────────────────
+$where  = "WHERE r.type = 'yukleme'";
 $params = [];
+
 if ($q !== '') {
-    $sql .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.alici LIKE :q
-              OR r.parti_no LIKE :q OR r.on_plaka LIKE :q OR r.arka_plaka LIKE :q
-              OR r.urun LIKE :q) ";
+    $where .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.alici LIKE :q
+               OR r.parti_no LIKE :q OR r.on_plaka LIKE :q OR r.arka_plaka LIKE :q
+               OR r.urun LIKE :q)";
     $params[':q'] = '%' . $q . '%';
 }
 if ($durum_filter !== '') {
-    $sql .= " AND r.durum = :durum ";
+    $where .= " AND r.durum = :durum";
     $params[':durum'] = $durum_filter;
 }
-$sql .= " ORDER BY
+if ($tarih_bas !== '') {
+    $where .= " AND r.tarih >= :tarih_bas";
+    $params[':tarih_bas'] = $tarih_bas;
+}
+if ($tarih_bit !== '') {
+    $where .= " AND r.tarih <= :tarih_bit";
+    $params[':tarih_bit'] = $tarih_bit;
+}
+
+// ── Toplam kayıt (sayfalama için) ──────────────────────────
+$st_count = db()->prepare("SELECT COUNT(*) FROM loading_records r $where");
+$st_count->execute($params);
+$total       = (int)$st_count->fetchColumn();
+$total_pages = max(1, (int)ceil($total / REC_PER_PAGE));
+$page        = min($page, $total_pages);
+$offset      = ($page - 1) * REC_PER_PAGE;
+
+// ── Ana sorgu — JOIN + GROUP BY (N+1 yok) ─────────────────
+$order = "ORDER BY
     CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
     COALESCE(r.tarih,'0000-00-00') DESC,
-    r.id DESC
-LIMIT 500";
+    r.id DESC";
+
+$sql = "SELECT r.*,
+               COUNT(p.id)                   AS toplam_palet,
+               COALESCE(SUM(p.kasa_adeti),0) AS toplam_kasa,
+               COALESCE(SUM(p.brut_kg),0)    AS toplam_brut,
+               COALESCE(SUM(p.dara_kg),0)    AS toplam_dara,
+               COALESCE(SUM(p.net_kg),0)     AS toplam_net
+        FROM loading_records r
+        LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
+        $where
+        GROUP BY r.id
+        $order
+        LIMIT :lim OFFSET :off";
 
 $st = db()->prepare($sql);
-$st->execute($params);
+foreach ($params as $k => $v) {
+    $st->bindValue($k, $v);
+}
+$st->bindValue(':lim', REC_PER_PAGE, PDO::PARAM_INT);
+$st->bindValue(':off', $offset,      PDO::PARAM_INT);
+$st->execute();
 $rows = $st->fetchAll();
 
 render_header('Kayıtlar');
+render_flash();
 ?>
-<?php render_flash(); ?>
 
 <div class="page-head">
     <div>
         <h1 style="color:#166534">Yükleme Kayıtları</h1>
-        <p class="muted">Toplam <?= count($rows) ?> kayıt</p>
+        <p class="muted">
+            Toplam <?= $total ?> kayıt
+            <?php if ($total_pages > 1): ?>
+            · Sayfa <?= $page ?> / <?= $total_pages ?>
+            <?php endif; ?>
+        </p>
     </div>
     <a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
 </div>
 
-<form method="get" class="search-row">
+<!-- ── Filtre formu ── -->
+<form method="get" class="rec-filter-form">
     <?php if ($durum_filter !== ''): ?>
     <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
     <?php endif; ?>
-    <input type="search" name="q" value="<?= h($q) ?>"
-           placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
-    <button class="btn">Ara</button>
-    <?php if ($q !== '' || $durum_filter !== ''): ?>
+
+    <div class="search-row">
+        <input type="search" name="q" value="<?= h($q) ?>"
+               placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
+        <button class="btn">Ara</button>
+        <?php if ($q !== '' || $durum_filter !== '' || $tarih_bas !== '' || $tarih_bit !== ''): ?>
         <a href="records.php" class="btn btn-ghost">Temizle</a>
-    <?php endif; ?>
+        <?php endif; ?>
+    </div>
+
+    <div class="date-filter-row">
+        <label class="date-filter-lbl">Tarih:</label>
+        <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
+        <span class="date-sep">—</span>
+        <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
+        <button class="btn btn-sm">Filtrele</button>
+    </div>
 </form>
 
-<?php
-$q_part = $q !== '' ? '&q=' . urlencode($q) : '';
-?>
+<!-- ── Hızlı tarih butonları ── -->
 <div class="filter-pills">
-    <a href="records.php<?= $q_part ? '?' . ltrim($q_part, '&') : '' ?>"
+    <a href="<?= rec_url(['tarih_bas' => '', 'tarih_bit' => '', 'page' => '']) ?>"
+       class="pill<?= ($tarih_bas === '' && $tarih_bit === '') ? ' active' : '' ?>">Tümü</a>
+    <a href="<?= rec_url(['tarih_bas' => $today,       'tarih_bit' => $today, 'page' => '']) ?>"
+       class="pill<?= $quick_active === 'bugun' ? ' active' : '' ?>">Bugün</a>
+    <a href="<?= rec_url(['tarih_bas' => $week_start,  'tarih_bit' => $today, 'page' => '']) ?>"
+       class="pill<?= $quick_active === 'hafta' ? ' active' : '' ?>">Bu hafta</a>
+    <a href="<?= rec_url(['tarih_bas' => $month_start, 'tarih_bit' => $today, 'page' => '']) ?>"
+       class="pill<?= $quick_active === 'ay' ? ' active' : '' ?>">Bu ay</a>
+    <span class="pill-sep"></span>
+    <a href="<?= rec_url(['durum' => '',        'page' => '']) ?>"
        class="pill<?= $durum_filter === '' ? ' active' : '' ?>">Tümü</a>
-    <a href="records.php?durum=islendi<?= $q_part ?>"
+    <a href="<?= rec_url(['durum' => 'islendi', 'page' => '']) ?>"
        class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
-    <a href="records.php?durum=yuklendi<?= $q_part ?>"
+    <a href="<?= rec_url(['durum' => 'yuklendi','page' => '']) ?>"
        class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
 </div>
 
 <?php if (empty($rows)): ?>
     <div class="empty">
-        <p>Henüz kayıt yok.</p>
-        <a href="record_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
+        <?php if ($total === 0 && ($q !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $durum_filter !== '')): ?>
+            <p>Filtre kriterlerine uyan kayıt bulunamadı.</p>
+            <a href="records.php" class="btn btn-ghost">Filtreleri temizle</a>
+        <?php else: ?>
+            <p>Henüz kayıt yok.</p>
+            <a href="record_create.php" class="btn btn-primary">İlk kaydı oluştur</a>
+        <?php endif; ?>
     </div>
 <?php else: ?>
 
@@ -204,10 +302,22 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <?php $plaka = trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /'); ?>
                     <?php if ($plaka): ?><div><span class="lbl">Plaka:</span> <?= h($plaka) ?></div><?php endif; ?>
                 </div>
+                <!-- Palet / Kasa / Brüt -->
                 <div class="record-card-totals">
                     <div><span>Palet</span><strong><?= (int)$r['toplam_palet'] ?></strong></div>
                     <div><span>Kasa</span><strong><?= (int)$r['toplam_kasa'] ?></strong></div>
-                    <div><span>Brüt</span><strong><?= fmt_kg($r['toplam_brut']) ?></strong></div>
+                    <div><span>Brüt kg</span><strong><?= fmt_kg($r['toplam_brut']) ?></strong></div>
+                </div>
+                <!-- Dara / Net — ayrı satır, net belirgin -->
+                <div class="record-card-dara-net">
+                    <div class="rcdn-item">
+                        <span>Dara</span>
+                        <strong><?= fmt_kg($r['toplam_dara']) ?> kg</strong>
+                    </div>
+                    <div class="rcdn-item rcdn-net">
+                        <span>Net</span>
+                        <strong><?= fmt_kg($r['toplam_net']) ?> kg</strong>
+                    </div>
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
@@ -229,6 +339,39 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
             </div>
         <?php endforeach; ?>
     </div>
+
+    <!-- ── Sayfalama ── -->
+    <?php if ($total_pages > 1): ?>
+    <div class="rec-pagination">
+        <span class="rec-pagination-info">
+            Toplam <?= $total ?> kayıt · Sayfa <?= $page ?> / <?= $total_pages ?>
+        </span>
+        <div class="rec-pagination-btns">
+            <?php if ($page > 1): ?>
+            <a href="<?= rec_url(['page' => $page - 1]) ?>" class="btn btn-sm">← Önceki</a>
+            <?php endif; ?>
+            <?php
+            // Sayfa numaraları: ilk, son, aktif etrafı
+            $show_pages = [];
+            for ($pg = 1; $pg <= $total_pages; $pg++) {
+                if ($pg === 1 || $pg === $total_pages || abs($pg - $page) <= 2) {
+                    $show_pages[] = $pg;
+                }
+            }
+            $prev_pg = null;
+            foreach ($show_pages as $pg):
+                if ($prev_pg !== null && $pg - $prev_pg > 1): ?>
+                <span class="rec-pg-ellipsis">…</span>
+                <?php endif; ?>
+                <a href="<?= rec_url(['page' => $pg]) ?>"
+                   class="btn btn-sm<?= $pg === $page ? ' btn-primary' : '' ?>"><?= $pg ?></a>
+            <?php $prev_pg = $pg; endforeach; ?>
+            <?php if ($page < $total_pages): ?>
+            <a href="<?= rec_url(['page' => $page + 1]) ?>" class="btn btn-sm">Sonraki →</a>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
 <?php endif; ?>
 
