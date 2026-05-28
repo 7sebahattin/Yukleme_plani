@@ -78,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli
         }
     } elseif ($fix_type === 'grup' && $fix_field === 'grup_adi') {
         $fix_val = normalize_firma($fix_val);
-        $_firma_def_check = $pdo->query("SELECT LOWER(name) FROM material_definitions WHERE type='firma'")->fetchAll(PDO::FETCH_COLUMN);
-        if ($fix_val === '' || !in_array(mb_strtolower($fix_val, 'UTF-8'), $_firma_def_check, true)) {
+        $_firma_def_names = $pdo->query("SELECT name FROM material_definitions WHERE type='firma'")->fetchAll(PDO::FETCH_COLUMN);
+        if ($fix_val === '' || !in_array($fix_val, array_map('normalize_text_v2', $_firma_def_names), true)) {
             $hd_error = 'Lütfen tanımlı bir firma seçin.';
         } else {
             try {
@@ -389,6 +389,23 @@ if ($f_tarih_bit !== '') { $qc_cn_where[] = "tarih <= ?";   $qc_cn_params[] = $f
 if ($f_firma     !== '') { $qc_cn_where[] = "firma LIKE ?"; $qc_cn_params[] = '%' . $f_firma . '%'; }
 $qc_cn_sql = 'WHERE ' . implode(' AND ', $qc_cn_where);
 
+// Pre-compute: normalize_text_v2 ile tanımsız kantar grubu ID'leri
+$_bad_grup_ids = [];
+try {
+    $_firma_norms = array_map(
+        'normalize_text_v2',
+        $pdo->query("SELECT name FROM material_definitions WHERE type='firma'")->fetchAll(PDO::FETCH_COLUMN)
+    );
+    foreach ($pdo->query("SELECT id, grup_adi FROM kantar_gruplar WHERE grup_adi != ''")->fetchAll() as $_gr) {
+        if (!in_array(normalize_text_v2($_gr['grup_adi']), $_firma_norms, true)) {
+            $_bad_grup_ids[] = (int)$_gr['id'];
+        }
+    }
+} catch (PDOException $e) {}
+$_bad_grup_sql = empty($_bad_grup_ids)
+    ? '1=0'
+    : 'kg.id IN (' . implode(',', $_bad_grup_ids) . ')';
+
 // [count_sql, params, label, severity, url, url_label, detail_msg]
 $check_defs = [
     ["SELECT COUNT(*) FROM kantar_fisleri {$k_extra}net_kg = 0",
@@ -421,7 +438,7 @@ $check_defs = [
     ["SELECT COUNT(*) FROM loading_records $qc_cn_sql AND cikis_nedeni = ''",
      $qc_cn_params, 'Çıkış nedeni boş — çıkma kaydı', 'dusuk', 'cikmalar.php', 'Çıkmalar',
      'Fire veya kötü ürün sebebi girilmemiş.'],
-    ["SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')",
+    ["SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE {$_bad_grup_sql}",
      [], 'Tanımsız firma adı — kantar grubu', 'orta', 'kantar.php', 'Kantar',
      'Grup firma adı tanımlı firma listesinde yok; stok firma filtresiyle eşleşmeyebilir.'],
     ["SELECT COUNT(*) FROM (
@@ -533,12 +550,12 @@ $qd_defs = [
       ORDER BY id DESC LIMIT 20", $qc_cn_params,
      'lr', 'cikis_nedeni'],
     ['Tanımsız firma adı — kantar grubu', 'orta', 'Kantar',
-     "SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')",
+     "SELECT COUNT(*) FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id WHERE {$_bad_grup_sql}",
      [],
      "SELECT kg.id, kf.giris_tarih AS tarih, kg.grup_adi AS firma, kf.malin_cinsi AS urun,
              kf.depo, 0 AS net_kg, CONCAT('kantar_edit.php?id=', kf.id) AS fix_link
       FROM kantar_gruplar kg JOIN kantar_fisleri kf ON kg.fis_id = kf.id
-      WHERE kg.grup_adi != '' AND LOWER(kg.grup_adi) NOT IN (SELECT LOWER(name) FROM material_definitions WHERE type='firma')
+      WHERE {$_bad_grup_sql}
       ORDER BY kg.id DESC LIMIT 20",
      [],
      'grup', 'grup_adi'],

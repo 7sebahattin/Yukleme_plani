@@ -74,11 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     if ($err !== '') {
         set_flash('error', $err);
     } else {
-        $mat_row = $pdo->prepare(
-            "SELECT id, unit_dara_kg FROM material_definitions WHERE type=? AND LOWER(name)=LOWER(?) LIMIT 1"
-        );
-        $mat_row->execute([$mv_mat_type, $mv_mat_name]);
-        $mat_row   = $mat_row->fetch();
+        $_def_st = $pdo->prepare("SELECT id, name, unit_dara_kg FROM material_definitions WHERE type=?");
+        $_def_st->execute([$mv_mat_type]);
+        $_def_needle = normalize_text_v2($mv_mat_name);
+        $mat_row = null;
+        foreach ($_def_st->fetchAll() as $_def_r) {
+            if (normalize_text_v2($_def_r['name']) === $_def_needle) { $mat_row = $_def_r; break; }
+        }
         $mat_id    = $mat_row ? (int)$mat_row['id'] : null;
         $unit_dara = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
         $total_dara = round($mv_qty * $unit_dara, 3);
