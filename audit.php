@@ -259,19 +259,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── NMQ verilerini yükle ─────────────────────────────────────
-$nmq_rows   = [];
-$nmq_exists = audit_tbl('normalize_migration_queue');
-$nmq_types  = [];
-$nmq_counts = ['pending' => 0, 'approved' => 0, 'excluded' => 0, 'total' => 0];
+$nmq_rows           = [];
+$nmq_exists         = audit_tbl('normalize_migration_queue');
+$nmq_types          = [];
+$nmq_counts         = ['pending' => 0, 'approved' => 0, 'excluded' => 0, 'total' => 0];
+$nmq_stat           = ['yuksek_risk'=>0,'merge'=>0,'u307'=>0,'riskli_dup'=>0];
+$nmq_pending_rows   = [];
+$nmq_high_risk_rows = [];
 
 if ($nmq_exists) {
     $nmq_rows = $pdo->query("
-        SELECT id, target_id, mat_type, current_value, v2_value, will_change,
-               is_merge, is_survivor, surviving_id, dup_id,
-               fk_lp_kasa, fk_lp_palet, fk_pm, fk_msm, fk_total,
-               u0307, unicode_flags, risk_level, status, reviewed_at
-        FROM normalize_migration_queue
-        ORDER BY FIELD(risk_level,'YÜKSEK','ORTA','DÜŞÜK'), mat_type, target_id
+        SELECT q.id, q.target_id, q.mat_type, q.current_value, q.v2_value, q.will_change,
+               q.is_merge, q.is_survivor, q.surviving_id, q.dup_id,
+               q.fk_lp_kasa, q.fk_lp_palet, q.fk_pm, q.fk_msm, q.fk_total,
+               q.u0307, q.unicode_flags, q.risk_level, q.status, q.reviewed_at,
+               sv.name AS surviving_name
+        FROM normalize_migration_queue q
+        LEFT JOIN material_definitions sv ON sv.id = q.surviving_id
+        ORDER BY FIELD(q.risk_level,'YÜKSEK','ORTA','DÜŞÜK'), q.mat_type, q.target_id
     ")->fetchAll();
     foreach ($nmq_rows as $r) {
         $nmq_types[$r['mat_type']] = true;
@@ -279,6 +284,15 @@ if ($nmq_exists) {
         $nmq_counts['total']++;
     }
     ksort($nmq_types);
+    foreach ($nmq_rows as $r) {
+        if ($r['risk_level'] === 'YÜKSEK')                                $nmq_stat['yuksek_risk']++;
+        if ($r['is_merge'])                                                $nmq_stat['merge']++;
+        if ($r['u0307'])                                                   $nmq_stat['u307']++;
+        if ($r['is_merge'] && !$r['is_survivor'] && $r['fk_total'] > 0)  $nmq_stat['riskli_dup']++;
+        if ($r['status'] === 'pending')                                    $nmq_pending_rows[]   = $r;
+        if ($r['risk_level']==='YÜKSEK' && $r['is_merge'] && !$r['is_survivor'])
+                                                                           $nmq_high_risk_rows[] = $r;
+    }
 }
 
 $has_msm = audit_tbl('material_stock_movements');
@@ -740,6 +754,37 @@ tr[data-status=excluded]{background:#f8fafc;opacity:.65}
 .nmq-hidden{display:none}
 .u307-flag{font-size:.68rem;background:#fee2e2;color:#991b1b;border-radius:4px;
             padding:1px 5px;margin-left:4px;font-family:monospace}
+/* ── Queue durum kartları ── */
+.nmq-stat-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.nmq-sc{display:flex;flex-direction:column;align-items:center;justify-content:center;
+         min-width:72px;padding:7px 14px;border-radius:8px;border:1px solid;text-align:center}
+.nmq-sc-val{font-size:1.3rem;font-weight:700;line-height:1.15}
+.nmq-sc-lbl{font-size:.67rem;font-weight:600;margin-top:3px;white-space:nowrap;opacity:.8}
+.nsc-total   {background:#f1f5f9;border-color:#cbd5e1;color:#475569}
+.nsc-pending {background:#fef9c3;border-color:#fde047;color:#854d0e}
+.nsc-pend-ok {background:#f0fdf4;border-color:#86efac;color:#166534}
+.nsc-approved{background:#d1fae5;border-color:#6ee7b7;color:#065f46}
+.nsc-excluded{background:#f8fafc;border-color:#e2e8f0;color:#64748b}
+.nsc-risk    {background:#fee2e2;border-color:#fca5a5;color:#991b1b}
+.nsc-risk-ok {background:#f0fdf4;border-color:#86efac;color:#166534}
+.nsc-merge   {background:#fff7ed;border-color:#fdba74;color:#9a3412}
+.nsc-u307    {background:#faf5ff;border-color:#c4b5fd;color:#5b21b6}
+.nsc-u307-ok {background:#f0fdf4;border-color:#86efac;color:#166534}
+.nsc-fkdup   {background:#fff1f2;border-color:#fda4af;color:#9f1239}
+.nsc-fkdup-ok{background:#f0fdf4;border-color:#86efac;color:#166534}
+/* ── Durum banner ── */
+.nmq-sb{padding:9px 14px;border-radius:7px;border:1px solid;font-size:.85rem;margin-bottom:12px}
+.nmq-sb-warn{background:#fef9c3;border-color:#fde047;color:#854d0e}
+.nmq-sb-ok  {background:#d1fae5;border-color:#6ee7b7;color:#065f46}
+.nmq-sb-info{background:#f1f5f9;border-color:#e2e8f0;color:#475569}
+/* ── Alt tablo akordeonu ── */
+.nmq-sub{margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
+.nmq-sub summary{padding:7px 12px;font-size:.83rem;font-weight:600;cursor:pointer;
+                  background:#f8fafc;list-style:none;display:flex;align-items:center;gap:6px}
+.nmq-sub summary::-webkit-details-marker{display:none}
+.nmq-sub[open] summary{border-bottom:1px solid #e2e8f0}
+.nmq-mini td,.nmq-mini th{font-size:.77rem;padding:5px 8px}
+.nmq-mini{margin:0}
 </style>
 
 <details class="au-sec" id="nmq-section" <?= $nmq_pending > 0 ? 'open' : '' ?>>
@@ -750,11 +795,19 @@ tr[data-status=excluded]{background:#f8fafc;opacity:.65}
 <div class="au-body">
 
 <?php /* ── Henüz analiz yapılmamış ── */ if (!$nmq_exists || $nmq_total === 0): ?>
-<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">
-    Analiz henüz çalıştırılmadı veya değişiklik gerektiren kayıt yok.<br>
-    <em>«Analizi Başlat»</em> butonu <code>material_definitions</code> tablosunu tarar,
-    normalize_text_v2() farklarını ve FK merge ihtiyaçlarını tespit eder.
-    Hiçbir veri değiştirmez.
+<?php if (!$nmq_exists): ?>
+<div class="nmq-sb nmq-sb-info">
+    ℹ Henüz analiz başlatılmamış. Aşağıdaki <strong>«Analizi Başlat»</strong> butonuna basın.
+</div>
+<?php else: ?>
+<div class="nmq-sb nmq-sb-info">
+    ℹ Queue boş — değişiklik gerektiren kayıt bulunamadı veya tüm kayıtlar zaten normalize edilmiş.
+    Yeniden taramak için <strong>«Analizi Başlat»</strong> butonuna basın.
+</div>
+<?php endif; ?>
+<p style="color:var(--text-muted);font-size:.82rem;margin-bottom:12px">
+    <code>material_definitions</code> tablosunu tarar, normalize_text_v2() farklarını
+    ve FK merge ihtiyaçlarını tespit eder. Hiçbir veri değiştirmez.
 </p>
 <form method="post">
     <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
@@ -763,6 +816,150 @@ tr[data-status=excluded]{background:#f8fafc;opacity:.65}
 </form>
 
 <?php else: ?>
+
+<?php /* ── Queue durum özeti ── */ ?>
+
+<?php /* Durum banner */ ?>
+<?php if ($nmq_pending > 0): ?>
+<div class="nmq-sb nmq-sb-warn">
+    ⚠ <strong><?= $nmq_pending ?> kayıt hâlâ bekliyor.</strong>
+    Her satır için <em>Onayla</em> veya <em>Hariç Tut</em> seçin.
+    <strong>Pending = 0 olmadan migration planı üretmeyin.</strong>
+</div>
+<?php elseif ($nmq_approved > 0): ?>
+<div class="nmq-sb nmq-sb-ok">
+    ✓ <strong>Review tamamlandı.</strong>
+    <?= $nmq_approved ?> onaylı · <?= $nmq_excluded ?> hariç tutuldu.
+    Migration planı üretilebilir: <code>php scripts/plan_normalize_migration.php</code>
+</div>
+<?php else: ?>
+<div class="nmq-sb nmq-sb-info">
+    ℹ Onaylanmış kayıt yok. Migration gerekmez veya tüm kayıtlar hariç tutuldu.
+</div>
+<?php endif; ?>
+
+<?php /* Stat kartları */ ?>
+<div class="nmq-stat-grid">
+    <div class="nmq-sc nsc-total">
+        <div class="nmq-sc-val"><?= $nmq_total ?></div>
+        <div class="nmq-sc-lbl">Toplam</div>
+    </div>
+    <div class="nmq-sc <?= $nmq_pending > 0 ? 'nsc-pending' : 'nsc-pend-ok' ?>">
+        <div class="nmq-sc-val"><?= $nmq_pending ?></div>
+        <div class="nmq-sc-lbl"><?= $nmq_pending > 0 ? '⏳ Bekliyor' : '✓ Bekliyor' ?></div>
+    </div>
+    <div class="nmq-sc nsc-approved">
+        <div class="nmq-sc-val"><?= $nmq_approved ?></div>
+        <div class="nmq-sc-lbl">✓ Onaylı</div>
+    </div>
+    <div class="nmq-sc nsc-excluded">
+        <div class="nmq-sc-val"><?= $nmq_excluded ?></div>
+        <div class="nmq-sc-lbl">— Hariç</div>
+    </div>
+    <div class="nmq-sc <?= $nmq_stat['yuksek_risk'] > 0 ? 'nsc-risk' : 'nsc-risk-ok' ?>">
+        <div class="nmq-sc-val"><?= $nmq_stat['yuksek_risk'] ?></div>
+        <div class="nmq-sc-lbl">Yüksek Risk</div>
+    </div>
+    <div class="nmq-sc nsc-merge">
+        <div class="nmq-sc-val"><?= $nmq_stat['merge'] ?></div>
+        <div class="nmq-sc-lbl">Merge</div>
+    </div>
+    <div class="nmq-sc <?= $nmq_stat['u307'] > 0 ? 'nsc-u307' : 'nsc-u307-ok' ?>">
+        <div class="nmq-sc-val"><?= $nmq_stat['u307'] ?></div>
+        <div class="nmq-sc-lbl">U+0307</div>
+    </div>
+    <div class="nmq-sc <?= $nmq_stat['riskli_dup'] > 0 ? 'nsc-fkdup' : 'nsc-fkdup-ok' ?>">
+        <div class="nmq-sc-val"><?= $nmq_stat['riskli_dup'] ?></div>
+        <div class="nmq-sc-lbl">FK'lı Dup</div>
+    </div>
+</div>
+
+<?php /* Pending mini tablo */ if (!empty($nmq_pending_rows)): ?>
+<details class="nmq-sub" open>
+    <summary>⏳ Bekleyen Kayıtlar <span style="background:#fde047;color:#854d0e;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-left:4px"><?= count($nmq_pending_rows) ?></span></summary>
+    <div class="au-tbl-wrap">
+    <table class="au-tbl nmq-mini">
+        <thead><tr>
+            <th>ID</th><th>Tür</th><th>Mevcut Değer</th><th>V2 Sonucu</th>
+            <th>Risk</th><th>Rol</th><th>FK</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($nmq_pending_rows as $r): ?>
+        <?php $is_dup = $r['is_merge'] && !$r['is_survivor']; ?>
+        <tr>
+            <td style="font-family:monospace;font-size:.75rem"><?= (int)$r['target_id'] ?></td>
+            <td><span style="font-size:.72rem;background:#f1f5f9;padding:1px 6px;border-radius:5px"><?= h($r['mat_type']) ?></span></td>
+            <td><?= h($r['current_value']) ?><?= $r['u0307'] ? '<span class="u307-flag">U+0307</span>' : '' ?></td>
+            <td style="color:#0f766e"><?= h($r['v2_value']) ?></td>
+            <td>
+                <?php $rc = match($r['risk_level']) {
+                    'YÜKSEK' => 'background:#fee2e2;color:#991b1b',
+                    'ORTA'   => 'background:#fff7ed;color:#9a3412',
+                    default  => 'background:#f0fdf4;color:#166534',
+                }; ?>
+                <span style="font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:9px;<?= $rc ?>"><?= h($r['risk_level']) ?></span>
+            </td>
+            <td>
+                <?php if ($is_dup): ?>
+                <span class="nmq-role role-dup">⬇ Dup</span>
+                <?php else: ?>
+                <span class="nmq-role role-upd">✎ Güncelle</span>
+                <?php endif; ?>
+            </td>
+            <td>
+                <?php if ($r['fk_total'] > 0): ?>
+                <span class="nmq-fk-chip"><?= (int)$r['fk_total'] ?> ref</span>
+                <?php else: ?><span style="color:#cbd5e1">—</span><?php endif; ?>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+</details>
+<?php endif; ?>
+
+<?php /* Yüksek riskli merge tablo */ if (!empty($nmq_high_risk_rows)): ?>
+<details class="nmq-sub" open>
+    <summary>🔴 Yüksek Riskli Merge <span style="background:#fee2e2;color:#991b1b;border-radius:10px;padding:1px 8px;font-size:.75rem;margin-left:4px"><?= count($nmq_high_risk_rows) ?></span></summary>
+    <div class="au-tbl-wrap">
+    <table class="au-tbl nmq-mini">
+        <thead><tr>
+            <th>Dup ID</th><th>Silinecek Değer</th>
+            <th>Surviving ID</th><th>Kalacak Değer</th>
+            <th>FK Dağılımı</th><th>Durum</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($nmq_high_risk_rows as $r): ?>
+        <tr>
+            <td style="font-family:monospace;font-size:.75rem;color:#991b1b"><?= (int)$r['target_id'] ?></td>
+            <td><del style="color:#991b1b"><?= h($r['current_value']) ?></del></td>
+            <td style="font-family:monospace;font-size:.75rem;color:#065f46"><?= (int)$r['surviving_id'] ?></td>
+            <td style="color:#065f46;font-weight:600"><?= h($r['surviving_name'] ?? '—') ?></td>
+            <td>
+                <div class="nmq-fk">
+                <?php
+                $fk_parts = [];
+                if ($r['fk_lp_kasa']  > 0) $fk_parts[] = 'kasa:'  . $r['fk_lp_kasa'];
+                if ($r['fk_lp_palet'] > 0) $fk_parts[] = 'palet:' . $r['fk_lp_palet'];
+                if ($r['fk_pm']       > 0) $fk_parts[] = 'malz:'  . $r['fk_pm'];
+                if ($r['fk_msm']      > 0) $fk_parts[] = 'stok:'  . $r['fk_msm'];
+                foreach ($fk_parts as $fp): ?><span class="nmq-fk-chip"><?= h($fp) ?></span><?php endforeach;
+                if (empty($fk_parts)) echo '<span style="color:#cbd5e1">—</span>';
+                ?>
+                </div>
+            </td>
+            <td>
+                <?php $st_map = ['pending'=>['st-pending','bekliyor'],'approved'=>['st-approved','onaylı'],'excluded'=>['st-excluded','hariç']]; ?>
+                <span class="nmq-status <?= $st_map[$r['status']][0] ?? '' ?>"><?= $st_map[$r['status']][1] ?? h($r['status']) ?></span>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+</details>
+<?php endif; ?>
 
 <?php /* ── Araç çubuğu ── */ ?>
 <div class="nmq-toolbar">
