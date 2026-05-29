@@ -24,6 +24,12 @@ if (empty($data)) {
 }
 csrf_check($data['csrf'] ?? null);
 
+if (!can('records.write')) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'msg' => 'Bu işlem için records.write yetkisi gereklidir.']);
+    exit;
+}
+
 $action = (string)($data['action'] ?? '');
 $id     = (int)($data['id'] ?? 0);
 

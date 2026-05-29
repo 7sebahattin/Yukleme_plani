@@ -30,6 +30,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     csrf_check($data['csrf'] ?? null);
 
+    if (!can('records.write')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'msg' => 'Bu işlem için records.write yetkisi gereklidir.']);
+        exit;
+    }
+
     $note = trim((string)($data['note'] ?? ''));
     if ($note === '') {
         echo json_encode(['ok' => false, 'msg' => 'Not boş olamaz.']);
