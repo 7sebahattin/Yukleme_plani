@@ -891,7 +891,7 @@ function render_flash(): void {
 })();
 
 function _audit_sanitize(array $data): array {
-    static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data'];
+    static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data', 'session', 'asya_session', 'http_cookie'];
     $out = [];
     foreach ($data as $k => $v) {
         if (in_array(strtolower((string)$k), $blocked, true)) continue;

@@ -114,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli
     }
 
     if ($hd_ok) {
+        audit_log_event('hizli_duzelt', 'stok', $fix_id, null, ['fix_type' => $fix_type, 'fix_field' => $fix_field, 'fix_val' => $fix_val]);
         set_flash('success', 'Kayıt güncellendi (#' . $fix_id . ').');
     } else {
         set_flash('error', $hd_error ?: 'Bilinmeyen hata.');
@@ -678,6 +679,7 @@ try {
 
 // ── Veri Kalite Raporu CSV export ────────────────────────
 if ($is_dkk_csv) {
+    audit_log_event('export', 'stok', null, null, ['type' => 'dkk_csv']);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="veri_kalite_raporu_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
@@ -704,6 +706,7 @@ if ($is_dkk_csv) {
 
 // ── Stok Hareketi CSV export ──────────────────────────────
 if ($is_csv) {
+    audit_log_event('export', 'stok', null, null, ['type' => 'stok_csv']);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="stok_hareket_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
