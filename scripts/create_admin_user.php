@@ -7,7 +7,7 @@
 //   php scripts/create_admin_user.php <username> <şifre> [display_name] [email]
 //
 // Örnek:
-//   php scripts/create_admin_user.php admin "GüçlüŞifre123" "Nuray Ünlü" "nuray4948@gmail.com"
+//   php scripts/create_admin_user.php admin "GucluSifre123!" "Sistem Yöneticisi" "admin@example.com"
 // =========================================================
 
 declare(strict_types=1);
@@ -21,7 +21,7 @@ if (php_sapi_name() !== 'cli') {
 $args = $argv ?? [];
 if (count($args) < 3) {
     echo "Kullanım  : php scripts/create_admin_user.php <username> <şifre> [display_name] [email]\n";
-    echo "Örnek     : php scripts/create_admin_user.php admin \"GüçlüŞifre123\" \"Nuray Ünlü\" \"nuray4948@gmail.com\"\n";
+    echo "Örnek     : php scripts/create_admin_user.php admin \"GucluSifre123!\" \"Sistem Yöneticisi\" \"admin@example.com\"\n";
     exit(1);
 }
 
