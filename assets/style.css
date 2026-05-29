@@ -1695,6 +1695,7 @@ body.print-mode .asya-sheet {
    ========================================================= */
 
 /* Overlay */
+.pm-overlay[hidden] { display: none !important; }
 .pm-overlay {
     position: fixed; inset: 0; z-index: 600;
     background: rgba(0,0,0,0.45);

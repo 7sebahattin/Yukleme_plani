@@ -86,4 +86,6 @@ function hks_status_class(string $status): string {
 }
 
 // Tüm HKS sayfaları için merkezi giriş zorunluluğu
+// config/db.php → helpers.php yükler ama auth.php yüklenmez; burada garantiye alınır.
+require_once __DIR__ . '/../config/auth.php';
 require_login();
