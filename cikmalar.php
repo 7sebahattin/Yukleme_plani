@@ -227,7 +227,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
 
 <script>
 (function () {
-    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var csrf      = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var canUnlock = <?= $can_unlock ? 'true' : 'false' ?>;
 
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-durum-action]');
@@ -314,7 +315,13 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 }
             } else if (data.durum === 'yuklendi') {
                 if (islendiBtn) islendiBtn.remove();
-                if (yuklendiBtn) { yuklendiBtn.textContent = '✓ Yüklendi'; yuklendiBtn.classList.add('durum-done'); yuklendiBtn.style.display = ''; }
+                if (yuklendiBtn) {
+                    if (canUnlock) {
+                        yuklendiBtn.textContent = '✓ Yüklendi'; yuklendiBtn.classList.add('durum-done'); yuklendiBtn.style.display = '';
+                    } else {
+                        yuklendiBtn.remove();
+                    }
+                }
             }
         })
         .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
