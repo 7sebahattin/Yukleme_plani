@@ -169,6 +169,12 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
             <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
         </nav>
+        <?php if (function_exists('current_user') && current_user() !== null): ?>
+        <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap">
+            <span class="topnav-logout-name"><?= h(current_user()['display_name'] ?: current_user()['username']) ?></span>
+            <span class="topnav-logout-icon">⏻</span>
+        </a>
+        <?php endif; ?>
     </div>
 </header>
 <?php endif; ?>
@@ -739,6 +745,34 @@ function render_flash(): void {
             INDEX `idx_sc_urun`    (`urun`(80)),
             INDEX `idx_sc_depo`    (`depo`(80)),
             INDEX `idx_sc_parti`   (`parti_no`(40))
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // 10) Auth tabloları: users + user_sessions
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `users` (
+            `id`            INT AUTO_INCREMENT PRIMARY KEY,
+            `username`      VARCHAR(60)  NOT NULL,
+            `email`         VARCHAR(120) NULL DEFAULT NULL,
+            `password_hash` VARCHAR(255) NOT NULL,
+            `display_name`  VARCHAR(100) NOT NULL DEFAULT '',
+            `is_active`     TINYINT(1)  NOT NULL DEFAULT 1,
+            `created_at`    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at`    DATETIME    NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            `last_login_at` DATETIME    NULL DEFAULT NULL,
+            UNIQUE KEY `uq_users_username` (`username`),
+            INDEX `idx_users_email` (`email`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        $pdo->exec("CREATE TABLE IF NOT EXISTS `user_sessions` (
+            `token`        CHAR(64)     NOT NULL,
+            `user_id`      INT          NOT NULL,
+            `ip`           VARCHAR(45)  NOT NULL DEFAULT '',
+            `user_agent`   VARCHAR(500) NOT NULL DEFAULT '',
+            `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `expires_at`   DATETIME     NOT NULL,
+            `last_seen_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`token`),
+            INDEX `idx_us_user_id` (`user_id`),
+            INDEX `idx_us_expires` (`expires_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     } catch (PDOException $e) {}
