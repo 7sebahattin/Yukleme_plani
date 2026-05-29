@@ -3211,7 +3211,7 @@ body.notes-modal-open { overflow: hidden; }
     .hesap-stat-grid  { grid-template-columns: repeat(2, 1fr); }
     .pc-only  { display: none !important; }
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
     .mobile-only { display: none !important; }
 }
 
@@ -3783,7 +3783,7 @@ body.notes-modal-open { overflow: hidden; }
         margin-bottom: 20px;
         padding-bottom: 16px;
         border-bottom: 1px solid var(--border);
-        align-items: flex-end;
+        align-items: center;
     }
     .page-head h1 { font-size: 1.7rem; letter-spacing: -.01em; }
 
@@ -3819,8 +3819,8 @@ body.notes-modal-open { overflow: hidden; }
         border-color: var(--border);
     }
     .home-card-icon {
-        width: 60px; height: 60px;
-        font-size: 2rem;
+        width: 68px; height: 68px;
+        font-size: 2.2rem;
         box-shadow: inset 0 0 0 1px rgba(20,30,60,.04);
     }
     .home-card:hover {
@@ -3859,4 +3859,50 @@ body.notes-modal-open { overflow: hidden; }
 
     /* Ana ekran kartlarına biraz daha hava */
     .home-card { min-height: 140px; }
+}
+
+/* =========================================================
+   SPRINT 31B — BUGFIX TAMAMLAMA + TABLET/DESKTOP EK POLİSH
+   ========================================================= */
+
+/* ── 1. Tablet (768–1023px): kayıt kartları 2 kolon grid ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .card-list {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    /* Tablet'te mobil kart başlıkları arasını düzelt */
+    .record-card { margin: 0; }
+}
+
+/* ── 2. Desktop (≥900px): filtre formu yatay düzen ───────── */
+@media (min-width: 900px) {
+    /* Arama kutusu ve tarih filtresi tek satırda */
+    .rec-filter-form {
+        display: flex; flex-wrap: wrap;
+        gap: 10px; align-items: center;
+        margin-bottom: 14px;
+    }
+    .rec-filter-form .search-row {
+        margin-bottom: 0;
+        flex: 1; min-width: 260px;
+    }
+    .rec-filter-form .date-filter-panel { margin-bottom: 0; }
+
+    /* Tablo durum satırları: hover'da daha belirgin ışıma */
+    .data-table tr.tr-islendi:hover > td { background: rgba(245,158,11,.14); }
+    .data-table tr.tr-yuklendi:hover > td { background: rgba(16,185,129,.13); }
+
+    /* Ana ekran bölüm başlığı: daha belirgin */
+    .home-section-title {
+        font-size: .8rem;
+        color: #6b7385;
+        letter-spacing: .06em;
+    }
+
+    /* Topbar: kullanıcı adı biraz daha okunaklı */
+    .topnav-user-name { font-size: .87rem; max-width: 160px; }
+    .topnav-user-role { font-size: .76rem; max-width: 160px; }
+    .topbar-inner { padding: 11px 22px; }
 }
