@@ -84,3 +84,6 @@ function hks_status_class(string $status): string {
         default  => '',
     };
 }
+
+// Tüm HKS sayfaları için merkezi giriş zorunluluğu
+require_login();
