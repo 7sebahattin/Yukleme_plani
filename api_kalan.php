@@ -31,6 +31,21 @@ db()->exec("CREATE TABLE IF NOT EXISTS crate_avg_settings (
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
+// ── Write-action guard ─────────────────────────────────────────────────────
+// READ : status, crate_settings, auto_avg, calculate  → records.read yeterli
+// WRITE: save_target, save_crate, delete_crate         → records.write + CSRF
+static $WRITE_ACTIONS = ['save_target', 'save_crate', 'delete_crate'];
+if (in_array($action, $WRITE_ACTIONS, true)) {
+    if (!can('records.write')) {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Bu işlem için records.write yetkisi gereklidir.']);
+        exit;
+    }
+    // csrf_check() artık JSON-aware: bu endpoint JSON başlığı set ettiği için JSON 403 döner.
+    csrf_check($_POST['csrf'] ?? null);
+}
+// ──────────────────────────────────────────────────────────────────────────
+
 function ok(array $d = []): void  { echo json_encode(['ok' => true]  + $d); exit; }
 function err(string $m):  void  { http_response_code(400); echo json_encode(['ok' => false, 'error' => $m]); exit; }
 

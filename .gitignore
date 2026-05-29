@@ -1,2 +1,10 @@
 backups/
 .claude/
+
+# Migration / analiz çıktıları — tek seferlik, runtime'da gerekmez
+scripts/*.sql
+scripts/*.csv
+scripts/staging_report_*.txt
+backups/*.sql
+backups/*.csv
+deploy.log

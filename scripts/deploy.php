@@ -12,6 +12,11 @@
  * Korunan dosyalar: deploy.php, deploy.log, config/db.php, .htaccess
  */
 
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
+}
+
 $work_dir = dirname(__DIR__);
 $logfile  = $work_dir . '/deploy.log';
 

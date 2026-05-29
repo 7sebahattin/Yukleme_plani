@@ -5,6 +5,12 @@
 //   php scripts/diagnostik.php
 // =========================================================
 declare(strict_types=1);
+
+if (PHP_SAPI !== 'cli') {
+    http_response_code(403);
+    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
+}
+
 require_once __DIR__ . '/../config/db.php';
 
 $pdo = db();

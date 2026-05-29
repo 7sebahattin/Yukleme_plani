@@ -30,6 +30,8 @@
         if (isPost) {
             const fd = new FormData();
             Object.entries(params).forEach(([k, v]) => fd.append(k, v));
+            const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            if (csrfMeta) fd.append('csrf', csrfMeta.content);
             opts.body = fd;
         } else {
             Object.entries(params).forEach(([k, v]) => { url += `&${k}=${encodeURIComponent(v)}`; });
