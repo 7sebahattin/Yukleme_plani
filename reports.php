@@ -829,6 +829,28 @@ render_flash();
         <div class="home-card-title"><?= h($m['label']) ?></div>
     </a>
 <?php endforeach; ?>
+
+<?php if (can('kantar.read') || can('stok.read')): ?>
+<div class="home-section-title">Stok &amp; Kantar</div>
+
+<?php if (can('kantar.read')): ?>
+    <a href="kantar_raporu.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f5f0">📈</div>
+        <div class="home-card-title">Kantar Raporu</div>
+    </a>
+<?php endif; ?>
+
+<?php if (can('stok.read')): ?>
+    <a href="stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f5e9">📦</div>
+        <div class="home-card-title">Ürün Stok</div>
+    </a>
+    <a href="malzeme_stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e3f2fd">🧰</div>
+        <div class="home-card-title">Malzeme Stok</div>
+    </a>
+<?php endif; ?>
+<?php endif; ?>
 </div>
 
 <?php elseif ($type === 'gunluk'): ?>
