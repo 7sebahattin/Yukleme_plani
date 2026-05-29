@@ -23,6 +23,16 @@ $pallets = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
+    // Kilitli kayıt kontrolü (POST)
+    $_lck = db()->prepare("SELECT durum, locked_at FROM loading_records WHERE id=:id");
+    $_lck->execute([':id' => $id]);
+    $_lck_row = $_lck->fetch();
+    if ($_lck_row && (!empty($_lck_row['locked_at']) || $_lck_row['durum'] === 'yuklendi')) {
+        if (!can('records.unlock')) {
+            forbidden('Bu kayıt kilitlidir. Düzenlemek için kilit açma yetkisi gereklidir. (records.unlock)');
+        }
+    }
+
     // Kayıt tipini önceden öğren (UPDATE SQL'i buna göre seçmek için)
     $type_row = db()->prepare("SELECT type FROM loading_records WHERE id=:id");
     $type_row->execute([':id' => $id]);
@@ -211,6 +221,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     if (!$record) {
         set_flash('error', 'Kayıt bulunamadı.');
         header('Location: records.php'); exit;
+    }
+
+    // Kilitli kayıt kontrolü (GET)
+    if (!empty($record['locked_at']) || ($record['durum'] ?? '') === 'yuklendi') {
+        if (!can('records.unlock')) {
+            forbidden('Bu kayıt kilitlidir. Düzenlemek için kilit açma yetkisi gereklidir. (records.unlock)');
+        }
     }
 
     $st = db()->prepare("SELECT * FROM loading_pallets WHERE loading_record_id=:r ORDER BY sira_no, id");

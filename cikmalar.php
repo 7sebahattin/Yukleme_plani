@@ -38,6 +38,8 @@ $st = db()->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll();
 
+$can_unlock = function_exists('can') && can('records.unlock');
+
 render_header('Çıkmalar');
 ?>
 <?php render_flash(); ?>
@@ -103,7 +105,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
             </thead>
             <tbody>
             <?php foreach ($rows as $r):
-                $durum = $r['durum'] ?? '';
+                $durum  = $r['durum'] ?? '';
+                $locked = !empty($r['locked_at']);
             ?>
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
@@ -111,7 +114,10 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
                     <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
                     <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
-                    <td><?= h($r['firma']) ?></td>
+                    <td>
+                        <?= h($r['firma']) ?>
+                        <?php if ($locked): ?><span class="badge-locked">🔒</span><?php endif; ?>
+                    </td>
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['urun']) ?></td>
                     <td><?php $cn = trim($r['cikis_nedeni'] ?? ''); if ($cn !== ''): ?><span class="cikis-nedeni-badge"><?= h($cn) ?></span><?php else: ?>—<?php endif; ?></td>
@@ -122,14 +128,14 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <?php if ($durum !== 'yuklendi'): ?>
+                        <?php if ($durum !== 'yuklendi' && !$locked): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                                 data-durum-action="islendi">
                             <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
                         </button>
                         <?php endif; ?>
-                        <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
+                        <?php if (($durum === 'islendi' && !$locked) || ($durum === 'yuklendi' && $can_unlock)): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
                                 data-durum-action="yuklendi">
@@ -139,9 +145,13 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                         <div class="pc-kebab-wrap">
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
+                                <?php if (!$locked || $can_unlock): ?>
                                 <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
                                 <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
                                    onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                                <?php else: ?>
+                                <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </td>
@@ -154,7 +164,8 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
     <!-- Mobil: kart -->
     <div class="card-list mobile-only">
         <?php foreach ($rows as $r):
-            $durum = $r['durum'] ?? '';
+            $durum  = $r['durum'] ?? '';
+            $locked = !empty($r['locked_at']);
         ?>
             <div class="record-card<?= $durum ? ' durum-' . h($durum) : '' ?>"
                  data-record-id="<?= (int)$r['id'] ?>"
@@ -162,6 +173,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <div class="record-card-head">
                     <div>
                         <strong><?= h($r['firma'] ?: '—') ?></strong>
+                        <?php if ($locked): ?><span class="badge-locked">🔒 Kilitli</span><?php endif; ?>
                         <?php if ($r['tarih']): ?>
                         <div class="record-card-firma"><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></div>
                         <?php endif; ?>
@@ -170,9 +182,13 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                         <div class="pc-dropdown" hidden>
+                            <?php if (!$locked || $can_unlock): ?>
                             <a href="record_edit.php?id=<?= (int)$r['id'] ?>">✎ Düzenle</a>
                             <a href="record_delete.php?id=<?= (int)$r['id'] ?>" class="pc-drop-danger"
                                onclick="return confirm('Bu kayıt ve tüm palet satırları silinecek. Emin misiniz?');">✕ Sil</a>
+                            <?php else: ?>
+                            <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -188,14 +204,14 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                    <?php if ($durum !== 'yuklendi'): ?>
+                    <?php if ($durum !== 'yuklendi' && !$locked): ?>
                     <button type="button"
                             class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
                             data-durum-action="islendi">
                         <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
                     </button>
                     <?php endif; ?>
-                    <?php if ($durum === 'islendi' || $durum === 'yuklendi'): ?>
+                    <?php if (($durum === 'islendi' && !$locked) || ($durum === 'yuklendi' && $can_unlock)): ?>
                     <button type="button"
                             class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
                             data-durum-action="yuklendi">
@@ -244,12 +260,22 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
         if (!confirm(msg)) return;
         btn.disabled = true;
 
+        var extraBody = '';
+        if (action === 'yuklendi' && currentDurum === 'yuklendi') {
+            var reason = prompt('Revizyon nedeni (zorunlu):');
+            if (reason === null) { btn.disabled = false; return; }
+            reason = reason.trim();
+            if (!reason) { btn.disabled = false; alert('Revizyon nedeni boş bırakılamaz.'); return; }
+            extraBody = '&revision_reason=' + encodeURIComponent(reason);
+        }
+
         fetch('record_durum.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: 'id=' + encodeURIComponent(container.dataset.recordId)
                 + '&durum=' + encodeURIComponent(targetDurum)
                 + '&csrf='  + encodeURIComponent(csrf)
+                + extraBody
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {

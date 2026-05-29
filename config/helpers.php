@@ -842,10 +842,10 @@ function render_flash(): void {
             $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // Yetki tanımları
-            $all_p = ['dashboard.read','records.read','records.write','records.delete','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin'];
+            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin'];
             $rp_map = [
                 'admin'    => $all_p,
-                'operator' => ['dashboard.read','records.read','records.write','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export'],
+                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export'],
                 'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read'],
                 'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export'],
             ];
@@ -889,6 +889,21 @@ function render_flash(): void {
                 INDEX `idx_al_action`  (`action`),
                 INDEX `idx_al_ts`      (`created_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) {}
+
+        // 13) Kayıt kilitleme kolonları
+        try {
+            $lr_cols = $pdo->query("SHOW COLUMNS FROM `loading_records`")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('locked_at',       $lr_cols)) $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `locked_at`       DATETIME NULL DEFAULT NULL");
+            if (!in_array('locked_by',       $lr_cols)) $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `locked_by`       INT NULL DEFAULT NULL");
+            if (!in_array('unlocked_at',     $lr_cols)) $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `unlocked_at`     DATETIME NULL DEFAULT NULL");
+            if (!in_array('unlocked_by',     $lr_cols)) $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `unlocked_by`     INT NULL DEFAULT NULL");
+            if (!in_array('revision_reason', $lr_cols)) $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `revision_reason` TEXT NULL DEFAULT NULL");
+            $st_idx = $pdo->prepare("SHOW INDEX FROM `loading_records` WHERE Key_name = 'idx_lr_locked'");
+            $st_idx->execute();
+            if ($st_idx->rowCount() === 0) {
+                try { $pdo->exec("ALTER TABLE `loading_records` ADD INDEX `idx_lr_locked` (`locked_at`)"); } catch (PDOException $ie) {}
+            }
         } catch (PDOException $e) {}
 
     } catch (PDOException $e) {}

@@ -1879,6 +1879,33 @@ body.print-mode .asya-sheet {
 .pc-dropdown button:hover, .pc-dropdown a:hover { background: var(--bg); }
 .pc-drop-danger { color: var(--danger) !important; }
 .pc-drop-danger:hover { background: var(--danger-soft) !important; }
+.pc-drop-disabled { display: block; padding: 8px 14px; color: var(--muted); font-size: .85rem; cursor: default; }
+
+/* Kilitli kayıt rozeti */
+.badge-locked {
+    display: inline-block;
+    font-size: .72rem; font-weight: 600;
+    background: #fff3cd; color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    padding: 1px 5px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+/* Kilit banner (record_view.php) */
+.lock-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff8e1; border: 1px solid #ffc107;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: .9rem;
+}
+.lock-banner-icon { font-size: 1.2rem; flex-shrink: 0; }
+.lock-banner-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.lock-banner-detail { color: var(--muted); font-size: .82rem; }
+.lock-banner-reason { color: #92400e; font-size: .82rem; font-style: italic; }
 
 /* Boş durum */
 .pc-empty {
