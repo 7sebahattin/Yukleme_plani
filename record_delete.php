@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.delete');
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -13,18 +16,32 @@ if ($id <= 0) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
-    // Type'ı silmeden önce al (redirect için)
-    $st_t = db()->prepare("SELECT type FROM loading_records WHERE id=:id");
+    // Type, durum ve kilit bilgisini al
+    $st_t = db()->prepare("SELECT type, durum, locked_at FROM loading_records WHERE id=:id");
     $st_t->execute([':id' => $id]);
-    $rec_type = $st_t->fetchColumn() ?: 'yukleme';
+    $st_t_row = $st_t->fetch();
+    $rec_type = ($st_t_row['type'] ?? 'yukleme');
     $list_url = $rec_type === 'cikma' ? 'cikmalar.php' : 'records.php';
 
+    // Kilitli kayıt kontrolü (POST)
+    if ($st_t_row && (!empty($st_t_row['locked_at']) || $st_t_row['durum'] === 'yuklendi')) {
+        if (!can('records.unlock')) {
+            forbidden('Kilitli kayıtlar silinemez. Silmek için kilit açma yetkisi gereklidir. (records.unlock)');
+        }
+    }
+
     try {
+        // Audit için silmeden önce kayıt detayını çek
+        $_del_row = db()->prepare("SELECT firma, tarih, urun, alici, parti_no FROM loading_records WHERE id=:id");
+        $_del_row->execute([':id' => $id]);
+        $_audit_del = $_del_row->fetch() ?: null;
+
         // Malzeme stok hareketlerini önce temizle (FK CASCADE kapsamı dışında)
         db()->prepare(
             "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
         )->execute([$id]);
         db()->prepare("DELETE FROM loading_records WHERE id=:id")->execute([':id' => $id]);
+        audit_log_event('delete', 'records', $id, $_audit_del ?: null);
         set_flash('success', 'Kayıt silindi (#' . $id . ').');
     } catch (Throwable $e) {
         set_flash('error', 'Silme hatası: ' . $e->getMessage());
@@ -33,10 +50,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // GET: onay ekranı (JS confirm zaten çıkar; bu sayfa fallback olarak da çalışır)
-$st = db()->prepare("SELECT id, type, firma, alici, parti_no, created_at FROM loading_records WHERE id=:id");
+$st = db()->prepare("SELECT id, type, firma, alici, parti_no, created_at, durum, locked_at FROM loading_records WHERE id=:id");
 $st->execute([':id' => $id]);
 $rec = $st->fetch();
 if (!$rec) { set_flash('error', 'Kayıt bulunamadı.'); header('Location: records.php'); exit; }
+
+// Kilitli kayıt kontrolü (GET)
+if (!empty($rec['locked_at']) || ($rec['durum'] ?? '') === 'yuklendi') {
+    if (!can('records.unlock')) {
+        forbidden('Kilitli kayıtlar silinemez. Silmek için kilit açma yetkisi gereklidir. (records.unlock)');
+    }
+}
 
 $list_url = ($rec['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'records.php';
 $tot = record_totals($id);

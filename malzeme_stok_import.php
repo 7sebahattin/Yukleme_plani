@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('stok.write');
 
 $pdo = db();
 
@@ -35,7 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_im
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
     );
 
-    $inserted = 0;
+    $inserted     = 0;
+    $cnt_giris    = 0;
+    $cnt_sevk     = 0;
+    $total_qty    = 0.0;
     foreach ($import_data as $row) {
         $mat_name = trim((string)($row['mat_name'] ?? ''));
         $mat_type = trim((string)($row['mat_type'] ?? ''));
@@ -60,7 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_im
             $belge ?: null, $firma ?: null, null,
         ]);
         $inserted++;
+        $total_qty += $qty;
+        if ($mv_type === 'giris') $cnt_giris++; else $cnt_sevk++;
     }
+
+    audit_log_event('import', 'malzeme_stok', null, null, [
+        'total_rows' => count($import_data),
+        'inserted'   => $inserted,
+        'skipped'    => count($import_data) - $inserted,
+        'giris'      => $cnt_giris,
+        'sevk'       => $cnt_sevk,
+        'total_qty'  => round($total_qty, 3),
+    ]);
 
     set_flash('success', "$inserted hareket başarıyla aktarıldı.");
     header('Location: malzeme_stok.php');

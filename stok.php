@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('stok.read');
 
 $pdo = db();
 
@@ -111,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hizli
     }
 
     if ($hd_ok) {
+        audit_log_event('hizli_duzelt', 'stok', $fix_id, null, ['fix_type' => $fix_type, 'fix_field' => $fix_field, 'fix_val' => $fix_val]);
         set_flash('success', 'Kayıt güncellendi (#' . $fix_id . ').');
     } else {
         set_flash('error', $hd_error ?: 'Bilinmeyen hata.');
@@ -214,6 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 round($post_diff,    3),
                 $note !== '' ? $note : null,
             ]);
+            audit_log_event('save_count', 'stok', null, null, ['firma' => $pf_firma, 'urun' => $pf_urun, 'depo' => $pf_depo, 'system_kg' => round($post_kalan, 3), 'counted_kg' => round($counted_kg, 3), 'diff_kg' => round($post_diff, 3)]);
             set_flash('success', 'Sayım kaydedildi. Sistem: ' . fmt_kg($post_kalan) . ' kg · Sayım: ' . fmt_kg($counted_kg) . ' kg · Fark: ' . ($post_diff >= 0 ? '+' : '') . fmt_kg($post_diff) . ' kg');
             $rp = array_filter([
                 'tarih_bas' => $pf_tarih_bas, 'tarih_bit' => $pf_tarih_bit,
@@ -674,6 +679,7 @@ try {
 
 // ── Veri Kalite Raporu CSV export ────────────────────────
 if ($is_dkk_csv) {
+    audit_log_event('export', 'stok', null, null, ['type' => 'dkk_csv']);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="veri_kalite_raporu_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
@@ -700,6 +706,7 @@ if ($is_dkk_csv) {
 
 // ── Stok Hareketi CSV export ──────────────────────────────
 if ($is_csv) {
+    audit_log_event('export', 'stok', null, null, ['type' => 'stok_csv']);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="stok_hareket_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');

@@ -5,6 +5,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.write');
 
 $record = [
     'firma' => '', 'bolge' => '', 'urun' => '',
@@ -127,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
             sync_malzeme_kullanim($rec_id);
+            audit_log_event('create', 'cikmalar', $rec_id, null, ['firma' => $record['firma'], 'tarih' => $record['tarih'], 'urun' => $record['urun'], 'cikis_nedeni' => $record['cikis_nedeni'], 'palet_sayisi' => count($computed)]);
             set_flash('success', 'Çıkma kaydı oluşturuldu (#' . $rec_id . ').');
             header('Location: record_view.php?id=' . $rec_id);
             exit;

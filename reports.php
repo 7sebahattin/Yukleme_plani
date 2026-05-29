@@ -4,6 +4,10 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+if (($_GET['export'] ?? '') !== '') { require_perm('reports.export'); }
+else { require_perm('reports.read'); }
 
 $type      = trim($_GET['type']      ?? '');
 $export    = trim($_GET['export']    ?? '');
@@ -451,6 +455,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
 
 // ── CSV Export ──────────────────────────────────────────
 if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
+    audit_log_event('export', 'reports', null, null, ['type' => $type, 'export' => $export, 'from' => $f_from ?? '', 'to' => $f_to ?? '']);
     // Günlük Operasyon CSV — bölümlü
     if ($type === 'gunluk') {
         $gl_fname = 'gunluk_raporu_' . $f_from . ($f_to !== $f_from ? '_'.$f_to : '') . '.csv';

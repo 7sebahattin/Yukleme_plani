@@ -6,6 +6,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/calc.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.write');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (int)($_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -19,6 +22,16 @@ $pallets = [];
 // POST işlem
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
+
+    // Kilitli kayıt kontrolü (POST)
+    $_lck = db()->prepare("SELECT durum, locked_at FROM loading_records WHERE id=:id");
+    $_lck->execute([':id' => $id]);
+    $_lck_row = $_lck->fetch();
+    if ($_lck_row && (!empty($_lck_row['locked_at']) || $_lck_row['durum'] === 'yuklendi')) {
+        if (!can('records.unlock')) {
+            forbidden('Bu kayıt kilitlidir. Düzenlemek için kilit açma yetkisi gereklidir. (records.unlock)');
+        }
+    }
 
     // Kayıt tipini önceden öğren (UPDATE SQL'i buna göre seçmek için)
     $type_row = db()->prepare("SELECT type FROM loading_records WHERE id=:id");
@@ -108,6 +121,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         try {
             $pdo = db();
+
+            // Audit için eski değerleri kaydet
+            $_old_row = $pdo->prepare("SELECT firma, bolge, tarih, urun, alici, parti_no FROM loading_records WHERE id=:id");
+            $_old_row->execute([':id' => $id]);
+            $_audit_old = $_old_row->fetch() ?: null;
+
             $pdo->beginTransaction();
 
             if ($edit_is_cikma) {
@@ -175,6 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
             sync_malzeme_kullanim($id);
+            audit_log_event('update', 'records', $id,
+                $_audit_old ?: null,
+                ['firma' => $record['firma'], 'tarih' => $record['tarih'], 'urun' => $record['urun']]
+            );
             set_flash('success', 'Kayıt güncellendi.');
             header('Location: record_view.php?id=' . $id);
             exit;
@@ -198,6 +221,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     if (!$record) {
         set_flash('error', 'Kayıt bulunamadı.');
         header('Location: records.php'); exit;
+    }
+
+    // Kilitli kayıt kontrolü (GET)
+    if (!empty($record['locked_at']) || ($record['durum'] ?? '') === 'yuklendi') {
+        if (!can('records.unlock')) {
+            forbidden('Bu kayıt kilitlidir. Düzenlemek için kilit açma yetkisi gereklidir. (records.unlock)');
+        }
     }
 
     $st = db()->prepare("SELECT * FROM loading_pallets WHERE loading_record_id=:r ORDER BY sira_no, id");

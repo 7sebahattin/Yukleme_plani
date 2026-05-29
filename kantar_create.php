@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('kantar.write');
 
 if (!function_exists('_parse_kp_rows')) {
     function _parse_kp_rows(mixed $raw, array $kasa_list, array $palet_list): array {
@@ -156,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $gst->execute([$fis_id, ++$sira, $ga, (int)($g['palet_sayisi'] ?? 0), (int)($g['kasa_adedi'] ?? 0), num($g['kasa_dara_kg'] ?? '0'), num($g['palet_dara_kg'] ?? '0'), num($g['brut_kg'] ?? '0')]);
             }
         }
+        audit_log_event('create', 'kantar', $fis_id, null, ['firma' => $fis['firma_adi'], 'tarih' => $fis['giris_tarih'], 'net_kg' => $net]);
         set_flash('success', 'Kantar fişi oluşturuldu (#' . $fis_id . ').');
         header('Location: kantar_view.php?id=' . $fis_id);
         exit;

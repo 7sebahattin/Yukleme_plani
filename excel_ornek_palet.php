@@ -1,6 +1,10 @@
 <?php
-// Örnek palet şablonu — Excel (.xls) olarak indir
 declare(strict_types=1);
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.write');
+// Örnek palet şablonu — Excel (.xls) olarak indir
 header('Content-Type: application/vnd.ms-excel; charset=utf-8');
 header('Content-Disposition: attachment; filename="ornek_palet_sablonu.xls"');
 header('Cache-Control: no-cache, no-store');

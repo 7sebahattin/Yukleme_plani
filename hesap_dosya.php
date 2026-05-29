@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('reports.read');
 
 $fn = trim($_GET['f'] ?? '');
 if (!preg_match('/^[a-f0-9]{32}\.(jpg|jpeg|png|webp|pdf)$/i', $fn)) {

@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.delete');
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { header('Location: hesap_liste.php'); exit; }

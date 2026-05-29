@@ -6,6 +6,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
 // Güvenlik köprüsü: üretim sunucusunda config/helpers.php eski sürümdeyse
 // (Sprint 4 öncesi) normalize_text_v2 tanımsız kalabilir.
@@ -1199,6 +1202,238 @@ window.nmqAction = function(btn, qid, newStatus) {
 })();
 </script>
 
+<?php endif; ?>
+</div>
+</details>
+
+
+<?php
+// ── İşlem Geçmişi (audit_log) ──────────────────────────────
+$has_audit_log = false;
+try {
+    db()->query("SELECT 1 FROM audit_log LIMIT 0");
+    $has_audit_log = true;
+} catch (PDOException $e) {}
+
+$al_page    = max(1, (int)($_GET['al_page'] ?? 1));
+$al_per     = 100;
+$al_offset  = ($al_page - 1) * $al_per;
+$al_module  = trim($_GET['al_module']  ?? '');
+$al_action  = trim($_GET['al_action']  ?? '');
+$al_user    = trim($_GET['al_user']    ?? '');
+$al_rid     = trim($_GET['al_rid']     ?? '');
+$al_from    = trim($_GET['al_from']    ?? '');
+$al_to      = trim($_GET['al_to']      ?? '');
+
+$al_rows    = [];
+$al_total   = 0;
+$al_users   = [];
+$al_modules = [];
+$al_actions = [];
+
+if ($has_audit_log) {
+    try {
+        // Distinct filters
+        $al_users   = db()->query("SELECT DISTINCT u.id, COALESCE(u.display_name, u.username) AS name FROM audit_log al JOIN users u ON u.id = al.user_id WHERE al.user_id IS NOT NULL ORDER BY name")->fetchAll();
+        $al_modules = db()->query("SELECT DISTINCT module FROM audit_log ORDER BY module")->fetchAll(PDO::FETCH_COLUMN);
+        $al_actions = db()->query("SELECT DISTINCT action FROM audit_log ORDER BY action")->fetchAll(PDO::FETCH_COLUMN);
+
+        $where = []; $params = [];
+        if ($al_module !== '') { $where[] = "al.module = ?"; $params[] = $al_module; }
+        if ($al_action !== '') { $where[] = "al.action = ?"; $params[] = $al_action; }
+        if ($al_user   !== '') { $where[] = "al.user_id = ?"; $params[] = (int)$al_user; }
+        if ($al_rid    !== '') { $where[] = "al.record_id = ?"; $params[] = (int)$al_rid; }
+        if ($al_from   !== '') { $where[] = "al.created_at >= ?"; $params[] = $al_from . ' 00:00:00'; }
+        if ($al_to     !== '') { $where[] = "al.created_at <= ?"; $params[] = $al_to   . ' 23:59:59'; }
+        $wsql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $cnt_st = db()->prepare("SELECT COUNT(*) FROM audit_log al $wsql");
+        $cnt_st->execute($params);
+        $al_total = (int)$cnt_st->fetchColumn();
+
+        $row_st = db()->prepare("
+            SELECT al.id, al.user_id, COALESCE(u.display_name, u.username, '—') AS user_name,
+                   al.action, al.module, al.record_id,
+                   al.old_values, al.new_values, al.ip, al.created_at
+            FROM audit_log al
+            LEFT JOIN users u ON u.id = al.user_id
+            $wsql
+            ORDER BY al.id DESC
+            LIMIT $al_per OFFSET $al_offset
+        ");
+        $row_st->execute($params);
+        $al_rows = $row_st->fetchAll();
+    } catch (PDOException $e) { }
+}
+
+$al_pages = max(1, (int)ceil($al_total / $al_per));
+
+function _al_pager_url(array $extra = []): string {
+    $base = array_filter([
+        'al_module' => $_GET['al_module'] ?? '',
+        'al_action' => $_GET['al_action'] ?? '',
+        'al_user'   => $_GET['al_user']   ?? '',
+        'al_rid'    => $_GET['al_rid']    ?? '',
+        'al_from'   => $_GET['al_from']   ?? '',
+        'al_to'     => $_GET['al_to']     ?? '',
+    ], fn($v) => $v !== '');
+    return 'audit.php?' . http_build_query(array_merge($base, $extra)) . '#al-section';
+}
+
+$al_badge_cls = ($al_total > 0 && $has_audit_log) ? 'b-info' : 'b-ok';
+$al_badge_txt = $has_audit_log ? ($al_total . ' kayıt') : 'Tablo yok';
+?>
+
+<details class="au-sec" id="al-section">
+<summary>
+    📋 İşlem Geçmişi
+    <span class="au-badge <?= $al_badge_cls ?>" style="margin-left:auto"><?= h($al_badge_txt) ?></span>
+</summary>
+<div class="au-body">
+
+<?php if (!$has_audit_log): ?>
+<p class="au-empty">audit_log tablosu henüz oluşturulmadı. Sayfayı yenileyin.</p>
+<?php else: ?>
+
+<style>
+.al-filters{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:#f8fafc;
+            border:1px solid #e2e8f0;border-radius:7px;margin-bottom:10px;align-items:flex-end}
+.al-filters label{display:flex;flex-direction:column;gap:3px;font-size:.78rem;font-weight:600;color:#475569}
+.al-filters input,.al-filters select{font-size:.8rem;padding:4px 7px;border:1px solid #cbd5e1;border-radius:5px;min-width:100px}
+.al-badge-action{display:inline-block;font-size:.7rem;padding:1px 8px;border-radius:9px;font-weight:700;white-space:nowrap}
+.al-a-create{background:#d1fae5;color:#065f46}
+.al-a-update{background:#dbeafe;color:#1e40af}
+.al-a-delete{background:#fee2e2;color:#991b1b}
+.al-a-login_success{background:#f0fdf4;color:#166534}
+.al-a-login_failed{background:#fff1f2;color:#9f1239}
+.al-a-logout{background:#f1f5f9;color:#475569}
+.al-a-default{background:#f3f4f6;color:#6b7280}
+.al-detail{display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px;margin-top:4px;font-size:.73rem;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+.al-row-toggle{cursor:pointer}
+.al-row-toggle:hover td{background:#f0f9ff}
+</style>
+
+<form method="get" action="audit.php">
+<div class="al-filters">
+    <label>Tarih başlangıç
+        <input type="date" name="al_from" value="<?= h($al_from) ?>">
+    </label>
+    <label>Tarih bitiş
+        <input type="date" name="al_to" value="<?= h($al_to) ?>">
+    </label>
+    <label>Kullanıcı
+        <select name="al_user">
+            <option value="">Tümü</option>
+            <?php foreach ($al_users as $u): ?>
+            <option value="<?= (int)$u['id'] ?>" <?= (string)$u['id'] === $al_user ? 'selected' : '' ?>>
+                <?= h($u['name']) ?>
+            </option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label>Modül
+        <select name="al_module">
+            <option value="">Tümü</option>
+            <?php foreach ($al_modules as $m): ?>
+            <option value="<?= h($m) ?>" <?= $m === $al_module ? 'selected' : '' ?>><?= h($m) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label>İşlem
+        <select name="al_action">
+            <option value="">Tümü</option>
+            <?php foreach ($al_actions as $a): ?>
+            <option value="<?= h($a) ?>" <?= $a === $al_action ? 'selected' : '' ?>><?= h($a) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label>Kayıt ID
+        <input type="number" name="al_rid" value="<?= h($al_rid) ?>" style="width:80px">
+    </label>
+    <div style="display:flex;gap:6px;align-self:flex-end;margin-top:2px">
+        <button type="submit" class="btn btn-sm">Filtrele</button>
+        <a href="audit.php#al-section" class="btn btn-sm btn-ghost">Sıfırla</a>
+    </div>
+</div>
+</form>
+
+<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px">
+    Toplam <strong><?= $al_total ?></strong> kayıt
+    <?php if ($al_pages > 1): ?>&nbsp;·&nbsp; Sayfa <strong><?= $al_page ?></strong> / <?= $al_pages ?><?php endif; ?>
+</div>
+
+<?php if (empty($al_rows)): ?>
+<p class="au-empty">Kayıt bulunamadı.</p>
+<?php else: ?>
+<div class="au-tbl-wrap">
+<table class="au-tbl" id="alTable">
+    <thead><tr>
+        <th>ID</th><th>Tarih</th><th>Kullanıcı</th><th>Modül</th><th>İşlem</th><th>Kayıt</th><th>IP</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($al_rows as $r):
+        $action_cls = 'al-a-' . (in_array($r['action'], ['create','update','delete','login_success','login_failed','logout']) ? $r['action'] : 'default');
+        $has_detail = ($r['old_values'] !== null || $r['new_values'] !== null);
+    ?>
+    <tr class="<?= $has_detail ? 'al-row-toggle' : '' ?>"
+        <?= $has_detail ? 'onclick="alToggle(this,' . (int)$r['id'] . ')"' : '' ?>>
+        <td style="font-size:.72rem;color:#94a3b8">#<?= (int)$r['id'] ?></td>
+        <td style="white-space:nowrap;font-size:.78rem"><?= h(substr((string)$r['created_at'], 0, 16)) ?></td>
+        <td style="font-size:.8rem"><?= h($r['user_name']) ?></td>
+        <td><code style="font-size:.75rem"><?= h($r['module']) ?></code></td>
+        <td><span class="al-badge-action <?= $action_cls ?>"><?= h($r['action']) ?></span></td>
+        <td style="font-size:.78rem"><?= $r['record_id'] ? '#' . (int)$r['record_id'] : '—' ?></td>
+        <td style="font-size:.72rem;color:#94a3b8"><?= h($r['ip'] ?? '') ?></td>
+    </tr>
+    <?php if ($has_detail): ?>
+    <tr id="alDetail<?= (int)$r['id'] ?>" style="display:none">
+        <td colspan="7" style="padding:0 8px 8px">
+            <?php if ($r['old_values'] !== null): ?>
+            <div style="font-size:.73rem;font-weight:600;color:#64748b;margin:6px 0 2px">Eski:</div>
+            <pre class="al-detail" style="display:block"><?= h($r['old_values']) ?></pre>
+            <?php endif; ?>
+            <?php if ($r['new_values'] !== null): ?>
+            <div style="font-size:.73rem;font-weight:600;color:#64748b;margin:6px 0 2px">Yeni:</div>
+            <pre class="al-detail" style="display:block"><?= h($r['new_values']) ?></pre>
+            <?php endif; ?>
+        </td>
+    </tr>
+    <?php endif; ?>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+
+<?php if ($al_pages > 1): ?>
+<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:.83rem">
+    <?php if ($al_page > 1): ?>
+    <a href="<?= h(_al_pager_url(['al_page' => $al_page - 1])) ?>" class="btn btn-sm btn-ghost">← Önceki</a>
+    <?php endif; ?>
+    <?php
+    $pstart = max(1, $al_page - 2);
+    $pend   = min($al_pages, $al_page + 2);
+    for ($pi = $pstart; $pi <= $pend; $pi++): ?>
+    <a href="<?= h(_al_pager_url(['al_page' => $pi])) ?>"
+       class="btn btn-sm <?= $pi === $al_page ? '' : 'btn-ghost' ?>"
+       style="<?= $pi === $al_page ? 'font-weight:700' : '' ?>">
+        <?= $pi ?>
+    </a>
+    <?php endfor; ?>
+    <?php if ($al_page < $al_pages): ?>
+    <a href="<?= h(_al_pager_url(['al_page' => $al_page + 1])) ?>" class="btn btn-sm btn-ghost">Sonraki →</a>
+    <?php endif; ?>
+    <span style="color:var(--text-muted)"><?= $al_page ?> / <?= $al_pages ?></span>
+</div>
+<?php endif; ?>
+
+<script>
+window.alToggle = function(row, id) {
+    var det = document.getElementById('alDetail' + id);
+    if (det) det.style.display = det.style.display === 'none' ? 'table-row' : 'none';
+};
+</script>
+
+<?php endif; ?>
 <?php endif; ?>
 </div>
 </details>

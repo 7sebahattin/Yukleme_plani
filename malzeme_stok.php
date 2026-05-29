@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('stok.read');
 
 $pdo = db();
 
@@ -70,6 +73,7 @@ $ms_units = ['adet', 'kg', 'm', 'm²', 'paket', 'rulo', 'top', 'çift', 'set'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && in_array($_POST['action'] ?? '', ['ms_giris', 'ms_sevk'], true)) {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $mv_type     = ($_POST['action'] === 'ms_sevk') ? 'sevk' : 'giris';
     $mv_date     = trim($_POST['mv_date']    ?? '');
@@ -117,6 +121,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
             $mv_depo, $mv_qty, $mv_unit, $unit_dara, $total_dara,
             $mv_belge, $mv_firma, $mv_note ?: null,
         ]);
+        $mv_inserted_id = (int)$pdo->lastInsertId();
+        audit_log_event('create', 'malzeme_stok', $mv_inserted_id, null, [
+            'movement_type' => $mv_type,
+            'material_id'   => $mat_id,
+            'material_name' => $mv_mat_name,
+            'material_type' => $mv_mat_type,
+            'depo'          => $mv_depo,
+            'quantity'      => $mv_qty,
+            'unit'          => $mv_unit,
+            'belge_no'      => $mv_belge,
+            'firma'         => $mv_firma,
+            'note'          => $mv_note,
+        ]);
 
         $lbl = $mv_type === 'giris' ? 'Giriş' : 'Sevk çıkışı';
         set_flash('success', "$lbl kaydedildi: $mv_mat_name · " . fmt_kg($mv_qty) . " $mv_unit");
@@ -128,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 // ── POST: Bağımsız Düzeltme ───────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme_direkt') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $dz_date     = trim($_POST['dz_date']     ?? '');
     $dz_mat_type = trim($_POST['dz_mat_type'] ?? '');
@@ -174,6 +192,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
             $dz_depo, $dz_qty, $dz_unit, $unit_dara, round($dz_qty * $unit_dara, 3),
             $dz_belge ?: null, $dz_note ?: null,
         ]);
+        $dz_inserted_id = (int)$pdo->lastInsertId();
+        audit_log_event('create', 'malzeme_stok', $dz_inserted_id, null, [
+            'movement_type' => 'duzeltme',
+            'direction'     => $dz_yon,
+            'material_id'   => $mat_id,
+            'material_name' => $dz_mat_name,
+            'material_type' => $dz_mat_type,
+            'depo'          => $dz_depo,
+            'quantity'      => $dz_qty,
+            'unit'          => $dz_unit,
+            'belge_no'      => $dz_belge,
+            'note'          => $dz_note,
+        ]);
         $lbl = $dz_yon === 'eksi' ? 'Eksi düzeltme' : 'Artı düzeltme';
         set_flash('success', "$lbl kaydedildi: $dz_mat_name · " . ($dz_qty >= 0 ? '+' : '') . fmt_kg($dz_qty) . ' ' . $dz_unit);
     }
@@ -184,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
 // ── POST: Referans Düzeltme (mevcut harekete bağlı) ───────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $dz_id   = (int)($_POST['dz_id']  ?? 0);
     $dz_qty  = num($_POST['dz_qty']   ?? '0');
@@ -209,6 +241,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
                 $base['material_id'], $base['material_name'], $base['material_type'],
                 $base['depo'], $dz_qty, $base['unit'], $dz_id, $dz_note ?: null,
             ]);
+            $ref_inserted_id = (int)$pdo->lastInsertId();
+            audit_log_event('create', 'malzeme_stok', $ref_inserted_id, null, [
+                'movement_type' => 'duzeltme',
+                'ref_id'        => $dz_id,
+                'material_name' => $base['material_name'],
+                'material_type' => $base['material_type'],
+                'depo'          => $base['depo'],
+                'quantity'      => $dz_qty,
+                'unit'          => $base['unit'],
+                'note'          => $dz_note,
+            ]);
             set_flash('success', 'Düzeltme kaydedildi: ' . ($dz_qty > 0 ? '+' : '') . fmt_kg($dz_qty) . ' ' . $base['unit']);
         }
     }
@@ -219,15 +262,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
 // ── POST: Sil ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_delete') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
     $del_id = (int)($_POST['del_id'] ?? 0);
     if ($del_id > 0) {
-        $row = $pdo->prepare("SELECT source_type FROM material_stock_movements WHERE id=? LIMIT 1");
+        $row = $pdo->prepare("SELECT source_type, movement_type, material_name, quantity, unit FROM material_stock_movements WHERE id=? LIMIT 1");
         $row->execute([$del_id]);
         $row = $row->fetch();
         if ($row && $row['source_type'] === 'loading') {
             set_flash('error', 'Yükleme kaynaklı kullanım hareketleri silinemez.');
         } elseif ($row) {
             $pdo->prepare("DELETE FROM material_stock_movements WHERE id=?")->execute([$del_id]);
+            audit_log_event('delete', 'malzeme_stok', $del_id, [
+                'movement_type' => $row['movement_type'],
+                'material_name' => $row['material_name'],
+                'quantity'      => $row['quantity'],
+                'unit'          => $row['unit'],
+            ]);
             set_flash('success', 'Hareket silindi (#' . $del_id . ').');
         }
     }

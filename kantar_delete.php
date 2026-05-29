@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('kantar.delete');
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if ($id <= 0) {
@@ -14,7 +17,12 @@ if ($id <= 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     try {
+        $_del_st = db()->prepare("SELECT firma_adi, giris_tarih FROM kantar_fisleri WHERE id = ?");
+        $_del_st->execute([$id]);
+        $_audit_del = $_del_st->fetch() ?: null;
+
         db()->prepare("DELETE FROM kantar_fisleri WHERE id = ?")->execute([$id]);
+        audit_log_event('delete', 'kantar', $id, $_audit_del ?: null);
         set_flash('success', 'Fiş silindi (#' . $id . ').');
     } catch (Throwable $e) {
         set_flash('error', 'Silme hatası: ' . $e->getMessage());

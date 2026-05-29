@@ -6,6 +6,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('records.read');
 
 $id = (int)($_GET['id'] ?? 0);
 $print = !empty($_GET['print']);
@@ -241,10 +244,43 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
 ?>
 <?php if (!$print): ?>
 <?php render_flash(); ?>
+<?php
+$_is_locked   = !empty($record['locked_at']);
+$_can_unlock  = function_exists('can') && can('records.unlock');
+?>
+<?php if ($_is_locked): ?>
+<div class="lock-banner">
+    <span class="lock-banner-icon">🔒</span>
+    <div class="lock-banner-body">
+        <strong>Kayıt kilitlidir</strong>
+        <span class="lock-banner-detail">
+            <?= h(fmt_datetime($record['locked_at'])) ?>
+            <?php
+            if (!empty($record['locked_by'])) {
+                try {
+                    $st_lkr = db()->prepare("SELECT display_name, username FROM users WHERE id=?");
+                    $st_lkr->execute([(int)$record['locked_by']]);
+                    $_lkr = $st_lkr->fetch();
+                    if ($_lkr) echo ' · ' . h($_lkr['display_name'] ?: $_lkr['username']);
+                } catch (Throwable $_e) {}
+            }
+            ?>
+        </span>
+        <?php if (!empty($record['revision_reason'])): ?>
+        <span class="lock-banner-reason">Son revizyon: <?= h($record['revision_reason']) ?></span>
+        <?php endif; ?>
+    </div>
+    <?php if ($_can_unlock): ?>
+    <button type="button" class="btn btn-sm btn-ghost" id="rvUnlockBtn">Kilidi Aç</button>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 <div class="page-head rv-head">
     <a href="<?= h($list_url) ?>" class="btn btn-ghost rv-back">← Liste</a>
     <div class="rv-actions">
+        <?php if (!$_is_locked || $_can_unlock): ?>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
+        <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
@@ -1321,5 +1357,33 @@ if (($record['type'] ?? 'yukleme') === 'cikma') {
     });
 })();
 </script>
+
+<?php if (!$print && $_can_unlock && $_is_locked): ?>
+<script>
+(function () {
+    var btn = document.getElementById('rvUnlockBtn');
+    if (!btn) return;
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    btn.addEventListener('click', function () {
+        var reason = prompt('Revizyon nedeni (zorunlu):');
+        if (reason === null) return;
+        reason = reason.trim();
+        if (!reason) { alert('Revizyon nedeni boş bırakılamaz.'); return; }
+        btn.disabled = true;
+        fetch('record_durum.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'id=<?= (int)$id ?>&durum=islendi&revision_reason=' + encodeURIComponent(reason) + '&csrf=' + encodeURIComponent(csrf)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) { btn.disabled = false; alert(d.msg || 'Hata'); return; }
+            location.reload();
+        })
+        .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php render_footer($print); ?>
