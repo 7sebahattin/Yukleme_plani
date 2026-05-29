@@ -32,18 +32,7 @@ try {
     $hesap_bekleyen = 0;
 }
 
-// Stok özet (bugün)
-try {
-    $stok_gelen_bugun = (float)db()->query("SELECT COALESCE(SUM(net_kg),0) FROM kantar_fisleri
-        WHERE giris_tarih >= CURDATE()")->fetchColumn();
-    $stok_cikan_bugun = (float)db()->query("SELECT COALESCE(SUM(lp.net_kg),0)
-        FROM loading_pallets lp
-        JOIN loading_records lr ON lp.loading_record_id = lr.id
-        WHERE lr.type IN ('yukleme','cikma') AND lr.tarih = CURDATE()")->fetchColumn();
-} catch (PDOException $e) {
-    $stok_gelen_bugun = 0.0;
-    $stok_cikan_bugun = 0.0;
-}
+// Stok özet artık index'te kullanılmıyor (kartlar reports.php'ye taşındı)
 
 // Kullanıcı sayısı — sadece users.admin yetkisiyle hesapla
 $kullanici_aktif = 0;
@@ -59,7 +48,6 @@ if (is_admin()) {
 
 // Bölüm görünürlükleri
 $_ops_show  = can('records.read') || can('kantar.read') || can('reports.read');
-$_rap_show  = can('stok.read') || can('kantar.read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -121,40 +109,6 @@ render_flash();
         <?php if ($hesap_bugun > 0): ?>
         <div class="home-card-sub">Bugün: <?= number_format($hesap_bugun, 2, ',', '.') ?>₺</div>
         <?php endif; ?>
-    </a>
-<?php endif; ?>
-
-<?php endif; ?>
-
-<?php if ($_rap_show): ?>
-<div class="home-section-title">Raporlar</div>
-
-<?php if (can('kantar.read')): ?>
-    <a href="kantar_raporu.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8f5f0">📈</div>
-        <div class="home-card-title">Kantar Raporu</div>
-    </a>
-<?php endif; ?>
-
-<?php if (can('stok.read')): ?>
-    <a href="stok.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8f5e9">📦</div>
-        <div class="home-card-title">Ürün Stok</div>
-        <?php if ($stok_gelen_bugun > 0 || $stok_cikan_bugun > 0): ?>
-        <div class="home-card-sub">
-            <?php if ($stok_gelen_bugun > 0): ?>
-            <span style="color:var(--success)">↑<?= fmt_kg($stok_gelen_bugun) ?>kg</span>
-            <?php endif; ?>
-            <?php if ($stok_cikan_bugun > 0): ?>
-            <span style="color:var(--danger)"> ↓<?= fmt_kg($stok_cikan_bugun) ?>kg</span>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-    </a>
-
-    <a href="malzeme_stok.php" class="home-card">
-        <div class="home-card-icon" style="background:#e3f2fd">🧰</div>
-        <div class="home-card-title">Malzeme Stok</div>
     </a>
 <?php endif; ?>
 
