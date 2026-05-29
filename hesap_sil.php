@@ -29,6 +29,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // DB kaydını sil (account_files cascade ile silinir)
     db()->prepare("DELETE FROM account_transactions WHERE id=?")->execute([$id]);
+
+    // Audit — mali kayıt silme (silinen kayıt özeti)
+    audit_log_event('delete', 'hesap', $id, [
+        'transaction_date' => $row['transaction_date'],
+        'type'             => $row['type'],
+        'category'         => $row['category'],
+        'amount'           => (float)$row['amount'],
+        'currency'         => $row['currency'],
+        'person_company'   => $row['person_company'],
+    ]);
+
     set_flash('success', 'Kayıt silindi.');
     header('Location: hesap_liste.php'); exit;
 }

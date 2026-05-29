@@ -34,6 +34,12 @@ if (file_exists($path)) @unlink($path);
 
 db()->prepare("DELETE FROM account_files WHERE id=?")->execute([$id]);
 
+// Audit — dosya silme (içerik loglanmaz, sadece meta)
+audit_log_event('file_delete', 'hesap', (int)$f['transaction_id'], [
+    'original_name' => $f['original_name'] ?? '',
+    'file_type'     => $f['file_type'] ?? '',
+]);
+
 // has_files güncelle
 $cnt_st = db()->prepare("SELECT COUNT(*) FROM account_files WHERE transaction_id=?");
 $cnt_st->execute([$f['transaction_id']]);

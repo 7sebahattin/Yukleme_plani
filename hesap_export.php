@@ -29,6 +29,19 @@ $st = db()->prepare("SELECT * FROM account_transactions WHERE $wstr ORDER BY tra
 $st->execute($params);
 $rows = $st->fetchAll();
 
+// Audit — dışa aktarma (içerik loglanmaz, sadece filtre ve kayıt sayısı)
+audit_log_event('export', 'hesap', null, null, [
+    'format'    => 'xls',
+    'row_count' => count($rows),
+    'filters'   => array_filter([
+        'q'         => $q,
+        'type'      => $type_f,
+        'tarih_bas' => $tarih_b,
+        'tarih_son' => $tarih_s,
+        'muh'       => $muh_f,
+    ], fn($v) => $v !== ''),
+]);
+
 $filename = 'hesap_' . date('Y-m-d') . '.xls';
 header('Content-Type: application/vnd.ms-excel; charset=utf-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');

@@ -13,6 +13,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toplu_muh'])) {
     if (!empty($ids)) {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         db()->prepare("UPDATE account_transactions SET is_given_to_accountant=1 WHERE id IN ($placeholders)")->execute($ids);
+
+        // Audit — toplu durum güncelleme (tek tek payload yazılmaz)
+        audit_log_event('bulk_update', 'hesap', null, null, [
+            'operation'      => 'muhasebeye_verildi',
+            'affected_count' => count($ids),
+        ]);
+
         set_flash('success', count($ids) . ' kayıt muhasebeye verildi olarak işaretlendi.');
     }
     header('Location: hesap_muhasebe.php');

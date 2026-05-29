@@ -49,6 +49,7 @@ if ($id > 0) {
         exit;
     }
     $record = $row;
+    $old_for_audit = $row;
     $existing_files = hesap_get_files($id);
 }
 
@@ -81,7 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $pdo = db();
-        if ($id > 0) {
+        $is_update = $id > 0;
+        if ($is_update) {
             $pdo->prepare("UPDATE account_transactions SET transaction_date=?,transaction_time=?,type=?,category=?,amount=?,currency=?,payment_method=?,person_company=?,description=?,document_no=?,has_invoice=?,is_for_company=?,is_given_to_accountant=?,notes=? WHERE id=?")
                 ->execute([
                     $record['transaction_date'], $record['transaction_time'], $record['type'],
@@ -101,6 +103,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             $id = (int)$pdo->lastInsertId();
         }
+
+        // Audit — mali kayıt create/update
+        $new_summary = [
+            'transaction_date' => $record['transaction_date'],
+            'type'             => $record['type'],
+            'category'         => $record['category'],
+            'amount'           => $amount_float,
+            'currency'         => $record['currency'],
+            'payment_method'   => $record['payment_method'],
+            'person_company'   => $record['person_company'],
+        ];
+        if ($is_update) {
+            $old_summary = isset($old_for_audit) ? [
+                'transaction_date' => $old_for_audit['transaction_date'],
+                'type'             => $old_for_audit['type'],
+                'category'         => $old_for_audit['category'],
+                'amount'           => (float)$old_for_audit['amount'],
+                'currency'         => $old_for_audit['currency'],
+                'payment_method'   => $old_for_audit['payment_method'],
+                'person_company'   => $old_for_audit['person_company'],
+            ] : null;
+            audit_log_event('update', 'hesap', $id, $old_summary, $new_summary);
+        } else {
+            audit_log_event('create', 'hesap', $id, null, $new_summary);
+        }
+
         // Dosya yükleme
         if (!empty($_FILES['dosyalar']['name'][0])) {
             foreach ($_FILES['dosyalar']['name'] as $i => $fname) {
@@ -112,10 +140,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'error'    => $_FILES['dosyalar']['error'][$i],
                     'size'     => $_FILES['dosyalar']['size'][$i],
                 ];
-                hesap_upload_file($single, $id);
+                $up = hesap_upload_file($single, $id);
+                if (!empty($up['ok'])) {
+                    // Audit — dosya yükleme (içerik loglanmaz, sadece meta)
+                    audit_log_event('upload', 'hesap', $id, null, [
+                        'original_name' => $up['original_name'] ?? basename($fname),
+                        'file_type'     => $single['type'],
+                        'file_size'     => (int)$single['size'],
+                    ]);
+                }
             }
         }
-        set_flash('success', $id > 0 ? 'Kayıt güncellendi.' : 'Kayıt eklendi.');
+        set_flash('success', $is_update ? 'Kayıt güncellendi.' : 'Kayıt eklendi.');
         header('Location: hesap_liste.php');
         exit;
     }
