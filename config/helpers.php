@@ -49,12 +49,44 @@ function csrf_token(): string {
     return $_SESSION['csrf'];
 }
 
+function is_json_request(): bool {
+    if (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest') return true;
+    if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')) return true;
+    if (str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json')) return true;
+    return false;
+}
+
 function csrf_check(?string $token): void {
     if (session_status() === PHP_SESSION_NONE) session_start();
-    if (empty($_SESSION['csrf']) || !is_string($token) || !hash_equals($_SESSION['csrf'], $token)) {
-        http_response_code(400);
-        die('Güvenlik doğrulaması başarısız (CSRF).');
+    // Geçerli token → sorun yok
+    if (!empty($_SESSION['csrf']) && is_string($token) && hash_equals($_SESSION['csrf'], $token)) {
+        return;
     }
+
+    // CSRF başarısız. JSON/AJAX isteklerde düzgün JSON hata dön.
+    $wants_json = is_json_request();
+    if (!$wants_json) {
+        // Çoğu fetch çağrısı Accept/X-Requested-With göndermez; ama JSON endpoint'ler
+        // csrf_check'ten önce JSON yanıt başlığı set eder — bunu güvenilir sinyal kabul et.
+        foreach (headers_list() as $h) {
+            if (stripos($h, 'content-type:') === 0 && stripos($h, 'application/json') !== false) {
+                $wants_json = true;
+                break;
+            }
+        }
+    }
+
+    http_response_code(403);
+    if ($wants_json) {
+        if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'    => false,
+            'error' => 'Güvenlik doğrulaması başarısız.',
+            'code'  => 403,
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    die('Güvenlik doğrulaması başarısız (CSRF).');
 }
 
 // --- Tarih biçimleme ---

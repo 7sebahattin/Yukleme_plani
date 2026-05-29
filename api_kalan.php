@@ -41,14 +41,8 @@ if (in_array($action, $WRITE_ACTIONS, true)) {
         echo json_encode(['ok' => false, 'error' => 'Bu işlem için records.write yetkisi gereklidir.']);
         exit;
     }
-    // csrf_check() die() kullandığı için JSON API'da manuel kontrol yapılır
-    if (session_status() === PHP_SESSION_NONE) session_start();
-    $csrf_post = $_POST['csrf'] ?? '';
-    if (empty($_SESSION['csrf']) || $csrf_post === '' || !hash_equals($_SESSION['csrf'], (string)$csrf_post)) {
-        http_response_code(403);
-        echo json_encode(['ok' => false, 'error' => 'Güvenlik doğrulaması başarısız.']);
-        exit;
-    }
+    // csrf_check() artık JSON-aware: bu endpoint JSON başlığı set ettiği için JSON 403 döner.
+    csrf_check($_POST['csrf'] ?? null);
 }
 // ──────────────────────────────────────────────────────────────────────────
 
