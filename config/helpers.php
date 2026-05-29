@@ -162,10 +162,11 @@ function render_header(string $title, bool $print_mode = false): void {
             <span class="brand-text">Asya Fresh</span>
         </a>
         <?php
-        $_nav_rec  = !function_exists('can') || can('records.read');
-        $_nav_rep  = !function_exists('can') || can('reports.read');
-        $_nav_stok = !function_exists('can') || can('stok.read');
-        $_nav_def  = !function_exists('can') || can('defs.read');
+        $_nav_rec   = !function_exists('can') || can('records.read');
+        $_nav_rep   = !function_exists('can') || can('reports.read');
+        $_nav_stok  = !function_exists('can') || can('stok.read');
+        $_nav_def   = !function_exists('can') || can('defs.read');
+        $_nav_users = function_exists('is_admin') && is_admin();
         ?>
         <nav class="topnav">
             <?php if ($_nav_rec): ?>
@@ -181,6 +182,9 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php endif; ?>
             <?php if ($_nav_def): ?>
             <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
+            <?php endif; ?>
+            <?php if ($_nav_users): ?>
+            <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <?php endif; ?>
         </nav>
         <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>
