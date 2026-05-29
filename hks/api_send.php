@@ -40,4 +40,19 @@ $repo   = new HksRepository(db());
 $client = new HksClient($repo);
 $result = $client->sendNotification($id);
 
+// Audit — dış sistem bildirimi özeti (tam payload, token, API key loglanmaz)
+audit_log_event(
+    ($result['ok'] ?? false) ? 'hks_send' : 'hks_send_failed',
+    'hks',
+    $id,
+    null,
+    array_filter([
+        'ok'              => $result['ok'] ?? false,
+        'notification_no' => $result['notification_no'] ?? null,
+        'tag_no'          => $result['tag_no'] ?? null,
+        'status'          => ($result['ok'] ?? false) ? 'sent' : 'error',
+        'error'           => !($result['ok'] ?? false) ? ($result['message'] ?? null) : null,
+    ], fn($v) => $v !== null)
+);
+
 echo json_encode($result);

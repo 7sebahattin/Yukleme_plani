@@ -3760,3 +3760,103 @@ body.notes-modal-open { overflow: hidden; }
 .ms-neg-table .num { text-align:right; }
 .ms-row-negatif { background:rgba(239,68,68,.05); }
 .ms-row-negatif td { border-bottom-color:rgba(239,68,68,.15); }
+
+/* =========================================================
+   SPRINT 31 — MASAÜSTÜ / TABLET KURUMSAL GÖRÜNÜM KATMANI
+   ---------------------------------------------------------
+   Bu blok YALNIZCA ≥900px ekranları etkiler. Mobil (≤767px)
+   kurallar burada OVERRIDE EDİLMEZ; mevcut mobil görünüm
+   olduğu gibi korunur. Tüm sayfaların paylaştığı yapı taşları
+   (container, page-head, card, data-table, home-card, topbar,
+   filter pills, özet grid) üzerinden ortak bir "dashboard"
+   kalitesi sağlanır.
+   ========================================================= */
+
+/* ---- Tablet ve üzeri (≥900px) ---- */
+@media (min-width: 900px) {
+
+    /* — Sayfa iskeleti: daha ferah yatay nefes — */
+    .container { padding-left: 28px; padding-right: 28px; }
+
+    /* — Sayfa başlığı: kurumsal başlık bandı — */
+    .page-head {
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border);
+        align-items: flex-end;
+    }
+    .page-head h1 { font-size: 1.7rem; letter-spacing: -.01em; }
+
+    /* — Kartlar biraz daha ferah — */
+    .card { padding: 20px 22px; }
+    .card-head { margin-bottom: 16px; }
+
+    /* — Tablo: beyaz panel + dashboard hissi — */
+    .table-wrap { box-shadow: var(--shadow); }
+    .data-table { font-size: .9rem; }
+    .data-table th {
+        padding: 13px 14px;
+        background: #f4f7fb;
+        color: #4a5365;
+        border-bottom: 2px solid var(--border-strong);
+    }
+    .data-table td { padding: 12px 14px; }
+    .data-table tbody tr { transition: background .12s ease; }
+    .data-table tbody tr:hover td { background: var(--primary-soft); }
+
+    /* — Filtre pill'leri: biraz daha dokunulabilir/okunur — */
+    .filter-pills { gap: 8px; margin-bottom: 18px; }
+    .pill { padding: 7px 14px; font-size: .88rem; }
+
+    /* — Buton grupları desktopta daha derli toplu — */
+    .page-head-actions { gap: 10px; }
+
+    /* — Ana ekran: kurumsal tile ızgarası — */
+    .home-grid { gap: 16px; }
+    .home-card {
+        min-height: 132px;
+        padding: 22px 18px 18px;
+        border-color: var(--border);
+    }
+    .home-card-icon {
+        width: 60px; height: 60px;
+        font-size: 2rem;
+        box-shadow: inset 0 0 0 1px rgba(20,30,60,.04);
+    }
+    .home-card:hover {
+        box-shadow: 0 4px 16px rgba(20,30,60,.08);
+        transform: translateY(-2px);
+        border-color: var(--border-strong);
+    }
+    /* Sayaç rozeti köşeye sabitlensin — düzenli dursun */
+    .home-card-badge {
+        position: absolute;
+        top: 12px; right: 12px;
+        margin: 0;
+    }
+    /* Bölüm başlığı: daha belirgin ayrım */
+    .home-section-title {
+        font-size: .74rem;
+        padding-top: 14px;
+        margin-top: 6px;
+    }
+
+    /* — Topbar: linkler arasında daha net ayrım — */
+    .topnav a { padding: 8px 16px; }
+
+    /* — Özet/istatistik kartları aynı yükseklikte hizalansın — */
+    .stok-ozet-grid > *, .stok-ozet-grid-4 > *, .stok-ozet-grid-6 > *,
+    .hesap-stat-grid > * { height: 100%; }
+}
+
+/* ---- Geniş masaüstü (≥1280px) ---- */
+@media (min-width: 1280px) {
+    /* İçeriği merkezde, okunabilir bir genişlikte tut */
+    .container   { max-width: 1440px; }
+    .topbar-inner { max-width: 1440px; }
+
+    .container { padding-left: 36px; padding-right: 36px; }
+
+    /* Ana ekran kartlarına biraz daha hava */
+    .home-card { min-height: 140px; }
+}
