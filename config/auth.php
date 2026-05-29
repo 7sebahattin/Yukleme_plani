@@ -54,10 +54,9 @@ function current_user(): ?array {
             return null;
         }
 
-        // Sliding expiry: expires_at ve last_seen_at güncelle
-        $new_expires = date('Y-m-d H:i:s', time() + SESSION_DURATION_HOURS * 3600);
-        $pdo->prepare("UPDATE user_sessions SET last_seen_at = NOW(), expires_at = ? WHERE token = ?")
-            ->execute([$new_expires, $token]);
+        // Sliding expiry: MySQL NOW() kullan — PHP timezone uyumsuzluğunu önler
+        $pdo->prepare("UPDATE user_sessions SET last_seen_at = NOW(), expires_at = TIMESTAMPADD(HOUR, ?, NOW()) WHERE token = ?")
+            ->execute([SESSION_DURATION_HOURS, $token]);
 
         // Cookie süresini de yenile
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
@@ -81,15 +80,15 @@ function require_login(): array {
 }
 
 function create_session(int $user_id): string {
-    $token   = bin2hex(random_bytes(32)); // 64 hex karakter
-    $expires = date('Y-m-d H:i:s', time() + SESSION_DURATION_HOURS * 3600);
-    $ip      = $_SERVER['REMOTE_ADDR'] ?? '';
-    $ua      = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+    $token = bin2hex(random_bytes(32)); // 64 hex karakter
+    $ip    = $_SERVER['REMOTE_ADDR'] ?? '';
+    $ua    = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
 
+    // TIMESTAMPADD ile MySQL zamanı kullan — PHP/MySQL timezone farkından kaçın
     db()->prepare("
         INSERT INTO user_sessions (token, user_id, ip, user_agent, expires_at, last_seen_at)
-        VALUES (?, ?, ?, ?, ?, NOW())
-    ")->execute([$token, $user_id, $ip, $ua, $expires]);
+        VALUES (?, ?, ?, ?, TIMESTAMPADD(HOUR, ?, NOW()), NOW())
+    ")->execute([$token, $user_id, $ip, $ua, SESSION_DURATION_HOURS]);
 
     return $token;
 }
