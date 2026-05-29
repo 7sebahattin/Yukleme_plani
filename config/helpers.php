@@ -195,7 +195,7 @@ function render_header(string $title, bool $print_mode = false): void {
                 <span class="topnav-user-role"><?= h($__pr['label']) ?></span>
                 <?php unset($__pr); endif; ?>
             </div>
-            <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap">⏻</a>
+            <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
         </div>
         <?php unset($__ctu); endif; ?>
     </div>
