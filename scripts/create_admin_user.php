@@ -79,6 +79,19 @@ $pdo->prepare("
 
 $id = (int)$pdo->lastInsertId();
 
+// Admin rolü ata
+$role_label = '(rol tablosu hazır değil — uygulamayı bir kez açın)';
+try {
+    $admin_role_id = $pdo->query("SELECT id FROM roles WHERE slug='admin' LIMIT 1")->fetchColumn();
+    if ($admin_role_id) {
+        $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)")
+            ->execute([$id, (int)$admin_role_id]);
+        $role_label = 'Sistem Yöneticisi (admin)';
+    }
+} catch (PDOException $re) {
+    $role_label = '(atama başarısız: ' . $re->getMessage() . ')';
+}
+
 echo "====================================================\n";
 echo " Kullanıcı başarıyla oluşturuldu\n";
 echo "====================================================\n";
@@ -87,6 +100,7 @@ echo " Kullanıcı adı : $username\n";
 echo " Display adı   : $display_name\n";
 echo " E-posta       : " . ($email ?: '—') . "\n";
 echo " Aktif         : Evet\n";
+echo " Rol           : $role_label\n";
 echo " Bcrypt cost   : 12\n";
 echo "====================================================\n";
 echo " Giriş: login.php → '$username' + şifreniz\n";

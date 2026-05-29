@@ -5,6 +5,17 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+// Permission: POST delete/toggle → defs.admin, POST create/update → defs.write, GET → defs.read
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $_da = $_POST['action'] ?? '';
+    if (in_array($_da, ['delete', 'toggle'], true)) { require_perm('defs.admin'); }
+    else { require_perm('defs.write'); }
+    unset($_da);
+} else {
+    require_perm('defs.read');
+}
 
 $type_labels = definition_types();
 

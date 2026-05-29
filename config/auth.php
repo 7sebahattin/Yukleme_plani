@@ -143,3 +143,141 @@ function logout_user(): void {
     // Static cache temizle
     // (Bir sonraki current_user() çağrısında session bulunamayacak)
 }
+
+// ── Yetki Sistemi ─────────────────────────────────────────
+
+function user_permissions(int $user_id): array {
+    static $cache = [];
+    if (isset($cache[$user_id])) return $cache[$user_id];
+    try {
+        $st = db()->prepare("
+            SELECT DISTINCT rp.permission
+            FROM user_roles ur
+            JOIN role_permissions rp ON rp.role_id = ur.role_id
+            WHERE ur.user_id = ?
+        ");
+        $st->execute([$user_id]);
+        $cache[$user_id] = $st->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        $cache[$user_id] = [];
+    }
+    return $cache[$user_id];
+}
+
+function can(string $permission): bool {
+    $user = current_user();
+    if ($user === null) return false;
+    return in_array($permission, user_permissions((int)$user['id']), true);
+}
+
+function is_admin(): bool {
+    $user = current_user();
+    if ($user === null) return false;
+    try {
+        $st = db()->prepare("
+            SELECT 1 FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = ? AND r.slug = 'admin'
+            LIMIT 1
+        ");
+        $st->execute([(int)$user['id']]);
+        return (bool)$st->fetchColumn();
+    } catch (PDOException $e) {
+        return false;
+    }
+}
+
+function user_primary_role(): ?array {
+    $user = current_user();
+    if ($user === null) return null;
+    static $role_cache = [];
+    $uid = (int)$user['id'];
+    if (isset($role_cache[$uid])) return $role_cache[$uid];
+    try {
+        $st = db()->prepare("
+            SELECT r.slug, r.label
+            FROM user_roles ur
+            JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = ?
+            ORDER BY CASE r.slug
+                WHEN 'admin'    THEN 1
+                WHEN 'operator' THEN 2
+                WHEN 'muhasebe' THEN 3
+                WHEN 'viewer'   THEN 4
+                ELSE 5
+            END ASC
+            LIMIT 1
+        ");
+        $st->execute([$uid]);
+        $role_cache[$uid] = $st->fetch() ?: null;
+    } catch (PDOException $e) {
+        $role_cache[$uid] = null;
+    }
+    return $role_cache[$uid];
+}
+
+function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
+    http_response_code(403);
+
+    $is_ajax = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest'
+        || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')
+        || str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json');
+
+    if ($is_ajax) {
+        if (!headers_sent()) header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => $msg, 'code' => 403]);
+        exit;
+    }
+
+    $base  = function_exists('base_url') ? base_url() : '';
+    $css_v = file_exists(__DIR__ . '/../assets/style.css') ? filemtime(__DIR__ . '/../assets/style.css') : 0;
+    $msg_h = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+    echo "<!doctype html><html lang='tr'><head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Erişim Reddedildi · Asya Fresh</title>
+<link rel='stylesheet' href='{$base}assets/style.css?v={$css_v}'>
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f0f4f8}
+  .fb{text-align:center;padding:40px 24px}
+  .fb-code{font-size:5rem;font-weight:900;color:#e2e8f0;line-height:1;margin-bottom:8px}
+  .fb-title{font-size:1.4rem;font-weight:700;color:#1e293b;margin-bottom:8px}
+  .fb-msg{color:#64748b;margin-bottom:28px;font-size:.95rem}
+  .fb-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+</style>
+</head><body>
+<div class='fb'>
+  <div class='fb-code'>403</div>
+  <div class='fb-title'>Erişim Reddedildi</div>
+  <div class='fb-msg'>{$msg_h}</div>
+  <div class='fb-actions'>
+    <a href='{$base}index.php' class='btn btn-primary'>Ana Sayfa</a>
+    <a href='{$base}logout.php' class='btn btn-ghost'>Çıkış Yap</a>
+  </div>
+</div>
+</body></html>";
+    exit;
+}
+
+function require_perm(string $permission): void {
+    if (current_user() === null) {
+        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
+        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
+        exit;
+    }
+    if (!can($permission)) {
+        forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: {$permission})");
+    }
+}
+
+function require_any_perm(array $permissions): void {
+    if (current_user() === null) {
+        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
+        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
+        exit;
+    }
+    foreach ($permissions as $p) {
+        if (can($p)) return;
+    }
+    forbidden();
+}

@@ -6,6 +6,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
 // Güvenlik köprüsü: üretim sunucusunda config/helpers.php eski sürümdeyse
 // (Sprint 4 öncesi) normalize_text_v2 tanımsız kalabilir.

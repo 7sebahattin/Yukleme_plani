@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('reports.read');
 
 $q       = trim($_GET['q'] ?? '');
 $type_f  = trim($_GET['type'] ?? '');

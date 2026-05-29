@@ -161,20 +161,39 @@ function render_header(string $title, bool $print_mode = false): void {
             <img src="<?= $base ?>assets/logo.jpg" class="brand-logo" alt="">
             <span class="brand-text">Asya Fresh</span>
         </a>
+        <?php
+        $_nav_rec  = !function_exists('can') || can('records.read');
+        $_nav_rep  = !function_exists('can') || can('reports.read');
+        $_nav_stok = !function_exists('can') || can('stok.read');
+        $_nav_def  = !function_exists('can') || can('defs.read');
+        ?>
         <nav class="topnav">
-            <a href="<?= $base ?>records.php" <?= in_array($cur, ['records.php']) ? 'class="active"' : '' ?>>Yüklemeler</a>
+            <?php if ($_nav_rec): ?>
+            <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yüklemeler</a>
             <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <?php endif; ?>
+            <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
+            <?php endif; ?>
+            <?php if ($_nav_stok): ?>
             <a href="<?= $base ?>stok.php" <?= $cur === 'stok.php' ? 'class="active"' : '' ?>>Ürün Stok</a>
             <a href="<?= $base ?>malzeme_stok.php" <?= $cur === 'malzeme_stok.php' ? 'class="active"' : '' ?>>Malzeme Stok</a>
+            <?php endif; ?>
+            <?php if ($_nav_def): ?>
             <a href="<?= $base ?>definitions.php" <?= $cur === 'definitions.php' ? 'class="active"' : '' ?>>Tanımlar</a>
+            <?php endif; ?>
         </nav>
-        <?php if (function_exists('current_user') && current_user() !== null): ?>
-        <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap">
-            <span class="topnav-logout-name"><?= h(current_user()['display_name'] ?: current_user()['username']) ?></span>
-            <span class="topnav-logout-icon">⏻</span>
-        </a>
-        <?php endif; ?>
+        <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>
+        <div class="topnav-user-wrap">
+            <div class="topnav-user-info">
+                <span class="topnav-user-name"><?= h($__ctu['display_name'] ?: $__ctu['username']) ?></span>
+                <?php if (function_exists('user_primary_role') && ($__pr = user_primary_role()) !== null): ?>
+                <span class="topnav-user-role"><?= h($__pr['label']) ?></span>
+                <?php unset($__pr); endif; ?>
+            </div>
+            <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap">⏻</a>
+        </div>
+        <?php unset($__ctu); endif; ?>
     </div>
 </header>
 <?php endif; ?>
@@ -208,22 +227,28 @@ function render_footer(bool $print_mode = false): void {
         <span class="bottomnav-icon">🏠</span>
         <span class="bottomnav-label">Ana Sayfa</span>
     </a>
+    <?php if (!function_exists('can') || can('records.read')): ?>
     <a href="<?= $base ?>records.php" class="bottomnav-item<?= $is_records ? ' active' : '' ?>">
         <span class="bottomnav-icon">📋</span>
         <span class="bottomnav-label">Yüklemeler</span>
     </a>
+    <?php endif; ?>
     <button type="button" id="notesOpenBtn" class="bottomnav-item bottomnav-notes<?= $is_notes ? ' active' : '' ?>">
         <span class="bottomnav-notes-circle">📝</span>
         <span class="bottomnav-label">Not</span>
     </button>
+    <?php if (!function_exists('can') || can('records.read')): ?>
     <a href="<?= $base ?>cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
         <span class="bottomnav-icon">🚚</span>
         <span class="bottomnav-label">Çıkmalar</span>
     </a>
+    <?php endif; ?>
+    <?php if (!function_exists('can') || can('reports.read')): ?>
     <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
         <span class="bottomnav-icon">📊</span>
         <span class="bottomnav-label">Raporlar</span>
     </a>
+    <?php endif; ?>
 </nav>
 
 <!-- ── Notlar Modal ── -->
@@ -774,6 +799,73 @@ function render_flash(): void {
             INDEX `idx_us_user_id` (`user_id`),
             INDEX `idx_us_expires` (`expires_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // 11) Rol tabloları + yetki seed + admin garantisi
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `roles` (
+                `id`         INT AUTO_INCREMENT PRIMARY KEY,
+                `slug`       VARCHAR(40) NOT NULL,
+                `label`      VARCHAR(80) NOT NULL DEFAULT '',
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY `uq_roles_slug` (`slug`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `role_permissions` (
+                `role_id`    INT NOT NULL,
+                `permission` VARCHAR(80) NOT NULL,
+                PRIMARY KEY (`role_id`, `permission`),
+                INDEX `idx_rp_perm` (`permission`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `user_roles` (
+                `user_id`    INT NOT NULL,
+                `role_id`    INT NOT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`user_id`, `role_id`),
+                INDEX `idx_ur_role` (`role_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Rol seed (idempotent)
+            $ins_r = $pdo->prepare("INSERT IGNORE INTO `roles` (slug, label) VALUES (?, ?)");
+            foreach ([
+                ['admin',    'Sistem Yöneticisi'],
+                ['operator', 'Operatör'],
+                ['viewer',   'Görüntüleyici'],
+                ['muhasebe', 'Muhasebe'],
+            ] as [$rs, $rl]) { $ins_r->execute([$rs, $rl]); }
+
+            // Rol ID haritası
+            $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
+
+            // Yetki tanımları
+            $all_p = ['dashboard.read','records.read','records.write','records.delete','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin'];
+            $rp_map = [
+                'admin'    => $all_p,
+                'operator' => ['dashboard.read','records.read','records.write','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export'],
+                'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read'],
+                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export'],
+            ];
+            $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
+            foreach ($rp_map as $slug => $perms) {
+                $rid = (int)($rids[$slug] ?? 0);
+                if (!$rid) continue;
+                foreach ($perms as $p) { $ins_p->execute([$rid, $p]); }
+            }
+
+            // Admin garantisi: hiç admin rolü atanmamışsa ilk aktif kullanıcıya ver
+            $admin_rid = (int)($rids['admin'] ?? 0);
+            if ($admin_rid > 0) {
+                $st_ha = $pdo->prepare("SELECT COUNT(*) FROM `user_roles` WHERE role_id = ?");
+                $st_ha->execute([$admin_rid]);
+                if ((int)$st_ha->fetchColumn() === 0) {
+                    $fu = $pdo->query("SELECT id FROM `users` WHERE is_active=1 ORDER BY id ASC LIMIT 1")->fetchColumn();
+                    if ($fu) {
+                        $pdo->prepare("INSERT IGNORE INTO `user_roles` (user_id, role_id) VALUES (?, ?)")
+                            ->execute([(int)$fu, $admin_rid]);
+                    }
+                }
+            }
+        } catch (PDOException $e) {}
 
     } catch (PDOException $e) {}
 })();

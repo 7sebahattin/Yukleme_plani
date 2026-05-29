@@ -4,6 +4,10 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+if (($_GET['export'] ?? '') !== '') { require_perm('reports.export'); }
+else { require_perm('reports.read'); }
 
 $type      = trim($_GET['type']      ?? '');
 $export    = trim($_GET['export']    ?? '');

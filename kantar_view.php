@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('kantar.read');
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {

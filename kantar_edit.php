@@ -4,6 +4,9 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
+require_perm('kantar.write');
 
 if (!function_exists('_parse_kp_rows')) {
     function _parse_kp_rows(mixed $raw, array $kasa_list, array $palet_list): array {

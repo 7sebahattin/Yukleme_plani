@@ -4,6 +4,8 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+$auth_user = require_login();
 
 $rows = db()->query(
     "SELECT id, page_url, page_name, note, done, created_at
