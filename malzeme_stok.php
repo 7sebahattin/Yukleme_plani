@@ -73,6 +73,7 @@ $ms_units = ['adet', 'kg', 'm', 'm²', 'paket', 'rulo', 'top', 'çift', 'set'];
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
     && in_array($_POST['action'] ?? '', ['ms_giris', 'ms_sevk'], true)) {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $mv_type     = ($_POST['action'] === 'ms_sevk') ? 'sevk' : 'giris';
     $mv_date     = trim($_POST['mv_date']    ?? '');
@@ -144,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 // ── POST: Bağımsız Düzeltme ───────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme_direkt') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $dz_date     = trim($_POST['dz_date']     ?? '');
     $dz_mat_type = trim($_POST['dz_mat_type'] ?? '');
@@ -213,6 +215,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
 // ── POST: Referans Düzeltme (mevcut harekete bağlı) ───────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
 
     $dz_id   = (int)($_POST['dz_id']  ?? 0);
     $dz_qty  = num($_POST['dz_qty']   ?? '0');
@@ -259,6 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
 // ── POST: Sil ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_delete') {
     csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
     $del_id = (int)($_POST['del_id'] ?? 0);
     if ($del_id > 0) {
         $row = $pdo->prepare("SELECT source_type, movement_type, material_name, quantity, unit FROM material_stock_movements WHERE id=? LIMIT 1");
