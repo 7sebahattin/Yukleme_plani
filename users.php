@@ -132,7 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email      = trim($_POST['email']         ?? '');
         $dname      = trim($_POST['display_name']  ?? '');
         $roles_post = array_map('intval', (array)($_POST['roles'] ?? []));
-        $is_active  = empty($_POST['is_active']) ? 0 : 1;
+        // Kendi hesabında is_active checkbox disabled olduğu için POST'ta gelmez;
+        // sunucu tarafında 1 olarak zorla — self-lock zaten ayrıca korunuyor.
+        $is_active  = ($uid === $me) ? 1 : (empty($_POST['is_active']) ? 0 : 1);
 
         $st_old = $pdo->prepare("SELECT id, username, email, display_name, is_active FROM users WHERE id = ?");
         $st_old->execute([$uid]);

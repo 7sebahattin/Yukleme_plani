@@ -205,11 +205,16 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 .grid label > input, .grid label > select, .grid label > textarea, .grid label > small {
     display: block; margin-top: 4px;
 }
+/* Genel form label/control yardımcıları (users.php vb.) */
+.form-label {
+    display: block; font-size: .83rem; color: var(--muted);
+    font-weight: 500; margin-bottom: 4px;
+}
 .form-foot {
     display: flex; flex-direction: column; gap: 4px;
 }
 input[type="text"], input[type="search"], input[type="tel"],
-input[type="date"], input[type="number"], select, textarea {
+input[type="date"], input[type="number"], input[type="email"], input[type="password"], select, textarea {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border-strong);
@@ -242,7 +247,7 @@ input:focus, select:focus, textarea:focus {
 /* iOS zoom önleme: input font-size min 16px */
 @media (max-width: 767px) {
     input[type="text"], input[type="search"], input[type="tel"],
-    input[type="date"], input[type="number"], select, textarea {
+    input[type="date"], input[type="number"], input[type="email"], input[type="password"], select, textarea {
         font-size: 16px;
     }
     .topnav { display: none; }
