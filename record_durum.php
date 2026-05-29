@@ -17,12 +17,8 @@ $id    = (int)($_POST['id']   ?? 0);
 $durum = trim($_POST['durum'] ?? '');
 $csrf  = $_POST['csrf'] ?? null;
 
-try {
-    csrf_check($csrf);
-} catch (Throwable $e) {
-    echo json_encode(['ok' => false, 'msg' => 'Güvenlik hatası.']);
-    exit;
-}
+// csrf_check() JSON-aware: başarısızsa kendisi JSON 403 döner ve exit eder.
+csrf_check($csrf);
 
 if ($id <= 0 || !in_array($durum, ['islendi', 'yuklendi', ''], true)) {
     http_response_code(400);

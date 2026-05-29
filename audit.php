@@ -210,8 +210,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($nmq_act === 'nmq_set_status') {
         // AJAX endpoint — JSON döner
         header('Content-Type: application/json; charset=utf-8');
+        // csrf_check() JSON-aware: başarısızsa kendisi JSON 403 döner ve exit eder.
+        csrf_check($_POST['csrf'] ?? null);
         try {
-            csrf_check($_POST['csrf'] ?? null);
             $qid    = (int)($_POST['queue_id'] ?? 0);
             $status = (string)($_POST['status'] ?? '');
             if ($qid <= 0 || !in_array($status, ['pending','approved','excluded'], true)) {
