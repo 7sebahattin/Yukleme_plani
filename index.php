@@ -57,14 +57,9 @@ if (is_admin()) {
     try { $audit_son24h = (int)db()->query("SELECT COUNT(*) FROM audit_log WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")->fetchColumn(); } catch (PDOException $e) {}
 }
 
-// Açık notlar
-$notlar_acik = 0;
-try { $notlar_acik = (int)db()->query("SELECT COUNT(*) FROM dev_notes WHERE done=0")->fetchColumn(); } catch (PDOException $e) {}
-
 // Bölüm görünürlükleri
-$_ops_show  = can('records.read') || can('kantar.read');
-$_stok_show = can('stok.read');
-$_rap_show  = can('reports.read') || can('kantar.read');
+$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read');
+$_rap_show  = can('stok.read') || can('kantar.read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -101,14 +96,6 @@ render_flash();
     </a>
 <?php endif; ?>
 
-    <a href="notes.php" class="home-card">
-        <div class="home-card-icon" style="background:#faf5ff">📝</div>
-        <div class="home-card-title">Notlar</div>
-        <?php if ($notlar_acik > 0): ?>
-        <div class="home-card-badge" style="background:#7c3aed"><?= $notlar_acik ?></div>
-        <?php endif; ?>
-    </a>
-
     <?php if (can('records.write')): ?>
     <a href="hks/index.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
@@ -118,36 +105,6 @@ render_flash();
         <?php endif; ?>
     </a>
     <?php endif; ?>
-
-<?php endif; ?>
-
-<?php if ($_stok_show): ?>
-<div class="home-section-title">Stok</div>
-
-    <a href="stok.php" class="home-card">
-        <div class="home-card-icon" style="background:#e8f5e9">📦</div>
-        <div class="home-card-title">Ürün Stok</div>
-        <?php if ($stok_gelen_bugun > 0 || $stok_cikan_bugun > 0): ?>
-        <div class="home-card-sub">
-            <?php if ($stok_gelen_bugun > 0): ?>
-            <span style="color:var(--success)">↑<?= fmt_kg($stok_gelen_bugun) ?>kg</span>
-            <?php endif; ?>
-            <?php if ($stok_cikan_bugun > 0): ?>
-            <span style="color:var(--danger)"> ↓<?= fmt_kg($stok_cikan_bugun) ?>kg</span>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-    </a>
-
-    <a href="malzeme_stok.php" class="home-card">
-        <div class="home-card-icon" style="background:#e3f2fd">🧰</div>
-        <div class="home-card-title">Malzeme Stok</div>
-    </a>
-
-<?php endif; ?>
-
-<?php if ($_rap_show): ?>
-<div class="home-section-title">Raporlama</div>
 
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
@@ -167,10 +124,37 @@ render_flash();
     </a>
 <?php endif; ?>
 
+<?php endif; ?>
+
+<?php if ($_rap_show): ?>
+<div class="home-section-title">Raporlar</div>
+
 <?php if (can('kantar.read')): ?>
     <a href="kantar_raporu.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f5f0">📈</div>
         <div class="home-card-title">Kantar Raporu</div>
+    </a>
+<?php endif; ?>
+
+<?php if (can('stok.read')): ?>
+    <a href="stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f5e9">📦</div>
+        <div class="home-card-title">Ürün Stok</div>
+        <?php if ($stok_gelen_bugun > 0 || $stok_cikan_bugun > 0): ?>
+        <div class="home-card-sub">
+            <?php if ($stok_gelen_bugun > 0): ?>
+            <span style="color:var(--success)">↑<?= fmt_kg($stok_gelen_bugun) ?>kg</span>
+            <?php endif; ?>
+            <?php if ($stok_cikan_bugun > 0): ?>
+            <span style="color:var(--danger)"> ↓<?= fmt_kg($stok_cikan_bugun) ?>kg</span>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
+    </a>
+
+    <a href="malzeme_stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#e3f2fd">🧰</div>
+        <div class="home-card-title">Malzeme Stok</div>
     </a>
 <?php endif; ?>
 
