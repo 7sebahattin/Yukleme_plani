@@ -867,8 +867,68 @@ function render_flash(): void {
             }
         } catch (PDOException $e) {}
 
+        // 12) Audit log tablosu
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_log` (
+                `id`         BIGINT AUTO_INCREMENT PRIMARY KEY,
+                `user_id`    INT NULL,
+                `action`     VARCHAR(40) NOT NULL,
+                `module`     VARCHAR(40) NOT NULL,
+                `record_id`  INT NULL,
+                `old_values` LONGTEXT NULL,
+                `new_values` LONGTEXT NULL,
+                `ip`         VARCHAR(45) NULL,
+                `user_agent` VARCHAR(255) NULL,
+                `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+                INDEX `idx_al_uid`     (`user_id`),
+                INDEX `idx_al_mod_rid` (`module`, `record_id`),
+                INDEX `idx_al_action`  (`action`),
+                INDEX `idx_al_ts`      (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) {}
+
     } catch (PDOException $e) {}
 })();
+
+function _audit_sanitize(array $data): array {
+    static $blocked = ['password', 'password_hash', 'token', 'csrf', 'cookie', 'foto_data'];
+    $out = [];
+    foreach ($data as $k => $v) {
+        if (in_array(strtolower((string)$k), $blocked, true)) continue;
+        if (is_string($v) && strlen($v) > 1000) $v = substr($v, 0, 1000) . '…';
+        $out[$k] = $v;
+    }
+    return $out;
+}
+
+function audit_log_event(
+    string $action,
+    string $module,
+    ?int $record_id = null,
+    ?array $old_values = null,
+    ?array $new_values = null,
+    ?int $explicit_user_id = null
+): void {
+    try {
+        if ($explicit_user_id !== null) {
+            $user_id = $explicit_user_id;
+        } else {
+            $user    = function_exists('current_user') ? current_user() : null;
+            $user_id = $user ? (int)$user['id'] : null;
+        }
+        $ip       = $_SERVER['REMOTE_ADDR'] ?? null;
+        $ua       = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
+        $old_json = $old_values !== null ? json_encode(_audit_sanitize($old_values), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        $new_json = $new_values !== null ? json_encode(_audit_sanitize($new_values), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
+        db()->prepare(
+            "INSERT INTO audit_log (user_id, action, module, record_id, old_values, new_values, ip, user_agent)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )->execute([$user_id, $action, $module, $record_id, $old_json, $new_json, $ip, $ua]);
+    } catch (PDOException $e) {
+        error_log('audit_log_event failed: ' . $e->getMessage());
+    }
+}
 
 // --- Bir kaydın özet toplamlarını çek ---
 function record_totals(int $record_id): array {

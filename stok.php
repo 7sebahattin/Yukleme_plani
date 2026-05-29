@@ -217,6 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 round($post_diff,    3),
                 $note !== '' ? $note : null,
             ]);
+            audit_log_event('save_count', 'stok', null, null, ['firma' => $pf_firma, 'urun' => $pf_urun, 'depo' => $pf_depo, 'system_kg' => round($post_kalan, 3), 'counted_kg' => round($counted_kg, 3), 'diff_kg' => round($post_diff, 3)]);
             set_flash('success', 'Sayım kaydedildi. Sistem: ' . fmt_kg($post_kalan) . ' kg · Sayım: ' . fmt_kg($counted_kg) . ' kg · Fark: ' . ($post_diff >= 0 ? '+' : '') . fmt_kg($post_diff) . ' kg');
             $rp = array_filter([
                 'tarih_bas' => $pf_tarih_bas, 'tarih_bit' => $pf_tarih_bit,

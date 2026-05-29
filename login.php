@@ -26,10 +26,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $user = login_user($username, $password);
 
     if ($user === null) {
+        audit_log_event('login_failed', 'auth', null, null, ['username' => $username]);
         $error = 'Kullanıcı adı veya şifre hatalı.';
     } else {
         $token = create_session((int)$user['id']);
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
+        audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
 
         // Güvenli yönlendirme: sadece kendi domain'e, '//' ile başlamamalı
         if ($next !== '' && str_starts_with($next, '/') && !str_starts_with($next, '//')) {

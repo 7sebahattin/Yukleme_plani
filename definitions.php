@@ -84,6 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
                 ->execute([$type, $name, $unit]);
+            $new_def_id = (int)db()->lastInsertId();
+            audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
             set_flash('success', '"' . $name . '" eklendi.');
 
         } elseif ($action === 'update') {
@@ -106,11 +108,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
                 ->execute([$name, $unit, $is_active, $id]);
+            audit_log_event('update', 'definitions', $id, null, ['name' => $name, 'type' => $type]);
             set_flash('success', 'Güncellendi.');
 
         } elseif ($action === 'toggle') {
             $id = (int)($_POST['id'] ?? 0);
+            $_tog_row = db()->prepare("SELECT is_active FROM material_definitions WHERE id=?");
+            $_tog_row->execute([$id]);
+            $_old_active = (int)($_tog_row->fetchColumn() ?? 1);
             db()->prepare("UPDATE material_definitions SET is_active = 1-is_active WHERE id=?")->execute([$id]);
+            audit_log_event('toggle', 'definitions', $id, ['is_active' => $_old_active], ['is_active' => 1 - $_old_active]);
             set_flash('success', 'Durum değiştirildi.');
 
         } elseif ($action === 'delete') {
@@ -149,9 +156,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($used > 0) {
                 db()->prepare("UPDATE material_definitions SET is_active=0 WHERE id=?")->execute([$id]);
+                audit_log_event('deactivate', 'definitions', $id, $dd ?: null, ['reason' => 'in_use']);
                 set_flash('success', 'Kullanımda olduğu için silinmedi, pasifleştirildi.');
             } else {
                 db()->prepare("DELETE FROM material_definitions WHERE id=?")->execute([$id]);
+                audit_log_event('delete', 'definitions', $id, $dd ?: null);
                 set_flash('success', 'Silindi.');
             }
         }

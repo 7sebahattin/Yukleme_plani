@@ -455,6 +455,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
 
 // ── CSV Export ──────────────────────────────────────────
 if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
+    audit_log_event('export', 'reports', null, null, ['type' => $type, 'export' => $export, 'from' => $f_from ?? '', 'to' => $f_to ?? '']);
     // Günlük Operasyon CSV — bölümlü
     if ($type === 'gunluk') {
         $gl_fname = 'gunluk_raporu_' . $f_from . ($f_to !== $f_from ? '_'.$f_to : '') . '.csv';

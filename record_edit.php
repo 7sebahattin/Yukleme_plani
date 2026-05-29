@@ -111,6 +111,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         try {
             $pdo = db();
+
+            // Audit için eski değerleri kaydet
+            $_old_row = $pdo->prepare("SELECT firma, bolge, tarih, urun, alici, parti_no FROM loading_records WHERE id=:id");
+            $_old_row->execute([':id' => $id]);
+            $_audit_old = $_old_row->fetch() ?: null;
+
             $pdo->beginTransaction();
 
             if ($edit_is_cikma) {
@@ -178,6 +184,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
             sync_malzeme_kullanim($id);
+            audit_log_event('update', 'records', $id,
+                $_audit_old ?: null,
+                ['firma' => $record['firma'], 'tarih' => $record['tarih'], 'urun' => $record['urun']]
+            );
             set_flash('success', 'Kayıt güncellendi.');
             header('Location: record_view.php?id=' . $id);
             exit;

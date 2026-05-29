@@ -23,11 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $list_url = $rec_type === 'cikma' ? 'cikmalar.php' : 'records.php';
 
     try {
+        // Audit için silmeden önce kayıt detayını çek
+        $_del_row = db()->prepare("SELECT firma, tarih, urun, alici, parti_no FROM loading_records WHERE id=:id");
+        $_del_row->execute([':id' => $id]);
+        $_audit_del = $_del_row->fetch() ?: null;
+
         // Malzeme stok hareketlerini önce temizle (FK CASCADE kapsamı dışında)
         db()->prepare(
             "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
         )->execute([$id]);
         db()->prepare("DELETE FROM loading_records WHERE id=:id")->execute([':id' => $id]);
+        audit_log_event('delete', 'records', $id, $_audit_del ?: null);
         set_flash('success', 'Kayıt silindi (#' . $id . ').');
     } catch (Throwable $e) {
         set_flash('error', 'Silme hatası: ' . $e->getMessage());

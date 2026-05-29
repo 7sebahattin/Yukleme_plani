@@ -40,5 +40,10 @@ if ($durum === 'yuklendi') {
     }
 }
 
+$st_old = db()->prepare("SELECT durum FROM loading_records WHERE id = ?");
+$st_old->execute([$id]);
+$_old_durum = ($st_old->fetchColumn() ?: '') ?: '';
+
 db()->prepare("UPDATE loading_records SET durum = ? WHERE id = ?")->execute([$durum, $id]);
+audit_log_event('status_change', 'records', $id, ['durum' => $_old_durum], ['durum' => $durum]);
 echo json_encode(['ok' => true, 'durum' => $durum]);
