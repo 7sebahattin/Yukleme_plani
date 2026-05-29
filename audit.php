@@ -1,8 +1,7 @@
 <?php
 // =========================================================
 // audit.php — Sistem veri kalitesi / orphan / duplicate audit
-// Geçici — işiniz bitince git rm yapın.
-// Web erişimine açık, otomatik silme/merge yapmaz.
+// Yalnızca admin erişimine açık. Otomatik silme/merge yapmaz.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';

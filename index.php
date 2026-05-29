@@ -109,6 +109,7 @@ render_flash();
         <?php endif; ?>
     </a>
 
+    <?php if (can('records.write')): ?>
     <a href="hks/index.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
         <div class="home-card-title">Hal Bildirimi</div>
@@ -116,6 +117,7 @@ render_flash();
         <div class="home-card-badge" style="background:#6366f1"><?= (int)$hks_taslak ?></div>
         <?php endif; ?>
     </a>
+    <?php endif; ?>
 
 <?php endif; ?>
 
