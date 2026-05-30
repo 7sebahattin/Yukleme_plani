@@ -299,7 +299,8 @@ input.num, select.num { text-align: right; }
     gap: 14px;
 }
 @media (min-width: 500px)  { .home-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (min-width: 900px)  { .home-grid { grid-template-columns: repeat(4, 1fr); } }
+/* 900px+: sidebar var, 3 kolon daha dengeli; 1280px'de Sprint32 bloğu 4 kolona geçer */
+@media (min-width: 900px)  { .home-grid { grid-template-columns: repeat(3, 1fr); } }
 
 .home-card {
     display: flex; flex-direction: column;
@@ -3910,13 +3911,13 @@ body.notes-modal-open { overflow: hidden; }
 /* =========================================================
    SPRINT 32 — MASAÜSTÜ SABİT SOL SIDEBAR NAVİGASYON
    ---------------------------------------------------------
-   < 1024px : sidebar GİZLİ, mevcut topbar + bottomnav korunur.
-   ≥ 1024px : sidebar görünür, topbar gizlenir, içerik sağa kayar.
+   < 900px  : sidebar GİZLİ, mevcut topbar + bottomnav korunur.
+   ≥ 900px  : sidebar görünür, topbar gizlenir, içerik sağa kayar.
    print    : sidebar gizli, içerik tam genişlik.
    ========================================================= */
 .desktop-sidebar { display: none; }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
     /* Üst yatay menü sidebar ile değiştirilir */
     .topbar { display: none !important; }
     .bottomnav { display: none !important; }
@@ -3926,7 +3927,7 @@ body.notes-modal-open { overflow: hidden; }
         flex-direction: column;
         position: fixed;
         left: 0; top: 0; bottom: 0;
-        width: 260px;
+        width: 220px;
         overflow-y: auto;
         background: var(--text);
         color: #fff;
@@ -3937,31 +3938,31 @@ body.notes-modal-open { overflow: hidden; }
     /* Marka */
     .sidebar-brand {
         display: flex; align-items: center; gap: 10px;
-        padding: 18px 18px 16px;
+        padding: 16px 16px 14px;
         color: #fff; text-decoration: none;
         border-bottom: 1px solid rgba(255,255,255,.08);
     }
     .sidebar-brand:hover { text-decoration: none; }
-    .sidebar-brand-logo { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    .sidebar-brand-logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
     .sidebar-brand-txt { display: flex; flex-direction: column; line-height: 1.2; }
-    .sidebar-brand-name { font-weight: 700; font-size: 1.05rem; }
-    .sidebar-brand-sub { font-size: .72rem; color: rgba(255,255,255,.5); }
+    .sidebar-brand-name { font-weight: 700; font-size: 1rem; }
+    .sidebar-brand-sub { font-size: .7rem; color: rgba(255,255,255,.5); }
 
     /* Menü */
-    .sidebar-nav { flex: 1; padding: 10px 12px; }
+    .sidebar-nav { flex: 1; padding: 8px 10px; }
     .sidebar-section {
-        font-size: .68rem; font-weight: 700; text-transform: uppercase;
+        font-size: .66rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: .08em; color: rgba(255,255,255,.4);
-        padding: 14px 10px 6px;
+        padding: 12px 8px 5px;
     }
     .sidebar-section:first-child { padding-top: 6px; }
 
     .sidebar-link {
-        display: flex; align-items: center; gap: 11px;
-        padding: 9px 12px; margin-bottom: 2px;
+        display: flex; align-items: center; gap: 9px;
+        padding: 8px 10px; margin-bottom: 1px;
         border-radius: var(--radius-sm);
         color: rgba(255,255,255,.82);
-        font-size: .92rem; font-weight: 500;
+        font-size: .88rem; font-weight: 500;
         text-decoration: none;
         border-left: 3px solid transparent;
         transition: background .12s, color .12s;
@@ -3970,7 +3971,7 @@ body.notes-modal-open { overflow: hidden; }
         background: rgba(255,255,255,.08);
         color: #fff; text-decoration: none;
     }
-    .sidebar-link-icon { font-size: 1.05rem; width: 22px; text-align: center; flex-shrink: 0; }
+    .sidebar-link-icon { font-size: 1rem; width: 20px; text-align: center; flex-shrink: 0; }
     .sidebar-link-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .sidebar-link.active {
@@ -3978,27 +3979,26 @@ body.notes-modal-open { overflow: hidden; }
         color: #fff;
         border-left-color: var(--success);
     }
-    .sidebar-link.active .sidebar-link-icon { filter: none; }
 
     /* Kullanıcı alanı (sidebar alt) */
     .sidebar-user {
-        display: flex; align-items: center; gap: 10px;
-        padding: 12px 16px;
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 14px;
         border-top: 1px solid rgba(255,255,255,.08);
         background: rgba(0,0,0,.15);
     }
     .sidebar-user-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
     .sidebar-user-name {
-        font-size: .85rem; font-weight: 600; color: rgba(255,255,255,.92);
+        font-size: .82rem; font-weight: 600; color: rgba(255,255,255,.92);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .sidebar-user-role {
-        font-size: .72rem; color: rgba(255,255,255,.5);
+        font-size: .7rem; color: rgba(255,255,255,.5);
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .sidebar-user-logout {
         display: flex; align-items: center; justify-content: center;
-        width: 34px; height: 34px; flex-shrink: 0;
+        width: 32px; height: 32px; flex-shrink: 0;
         color: rgba(255,255,255,.65);
         border: 1px solid rgba(255,255,255,.18);
         border-radius: var(--radius-sm);
@@ -4008,7 +4008,7 @@ body.notes-modal-open { overflow: hidden; }
 
     /* İçerik alanını sidebar genişliği kadar kaydır */
     .container {
-        margin-left: 260px !important;
+        margin-left: 220px !important;
         margin-right: 0 !important;
         max-width: none !important;
         padding-bottom: 48px;
@@ -4016,8 +4016,14 @@ body.notes-modal-open { overflow: hidden; }
 }
 
 @media (min-width: 1280px) {
-    /* Geniş ekranda içeriği makul genişlikte tut, fazla yayılmasın */
-    .container { max-width: 1400px !important; }
+    /* Geniş ekranda sidebar ve içerik genişler */
+    .desktop-sidebar { width: 260px; }
+    .container {
+        margin-left: 260px !important;
+        max-width: 1400px !important;
+    }
+    /* 1280px'de sidebar daha geniş olduğu için 4 kolon yeterlice alan bulur */
+    .home-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 @media print {
