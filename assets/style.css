@@ -3487,6 +3487,72 @@ body.notes-modal-open { overflow: hidden; }
     .ms-form-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* ── Sprint 33: Giriş/Sevk/Düzeltme açık turuncu panel ── */
+.ms-action-card {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+}
+.ms-form-tabs .ms-tab-btn.ms-tab-active {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #b45309;
+}
+/* Inputlar beyaz kalsın — okunabilirlik için */
+.ms-action-card .form-control { background: #fff; }
+
+/* ── Sprint 33: Stok Özeti mini filtre ── */
+.ms-ozet-filter {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2, #f8fafc);
+}
+.ms-ozet-fg { display: flex; flex-direction: column; gap: 3px; flex: 1 1 150px; min-width: 120px; }
+.ms-ozet-fg label { font-size: .72rem; font-weight: 600; color: var(--muted); }
+.ms-ozet-actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: flex-end; }
+@media (max-width: 599px) {
+    .ms-ozet-fg { flex: 1 1 100%; }
+    .ms-ozet-actions { flex: 1 1 100%; }
+    .ms-ozet-actions .btn { flex: 1; }
+}
+
+/* ── Sprint 33: Hareket düzenle modalı ── */
+.ms-edit-btn {
+    padding: 2px 7px; font-size: .8rem; line-height: 1.2;
+    background: #eff6ff; color: var(--primary); border: 1px solid #bfdbfe;
+    border-radius: 4px; cursor: pointer; margin-right: 4px;
+}
+.ms-edit-btn:hover { background: #dbeafe; }
+.ms-edit-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .55);
+    z-index: 1000; display: none; align-items: flex-start; justify-content: center;
+    padding: 24px 16px; overflow-y: auto;
+}
+.ms-edit-overlay.open { display: flex; }
+.ms-edit-modal {
+    background: #fff; border-radius: var(--radius); width: 100%; max-width: 640px;
+    margin: auto; box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
+}
+.ms-edit-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.ms-edit-head h3 { margin: 0; font-size: 1rem; }
+.ms-edit-close {
+    background: none; border: none; font-size: 1.6rem; line-height: 1;
+    cursor: pointer; color: var(--muted); padding: 0 4px;
+}
+.ms-edit-close:hover { color: var(--text, #111); }
+.ms-edit-body { padding: 16px 18px; }
+.ms-edit-foot {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+}
+@media (max-width: 599px) {
+    .ms-edit-overlay { padding: 0; }
+    .ms-edit-modal { max-width: 100%; min-height: 100%; border-radius: 0; }
+    .ms-edit-foot .btn { flex: 1; }
+}
+
 /* ── Kantar: Çok-tip Kasa/Palet Satırları ── */
 .kp-section { margin-top: 8px; }
 .kp-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
