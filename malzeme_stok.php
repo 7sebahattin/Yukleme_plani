@@ -1122,7 +1122,9 @@ $mat_dusuk_count = count($negatif_ozet);
                     <td>
                         <span class="stok-badge <?= $badge_cls ?>"><?= $badge_lbl ?></span>
                         <?php if ($is_kullan && $r['source_id']): ?>
-                        <div style="font-size:.7rem;color:var(--muted)">Yük #<?= (int)$r['source_id'] ?></div>
+                        <div style="font-size:.7rem;color:var(--muted)">
+                            <a href="record_view.php?id=<?= (int)$r['source_id'] ?>" style="color:var(--primary);text-decoration:none">Yük #<?= (int)$r['source_id'] ?> →</a>
+                        </div>
                         <?php endif; ?>
                         <?php if (!empty($r['note'])): ?>
                         <div style="font-size:.7rem;color:var(--muted)"><?= h(mb_substr($r['note'], 0, 30)) ?></div>
@@ -1164,6 +1166,9 @@ $mat_dusuk_count = count($negatif_ozet);
                             <input type="hidden" name="del_id" value="<?= (int)$r['id'] ?>">
                             <button type="submit" class="btn btn-sm" style="padding:2px 7px;font-size:.75rem;background:var(--danger-light,#fdecea);color:var(--danger)" title="Sil">✕</button>
                         </form>
+                        <?php elseif ($r['source_type'] === 'loading'): ?>
+                        <span style="font-size:.7rem;color:var(--muted);white-space:nowrap"
+                              title="Bu hareket Yük #<?= (int)$r['source_id'] ?> yükleme kaydından otomatik oluşur. Silmek/düzeltmek için ilgili yükleme kaydını düzenleyin.">🔒 Yük #<?= (int)$r['source_id'] ?></span>
                         <?php endif; ?>
                     </td>
                 </tr>
