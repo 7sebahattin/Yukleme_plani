@@ -3852,9 +3852,8 @@ body.notes-modal-open { overflow: hidden; }
 
 /* ---- Geniş masaüstü (≥1280px) ---- */
 @media (min-width: 1280px) {
-    /* İçeriği merkezde, okunabilir bir genişlikte tut */
-    .container   { max-width: 1440px; }
-    .topbar-inner { max-width: 1440px; }
+    /* Topbar sidebar arkasında kalır (≥900px gizli), max-width sidebar ile çakışmaması için kaldırıldı */
+    .topbar-inner { max-width: none; }
 
     .container { padding-left: 36px; padding-right: 36px; }
 
@@ -4020,7 +4019,7 @@ body.notes-modal-open { overflow: hidden; }
     .desktop-sidebar { width: 260px; }
     .container {
         margin-left: 260px !important;
-        max-width: 1400px !important;
+        max-width: none !important;
     }
     /* 1280px'de sidebar daha geniş olduğu için 4 kolon yeterlice alan bulur */
     .home-grid { grid-template-columns: repeat(4, 1fr); }
