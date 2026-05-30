@@ -1184,31 +1184,66 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
     return $errs;
 }
 
-// ── Malzeme Stok: Yükleme kullanımını senkronize et ──────
-// Yükleme kaydı kaydedildikten/güncellendikten sonra çağrılır.
-// pallet_materials → material_stock_movements (kullanim) idempotent sync.
+// ── Malzeme Stok: Yükleme/Çıkma hareketlerini senkronize et ──
+// Yükleme/çıkma kaydı kaydedildikten/güncellendikten sonra çağrılır.
+// Kaynaklar → material_stock_movements (idempotent sync):
+//   A) loading_pallets.kasa_cinsi_id  (kasa kullanımı, quantity = kasa_adeti)
+//   B) loading_pallets.palet_tipi_id  (palet kullanımı, quantity = 1)
+//   C) pallet_materials               (sarf malzeme kullanımı)
+// Yön: type='yukleme' → 'kullanim' (stoktan düş) · type='cikma' → 'giris' (stoğa dön).
+// Yalnızca source_type='loading' + source_id=loading_record_id hareketleri silinip
+// yeniden yazılır; manuel hareketlere dokunulmaz.
 function sync_malzeme_kullanim(int $loading_record_id): void {
     try {
         $pdo = db();
         // material_stock_movements tablosu yoksa çık
         $pdo->query("SELECT 1 FROM `material_stock_movements` LIMIT 0");
 
-        $rows = $pdo->prepare("
+        // Kayıt türü → hareket yönü
+        $lr_st = $pdo->prepare("SELECT type, tarih FROM loading_records WHERE id=? LIMIT 1");
+        $lr_st->execute([$loading_record_id]);
+        $lr = $lr_st->fetch();
+        if (!$lr) return;
+        $is_cikma = (($lr['type'] ?? 'yukleme') === 'cikma');
+        $mv_type  = $is_cikma ? 'giris' : 'kullanim';
+        $lr_tarih = $lr['tarih'] ?: date('Y-m-d');
+
+        // Okunabilir açıklamalar
+        $note_kasa  = $is_cikma ? 'Çıkma kasa dönüşü'    : 'Yükleme kasa kullanımı';
+        $note_palet = $is_cikma ? 'Çıkma palet dönüşü'   : 'Yükleme palet kullanımı';
+        $note_sarf  = $is_cikma ? 'Çıkma malzeme dönüşü' : 'Yükleme malzeme kullanımı';
+
+        // A+B) Kasa & palet — loading_pallets + tanım LEFT JOIN (pasif tanım da dahil)
+        $pal_st = $pdo->prepare("
+            SELECT lp.id AS pallet_id, lp.depo, lp.kasa_adeti,
+                   lp.kasa_cinsi_id, kc.name AS kasa_name, kc.type AS kasa_type, kc.unit_dara_kg AS kasa_dara,
+                   lp.palet_tipi_id, pt.name AS palet_name, pt.type AS palet_type, pt.unit_dara_kg AS palet_dara
+            FROM loading_pallets lp
+            LEFT JOIN material_definitions kc ON kc.id = lp.kasa_cinsi_id
+            LEFT JOIN material_definitions pt ON pt.id = lp.palet_tipi_id
+            WHERE lp.loading_record_id = ?
+            ORDER BY lp.id
+        ");
+        $pal_st->execute([$loading_record_id]);
+        $pallets = $pal_st->fetchAll();
+
+        // C) Sarf malzeme — pallet_materials (mevcut davranış korunur)
+        $mat_st = $pdo->prepare("
             SELECT pm.loading_pallet_id, pm.material_id, pm.quantity, pm.total_dara_kg,
                    md.name AS mat_name, md.type AS mat_type, md.unit_dara_kg,
-                   lp.depo, lr.tarih AS lr_tarih
+                   lp.depo
             FROM pallet_materials pm
             JOIN material_definitions md ON md.id = pm.material_id
             JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
-            JOIN loading_records lr ON lr.id = lp.loading_record_id
             WHERE lp.loading_record_id = ?
             ORDER BY pm.loading_pallet_id, pm.id
         ");
-        $rows->execute([$loading_record_id]);
-        $all = $rows->fetchAll();
+        $mat_st->execute([$loading_record_id]);
+        $materials = $mat_st->fetchAll();
 
         $pdo->beginTransaction();
         try {
+            // Sadece bu kayda ait otomatik hareketleri temizle (idempotent)
             $pdo->prepare(
                 "DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?"
             )->execute([$loading_record_id]);
@@ -1217,19 +1252,48 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
                 INSERT INTO material_stock_movements
                     (movement_date, movement_type, material_id, material_name, material_type,
                      depo, quantity, unit, unit_dara_kg, total_dara_kg,
-                     source_type, source_id, source_detail_id)
-                VALUES (?, 'kullanim', ?, ?, ?, ?, ?, 'adet', ?, ?, 'loading', ?, ?)
+                     source_type, source_id, source_detail_id, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'adet', ?, ?, 'loading', ?, ?, ?)
             ");
-            foreach ($all as $r) {
+
+            foreach ($pallets as $p) {
+                // A) Kasa kullanımı — kasa_cinsi_id dolu ve kasa_adeti > 0
+                $kasa_qty = (float)$p['kasa_adeti'];
+                if (!empty($p['kasa_cinsi_id']) && $kasa_qty > 0) {
+                    $kasa_dara = (float)($p['kasa_dara'] ?? 0);
+                    $ins->execute([
+                        $lr_tarih, $mv_type,
+                        (int)$p['kasa_cinsi_id'], $p['kasa_name'] ?? '', $p['kasa_type'] ?? 'kasa_cinsi',
+                        $p['depo'], $kasa_qty,
+                        $kasa_dara, round($kasa_qty * $kasa_dara, 3),
+                        $loading_record_id, $p['pallet_id'], $note_kasa,
+                    ]);
+                }
+                // B) Palet kullanımı — palet adedi kolonu yok; her loading_pallets satırı = 1 palet
+                if (!empty($p['palet_tipi_id'])) {
+                    $palet_dara = (float)($p['palet_dara'] ?? 0);
+                    $ins->execute([
+                        $lr_tarih, $mv_type,
+                        (int)$p['palet_tipi_id'], $p['palet_name'] ?? '', $p['palet_type'] ?? 'palet_tipi',
+                        $p['depo'], 1,
+                        $palet_dara, round($palet_dara, 3),
+                        $loading_record_id, $p['pallet_id'], $note_palet,
+                    ]);
+                }
+            }
+
+            // C) Sarf malzeme kullanımı
+            foreach ($materials as $r) {
                 if ((float)$r['quantity'] <= 0) continue;
                 $ins->execute([
-                    $r['lr_tarih'] ?: date('Y-m-d'),
+                    $lr_tarih, $mv_type,
                     $r['material_id'], $r['mat_name'], $r['mat_type'],
                     $r['depo'], $r['quantity'],
                     $r['unit_dara_kg'], $r['total_dara_kg'],
-                    $loading_record_id, $r['loading_pallet_id'],
+                    $loading_record_id, $r['loading_pallet_id'], $note_sarf,
                 ]);
             }
+
             $pdo->commit();
         } catch (PDOException $e) {
             $pdo->rollBack();
