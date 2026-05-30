@@ -61,7 +61,7 @@ foreach ($pallets as $p) {
 
 function kasa_label(?string $name, $kg): string {
     if (!$name) return '—';
-    return $name . ' (' . fmt_kg($kg) . ' kg)';
+    return $name . ' (' . fmt_unit_kg($kg) . ' kg)';
 }
 
 // ====== Stok çıkışları (yazdırma şablonu için) ======
@@ -779,7 +779,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
               ?>
               <optgroup label="<?= h($blabel) ?>">
                 <?php foreach ($blist as $bm): ?>
-                <option value="<?= (int)$bm['id'] ?>" data-unit="<?= h($bm['unit_dara_kg']) ?>"><?= h($bm['name']) ?> (<?= h(fmt_kg($bm['unit_dara_kg'])) ?> kg)</option>
+                <option value="<?= (int)$bm['id'] ?>" data-unit="<?= h($bm['unit_dara_kg']) ?>"><?= h($bm['name']) ?> (<?= h(fmt_unit_kg($bm['unit_dara_kg'])) ?> kg)</option>
                 <?php endforeach; ?>
               </optgroup>
               <?php endforeach; ?>

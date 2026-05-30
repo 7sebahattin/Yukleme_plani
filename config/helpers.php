@@ -104,9 +104,15 @@ function fmt_datetime(?string $d): string {
     return date('d.m.Y H:i', $ts);
 }
 
-// --- Kg biçimle: tam sayıya yuvarla, nokta binlik ayraç ---
+// --- Kg biçimle: tam sayıya yuvarla, nokta binlik ayraç (toplam kg için) ---
 function fmt_kg($v): string {
     return number_format((int)round((float)$v), 0, '', '.');
+}
+
+// --- Birim dara kg: ondalıklı, gereksiz sıfır yok, virgül ondalık ayraç ---
+function fmt_unit_kg($v): string {
+    $s = rtrim(rtrim(number_format((float)$v, 3, ',', '.'), '0'), ',');
+    return $s === '' ? '0' : $s;
 }
 
 function fmt_money($v): string {

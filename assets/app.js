@@ -73,6 +73,11 @@
         if (n < 0) return '-' + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     }
+    function fmtUnitKg(n) {
+        n = parseFloat(n) || 0;
+        const s = (Math.round(n * 1000) / 1000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+        return s.replace('.', ',');
+    }
     /* Sayıyı input-uyumlu formata çevir: virgül ondalık, binler ayracı yok ("1045,273")
        PHP num() noktayı binler ayracı sanır — hidden input'ta bu format gerekli */
     function fmtInput(n) {
@@ -134,7 +139,7 @@
         let html = `<option value="">${placeholder}</option>`;
         items.forEach(it => {
             const sel = String(it.id) === String(selectedId) ? ' selected' : '';
-            html += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtKg(it.unit)} kg)</option>`;
+            html += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtUnitKg(it.unit)} kg)</option>`;
         });
         return html;
     }
@@ -189,7 +194,7 @@
             opts += `<optgroup label="${escHtml(label)}">`;
             matsByType[t].forEach(it => {
                 const sel = String(it.id) === String(d.material_id) ? ' selected' : '';
-                opts += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtKg(it.unit)} kg)</option>`;
+                opts += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtUnitKg(it.unit)} kg)</option>`;
             });
             opts += '</optgroup>';
         });
