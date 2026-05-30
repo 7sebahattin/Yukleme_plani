@@ -3515,6 +3515,13 @@ body.notes-modal-open { overflow: hidden; }
     .ms-ozet-actions .btn { flex: 1; }
 }
 
+/* ── Sprint 33C: Stok kategorisi rozeti ── */
+.ms-cat-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+.ms-cat-kasa  { background: #dbeafe; color: #1e40af; }
+.ms-cat-palet { background: #ede9fe; color: #6d28d9; }
+.ms-cat-sarf  { background: #dcfce7; color: #166534; }
+.ms-cat-diger { background: #f1f5f9; color: #475569; }
+
 /* ── Sprint 33: Hareket düzenle modalı ── */
 .ms-edit-btn {
     padding: 2px 7px; font-size: .8rem; line-height: 1.2;

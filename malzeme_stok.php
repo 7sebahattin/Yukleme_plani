@@ -13,7 +13,7 @@ $pdo = db();
 // ── URL oluşturucu — filtre durumunu korur ────────────────
 function ms_url(array $override = [], array $drop = []): string {
     global $f_tarih_bas, $f_tarih_bit, $f_mat_type, $f_mat_name, $f_depo,
-           $f_hareket_tipi, $hareket_page, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo;
+           $f_hareket_tipi, $hareket_page, $f_ozet_kategori, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo;
     $base = [
         'tarih_bas'    => $f_tarih_bas    ?? '',
         'tarih_bit'    => $f_tarih_bit    ?? '',
@@ -21,6 +21,7 @@ function ms_url(array $override = [], array $drop = []): string {
         'mat_name'     => $f_mat_name     ?? '',
         'depo'         => $f_depo         ?? '',
         'hareket_tipi' => $f_hareket_tipi ?? '',
+        'ozet_kategori'=> $f_ozet_kategori ?? '',
         'ozet_tur'     => $f_ozet_tur     ?? '',
         'ozet_malzeme' => $f_ozet_malzeme ?? '',
         'ozet_depo'    => $f_ozet_depo    ?? '',
@@ -71,6 +72,25 @@ function ms_material_types(): array {
 
 $ms_types = ms_material_types();
 $ms_units = ['adet', 'kg', 'm', 'm²', 'paket', 'rulo', 'top', 'çift', 'set'];
+
+// ── Stok kategorileri (Kasa / Palet / Sarf / Diğer) ───────
+$ms_cat_labels = ['kasa' => 'Kasa', 'palet' => 'Palet', 'sarf' => 'Sarf', 'diger' => 'Diğer'];
+// Stok özetine dahil edilen tür grupları (firma/depo/bölge/ürün/lokasyon hariç)
+$ms_excluded_types = ['firma', 'depo', 'bolge', 'urun', 'lokasyon'];
+$ms_summary_types  = array_values(array_diff(array_keys($ms_types), $ms_excluded_types));
+
+// type → kategori eşlemesi
+function ms_cat_of(string $type): string {
+    static $map = [
+        'kasa_cinsi'    => 'kasa',
+        'palet_tipi'    => 'palet',
+        'sapka'         => 'sarf', 'kosebent' => 'sarf', 'serit' => 'sarf',
+        'kraft_kagit'   => 'sarf', 'taban_kagidi' => 'sarf', 'kose_karton' => 'sarf',
+        'kenar_kartonu' => 'sarf', 'casus' => 'sarf', 'kasa_etiketi' => 'sarf',
+        'minti'         => 'sarf', 'sale' => 'sarf', 'viyol' => 'sarf', 'file' => 'sarf',
+    ];
+    return $map[$type] ?? 'diger';
+}
 
 // ── POST: Giriş / Sevk kaydet ─────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
@@ -418,7 +438,9 @@ $is_csv         = isset($_GET['csv']);
 $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['giris', 'sevk', 'kullanim', 'duzeltme', ''], true)) $f_hareket_tipi = '';
 
-// Stok Özeti'ne özel filtreler — yalnızca özet tablosunu daraltır, hareketleri/CSV'yi etkilemez
+// Stok Özeti'ne özel filtreler — yalnızca özet tablosunu daraltır, hareket listesini etkilemez
+$f_ozet_kategori = trim($_GET['ozet_kategori'] ?? '');
+if (!in_array($f_ozet_kategori, ['kasa', 'palet', 'sarf', 'diger', ''], true)) $f_ozet_kategori = '';
 $f_ozet_tur     = trim($_GET['ozet_tur']     ?? '');
 $f_ozet_malzeme = trim($_GET['ozet_malzeme'] ?? '');
 $f_ozet_depo    = trim($_GET['ozet_depo']    ?? '');
@@ -437,32 +459,114 @@ $where_mv = $where; $params_mv = $params;
 if ($f_hareket_tipi !== '') { $where_mv[] = "movement_type = ?"; $params_mv[] = $f_hareket_tipi; }
 $where_mv_sql = $where_mv ? 'WHERE ' . implode(' AND ', $where_mv) : '';
 
-// WHERE builder — Stok Özeti (global filtreler + özete özel tür/malzeme/depo)
-$where_oz = $where; $params_oz = $params;
-if ($f_ozet_tur     !== '') { $where_oz[] = "material_type = ?";  $params_oz[] = $f_ozet_tur; }
-if ($f_ozet_malzeme !== '') { $where_oz[] = "material_name LIKE ?"; $params_oz[] = '%' . $f_ozet_malzeme . '%'; }
-if ($f_ozet_depo    !== '') { $where_oz[] = "depo LIKE ?";          $params_oz[] = '%' . $f_ozet_depo . '%'; }
-$where_oz_sql = $where_oz ? 'WHERE ' . implode(' AND ', $where_oz) : '';
-
-// ── Stok özeti ────────────────────────────────────────────
+// ── Stok özeti ─────────────────────────────────────────────
+// Ana kaynak: material_definitions. Hareketler material_id ile eşlenir (LEFT JOIN
+// mantığı PHP tarafında). Böylece tanımlı ama hareketsiz malzeme 0, girişi olmayan
+// ama kullanımı olan malzeme negatif görünür. Tarih filtresi hareket toplamını sınırlar.
 $ozet_rows = [];
 try {
-    $st = $pdo->prepare("
-        SELECT material_type, material_name, depo, unit,
-            SUM(CASE WHEN movement_type='giris' THEN quantity ELSE 0 END) AS total_giris,
-            SUM(CASE WHEN movement_type IN ('sevk','kullanim') THEN quantity ELSE 0 END) AS total_cikis,
+    // 1) Hareket toplamları — material_id + depo + birim kırılımında (tarih bazlı)
+    $agg_where = []; $agg_params = [];
+    if ($f_tarih_bas !== '') { $agg_where[] = "movement_date >= ?"; $agg_params[] = $f_tarih_bas; }
+    if ($f_tarih_bit !== '') { $agg_where[] = "movement_date <= ?"; $agg_params[] = $f_tarih_bit; }
+    $agg_where_sql = $agg_where ? 'WHERE ' . implode(' AND ', $agg_where) : '';
+
+    $agg_st = $pdo->prepare("
+        SELECT material_id, material_type, material_name, depo, unit,
+            SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS total_giris,
+            SUM(CASE WHEN movement_type='sevk'     THEN quantity ELSE 0 END) AS total_sevk,
+            SUM(CASE WHEN movement_type='kullanim' THEN quantity ELSE 0 END) AS total_kullanim,
             SUM(CASE WHEN movement_type='duzeltme' THEN quantity ELSE 0 END) AS total_duzeltme,
             SUM(CASE WHEN movement_type='giris' THEN quantity
                      WHEN movement_type IN ('sevk','kullanim') THEN -quantity
                      WHEN movement_type='duzeltme' THEN quantity
                      ELSE 0 END) AS kalan
         FROM material_stock_movements
-        $where_oz_sql
-        GROUP BY material_type, material_name, depo, unit
-        ORDER BY material_type, material_name, depo
+        $agg_where_sql
+        GROUP BY material_id, material_type, material_name, depo, unit
     ");
-    $st->execute($params_oz);
-    $ozet_rows = $st->fetchAll();
+    $agg_st->execute($agg_params);
+    $agg_rows = $agg_st->fetchAll();
+
+    // material_id → hareket toplamları (bir malzemenin birden çok depo/birim satırı olabilir)
+    $agg_by_id = [];
+    foreach ($agg_rows as $a) {
+        $mid = ($a['material_id'] === null || $a['material_id'] === '') ? null : (int)$a['material_id'];
+        if ($mid !== null) $agg_by_id[$mid][] = $a;
+    }
+
+    // 2) Dahil edilecek tanımlar (stok türleri)
+    $def_rows = [];
+    if (!empty($ms_summary_types)) {
+        $place  = implode(',', array_fill(0, count($ms_summary_types), '?'));
+        $def_st = $pdo->prepare("SELECT id, type, name, is_active FROM material_definitions WHERE type IN ($place) ORDER BY type, name");
+        $def_st->execute($ms_summary_types);
+        $def_rows = $def_st->fetchAll();
+    }
+
+    // satır kurucu (kart/negatif tablo ile uyumlu anahtarlar)
+    $mk_row = function (string $cat, string $type, string $name, $depo, $unit, array $a, int $is_active): array {
+        $giris = (float)($a['total_giris'] ?? 0);
+        $sevk  = (float)($a['total_sevk'] ?? 0);
+        $kull  = (float)($a['total_kullanim'] ?? 0);
+        return [
+            'category'       => $cat,
+            'material_type'  => $type,
+            'material_name'  => $name,
+            'depo'           => (string)($depo ?? ''),
+            'unit'           => (string)($unit ?: 'adet'),
+            'total_giris'    => $giris,
+            'total_sevk'     => $sevk,
+            'total_kullanim' => $kull,
+            'total_cikis'    => $sevk + $kull,
+            'total_duzeltme' => (float)($a['total_duzeltme'] ?? 0),
+            'kalan'          => (float)($a['kalan'] ?? 0),
+            'is_active'      => $is_active,
+        ];
+    };
+
+    // 3) Tanım merkezli satırlar
+    $seen_ids = [];
+    foreach ($def_rows as $d) {
+        $did = (int)$d['id'];
+        $cat = ms_cat_of($d['type']);
+        $act = (int)$d['is_active'];
+        if (!empty($agg_by_id[$did])) {
+            foreach ($agg_by_id[$did] as $a) {
+                $ozet_rows[] = $mk_row($cat, $d['type'], $d['name'], $a['depo'], $a['unit'], $a, $act);
+            }
+            $seen_ids[$did] = true;
+        } elseif ($act === 1) {
+            // hareketsiz aktif tanım → kalan 0; pasif + hareketsiz → atla
+            $ozet_rows[] = $mk_row($cat, $d['type'], $d['name'], '', 'adet', [], $act);
+        }
+    }
+
+    // 4) Tanıma bağlanmayan hareketler (material_id NULL ya da dışlanan/silinen tanım)
+    foreach ($agg_rows as $a) {
+        $mid = ($a['material_id'] === null || $a['material_id'] === '') ? null : (int)$a['material_id'];
+        if ($mid !== null && isset($seen_ids[$mid])) continue;            // tanım altında gösterildi
+        $atype = (string)($a['material_type'] ?? '');
+        if (in_array($atype, $ms_excluded_types, true)) continue;         // firma/depo/ürün vb. atla
+        $ozet_rows[] = $mk_row(ms_cat_of($atype), $atype, (string)$a['material_name'], $a['depo'], $a['unit'], $a, 1);
+    }
+
+    // 5) ozet_* filtreleri (PHP tarafı)
+    if ($f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '') {
+        $ozet_rows = array_values(array_filter($ozet_rows, function ($r) use ($f_ozet_kategori, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo) {
+            if ($f_ozet_kategori !== '' && $r['category'] !== $f_ozet_kategori) return false;
+            if ($f_ozet_tur      !== '' && $r['material_type'] !== $f_ozet_tur) return false;
+            if ($f_ozet_malzeme  !== '' && mb_stripos($r['material_name'], $f_ozet_malzeme) === false) return false;
+            if ($f_ozet_depo     !== '' && $r['depo'] !== $f_ozet_depo) return false;
+            return true;
+        }));
+    }
+
+    // 6) Sırala: kategori, tür, malzeme, depo
+    usort($ozet_rows, fn($x, $y) =>
+        [$x['category'], $x['material_type'], $x['material_name'], $x['depo']]
+        <=> [$y['category'], $y['material_type'], $y['material_name'], $y['depo']]
+    );
 } catch (PDOException $e) {}
 
 // Negatif stok satırları (uyarı için)
@@ -523,10 +627,36 @@ try {
 } catch (PDOException $e) {}
 
 $herhangi_filtre = $f_tarih_bas !== '' || $f_tarih_bit !== '' || $f_mat_type !== '' || $f_mat_name !== '' || $f_depo !== '' || $f_hareket_tipi !== '';
-$ozet_filtre_aktif = $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '';
+$ozet_filtre_aktif = $f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '';
 $ms_can_write = can('stok.write');
 
-// ── CSV export ────────────────────────────────────────────
+// ── CSV export — Stok Özeti (csv=ozet) ─────────────────────
+// Yeni özet mantığına uyumlu; ozet_* filtrelerine göre tüm satırları verir (sayfalama yok).
+if ($is_csv && ($_GET['csv'] ?? '') === 'ozet') {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="malzeme_stok_ozet_' . date('Y-m-d') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fprintf($out, "\xEF\xBB\xBF");
+    fputcsv($out, ['Kategori', 'Tür', 'Malzeme', 'Depo', 'Giriş', 'Sevk', 'Kullanım', 'Düzeltme', 'Kalan', 'Birim'], ';', '"', '\\');
+    foreach ($ozet_rows as $r) {
+        fputcsv($out, [
+            $ms_cat_labels[$r['category']] ?? $r['category'],
+            $ms_types[$r['material_type']] ?? $r['material_type'],
+            $r['material_name'],
+            $r['depo'] !== '' ? $r['depo'] : 'Depo Boş',
+            number_format($r['total_giris'], 3, ',', '.'),
+            number_format($r['total_sevk'], 3, ',', '.'),
+            number_format($r['total_kullanim'], 3, ',', '.'),
+            number_format($r['total_duzeltme'], 3, ',', '.'),
+            number_format($r['kalan'], 3, ',', '.'),
+            $r['unit'],
+        ], ';', '"', '\\');
+    }
+    fclose($out);
+    exit;
+}
+
+// ── CSV export — Hareketler (csv=1) ────────────────────────
 if ($is_csv) {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="malzeme_stok_' . date('Y-m-d') . '.csv"');
@@ -600,7 +730,8 @@ $mat_dusuk_count = count($negatif_ozet);
     <h2 class="page-title">🗃️ Malzeme Stok</h2>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <a href="malzeme_stok_import.php" class="btn btn-sm btn-secondary">📥 Excel Aktar</a>
-        <a href="<?= ms_url(['csv' => '1', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ CSV</a>
+        <a href="<?= ms_url(['csv' => 'ozet', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Özet CSV</a>
+        <a href="<?= ms_url(['csv' => '1', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Hareket CSV</a>
     </div>
 </div>
 
@@ -636,6 +767,7 @@ $mat_dusuk_count = count($negatif_ozet);
 <!-- ── Filtre formu ───────────────────────────────────────── -->
 <div class="card" style="margin-bottom:14px">
     <form method="get" action="malzeme_stok.php" class="stok-filter-form">
+        <?php if ($f_ozet_kategori !== ''): ?><input type="hidden" name="ozet_kategori" value="<?= h($f_ozet_kategori) ?>"><?php endif; ?>
         <?php if ($f_ozet_tur     !== ''): ?><input type="hidden" name="ozet_tur"     value="<?= h($f_ozet_tur) ?>"><?php endif; ?>
         <?php if ($f_ozet_malzeme !== ''): ?><input type="hidden" name="ozet_malzeme" value="<?= h($f_ozet_malzeme) ?>"><?php endif; ?>
         <?php if ($f_ozet_depo    !== ''): ?><input type="hidden" name="ozet_depo"    value="<?= h($f_ozet_depo) ?>"><?php endif; ?>
@@ -716,7 +848,7 @@ $mat_dusuk_count = count($negatif_ozet);
         <span style="font-weight:700;font-size:.97rem">Stok Özeti</span>
         <span style="font-size:.82rem;color:var(--muted)"><?= count($ozet_rows) ?> malzeme/depo</span>
     </div>
-    <!-- Stok Özeti'ne özel filtre (tür / malzeme / depo) -->
+    <!-- Stok Özeti'ne özel filtre (kategori / tür / malzeme / depo) -->
     <form method="get" action="malzeme_stok.php" class="ms-ozet-filter">
         <?php if ($f_tarih_bas    !== ''): ?><input type="hidden" name="tarih_bas"    value="<?= h($f_tarih_bas) ?>"><?php endif; ?>
         <?php if ($f_tarih_bit    !== ''): ?><input type="hidden" name="tarih_bit"    value="<?= h($f_tarih_bit) ?>"><?php endif; ?>
@@ -724,6 +856,15 @@ $mat_dusuk_count = count($negatif_ozet);
         <?php if ($f_mat_name     !== ''): ?><input type="hidden" name="mat_name"     value="<?= h($f_mat_name) ?>"><?php endif; ?>
         <?php if ($f_depo         !== ''): ?><input type="hidden" name="depo"         value="<?= h($f_depo) ?>"><?php endif; ?>
         <?php if ($f_hareket_tipi !== ''): ?><input type="hidden" name="hareket_tipi" value="<?= h($f_hareket_tipi) ?>"><?php endif; ?>
+        <div class="ms-ozet-fg">
+            <label>Kategori</label>
+            <select name="ozet_kategori" class="form-control">
+                <option value="">Tümü</option>
+                <?php foreach ($ms_cat_labels as $ck => $cl): ?>
+                <option value="<?= h($ck) ?>" <?= $f_ozet_kategori === $ck ? 'selected' : '' ?>><?= h($cl) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="ms-ozet-fg">
             <label>Tür</label>
             <select name="ozet_tur" class="form-control">
@@ -755,7 +896,7 @@ $mat_dusuk_count = count($negatif_ozet);
         <div class="ms-ozet-actions">
             <button type="submit" class="btn btn-sm btn-primary">Süz</button>
             <?php if ($ozet_filtre_aktif): ?>
-            <a href="<?= ms_url([], ['ozet_tur', 'ozet_malzeme', 'ozet_depo']) ?>" class="btn btn-sm btn-ghost">Temizle</a>
+            <a href="<?= ms_url([], ['ozet_kategori', 'ozet_tur', 'ozet_malzeme', 'ozet_depo']) ?>" class="btn btn-sm btn-ghost">Temizle</a>
             <?php endif; ?>
         </div>
     </form>
@@ -764,13 +905,16 @@ $mat_dusuk_count = count($negatif_ozet);
         <table class="data-table stok-table">
             <thead>
                 <tr>
-                    <th>Tür</th>
+                    <th class="stok-hide-sm">Kategori</th>
+                    <th class="stok-hide-sm">Tür</th>
                     <th>Malzeme</th>
                     <th class="stok-hide-sm">Depo</th>
-                    <th class="stok-hide-sm">Birim</th>
                     <th style="text-align:right">Giriş</th>
-                    <th style="text-align:right">Çıkış</th>
+                    <th style="text-align:right;color:var(--danger)">Sevk</th>
+                    <th style="text-align:right;color:var(--danger)">Kullanım</th>
+                    <th style="text-align:right;color:var(--warn)">Düzeltme</th>
                     <th style="text-align:right">Kalan</th>
+                    <th class="stok-hide-sm">Birim</th>
                     <th></th>
                 </tr>
             </thead>
@@ -779,6 +923,7 @@ $mat_dusuk_count = count($negatif_ozet);
                 $kalan     = (float)$oz['kalan'];
                 $is_neg    = $kalan < 0;
                 $kalan_cls = $is_neg ? 'stok-negatif' : ($kalan > 0 ? '' : 'color:var(--muted)');
+                $duz       = (float)$oz['total_duzeltme'];
                 $oz_link   = ms_url([
                     'mat_type'     => $oz['material_type'],
                     'mat_name'     => $oz['material_name'],
@@ -788,20 +933,21 @@ $mat_dusuk_count = count($negatif_ozet);
                 ]) . '#ms-hareketler';
             ?>
                 <tr class="<?= $is_neg ? 'ms-row-negatif' : '' ?>">
-                    <td style="font-size:.8rem;color:var(--muted)"><?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?></td>
-                    <td style="font-weight:600"><?= h($oz['material_name']) ?></td>
-                    <td class="stok-hide-sm"><?= h($oz['depo'] ?: '—') ?></td>
-                    <td class="stok-hide-sm" style="font-size:.82rem;color:var(--muted)"><?= h($oz['unit']) ?></td>
-                    <td style="text-align:right;color:var(--success)">+<?= number_format((float)$oz['total_giris'], 0, ',', '.') ?></td>
-                    <td style="text-align:right;color:var(--danger)">
-                        <?php if ((float)$oz['total_cikis'] > 0): ?>
-                        −<?= number_format((float)$oz['total_cikis'], 0, ',', '.') ?>
-                        <?php else: ?>—<?php endif; ?>
+                    <td class="stok-hide-sm"><span class="ms-cat-badge ms-cat-<?= h($oz['category']) ?>"><?= h($ms_cat_labels[$oz['category']] ?? $oz['category']) ?></span></td>
+                    <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)"><?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?></td>
+                    <td style="font-weight:600">
+                        <?= h($oz['material_name']) ?>
+                        <?php if ((int)$oz['is_active'] === 0): ?><span style="font-size:.68rem;color:var(--muted)" title="Pasif tanım"> (pasif)</span><?php endif; ?>
                     </td>
+                    <td class="stok-hide-sm"><?= $oz['depo'] !== '' ? h($oz['depo']) : '<span style="color:var(--muted)">Depo Boş</span>' ?></td>
+                    <td style="text-align:right;color:var(--success)"><?= (float)$oz['total_giris'] > 0 ? '+' . number_format((float)$oz['total_giris'], 0, ',', '.') : '—' ?></td>
+                    <td style="text-align:right;color:var(--danger)"><?= (float)$oz['total_sevk'] > 0 ? '−' . number_format((float)$oz['total_sevk'], 0, ',', '.') : '—' ?></td>
+                    <td style="text-align:right;color:var(--danger)"><?= (float)$oz['total_kullanim'] > 0 ? '−' . number_format((float)$oz['total_kullanim'], 0, ',', '.') : '—' ?></td>
+                    <td style="text-align:right;color:var(--warn)"><?= $duz != 0.0 ? ($duz > 0 ? '+' : '−') . number_format(abs($duz), 0, ',', '.') : '—' ?></td>
                     <td style="text-align:right;font-weight:700;<?= $kalan_cls ?>">
                         <?= number_format($kalan, 0, ',', '.') ?>
-                        <small style="font-weight:400;color:var(--muted)"> <?= h($oz['unit']) ?></small>
                     </td>
+                    <td class="stok-hide-sm" style="font-size:.82rem;color:var(--muted)"><?= h($oz['unit']) ?></td>
                     <td style="text-align:right;white-space:nowrap">
                         <a href="<?= h($oz_link) ?>" class="ms-edit-btn" title="Bu malzeme/deponun hareketlerini gör">🔍</a>
                     </td>
