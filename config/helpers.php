@@ -228,17 +228,9 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_recw) $lnk('hks/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
 
-        <?php if ($p_stok): ?>
-        <div class="sidebar-section">Stok</div>
-        <?php $lnk('stok.php',          '📦', 'Ürün Stok',    $a_ustok); ?>
-        <?php $lnk('malzeme_stok.php',  '🧱', 'Malzeme Stok', $a_mstok); ?>
-        <?php endif; ?>
-
-        <?php if ($p_rep || $p_kant): ?>
-        <div class="sidebar-section">Raporlama</div>
-        <?php if ($p_rep)  $lnk('reports.php',       '📊', 'Raporlar',      $a_rep);  ?>
-        <?php if ($p_kant) $lnk('kantar_raporu.php', '📈', 'Kantar Raporu', $a_krap); ?>
-        <?php if ($p_rep)  $lnk('hesap.php',         '🏦', 'Hesap',         $a_hes);  ?>
+        <?php if ($p_rep): ?>
+        <?php $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
+        <?php $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
         <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
