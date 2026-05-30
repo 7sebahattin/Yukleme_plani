@@ -3918,8 +3918,8 @@ body.notes-modal-open { overflow: hidden; }
 
 @media (min-width: 1024px) {
     /* Üst yatay menü sidebar ile değiştirilir */
-    body:not(.print-mode) .topbar { display: none; }
-    body:not(.print-mode) .bottomnav { display: none !important; }
+    .topbar { display: none !important; }
+    .bottomnav { display: none !important; }
 
     .desktop-sidebar {
         display: flex;
@@ -4007,22 +4007,22 @@ body.notes-modal-open { overflow: hidden; }
     .sidebar-user-logout:hover { background: rgba(255,255,255,.12); color: #fff; text-decoration: none; }
 
     /* İçerik alanını sidebar genişliği kadar kaydır */
-    body:not(.print-mode) .container {
-        margin-left: 260px;
-        margin-right: 0;
-        max-width: none;
+    .container {
+        margin-left: 260px !important;
+        margin-right: 0 !important;
+        max-width: none !important;
         padding-bottom: 48px;
     }
 }
 
 @media (min-width: 1280px) {
     /* Geniş ekranda içeriği makul genişlikte tut, fazla yayılmasın */
-    body:not(.print-mode) .container {
-        max-width: 1400px;
-    }
+    .container { max-width: 1400px !important; }
 }
 
 @media print {
     .desktop-sidebar { display: none !important; }
-    .container { margin-left: 0 !important; max-width: none !important; }
+    .topbar { display: none !important; }
+    .container { margin-left: 0 !important; max-width: none !important; padding-bottom: 0 !important; }
 }
+body.print-mode .container { margin-left: 0 !important; max-width: none !important; }
