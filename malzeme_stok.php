@@ -609,14 +609,23 @@ $mat_dusuk_count = count($negatif_ozet);
 <div class="ms-neg-uyari">
     <div class="ms-neg-uyari-head">⚠ <?= count($negatif_ozet) ?> malzeme/depoda negatif stok — sevk veya kullanım miktarı girişten fazla olabilir.</div>
     <table class="ms-neg-table">
-        <thead><tr><th>Malzeme</th><th>Depo</th><th>Birim</th><th class="num">Kalan</th></tr></thead>
+        <thead><tr><th>Malzeme</th><th>Depo</th><th>Birim</th><th class="num">Kalan</th><th></th></tr></thead>
         <tbody>
-        <?php foreach ($negatif_ozet as $nr): ?>
+        <?php foreach ($negatif_ozet as $nr):
+            $nr_link = ms_url([
+                'mat_type'     => $nr['material_type'],
+                'mat_name'     => $nr['material_name'],
+                'depo'         => $nr['depo'],
+                'hareket_tipi' => '',
+                'hareket_page' => '',
+            ]) . '#ms-hareketler';
+        ?>
         <tr>
             <td><?= h($nr['material_name']) ?></td>
             <td><?= h($nr['depo'] ?: '—') ?></td>
             <td style="color:var(--muted);font-size:.8rem"><?= h($nr['unit']) ?></td>
             <td class="num" style="color:var(--danger);font-weight:700"><?= number_format((float)$nr['kalan'], 0, ',', '.') ?></td>
+            <td class="num"><a href="<?= h($nr_link) ?>" class="btn btn-sm btn-ghost" style="white-space:nowrap">🔍 Hareketler</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -762,6 +771,7 @@ $mat_dusuk_count = count($negatif_ozet);
                     <th style="text-align:right">Giriş</th>
                     <th style="text-align:right">Çıkış</th>
                     <th style="text-align:right">Kalan</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -769,6 +779,13 @@ $mat_dusuk_count = count($negatif_ozet);
                 $kalan     = (float)$oz['kalan'];
                 $is_neg    = $kalan < 0;
                 $kalan_cls = $is_neg ? 'stok-negatif' : ($kalan > 0 ? '' : 'color:var(--muted)');
+                $oz_link   = ms_url([
+                    'mat_type'     => $oz['material_type'],
+                    'mat_name'     => $oz['material_name'],
+                    'depo'         => $oz['depo'],
+                    'hareket_tipi' => '',
+                    'hareket_page' => '',
+                ]) . '#ms-hareketler';
             ?>
                 <tr class="<?= $is_neg ? 'ms-row-negatif' : '' ?>">
                     <td style="font-size:.8rem;color:var(--muted)"><?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?></td>
@@ -784,6 +801,9 @@ $mat_dusuk_count = count($negatif_ozet);
                     <td style="text-align:right;font-weight:700;<?= $kalan_cls ?>">
                         <?= number_format($kalan, 0, ',', '.') ?>
                         <small style="font-weight:400;color:var(--muted)"> <?= h($oz['unit']) ?></small>
+                    </td>
+                    <td style="text-align:right;white-space:nowrap">
+                        <a href="<?= h($oz_link) ?>" class="ms-edit-btn" title="Bu malzeme/deponun hareketlerini gör">🔍</a>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -1033,6 +1053,7 @@ $mat_dusuk_count = count($negatif_ozet);
 </div>
 
 <!-- ── Hareket Tipi Filtresi ─────────────────────────────── -->
+<div id="ms-hareketler" style="scroll-margin-top:16px"></div>
 <div class="stok-mv-filter-row">
     <a href="<?= ms_url(['hareket_tipi' => '', 'hareket_page' => '']) ?>"
        class="pill<?= $f_hareket_tipi === '' ? ' active' : '' ?>">Tümü</a>
