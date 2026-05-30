@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
         )->execute([
             $dz_date, 'duzeltme', $mat_id, $dz_mat_name, $dz_mat_type,
             $dz_depo, $dz_qty, $dz_unit, $unit_dara, round($dz_qty * $unit_dara, 3),
-            $dz_belge ?: null, $dz_note ?: null,
+            $dz_belge, $dz_note ?: null,
         ]);
         $dz_inserted_id = (int)$pdo->lastInsertId();
         audit_log_event('create', 'malzeme_stok', $dz_inserted_id, null, [
