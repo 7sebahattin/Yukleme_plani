@@ -13,7 +13,7 @@ $pdo = db();
 // ── URL oluşturucu — filtre durumunu korur ────────────────
 function ms_url(array $override = [], array $drop = []): string {
     global $f_tarih_bas, $f_tarih_bit, $f_mat_type, $f_mat_name, $f_depo,
-           $f_hareket_tipi, $hareket_page;
+           $f_hareket_tipi, $hareket_page, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo;
     $base = [
         'tarih_bas'    => $f_tarih_bas    ?? '',
         'tarih_bit'    => $f_tarih_bit    ?? '',
@@ -21,6 +21,9 @@ function ms_url(array $override = [], array $drop = []): string {
         'mat_name'     => $f_mat_name     ?? '',
         'depo'         => $f_depo         ?? '',
         'hareket_tipi' => $f_hareket_tipi ?? '',
+        'ozet_tur'     => $f_ozet_tur     ?? '',
+        'ozet_malzeme' => $f_ozet_malzeme ?? '',
+        'ozet_depo'    => $f_ozet_depo    ?? '',
         'hareket_page' => (isset($hareket_page) && $hareket_page > 1) ? (string)$hareket_page : '',
     ];
     foreach ($override as $k => $v) { $base[$k] = (string)$v; }
@@ -93,6 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         $err = 'Malzeme türü seçiniz.';
     } elseif ($mv_mat_name === '') {
         $err = 'Malzeme adı zorunludur.';
+    } elseif ($mv_depo === '') {
+        $err = 'Depo seçimi zorunludur.';
     } elseif ($mv_qty <= 0) {
         $err = 'Miktar sıfırdan büyük olmalıdır.';
     }
@@ -165,6 +170,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
         $err = 'Malzeme türü seçiniz.';
     } elseif ($dz_mat_name === '') {
         $err = 'Malzeme adı zorunludur.';
+    } elseif ($dz_depo === '') {
+        $err = 'Depo seçimi zorunludur.';
     } elseif ($dz_qty_raw == 0.0) {
         $err = 'Miktar sıfır olamaz.';
     }
@@ -231,6 +238,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
         $base = $base->fetch();
         if (!$base) {
             set_flash('error', 'Kayıt bulunamadı.');
+        } elseif (trim((string)($base['depo'] ?? '')) === '') {
+            set_flash('error', 'Depo seçimi zorunludur.');
         } else {
             $pdo->prepare(
                 "INSERT INTO material_stock_movements
@@ -256,6 +265,120 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
         }
     }
     header('Location: malzeme_stok.php');
+    exit;
+}
+
+// ── POST: Hareket Düzenle ─────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_update') {
+    csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
+
+    $up_id       = (int)($_POST['up_id']       ?? 0);
+    $up_date     = trim($_POST['up_date']      ?? '');
+    $up_mat_type = trim($_POST['up_mat_type']  ?? '');
+    $up_mat_name = trim($_POST['up_mat_name']  ?? '');
+    $up_depo     = trim($_POST['up_depo']      ?? '');
+    $up_qty_raw  = num($_POST['up_qty']        ?? '0');
+    $up_yon      = trim($_POST['up_yon']       ?? 'arti');
+    $up_unit     = trim($_POST['up_unit']      ?? 'adet');
+    $up_belge    = trim($_POST['up_belge']     ?? '');
+    $up_firma    = trim($_POST['up_firma']     ?? '');
+    $up_note     = trim($_POST['up_note']      ?? '');
+
+    $err = '';
+    $base = null;
+    if ($up_id <= 0) {
+        $err = 'Geçersiz kayıt.';
+    } else {
+        $base = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
+        $base->execute([$up_id]);
+        $base = $base->fetch();
+        if (!$base) {
+            $err = 'Kayıt bulunamadı.';
+        } elseif ($base['source_type'] === 'loading') {
+            $err = 'Yükleme kaynaklı kullanım hareketleri düzenlenemez.';
+        }
+    }
+
+    // movement_type ve direction (sevk/giriş/kullanım için) korunur; sadece düzeltme yön değiştirebilir
+    if ($err === '') {
+        if (!$up_date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $up_date)) {
+            $err = 'Tarih zorunludur (YYYY-AA-GG).';
+        } elseif (!isset($ms_types[$up_mat_type])) {
+            $err = 'Malzeme türü seçiniz.';
+        } elseif ($up_mat_name === '') {
+            $err = 'Malzeme adı zorunludur.';
+        } elseif ($up_depo === '') {
+            $err = 'Depo seçimi zorunludur.';
+        } elseif ($up_qty_raw == 0.0) {
+            $err = 'Miktar sıfır olamaz.';
+        } elseif ($base['movement_type'] !== 'duzeltme' && abs($up_qty_raw) <= 0) {
+            $err = 'Miktar sıfırdan büyük olmalıdır.';
+        }
+    }
+
+    if ($err !== '') {
+        set_flash('error', $err);
+    } else {
+        // Düzeltme: yön seçilebilir (işaretli miktar). Diğer tipler: her zaman pozitif.
+        if ($base['movement_type'] === 'duzeltme') {
+            $up_qty = $up_yon === 'eksi' ? -abs($up_qty_raw) : abs($up_qty_raw);
+        } else {
+            $up_qty = abs($up_qty_raw);
+        }
+
+        // Malzeme tanımını yeni tür/ad üzerinden yeniden eşle (dara hesabı için)
+        $_def_st = $pdo->prepare("SELECT id, name, unit_dara_kg FROM material_definitions WHERE type=?");
+        $_def_st->execute([$up_mat_type]);
+        $_def_needle = normalize_text_v2($up_mat_name);
+        $mat_row = null;
+        foreach ($_def_st->fetchAll() as $_def_r) {
+            if (normalize_text_v2($_def_r['name']) === $_def_needle) { $mat_row = $_def_r; break; }
+        }
+        $mat_id     = $mat_row ? (int)$mat_row['id'] : null;
+        $unit_dara  = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
+        $total_dara = round($up_qty * $unit_dara, 3);
+
+        $old_vals = [
+            'movement_type' => $base['movement_type'],
+            'movement_date' => $base['movement_date'],
+            'material_name' => $base['material_name'],
+            'material_type' => $base['material_type'],
+            'depo'          => $base['depo'],
+            'quantity'      => $base['quantity'],
+            'unit'          => $base['unit'],
+            'belge_no'      => $base['belge_no'],
+            'firma'         => $base['firma'],
+            'note'          => $base['note'],
+        ];
+
+        $pdo->prepare(
+            "UPDATE material_stock_movements
+                SET movement_date=?, material_id=?, material_name=?, material_type=?,
+                    depo=?, quantity=?, unit=?, unit_dara_kg=?, total_dara_kg=?,
+                    belge_no=?, firma=?, note=?
+              WHERE id=?"
+        )->execute([
+            $up_date, $mat_id, $up_mat_name, $up_mat_type,
+            $up_depo, $up_qty, $up_unit, $unit_dara, $total_dara,
+            $up_belge, $up_firma, $up_note ?: null, $up_id,
+        ]);
+
+        audit_log_event('update', 'malzeme_stok', $up_id, $old_vals, [
+            'movement_type' => $base['movement_type'],
+            'movement_date' => $up_date,
+            'material_name' => $up_mat_name,
+            'material_type' => $up_mat_type,
+            'depo'          => $up_depo,
+            'quantity'      => $up_qty,
+            'unit'          => $up_unit,
+            'belge_no'      => $up_belge,
+            'firma'         => $up_firma,
+            'note'          => $up_note,
+        ]);
+        set_flash('success', 'Hareket güncellendi (#' . $up_id . '): ' . $up_mat_name . ' · ' . fmt_kg($up_qty) . ' ' . $up_unit);
+    }
+    header('Location: ' . ms_url());
     exit;
 }
 
@@ -295,6 +418,11 @@ $is_csv         = isset($_GET['csv']);
 $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['giris', 'sevk', 'kullanim', 'duzeltme', ''], true)) $f_hareket_tipi = '';
 
+// Stok Özeti'ne özel filtreler — yalnızca özet tablosunu daraltır, hareketleri/CSV'yi etkilemez
+$f_ozet_tur     = trim($_GET['ozet_tur']     ?? '');
+$f_ozet_malzeme = trim($_GET['ozet_malzeme'] ?? '');
+$f_ozet_depo    = trim($_GET['ozet_depo']    ?? '');
+
 // ── WHERE builder — özet sorgusu (hareket tipi hariç) ─────
 $where = []; $params = [];
 if ($f_tarih_bas !== '') { $where[] = "movement_date >= ?"; $params[] = $f_tarih_bas; }
@@ -309,6 +437,13 @@ $where_mv = $where; $params_mv = $params;
 if ($f_hareket_tipi !== '') { $where_mv[] = "movement_type = ?"; $params_mv[] = $f_hareket_tipi; }
 $where_mv_sql = $where_mv ? 'WHERE ' . implode(' AND ', $where_mv) : '';
 
+// WHERE builder — Stok Özeti (global filtreler + özete özel tür/malzeme/depo)
+$where_oz = $where; $params_oz = $params;
+if ($f_ozet_tur     !== '') { $where_oz[] = "material_type = ?";  $params_oz[] = $f_ozet_tur; }
+if ($f_ozet_malzeme !== '') { $where_oz[] = "material_name LIKE ?"; $params_oz[] = '%' . $f_ozet_malzeme . '%'; }
+if ($f_ozet_depo    !== '') { $where_oz[] = "depo LIKE ?";          $params_oz[] = '%' . $f_ozet_depo . '%'; }
+$where_oz_sql = $where_oz ? 'WHERE ' . implode(' AND ', $where_oz) : '';
+
 // ── Stok özeti ────────────────────────────────────────────
 $ozet_rows = [];
 try {
@@ -322,11 +457,11 @@ try {
                      WHEN movement_type='duzeltme' THEN quantity
                      ELSE 0 END) AS kalan
         FROM material_stock_movements
-        $where_sql
+        $where_oz_sql
         GROUP BY material_type, material_name, depo, unit
         ORDER BY material_type, material_name, depo
     ");
-    $st->execute($params);
+    $st->execute($params_oz);
     $ozet_rows = $st->fetchAll();
 } catch (PDOException $e) {}
 
@@ -388,6 +523,8 @@ try {
 } catch (PDOException $e) {}
 
 $herhangi_filtre = $f_tarih_bas !== '' || $f_tarih_bit !== '' || $f_mat_type !== '' || $f_mat_name !== '' || $f_depo !== '' || $f_hareket_tipi !== '';
+$ozet_filtre_aktif = $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '';
+$ms_can_write = can('stok.write');
 
 // ── CSV export ────────────────────────────────────────────
 if ($is_csv) {
@@ -490,6 +627,9 @@ $mat_dusuk_count = count($negatif_ozet);
 <!-- ── Filtre formu ───────────────────────────────────────── -->
 <div class="card" style="margin-bottom:14px">
     <form method="get" action="malzeme_stok.php" class="stok-filter-form">
+        <?php if ($f_ozet_tur     !== ''): ?><input type="hidden" name="ozet_tur"     value="<?= h($f_ozet_tur) ?>"><?php endif; ?>
+        <?php if ($f_ozet_malzeme !== ''): ?><input type="hidden" name="ozet_malzeme" value="<?= h($f_ozet_malzeme) ?>"><?php endif; ?>
+        <?php if ($f_ozet_depo    !== ''): ?><input type="hidden" name="ozet_depo"    value="<?= h($f_ozet_depo) ?>"><?php endif; ?>
         <div class="stok-filter-row">
             <div class="form-group stok-fg">
                 <label class="form-label">Başlangıç</label>
@@ -562,12 +702,55 @@ $mat_dusuk_count = count($negatif_ozet);
 </div>
 
 <!-- ── Stok Özeti Tablosu ─────────────────────────────────── -->
-<?php if (!empty($ozet_rows)): ?>
 <div class="card" style="margin-top:16px;padding:0">
     <div class="stok-table-head">
         <span style="font-weight:700;font-size:.97rem">Stok Özeti</span>
         <span style="font-size:.82rem;color:var(--muted)"><?= count($ozet_rows) ?> malzeme/depo</span>
     </div>
+    <!-- Stok Özeti'ne özel filtre (tür / malzeme / depo) -->
+    <form method="get" action="malzeme_stok.php" class="ms-ozet-filter">
+        <?php if ($f_tarih_bas    !== ''): ?><input type="hidden" name="tarih_bas"    value="<?= h($f_tarih_bas) ?>"><?php endif; ?>
+        <?php if ($f_tarih_bit    !== ''): ?><input type="hidden" name="tarih_bit"    value="<?= h($f_tarih_bit) ?>"><?php endif; ?>
+        <?php if ($f_mat_type     !== ''): ?><input type="hidden" name="mat_type"     value="<?= h($f_mat_type) ?>"><?php endif; ?>
+        <?php if ($f_mat_name     !== ''): ?><input type="hidden" name="mat_name"     value="<?= h($f_mat_name) ?>"><?php endif; ?>
+        <?php if ($f_depo         !== ''): ?><input type="hidden" name="depo"         value="<?= h($f_depo) ?>"><?php endif; ?>
+        <?php if ($f_hareket_tipi !== ''): ?><input type="hidden" name="hareket_tipi" value="<?= h($f_hareket_tipi) ?>"><?php endif; ?>
+        <div class="ms-ozet-fg">
+            <label>Tür</label>
+            <select name="ozet_tur" class="form-control">
+                <option value="">Hepsi</option>
+                <?php foreach ($ms_types as $k => $lbl): ?>
+                <option value="<?= h($k) ?>" <?= $f_ozet_tur === $k ? 'selected' : '' ?>><?= h($lbl) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="ms-ozet-fg">
+            <label>Malzeme</label>
+            <input type="text" name="ozet_malzeme" class="form-control" value="<?= h($f_ozet_malzeme) ?>"
+                   list="ms-ozet-name-list" placeholder="Hepsi" autocomplete="off">
+            <datalist id="ms-ozet-name-list">
+                <?php foreach (array_merge(...array_values($mat_names_by_type ?: [[]])) as $mn): ?>
+                <option value="<?= h($mn) ?>">
+                <?php endforeach; ?>
+            </datalist>
+        </div>
+        <div class="ms-ozet-fg">
+            <label>Depo</label>
+            <select name="ozet_depo" class="form-control">
+                <option value="">Hepsi</option>
+                <?php foreach ($depo_list as $dv): ?>
+                <option value="<?= h($dv) ?>" <?= $f_ozet_depo === $dv ? 'selected' : '' ?>><?= h($dv) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="ms-ozet-actions">
+            <button type="submit" class="btn btn-sm btn-primary">Süz</button>
+            <?php if ($ozet_filtre_aktif): ?>
+            <a href="<?= ms_url([], ['ozet_tur', 'ozet_malzeme', 'ozet_depo']) ?>" class="btn btn-sm btn-ghost">Temizle</a>
+            <?php endif; ?>
+        </div>
+    </form>
+    <?php if (!empty($ozet_rows)): ?>
     <div class="table-wrap">
         <table class="data-table stok-table">
             <thead>
@@ -607,12 +790,12 @@ $mat_dusuk_count = count($negatif_ozet);
             </tbody>
         </table>
     </div>
+    <?php else: ?>
+    <div style="padding:28px;text-align:center;color:var(--muted)">
+        Henüz malzeme stok hareketi yok.<?= ($herhangi_filtre || $ozet_filtre_aktif) ? ' Filtre kriterlerine uygun kayıt bulunamadı.' : '' ?>
+    </div>
+    <?php endif; ?>
 </div>
-<?php else: ?>
-<div class="card" style="margin-top:16px;padding:28px;text-align:center;color:var(--muted)">
-    Henüz malzeme stok hareketi yok.<?= $herhangi_filtre ? ' Filtre kriterlerine uygun hareket bulunamadı.' : '' ?>
-</div>
-<?php endif; ?>
 
 <!-- ── Giriş / Sevk / Düzeltme Formu ─────────────────────── -->
 <div class="ms-form-wrap" style="margin-top:20px">
@@ -629,7 +812,7 @@ $mat_dusuk_count = count($negatif_ozet);
     </div>
 
     <!-- Giriş formu -->
-    <div id="msFormGiris" class="card ms-form-card">
+    <div id="msFormGiris" class="card ms-form-card ms-action-card">
         <form method="post" action="malzeme_stok.php" autocomplete="off">
             <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="ms_giris">
@@ -655,8 +838,8 @@ $mat_dusuk_count = count($negatif_ozet);
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Depo</label>
-                    <select name="mv_depo" class="form-control">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="mv_depo" class="form-control" required>
                         <option value="">— seçiniz —</option>
                         <?php foreach ($depo_list as $dv): ?>
                         <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
@@ -702,7 +885,7 @@ $mat_dusuk_count = count($negatif_ozet);
     </div>
 
     <!-- Sevk formu -->
-    <div id="msFormSevk" class="card ms-form-card" hidden>
+    <div id="msFormSevk" class="card ms-form-card ms-action-card" hidden>
         <form method="post" action="malzeme_stok.php" autocomplete="off">
             <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="ms_sevk">
@@ -728,8 +911,8 @@ $mat_dusuk_count = count($negatif_ozet);
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Depo</label>
-                    <select name="mv_depo" class="form-control">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="mv_depo" class="form-control" required>
                         <option value="">— seçiniz —</option>
                         <?php foreach ($depo_list as $dv): ?>
                         <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
@@ -775,7 +958,7 @@ $mat_dusuk_count = count($negatif_ozet);
     </div>
 
     <!-- Düzeltme formu -->
-    <div id="msFormDuzeltme" class="card ms-form-card" hidden>
+    <div id="msFormDuzeltme" class="card ms-form-card ms-action-card" hidden>
         <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px">
             Stok sayım farkını veya hatalı girişi düzeltmek için kullanın.
             <strong>Artı düzeltme</strong> stoka ekler, <strong>eksi düzeltme</strong> stoktan çıkarır.
@@ -805,8 +988,8 @@ $mat_dusuk_count = count($negatif_ozet);
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Depo</label>
-                    <select name="dz_depo" class="form-control">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="dz_depo" class="form-control" required>
                         <option value="">— seçiniz —</option>
                         <?php foreach ($depo_list as $dv): ?>
                         <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
@@ -936,6 +1119,21 @@ $mat_dusuk_count = count($negatif_ozet);
                         <small style="font-weight:400;color:var(--muted)"> <?= h($r['unit']) ?></small>
                     </td>
                     <td style="white-space:nowrap">
+                        <?php if ($ms_can_write && $can_delete): ?>
+                        <button type="button" class="ms-edit-btn" title="Düzenle"
+                                data-id="<?= (int)$r['id'] ?>"
+                                data-date="<?= h($r['movement_date']) ?>"
+                                data-mtype="<?= h($r['movement_type']) ?>"
+                                data-mattype="<?= h($r['material_type']) ?>"
+                                data-matname="<?= h($r['material_name']) ?>"
+                                data-depo="<?= h($r['depo'] ?? '') ?>"
+                                data-qty="<?= h((string)$r['quantity']) ?>"
+                                data-unit="<?= h($r['unit']) ?>"
+                                data-belge="<?= h($r['belge_no'] ?? '') ?>"
+                                data-firma="<?= h($r['firma'] ?? '') ?>"
+                                data-note="<?= h($r['note'] ?? '') ?>"
+                                onclick="msOpenEdit(this)">✎</button>
+                        <?php endif; ?>
                         <?php if ($can_delete): ?>
                         <form method="post" action="malzeme_stok.php"
                               onsubmit="return confirm('Bu hareketi silmek istediğinizden emin misiniz?');"
@@ -980,6 +1178,92 @@ $mat_dusuk_count = count($negatif_ozet);
     <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<?php if ($ms_can_write): ?>
+<!-- ── Hareket Düzenle Modal ─────────────────────────────── -->
+<div id="msEditOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msCloseEdit()">
+    <div class="ms-edit-modal" role="dialog" aria-modal="true" aria-labelledby="msEditTitle">
+        <div class="ms-edit-head">
+            <h3 id="msEditTitle">Hareketi Düzenle <span id="msEditTypeBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
+            <button type="button" class="ms-edit-close" onclick="msCloseEdit()" aria-label="Kapat">×</button>
+        </div>
+        <form method="post" action="malzeme_stok.php" autocomplete="off" id="msEditForm">
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="ms_update">
+            <input type="hidden" name="up_id"  id="msEditId" value="">
+            <div class="ms-edit-body">
+                <div class="ms-form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Tarih <span class="req">*</span></label>
+                        <input type="date" name="up_date" id="msEditDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Malzeme Türü <span class="req">*</span></label>
+                        <select name="up_mat_type" id="msEditMatType" class="form-control" required onchange="msEditUpdateNames()">
+                            <option value="">— seçiniz —</option>
+                            <?php foreach ($ms_types as $k => $lbl): ?>
+                            <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Malzeme Adı <span class="req">*</span></label>
+                        <select name="up_mat_name" id="msEditMatName" class="form-control" required>
+                            <option value="">— önce tür seçin —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Depo <span class="req">*</span></label>
+                        <select name="up_depo" id="msEditDepo" class="form-control" required>
+                            <option value="">— seçiniz —</option>
+                            <?php foreach ($depo_list as $dv): ?>
+                            <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Miktar <span class="req">*</span></label>
+                        <input type="number" name="up_qty" id="msEditQty" class="form-control" required
+                               min="0.001" step="any" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Birim</label>
+                        <select name="up_unit" id="msEditUnit" class="form-control">
+                            <?php foreach ($ms_units as $u): ?>
+                            <option value="<?= h($u) ?>"><?= h($u) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group" id="msEditYonWrap" hidden>
+                        <label class="form-label">Yön <span class="req">*</span></label>
+                        <select name="up_yon" id="msEditYon" class="form-control">
+                            <option value="arti">+ Artı düzeltme (stoka ekle)</option>
+                            <option value="eksi">− Eksi düzeltme (stoktan çıkar)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Belge / İrsaliye No</label>
+                        <input type="text" name="up_belge" id="msEditBelge" class="form-control" placeholder="İsteğe bağlı">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Firma</label>
+                        <input type="text" name="up_firma" id="msEditFirma" class="form-control"
+                               list="ms-firma-list" placeholder="İsteğe bağlı" autocomplete="off">
+                    </div>
+                    <div class="form-group ms-form-full">
+                        <label class="form-label">Not</label>
+                        <input type="text" name="up_note" id="msEditNote" class="form-control" placeholder="İsteğe bağlı">
+                    </div>
+                </div>
+            </div>
+            <div class="ms-edit-foot">
+                <button type="button" class="btn btn-ghost" onclick="msCloseEdit()">Vazgeç</button>
+                <button type="submit" class="btn btn-primary">💾 Güncelle</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
 $_ac     = ms_audit_counts($pdo);
@@ -1095,6 +1379,82 @@ function msTab(tab) {
         if (btn) btn.classList.toggle('ms-tab-active', t === tab);
     });
 }
+
+// ── Hareket düzenleme modalı ──────────────────────────────
+function msEditFillNames(selectedName) {
+    var typeSel = document.getElementById('msEditMatType');
+    var nameSel = document.getElementById('msEditMatName');
+    if (!typeSel || !nameSel) return;
+    var names = msNamesData[typeSel.value] || [];
+    nameSel.innerHTML = '<option value="">— seçiniz —</option>';
+    var found = false;
+    names.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        if (n === selectedName) { opt.selected = true; found = true; }
+        nameSel.appendChild(opt);
+    });
+    // Tanımda olmayan ama harekette geçen ad: yine de seçilebilsin
+    if (!found && selectedName) {
+        var opt = document.createElement('option');
+        opt.value = selectedName; opt.textContent = selectedName; opt.selected = true;
+        nameSel.appendChild(opt);
+    }
+    nameSel.disabled = false;
+}
+
+function msEditUpdateNames() { msEditFillNames(''); }
+
+function msSetSelect(id, val) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var has = false;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === val) { has = true; break; }
+    }
+    if (!has && val) {
+        var opt = document.createElement('option');
+        opt.value = val; opt.textContent = val;
+        sel.appendChild(opt);
+    }
+    sel.value = val;
+}
+
+function msOpenEdit(btn) {
+    var d = btn.dataset;
+    document.getElementById('msEditId').value    = d.id || '';
+    document.getElementById('msEditDate').value  = d.date || '';
+    msSetSelect('msEditMatType', d.mattype || '');
+    msEditFillNames(d.matname || '');
+    msSetSelect('msEditDepo', d.depo || '');
+    var qty = parseFloat((d.qty || '0').replace(',', '.')) || 0;
+    document.getElementById('msEditQty').value   = Math.abs(qty);
+    msSetSelect('msEditUnit', d.unit || 'adet');
+    document.getElementById('msEditBelge').value = d.belge || '';
+    document.getElementById('msEditFirma').value = d.firma || '';
+    document.getElementById('msEditNote').value  = d.note || '';
+
+    // Düzeltme tipinde yön seçimi göster; diğer tiplerde gizle (movement_type değişmez)
+    var isDuz   = (d.mtype === 'duzeltme');
+    var yonWrap = document.getElementById('msEditYonWrap');
+    var yonSel  = document.getElementById('msEditYon');
+    if (yonWrap) yonWrap.hidden = !isDuz;
+    if (yonSel)  yonSel.value = qty < 0 ? 'eksi' : 'arti';
+
+    var typeLbl = {giris:'Giriş', sevk:'Sevk', kullanim:'Kullanım', duzeltme:'Düzeltme'}[d.mtype] || d.mtype;
+    document.getElementById('msEditTypeBadge').textContent = '· ' + typeLbl + ' #' + (d.id || '');
+
+    document.getElementById('msEditOverlay').classList.add('open');
+}
+
+function msCloseEdit() {
+    var ov = document.getElementById('msEditOverlay');
+    if (ov) ov.classList.remove('open');
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') msCloseEdit();
+});
 </script>
 
 <?php render_footer(); ?>
