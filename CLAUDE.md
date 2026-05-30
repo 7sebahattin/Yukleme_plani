@@ -1,165 +1,166 @@
-# Yükleme Planı — Geliştirici Kılavuzu (CLAUDE.md)
+# Asya Fresh — Claude Code Proje Hafızası
 
-## Proje Özeti
+## Project Summary
 
-PHP 8 + MySQL web uygulaması. Mobil öncelikli, PWA olarak kurulabilir.
-Çerçeve yok — saf PHP, vanilla JS, tek CSS dosyası.
+PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA kurulabilir.
+Çerçeve yok — saf PHP, vanilla JS, tek CSS (`assets/style.css`), tek JS (`assets/app.js`).
 
 **Canlı:** `nuverna.derspros.com.tr`  
-**Branch:** `claude/fix-records-print-mobile-WuKdT`
+**Branch:** `claude/fix-records-print-mobile-WuKdT`  
+**SW Cache:** `yukleme-plani-v8` (sw.js — değişiklikte artır)
 
 ---
 
-## Dosya Haritası
+## Dosya Haritası (Kritik Dosyalar)
 
 ```
 /
-├── index.php              # Ana sayfa (kart grid)
-├── records.php            # Yükleme listesi
-├── cikmalar.php           # Çıkma listesi
-├── record_create.php      # Yeni yükleme formu
-├── cikma_create.php       # Yeni çıkma formu
-├── record_edit.php        # Düzenleme
+├── index.php              # Ana sayfa — kart grid
+├── records.php / cikmalar.php   # Yükleme / Çıkma listesi
 ├── record_view.php        # Görüntüleme + yazdırma
-├── record_delete.php      # Silme onayı
-├── record_new.php         # Kayıt türü seçim sayfası
-├── kantar.php             # Kantar hesaplama modülü
-├── definitions.php        # Malzeme tanımları
-├── _form.php              # Kayıt formu (create+edit ortak)
-├── manifest.json          # PWA manifest
-├── sw.js                  # Service worker
-├── migrate.php            # Tek seferlik DB migrasyonu (üretimde silin)
-│
+├── record_create/edit.php # Form sayfaları
+├── kantar.php / kantar_view.php / kantar_raporu.php
+├── stok.php / malzeme_stok.php
+├── reports.php / hesap.php
+├── definitions.php / users.php / audit.php
+├── notes.php / logout.php
+├── sw.js / manifest.json  # PWA
 ├── config/
-│   ├── db.php             # PDO bağlantısı + otomatik migrasyon
-│   ├── helpers.php        # render_header/footer, yardımcı fonksiyonlar
-│   └── calc.php           # Dara/net hesaplama mantığı (PHP)
-│
-└── assets/
-    ├── style.css          # TEK CSS dosyası — tüm stiller burada
-    ├── app.js             # TEK JS dosyası — tüm client-side logic
-    ├── icon.svg           # PWA ana ikon
-    └── icon-maskable.svg  # PWA maskable ikon
+│   ├── db.php             # PDO + auto-migration
+│   ├── helpers.php        # render_header/footer, render_desktop_sidebar,
+│   │                      # csrf_check, audit_log_event, can(), is_admin()
+│   ├── auth.php           # require_login, session
+│   └── calc.php           # Dara/net hesaplama
+├── assets/
+│   ├── style.css          # TEK CSS — tüm stiller + sidebar + breakpoints
+│   └── app.js             # TEK JS
+└── hks/                   # Hal Bildirimi modülü
+    ├── index.php / api_send.php
+    ├── HksClient.php / HksRepository.php / helpers.php
+    └── .htaccess          # include-only PHP dosyalarına web erişim kapalı
 ```
+
+**docs/ referans:** `@docs/ARCHITECTURE.md` · `@docs/SECURITY_NOTES.md` · `@docs/NEXT_TASKS.md`
 
 ---
 
-## Mobil Mimari — BOZMA
+## Critical Rules
 
-### Bottom Navigation (≤767px)
+- **Mobil görünümü bozma** — `< 768px` kurallarına dokunurken çok dikkat et.
+- **DB migration yalnızca açık GO ile** — "GO veriyorum" olmadan migration çalıştırma.
+- **Rollback önce raporla**, otomatik yapma.
+- **Her POST'ta CSRF** — `csrf_check()` artık JSON-aware (403 + JSON döner).
+- **Her write/delete işleminde** uygun `can()` permission kontrolü.
+- **Kritik write/delete/lock audit'e** — `audit_log_event()` kullan.
+- **Hassas veri audit'e yazma** — password/token/csrf/cookie/foto_data filtrelenir.
+- **`yuklendi` durumu = kilitli** — yalnızca `records.unlock` açabilir, `revision_reason` zorunlu.
+- **KG ekranda tam sayı ve virgülsüz** — CSV decimal koruyabilir.
+- **Kişisel isim/e-posta örneklerde kullanma.**
 
-`render_footer()` içinde üretilir (`config/helpers.php`).  
-5 sekme: Ana Sayfa · Yüklemeler · ⊕ Yeni · Çıkmalar · Tanımlar
+---
 
-```
-Aktif sekme tespiti: basename($_SERVER['PHP_SELF'])
-CSS sınıfı: .bottomnav-item.active
-```
+## Role / Permission Matrix
 
-**Yeni bir sayfa eklerken:**
-- `render_footer()` içindeki `$is_*` değişkenlerini güncelle
-- Yeni sayfanın hangi sekmeye ait olduğuna karar ver
+| Yetki | Admin | Operator | Viewer | Muhasebe |
+|---|:---:|:---:|:---:|:---:|
+| records.read | ✓ | ✓ | ✓ | ✓ |
+| records.write | ✓ | ✓ | — | — |
+| records.unlock | ✓ | — | — | — |
+| kantar.read/write | ✓ | ✓ | — | — |
+| stok.read/write | ✓ | ✓ | — | ✓ read |
+| reports.read/export | ✓ | ✓ | — | ✓ |
+| defs.read/write | ✓ | read | — | — |
+| users.admin | ✓ | — | — | — |
+| is_admin() | ✓ | — | — | — |
 
-### CSS Breakpoint'leri
+---
 
-| Breakpoint | Davranış |
+## UI / Breakpoint Mimarisi
+
+### CSS Breakpoints (Sprint 32 sonrası)
+
+| Genişlik | Davranış |
 |---|---|
-| `< 768px` | Mobil: bottom nav görünür, top nav gizli |
-| `≥ 720px` | Grid 3 kolon, bazı tablo başlıkları |
-| `≥ 1024px` | PC: tablo görünümü, palet satır tablosu |
+| `< 768px` | Mobil: bottomnav görünür, topbar görünür, sidebar gizli |
+| `768–899px` | Tablet: topbar görünür, sidebar gizli, 2-kolon kart grid |
+| `≥ 900px` | Desktop: **sol sidebar** (220px), topbar+bottomnav gizli |
+| `≥ 1024px` | Desktop: `.pc-only` tablo görünür, `.mobile-only` kartlar gizli |
+| `≥ 1280px` | Geniş: sidebar 260px, max-width 1400px, 4-kolon grid |
+
+### Sidebar (Sprint 32)
+
+`render_desktop_sidebar()` — `config/helpers.php` içinde, `render_header()` tarafından çağrılır.
+`position: fixed; left:0; top:0; bottom:0;` — z-index 100.
+Gruplar: Operasyon / Stok / Raporlama / Yönetim.
+Permission'lar `can()` / `is_admin()` ile kontrol edilir.
+
+### Z-index Mimarisi
+
+| Katman | z-index |
+|---|---|
+| Topbar / Sidebar | 100 |
+| Kebab dropdown | 200 |
+| Bottomnav | 500 |
+| Palet modal (.pm-overlay) | 600 |
+| Kalan modal (#kalanModal) | 1000 |
+| Etiket/Crop overlay | 3000 |
+
+**Yeni modal eklerken z-index ≥ 600** kullan.
 
 ### Overflow Kuralı — KRİTİK
 
-`overflow-x: hidden` → **html elementinde KULLANMA**.  
-iOS Safari'de dikey scroll'u da kilitler.
-
 ```css
-/* DOĞRU */
-html { overflow-x: clip; }   /* clip: yatay keser, dikey scroll'a dokunmaz */
-body { overflow-x: clip; position: relative; }
-
-/* YANLIŞ — scroll kilitlenir */
-html { overflow-x: hidden; }
+html { overflow-x: clip; }   /* DOĞRU — iOS scroll korur */
+/* html { overflow-x: hidden; }  YANLIŞ — iOS dikey scroll kilitler */
 ```
 
-### Safe Area (iPhone notch/home bar)
+### iOS Safe Area
 
 ```css
-/* Container alt padding: bottom nav yüksekliği + iPhone home bar */
 .container { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
-
-/* Bottom nav kendi padding'i */
 .bottomnav { padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
 ```
 
 ### iOS Zoom Önleme
 
-Input font-size < 16px olursa iOS otomatik zoom yapar.
-
 ```css
-@media (max-width: 767px) {
-    input, select, textarea { font-size: 16px; }
-}
+@media (max-width: 767px) { input, select, textarea { font-size: 16px; } }
 ```
 
 ---
 
-## PWA Notları
-
-- **manifest.json** değişirse → cache adını `sw.js` içinde güncelle (`yukleme-plani-v2` gibi)
-- **sw.js** network-first stratejisi kullanır — ağ erişimi varsa daima güncel sürümü çeker
-- Service worker `render_header()` içinden kaydedilir; print modda kaydedilmez
-- Apple PWA meta tagları `render_header()` içinde — kaldırma
-
----
-
-## Veritabanı Şeması (özet)
+## Veritabanı Şeması (Özet)
 
 ```sql
-loading_records   -- Kayıt başlıkları (type: 'yukleme' | 'cikma')
-loading_pallets   -- Palet satırları (FK: loading_record_id)
-pallet_materials  -- Palet malzemeleri (FK: loading_pallet_id)
-material_definitions -- Malzeme/kasa/palet tanımları
-material_templates      -- Şablon başlıkları
-material_template_items -- Şablon kalemleri
+loading_records     -- type: 'yukleme'|'cikma', durum, locked_at/by, revision_reason
+loading_pallets     -- palet satırları (FK: loading_record_id)
+pallet_materials    -- malzeme satırları (FK: loading_pallet_id)
+material_definitions
+material_templates / material_template_items
+account_transactions / account_files  -- Hesap modülü
+audit_log           -- İşlem geçmişi
+users / roles / role_permissions
+kantar_gruplar / kantar_kayitlar
+hks_notifications   -- Hal Bildirimi taslakları
 ```
 
-### type Kolonu (ÖNEMLİ)
-
-`loading_records.type` kolonu sonradan eklendi.  
-`config/db.php` ve `config/helpers.php` içinde **otomatik migrasyon** var:
-
-```php
-// helpers.php sonunda çalışır — eski db.php versiyonu olan sunucularda da çalışır
-$has = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'type'")->fetchColumn();
-if (!$has) {
-    $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'");
-}
-```
-
-Üretim sunucusunda `config/db.php` farklı DB credentials içerebilir ve `git pull` ile güncellenmeyebilir. Bu yüzden migrasyon `helpers.php`'de de tekrarlanmıştır.
+**Auto-migration:** `config/db.php` açılışta `type` kolonu ve index'leri ekler.
 
 ---
 
 ## Hesaplama Mantığı
 
-### Dara Hesabı — YUVARLAMA
-
-**Her palet için ham dara sakla, sadece toplamı yuvarla.**
+**Dara — ham sakla, sadece toplamı yuvarla:**
 
 ```js
-// app.js — YANLIŞ (birikimli hata oluşur)
-dara = Math.round(kasaAdeti * kasaKg + paletKg + extra);  // ← YAPMA
-
-// DOĞRU
-dara = kasaAdeti * kasaKg + paletKg + extra;  // ham tut
-// Ekranda toplam gösterirken:
-totDara = Math.round(hammToplamDara);
+// DOĞRU — app.js
+dara = kasaAdeti * kasaKg + paletKg + extra;  // ham, yuvarlama yok
+totDara = Math.round(hammToplamDara);           // sadece toplamda
 ```
 
 ```php
-// calc.php — DOĞRU
-$dara = round($kasa_total + $palet_total + $extra_total, 3); // 3 decimal, toplam
+// DOĞRU — calc.php
+$dara = round($kasa_total + $palet_total + $extra_total, 3);
 $net  = round(max(0, $brut - $dara), 3);
 ```
 
@@ -167,54 +168,45 @@ $net  = round(max(0, $brut - $dara), 3);
 
 ## Önemli Desenler
 
-### Tür-Aware Yönlendirme
-
-Kayıt düzenleme/silme sonrası doğru listeye yönlendir:
-
 ```php
+// Tür-aware yönlendirme
 $list_url = ($record['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'records.php';
+
+// CSRF — form
+<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+// CSRF — işlem
+csrf_check($_POST['csrf'] ?? null);    // JSON endpoint: JSON body'den
+csrf_check($input['csrf'] ?? null);    // csrf_check() JSON-aware: 403+JSON döner
+
+// Audit
+audit_log_event('create', 'records', $id, null, $new_vals);
+audit_log_event('lock',   'records', $id, $old, ['durum'=>'yuklendi']);
+
+// Kilitli kayıt unlock
+// durum=yuklendi → locked_at/locked_by set
+// kilit açma → records.unlock gerekli + revision_reason zorunlu
+
+// pc-only / mobile-only (Sprint 31B fix)
+// ≥900px: .pc-only → sidebar var, .mobile-only cards gizli (1024px'de)
+// <768px: .mobile-only kart, .pc-only gizli
 ```
-
-### render_header / render_footer
-
-Her sayfada çift çağrı — print_mode=true olduğunda:
-- Bottom nav çıkmaz
-- JS dosyası yüklenmez
-- Service worker kaydedilmez
-
-### CSRF
-
-Form → `<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"`  
-İşlem → `csrf_check($_POST['csrf'] ?? null);`
 
 ---
 
 ## Geliştirme Kontrol Listesi
 
-Yeni özellik eklerken şunları kontrol et:
+Yeni özellik eklerken:
 
-- [ ] Mobilde taşma var mı? (yatay scroll kontrolü)
-- [ ] Bottom nav'da hangi sekme aktif olmalı? (`render_footer` güncellendi mi?)
-- [ ] Input'lar mobilde 16px font-size alıyor mu?
-- [ ] Yeni tablo varsa `.table-wrap` içine alındı mı?
-- [ ] Yazdırma modunda görünmemesi gerekenler `@media print { display:none }` içinde mi?
+- [ ] Mobilde taşma var mı? (`overflow-x: clip` korunuyor mu?)
+- [ ] Sidebar aktif link tespiti güncellendi mi? (`render_desktop_sidebar` içinde `$a_*` değişkenleri)
+- [ ] Bottomnav aktif sekme güncellendi mi? (`render_footer` içinde `$is_*`)
+- [ ] Input mobilde 16px font-size alıyor mu?
+- [ ] Yeni tablo `.table-wrap` içinde mi?
+- [ ] Print'te görünmemesi gerekenler `@media print { display:none }` içinde mi?
 - [ ] Yeni DB kolonu/tablosu varsa migrasyon eklendi mi?
-- [ ] `type` kolonu kullanan yeni sorgular için fallback var mı?
-
----
-
-## Z-index Mimarisi
-
-| Katman | z-index | Neden |
-|---|---|---|
-| Topbar (sticky) | 100 | Sayfa içeriğinin üstünde |
-| Kebab dropdown | 200 | Kartların üstünde |
-| Bottom nav | 500 | Her şeyin üstünde (sabit nav) |
-| Palet modal (.pm-overlay) | 600 | Bottom nav'ın üstünde olmalı |
-| Kalan modal (#kalanModal) | 1000 | En üstte |
-| Etiket crop overlay | 3000 | Print modal |
-
-**Kural:** Yeni modal/overlay eklerken z-index ≥ 600 kullan (bottom nav 500'dür).
+- [ ] Permission kontrolü var mı?
+- [ ] Audit logu var mı?
+- [ ] SW cache versiyonu artırıldı mı? (style.css veya kritik dosya değiştiyse)
 
 ---
 
@@ -223,7 +215,9 @@ Yeni özellik eklerken şunları kontrol et:
 | Hata | Sebep | Çözüm |
 |---|---|---|
 | Dikey scroll çalışmıyor | `overflow-x: hidden` html'de | `overflow-x: clip` kullan |
-| Dropdown overflow container'da kesiyor | `overflow: auto` stacking context | `position: fixed` + `getBoundingClientRect()` |
-| Dara toplamı 1 eksik çıkıyor | Per-palet yuvarlama | Sadece toplamda yuvarla |
-| `type` kolonu bulunamadı | DB migrasyonu çalışmadı | migrate.php?run=1 veya phpMyAdmin'de ALTER TABLE |
-| SQLSTATE[HY093] | PDO named param aynı sorguda tekrar kullanıldı | Pozisyonel `?` parametreye geç |
+| Dropdown overflow'da kesiyor | `overflow: auto` stacking context | `position: fixed` + `getBoundingClientRect()` |
+| Dara toplamı 1 eksik | Per-palet yuvarlama | Sadece toplamda yuvarla |
+| `type` kolonu bulunamadı | Auto-migration çalışmadı | `migrate.php?run=1` veya phpMyAdmin ALTER TABLE |
+| SQLSTATE[HY093] | PDO named param tekrar kullanıldı | Pozisyonel `?` kullan |
+| Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
+| CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |
