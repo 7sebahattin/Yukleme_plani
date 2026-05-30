@@ -165,6 +165,107 @@ function base_url(): string {
 }
 
 // --- Ortak header/footer parçaları ---
+
+/**
+ * Masaüstü (≥1024px) sabit sol sidebar navigasyonu.
+ * Yalnızca CSS ile desktop'ta görünür; mobil/tablet'te gizlidir.
+ * Permission mantığı topbar ile aynı can()/is_admin() üzerinden çalışır.
+ */
+function render_desktop_sidebar(string $base): void {
+    $self   = $_SERVER['PHP_SELF'] ?? '';
+    $cur    = basename($self);
+    $in_hks = strpos($self, '/hks/') !== false;
+    $cikma  = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
+
+    $_fn   = function_exists('can');
+    $p_dash = !$_fn || can('dashboard.read');
+    $p_rec  = !$_fn || can('records.read');
+    $p_recw = !$_fn || can('records.write');
+    $p_kant = !$_fn || can('kantar.read');
+    $p_stok = !$_fn || can('stok.read');
+    $p_rep  = !$_fn || can('reports.read');
+    $p_def  = !$_fn || can('defs.read');
+    $p_usr  = $_fn && can('users.admin');
+    $p_adm  = function_exists('is_admin') && is_admin();
+
+    // Aktif sayfa tespiti
+    $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
+    $a_yuk   = !$cikma && !$in_hks && in_array($cur, ['records.php','record_view.php','record_edit.php','record_create.php','record_new.php'], true);
+    $a_cik   = $cikma || in_array($cur, ['cikmalar.php','cikma_create.php'], true);
+    $a_kant  = in_array($cur, ['kantar.php','kantar_view.php'], true);
+    $a_krap  = $cur === 'kantar_raporu.php';
+    $a_hks   = $in_hks;
+    $a_not   = $cur === 'notes.php';
+    $a_ustok = $cur === 'stok.php';
+    $a_mstok = $cur === 'malzeme_stok.php';
+    $a_rep   = $cur === 'reports.php';
+    $a_hes   = $cur === 'hesap.php';
+    $a_def   = $cur === 'definitions.php';
+    $a_usr   = $cur === 'users.php';
+    $a_aud   = $cur === 'audit.php';
+
+    $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
+        echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
+           . '<span class="sidebar-link-icon" aria-hidden="true">' . $icon . '</span>'
+           . '<span class="sidebar-link-label">' . h($label) . '</span></a>';
+    };
+    ?>
+<aside class="desktop-sidebar" aria-label="Masaüstü gezinme">
+    <a href="<?= $base ?>index.php" class="sidebar-brand">
+        <img src="<?= $base ?>assets/logo.jpg" class="sidebar-brand-logo" alt="">
+        <span class="sidebar-brand-txt">
+            <span class="sidebar-brand-name">Asya Fresh</span>
+            <span class="sidebar-brand-sub">Operasyon Paneli</span>
+        </span>
+    </a>
+
+    <nav class="sidebar-nav">
+        <div class="sidebar-section">Operasyon</div>
+        <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
+        <?php if ($p_rec)  $lnk('records.php',   '📋', 'Yüklemeler',    $a_yuk);  ?>
+        <?php if ($p_rec)  $lnk('cikmalar.php',  '🚚', 'Çıkmalar',      $a_cik);  ?>
+        <?php if ($p_kant) $lnk('kantar.php',    '⚖️', 'Kantar',        $a_kant); ?>
+        <?php if ($p_recw) $lnk('hks/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
+        <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
+
+        <?php if ($p_stok): ?>
+        <div class="sidebar-section">Stok</div>
+        <?php $lnk('stok.php',          '📦', 'Ürün Stok',    $a_ustok); ?>
+        <?php $lnk('malzeme_stok.php',  '🧱', 'Malzeme Stok', $a_mstok); ?>
+        <?php endif; ?>
+
+        <?php if ($p_rep || $p_kant): ?>
+        <div class="sidebar-section">Raporlama</div>
+        <?php if ($p_rep)  $lnk('reports.php',       '📊', 'Raporlar',      $a_rep);  ?>
+        <?php if ($p_kant) $lnk('kantar_raporu.php', '📈', 'Kantar Raporu', $a_krap); ?>
+        <?php if ($p_rep)  $lnk('hesap.php',         '🏦', 'Hesap',         $a_hes);  ?>
+        <?php endif; ?>
+
+        <?php if ($p_def || $p_usr || $p_adm): ?>
+        <div class="sidebar-section">Yönetim</div>
+        <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
+        <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
+        <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
+        <?php endif; ?>
+    </nav>
+
+    <?php if (function_exists('current_user') && ($__su = current_user()) !== null): ?>
+    <div class="sidebar-user">
+        <div class="sidebar-user-info">
+            <span class="sidebar-user-name"><?= h($__su['display_name'] ?: $__su['username']) ?></span>
+            <?php if (function_exists('user_primary_role') && ($__sr = user_primary_role()) !== null): ?>
+            <span class="sidebar-user-role"><?= h($__sr['label']) ?></span>
+            <?php unset($__sr); endif; ?>
+        </div>
+        <a href="<?= $base ?>logout.php" class="sidebar-user-logout" title="Çıkış Yap" aria-label="Çıkış Yap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </a>
+    </div>
+    <?php unset($__su); endif; ?>
+</aside>
+    <?php
+}
+
 function render_header(string $title, bool $print_mode = false): void {
     $token = csrf_token();
     $cur   = basename($_SERVER['PHP_SELF'] ?? '');
@@ -232,6 +333,7 @@ function render_header(string $title, bool $print_mode = false): void {
         <?php unset($__ctu); endif; ?>
     </div>
 </header>
+<?php render_desktop_sidebar($base); ?>
 <?php endif; ?>
 <main class="container">
 <?php
