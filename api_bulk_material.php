@@ -165,12 +165,12 @@ if (($body['action'] ?? '') === 'delete') {
 
 // Eski (tekli) format → yeni array formatına çevir
 if (!empty($body['material_id'])) {
-    $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => num($body['quantity'] ?? 1)]];
+    $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => parse_decimal($body['quantity'] ?? 1)]];
 } else {
     $materials_input = [];
     foreach ((array)($body['materials'] ?? []) as $m) {
         $mid = (int)($m['material_id'] ?? 0);
-        $qty = num($m['quantity'] ?? 1);
+        $qty = parse_decimal($m['quantity'] ?? 1);
         if ($mid > 0 && $qty > 0) $materials_input[] = ['material_id' => $mid, 'quantity' => $qty];
     }
 }
@@ -214,7 +214,7 @@ try {
     foreach ($valid_ids as $pid) {
         foreach ($materials_input as $m) {
             $mid     = $m['material_id'];
-            $unit_kg = num($mats_db[$mid]['unit_dara_kg']);
+            $unit_kg = parse_decimal($mats_db[$mid]['unit_dara_kg']);   // DB "0.480" → 0.48
             // Etiket (kasa_etiketi) palete eklenince kasa adetiyle çarpılır:
             // 1 etiket × 90 kasa = 90 etiket. Diğer malzemeler girildiği gibi.
             $qty = $m['quantity'];
@@ -230,7 +230,7 @@ try {
             $existing = $st_chk->fetch();
 
             if ($existing) {
-                $new_qty  = round(num($existing['quantity']) + $qty, 3);
+                $new_qty  = round(parse_decimal($existing['quantity']) + $qty, 3);   // DB "90.000" → 90
                 $new_dara = round($unit_kg * $new_qty, 3);
                 $pdo->prepare("UPDATE pallet_materials SET quantity=?, total_dara_kg=? WHERE id=?")
                     ->execute([$new_qty, $new_dara, (int)$existing['id']]);

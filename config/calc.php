@@ -25,9 +25,33 @@ if (!function_exists('round_half')) {
     }
 }
 
+// JS parseNum() ile BİREBİR aynı mantık. num()'dan farkı: tek nokta (".")
+// ondalık kabul edilir (binlik DEĞİL). Böylece DB DECIMAL "974.000" → 974,
+// "90.000" → 90 doğru çözülür (num() bunları 974000/90000 yapıyordu → bug).
+if (!function_exists('parse_decimal')) {
+    function parse_decimal($v): float {
+        if (is_int($v) || is_float($v)) return (float)$v;
+        $s = str_replace(["\xc2\xa0", ' '], '', (string)($v ?? ''));
+        if ($s === '') return 0.0;
+        $hasComma = strpos($s, ',') !== false;
+        $hasDot   = strpos($s, '.') !== false;
+        if ($hasComma && $hasDot) {
+            if (strrpos($s, '.') > strrpos($s, ',')) {
+                $s = str_replace(',', '', $s);                       // 13,960.5 (İngilizce)
+            } else {
+                $s = str_replace('.', '', $s); $s = str_replace(',', '.', $s); // 13.960,5 (Türkçe)
+            }
+        } elseif ($hasComma) {
+            $s = str_replace(',', '.', $s);                          // 13960,5
+        }
+        // yalnız nokta → ondalık (parseFloat davranışı)
+        return is_numeric($s) ? (float)$s : 0.0;
+    }
+}
+
 function compute_pallet_row(array $row): array {
     $kasa_adeti = intval_safe($row['kasa_adeti'] ?? 0);
-    $brut       = num($row['brut_kg'] ?? 0);
+    $brut       = parse_decimal($row['brut_kg'] ?? 0);
 
     $kasa_cinsi_id = isset($row['kasa_cinsi_id']) && $row['kasa_cinsi_id'] !== ''
         ? (int)$row['kasa_cinsi_id'] : null;
@@ -43,7 +67,7 @@ function compute_pallet_row(array $row): array {
     if (!empty($row['materials']) && is_array($row['materials'])) {
         foreach ($row['materials'] as $m) {
             $mid = isset($m['material_id']) ? (int)$m['material_id'] : 0;
-            $qty = num($m['quantity'] ?? 1);
+            $qty = parse_decimal($m['quantity'] ?? 1);
             if ($mid > 0 && $qty > 0) {
                 $materials[] = ['material_id' => $mid, 'quantity' => $qty];
                 $needed_ids[] = $mid;
