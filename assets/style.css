@@ -194,6 +194,21 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
     grid-template-columns: 1fr;
     gap: 12px;
 }
+
+/* Sprint 34: Marka segmented seçim (ASYA / URAL / URAS) */
+.brand-seg { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.brand-seg-opt {
+    flex: 1 1 0; min-width: 64px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    padding: 9px 6px; border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; font-weight: 700; font-size: .9rem; color: var(--muted);
+    background: var(--surface-2, #f8fafc); user-select: none;
+    transition: background .12s, border-color .12s, color .12s;
+}
+.brand-seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.brand-seg-opt.active,
+.brand-seg-opt:has(input:checked) { background: #fff3cd; border-color: #d97706; color: #92400e; }
+.brand-seg-clear { flex: 0 0 auto; min-width: 44px; }
 .grid label.span-2 { grid-column: span 1; }
 .grid label, .form-foot {
     font-size: .85rem; color: var(--muted); font-weight: 500;
@@ -1118,6 +1133,19 @@ body.print-mode .topbar { display: none; }
     background: #f0f0f0 !important;
 }
 .marka-cell strong { font-weight: 700; font-size: 7.5pt; }
+/* Sprint 34: seçili marka — koyu çerçeve + ✓ (printte de net görünür) */
+.marka-cell.marka-on {
+    background: #fff3cd !important;
+    border: 2px solid #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.marka-cell.marka-on span,
+.marka-cell.marka-on strong { font-weight: 800; }
+.marka-uyari {
+    text-align: center; font-size: 7pt; color: #b00020;
+    padding: 2px; font-weight: 700;
+}
 
 .asya-etiket {
     flex: 1 1 0;
@@ -1356,7 +1384,10 @@ body.print-mode .topbar { display: none; }
     margin-top: 0;
     font-size: 9pt;
     vertical-align: top;
-    height: 100%;
+    /* Sprint 34: kolonu dikey uzatma — GENEL TOPLAM satırı şişmesin,
+       artan boşluk bloğun ALTINDA kalsın (üstte hizalı, sabit yükseklik). */
+    height: auto;
+    align-self: start;
 }
 .asya-totals th {
     background: #fff !important;

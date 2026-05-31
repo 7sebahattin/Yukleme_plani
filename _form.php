@@ -119,6 +119,22 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>
             <?php if (!$form_is_cikma): ?>
+            <label class="span-2">Marka
+                <?php $_cur_brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
+                <div class="brand-seg" role="radiogroup" aria-label="Marka">
+                    <?php foreach (['ASYA', 'URAL', 'URAS'] as $_bv): ?>
+                    <label class="brand-seg-opt<?= $_cur_brand === $_bv ? ' active' : '' ?>">
+                        <input type="radio" name="brand" value="<?= h($_bv) ?>" <?= $_cur_brand === $_bv ? 'checked' : '' ?>>
+                        <span><?= h($_bv) ?></span>
+                    </label>
+                    <?php endforeach; ?>
+                    <label class="brand-seg-opt brand-seg-clear<?= $_cur_brand === '' ? ' active' : '' ?>">
+                        <input type="radio" name="brand" value="" <?= $_cur_brand === '' ? 'checked' : '' ?>>
+                        <span>—</span>
+                    </label>
+                </div>
+                <small class="muted">Etiket çıktısında işaretlenecek marka.</small>
+            </label>
             <label class="span-2">Etiket / Marka Bilgisi
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
             </label>
