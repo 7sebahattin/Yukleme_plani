@@ -345,6 +345,12 @@ $form_is_cikma = $form_is_cikma ?? false;
         'net_kg'     => isset($p['net_kg'])     ? (float)$p['net_kg']     : null,
         'kasa_adeti' => isset($p['kasa_adeti']) ? (int)  $p['kasa_adeti'] : null,
         'islendi'    => !empty($p['islendi'])   ? true                    : false,
+        // Malzeme miktarlarını TEMİZ sayı olarak ver: DB "90.000" → 90.
+        // (Aksi halde num() '.'yi binlik ayırıcı sanıp 90→90000 yapıyordu.)
+        'materials'  => array_map(fn($m) => [
+            'material_id' => (int)($m['material_id'] ?? 0),
+            'quantity'    => (float)($m['quantity'] ?? 0),
+        ], $p['materials'] ?? []),
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
