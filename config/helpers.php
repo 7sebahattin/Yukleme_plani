@@ -650,10 +650,11 @@ function db_has_column(string $table, string $column): bool {
     $key = $table . '::' . $column;
     if (array_key_exists($key, $cache)) return $cache[$key];
     try {
-        $tbl = str_replace('`', '', $table);
-        $st  = db()->prepare("SHOW COLUMNS FROM `$tbl` LIKE ?");
-        $st->execute([$column]);
-        $cache[$key] = (bool)$st->fetchColumn();
+        // NOT: "SHOW COLUMNS ... LIKE ?" native prepared statement'ta (EMULATE_PREPARES=false)
+        // güvenilir çalışmaz → tüm kolonları çekip PHP'de kontrol et.
+        $tbl  = str_replace('`', '', $table);
+        $cols = db()->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        $cache[$key] = in_array($column, $cols, true);
     } catch (PDOException $e) {
         $cache[$key] = false;
     }
