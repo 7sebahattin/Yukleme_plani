@@ -489,7 +489,13 @@
                         const inp = document.createElement('input');
                         inp.type = 'hidden'; inp.className = 'pallet-hidden';
                         inp.name = `pallets[${n}][materials][][${k}]`;
-                        inp.value = m[k] ?? '';
+                        let val = m[k] ?? '';
+                        if (k === 'quantity') {
+                            // num() '.'yi binlik ayırıcı sayar → tam sayı düz, ondalık virgüllü gönder
+                            const q = parseNum(val);
+                            val = Number.isInteger(q) ? String(q) : String(q).replace('.', ',');
+                        }
+                        inp.value = val;
                         frag.appendChild(inp);
                     });
                 });
