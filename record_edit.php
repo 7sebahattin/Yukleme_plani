@@ -133,6 +133,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->beginTransaction();
 
+            // brand kolonu yoksa (migration çalışmadıysa) sorgudan ve parametreden çıkar — defansif
+            $has_brand = !$edit_is_cikma && db_has_column('loading_records', 'brand');
+            if (!$has_brand) {
+                unset($record['brand']);
+            }
+
             if ($edit_is_cikma) {
                 $st = $pdo->prepare(
                     "UPDATE loading_records SET firma=:firma, bolge=:bolge, tarih=:tarih, urun=:urun,
@@ -147,7 +153,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         fatura_no=:fatura_no, casus_no=:casus_no,
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket, brand=:brand
+                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
+                        . ($has_brand ? ", brand=:brand" : "") . "
                      WHERE id=:id"
                 );
             }

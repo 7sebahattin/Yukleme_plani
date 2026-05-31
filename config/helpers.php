@@ -644,6 +644,22 @@ function render_flash(): void {
     }
 }
 
+// --- Şema yardımcı: kolon var mı? (request başına cache'li) ---
+function db_has_column(string $table, string $column): bool {
+    static $cache = [];
+    $key = $table . '::' . $column;
+    if (array_key_exists($key, $cache)) return $cache[$key];
+    try {
+        $tbl = str_replace('`', '', $table);
+        $st  = db()->prepare("SHOW COLUMNS FROM `$tbl` LIKE ?");
+        $st->execute([$column]);
+        $cache[$key] = (bool)$st->fetchColumn();
+    } catch (PDOException $e) {
+        $cache[$key] = false;
+    }
+    return $cache[$key];
+}
+
 // --- Tek seferlik otomatik migrasyon ---
 (function () {
     try {
@@ -667,7 +683,14 @@ function render_flash(): void {
             if (!$has_cn) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `cikis_nedeni` VARCHAR(80) NOT NULL DEFAULT ''");
             }
-        } catch (PDOException $e) {}
+            // Sprint 34: marka (brand) — opsiyonel, eski kayıtlar NULL
+            $has_brand = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'brand'")->fetchColumn();
+            if (!$has_brand) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL");
+            }
+        } catch (PDOException $e) {
+            error_log('[migration] loading_records kolon eklenemedi: ' . $e->getMessage());
+        }
 
         // 2) Kantar tabloları
         $pdo->exec("CREATE TABLE IF NOT EXISTS `kantar_fisleri` (
