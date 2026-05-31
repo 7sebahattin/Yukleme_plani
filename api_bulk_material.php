@@ -214,7 +214,6 @@ try {
     foreach ($valid_ids as $pid) {
         foreach ($materials_input as $m) {
             $mid     = $m['material_id'];
-            $unit_kg = parse_decimal($mats_db[$mid]['unit_dara_kg']);   // DB "0.480" → 0.48
             // Etiket (kasa_etiketi) palete eklenince kasa adetiyle çarpılır:
             // 1 etiket × 90 kasa = 90 etiket. Diğer malzemeler girildiği gibi.
             $qty = $m['quantity'];
@@ -229,17 +228,16 @@ try {
             $st_chk->execute([$pid, $mid]);
             $existing = $st_chk->fetch();
 
+            // Sarf/giydirme malzeme darası HİÇBİR yere girmez → total_dara_kg her zaman 0
             if ($existing) {
-                $new_qty  = round(parse_decimal($existing['quantity']) + $qty, 3);   // DB "90.000" → 90
-                $new_dara = round($unit_kg * $new_qty, 3);
-                $pdo->prepare("UPDATE pallet_materials SET quantity=?, total_dara_kg=? WHERE id=?")
-                    ->execute([$new_qty, $new_dara, (int)$existing['id']]);
+                $new_qty = round(parse_decimal($existing['quantity']) + $qty, 3);   // DB "90.000" → 90
+                $pdo->prepare("UPDATE pallet_materials SET quantity=?, total_dara_kg=0 WHERE id=?")
+                    ->execute([$new_qty, (int)$existing['id']]);
             } else {
-                $dara = round($unit_kg * $qty, 3);
                 $pdo->prepare(
                     "INSERT INTO pallet_materials (loading_pallet_id, material_id, quantity, total_dara_kg)
-                     VALUES (?,?,?,?)"
-                )->execute([$pid, $mid, $qty, $dara]);
+                     VALUES (?,?,?,0)"
+                )->execute([$pid, $mid, $qty]);
             }
         }
 
