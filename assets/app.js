@@ -158,20 +158,15 @@
     }
 
     /* ── Modal dara/net hesapla ── */
+    /* Dara = yalnızca kasa + palet. Ek malzemeler (şapka/köşebent/şerit vb.)
+       stok takibi içindir; dara/net hesabına DAHİL EDİLMEZ. */
     function calcModalDara() {
         const ka = parseInt2(pmKasaAdeti.value);
         const kasaOpt  = pmKasaCinsi.options[pmKasaCinsi.selectedIndex];
         const paletOpt = pmPaletTipi.options[pmPaletTipi.selectedIndex];
         const kasaUnit  = parseNum(kasaOpt?.dataset.unit  || 0);
         const paletUnit = parseNum(paletOpt?.dataset.unit || 0);
-        let extra = 0;
-        pmMatList.querySelectorAll('.pm-mat-row').forEach(mr => {
-            const sel  = mr.querySelector('.mat-select');
-            const unit = parseNum(sel.options[sel.selectedIndex]?.dataset.unit || 0);
-            const qty  = parseNum(mr.querySelector('.mat-qty').value);
-            extra += (unit * qty) || 0;
-        });
-        return ka * kasaUnit + paletUnit + extra;
+        return ka * kasaUnit + paletUnit;
     }
     function updateModalCalc() {
         const brut = parseNum(pmBrutKg.value);

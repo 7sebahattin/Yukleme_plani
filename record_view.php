@@ -558,8 +558,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             <thead>
             <tr><th class="th-banner" colspan="3">STOK ÇIKIŞLARI</th></tr>
             <tr>
-                <th class="stok-name"></th>
-                <th class="stok-adet" colspan="2">ADET / KG</th>
+                <th class="stok-name">MALZEME</th>
+                <th class="stok-adet">ADET</th>
+                <th class="stok-adet">DARA KG</th>
             </tr>
             </thead>
             <tbody>
