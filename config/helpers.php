@@ -692,6 +692,12 @@ function db_has_column(string $table, string $column): bool {
             error_log('[migration] loading_records kolon eklenemedi: ' . $e->getMessage());
         }
 
+        // Sprint 36: sarf (kasa/palet dışı) tanımlarda dara artık kullanılmıyor → sıfırla (idempotent)
+        try {
+            $pdo->exec("UPDATE `material_definitions` SET unit_dara_kg = 0
+                        WHERE unit_dara_kg <> 0 AND type NOT IN ('kasa_cinsi','palet_tipi')");
+        } catch (PDOException $e) {}
+
         // 2) Kantar tabloları
         $pdo->exec("CREATE TABLE IF NOT EXISTS `kantar_fisleri` (
             `id`           INT AUTO_INCREMENT PRIMARY KEY,
@@ -1228,13 +1234,24 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
         $lr = $lr_st->fetch();
         if (!$lr) return;
         $is_cikma = (($lr['type'] ?? 'yukleme') === 'cikma');
-        $mv_type  = $is_cikma ? 'giris' : 'kullanim';
+
+        // Sprint 36: Çıkma kayıtları artık stok hareketi ÜRETMEZ.
+        // Daha önce oluşmuş otomatik (loading kaynaklı) hareketleri temizle ve çık.
+        if ($is_cikma) {
+            try {
+                $pdo->prepare("DELETE FROM material_stock_movements WHERE source_type='loading' AND source_id=?")
+                    ->execute([$loading_record_id]);
+            } catch (PDOException $e) {}
+            return;
+        }
+
+        $mv_type  = 'kullanim';
         $lr_tarih = $lr['tarih'] ?: date('Y-m-d');
 
-        // Okunabilir açıklamalar
-        $note_kasa  = $is_cikma ? 'Çıkma kasa dönüşü'    : 'Yükleme kasa kullanımı';
-        $note_palet = $is_cikma ? 'Çıkma palet dönüşü'   : 'Yükleme palet kullanımı';
-        $note_sarf  = $is_cikma ? 'Çıkma malzeme dönüşü' : 'Yükleme malzeme kullanımı';
+        // Okunabilir açıklamalar (yalnız yükleme)
+        $note_kasa  = 'Yükleme kasa kullanımı';
+        $note_palet = 'Yükleme palet kullanımı';
+        $note_sarf  = 'Yükleme malzeme kullanımı';
 
         // A+B) Kasa & palet — loading_pallets + tanım LEFT JOIN (pasif tanım da dahil)
         $pal_st = $pdo->prepare("

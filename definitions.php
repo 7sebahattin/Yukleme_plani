@@ -49,17 +49,16 @@ foreach ($SECTIONS as $sk => $sv) {
     foreach ($sv['types'] as $t) $type_section[$t] = $sk;
 }
 
-// Bir tip dara (birim ağırlık) içerir mi?
+// Bir tip dara (birim ağırlık) içerir mi? (Sprint 36: yalnız kasa/palet)
 function def_has_dara(string $type): bool {
-    return !in_array($type, ['firma', 'depo', 'bolge', 'urun', 'lokasyon'], true);
+    return in_array($type, ['kasa_cinsi', 'palet_tipi'], true);
 }
 // Ekleme formu açıklaması
 function def_help(string $type): string {
     return match ($type) {
-        'firma', 'depo', 'bolge', 'urun', 'lokasyon' => 'Bu tür için dara gerekmez.',
         'kasa_cinsi' => 'Kasa darası (kg) girilebilir.',
         'palet_tipi' => 'Palet darası (kg) girilebilir.',
-        default      => 'Birim ağırlık gerekiyorsa (kg) girilebilir.',
+        default      => 'Bu tür için dara gerekmez.',
     };
 }
 
@@ -73,7 +72,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'create') {
             $type = (string)($_POST['type'] ?? '');
             $name = normalize_text_v2((string)($_POST['name'] ?? ''));
-            $unit = num($_POST['unit_dara_kg'] ?? 0);
+            // Sprint 36: dara yalnız kasa/palet; sarf tiplerinde her zaman 0
+            $unit = def_has_dara($type) ? num($_POST['unit_dara_kg'] ?? 0) : 0;
             if (!isset($type_labels[$type]) || $name === '') throw new RuntimeException('Tür ve isim zorunlu.');
             $existing = db()->prepare("SELECT name FROM material_definitions WHERE type = ?");
             $existing->execute([$type]);
@@ -91,12 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'update') {
             $id        = (int)($_POST['id'] ?? 0);
             $name      = normalize_text_v2((string)($_POST['name'] ?? ''));
-            $unit      = num($_POST['unit_dara_kg'] ?? 0);
             $is_active = !empty($_POST['is_active']) ? 1 : 0;
             if ($id <= 0 || $name === '') throw new RuntimeException('Geçersiz veri.');
             $row = db()->prepare("SELECT type FROM material_definitions WHERE id = ?");
             $row->execute([$id]);
             $type = (string)($row->fetchColumn() ?: '');
+            // Sprint 36: dara yalnız kasa/palet; sarf tiplerinde her zaman 0
+            $unit = def_has_dara($type) ? num($_POST['unit_dara_kg'] ?? 0) : 0;
             if ($type !== '') {
                 $others = db()->prepare("SELECT name FROM material_definitions WHERE type = ? AND id != ?");
                 $others->execute([$type, $id]);

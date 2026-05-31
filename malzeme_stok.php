@@ -762,12 +762,14 @@ $ms_kalite[] = ms_kalite_check($pdo, 'sync_disi',
     'Stok hareketi oluşmamış kayıtlar',
     'Paletleri var ama malzeme stok hareketleri henüz oluşmamış olabilir (kayıt yeniden kaydedilince oluşur).',
     "SELECT COUNT(*) FROM loading_records lr
-      WHERE EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
+      WHERE COALESCE(lr.type,'yukleme') <> 'cikma'
+        AND EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
         AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)",
     "SELECT lr.id, lr.tarih, lr.firma, lr.type, lr.durum,
             (SELECT COUNT(*) FROM loading_pallets lp WHERE lp.loading_record_id = lr.id) AS palet_sayisi
        FROM loading_records lr
-      WHERE EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
+      WHERE COALESCE(lr.type,'yukleme') <> 'cikma'
+        AND EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
         AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)
       ORDER BY lr.id DESC LIMIT 10");
 

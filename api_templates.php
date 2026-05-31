@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body   = json_decode(file_get_contents('php://input'), true) ?? [];
     csrf_check($body['csrf'] ?? null);
+    require_perm('records.write');   // şablon oluştur/güncelle/sil — viewer yapamaz
     $action = $body['action'] ?? '';
 
     /* Kaydet */
@@ -81,7 +82,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute([$tid, $item['material_id'], $item['quantity']]);
             }
             $pdo->commit();
+            audit_log_event('create', 'material_templates', $tid, null, ['name' => $name, 'items' => count($items)]);
             echo json_encode(['ok' => true, 'id' => $tid]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            echo json_encode(['error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /* Güncelle */
+    if ($action === 'update') {
+        $id    = (int)($body['id'] ?? 0);
+        $name  = trim($body['name'] ?? '');
+        $items = [];
+        foreach ((array)($body['items'] ?? []) as $it) {
+            $mid = (int)($it['material_id'] ?? 0);
+            $qty = num($it['quantity'] ?? 1);
+            if ($mid > 0 && $qty > 0) $items[] = ['material_id' => $mid, 'quantity' => $qty];
+        }
+        if ($id <= 0)      { echo json_encode(['error' => 'Geçersiz ID']); exit; }
+        if (!$name)        { echo json_encode(['error' => 'Şablon adı gerekli']); exit; }
+        if (empty($items)) { echo json_encode(['error' => 'En az bir malzeme ekleyin']); exit; }
+
+        $pdo = db();
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare("UPDATE material_templates SET name=? WHERE id=?")->execute([$name, $id]);
+            $pdo->prepare("DELETE FROM material_template_items WHERE template_id=?")->execute([$id]);
+            $st = $pdo->prepare(
+                "INSERT INTO material_template_items (template_id, material_id, quantity) VALUES (?,?,?)"
+            );
+            foreach ($items as $item) {
+                $st->execute([$id, $item['material_id'], $item['quantity']]);
+            }
+            $pdo->commit();
+            audit_log_event('update', 'material_templates', $id, null, ['name' => $name, 'items' => count($items)]);
+            echo json_encode(['ok' => true, 'id' => $id]);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
             echo json_encode(['error' => $e->getMessage()]);
@@ -93,7 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete') {
         $id = (int)($body['id'] ?? 0);
         if ($id <= 0) { echo json_encode(['error' => 'Geçersiz ID']); exit; }
+        $_tname = db()->prepare("SELECT name FROM material_templates WHERE id=?");
+        $_tname->execute([$id]);
+        $_tn = $_tname->fetchColumn();
         db()->prepare("DELETE FROM material_templates WHERE id=?")->execute([$id]);
+        audit_log_event('delete', 'material_templates', $id, $_tn !== false ? ['name' => $_tn] : null, null);
         echo json_encode(['ok' => true]);
         exit;
     }
