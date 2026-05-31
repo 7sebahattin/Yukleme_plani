@@ -122,9 +122,14 @@ $form_is_cikma = $form_is_cikma ?? false;
             <?php $_brand_col_ok = !function_exists('db_has_column') || db_has_column('loading_records', 'brand'); ?>
             <?php if (!$_brand_col_ok): ?>
             <div class="span-2" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;color:#991b1b;font-size:.83rem;line-height:1.5">
-                ⚠ <strong>Marka kaydedilemiyor:</strong> veritabanında <code>loading_records.brand</code> kolonu yok (otomatik ekleme engellendi — muhtemelen ALTER yetkisi yok).<br>
-                <strong>Çözüm:</strong> phpMyAdmin → SQL sekmesinde şunu çalıştırın:<br>
-                <code style="display:inline-block;margin-top:4px;background:#fff;padding:3px 6px;border-radius:4px;user-select:all">ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL;</code>
+                ⚠ <strong>Marka kaydedilemiyor:</strong> veritabanında <code>loading_records.brand</code> kolonu yok.<br>
+                <?php if (function_exists('is_admin') && is_admin()): ?>
+                <a href="fix_brand.php" class="btn btn-sm btn-primary" style="margin-top:6px" target="_blank">🔧 Kolonu Otomatik Ekle</a>
+                <span style="margin-left:6px">veya phpMyAdmin → SQL:
+                <code style="background:#fff;padding:2px 6px;border-radius:4px;user-select:all">ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL;</code></span>
+                <?php else: ?>
+                Lütfen bir yönetici ile iletişime geçin.
+                <?php endif; ?>
             </div>
             <?php endif; ?>
             <label class="span-2">Marka
