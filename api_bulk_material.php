@@ -183,7 +183,7 @@ if ($record_id <= 0 || empty($materials_input) || empty($pallet_ids)) {
 // Tüm malzemelerin aktif olduğunu doğrula
 $mat_ids = array_values(array_unique(array_column($materials_input, 'material_id')));
 $place   = implode(',', array_fill(0, count($mat_ids), '?'));
-$st      = db()->prepare("SELECT id, unit_dara_kg FROM material_definitions WHERE id IN ($place) AND is_active=1");
+$st      = db()->prepare("SELECT id, unit_dara_kg, type FROM material_definitions WHERE id IN ($place) AND is_active=1");
 $st->execute($mat_ids);
 $mats_db = array_column($st->fetchAll(), null, 'id');
 
@@ -194,11 +194,13 @@ foreach ($materials_input as $m) {
     }
 }
 
-// Sadece bu kayda ait paletleri işle
+// Sadece bu kayda ait paletleri işle (kasa adeti ile — etiket çarpımı için)
 $place2    = implode(',', array_fill(0, count($pallet_ids), '?'));
-$st        = db()->prepare("SELECT id FROM loading_pallets WHERE id IN ($place2) AND loading_record_id=?");
+$st        = db()->prepare("SELECT id, kasa_adeti FROM loading_pallets WHERE id IN ($place2) AND loading_record_id=?");
 $st->execute(array_merge($pallet_ids, [$record_id]));
-$valid_ids = array_column($st->fetchAll(), 'id');
+$valid_rows = $st->fetchAll();
+$valid_ids  = array_column($valid_rows, 'id');
+$kasa_by_pallet = array_column($valid_rows, 'kasa_adeti', 'id');
 
 if (empty($valid_ids)) {
     echo json_encode(['error' => 'Bu kayda ait geçerli palet bulunamadı']);
@@ -212,8 +214,14 @@ try {
     foreach ($valid_ids as $pid) {
         foreach ($materials_input as $m) {
             $mid     = $m['material_id'];
-            $qty     = $m['quantity'];
             $unit_kg = num($mats_db[$mid]['unit_dara_kg']);
+            // Etiket (kasa_etiketi) palete eklenince kasa adetiyle çarpılır:
+            // 1 etiket × 90 kasa = 90 etiket. Diğer malzemeler girildiği gibi.
+            $qty = $m['quantity'];
+            if (($mats_db[$mid]['type'] ?? '') === 'kasa_etiketi') {
+                $ka  = (int)($kasa_by_pallet[$pid] ?? 0);
+                if ($ka > 0) $qty = round($m['quantity'] * $ka, 3);
+            }
 
             $st_chk = $pdo->prepare(
                 "SELECT id, quantity FROM pallet_materials WHERE loading_pallet_id=? AND material_id=?"
