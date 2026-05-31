@@ -70,6 +70,7 @@ if (($body['action'] ?? '') === 'delete') {
         $pdo->prepare("UPDATE loading_pallets SET dara_kg=?, net_kg=? WHERE id=?")
             ->execute([$computed['dara_kg'], $computed['net_kg'], $pid]);
         $pdo->commit();
+        sync_malzeme_kullanim($record_id);   // palet malzemesi silindi → stok hareketlerini güncelle
         echo json_encode(['ok' => true]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
@@ -179,6 +180,7 @@ try {
     }
 
     $pdo->commit();
+    sync_malzeme_kullanim($record_id);   // palet malzemesi eklendi → stok hareketlerini güncelle
     echo json_encode(['ok' => true, 'updated' => count($valid_ids)]);
 
 } catch (Throwable $e) {
