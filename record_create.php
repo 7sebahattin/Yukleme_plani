@@ -79,17 +79,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
 
+            // brand kolonu yoksa (migration çalışmadıysa) sorguya ekleme — defansif
+            $has_brand = db_has_column('loading_records', 'brand');
             $st = $pdo->prepare(
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket, brand)
+                  tarih, alici, urun, etiket" . ($has_brand ? ", brand" : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket, :brand)"
+                  :tarih, :alici, :urun, :etiket" . ($has_brand ? ", :brand" : "") . ")"
             );
-            $st->execute([
+            $ins_params = [
                 ':firma' => $record['firma'],
                 ':bolge' => $record['bolge'],
                 ':parti_no' => $record['parti_no'],
@@ -107,8 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':alici' => $record['alici'],
                 ':urun' => $record['urun'],
                 ':etiket' => $record['etiket'],
-                ':brand' => $record['brand'] !== '' ? $record['brand'] : null,
-            ]);
+            ];
+            if ($has_brand) {
+                $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;
+            }
+            $st->execute($ins_params);
             $rec_id = (int)$pdo->lastInsertId();
 
             $st_p = $pdo->prepare(
