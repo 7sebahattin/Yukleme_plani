@@ -526,15 +526,17 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                         <strong><?= h($record['urun']) ?></strong>
                     </div>
                 </div>
+                <?php $_etiket_foto = trim((string)($record['etiket_foto'] ?? '')); ?>
                 <div class="asya-etiket">
-                    <img id="etiketImg" class="etiket-img" alt="" style="display:none">
-                    <div id="etiketPlaceholder" class="etiket-placeholder">ETİKET</div>
+                    <img id="etiketImg" class="etiket-img" alt=""
+                         <?= $_etiket_foto !== '' ? 'src="' . h($_etiket_foto) . '"' : 'style="display:none"' ?>>
+                    <div id="etiketPlaceholder" class="etiket-placeholder"<?= $_etiket_foto !== '' ? ' style="display:none"' : '' ?>>ETİKET</div>
                     <div class="etiket-actions no-print">
                         <label class="etiket-upload-btn">
                             📷 Fotoğraf Ekle
                             <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
                         </label>
-                        <button id="etiketClear" class="etiket-clear-btn" style="display:none">✕ Kaldır</button>
+                        <button id="etiketClear" class="etiket-clear-btn"<?= $_etiket_foto !== '' ? '' : ' style="display:none"' ?>>✕ Kaldır</button>
                     </div>
                 </div>
             </div>
