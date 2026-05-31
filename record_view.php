@@ -822,16 +822,17 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <button type="button" class="btn btn-sm" id="bmTplNewBtn">+ Yeni Şablon Oluştur</button>
 
         <div id="bmTplForm" class="bm-create-form" hidden>
-          <h4>Yeni Şablon</h4>
+          <h4 id="bmTplFormTitle">Yeni Şablon</h4>
           <label class="pm-label" style="margin-bottom:10px">
             <span>Şablon Adı *</span>
             <input type="text" id="bmTplName" placeholder="Ör: İhracat Seti">
           </label>
           <div id="bmTplMatRows" class="bm-tpl-mat-rows"></div>
           <button type="button" class="btn btn-sm btn-ghost" id="bmTplAddRow" style="margin-bottom:12px">+ Satır Ekle</button>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center">
             <button type="button" class="btn btn-sm btn-primary" id="bmTplSaveBtn">Kaydet</button>
             <button type="button" class="btn btn-sm btn-ghost"   id="bmTplCancelBtn">Vazgeç</button>
+            <button type="button" class="btn btn-sm btn-danger"  id="bmTplDeleteBtn" hidden style="margin-left:auto">Sil</button>
           </div>
           <p id="bmTplStatus" class="bm-status" style="margin-top:6px"></p>
         </div>
@@ -1055,6 +1056,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     var tplSaveBtn  = document.getElementById('bmTplSaveBtn');
     var tplCancelBtn= document.getElementById('bmTplCancelBtn');
     var tplStatus   = document.getElementById('bmTplStatus');
+    var tplFormTitle= document.getElementById('bmTplFormTitle');
+    var tplDeleteBtn= document.getElementById('bmTplDeleteBtn');
+    var editingTplId = null;   // null → yeni; sayı → düzenleme
 
     /* Malzeme select seçeneği oluştur */
     function buildMatSelect(selectedId) {
@@ -1103,8 +1107,11 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 
     tplAddRow.addEventListener('click', function() { addTplRow(); });
 
-    /* Formu aç/kapat */
+    /* Yeni şablon formunu aç */
     tplNewBtn.addEventListener('click', function() {
+        editingTplId = null;
+        tplFormTitle.textContent = 'Yeni Şablon';
+        tplDeleteBtn.hidden = true;
         tplForm.hidden = false;
         tplNewBtn.hidden = true;
         tplNameInp.value = '';
@@ -1113,9 +1120,47 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         addTplRow(); // Başlangıçta 1 boş satır
         tplNameInp.focus();
     });
+    /* Mevcut şablonu düzenlemek için formu doldur */
+    function openTplEdit(tpl) {
+        editingTplId = tpl.id;
+        tplFormTitle.textContent = 'Şablon Düzenle';
+        tplDeleteBtn.hidden = false;
+        tplForm.hidden = false;
+        tplNewBtn.hidden = true;
+        tplNameInp.value = tpl.name || '';
+        tplRowsCont.innerHTML = '';
+        tplStatus.textContent = '';
+        (tpl.items || []).forEach(function(it) { addTplRow(it.material_id, parseN(it.quantity)); });
+        if (!(tpl.items || []).length) addTplRow();
+        tplNameInp.focus();
+    }
     tplCancelBtn.addEventListener('click', function() {
         tplForm.hidden = true;
         tplNewBtn.hidden = false;
+        editingTplId = null;
+    });
+    /* Düzenleme alanı içinde Sil */
+    tplDeleteBtn.addEventListener('click', function() {
+        if (!editingTplId) return;
+        if (!confirm('Bu şablonu silmek istediğinize emin misiniz?')) return;
+        tplDeleteBtn.disabled = true;
+        fetch('api_templates.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({csrf: CSRF, action: 'delete', id: editingTplId})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            tplDeleteBtn.disabled = false;
+            if (data.ok) {
+                tplForm.hidden = true; tplNewBtn.hidden = false; editingTplId = null;
+                loadTemplates();
+            } else {
+                tplStatus.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata');
+                tplStatus.style.color = 'var(--danger)';
+            }
+        })
+        .catch(function() { tplDeleteBtn.disabled = false; tplStatus.textContent = 'Bağlantı hatası.'; tplStatus.style.color = 'var(--danger)'; });
     });
 
     /* Şablon kaydet */
@@ -1133,16 +1178,19 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         tplSaveBtn.disabled = true;
         tplStatus.textContent = 'Kaydediliyor…'; tplStatus.style.color = 'var(--muted)';
 
+        var payload = editingTplId
+            ? {csrf: CSRF, action: 'update', id: editingTplId, name: name, items: items}
+            : {csrf: CSRF, action: 'save', name: name, items: items};
         fetch('api_templates.php', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({csrf: CSRF, action: 'save', name: name, items: items})
+            body: JSON.stringify(payload)
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             tplSaveBtn.disabled = false;
             if (data.ok) {
-                tplForm.hidden = true; tplNewBtn.hidden = false;
+                tplForm.hidden = true; tplNewBtn.hidden = false; editingTplId = null;
                 tplStatus.textContent = '';
                 loadTemplates();
             } else {
@@ -1186,7 +1234,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                 '</div>' +
                 '<div class="bm-tpl-actions">' +
                   '<button class="btn btn-sm btn-primary" data-apply="' + tpl.id + '">Uygula</button>' +
-                  '<button class="btn btn-sm btn-ghost tpl-del-btn" data-del="' + tpl.id + '">Sil</button>' +
+                  '<button class="btn btn-sm btn-ghost tpl-edit-btn" data-edit="' + tpl.id + '">Düzenle</button>' +
                 '</div>';
 
             card.querySelector('[data-apply]').addEventListener('click', function() {
@@ -1198,21 +1246,8 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                 sendMaterials(materials, ids, this);
             });
 
-            card.querySelector('[data-del]').addEventListener('click', function() {
-                if (!confirm('"' + tpl.name + '" şablonu silinsin mi?')) return;
-                var btn = this;
-                btn.disabled = true;
-                fetch('api_templates.php', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({csrf: CSRF, action: 'delete', id: tpl.id})
-                })
-                .then(function(r) { return r.json(); })
-                .then(function(data) {
-                    if (data.ok) loadTemplates();
-                    else { btn.disabled = false; alert('Hata: ' + data.error); }
-                })
-                .catch(function() { btn.disabled = false; });
+            card.querySelector('[data-edit]').addEventListener('click', function() {
+                openTplEdit(tpl);
             });
 
             tplListEl.appendChild(card);
