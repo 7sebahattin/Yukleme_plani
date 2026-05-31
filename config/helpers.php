@@ -683,13 +683,18 @@ function db_has_column(string $table, string $column): bool {
             if (!$has_cn) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `cikis_nedeni` VARCHAR(80) NOT NULL DEFAULT ''");
             }
-            // Sprint 34: marka (brand) — opsiyonel, eski kayıtlar NULL
+        } catch (PDOException $e) {
+            error_log('[migration] loading_records temel kolonlar: ' . $e->getMessage());
+        }
+
+        // Sprint 34/36: marka (brand) — KENDİ try bloğunda (önceki ALTER hatası bunu atlamasın)
+        try {
             $has_brand = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'brand'")->fetchColumn();
             if (!$has_brand) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL");
             }
         } catch (PDOException $e) {
-            error_log('[migration] loading_records kolon eklenemedi: ' . $e->getMessage());
+            error_log('[migration] brand kolonu eklenemedi (ALTER yetkisi?): ' . $e->getMessage());
         }
 
         // Sprint 36: sarf (kasa/palet dışı) tanımlarda dara artık kullanılmıyor → sıfırla (idempotent)
