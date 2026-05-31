@@ -228,6 +228,8 @@ $urun_keys = array_slice(array_keys($urun_groups), 0, 4);
 
 // Toplu malzeme ekleme modalı için aktif malzemeleri çek
 $bm_materials = get_all_active_materials();
+// Yalnız palete giydirilen sarf malzemeler listelenir — ticari/yapısal tipler hariç
+$bm_skip_types = ['firma', 'depo', 'bolge', 'urun', 'lokasyon', 'kasa_cinsi', 'palet_tipi'];
 
 // "Eklenenleri Sil" sekmesi — bu kayda eklenmiş sarf/giydirme malzemeleri (pallet_materials)
 $extra_materials = [];
@@ -792,7 +794,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
               <?php
               $bm_by_type = [];
               foreach ($bm_materials as $m) {
-                  if (in_array($m['type'], ['kasa_cinsi', 'palet_tipi', 'firma', 'depo', 'urun'])) continue;
+                  if (in_array($m['type'], $bm_skip_types, true)) continue;
                   $bm_by_type[$m['type']][] = $m;
               }
               foreach ($bm_by_type as $btype => $blist):
@@ -910,7 +912,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <?php
     $bm_mat_list = [];
     foreach ($bm_materials as $m) {
-        if ($m['type'] === 'kasa_cinsi' || $m['type'] === 'palet_tipi') continue;
+        if (in_array($m['type'], $bm_skip_types, true)) continue;
         $bm_mat_list[] = [
             'id'   => (int)$m['id'],
             'name' => $m['name'],
