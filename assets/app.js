@@ -484,11 +484,13 @@
                 frag.appendChild(inp);
             });
             if (Array.isArray(p.materials)) {
-                p.materials.forEach(m => {
+                p.materials.forEach((m, mi) => {
                     ['material_id', 'quantity'].forEach(k => {
                         const inp = document.createElement('input');
                         inp.type = 'hidden'; inp.className = 'pallet-hidden';
-                        inp.name = `pallets[${n}][materials][][${k}]`;
+                        // AÇIK index (mi) ŞART: "materials[][material_id]" + "materials[][quantity]"
+                        // PHP'de AYRI elemanlara bölünür → quantity kaybolur, qty=1 default olur.
+                        inp.name = `pallets[${n}][materials][${mi}][${k}]`;
                         let val = m[k] ?? '';
                         if (k === 'quantity') {
                             // num() '.'yi binlik ayırıcı sayar → tam sayı düz, ondalık virgüllü gönder
