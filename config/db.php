@@ -52,6 +52,13 @@ function db(): PDO {
                     );
                 }
             }
+            // Sprint 34: marka (brand) kolonu — opsiyonel, eski kayıtlar NULL kalır
+            $has_brand = (bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'brand'")->fetchColumn();
+            if (!$has_brand) {
+                try {
+                    $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL");
+                } catch (PDOException $mig_e) { /* eklenememişse view/form defansif çalışır */ }
+            }
         }
 
         // Hesap modülü tabloları

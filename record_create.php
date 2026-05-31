@@ -14,7 +14,7 @@ $record = [
     'nakliye_bedeli' => '', 'avans' => '',
     'sofor_adi' => '', 'fatura_no' => '', 'casus_no' => '',
     'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '',
-    'tarih' => date('Y-m-d'), 'alici' => '', 'urun' => '', 'etiket' => '',
+    'tarih' => date('Y-m-d'), 'alici' => '', 'urun' => '', 'etiket' => '', 'brand' => '',
 ];
 $pallets = [];
 
@@ -30,6 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
+    $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS'], true) ? strtoupper($record['brand']) : '';
     if ($record['tarih'] === '') $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '') $errors[] = 'Firma zorunludur.';
     if ($record['urun']  === '') $errors[] = 'Ürün zorunludur.';
@@ -82,11 +83,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket)
+                  tarih, alici, urun, etiket, brand)
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket)"
+                  :tarih, :alici, :urun, :etiket, :brand)"
             );
             $st->execute([
                 ':firma' => $record['firma'],
@@ -106,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':alici' => $record['alici'],
                 ':urun' => $record['urun'],
                 ':etiket' => $record['etiket'],
+                ':brand' => $record['brand'] !== '' ? $record['brand'] : null,
             ]);
             $rec_id = (int)$pdo->lastInsertId();
 

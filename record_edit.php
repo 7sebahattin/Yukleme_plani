@@ -63,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'telefon'         => trim((string)($_POST['telefon'] ?? '')),
             'alici'           => trim((string)($_POST['alici'] ?? '')),
             'etiket'          => trim((string)($_POST['etiket'] ?? '')),
+            'brand'           => trim((string)($_POST['brand'] ?? '')),
         ];
     }
 
@@ -86,6 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Normalize
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
+    if (!$edit_is_cikma) {
+        $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS'], true) ? strtoupper($record['brand']) : null;
+    }
 
     // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et
     foreach ($computed as &$p) {
@@ -143,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         fatura_no=:fatura_no, casus_no=:casus_no,
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket
+                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket, brand=:brand
                      WHERE id=:id"
                 );
             }

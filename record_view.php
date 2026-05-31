@@ -488,11 +488,17 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 
             <!-- Sağ: MARKA + ALICI + ÜRÜN + ETİKET -->
             <div class="asya-right-top">
+                <?php $brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
                 <div class="asya-marka-row">
-                    <div class="marka-cell"><span>ASYA</span><strong>MARKA</strong></div>
-                    <div class="marka-cell"><span>URAL</span><strong>MARKA</strong></div>
-                    <div class="marka-cell"><span>URAS</span><strong>MARKA</strong></div>
+                    <?php foreach (['ASYA', 'URAL', 'URAS'] as $_bv): $_on = ($brand === $_bv); ?>
+                    <div class="marka-cell<?= $_on ? ' marka-on' : '' ?>">
+                        <span><?= $_on ? '✓ ' : '' ?><?= $_bv ?></span><strong>MARKA</strong>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
+                <?php if ($brand === ''): ?>
+                <div class="marka-uyari">⚠ Marka seçilmedi</div>
+                <?php endif; ?>
                 <div class="asya-alici-urun-row">
                     <div class="cell-pair asya-alici-cell">
                         <span>ALICI</span>
