@@ -716,6 +716,86 @@ foreach ($_ms_audit_check_defs as $_acd) {
     $_ms_audit_details[] = ['label' => $_acd['label'], 'detail' => $_acd['detail'], 'cnt' => $_cnt, 'rows' => $_rows];
 }
 
+// ── Sprint 33D: Veri Kalite Kontrolü ──────────────────────
+// Yalnızca tespit/raporlama; otomatik düzeltme veya backfill yok.
+function ms_kalite_check(PDO $pdo, string $key, string $label, string $desc, string $cnt_sql, string $row_sql): array {
+    try {
+        $cnt  = (int)$pdo->query($cnt_sql)->fetchColumn();
+        $rows = $cnt > 0 ? $pdo->query($row_sql)->fetchAll() : [];
+    } catch (PDOException $e) { $cnt = 0; $rows = []; }
+    return ['key' => $key, 'label' => $label, 'desc' => $desc, 'cnt' => $cnt, 'rows' => $rows];
+}
+
+$ms_kalite = [];
+
+// 1) Kasa adedi var ama kasa tipi boş → stoktan düşemez
+$ms_kalite[] = ms_kalite_check($pdo, 'kasa_tipsiz',
+    'Kasa tipi seçilmemiş paletler',
+    'Kasa adedi girilmiş ama kasa tipi seçilmemiş — bu kasalar stoktan düşemez.',
+    "SELECT COUNT(*) FROM loading_pallets WHERE kasa_adeti > 0 AND (kasa_cinsi_id IS NULL OR kasa_cinsi_id = 0)",
+    "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
+       FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
+      WHERE lp.kasa_adeti > 0 AND (lp.kasa_cinsi_id IS NULL OR lp.kasa_cinsi_id = 0)
+      ORDER BY lp.id DESC LIMIT 10");
+
+// 2) Palet tipi boş
+$ms_kalite[] = ms_kalite_check($pdo, 'palet_tipsiz',
+    'Palet tipi seçilmemiş paletler',
+    'Palet tipi seçilmemiş — palet stoğu bu satırlardan düşemez.',
+    "SELECT COUNT(*) FROM loading_pallets WHERE (palet_tipi_id IS NULL OR palet_tipi_id = 0)",
+    "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
+       FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
+      WHERE (lp.palet_tipi_id IS NULL OR lp.palet_tipi_id = 0)
+      ORDER BY lp.id DESC LIMIT 10");
+
+// 3) Deposu boş hareketler
+$ms_kalite[] = ms_kalite_check($pdo, 'depo_bos',
+    'Deposu boş malzeme hareketleri',
+    'Depo bazlı stok bu hareketlerde eksik görünebilir.',
+    "SELECT COUNT(*) FROM material_stock_movements WHERE depo IS NULL OR depo = ''",
+    "SELECT id, movement_date, material_name, movement_type, quantity, unit, source_type, source_id
+       FROM material_stock_movements WHERE depo IS NULL OR depo = ''
+      ORDER BY id DESC LIMIT 10");
+
+// 4) Sync dışı yükleme kayıtları (paleti var, loading hareketi yok)
+$ms_kalite[] = ms_kalite_check($pdo, 'sync_disi',
+    'Stok hareketi oluşmamış kayıtlar',
+    'Paletleri var ama malzeme stok hareketleri henüz oluşmamış olabilir (kayıt yeniden kaydedilince oluşur).',
+    "SELECT COUNT(*) FROM loading_records lr
+      WHERE EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
+        AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)",
+    "SELECT lr.id, lr.tarih, lr.firma, lr.type, lr.durum,
+            (SELECT COUNT(*) FROM loading_pallets lp WHERE lp.loading_record_id = lr.id) AS palet_sayisi
+       FROM loading_records lr
+      WHERE EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
+        AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)
+      ORDER BY lr.id DESC LIMIT 10");
+
+// 5) Pasif ama kullanımda olan tanımlar
+$ms_kalite[] = ms_kalite_check($pdo, 'pasif_kullanim',
+    'Pasif ama kullanımda olan tanımlar',
+    'Pasif tanımlar geçmiş stok hareketlerinde kullanılıyor.',
+    "SELECT COUNT(*) FROM material_definitions md
+      WHERE md.is_active = 0 AND EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.material_id = md.id)",
+    "SELECT md.id, md.type, md.name,
+            (SELECT COUNT(*) FROM material_stock_movements m WHERE m.material_id = md.id) AS hareket_sayisi
+       FROM material_definitions md
+      WHERE md.is_active = 0 AND EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.material_id = md.id)
+      ORDER BY md.type, md.name LIMIT 10");
+
+// 6) Negatif stoktaki kasa/paletler (özet satırlarından — PHP)
+$ms_neg_kasa_palet = array_values(array_filter($ozet_rows, fn($r) =>
+    in_array($r['category'], ['kasa', 'palet'], true) && (float)$r['kalan'] < 0));
+$ms_kalite[] = [
+    'key'   => 'neg_kasa_palet',
+    'label' => 'Negatif stoktaki kasa/paletler',
+    'desc'  => 'Kasa/palet stok girişleri eksik olabilir (kullanım girişten fazla).',
+    'cnt'   => count($ms_neg_kasa_palet),
+    'rows'  => array_slice($ms_neg_kasa_palet, 0, 10),
+];
+
+$ms_kalite_total = array_sum(array_column($ms_kalite, 'cnt'));
+
 render_header('Malzeme Stok');
 render_flash();
 
@@ -1350,6 +1430,117 @@ $mat_dusuk_count = count($negatif_ozet);
     <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<!-- ── Veri Kalite Kontrolü ──────────────────────────────── -->
+<?php
+$ms_kalite_aktif = array_values(array_filter($ms_kalite, fn($k) => $k['cnt'] > 0));
+$ms_tip_lbl = fn($t) => match ($t) {
+    'giris' => 'Giriş', 'sevk' => 'Sevk', 'kullanim' => 'Kullanım', 'duzeltme' => 'Düzeltme', default => $t,
+};
+$ms_kayit_tip = fn($t) => ($t ?? 'yukleme') === 'cikma' ? 'Çıkma' : 'Yükleme';
+?>
+<details class="card ms-kalite-card" style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden" <?= $ms_kalite_total > 0 ? 'open' : '' ?>>
+    <summary class="ms-kalite-summary">
+        🧪 Veri Kalite Kontrolü
+        <span class="ms-kalite-pill" style="background:<?= $ms_kalite_total > 0 ? '#fef3c7' : '#d1fae5' ?>;color:<?= $ms_kalite_total > 0 ? '#92400e' : '#065f46' ?>">
+            <?= $ms_kalite_total > 0 ? '⚠ ' . $ms_kalite_total . ' kayıt' : '✓ Temiz' ?>
+        </span>
+    </summary>
+    <div style="padding:14px 16px">
+        <?php if ($ms_kalite_total === 0): ?>
+        <p style="color:var(--success);font-size:.9rem;margin:0">✓ Malzeme stok veri kalitesi temiz görünüyor.</p>
+        <?php else: ?>
+        <?php foreach ($ms_kalite_aktif as $chk): ?>
+        <div class="ms-kalite-block">
+            <div class="ms-kalite-head">
+                <span class="dkk-badge dkk-badge-orta" style="font-size:.72rem"><?= (int)$chk['cnt'] ?></span>
+                <strong style="font-size:.88rem"><?= h($chk['label']) ?></strong>
+                <span style="font-size:.78rem;color:var(--muted)"><?= h($chk['desc']) ?></span>
+            </div>
+            <div class="table-wrap">
+                <table class="data-table" style="font-size:.8rem">
+                    <?php switch ($chk['key']):
+                        case 'kasa_tipsiz':
+                        case 'palet_tipsiz': ?>
+                        <thead><tr><th>Kayıt</th><th>Palet</th><th>Kasa Adedi</th><th>Tarih</th><th>Firma</th><th>Tür</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($chk['rows'] as $r): ?>
+                        <tr>
+                            <td>#<?= (int)$r['loading_record_id'] ?></td>
+                            <td><?= (int)$r['pallet_id'] ?></td>
+                            <td><?= number_format((float)$r['kasa_adeti'], 0, ',', '.') ?></td>
+                            <td><?= h(fmt_date($r['tarih'])) ?></td>
+                            <td><?= h($r['firma'] ?: '—') ?></td>
+                            <td><?= h($ms_kayit_tip($r['type'])) ?></td>
+                            <td><a href="record_edit.php?id=<?= (int)$r['loading_record_id'] ?>" class="btn btn-sm btn-ghost">✎ Düzenle</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    <?php break; case 'depo_bos': ?>
+                        <thead><tr><th>ID</th><th>Tarih</th><th>Malzeme</th><th>Hareket</th><th>Miktar</th><th>Kaynak</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($chk['rows'] as $r): ?>
+                        <tr>
+                            <td><?= (int)$r['id'] ?></td>
+                            <td><?= h(fmt_date($r['movement_date'])) ?></td>
+                            <td><?= h($r['material_name'] ?: '—') ?></td>
+                            <td><?= h($ms_tip_lbl($r['movement_type'])) ?></td>
+                            <td><?= number_format((float)$r['quantity'], 0, ',', '.') ?> <?= h($r['unit']) ?></td>
+                            <td><?= $r['source_type'] !== '' ? h($r['source_type'] . ($r['source_id'] ? '#' . $r['source_id'] : '')) : '—' ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    <?php break; case 'sync_disi': ?>
+                        <thead><tr><th>Kayıt</th><th>Tarih</th><th>Firma</th><th>Tür</th><th>Durum</th><th>Palet</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($chk['rows'] as $r): ?>
+                        <tr>
+                            <td>#<?= (int)$r['id'] ?></td>
+                            <td><?= h(fmt_date($r['tarih'])) ?></td>
+                            <td><?= h($r['firma'] ?: '—') ?></td>
+                            <td><?= h($ms_kayit_tip($r['type'])) ?></td>
+                            <td><?= h($r['durum'] ?: '—') ?></td>
+                            <td><?= (int)$r['palet_sayisi'] ?></td>
+                            <td><a href="record_edit.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-ghost">✎ Düzenle</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    <?php break; case 'pasif_kullanim': ?>
+                        <thead><tr><th>ID</th><th>Tür</th><th>Malzeme</th><th>Hareket</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($chk['rows'] as $r): ?>
+                        <tr>
+                            <td><?= (int)$r['id'] ?></td>
+                            <td><?= h($ms_types[$r['type']] ?? $r['type']) ?></td>
+                            <td><?= h($r['name']) ?></td>
+                            <td><?= (int)$r['hareket_sayisi'] ?> hareket</td>
+                            <td><a href="definitions.php" class="btn btn-sm btn-ghost">→ Tanımlar</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    <?php break; case 'neg_kasa_palet': ?>
+                        <thead><tr><th>Kategori</th><th>Malzeme</th><th>Depo</th><th class="num">Kalan</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($chk['rows'] as $r):
+                            $lnk = ms_url(['mat_type' => $r['material_type'], 'mat_name' => $r['material_name'], 'depo' => $r['depo'], 'hareket_tipi' => '', 'hareket_page' => '']) . '#ms-hareketler';
+                        ?>
+                        <tr>
+                            <td><span class="ms-cat-badge ms-cat-<?= h($r['category']) ?>"><?= h($ms_cat_labels[$r['category']] ?? $r['category']) ?></span></td>
+                            <td><?= h($r['material_name']) ?></td>
+                            <td><?= $r['depo'] !== '' ? h($r['depo']) : '<span style="color:var(--muted)">Depo Boş</span>' ?></td>
+                            <td class="num" style="color:var(--danger);font-weight:700"><?= number_format((float)$r['kalan'], 0, ',', '.') ?></td>
+                            <td><a href="<?= h($lnk) ?>" class="btn btn-sm btn-ghost">🔍 Hareketler</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    <?php break; endswitch; ?>
+                </table>
+            </div>
+        </div>
+        <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</details>
 
 <?php if ($ms_can_write): ?>
 <!-- ── Hareket Düzenle Modal ─────────────────────────────── -->
