@@ -229,6 +229,21 @@ $urun_keys = array_slice(array_keys($urun_groups), 0, 4);
 // Toplu malzeme ekleme modalı için aktif malzemeleri çek
 $bm_materials = get_all_active_materials();
 
+// "Eklenenleri Sil" sekmesi — bu kayda eklenmiş sarf/giydirme malzemeleri (pallet_materials)
+$extra_materials = [];
+foreach ($pallets as $p) {
+    foreach (($p['materials'] ?? []) as $m) {
+        $extra_materials[] = [
+            'pm_id'    => (int)$m['id'],
+            'name'     => $m['material_name'],
+            'type'     => $type_labels[$m['material_type']] ?? $m['material_type'],
+            'qty'      => (float)$m['quantity'],
+            'depo'     => $p['depo'] ?? '',
+            'palet_no' => $p['palet_no'] ?? '',
+        ];
+    }
+}
+
 $depo_values = array_unique(array_filter(array_map('trim', array_column($pallets, 'depo'))));
 $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 
@@ -562,11 +577,10 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <!-- Stok Çıkışları (ayrı sütun) -->
         <table class="asya-stok">
             <thead>
-            <tr><th class="th-banner" colspan="3">STOK ÇIKIŞLARI</th></tr>
+            <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
             <tr>
                 <th class="stok-name">MALZEME</th>
                 <th class="stok-adet">ADET</th>
-                <th class="stok-adet">DARA KG</th>
             </tr>
             </thead>
             <tbody>
@@ -580,11 +594,10 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                 <tr>
                     <td class="stok-name"><?= h($label) ?></td>
                     <td class="stok-val"><?= h($adet_str) ?></td>
-                    <td class="stok-val"><?= $r['kg'] > 0 ? h(fmt_kg(round($r['kg']))) : '' ?></td>
                 </tr>
             <?php endforeach; ?>
             <?php for ($fi = $stok_shown; $fi < $grid_rows; $fi++): ?>
-                <tr class="stok-filler"><td></td><td></td><td></td></tr>
+                <tr class="stok-filler"><td></td><td></td></tr>
             <?php endfor; ?>
             </tbody>
         </table>
@@ -764,6 +777,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <div class="bm-tabs">
       <button type="button" class="bm-tab-btn active" data-tab="single">Malzeme Ekle</button>
       <button type="button" class="bm-tab-btn" data-tab="tpl">Şablonlar</button>
+      <button type="button" class="bm-tab-btn" data-tab="remove">Eklenenleri Sil<?= !empty($extra_materials) ? ' (' . count($extra_materials) . ')' : '' ?></button>
     </div>
 
     <div class="pm-body">
@@ -821,6 +835,32 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
           </div>
           <p id="bmTplStatus" class="bm-status" style="margin-top:6px"></p>
         </div>
+      </div>
+
+      <!-- ── Eklenenleri Sil paneli ── -->
+      <div class="bm-panel" id="bmPanelRemove" hidden>
+        <?php if (empty($extra_materials)): ?>
+          <div class="bm-tpl-empty">Bu kayda eklenmiş giydirme/sarf malzeme yok.</div>
+        <?php else: ?>
+          <div class="bm-rm-head">
+            <label class="bm-check-label"><input type="checkbox" id="bmRmAll"> <strong>Tümünü Seç</strong></label>
+            <span class="muted">Kasa cinsi ve palet tipi silinmez.</span>
+          </div>
+          <div class="bm-rm-list">
+            <?php foreach ($extra_materials as $em): ?>
+            <label class="bm-check-label bm-rm-item">
+              <input type="checkbox" class="bm-rm-cb" value="<?= (int)$em['pm_id'] ?>">
+              <span class="bm-rm-name"><?= h($em['name']) ?></span>
+              <span class="muted"><?= h($em['type']) ?> · Palet <?= h($em['palet_no'] !== '' ? $em['palet_no'] : '—') ?> · <?= h(rtrim(rtrim(number_format($em['qty'], 3, ',', '.'), '0'), ',')) ?> adet<?= $em['depo'] !== '' ? ' · ' . h($em['depo']) : '' ?></span>
+            </label>
+            <?php endforeach; ?>
+          </div>
+          <div class="bm-rm-actions">
+            <button type="button" class="btn btn-sm btn-danger" id="bmRmSelected">Seçilenleri Sil</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="bmRmAllBtn">Tüm Giydirme Malzemelerini Kaldır</button>
+          </div>
+        <?php endif; ?>
+        <p id="bmRmStatus" class="bm-status"></p>
       </div>
 
       <!-- ── Palet seçimi (her iki modda ortak) ── -->
@@ -902,7 +942,15 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             btn.classList.add('active');
             document.getElementById('bmPanelSingle').hidden = (activeTab !== 'single');
             document.getElementById('bmPanelTpl').hidden    = (activeTab !== 'tpl');
+            var rmPanel = document.getElementById('bmPanelRemove');
+            if (rmPanel) rmPanel.hidden = (activeTab !== 'remove');
             applyBtn.style.display = (activeTab === 'single') ? '' : 'none';
+            // Palet seçimi "Eklenenleri Sil" modunda gereksiz → gizle
+            var palHead = document.querySelector('.bm-pallets-head');
+            var palList = document.querySelector('.bm-pallet-list');
+            var showPal = (activeTab !== 'remove');
+            if (palHead) palHead.style.display = showPal ? '' : 'none';
+            if (palList) palList.style.display = showPal ? '' : 'none';
             if (activeTab === 'tpl') loadTemplates();
         });
     });
@@ -1188,6 +1236,51 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             })
             .catch(function() { alert('Bağlantı hatası.'); btn.disabled = false; });
         });
+    });
+
+    /* ── Eklenenleri Sil (toplu) ── */
+    var rmAll    = document.getElementById('bmRmAll');
+    var rmStatus = document.getElementById('bmRmStatus');
+    if (rmAll) {
+        rmAll.addEventListener('change', function() {
+            document.querySelectorAll('.bm-rm-cb').forEach(function(cb) { cb.checked = rmAll.checked; });
+        });
+    }
+    function bmRemove(payload, btn, confirmMsg) {
+        if (confirmMsg && !confirm(confirmMsg)) return;
+        if (btn) btn.disabled = true;
+        if (rmStatus) { rmStatus.textContent = 'Siliniyor…'; rmStatus.style.color = 'var(--muted)'; }
+        fetch('api_bulk_material.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(Object.assign({csrf: CSRF, record_id: REC_ID}, payload))
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                if (rmStatus) { rmStatus.textContent = '✓ ' + data.deleted + ' malzeme silindi. Yenileniyor…'; rmStatus.style.color = 'var(--success)'; }
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                if (btn) btn.disabled = false;
+                if (rmStatus) { rmStatus.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata'); rmStatus.style.color = 'var(--danger)'; }
+            }
+        })
+        .catch(function() {
+            if (btn) btn.disabled = false;
+            if (rmStatus) { rmStatus.textContent = 'Bağlantı hatası.'; rmStatus.style.color = 'var(--danger)'; }
+        });
+    }
+    var rmSelBtn = document.getElementById('bmRmSelected');
+    if (rmSelBtn) rmSelBtn.addEventListener('click', function() {
+        var ids = [];
+        document.querySelectorAll('.bm-rm-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+        if (!ids.length) { alert('Silinecek malzeme seçiniz.'); return; }
+        bmRemove({action: 'delete_selected_materials', pm_ids: ids}, rmSelBtn, ids.length + ' malzeme silinsin mi?');
+    });
+    var rmAllBtn = document.getElementById('bmRmAllBtn');
+    if (rmAllBtn) rmAllBtn.addEventListener('click', function() {
+        bmRemove({action: 'delete_all_extra_materials'}, rmAllBtn,
+            'Bu kayda eklenmiş TÜM giydirme/sarf malzemeleri kaldırılsın mı? (Kasa/palet bilgileri korunur.)');
     });
 })();
 </script>

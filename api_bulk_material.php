@@ -26,6 +26,90 @@ csrf_check($body['csrf'] ?? null);
 $record_id  = (int)($body['record_id'] ?? 0);
 $pallet_ids = array_values(array_unique(array_map('intval', (array)($body['pallet_ids'] ?? []))));
 
+// Bir paletin dara/net değerlerini mevcut malzemelere göre yeniden hesaplar (dara = kasa+palet).
+function ms_recompute_pallet(PDO $pdo, int $pid): void {
+    $st_p = $pdo->prepare("SELECT * FROM loading_pallets WHERE id=?");
+    $st_p->execute([$pid]);
+    $pallet = $st_p->fetch();
+    if (!$pallet) return;
+    $st_m = $pdo->prepare("SELECT material_id, quantity FROM pallet_materials WHERE loading_pallet_id=?");
+    $st_m->execute([$pid]);
+    $mats = array_map(fn($mi) => ['material_id' => $mi['material_id'], 'quantity' => $mi['quantity']], $st_m->fetchAll());
+    $c = compute_pallet_row([
+        'palet_no' => $pallet['palet_no'], 'kasa_adeti' => $pallet['kasa_adeti'], 'size' => $pallet['size'],
+        'brut_kg' => $pallet['brut_kg'], 'kasa_cinsi_id' => $pallet['kasa_cinsi_id'],
+        'palet_tipi_id' => $pallet['palet_tipi_id'], 'urun_cinsi' => $pallet['urun_cinsi'],
+        'depo' => $pallet['depo'], 'materials' => $mats,
+    ]);
+    $pdo->prepare("UPDATE loading_pallets SET dara_kg=?, net_kg=? WHERE id=?")
+        ->execute([$c['dara_kg'], $c['net_kg'], $pid]);
+}
+
+// ── Toplu giydirme/sarf malzeme silme (seçili veya tümü) ─────────
+if (in_array($body['action'] ?? '', ['delete_selected_materials', 'delete_all_extra_materials'], true)) {
+    if ($record_id <= 0) { echo json_encode(['ok' => false, 'error' => 'Geçersiz kayıt']); exit; }
+
+    // Kilit kontrolü — yüklendi/kilitli kayıtta yalnız records.unlock olanlar değiştirebilir
+    $lr = db()->prepare("SELECT locked_at, durum FROM loading_records WHERE id=?");
+    $lr->execute([$record_id]);
+    $lrow = $lr->fetch();
+    if (!$lrow) { echo json_encode(['ok' => false, 'error' => 'Kayıt bulunamadı']); exit; }
+    $locked = !empty($lrow['locked_at']) || (($lrow['durum'] ?? '') === 'yuklendi');
+    if ($locked && !can('records.unlock')) {
+        echo json_encode(['ok' => false, 'error' => 'Kayıt kilitli; malzeme değişikliği yapılamaz.']); exit;
+    }
+
+    $pdo = db();
+    // Yalnızca BU kayda ait paletlerin pallet_materials satırları (kasa/palet asla burada değil)
+    if (($body['action']) === 'delete_selected_materials') {
+        $pm_ids = array_values(array_unique(array_map('intval', (array)($body['pm_ids'] ?? []))));
+        if (empty($pm_ids)) { echo json_encode(['ok' => false, 'error' => 'Silinecek malzeme seçilmedi']); exit; }
+        $ph  = implode(',', array_fill(0, count($pm_ids), '?'));
+        $sel = $pdo->prepare(
+            "SELECT pm.id, pm.loading_pallet_id, pm.material_id, m.name AS material_name
+             FROM pallet_materials pm
+             JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+             LEFT JOIN material_definitions m ON m.id = pm.material_id
+             WHERE lp.loading_record_id = ? AND pm.id IN ($ph)"
+        );
+        $sel->execute(array_merge([$record_id], $pm_ids));
+    } else {
+        $sel = $pdo->prepare(
+            "SELECT pm.id, pm.loading_pallet_id, pm.material_id, m.name AS material_name
+             FROM pallet_materials pm
+             JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+             LEFT JOIN material_definitions m ON m.id = pm.material_id
+             WHERE lp.loading_record_id = ?"
+        );
+        $sel->execute([$record_id]);
+    }
+    $rows = $sel->fetchAll();
+    if (empty($rows)) { echo json_encode(['ok' => true, 'deleted' => 0]); exit; }
+
+    $del_ids   = array_map('intval', array_column($rows, 'id'));
+    $pallets_a = array_values(array_unique(array_map('intval', array_column($rows, 'loading_pallet_id'))));
+    $names     = array_values(array_unique(array_filter(array_column($rows, 'material_name'))));
+
+    $pdo->beginTransaction();
+    try {
+        $ph2 = implode(',', array_fill(0, count($del_ids), '?'));
+        $pdo->prepare("DELETE FROM pallet_materials WHERE id IN ($ph2)")->execute($del_ids);
+        foreach ($pallets_a as $pid) { ms_recompute_pallet($pdo, $pid); }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]); exit;
+    }
+
+    sync_malzeme_kullanim($record_id);   // stok hareketlerini güncelle
+    audit_log_event('bulk_delete_materials', 'records', $record_id, null, [
+        'silinen_satir' => count($del_ids),
+        'malzemeler'    => implode(', ', array_slice($names, 0, 15)),
+    ]);
+    echo json_encode(['ok' => true, 'deleted' => count($del_ids)]);
+    exit;
+}
+
 // ── Malzeme sil ──────────────────────────────────────────────────
 if (($body['action'] ?? '') === 'delete') {
     $pm_id = (int)($body['pm_id'] ?? 0);

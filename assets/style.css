@@ -1368,14 +1368,14 @@ body.print-mode .topbar { display: none; }
     font-weight: 600;
     font-size: 7pt;
     padding: 2px 4px;
-    width: 50%;
+    width: 68%;
 }
 .asya-stok .stok-val {
     text-align: right;
     height: 13px;
     font-size: 7.5pt;
     padding: 1px 3px;
-    width: 25%;
+    width: 32%;
 }
 .asya-stok tr.stok-filler td { height: 13px; padding: 0; }
 
@@ -1993,6 +1993,18 @@ body.print-mode .asya-sheet {
     font-size: .9rem; user-select: none;
 }
 .bm-check-label:hover { background: var(--bg); }
+
+/* Sprint 35: Eklenenleri Sil paneli */
+.bm-rm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.bm-rm-list {
+    max-height: 240px; overflow-y: auto; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); margin-bottom: 10px; -webkit-overflow-scrolling: touch;
+}
+.bm-rm-item { border-bottom: 1px solid var(--border); }
+.bm-rm-item:last-child { border-bottom: none; }
+.bm-rm-name { font-weight: 600; }
+.bm-rm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bm-rm-actions .btn { flex: 1 1 auto; }
 .bm-check-label input[type="checkbox"] {
     width: 17px; height: 17px; min-height: unset;
     flex-shrink: 0; accent-color: var(--primary);
