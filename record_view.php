@@ -1353,6 +1353,19 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     var inp    = document.getElementById('etiketInput');
     var clrBtn = document.getElementById('etiketClear');
 
+    var REC_ID = <?= (int)$id ?>;
+    var CSRF   = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    function saveToServer(payload) {
+        return fetch('api_etiket_foto.php', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(Object.assign({csrf: CSRF, id: REC_ID}, payload))
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.ok) alert('Fotoğraf kaydedilemedi: ' + (d.error || 'hata'));
+            return !!d.ok;
+        }).catch(function () { alert('Bağlantı hatası.'); return false; });
+    }
+
     function showPhoto(src) {
         if (!imgEl) return;
         imgEl.src = src; imgEl.style.display = 'block';
@@ -1360,21 +1373,24 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         if (clrBtn) clrBtn.style.display = 'inline-block';
     }
     function clearPhoto() {
-        if (imgEl) { imgEl.src = ''; imgEl.style.display = 'none'; }
+        if (imgEl) { imgEl.removeAttribute('src'); imgEl.style.display = 'none'; }
         if (ph)     ph.style.display     = 'flex';
         if (clrBtn) clrBtn.style.display = 'none';
+        saveToServer({clear: 1});                 // SUNUCUDAN da sil
         try { localStorage.removeItem(KEY); } catch(e) {}
     }
 
-    /* Kayıtlı fotoğrafı yükle (geriye dönük uyum: eski key + plain data-URL) */
-    try {
-        var raw = localStorage.getItem(KEY)
-               || localStorage.getItem('etiket_img_<?= (int)$id ?>');
-        if (raw) {
-            var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
-            if (src && src.indexOf('data:') === 0) showPhoto(src);
-        }
-    } catch(e) {}
+    /* Foto SUNUCUDA ise HTML zaten img src'yi bastı (her cihazda görünür).
+       Yoksa eski localStorage fotoğrafını TEK SEFER sunucuya taşı. */
+    if (imgEl && !imgEl.getAttribute('src')) {
+        try {
+            var raw = localStorage.getItem(KEY) || localStorage.getItem('etiket_img_<?= (int)$id ?>');
+            if (raw) {
+                var src = (raw.charAt(0) === '{') ? JSON.parse(raw).src : raw;
+                if (src && src.indexOf('data:') === 0) { showPhoto(src); saveToServer({data: src}); }
+            }
+        } catch(e) {}
+    }
 
     if (clrBtn) clrBtn.addEventListener('click', clearPhoto);
 
@@ -1479,8 +1495,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         cv.width = Math.round(sw); cv.height = Math.round(sh);
         cv.getContext('2d').drawImage(cropSrc, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
         var out = cv.toDataURL('image/jpeg', 0.92);
-        try { localStorage.setItem(KEY, out); } catch(e) {}
         showPhoto(out);
+        saveToServer({data: out});               // SUNUCUYA kaydet → masaüstü/print görür
+        try { localStorage.setItem(KEY, out); } catch(e) {}
         closeCrop();
     });
     if (btnNo) btnNo.addEventListener('click', closeCrop);

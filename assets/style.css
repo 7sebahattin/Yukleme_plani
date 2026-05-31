@@ -1494,7 +1494,13 @@ body.print-mode .asya-sheet {
     .cell-pair, .marka-cell { border-color: #000; }
     .avans-th { border-color: #000 !important; }
     .asya-etiket { min-height: 0; overflow: hidden; }
-    .etiket-img { display: block !important; width: 100% !important; height: 100% !important; min-height: 0; }
+    /* Foto varsa (src) yazdırmada da görünür; yoksa kırık ikon çıkmasın */
+    .etiket-img[src] {
+        display: block !important; max-width: 100% !important; max-height: 100% !important;
+        width: auto !important; height: auto !important; object-fit: contain;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .etiket-img:not([src]) { display: none !important; }
     .etiket-placeholder { color: #ccc; }
     .asya-pallets .row-no {
         background: #f6f6f6 !important;
