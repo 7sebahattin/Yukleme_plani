@@ -119,6 +119,14 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>
             <?php if (!$form_is_cikma): ?>
+            <?php $_brand_col_ok = !function_exists('db_has_column') || db_has_column('loading_records', 'brand'); ?>
+            <?php if (!$_brand_col_ok): ?>
+            <div class="span-2" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;color:#991b1b;font-size:.83rem;line-height:1.5">
+                ⚠ <strong>Marka kaydedilemiyor:</strong> veritabanında <code>loading_records.brand</code> kolonu yok (otomatik ekleme engellendi — muhtemelen ALTER yetkisi yok).<br>
+                <strong>Çözüm:</strong> phpMyAdmin → SQL sekmesinde şunu çalıştırın:<br>
+                <code style="display:inline-block;margin-top:4px;background:#fff;padding:3px 6px;border-radius:4px;user-select:all">ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL;</code>
+            </div>
+            <?php endif; ?>
             <label class="span-2">Marka
                 <?php $_cur_brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
                 <div class="brand-seg" role="radiogroup" aria-label="Marka">
