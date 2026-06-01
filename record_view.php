@@ -476,10 +476,6 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 <!-- ============================================================
      YAZDIRMA MODU: ASYA FRESH şablonu
      ============================================================ -->
-<div class="print-actions no-print">
-    <a href="record_view.php?id=<?= (int)$id ?>" class="btn btn-ghost btn-sm">← Geri</a>
-    <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">🖨 Yazdır</button>
-</div>
 <div class="asya-sheet">
 
     <!-- ============= ÜST BLOK: Genel bilgiler + ETİKET + Marka ============= -->
