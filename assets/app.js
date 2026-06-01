@@ -1024,3 +1024,67 @@
     renderCards();
     recomputeTotals();
 })();
+
+/* ════════════════════════════════════════════════════════
+   Ortak Paylaş Helper (tüm sayfalarda çalışır)
+   <button class="share-btn" data-share-title=".." data-share-text=".."
+           data-share-url="record_view.php?id=123">Paylaş</button>
+   1) navigator.share  2) WhatsApp wa.me  3) panoya kopyala
+   ════════════════════════════════════════════════════════ */
+(function () {
+    function absUrl(u) {
+        if (!u) return window.location.href;
+        if (/^https?:\/\//i.test(u)) return u;
+        // mevcut dizine göre çöz (alt klasör güvenli)
+        return new URL(u, window.location.href).href;
+    }
+
+    function toast(msg) {
+        var t = document.createElement('div');
+        t.className = 'share-toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        requestAnimationFrame(function () { t.classList.add('show'); });
+        setTimeout(function () {
+            t.classList.remove('show');
+            setTimeout(function () { t.remove(); }, 300);
+        }, 2000);
+    }
+
+    window.shareContent = function (opts) {
+        opts = opts || {};
+        var title = opts.title || 'Asya Fresh';
+        var text  = opts.text  || '';
+        var url   = absUrl(opts.url);
+        var full  = (text ? text + '\n' : '') + url;
+
+        if (navigator.share) {
+            navigator.share({ title: title, text: text, url: url }).catch(function () {});
+            return;
+        }
+        // WhatsApp fallback (yeni sekme)
+        var wa = 'https://wa.me/?text=' + encodeURIComponent(full);
+        var win = window.open(wa, '_blank');
+        if (win) return;
+        // Pop-up engellendi → panoya kopyala
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(full).then(function () {
+                toast('Bağlantı kopyalandı');
+            }).catch(function () { prompt('Bağlantıyı kopyalayın:', full); });
+        } else {
+            prompt('Bağlantıyı kopyalayın:', full);
+        }
+    };
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.share-btn, .card-share-btn, .kantar-share-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        shareContent({
+            title: btn.dataset.shareTitle || 'Asya Fresh',
+            text:  btn.dataset.shareText  || '',
+            url:   btn.dataset.shareUrl   || ''
+        });
+    });
+})();
