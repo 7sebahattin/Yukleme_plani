@@ -3061,6 +3061,35 @@ body.notes-modal-open { overflow: hidden; }
 .hesap-stat.blue strong { color: #1e40af; }
 .hesap-stat.orange { border-color: #fdba74; background: #fff7ed; }
 .hesap-stat.orange strong { color: #9a3412; }
+.hesap-stat.gray { border-color: #cbd5e1; background: #f8fafc; }
+.hesap-stat.gray strong { color: #334155; }
+.hesap-stat small { display: block; font-size: .63rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+.hesap-ay-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+.hesap-ay-label {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    font-size: .9rem;
+}
+.hesap-ay-arrow { padding: 4px 12px; font-size: 1.1rem; line-height: 1; }
+.hesap-ay-arrow.disabled { opacity: .3; pointer-events: none; }
+.hesap-ay-badge {
+    display: inline-block;
+    font-size: .65rem;
+    font-weight: 600;
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 10px;
+    padding: 1px 7px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
 
 .hesap-quick-grid {
     display: grid;
