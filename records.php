@@ -260,11 +260,8 @@ render_flash();
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <button type="button" class="btn btn-sm card-share-btn"
-                                title="Paylaş"
-                                data-share-title="Yükleme Kaydı"
-                                data-share-text="Asya Fresh Yükleme Kaydı&#10;Firma: <?= h($r['firma'] ?: '—') ?><?= $r['urun'] ? '&#10;Ürün: ' . h($r['urun']) : '' ?>&#10;Net: <?= h(fmt_kg($r['toplam_net'])) ?> kg"
-                                data-share-url="record_view.php?id=<?= (int)$r['id'] ?>">📤</button>
+                        <a class="btn btn-sm card-share-link" title="Paylaş" target="_blank"
+                           href="record_view.php?id=<?= (int)$r['id'] ?>&print=1&share=1">📤</a>
                         <?php if ($durum !== 'yuklendi' && !$locked): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
@@ -371,18 +368,8 @@ render_flash();
                         <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
                     </button>
                     <?php endif; ?>
-                    <?php
-                        $_share_text = 'Asya Fresh Yükleme Kaydı'
-                            . "\nFirma: " . ($r['firma'] ?: '—')
-                            . ($r['urun'] ? "\nÜrün: " . $r['urun'] : '')
-                            . ($r['tarih'] ? "\nTarih: " . fmt_tarih_tr($r['tarih']) : '')
-                            . "\nToplam Kasa: " . (int)$r['toplam_kasa']
-                            . "\nNet: " . fmt_kg($r['toplam_net']) . ' kg';
-                    ?>
-                    <button type="button" class="btn btn-sm card-share-btn"
-                            data-share-title="Yükleme Kaydı"
-                            data-share-text="<?= h($_share_text) ?>"
-                            data-share-url="record_view.php?id=<?= (int)$r['id'] ?>">📤 Paylaş</button>
+                    <a class="btn btn-sm card-share-link" target="_blank"
+                       href="record_view.php?id=<?= (int)$r['id'] ?>&print=1&share=1">📤 Paylaş</a>
                 </div>
             </div>
         <?php endforeach; ?>

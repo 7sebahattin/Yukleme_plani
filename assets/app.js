@@ -1039,16 +1039,24 @@
         return new URL(u, window.location.href).href;
     }
 
-    function toast(msg) {
+    function toast(msg, sticky) {
         var t = document.createElement('div');
         t.className = 'share-toast';
         t.textContent = msg;
         document.body.appendChild(t);
         requestAnimationFrame(function () { t.classList.add('show'); });
-        setTimeout(function () {
-            t.classList.remove('show');
-            setTimeout(function () { t.remove(); }, 300);
-        }, 2000);
+        if (!sticky) {
+            setTimeout(function () {
+                t.classList.remove('show');
+                setTimeout(function () { t.remove(); }, 300);
+            }, 2000);
+        }
+        return t;  // sticky ise çağıran kapatır
+    }
+    function hideToast(t) {
+        if (!t) return;
+        t.classList.remove('show');
+        setTimeout(function () { t.remove(); }, 300);
     }
 
     window.shareContent = function (opts) {
@@ -1076,6 +1084,75 @@
         }
     };
 
+    /* ── Görsellerin yüklenmesini bekle (etiket/fotoğraf) ── */
+    function waitImages(el, timeoutMs) {
+        var imgs = Array.prototype.slice.call(el.querySelectorAll('img'));
+        var pending = imgs.filter(function (im) { return im.src && !im.complete; });
+        if (!pending.length) return Promise.resolve();
+        return new Promise(function (resolve) {
+            var done = 0, finished = false;
+            function tick() { if (!finished && ++done >= pending.length) { finished = true; resolve(); } }
+            pending.forEach(function (im) {
+                im.addEventListener('load',  tick, { once: true });
+                im.addEventListener('error', tick, { once: true });
+            });
+            setTimeout(function () { if (!finished) { finished = true; resolve(); } }, timeoutMs || 4000);
+        });
+    }
+
+    /* ── Element → PNG → paylaş (Web Share files) / indir / yeni sekme ── */
+    window.shareElementAsImage = function (el, filename, title, text) {
+        if (!el) return;
+        if (typeof html2canvas === 'undefined') {
+            toast('Görsel kütüphanesi yüklenemedi');
+            if (window.shareContent) shareContent({ title: title, text: text, url: location.href });
+            return;
+        }
+        var loading = toast('Görüntü hazırlanıyor…', true);
+        document.body.classList.add('capturing');  // .no-capture öğeleri gizle
+
+        waitImages(el, 4000).then(function () {
+            return html2canvas(el, {
+                backgroundColor: '#ffffff',
+                scale: Math.min(2, window.devicePixelRatio || 1.5),
+                useCORS: true, logging: false,
+                windowWidth: el.scrollWidth, windowHeight: el.scrollHeight
+            });
+        }).then(function (canvas) {
+            return new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+        }).then(function (blob) {
+            document.body.classList.remove('capturing');
+            hideToast(loading);
+            if (!blob) { toast('Görüntü oluşturulamadı'); return; }
+            var fname = (filename || 'belge') + '.png';
+            var file  = new File([blob], fname, { type: 'image/png' });
+
+            // 1) Web Share files
+            if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+                navigator.share({ files: [file], title: title || 'Asya Fresh', text: text || '' })
+                    .catch(function () {});
+                return;
+            }
+            // 2) İndir
+            var url = URL.createObjectURL(blob);
+            try {
+                var a = document.createElement('a');
+                a.href = url; a.download = fname;
+                document.body.appendChild(a); a.click(); a.remove();
+                toast('Görüntü indirildi');
+                setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+            } catch (e) {
+                // 3) Yeni sekmede aç
+                window.open(url, '_blank');
+            }
+        }).catch(function (err) {
+            document.body.classList.remove('capturing');
+            hideToast(loading);
+            toast('Görüntü hazırlanamadı');
+            if (console && console.warn) console.warn('shareElementAsImage:', err);
+        });
+    };
+
     document.addEventListener('click', function (e) {
         var btn = e.target.closest('.share-btn, .card-share-btn, .kantar-share-btn');
         if (!btn) return;
@@ -1087,4 +1164,26 @@
             url:   btn.dataset.shareUrl   || ''
         });
     });
+
+    /* ── Detay sayfasındaki "Görüntü Olarak Paylaş" butonu ── */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.shot-share-btn');
+        if (!btn) return;
+        e.preventDefault();
+        var target = document.querySelector(btn.dataset.shotTarget || '');
+        if (!target) { toast('Paylaşılacak alan bulunamadı'); return; }
+        shareElementAsImage(target, btn.dataset.shotFilename || 'belge',
+                            btn.dataset.shareTitle || 'Asya Fresh',
+                            btn.dataset.shareText || '');
+    });
+
+    /* Liste sayfasından share=1 ile gelindiyse otomatik görüntü paylaşımı tetikle */
+    (function autoShot() {
+        try {
+            var p = new URLSearchParams(window.location.search);
+            if (p.get('share') !== '1') return;
+            var btn = document.querySelector('.shot-share-btn');
+            if (btn) setTimeout(function () { btn.click(); }, 700);
+        } catch (e) {}
+    })();
 })();
