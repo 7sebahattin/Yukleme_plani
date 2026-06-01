@@ -81,8 +81,6 @@ render_flash();
                 <td class="actions-col">
                     <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                     <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-                    <a class="btn btn-sm card-share-link" title="Paylaş" target="_blank"
-                       href="kantar_view.php?id=<?= (int)$r['id'] ?>&amp;share=1">📤</a>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -116,8 +114,6 @@ render_flash();
         <div class="record-card-actions">
             <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
             <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-            <a class="btn btn-sm card-share-link" target="_blank"
-               href="kantar_view.php?id=<?= (int)$r['id'] ?>&amp;share=1">📤 Paylaş</a>
         </div>
     </div>
     <?php endforeach; ?>

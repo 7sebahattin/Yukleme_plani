@@ -260,8 +260,6 @@ render_flash();
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <a class="btn btn-sm card-share-link" title="Paylaş" target="_blank"
-                           href="record_view.php?id=<?= (int)$r['id'] ?>&print=1&share=1">📤</a>
                         <?php if ($durum !== 'yuklendi' && !$locked): ?>
                         <button type="button"
                                 class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
@@ -368,8 +366,6 @@ render_flash();
                         <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
                     </button>
                     <?php endif; ?>
-                    <a class="btn btn-sm card-share-link" target="_blank"
-                       href="record_view.php?id=<?= (int)$r['id'] ?>&print=1&share=1">📤 Paylaş</a>
                 </div>
             </div>
         <?php endforeach; ?>
