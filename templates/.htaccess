@@ -1,0 +1,3 @@
+# templates/ — web erişimi kapalı (yalnız include/PhpSpreadsheet okur)
+Order deny,allow
+Deny from all
