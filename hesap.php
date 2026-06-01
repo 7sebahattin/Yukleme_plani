@@ -7,25 +7,45 @@ $auth_user = require_login();
 require_perm('reports.read');
 
 $bugun = date('Y-m-d');
-$ay_bas = date('Y-m-01');
 
+// Ay filtresi (GET: ay=2026-05)
+$ay_param = $_GET['ay'] ?? date('Y-m');
+if (!preg_match('/^\d{4}-\d{2}$/', $ay_param)) {
+    $ay_param = date('Y-m');
+}
+$ay_bas     = $ay_param . '-01';
+$ay_son     = date('Y-m-01', strtotime('+1 month', strtotime($ay_bas)));
+$onceki_ay  = date('Y-m', strtotime('-1 month', strtotime($ay_bas)));
+$sonraki_ay = date('Y-m', strtotime('+1 month', strtotime($ay_bas)));
+$bu_ay_mi   = ($ay_param === date('Y-m'));
+
+$ay_isimleri = [1=>'Ocak',2=>'Şubat',3=>'Mart',4=>'Nisan',5=>'Mayıs',6=>'Haziran',
+                7=>'Temmuz',8=>'Ağustos',9=>'Eylül',10=>'Ekim',11=>'Kasım',12=>'Aralık'];
+$ay_label = $ay_isimleri[(int)date('n', strtotime($ay_bas))] . ' ' . date('Y', strtotime($ay_bas));
+
+// Ana özet sorgusu — seçili ay + devir (ay öncesi bakiye)
 $st = db()->query("
     SELECT
-        COALESCE(SUM(CASE WHEN type='gelir' AND transaction_date=CURDATE() THEN amount END),0) AS bugun_gelir,
-        COALESCE(SUM(CASE WHEN type IN ('gider','nakit') AND transaction_date=CURDATE() THEN amount END),0) AS bugun_gider,
-        COALESCE(SUM(CASE WHEN type='gelir' AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_gelir,
-        COALESCE(SUM(CASE WHEN type IN ('gider','nakit') AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_gider,
-        COALESCE(SUM(CASE WHEN type='havale' AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_havale,
-        COALESCE(SUM(CASE WHEN category='Nakit harcama' AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_nakit,
-        COALESCE(SUM(CASE WHEN category='Yemek gideri' AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_yemek,
-        COALESCE(SUM(CASE WHEN category='Şirket malzemesi' AND transaction_date>='{$ay_bas}' THEN amount END),0) AS ay_malzeme,
+        COALESCE(SUM(CASE WHEN type='gelir'           AND transaction_date>='{$ay_bas}' AND transaction_date<'{$ay_son}' THEN amount END),0) AS ay_gelir,
+        COALESCE(SUM(CASE WHEN type IN ('gider','nakit') AND transaction_date>='{$ay_bas}' AND transaction_date<'{$ay_son}' THEN amount END),0) AS ay_gider,
+        COALESCE(SUM(CASE WHEN type='havale'           AND transaction_date>='{$ay_bas}' AND transaction_date<'{$ay_son}' THEN amount END),0) AS ay_havale,
+        COALESCE(SUM(CASE WHEN category='Yemek gideri'     AND transaction_date>='{$ay_bas}' AND transaction_date<'{$ay_son}' THEN amount END),0) AS ay_yemek,
+        COALESCE(SUM(CASE WHEN category='Şirket malzemesi' AND transaction_date>='{$ay_bas}' AND transaction_date<'{$ay_son}' THEN amount END),0) AS ay_malzeme,
+        COALESCE(SUM(CASE WHEN type='gelir'                AND transaction_date<'{$ay_bas}' THEN amount END),0) AS devir_gelir,
+        COALESCE(SUM(CASE WHEN type IN ('gider','nakit','havale') AND transaction_date<'{$ay_bas}' THEN amount END),0) AS devir_gider,
         (SELECT COUNT(*) FROM account_transactions WHERE is_given_to_accountant=0) AS bekleyen,
-        (SELECT COUNT(*) FROM account_transactions WHERE has_files=0) AS fissiz,
-        (SELECT COUNT(*) FROM account_transactions) AS toplam_kayit
+        (SELECT COUNT(*) FROM account_transactions WHERE has_files=0)              AS fissiz,
+        (SELECT COUNT(*) FROM account_transactions)                                AS toplam_kayit
     FROM account_transactions WHERE currency='TRY'
 ")->fetch();
 
-$bakiye = (float)$st['ay_gelir'] - (float)$st['ay_gider'] - (float)$st['ay_havale'];
+// Bakiye hesaplama
+// Geçen Aydan Devir = seçili ay başından önceki tüm kayıtların net toplamı
+// Bu Ay Net         = seçili ayın gelir - gider - havale
+// Güncel Bakiye     = Devir + Bu Ay Net
+$ay_net = (float)$st['ay_gelir'] - (float)$st['ay_gider'] - (float)$st['ay_havale'];
+$devir  = (float)$st['devir_gelir'] - (float)$st['devir_gider'];
+$bakiye = $devir + $ay_net;
 
 $son_islemler = db()->query("SELECT * FROM account_transactions ORDER BY transaction_date DESC, id DESC LIMIT 10")->fetchAll();
 
@@ -37,11 +57,24 @@ render_flash();
     <a href="hesap_kayit.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
 </div>
 
+<!-- Ay Seçici -->
+<div class="hesap-ay-nav">
+    <a href="hesap.php?ay=<?= h($onceki_ay) ?>" class="btn btn-ghost hesap-ay-arrow">‹</a>
+    <span class="hesap-ay-label"><?= h($ay_label) ?><?= $bu_ay_mi ? ' <span class="hesap-ay-badge">Bu Ay</span>' : '' ?></span>
+    <a href="hesap.php?ay=<?= h($sonraki_ay) ?>" class="btn btn-ghost hesap-ay-arrow<?= $bu_ay_mi ? ' disabled' : '' ?>"
+       <?= $bu_ay_mi ? 'aria-disabled="true" tabindex="-1"' : '' ?>>›</a>
+</div>
+
 <!-- Özet Kartlar -->
 <div class="hesap-stat-grid">
     <div class="hesap-stat green"><span>Bu Ay Gelir</span><strong><?= fmt_para((float)$st['ay_gelir']) ?></strong></div>
     <div class="hesap-stat red"><span>Bu Ay Gider</span><strong><?= fmt_para((float)$st['ay_gider'] + (float)$st['ay_havale']) ?></strong></div>
-    <div class="hesap-stat <?= $bakiye >= 0 ? 'green' : 'red' ?>"><span>Bakiye</span><strong><?= fmt_para($bakiye) ?></strong></div>
+    <div class="hesap-stat gray"><span>Geçen Aydan Devir</span><strong><?= fmt_para($devir) ?></strong></div>
+    <div class="hesap-stat <?= $bakiye >= 0 ? 'green' : 'red' ?>">
+        <span>Güncel Bakiye</span>
+        <strong><?= fmt_para($bakiye) ?></strong>
+        <small>Devir <?= fmt_para($devir) ?> · Net <?= fmt_para($ay_net) ?></small>
+    </div>
     <div class="hesap-stat blue"><span>Bu Ay Havale</span><strong><?= fmt_para((float)$st['ay_havale']) ?></strong></div>
     <div class="hesap-stat orange"><span>Yemek Gideri</span><strong><?= fmt_para((float)$st['ay_yemek']) ?></strong></div>
     <div class="hesap-stat blue"><span>Şirket Malzeme</span><strong><?= fmt_para((float)$st['ay_malzeme']) ?></strong></div>
