@@ -1,12 +1,11 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v22';
+const CACHE_NAME = 'yukleme-plani-v23';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
   './index.php',
   './assets/style.css',
   './assets/app.js',
-  './assets/vendor/html2canvas.min.js',
   './assets/icon.svg',
   './manifest.json'
 ];

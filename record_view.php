@@ -253,7 +253,6 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <?php if ($print): ?>
 <style>@page { size: A4 portrait; margin: 4mm; }</style>
-<script src="assets/vendor/html2canvas.min.js" defer></script>
 <?php endif; ?>
 <?php
 if (($record['type'] ?? 'yukleme') === 'cikma') {
@@ -477,14 +476,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 <!-- ============================================================
      YAZDIRMA MODU: ASYA FRESH şablonu
      ============================================================ -->
-<div class="shot-share-bar no-print no-capture">
+<div class="print-actions no-print">
     <a href="record_view.php?id=<?= (int)$id ?>" class="btn btn-ghost btn-sm">← Geri</a>
     <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">🖨 Yazdır</button>
-    <button type="button" class="btn btn-primary btn-sm shot-share-btn"
-            data-shot-target=".asya-sheet"
-            data-shot-filename="yukleme_kaydi_<?= (int)$id ?>"
-            data-share-title="Yükleme Kaydı"
-            data-share-text="Asya Fresh Yükleme Kaydı — <?= h($record['firma'] ?? '') ?>">📤 Görüntü Olarak Paylaş</button>
 </div>
 <div class="asya-sheet">
 

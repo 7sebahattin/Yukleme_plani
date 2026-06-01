@@ -56,7 +56,6 @@ $gruplar = $st_g->fetchAll() ?: [];
 render_header('Kantar Fişi #' . ($fis['fis_no'] ?: $id));
 render_flash();
 ?>
-<script src="assets/vendor/html2canvas.min.js" defer></script>
 
 <style>
 /* ── EKRAN: sarmalayıcılar şeffaf ── */
@@ -272,11 +271,6 @@ render_flash();
         <a href="kantar.php" class="btn btn-ghost">← Liste</a>
         <a href="kantar_edit.php?id=<?= $id ?>" class="btn">Düzenle</a>
         <button onclick="window.print()" class="btn btn-primary">🖨 Yazdır</button>
-        <button type="button" class="btn btn-primary shot-share-btn"
-                data-shot-target=".kv-pb"
-                data-shot-filename="kantar_fisi_<?= (int)$id ?>"
-                data-share-title="Kantar Fişi"
-                data-share-text="Asya Fresh Kantar Fişi <?= h($fis['fis_no'] ? '· ' . $fis['fis_no'] : '#' . $id) ?>">📤 Görüntü Olarak Paylaş</button>
     </div>
 </div>
 
