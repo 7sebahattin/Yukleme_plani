@@ -698,6 +698,16 @@ function db_has_column(string $table, string $column): bool {
             error_log('[migration] brand kolonu eklenemedi (ALTER yetkisi?): ' . $e->getMessage());
         }
 
+        // Etiket fotoğrafı (base64) — cihazlar arası görünsün diye DB'de saklanır
+        try {
+            $has_ef = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'etiket_foto'")->fetchColumn();
+            if (!$has_ef) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `etiket_foto` MEDIUMTEXT NULL");
+            }
+        } catch (PDOException $e) {
+            error_log('[migration] etiket_foto kolonu eklenemedi (ALTER yetkisi?): ' . $e->getMessage());
+        }
+
         // Sprint 36: sarf (kasa/palet dışı) tanımlarda dara artık kullanılmıyor → sıfırla (idempotent)
         try {
             $pdo->exec("UPDATE `material_definitions` SET unit_dara_kg = 0

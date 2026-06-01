@@ -81,6 +81,10 @@ render_flash();
                 <td class="actions-col">
                     <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                     <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+                    <button type="button" class="btn btn-sm kantar-share-btn" title="Paylaş"
+                            data-share-title="Kantar Fişi"
+                            data-share-text="Asya Fresh Kantar Fişi&#10;Fiş No: <?= h($r['fis_no'] ?: (string)$r['id']) ?><?= $r['plaka'] ? '&#10;Plaka: ' . h($r['plaka']) : '' ?><?= $net > 0 ? '&#10;Net: ' . h(fmt_kg($net)) . ' kg' : '' ?>"
+                            data-share-url="kantar_view.php?id=<?= (int)$r['id'] ?>&amp;print=1">📤</button>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -93,6 +97,14 @@ render_flash();
     <?php foreach ($rows as $r):
         $net        = (float)$r['tartim1'] - (float)$r['tartim2'];
         $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
+    ?>
+    <?php
+        $_k_share = 'Asya Fresh Kantar Fişi'
+            . "\nFiş No: " . ($r['fis_no'] ?: (string)$r['id'])
+            . ($giris_disp ? "\nTarih: " . $giris_disp : '')
+            . ($r['plaka'] ? "\nPlaka: " . $r['plaka'] : '')
+            . ($r['firma_adi'] ? "\nFirma: " . $r['firma_adi'] : '')
+            . ($net > 0 ? "\nNet: " . fmt_kg($net) . ' kg' : '');
     ?>
     <div class="record-card">
         <div class="record-card-head">
@@ -114,6 +126,10 @@ render_flash();
         <div class="record-card-actions">
             <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
             <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+            <button type="button" class="btn btn-sm kantar-share-btn"
+                    data-share-title="Kantar Fişi"
+                    data-share-text="<?= h($_k_share) ?>"
+                    data-share-url="kantar_view.php?id=<?= (int)$r['id'] ?>&amp;print=1">📤 Paylaş</button>
         </div>
     </div>
     <?php endforeach; ?>

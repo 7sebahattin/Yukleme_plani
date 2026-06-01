@@ -464,4 +464,11 @@ render_flash();
     </div><!-- /kv-pb-bottom -->
 </div><!-- /kv-pb -->
 
+<?php if (!empty($_GET['print'])): ?>
+<script>
+/* Paylaşılan ?print=1 linki açılınca otomatik yazdır (fotoğraf yüklensin diye kısa gecikme) */
+window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 600); });
+</script>
+<?php endif; ?>
+
 <?php render_footer(); ?>
