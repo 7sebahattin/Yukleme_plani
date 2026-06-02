@@ -22,14 +22,23 @@ if ($id <= 0 || !in_array($action, ['mark', 'unmark'], true)) {
     header('Location: kantar.php'); exit;
 }
 
-// Kolon henüz eklenmemişse nazikçe hata ver
+// Kolon henüz eklenmemişse eklemeye çalış (db.php migration fallback)
 $col_ok = false;
 try {
     $col_ok = (bool)db()->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn();
 } catch (PDOException $_ce) {}
 if (!$col_ok) {
-    set_flash('error', 'Veritabanı güncelleme bekleniyor, lütfen sayfayı yenileyin.');
-    header('Location: kantar.php'); exit;
+    try {
+        db()->exec("ALTER TABLE `kantar_fisleri`
+            ADD COLUMN `reported_at` DATETIME NULL,
+            ADD COLUMN `reported_by` INT NULL");
+        $col_ok = true;
+    } catch (PDOException $_ae) {
+        set_flash('error', 'Veritabanı güncellenemedi: ' . htmlspecialchars($_ae->getMessage()));
+        $back = $_POST['back'] ?? '';
+        header('Location: ' . (preg_match('/^(kantar\.php|kantar_view\.php)/', $back) ? $back : 'kantar.php'));
+        exit;
+    }
 }
 
 $st = db()->prepare("SELECT id, reported_at FROM kantar_fisleri WHERE id = ?");
