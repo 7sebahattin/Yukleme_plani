@@ -363,9 +363,15 @@ if ($type === 'yukleme' || $type === 'cikma') {
     try {
         // Kolon varsa sadece raporlanmayanları göster; kolon yoksa tüm günün girişleri
         $rep_col_exists = (bool)db()->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn();
-        $kw = ["kf.giris_tarih >= ?", "kf.giris_tarih <= ?"];
+        // giris_tarih VARCHAR(40) — datetime-local 'YYYY-MM-DDTHH:mm' saklar.
+        // String kıyaslamada 'T' > ' ' olduğu için ' 23:59:59' ile <= çalışmaz.
+        // SUBSTRING(1,10) ile sadece tarih kısmını al; boşsa created_at'e düş.
+        $kw = [
+            "COALESCE(NULLIF(SUBSTRING(kf.giris_tarih,1,10),''), DATE(kf.created_at)) >= ?",
+            "COALESCE(NULLIF(SUBSTRING(kf.giris_tarih,1,10),''), DATE(kf.created_at)) <= ?"
+        ];
         if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
-        $kp = [$f_from . ' 00:00:00', $f_to . ' 23:59:59'];
+        $kp = [$f_from, $f_to];
         if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";       $kp[] = $f_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
