@@ -361,8 +361,16 @@ if ($type === 'yukleme' || $type === 'cikma') {
 
     // Kantar girişleri
     try {
-        // Kolon varsa sadece raporlanmayanları göster; kolon yoksa tüm günün girişleri
+        // Kolon yoksa ekle (idempotent fallback — db.php migration çalışmamışsa)
         $rep_col_exists = (bool)db()->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn();
+        if (!$rep_col_exists) {
+            try {
+                db()->exec("ALTER TABLE `kantar_fisleri`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL");
+                $rep_col_exists = true;
+            } catch (PDOException $_me) {}
+        }
         // giris_tarih VARCHAR(40) — datetime-local 'YYYY-MM-DDTHH:mm' saklar.
         // String kıyaslamada 'T' > ' ' olduğu için ' 23:59:59' ile <= çalışmaz.
         // SUBSTRING(1,10) ile sadece tarih kısmını al; boşsa created_at'e düş.
