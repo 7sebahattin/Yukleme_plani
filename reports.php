@@ -22,8 +22,6 @@ $f_plaka   = trim($_GET['plaka']     ?? '');
 $f_mtype   = trim($_GET['mat_type']  ?? '');
 $f_q       = trim($_GET['q']         ?? '');
 $f_sort    = trim($_GET['sort']      ?? 'tarih');
-$f_pallet_flag   = trim($_GET['pallet_flag']   ?? 'all');
-if (!in_array($f_pallet_flag, ['all','checked','unchecked'], true)) { $f_pallet_flag = 'all'; }
 $f_palet_islendi = trim($_GET['palet_islendi'] ?? '');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
@@ -425,25 +423,31 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st->execute($cp);
     $ck_rows = $st->fetchAll();
 
-    // Yükleme Verisi — palet düzeyi, pallet_flag'e göre islendi filtresi
+    // Makineye Dökülen — kayıt düzeyi, sadece islendi=1 paletlerin toplamı
     $mk_rows = [];
     $mkw = ["r.type='yukleme'", "r.tarih BETWEEN ? AND ?"];
     $mkp = [$f_from, $f_to];
-    if ($f_pallet_flag === 'checked')   { $mkw[] = "p.islendi = 1"; }
-    elseif ($f_pallet_flag === 'unchecked') { $mkw[] = "(p.islendi = 0 OR p.islendi IS NULL)"; }
     if ($f_firma !== '') { $mkw[] = "r.firma = ?"; $mkp[] = $f_firma; }
     if ($f_urun  !== '') { $mkw[] = "r.urun = ?";  $mkp[] = $f_urun;  }
-    if ($f_depo  !== '') { $mkw[] = "p.depo = ?";  $mkp[] = $f_depo;  }
+    if ($f_depo  !== '') {
+        $mkw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
+        $mkp[] = $f_depo;
+    }
     $st = db()->prepare("
-        SELECT r.tarih, r.firma, r.urun, r.id AS kayit_id,
-               p.palet_no, p.kasa_adeti, p.depo, p.brut_kg, p.dara_kg, p.net_kg, p.sira_no, p.islendi,
-               COALESCE(mk.name,'') AS kasa_cinsi, COALESCE(mp.name,'') AS palet_tipi
+        SELECT r.id, r.tarih, r.firma, r.urun, r.durum,
+               (SELECT _p.depo FROM loading_pallets _p
+                WHERE _p.loading_record_id=r.id AND _p.depo!='' ORDER BY _p.id LIMIT 1) AS depo,
+               COALESCE(COUNT(CASE WHEN p.islendi=1 THEN 1 END),0)                          AS palet_sayisi,
+               COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.kasa_adeti ELSE 0 END),0)          AS toplam_kasa,
+               ROUND(COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg  ELSE 0 END),0),3)   AS toplam_brut,
+               ROUND(COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg  ELSE 0 END),0),3)   AS toplam_dara,
+               ROUND(COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg   ELSE 0 END),0),3)   AS toplam_net
         FROM loading_records r
-        JOIN loading_pallets p ON p.loading_record_id = r.id
-        LEFT JOIN material_definitions mk ON mk.id = p.kasa_cinsi_id
-        LEFT JOIN material_definitions mp ON mp.id = p.palet_tipi_id
+        LEFT JOIN loading_pallets p ON p.loading_record_id=r.id
         WHERE " . implode(' AND ', $mkw) . "
-        ORDER BY r.tarih DESC, r.id DESC, p.sira_no ASC LIMIT 1000");
+        GROUP BY r.id
+        HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END) > 0
+        ORDER BY r.tarih DESC, r.id DESC LIMIT 500");
     $st->execute($mkp);
     $mk_rows = $st->fetchAll();
 
@@ -932,13 +936,6 @@ render_flash();
             </select>
         </label>
         <label>Ürün<input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün adı..."></label>
-        <label>Yükleme Palet Durumu
-            <select name="pallet_flag">
-                <option value="all"       <?= $f_pallet_flag==='all'       ?'selected':'' ?>>Tümü</option>
-                <option value="checked"   <?= $f_pallet_flag==='checked'   ?'selected':'' ?>>İşaretli (Makineye Dökülen)</option>
-                <option value="unchecked" <?= $f_pallet_flag==='unchecked' ?'selected':'' ?>>İşaretlenmeyen</option>
-            </select>
-        </label>
     </div>
     <div class="rpt-filter-actions">
         <button class="btn btn-primary btn-sm">Filtrele</button>
@@ -1071,59 +1068,45 @@ render_flash();
 <div class="empty"><p>Seçilen tarih aralığında kayıt bulunamadı.</p></div>
 <?php endif; ?>
 
-<?php
-$_gl_yk_title = match($f_pallet_flag) {
-    'checked'   => 'Makineye Dökülen',
-    'unchecked' => 'Makineye Dökülmeyen',
-    default     => 'Yükleme Verisi',
-};
-$_gl_yk_empty = match($f_pallet_flag) {
-    'checked'   => 'Bu filtreye göre işaretli yükleme paleti bulunamadı.',
-    'unchecked' => 'Bu filtreye göre işaretlenmeyen yükleme paleti bulunamadı.',
-    default     => 'Bu filtreye göre yükleme paleti bulunamadı.',
-};
-?>
-<!-- Yükleme Verisi / Makineye Dökülen -->
+<!-- Makineye Dökülen -->
 <div class="gl-section">
-    <div class="gl-section-title"><?= h($_gl_yk_title) ?> (<?= count($mk_rows) ?> palet)</div>
+    <div class="gl-section-title">Makineye Dökülen (<?= count($mk_rows) ?> kayıt)</div>
     <?php if (empty($mk_rows)): ?>
-    <p class="muted"><?= h($_gl_yk_empty) ?></p>
+    <p class="muted">Bu filtreye göre makineye dökülen palet bulunamadı.</p>
     <?php else: ?>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
             <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Depo</th>
-            <th class="num">Palet No</th><th class="num">Kasa</th>
-            <th>Kasa Cinsi</th><th>Palet Tipi</th>
+            <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
             <th>Durum</th>
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
         <?php $_mk_tot_brut = 0.0; $_mk_tot_net = 0.0;
-        foreach ($mk_rows as $_mkr): $_mk_tot_brut += (float)$_mkr['brut_kg']; $_mk_tot_net += (float)$_mkr['net_kg']; ?>
+        foreach ($mk_rows as $_mkr): $_mk_tot_brut += (float)$_mkr['toplam_brut']; $_mk_tot_net += (float)$_mkr['toplam_net'];
+            $_md = $_mkr['durum']; $_mdc = $_md==='islendi'?'badge-islendi':($_md==='yuklendi'?'badge-yuklendi':'');
+        ?>
         <tr>
             <td><?= h(fmt_date($_mkr['tarih'])) ?></td>
             <td><?= h($_mkr['firma'] ?: '—') ?></td>
             <td><?= h($_mkr['urun']  ?: '—') ?></td>
             <td><?= h($_mkr['depo']  ?: '—') ?></td>
-            <td class="num"><?= $_mkr['palet_no'] !== '' ? h($_mkr['palet_no']) : '<span class="muted">—</span>' ?></td>
-            <td class="num"><?= (int)$_mkr['kasa_adeti'] ?></td>
-            <td><?= h($_mkr['kasa_cinsi'] ?: '—') ?></td>
-            <td><?= h($_mkr['palet_tipi'] ?: '—') ?></td>
-            <td class="num"><?= fmt_kg((float)$_mkr['brut_kg']) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_mkr['dara_kg'])) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_mkr['net_kg'])) ?></td>
-            <td><?= (int)$_mkr['islendi'] === 1 ? '<span class="rpt-badge badge-islendi">İşaretli</span>' : '<span class="muted">İşaretsiz</span>' ?></td>
-            <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_mkr['kayit_id'] ?>" class="btn btn-sm">Görüntüle</a></td>
+            <td class="num"><?= (int)$_mkr['palet_sayisi'] ?></td>
+            <td class="num"><?= number_format((int)$_mkr['toplam_kasa'], 0, ',', '.') ?></td>
+            <td class="num"><?= fmt_kg((float)$_mkr['toplam_brut']) ?></td>
+            <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_dara'])) ?></td>
+            <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_net'])) ?></td>
+            <td><?= $_md ? '<span class="rpt-badge '.$_mdc.'">'.h($_md).'</span>' : '<span class="muted">—</span>' ?></td>
+            <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_mkr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
             <td class="strong" colspan="4">TOPLAM</td>
-            <td></td>
-            <td class="num strong"><?= number_format((int)array_sum(array_column($mk_rows,'kasa_adeti')), 0, ',', '.') ?></td>
-            <td colspan="2"></td>
+            <td class="num strong"><?= number_format((int)array_sum(array_column($mk_rows,'palet_sayisi')), 0, ',', '.') ?></td>
+            <td class="num strong"><?= number_format((int)array_sum(array_column($mk_rows,'toplam_kasa')), 0, ',', '.') ?></td>
             <td class="num strong"><?= fmt_kg($_mk_tot_brut) ?></td>
             <td></td>
             <td class="num strong"><?= fmt_kg(round($_mk_tot_net)) ?></td>
