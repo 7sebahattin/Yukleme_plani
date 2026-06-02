@@ -115,19 +115,22 @@ render_flash();
                 <td><?= h($r['depo'] ?: '—') ?></td>
                 <td class="num strong"><?= $net > 0 ? fmt_kg($net) . ' kg' : '—' ?></td>
                 <td>
-                    <span class="kantar-badge <?= $is_rep ? 'kantar-badge-yes' : 'kantar-badge-no' ?>">
-                        <?= $is_rep ? '✓ Raporlandı' : 'Raporlanmadı' ?>
-                    </span>
                     <?php if ($can_write): ?>
-                    <form method="post" action="kantar_report_toggle.php" style="display:inline;margin-left:4px">
+                    <form method="post" action="kantar_report_toggle.php" style="display:inline">
                         <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
                         <input type="hidden" name="id"     value="<?= (int)$r['id'] ?>">
                         <input type="hidden" name="action" value="<?= $is_rep ? 'unmark' : 'mark' ?>">
                         <input type="hidden" name="back"   value="kantar.php?raporlandi=<?= urlencode($f_raporlandi) ?>">
-                        <button type="submit" class="btn btn-xs btn-ghost">
-                            <?= $is_rep ? 'Geri Al' : 'İşaretle' ?>
+                        <button type="submit" class="btn btn-sm"
+                            style="<?= $is_rep ? 'background:#16a34a;color:#fff;border-color:#16a34a' : 'background:#f97316;color:#fff;border-color:#f97316' ?>"
+                            <?= $is_rep ? 'onclick="return confirm(\'Raporlamayı iptal etmek istiyor musunuz?\')"' : '' ?>>
+                            <?= $is_rep ? '✓ Raporlandı' : 'Raporla' ?>
                         </button>
                     </form>
+                    <?php else: ?>
+                    <span class="kantar-badge <?= $is_rep ? 'kantar-badge-yes' : 'kantar-badge-no' ?>">
+                        <?= $is_rep ? '✓' : '—' ?>
+                    </span>
                     <?php endif; ?>
                 </td>
                 <td class="actions-col">
@@ -172,7 +175,9 @@ render_flash();
                 <input type="hidden" name="id"     value="<?= (int)$r['id'] ?>">
                 <input type="hidden" name="action" value="<?= $is_rep ? 'unmark' : 'mark' ?>">
                 <input type="hidden" name="back"   value="kantar.php?raporlandi=<?= urlencode($f_raporlandi) ?>">
-                <button type="submit" class="btn btn-sm" <?= $is_rep ? 'style="background:#16a34a;color:#fff;border-color:#16a34a"' : '' ?>>
+                <button type="submit" class="btn btn-sm"
+                    style="<?= $is_rep ? 'background:#16a34a;color:#fff;border-color:#16a34a' : 'background:#f97316;color:#fff;border-color:#f97316' ?>"
+                    <?= $is_rep ? 'onclick="return confirm(\'Raporlamayı iptal etmek istiyor musunuz?\')"' : '' ?>>
                     <?= $is_rep ? '✓ Raporlandı' : 'Raporla' ?>
                 </button>
             </form>
