@@ -299,10 +299,10 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
-        <a href="record_excel.php?id=<?= (int)$id ?>" class="btn no-print">📊 Excel İndir</a>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>
+                <a href="record_excel.php?id=<?= (int)$id ?>">📊 Excel İndir</a>
                 <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>
                 <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
             </div>
@@ -508,7 +508,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             <div class="asya-right-top">
                 <?php $brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
                 <div class="asya-marka-row">
-                    <?php foreach (['ASYA', 'URAL', 'URAS'] as $_bv): $_on = ($brand === $_bv); ?>
+                    <?php foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_bv): $_on = ($brand === $_bv); ?>
                     <div class="marka-cell<?= $_on ? ' marka-on' : '' ?>">
                         <span><?= $_on ? '✓ ' : '' ?><?= $_bv ?></span><strong>MARKA</strong>
                     </div>

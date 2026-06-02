@@ -1092,7 +1092,7 @@ body.print-mode .topbar { display: none; }
 }
 .asya-marka-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(4, 1fr);
     border-bottom: 1px solid #ccc;
 }
 /* ALICI + ÜRÜN yan yana tek satır */
@@ -1903,9 +1903,43 @@ body.print-mode .asya-sheet {
     display: flex; flex-wrap: wrap; gap: 4px 14px;
     font-size: .83rem; color: var(--muted);
 }
+.pc-stats + .pc-stats { margin-top: 2px; }
 .pc-stats strong { color: var(--text); font-weight: 600; }
 .pc-stats strong.pc-warn { color: #ef4444; font-weight: 700; }
 .pc-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
+
+/* Palet aksiyon butonları */
+.pallet-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    min-width: 0;
+}
+.pallet-sec-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pallet-sec-btns .btn {
+    flex: 1;
+    min-height: 40px;
+    font-size: .82rem;
+    white-space: nowrap;
+    text-align: center;
+}
+.pallet-add-main {
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+    border-radius: 12px;
+}
+@media (min-width: 768px) {
+    .pallet-card-head { align-items: flex-start; }
+    .pallet-actions { flex-direction: row; align-items: center; }
+    .pallet-add-main { width: auto; min-height: 36px; font-size: .875rem; border-radius: var(--radius); }
+    .pallet-sec-btns .btn { flex: none; min-height: 32px; }
+}
 .pc-kebab-wrap {
     position: relative;
     flex-shrink: 0;
