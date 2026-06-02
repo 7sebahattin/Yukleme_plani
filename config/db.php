@@ -109,6 +109,16 @@ function db(): PDO {
             $pdo->exec("UPDATE `kantar_gruplar` SET grup_adi = 'Cihat Karaköse' WHERE LOWER(grup_adi) IN ('ck', 'cihat')");
         } catch (PDOException $_gm) { /* kantar_gruplar yoksa veya hata — sessizce geç */ }
 
+        // Sprint Kantar-01: kantar_fisleri'ne reported_at + reported_by ekle (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `kantar_fisleri` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `kantar_fisleri`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL");
+            }
+        } catch (PDOException $_km) { /* kantar_fisleri yoksa — sessizce geç */ }
+
         // Performans indexleri — idempotent (duplicate key veya tablo yok → sessizce geçilir)
         foreach ([
             "ALTER TABLE `loading_records` ADD INDEX `idx_type` (`type`)",

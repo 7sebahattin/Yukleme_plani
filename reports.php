@@ -361,7 +361,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
 
     // Kantar girişleri
     try {
-        $kw = ["kf.giris_tarih >= ?", "kf.giris_tarih <= ?"];
+        $kw = ["kf.giris_tarih >= ?", "kf.giris_tarih <= ?", "kf.reported_at IS NULL"];
         $kp = [$f_from . ' 00:00:00', $f_to . ' 23:59:59'];
         if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";       $kp[] = $f_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
