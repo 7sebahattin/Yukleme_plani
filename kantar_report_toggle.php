@@ -22,6 +22,16 @@ if ($id <= 0 || !in_array($action, ['mark', 'unmark'], true)) {
     header('Location: kantar.php'); exit;
 }
 
+// Kolon henüz eklenmemişse nazikçe hata ver
+$col_ok = false;
+try {
+    $col_ok = (bool)db()->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn();
+} catch (PDOException $_ce) {}
+if (!$col_ok) {
+    set_flash('error', 'Veritabanı güncelleme bekleniyor, lütfen sayfayı yenileyin.');
+    header('Location: kantar.php'); exit;
+}
+
 $st = db()->prepare("SELECT id, reported_at FROM kantar_fisleri WHERE id = ?");
 $st->execute([$id]);
 $fis = $st->fetch();

@@ -153,9 +153,6 @@ render_flash();
                 <strong>#<?= h($r['fis_no'] ?: (string)$r['id']) ?></strong>
                 <div class="muted"><?= h($giris_disp) ?></div>
             </div>
-            <span class="kantar-badge <?= $is_rep ? 'kantar-badge-yes' : 'kantar-badge-no' ?>">
-                <?= $is_rep ? '✓ Raporlandı' : 'Raporlanmadı' ?>
-            </span>
         </div>
         <div class="record-card-body">
             <?php if ($r['plaka']): ?><div><span class="lbl">Plaka:</span> <?= h($r['plaka']) ?></div><?php endif; ?>
@@ -169,15 +166,14 @@ render_flash();
         </div>
         <div class="record-card-actions">
             <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-            <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
             <?php if ($can_write): ?>
             <form method="post" action="kantar_report_toggle.php" style="display:inline">
                 <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
                 <input type="hidden" name="id"     value="<?= (int)$r['id'] ?>">
                 <input type="hidden" name="action" value="<?= $is_rep ? 'unmark' : 'mark' ?>">
                 <input type="hidden" name="back"   value="kantar.php?raporlandi=<?= urlencode($f_raporlandi) ?>">
-                <button type="submit" class="btn btn-sm btn-ghost">
-                    <?= $is_rep ? 'Geri Al' : '✓ Raporlandı' ?>
+                <button type="submit" class="btn btn-sm" <?= $is_rep ? 'style="background:#16a34a;color:#fff;border-color:#16a34a"' : '' ?>>
+                    <?= $is_rep ? '✓ Raporlandı' : 'Raporla' ?>
                 </button>
             </form>
             <?php endif; ?>
