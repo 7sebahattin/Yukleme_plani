@@ -371,15 +371,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
                 $rep_col_exists = true;
             } catch (PDOException $_me) {}
         }
-        // giris_tarih VARCHAR(40) — datetime-local 'YYYY-MM-DDTHH:mm' saklar.
-        // String kıyaslamada 'T' > ' ' olduğu için ' 23:59:59' ile <= çalışmaz.
-        // SUBSTRING(1,10) ile sadece tarih kısmını al; boşsa created_at'e düş.
-        $kw = [
-            "COALESCE(NULLIF(SUBSTRING(kf.giris_tarih,1,10),''), DATE(kf.created_at)) >= ?",
-            "COALESCE(NULLIF(SUBSTRING(kf.giris_tarih,1,10),''), DATE(kf.created_at)) <= ?"
-        ];
+        // Kantar: tarih filtresiz — raporlanmamış fiş tarihe bakılmaksızın görünmeli.
+        // kantar.php'deki "Raporla" koşuluyla birebir aynı: reported_at IS NULL
+        $kw = ["1=1"];
         if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
-        $kp = [$f_from, $f_to];
+        $kp = [];
         if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";       $kp[] = $f_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
