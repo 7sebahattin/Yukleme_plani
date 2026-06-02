@@ -1936,7 +1936,9 @@ body.print-mode .asya-sheet {
     background: #16a34a !important;
     border-color: #16a34a !important;
 }
-.pallet-add-main:hover { background: #15803d !important; border-color: #15803d !important; }
+.pallet-add-main:hover,
+.pallet-add-bottom:hover { background: #15803d !important; border-color: #15803d !important; }
+.pallet-add-bottom { background: #16a34a !important; border-color: #16a34a !important; }
 @media (min-width: 768px) {
     .pallet-card-head { align-items: flex-start; }
     .pallet-actions { flex-direction: row; align-items: center; }
