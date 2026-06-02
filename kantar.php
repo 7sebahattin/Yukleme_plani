@@ -10,19 +10,30 @@ require_perm('kantar.read');
 
 $f_raporlandi = trim($_GET['raporlandi'] ?? '');
 
+// Kolon yoksa (migration henüz çalışmadıysa) sorgu patlamaması için kontrol
+$has_reported_col = false;
+try {
+    $has_reported_col = (bool)db()->query(
+        "SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'"
+    )->fetchColumn();
+} catch (PDOException $_e) {}
+
+if (!$has_reported_col) { $f_raporlandi = ''; }
+
 $kf_where = "1=1";
-if ($f_raporlandi === 'raporlanmayan') {
-    $kf_where = "reported_at IS NULL";
-} elseif ($f_raporlandi === 'raporlanan') {
-    $kf_where = "reported_at IS NOT NULL";
+if ($has_reported_col) {
+    if ($f_raporlandi === 'raporlanmayan')     $kf_where = "reported_at IS NULL";
+    elseif ($f_raporlandi === 'raporlanan')    $kf_where = "reported_at IS NOT NULL";
 }
+
+$sel_rep = $has_reported_col ? ", reported_at" : ", NULL as reported_at";
 
 $rows = [];
 try {
     $rows = db()->query(
         "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
                 palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2,
-                depo, created_at, reported_at
+                depo, created_at{$sel_rep}
          FROM kantar_fisleri
          WHERE {$kf_where}
          ORDER BY CAST(fis_no AS UNSIGNED) DESC, id DESC
