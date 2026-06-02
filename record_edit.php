@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
     if (!$edit_is_cikma) {
-        $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS'], true) ? strtoupper($record['brand']) : null;
+        $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : null;
     }
 
     // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et

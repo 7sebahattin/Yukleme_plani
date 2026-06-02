@@ -8,6 +8,11 @@ require_perm('records.write');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_POST['id']) ? (int)$_POST['id'] : 0);
 $hizli = trim($_GET['hizli'] ?? '');
+
+// Yeni kayıt için idempotency token — çift submit'i önler
+if ($id === 0 && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $_SESSION['hesap_form_token'] = bin2hex(random_bytes(16));
+}
 $errors = [];
 
 // Hızlı giriş ön ayarları
@@ -56,6 +61,17 @@ if ($id > 0) {
 // POST işlemi
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
+
+    // Yeni kayıt: idempotency token doğrula — çift submit engeli
+    if ($id === 0) {
+        $submitted_token = $_POST['form_token'] ?? '';
+        if ($submitted_token === '' || $submitted_token !== ($_SESSION['hesap_form_token'] ?? '')) {
+            set_flash('warning', 'Bu kayıt zaten işleme alındı.');
+            header('Location: hesap_liste.php');
+            exit;
+        }
+        unset($_SESSION['hesap_form_token']);
+    }
 
     $record['transaction_date']       = trim($_POST['transaction_date'] ?? date('Y-m-d')) ?: date('Y-m-d');
     $record['transaction_time']       = trim($_POST['transaction_time'] ?? '00:00') ?: '00:00';
@@ -170,9 +186,10 @@ render_flash();
 <div class="flash flash-error"><?= h($e) ?></div>
 <?php endforeach; endif; ?>
 
-<form method="post" enctype="multipart/form-data" class="record-form">
+<form method="post" enctype="multipart/form-data" class="record-form" id="hesapKayitForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 <?php if ($id > 0): ?><input type="hidden" name="id" value="<?= $id ?>"><?php endif; ?>
+<?php if ($id === 0): ?><input type="hidden" name="form_token" value="<?= h($_SESSION['hesap_form_token'] ?? '') ?>"><?php endif; ?>
 
 <section class="card">
     <div class="card-head"><h2>İşlem Bilgileri</h2></div>
@@ -352,5 +369,17 @@ function hesapDelFile(btn) {
 document.getElementById('uploadArea').addEventListener('click', function() {
     document.getElementById('dosyalarInput').click();
 });
+
+// Çift submit engeli — form gönderilince kaydet butonunu devre dışı bırak
+(function () {
+    var form = document.getElementById('hesapKayitForm');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+        var btn = form.querySelector('button[type="submit"]');
+        if (!btn) return;
+        btn.disabled = true;
+        btn.textContent = 'Kaydediliyor...';
+    });
+})();
 </script>
 <?php render_footer(); ?>

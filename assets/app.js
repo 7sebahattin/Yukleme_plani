@@ -384,6 +384,8 @@
                     <div class="pc-stats">
                         <span><strong${kasaWarn ? ' class="pc-warn"' : ''}>${p.kasa_adeti}</strong> kasa</span>
                         <span>Brüt <strong${brutWarn ? ' class="pc-warn"' : ''}>${fmtKg(Math.round(br))}</strong></span>
+                    </div>
+                    <div class="pc-stats pc-stats-dara">
                         <span>Dara <strong>${fmtKg(Math.round(dara))}</strong></span>
                         <span>Net <strong class="strong">${fmtKg(Math.round(net))}</strong></span>
                     </div>

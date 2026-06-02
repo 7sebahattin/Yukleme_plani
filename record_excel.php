@@ -124,8 +124,9 @@ function xls_n($v): string { $n = (float)$v; return rtrim(rtrim(number_format($n
 $brand = strtoupper(trim((string)($record['brand'] ?? '')));
 $brand_title = ($brand === 'URAL') ? 'URAL FRESH'
             : (($brand === 'URAS') ? 'URAS FRESH'
+            : (($brand === 'AGRO') ? 'AGRO FRESH'
             : (($brand === 'ASYA') ? 'ASYA FRESH'
-            : (trim((string)($record['firma'] ?? '')) ?: 'ASYA FRESH')));
+            : (trim((string)($record['firma'] ?? '')) ?: 'ASYA FRESH'))));
 
 $n_body = max(count($pallets), count($malzeme_list), count($right_rows));
 
