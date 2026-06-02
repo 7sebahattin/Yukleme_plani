@@ -1933,7 +1933,10 @@ body.print-mode .asya-sheet {
     min-height: 48px;
     font-size: 1rem;
     border-radius: 12px;
+    background: #16a34a !important;
+    border-color: #16a34a !important;
 }
+.pallet-add-main:hover { background: #15803d !important; border-color: #15803d !important; }
 @media (min-width: 768px) {
     .pallet-card-head { align-items: flex-start; }
     .pallet-actions { flex-direction: row; align-items: center; }
