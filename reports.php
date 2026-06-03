@@ -41,7 +41,7 @@ $report_meta = [
 function col_label(string $c): string {
     static $m = [
         'id'=>'ID','tarih'=>'Tarih','firma'=>'Firma','bolge'=>'Bölge','alici'=>'Alıcı',
-        'urun'=>'Ürün','parti_no'=>'Parti No','on_plaka'=>'Ön Plaka','arka_plaka'=>'Arka Plaka',
+        'urun'=>'Ürün','parti_no'=>'Parti No','cikis_nedeni'=>'Çıkma Nedeni','on_plaka'=>'Ön Plaka','arka_plaka'=>'Arka Plaka',
         'durum'=>'Durum','palet_sayisi'=>'Palet','toplam_kasa'=>'Kasa',
         'toplam_brut'=>'Brüt KG','toplam_dara'=>'Dara KG','toplam_net'=>'Net KG',
         'nakliye_bedeli'=>'Nakliye Bedeli','avans'=>'Avans','created_at'=>'Oluşturulma',
@@ -116,7 +116,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $agg_dara  = "COALESCE(SUM(p.dara_kg),0)";
         $agg_net   = "COALESCE(SUM(p.net_kg),0)";
     }
-    $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no,
+    $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.cikis_nedeni,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
                    (SELECT p2.depo FROM loading_pallets p2
                     WHERE p2.loading_record_id = r.id AND p2.depo != ''
@@ -157,8 +157,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $rows = $st->fetchAll();
     if ($type === 'yukleme') {
         $cols = ['tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
-    } else { // cikma — alıcı yok, depo var
-        $cols = ['tarih','firma','bolge','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    } else { // cikma — alıcı yok, depo var, çıkma nedeni göster
+        $cols = ['tarih','firma','bolge','depo','urun','cikis_nedeni','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     }
     foreach ($rows as $r) {
         $totals['palet_sayisi']   = ($totals['palet_sayisi']   ?? 0) + (int)$r['palet_sayisi'];
@@ -357,12 +357,25 @@ if ($type === 'yukleme' || $type === 'cikma') {
     elseif ($f_from !== '' && $f_to === '') { $f_to   = $f_from; }
     elseif ($f_from === '' && $f_to !== '') { $f_from = $f_to; }
 
-    $gk_rows = $yk_rows = $ck_rows = $mv_rows = [];
+    $gk_rows = $yk_rows = $ck_rows = [];
 
     // Kantar girişleri
     try {
-        $kw = ["kf.giris_tarih >= ?", "kf.giris_tarih <= ?"];
-        $kp = [$f_from . ' 00:00:00', $f_to . ' 23:59:59'];
+        // Kolon yoksa ekle (idempotent fallback — db.php migration çalışmamışsa)
+        $rep_col_exists = (bool)db()->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'")->fetchColumn();
+        if (!$rep_col_exists) {
+            try {
+                db()->exec("ALTER TABLE `kantar_fisleri`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL");
+                $rep_col_exists = true;
+            } catch (PDOException $_me) {}
+        }
+        // Kantar: tarih filtresiz — raporlanmamış fiş tarihe bakılmaksızın görünmeli.
+        // kantar.php'deki "Raporla" koşuluyla birebir aynı: reported_at IS NULL
+        $kw = ["1=1"];
+        if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
+        $kp = [];
         if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";       $kp[] = $f_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
@@ -411,9 +424,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
         SELECT r.id, r.tarih, r.firma, r.urun, r.parti_no, r.durum, r.cikis_nedeni,
                (SELECT _p.depo FROM loading_pallets _p
                 WHERE _p.loading_record_id=r.id AND _p.depo!='' ORDER BY _p.id LIMIT 1) AS depo,
-               COUNT(p.id)                       AS palet_sayisi,
-               COALESCE(SUM(p.kasa_adeti),0)      AS toplam_kasa,
-               ROUND(COALESCE(SUM(p.net_kg),0),3) AS toplam_net
+               COUNT(p.id)                        AS palet_sayisi,
+               COALESCE(SUM(p.kasa_adeti),0)       AS toplam_kasa,
+               ROUND(COALESCE(SUM(p.brut_kg),0),3) AS toplam_brut,
+               ROUND(COALESCE(SUM(p.dara_kg),0),3) AS toplam_dara,
+               ROUND(COALESCE(SUM(p.net_kg),0),3)  AS toplam_net
         FROM loading_records r
         LEFT JOIN loading_pallets p ON p.loading_record_id=r.id
         WHERE " . implode(' AND ', $cw) . "
@@ -421,19 +436,56 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st->execute($cp);
     $ck_rows = $st->fetchAll();
 
-    // Malzeme hareketleri
-    try {
-        $mw = ["m.movement_date BETWEEN ? AND ?"]; $mp = [$f_from, $f_to];
-        if ($f_depo !== '') { $mw[] = "m.depo = ?"; $mp[] = $f_depo; }
-        $st = db()->prepare("
-            SELECT m.movement_date, m.movement_type, m.material_name, m.material_type,
-                   m.depo, m.quantity, m.unit, m.belge_no, m.note
-            FROM material_stock_movements m
-            WHERE " . implode(' AND ', $mw) . "
-            ORDER BY m.movement_date DESC, m.id DESC LIMIT 500");
-        $st->execute($mp);
-        $mv_rows = $st->fetchAll();
-    } catch (PDOException $e) {}
+    // Makineye Dökülen — kayıt düzeyi, Yükleme Raporu CASE WHEN p.islendi mantığı
+    // Günlük'te varsayılan: işaretli
+    if ($f_palet_islendi === '') $f_palet_islendi = 'hicbiri';
+    if ($f_palet_islendi === 'isaretli') {
+        $mk_agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi=1 THEN 1 END),0)";
+        $mk_agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.kasa_adeti ELSE 0 END),0)";
+        $mk_agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg    ELSE 0 END),0)";
+        $mk_agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg    ELSE 0 END),0)";
+        $mk_agg_net   = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg     ELSE 0 END),0)";
+        $mk_having    = " HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END) > 0";
+    } elseif ($f_palet_islendi === 'hicbiri') {
+        $mk_agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi!=1 THEN 1 END),0)";
+        $mk_agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)";
+        $mk_agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg    ELSE 0 END),0)";
+        $mk_agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg    ELSE 0 END),0)";
+        $mk_agg_net   = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg     ELSE 0 END),0)";
+        $mk_having    = " HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END) > 0";
+    } else {
+        $mk_agg_palet = "COUNT(p.id)";
+        $mk_agg_kasa  = "COALESCE(SUM(p.kasa_adeti),0)";
+        $mk_agg_brut  = "COALESCE(SUM(p.brut_kg),0)";
+        $mk_agg_dara  = "COALESCE(SUM(p.dara_kg),0)";
+        $mk_agg_net   = "COALESCE(SUM(p.net_kg),0)";
+        $mk_having    = "";
+    }
+    $mk_rows = [];
+    $mkw = ["r.type='yukleme'", "r.tarih BETWEEN ? AND ?"];
+    $mkp = [$f_from, $f_to];
+    if ($f_firma !== '') { $mkw[] = "r.firma = ?"; $mkp[] = $f_firma; }
+    if ($f_urun  !== '') { $mkw[] = "r.urun = ?";  $mkp[] = $f_urun;  }
+    if ($f_depo  !== '') {
+        $mkw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
+        $mkp[] = $f_depo;
+    }
+    $st = db()->prepare("
+        SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.durum,
+               (SELECT _p.depo FROM loading_pallets _p
+                WHERE _p.loading_record_id=r.id AND _p.depo!='' ORDER BY _p.id LIMIT 1) AS depo,
+               {$mk_agg_palet}               AS palet_sayisi,
+               {$mk_agg_kasa}                AS toplam_kasa,
+               ROUND({$mk_agg_brut},3)        AS toplam_brut,
+               ROUND({$mk_agg_dara},3)        AS toplam_dara,
+               ROUND({$mk_agg_net},3)         AS toplam_net
+        FROM loading_records r
+        LEFT JOIN loading_pallets p ON p.loading_record_id=r.id
+        WHERE " . implode(' AND ', $mkw) . "
+        GROUP BY r.id{$mk_having}
+        ORDER BY r.tarih DESC, r.id DESC LIMIT 500");
+    $st->execute($mkp);
+    $mk_rows = $st->fetchAll();
 
     // Özet
     $ozet_kantar_brut = 0.0; $ozet_kantar_dara = 0.0; $ozet_kantar_net = 0.0;
@@ -447,10 +499,6 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $ozet_cikma_net    = (float)array_sum(array_column($ck_rows, 'toplam_net'));
     $ozet_palet        = (int)  array_sum(array_column($yk_rows, 'palet_sayisi'));
     $ozet_kasa         = (int)  array_sum(array_column($yk_rows, 'toplam_kasa'));
-    $ozet_malzeme_qty  = 0.0;
-    foreach ($mv_rows as $_mv) {
-        if ($_mv['movement_type'] === 'kullanim') $ozet_malzeme_qty += (float)$_mv['quantity'];
-    }
 }
 
 // ── CSV Export ──────────────────────────────────────────
@@ -475,7 +523,6 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         fputcsv($gl_fp, ['Çıkma Net KG',     str_replace('.', ',', number_format($ozet_cikma_net,   3, '.', ''))], ';');
         fputcsv($gl_fp, ['Yükleme Palet',    (string)$ozet_palet], ';');
         fputcsv($gl_fp, ['Yükleme Kasa',     (string)$ozet_kasa],  ';');
-        fputcsv($gl_fp, ['Malzeme Kullanım', str_replace('.', ',', number_format($ozet_malzeme_qty, 3, '.', ''))], ';');
         fputcsv($gl_fp, [], ';');
         // KANTAR
         fputcsv($gl_fp, ['--- KANTAR GİRİŞLERİ ---'], ';');
@@ -530,20 +577,29 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                 $_ckr['durum'],
             ], ';');
         }
-        fputcsv($gl_fp, [], ';');
-        // MALZEME
-        fputcsv($gl_fp, ['--- MALZEME HAREKETLERİ ---'], ';');
-        fputcsv($gl_fp, ['Tarih','Tür','Malzeme','Depo','Miktar','Birim','Belge No','Not'], ';');
-        foreach ($mv_rows as $_mvr) {
+        // MAKİNEYE DÖKÜLEN
+        $_mk_label = match($f_palet_islendi) {
+            'hicbiri' => '--- MAKİNEYE DÖKÜLMEYENLERİ ---',
+            ''        => '--- YÜKLEME KAYITLARI (TÜMÜ) ---',
+            default   => '--- MAKİNEYE DÖKÜLEN ---',
+        };
+        fputcsv($gl_fp, [$_mk_label], ';');
+        fputcsv($gl_fp, ['Tarih','Firma','Bölge','Alıcı','Depo','Ürün','Parti No','Durum','Palet','Kasa','Brüt KG','Dara KG','Net KG'], ';');
+        foreach ($mk_rows as $_mkr) {
             fputcsv($gl_fp, [
-                $_mvr['movement_date'],
-                $_mvr['movement_type'],
-                $_mvr['material_name'],
-                $_mvr['depo']     ?? '',
-                str_replace('.', ',', number_format((float)$_mvr['quantity'], 3, '.', '')),
-                $_mvr['unit']     ?? '',
-                $_mvr['belge_no'] ?? '',
-                $_mvr['note']     ?? '',
+                $_mkr['tarih'],
+                $_mkr['firma'],
+                $_mkr['bolge']    ?? '',
+                $_mkr['alici']    ?? '',
+                $_mkr['depo']     ?? '',
+                $_mkr['urun'],
+                $_mkr['parti_no'] ?? '',
+                $_mkr['durum']    ?? '',
+                (int)$_mkr['palet_sayisi'],
+                (int)$_mkr['toplam_kasa'],
+                str_replace('.', ',', number_format((float)$_mkr['toplam_brut'], 3, '.', '')),
+                str_replace('.', ',', number_format((float)$_mkr['toplam_dara'], 3, '.', '')),
+                str_replace('.', ',', number_format((float)$_mkr['toplam_net'],  3, '.', '')),
             ], ';');
         }
         fclose($gl_fp);
@@ -568,6 +624,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                 lr.alici,
                 lr.urun          AS kayit_urun,
                 lr.parti_no,
+                lr.cikis_nedeni,
                 lr.on_plaka,
                 lr.arka_plaka,
                 lr.durum,
@@ -622,7 +679,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
             'bolge'            => 'Bölge',
             'alici'            => 'Alıcı',
             'kayit_urun'       => 'Ürün (Kayıt)',
-            'parti_no'         => 'Parti No',
+            ($type === 'cikma' ? 'cikis_nedeni' : 'parti_no') => ($type === 'cikma' ? 'Çıkma Nedeni' : 'Parti No'),
             'on_plaka'         => 'Ön Plaka',
             'arka_plaka'       => 'Arka Plaka',
             'durum'            => 'Durum',
@@ -889,7 +946,7 @@ render_flash();
 
 <!-- Yazdırma başlığı (sadece print'te görünür) -->
 <div class="gl-print-header">
-    <h2>Günlük Operasyon Raporu</h2>
+    <h2>Günlük Rapor</h2>
     <p><?= $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to)) ?><?= $f_firma ? ' · ' . h($f_firma) : '' ?><?= $f_depo ? ' · Depo: ' . h($f_depo) : '' ?></p>
 </div>
 
@@ -900,13 +957,14 @@ render_flash();
         <h1>📅 Günlük Operasyon Raporu</h1>
         <p class="muted">
             <?= $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to)) ?>
-            &nbsp;·&nbsp; <?= count($gk_rows) + count($yk_rows) + count($ck_rows) + count($mv_rows) ?> kayıt
+            &nbsp;·&nbsp; <?= count($gk_rows) + count($ck_rows) + count($mk_rows) ?> kayıt
         </p>
     </div>
     <div class="rpt-actions">
         <?php
         $gl_csv_params = array_filter(['type'=>'gunluk','export'=>'csv',
-            'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun]);
+            'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun,
+            'palet_islendi'=>$f_palet_islendi]);
         $gl_csv_url = 'reports.php?' . http_build_query($gl_csv_params);
         ?>
         <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
@@ -940,6 +998,13 @@ render_flash();
             </select>
         </label>
         <label>Ürün<input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün adı..."></label>
+        <label>Palet İşaret
+            <select name="palet_islendi">
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ?'selected':'' ?>>İşaretsiz (Makinaya Dökülen)</option>
+                <option value=""         <?= $f_palet_islendi===''          ?'selected':'' ?>>Tümü</option>
+                <option value="isaretli" <?= $f_palet_islendi==='isaretli'  ?'selected':'' ?>>İşaretli (Raporlandı)</option>
+            </select>
+        </label>
     </div>
     <div class="rpt-filter-actions">
         <button class="btn btn-primary btn-sm">Filtrele</button>
@@ -948,45 +1013,12 @@ render_flash();
 </form>
 </div>
 
-<!-- A) Özet kartlar -->
+<!-- Kantar -->
 <div class="gl-section">
-    <div class="gl-section-title">A) Günlük Özet</div>
-    <div class="gl-ozet-strip">
-        <div class="gl-ozet-card gl-ozet-hi">
-            <span>Kantar Net KG</span>
-            <strong><?= fmt_kg($ozet_kantar_net) ?></strong>
-        </div>
-        <div class="gl-ozet-card">
-            <span>Kantar Brüt KG</span>
-            <strong><?= fmt_kg($ozet_kantar_brut) ?></strong>
-        </div>
-        <div class="gl-ozet-card gl-ozet-hi">
-            <span>Yükleme Net KG</span>
-            <strong><?= fmt_kg($ozet_yukleme_net) ?></strong>
-        </div>
-        <div class="gl-ozet-card">
-            <span>Çıkma / Fire Net KG</span>
-            <strong><?= fmt_kg($ozet_cikma_net) ?></strong>
-        </div>
-        <div class="gl-ozet-card">
-            <span>Yükleme Palet</span>
-            <strong><?= number_format($ozet_palet, 0, ',', '.') ?></strong>
-        </div>
-        <div class="gl-ozet-card">
-            <span>Yükleme Kasa</span>
-            <strong><?= number_format($ozet_kasa, 0, ',', '.') ?></strong>
-        </div>
-        <div class="gl-ozet-card">
-            <span>Malzeme Kullanım</span>
-            <strong><?= fmt_kg($ozet_malzeme_qty) ?></strong>
-        </div>
-    </div>
-</div>
-
-<!-- B) Kantar girişleri -->
-<?php if (!empty($gk_rows)): ?>
-<div class="gl-section">
-    <div class="gl-section-title">B) Kantar Girişleri (<?= count($gk_rows) ?>)</div>
+    <div class="gl-section-title">Kantar<?= !empty($gk_rows) ? ' ('.count($gk_rows).')' : '' ?></div>
+    <?php if (!empty($gk_rows)):
+        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0;
+    ?>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
@@ -996,7 +1028,6 @@ render_flash();
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; ?>
         <?php foreach ($gk_rows as $_gkr): $_kc = kantar_calc($_gkr); $_gk_tot_brut += $_kc['brut']; $_gk_tot_net += $_kc['net']; ?>
         <tr>
             <td><?= h(fmt_datetime($_gkr['giris_tarih'] ?? '')) ?></td>
@@ -1023,66 +1054,87 @@ render_flash();
         </tr></tfoot>
     </table>
     </div>
+    <?php else: ?>
+    <p class="muted">İşlem yok</p>
+    <?php endif; ?>
 </div>
-<?php endif; ?>
 
-<!-- C) Yükleme kayıtları -->
-<?php if (!empty($yk_rows)): ?>
+<!-- Makineye Dökülen -->
+<?php
+$_mk_tot_palet = (int)  array_sum(array_column($mk_rows,'palet_sayisi'));
+$_mk_tot_kasa  = (int)  array_sum(array_column($mk_rows,'toplam_kasa'));
+$_mk_tot_brut  = (float)array_sum(array_column($mk_rows,'toplam_brut'));
+$_mk_tot_dara  = (float)array_sum(array_column($mk_rows,'toplam_dara'));
+$_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
+?>
 <div class="gl-section">
-    <div class="gl-section-title">C) Yükleme Kayıtları (<?= count($yk_rows) ?>)</div>
+    <div class="gl-section-title">Makineye Dökülen<?= !empty($mk_rows) ? ' ('.count($mk_rows).' kayıt)' : '' ?></div>
+    <?php if (!empty($mk_rows)): ?>
+    <div class="rpt-summary" style="margin-bottom:10px">
+        <div class="rpt-sum-item"><span>Kayıt</span><strong><?= count($mk_rows) ?></strong></div>
+        <div class="rpt-sum-item"><span>Palet</span><strong><?= number_format($_mk_tot_palet, 0, ',', '.') ?></strong></div>
+        <div class="rpt-sum-item"><span>Kasa</span><strong><?= number_format($_mk_tot_kasa, 0, ',', '.') ?></strong></div>
+        <div class="rpt-sum-item"><span>Brüt KG</span><strong><?= fmt_kg($_mk_tot_brut) ?></strong></div>
+        <div class="rpt-sum-item rpt-sum-highlight"><span>Net KG</span><strong><?= fmt_kg(round($_mk_tot_net)) ?></strong></div>
+    </div>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Depo</th>
+            <th>Tarih</th><th>Firma</th><th>Bölge</th><th>Alıcı</th><th>Depo</th><th>Ürün</th>
+            <th>Parti No</th><th>Durum</th>
             <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
-            <th>Durum</th>
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($yk_rows as $_ykr):
-            $_yd = $_ykr['durum']; $_ydc = $_yd==='islendi'?'badge-islendi':($_yd==='yuklendi'?'badge-yuklendi':'');
+        <?php foreach ($mk_rows as $_mkr):
+            $_md = $_mkr['durum']; $_mdc = $_md==='islendi'?'badge-islendi':($_md==='yuklendi'?'badge-yuklendi':'');
         ?>
         <tr>
-            <td><?= h(fmt_date($_ykr['tarih'])) ?></td>
-            <td><?= h($_ykr['firma'] ?: '—') ?></td>
-            <td><?= h($_ykr['urun']  ?: '—') ?></td>
-            <td><?= h($_ykr['depo']  ?: '—') ?></td>
-            <td class="num"><?= (int)$_ykr['palet_sayisi'] ?></td>
-            <td class="num"><?= number_format((int)$_ykr['toplam_kasa'], 0, ',', '.') ?></td>
-            <td class="num"><?= fmt_kg((float)$_ykr['toplam_brut']) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_ykr['toplam_dara'])) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_ykr['toplam_net'])) ?></td>
-            <td><?= $_yd ? '<span class="rpt-badge '.$_ydc.'">'.h($_yd).'</span>' : '<span class="muted">—</span>' ?></td>
-            <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_ykr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
+            <td><?= h(fmt_date($_mkr['tarih'])) ?></td>
+            <td><?= h($_mkr['firma']   ?: '—') ?></td>
+            <td><?= h($_mkr['bolge']   ?: '—') ?></td>
+            <td><?= h($_mkr['alici']   ?: '—') ?></td>
+            <td><?= h($_mkr['depo']    ?: '—') ?></td>
+            <td><?= h($_mkr['urun']    ?: '—') ?></td>
+            <td><?= h($_mkr['parti_no']?: '—') ?></td>
+            <td><?= $_md ? '<span class="rpt-badge '.$_mdc.'">'.($_md==='islendi'?'İşlendi':($_md==='yuklendi'?'Yüklendi':h($_md))).'</span>' : '<span class="muted">—</span>' ?></td>
+            <td class="num"><?= number_format((int)$_mkr['palet_sayisi'], 0, ',', '.') ?></td>
+            <td class="num"><?= number_format((int)$_mkr['toplam_kasa'],  0, ',', '.') ?></td>
+            <td class="num"><?= fmt_kg((float)$_mkr['toplam_brut']) ?></td>
+            <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_dara'])) ?></td>
+            <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_net'])) ?></td>
+            <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_mkr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
-            <td class="strong" colspan="4">TOPLAM</td>
-            <td class="num strong"><?= number_format($ozet_palet, 0, ',', '.') ?></td>
-            <td class="num strong"><?= number_format($ozet_kasa,  0, ',', '.') ?></td>
-            <td class="num strong"><?= fmt_kg((float)array_sum(array_column($yk_rows,'toplam_brut'))) ?></td>
-            <td class="num strong"><?= fmt_kg(round((float)array_sum(array_column($yk_rows,'toplam_dara')))) ?></td>
-            <td class="num strong"><?= fmt_kg($ozet_yukleme_net) ?></td>
-            <td></td><td class="gl-no-print"></td>
+            <td class="strong" colspan="8">TOPLAM</td>
+            <td class="num strong"><?= number_format($_mk_tot_palet, 0, ',', '.') ?></td>
+            <td class="num strong"><?= number_format($_mk_tot_kasa,  0, ',', '.') ?></td>
+            <td class="num strong"><?= fmt_kg($_mk_tot_brut) ?></td>
+            <td class="num strong"><?= fmt_kg(round($_mk_tot_dara)) ?></td>
+            <td class="num strong"><?= fmt_kg(round($_mk_tot_net)) ?></td>
+            <td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
     </div>
+    <?php else: ?>
+    <p class="muted">İşlem yok</p>
+    <?php endif; ?>
 </div>
-<?php endif; ?>
 
-<!-- D) Çıkma kayıtları -->
-<?php if (!empty($ck_rows)): ?>
+<!-- Çıkmalar -->
 <div class="gl-section">
-    <div class="gl-section-title">D) Çıkma / Fire Kayıtları (<?= count($ck_rows) ?>)</div>
+    <div class="gl-section-title">Çıkmalar<?= !empty($ck_rows) ? ' ('.count($ck_rows).')' : '' ?></div>
+    <?php if (!empty($ck_rows)): ?>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Çıkış Nedeni</th><th>Depo</th>
-            <th class="num">Palet</th><th class="num">Kasa</th><th class="num">Net KG</th>
-            <th>Durum</th>
-            <th class="gl-no-print">Bağlantı</th>
+            <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Çıkma Nedeni</th><th>Depo</th>
+            <th class="num">Palet</th><th class="num">Kasa</th>
+            <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
+            <th>Durum</th><th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
         <?php foreach ($ck_rows as $_ckr):
@@ -1096,8 +1148,10 @@ render_flash();
             <td><?= h($_ckr['depo']  ?: '—') ?></td>
             <td class="num"><?= (int)$_ckr['palet_sayisi'] ?></td>
             <td class="num"><?= number_format((int)$_ckr['toplam_kasa'], 0, ',', '.') ?></td>
+            <td class="num"><?= fmt_kg((float)$_ckr['toplam_brut']) ?></td>
+            <td class="num"><?= fmt_kg(round((float)$_ckr['toplam_dara'])) ?></td>
             <td class="num"><?= fmt_kg(round((float)$_ckr['toplam_net'])) ?></td>
-            <td><?= $_cd ? '<span class="rpt-badge '.$_cdc.'">'.h($_cd).'</span>' : '<span class="muted">—</span>' ?></td>
+            <td><?= $_cd ? '<span class="rpt-badge '.$_cdc.'">'.($_cd==='islendi'?'İşlendi':($_cd==='yuklendi'?'Yüklendi':h($_cd))).'</span>' : '<span class="muted">—</span>' ?></td>
             <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_ckr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
@@ -1106,50 +1160,17 @@ render_flash();
             <td class="strong" colspan="5">TOPLAM</td>
             <td class="num strong"><?= number_format((int)array_sum(array_column($ck_rows,'palet_sayisi')), 0, ',', '.') ?></td>
             <td class="num strong"><?= number_format((int)array_sum(array_column($ck_rows,'toplam_kasa')),  0, ',', '.') ?></td>
-            <td class="num strong"><?= fmt_kg($ozet_cikma_net) ?></td>
+            <td class="num strong"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_brut'))) ?></td>
+            <td class="num strong"><?= fmt_kg(round((float)array_sum(array_column($ck_rows,'toplam_dara')))) ?></td>
+            <td class="num strong"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_net'))) ?></td>
             <td></td><td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
     </div>
+    <?php else: ?>
+    <p class="muted">İşlem yok</p>
+    <?php endif; ?>
 </div>
-<?php endif; ?>
-
-<!-- E) Malzeme hareketleri -->
-<?php if (!empty($mv_rows)): ?>
-<div class="gl-section">
-    <div class="gl-section-title">E) Malzeme Hareketleri (<?= count($mv_rows) ?>)</div>
-    <div class="table-wrap">
-    <table class="data-table">
-        <thead><tr>
-            <th>Tarih</th><th>Tür</th><th>Malzeme</th><th>Depo</th>
-            <th class="num">Miktar</th><th>Birim</th><th>Belge No</th>
-        </tr></thead>
-        <tbody>
-        <?php
-        $gl_mv_labels = ['giris'=>'Giriş','sevk'=>'Sevk','kullanim'=>'Kullanım','duzeltme'=>'Düzeltme'];
-        foreach ($mv_rows as $_mvr):
-            $_mt = $_mvr['movement_type'];
-            $_mc = 'gl-mv-' . ($_mt === 'duzeltme' ? 'duzeltme' : $_mt);
-        ?>
-        <tr>
-            <td><?= h(fmt_date($_mvr['movement_date'] ?? '')) ?></td>
-            <td><span class="gl-mv-badge <?= h($_mc) ?>"><?= h($gl_mv_labels[$_mt] ?? $_mt) ?></span></td>
-            <td><?= h($_mvr['material_name'] ?: '—') ?></td>
-            <td><?= h($_mvr['depo'] ?: '—') ?></td>
-            <td class="num"><?= fmt_kg((float)$_mvr['quantity']) ?></td>
-            <td><?= h($_mvr['unit'] ?: '—') ?></td>
-            <td><?= h($_mvr['belge_no'] ?: '—') ?></td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    </div>
-</div>
-<?php endif; ?>
-
-<?php if (empty($gk_rows) && empty($yk_rows) && empty($ck_rows) && empty($mv_rows)): ?>
-<div class="empty"><p>Seçilen tarih aralığında kayıt bulunamadı.</p></div>
-<?php endif; ?>
 
 <?php else: ?>
 <!-- ── Rapor Sayfası ─────────────────────────────────── -->

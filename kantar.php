@@ -8,17 +8,40 @@ require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('kantar.read');
 
+$f_raporlandi = trim($_GET['raporlandi'] ?? '');
+
+// Kolon yoksa (migration henüz çalışmadıysa) sorgu patlamaması için kontrol
+$has_reported_col = false;
+try {
+    $has_reported_col = (bool)db()->query(
+        "SHOW COLUMNS FROM `kantar_fisleri` LIKE 'reported_at'"
+    )->fetchColumn();
+} catch (PDOException $_e) {}
+
+if (!$has_reported_col) { $f_raporlandi = ''; }
+
+$kf_where = "1=1";
+if ($has_reported_col) {
+    if ($f_raporlandi === 'raporlanmayan')     $kf_where = "reported_at IS NULL";
+    elseif ($f_raporlandi === 'raporlanan')    $kf_where = "reported_at IS NOT NULL";
+}
+
+$sel_rep = $has_reported_col ? ", reported_at" : ", NULL as reported_at";
+
 $rows = [];
 try {
     $rows = db()->query(
         "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
                 palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2,
-                depo, created_at
+                depo, created_at{$sel_rep}
          FROM kantar_fisleri
+         WHERE {$kf_where}
          ORDER BY CAST(fis_no AS UNSIGNED) DESC, id DESC
          LIMIT 500"
     )->fetchAll();
 } catch (PDOException $e) {}
+
+$can_write = can('kantar.write');
 
 render_header('Kantar');
 render_flash();
@@ -37,9 +60,20 @@ render_flash();
     </div>
 </div>
 
+<!-- Filtre çubuğu -->
+<div class="filter-bar" style="margin-bottom:12px">
+    <?php
+    $r_opts = ['' => 'Tümü', 'raporlanmayan' => 'Raporlanmayan', 'raporlanan' => 'Raporlanan'];
+    foreach ($r_opts as $val => $lbl):
+        $active = ($f_raporlandi === $val) ? 'btn-primary' : 'btn-ghost';
+    ?>
+    <a href="kantar.php?raporlandi=<?= urlencode($val) ?>" class="btn btn-sm <?= $active ?>"><?= $lbl ?></a>
+    <?php endforeach; ?>
+</div>
+
 <?php if (empty($rows)): ?>
 <div class="empty">
-    <p>Henüz kantar fişi yok.</p>
+    <p>Bu filtreye göre kantar fişi bulunamadı.</p>
     <a href="kantar_create.php" class="btn btn-primary">İlk fişi oluştur</a>
 </div>
 <?php else: ?>
@@ -59,6 +93,7 @@ render_flash();
             <th class="num">Kasa</th>
             <th>Depo</th>
             <th class="num">Net KG</th>
+            <th>Raporlandı</th>
             <th class="actions-col">İşlemler</th>
         </tr>
         </thead>
@@ -66,6 +101,7 @@ render_flash();
         <?php foreach ($rows as $r):
             $net        = (float)$r['tartim1'] - (float)$r['tartim2'];
             $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
+            $is_rep     = !empty($r['reported_at']);
         ?>
             <tr>
                 <td><strong>#<?= h($r['fis_no'] ?: (string)$r['id']) ?></strong></td>
@@ -78,6 +114,25 @@ render_flash();
                 <td class="num"><?= $r['kasa_sayisi']  ? (int)$r['kasa_sayisi']  : '—' ?></td>
                 <td><?= h($r['depo'] ?: '—') ?></td>
                 <td class="num strong"><?= $net > 0 ? fmt_kg($net) . ' kg' : '—' ?></td>
+                <td>
+                    <?php if ($can_write): ?>
+                    <form method="post" action="kantar_report_toggle.php" style="display:inline">
+                        <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+                        <input type="hidden" name="id"     value="<?= (int)$r['id'] ?>">
+                        <input type="hidden" name="action" value="<?= $is_rep ? 'unmark' : 'mark' ?>">
+                        <input type="hidden" name="back"   value="kantar.php?raporlandi=<?= urlencode($f_raporlandi) ?>">
+                        <button type="submit" class="btn btn-sm"
+                            style="<?= $is_rep ? 'background:#16a34a;color:#fff;border-color:#16a34a' : 'background:#f97316;color:#fff;border-color:#f97316' ?>"
+                            <?= $is_rep ? 'onclick="return confirm(\'Raporlamayı iptal etmek istiyor musunuz?\')"' : '' ?>>
+                            <?= $is_rep ? '✓ Raporlandı' : 'Raporla' ?>
+                        </button>
+                    </form>
+                    <?php else: ?>
+                    <span class="kantar-badge <?= $is_rep ? 'kantar-badge-yes' : 'kantar-badge-no' ?>">
+                        <?= $is_rep ? '✓' : '—' ?>
+                    </span>
+                    <?php endif; ?>
+                </td>
                 <td class="actions-col">
                     <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                     <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
@@ -93,6 +148,7 @@ render_flash();
     <?php foreach ($rows as $r):
         $net        = (float)$r['tartim1'] - (float)$r['tartim2'];
         $giris_disp = $r['giris_tarih'] ? fmt_datetime($r['giris_tarih']) : fmt_datetime($r['created_at']);
+        $is_rep     = !empty($r['reported_at']);
     ?>
     <div class="record-card">
         <div class="record-card-head">
@@ -113,7 +169,19 @@ render_flash();
         </div>
         <div class="record-card-actions">
             <a class="btn btn-sm" href="kantar_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-            <a class="btn btn-sm" href="kantar_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+            <?php if ($can_write): ?>
+            <form method="post" action="kantar_report_toggle.php" style="display:inline">
+                <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="id"     value="<?= (int)$r['id'] ?>">
+                <input type="hidden" name="action" value="<?= $is_rep ? 'unmark' : 'mark' ?>">
+                <input type="hidden" name="back"   value="kantar.php?raporlandi=<?= urlencode($f_raporlandi) ?>">
+                <button type="submit" class="btn btn-sm"
+                    style="<?= $is_rep ? 'background:#16a34a;color:#fff;border-color:#16a34a' : 'background:#f97316;color:#fff;border-color:#f97316' ?>"
+                    <?= $is_rep ? 'onclick="return confirm(\'Raporlamayı iptal etmek istiyor musunuz?\')"' : '' ?>>
+                    <?= $is_rep ? '✓ Raporlandı' : 'Raporla' ?>
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
     </div>
     <?php endforeach; ?>

@@ -62,7 +62,18 @@ $use_by_id   = [];   // def_id => ['name','type','adet']
 foreach ($pallets as $p) {
     if ($p['kasa_cinsi_id']) { $kid=(int)$p['kasa_cinsi_id']; $use_by_id[$kid]['adet']=($use_by_id[$kid]['adet']??0)+(int)$p['kasa_adeti']; }
     if ($p['palet_tipi_id']) { $kid=(int)$p['palet_tipi_id']; $use_by_id[$kid]['adet']=($use_by_id[$kid]['adet']??0)+1; }
-    foreach ($p['materials'] as $m) { $kid=(int)$m['def_id']; $use_by_id[$kid]['adet']=($use_by_id[$kid]['adet']??0)+(float)$m['quantity']; }
+    // Ek malzeme — kasa bazlı: quantity × kasa_adeti, palet bazlı: quantity
+    // (Sprint Malzeme-02 ile aynı mantık → record_view/record_excel ile tutarlı)
+    foreach ($p['materials'] as $m) {
+        $kid   = (int)$m['def_id'];
+        $basis = function_exists('material_calc_basis')
+            ? material_calc_basis((string)$m['material_type'], (string)$m['material_name'])
+            : 'palet';
+        $eff   = ($basis === 'kasa')
+            ? (float)$m['quantity'] * (int)$p['kasa_adeti']
+            : (float)$m['quantity'];
+        $use_by_id[$kid]['adet'] = ($use_by_id[$kid]['adet'] ?? 0) + $eff;
+    }
 }
 foreach ($use_by_id as $kid => &$u) {
     $d = $defs_by_id[$kid] ?? null; if (!$d) continue;

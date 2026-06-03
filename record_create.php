@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
-    $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS'], true) ? strtoupper($record['brand']) : '';
+    $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : '';
     if ($record['tarih'] === '') $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '') $errors[] = 'Firma zorunludur.';
     if ($record['urun']  === '') $errors[] = 'Ürün zorunludur.';

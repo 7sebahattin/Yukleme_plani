@@ -135,7 +135,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <label class="span-2">Marka
                 <?php $_cur_brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
                 <div class="brand-seg" role="radiogroup" aria-label="Marka">
-                    <?php foreach (['ASYA', 'URAL', 'URAS'] as $_bv): ?>
+                    <?php foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_bv): ?>
                     <label class="brand-seg-opt<?= $_cur_brand === $_bv ? ' active' : '' ?>">
                         <input type="radio" name="brand" value="<?= h($_bv) ?>" <?= $_cur_brand === $_bv ? 'checked' : '' ?>>
                         <span><?= h($_bv) ?></span>
@@ -204,13 +204,15 @@ $form_is_cikma = $form_is_cikma ?? false;
 
 <!-- ============== YÜKLEME PLANI / PALETLER ============== -->
 <section class="card">
-    <div class="card-head">
+    <div class="card-head pallet-card-head">
         <h2>Yükleme Planı (Paletler)</h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu İşle</button>
-            <button type="button" class="btn btn-primary" id="addPalletBtn">+ Yeni Palet Ekle</button>
+        <div class="pallet-actions">
+            <div class="pallet-sec-btns">
+                <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu İşle</button>
+            </div>
+            <button type="button" class="btn btn-primary pallet-add-main" id="addPalletBtn">+ Yeni Palet Ekle</button>
         </div>
     </div>
 

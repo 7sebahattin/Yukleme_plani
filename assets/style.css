@@ -1092,7 +1092,7 @@ body.print-mode .topbar { display: none; }
 }
 .asya-marka-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(4, 1fr);
     border-bottom: 1px solid #ccc;
 }
 /* ALICI + ÜRÜN yan yana tek satır */
@@ -1903,9 +1903,48 @@ body.print-mode .asya-sheet {
     display: flex; flex-wrap: wrap; gap: 4px 14px;
     font-size: .83rem; color: var(--muted);
 }
+.pc-stats + .pc-stats { margin-top: 2px; }
 .pc-stats strong { color: var(--text); font-weight: 600; }
 .pc-stats strong.pc-warn { color: #ef4444; font-weight: 700; }
 .pc-meta { font-size: .78rem; color: var(--muted); margin-top: 3px; }
+
+/* Palet aksiyon butonları */
+.pallet-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: stretch;
+    min-width: 0;
+}
+.pallet-sec-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pallet-sec-btns .btn {
+    flex: 1;
+    min-height: 40px;
+    font-size: .82rem;
+    white-space: nowrap;
+    text-align: center;
+}
+.pallet-add-main {
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+    border-radius: 12px;
+    background: #16a34a !important;
+    border-color: #16a34a !important;
+}
+.pallet-add-main:hover,
+.pallet-add-bottom:hover { background: #15803d !important; border-color: #15803d !important; }
+.pallet-add-bottom { background: #16a34a !important; border-color: #16a34a !important; }
+@media (min-width: 768px) {
+    .pallet-card-head { align-items: flex-start; }
+    .pallet-actions { flex-direction: row; align-items: center; }
+    .pallet-add-main { width: auto; min-height: 36px; font-size: .875rem; border-radius: var(--radius); }
+    .pallet-sec-btns .btn { flex: none; min-height: 32px; }
+}
 .pc-kebab-wrap {
     position: relative;
     flex-shrink: 0;
@@ -3061,6 +3100,35 @@ body.notes-modal-open { overflow: hidden; }
 .hesap-stat.blue strong { color: #1e40af; }
 .hesap-stat.orange { border-color: #fdba74; background: #fff7ed; }
 .hesap-stat.orange strong { color: #9a3412; }
+.hesap-stat.gray { border-color: #cbd5e1; background: #f8fafc; }
+.hesap-stat.gray strong { color: #334155; }
+.hesap-stat small { display: block; font-size: .63rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+.hesap-ay-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+.hesap-ay-label {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    font-size: .9rem;
+}
+.hesap-ay-arrow { padding: 4px 12px; font-size: 1.1rem; line-height: 1; }
+.hesap-ay-arrow.disabled { opacity: .3; pointer-events: none; }
+.hesap-ay-badge {
+    display: inline-block;
+    font-size: .65rem;
+    font-weight: 600;
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 10px;
+    padding: 1px 7px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
 
 .hesap-quick-grid {
     display: grid;
@@ -4170,4 +4238,13 @@ body.notes-modal-open { overflow: hidden; }
     .topbar { display: none !important; }
     .container { margin-left: 0 !important; max-width: none !important; padding-bottom: 0 !important; }
 }
+
+/* Kantar Raporlandı Badge */
+.kantar-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 2px 8px; border-radius: 20px;
+    font-size: .75rem; font-weight: 600; white-space: nowrap;
+}
+.kantar-badge-yes { background: #dcfce7; color: #166534; }
+.kantar-badge-no  { background: #fef3c7; color: #92400e; }
 body.print-mode .container { margin-left: 0 !important; max-width: none !important; }
