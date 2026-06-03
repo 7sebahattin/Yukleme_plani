@@ -14,6 +14,20 @@ if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
 $rapor_filter = trim((string)($_GET['rapor_durumu'] ?? ''));
 if (!in_array($rapor_filter, ['raporlanmamis', 'raporlandi'], true)) $rapor_filter = '';
 
+// loading_records.reported_at kolon varlığı kontrolü (idempotent fallback)
+$lr_rep_col = false;
+try {
+    $lr_rep_col = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'reported_at'")->fetchColumn();
+    if (!$lr_rep_col) {
+        try {
+            db()->exec("ALTER TABLE `loading_records`
+                ADD COLUMN `reported_at` DATETIME NULL,
+                ADD COLUMN `reported_by` INT NULL");
+            $lr_rep_col = true;
+        } catch (PDOException $_lrcm) {}
+    }
+} catch (PDOException $_lrce) {}
+
 $sql = "SELECT r.*,
                (SELECT COUNT(*)                          FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_palet,
                (SELECT COALESCE(SUM(p.kasa_adeti),0)    FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_kasa,
@@ -34,8 +48,10 @@ if ($durum_filter !== '') {
     $sql .= " AND r.durum = :durum ";
     $params[':durum'] = $durum_filter;
 }
-if ($rapor_filter === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL "; }
-if ($rapor_filter === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL "; }
+if ($lr_rep_col) {
+    if ($rapor_filter === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL "; }
+    if ($rapor_filter === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL "; }
+}
 $sql .= " ORDER BY r.id DESC LIMIT 500";
 
 $st = db()->prepare($sql);
