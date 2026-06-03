@@ -15,6 +15,8 @@ $f_from    = trim($_GET['date_from'] ?? '');
 $f_to      = trim($_GET['date_to']   ?? '');
 $f_firma   = trim($_GET['firma']     ?? '');
 $f_durum   = trim($_GET['durum']     ?? '');
+$f_cikma_rapor = trim($_GET['cikma_rapor'] ?? '');
+if (!in_array($f_cikma_rapor, ['raporlanmamis', 'raporlandi'], true)) $f_cikma_rapor = '';
 $f_urun    = trim($_GET['urun']      ?? '');
 $f_bolge   = trim($_GET['bolge']     ?? '');
 $f_depo    = trim($_GET['depo']      ?? '');
@@ -132,10 +134,21 @@ if ($type === 'yukleme' || $type === 'cikma') {
             WHERE r.type = :rtype";
     $p = [':rtype' => $type];
     if ($f_firma !== '') { $sql .= " AND r.firma = :firma"; $p[':firma'] = $f_firma; }
-    if ($f_durum !== '') { $sql .= " AND r.durum = :durum"; $p[':durum'] = $f_durum; }
+    if ($f_durum !== '' && $type === 'yukleme') { $sql .= " AND r.durum = :durum"; $p[':durum'] = $f_durum; }
     if ($f_urun  !== '') { $sql .= " AND r.urun  = :urun";  $p[':urun']  = $f_urun;  }
     if ($f_bolge !== '') { $sql .= " AND r.bolge = :bolge"; $p[':bolge'] = $f_bolge; }
     if ($f_depo  !== '') { $sql .= " AND p.depo  = :depo";  $p[':depo']  = $f_depo;  }
+    if ($type === 'cikma' && $f_cikma_rapor !== '') {
+        static $_rpt_col_checked = null;
+        if ($_rpt_col_checked === null) {
+            try { $_rpt_col_checked = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'reported_at'")->fetchColumn(); }
+            catch (Throwable $_) { $_rpt_col_checked = false; }
+        }
+        if ($_rpt_col_checked) {
+            if ($f_cikma_rapor === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL"; }
+            if ($f_cikma_rapor === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL"; }
+        }
+    }
     if ($f_q     !== '') {
         $sql .= " AND (r.firma LIKE :q OR r.parti_no LIKE :q OR r.alici LIKE :q OR r.urun LIKE :q)";
         $p[':q'] = '%'.$f_q.'%';
@@ -157,8 +170,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $rows = $st->fetchAll();
     if ($type === 'yukleme') {
         $cols = ['tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
-    } else { // cikma — alıcı yok, depo var, çıkma nedeni göster
-        $cols = ['tarih','firma','bolge','depo','urun','cikis_nedeni','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+    } else { // cikma — durum sütunu yok, alıcı yok, çıkma nedeni göster
+        $cols = ['tarih','firma','bolge','depo','urun','cikis_nedeni','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     }
     foreach ($rows as $r) {
         $totals['palet_sayisi']   = ($totals['palet_sayisi']   ?? 0) + (int)$r['palet_sayisi'];
@@ -771,7 +784,8 @@ $csv_params = array_filter([
     'date_from'      => $f_from,
     'date_to'        => $f_to,
     'firma'          => $f_firma,
-    'durum'          => $f_durum,
+    'durum'          => ($type !== 'cikma') ? $f_durum : '',
+    'cikma_rapor'    => ($type === 'cikma') ? $f_cikma_rapor : '',
     'urun'           => $f_urun,
     'bolge'          => $f_bolge,
     'depo'           => $f_depo,
@@ -779,7 +793,7 @@ $csv_params = array_filter([
     'mat_type'       => $f_mtype,
     'q'              => $f_q,
     'sort'           => ($f_sort !== 'tarih') ? $f_sort : '',
-    'palet_islendi'  => $f_palet_islendi,
+    'palet_islendi'  => ($type !== 'cikma') ? $f_palet_islendi : '',
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
 $csv_summary_params = $csv_params;
@@ -1170,24 +1184,21 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
             <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Çıkma Nedeni</th><th>Depo</th>
             <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
-            <th>Durum</th><th class="gl-no-print">Bağlantı</th>
+            <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($ck_rows as $_ckr):
-            $_cd = $_ckr['durum']; $_cdc = $_cd==='islendi'?'badge-islendi':($_cd==='yuklendi'?'badge-yuklendi':'');
-        ?>
+        <?php foreach ($ck_rows as $_ckr): ?>
         <tr>
             <td><?= h(fmt_date($_ckr['tarih'])) ?></td>
             <td><?= h($_ckr['firma'] ?: '—') ?></td>
             <td><?= h($_ckr['urun']  ?: '—') ?></td>
-            <td><?= h($_ckr['cikis_nedeni'] ?: '—') ?></td>
+            <td><?php $_cn = trim($_ckr['cikis_nedeni'] ?? ''); echo $_cn !== '' ? '<span class="cikis-nedeni-badge">' . h($_cn) . '</span>' : '—'; ?></td>
             <td><?= h($_ckr['depo']  ?: '—') ?></td>
             <td class="num"><?= (int)$_ckr['palet_sayisi'] ?></td>
             <td class="num"><?= number_format((int)$_ckr['toplam_kasa'], 0, ',', '.') ?></td>
             <td class="num"><?= fmt_kg((float)$_ckr['toplam_brut']) ?></td>
             <td class="num"><?= fmt_kg(round((float)$_ckr['toplam_dara'])) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_ckr['toplam_net'])) ?></td>
-            <td><?= $_cd ? '<span class="rpt-badge '.$_cdc.'">'.($_cd==='islendi'?'İşlendi':($_cd==='yuklendi'?'Yüklendi':h($_cd))).'</span>' : '<span class="muted">—</span>' ?></td>
+            <td class="num"><span class="cikma-net-kg"><?= fmt_kg(round((float)$_ckr['toplam_net'])) ?></span></td>
             <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_ckr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
@@ -1198,8 +1209,8 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
             <td class="num strong"><?= number_format((int)array_sum(array_column($ck_rows,'toplam_kasa')),  0, ',', '.') ?></td>
             <td class="num strong"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_brut'))) ?></td>
             <td class="num strong"><?= fmt_kg(round((float)array_sum(array_column($ck_rows,'toplam_dara')))) ?></td>
-            <td class="num strong"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_net'))) ?></td>
-            <td></td><td class="gl-no-print"></td>
+            <td class="num strong"><span class="cikma-net-kg"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_net'))) ?></span></td>
+            <td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
     </div>
@@ -1283,6 +1294,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
             </select>
         </label>
     </div>
+    <?php if ($type === 'yukleme'): ?>
     <div class="rpt-filter-group">
         <label>Kayıt Durumu
             <select name="durum">
@@ -1299,6 +1311,17 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
             </select>
         </label>
     </div>
+    <?php elseif ($type === 'cikma'): ?>
+    <div class="rpt-filter-group">
+        <label>Rapor Durumu
+            <select name="cikma_rapor">
+                <option value=""              <?= $f_cikma_rapor===''              ? 'selected':'' ?>>Tümü</option>
+                <option value="raporlanmamis" <?= $f_cikma_rapor==='raporlanmamis' ? 'selected':'' ?>>Raporlanmadı</option>
+                <option value="raporlandi"    <?= $f_cikma_rapor==='raporlandi'    ? 'selected':'' ?>>Raporlandı</option>
+            </select>
+        </label>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($type === 'depo'): ?>
@@ -1468,6 +1491,12 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
                 $cls = $v === 'islendi' ? 'badge-islendi' : ($v === 'yuklendi' ? 'badge-yuklendi' : '');
                 $lbl = $v === 'islendi' ? 'İşlendi' : ($v === 'yuklendi' ? 'Yüklendi' : h($v));
                 echo '<td>' . ($v !== '' ? '<span class="rpt-badge '.$cls.'">'.$lbl.'</span>' : '<span class="muted">—</span>') . '</td>';
+            } elseif ($c === 'cikis_nedeni') {
+                $cn = trim((string)$v);
+                echo '<td>' . ($cn !== '' ? '<span class="cikis-nedeni-badge">' . h($cn) . '</span>' : '<span class="muted">—</span>') . '</td>';
+            } elseif ($c === 'toplam_net' && $type === 'cikma') {
+                $rv = round((float)$v);
+                echo '<td class="num"><span class="cikma-net-kg">' . ($rv != 0 ? h(fmt_kg($rv)) : '<span class="muted">—</span>') . '</span></td>';
             } elseif ($c === 'stok_mevcut') {
                 $sv = (float)$v;
                 $color = $sv < 0 ? ' style="color:#dc2626;font-weight:700"' : ($sv > 0 ? ' style="font-weight:600"' : '');

@@ -140,7 +140,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_dara']) ?></td>
-                    <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
+                    <td class="num strong"><span class="cikma-net-kg"><?= fmt_kg($r['toplam_net']) ?></span></td>
                     <td>
                         <?php if ($can_write): ?>
                         <form method="post" action="cikma_report_toggle.php" style="display:inline">
