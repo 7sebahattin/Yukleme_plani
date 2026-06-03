@@ -358,12 +358,12 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                 <tr>
                     <th>Fiş No</th>
                     <th class="kr-col-tarih">Tarih</th>
-                    <th>Plaka</th>
+                    <th class="kr-col-plaka">Plaka</th>
                     <th class="kr-col-malin">Malın Cinsi</th>
                     <th class="kr-col-firma">Firma / Grup</th>
                     <th class="kr-col-depo">Depo</th>
                     <th class="num">Palet</th>
-                    <th class="num">Kasa</th>
+                    <th class="num kr-col-kasa">Kasa</th>
                     <th class="num">Brüt KG</th>
                     <th class="num kr-col-dara">Dara KG</th>
                     <th class="num">Net KG</th>
@@ -424,7 +424,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                     <td class="kr-col-firma"><strong><?= h($d['firma']) ?></strong></td>
                     <td class="kr-col-depo"><?= h($f['depo']?:'—') ?></td>
                     <td class="num"><?= $d['palet']?:0 ?></td>
-                    <td class="num"><?= $d['kasa'] ?></td>
+                    <td class="num kr-col-kasa"><?= $d['kasa'] ?></td>
                     <td class="num"><?= fmt_kg($d['brut_kg']) ?></td>
                     <td class="num kr-col-dara kr-dara"><?= fmt_kg($d['dara_kg']) ?></td>
                     <td class="num kr-net"><strong><?= fmt_kg($d['net_kg']) ?></strong></td>
@@ -435,12 +435,12 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                 <tr class="kr-row-tek">
                     <td><a href="<?= $fis_url ?>" class="kr-fis-link">#<?= h($f['fis_no']?:(string)$f['id']) ?></a></td>
                     <td class="kr-col-tarih"><?= h($tarih_d) ?></td>
-                    <td><?= h($f['plaka']?:'—') ?></td>
+                    <td class="kr-col-plaka"><?= h($f['plaka']?:'—') ?></td>
                     <td class="kr-col-malin"><?= h($f['malin_cinsi']?:'—') ?><?= $f['parti_no'] ? '<br><small class="muted">'.h($f['parti_no']).'</small>' : '' ?></td>
                     <td class="kr-col-firma"><strong><?= h($d['firma']) ?></strong></td>
                     <td class="kr-col-depo"><?= h($f['depo']?:'—') ?></td>
                     <td class="num"><?= $d['palet']?:0 ?></td>
-                    <td class="num"><?= $d['kasa'] ?></td>
+                    <td class="num kr-col-kasa"><?= $d['kasa'] ?></td>
                     <td class="num"><?= fmt_kg($d['brut_kg']) ?></td>
                     <td class="num kr-col-dara kr-dara"><?= fmt_kg($d['dara_kg']) ?></td>
                     <td class="num kr-net"><strong><?= fmt_kg($d['net_kg']) ?></strong></td>
@@ -452,7 +452,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                 <tr class="kr-total-row">
                     <td colspan="6"><strong>TOPLAM</strong></td>
                     <td class="num"><strong><?= $toplam_palet ?></strong></td>
-                    <td class="num"><strong><?= $toplam_kasa ?></strong></td>
+                    <td class="num kr-col-kasa"><strong><?= $toplam_kasa ?></strong></td>
                     <td class="num"><strong><?= fmt_kg($toplam_brut) ?></strong></td>
                     <td class="num kr-col-dara kr-dara"><strong><?= fmt_kg($toplam_dara) ?></strong></td>
                     <td class="num kr-net"><strong><?= fmt_kg($toplam_net) ?></strong></td>
@@ -604,12 +604,12 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 
 /* Sütun gizleme — dar ekranlarda */
 @media (max-width:767px) {
-    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih { display:none; }
+    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih,
+    .kr-col-plaka, .kr-col-kasa { display:none; }
     .kr-grup-head-inner { flex-direction:column; gap:3px; }
     .kr-grup-head-totals { font-size:.78rem; gap:5px; }
-    /* min-width ile table-wrap yatay scroll devreye girer;
-       white-space:nowrap th/td kuralları üst satırda tanımlı — override yok */
-    .kr-table { min-width: 520px; }
+    /* Firma td sütunu dar ekranda kırılabilsin (th nowrap kalır) */
+    td.kr-col-firma { white-space: normal; }
 }
 
 /* Tek-firma satırı */
@@ -712,8 +712,10 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
     .data-table th { font-size:6pt !important; padding:2px 3px !important; background:#f5f5f5 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .data-table td { padding:2px 3px !important; }
 
-    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih { display:table-cell !important; }
+    .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih,
+    .kr-col-plaka, .kr-col-kasa { display:table-cell !important; }
     .kr-col-firma { white-space:normal; }
+    #krDagilimCard { page-break-before:avoid; page-break-inside:auto !important; }
 
     .kr-grup-head-cell { padding:4px 6px !important; }
     .kr-grup-head-totals { font-size:7pt !important; gap:6px !important; }
