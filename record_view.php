@@ -59,6 +59,14 @@ foreach ($pallets as $p) {
     $kasa_breakdown[$name] = ($kasa_breakdown[$name] ?? 0) + (int)$p['kasa_adeti'];
 }
 
+// Palet tipi dağılımı (çıkma yazdır için)
+$palet_tipi_breakdown = [];
+foreach ($pallets as $p) {
+    if (empty($p['palet_tipi_id'])) continue;
+    $name = trim((string)($p['palet_tipi_adi'] ?? '')) ?: '—';
+    $palet_tipi_breakdown[$name] = ($palet_tipi_breakdown[$name] ?? 0) + 1;
+}
+
 function kasa_label(?string $name, $kg): string {
     if (!$name) return '—';
     return $name . ' (' . fmt_unit_kg($kg) . ' kg)';
@@ -358,7 +366,11 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <?php endif; ?>
 </div>
 
+<?php if (($record['type'] ?? 'yukleme') === 'cikma'): ?>
+<h3 class="section-title">Palet Listesi</h3>
+<?php else: ?>
 <h3 class="section-title">Yükleme Planı</h3>
+<?php endif; ?>
 
 <!-- PC tablo -->
 <div class="view-table-wrap">
@@ -478,8 +490,107 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 
 <?php else: ?>
 <!-- ============================================================
-     YAZDIRMA MODU: ASYA FRESH şablonu
+     YAZDIRMA MODU
      ============================================================ -->
+<?php if (($record['type'] ?? 'yukleme') === 'cikma'): ?>
+<!-- ── ÇIKMA YAZDIRMA ŞABLONU ── -->
+<div class="cikma-sheet">
+
+    <div class="cikma-print-header">
+        <?php $cikis_nedeni_upper = mb_strtoupper(trim((string)($record['cikis_nedeni'] ?? '')), 'UTF-8'); ?>
+        <div class="cikma-print-title"><?= $cikis_nedeni_upper !== '' ? h($cikis_nedeni_upper) : 'ÇIKMA' ?></div>
+        <div class="cikma-print-subtitle">ÇIKMA RAPORU</div>
+    </div>
+
+    <table class="cikma-info-table">
+        <tr>
+            <th>FİRMA</th><td><?= h($record['firma'] ?? '—') ?></td>
+            <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td>
+            <th>DEPO</th><td><?= h($depo_str) ?></td>
+            <th>TARİH</th><td><?= h(fmt_date($record['tarih'])) ?></td>
+        </tr>
+    </table>
+
+    <table class="cikma-pallets-table">
+        <thead>
+        <tr>
+            <th>Palet No</th>
+            <th>Size</th>
+            <th>Kasa Cinsi</th>
+            <th>Palet Tipi</th>
+            <th>Ürün Cinsi</th>
+            <th>Depo</th>
+            <th class="num">Kasa Sayısı</th>
+            <th class="num">Brüt KG</th>
+            <th class="num">Dara KG</th>
+            <th class="num">Net KG</th>
+        </tr>
+        </thead>
+        <tbody>
+        <?php if (empty($pallets)): ?>
+            <tr><td colspan="10" style="text-align:center;color:#999">Palet kaydı yok.</td></tr>
+        <?php endif; ?>
+        <?php foreach ($pallets as $p): ?>
+            <tr>
+                <td><?= h($p['palet_no'] ?? '—') ?></td>
+                <td><?= h($p['size'] ?: '—') ?></td>
+                <td><?= h($p['kasa_cinsi_adi'] ?: '—') ?></td>
+                <td><?= h($p['palet_tipi_adi'] ?: '—') ?></td>
+                <td><?= h($p['urun_cinsi'] ?: '—') ?></td>
+                <td><?= h($p['depo'] ?: '—') ?></td>
+                <td class="num"><?= (int)$p['kasa_adeti'] ?></td>
+                <td class="num"><?= h(fmt_kg($p['brut_kg'])) ?></td>
+                <td class="num"><?= h(fmt_kg($p['dara_kg'])) ?></td>
+                <td class="num cikma-net-kg"><?= h(fmt_kg($p['net_kg'])) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+        <tr>
+            <td colspan="6">TOPLAM</td>
+            <td class="num"><?= (int)$tot['toplam_kasa'] ?></td>
+            <td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
+            <td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
+            <td class="num cikma-net-kg"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td>
+        </tr>
+        </tfoot>
+    </table>
+
+    <table class="cikma-summary-table">
+        <thead><tr><th colspan="2">ÖZET</th></tr></thead>
+        <tbody>
+        <tr><th>Palet Sayısı</th><td><?= count($pallets) ?></td></tr>
+        <?php if (!empty($kasa_breakdown)): ?>
+        <tr><th>Kasa Cinsi</th><td>
+            <?php foreach ($kasa_breakdown as $_kn => $_ka): ?>
+            <div><?= h($_kn) ?>: <strong><?= (int)$_ka ?></strong></div>
+            <?php endforeach; ?>
+        </td></tr>
+        <?php endif; ?>
+        <?php if (!empty($palet_tipi_breakdown)): ?>
+        <tr><th>Palet Cinsi</th><td>
+            <?php foreach ($palet_tipi_breakdown as $_ptn => $_pta): ?>
+            <div><?= h($_ptn) ?>: <strong><?= (int)$_pta ?></strong></div>
+            <?php endforeach; ?>
+        </td></tr>
+        <?php endif; ?>
+        <?php if (!empty($urun_groups)): ?>
+        <tr><th>Ürün Cinsi</th><td>
+            <?php foreach ($urun_groups as $_uk => $_ug): ?>
+            <div><?= h($_uk) ?>: <strong><?= (int)$_ug['kasa'] ?> kasa / <?= h(fmt_kg(round((float)$_ug['net']))) ?> kg</strong></div>
+            <?php endforeach; ?>
+        </td></tr>
+        <?php endif; ?>
+        <tr><th>Kasa Toplamı</th><td><strong><?= (int)$tot['toplam_kasa'] ?></strong></td></tr>
+        <tr><th>Brüt KG Toplamı</th><td><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
+        <tr><th>Dara KG Toplamı</th><td><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
+        <tr class="cikma-summary-net"><th>Net KG Toplamı</th><td><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
+        </tbody>
+    </table>
+
+</div>
+<?php else: ?>
+<!-- ── ASYA FRESH YÜKLEME ŞABLONU ── -->
 <div class="asya-sheet">
 
     <!-- ============= ÜST BLOK: Genel bilgiler + ETİKET + Marka ============= -->
@@ -658,7 +769,8 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     </div>
 
 </div>
-<?php endif; ?>
+<?php endif; /* cikma / yukleme print template */ ?>
+<?php endif; /* print / screen */ ?>
 
 <?php if (!$print): ?>
 <!-- ============================================================
