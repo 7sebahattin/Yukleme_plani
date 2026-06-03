@@ -9,8 +9,6 @@ $auth_user = require_login();
 require_perm('records.read');
 
 $q            = trim((string)($_GET['q'] ?? ''));
-$durum_filter = trim((string)($_GET['durum'] ?? ''));
-if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
 $rapor_filter = trim((string)($_GET['rapor_durumu'] ?? ''));
 if (!in_array($rapor_filter, ['raporlanmamis', 'raporlandi'], true)) $rapor_filter = '';
 
@@ -44,10 +42,6 @@ if ($q !== '') {
     $sql .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.urun LIKE :q) ";
     $params[':q'] = '%' . $q . '%';
 }
-if ($durum_filter !== '') {
-    $sql .= " AND r.durum = :durum ";
-    $params[':durum'] = $durum_filter;
-}
 if ($lr_rep_col) {
     if ($rapor_filter === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL "; }
     if ($rapor_filter === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL "; }
@@ -74,35 +68,27 @@ render_header('Çıkmalar');
 </div>
 
 <form method="get" class="search-row">
-    <?php if ($durum_filter !== ''): ?>
-    <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
-    <?php endif; ?>
     <?php if ($rapor_filter !== ''): ?>
     <input type="hidden" name="rapor_durumu" value="<?= h($rapor_filter) ?>">
     <?php endif; ?>
     <input type="search" name="q" value="<?= h($q) ?>"
            placeholder="Firma, bölge, ürün..." autocomplete="off">
     <button class="btn">Ara</button>
-    <?php if ($q !== '' || $durum_filter !== '' || $rapor_filter !== ''): ?>
+    <?php if ($q !== '' || $rapor_filter !== ''): ?>
         <a href="cikmalar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
 </form>
 
 <?php
 $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
-$d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
 ?>
 <div class="filter-pills">
     <a href="cikmalar.php<?= $q_part ? '?' . ltrim($q_part, '&') : '' ?>"
-       class="pill<?= $durum_filter === '' && $rapor_filter === '' ? ' active' : '' ?>">Tümü</a>
-    <a href="cikmalar.php?durum=islendi<?= $q_part ?>"
-       class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
-    <a href="cikmalar.php?durum=yuklendi<?= $q_part ?>"
-       class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
-    <a href="cikmalar.php?rapor_durumu=raporlanmamis<?= $d_part . $q_part ?>"
+       class="pill<?= $rapor_filter === '' ? ' active' : '' ?>">Tümü</a>
+    <a href="cikmalar.php?rapor_durumu=raporlanmamis<?= $q_part ?>"
        class="pill<?= $rapor_filter === 'raporlanmamis' ? ' active' : '' ?>">📋 Raporlanmadı</a>
-    <a href="cikmalar.php?rapor_durumu=raporlandi<?= $d_part . $q_part ?>"
-       class="pill<?= $rapor_filter === 'raporlandi' ? ' active' : '' ?>">✓ Raporlandı</a>
+    <a href="cikmalar.php?rapor_durumu=raporlandi<?= $q_part ?>"
+       class="pill<?= $rapor_filter === 'raporlandi' ? ' active-islendi' : '' ?>">✓ Raporlandı</a>
 </div>
 
 <?php if (empty($rows)): ?>
@@ -138,9 +124,8 @@ $d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
                 $durum  = $r['durum'] ?? '';
                 $locked = !empty($r['locked_at']);
             ?>
-                <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
-                    data-record-id="<?= (int)$r['id'] ?>"
-                    data-durum="<?= h($durum) ?>">
+                <tr class="<?= ($r['reported_at'] ?? null) ? 'tr-islendi' : '' ?>"
+                    data-record-id="<?= (int)$r['id'] ?>">
                     <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
                     <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
                     <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
@@ -173,20 +158,6 @@ $d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
                     </td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                        <?php if ($durum !== 'yuklendi' && !$locked): ?>
-                        <button type="button"
-                                class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
-                                data-durum-action="islendi">
-                            <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
-                        </button>
-                        <?php endif; ?>
-                        <?php if (($durum === 'islendi' && !$locked) || ($durum === 'yuklendi' && $can_unlock)): ?>
-                        <button type="button"
-                                class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
-                                data-durum-action="yuklendi">
-                            <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
-                        </button>
-                        <?php endif; ?>
                         <div class="pc-kebab-wrap">
                             <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
                             <div class="pc-dropdown" hidden>
@@ -212,9 +183,8 @@ $d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
             $durum  = $r['durum'] ?? '';
             $locked = !empty($r['locked_at']);
         ?>
-            <div class="record-card<?= $durum ? ' durum-' . h($durum) : '' ?>"
-                 data-record-id="<?= (int)$r['id'] ?>"
-                 data-durum="<?= h($durum) ?>">
+            <div class="record-card<?= ($r['reported_at'] ?? null) ? ' durum-islendi' : '' ?>"
+                 data-record-id="<?= (int)$r['id'] ?>">
                 <div class="record-card-head">
                     <div>
                         <strong><?= h($r['firma'] ?: '—') ?></strong>
@@ -249,20 +219,6 @@ $d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
                 </div>
                 <div class="record-card-actions">
                     <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                    <?php if ($durum !== 'yuklendi' && !$locked): ?>
-                    <button type="button"
-                            class="btn btn-sm btn-durum-islendi<?= $durum === 'islendi' ? ' durum-done' : '' ?>"
-                            data-durum-action="islendi">
-                        <?= $durum === 'islendi' ? '✓ İşlendi' : 'İşle' ?>
-                    </button>
-                    <?php endif; ?>
-                    <?php if (($durum === 'islendi' && !$locked) || ($durum === 'yuklendi' && $can_unlock)): ?>
-                    <button type="button"
-                            class="btn btn-sm btn-durum-yuklendi<?= $durum === 'yuklendi' ? ' durum-done' : '' ?>"
-                            data-durum-action="yuklendi">
-                        <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
-                    </button>
-                    <?php endif; ?>
                     <?php if ($can_write): ?>
                     <form method="post" action="cikma_report_toggle.php" style="display:inline">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -280,109 +236,5 @@ $d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
     </div>
 
 <?php endif; ?>
-
-<script>
-(function () {
-    var csrf      = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var canUnlock = <?= $can_unlock ? 'true' : 'false' ?>;
-
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-durum-action]');
-        if (!btn) return;
-        var container = btn.closest('[data-record-id]');
-        if (!container) return;
-
-        var action       = btn.dataset.durumAction;
-        var currentDurum = container.dataset.durum || '';
-        var targetDurum, msg;
-
-        if (action === 'islendi') {
-            if (currentDurum === 'islendi') {
-                msg = 'İşlendi iptal edilsin mi?';
-                targetDurum = '';
-            } else {
-                msg = 'Ürün işlendi mi?';
-                targetDurum = 'islendi';
-            }
-        } else if (action === 'yuklendi') {
-            if (currentDurum === 'yuklendi') {
-                msg = 'Yüklendi iptal edilsin mi?';
-                targetDurum = 'islendi';
-            } else {
-                msg = 'Ürün yüklendi mi?';
-                targetDurum = 'yuklendi';
-            }
-        } else { return; }
-
-        if (!confirm(msg)) return;
-        btn.disabled = true;
-
-        var extraBody = '';
-        if (action === 'yuklendi' && currentDurum === 'yuklendi') {
-            var reason = prompt('Revizyon nedeni (zorunlu):');
-            if (reason === null) { btn.disabled = false; return; }
-            reason = reason.trim();
-            if (!reason) { btn.disabled = false; alert('Revizyon nedeni boş bırakılamaz.'); return; }
-            extraBody = '&revision_reason=' + encodeURIComponent(reason);
-        }
-
-        fetch('record_durum.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'id=' + encodeURIComponent(container.dataset.recordId)
-                + '&durum=' + encodeURIComponent(targetDurum)
-                + '&csrf='  + encodeURIComponent(csrf)
-                + extraBody
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            btn.disabled = false;
-            if (!data.ok) { alert(data.msg || 'Hata oluştu.'); return; }
-
-            container.dataset.durum = data.durum;
-            var isTR = container.tagName === 'TR';
-            container.classList.remove('durum-islendi', 'durum-yuklendi', 'tr-islendi', 'tr-yuklendi');
-            if (data.durum === 'islendi') container.classList.add(isTR ? 'tr-islendi' : 'durum-islendi');
-            if (data.durum === 'yuklendi') container.classList.add(isTR ? 'tr-yuklendi' : 'durum-yuklendi');
-
-            var islendiBtn  = container.querySelector('[data-durum-action="islendi"]');
-            var yuklendiBtn = container.querySelector('[data-durum-action="yuklendi"]');
-            var actionsEl   = islendiBtn ? islendiBtn.parentNode : (yuklendiBtn ? yuklendiBtn.parentNode : null);
-
-            if (data.durum === '') {
-                if (islendiBtn) { islendiBtn.textContent = 'İşle'; islendiBtn.classList.remove('durum-done'); islendiBtn.style.display = ''; }
-                if (yuklendiBtn) yuklendiBtn.remove();
-            } else if (data.durum === 'islendi') {
-                if (!islendiBtn && actionsEl) {
-                    var nb = document.createElement('button');
-                    nb.type = 'button'; nb.className = 'btn btn-sm btn-durum-islendi durum-done';
-                    nb.dataset.durumAction = 'islendi'; nb.textContent = '✓ İşlendi';
-                    actionsEl.appendChild(nb);
-                } else if (islendiBtn) {
-                    islendiBtn.textContent = '✓ İşlendi'; islendiBtn.classList.add('durum-done'); islendiBtn.style.display = '';
-                }
-                if (!yuklendiBtn && actionsEl) {
-                    var ny = document.createElement('button');
-                    ny.type = 'button'; ny.className = 'btn btn-sm btn-durum-yuklendi';
-                    ny.dataset.durumAction = 'yuklendi'; ny.textContent = 'Yükle';
-                    actionsEl.appendChild(ny);
-                } else if (yuklendiBtn) {
-                    yuklendiBtn.textContent = 'Yükle'; yuklendiBtn.classList.remove('durum-done'); yuklendiBtn.style.display = '';
-                }
-            } else if (data.durum === 'yuklendi') {
-                if (islendiBtn) islendiBtn.remove();
-                if (yuklendiBtn) {
-                    if (canUnlock) {
-                        yuklendiBtn.textContent = '✓ Yüklendi'; yuklendiBtn.classList.add('durum-done'); yuklendiBtn.style.display = '';
-                    } else {
-                        yuklendiBtn.remove();
-                    }
-                }
-            }
-        })
-        .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
-    });
-})();
-</script>
 
 <?php render_footer(); ?>
