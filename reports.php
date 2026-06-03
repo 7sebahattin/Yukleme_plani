@@ -104,11 +104,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg    ELSE 0 END),0)";
         $agg_net   = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg     ELSE 0 END),0)";
     } elseif ($f_palet_islendi === 'hicbiri') {
-        $agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi!=1 THEN 1 END),0)";
-        $agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)";
-        $agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg    ELSE 0 END),0)";
-        $agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg    ELSE 0 END),0)";
-        $agg_net   = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg     ELSE 0 END),0)";
+        $agg_palet = "COALESCE(COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END),0)";
+        $agg_kasa  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.kasa_adeti ELSE 0 END),0)";
+        $agg_brut  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.brut_kg    ELSE 0 END),0)";
+        $agg_dara  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.dara_kg    ELSE 0 END),0)";
+        $agg_net   = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.net_kg     ELSE 0 END),0)";
     } else {
         $agg_palet = "COUNT(p.id)";
         $agg_kasa  = "COALESCE(SUM(p.kasa_adeti),0)";
@@ -151,7 +151,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $order_by = $sort_map[$f_sort] ?? 'r.tarih DESC, r.id DESC';
     $sql .= " GROUP BY r.id";
     if ($f_palet_islendi === 'isaretli') $sql .= " HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END) > 0";
-    if ($f_palet_islendi === 'hicbiri')  $sql .= " HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END) > 0";
+    if ($f_palet_islendi === 'hicbiri')  $sql .= " HAVING COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END) > 0";
     $sql .= " ORDER BY $order_by LIMIT 2000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -176,11 +176,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
         COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.brut_kg ELSE 0 END),0)      AS is_brut,
         COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.dara_kg ELSE 0 END),0)      AS is_dara,
         COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg ELSE 0 END),0)       AS is_net,
-        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN 1 ELSE 0 END),0)             AS nis_palet,
-        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)  AS nis_kasa,
-        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg ELSE 0 END),0)     AS nis_brut,
-        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg ELSE 0 END),0)     AS nis_dara,
-        COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg ELSE 0 END),0)      AS nis_net
+        COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 ELSE 0 END),0)             AS nis_palet,
+        COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.kasa_adeti ELSE 0 END),0)  AS nis_kasa,
+        COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.brut_kg ELSE 0 END),0)     AS nis_brut,
+        COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.dara_kg ELSE 0 END),0)     AS nis_dara,
+        COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.net_kg ELSE 0 END),0)      AS nis_net
         FROM loading_records r
         LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
         WHERE r.type = :rtype2";
@@ -194,7 +194,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
     if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
     if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END)>0"; }
-    elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END)>0"; }
+    elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END)>0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
     $islendi_totals = $sp_st->fetch() ?: null;
 
@@ -451,12 +451,12 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $mk_agg_net   = "COALESCE(SUM(CASE WHEN p.islendi=1 THEN p.net_kg     ELSE 0 END),0)";
         $mk_having    = " HAVING COUNT(CASE WHEN p.islendi=1 THEN 1 END) > 0";
     } elseif ($f_palet_islendi === 'hicbiri') {
-        $mk_agg_palet = "COALESCE(COUNT(CASE WHEN p.islendi!=1 THEN 1 END),0)";
-        $mk_agg_kasa  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.kasa_adeti ELSE 0 END),0)";
-        $mk_agg_brut  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.brut_kg    ELSE 0 END),0)";
-        $mk_agg_dara  = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.dara_kg    ELSE 0 END),0)";
-        $mk_agg_net   = "COALESCE(SUM(CASE WHEN p.islendi!=1 THEN p.net_kg     ELSE 0 END),0)";
-        $mk_having    = " HAVING COUNT(CASE WHEN p.islendi!=1 THEN 1 END) > 0";
+        $mk_agg_palet = "COALESCE(COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END),0)";
+        $mk_agg_kasa  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.kasa_adeti ELSE 0 END),0)";
+        $mk_agg_brut  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.brut_kg    ELSE 0 END),0)";
+        $mk_agg_dara  = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.dara_kg    ELSE 0 END),0)";
+        $mk_agg_net   = "COALESCE(SUM(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN p.net_kg     ELSE 0 END),0)";
+        $mk_having    = " HAVING COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END) > 0";
     } else {
         $mk_agg_palet = "COUNT(p.id)";
         $mk_agg_kasa  = "COALESCE(SUM(p.kasa_adeti),0)";
@@ -586,9 +586,9 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         }
         // MAKİNEYE DÖKÜLEN
         $_mk_label = match($f_palet_islendi) {
-            'hicbiri' => '--- MAKİNEYE DÖKÜLMEYENLERİ ---',
-            ''        => '--- YÜKLEME KAYITLARI (TÜMÜ) ---',
-            default   => '--- MAKİNEYE DÖKÜLEN ---',
+            'hicbiri' => '--- MAKİNEYE DÖKÜLEN ---',
+            'isaretli' => '--- RAPORLANDI ---',
+            default   => '--- YÜKLEME KAYITLARI (TÜMÜ) ---',
         };
         fputcsv($gl_fp, [$_mk_label], ';');
         fputcsv($gl_fp, ['Tarih','Firma','Bölge','Alıcı','Depo','Ürün','Parti No','Durum','Palet','Kasa','Brüt KG','Dara KG','Net KG'], ';');
@@ -1022,7 +1022,7 @@ render_flash();
         </label>
         <label>Yükleme Rapor Durumu
             <select name="palet_islendi">
-                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ?'selected':'' ?>>Raporlanmadı (Makinaya Dökülen)</option>
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ?'selected':'' ?>>Makinaya Dökülen</option>
                 <option value=""         <?= $f_palet_islendi===''          ?'selected':'' ?>>Tümü</option>
                 <option value="isaretli" <?= $f_palet_islendi==='isaretli'  ?'selected':'' ?>>Raporlandı</option>
             </select>
@@ -1280,8 +1280,8 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <label>Yükleme Rapor Durumu
             <select name="palet_islendi">
                 <option value=""         <?= $f_palet_islendi===''         ? 'selected':'' ?>>Tümü</option>
-                <option value="isaretli" <?= $f_palet_islendi==='isaretli' ? 'selected':'' ?>>Raporlandı Paletler</option>
-                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Raporlanmadı</option>
+                <option value="isaretli" <?= $f_palet_islendi==='isaretli' ? 'selected':'' ?>>Raporlandı</option>
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Makinaya Dökülen</option>
             </select>
         </label>
     </div>
