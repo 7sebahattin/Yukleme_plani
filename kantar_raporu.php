@@ -603,10 +603,15 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
 .kr-col-firma { white-space: nowrap; }
 
 /* Sütun gizleme — dar ekranlarda */
-@media (max-width:600px) {
+@media (max-width:767px) {
     .kr-col-malin, .kr-col-depo, .kr-col-dara, .kr-col-tarih { display:none; }
     .kr-grup-head-inner { flex-direction:column; gap:3px; }
     .kr-grup-head-totals { font-size:.78rem; gap:5px; }
+    /* Tablo min-width ile table-wrap yatay scroll devreye girer */
+    .kr-table { min-width: 520px; }
+    /* Uzun firma adları dar sütunda kırılsın */
+    .kr-col-firma { white-space: normal; word-break: break-word; }
+    .kr-table th  { white-space: normal; }
 }
 
 /* Tek-firma satırı */
