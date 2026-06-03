@@ -415,7 +415,21 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $yk_rows = $st->fetchAll();
 
     // Çıkma kayıtları — raporlanmamış, tarih opsiyonel
-    $cw = ["r.type='cikma'", "r.reported_at IS NULL"]; $cp = [];
+    // Kolon yoksa ekle (idempotent fallback — db.php migration çalışmamışsa)
+    $cikma_rep_col = false;
+    try {
+        $cikma_rep_col = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'reported_at'")->fetchColumn();
+        if (!$cikma_rep_col) {
+            try {
+                db()->exec("ALTER TABLE `loading_records`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL");
+                $cikma_rep_col = true;
+            } catch (PDOException $_me) {}
+        }
+    } catch (PDOException $_ce) {}
+    $cw = ["r.type='cikma'"]; $cp = [];
+    if ($cikma_rep_col) { $cw[] = "r.reported_at IS NULL"; }
     if ($f_firma !== '') { $cw[] = "r.firma = ?"; $cp[] = $f_firma; }
     if ($f_urun  !== '') { $cw[] = "r.urun = ?";  $cp[] = $f_urun;  }
     if ($f_depo  !== '') {
