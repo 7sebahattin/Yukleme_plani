@@ -306,11 +306,11 @@ $form_is_cikma = $form_is_cikma ?? false;
     <?php if ($is_edit_mode): ?>
     <!-- İşaretli / İşaretsiz ayrım özeti (sadece düzenleme modunda) -->
     <div id="islendiOzetWrap">
-        <button type="button" id="islendiOzetToggle" class="islendi-ozet-toggle">▸ İşaretli / İşaretsiz Ayrım</button>
+        <button type="button" id="islendiOzetToggle" class="islendi-ozet-toggle">▸ Raporlandı / Raporlanmadı Ayrım</button>
         <div id="islendiOzetPanel" class="islendi-ozet-panel" style="display:none">
             <div class="islendi-ozet-grid">
                 <div class="islendi-ozet-section islendi-ozet-done">
-                    <div class="islendi-ozet-head">✓ İşaretli Paletler</div>
+                    <div class="islendi-ozet-head">✓ Raporlandı Paletler</div>
                     <div class="islendi-ozet-row"><span>Palet</span><strong id="isAdet">0</strong></div>
                     <div class="islendi-ozet-row"><span>Kasa</span><strong id="isKasa">0</strong></div>
                     <div class="islendi-ozet-row"><span>Brüt KG</span><strong id="isBrut">0,000</strong></div>
@@ -318,7 +318,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                     <div class="islendi-ozet-row"><span>Net KG</span><strong id="isNet">0,000</strong></div>
                 </div>
                 <div class="islendi-ozet-section islendi-ozet-pending">
-                    <div class="islendi-ozet-head">○ İşaretsiz Paletler</div>
+                    <div class="islendi-ozet-head">○ Raporlanmadı Paletler</div>
                     <div class="islendi-ozet-row"><span>Palet</span><strong id="nisAdet">0</strong></div>
                     <div class="islendi-ozet-row"><span>Kasa</span><strong id="nisKasa">0</strong></div>
                     <div class="islendi-ozet-row"><span>Brüt KG</span><strong id="nisBrut">0,000</strong></div>
@@ -467,7 +467,7 @@ $form_is_cikma = $form_is_cikma ?? false;
     btn.addEventListener('click', function () {
         var open = panel.style.display !== 'none';
         panel.style.display = open ? 'none' : 'block';
-        btn.textContent = (open ? '▸' : '▾') + ' İşaretli / İşaretsiz Ayrım';
+        btn.textContent = (open ? '▸' : '▾') + ' Raporlandı / Raporlanmadı Ayrım';
     });
 })();
 </script>

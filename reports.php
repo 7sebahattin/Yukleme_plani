@@ -35,7 +35,7 @@ $report_meta = [
     'firma'    => ['label'=>'Firma',      'icon'=>'🏢', 'bg'=>'#f5f0ff'],
     'malzeme'  => ['label'=>'Malzeme',    'icon'=>'📦', 'bg'=>'#fff5f0'],
     'kantar'   => ['label'=>'Kantar',          'icon'=>'⚖️',  'bg'=>'#f0f9ff'],
-    'gunluk'   => ['label'=>'Günlük Operasyon', 'icon'=>'📅', 'bg'=>'#f0fdf4'],
+    'gunluk'   => ['label'=>'Günlük Rapor',      'icon'=>'📅', 'bg'=>'#f0fdf4'],
 ];
 
 function col_label(string $c): string {
@@ -352,9 +352,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
     }
 
 } elseif ($type === 'gunluk') {
-    // Varsayılan: bugün
-    if ($f_from === '' && $f_to === '') { $f_from = $f_to = date('Y-m-d'); }
-    elseif ($f_from !== '' && $f_to === '') { $f_to   = $f_from; }
+    // Tarih cross-fill — tek tarih girilince aynı gün yapılır; her ikisi boşsa filtre yok
+    if ($f_from !== '' && $f_to === '') { $f_to   = $f_from; }
     elseif ($f_from === '' && $f_to !== '') { $f_from = $f_to; }
 
     $gk_rows = $yk_rows = $ck_rows = [];
@@ -388,8 +387,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $gk_rows = $st->fetchAll();
     } catch (PDOException $e) {}
 
-    // Yükleme kayıtları
-    $yw = ["r.type='yukleme'", "r.tarih BETWEEN ? AND ?"]; $yp = [$f_from, $f_to];
+    // Yükleme kayıtları — tarih opsiyonel
+    $yw = ["r.type='yukleme'"]; $yp = [];
+    if ($f_from !== '' && $f_to !== '') { $yw[] = "r.tarih BETWEEN ? AND ?"; $yp[] = $f_from; $yp[] = $f_to; }
+    elseif ($f_from !== '') { $yw[] = "r.tarih >= ?"; $yp[] = $f_from; }
+    elseif ($f_to   !== '') { $yw[] = "r.tarih <= ?"; $yp[] = $f_to; }
     if ($f_firma !== '') { $yw[] = "r.firma = ?"; $yp[] = $f_firma; }
     if ($f_urun  !== '') { $yw[] = "r.urun = ?";  $yp[] = $f_urun;  }
     if ($f_depo  !== '') {
@@ -412,14 +414,16 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st->execute($yp);
     $yk_rows = $st->fetchAll();
 
-    // Çıkma kayıtları
-    $cw = ["r.type='cikma'", "r.tarih BETWEEN ? AND ?"]; $cp = [$f_from, $f_to];
+    // Çıkma kayıtları — raporlanmamış, tarih opsiyonel
+    $cw = ["r.type='cikma'", "r.reported_at IS NULL"]; $cp = [];
     if ($f_firma !== '') { $cw[] = "r.firma = ?"; $cp[] = $f_firma; }
     if ($f_urun  !== '') { $cw[] = "r.urun = ?";  $cp[] = $f_urun;  }
     if ($f_depo  !== '') {
         $cw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
         $cp[] = $f_depo;
     }
+    if ($f_from !== '') { $cw[] = "r.tarih >= ?"; $cp[] = $f_from; }
+    if ($f_to   !== '') { $cw[] = "r.tarih <= ?"; $cp[] = $f_to; }
     $st = db()->prepare("
         SELECT r.id, r.tarih, r.firma, r.urun, r.parti_no, r.durum, r.cikis_nedeni,
                (SELECT _p.depo FROM loading_pallets _p
@@ -462,8 +466,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $mk_having    = "";
     }
     $mk_rows = [];
-    $mkw = ["r.type='yukleme'", "r.tarih BETWEEN ? AND ?"];
-    $mkp = [$f_from, $f_to];
+    $mkw = ["r.type='yukleme'"]; $mkp = [];
+    if ($f_from !== '' && $f_to !== '') { $mkw[] = "r.tarih BETWEEN ? AND ?"; $mkp[] = $f_from; $mkp[] = $f_to; }
+    elseif ($f_from !== '') { $mkw[] = "r.tarih >= ?"; $mkp[] = $f_from; }
+    elseif ($f_to   !== '') { $mkw[] = "r.tarih <= ?"; $mkp[] = $f_to; }
     if ($f_firma !== '') { $mkw[] = "r.firma = ?"; $mkp[] = $f_firma; }
     if ($f_urun  !== '') { $mkw[] = "r.urun = ?";  $mkp[] = $f_urun;  }
     if ($f_depo  !== '') {
@@ -504,9 +510,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
 // ── CSV Export ──────────────────────────────────────────
 if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
     audit_log_event('export', 'reports', null, null, ['type' => $type, 'export' => $export, 'from' => $f_from ?? '', 'to' => $f_to ?? '']);
-    // Günlük Operasyon CSV — bölümlü
+    // Günlük Rapor CSV — bölümlü
     if ($type === 'gunluk') {
-        $gl_fname = 'gunluk_raporu_' . $f_from . ($f_to !== $f_from ? '_'.$f_to : '') . '.csv';
+        $_gl_date_from = $f_from ?: date('Y-m-d');
+        $gl_fname = 'gunluk_rapor_' . $_gl_date_from . ($f_to !== '' && $f_to !== $f_from ? '_'.$f_to : '') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $gl_fname . '"');
         header('Cache-Control: no-cache, must-revalidate');
@@ -514,7 +521,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         $gl_fp = fopen('php://output', 'w');
         // ÖZET
         fputcsv($gl_fp, ['BÖLÜM', 'ÖZET'], ';');
-        $gl_tarih = $f_from === $f_to ? $f_from : $f_from . ' – ' . $f_to;
+        $gl_tarih = ($f_from === '' && $f_to === '') ? 'Tüm dönem' : ($f_from === $f_to ? $f_from : $f_from . ' – ' . $f_to);
         fputcsv($gl_fp, ['Tarih', $gl_tarih], ';');
         fputcsv($gl_fp, ['Kantar Brüt KG',   str_replace('.', ',', number_format($ozet_kantar_brut, 3, '.', ''))], ';');
         fputcsv($gl_fp, ['Kantar Dara KG',   str_replace('.', ',', number_format($ozet_kantar_dara, 3, '.', ''))], ';');
@@ -765,11 +772,12 @@ $csv_summary_params = $csv_params;
 $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
-$page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ' Raporu' : 'Raporlar';
-$filter_firma_list = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
-$filter_urun_list  = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_bolge_list = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
-$filter_depo_list  = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ($type === 'gunluk' ? '' : ' Raporu') : 'Raporlar';
+$filter_firma_list    = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$filter_urun_list     = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_bolge_list    = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_depo_list     = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_urun_def_list = db()->query("SELECT name FROM material_definitions WHERE type='urun' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 render_header($page_title);
 render_flash();
 ?>
@@ -947,17 +955,24 @@ render_flash();
 <!-- Yazdırma başlığı (sadece print'te görünür) -->
 <div class="gl-print-header">
     <h2>Günlük Rapor</h2>
-    <p><?= $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to)) ?><?= $f_firma ? ' · ' . h($f_firma) : '' ?><?= $f_depo ? ' · Depo: ' . h($f_depo) : '' ?></p>
+    <p><?php
+        if ($f_from !== '' || $f_to !== '') {
+            echo $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to));
+        }
+    ?><?= $f_firma ? ($f_from !== '' || $f_to !== '' ? ' · ' : '') . h($f_firma) : '' ?><?= $f_depo ? ' · Depo: ' . h($f_depo) : '' ?></p>
 </div>
 
 <!-- Sayfa başlığı (ekran) -->
 <div class="page-head rpt-head gl-no-print">
     <div class="rpt-title">
         <a href="reports.php" class="btn btn-ghost btn-sm">← Raporlar</a>
-        <h1>📅 Günlük Operasyon Raporu</h1>
+        <h1>📅 Günlük Rapor</h1>
         <p class="muted">
+            <?php if ($f_from !== '' || $f_to !== ''): ?>
             <?= $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to)) ?>
-            &nbsp;·&nbsp; <?= count($gk_rows) + count($ck_rows) + count($mk_rows) ?> kayıt
+            &nbsp;·&nbsp;
+            <?php endif; ?>
+            <?= count($gk_rows) + count($ck_rows) + count($mk_rows) ?> kayıt
         </p>
     </div>
     <div class="rpt-actions">
@@ -997,12 +1012,19 @@ render_flash();
                 <?php endforeach; ?>
             </select>
         </label>
-        <label>Ürün<input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="Ürün adı..."></label>
-        <label>Palet İşaret
+        <label>Ürün
+            <select name="urun">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_urun_def_list as $_ud): ?>
+                <option value="<?= h($_ud) ?>" <?= $f_urun===$_ud?'selected':'' ?>><?= h($_ud) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>Yükleme Rapor Durumu
             <select name="palet_islendi">
-                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ?'selected':'' ?>>İşaretsiz (Makinaya Dökülen)</option>
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ?'selected':'' ?>>Raporlanmadı (Makinaya Dökülen)</option>
                 <option value=""         <?= $f_palet_islendi===''          ?'selected':'' ?>>Tümü</option>
-                <option value="isaretli" <?= $f_palet_islendi==='isaretli'  ?'selected':'' ?>>İşaretli (Raporlandı)</option>
+                <option value="isaretli" <?= $f_palet_islendi==='isaretli'  ?'selected':'' ?>>Raporlandı</option>
             </select>
         </label>
     </div>
@@ -1255,11 +1277,11 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
                 <option value="yuklendi" <?= $f_durum==='yuklendi'? 'selected':'' ?>>Yüklendi</option>
             </select>
         </label>
-        <label>Palet İşaret
+        <label>Yükleme Rapor Durumu
             <select name="palet_islendi">
                 <option value=""         <?= $f_palet_islendi===''         ? 'selected':'' ?>>Tümü</option>
-                <option value="isaretli" <?= $f_palet_islendi==='isaretli' ? 'selected':'' ?>>İşaretli Paletler</option>
-                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Hiç İşaretli Değil</option>
+                <option value="isaretli" <?= $f_palet_islendi==='isaretli' ? 'selected':'' ?>>Raporlandı Paletler</option>
+                <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Raporlanmadı</option>
             </select>
         </label>
     </div>
@@ -1369,11 +1391,11 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 
 <?php if (!empty($islendi_totals) && in_array($type, ['yukleme','cikma'], true)): ?>
 <div id="islendiRptWrap" style="margin-top:6px">
-    <button type="button" id="islendiRptToggle" class="islendi-ozet-toggle rpt-no-print">▸ İşaretli / İşaretsiz Palet Ayrımı</button>
+    <button type="button" id="islendiRptToggle" class="islendi-ozet-toggle rpt-no-print">▸ Raporlandı / Raporlanmadı Palet Ayrımı</button>
     <div id="islendiRptPanel" class="islendi-ozet-panel" style="display:none">
         <div class="islendi-ozet-grid">
             <div class="islendi-ozet-section islendi-ozet-done">
-                <div class="islendi-ozet-head">✓ İşaretli Paletler</div>
+                <div class="islendi-ozet-head">✓ Raporlandı Paletler</div>
                 <div class="islendi-ozet-row"><span>Palet</span><strong><?= number_format((int)$islendi_totals['is_palet'],0,',','.') ?></strong></div>
                 <div class="islendi-ozet-row"><span>Kasa</span><strong><?= number_format((int)$islendi_totals['is_kasa'],0,',','.') ?></strong></div>
                 <div class="islendi-ozet-row"><span>Brüt KG</span><strong><?= fmt_kg((float)$islendi_totals['is_brut']) ?></strong></div>
@@ -1381,7 +1403,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
                 <div class="islendi-ozet-row"><span>Net KG</span><strong><?= fmt_kg(round((float)$islendi_totals['is_net'])) ?></strong></div>
             </div>
             <div class="islendi-ozet-section islendi-ozet-pending">
-                <div class="islendi-ozet-head">○ İşaretsiz Paletler</div>
+                <div class="islendi-ozet-head">○ Raporlanmadı Paletler</div>
                 <div class="islendi-ozet-row"><span>Palet</span><strong><?= number_format((int)$islendi_totals['nis_palet'],0,',','.') ?></strong></div>
                 <div class="islendi-ozet-row"><span>Kasa</span><strong><?= number_format((int)$islendi_totals['nis_kasa'],0,',','.') ?></strong></div>
                 <div class="islendi-ozet-row"><span>Brüt KG</span><strong><?= fmt_kg((float)$islendi_totals['nis_brut']) ?></strong></div>
@@ -1399,7 +1421,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     btn.addEventListener('click',function(){
         var open=panel.style.display!=='none';
         panel.style.display=open?'none':'block';
-        btn.textContent=(open?'▸':'▾')+' İşaretli / İşaretsiz Palet Ayrımı';
+        btn.textContent=(open?'▸':'▾')+' Raporlandı / Raporlanmadı Palet Ayrımı';
     });
 })();
 </script>
