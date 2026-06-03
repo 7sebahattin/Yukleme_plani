@@ -1496,10 +1496,18 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         var nw = cropSrc.naturalWidth, nh = cropSrc.naturalHeight;
         var sx = cs.x / iw * nw, sy = cs.y / ih * nh;
         var sw = cs.w / iw * nw, sh = cs.h / ih * nh;
+        /* Sunucu POST limiti aşılmasın: max 1400 px uzun kenar */
+        var MAX_PX = 1400;
+        var outW = Math.round(sw), outH = Math.round(sh);
+        if (outW > MAX_PX || outH > MAX_PX) {
+            var ratio = Math.min(MAX_PX / outW, MAX_PX / outH);
+            outW = Math.round(outW * ratio);
+            outH = Math.round(outH * ratio);
+        }
         var cv = document.createElement('canvas');
-        cv.width = Math.round(sw); cv.height = Math.round(sh);
+        cv.width = outW; cv.height = outH;
         cv.getContext('2d').drawImage(cropSrc, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-        var out = cv.toDataURL('image/jpeg', 0.92);
+        var out = cv.toDataURL('image/jpeg', 0.82);
         showPhoto(out);
         saveToServer({data: out});               // SUNUCUYA kaydet → masaüstü/print görür
         try { localStorage.setItem(KEY, out); } catch(e) {}
