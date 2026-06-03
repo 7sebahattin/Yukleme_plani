@@ -377,7 +377,7 @@
             card.innerHTML = `
                 <div class="pc-num-wrap">
                     <div class="pc-num${_done ? ' pc-num-done' : ''}">${i + 1}</div>
-                    <button type="button" class="pc-isle-btn${_done ? ' active' : ''}" data-isle="${i}" title="${_done ? 'İşlendi — geri al' : 'İşlendi işaretle'}">✓</button>
+                    <button type="button" class="pc-isle-btn${_done ? ' active' : ''}" data-isle="${i}" title="${_done ? 'Raporlandı — geri al' : 'Raporla'}">✓</button>
                 </div>
                 <div class="pc-body">
                     <div class="pc-title">Palet ${escHtml(p.palet_no || (i + 1))}${p.size ? ' · ' + escHtml(p.size) : ''}</div>

@@ -11,6 +11,8 @@ require_perm('records.read');
 $q            = trim((string)($_GET['q'] ?? ''));
 $durum_filter = trim((string)($_GET['durum'] ?? ''));
 if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
+$rapor_filter = trim((string)($_GET['rapor_durumu'] ?? ''));
+if (!in_array($rapor_filter, ['raporlanmamis', 'raporlandi'], true)) $rapor_filter = '';
 
 $sql = "SELECT r.*,
                (SELECT COUNT(*)                          FROM loading_pallets p WHERE p.loading_record_id = r.id) AS toplam_palet,
@@ -32,6 +34,8 @@ if ($durum_filter !== '') {
     $sql .= " AND r.durum = :durum ";
     $params[':durum'] = $durum_filter;
 }
+if ($rapor_filter === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL "; }
+if ($rapor_filter === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL "; }
 $sql .= " ORDER BY r.id DESC LIMIT 500";
 
 $st = db()->prepare($sql);
@@ -39,6 +43,7 @@ $st->execute($params);
 $rows = $st->fetchAll();
 
 $can_unlock = function_exists('can') && can('records.unlock');
+$can_write  = function_exists('can') && can('records.write');
 
 render_header('Çıkmalar');
 ?>
@@ -56,24 +61,32 @@ render_header('Çıkmalar');
     <?php if ($durum_filter !== ''): ?>
     <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
     <?php endif; ?>
+    <?php if ($rapor_filter !== ''): ?>
+    <input type="hidden" name="rapor_durumu" value="<?= h($rapor_filter) ?>">
+    <?php endif; ?>
     <input type="search" name="q" value="<?= h($q) ?>"
            placeholder="Firma, bölge, ürün..." autocomplete="off">
     <button class="btn">Ara</button>
-    <?php if ($q !== '' || $durum_filter !== ''): ?>
+    <?php if ($q !== '' || $durum_filter !== '' || $rapor_filter !== ''): ?>
         <a href="cikmalar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
 </form>
 
 <?php
 $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
+$d_part = $durum_filter !== '' ? '&durum=' . urlencode($durum_filter) : '';
 ?>
 <div class="filter-pills">
     <a href="cikmalar.php<?= $q_part ? '?' . ltrim($q_part, '&') : '' ?>"
-       class="pill<?= $durum_filter === '' ? ' active' : '' ?>">Tümü</a>
+       class="pill<?= $durum_filter === '' && $rapor_filter === '' ? ' active' : '' ?>">Tümü</a>
     <a href="cikmalar.php?durum=islendi<?= $q_part ?>"
        class="pill<?= $durum_filter === 'islendi' ? ' active-islendi' : '' ?>">🟠 İşlendi</a>
     <a href="cikmalar.php?durum=yuklendi<?= $q_part ?>"
        class="pill<?= $durum_filter === 'yuklendi' ? ' active-yuklendi' : '' ?>">🟢 Yüklendi</a>
+    <a href="cikmalar.php?rapor_durumu=raporlanmamis<?= $d_part . $q_part ?>"
+       class="pill<?= $rapor_filter === 'raporlanmamis' ? ' active' : '' ?>">📋 Raporlanmadı</a>
+    <a href="cikmalar.php?rapor_durumu=raporlandi<?= $d_part . $q_part ?>"
+       class="pill<?= $rapor_filter === 'raporlandi' ? ' active' : '' ?>">✓ Raporlandı</a>
 </div>
 
 <?php if (empty($rows)): ?>
@@ -100,6 +113,7 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                 <th class="num">Brüt</th>
                 <th class="num">Dara</th>
                 <th class="num">Net</th>
+                <th>Rapor</th>
                 <th class="actions-col">İşlemler</th>
             </tr>
             </thead>
@@ -126,6 +140,21 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_dara']) ?></td>
                     <td class="num strong"><?= fmt_kg($r['toplam_net']) ?></td>
+                    <td>
+                        <?php if ($can_write): ?>
+                        <form method="post" action="cikma_report_toggle.php" style="display:inline">
+                            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <input type="hidden" name="action" value="<?= ($r['reported_at'] ?? null) ? 'unmark' : 'mark' ?>">
+                            <button type="submit" class="btn btn-sm<?= ($r['reported_at'] ?? null) ? ' btn-durum-islendi durum-done' : '' ?>"
+                                    onclick="return confirm('<?= ($r['reported_at'] ?? null) ? 'Raporlandı işareti geri alınsın mı?' : 'Çıkma kaydı raporlandı olarak işaretlensin mi?' ?>')">
+                                <?= ($r['reported_at'] ?? null) ? '✓ Raporlandı' : 'Raporla' ?>
+                            </button>
+                        </form>
+                        <?php elseif ($r['reported_at'] ?? null): ?>
+                        <span class="badge badge-yuklendi" style="font-size:.75rem">✓ Raporlandı</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="actions-col">
                         <a class="btn btn-sm" href="record_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                         <?php if ($durum !== 'yuklendi' && !$locked): ?>
@@ -217,6 +246,17 @@ $q_part = $q !== '' ? '&q=' . urlencode($q) : '';
                             data-durum-action="yuklendi">
                         <?= $durum === 'yuklendi' ? '✓ Yüklendi' : 'Yükle' ?>
                     </button>
+                    <?php endif; ?>
+                    <?php if ($can_write): ?>
+                    <form method="post" action="cikma_report_toggle.php" style="display:inline">
+                        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                        <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                        <input type="hidden" name="action" value="<?= ($r['reported_at'] ?? null) ? 'unmark' : 'mark' ?>">
+                        <button type="submit" class="btn btn-sm<?= ($r['reported_at'] ?? null) ? ' btn-durum-islendi durum-done' : '' ?>"
+                                onclick="return confirm('<?= ($r['reported_at'] ?? null) ? 'Raporlandı işareti geri alınsın mı?' : 'Çıkma kaydı raporlandı olarak işaretlensin mi?' ?>')">
+                            <?= ($r['reported_at'] ?? null) ? '✓ Raporlandı' : 'Raporla' ?>
+                        </button>
+                    </form>
                     <?php endif; ?>
                 </div>
             </div>

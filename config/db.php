@@ -119,6 +119,16 @@ function db(): PDO {
             }
         } catch (PDOException $_km) { /* kantar_fisleri yoksa — sessizce geç */ }
 
+        // Sprint Günlük-03: loading_records'a reported_at + reported_by ekle (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'reported_at'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `loading_records`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL");
+            }
+        } catch (PDOException $_lrm) { /* loading_records yoksa — sessizce geç */ }
+
         // Performans indexleri — idempotent (duplicate key veya tablo yok → sessizce geçilir)
         foreach ([
             "ALTER TABLE `loading_records` ADD INDEX `idx_type` (`type`)",
