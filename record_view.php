@@ -89,12 +89,16 @@ foreach ($pallets as $p) {
         $stok_use[$kid]['adet'] += 1;
         $stok_use[$kid]['kg']   += (float)($defs_by_id[$kid]['unit_dara_kg'] ?? 0);
     }
-    // 3) Ek malzemeler: pallet_materials.quantity (kg: unit × adet, total_dara_kg artık 0)
+    // 3) Ek malzemeler — kasa bazlı: quantity × kasa_adeti; palet bazlı: quantity
     foreach ($p['materials'] as $m) {
-        $kid = (int)$m['def_id'];
+        $kid   = (int)$m['def_id'];
+        $basis = material_calc_basis($m['material_type'], $m['material_name']);
+        $eff   = ($basis === 'kasa')
+            ? (float)$m['quantity'] * (int)$p['kasa_adeti']
+            : (float)$m['quantity'];
         if (!isset($stok_use[$kid])) $stok_use[$kid] = ['adet' => 0, 'kg' => 0];
-        $stok_use[$kid]['adet'] += (float)$m['quantity'];
-        $stok_use[$kid]['kg']   += (float)$m['material_unit'] * (float)$m['quantity'];
+        $stok_use[$kid]['adet'] += $eff;
+        $stok_use[$kid]['kg']   += (float)$m['material_unit'] * $eff;
     }
 }
 

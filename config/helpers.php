@@ -1229,6 +1229,28 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
     return $errs;
 }
 
+// ── Malzeme hesaplama bazı: kasa mı, palet mi? ──────────────
+// 'kasa'  → effective_qty = quantity × kasa_adeti
+// 'palet' → effective_qty = quantity
+// NOT: kasa_etiketi tipi kayıt sırasında zaten kasa_adeti ile çarpılarak DB'ye yazılır;
+//      bu yüzden 'palet' döndürülür (çift çarpım önlenir).
+function material_calc_basis(string $type, string $name): string {
+    if ($type === 'kasa_etiketi') return 'palet'; // pre-multiplied at save time
+
+    // İsim normalizasyonu (tr_norm benzeri, helpers.php içi)
+    $n = mb_strtolower($name, 'UTF-8');
+    $n = str_replace("\xCC\x87", '', $n); // combining dot above (İ → i)
+    $n = strtr($n, ['ı' => 'i', 'ş' => 's', 'ç' => 'c', 'ğ' => 'g', 'ü' => 'u', 'ö' => 'o']);
+    $n = str_replace([' ', '-', '.', ',', '_'], '', $n);
+
+    // Kasa bazlı: her kasa için hesaplanır
+    $kasa_kw = ['kenarkartonu', 'kenarkart', 'kenarkagidi', 'kenarkagit', 'tabankagidi', 'tabankagit', 'sale', 'kasaetiketi'];
+    foreach ($kasa_kw as $kw) {
+        if (str_contains($n, $kw)) return 'kasa';
+    }
+    return 'palet';
+}
+
 // ── Malzeme Stok: Yükleme/Çıkma hareketlerini senkronize et ──
 // Yükleme/çıkma kaydı kaydedildikten/güncellendikten sonra çağrılır.
 // Kaynaklar → material_stock_movements (idempotent sync):
@@ -1283,11 +1305,11 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
         $pal_st->execute([$loading_record_id]);
         $pallets = $pal_st->fetchAll();
 
-        // C) Sarf malzeme — pallet_materials (mevcut davranış korunur)
+        // C) Sarf malzeme — pallet_materials + kasa_adeti (effective_qty hesabı için)
         $mat_st = $pdo->prepare("
             SELECT pm.loading_pallet_id, pm.material_id, pm.quantity, pm.total_dara_kg,
                    md.name AS mat_name, md.type AS mat_type, md.unit_dara_kg,
-                   lp.depo
+                   lp.depo, lp.kasa_adeti
             FROM pallet_materials pm
             JOIN material_definitions md ON md.id = pm.material_id
             JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
@@ -1338,13 +1360,18 @@ function sync_malzeme_kullanim(int $loading_record_id): void {
                 }
             }
 
-            // C) Sarf malzeme kullanımı
+            // C) Sarf malzeme kullanımı — kasa bazlı malzemeler kasa_adeti ile çarpılır
             foreach ($materials as $r) {
                 if ((float)$r['quantity'] <= 0) continue;
+                $basis   = material_calc_basis($r['mat_type'], $r['mat_name']);
+                $eff_qty = ($basis === 'kasa')
+                    ? round((float)$r['quantity'] * (int)($r['kasa_adeti'] ?? 0), 3)
+                    : (float)$r['quantity'];
+                if ($eff_qty <= 0) continue;
                 $ins->execute([
                     $lr_tarih, $mv_type,
                     $r['material_id'], $r['mat_name'], $r['mat_type'],
-                    $r['depo'], $r['quantity'],
+                    $r['depo'], $eff_qty,
                     $r['unit_dara_kg'], $r['total_dara_kg'],
                     $loading_record_id, $r['loading_pallet_id'], $note_sarf,
                 ]);

@@ -65,8 +65,12 @@ foreach ($pallets as $p) {
         $stok_use[$kid] = ($stok_use[$kid] ?? 0) + 1;
     }
     foreach ($p['materials'] as $m) {
-        $kid = (int)$m['def_id'];
-        $stok_use[$kid] = ($stok_use[$kid] ?? 0) + (float)$m['quantity'];
+        $kid   = (int)$m['def_id'];
+        $basis = material_calc_basis($m['material_type'], $m['material_name']);
+        $eff   = ($basis === 'kasa')
+            ? (float)$m['quantity'] * (int)$p['kasa_adeti']
+            : (float)$m['quantity'];
+        $stok_use[$kid] = ($stok_use[$kid] ?? 0) + $eff;
     }
 }
 $malzeme_list = [];
