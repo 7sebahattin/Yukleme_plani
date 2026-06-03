@@ -303,10 +303,11 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
+        <a href="record_excel_template.php?id=<?= (int)$id ?>" class="btn no-print">📊 Excel İndir</a>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>
-                <a href="record_excel.php?id=<?= (int)$id ?>">📊 Excel İndir</a>
+                <a href="record_excel.php?id=<?= (int)$id ?>">📄 Eski Excel (.xls)</a>
                 <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>
                 <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
             </div>
