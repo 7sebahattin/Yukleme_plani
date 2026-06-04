@@ -129,6 +129,75 @@ function db(): PDO {
             }
         } catch (PDOException $_lrm) { /* loading_records yoksa — sessizce geç */ }
 
+        // Sprint XZ-01: daily_reports — X/Z günlük rapor arşivi (idempotent)
+        try { $pdo->query("SELECT 1 FROM `daily_reports` LIMIT 0"); }
+        catch (PDOException $_e) {
+            $pdo->exec("CREATE TABLE `daily_reports` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `report_type`   VARCHAR(5) NOT NULL,
+                `report_date`   DATE NULL,
+                `date_from`     DATE NULL,
+                `date_to`       DATE NULL,
+                `title`         VARCHAR(200) NOT NULL DEFAULT '',
+                `note`          TEXT NULL,
+                `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `created_by`    INT NULL,
+                `closed_at`     DATETIME NULL,
+                `status`        VARCHAR(20) NOT NULL DEFAULT 'final',
+                `snapshot_json` LONGTEXT NULL,
+                `pdf_path`      VARCHAR(500) NULL,
+                INDEX `idx_dr_type`  (`report_type`),
+                INDEX `idx_dr_date`  (`report_date`),
+                INDEX `idx_dr_by`    (`created_by`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        // Sprint XZ-01: daily_report_items — rapor kalemleri (idempotent)
+        try { $pdo->query("SELECT 1 FROM `daily_report_items` LIMIT 0"); }
+        catch (PDOException $_e) {
+            $pdo->exec("CREATE TABLE `daily_report_items` (
+                `id`               INT AUTO_INCREMENT PRIMARY KEY,
+                `report_id`        INT NOT NULL,
+                `item_type`        VARCHAR(30) NOT NULL,
+                `source_table`     VARCHAR(60) NOT NULL,
+                `source_id`        INT NOT NULL,
+                `source_detail_id` INT NULL,
+                `snapshot_json`    LONGTEXT NULL,
+                `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_dri_report` (`report_id`),
+                INDEX `idx_dri_type`   (`item_type`),
+                INDEX `idx_dri_source` (`source_table`, `source_id`),
+                INDEX `idx_dri_detail` (`source_detail_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        // Sprint XZ-01: kantar_fisleri'ne report_id ekle (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `kantar_fisleri` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `kantar_fisleri` LIKE 'report_id'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `kantar_fisleri` ADD COLUMN `report_id` INT NULL");
+            }
+        } catch (PDOException $_km2) { /* kantar_fisleri yoksa — sessizce geç */ }
+
+        // Sprint XZ-01: loading_records'a report_id ekle — type='cikma' için (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'report_id'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `report_id` INT NULL");
+            }
+        } catch (PDOException $_lrm2) { /* loading_records yoksa — sessizce geç */ }
+
+        // Sprint XZ-01: loading_pallets'e reported_at + reported_by + report_id ekle (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `loading_pallets` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_pallets` LIKE 'reported_at'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `loading_pallets`
+                    ADD COLUMN `reported_at` DATETIME NULL,
+                    ADD COLUMN `reported_by` INT NULL,
+                    ADD COLUMN `report_id`   INT NULL");
+            }
+        } catch (PDOException $_lpm) { /* loading_pallets yoksa — sessizce geç */ }
+
         // Performans indexleri — idempotent (duplicate key veya tablo yok → sessizce geçilir)
         foreach ([
             "ALTER TABLE `loading_records` ADD INDEX `idx_type` (`type`)",

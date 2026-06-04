@@ -210,7 +210,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <div class="pallet-sec-btns">
                 <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu İşle</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu Raporla</button>
             </div>
             <button type="button" class="btn btn-primary pallet-add-main" id="addPalletBtn">+ Yeni Palet Ekle</button>
         </div>
