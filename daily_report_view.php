@@ -191,16 +191,27 @@ render_flash();
 }
 
 @media print {
+    @page { margin: 10mm 8mm; }
     .topbar, .bottomnav, .page-head .btn, .drv-back-btn, .sidebar,
     .drv-mob-details summary, .mobile-only { display:none !important; }
     .pc-only { display:block !important; }
+    .drv-prt-hide { display:none !important; }
     body { background:#fff !important; }
     .container { max-width:none !important; padding:0 !important; }
     .drv-record-pallets { display:block !important; max-height:none !important; }
     .drv-record-group { break-inside:avoid; }
-    .drv-section { break-inside:avoid; }
-    .drv-totals-bar { border:1px solid #ccc !important; }
-    .data-table { font-size:8pt; }
+    .drv-section { break-inside:avoid; margin-bottom:10px; }
+    .drv-section-title { font-size:10.5pt; font-weight:700; border-bottom:1.5px solid #333 !important; padding-bottom:3px; margin-bottom:6px; }
+    .drv-meta { font-size:8pt; gap:4px 14px; margin:3px 0 7px; }
+    .drv-totals-bar { border:1px solid #ccc !important; font-size:8pt; padding:5px 10px; gap:5px 14px; margin-bottom:6px; }
+    .drv-totals-bar .t-item strong { font-size:9.5pt; }
+    .drv-filter-chips { margin-bottom:5px; }
+    .drv-chip { font-size:7pt; padding:1px 6px; }
+    .drv-record-head { font-size:8.5pt; padding:4px 10px; }
+    .data-table { font-size:8.5pt; width:100%; border-collapse:collapse; }
+    .data-table th { font-size:8.5pt; font-weight:700; padding:2px 5px; }
+    .data-table td { padding:2px 5px; line-height:1.2; }
+    .data-table tfoot td { font-size:8.5pt; font-weight:700; padding:2px 5px; }
     .table-wrap { overflow:visible !important; }
 }
 </style>
@@ -233,7 +244,7 @@ render_flash();
     <?php if (!empty($report['closed_at'])): ?>
     <div><span>Kapanış: </span><strong style="color:#059669"><?= h(fmt_datetime($report['closed_at'])) ?></strong></div>
     <?php endif; ?>
-    <div><span>Durum: </span><strong><?= h($report['status'] ?? 'final') ?></strong></div>
+    <div class="drv-prt-hide"><span>Durum: </span><strong><?= h($report['status'] ?? 'final') ?></strong></div>
 </div>
 
 <!-- Filtre chip'leri -->
@@ -330,38 +341,38 @@ foreach ($cikma_items as $_ci) {
     <table class="data-table">
         <thead><tr>
             <th>Fiş No</th>
-            <th>Tarih</th>
+            <th class="drv-prt-hide">Tarih</th>
             <th>Firma</th>
             <th>Mal Cinsi</th>
             <th>Plaka</th>
             <th>Depo</th>
-            <th class="num">Kasa</th>
             <th class="num">Brüt KG</th>
             <th class="num">Dara KG</th>
             <th class="num">Net KG</th>
+            <th class="num">Kasa</th>
         </tr></thead>
         <tbody>
         <?php foreach ($kantar_items as $ki): ?>
         <tr>
             <td><?= h($ki['fis_no'] ?? '—') ?></td>
-            <td><?= h(isset($ki['giris_tarih']) ? fmt_date($ki['giris_tarih']) : '—') ?></td>
+            <td class="drv-prt-hide"><?= h(isset($ki['giris_tarih']) ? fmt_date($ki['giris_tarih']) : '—') ?></td>
             <td><?= h($ki['firma_adi'] ?? '—') ?></td>
             <td><?= h($ki['malin_cinsi'] ?? '—') ?></td>
             <td><?= h($ki['plaka'] ?? '—') ?></td>
             <td><?= h($ki['depo'] ?? '—') ?></td>
-            <td class="num"><?= (int)($ki['kasa_sayisi'] ?? 0) ?: '—' ?></td>
             <td class="num"><?= fmt_kg((float)($ki['brut_kg'] ?? 0)) ?></td>
             <td class="num"><?= fmt_kg((float)($ki['dara_kg'] ?? 0)) ?></td>
             <td class="num"><strong><?= fmt_kg((float)($ki['net_kg'] ?? 0)) ?></strong></td>
+            <td class="num"><?= (int)($ki['kasa_sayisi'] ?? 0) ?: '—' ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr>
             <td colspan="6"><strong>Toplam</strong></td>
-            <td class="num"><strong><?= $k_kasa_total ?: '—' ?></strong></td>
             <td class="num"><strong><?= fmt_kg($k_brut_total) ?></strong></td>
             <td class="num"><strong><?= fmt_kg($k_dara_total) ?></strong></td>
             <td class="num"><strong><?= fmt_kg($k_net_total) ?></strong></td>
+            <td class="num"><strong><?= $k_kasa_total ?: '—' ?></strong></td>
         </tr></tfoot>
     </table>
     </div>
@@ -550,7 +561,7 @@ foreach ($cikma_items as $_ci) {
     <div class="table-wrap pc-only">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th>
+            <th class="drv-prt-hide">Tarih</th>
             <th>Firma</th>
             <th>Ürün</th>
             <th>Çıkış Nedeni</th>
@@ -564,7 +575,7 @@ foreach ($cikma_items as $_ci) {
         <tbody>
         <?php foreach ($cikma_items as $ci): ?>
         <tr>
-            <td><?= h(isset($ci['tarih']) ? fmt_date($ci['tarih']) : '—') ?></td>
+            <td class="drv-prt-hide"><?= h(isset($ci['tarih']) ? fmt_date($ci['tarih']) : '—') ?></td>
             <td><?= h($ci['firma'] ?? '—') ?></td>
             <td><?= h($ci['urun']  ?? '—') ?></td>
             <td><?= h($ci['cikis_nedeni'] ?? '—') ?></td>
