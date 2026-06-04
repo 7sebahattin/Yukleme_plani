@@ -964,6 +964,10 @@ render_flash();
     html, body { background: #fff !important; }
     .container { max-width: none !important; padding: 0 !important; }
     .topbar, .bottomnav, .rpt-filter-card { display: none !important; }
+    .gl-section .data-table { font-size: 9pt !important; }
+    .gl-section .data-table th { font-size: 9pt !important; padding: 3px 6px !important; font-weight: 700; }
+    .gl-section .data-table td { font-size: 9pt !important; padding: 3px 6px !important; }
+    .gl-section .data-table tfoot td { font-size: 9pt !important; padding: 3px 6px !important; font-weight: 700; }
 }
 .gl-print-header { display: none; }
 .gl-section { margin-bottom: 20px; }
@@ -978,6 +982,10 @@ render_flash();
 .gl-mv-sevk     { background: #fef9c3; color: #854d0e; }
 .gl-mv-kullanim { background: #fff7ed; color: #9a3412; }
 .gl-mv-duzeltme { background: #f0f9ff; color: #0c4a6e; }
+.gl-section .data-table { font-size: .92rem; }
+.gl-section .data-table th { font-weight: 700; padding: 7px 10px; }
+.gl-section .data-table td { padding: 6px 10px; }
+.gl-section .data-table tfoot td { font-size: .92rem; padding: 7px 10px; }
 </style>
 
 <!-- Yazdırma başlığı (sadece print'te görünür) -->
@@ -1096,39 +1104,37 @@ render_flash();
 <div class="gl-section">
     <div class="gl-section-title">Kantar<?= !empty($gk_rows) ? ' ('.count($gk_rows).')' : '' ?></div>
     <?php if (!empty($gk_rows)):
-        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0;
+        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
     ?>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th><th>Fiş No</th><th>Firma</th><th>Malın Cinsi</th><th>Plaka</th>
+            <th>Fiş No</th><th>Plaka</th>
+            <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
-            <th class="num">Kasa</th><th class="num">Palet</th>
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($gk_rows as $_gkr): $_kc = kantar_calc($_gkr); $_gk_tot_brut += $_kc['brut']; $_gk_tot_net += $_kc['net']; ?>
+        <?php foreach ($gk_rows as $_gkr): $_kc = kantar_calc($_gkr); $_gk_tot_brut += $_kc['brut']; $_gk_tot_net += $_kc['net']; $_gk_tot_kasa += (int)$_gkr['kasa_sayisi']; $_gk_tot_palet += (int)$_gkr['palet_sayisi']; ?>
         <tr>
-            <td><?= h(fmt_datetime($_gkr['giris_tarih'] ?? '')) ?></td>
             <td><?= h($_gkr['fis_no'] ?? '—') ?></td>
-            <td><?= h($_gkr['firma_adi'] ?? '—') ?></td>
-            <td><?= h($_gkr['malin_cinsi'] ?? '—') ?></td>
             <td><?= h($_gkr['plaka'] ?? '—') ?></td>
+            <td class="num"><?= (int)$_gkr['palet_sayisi'] ?></td>
+            <td class="num"><?= number_format((int)$_gkr['kasa_sayisi'], 0, ',', '.') ?></td>
             <td class="num"><?= fmt_kg($_kc['brut']) ?></td>
             <td class="num"><?= fmt_kg($_kc['dara']) ?></td>
-            <td class="num"><?= fmt_kg($_kc['net']) ?></td>
-            <td class="num"><?= (int)$_gkr['kasa_sayisi'] ?></td>
-            <td class="num"><?= (int)$_gkr['palet_sayisi'] ?></td>
+            <td class="num"><strong><?= fmt_kg($_kc['net']) ?></strong></td>
             <td class="gl-no-print"><a href="kantar_view.php?id=<?= (int)$_gkr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
-            <td class="strong" colspan="5">TOPLAM</td>
-            <td class="num strong"><?= fmt_kg($_gk_tot_brut) ?></td>
+            <td colspan="2"><strong>TOPLAM</strong></td>
+            <td class="num"><strong><?= $_gk_tot_palet ?></strong></td>
+            <td class="num"><strong><?= number_format($_gk_tot_kasa, 0, ',', '.') ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($_gk_tot_brut) ?></strong></td>
             <td></td>
-            <td class="num strong"><?= fmt_kg($_gk_tot_net) ?></td>
-            <td colspan="2"></td>
+            <td class="num"><strong><?= fmt_kg($_gk_tot_net) ?></strong></td>
             <td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
@@ -1159,41 +1165,33 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th><th>Firma</th><th>Bölge</th><th>Alıcı</th><th>Depo</th><th>Ürün</th>
-            <th>Parti No</th><th>Durum</th>
+            <th>Firma</th><th>Ürün</th><th>Parti No</th>
             <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($mk_rows as $_mkr):
-            $_md = $_mkr['durum']; $_mdc = $_md==='islendi'?'badge-islendi':($_md==='yuklendi'?'badge-yuklendi':'');
-        ?>
+        <?php foreach ($mk_rows as $_mkr): ?>
         <tr>
-            <td><?= h(fmt_date($_mkr['tarih'])) ?></td>
             <td><?= h($_mkr['firma']   ?: '—') ?></td>
-            <td><?= h($_mkr['bolge']   ?: '—') ?></td>
-            <td><?= h($_mkr['alici']   ?: '—') ?></td>
-            <td><?= h($_mkr['depo']    ?: '—') ?></td>
             <td><?= h($_mkr['urun']    ?: '—') ?></td>
             <td><?= h($_mkr['parti_no']?: '—') ?></td>
-            <td><?= $_md ? '<span class="rpt-badge '.$_mdc.'">'.($_md==='islendi'?'İşlendi':($_md==='yuklendi'?'Yüklendi':h($_md))).'</span>' : '<span class="muted">—</span>' ?></td>
             <td class="num"><?= number_format((int)$_mkr['palet_sayisi'], 0, ',', '.') ?></td>
             <td class="num"><?= number_format((int)$_mkr['toplam_kasa'],  0, ',', '.') ?></td>
             <td class="num"><?= fmt_kg((float)$_mkr['toplam_brut']) ?></td>
             <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_dara'])) ?></td>
-            <td class="num"><?= fmt_kg(round((float)$_mkr['toplam_net'])) ?></td>
+            <td class="num"><strong><?= fmt_kg(round((float)$_mkr['toplam_net'])) ?></strong></td>
             <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_mkr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
-            <td class="strong" colspan="8">TOPLAM</td>
-            <td class="num strong"><?= number_format($_mk_tot_palet, 0, ',', '.') ?></td>
-            <td class="num strong"><?= number_format($_mk_tot_kasa,  0, ',', '.') ?></td>
-            <td class="num strong"><?= fmt_kg($_mk_tot_brut) ?></td>
-            <td class="num strong"><?= fmt_kg(round($_mk_tot_dara)) ?></td>
-            <td class="num strong"><?= fmt_kg(round($_mk_tot_net)) ?></td>
+            <td colspan="3"><strong>TOPLAM</strong></td>
+            <td class="num"><strong><?= number_format($_mk_tot_palet, 0, ',', '.') ?></strong></td>
+            <td class="num"><strong><?= number_format($_mk_tot_kasa,  0, ',', '.') ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($_mk_tot_brut) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg(round($_mk_tot_dara)) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg(round($_mk_tot_net)) ?></strong></td>
             <td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
@@ -1210,7 +1208,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Tarih</th><th>Firma</th><th>Ürün</th><th>Çıkma Nedeni</th><th>Depo</th>
+            <th>Firma</th><th>Ürün</th><th>Çıkma Nedeni</th>
             <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
             <th class="gl-no-print">Bağlantı</th>
@@ -1218,27 +1216,25 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <tbody>
         <?php foreach ($ck_rows as $_ckr): ?>
         <tr>
-            <td><?= h(fmt_date($_ckr['tarih'])) ?></td>
             <td><?= h($_ckr['firma'] ?: '—') ?></td>
             <td><?= h($_ckr['urun']  ?: '—') ?></td>
             <td><?php $_cn = trim($_ckr['cikis_nedeni'] ?? ''); echo $_cn !== '' ? '<span class="cikis-nedeni-badge">' . h($_cn) . '</span>' : '—'; ?></td>
-            <td><?= h($_ckr['depo']  ?: '—') ?></td>
             <td class="num"><?= (int)$_ckr['palet_sayisi'] ?></td>
             <td class="num"><?= number_format((int)$_ckr['toplam_kasa'], 0, ',', '.') ?></td>
             <td class="num"><?= fmt_kg((float)$_ckr['toplam_brut']) ?></td>
             <td class="num"><?= fmt_kg(round((float)$_ckr['toplam_dara'])) ?></td>
-            <td class="num"><span class="cikma-net-kg"><?= fmt_kg(round((float)$_ckr['toplam_net'])) ?></span></td>
+            <td class="num"><strong><?= fmt_kg(round((float)$_ckr['toplam_net'])) ?></strong></td>
             <td class="gl-no-print"><a href="record_view.php?id=<?= (int)$_ckr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
-            <td class="strong" colspan="5">TOPLAM</td>
-            <td class="num strong"><?= number_format((int)array_sum(array_column($ck_rows,'palet_sayisi')), 0, ',', '.') ?></td>
-            <td class="num strong"><?= number_format((int)array_sum(array_column($ck_rows,'toplam_kasa')),  0, ',', '.') ?></td>
-            <td class="num strong"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_brut'))) ?></td>
-            <td class="num strong"><?= fmt_kg(round((float)array_sum(array_column($ck_rows,'toplam_dara')))) ?></td>
-            <td class="num strong"><span class="cikma-net-kg"><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_net'))) ?></span></td>
+            <td colspan="3"><strong>TOPLAM</strong></td>
+            <td class="num"><strong><?= number_format((int)array_sum(array_column($ck_rows,'palet_sayisi')), 0, ',', '.') ?></strong></td>
+            <td class="num"><strong><?= number_format((int)array_sum(array_column($ck_rows,'toplam_kasa')),  0, ',', '.') ?></strong></td>
+            <td class="num"><strong><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_brut'))) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg(round((float)array_sum(array_column($ck_rows,'toplam_dara')))) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg((float)array_sum(array_column($ck_rows,'toplam_net'))) ?></strong></td>
             <td class="gl-no-print"></td>
         </tr></tfoot>
     </table>
