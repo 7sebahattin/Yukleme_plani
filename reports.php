@@ -388,7 +388,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $kw = ["1=1"];
         if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
         $kp = [];
-        if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";       $kp[] = $f_firma; }
+        if ($f_firma !== '') { $kw[] = "(kf.firma_adi = ? OR EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?))"; $kp[] = $f_firma; $kp[] = $f_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
         $st = db()->prepare("SELECT kf.*,
@@ -399,6 +399,19 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $st->execute($kp);
         $gk_rows = $st->fetchAll();
     } catch (PDOException $e) {}
+    // Pre-fetch kantar grupları tüm fişler için (tek sorgu)
+    $gk_gruplar = [];
+    if (!empty($gk_rows)) {
+        $_gk_ids = array_column($gk_rows, 'id');
+        $_gk_ph  = implode(',', array_fill(0, count($_gk_ids), '?'));
+        try {
+            $_st_g = db()->prepare("SELECT fis_id, grup_adi, palet_sayisi, kasa_adedi, kasa_dara_kg, palet_dara_kg, brut_kg FROM kantar_gruplar WHERE fis_id IN ($_gk_ph) ORDER BY fis_id, sira");
+            $_st_g->execute($_gk_ids);
+            foreach ($_st_g->fetchAll() as $_grp) {
+                $gk_gruplar[(int)$_grp['fis_id']][] = $_grp;
+            }
+        } catch (PDOException $_ge) {}
+    }
 
     // Yükleme kayıtları — tarih opsiyonel
     $yw = ["r.type='yukleme'"]; $yp = [];
@@ -801,7 +814,11 @@ $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ($type === 'gunluk' ? '' : ' Raporu') : 'Raporlar';
-$filter_firma_list    = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$_frm_lr = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$_frm_kg = [];
+try { $_frm_kg = db()->query("SELECT DISTINCT grup_adi FROM kantar_gruplar WHERE grup_adi!='' ORDER BY grup_adi LIMIT 200")->fetchAll(PDO::FETCH_COLUMN); } catch (PDOException $_fke) {}
+$filter_firma_list = array_values(array_unique(array_merge($_frm_lr, $_frm_kg)));
+sort($filter_firma_list);
 $filter_urun_list     = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_bolge_list    = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_depo_list     = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
@@ -1109,27 +1126,60 @@ render_flash();
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
-            <th>Fiş No</th><th>Plaka</th>
+            <th>Fiş No</th><th>Plaka</th><th>Firma</th>
             <th class="num">Palet</th><th class="num">Kasa</th>
             <th class="num">Brüt KG</th><th class="num">Dara KG</th><th class="num">Net KG</th>
             <th class="gl-no-print">Bağlantı</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($gk_rows as $_gkr): $_kc = kantar_calc($_gkr); $_gk_tot_brut += $_kc['brut']; $_gk_tot_net += $_kc['net']; $_gk_tot_kasa += (int)$_gkr['kasa_sayisi']; $_gk_tot_palet += (int)$_gkr['palet_sayisi']; ?>
-        <tr>
-            <td><?= h($_gkr['fis_no'] ?? '—') ?></td>
-            <td><?= h($_gkr['plaka'] ?? '—') ?></td>
-            <td class="num"><?= (int)$_gkr['palet_sayisi'] ?></td>
-            <td class="num"><?= number_format((int)$_gkr['kasa_sayisi'], 0, ',', '.') ?></td>
-            <td class="num"><?= fmt_kg($_kc['brut']) ?></td>
-            <td class="num"><?= fmt_kg($_kc['dara']) ?></td>
-            <td class="num"><strong><?= fmt_kg($_kc['net']) ?></strong></td>
-            <td class="gl-no-print"><a href="kantar_view.php?id=<?= (int)$_gkr['id'] ?>" class="btn btn-sm">Görüntüle</a></td>
-        </tr>
-        <?php endforeach; ?>
+        <?php foreach ($gk_rows as $_gkr):
+            $_kc   = kantar_calc($_gkr);
+            $_fid  = (int)$_gkr['id'];
+            $_grps = $gk_gruplar[$_fid] ?? [];
+            if ($f_firma !== '' && !empty($_grps)):
+                // Firma filtresi aktif ve fiş grupları var → dağıtılmış gruba göre göster
+                $_dist = kantar_grup_dist($_grps, $_kc['brut'], $_kc['eff_kdu'], $_kc['eff_pdu']);
+                foreach ($_dist as $_dr):
+                    if (mb_strtolower(trim((string)($_dr['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_firma), 'UTF-8')) continue;
+                    $_gk_tot_brut  += $_dr['brut_kg'];
+                    $_gk_tot_net   += $_dr['net_kg'];
+                    $_gk_tot_kasa  += (int)$_dr['kasa'];
+                    $_gk_tot_palet += (int)$_dr['palet'];
+        ?>
+            <tr>
+                <td><?= h($_gkr['fis_no'] ?? '—') ?></td>
+                <td><?= h($_gkr['plaka'] ?? '—') ?></td>
+                <td><?= h($_dr['firma']) ?></td>
+                <td class="num"><?= (int)$_dr['palet'] ?></td>
+                <td class="num"><?= number_format((int)$_dr['kasa'], 0, ',', '.') ?></td>
+                <td class="num"><?= fmt_kg($_dr['brut_kg']) ?></td>
+                <td class="num"><?= fmt_kg($_dr['dara_kg']) ?></td>
+                <td class="num"><strong><?= fmt_kg($_dr['net_kg']) ?></strong></td>
+                <td class="gl-no-print"><a href="kantar_view.php?id=<?= $_fid ?>" class="btn btn-sm">Görüntüle</a></td>
+            </tr>
+        <?php     endforeach;
+            else:
+                // Firma filtresi yok veya grup yok → fiş düzeyinde göster
+                $_gk_tot_brut  += $_kc['brut'];
+                $_gk_tot_net   += $_kc['net'];
+                $_gk_tot_kasa  += (int)$_gkr['kasa_sayisi'];
+                $_gk_tot_palet += (int)$_gkr['palet_sayisi'];
+        ?>
+            <tr>
+                <td><?= h($_gkr['fis_no'] ?? '—') ?></td>
+                <td><?= h($_gkr['plaka'] ?? '—') ?></td>
+                <td><?= h($_gkr['firma_adi'] ?: '—') ?></td>
+                <td class="num"><?= (int)$_gkr['palet_sayisi'] ?></td>
+                <td class="num"><?= number_format((int)$_gkr['kasa_sayisi'], 0, ',', '.') ?></td>
+                <td class="num"><?= fmt_kg($_kc['brut']) ?></td>
+                <td class="num"><?= fmt_kg($_kc['dara']) ?></td>
+                <td class="num"><strong><?= fmt_kg($_kc['net']) ?></strong></td>
+                <td class="gl-no-print"><a href="kantar_view.php?id=<?= $_fid ?>" class="btn btn-sm">Görüntüle</a></td>
+            </tr>
+        <?php endif; endforeach; ?>
         </tbody>
         <tfoot><tr class="totals-row">
-            <td colspan="2"><strong>TOPLAM</strong></td>
+            <td colspan="3"><strong>TOPLAM</strong></td>
             <td class="num"><strong><?= $_gk_tot_palet ?></strong></td>
             <td class="num"><strong><?= number_format($_gk_tot_kasa, 0, ',', '.') ?></strong></td>
             <td class="num"><strong><?= fmt_kg($_gk_tot_brut) ?></strong></td>
