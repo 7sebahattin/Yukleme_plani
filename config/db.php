@@ -129,10 +129,9 @@ function db(): PDO {
             }
         } catch (PDOException $_lrm) { /* loading_records yoksa — sessizce geç */ }
 
-        // Sprint XZ-01: daily_reports — X/Z günlük rapor arşivi (idempotent)
-        try { $pdo->query("SELECT 1 FROM `daily_reports` LIMIT 0"); }
-        catch (PDOException $_e) {
-            $pdo->exec("CREATE TABLE `daily_reports` (
+        // Sprint XZ-01 (fixed XZ-03): daily_reports — CREATE TABLE IF NOT EXISTS (idempotent + hata loglanır)
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `daily_reports` (
                 `id`            INT AUTO_INCREMENT PRIMARY KEY,
                 `report_type`   VARCHAR(5) NOT NULL,
                 `report_date`   DATE NULL,
@@ -146,16 +145,18 @@ function db(): PDO {
                 `status`        VARCHAR(20) NOT NULL DEFAULT 'final',
                 `snapshot_json` LONGTEXT NULL,
                 `pdf_path`      VARCHAR(500) NULL,
-                INDEX `idx_dr_type`  (`report_type`),
-                INDEX `idx_dr_date`  (`report_date`),
-                INDEX `idx_dr_by`    (`created_by`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                INDEX `idx_dr_type`    (`report_type`),
+                INDEX `idx_dr_date`    (`report_date`),
+                INDEX `idx_dr_created` (`created_at`),
+                INDEX `idx_dr_by`      (`created_by`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $_xz_dr) {
+            error_log("[XZ MIGRATION] daily_reports CREATE TABLE failed: " . $_xz_dr->getMessage());
         }
 
-        // Sprint XZ-01: daily_report_items — rapor kalemleri (idempotent)
-        try { $pdo->query("SELECT 1 FROM `daily_report_items` LIMIT 0"); }
-        catch (PDOException $_e) {
-            $pdo->exec("CREATE TABLE `daily_report_items` (
+        // Sprint XZ-01 (fixed XZ-03): daily_report_items — CREATE TABLE IF NOT EXISTS
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `daily_report_items` (
                 `id`               INT AUTO_INCREMENT PRIMARY KEY,
                 `report_id`        INT NOT NULL,
                 `item_type`        VARCHAR(30) NOT NULL,
@@ -168,7 +169,9 @@ function db(): PDO {
                 INDEX `idx_dri_type`   (`item_type`),
                 INDEX `idx_dri_source` (`source_table`, `source_id`),
                 INDEX `idx_dri_detail` (`source_detail_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $_xz_dri) {
+            error_log("[XZ MIGRATION] daily_report_items CREATE TABLE failed: " . $_xz_dri->getMessage());
         }
 
         // Sprint XZ-01: kantar_fisleri'ne report_id ekle (idempotent)

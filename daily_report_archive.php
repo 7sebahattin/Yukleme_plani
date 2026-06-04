@@ -87,7 +87,10 @@ render_flash();
 </div>
 
 <?php if ($fetch_err !== null): ?>
-<div class="empty"><p class="muted">Rapor arşivi yüklenemedi. Tablo henüz oluşturulmamış olabilir.</p></div>
+<div class="empty">
+    <p class="muted">Rapor arşiv tabloları henüz oluşturulmadı.</p>
+    <p class="muted" style="font-size:.85rem">Sayfayı yenileyip tekrar deneyin. Sorun devam ederse sistem yöneticisine bildirin.</p>
+</div>
 <?php elseif (empty($reports)): ?>
 <div class="empty"><p>Henüz arşivlenmiş rapor yok.</p>
     <a href="reports.php?type=gunluk" class="btn btn-primary btn-sm">Günlük Rapor'a git</a>

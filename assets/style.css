@@ -2837,6 +2837,9 @@ body.notes-modal-open { overflow: hidden; }
     .rpt-filter-group select { font-size: 16px; min-width: 100px; }
     .rpt-summary { gap: 6px; }
     .rpt-sum-item { padding: 8px 10px; min-width: 80px; }
+    /* Aksiyon butonları mobilde sıkışmasın — tam satır genişliği, kaydırılabilir */
+    .rpt-actions { flex-shrink: 1; width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+    .rpt-head { flex-direction: column; align-items: flex-start; }
 }
 
 @media print {
