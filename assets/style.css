@@ -1512,21 +1512,21 @@ body.print-mode .asya-sheet {
         background: #f6f6f6 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .asya-info th { font-size: 7pt; padding: 0px 4px; }
-    .asya-info td { font-size: 7.5pt; padding: 0px 4px; min-height: 11px; }
-    .asya-pallets th { font-size: 6.5pt; padding: 1px; }
-    .asya-pallets td { height: 11px; padding: 0px 2px; font-size: 7pt; line-height: 1; text-align: center !important; }
-    .asya-pallets td.small { font-size: 6.5pt; }
-    .asya-stok { font-size: 6.5pt; }
-    .asya-stok .stok-name { font-size: 6.5pt; padding: 0px 3px; }
-    .asya-stok .stok-val { height: 10px; font-size: 6.5pt; padding: 0px 2px; }
-    .asya-stok tr.stok-filler td { height: 11px; padding: 0; }
-    .asya-totals th { font-size: 7.5pt; padding: 0px 3px; height: 11px; font-weight: 700; }
-    .asya-totals td { font-size: 8pt; padding: 0px 3px; height: 11px; font-weight: 600; }
-    .asya-totals .urun-banner { font-size: 7pt; padding: 1px 0; font-weight: 700; height: 20px; min-height: 20px; box-sizing: border-box; }
+    .asya-info th { font-size: 7.5pt; padding: 0px 4px; }
+    .asya-info td { font-size: 8pt; padding: 0px 4px; min-height: 11px; }
+    .asya-pallets th { font-size: 7.5pt; padding: 1px; }
+    .asya-pallets td { height: 12px; padding: 0px 2px; font-size: 8pt; line-height: 1.2; text-align: center !important; }
+    .asya-pallets td.small { font-size: 7.5pt; word-break: normal; overflow-wrap: normal; }
+    .asya-stok { font-size: 7.5pt; }
+    .asya-stok .stok-name { font-size: 7pt; padding: 0px 3px; font-weight: 700; }
+    .asya-stok .stok-val { height: 11px; font-size: 7.5pt; padding: 0px 2px; font-weight: 600; }
+    .asya-stok tr.stok-filler td { height: 12px; padding: 0; }
+    .asya-totals th { font-size: 8.5pt; padding: 0px 3px; height: 13px; font-weight: 700; }
+    .asya-totals td { font-size: 9.5pt; padding: 0px 3px; height: 13px; font-weight: 700; }
+    .asya-totals .urun-banner { font-size: 7.5pt; padding: 1px 0; font-weight: 700; height: 20px; min-height: 20px; box-sizing: border-box; }
     .asya-totals .urun-banner-empty { /* aynı yükseklik, fazladan stil yok */ }
-    .asya-bottom th { font-size: 6pt; padding: 1px; }
-    .asya-bottom td { height: 12px; padding: 0px 3px; font-size: 6.5pt; }
+    .asya-bottom th { font-size: 7pt; padding: 1px; }
+    .asya-bottom td { height: 13px; padding: 0px 3px; font-size: 7pt; }
     .asya-brand { font-size: 10pt; padding: 1px; }
     .etiket-label { font-size: 12pt; padding: 8px 0; }
     .etiket-content { font-size: 7pt; }
