@@ -390,7 +390,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
         $kp = [];
         if ($f_firma       !== '') { $kw[] = "kf.firma_adi = ?"; $kp[] = $f_firma; }
-        if ($f_kantar_firma !== '') { $kw[] = "EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?)"; $kp[] = $f_kantar_firma; }
+        if ($f_kantar_firma !== '') { $kw[] = "(EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?) OR NOT EXISTS (SELECT 1 FROM kantar_gruplar _kg2 WHERE _kg2.fis_id=kf.id))"; $kp[] = $f_kantar_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
         $st = db()->prepare("SELECT kf.*,
