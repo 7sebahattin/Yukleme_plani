@@ -1027,6 +1027,20 @@ render_flash();
                 📋 X Raporu Al
             </button>
         </form>
+        <form method="post" action="daily_report_create.php" style="display:contents">
+            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="report_type"   value="Z">
+            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+            <input type="hidden" name="palet_islendi" value="hicbiri">
+            <button type="submit" class="btn btn-sm btn-success"
+                    onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
+                🔒 Z Raporu Al ve Kapat
+            </button>
+        </form>
     </div>
 </div>
 

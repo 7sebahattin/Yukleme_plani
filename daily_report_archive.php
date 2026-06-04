@@ -138,7 +138,7 @@ render_flash();
     <tr>
         <td><?= h($date_disp) ?></td>
         <td><strong>#<?= (int)$r['id'] ?></strong></td>
-        <td><span class="dr-type-badge dr-type-<?= h(strtolower($r['report_type'])) ?>"><?= h($r['report_type']) ?></span></td>
+        <td><span class="dr-type-badge dr-type-<?= h(strtolower($r['report_type'])) ?>"><?= $r['report_type'] === 'Z' ? '🔒 Z' : h($r['report_type']) ?></span></td>
         <td><?= h($r['user_name'] ?: ('Kullanıcı #' . ($r['created_by'] ?? '?'))) ?></td>
         <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
         <td class="num"><?= isset($snap['kantar_count'])        ? (int)$snap['kantar_count']        : '—' ?></td>
@@ -175,7 +175,7 @@ render_flash();
 <div class="record-card">
     <div class="record-card-head">
         <div>
-            <strong>#<?= (int)$r['id'] ?> &nbsp;<span class="dr-type-badge dr-type-<?= h(strtolower($r['report_type'])) ?>"><?= h($r['report_type']) ?></span></strong>
+            <strong>#<?= (int)$r['id'] ?> &nbsp;<span class="dr-type-badge dr-type-<?= h(strtolower($r['report_type'])) ?>"><?= $r['report_type'] === 'Z' ? '🔒 Z' : h($r['report_type']) ?></span></strong>
             <div class="muted"><?= h($date_disp) ?> · <?= h(fmt_datetime($r['created_at'])) ?></div>
         </div>
     </div>

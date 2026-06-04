@@ -227,9 +227,12 @@ render_flash();
 <!-- Meta bilgi -->
 <div class="drv-meta">
     <div><span>Rapor No: </span><strong>#<?= $id ?></strong></div>
-    <div><span>Tip: </span><strong><?= h($report['report_type']) ?></strong></div>
+    <div><span>Tip: </span><strong><?= $report['report_type'] === 'Z' ? '🔒 Z (Kapalı)' : 'X (Snapshot)' ?></strong></div>
     <div><span>Oluşturan: </span><strong><?= h($report['user_name'] ?: ('Kullanıcı #' . ($report['created_by'] ?? '?'))) ?></strong></div>
     <div><span>Oluşturma: </span><strong><?= h(fmt_datetime($report['created_at'])) ?></strong></div>
+    <?php if (!empty($report['closed_at'])): ?>
+    <div><span>Kapanış: </span><strong style="color:#059669"><?= h(fmt_datetime($report['closed_at'])) ?></strong></div>
+    <?php endif; ?>
     <div><span>Durum: </span><strong><?= h($report['status'] ?? 'final') ?></strong></div>
 </div>
 
