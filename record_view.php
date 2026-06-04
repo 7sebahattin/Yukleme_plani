@@ -898,7 +898,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <div class="bm-tabs">
       <button type="button" class="bm-tab-btn active" data-tab="single">Malzeme Ekle</button>
       <button type="button" class="bm-tab-btn" data-tab="tpl">Şablonlar</button>
-      <button type="button" class="bm-tab-btn" data-tab="remove">Eklenenleri Sil<?= !empty($extra_materials) ? ' (' . count($extra_materials) . ')' : '' ?></button>
+      <button type="button" class="bm-tab-btn" data-tab="remove">Eklenenleri Sil<span id="bmRmCount"><?= !empty($extra_materials) ? ' (' . count($extra_materials) . ')' : '' ?></span></button>
     </div>
 
     <div class="pm-body">
@@ -959,29 +959,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         </div>
       </div>
 
-      <!-- ── Eklenenleri Sil paneli ── -->
+      <!-- ── Eklenenleri Sil paneli — JS tarafından accordion olarak doldurulur ── -->
       <div class="bm-panel" id="bmPanelRemove" hidden>
-        <?php if (empty($extra_materials)): ?>
-          <div class="bm-tpl-empty">Bu kayda eklenmiş giydirme/sarf malzeme yok.</div>
-        <?php else: ?>
-          <div class="bm-rm-head">
-            <label class="bm-check-label"><input type="checkbox" id="bmRmAll"> <strong>Tümünü Seç</strong></label>
-            <span class="muted">Kasa cinsi ve palet tipi silinmez.</span>
-          </div>
-          <div class="bm-rm-list">
-            <?php foreach ($extra_materials as $em): ?>
-            <label class="bm-check-label bm-rm-item">
-              <input type="checkbox" class="bm-rm-cb" value="<?= (int)$em['pm_id'] ?>">
-              <span class="bm-rm-name"><?= h($em['name']) ?></span>
-              <span class="muted"><?= h($em['type']) ?> · Palet <?= h($em['palet_no'] !== '' ? $em['palet_no'] : '—') ?> · <?= h(rtrim(rtrim(number_format($em['qty'], 3, ',', '.'), '0'), ',')) ?> adet<?= $em['depo'] !== '' ? ' · ' . h($em['depo']) : '' ?></span>
-            </label>
-            <?php endforeach; ?>
-          </div>
-          <div class="bm-rm-actions">
-            <button type="button" class="btn btn-sm btn-danger" id="bmRmSelected">Seçilenleri Sil</button>
-            <button type="button" class="btn btn-sm btn-ghost" id="bmRmAllBtn">Tüm Giydirme Malzemelerini Kaldır</button>
-          </div>
-        <?php endif; ?>
+        <div id="bmRmAccordion"></div>
         <p id="bmRmStatus" class="bm-status"></p>
       </div>
 
@@ -1074,6 +1054,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             if (palHead) palHead.style.display = showPal ? '' : 'none';
             if (palList) palList.style.display = showPal ? '' : 'none';
             if (activeTab === 'tpl') loadTemplates();
+            if (activeTab === 'remove') loadExtraMaterials();
         });
     });
 
@@ -1082,8 +1063,8 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         overlay.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         statusEl.textContent = '';
-        // Şablonlar aktifse yükle
         if (activeTab === 'tpl') loadTemplates();
+        if (activeTab === 'remove') loadExtraMaterials();
     }
     function closeModal() {
         overlay.style.display = 'none';
@@ -1148,12 +1129,12 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            if (triggerBtn) triggerBtn.disabled = false;
             if (data.ok) {
-                statusEl.textContent = '✓ ' + data.updated + ' palete eklendi. Sayfa yenileniyor…';
+                statusEl.textContent = '✓ ' + data.updated + ' palete eklendi.';
                 statusEl.style.color = 'var(--success)';
-                setTimeout(function() { location.reload(); }, 900);
+                loadExtraMaterials();
             } else {
-                if (triggerBtn) triggerBtn.disabled = false;
                 statusEl.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata');
                 statusEl.style.color = 'var(--danger)';
             }
@@ -1375,7 +1356,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         });
     }
 
-    /* ── Malzeme sil ── */
+    /* ── Malzeme sil (palet görünümündeki bireysel butonlar) ── */
     document.querySelectorAll('.vc-mat-del').forEach(function(btn) {
         btn.addEventListener('click', function() {
             if (!confirm('Bu malzemeyi paletden silmek istediğinizden emin misiniz?')) return;
@@ -1394,14 +1375,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         });
     });
 
-    /* ── Eklenenleri Sil (toplu) ── */
-    var rmAll    = document.getElementById('bmRmAll');
+    /* ── Eklenenleri Sil — accordion tabanlı ── */
     var rmStatus = document.getElementById('bmRmStatus');
-    if (rmAll) {
-        rmAll.addEventListener('change', function() {
-            document.querySelectorAll('.bm-rm-cb').forEach(function(cb) { cb.checked = rmAll.checked; });
-        });
-    }
+
     function bmRemove(payload, btn, confirmMsg) {
         if (confirmMsg && !confirm(confirmMsg)) return;
         if (btn) btn.disabled = true;
@@ -1413,11 +1389,11 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            if (btn) btn.disabled = false;
             if (data.ok) {
-                if (rmStatus) { rmStatus.textContent = '✓ ' + data.deleted + ' malzeme silindi. Yenileniyor…'; rmStatus.style.color = 'var(--success)'; }
-                setTimeout(function() { location.reload(); }, 800);
+                if (rmStatus) { rmStatus.textContent = '✓ ' + data.deleted + ' malzeme silindi.'; rmStatus.style.color = 'var(--success)'; }
+                loadExtraMaterials();
             } else {
-                if (btn) btn.disabled = false;
                 if (rmStatus) { rmStatus.textContent = 'Hata: ' + (data.error || 'Bilinmeyen hata'); rmStatus.style.color = 'var(--danger)'; }
             }
         })
@@ -1426,18 +1402,122 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             if (rmStatus) { rmStatus.textContent = 'Bağlantı hatası.'; rmStatus.style.color = 'var(--danger)'; }
         });
     }
-    var rmSelBtn = document.getElementById('bmRmSelected');
-    if (rmSelBtn) rmSelBtn.addEventListener('click', function() {
-        var ids = [];
-        document.querySelectorAll('.bm-rm-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
-        if (!ids.length) { alert('Silinecek malzeme seçiniz.'); return; }
-        bmRemove({action: 'delete_selected_materials', pm_ids: ids}, rmSelBtn, ids.length + ' malzeme silinsin mi?');
-    });
-    var rmAllBtn = document.getElementById('bmRmAllBtn');
-    if (rmAllBtn) rmAllBtn.addEventListener('click', function() {
-        bmRemove({action: 'delete_all_extra_materials'}, rmAllBtn,
-            'Bu kayda eklenmiş TÜM giydirme/sarf malzemeleri kaldırılsın mı? (Kasa/palet bilgileri korunur.)');
-    });
+
+    function updateRemoveTabCount(total) {
+        var el = document.getElementById('bmRmCount');
+        if (el) el.textContent = total > 0 ? ' (' + total + ')' : '';
+    }
+
+    function renderAccordion(groups) {
+        var accordion = document.getElementById('bmRmAccordion');
+        if (!accordion) return;
+        accordion.innerHTML = '';
+
+        var allWrap = document.createElement('div');
+        allWrap.className = 'bm-rm-all-wrap';
+        var allBtn = document.createElement('button');
+        allBtn.type = 'button'; allBtn.className = 'btn btn-sm btn-ghost';
+        allBtn.textContent = 'Tüm Giydirme Malzemelerini Kaldır';
+        allBtn.addEventListener('click', function() {
+            bmRemove({action: 'delete_all_extra_materials'}, allBtn,
+                'Bu kayda eklenmiş TÜM giydirme/sarf malzemeleri kaldırılsın mı? (Kasa/palet bilgileri korunur.)');
+        });
+        allWrap.appendChild(allBtn);
+        accordion.appendChild(allWrap);
+
+        groups.forEach(function(group) {
+            var item = document.createElement('div');
+            item.className = 'bm-acc-item';
+
+            var header = document.createElement('div');
+            header.className = 'bm-acc-header';
+            var arrow = document.createElement('span');
+            arrow.className = 'bm-acc-arrow'; arrow.textContent = '▸';
+            var nameEl = document.createElement('span');
+            nameEl.className = 'bm-acc-name'; nameEl.textContent = group.material_name;
+            var metaEl = document.createElement('span');
+            metaEl.className = 'bm-acc-meta muted';
+            metaEl.textContent = group.pallet_count + ' palete · toplam ' + fmtN(group.total_quantity) + ' adet';
+            header.appendChild(arrow); header.appendChild(nameEl); header.appendChild(metaEl);
+
+            var body = document.createElement('div');
+            body.className = 'bm-acc-body'; body.hidden = true;
+
+            var palletList = document.createElement('div');
+            palletList.className = 'bm-acc-pallets';
+            group.pallets.forEach(function(pallet) {
+                var lbl = document.createElement('label');
+                lbl.className = 'bm-check-label';
+                var cb = document.createElement('input');
+                cb.type = 'checkbox'; cb.className = 'bm-acc-pallet-cb'; cb.value = pallet.pm_id;
+                var sp1 = document.createElement('span');
+                sp1.textContent = 'Palet ' + pallet.pallet_no;
+                var sp2 = document.createElement('span');
+                sp2.className = 'muted'; sp2.textContent = fmtN(pallet.quantity) + ' adet';
+                lbl.appendChild(cb); lbl.appendChild(sp1); lbl.appendChild(sp2);
+                palletList.appendChild(lbl);
+            });
+
+            var actions = document.createElement('div');
+            actions.className = 'bm-acc-actions';
+
+            var selBtn = document.createElement('button');
+            selBtn.type = 'button'; selBtn.className = 'btn btn-sm btn-danger';
+            selBtn.textContent = 'Seçilenleri Sil';
+            (function(g, b, bl) {
+                b.addEventListener('click', function() {
+                    var ids = [];
+                    bl.querySelectorAll('.bm-acc-pallet-cb:checked').forEach(function(cb) { ids.push(parseInt(cb.value)); });
+                    if (!ids.length) { alert('Silinecek palet seçiniz.'); return; }
+                    bmRemove({action: 'delete_selected_materials', pm_ids: ids}, b, ids.length + ' malzeme kaydı silinsin mi?');
+                });
+            })(group, selBtn, body);
+
+            var allMatBtn = document.createElement('button');
+            allMatBtn.type = 'button'; allMatBtn.className = 'btn btn-sm btn-ghost';
+            allMatBtn.textContent = 'Bu Malzemeyi Tüm Paletlerden Sil';
+            (function(g, b) {
+                b.addEventListener('click', function() {
+                    bmRemove({action: 'delete_material_all_pallets', material_id: g.material_id}, b,
+                        '"' + g.material_name + '" tüm paletlerden silinsin mi?');
+                });
+            })(group, allMatBtn);
+
+            actions.appendChild(selBtn); actions.appendChild(allMatBtn);
+            body.appendChild(palletList); body.appendChild(actions);
+
+            header.addEventListener('click', function() {
+                var open = !body.hidden;
+                body.hidden = open;
+                arrow.textContent = open ? '▸' : '▾';
+            });
+
+            item.appendChild(header); item.appendChild(body);
+            accordion.appendChild(item);
+        });
+    }
+
+    function loadExtraMaterials() {
+        var accordion = document.getElementById('bmRmAccordion');
+        if (!accordion) return;
+        accordion.innerHTML = '<div class="bm-tpl-empty">Yükleniyor…</div>';
+        fetch('api_bulk_material.php?record_id=' + REC_ID)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.ok) { accordion.innerHTML = '<div class="bm-tpl-empty">Yüklenemedi.</div>'; return; }
+            if (!data.groups || !data.groups.length) {
+                accordion.innerHTML = '<div class="bm-tpl-empty">Bu kayda eklenmiş giydirme/sarf malzeme yok.</div>';
+                updateRemoveTabCount(0);
+                return;
+            }
+            renderAccordion(data.groups);
+            var total = data.groups.reduce(function(s, g) { return s + g.pallet_count; }, 0);
+            updateRemoveTabCount(total);
+        })
+        .catch(function() {
+            accordion.innerHTML = '<div class="bm-tpl-empty">Yüklenemedi.</div>';
+        });
+    }
 })();
 </script>
 <?php endif; ?>
