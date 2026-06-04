@@ -1012,6 +1012,21 @@ render_flash();
         ?>
         <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
+        <a href="daily_report_archive.php" class="btn btn-sm">📁 Arşiv</a>
+        <form method="post" action="daily_report_create.php" style="display:inline">
+            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="report_type"   value="X">
+            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+            <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
+            <button type="submit" class="btn btn-sm btn-primary"
+                    onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
+                📋 X Raporu Al
+            </button>
+        </form>
     </div>
 </div>
 
