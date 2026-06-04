@@ -24,7 +24,8 @@ $f_plaka   = trim($_GET['plaka']     ?? '');
 $f_mtype   = trim($_GET['mat_type']  ?? '');
 $f_q       = trim($_GET['q']         ?? '');
 $f_sort    = trim($_GET['sort']      ?? 'tarih');
-$f_palet_islendi = trim($_GET['palet_islendi'] ?? '');
+$f_palet_islendi  = trim($_GET['palet_islendi']  ?? '');
+$f_kantar_firma   = trim($_GET['kantar_firma']  ?? '');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
@@ -388,7 +389,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $kw = ["1=1"];
         if ($rep_col_exists) { $kw[] = "kf.reported_at IS NULL"; }
         $kp = [];
-        if ($f_firma !== '') { $kw[] = "(kf.firma_adi = ? OR EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?))"; $kp[] = $f_firma; $kp[] = $f_firma; }
+        if ($f_firma       !== '') { $kw[] = "kf.firma_adi = ?"; $kp[] = $f_firma; }
+        if ($f_kantar_firma !== '') { $kw[] = "EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?)"; $kp[] = $f_kantar_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
         $st = db()->prepare("SELECT kf.*,
@@ -575,19 +577,40 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         fputcsv($gl_fp, ['--- KANTAR GİRİŞLERİ ---'], ';');
         fputcsv($gl_fp, ['Tarih','Fiş No','Firma','Malın Cinsi','Plaka','Brüt KG','Dara KG','Net KG','Kasa','Palet'], ';');
         foreach ($gk_rows as $_gkr) {
-            $_kc2 = kantar_calc($_gkr);
-            fputcsv($gl_fp, [
-                $_gkr['giris_tarih'] ?? '',
-                $_gkr['fis_no']      ?? '',
-                $_gkr['firma_adi']   ?? '',
-                $_gkr['malin_cinsi'] ?? '',
-                $_gkr['plaka']       ?? '',
-                str_replace('.', ',', number_format($_kc2['brut'], 3, '.', '')),
-                str_replace('.', ',', number_format($_kc2['dara'], 3, '.', '')),
-                str_replace('.', ',', number_format($_kc2['net'],  3, '.', '')),
-                (int)$_gkr['kasa_sayisi'],
-                (int)$_gkr['palet_sayisi'],
-            ], ';');
+            $_kc2  = kantar_calc($_gkr);
+            $_fid2 = (int)$_gkr['id'];
+            $_grps2 = $gk_gruplar[$_fid2] ?? [];
+            if ($f_kantar_firma !== '' && !empty($_grps2)) {
+                $_dist2 = kantar_grup_dist($_grps2, $_kc2['brut'], $_kc2['eff_kdu'], $_kc2['eff_pdu']);
+                foreach ($_dist2 as $_dr2) {
+                    if (mb_strtolower(trim((string)($_dr2['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_kantar_firma), 'UTF-8')) continue;
+                    fputcsv($gl_fp, [
+                        $_gkr['giris_tarih'] ?? '',
+                        $_gkr['fis_no']      ?? '',
+                        $_dr2['firma'],
+                        $_gkr['malin_cinsi'] ?? '',
+                        $_gkr['plaka']       ?? '',
+                        str_replace('.', ',', number_format($_dr2['brut_kg'], 3, '.', '')),
+                        str_replace('.', ',', number_format($_dr2['dara_kg'], 3, '.', '')),
+                        str_replace('.', ',', number_format($_dr2['net_kg'],  3, '.', '')),
+                        (int)$_dr2['kasa'],
+                        (int)$_dr2['palet'],
+                    ], ';');
+                }
+            } else {
+                fputcsv($gl_fp, [
+                    $_gkr['giris_tarih'] ?? '',
+                    $_gkr['fis_no']      ?? '',
+                    $_gkr['firma_adi']   ?? '',
+                    $_gkr['malin_cinsi'] ?? '',
+                    $_gkr['plaka']       ?? '',
+                    str_replace('.', ',', number_format($_kc2['brut'], 3, '.', '')),
+                    str_replace('.', ',', number_format($_kc2['dara'], 3, '.', '')),
+                    str_replace('.', ',', number_format($_kc2['net'],  3, '.', '')),
+                    (int)$_gkr['kasa_sayisi'],
+                    (int)$_gkr['palet_sayisi'],
+                ], ';');
+            }
         }
         fputcsv($gl_fp, [], ';');
         // YÜKLEME
@@ -814,11 +837,9 @@ $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ($type === 'gunluk' ? '' : ' Raporu') : 'Raporlar';
-$_frm_lr = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
-$_frm_kg = [];
-try { $_frm_kg = db()->query("SELECT DISTINCT grup_adi FROM kantar_gruplar WHERE grup_adi!='' ORDER BY grup_adi LIMIT 200")->fetchAll(PDO::FETCH_COLUMN); } catch (PDOException $_fke) {}
-$filter_firma_list = array_values(array_unique(array_merge($_frm_lr, $_frm_kg)));
-sort($filter_firma_list);
+$filter_firma_list = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
+$filter_kantar_firma_list = [];
+try { $filter_kantar_firma_list = db()->query("SELECT DISTINCT grup_adi FROM kantar_gruplar WHERE grup_adi!='' ORDER BY grup_adi LIMIT 200")->fetchAll(PDO::FETCH_COLUMN); } catch (PDOException $_kfl) {}
 $filter_urun_list     = db()->query("SELECT DISTINCT urun  FROM loading_records WHERE urun !='' ORDER BY urun  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_bolge_list    = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_depo_list     = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
@@ -1032,7 +1053,7 @@ render_flash();
         <?php
         $gl_csv_params = array_filter(['type'=>'gunluk','export'=>'csv',
             'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun,
-            'palet_islendi'=>$f_palet_islendi]);
+            'palet_islendi'=>$f_palet_islendi,'kantar_firma'=>$f_kantar_firma]);
         $gl_csv_url = 'reports.php?' . http_build_query($gl_csv_params);
         ?>
         <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
@@ -1047,6 +1068,7 @@ render_flash();
             <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
             <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
             <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
+            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
             <button type="submit" class="btn btn-sm btn-primary"
                     onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
                 📋 X Raporu Al
@@ -1061,6 +1083,7 @@ render_flash();
             <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
             <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
             <input type="hidden" name="palet_islendi" value="hicbiri">
+            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
             <button type="submit" class="btn btn-sm btn-success"
                     onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
                 🔒 Z Raporu Al ve Kapat
@@ -1109,6 +1132,16 @@ render_flash();
                 <option value="isaretli" <?= $f_palet_islendi==='isaretli'  ?'selected':'' ?>>Raporlandı</option>
             </select>
         </label>
+        <?php if (!empty($filter_kantar_firma_list)): ?>
+        <label>Kantar Grubu
+            <select name="kantar_firma">
+                <option value="">-- Tümü --</option>
+                <?php foreach ($filter_kantar_firma_list as $_kgf): ?>
+                <option value="<?= h($_kgf) ?>" <?= $f_kantar_firma===$_kgf?'selected':'' ?>><?= h($_kgf) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php endif; ?>
     </div>
     <div class="rpt-filter-actions">
         <button class="btn btn-primary btn-sm">Filtrele</button>
@@ -1136,11 +1169,11 @@ render_flash();
             $_kc   = kantar_calc($_gkr);
             $_fid  = (int)$_gkr['id'];
             $_grps = $gk_gruplar[$_fid] ?? [];
-            if ($f_firma !== '' && !empty($_grps)):
-                // Firma filtresi aktif ve fiş grupları var → dağıtılmış gruba göre göster
+            if ($f_kantar_firma !== '' && !empty($_grps)):
+                // Kantar grubu filtresi aktif → dağıtılmış gruba göre göster
                 $_dist = kantar_grup_dist($_grps, $_kc['brut'], $_kc['eff_kdu'], $_kc['eff_pdu']);
                 foreach ($_dist as $_dr):
-                    if (mb_strtolower(trim((string)($_dr['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_firma), 'UTF-8')) continue;
+                    if (mb_strtolower(trim((string)($_dr['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_kantar_firma), 'UTF-8')) continue;
                     $_gk_tot_brut  += $_dr['brut_kg'];
                     $_gk_tot_net   += $_dr['net_kg'];
                     $_gk_tot_kasa  += (int)$_dr['kasa'];
