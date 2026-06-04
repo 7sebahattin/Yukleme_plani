@@ -183,6 +183,9 @@ render_flash();
 .drv-mob-total-card .t-item span { font-size:.72rem; color:var(--text-muted,#666); }
 .drv-mob-total-card .t-item strong { font-size:.9rem; font-variant-numeric:tabular-nums; }
 
+/* Print-only düz tablo (ekranda gizli) */
+.drv-yukleme-print { display:none; }
+
 /* Çıkma nedeni badge */
 .drv-cikma-neden {
     display:inline-block; padding:1px 8px; border-radius:12px;
@@ -201,6 +204,8 @@ render_flash();
     .drv-record-pallets { display:block !important; max-height:none !important; }
     .drv-record-group { break-inside:avoid; }
     .drv-section { break-inside:avoid; margin-bottom:10px; }
+    .drv-yukleme-screen { display:none !important; }
+    .drv-yukleme-print  { display:block !important; }
     .drv-section-title { font-size:10.5pt; font-weight:700; border-bottom:1.5px solid #333 !important; padding-bottom:3px; margin-bottom:6px; }
     .drv-meta { font-size:8pt; gap:4px 14px; margin:3px 0 7px; }
     .drv-totals-bar { border:1px solid #ccc !important; font-size:8pt; padding:5px 10px; gap:5px 14px; margin-bottom:6px; }
@@ -300,15 +305,17 @@ $chip_parts[] = 'Palet: ' . $pi_label;
 
 <?php
 // ── Kantar toplamları önceden hesapla (mobil/PC paylaşılır) ──
-$k_brut_total = 0.0; $k_dara_total = 0.0; $k_net_total = 0.0; $k_kasa_total = 0;
+$k_brut_total = 0.0; $k_dara_total = 0.0; $k_net_total = 0.0; $k_kasa_total = 0; $k_palet_total = 0;
 foreach ($kantar_items as $_ki) {
-    $k_brut_total += (float)($_ki['brut_kg']   ?? 0);
-    $k_dara_total += (float)($_ki['dara_kg']   ?? 0);
-    $k_net_total  += (float)($_ki['net_kg']    ?? 0);
-    $k_kasa_total += (int)($_ki['kasa_sayisi'] ?? 0);
+    $k_brut_total  += (float)($_ki['brut_kg']    ?? 0);
+    $k_dara_total  += (float)($_ki['dara_kg']    ?? 0);
+    $k_net_total   += (float)($_ki['net_kg']     ?? 0);
+    $k_kasa_total  += (int)($_ki['kasa_sayisi']  ?? 0);
+    $k_palet_total += (int)($_ki['palet_sayisi'] ?? 0);
 }
 // ── Yükleme toplamları ──
-$m_brut_total = 0.0; $m_dara_total = 0.0; $m_net_total = 0.0; $m_kasa_total = 0;
+$m_brut_total  = 0.0; $m_dara_total = 0.0; $m_net_total = 0.0; $m_kasa_total = 0;
+$m_palet_total = (int)array_sum(array_column($palet_items, 'palet_sayisi'));
 foreach ($palet_items as $_rec) {
     $m_brut_total += $_rec['toplam_brut'];
     $m_dara_total += $_rec['toplam_dara'];
@@ -346,10 +353,11 @@ foreach ($cikma_items as $_ci) {
             <th>Mal Cinsi</th>
             <th>Plaka</th>
             <th>Depo</th>
+            <th class="num">Palet</th>
+            <th class="num">Kasa</th>
             <th class="num">Brüt KG</th>
             <th class="num">Dara KG</th>
             <th class="num">Net KG</th>
-            <th class="num">Kasa</th>
         </tr></thead>
         <tbody>
         <?php foreach ($kantar_items as $ki): ?>
@@ -360,19 +368,21 @@ foreach ($cikma_items as $_ci) {
             <td><?= h($ki['malin_cinsi'] ?? '—') ?></td>
             <td><?= h($ki['plaka'] ?? '—') ?></td>
             <td><?= h($ki['depo'] ?? '—') ?></td>
+            <td class="num"><?= (int)($ki['palet_sayisi'] ?? 0) ?: '—' ?></td>
+            <td class="num"><?= (int)($ki['kasa_sayisi']  ?? 0) ?: '—' ?></td>
             <td class="num"><?= fmt_kg((float)($ki['brut_kg'] ?? 0)) ?></td>
             <td class="num"><?= fmt_kg((float)($ki['dara_kg'] ?? 0)) ?></td>
             <td class="num"><strong><?= fmt_kg((float)($ki['net_kg'] ?? 0)) ?></strong></td>
-            <td class="num"><?= (int)($ki['kasa_sayisi'] ?? 0) ?: '—' ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr>
             <td colspan="6"><strong>Toplam</strong></td>
+            <td class="num"><strong><?= $k_palet_total ?: '—' ?></strong></td>
+            <td class="num"><strong><?= $k_kasa_total  ?: '—' ?></strong></td>
             <td class="num"><strong><?= fmt_kg($k_brut_total) ?></strong></td>
             <td class="num"><strong><?= fmt_kg($k_dara_total) ?></strong></td>
-            <td class="num"><strong><?= fmt_kg($k_net_total) ?></strong></td>
-            <td class="num"><strong><?= $k_kasa_total ?: '—' ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($k_net_total)  ?></strong></td>
         </tr></tfoot>
     </table>
     </div>
@@ -429,8 +439,9 @@ foreach ($cikma_items as $_ci) {
         <p class="drv-empty">İşlem yok</p>
     <?php else: ?>
 
-    <!-- PC: accordion gruplar -->
+    <!-- PC: accordion gruplar (ekran görünümü) -->
     <div class="pc-only">
+    <div class="drv-yukleme-screen">
     <?php foreach ($palet_items as $rec): ?>
     <div class="drv-record-group">
         <div class="drv-record-head" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none'">
@@ -478,11 +489,55 @@ foreach ($cikma_items as $_ci) {
     </div>
     <?php endforeach; ?>
     <div class="drv-totals-bar" style="margin-top:8px;">
+        <div class="t-item"><span>Toplam Palet</span><strong><?= $m_palet_total ?></strong></div>
         <div class="t-item"><span>Toplam Kasa</span><strong><?= $m_kasa_total ?: '—' ?></strong></div>
         <div class="t-item"><span>Toplam Brüt</span><strong><?= fmt_kg($m_brut_total) ?></strong></div>
         <div class="t-item"><span>Toplam Dara</span><strong><?= fmt_kg($m_dara_total) ?></strong></div>
         <div class="t-item"><span>Toplam Net</span><strong><?= fmt_kg($m_net_total) ?></strong></div>
     </div>
+    </div><!-- /drv-yukleme-screen -->
+
+    <!-- Print: kayıt bazında düz tablo (Tarih/Durum yok) -->
+    <div class="table-wrap drv-yukleme-print">
+    <table class="data-table">
+        <thead><tr>
+            <th>Firma</th>
+            <th>Bölge</th>
+            <th>Alıcı</th>
+            <th>Depo</th>
+            <th>Ürün</th>
+            <th class="num">Palet</th>
+            <th class="num">Kasa</th>
+            <th class="num">Brüt KG</th>
+            <th class="num">Dara KG</th>
+            <th class="num">Net KG</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($palet_items as $rec): ?>
+        <tr>
+            <td><?= h($rec['firma'] ?? '—') ?></td>
+            <td><?= h($rec['bolge'] ?? '') ?: '—' ?></td>
+            <td><?= h($rec['alici'] ?? '') ?: '—' ?></td>
+            <td><?= h($rec['depo']  ?? '') ?: '—' ?></td>
+            <td><?= h($rec['urun']  ?? '—') ?></td>
+            <td class="num"><?= $rec['palet_sayisi'] ?></td>
+            <td class="num"><?= $rec['toplam_kasa'] ?: '—' ?></td>
+            <td class="num"><?= fmt_kg($rec['toplam_brut']) ?></td>
+            <td class="num"><?= fmt_kg($rec['toplam_dara']) ?></td>
+            <td class="num"><strong><?= fmt_kg($rec['toplam_net']) ?></strong></td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+        <tfoot><tr>
+            <td colspan="5"><strong>Toplam</strong></td>
+            <td class="num"><strong><?= $m_palet_total ?></strong></td>
+            <td class="num"><strong><?= $m_kasa_total ?: '—' ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($m_brut_total) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($m_dara_total) ?></strong></td>
+            <td class="num"><strong><?= fmt_kg($m_net_total) ?></strong></td>
+        </tr></tfoot>
+    </table>
+    </div><!-- /drv-yukleme-print -->
     </div><!-- /pc-only -->
 
     <!-- Mobil: kart liste -->
