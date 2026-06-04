@@ -1512,27 +1512,30 @@ body.print-mode .asya-sheet {
         background: #f6f6f6 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .asya-info th { font-size: 7.5pt; padding: 0px 4px; }
-    .asya-info td { font-size: 8pt; padding: 0px 4px; min-height: 11px; }
+    .asya-info th { font-size: 8.5pt; padding: 0px 4px; }
+    .asya-info td { font-size: 9pt; padding: 0px 4px; min-height: 11px; }
     .asya-pallets th { font-size: 7.5pt; padding: 1px; }
     .asya-pallets td { height: 12px; padding: 0px 2px; font-size: 8pt; line-height: 1.2; text-align: center !important; }
+    .asya-pallets td.num { font-size: 9pt; font-weight: 700; }
     .asya-pallets td.small { font-size: 7.5pt; word-break: normal; overflow-wrap: normal; }
-    .asya-stok { font-size: 7.5pt; }
-    .asya-stok .stok-name { font-size: 7pt; padding: 0px 3px; font-weight: 700; }
-    .asya-stok .stok-val { height: 11px; font-size: 7.5pt; padding: 0px 2px; font-weight: 600; }
+    .asya-stok { font-size: 8pt; }
+    .asya-stok .stok-name { font-size: 8pt; padding: 0px 3px; font-weight: 700; }
+    .asya-stok .stok-val { height: 11px; font-size: 8.5pt; padding: 0px 2px; font-weight: 700; }
     .asya-stok tr.stok-filler td { height: 12px; padding: 0; }
     .asya-totals th { font-size: 8.5pt; padding: 0px 3px; height: 13px; font-weight: 700; }
     .asya-totals td { font-size: 9.5pt; padding: 0px 3px; height: 13px; font-weight: 700; }
+    .asya-totals td.strong { font-size: 10.5pt; font-weight: 900; }
     .asya-totals .urun-banner { font-size: 7.5pt; padding: 1px 0; font-weight: 700; height: 20px; min-height: 20px; box-sizing: border-box; }
     .asya-totals .urun-banner-empty { /* aynı yükseklik, fazladan stil yok */ }
-    .asya-bottom th { font-size: 7pt; padding: 1px; }
-    .asya-bottom td { height: 13px; padding: 0px 3px; font-size: 7pt; }
+    .asya-bottom th { font-size: 8pt; padding: 1px; }
+    .asya-bottom td { height: 13px; padding: 0px 3px; font-size: 8pt; }
     .asya-brand { font-size: 10pt; padding: 1px; }
     .etiket-label { font-size: 12pt; padding: 8px 0; }
     .etiket-content { font-size: 7pt; }
     .asya-etiket { min-height: 50px; padding: 3px; }
     .cell-pair span, .marka-cell span { font-size: 6pt; }
     .cell-pair strong, .marka-cell strong { font-size: 7pt; }
+    .asya-alici-cell strong, .asya-urun-cell strong { font-size: 9pt; }
     .marka-cell strong { font-size: 6.5pt; }
     .asya-signatures {
         margin-top: 6px;
