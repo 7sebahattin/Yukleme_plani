@@ -89,7 +89,12 @@ render_flash();
 <?php if ($fetch_err !== null): ?>
 <div class="empty">
     <p class="muted">Rapor arşiv tabloları henüz oluşturulmadı.</p>
+    <?php if (function_exists('is_admin') && is_admin()): ?>
+    <p class="muted" style="font-size:.85rem">Onarım aracını çalıştırarak tabloları oluşturabilirsiniz.</p>
+    <a href="repair_xz_tables.php" class="btn btn-primary btn-sm">🔧 Onarım Aracını Aç</a>
+    <?php else: ?>
     <p class="muted" style="font-size:.85rem">Sayfayı yenileyip tekrar deneyin. Sorun devam ederse sistem yöneticisine bildirin.</p>
+    <?php endif; ?>
 </div>
 <?php elseif (empty($reports)): ?>
 <div class="empty"><p>Henüz arşivlenmiş rapor yok.</p>

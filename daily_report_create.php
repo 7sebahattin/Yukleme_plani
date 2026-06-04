@@ -21,7 +21,10 @@ try {
     db()->query("SELECT 1 FROM `daily_report_items` LIMIT 0");
 } catch (PDOException $_tbl_e) {
     error_log("[XZ] daily_reports/items tablo erişim hatası: " . $_tbl_e->getMessage());
-    set_flash('error', 'Rapor arşiv tabloları hazır değil. Lütfen sayfayı yenileyip tekrar deneyin veya sistem yöneticisine bildirin.');
+    $repair_hint = (function_exists('is_admin') && is_admin())
+        ? ' <a href="repair_xz_tables.php">Onarım aracını çalıştırın.</a>'
+        : ' Sistem yöneticisine bildirin.';
+    set_flash('error', 'Rapor arşiv tabloları hazır değil.' . $repair_hint);
     header('Location: reports.php?type=gunluk'); exit;
 }
 
