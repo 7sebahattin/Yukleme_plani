@@ -699,4 +699,7 @@ foreach ($cikma_items as $_ci) {
     <?php endif; ?>
 </div>
 
+<?php if ($print_mode): ?>
+<script>window.addEventListener('load', function(){ window.print(); });</script>
+<?php endif; ?>
 <?php render_footer(); ?>

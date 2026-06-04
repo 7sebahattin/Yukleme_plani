@@ -1342,6 +1342,18 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
         <a href="<?= h($csv_summary_url) ?>" class="btn btn-sm">⬇ Özet Excel</a>
         <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Detay Excel</a>
+        <?php if ($type === 'yukleme'): ?>
+        <?php
+        $_bulk_params = array_filter([
+            'date_from' => $f_from, 'date_to' => $f_to,
+            'firma' => $f_firma, 'urun' => $f_urun,
+            'bolge' => $f_bolge, 'depo' => $f_depo,
+            'durum' => $f_durum, 'sort' => ($f_sort !== 'tarih' ? $f_sort : ''),
+        ]);
+        $_bulk_url = 'records_bulk_print.php?' . http_build_query($_bulk_params);
+        ?>
+        <a href="<?= h($_bulk_url) ?>" class="btn btn-sm" target="_blank" title="Filtreli tüm yüklemeleri tek PDF'te aç (max 50)">📄 Toplu PDF</a>
+        <?php endif; ?>
         <?php else: ?>
         <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Excel/CSV</a>
         <?php endif; ?>
