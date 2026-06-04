@@ -15,6 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 csrf_check($_POST['csrf'] ?? null);
 
+// Tablo varlık kontrolü — migration db.php'de çalışır, ama yine de doğrula
+try {
+    db()->query("SELECT 1 FROM `daily_reports` LIMIT 0");
+    db()->query("SELECT 1 FROM `daily_report_items` LIMIT 0");
+} catch (PDOException $_tbl_e) {
+    error_log("[XZ] daily_reports/items tablo erişim hatası: " . $_tbl_e->getMessage());
+    set_flash('error', 'Rapor arşiv tabloları hazır değil. Lütfen sayfayı yenileyip tekrar deneyin veya sistem yöneticisine bildirin.');
+    header('Location: reports.php?type=gunluk'); exit;
+}
+
 $report_type = trim($_POST['report_type'] ?? '');
 if ($report_type === 'Z') {
     set_flash('error', 'Z Raporu henüz aktif değil.');

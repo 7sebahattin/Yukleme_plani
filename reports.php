@@ -1013,7 +1013,7 @@ render_flash();
         <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
         <a href="daily_report_archive.php" class="btn btn-sm">📁 Arşiv</a>
-        <form method="post" action="daily_report_create.php" style="display:inline">
+        <form method="post" action="daily_report_create.php" style="display:contents">
             <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="report_type"   value="X">
             <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
