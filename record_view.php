@@ -149,7 +149,10 @@ $palet_tipi_total_adet = 0;
 foreach ($stok_use as $def_id => $u) {
     $d = $defs_by_id[$def_id] ?? null;
     if ($d && $d['type'] === 'palet_tipi') {
-        $palet_tipi_names[] = h(mb_strtoupper($d['name'], 'UTF-8'));
+        $unit_kg = (float)($d['unit_dara_kg'] ?? 0);
+        $name_str = mb_strtoupper($d['name'], 'UTF-8');
+        if ($unit_kg > 0) $name_str .= ' (' . fmt_unit_kg($unit_kg) . ' KG)';
+        $palet_tipi_names[] = h($name_str);
         $palet_tipi_total_adet += (int)$u['adet'];
     }
 }
@@ -219,9 +222,10 @@ foreach ($stok_use as $def_id => $u) {
     $d = $defs_by_id[$def_id] ?? null;
     if (!$d || $d['type'] !== 'kasa_cinsi') continue;
     $kasa_dara_breakdown[] = [
-        'name' => $d['name'],
-        'adet' => (int)$u['adet'],
-        'kg'   => (float)$u['kg'],
+        'name'    => $d['name'],
+        'adet'    => (int)$u['adet'],
+        'kg'      => (float)$u['kg'],
+        'unit_kg' => (float)($d['unit_dara_kg'] ?? 0),
     ];
 }
 
@@ -659,14 +663,15 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
         <table class="asya-pallets">
             <thead>
             <tr>
-                <th class="th-banner" colspan="8">YÜKLEME PLANI</th>
+                <th class="th-banner" colspan="9">YÜKLEME PLANI</th>
             </tr>
             <tr>
                 <th class="w-no">PALET<br>NO</th>
                 <th class="w-kasa">KASA<br>ADETİ</th>
                 <th class="w-size">SIZE</th>
-                <th class="w-brut">PALET BRÜT<br>AĞIRLIK</th>
-                <th class="w-net">NET KG</th>
+                <th class="w-brut">BRÜT<br>KG</th>
+                <th class="w-dara">DARA<br>KG</th>
+                <th class="w-net">NET<br>KG</th>
                 <th class="w-kc">KASA CİNSİ</th>
                 <th class="w-uc">ÜRÜN CİNSİ</th>
                 <th class="w-depo">DEPO</th>
@@ -679,6 +684,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                     <td class="num"><?= $p ? (int)$p['kasa_adeti'] : '' ?></td>
                     <td><?= $p ? h($p['size']) : '' ?></td>
                     <td class="num"><?= $p ? h(fmt_kg($p['brut_kg'])) : '' ?></td>
+                    <td class="num"><?= $p ? h(fmt_kg($p['dara_kg'])) : '' ?></td>
                     <td class="num"><?= $p ? h(fmt_kg($p['net_kg'])) : '' ?></td>
                     <td class="small"><?= $p ? h($p['kasa_cinsi_adi']) : '' ?></td>
                     <td class="small"><?= $p ? h($p['urun_cinsi']) : '' ?></td>
@@ -743,7 +749,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
             <th class="bot-label">TOPLAM</th>
             <th><?= $palet_bottom_label ?></th>
             <?php foreach ($kasa_dara_breakdown as $k): ?>
-            <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA<br>
+            <th><?= h(mb_strtoupper($k['name'], 'UTF-8')) ?> KASA<?= $k['unit_kg'] > 0 ? ' (' . h(fmt_unit_kg($k['unit_kg'])) . ' KG)' : '' ?><br>
                 <small style="font-size:6pt;font-weight:normal"><?= (int)$k['adet'] ?> ADET</small></th>
             <?php endforeach; ?>
         </tr>

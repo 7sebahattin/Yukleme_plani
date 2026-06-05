@@ -1368,8 +1368,9 @@ body.print-mode .topbar { display: none; }
 .asya-pallets .w-no   { width: 22px; }
 .asya-pallets .w-kasa { width: 36px; }
 .asya-pallets .w-size { width: 38px; }
-.asya-pallets .w-brut { width: 50px; }
-.asya-pallets .w-net  { width: 48px; }
+.asya-pallets .w-brut { width: 46px; }
+.asya-pallets .w-dara { width: 40px; }
+.asya-pallets .w-net  { width: 46px; }
 
 /* Stok çıkışları */
 .asya-stok { font-size: 9.5pt; vertical-align: top; height: 100%; }
