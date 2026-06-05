@@ -63,7 +63,13 @@ $form_is_cikma = $form_is_cikma ?? false;
 <div class="page-head">
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
-        <a href="<?= h($cancel_url ?? 'records.php') ?>" class="btn btn-ghost">İptal</a>
+        <?php
+        $_cu     = $cancel_url ?? 'records.php';
+        $_flpage = (strpos($_cu, 'cikmalar') !== false) ? 'cikmalar' : 'records';
+        ?>
+        <a href="<?= h($_cu) ?>" class="btn btn-ghost"
+           data-list-back="<?= $_flpage ?>"
+           data-record-id="<?= (int)($record['id'] ?? 0) ?>">İptal</a>
         <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
     </div>
 </div>
@@ -119,6 +125,19 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <?php if (empty($_depo_names)): ?><small class="muted">Tanımlar → Depolar'dan ekleyin</small><?php endif; ?>
             </label>
             <?php if (!$form_is_cikma): ?>
+            <?php $_cur_urun_sahibi = (int)($record['urun_sahibi_id'] ?? 0); ?>
+            <label class="span-2">Ürün Sahibi
+                <select name="urun_sahibi_id" id="urunSahibiSel"
+                        class="<?= $_cur_urun_sahibi > 0 ? 'urun-sahibi-selected' : '' ?>">
+                    <option value="">Seçilmedi — Asya Fresh kabul edilir</option>
+                    <?php foreach ($firma_list as $_us): ?>
+                    <option value="<?= (int)$_us['id'] ?>"<?= $_cur_urun_sahibi === (int)$_us['id'] ? ' selected' : '' ?>>
+                        <?= h($_us['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <small class="muted">Boş bırakılırsa Asya Fresh malı sayılır.</small>
+            </label>
             <?php $_brand_col_ok = !function_exists('db_has_column') || db_has_column('loading_records', 'brand'); ?>
             <?php if (!$_brand_col_ok): ?>
             <div class="span-2" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;color:#991b1b;font-size:.83rem;line-height:1.5">
@@ -468,6 +487,13 @@ $form_is_cikma = $form_is_cikma ?? false;
         var open = panel.style.display !== 'none';
         panel.style.display = open ? 'none' : 'block';
         btn.textContent = (open ? '▸' : '▾') + ' Raporlandı / Raporlanmadı Ayrım';
+    });
+})();
+(function () {
+    var sel = document.getElementById('urunSahibiSel');
+    if (!sel) return;
+    sel.addEventListener('change', function () {
+        this.classList.toggle('urun-sahibi-selected', this.value !== '');
     });
 })();
 </script>

@@ -64,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'alici'           => trim((string)($_POST['alici'] ?? '')),
             'etiket'          => trim((string)($_POST['etiket'] ?? '')),
             'brand'           => trim((string)($_POST['brand'] ?? '')),
+            'urun_sahibi_id'  => !empty($_POST['urun_sahibi_id']) ? (int)$_POST['urun_sahibi_id'] : null,
         ];
     }
 
@@ -133,11 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->beginTransaction();
 
-            // brand kolonu yoksa (migration çalışmadıysa) sorgudan ve parametreden çıkar — defansif
-            $has_brand = !$edit_is_cikma && db_has_column('loading_records', 'brand');
-            if (!$has_brand) {
-                unset($record['brand']);
-            }
+            // brand / urun_sahibi_id kolonları yoksa (migration çalışmadıysa) çıkar — defansif
+            $has_brand       = !$edit_is_cikma && db_has_column('loading_records', 'brand');
+            $has_urun_sahibi = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
+            if (!$has_brand)       { unset($record['brand']); }
+            if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
 
             if ($edit_is_cikma) {
                 $st = $pdo->prepare(
@@ -154,7 +155,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
                         tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
-                        . ($has_brand ? ", brand=:brand" : "") . "
+                        . ($has_brand       ? ", brand=:brand"                   : "")
+                        . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
                      WHERE id=:id"
                 );
             }

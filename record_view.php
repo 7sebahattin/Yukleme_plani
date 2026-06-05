@@ -309,7 +309,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 </div>
 <?php endif; ?>
 <div class="page-head rv-head">
-    <a href="<?= h($list_url) ?>" class="btn btn-ghost rv-back">← Liste</a>
+    <?php $_lpage = (strpos($list_url, 'cikmalar') !== false) ? 'cikmalar' : 'records'; ?>
+    <a href="<?= h($list_url) ?>" class="btn btn-ghost rv-back"
+       data-list-back="<?= $_lpage ?>" data-record-id="<?= (int)$id ?>">← Liste</a>
     <div class="rv-actions">
         <?php if (!$_is_locked || $_can_unlock): ?>
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
