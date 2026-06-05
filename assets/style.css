@@ -2061,17 +2061,33 @@ body.print-mode .asya-sheet {
 }
 .bm-check-label:hover { background: var(--bg); }
 
-/* Sprint 35: Eklenenleri Sil paneli */
-.bm-rm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.bm-rm-list {
-    max-height: 240px; overflow-y: auto; border: 1px solid var(--border);
-    border-radius: var(--radius-sm); margin-bottom: 10px; -webkit-overflow-scrolling: touch;
+/* Sprint 36: Eklenenleri Sil — accordion tasarımı */
+.bm-rm-all-wrap { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.bm-acc-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    overflow: hidden;
 }
-.bm-rm-item { border-bottom: 1px solid var(--border); }
-.bm-rm-item:last-child { border-bottom: none; }
-.bm-rm-name { font-weight: 600; }
-.bm-rm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.bm-rm-actions .btn { flex: 1 1 auto; }
+.bm-acc-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer; user-select: none;
+    background: var(--bg);
+    transition: background .1s;
+}
+.bm-acc-header:hover { background: var(--border); }
+.bm-acc-arrow { font-size: .75rem; color: var(--muted); flex-shrink: 0; width: 14px; text-align: center; }
+.bm-acc-name { font-weight: 600; font-size: .9rem; flex: 1; min-width: 0; }
+.bm-acc-meta { font-size: .78rem; flex-shrink: 0; text-align: right; }
+.bm-acc-body {
+    padding: 10px 12px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--card);
+}
+.bm-acc-pallets { max-height: 200px; overflow-y: auto; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
+.bm-acc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bm-acc-actions .btn { flex: 1 1 auto; }
 .bm-check-label input[type="checkbox"] {
     width: 17px; height: 17px; min-height: unset;
     flex-shrink: 0; accent-color: var(--primary);

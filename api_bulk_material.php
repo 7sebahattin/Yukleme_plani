@@ -14,6 +14,42 @@ require_perm('records.write');
 
 header('Content-Type: application/json; charset=utf-8');
 
+// ── GET: Bu kayda eklenmiş malzemeleri malzeme bazlı grupla ────────
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $record_id = (int)($_GET['record_id'] ?? 0);
+    if ($record_id <= 0) { echo json_encode(['ok' => false, 'error' => 'Geçersiz kayıt']); exit; }
+    $ck = db()->prepare("SELECT id FROM loading_records WHERE id=?");
+    $ck->execute([$record_id]);
+    if (!$ck->fetch()) { echo json_encode(['ok' => false, 'error' => 'Kayıt bulunamadı']); exit; }
+    $st = db()->prepare("
+        SELECT pm.id AS pm_id, pm.loading_pallet_id, pm.material_id, pm.quantity,
+               m.name AS material_name, lp.palet_no
+        FROM pallet_materials pm
+        JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+        JOIN material_definitions m ON m.id = pm.material_id
+        WHERE lp.loading_record_id = ?
+        ORDER BY m.name, CAST(lp.palet_no AS UNSIGNED), lp.id
+    ");
+    $st->execute([$record_id]);
+    $rows = $st->fetchAll();
+    $groups = [];
+    foreach ($rows as $row) {
+        $mid = (int)$row['material_id'];
+        if (!isset($groups[$mid])) {
+            $groups[$mid] = ['material_id' => $mid, 'material_name' => $row['material_name'],
+                             'pallet_count' => 0, 'total_quantity' => 0, 'pallets' => []];
+        }
+        $groups[$mid]['pallet_count']++;
+        $groups[$mid]['total_quantity'] = round($groups[$mid]['total_quantity'] + (float)$row['quantity'], 3);
+        $groups[$mid]['pallets'][] = [
+            'pm_id' => (int)$row['pm_id'], 'pallet_id' => (int)$row['loading_pallet_id'],
+            'pallet_no' => $row['palet_no'], 'quantity' => (float)$row['quantity'],
+        ];
+    }
+    echo json_encode(['ok' => true, 'groups' => array_values($groups)]);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed']);
@@ -43,6 +79,14 @@ function ms_recompute_pallet(PDO $pdo, int $pid): void {
     ]);
     $pdo->prepare("UPDATE loading_pallets SET dara_kg=?, net_kg=? WHERE id=?")
         ->execute([$c['dara_kg'], $c['net_kg'], $pid]);
+}
+
+// ── Casus malzeme tespiti (büyük/küçük harf + Türkçe karakter bağımsız) ──
+function is_casus_material(string $name): bool {
+    $n = mb_strtolower(trim($name), 'UTF-8');
+    $n = str_replace("\xCC\x87", '', $n);   // Türkçe İ sonrası combining dot
+    $n = strtr($n, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
+    return str_contains($n, 'casus');
 }
 
 // ── Toplu giydirme/sarf malzeme silme (seçili veya tümü) ─────────
@@ -163,6 +207,52 @@ if (($body['action'] ?? '') === 'delete') {
     exit;
 }
 
+// ── Malzeme bazlı tüm paletlerden sil ──────────────────────────────
+if (($body['action'] ?? '') === 'delete_material_all_pallets') {
+    $material_id = (int)($body['material_id'] ?? 0);
+    if ($material_id <= 0 || $record_id <= 0) {
+        echo json_encode(['ok' => false, 'error' => 'Geçersiz parametre']); exit;
+    }
+    $lr = db()->prepare("SELECT locked_at, durum FROM loading_records WHERE id=?");
+    $lr->execute([$record_id]);
+    $lrow = $lr->fetch();
+    if (!$lrow) { echo json_encode(['ok' => false, 'error' => 'Kayıt bulunamadı']); exit; }
+    $locked = !empty($lrow['locked_at']) || (($lrow['durum'] ?? '') === 'yuklendi');
+    if ($locked && !can('records.unlock')) {
+        echo json_encode(['ok' => false, 'error' => 'Kayıt kilitli; malzeme değişikliği yapılamaz.']); exit;
+    }
+    $pdo = db();
+    $sel = $pdo->prepare("
+        SELECT pm.id, pm.loading_pallet_id, m.name AS material_name
+        FROM pallet_materials pm
+        JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
+        LEFT JOIN material_definitions m ON m.id = pm.material_id
+        WHERE lp.loading_record_id = ? AND pm.material_id = ?
+    ");
+    $sel->execute([$record_id, $material_id]);
+    $rows = $sel->fetchAll();
+    if (empty($rows)) { echo json_encode(['ok' => true, 'deleted' => 0]); exit; }
+    $del_ids   = array_map('intval', array_column($rows, 'id'));
+    $pallets_a = array_values(array_unique(array_map('intval', array_column($rows, 'loading_pallet_id'))));
+    $mat_name  = $rows[0]['material_name'] ?? '';
+    $pdo->beginTransaction();
+    try {
+        $ph3 = implode(',', array_fill(0, count($del_ids), '?'));
+        $pdo->prepare("DELETE FROM pallet_materials WHERE id IN ($ph3)")->execute($del_ids);
+        foreach ($pallets_a as $pid) { ms_recompute_pallet($pdo, $pid); }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        echo json_encode(['ok' => false, 'error' => $e->getMessage()]); exit;
+    }
+    sync_malzeme_kullanim($record_id);
+    audit_log_event('delete_material_all_pallets', 'records', $record_id, null, [
+        'material_id' => $material_id, 'material_name' => $mat_name, 'silinen_satir' => count($del_ids),
+    ]);
+    echo json_encode(['ok' => true, 'deleted' => count($del_ids)]);
+    exit;
+}
+
 // Eski (tekli) format → yeni array formatına çevir
 if (!empty($body['material_id'])) {
     $materials_input = [['material_id' => (int)$body['material_id'], 'quantity' => parse_decimal($body['quantity'] ?? 1)]];
@@ -208,12 +298,30 @@ if (empty($valid_ids)) {
 }
 
 $pdo = db();
+
+// Casus kuralı: kayıttaki ilk paleti bul (sira_no, id sırasıyla)
+$st_first = $pdo->prepare("SELECT id FROM loading_pallets WHERE loading_record_id=? ORDER BY sira_no, id LIMIT 1");
+$st_first->execute([$record_id]);
+$first_pallet_id = (int)($st_first->fetchColumn() ?: 0);
+
+// Malzeme adlarını önbelleğe al (Casus tespiti için)
+$mat_names_cache = [];
+foreach ($mats_db as $mid_k => $mdef) {
+    $mat_names_cache[$mid_k] = $mdef['name'] ?? '';
+}
+
 $pdo->beginTransaction();
 
 try {
     foreach ($valid_ids as $pid) {
         foreach ($materials_input as $m) {
             $mid     = $m['material_id'];
+
+            // Casus sadece kayıttaki ilk palete eklenir
+            if ($first_pallet_id > 0 && is_casus_material($mat_names_cache[$mid] ?? '') && $pid !== $first_pallet_id) {
+                continue;
+            }
+
             // Etiket (kasa_etiketi) palete eklenince kasa adetiyle çarpılır:
             // 1 etiket × 90 kasa = 90 etiket. Diğer malzemeler girildiği gibi.
             $qty = $m['quantity'];
