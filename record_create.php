@@ -28,6 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $record[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
+    // urun_sahibi_id is INT — handle separately from the string-based foreach above
+    $record['urun_sahibi_id'] = !empty($_POST['urun_sahibi_id']) ? (int)$_POST['urun_sahibi_id'] : null;
+
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
     $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : '';
@@ -79,17 +82,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
 
-            // brand kolonu yoksa (migration çalışmadıysa) sorguya ekleme — defansif
-            $has_brand = db_has_column('loading_records', 'brand');
+            // brand / urun_sahibi_id kolonları yoksa (migration çalışmadıysa) sorguya ekleme — defansif
+            $has_brand        = db_has_column('loading_records', 'brand');
+            $has_urun_sahibi  = db_has_column('loading_records', 'urun_sahibi_id');
             $st = $pdo->prepare(
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket" . ($has_brand ? ", brand" : "") . ")
+                  tarih, alici, urun, etiket"
+                  . ($has_brand       ? ", brand"          : "")
+                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket" . ($has_brand ? ", :brand" : "") . ")"
+                  :tarih, :alici, :urun, :etiket"
+                  . ($has_brand       ? ", :brand"          : "")
+                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "") . ")"
             );
             $ins_params = [
                 ':firma' => $record['firma'],
@@ -112,6 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
             if ($has_brand) {
                 $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;
+            }
+            if ($has_urun_sahibi) {
+                $ins_params[':urun_sahibi_id'] = $record['urun_sahibi_id'] ?: null;
             }
             $st->execute($ins_params);
             $rec_id = (int)$pdo->lastInsertId();

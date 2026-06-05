@@ -195,6 +195,13 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
     gap: 12px;
 }
 
+/* Sprint ÜrünSahibi-01: Ürün Sahibi seçilince kırmızı vurgu */
+select.urun-sahibi-selected {
+    border-color: #c00000;
+    color: #c00000;
+    font-weight: 700;
+}
+
 /* Sprint 34: Marka segmented seçim (ASYA / URAL / URAS) */
 .brand-seg { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
 .brand-seg-opt {

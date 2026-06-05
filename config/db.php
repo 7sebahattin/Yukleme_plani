@@ -190,6 +190,14 @@ function db(): PDO {
             }
         } catch (PDOException $_lrm2) { /* loading_records yoksa — sessizce geç */ }
 
+        // Sprint ÜrünSahibi-01: loading_records'a urun_sahibi_id ekle (idempotent)
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `urun_sahibi_id` INT NULL DEFAULT NULL");
+            }
+        } catch (PDOException $_usm) { /* loading_records yoksa — sessizce geç */ }
+
         // Sprint XZ-01: loading_pallets'e reported_at + reported_by + report_id ekle (idempotent)
         try {
             $pdo->query("SELECT 1 FROM `loading_pallets` LIMIT 0");

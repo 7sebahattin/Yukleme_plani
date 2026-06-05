@@ -26,6 +26,7 @@ $f_q       = trim($_GET['q']         ?? '');
 $f_sort    = trim($_GET['sort']      ?? 'tarih');
 $f_palet_islendi  = trim($_GET['palet_islendi']  ?? '');
 $f_kantar_firma   = trim($_GET['kantar_firma']  ?? '');
+$f_urun_sahibi    = trim($_GET['urun_sahibi']   ?? '');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
@@ -139,6 +140,20 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_urun  !== '') { $sql .= " AND r.urun  = :urun";  $p[':urun']  = $f_urun;  }
     if ($f_bolge !== '') { $sql .= " AND r.bolge = :bolge"; $p[':bolge'] = $f_bolge; }
     if ($f_depo  !== '') { $sql .= " AND p.depo  = :depo";  $p[':depo']  = $f_depo;  }
+    // Sprint ÜrünSahibi-01: ürün sahibi filtresi (yalnızca yukleme)
+    $_us_col_ok = false;
+    if ($f_urun_sahibi !== '' && $type === 'yukleme') {
+        try { $_us_col_ok = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn(); }
+        catch (Throwable $_) {}
+        if ($_us_col_ok) {
+            if ($f_urun_sahibi === '0') {
+                $sql .= " AND r.urun_sahibi_id IS NULL";
+            } elseif (ctype_digit($f_urun_sahibi) && (int)$f_urun_sahibi > 0) {
+                $sql .= " AND r.urun_sahibi_id = :urun_sahibi";
+                $p[':urun_sahibi'] = (int)$f_urun_sahibi;
+            }
+        }
+    }
     if ($type === 'cikma' && $f_cikma_rapor !== '') {
         static $_rpt_col_checked = null;
         if ($_rpt_col_checked === null) {
@@ -207,6 +222,14 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_q     !== '') { $sp .= " AND (r.firma LIKE :q2 OR r.parti_no LIKE :q2 OR r.alici LIKE :q2 OR r.urun LIKE :q2)"; $sp2[':q2'] = '%'.$f_q.'%'; }
     if ($f_from  !== '') { $sp .= " AND r.tarih >= :df2"; $sp2[':df2'] = $f_from; }
     if ($f_to    !== '') { $sp .= " AND r.tarih <= :dt2"; $sp2[':dt2'] = $f_to; }
+    if ($f_urun_sahibi !== '' && $type === 'yukleme' && $_us_col_ok) {
+        if ($f_urun_sahibi === '0') {
+            $sp .= " AND r.urun_sahibi_id IS NULL";
+        } elseif (ctype_digit($f_urun_sahibi) && (int)$f_urun_sahibi > 0) {
+            $sp .= " AND r.urun_sahibi_id = :urun_sahibi2";
+            $sp2[':urun_sahibi2'] = (int)$f_urun_sahibi;
+        }
+    }
     if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END)>0"; }
     elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END)>0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
@@ -830,6 +853,7 @@ $csv_params = array_filter([
     'q'              => $f_q,
     'sort'           => ($f_sort !== 'tarih') ? $f_sort : '',
     'palet_islendi'  => ($type !== 'cikma') ? $f_palet_islendi : '',
+    'urun_sahibi'    => ($type === 'yukleme') ? $f_urun_sahibi : '',
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
 $csv_summary_params = $csv_params;
@@ -844,6 +868,7 @@ $filter_urun_list     = db()->query("SELECT DISTINCT urun  FROM loading_records 
 $filter_bolge_list    = db()->query("SELECT DISTINCT bolge FROM loading_records WHERE bolge!='' ORDER BY bolge LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_depo_list     = db()->query("SELECT DISTINCT depo  FROM loading_pallets  WHERE depo !='' ORDER BY depo  LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 $filter_urun_def_list = db()->query("SELECT name FROM material_definitions WHERE type='urun' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
+$filter_urun_sahibi_list = db()->query("SELECT id, name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name LIMIT 200")->fetchAll();
 render_header($page_title);
 render_flash();
 ?>
@@ -1430,6 +1455,19 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
                 <option value="hicbiri"  <?= $f_palet_islendi==='hicbiri'  ? 'selected':'' ?>>Makinaya Dökülen</option>
             </select>
         </label>
+        <?php if (!empty($filter_urun_sahibi_list)): ?>
+        <label>Ürün Sahibi
+            <select name="urun_sahibi">
+                <option value="">-- Tümü --</option>
+                <option value="0" <?= $f_urun_sahibi==='0' ? 'selected' : '' ?>>Asya Fresh (Bizim)</option>
+                <?php foreach ($filter_urun_sahibi_list as $_us): ?>
+                <option value="<?= (int)$_us['id'] ?>" <?= $f_urun_sahibi===(string)(int)$_us['id'] ? 'selected' : '' ?>>
+                    <?= h($_us['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php endif; ?>
     </div>
     <?php elseif ($type === 'cikma'): ?>
     <div class="rpt-filter-group">
