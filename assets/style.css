@@ -1531,15 +1531,14 @@ body.print-mode .asya-sheet {
     .asya-pallets td { overflow: hidden; padding: 0px 2px; font-size: 7.5pt; line-height: 1.2; text-align: center !important; vertical-align: middle; }
     .asya-pallets td.num { font-size: 7.5pt; font-weight: 700; }
     .asya-pallets td.small { font-size: 6.5pt; line-height: 1.15; overflow: hidden; word-break: normal; overflow-wrap: normal; }
-    .asya-stok { font-size: 7.5pt; }
-    .asya-stok .stok-name { font-size: 7.5pt; padding: 0px 3px; font-weight: 700; }
-    .asya-stok .stok-val { height: 9px; font-size: 8pt; padding: 0px 2px; font-weight: 700; }
-    .asya-stok tr.stok-filler td { height: 1px; padding: 0; }
+    /* Stok sütunu: içerik üstte bitişik, palet tablosu boyuna yayılmasın */
+    .asya-stok { font-size: 7.5pt; align-self: start; height: auto; }
+    .asya-stok .stok-name { font-size: 7.5pt; padding: 1px 4px; font-weight: 700; }
+    .asya-stok .stok-val { font-size: 8pt; padding: 1px 3px; font-weight: 700; }
     .asya-totals th { font-size: 8.5pt; padding: 0px 2px; height: 10px; font-weight: 700; }
     .asya-totals td { font-size: 9.5pt; padding: 0px 2px; height: 10px; font-weight: 700; }
     .asya-totals td.strong { font-size: 10.5pt; font-weight: 900; }
     .asya-totals .urun-banner { font-size: 7.5pt; padding: 1px 0; font-weight: 700; height: 13px; min-height: 13px; box-sizing: border-box; }
-    .asya-totals .urun-banner-empty { /* aynı yükseklik, fazladan stil yok */ }
     .asya-bottom th { font-size: 8pt; padding: 1px; }
     .asya-bottom td { height: 10px; padding: 0px 3px; font-size: 8pt; }
     .asya-brand { font-size: 10pt; padding: 1px; }
