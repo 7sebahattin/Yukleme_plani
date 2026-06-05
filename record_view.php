@@ -592,7 +592,8 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 <?php else: ?>
 <?php
 $_b = strtoupper(trim((string)($record['brand'] ?? '')));
-$brand_label = $_b !== '' ? ($_b . ' FRESH') : 'ASYA FRESH';
+$_brand_names = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
+$brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
 ?>
 <!-- ── YÜKLEME ŞABLONU ── -->
 <div class="asya-sheet">
