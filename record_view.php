@@ -590,12 +590,17 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 
 </div>
 <?php else: ?>
-<!-- ── ASYA FRESH YÜKLEME ŞABLONU ── -->
+<?php
+$_b = strtoupper(trim((string)($record['brand'] ?? '')));
+$_brand_names = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
+$brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
+?>
+<!-- ── YÜKLEME ŞABLONU ── -->
 <div class="asya-sheet">
 
     <!-- ============= ÜST BLOK: Genel bilgiler + ETİKET + Marka ============= -->
     <div class="asya-top">
-        <div class="asya-brand-full">ASYA FRESH</div>
+        <div class="asya-brand-full"><?= h($brand_label) ?></div>
         <div class="asya-top-body">
             <!-- Sol: Genel bilgi alanları -->
             <table class="asya-info">
@@ -695,7 +700,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         </table>
 
         <!-- Stok Çıkışları (ayrı sütun) -->
-        <table class="asya-stok">
+        <table class="asya-stok"<?= $print ? ' style="height:auto;align-self:start"' : '' ?>>
             <thead>
             <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
             <tr>
