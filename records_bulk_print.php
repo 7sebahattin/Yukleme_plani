@@ -342,6 +342,9 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
             </tbody>
         </table>
 
+        <!-- Sağ sütun: Stok Çıkışları üstte + Genel Toplam altta -->
+        <div class="asya-right-col">
+
         <table class="asya-stok">
             <thead>
             <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
@@ -360,12 +363,10 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
                     <td class="stok-val"><?= h($adet_str) ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php for ($fi = $stok_shown; $fi < $grid_rows; $fi++): ?>
-                <tr class="stok-filler"><td></td><td></td></tr>
-            <?php endfor; ?>
             </tbody>
         </table>
 
+        <!-- Genel Toplam + Ürün/1..4 -->
         <table class="asya-totals">
             <tr><th class="th-banner" colspan="2">GENEL TOPLAM</th></tr>
             <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
@@ -383,6 +384,8 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
                 <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
             <?php endfor; ?>
         </table>
+
+        </div><!-- /.asya-right-col -->
     </div>
 
     <table class="asya-bottom" style="table-layout:auto">

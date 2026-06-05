@@ -688,7 +688,9 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
             </tbody>
         </table>
 
-        <!-- Stok Çıkışları (ayrı sütun) -->
+        <!-- Sağ sütun: Stok Çıkışları üstte + Genel Toplam altta -->
+        <div class="asya-right-col">
+
         <table class="asya-stok"<?= $print ? ' style="height:auto;align-self:start"' : '' ?>>
             <thead>
             <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
@@ -713,7 +715,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
             </tbody>
         </table>
 
-        <!-- Genel Toplam + Ürün/1..4 (ayrı sütun) -->
+        <!-- Genel Toplam + Ürün/1..4 -->
         <table class="asya-totals">
             <tr><th class="th-banner" colspan="2">GENEL TOPLAM</th></tr>
             <tr><th>KASA</th><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
@@ -731,6 +733,8 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                 <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
             <?php endforeach; ?>
         </table>
+
+        </div><!-- /.asya-right-col -->
     </div>
 
     <!-- ============= ALT BLOK: Toplam dara satırı ============= -->
