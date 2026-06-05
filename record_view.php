@@ -716,9 +716,6 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                     <td class="stok-val"><?= h($adet_str) ?></td>
                 </tr>
             <?php endforeach; ?>
-            <?php for ($fi = $stok_shown; $fi < $grid_rows; $fi++): ?>
-                <tr class="stok-filler"><td></td><td></td></tr>
-            <?php endfor; ?>
             </tbody>
         </table>
 
@@ -730,16 +727,15 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
             <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
             <tr><th>NET</th><td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
 
-            <?php for ($i = 0; $i < 4; $i++):
-                $key = $urun_keys[$i] ?? null;
-                $g   = $key ? $urun_groups[$key] : null;
+            <?php foreach ($urun_keys as $key):
+                $g = $urun_groups[$key] ?? null;
             ?>
-                <tr><th class="urun-banner<?= $key ? '' : ' urun-banner-empty' ?>" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : '' ?></th></tr>
+                <tr><th class="urun-banner" colspan="2"><?= h(mb_strtoupper($key, 'UTF-8')) ?></th></tr>
                 <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
                 <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
-            <?php endfor; ?>
+            <?php endforeach; ?>
         </table>
     </div>
 
