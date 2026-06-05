@@ -698,6 +698,16 @@ function db_has_column(string $table, string $column): bool {
             error_log('[migration] brand kolonu eklenemedi (ALTER yetkisi?): ' . $e->getMessage());
         }
 
+        // Sprint ÜrünSahibi-01: urun_sahibi_id — ayrı try bloğu
+        try {
+            $has_us = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn();
+            if (!$has_us) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `urun_sahibi_id` INT NULL DEFAULT NULL");
+            }
+        } catch (PDOException $e) {
+            error_log('[migration] urun_sahibi_id kolonu eklenemedi: ' . $e->getMessage());
+        }
+
         // Etiket fotoğrafı (base64) — cihazlar arası görünsün diye DB'de saklanır
         try {
             $has_ef = $pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'etiket_foto'")->fetchColumn();

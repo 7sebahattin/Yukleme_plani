@@ -34,6 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
     $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : '';
+    // Geçersiz firma ID → NULL yap
+    if (!empty($record['urun_sahibi_id'])) {
+        $_us_check = db()->prepare("SELECT id FROM material_definitions WHERE id=:id AND type='firma' AND is_active=1");
+        $_us_check->execute([':id' => $record['urun_sahibi_id']]);
+        if (!$_us_check->fetchColumn()) {
+            $record['urun_sahibi_id'] = null;
+        }
+    }
     if ($record['tarih'] === '') $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '') $errors[] = 'Firma zorunludur.';
     if ($record['urun']  === '') $errors[] = 'Ürün zorunludur.';
