@@ -1051,9 +1051,10 @@ body.print-mode .topbar { display: none; }
 }
 .asya-brand-full {
     text-align: center;
-    font-size: 13pt;
-    font-weight: 800;
+    font-size: 14pt;
+    font-weight: 900;
     letter-spacing: .05em;
+    color: #c00000;
     padding: 4px;
     border-bottom: 1px solid #ccc;
 }
@@ -1133,6 +1134,15 @@ body.print-mode .topbar { display: none; }
 .asya-alici-cell strong, .asya-urun-cell strong {
     font-size: 10.5pt;
     font-weight: 800;
+}
+.asya-alici-cell strong {
+    font-size: 11.5pt;
+    color: #1a7a1a;
+}
+.asya-info td.parti-no-val {
+    font-size: 11pt;
+    color: #c00000;
+    font-weight: 700;
 }
 .marka-cell {
     text-align: center;
@@ -1368,8 +1378,9 @@ body.print-mode .topbar { display: none; }
 .asya-pallets .w-no   { width: 22px; }
 .asya-pallets .w-kasa { width: 36px; }
 .asya-pallets .w-size { width: 38px; }
-.asya-pallets .w-brut { width: 50px; }
-.asya-pallets .w-net  { width: 48px; }
+.asya-pallets .w-brut { width: 46px; }
+.asya-pallets .w-dara { width: 40px; }
+.asya-pallets .w-net  { width: 46px; }
 
 /* Stok çıkışları */
 .asya-stok { font-size: 9.5pt; vertical-align: top; height: 100%; }
@@ -1515,7 +1526,10 @@ body.print-mode .asya-sheet {
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .asya-top { border-color: #000; }
-    .asya-brand-full { border-color: #000; font-size: 12pt; }
+    .asya-brand-full {
+        border-color: #000; font-size: 13pt; font-weight: 900;
+        color: #c00000; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
     .asya-right-top { border-color: #000; }
     .asya-marka-row { border-color: #000; }
     .asya-alici-urun-row { border-color: #000; border-bottom-color: #000; }
@@ -1562,6 +1576,14 @@ body.print-mode .asya-sheet {
     .cell-pair span, .marka-cell span { font-size: 6pt; }
     .cell-pair strong, .marka-cell strong { font-size: 7pt; }
     .asya-alici-cell strong, .asya-urun-cell strong { font-size: 11pt; font-weight: 800; }
+    .asya-alici-cell strong {
+        font-size: 12pt; color: #1a7a1a;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .asya-info td.parti-no-val {
+        font-size: 12pt; color: #c00000; font-weight: 700;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
     .marka-cell strong { font-size: 6.5pt; }
     .asya-signatures {
         margin-top: 2px;
