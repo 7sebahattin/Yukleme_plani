@@ -63,7 +63,13 @@ $form_is_cikma = $form_is_cikma ?? false;
 <div class="page-head">
     <h1><?= h($title) ?></h1>
     <div class="page-head-actions">
-        <a href="<?= h($cancel_url ?? 'records.php') ?>" class="btn btn-ghost">İptal</a>
+        <?php
+        $_cu     = $cancel_url ?? 'records.php';
+        $_flpage = (strpos($_cu, 'cikmalar') !== false) ? 'cikmalar' : 'records';
+        ?>
+        <a href="<?= h($_cu) ?>" class="btn btn-ghost"
+           data-list-back="<?= $_flpage ?>"
+           data-record-id="<?= (int)($record['id'] ?? 0) ?>">İptal</a>
         <button class="btn btn-primary btn-lg" type="submit"><?= h($submit_label) ?></button>
     </div>
 </div>

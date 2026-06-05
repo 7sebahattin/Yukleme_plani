@@ -406,6 +406,12 @@ input.num, select.num { text-align: right; }
 .data-table.small td { padding: 6px 10px; }
 .data-table .actions-col { white-space: nowrap; text-align: right; }
 
+/* Scroll restore: kart/satır topbar ve bottomnav arkasına gizlenmesin */
+[data-record-id] {
+    scroll-margin-top: 72px;
+    scroll-margin-bottom: 96px;
+}
+
 /* ---------- Liste mobil kart ---------- */
 .card-list { display: flex; flex-direction: column; gap: 10px; }
 .record-card {

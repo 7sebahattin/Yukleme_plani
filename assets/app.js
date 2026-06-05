@@ -1026,3 +1026,96 @@
     renderCards();
     recomputeTotals();
 })();
+
+/* =========================================================
+   Liste Scroll Koruma — records.php / cikmalar.php
+   Kayıt linkine tıklanınca scroll kaydedilir; geri dönünce
+   aynı karta scroll restore yapılır.
+   Geri/İptal butonları: referrer listeyse history.back(),
+   yoksa sessionStorage ile listeye doğrudan gidilir.
+   ========================================================= */
+(function () {
+    'use strict';
+
+    var TTL = 30 * 60 * 1000; // 30 dakika
+
+    function sk(page, suffix) { return 'asya_' + page + '_' + suffix; }
+
+    // Hangi liste sayfasındayız?
+    var path = window.location.pathname;
+    var currentPage = path.indexOf('cikmalar.php') !== -1 ? 'cikmalar'
+                    : path.indexOf('records.php')  !== -1 ? 'records'
+                    : null;
+
+    if (currentPage) {
+        // Kayıt linkine tıklanınca scroll + hedef kaydet
+        document.addEventListener('click', function (e) {
+            var link = e.target.closest('a[href]');
+            if (!link) return;
+            var href = link.getAttribute('href') || '';
+            var m = href.match(/(?:record_view|record_edit)\.php.*?[?&]id=(\d+)/);
+            if (!m) return;
+            try {
+                sessionStorage.setItem(sk(currentPage, 'scroll'), String(Math.round(window.scrollY)));
+                sessionStorage.setItem(sk(currentPage, 'target'), m[1]);
+                sessionStorage.setItem(sk(currentPage, 'ts'),     String(Date.now()));
+            } catch (_) {}
+        });
+
+        // Sayfa yüklenince scroll restore (bfcache değilse)
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) return; // bfcache — tarayıcı scroll'ı zaten korur
+            try {
+                var ts = parseInt(sessionStorage.getItem(sk(currentPage, 'ts')) || '0', 10);
+                if (!ts || Date.now() - ts > TTL) return;
+                var target = sessionStorage.getItem(sk(currentPage, 'target')) || '';
+                var savedY = parseInt(sessionStorage.getItem(sk(currentPage, 'scroll')) || '0', 10);
+                if (target) {
+                    // Her iki görünümdeki (pc tr + mobil div) data-record-id elementleri arasında
+                    // offsetParent'ı null olmayan (display:none dışında) görünür olanı bul
+                    var hits = document.querySelectorAll('[data-record-id="' + target + '"]');
+                    for (var i = 0; i < hits.length; i++) {
+                        if (hits[i].offsetParent !== null) {
+                            hits[i].scrollIntoView({ block: 'center' });
+                            return;
+                        }
+                    }
+                }
+                if (savedY > 0) window.scrollTo(0, savedY);
+            } catch (_) {}
+        });
+    }
+
+    // ── Geri / İptal butonları: data-list-back attribute ile hibrit davranış ──
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-list-back]');
+        if (!btn) return;
+        e.preventDefault();
+
+        var listPage = btn.dataset.listBack;            // 'records' | 'cikmalar'
+        var recordId = btn.dataset.recordId || '';
+        var listUrl  = btn.getAttribute('href')
+                    || (listPage === 'cikmalar' ? 'cikmalar.php' : 'records.php');
+
+        // Referrer kontrol: aynı domain'den ve liste sayfasından mı gelindi?
+        var ref = document.referrer || '';
+        var isListRef = ref.length > 0 && ref.indexOf(listPage + '.php') !== -1;
+
+        if (isListRef) {
+            // Listeden gelindi → tarayıcı geçmişi ile dön (bfcache scroll koruması)
+            history.back();
+            return;
+        }
+
+        // Direkt link veya başka sayfa → sessionStorage'a hedef yaz, listeye git
+        if (recordId) {
+            try {
+                sessionStorage.setItem(sk(listPage, 'target'), recordId);
+                sessionStorage.setItem(sk(listPage, 'scroll'), '0');
+                sessionStorage.setItem(sk(listPage, 'ts'),     String(Date.now()));
+            } catch (_) {}
+        }
+        window.location.href = listUrl;
+    });
+
+})();
