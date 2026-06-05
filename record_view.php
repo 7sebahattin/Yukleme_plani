@@ -624,19 +624,8 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                 <tr><th>TARİH</th><td colspan="3"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>
 
-            <!-- Sağ: MARKA + ALICI + ÜRÜN + ETİKET -->
+            <!-- Sağ: ALICI + ÜRÜN + ETİKET -->
             <div class="asya-right-top">
-                <?php $brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
-                <div class="asya-marka-row">
-                    <?php foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_bv): $_on = ($brand === $_bv); ?>
-                    <div class="marka-cell<?= $_on ? ' marka-on' : '' ?>">
-                        <span><?= $_on ? '✓ ' : '' ?><?= $_bv ?></span><strong>MARKA</strong>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-                <?php if ($brand === ''): ?>
-                <div class="marka-uyari">⚠ Marka seçilmedi</div>
-                <?php endif; ?>
                 <div class="asya-alici-urun-row">
                     <div class="cell-pair asya-alici-cell">
                         <span>ALICI</span>
