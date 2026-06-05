@@ -610,7 +610,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
             <table class="asya-info">
                 <tr><th>FİRMA</th><td colspan="3"><?= h($record['firma']) ?></td></tr>
                 <tr><th>BÖLGE</th><td colspan="3"><?= h($record['bolge']) ?></td></tr>
-                <tr><th>PARTİ NO</th><td colspan="3"><?= h($record['parti_no']) ?></td></tr>
+                <tr><th>PARTİ NO</th><td class="parti-no-val" colspan="3"><?= h($record['parti_no']) ?></td></tr>
                 <tr><th>GÜMRÜK</th><td colspan="3"><?= h($record['gumruk']) ?></td></tr>
                 <tr>
                     <th>NAKLİYE BEDELİ</th>
