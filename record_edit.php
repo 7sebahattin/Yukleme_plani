@@ -90,6 +90,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['urun']  = normalize_urun($record['urun']);
     if (!$edit_is_cikma) {
         $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : null;
+        // Geçersiz firma ID → NULL yap (form akışını bozma)
+        if (!empty($record['urun_sahibi_id'])) {
+            $_us_check = db()->prepare("SELECT id FROM material_definitions WHERE id=:id AND type='firma' AND is_active=1");
+            $_us_check->execute([':id' => $record['urun_sahibi_id']]);
+            if (!$_us_check->fetchColumn()) {
+                $record['urun_sahibi_id'] = null;
+            }
+        }
     }
 
     // Palet ürün alanı: boşsa kayıt ürününden doldur, doluysa normalize et
@@ -146,6 +154,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         cikis_nedeni=:cikis_nedeni
                      WHERE id=:id"
                 );
+                $st->execute([
+                    ':firma'        => $record['firma'],
+                    ':bolge'        => $record['bolge'],
+                    ':tarih'        => $record['tarih'],
+                    ':urun'         => $record['urun'],
+                    ':cikis_nedeni' => $record['cikis_nedeni'],
+                    ':id'           => $id,
+                ]);
             } else {
                 $st = $pdo->prepare(
                     "UPDATE loading_records SET
@@ -159,8 +175,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
                      WHERE id=:id"
                 );
+                $upd_params = [
+                    ':firma'           => $record['firma'],
+                    ':bolge'           => $record['bolge'],
+                    ':parti_no'        => $record['parti_no'],
+                    ':gumruk'          => $record['gumruk'],
+                    ':nakliye_bedeli'  => $record['nakliye_bedeli'],
+                    ':avans'           => $record['avans'],
+                    ':sofor_adi'       => $record['sofor_adi'],
+                    ':fatura_no'       => $record['fatura_no'],
+                    ':casus_no'        => $record['casus_no'],
+                    ':on_plaka'        => $record['on_plaka'],
+                    ':arka_plaka'      => $record['arka_plaka'],
+                    ':nakliye_sirketi' => $record['nakliye_sirketi'],
+                    ':telefon'         => $record['telefon'],
+                    ':tarih'           => $record['tarih'],
+                    ':alici'           => $record['alici'],
+                    ':urun'            => $record['urun'],
+                    ':etiket'          => $record['etiket'],
+                    ':id'              => $id,
+                ];
+                if ($has_brand) {
+                    $upd_params[':brand'] = $record['brand'];
+                }
+                if ($has_urun_sahibi) {
+                    $upd_params[':urun_sahibi_id'] = $record['urun_sahibi_id'] ?: null;
+                }
+                $st->execute($upd_params);
             }
-            $st->execute(array_merge($record, [':id' => $id]));
 
             // Paletleri sıfırdan yaz
             $pdo->prepare("DELETE FROM loading_pallets WHERE loading_record_id=:r")
