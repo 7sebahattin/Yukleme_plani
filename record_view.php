@@ -695,7 +695,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         </table>
 
         <!-- Stok Çıkışları (ayrı sütun) -->
-        <table class="asya-stok">
+        <table class="asya-stok"<?= $print ? ' style="height:auto;align-self:start"' : '' ?>>
             <thead>
             <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
             <tr>
