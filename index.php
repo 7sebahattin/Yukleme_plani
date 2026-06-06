@@ -84,7 +84,7 @@ render_flash();
     </a>
 <?php endif; ?>
 
-    <?php if (can_beyan('read')): ?>
+    <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
     <a href="beyanlar.php" class="home-card">
         <div class="home-card-icon" style="background:#ede9fe">🧾</div>
         <div class="home-card-title">Beyanlar</div>
