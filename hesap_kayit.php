@@ -6,16 +6,9 @@ require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('records.write');
 
-// Session $_SESSION'a yazmadan önce başlatılmalı — csrf_token() lazy başlatır ama o çok geç olur
-if (session_status() === PHP_SESSION_NONE) session_start();
-
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_POST['id']) ? (int)$_POST['id'] : 0);
 $hizli = trim($_GET['hizli'] ?? '');
 
-// Yeni kayıt için idempotency token — çift submit'i önler
-if ($id === 0 && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    $_SESSION['hesap_form_token'] = bin2hex(random_bytes(16));
-}
 $errors = [];
 
 // Hızlı giriş ön ayarları
@@ -65,29 +58,6 @@ if ($id > 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
-    // Yeni kayıt: çift submit engeli (fail-open — token yoksa veya session uyuşmuyorsa geçir)
-    if ($id === 0) {
-        $submitted_token = $_POST['form_token'] ?? '';
-
-        if ($submitted_token !== '') {
-            // Eski used_token'ları temizle (30 dakikadan eski)
-            $now = time();
-            $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
-            foreach ($used_tokens as $_t => $_ts) {
-                if ($now - $_ts > 1800) unset($used_tokens[$_t]);
-            }
-            $_SESSION['used_hesap_tokens'] = $used_tokens;
-
-            // Yalnızca kesin çift-submit kanıtında engelle: bu token daha önce başarıyla kullanıldı
-            if (isset($used_tokens[$submitted_token])) {
-                set_flash('warning', 'Bu form daha önce gönderildi, ikinci kez işlenmedi.');
-                header('Location: hesap_liste.php');
-                exit;
-            }
-        }
-        // Token boşsa veya session'da uyuşmuyorsa: sessizce geçir (CSRF koruması yeterli)
-    }
-
     $record['transaction_date']       = trim($_POST['transaction_date'] ?? date('Y-m-d')) ?: date('Y-m-d');
     $record['transaction_time']       = trim($_POST['transaction_time'] ?? '00:00') ?: '00:00';
     $record['type']                   = trim($_POST['type'] ?? 'gider');
@@ -133,19 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (int)$record['is_given_to_accountant'], $record['notes'],
                 ]);
             $id = (int)$pdo->lastInsertId();
-
-            // Token'ı başarılı insert sonrasında tüket — geri tuşu koruması için used listesine ekle
-            $now = time();
-            $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
-            foreach ($used_tokens as $_t => $_ts) {
-                if ($now - $_ts > 1800) unset($used_tokens[$_t]);
-            }
-            $token_used = $_POST['form_token'] ?? '';
-            if ($token_used !== '') {
-                $used_tokens[$token_used] = $now;
-            }
-            $_SESSION['used_hesap_tokens'] = $used_tokens;
-            unset($_SESSION['hesap_form_token']);
         }
 
         // Audit — mali kayıt create/update
@@ -186,7 +143,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ];
                 $up = hesap_upload_file($single, $id);
                 if (!empty($up['ok'])) {
-                    // Audit — dosya yükleme (içerik loglanmaz, sadece meta)
                     audit_log_event('upload', 'hesap', $id, null, [
                         'original_name' => $up['original_name'] ?? basename($fname),
                         'file_type'     => $single['type'],
@@ -217,7 +173,6 @@ render_flash();
 <form method="post" enctype="multipart/form-data" class="record-form" id="hesapKayitForm">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 <?php if ($id > 0): ?><input type="hidden" name="id" value="<?= $id ?>"><?php endif; ?>
-<?php if ($id === 0): ?><input type="hidden" name="form_token" value="<?= h($_SESSION['hesap_form_token'] ?? '') ?>"><?php endif; ?>
 
 <section class="card">
     <div class="card-head"><h2>İşlem Bilgileri</h2></div>
@@ -397,17 +352,5 @@ function hesapDelFile(btn) {
 document.getElementById('uploadArea').addEventListener('click', function() {
     document.getElementById('dosyalarInput').click();
 });
-
-// Çift submit engeli — form gönderilince kaydet butonunu devre dışı bırak
-(function () {
-    var form = document.getElementById('hesapKayitForm');
-    if (!form) return;
-    form.addEventListener('submit', function () {
-        var btn = form.querySelector('button[type="submit"]');
-        if (!btn) return;
-        btn.disabled = true;
-        btn.textContent = 'Kaydediliyor...';
-    });
-})();
 </script>
 <?php render_footer(); ?>
