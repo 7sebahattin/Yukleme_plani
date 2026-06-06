@@ -210,11 +210,11 @@ $form_is_cikma = $form_is_cikma ?? false;
             </label>
             <label>Nakliye Bedeli
                 <input type="text" name="nakliye_bedeli" inputmode="decimal"
-                       value="<?= h($record['nakliye_bedeli'] ?? '') ?>">
+                       value="<?= h(fmt_edit_num($record['nakliye_bedeli'] ?? null, 2)) ?>">
             </label>
             <label>Avans
                 <input type="text" name="avans" inputmode="decimal"
-                       value="<?= h($record['avans'] ?? '') ?>">
+                       value="<?= h(fmt_edit_num($record['avans'] ?? null, 2)) ?>">
             </label>
         </div>
     </div>

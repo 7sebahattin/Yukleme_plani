@@ -40,6 +40,18 @@ function intval_safe($v): int {
     return (int)preg_replace('/[^0-9-]/', '', (string)$v);
 }
 
+// Edit formları için: DB değerini num()-uyumlu Türkçe formata çevirir.
+// Türkçe: nokta=binler ayracı, virgül=ondalık → "24.300" veya "24.300,50"
+// num("24.300") = 24300, num("24.300,50") = 24300.5  — doğru parse edilir.
+// Sıfır/null → '' döner (input boş kalır).
+function fmt_edit_num($v, int $decimals = 0): string
+{
+    if ($v === null || $v === '') return '';
+    $f = (float)$v;
+    if (abs($f) < 0.000001) return '';
+    return number_format($f, $decimals, ',', '.');
+}
+
 // --- CSRF ---
 function csrf_token(): string {
     if (session_status() === PHP_SESSION_NONE) session_start();
