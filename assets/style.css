@@ -4480,3 +4480,140 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
         print-color-adjust: exact;
     }
 }
+
+/* ── Beyan Modülü — Durum Badge'leri (Sprint Beyan-01) ── */
+.beyan-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.beyan-badge-taslak          { background: #f3f4f6; color: #374151; }
+.beyan-badge-beyan_acildi    { background: #dbeafe; color: #1d4ed8; }
+.beyan-badge-numune_bekliyor { background: #fef3c7; color: #92400e; }
+.beyan-badge-analiz_bekliyor { background: #ffedd5; color: #9a3412; }
+.beyan-badge-temiz           { background: #d1fae5; color: #065f46; }
+.beyan-badge-red             { background: #fee2e2; color: #991b1b; }
+.beyan-badge-iptal           { background: #e5e7eb; color: #4b5563; }
+.beyan-badge-yukleme_olustu  { background: #ede9fe; color: #5b21b6; }
+
+/* Beyan kart listesi */
+.beyan-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    box-shadow: var(--shadow);
+    text-decoration: none;
+    color: var(--text);
+    display: block;
+}
+.beyan-card:hover { border-color: var(--primary); text-decoration: none; }
+.beyan-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.beyan-card-parti { font-weight: 700; font-size: 1rem; }
+.beyan-card-urun  { font-size: .95rem; color: var(--text); margin-bottom: 4px; }
+.beyan-card-meta  {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: .82rem;
+    color: var(--muted);
+    margin: 4px 0;
+}
+.beyan-card-alici { font-size: .88rem; margin-top: 4px; }
+.beyan-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+/* Beyan form bölümleri */
+.beyan-section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+.beyan-section-title {
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+.beyan-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+@media (max-width: 480px) {
+    .beyan-form-grid { grid-template-columns: 1fr; }
+}
+
+/* Beyan detay görünümü */
+.beyan-view-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 16px;
+    font-size: .9rem;
+}
+@media (min-width: 768px) {
+    .beyan-view-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.beyan-view-row .lbl { color: var(--muted); font-size: .78rem; display: block; }
+.beyan-view-row .val { font-weight: 500; }
+
+/* Collapsible ham metin */
+.beyan-collapsible-toggle {
+    background: none;
+    border: none;
+    font: inherit;
+    cursor: pointer;
+    color: var(--primary);
+    font-size: .88rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.beyan-collapsible-body {
+    margin-top: 8px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    font-size: .82rem;
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Durum geçiş butonları */
+.beyan-next-status-wrap {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+}
+
+@media print {
+    .beyan-card-actions, .beyan-next-status-wrap { display: none; }
+}
