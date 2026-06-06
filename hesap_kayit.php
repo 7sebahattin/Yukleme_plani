@@ -65,40 +65,27 @@ if ($id > 0) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
-    // Yeni kayıt: idempotency token doğrula — çift submit engeli
+    // Yeni kayıt: çift submit engeli (fail-open — token yoksa veya session uyuşmuyorsa geçir)
     if ($id === 0) {
         $submitted_token = $_POST['form_token'] ?? '';
 
-        if ($submitted_token === '') {
-            set_flash('warning', 'Form süresi dolmuş. Lütfen sayfayı yenileyip tekrar deneyin.');
-            header('Location: hesap_kayit.php' . ($hizli ? '?hizli=' . urlencode($hizli) : ''));
-            exit;
-        }
+        if ($submitted_token !== '') {
+            // Eski used_token'ları temizle (30 dakikadan eski)
+            $now = time();
+            $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
+            foreach ($used_tokens as $_t => $_ts) {
+                if ($now - $_ts > 1800) unset($used_tokens[$_t]);
+            }
+            $_SESSION['used_hesap_tokens'] = $used_tokens;
 
-        // Eski used_token'ları temizle (30 dakikadan eski)
-        $now = time();
-        $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
-        foreach ($used_tokens as $_t => $_ts) {
-            if ($now - $_ts > 1800) unset($used_tokens[$_t]);
+            // Yalnızca kesin çift-submit kanıtında engelle: bu token daha önce başarıyla kullanıldı
+            if (isset($used_tokens[$submitted_token])) {
+                set_flash('warning', 'Bu form daha önce gönderildi, ikinci kez işlenmedi.');
+                header('Location: hesap_liste.php');
+                exit;
+            }
         }
-        $_SESSION['used_hesap_tokens'] = $used_tokens;
-
-        // Geri tuşu ile tekrar submit koruması — daha önce başarıyla işlenmiş token
-        if (isset($used_tokens[$submitted_token])) {
-            set_flash('warning', 'Bu form daha önce gönderildi. Aynı işlemi ikinci kez oluşturmamak için tekrar işlenmedi. Yeni kayıt için sayfayı açın.');
-            header('Location: hesap_liste.php');
-            exit;
-        }
-
-        // Aktif session token ile karşılaştır
-        if ($submitted_token !== ($_SESSION['hesap_form_token'] ?? '')) {
-            set_flash('warning', 'Bu form daha önce gönderildi. Aynı işlemi ikinci kez oluşturmamak için tekrar işlenmedi.');
-            header('Location: hesap_liste.php');
-            exit;
-        }
-
-        // ⚠️ Token'ı burada tüketme — yalnızca başarılı DB insert sonrası tüket
-        // Validasyon hatası olursa kullanıcı formu düzeltip tekrar gönderebilsin
+        // Token boşsa veya session'da uyuşmuyorsa: sessizce geçir (CSRF koruması yeterli)
     }
 
     $record['transaction_date']       = trim($_POST['transaction_date'] ?? date('Y-m-d')) ?: date('Y-m-d');
