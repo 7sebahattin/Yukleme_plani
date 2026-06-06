@@ -4617,3 +4617,15 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 @media print {
     .beyan-card-actions, .beyan-next-status-wrap { display: none; }
 }
+
+/* ── Beyan parse alert (Sprint Beyan-02) ── */
+.beyan-parse-alert {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin: 10px 0 4px;
+    line-height: 1.4;
+}
+.beyan-parse-alert-ok    { background: #d1fae5; color: #065f46; }
+.beyan-parse-alert-warn  { background: #fef3c7; color: #92400e; }
+.beyan-parse-alert-error { background: #fee2e2; color: #991b1b; }

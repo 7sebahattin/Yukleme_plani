@@ -46,6 +46,91 @@
     // Close on scroll (fixed dropdowns stay in place otherwise)
     window.addEventListener('scroll', closeAllDropdowns, true);
 
+    /* ── Beyan WhatsApp metin ayrıştırıcı ── */
+    (function () {
+        var parseBtn = document.querySelector('[data-beyan-parse-btn]');
+        if (!parseBtn) return;
+
+        var beyanForm  = document.querySelector('[data-beyan-form]');
+        var statusDiv  = document.getElementById('beyanParseStatus');
+        var baseUrl    = parseBtn.dataset.baseUrl || '';
+
+        function showParseStatus(type, msg) {
+            if (!statusDiv) return;
+            statusDiv.className = 'beyan-parse-alert beyan-parse-alert-' + type;
+            statusDiv.textContent = msg;
+            statusDiv.hidden = false;
+        }
+
+        function fillField(name, value) {
+            if (value === null || value === undefined || value === '') return;
+            var el = beyanForm ? beyanForm.querySelector('[name="' + name + '"]') : null;
+            if (!el || el.tagName === 'SELECT') return;
+            if (el.value.trim() === '' || el.value === '0') {
+                el.value = String(value);
+            }
+        }
+
+        parseBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            var rawEl = beyanForm ? beyanForm.querySelector('[name="raw_text"]') : null;
+            if (!rawEl || rawEl.value.trim() === '') {
+                showParseStatus('warn', 'Lütfen önce WhatsApp metnini girin.');
+                return;
+            }
+            var csrfEl = beyanForm ? beyanForm.querySelector('[name="csrf"]') : null;
+
+            parseBtn.disabled = true;
+            parseBtn.textContent = 'Ayrıştırılıyor…';
+            if (statusDiv) statusDiv.hidden = true;
+
+            var fd = new FormData();
+            if (csrfEl) fd.append('csrf', csrfEl.value);
+            fd.append('text', rawEl.value);
+
+            fetch(baseUrl + 'beyan_parse.php', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    parseBtn.disabled = false;
+                    parseBtn.textContent = '🔍 Metni Ayrıştır';
+
+                    if (!data.ok) {
+                        showParseStatus('error', data.error || 'Ayrıştırma başarısız.');
+                        return;
+                    }
+
+                    var p = data.parsed || {};
+                    var fields = [
+                        'declaration_title', 'party_no', 'transport_type', 'line_type',
+                        'company_name', 'company_address', 'product_name', 'product_variety',
+                        'pallet_count', 'gross_kg', 'net_kg', 'crate_count', 'crate_type',
+                        'exit_depot', 'buyer_name', 'contact_person', 'brand'
+                    ];
+                    fields.forEach(function (f) { fillField(f, p[f]); });
+
+                    if (data.unmatched) {
+                        var unmEl = beyanForm ? beyanForm.querySelector('[name="unmatched_text"]') : null;
+                        if (unmEl && unmEl.value.trim() === '') unmEl.value = data.unmatched;
+                    }
+
+                    var mc = data.matched_count || 0;
+                    var msg = mc > 0
+                        ? mc + ' alan dolduruldu'
+                        : 'Eşleşen alan bulunamadı — metni kontrol edin.';
+                    if (data.unmatched) {
+                        var ul = data.unmatched.split('\n').filter(function (s) { return s.trim(); });
+                        if (ul.length) msg += ' (' + ul.length + ' satır eşleşmedi)';
+                    }
+                    showParseStatus(mc > 0 ? 'ok' : 'warn', msg);
+                })
+                .catch(function (err) {
+                    parseBtn.disabled = false;
+                    parseBtn.textContent = '🔍 Metni Ayrıştır';
+                    showParseStatus('error', 'Bağlantı hatası: ' + err.message);
+                });
+        });
+    })();
+
     const formEl = document.getElementById('recordForm');
     if (!formEl) return;
 

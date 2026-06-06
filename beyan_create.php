@@ -146,7 +146,7 @@ render_flash();
 </div>
 <?php endif; ?>
 
-<form method="post" action="beyan_create.php">
+<form method="post" action="beyan_create.php" data-beyan-form>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 
 <!-- 1. WhatsApp Ham Metni -->
@@ -157,9 +157,14 @@ render_flash();
         <textarea name="raw_text" rows="8" class="form-control"
                   placeholder="WhatsApp beyan metnini buraya yapıştırın..."
                   style="font-size:14px;font-family:monospace"><?= h($f['raw_text']) ?></textarea>
-        <div class="form-hint">Sonraki sprintte bu metin otomatik ayrıştırılacak.</div>
     </div>
-    <div class="form-group" style="margin-top:10px">
+    <div style="margin-top:8px">
+        <button type="button" class="btn btn-secondary"
+                data-beyan-parse-btn
+                data-base-url="<?= h(base_url()) ?>">🔍 Metni Ayrıştır</button>
+    </div>
+    <div id="beyanParseStatus" hidden></div>
+    <div class="form-group" style="margin-top:12px">
         <label class="form-label">Eşleşmeyen / Dikkat Edilecek Satırlar</label>
         <textarea name="unmatched_text" rows="3" class="form-control"
                   placeholder="Eşleşmeyen veya sonradan kontrol edilecek satırlar..."
