@@ -103,9 +103,11 @@ $sql = "SELECT r.*,
                COALESCE(SUM(p.kasa_adeti),0) AS toplam_kasa,
                COALESCE(SUM(p.brut_kg),0)    AS toplam_brut,
                COALESCE(SUM(p.dara_kg),0)    AS toplam_dara,
-               COALESCE(SUM(p.net_kg),0)     AS toplam_net
+               COALESCE(SUM(p.net_kg),0)     AS toplam_net,
+               us.name                        AS urun_sahibi_adi
         FROM loading_records r
         LEFT JOIN loading_pallets p ON p.loading_record_id = r.id
+        LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma'
         $where
         GROUP BY r.id
         $order
@@ -214,7 +216,7 @@ render_flash();
             <thead>
             <tr>
                 <th>Tarih</th>
-                <th>Oluşturma</th>
+                <th>Ürün Sahibi</th>
                 <th>Son Düzenleme</th>
                 <th>Firma</th>
                 <th>Bölge</th>
@@ -239,7 +241,7 @@ render_flash();
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>">
                     <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
-                    <td class="muted"><?= h(fmt_datetime($r['created_at'])) ?></td>
+                    <td><?= $r['urun_sahibi_adi'] ? h($r['urun_sahibi_adi']) : '<span class="muted">—</span>' ?></td>
                     <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
                     <td>
                         <?= h($r['firma']) ?>
@@ -311,7 +313,7 @@ render_flash();
                         <strong><?= h($firma_label) ?><?= $ft ? ' <span class="record-card-tarih">· ' . h($ft) . '</span>' : '' ?></strong>
                         <?php if ($locked): ?><span class="badge-locked">🔒 Kilitli</span><?php endif; ?>
                         <?php if ($r['parti_no']): ?><div class="record-card-firma">Parti: <?= h($r['parti_no']) ?></div><?php endif; ?>
-                        <div class="muted"><?= h(fmt_datetime($r['created_at'])) ?></div>
+                        <?php if ($r['urun_sahibi_adi']): ?><div class="muted">Ürün Sahibi: <?= h($r['urun_sahibi_adi']) ?></div><?php endif; ?>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
