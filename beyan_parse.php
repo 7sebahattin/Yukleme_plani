@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// beyan_parse.php — WhatsApp beyan metni ayrıştırıcı (Sprint Beyan-02)
+// beyan_parse.php — WhatsApp beyan metni ayrıştırıcı (Sprint Beyan-02 bugfix)
 // AJAX endpoint: POST {csrf, text} → JSON {ok, parsed, unmatched, matched_count}
 // =========================================================
 declare(strict_types=1);
@@ -30,20 +30,28 @@ if ($raw === '') {
     exit;
 }
 
+// ── Normalize a single line: NBSP/ZWS → space, collapse whitespace ──
+function normalize_line(string $s): string
+{
+    $s = str_replace(["\xc2\xa0", "\xe2\x80\x8b", "\xef\xbb\xbf"], ' ', $s);
+    $s = (string)preg_replace('/\s+/u', ' ', $s);
+    return trim($s);
+}
+
 // ── Turkish number parser ── mirrors num() but returns null for empty/invalid ──
 function parse_beyan_number(string $s): ?float
 {
     $s = trim($s);
     if ($s === '') return null;
-    // Strip trailing unit suffixes (KG, ADET, AD, PCS, TN)
-    $s = preg_replace('/\s*(KG|ADET|AD\.?|PCS|TN)\.?\s*$/ui', '', $s);
+    // Strip trailing unit suffixes (KG, ADET, AD, PCS, TN, TON)
+    $s = (string)preg_replace('/\s*(KG|ADET|AD\.?|PCS|TN|TON)\.?\s*$/ui', '', $s);
     $s = trim(str_replace([' ', "\xc2\xa0"], '', $s));
     if ($s === '') return null;
     if (str_contains($s, ',')) {
-        $s = str_replace('.', '', $s);
-        $s = str_replace(',', '.', $s);
+        $s = str_replace('.', '', $s);  // remove thousands dots
+        $s = str_replace(',', '.', $s); // decimal comma → dot
     } else {
-        $s = str_replace('.', '', $s); // dot is always thousands sep in Turkish
+        $s = str_replace('.', '', $s);  // dot = always thousands sep in Turkish
     }
     return is_numeric($s) ? (float)$s : null;
 }
@@ -71,10 +79,12 @@ function parse_beyan_text(string $raw): array
         'brand'             => null,
     ];
 
-    $lines   = preg_split('/\r?\n/', trim($raw));
+    $rawLines = preg_split('/\r?\n/', trim($raw));
+    // Normalize each line (collapse spaces, NBSP); keep raw for nothing — normalized is the value too
+    $lines   = array_map('normalize_line', $rawLines);
     $matched = array_fill(0, count($lines), false);
 
-    // Helper: set field only once; returns true when actually set
+    // Set field only once; returns true when value was actually stored
     $setOnce = static function (string $field, $val) use (&$out): bool {
         if ($out[$field] !== null || $val === null || $val === '') return false;
         $out[$field] = $val;
@@ -84,26 +94,26 @@ function parse_beyan_text(string $raw): array
     // ── Pass 1: labeled patterns (KEY: VALUE or KEY - VALUE) ──
     $labeled = [
         'declaration_title' => '/^(?:BEYAN\s*T[İI]P[İI]|BA[ŞS]LIK|TITLE)\s*[:\-]\s*(.+)/ui',
-        'party_no'          => '/^PART[İI]\s*NO\s*[:\-]\s*(.+)/ui',
-        'transport_type'    => '/^(?:NAKL[İI]YE\s*T[ÜU]R[ÜU]|TRANSPORT\s*TYPE)\s*[:\-]\s*(.+)/ui',
-        'line_type'         => '/^(?:HAT|LINE|G[ÜU]ZERGAH|GÜZERGAH)\s*[:\-]\s*(.+)/ui',
+        // "PARTİ: 46/22" AND "PARTİ NO: 46/22"
+        'party_no'          => '/^PART[İI](?:\s*NO)?\s*[:\-]\s*(\d[\d\s\/]*\d)/ui',
+        'transport_type'    => '/^(?:NAKL[İI]YE\s*T[ÜU]R[ÜU]|TRANSPORT\s*(?:TYPE)?)\s*[:\-]\s*(.+)/ui',
+        'line_type'         => '/^(?:HAT|LINE|G[ÜU]ZERGAH)\s*[:\-]\s*(.+)/ui',
         'product_name'      => '/^(?:[ÜU]R[ÜU]N(?:\s*ADI)?|MAHSUL)\s*[:\-]\s*(.+)/ui',
         'product_variety'   => '/^(?:[CÇ]E[ŞS][İI]T(?:\s*ADI)?|VARYETE|VAR\.)\s*[:\-]\s*(.+)/ui',
         'pallet_count'      => '/^(?:PALET(?:\s*ADET[İI])?|PALLET)\s*[:\-]\s*(.+)/ui',
         'gross_kg'          => '/^(?:BR[ÜU]T(?:\s*KG)?|GROSS(?:\s*KG)?|TOPLAM\s*KG)\s*[:\-]\s*(.+)/ui',
-        'net_kg'            => '/^NET(?:\s*KG(?:\s*A[ĞG]IRLI[ĞG]I)?|(?:\s*A[ĞG]IRLI[ĞG]I)?)?\s*[:\-]\s*(.+)/ui',
+        'net_kg'            => '/^NET(?:\s*(?:KG|A[ĞG]IRLI[ĞG]I|KG\s*A[ĞG]IRLI[ĞG]I))?\s*[:\-]\s*(.+)/ui',
         'crate_count'       => '/^(?:KASA(?:\s*ADET[İI])?|SANDIK|KUTU)\s*[:\-]\s*(.+)/ui',
         'crate_type'        => '/^(?:KASA\s*C[İI]NS[İI]|KASA\s*T[İI]P[İI]|AMBALAJ)\s*[:\-]\s*(.+)/ui',
         'exit_depot'        => '/^(?:[CÇ][IÇ]KI[ŞS]\s*DEPO|DEPO(?:\s*ADI)?)\s*[:\-]\s*(.+)/ui',
         'buyer_name'        => '/^(?:ALICI|BUYER|M[ÜU][ŞS]TER[İI])\s*[:\-]\s*(.+)/ui',
-        'contact_person'    => '/^(?:[İI]LG[İI]L[İI](?:\s*K[İI][ŞŞ][İI])?|CONTACT|YETKL[İI])\s*[:\-]\s*(.+)/ui',
+        'contact_person'    => '/^(?:[İI]LG[İI]L[İI](?:\s*K[İI][ŞS][İI])?|CONTACT|YETKL[İI])\s*[:\-]\s*(.+)/ui',
         'brand'             => '/^(?:MARKA|BRAND)\s*[:\-]\s*(.+)/ui',
     ];
 
     $numFields = ['pallet_count', 'gross_kg', 'net_kg', 'crate_count'];
 
-    foreach ($lines as $i => $line) {
-        $t = trim($line);
+    foreach ($lines as $i => $t) {
         if ($t === '') {
             $matched[$i] = true;
             continue;
@@ -117,6 +127,10 @@ function parse_beyan_text(string $raw): array
                     $v = in_array($field, ['pallet_count', 'crate_count'], true) ? (int)$n : $n;
                     if ($setOnce($field, $v)) $matched[$i] = true;
                 }
+            } elseif ($field === 'party_no') {
+                // Collapse spaces: "46 / 22" → "46/22"
+                $val = (string)preg_replace('/\s+/u', '', $val);
+                if ($setOnce($field, $val)) $matched[$i] = true;
             } else {
                 if ($setOnce($field, $val)) $matched[$i] = true;
             }
@@ -124,94 +138,167 @@ function parse_beyan_text(string $raw): array
         }
     }
 
-    // ── Pass 2: unlabeled / positional patterns ──
-    foreach ($lines as $i => $line) {
-        if ($matched[$i]) continue;
-        $t = trim($line);
-        if ($t === '') {
+    // ── Pass 2: PLASTİK KASA special — typo-tolerant, optional embedded count ──
+    // Must run before generic unlabeled pass so crate_type is always normalized.
+    // Handles: PLASİTK, PLASTIK, PLASTİK, PLASITK, PLAS\w+ variants with optional ": 2.662"
+    foreach ($lines as $i => $t) {
+        if ($matched[$i] || $t === '') continue;
+
+        // PLAS* KASA (any typo) with optional separator and count
+        if (preg_match('/^PLAS\w*\s+KASA\s*[:\-]?\s*([\d.,]*)$/ui', $t, $m)) {
+            $setOnce('crate_type', 'PLASTİK KASA');
+            $matched[$i] = true;
+            if ($m[1] !== '') {
+                $n = parse_beyan_number($m[1]);
+                if ($n !== null) $setOnce('crate_count', (int)$n);
+            }
+            continue;
+        }
+        // Other material types: AHŞAP, KARTON, OLUKLU, METAL with optional count
+        if (preg_match('/^(AH[ŞS]AP|KARTON|OLUKLU|KA[ĞG]IT|TAHTA|WOOD|METAL)\s+(?:KASA|SANDIK|KUTU)\s*[:\-]?\s*([\d.,]*)$/ui', $t, $m)) {
+            $typeWord = mb_strtoupper(trim($m[1]), 'UTF-8');
+            $setOnce('crate_type', $typeWord . ' KASA');
+            $matched[$i] = true;
+            if (!empty($m[2])) {
+                $n = parse_beyan_number($m[2]);
+                if ($n !== null) $setOnce('crate_count', (int)$n);
+            }
+            continue;
+        }
+    }
+
+    // ── Pass 3: unlabeled / positional patterns ──
+    foreach ($lines as $i => $t) {
+        if ($matched[$i] || $t === '') {
             $matched[$i] = true;
             continue;
         }
-        $tu = mb_strtoupper($t, 'UTF-8');
 
-        // "YENİ BEYAN" / "BEYAN" title line (≤60 chars)
+        // "YENİ BEYAN" title — always mark as matched even if title already set
         if (preg_match('/\bBEYAN\b/ui', $t) && mb_strlen($t) <= 60) {
-            if ($setOnce('declaration_title', $t)) { $matched[$i] = true; continue; }
+            $setOnce('declaration_title', $t);
+            $matched[$i] = true;
+            continue;
         }
 
-        // Parti no: standalone "46/22" or "PRTİ:46/22"
-        if (preg_match('/^(\d{1,4}\/\d{1,4})$/u', $t, $m)) {
-            if ($setOnce('party_no', $m[1])) { $matched[$i] = true; continue; }
+        // Transport type, optionally combined with line type on same line:
+        //   "DENİZYOLU ( YEŞİL HAT)"  "KARAYOLU"  "DENIZYOLU YESIL HAT"
+        if (preg_match('/\b(DEN[İI]ZYOLU|KARAYOLU|HAVAYOLU|T[İI]R|U[ÇC]AK)\b(.*)/ui', $t, $m)) {
+            $setOnce('transport_type', mb_strtoupper(trim($m[1]), 'UTF-8'));
+            $matched[$i] = true;
+            // Extract HAT component from the rest, stripping parentheses
+            $rest = trim($m[2]);
+            $rest = trim((string)preg_replace('/^\s*\(\s*|\s*\)\s*$/', '', $rest));
+            if ($rest !== '' && preg_match('/\bHAT\b/ui', $rest)) {
+                $hatNorm = (string)preg_replace('/\s+/u', ' ', mb_strtoupper($rest, 'UTF-8'));
+                $setOnce('line_type', $hatNorm);
+            }
+            continue;
         }
 
-        // Transport type standalone keyword
-        if (preg_match('/^(DEN[İI]ZYOLU|KARAYOLU|HAVAYOLU|T[İI]R|U[ÇC]AK)$/ui', $t, $m)) {
-            if ($setOnce('transport_type', $tu)) { $matched[$i] = true; continue; }
+        // Line type standalone: "YEŞİL HAT", "KIRMIZI HAT", etc.
+        if (preg_match('/^(YE[ŞS][İI]L|KIRMIZI|TURUNCU|LAC[İI]VERT|MAV[İI]|SARI)\s+HAT$/ui', $t)) {
+            if ($setOnce('line_type', mb_strtoupper($t, 'UTF-8'))) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // Line type: "YEŞİL HAT", "KIRMIZI HAT", etc.
-        if (preg_match('/^(YE[ŞS][İI]L|KIRMIZI|TURUNCU|LAC[İI]VERT|MAV[İI]|SARI)\s+HAT$/ui', $t, $m)) {
-            if ($setOnce('line_type', $tu)) { $matched[$i] = true; continue; }
+        // Parti no: "46/22" alone, "46/22 parti", "46 / 22 PARTİ"
+        if (preg_match('/^(\d{1,4}\s*\/\s*\d{1,4})\s*(?:PART[İI])?$/ui', $t, $m)) {
+            $pno = (string)preg_replace('/\s+/', '', $m[1]);
+            if ($setOnce('party_no', $pno)) {
+                $matched[$i] = true;
+                continue;
+            }
+        }
+        // "PARTİ 46/22" (prefix without colon — colon form already caught in Pass 1)
+        if (preg_match('/^PART[İI]\s+(\d{1,4}\s*\/\s*\d{1,4})$/ui', $t, $m)) {
+            $pno = (string)preg_replace('/\s+/', '', $m[1]);
+            if ($setOnce('party_no', $pno)) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // "26 PALET" or "26 PALET ADEDİ"
-        if (preg_match('/^(\S+)\s+PALET(?:\s*ADET[İI])?$/ui', $t, $m)) {
+        // "26 PALET KAYISI MİKADO" — pallet count, then optional product name + variety
+        if (preg_match('/^(\d[\d.,]*)\s+PALET\s*(.*)$/ui', $t, $m)) {
             $n = parse_beyan_number($m[1]);
-            if ($n !== null && $setOnce('pallet_count', (int)$n)) { $matched[$i] = true; continue; }
+            if ($n !== null) {
+                $setOnce('pallet_count', (int)$n);
+                $matched[$i] = true;
+                $rest = trim($m[2]);
+                // Only parse product info if rest is not an ADET/NO suffix
+                if ($rest !== '' && !preg_match('/^ADET[İI]?\b/ui', $rest)) {
+                    $parts = (array)preg_split('/\s+/u', $rest, 2);
+                    $setOnce('product_name', $parts[0]);
+                    if (!empty($parts[1])) $setOnce('product_variety', $parts[1]);
+                }
+                continue;
+            }
         }
 
-        // "24.200 BRÜT" or "24.200 KG BRÜT" or "BRÜT 24.200" or "BRÜT: 24.200 KG"
+        // "24.200 BRÜT" / "BRÜT 24.200" / "24.200 KG BRÜT"
         if (preg_match('/^(\S+)\s+(?:KG\s+)?BR[ÜU]T(?:\s+KG)?$/ui', $t, $m)
-            || preg_match('/^BR[ÜU]T\s+(?:KG\s+)?(\S+(?:\s+KG)?)$/ui', $t, $m)) {
+            || preg_match('/^BR[ÜU]T\s+(?:KG\s+)?(\S+)$/ui', $t, $m)) {
             $n = parse_beyan_number($m[1]);
-            if ($n !== null && $setOnce('gross_kg', $n)) { $matched[$i] = true; continue; }
+            if ($n !== null && $setOnce('gross_kg', $n)) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // "22.400 NET" or "NET 22.400"
+        // "22.400 NET" / "NET 22.400"
         if (preg_match('/^(\S+)\s+(?:KG\s+)?NET(?:\s+KG)?$/ui', $t, $m)
-            || preg_match('/^NET\s+(?:KG\s+)?(\S+(?:\s+KG)?)$/ui', $t, $m)) {
+            || preg_match('/^NET\s+(?:KG\s+)?(\S+)$/ui', $t, $m)) {
             $n = parse_beyan_number($m[1]);
-            if ($n !== null && $setOnce('net_kg', $n)) { $matched[$i] = true; continue; }
+            if ($n !== null && $setOnce('net_kg', $n)) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // "2.662 KASA" or "KASA 2.662"
+        // "2.662 KASA" / "KASA 2.662"
         if (preg_match('/^(\S+)\s+KASA(?:\s*ADET[İI])?$/ui', $t, $m)
             || preg_match('/^KASA\s+(\S+)$/ui', $t, $m)) {
             $n = parse_beyan_number($m[1]);
-            if ($n !== null && $setOnce('crate_count', (int)$n)) { $matched[$i] = true; continue; }
+            if ($n !== null && $setOnce('crate_count', (int)$n)) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // Crate type: PLASTİK KASA (typo-tolerant: PLASİTK, PLASTIK, PLASITK)
-        if (preg_match('/^(?:PLAS(?:T[İI]|[İI]T)K|PLAS(?:TIK|[İI]K)?)\s+(?:KASA|SANDIK|KUTU)$/ui', $t)
-            || preg_match('/^(?:AH[ŞS]AP|KARTON|OLUKLU|KAĞIT|TAHTA|WOOD|METAL)\s+(?:KASA|SANDIK|KUTU)$/ui', $t)) {
-            if ($setOnce('crate_type', $t)) { $matched[$i] = true; continue; }
-        }
-
-        // Depot: line containing "DEPO" (≤80 chars)
+        // Depot: any line containing "DEPO" (≤80 chars)
         if (preg_match('/\bDEPO\b/ui', $t) && mb_strlen($t) <= 80) {
-            if ($setOnce('exit_depot', $t)) { $matched[$i] = true; continue; }
+            if ($setOnce('exit_depot', $t)) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
         // Brand: "URAS MARKA" or "MARKA URAS"
         if (preg_match('/^(.+?)\s+MARKA$/ui', $t, $m)) {
-            if ($setOnce('brand', trim($m[1]))) { $matched[$i] = true; continue; }
+            if ($setOnce('brand', trim($m[1]))) {
+                $matched[$i] = true;
+                continue;
+            }
         }
         if (preg_match('/^MARKA\s+(.+)$/ui', $t, $m)) {
-            if ($setOnce('brand', trim($m[1]))) { $matched[$i] = true; continue; }
+            if ($setOnce('brand', trim($m[1]))) {
+                $matched[$i] = true;
+                continue;
+            }
         }
 
-        // Company block: LLC, LTD, LIMITED, A.Ş., GMBH, CORP
-        if (preg_match('/\b(?:LIMITED|COMPANY|LLC|LTD\.?|A\.?[ŞS]\.?|GMBH|CORP(?:ORATION)?|[İI][ŞS]LET|L[İI]M[İI]TED\s*[ŞS][İI]RKET)\b/ui', $t)) {
+        // Company block: LIMITED, LLC, LTD, A.Ş., GMBH, CORP
+        if (preg_match('/\b(?:LIMITED|COMPANY|LLC|LTD\.?|A\.?[ŞS]\.?|GMBH|CORP(?:ORATION)?|L[İI]M[İI]TED\s*[ŞS][İI]RKET)\b/ui', $t)) {
             if ($out['company_name'] === null) {
                 $out['company_name'] = $t;
                 $matched[$i]         = true;
-                // Following non-empty lines as address (up to 4 lines)
                 $addrParts = [];
                 for ($j = $i + 1; $j < count($lines) && $j <= $i + 4; $j++) {
-                    $nxt = trim($lines[$j]);
-                    if ($nxt === '') break;
-                    if ($matched[$j]) break;
-                    // Address heuristic: contains digits or looks like city/country
+                    $nxt = $lines[$j];
+                    if ($nxt === '' || $matched[$j]) break;
                     if (preg_match('/\d/', $nxt) || preg_match('/\b(?:KRA[YI]|OBL|STR|AVE|KAD|MAH|SK\.?|CAD\.?)\b/ui', $nxt)) {
                         $addrParts[] = $nxt;
                         $matched[$j] = true;
@@ -225,11 +312,11 @@ function parse_beyan_text(string $raw): array
         }
     }
 
-    // ── Pass 3: collect unmatched non-empty lines ──
+    // ── Pass 4: collect unmatched non-empty lines ──
     $unmatched = [];
-    foreach ($lines as $i => $line) {
-        if (!$matched[$i] && trim($line) !== '') {
-            $unmatched[] = trim($line);
+    foreach ($lines as $i => $t) {
+        if (!$matched[$i] && $t !== '') {
+            $unmatched[] = $t;
         }
     }
 
