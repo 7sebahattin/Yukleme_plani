@@ -65,12 +65,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Yeni kayıt: idempotency token doğrula — çift submit engeli
     if ($id === 0) {
         $submitted_token = $_POST['form_token'] ?? '';
-        if ($submitted_token === '' || $submitted_token !== ($_SESSION['hesap_form_token'] ?? '')) {
-            set_flash('warning', 'Bu kayıt zaten işleme alındı.');
+
+        if ($submitted_token === '') {
+            set_flash('warning', 'Form süresi dolmuş. Lütfen sayfayı yenileyip tekrar deneyin.');
+            header('Location: hesap_kayit.php' . ($hizli ? '?hizli=' . urlencode($hizli) : ''));
+            exit;
+        }
+
+        // Eski used_token'ları temizle (30 dakikadan eski)
+        $now = time();
+        $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
+        foreach ($used_tokens as $_t => $_ts) {
+            if ($now - $_ts > 1800) unset($used_tokens[$_t]);
+        }
+        $_SESSION['used_hesap_tokens'] = $used_tokens;
+
+        // Geri tuşu ile tekrar submit koruması — daha önce başarıyla işlenmiş token
+        if (isset($used_tokens[$submitted_token])) {
+            set_flash('warning', 'Bu form daha önce gönderildi. Aynı işlemi ikinci kez oluşturmamak için tekrar işlenmedi. Yeni kayıt için sayfayı açın.');
             header('Location: hesap_liste.php');
             exit;
         }
-        unset($_SESSION['hesap_form_token']);
+
+        // Aktif session token ile karşılaştır
+        if ($submitted_token !== ($_SESSION['hesap_form_token'] ?? '')) {
+            set_flash('warning', 'Bu form daha önce gönderildi. Aynı işlemi ikinci kez oluşturmamak için tekrar işlenmedi.');
+            header('Location: hesap_liste.php');
+            exit;
+        }
+
+        // ⚠️ Token'ı burada tüketme — yalnızca başarılı DB insert sonrası tüket
+        // Validasyon hatası olursa kullanıcı formu düzeltip tekrar gönderebilsin
     }
 
     $record['transaction_date']       = trim($_POST['transaction_date'] ?? date('Y-m-d')) ?: date('Y-m-d');
@@ -118,6 +143,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (int)$record['is_given_to_accountant'], $record['notes'],
                 ]);
             $id = (int)$pdo->lastInsertId();
+
+            // Token'ı başarılı insert sonrasında tüket — geri tuşu koruması için used listesine ekle
+            $now = time();
+            $used_tokens = $_SESSION['used_hesap_tokens'] ?? [];
+            foreach ($used_tokens as $_t => $_ts) {
+                if ($now - $_ts > 1800) unset($used_tokens[$_t]);
+            }
+            $token_used = $_POST['form_token'] ?? '';
+            if ($token_used !== '') {
+                $used_tokens[$token_used] = $now;
+            }
+            $_SESSION['used_hesap_tokens'] = $used_tokens;
+            unset($_SESSION['hesap_form_token']);
         }
 
         // Audit — mali kayıt create/update
