@@ -84,6 +84,13 @@ render_flash();
     </a>
 <?php endif; ?>
 
+    <?php if (can_beyan('read')): ?>
+    <a href="beyanlar.php" class="home-card">
+        <div class="home-card-icon" style="background:#ede9fe">🧾</div>
+        <div class="home-card-title">Beyanlar</div>
+    </a>
+    <?php endif; ?>
+
     <?php if (can('records.write')): ?>
     <a href="hks/index.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f0fe">🏛</div>

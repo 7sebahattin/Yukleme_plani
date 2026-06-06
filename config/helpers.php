@@ -184,15 +184,16 @@ function render_desktop_sidebar(string $base): void {
     $cikma  = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
 
     $_fn   = function_exists('can');
-    $p_dash = !$_fn || can('dashboard.read');
-    $p_rec  = !$_fn || can('records.read');
-    $p_recw = !$_fn || can('records.write');
-    $p_kant = !$_fn || can('kantar.read');
-    $p_stok = !$_fn || can('stok.read');
-    $p_rep  = !$_fn || can('reports.read');
-    $p_def  = !$_fn || can('defs.read');
-    $p_usr  = $_fn && can('users.admin');
-    $p_adm  = function_exists('is_admin') && is_admin();
+    $p_dash  = !$_fn || can('dashboard.read');
+    $p_rec   = !$_fn || can('records.read');
+    $p_recw  = !$_fn || can('records.write');
+    $p_kant  = !$_fn || can('kantar.read');
+    $p_stok  = !$_fn || can('stok.read');
+    $p_rep   = !$_fn || can('reports.read');
+    $p_def   = !$_fn || can('defs.read');
+    $p_usr   = $_fn && can('users.admin');
+    $p_adm   = function_exists('is_admin') && is_admin();
+    $p_beyan = !$_fn || can('beyan.read') || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -202,6 +203,7 @@ function render_desktop_sidebar(string $base): void {
     $a_krap  = $cur === 'kantar_raporu.php';
     $a_hks   = $in_hks;
     $a_not   = $cur === 'notes.php';
+    $a_beyan = in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php','beyan_delete.php'], true);
     $a_ustok = $cur === 'stok.php';
     $a_mstok = $cur === 'malzeme_stok.php';
     $a_rep   = $cur === 'reports.php';
@@ -229,8 +231,9 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Operasyon</div>
         <?php if ($p_dash) $lnk('index.php',     '🏠', 'Ana Sayfa',     $a_home); ?>
         <?php if ($p_rec)  $lnk('records.php',   '📋', 'Yüklemeler',    $a_yuk);  ?>
-        <?php if ($p_rec)  $lnk('cikmalar.php',  '🚚', 'Çıkmalar',      $a_cik);  ?>
-        <?php if ($p_kant) $lnk('kantar.php',    '⚖️', 'Kantar',        $a_kant); ?>
+        <?php if ($p_rec)   $lnk('cikmalar.php',  '🚚', 'Çıkmalar',  $a_cik);   ?>
+        <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
+        <?php if ($p_kant)  $lnk('kantar.php',   '⚖️', 'Kantar',    $a_kant);  ?>
         <?php if ($p_recw) $lnk('hks/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
 
@@ -303,6 +306,9 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php if ($_nav_rec): ?>
             <a href="<?= $base ?>records.php" <?= $cur === 'records.php' ? 'class="active"' : '' ?>>Yüklemeler</a>
             <a href="<?= $base ?>cikmalar.php" <?= $cur === 'cikmalar.php' ? 'class="active"' : '' ?>>Çıkmalar</a>
+            <?php endif; ?>
+            <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
+            <a href="<?= $base ?>beyanlar.php" <?= in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php'], true) ? 'class="active"' : '' ?>>Beyanlar</a>
             <?php endif; ?>
             <?php if ($_nav_rep): ?>
             <a href="<?= $base ?>reports.php" <?= $cur === 'reports.php' ? 'class="active"' : '' ?>>Raporlar</a>
@@ -1029,12 +1035,12 @@ function db_has_column(string $table, string $column): bool {
             $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // Yetki tanımları
-            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin'];
+            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete'];
             $rp_map = [
                 'admin'    => $all_p,
-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export'],
-                'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read'],
-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export'],
+                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write'],
+                'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read'],
+                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {
@@ -1092,6 +1098,51 @@ function db_has_column(string $table, string $column): bool {
                 try { $pdo->exec("ALTER TABLE `loading_records` ADD INDEX `idx_lr_locked` (`locked_at`)"); } catch (PDOException $ie) {}
             }
         } catch (PDOException $e) {}
+
+        // Sprint Beyan-01: customs_declarations tablosu (idempotent)
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `customs_declarations` (
+                `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+                `raw_text`           LONGTEXT NULL,
+                `unmatched_text`     LONGTEXT NULL,
+                `declaration_title`  VARCHAR(100) NULL,
+                `company_name`       VARCHAR(255) NULL,
+                `company_address`    TEXT NULL,
+                `transport_type`     VARCHAR(100) NULL,
+                `line_type`          VARCHAR(100) NULL,
+                `party_no`           VARCHAR(100) NULL,
+                `pallet_count`       INT NULL,
+                `product_name`       VARCHAR(150) NULL,
+                `product_variety`    VARCHAR(150) NULL,
+                `gross_kg`           DECIMAL(12,3) NULL,
+                `net_kg`             DECIMAL(12,3) NULL,
+                `crate_count`        INT NULL,
+                `crate_type`         VARCHAR(100) NULL,
+                `exit_depot`         VARCHAR(150) NULL,
+                `contact_person`     VARCHAR(150) NULL,
+                `buyer_name`         VARCHAR(150) NULL,
+                `brand`              VARCHAR(50) NULL,
+                `status`             VARCHAR(50) NOT NULL DEFAULT 'beyan_acildi',
+                `analysis_note`      TEXT NULL,
+                `sample_taken_at`    DATETIME NULL,
+                `analysis_result_at` DATETIME NULL,
+                `loading_record_id`  INT NULL,
+                `created_by`         INT NULL,
+                `updated_by`         INT NULL,
+                `created_at`         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`         DATETIME NULL,
+                `deleted_at`         DATETIME NULL,
+                INDEX `idx_cd_status`  (`status`),
+                INDEX `idx_cd_created` (`created_at`),
+                INDEX `idx_cd_party`   (`party_no`),
+                INDEX `idx_cd_buyer`   (`buyer_name`(80)),
+                INDEX `idx_cd_product` (`product_name`(80)),
+                INDEX `idx_cd_depot`   (`exit_depot`(80)),
+                INDEX `idx_cd_deleted` (`deleted_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) {
+            error_log('[Beyan-01 MIGRATION] customs_declarations: ' . $e->getMessage());
+        }
 
     } catch (PDOException $e) {}
 })();
@@ -1456,4 +1507,44 @@ function kantar_grup_dist(array $gruplar, float $brut, float $eff_kdu, float $ef
 // ── İzin Verilen Çıkış Nedenleri ─────────────────────────
 function cikis_nedeni_listesi(): array {
     return ['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
+}
+
+// ── Beyan Modülü Yardımcıları (Sprint Beyan-01) ──────────
+
+function beyan_statuses(): array {
+    return [
+        'taslak'          => ['label' => 'TASLAK',          'css' => 'taslak'],
+        'beyan_acildi'    => ['label' => 'AÇILDI',          'css' => 'beyan_acildi'],
+        'numune_bekliyor' => ['label' => 'NUMUNE',          'css' => 'numune_bekliyor'],
+        'analiz_bekliyor' => ['label' => 'ANALİZ',          'css' => 'analiz_bekliyor'],
+        'temiz'           => ['label' => 'TEMİZ',           'css' => 'temiz'],
+        'red'             => ['label' => 'RED',             'css' => 'red'],
+        'iptal'           => ['label' => 'İPTAL',           'css' => 'iptal'],
+        'yukleme_olustu'  => ['label' => 'YÜKLEME OLUŞTU', 'css' => 'yukleme_olustu'],
+    ];
+}
+
+function beyan_badge_html(string $status): string {
+    $statuses = beyan_statuses();
+    $s = $statuses[$status] ?? ['label' => $status, 'css' => 'taslak'];
+    return '<span class="beyan-badge beyan-badge-' . h($s['css']) . '">' . h($s['label']) . '</span>';
+}
+
+function beyan_next_statuses(string $current): array {
+    $map = [
+        'taslak'          => ['beyan_acildi', 'iptal'],
+        'beyan_acildi'    => ['numune_bekliyor', 'analiz_bekliyor', 'iptal'],
+        'numune_bekliyor' => ['analiz_bekliyor', 'iptal'],
+        'analiz_bekliyor' => ['temiz', 'red', 'iptal'],
+        'temiz'           => ['yukleme_olustu', 'iptal'],
+        'red'             => ['iptal'],
+        'iptal'           => [],
+        'yukleme_olustu'  => [],
+    ];
+    return $map[$current] ?? [];
+}
+
+function can_beyan(string $perm): bool {
+    if (!function_exists('can')) return true;
+    return can('beyan.' . $perm) || (function_exists('is_admin') && is_admin());
 }
