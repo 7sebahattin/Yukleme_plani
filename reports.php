@@ -1018,7 +1018,7 @@ render_flash();
     .gl-print-header h2 { font-size: 13pt; margin: 0 0 2px; }
     .gl-print-header p  { font-size: 8pt; color: #555; margin: 0; }
     .gl-section { margin-bottom: 8mm; }
-    .gl-section-title { font-size: 18pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
+    .gl-section-title { font-size: 22pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
     .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
     .gl-ozet-card { border: 1px solid #ccc; padding: 3px 7px; flex: 1 1 80px; min-width: 70px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ozet-card span   { font-size: 6.5pt; display: block; color: #555; }
@@ -1027,14 +1027,14 @@ render_flash();
     html, body { background: #fff !important; }
     .container { max-width: none !important; padding: 0 !important; }
     .topbar, .bottomnav, .rpt-filter-card { display: none !important; }
-    .gl-section .data-table { font-size: 10pt !important; }
-    .gl-section .data-table th { font-size: 10pt !important; padding: 3px 6px !important; font-weight: 700; }
-    .gl-section .data-table td { font-size: 10pt !important; padding: 3px 6px !important; }
+    .gl-section .data-table { font-size: 12pt !important; }
+    .gl-section .data-table th { font-size: 14pt !important; padding: 4px 6px !important; font-weight: 700; }
+    .gl-section .data-table td { font-size: 12pt !important; padding: 4px 6px !important; }
     .gl-section .data-table tfoot { display: none !important; }
     .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .gl-ps-item { border: 2px solid; padding: 8px 16px; flex: 1 1 100px; min-width: 90px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .gl-ps-item span   { font-size: 11pt; display: block; font-weight: 600; }
-    .gl-ps-item strong { font-size: 22pt; display: block; font-weight: 800; line-height: 1.1; }
+    .gl-ps-item { border: 2px solid; padding: 7px 12px; flex: 1 1 90px; min-width: 80px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; display: flex; flex-direction: row; align-items: center; gap: 8px; }
+    .gl-ps-item span   { font-size: 14pt; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+    .gl-ps-item strong { font-size: 18pt; font-weight: 800; }
     .gl-ps-palet { border-color: #7c3aed !important; color: #7c3aed !important; }
     .gl-ps-kasa  { border-color: #6b7280 !important; color: #6b7280 !important; }
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
@@ -1207,7 +1207,7 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
 <div class="gl-section">
     <div class="gl-section-title">Kantar<?= !empty($gk_rows) ? ' ('.count($gk_rows).')' : '' ?></div>
     <?php if (!empty($gk_rows)):
-        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
+        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_dara = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
         // Pre-compute totals for summary strip
         foreach ($gk_rows as $_gkrp):
             $_kcp   = kantar_calc($_gkrp);
@@ -1218,12 +1218,14 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
                 foreach ($_distp as $_drp):
                     if (mb_strtolower(trim((string)($_drp['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_kantar_firma), 'UTF-8')) continue;
                     $_gk_tot_brut  += $_drp['brut_kg'];
+                    $_gk_tot_dara  += $_drp['dara_kg'];
                     $_gk_tot_net   += $_drp['net_kg'];
                     $_gk_tot_kasa  += (int)$_drp['kasa'];
                     $_gk_tot_palet += (int)$_drp['palet'];
                 endforeach;
             else:
                 $_gk_tot_brut  += $_kcp['brut'];
+                $_gk_tot_dara  += $_kcp['dara'];
                 $_gk_tot_net   += $_kcp['net'];
                 $_gk_tot_kasa  += (int)$_gkrp['kasa_sayisi'];
                 $_gk_tot_palet += (int)$_gkrp['palet_sayisi'];
@@ -1234,11 +1236,12 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
         <div class="gl-ps-item gl-ps-palet"><span>Palet</span><strong><?= number_format($_gk_tot_palet, 0, ',', '.') ?></strong></div>
         <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gk_tot_kasa, 0, ',', '.') ?></strong></div>
         <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gk_tot_brut) ?></strong></div>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_gk_tot_dara)) ?></strong></div>
         <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg($_gk_tot_net) ?></strong></div>
     </div>
     <?php
         // Reset for in-loop accumulation (used by tfoot)
-        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
+        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_dara = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
     ?>
     <div class="table-wrap">
     <table class="data-table">
