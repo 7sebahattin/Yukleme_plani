@@ -1359,11 +1359,11 @@ body.print-mode .topbar { display: none; }
     font-size: 10pt;
     margin-bottom: 3px;
     letter-spacing: .02em;
-    color: #c00000;
 }
 .print-note-text {
     white-space: pre-wrap;
-    font-weight: 500;
+    font-weight: 700;
+    color: #c00000;
 }
 
 /* ====== Orta blok — 2 sütun: palet | stok+toplamlar ====== */
@@ -1593,8 +1593,8 @@ body.print-mode .asya-sheet {
     .asya-right-col { gap: 3mm; border-left: none; }
     /* Stok çıkışları: +2pt */
     .asya-stok { font-size: 9.5pt; align-self: start; height: auto; }
-    .asya-stok .stok-name { font-size: 9.5pt; padding: 1px 4px; font-weight: 700; }
-    .asya-stok .stok-val { font-size: 10pt; padding: 1px 3px; font-weight: 700; }
+    .asya-stok .stok-name { font-size: 11.5pt; padding: 1px 4px; font-weight: 700; }
+    .asya-stok .stok-val { font-size: 12pt; padding: 1px 3px; font-weight: 700; }
     /* Genel toplam: başlıklar büyük, veriler göze çarpan */
     .asya-totals th { font-size: 11pt; padding: 1px 3px; height: 13px; font-weight: 800; letter-spacing: .02em; }
     .asya-totals td { font-size: 12pt; padding: 1px 3px; height: 13px; font-weight: 800; color: #0f2f5f; }
@@ -1629,8 +1629,13 @@ body.print-mode .asya-sheet {
     .asya-sheet { page-break-after: avoid; }
     /* Not kutusu — print override */
     .print-note-box { page-break-inside: avoid; break-inside: avoid; }
-    .print-note-title {
+    .print-note-text {
         color: #c00000;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    /* Genel toplam başlık arka planı ürün bandıyla aynı */
+    .asya-totals .th-banner {
+        background: #f0f0f0 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
 }
