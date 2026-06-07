@@ -138,11 +138,11 @@ render_flash();
     .has-gruplar .kv-grup-col    { flex: 1 !important; min-width: 0 !important; }
     /* Fiş bilgileri daha kompakt */
     .has-gruplar .kv-pb-left .card-body { padding: 3px 6px !important; }
-    .has-gruplar .info-grid { gap: 3px 10px !important; }
-    .has-gruplar .info-grid .lbl   { font-size: 6pt; }
-    .has-gruplar .info-grid strong { font-size: 8.5pt; }
+    .has-gruplar .info-grid { gap: 2px 8px !important; }
+    .has-gruplar .info-grid .lbl   { font-size: 5.5pt; }
+    .has-gruplar .info-grid strong { font-size: 8pt; }
     /* Tartımlar değerleri dar kolonda biraz küçük */
-    .has-gruplar .kv-tartim-val { font-size: 12pt !important; }
+    .has-gruplar .kv-tartim-val { font-size: 11pt !important; }
     .has-gruplar .kv-nd-net-val { font-size: 13pt !important; }
 
     /* ── Kartlar ── */
@@ -156,42 +156,58 @@ render_flash();
     .card-head h2 { font-size: 9pt !important; font-weight: 700; margin: 0 !important; text-transform: uppercase; letter-spacing: .04em; }
     .card-body { padding: 6px 8px !important; }
 
-    /* ── Fiş bilgileri: 4 kolon ── */
+    /* ── Fiş bilgileri: 4 kolon, etiket+değer tek satırda ── */
     .info-grid {
         display: grid !important;
         grid-template-columns: 1fr 1fr 1fr 1fr !important;
-        gap: 4px 12px !important;
+        gap: 3px 10px !important;
     }
-    .info-grid > div { min-width: 0; }
+    .info-grid > div { min-width: 0; display: flex; align-items: baseline; gap: 3px; }
     .info-grid .span-2 { grid-column: span 2; }
     .info-grid .lbl {
-        font-size: 7pt;
+        font-size: 6pt;
         text-transform: uppercase;
-        letter-spacing: .04em;
-        color: #777;
-        display: block;
-        line-height: 1.2;
+        letter-spacing: .03em;
+        color: #888;
+        white-space: nowrap;
+        flex-shrink: 0;
+        line-height: 1.5;
     }
-    .info-grid strong { font-size: 10pt; font-weight: 600; display: block; line-height: 1.3; }
+    .info-grid .lbl::after { content: ':'; }
+    .info-grid strong { font-size: 9pt; font-weight: 600; line-height: 1.5; min-width: 0; }
 
     /* ── Tartımlar ── */
-    .kv-tartim-list { display: flex; gap: 8px; margin-bottom: 6px; }
-    .kv-tartim-row { flex: 1; border: 1px solid #ddd; border-radius: 3px; padding: 5px 8px; }
+    .kv-tartim-list {
+        display: block;
+        margin-bottom: 5px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .kv-tartim-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 8px;
+        border-bottom: 1px solid #eee;
+    }
+    .kv-tartim-row:last-child { border-bottom: none; }
     .kv-tartim-label { font-size: 8pt; color: #666; }
-    .kv-tartim-val { font-size: 14pt; font-weight: 700; line-height: 1.3; }
-    .kv-tartim-unit { font-size: 9pt; font-weight: 400; }
-    .kv-tartim-alibi { font-size: 7pt; color: #666; }
+    .kv-tartim-val { font-size: 13pt; font-weight: 700; text-align: right; }
+    .kv-tartim-unit { font-size: 8pt; font-weight: 400; }
+    .kv-tartim-alibi { font-size: 6pt; color: #888; text-align: right; }
 
     .kv-net-box {
         background: #e85d04 !important; color: #fff !important;
-        padding: 4px 10px !important; margin-top: 5px !important; border-radius: 3px;
+        padding: 4px 10px !important; margin-top: 5px !important; margin-bottom: 6px !important;
+        border-radius: 3px;
         display: flex; justify-content: space-between; align-items: center;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .kv-net-label { font-size: 9pt !important; font-weight: 600; letter-spacing: .05em; }
     .kv-net-val   { font-size: 14pt !important; font-weight: 700 !important; }
 
-    .kv-nd-box { margin-top: 5px !important; border: 1px solid #ddd; border-radius: 3px; }
+    .kv-nd-box { margin-top: 0 !important; border: 1px solid #ddd; border-radius: 3px; }
     .kv-nd-row {
         display: flex; justify-content: space-between; align-items: center;
         padding: 4px 10px !important; font-size: 9pt !important;
