@@ -132,6 +132,19 @@ render_flash();
     .kv-pb-left   { display: block !important; width: 100%; }
     .kv-pb-right  { display: block !important; width: 100%; }
 
+    /* ── Gruplandırma varsa: tartımlar sol, gruplandırma sağ ── */
+    .has-gruplar .kv-pb-right { display: flex !important; gap: 5mm; align-items: flex-start; }
+    .has-gruplar .kv-tartim-card { flex: 0 0 34% !important; }
+    .has-gruplar .kv-grup-col    { flex: 1 !important; min-width: 0 !important; }
+    /* Fiş bilgileri daha kompakt */
+    .has-gruplar .kv-pb-left .card-body { padding: 3px 6px !important; }
+    .has-gruplar .info-grid { gap: 3px 10px !important; }
+    .has-gruplar .info-grid .lbl   { font-size: 6pt; }
+    .has-gruplar .info-grid strong { font-size: 8.5pt; }
+    /* Tartımlar değerleri dar kolonda biraz küçük */
+    .has-gruplar .kv-tartim-val { font-size: 12pt !important; }
+    .has-gruplar .kv-nd-net-val { font-size: 13pt !important; }
+
     /* ── Kartlar ── */
     .card {
         border: 1px solid #bbb !important;
@@ -274,8 +287,8 @@ render_flash();
         <?php endif; ?>
     </div>
 
-    <!-- ALT: İki kolon -->
-    <div class="kv-pb-bottom">
+    <!-- ALT: Fiş bilgileri + (tartımlar | gruplandırma) -->
+    <div class="kv-pb-bottom<?= !empty($gruplar) ? ' has-gruplar' : '' ?>">
 
         <!-- ALT SOL: Fiş Bilgileri -->
         <div class="kv-pb-left">
@@ -335,7 +348,7 @@ render_flash();
         <div class="kv-pb-right">
 
             <!-- Tartımlar -->
-            <section class="card">
+            <section class="card kv-tartim-card">
                 <div class="card-head"><h2>Tartımlar</h2></div>
                 <div class="card-body">
                     <div class="kv-tartim-list">
@@ -380,6 +393,7 @@ render_flash();
                 $grup_tot_net   = array_sum(array_column($grup_rows, 'net_kg'));
                 $grup_sapma     = abs($grup_tot_net - $kc['net']);
             ?>
+            <div class="kv-grup-col">
             <?php if ($grup_sapma > 1.0): ?>
             <div class="kv-sapma-uyari">
                 <strong>⚠ Sapma Uyarısı:</strong>
@@ -392,7 +406,7 @@ render_flash();
             </div>
             <?php endif; ?>
             <!-- Gruplandırma -->
-            <section class="card">
+            <section class="card kv-grup-card">
                 <div class="card-head"><h2>🗂 Gruplandırma</h2></div>
                 <div class="card-body" style="padding:0">
                     <table class="kv-grup-table">
@@ -403,7 +417,6 @@ render_flash();
                             <th>Brüt KG</th>
                             <th>Dara KG</th>
                             <th>Net KG</th>
-                            <th>Oran</th>
                         </tr></thead>
                         <tbody>
                         <?php
@@ -412,7 +425,6 @@ render_flash();
                             '#f3e8ff','#ffedd5','#e0f2fe','#fef2f2',
                         ];
                         foreach ($grup_rows as $_gi => $gr):
-                            $gr_oran = $grup_tot_net > 0 ? round($gr['net_kg'] / $grup_tot_net * 100, 1) : 0;
                             $_gbg = $kv_grup_colors[$_gi % count($kv_grup_colors)];
                         ?>
                             <tr style="background:<?= $_gbg ?> !important; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
@@ -427,7 +439,6 @@ render_flash();
                                 <td><?= number_format(round($gr['brut_kg']), 0, ',', '.') ?></td>
                                 <td><?= number_format(round($gr['dara_kg']), 0, ',', '.') ?></td>
                                 <td class="kv-grup-net"><?= number_format(round($gr['net_kg']), 0, ',', '.') ?></td>
-                                <td><?= $gr_oran ?>%</td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -439,12 +450,12 @@ render_flash();
                             <td><?= number_format(round($grup_tot_brut), 0, ',', '.') ?></td>
                             <td><?= number_format(round($grup_tot_dara), 0, ',', '.') ?></td>
                             <td class="kv-grup-net"><?= number_format(round($grup_tot_net), 0, ',', '.') ?></td>
-                            <td>100%</td>
                         </tr></tfoot>
                         <?php endif; ?>
                     </table>
                 </div>
             </section>
+            </div><!-- /kv-grup-col -->
             <?php endif; ?>
 
         </div><!-- /kv-pb-right -->
