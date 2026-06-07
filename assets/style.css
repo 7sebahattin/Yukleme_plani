@@ -1359,6 +1359,7 @@ body.print-mode .topbar { display: none; }
     font-size: 10pt;
     margin-bottom: 3px;
     letter-spacing: .02em;
+    color: #c00000;
 }
 .print-note-text {
     white-space: pre-wrap;
@@ -1628,6 +1629,10 @@ body.print-mode .asya-sheet {
     .asya-sheet { page-break-after: avoid; }
     /* Not kutusu — print override */
     .print-note-box { page-break-inside: avoid; break-inside: avoid; }
+    .print-note-title {
+        color: #c00000;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
 }
 
 /* =========================================================
