@@ -129,7 +129,7 @@ render_flash();
 
     /* ── Fiş + Tartımlar yanyana, Gruplandırma tam genişlik altında ── */
     .kv-pb-bottom { display: block !important; }
-    .kv-top-row   { display: flex !important; gap: 5mm; align-items: flex-start; margin-bottom: 4px; }
+    .kv-top-row   { display: flex !important; gap: 5mm; align-items: stretch; margin-bottom: 4px; }
     .kv-pb-left   { display: flex !important; flex-direction: column; flex: 1; min-width: 0; }
     .kv-pb-right  { display: flex !important; flex-direction: column; flex: 0 0 40%; min-width: 0; }
     .kv-pb-left > .card,
