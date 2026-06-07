@@ -265,20 +265,20 @@ foreach ($pallets as $p) {
 $depo_values = array_unique(array_filter(array_map('trim', array_column($pallets, 'depo'))));
 $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 
-if ($print) {
-    $_pdf_parts = array_filter([
-        trim((string)($record['parti_no'] ?? '')),
-        trim((string)($record['firma']   ?? '')),
-        ($record['tarih'] ? fmt_date($record['tarih']) : ''),
-    ]);
-    $_pdf_title = implode(' - ', $_pdf_parts) ?: ($record['firma'] ?? 'Kayıt');
-    render_header(h($_pdf_title), $print);
-} else {
-    render_header(h($record['firma'] ?? 'Kayıt'), $print);
-}
+render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <?php if ($print): ?>
 <style>@page { size: A4 portrait; margin: 3mm; }</style>
+<?php
+    // PDF dosya adı: "PartiNo · Firma - Tarih"
+    $_pdf_head = array_filter([
+        trim((string)($record['parti_no'] ?? '')),
+        trim((string)($record['firma']   ?? '')),
+    ]);
+    $_pdf_title = implode(' · ', $_pdf_head);
+    if ($record['tarih']) { $_pdf_title .= ' - ' . fmt_date($record['tarih']); }
+?>
+<script>document.title = <?= json_encode($_pdf_title ?: ($record['firma'] ?? 'Kayıt')) ?>;</script>
 <?php endif; ?>
 <?php
 if (($record['type'] ?? 'yukleme') === 'cikma') {

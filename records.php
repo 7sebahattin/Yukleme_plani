@@ -329,7 +329,7 @@ render_flash();
                     </div>
                 </div>
                 <div class="record-card-body">
-                    <?php if ($r['alici']): ?><div><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div><?php endif; ?>
+                    <?php if ($r['alici']): ?><div style="color:#c56a00;font-weight:600"><span class="lbl">Alıcı:</span> <?= h($r['alici']) ?></div><?php endif; ?>
                     <?php if ($r['bolge']): ?><div><span class="lbl">Bölge:</span> <?= h($r['bolge']) ?></div><?php endif; ?>
                     <?php if ($r['urun']): ?><div><span class="lbl">Ürün:</span> <?= h($r['urun']) ?></div><?php endif; ?>
                     <?php $plaka = trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /'); ?>
