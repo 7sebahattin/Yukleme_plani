@@ -127,23 +127,14 @@ render_flash();
     }
     .kv-photo-ph { display: none !important; }
 
-    /* ── Alt bölümler: tek kolon alt alta ── */
+    /* ── Fiş + Tartımlar yanyana, Gruplandırma tam genişlik altında ── */
     .kv-pb-bottom { display: block !important; }
-    .kv-pb-left   { display: block !important; width: 100%; }
-    .kv-pb-right  { display: block !important; width: 100%; }
-
-    /* ── Gruplandırma varsa: tartımlar sol, gruplandırma sağ ── */
-    .has-gruplar .kv-pb-right { display: flex !important; gap: 5mm; align-items: flex-start; }
-    .has-gruplar .kv-tartim-card { flex: 0 0 34% !important; }
-    .has-gruplar .kv-grup-col    { flex: 1 !important; min-width: 0 !important; }
-    /* Fiş bilgileri daha kompakt */
-    .has-gruplar .kv-pb-left .card-body { padding: 3px 6px !important; }
-    .has-gruplar .info-grid { gap: 2px 8px !important; }
-    .has-gruplar .info-grid .lbl   { font-size: 5.5pt; }
-    .has-gruplar .info-grid strong { font-size: 8pt; }
-    /* Tartımlar değerleri dar kolonda biraz küçük */
-    .has-gruplar .kv-tartim-val { font-size: 11pt !important; }
-    .has-gruplar .kv-nd-net-val { font-size: 13pt !important; }
+    .kv-top-row   { display: flex !important; gap: 5mm; align-items: stretch; margin-bottom: 4px; }
+    .kv-pb-left   { display: flex !important; flex-direction: column; flex: 1; min-width: 0; }
+    .kv-pb-right  { display: flex !important; flex-direction: column; flex: 0 0 36%; min-width: 0; }
+    .kv-pb-left > .card,
+    .kv-pb-right > .card { flex: 1; }
+    .kv-grup-col  { display: block !important; }
 
     /* ── Kartlar ── */
     .card {
@@ -156,16 +147,17 @@ render_flash();
     .card-head h2 { font-size: 9pt !important; font-weight: 700; margin: 0 !important; text-transform: uppercase; letter-spacing: .04em; }
     .card-body { padding: 6px 8px !important; }
 
-    /* ── Fiş bilgileri: 4 kolon, etiket+değer tek satırda ── */
+    /* ── Fiş bilgileri: 2 kolon, etiket+değer tek satırda ── */
+    .card-body { padding: 4px 6px !important; }
     .info-grid {
         display: grid !important;
-        grid-template-columns: 1fr 1fr 1fr 1fr !important;
-        gap: 3px 10px !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 2px 10px !important;
     }
     .info-grid > div { min-width: 0; display: flex; align-items: baseline; gap: 3px; }
     .info-grid .span-2 { grid-column: span 2; }
     .info-grid .lbl {
-        font-size: 6pt;
+        font-size: 5.5pt;
         text-transform: uppercase;
         letter-spacing: .03em;
         color: #888;
@@ -174,7 +166,7 @@ render_flash();
         line-height: 1.5;
     }
     .info-grid .lbl::after { content: ':'; }
-    .info-grid strong { font-size: 9pt; font-weight: 600; line-height: 1.5; min-width: 0; }
+    .info-grid strong { font-size: 8.5pt; font-weight: 600; line-height: 1.5; min-width: 0; }
 
     /* ── Tartımlar ── */
     .kv-tartim-list {
@@ -192,9 +184,9 @@ render_flash();
         border-bottom: 1px solid #eee;
     }
     .kv-tartim-row:last-child { border-bottom: none; }
-    .kv-tartim-label { font-size: 8pt; color: #666; }
-    .kv-tartim-val { font-size: 13pt; font-weight: 700; text-align: right; }
-    .kv-tartim-unit { font-size: 8pt; font-weight: 400; }
+    .kv-tartim-label { font-size: 7.5pt; color: #666; }
+    .kv-tartim-val { font-size: 11pt; font-weight: 700; text-align: right; }
+    .kv-tartim-unit { font-size: 7pt; font-weight: 400; }
     .kv-tartim-alibi { font-size: 6pt; color: #888; text-align: right; }
 
     .kv-net-box {
@@ -306,7 +298,9 @@ render_flash();
     <!-- ALT: Fiş bilgileri + (tartımlar | gruplandırma) -->
     <div class="kv-pb-bottom<?= !empty($gruplar) ? ' has-gruplar' : '' ?>">
 
-        <!-- ALT SOL: Fiş Bilgileri -->
+        <!-- Fiş Bilgileri + Tartımlar yanyana -->
+        <div class="kv-top-row">
+
         <div class="kv-pb-left">
             <section class="card">
                 <div class="card-head"><h2>Fiş Bilgileri</h2></div>
@@ -325,10 +319,10 @@ render_flash();
                         <div><span class="lbl">Operatör</span><strong><?= h($fis['operator_adi']) ?></strong></div>
                         <?php endif; ?>
                         <?php if ($fis['giris_tarih']): ?>
-                        <div><span class="lbl">Giriş Tarihi</span><strong><?= h(fmt_datetime($fis['giris_tarih'])) ?></strong></div>
+                        <div><span class="lbl">Giriş</span><strong><?= h(fmt_datetime($fis['giris_tarih'])) ?></strong></div>
                         <?php endif; ?>
                         <?php if ($fis['cikis_tarih']): ?>
-                        <div><span class="lbl">Çıkış Tarihi</span><strong><?= h(fmt_datetime($fis['cikis_tarih'])) ?></strong></div>
+                        <div><span class="lbl">Çıkış</span><strong><?= h(fmt_datetime($fis['cikis_tarih'])) ?></strong></div>
                         <?php endif; ?>
                         <?php if ($fis['malin_cinsi']): ?>
                         <div><span class="lbl">Malın Cinsi</span><strong><?= h($fis['malin_cinsi']) ?></strong></div>
@@ -344,9 +338,9 @@ render_flash();
                             <div><span class="lbl"><?= $kpr['tip'] === 'palet' ? 'Palet' : 'Kasa' ?>: <?= h($kpr['cinsi']) ?></span><strong><?= number_format((int)$kpr['sayisi']) ?> adet</strong></div>
                             <?php endforeach; ?>
                         <?php else: ?>
-                            <?php if ($palet_say): ?><div><span class="lbl">Palet Sayısı</span><strong><?= $palet_say ?></strong></div><?php endif; ?>
+                            <?php if ($palet_say): ?><div><span class="lbl">Palet</span><strong><?= $palet_say ?> adet</strong></div><?php endif; ?>
                             <?php if ($fis['palet_cinsi'] ?? ''): ?><div><span class="lbl">Palet Cinsi</span><strong><?= h($fis['palet_cinsi']) ?></strong></div><?php endif; ?>
-                            <?php if ($kasa_say): ?><div><span class="lbl">Kasa Sayısı</span><strong><?= $kasa_say ?></strong></div><?php endif; ?>
+                            <?php if ($kasa_say): ?><div><span class="lbl">Kasa</span><strong><?= $kasa_say ?> adet</strong></div><?php endif; ?>
                             <?php if ($fis['kasa_cinsi']): ?><div><span class="lbl">Kasa Cinsi</span><strong><?= h($fis['kasa_cinsi']) ?></strong></div><?php endif; ?>
                         <?php endif; ?>
                         <?php if ($fis['depo'] ?? ''): ?>
@@ -360,9 +354,7 @@ render_flash();
             </section>
         </div>
 
-        <!-- ALT SAĞ: Tartımlar + Gruplandırma -->
         <div class="kv-pb-right">
-
             <!-- Tartımlar -->
             <section class="card kv-tartim-card">
                 <div class="card-head"><h2>Tartımlar</h2></div>
@@ -398,18 +390,22 @@ render_flash();
                     <?php endif; ?>
                 </div>
             </section>
+        </div><!-- /kv-pb-right -->
 
-            <?php if (!empty($gruplar)):
-                $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
-                $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
-                $kc             = kantar_calc($fis);
-                $grup_rows      = kantar_grup_dist($gruplar, $kc['brut'], $kc['eff_kdu'], $kc['eff_pdu']);
-                $grup_tot_brut  = array_sum(array_column($grup_rows, 'brut_kg'));
-                $grup_tot_dara  = array_sum(array_column($grup_rows, 'dara_kg'));
-                $grup_tot_net   = array_sum(array_column($grup_rows, 'net_kg'));
-                $grup_sapma     = abs($grup_tot_net - $kc['net']);
-            ?>
-            <div class="kv-grup-col">
+        </div><!-- /kv-top-row -->
+
+        <!-- Gruplandırma — tam genişlik -->
+        <?php if (!empty($gruplar)):
+            $grup_tot_palet = array_sum(array_column($gruplar, 'palet_sayisi'));
+            $grup_tot_kasa  = array_sum(array_column($gruplar, 'kasa_adedi'));
+            $kc             = kantar_calc($fis);
+            $grup_rows      = kantar_grup_dist($gruplar, $kc['brut'], $kc['eff_kdu'], $kc['eff_pdu']);
+            $grup_tot_brut  = array_sum(array_column($grup_rows, 'brut_kg'));
+            $grup_tot_dara  = array_sum(array_column($grup_rows, 'dara_kg'));
+            $grup_tot_net   = array_sum(array_column($grup_rows, 'net_kg'));
+            $grup_sapma     = abs($grup_tot_net - $kc['net']);
+        ?>
+        <div class="kv-grup-col">
             <?php if ($grup_sapma > 1.0): ?>
             <div class="kv-sapma-uyari">
                 <strong>⚠ Sapma Uyarısı:</strong>
