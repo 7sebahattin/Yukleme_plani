@@ -99,6 +99,21 @@ if ($report['report_date']) {
     $date_disp = fmt_datetime($report['created_at']);
 }
 
+// Türkçe uzun tarih: "07 Haziran 2026 Pazar"
+function fmt_date_tr_long(string $date): string {
+    $ts = strtotime($date);
+    if (!$ts) return '';
+    $months = ['','Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+    $days   = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+    return sprintf('%02d %s %s %s', (int)date('j',$ts), $months[(int)date('n',$ts)], date('Y',$ts), $days[(int)date('w',$ts)]);
+}
+$date_disp_long = '';
+if (!empty($report['report_date'])) {
+    $date_disp_long = fmt_date_tr_long($report['report_date']);
+} elseif (!empty($report['date_from'])) {
+    $date_disp_long = fmt_date_tr_long($report['date_from']);
+}
+
 $page_title = h($report['title'] ?: ('Rapor #' . $id));
 
 render_header($page_title, $print_mode);
@@ -193,8 +208,13 @@ render_flash();
     background:#fef9c3; color:#854d0e;
 }
 
+/* Bölüm özet kutuları — ekranda gizli, baskıda görünür */
+.drv-print-summary { display: none; }
+/* Başlık yanı tarih */
+.drv-title-date { display: inline-block; font-size: .85rem; font-weight: 400; color: #666; margin-left: 10px; vertical-align: middle; }
+
 @media print {
-    @page { margin: 10mm 8mm; }
+    @page { margin: 10mm 8mm; size: A4 landscape; }
     .topbar, .bottomnav, .page-head .btn, .drv-back-btn, .sidebar,
     .drv-mob-details summary, .mobile-only { display:none !important; }
     .pc-only { display:block !important; }
@@ -218,6 +238,26 @@ render_flash();
     .data-table td { padding:2px 5px; line-height:1.2; }
     .data-table tfoot td { font-size:8.5pt; font-weight:700; padding:2px 5px; }
     .table-wrap { overflow:visible !important; }
+    /* Yatay baskıda tfoot (sarı TOPLAM satırları) gizle */
+    .data-table tfoot { display: none !important; }
+    /* Üst özet bar baskıda gizli (bölüm kutularıyla değiştirildi) */
+    .drv-totals-bar { display: none !important; }
+    /* Bölüm özet kutuları — sadece baskıda görünür */
+    .drv-print-summary { display: flex !important; gap: 10px; margin: 7px 0 9px; flex-wrap: nowrap; break-inside: avoid; }
+    .drv-ps-item {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-width: 90px; padding: 12px 16px; border-radius: 6px; border: 2.5px solid;
+        font-variant-numeric: tabular-nums; break-inside: avoid;
+    }
+    .drv-ps-item span { font-size: 8.5pt; font-weight: 700; margin-bottom: 5px; letter-spacing: .03em; }
+    .drv-ps-item strong { font-size: 18pt; font-weight: 900; line-height: 1; }
+    .drv-ps-palet { border-color: #7c3aed; color: #7c3aed; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .drv-ps-kasa  { border-color: #6b7280; color: #6b7280; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .drv-ps-brut  { border-color: #2563eb; color: #2563eb; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .drv-ps-dara  { border-color: #d97706; color: #d97706; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .drv-ps-net   { border-color: #059669; color: #059669; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    /* Başlıktaki tarih — sadece baskıda büyük görünür */
+    .drv-title-date { font-size: 11pt; font-weight: 600; margin-left: 12px; color: #444; }
 }
 </style>
 
@@ -229,6 +269,9 @@ render_flash();
         <h1>
             <span class="dr-type-badge dr-type-<?= h(strtolower($report['report_type'])) ?>"><?= h($report['report_type']) ?></span>
             <?= $page_title ?>
+            <?php if ($date_disp_long !== ''): ?>
+            <span class="drv-title-date"><?= h($date_disp_long) ?></span>
+            <?php endif; ?>
         </h1>
         <p class="muted"><?= h($date_disp) ?></p>
     </div>
@@ -339,6 +382,15 @@ foreach ($cikma_items as $_ci) {
 ══════════════════════════════════════════════════════ -->
 <div class="drv-section">
     <div class="drv-section-title">Kantar Fişleri (<?= count($kantar_items) ?>)</div>
+    <?php if (!empty($kantar_items)): ?>
+    <div class="drv-print-summary">
+        <?php if ($k_palet_total > 0): ?><div class="drv-ps-item drv-ps-palet"><span>PALET</span><strong><?= $k_palet_total ?></strong></div><?php endif; ?>
+        <?php if ($k_kasa_total > 0): ?><div class="drv-ps-item drv-ps-kasa"><span>KASA</span><strong><?= number_format($k_kasa_total, 0, ',', '.') ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($k_brut_total) ?></strong></div>
+        <?php if ($k_dara_total > 0): ?><div class="drv-ps-item drv-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($k_dara_total) ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-net"><span>NET KG</span><strong><?= fmt_kg($k_net_total) ?></strong></div>
+    </div>
+    <?php endif; ?>
     <?php if (empty($kantar_items)): ?>
         <p class="drv-empty">İşlem yok</p>
     <?php else: ?>
@@ -435,6 +487,15 @@ foreach ($cikma_items as $_ci) {
 ══════════════════════════════════════════════════════ -->
 <div class="drv-section">
     <div class="drv-section-title">Makineye Dökülen (<?= count($palet_items) ?> yükleme, <?= array_sum(array_column($palet_items, 'palet_sayisi')) ?> palet)</div>
+    <?php if (!empty($palet_items)): ?>
+    <div class="drv-print-summary">
+        <div class="drv-ps-item drv-ps-palet"><span>PALET</span><strong><?= $m_palet_total ?></strong></div>
+        <?php if ($m_kasa_total > 0): ?><div class="drv-ps-item drv-ps-kasa"><span>KASA</span><strong><?= number_format($m_kasa_total, 0, ',', '.') ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($m_brut_total) ?></strong></div>
+        <?php if ($m_dara_total > 0): ?><div class="drv-ps-item drv-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($m_dara_total) ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-net"><span>NET KG</span><strong><?= fmt_kg($m_net_total) ?></strong></div>
+    </div>
+    <?php endif; ?>
     <?php if (empty($palet_items)): ?>
         <p class="drv-empty">İşlem yok</p>
     <?php else: ?>
@@ -608,6 +669,15 @@ foreach ($cikma_items as $_ci) {
 ══════════════════════════════════════════════════════ -->
 <div class="drv-section">
     <div class="drv-section-title">Çıkmalar (<?= count($cikma_items) ?>)</div>
+    <?php if (!empty($cikma_items)): ?>
+    <div class="drv-print-summary">
+        <?php if ($c_palet_total > 0): ?><div class="drv-ps-item drv-ps-palet"><span>PALET</span><strong><?= $c_palet_total ?></strong></div><?php endif; ?>
+        <?php if ($c_kasa_total > 0): ?><div class="drv-ps-item drv-ps-kasa"><span>KASA</span><strong><?= number_format($c_kasa_total, 0, ',', '.') ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($c_brut_total) ?></strong></div>
+        <?php if ($c_dara_total > 0): ?><div class="drv-ps-item drv-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($c_dara_total) ?></strong></div><?php endif; ?>
+        <div class="drv-ps-item drv-ps-net"><span>NET KG</span><strong><?= fmt_kg($c_net_total) ?></strong></div>
+    </div>
+    <?php endif; ?>
     <?php if (empty($cikma_items)): ?>
         <p class="drv-empty">İşlem yok</p>
     <?php else: ?>
