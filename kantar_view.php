@@ -119,7 +119,7 @@ render_flash();
     .kv-photo {
         width: 100% !important;
         height: auto !important;
-        max-height: 120mm !important;
+        max-height: 96mm !important;
         object-fit: contain;
         display: block !important;
         -webkit-print-color-adjust: exact;
@@ -147,17 +147,17 @@ render_flash();
     .card-head h2 { font-size: 9pt !important; font-weight: 700; margin: 0 !important; text-transform: uppercase; letter-spacing: .04em; }
     .card-body { padding: 6px 8px !important; }
 
-    /* ── Fiş bilgileri: 2 kolon, etiket+değer tek satırda ── */
+    /* ── Fiş bilgileri: 3 kolon, etiket+değer tek satırda ── */
     .card-body { padding: 4px 6px !important; }
     .info-grid {
         display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 2px 10px !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 2px 8px !important;
     }
     .info-grid > div { min-width: 0; display: flex; align-items: baseline; gap: 3px; }
-    .info-grid .span-2 { grid-column: span 2; }
+    .info-grid .span-2 { grid-column: span 3; }
     .info-grid .lbl {
-        font-size: 5.5pt;
+        font-size: 5pt;
         text-transform: uppercase;
         letter-spacing: .03em;
         color: #888;
@@ -166,7 +166,7 @@ render_flash();
         line-height: 1.5;
     }
     .info-grid .lbl::after { content: ':'; }
-    .info-grid strong { font-size: 8.5pt; font-weight: 600; line-height: 1.5; min-width: 0; }
+    .info-grid strong { font-size: 8pt; font-weight: 600; line-height: 1.5; min-width: 0; }
 
     /* ── Tartımlar ── */
     .kv-tartim-list {
@@ -470,7 +470,6 @@ render_flash();
             </div><!-- /kv-grup-col -->
             <?php endif; ?>
 
-        </div><!-- /kv-pb-right -->
     </div><!-- /kv-pb-bottom -->
 </div><!-- /kv-pb -->
 
