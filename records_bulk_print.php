@@ -179,7 +179,7 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
     }
     unset($_pp);
 
-    $tot = record_totals($_rid);
+    $tot = record_totals((int)$_rid);
 
     // stok_use
     $stok_use = [];
