@@ -1018,7 +1018,7 @@ render_flash();
     .gl-print-header h2 { font-size: 13pt; margin: 0 0 2px; }
     .gl-print-header p  { font-size: 8pt; color: #555; margin: 0; }
     .gl-section { margin-bottom: 8mm; }
-    .gl-section-title { font-size: 9pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-bottom: 4px; }
+    .gl-section-title { font-size: 18pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
     .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
     .gl-ozet-card { border: 1px solid #ccc; padding: 3px 7px; flex: 1 1 80px; min-width: 70px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ozet-card span   { font-size: 6.5pt; display: block; color: #555; }
@@ -1027,14 +1027,14 @@ render_flash();
     html, body { background: #fff !important; }
     .container { max-width: none !important; padding: 0 !important; }
     .topbar, .bottomnav, .rpt-filter-card { display: none !important; }
-    .gl-section .data-table { font-size: 9pt !important; }
-    .gl-section .data-table th { font-size: 9pt !important; padding: 3px 6px !important; font-weight: 700; }
-    .gl-section .data-table td { font-size: 9pt !important; padding: 3px 6px !important; }
+    .gl-section .data-table { font-size: 10pt !important; }
+    .gl-section .data-table th { font-size: 10pt !important; padding: 3px 6px !important; font-weight: 700; }
+    .gl-section .data-table td { font-size: 10pt !important; padding: 3px 6px !important; }
     .gl-section .data-table tfoot { display: none !important; }
     .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .gl-ps-item { border: 2px solid; padding: 6px 14px; flex: 1 1 100px; min-width: 90px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .gl-ps-item span   { font-size: 7.5pt; display: block; font-weight: 600; }
-    .gl-ps-item strong { font-size: 13pt; display: block; font-weight: 800; }
+    .gl-ps-item { border: 2px solid; padding: 8px 16px; flex: 1 1 100px; min-width: 90px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-ps-item span   { font-size: 11pt; display: block; font-weight: 600; }
+    .gl-ps-item strong { font-size: 22pt; display: block; font-weight: 800; line-height: 1.1; }
     .gl-ps-palet { border-color: #7c3aed !important; color: #7c3aed !important; }
     .gl-ps-kasa  { border-color: #6b7280 !important; color: #6b7280 !important; }
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
@@ -1069,11 +1069,19 @@ function fmt_date_tr_long_gl(string $d): string {
     if ($ts === false) return $d;
     return (int)date('j',$ts).' '.$months[(int)date('n',$ts)-1].' '.date('Y',$ts).' '.$days[(int)date('w',$ts)];
 }
+// Başlık ve PDF dosyası için referans tarih (filtre yoksa bugün)
+$_gl_ref = $f_from !== '' ? $f_from : date('Y-m-d');
+$_gl_date_long = fmt_date_tr_long_gl($_gl_ref);
+$_gl_is_range  = ($f_from !== '' && $f_to !== '' && $f_from !== $f_to);
+$_gl_tr_short  = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+$_gl_pdf_ts    = strtotime($_gl_ref);
+$_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)date('n',$_gl_pdf_ts)-1].'- Günlük Rapor';
 ?>
+<script>document.title = <?= json_encode($_gl_pdf_title) ?>;</script>
 
 <!-- Yazdırma başlığı (sadece print'te görünür) -->
 <div class="gl-print-header">
-    <h2>Günlük Rapor<?php if ($f_from !== '' && $f_from === $f_to): ?> — <?= h(fmt_date_tr_long_gl($f_from)) ?><?php elseif ($f_from !== '' || $f_to !== ''): ?> — <?= h(fmt_date($f_from)) ?><?= ($f_to !== '' && $f_to !== $f_from) ? ' – '.h(fmt_date($f_to)) : '' ?><?php endif; ?></h2>
+    <h2>Günlük Rapor — <?php if ($_gl_is_range): ?><?= h(fmt_date($f_from)) ?> – <?= h(fmt_date($f_to)) ?><?php else: ?><?= h($_gl_date_long) ?><?php endif; ?></h2>
     <p><?php
         if ($f_from !== '' || $f_to !== '') {
             echo $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to));
