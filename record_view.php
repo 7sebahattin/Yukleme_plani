@@ -643,10 +643,13 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                     </div>
                 </div>
                 <?php $_etiket_foto = trim((string)($record['etiket_foto'] ?? '')); ?>
+                <?php $_etiket_note = trim((string)($record['etiket'] ?? '')); ?>
                 <div class="asya-etiket">
                     <img id="etiketImg" class="etiket-img" alt=""
                          <?= $_etiket_foto !== '' ? 'src="' . h($_etiket_foto) . '"' : 'style="display:none"' ?>>
+                    <?php if (!($print && $_etiket_foto === '')): ?>
                     <div id="etiketPlaceholder" class="etiket-placeholder"<?= $_etiket_foto !== '' ? ' style="display:none"' : '' ?>>ETİKET</div>
+                    <?php endif; ?>
                     <div class="etiket-actions no-print">
                         <label class="etiket-upload-btn">
                             📷 Fotoğraf Ekle
@@ -741,6 +744,13 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                 <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
             <?php endforeach; ?>
         </table>
+
+        <?php if ($_etiket_note !== ''): ?>
+        <div class="print-note-box">
+            <div class="print-note-title">NOT</div>
+            <div class="print-note-text"><?= nl2br(h($_etiket_note)) ?></div>
+        </div>
+        <?php endif; ?>
 
         </div><!-- /.asya-right-col -->
     </div>

@@ -167,8 +167,8 @@ $form_is_cikma = $form_is_cikma ?? false;
                 </div>
                 <small class="muted">Etiket çıktısında işaretlenecek marka.</small>
             </label>
-            <label class="span-2">Etiket / Marka Bilgisi
-                <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>">
+            <label class="span-2">Not
+                <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not">
             </label>
             <label>Gümrük
                 <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>">
