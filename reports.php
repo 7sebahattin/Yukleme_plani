@@ -25,7 +25,7 @@ $f_mtype   = trim($_GET['mat_type']  ?? '');
 $f_q       = trim($_GET['q']         ?? '');
 $f_sort    = trim($_GET['sort']      ?? 'tarih');
 $f_palet_islendi  = trim($_GET['palet_islendi']  ?? '');
-$f_kantar_firma   = trim($_GET['kantar_firma']  ?? '');
+$f_kantar_firma   = isset($_GET['kantar_firma']) ? trim($_GET['kantar_firma']) : 'Asya Fresh';
 $f_urun_sahibi    = trim($_GET['urun_sahibi']   ?? '');
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
