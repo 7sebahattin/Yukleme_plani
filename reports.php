@@ -1011,7 +1011,7 @@ render_flash();
 
 <?php elseif ($type === 'gunluk'): ?>
 <style>
-@page { size: A4 portrait; margin: 10mm; }
+@page { size: A4 landscape; margin: 8mm; }
 @media print {
     .gl-no-print { display: none !important; }
     .gl-print-header { display: block !important; text-align: center; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 10px; }
@@ -1030,7 +1030,16 @@ render_flash();
     .gl-section .data-table { font-size: 9pt !important; }
     .gl-section .data-table th { font-size: 9pt !important; padding: 3px 6px !important; font-weight: 700; }
     .gl-section .data-table td { font-size: 9pt !important; padding: 3px 6px !important; }
-    .gl-section .data-table tfoot td { font-size: 9pt !important; padding: 3px 6px !important; font-weight: 700; }
+    .gl-section .data-table tfoot { display: none !important; }
+    .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-ps-item { border: 2px solid; padding: 6px 14px; flex: 1 1 100px; min-width: 90px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-ps-item span   { font-size: 7.5pt; display: block; font-weight: 600; }
+    .gl-ps-item strong { font-size: 13pt; display: block; font-weight: 800; }
+    .gl-ps-palet { border-color: #7c3aed !important; color: #7c3aed !important; }
+    .gl-ps-kasa  { border-color: #6b7280 !important; color: #6b7280 !important; }
+    .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
+    .gl-ps-dara  { border-color: #d97706 !important; color: #d97706 !important; }
+    .gl-ps-net   { border-color: #059669 !important; color: #059669 !important; }
 }
 .gl-print-header { display: none; }
 .gl-section { margin-bottom: 20px; }
@@ -1049,11 +1058,22 @@ render_flash();
 .gl-section .data-table th { font-weight: 700; padding: 7px 10px; }
 .gl-section .data-table td { padding: 6px 10px; }
 .gl-section .data-table tfoot td { font-size: .92rem; padding: 7px 10px; }
+.gl-ps-strip { display: none; }
 </style>
+
+<?php
+function fmt_date_tr_long_gl(string $d): string {
+    static $months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+    static $days   = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+    $ts = strtotime($d);
+    if ($ts === false) return $d;
+    return (int)date('j',$ts).' '.$months[(int)date('n',$ts)-1].' '.date('Y',$ts).' '.$days[(int)date('w',$ts)];
+}
+?>
 
 <!-- Yazdırma başlığı (sadece print'te görünür) -->
 <div class="gl-print-header">
-    <h2>Günlük Rapor</h2>
+    <h2>Günlük Rapor<?php if ($f_from !== '' && $f_from === $f_to): ?> — <?= h(fmt_date_tr_long_gl($f_from)) ?><?php elseif ($f_from !== '' || $f_to !== ''): ?> — <?= h(fmt_date($f_from)) ?><?= ($f_to !== '' && $f_to !== $f_from) ? ' – '.h(fmt_date($f_to)) : '' ?><?php endif; ?></h2>
     <p><?php
         if ($f_from !== '' || $f_to !== '') {
             echo $f_from === $f_to ? h(fmt_date($f_from)) : h(fmt_date($f_from)) . ' – ' . h(fmt_date($f_to));
@@ -1180,6 +1200,37 @@ render_flash();
     <div class="gl-section-title">Kantar<?= !empty($gk_rows) ? ' ('.count($gk_rows).')' : '' ?></div>
     <?php if (!empty($gk_rows)):
         $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
+        // Pre-compute totals for summary strip
+        foreach ($gk_rows as $_gkrp):
+            $_kcp   = kantar_calc($_gkrp);
+            $_fidp  = (int)$_gkrp['id'];
+            $_grpsp = $gk_gruplar[$_fidp] ?? [];
+            if ($f_kantar_firma !== '' && !empty($_grpsp)):
+                $_distp = kantar_grup_dist($_grpsp, $_kcp['brut'], $_kcp['eff_kdu'], $_kcp['eff_pdu']);
+                foreach ($_distp as $_drp):
+                    if (mb_strtolower(trim((string)($_drp['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_kantar_firma), 'UTF-8')) continue;
+                    $_gk_tot_brut  += $_drp['brut_kg'];
+                    $_gk_tot_net   += $_drp['net_kg'];
+                    $_gk_tot_kasa  += (int)$_drp['kasa'];
+                    $_gk_tot_palet += (int)$_drp['palet'];
+                endforeach;
+            else:
+                $_gk_tot_brut  += $_kcp['brut'];
+                $_gk_tot_net   += $_kcp['net'];
+                $_gk_tot_kasa  += (int)$_gkrp['kasa_sayisi'];
+                $_gk_tot_palet += (int)$_gkrp['palet_sayisi'];
+            endif;
+        endforeach;
+    ?>
+    <div class="gl-ps-strip">
+        <div class="gl-ps-item gl-ps-palet"><span>Palet</span><strong><?= number_format($_gk_tot_palet, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gk_tot_kasa, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gk_tot_brut) ?></strong></div>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg($_gk_tot_net) ?></strong></div>
+    </div>
+    <?php
+        // Reset for in-loop accumulation (used by tfoot)
+        $_gk_tot_brut = 0.0; $_gk_tot_net = 0.0; $_gk_tot_kasa = 0; $_gk_tot_palet = 0;
     ?>
     <div class="table-wrap">
     <table class="data-table">
@@ -1263,12 +1314,19 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 <div class="gl-section">
     <div class="gl-section-title">Makineye Dökülen<?= !empty($mk_rows) ? ' ('.count($mk_rows).' kayıt)' : '' ?></div>
     <?php if (!empty($mk_rows)): ?>
-    <div class="rpt-summary" style="margin-bottom:10px">
+    <div class="rpt-summary gl-no-print" style="margin-bottom:10px">
         <div class="rpt-sum-item"><span>Kayıt</span><strong><?= count($mk_rows) ?></strong></div>
         <div class="rpt-sum-item"><span>Palet</span><strong><?= number_format($_mk_tot_palet, 0, ',', '.') ?></strong></div>
         <div class="rpt-sum-item"><span>Kasa</span><strong><?= number_format($_mk_tot_kasa, 0, ',', '.') ?></strong></div>
         <div class="rpt-sum-item"><span>Brüt KG</span><strong><?= fmt_kg($_mk_tot_brut) ?></strong></div>
         <div class="rpt-sum-item rpt-sum-highlight"><span>Net KG</span><strong><?= fmt_kg(round($_mk_tot_net)) ?></strong></div>
+    </div>
+    <div class="gl-ps-strip">
+        <div class="gl-ps-item gl-ps-palet"><span>Palet</span><strong><?= number_format($_mk_tot_palet, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_mk_tot_kasa, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_mk_tot_brut) ?></strong></div>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_mk_tot_dara)) ?></strong></div>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg(round($_mk_tot_net)) ?></strong></div>
     </div>
     <div class="table-wrap">
     <table class="data-table">
@@ -1312,7 +1370,21 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 <!-- Çıkmalar -->
 <div class="gl-section">
     <div class="gl-section-title">Çıkmalar<?= !empty($ck_rows) ? ' ('.count($ck_rows).')' : '' ?></div>
-    <?php if (!empty($ck_rows)): ?>
+    <?php if (!empty($ck_rows)):
+        $_ck_tot_palet = (int)  array_sum(array_column($ck_rows, 'palet_sayisi'));
+        $_ck_tot_kasa  = (int)  array_sum(array_column($ck_rows, 'toplam_kasa'));
+        $_ck_tot_brut  = (float)array_sum(array_column($ck_rows, 'toplam_brut'));
+        $_ck_tot_dara  = (float)array_sum(array_column($ck_rows, 'toplam_dara'));
+        $_ck_tot_net   = (float)array_sum(array_column($ck_rows, 'toplam_net'));
+    ?>
+    <div class="gl-ps-strip">
+        <div class="gl-ps-item gl-ps-palet"><span>Palet</span><strong><?= number_format($_ck_tot_palet, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_ck_tot_kasa, 0, ',', '.') ?></strong></div>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_ck_tot_brut) ?></strong></div>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_ck_tot_dara)) ?></strong></div>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg($_ck_tot_net) ?></strong></div>
+    </div>
+    <?php endif; if (!empty($ck_rows)): ?>
     <div class="table-wrap">
     <table class="data-table">
         <thead><tr>
