@@ -745,10 +745,13 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
             <?php endforeach; ?>
         </table>
 
-        <?php if ($_etiket_note !== ''): ?>
+        <?php
+            $_note_val = trim((string)($record['etiket'] ?? ''));
+            if ($_note_val !== ''):
+        ?>
         <div class="print-note-box">
             <div class="print-note-title">NOT</div>
-            <div class="print-note-text"><?= nl2br(h($_etiket_note)) ?></div>
+            <div class="print-note-text"><?= nl2br(h($_note_val)) ?></div>
         </div>
         <?php endif; ?>
 
