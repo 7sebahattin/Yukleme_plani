@@ -1033,8 +1033,8 @@ render_flash();
     .gl-section .data-table tfoot { display: none !important; }
     .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ps-item { border: 2px solid; padding: 7px 12px; flex: 1 1 90px; min-width: 80px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-    .gl-ps-item span   { font-size: 14pt; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-    .gl-ps-item strong { font-size: 18pt; font-weight: 800; }
+    .gl-ps-item span   { font-size: 12pt; font-weight: 700; white-space: nowrap; flex-shrink: 0; color: #000 !important; }
+    .gl-ps-item strong { font-size: 16pt; font-weight: 800; }
     .gl-ps-palet { border-color: #7c3aed !important; color: #7c3aed !important; }
     .gl-ps-kasa  { border-color: #6b7280 !important; color: #6b7280 !important; }
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
