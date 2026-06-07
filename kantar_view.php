@@ -86,14 +86,14 @@ render_flash();
     .topbar, .bottomnav, .page-head, .flash,
     .kv-no-print { display: none !important; }
 
-    html, body { font-size: 9pt !important; }
+    html, body { font-size: 10pt !important; }
     body, .container {
         background: #fff !important;
         padding: 0 !important; margin: 0 !important;
     }
     .container { padding-bottom: 0 !important; max-width: 100% !important; }
 
-    /* ── Başlık tam genişlik ── */
+    /* ── Başlık ── */
     .kv-print-header {
         display: flex !important;
         justify-content: space-between;
@@ -102,33 +102,24 @@ render_flash();
         padding-bottom: 4px;
         margin-bottom: 5px;
     }
-    .kv-print-h-title { font-size: 13pt; font-weight: 700; }
-    .kv-print-h-sub   { font-size: 8pt; color: #444; margin-top: 1px; }
-    .kv-print-h-right { text-align: right; font-size: 8pt; line-height: 1.5; }
+    .kv-print-h-title { font-size: 14pt; font-weight: 700; }
+    .kv-print-h-sub   { font-size: 9pt; color: #444; margin-top: 1px; }
+    .kv-print-h-right { text-align: right; font-size: 9pt; line-height: 1.5; }
 
-    /* ── Üst: fotoğraf tam genişlik ── */
+    /* ── Fotoğraf: yarım sayfa yüksekliği ── */
     .kv-pb         { display: block !important; }
-    .kv-pb-photo   {
-        display: block !important;
-        width: 100%;
-        margin-bottom: 5mm;
-    }
+    .kv-pb-photo   { display: block !important; width: 100%; margin-bottom: 4mm; }
     .kv-photo-card {
         border: 1px solid #ccc !important;
         box-shadow: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
+        margin: 0 !important; padding: 0 !important;
         overflow: hidden;
     }
-    .kv-photo-wrap {
-        background: #fff !important;
-        min-height: unset !important;
-        padding: 0 !important;
-    }
+    .kv-photo-wrap { background: #fff !important; min-height: unset !important; padding: 0 !important; }
     .kv-photo {
         width: 100% !important;
         height: auto !important;
-        max-height: 80mm !important;
+        max-height: 120mm !important;
         object-fit: contain;
         display: block !important;
         -webkit-print-color-adjust: exact;
@@ -136,14 +127,10 @@ render_flash();
     }
     .kv-photo-ph { display: none !important; }
 
-    /* ── Alt: iki kolon ── */
-    .kv-pb-bottom {
-        display: flex !important;
-        gap: 5mm;
-        align-items: flex-start;
-    }
-    .kv-pb-left  { display: block !important; flex: 1; min-width: 0; }
-    .kv-pb-right { display: block !important; flex: 1; min-width: 0; }
+    /* ── Alt bölümler: tek kolon alt alta ── */
+    .kv-pb-bottom { display: block !important; }
+    .kv-pb-left   { display: block !important; width: 100%; }
+    .kv-pb-right  { display: block !important; width: 100%; }
 
     /* ── Kartlar ── */
     .card {
@@ -152,95 +139,89 @@ render_flash();
         margin-bottom: 4px !important;
         page-break-inside: avoid;
     }
-    .card-head { border-bottom: 1px solid #bbb !important; padding: 3px 7px !important; }
-    .card-head h2 { font-size: 7.5pt !important; font-weight: 700; margin: 0 !important; text-transform: uppercase; letter-spacing: .04em; }
-    .card-body { padding: 5px 7px !important; }
+    .card-head { border-bottom: 1px solid #bbb !important; padding: 4px 8px !important; }
+    .card-head h2 { font-size: 9pt !important; font-weight: 700; margin: 0 !important; text-transform: uppercase; letter-spacing: .04em; }
+    .card-body { padding: 6px 8px !important; }
 
-    /* ── Fiş bilgileri: 2 kolon ── */
+    /* ── Fiş bilgileri: 4 kolon ── */
     .info-grid {
         display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 3px 8px !important;
+        grid-template-columns: 1fr 1fr 1fr 1fr !important;
+        gap: 4px 12px !important;
     }
     .info-grid > div { min-width: 0; }
     .info-grid .span-2 { grid-column: span 2; }
     .info-grid .lbl {
-        font-size: 5.5pt;
+        font-size: 7pt;
         text-transform: uppercase;
         letter-spacing: .04em;
         color: #777;
         display: block;
         line-height: 1.2;
     }
-    .info-grid strong {
-        font-size: 8pt;
-        font-weight: 600;
-        display: block;
-        line-height: 1.3;
-    }
+    .info-grid strong { font-size: 10pt; font-weight: 600; display: block; line-height: 1.3; }
 
     /* ── Tartımlar ── */
-    .kv-tartim-list { display: flex; gap: 5px; margin-bottom: 4px; }
-    .kv-tartim-row {
-        flex: 1;
-        border: 1px solid #ddd;
-        border-radius: 3px;
-        padding: 3px 6px;
-    }
-    .kv-tartim-label { font-size: 6pt; color: #666; }
-    .kv-tartim-val { font-size: 10pt; font-weight: 700; line-height: 1.3; }
-    .kv-tartim-unit { font-size: 7pt; font-weight: 400; }
-    .kv-tartim-alibi { font-size: 6pt; color: #666; }
+    .kv-tartim-list { display: flex; gap: 8px; margin-bottom: 6px; }
+    .kv-tartim-row { flex: 1; border: 1px solid #ddd; border-radius: 3px; padding: 5px 8px; }
+    .kv-tartim-label { font-size: 8pt; color: #666; }
+    .kv-tartim-val { font-size: 14pt; font-weight: 700; line-height: 1.3; }
+    .kv-tartim-unit { font-size: 9pt; font-weight: 400; }
+    .kv-tartim-alibi { font-size: 7pt; color: #666; }
 
     .kv-net-box {
-        background: #e85d04 !important;
-        color: #fff !important;
-        padding: 2px 6px !important;
-        margin-top: 4px !important;
-        border-radius: 3px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+        background: #e85d04 !important; color: #fff !important;
+        padding: 4px 10px !important; margin-top: 5px !important; border-radius: 3px;
+        display: flex; justify-content: space-between; align-items: center;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .kv-net-label { font-size: 6pt !important; font-weight: 600; letter-spacing: .05em; }
-    .kv-net-val { font-size: 8pt !important; font-weight: 700 !important; }
+    .kv-net-label { font-size: 9pt !important; font-weight: 600; letter-spacing: .05em; }
+    .kv-net-val   { font-size: 14pt !important; font-weight: 700 !important; }
 
-    .kv-nd-box { margin-top: 4px !important; border: 1px solid #ddd; border-radius: 3px; }
+    .kv-nd-box { margin-top: 5px !important; border: 1px solid #ddd; border-radius: 3px; }
     .kv-nd-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 2px 6px !important;
-        font-size: 7pt !important;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 4px 10px !important; font-size: 9pt !important;
         border-bottom: 1px solid #eee;
     }
     .kv-nd-row:last-child { border-bottom: none; }
-    .kv-nd-net { background: #1a56db !important; color: #fff !important; font-weight: 700; padding: 4px 8px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .kv-nd-net { background: #1a56db !important; color: #fff !important; font-weight: 700; padding: 6px 12px !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .kv-nd-net .kv-nd-lbl { color: rgba(255,255,255,.8) !important; }
     .kv-nd-lbl { color: #555; }
     .kv-nd-val { font-weight: 600; }
-    .kv-nd-net-val { font-size: 13pt !important; }
+    .kv-nd-net-val { font-size: 16pt !important; }
 
     /* ── Gruplandırma tablosu ── */
-    .kv-grup-table { width: 100%; border-collapse: collapse; font-size: 6.5pt; }
-    .kv-grup-table th { font-size: 5.5pt; text-transform: uppercase; letter-spacing:.04em; color:#555; font-weight:700; text-align:right; border-bottom:1px solid #bbb; padding: 2px 3px; }
-    .kv-grup-table th:first-child { text-align:left; }
-    .kv-grup-table td { padding: 2px 3px; border-bottom: 1px solid #eee; text-align:right; font-variant-numeric:tabular-nums; }
-    .kv-grup-table td:first-child { text-align:left; font-weight:600; }
-    .kv-grup-table tfoot td { border-top: 1.5px solid #374151; font-weight:700; background:#f5f5f5 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    .kv-grup-net { color: #1a56db !important; font-weight:800 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .kv-grup-table { width: 100%; border-collapse: collapse; font-size: 11pt; }
+    .kv-grup-table th {
+        font-size: 9pt; text-transform: uppercase; letter-spacing: .04em;
+        color: #333; font-weight: 700; text-align: right;
+        border-bottom: 2px solid #374151; padding: 5px 10px;
+        background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .kv-grup-table th:first-child { text-align: left; }
+    .kv-grup-table td {
+        padding: 8px 10px; border-bottom: 1px solid rgba(0,0,0,.1);
+        text-align: right; font-variant-numeric: tabular-nums;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .kv-grup-table td:first-child { text-align: left; font-weight: 700; font-size: 12pt; }
+    .kv-grup-table tfoot td {
+        border-top: 2px solid #374151; font-weight: 700; font-size: 11pt;
+        background: #e2e8f0 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .kv-grup-net { color: #1a56db !important; font-weight: 800 !important; font-size: 13pt !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
     /* Sapma uyarısı — print */
     .kv-sapma-uyari {
         background: #fef2f2 !important; border: 1pt solid #ef4444 !important;
-        padding: 3px 6px !important; margin-bottom: 3px !important;
-        font-size: 6.5pt !important; color: #7f1d1d !important;
+        padding: 4px 8px !important; margin-bottom: 4px !important;
+        font-size: 8pt !important; color: #7f1d1d !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
         page-break-inside: avoid;
     }
-    .kv-sapma-detail { font-size: 6pt !important; margin-top: 2px !important; gap: 6px !important; }
+    .kv-sapma-detail { font-size: 7pt !important; margin-top: 2px !important; gap: 8px !important; }
 }
 </style>
 
@@ -425,10 +406,16 @@ render_flash();
                             <th>Oran</th>
                         </tr></thead>
                         <tbody>
-                        <?php foreach ($grup_rows as $gr):
+                        <?php
+                        $kv_grup_colors = [
+                            '#dbeafe','#dcfce7','#fce7f3','#fef9c3',
+                            '#f3e8ff','#ffedd5','#e0f2fe','#fef2f2',
+                        ];
+                        foreach ($grup_rows as $_gi => $gr):
                             $gr_oran = $grup_tot_net > 0 ? round($gr['net_kg'] / $grup_tot_net * 100, 1) : 0;
+                            $_gbg = $kv_grup_colors[$_gi % count($kv_grup_colors)];
                         ?>
-                            <tr>
+                            <tr style="background:<?= $_gbg ?> !important; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
                                 <td>
                                     <?= h($gr['firma']) ?>
                                     <div class="kv-no-print" style="font-size:.72rem;color:#6b7280;margin-top:1px">
