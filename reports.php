@@ -45,7 +45,7 @@ $report_meta = [
 function col_label(string $c): string {
     static $m = [
         'id'=>'ID','tarih'=>'Tarih','firma'=>'Firma','bolge'=>'Bölge','alici'=>'Alıcı',
-        'urun'=>'Ürün','parti_no'=>'Parti No','cikis_nedeni'=>'Çıkma Nedeni','on_plaka'=>'Ön Plaka','arka_plaka'=>'Arka Plaka',
+        'urun'=>'Ürün','parti_no'=>'Parti No','casus_no'=>'Casus No','cikis_nedeni'=>'Çıkma Nedeni','on_plaka'=>'Ön Plaka','arka_plaka'=>'Arka Plaka',
         'durum'=>'Durum','palet_sayisi'=>'Palet','toplam_kasa'=>'Kasa',
         'toplam_brut'=>'Brüt KG','toplam_dara'=>'Dara KG','toplam_net'=>'Net KG',
         'nakliye_bedeli'=>'Nakliye Bedeli','avans'=>'Avans','created_at'=>'Oluşturulma',
@@ -120,7 +120,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $agg_dara  = "COALESCE(SUM(p.dara_kg),0)";
         $agg_net   = "COALESCE(SUM(p.net_kg),0)";
     }
-    $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.cikis_nedeni,
+    $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.casus_no, r.cikis_nedeni,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
                    (SELECT p2.depo FROM loading_pallets p2
                     WHERE p2.loading_record_id = r.id AND p2.depo != ''
@@ -185,7 +185,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
     if ($type === 'yukleme') {
-        $cols = ['tarih','firma','bolge','alici','depo','urun','parti_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
+        $cols = ['tarih','firma','bolge','alici','depo','urun','parti_no','casus_no','durum','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     } else { // cikma — durum sütunu yok, alıcı yok, çıkma nedeni göster
         $cols = ['tarih','firma','bolge','depo','urun','cikis_nedeni','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
     }
