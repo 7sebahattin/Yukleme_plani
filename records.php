@@ -313,6 +313,7 @@ render_flash();
                         <strong><?= h($firma_label) ?><?= $ft ? ' <span class="record-card-tarih">· ' . h($ft) . '</span>' : '' ?></strong>
                         <?php if ($locked): ?><span class="badge-locked">🔒 Kilitli</span><?php endif; ?>
                         <?php if ($r['parti_no']): ?><div class="record-card-firma">Parti: <?= h($r['parti_no']) ?></div><?php endif; ?>
+                        <?php if ($r['casus_no']): ?><div class="record-card-firma">Casus: <?= h($r['casus_no']) ?></div><?php endif; ?>
                         <?php if ($r['urun_sahibi_adi']): ?><div style="color:#c00000;font-size:.85rem">Ürün Sahibi: <?= h($r['urun_sahibi_adi']) ?></div><?php endif; ?>
                     </div>
                     <div class="pc-kebab-wrap">
