@@ -218,6 +218,17 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
 // ── Not alanı ─────────────────────────────────────────────
 $note_val = trim((string)($record['etiket'] ?? ''));
 
+// ── Ürün sahibi adı (urun_sahibi_id → material_definitions) ──
+$urun_sahibi_adi = '';
+$urun_sahibi_id  = (int)($record['urun_sahibi_id'] ?? 0);
+if ($urun_sahibi_id > 0) {
+    try {
+        $st_us = db()->prepare("SELECT name FROM material_definitions WHERE id = :id LIMIT 1");
+        $st_us->execute([':id' => $urun_sahibi_id]);
+        $urun_sahibi_adi = (string)($st_us->fetchColumn() ?: '');
+    } catch (PDOException $_use) {}
+}
+
 // ── Sayfa yönü ────────────────────────────────────────────
 $orientation = print_orientation($mode, $mode === 'detail' ? 9 : 5);
 $body_class  = print_body_class('loading', $mode, $orientation);
@@ -311,6 +322,10 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
 /* ── Detail: üst bilgi grid ──────────────────────── */
 .lp-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin-bottom: 8px; }
 
+/* Detail 3-sütunlu tam bilgi tablosu */
+.lp-info-3col th { width: auto; white-space: normal; min-width: 72px; }
+.lp-info-3col td { min-width: 60px; }
+
 /* ── Detail: stok + kasa dara yan yana ───────────── */
 .lp-bottom-row { display: flex; gap: 10px; margin-bottom: 8px; }
 .lp-bottom-row > * { flex: 1; }
@@ -378,6 +393,11 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
       <th>ÖN PLAKA</th><td><?= h($record['on_plaka'] ?? '—') ?></td>
       <th>ARKA PLAKA</th><td><?= h($record['arka_plaka'] ?? '—') ?></td>
     </tr>
+    <?php if ($urun_sahibi_adi !== ''): ?>
+    <tr>
+      <th>ÜRÜN SAHİBİ</th><td colspan="3"><?= h($urun_sahibi_adi) ?></td>
+    </tr>
+    <?php endif; ?>
   </table>
 
   <!-- Özet kutular: PALET / KASA / BRÜT / DARA / NET -->
@@ -527,23 +547,39 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
     </div>
   </div>
 
-  <!-- Üst bilgi grid: 2 sütun kompakt -->
-  <div class="lp-info-grid" style="margin-bottom:6px">
-    <table class="lp-info" style="margin-bottom:0">
-      <tr><th>FİRMA</th><td><?= h($record['firma'] ?? '—') ?></td></tr>
-      <tr><th>BÖLGE</th><td><?= h($record['bolge'] ?? '—') ?></td></tr>
-      <tr><th>PARTİ NO</th><td><?= h($record['parti_no'] ?? '—') ?></td></tr>
-      <tr><th>GÜMRÜK</th><td><?= h($record['gumruk'] ?? '—') ?></td></tr>
-      <tr><th>FATURA NO</th><td><?= h($record['fatura_no'] ?? '—') ?></td></tr>
-    </table>
-    <table class="lp-info" style="margin-bottom:0">
-      <tr><th>ALICI</th><td><?= h($record['alici'] ?? '—') ?></td></tr>
-      <tr><th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td></tr>
-      <tr><th>ŞOFÖR</th><td><?= h($record['sofor_adi'] ?? '—') ?></td></tr>
-      <tr><th>ÖN PLAKA</th><td><?= h($record['on_plaka'] ?? '—') ?></td></tr>
-      <tr><th>ARKA PLAKA</th><td><?= h($record['arka_plaka'] ?? '—') ?></td></tr>
-    </table>
-  </div>
+  <!-- Üst bilgi: 3-sütunlu tam bilgi tablosu -->
+  <table class="lp-info lp-info-3col" style="margin-bottom:6px">
+    <tr>
+      <th>FİRMA</th><td><?= h($record['firma'] ?? '—') ?></td>
+      <th>BÖLGE</th><td><?= h($record['bolge'] ?? '—') ?></td>
+      <th>TARİH</th><td><?= h(fmt_date($record['tarih'])) ?></td>
+    </tr>
+    <tr>
+      <th>PARTİ NO</th><td><?= h($record['parti_no'] ?? '—') ?></td>
+      <th>GÜMRÜK</th><td><?= h($record['gumruk'] ?? '—') ?></td>
+      <th>ALICI</th><td><?= h($record['alici'] ?? '—') ?></td>
+    </tr>
+    <tr>
+      <th>ÜRÜN</th><td><?= h($record['urun'] ?? '—') ?></td>
+      <th>MARKA</th><td><?= h($brand_label) ?></td>
+      <th>ÜRÜN SAHİBİ</th><td><?= $urun_sahibi_adi !== '' ? h($urun_sahibi_adi) : '—' ?></td>
+    </tr>
+    <tr>
+      <th>NAKLİYE ŞİRKETİ</th><td><?= h($record['nakliye_sirketi'] ?? '—') ?></td>
+      <th>ŞOFÖR</th><td><?= h($record['sofor_adi'] ?? '—') ?></td>
+      <th>TELEFON</th><td><?= h($record['telefon'] ?? '—') ?></td>
+    </tr>
+    <tr>
+      <th>ÖN PLAKA</th><td><?= h($record['on_plaka'] ?? '—') ?></td>
+      <th>ARKA PLAKA</th><td><?= h($record['arka_plaka'] ?? '—') ?></td>
+      <th>FATURA NO</th><td><?= h($record['fatura_no'] ?? '—') ?></td>
+    </tr>
+    <tr>
+      <th>CASUS NO</th><td><?= h($record['casus_no'] ?? '') ?: '—' ?></td>
+      <th>NAKLİYE BEDELİ</th><td><?= (float)($record['nakliye_bedeli'] ?? 0) > 0 ? h(fmt_money((float)$record['nakliye_bedeli'])) : '—' ?></td>
+      <th>AVANS</th><td><?= (float)($record['avans'] ?? 0) > 0 ? h(fmt_money((float)$record['avans'])) : '—' ?></td>
+    </tr>
+  </table>
 
   <!-- Palet detay tablosu — TÜM PALETLER (26 sınırı YOK) -->
   <table class="lp-table" style="font-size:7pt">
