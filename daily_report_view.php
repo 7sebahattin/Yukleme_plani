@@ -278,6 +278,8 @@ render_flash();
     <?php if (!$print_mode): ?>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a href="daily_report_view.php?id=<?= $id ?>&print=1" class="btn btn-sm" target="_blank">🖨 Yazdır</a>
+        <a href="print_daily.php?id=<?= $id ?>&mode=summary" class="btn btn-sm" target="_blank">📄 Özet Yazdır</a>
+        <a href="print_daily.php?id=<?= $id ?>&mode=detail" class="btn btn-sm" target="_blank">📋 Detaylı Yazdır</a>
         <a href="daily_report_archive.php" class="btn btn-ghost btn-sm">📁 Arşiv</a>
     </div>
     <?php endif; ?>
