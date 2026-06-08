@@ -330,6 +330,10 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>
+                <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
+                <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" target="_blank">📄 Özet Yazdır</a>
+                <a href="print_loading.php?id=<?= (int)$id ?>&mode=detail" target="_blank">📋 Detaylı Yazdır</a>
+                <?php endif; ?>
                 <a href="record_excel_template.php?id=<?= (int)$id ?>">📊 Excel İndir</a>
                 <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
                 <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>

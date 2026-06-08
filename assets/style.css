@@ -1003,8 +1003,9 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 /* =========================================================
    YAZDIRMA
    ========================================================= */
-/* Genel varsayılan: A4 yatay. Sayfa özel @page kuralları kendi <style> bloğunda override eder. */
-@page { size: A4 landscape; margin: 12mm; }
+/* Global @page kuralı kaldırıldı (Sprint Print-Arch-01).
+   Her yazdırma sayfası kendi @page kuralını kendi <style> bloğunda tanımlar.
+   Yeni print sayfaları için bkz: assets/print_base.css */
 
 @media print {
     body { background: #fff; }
@@ -1018,6 +1019,10 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     /* Yazdırmada tablo göster, kartları gizle */
     .view-table-wrap { display: block !important; }
     .view-cards { display: none !important; }
+    /* Sprint Print-Arch-01: Standart görünürlük kuralları */
+    .mobile-only { display: none !important; }
+    .print-only  { display: block !important; }
+    .print-hide  { display: none !important; }
 }
 
 body.print-mode .topbar { display: none; }
