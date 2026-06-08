@@ -327,6 +327,10 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
+        <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
+        <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" class="btn" target="_blank">📄 Özet Yazdır</a>
+        <a href="print_loading.php?id=<?= (int)$id ?>&mode=detail" class="btn" target="_blank">📋 Detaylı Yazdır</a>
+        <?php endif; ?>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>
