@@ -223,7 +223,7 @@ $orientation = print_orientation($mode, $mode === 'detail' ? 9 : 5);
 $body_class  = print_body_class('loading', $mode, $orientation);
 
 // ── Sayfa başlığı ─────────────────────────────────────────
-$page_title = sprintf('Yükleme Planı %s — %s', $mode === 'detail' ? 'Detay' : 'Özet', h($record['firma'] ?? ''));
+$page_title = sprintf('Yükleme Planı %s — %s', $mode === 'detail' ? 'Detay' : 'Özet', $record['firma'] ?? '');
 
 // ── Stok aktif satırlar (boş olmayanlar) ─────────────────
 $stok_aktif = [];
@@ -268,7 +268,8 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
            padding: 5px 4px; text-align: center;
            -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .lp-box-label { font-size: 6pt; text-transform: uppercase; letter-spacing: .5px; color: #555; }
-.lp-box-val   { font-size: 13pt; font-weight: bold; color: #000; line-height: 1.2; }
+.lp-box-val   { font-size: 12pt; font-weight: bold; color: #000; line-height: 1.2;
+                word-break: break-all; }
 .lp-box-unit  { font-size: 6pt; color: #666; }
 .lp-box.net   { border-color: #1a56db; background: #eff6ff !important; }
 .lp-box.net .lp-box-val { color: #1a56db; }
@@ -295,14 +296,17 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
 
 /* ── Not kutusu ───────────────────────────────────── */
 .lp-note { border: 1px solid #bbb; border-radius: 3px; padding: 5px 7px;
-            margin-bottom: 8px; font-size: 7.5pt; }
+            margin-bottom: 8px; font-size: 7.5pt;
+            break-inside: avoid; page-break-inside: avoid; }
 .lp-note-title { font-weight: bold; font-size: 7pt; text-transform: uppercase;
                   letter-spacing: .5px; margin-bottom: 3px; }
 
 /* ── İmzalar ──────────────────────────────────────── */
-.lp-sigs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 12px; }
+.lp-sigs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;
+            margin-top: 16px; padding-top: 4px;
+            break-inside: avoid; page-break-inside: avoid; }
 .lp-sig  { border-top: 1px solid #555; padding-top: 4px; font-size: 7.5pt;
-            text-align: center; }
+            text-align: center; min-height: 24px; }
 
 /* ── Detail: üst bilgi grid ──────────────────────── */
 .lp-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin-bottom: 8px; }
@@ -313,6 +317,14 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
 
 @media print {
     .lp-box.net { background: #eff6ff !important; }
+    .lp-info th { background: #f0f0f0 !important; }
+    .lp-table th { background: #eef2f8 !important; }
+    .lp-table tfoot td { background: #fff5cc !important; }
+    /* Zebra satır rengi printte çok hafif — mürekkep tasarrufu için kaldır */
+    .lp-table .row-odd { background: #fff !important; }
+    /* Tablo başlığı sayfa kırılmalarında tekrarlanır */
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
 }
 </style>
 
@@ -397,8 +409,16 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
     </div>
   </div>
 
-  <!-- Kasa cinsi + Ürün/Depo özeti yan yana -->
-  <div class="lp-two-col">
+  <?php
+  // İkinci kolon içeriği belirleme (özet için)
+  $show_urun_col  = count($urun_groups) > 1 || (count($urun_groups) === 1 && key($urun_groups) !== '—');
+  $show_depo_col  = !$show_urun_col && count($depo_groups) > 1;
+  $has_second_col = $show_urun_col || $show_depo_col;
+  ?>
+
+  <!-- Kasa cinsi + Ürün/Depo özeti: tek ya da çift sütun -->
+  <?php if (!empty($kasa_breakdown) || $has_second_col): ?>
+  <div class="<?= ($has_second_col && !empty($kasa_breakdown)) ? 'lp-two-col' : '' ?>">
 
     <!-- Kasa cinsi toplamları -->
     <?php if (!empty($kasa_breakdown)): ?>
@@ -410,14 +430,16 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         <?php foreach ($kasa_breakdown as $kn => $ka): ?>
           <tr><td><?= h(mb_strtoupper($kn, 'UTF-8')) ?></td><td class="num"><?= (int)$ka ?></td></tr>
         <?php endforeach; ?>
-        <tr style="font-weight:bold;background:#f5f5f5 !important"><td>TOPLAM</td><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
         </tbody>
+        <tfoot>
+          <tr><td>TOPLAM</td><td class="num"><?= (int)$tot['toplam_kasa'] ?></td></tr>
+        </tfoot>
       </table>
     </div>
     <?php endif; ?>
 
     <!-- Ürün cinsi grupları -->
-    <?php if (count($urun_groups) > 1 || (count($urun_groups) === 1 && key($urun_groups) !== '—')): ?>
+    <?php if ($show_urun_col): ?>
     <div>
       <div class="lp-section-title">Ürün Cinsi</div>
       <table class="lp-table">
@@ -433,7 +455,7 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         </tbody>
       </table>
     </div>
-    <?php elseif (count($depo_groups) > 1): ?>
+    <?php elseif ($show_depo_col): ?>
     <!-- Depo özeti (tek ürün cinsi varsa) -->
     <div>
       <div class="lp-section-title">Depo</div>
@@ -450,11 +472,10 @@ render_print_page_start($page_title, 'loading', $mode, $orientation);
         </tbody>
       </table>
     </div>
-    <?php else: ?>
-    <div></div>
     <?php endif; ?>
 
-  </div><!-- .lp-two-col -->
+  </div><!-- .lp-two-col / single-col -->
+  <?php endif; ?>
 
   <!-- Stok çıkışları -->
   <?php if (!empty($stok_aktif)): ?>
