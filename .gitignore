@@ -8,3 +8,7 @@ scripts/staging_report_*.txt
 backups/*.sql
 backups/*.csv
 deploy.log
+
+# Geçici / yerel veritabanı dosyaları
+*.sqlite
+*.sqlite3
