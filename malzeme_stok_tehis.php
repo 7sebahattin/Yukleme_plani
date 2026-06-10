@@ -193,17 +193,6 @@ $depo_bos_count = count(array_filter($depo_rows, fn($r) => $r['depo'] === '[Boş
 // Aynı normalize_key + type için farklı ID'lere dağılmış giriş/kullanım
 $split_risks = [];
 if ($has_msm && $has_md) {
-    // Her id için toplam giriş ve kullanım al
-    $msm_totals = $pdo->query("
-        SELECT
-            material_id,
-            SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS giris,
-            SUM(CASE WHEN movement_type='kullanim' THEN quantity ELSE 0 END) AS kullanim
-        FROM material_stock_movements
-        WHERE material_id IS NOT NULL
-        GROUP BY material_id
-    ")->fetchAll(PDO::FETCH_KEY_PAIR + 0); // fetchAll sonra key olarak material_id kullanacağız
-    // PDO::FETCH_KEY_PAIR iki kolon ister, burada 3 kolon var, normal fetchAll kullan
     $msm_totals = $pdo->query("
         SELECT material_id,
                SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS giris,
