@@ -375,16 +375,58 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     </div>
 </div>
 
+<?php $_rv_is_yukleme = ($record['type'] ?? 'yukleme') === 'yukleme'; ?>
+<h3 class="section-title">Genel Bilgiler</h3>
 <div class="info-grid">
     <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
-    <div><span class="lbl">Ürün</span><strong><?= h($record['urun']) ?></strong></div>
-    <div><span class="lbl">Depo</span><strong><?= h($depo_str) ?></strong></div>
-    <?php if (($record['type'] ?? 'yukleme') === 'cikma' && !empty($record['cikis_nedeni'])): ?>
+    <div><span class="lbl">Ürün</span><strong><?= h($record['urun'] ?: '—') ?></strong></div>
+    <div><span class="lbl">Depo</span><strong><?= h($depo_str ?: '—') ?></strong></div>
+    <div><span class="lbl">Bölge</span><strong><?= h($record['bolge'] ?: '—') ?></strong></div>
+    <?php if ($_rv_is_yukleme): ?>
+    <div><span class="lbl">Alıcı</span><strong><?= h($record['alici'] ?: '—') ?></strong></div>
+    <div><span class="lbl">Fatura No</span><strong><?= h($record['fatura_no'] ?: '—') ?></strong></div>
+    <div><span class="lbl">Casus No</span><strong><?= h($record['casus_no'] ?: '—') ?></strong></div>
+    <?php endif; ?>
+    <?php if (!$_rv_is_yukleme && !empty($record['cikis_nedeni'])): ?>
     <div><span class="lbl">Çıkış Nedeni</span><strong><span class="cikis-nedeni-badge"><?= h($record['cikis_nedeni']) ?></span></strong></div>
     <?php endif; ?>
 </div>
 
-<?php if (($record['type'] ?? 'yukleme') === 'cikma'): ?>
+<?php
+$_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) ||
+                   !empty($record['nakliye_sirketi']) || !empty($record['sofor_adi']) ||
+                   !empty($record['telefon']) ||
+                   (float)($record['nakliye_bedeli'] ?? 0) > 0 ||
+                   (float)($record['avans'] ?? 0) > 0;
+?>
+<?php if ($_rv_is_yukleme && $_rv_has_nakliye): ?>
+<h3 class="section-title">Nakliye Bilgileri</h3>
+<div class="info-grid">
+    <?php if (!empty($record['on_plaka'])): ?>
+    <div><span class="lbl">Ön Plaka</span><strong><?= h($record['on_plaka']) ?></strong></div>
+    <?php endif; ?>
+    <?php if (!empty($record['arka_plaka'])): ?>
+    <div><span class="lbl">Arka Plaka</span><strong><?= h($record['arka_plaka']) ?></strong></div>
+    <?php endif; ?>
+    <?php if (!empty($record['nakliye_sirketi'])): ?>
+    <div><span class="lbl">Nakliye Şirketi</span><strong><?= h($record['nakliye_sirketi']) ?></strong></div>
+    <?php endif; ?>
+    <?php if (!empty($record['sofor_adi'])): ?>
+    <div><span class="lbl">Şoför Adı</span><strong><?= h($record['sofor_adi']) ?></strong></div>
+    <?php endif; ?>
+    <?php if (!empty($record['telefon'])): ?>
+    <div><span class="lbl">Telefon</span><strong><?= h($record['telefon']) ?></strong></div>
+    <?php endif; ?>
+    <?php if ((float)($record['nakliye_bedeli'] ?? 0) > 0): ?>
+    <div><span class="lbl">Nakliye Bedeli</span><strong><?= h(fmt_money($record['nakliye_bedeli'])) ?></strong></div>
+    <?php endif; ?>
+    <?php if ((float)($record['avans'] ?? 0) > 0): ?>
+    <div><span class="lbl">Avans</span><strong><?= h(fmt_money($record['avans'])) ?></strong></div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (!$_rv_is_yukleme): ?>
 <h3 class="section-title">Palet Listesi</h3>
 <?php else: ?>
 <h3 class="section-title">Yükleme Planı</h3>
