@@ -58,6 +58,31 @@ function tbl_exists(string $t): bool {
     catch (PDOException $e) { return false; }
 }
 
+// ── Tip ailesi — eşleşme adayını yalnızca aynı fiziksel aile ile sınırla
+// firma asla aday değildir; şapka ≠ köşebent; kasa ≠ palet.
+function type_family(string $type): string {
+    $t = mb_strtolower(trim($type), 'UTF-8');
+    $t = str_replace(['ş','ç','ğ','ı','ö','ü','İ','i'], ['s','c','g','i','o','u','i','i'], $t);
+    if ($t === '')                    return '';
+    if (str_contains($t, 'firma'))    return 'firma';
+    if (str_contains($t, 'kosebent')) return 'kosebent';
+    if (str_contains($t, 'sapka'))    return 'sapka';
+    if (str_contains($t, 'serit'))    return 'serit';
+    if (str_contains($t, 'file'))     return 'file';
+    if (str_contains($t, 'casus'))    return 'casus';
+    if (str_contains($t, 'kenar'))    return 'kenar_kartonu';
+    if (str_contains($t, 'palet'))    return 'palet';
+    if (str_contains($t, 'kasa') || str_contains($t, 'sale')) return 'kasa';
+    return $t;
+}
+// İki tip eşleşme adayı olabilir mi? Aynı aile + ikisi de firma değil.
+function type_compatible(string $a, string $b): bool {
+    $fa = type_family($a); $fb = type_family($b);
+    if ($fa === '' || $fb === '') return false;
+    if ($fa === 'firma' || $fb === 'firma') return false;
+    return $fa === $fb;
+}
+
 $pdo = db();
 $has_msm   = tbl_exists('material_stock_movements');
 $has_pm    = tbl_exists('pallet_materials');
@@ -299,6 +324,10 @@ if ($has_lr && $has_lp && $has_msm) {
 }
 
 // ── H) Negatif stok malzemeleri — hareket detayı ────────────
+// id → tanım haritası (benzer/tip ailesi filtresi için erken gerekli)
+$def_by_id_early = [];
+foreach ($all_defs as $d) $def_by_id_early[(int)$d['id']] = $d;
+
 $neg_malzemeler = [];
 if ($has_msm && $has_md) {
     $neg_ids_q = $pdo->query("
@@ -348,13 +377,16 @@ if ($has_msm && $has_md) {
         $giris_h    = array_values(array_filter($hareketler, fn($r) => $r['movement_type'] === 'giris'));
         $kullanim_h = array_values(array_filter($hareketler, fn($r) => $r['movement_type'] === 'kullanim'));
 
-        // Benzer isimli tanımlar (nmk token eşleşmesi)
+        // Benzer isimli tanımlar — yalnızca aynı tip ailesi (firma asla, şapka≠köşebent)
+        $neg_type    = $def_by_id_early[$mid]['type'] ?? '';
         $norm_tokens = array_filter(explode(' ', nmk((string)$nq['mat_name'])), fn($t) => strlen($t) >= 2);
         $benzer = [];
         foreach ($all_defs as $d) {
             if ((int)$d['id'] === $mid) continue;
+            if (!type_compatible($neg_type, (string)$d['type'])) continue; // tip ailesi filtresi
             $dn_tokens = array_filter(explode(' ', nmk($d['name'])), fn($t) => strlen($t) >= 2);
-            if (count(array_intersect($norm_tokens, $dn_tokens)) > 0) {
+            $ortak     = array_values(array_intersect($norm_tokens, $dn_tokens));
+            if (count($ortak) > 0) {
                 $dmid = (string)$d['id'];
                 $dm   = $msm_by_mid[$dmid] ?? null;
                 $dg   = (float)($dm['giris']    ?? 0);
@@ -370,6 +402,7 @@ if ($has_msm && $has_md) {
                     'kullanim'  => $dk,
                     'net'       => $dg - $dk - $ds + $dd,
                     'depolar'   => $dm['depolar'] ?? '—',
+                    'sebep'     => implode(' + ', $ortak), // ortak kelimeler = benzerlik sebebi
                 ];
             }
         }
@@ -377,14 +410,14 @@ if ($has_msm && $has_md) {
         // Öneri
         $oneriler = [];
         if ((float)$nq['giris'] == 0) {
-            $oneriler[] = ['sev' => 'crit', 'msg' => 'Bu malzeme için hiç stok girişi yapılmamış. Başlangıç stok girişi veya düzeltme hareketi eklenmeli.'];
+            $oneriler[] = ['sev' => 'crit', 'msg' => 'Bu malzeme için hiç stok girişi yapılmamış.'];
         } else {
-            $oneriler[] = ['sev' => 'warn', 'msg' => 'Giriş (' . number_format((float)$nq['giris'], 0) . ') kullanımı (' . number_format((float)$nq['kullanim'], 0) . ') karşılamıyor. Ek stok girişi veya düzeltme hareketi değerlendirilmeli.'];
+            $oneriler[] = ['sev' => 'warn', 'msg' => 'Giriş (' . number_format((float)$nq['giris'], 0) . ') kullanımı (' . number_format((float)$nq['kullanim'], 0) . ') karşılamıyor.'];
         }
         $benzer_girisli = array_filter($benzer, fn($b) => $b['giris'] > 0);
         if (!empty($benzer_girisli)) {
             $isimler = implode(', ', array_map(fn($b) => '"' . h($b['name']) . '"', $benzer_girisli));
-            $oneriler[] = ['sev' => 'warn', 'msg' => 'Benzer isimde stok girişi olan tanım var: ' . $isimler . '. Muhtemel yanlış malzeme eşleşmesi — merge/transfer değerlendirilmeli.'];
+            $oneriler[] = ['sev' => 'warn', 'msg' => 'Aynı aileden stok girişi olan tanım(lar): ' . $isimler . '. Giriş/kullanım yanlış tanıma düşmüş olabilir — eşleştirme/merge değerlendirilmeli.'];
         }
 
         $neg_malzemeler[] = [
@@ -405,8 +438,7 @@ if ($has_msm && $has_md) {
 }
 
 // ── H2) Düzeltme planı — kategori, benzer_pozitif, kullanım kaynağı ──
-$def_by_id = [];
-foreach ($all_defs as $d) $def_by_id[(int)$d['id']] = $d;
+$def_by_id = $def_by_id_early;
 $has_mti = tbl_exists('material_template_items');
 
 $dp_toplam_eksik = 0.0;
@@ -416,32 +448,11 @@ foreach ($neg_malzemeler as &$nm) {
     $dp_toplam_eksik   += $nm['eksik_miktar'];
     $nm['mat_type']     = $def_by_id[$mid]['type'] ?? '';
 
-    // Benzer içinden net > 0 olanlar
+    // Benzer içinden net > 0 olanlar (zaten tip ailesi filtreli)
     $nm['benzer_pozitif'] = array_values(array_filter($nm['benzer'], fn($b) => $b['net'] > 0));
-    $bp_same_count = count(array_filter($nm['benzer_pozitif'], fn($b) => $b['type'] === $nm['mat_type']));
     $bp_count = count($nm['benzer_pozitif']);
 
-    // Kategori
-    if ($bp_count === 0) {
-        $nm['kategori']          = 'A';
-        $nm['kategori_metin']    = 'Eksik Stok Girişi';
-        $nm['kategori_renk']     = 'crit';
-        $nm['kategori_aciklama'] = $nm['giris'] > 0
-            ? 'Giriş (' . number_format($nm['giris'], 0) . ') kullanımı (' . number_format($nm['kullanim'], 0) . ') karşılamıyor. Ek stok girişi veya düzeltme hareketi yapılmalı.'
-            : 'Bu malzeme için hiç stok girişi yapılmamış. Başlangıç stok girişi veya düzeltme hareketi eklenmeli.';
-    } elseif ($bp_count >= 3 || $bp_same_count >= 2) {
-        $nm['kategori']          = 'D';
-        $nm['kategori_metin']    = 'Manuel Karar';
-        $nm['kategori_renk']     = 'purple';
-        $nm['kategori_aciklama'] = $bp_count . ' benzer pozitif tanım var' . ($bp_same_count > 0 ? ', ' . $bp_same_count . ' tanesi aynı tip' : '') . '. Hangi tanımın bu kullanımla eşleştiğini manuel belirleyip merge/transfer kararı verilmeli. Otomatik birleştirme yapılmamalı.';
-    } else {
-        $nm['kategori']          = 'B';
-        $nm['kategori_metin']    = 'Benzer Tanım / Eşleştirme';
-        $nm['kategori_renk']     = 'warn';
-        $nm['kategori_aciklama'] = 'Benzer isimde ' . $bp_count . ' pozitif stoklu tanım var' . ($bp_same_count > 0 ? ' (' . $bp_same_count . ' aynı tip)' : '') . '. Stok girişi yanlış tanıma yapılmış olabilir — merge/transfer/mapping kararı gerekir.';
-    }
-
-    // Kullanım kaynağı
+    // Kullanım kaynağı — kategori kararı için önce tespit et
     $kaynaklar = [];
     if ($has_lp) {
         $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(loading_record_id) AS ornek_id FROM loading_pallets WHERE kasa_cinsi_id = ?");
@@ -469,12 +480,127 @@ foreach ($neg_malzemeler as &$nm) {
     if (empty($kaynaklar))
         $kaynaklar[] = ['tip' => 'Bilinmiyor', 'alan' => '—', 'sayi' => 0, 'ornek_id' => null, 'aciklama' => 'Kaynak tespit edilemedi. Hareket notlarını kontrol edin.'];
     $nm['kaynaklar'] = $kaynaklar;
+
+    // Kullanım mapping üzerinden mi geliyor? (kasa cinsi / palet / şablon)
+    $mapping_kaynak = false;
+    foreach ($kaynaklar as $k) {
+        if (in_array($k['tip'], ['Kasa Cinsi', 'Palet Tipi', 'Şablon', 'Ek Malzeme'], true)) { $mapping_kaynak = true; break; }
+    }
+    $nm['mapping_kaynak'] = $mapping_kaynak;
+
+    // ── Yeni 4'lü sınıflandırma ──────────────────────────────
+    // Aday = aynı tip ailesinden pozitif stoklu tanım (firma hariç).
+    if ($bp_count === 0) {
+        // Hiç aday yok → gerçekten eksik giriş
+        $nm['kategori']          = 1;
+        $nm['kategori_metin']    = 'Eksik Giriş';
+        $nm['kategori_renk']     = 'crit';
+        $nm['kategori_aciklama'] = $nm['giris'] > 0
+            ? 'Aynı aileden başka pozitif stok yok. Giriş (' . number_format($nm['giris'],0) . ') kullanımı (' . number_format($nm['kullanim'],0) . ') karşılamıyor — eksik giriş/düzeltme gerekir.'
+            : 'Aynı aileden başka pozitif stok yok ve hiç giriş yok. Başlangıç stok girişi veya düzeltme hareketi gerekir.';
+    } elseif ($bp_count >= 2) {
+        // Birden çok aday → güvenli otomatik karar yok
+        $nm['kategori']          = 4;
+        $nm['kategori_metin']    = 'Manuel Karar';
+        $nm['kategori_renk']     = 'purple';
+        $nm['kategori_aciklama'] = $bp_count . ' aynı aileden pozitif aday var. Hangisinin bu malzemeyle aynı fiziksel ürün olduğu manuel doğrulanmalı. Otomatik birleştirme yapılmamalı.';
+    } else {
+        // Tam 1 aday var
+        $aday = $nm['benzer_pozitif'][0];
+        if ($mapping_kaynak && $nm['giris'] == 0) {
+            // Kullanım mapping'den geliyor + bu tanıma hiç giriş yok
+            // → kullanım yanlış tanımdan düşüyor olabilir
+            $nm['kategori']          = 3;
+            $nm['kategori_metin']    = 'Yanlış Kullanım Tanımı';
+            $nm['kategori_renk']     = 'info';
+            $nm['kategori_aciklama'] = 'Bu tanıma hiç giriş yok; kullanım kasa cinsi/şablon eşleştirmesinden düşüyor. Aynı aileden "' . $aday['name'] . '" (ID ' . (int)$aday['id'] . ', +' . number_format($aday['net'],0) . ') pozitif. Kullanım büyük olasılıkla yanlış tanımdan düşüyor — mapping düzeltilmeli + geçmiş kullanım doğru tanıma taşınmalı. (Ortak kelime: ' . $aday['sebep'] . ')';
+        } else {
+            $nm['kategori']          = 2;
+            $nm['kategori_metin']    = 'Giriş Var, Farklı Tanımda';
+            $nm['kategori_renk']     = 'warn';
+            $nm['kategori_aciklama'] = 'Aynı aileden "' . $aday['name'] . '" (ID ' . (int)$aday['id'] . ', +' . number_format($aday['net'],0) . ') pozitif stoklu. Stok girişi yanlış tanıma yapılmış olabilir — eşleştirme/merge/transfer değerlendirilmeli. (Ortak kelime: ' . $aday['sebep'] . ')';
+        }
+    }
 }
 unset($nm);
 
-$dp_kategori_a = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'A'));
-$dp_kategori_b = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'B'));
-$dp_kategori_d = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'D'));
+$dp_kat1 = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? 0) === 1));
+$dp_kat2 = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? 0) === 2));
+$dp_kat3 = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? 0) === 3));
+$dp_kat4 = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? 0) === 4));
+
+// ── H3) Tek malzeme giriş/çıkış ID incelemesi (Yunan Kasa örneği) ──
+// İsim parçasına göre tüm tanımları ve giriş/kullanım dağılımını çıkar.
+function mat_isim_analiz(PDO $pdo, string $like): array {
+    $st = $pdo->prepare("
+        SELECT md.id, md.name, md.type,
+            COALESCE(SUM(CASE WHEN m.movement_type='giris'    THEN m.quantity END),0) AS giris,
+            COALESCE(SUM(CASE WHEN m.movement_type='kullanim' THEN m.quantity END),0) AS kullanim,
+            COALESCE(SUM(CASE WHEN m.movement_type='sevk'     THEN m.quantity END),0) AS sevk,
+            COALESCE(SUM(CASE WHEN m.movement_type='duzeltme' THEN m.quantity END),0) AS duzeltme,
+            GROUP_CONCAT(DISTINCT COALESCE(NULLIF(m.depo,''),'[Boş]') SEPARATOR ', ') AS depolar
+        FROM material_definitions md
+        LEFT JOIN material_stock_movements m ON m.material_id = md.id
+        WHERE LOWER(md.name) LIKE ?
+        GROUP BY md.id, md.name, md.type
+        ORDER BY md.id
+    ");
+    $st->execute(['%' . mb_strtolower($like, 'UTF-8') . '%']);
+    return $st->fetchAll();
+}
+$yunan_rows = ($has_msm && $has_md) ? mat_isim_analiz($pdo, 'yunan') : [];
+// Sonuç yorumu
+$yunan_giris_ids = array_values(array_filter($yunan_rows, fn($r) => (float)$r['giris'] > 0));
+$yunan_kull_ids  = array_values(array_filter($yunan_rows, fn($r) => (float)$r['kullanim'] > 0));
+$yunan_gid = array_map(fn($r) => (int)$r['id'], $yunan_giris_ids);
+$yunan_kid = array_map(fn($r) => (int)$r['id'], $yunan_kull_ids);
+if (empty($yunan_rows)) {
+    $yunan_sonuc = ['durum' => 'yok', 'metin' => '"Yunan" içeren tanım bulunamadı.'];
+} elseif (count($yunan_gid) === 0) {
+    $yunan_sonuc = ['durum' => 'eksik', 'metin' => 'Yunan Kasa için hiç giriş hareketi yok.'];
+} elseif (count(array_diff($yunan_kid, $yunan_gid)) === 0 && count($yunan_gid) === 1 && count(array_unique(array_merge($yunan_gid, $yunan_kid))) === 1) {
+    $yunan_sonuc = ['durum' => 'ayni', 'metin' => 'Yunan Kasa giriş ve çıkış AYNI tanımda (ID ' . $yunan_gid[0] . '). Sorun eşleşme değil — yalnızca giriş/kullanım farkı. Birleştirme gerekmez.'];
+} else {
+    $yunan_sonuc = ['durum' => 'farkli', 'metin' => 'Yunan Kasa giriş ID(ler): ' . implode(', ', $yunan_gid) . ' · kullanım ID(ler): ' . implode(', ', $yunan_kid) . '. Farklı ID\'lere dağılmış — eşleştirme/merge gerekebilir.'];
+}
+
+// ── H4) İsim değişikliği sonrası kopan hareketler ───────────
+// Hareketin isim snapshot'ı (material_name) güncel tanım adından farklıysa,
+// tanım sonradan yeniden adlandırılmış demektir. Eski grup bazlı stok ekranında
+// bu durum +giriş/-kullanım'ın ayrı satıra bölünmesine yol açıyordu.
+$rename_rows = [];
+$rename_mid_set = [];
+if ($has_msm && $has_md) {
+    $rn_st = $pdo->query("
+        SELECT m.material_id,
+               md.name        AS guncel_isim,
+               md.is_active,
+               md.type        AS guncel_type,
+               COUNT(*)        AS hareket_sayisi,
+               GROUP_CONCAT(DISTINCT m.material_name ORDER BY m.material_name SEPARATOR ' || ') AS snapshot_isimler,
+               SUM(CASE WHEN m.movement_type='giris'    THEN m.quantity ELSE 0 END) AS giris,
+               SUM(CASE WHEN m.movement_type='kullanim' THEN m.quantity ELSE 0 END) AS kullanim,
+               GROUP_CONCAT(DISTINCT COALESCE(NULLIF(m.depo,''),'[Boş]') SEPARATOR ', ') AS depolar
+        FROM material_stock_movements m
+        JOIN material_definitions md ON md.id = m.material_id
+        WHERE m.material_id IS NOT NULL
+          AND m.material_name <> md.name
+        GROUP BY m.material_id, md.name, md.is_active, md.type
+        ORDER BY m.material_id
+    ")->fetchAll();
+    foreach ($rn_st as $r) {
+        // nmk ile gerçek (anlamlı) yeniden adlandırmayı doğrula — boşluk/küçük fark gürültüsünü ele
+        $snaps = array_filter(array_map('trim', explode('||', $r['snapshot_isimler'])));
+        $gercek_fark = false;
+        foreach ($snaps as $sn) {
+            if (nmk($sn) !== nmk((string)$r['guncel_isim'])) { $gercek_fark = true; break; }
+        }
+        $r['gercek_fark'] = $gercek_fark;
+        $rename_rows[] = $r;
+        $rename_mid_set[(int)$r['material_id']] = true;
+    }
+}
+$rename_gercek = array_values(array_filter($rename_rows, fn($r) => $r['gercek_fark']));
 
 // ── G) Pasif tanım hâlâ kullanımda mı? ──────────────────────
 $pasif_kullanim_rows = [];
@@ -1225,16 +1351,28 @@ tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count(
     Negatif net stoku olan her malzeme için kategori, önerilen düzeltme miktarı, benzer pozitif tanımlar ve kullanım kaynağı.
     Sadece okuma — otomatik hareket oluşturulmaz.
 </p>
+<?php
+// Kategori (1-4) → stil eşlemesi
+function dp_cat_style(int $kat): array {
+    switch ($kat) {
+        case 1: return ['tr'=>'crit-row',      'badge'=>'badge-crit',   'border'=>'#dc2626','bg'=>'#fef2f2','icon'=>'🔴'];
+        case 3: return ['tr'=>'dp-row-info',   'badge'=>'badge-infodp', 'border'=>'#0284c7','bg'=>'#f0f9ff','icon'=>'🔵'];
+        case 4: return ['tr'=>'dp-row-purple', 'badge'=>'badge-purple', 'border'=>'#7c3aed','bg'=>'#faf5ff','icon'=>'🟣'];
+        default:return ['tr'=>'warn-row',      'badge'=>'badge-warn',   'border'=>'#d97706','bg'=>'#fffbeb','icon'=>'🟡'];
+    }
+}
+?>
 <?php if (empty($neg_malzemeler)): ?>
     <p style="color:#16a34a">✓ Negatif stok bulunamadı.</p>
 <?php else: ?>
 
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px">
     <div class="tehis-kart crit"><div class="tehis-kart-num"><?= count($neg_malzemeler) ?></div><div class="tehis-kart-lbl">Negatif Malzeme</div></div>
     <div class="tehis-kart crit"><div class="tehis-kart-num"><?= number_format($dp_toplam_eksik,0) ?></div><div class="tehis-kart-lbl">Toplam Eksik Adet</div></div>
-    <div class="tehis-kart crit"><div class="tehis-kart-num"><?= $dp_kategori_a ?></div><div class="tehis-kart-lbl">Kat A – Eksik Giriş</div></div>
-    <div class="tehis-kart warn"><div class="tehis-kart-num"><?= $dp_kategori_b ?></div><div class="tehis-kart-lbl">Kat B – Eşleştirme</div></div>
-    <div class="tehis-kart" style="background:#faf5ff;border-color:#c4b5fd;color:#6d28d9"><div class="tehis-kart-num"><?= $dp_kategori_d ?></div><div class="tehis-kart-lbl">Kat D – Manuel Karar</div></div>
+    <div class="tehis-kart crit"><div class="tehis-kart-num"><?= $dp_kat1 ?></div><div class="tehis-kart-lbl">1 · Eksik Giriş</div></div>
+    <div class="tehis-kart warn"><div class="tehis-kart-num"><?= $dp_kat2 ?></div><div class="tehis-kart-lbl">2 · Farklı Tanımda</div></div>
+    <div class="tehis-kart" style="background:#f0f9ff;border-color:#7dd3fc;color:#0369a1"><div class="tehis-kart-num"><?= $dp_kat3 ?></div><div class="tehis-kart-lbl">3 · Yanlış Kullanım</div></div>
+    <div class="tehis-kart" style="background:#faf5ff;border-color:#c4b5fd;color:#6d28d9"><div class="tehis-kart-num"><?= $dp_kat4 ?></div><div class="tehis-kart-lbl">4 · Manuel Karar</div></div>
 </div>
 
 <!-- Özet tablo -->
@@ -1249,8 +1387,8 @@ tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count(
     </tr></thead>
     <tbody>
     <?php foreach ($neg_malzemeler as $nm):
-        $tr_cls  = $nm['kategori'] === 'A' ? 'crit-row' : ($nm['kategori'] === 'D' ? 'dp-row-purple' : 'warn-row');
-        $bdg_cls = $nm['kategori'] === 'A' ? 'badge-crit' : ($nm['kategori'] === 'D' ? 'badge-purple' : 'badge-warn');
+        $cs = dp_cat_style((int)$nm['kategori']);
+        $tr_cls = $cs['tr']; $bdg_cls = $cs['badge'];
     ?>
     <tr class="<?= $tr_cls ?>">
         <td><strong><?= h($nm['mat_name']) ?></strong></td>
@@ -1275,7 +1413,7 @@ tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count(
                 <?php if ($k['tip'] !== 'Bilinmiyor'): ?><span class="tehis-badge badge-info" style="display:inline-block;margin-bottom:2px"><?= h($k['tip']) ?></span><?php endif; ?>
             <?php endforeach; ?>
         </td>
-        <td><span class="tehis-badge <?= $bdg_cls ?>"><?= h($nm['kategori']) ?> · <?= h($nm['kategori_metin']) ?></span></td>
+        <td><span class="tehis-badge <?= $bdg_cls ?>"><?= (int)$nm['kategori'] ?> · <?= h($nm['kategori_metin']) ?></span></td>
     </tr>
     <?php endforeach; ?>
     </tbody>
@@ -1285,22 +1423,20 @@ tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count(
 <!-- Per-malzeme detay -->
 <h4 style="margin-bottom:12px;font-size:.88rem;color:var(--muted);font-weight:600">Malzeme Bazlı Düzeltme Detayı</h4>
 <?php foreach ($neg_malzemeler as $nm):
-    $dp_border = $nm['kategori'] === 'A' ? '#dc2626' : ($nm['kategori'] === 'D' ? '#7c3aed' : '#d97706');
-    $dp_bg     = $nm['kategori'] === 'A' ? '#fef2f2' : ($nm['kategori'] === 'D' ? '#faf5ff' : '#fffbeb');
-    $bdg_cls   = $nm['kategori'] === 'A' ? 'badge-crit' : ($nm['kategori'] === 'D' ? 'badge-purple' : 'badge-warn');
+    $cs = dp_cat_style((int)$nm['kategori']);
 ?>
-<details class="dp-detail" style="border-color:<?= $dp_border ?>">
-    <summary class="dp-summary" style="background:<?= $dp_bg ?>">
+<details class="dp-detail" style="border-color:<?= $cs['border'] ?>">
+    <summary class="dp-summary" style="background:<?= $cs['bg'] ?>">
         <span style="font-weight:800"><?= h($nm['mat_name']) ?></span>
         <span class="neg" style="margin-left:8px;font-weight:800"><?= number_format($nm['net'],0) ?></span>
-        <span class="tehis-badge <?= $bdg_cls ?>" style="margin-left:8px"><?= h($nm['kategori']) ?> · <?= h($nm['kategori_metin']) ?></span>
+        <span class="tehis-badge <?= $cs['badge'] ?>" style="margin-left:8px"><?= (int)$nm['kategori'] ?> · <?= h($nm['kategori_metin']) ?></span>
         <span style="margin-left:10px;font-size:.78rem;color:#7c3aed;font-weight:700">Önerilen: <?= number_format($nm['eksik_miktar'],0) ?> adet</span>
         <span style="margin-left:auto;font-size:.73rem;color:var(--muted)">ID <?= (int)$nm['mid'] ?> · <?= h($nm['mat_type']) ?> · <?= h($nm['depolar']) ?></span>
     </summary>
     <div class="dp-body">
         <div class="neg-oneri neg-oneri-<?= $nm['kategori_renk'] ?>" style="margin-bottom:12px">
-            <?= $nm['kategori'] === 'A' ? '🔴' : ($nm['kategori'] === 'D' ? '🟣' : '🟡') ?>
-            <strong>Kategori <?= h($nm['kategori']) ?> — <?= h($nm['kategori_metin']) ?>:</strong>
+            <?= $cs['icon'] ?>
+            <strong>Kategori <?= (int)$nm['kategori'] ?> — <?= h($nm['kategori_metin']) ?>:</strong>
             <?= h($nm['kategori_aciklama']) ?>
         </div>
         <div class="dp-grid">
@@ -1357,10 +1493,168 @@ tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count(
 .dp-body { padding:14px;border-top:1px solid rgba(0,0,0,.08); }
 .dp-grid { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
 .badge-purple { background:#f3e8ff;color:#6d28d9; }
+.badge-infodp { background:#e0f2fe;color:#0369a1; }
 .dp-row-purple td { background:#faf5ff !important; }
+.dp-row-info td { background:#f0f9ff !important; }
 .neg-oneri-purple { background:#faf5ff;color:#6d28d9;border:1px solid #c4b5fd; }
+.neg-oneri-info { background:#f0f9ff;color:#0369a1;border:1px solid #7dd3fc; }
 @media(max-width:767px){ .dp-grid { grid-template-columns:1fr; } }
 </style>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 10: Pozitif / Negatif Eşleşme Adayları
+     ────────────────────────────────────────────────────────── -->
+<?php
+$es_negler = array_values(array_filter($neg_malzemeler, fn($n) => !empty($n['benzer_pozitif'])));
+$es_badge = count($es_negler) > 0
+    ? '<span class="tehis-badge badge-warn">'.count($es_negler).' malzemenin adayı var</span>'
+    : '<span class="tehis-badge badge-ok">Aday yok</span>';
+tehis_section_open('b10', '10 · Pozitif / Negatif Eşleşme Adayları', $es_badge, count($es_negler) > 0);
+?>
+<p class="tehis-sub">
+    Negatif bir malzemenin karşısına, <strong>yalnızca aynı tip ailesinden</strong> (firma hariç, şapka≠köşebent, kasa≠palet)
+    ve ortak kelime paylaşan pozitif stoklu tanımlar konur. Benzerlik yalnızca kelime eşleşmesidir —
+    fiziksel aynılık admin tarafından doğrulanmalı, otomatik birleştirme yapılmaz.
+</p>
+<?php if (empty($es_negler)): ?>
+    <p style="color:#16a34a">✓ Hiçbir negatif malzeme için aynı aileden pozitif aday bulunamadı (hepsi gerçek eksik giriş).</p>
+<?php else: ?>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th>Negatif Malzeme</th><th class="num">Neg. ID</th><th class="num">Net Kalan</th>
+        <th>Pozitif Aday</th><th class="num">Poz. ID</th><th class="num">Poz. Net</th>
+        <th>Type</th><th>Benzerlik Sebebi</th><th>Öneri</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($es_negler as $nm):
+        $rowspan = count($nm['benzer_pozitif']);
+        $first = true;
+        foreach ($nm['benzer_pozitif'] as $b):
+    ?>
+    <tr class="<?= $rowspan > 1 ? 'dp-row-purple' : 'warn-row' ?>">
+        <?php if ($first): ?>
+        <td rowspan="<?= $rowspan ?>"><strong><?= h($nm['mat_name']) ?></strong></td>
+        <td rowspan="<?= $rowspan ?>" class="num"><?= (int)$nm['mid'] ?></td>
+        <td rowspan="<?= $rowspan ?>" class="num neg"><?= number_format($nm['net'],0) ?></td>
+        <?php endif; ?>
+        <td><?= h($b['name']) ?></td>
+        <td class="num"><?= (int)$b['id'] ?></td>
+        <td class="num pos">+<?= number_format($b['net'],0) ?></td>
+        <td style="font-size:.75rem"><?= h($b['type']) ?></td>
+        <td><span class="tehis-norm"><?= h($b['sebep']) ?></span></td>
+        <?php if ($first): ?>
+        <td rowspan="<?= $rowspan ?>" style="font-size:.76rem">
+            <?= $rowspan > 1
+                ? '<span class="tehis-badge badge-purple">Manuel: '.$rowspan.' aday</span>'
+                : '<span class="tehis-badge badge-warn">Tek aday — eşleştir/incele</span>' ?>
+        </td>
+        <?php endif; ?>
+    </tr>
+    <?php $first = false; endforeach; endforeach; ?>
+    </tbody>
+</table>
+</div>
+<p class="tehis-sub" style="margin-top:10px">
+    ⚠ Bu tablo yalnızca <strong>karar desteği</strong>dir. "Aday" demek "aynı malzeme" demek değildir.
+    Örn. ortak kelime sadece bir renk ("Siyah") veya tip ("Kasa") olabilir.
+</p>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 11: Yunan Kasa Giriş / Çıkış İncelemesi
+     ────────────────────────────────────────────────────────── -->
+<?php
+$yk_badge = match($yunan_sonuc['durum']) {
+    'ayni'   => '<span class="tehis-badge badge-ok">Aynı tanımda</span>',
+    'farkli' => '<span class="tehis-badge badge-crit">Farklı ID</span>',
+    'eksik'  => '<span class="tehis-badge badge-warn">Giriş yok</span>',
+    default  => '<span class="tehis-badge badge-info">—</span>',
+};
+tehis_section_open('b11', '11 · Yunan Kasa Giriş / Çıkış İncelemesi', $yk_badge, true);
+?>
+<p class="tehis-sub">"Yunan" içeren tüm tanımların giriş ve kullanım hareketlerinin hangi material_id'de toplandığı.</p>
+<div class="neg-oneri <?= $yunan_sonuc['durum']==='ayni' ? 'neg-oneri-info' : 'neg-oneri-crit' ?>" style="margin-bottom:12px">
+    <?= $yunan_sonuc['durum']==='ayni' ? '🟢' : '🔴' ?> <strong>Sonuç:</strong> <?= h($yunan_sonuc['metin']) ?>
+</div>
+<?php if (!empty($yunan_rows)): ?>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th>ID</th><th>İsim</th><th>Type</th>
+        <th class="num">Giriş</th><th class="num">Kullanım</th><th class="num">Sevk</th><th class="num">Düzeltme</th><th class="num">Net</th><th>Depolar</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($yunan_rows as $r):
+        $ynet = (float)$r['giris'] - (float)$r['kullanim'] - (float)$r['sevk'] + (float)$r['duzeltme'];
+    ?>
+    <tr>
+        <td><strong><?= (int)$r['id'] ?></strong></td>
+        <td><?= h($r['name']) ?></td>
+        <td style="font-size:.76rem"><?= h($r['type']) ?></td>
+        <td class="num <?= (float)$r['giris']>0?'pos':'' ?>"><?= (float)$r['giris']>0 ? number_format((float)$r['giris'],0) : '—' ?></td>
+        <td class="num"><?= (float)$r['kullanim']>0 ? number_format((float)$r['kullanim'],0) : '—' ?></td>
+        <td class="num"><?= (float)$r['sevk']>0 ? number_format((float)$r['sevk'],0) : '—' ?></td>
+        <td class="num"><?= (float)$r['duzeltme']!=0 ? number_format((float)$r['duzeltme'],0) : '—' ?></td>
+        <td class="num <?= $ynet<0?'neg':($ynet>0?'pos':'') ?>"><?= number_format($ynet,0) ?></td>
+        <td style="font-size:.74rem"><?= h($r['depolar'] ?? '—') ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 12: İsim Değişikliği Sonrası Kopan Stok Hareketleri
+     ────────────────────────────────────────────────────────── -->
+<?php
+$rn_badge = count($rename_gercek) > 0
+    ? '<span class="tehis-badge badge-warn">'.count($rename_gercek).' tanım yeniden adlandırılmış</span>'
+    : '<span class="tehis-badge badge-ok">Yok</span>';
+tehis_section_open('b12', '12 · İsim Değişikliği Sonrası Kopan Hareketler', $rn_badge, count($rename_gercek) > 0);
+?>
+<p class="tehis-sub">
+    Hareketin isim snapshot'ı (<code>material_name</code>) güncel tanım adından farklı olan kayıtlar.
+    Bu, tanımın sonradan yeniden adlandırıldığını gösterir. <strong>Düzeltme uygulandı:</strong> stok ekranı artık
+    yalnızca <code>material_id</code> ile gruplar, bu yüzden bu hareketler güncel isim altında birleşik görünür —
+    veride değişiklik yapılmadı, snapshot'lar olduğu gibi kaldı.
+</p>
+<?php if (empty($rename_gercek)): ?>
+    <p style="color:#16a34a">✓ Güncel adı snapshot'tan anlamlı şekilde farklı tanım bulunamadı.</p>
+<?php else: ?>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th class="num">material_id</th><th>Güncel Tanım Adı</th><th>Type</th><th>Aktif</th>
+        <th>Eski/Snapshot İsim(ler)</th><th class="num">Hareket</th>
+        <th class="num">Giriş</th><th class="num">Kullanım</th><th>Depolar</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($rename_gercek as $r): ?>
+    <tr class="warn-row">
+        <td class="num"><strong><?= (int)$r['material_id'] ?></strong></td>
+        <td><strong><?= h($r['guncel_isim']) ?></strong></td>
+        <td style="font-size:.76rem"><?= h($r['guncel_type']) ?></td>
+        <td><?= $r['is_active'] ? '<span class="tehis-badge badge-ok">Aktif</span>' : '<span class="tehis-badge badge-warn">Pasif</span>' ?></td>
+        <td style="font-size:.78rem;color:#92400e"><?= h($r['snapshot_isimler']) ?></td>
+        <td class="num"><?= (int)$r['hareket_sayisi'] ?></td>
+        <td class="num <?= (float)$r['giris']>0?'pos':'' ?>"><?= (float)$r['giris']>0 ? number_format((float)$r['giris'],0) : '—' ?></td>
+        <td class="num"><?= (float)$r['kullanim']>0 ? number_format((float)$r['kullanim'],0) : '—' ?></td>
+        <td style="font-size:.74rem"><?= h($r['depolar']) ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<p class="tehis-sub" style="margin-top:10px">
+    ℹ️ Bu liste boş olsa bile geçmişte isim değişmiş olabilir — snapshot ile güncel ad <em>aynıysa</em> (örn. sync sonradan
+    güncel adla yeniden yazdıysa) burada görünmez. Asıl önemli olan: stok ekranı artık <code>material_id</code> bazlı.
+</p>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
 
 <!-- Altbilgi -->
 <div style="margin-top:20px;padding:10px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;font-size:.78rem;color:var(--muted)">

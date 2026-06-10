@@ -471,8 +471,17 @@ try {
     if ($f_tarih_bit !== '') { $agg_where[] = "movement_date <= ?"; $agg_params[] = $f_tarih_bit; }
     $agg_where_sql = $agg_where ? 'WHERE ' . implode(' AND ', $agg_where) : '';
 
+    // KÖK BUGFIX: gruplama material_id bazlı yapılır. Eskiden material_name de
+    // GROUP BY içindeydi; tanım ismi değişince eski/yeni isimli hareketler aynı
+    // material_id'de olsa bile ayrı satıra bölünüyor, +giriş bir satırda,
+    // -kullanım başka satırda görünüyordu. Artık isim yalnızca material_id NULL
+    // hareketlerde grup anahtarıdır; tanımlı hareketler tek material_id altında
+    // toplanır. Görünen isim zaten material_definitions'tan (güncel) çözülüyor.
     $agg_st = $pdo->prepare("
-        SELECT material_id, material_type, material_name, depo, unit,
+        SELECT material_id,
+            MAX(material_type) AS material_type,
+            MAX(material_name) AS material_name,
+            depo, unit,
             SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS total_giris,
             SUM(CASE WHEN movement_type='sevk'     THEN quantity ELSE 0 END) AS total_sevk,
             SUM(CASE WHEN movement_type='kullanim' THEN quantity ELSE 0 END) AS total_kullanim,
@@ -483,7 +492,9 @@ try {
                      ELSE 0 END) AS kalan
         FROM material_stock_movements
         $agg_where_sql
-        GROUP BY material_id, material_type, material_name, depo, unit
+        GROUP BY material_id, depo, unit,
+            (CASE WHEN material_id IS NULL THEN material_name ELSE NULL END),
+            (CASE WHEN material_id IS NULL THEN material_type ELSE NULL END)
     ");
     $agg_st->execute($agg_params);
     $agg_rows = $agg_st->fetchAll();
