@@ -455,7 +455,7 @@ foreach ($neg_malzemeler as &$nm) {
             $kaynaklar[] = ['tip' => 'Palet Tipi', 'alan' => 'loading_pallets.palet_tipi_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => $r['ornek_id'], 'aciklama' => 'Yükleme planı palet tipi seçiminden geliyor.'];
     }
     if ($has_pm) {
-        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(lp.loading_record_id) AS ornek_id FROM pallet_materials pm LEFT JOIN loading_pallets lp ON lp.id = pm.pallet_id WHERE pm.material_id = ?");
+        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(lp.loading_record_id) AS ornek_id FROM pallet_materials pm LEFT JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id WHERE pm.material_id = ?");
         $sth->execute([$mid]); $r = $sth->fetch();
         if ($r && (int)$r['cnt'] > 0)
             $kaynaklar[] = ['tip' => 'Ek Malzeme', 'alan' => 'pallet_materials.material_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => $r['ornek_id'], 'aciklama' => 'Palet ek malzeme listesinden geliyor.'];
