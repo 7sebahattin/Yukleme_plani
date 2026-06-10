@@ -703,6 +703,10 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .td-tarih-cell { white-space: nowrap; }
 .td-son-duz { font-size: .72rem; color: var(--muted, #6b7280); margin-top: 2px; }
 
+/* Renkli sütunlar — records listesi */
+.td-urun-sahibi { color: #2563eb; }
+.td-casus-no { color: #dc2626; font-weight: 700; }
+
 .section-title {
     font-weight: 700; font-size: 1rem;
     margin: 16px 0 8px;

@@ -213,10 +213,10 @@ render_flash();
                 <?= $_sth('Tarih', 'tarih') ?>
                 <?= $_sth('Ürün Sahibi', 'urun_sahibi') ?>
                 <?= $_sth('Firma', 'firma') ?>
-                <th>Bölge</th>
-                <?= $_sth('Alıcı', 'alici') ?>
-                <th>Ürün</th>
                 <?= $_sth('Parti No', 'parti_no') ?>
+                <?= $_sth('Alıcı', 'alici') ?>
+                <th>Bölge</th>
+                <th>Ürün</th>
                 <?= $_sth('Casus No', 'casus_no') ?>
                 <th>Plaka</th>
                 <th class="num">Palet</th>
@@ -242,16 +242,16 @@ render_flash();
                         <div class="td-son-duz"><?= h(fmt_dt_short($r['updated_at'])) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td><?= $r['urun_sahibi_adi'] ? h($r['urun_sahibi_adi']) : '<span class="muted">—</span>' ?></td>
+                    <td class="td-urun-sahibi"><?= $r['urun_sahibi_adi'] ? h($r['urun_sahibi_adi']) : '<span class="muted">—</span>' ?></td>
                     <td>
                         <?= h($r['firma']) ?>
                         <?php if ($locked): ?><span class="badge-locked">🔒</span><?php endif; ?>
                     </td>
-                    <td><?= h($r['bolge']) ?></td>
-                    <td><?= h($r['alici']) ?></td>
-                    <td><?= h($r['urun']) ?></td>
                     <td><?= h($r['parti_no']) ?></td>
-                    <td><?= h($r['casus_no']) ?></td>
+                    <td><?= h($r['alici']) ?></td>
+                    <td><?= h($r['bolge']) ?></td>
+                    <td><?= h($r['urun']) ?></td>
+                    <td class="td-casus-no"><?= h($r['casus_no']) ?></td>
                     <td><?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
