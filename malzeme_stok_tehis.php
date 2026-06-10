@@ -298,6 +298,112 @@ if ($has_lr && $has_lp && $has_msm) {
     ")->fetchAll();
 }
 
+// ── H) Negatif stok malzemeleri — hareket detayı ────────────
+$neg_malzemeler = [];
+if ($has_msm && $has_md) {
+    $neg_ids_q = $pdo->query("
+        SELECT msm.material_id,
+               COALESCE(MIN(md.name), MAX(msm.material_name)) AS mat_name,
+               SUM(CASE WHEN msm.movement_type='giris'    THEN msm.quantity ELSE 0 END) AS giris,
+               SUM(CASE WHEN msm.movement_type='kullanim' THEN msm.quantity ELSE 0 END) AS kullanim,
+               SUM(CASE WHEN msm.movement_type='sevk'     THEN msm.quantity ELSE 0 END) AS sevk,
+               SUM(CASE WHEN msm.movement_type='duzeltme' THEN msm.quantity ELSE 0 END) AS duzeltme,
+               GROUP_CONCAT(DISTINCT COALESCE(NULLIF(msm.depo,''),'[Boş]') SEPARATOR ', ') AS depolar
+        FROM material_stock_movements msm
+        LEFT JOIN material_definitions md ON md.id = msm.material_id
+        WHERE msm.material_id IS NOT NULL
+        GROUP BY msm.material_id
+        HAVING SUM(CASE WHEN msm.movement_type='giris'    THEN msm.quantity ELSE 0 END)
+             - SUM(CASE WHEN msm.movement_type='kullanim' THEN msm.quantity ELSE 0 END)
+             - SUM(CASE WHEN msm.movement_type='sevk'     THEN msm.quantity ELSE 0 END)
+             + SUM(CASE WHEN msm.movement_type='duzeltme' THEN msm.quantity ELSE 0 END) < 0
+        ORDER BY (
+            SUM(CASE WHEN msm.movement_type='giris'    THEN msm.quantity ELSE 0 END)
+          - SUM(CASE WHEN msm.movement_type='kullanim' THEN msm.quantity ELSE 0 END)
+          - SUM(CASE WHEN msm.movement_type='sevk'     THEN msm.quantity ELSE 0 END)
+          + SUM(CASE WHEN msm.movement_type='duzeltme' THEN msm.quantity ELSE 0 END)
+        ) ASC
+    ")->fetchAll();
+
+    foreach ($neg_ids_q as $nq) {
+        $mid = (int)$nq['material_id'];
+        $net = (float)$nq['giris'] - (float)$nq['kullanim'] - (float)$nq['sevk'] + (float)$nq['duzeltme'];
+
+        // Tüm hareketler + yükleme kaydı join
+        $sth = $pdo->prepare("
+            SELECT m.id, m.movement_date, m.movement_type, m.material_name, m.depo,
+                   m.quantity, m.unit, m.source_type, m.source_id, m.note,
+                   lr.id AS lr_id, lr.firma, lr.parti_no, lr.urun,
+                   lr.tarih AS lr_tarih, lr.alici, lr.durum, lr.type AS lr_type
+            FROM material_stock_movements m
+            LEFT JOIN loading_records lr
+                   ON m.source_type = 'loading' AND lr.id = m.source_id
+            WHERE m.material_id = ?
+            ORDER BY m.movement_date DESC, m.id DESC
+            LIMIT 500
+        ");
+        $sth->execute([$mid]);
+        $hareketler = $sth->fetchAll();
+
+        $giris_h    = array_values(array_filter($hareketler, fn($r) => $r['movement_type'] === 'giris'));
+        $kullanim_h = array_values(array_filter($hareketler, fn($r) => $r['movement_type'] === 'kullanim'));
+
+        // Benzer isimli tanımlar (nmk token eşleşmesi)
+        $norm_tokens = array_filter(explode(' ', nmk((string)$nq['mat_name'])), fn($t) => strlen($t) >= 2);
+        $benzer = [];
+        foreach ($all_defs as $d) {
+            if ((int)$d['id'] === $mid) continue;
+            $dn_tokens = array_filter(explode(' ', nmk($d['name'])), fn($t) => strlen($t) >= 2);
+            if (count(array_intersect($norm_tokens, $dn_tokens)) > 0) {
+                $dmid = (string)$d['id'];
+                $dm   = $msm_by_mid[$dmid] ?? null;
+                $dg   = (float)($dm['giris']    ?? 0);
+                $dk   = (float)($dm['kullanim'] ?? 0);
+                $ds   = (float)($dm['sevk']     ?? 0);
+                $dd   = (float)($dm['duzeltme'] ?? 0);
+                $benzer[] = [
+                    'id'        => $d['id'],
+                    'name'      => $d['name'],
+                    'type'      => $d['type'],
+                    'is_active' => $d['is_active'],
+                    'giris'     => $dg,
+                    'kullanim'  => $dk,
+                    'net'       => $dg - $dk - $ds + $dd,
+                    'depolar'   => $dm['depolar'] ?? '—',
+                ];
+            }
+        }
+
+        // Öneri
+        $oneriler = [];
+        if ((float)$nq['giris'] == 0) {
+            $oneriler[] = ['sev' => 'crit', 'msg' => 'Bu malzeme için hiç stok girişi yapılmamış. Başlangıç stok girişi veya düzeltme hareketi eklenmeli.'];
+        } else {
+            $oneriler[] = ['sev' => 'warn', 'msg' => 'Giriş (' . number_format((float)$nq['giris'], 0) . ') kullanımı (' . number_format((float)$nq['kullanim'], 0) . ') karşılamıyor. Ek stok girişi veya düzeltme hareketi değerlendirilmeli.'];
+        }
+        $benzer_girisli = array_filter($benzer, fn($b) => $b['giris'] > 0);
+        if (!empty($benzer_girisli)) {
+            $isimler = implode(', ', array_map(fn($b) => '"' . h($b['name']) . '"', $benzer_girisli));
+            $oneriler[] = ['sev' => 'warn', 'msg' => 'Benzer isimde stok girişi olan tanım var: ' . $isimler . '. Muhtemel yanlış malzeme eşleşmesi — merge/transfer değerlendirilmeli.'];
+        }
+
+        $neg_malzemeler[] = [
+            'mid'        => $mid,
+            'mat_name'   => $nq['mat_name'],
+            'giris'      => (float)$nq['giris'],
+            'kullanim'   => (float)$nq['kullanim'],
+            'sevk'       => (float)$nq['sevk'],
+            'net'        => $net,
+            'depolar'    => $nq['depolar'],
+            'hareketler' => $hareketler,
+            'giris_h'    => $giris_h,
+            'kullanim_h' => $kullanim_h,
+            'benzer'     => $benzer,
+            'oneriler'   => $oneriler,
+        ];
+    }
+}
+
 // ── G) Pasif tanım hâlâ kullanımda mı? ──────────────────────
 $pasif_kullanim_rows = [];
 if ($has_md && $has_lp) {
@@ -841,6 +947,198 @@ tehis_section_open('b7', '7 · Pasif Tanımlar Yükleme Planında Kullanımda', 
 </div>
 <?php endif; ?>
 <?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 8: Negatif Stok Hareket Detayı
+     ────────────────────────────────────────────────────────── -->
+<?php
+$neg_badge = count($neg_malzemeler) > 0
+    ? '<span class="tehis-badge badge-crit">'.count($neg_malzemeler).' malzeme</span>'
+    : '<span class="tehis-badge badge-ok">Yok</span>';
+tehis_section_open('b8', '8 · Negatif Stok Hareket Detayı', $neg_badge, count($neg_malzemeler) > 0);
+?>
+<p class="tehis-sub">
+    Net stoğu negatife düşmüş malzemelerin tüm hareketleri, kaynak yükleme kayıtları, giriş durumu ve benzer isimli tanımlar.
+    Sadece okuma — veri değiştirilmez.
+</p>
+<?php if (empty($neg_malzemeler)): ?>
+    <p style="color:#16a34a">✓ Net stoğu negatife düşmüş malzeme bulunamadı.</p>
+<?php else: ?>
+<?php foreach ($neg_malzemeler as $nm):
+    $nm_id = 'neg_' . (int)$nm['mid'];
+?>
+<details class="neg-detail" open>
+    <summary class="neg-summary">
+        <span class="neg-mat-name"><?= h($nm['mat_name']) ?></span>
+        <span style="margin-left:10px;color:#dc2626;font-weight:800"><?= number_format($nm['net'], 0) ?></span>
+        <span style="margin-left:10px;font-size:.78rem;color:var(--muted)">
+            Giriş: <?= $nm['giris'] > 0 ? '<span style="color:#16a34a">'.number_format($nm['giris'],0).'</span>' : '<em>yok</em>' ?>
+            &nbsp;/ Kullanım: <?= number_format($nm['kullanim'],0) ?>
+            &nbsp;/ ID: <?= (int)$nm['mid'] ?>
+            &nbsp;/ Depo: <?= h($nm['depolar']) ?>
+        </span>
+    </summary>
+    <div class="neg-body">
+
+        <!-- Öneriler -->
+        <?php foreach ($nm['oneriler'] as $on): ?>
+        <div class="neg-oneri neg-oneri-<?= $on['sev'] ?>">
+            <?= $on['sev'] === 'crit' ? '🔴' : '🟡' ?>
+            <?= h($on['msg']) ?>
+        </div>
+        <?php endforeach; ?>
+
+        <!-- Kullanım kaynakları -->
+        <details class="neg-sub" open>
+            <summary><strong>Kullanım Kaynakları</strong>
+                <span class="tehis-badge badge-crit" style="margin-left:6px"><?= count($nm['kullanim_h']) ?> hareket</span>
+            </summary>
+            <div class="table-wrap" style="margin-top:8px">
+            <?php if (empty($nm['kullanim_h'])): ?>
+                <p style="color:#16a34a;padding:6px">✓ Kullanım hareketi bulunamadı.</p>
+            <?php else: ?>
+            <table class="tehis-table">
+                <thead><tr>
+                    <th>Hk. ID</th><th>Tarih</th><th>Depo</th>
+                    <th class="num">Miktar</th><th>Birim</th>
+                    <th>Kaynak Tip</th><th>Yükleme ID</th><th>Firma</th>
+                    <th>Parti No</th><th>Ürün</th><th>Yük. Tarih</th>
+                    <th>Alıcı</th><th>Durum</th><th>Not</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($nm['kullanim_h'] as $h_row): ?>
+                <tr class="crit-row">
+                    <td><?= (int)$h_row['id'] ?></td>
+                    <td style="white-space:nowrap"><?= h(substr($h_row['movement_date'] ?? '', 0, 16)) ?></td>
+                    <td><?= h($h_row['depo'] ?? '') ?: '<em class="muted">Boş</em>' ?></td>
+                    <td class="num neg"><?= number_format((float)$h_row['quantity'], 0) ?></td>
+                    <td><?= h($h_row['unit'] ?? '') ?></td>
+                    <td><?= h($h_row['source_type'] ?? '—') ?></td>
+                    <?php if ($h_row['lr_id']): ?>
+                    <td><a href="record_view.php?id=<?= (int)$h_row['lr_id'] ?>" target="_blank"><?= (int)$h_row['lr_id'] ?></a></td>
+                    <td><?= h($h_row['firma'] ?? '—') ?></td>
+                    <td><?= h($h_row['parti_no'] ?? '—') ?></td>
+                    <td><?= h($h_row['urun'] ?? '—') ?></td>
+                    <td style="white-space:nowrap"><?= h($h_row['lr_tarih'] ?? '—') ?></td>
+                    <td><?= h($h_row['alici'] ?? '—') ?></td>
+                    <td><?= h($h_row['durum'] ?? '—') ?></td>
+                    <?php else: ?>
+                    <td colspan="7" style="color:#dc2626;font-style:italic">
+                        <?= $h_row['source_id'] ? 'Bağlantısız kullanım (kaynak ID: '.(int)$h_row['source_id'].')' : 'Kaynak yok' ?>
+                    </td>
+                    <?php endif; ?>
+                    <td style="font-size:.73rem;max-width:160px;word-break:break-word"><?= h(mb_substr($h_row['note'] ?? '', 0, 80)) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if (count($nm['hareketler']) >= 500): ?>
+                <tr><td colspan="14" style="text-align:center;color:var(--muted);font-size:.78rem">… ilk 500 hareket gösterildi</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+            </div>
+        </details>
+
+        <!-- Giriş hareketleri -->
+        <details class="neg-sub">
+            <summary><strong>Giriş Hareketleri</strong>
+                <?php if (empty($nm['giris_h'])): ?>
+                <span class="tehis-badge badge-crit" style="margin-left:6px">Giriş yok</span>
+                <?php else: ?>
+                <span class="tehis-badge badge-ok" style="margin-left:6px"><?= count($nm['giris_h']) ?> hareket</span>
+                <?php endif; ?>
+            </summary>
+            <div style="margin-top:8px">
+            <?php if (empty($nm['giris_h'])): ?>
+                <p style="color:#dc2626;font-weight:600;padding:6px">⛔ Bu malzeme için kayıtlı stok girişi yok.</p>
+            <?php else: ?>
+            <div class="table-wrap">
+            <table class="tehis-table">
+                <thead><tr>
+                    <th>Hk. ID</th><th>Tarih</th><th>Depo</th>
+                    <th class="num">Miktar</th><th>Birim</th>
+                    <th>Kaynak Tip</th><th>Kaynak ID</th><th>Not</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($nm['giris_h'] as $h_row): ?>
+                <tr>
+                    <td><?= (int)$h_row['id'] ?></td>
+                    <td style="white-space:nowrap"><?= h(substr($h_row['movement_date'] ?? '', 0, 16)) ?></td>
+                    <td><?= h($h_row['depo'] ?? '') ?: '<em class="muted">Boş</em>' ?></td>
+                    <td class="num pos"><?= number_format((float)$h_row['quantity'], 0) ?></td>
+                    <td><?= h($h_row['unit'] ?? '') ?></td>
+                    <td><?= h($h_row['source_type'] ?? '—') ?></td>
+                    <td><?= $h_row['source_id'] ? (int)$h_row['source_id'] : '—' ?></td>
+                    <td style="font-size:.73rem"><?= h(mb_substr($h_row['note'] ?? '', 0, 80)) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+            <?php endif; ?>
+            </div>
+        </details>
+
+        <!-- Benzer isimli tanımlar -->
+        <details class="neg-sub">
+            <summary><strong>Benzer İsimli Tanımlar</strong>
+                <?php if (empty($nm['benzer'])): ?>
+                <span class="tehis-badge badge-info" style="margin-left:6px">Bulunamadı</span>
+                <?php else: ?>
+                <span class="tehis-badge badge-warn" style="margin-left:6px"><?= count($nm['benzer']) ?> tanım</span>
+                <?php endif; ?>
+            </summary>
+            <div style="margin-top:8px">
+            <?php if (empty($nm['benzer'])): ?>
+                <p style="color:var(--muted);padding:6px;font-size:.85rem">Normalize isimde ortak token bulunan başka tanım yok.</p>
+            <?php else: ?>
+            <p class="tehis-sub">Normalize isimde ortak token paylaşan material_definitions kayıtları. Otomatik birleştirme yapılmaz — yalnızca gösterim.</p>
+            <div class="table-wrap">
+            <table class="tehis-table">
+                <thead><tr>
+                    <th>ID</th><th>İsim</th><th>Type</th><th>Aktif</th>
+                    <th class="num">Giriş</th><th class="num">Kullanım</th><th class="num">Net</th><th>Depolar</th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($nm['benzer'] as $b): ?>
+                <tr class="<?= $b['giris'] > 0 ? 'warn-row' : '' ?>">
+                    <td><?= (int)$b['id'] ?></td>
+                    <td><?= h($b['name']) ?></td>
+                    <td><?= h($b['type']) ?></td>
+                    <td><?= $b['is_active'] ? '<span class="tehis-badge badge-ok">Aktif</span>' : '<span class="tehis-badge badge-warn">Pasif</span>' ?></td>
+                    <td class="num <?= $b['giris'] > 0 ? 'pos' : '' ?>"><?= $b['giris'] > 0 ? number_format($b['giris'],0) : '—' ?></td>
+                    <td class="num"><?= $b['kullanim'] > 0 ? number_format($b['kullanim'],0) : '—' ?></td>
+                    <td class="num <?= $b['net'] < 0 ? 'neg' : ($b['net'] > 0 ? 'pos' : '') ?>"><?= number_format($b['net'],0) ?></td>
+                    <td style="font-size:.75rem"><?= h($b['depolar']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+            <?php endif; ?>
+            </div>
+        </details>
+
+    </div><!-- .neg-body -->
+</details>
+<?php endforeach; ?>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<style>
+.neg-detail { border:1.5px solid #fca5a5;border-radius:8px;margin-bottom:14px;overflow:hidden; }
+.neg-summary { display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:10px 14px;background:#fef2f2;cursor:pointer;user-select:none;list-style:none; }
+.neg-summary::-webkit-details-marker { display:none; }
+.neg-mat-name { font-weight:700;font-size:.95rem; }
+.neg-body { padding:14px;border-top:1px solid #fca5a5;display:flex;flex-direction:column;gap:10px; }
+.neg-sub { border:1px solid var(--border);border-radius:6px;overflow:hidden; }
+.neg-sub > summary { padding:8px 12px;background:#f8fafc;cursor:pointer;user-select:none;list-style:none;font-size:.85rem; }
+.neg-sub > summary::-webkit-details-marker { display:none; }
+.neg-sub > div { padding:8px 12px 12px; }
+.neg-oneri { border-radius:6px;padding:8px 12px;font-size:.84rem;font-weight:600; }
+.neg-oneri-crit { background:#fee2e2;color:#991b1b;border:1px solid #fca5a5; }
+.neg-oneri-warn { background:#fffbeb;color:#92400e;border:1px solid #fde68a; }
+</style>
 
 <!-- Altbilgi -->
 <div style="margin-top:20px;padding:10px 14px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;font-size:.78rem;color:var(--muted)">
