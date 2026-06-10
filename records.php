@@ -234,7 +234,8 @@ render_flash();
             ?>
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
-                    data-durum="<?= h($durum) ?>">
+                    data-durum="<?= h($durum) ?>"
+                    data-tarih="<?= h($r['tarih'] ?? '') ?>">
                     <td class="td-tarih-cell">
                         <div><?= $r['tarih'] ? h(fmt_date_short($r['tarih'])) : '—' ?></div>
                         <?php if (!empty($r['updated_at'])): ?>
@@ -410,62 +411,103 @@ render_flash();
 
 <?php endif; ?>
 
+<!-- Yükleme Tarihi Onay Modalı -->
+<div id="yukleModal" class="ym-overlay" hidden aria-modal="true" role="dialog">
+    <div class="ym-box">
+        <div class="ym-head">
+            <span class="ym-icon">🚚</span>
+            <strong>Yükleme Onayı</strong>
+        </div>
+        <p class="ym-desc">Yükleme tarihini doğrulayın veya güncelleyin.</p>
+        <label class="ym-lbl">Yükleme Tarihi
+            <input type="date" id="yukleModalTarih" class="ym-date-input">
+        </label>
+        <p class="ym-hint" id="yukleModalHint" hidden></p>
+        <div class="ym-actions">
+            <button id="yukleModalOnayla" class="btn btn-primary">Kaydet &amp; Yükle</button>
+            <button id="yukleModalIptal"  class="btn btn-ghost">İptal</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
-    var csrf       = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var canUnlock  = <?= $can_unlock ? 'true' : 'false' ?>;
+    var csrf      = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var canUnlock = <?= $can_unlock ? 'true' : 'false' ?>;
 
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-durum-action]');
-        if (!btn) return;
-        var container = btn.closest('[data-record-id]');
-        if (!container) return;
+    /* ── Yükleme Modalı ── */
+    var modal      = document.getElementById('yukleModal');
+    var modalTarih = document.getElementById('yukleModalTarih');
+    var modalHint  = document.getElementById('yukleModalHint');
+    var modalOnayla= document.getElementById('yukleModalOnayla');
+    var modalIptal = document.getElementById('yukleModalIptal');
+    var _activeBtn = null, _activeContainer = null;
 
-        var action       = btn.dataset.durumAction;
-        var currentDurum = container.dataset.durum || '';
-        var targetDurum, msg;
+    function openYukleModal(btn, container) {
+        _activeBtn       = btn;
+        _activeContainer = container;
+        var recTarih     = container.dataset.tarih || '';
+        var today        = new Date().toISOString().slice(0, 10);
+        modalTarih.value = recTarih || today;
 
-        if (action === 'islendi') {
-            if (currentDurum === 'islendi') {
-                msg = 'İşlendi iptal edilsin mi?';
-                targetDurum = '';
+        // Uyarı: kayıttaki tarih bugünden farklıysa göster
+        if (recTarih && recTarih !== today) {
+            var diff = Math.round((new Date(today) - new Date(recTarih)) / 86400000);
+            if (diff > 0) {
+                modalHint.textContent = '⚠ Kayıt tarihi ' + diff + ' gün önce. Bugünü seçmek ister misiniz?';
+                modalHint.hidden = false;
             } else {
-                msg = 'Ürün işlendi mi?';
-                targetDurum = 'islendi';
+                modalHint.hidden = true;
             }
-        } else if (action === 'yuklendi') {
-            if (currentDurum === 'yuklendi') {
-                msg = 'Yüklendi iptal edilsin mi?';
-                targetDurum = 'islendi';
-            } else {
-                msg = 'Ürün yüklendi mi?';
-                targetDurum = 'yuklendi';
-            }
-        } else { return; }
-
-        if (!confirm(msg)) return;
-        btn.disabled = true;
-
-        var extraBody = '';
-        if (action === 'yuklendi' && currentDurum === 'yuklendi') {
-            var reason = prompt('Revizyon nedeni (zorunlu):');
-            if (reason === null) { btn.disabled = false; return; }
-            reason = reason.trim();
-            if (!reason) { btn.disabled = false; alert('Revizyon nedeni boş bırakılamaz.'); return; }
-            extraBody = '&revision_reason=' + encodeURIComponent(reason);
+        } else {
+            modalHint.hidden = true;
         }
+        modal.hidden = false;
+        modalTarih.focus();
+    }
 
+    function closeYukleModal() {
+        modal.hidden = true;
+        if (_activeBtn) _activeBtn.disabled = false;
+        _activeBtn = _activeContainer = null;
+    }
+
+    modalIptal.addEventListener('click', closeYukleModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeYukleModal(); });
+
+    modalOnayla.addEventListener('click', function () {
+        if (!_activeBtn || !_activeContainer) return;
+        var tarih = modalTarih.value;
+        if (!tarih) { modalTarih.focus(); return; }
+        modalOnayla.disabled = true;
+        submitDurum(_activeContainer, _activeBtn, 'yuklendi', '&tarih=' + encodeURIComponent(tarih), function () {
+            // Tarihi güncelle tabloda
+            _activeContainer.dataset.tarih = tarih;
+            var tarihTd = _activeContainer.querySelector('.td-tarih-cell div:first-child');
+            if (tarihTd) {
+                // fmt_date_short: dd.mm.yy
+                var p = tarih.split('-');
+                tarihTd.textContent = p[2] + '.' + p[1] + '.' + p[0].slice(2);
+            }
+            modal.hidden = true;
+            _activeBtn = _activeContainer = null;
+        });
+    });
+
+    /* ── Durum güncelleme ── */
+    function submitDurum(container, btn, targetDurum, extraBody, onSuccess) {
         fetch('record_durum.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'id=' + encodeURIComponent(container.dataset.recordId)
-                + '&durum=' + encodeURIComponent(targetDurum)
-                + '&csrf='  + encodeURIComponent(csrf)
-                + extraBody
+            body: 'id='    + encodeURIComponent(container.dataset.recordId)
+                + '&durum='+ encodeURIComponent(targetDurum)
+                + '&csrf=' + encodeURIComponent(csrf)
+                + (extraBody || '')
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
             btn.disabled = false;
+            if (modalOnayla) modalOnayla.disabled = false;
             if (!data.ok) { alert(data.msg || 'Hata oluştu.'); return; }
 
             container.dataset.durum = data.durum;
@@ -508,8 +550,44 @@ render_flash();
                     }
                 }
             }
+            if (onSuccess) onSuccess();
         })
-        .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
+        .catch(function () { btn.disabled = false; if (modalOnayla) modalOnayla.disabled = false; alert('Bağlantı hatası.'); });
+    }
+
+    /* ── Click delegasyonu ── */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-durum-action]');
+        if (!btn) return;
+        var container = btn.closest('[data-record-id]');
+        if (!container) return;
+
+        var action       = btn.dataset.durumAction;
+        var currentDurum = container.dataset.durum || '';
+
+        if (action === 'islendi') {
+            var msg = currentDurum === 'islendi' ? 'İşlendi iptal edilsin mi?' : 'Ürün işlendi mi?';
+            var targetDurum = currentDurum === 'islendi' ? '' : 'islendi';
+            if (!confirm(msg)) return;
+            btn.disabled = true;
+            submitDurum(container, btn, targetDurum, '');
+
+        } else if (action === 'yuklendi') {
+            if (currentDurum === 'yuklendi') {
+                // Kilit açma — revizyon nedeni sor
+                if (!confirm('Yüklendi iptal edilsin mi?')) return;
+                var reason = prompt('Revizyon nedeni (zorunlu):');
+                if (reason === null) return;
+                reason = reason.trim();
+                if (!reason) { alert('Revizyon nedeni boş bırakılamaz.'); return; }
+                btn.disabled = true;
+                submitDurum(container, btn, 'islendi', '&revision_reason=' + encodeURIComponent(reason));
+            } else {
+                // Yükleme — tarih onay modalı
+                btn.disabled = true;
+                openYukleModal(btn, container);
+            }
+        }
     });
 })();
 </script>
