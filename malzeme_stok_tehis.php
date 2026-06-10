@@ -564,6 +564,44 @@ if (empty($yunan_rows)) {
     $yunan_sonuc = ['durum' => 'farkli', 'metin' => 'Yunan Kasa giriş ID(ler): ' . implode(', ', $yunan_gid) . ' · kullanım ID(ler): ' . implode(', ', $yunan_kid) . '. Farklı ID\'lere dağılmış — eşleştirme/merge gerekebilir.'];
 }
 
+// ── H4) İsim değişikliği sonrası kopan hareketler ───────────
+// Hareketin isim snapshot'ı (material_name) güncel tanım adından farklıysa,
+// tanım sonradan yeniden adlandırılmış demektir. Eski grup bazlı stok ekranında
+// bu durum +giriş/-kullanım'ın ayrı satıra bölünmesine yol açıyordu.
+$rename_rows = [];
+$rename_mid_set = [];
+if ($has_msm && $has_md) {
+    $rn_st = $pdo->query("
+        SELECT m.material_id,
+               md.name        AS guncel_isim,
+               md.is_active,
+               md.type        AS guncel_type,
+               COUNT(*)        AS hareket_sayisi,
+               GROUP_CONCAT(DISTINCT m.material_name ORDER BY m.material_name SEPARATOR ' || ') AS snapshot_isimler,
+               SUM(CASE WHEN m.movement_type='giris'    THEN m.quantity ELSE 0 END) AS giris,
+               SUM(CASE WHEN m.movement_type='kullanim' THEN m.quantity ELSE 0 END) AS kullanim,
+               GROUP_CONCAT(DISTINCT COALESCE(NULLIF(m.depo,''),'[Boş]') SEPARATOR ', ') AS depolar
+        FROM material_stock_movements m
+        JOIN material_definitions md ON md.id = m.material_id
+        WHERE m.material_id IS NOT NULL
+          AND m.material_name <> md.name
+        GROUP BY m.material_id, md.name, md.is_active, md.type
+        ORDER BY m.material_id
+    ")->fetchAll();
+    foreach ($rn_st as $r) {
+        // nmk ile gerçek (anlamlı) yeniden adlandırmayı doğrula — boşluk/küçük fark gürültüsünü ele
+        $snaps = array_filter(array_map('trim', explode('||', $r['snapshot_isimler'])));
+        $gercek_fark = false;
+        foreach ($snaps as $sn) {
+            if (nmk($sn) !== nmk((string)$r['guncel_isim'])) { $gercek_fark = true; break; }
+        }
+        $r['gercek_fark'] = $gercek_fark;
+        $rename_rows[] = $r;
+        $rename_mid_set[(int)$r['material_id']] = true;
+    }
+}
+$rename_gercek = array_values(array_filter($rename_rows, fn($r) => $r['gercek_fark']));
+
 // ── G) Pasif tanım hâlâ kullanımda mı? ──────────────────────
 $pasif_kullanim_rows = [];
 if ($has_md && $has_lp) {
@@ -1566,6 +1604,55 @@ tehis_section_open('b11', '11 · Yunan Kasa Giriş / Çıkış İncelemesi', $yk
     </tbody>
 </table>
 </div>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 12: İsim Değişikliği Sonrası Kopan Stok Hareketleri
+     ────────────────────────────────────────────────────────── -->
+<?php
+$rn_badge = count($rename_gercek) > 0
+    ? '<span class="tehis-badge badge-warn">'.count($rename_gercek).' tanım yeniden adlandırılmış</span>'
+    : '<span class="tehis-badge badge-ok">Yok</span>';
+tehis_section_open('b12', '12 · İsim Değişikliği Sonrası Kopan Hareketler', $rn_badge, count($rename_gercek) > 0);
+?>
+<p class="tehis-sub">
+    Hareketin isim snapshot'ı (<code>material_name</code>) güncel tanım adından farklı olan kayıtlar.
+    Bu, tanımın sonradan yeniden adlandırıldığını gösterir. <strong>Düzeltme uygulandı:</strong> stok ekranı artık
+    yalnızca <code>material_id</code> ile gruplar, bu yüzden bu hareketler güncel isim altında birleşik görünür —
+    veride değişiklik yapılmadı, snapshot'lar olduğu gibi kaldı.
+</p>
+<?php if (empty($rename_gercek)): ?>
+    <p style="color:#16a34a">✓ Güncel adı snapshot'tan anlamlı şekilde farklı tanım bulunamadı.</p>
+<?php else: ?>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th class="num">material_id</th><th>Güncel Tanım Adı</th><th>Type</th><th>Aktif</th>
+        <th>Eski/Snapshot İsim(ler)</th><th class="num">Hareket</th>
+        <th class="num">Giriş</th><th class="num">Kullanım</th><th>Depolar</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($rename_gercek as $r): ?>
+    <tr class="warn-row">
+        <td class="num"><strong><?= (int)$r['material_id'] ?></strong></td>
+        <td><strong><?= h($r['guncel_isim']) ?></strong></td>
+        <td style="font-size:.76rem"><?= h($r['guncel_type']) ?></td>
+        <td><?= $r['is_active'] ? '<span class="tehis-badge badge-ok">Aktif</span>' : '<span class="tehis-badge badge-warn">Pasif</span>' ?></td>
+        <td style="font-size:.78rem;color:#92400e"><?= h($r['snapshot_isimler']) ?></td>
+        <td class="num"><?= (int)$r['hareket_sayisi'] ?></td>
+        <td class="num <?= (float)$r['giris']>0?'pos':'' ?>"><?= (float)$r['giris']>0 ? number_format((float)$r['giris'],0) : '—' ?></td>
+        <td class="num"><?= (float)$r['kullanim']>0 ? number_format((float)$r['kullanim'],0) : '—' ?></td>
+        <td style="font-size:.74rem"><?= h($r['depolar']) ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<p class="tehis-sub" style="margin-top:10px">
+    ℹ️ Bu liste boş olsa bile geçmişte isim değişmiş olabilir — snapshot ile güncel ad <em>aynıysa</em> (örn. sync sonradan
+    güncel adla yeniden yazdıysa) burada görünmez. Asıl önemli olan: stok ekranı artık <code>material_id</code> bazlı.
+</p>
 <?php endif; ?>
 <?php tehis_section_close(); ?>
 
