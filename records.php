@@ -20,15 +20,28 @@ function valid_date(string $d): bool {
     return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
 }
 
+function fmt_date_short(?string $d): string {
+    if (!$d) return '';
+    $ts = strtotime($d);
+    return $ts ? date('d.m.y', $ts) : '';
+}
+
+function fmt_dt_short(?string $dt): string {
+    if (!$dt) return '';
+    $ts = strtotime($dt);
+    return $ts ? date('d.m.y - H:i', $ts) : '';
+}
+
 // Tüm filtreleri koruyarak URL üret
 function rec_url(array $override = [], array $drop = []): string {
-    global $q, $durum_filter, $tarih_bas, $tarih_bit, $page;
+    global $durum_filter, $tarih_bas, $tarih_bit, $page, $sort, $sort_dir_lc;
     $p = [
-        'q'         => $q,
         'durum'     => $durum_filter,
         'tarih_bas' => $tarih_bas,
         'tarih_bit' => $tarih_bit,
         'page'      => $page > 1 ? (string)$page : '',
+        'sort'      => $sort,
+        'dir'       => $sort !== '' ? $sort_dir_lc : '',
     ];
     foreach ($override as $k => $v) $p[$k] = $v;
     foreach ($drop    as $k)       unset($p[$k]);
@@ -39,11 +52,22 @@ function rec_url(array $override = [], array $drop = []): string {
 const REC_PER_PAGE = 50;
 
 // ── GET parametreleri ──────────────────────────────────────
-$q            = trim((string)($_GET['q']         ?? ''));
 $durum_filter = trim((string)($_GET['durum']     ?? ''));
 $tarih_bas    = trim((string)($_GET['tarih_bas'] ?? ''));
 $tarih_bit    = trim((string)($_GET['tarih_bit'] ?? ''));
 $page         = max(1, (int)($_GET['page'] ?? 1));
+$sort         = trim((string)($_GET['sort']      ?? ''));
+$sort_dir_lc  = strtolower(trim((string)($_GET['dir'] ?? ''))) === 'asc' ? 'asc' : 'desc';
+
+$_sort_cols = [
+    'tarih'       => 'r.tarih',
+    'urun_sahibi' => 'COALESCE(us.name, "")',
+    'firma'       => 'r.firma',
+    'alici'       => 'r.alici',
+    'parti_no'    => 'r.parti_no',
+    'casus_no'    => 'r.casus_no',
+];
+if (!array_key_exists($sort, $_sort_cols)) $sort = '';
 
 if (!in_array($durum_filter, ['islendi', 'yuklendi'], true)) $durum_filter = '';
 if ($tarih_bas !== '' && !valid_date($tarih_bas)) $tarih_bas = '';
@@ -65,12 +89,6 @@ elseif ($tarih_bas === '' && $tarih_bit === '')                               $q
 $where  = "WHERE r.type = 'yukleme'";
 $params = [];
 
-if ($q !== '') {
-    $where .= " AND (r.firma LIKE :q OR r.bolge LIKE :q OR r.alici LIKE :q
-               OR r.parti_no LIKE :q OR r.on_plaka LIKE :q OR r.arka_plaka LIKE :q
-               OR r.urun LIKE :q)";
-    $params[':q'] = '%' . $q . '%';
-}
 if ($durum_filter !== '') {
     $where .= " AND r.durum = :durum";
     $params[':durum'] = $durum_filter;
@@ -93,10 +111,14 @@ $page        = min($page, $total_pages);
 $offset      = ($page - 1) * REC_PER_PAGE;
 
 // ── Ana sorgu — JOIN + GROUP BY (N+1 yok) ─────────────────
-$order = "ORDER BY
-    CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
-    COALESCE(r.tarih,'0000-00-00') DESC,
-    r.id DESC";
+if ($sort !== '') {
+    $order = "ORDER BY " . $_sort_cols[$sort] . " " . strtoupper($sort_dir_lc) . ", r.id DESC";
+} else {
+    $order = "ORDER BY
+        CASE WHEN COALESCE(r.durum,'')='' THEN 0 WHEN r.durum='islendi' THEN 1 ELSE 2 END ASC,
+        COALESCE(r.tarih,'0000-00-00') DESC,
+        r.id DESC";
+}
 
 $sql = "SELECT r.*,
                COUNT(p.id)                   AS toplam_palet,
@@ -141,44 +163,6 @@ render_flash();
     <a href="record_create.php" class="btn btn-primary btn-lg">+ Yeni Kayıt</a>
 </div>
 
-<!-- ── Filtre formu ── -->
-<form method="get" class="rec-filter-form">
-    <?php if ($durum_filter !== ''): ?>
-    <input type="hidden" name="durum" value="<?= h($durum_filter) ?>">
-    <?php endif; ?>
-
-    <div class="search-row">
-        <input type="search" name="q" value="<?= h($q) ?>"
-               placeholder="Firma, alıcı, parti no, plaka, ürün..." autocomplete="off">
-        <button class="btn">Ara</button>
-        <?php if ($q !== '' || $durum_filter !== '' || $tarih_bas !== '' || $tarih_bit !== ''): ?>
-        <a href="records.php" class="btn btn-ghost">Temizle</a>
-        <?php endif; ?>
-    </div>
-
-    <!-- Mobil: toggle chip (desktop'ta gizli) -->
-    <?php $has_date = $tarih_bas !== '' || $tarih_bit !== ''; ?>
-    <button type="button"
-            class="rec-date-toggle<?= $has_date ? ' has-filter' : '' ?>"
-            id="recDateToggle">
-        <span>📅 <?php if ($has_date): ?><?= $tarih_bas ? h(date('d.m', strtotime($tarih_bas))) : '?' ?> — <?= $tarih_bit ? h(date('d.m', strtotime($tarih_bit))) : '?' ?><?php else: ?>Tarih filtresi<?php endif; ?></span>
-        <span class="rec-date-toggle-chev">▾</span>
-    </button>
-
-    <!-- Tarih filtresi paneli: mobilde collapsible, desktop'ta her zaman görünür -->
-    <div class="date-filter-panel<?= $has_date ? ' rec-open' : '' ?>" id="recDatePanel">
-        <label class="date-filter-lbl">Tarih:</label>
-        <div class="date-pair">
-            <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
-            <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
-        </div>
-        <button class="btn btn-sm">Filtrele</button>
-        <?php if ($has_date): ?>
-        <a href="records.php<?= $q !== '' ? '?q='.urlencode($q) : '' ?>" class="btn btn-sm btn-ghost">Tarihi Temizle</a>
-        <?php endif; ?>
-    </div>
-</form>
-
 <!-- ── Hızlı tarih butonları ── -->
 <div class="filter-pills">
     <a href="<?= rec_url(['tarih_bas' => '', 'tarih_bit' => '', 'page' => '']) ?>"
@@ -200,7 +184,7 @@ render_flash();
 
 <?php if (empty($rows)): ?>
     <div class="empty">
-        <?php if ($total === 0 && ($q !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $durum_filter !== '')): ?>
+        <?php if ($total === 0 && ($tarih_bas !== '' || $tarih_bit !== '' || $durum_filter !== '')): ?>
             <p>Filtre kriterlerine uyan kayıt bulunamadı.</p>
             <a href="records.php" class="btn btn-ghost">Filtreleri temizle</a>
         <?php else: ?>
@@ -210,19 +194,30 @@ render_flash();
     </div>
 <?php else: ?>
 
+    <?php
+    $_sth = function(string $label, string $col) use ($sort, $sort_dir_lc): string {
+        $is_active = $sort === $col;
+        $next_dir  = ($is_active && $sort_dir_lc === 'desc') ? 'asc' : 'desc';
+        $arrow     = $is_active ? ($sort_dir_lc === 'desc' ? ' ▼' : ' ▲') : '';
+        $url       = rec_url(['sort' => $col, 'dir' => $next_dir, 'page' => '']);
+        $cls       = 'th-sortable' . ($is_active ? ' th-sort-active' : '');
+        return '<th class="' . $cls . '"><a href="' . htmlspecialchars($url, ENT_QUOTES) . '">'
+             . htmlspecialchars($label, ENT_QUOTES) . $arrow . '</a></th>';
+    };
+    ?>
     <!-- PC: tablo -->
     <div class="table-wrap pc-only">
         <table class="data-table">
             <thead>
             <tr>
-                <th>Tarih</th>
-                <th>Ürün Sahibi</th>
-                <th>Son Düzenleme</th>
-                <th>Firma</th>
+                <?= $_sth('Tarih', 'tarih') ?>
+                <?= $_sth('Ürün Sahibi', 'urun_sahibi') ?>
+                <?= $_sth('Firma', 'firma') ?>
                 <th>Bölge</th>
-                <th>Alıcı</th>
+                <?= $_sth('Alıcı', 'alici') ?>
                 <th>Ürün</th>
-                <th>Parti No</th>
+                <?= $_sth('Parti No', 'parti_no') ?>
+                <?= $_sth('Casus No', 'casus_no') ?>
                 <th>Plaka</th>
                 <th class="num">Palet</th>
                 <th class="num">Kasa</th>
@@ -239,21 +234,24 @@ render_flash();
             ?>
                 <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
-                    data-durum="<?= h($durum) ?>">
-                    <td><?= $r['tarih'] ? h(date('d.m.Y', strtotime($r['tarih']))) : '—' ?></td>
+                    data-durum="<?= h($durum) ?>"
+                    data-tarih="<?= h($r['tarih'] ?? '') ?>">
+                    <td class="td-tarih-cell">
+                        <div><?= $r['tarih'] ? h(fmt_date_short($r['tarih'])) : '—' ?></div>
+                        <?php if (!empty($r['updated_at'])): ?>
+                        <div class="td-son-duz"><?= h(fmt_dt_short($r['updated_at'])) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= $r['urun_sahibi_adi'] ? h($r['urun_sahibi_adi']) : '<span class="muted">—</span>' ?></td>
-                    <td class="muted"><?= $r['updated_at'] ? h(fmt_datetime($r['updated_at'])) : '—' ?></td>
                     <td>
                         <?= h($r['firma']) ?>
                         <?php if ($locked): ?><span class="badge-locked">🔒</span><?php endif; ?>
-                        <?php $ft = fmt_tarih_tr($r['tarih']); if ($ft): ?>
-                        <div class="muted" style="font-size:.75rem"><?= h($ft) ?></div>
-                        <?php endif; ?>
                     </td>
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['alici']) ?></td>
                     <td><?= h($r['urun']) ?></td>
                     <td><?= h($r['parti_no']) ?></td>
+                    <td><?= h($r['casus_no']) ?></td>
                     <td><?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
@@ -413,75 +411,103 @@ render_flash();
 
 <?php endif; ?>
 
+<!-- Yükleme Tarihi Onay Modalı -->
+<div id="yukleModal" class="ym-overlay" hidden aria-modal="true" role="dialog">
+    <div class="ym-box">
+        <div class="ym-head">
+            <span class="ym-icon">🚚</span>
+            <strong>Yükleme Onayı</strong>
+        </div>
+        <p class="ym-desc">Yükleme tarihini doğrulayın veya güncelleyin.</p>
+        <label class="ym-lbl">Yükleme Tarihi
+            <input type="date" id="yukleModalTarih" class="ym-date-input">
+        </label>
+        <p class="ym-hint" id="yukleModalHint" hidden></p>
+        <div class="ym-actions">
+            <button id="yukleModalOnayla" class="btn btn-primary">Kaydet &amp; Yükle</button>
+            <button id="yukleModalIptal"  class="btn btn-ghost">İptal</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
-    // Tarih filtresi toggle (mobil)
-    var dateToggle = document.getElementById('recDateToggle');
-    var datePanel  = document.getElementById('recDatePanel');
-    if (dateToggle && datePanel) {
-        if (datePanel.classList.contains('rec-open')) dateToggle.classList.add('panel-open');
-        dateToggle.addEventListener('click', function () {
-            var open = datePanel.classList.toggle('rec-open');
-            dateToggle.classList.toggle('panel-open', open);
-        });
-    }
-})();
+    var csrf      = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var canUnlock = <?= $can_unlock ? 'true' : 'false' ?>;
 
-(function () {
-    var csrf       = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var canUnlock  = <?= $can_unlock ? 'true' : 'false' ?>;
+    /* ── Yükleme Modalı ── */
+    var modal      = document.getElementById('yukleModal');
+    var modalTarih = document.getElementById('yukleModalTarih');
+    var modalHint  = document.getElementById('yukleModalHint');
+    var modalOnayla= document.getElementById('yukleModalOnayla');
+    var modalIptal = document.getElementById('yukleModalIptal');
+    var _activeBtn = null, _activeContainer = null;
 
-    document.addEventListener('click', function (e) {
-        var btn = e.target.closest('[data-durum-action]');
-        if (!btn) return;
-        var container = btn.closest('[data-record-id]');
-        if (!container) return;
+    function openYukleModal(btn, container) {
+        _activeBtn       = btn;
+        _activeContainer = container;
+        var recTarih     = container.dataset.tarih || '';
+        var today        = new Date().toISOString().slice(0, 10);
+        modalTarih.value = recTarih || today;
 
-        var action       = btn.dataset.durumAction;
-        var currentDurum = container.dataset.durum || '';
-        var targetDurum, msg;
-
-        if (action === 'islendi') {
-            if (currentDurum === 'islendi') {
-                msg = 'İşlendi iptal edilsin mi?';
-                targetDurum = '';
+        // Uyarı: kayıttaki tarih bugünden farklıysa göster
+        if (recTarih && recTarih !== today) {
+            var diff = Math.round((new Date(today) - new Date(recTarih)) / 86400000);
+            if (diff > 0) {
+                modalHint.textContent = '⚠ Kayıt tarihi ' + diff + ' gün önce. Bugünü seçmek ister misiniz?';
+                modalHint.hidden = false;
             } else {
-                msg = 'Ürün işlendi mi?';
-                targetDurum = 'islendi';
+                modalHint.hidden = true;
             }
-        } else if (action === 'yuklendi') {
-            if (currentDurum === 'yuklendi') {
-                msg = 'Yüklendi iptal edilsin mi?';
-                targetDurum = 'islendi';
-            } else {
-                msg = 'Ürün yüklendi mi?';
-                targetDurum = 'yuklendi';
-            }
-        } else { return; }
-
-        if (!confirm(msg)) return;
-        btn.disabled = true;
-
-        var extraBody = '';
-        if (action === 'yuklendi' && currentDurum === 'yuklendi') {
-            var reason = prompt('Revizyon nedeni (zorunlu):');
-            if (reason === null) { btn.disabled = false; return; }
-            reason = reason.trim();
-            if (!reason) { btn.disabled = false; alert('Revizyon nedeni boş bırakılamaz.'); return; }
-            extraBody = '&revision_reason=' + encodeURIComponent(reason);
+        } else {
+            modalHint.hidden = true;
         }
+        modal.hidden = false;
+        modalTarih.focus();
+    }
 
+    function closeYukleModal() {
+        modal.hidden = true;
+        if (_activeBtn) _activeBtn.disabled = false;
+        _activeBtn = _activeContainer = null;
+    }
+
+    modalIptal.addEventListener('click', closeYukleModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeYukleModal(); });
+
+    modalOnayla.addEventListener('click', function () {
+        if (!_activeBtn || !_activeContainer) return;
+        var tarih = modalTarih.value;
+        if (!tarih) { modalTarih.focus(); return; }
+        modalOnayla.disabled = true;
+        submitDurum(_activeContainer, _activeBtn, 'yuklendi', '&tarih=' + encodeURIComponent(tarih), function () {
+            // Tarihi güncelle tabloda
+            _activeContainer.dataset.tarih = tarih;
+            var tarihTd = _activeContainer.querySelector('.td-tarih-cell div:first-child');
+            if (tarihTd) {
+                // fmt_date_short: dd.mm.yy
+                var p = tarih.split('-');
+                tarihTd.textContent = p[2] + '.' + p[1] + '.' + p[0].slice(2);
+            }
+            modal.hidden = true;
+            _activeBtn = _activeContainer = null;
+        });
+    });
+
+    /* ── Durum güncelleme ── */
+    function submitDurum(container, btn, targetDurum, extraBody, onSuccess) {
         fetch('record_durum.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'id=' + encodeURIComponent(container.dataset.recordId)
-                + '&durum=' + encodeURIComponent(targetDurum)
-                + '&csrf='  + encodeURIComponent(csrf)
-                + extraBody
+            body: 'id='    + encodeURIComponent(container.dataset.recordId)
+                + '&durum='+ encodeURIComponent(targetDurum)
+                + '&csrf=' + encodeURIComponent(csrf)
+                + (extraBody || '')
         })
         .then(function (r) { return r.json(); })
         .then(function (data) {
             btn.disabled = false;
+            if (modalOnayla) modalOnayla.disabled = false;
             if (!data.ok) { alert(data.msg || 'Hata oluştu.'); return; }
 
             container.dataset.durum = data.durum;
@@ -524,8 +550,44 @@ render_flash();
                     }
                 }
             }
+            if (onSuccess) onSuccess();
         })
-        .catch(function () { btn.disabled = false; alert('Bağlantı hatası.'); });
+        .catch(function () { btn.disabled = false; if (modalOnayla) modalOnayla.disabled = false; alert('Bağlantı hatası.'); });
+    }
+
+    /* ── Click delegasyonu ── */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-durum-action]');
+        if (!btn) return;
+        var container = btn.closest('[data-record-id]');
+        if (!container) return;
+
+        var action       = btn.dataset.durumAction;
+        var currentDurum = container.dataset.durum || '';
+
+        if (action === 'islendi') {
+            var msg = currentDurum === 'islendi' ? 'İşlendi iptal edilsin mi?' : 'Ürün işlendi mi?';
+            var targetDurum = currentDurum === 'islendi' ? '' : 'islendi';
+            if (!confirm(msg)) return;
+            btn.disabled = true;
+            submitDurum(container, btn, targetDurum, '');
+
+        } else if (action === 'yuklendi') {
+            if (currentDurum === 'yuklendi') {
+                // Kilit açma — revizyon nedeni sor
+                if (!confirm('Yüklendi iptal edilsin mi?')) return;
+                var reason = prompt('Revizyon nedeni (zorunlu):');
+                if (reason === null) return;
+                reason = reason.trim();
+                if (!reason) { alert('Revizyon nedeni boş bırakılamaz.'); return; }
+                btn.disabled = true;
+                submitDurum(container, btn, 'islendi', '&revision_reason=' + encodeURIComponent(reason));
+            } else {
+                // Yükleme — tarih onay modalı
+                btn.disabled = true;
+                openYukleModal(btn, container);
+            }
+        }
     });
 })();
 </script>

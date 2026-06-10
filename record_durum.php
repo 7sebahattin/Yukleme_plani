@@ -16,6 +16,7 @@ header('Content-Type: application/json');
 $id    = (int)($_POST['id']   ?? 0);
 $durum = trim($_POST['durum'] ?? '');
 $csrf  = $_POST['csrf'] ?? null;
+$tarih_new = trim($_POST['tarih'] ?? '');
 
 // csrf_check() JSON-aware: başarısızsa kendisi JSON 403 döner ve exit eder.
 csrf_check($csrf);
@@ -63,9 +64,15 @@ $user_id = (int)($auth_user['id'] ?? 0);
 $pdo     = db();
 
 if ($durum === 'yuklendi') {
-    $pdo->prepare("UPDATE loading_records SET durum = ?, locked_at = NOW(), locked_by = ? WHERE id = ?")
-        ->execute([$durum, $user_id, $id]);
-    audit_log_event('lock', 'records', $id, ['durum' => $_old_durum], ['durum' => $durum, 'locked_by' => $user_id]);
+    $tarih_ok = ($tarih_new !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih_new) && strtotime($tarih_new));
+    if ($tarih_ok) {
+        $pdo->prepare("UPDATE loading_records SET durum = ?, locked_at = NOW(), locked_by = ?, tarih = ? WHERE id = ?")
+            ->execute([$durum, $user_id, $tarih_new, $id]);
+    } else {
+        $pdo->prepare("UPDATE loading_records SET durum = ?, locked_at = NOW(), locked_by = ? WHERE id = ?")
+            ->execute([$durum, $user_id, $id]);
+    }
+    audit_log_event('lock', 'records', $id, ['durum' => $_old_durum], ['durum' => $durum, 'locked_by' => $user_id, 'tarih' => $tarih_ok ? $tarih_new : null]);
 } elseif ($_old_durum === 'yuklendi' || $_locked) {
     $revision_reason = trim($_POST['revision_reason'] ?? '');
     $pdo->prepare("UPDATE loading_records SET durum = ?, locked_at = NULL, locked_by = NULL, unlocked_at = NOW(), unlocked_by = ?, revision_reason = ? WHERE id = ?")
