@@ -210,9 +210,22 @@ if ($debug) {
 }
 
 // ── İndir ──
-$urun_slug = preg_replace('/[^A-Za-z0-9]+/', '_', $type_labels && isset($record['urun']) ? (string)$record['urun'] : 'KAYIT');
-$urun_slug = trim((string)$urun_slug, '_') ?: 'KAYIT';
-$fname = 'YUKLEME_PLANI_' . mb_strtoupper($urun_slug, 'UTF-8') . '_' . $id . '_' . date('Ymd') . '.xlsx';
+$_parti  = trim((string)($record['parti_no'] ?? ''));
+$_firma  = trim((string)($record['firma']   ?? ''));
+$_tarih  = trim((string)($record['tarih']   ?? ''));
+$_tarih_fmt = $_tarih ? date('Ymd', strtotime($_tarih)) : date('Ymd');
+
+$_parts = array_filter([$_parti, $_firma, $_tarih_fmt]);
+if ($_parts) {
+    $fname = implode('-', array_map(
+        fn($s) => mb_strtoupper(preg_replace('/[^A-Za-z0-9\-]+/', '_', $s), 'UTF-8'),
+        $_parts
+    )) . '.xlsx';
+} else {
+    $urun_slug = preg_replace('/[^A-Za-z0-9]+/', '_', $type_labels && isset($record['urun']) ? (string)$record['urun'] : 'KAYIT');
+    $urun_slug = trim((string)$urun_slug, '_') ?: 'KAYIT';
+    $fname = 'YUKLEME_PLANI_' . mb_strtoupper($urun_slug, 'UTF-8') . '_' . $id . '_' . date('Ymd') . '.xlsx';
+}
 
 try {
     $writer = IOFactory::createWriter($ss, 'Xlsx');
