@@ -404,6 +404,78 @@ if ($has_msm && $has_md) {
     }
 }
 
+// ── H2) Düzeltme planı — kategori, benzer_pozitif, kullanım kaynağı ──
+$def_by_id = [];
+foreach ($all_defs as $d) $def_by_id[(int)$d['id']] = $d;
+$has_mti = tbl_exists('material_template_items');
+
+$dp_toplam_eksik = 0.0;
+foreach ($neg_malzemeler as &$nm) {
+    $mid = (int)$nm['mid'];
+    $nm['eksik_miktar'] = abs($nm['net']);
+    $dp_toplam_eksik   += $nm['eksik_miktar'];
+    $nm['mat_type']     = $def_by_id[$mid]['type'] ?? '';
+
+    // Benzer içinden net > 0 olanlar
+    $nm['benzer_pozitif'] = array_values(array_filter($nm['benzer'], fn($b) => $b['net'] > 0));
+    $bp_same_count = count(array_filter($nm['benzer_pozitif'], fn($b) => $b['type'] === $nm['mat_type']));
+    $bp_count = count($nm['benzer_pozitif']);
+
+    // Kategori
+    if ($bp_count === 0) {
+        $nm['kategori']          = 'A';
+        $nm['kategori_metin']    = 'Eksik Stok Girişi';
+        $nm['kategori_renk']     = 'crit';
+        $nm['kategori_aciklama'] = $nm['giris'] > 0
+            ? 'Giriş (' . number_format($nm['giris'], 0) . ') kullanımı (' . number_format($nm['kullanim'], 0) . ') karşılamıyor. Ek stok girişi veya düzeltme hareketi yapılmalı.'
+            : 'Bu malzeme için hiç stok girişi yapılmamış. Başlangıç stok girişi veya düzeltme hareketi eklenmeli.';
+    } elseif ($bp_count >= 3 || $bp_same_count >= 2) {
+        $nm['kategori']          = 'D';
+        $nm['kategori_metin']    = 'Manuel Karar';
+        $nm['kategori_renk']     = 'purple';
+        $nm['kategori_aciklama'] = $bp_count . ' benzer pozitif tanım var' . ($bp_same_count > 0 ? ', ' . $bp_same_count . ' tanesi aynı tip' : '') . '. Hangi tanımın bu kullanımla eşleştiğini manuel belirleyip merge/transfer kararı verilmeli. Otomatik birleştirme yapılmamalı.';
+    } else {
+        $nm['kategori']          = 'B';
+        $nm['kategori_metin']    = 'Benzer Tanım / Eşleştirme';
+        $nm['kategori_renk']     = 'warn';
+        $nm['kategori_aciklama'] = 'Benzer isimde ' . $bp_count . ' pozitif stoklu tanım var' . ($bp_same_count > 0 ? ' (' . $bp_same_count . ' aynı tip)' : '') . '. Stok girişi yanlış tanıma yapılmış olabilir — merge/transfer/mapping kararı gerekir.';
+    }
+
+    // Kullanım kaynağı
+    $kaynaklar = [];
+    if ($has_lp) {
+        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(loading_record_id) AS ornek_id FROM loading_pallets WHERE kasa_cinsi_id = ?");
+        $sth->execute([$mid]); $r = $sth->fetch();
+        if ($r && (int)$r['cnt'] > 0)
+            $kaynaklar[] = ['tip' => 'Kasa Cinsi', 'alan' => 'loading_pallets.kasa_cinsi_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => $r['ornek_id'], 'aciklama' => 'Yükleme planı kasa cinsi seçiminden geliyor.'];
+
+        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(loading_record_id) AS ornek_id FROM loading_pallets WHERE palet_tipi_id = ?");
+        $sth->execute([$mid]); $r = $sth->fetch();
+        if ($r && (int)$r['cnt'] > 0)
+            $kaynaklar[] = ['tip' => 'Palet Tipi', 'alan' => 'loading_pallets.palet_tipi_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => $r['ornek_id'], 'aciklama' => 'Yükleme planı palet tipi seçiminden geliyor.'];
+    }
+    if ($has_pm) {
+        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt, MIN(lp.loading_record_id) AS ornek_id FROM pallet_materials pm LEFT JOIN loading_pallets lp ON lp.id = pm.pallet_id WHERE pm.material_id = ?");
+        $sth->execute([$mid]); $r = $sth->fetch();
+        if ($r && (int)$r['cnt'] > 0)
+            $kaynaklar[] = ['tip' => 'Ek Malzeme', 'alan' => 'pallet_materials.material_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => $r['ornek_id'], 'aciklama' => 'Palet ek malzeme listesinden geliyor.'];
+    }
+    if ($has_mti) {
+        $sth = $pdo->prepare("SELECT COUNT(*) AS cnt FROM material_template_items WHERE material_id = ?");
+        $sth->execute([$mid]); $r = $sth->fetch();
+        if ($r && (int)$r['cnt'] > 0)
+            $kaynaklar[] = ['tip' => 'Şablon', 'alan' => 'material_template_items.material_id', 'sayi' => (int)$r['cnt'], 'ornek_id' => null, 'aciklama' => 'Malzeme şablonunda tanımlanmış.'];
+    }
+    if (empty($kaynaklar))
+        $kaynaklar[] = ['tip' => 'Bilinmiyor', 'alan' => '—', 'sayi' => 0, 'ornek_id' => null, 'aciklama' => 'Kaynak tespit edilemedi. Hareket notlarını kontrol edin.'];
+    $nm['kaynaklar'] = $kaynaklar;
+}
+unset($nm);
+
+$dp_kategori_a = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'A'));
+$dp_kategori_b = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'B'));
+$dp_kategori_d = count(array_filter($neg_malzemeler, fn($n) => ($n['kategori'] ?? '') === 'D'));
+
 // ── G) Pasif tanım hâlâ kullanımda mı? ──────────────────────
 $pasif_kullanim_rows = [];
 if ($has_md && $has_lp) {
@@ -1138,6 +1210,156 @@ tehis_section_open('b8', '8 · Negatif Stok Hareket Detayı', $neg_badge, count(
 .neg-oneri { border-radius:6px;padding:8px 12px;font-size:.84rem;font-weight:600; }
 .neg-oneri-crit { background:#fee2e2;color:#991b1b;border:1px solid #fca5a5; }
 .neg-oneri-warn { background:#fffbeb;color:#92400e;border:1px solid #fde68a; }
+</style>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 9: Negatif Stok Düzeltme Planı
+     ────────────────────────────────────────────────────────── -->
+<?php
+$dp_badge = count($neg_malzemeler) > 0
+    ? '<span class="tehis-badge badge-crit">'.count($neg_malzemeler).' malzeme &nbsp;·&nbsp; '.number_format($dp_toplam_eksik,0).' adet eksik</span>'
+    : '<span class="tehis-badge badge-ok">Yok</span>';
+tehis_section_open('b9', '9 · Negatif Stok Düzeltme Planı', $dp_badge, count($neg_malzemeler) > 0);
+?>
+<p class="tehis-sub">
+    Negatif net stoku olan her malzeme için kategori, önerilen düzeltme miktarı, benzer pozitif tanımlar ve kullanım kaynağı.
+    Sadece okuma — otomatik hareket oluşturulmaz.
+</p>
+<?php if (empty($neg_malzemeler)): ?>
+    <p style="color:#16a34a">✓ Negatif stok bulunamadı.</p>
+<?php else: ?>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px">
+    <div class="tehis-kart crit"><div class="tehis-kart-num"><?= count($neg_malzemeler) ?></div><div class="tehis-kart-lbl">Negatif Malzeme</div></div>
+    <div class="tehis-kart crit"><div class="tehis-kart-num"><?= number_format($dp_toplam_eksik,0) ?></div><div class="tehis-kart-lbl">Toplam Eksik Adet</div></div>
+    <div class="tehis-kart crit"><div class="tehis-kart-num"><?= $dp_kategori_a ?></div><div class="tehis-kart-lbl">Kat A – Eksik Giriş</div></div>
+    <div class="tehis-kart warn"><div class="tehis-kart-num"><?= $dp_kategori_b ?></div><div class="tehis-kart-lbl">Kat B – Eşleştirme</div></div>
+    <div class="tehis-kart" style="background:#faf5ff;border-color:#c4b5fd;color:#6d28d9"><div class="tehis-kart-num"><?= $dp_kategori_d ?></div><div class="tehis-kart-lbl">Kat D – Manuel Karar</div></div>
+</div>
+
+<!-- Özet tablo -->
+<div class="table-wrap" style="margin-bottom:22px">
+<table class="tehis-table">
+    <thead><tr>
+        <th>Malzeme</th><th>Type</th><th>ID</th>
+        <th class="num">Net Kalan</th><th class="num">Öner. Düzeltme</th>
+        <th class="num">Giriş</th><th class="num">Kullanım</th>
+        <th class="num">Kull.Hk.</th><th class="num">Giriş Hk.</th>
+        <th>Benzer Pozitif</th><th>Kull. Kaynağı</th><th>Kategori</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($neg_malzemeler as $nm):
+        $tr_cls  = $nm['kategori'] === 'A' ? 'crit-row' : ($nm['kategori'] === 'D' ? 'dp-row-purple' : 'warn-row');
+        $bdg_cls = $nm['kategori'] === 'A' ? 'badge-crit' : ($nm['kategori'] === 'D' ? 'badge-purple' : 'badge-warn');
+    ?>
+    <tr class="<?= $tr_cls ?>">
+        <td><strong><?= h($nm['mat_name']) ?></strong></td>
+        <td style="font-size:.77rem"><?= h($nm['mat_type']) ?></td>
+        <td><?= (int)$nm['mid'] ?></td>
+        <td class="num neg"><strong><?= number_format($nm['net'],0) ?></strong></td>
+        <td class="num" style="color:#7c3aed;font-weight:700"><?= number_format($nm['eksik_miktar'],0) ?></td>
+        <td class="num <?= $nm['giris'] > 0 ? 'pos' : '' ?>"><?= $nm['giris'] > 0 ? number_format($nm['giris'],0) : '—' ?></td>
+        <td class="num"><?= number_format($nm['kullanim'],0) ?></td>
+        <td class="num"><?= count($nm['kullanim_h']) ?><?= count($nm['hareketler']) >= 500 ? '<sup title="500 limit">+</sup>' : '' ?></td>
+        <td class="num <?= empty($nm['giris_h']) ? 'neg' : '' ?>"><?= count($nm['giris_h']) ?: '0' ?></td>
+        <td>
+            <?php if (!empty($nm['benzer_pozitif'])): ?>
+                <?php foreach (array_slice($nm['benzer_pozitif'],0,2) as $b): ?>
+                <div style="font-size:.72rem"><?= h($b['name']) ?> <span class="pos">(+<?= number_format($b['net'],0) ?>)</span></div>
+                <?php endforeach; ?>
+                <?php if (count($nm['benzer_pozitif'])>2): ?><div style="font-size:.7rem;color:var(--muted)">+<?= count($nm['benzer_pozitif'])-2 ?> daha</div><?php endif; ?>
+            <?php else: ?><em style="font-size:.77rem;color:var(--muted)">Yok</em><?php endif; ?>
+        </td>
+        <td>
+            <?php foreach ($nm['kaynaklar'] as $k): ?>
+                <?php if ($k['tip'] !== 'Bilinmiyor'): ?><span class="tehis-badge badge-info" style="display:inline-block;margin-bottom:2px"><?= h($k['tip']) ?></span><?php endif; ?>
+            <?php endforeach; ?>
+        </td>
+        <td><span class="tehis-badge <?= $bdg_cls ?>"><?= h($nm['kategori']) ?> · <?= h($nm['kategori_metin']) ?></span></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+
+<!-- Per-malzeme detay -->
+<h4 style="margin-bottom:12px;font-size:.88rem;color:var(--muted);font-weight:600">Malzeme Bazlı Düzeltme Detayı</h4>
+<?php foreach ($neg_malzemeler as $nm):
+    $dp_border = $nm['kategori'] === 'A' ? '#dc2626' : ($nm['kategori'] === 'D' ? '#7c3aed' : '#d97706');
+    $dp_bg     = $nm['kategori'] === 'A' ? '#fef2f2' : ($nm['kategori'] === 'D' ? '#faf5ff' : '#fffbeb');
+    $bdg_cls   = $nm['kategori'] === 'A' ? 'badge-crit' : ($nm['kategori'] === 'D' ? 'badge-purple' : 'badge-warn');
+?>
+<details class="dp-detail" style="border-color:<?= $dp_border ?>">
+    <summary class="dp-summary" style="background:<?= $dp_bg ?>">
+        <span style="font-weight:800"><?= h($nm['mat_name']) ?></span>
+        <span class="neg" style="margin-left:8px;font-weight:800"><?= number_format($nm['net'],0) ?></span>
+        <span class="tehis-badge <?= $bdg_cls ?>" style="margin-left:8px"><?= h($nm['kategori']) ?> · <?= h($nm['kategori_metin']) ?></span>
+        <span style="margin-left:10px;font-size:.78rem;color:#7c3aed;font-weight:700">Önerilen: <?= number_format($nm['eksik_miktar'],0) ?> adet</span>
+        <span style="margin-left:auto;font-size:.73rem;color:var(--muted)">ID <?= (int)$nm['mid'] ?> · <?= h($nm['mat_type']) ?> · <?= h($nm['depolar']) ?></span>
+    </summary>
+    <div class="dp-body">
+        <div class="neg-oneri neg-oneri-<?= $nm['kategori_renk'] ?>" style="margin-bottom:12px">
+            <?= $nm['kategori'] === 'A' ? '🔴' : ($nm['kategori'] === 'D' ? '🟣' : '🟡') ?>
+            <strong>Kategori <?= h($nm['kategori']) ?> — <?= h($nm['kategori_metin']) ?>:</strong>
+            <?= h($nm['kategori_aciklama']) ?>
+        </div>
+        <div class="dp-grid">
+            <div>
+                <strong style="font-size:.84rem">Kullanım Kaynağı</strong>
+                <table class="tehis-table" style="margin-top:6px">
+                    <thead><tr><th>Kaynak</th><th>DB Alanı</th><th class="num">Palet Sayısı</th><th>Örnek Yük.</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($nm['kaynaklar'] as $k): ?>
+                    <tr>
+                        <td><?= h($k['tip']) ?></td>
+                        <td style="font-size:.72rem;font-family:monospace"><?= h($k['alan']) ?></td>
+                        <td class="num"><?= $k['sayi'] > 0 ? $k['sayi'] : '—' ?></td>
+                        <td><?php if ($k['ornek_id']): ?><a href="record_view.php?id=<?= (int)$k['ornek_id'] ?>" target="_blank">#<?= (int)$k['ornek_id'] ?></a><?php else: ?>—<?php endif; ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <p style="font-size:.74rem;color:var(--muted);margin-top:4px"><?= h($nm['kaynaklar'][0]['aciklama'] ?? '') ?></p>
+            </div>
+            <div>
+                <strong style="font-size:.84rem">Benzer Pozitif Tanımlar</strong>
+                <?php if (empty($nm['benzer_pozitif'])): ?>
+                <p style="font-size:.81rem;color:var(--muted);margin-top:6px">Benzer isimde pozitif stoklu tanım bulunamadı.</p>
+                <?php else: ?>
+                <table class="tehis-table" style="margin-top:6px">
+                    <thead><tr><th>ID</th><th>İsim</th><th>Type</th><th class="num">Net</th><th>Depo</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($nm['benzer_pozitif'] as $b): ?>
+                    <tr class="warn-row">
+                        <td><?= (int)$b['id'] ?></td>
+                        <td><?= h($b['name']) ?></td>
+                        <td style="font-size:.74rem"><?= h($b['type']) ?></td>
+                        <td class="num pos"><?= number_format($b['net'],0) ?></td>
+                        <td style="font-size:.72rem"><?= h($b['depolar']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</details>
+<?php endforeach; ?>
+
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<style>
+.dp-detail { border:1.5px solid;border-radius:8px;margin-bottom:12px;overflow:hidden; }
+.dp-summary { display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 14px;cursor:pointer;user-select:none;list-style:none; }
+.dp-summary::-webkit-details-marker { display:none; }
+.dp-body { padding:14px;border-top:1px solid rgba(0,0,0,.08); }
+.dp-grid { display:grid;grid-template-columns:1fr 1fr;gap:14px; }
+.badge-purple { background:#f3e8ff;color:#6d28d9; }
+.dp-row-purple td { background:#faf5ff !important; }
+.neg-oneri-purple { background:#faf5ff;color:#6d28d9;border:1px solid #c4b5fd; }
+@media(max-width:767px){ .dp-grid { grid-template-columns:1fr; } }
 </style>
 
 <!-- Altbilgi -->
