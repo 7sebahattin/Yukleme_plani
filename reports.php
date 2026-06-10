@@ -27,6 +27,8 @@ $f_sort    = trim($_GET['sort']      ?? 'tarih');
 $f_palet_islendi  = trim($_GET['palet_islendi']  ?? '');
 $f_kantar_firma   = isset($_GET['kantar_firma']) ? trim($_GET['kantar_firma']) : 'Asya Fresh';
 $f_urun_sahibi    = trim($_GET['urun_sahibi']   ?? '');
+$f_casus          = trim($_GET['casus']          ?? '');
+if (!in_array($f_casus, ['dolu','bos'], true)) $f_casus = '';
 
 $valid_types = ['yukleme','cikma','depo','urun','firma','malzeme','kantar','gunluk'];
 if ($type !== '' && !in_array($type, $valid_types, true)) { $type = ''; }
@@ -165,6 +167,8 @@ if ($type === 'yukleme' || $type === 'cikma') {
             if ($f_cikma_rapor === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL"; }
         }
     }
+    if ($f_casus === 'dolu') { $sql .= " AND r.casus_no != '' AND r.casus_no IS NOT NULL"; }
+    if ($f_casus === 'bos')  { $sql .= " AND (r.casus_no IS NULL OR r.casus_no = '')"; }
     if ($f_q     !== '') {
         $sql .= " AND (r.firma LIKE :q OR r.parti_no LIKE :q OR r.alici LIKE :q OR r.urun LIKE :q)";
         $p[':q'] = '%'.$f_q.'%';
@@ -854,6 +858,7 @@ $csv_params = array_filter([
     'sort'           => ($f_sort !== 'tarih') ? $f_sort : '',
     'palet_islendi'  => ($type !== 'cikma') ? $f_palet_islendi : '',
     'urun_sahibi'    => ($type === 'yukleme') ? $f_urun_sahibi : '',
+    'casus'          => ($type === 'yukleme') ? $f_casus : '',
 ]);
 $csv_url = 'reports.php?' . http_build_query($csv_params);
 $csv_summary_params = $csv_params;
@@ -1551,6 +1556,13 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
             </select>
         </label>
         <?php endif; ?>
+        <label>Casus No
+            <select name="casus">
+                <option value=""    <?= $f_casus===''    ? 'selected':'' ?>>Tümü</option>
+                <option value="dolu" <?= $f_casus==='dolu' ? 'selected':'' ?>>Yazılı</option>
+                <option value="bos"  <?= $f_casus==='bos'  ? 'selected':'' ?>>Boş</option>
+            </select>
+        </label>
     </div>
     <?php elseif ($type === 'cikma'): ?>
     <div class="rpt-filter-group">
