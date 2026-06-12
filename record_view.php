@@ -707,8 +707,12 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                     <?php endif; ?>
                     <div class="etiket-actions no-print">
                         <label class="etiket-upload-btn">
-                            📷 Fotoğraf Ekle
-                            <input type="file" id="etiketInput" accept="image/*" style="display:none">
+                            📷 Kamera
+                            <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
+                        </label>
+                        <label class="etiket-upload-btn">
+                            🖼️ Galeri
+                            <input type="file" id="etiketGaleri" accept="image/*" style="display:none">
                         </label>
                         <button id="etiketClear" class="etiket-clear-btn"<?= $_etiket_foto !== '' ? '' : ' style="display:none"' ?>>✕ Kaldır</button>
                     </div>
@@ -1777,15 +1781,18 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
     });
     if (btnNo) btnNo.addEventListener('click', closeCrop);
 
-    /* Dosya seçilince crop aç */
-    if (inp) inp.addEventListener('change', function () {
+    /* Dosya seçilince crop aç (kamera veya galeri) */
+    function onFileChange() {
         var file = this.files[0];
         if (!file) return;
         var rd = new FileReader();
         rd.onload = function (ev) { openCrop(ev.target.result); };
         rd.readAsDataURL(file);
         this.value = ''; /* tekrar aynı dosya seçilebilsin */
-    });
+    }
+    if (inp) inp.addEventListener('change', onFileChange);
+    var galeri = document.getElementById('etiketGaleri');
+    if (galeri) galeri.addEventListener('change', onFileChange);
 })();
 </script>
 
