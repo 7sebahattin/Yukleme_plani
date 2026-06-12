@@ -6,6 +6,13 @@
     'use strict';
 
     /* ── Türkçe büyük harf — data-uppercase="tr" ── */
+    // Sayfa yüklenince mevcut değerleri dönüştür (DB'den gelen eski title-case değerler için)
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-uppercase="tr"]').forEach(function(el) {
+            if (el.value) el.value = el.value.toLocaleUpperCase('tr-TR');
+        });
+    });
+    // Kullanıcı yazarken anlık dönüştür
     document.addEventListener('input', function(e) {
         const el = e.target;
         if (!el || !el.matches('[data-uppercase="tr"]')) return;
