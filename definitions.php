@@ -71,14 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         if ($action === 'create') {
             $type = (string)($_POST['type'] ?? '');
-            $name = normalize_text_v2((string)($_POST['name'] ?? ''));
+            $name = tr_upper((string)($_POST['name'] ?? ''));
             // Sprint 36: dara yalnız kasa/palet; sarf tiplerinde her zaman 0
             $unit = def_has_dara($type) ? num($_POST['unit_dara_kg'] ?? 0) : 0;
             if (!isset($type_labels[$type]) || $name === '') throw new RuntimeException('Tür ve isim zorunlu.');
             $existing = db()->prepare("SELECT name FROM material_definitions WHERE type = ?");
             $existing->execute([$type]);
             foreach ($existing->fetchAll(PDO::FETCH_COLUMN) as $n) {
-                if (normalize_text_v2($n) === $name) {
+                if (tr_upper($n) === $name) {
                     throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
                 }
             }
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } elseif ($action === 'update') {
             $id        = (int)($_POST['id'] ?? 0);
-            $name      = normalize_text_v2((string)($_POST['name'] ?? ''));
+            $name      = tr_upper((string)($_POST['name'] ?? ''));
             $is_active = !empty($_POST['is_active']) ? 1 : 0;
             if ($id <= 0 || $name === '') throw new RuntimeException('Geçersiz veri.');
             $row = db()->prepare("SELECT type FROM material_definitions WHERE id = ?");
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $others = db()->prepare("SELECT name FROM material_definitions WHERE type = ? AND id != ?");
                 $others->execute([$type, $id]);
                 foreach ($others->fetchAll(PDO::FETCH_COLUMN) as $n) {
-                    if (normalize_text_v2($n) === $name) {
+                    if (tr_upper($n) === $name) {
                         throw new RuntimeException('Bu türde aynı isimde başka bir tanım zaten var.');
                     }
                 }

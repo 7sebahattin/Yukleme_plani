@@ -5,6 +5,16 @@
 (function () {
     'use strict';
 
+    /* ── Türkçe büyük harf — data-uppercase="tr" ── */
+    document.addEventListener('input', function(e) {
+        const el = e.target;
+        if (!el || !el.matches('[data-uppercase="tr"]')) return;
+        const start = el.selectionStart;
+        const end   = el.selectionEnd;
+        el.value = el.value.toLocaleUpperCase('tr-TR');
+        try { el.setSelectionRange(start, end); } catch (_) {}
+    });
+
     /* ── Açılır/kapanır kart bölümleri ── */
     document.querySelectorAll('.collapsible-card').forEach(card => {
         const head = card.querySelector('.card-head-toggle');
