@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/material_stock_helpers.php';
 $auth_user = require_login();
 require_perm('stok.read');
 
@@ -65,33 +66,10 @@ function audit_tbl_ms(string $t): bool {
     catch (PDOException $e) { return false; }
 }
 
-// Material types tracked in this module (all except firma/depo/bolge/urun)
-function ms_material_types(): array {
-    $skip = ['firma', 'depo', 'bolge', 'urun'];
-    return array_filter(definition_types(), fn($k) => !in_array($k, $skip), ARRAY_FILTER_USE_KEY);
-}
-
-$ms_types = ms_material_types();
-$ms_units = ['adet', 'kg', 'm', 'm²', 'paket', 'rulo', 'top', 'çift', 'set'];
-
-// ── Stok kategorileri (Kasa / Palet / Sarf / Diğer) ───────
-$ms_cat_labels = ['kasa' => 'Kasa', 'palet' => 'Palet', 'sarf' => 'Sarf', 'diger' => 'Diğer'];
-// Stok özetine dahil edilen tür grupları (firma/depo/bölge/ürün/lokasyon hariç)
-$ms_excluded_types = ['firma', 'depo', 'bolge', 'urun', 'lokasyon'];
-$ms_summary_types  = array_values(array_diff(array_keys($ms_types), $ms_excluded_types));
-
-// type → kategori eşlemesi
-function ms_cat_of(string $type): string {
-    static $map = [
-        'kasa_cinsi'    => 'kasa',
-        'palet_tipi'    => 'palet',
-        'sapka'         => 'sarf', 'kosebent' => 'sarf', 'serit' => 'sarf',
-        'kraft_kagit'   => 'sarf', 'taban_kagidi' => 'sarf', 'kose_karton' => 'sarf',
-        'kenar_kartonu' => 'sarf', 'casus' => 'sarf', 'kasa_etiketi' => 'sarf',
-        'minti'         => 'sarf', 'sale' => 'sarf', 'viyol' => 'sarf', 'file' => 'sarf',
-    ];
-    return $map[$type] ?? 'diger';
-}
+// Tür/birim/kategori sabitleri config/material_stock_helpers.php'den gelir
+$ms_types      = ms_material_types();
+$ms_units      = ms_stock_units();
+$ms_cat_labels = ms_cat_labels();
 
 // ── POST: Giriş / Sevk kaydet ─────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
@@ -126,13 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     if ($err !== '') {
         set_flash('error', $err);
     } else {
-        $_def_st = $pdo->prepare("SELECT id, name, unit_dara_kg FROM material_definitions WHERE type=?");
-        $_def_st->execute([$mv_mat_type]);
-        $_def_needle = normalize_text_v2($mv_mat_name);
-        $mat_row = null;
-        foreach ($_def_st->fetchAll() as $_def_r) {
-            if (normalize_text_v2($_def_r['name']) === $_def_needle) { $mat_row = $_def_r; break; }
-        }
+        $mat_row   = ms_find_material_definition($pdo, $mv_mat_type, $mv_mat_name);
         $mat_id    = $mat_row ? (int)$mat_row['id'] : null;
         $unit_dara = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
         $total_dara = round($mv_qty * $unit_dara, 3);
@@ -200,13 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
     if ($err !== '') {
         set_flash('error', $err);
     } else {
-        $_def_st = $pdo->prepare("SELECT id, name, unit_dara_kg FROM material_definitions WHERE type=?");
-        $_def_st->execute([$dz_mat_type]);
-        $_def_needle = normalize_text_v2($dz_mat_name);
-        $mat_row = null;
-        foreach ($_def_st->fetchAll() as $_def_r) {
-            if (normalize_text_v2($_def_r['name']) === $_def_needle) { $mat_row = $_def_r; break; }
-        }
+        $mat_row   = ms_find_material_definition($pdo, $dz_mat_type, $dz_mat_name);
         $mat_id    = $mat_row ? (int)$mat_row['id'] : null;
         $unit_dara = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
 
@@ -240,56 +206,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
     exit;
 }
 
-// ── POST: Referans Düzeltme (mevcut harekete bağlı) ───────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme') {
-    csrf_check($_POST['csrf'] ?? null);
-    require_perm('stok.write');
-
-    $dz_id   = (int)($_POST['dz_id']  ?? 0);
-    $dz_qty  = num($_POST['dz_qty']   ?? '0');
-    $dz_note = trim($_POST['dz_note'] ?? '');
-
-    if ($dz_id <= 0) {
-        set_flash('error', 'Geçersiz kayıt.');
-    } elseif ($dz_qty == 0.0) {
-        set_flash('error', 'Düzeltme miktarı sıfır olamaz.');
-    } else {
-        $base = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
-        $base->execute([$dz_id]);
-        $base = $base->fetch();
-        if (!$base) {
-            set_flash('error', 'Kayıt bulunamadı.');
-        } elseif (trim((string)($base['depo'] ?? '')) === '') {
-            set_flash('error', 'Depo seçimi zorunludur.');
-        } else {
-            $pdo->prepare(
-                "INSERT INTO material_stock_movements
-                 (movement_date, movement_type, material_id, material_name, material_type,
-                  depo, quantity, unit, source_type, source_id, nota)
-                 VALUES (CURDATE(),'duzeltme',?,?,?,?,?,?,'duzeltme',?,?)"
-            )->execute([
-                $base['material_id'], $base['material_name'], $base['material_type'],
-                $base['depo'], $dz_qty, $base['unit'], $dz_id, $dz_note ?: null,
-            ]);
-            $ref_inserted_id = (int)$pdo->lastInsertId();
-            audit_log_event('create', 'malzeme_stok', $ref_inserted_id, null, [
-                'movement_type' => 'duzeltme',
-                'ref_id'        => $dz_id,
-                'material_name' => $base['material_name'],
-                'material_type' => $base['material_type'],
-                'depo'          => $base['depo'],
-                'quantity'      => $dz_qty,
-                'unit'          => $base['unit'],
-                'note'          => $dz_note,
-            ]);
-            set_flash('success', 'Düzeltme kaydedildi: ' . ($dz_qty > 0 ? '+' : '') . fmt_kg($dz_qty) . ' ' . $base['unit']);
-        }
-    }
-    header('Location: malzeme_stok.php');
-    exit;
-}
+// NOT (Pro-00): 'ms_duzeltme' (referanslı düzeltme) handler'ı kaldırıldı —
+// hiçbir form bu action'ı göndermiyordu ve INSERT şemada olmayan `nota`
+// kolonuna yazdığı için çalıştırılamazdı. Harekete bağlı düzeltme/iptal
+// akışı Pro-04'te admin-only ekran olarak yeniden tasarlanacak.
 
 // ── POST: Hareket Düzenle ─────────────────────────────────
+// TODO Pro-04: Miktar/malzeme/tarih update yerine "iptal + yeni hareket"
+// standardına geçilecek (geçmiş hareketler değişmez kayıt olacak).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_update') {
     csrf_check($_POST['csrf'] ?? null);
     require_perm('stok.write');
@@ -349,13 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_up
         }
 
         // Malzeme tanımını yeni tür/ad üzerinden yeniden eşle (dara hesabı için)
-        $_def_st = $pdo->prepare("SELECT id, name, unit_dara_kg FROM material_definitions WHERE type=?");
-        $_def_st->execute([$up_mat_type]);
-        $_def_needle = normalize_text_v2($up_mat_name);
-        $mat_row = null;
-        foreach ($_def_st->fetchAll() as $_def_r) {
-            if (normalize_text_v2($_def_r['name']) === $_def_needle) { $mat_row = $_def_r; break; }
-        }
+        $mat_row    = ms_find_material_definition($pdo, $up_mat_type, $up_mat_name);
         $mat_id     = $mat_row ? (int)$mat_row['id'] : null;
         $unit_dara  = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
         $total_dara = round($up_qty * $unit_dara, 3);
@@ -404,6 +322,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_up
 }
 
 // ── POST: Sil ─────────────────────────────────────────────
+// TODO Pro-04: Hard delete yerine admin-only void/ters kayıt sistemine
+// geçilecek (hareketler kalıcı silinmeyecek, iz bırakarak iptal edilecek).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_delete') {
     csrf_check($_POST['csrf'] ?? null);
     require_perm('stok.write');
@@ -447,204 +367,39 @@ $f_ozet_tur     = trim($_GET['ozet_tur']     ?? '');
 $f_ozet_malzeme = trim($_GET['ozet_malzeme'] ?? '');
 $f_ozet_depo    = trim($_GET['ozet_depo']    ?? '');
 
-// ── WHERE builder — özet sorgusu (hareket tipi hariç) ─────
-$where = []; $params = [];
-if ($f_tarih_bas !== '') { $where[] = "movement_date >= ?"; $params[] = $f_tarih_bas; }
-if ($f_tarih_bit !== '') { $where[] = "movement_date <= ?"; $params[] = $f_tarih_bit; }
-// ID bazlı filtre: isim değişse bile geçmiş tüm hareketleri yakalar.
-// mat_id verildiyse mat_type/mat_name filtreleri yok sayılır (anlamsız çelişki olmasın).
-if ($f_mat_id > 0) {
-    $where[] = "material_id = ?"; $params[] = $f_mat_id;
-} else {
-    if ($f_mat_type  !== '') { $where[] = "material_type = ?";  $params[] = $f_mat_type; }
-    if ($f_mat_name  !== '') { $where[] = "material_name LIKE ?"; $params[] = '%' . $f_mat_name . '%'; }
-}
-if ($f_depo      !== '') { $where[] = "depo LIKE ?";          $params[] = '%' . $f_depo . '%'; }
-$where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+// ── Stok özeti — config/material_stock_helpers.php ────────
+// KÖK BUGFIX helper içinde korunur: gruplama material_id bazlıdır;
+// material_name yalnızca material_id NULL hareketlerde grup anahtarıdır.
+$ozet_rows = get_material_stock_summary($pdo, [
+    'tarih_bas'     => $f_tarih_bas,
+    'tarih_bit'     => $f_tarih_bit,
+    'ozet_kategori' => $f_ozet_kategori,
+    'ozet_tur'      => $f_ozet_tur,
+    'ozet_malzeme'  => $f_ozet_malzeme,
+    'ozet_depo'     => $f_ozet_depo,
+]);
 
-// WHERE builder — hareket listesi (+ hareket tipi filtresi)
-$where_mv = $where; $params_mv = $params;
-if ($f_hareket_tipi !== '') { $where_mv[] = "movement_type = ?"; $params_mv[] = $f_hareket_tipi; }
-$where_mv_sql = $where_mv ? 'WHERE ' . implode(' AND ', $where_mv) : '';
-
-// ── Stok özeti ─────────────────────────────────────────────
-// Ana kaynak: material_definitions. Hareketler material_id ile eşlenir (LEFT JOIN
-// mantığı PHP tarafında). Böylece tanımlı ama hareketsiz malzeme 0, girişi olmayan
-// ama kullanımı olan malzeme negatif görünür. Tarih filtresi hareket toplamını sınırlar.
-$ozet_rows = [];
-try {
-    // 1) Hareket toplamları — material_id + depo + birim kırılımında (tarih bazlı)
-    $agg_where = []; $agg_params = [];
-    if ($f_tarih_bas !== '') { $agg_where[] = "movement_date >= ?"; $agg_params[] = $f_tarih_bas; }
-    if ($f_tarih_bit !== '') { $agg_where[] = "movement_date <= ?"; $agg_params[] = $f_tarih_bit; }
-    $agg_where_sql = $agg_where ? 'WHERE ' . implode(' AND ', $agg_where) : '';
-
-    // KÖK BUGFIX: gruplama material_id bazlı yapılır. Eskiden material_name de
-    // GROUP BY içindeydi; tanım ismi değişince eski/yeni isimli hareketler aynı
-    // material_id'de olsa bile ayrı satıra bölünüyor, +giriş bir satırda,
-    // -kullanım başka satırda görünüyordu. Artık isim yalnızca material_id NULL
-    // hareketlerde grup anahtarıdır; tanımlı hareketler tek material_id altında
-    // toplanır. Görünen isim zaten material_definitions'tan (güncel) çözülüyor.
-    $agg_st = $pdo->prepare("
-        SELECT material_id,
-            MAX(material_type) AS material_type,
-            MAX(material_name) AS material_name,
-            depo, unit,
-            SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS total_giris,
-            SUM(CASE WHEN movement_type='sevk'     THEN quantity ELSE 0 END) AS total_sevk,
-            SUM(CASE WHEN movement_type='kullanim' THEN quantity ELSE 0 END) AS total_kullanim,
-            SUM(CASE WHEN movement_type='duzeltme' THEN quantity ELSE 0 END) AS total_duzeltme,
-            SUM(CASE WHEN movement_type='giris' THEN quantity
-                     WHEN movement_type IN ('sevk','kullanim') THEN -quantity
-                     WHEN movement_type='duzeltme' THEN quantity
-                     ELSE 0 END) AS kalan
-        FROM material_stock_movements
-        $agg_where_sql
-        GROUP BY material_id, depo, unit,
-            (CASE WHEN material_id IS NULL THEN material_name ELSE NULL END),
-            (CASE WHEN material_id IS NULL THEN material_type ELSE NULL END)
-    ");
-    $agg_st->execute($agg_params);
-    $agg_rows = $agg_st->fetchAll();
-
-    // material_id → hareket toplamları (bir malzemenin birden çok depo/birim satırı olabilir)
-    $agg_by_id = [];
-    foreach ($agg_rows as $a) {
-        $mid = ($a['material_id'] === null || $a['material_id'] === '') ? null : (int)$a['material_id'];
-        if ($mid !== null) $agg_by_id[$mid][] = $a;
-    }
-
-    // 2) Dahil edilecek tanımlar (stok türleri)
-    $def_rows = [];
-    if (!empty($ms_summary_types)) {
-        $place  = implode(',', array_fill(0, count($ms_summary_types), '?'));
-        $def_st = $pdo->prepare("SELECT id, type, name, is_active FROM material_definitions WHERE type IN ($place) ORDER BY type, name");
-        $def_st->execute($ms_summary_types);
-        $def_rows = $def_st->fetchAll();
-    }
-
-    // satır kurucu (kart/negatif tablo ile uyumlu anahtarlar)
-    $mk_row = function (string $cat, string $type, string $name, $depo, $unit, array $a, int $is_active, ?int $mid): array {
-        $giris = (float)($a['total_giris'] ?? 0);
-        $sevk  = (float)($a['total_sevk'] ?? 0);
-        $kull  = (float)($a['total_kullanim'] ?? 0);
-        return [
-            'category'       => $cat,
-            'material_id'    => $mid,
-            'material_type'  => $type,
-            'material_name'  => $name,
-            'depo'           => (string)($depo ?? ''),
-            'unit'           => (string)($unit ?: 'adet'),
-            'total_giris'    => $giris,
-            'total_sevk'     => $sevk,
-            'total_kullanim' => $kull,
-            'total_cikis'    => $sevk + $kull,
-            'total_duzeltme' => (float)($a['total_duzeltme'] ?? 0),
-            'kalan'          => (float)($a['kalan'] ?? 0),
-            'is_active'      => $is_active,
-        ];
-    };
-
-    // 3) Tanım merkezli satırlar
-    $seen_ids = [];
-    foreach ($def_rows as $d) {
-        $did = (int)$d['id'];
-        $cat = ms_cat_of($d['type']);
-        $act = (int)$d['is_active'];
-        if (!empty($agg_by_id[$did])) {
-            foreach ($agg_by_id[$did] as $a) {
-                $ozet_rows[] = $mk_row($cat, $d['type'], $d['name'], $a['depo'], $a['unit'], $a, $act, $did);
-            }
-            $seen_ids[$did] = true;
-        } elseif ($act === 1) {
-            // hareketsiz aktif tanım → kalan 0; pasif + hareketsiz → atla
-            $ozet_rows[] = $mk_row($cat, $d['type'], $d['name'], '', 'adet', [], $act, $did);
-        }
-    }
-
-    // 4) Tanıma bağlanmayan hareketler (material_id NULL ya da dışlanan/silinen tanım)
-    foreach ($agg_rows as $a) {
-        $mid = ($a['material_id'] === null || $a['material_id'] === '') ? null : (int)$a['material_id'];
-        if ($mid !== null && isset($seen_ids[$mid])) continue;            // tanım altında gösterildi
-        $atype = (string)($a['material_type'] ?? '');
-        if (in_array($atype, $ms_excluded_types, true)) continue;         // firma/depo/ürün vb. atla
-        $ozet_rows[] = $mk_row(ms_cat_of($atype), $atype, (string)$a['material_name'], $a['depo'], $a['unit'], $a, 1, $mid);
-    }
-
-    // 5) ozet_* filtreleri (PHP tarafı)
-    if ($f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '') {
-        $ozet_rows = array_values(array_filter($ozet_rows, function ($r) use ($f_ozet_kategori, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo) {
-            if ($f_ozet_kategori !== '' && $r['category'] !== $f_ozet_kategori) return false;
-            if ($f_ozet_tur      !== '' && $r['material_type'] !== $f_ozet_tur) return false;
-            if ($f_ozet_malzeme  !== '' && mb_stripos($r['material_name'], $f_ozet_malzeme) === false) return false;
-            if ($f_ozet_depo     !== '' && $r['depo'] !== $f_ozet_depo) return false;
-            return true;
-        }));
-    }
-
-    // 6) Sırala: kategori, tür, malzeme, depo
-    usort($ozet_rows, fn($x, $y) =>
-        [$x['category'], $x['material_type'], $x['material_name'], $x['depo']]
-        <=> [$y['category'], $y['material_type'], $y['material_name'], $y['depo']]
-    );
-} catch (PDOException $e) {}
-
-// Negatif stok satırları (uyarı için)
-$negatif_ozet = array_slice(
-    array_values(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] < 0)),
-    0, 10
-);
+// Negatif stok satırları (uyarı bandı için ilk 10)
+$negatif_ozet = array_slice(get_negative_materials($ozet_rows), 0, 10);
 
 // ── Hareket listesi ───────────────────────────────────────
-$hareket_rows = [];
-try {
-    $st = $pdo->prepare("
-        SELECT id, movement_date, movement_type, material_type, material_name,
-               depo, quantity, unit, source_type, source_id,
-               belge_no, firma, note
-        FROM material_stock_movements
-        $where_mv_sql
-        ORDER BY movement_date DESC, id DESC
-        LIMIT 2000
-    ");
-    $st->execute($params_mv);
-    $hareket_rows = $st->fetchAll();
-} catch (PDOException $e) {}
+$hareket_rows = get_material_movements($pdo, [
+    'tarih_bas'    => $f_tarih_bas,
+    'tarih_bit'    => $f_tarih_bit,
+    'mat_id'       => $f_mat_id,
+    'mat_type'     => $f_mat_type,
+    'mat_name'     => $f_mat_name,
+    'depo'         => $f_depo,
+    'hareket_tipi' => $f_hareket_tipi,
+], 2000);
 
 $hareket_total = count($hareket_rows);
 
 // ── Dropdown listeleri ────────────────────────────────────
-$depo_list = [];
-try {
-    $depo_list = $pdo->query(
-        "SELECT name FROM material_definitions WHERE type='depo' AND is_active=1 ORDER BY name"
-    )->fetchAll(PDO::FETCH_COLUMN);
-} catch (PDOException $e) {}
-
-$mat_names_by_type = [];
-try {
-    foreach ($pdo->query("SELECT type, name FROM material_definitions WHERE is_active=1 ORDER BY type, name")->fetchAll() as $d) {
-        if (isset($ms_types[$d['type']])) {
-            $mat_names_by_type[$d['type']][] = $d['name'];
-        }
-    }
-} catch (PDOException $e) {}
-
-// Also collect names from existing movements (for datalist completeness)
-try {
-    $existing = $pdo->query("SELECT DISTINCT material_type, material_name FROM material_stock_movements WHERE material_name != '' ORDER BY material_type, material_name")->fetchAll();
-    foreach ($existing as $e) {
-        if (!isset($mat_names_by_type[$e['material_type']])) $mat_names_by_type[$e['material_type']] = [];
-        if (!in_array($e['material_name'], $mat_names_by_type[$e['material_type']], true)) {
-            $mat_names_by_type[$e['material_type']][] = $e['material_name'];
-        }
-    }
-} catch (PDOException $e2) {}
-
-$firma_list = [];
-try {
-    $firma_list = $pdo->query("SELECT name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-} catch (PDOException $e) {}
+$ms_dd             = get_material_dropdown_data($pdo);
+$depo_list         = $ms_dd['depo_list'];
+$mat_names_by_type = $ms_dd['mat_names_by_type'];
+$firma_list        = $ms_dd['firma_list'];
 
 $herhangi_filtre = $f_tarih_bas !== '' || $f_tarih_bit !== '' || $f_mat_id > 0 || $f_mat_type !== '' || $f_mat_name !== '' || $f_depo !== '' || $f_hareket_tipi !== '';
 $ozet_filtre_aktif = $f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '';
@@ -844,10 +599,11 @@ render_flash();
 <?php
 
 // Precompute summary totals for top cards
-$toplam_giris    = array_sum(array_column($ozet_rows, 'total_giris'));
-$toplam_cikis    = array_sum(array_column($ozet_rows, 'total_cikis'));
-$mat_kalan_count = count(array_filter($ozet_rows, fn($r) => (float)$r['kalan'] > 0));
-$mat_dusuk_count = count($negatif_ozet);
+$ms_totals       = get_material_stock_totals($pdo, $ozet_rows);
+$toplam_giris    = $ms_totals['toplam_giris'];
+$toplam_cikis    = $ms_totals['toplam_cikis'];
+$mat_kalan_count = $ms_totals['stokta_count'];
+$mat_dusuk_count = count($negatif_ozet); // mevcut davranış: kart, uyarı bandındaki (max 10) satır sayısını gösterir
 ?>
 
 <div class="page-head">
