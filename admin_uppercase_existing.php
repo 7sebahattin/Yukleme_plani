@@ -10,14 +10,6 @@ require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 if (!is_admin()) forbidden('Bu sayfaya yalnızca yönetici erişebilir.');
 
-// Güncellenmeyecek kolonlar — kesinlikle dokunulmuyor
-const UC_EXCLUDED = [
-    'password', 'password_hash', 'token', 'remember_token', 'csrf',
-    'email', 'phone', 'telefon', 'url', 'raw_text', 'unmatched_text',
-    'analysis_note', 'revision_reason', 'note', 'nota', 'description',
-    'aciklama', 'snapshot_json', 'created_at', 'updated_at', 'id',
-];
-
 // Tablo / kolon whitelist
 $WHITELIST = [
     'loading_records' => [
