@@ -34,37 +34,10 @@ function ms_url(array $override = [], array $drop = []): string {
     return 'malzeme_stok.php' . (($q = array_filter($base, fn($v) => $v !== '')) ? '?' . http_build_query($q) : '');
 }
 
-// ── Audit özet ───────────────────────────────────────────
-function ms_audit_counts(PDO $pdo): array {
-    $r = ['orphan' => 0, 'dup_exact' => 0, 'dup_norm' => 0, 'total' => 0];
-    try {
-        if (audit_tbl_ms('material_stock_movements') && audit_tbl_ms('loading_records')) {
-            $r['orphan'] = (int)$pdo->query("SELECT COUNT(*) FROM material_stock_movements m
-                WHERE m.source_type='loading' AND m.source_id IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM loading_records r WHERE r.id=m.source_id)"
-            )->fetchColumn();
-        }
-        if (audit_tbl_ms('material_definitions')) {
-            $r['dup_exact'] = (int)$pdo->query("SELECT COUNT(*) FROM (
-                SELECT 1 FROM material_definitions GROUP BY type, name HAVING COUNT(*) > 1
-            ) x")->fetchColumn();
-            // normalize_text_v2 tabanlı duplicate kontrolü — LOWER kullanmıyor
-            $defs = $pdo->query("SELECT type, name FROM material_definitions")->fetchAll();
-            $norm_groups = [];
-            foreach ($defs as $_d) {
-                $key = $_d['type'] . '::' . normalize_text_v2($_d['name']);
-                $norm_groups[$key] = ($norm_groups[$key] ?? 0) + 1;
-            }
-            $r['dup_norm'] = count(array_filter($norm_groups, fn($c) => $c > 1));
-        }
-        $r['total'] = $r['orphan'] + $r['dup_exact'] + $r['dup_norm'];
-    } catch (PDOException $e) {}
-    return $r;
-}
-function audit_tbl_ms(string $t): bool {
-    try { db()->query("SELECT 1 FROM `$t` LIMIT 0"); return true; }
-    catch (PDOException $e) { return false; }
-}
+// NOT (Pro-06): Teknik teşhis/audit panelleri ve onları besleyen sorgular
+// (ms_audit_counts, audit_tbl_ms, veri kalite + sistem audit) bu sayfadan
+// kaldırıldı. Tümü admin-only malzeme_stok_tehis.php sayfasında toplandı.
+// Bu sayfa artık yalnızca günlük stok ekranı olarak çalışır.
 
 // Tür/birim/kategori sabitleri config/material_stock_helpers.php'den gelir
 $ms_types      = ms_material_types();
@@ -467,111 +440,10 @@ $hareket_total_pages = max(1, (int)ceil($hareket_total / $hareket_per_page));
 $hareket_page        = min($hareket_page, $hareket_total_pages);
 $hareket_page_rows   = array_slice($hareket_rows, ($hareket_page - 1) * $hareket_per_page, $hareket_per_page);
 
-// ── Audit detay sorguları ──────────────────────────────────
-$_ms_audit_details = [];
-$_ms_audit_check_defs = [
-    ['label'  => 'Malzeme tanımı eşleşmemiş',
-     'detail' => 'material_id boş; dara hesabı çalışmıyor.',
-     'cnt_sql' => "SELECT COUNT(*) FROM material_stock_movements WHERE material_id IS NULL",
-     'row_sql' => "SELECT id, movement_date, material_name, movement_type, depo, quantity, unit FROM material_stock_movements WHERE material_id IS NULL ORDER BY id DESC LIMIT 5"],
-    ['label'  => 'Depo boş hareket',
-     'detail' => 'Depo filtresi bu kayıtları atlar.',
-     'cnt_sql' => "SELECT COUNT(*) FROM material_stock_movements WHERE (depo = '' OR depo IS NULL) AND movement_type NOT IN ('kullanim')",
-     'row_sql' => "SELECT id, movement_date, material_name, movement_type, depo, quantity, unit FROM material_stock_movements WHERE (depo = '' OR depo IS NULL) AND movement_type NOT IN ('kullanim') ORDER BY id DESC LIMIT 5"],
-    ['label'  => 'Miktar sıfır veya negatif',
-     'detail' => 'Stok hesabını bozabilir.',
-     'cnt_sql' => "SELECT COUNT(*) FROM material_stock_movements WHERE quantity <= 0",
-     'row_sql' => "SELECT id, movement_date, material_name, movement_type, depo, quantity, unit FROM material_stock_movements WHERE quantity <= 0 ORDER BY id DESC LIMIT 5"],
-];
-foreach ($_ms_audit_check_defs as $_acd) {
-    try {
-        $_cnt  = (int)$pdo->query($_acd['cnt_sql'])->fetchColumn();
-        $_rows = $_cnt > 0 ? $pdo->query($_acd['row_sql'])->fetchAll() : [];
-    } catch (PDOException $_ace) { $_cnt = 0; $_rows = []; }
-    $_ms_audit_details[] = ['label' => $_acd['label'], 'detail' => $_acd['detail'], 'cnt' => $_cnt, 'rows' => $_rows];
-}
-
-// ── Sprint 33D: Veri Kalite Kontrolü ──────────────────────
-// Yalnızca tespit/raporlama; otomatik düzeltme veya backfill yok.
-function ms_kalite_check(PDO $pdo, string $key, string $label, string $desc, string $cnt_sql, string $row_sql): array {
-    try {
-        $cnt  = (int)$pdo->query($cnt_sql)->fetchColumn();
-        $rows = $cnt > 0 ? $pdo->query($row_sql)->fetchAll() : [];
-    } catch (PDOException $e) { $cnt = 0; $rows = []; }
-    return ['key' => $key, 'label' => $label, 'desc' => $desc, 'cnt' => $cnt, 'rows' => $rows];
-}
-
-$ms_kalite = [];
-
-// 1) Kasa adedi var ama kasa tipi boş → stoktan düşemez
-$ms_kalite[] = ms_kalite_check($pdo, 'kasa_tipsiz',
-    'Kasa tipi seçilmemiş paletler',
-    'Kasa adedi girilmiş ama kasa tipi seçilmemiş — bu kasalar stoktan düşemez.',
-    "SELECT COUNT(*) FROM loading_pallets WHERE kasa_adeti > 0 AND (kasa_cinsi_id IS NULL OR kasa_cinsi_id = 0)",
-    "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
-       FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
-      WHERE lp.kasa_adeti > 0 AND (lp.kasa_cinsi_id IS NULL OR lp.kasa_cinsi_id = 0)
-      ORDER BY lp.id DESC LIMIT 10");
-
-// 2) Palet tipi boş
-$ms_kalite[] = ms_kalite_check($pdo, 'palet_tipsiz',
-    'Palet tipi seçilmemiş paletler',
-    'Palet tipi seçilmemiş — palet stoğu bu satırlardan düşemez.',
-    "SELECT COUNT(*) FROM loading_pallets WHERE (palet_tipi_id IS NULL OR palet_tipi_id = 0)",
-    "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
-       FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
-      WHERE (lp.palet_tipi_id IS NULL OR lp.palet_tipi_id = 0)
-      ORDER BY lp.id DESC LIMIT 10");
-
-// 3) Deposu boş hareketler
-$ms_kalite[] = ms_kalite_check($pdo, 'depo_bos',
-    'Deposu boş malzeme hareketleri',
-    'Depo bazlı stok bu hareketlerde eksik görünebilir.',
-    "SELECT COUNT(*) FROM material_stock_movements WHERE depo IS NULL OR depo = ''",
-    "SELECT id, movement_date, material_name, movement_type, quantity, unit, source_type, source_id
-       FROM material_stock_movements WHERE depo IS NULL OR depo = ''
-      ORDER BY id DESC LIMIT 10");
-
-// 4) Sync dışı yükleme kayıtları (paleti var, loading hareketi yok)
-$ms_kalite[] = ms_kalite_check($pdo, 'sync_disi',
-    'Stok hareketi oluşmamış kayıtlar',
-    'Paletleri var ama malzeme stok hareketleri henüz oluşmamış olabilir (kayıt yeniden kaydedilince oluşur).',
-    "SELECT COUNT(*) FROM loading_records lr
-      WHERE COALESCE(lr.type,'yukleme') <> 'cikma'
-        AND EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
-        AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)",
-    "SELECT lr.id, lr.tarih, lr.firma, lr.type, lr.durum,
-            (SELECT COUNT(*) FROM loading_pallets lp WHERE lp.loading_record_id = lr.id) AS palet_sayisi
-       FROM loading_records lr
-      WHERE COALESCE(lr.type,'yukleme') <> 'cikma'
-        AND EXISTS (SELECT 1 FROM loading_pallets lp WHERE lp.loading_record_id = lr.id)
-        AND NOT EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.source_type='loading' AND m.source_id = lr.id)
-      ORDER BY lr.id DESC LIMIT 10");
-
-// 5) Pasif ama kullanımda olan tanımlar
-$ms_kalite[] = ms_kalite_check($pdo, 'pasif_kullanim',
-    'Pasif ama kullanımda olan tanımlar',
-    'Pasif tanımlar geçmiş stok hareketlerinde kullanılıyor.',
-    "SELECT COUNT(*) FROM material_definitions md
-      WHERE md.is_active = 0 AND EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.material_id = md.id)",
-    "SELECT md.id, md.type, md.name,
-            (SELECT COUNT(*) FROM material_stock_movements m WHERE m.material_id = md.id) AS hareket_sayisi
-       FROM material_definitions md
-      WHERE md.is_active = 0 AND EXISTS (SELECT 1 FROM material_stock_movements m WHERE m.material_id = md.id)
-      ORDER BY md.type, md.name LIMIT 10");
-
-// 6) Negatif stoktaki kasa/paletler (özet satırlarından — PHP)
-$ms_neg_kasa_palet = array_values(array_filter($ozet_rows, fn($r) =>
-    in_array($r['category'], ['kasa', 'palet'], true) && (float)$r['kalan'] < 0));
-$ms_kalite[] = [
-    'key'   => 'neg_kasa_palet',
-    'label' => 'Negatif stoktaki kasa/paletler',
-    'desc'  => 'Kasa/palet stok girişleri eksik olabilir (kullanım girişten fazla).',
-    'cnt'   => count($ms_neg_kasa_palet),
-    'rows'  => array_slice($ms_neg_kasa_palet, 0, 10),
-];
-
-$ms_kalite_total = array_sum(array_column($ms_kalite, 'cnt'));
+// NOT (Pro-06): Veri kalite + sistem audit kontrolleri (kasa/palet tipsiz,
+// depo boş, miktar≤0, orphan, duplicate, sync eksik, pasif kullanım, negatif
+// kasa/palet) admin-only malzeme_stok_tehis.php'ye taşındı. Bu sayfa artık
+// teknik teşhis sorgularını ÇALIŞTIRMAZ — sayfa açılışı hafifledi.
 
 render_header('Malzeme Stok');
 render_flash();
@@ -613,6 +485,9 @@ $mat_dusuk_count = count($negatif_ozet); // mevcut davranış: kart, uyarı band
         <a href="<?= ms_url(['csv' => 'ozet', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Özet CSV</a>
         <a href="<?= ms_url(['csv' => '1', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Hareket CSV</a>
         <button type="button" class="btn btn-sm btn-ghost" onclick="window.print()">🖨 Yazdır</button>
+        <?php if (is_admin()): ?>
+        <a href="malzeme_stok_tehis.php" class="btn btn-sm btn-ghost" title="Veri kalite ve sistem audit kontrolleri (admin)">🔬 Teknik Teşhis</a>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -1263,116 +1138,7 @@ $mat_dusuk_count = count($negatif_ozet); // mevcut davranış: kart, uyarı band
     <?php endif; ?>
 </div>
 
-<!-- ── Veri Kalite Kontrolü ──────────────────────────────── -->
-<?php
-$ms_kalite_aktif = array_values(array_filter($ms_kalite, fn($k) => $k['cnt'] > 0));
-$ms_tip_lbl = fn($t) => match ($t) {
-    'giris' => 'Giriş', 'sevk' => 'Sevk', 'kullanim' => 'Kullanım', 'duzeltme' => 'Düzeltme', default => $t,
-};
-$ms_kayit_tip = fn($t) => ($t ?? 'yukleme') === 'cikma' ? 'Çıkma' : 'Yükleme';
-?>
-<details class="card ms-kalite-card" style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden" <?= $ms_kalite_total > 0 ? 'open' : '' ?>>
-    <summary class="ms-kalite-summary">
-        🧪 Veri Kalite Kontrolü
-        <span class="ms-kalite-pill" style="background:<?= $ms_kalite_total > 0 ? '#fef3c7' : '#d1fae5' ?>;color:<?= $ms_kalite_total > 0 ? '#92400e' : '#065f46' ?>">
-            <?= $ms_kalite_total > 0 ? '⚠ ' . $ms_kalite_total . ' kayıt' : '✓ Temiz' ?>
-        </span>
-    </summary>
-    <div style="padding:14px 16px">
-        <?php if ($ms_kalite_total === 0): ?>
-        <p style="color:var(--success);font-size:.9rem;margin:0">✓ Malzeme stok veri kalitesi temiz görünüyor.</p>
-        <?php else: ?>
-        <?php foreach ($ms_kalite_aktif as $chk): ?>
-        <div class="ms-kalite-block">
-            <div class="ms-kalite-head">
-                <span class="dkk-badge dkk-badge-orta" style="font-size:.72rem"><?= (int)$chk['cnt'] ?></span>
-                <strong style="font-size:.88rem"><?= h($chk['label']) ?></strong>
-                <span style="font-size:.78rem;color:var(--muted)"><?= h($chk['desc']) ?></span>
-            </div>
-            <div class="table-wrap">
-                <table class="data-table" style="font-size:.8rem">
-                    <?php switch ($chk['key']):
-                        case 'kasa_tipsiz':
-                        case 'palet_tipsiz': ?>
-                        <thead><tr><th>Kayıt</th><th>Palet</th><th>Kasa Adedi</th><th>Tarih</th><th>Firma</th><th>Tür</th><th></th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chk['rows'] as $r): ?>
-                        <tr>
-                            <td>#<?= (int)$r['loading_record_id'] ?></td>
-                            <td><?= (int)$r['pallet_id'] ?></td>
-                            <td><?= number_format((float)$r['kasa_adeti'], 0, ',', '.') ?></td>
-                            <td><?= h(fmt_date($r['tarih'])) ?></td>
-                            <td><?= h($r['firma'] ?: '—') ?></td>
-                            <td><?= h($ms_kayit_tip($r['type'])) ?></td>
-                            <td><a href="record_edit.php?id=<?= (int)$r['loading_record_id'] ?>" class="btn btn-sm btn-ghost">✎ Düzenle</a></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    <?php break; case 'depo_bos': ?>
-                        <thead><tr><th>ID</th><th>Tarih</th><th>Malzeme</th><th>Hareket</th><th>Miktar</th><th>Kaynak</th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chk['rows'] as $r): ?>
-                        <tr>
-                            <td><?= (int)$r['id'] ?></td>
-                            <td><?= h(fmt_date($r['movement_date'])) ?></td>
-                            <td><?= h($r['material_name'] ?: '—') ?></td>
-                            <td><?= h($ms_tip_lbl($r['movement_type'])) ?></td>
-                            <td><?= number_format((float)$r['quantity'], 0, ',', '.') ?> <?= h($r['unit']) ?></td>
-                            <td><?= $r['source_type'] !== '' ? h($r['source_type'] . ($r['source_id'] ? '#' . $r['source_id'] : '')) : '—' ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    <?php break; case 'sync_disi': ?>
-                        <thead><tr><th>Kayıt</th><th>Tarih</th><th>Firma</th><th>Tür</th><th>Durum</th><th>Palet</th><th></th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chk['rows'] as $r): ?>
-                        <tr>
-                            <td>#<?= (int)$r['id'] ?></td>
-                            <td><?= h(fmt_date($r['tarih'])) ?></td>
-                            <td><?= h($r['firma'] ?: '—') ?></td>
-                            <td><?= h($ms_kayit_tip($r['type'])) ?></td>
-                            <td><?= h($r['durum'] ?: '—') ?></td>
-                            <td><?= (int)$r['palet_sayisi'] ?></td>
-                            <td><a href="record_edit.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-ghost">✎ Düzenle</a></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    <?php break; case 'pasif_kullanim': ?>
-                        <thead><tr><th>ID</th><th>Tür</th><th>Malzeme</th><th>Hareket</th><th></th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chk['rows'] as $r): ?>
-                        <tr>
-                            <td><?= (int)$r['id'] ?></td>
-                            <td><?= h($ms_types[$r['type']] ?? $r['type']) ?></td>
-                            <td><?= h($r['name']) ?></td>
-                            <td><?= (int)$r['hareket_sayisi'] ?> hareket</td>
-                            <td><a href="definitions.php" class="btn btn-sm btn-ghost">→ Tanımlar</a></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    <?php break; case 'neg_kasa_palet': ?>
-                        <thead><tr><th>Kategori</th><th>Malzeme</th><th>Depo</th><th class="num">Kalan</th><th></th></tr></thead>
-                        <tbody>
-                        <?php foreach ($chk['rows'] as $r):
-                            $lnk = ms_url(['mat_type' => $r['material_type'], 'mat_name' => $r['material_name'], 'depo' => $r['depo'], 'hareket_tipi' => '', 'hareket_page' => '']) . '#ms-hareketler';
-                        ?>
-                        <tr>
-                            <td><span class="ms-cat-badge ms-cat-<?= h($r['category']) ?>"><?= h($ms_cat_labels[$r['category']] ?? $r['category']) ?></span></td>
-                            <td><?= h($r['material_name']) ?></td>
-                            <td><?= $r['depo'] !== '' ? h($r['depo']) : '<span style="color:var(--muted)">Depo Boş</span>' ?></td>
-                            <td class="num" style="color:var(--danger);font-weight:700"><?= number_format((float)$r['kalan'], 0, ',', '.') ?></td>
-                            <td><a href="<?= h($lnk) ?>" class="btn btn-sm btn-ghost">🔍 Hareketler</a></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    <?php break; endswitch; ?>
-                </table>
-            </div>
-        </div>
-        <?php endforeach; ?>
-        <?php endif; ?>
-    </div>
-</details>
+<!-- Veri Kalite Kontrolü paneli Pro-06'da malzeme_stok_tehis.php'ye taşındı. -->
 
 <?php if ($ms_can_write): ?>
 <!-- ── Hareket Düzenle Modal ─────────────────────────────── -->
@@ -1460,90 +1226,7 @@ $ms_kayit_tip = fn($t) => ($t ?? 'yukleme') === 'cikma' ? 'Çıkma' : 'Yükleme'
 </div>
 <?php endif; ?>
 
-<?php
-$_ac     = ms_audit_counts($pdo);
-$_ac_txt = $_ac['total'] > 0 ? '⚠ ' . $_ac['total'] . ' sorun' : '✓ Temiz';
-$_ms_audit_has_detail = array_filter($_ms_audit_details, fn($d) => $d['cnt'] > 0);
-?>
-<details class="card" style="margin-top:18px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-    <summary style="cursor:pointer;padding:11px 16px;background:var(--card-bg,#fff);display:flex;align-items:center;gap:10px;list-style:none;user-select:none;font-weight:600">
-        🔍 Sistem Audit
-        <span style="font-size:.75rem;padding:2px 10px;border-radius:20px;font-weight:700;margin-left:auto;
-            background:<?= $_ac['total'] > 0 ? '#fee2e2' : '#d1fae5' ?>;
-            color:<?= $_ac['total'] > 0 ? '#991b1b' : '#065f46' ?>">
-            <?= h($_ac_txt) ?>
-        </span>
-    </summary>
-    <div style="padding:14px 16px">
-        <!-- Sayı kartları -->
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px">
-            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
-                <div style="font-size:.75rem;color:var(--text-muted)">Yetim stok hareketi</div>
-                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['orphan'] > 0 ? '#dc2626' : '#16a34a' ?>">
-                    <?= $_ac['orphan'] ?>
-                </div>
-                <?php if ($_ac['orphan'] > 0): ?>
-                <div style="font-size:.72rem;color:#92400e">Kayıt silinmiş yüklemeye bağlı hareket</div>
-                <?php endif; ?>
-            </div>
-            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
-                <div style="font-size:.75rem;color:var(--text-muted)">Birebir duplicate tanım</div>
-                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['dup_exact'] > 0 ? '#dc2626' : '#16a34a' ?>">
-                    <?= $_ac['dup_exact'] ?>
-                </div>
-            </div>
-            <div style="background:var(--card-bg,#f8fafc);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
-                <div style="font-size:.75rem;color:var(--text-muted)">Normalize duplicate tanım</div>
-                <div style="font-size:1.4rem;font-weight:700;color:<?= $_ac['dup_norm'] > 0 ? '#dc2626' : '#16a34a' ?>">
-                    <?= $_ac['dup_norm'] ?>
-                </div>
-                <div style="font-size:.72rem;color:var(--muted)">normalize_text_v2 tabanlı</div>
-            </div>
-        </div>
-
-        <?php if (!empty($_ms_audit_has_detail)): ?>
-        <!-- Detay tabloları -->
-        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:2px">
-            <?php foreach ($_ms_audit_details as $_acd): ?>
-            <?php if ($_acd['cnt'] === 0) continue; ?>
-            <div style="margin-bottom:14px">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-                    <span class="dkk-badge dkk-badge-orta" style="font-size:.72rem"><?= $_acd['cnt'] ?></span>
-                    <strong style="font-size:.88rem"><?= h($_acd['label']) ?></strong>
-                    <span style="font-size:.78rem;color:var(--muted)"><?= h($_acd['detail']) ?></span>
-                </div>
-                <?php if (!empty($_acd['rows'])): ?>
-                <div class="table-wrap">
-                    <table class="data-table" style="font-size:.8rem">
-                        <thead><tr><th>ID</th><th>Tarih</th><th>Malzeme</th><th>Hareket</th><th>Depo</th><th>Miktar</th></tr></thead>
-                        <tbody>
-                        <?php foreach ($_acd['rows'] as $_arow): ?>
-                        <tr>
-                            <td><?= (int)$_arow['id'] ?></td>
-                            <td><?= h($_arow['movement_date'] ?? '—') ?></td>
-                            <td><?= h($_arow['material_name'] ?? '—') ?></td>
-                            <td><?= h($_arow['movement_type'] ?? '—') ?></td>
-                            <td><?= h($_arow['depo'] ?: '—') ?></td>
-                            <td><?= number_format((int)round((float)($_arow['quantity'] ?? 0)), 0, '', '.') ?> <?= h($_arow['unit'] ?? '') ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <?php endif; ?>
-            </div>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($_ac['total'] > 0 && empty($_ms_audit_has_detail)): ?>
-        <p style="font-size:.83rem;color:#b45309;background:#fffbeb;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:10px">
-            ⚠ Sorunlu kayıtlar tespit edildi. Detay ve CSV için Detaylı Audit sayfasını açın.
-        </p>
-        <?php endif; ?>
-        <a href="audit.php" class="btn btn-ghost btn-sm">→ Detaylı Audit &amp; CSV</a>
-    </div>
-</details>
+<!-- Sistem Audit paneli Pro-06'da malzeme_stok_tehis.php'ye taşındı. -->
 
 <script>
 var msNamesData = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;

@@ -617,6 +617,56 @@ if ($has_md && $has_lp) {
     ")->fetchAll();
 }
 
+// ── I) Veri giriş kalitesi ───────────────────────────────────
+// Ana stok sayfasındaki "Veri Kalite Kontrolü" panelinden taşındı (Pro-06):
+// kasa/palet tipi seçilmemiş paletler + miktarı sıfır/negatif hareketler.
+// Yalnızca tespit; otomatik düzeltme yok.
+$kasa_tipsiz_rows = [];  $kasa_tipsiz_count = 0;
+$palet_tipsiz_rows = []; $palet_tipsiz_count = 0;
+if ($has_lp && $has_lr) {
+    try {
+        $kasa_tipsiz_count = (int)$pdo->query(
+            "SELECT COUNT(*) FROM loading_pallets WHERE kasa_adeti > 0 AND (kasa_cinsi_id IS NULL OR kasa_cinsi_id = 0)"
+        )->fetchColumn();
+        if ($kasa_tipsiz_count > 0) {
+            $kasa_tipsiz_rows = $pdo->query(
+                "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
+                   FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
+                  WHERE lp.kasa_adeti > 0 AND (lp.kasa_cinsi_id IS NULL OR lp.kasa_cinsi_id = 0)
+                  ORDER BY lp.id DESC LIMIT 50"
+            )->fetchAll();
+        }
+    } catch (PDOException $e) { $kasa_tipsiz_count = 0; $kasa_tipsiz_rows = []; }
+    try {
+        $palet_tipsiz_count = (int)$pdo->query(
+            "SELECT COUNT(*) FROM loading_pallets WHERE (palet_tipi_id IS NULL OR palet_tipi_id = 0)"
+        )->fetchColumn();
+        if ($palet_tipsiz_count > 0) {
+            $palet_tipsiz_rows = $pdo->query(
+                "SELECT lp.id AS pallet_id, lp.loading_record_id, lp.kasa_adeti, lr.tarih, lr.firma, lr.type
+                   FROM loading_pallets lp JOIN loading_records lr ON lr.id = lp.loading_record_id
+                  WHERE (lp.palet_tipi_id IS NULL OR lp.palet_tipi_id = 0)
+                  ORDER BY lp.id DESC LIMIT 50"
+            )->fetchAll();
+        }
+    } catch (PDOException $e) { $palet_tipsiz_count = 0; $palet_tipsiz_rows = []; }
+}
+$miktar_sifir_rows = []; $miktar_sifir_count = 0;
+if ($has_msm) {
+    try {
+        $miktar_sifir_count = (int)$pdo->query(
+            "SELECT COUNT(*) FROM material_stock_movements WHERE quantity <= 0"
+        )->fetchColumn();
+        if ($miktar_sifir_count > 0) {
+            $miktar_sifir_rows = $pdo->query(
+                "SELECT id, movement_date, material_name, movement_type, depo, quantity, unit
+                   FROM material_stock_movements WHERE quantity <= 0 ORDER BY id DESC LIMIT 50"
+            )->fetchAll();
+        }
+    } catch (PDOException $e) { $miktar_sifir_count = 0; $miktar_sifir_rows = []; }
+}
+$veri_giris_sorun = $kasa_tipsiz_count + $palet_tipsiz_count + $miktar_sifir_count;
+
 // ── Özet sayılar ─────────────────────────────────────────────
 $summary = [
     'duplicate_grup'    => count($duplicate_groups),
@@ -626,10 +676,11 @@ $summary = [
     'orphan'            => $orphan_count,
     'sync_eksik'        => $sync_eksik_count,
     'pasif_kullanim'    => count($pasif_kullanim_rows),
+    'veri_giris'        => $veri_giris_sorun,
 ];
 $toplam_sorun = $summary['duplicate_grup'] + ($summary['null_mid'] > 0 ? 1 : 0)
               + ($summary['split_risk'])    + ($summary['orphan'] > 0 ? 1 : 0)
-              + ($summary['sync_eksik'] > 0 ? 1 : 0);
+              + ($summary['sync_eksik'] > 0 ? 1 : 0) + ($summary['veri_giris'] > 0 ? 1 : 0);
 
 // ============================================================
 // HTML
@@ -719,6 +770,10 @@ render_header('Malzeme Stok Teşhis');
     <div class="tehis-kart <?= $summary['pasif_kullanim'] > 0 ? 'warn' : 'ok' ?>">
         <div class="tehis-kart-num"><?= $summary['pasif_kullanim'] ?></div>
         <div class="tehis-kart-lbl">Pasif Def. Kullanımda</div>
+    </div>
+    <div class="tehis-kart <?= $summary['veri_giris'] > 0 ? 'warn' : 'ok' ?>">
+        <div class="tehis-kart-num"><?= $summary['veri_giris'] ?></div>
+        <div class="tehis-kart-lbl">Veri Giriş Kalitesi</div>
     </div>
 </div>
 
@@ -1653,6 +1708,109 @@ tehis_section_open('b12', '12 · İsim Değişikliği Sonrası Kopan Hareketler'
     ℹ️ Bu liste boş olsa bile geçmişte isim değişmiş olabilir — snapshot ile güncel ad <em>aynıysa</em> (örn. sync sonradan
     güncel adla yeniden yazdıysa) burada görünmez. Asıl önemli olan: stok ekranı artık <code>material_id</code> bazlı.
 </p>
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 13: Veri Giriş Kalitesi (ana stok sayfasından taşındı)
+     ────────────────────────────────────────────────────────── -->
+<?php
+$vg_badge = $summary['veri_giris'] > 0
+    ? '<span class="tehis-badge badge-warn">'.$summary['veri_giris'].' kayıt</span>'
+    : '<span class="tehis-badge badge-ok">Temiz</span>';
+tehis_section_open('b13', '13 · Veri Giriş Kalitesi', $vg_badge, $summary['veri_giris'] > 0);
+$vg_tip_lbl = fn($t) => match ($t) {
+    'giris' => 'Giriş', 'sevk' => 'Sevk', 'kullanim' => 'Kullanım', 'duzeltme' => 'Düzeltme', default => (string)$t,
+};
+$vg_kayit_tip = fn($t) => ($t ?? 'yukleme') === 'cikma' ? 'Çıkma' : 'Yükleme';
+?>
+<p class="tehis-sub">
+    Yükleme planında kasa/palet tipi seçilmemiş paletler ve miktarı sıfır/negatif stok hareketleri.
+    Bu kayıtlar stok hesabını eksik veya hatalı gösterebilir. Düzeltme ilgili yükleme kaydından yapılır;
+    burada yalnızca tespit edilir.
+</p>
+
+<?php if ($summary['veri_giris'] === 0): ?>
+    <p style="color:#16a34a">✓ Kasa/palet tipi ve hareket miktarı verileri temiz görünüyor.</p>
+<?php else: ?>
+
+<?php if ($kasa_tipsiz_count > 0): ?>
+<h4 style="margin:14px 0 4px;font-size:.86rem">
+    Kasa tipi seçilmemiş paletler
+    <span class="tehis-badge badge-warn"><?= $kasa_tipsiz_count ?></span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">Kasa adedi girilmiş ama kasa tipi seçilmemiş — bu kasalar stoktan düşemez (ilk 50).</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr><th>Kayıt</th><th class="num">Palet</th><th class="num">Kasa Adedi</th><th>Tarih</th><th>Firma</th><th>Tür</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($kasa_tipsiz_rows as $r): ?>
+    <tr class="warn-row">
+        <td>#<?= (int)$r['loading_record_id'] ?></td>
+        <td class="num"><?= (int)$r['pallet_id'] ?></td>
+        <td class="num"><?= number_format((float)$r['kasa_adeti'], 0, ',', '.') ?></td>
+        <td><?= h(fmt_date($r['tarih'])) ?></td>
+        <td><?= h($r['firma'] ?: '—') ?></td>
+        <td><?= h($vg_kayit_tip($r['type'])) ?></td>
+        <td><a href="record_edit.php?id=<?= (int)$r['loading_record_id'] ?>" class="tehis-badge badge-info" style="text-decoration:none">✎ Düzenle</a></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+
+<?php if ($palet_tipsiz_count > 0): ?>
+<h4 style="margin:16px 0 4px;font-size:.86rem">
+    Palet tipi seçilmemiş paletler
+    <span class="tehis-badge badge-warn"><?= $palet_tipsiz_count ?></span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">Palet tipi seçilmemiş — palet stoğu bu satırlardan düşemez (ilk 50).</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr><th>Kayıt</th><th class="num">Palet</th><th class="num">Kasa Adedi</th><th>Tarih</th><th>Firma</th><th>Tür</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($palet_tipsiz_rows as $r): ?>
+    <tr class="warn-row">
+        <td>#<?= (int)$r['loading_record_id'] ?></td>
+        <td class="num"><?= (int)$r['pallet_id'] ?></td>
+        <td class="num"><?= number_format((float)$r['kasa_adeti'], 0, ',', '.') ?></td>
+        <td><?= h(fmt_date($r['tarih'])) ?></td>
+        <td><?= h($r['firma'] ?: '—') ?></td>
+        <td><?= h($vg_kayit_tip($r['type'])) ?></td>
+        <td><a href="record_edit.php?id=<?= (int)$r['loading_record_id'] ?>" class="tehis-badge badge-info" style="text-decoration:none">✎ Düzenle</a></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+
+<?php if ($miktar_sifir_count > 0): ?>
+<h4 style="margin:16px 0 4px;font-size:.86rem">
+    Miktarı sıfır veya negatif hareketler
+    <span class="tehis-badge badge-warn"><?= $miktar_sifir_count ?></span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">Stok hesabını bozabilir (ilk 50).</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr><th class="num">ID</th><th>Tarih</th><th>Malzeme</th><th>Hareket</th><th>Depo</th><th class="num">Miktar</th></tr></thead>
+    <tbody>
+    <?php foreach ($miktar_sifir_rows as $r): ?>
+    <tr class="warn-row">
+        <td class="num"><?= (int)$r['id'] ?></td>
+        <td><?= h(fmt_date($r['movement_date'])) ?></td>
+        <td><?= h($r['material_name'] ?: '—') ?></td>
+        <td><?= h($vg_tip_lbl($r['movement_type'])) ?></td>
+        <td><?= h($r['depo'] ?: '—') ?></td>
+        <td class="num"><?= number_format((float)$r['quantity'], 0, ',', '.') ?> <?= h($r['unit']) ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+
 <?php endif; ?>
 <?php tehis_section_close(); ?>
 
