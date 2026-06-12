@@ -343,7 +343,7 @@ render_flash();
                     </select>
                 </label>
                 <label>Tanım Adı
-                    <input type="text" name="name" required autocomplete="off" placeholder="Örn: Karaman Cihat">
+                    <input type="text" name="name" required autocomplete="off" placeholder="Örn: Karaman Cihat" data-uppercase="tr">
                 </label>
                 <label id="defAddDaraWrap">Birim Dara (kg)
                     <input type="text" name="unit_dara_kg" inputmode="decimal" value="0">
@@ -404,7 +404,7 @@ foreach ($SECTIONS as $sk => $sv):
 
                     <div class="def2-item-main">
                         <input type="text" name="name" value="<?= h($d['name']) ?>"
-                               class="def2-item-name" required autocomplete="off">
+                               class="def2-item-name" required autocomplete="off" data-uppercase="tr">
                         <?php if ($has_dara): ?>
                         <span class="def2-item-dara">
                             <input type="text" name="unit_dara_kg" inputmode="decimal"
