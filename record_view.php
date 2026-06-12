@@ -708,7 +708,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                     <div class="etiket-actions no-print">
                         <label class="etiket-upload-btn">
                             📷 Fotoğraf Ekle
-                            <input type="file" id="etiketInput" accept="image/*" capture="environment" style="display:none">
+                            <input type="file" id="etiketInput" accept="image/*" style="display:none">
                         </label>
                         <button id="etiketClear" class="etiket-clear-btn"<?= $_etiket_foto !== '' ? '' : ' style="display:none"' ?>>✕ Kaldır</button>
                     </div>
