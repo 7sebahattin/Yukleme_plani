@@ -216,9 +216,7 @@ function get_negative_materials(array $summaryRows): array {
 // $filters: tarih_bas, tarih_bit, mat_id, mat_type, mat_name, depo, hareket_tipi
 // mat_id verildiyse mat_type/mat_name yok sayılır (ID bazlı filtre isim
 // değişikliğine dayanıklıdır).
-// TODO Pro-02: SQL tabanlı LIMIT/OFFSET pagination yapılacak — şu an üst
-// sınır kadar satır çekilip sayfalama PHP tarafında dilimleniyor.
-function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000): array {
+function ms_movements_where(array $filters): array {
     $f_tarih_bas    = (string)($filters['tarih_bas']    ?? '');
     $f_tarih_bit    = (string)($filters['tarih_bit']    ?? '');
     $f_mat_id       = (int)   ($filters['mat_id']       ?? 0);
@@ -238,7 +236,15 @@ function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000
     }
     if ($f_depo         !== '') { $where[] = "depo LIKE ?";       $params[] = '%' . $f_depo . '%'; }
     if ($f_hareket_tipi !== '') { $where[] = "movement_type = ?"; $params[] = $f_hareket_tipi; }
-    $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
+}
+
+// Pro-02: SQL tabanlı LIMIT/OFFSET pagination. $limit/$offset int olarak
+// cast edilir (SQL injection riski yok). Eski çağrılar (offset'siz) aynen çalışır.
+function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000, int $offset = 0): array {
+    [$where_sql, $params] = ms_movements_where($filters);
+    $limit  = max(1, $limit);
+    $offset = max(0, $offset);
 
     $rows = [];
     try {
@@ -249,12 +255,28 @@ function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000
             FROM material_stock_movements
             $where_sql
             ORDER BY movement_date DESC, id DESC
-            LIMIT " . max(1, $limit) . "
+            LIMIT $limit OFFSET $offset
         ");
         $st->execute($params);
         $rows = $st->fetchAll();
     } catch (PDOException $e) {}
     return $rows;
+}
+
+// Filtreye uyan toplam hareket sayısı (gerçek SQL pagination için).
+function count_material_movements(PDO $pdo, array $filters = []): int {
+    [$where_sql, $params] = ms_movements_where($filters);
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM material_stock_movements $where_sql");
+        $st->execute($params);
+        return (int)$st->fetchColumn();
+    } catch (PDOException $e) { return 0; }
+}
+
+// Hareket sayfası link kurucu — boş parametreleri atar.
+function ms_hareket_url(array $params = []): string {
+    $q = array_filter($params, fn($v) => $v !== '' && $v !== null);
+    return 'malzeme_hareketleri.php' . ($q ? '?' . http_build_query($q) : '');
 }
 
 // ── Dropdown verileri ─────────────────────────────────────

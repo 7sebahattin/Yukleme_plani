@@ -123,6 +123,22 @@ check('hareket satır anahtarları',
     ['id','movement_date','movement_type','material_type','material_name','depo','quantity','unit','source_type','source_id','belge_no','firma','note'],
     array_keys($mv[0]));
 
+// ── 4b) Pro-02: SQL pagination + count + url builder ──
+check('count_material_movements filtresiz', 9, count_material_movements($pdo));
+check('count_material_movements hareket_tipi=giris', 4, count_material_movements($pdo, ['hareket_tipi' => 'giris']));
+check('count_material_movements mat_id=1', 4, count_material_movements($pdo, ['mat_id' => 1]));
+// offset pagination: sayfa 1 (limit 4) ile sayfa 2 (offset 4) çakışmamalı, birlik = tüm sıralı liste
+$p1 = get_material_movements($pdo, [], 4, 0);
+$p2 = get_material_movements($pdo, [], 4, 4);
+$p3 = get_material_movements($pdo, [], 4, 8);
+check('pagination sayfa boyutları', [4, 4, 1], [count($p1), count($p2), count($p3)]);
+check('pagination çakışma yok (id bazında)',
+    array_column($mv, 'id'),
+    array_merge(array_column($p1, 'id'), array_column($p2, 'id'), array_column($p3, 'id')));
+check('ms_hareket_url boş paramları atar', 'malzeme_hareketleri.php?mat_id=1&depo=KARAMAN',
+    ms_hareket_url(['mat_id' => 1, 'mat_type' => '', 'depo' => 'KARAMAN']));
+check('ms_hareket_url parametresiz', 'malzeme_hareketleri.php', ms_hareket_url([]));
+
 // ── 5) Dropdown verileri ──
 $dd = get_material_dropdown_data($pdo);
 check('depo_list', ['KARAMAN CİHAT'], $dd['depo_list']);
