@@ -820,6 +820,28 @@ $ms_kalite_total = array_sum(array_column($ms_kalite, 'cnt'));
 
 render_header('Malzeme Stok');
 render_flash();
+?>
+<style>
+@media print {
+    .topbar,.bottomnav,.sidebar,.page-head,
+    .ms-neg-uyari,.stok-ozet-grid,
+    .ms-form-wrap,.ms-ozet-filter { display:none !important; }
+    .card:not(#ms-ozet-card) { display:none !important; }
+    #ms-ozet-card { border:none !important; box-shadow:none !important; border-radius:0 !important; }
+    .stok-table-head { border-bottom:2px solid #000 !important; padding:0 0 6px !important; background:none !important; }
+    .ms-print-header { display:block !important; }
+    .stok-hide-sm { display:table-cell !important; }
+    .stok-table th:last-child,.stok-table td:last-child { display:none !important; }
+    .stok-table { font-size:10pt; width:100%; border-collapse:collapse; }
+    .stok-table th,.stok-table td { border:1px solid #bbb; padding:3px 5px; }
+    .stok-table thead tr { background:#f0f0f0 !important; }
+    .ms-cat-badge { border:1px solid #999 !important; background:#eee !important; color:#000 !important; }
+    .container { padding:0 !important; margin:0 !important; max-width:none !important; }
+    body { margin:0; padding:8px; }
+    @page { margin:1.5cm; }
+}
+</style>
+<?php
 
 // Precompute summary totals for top cards
 $toplam_giris    = array_sum(array_column($ozet_rows, 'total_giris'));
@@ -834,6 +856,7 @@ $mat_dusuk_count = count($negatif_ozet);
         <a href="malzeme_stok_import.php" class="btn btn-sm btn-secondary">📥 Excel Aktar</a>
         <a href="<?= ms_url(['csv' => 'ozet', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Özet CSV</a>
         <a href="<?= ms_url(['csv' => '1', 'hareket_page' => '']) ?>" class="btn btn-sm btn-ghost">⬇ Hareket CSV</a>
+        <button type="button" class="btn btn-sm btn-ghost" onclick="window.print()">🖨 Yazdır</button>
     </div>
 </div>
 
@@ -945,7 +968,22 @@ $mat_dusuk_count = count($negatif_ozet);
 </div>
 
 <!-- ── Stok Özeti Tablosu ─────────────────────────────────── -->
-<div class="card" style="margin-top:16px;padding:0">
+<div class="card" id="ms-ozet-card" style="margin-top:16px;padding:0">
+    <!-- Yazdırma başlığı — yalnızca @media print'te görünür -->
+    <div class="ms-print-header" style="display:none;padding:0 14px 8px">
+        <h2 style="margin:0 0 2px;font-size:14pt">Malzeme Stok Özeti</h2>
+        <div style="font-size:9pt;color:#555">
+            Tarih: <?= date('d.m.Y H:i') ?>
+            <?php if ($f_tarih_bas !== '' || $f_tarih_bit !== ''): ?>
+            &nbsp;·&nbsp; Dönem: <?= $f_tarih_bas ? h($f_tarih_bas) : '...' ?> – <?= $f_tarih_bit ? h($f_tarih_bit) : '...' ?>
+            <?php endif; ?>
+            <?php if ($f_ozet_kategori !== ''): ?>&nbsp;·&nbsp; Kategori: <?= h($ms_cat_labels[$f_ozet_kategori] ?? $f_ozet_kategori) ?><?php endif; ?>
+            <?php if ($f_ozet_tur !== ''): ?>&nbsp;·&nbsp; Tür: <?= h($ms_types[$f_ozet_tur] ?? $f_ozet_tur) ?><?php endif; ?>
+            <?php if ($f_ozet_malzeme !== ''): ?>&nbsp;·&nbsp; Malzeme: <?= h($f_ozet_malzeme) ?><?php endif; ?>
+            <?php if ($f_ozet_depo !== ''): ?>&nbsp;·&nbsp; Depo: <?= h($f_ozet_depo) ?><?php endif; ?>
+            &nbsp;·&nbsp; <?= count($ozet_rows) ?> satır
+        </div>
+    </div>
     <div class="stok-table-head">
         <span style="font-weight:700;font-size:.97rem">Stok Özeti</span>
         <span style="font-size:.82rem;color:var(--muted)"><?= count($ozet_rows) ?> malzeme/depo</span>
