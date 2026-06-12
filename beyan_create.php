@@ -43,6 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
+    // Büyük harf — seçili metin alanları
+    foreach (['declaration_title', 'company_name', 'company_address', 'transport_type',
+              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
+              'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
+        if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
+    }
+
     // Validasyon
     if ($f['raw_text'] === '' && $f['party_no'] === '' && $f['product_name'] === '') {
         $errors[] = 'En az bir alan dolu olmalıdır: WhatsApp metni, Parti No veya Ürün Adı.';
@@ -179,34 +186,34 @@ render_flash();
         <div class="form-group">
             <label class="form-label">Başlık / Beyan Tipi</label>
             <input type="text" name="declaration_title" class="form-control"
-                   value="<?= h($f['declaration_title']) ?>" placeholder="YENİ BEYAN">
+                   value="<?= h($f['declaration_title']) ?>" placeholder="YENİ BEYAN" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Parti No</label>
             <input type="text" name="party_no" class="form-control"
-                   value="<?= h($f['party_no']) ?>" placeholder="46/22">
+                   value="<?= h($f['party_no']) ?>" placeholder="46/22" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Nakliye Türü</label>
             <input type="text" name="transport_type" class="form-control"
-                   value="<?= h($f['transport_type']) ?>" placeholder="DENİZYOLU">
+                   value="<?= h($f['transport_type']) ?>" placeholder="DENİZYOLU" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Hat / Güzergah</label>
             <input type="text" name="line_type" class="form-control"
-                   value="<?= h($f['line_type']) ?>" placeholder="YEŞİL HAT">
+                   value="<?= h($f['line_type']) ?>" placeholder="YEŞİL HAT" data-uppercase="tr">
         </div>
     </div>
     <div class="form-group">
         <label class="form-label">Şirket Adı</label>
         <input type="text" name="company_name" class="form-control"
                value="<?= h($f['company_name']) ?>"
-               placeholder="LIMITED LIABILITY COMPANY FRUTELLA...">
+               placeholder="LIMITED LIABILITY COMPANY FRUTELLA..." data-uppercase="tr">
     </div>
     <div class="form-group">
         <label class="form-label">Şirket Adresi</label>
         <textarea name="company_address" rows="2" class="form-control"
-                  placeholder="354000, KRASNODAR KRAI, SOCHI..."><?= h($f['company_address']) ?></textarea>
+                  placeholder="354000, KRASNODAR KRAI, SOCHI..." data-uppercase="tr"><?= h($f['company_address']) ?></textarea>
     </div>
 </div>
 
@@ -217,12 +224,12 @@ render_flash();
         <div class="form-group">
             <label class="form-label">Ürün Adı</label>
             <input type="text" name="product_name" class="form-control"
-                   value="<?= h($f['product_name']) ?>" placeholder="KAYISI">
+                   value="<?= h($f['product_name']) ?>" placeholder="KAYISI" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Ürün Çeşidi</label>
             <input type="text" name="product_variety" class="form-control"
-                   value="<?= h($f['product_variety']) ?>" placeholder="MİKADO">
+                   value="<?= h($f['product_variety']) ?>" placeholder="MİKADO" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Palet Adedi</label>
@@ -250,7 +257,7 @@ render_flash();
         <div class="form-group">
             <label class="form-label">Kasa Cinsi</label>
             <input type="text" name="crate_type" class="form-control"
-                   value="<?= h($f['crate_type']) ?>" placeholder="PLASTİK KASA">
+                   value="<?= h($f['crate_type']) ?>" placeholder="PLASTİK KASA" data-uppercase="tr">
         </div>
     </div>
 </div>
@@ -262,22 +269,22 @@ render_flash();
         <div class="form-group">
             <label class="form-label">Çıkış Depo</label>
             <input type="text" name="exit_depot" class="form-control"
-                   value="<?= h($f['exit_depot']) ?>" placeholder="KARAMAN DEPO">
+                   value="<?= h($f['exit_depot']) ?>" placeholder="KARAMAN DEPO" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Alıcı</label>
             <input type="text" name="buyer_name" class="form-control"
-                   value="<?= h($f['buyer_name']) ?>" placeholder="SÜLEYMAN MOSKOVA">
+                   value="<?= h($f['buyer_name']) ?>" placeholder="SÜLEYMAN MOSKOVA" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">İlgili Kişi</label>
             <input type="text" name="contact_person" class="form-control"
-                   value="<?= h($f['contact_person']) ?>" placeholder="MUHAMMED BEY">
+                   value="<?= h($f['contact_person']) ?>" placeholder="MUHAMMED BEY" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Marka</label>
             <input type="text" name="brand" class="form-control"
-                   value="<?= h($f['brand']) ?>" placeholder="URAS">
+                   value="<?= h($f['brand']) ?>" placeholder="URAS" data-uppercase="tr">
         </div>
     </div>
 </div>

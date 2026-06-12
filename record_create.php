@@ -34,6 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
     $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : '';
+    foreach (['parti_no', 'bolge', 'gumruk', 'alici', 'sofor_adi', 'fatura_no', 'casus_no', 'on_plaka', 'arka_plaka', 'nakliye_sirketi'] as $_tf) {
+        if (isset($record[$_tf]) && $record[$_tf] !== '') $record[$_tf] = tr_upper($record[$_tf]);
+    }
     // Geçersiz firma ID → NULL yap
     if (!empty($record['urun_sahibi_id'])) {
         $_us_check = db()->prepare("SELECT id FROM material_definitions WHERE id=:id AND type='firma' AND is_active=1");

@@ -92,7 +92,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             </label>
             <?php if (!$form_is_cikma): ?>
             <label>Parti No
-                <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>">
+                <input type="text" name="parti_no" value="<?= h($record['parti_no'] ?? '') ?>" data-uppercase="tr">
             </label>
             <?php endif; ?>
             <label>Tarih <span class="req">*</span>
@@ -113,7 +113,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <?php endif; ?>
             <?php if (!$form_is_cikma): ?>
             <label>Alıcı
-                <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>">
+                <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>" data-uppercase="tr">
             </label>
             <?php endif; ?>
             <label>Ürün <span class="req">*</span>
@@ -171,13 +171,13 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">
             </label>
             <label>Gümrük
-                <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>">
+                <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Fatura No
-                <input type="text" name="fatura_no" value="<?= h($record['fatura_no'] ?? '') ?>">
+                <input type="text" name="fatura_no" value="<?= h($record['fatura_no'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Casus No
-                <input type="text" name="casus_no" value="<?= h($record['casus_no'] ?? '') ?>">
+                <input type="text" name="casus_no" value="<?= h($record['casus_no'] ?? '') ?>" data-uppercase="tr">
             </label>
             <?php endif; ?>
         </div>
@@ -194,19 +194,19 @@ $form_is_cikma = $form_is_cikma ?? false;
     <div class="card-body">
         <div class="grid">
             <label>Nakliye Şirketi
-                <input type="text" name="nakliye_sirketi" value="<?= h($record['nakliye_sirketi'] ?? '') ?>">
+                <input type="text" name="nakliye_sirketi" value="<?= h($record['nakliye_sirketi'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Şoför Adı
-                <input type="text" name="sofor_adi" value="<?= h($record['sofor_adi'] ?? '') ?>">
+                <input type="text" name="sofor_adi" value="<?= h($record['sofor_adi'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Telefon
                 <input type="tel" name="telefon" value="<?= h($record['telefon'] ?? '') ?>" inputmode="tel">
             </label>
             <label>Ön Plaka No
-                <input type="text" name="on_plaka" value="<?= h($record['on_plaka'] ?? '') ?>">
+                <input type="text" name="on_plaka" value="<?= h($record['on_plaka'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Arka Plaka No
-                <input type="text" name="arka_plaka" value="<?= h($record['arka_plaka'] ?? '') ?>">
+                <input type="text" name="arka_plaka" value="<?= h($record['arka_plaka'] ?? '') ?>" data-uppercase="tr">
             </label>
             <label>Nakliye Bedeli
                 <input type="text" name="nakliye_bedeli" inputmode="decimal"

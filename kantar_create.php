@@ -57,6 +57,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fis['firma_adi']   = normalize_firma($fis['firma_adi']);
     $fis['malin_cinsi'] = normalize_urun($fis['malin_cinsi']);
     $fis['depo']        = normalize_depo($fis['depo']);
+    foreach (['operator_adi', 'geldigi_yer', 'gittigi_yer', 'parti_no'] as $_tf) {
+        if ($fis[$_tf] !== '') $fis[$_tf] = tr_upper($fis[$_tf]);
+    }
 
     // ── Zorunlu alan kontrolü ─────────────────────────────
     if ($fis['giris_tarih'] === '') $errors[] = 'Giriş tarihi zorunludur.';

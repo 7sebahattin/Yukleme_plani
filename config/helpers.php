@@ -1249,22 +1249,41 @@ function normalize_text_v2(string $v): string {
     return implode(' ', $words);
 }
 
-function normalize_firma(string $v): string { return normalize_text_v2($v); }
-function normalize_urun(string $v): string  { return normalize_text_v2($v); }
-function normalize_depo(string $v): string  { return normalize_text_v2($v); }
+// ── Türkçe Büyük Harf ────────────────────────────────────
+// i→İ ve ı→I dahil tüm Türkçe karakterleri doğru büyütür.
+// Boşlukları normalize eder; null → '' döner.
+function tr_upper(?string $value): string
+{
+    if ($value === null) return '';
+    $value = trim($value);
+    if ($value === '') return '';
+    $value = preg_replace('/\s+/u', ' ', $value);
+    $value = str_replace(['i', 'ı'], ['İ', 'I'], $value);
+    return mb_strtoupper($value, 'UTF-8');
+}
+
+function tr_upper_or_null($value): ?string
+{
+    $v = tr_upper(is_null($value) ? null : (string)$value);
+    return $v === '' ? null : $v;
+}
+
+function normalize_firma(string $v): string { return tr_upper($v); }
+function normalize_urun(string $v): string  { return tr_upper($v); }
+function normalize_depo(string $v): string  { return tr_upper($v); }
 
 // ── Tanım Tablosuna Otomatik Ekle ────────────────────────
 // Case-insensitive kontrol; aynı isim iki kez eklenmez.
 // type: 'firma' | 'depo' | 'urun'
 function ensure_definition(string $type, string $name): void {
-    $name = normalize_text_v2($name);
+    $name = tr_upper($name);
     if ($name === '') return;
     try {
         $pdo = db();
         $st  = $pdo->prepare("SELECT name FROM material_definitions WHERE type = ?");
         $st->execute([$type]);
         foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
-            if (normalize_text_v2($n) === $name) return;
+            if (tr_upper($n) === $name) return;
         }
         $pdo->prepare(
             "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"

@@ -154,14 +154,14 @@ function kf_datalist(string $id, array $items): string {
                 <?php if (!empty($_all_firma)): ?>
                 <select name="firma_adi"><?= kf_sel_opt($fis['firma_adi'] ?? '', $_all_firma) ?></select>
                 <?php else: ?>
-                <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>">
+                <input type="text" name="firma_adi" value="<?= h($fis['firma_adi'] ?? '') ?>" data-uppercase="tr">
                 <small class="muted"><a href="definitions.php?type=firma">Tanımlar → Firmalar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
             <label>Operatör
                 <?= kf_datalist('kfOpDl', $_kf_op_hist) ?>
                 <input type="text" name="operator_adi" list="kfOpDl"
-                       value="<?= h($fis['operator_adi'] ?? '') ?>" autocomplete="off">
+                       value="<?= h($fis['operator_adi'] ?? '') ?>" autocomplete="off" data-uppercase="tr">
             </label>
             <label>Giriş Tarih / Saat <span class="req">*</span>
                 <input type="datetime-local" name="giris_tarih" value="<?= h($fis['giris_tarih'] ?? '') ?>">
@@ -173,7 +173,7 @@ function kf_datalist(string $id, array $items): string {
                 <?php if (!empty($_urun_names)): ?>
                 <select name="malin_cinsi"><?= kf_sel_opt($fis['malin_cinsi'] ?? '', $_urun_names) ?></select>
                 <?php else: ?>
-                <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>">
+                <input type="text" name="malin_cinsi" value="<?= h($fis['malin_cinsi'] ?? '') ?>" data-uppercase="tr">
                 <small class="muted"><a href="definitions.php?type=urun">Tanımlar → Ürünler'den ekleyin</a></small>
                 <?php endif; ?>
             </label>
@@ -181,7 +181,7 @@ function kf_datalist(string $id, array $items): string {
                 <?php if (!empty($_lokasyon_names)): ?>
                 <select name="geldigi_yer"><?= kf_sel_opt($fis['geldigi_yer'] ?? '', $_lokasyon_names) ?></select>
                 <?php else: ?>
-                <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>">
+                <input type="text" name="geldigi_yer" value="<?= h($fis['geldigi_yer'] ?? '') ?>" data-uppercase="tr">
                 <small class="muted"><a href="definitions.php?type=lokasyon">Tanımlar → Lokasyonlar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
@@ -189,7 +189,7 @@ function kf_datalist(string $id, array $items): string {
                 <?php if (!empty($_lokasyon_names)): ?>
                 <select name="gittigi_yer"><?= kf_sel_opt($fis['gittigi_yer'] ?? '', $_lokasyon_names) ?></select>
                 <?php else: ?>
-                <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>">
+                <input type="text" name="gittigi_yer" value="<?= h($fis['gittigi_yer'] ?? '') ?>" data-uppercase="tr">
                 <small class="muted"><a href="definitions.php?type=lokasyon">Tanımlar → Lokasyonlar'dan ekleyin</a></small>
                 <?php endif; ?>
             </label>
