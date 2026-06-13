@@ -3609,6 +3609,107 @@ body.notes-modal-open { overflow: hidden; }
 }
 @media (max-width: 599px) { .stok-hide-sm { display: none !important; } }
 
+/* ── Malzeme Hareketleri: aksiyon butonları (Pro-07) ───── */
+/* Tablo + mobil kart ortak buton stili. */
+.ms-act-btn {
+    padding: 3px 9px; font-size: .76rem; border-radius: 5px;
+    border: 1px solid transparent; cursor: pointer; line-height: 1.4;
+    white-space: nowrap;
+}
+.ms-act-btn.ms-move-btn { background: var(--primary-light, #e8f0fe); color: var(--primary, #1a73e8); }
+.ms-act-btn.ms-rev-btn  { background: var(--warn-light, #fff3cd); color: var(--warn-dark, #856404); }
+.ms-act-btn.ms-edit-btn { background: var(--bg-alt, #f1f3f5); color: var(--text, #222); }
+.mh-act-cell .ms-act-btn { margin: 0 1px; }
+
+/* ── Malzeme Hareketleri: mobil kart görünümü (Pro-07) ─── */
+.mh-cards { display: none; }   /* ≥768px: gizli, tablo görünür */
+
+@media (max-width: 767px) {
+    .mh-desk  { display: none !important; }   /* mobilde tablo gizli */
+    .mh-cards { display: block; padding: 10px; }
+
+    .mh-card {
+        border: 1px solid var(--border); border-radius: 9px;
+        padding: 11px 13px; margin-bottom: 10px; background: var(--card-bg, #fff);
+    }
+    .mh-card:last-child { margin-bottom: 0; }
+    .mh-card-top {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        margin-bottom: 7px;
+    }
+    .mh-card-date { font-size: .8rem; color: var(--muted); }
+    .mh-card-lock {
+        margin-left: auto; font-size: .72rem; color: var(--muted);
+        white-space: nowrap;
+    }
+    .mh-card-main { margin-bottom: 4px; }
+    .mh-card-mat  { font-weight: 700; font-size: 1.02rem; line-height: 1.3; }
+    .mh-card-meta { font-size: .8rem; color: var(--muted); margin-top: 1px; }
+    .mh-card-qty  { font-weight: 800; font-size: 1.25rem; margin: 4px 0 2px; }
+    .mh-card-qty small { font-weight: 400; font-size: .8rem; color: var(--muted); }
+    .mh-card-details {
+        font-size: .8rem; color: var(--text); margin-top: 7px;
+        padding-top: 7px; border-top: 1px dashed var(--border);
+        display: flex; flex-direction: column; gap: 2px;
+    }
+    .mh-card-details span { color: var(--muted); }
+    .mh-card-note {
+        font-size: .76rem; color: var(--muted); margin-top: 8px;
+        padding-top: 7px; border-top: 1px dashed var(--border);
+    }
+    .mh-card-actions {
+        display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px;
+        padding-top: 9px; border-top: 1px dashed var(--border);
+    }
+    .mh-card-actions .ms-act-btn {
+        flex: 1 1 auto; min-height: 40px; font-size: .82rem;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+}
+
+/* ── Malzeme Stok ana sayfa: mobil kart görünümü (Pro-09) ─ */
+.ms-stock-cards { display: none; }   /* ≥768px: gizli, tablo görünür */
+
+@media (max-width: 767px) {
+    .ms-stock-desk  { display: none !important; }   /* mobilde tablo gizli */
+    .ms-stock-cards { display: block; padding: 10px; }
+
+    .ms-scard {
+        border: 1px solid var(--border); border-left-width: 4px;
+        border-radius: 9px; padding: 11px 13px; margin-bottom: 10px;
+        background: var(--card-bg, #fff);
+    }
+    .ms-scard:last-child { margin-bottom: 0; }
+    /* Durum renk şeridi (sol kenar) */
+    .ms-scard-negatif { border-left-color: var(--danger, #dc2626); }
+    .ms-scard-stokta  { border-left-color: var(--success, #16a34a); }
+    .ms-scard-sifir   { border-left-color: var(--muted, #9ca3af); }
+
+    .ms-scard-top {
+        display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 8px; margin-bottom: 5px;
+    }
+    .ms-scard-name { font-weight: 700; font-size: 1.02rem; line-height: 1.3; }
+    .ms-scard-passive {
+        font-size: .64rem; font-weight: 700; color: var(--muted);
+        border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px;
+        vertical-align: middle;
+    }
+    .ms-scard-meta { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    .ms-scard-kalan { font-weight: 800; font-size: 1.5rem; margin: 2px 0 6px; }
+    .ms-scard-kalan small { font-weight: 400; font-size: .8rem; color: var(--muted); }
+    .ms-scard-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+        padding: 7px 0; border-top: 1px dashed var(--border);
+        border-bottom: 1px dashed var(--border); margin-bottom: 9px;
+    }
+    .ms-scard-grid div { display: flex; flex-direction: column; }
+    .ms-scard-grid span { font-size: .7rem; color: var(--muted); }
+    .ms-scard-grid b { font-size: .9rem; }
+    .ms-scard-actions { display: flex; gap: 8px; }
+    .ms-scard-actions .btn { flex: 1 1 auto; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+}
+
 /* ── Sayım Kaydet formu ────────────────────────────────── */
 .sc-kaydet-card   { margin-top: 12px; }
 .sc-kaydet-head   { padding: 12px 16px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -3780,6 +3881,39 @@ body.notes-modal-open { overflow: hidden; }
 }
 /* Inputlar beyaz kalsın — okunabilirlik için */
 .ms-action-card .form-control { background: #fff; }
+
+/* ── Pro-08: Hızlı tekrar kartı ───────────────────────── */
+.ms-quick-card {
+    border: 1px solid var(--success, #16a34a);
+    background: var(--success-soft, #f0fdf4);
+    margin-bottom: 14px;
+}
+.ms-quick-head { font-weight: 700; font-size: .95rem; margin-bottom: 10px; color: var(--success-dark, #166534); }
+.ms-quick-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Pro-08: Mobil işlem formu konforu ────────────────── */
+@media (max-width: 767px) {
+    .ms-form-tabs { flex-wrap: wrap; gap: 4px; }
+    .ms-tab-btn { flex: 1 1 auto; padding: 10px 12px; text-align: center; border-radius: var(--radius); }
+    .ms-action-card .btn[type="submit"] { width: 100%; min-height: 46px; font-size: 1rem; }
+    .ms-quick-btns .btn { flex: 1 1 100%; min-height: 44px; }
+}
+
+/* ── Pro-08B: Son firma+belge öneri paneli ────────────── */
+.ms-last-hint-panel {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #f0f9ff; border: 1px solid #bae6fd; border-radius: var(--radius);
+    padding: 7px 12px; margin-bottom: 10px; font-size: .84rem; color: #0369a1;
+}
+.ms-last-hint-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ms-last-hint-btn  { white-space: nowrap; flex-shrink: 0; }
+
+/* ── Pro-08B: Hızlı tekrar kartı detay satırı ─────────── */
+.ms-quick-detail {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    font-size: .82rem; color: #374151; margin-bottom: 10px;
+}
+.ms-quick-detail span { display: inline-flex; gap: 4px; align-items: center; }
 
 /* ── Sprint 33: Stok Özeti mini filtre ── */
 .ms-ozet-filter {

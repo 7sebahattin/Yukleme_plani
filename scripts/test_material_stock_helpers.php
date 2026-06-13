@@ -110,6 +110,25 @@ $neg = get_negative_materials($rows);
 check('get_negative_materials adları', ['C-5 SİYAH', 'PASİF KASA'],
     array_values(array_intersect(array_column($neg, 'material_name'), ['C-5 SİYAH', 'PASİF KASA'])));
 
+// ── 3b) Pro-01: ms_filter_summary_rows (yeni adlar + durum) ──
+$allr = get_material_stock_summary($pdo, []); // filtresiz tam set
+check('filtre yokken tüm satırlar döner', count($allr),
+    count(ms_filter_summary_rows($allr, [])));
+check('durum=negatif yalnızca negatifler', true,
+    count($f = ms_filter_summary_rows($allr, ['durum' => 'negatif'])) > 0
+    && count(array_filter($f, fn($r) => (float)$r['kalan'] >= 0)) === 0);
+check('durum=stokta yalnızca pozitifler', 0,
+    count(array_filter(ms_filter_summary_rows($allr, ['durum' => 'stokta']), fn($r) => (float)$r['kalan'] <= 0)));
+check('durum=sifir yalnızca sıfırlar', 0,
+    count(array_filter(ms_filter_summary_rows($allr, ['durum' => 'sifir']), fn($r) => (float)$r['kalan'] != 0.0)));
+check('q (yeni ad) = ozet_malzeme davranışı', count(ms_filter_summary_rows($allr, ['ozet_malzeme' => 'yunan'])),
+    count(ms_filter_summary_rows($allr, ['q' => 'yunan'])));
+check('kategori (yeni ad) yalnızca kasa', ['kasa'],
+    array_values(array_unique(array_column(ms_filter_summary_rows($allr, ['kategori' => 'kasa']), 'category'))));
+check('durum+kategori birlikte (negatif kasa)', true,
+    count(array_filter(ms_filter_summary_rows($allr, ['kategori' => 'kasa', 'durum' => 'negatif']),
+        fn($r) => $r['category'] !== 'kasa' || (float)$r['kalan'] >= 0)) === 0);
+
 // ── 4) Hareket listesi ──
 $mv = get_material_movements($pdo);
 check('hareket sayısı (filtresiz)', 9, count($mv));
@@ -122,6 +141,22 @@ check('limit parametresi', 3, count(get_material_movements($pdo, [], 3)));
 check('hareket satır anahtarları',
     ['id','movement_date','movement_type','material_type','material_name','depo','quantity','unit','source_type','source_id','belge_no','firma','note'],
     array_keys($mv[0]));
+
+// ── 4b) Pro-02: SQL pagination + count + url builder ──
+check('count_material_movements filtresiz', 9, count_material_movements($pdo));
+check('count_material_movements hareket_tipi=giris', 4, count_material_movements($pdo, ['hareket_tipi' => 'giris']));
+check('count_material_movements mat_id=1', 4, count_material_movements($pdo, ['mat_id' => 1]));
+// offset pagination: sayfa 1 (limit 4) ile sayfa 2 (offset 4) çakışmamalı, birlik = tüm sıralı liste
+$p1 = get_material_movements($pdo, [], 4, 0);
+$p2 = get_material_movements($pdo, [], 4, 4);
+$p3 = get_material_movements($pdo, [], 4, 8);
+check('pagination sayfa boyutları', [4, 4, 1], [count($p1), count($p2), count($p3)]);
+check('pagination çakışma yok (id bazında)',
+    array_column($mv, 'id'),
+    array_merge(array_column($p1, 'id'), array_column($p2, 'id'), array_column($p3, 'id')));
+check('ms_hareket_url boş paramları atar', 'malzeme_hareketleri.php?mat_id=1&depo=KARAMAN',
+    ms_hareket_url(['mat_id' => 1, 'mat_type' => '', 'depo' => 'KARAMAN']));
+check('ms_hareket_url parametresiz', 'malzeme_hareketleri.php', ms_hareket_url([]));
 
 // ── 5) Dropdown verileri ──
 $dd = get_material_dropdown_data($pdo);

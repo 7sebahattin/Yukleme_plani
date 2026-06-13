@@ -1,0 +1,729 @@
+<?php
+// =========================================================
+// malzeme_stok_islem.php — Malzeme Stok İşlemi (Giriş/Sevk/Düzeltme)
+// Formlar Pro-03'te malzeme_stok.php'den taşındı. POST davranışı korundu.
+// =========================================================
+declare(strict_types=1);
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/material_stock_helpers.php';
+$auth_user = require_login();
+require_perm('stok.write');
+
+$pdo = db();
+
+$ms_types = ms_material_types();
+$ms_units = ms_stock_units();
+
+// ── return güvenliği — yalnızca yerel .php yolu ────────────
+function islem_safe_return(?string $r): string {
+    $r = trim((string)$r);
+    if ($r === '') return '';
+    // şema (http://), protokol-relative (//), mutlak yol (/...) reddedilir
+    if (preg_match('~^[A-Za-z0-9_]+\.php(\?[^#\s]*)?$~', $r)) return $r;
+    return '';
+}
+$return = islem_safe_return($_GET['return'] ?? ($_POST['return'] ?? ''));
+
+// ── Mod (sekme) ───────────────────────────────────────────
+$mode = (string)($_GET['mode'] ?? 'giris');
+if (!in_array($mode, ['giris', 'sevk', 'duzeltme'], true)) $mode = 'giris';
+
+// ── İşlem sonrası dönüş hedefleri ─────────────────────────
+function islem_self_url(string $mode, string $return): string {
+    $q = ['mode' => $mode];
+    if ($return !== '') $q['return'] = $return;
+    return 'malzeme_stok_islem.php?' . http_build_query($q);
+}
+// Hızlı tekrar linki: mode + opsiyonel material_id/depo + return (miktar taşınmaz).
+function islem_quick_url(string $mode, array $extra, string $return): string {
+    $q = ['mode' => $mode];
+    foreach ($extra as $k => $v) {
+        if ($v !== '' && $v !== null && $v !== 0) $q[$k] = $v;
+    }
+    if ($return !== '') $q['return'] = $return;
+    return 'malzeme_stok_islem.php?' . http_build_query($q);
+}
+
+// ── POST: Giriş / Sevk kaydet ─────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && in_array($_POST['action'] ?? '', ['ms_giris', 'ms_sevk'], true)) {
+    csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
+
+    $mv_type     = ($_POST['action'] === 'ms_sevk') ? 'sevk' : 'giris';
+    $mv_date     = trim($_POST['mv_date']    ?? '');
+    $mv_mat_type = trim($_POST['mv_mat_type'] ?? '');
+    $mv_mat_name = trim($_POST['mv_mat_name'] ?? '');
+    $mv_depo     = trim($_POST['mv_depo']    ?? '');
+    $mv_qty      = num($_POST['mv_qty']      ?? '0');
+    $mv_unit     = trim($_POST['mv_unit']    ?? 'adet');
+    $mv_belge    = trim($_POST['mv_belge']   ?? '');
+    $mv_firma    = trim($_POST['mv_firma']   ?? '');
+    $mv_note     = trim($_POST['mv_note']    ?? '');
+
+    $err = '';
+    if (!$mv_date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $mv_date)) {
+        $err = 'Tarih zorunludur (YYYY-AA-GG).';
+    } elseif (!isset($ms_types[$mv_mat_type])) {
+        $err = 'Malzeme türü seçiniz.';
+    } elseif ($mv_mat_name === '') {
+        $err = 'Malzeme adı zorunludur.';
+    } elseif ($mv_depo === '') {
+        $err = 'Depo seçimi zorunludur.';
+    } elseif ($mv_qty <= 0) {
+        $err = 'Miktar sıfırdan büyük olmalıdır.';
+    }
+
+    if ($err !== '') {
+        set_flash('error', $err);
+        header('Location: ' . islem_self_url($mv_type === 'sevk' ? 'sevk' : 'giris', $return));
+        exit;
+    }
+
+    $mat_row   = ms_find_material_definition($pdo, $mv_mat_type, $mv_mat_name);
+    $mat_id    = $mat_row ? (int)$mat_row['id'] : null;
+    $unit_dara = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
+    $total_dara = round($mv_qty * $unit_dara, 3);
+
+    $pdo->prepare(
+        "INSERT INTO material_stock_movements
+         (movement_date, movement_type, material_id, material_name, material_type,
+          depo, quantity, unit, unit_dara_kg, total_dara_kg, belge_no, firma, note)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    )->execute([
+        $mv_date, $mv_type, $mat_id, $mv_mat_name, $mv_mat_type,
+        $mv_depo, $mv_qty, $mv_unit, $unit_dara, $total_dara,
+        $mv_belge, $mv_firma, $mv_note ?: null,
+    ]);
+    $mv_inserted_id = (int)$pdo->lastInsertId();
+    audit_log_event('create', 'malzeme_stok', $mv_inserted_id, null, [
+        'movement_type' => $mv_type,
+        'material_id'   => $mat_id,
+        'material_name' => $mv_mat_name,
+        'material_type' => $mv_mat_type,
+        'depo'          => $mv_depo,
+        'quantity'      => $mv_qty,
+        'unit'          => $mv_unit,
+        'belge_no'      => $mv_belge,
+        'firma'         => $mv_firma,
+        'note'          => $mv_note,
+    ]);
+
+    $lbl = $mv_type === 'giris' ? 'Giriş' : 'Sevk çıkışı';
+    set_flash('success', "$lbl kaydedildi: $mv_mat_name · " . fmt_kg($mv_qty) . " $mv_unit");
+    // Hızlı tekrar için son işlem bilgisi (tek kullanımlık, sadece link üretimi).
+    $_SESSION['ms_last_action'] = [
+        'mode'          => $mv_type,
+        'material_id'   => $mat_id,
+        'material_name' => $mv_mat_name,
+        'material_type' => $mv_mat_type,
+        'depo'          => $mv_depo,
+        'firma'         => $mv_firma,
+        'belge'         => $mv_belge,
+        'movement_id'   => $mv_inserted_id,
+        'return'        => $return,
+    ];
+    // İşlem sayfasında kal: hızlı tekrar kartı gösterilsin (return quick link'te taşınır).
+    header('Location: ' . islem_self_url($mv_type, $return));
+    exit;
+}
+
+// ── POST: Bağımsız Düzeltme ───────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_duzeltme_direkt') {
+    csrf_check($_POST['csrf'] ?? null);
+    require_perm('stok.write');
+
+    $dz_date     = trim($_POST['dz_date']     ?? '');
+    $dz_mat_type = trim($_POST['dz_mat_type'] ?? '');
+    $dz_mat_name = trim($_POST['dz_mat_name'] ?? '');
+    $dz_depo     = trim($_POST['dz_depo']     ?? '');
+    $dz_qty_raw  = num($_POST['dz_qty']       ?? '0');
+    $dz_yon      = trim($_POST['dz_yon']      ?? 'arti');
+    $dz_unit     = trim($_POST['dz_unit']     ?? 'adet');
+    $dz_belge    = trim($_POST['dz_belge']    ?? '');
+    $dz_note     = trim($_POST['dz_note']     ?? '');
+    $dz_qty      = $dz_yon === 'eksi' ? -abs($dz_qty_raw) : abs($dz_qty_raw);
+
+    $err = '';
+    if (!$dz_date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dz_date)) {
+        $err = 'Tarih zorunludur.';
+    } elseif (!isset($ms_types[$dz_mat_type])) {
+        $err = 'Malzeme türü seçiniz.';
+    } elseif ($dz_mat_name === '') {
+        $err = 'Malzeme adı zorunludur.';
+    } elseif ($dz_depo === '') {
+        $err = 'Depo seçimi zorunludur.';
+    } elseif ($dz_qty_raw == 0.0) {
+        $err = 'Miktar sıfır olamaz.';
+    }
+
+    if ($err !== '') {
+        set_flash('error', $err);
+        header('Location: ' . islem_self_url('duzeltme', $return));
+        exit;
+    }
+
+    $mat_row   = ms_find_material_definition($pdo, $dz_mat_type, $dz_mat_name);
+    $mat_id    = $mat_row ? (int)$mat_row['id'] : null;
+    $unit_dara = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
+
+    $pdo->prepare(
+        "INSERT INTO material_stock_movements
+         (movement_date, movement_type, material_id, material_name, material_type,
+          depo, quantity, unit, unit_dara_kg, total_dara_kg, belge_no, note)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+    )->execute([
+        $dz_date, 'duzeltme', $mat_id, $dz_mat_name, $dz_mat_type,
+        $dz_depo, $dz_qty, $dz_unit, $unit_dara, round($dz_qty * $unit_dara, 3),
+        $dz_belge, $dz_note ?: null,
+    ]);
+    $dz_inserted_id = (int)$pdo->lastInsertId();
+    audit_log_event('create', 'malzeme_stok', $dz_inserted_id, null, [
+        'movement_type' => 'duzeltme',
+        'direction'     => $dz_yon,
+        'material_id'   => $mat_id,
+        'material_name' => $dz_mat_name,
+        'material_type' => $dz_mat_type,
+        'depo'          => $dz_depo,
+        'quantity'      => $dz_qty,
+        'unit'          => $dz_unit,
+        'belge_no'      => $dz_belge,
+        'note'          => $dz_note,
+    ]);
+    $lbl = $dz_yon === 'eksi' ? 'Eksi düzeltme' : 'Artı düzeltme';
+    set_flash('success', "$lbl kaydedildi: $dz_mat_name · " . ($dz_qty >= 0 ? '+' : '') . fmt_kg($dz_qty) . ' ' . $dz_unit);
+    $_SESSION['ms_last_action'] = [
+        'mode'          => 'duzeltme',
+        'material_id'   => $mat_id,
+        'material_name' => $dz_mat_name,
+        'material_type' => $dz_mat_type,
+        'depo'          => $dz_depo,
+        'firma'         => '',
+        'belge'         => $dz_belge,
+        'movement_id'   => $dz_inserted_id,
+        'return'        => $return,
+    ];
+    header('Location: ' . islem_self_url('duzeltme', $return));
+    exit;
+}
+
+// ── Ön-dolum (GET) ────────────────────────────────────────
+// material_id verildiyse tanım ID üzerinden ESAS alınır; isim/tür yalnızca
+// görünüm için tanımdan çözülür (isimden eşleştirme yapılmaz).
+$pf_mat_id    = (int)($_GET['material_id'] ?? 0);
+$pf_mat_name  = trim($_GET['mat_name'] ?? '');
+$pf_mat_type  = trim($_GET['mat_type'] ?? '');
+$pf_depo      = trim($_GET['depo'] ?? '');
+$pf_passive   = false;
+if ($pf_mat_id > 0) {
+    // ID esas: tür/ad daima tanımdan çözülür (URL'deki mat_name/mat_type yok sayılır).
+    $st = $pdo->prepare("SELECT type, name, is_active FROM material_definitions WHERE id=? LIMIT 1");
+    $st->execute([$pf_mat_id]);
+    if ($row = $st->fetch()) {
+        $pf_mat_type = (string)$row['type'];
+        $pf_mat_name = (string)$row['name'];
+        $pf_passive  = !(int)$row['is_active'];
+    } else {
+        $pf_mat_id = 0; // tanım bulunamadı → ID'yi düşür
+    }
+}
+if (!isset($ms_types[$pf_mat_type])) { $pf_mat_type = ''; $pf_mat_name = ''; }
+$prefill = ['mat_type' => $pf_mat_type, 'mat_name' => $pf_mat_name, 'depo' => $pf_depo];
+
+// ── Hızlı tekrar: son işlem bilgisi (tek kullanımlık) ─────
+$last_action = null;
+if (!empty($_SESSION['ms_last_action'])) {
+    $last_action = $_SESSION['ms_last_action'];
+    unset($_SESSION['ms_last_action']);
+}
+
+// ── Üst "Hareketlere Git" linki — ön-dolum varsa filtreli ─
+$hareket_link = ms_hareket_url([
+    'mat_id' => $pf_mat_id > 0 ? $pf_mat_id : '',
+    'depo'   => $pf_depo,
+]);
+
+// ── Dropdown verileri ─────────────────────────────────────
+$ms_dd             = get_material_dropdown_data($pdo);
+$depo_list         = $ms_dd['depo_list'];
+$mat_names_by_type = $ms_dd['mat_names_by_type'];
+$firma_list        = $ms_dd['firma_list'];
+
+render_header('Malzeme Stok İşlemi');
+render_flash();
+?>
+
+<div class="page-head">
+    <div>
+        <h2 class="page-title">➕ Malzeme Stok İşlemi</h2>
+        <p style="color:var(--text-muted);font-size:.85rem;margin-top:2px">
+            Stok giriş, sevk ve düzeltme işlemlerini buradan yapabilirsiniz.
+        </p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <a href="<?= h($return !== '' ? $return : 'malzeme_stok.php') ?>" class="btn btn-sm btn-secondary">← Stoklara Dön</a>
+        <a href="<?= h($hareket_link) ?>" class="btn btn-sm btn-ghost">📜 Hareketlere Git</a>
+    </div>
+</div>
+
+<?php if ($pf_passive): ?>
+<div class="flash flash-error" style="margin-bottom:12px">
+    ⚠ Bu malzeme <strong>pasif tanımdır</strong>. İşlem yapmadan önce doğru malzemeyi seçtiğinizden emin olun.
+</div>
+<?php endif; ?>
+
+<?php if ($last_action):
+    $la_mid   = (int)($last_action['material_id'] ?? 0);
+    $la_depo  = (string)($last_action['depo'] ?? '');
+    $la_name  = (string)($last_action['material_name'] ?? '');
+    $la_ret   = islem_safe_return($last_action['return'] ?? '');
+    $la_firma = (string)($last_action['firma'] ?? '');
+    $la_belge = (string)($last_action['belge'] ?? '');
+?>
+<div class="card ms-quick-card">
+    <div class="ms-quick-head">✓ İşlem kaydedildi. Ne yapmak istersiniz?</div>
+    <?php if ($la_firma !== '' || $la_belge !== ''): ?>
+    <div class="ms-quick-detail">
+        <?php if ($la_firma !== ''): ?><span>Firma: <strong><?= h($la_firma) ?></strong></span><?php endif; ?>
+        <?php if ($la_belge !== ''): ?><span>Belge: <strong><?= h($la_belge) ?></strong></span><?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <div class="ms-quick-btns">
+        <?php if ($la_mid > 0): ?>
+        <a href="<?= h(islem_quick_url('giris', ['material_id' => $la_mid, 'depo' => $la_depo], $la_ret)) ?>"
+           class="btn btn-sm btn-primary">➕ Aynı malzemeye tekrar giriş<?= $la_name !== '' ? ' (' . h($la_name) . ')' : '' ?></a>
+        <?php endif; ?>
+        <?php if ($la_depo !== ''): ?>
+        <a href="<?= h(islem_quick_url('giris', ['depo' => $la_depo], $la_ret)) ?>"
+           class="btn btn-sm btn-secondary">📦 Aynı depoya yeni giriş (<?= h($la_depo) ?>)</a>
+        <?php endif; ?>
+        <a href="<?= h(ms_hareket_url(['mat_id' => $la_mid > 0 ? $la_mid : '', 'depo' => $la_depo])) ?>"
+           class="btn btn-sm btn-ghost">📜 Hareketleri gör</a>
+        <a href="<?= h($la_ret !== '' ? $la_ret : 'malzeme_stok.php') ?>"
+           class="btn btn-sm btn-ghost">← Stoklara dön</a>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Sekmeler ───────────────────────────────────────────── -->
+<div class="ms-form-wrap">
+    <div class="ms-form-tabs">
+        <button type="button" class="ms-tab-btn<?= $mode === 'giris' ? ' ms-tab-active' : '' ?>" id="tabGiris" onclick="msTab('giris')">
+            ➕ Giriş
+        </button>
+        <button type="button" class="ms-tab-btn<?= $mode === 'sevk' ? ' ms-tab-active' : '' ?>" id="tabSevk" onclick="msTab('sevk')">
+            ↗ Sevk / Çıkış
+        </button>
+        <button type="button" class="ms-tab-btn<?= $mode === 'duzeltme' ? ' ms-tab-active' : '' ?>" id="tabDuzeltme" onclick="msTab('duzeltme')">
+            ± Düzeltme
+        </button>
+    </div>
+
+    <!-- Son kullanılan firma+belge önerisi -->
+    <div id="ms-last-hint" class="ms-last-hint-panel" hidden>
+        <span class="ms-last-hint-text">Son: <span id="ms-last-hint-info"></span></span>
+        <button type="button" class="btn btn-sm btn-ghost ms-last-hint-btn" onclick="msFillLastHint()">Son bilgileri doldur</button>
+    </div>
+
+    <!-- Giriş formu -->
+    <div id="msFormGiris" class="card ms-form-card ms-action-card"<?= $mode === 'giris' ? '' : ' hidden' ?>>
+        <form method="post" action="<?= h(islem_self_url('giris', $return)) ?>" autocomplete="off">
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="ms_giris">
+            <?php if ($return !== ''): ?><input type="hidden" name="return" value="<?= h($return) ?>"><?php endif; ?>
+            <div class="ms-form-grid">
+                <div class="form-group">
+                    <label class="form-label">Tarih <span class="req">*</span></label>
+                    <input type="date" name="mv_date" class="form-control" required value="<?= date('Y-m-d') ?>">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Türü <span class="req">*</span></label>
+                    <select name="mv_mat_type" class="form-control" id="girisMatType" required onchange="msUpdateNames('giris')">
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($ms_types as $k => $lbl): ?>
+                        <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Adı <span class="req">*</span></label>
+                    <select name="mv_mat_name" id="girisMatName" class="form-control" required>
+                        <option value="">— önce tür seçin —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="mv_depo" id="girisDepo" class="form-control" required>
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($depo_list as $dv): ?>
+                        <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Miktar <span class="req">*</span></label>
+                    <input type="number" name="mv_qty" class="form-control" required min="0.001" step="any" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Birim</label>
+                    <select name="mv_unit" class="form-control">
+                        <?php foreach ($ms_units as $u): ?>
+                        <option value="<?= h($u) ?>"><?= h($u) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Belge / İrsaliye No</label>
+                    <input type="text" name="mv_belge" id="girisBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tedarikçi / Firma</label>
+                    <input type="text" name="mv_firma" id="girisFirma" class="form-control"
+                           list="ms-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
+                    <datalist id="ms-firma-list">
+                        <?php foreach ($firma_list as $fv): ?>
+                        <option value="<?= h($fv) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+                <div class="form-group ms-form-full">
+                    <label class="form-label">Not</label>
+                    <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
+                </div>
+            </div>
+            <div style="margin-top:12px">
+                <button type="submit" class="btn btn-primary">💾 Girişi Kaydet</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Sevk formu -->
+    <div id="msFormSevk" class="card ms-form-card ms-action-card"<?= $mode === 'sevk' ? '' : ' hidden' ?>>
+        <form method="post" action="<?= h(islem_self_url('sevk', $return)) ?>" autocomplete="off">
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="ms_sevk">
+            <?php if ($return !== ''): ?><input type="hidden" name="return" value="<?= h($return) ?>"><?php endif; ?>
+            <div class="ms-form-grid">
+                <div class="form-group">
+                    <label class="form-label">Tarih <span class="req">*</span></label>
+                    <input type="date" name="mv_date" class="form-control" required value="<?= date('Y-m-d') ?>">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Türü <span class="req">*</span></label>
+                    <select name="mv_mat_type" class="form-control" id="sevkMatType" required onchange="msUpdateNames('sevk')">
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($ms_types as $k => $lbl): ?>
+                        <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Adı <span class="req">*</span></label>
+                    <select name="mv_mat_name" id="sevkMatName" class="form-control" required>
+                        <option value="">— önce tür seçin —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="mv_depo" id="sevkDepo" class="form-control" required>
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($depo_list as $dv): ?>
+                        <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Miktar <span class="req">*</span></label>
+                    <input type="number" name="mv_qty" class="form-control" required min="0.001" step="any" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Birim</label>
+                    <select name="mv_unit" class="form-control">
+                        <?php foreach ($ms_units as $u): ?>
+                        <option value="<?= h($u) ?>"><?= h($u) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Belge / İrsaliye No</label>
+                    <input type="text" name="mv_belge" id="sevkBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Gönderilen Firma</label>
+                    <input type="text" name="mv_firma" id="sevkFirma" class="form-control"
+                           list="ms-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
+                </div>
+                <div class="form-group ms-form-full">
+                    <label class="form-label">Not</label>
+                    <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
+                </div>
+            </div>
+            <div style="margin-top:12px">
+                <button type="submit" class="btn btn-danger">↗ Sevki Kaydet</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Düzeltme formu -->
+    <div id="msFormDuzeltme" class="card ms-form-card ms-action-card"<?= $mode === 'duzeltme' ? '' : ' hidden' ?>>
+        <p style="font-size:.84rem;color:var(--muted);margin-bottom:12px">
+            Stok sayım farkını veya hatalı girişi düzeltmek için kullanın.
+            <strong>Artı düzeltme</strong> stoka ekler, <strong>eksi düzeltme</strong> stoktan çıkarır.
+        </p>
+        <form method="post" action="<?= h(islem_self_url('duzeltme', $return)) ?>" autocomplete="off">
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="ms_duzeltme_direkt">
+            <?php if ($return !== ''): ?><input type="hidden" name="return" value="<?= h($return) ?>"><?php endif; ?>
+            <div class="ms-form-grid">
+                <div class="form-group">
+                    <label class="form-label">Tarih <span class="req">*</span></label>
+                    <input type="date" name="dz_date" class="form-control" required value="<?= date('Y-m-d') ?>">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Türü <span class="req">*</span></label>
+                    <select name="dz_mat_type" class="form-control" id="duzeltmeMatType" required onchange="msUpdateNames('duzeltme')">
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($ms_types as $k => $lbl): ?>
+                        <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Malzeme Adı <span class="req">*</span></label>
+                    <select name="dz_mat_name" id="duzeltmeMatName" class="form-control" required>
+                        <option value="">— önce tür seçin —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Depo <span class="req">*</span></label>
+                    <select name="dz_depo" id="duzeltmeDepo" class="form-control" required>
+                        <option value="">— seçiniz —</option>
+                        <?php foreach ($depo_list as $dv): ?>
+                        <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Miktar <span class="req">*</span></label>
+                    <input type="number" name="dz_qty" class="form-control" required min="0.001" step="any" placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Birim</label>
+                    <select name="dz_unit" class="form-control">
+                        <?php foreach ($ms_units as $u): ?>
+                        <option value="<?= h($u) ?>"><?= h($u) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Yön <span class="req">*</span></label>
+                    <select name="dz_yon" class="form-control" required>
+                        <option value="arti">+ Artı düzeltme (stoka ekle)</option>
+                        <option value="eksi">− Eksi düzeltme (stoktan çıkar)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Belge / Açıklama</label>
+                    <input type="text" name="dz_belge" id="duzeltmeBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                </div>
+                <div class="form-group ms-form-full">
+                    <label class="form-label">Not</label>
+                    <input type="text" name="dz_note" class="form-control" placeholder="İsteğe bağlı">
+                </div>
+            </div>
+            <div style="margin-top:12px">
+                <button type="submit" class="btn btn-secondary">± Düzeltmeyi Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
+var msPrefill    = <?= json_encode($prefill, JSON_UNESCAPED_UNICODE) ?>;
+var msDepoKey    = 'asyaFresh.materialStock.lastDepo';
+var msFirmaKey   = 'asyaFresh.materialStock.lastFirma';
+var msBelgeKey   = 'asyaFresh.materialStock.lastBelgeNo';
+var msCurrentTab = <?= json_encode($mode, JSON_UNESCAPED_UNICODE) ?>;
+
+function msUpdateNames(form, selectedName) {
+    var typeId  = form === 'giris' ? 'girisMatType' : (form === 'sevk' ? 'sevkMatType' : 'duzeltmeMatType');
+    var nameId  = form === 'giris' ? 'girisMatName' : (form === 'sevk' ? 'sevkMatName' : 'duzeltmeMatName');
+    var typeSel = document.getElementById(typeId);
+    var nameSel = document.getElementById(nameId);
+    if (!typeSel || !nameSel) return;
+    var names = msNamesData[typeSel.value] || [];
+    nameSel.innerHTML = '<option value="">— seçiniz —</option>';
+    var found = false;
+    names.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        if (selectedName && n === selectedName) { opt.selected = true; found = true; }
+        nameSel.appendChild(opt);
+    });
+    // Tanımda olmayan ama istenen ad: yine de seçilebilsin
+    if (!found && selectedName) {
+        var opt = document.createElement('option');
+        opt.value = selectedName; opt.textContent = selectedName; opt.selected = true;
+        nameSel.appendChild(opt);
+    }
+    nameSel.disabled = names.length === 0 && !selectedName;
+}
+
+function msTab(tab) {
+    // Geçişten önce mevcut formun değerlerini al (miktar ve not TAŞINMAZ)
+    var fromType  = document.getElementById(msCurrentTab + 'MatType');
+    var fromName  = document.getElementById(msCurrentTab + 'MatName');
+    var fromDepo  = document.getElementById(msCurrentTab + 'Depo');
+    var fromFirma = document.getElementById(msCurrentTab + 'Firma');
+    var fromBelge = document.getElementById(msCurrentTab + 'Belge');
+    var carry = {
+        type:  fromType  ? fromType.value  : '',
+        name:  fromName  ? fromName.value  : '',
+        depo:  fromDepo  ? fromDepo.value  : '',
+        firma: fromFirma ? fromFirma.value : '',
+        belge: fromBelge ? fromBelge.value : '',
+    };
+
+    var tabs = ['giris', 'sevk', 'duzeltme'];
+    tabs.forEach(function(t) {
+        var cap = t.charAt(0).toUpperCase() + t.slice(1);
+        var el  = document.getElementById('msForm'  + cap);
+        var btn = document.getElementById('tab'     + cap);
+        if (el)  el.hidden = (t !== tab);
+        if (btn) btn.classList.toggle('ms-tab-active', t === tab);
+    });
+
+    // Hedef forma değerleri taşı (yalnızca farklı sekmeye geçişte)
+    if (tab !== msCurrentTab) {
+        if (carry.type) { msSetSelect(tab + 'MatType', carry.type); msUpdateNames(tab, carry.name || ''); }
+        if (carry.depo) { msSetSelect(tab + 'Depo', carry.depo); }
+        var toFirma = document.getElementById(tab + 'Firma');
+        var toBelge = document.getElementById(tab + 'Belge');
+        if (toFirma && carry.firma) toFirma.value = carry.firma;
+        if (toBelge && carry.belge) toBelge.value = carry.belge;
+    }
+    msCurrentTab = tab;
+    msCheckHint();
+}
+
+function msSetSelect(id, val) {
+    var sel = document.getElementById(id);
+    if (!sel || !val) return;
+    var has = false;
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === val) { has = true; break; }
+    }
+    if (!has) {
+        var opt = document.createElement('option');
+        opt.value = val; opt.textContent = val;
+        sel.appendChild(opt);
+    }
+    sel.value = val;
+}
+
+function msReadLastDepo()  { try { return localStorage.getItem(msDepoKey)  || ''; } catch(e) { return ''; } }
+function msSaveLastDepo(v) { if (!v) return; try { localStorage.setItem(msDepoKey, v);  } catch(e) {} }
+function msReadLastFirma() { try { return localStorage.getItem(msFirmaKey) || ''; } catch(e) { return ''; } }
+function msSaveLastFirma(v){ if (!v) return; try { localStorage.setItem(msFirmaKey, v); } catch(e) {} }
+function msReadLastBelge() { try { return localStorage.getItem(msBelgeKey) || ''; } catch(e) { return ''; } }
+function msSaveLastBelge(v){ if (!v) return; try { localStorage.setItem(msBelgeKey, v); } catch(e) {} }
+
+function msCheckHint() {
+    var hint = document.getElementById('ms-last-hint');
+    if (!hint) return;
+    var firma = msReadLastFirma();
+    var belge = msReadLastBelge();
+    if (!firma && !belge) { hint.hidden = true; return; }
+    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
+    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
+    var firmaFilled = firmaEl && firmaEl.value;
+    var belgeFilled = belgeEl && belgeEl.value;
+    // Göster: en az bir localStorage değeri var VE ilgili alanlar boş
+    if (!firmaFilled && !belgeFilled) {
+        hint.hidden = false;
+        var infoEl = document.getElementById('ms-last-hint-info');
+        if (infoEl) {
+            var parts = [];
+            if (firma) parts.push('Firma: ' + firma);
+            if (belge) parts.push('Belge: ' + belge);
+            infoEl.textContent = parts.join(' · ');
+        }
+    } else {
+        hint.hidden = true;
+    }
+}
+
+function msFillLastHint() {
+    var firma = msReadLastFirma();
+    var belge = msReadLastBelge();
+    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
+    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
+    if (firmaEl && !firmaEl.value && firma) firmaEl.value = firma;
+    if (belgeEl && !belgeEl.value && belge) belgeEl.value = belge;
+    msCheckHint();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var forms = ['giris', 'sevk', 'duzeltme'];
+
+    // 1) Ön-dolum: tür/ad/depo (URL/material_id öncelikli)
+    if (msPrefill && (msPrefill.mat_type || msPrefill.depo)) {
+        forms.forEach(function(form) {
+            if (msPrefill.mat_type) {
+                msSetSelect(form + 'MatType', msPrefill.mat_type);
+                msUpdateNames(form, msPrefill.mat_name || '');
+            }
+            if (msPrefill.depo) msSetSelect(form + 'Depo', msPrefill.depo);
+        });
+    }
+
+    // 2) Depo hatırlama: URL/prefill depo YOKSA son kullanılan depoyu doldur
+    if (!msPrefill || !msPrefill.depo) {
+        var lastDepo = msReadLastDepo();
+        if (lastDepo) {
+            forms.forEach(function(form) {
+                var sel = document.getElementById(form + 'Depo');
+                if (sel && !sel.value) msSetSelect(form + 'Depo', lastDepo);
+            });
+        }
+    }
+
+    // 3) Depo değişince localStorage'a kaydet
+    forms.forEach(function(form) {
+        var sel = document.getElementById(form + 'Depo');
+        if (sel) sel.addEventListener('change', function() { msSaveLastDepo(sel.value); });
+    });
+
+    // 4) Firma+belge değişince localStorage'a kaydet
+    forms.forEach(function(form) {
+        var firmaEl = document.getElementById(form + 'Firma');
+        var belgeEl = document.getElementById(form + 'Belge');
+        if (firmaEl) firmaEl.addEventListener('change', function() { msSaveLastFirma(firmaEl.value); msCheckHint(); });
+        if (belgeEl) belgeEl.addEventListener('change', function() { msSaveLastBelge(belgeEl.value); msCheckHint(); });
+    });
+
+    // 5) Çift gönderim engeli: submit'te kaydet butonunu kilitle
+    document.querySelectorAll('.ms-action-card form').forEach(function(frm) {
+        frm.addEventListener('submit', function() {
+            var btn = frm.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.dataset.label = btn.textContent;
+                btn.textContent = '⏳ Kaydediliyor...';
+                // Güvenlik: 6 sn sonra tekrar aç (ağ hatasında kilitli kalmasın)
+                setTimeout(function() {
+                    btn.disabled = false;
+                    if (btn.dataset.label) btn.textContent = btn.dataset.label;
+                }, 6000);
+            }
+        });
+    });
+
+    // 6) Sayfa açılışında hint durumunu kontrol et
+    msCheckHint();
+});
+</script>
+
+<?php render_footer(); ?>

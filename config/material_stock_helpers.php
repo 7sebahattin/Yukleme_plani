@@ -174,16 +174,8 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
             $ozet_rows[] = $mk_row(ms_cat_of($atype), $atype, (string)$a['material_name'], $a['depo'], $a['unit'], $a, 1, $mid);
         }
 
-        // 5) ozet_* filtreleri (PHP tarafı)
-        if ($f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '') {
-            $ozet_rows = array_values(array_filter($ozet_rows, function ($r) use ($f_ozet_kategori, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo) {
-                if ($f_ozet_kategori !== '' && $r['category'] !== $f_ozet_kategori) return false;
-                if ($f_ozet_tur      !== '' && $r['material_type'] !== $f_ozet_tur) return false;
-                if ($f_ozet_malzeme  !== '' && mb_stripos($r['material_name'], $f_ozet_malzeme) === false) return false;
-                if ($f_ozet_depo     !== '' && $r['depo'] !== $f_ozet_depo) return false;
-                return true;
-            }));
-        }
+        // 5) Filtreler (PHP tarafı) — ozet_* / yeni adlar + durum, tek yerden
+        $ozet_rows = ms_filter_summary_rows($ozet_rows, $filters);
 
         // 6) Sırala: kategori, tür, malzeme, depo
         usort($ozet_rows, fn($x, $y) =>
@@ -193,6 +185,36 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
     } catch (PDOException $e) {}
 
     return $ozet_rows;
+}
+
+// ── Özet satırlarını filtrele (zaten hesaplanmış satırlar üzerinde) ──
+// Hem eski (ozet_kategori/ozet_tur/ozet_malzeme/ozet_depo) hem yeni
+// (kategori/tur/q/depo) anahtarları kabul eder; ayrıca durum (kalan bazlı).
+// Hesaplama YOK — yalnızca süzme; çağıran ana özeti yeniden hesaplamadan
+// farklı görünümler (kartlar vs tablo) için kullanabilir.
+function ms_filter_summary_rows(array $rows, array $filters): array {
+    $kategori = (string)($filters['kategori'] ?? $filters['ozet_kategori'] ?? '');
+    $tur      = (string)($filters['tur']      ?? $filters['ozet_tur']      ?? '');
+    $q        = (string)($filters['q']        ?? $filters['ozet_malzeme']  ?? '');
+    $depo     = (string)($filters['depo']     ?? $filters['ozet_depo']     ?? '');
+    $durum    = (string)($filters['durum']    ?? '');
+
+    if ($kategori === '' && $tur === '' && $q === '' && $depo === '' && $durum === '') {
+        return array_values($rows);
+    }
+    return array_values(array_filter($rows, function ($r) use ($kategori, $tur, $q, $depo, $durum) {
+        if ($kategori !== '' && $r['category'] !== $kategori) return false;
+        if ($tur      !== '' && $r['material_type'] !== $tur) return false;
+        if ($q        !== '' && mb_stripos($r['material_name'], $q) === false) return false;
+        if ($depo     !== '' && $r['depo'] !== $depo) return false;
+        if ($durum    !== '') {
+            $k = (float)$r['kalan'];
+            if ($durum === 'stokta'  && !($k > 0))  return false;
+            if ($durum === 'negatif' && !($k < 0))  return false;
+            if ($durum === 'sifir'   && $k != 0.0)  return false;
+        }
+        return true;
+    }));
 }
 
 // ── Üst kart toplamları ───────────────────────────────────
@@ -216,9 +238,7 @@ function get_negative_materials(array $summaryRows): array {
 // $filters: tarih_bas, tarih_bit, mat_id, mat_type, mat_name, depo, hareket_tipi
 // mat_id verildiyse mat_type/mat_name yok sayılır (ID bazlı filtre isim
 // değişikliğine dayanıklıdır).
-// TODO Pro-02: SQL tabanlı LIMIT/OFFSET pagination yapılacak — şu an üst
-// sınır kadar satır çekilip sayfalama PHP tarafında dilimleniyor.
-function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000): array {
+function ms_movements_where(array $filters): array {
     $f_tarih_bas    = (string)($filters['tarih_bas']    ?? '');
     $f_tarih_bit    = (string)($filters['tarih_bit']    ?? '');
     $f_mat_id       = (int)   ($filters['mat_id']       ?? 0);
@@ -238,7 +258,15 @@ function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000
     }
     if ($f_depo         !== '') { $where[] = "depo LIKE ?";       $params[] = '%' . $f_depo . '%'; }
     if ($f_hareket_tipi !== '') { $where[] = "movement_type = ?"; $params[] = $f_hareket_tipi; }
-    $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+    return [$where ? 'WHERE ' . implode(' AND ', $where) : '', $params];
+}
+
+// Pro-02: SQL tabanlı LIMIT/OFFSET pagination. $limit/$offset int olarak
+// cast edilir (SQL injection riski yok). Eski çağrılar (offset'siz) aynen çalışır.
+function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000, int $offset = 0): array {
+    [$where_sql, $params] = ms_movements_where($filters);
+    $limit  = max(1, $limit);
+    $offset = max(0, $offset);
 
     $rows = [];
     try {
@@ -249,12 +277,28 @@ function get_material_movements(PDO $pdo, array $filters = [], int $limit = 2000
             FROM material_stock_movements
             $where_sql
             ORDER BY movement_date DESC, id DESC
-            LIMIT " . max(1, $limit) . "
+            LIMIT $limit OFFSET $offset
         ");
         $st->execute($params);
         $rows = $st->fetchAll();
     } catch (PDOException $e) {}
     return $rows;
+}
+
+// Filtreye uyan toplam hareket sayısı (gerçek SQL pagination için).
+function count_material_movements(PDO $pdo, array $filters = []): int {
+    [$where_sql, $params] = ms_movements_where($filters);
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM material_stock_movements $where_sql");
+        $st->execute($params);
+        return (int)$st->fetchColumn();
+    } catch (PDOException $e) { return 0; }
+}
+
+// Hareket sayfası link kurucu — boş parametreleri atar.
+function ms_hareket_url(array $params = []): string {
+    $q = array_filter($params, fn($v) => $v !== '' && $v !== null);
+    return 'malzeme_hareketleri.php' . ($q ? '?' . http_build_query($q) : '');
 }
 
 // ── Dropdown verileri ─────────────────────────────────────
