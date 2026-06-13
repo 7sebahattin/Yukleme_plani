@@ -193,7 +193,7 @@ render_flash();
         <a href="malzeme_stok_import.php" class="btn btn-sm btn-ghost">📥 Excel Aktar</a>
         <?php endif; ?>
         <a href="<?= ms_url(['csv' => 'ozet']) ?>" class="btn btn-sm btn-ghost">⬇ Özet CSV</a>
-        <button type="button" class="btn btn-sm btn-ghost" onclick="window.print()">🖨 Yazdır</button>
+        <a href="<?= h(str_replace('malzeme_stok.php', 'malzeme_stok_rapor.php', ms_url())) ?>" class="btn btn-sm btn-ghost">🖨️ Rapor / Yazdır</a>
         <?php if (is_admin()): ?>
         <a href="malzeme_stok_tehis.php" class="btn btn-sm btn-ghost" title="Veri kalite ve sistem audit kontrolleri (admin)">🔬 Teknik Teşhis</a>
         <?php endif; ?>
@@ -204,7 +204,10 @@ render_flash();
 <!-- ── Negatif Stok Uyarısı (kısa) ─────────────────────────── -->
 <div class="ms-neg-uyari" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
     <div class="ms-neg-uyari-head" style="margin:0">⚠ Negatif stokta <?= $card_negatif ?> malzeme/depo var — çıkış girişten fazla olabilir.</div>
-    <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="btn btn-sm btn-danger" style="white-space:nowrap">Negatifleri Göster</a>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="btn btn-sm btn-danger" style="white-space:nowrap">Negatifleri Göster</a>
+        <a href="malzeme_stok_rapor.php?durum=negatif" class="btn btn-sm btn-ghost" style="white-space:nowrap">🖨️ Negatif Raporu</a>
+    </div>
 </div>
 <?php endif; ?>
 
