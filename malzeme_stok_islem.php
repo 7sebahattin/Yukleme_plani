@@ -30,13 +30,20 @@ $mode = (string)($_GET['mode'] ?? 'giris');
 if (!in_array($mode, ['giris', 'sevk', 'duzeltme'], true)) $mode = 'giris';
 
 // ── İşlem sonrası dönüş hedefleri ─────────────────────────
-$success_url = $return !== '' ? $return : 'malzeme_stok.php';
 function islem_self_url(string $mode, string $return): string {
     $q = ['mode' => $mode];
     if ($return !== '') $q['return'] = $return;
     return 'malzeme_stok_islem.php?' . http_build_query($q);
 }
-$error_url = islem_self_url($mode, $return);
+// Hızlı tekrar linki: mode + opsiyonel material_id/depo + return (miktar taşınmaz).
+function islem_quick_url(string $mode, array $extra, string $return): string {
+    $q = ['mode' => $mode];
+    foreach ($extra as $k => $v) {
+        if ($v !== '' && $v !== null && $v !== 0) $q[$k] = $v;
+    }
+    if ($return !== '') $q['return'] = $return;
+    return 'malzeme_stok_islem.php?' . http_build_query($q);
+}
 
 // ── POST: Giriş / Sevk kaydet ─────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST'
@@ -105,7 +112,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
     $lbl = $mv_type === 'giris' ? 'Giriş' : 'Sevk çıkışı';
     set_flash('success', "$lbl kaydedildi: $mv_mat_name · " . fmt_kg($mv_qty) . " $mv_unit");
-    header('Location: ' . $success_url);
+    // Hızlı tekrar için son işlem bilgisi (tek kullanımlık, sadece link üretimi).
+    $_SESSION['ms_last_action'] = [
+        'mode'          => $mv_type,
+        'material_id'   => $mat_id,
+        'material_name' => $mv_mat_name,
+        'material_type' => $mv_mat_type,
+        'depo'          => $mv_depo,
+        'movement_id'   => $mv_inserted_id,
+        'return'        => $return,
+    ];
+    // İşlem sayfasında kal: hızlı tekrar kartı gösterilsin (return quick link'te taşınır).
+    header('Location: ' . islem_self_url($mv_type, $return));
     exit;
 }
 
@@ -173,24 +191,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
     ]);
     $lbl = $dz_yon === 'eksi' ? 'Eksi düzeltme' : 'Artı düzeltme';
     set_flash('success', "$lbl kaydedildi: $dz_mat_name · " . ($dz_qty >= 0 ? '+' : '') . fmt_kg($dz_qty) . ' ' . $dz_unit);
-    header('Location: ' . $success_url);
+    $_SESSION['ms_last_action'] = [
+        'mode'          => 'duzeltme',
+        'material_id'   => $mat_id,
+        'material_name' => $dz_mat_name,
+        'material_type' => $dz_mat_type,
+        'depo'          => $dz_depo,
+        'movement_id'   => $dz_inserted_id,
+        'return'        => $return,
+    ];
+    header('Location: ' . islem_self_url('duzeltme', $return));
     exit;
 }
 
 // ── Ön-dolum (GET) ────────────────────────────────────────
 // material_id verildiyse tanım ID üzerinden ESAS alınır; isim/tür yalnızca
 // görünüm için tanımdan çözülür (isimden eşleştirme yapılmaz).
-$pf_mat_id   = (int)($_GET['material_id'] ?? 0);
-$pf_mat_name = trim($_GET['mat_name'] ?? '');
-$pf_mat_type = trim($_GET['mat_type'] ?? '');
-$pf_depo     = trim($_GET['depo'] ?? '');
+$pf_mat_id    = (int)($_GET['material_id'] ?? 0);
+$pf_mat_name  = trim($_GET['mat_name'] ?? '');
+$pf_mat_type  = trim($_GET['mat_type'] ?? '');
+$pf_depo      = trim($_GET['depo'] ?? '');
+$pf_passive   = false;
 if ($pf_mat_id > 0) {
-    $st = $pdo->prepare("SELECT type, name FROM material_definitions WHERE id=? LIMIT 1");
+    // ID esas: tür/ad daima tanımdan çözülür (URL'deki mat_name/mat_type yok sayılır).
+    $st = $pdo->prepare("SELECT type, name, is_active FROM material_definitions WHERE id=? LIMIT 1");
     $st->execute([$pf_mat_id]);
-    if ($row = $st->fetch()) { $pf_mat_type = (string)$row['type']; $pf_mat_name = (string)$row['name']; }
+    if ($row = $st->fetch()) {
+        $pf_mat_type = (string)$row['type'];
+        $pf_mat_name = (string)$row['name'];
+        $pf_passive  = !(int)$row['is_active'];
+    } else {
+        $pf_mat_id = 0; // tanım bulunamadı → ID'yi düşür
+    }
 }
 if (!isset($ms_types[$pf_mat_type])) { $pf_mat_type = ''; $pf_mat_name = ''; }
 $prefill = ['mat_type' => $pf_mat_type, 'mat_name' => $pf_mat_name, 'depo' => $pf_depo];
+
+// ── Hızlı tekrar: son işlem bilgisi (tek kullanımlık) ─────
+$last_action = null;
+if (!empty($_SESSION['ms_last_action'])) {
+    $last_action = $_SESSION['ms_last_action'];
+    unset($_SESSION['ms_last_action']);
+}
+
+// ── Üst "Hareketlere Git" linki — ön-dolum varsa filtreli ─
+$hareket_link = ms_hareket_url([
+    'mat_id' => $pf_mat_id > 0 ? $pf_mat_id : '',
+    'depo'   => $pf_depo,
+]);
 
 // ── Dropdown verileri ─────────────────────────────────────
 $ms_dd             = get_material_dropdown_data($pdo);
@@ -211,9 +259,40 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <a href="<?= h($return !== '' ? $return : 'malzeme_stok.php') ?>" class="btn btn-sm btn-secondary">← Stoklara Dön</a>
-        <a href="malzeme_hareketleri.php" class="btn btn-sm btn-ghost">📜 Hareketlere Git</a>
+        <a href="<?= h($hareket_link) ?>" class="btn btn-sm btn-ghost">📜 Hareketlere Git</a>
     </div>
 </div>
+
+<?php if ($pf_passive): ?>
+<div class="flash flash-error" style="margin-bottom:12px">
+    ⚠ Bu malzeme <strong>pasif tanımdır</strong>. İşlem yapmadan önce doğru malzemeyi seçtiğinizden emin olun.
+</div>
+<?php endif; ?>
+
+<?php if ($last_action):
+    $la_mid  = (int)($last_action['material_id'] ?? 0);
+    $la_depo = (string)($last_action['depo'] ?? '');
+    $la_name = (string)($last_action['material_name'] ?? '');
+    $la_ret  = islem_safe_return($last_action['return'] ?? '');
+?>
+<div class="card ms-quick-card">
+    <div class="ms-quick-head">✓ İşlem kaydedildi. Ne yapmak istersiniz?</div>
+    <div class="ms-quick-btns">
+        <?php if ($la_mid > 0): ?>
+        <a href="<?= h(islem_quick_url('giris', ['material_id' => $la_mid, 'depo' => $la_depo], $la_ret)) ?>"
+           class="btn btn-sm btn-primary">➕ Aynı malzemeye tekrar giriş<?= $la_name !== '' ? ' (' . h($la_name) . ')' : '' ?></a>
+        <?php endif; ?>
+        <?php if ($la_depo !== ''): ?>
+        <a href="<?= h(islem_quick_url('giris', ['depo' => $la_depo], $la_ret)) ?>"
+           class="btn btn-sm btn-secondary">📦 Aynı depoya yeni giriş (<?= h($la_depo) ?>)</a>
+        <?php endif; ?>
+        <a href="<?= h(ms_hareket_url(['mat_id' => $la_mid > 0 ? $la_mid : '', 'depo' => $la_depo])) ?>"
+           class="btn btn-sm btn-ghost">📜 Hareketleri gör</a>
+        <a href="<?= h($la_ret !== '' ? $la_ret : 'malzeme_stok.php') ?>"
+           class="btn btn-sm btn-ghost">← Stoklara dön</a>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- ── Sekmeler ───────────────────────────────────────────── -->
 <div class="ms-form-wrap">
@@ -443,8 +522,10 @@ render_flash();
 </div>
 
 <script>
-var msNamesData = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
-var msPrefill   = <?= json_encode($prefill, JSON_UNESCAPED_UNICODE) ?>;
+var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
+var msPrefill    = <?= json_encode($prefill, JSON_UNESCAPED_UNICODE) ?>;
+var msDepoKey    = 'asyaFresh.materialStock.lastDepo';
+var msCurrentTab = <?= json_encode($mode, JSON_UNESCAPED_UNICODE) ?>;
 
 function msUpdateNames(form, selectedName) {
     var typeId  = form === 'giris' ? 'girisMatType' : (form === 'sevk' ? 'sevkMatType' : 'duzeltmeMatType');
@@ -471,6 +552,16 @@ function msUpdateNames(form, selectedName) {
 }
 
 function msTab(tab) {
+    // Geçişten önce mevcut formun malzeme/tür/depo değerlerini al (miktar TAŞINMAZ)
+    var fromType = document.getElementById(msCurrentTab + 'MatType');
+    var fromName = document.getElementById(msCurrentTab + 'MatName');
+    var fromDepo = document.getElementById(msCurrentTab + 'Depo');
+    var carry = {
+        type: fromType ? fromType.value : '',
+        name: fromName ? fromName.value : '',
+        depo: fromDepo ? fromDepo.value : '',
+    };
+
     var tabs = ['giris', 'sevk', 'duzeltme'];
     tabs.forEach(function(t) {
         var cap = t.charAt(0).toUpperCase() + t.slice(1);
@@ -479,6 +570,13 @@ function msTab(tab) {
         if (el)  el.hidden = (t !== tab);
         if (btn) btn.classList.toggle('ms-tab-active', t === tab);
     });
+
+    // Hedef forma malzeme/depo taşı (yalnızca farklı sekmeye geçişte)
+    if (tab !== msCurrentTab) {
+        if (carry.type) { msSetSelect(tab + 'MatType', carry.type); msUpdateNames(tab, carry.name || ''); }
+        if (carry.depo) { msSetSelect(tab + 'Depo', carry.depo); }
+    }
+    msCurrentTab = tab;
 }
 
 function msSetSelect(id, val) {
@@ -496,16 +594,60 @@ function msSetSelect(id, val) {
     sel.value = val;
 }
 
-// ── Ön-dolum: her formda tür/ad/depo doldur ──
+function msReadLastDepo() {
+    try { return localStorage.getItem(msDepoKey) || ''; } catch (e) { return ''; }
+}
+function msSaveLastDepo(val) {
+    if (!val) return;
+    try { localStorage.setItem(msDepoKey, val); } catch (e) {}
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    if (!msPrefill || (!msPrefill.mat_type && !msPrefill.depo)) return;
-    ['giris', 'sevk', 'duzeltme'].forEach(function(form) {
-        var cap = form.charAt(0).toUpperCase() + form.slice(1);
-        if (msPrefill.mat_type) {
-            msSetSelect(form + 'MatType', msPrefill.mat_type);
-            msUpdateNames(form, msPrefill.mat_name || '');
+    var forms = ['giris', 'sevk', 'duzeltme'];
+
+    // 1) Ön-dolum: tür/ad/depo (URL/material_id öncelikli)
+    if (msPrefill && (msPrefill.mat_type || msPrefill.depo)) {
+        forms.forEach(function(form) {
+            if (msPrefill.mat_type) {
+                msSetSelect(form + 'MatType', msPrefill.mat_type);
+                msUpdateNames(form, msPrefill.mat_name || '');
+            }
+            if (msPrefill.depo) msSetSelect(form + 'Depo', msPrefill.depo);
+        });
+    }
+
+    // 2) Depo hatırlama: URL/prefill depo YOKSA son kullanılan depoyu doldur
+    if (!msPrefill || !msPrefill.depo) {
+        var lastDepo = msReadLastDepo();
+        if (lastDepo) {
+            forms.forEach(function(form) {
+                var sel = document.getElementById(form + 'Depo');
+                if (sel && !sel.value) msSetSelect(form + 'Depo', lastDepo);
+            });
         }
-        if (msPrefill.depo) msSetSelect(form + 'Depo', msPrefill.depo);
+    }
+
+    // 3) Depo değişince localStorage'a kaydet
+    forms.forEach(function(form) {
+        var sel = document.getElementById(form + 'Depo');
+        if (sel) sel.addEventListener('change', function() { msSaveLastDepo(sel.value); });
+    });
+
+    // 4) Çift gönderim engeli: submit'te kaydet butonunu kilitle
+    document.querySelectorAll('.ms-action-card form').forEach(function(frm) {
+        frm.addEventListener('submit', function() {
+            var btn = frm.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.dataset.label = btn.textContent;
+                btn.textContent = '⏳ Kaydediliyor...';
+                // Güvenlik: 6 sn sonra tekrar aç (ağ hatasında kilitli kalmasın)
+                setTimeout(function() {
+                    btn.disabled = false;
+                    if (btn.dataset.label) btn.textContent = btn.dataset.label;
+                }, 6000);
+            }
+        });
     });
 });
 </script>

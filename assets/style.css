@@ -3839,6 +3839,23 @@ body.notes-modal-open { overflow: hidden; }
 /* Inputlar beyaz kalsın — okunabilirlik için */
 .ms-action-card .form-control { background: #fff; }
 
+/* ── Pro-08: Hızlı tekrar kartı ───────────────────────── */
+.ms-quick-card {
+    border: 1px solid var(--success, #16a34a);
+    background: var(--success-soft, #f0fdf4);
+    margin-bottom: 14px;
+}
+.ms-quick-head { font-weight: 700; font-size: .95rem; margin-bottom: 10px; color: var(--success-dark, #166534); }
+.ms-quick-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Pro-08: Mobil işlem formu konforu ────────────────── */
+@media (max-width: 767px) {
+    .ms-form-tabs { flex-wrap: wrap; gap: 4px; }
+    .ms-tab-btn { flex: 1 1 auto; padding: 10px 12px; text-align: center; border-radius: var(--radius); }
+    .ms-action-card .btn[type="submit"] { width: 100%; min-height: 46px; font-size: 1rem; }
+    .ms-quick-btns .btn { flex: 1 1 100%; min-height: 44px; }
+}
+
 /* ── Sprint 33: Stok Özeti mini filtre ── */
 .ms-ozet-filter {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
