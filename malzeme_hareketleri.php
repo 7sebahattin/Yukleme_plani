@@ -238,33 +238,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_up
     exit;
 }
 
-// ── POST: Kalıcı Sil — admin-only ────────────────────────
-// TODO Pro-04B: Hard delete tamamen kaldırılacak; yalnızca ters kayıt kalacak.
+// ── POST: ms_delete — DEVRE DIŞI (Pro-04B) ───────────────
+// Kalıcı silme kaldırıldı. Yanlış hareketler için Ters Kayıt veya Taşı kullanılır.
+// TODO Pro-04C: ms_update da sadece meta alanlara (belge/not) kısıtlanacak.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_delete') {
     csrf_check($_POST['csrf'] ?? null);
-    if (!is_admin()) {
-        set_flash('error', 'Hareket silme işlemi yalnızca yöneticiler tarafından yapılabilir. Bunun yerine ters kayıt kullanın.');
-        header('Location: ' . mh_url());
-        exit;
-    }
-    $del_id = (int)($_POST['del_id'] ?? 0);
-    if ($del_id > 0) {
-        $row = $pdo->prepare("SELECT source_type, movement_type, material_name, quantity, unit FROM material_stock_movements WHERE id=? LIMIT 1");
-        $row->execute([$del_id]);
-        $row = $row->fetch();
-        if ($row && $row['source_type'] === 'loading') {
-            set_flash('error', 'Yükleme kaynaklı kullanım hareketleri silinemez.');
-        } elseif ($row) {
-            $pdo->prepare("DELETE FROM material_stock_movements WHERE id=?")->execute([$del_id]);
-            audit_log_event('delete', 'malzeme_stok', $del_id, [
-                'movement_type' => $row['movement_type'],
-                'material_name' => $row['material_name'],
-                'quantity'      => $row['quantity'],
-                'unit'          => $row['unit'],
-            ]);
-            set_flash('success', 'Hareket silindi (#' . $del_id . ').');
-        }
-    }
+    set_flash('error', 'Kalıcı silme devre dışıdır. Yanlış hareketler için Ters Kayıt veya Taşı işlemini kullanın.');
     header('Location: ' . mh_url());
     exit;
 }
@@ -469,6 +448,12 @@ render_flash();
     </div>
 </div>
 
+<?php if ($ms_is_admin): ?>
+<div style="font-size:.78rem;color:var(--muted);background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:10px">
+    ℹ️ Kalıcı silme devre dışıdır. Yanlış hareketler için <b>⇄ Taşı</b> veya <b>↩ Ters Kayıt</b> kullanılır.
+</div>
+<?php endif; ?>
+
 <!-- ── Filtre formu ───────────────────────────────────────── -->
 <div class="card" style="margin-bottom:14px">
     <form method="get" action="malzeme_hareketleri.php" class="stok-filter-form">
@@ -655,7 +640,7 @@ render_flash();
                                     <?= json_encode($r['unit'], JSON_UNESCAPED_UNICODE) ?>
                                 )">↩</button>
                         <button type="button" class="ms-edit-btn"
-                                title="Düzenle (geçmiş hareketi düzenlemek yerine taşı veya ters kayıt kullanılması önerilir)"
+                                title="Düzenle (geçmiş hareketi düzenlemek yerine Taşı veya Ters Kayıt kullanılması önerilir)"
                                 data-id="<?= (int)$r['id'] ?>"
                                 data-date="<?= h($r['movement_date']) ?>"
                                 data-mtype="<?= h($r['movement_type']) ?>"
@@ -668,14 +653,6 @@ render_flash();
                                 data-firma="<?= h($r['firma'] ?? '') ?>"
                                 data-note="<?= h($r['note'] ?? '') ?>"
                                 onclick="msOpenEdit(this)">✎</button>
-                        <form method="post" action="<?= h(mh_url()) ?>"
-                              onsubmit="return confirm('Bu hareketi kalıcı olarak silmek istediğinizden emin misiniz?\n\nBu işlem geri alınamaz. Bunun yerine ters kayıt kullanmanız önerilir.');"
-                              style="display:inline">
-                            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-                            <input type="hidden" name="action" value="ms_delete">
-                            <input type="hidden" name="del_id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm" style="padding:2px 7px;font-size:.75rem;background:var(--danger-light,#fdecea);color:var(--danger)" title="Kalıcı Sil">✕</button>
-                        </form>
                         <?php endif; ?>
                     </td>
                 </tr>
