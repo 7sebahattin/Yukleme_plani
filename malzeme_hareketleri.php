@@ -13,8 +13,7 @@ require_perm('stok.read');
 
 $pdo = db();
 
-$ms_types      = ms_material_types();
-$ms_units      = ms_stock_units();
+$ms_types = ms_material_types();
 
 // ── URL oluşturucu — filtre + sayfa durumunu korur ────────
 function mh_url(array $override = [], array $drop = []): string {
@@ -125,114 +124,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_re
     exit;
 }
 
-// ── POST: Hareket Düzenle — admin-only ───────────────────
-// Geçmiş hareketi düzenlemek yerine ters kayıt kullanılması önerilir.
+// ── POST: Hareket Meta Düzenle — admin-only (Pro-04C) ────
+// Sadece belge_no, firma, note güncellenir.
+// Stok etkileyen alanlar (tarih, malzeme, miktar, depo) değiştirilemez.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_update') {
     csrf_check($_POST['csrf'] ?? null);
     if (!is_admin()) {
-        set_flash('error', 'Hareket düzenleme işlemi yalnızca yöneticiler tarafından yapılabilir. Bunun yerine ters kayıt kullanın.');
+        set_flash('error', 'Bu işlem sadece admin tarafından yapılabilir.');
         header('Location: ' . mh_url());
         exit;
     }
+    $up_id    = (int)($_POST['up_id']   ?? 0);
+    $up_belge = trim($_POST['up_belge'] ?? '');
+    $up_firma = trim($_POST['up_firma'] ?? '');
+    $up_note  = trim($_POST['up_note']  ?? '');
 
-    $up_id       = (int)($_POST['up_id']       ?? 0);
-    $up_date     = trim($_POST['up_date']      ?? '');
-    $up_mat_type = trim($_POST['up_mat_type']  ?? '');
-    $up_mat_name = trim($_POST['up_mat_name']  ?? '');
-    $up_depo     = trim($_POST['up_depo']      ?? '');
-    $up_qty_raw  = num($_POST['up_qty']        ?? '0');
-    $up_yon      = trim($_POST['up_yon']       ?? 'arti');
-    $up_unit     = trim($_POST['up_unit']      ?? 'adet');
-    $up_belge    = trim($_POST['up_belge']     ?? '');
-    $up_firma    = trim($_POST['up_firma']     ?? '');
-    $up_note     = trim($_POST['up_note']      ?? '');
-
-    $err = '';
+    $err  = '';
     $base = null;
     if ($up_id <= 0) {
         $err = 'Geçersiz kayıt.';
     } else {
-        $base = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
-        $base->execute([$up_id]);
-        $base = $base->fetch();
+        $stmt = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
+        $stmt->execute([$up_id]);
+        $base = $stmt->fetch();
         if (!$base) {
             $err = 'Kayıt bulunamadı.';
         } elseif ($base['source_type'] === 'loading') {
-            $err = 'Yükleme kaynaklı kullanım hareketleri düzenlenemez.';
-        }
-    }
-
-    // movement_type ve direction (sevk/giriş/kullanım için) korunur; sadece düzeltme yön değiştirebilir
-    if ($err === '') {
-        if (!$up_date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $up_date)) {
-            $err = 'Tarih zorunludur (YYYY-AA-GG).';
-        } elseif (!isset($ms_types[$up_mat_type])) {
-            $err = 'Malzeme türü seçiniz.';
-        } elseif ($up_mat_name === '') {
-            $err = 'Malzeme adı zorunludur.';
-        } elseif ($up_depo === '') {
-            $err = 'Depo seçimi zorunludur.';
-        } elseif ($up_qty_raw == 0.0) {
-            $err = 'Miktar sıfır olamaz.';
-        } elseif ($base['movement_type'] !== 'duzeltme' && abs($up_qty_raw) <= 0) {
-            $err = 'Miktar sıfırdan büyük olmalıdır.';
+            $err = 'Yükleme kaynaklı hareketler buradan düzenlenemez. Kaynak yükleme kaydı düzenlenmelidir.';
         }
     }
 
     if ($err !== '') {
         set_flash('error', $err);
     } else {
-        // Düzeltme: yön seçilebilir (işaretli miktar). Diğer tipler: her zaman pozitif.
-        if ($base['movement_type'] === 'duzeltme') {
-            $up_qty = $up_yon === 'eksi' ? -abs($up_qty_raw) : abs($up_qty_raw);
-        } else {
-            $up_qty = abs($up_qty_raw);
-        }
-
-        // Malzeme tanımını yeni tür/ad üzerinden yeniden eşle (dara hesabı için)
-        $mat_row    = ms_find_material_definition($pdo, $up_mat_type, $up_mat_name);
-        $mat_id     = $mat_row ? (int)$mat_row['id'] : null;
-        $unit_dara  = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
-        $total_dara = round($up_qty * $unit_dara, 3);
-
-        $old_vals = [
-            'movement_type' => $base['movement_type'],
-            'movement_date' => $base['movement_date'],
-            'material_name' => $base['material_name'],
-            'material_type' => $base['material_type'],
-            'depo'          => $base['depo'],
-            'quantity'      => $base['quantity'],
-            'unit'          => $base['unit'],
-            'belge_no'      => $base['belge_no'],
-            'firma'         => $base['firma'],
-            'note'          => $base['note'],
-        ];
-
         $pdo->prepare(
-            "UPDATE material_stock_movements
-                SET movement_date=?, material_id=?, material_name=?, material_type=?,
-                    depo=?, quantity=?, unit=?, unit_dara_kg=?, total_dara_kg=?,
-                    belge_no=?, firma=?, note=?
-              WHERE id=?"
-        )->execute([
-            $up_date, $mat_id, $up_mat_name, $up_mat_type,
-            $up_depo, $up_qty, $up_unit, $unit_dara, $total_dara,
-            $up_belge, $up_firma, $up_note ?: null, $up_id,
-        ]);
+            "UPDATE material_stock_movements SET belge_no=?, firma=?, note=? WHERE id=?"
+        )->execute([$up_belge ?: null, $up_firma ?: null, $up_note ?: null, $up_id]);
 
-        audit_log_event('update', 'malzeme_stok', $up_id, $old_vals, [
-            'movement_type' => $base['movement_type'],
-            'movement_date' => $up_date,
-            'material_name' => $up_mat_name,
-            'material_type' => $up_mat_type,
-            'depo'          => $up_depo,
-            'quantity'      => $up_qty,
-            'unit'          => $up_unit,
-            'belge_no'      => $up_belge,
-            'firma'         => $up_firma,
-            'note'          => $up_note,
+        audit_log_event('material_stock_meta_update', 'malzeme_stok', $up_id, [
+            'old_belge_no' => $base['belge_no'],
+            'old_firma'    => $base['firma'],
+            'old_note'     => $base['note'],
+        ], [
+            'new_belge_no' => $up_belge,
+            'new_firma'    => $up_firma,
+            'new_note'     => $up_note,
         ]);
-        set_flash('success', 'Hareket güncellendi (#' . $up_id . '): ' . $up_mat_name . ' · ' . fmt_kg($up_qty) . ' ' . $up_unit);
+        set_flash('success', 'Hareket meta bilgileri güncellendi (#' . $up_id . ').');
     }
     header('Location: ' . mh_url());
     exit;
@@ -690,11 +628,12 @@ render_flash();
 </div>
 
 <?php if ($ms_is_admin): ?>
-<!-- ── Hareket Düzenle Modal (admin-only) ────────────────── -->
+<!-- ── Hareket Bilgi Düzenle Modal (admin-only, Pro-04C) ── -->
+<!-- Sadece meta alanlar: belge_no, firma, note. Stok alanları readonly. -->
 <div id="msEditOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msCloseEdit()">
     <div class="ms-edit-modal" role="dialog" aria-modal="true" aria-labelledby="msEditTitle">
         <div class="ms-edit-head">
-            <h3 id="msEditTitle">Hareketi Düzenle <span id="msEditTypeBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
+            <h3 id="msEditTitle">✎ Hareket Bilgi Düzenle <span id="msEditTypeBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
             <button type="button" class="ms-edit-close" onclick="msCloseEdit()" aria-label="Kapat">×</button>
         </div>
         <form method="post" action="<?= h(mh_url()) ?>" autocomplete="off" id="msEditForm">
@@ -702,79 +641,33 @@ render_flash();
             <input type="hidden" name="action" value="ms_update">
             <input type="hidden" name="up_id"  id="msEditId" value="">
             <div class="ms-edit-body">
-                <div class="ms-form-grid">
-                    <div class="form-group">
-                        <label class="form-label">Tarih <span class="req">*</span></label>
-                        <input type="date" name="up_date" id="msEditDate" class="form-control" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Malzeme Türü <span class="req">*</span></label>
-                        <select name="up_mat_type" id="msEditMatType" class="form-control" required onchange="msEditUpdateNames()">
-                            <option value="">— seçiniz —</option>
-                            <?php foreach ($ms_types as $k => $lbl): ?>
-                            <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Malzeme Adı <span class="req">*</span></label>
-                        <select name="up_mat_name" id="msEditMatName" class="form-control" required>
-                            <option value="">— önce tür seçin —</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Depo <span class="req">*</span></label>
-                        <select name="up_depo" id="msEditDepo" class="form-control" required>
-                            <option value="">— seçiniz —</option>
-                            <?php foreach ($depo_list as $dv): ?>
-                            <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Miktar <span class="req">*</span></label>
-                        <input type="number" name="up_qty" id="msEditQty" class="form-control" required
-                               min="0.001" step="any" placeholder="0">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Birim</label>
-                        <select name="up_unit" id="msEditUnit" class="form-control">
-                            <?php foreach ($ms_units as $u): ?>
-                            <option value="<?= h($u) ?>"><?= h($u) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group" id="msEditYonWrap" hidden>
-                        <label class="form-label">Yön <span class="req">*</span></label>
-                        <select name="up_yon" id="msEditYon" class="form-control">
-                            <option value="arti">+ Artı düzeltme (stoka ekle)</option>
-                            <option value="eksi">− Eksi düzeltme (stoktan çıkar)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Belge / İrsaliye No</label>
-                        <input type="text" name="up_belge" id="msEditBelge" class="form-control" placeholder="İsteğe bağlı">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Firma</label>
-                        <input type="text" name="up_firma" id="msEditFirma" class="form-control"
-                               list="mh-firma-list" placeholder="İsteğe bağlı" autocomplete="off">
-                        <datalist id="mh-firma-list">
-                            <?php foreach ($firma_list as $fv): ?>
-                            <option value="<?= h($fv) ?>">
-                            <?php endforeach; ?>
-                        </datalist>
-                    </div>
-                    <div class="form-group ms-form-full">
-                        <label class="form-label">Not</label>
-                        <input type="text" name="up_note" id="msEditNote" class="form-control" placeholder="İsteğe bağlı">
-                    </div>
+                <div id="msEditInfoPanel" style="background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;line-height:1.7"></div>
+                <div style="font-size:.8rem;color:var(--warn-dark,#856404);background:var(--warn-bg,#fffbf0);border:1px solid var(--warn,#e6a817);border-radius:5px;padding:7px 12px;margin-bottom:14px">
+                    ⚠ Bu ekranda stok miktarı, malzeme, tarih veya depo değiştirilemez. Yanlış hareket için <b>⇄ Taşı</b> veya <b>↩ Ters Kayıt</b> kullanın.
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Belge / İrsaliye No</label>
+                    <input type="text" name="up_belge" id="msEditBelge" class="form-control"
+                           placeholder="İsteğe bağlı" data-uppercase="tr">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Firma</label>
+                    <input type="text" name="up_firma" id="msEditFirma" class="form-control"
+                           list="mh-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
+                    <datalist id="mh-firma-list">
+                        <?php foreach ($firma_list as $fv): ?>
+                        <option value="<?= h($fv) ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Not</label>
+                    <input type="text" name="up_note" id="msEditNote" class="form-control" placeholder="İsteğe bağlı">
                 </div>
             </div>
             <div class="ms-edit-foot">
-                <span style="font-size:.75rem;color:var(--warn-dark,#856404);flex:1;align-self:center">⚠ Geçmiş hareketi düzenlemek yerine ters kayıt kullanılması önerilir.</span>
                 <button type="button" class="btn btn-ghost" onclick="msCloseEdit()">Vazgeç</button>
-                <button type="submit" class="btn btn-primary">💾 Güncelle</button>
+                <button type="submit" class="btn btn-primary">💾 Meta Güncelle</button>
             </div>
         </form>
     </div>
@@ -869,7 +762,6 @@ render_flash();
 <?php endif; ?>
 
 <script>
-var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msMoveDefs   = <?= json_encode($move_defs_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msMoveCtx    = {};
 
@@ -969,70 +861,28 @@ function msMoveClose() {
     if (ov) ov.classList.remove('open');
 }
 
-// ── Hareket düzenleme modalı ──────────────────────────────
-function msEditFillNames(selectedName) {
-    var typeSel = document.getElementById('msEditMatType');
-    var nameSel = document.getElementById('msEditMatName');
-    if (!typeSel || !nameSel) return;
-    var names = msNamesData[typeSel.value] || [];
-    nameSel.innerHTML = '<option value="">— seçiniz —</option>';
-    var found = false;
-    names.forEach(function(n) {
-        var opt = document.createElement('option');
-        opt.value = n; opt.textContent = n;
-        if (n === selectedName) { opt.selected = true; found = true; }
-        nameSel.appendChild(opt);
-    });
-    // Tanımda olmayan ama harekette geçen ad: yine de seçilebilsin
-    if (!found && selectedName) {
-        var opt = document.createElement('option');
-        opt.value = selectedName; opt.textContent = selectedName; opt.selected = true;
-        nameSel.appendChild(opt);
-    }
-    nameSel.disabled = false;
-}
-
-function msEditUpdateNames() { msEditFillNames(''); }
-
-function msSetSelect(id, val) {
-    var sel = document.getElementById(id);
-    if (!sel) return;
-    var has = false;
-    for (var i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === val) { has = true; break; }
-    }
-    if (!has && val) {
-        var opt = document.createElement('option');
-        opt.value = val; opt.textContent = val;
-        sel.appendChild(opt);
-    }
-    sel.value = val;
-}
-
+// ── Hareket Bilgi Düzenle Modal (meta-only, Pro-04C) ─────
 function msOpenEdit(btn) {
     var d = btn.dataset;
-    document.getElementById('msEditId').value    = d.id || '';
-    document.getElementById('msEditDate').value  = d.date || '';
-    msSetSelect('msEditMatType', d.mattype || '');
-    msEditFillNames(d.matname || '');
-    msSetSelect('msEditDepo', d.depo || '');
-    var qty = parseFloat((d.qty || '0').replace(',', '.')) || 0;
-    document.getElementById('msEditQty').value   = Math.abs(qty);
-    msSetSelect('msEditUnit', d.unit || 'adet');
+    document.getElementById('msEditId').value    = d.id    || '';
     document.getElementById('msEditBelge').value = d.belge || '';
     document.getElementById('msEditFirma').value = d.firma || '';
-    document.getElementById('msEditNote').value  = d.note || '';
-
-    // Düzeltme tipinde yön seçimi göster; diğer tiplerde gizle (movement_type değişmez)
-    var isDuz   = (d.mtype === 'duzeltme');
-    var yonWrap = document.getElementById('msEditYonWrap');
-    var yonSel  = document.getElementById('msEditYon');
-    if (yonWrap) yonWrap.hidden = !isDuz;
-    if (yonSel)  yonSel.value = qty < 0 ? 'eksi' : 'arti';
+    document.getElementById('msEditNote').value  = d.note  || '';
 
     var typeLbl = {giris:'Giriş', sevk:'Sevk', kullanim:'Kullanım', duzeltme:'Düzeltme'}[d.mtype] || d.mtype;
+    var qty     = parseFloat((d.qty || '0').replace(',', '.')) || 0;
+    var qSign   = (d.mtype === 'giris' || (d.mtype === 'duzeltme' && qty >= 0)) ? '+' : '−';
+    var matTypeLbl = (d.mattype || '').replace(/_/g, ' ');
+    var panel = document.getElementById('msEditInfoPanel');
+    if (panel) {
+        panel.innerHTML =
+            '<b>Hareket #' + d.id + '</b> · ' + typeLbl + ' · ' + (d.date || '') + '<br>' +
+            '<b>Malzeme:</b> ' + (d.matname || '—') + '<br>' +
+            '<b>Tür:</b> '     + matTypeLbl + '<br>' +
+            '<b>Depo:</b> '    + (d.depo || '—') + '<br>' +
+            '<b>Miktar:</b> '  + qSign + Math.abs(qty) + ' ' + (d.unit || '');
+    }
     document.getElementById('msEditTypeBadge').textContent = '· ' + typeLbl + ' #' + (d.id || '');
-
     document.getElementById('msEditOverlay').classList.add('open');
 }
 
