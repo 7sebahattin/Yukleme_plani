@@ -119,6 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
         'material_name' => $mv_mat_name,
         'material_type' => $mv_mat_type,
         'depo'          => $mv_depo,
+        'firma'         => $mv_firma,
+        'belge'         => $mv_belge,
         'movement_id'   => $mv_inserted_id,
         'return'        => $return,
     ];
@@ -197,6 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_du
         'material_name' => $dz_mat_name,
         'material_type' => $dz_mat_type,
         'depo'          => $dz_depo,
+        'firma'         => '',
+        'belge'         => $dz_belge,
         'movement_id'   => $dz_inserted_id,
         'return'        => $return,
     ];
@@ -270,13 +274,21 @@ render_flash();
 <?php endif; ?>
 
 <?php if ($last_action):
-    $la_mid  = (int)($last_action['material_id'] ?? 0);
-    $la_depo = (string)($last_action['depo'] ?? '');
-    $la_name = (string)($last_action['material_name'] ?? '');
-    $la_ret  = islem_safe_return($last_action['return'] ?? '');
+    $la_mid   = (int)($last_action['material_id'] ?? 0);
+    $la_depo  = (string)($last_action['depo'] ?? '');
+    $la_name  = (string)($last_action['material_name'] ?? '');
+    $la_ret   = islem_safe_return($last_action['return'] ?? '');
+    $la_firma = (string)($last_action['firma'] ?? '');
+    $la_belge = (string)($last_action['belge'] ?? '');
 ?>
 <div class="card ms-quick-card">
     <div class="ms-quick-head">✓ İşlem kaydedildi. Ne yapmak istersiniz?</div>
+    <?php if ($la_firma !== '' || $la_belge !== ''): ?>
+    <div class="ms-quick-detail">
+        <?php if ($la_firma !== ''): ?><span>Firma: <strong><?= h($la_firma) ?></strong></span><?php endif; ?>
+        <?php if ($la_belge !== ''): ?><span>Belge: <strong><?= h($la_belge) ?></strong></span><?php endif; ?>
+    </div>
+    <?php endif; ?>
     <div class="ms-quick-btns">
         <?php if ($la_mid > 0): ?>
         <a href="<?= h(islem_quick_url('giris', ['material_id' => $la_mid, 'depo' => $la_depo], $la_ret)) ?>"
@@ -306,6 +318,12 @@ render_flash();
         <button type="button" class="ms-tab-btn<?= $mode === 'duzeltme' ? ' ms-tab-active' : '' ?>" id="tabDuzeltme" onclick="msTab('duzeltme')">
             ± Düzeltme
         </button>
+    </div>
+
+    <!-- Son kullanılan firma+belge önerisi -->
+    <div id="ms-last-hint" class="ms-last-hint-panel" hidden>
+        <span class="ms-last-hint-text">Son: <span id="ms-last-hint-info"></span></span>
+        <button type="button" class="btn btn-sm btn-ghost ms-last-hint-btn" onclick="msFillLastHint()">Son bilgileri doldur</button>
     </div>
 
     <!-- Giriş formu -->
@@ -357,11 +375,11 @@ render_flash();
                 </div>
                 <div class="form-group">
                     <label class="form-label">Belge / İrsaliye No</label>
-                    <input type="text" name="mv_belge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                    <input type="text" name="mv_belge" id="girisBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Tedarikçi / Firma</label>
-                    <input type="text" name="mv_firma" class="form-control"
+                    <input type="text" name="mv_firma" id="girisFirma" class="form-control"
                            list="ms-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
                     <datalist id="ms-firma-list">
                         <?php foreach ($firma_list as $fv): ?>
@@ -429,11 +447,11 @@ render_flash();
                 </div>
                 <div class="form-group">
                     <label class="form-label">Belge / İrsaliye No</label>
-                    <input type="text" name="mv_belge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                    <input type="text" name="mv_belge" id="sevkBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Gönderilen Firma</label>
-                    <input type="text" name="mv_firma" class="form-control"
+                    <input type="text" name="mv_firma" id="sevkFirma" class="form-control"
                            list="ms-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
                 </div>
                 <div class="form-group ms-form-full">
@@ -507,7 +525,7 @@ render_flash();
                 </div>
                 <div class="form-group">
                     <label class="form-label">Belge / Açıklama</label>
-                    <input type="text" name="dz_belge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
+                    <input type="text" name="dz_belge" id="duzeltmeBelge" class="form-control" placeholder="İsteğe bağlı" data-uppercase="tr">
                 </div>
                 <div class="form-group ms-form-full">
                     <label class="form-label">Not</label>
@@ -525,6 +543,8 @@ render_flash();
 var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msPrefill    = <?= json_encode($prefill, JSON_UNESCAPED_UNICODE) ?>;
 var msDepoKey    = 'asyaFresh.materialStock.lastDepo';
+var msFirmaKey   = 'asyaFresh.materialStock.lastFirma';
+var msBelgeKey   = 'asyaFresh.materialStock.lastBelgeNo';
 var msCurrentTab = <?= json_encode($mode, JSON_UNESCAPED_UNICODE) ?>;
 
 function msUpdateNames(form, selectedName) {
@@ -552,14 +572,18 @@ function msUpdateNames(form, selectedName) {
 }
 
 function msTab(tab) {
-    // Geçişten önce mevcut formun malzeme/tür/depo değerlerini al (miktar TAŞINMAZ)
-    var fromType = document.getElementById(msCurrentTab + 'MatType');
-    var fromName = document.getElementById(msCurrentTab + 'MatName');
-    var fromDepo = document.getElementById(msCurrentTab + 'Depo');
+    // Geçişten önce mevcut formun değerlerini al (miktar ve not TAŞINMAZ)
+    var fromType  = document.getElementById(msCurrentTab + 'MatType');
+    var fromName  = document.getElementById(msCurrentTab + 'MatName');
+    var fromDepo  = document.getElementById(msCurrentTab + 'Depo');
+    var fromFirma = document.getElementById(msCurrentTab + 'Firma');
+    var fromBelge = document.getElementById(msCurrentTab + 'Belge');
     var carry = {
-        type: fromType ? fromType.value : '',
-        name: fromName ? fromName.value : '',
-        depo: fromDepo ? fromDepo.value : '',
+        type:  fromType  ? fromType.value  : '',
+        name:  fromName  ? fromName.value  : '',
+        depo:  fromDepo  ? fromDepo.value  : '',
+        firma: fromFirma ? fromFirma.value : '',
+        belge: fromBelge ? fromBelge.value : '',
     };
 
     var tabs = ['giris', 'sevk', 'duzeltme'];
@@ -571,12 +595,17 @@ function msTab(tab) {
         if (btn) btn.classList.toggle('ms-tab-active', t === tab);
     });
 
-    // Hedef forma malzeme/depo taşı (yalnızca farklı sekmeye geçişte)
+    // Hedef forma değerleri taşı (yalnızca farklı sekmeye geçişte)
     if (tab !== msCurrentTab) {
         if (carry.type) { msSetSelect(tab + 'MatType', carry.type); msUpdateNames(tab, carry.name || ''); }
         if (carry.depo) { msSetSelect(tab + 'Depo', carry.depo); }
+        var toFirma = document.getElementById(tab + 'Firma');
+        var toBelge = document.getElementById(tab + 'Belge');
+        if (toFirma && carry.firma) toFirma.value = carry.firma;
+        if (toBelge && carry.belge) toBelge.value = carry.belge;
     }
     msCurrentTab = tab;
+    msCheckHint();
 }
 
 function msSetSelect(id, val) {
@@ -594,12 +623,46 @@ function msSetSelect(id, val) {
     sel.value = val;
 }
 
-function msReadLastDepo() {
-    try { return localStorage.getItem(msDepoKey) || ''; } catch (e) { return ''; }
+function msReadLastDepo()  { try { return localStorage.getItem(msDepoKey)  || ''; } catch(e) { return ''; } }
+function msSaveLastDepo(v) { if (!v) return; try { localStorage.setItem(msDepoKey, v);  } catch(e) {} }
+function msReadLastFirma() { try { return localStorage.getItem(msFirmaKey) || ''; } catch(e) { return ''; } }
+function msSaveLastFirma(v){ if (!v) return; try { localStorage.setItem(msFirmaKey, v); } catch(e) {} }
+function msReadLastBelge() { try { return localStorage.getItem(msBelgeKey) || ''; } catch(e) { return ''; } }
+function msSaveLastBelge(v){ if (!v) return; try { localStorage.setItem(msBelgeKey, v); } catch(e) {} }
+
+function msCheckHint() {
+    var hint = document.getElementById('ms-last-hint');
+    if (!hint) return;
+    var firma = msReadLastFirma();
+    var belge = msReadLastBelge();
+    if (!firma && !belge) { hint.hidden = true; return; }
+    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
+    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
+    var firmaFilled = firmaEl && firmaEl.value;
+    var belgeFilled = belgeEl && belgeEl.value;
+    // Göster: en az bir localStorage değeri var VE ilgili alanlar boş
+    if (!firmaFilled && !belgeFilled) {
+        hint.hidden = false;
+        var infoEl = document.getElementById('ms-last-hint-info');
+        if (infoEl) {
+            var parts = [];
+            if (firma) parts.push('Firma: ' + firma);
+            if (belge) parts.push('Belge: ' + belge);
+            infoEl.textContent = parts.join(' · ');
+        }
+    } else {
+        hint.hidden = true;
+    }
 }
-function msSaveLastDepo(val) {
-    if (!val) return;
-    try { localStorage.setItem(msDepoKey, val); } catch (e) {}
+
+function msFillLastHint() {
+    var firma = msReadLastFirma();
+    var belge = msReadLastBelge();
+    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
+    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
+    if (firmaEl && !firmaEl.value && firma) firmaEl.value = firma;
+    if (belgeEl && !belgeEl.value && belge) belgeEl.value = belge;
+    msCheckHint();
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -633,7 +696,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sel) sel.addEventListener('change', function() { msSaveLastDepo(sel.value); });
     });
 
-    // 4) Çift gönderim engeli: submit'te kaydet butonunu kilitle
+    // 4) Firma+belge değişince localStorage'a kaydet
+    forms.forEach(function(form) {
+        var firmaEl = document.getElementById(form + 'Firma');
+        var belgeEl = document.getElementById(form + 'Belge');
+        if (firmaEl) firmaEl.addEventListener('change', function() { msSaveLastFirma(firmaEl.value); msCheckHint(); });
+        if (belgeEl) belgeEl.addEventListener('change', function() { msSaveLastBelge(belgeEl.value); msCheckHint(); });
+    });
+
+    // 5) Çift gönderim engeli: submit'te kaydet butonunu kilitle
     document.querySelectorAll('.ms-action-card form').forEach(function(frm) {
         frm.addEventListener('submit', function() {
             var btn = frm.querySelector('button[type="submit"]');
@@ -649,6 +720,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // 6) Sayfa açılışında hint durumunu kontrol et
+    msCheckHint();
 });
 </script>
 
