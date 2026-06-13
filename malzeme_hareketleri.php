@@ -369,6 +369,32 @@ $mv_page        = min($mv_page, $mv_total_pages);
 $mv_offset      = ($mv_page - 1) * $mv_per_page;
 $hareket_rows   = get_material_movements($pdo, $mv_filters, $mv_per_page, $mv_offset);
 
+// ── Aksiyon butonları — tablo + mobil kart ortak (Pro-07) ─
+// Admin + non-loading hareketlerde Taşı / Ters Kayıt / Bilgi Düzenle döndürür.
+// Aynı modal JS fonksiyonlarını çağırır (msMoveOpen / msRevOpen / msOpenEdit).
+$mh_action_buttons = function (array $r) use ($ms_is_admin): string {
+    if (!$ms_is_admin) return '';
+    $can_move = !in_array($r['source_type'], ['loading', 'manual_reverse'], true);
+    $id = (int)$r['id'];
+    // json_encode + h(): çift tırnak &quot; olur, onclick="" attribute içinde güvenli kalır.
+    $j  = fn($v) => h(json_encode($v, JSON_UNESCAPED_UNICODE));
+    ob_start();
+    if ($can_move): ?>
+        <button type="button" class="btn btn-sm ms-act-btn ms-move-btn" title="Başka malzeme tanımına taşı"
+                onclick="msMoveOpen(<?= $id ?>, <?= $j($r['movement_date']) ?>, <?= $j($r['movement_type']) ?>, <?= $j($r['material_type']) ?>, <?= $j((string)($r['material_id'] ?? '')) ?>, <?= $j($r['material_name']) ?>, <?= $j($r['depo'] ?? '') ?>, <?= $j((string)$r['quantity']) ?>, <?= $j($r['unit']) ?>, <?= $j($r['belge_no'] ?? '') ?>, <?= $j($r['firma'] ?? '') ?>, <?= $j($r['note'] ?? '') ?>)">⇄ Taşı</button>
+    <?php endif; ?>
+        <button type="button" class="btn btn-sm ms-act-btn ms-rev-btn" title="Ters Kayıt Oluştur — orijinal hareketi silmeden iptal eder"
+                onclick="msRevOpen(<?= $id ?>, <?= $j($r['movement_date']) ?>, <?= $j($r['movement_type']) ?>, <?= $j($r['material_name']) ?>, <?= $j($r['depo'] ?? '') ?>, <?= $j((string)$r['quantity']) ?>, <?= $j($r['unit']) ?>)">↩ Ters Kayıt</button>
+        <button type="button" class="btn btn-sm ms-act-btn ms-edit-btn" title="Bilgi Düzenle (belge no / firma / not)"
+                data-id="<?= $id ?>" data-date="<?= h($r['movement_date']) ?>" data-mtype="<?= h($r['movement_type']) ?>"
+                data-mattype="<?= h($r['material_type']) ?>" data-matname="<?= h($r['material_name']) ?>"
+                data-depo="<?= h($r['depo'] ?? '') ?>" data-qty="<?= h((string)$r['quantity']) ?>" data-unit="<?= h($r['unit']) ?>"
+                data-belge="<?= h($r['belge_no'] ?? '') ?>" data-firma="<?= h($r['firma'] ?? '') ?>" data-note="<?= h($r['note'] ?? '') ?>"
+                onclick="msOpenEdit(this)">✎ Bilgi</button>
+    <?php
+    return ob_get_clean();
+};
+
 render_header('Malzeme Hareketleri');
 render_flash();
 ?>
@@ -478,7 +504,8 @@ render_flash();
         <?= $herhangi_filtre ? 'Filtre kriterlerine uygun hareket bulunamadı.' : 'Henüz hareket kaydı yok.' ?>
     </div>
     <?php else: ?>
-    <div class="table-wrap">
+    <!-- ── Masaüstü tablo (≥768px) ──────────────────────────── -->
+    <div class="table-wrap mh-desk">
         <table class="data-table stok-table">
             <thead>
                 <tr>
@@ -515,7 +542,6 @@ render_flash();
                 $qty_abs   = abs((float)$r['quantity']);
                 $qty_color  = $is_giris ? 'var(--success)' : ($is_duz ? 'var(--warn)' : 'var(--danger)');
                 $is_loading = $r['source_type'] === 'loading';
-                $can_move   = $ms_is_admin && !in_array($r['source_type'], ['loading', 'manual_reverse'], true);
             ?>
                 <tr>
                     <td style="white-space:nowrap"><?= h(fmt_date($r['movement_date'])) ?></td>
@@ -541,62 +567,81 @@ render_flash();
                         <?= $qty_sign ?><?= number_format($qty_abs, 0, ',', '.') ?>
                         <small style="font-weight:400;color:var(--muted)"> <?= h($r['unit']) ?></small>
                     </td>
-                    <td style="white-space:nowrap">
+                    <td class="mh-act-cell" style="white-space:nowrap">
                         <?php if ($is_loading): ?>
                         <span style="font-size:.7rem;color:var(--muted);white-space:nowrap"
                               title="Bu hareket Yük #<?= (int)$r['source_id'] ?> yükleme kaydından otomatik oluşur. Silmek/düzeltmek için ilgili yükleme kaydını düzenleyin.">🔒 Yük #<?= (int)$r['source_id'] ?></span>
-                        <?php elseif ($ms_is_admin): ?>
-                        <?php if ($can_move): ?>
-                        <button type="button" class="btn btn-sm ms-move-btn"
-                                title="Başka malzeme tanımına taşı"
-                                style="padding:2px 7px;font-size:.75rem;background:var(--primary-light,#e8f0fe);color:var(--primary,#1a73e8)"
-                                onclick="msMoveOpen(
-                                    <?= (int)$r['id'] ?>,
-                                    <?= json_encode($r['movement_date'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['movement_type'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['material_type'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode((string)($r['material_id'] ?? ''), JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['material_name'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['depo'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode((string)$r['quantity'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['unit'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['belge_no'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['firma'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['note'] ?? '', JSON_UNESCAPED_UNICODE) ?>
-                                )">⇄</button>
-                        <?php endif; ?>
-                        <button type="button" class="btn btn-sm ms-rev-btn"
-                                title="Ters Kayıt Oluştur — orijinal hareketi silmeden iptal eder"
-                                style="padding:2px 7px;font-size:.75rem;background:var(--warn-light,#fff3cd);color:var(--warn-dark,#856404)"
-                                onclick="msRevOpen(
-                                    <?= (int)$r['id'] ?>,
-                                    <?= json_encode($r['movement_date'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['movement_type'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['material_name'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['depo'] ?? '', JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode((string)$r['quantity'], JSON_UNESCAPED_UNICODE) ?>,
-                                    <?= json_encode($r['unit'], JSON_UNESCAPED_UNICODE) ?>
-                                )">↩</button>
-                        <button type="button" class="ms-edit-btn"
-                                title="Düzenle (geçmiş hareketi düzenlemek yerine Taşı veya Ters Kayıt kullanılması önerilir)"
-                                data-id="<?= (int)$r['id'] ?>"
-                                data-date="<?= h($r['movement_date']) ?>"
-                                data-mtype="<?= h($r['movement_type']) ?>"
-                                data-mattype="<?= h($r['material_type']) ?>"
-                                data-matname="<?= h($r['material_name']) ?>"
-                                data-depo="<?= h($r['depo'] ?? '') ?>"
-                                data-qty="<?= h((string)$r['quantity']) ?>"
-                                data-unit="<?= h($r['unit']) ?>"
-                                data-belge="<?= h($r['belge_no'] ?? '') ?>"
-                                data-firma="<?= h($r['firma'] ?? '') ?>"
-                                data-note="<?= h($r['note'] ?? '') ?>"
-                                onclick="msOpenEdit(this)">✎</button>
+                        <?php else: ?>
+                        <?= $mh_action_buttons($r) ?>
                         <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+
+    <!-- ── Mobil kart listesi (<768px) ──────────────────────── -->
+    <div class="mh-cards">
+        <?php foreach ($hareket_rows as $r):
+            $is_giris  = $r['movement_type'] === 'giris';
+            $is_kullan = $r['movement_type'] === 'kullanim';
+            $is_duz    = $r['movement_type'] === 'duzeltme';
+            $badge_cls = match ($r['movement_type']) {
+                'giris'    => 'badge-gelen',
+                'sevk'     => 'badge-cikan',
+                'kullanim' => 'badge-fire',
+                'duzeltme' => 'badge-duzeltme',
+                default    => '',
+            };
+            $badge_lbl = match ($r['movement_type']) {
+                'giris'    => 'Giriş',
+                'sevk'     => 'Sevk',
+                'kullanim' => 'Kullanım',
+                'duzeltme' => 'Düzeltme',
+                default    => $r['movement_type'],
+            };
+            $qty_sign  = $is_giris || ($is_duz && (float)$r['quantity'] >= 0) ? '+' : '−';
+            $qty_abs   = abs((float)$r['quantity']);
+            $qty_color = $is_giris ? 'var(--success)' : ($is_duz ? 'var(--warn)' : 'var(--danger)');
+            $is_loading = $r['source_type'] === 'loading';
+        ?>
+        <div class="mh-card">
+            <div class="mh-card-top">
+                <span class="stok-badge <?= $badge_cls ?>"><?= $badge_lbl ?></span>
+                <span class="mh-card-date"><?= h(fmt_date($r['movement_date'])) ?></span>
+                <?php if ($is_loading): ?>
+                <span class="mh-card-lock" title="Yükleme kaynaklı hareket">🔒 Yük #<?= (int)$r['source_id'] ?></span>
+                <?php endif; ?>
+            </div>
+            <div class="mh-card-main">
+                <div class="mh-card-mat"><?= h($r['material_name']) ?></div>
+                <div class="mh-card-meta">
+                    <?= h($ms_types[$r['material_type']] ?? $r['material_type']) ?>
+                    · <?= h($r['depo'] ?: '—') ?>
+                </div>
+            </div>
+            <div class="mh-card-qty" style="color:<?= $qty_color ?>">
+                <?= $qty_sign ?><?= number_format($qty_abs, 0, ',', '.') ?>
+                <small><?= h($r['unit']) ?></small>
+            </div>
+            <?php if ($r['belge_no'] || $r['firma'] || ($is_kullan && $r['source_id']) || !empty($r['note'])): ?>
+            <div class="mh-card-details">
+                <?php if ($r['belge_no']): ?><div><span>Belge:</span> <?= h($r['belge_no']) ?></div><?php endif; ?>
+                <?php if ($r['firma']): ?><div><span>Firma:</span> <?= h($r['firma']) ?></div><?php endif; ?>
+                <?php if ($is_kullan && $r['source_id']): ?>
+                <div><span>Kaynak:</span> <a href="record_view.php?id=<?= (int)$r['source_id'] ?>" style="color:var(--primary);text-decoration:none">Yük #<?= (int)$r['source_id'] ?> →</a></div>
+                <?php endif; ?>
+                <?php if (!empty($r['note'])): ?><div><span>Not:</span> <?= h($r['note']) ?></div><?php endif; ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($is_loading): ?>
+            <div class="mh-card-note">🔒 Yükleme kaynaklı hareket — düzenlemek için ilgili yükleme kaydını açın.</div>
+            <?php elseif ($ms_is_admin): ?>
+            <div class="mh-card-actions"><?= $mh_action_buttons($r) ?></div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
     </div>
     <?php if ($mv_total_pages > 1): ?>
     <div class="stok-pg">
