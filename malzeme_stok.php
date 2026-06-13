@@ -123,13 +123,47 @@ if ($is_csv && ($_GET['csv'] ?? '') === 'ozet') {
 // kasa/palet) admin-only malzeme_stok_tehis.php'ye taşındı. Bu sayfa artık
 // teknik teşhis sorgularını ÇALIŞTIRMAZ — sayfa açılışı hafifledi.
 
+// ── Satır bağlamı — tablo + mobil kart ortak (Pro-09) ─────
+// Durum rozeti, çıkış/düzeltme ve hareketler/giriş linklerini tek yerde üretir;
+// böylece masaüstü tablo ile mobil kart AYNI değerleri gösterir.
+// material_id varsa ID bazlı link, yoksa name+type fallback (GROUP BY ile uyumlu).
+$ms_row_ctx = function (array $oz): array {
+    $kalan  = (float)$oz['kalan'];
+    $is_neg = $kalan < 0;
+    if ($is_neg)        { $durum_lbl = 'Negatif'; $durum_cls = 'badge-fire';    $durum_key = 'negatif'; }
+    elseif ($kalan > 0) { $durum_lbl = 'Stokta';  $durum_cls = 'badge-gelen';   $durum_key = 'stokta';  }
+    else                { $durum_lbl = 'Sıfır';   $durum_cls = 'badge-duzeltme';$durum_key = 'sifir';   }
+
+    $_oz_mid    = $oz['material_id'] ?? null;
+    $_oz_return = 'return=' . rawurlencode(ms_url()); // işlem sonrası filtreli sayfaya dön
+    if ($_oz_mid !== null && (int)$_oz_mid > 0) {
+        $oz_link  = ms_hareket_url(['mat_id' => (int)$_oz_mid, 'depo' => $oz['depo']]);
+        $oz_giris = 'malzeme_stok_islem.php?' . http_build_query(['mode' => 'giris', 'material_id' => (int)$_oz_mid, 'depo' => $oz['depo']]) . '&' . $_oz_return;
+    } else {
+        $oz_link  = ms_hareket_url(['mat_type' => $oz['material_type'], 'mat_name' => $oz['material_name'], 'depo' => $oz['depo']]);
+        $oz_giris = 'malzeme_stok_islem.php?' . http_build_query(['mode' => 'giris', 'mat_name' => $oz['material_name'], 'mat_type' => $oz['material_type'], 'depo' => $oz['depo']]) . '&' . $_oz_return;
+    }
+    return [
+        'kalan'     => $kalan,
+        'is_neg'    => $is_neg,
+        'cikis'     => (float)$oz['total_cikis'],   // sevk + kullanım
+        'duz'       => (float)$oz['total_duzeltme'],
+        'durum_lbl' => $durum_lbl,
+        'durum_cls' => $durum_cls,
+        'durum_key' => $durum_key,
+        'oz_link'   => $oz_link,
+        'oz_giris'  => $oz_giris,
+    ];
+};
+
 render_header('Malzeme Stok');
 render_flash();
 ?>
 <style>
 @media print {
     .topbar,.bottomnav,.sidebar,.page-head,
-    .ms-neg-uyari,.stok-ozet-grid,.ms-info-note { display:none !important; }
+    .ms-neg-uyari,.stok-ozet-grid,.ms-info-note,.ms-stock-cards { display:none !important; }
+    .ms-stock-desk { display:block !important; }   /* yazdırmada daima tablo */
     .card:not(#ms-ozet-card) { display:none !important; }
     #ms-ozet-card { border:none !important; box-shadow:none !important; border-radius:0 !important; }
     .stok-table-head { border-bottom:2px solid #000 !important; padding:0 0 6px !important; background:none !important; }
@@ -284,7 +318,8 @@ render_flash();
         <span style="font-size:.82rem;color:var(--muted)"><?= count($ozet_rows) ?> malzeme/depo<?= $herhangi_filtre ? ' (filtreli)' : '' ?></span>
     </div>
     <?php if (!empty($ozet_rows)): ?>
-    <div class="table-wrap">
+    <!-- ── Masaüstü tablo (≥768px) ──────────────────────────── -->
+    <div class="table-wrap ms-stock-desk">
         <table class="data-table stok-table">
             <thead>
                 <tr>
@@ -301,25 +336,12 @@ render_flash();
             </thead>
             <tbody>
             <?php foreach ($ozet_rows as $oz):
-                $kalan     = (float)$oz['kalan'];
-                $is_neg    = $kalan < 0;
+                $c         = $ms_row_ctx($oz);
+                $kalan     = $c['kalan'];
+                $is_neg    = $c['is_neg'];
                 $kalan_cls = $is_neg ? 'stok-negatif' : ($kalan > 0 ? '' : 'color:var(--muted)');
-                $duz       = (float)$oz['total_duzeltme'];
-                $cikis     = (float)$oz['total_cikis']; // sevk + kullanım
-                // Durum rozeti
-                if ($is_neg)        { $durum_lbl = 'Negatif'; $durum_cls = 'badge-fire';   }
-                elseif ($kalan > 0) { $durum_lbl = 'Stokta';  $durum_cls = 'badge-gelen';  }
-                else                { $durum_lbl = 'Sıfır';   $durum_cls = 'badge-duzeltme';}
-                // İsim değişikliğine dayanıklı: tanımlı malzemeler için ID, tanımsız için name+type.
-                $_oz_mid = $oz['material_id'] ?? null;
-                $_oz_return = 'return=' . rawurlencode(ms_url()); // işlem sonrası filtreli sayfaya dön
-                if ($_oz_mid !== null && (int)$_oz_mid > 0) {
-                    $oz_link  = ms_hareket_url(['mat_id' => (int)$_oz_mid, 'depo' => $oz['depo']]);
-                    $oz_giris = 'malzeme_stok_islem.php?' . http_build_query(['mode' => 'giris', 'material_id' => (int)$_oz_mid, 'depo' => $oz['depo']]) . '&' . $_oz_return;
-                } else {
-                    $oz_link  = ms_hareket_url(['mat_type' => $oz['material_type'], 'mat_name' => $oz['material_name'], 'depo' => $oz['depo']]);
-                    $oz_giris = 'malzeme_stok_islem.php?' . http_build_query(['mode' => 'giris', 'mat_name' => $oz['material_name'], 'mat_type' => $oz['material_type'], 'depo' => $oz['depo']]) . '&' . $_oz_return;
-                }
+                $duz       = $c['duz'];
+                $cikis     = $c['cikis'];
             ?>
                 <tr class="<?= $is_neg ? 'ms-row-negatif' : '' ?>">
                     <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)"><?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?></td>
@@ -336,17 +358,60 @@ render_flash();
                         <?= number_format($kalan, 0, ',', '.') ?>
                         <small style="font-weight:400;color:var(--muted)"><?= h($oz['unit']) ?></small>
                     </td>
-                    <td><span class="stok-badge <?= $durum_cls ?>"><?= $durum_lbl ?></span></td>
+                    <td><span class="stok-badge <?= $c['durum_cls'] ?>"><?= $c['durum_lbl'] ?></span></td>
                     <td style="text-align:right;white-space:nowrap">
-                        <a href="<?= h($oz_link) ?>" class="ms-edit-btn" title="Bu malzeme/deponun hareketlerini gör">🔍</a>
+                        <a href="<?= h($c['oz_link']) ?>" class="ms-edit-btn" title="Bu malzeme/deponun hareketlerini gör">🔍</a>
                         <?php if ($ms_can_write): ?>
-                        <a href="<?= h($oz_giris) ?>" class="ms-edit-btn" title="Bu malzemeye stok girişi ekle">➕</a>
+                        <a href="<?= h($c['oz_giris']) ?>" class="ms-edit-btn" title="Bu malzemeye stok girişi ekle">➕</a>
                         <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+
+    <!-- ── Mobil kart listesi (<768px) ──────────────────────── -->
+    <div class="ms-stock-cards">
+        <?php foreach ($ozet_rows as $oz):
+            $c       = $ms_row_ctx($oz);
+            $kalan   = $c['kalan'];
+            $is_neg  = $c['is_neg'];
+            $duz     = $c['duz'];
+            $cikis   = $c['cikis'];
+            $giris   = (float)$oz['total_giris'];
+            $kalan_color = $is_neg ? 'var(--danger)' : ($kalan > 0 ? 'var(--success)' : 'var(--muted)');
+        ?>
+        <div class="ms-scard ms-scard-<?= $c['durum_key'] ?>">
+            <div class="ms-scard-top">
+                <div class="ms-scard-name">
+                    <?= h($oz['material_name']) ?>
+                    <?php if ((int)$oz['is_active'] === 0): ?><span class="ms-scard-passive">PASİF</span><?php endif; ?>
+                </div>
+                <span class="stok-badge <?= $c['durum_cls'] ?>"><?= mb_strtoupper($c['durum_lbl'], 'UTF-8') ?></span>
+            </div>
+            <div class="ms-scard-meta">
+                <span class="ms-cat-badge ms-cat-<?= h($oz['category']) ?>"><?= h($ms_cat_labels[$oz['category']] ?? $oz['category']) ?></span>
+                <?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?>
+                · <?= $oz['depo'] !== '' ? h($oz['depo']) : 'Depo Boş' ?>
+            </div>
+            <div class="ms-scard-kalan" style="color:<?= $kalan_color ?>">
+                <?= number_format($kalan, 0, ',', '.') ?>
+                <small><?= h($oz['unit']) ?></small>
+            </div>
+            <div class="ms-scard-grid">
+                <div><span>Giriş</span><b style="color:var(--success)"><?= $giris > 0 ? '+' . number_format($giris, 0, ',', '.') : '—' ?></b></div>
+                <div><span>Çıkış</span><b style="color:var(--danger)"><?= $cikis > 0 ? '−' . number_format($cikis, 0, ',', '.') : '—' ?></b></div>
+                <div><span>Düzeltme</span><b style="color:var(--warn)"><?= $duz != 0.0 ? ($duz > 0 ? '+' : '−') . number_format(abs($duz), 0, ',', '.') : '—' ?></b></div>
+            </div>
+            <div class="ms-scard-actions">
+                <a href="<?= h($c['oz_link']) ?>" class="btn btn-sm btn-ghost">🔍 Hareketler</a>
+                <?php if ($ms_can_write): ?>
+                <a href="<?= h($c['oz_giris']) ?>" class="btn btn-sm btn-primary">➕ Giriş Ekle</a>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
     </div>
     <?php else: ?>
     <div style="padding:28px;text-align:center;color:var(--muted)">
