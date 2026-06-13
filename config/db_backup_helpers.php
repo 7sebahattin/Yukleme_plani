@@ -38,6 +38,26 @@ function ensure_db_backup_dir(): void {
     }
 }
 
+// ── Backup tablosunu garantile ────────────────────────────
+function ensure_db_backup_table(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `database_backups` (
+        `id`            INT AUTO_INCREMENT PRIMARY KEY,
+        `backup_date`   DATE NOT NULL,
+        `filename`      VARCHAR(255) NOT NULL,
+        `file_path`     TEXT NOT NULL,
+        `file_size`     BIGINT NULL,
+        `method`        VARCHAR(50) NULL,
+        `status`        ENUM('success','failed') NOT NULL DEFAULT 'success',
+        `error_message` TEXT NULL,
+        `created_by`    INT NULL,
+        `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `downloaded_at` DATETIME NULL,
+        `downloaded_by` INT NULL,
+        INDEX `idx_bkp_date`   (`backup_date`),
+        INDEX `idx_bkp_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
 // ── Shell araç kontrolü ───────────────────────────────────
 function _bh_fn_ok(string $fn): bool {
     if (!function_exists($fn)) return false;
@@ -198,7 +218,9 @@ function create_database_backup(PDO $pdo, int $userId, string $trigger = 'auto_l
 
     // ── DB kaydı ──────────────────────────────────────────
     $backup_id = 0;
+    $db_err    = null;
     try {
+        ensure_db_backup_table($pdo);
         $pdo->prepare(
             "INSERT INTO database_backups
              (backup_date, filename, file_path, file_size, method, status, error_message, created_by)
@@ -215,7 +237,7 @@ function create_database_backup(PDO $pdo, int $userId, string $trigger = 'auto_l
         ]);
         $backup_id = (int)$pdo->lastInsertId();
     } catch (PDOException $e) {
-        // tablo henüz yok veya başka hata — sessizce devam
+        $db_err = 'Kayıt tablosuna yazılamadı: ' . substr($e->getMessage(), 0, 120);
     }
 
     // ── Audit log ─────────────────────────────────────────
@@ -242,13 +264,16 @@ function create_database_backup(PDO $pdo, int $userId, string $trigger = 'auto_l
     }
 
     return [
-        'ok'        => $ok,
+        'ok'        => $ok && $backup_id > 0,
+        'file_ok'   => $ok,
+        'db_ok'     => $backup_id > 0,
         'id'        => $backup_id,
         'filename'  => $filename,
         'file_path' => $filepath,
         'size'      => $file_size,
         'method'    => $method,
-        'error'     => $err_msg,
+        'error'     => $err_msg ?? $db_err,
+        'db_error'  => $db_err,
     ];
 }
 
@@ -277,6 +302,7 @@ function create_daily_backup_if_needed(PDO $pdo, int $userId): ?array {
 // ── Admin sayfası için yedek listesi ─────────────────────
 function list_database_backups(PDO $pdo, int $limit = 30): array {
     try {
+        ensure_db_backup_table($pdo);
         $st = $pdo->prepare(
             "SELECT b.*,
                     uc.display_name AS created_by_name,

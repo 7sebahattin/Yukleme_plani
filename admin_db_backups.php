@@ -88,6 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backu
     $result = create_database_backup($pdo, (int)($auth_user['id'] ?? 0), 'manual_admin');
     if ($result['ok']) {
         set_flash('success', "Yedek oluşturuldu: {$result['filename']} (" . number_format((int)$result['size'] / 1024, 1) . " KB)");
+    } elseif ($result['file_ok'] && !$result['db_ok']) {
+        set_flash('error', 'Dosya oluştu ama kayıt tablosuna yazılamadı: ' . ($result['db_error'] ?? 'Bilinmeyen DB hatası') . ' — Dosya: ' . $result['filename']);
     } else {
         set_flash('error', 'Yedek oluşturulamadı: ' . ($result['error'] ?? 'Bilinmeyen hata'));
     }

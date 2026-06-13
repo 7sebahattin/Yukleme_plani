@@ -69,6 +69,8 @@ if ($db_backup_result !== null): ?>
     <span>
         <?php if ($db_backup_result['ok']): ?>
             🗄️ Bugünün veritabanı yedeği oluşturuldu (<?= h($db_backup_result['method']) ?>).
+        <?php elseif (!empty($db_backup_result['file_ok']) && empty($db_backup_result['db_ok'])): ?>
+            ⚠️ Yedek dosyası oluşturuldu fakat kayıt tablosuna yazılamadı.
         <?php else: ?>
             ⚠️ Otomatik veritabanı yedeği oluşturulamadı.
         <?php endif; ?>
