@@ -174,16 +174,8 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
             $ozet_rows[] = $mk_row(ms_cat_of($atype), $atype, (string)$a['material_name'], $a['depo'], $a['unit'], $a, 1, $mid);
         }
 
-        // 5) ozet_* filtreleri (PHP tarafı)
-        if ($f_ozet_kategori !== '' || $f_ozet_tur !== '' || $f_ozet_malzeme !== '' || $f_ozet_depo !== '') {
-            $ozet_rows = array_values(array_filter($ozet_rows, function ($r) use ($f_ozet_kategori, $f_ozet_tur, $f_ozet_malzeme, $f_ozet_depo) {
-                if ($f_ozet_kategori !== '' && $r['category'] !== $f_ozet_kategori) return false;
-                if ($f_ozet_tur      !== '' && $r['material_type'] !== $f_ozet_tur) return false;
-                if ($f_ozet_malzeme  !== '' && mb_stripos($r['material_name'], $f_ozet_malzeme) === false) return false;
-                if ($f_ozet_depo     !== '' && $r['depo'] !== $f_ozet_depo) return false;
-                return true;
-            }));
-        }
+        // 5) Filtreler (PHP tarafı) — ozet_* / yeni adlar + durum, tek yerden
+        $ozet_rows = ms_filter_summary_rows($ozet_rows, $filters);
 
         // 6) Sırala: kategori, tür, malzeme, depo
         usort($ozet_rows, fn($x, $y) =>
@@ -193,6 +185,36 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
     } catch (PDOException $e) {}
 
     return $ozet_rows;
+}
+
+// ── Özet satırlarını filtrele (zaten hesaplanmış satırlar üzerinde) ──
+// Hem eski (ozet_kategori/ozet_tur/ozet_malzeme/ozet_depo) hem yeni
+// (kategori/tur/q/depo) anahtarları kabul eder; ayrıca durum (kalan bazlı).
+// Hesaplama YOK — yalnızca süzme; çağıran ana özeti yeniden hesaplamadan
+// farklı görünümler (kartlar vs tablo) için kullanabilir.
+function ms_filter_summary_rows(array $rows, array $filters): array {
+    $kategori = (string)($filters['kategori'] ?? $filters['ozet_kategori'] ?? '');
+    $tur      = (string)($filters['tur']      ?? $filters['ozet_tur']      ?? '');
+    $q        = (string)($filters['q']        ?? $filters['ozet_malzeme']  ?? '');
+    $depo     = (string)($filters['depo']     ?? $filters['ozet_depo']     ?? '');
+    $durum    = (string)($filters['durum']    ?? '');
+
+    if ($kategori === '' && $tur === '' && $q === '' && $depo === '' && $durum === '') {
+        return array_values($rows);
+    }
+    return array_values(array_filter($rows, function ($r) use ($kategori, $tur, $q, $depo, $durum) {
+        if ($kategori !== '' && $r['category'] !== $kategori) return false;
+        if ($tur      !== '' && $r['material_type'] !== $tur) return false;
+        if ($q        !== '' && mb_stripos($r['material_name'], $q) === false) return false;
+        if ($depo     !== '' && $r['depo'] !== $depo) return false;
+        if ($durum    !== '') {
+            $k = (float)$r['kalan'];
+            if ($durum === 'stokta'  && !($k > 0))  return false;
+            if ($durum === 'negatif' && !($k < 0))  return false;
+            if ($durum === 'sifir'   && $k != 0.0)  return false;
+        }
+        return true;
+    }));
 }
 
 // ── Üst kart toplamları ───────────────────────────────────

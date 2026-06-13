@@ -110,6 +110,25 @@ $neg = get_negative_materials($rows);
 check('get_negative_materials adları', ['C-5 SİYAH', 'PASİF KASA'],
     array_values(array_intersect(array_column($neg, 'material_name'), ['C-5 SİYAH', 'PASİF KASA'])));
 
+// ── 3b) Pro-01: ms_filter_summary_rows (yeni adlar + durum) ──
+$allr = get_material_stock_summary($pdo, []); // filtresiz tam set
+check('filtre yokken tüm satırlar döner', count($allr),
+    count(ms_filter_summary_rows($allr, [])));
+check('durum=negatif yalnızca negatifler', true,
+    count($f = ms_filter_summary_rows($allr, ['durum' => 'negatif'])) > 0
+    && count(array_filter($f, fn($r) => (float)$r['kalan'] >= 0)) === 0);
+check('durum=stokta yalnızca pozitifler', 0,
+    count(array_filter(ms_filter_summary_rows($allr, ['durum' => 'stokta']), fn($r) => (float)$r['kalan'] <= 0)));
+check('durum=sifir yalnızca sıfırlar', 0,
+    count(array_filter(ms_filter_summary_rows($allr, ['durum' => 'sifir']), fn($r) => (float)$r['kalan'] != 0.0)));
+check('q (yeni ad) = ozet_malzeme davranışı', count(ms_filter_summary_rows($allr, ['ozet_malzeme' => 'yunan'])),
+    count(ms_filter_summary_rows($allr, ['q' => 'yunan'])));
+check('kategori (yeni ad) yalnızca kasa', ['kasa'],
+    array_values(array_unique(array_column(ms_filter_summary_rows($allr, ['kategori' => 'kasa']), 'category'))));
+check('durum+kategori birlikte (negatif kasa)', true,
+    count(array_filter(ms_filter_summary_rows($allr, ['kategori' => 'kasa', 'durum' => 'negatif']),
+        fn($r) => $r['category'] !== 'kasa' || (float)$r['kalan'] >= 0)) === 0);
+
 // ── 4) Hareket listesi ──
 $mv = get_material_movements($pdo);
 check('hareket sayısı (filtresiz)', 9, count($mv));
