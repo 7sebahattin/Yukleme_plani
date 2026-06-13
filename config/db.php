@@ -218,6 +218,26 @@ function db(): PDO {
         ] as $_idx_sql) {
             try { $pdo->exec($_idx_sql); } catch (PDOException $_e) { /* var veya tablo yok */ }
         }
+
+        // DB-Backup-01: database_backups — yedek takip tablosu (idempotent)
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `database_backups` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `backup_date`   DATE NOT NULL,
+                `filename`      VARCHAR(255) NOT NULL,
+                `file_path`     TEXT NOT NULL,
+                `file_size`     BIGINT NULL,
+                `method`        VARCHAR(50) NULL,
+                `status`        ENUM('success','failed') NOT NULL DEFAULT 'success',
+                `error_message` TEXT NULL,
+                `created_by`    INT NULL,
+                `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `downloaded_at` DATETIME NULL,
+                `downloaded_by` INT NULL,
+                INDEX `idx_bkp_date`   (`backup_date`),
+                INDEX `idx_bkp_status` (`status`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_bkpe) { /* sessizce geç */ }
     }
     return $pdo;
 }

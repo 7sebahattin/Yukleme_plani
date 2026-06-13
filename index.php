@@ -8,6 +8,17 @@ require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('dashboard.read');
 
+// ── DB-Backup-01: Admin girişinde günlük otomatik yedek ───
+$db_backup_result = null;
+if (is_admin()) {
+    require_once __DIR__ . '/config/db_backup_helpers.php';
+    try {
+        $db_backup_result = create_daily_backup_if_needed(db(), (int)($auth_user['id'] ?? 0));
+    } catch (Throwable $_bkp_err) {
+        // backup hatası ana sayfayı çökertmemeli
+    }
+}
+
 // Temel sayaçlar
 $stats = db()->query("
     SELECT
@@ -52,7 +63,25 @@ $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
 render_flash();
-?>
+// Backup bildirimi (admin, HTML link içerdiği için render_flash() dışında)
+if ($db_backup_result !== null): ?>
+<div class="flash flash-<?= $db_backup_result['ok'] ? 'success' : 'error' ?>" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span>
+        <?php if ($db_backup_result['ok']): ?>
+            🗄️ Bugünün veritabanı yedeği oluşturuldu (<?= h($db_backup_result['method']) ?>).
+        <?php else: ?>
+            ⚠️ Otomatik veritabanı yedeği oluşturulamadı.
+        <?php endif; ?>
+    </span>
+    <span style="display:flex;gap:8px;flex-wrap:wrap">
+        <?php if ($db_backup_result['ok'] && $db_backup_result['id'] > 0): ?>
+        <a href="admin_db_backups.php?action=download&id=<?= (int)$db_backup_result['id'] ?>"
+           style="font-weight:700;color:inherit;text-decoration:underline">⬇ İndir</a>
+        <?php endif; ?>
+        <a href="admin_db_backups.php" style="color:inherit;text-decoration:underline">Tüm yedekler</a>
+    </span>
+</div>
+<?php endif; ?>
 
 <div class="home-grid">
 
@@ -152,6 +181,11 @@ render_flash();
         <div class="home-card-badge" style="background:#e91e63"><?= $audit_son24h ?></div>
         <?php endif; ?>
         <div class="home-card-sub">Son 24 saat</div>
+    </a>
+    <a href="admin_db_backups.php" class="home-card">
+        <div class="home-card-icon" style="background:#e8f5e9">🗄️</div>
+        <div class="home-card-title">Veritabanı Yedekleri</div>
+        <div class="home-card-sub">Günlük otomatik</div>
     </a>
 <?php endif; ?>
 
