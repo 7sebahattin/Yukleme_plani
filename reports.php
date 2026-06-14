@@ -48,7 +48,8 @@ function col_label(string $c): string {
     static $m = [
         'id'=>'ID','tarih'=>'Tarih','firma'=>'Firma','bolge'=>'Bölge','alici'=>'Alıcı',
         'urun'=>'Ürün','parti_no'=>'Parti No','casus_no'=>'Casus No','cikis_nedeni'=>'Çıkma Nedeni','on_plaka'=>'Plaka','arka_plaka'=>'Arka Plaka',
-        'gumruk'=>'Gümrük','fatura_no'=>'Fatura No','etiket'=>'Marka/Etiket',
+        'gumruk'=>'Gümrük','fatura_no'=>'Fatura No','etiket'=>'Not','brand'=>'Marka',
+        'urun_sahibi_adi'=>'Ürün Sahibi',
         'sofor_adi'=>'Şoför','telefon'=>'Telefon','nakliye_sirketi'=>'Nakliye Şirketi',
         'durum'=>'Durum','palet_sayisi'=>'Palet','toplam_kasa'=>'Kasa',
         'toplam_brut'=>'Brüt KG','toplam_dara'=>'Dara KG','toplam_net'=>'Net KG',
@@ -124,10 +125,19 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $agg_dara  = "COALESCE(SUM(p.dara_kg),0)";
         $agg_net   = "COALESCE(SUM(p.net_kg),0)";
     }
+    // urun_sahibi_id kolonu var mı kontrol et (SELECT ve WHERE'de kullanılır)
+    $_us_col_ok = false;
+    try { $_us_col_ok = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn(); }
+    catch (Throwable $_) {}
+    $_us_subq = $_us_col_ok
+        ? "(SELECT md.name FROM material_definitions md WHERE md.id = r.urun_sahibi_id LIMIT 1) AS urun_sahibi_adi"
+        : "'' AS urun_sahibi_adi";
+
     $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.casus_no, r.cikis_nedeni,
-                   r.gumruk, r.fatura_no, r.etiket,
+                   r.gumruk, r.fatura_no, COALESCE(r.brand,'') AS brand,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
                    r.sofor_adi, r.nakliye_sirketi, r.telefon,
+                   {$_us_subq},
                    (SELECT p2.depo FROM loading_pallets p2
                     WHERE p2.loading_record_id = r.id AND p2.depo != ''
                     ORDER BY p2.id LIMIT 1)  AS depo,
@@ -147,10 +157,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_bolge !== '') { $sql .= " AND r.bolge = :bolge"; $p[':bolge'] = $f_bolge; }
     if ($f_depo  !== '') { $sql .= " AND p.depo  = :depo";  $p[':depo']  = $f_depo;  }
     // Sprint ÜrünSahibi-01: ürün sahibi filtresi (yalnızca yukleme)
-    $_us_col_ok = false;
     if ($f_urun_sahibi !== '' && $type === 'yukleme') {
-        try { $_us_col_ok = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn(); }
-        catch (Throwable $_) {}
         if ($_us_col_ok) {
             if ($f_urun_sahibi === '0') {
                 $sql .= " AND r.urun_sahibi_id IS NULL";
@@ -196,7 +203,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         // Kolon grupları: Temel | Ürün | Nakliye | Toplamlar | Durum
         $cols = [
             'id','tarih','firma','bolge','parti_no',
-            'alici','urun','etiket','gumruk','fatura_no','casus_no','depo',
+            'alici','urun','brand','urun_sahibi_adi','gumruk','fatura_no','casus_no','depo',
             'sofor_adi','telefon','on_plaka','nakliye_sirketi','nakliye_bedeli','avans',
             'palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net',
             'durum',
