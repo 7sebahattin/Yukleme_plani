@@ -39,6 +39,30 @@ function hesap_get_files(int $tid): array {
 function hesap_is_image(string $fn): bool {
     return (bool)preg_match('/\.(jpg|jpeg|png|webp)$/i', $fn);
 }
+
+/**
+ * Fiş durumu mantığı — fotoğraf/dosya varsa "fiş var" kabul edilir.
+ *   Foto/dosya var + fiş no var  → "Fiş var · No: 123"
+ *   Foto/dosya var + fiş no yok  → "Fiş var · Fiş no yok"
+ *   Foto/dosya yok               → "Fiş fotoğrafı yok"
+ * has_invoice (manuel "fatura/fiş var" işareti) de fiş var sayılır.
+ */
+function hesap_fis_durumu(array $r): array {
+    $has_foto = !empty($r['has_files']);
+    $has_inv  = !empty($r['has_invoice']);
+    $no       = trim((string)($r['document_no'] ?? ''));
+    if ($has_foto || $has_inv) {
+        $label = $no !== '' ? ('Fiş var · No: ' . $no) : 'Fiş var · Fiş no yok';
+        return ['var' => true, 'label' => $label, 'kisa' => 'Fiş var', 'icon' => '✓', 'no' => $no];
+    }
+    return ['var' => false, 'label' => 'Fiş fotoğrafı yok', 'kisa' => 'Fiş fotoğrafı yok', 'icon' => '⚠', 'no' => ''];
+}
+
+/** Bir işlemin fotoğraf (resim) dosyalarını döndür — PDF dökümü için. */
+function hesap_get_image_files(int $tid): array {
+    $files = hesap_get_files($tid);
+    return array_values(array_filter($files, fn($f) => hesap_is_image($f['file_name'])));
+}
 function hesap_upload_file(array $file, int $tid): array {
     if (!is_dir(HESAP_UPLOAD_DIR)) mkdir(HESAP_UPLOAD_DIR, 0755, true);
     $htaccess = HESAP_UPLOAD_DIR . '.htaccess';

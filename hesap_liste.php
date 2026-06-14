@@ -168,7 +168,8 @@ render_flash();
     <td><?= h($r['person_company'] ?: $r['description']) ?></td>
     <td class="num strong <?= in_array($r['type'], ['gelir']) ? 'text-green' : 'text-red' ?>"><?= fmt_para((float)$r['amount'], $r['currency']) ?></td>
     <td class="muted"><?= hesap_payment_label($r['payment_method']) ?></td>
-    <td><?= $r['has_invoice'] ? '✓' : '<span style="color:var(--danger)">⚠</span>' ?></td>
+    <?php $fd = hesap_fis_durumu($r); ?>
+    <td title="<?= h($fd['label']) ?>"><?= $fd['var'] ? '✓' : '<span style="color:var(--danger)">⚠</span>' ?></td>
     <td><?= $r['is_given_to_accountant'] ? '✓' : '<span style="color:var(--warn)">•</span>' ?></td>
     <td class="actions-col">
         <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
@@ -190,8 +191,9 @@ render_flash();
             <?php if ($r['person_company']): ?>
             <div class="record-card-firma"><?= h($r['person_company']) ?></div>
             <?php endif; ?>
+            <?php $fd = hesap_fis_durumu($r); ?>
             <div class="muted"><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?>
-                <?php if (!$r['has_invoice']): ?> · <span style="color:var(--danger)">Fiş yok</span><?php endif; ?>
+                <?php if (!$fd['var']): ?> · <span style="color:var(--danger)"><?= h($fd['kisa']) ?></span><?php endif; ?>
                 <?php if (!$r['is_given_to_accountant']): ?> · <span style="color:var(--warn)">Bekliyor</span><?php endif; ?>
             </div>
         </div>

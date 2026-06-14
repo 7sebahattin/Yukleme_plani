@@ -58,6 +58,7 @@ render_flash();
     <div>
         <a href="hesap_export.php?<?= http_build_query(array_filter(['muh'=>(string)$sadece_bekleyen,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost">📊 Excel</a>
         <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['muh'=>(string)$sadece_bekleyen,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
+        <a href="hesap_muhasebe_fis_pdf.php?<?= http_build_query(array_filter(['tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
     </div>
 </div>
 
@@ -123,7 +124,8 @@ render_flash();
         <td class="muted"><?= h($r['document_no']) ?></td>
         <td class="num strong"><?= fmt_para((float)$r['amount'], $r['currency']) ?></td>
         <td class="muted"><?= hesap_payment_label($r['payment_method']) ?></td>
-        <td><?= $r['has_invoice'] ? '✓' : '<span style="color:var(--danger)">⚠</span>' ?></td>
+        <?php $fd = hesap_fis_durumu($r); ?>
+        <td title="<?= h($fd['label']) ?>"><?= $fd['var'] ? '✓' : '<span style="color:var(--danger)">⚠</span>' ?></td>
     </tr>
     <?php if ($r['notes']): ?>
     <tr style="background:#fafafa">

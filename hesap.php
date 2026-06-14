@@ -75,11 +75,8 @@ render_flash();
         <strong><?= fmt_para($bakiye) ?></strong>
         <small>Devir <?= fmt_para($devir) ?> · Net <?= fmt_para($ay_net) ?></small>
     </div>
-    <div class="hesap-stat blue"><span>Bu Ay Havale</span><strong><?= fmt_para((float)$st['ay_havale']) ?></strong></div>
     <div class="hesap-stat orange"><span>Yemek Gideri</span><strong><?= fmt_para((float)$st['ay_yemek']) ?></strong></div>
-    <div class="hesap-stat blue"><span>Şirket Malzeme</span><strong><?= fmt_para((float)$st['ay_malzeme']) ?></strong></div>
     <div class="hesap-stat <?= (int)$st['bekleyen'] > 0 ? 'orange' : 'green' ?>"><span>Muhasebe Bekleyen</span><strong><?= (int)$st['bekleyen'] ?> kayıt</strong></div>
-    <div class="hesap-stat <?= (int)$st['fissiz'] > 0 ? 'red' : 'green' ?>"><span>Fişsiz Kayıt</span><strong><?= (int)$st['fissiz'] ?> adet</strong></div>
 </div>
 
 <!-- Hızlı Butonlar -->
@@ -96,6 +93,7 @@ render_flash();
 <div class="hesap-nav-links">
     <a href="hesap_liste.php" class="btn btn-ghost">📋 Tüm Kayıtlar (<?= (int)$st['toplam_kayit'] ?>)</a>
     <a href="hesap_muhasebe.php" class="btn btn-ghost">🗂️ Muhasebe Dökümü</a>
+    <a href="hesap_muhasebe_fis_pdf.php" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
     <a href="hesap_export.php" class="btn btn-ghost">📊 Excel Export</a>
     <a href="hesap_yazdir.php" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
 </div>
@@ -113,8 +111,9 @@ render_flash();
         <div>
             <div class="hesap-row-cat"><?= h($t['category'] ?: hesap_type_label($t['type'])) ?></div>
             <?php if ($t['person_company']): ?><div class="muted" style="font-size:.78rem"><?= h($t['person_company']) ?></div><?php endif; ?>
+            <?php $fd = hesap_fis_durumu($t); ?>
             <div class="muted" style="font-size:.72rem"><?= h(date('d.m.Y', strtotime($t['transaction_date']))) ?>
-                <?php if (!$t['has_invoice']): ?> <span style="color:var(--danger)">⚠ fiş yok</span><?php endif; ?>
+                <?php if (!$fd['var']): ?> <span style="color:var(--danger)">⚠ <?= h($fd['kisa']) ?></span><?php endif; ?>
                 <?php if (!$t['is_given_to_accountant']): ?> <span style="color:var(--warn)">• bekliyor</span><?php endif; ?>
             </div>
         </div>
