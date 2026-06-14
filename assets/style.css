@@ -3354,6 +3354,8 @@ body.notes-modal-open { overflow: hidden; }
 .hesap-upload-area span { display: block; font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
 .hesap-upload-area small { font-size: .75rem; }
 
+.hesap-img-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hesap-img-actions .btn { cursor: pointer; }
 .hesap-file-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .hesap-file-item { position: relative; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px; }
 .hesap-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; cursor: zoom-in; display: block; }

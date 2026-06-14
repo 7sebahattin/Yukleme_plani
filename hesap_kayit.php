@@ -267,15 +267,19 @@ render_flash();
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
-        <label class="hesap-upload-label" for="dosyalarInput">
-            <div class="hesap-upload-area" id="uploadArea">
-                <span>📷 Fotoğraf çek veya dosya seç</span>
-                <small>JPG, PNG, WEBP, PDF — Maks 10 MB</small>
-            </div>
-        </label>
-        <input type="file" name="dosyalar[]" id="dosyalarInput" multiple
-               accept="image/*,.pdf" capture="environment" style="display:none"
-               onchange="hesapPreview(this)">
+        <div class="hesap-img-actions">
+            <label class="btn">
+                📷 Kamera
+                <input type="file" id="hesapCamInput" accept="image/*" capture="environment" style="display:none">
+            </label>
+            <label class="btn">
+                🖼 Galeriden Seç
+                <input type="file" id="hesapGalInput" accept="image/*,.pdf" multiple style="display:none">
+            </label>
+        </div>
+        <small class="muted" style="display:block;margin-top:6px">JPG, PNG, WEBP, PDF — Maks 10 MB · Birden fazla eklenebilir</small>
+        <!-- Gerçek gönderilen input — DataTransfer ile yönetilir -->
+        <input type="file" name="dosyalar[]" id="dosyalarInput" multiple accept="image/*,.pdf" style="display:none">
         <div id="previewGrid" class="hesap-file-grid" style="margin-top:8px"></div>
     </div>
 </section>
@@ -307,14 +311,46 @@ function filterKat() {
 turSel.addEventListener('change', filterKat);
 filterKat();
 
-// Dosya önizleme
-function hesapPreview(inp) {
+// ── Fotoğraf / dosya seçimi — kantar tarzı sağlam yapı ──
+// Kamera ve galeri ayrı inputlar; seçilenler DataTransfer ile birikir,
+// gerçek gönderilen input (dosyalarInput) bu listeyle senkron tutulur.
+var hesapCam   = document.getElementById('hesapCamInput');
+var hesapGal   = document.getElementById('hesapGalInput');
+var hesapReal  = document.getElementById('dosyalarInput');
+var hesapDT    = new DataTransfer();
+
+function hesapSyncReal() {
+    try { hesapReal.files = hesapDT.files; } catch (e) {}
+}
+
+function hesapAddFiles(fileList) {
+    Array.from(fileList).forEach(function(f) {
+        if (!f) return;
+        if (f.size > 10 * 1024 * 1024) {
+            alert((f.name || 'Dosya') + ' 10 MB sınırını aşıyor, eklenmedi.');
+            return;
+        }
+        hesapDT.items.add(f);
+    });
+    hesapSyncReal();
+    hesapRenderPreview();
+}
+
+function hesapRemoveAt(idx) {
+    var ndt = new DataTransfer();
+    Array.from(hesapDT.files).forEach(function(f, i) { if (i !== idx) ndt.items.add(f); });
+    hesapDT = ndt;
+    hesapSyncReal();
+    hesapRenderPreview();
+}
+
+function hesapRenderPreview() {
     var grid = document.getElementById('previewGrid');
     grid.innerHTML = '';
-    Array.from(inp.files).forEach(function(f) {
+    Array.from(hesapDT.files).forEach(function(f, idx) {
         var div = document.createElement('div');
         div.className = 'hesap-file-item';
-        if (f.type.startsWith('image/')) {
+        if (f.type && f.type.indexOf('image/') === 0) {
             var img = document.createElement('img');
             img.className = 'hesap-thumb';
             img.onclick = function() { hesapZoom(img.src); };
@@ -323,11 +359,37 @@ function hesapPreview(inp) {
             reader.readAsDataURL(f);
             div.appendChild(img);
         } else {
-            div.textContent = '📄 ' + f.name;
+            var ic = document.createElement('div');
+            ic.className = 'hesap-file-icon';
+            ic.textContent = '📄';
+            div.appendChild(ic);
+            var nm = document.createElement('div');
+            nm.style.fontSize = '.7rem';
+            nm.style.maxWidth = '80px';
+            nm.style.overflow = 'hidden';
+            nm.style.textOverflow = 'ellipsis';
+            nm.style.whiteSpace = 'nowrap';
+            nm.textContent = f.name;
+            div.appendChild(nm);
         }
+        var del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'hesap-file-del';
+        del.textContent = '✕';
+        del.onclick = function() { hesapRemoveAt(idx); };
+        div.appendChild(del);
         grid.appendChild(div);
     });
 }
+
+if (hesapCam) hesapCam.addEventListener('change', function() {
+    if (this.files && this.files.length) hesapAddFiles(this.files);
+    this.value = '';
+});
+if (hesapGal) hesapGal.addEventListener('change', function() {
+    if (this.files && this.files.length) hesapAddFiles(this.files);
+    this.value = '';
+});
 
 function hesapZoom(src) {
     document.getElementById('hesapZoomImg').src = src;
@@ -349,9 +411,5 @@ function hesapDelFile(btn) {
     });
 }
 
-// Upload area tıklama
-document.getElementById('uploadArea').addEventListener('click', function() {
-    document.getElementById('dosyalarInput').click();
-});
 </script>
 <?php render_footer(); ?>

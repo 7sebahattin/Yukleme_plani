@@ -89,7 +89,7 @@ td { padding: 4px 8px; border: 1px solid #ddd; }
     <td><?= h($r['document_no']) ?></td>
     <td class="num <?= in_array($r['type'], ['gelir']) ? 'gelir' : 'gider' ?>"><?= fmt_para((float)$r['amount'], $r['currency']) ?></td>
     <td><?= hesap_payment_label($r['payment_method']) ?></td>
-    <td><?= $r['has_invoice'] ? '✓' : '⚠' ?></td>
+    <td><?= hesap_fis_durumu($r)['var'] ? '✓' : '⚠' ?></td>
 </tr>
 <?php endforeach; ?>
 <tr class="total-row">
