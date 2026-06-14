@@ -250,8 +250,9 @@ render_flash();
 
 <!-- Dosya Yükleme — hesap'a özel, kantardan tamamen bağımsız foto alanı -->
 <section class="card" data-hesap-photo-root>
-    <div class="card-head"><h2>📎 Fiş / Dekont</h2></div>
+    <div class="card-head"><h2>📷 Fiş Fotoğrafları</h2></div>
     <div class="card-body">
+        <p class="muted hesap-photo-intro">Fotoğraf çekebilir, galeriden seçebilir ve fiş alanını kırpabilirsiniz.</p>
         <?php if (!empty($existing_files)): ?>
         <div class="hesap-file-grid" id="existingFiles">
             <?php foreach ($existing_files as $f): ?>
@@ -269,7 +270,7 @@ render_flash();
         <?php endif; ?>
         <div class="hesap-photo-actions">
             <label class="btn">
-                📷 Kamera
+                📷 Kamera ile Çek
                 <input type="file" class="hesap-photo-cam" accept="image/*" capture="environment" hidden>
             </label>
             <label class="btn">
@@ -281,6 +282,31 @@ render_flash();
         <!-- Gerçek gönderilen input — DataTransfer ile yönetilir -->
         <input type="file" name="dosyalar[]" class="hesap-photo-real" multiple accept="image/*,.pdf" hidden>
         <div class="hesap-photo-preview"></div>
+    </div>
+
+    <!-- Fiş alanı kırpma modalı — hesap'a özel -->
+    <div class="hesap-crop-modal" hidden>
+        <div class="hesap-crop-dialog">
+            <div class="hesap-crop-head">
+                <strong>Fiş Alanını Seç</strong>
+                <span class="muted">Fişin bulunduğu alanı seçin. Arka plan kırpılacaktır.</span>
+            </div>
+            <div class="hesap-crop-stage">
+                <div class="hesap-crop-imgwrap">
+                    <img class="hesap-crop-img" alt="">
+                    <div class="hesap-crop-selection">
+                        <span class="hesap-crop-handle" data-c="tl"></span>
+                        <span class="hesap-crop-handle" data-c="tr"></span>
+                        <span class="hesap-crop-handle" data-c="bl"></span>
+                        <span class="hesap-crop-handle" data-c="br"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="hesap-crop-foot">
+                <button type="button" class="btn btn-ghost hesap-crop-cancel">Vazgeç</button>
+                <button type="button" class="btn btn-primary hesap-crop-ok">Kırp ve Kullan</button>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -324,6 +350,7 @@ filterKat();
     var preview   = root.querySelector('.hesap-photo-preview');
     if (!realInput || !preview) return;
     var hesapPhotoDT = new DataTransfer();
+    var canCrop = (typeof DataTransfer !== 'undefined') && (typeof File === 'function');
 
     function hesapPhotoSync() {
         try { realInput.files = hesapPhotoDT.files; } catch (e) {}
@@ -347,12 +374,20 @@ filterKat();
         hesapPhotoSync();
         hesapPhotoRender();
     }
+    function hesapPhotoReplaceAt(idx, file) {
+        var ndt = new DataTransfer();
+        Array.from(hesapPhotoDT.files).forEach(function(f, i) { ndt.items.add(i === idx ? file : f); });
+        hesapPhotoDT = ndt;
+        hesapPhotoSync();
+        hesapPhotoRender();
+    }
     function hesapPhotoRender() {
         preview.innerHTML = '';
         Array.from(hesapPhotoDT.files).forEach(function(f, idx) {
+            var isImg = f.type && f.type.indexOf('image/') === 0;
             var div = document.createElement('div');
             div.className = 'hesap-photo-item';
-            if (f.type && f.type.indexOf('image/') === 0) {
+            if (isImg) {
                 var img = document.createElement('img');
                 img.className = 'hesap-thumb';
                 img.onclick = function() { hesapZoom(img.src); };
@@ -360,17 +395,21 @@ filterKat();
                 reader.onload = function(e) { img.src = e.target.result; };
                 reader.readAsDataURL(f);
                 div.appendChild(img);
+                if (canCrop) {
+                    var cropBtn = document.createElement('button');
+                    cropBtn.type = 'button';
+                    cropBtn.className = 'btn btn-sm hesap-photo-crop-btn';
+                    cropBtn.textContent = '✂ Fiş Alanını Seç';
+                    cropBtn.onclick = function() { hesapCropOpen(idx); };
+                    div.appendChild(cropBtn);
+                }
             } else {
                 var ic = document.createElement('div');
                 ic.className = 'hesap-file-icon';
                 ic.textContent = '📄';
                 div.appendChild(ic);
                 var nm = document.createElement('div');
-                nm.style.fontSize = '.7rem';
-                nm.style.maxWidth = '80px';
-                nm.style.overflow = 'hidden';
-                nm.style.textOverflow = 'ellipsis';
-                nm.style.whiteSpace = 'nowrap';
+                nm.className = 'hesap-photo-fname';
                 nm.textContent = f.name;
                 div.appendChild(nm);
             }
@@ -392,6 +431,124 @@ filterKat();
         if (this.files && this.files.length) hesapPhotoAdd(this.files);
         this.value = '';
     });
+
+    /* ── Fiş alanı kırpma (hesapCrop*) ── */
+    var cropModal  = root.querySelector('.hesap-crop-modal');
+    var cropImg    = root.querySelector('.hesap-crop-img');
+    var cropSel    = root.querySelector('.hesap-crop-selection');
+    var cropOkBtn  = root.querySelector('.hesap-crop-ok');
+    var cropCancel = root.querySelector('.hesap-crop-cancel');
+    var hesapCropIdx = -1;
+    var sel = { x: 0, y: 0, w: 0, h: 0 };
+    var dragMode = null, startX = 0, startY = 0, startSel = null;
+    var MIN = 28;
+
+    function hesapCropRenderSel() {
+        cropSel.style.left   = sel.x + 'px';
+        cropSel.style.top    = sel.y + 'px';
+        cropSel.style.width  = sel.w + 'px';
+        cropSel.style.height = sel.h + 'px';
+    }
+    function hesapCropClamp() {
+        var W = cropImg.offsetWidth, H = cropImg.offsetHeight;
+        if (sel.w > W) sel.w = W;
+        if (sel.h > H) sel.h = H;
+        if (sel.w < MIN) sel.w = MIN;
+        if (sel.h < MIN) sel.h = MIN;
+        if (sel.x < 0) sel.x = 0;
+        if (sel.y < 0) sel.y = 0;
+        if (sel.x + sel.w > W) sel.x = W - sel.w;
+        if (sel.y + sel.h > H) sel.y = H - sel.h;
+    }
+    function hesapCropOpen(idx) {
+        if (!cropModal || !canCrop) return;
+        var f = hesapPhotoDT.files[idx];
+        if (!f || f.type.indexOf('image/') !== 0) return;
+        hesapCropIdx = idx;
+        var r = new FileReader();
+        r.onload = function(ev) {
+            cropImg.onload = function() {
+                cropModal.removeAttribute('hidden');
+                requestAnimationFrame(function() {
+                    var W = cropImg.offsetWidth, H = cropImg.offsetHeight;
+                    sel = { x: W * 0.1, y: H * 0.1, w: W * 0.8, h: H * 0.8 };
+                    hesapCropClamp();
+                    hesapCropRenderSel();
+                });
+            };
+            cropImg.src = ev.target.result;
+        };
+        r.readAsDataURL(f);
+    }
+    function hesapCropClose() {
+        if (cropModal) cropModal.setAttribute('hidden', '');
+        cropImg.src = '';
+        hesapCropIdx = -1;
+        dragMode = null;
+    }
+    function hesapCropPoint(e) {
+        var t = e.touches && e.touches.length ? e.touches[0] : e;
+        return { x: t.clientX, y: t.clientY };
+    }
+    function hesapCropDown(e) {
+        var c = e.target.getAttribute && e.target.getAttribute('data-c');
+        dragMode = c ? c : 'move';
+        var p = hesapCropPoint(e);
+        startX = p.x; startY = p.y;
+        startSel = { x: sel.x, y: sel.y, w: sel.w, h: sel.h };
+        e.preventDefault();
+    }
+    function hesapCropMove(e) {
+        if (!dragMode) return;
+        var p = hesapCropPoint(e);
+        var dx = p.x - startX, dy = p.y - startY;
+        var s = { x: startSel.x, y: startSel.y, w: startSel.w, h: startSel.h };
+        var W = cropImg.offsetWidth, H = cropImg.offsetHeight;
+        if (dragMode === 'move') {
+            s.x += dx; s.y += dy;
+        } else {
+            if (dragMode.indexOf('l') >= 0) { var nx = s.x + dx, mx = s.x + s.w - MIN; if (nx < 0) nx = 0; if (nx > mx) nx = mx; s.w = s.x + s.w - nx; s.x = nx; }
+            if (dragMode.indexOf('r') >= 0) { s.w = s.w + dx; if (s.w < MIN) s.w = MIN; if (s.x + s.w > W) s.w = W - s.x; }
+            if (dragMode.indexOf('t') >= 0) { var ny = s.y + dy, my = s.y + s.h - MIN; if (ny < 0) ny = 0; if (ny > my) ny = my; s.h = s.y + s.h - ny; s.y = ny; }
+            if (dragMode.indexOf('b') >= 0) { s.h = s.h + dy; if (s.h < MIN) s.h = MIN; if (s.y + s.h > H) s.h = H - s.y; }
+        }
+        sel = s; hesapCropClamp(); hesapCropRenderSel();
+        e.preventDefault();
+    }
+    function hesapCropUp() { dragMode = null; }
+    function hesapCropApply() {
+        var W = cropImg.offsetWidth, H = cropImg.offsetHeight;
+        var nW = cropImg.naturalWidth, nH = cropImg.naturalHeight;
+        if (!W || !H || !nW) { hesapCropClose(); return; }
+        var rx = nW / W, ry = nH / H;
+        var sx = Math.max(0, sel.x * rx), sy = Math.max(0, sel.y * ry);
+        var sw = Math.min(nW - sx, sel.w * rx), sh = Math.min(nH - sy, sel.h * ry);
+        var outW = sw, outH = sh, MAX = 1600;
+        if (outW > MAX || outH > MAX) { var sc = Math.min(MAX / outW, MAX / outH); outW = outW * sc; outH = outH * sc; }
+        var cv = document.createElement('canvas');
+        cv.width  = Math.max(1, Math.round(outW));
+        cv.height = Math.max(1, Math.round(outH));
+        cv.getContext('2d').drawImage(cropImg, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+        var idx = hesapCropIdx;
+        cv.toBlob(function(blob) {
+            if (!blob) { hesapCropClose(); return; }
+            var file = new File([blob], 'fis_' + Date.now() + '.jpg', { type: 'image/jpeg' });
+            hesapPhotoReplaceAt(idx, file);
+            hesapCropClose();
+        }, 'image/jpeg', 0.85);
+    }
+
+    if (cropSel) {
+        cropSel.addEventListener('mousedown', hesapCropDown);
+        cropSel.addEventListener('touchstart', hesapCropDown, { passive: false });
+    }
+    document.addEventListener('mousemove', hesapCropMove);
+    document.addEventListener('touchmove', hesapCropMove, { passive: false });
+    document.addEventListener('mouseup', hesapCropUp);
+    document.addEventListener('touchend', hesapCropUp);
+    if (cropOkBtn)  cropOkBtn.addEventListener('click', hesapCropApply);
+    if (cropCancel) cropCancel.addEventListener('click', hesapCropClose);
+    if (cropModal)  cropModal.addEventListener('click', function(e) { if (e.target === cropModal) hesapCropClose(); });
 })();
 
 function hesapZoom(src) {
