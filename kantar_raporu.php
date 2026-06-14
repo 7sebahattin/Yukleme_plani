@@ -101,6 +101,7 @@ function fo_add_types(string $fk, array $kp_rows, int $grp_kasa, int $grp_palet,
 }
 
 // ── Rapor verisi üret ─────────────────────────────────────
+$firma_filter_active = $f_firma !== '';
 $entries         = [];
 $firma_ozet      = [];
 $toplam_brut     = $toplam_dara = $toplam_net = 0.0;
@@ -125,8 +126,11 @@ foreach ($fisleri as $fis) {
     }
 
     $toplam_fis++;
-    $toplam_brut += $c['brut'];
-    $toplam_dara += $c['dara'];
+    // Gruplu fişlerde brüt/dara dist loop'undan toplanır; grupsuzda burada alınır
+    if (!$has_grup) {
+        $toplam_brut += $c['brut'];
+        $toplam_dara += $c['dara'];
+    }
 
     // kp toplamları (oran hesabı için)
     $fis_kasa_kp = $fis_palet_kp = 0;
@@ -178,6 +182,8 @@ foreach ($fisleri as $fis) {
             $toplam_net   += $d['net_kg'];
             $toplam_kasa  += $d['kasa'];
             $toplam_palet += $d['palet'];
+            $toplam_brut  += $d['brut_kg'];
+            $toplam_dara  += $d['dara_kg'];
             $fk = $d['firma'];
             $fo_ensure($fk);
             $firma_ozet[$fk]['net_kg']  += $d['net_kg'];
@@ -380,6 +386,23 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                 $tarih_d = $f['giris_tarih'] ? fmt_datetime($f['giris_tarih']) : fmt_datetime($f['created_at']);
             ?>
             <?php if ($grouped): ?>
+                <?php if ($firma_filter_active && !empty($dist)): ?>
+                    <?php foreach ($dist as $d): ?>
+                    <tr class="kr-row-grup-head">
+                        <td><a href="<?= $fis_url ?>" class="kr-fis-link">#<?= h($f['fis_no']?:(string)$f['id']) ?></a></td>
+                        <td class="kr-col-tarih"><?= h($tarih_d) ?></td>
+                        <td class="kr-col-plaka"><?= h($f['plaka']?:'—') ?></td>
+                        <td class="kr-col-malin"><?= h($f['malin_cinsi']?:'—') ?><?= $f['parti_no'] ? '<br><small class="muted">'.h($f['parti_no']).'</small>' : '' ?></td>
+                        <td class="kr-col-firma"><strong><?= h($d['firma']) ?></strong></td>
+                        <td class="kr-col-depo"><?= h($f['depo']?:'—') ?></td>
+                        <td class="num"><?= $d['palet']?:0 ?></td>
+                        <td class="num kr-col-kasa"><?= $d['kasa'] ?></td>
+                        <td class="num"><?= fmt_kg($d['brut_kg']) ?></td>
+                        <td class="num kr-col-dara kr-dara"><?= fmt_kg($d['dara_kg']) ?></td>
+                        <td class="num kr-net"><strong><?= fmt_kg($d['net_kg']) ?></strong></td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
                 <tr class="kr-row-grup-head">
                     <td colspan="11" class="kr-grup-head-cell">
                         <div class="kr-grup-head-inner">
@@ -430,6 +453,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                     <td class="num kr-net"><strong><?= fmt_kg($d['net_kg']) ?></strong></td>
                 </tr>
                 <?php endforeach; ?>
+                <?php endif; ?>
             <?php else:
                 $d = $dist[0]; ?>
                 <tr class="kr-row-tek">
