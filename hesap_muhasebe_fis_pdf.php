@@ -68,6 +68,7 @@ $sayfalar = array_chunk($boxes, 9);
 <style>
 * { box-sizing: border-box; }
 body { font-family: Arial, sans-serif; margin: 0; padding: 10mm; color: #111; background: #f5f5f5; }
+.receipt-note, .uyari { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 .no-print { margin-bottom: 12px; }
 .no-print button, .no-print a {
@@ -120,16 +121,29 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 10mm; color: #111; ba
 .receipt-meta {
     font-size: 9px;
     line-height: 1.35;
-    min-height: 16mm;
-    margin-bottom: 2mm;
+    margin-bottom: 1.5mm;
     border-bottom: 1px dashed #bbb;
     padding-bottom: 1.5mm;
 }
 .receipt-meta .r-amount { font-size: 12px; font-weight: 700; color: #111; }
 .receipt-meta .r-date   { font-weight: 600; }
 .receipt-meta .r-line   { display: block; color: #333; }
-.receipt-meta .r-note   { color: #555; font-style: italic; }
 .receipt-meta .r-fis    { color: #166534; font-weight: 600; }
+
+.receipt-note {
+    margin-bottom: 2mm;
+    padding: 1.5mm 2mm;
+    border: 1px solid #d6b45c;
+    background: #fff8df;
+    font-size: 10px;
+    font-weight: 700;
+    color: #111;
+    line-height: 1.25;
+    border-radius: 2px;
+    max-height: 16mm;
+    overflow: hidden;
+}
+.receipt-note-label { font-weight: 800; }
 
 .receipt-image-box {
     flex: 1;
@@ -197,11 +211,14 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 10mm; color: #111; ba
             <?php if ($t['category'] || $t['person_company']): ?>
             <span class="r-line"><?= h(trim(($t['category'] ?: hesap_type_label($t['type'])) . ($t['person_company'] ? ' · ' . $t['person_company'] : ''))) ?></span>
             <?php endif; ?>
-            <span class="r-line r-fis"><?= h($fd['var'] ? ($fd['no'] !== '' ? 'Fiş No: ' . $fd['no'] : 'Fiş no yok') : '') ?></span>
-            <?php if ($t['notes'] || $t['description']): ?>
-            <span class="r-line r-note">📝 <?= h(mb_substr((string)($t['notes'] ?: $t['description']), 0, 120)) ?></span>
+            <?php if ($fd['no'] !== ''): ?>
+            <span class="r-line r-fis">Fiş No: <?= h($fd['no']) ?></span>
             <?php endif; ?>
         </div>
+        <?php $not_metni = trim((string)($t['notes'] ?: $t['description'])); ?>
+        <?php if ($not_metni !== ''): ?>
+        <div class="receipt-note"><span class="receipt-note-label">Not:</span> <?= h(mb_substr($not_metni, 0, 160)) ?></div>
+        <?php endif; ?>
         <div class="receipt-image-box">
             <img src="hesap_dosya.php?f=<?= urlencode($box['file']) ?>" alt="Fiş fotoğrafı" loading="lazy">
         </div>
