@@ -134,7 +134,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         : "'' AS urun_sahibi_adi";
 
     $sql = "SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.casus_no, r.cikis_nedeni,
-                   r.gumruk, r.fatura_no, COALESCE(r.brand,'') AS brand,
+                   r.gumruk, r.fatura_no, COALESCE(r.brand,'') AS brand, r.etiket,
                    r.on_plaka, r.arka_plaka, r.durum, r.nakliye_bedeli, r.avans,
                    r.sofor_adi, r.nakliye_sirketi, r.telefon,
                    {$_us_subq},
@@ -203,7 +203,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         // Kolon grupları: Temel | Ürün | Nakliye | Toplamlar | Durum
         $cols = [
             'id','tarih','firma','bolge','parti_no',
-            'alici','urun','brand','urun_sahibi_adi','gumruk','fatura_no','casus_no','depo',
+            'alici','urun','brand','urun_sahibi_adi','etiket','gumruk','fatura_no','casus_no','depo',
             'sofor_adi','telefon','on_plaka','nakliye_sirketi','nakliye_bedeli','avans',
             'palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net',
             'durum',
