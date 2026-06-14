@@ -11,14 +11,19 @@ $auth_user = require_login();
 require_perm('records.read');
 
 // ── Filtre parametreleri (reports.php yukleme ile aynı mantık) ──
-$f_from  = trim($_GET['date_from'] ?? '');
-$f_to    = trim($_GET['date_to']   ?? '');
-$f_firma = trim($_GET['firma']     ?? '');
-$f_urun  = trim($_GET['urun']      ?? '');
-$f_bolge = trim($_GET['bolge']     ?? '');
-$f_depo  = trim($_GET['depo']      ?? '');
-$f_durum = trim($_GET['durum']     ?? '');
-$f_sort  = trim($_GET['sort']      ?? 'tarih');
+$f_from           = trim($_GET['date_from']     ?? '');
+$f_to             = trim($_GET['date_to']       ?? '');
+$f_firma          = trim($_GET['firma']         ?? '');
+$f_urun           = trim($_GET['urun']          ?? '');
+$f_bolge          = trim($_GET['bolge']         ?? '');
+$f_depo           = trim($_GET['depo']          ?? '');
+$f_durum          = trim($_GET['durum']         ?? '');
+$f_q              = trim($_GET['q']             ?? '');
+$f_palet_islendi  = trim($_GET['palet_islendi'] ?? '');
+$f_urun_sahibi    = trim($_GET['urun_sahibi']   ?? '');
+$f_casus          = trim($_GET['casus']         ?? '');
+if (!in_array($f_casus, ['dolu','bos'], true)) $f_casus = '';
+$f_sort           = trim($_GET['sort']          ?? 'tarih');
 
 // ── Kayıtları çek (max 50) ──
 $w = ["r.type='yukleme'"]; $p = [];
@@ -31,6 +36,30 @@ if ($f_durum !== '') { $w[] = "r.durum = ?";  $p[] = $f_durum; }
 if ($f_depo  !== '') {
     $w[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
     $p[] = $f_depo;
+}
+if ($f_q !== '') {
+    $w[] = "(r.firma LIKE ? OR r.parti_no LIKE ? OR r.alici LIKE ? OR r.urun LIKE ?)";
+    $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%';
+}
+if ($f_casus === 'dolu') { $w[] = "r.casus_no != '' AND r.casus_no IS NOT NULL"; }
+if ($f_casus === 'bos')  { $w[] = "(r.casus_no IS NULL OR r.casus_no = '')"; }
+if ($f_palet_islendi === 'isaretli') {
+    $w[] = "EXISTS (SELECT 1 FROM loading_pallets _pi WHERE _pi.loading_record_id=r.id AND _pi.islendi=1)";
+} elseif ($f_palet_islendi === 'hicbiri') {
+    $w[] = "EXISTS (SELECT 1 FROM loading_pallets _pi WHERE _pi.loading_record_id=r.id AND (_pi.islendi IS NULL OR _pi.islendi=0))";
+}
+if ($f_urun_sahibi !== '') {
+    $_bp_us_col = false;
+    try { $_bp_us_col = (bool)db()->query("SHOW COLUMNS FROM `loading_records` LIKE 'urun_sahibi_id'")->fetchColumn(); }
+    catch (Throwable $_) {}
+    if ($_bp_us_col) {
+        if ($f_urun_sahibi === '0') {
+            $w[] = "r.urun_sahibi_id IS NULL";
+        } elseif (ctype_digit($f_urun_sahibi) && (int)$f_urun_sahibi > 0) {
+            $w[] = "r.urun_sahibi_id = ?";
+            $p[] = (int)$f_urun_sahibi;
+        }
+    }
 }
 $sort_map = [
     'tarih'    => 'r.tarih DESC, r.id DESC',

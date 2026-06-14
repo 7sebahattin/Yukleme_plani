@@ -1476,10 +1476,18 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <?php if ($type === 'yukleme'): ?>
         <?php
         $_bulk_params = array_filter([
-            'date_from' => $f_from, 'date_to' => $f_to,
-            'firma' => $f_firma, 'urun' => $f_urun,
-            'bolge' => $f_bolge, 'depo' => $f_depo,
-            'durum' => $f_durum, 'sort' => ($f_sort !== 'tarih' ? $f_sort : ''),
+            'date_from'     => $f_from,
+            'date_to'       => $f_to,
+            'firma'         => $f_firma,
+            'urun'          => $f_urun,
+            'bolge'         => $f_bolge,
+            'depo'          => $f_depo,
+            'durum'         => $f_durum,
+            'q'             => $f_q,
+            'palet_islendi' => $f_palet_islendi,
+            'urun_sahibi'   => $f_urun_sahibi,
+            'casus'         => $f_casus,
+            'sort'          => ($f_sort !== 'tarih' ? $f_sort : ''),
         ]);
         $_bulk_url = 'records_bulk_print.php?' . http_build_query($_bulk_params);
         ?>
