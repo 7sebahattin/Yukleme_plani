@@ -97,6 +97,27 @@ $err   = curl_error($ch);
 $info  = curl_getinfo($ch);
 curl_close($ch);
 
+// ── DEBUG: proxy.php/...?__hksdebug=1 — ham veriyi göster ──────
+if (isset($_GET['__hksdebug'])) {
+    header('Content-Type: text/plain; charset=utf-8');
+    $d_sz   = (int)($info['header_size'] ?? 0);
+    $d_hdr  = $raw !== false ? substr((string)$raw, 0, $d_sz) : '';
+    $d_body = $raw !== false ? substr((string)$raw, $d_sz) : '';
+    $has_form = (stripos($d_body, 'Kullanıcı') !== false || stripos($d_body, 'txtUserName') !== false
+                 || stripos($d_body, 'Şifre') !== false) ? 'EVET' : 'HAYIR';
+    $has_old  = (stripos($d_body, 'güncelleştir') !== false || stripos($d_body, 'Internet Explorer') !== false) ? 'EVET' : 'HAYIR';
+    echo "### HEDEF URL\n{$target_url}\n\n";
+    echo "### GÖNDERDİĞİM İSTEK BAŞLIKLARI\n" . implode("\n", $req_headers) . "\n\n";
+    echo "### PHP HTTP_USER_AGENT (ham)\n" . ($_SERVER['HTTP_USER_AGENT'] ?? '(YOK)') . "\n\n";
+    echo "### cURL\nerrno={$errno}  msg={$err}\n\n";
+    echo "### HKS HTTP DURUM\n" . (int)($info['http_code'] ?? 0) . "\n\n";
+    echo "### GÖVDEDE GİRİŞ FORMU VAR MI? {$has_form}\n";
+    echo "### GÖVDEDE 'eski tarayıcı' UYARISI VAR MI? {$has_old}\n\n";
+    echo "### HKS YANIT BAŞLIKLARI\n{$d_hdr}\n";
+    echo "### HAM GÖVDE (ilk 4000 karakter, değiştirilmemiş)\n" . substr($d_body, 0, 4000) . "\n";
+    exit;
+}
+
 if ($errno || $raw === false) {
     http_response_code(502);
     header('Content-Type: text/html; charset=utf-8');
