@@ -448,13 +448,13 @@ render_flash();
         _activeContainer = container;
         var recTarih     = container.dataset.tarih || '';
         var today        = new Date().toISOString().slice(0, 10);
-        modalTarih.value = recTarih || today;
+        modalTarih.value = recTarih;   // today fallback yok — kullanıcı seçmeli
 
-        // Uyarı: kayıttaki tarih bugünden farklıysa göster
+        // Uyarı: kayıt tarihi varsa ve bugünden farklıysa göster
         if (recTarih && recTarih !== today) {
             var diff = Math.round((new Date(today) - new Date(recTarih)) / 86400000);
             if (diff > 0) {
-                modalHint.textContent = '⚠ Kayıt tarihi ' + diff + ' gün önce. Bugünü seçmek ister misiniz?';
+                modalHint.textContent = '⚠ Kayıt tarihi ' + diff + ' gün önce. Yükleme tarihini seçin.';
                 modalHint.hidden = false;
             } else {
                 modalHint.hidden = true;
@@ -478,7 +478,12 @@ render_flash();
     modalOnayla.addEventListener('click', function () {
         if (!_activeBtn || !_activeContainer) return;
         var tarih = modalTarih.value;
-        if (!tarih) { modalTarih.focus(); return; }
+        if (!tarih) {
+            modalHint.textContent = '⚠ Lütfen yükleme tarihini seçin.';
+            modalHint.hidden = false;
+            modalTarih.focus();
+            return;
+        }
         modalOnayla.disabled = true;
         submitDurum(_activeContainer, _activeBtn, 'yuklendi', '&tarih=' + encodeURIComponent(tarih), function () {
             // Tarihi güncelle tabloda

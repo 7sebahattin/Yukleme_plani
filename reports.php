@@ -1068,13 +1068,14 @@ render_flash();
 <style>
 @page { size: A4 landscape; margin: 8mm; }
 @media print {
+    @page { margin: 7mm 8mm; }
     .gl-no-print { display: none !important; }
-    .gl-print-header { display: block !important; text-align: center; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 10px; }
+    .gl-print-header { display: block !important; text-align: center; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 8px; }
     .gl-print-header h2 { font-size: 13pt; margin: 0 0 2px; }
     .gl-print-header p  { font-size: 8pt; color: #555; margin: 0; }
-    .gl-section { margin-bottom: 8mm; }
-    .gl-section-title { font-size: 14pt !important; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
-    .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+    .gl-section { margin-bottom: 5mm; }
+    .gl-section-title { font-size: 14pt !important; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 5px; }
+    .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 5px; }
     .gl-ozet-card { border: 1px solid #ccc; padding: 3px 7px; flex: 1 1 80px; min-width: 70px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ozet-card span   { font-size: 6.5pt; display: block; color: #555; }
     .gl-ozet-card strong { font-size: 8pt; }
@@ -1082,22 +1083,22 @@ render_flash();
     html, body { background: #fff !important; }
     .container { max-width: none !important; padding: 0 !important; }
     .topbar, .bottomnav, .rpt-filter-card { display: none !important; }
-    .gl-section .data-table { font-size: 12pt !important; }
-    .gl-section .data-table th { font-size: 14pt !important; padding: 4px 6px !important; font-weight: 700; }
-    .gl-section .data-table td { font-size: 12pt !important; padding: 4px 6px !important; }
+    .gl-section .data-table { font-size: 8pt !important; }
+    .gl-section .data-table th { font-size: 8.5pt !important; padding: 3px 5px !important; font-weight: 700; }
+    .gl-section .data-table td { font-size: 8pt !important; padding: 3px 5px !important; }
     .gl-section .data-table tfoot { display: none !important; }
-    .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .gl-ps-item { border: 2px solid; padding: 7px 12px; flex: 1 1 90px; min-width: 80px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; display: flex; flex-direction: row; align-items: center; gap: 8px; }
-    .gl-ps-item span   { font-size: 12pt; font-weight: 700; white-space: nowrap; flex-shrink: 0; color: #000 !important; }
-    .gl-ps-item strong { font-size: 16pt; font-weight: 800; }
+    .gl-ps-strip { display: flex !important; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-ps-item { border: 2px solid; padding: 5px 10px; flex: 1 1 80px; min-width: 70px; page-break-inside: avoid; break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+    .gl-ps-item span   { font-size: 9pt; font-weight: 700; white-space: nowrap; flex-shrink: 0; color: #000 !important; }
+    .gl-ps-item strong { font-size: 13pt; font-weight: 800; }
     .gl-ps-palet { border-color: #7c3aed !important; color: #7c3aed !important; }
     .gl-ps-kasa  { border-color: #6b7280 !important; color: #6b7280 !important; }
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
     .gl-ps-dara  { border-color: #d97706 !important; color: #d97706 !important; }
     .gl-ps-net   { border-color: #059669 !important; color: #059669 !important; }
     /* Hazır Palet bölümü — sadece print'te görünür */
-    .gl-hazir-section { display: block !important; margin-bottom: 8mm; }
-    .gl-hazir-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-hazir-section { display: block !important; margin-bottom: 5mm; break-inside: avoid; page-break-inside: avoid; }
+    .gl-hazir-strip { display: flex !important; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-hazir-title {
         font-size: 14pt; font-weight: 700; color: #dc2626 !important;
         border-bottom: 1.5px solid #dc2626 !important;
@@ -1106,7 +1107,7 @@ render_flash();
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .gl-hazir-subtitle {
-        font-size: 9pt; color: #dc2626 !important; font-style: italic; margin-bottom: 5px;
+        font-size: 8pt; color: #dc2626 !important; font-style: italic; margin-bottom: 4px;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .gl-ps-hazir { border-color: #dc2626 !important; color: #dc2626 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
