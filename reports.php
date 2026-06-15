@@ -580,6 +580,46 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st->execute($mkp);
     $mk_rows = $st->fetchAll();
 
+    // ── Hazır Palet (Soğuk Hava — canlı sorgu, sadece Yazdır çıktısı için) ─
+    // Kural: durum='yuklendi' + mevcut sayfadaki mk_rows hariç + firma/urun/depo filtresi
+    // Tarih filtresi UYGULANMAZ (hazır palet güncel stok mantığıdır)
+    $_gl_hazir = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
+    try {
+        $hw = ["lr.type='yukleme'", "lr.durum='yuklendi'"];
+        $hp = [];
+        $exclude_ids = array_values(array_filter(
+            array_map('intval', array_column($mk_rows, 'id')),
+            fn($v) => $v > 0
+        ));
+        if (!empty($exclude_ids)) {
+            $hw[] = "lr.id NOT IN (" . implode(',', $exclude_ids) . ")";
+        }
+        if ($f_firma !== '') { $hw[] = "lr.firma=?"; $hp[] = $f_firma; }
+        if ($f_urun  !== '') { $hw[] = "lr.urun=?";  $hp[] = $f_urun; }
+        if ($f_depo  !== '') { $hw[] = "lp.depo=?";  $hp[] = $f_depo; }
+        $st = db()->prepare("
+            SELECT COUNT(DISTINCT lr.id) AS record_count,
+                   COUNT(lp.id)          AS palet_count,
+                   COALESCE(SUM(lp.kasa_adeti),0)       AS kasa_total,
+                   ROUND(COALESCE(SUM(lp.brut_kg),0),3) AS brut_total,
+                   ROUND(COALESCE(SUM(lp.dara_kg),0),3) AS dara_total,
+                   ROUND(COALESCE(SUM(lp.net_kg),0),3)  AS net_total
+            FROM loading_records lr
+            JOIN loading_pallets lp ON lp.loading_record_id = lr.id
+            WHERE " . implode(' AND ', $hw));
+        $st->execute($hp);
+        $hp_row = $st->fetch();
+        if ($hp_row) {
+            $_gl_hazir = [
+                'palet' => (int)($hp_row['palet_count']  ?? 0),
+                'kasa'  => (int)($hp_row['kasa_total']   ?? 0),
+                'brut'  => (float)($hp_row['brut_total'] ?? 0),
+                'dara'  => (float)($hp_row['dara_total'] ?? 0),
+                'net'   => (float)($hp_row['net_total']  ?? 0),
+            ];
+        }
+    } catch (PDOException $_he) {}
+
     // Özet
     $ozet_kantar_brut = 0.0; $ozet_kantar_dara = 0.0; $ozet_kantar_net = 0.0;
     foreach ($gk_rows as $_kf) {
@@ -1063,7 +1103,23 @@ render_flash();
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
     .gl-ps-dara  { border-color: #d97706 !important; color: #d97706 !important; }
     .gl-ps-net   { border-color: #059669 !important; color: #059669 !important; }
+    /* Hazır Palet bölümü — sadece print'te görünür */
+    .gl-hazir-section { display: block !important; margin-bottom: 8mm; }
+    .gl-hazir-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-hazir-title {
+        font-size: 14pt; font-weight: 700; color: #dc2626 !important;
+        border-bottom: 1.5px solid #dc2626 !important;
+        padding-bottom: 3px; margin-bottom: 2px;
+        break-after: avoid;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .gl-hazir-subtitle {
+        font-size: 9pt; color: #dc2626 !important; font-style: italic; margin-bottom: 5px;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .gl-ps-hazir { border-color: #dc2626 !important; color: #dc2626 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+.gl-hazir-section { display: none; }
 .gl-print-header { display: none; }
 .gl-section { margin-bottom: 20px; }
 .gl-section-title { font-size: .9rem; font-weight: 700; margin: 0 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
@@ -1399,6 +1455,27 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <?php else: ?>
     <p class="muted">İşlem yok</p>
     <?php endif; ?>
+</div>
+
+<!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
+<div class="gl-hazir-section">
+    <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
+    <div class="gl-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti — tarih filtresi uygulanmaz)</div>
+    <div class="gl-ps-strip gl-hazir-strip">
+        <?php if ($_gl_hazir['palet'] === 0): ?>
+        <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>
+        <?php else: ?>
+        <div class="gl-ps-item gl-ps-hazir"><span>Palet</span><strong><?= number_format($_gl_hazir['palet'], 0, ',', '.') ?></strong></div>
+        <?php if ($_gl_hazir['kasa'] > 0): ?>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gl_hazir['kasa'], 0, ',', '.') ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gl_hazir['brut']) ?></strong></div>
+        <?php if ($_gl_hazir['dara'] > 0): ?>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_gl_hazir['dara'])) ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg(round($_gl_hazir['net'])) ?></strong></div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- Çıkmalar -->

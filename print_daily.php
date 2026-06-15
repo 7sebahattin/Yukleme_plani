@@ -109,46 +109,6 @@ foreach ($cikma_items as $ci) {
     $c_palet_total += (int)($ci['palet_sayisi']  ?? 0);
 }
 
-// ── Hazır Palet (Soğuk Hava — canlı sorgu) ───────────────
-// loading_records.durum='yuklendi', bu raporun makineye dökülen kayıtları hariç
-$hazir_palet = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
-try {
-    $hp_snap    = json_decode($report['snapshot_json'] ?? '', true) ?: [];
-    $hp_filters = $hp_snap['filters'] ?? [];
-    $hw = ["lr.type='yukleme'", "lr.durum='yuklendi'"];
-    $hp = [$id];
-    $hw[] = "lr.id NOT IN (
-        SELECT DISTINCT source_detail_id
-        FROM daily_report_items
-        WHERE report_id=? AND item_type='yukleme_palet'
-              AND source_detail_id IS NOT NULL AND source_detail_id > 0
-    )";
-    if (!empty($hp_filters['firma'])) { $hw[] = "lr.firma=?"; $hp[] = $hp_filters['firma']; }
-    if (!empty($hp_filters['urun']))  { $hw[] = "lr.urun=?";  $hp[] = $hp_filters['urun']; }
-    if (!empty($hp_filters['depo']))  { $hw[] = "lp.depo=?";  $hp[] = $hp_filters['depo']; }
-    $st = db()->prepare("
-        SELECT COUNT(DISTINCT lr.id) AS record_count,
-               COUNT(lp.id)          AS palet_count,
-               COALESCE(SUM(lp.kasa_adeti),0)       AS kasa_total,
-               ROUND(COALESCE(SUM(lp.brut_kg),0),3) AS brut_total,
-               ROUND(COALESCE(SUM(lp.dara_kg),0),3) AS dara_total,
-               ROUND(COALESCE(SUM(lp.net_kg),0),3)  AS net_total
-        FROM loading_records lr
-        JOIN loading_pallets lp ON lp.loading_record_id = lr.id
-        WHERE " . implode(' AND ', $hw));
-    $st->execute($hp);
-    $hp_row = $st->fetch();
-    if ($hp_row) {
-        $hazir_palet = [
-            'palet' => (int)($hp_row['palet_count']  ?? 0),
-            'kasa'  => (int)($hp_row['kasa_total']   ?? 0),
-            'brut'  => (float)($hp_row['brut_total'] ?? 0),
-            'dara'  => (float)($hp_row['dara_total'] ?? 0),
-            'net'   => (float)($hp_row['net_total']  ?? 0),
-        ];
-    }
-} catch (PDOException $_hp_e) {}
-
 // ── Rapor meta ────────────────────────────────────────────
 $date_disp = '';
 if ($report['report_date']) {
@@ -288,28 +248,6 @@ tfoot { display: table-footer-group; }
 /* Palet alt satırları */
 .pd-palet-row td { font-size: 7.5pt; color: #333; }
 .pd-palet-row td:first-child { padding-left: 16px; color: #555; }
-
-/* Hazır palet bölümü */
-.pd-hazir-title {
-    font-size: 10.5pt;
-    font-weight: 700;
-    border-bottom: 1.5px solid #dc2626;
-    padding-bottom: 3px;
-    margin-bottom: 2px;
-    color: #dc2626;
-    break-after: avoid;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-}
-.pd-hazir-subtitle {
-    font-size: 8pt;
-    color: #dc2626;
-    margin-bottom: 6px;
-    font-style: italic;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-}
-.pd-ps-hazir { border-color: #dc2626 !important; color: #dc2626 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 </style>
 
 <div class="print-sheet">
@@ -436,27 +374,6 @@ echo render_print_header_html(
         <td class="num"><strong><?= fmt_kg($m_net_total) ?></strong></td>
     </tr></tfoot>
 </table>
-<?php endif; ?>
-</div>
-
-<!-- Hazır Palet (Soğuk Hava Deposu) -->
-<div class="pd-section">
-<div class="pd-hazir-title">Soğuk Havada Hazır Palet</div>
-<div class="pd-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti)</div>
-<?php if ($hazir_palet['palet'] === 0): ?>
-    <p class="pd-empty" style="color:#dc2626;">Hazır palet yok</p>
-<?php else: ?>
-<div class="pd-summary-row">
-    <div class="pd-ps-item pd-ps-hazir"><span>PALET</span><strong><?= $hazir_palet['palet'] ?></strong></div>
-    <?php if ($hazir_palet['kasa'] > 0): ?>
-    <div class="pd-ps-item pd-ps-kasa"><span>KASA</span><strong><?= number_format($hazir_palet['kasa'], 0, ',', '.') ?></strong></div>
-    <?php endif; ?>
-    <div class="pd-ps-item pd-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($hazir_palet['brut']) ?></strong></div>
-    <?php if ($hazir_palet['dara'] > 0): ?>
-    <div class="pd-ps-item pd-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($hazir_palet['dara']) ?></strong></div>
-    <?php endif; ?>
-    <div class="pd-ps-item pd-ps-net"><span>NET KG</span><strong><?= fmt_kg($hazir_palet['net']) ?></strong></div>
-</div>
 <?php endif; ?>
 </div>
 
@@ -629,27 +546,6 @@ echo render_print_header_html(
         <td class="num"><strong><?= fmt_kg($m_net_total) ?></strong></td>
     </tr></tfoot>
 </table>
-<?php endif; ?>
-</div>
-
-<!-- Hazır Palet (Soğuk Hava Deposu) — detay modu -->
-<div class="pd-section">
-<div class="pd-hazir-title">Soğuk Havada Hazır Palet</div>
-<div class="pd-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti)</div>
-<?php if ($hazir_palet['palet'] === 0): ?>
-    <p class="pd-empty" style="color:#dc2626;">Hazır palet yok</p>
-<?php else: ?>
-<div class="pd-summary-row">
-    <div class="pd-ps-item pd-ps-hazir"><span>PALET</span><strong><?= $hazir_palet['palet'] ?></strong></div>
-    <?php if ($hazir_palet['kasa'] > 0): ?>
-    <div class="pd-ps-item pd-ps-kasa"><span>KASA</span><strong><?= number_format($hazir_palet['kasa'], 0, ',', '.') ?></strong></div>
-    <?php endif; ?>
-    <div class="pd-ps-item pd-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($hazir_palet['brut']) ?></strong></div>
-    <?php if ($hazir_palet['dara'] > 0): ?>
-    <div class="pd-ps-item pd-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($hazir_palet['dara']) ?></strong></div>
-    <?php endif; ?>
-    <div class="pd-ps-item pd-ps-net"><span>NET KG</span><strong><?= fmt_kg($hazir_palet['net']) ?></strong></div>
-</div>
 <?php endif; ?>
 </div>
 
