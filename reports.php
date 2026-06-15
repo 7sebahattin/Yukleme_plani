@@ -581,10 +581,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $mk_rows = $st->fetchAll();
 
     // ── Hazır Palet (Soğuk Hava — canlı sorgu, sadece Yazdır çıktısı için) ─
-    // Kural: lp.islendi=1 (Z raporu ile "Raporlandı" işaretlenmiş paletler) + firma/urun/depo filtresi
+    // Kural: lp.islendi=1 + lr.durum!='yuklendi' (raporlandı ama henüz yüklenmemiş) + firma/urun/depo filtresi
     $_gl_hazir = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
     try {
-        $hw = ["lr.type='yukleme'", "lp.islendi=1"];
+        $hw = ["lr.type='yukleme'", "lp.islendi=1", "COALESCE(lr.durum,'') != 'yuklendi'"];
         $hp = [];
         if ($f_firma !== '') { $hw[] = "lr.firma=?"; $hp[] = $f_firma; }
         if ($f_urun  !== '') { $hw[] = "lr.urun=?";  $hp[] = $f_urun; }
@@ -1480,7 +1480,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 <!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
 <div class="gl-hazir-section">
     <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
-    <div class="gl-hazir-subtitle">(Z raporu ile "Raporlandı" olarak işaretlenmiş hazır paletler)</div>
+    <div class="gl-hazir-subtitle">(Z raporu ile Raporlandı işaretlenmiş, henüz yüklenmemiş hazır paletler)</div>
     <div class="gl-ps-strip gl-hazir-strip">
         <?php if ($_gl_hazir['palet'] === 0): ?>
         <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>

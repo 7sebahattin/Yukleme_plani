@@ -46,14 +46,12 @@
             const wasOpen = !dd.hidden;
             closeAllDropdowns();
             if (!wasOpen) {
-                // .table-wrap has overflow-x:auto which clips absolute children → use fixed
-                if (btn.closest('.table-wrap')) {
-                    const r = btn.getBoundingClientRect();
-                    dd.style.position = 'fixed';
-                    dd.style.top = (r.bottom + 4) + 'px';
-                    dd.style.right = (window.innerWidth - r.right) + 'px';
-                    dd.style.left = 'auto';
-                }
+                // Always use fixed positioning — avoids clipping by any overflow:auto ancestor
+                const r = btn.getBoundingClientRect();
+                dd.style.position = 'fixed';
+                dd.style.top = (r.bottom + 4) + 'px';
+                dd.style.right = (window.innerWidth - r.right) + 'px';
+                dd.style.left = 'auto';
                 dd.hidden = false;
             }
         } else {
