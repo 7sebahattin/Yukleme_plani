@@ -1,164 +1,142 @@
 <?php
 // =========================================================
-// hks/index.php — Hal Bildirimi Sayfası
+// hks/index.php — Hal Bildirimi embed sayfası
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/helpers.php';   // require_login() bu dosyada
 
-// Resmi Hal Bildirimi giriş adresi
-$hal_bildirimi_url = 'https://hks.hal.gov.tr';
+// Resmi Hal Bildirimi doğrudan linki (yeni sekmede aç butonu için)
+$hal_direct_url = 'https://hks.hal.gov.tr';
 
 render_header('Hal Bildirimi');
 render_flash();
 ?>
 
 <style>
-.hal-page {
-    max-width: 560px;
-    margin: 0 auto;
+/* ── Hal Bildirimi embed — sayfa özel stiller ── */
+.hal-embed-wrap {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding-top: 8px;
-}
-
-.hal-card {
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #e0e0e0);
-    border-radius: 12px;
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    text-align: center;
-}
-
-.hal-card-icon {
-    font-size: 3rem;
-    line-height: 1;
-}
-
-.hal-card-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--text, #111);
-}
-
-.hal-card-desc {
-    font-size: .88rem;
-    color: var(--muted, #666);
-    line-height: 1.55;
-    max-width: 380px;
-}
-
-.hal-btn-open {
-    display: inline-flex;
-    align-items: center;
     gap: 8px;
-    padding: 13px 28px;
-    background: var(--primary, #1a73e8);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: opacity .15s;
+    /* İframe ile birlikte sayfa tam ekranı doldursun */
+    height: calc(100vh - 130px);
 }
 
-.hal-btn-open:hover {
-    opacity: .88;
-}
-
-.hal-url-chip {
-    display: inline-flex;
+.hal-embed-toolbar {
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
-    font-size: .8rem;
-    color: var(--muted, #888);
-    background: var(--bg, #f5f5f5);
+    padding: 8px 10px;
+    background: var(--surface, #fff);
     border: 1px solid var(--border, #e0e0e0);
-    border-radius: 20px;
-    padding: 4px 12px;
-    word-break: break-all;
-}
-
-.hal-security-note {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
-    background: var(--info-bg, #f0f7ff);
-    border: 1px solid var(--info-border, #b8d9f8);
     border-radius: 8px;
-    font-size: .82rem;
-    color: var(--info-text, #1565c0);
-    line-height: 1.5;
-}
-
-.hal-security-note-icon {
     flex-shrink: 0;
-    font-size: 1rem;
-    margin-top: 1px;
 }
 
+.hal-embed-toolbar-url {
+    flex: 1 1 auto;
+    font-size: .78rem;
+    color: var(--muted, #888);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.hal-embed-toolbar-actions {
+    display: flex;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.hal-embed-frame-box {
+    flex: 1 1 auto;
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+}
+
+.hal-embed-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+}
+
+.hal-embed-security {
+    font-size: .75rem;
+    color: var(--muted, #888);
+    padding: 2px 2px;
+    flex-shrink: 0;
+}
+
+/* Mobil: bottomnav için alt boşluk */
 @media (max-width: 767px) {
-    .hal-page {
-        max-width: 100%;
+    .hal-embed-wrap {
+        height: calc(100vh - 175px);
     }
 
-    .hal-card {
-        padding: 20px 16px;
+    .hal-embed-toolbar-url {
+        display: none; /* Dar ekranda URL chip'i gizle */
     }
 
-    .hal-btn-open {
-        width: 100%;
-        justify-content: center;
-        padding: 14px 20px;
+    .hal-embed-toolbar-actions .btn {
+        font-size: .78rem;
+        padding: 6px 8px;
+    }
+}
+
+/* Geniş desktop: sidebar var, daha fazla yer */
+@media (min-width: 900px) {
+    .hal-embed-wrap {
+        height: calc(100vh - 90px);
     }
 }
 </style>
 
-<div class="hal-page">
+<div class="hal-embed-wrap">
 
-    <div class="page-head" style="margin-bottom:0">
-        <div>
-            <h1>🏛 Hal Bildirimi</h1>
-            <p class="muted">Resmi Hal Kayıt Sistemi</p>
+    <!-- Kontrol barı -->
+    <div class="hal-embed-toolbar">
+        <span class="hal-embed-toolbar-url">🌐 <?= htmlspecialchars($hal_direct_url, ENT_QUOTES, 'UTF-8') ?></span>
+        <div class="hal-embed-toolbar-actions">
+            <button class="btn btn-ghost btn-sm" id="hal-btn-reload">🔄 Yenile</button>
+            <a href="<?= htmlspecialchars($hal_direct_url, ENT_QUOTES, 'UTF-8') ?>"
+               target="_blank" rel="noopener noreferrer"
+               class="btn btn-ghost btn-sm">↗ Yeni Sekmede Aç</a>
+            <a href="../index.php" class="btn btn-ghost btn-sm">🏠 Ana Sayfa</a>
         </div>
     </div>
 
+    <!-- iframe — proxy üzerinden yüklenir (same-origin → cookie sorunsuz) -->
+    <div class="hal-embed-frame-box">
+        <iframe
+            id="hal-frame"
+            class="hal-embed-frame"
+            src="proxy.php"
+            title="Hal Bildirimi Sistemi"
+        ></iframe>
+    </div>
+
     <!-- Güvenlik notu -->
-    <div class="hal-security-note">
-        <span class="hal-security-note-icon">🔒</span>
-        <span>Bu uygulama Hal Bildirimi kullanıcı adı/şifrenizi kaydetmez.
-        Giriş işlemi resmi site üzerinde yapılır; bilgileriniz sistemimizden geçmez.</span>
-    </div>
-
-    <!-- Ana kart -->
-    <div class="hal-card">
-        <span class="hal-card-icon">🏛</span>
-        <span class="hal-card-title">Hal Kayıt Sistemi</span>
-        <p class="hal-card-desc">
-            T.C. Ticaret Bakanlığı Hal Kayıt Sistemi'ne erişmek için
-            aşağıdaki butona tıklayın. Resmi site yeni sekmede açılır.
-        </p>
-
-        <a href="<?= htmlspecialchars($hal_bildirimi_url, ENT_QUOTES, 'UTF-8') ?>"
-           target="_blank"
-           rel="noopener noreferrer"
-           class="hal-btn-open">
-            ↗ Hal Bildirimi'ni Aç
-        </a>
-
-        <span class="hal-url-chip">
-            🌐 <?= htmlspecialchars($hal_bildirimi_url, ENT_QUOTES, 'UTF-8') ?>
-        </span>
-    </div>
+    <p class="hal-embed-security">
+        🔒 Bu uygulama kullanıcı adı/şifrenizi kaydetmez. Giriş resmi site üzerinde yapılır.
+    </p>
 
 </div>
+
+<script>
+(function () {
+    var frame = document.getElementById('hal-frame');
+    document.getElementById('hal-btn-reload').addEventListener('click', function () {
+        frame.src = frame.src;
+    });
+})();
+</script>
 
 <?php render_footer(); ?>
