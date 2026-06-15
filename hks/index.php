@@ -1,200 +1,266 @@
 <?php
 // =========================================================
-// hks/index.php — HKS Bildirimleri Listesi
+// hks/index.php — Hal Bildirimi (Embed / Browser Görünümü)
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/helpers.php';
-require_once __DIR__ . '/HksRepository.php';
+require_once __DIR__ . '/helpers.php';   // require_login() bu dosyada
 
-// Auto-migration
-try {
-    $pdo = db();
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_settings` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `username` VARCHAR(100) NOT NULL DEFAULT '',
-      `password_enc` TEXT NOT NULL DEFAULT '',
-      `service_password_enc` TEXT NOT NULL DEFAULT '',
-      `security_word_enc` TEXT DEFAULT NULL,
-      `environment` ENUM('test','live') NOT NULL DEFAULT 'test',
-      `genel_wsdl_url` VARCHAR(500) NOT NULL DEFAULT '',
-      `bildirim_wsdl_url` VARCHAR(500) NOT NULL DEFAULT '',
-      `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+// Resmi Hal Bildirimi giriş adresi
+$hal_bildirimi_url = 'https://hks.hal.gov.tr';
 
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_reference_stock` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `kunye_no` VARCHAR(100) NOT NULL DEFAULT '',
-      `product_name` VARCHAR(200) NOT NULL DEFAULT '',
-      `incoming_quantity` DECIMAL(12,3) NOT NULL DEFAULT 0,
-      `used_quantity` DECIMAL(12,3) NOT NULL DEFAULT 0,
-      `remaining_quantity` DECIMAL(12,3) NOT NULL DEFAULT 0,
-      `unit` VARCHAR(20) NOT NULL DEFAULT 'KG',
-      `source_notification_type` VARCHAR(50) NOT NULL DEFAULT '',
-      `supplier_name` VARCHAR(200) DEFAULT NULL,
-      `header_id` INT UNSIGNED DEFAULT NULL,
-      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX `idx_kunye_no` (`kunye_no`),
-      INDEX `idx_remaining` (`remaining_quantity`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_headers` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `type` ENUM('alis','satis','ihracat','transfer','iade') NOT NULL DEFAULT 'alis',
-      `buyer_name` VARCHAR(200) NOT NULL DEFAULT '',
-      `vehicle_plate` VARCHAR(20) DEFAULT NULL,
-      `driver_name` VARCHAR(100) DEFAULT NULL,
-      `shipment_date` DATE NOT NULL,
-      `origin_place` VARCHAR(200) DEFAULT NULL,
-      `destination_place` VARCHAR(200) DEFAULT NULL,
-      `supplier_name` VARCHAR(200) DEFAULT NULL,
-      `note` TEXT DEFAULT NULL,
-      `status` ENUM('draft','sent','error') NOT NULL DEFAULT 'draft',
-      `hks_notification_no` VARCHAR(50) DEFAULT NULL,
-      `last_error` TEXT DEFAULT NULL,
-      `request_xml` LONGTEXT DEFAULT NULL,
-      `response_xml` LONGTEXT DEFAULT NULL,
-      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      `sent_at` DATETIME DEFAULT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_items` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `header_id` INT UNSIGNED NOT NULL,
-      `reference_kunye_no` VARCHAR(100) NOT NULL DEFAULT '',
-      `product_name` VARCHAR(200) NOT NULL DEFAULT '',
-      `quantity` DECIMAL(12,3) NOT NULL DEFAULT 0,
-      `unit` VARCHAR(20) NOT NULL DEFAULT 'KG',
-      `unit_price` DECIMAL(12,4) DEFAULT NULL,
-      `stock_id` INT UNSIGNED DEFAULT NULL,
-      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX `idx_header_id` (`header_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_logs` (
-      `id` INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      `header_id` INT UNSIGNED DEFAULT NULL,
-      `action` VARCHAR(100) NOT NULL DEFAULT '',
-      `message` TEXT NOT NULL DEFAULT '',
-      `request_payload` LONGTEXT DEFAULT NULL,
-      `response_payload` LONGTEXT DEFAULT NULL,
-      `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX `idx_header_id` (`header_id`),
-      INDEX `idx_created_at` (`created_at`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-} catch (Throwable $e) {}
-
-$repo    = new HksRepository(db());
-$headers = $repo->listHeaders(300);
-
-// Özet sayaçlar
-$cnt_draft = 0; $cnt_sent = 0; $cnt_err = 0;
-foreach ($headers as $h) {
-    match ($h['status']) {
-        'draft' => $cnt_draft++,
-        'sent'  => $cnt_sent++,
-        'error' => $cnt_err++,
-        default => null,
-    };
-}
-
-render_header('HKS Bildirimleri');
+render_header('Hal Bildirimi');
 render_flash();
 ?>
 
-<div class="page-head">
-    <div>
-        <h1>🏛 HKS Bildirimleri</h1>
-        <p class="muted">Toplam <?= count($headers) ?> bildirim</p>
-    </div>
-    <div class="page-head-actions">
-        <a href="stock.php" class="btn btn-ghost">📦 Stok</a>
-        <a href="settings.php" class="btn btn-ghost">Ayarlar</a>
-        <a href="create_purchase.php" class="btn btn-ghost btn-lg">+ Alış</a>
-        <a href="shipment.php" class="btn btn-primary btn-lg">⚡ Hızlı Sevk</a>
-    </div>
-</div>
+<style>
+/* ── Hal Embed — sayfa özel stiller ── */
+.hal-embed-page {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 
-<?php if ($cnt_draft || $cnt_sent || $cnt_err): ?>
-<div class="rpt-summary" style="margin-bottom:14px">
-    <div class="rpt-sum-item"><span>Taslak</span><strong><?= $cnt_draft ?></strong></div>
-    <div class="rpt-sum-item rpt-sum-highlight"><span>Gönderildi</span><strong><?= $cnt_sent ?></strong></div>
-    <?php if ($cnt_err): ?>
-    <div class="rpt-sum-item" style="border-color:var(--danger)"><span>Hata</span><strong style="color:var(--danger)"><?= $cnt_err ?></strong></div>
-    <?php endif; ?>
-</div>
-<?php endif; ?>
+.hal-embed-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 10px;
+}
 
-<?php if (empty($headers)): ?>
-<div class="empty">
-    <p>Henüz HKS bildirimi yok.</p>
-    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px">
-        <a href="create_purchase.php" class="btn btn-ghost">+ Alış Bildirimi</a>
-        <a href="shipment.php" class="btn btn-primary">⚡ Hızlı Sevk</a>
-    </div>
-</div>
-<?php else: ?>
+.hal-embed-toolbar-title {
+    font-weight: 600;
+    font-size: .95rem;
+    flex: 1 1 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-<!-- PC tablo -->
-<div class="table-wrap pc-only">
-    <table class="data-table">
-        <thead>
-        <tr>
-            <th>ID</th>
-            <th>Tip</th>
-            <th>Tarih</th>
-            <th>Alıcı / Tedarikçi</th>
-            <th>Plaka</th>
-            <th>Kalem</th>
-            <th>Durum</th>
-            <th>Bildirim No</th>
-            <th class="actions-col">İşlemler</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php foreach ($headers as $h): ?>
-        <tr>
-            <td><?= (int)$h['id'] ?></td>
-            <td><?= hks_h(hks_type_label($h['type'])) ?></td>
-            <td><?= hks_h($h['shipment_date']) ?></td>
-            <td><?= hks_h($h['buyer_name'] ?: $h['supplier_name'] ?: '—') ?></td>
-            <td><?= hks_h($h['vehicle_plate'] ?? '—') ?></td>
-            <td class="num"><?= (int)$h['item_count'] ?></td>
-            <td><span class="hks-badge <?= hks_h(hks_status_class($h['status'])) ?>"><?= hks_h(hks_status_label($h['status'])) ?></span></td>
-            <td><?= $h['hks_notification_no'] ? hks_h($h['hks_notification_no']) : '<span class="muted">—</span>' ?></td>
-            <td class="actions-col"><a href="view.php?id=<?= (int)$h['id'] ?>" class="btn btn-sm btn-ghost">Görüntüle</a></td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
+.hal-embed-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
 
-<!-- Mobil kartlar -->
-<div class="mobile-only">
-    <?php foreach ($headers as $h): ?>
-    <div class="hks-card">
-        <div class="hks-card-head">
-            <div>
-                <div class="hks-card-title"><?= hks_h(hks_type_label($h['type'])) ?> — <?= hks_h($h['buyer_name'] ?: $h['supplier_name'] ?: '—') ?></div>
-                <div class="hks-card-meta"><?= hks_h($h['shipment_date']) ?> · <?= hks_h($h['vehicle_plate'] ?? '') ?> · <?= (int)$h['item_count'] ?> kalem</div>
-            </div>
-            <span class="hks-badge <?= hks_h(hks_status_class($h['status'])) ?>"><?= hks_h(hks_status_label($h['status'])) ?></span>
+.hal-embed-info {
+    font-size: .82rem;
+    color: var(--muted, #888);
+    padding: 6px 2px 0;
+}
+
+.hal-embed-wrapper {
+    position: relative;
+    border: 1px solid var(--border, #e0e0e0);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f5f5f5;
+    min-height: 75vh;
+}
+
+.hal-embed-frame {
+    display: block;
+    width: 100%;
+    min-height: 75vh;
+    border: none;
+    background: #fff;
+}
+
+.hal-embed-warning {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,.96);
+    z-index: 10;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    padding: 24px;
+    text-align: center;
+}
+
+.hal-embed-warning.visible {
+    display: flex;
+}
+
+.hal-embed-warning-icon {
+    font-size: 2.4rem;
+    line-height: 1;
+}
+
+.hal-embed-warning-title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.hal-embed-warning-text {
+    font-size: .85rem;
+    color: var(--muted, #888);
+    max-width: 340px;
+}
+
+.hal-embed-security-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--info-bg, #f0f7ff);
+    border: 1px solid var(--info-border, #b8d9f8);
+    border-radius: 8px;
+    font-size: .82rem;
+    color: var(--info-text, #1565c0);
+}
+
+.hal-embed-security-note-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+    margin-top: 1px;
+}
+
+@media (max-width: 767px) {
+    .hal-embed-frame,
+    .hal-embed-wrapper {
+        min-height: 70vh;
+    }
+
+    .hal-embed-toolbar-title {
+        width: 100%;
+        flex: 1 1 100%;
+    }
+
+    .hal-embed-toolbar-actions {
+        width: 100%;
+    }
+
+    .hal-embed-toolbar-actions .btn {
+        flex: 1 1 auto;
+        text-align: center;
+        font-size: .82rem;
+        padding: 7px 8px;
+    }
+}
+</style>
+
+<div class="hal-embed-page">
+
+    <!-- Üst başlık -->
+    <div class="page-head" style="margin-bottom:0">
+        <div>
+            <h1>🏛 Hal Bildirimi</h1>
+            <p class="muted">Resmi Hal Bildirimi sistemi uygulama içinde açılır.</p>
         </div>
-        <?php if ($h['hks_notification_no']): ?>
-        <div style="font-size:.82rem;color:var(--success)">Bildirim No: <?= hks_h($h['hks_notification_no']) ?></div>
-        <?php endif; ?>
-        <div class="hks-card-foot">
-            <span style="font-size:.8rem;color:var(--muted)">#<?= (int)$h['id'] ?></span>
-            <a href="view.php?id=<?= (int)$h['id'] ?>" class="btn btn-sm btn-ghost">Görüntüle →</a>
+    </div>
+
+    <!-- Güvenlik notu -->
+    <div class="hal-embed-security-note">
+        <span class="hal-embed-security-note-icon">🔒</span>
+        <span>Bu uygulama Hal Bildirimi kullanıcı adı/şifrenizi kaydetmez. Giriş işlemi resmi site üzerinde yapılır; bilgileriniz sistemimizden geçmez.</span>
+    </div>
+
+    <!-- Kontrol barı -->
+    <div class="hal-embed-toolbar">
+        <span class="hal-embed-toolbar-title">🌐 <?= htmlspecialchars($hal_bildirimi_url, ENT_QUOTES, 'UTF-8') ?></span>
+        <div class="hal-embed-toolbar-actions">
+            <button class="btn btn-ghost btn-sm" id="hal-btn-reload" title="Yenile">
+                🔄 Yenile
+            </button>
+            <button class="btn btn-ghost btn-sm" id="hal-btn-newtab" title="Yeni sekmede aç">
+                ↗ Yeni Sekmede Aç
+            </button>
+            <a href="../index.php" class="btn btn-ghost btn-sm" title="Ana sayfaya dön">
+                🏠 Ana Sayfa
+            </a>
         </div>
     </div>
-    <?php endforeach; ?>
+
+    <!-- Iframe alanı -->
+    <div class="hal-embed-wrapper">
+        <iframe
+            id="hal-frame"
+            class="hal-embed-frame"
+            src="<?= htmlspecialchars($hal_bildirimi_url, ENT_QUOTES, 'UTF-8') ?>"
+            referrerpolicy="no-referrer-when-downgrade"
+            title="Hal Bildirimi Sistemi"
+            allowfullscreen
+        ></iframe>
+
+        <!-- Fallback: iframe engellenmişse gösterilir -->
+        <div class="hal-embed-warning" id="hal-fallback">
+            <span class="hal-embed-warning-icon">⚠️</span>
+            <span class="hal-embed-warning-title">Sayfa Açılamadı</span>
+            <p class="hal-embed-warning-text">
+                Resmi Hal Bildirimi sitesi güvenlik politikası nedeniyle uygulama içinde açılmıyor olabilir.
+                Aşağıdaki butona tıklayarak yeni sekmede açabilirsiniz.
+            </p>
+            <button class="btn btn-primary" id="hal-fallback-newtab">
+                ↗ Yeni Sekmede Aç
+            </button>
+            <button class="btn btn-ghost btn-sm" id="hal-fallback-dismiss" style="margin-top:-4px">
+                Kapat
+            </button>
+        </div>
+    </div>
+
+    <!-- Alt uyarı notu -->
+    <p class="hal-embed-info">
+        💡 Resmi site güvenlik nedeniyle uygulama içinde açılmazsa <strong>Yeni Sekmede Aç</strong> butonunu kullanın.
+    </p>
+
 </div>
-<?php endif; ?>
+
+<script>
+(function () {
+    // Resmi URL — PHP'den aktarılır
+    var HAL_URL = <?= json_encode($hal_bildirimi_url) ?>;
+
+    var frame    = document.getElementById('hal-frame');
+    var fallback = document.getElementById('hal-fallback');
+    var timer    = null;
+
+    // Yenile butonu
+    document.getElementById('hal-btn-reload').addEventListener('click', function () {
+        // Fallback gizliyse frame'i yenile
+        fallback.classList.remove('visible');
+        clearTimeout(timer);
+        frame.src = HAL_URL;
+        startFallbackTimer();
+    });
+
+    // Yeni Sekmede Aç butonu (toolbar)
+    document.getElementById('hal-btn-newtab').addEventListener('click', function () {
+        window.open(HAL_URL, '_blank', 'noopener,noreferrer');
+    });
+
+    // Fallback — Yeni Sekmede Aç
+    document.getElementById('hal-fallback-newtab').addEventListener('click', function () {
+        window.open(HAL_URL, '_blank', 'noopener,noreferrer');
+    });
+
+    // Fallback — Kapat
+    document.getElementById('hal-fallback-dismiss').addEventListener('click', function () {
+        fallback.classList.remove('visible');
+    });
+
+    // iframe yüklendiğinde timer'ı iptal et
+    // Not: cross-origin olduğu için içeriği okuyamayız — bu normaldir.
+    frame.addEventListener('load', function () {
+        clearTimeout(timer);
+    });
+
+    // 8 saniye içinde load event gelmezse fallback göster
+    function startFallbackTimer() {
+        timer = setTimeout(function () {
+            fallback.classList.add('visible');
+        }, 8000);
+    }
+
+    startFallbackTimer();
+})();
+</script>
 
 <?php render_footer(); ?>
-</content>
-</invoke>
