@@ -581,19 +581,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $mk_rows = $st->fetchAll();
 
     // ── Hazır Palet (Soğuk Hava — canlı sorgu, sadece Yazdır çıktısı için) ─
-    // Kural: durum='yuklendi' + mevcut sayfadaki mk_rows hariç + firma/urun/depo filtresi
-    // Tarih filtresi UYGULANMAZ (hazır palet güncel stok mantığıdır)
+    // Kural: lp.islendi=1 (Z raporu ile "Raporlandı" işaretlenmiş paletler) + firma/urun/depo filtresi
     $_gl_hazir = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
     try {
-        $hw = ["lr.type='yukleme'", "lr.durum='yuklendi'"];
+        $hw = ["lr.type='yukleme'", "lp.islendi=1"];
         $hp = [];
-        $exclude_ids = array_values(array_filter(
-            array_map('intval', array_column($mk_rows, 'id')),
-            fn($v) => $v > 0
-        ));
-        if (!empty($exclude_ids)) {
-            $hw[] = "lr.id NOT IN (" . implode(',', $exclude_ids) . ")";
-        }
         if ($f_firma !== '') { $hw[] = "lr.firma=?"; $hp[] = $f_firma; }
         if ($f_urun  !== '') { $hw[] = "lr.urun=?";  $hp[] = $f_urun; }
         if ($f_depo  !== '') { $hw[] = "lp.depo=?";  $hp[] = $f_depo; }
@@ -1488,7 +1480,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 <!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
 <div class="gl-hazir-section">
     <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
-    <div class="gl-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti — tarih filtresi uygulanmaz)</div>
+    <div class="gl-hazir-subtitle">(Z raporu ile "Raporlandı" olarak işaretlenmiş hazır paletler)</div>
     <div class="gl-ps-strip gl-hazir-strip">
         <?php if ($_gl_hazir['palet'] === 0): ?>
         <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>
