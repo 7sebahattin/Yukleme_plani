@@ -1138,6 +1138,21 @@ render_flash();
 .gl-section .data-table td { padding: 6px 10px; }
 .gl-section .data-table tfoot td { font-size: .92rem; padding: 7px 10px; }
 .gl-ps-strip { display: none; }
+
+/* Filtre toggle (mobil) */
+.gl-filter-badge { display:inline-block; width:8px; height:8px; background:#2563eb; border-radius:50%; margin-left:3px; vertical-align:middle; }
+/* Filtre kartı: mobilde gizli, açık sınıfı varsa göster */
+@media (max-width: 899px) {
+    .rpt-filter-card.gl-filter-card { display: none; }
+    .rpt-filter-card.gl-filter-card.gl-filter-open { display: block; }
+    .gl-filter-toggle { display: inline-flex !important; align-items: center; gap: 4px; }
+}
+/* Masaüstünde filtre herzaman açık, toggle gizli */
+@media (min-width: 900px) {
+    .gl-filter-toggle { display: none !important; }
+}
+/* Kebab dropdown içindeki formları düzenle */
+.gl-kebab-forms { display: none; }
 </style>
 
 <?php
@@ -1168,6 +1183,30 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
     ?><?= $f_firma ? ($f_from !== '' || $f_to !== '' ? ' · ' : '') . h($f_firma) : '' ?><?= $f_depo ? ' · Depo: ' . h($f_depo) : '' ?></p>
 </div>
 
+<!-- X / Z form hidden inputs (form="id" ile çağrılır) -->
+<form id="gl-form-x" method="post" action="daily_report_create.php" class="gl-kebab-forms">
+    <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="report_type"   value="X">
+    <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+    <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+    <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+    <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+    <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+    <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
+    <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
+</form>
+<form id="gl-form-z" method="post" action="daily_report_create.php" class="gl-kebab-forms">
+    <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="report_type"   value="Z">
+    <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+    <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+    <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+    <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+    <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+    <input type="hidden" name="palet_islendi" value="hicbiri">
+    <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
+</form>
+
 <!-- Sayfa başlığı (ekran) -->
 <div class="page-head rpt-head gl-no-print">
     <div class="rpt-title">
@@ -1187,45 +1226,34 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
             'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun,
             'palet_islendi'=>$f_palet_islendi,'kantar_firma'=>$f_kantar_firma]);
         $gl_csv_url = 'reports.php?' . http_build_query($gl_csv_params);
+        $_gl_has_filter = ($f_firma !== '' || $f_depo !== '' || $f_urun !== '' || $f_from !== '' || $f_to !== '');
         ?>
-        <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
-        <a href="daily_report_archive.php" class="btn btn-sm">📁 Arşiv</a>
-        <form method="post" action="daily_report_create.php" style="display:contents">
-            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="report_type"   value="X">
-            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
-            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
-            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
-            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
-            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
-            <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
-            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
-            <button type="submit" class="btn btn-sm btn-primary"
-                    onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
-                📋 X Raporu Al
-            </button>
-        </form>
-        <form method="post" action="daily_report_create.php" style="display:contents">
-            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="report_type"   value="Z">
-            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
-            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
-            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
-            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
-            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
-            <input type="hidden" name="palet_islendi" value="hicbiri">
-            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
-            <button type="submit" class="btn btn-sm btn-success"
-                    onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
-                🔒 Z Raporu Al ve Kapat
-            </button>
-        </form>
+        <button type="button" class="btn btn-sm gl-filter-toggle"
+                onclick="document.getElementById('glFilterCard').classList.toggle('gl-filter-open')">
+            🔍 Filtre<?php if ($_gl_has_filter): ?><span class="gl-filter-badge"></span><?php endif; ?>
+        </button>
+        <div class="pc-kebab-wrap">
+            <button type="button" class="pc-kebab" aria-label="Daha fazla işlem" title="Daha fazla işlem">⋮</button>
+            <div class="pc-dropdown" hidden>
+                <a href="<?= h($gl_csv_url) ?>">⬇ Excel/CSV</a>
+                <a href="daily_report_archive.php">📁 Arşiv</a>
+                <button type="submit" form="gl-form-x"
+                        onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
+                    📋 X Raporu Al
+                </button>
+                <button type="submit" form="gl-form-z" class="pc-drop-success"
+                        onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
+                    🔒 Z Raporu Al ve Kapat
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Filtre formu -->
-<div class="rpt-filter-card gl-no-print">
+<?php $_gl_filter_open_class = $_gl_has_filter ? ' gl-filter-open' : ''; ?>
+<div id="glFilterCard" class="rpt-filter-card gl-no-print gl-filter-card<?= $_gl_filter_open_class ?>">
 <form method="get" class="rpt-filter-form">
     <input type="hidden" name="type" value="gunluk">
     <div class="rpt-filter-group">
