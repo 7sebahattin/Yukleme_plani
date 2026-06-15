@@ -118,7 +118,7 @@ render_flash();
         <iframe
             id="hal-frame"
             class="hal-embed-frame"
-            src="proxy.php"
+            src="proxy.php?__hksfresh=1"
             title="Hal Bildirimi Sistemi"
         ></iframe>
     </div>

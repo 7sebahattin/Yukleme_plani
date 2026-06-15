@@ -14,13 +14,27 @@ require_once __DIR__ . '/helpers.php';  // require_login() burada
 
 const HKS_ORIGIN = 'https://hks.hal.gov.tr';
 
-// PATH_INFO: proxy.php/some/path → $_SERVER['PATH_INFO'] = '/some/path'
-$path  = $_SERVER['PATH_INFO'] ?? '/';
-$query = $_SERVER['QUERY_STRING'] ?? '';
-$target_url = HKS_ORIGIN . $path . ($query !== '' ? '?' . $query : '');
-
 // Session cookie jar — tarayıcıya cookie gönderilmez, sunucuda tutulur
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+// PATH_INFO: proxy.php/some/path → $_SERVER['PATH_INFO'] = '/some/path'
+$path = $_SERVER['PATH_INFO'] ?? '/';
+
+// Query string — kendi kontrol parametrelerimizi (__hksfresh) HKS'ye iletme
+parse_str($_SERVER['QUERY_STRING'] ?? '', $qs);
+$fresh = isset($qs['__hksfresh']);
+unset($qs['__hksfresh']);
+$query = http_build_query($qs);
+
+// Taze başlangıç: index.php sayfayı her açtığında bayat/bozuk HKS oturumunu
+// temizle. Aksi halde önceki başarısız denemenin cookie'si "tarayıcınızı
+// güncelleyin" gibi bozuk sayfaları getirmeye devam edebilir.
+if ($fresh) {
+    unset($_SESSION['hks_proxy_cookies']);
+}
+
+$target_url = HKS_ORIGIN . $path . ($query !== '' ? '?' . $query : '');
+
 $cookie_map = $_SESSION['hks_proxy_cookies'] ?? [];
 $cookie_hdr = implode('; ', array_map(
     static fn($k, $v) => $k . '=' . $v,
@@ -49,6 +63,7 @@ $req_headers = [
     'User-Agent: '      . $browser_ua,
     'Accept: '          . $browser_acc,
     'Accept-Language: ' . $browser_lang,
+    'Upgrade-Insecure-Requests: 1',
     'Cache-Control: no-cache',
     'Pragma: no-cache',
 ];
