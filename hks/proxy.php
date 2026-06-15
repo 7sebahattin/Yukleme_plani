@@ -97,25 +97,6 @@ $err   = curl_error($ch);
 $info  = curl_getinfo($ch);
 curl_close($ch);
 
-// ── DEBUG modu: proxy.php?__hksdebug=1 ──────────────────────────
-// HKS'ye ne gönderdiğimizi ve HKS'nin ne döndürdüğünü düz metin gösterir.
-// Sadece giriş yapmış kullanıcı erişebilir (helpers.php require_login).
-if (isset($_GET['__hksdebug'])) {
-    header('Content-Type: text/plain; charset=utf-8');
-    $dbg_hdr_size = (int)($info['header_size'] ?? 0);
-    $dbg_resp_hdr = $raw !== false ? substr((string)$raw, 0, $dbg_hdr_size) : '';
-    $dbg_body     = $raw !== false ? substr((string)$raw, $dbg_hdr_size) : '';
-    echo "=== HEDEF URL ===\n{$target_url}\n\n";
-    echo "=== GÖNDERİLEN İSTEK BAŞLIKLARI ===\n";
-    echo implode("\n", $req_headers) . "\n\n";
-    echo "=== cURL HATASI ===\nerrno={$errno}  msg={$err}\n\n";
-    echo "=== HTTP DURUM ===\n" . (int)($info['http_code'] ?? 0) . "\n\n";
-    echo "=== HKS YANIT BAŞLIKLARI ===\n{$dbg_resp_hdr}\n";
-    echo "=== YANIT GÖVDESİ (ilk 3000 karakter) ===\n";
-    echo substr($dbg_body, 0, 3000) . "\n";
-    exit;
-}
-
 if ($errno || $raw === false) {
     http_response_code(502);
     header('Content-Type: text/html; charset=utf-8');
