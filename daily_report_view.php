@@ -226,7 +226,7 @@ render_flash();
     .drv-section { break-inside:avoid; margin-bottom:10px; }
     .drv-yukleme-screen { display:none !important; }
     .drv-yukleme-print  { display:block !important; }
-    .drv-section-title { font-size:10.5pt; font-weight:700; border-bottom:1.5px solid #333 !important; padding-bottom:3px; margin-bottom:6px; }
+    .drv-section-title { font-size:13pt; font-weight:700; border-bottom:1.5px solid #333 !important; padding-bottom:3px; margin-bottom:6px; }
     .drv-meta { font-size:8pt; gap:4px 14px; margin:3px 0 7px; }
     .drv-totals-bar { border:1px solid #ccc !important; font-size:8pt; padding:5px 10px; gap:5px 14px; margin-bottom:6px; }
     .drv-totals-bar .t-item strong { font-size:9.5pt; }

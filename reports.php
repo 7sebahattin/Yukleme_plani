@@ -1073,7 +1073,7 @@ render_flash();
     .gl-print-header h2 { font-size: 13pt; margin: 0 0 2px; }
     .gl-print-header p  { font-size: 8pt; color: #555; margin: 0; }
     .gl-section { margin-bottom: 8mm; }
-    .gl-section-title { font-size: 22pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
+    .gl-section-title { font-size: 13pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
     .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
     .gl-ozet-card { border: 1px solid #ccc; padding: 3px 7px; flex: 1 1 80px; min-width: 70px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ozet-card span   { font-size: 6.5pt; display: block; color: #555; }
@@ -1477,27 +1477,6 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <?php endif; ?>
 </div>
 
-<!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
-<div class="gl-hazir-section">
-    <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
-    <div class="gl-hazir-subtitle">(Z raporu ile Raporlandı işaretlenmiş, henüz yüklenmemiş hazır paletler)</div>
-    <div class="gl-ps-strip gl-hazir-strip">
-        <?php if ($_gl_hazir['palet'] === 0): ?>
-        <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>
-        <?php else: ?>
-        <div class="gl-ps-item gl-ps-hazir"><span>Palet</span><strong><?= number_format($_gl_hazir['palet'], 0, ',', '.') ?></strong></div>
-        <?php if ($_gl_hazir['kasa'] > 0): ?>
-        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gl_hazir['kasa'], 0, ',', '.') ?></strong></div>
-        <?php endif; ?>
-        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gl_hazir['brut']) ?></strong></div>
-        <?php if ($_gl_hazir['dara'] > 0): ?>
-        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_gl_hazir['dara'])) ?></strong></div>
-        <?php endif; ?>
-        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg(round($_gl_hazir['net'])) ?></strong></div>
-        <?php endif; ?>
-    </div>
-</div>
-
 <!-- Çıkmalar -->
 <div class="gl-section">
     <div class="gl-section-title">Çıkmalar<?= !empty($ck_rows) ? ' ('.count($ck_rows).')' : '' ?></div>
@@ -1553,6 +1532,27 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <?php else: ?>
     <p class="muted">İşlem yok</p>
     <?php endif; ?>
+</div>
+
+<!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
+<div class="gl-hazir-section">
+    <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
+    <div class="gl-hazir-subtitle">Makineye dökülen hariç daha önce raporlanmış depoda hazır palet sayısıdır</div>
+    <div class="gl-ps-strip gl-hazir-strip">
+        <?php if ($_gl_hazir['palet'] === 0): ?>
+        <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>
+        <?php else: ?>
+        <div class="gl-ps-item gl-ps-hazir"><span>Palet</span><strong><?= number_format($_gl_hazir['palet'], 0, ',', '.') ?></strong></div>
+        <?php if ($_gl_hazir['kasa'] > 0): ?>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gl_hazir['kasa'], 0, ',', '.') ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gl_hazir['brut']) ?></strong></div>
+        <?php if ($_gl_hazir['dara'] > 0): ?>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_gl_hazir['dara'])) ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg(round($_gl_hazir['net'])) ?></strong></div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php else: ?>

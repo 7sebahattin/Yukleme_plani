@@ -163,7 +163,7 @@ render_print_page_start($page_title, 'daily', $mode, $orientation);
 
 .pd-section { margin-bottom: 14px; }
 .pd-section-title {
-    font-size: 10.5pt;
+    font-size: 13pt;
     font-weight: 700;
     border-bottom: 1.5px solid #333;
     padding-bottom: 3px;
