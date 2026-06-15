@@ -580,6 +580,46 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $st->execute($mkp);
     $mk_rows = $st->fetchAll();
 
+    // ── Hazır Palet (Soğuk Hava — canlı sorgu, sadece Yazdır çıktısı için) ─
+    // Kural: durum='yuklendi' + mevcut sayfadaki mk_rows hariç + firma/urun/depo filtresi
+    // Tarih filtresi UYGULANMAZ (hazır palet güncel stok mantığıdır)
+    $_gl_hazir = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
+    try {
+        $hw = ["lr.type='yukleme'", "lr.durum='yuklendi'"];
+        $hp = [];
+        $exclude_ids = array_values(array_filter(
+            array_map('intval', array_column($mk_rows, 'id')),
+            fn($v) => $v > 0
+        ));
+        if (!empty($exclude_ids)) {
+            $hw[] = "lr.id NOT IN (" . implode(',', $exclude_ids) . ")";
+        }
+        if ($f_firma !== '') { $hw[] = "lr.firma=?"; $hp[] = $f_firma; }
+        if ($f_urun  !== '') { $hw[] = "lr.urun=?";  $hp[] = $f_urun; }
+        if ($f_depo  !== '') { $hw[] = "lp.depo=?";  $hp[] = $f_depo; }
+        $st = db()->prepare("
+            SELECT COUNT(DISTINCT lr.id) AS record_count,
+                   COUNT(lp.id)          AS palet_count,
+                   COALESCE(SUM(lp.kasa_adeti),0)       AS kasa_total,
+                   ROUND(COALESCE(SUM(lp.brut_kg),0),3) AS brut_total,
+                   ROUND(COALESCE(SUM(lp.dara_kg),0),3) AS dara_total,
+                   ROUND(COALESCE(SUM(lp.net_kg),0),3)  AS net_total
+            FROM loading_records lr
+            JOIN loading_pallets lp ON lp.loading_record_id = lr.id
+            WHERE " . implode(' AND ', $hw));
+        $st->execute($hp);
+        $hp_row = $st->fetch();
+        if ($hp_row) {
+            $_gl_hazir = [
+                'palet' => (int)($hp_row['palet_count']  ?? 0),
+                'kasa'  => (int)($hp_row['kasa_total']   ?? 0),
+                'brut'  => (float)($hp_row['brut_total'] ?? 0),
+                'dara'  => (float)($hp_row['dara_total'] ?? 0),
+                'net'   => (float)($hp_row['net_total']  ?? 0),
+            ];
+        }
+    } catch (PDOException $_he) {}
+
     // Özet
     $ozet_kantar_brut = 0.0; $ozet_kantar_dara = 0.0; $ozet_kantar_net = 0.0;
     foreach ($gk_rows as $_kf) {
@@ -1063,7 +1103,23 @@ render_flash();
     .gl-ps-brut  { border-color: #2563eb !important; color: #2563eb !important; }
     .gl-ps-dara  { border-color: #d97706 !important; color: #d97706 !important; }
     .gl-ps-net   { border-color: #059669 !important; color: #059669 !important; }
+    /* Hazır Palet bölümü — sadece print'te görünür */
+    .gl-hazir-section { display: block !important; margin-bottom: 8mm; }
+    .gl-hazir-strip { display: flex !important; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .gl-hazir-title {
+        font-size: 14pt; font-weight: 700; color: #dc2626 !important;
+        border-bottom: 1.5px solid #dc2626 !important;
+        padding-bottom: 3px; margin-bottom: 2px;
+        break-after: avoid;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .gl-hazir-subtitle {
+        font-size: 9pt; color: #dc2626 !important; font-style: italic; margin-bottom: 5px;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .gl-ps-hazir { border-color: #dc2626 !important; color: #dc2626 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
+.gl-hazir-section { display: none; }
 .gl-print-header { display: none; }
 .gl-section { margin-bottom: 20px; }
 .gl-section-title { font-size: .9rem; font-weight: 700; margin: 0 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
@@ -1082,6 +1138,21 @@ render_flash();
 .gl-section .data-table td { padding: 6px 10px; }
 .gl-section .data-table tfoot td { font-size: .92rem; padding: 7px 10px; }
 .gl-ps-strip { display: none; }
+
+/* Filtre toggle (mobil) */
+.gl-filter-badge { display:inline-block; width:8px; height:8px; background:#2563eb; border-radius:50%; margin-left:3px; vertical-align:middle; }
+/* Filtre kartı: mobilde gizli, açık sınıfı varsa göster */
+@media (max-width: 899px) {
+    .rpt-filter-card.gl-filter-card { display: none; }
+    .rpt-filter-card.gl-filter-card.gl-filter-open { display: block; }
+    .gl-filter-toggle { display: inline-flex !important; align-items: center; gap: 4px; }
+}
+/* Masaüstünde filtre herzaman açık, toggle gizli */
+@media (min-width: 900px) {
+    .gl-filter-toggle { display: none !important; }
+}
+/* Kebab dropdown içindeki formları düzenle */
+.gl-kebab-forms { display: none; }
 </style>
 
 <?php
@@ -1112,6 +1183,30 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
     ?><?= $f_firma ? ($f_from !== '' || $f_to !== '' ? ' · ' : '') . h($f_firma) : '' ?><?= $f_depo ? ' · Depo: ' . h($f_depo) : '' ?></p>
 </div>
 
+<!-- X / Z form hidden inputs (form="id" ile çağrılır) -->
+<form id="gl-form-x" method="post" action="daily_report_create.php" class="gl-kebab-forms">
+    <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="report_type"   value="X">
+    <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+    <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+    <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+    <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+    <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+    <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
+    <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
+</form>
+<form id="gl-form-z" method="post" action="daily_report_create.php" class="gl-kebab-forms">
+    <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="report_type"   value="Z">
+    <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
+    <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
+    <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
+    <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
+    <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
+    <input type="hidden" name="palet_islendi" value="hicbiri">
+    <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
+</form>
+
 <!-- Sayfa başlığı (ekran) -->
 <div class="page-head rpt-head gl-no-print">
     <div class="rpt-title">
@@ -1131,45 +1226,34 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
             'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun,
             'palet_islendi'=>$f_palet_islendi,'kantar_firma'=>$f_kantar_firma]);
         $gl_csv_url = 'reports.php?' . http_build_query($gl_csv_params);
+        $_gl_has_filter = ($f_firma !== '' || $f_depo !== '' || $f_urun !== '' || $f_from !== '' || $f_to !== '');
         ?>
-        <a href="<?= h($gl_csv_url) ?>" class="btn btn-sm">⬇ Excel/CSV</a>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
-        <a href="daily_report_archive.php" class="btn btn-sm">📁 Arşiv</a>
-        <form method="post" action="daily_report_create.php" style="display:contents">
-            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="report_type"   value="X">
-            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
-            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
-            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
-            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
-            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
-            <input type="hidden" name="palet_islendi" value="<?= h($f_palet_islendi) ?>">
-            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
-            <button type="submit" class="btn btn-sm btn-primary"
-                    onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
-                📋 X Raporu Al
-            </button>
-        </form>
-        <form method="post" action="daily_report_create.php" style="display:contents">
-            <input type="hidden" name="csrf"          value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="report_type"   value="Z">
-            <input type="hidden" name="date_from"     value="<?= h($f_from) ?>">
-            <input type="hidden" name="date_to"       value="<?= h($f_to) ?>">
-            <input type="hidden" name="firma"         value="<?= h($f_firma) ?>">
-            <input type="hidden" name="urun"          value="<?= h($f_urun) ?>">
-            <input type="hidden" name="depo"          value="<?= h($f_depo) ?>">
-            <input type="hidden" name="palet_islendi" value="hicbiri">
-            <input type="hidden" name="kantar_firma"  value="<?= h($f_kantar_firma) ?>">
-            <button type="submit" class="btn btn-sm btn-success"
-                    onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
-                🔒 Z Raporu Al ve Kapat
-            </button>
-        </form>
+        <button type="button" class="btn btn-sm gl-filter-toggle"
+                onclick="document.getElementById('glFilterCard').classList.toggle('gl-filter-open')">
+            🔍 Filtre<?php if ($_gl_has_filter): ?><span class="gl-filter-badge"></span><?php endif; ?>
+        </button>
+        <div class="pc-kebab-wrap">
+            <button type="button" class="pc-kebab" aria-label="Daha fazla işlem" title="Daha fazla işlem">⋮</button>
+            <div class="pc-dropdown" hidden>
+                <a href="<?= h($gl_csv_url) ?>">⬇ Excel/CSV</a>
+                <a href="daily_report_archive.php">📁 Arşiv</a>
+                <button type="submit" form="gl-form-x"
+                        onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
+                    📋 X Raporu Al
+                </button>
+                <button type="submit" form="gl-form-z" class="pc-drop-success"
+                        onclick="return confirm('Bu rapordaki kantar fişleri, makineye dökülen paletler ve çıkma kayıtları raporlandı olarak kapatılacak. Bu işlem günlük açık listeden düşürür. Devam edilsin mi?')">
+                    🔒 Z Raporu Al ve Kapat
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- Filtre formu -->
-<div class="rpt-filter-card gl-no-print">
+<?php $_gl_filter_open_class = $_gl_has_filter ? ' gl-filter-open' : ''; ?>
+<div id="glFilterCard" class="rpt-filter-card gl-no-print gl-filter-card<?= $_gl_filter_open_class ?>">
 <form method="get" class="rpt-filter-form">
     <input type="hidden" name="type" value="gunluk">
     <div class="rpt-filter-group">
@@ -1399,6 +1483,27 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <?php else: ?>
     <p class="muted">İşlem yok</p>
     <?php endif; ?>
+</div>
+
+<!-- Hazır Palet (sadece window.print() çıktısında görünür, @media print) -->
+<div class="gl-hazir-section">
+    <div class="gl-hazir-title">Soğuk Havada Hazır Palet</div>
+    <div class="gl-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti — tarih filtresi uygulanmaz)</div>
+    <div class="gl-ps-strip gl-hazir-strip">
+        <?php if ($_gl_hazir['palet'] === 0): ?>
+        <span style="color:#dc2626;font-style:italic;font-size:12pt;">Hazır palet kaydı bulunamadı</span>
+        <?php else: ?>
+        <div class="gl-ps-item gl-ps-hazir"><span>Palet</span><strong><?= number_format($_gl_hazir['palet'], 0, ',', '.') ?></strong></div>
+        <?php if ($_gl_hazir['kasa'] > 0): ?>
+        <div class="gl-ps-item gl-ps-kasa"><span>Kasa</span><strong><?= number_format($_gl_hazir['kasa'], 0, ',', '.') ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-brut"><span>Brüt KG</span><strong><?= fmt_kg($_gl_hazir['brut']) ?></strong></div>
+        <?php if ($_gl_hazir['dara'] > 0): ?>
+        <div class="gl-ps-item gl-ps-dara"><span>Dara KG</span><strong><?= fmt_kg(round($_gl_hazir['dara'])) ?></strong></div>
+        <?php endif; ?>
+        <div class="gl-ps-item gl-ps-net"><span>Net KG</span><strong><?= fmt_kg(round($_gl_hazir['net'])) ?></strong></div>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- Çıkmalar -->

@@ -2110,6 +2110,8 @@ body.print-mode .asya-sheet {
 .pc-dropdown button:hover, .pc-dropdown a:hover { background: var(--bg); }
 .pc-drop-danger { color: var(--danger) !important; }
 .pc-drop-danger:hover { background: var(--danger-soft) !important; }
+.pc-drop-success { color: #059669 !important; }
+.pc-drop-success:hover { background: rgba(5,150,105,.08) !important; }
 .pc-drop-disabled { display: block; padding: 8px 14px; color: var(--muted); font-size: .85rem; cursor: default; }
 
 /* Kilitli kayıt rozeti */

@@ -85,43 +85,6 @@ foreach ($items as $itm) {
 $rpt_snap    = json_decode($report['snapshot_json'] ?? '', true) ?: [];
 $rpt_filters = $rpt_snap['filters'] ?? [];
 
-// ── Hazır Palet (Soğuk Hava — canlı sorgu) ───────────────
-$hazir_palet = ['palet' => 0, 'kasa' => 0, 'brut' => 0.0, 'dara' => 0.0, 'net' => 0.0];
-try {
-    $hw = ["lr.type='yukleme'", "lr.durum='yuklendi'"];
-    $hp = [$id];
-    $hw[] = "lr.id NOT IN (
-        SELECT DISTINCT source_detail_id
-        FROM daily_report_items
-        WHERE report_id=? AND item_type='yukleme_palet'
-              AND source_detail_id IS NOT NULL AND source_detail_id > 0
-    )";
-    if (!empty($rpt_filters['firma'])) { $hw[] = "lr.firma=?"; $hp[] = $rpt_filters['firma']; }
-    if (!empty($rpt_filters['urun']))  { $hw[] = "lr.urun=?";  $hp[] = $rpt_filters['urun']; }
-    if (!empty($rpt_filters['depo']))  { $hw[] = "lp.depo=?";  $hp[] = $rpt_filters['depo']; }
-    $st = db()->prepare("
-        SELECT COUNT(DISTINCT lr.id) AS record_count,
-               COUNT(lp.id)          AS palet_count,
-               COALESCE(SUM(lp.kasa_adeti),0)       AS kasa_total,
-               ROUND(COALESCE(SUM(lp.brut_kg),0),3) AS brut_total,
-               ROUND(COALESCE(SUM(lp.dara_kg),0),3) AS dara_total,
-               ROUND(COALESCE(SUM(lp.net_kg),0),3)  AS net_total
-        FROM loading_records lr
-        JOIN loading_pallets lp ON lp.loading_record_id = lr.id
-        WHERE " . implode(' AND ', $hw));
-    $st->execute($hp);
-    $hp_row = $st->fetch();
-    if ($hp_row) {
-        $hazir_palet = [
-            'palet' => (int)($hp_row['palet_count']  ?? 0),
-            'kasa'  => (int)($hp_row['kasa_total']   ?? 0),
-            'brut'  => (float)($hp_row['brut_total'] ?? 0),
-            'dara'  => (float)($hp_row['dara_total'] ?? 0),
-            'net'   => (float)($hp_row['net_total']  ?? 0),
-        ];
-    }
-} catch (PDOException $_hp_e) {}
-
 // Tarih gösterimi
 $date_disp = '';
 if ($report['report_date']) {
@@ -249,16 +212,6 @@ render_flash();
 .drv-print-summary { display: none; }
 /* Başlık yanı tarih */
 .drv-title-date { display: inline-block; font-size: .85rem; font-weight: 400; color: #666; margin-left: 10px; vertical-align: middle; }
-/* Hazır palet bölümü ekran görünümü */
-.drv-hazir-screen { background: #fff5f5; border: 1.5px solid #fca5a5; border-radius: 8px; padding: 10px 14px; margin-bottom: 22px; }
-.drv-hazir-screen-title { font-size: 1rem; font-weight: 700; color: #dc2626; margin-bottom: 2px; }
-.drv-hazir-screen-sub { font-size: .78rem; color: #dc2626; font-style: italic; margin-bottom: 8px; }
-.drv-hazir-totals { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .88rem; }
-.drv-hazir-totals .t-item { display: flex; flex-direction: column; }
-.drv-hazir-totals .t-item span { color: #b91c1c; font-size: .75rem; font-weight: 600; }
-.drv-hazir-totals .t-item strong { font-size: 1rem; font-variant-numeric: tabular-nums; color: #dc2626; }
-/* Hazır palet baskı container — ekranda gizli, baskıda görünür */
-.drv-hazir-prt { display: none; }
 
 @media print {
     @page { margin: 10mm 8mm; size: A4 landscape; }
@@ -303,24 +256,8 @@ render_flash();
     .drv-ps-brut  { border-color: #2563eb; color: #2563eb; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .drv-ps-dara  { border-color: #d97706; color: #d97706; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .drv-ps-net   { border-color: #059669; color: #059669; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    .drv-ps-hazir { border-color: #dc2626; color: #dc2626; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     /* Başlıktaki tarih — sadece baskıda büyük görünür */
     .drv-title-date { font-size: 11pt; font-weight: 600; margin-left: 12px; color: #444; }
-    /* Hazır palet bölümü — baskıda görünür */
-    .drv-hazir-screen { display: none !important; }
-    .drv-hazir-prt { display: block !important; margin-bottom: 10px; }
-    .drv-hazir-title {
-        font-size: 10.5pt; font-weight: 700;
-        border-bottom: 1.5px solid #dc2626 !important;
-        padding-bottom: 3px; margin-bottom: 2px;
-        color: #dc2626 !important;
-        break-after: avoid;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }
-    .drv-hazir-subtitle {
-        font-size: 7.5pt; color: #dc2626 !important; margin-bottom: 6px; font-style: italic;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }
 }
 </style>
 
@@ -727,50 +664,6 @@ foreach ($cikma_items as $_ci) {
     </div><!-- /mobile-only -->
 
     <?php endif; ?>
-</div>
-
-<!-- ══════════════════════════════════════════════════════
-     HAZIR PALET (Soğuk Hava Deposu)
-══════════════════════════════════════════════════════ -->
-<!-- Ekran görünümü (.drv-hazir-screen baskıda @media print ile gizlenir) -->
-<div class="drv-hazir-screen">
-    <div class="drv-hazir-screen-title">Soğuk Havada Hazır Palet</div>
-    <div class="drv-hazir-screen-sub">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti)</div>
-    <?php if ($hazir_palet['palet'] === 0): ?>
-    <p class="drv-empty" style="color:#dc2626;">Hazır palet kaydı bulunamadı</p>
-    <?php else: ?>
-    <div class="drv-hazir-totals">
-        <div class="t-item"><span>PALET</span><strong><?= $hazir_palet['palet'] ?></strong></div>
-        <?php if ($hazir_palet['kasa'] > 0): ?>
-        <div class="t-item"><span>KASA</span><strong><?= number_format($hazir_palet['kasa'], 0, ',', '.') ?></strong></div>
-        <?php endif; ?>
-        <div class="t-item"><span>BRÜT KG</span><strong><?= fmt_kg($hazir_palet['brut']) ?></strong></div>
-        <?php if ($hazir_palet['dara'] > 0): ?>
-        <div class="t-item"><span>DARA KG</span><strong><?= fmt_kg($hazir_palet['dara']) ?></strong></div>
-        <?php endif; ?>
-        <div class="t-item"><span>NET KG</span><strong><?= fmt_kg($hazir_palet['net']) ?></strong></div>
-    </div>
-    <?php endif; ?>
-</div>
-<!-- Baskı görünümü (.drv-hazir-prt ekranda gizli, @media print'te görünür) -->
-<div class="drv-hazir-prt">
-    <div class="drv-hazir-title">Soğuk Havada Hazır Palet</div>
-    <div class="drv-hazir-subtitle">(Bugün makineye dökülen hariç, soğuk havada hazır palet adeti)</div>
-    <div class="drv-print-summary">
-        <?php if ($hazir_palet['palet'] === 0): ?>
-        <span style="color:#dc2626;font-style:italic;">Hazır palet yok</span>
-        <?php else: ?>
-        <div class="drv-ps-item drv-ps-hazir"><span>PALET</span><strong><?= $hazir_palet['palet'] ?></strong></div>
-        <?php if ($hazir_palet['kasa'] > 0): ?>
-        <div class="drv-ps-item drv-ps-kasa"><span>KASA</span><strong><?= number_format($hazir_palet['kasa'], 0, ',', '.') ?></strong></div>
-        <?php endif; ?>
-        <div class="drv-ps-item drv-ps-brut"><span>BRÜT KG</span><strong><?= fmt_kg($hazir_palet['brut']) ?></strong></div>
-        <?php if ($hazir_palet['dara'] > 0): ?>
-        <div class="drv-ps-item drv-ps-dara"><span>DARA KG</span><strong><?= fmt_kg($hazir_palet['dara']) ?></strong></div>
-        <?php endif; ?>
-        <div class="drv-ps-item drv-ps-net"><span>NET KG</span><strong><?= fmt_kg($hazir_palet['net']) ?></strong></div>
-        <?php endif; ?>
-    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════
