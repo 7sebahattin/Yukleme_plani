@@ -39,12 +39,16 @@ if ($method === 'POST') {
     }
 }
 
-// Request headers
+// Kullanıcının gerçek tarayıcı bilgileri — HKS sunucu tarafı UA tespiti için zorunlu
+$browser_ua   = $_SERVER['HTTP_USER_AGENT']      ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+$browser_acc  = $_SERVER['HTTP_ACCEPT']          ?? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+$browser_lang = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'tr-TR,tr;q=0.9,en;q=0.8';
+
 $req_headers = [
     'Host: hks.hal.gov.tr',
-    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language: tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-    'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'User-Agent: '      . $browser_ua,
+    'Accept: '          . $browser_acc,
+    'Accept-Language: ' . $browser_lang,
     'Cache-Control: no-cache',
     'Pragma: no-cache',
 ];
