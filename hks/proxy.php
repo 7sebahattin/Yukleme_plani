@@ -14,6 +14,12 @@ require_once __DIR__ . '/helpers.php';  // require_login() burada
 
 const HKS_ORIGIN = 'https://hks.hal.gov.tr';
 
+// Proxy'nin web köküne göre MUTLAK yolu (ör. /hks/proxy.php).
+// Yeniden yazılan URL'ler bununla mutlak hale gelir; böylece sayfa
+// proxy.php/Pages/Account/Login.aspx gibi derin bir yolda olsa bile
+// /Media/... gibi kaynaklar doğru çözülür.
+$proxy_base = $_SERVER['SCRIPT_NAME'] ?? '/hks/proxy.php';
+
 // Session cookie jar — tarayıcıya cookie gönderilmez, sunucuda tutulur
 if (session_status() === PHP_SESSION_NONE) session_start();
 
@@ -160,8 +166,8 @@ if (in_array($http_code, [301, 302, 303, 307, 308])) {
             $loc = substr($loc, strlen(HKS_ORIGIN));
         }
         if (str_starts_with($loc, '/')) {
-            // Mutlak yol → proxy PATH_INFO üzerinden
-            header('Location: proxy.php' . $loc, true, $http_code);
+            // Mutlak yol → mutlak proxy yolu üzerinden
+            header('Location: ' . $proxy_base . $loc, true, $http_code);
         } else {
             header('Location: ' . $loc, true, $http_code);
         }
@@ -175,24 +181,24 @@ $is_html = str_contains($content_type, 'text/html') ||
 $is_css  = str_contains($content_type, 'text/css');
 
 if ($is_html) {
-    // 1. Tam URL (origin dahil) → proxy.php'ye yönlendir
+    // 1. Tam URL (origin dahil) → mutlak proxy yoluna
     $body = str_replace(
         [HKS_ORIGIN . '/', 'http://hks.hal.gov.tr/'],
-        ['proxy.php/', 'proxy.php/'],
+        [$proxy_base . '/', $proxy_base . '/'],
         $body
     );
     // 2. Mutlak yolları HTML özelliklerinde yeniden yaz
-    //    href="/path" src="/path" action="/path"  →  proxy.php/path
+    //    href="/path" src="/path" action="/path"  →  /hks/proxy.php/path
     //    Protokol-bağıl //cdn... adreslerine dokunma
     $body = preg_replace_callback(
         '/(\b(?:href|src|action|data-src)\s*=\s*["\'])(\/(?!\/))/i',
-        static fn($m) => $m[1] . 'proxy.php/',
+        static fn($m) => $m[1] . $proxy_base . '/',
         $body
     );
     // 3. CSS url() içindeki mutlak yollar
     $body = preg_replace_callback(
         '/(\burl\(\s*["\']?)(\/(?!\/))/i',
-        static fn($m) => $m[1] . 'proxy.php/',
+        static fn($m) => $m[1] . $proxy_base . '/',
         $body
     );
     // 4. X-Frame-Options ve CSP frame-ancestors başlıkları zaten iletilmedi —
@@ -207,12 +213,12 @@ if ($is_html) {
 if ($is_css) {
     $body = str_replace(
         [HKS_ORIGIN . '/', 'http://hks.hal.gov.tr/'],
-        ['proxy.php/', 'proxy.php/'],
+        [$proxy_base . '/', $proxy_base . '/'],
         $body
     );
     $body = preg_replace_callback(
         '/(\burl\(\s*["\']?)(\/(?!\/))/i',
-        static fn($m) => $m[1] . 'proxy.php/',
+        static fn($m) => $m[1] . $proxy_base . '/',
         $body
     );
 }

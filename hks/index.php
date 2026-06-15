@@ -6,10 +6,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/helpers.php';   // require_login() bu dosyada
 
-// Resmi Hal Bildirimi giriş adresi — iframe doğrudan buraya bağlanır.
-// (Proxy DEĞİL: HKS sunucusu proxy isteklerine "eski tarayıcı" sayfası
-//  döndürüyor; tarayıcının doğrudan isteğinde giriş formu normal açılıyor.)
+// Resmi Hal Bildirimi doğrudan adresi — "Yeni Sekmede Aç" butonu için.
 $hal_direct_url = 'https://hks.hal.gov.tr/Pages/Account/Login.aspx';
+
+// iframe, HKS giriş sayfasını PROXY üzerinden açar (same-origin → çerez
+// sorunsuz tutulur, giriş çalışır). __hksfresh: her açılışta temiz oturum.
+$hal_proxy_url = 'proxy.php/Pages/Account/Login.aspx?__hksfresh=1';
 
 render_header('Hal Bildirimi');
 render_flash();
@@ -115,13 +117,12 @@ render_flash();
         </div>
     </div>
 
-    <!-- iframe — resmi HKS giriş sayfasını doğrudan açar -->
+    <!-- iframe — HKS giriş sayfasını proxy üzerinden (same-origin) açar -->
     <div class="hal-embed-frame-box">
         <iframe
             id="hal-frame"
             class="hal-embed-frame"
-            src="<?= htmlspecialchars($hal_direct_url, ENT_QUOTES, 'UTF-8') ?>"
-            referrerpolicy="no-referrer-when-downgrade"
+            src="<?= htmlspecialchars($hal_proxy_url, ENT_QUOTES, 'UTF-8') ?>"
             title="Hal Bildirimi Sistemi"
         ></iframe>
     </div>
