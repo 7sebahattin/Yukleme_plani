@@ -1073,7 +1073,7 @@ render_flash();
     .gl-print-header h2 { font-size: 13pt; margin: 0 0 2px; }
     .gl-print-header p  { font-size: 8pt; color: #555; margin: 0; }
     .gl-section { margin-bottom: 8mm; }
-    .gl-section-title { font-size: 13pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
+    .gl-section-title { font-size: 14pt; font-weight: 700; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 6px; }
     .gl-ozet-strip { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
     .gl-ozet-card { border: 1px solid #ccc; padding: 3px 7px; flex: 1 1 80px; min-width: 70px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .gl-ozet-card span   { font-size: 6.5pt; display: block; color: #555; }
