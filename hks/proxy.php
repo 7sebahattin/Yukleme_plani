@@ -24,6 +24,9 @@ const STATIC_MIME_TYPES = [
     'application/font-woff', 'application/vnd.ms-fontobject',
 ];
 
+// Sunucu tarafı disk önbelleği — oturumlar arası paylaşım, ilk yükten sonra cURL atlanır
+const PROXY_DISK_CACHE_DIR = '/tmp/hks_proxy_cache';
+
 // Proxy'nin web köküne göre MUTLAK yolu (ör. /hks/proxy.php).
 $proxy_base = $_SERVER['SCRIPT_NAME'] ?? '/hks/proxy.php';
 
@@ -39,14 +42,52 @@ $fresh = isset($qs['__hksfresh']);
 unset($qs['__hksfresh']);
 $query = http_build_query($qs);
 
-// Taze başlangıç: index.php sayfayı her açtığında bayat HKS oturumunu temizle
+// Session'dan cookie'leri oku; taze başlangıçta temizle
 if ($fresh) {
     unset($_SESSION['hks_proxy_cookies']);
+    $cookie_map = [];
+} else {
+    $cookie_map = $_SESSION['hks_proxy_cookies'] ?? [];
 }
+
+// Session kilidini cURL isteğinden ÖNCE serbest bırak.
+// Aksi halde eş zamanlı proxy istekleri (CSS, JS, resimler) sıra bekler
+// ve sayfa çok yavaş açılır.
+session_write_close();
 
 $target_url = HKS_ORIGIN . $path . ($query !== '' ? '?' . $query : '');
 
-$cookie_map = $_SESSION['hks_proxy_cookies'] ?? [];
+// Statik dosya isteğini tespit et (CSS, JS, resimler — önbelleklenebilir)
+$is_static_req = (bool) preg_match('/\.(css|js|png|gif|jpg|jpeg|svg|ico|woff2?|eot|ttf)(\?.*)?$/i', $path);
+
+// Statik varlıklar: önce sunucu tarafı disk önbelleğini kontrol et
+// Farklı kullanıcı/oturumlarda aynı CSS/JS dosyası cURL ile tekrar çekilmez.
+$disk_cache_file = null;
+if ($is_static_req) {
+    if (!is_dir(PROXY_DISK_CACHE_DIR)) @mkdir(PROXY_DISK_CACHE_DIR, 0700, true);
+    $disk_cache_file = PROXY_DISK_CACHE_DIR . '/' . md5($target_url);
+    if (file_exists($disk_cache_file)) {
+        $age = time() - filemtime($disk_cache_file);
+        if ($age < STATIC_CACHE_TTL) {
+            $cached = @unserialize((string) file_get_contents($disk_cache_file));
+            if (is_array($cached)) {
+                // Tarayıcı ETag 304 desteği
+                if (!empty($_SERVER['HTTP_IF_NONE_MATCH']) && ($cached['etag'] ?? '') !== '' &&
+                    $_SERVER['HTTP_IF_NONE_MATCH'] === $cached['etag']) {
+                    http_response_code(304);
+                    exit;
+                }
+                http_response_code(200);
+                header('Content-Type: ' . $cached['ct']);
+                header('Cache-Control: public, max-age=' . max(1, STATIC_CACHE_TTL - $age));
+                if (!empty($cached['etag'])) header('ETag: ' . $cached['etag']);
+                echo $cached['body'];
+                exit;
+            }
+        }
+    }
+}
+
 $cookie_hdr = implode('; ', array_map(
     static fn($k, $v) => $k . '=' . $v,
     array_keys($cookie_map),
@@ -68,9 +109,6 @@ $browser_ua   = $_SERVER['HTTP_USER_AGENT']      ?? 'Mozilla/5.0 (Windows NT 10.
 $browser_acc  = $_SERVER['HTTP_ACCEPT']          ?? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
 $browser_lang = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? 'tr-TR,tr;q=0.9,en;q=0.8';
 
-// Statik dosya isteğini tespit et (CSS, JS, resimler — önbelleklenebilir)
-$is_static_req = preg_match('/\.(css|js|png|gif|jpg|jpeg|svg|ico|woff2?|eot|ttf)(\?.*)?$/i', $path);
-
 $req_headers = [
     'Host: hks.hal.gov.tr',
     'User-Agent: '      . $browser_ua,
@@ -78,6 +116,18 @@ $req_headers = [
     'Accept-Language: ' . $browser_lang,
     'Upgrade-Insecure-Requests: 1',
 ];
+
+// ASP.NET UpdatePanel / AJAX istekleri için gerekli başlıkları ilet.
+// "Künye Sorgula" gibi butonlar partial-page postback (UpdatePanel) kullanır;
+// bu başlıklar olmadan HKS isteği normal postback sanır ve tam sayfa döndürür.
+foreach ([
+    'X-Requested-With' => 'HTTP_X_REQUESTED_WITH',
+    'X-MicrosoftAjax'  => 'HTTP_X_MICROSOFTAJAX',
+] as $hdr_name => $srv_key) {
+    if (!empty($_SERVER[$srv_key])) {
+        $req_headers[] = $hdr_name . ': ' . $_SERVER[$srv_key];
+    }
+}
 
 // Statik dosyalar için koşullu istek başlıklarını ilet (304 optimizasyonu)
 if ($is_static_req) {
@@ -114,6 +164,7 @@ curl_setopt_array($ch, [
     CURLOPT_POSTFIELDS     => $method === 'POST' ? $post_body : null,
     CURLOPT_TIMEOUT        => 30,
     CURLOPT_ENCODING       => '',   // cURL gzip/deflate'i otomatik açar
+    CURLOPT_TCP_KEEPALIVE  => 1,
 ]);
 
 $raw   = curl_exec($ch);
@@ -151,15 +202,25 @@ foreach (explode("\r\n", $resp_hdrs) as $h) {
 }
 
 // Set-Cookie → server-side session'a kaydet, tarayıcıya iletme
+$new_cookies = [];
 foreach (explode("\r\n", $resp_hdrs) as $h) {
     if (stripos($h, 'set-cookie:') !== 0) continue;
     $cs = trim(substr($h, 11));
     $nv = explode('=', explode(';', $cs)[0], 2);
     if (count($nv) === 2) {
-        $cookie_map[trim($nv[0])] = trim($nv[1]);
+        $new_cookies[trim($nv[0])] = trim($nv[1]);
     }
 }
-$_SESSION['hks_proxy_cookies'] = $cookie_map;
+
+// Yeni cookie varsa session'ı en kısa süreliğine aç, merge et, kapat
+if ($new_cookies) {
+    session_start();
+    $_SESSION['hks_proxy_cookies'] = array_merge(
+        $_SESSION['hks_proxy_cookies'] ?? [],
+        $new_cookies
+    );
+    session_write_close();
+}
 
 // Yönlendirme → Location başlığını mutlak proxy yoluyla yeniden yaz
 if (in_array($http_code, [301, 302, 303, 307, 308])) {
@@ -191,7 +252,7 @@ $is_css   = $base_ct === 'text/css';
 $is_static = in_array($base_ct, STATIC_MIME_TYPES, true) || $is_static_req;
 
 if ($is_html) {
-    // Tam URL → mutlak proxy yoluna
+    // Tam URL → mutlak proxy yoluna (HTML özelliklerinde VE inline JS string'lerinde çalışır)
     $body = str_replace(
         [HKS_ORIGIN . '/', 'http://hks.hal.gov.tr/'],
         [$proxy_base . '/', $proxy_base . '/'],
@@ -206,6 +267,13 @@ if ($is_html) {
     // CSS url() içindeki mutlak yollar
     $body = preg_replace_callback(
         '/(\burl\(\s*["\']?)(\/(?!\/))/i',
+        static fn($m) => $m[1] . $proxy_base . '/',
+        $body
+    );
+    // JavaScript location atamaları — mutlak yolları proxy'e yönlendir
+    // Örn: location.href='/Pages/...' veya window.location='/Pages/...'
+    $body = preg_replace_callback(
+        '/(\blocation(?:\.href)?\s*=\s*["\'])(\/(?!\/))/i',
         static fn($m) => $m[1] . $proxy_base . '/',
         $body
     );
@@ -228,6 +296,15 @@ if ($is_css) {
         static fn($m) => $m[1] . $proxy_base . '/',
         $body
     );
+}
+
+// Statik varlığı disk önbelleğine kaydet (sonraki isteklerde cURL atlanır)
+if ($disk_cache_file !== null && $is_static && $http_code === 200 && $body !== '') {
+    @file_put_contents($disk_cache_file, serialize([
+        'ct'   => $content_type,
+        'etag' => $etag,
+        'body' => $body,
+    ]));
 }
 
 // Yanıtı gönder
