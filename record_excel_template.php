@@ -49,7 +49,6 @@ $st_pm = db()->prepare("
 foreach ($pallets as &$p) { $st_pm->execute([':p' => $p['id']]); $p['materials'] = $st_pm->fetchAll(); }
 unset($p);
 
-$tot         = record_totals($id);
 $type_labels = definition_types();
 $defs_by_id  = [];
 foreach (db()->query("SELECT id, type, name FROM material_definitions")->fetchAll() as $d) {
@@ -100,6 +99,13 @@ $setN = function (string $cell, $val) use ($sh, &$log) {
     $sh->setCellValueExplicit($cell, (float)$val, DataType::TYPE_NUMERIC);
     $log[] = "$cell=" . (float)$val;
 };
+// Formül yaz — Excel'de canlı hesaplar (kullanıcı girdi hücresini değiştirince otomatik güncellenir).
+// PhpSpreadsheet kayıt sırasında formülü önceden hesaplayıp önbellek değerini de yazar,
+// böylece dosya açılır açılmaz doğru değer görünür; düzenlenince yeniden hesaplanır.
+$setF = function (string $cell, string $formula) use ($sh, &$log) {
+    $sh->setCellValue($cell, $formula);
+    $log[] = "$cell=$formula [F]";
+};
 
 // ── Marka başlığı (A1) ──
 $brand = strtoupper(trim((string)($record['brand'] ?? '')));
@@ -135,12 +141,16 @@ foreach ($pallets as $i => $p) {
     $r = $ROW0 + $i;
     $setS("A$r", $p['palet_no'] ?: (string)($i + 1));
     $setN("B$r", (int)$p['kasa_adeti']);
-    $setS("C$r", $p['size'] ?? '');
+    // SİZE — sayısal ise sayı olarak yaz (aşağıdaki SUMIF özet satırları sayısal size etiketleriyle eşleşsin)
+    $size_val = trim((string)($p['size'] ?? ''));
+    if ($size_val !== '' && is_numeric($size_val)) { $setN("C$r", $size_val); }
+    else { $setS("C$r", $size_val); }
     $setN("D$r", round((float)$p['brut_kg'], 1));
     $setN("E$r", round((float)$p['dara_kg'], 1));
     $setS("F$r", $p['kasa_cinsi_adi'] ?? '');
     $setS("G$r", mb_strtoupper(trim((string)($p['urun_cinsi'] ?? '')), 'UTF-8'));
-    $setN("H$r", round((float)$p['net_kg'], 1));
+    // NET KG = BRÜT − DARA (canlı formül; brüt/dara düzenlenince otomatik güncellenir)
+    $setF("H$r", "=ROUND(D$r-E$r,1)");
 }
 
 // ── Malzeme listesi (sabit satır eşleştirme — Mod 1) ──
@@ -171,29 +181,21 @@ foreach ($use_by_type as $t => $adet) {
     }
 }
 
-// ── Genel toplam (O10..O13) ──
-$setN('O10', round((float)$tot['toplam_brut']));
-$setN('O11', round((float)$tot['toplam_dara']));
-$setN('O12', round((float)$tot['toplam_net']));
-$setN('O13', (int)$tot['toplam_kasa']);
+// ── Genel toplam (O10..O13) — canlı formüller (palet satırları 10..35) ──
+$ROWE = $ROW0 + $CAP - 1;  // 35
+$setF('O10', "=ROUND(SUM(D$ROW0:D$ROWE),0)"); // TOPLAM BRÜT KG
+$setF('O11', "=ROUND(SUM(E$ROW0:E$ROWE),0)"); // TOPLAM DARA KG
+$setF('O12', "=ROUND(SUM(H$ROW0:H$ROWE),0)"); // TOPLAM NET KG
+$setF('O13', "=SUM(B$ROW0:B$ROWE)");          // TOPLAM KASA ADETİ
 
 // ── Size özeti (H38..K41) — sablon sabit size satirlari: H38=8,H39=9,H40=12,H41=14 ──
-// loading_pallets.size kırılımı (sayısal eşleşenleri yaz)
-$size_groups = [];
-foreach ($pallets as $p) {
-    $sz = trim((string)($p['size'] ?? '')); if ($sz === '') continue;
-    if (!isset($size_groups[$sz])) $size_groups[$sz] = ['kasa'=>0,'brut'=>0,'net'=>0];
-    $size_groups[$sz]['kasa'] += (int)$p['kasa_adeti'];
-    $size_groups[$sz]['brut'] += (float)$p['brut_kg'];
-    $size_groups[$sz]['net']  += (float)$p['net_kg'];
-}
-// Şablonun sabit size satırlarına yaz (eşleşirse). Aksi halde boş bırak.
-$size_rows = [38 => '8', 39 => '9', 40 => '12', 41 => '14'];
-foreach ($size_rows as $r => $szlabel) {
-    if (isset($size_groups[$szlabel])) {
-        $g = $size_groups[$szlabel];
-        $setN("I$r", (int)$g['kasa']); $setN("J$r", round((float)$g['brut'])); $setN("K$r", round((float)$g['net']));
-    }
+// Canlı SUMIF formülleri: kriter = H sütunundaki size etiketi, aralık = palet satırları (10..35).
+// Palet brüt/net/kasa hücreleri düzenlenince bu özet de otomatik güncellenir.
+$size_rows = [38, 39, 40, 41];
+foreach ($size_rows as $r) {
+    $setF("I$r", "=SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$B\$$ROW0:\$B\$$ROWE)");          // KASA
+    $setF("J$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$D\$$ROW0:\$D\$$ROWE),0)"); // BRÜT
+    $setF("K$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$H\$$ROW0:\$H\$$ROWE),0)"); // NET
 }
 
 // ── DEBUG modu ──
