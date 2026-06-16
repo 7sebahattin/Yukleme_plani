@@ -8,6 +8,7 @@
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/calc.php';   // parse_decimal() — num() '.'yi binlik sanar (0.5→5 bug)
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_perm('defs.read');
@@ -63,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $items = [];
         foreach ((array)($body['items'] ?? []) as $it) {
             $mid = (int)($it['material_id'] ?? 0);
-            $qty = num($it['quantity'] ?? 1);
+            $qty = parse_decimal($it['quantity'] ?? 1);
             if ($mid > 0 && $qty > 0) $items[] = ['material_id' => $mid, 'quantity' => $qty];
         }
 
@@ -98,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $items = [];
         foreach ((array)($body['items'] ?? []) as $it) {
             $mid = (int)($it['material_id'] ?? 0);
-            $qty = num($it['quantity'] ?? 1);
+            $qty = parse_decimal($it['quantity'] ?? 1);
             if ($mid > 0 && $qty > 0) $items[] = ['material_id' => $mid, 'quantity' => $qty];
         }
         if ($id <= 0)      { echo json_encode(['error' => 'Geçersiz ID']); exit; }

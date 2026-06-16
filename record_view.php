@@ -1097,7 +1097,25 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
     var BM_MATS = <?= json_encode($bm_mat_list) ?>;
 
     /* ── Yardımcılar ── */
-    function parseN(v) { return parseFloat(String(v).replace(',', '.')) || 0; }
+    /* Türkçe/İngilizce sayı formatını güvenli çöz: "1.234,5"→1234.5, "1,234.5"→1234.5,
+       "8"→8, "8,5"→8.5. Çıplak nokta binlik ayracı sayılır (ör. "1.000"→1000) —
+       num()/parse_decimal ile aynı mantık; "nokta" yanlış hesabını önler. */
+    function parseN(v) {
+        if (v === null || v === undefined || v === '') return 0;
+        if (typeof v === 'number') return isFinite(v) ? v : 0;
+        var s = String(v).replace(/\s/g, '');
+        var hasComma = s.indexOf(',') !== -1, hasDot = s.indexOf('.') !== -1;
+        if (hasComma && hasDot) {
+            if (s.lastIndexOf('.') > s.lastIndexOf(',')) s = s.split(',').join('');
+            else { s = s.split('.').join(''); s = s.replace(',', '.'); }
+        } else if (hasComma) {
+            s = s.replace(',', '.');
+        } else if (hasDot) {
+            s = s.split('.').join('');   // çıplak nokta = binlik ayracı
+        }
+        var n = parseFloat(s);
+        return isFinite(n) ? n : 0;
+    }
     function fmtN(n)   {
         var s = n.toLocaleString('tr-TR', {minimumFractionDigits:0, maximumFractionDigits:3});
         return s;
