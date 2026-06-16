@@ -32,7 +32,8 @@ $record = $st->fetch();
 if (!$record) { http_response_code(404); die('Kayıt bulunamadı.'); }
 
 $st = db()->prepare("
-    SELECT p.*, kc.name AS kasa_cinsi_adi, pt.name AS palet_tipi_adi
+    SELECT p.*, kc.name AS kasa_cinsi_adi, kc.unit_dara_kg AS kasa_unit_dara,
+           pt.name AS palet_tipi_adi, pt.unit_dara_kg AS palet_unit_dara
     FROM loading_pallets p
     LEFT JOIN material_definitions kc ON kc.id = p.kasa_cinsi_id
     LEFT JOIN material_definitions pt ON pt.id = p.palet_tipi_id
@@ -137,6 +138,13 @@ if (count($pallets) > $CAP) {
     http_response_code(400);
     die('Şablonda ' . $CAP . ' palet satırı var; bu kayıtta ' . count($pallets) . ' palet var. Daha uzun şablon gerekir.');
 }
+// Dara hesabı için birim dara kg'lar gizli yardımcı sütunlara yazılır (R=kasa birim, S=palet birim);
+// E (DARA) bu sütunlara ve B'ye (kasa adeti) bağlı canlı formül olur — config/calc.php::compute_pallet_row
+// ile aynı mantık: dara = kasa_adeti × kasa_birim_dara + palet_birim_dara.
+$sh->getColumnDimension('R')->setVisible(false);
+$sh->getColumnDimension('S')->setVisible(false);
+$setS('R9', 'Kasa Br.Dara');
+$setS('S9', 'Palet Br.Dara');
 foreach ($pallets as $i => $p) {
     $r = $ROW0 + $i;
     $setS("A$r", $p['palet_no'] ?: (string)($i + 1));
@@ -146,7 +154,10 @@ foreach ($pallets as $i => $p) {
     if ($size_val !== '' && is_numeric($size_val)) { $setN("C$r", $size_val); }
     else { $setS("C$r", $size_val); }
     $setN("D$r", round((float)$p['brut_kg'], 1));
-    $setN("E$r", round((float)$p['dara_kg'], 1));
+    $setN("R$r", (float)($p['kasa_unit_dara']  ?? 0));
+    $setN("S$r", (float)($p['palet_unit_dara'] ?? 0));
+    // DARA = KASA ADETİ × kasa birim dara + palet birim dara (canlı formül; kasa adeti değişince otomatik güncellenir)
+    $setF("E$r", "=ROUND(B$r*R$r+S$r,1)");
     $setS("F$r", $p['kasa_cinsi_adi'] ?? '');
     $setS("G$r", mb_strtoupper(trim((string)($p['urun_cinsi'] ?? '')), 'UTF-8'));
     // NET KG = BRÜT − DARA (canlı formül; brüt/dara düzenlenince otomatik güncellenir)
