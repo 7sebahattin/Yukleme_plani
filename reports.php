@@ -1041,6 +1041,13 @@ render_flash();
     </a>
 <?php endforeach; ?>
 
+<?php if (can('reports.read')): ?>
+    <a href="rapor_malzeme.php" class="home-card">
+        <div class="home-card-icon" style="background:#fff5f0">🧮</div>
+        <div class="home-card-title">Malzeme Kullanım Raporu</div>
+    </a>
+<?php endif; ?>
+
 <?php if (can('kantar.read') || can('stok.read')): ?>
 <div class="home-section-title">Stok &amp; Kantar</div>
 
