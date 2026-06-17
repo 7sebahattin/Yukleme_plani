@@ -116,8 +116,8 @@ render_flash();
 </div>
 
 <!-- ── Filtre formu ── -->
-<form method="get" class="rec-filter-form" id="beyanFilterForm">
-    <div class="search-row">
+<form method="get" class="beyan-filter-form" id="beyanFilterForm">
+    <div class="bff-main">
         <input type="search" name="q" value="<?= h($q) ?>"
                placeholder="Parti no, ürün, alıcı, marka, depo..." autocomplete="off">
         <button class="btn">Ara</button>
@@ -126,40 +126,35 @@ render_flash();
         <?php endif; ?>
     </div>
 
-    <button type="button" class="rec-date-toggle<?= ($tarih_bas !== '' || $tarih_bit !== '') ? ' has-filter' : '' ?>"
-            id="beyanFilterToggle">
-        <span>🔽 Gelişmiş Filtre</span>
-        <span class="rec-date-toggle-chev">▾</span>
+    <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle">
+        ▾ Detaylı Filtre<?php if ($tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== ''): ?> <span style="color:var(--primary)">●</span><?php endif; ?>
     </button>
 
-    <div class="date-filter-panel<?= ($tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '') ? ' rec-open' : '' ?>"
+    <div class="bff-filters<?= ($tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '') ? ' bff-open' : '' ?>"
          id="beyanFilterPanel">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-            <div>
-                <label class="date-filter-lbl">Tarih (başlangıç):</label>
-                <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
-            </div>
-            <div>
-                <label class="date-filter-lbl">Tarih (bitiş):</label>
-                <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
-            </div>
-            <div>
-                <label class="date-filter-lbl">Ürün:</label>
-                <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="KAYISI...">
-            </div>
-            <div>
-                <label class="date-filter-lbl">Marka:</label>
-                <input type="text" name="marka" value="<?= h($f_marka) ?>" placeholder="URAS...">
-            </div>
-            <div>
-                <label class="date-filter-lbl">Çıkış Depo:</label>
-                <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="KARAMAN...">
-            </div>
+        <div>
+            <label>Tarih (başlangıç)</label>
+            <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
         </div>
-        <button class="btn btn-sm">Filtrele</button>
-        <?php if ($has_filter): ?>
-        <a href="beyanlar.php" class="btn btn-sm btn-ghost">Filtreleri Temizle</a>
-        <?php endif; ?>
+        <div>
+            <label>Tarih (bitiş)</label>
+            <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
+        </div>
+        <div>
+            <label>Ürün</label>
+            <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="KAYISI...">
+        </div>
+        <div>
+            <label>Marka</label>
+            <input type="text" name="marka" value="<?= h($f_marka) ?>" placeholder="URAS...">
+        </div>
+        <div>
+            <label>Çıkış Depo</label>
+            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="KARAMAN...">
+        </div>
+        <div style="align-self:flex-end;flex:0 0 auto;min-width:auto">
+            <button class="btn btn-sm" style="white-space:nowrap">Filtrele</button>
+        </div>
     </div>
 </form>
 
@@ -198,6 +193,8 @@ render_flash();
             <th>Parti No</th>
             <th>Ürün / Çeşit</th>
             <th class="num">Palet</th>
+            <th class="num">Kasa</th>
+            <th class="num">Brüt KG</th>
             <th class="num">Net KG</th>
             <th>Alıcı</th>
             <th>Marka</th>
@@ -218,6 +215,8 @@ render_flash();
                 <?php endif; ?>
             </td>
             <td class="num"><?= $r['pallet_count'] !== null ? (int)$r['pallet_count'] : '—' ?></td>
+            <td class="num"><?= $r['crate_count'] !== null ? number_format((int)$r['crate_count'], 0, ',', '.') : '—' ?></td>
+            <td class="num"><?= $r['gross_kg'] !== null ? fmt_kg($r['gross_kg']) : '—' ?></td>
             <td class="num strong"><?= $r['net_kg'] !== null ? fmt_kg($r['net_kg']) : '—' ?></td>
             <td><?= h($r['buyer_name'] ?: '—') ?></td>
             <td><?= h($r['brand'] ?: '—') ?></td>
@@ -225,6 +224,15 @@ render_flash();
             <td><?= beyan_badge_html($r['status']) ?></td>
             <td class="actions-col">
                 <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+                <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
+                <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="status" value="yuklendi">
+                    <input type="hidden" name="status_only" value="1">
+                    <button type="submit" class="btn btn-sm btn-success"
+                            onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
+                </form>
+                <?php endif; ?>
                 <?php if (can_beyan('write')): ?>
                 <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
                 <?php endif; ?>
@@ -256,6 +264,12 @@ render_flash();
             <?php if ($r['pallet_count'] !== null): ?>
             <span><?= (int)$r['pallet_count'] ?> palet</span>
             <?php endif; ?>
+            <?php if ($r['crate_count'] !== null): ?>
+            <span><?= number_format((int)$r['crate_count'], 0, ',', '.') ?> kasa</span>
+            <?php endif; ?>
+            <?php if ($r['gross_kg'] !== null): ?>
+            <span><?= fmt_kg($r['gross_kg']) ?> kg brüt</span>
+            <?php endif; ?>
             <?php if ($r['net_kg'] !== null): ?>
             <span><?= fmt_kg($r['net_kg']) ?> kg net</span>
             <?php endif; ?>
@@ -277,6 +291,15 @@ render_flash();
 
         <div class="beyan-card-actions">
             <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
+            <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
+            <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="status" value="yuklendi">
+                <input type="hidden" name="status_only" value="1">
+                <button type="submit" class="btn btn-sm btn-success"
+                        onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
+            </form>
+            <?php endif; ?>
             <?php if (can_beyan('write')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
             <?php endif; ?>
@@ -308,7 +331,7 @@ render_flash();
     var panel  = document.getElementById('beyanFilterPanel');
     if (toggle && panel) {
         toggle.addEventListener('click', function () {
-            panel.classList.toggle('rec-open');
+            panel.classList.toggle('bff-open');
         });
     }
 })();

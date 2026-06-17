@@ -50,6 +50,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $old_status = $beyan['status'];
 
+    // Yalnızca durum geçişi (liste ekranındaki hızlı butonlar) — diğer alanlara dokunma
+    if (!empty($_POST['status_only'])) {
+        $new_status     = (string)($_POST['status'] ?? '');
+        $valid_statuses = array_keys(beyan_statuses());
+        $allowed        = is_admin()
+            ? $valid_statuses
+            : array_merge([$old_status], beyan_next_statuses($old_status));
+        if (!in_array($new_status, $valid_statuses, true) || !in_array($new_status, $allowed, true)) {
+            set_flash('error', 'Geçersiz durum geçişi.');
+            header('Location: beyanlar.php'); exit;
+        }
+        db()->prepare("UPDATE customs_declarations SET status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
+            ->execute([$new_status, (int)($auth_user['id'] ?? 0), $id]);
+        if ($old_status !== $new_status) {
+            audit_log_event('beyan_status_change', 'declarations', $id,
+                ['status' => $old_status], ['status' => $new_status]);
+        }
+        set_flash('success', 'Durum güncellendi: ' . (beyan_statuses()[$new_status]['label'] ?? $new_status));
+        header('Location: beyanlar.php'); exit;
+    }
+
     foreach (array_keys($f) as $k) {
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
@@ -156,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statuses    = beyan_statuses();
 $cur_status  = $beyan['status'];
 $next_states = beyan_next_statuses($cur_status);
-$is_terminal = in_array($cur_status, ['red', 'iptal', 'yukleme_olustu'], true);
+$is_terminal = in_array($cur_status, ['red', 'iptal', 'yukleme_olustu', 'yuklendi'], true);
 $is_admin_   = is_admin();
 
 render_header('Beyan Düzenle');

@@ -4753,6 +4753,35 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-badge-red             { background: #fee2e2; color: #991b1b; }
 .beyan-badge-iptal           { background: #e5e7eb; color: #4b5563; }
 .beyan-badge-yukleme_olustu  { background: #ede9fe; color: #5b21b6; }
+.beyan-badge-yuklendi        { background: #d1fae5; color: #065f46; font-weight: 700; }
+
+/* Beyan filtre formu */
+.beyan-filter-form { margin-bottom: 14px; }
+.beyan-filter-form .bff-main { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.beyan-filter-form .bff-main input[type="search"] { flex: 1; min-width: 180px; }
+.beyan-filter-form .bff-filters {
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+}
+.beyan-filter-form .bff-filters > div {
+    display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 120px;
+}
+.beyan-filter-form .bff-filters label {
+    font-size: .75rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;
+}
+.beyan-filter-form .bff-filters input { width: 100%; }
+@media (max-width: 767px) {
+    .beyan-filter-form .bff-filters { display: none; }
+    .beyan-filter-form .bff-filters.bff-open { display: flex; }
+    .beyan-filter-toggle {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: .85rem; padding: 6px 10px; margin-bottom: 8px;
+        background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+        cursor: pointer; color: var(--text);
+    }
+}
+@media (min-width: 768px) {
+    .beyan-filter-toggle { display: none; }
+}
 
 /* Beyan kart listesi */
 .beyan-card {
