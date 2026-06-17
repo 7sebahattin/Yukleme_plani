@@ -61,14 +61,22 @@
     // Close on scroll (fixed dropdowns stay in place otherwise)
     window.addEventListener('scroll', closeAllDropdowns, true);
 
-    /* ── Beyan WhatsApp metin ayrıştırıcı ── */
+    /* ── Beyan WhatsApp metin ayrıştırıcı (tekli + toplu otomatik algılama) ── */
     (function () {
         var parseBtn = document.querySelector('[data-beyan-parse-btn]');
         if (!parseBtn) return;
 
-        var beyanForm  = document.querySelector('[data-beyan-form]');
-        var statusDiv  = document.getElementById('beyanParseStatus');
-        var baseUrl    = parseBtn.dataset.baseUrl || '';
+        var beyanForm   = document.querySelector('[data-beyan-form]');
+        var statusDiv   = document.getElementById('beyanParseStatus');
+        var bulkBox     = document.getElementById('beyanBulkPreview'); // yalnız create sayfasında
+        var baseUrl     = parseBtn.dataset.baseUrl || '';
+
+        var FIELDS = [
+            'declaration_title', 'party_no', 'transport_type', 'line_type',
+            'company_name', 'company_address', 'product_name', 'product_variety',
+            'pallet_count', 'gross_kg', 'net_kg', 'crate_count', 'crate_type',
+            'exit_depot', 'buyer_name', 'contact_person', 'brand'
+        ];
 
         function showParseStatus(type, msg) {
             if (!statusDiv) return;
@@ -76,6 +84,8 @@
             statusDiv.textContent = msg;
             statusDiv.hidden = false;
         }
+
+        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
         function fillField(name, value) {
             if (value === null || value === undefined || value === '') return;
@@ -86,6 +96,118 @@
             }
         }
 
+        // Tekli: parse sonucunu forma doldur
+        function fillSingle(decl) {
+            var p = (decl && decl.parsed) || {};
+            FIELDS.forEach(function (f) { fillField(f, p[f]); });
+            if (decl && decl.unmatched) {
+                var unmEl = beyanForm ? beyanForm.querySelector('[name="unmatched_text"]') : null;
+                if (unmEl && unmEl.value.trim() === '') unmEl.value = decl.unmatched;
+            }
+            var mc = (decl && decl.matched_count) || 0;
+            var msg = mc > 0 ? (mc + ' alan dolduruldu') : 'Eşleşen alan bulunamadı — metni kontrol edin.';
+            if (decl && decl.unmatched) {
+                var ul = decl.unmatched.split('\n').filter(function (s) { return s.trim(); });
+                if (ul.length) msg += ' (' + ul.length + ' satır eşleşmedi)';
+            }
+            showParseStatus(mc > 0 ? 'ok' : 'warn', msg);
+        }
+
+        // Toplu modda elle düzenleme bölümlerini gizle/göster
+        function manualSections() {
+            return Array.prototype.slice.call(document.querySelectorAll('.beyan-section')).slice(1);
+        }
+        function setSingleUI(visible) {
+            manualSections().forEach(function (s) { s.style.display = visible ? '' : 'none'; });
+            var acts = document.getElementById('beyanSingleActions');
+            if (acts) acts.style.display = visible ? '' : 'none';
+        }
+        function restoreSingle() {
+            if (bulkBox) { bulkBox.hidden = true; bulkBox.innerHTML = ''; }
+            setSingleUI(true);
+        }
+
+        // Çoklu: önizleme listesi + "Hepsini Kaydet"
+        function renderBulk(declarations, csrf) {
+            if (!bulkBox) return;
+            setSingleUI(false);
+
+            var rowsHtml = declarations.map(function (d, idx) {
+                var p = d.parsed || {};
+                var bits = [];
+                if (p.product_name)  bits.push(esc(p.product_name) + (p.product_variety ? ' ' + esc(p.product_variety) : ''));
+                if (p.pallet_count)  bits.push(esc(p.pallet_count) + ' palet');
+                if (p.net_kg)        bits.push('NET ' + esc(p.net_kg));
+                if (p.buyer_name)    bits.push('Alıcı: ' + esc(p.buyer_name));
+                if (p.brand)         bits.push(esc(p.brand));
+                var unm = (d.unmatched || '').split('\n').filter(function (s) { return s.trim(); }).length;
+                return '' +
+                    '<div class="beyan-bulk-item">' +
+                      '<div class="beyan-bulk-item-head">' +
+                        '<span class="beyan-bulk-no">#' + (idx + 1) + '</span>' +
+                        '<span class="beyan-bulk-parti">' + esc(p.party_no || '(parti no yok)') + '</span>' +
+                        '<span class="beyan-bulk-count">' + (d.matched_count || 0) + ' alan' +
+                          (unm ? ' · ' + unm + ' satır ?' : '') + '</span>' +
+                      '</div>' +
+                      '<div class="beyan-bulk-item-body">' + (bits.join(' · ') || '<em>tanınan alan yok</em>') + '</div>' +
+                    '</div>';
+            }).join('');
+
+            bulkBox.innerHTML = '' +
+                '<div class="beyan-bulk-head">' +
+                  '<div><strong>' + declarations.length + ' beyan algılandı</strong>' +
+                  '<span class="muted"> — toplu ekleme</span></div>' +
+                  '<button type="button" class="btn btn-sm btn-ghost" data-beyan-bulk-cancel>✏️ Tekli düzenle</button>' +
+                '</div>' +
+                '<div class="beyan-bulk-list">' + rowsHtml + '</div>' +
+                '<div class="beyan-bulk-actions">' +
+                  '<button type="button" class="btn btn-primary btn-lg" data-beyan-bulk-save>' +
+                    '✅ Hepsini Kaydet (' + declarations.length + ')</button>' +
+                '</div>' +
+                '<div class="beyan-bulk-status" hidden></div>';
+            bulkBox.hidden = false;
+            bulkBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            var cancelBtn = bulkBox.querySelector('[data-beyan-bulk-cancel]');
+            if (cancelBtn) cancelBtn.addEventListener('click', restoreSingle);
+
+            var saveBtn  = bulkBox.querySelector('[data-beyan-bulk-save]');
+            var bulkStat = bulkBox.querySelector('.beyan-bulk-status');
+            if (saveBtn) saveBtn.addEventListener('click', function () {
+                var payload = declarations.map(function (d) {
+                    var rec = Object.assign({}, d.parsed || {});
+                    rec.raw_text       = d.raw_text || '';
+                    rec.unmatched_text = d.unmatched || '';
+                    return rec;
+                });
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Kaydediliyor…';
+                if (bulkStat) { bulkStat.hidden = false; bulkStat.textContent = ''; bulkStat.className = 'beyan-bulk-status'; }
+
+                fetch(baseUrl + 'beyan_bulk_save.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csrf: csrf, declarations: payload })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (res) {
+                        if (res.ok) {
+                            if (bulkStat) { bulkStat.className = 'beyan-bulk-status ok'; bulkStat.textContent = '✓ ' + res.created + ' beyan eklendi, yönlendiriliyor…'; }
+                            window.location.href = baseUrl + 'beyanlar.php';
+                        } else {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = '✅ Hepsini Kaydet (' + declarations.length + ')';
+                            if (bulkStat) { bulkStat.className = 'beyan-bulk-status err'; bulkStat.textContent = 'Hata: ' + (res.error || 'bilinmeyen'); }
+                        }
+                    })
+                    .catch(function (err) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = '✅ Hepsini Kaydet (' + declarations.length + ')';
+                        if (bulkStat) { bulkStat.className = 'beyan-bulk-status err'; bulkStat.textContent = 'Bağlantı hatası: ' + err.message; }
+                    });
+            });
+        }
+
         parseBtn.addEventListener('click', function (e) {
             e.preventDefault();
             var rawEl = beyanForm ? beyanForm.querySelector('[name="raw_text"]') : null;
@@ -94,13 +216,16 @@
                 return;
             }
             var csrfEl = beyanForm ? beyanForm.querySelector('[name="csrf"]') : null;
+            var csrf   = csrfEl ? csrfEl.value : '';
 
             parseBtn.disabled = true;
             parseBtn.textContent = 'Ayrıştırılıyor…';
             if (statusDiv) statusDiv.hidden = true;
+            if (bulkBox) { bulkBox.hidden = true; bulkBox.innerHTML = ''; }
+            setSingleUI(true); // her ayrıştırmada tekli düzene dön; toplu ise renderBulk gizler
 
             var fd = new FormData();
-            if (csrfEl) fd.append('csrf', csrfEl.value);
+            if (csrf) fd.append('csrf', csrf);
             fd.append('text', rawEl.value);
 
             fetch(baseUrl + 'beyan_parse.php', { method: 'POST', body: fd })
@@ -114,29 +239,17 @@
                         return;
                     }
 
-                    var p = data.parsed || {};
-                    var fields = [
-                        'declaration_title', 'party_no', 'transport_type', 'line_type',
-                        'company_name', 'company_address', 'product_name', 'product_variety',
-                        'pallet_count', 'gross_kg', 'net_kg', 'crate_count', 'crate_type',
-                        'exit_depot', 'buyer_name', 'contact_person', 'brand'
-                    ];
-                    fields.forEach(function (f) { fillField(f, p[f]); });
-
-                    if (data.unmatched) {
-                        var unmEl = beyanForm ? beyanForm.querySelector('[name="unmatched_text"]') : null;
-                        if (unmEl && unmEl.value.trim() === '') unmEl.value = data.unmatched;
+                    var decls = data.declarations || [];
+                    // Toplu: 2+ beyan VE create sayfasındaysak önizleme göster
+                    if (bulkBox && decls.length > 1) {
+                        showParseStatus('ok', decls.length + ' beyan algılandı — aşağıdan toplu kaydedin.');
+                        renderBulk(decls, csrf);
+                        return;
                     }
-
-                    var mc = data.matched_count || 0;
-                    var msg = mc > 0
-                        ? mc + ' alan dolduruldu'
-                        : 'Eşleşen alan bulunamadı — metni kontrol edin.';
-                    if (data.unmatched) {
-                        var ul = data.unmatched.split('\n').filter(function (s) { return s.trim(); });
-                        if (ul.length) msg += ' (' + ul.length + ' satır eşleşmedi)';
-                    }
-                    showParseStatus(mc > 0 ? 'ok' : 'warn', msg);
+                    // Tekli: forma doldur
+                    setSingleUI(true);
+                    var first = decls[0] || { parsed: data.parsed, unmatched: data.unmatched, matched_count: data.matched_count };
+                    fillSingle(first);
                 })
                 .catch(function (err) {
                     parseBtn.disabled = false;
