@@ -223,6 +223,7 @@ function render_desktop_sidebar(string $base): void {
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
+    $a_mig   = $cur === 'migrate.php';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
@@ -259,6 +260,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
+        <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
         <?php endif; ?>
     </nav>
 
