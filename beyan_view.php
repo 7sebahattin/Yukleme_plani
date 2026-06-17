@@ -28,6 +28,54 @@ if (!empty($beyan['loading_record_id'])) {
     $linked_record = $slr->fetch() ?: null;
 }
 
+// ── Eşleştirme: yüklendi olmayan yükleme planları (modal için) ──
+// Buton yalnızca düzenleme yetkisi olan, silinmemiş ve henüz yüklenmemiş
+// beyanlarda aktif olur.
+$can_match     = !$is_deleted && can_beyan('write') && $cur_status !== 'yuklendi'
+                 && empty($beyan['loading_record_id']);
+$match_records = [];
+if ($can_match) {
+    // Son 90 gün + tarihi olmayanlar; yalnızca yuklendi olmayan ve kilitsiz kayıtlar.
+    $since = date('Y-m-d', strtotime('-90 days'));
+    $ms = db()->prepare(
+        "SELECT r.id, r.tarih, r.firma, r.parti_no, r.alici, r.ulasim, r.gumruk,
+                r.urun, r.durum, us.name AS urun_sahibi_adi
+         FROM loading_records r
+         LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma'
+         WHERE r.type = 'yukleme'
+           AND COALESCE(r.durum, '') <> 'yuklendi'
+           AND r.locked_at IS NULL
+           AND (r.tarih IS NULL OR r.tarih >= ?)
+         ORDER BY COALESCE(r.tarih, '0000-00-00') DESC, r.id DESC
+         LIMIT 200"
+    );
+    $ms->execute([$since]);
+    $match_records = $ms->fetchAll();
+    // Veri azsa (90 günde hiç yoksa) tüm yüklendi olmayanları getir
+    if (empty($match_records)) {
+        $ms2 = db()->prepare(
+            "SELECT r.id, r.tarih, r.firma, r.parti_no, r.alici, r.ulasim, r.gumruk,
+                    r.urun, r.durum, us.name AS urun_sahibi_adi
+             FROM loading_records r
+             LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma'
+             WHERE r.type = 'yukleme'
+               AND COALESCE(r.durum, '') <> 'yuklendi'
+               AND r.locked_at IS NULL
+             ORDER BY COALESCE(r.tarih, '0000-00-00') DESC, r.id DESC
+             LIMIT 200"
+        );
+        $ms2->execute();
+        $match_records = $ms2->fetchAll();
+    }
+}
+
+// Beyan tarafındaki (aktarılacak) değerler — önizleme + JS için
+$beyan_match = [
+    'parti_no' => trim((string)($beyan['party_no']       ?? '')),
+    'alici'    => trim((string)($beyan['buyer_name']      ?? '')),
+    'ulasim'   => trim((string)($beyan['transport_type']  ?? '')),
+];
+
 render_header('Beyan Detayı');
 render_flash();
 ?>
@@ -45,6 +93,14 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
+        <?php if ($can_match): ?>
+        <button type="button" class="btn" id="beyanMatchOpenBtn"
+                style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">
+            🔗 Yükleme Planı ile Eşleştir
+        </button>
+        <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi'): ?>
+        <span class="muted" style="font-size:.82rem;align-self:center">Bu beyan zaten yüklendi.</span>
+        <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('write')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
@@ -333,5 +389,245 @@ function prompt_note(btn) {
     return true;
 }
 </script>
+
+<?php if ($can_match): ?>
+<!-- ============================================================
+     YÜKLEME PLANI EŞLEŞTİRME MODALI (Sprint Beyan-Yukleme-Eslesme-01)
+     ============================================================ -->
+<div id="beyanMatchOverlay" class="beyan-match-overlay" hidden role="dialog" aria-modal="true"
+     aria-labelledby="beyanMatchTitle">
+  <div class="beyan-match-dialog">
+
+    <div class="beyan-match-head">
+      <h2 id="beyanMatchTitle">Yükleme Planı ile Eşleştir</h2>
+      <button type="button" class="beyan-match-close" id="beyanMatchClose" aria-label="Kapat">✕</button>
+    </div>
+
+    <!-- ── 1. ADIM: Yükleme planı seçimi ── -->
+    <div class="beyan-match-body" id="beyanMatchStep1">
+      <p class="beyan-match-desc">
+        Yüklendi olmayan yükleme planlarından birini seçin. Beyan bilgileri seçilen
+        yükleme planına aktarılacaktır.
+      </p>
+      <div class="beyan-match-search">
+        <input type="text" id="beyanMatchSearch" class="form-control"
+               placeholder="Firma, ürün, parti no, alıcı ara…">
+      </div>
+
+      <div class="beyan-match-table-wrap">
+        <table class="beyan-match-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>No</th>
+              <th>Tarih</th>
+              <th>Firma</th>
+              <th>Ürün Sahibi</th>
+              <th>Ürün</th>
+              <th>Parti No</th>
+              <th>Alıcı</th>
+              <th>Ulaşım</th>
+              <th>Gümrük</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="beyanMatchRows">
+            <?php if (empty($match_records)): ?>
+            <tr><td colspan="11" class="muted center" style="padding:16px">
+              Yüklendi olmayan yükleme planı bulunamadı.
+            </td></tr>
+            <?php else: foreach ($match_records as $mr):
+                $durum_lbl = ($mr['durum'] ?? '') === 'islendi' ? 'İşlendi' : 'Yeni';
+                $hay = mb_strtolower(trim(
+                    ($mr['firma'] ?? '') . ' ' . ($mr['urun'] ?? '') . ' ' . ($mr['parti_no'] ?? '') . ' ' .
+                    ($mr['alici'] ?? '') . ' ' . ($mr['urun_sahibi_adi'] ?? '')
+                ), 'UTF-8');
+            ?>
+            <tr class="beyan-match-row" data-search="<?= h($hay) ?>"
+                data-id="<?= (int)$mr['id'] ?>"
+                data-parti="<?= h((string)($mr['parti_no'] ?? '')) ?>"
+                data-alici="<?= h((string)($mr['alici'] ?? '')) ?>"
+                data-ulasim="<?= h((string)($mr['ulasim'] ?? '')) ?>"
+                data-gumruk="<?= h((string)($mr['gumruk'] ?? '')) ?>">
+              <td><input type="radio" name="beyanMatchPick" value="<?= (int)$mr['id'] ?>" class="beyan-match-radio"></td>
+              <td>#<?= (int)$mr['id'] ?></td>
+              <td><?= h(fmt_date($mr['tarih'] ?? '')) ?: '—' ?></td>
+              <td><?= h($mr['firma'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['urun_sahibi_adi'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['urun'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['parti_no'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['alici'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['ulasim'] ?? '') ?: '—' ?></td>
+              <td><?= h($mr['gumruk'] ?? '') ?: '—' ?></td>
+              <td><span class="beyan-match-durum"><?= h($durum_lbl) ?></span></td>
+            </tr>
+            <?php endforeach; endif; ?>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="beyan-match-footer">
+        <button type="button" class="btn btn-ghost" id="beyanMatchCancel1">Vazgeç</button>
+        <button type="button" class="btn btn-primary" id="beyanMatchCompare" disabled>Eşleşme Yap</button>
+      </div>
+    </div>
+
+    <!-- ── 2. ADIM: Önizleme ── -->
+    <div class="beyan-match-body" id="beyanMatchStep2" hidden>
+      <p class="beyan-match-desc">
+        <strong>Eşleşme Önizlemesi.</strong> Beyanda değer varsa yükleme planına aktarılır;
+        beyan boşsa yükleme planındaki mevcut değer korunur.
+      </p>
+      <div class="beyan-match-table-wrap">
+        <table class="beyan-match-table beyan-match-preview">
+          <thead>
+            <tr>
+              <th>Alan</th>
+              <th>Beyan Verisi</th>
+              <th>Yükleme Planındaki Mevcut</th>
+              <th>İşlem Sonrası</th>
+            </tr>
+          </thead>
+          <tbody id="beyanMatchPreviewRows"></tbody>
+        </table>
+      </div>
+
+      <form method="post" action="beyan_eslestir.php" id="beyanMatchForm"
+            onsubmit="return beyanMatchConfirm();">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="match_loading_record">
+        <input type="hidden" name="beyan_id" value="<?= $id ?>">
+        <input type="hidden" name="loading_record_id" id="beyanMatchLoadingId" value="">
+        <p class="beyan-match-warn">
+          Bu işlem seçilen yükleme planını beyan bilgileriyle günceller ve yükleme
+          durumunu <strong>Yüklendi</strong> yapar. Beyan durumu da <strong>Yüklendi</strong> olur.
+        </p>
+        <div class="beyan-match-footer">
+          <button type="button" class="btn btn-ghost" id="beyanMatchBack">← Geri</button>
+          <button type="submit" class="btn btn-primary">Her Şeyi Eşleştir ve Güncelle</button>
+        </div>
+      </form>
+    </div>
+
+  </div><!-- .beyan-match-dialog -->
+</div><!-- #beyanMatchOverlay -->
+
+<script>
+(function () {
+    var BEYAN = <?= json_encode($beyan_match, JSON_UNESCAPED_UNICODE) ?>;
+
+    var overlay  = document.getElementById('beyanMatchOverlay');
+    var openBtn  = document.getElementById('beyanMatchOpenBtn');
+    var closeBtn = document.getElementById('beyanMatchClose');
+    var cancel1  = document.getElementById('beyanMatchCancel1');
+    var search   = document.getElementById('beyanMatchSearch');
+    var rows     = Array.prototype.slice.call(document.querySelectorAll('.beyan-match-row'));
+    var radios   = Array.prototype.slice.call(document.querySelectorAll('.beyan-match-radio'));
+    var compareBtn = document.getElementById('beyanMatchCompare');
+    var step1    = document.getElementById('beyanMatchStep1');
+    var step2    = document.getElementById('beyanMatchStep2');
+    var backBtn  = document.getElementById('beyanMatchBack');
+    var previewBody = document.getElementById('beyanMatchPreviewRows');
+    var loadingIdInput = document.getElementById('beyanMatchLoadingId');
+
+    if (!overlay || !openBtn) return;
+
+    function openModal()  { overlay.hidden = false; document.body.style.overflow = 'hidden'; }
+    function closeModal() {
+        overlay.hidden = true;
+        document.body.style.overflow = '';
+        showStep1();
+    }
+    function showStep1() { step1.hidden = false; step2.hidden = true; }
+    function showStep2() { step1.hidden = true;  step2.hidden = false; }
+
+    openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancel1)  cancel1.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !overlay.hidden) closeModal();
+    });
+
+    // Arama filtresi
+    if (search) {
+        search.addEventListener('input', function () {
+            var q = this.value.trim().toLowerCase();
+            rows.forEach(function (tr) {
+                var hay = tr.getAttribute('data-search') || '';
+                tr.style.display = (q === '' || hay.indexOf(q) !== -1) ? '' : 'none';
+            });
+        });
+    }
+
+    // Radyo seçimi
+    radios.forEach(function (rb) {
+        rb.addEventListener('change', function () {
+            compareBtn.disabled = !document.querySelector('.beyan-match-radio:checked');
+        });
+    });
+    rows.forEach(function (tr) {
+        tr.addEventListener('click', function (e) {
+            if (e.target.tagName === 'INPUT') return;
+            var rb = tr.querySelector('.beyan-match-radio');
+            if (rb) { rb.checked = true; rb.dispatchEvent(new Event('change')); }
+        });
+    });
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+            return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+        });
+    }
+
+    function buildPreview(row) {
+        // Alanlar: [etiket, beyan değeri, mevcut yükleme değeri, gümrük mü?]
+        var defs = [
+            ['Parti No', BEYAN.parti_no, row.getAttribute('data-parti') || '', false],
+            ['Alıcı',    BEYAN.alici,    row.getAttribute('data-alici') || '', false],
+            ['Ulaşım',   BEYAN.ulasim,   row.getAttribute('data-ulasim') || '', false],
+            ['Gümrük',   '',             row.getAttribute('data-gumruk') || '', true]
+        ];
+        var html = '';
+        defs.forEach(function (d) {
+            var label = d[0], beyanVal = (d[1] || '').trim(), curVal = (d[2] || '').trim(), isGumruk = d[3];
+            var result, note = '';
+            if (isGumruk) {
+                result = curVal;
+                note = '<div class="beyan-match-note">Beyanda gümrük alanı yok — mevcut değer korunacak.</div>';
+            } else if (beyanVal === '') {
+                result = curVal;
+                note = '<div class="beyan-match-note">Beyan verisi boş olduğu için mevcut değer korunacak.</div>';
+            } else {
+                result = beyanVal;
+            }
+            var changed = !isGumruk && beyanVal !== '' && beyanVal !== curVal;
+            html += '<tr' + (changed ? ' class="beyan-match-changed"' : '') + '>'
+                  + '<th>' + esc(label) + '</th>'
+                  + '<td>' + (beyanVal !== '' ? esc(beyanVal) : '<span class="muted">—</span>') + '</td>'
+                  + '<td>' + (curVal   !== '' ? esc(curVal)   : '<span class="muted">boş</span>') + '</td>'
+                  + '<td><strong>' + (result !== '' ? esc(result) : '<span class="muted">—</span>') + '</strong>' + note + '</td>'
+                  + '</tr>';
+        });
+        previewBody.innerHTML = html;
+    }
+
+    compareBtn.addEventListener('click', function () {
+        var rb = document.querySelector('.beyan-match-radio:checked');
+        if (!rb) return;
+        var row = rb.closest('.beyan-match-row');
+        loadingIdInput.value = rb.value;
+        buildPreview(row);
+        showStep2();
+    });
+
+    if (backBtn) backBtn.addEventListener('click', showStep1);
+
+    window.beyanMatchConfirm = function () {
+        return confirm('Seçilen yükleme planı beyan bilgileriyle güncellenecek ve Yüklendi yapılacak. Onaylıyor musunuz?');
+    };
+})();
+</script>
+<?php endif; ?>
 
 <?php render_footer(); ?>
