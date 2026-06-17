@@ -70,10 +70,12 @@ if ($can_match) {
 }
 
 // Beyan tarafındaki (aktarılacak) değerler — önizleme + JS için
+// Not: Beyandaki "Şirket Adı" (company_name) → yükleme planı "Gümrük" (gumruk)
 $beyan_match = [
     'parti_no' => trim((string)($beyan['party_no']       ?? '')),
     'alici'    => trim((string)($beyan['buyer_name']      ?? '')),
     'ulasim'   => trim((string)($beyan['transport_type']  ?? '')),
+    'gumruk'   => trim((string)($beyan['company_name']    ?? '')),
 ];
 
 render_header('Beyan Detayı');
@@ -581,27 +583,26 @@ function prompt_note(btn) {
     }
 
     function buildPreview(row) {
-        // Alanlar: [etiket, beyan değeri, mevcut yükleme değeri, gümrük mü?]
+        // Alanlar: [etiket, beyan değeri, mevcut yükleme değeri, ek not]
         var defs = [
-            ['Parti No', BEYAN.parti_no, row.getAttribute('data-parti') || '', false],
-            ['Alıcı',    BEYAN.alici,    row.getAttribute('data-alici') || '', false],
-            ['Ulaşım',   BEYAN.ulasim,   row.getAttribute('data-ulasim') || '', false],
-            ['Gümrük',   '',             row.getAttribute('data-gumruk') || '', true]
+            ['Parti No', BEYAN.parti_no, row.getAttribute('data-parti') || '', ''],
+            ['Alıcı',    BEYAN.alici,    row.getAttribute('data-alici') || '', ''],
+            ['Ulaşım',   BEYAN.ulasim,   row.getAttribute('data-ulasim') || '', ''],
+            ['Gümrük',   BEYAN.gumruk,   row.getAttribute('data-gumruk') || '',
+             'Beyandaki Şirket Adı, yükleme planında Gümrük alanına aktarılır.']
         ];
         var html = '';
         defs.forEach(function (d) {
-            var label = d[0], beyanVal = (d[1] || '').trim(), curVal = (d[2] || '').trim(), isGumruk = d[3];
+            var label = d[0], beyanVal = (d[1] || '').trim(), curVal = (d[2] || '').trim(), hint = d[3] || '';
             var result, note = '';
-            if (isGumruk) {
-                result = curVal;
-                note = '<div class="beyan-match-note">Beyanda gümrük alanı yok — mevcut değer korunacak.</div>';
-            } else if (beyanVal === '') {
+            if (beyanVal === '') {
                 result = curVal;
                 note = '<div class="beyan-match-note">Beyan verisi boş olduğu için mevcut değer korunacak.</div>';
             } else {
                 result = beyanVal;
+                if (hint) note = '<div class="beyan-match-note">' + esc(hint) + '</div>';
             }
-            var changed = !isGumruk && beyanVal !== '' && beyanVal !== curVal;
+            var changed = beyanVal !== '' && beyanVal !== curVal;
             html += '<tr' + (changed ? ' class="beyan-match-changed"' : '') + '>'
                   + '<th>' + esc(label) + '</th>'
                   + '<td>' + (beyanVal !== '' ? esc(beyanVal) : '<span class="muted">—</span>') + '</td>'

@@ -46,13 +46,13 @@ if ($loading_id <= 0) {
 
 // Beyandan yükleme planına aktarılacak alan eşlemesi
 //   loading_records sütunu  =>  customs_declarations sütunu
-// NOT: customs_declarations tablosunda "gümrük" karşılığı bir sütun
-//      bulunmadığından gümrük aktarımı yapılmaz; loading_records.gumruk
-//      mevcut değeriyle korunur (önizlemede bilgilendirilir).
+// NOT: Beyandaki "Şirket Adı" (company_name) alanı, yükleme planındaki
+//      "Gümrük" (gumruk) alanına karşılık gelir.
 $field_map = [
     'parti_no' => 'party_no',
     'alici'    => 'buyer_name',
     'ulasim'   => 'transport_type',
+    'gumruk'   => 'company_name',
 ];
 
 $user_id = (int)($auth_user['id'] ?? 0);
