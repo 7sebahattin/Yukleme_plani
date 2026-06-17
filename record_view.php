@@ -385,7 +385,6 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     <div><span class="lbl">Bölge</span><strong><?= h($record['bolge'] ?: '—') ?></strong></div>
     <?php if ($_rv_is_yukleme): ?>
     <div><span class="lbl">Alıcı</span><strong><?= h($record['alici'] ?: '—') ?></strong></div>
-    <div><span class="lbl">Fatura No</span><strong><?= h($record['fatura_no'] ?: '—') ?></strong></div>
     <div><span class="lbl">Casus No</span><strong><?= h($record['casus_no'] ?: '—') ?></strong></div>
     <?php endif; ?>
     <?php if (!$_rv_is_yukleme && !empty($record['cikis_nedeni'])): ?>
@@ -396,9 +395,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 <?php
 $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) ||
                    !empty($record['nakliye_sirketi']) || !empty($record['sofor_adi']) ||
-                   !empty($record['telefon']) ||
-                   (float)($record['nakliye_bedeli'] ?? 0) > 0 ||
-                   (float)($record['avans'] ?? 0) > 0;
+                   !empty($record['telefon']) || !empty($record['ulasim']);
 ?>
 <?php if ($_rv_is_yukleme && $_rv_has_nakliye): ?>
 <h3 class="section-title">Nakliye Bilgileri</h3>
@@ -418,11 +415,8 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
     <?php if (!empty($record['telefon'])): ?>
     <div><span class="lbl">Telefon</span><strong><?= h($record['telefon']) ?></strong></div>
     <?php endif; ?>
-    <?php if ((float)($record['nakliye_bedeli'] ?? 0) > 0): ?>
-    <div><span class="lbl">Nakliye Bedeli</span><strong><?= h(fmt_money($record['nakliye_bedeli'])) ?></strong></div>
-    <?php endif; ?>
-    <?php if ((float)($record['avans'] ?? 0) > 0): ?>
-    <div><span class="lbl">Avans</span><strong><?= h(fmt_money($record['avans'])) ?></strong></div>
+    <?php if (!empty($record['ulasim'])): ?>
+    <div><span class="lbl">Ulaşım</span><strong><?= h($record['ulasim']) ?></strong></div>
     <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -669,20 +663,14 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
                 <tr><th>BÖLGE</th><td colspan="3"><?= h($record['bolge']) ?></td></tr>
                 <tr><th>PARTİ NO</th><td class="parti-no-val" colspan="3"><?= h($record['parti_no']) ?></td></tr>
                 <tr><th>GÜMRÜK</th><td colspan="3"><?= h($record['gumruk']) ?></td></tr>
-                <tr>
-                    <th>NAKLİYE BEDELİ</th>
-                    <td><?= h($record['nakliye_bedeli'] > 0 ? fmt_money($record['nakliye_bedeli']) : '') ?></td>
-                    <th class="avans-th">AVANS</th>
-                    <td class="avans-td"><?= h($record['avans'] > 0 ? fmt_money($record['avans']) : '') ?></td>
-                </tr>
                 <tr><th>ŞOFÖR ADI</th><td colspan="3"><?= h($record['sofor_adi']) ?></td></tr>
-                <tr><th>FATURA NO</th><td colspan="3"><?= h($record['fatura_no']) ?></td></tr>
-                <tr><th>CASUS NO</th><td colspan="3"><?= h($record['casus_no']) ?></td></tr>
-                <tr><th>ÖN PLAKA NO</th><td colspan="3"><?= h($record['on_plaka']) ?></td></tr>
-                <tr><th>ARKA PLAKA NO</th><td colspan="3"><?= h($record['arka_plaka']) ?></td></tr>
+                <tr><th>CASUS NO</th><td colspan="3" class="ai-casus"><?= h($record['casus_no']) ?></td></tr>
+                <tr><th>ÖN PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['on_plaka']) ?></td></tr>
+                <tr><th>ARKA PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['arka_plaka']) ?></td></tr>
                 <tr><th>NAKLİYE ŞİRKETİ</th><td colspan="3"><?= h($record['nakliye_sirketi']) ?></td></tr>
+                <tr><th>ULAŞIM</th><td colspan="3"><?= h($record['ulasim'] ?? '') ?></td></tr>
                 <tr><th>TELEFON</th><td colspan="3"><?= h($record['telefon']) ?></td></tr>
-                <tr><th>TARİH</th><td colspan="3"><?= h(fmt_date($record['tarih'])) ?></td></tr>
+                <tr><th>TARİH</th><td colspan="3" class="ai-emph"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>
 
             <!-- Sağ: ALICI + ÜRÜN + ETİKET -->

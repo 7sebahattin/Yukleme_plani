@@ -1118,6 +1118,10 @@ body.print-mode .topbar { display: none; }
 /* Sprint 37: nakliye bedeli + avans değer alanları daralmasın */
 .asya-info td.avans-td { width: auto; min-width: 90px; }
 .asya-info tr > td:first-of-type { min-width: 90px; }
+/* ai-emph: 2pt büyük (ekran: 10pt+2=12pt) */
+.asya-info td.ai-emph { font-size: 12pt; }
+/* ai-casus: 2pt büyük + açık mavi */
+.asya-info td.ai-casus { font-size: 12pt; color: #3b9ee8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
 .asya-right-top {
     display: flex;
@@ -1606,6 +1610,9 @@ body.print-mode .asya-sheet {
     }
     .asya-info th { font-size: 10pt; padding: 0px 3px; }
     .asya-info td { font-size: 11pt; padding: 0px 3px; min-height: 0; }
+    /* ai-emph: print'te 11pt+2=13pt */
+    .asya-info td.ai-emph { font-size: 13pt; }
+    .asya-info td.ai-casus { font-size: 13pt; color: #3b9ee8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .asya-pallets th { font-size: 7.5pt; padding: 1px; line-height: 1; }
     .asya-pallets td { overflow: hidden; padding: 0px 2px; font-size: 7.5pt; line-height: 1.2; text-align: center !important; vertical-align: middle; }
     .asya-pallets td.num { font-size: 7.5pt; font-weight: 700; }
