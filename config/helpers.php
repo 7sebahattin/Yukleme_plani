@@ -1555,6 +1555,7 @@ function beyan_statuses(): array {
         'red'             => ['label' => 'RED',             'css' => 'red'],
         'iptal'           => ['label' => 'İPTAL',           'css' => 'iptal'],
         'yukleme_olustu'  => ['label' => 'YÜKLEME OLUŞTU', 'css' => 'yukleme_olustu'],
+        'yuklendi'        => ['label' => 'YÜKLENDİ',       'css' => 'yuklendi'],
     ];
 }
 
@@ -1573,7 +1574,8 @@ function beyan_next_statuses(string $current): array {
         'temiz'           => ['yukleme_olustu', 'iptal'],
         'red'             => ['iptal'],
         'iptal'           => [],
-        'yukleme_olustu'  => [],
+        'yukleme_olustu'  => ['yuklendi'],
+        'yuklendi'        => [],
     ];
     return $map[$current] ?? [];
 }
