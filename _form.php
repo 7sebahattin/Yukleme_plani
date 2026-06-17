@@ -173,9 +173,6 @@ $form_is_cikma = $form_is_cikma ?? false;
             <label>Gümrük
                 <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>" data-uppercase="tr">
             </label>
-            <label>Fatura No
-                <input type="text" name="fatura_no" value="<?= h($record['fatura_no'] ?? '') ?>" data-uppercase="tr">
-            </label>
             <label>Casus No
                 <input type="text" name="casus_no" value="<?= h($record['casus_no'] ?? '') ?>" data-uppercase="tr">
             </label>
@@ -208,13 +205,8 @@ $form_is_cikma = $form_is_cikma ?? false;
             <label>Arka Plaka No
                 <input type="text" name="arka_plaka" value="<?= h($record['arka_plaka'] ?? '') ?>" data-uppercase="tr">
             </label>
-            <label>Nakliye Bedeli
-                <input type="text" name="nakliye_bedeli" inputmode="decimal"
-                       value="<?= h(fmt_edit_num($record['nakliye_bedeli'] ?? null, 2)) ?>">
-            </label>
-            <label>Avans
-                <input type="text" name="avans" inputmode="decimal"
-                       value="<?= h(fmt_edit_num($record['avans'] ?? null, 2)) ?>">
+            <label>Ulaşım
+                <input type="text" name="ulasim" value="<?= h($record['ulasim'] ?? '') ?>" data-uppercase="tr">
             </label>
         </div>
     </div>

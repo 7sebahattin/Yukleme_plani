@@ -13,7 +13,7 @@ $record = [
     'firma' => '', 'bolge' => '', 'parti_no' => '', 'gumruk' => '',
     'nakliye_bedeli' => '', 'avans' => '',
     'sofor_adi' => '', 'fatura_no' => '', 'casus_no' => '',
-    'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '',
+    'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '', 'ulasim' => '',
     'tarih' => date('Y-m-d'), 'alici' => '', 'urun' => '', 'etiket' => '', 'brand' => '',
 ];
 $pallets = [];
@@ -102,13 +102,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
                   tarih, alici, urun, etiket"
                   . ($has_brand       ? ", brand"          : "")
-                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "") . ")
+                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "")
+                  . (db_has_column('loading_records', 'ulasim') ? ", ulasim" : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
                   :tarih, :alici, :urun, :etiket"
                   . ($has_brand       ? ", :brand"          : "")
-                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "") . ")"
+                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "")
+                  . (db_has_column('loading_records', 'ulasim') ? ", :ulasim" : "") . ")"
             );
             $ins_params = [
                 ':firma' => $record['firma'],
@@ -129,6 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':urun' => $record['urun'],
                 ':etiket' => $record['etiket'],
             ];
+            if (db_has_column('loading_records', 'ulasim')) {
+                $ins_params[':ulasim'] = $record['ulasim'] ?? '';
+            }
             if ($has_brand) {
                 $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;
             }
