@@ -45,7 +45,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
               ORDER BY ti.id"
         );
         $st->execute([$t['id']]);
-        $t['items'] = $st->fetchAll();
+        $items = $st->fetchAll();
+        foreach ($items as &$item) {
+            $item['quantity']     = (float)$item['quantity'];
+            $item['unit_dara_kg'] = (float)$item['unit_dara_kg'];
+        }
+        $t['items'] = $items;
     }
     echo json_encode($templates);
     exit;

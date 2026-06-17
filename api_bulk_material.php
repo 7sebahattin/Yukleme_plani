@@ -284,13 +284,11 @@ foreach ($materials_input as $m) {
     }
 }
 
-// Sadece bu kayda ait paletleri işle (kasa adeti ile — etiket çarpımı için)
+// Sadece bu kayda ait geçerli paletleri al
 $place2    = implode(',', array_fill(0, count($pallet_ids), '?'));
-$st        = db()->prepare("SELECT id, kasa_adeti FROM loading_pallets WHERE id IN ($place2) AND loading_record_id=?");
+$st        = db()->prepare("SELECT id FROM loading_pallets WHERE id IN ($place2) AND loading_record_id=?");
 $st->execute(array_merge($pallet_ids, [$record_id]));
-$valid_rows = $st->fetchAll();
-$valid_ids  = array_column($valid_rows, 'id');
-$kasa_by_pallet = array_column($valid_rows, 'kasa_adeti', 'id');
+$valid_ids = array_column($st->fetchAll(), 'id');
 
 if (empty($valid_ids)) {
     echo json_encode(['error' => 'Bu kayda ait geçerli palet bulunamadı']);
@@ -322,13 +320,10 @@ try {
                 continue;
             }
 
-            // Etiket (kasa_etiketi) palete eklenince kasa adetiyle çarpılır:
-            // 1 etiket × 90 kasa = 90 etiket. Diğer malzemeler girildiği gibi.
+            // Tek-çarpım kuralı: malzeme DB'ye HAM (girilen) adet olarak yazılır.
+            // Kasa-bazlı çarpım (kasa_etiketi/şale/kenar kartonu vb.) görüntü/stok
+            // hesabında material_calc_basis ile bir kez yapılır → ekle/düzenle balon yapmaz.
             $qty = $m['quantity'];
-            if (($mats_db[$mid]['type'] ?? '') === 'kasa_etiketi') {
-                $ka  = (int)($kasa_by_pallet[$pid] ?? 0);
-                if ($ka > 0) $qty = round($m['quantity'] * $ka, 3);
-            }
 
             $st_chk = $pdo->prepare(
                 "SELECT id, quantity FROM pallet_materials WHERE loading_pallet_id=? AND material_id=?"

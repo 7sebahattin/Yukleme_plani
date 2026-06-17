@@ -1324,10 +1324,11 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
 // ── Malzeme hesaplama bazı: kasa mı, palet mi? ──────────────
 // 'kasa'  → effective_qty = quantity × kasa_adeti
 // 'palet' → effective_qty = quantity
-// NOT: kasa_etiketi tipi kayıt sırasında zaten kasa_adeti ile çarpılarak DB'ye yazılır;
-//      bu yüzden 'palet' döndürülür (çift çarpım önlenir).
+// KURAL (tek-çarpım): kasa-bazlı tüm malzemeler DB'ye HAM (girilen) adet olarak yazılır;
+// kasa_adeti ile çarpım YALNIZCA burada (görüntü/stok/excel hesabında) bir kez yapılır.
+// Böylece ekle→düzenle döngüsünde çift çarpım/balon (ör. 8→896→100352) oluşamaz.
 function material_calc_basis(string $type, string $name): string {
-    if ($type === 'kasa_etiketi') return 'palet'; // pre-multiplied at save time
+    if ($type === 'kasa_etiketi') return 'kasa'; // ham sakla, çarpımı burada yap (tek nokta)
 
     // İsim normalizasyonu (tr_norm benzeri, helpers.php içi)
     $n = mb_strtolower($name, 'UTF-8');
