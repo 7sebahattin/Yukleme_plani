@@ -21,9 +21,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $ck = db()->prepare("SELECT id FROM loading_records WHERE id=?");
     $ck->execute([$record_id]);
     if (!$ck->fetch()) { echo json_encode(['ok' => false, 'error' => 'Kayıt bulunamadı']); exit; }
+    require_once __DIR__ . '/config/helpers.php';
     $st = db()->prepare("
         SELECT pm.id AS pm_id, pm.loading_pallet_id, pm.material_id, pm.quantity,
-               m.name AS material_name, lp.palet_no
+               m.name AS material_name, m.type AS material_type, lp.palet_no, lp.kasa_adeti
         FROM pallet_materials pm
         JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
         JOIN material_definitions m ON m.id = pm.material_id
@@ -34,16 +35,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $rows = $st->fetchAll();
     $groups = [];
     foreach ($rows as $row) {
-        $mid = (int)$row['material_id'];
+        $mid  = (int)$row['material_id'];
+        $basis = material_calc_basis((string)$row['material_type'], (string)$row['material_name']);
+        $eff   = $basis === 'kasa'
+            ? round((float)$row['quantity'] * (int)$row['kasa_adeti'], 3)
+            : (float)$row['quantity'];
         if (!isset($groups[$mid])) {
             $groups[$mid] = ['material_id' => $mid, 'material_name' => $row['material_name'],
                              'pallet_count' => 0, 'total_quantity' => 0, 'pallets' => []];
         }
         $groups[$mid]['pallet_count']++;
-        $groups[$mid]['total_quantity'] = round($groups[$mid]['total_quantity'] + (float)$row['quantity'], 3);
+        $groups[$mid]['total_quantity'] = round($groups[$mid]['total_quantity'] + $eff, 3);
         $groups[$mid]['pallets'][] = [
             'pm_id' => (int)$row['pm_id'], 'pallet_id' => (int)$row['loading_pallet_id'],
-            'pallet_no' => $row['palet_no'], 'quantity' => (float)$row['quantity'],
+            'pallet_no' => $row['palet_no'], 'quantity' => $eff,
         ];
     }
     echo json_encode(['ok' => true, 'groups' => array_values($groups)]);
