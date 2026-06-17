@@ -100,17 +100,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket"
+                  tarih, alici, urun, etiket, ulasim"
                   . ($has_brand       ? ", brand"          : "")
-                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "")
-                  . (db_has_column('loading_records', 'ulasim') ? ", ulasim" : "") . ")
+                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket"
+                  :tarih, :alici, :urun, :etiket, :ulasim"
                   . ($has_brand       ? ", :brand"          : "")
-                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "")
-                  . (db_has_column('loading_records', 'ulasim') ? ", :ulasim" : "") . ")"
+                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "") . ")"
             );
             $ins_params = [
                 ':firma' => $record['firma'],
@@ -130,10 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':alici' => $record['alici'],
                 ':urun' => $record['urun'],
                 ':etiket' => $record['etiket'],
+                ':ulasim' => $record['ulasim'] ?? '',
             ];
-            if (db_has_column('loading_records', 'ulasim')) {
-                $ins_params[':ulasim'] = $record['ulasim'] ?? '';
-            }
             if ($has_brand) {
                 $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;
             }

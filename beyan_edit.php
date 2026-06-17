@@ -220,22 +220,22 @@ render_flash();
         <div class="form-group">
             <label class="form-label">Başlık / Beyan Tipi</label>
             <input type="text" name="declaration_title" class="form-control"
-                   value="<?= h($f['declaration_title']) ?>" placeholder="YENİ BEYAN" data-uppercase="tr">
+                   value="<?= h($f['declaration_title']) ?>" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Parti No</label>
             <input type="text" name="party_no" class="form-control"
-                   value="<?= h($f['party_no']) ?>" placeholder="46/22" data-uppercase="tr">
+                   value="<?= h($f['party_no']) ?>" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Nakliye Türü</label>
             <input type="text" name="transport_type" class="form-control"
-                   value="<?= h($f['transport_type']) ?>" placeholder="DENİZYOLU" data-uppercase="tr">
+                   value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
         </div>
         <div class="form-group">
             <label class="form-label">Hat / Güzergah</label>
             <input type="text" name="line_type" class="form-control"
-                   value="<?= h($f['line_type']) ?>" placeholder="YEŞİL HAT" data-uppercase="tr">
+                   value="<?= h($f['line_type']) ?>" data-uppercase="tr">
         </div>
     </div>
     <div class="form-group">

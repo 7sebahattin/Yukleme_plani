@@ -4881,3 +4881,48 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-parse-alert-ok    { background: #d1fae5; color: #065f46; }
 .beyan-parse-alert-warn  { background: #fef3c7; color: #92400e; }
 .beyan-parse-alert-error { background: #fee2e2; color: #991b1b; }
+
+/* ── Toplu beyan önizleme ── */
+#beyanBulkPreview {
+    margin: 12px 0 4px;
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 10px;
+    background: #f8fafc;
+    overflow: hidden;
+}
+.beyan-bulk-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 14px;
+    background: #eef2ff;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+    flex-wrap: wrap;
+}
+.beyan-bulk-head strong { font-size: 1rem; }
+.beyan-bulk-list {
+    max-height: 360px; overflow-y: auto;
+    padding: 8px 10px; display: flex; flex-direction: column; gap: 8px;
+}
+.beyan-bulk-item {
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px 10px;
+}
+.beyan-bulk-item-head {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 3px;
+}
+.beyan-bulk-no    { font-weight: 700; color: var(--primary); font-size: .82rem; }
+.beyan-bulk-parti { font-weight: 700; font-size: .95rem; }
+.beyan-bulk-count {
+    margin-left: auto; font-size: .72rem; color: var(--muted);
+    background: #f1f5f9; border-radius: 999px; padding: 2px 8px;
+}
+.beyan-bulk-item-body { font-size: .85rem; color: var(--text); line-height: 1.35; }
+.beyan-bulk-actions {
+    padding: 10px 14px; border-top: 1px solid var(--border, #e2e8f0);
+    display: flex; justify-content: flex-end;
+}
+.beyan-bulk-status { padding: 0 14px 12px; font-size: .85rem; }
+.beyan-bulk-status.ok  { color: #065f46; }
+.beyan-bulk-status.err { color: #991b1b; }

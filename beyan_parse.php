@@ -94,8 +94,8 @@ function parse_beyan_text(string $raw): array
     // ── Pass 1: labeled patterns (KEY: VALUE or KEY - VALUE) ──
     $labeled = [
         'declaration_title' => '/^(?:BEYAN\s*T[İI]P[İI]|BA[ŞS]LIK|TITLE)\s*[:\-]\s*(.+)/ui',
-        // "PARTİ: 46/22" AND "PARTİ NO: 46/22"
-        'party_no'          => '/^PART[İI](?:\s*NO)?\s*[:\-]\s*(\d[\d\s\/]*\d)/ui',
+        // "PARTİ: 46/22", "PARTİ NO: 46/22", "PARTİ: 46-17" (slash veya tire ayraç)
+        'party_no'          => '/^PART[İI](?:\s*NO)?\s*[:\-]\s*(\d[\d\s\/\-]*\d)/ui',
         'transport_type'    => '/^(?:NAKL[İI]YE\s*T[ÜU]R[ÜU]|TRANSPORT\s*(?:TYPE)?)\s*[:\-]\s*(.+)/ui',
         'line_type'         => '/^(?:HAT|LINE|G[ÜU]ZERGAH)\s*[:\-]\s*(.+)/ui',
         'product_name'      => '/^(?:[ÜU]R[ÜU]N(?:\s*ADI)?|MAHSUL)\s*[:\-]\s*(.+)/ui',
@@ -104,11 +104,13 @@ function parse_beyan_text(string $raw): array
         'gross_kg'          => '/^(?:BR[ÜU]T(?:\s*KG)?|GROSS(?:\s*KG)?|TOPLAM\s*KG)\s*[:\-]\s*(.+)/ui',
         'net_kg'            => '/^NET(?:\s*(?:KG|A[ĞG]IRLI[ĞG]I|KG\s*A[ĞG]IRLI[ĞG]I))?\s*[:\-]\s*(.+)/ui',
         'crate_count'       => '/^(?:KASA(?:\s*ADET[İI])?|SANDIK|KUTU)\s*[:\-]\s*(.+)/ui',
-        'crate_type'        => '/^(?:KASA\s*C[İI]NS[İI]|KASA\s*T[İI]P[İI]|AMBALAJ)\s*[:\-]\s*(.+)/ui',
-        'exit_depot'        => '/^(?:[CÇ][IÇ]KI[ŞS]\s*DEPO|DEPO(?:\s*ADI)?)\s*[:\-]\s*(.+)/ui',
-        'buyer_name'        => '/^(?:ALICI|BUYER|M[ÜU][ŞS]TER[İI])\s*[:\-]\s*(.+)/ui',
+        'crate_type'        => '/^(?:KASA\s*C[İI]NS[İI]|KASA\s*T[İI]P[İI])\s*[:\-]\s*(.+)/ui',
+        // "ÇIKIŞ: KARAMAN DEPO", "ÇIKIŞ DEPO: ...", "DEPO: ..." — [Iı] dotsuz ı'yı da kapsar
+        'exit_depot'        => '/^(?:[CÇ][Iı]K[Iı][ŞS](?:\s*DEPO)?|DEPO(?:\s*ADI)?)\s*[:\-]\s*(.+)/ui',
+        'buyer_name'        => '/^(?:AL[Iı]C[Iı]|BUYER|M[ÜU][ŞS]TER[İI])\s*[:\-]\s*(.+)/ui',
         'contact_person'    => '/^(?:[İI]LG[İI]L[İI](?:\s*K[İI][ŞS][İI])?|CONTACT|YETKL[İI])\s*[:\-]\s*(.+)/ui',
-        'brand'             => '/^(?:MARKA|BRAND)\s*[:\-]\s*(.+)/ui',
+        // MARKA / BRAND / AMBALAJ → marka (bu beyanlarda AMBALAJ paketleme markasını taşır: ASYA/URAL…)
+        'brand'             => '/^(?:MARKA|BRAND|AMBALAJ)\s*[:\-]\s*(.+)/ui',
     ];
 
     $numFields = ['pallet_count', 'gross_kg', 'net_kg', 'crate_count'];
@@ -145,7 +147,8 @@ function parse_beyan_text(string $raw): array
         if ($matched[$i] || $t === '') continue;
 
         // PLAS* KASA (any typo) with optional separator and count
-        if (preg_match('/^PLAS\w*\s+KASA\s*[:\-]?\s*([\d.,]*)$/ui', $t, $m)) {
+        // \S* (\w yerine) — Türkçe İ harfini de geçer: PLASTİK, PLASİTK, PLASTIK…
+        if (preg_match('/^PLAS\S*\s+KASA\s*[:\-]?\s*([\d.,]*)$/ui', $t, $m)) {
             $setOnce('crate_type', 'PLASTİK KASA');
             $matched[$i] = true;
             if ($m[1] !== '') {
@@ -204,16 +207,16 @@ function parse_beyan_text(string $raw): array
             }
         }
 
-        // Parti no: "46/22" alone, "46/22 parti", "46 / 22 PARTİ"
-        if (preg_match('/^(\d{1,4}\s*\/\s*\d{1,4})\s*(?:PART[İI])?$/ui', $t, $m)) {
+        // Parti no: "46/22" / "46-17" alone, "46-17 parti", "46 / 22 PARTİ"
+        if (preg_match('/^(\d{1,4}\s*[\/\-]\s*\d{1,4})\s*(?:PART[İI])?$/ui', $t, $m)) {
             $pno = (string)preg_replace('/\s+/', '', $m[1]);
             if ($setOnce('party_no', $pno)) {
                 $matched[$i] = true;
                 continue;
             }
         }
-        // "PARTİ 46/22" (prefix without colon — colon form already caught in Pass 1)
-        if (preg_match('/^PART[İI]\s+(\d{1,4}\s*\/\s*\d{1,4})$/ui', $t, $m)) {
+        // "PARTİ 46/22" / "PARTİ 46-17" (prefix without colon — colon form caught in Pass 1)
+        if (preg_match('/^PART[İI]\s+(\d{1,4}\s*[\/\-]\s*\d{1,4})$/ui', $t, $m)) {
             $pno = (string)preg_replace('/\s+/', '', $m[1]);
             if ($setOnce('party_no', $pno)) {
                 $matched[$i] = true;
@@ -332,11 +335,97 @@ function parse_beyan_text(string $raw): array
     ];
 }
 
-$result = parse_beyan_text($raw);
+// ── WhatsApp satır önekini soyar: "[10:41, 17.06.2026] Ad Soyad: METİN" → "METİN" ──
+function strip_whatsapp_prefix(string $line): string
+{
+    return (string)preg_replace(
+        '/^\s*\[\d{1,2}:\d{2},\s*\d{1,2}\.\d{1,2}\.\d{2,4}\]\s*[^:\n]*:\s*/u',
+        '',
+        $line
+    );
+}
 
-echo json_encode([
-    'ok'            => true,
-    'parsed'        => $result['parsed'],
-    'unmatched'     => $result['unmatched'],
-    'matched_count' => $result['matched_count'],
-]);
+// ── Ham metni N beyan bloğuna böler. Tek beyan → 1 blok. ──
+// Öncelik: WhatsApp zaman damgaları (her mesaj = 1 beyan). Yoksa: "YENİ BEYAN" başlık işareti.
+function split_beyan_blocks(string $raw): array
+{
+    $lines = preg_split('/\r?\n/', $raw) ?: [];
+
+    $tsPattern     = '/^\s*\[\d{1,2}:\d{2},\s*\d{1,2}\.\d{1,2}\.\d{2,4}\]/u';
+    $markerPattern = '/\bYEN[İI]\s+BEYAN\b/ui';
+
+    $tsCount = 0;
+    foreach ($lines as $ln) {
+        if (preg_match($tsPattern, $ln)) $tsCount++;
+    }
+    $useTs = $tsCount >= 1;
+
+    $blocks  = [];
+    $current = [];
+    $started = false;
+
+    foreach ($lines as $ln) {
+        $isBoundary = $useTs
+            ? (bool)preg_match($tsPattern, $ln)
+            : (bool)preg_match($markerPattern, $ln);
+
+        if ($isBoundary) {
+            if ($started && trim(implode("\n", $current)) !== '') {
+                $blocks[] = implode("\n", $current);
+            }
+            $current = [];
+            $started = true;
+            if ($useTs) $ln = strip_whatsapp_prefix($ln);
+        }
+        $current[] = $ln;
+    }
+    if (trim(implode("\n", $current)) !== '') {
+        $blocks[] = implode("\n", $current);
+    }
+
+    if (empty($blocks)) {
+        $blocks = [trim($raw)];
+    }
+
+    return array_values(array_filter(array_map('trim', $blocks), fn($b) => $b !== ''));
+}
+
+// ── Çoklu beyan ayrıştırma ──
+$blocks       = split_beyan_blocks($raw);
+$declarations = [];
+foreach ($blocks as $blk) {
+    $r = parse_beyan_text($blk);
+    if ($r['matched_count'] === 0) continue;   // tanınan alan yok → atla
+    $declarations[] = [
+        'parsed'        => $r['parsed'],
+        'unmatched'     => $r['unmatched'],
+        'matched_count' => $r['matched_count'],
+        'raw_text'      => $blk,
+    ];
+}
+
+// Hiç anlamlı blok çıkmadıysa: tüm metni tek beyan gibi dön (kullanıcı elle düzeltsin)
+if (empty($declarations)) {
+    $r = parse_beyan_text($raw);
+    $declarations[] = [
+        'parsed'        => $r['parsed'],
+        'unmatched'     => $r['unmatched'],
+        'matched_count' => $r['matched_count'],
+        'raw_text'      => trim($raw),
+    ];
+}
+
+$count = count($declarations);
+$resp  = [
+    'ok'           => true,
+    'count'        => $count,
+    'declarations' => $declarations,
+];
+// Geriye dönük uyumluluk — tekli doldurma yolu (beyan_edit ve tek beyan)
+if ($count === 1) {
+    $resp['parsed']        = $declarations[0]['parsed'];
+    $resp['unmatched']     = $declarations[0]['unmatched'];
+    $resp['matched_count'] = $declarations[0]['matched_count'];
+}
+
+echo json_encode($resp);

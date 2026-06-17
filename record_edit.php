@@ -149,7 +149,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // brand / urun_sahibi_id kolonları yoksa (migration çalışmadıysa) çıkar — defansif
             $has_brand       = !$edit_is_cikma && db_has_column('loading_records', 'brand');
             $has_urun_sahibi = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
-            $has_ulasim      = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
             if (!$has_brand)       { unset($record['brand']); }
             if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
 
@@ -175,10 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         fatura_no=:fatura_no, casus_no=:casus_no,
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
+                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket,
+                        ulasim=:ulasim"
                         . ($has_brand       ? ", brand=:brand"                   : "")
-                        . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "")
-                        . ($has_ulasim      ? ", ulasim=:ulasim"                  : "") . "
+                        . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
                      WHERE id=:id"
                 );
                 $upd_params = [
@@ -199,6 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':alici'           => $record['alici'],
                     ':urun'            => $record['urun'],
                     ':etiket'          => $record['etiket'],
+                    ':ulasim'          => $record['ulasim'] ?? '',
                     ':id'              => $id,
                 ];
                 if ($has_brand) {
@@ -206,9 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if ($has_urun_sahibi) {
                     $upd_params[':urun_sahibi_id'] = $record['urun_sahibi_id'] ?: null;
-                }
-                if ($has_ulasim) {
-                    $upd_params[':ulasim'] = $record['ulasim'] ?? '';
                 }
                 $st->execute($upd_params);
             }

@@ -1580,3 +1580,85 @@ function can_beyan(string $perm): bool {
     if (!function_exists('can')) return true;
     return can('beyan.' . $perm) || (function_exists('is_admin') && is_admin());
 }
+
+// ── Sayı normalize: zaten sayı ise dokunma (parser JSON'undan gelen float
+//    "." round-trip'inde num() tarafından binlik sanılıp bozulmasın). ──
+function beyan_num_or_null($v): ?float {
+    if ($v === null || $v === '') return null;
+    if (is_int($v) || is_float($v)) return (float)$v;     // parser/JSON sayısı — olduğu gibi
+    return num((string)$v);                                // elle girilen Türkçe format
+}
+function beyan_int_or_null($v): ?int {
+    if ($v === null || $v === '') return null;
+    if (is_int($v))   return $v;
+    if (is_float($v)) return (int)$v;
+    return (int)num((string)$v);
+}
+
+// ── Tek bir beyanı DB'ye ekler, yeni id döner (toplu içe aktarma için ortak yol). ──
+// $data: parser/JSON alanları (string ya da sayı). Numune/analiz tarihleri set edilmez.
+function beyan_insert(array $data, int $user_id): int {
+    $str_fields = [
+        'raw_text', 'unmatched_text', 'declaration_title', 'company_name', 'company_address',
+        'transport_type', 'line_type', 'party_no', 'product_name', 'product_variety',
+        'crate_type', 'exit_depot', 'contact_person', 'buyer_name', 'brand', 'analysis_note',
+    ];
+    $f = [];
+    foreach ($str_fields as $k) $f[$k] = trim((string)($data[$k] ?? ''));
+
+    // Büyük harf — seçili metin alanları (raw_text / unmatched / not hariç)
+    foreach (['declaration_title', 'company_name', 'company_address', 'transport_type',
+              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
+              'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $k) {
+        if ($f[$k] !== '') $f[$k] = tr_upper($f[$k]);
+    }
+
+    $gross_kg  = beyan_num_or_null($data['gross_kg']     ?? null);
+    $net_kg    = beyan_num_or_null($data['net_kg']       ?? null);
+    $pallet_ct = beyan_int_or_null($data['pallet_count'] ?? null);
+    $crate_ct  = beyan_int_or_null($data['crate_count']  ?? null);
+
+    $status = (string)($data['status'] ?? 'beyan_acildi');
+    if (!in_array($status, array_keys(beyan_statuses()), true)) $status = 'beyan_acildi';
+
+    $st = db()->prepare("INSERT INTO customs_declarations
+        (raw_text, unmatched_text, declaration_title, company_name, company_address,
+         transport_type, line_type, party_no, pallet_count, product_name, product_variety,
+         gross_kg, net_kg, crate_count, crate_type, exit_depot, contact_person,
+         buyer_name, brand, status, analysis_note,
+         created_by, updated_by, created_at, updated_at)
+        VALUES
+        (?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?,
+         ?, ?, ?, ?,
+         ?, ?, NOW(), NOW())");
+
+    $st->execute([
+        $f['raw_text']          ?: null,
+        $f['unmatched_text']    ?: null,
+        $f['declaration_title'] ?: null,
+        $f['company_name']      ?: null,
+        $f['company_address']   ?: null,
+        $f['transport_type']    ?: null,
+        $f['line_type']         ?: null,
+        $f['party_no']          ?: null,
+        $pallet_ct,
+        $f['product_name']      ?: null,
+        $f['product_variety']   ?: null,
+        $gross_kg,
+        $net_kg,
+        $crate_ct,
+        $f['crate_type']        ?: null,
+        $f['exit_depot']        ?: null,
+        $f['contact_person']    ?: null,
+        $f['buyer_name']        ?: null,
+        $f['brand']             ?: null,
+        $status,
+        $f['analysis_note']     ?: null,
+        $user_id,
+        $user_id,
+    ]);
+
+    return (int)db()->lastInsertId();
+}
