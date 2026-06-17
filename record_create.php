@@ -93,22 +93,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
 
-            // brand / urun_sahibi_id kolonları yoksa (migration çalışmadıysa) sorguya ekleme — defansif
+            // brand / urun_sahibi_id / ulasim kolonları yoksa (migration çalışmadıysa) sorguya ekleme — defansif
             $has_brand        = db_has_column('loading_records', 'brand');
             $has_urun_sahibi  = db_has_column('loading_records', 'urun_sahibi_id');
+            $has_ulasim       = db_has_column('loading_records', 'ulasim');
             $st = $pdo->prepare(
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
-                  tarih, alici, urun, etiket, ulasim"
-                  . ($has_brand       ? ", brand"          : "")
-                  . ($has_urun_sahibi ? ", urun_sahibi_id" : "") . ")
+                  tarih, alici, urun, etiket"
+                  . ($has_ulasim      ? ", ulasim"          : "")
+                  . ($has_brand       ? ", brand"           : "")
+                  . ($has_urun_sahibi ? ", urun_sahibi_id"  : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
-                  :tarih, :alici, :urun, :etiket, :ulasim"
-                  . ($has_brand       ? ", :brand"          : "")
-                  . ($has_urun_sahibi ? ", :urun_sahibi_id" : "") . ")"
+                  :tarih, :alici, :urun, :etiket"
+                  . ($has_ulasim      ? ", :ulasim"          : "")
+                  . ($has_brand       ? ", :brand"           : "")
+                  . ($has_urun_sahibi ? ", :urun_sahibi_id"  : "") . ")"
             );
             $ins_params = [
                 ':firma' => $record['firma'],
@@ -128,8 +131,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':alici' => $record['alici'],
                 ':urun' => $record['urun'],
                 ':etiket' => $record['etiket'],
-                ':ulasim' => $record['ulasim'] ?? '',
             ];
+            if ($has_ulasim) {
+                $ins_params[':ulasim'] = $record['ulasim'] ?? '';
+            }
             if ($has_brand) {
                 $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;
             }

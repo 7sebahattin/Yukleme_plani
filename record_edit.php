@@ -146,9 +146,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->beginTransaction();
 
-            // brand / urun_sahibi_id kolonları yoksa (migration çalışmadıysa) çıkar — defansif
+            // brand / urun_sahibi_id / ulasim kolonları yoksa (migration çalışmadıysa) çıkar — defansif
             $has_brand       = !$edit_is_cikma && db_has_column('loading_records', 'brand');
             $has_urun_sahibi = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
+            $has_ulasim      = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
             if (!$has_brand)       { unset($record['brand']); }
             if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
 
@@ -174,8 +175,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         fatura_no=:fatura_no, casus_no=:casus_no,
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
-                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket,
-                        ulasim=:ulasim"
+                        tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
+                        . ($has_ulasim      ? ", ulasim=:ulasim"                 : "")
                         . ($has_brand       ? ", brand=:brand"                   : "")
                         . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
                      WHERE id=:id"
@@ -198,9 +199,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':alici'           => $record['alici'],
                     ':urun'            => $record['urun'],
                     ':etiket'          => $record['etiket'],
-                    ':ulasim'          => $record['ulasim'] ?? '',
                     ':id'              => $id,
                 ];
+                if ($has_ulasim) {
+                    $upd_params[':ulasim'] = $record['ulasim'] ?? '';
+                }
                 if ($has_brand) {
                     $upd_params[':brand'] = $record['brand'];
                 }

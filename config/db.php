@@ -204,7 +204,9 @@ function db(): PDO {
             if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'ulasim'")->fetchColumn()) {
                 $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `ulasim` VARCHAR(100) NOT NULL DEFAULT ''");
             }
-        } catch (PDOException $_ulm) { /* loading_records yoksa — sessizce geç */ }
+        } catch (PDOException $_ulm) {
+            error_log("[MIGRATION ulasim] " . $_ulm->getMessage());
+        }
 
         // Sprint XZ-01: loading_pallets'e reported_at + reported_by + report_id ekle (idempotent)
         try {
