@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/includes/hks_bootstrap.php';
 $auth_user = require_login();
-if (!(function_exists('can') && can('hks.settings'))) {
+if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
     http_response_code(403); die('Bu sayfaya erişim yetkiniz yok (hks.settings).');
 }
 

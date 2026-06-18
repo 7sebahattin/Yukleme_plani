@@ -35,7 +35,7 @@ switch ($action) {
 
     // ── Bağlantı Testi ──────────────────────────────────────
     case 'test_connection':
-        if (!(function_exists('can') && can('hks.settings'))) {
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
             echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
         }
         audit_log_event('hks_connection_tested', 'hks_settings', null, null, ['user' => $user['username'] ?? '']);
@@ -44,7 +44,7 @@ switch ($action) {
 
     // ── WSDL Metod Keşfi ───────────────────────────────────
     case 'inspect_wsdl':
-        if (!(function_exists('can') && can('hks.settings'))) {
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
             echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
         }
         $wsdl_service = $input['service'] ?? 'genel';
@@ -53,7 +53,7 @@ switch ($action) {
 
     // ── Referans Senkronizasyonu ────────────────────────────
     case 'sync_reference':
-        if (!(function_exists('can') && can('hks.settings'))) {
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
             echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
         }
         $ref_type = $input['ref_type'] ?? 'all';
