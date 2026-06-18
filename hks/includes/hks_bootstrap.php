@@ -78,4 +78,62 @@ require_once __DIR__ . '/../../config/auth.php';
             }
         }
     }
+
+    // hks_notifications kolon migrasyonu — eski şema ile deploy edilmiş sunucularda eksik kolonlar olabilir.
+    // Sadece bir probe ile kontrol et; tüm ALTER TABLE'ları yalnızca gerektiğinde çalıştır.
+    try {
+        $pdo->query("SELECT firma, direction, notification_type, sifat, urun_cinsi,
+                            depo, il, ilce, belde, uretici_ad, uretici_tc_vkn,
+                            alici_ad, alici_tc_vkn, sevk_tarihi, arac_plaka, belge_no,
+                            reference_kunye_no, hks_bildirim_no, hks_kunye_no,
+                            validation_errors_json, request_json, response_json, last_error,
+                            checked_at, checked_by, send_attempt_count, sent_at
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        // Bazı kolonlar eksik — hepsini tek tek ekle (zaten varsa hata sessizce geçilir)
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `firma`                  VARCHAR(200) NOT NULL DEFAULT ''",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `urun`                   VARCHAR(200) NOT NULL DEFAULT ''",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `miktar`                 DECIMAL(14,3) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `birim`                  VARCHAR(20) NOT NULL DEFAULT 'KG'",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `direction`              VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `notification_type`      VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `sifat`                  VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `urun_cinsi`             VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `depo`                   VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `il`                     VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `ilce`                   VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `belde`                  VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `uretici_ad`             VARCHAR(200) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `uretici_tc_vkn`         VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `alici_ad`               VARCHAR(200) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `alici_tc_vkn`           VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `sevk_tarihi`            DATE NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `arac_plaka`             VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `belge_no`               VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_no`     VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `hks_bildirim_no`        VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `hks_kunye_no`           VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `validation_errors_json` TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `request_json`           TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `response_json`          TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `last_error`             TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `checked_at`             DATETIME NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `checked_by`             INT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `send_attempt_count`     INT NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `sent_at`                DATETIME NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `source_type`            VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `source_id`              INT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `created_by`             INT NULL",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+        // Status ENUM genişletme — checked ve send_pending ekle (idempotent)
+        try {
+            $pdo->exec("ALTER TABLE `hks_notifications`
+                MODIFY COLUMN `status`
+                ENUM('draft','ready','checked','send_pending','sent','failed','cancelled')
+                NOT NULL DEFAULT 'draft'");
+        } catch (PDOException $_ce) { /* zaten genişletilmiş */ }
+    }
 })();
