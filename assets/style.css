@@ -4150,6 +4150,78 @@ body.notes-modal-open { overflow: hidden; }
     .hks-form-grid input, .hks-form-grid select, .hks-form-grid textarea { font-size:16px; }
 }
 
+/* HKS page container + sekme navigasyonu */
+.hks-page { max-width:1100px; margin:0 auto; }
+.hks-tabs { display:flex; flex-wrap:wrap; gap:4px; padding:12px 0 0; margin-bottom:16px; border-bottom:2px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.hks-tab  { display:flex; align-items:center; gap:5px; padding:8px 14px; border-radius:8px 8px 0 0; text-decoration:none; color:var(--muted); font-size:.88rem; border:1px solid transparent; border-bottom:none; transition:background .15s; white-space:nowrap; flex-shrink:0; }
+.hks-tab:hover  { background:var(--bg); color:var(--text); }
+.hks-tab.active { background:var(--card); color:var(--primary); font-weight:600; border-color:var(--border); margin-bottom:-2px; }
+.hks-tab-label  { display:none; }
+@media (min-width:600px) { .hks-tab-label { display:inline; } }
+
+/* HKS badge — tam set */
+.hks-badge-ready     { background:#dbeafe; color:#1e40af; }
+.hks-badge-checked   { background:#ede9fe; color:#5b21b6; }
+.hks-badge-pending   { background:#fef9c3; color:#854d0e; }
+.hks-badge-failed    { background:#fee2e2; color:#991b1b; }
+.hks-badge-cancelled { background:#f3f4f6; color:#6b7280; }
+
+/* HKS durum kutuları */
+.hks-statebox     { border-radius:8px; padding:12px 16px; margin-bottom:12px; font-size:.9rem; border:1px solid; }
+.hks-sb-draft     { background:#f9fafb; border-color:#d1d5db; color:#374151; }
+.hks-sb-ready     { background:#eff6ff; border-color:#93c5fd; color:#1e40af; }
+.hks-sb-checked   { background:#f5f3ff; border-color:#c4b5fd; color:#5b21b6; }
+.hks-sb-pending   { background:#fefce8; border-color:#fde047; color:#854d0e; }
+.hks-sb-sent      { background:#f0fdf4; border-color:var(--success); color:#065f46; }
+.hks-sb-failed    { background:#fef2f2; border-color:var(--danger); color:#991b1b; }
+.hks-sb-cancelled { background:#f3f4f6; border-color:#d1d5db; color:#6b7280; }
+
+/* HKS uyarı kutuları */
+.hks-warning-box { background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:12px 16px; font-size:.88rem; color:#92400e; margin-bottom:12px; }
+.hks-info-box    { background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:12px 16px; font-size:.88rem; color:#1e40af; margin-bottom:12px; }
+.hks-secret-status { display:inline-flex; align-items:center; gap:5px; font-size:.82rem; padding:2px 8px; border-radius:20px; font-weight:600; background:#d1fae5; color:#065f46; }
+.hks-secret-status.missing { background:#fef3c7; color:#92400e; }
+
+/* HKS kontrol tablosu */
+.hks-check-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+.hks-check-table td { padding:6px 10px; border-bottom:1px solid var(--border); }
+.hks-check-table td:first-child { color:var(--muted); width:42%; }
+.hks-check-table td:last-child  { font-weight:600; }
+
+/* HKS gönderim paneli */
+.hks-send-panel   { background:var(--card); border:2px solid #c4b5fd; border-radius:10px; padding:18px 20px; margin:16px 0; }
+.hks-blocker-list { margin:8px 0 0; padding-left:20px; }
+.hks-blocker-list li { margin:3px 0; color:#991b1b; font-size:.88rem; }
+.hks-onay-row     { display:flex; align-items:flex-start; gap:8px; margin:14px 0; font-size:.9rem; }
+.hks-onay-row input { margin-top:3px; }
+
+/* HKS dashboard kart ızgarası */
+.hks-dashboard    { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:14px; margin-top:16px; }
+.hks-card-value   { font-size:2rem; font-weight:700; color:var(--text); line-height:1.1; }
+.hks-card-sub     { font-size:.82rem; color:var(--muted); margin-top:4px; }
+.hks-card-ok      { border-left:3px solid var(--success); }
+.hks-card-warn    { border-left:3px solid #f59e0b; }
+.hks-card-err     { border-left:3px solid var(--danger); }
+.hks-card-info    { border-left:3px solid var(--primary); }
+
+/* HKS liste tablosu */
+.hks-table    { width:100%; border-collapse:collapse; font-size:.88rem; }
+.hks-table th { background:var(--bg); text-align:left; padding:8px 10px; font-weight:600; border-bottom:2px solid var(--border); }
+.hks-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+.hks-table tr:hover td { background:var(--bg); }
+
+/* HKS ayarlar formu */
+.hks-form .form-group       { margin-bottom:14px; }
+.hks-form .form-group label { display:block; font-weight:600; font-size:.85rem; margin-bottom:4px; }
+.hks-form .form-group input,
+.hks-form .form-group select { width:100%; box-sizing:border-box; padding:9px 11px; border:1px solid var(--border); border-radius:7px; font-size:.95rem; background:#fff; }
+@media (max-width:767px) {
+    .hks-form .form-group input,
+    .hks-form .form-group select { font-size:16px; }
+}
+.form-section       { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
+.form-section-title { font-size:.95rem; font-weight:700; margin-bottom:14px; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:8px; }
+
 /* =========================================================
    Sprint 17 — Yükleme Kayıtları İyileştirme
    ========================================================= */
