@@ -81,6 +81,10 @@ render_flash();
 @media (min-width: 600px) { .hks-tab-label { display: inline; } }
 .hks-warning-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #92400e; margin-bottom: 12px; }
 .hks-info-box    { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #1e40af; margin-bottom: 12px; }
+.hks-success-box { background: #f0fdf4; border: 1px solid var(--success); border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #065f46; margin-top: 12px; }
+.hks-error-box   { background: #fef2f2; border: 1px solid var(--danger); border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #991b1b; margin-top: 12px; }
+.hks-secret-status { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; background: #d1fae5; color: #065f46; }
+.hks-secret-status.missing { background: #fef3c7; color: #92400e; }
 .hks-form .form-group { margin-bottom: 14px; }
 .hks-form .form-group label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 4px; }
 .hks-form .form-group input, .hks-form .form-group select { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: .95rem; background: #fff; }
@@ -97,8 +101,8 @@ include __DIR__ . '/views/_tabs.php';
 
 <div class="page-head" style="margin-top:16px">
     <div>
-        <h1>⚙️ HKS Ayarları</h1>
-        <p class="muted">Hal Kayıt Sistemi bağlantı yapılandırması</p>
+        <h1>⚙️ HKS Web Servis Ayarları</h1>
+        <p class="muted">HKS kullanıcı adı, kullanıcı şifresi ve web servis şifresi bu alanda güvenli şekilde saklanır. Şifreler ekranda açık gösterilmez.</p>
     </div>
     <div class="page-head-actions">
         <a href="index.php" class="btn btn-ghost">← Panele Dön</a>

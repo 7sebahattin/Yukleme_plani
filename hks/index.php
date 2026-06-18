@@ -135,6 +135,30 @@ render_flash();
         <?php endif; ?>
     </div>
 
+    <!-- HKS Bağlantı Ayarları -->
+    <?php
+    $s_user = !empty($settings['username']);
+    $s_pass = !empty($settings['password_enc']);
+    $s_svc  = !empty($settings['service_password_enc']);
+    $s_all  = $s_user && $s_pass && $s_svc;
+    $can_cfg = function_exists('can') && can('hks.settings');
+    ?>
+    <div class="hks-card <?= $s_all ? 'hks-card-ok' : 'hks-card-warn' ?>">
+        <div class="hks-card-title">HKS Bağlantı Ayarları</div>
+        <div style="font-size:.84rem;line-height:2.1">
+            <div><?= $s_user ? '✅' : '⚠️' ?> Kullanıcı Adı: <strong><?= $s_user ? 'Kayıtlı' : 'Eksik' ?></strong></div>
+            <div><?= $s_pass ? '✅' : '⚠️' ?> HKS Şifresi: <strong><?= $s_pass ? 'Kayıtlı' : 'Eksik' ?></strong></div>
+            <div><?= $s_svc  ? '✅' : '⚠️' ?> Servis Şifresi: <strong><?= $s_svc ? 'Kayıtlı' : 'Eksik' ?></strong></div>
+        </div>
+        <?php if ($can_cfg): ?>
+        <div style="margin-top:10px">
+            <a href="ayarlar.php" class="btn btn-ghost" style="font-size:.82rem;padding:4px 12px">
+                <?= $s_all ? '⚙️ Ayarları Düzenle' : '⚠️ Ayarları Tamamla →' ?>
+            </a>
+        </div>
+        <?php endif; ?>
+    </div>
+
     <!-- Bekleyen Taslaklar -->
     <div class="hks-card hks-card-info">
         <div class="hks-card-title">Bekleyen Taslaklar</div>
