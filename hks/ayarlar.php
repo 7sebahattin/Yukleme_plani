@@ -9,6 +9,32 @@ if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
 
 $repo = new HksRepository(db());
 
+// HKS_CRED_KEY anahtar oluşturma
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'generate_key') {
+    csrf_check($_POST['csrf'] ?? null);
+    $local_php = __DIR__ . '/../../config/local.php';
+    $new_key   = bin2hex(random_bytes(32)); // 64 hex karakter = 256 bit entropy
+
+    if (file_exists($local_php)) {
+        $existing = file_get_contents($local_php) ?: '';
+        if (strpos($existing, 'HKS_CRED_KEY') !== false) {
+            set_flash('info', 'HKS_CRED_KEY zaten config/local.php içinde tanımlı. Sayfa yenileniyor...');
+            header('Location: ayarlar.php'); exit;
+        }
+        $write_content = rtrim($existing) . "\ndefine('HKS_CRED_KEY', '" . $new_key . "');\n";
+    } else {
+        $write_content = "<?php\ndefine('HKS_CRED_KEY', '" . $new_key . "');\n";
+    }
+
+    if (@file_put_contents($local_php, $write_content) !== false) {
+        audit_log_event('hks_cred_key_generated', 'hks_settings', null, null, []);
+        set_flash('success', 'HKS_CRED_KEY başarıyla oluşturuldu ve config/local.php\'ye kaydedildi. Artık şifre girebilirsiniz.');
+    } else {
+        set_flash('error', "config/local.php yazılamadı. Dosyayı el ile oluşturun — içeriği: define('HKS_CRED_KEY', '{$new_key}');");
+    }
+    header('Location: ayarlar.php'); exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
@@ -65,7 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $s = $repo->getSettings();
-$has_secure_key = hks_can_save_passwords();
+$has_secure_key  = hks_can_save_passwords();
+$suggested_key   = !$has_secure_key ? bin2hex(random_bytes(32)) : '';
 
 render_header('HKS Ayarları');
 render_flash();
@@ -87,8 +114,8 @@ render_flash();
 .hks-secret-status.missing { background: #fef3c7; color: #92400e; }
 .hks-form .form-group { margin-bottom: 14px; }
 .hks-form .form-group label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 4px; }
-.hks-form .form-group input, .hks-form .form-group select { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: .95rem; background: #fff; }
-@media (max-width: 767px) { .hks-form .form-group input, .hks-form .form-group select { font-size: 16px; } }
+.hks-form .form-group input:not([type="checkbox"]):not([type="radio"]), .hks-form .form-group select { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: .95rem; background: #fff; }
+@media (max-width: 767px) { .hks-form .form-group input:not([type="checkbox"]):not([type="radio"]), .hks-form .form-group select { font-size: 16px; } }
 .form-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
 .form-section-title { font-size: .95rem; font-weight: 700; margin-bottom: 14px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 </style>
@@ -112,11 +139,25 @@ include __DIR__ . '/views/_tabs.php';
 <?php if (!$has_secure_key): ?>
 <div class="hks-warning-box">
     🔑 <strong>HKS_CRED_KEY tanımlanmamış — HKS şifreleri kaydedilemez.</strong><br>
-    Şifre (HKS Şifresi, Servis Şifresi, Güvenlik Kelimesi) kaydetmek için
-    <code>config/local.php</code> dosyasında şunu tanımlayın:<br>
-    <code>&lt;?php define('HKS_CRED_KEY', 'en_az_32_karakter_rastgele_anahtar');</code><br>
-    Bu dosyayı <code>.gitignore</code>'a ekleyin.
-    Diğer ayarlar (kullanıcı adı, ortam, WSDL URL, firma bilgileri) kaydedilebilir.
+    Şifre alanlarını etkinleştirmek için aşağıdaki butonu kullanın veya
+    <code>config/local.php</code> dosyasını elle oluşturun.<br>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <form method="post" action="ayarlar.php">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="generate_key">
+            <button type="submit" class="btn btn-sm" style="background:#d97706;color:#fff;border-color:#d97706;font-weight:600">
+                🔑 Otomatik Anahtar Oluştur &amp; Kaydet
+            </button>
+        </form>
+        <span style="color:#92400e;font-size:.82rem">— veya el ile —</span>
+    </div>
+    <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:.82rem;font-weight:600">El ile kurulum göster</summary>
+        <div style="margin-top:6px;font-size:.82rem">
+            <code>config/local.php</code> dosyasına ekleyin:<br>
+            <code style="display:block;background:#fef3c7;border-radius:4px;padding:6px 10px;margin-top:4px;word-break:break-all">&lt;?php<br>define('HKS_CRED_KEY', '<?= hks_h($suggested_key) ?>');</code>
+        </div>
+    </details>
 </div>
 <?php else: ?>
 <div class="hks-info-box">🔐 Şifreler AES-256-CBC ile şifrelenmiş olarak saklanmaktadır.</div>
