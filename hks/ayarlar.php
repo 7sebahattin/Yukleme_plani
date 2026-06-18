@@ -3,7 +3,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/includes/hks_bootstrap.php';
 $auth_user = require_login();
-if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+if (!(function_exists('can') && can('hks.settings'))) {
     http_response_code(403); die('Bu sayfaya erişim yetkiniz yok (hks.settings).');
 }
 
@@ -11,11 +11,6 @@ $repo = new HksRepository(db());
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
-
-    if (!hks_has_secure_key()) {
-        set_flash('error', 'HKS_CRED_KEY tanımlanmadan şifre kaydedilemez. config/local.php içinde HKS_CRED_KEY tanımlayın.');
-        header('Location: ayarlar.php'); exit;
-    }
 
     $existing    = $repo->getSettings();
     $environment = in_array($_POST['environment'] ?? '', ['test','live'], true)
@@ -32,6 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $live_send   = isset($_POST['live_send_enabled']) ? 1 : 0;
     $genel_wsdl  = trim($_POST['genel_wsdl_url'] ?? '');
     $bil_wsdl    = trim($_POST['bildirim_wsdl_url'] ?? '');
+
+    // Şifre alanı doldurulduysa HKS_CRED_KEY zorunlu
+    $has_any_password = $password !== '' || $svc_pass !== '' || $sec_word !== '';
+    if ($has_any_password && !hks_can_save_passwords()) {
+        set_flash('error', 'HKS_CRED_KEY tanımlanmadan HKS şifreleri kaydedilemez. config/local.php dosyasına HKS_CRED_KEY tanımlayın.');
+        header('Location: ayarlar.php'); exit;
+    }
 
     // Boş bırakılan şifreler mevcut değeri korur
     $password_enc = $password !== '' ? hks_encrypt($password) : ($existing['password_enc'] ?? '');
@@ -63,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $s = $repo->getSettings();
-$has_secure_key = hks_has_secure_key();
+$has_secure_key = hks_can_save_passwords();
 
 render_header('HKS Ayarları');
 render_flash();
@@ -105,10 +107,12 @@ include __DIR__ . '/views/_tabs.php';
 
 <?php if (!$has_secure_key): ?>
 <div class="hks-warning-box">
-    🔑 <strong>HKS_CRED_KEY tanımlanmamış.</strong><br>
-    Şifrelerin güvenli saklanması için <code>config/local.php</code> dosyasında şunu tanımlayın:<br>
+    🔑 <strong>HKS_CRED_KEY tanımlanmamış — HKS şifreleri kaydedilemez.</strong><br>
+    Şifre (HKS Şifresi, Servis Şifresi, Güvenlik Kelimesi) kaydetmek için
+    <code>config/local.php</code> dosyasında şunu tanımlayın:<br>
     <code>&lt;?php define('HKS_CRED_KEY', 'en_az_32_karakter_rastgele_anahtar');</code><br>
-    Bu dosyayı <code>.gitignore</code>'a ekleyin. Key tanımlanmadan şifre <strong>kaydedilmez</strong>.
+    Bu dosyayı <code>.gitignore</code>'a ekleyin.
+    Diğer ayarlar (kullanıcı adı, ortam, WSDL URL, firma bilgileri) kaydedilebilir.
 </div>
 <?php else: ?>
 <div class="hks-info-box">🔐 Şifreler AES-256-CBC ile şifrelenmiş olarak saklanmaktadır.</div>
@@ -239,7 +243,7 @@ include __DIR__ . '/views/_tabs.php';
 
     <div class="form-actions">
         <a href="index.php" class="btn btn-ghost btn-lg">İptal</a>
-        <button type="submit" class="btn btn-primary btn-lg" <?= !$has_secure_key ? 'disabled' : '' ?>>
+        <button type="submit" class="btn btn-primary btn-lg">
             Ayarları Kaydet
         </button>
     </div>

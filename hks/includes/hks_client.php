@@ -160,8 +160,53 @@ class HksClient {
         return $this->callGenelService('GetUretimSekli', [], 'uretim_sekli');
     }
 
+    // ── WSDL İnceleme ───────────────────────────────────────
+
+    public function inspectWsdl(string $service = 'genel'): array {
+        $start = microtime(true);
+        $env   = $this->getEnvironment();
+
+        if (!hks_check_soap()) {
+            return ['ok' => false, 'message' => 'PHP SOAP extension aktif değil.', 'methods' => []];
+        }
+        if (!$this->hasSettings()) {
+            return ['ok' => false, 'message' => 'HKS ayarları yapılandırılmamış.', 'methods' => []];
+        }
+
+        $wsdl     = $service === 'bildirim' ? $this->bildirimWsdl() : $this->genelWsdl();
+        $svcLabel = $service === 'bildirim' ? 'BildirimService' : 'GenelService';
+
+        try {
+            $client    = new SoapClient($wsdl, $this->soapOptions());
+            $functions = $client->__getFunctions() ?? [];
+            $duration  = (int)((microtime(true) - $start) * 1000);
+
+            $this->logService($svcLabel, 'inspectWsdl', $env,
+                ['wsdl' => $wsdl], ['method_count' => count($functions)],
+                true, null, null, $duration);
+
+            return [
+                'ok'          => true,
+                'wsdl'        => $wsdl,
+                'service'     => $service,
+                'methods'     => $functions,
+                'duration_ms' => $duration,
+            ];
+
+        } catch (SoapFault $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService($svcLabel, 'inspectWsdl', $env,
+                ['wsdl' => $wsdl], null, false, $e->faultcode, $e->faultstring, $duration);
+            return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'methods' => [], 'duration_ms' => $duration];
+
+        } catch (Throwable $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            return ['ok' => false, 'message' => $e->getMessage(), 'methods' => [], 'duration_ms' => $duration];
+        }
+    }
+
     // ── Bildirim Servisleri ─────────────────────────────────
-    // HKS kılavuzu method adları doğrulanmadan canlı çağrı YOK.
+    // Canlı bildirim gönderimi KAPALI — sadece sorgu metodları aktif.
 
     public function saveBildirim(array $payload): array {
         return [
@@ -173,11 +218,106 @@ class HksClient {
     }
 
     public function queryBildirim(array $params): array {
-        return $this->notMapped('BildirimSorgu');
+        $start = microtime(true);
+        $env   = $this->getEnvironment();
+
+        if (!hks_check_soap() || !$this->hasSettings()) {
+            return ['ok' => false, 'message' => 'Servis kullanılamıyor.'];
+        }
+
+        $candidates = ['GetBildirimDetay', 'BildirimSorgu', 'GetBildirim', 'BildirimDetayGetir'];
+        $method = $this->discoverMethod($this->bildirimWsdl(), $candidates);
+
+        if ($method === null) {
+            $inspect = $this->inspectWsdl('bildirim');
+            return [
+                'ok'               => false,
+                'message'          => 'Bildirim sorgu methodu bulunamadı. WSDL\'i inceleyin.',
+                'methods_available' => $inspect['methods'] ?? [],
+                'hint'             => 'Aşağıdaki methodlardan uygun olanı hks_client.php\'deki $candidates dizisine ekleyin.',
+            ];
+        }
+
+        $creds = $this->credentials();
+        $requestParams = array_merge([
+            'KullaniciAdi' => $creds['username'],
+            'Sifre'        => $creds['password'],
+            'ServisSifre'  => $creds['service_password'],
+        ], $params);
+
+        try {
+            $client   = new SoapClient($this->bildirimWsdl(), $this->soapOptions());
+            $result   = $client->__soapCall($method, [$requestParams]);
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $data     = $this->extractResultArray($result, $method);
+
+            $this->logService('BildirimService', $method, $env,
+                $requestParams, ['count' => count($data)], true, null, null, $duration);
+
+            return ['ok' => true, 'data' => $data, 'method_used' => $method, 'duration_ms' => $duration];
+
+        } catch (SoapFault $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService('BildirimService', $method, $env,
+                $requestParams, null, false, $e->faultcode, $e->faultstring, $duration);
+            return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'duration_ms' => $duration];
+
+        } catch (Throwable $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            return ['ok' => false, 'message' => $e->getMessage(), 'duration_ms' => $duration];
+        }
     }
 
     public function queryKunye(string $kunye_no): array {
-        return $this->notMapped('KunyeSorgu');
+        $start = microtime(true);
+        $env   = $this->getEnvironment();
+
+        if (!hks_check_soap() || !$this->hasSettings()) {
+            return ['ok' => false, 'message' => 'Servis kullanılamıyor.'];
+        }
+
+        $candidates = ['GetKunyeDetay', 'KunyeSorgu', 'GetKunye', 'MalSorgu', 'KunyeliMalSorgu'];
+        $method = $this->discoverMethod($this->genelWsdl(), $candidates);
+
+        if ($method === null) {
+            $inspect = $this->inspectWsdl('genel');
+            return [
+                'ok'               => false,
+                'message'          => 'Künye sorgu methodu bulunamadı. WSDL\'i inceleyin.',
+                'methods_available' => $inspect['methods'] ?? [],
+                'hint'             => 'Aşağıdaki methodlardan uygun olanı hks_client.php\'deki $candidates dizisine ekleyin.',
+            ];
+        }
+
+        $creds = $this->credentials();
+        $requestParams = [
+            'KullaniciAdi' => $creds['username'],
+            'Sifre'        => $creds['password'],
+            'ServisSifre'  => $creds['service_password'],
+            'KunyeNo'      => $kunye_no,
+        ];
+
+        try {
+            $client   = new SoapClient($this->genelWsdl(), $this->soapOptions());
+            $result   = $client->__soapCall($method, [$requestParams]);
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $data     = $this->extractResultArray($result, $method);
+
+            $this->logService('GenelService', $method, $env,
+                $requestParams, ['data' => $data], true, null, null, $duration);
+
+            return ['ok' => true, 'data' => $data, 'method_used' => $method, 'duration_ms' => $duration];
+
+        } catch (SoapFault $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService('GenelService', $method, $env,
+                $requestParams, null, false, $e->faultcode, $e->faultstring, $duration);
+            return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'duration_ms' => $duration];
+
+        } catch (Throwable $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            return ['ok' => false, 'message' => $e->getMessage(), 'duration_ms' => $duration];
+        }
     }
 
     // ── İç Yardımcılar ──────────────────────────────────────
@@ -241,6 +381,26 @@ class HksClient {
             return [(array)$result];
         }
         return [];
+    }
+
+    // Verilen WSDL'den aday method adlarından birini keşfeder
+    private function discoverMethod(string $wsdl, array $candidates): ?string {
+        try {
+            $client    = new SoapClient($wsdl, $this->soapOptions());
+            $functions = $client->__getFunctions() ?? [];
+            $available = [];
+            foreach ($functions as $sig) {
+                if (preg_match('/\b(\w+)\(/', $sig, $m)) {
+                    $available[] = $m[1];
+                }
+            }
+            foreach ($candidates as $candidate) {
+                if (in_array($candidate, $available, true)) {
+                    return $candidate;
+                }
+            }
+        } catch (Throwable) {}
+        return null;
     }
 
     private function notMapped(string $service): array {

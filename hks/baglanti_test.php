@@ -50,13 +50,31 @@ render_flash();
         <li><?= ($s['environment'] ?? 'test') === 'live' ? '🔴 Canlı Ortam' : '🟡 Test Ortamı' ?></li>
     </ul>
 
-    <button type="button" id="btnTest" class="btn btn-primary btn-lg" style="margin-top:8px">
-        🔌 Bağlantıyı Test Et
-    </button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" id="btnTest" class="btn btn-primary btn-lg">
+            🔌 Bağlantıyı Test Et
+        </button>
+        <button type="button" id="btnInspect" class="btn btn-ghost btn-lg">
+            🔎 WSDL Metodlarını Gör
+        </button>
+    </div>
     <span id="test-spinner" style="display:none;margin-left:10px;color:var(--muted)">Test ediliyor...</span>
+    <span id="inspect-spinner" style="display:none;margin-left:10px;color:var(--muted)">WSDL yükleniyor...</span>
 </div>
 
 <div id="test-result" style="display:none;padding:16px;border-radius:8px;margin-bottom:16px"></div>
+
+<div id="inspect-result" style="display:none;margin-bottom:16px">
+    <div class="card" style="padding:20px">
+        <h3 style="margin-top:0">🔎 WSDL Metodları</h3>
+        <div style="margin-bottom:12px">
+            <button type="button" class="btn btn-ghost btn-sm inspect-tab active" data-svc="genel">GenelService</button>
+            <button type="button" class="btn btn-ghost btn-sm inspect-tab" data-svc="bildirim">BildirimService</button>
+        </div>
+        <div id="inspect-methods" style="font-size:.85rem;font-family:monospace;line-height:1.7;white-space:pre-wrap;max-height:320px;overflow-y:auto;background:var(--bg);padding:12px;border-radius:6px;border:1px solid var(--border)"></div>
+        <p id="inspect-wsdl-url" style="font-size:.78rem;color:var(--muted);margin:8px 0 0"></p>
+    </div>
+</div>
 
 <?php if ($s && $s['last_test_at']): ?>
 <div class="card" style="padding:16px">
@@ -72,13 +90,15 @@ render_flash();
 </div>
 
 <script>
+var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
 document.getElementById('btnTest').addEventListener('click', function() {
     var btn = this, spinner = document.getElementById('test-spinner'), result = document.getElementById('test-result');
     btn.disabled = true; spinner.style.display = 'inline'; result.style.display = 'none';
     fetch('ajax.php?action=test_connection', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'csrf=' + encodeURIComponent(document.querySelector('meta[name="csrf-token"]').content)
+        body: 'csrf=' + encodeURIComponent(csrfToken)
     })
     .then(r => r.json())
     .then(data => {
@@ -95,6 +115,46 @@ document.getElementById('btnTest').addEventListener('click', function() {
         result.style.border='1px solid var(--danger)'; result.textContent='İstek gönderilemedi.';
     })
     .finally(() => { btn.disabled=false; spinner.style.display='none'; });
+});
+
+function loadInspect(service) {
+    var spinner = document.getElementById('inspect-spinner');
+    var panel   = document.getElementById('inspect-result');
+    var methods = document.getElementById('inspect-methods');
+    var urlEl   = document.getElementById('inspect-wsdl-url');
+    spinner.style.display = 'inline';
+    fetch('ajax.php?action=inspect_wsdl', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'csrf=' + encodeURIComponent(csrfToken) + '&service=' + encodeURIComponent(service)
+    })
+    .then(r => r.json())
+    .then(data => {
+        panel.style.display = 'block';
+        if (data.ok) {
+            methods.textContent = data.methods && data.methods.length
+                ? data.methods.join('\n')
+                : '(Metod bulunamadı)';
+            urlEl.textContent = 'WSDL: ' + (data.wsdl || '');
+        } else {
+            methods.textContent = '❌ ' + (data.message || 'Hata');
+            urlEl.textContent = '';
+        }
+    })
+    .catch(() => { methods.textContent = 'İstek gönderilemedi.'; })
+    .finally(() => { spinner.style.display = 'none'; });
+}
+
+document.getElementById('btnInspect').addEventListener('click', function() {
+    loadInspect('genel');
+});
+
+document.querySelectorAll('.inspect-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.inspect-tab').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        loadInspect(this.dataset.svc);
+    });
 });
 </script>
 

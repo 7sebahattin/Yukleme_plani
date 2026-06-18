@@ -19,6 +19,11 @@ function hks_has_secure_key(): bool {
         || (defined('HKS_ENC_KEY') && HKS_ENC_KEY !== '');
 }
 
+// Şifre KAYDETMEK için sadece HKS_CRED_KEY kabul edilir (HKS_ENC_KEY fallback yok)
+function hks_can_save_passwords(): bool {
+    return defined('HKS_CRED_KEY') && HKS_CRED_KEY !== '';
+}
+
 function hks_encrypt(string $plain): string {
     if ($plain === '') return '';
     $key = hks_enc_key();

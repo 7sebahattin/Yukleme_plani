@@ -414,7 +414,7 @@ function db(): PDO {
                 )->execute([$_hksperm]);
             } catch (PDOException $_e) { /* role_permissions yok veya zaten var */ }
         }
-        foreach (['hks.read','hks.write'] as $_hksperm) {
+        foreach (['hks.read','hks.write','hks.export'] as $_hksperm) {
             try {
                 $pdo->prepare(
                     "INSERT IGNORE INTO role_permissions (role_id, permission)
@@ -422,6 +422,13 @@ function db(): PDO {
                 )->execute([$_hksperm]);
             } catch (PDOException $_e) { /* sessizce geç */ }
         }
+        // hks.settings ve hks.send sadece admin — operator varsa sil (idempotent)
+        try {
+            $pdo->exec("DELETE rp FROM role_permissions rp
+                        INNER JOIN roles r ON r.id = rp.role_id
+                        WHERE r.slug = 'operator'
+                        AND rp.permission IN ('hks.settings','hks.send')");
+        } catch (PDOException $_e) { /* role_permissions yoksa sessizce geç */ }
         // ── HKS tabloları sonu ──────────────────────────────────────────────────
 
         // DB-Backup-01: database_backups — yedek takip tablosu (idempotent)

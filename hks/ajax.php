@@ -35,16 +35,25 @@ switch ($action) {
 
     // ── Bağlantı Testi ──────────────────────────────────────
     case 'test_connection':
-        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+        if (!(function_exists('can') && can('hks.settings'))) {
             echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
         }
         audit_log_event('hks_connection_tested', 'hks_settings', null, null, ['user' => $user['username'] ?? '']);
         echo json_encode($client->testConnection());
         break;
 
+    // ── WSDL Metod Keşfi ───────────────────────────────────
+    case 'inspect_wsdl':
+        if (!(function_exists('can') && can('hks.settings'))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        $wsdl_service = $input['service'] ?? 'genel';
+        echo json_encode($client->inspectWsdl($wsdl_service));
+        break;
+
     // ── Referans Senkronizasyonu ────────────────────────────
     case 'sync_reference':
-        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+        if (!(function_exists('can') && can('hks.settings'))) {
             echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
         }
         $ref_type = $input['ref_type'] ?? 'all';
@@ -62,6 +71,46 @@ switch ($action) {
         } catch (Throwable $e) {
             echo json_encode(['ok' => false, 'message' => 'Hata: ' . $e->getMessage()]);
         }
+        break;
+
+    // ── Künye Sorgu ────────────────────────────────────────
+    case 'query_kunye':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        $kunye_no = trim($input['kunye_no'] ?? '');
+        if ($kunye_no === '') {
+            echo json_encode(['ok' => false, 'message' => 'Künye numarası girilmedi.']); exit;
+        }
+        $uid = isset($user['id']) ? (int)$user['id'] : null;
+        $result = $client->queryKunye($kunye_no);
+        if ($result['ok']) {
+            $repo->saveQuery('kunye', $kunye_no, 'ok', json_encode($result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid);
+            audit_log_event('hks_kunye_query', 'hks_queries', null, null, ['kunye_no' => $kunye_no]);
+        } else {
+            $repo->saveQuery('kunye', $kunye_no, 'error', $result['message'] ?? null, $uid);
+        }
+        echo json_encode($result);
+        break;
+
+    // ── Bildirim Sorgu ─────────────────────────────────────
+    case 'query_bildirim':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        $bildirim_no = trim($input['bildirim_no'] ?? '');
+        if ($bildirim_no === '') {
+            echo json_encode(['ok' => false, 'message' => 'Bildirim numarası girilmedi.']); exit;
+        }
+        $uid2 = isset($user['id']) ? (int)$user['id'] : null;
+        $result = $client->queryBildirim(['BildirimNo' => $bildirim_no]);
+        if ($result['ok']) {
+            $repo->saveQuery('bildirim', $bildirim_no, 'ok', json_encode($result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid2);
+            audit_log_event('hks_bildirim_query', 'hks_queries', null, null, ['bildirim_no' => $bildirim_no]);
+        } else {
+            $repo->saveQuery('bildirim', $bildirim_no, 'error', $result['message'] ?? null, $uid2);
+        }
+        echo json_encode($result);
         break;
 
     // ── Bilinmeyen action ───────────────────────────────────
