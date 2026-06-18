@@ -8,6 +8,11 @@ declare(strict_types=1);
 
 date_default_timezone_set('Europe/Istanbul');
 
+// Yerel ortam sabitleri (HKS_CRED_KEY vb.) — .gitignore'da
+if (file_exists(__DIR__ . '/local.php')) {
+    require_once __DIR__ . '/local.php';
+}
+
 // --- DB AYARLARI ---
 const DB_HOST    = 'localhost';
 const DB_NAME    = 'yukleme_plani';
@@ -228,6 +233,223 @@ function db(): PDO {
         ] as $_idx_sql) {
             try { $pdo->exec($_idx_sql); } catch (PDOException $_e) { /* var veya tablo yok */ }
         }
+
+        // ── HKS-Core-01: Hal Bildirimi Modülü Tabloları ──────────────────────────
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_settings` (
+                `id`                    INT AUTO_INCREMENT PRIMARY KEY,
+                `environment`           ENUM('test','live') NOT NULL DEFAULT 'test',
+                `username`              VARCHAR(100) NOT NULL DEFAULT '',
+                `password_enc`          TEXT NOT NULL DEFAULT '',
+                `service_password_enc`  TEXT NOT NULL DEFAULT '',
+                `security_word_enc`     TEXT NULL,
+                `sender_name`           VARCHAR(200) NULL,
+                `default_depo`          VARCHAR(100) NULL,
+                `default_il`            VARCHAR(100) NULL,
+                `default_ilce`          VARCHAR(100) NULL,
+                `timeout_seconds`       INT NOT NULL DEFAULT 30,
+                `live_send_enabled`     TINYINT(1) NOT NULL DEFAULT 0,
+                `genel_wsdl_url`        VARCHAR(500) NOT NULL DEFAULT '',
+                `bildirim_wsdl_url`     VARCHAR(500) NOT NULL DEFAULT '',
+                `last_test_at`          DATETIME NULL,
+                `last_test_ok`          TINYINT(1) NULL,
+                `last_test_message`     VARCHAR(500) NULL,
+                `created_at`            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // Eski hks_settings tablosuna yeni kolonları ekle (idempotent)
+            foreach ([
+                "ALTER TABLE `hks_settings` ADD COLUMN `sender_name` VARCHAR(200) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `default_depo` VARCHAR(100) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `default_il` VARCHAR(100) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `default_ilce` VARCHAR(100) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `timeout_seconds` INT NOT NULL DEFAULT 30",
+                "ALTER TABLE `hks_settings` ADD COLUMN `live_send_enabled` TINYINT(1) NOT NULL DEFAULT 0",
+                "ALTER TABLE `hks_settings` ADD COLUMN `genel_wsdl_url` VARCHAR(500) NOT NULL DEFAULT ''",
+                "ALTER TABLE `hks_settings` ADD COLUMN `bildirim_wsdl_url` VARCHAR(500) NOT NULL DEFAULT ''",
+                "ALTER TABLE `hks_settings` ADD COLUMN `last_test_at` DATETIME NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `last_test_ok` TINYINT(1) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `last_test_message` VARCHAR(500) NULL",
+                "ALTER TABLE `hks_settings` ADD COLUMN `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+            ] as $_hkscol) {
+                try { $pdo->exec($_hkscol); } catch (PDOException $_e) { /* zaten var */ }
+            }
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_settings] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_reference_cache` (
+                `id`              INT AUTO_INCREMENT PRIMARY KEY,
+                `ref_type`        VARCHAR(50) NOT NULL,
+                `ref_code`        VARCHAR(100) NOT NULL,
+                `ref_name`        VARCHAR(300) NOT NULL DEFAULT '',
+                `ref_parent_code` VARCHAR(100) NULL,
+                `raw_json`        TEXT NULL,
+                `synced_at`       DATETIME NULL,
+                `is_active`       TINYINT(1) NOT NULL DEFAULT 1,
+                UNIQUE KEY `uq_ref_type_code` (`ref_type`, `ref_code`),
+                INDEX `idx_ref_type`   (`ref_type`),
+                INDEX `idx_ref_parent` (`ref_parent_code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_reference_cache] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_notifications` (
+                `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+                `local_no`               VARCHAR(30) NOT NULL DEFAULT '',
+                `source_type`            VARCHAR(50) NULL,
+                `source_id`              INT NULL,
+                `direction`              VARCHAR(20) NULL,
+                `notification_type`      VARCHAR(100) NULL,
+                `sifat`                  VARCHAR(100) NULL,
+                `firma`                  VARCHAR(200) NOT NULL DEFAULT '',
+                `urun`                   VARCHAR(200) NOT NULL DEFAULT '',
+                `urun_cinsi`             VARCHAR(100) NULL,
+                `miktar`                 DECIMAL(14,3) NOT NULL DEFAULT 0,
+                `birim`                  VARCHAR(20) NOT NULL DEFAULT 'KG',
+                `depo`                   VARCHAR(100) NULL,
+                `il`                     VARCHAR(100) NULL,
+                `ilce`                   VARCHAR(100) NULL,
+                `belde`                  VARCHAR(100) NULL,
+                `uretici_ad`             VARCHAR(200) NULL,
+                `uretici_tc_vkn`         VARCHAR(20) NULL,
+                `alici_ad`               VARCHAR(200) NULL,
+                `alici_tc_vkn`           VARCHAR(20) NULL,
+                `sevk_tarihi`            DATE NULL,
+                `arac_plaka`             VARCHAR(50) NULL,
+                `belge_no`               VARCHAR(100) NULL,
+                `reference_kunye_no`     VARCHAR(100) NULL,
+                `hks_bildirim_no`        VARCHAR(100) NULL,
+                `hks_kunye_no`           VARCHAR(100) NULL,
+                `status`                 ENUM('draft','ready','checked','send_pending','sent','failed','cancelled') NOT NULL DEFAULT 'draft',
+                `validation_errors_json` TEXT NULL,
+                `request_json`           TEXT NULL,
+                `response_json`          TEXT NULL,
+                `last_error`             TEXT NULL,
+                `checked_at`             DATETIME NULL,
+                `checked_by`             INT NULL,
+                `send_attempt_count`     INT NOT NULL DEFAULT 0,
+                `sent_at`                DATETIME NULL,
+                `created_by`             INT NULL,
+                `created_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX `idx_hksn_status`   (`status`),
+                INDEX `idx_hksn_firma`    (`firma`(50)),
+                INDEX `idx_hksn_local_no` (`local_no`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // HKS-Safety-01: durum akışı genişletme + kontrol kolonları (idempotent)
+            try {
+                $pdo->exec("ALTER TABLE `hks_notifications`
+                    MODIFY COLUMN `status`
+                    ENUM('draft','ready','checked','send_pending','sent','failed','cancelled')
+                    NOT NULL DEFAULT 'draft'");
+            } catch (PDOException $_e) { /* zaten genişletilmiş */ }
+            foreach ([
+                "ALTER TABLE `hks_notifications` ADD COLUMN `sifat` VARCHAR(100) NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `checked_at` DATETIME NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `checked_by` INT NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `send_attempt_count` INT NOT NULL DEFAULT 0",
+            ] as $_hkscol) {
+                try { $pdo->exec($_hkscol); } catch (PDOException $_e) { /* zaten var */ }
+            }
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_notifications] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_notification_items` (
+                `id`              INT AUTO_INCREMENT PRIMARY KEY,
+                `notification_id` INT NOT NULL,
+                `urun_code`       VARCHAR(50) NULL,
+                `urun_name`       VARCHAR(200) NOT NULL DEFAULT '',
+                `miktar`          DECIMAL(14,3) NOT NULL DEFAULT 0,
+                `birim_code`      VARCHAR(20) NULL,
+                `birim_name`      VARCHAR(50) NULL,
+                `ambalaj`         VARCHAR(100) NULL,
+                `kalite`          VARCHAR(100) NULL,
+                `raw_json`        TEXT NULL,
+                INDEX `idx_hksni_notif` (`notification_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_notification_items] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_stock` (
+                `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+                `stock_key`              VARCHAR(32) NOT NULL DEFAULT '',
+                `urun`                   VARCHAR(200) NOT NULL DEFAULT '',
+                `urun_code`              VARCHAR(50) NULL,
+                `depo`                   VARCHAR(100) NULL,
+                `reference_kunye_no`     VARCHAR(100) NULL,
+                `hks_kunye_no`           VARCHAR(100) NULL,
+                `giris_miktar`           DECIMAL(14,3) NOT NULL DEFAULT 0,
+                `cikis_miktar`           DECIMAL(14,3) NOT NULL DEFAULT 0,
+                `kalan_miktar`           DECIMAL(14,3) NOT NULL DEFAULT 0,
+                `birim`                  VARCHAR(20) NOT NULL DEFAULT 'KG',
+                `source_notification_id` INT NULL,
+                `updated_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY `uq_stock_key` (`stock_key`),
+                INDEX `idx_hkss_urun` (`urun`(50)),
+                INDEX `idx_hkss_depo` (`depo`(50))
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_stock] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_queries` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `query_type`    ENUM('kunye','bildirim','referans_kunye') NOT NULL,
+                `query_value`   VARCHAR(200) NOT NULL DEFAULT '',
+                `result_status` VARCHAR(50) NOT NULL DEFAULT '',
+                `result_json`   TEXT NULL,
+                `created_by`    INT NULL,
+                `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_hksq_type` (`query_type`),
+                INDEX `idx_hksq_date` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_queries] ' . $_hkse->getMessage()); }
+
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_service_logs` (
+                `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+                `service_name`       VARCHAR(100) NOT NULL DEFAULT '',
+                `method_name`        VARCHAR(100) NOT NULL DEFAULT '',
+                `environment`        VARCHAR(10) NOT NULL DEFAULT 'test',
+                `request_safe_json`  TEXT NULL,
+                `response_json`      TEXT NULL,
+                `is_success`         TINYINT(1) NOT NULL DEFAULT 0,
+                `error_code`         VARCHAR(100) NULL,
+                `error_message`      TEXT NULL,
+                `duration_ms`        INT NOT NULL DEFAULT 0,
+                `created_by`         INT NULL,
+                `created_at`         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX `idx_hkslog_date`    (`created_at`),
+                INDEX `idx_hkslog_success` (`is_success`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_hkse) { error_log('[HKS mig hks_service_logs] ' . $_hkse->getMessage()); }
+
+        // HKS yetkileri — admin ve operator rolleri için (idempotent)
+        foreach (['hks.read','hks.write','hks.settings','hks.send','hks.export'] as $_hksperm) {
+            try {
+                $pdo->prepare(
+                    "INSERT IGNORE INTO role_permissions (role_id, permission)
+                     SELECT r.id, ? FROM roles r WHERE r.slug IN ('admin')"
+                )->execute([$_hksperm]);
+            } catch (PDOException $_e) { /* role_permissions yok veya zaten var */ }
+        }
+        foreach (['hks.read','hks.write','hks.export'] as $_hksperm) {
+            try {
+                $pdo->prepare(
+                    "INSERT IGNORE INTO role_permissions (role_id, permission)
+                     SELECT r.id, ? FROM roles r WHERE r.slug = 'operator'"
+                )->execute([$_hksperm]);
+            } catch (PDOException $_e) { /* sessizce geç */ }
+        }
+        // hks.settings ve hks.send sadece admin — operator varsa sil (idempotent)
+        try {
+            $pdo->exec("DELETE rp FROM role_permissions rp
+                        INNER JOIN roles r ON r.id = rp.role_id
+                        WHERE r.slug = 'operator'
+                        AND rp.permission IN ('hks.settings','hks.send')");
+        } catch (PDOException $_e) { /* role_permissions yoksa sessizce geç */ }
+        // ── HKS tabloları sonu ──────────────────────────────────────────────────
 
         // DB-Backup-01: database_backups — yedek takip tablosu (idempotent)
         try {
