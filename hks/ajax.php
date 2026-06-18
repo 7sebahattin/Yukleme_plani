@@ -1,0 +1,137 @@
+<?php
+// HKS AJAX endpoint — tüm AJAX işlemler burada
+declare(strict_types=1);
+require_once __DIR__ . '/includes/hks_bootstrap.php';
+
+// Auth zorunlu
+require_once __DIR__ . '/../config/auth.php';
+$user = current_user();
+if (!$user) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'message' => 'Oturum açmanız gerekiyor.']);
+    exit;
+}
+
+header('Content-Type: application/json; charset=utf-8');
+
+// JSON body veya form body'den CSRF oku
+$raw   = file_get_contents('php://input');
+$input = [];
+if ($raw) {
+    $input = (array)(json_decode($raw, true) ?? []);
+}
+if (empty($input)) {
+    parse_str($raw, $input);
+}
+$input = array_merge($input, $_POST);
+
+csrf_check($input['csrf'] ?? null);
+
+$action = $_GET['action'] ?? ($input['action'] ?? '');
+$repo   = new HksRepository(db());
+$client = new HksClient($repo);
+
+switch ($action) {
+
+    // ── Bağlantı Testi ──────────────────────────────────────
+    case 'test_connection':
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        audit_log_event('hks_connection_tested', 'hks_settings', null, null, ['user' => $user['username'] ?? '']);
+        echo json_encode($client->testConnection());
+        break;
+
+    // ── Referans Senkronizasyonu ────────────────────────────
+    case 'sync_reference':
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        $ref_type = $input['ref_type'] ?? 'all';
+        echo json_encode(hks_ajax_sync_reference($client, $repo, $ref_type, $user));
+        break;
+
+    // ── Stok Yeniden Hesaplama ──────────────────────────────
+    case 'rebuild_stock':
+        if (!is_admin()) {
+            echo json_encode(['ok' => false, 'message' => 'Admin yetkisi gerekiyor.']); exit;
+        }
+        try {
+            $repo->rebuildStock();
+            echo json_encode(['ok' => true, 'message' => 'Stok yeniden hesaplandı.']);
+        } catch (Throwable $e) {
+            echo json_encode(['ok' => false, 'message' => 'Hata: ' . $e->getMessage()]);
+        }
+        break;
+
+    // ── Bilinmeyen action ───────────────────────────────────
+    default:
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'message' => 'Geçersiz işlem: ' . $action]);
+        break;
+}
+
+// ── Yardımcı fonksiyonlar ────────────────────────────────
+
+function hks_ajax_sync_reference(HksClient $client, HksRepository $repo, string $ref_type, array $user): array {
+    $type_map = [
+        'ulke'          => 'getUlkeler',
+        'il'            => 'getIller',
+        'depo'          => 'getDepolar',
+        'sube'          => 'getSubeler',
+        'urun'          => 'getUrunler',
+        'urun_birim'    => 'getUrunBirimleri',
+        'urun_cins'     => 'getUrunCinsleri',
+        'bildirim_turu' => 'getBildirimTurleri',
+        'sifat'         => 'getSifatlar',
+        'malin_niteligi'=> 'getMalinNiteligi',
+        'uretim_sekli'  => 'getUretimSekli',
+    ];
+
+    if ($ref_type === 'all') {
+        $total = 0; $errors = [];
+        foreach ($type_map as $rtype => $method) {
+            $result = hks_ajax_sync_single($client, $repo, $rtype, $method);
+            if ($result['ok']) {
+                $total += $result['count'] ?? 0;
+            } else {
+                $errors[] = $rtype . ': ' . ($result['message'] ?? 'hata');
+            }
+        }
+        audit_log_event('hks_reference_synced', 'hks_reference_cache', null, null, ['types' => 'all', 'total' => $total]);
+        if ($errors) {
+            return ['ok' => false, 'message' => 'Bazı tipler başarısız: ' . implode(', ', $errors)];
+        }
+        return ['ok' => true, 'message' => "Tüm referanslar senkronize edildi. Toplam: {$total} kayıt."];
+    }
+
+    if (!isset($type_map[$ref_type])) {
+        return ['ok' => false, 'message' => "Bilinmeyen referans tipi: {$ref_type}"];
+    }
+
+    $result = hks_ajax_sync_single($client, $repo, $ref_type, $type_map[$ref_type]);
+    if ($result['ok']) {
+        audit_log_event('hks_reference_synced', 'hks_reference_cache', null, null, ['type' => $ref_type, 'count' => $result['count'] ?? 0]);
+    }
+    return $result;
+}
+
+function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $ref_type, string $method): array {
+    $result = $client->$method();
+    if (!$result['ok']) {
+        return ['ok' => false, 'message' => $result['message'] ?? 'Servis hatası'];
+    }
+    $data = $result['data'] ?? [];
+    $repo->deactivateReferenceType($ref_type);
+    $count = 0;
+    foreach ($data as $item) {
+        $item = (array)$item;
+        $code   = (string)($item['Kod'] ?? $item['kod'] ?? $item['ID'] ?? $item['id'] ?? '');
+        $name   = (string)($item['Ad'] ?? $item['ad'] ?? $item['Adi'] ?? $item['adi'] ?? $item['name'] ?? $code);
+        $parent = (string)($item['IlKodu'] ?? $item['il_kodu'] ?? $item['ParentKod'] ?? '');
+        if ($code === '') continue;
+        $repo->upsertReference($ref_type, $code, $name, $parent ?: null, json_encode($item, JSON_UNESCAPED_UNICODE));
+        $count++;
+    }
+    return ['ok' => true, 'message' => hks_ref_type_label($ref_type) . ": {$count} kayıt senkronize edildi.", 'count' => $count];
+}

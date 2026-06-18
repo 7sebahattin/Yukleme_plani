@@ -1,14 +1,19 @@
 Options -Indexes
 
-# Yedek / şema / log dosyalarına web erişimi kapalı
+# SQL, log, backup dosyalarına web erişimi kapalı
 <FilesMatch "\.(sql|bak|log)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# Include-only PHP dosyaları (class/helper) — doğrudan web erişimi kapalı.
-# Not: PHP içinden require_once ile çağrılmaları dosya sistemi erişimi olduğu
-# için bundan etkilenmez; yalnızca doğrudan HTTP isteği engellenir.
+# includes/ ve views/ klasörlerindeki PHP dosyalarına doğrudan web erişimi kapalı
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^includes/.*\.php$ - [F,L]
+    RewriteRule ^views/.*\.php$ - [F,L]
+</IfModule>
+
+# Eski include-only dosyalar (geriye dönük uyumluluk)
 <FilesMatch "^(HksClient|HksRepository|HksConfig|helpers)\.php$">
     Order allow,deny
     Deny from all

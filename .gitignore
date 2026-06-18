@@ -12,3 +12,4 @@ deploy.log
 # Geçici / yerel veritabanı dosyaları
 *.sqlite
 *.sqlite3
+config/local.php
