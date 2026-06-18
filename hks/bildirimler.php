@@ -27,6 +27,16 @@ render_header('HKS Bildirimler');
 render_flash();
 ?>
 
+<style>
+.hks-badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:.78rem; font-weight:600; }
+.hks-badge-draft     { background:#e5e7eb; color:#374151; }
+.hks-badge-ready     { background:#dbeafe; color:#1e40af; }
+.hks-badge-checked   { background:#ede9fe; color:#5b21b6; }
+.hks-badge-pending   { background:#fef9c3; color:#854d0e; }
+.hks-badge-sent      { background:#d1fae5; color:#065f46; }
+.hks-badge-failed    { background:#fee2e2; color:#991b1b; }
+.hks-badge-cancelled { background:#f3f4f6; color:#6b7280; }
+</style>
 <div class="hks-page" style="max-width:1200px;margin:0 auto">
 <?php
 $hks_active_tab = 'bildirimler.php';
@@ -50,7 +60,7 @@ include __DIR__ . '/views/_tabs.php';
     <a href="bildirimler.php" class="btn btn-sm <?= $filter_status === '' ? 'btn-primary' : 'btn-ghost' ?>">
         Tümü (<?= array_sum($counts) ?>)
     </a>
-    <?php foreach (['draft'=>'Taslak','ready'=>'Hazır','sent'=>'Gönderildi','failed'=>'Hatalı','cancelled'=>'İptal'] as $st => $lbl): ?>
+    <?php foreach (['draft'=>'Taslak','ready'=>'Hazır','checked'=>'Kontrol Edildi','sent'=>'Gönderildi','failed'=>'Hatalı','cancelled'=>'İptal'] as $st => $lbl): ?>
     <a href="bildirimler.php?status=<?= hks_h($st) ?>" class="btn btn-sm <?= $filter_status === $st ? 'btn-primary' : 'btn-ghost' ?>">
         <?= hks_h($lbl) ?> (<?= $counts[$st] ?? 0 ?>)
     </a>

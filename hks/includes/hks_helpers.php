@@ -22,24 +22,28 @@ function hks_check_soap(): bool {
 
 function hks_status_label(string $status): string {
     return match($status) {
-        'draft'     => 'Taslak',
-        'ready'     => 'Gönderime Hazır',
-        'sent'      => 'Gönderildi',
-        'failed'    => 'Hata',
-        'cancelled' => 'İptal',
-        default     => $status,
+        'draft'        => 'Taslak',
+        'ready'        => 'Gönderime Hazır',
+        'checked'      => 'Kontrol Edildi',
+        'send_pending' => 'Gönderim Kilidi',
+        'sent'         => 'Gönderildi',
+        'failed'       => 'Hata',
+        'cancelled'    => 'İptal',
+        default        => $status,
     };
 }
 
 function hks_status_badge(string $status): string {
     $label = hks_status_label($status);
     $cls   = match($status) {
-        'draft'     => 'hks-badge-draft',
-        'ready'     => 'hks-badge-ready',
-        'sent'      => 'hks-badge-sent',
-        'failed'    => 'hks-badge-failed',
-        'cancelled' => 'hks-badge-cancelled',
-        default     => '',
+        'draft'        => 'hks-badge-draft',
+        'ready'        => 'hks-badge-ready',
+        'checked'      => 'hks-badge-checked',
+        'send_pending' => 'hks-badge-pending',
+        'sent'         => 'hks-badge-sent',
+        'failed'       => 'hks-badge-failed',
+        'cancelled'    => 'hks-badge-cancelled',
+        default        => '',
     };
     return '<span class="hks-badge ' . $cls . '">' . hks_h($label) . '</span>';
 }
@@ -86,26 +90,130 @@ function hks_ref_options(array $refs, string $selected = '', bool $include_empty
 
 function hks_validate_notification(array $n): array {
     $errors = [];
+
+    // Her zaman zorunlu alanlar
     $required = [
         'notification_type' => 'Bildirim türü',
+        'sifat'             => 'Sıfat',
         'firma'             => 'Firma',
         'urun'              => 'Ürün',
+        'urun_cinsi'        => 'Ürün cinsi',
         'miktar'            => 'Miktar',
         'birim'             => 'Birim',
-        'depo'              => 'Depo',
+        'depo'              => 'Depo / şube',
         'il'                => 'İl',
+        'ilce'              => 'İlçe',
         'sevk_tarihi'       => 'Sevk tarihi',
         'arac_plaka'        => 'Araç plaka',
+        'alici_ad'          => 'Alıcı adı',
+        'alici_tc_vkn'      => 'Alıcı TC / VKN / vergi no',
     ];
     foreach ($required as $field => $label) {
-        if (empty($n[$field])) {
+        if (trim((string)($n[$field] ?? '')) === '') {
             $errors[] = $label . ' zorunludur.';
         }
     }
-    if (!empty($n['miktar']) && (float)$n['miktar'] <= 0) {
+
+    // Miktar > 0
+    if (trim((string)($n['miktar'] ?? '')) !== '' && (float)$n['miktar'] <= 0) {
         $errors[] = 'Miktar sıfırdan büyük olmalıdır.';
     }
+
+    // Sevk tarihi format kontrolü (Y-m-d)
+    $sevk = trim((string)($n['sevk_tarihi'] ?? ''));
+    if ($sevk !== '') {
+        $d = DateTime::createFromFormat('Y-m-d', $sevk);
+        if (!$d || $d->format('Y-m-d') !== $sevk) {
+            $errors[] = 'Sevk tarihi formatı geçersiz (YYYY-AA-GG olmalı).';
+        }
+    }
+
+    // Plaka format kontrolü — boş/geçersiz değil
+    $plaka = hks_plate((string)($n['arac_plaka'] ?? ''));
+    if ($plaka !== '') {
+        $first = explode('/', $plaka)[0];
+        if (!preg_match('/^[0-9]{2}[A-ZÇĞİÖŞÜ]{1,3}[0-9]{2,4}$/u', $first)) {
+            $errors[] = 'Araç plaka formatı geçersiz görünüyor (örn. 34ABC123).';
+        }
+    }
+
+    // TC/VKN uzunluk kontrolü (alıcı)
+    $alici_no = preg_replace('/\D/', '', (string)($n['alici_tc_vkn'] ?? ''));
+    if ($alici_no !== '' && !in_array(strlen($alici_no), [10, 11], true)) {
+        $errors[] = 'Alıcı TC (11) veya VKN (10) hane uzunluğunda olmalı.';
+    }
+
+    // Üretici: ikisinden biri girildiyse her ikisi de zorunlu
+    $up_ad  = trim((string)($n['uretici_ad'] ?? ''));
+    $up_vkn = trim((string)($n['uretici_tc_vkn'] ?? ''));
+    if (($up_ad !== '' || $up_vkn !== '') && ($up_ad === '' || $up_vkn === '')) {
+        $errors[] = 'Üretici bilgisi girilecekse hem üretici adı hem TC/VKN zorunludur.';
+    }
+
+    // Çıkış yönünde referans künye zorunlu
+    if (($n['direction'] ?? '') === 'cikis' && trim((string)($n['reference_kunye_no'] ?? '')) === '') {
+        $errors[] = 'Çıkış bildiriminde referans künye no zorunludur.';
+    }
+
     return $errors;
+}
+
+// HKS'ye gidecek operasyonel payload önizlemesi — şifre/secret İÇERMEZ
+function hks_notification_payload_preview(array $n): array {
+    return [
+        'Bildirim Türü'  => $n['notification_type'] ?? '',
+        'Sıfat'          => $n['sifat'] ?? '',
+        'Yön'            => $n['direction'] ?? '',
+        'Firma'          => $n['firma'] ?? '',
+        'Ürün'           => $n['urun'] ?? '',
+        'Ürün Cinsi'     => $n['urun_cinsi'] ?? '',
+        'Miktar'         => ($n['miktar'] ?? '') !== '' ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . ($n['birim'] ?? '') : '',
+        'Depo / Şube'    => $n['depo'] ?? '',
+        'İl / İlçe'      => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
+        'Belde'          => $n['belde'] ?? '',
+        'Üretici'        => trim(($n['uretici_ad'] ?? '') . ' ' . ($n['uretici_tc_vkn'] ? '(' . $n['uretici_tc_vkn'] . ')' : '')),
+        'Alıcı'          => trim(($n['alici_ad'] ?? '') . ' ' . ($n['alici_tc_vkn'] ? '(' . $n['alici_tc_vkn'] . ')' : '')),
+        'Araç Plaka'     => $n['arac_plaka'] ?? '',
+        'Sevk Tarihi'    => $n['sevk_tarihi'] ?? '',
+        'Belge No'       => $n['belge_no'] ?? '',
+        'Referans Künye' => $n['reference_kunye_no'] ?? '',
+    ];
+}
+
+// Canlı gönderim için engelleyici koşulları döndürür — boş ise gönderilebilir
+function hks_send_blockers(array $n, ?array $settings): array {
+    $blockers = [];
+    if (!(function_exists('can') && can('hks.send'))) {
+        $blockers[] = 'Canlı gönderim yetkiniz yok (hks.send).';
+    }
+    if (!$settings || (int)($settings['live_send_enabled'] ?? 0) !== 1) {
+        $blockers[] = 'Canlı gönderim ayarlardan etkinleştirilmemiş.';
+    }
+    if (($n['status'] ?? '') !== 'checked') {
+        $blockers[] = 'Kayıt "Kontrol Edildi" durumunda olmalı.';
+    }
+    if (!hks_can_save_passwords()) {
+        $blockers[] = 'HKS_CRED_KEY tanımlı değil.';
+    }
+    if (trim((string)($settings['username'] ?? '')) === '') {
+        $blockers[] = 'HKS kullanıcı adı kayıtlı değil.';
+    }
+    if (trim((string)($settings['password_enc'] ?? '')) === '') {
+        $blockers[] = 'HKS kullanıcı şifresi kayıtlı değil.';
+    }
+    if (trim((string)($settings['service_password_enc'] ?? '')) === '') {
+        $blockers[] = 'HKS servis şifresi kayıtlı değil.';
+    }
+    if ((int)($settings['last_test_ok'] ?? 0) !== 1) {
+        $blockers[] = 'Son bağlantı testi başarılı değil.';
+    }
+    if (!empty($n['validation_errors_json']) && $n['validation_errors_json'] !== '[]') {
+        $blockers[] = 'Doğrulama hataları mevcut.';
+    }
+    if (!empty($n['hks_bildirim_no']) || !empty($n['hks_kunye_no'])) {
+        $blockers[] = 'Bu kayıt zaten HKS numarası almış (mükerrer engeli).';
+    }
+    return $blockers;
 }
 
 // ── Yükleme planından taslak oluştur ───────────────────

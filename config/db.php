@@ -301,6 +301,7 @@ function db(): PDO {
                 `source_id`              INT NULL,
                 `direction`              VARCHAR(20) NULL,
                 `notification_type`      VARCHAR(100) NULL,
+                `sifat`                  VARCHAR(100) NULL,
                 `firma`                  VARCHAR(200) NOT NULL DEFAULT '',
                 `urun`                   VARCHAR(200) NOT NULL DEFAULT '',
                 `urun_cinsi`             VARCHAR(100) NULL,
@@ -320,11 +321,14 @@ function db(): PDO {
                 `reference_kunye_no`     VARCHAR(100) NULL,
                 `hks_bildirim_no`        VARCHAR(100) NULL,
                 `hks_kunye_no`           VARCHAR(100) NULL,
-                `status`                 ENUM('draft','ready','sent','failed','cancelled') NOT NULL DEFAULT 'draft',
+                `status`                 ENUM('draft','ready','checked','send_pending','sent','failed','cancelled') NOT NULL DEFAULT 'draft',
                 `validation_errors_json` TEXT NULL,
                 `request_json`           TEXT NULL,
                 `response_json`          TEXT NULL,
                 `last_error`             TEXT NULL,
+                `checked_at`             DATETIME NULL,
+                `checked_by`             INT NULL,
+                `send_attempt_count`     INT NOT NULL DEFAULT 0,
                 `sent_at`                DATETIME NULL,
                 `created_by`             INT NULL,
                 `created_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -333,6 +337,22 @@ function db(): PDO {
                 INDEX `idx_hksn_firma`    (`firma`(50)),
                 INDEX `idx_hksn_local_no` (`local_no`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // HKS-Safety-01: durum akışı genişletme + kontrol kolonları (idempotent)
+            try {
+                $pdo->exec("ALTER TABLE `hks_notifications`
+                    MODIFY COLUMN `status`
+                    ENUM('draft','ready','checked','send_pending','sent','failed','cancelled')
+                    NOT NULL DEFAULT 'draft'");
+            } catch (PDOException $_e) { /* zaten genişletilmiş */ }
+            foreach ([
+                "ALTER TABLE `hks_notifications` ADD COLUMN `sifat` VARCHAR(100) NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `checked_at` DATETIME NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `checked_by` INT NULL",
+                "ALTER TABLE `hks_notifications` ADD COLUMN `send_attempt_count` INT NOT NULL DEFAULT 0",
+            ] as $_hkscol) {
+                try { $pdo->exec($_hkscol); } catch (PDOException $_e) { /* zaten var */ }
+            }
         } catch (PDOException $_hkse) { error_log('[HKS mig hks_notifications] ' . $_hkse->getMessage()); }
 
         try {

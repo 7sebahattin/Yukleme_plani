@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $data = [
         'notification_type' => trim($_POST['notification_type'] ?? ''),
+        'sifat'             => trim($_POST['sifat'] ?? '') ?: null,
         'firma'             => trim($_POST['firma'] ?? ''),
         'urun'              => trim($_POST['urun'] ?? ''),
         'urun_cinsi'        => trim($_POST['urun_cinsi'] ?? '') ?: null,
@@ -49,12 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($is_new) {
         $data['created_by'] = $auth_user['id'] ?? null;
         $new_id = $repo->createNotification($data);
-        // Zorunlu alanlar tamam → ready'ye geç
-        $errors = hks_validate_notification($data);
-        if (empty($errors)) {
-            $repo->updateNotification($new_id, $data);
-        }
-        audit_log_event('hks_notification_draft_created', 'hks_notifications', $new_id, null, ['firma' => $data['firma'], 'urun' => $data['urun']]);
+        // Doğrulama çalışır: zorunlu alanlar tamamsa ready, eksikse draft + hata listesi
+        $repo->updateNotification($new_id, $data);
+        $created = $repo->getNotification($new_id);
+        audit_log_event('hks_notification_draft_created', 'hks_notifications', $new_id, null, ['firma' => $data['firma'], 'urun' => $data['urun'], 'status' => $created['status'] ?? 'draft']);
+        audit_log_event('hks_notification_validated', 'hks_notifications', $new_id, null, ['status' => $created['status'] ?? 'draft']);
         set_flash('success', 'Bildirim taslağı oluşturuldu.');
         header('Location: bildirim_view.php?id=' . $new_id); exit;
     } else {
@@ -62,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $updated = $repo->getNotification($id);
         $event = $updated['status'] === 'ready' ? 'hks_notification_ready' : 'hks_notification_draft_created';
         audit_log_event($event, 'hks_notifications', $id, null, ['status' => $updated['status']]);
+        audit_log_event('hks_notification_validated', 'hks_notifications', $id, null, ['status' => $updated['status']]);
         set_flash('success', 'Bildirim güncellendi.');
         header('Location: bildirim_view.php?id=' . $id); exit;
     }
@@ -69,6 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Referans verileri dropdown için
 $bildirim_turleri = $repo->getReferences('bildirim_turu');
+$sifatlar         = $repo->getReferences('sifat');
 $iller            = $repo->getReferences('il');
 $depolar          = $repo->getReferences('depo');
 $birimler         = $repo->getReferences('urun_birim');
@@ -129,11 +131,22 @@ include __DIR__ . '/views/_tabs.php';
             </div>
 
             <div class="form-group">
+                <label for="sifat">Sıfat <span style="color:var(--danger)">*</span></label>
+                <?php if ($sifatlar): ?>
+                <select id="sifat" name="sifat">
+                    <?= hks_ref_options($sifatlar, $v['sifat'] ?? '') ?>
+                </select>
+                <?php else: ?>
+                <input type="text" id="sifat" name="sifat" value="<?= hks_h($v['sifat'] ?? '') ?>" placeholder="Sıfat kodu">
+                <?php endif; ?>
+            </div>
+
+            <div class="form-group">
                 <label for="direction">Yön</label>
                 <select id="direction" name="direction">
                     <option value="">— Seçin —</option>
                     <option value="giris" <?= ($v['direction'] ?? '') === 'giris' ? 'selected' : '' ?>>Giriş</option>
-                    <option value="cikis" <?= ($v['direction'] ?? '') === 'cikis' ? 'selected' : '' ?>>Çıkış</option>
+                    <option value="cikis" <?= ($v['direction'] ?? '') === 'cikis' ? 'selected' : '' ?>>Çıkış (referans künye zorunlu)</option>
                 </select>
             </div>
 
@@ -150,7 +163,7 @@ include __DIR__ . '/views/_tabs.php';
             </div>
 
             <div class="form-group">
-                <label for="urun_cinsi">Ürün Cinsi</label>
+                <label for="urun_cinsi">Ürün Cinsi <span style="color:var(--danger)">*</span></label>
                 <?php if ($urun_cinsleri): ?>
                 <select id="urun_cinsi" name="urun_cinsi">
                     <?= hks_ref_options($urun_cinsleri, $v['urun_cinsi'] ?? '') ?>
@@ -213,7 +226,7 @@ include __DIR__ . '/views/_tabs.php';
             </div>
 
             <div class="form-group">
-                <label for="ilce">İlçe</label>
+                <label for="ilce">İlçe <span style="color:var(--danger)">*</span></label>
                 <input type="text" id="ilce" name="ilce" value="<?= hks_h($v['ilce'] ?? '') ?>" placeholder="İlçe kodu">
             </div>
 
@@ -238,12 +251,13 @@ include __DIR__ . '/views/_tabs.php';
             </div>
 
             <div class="form-group">
-                <label for="alici_ad">Alıcı Adı</label>
+                <label for="alici_ad">Alıcı Adı <span style="color:var(--danger)">*</span></label>
                 <input type="text" id="alici_ad" name="alici_ad" value="<?= hks_h($v['alici_ad'] ?? '') ?>">
             </div>
             <div class="form-group">
-                <label for="alici_tc_vkn">Alıcı TC / VKN</label>
-                <input type="text" id="alici_tc_vkn" name="alici_tc_vkn" value="<?= hks_h($v['alici_tc_vkn'] ?? '') ?>">
+                <label for="alici_tc_vkn">Alıcı TC / VKN <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="alici_tc_vkn" name="alici_tc_vkn" value="<?= hks_h($v['alici_tc_vkn'] ?? '') ?>"
+                       inputmode="numeric" placeholder="11 hane TC veya 10 hane VKN">
             </div>
 
             <div class="form-group">

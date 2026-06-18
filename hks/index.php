@@ -12,6 +12,7 @@ $client   = new HksClient($repo);
 $settings = $repo->getSettings();
 
 $counts   = $repo->countNotificationsByStatus();
+$dupCount = $repo->countDuplicateWarnings();
 $refStats = $repo->getReferenceStats();
 $recentLogs = $repo->getRecentLogs(5);
 
@@ -55,6 +56,8 @@ render_flash();
 .hks-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: .78rem; font-weight: 600; }
 .hks-badge-draft     { background: #e5e7eb; color: #374151; }
 .hks-badge-ready     { background: #dbeafe; color: #1e40af; }
+.hks-badge-checked   { background: #ede9fe; color: #5b21b6; }
+.hks-badge-pending   { background: #fef9c3; color: #854d0e; }
 .hks-badge-sent      { background: #d1fae5; color: #065f46; }
 .hks-badge-failed    { background: #fee2e2; color: #991b1b; }
 .hks-badge-cancelled { background: #f3f4f6; color: #6b7280; }
@@ -166,11 +169,18 @@ render_flash();
         <div class="hks-card-sub"><a href="bildirimler.php?status=draft">Listele →</a></div>
     </div>
 
-    <!-- Gönderime Hazır -->
-    <div class="hks-card <?= $counts['ready'] > 0 ? 'hks-card-ok' : 'hks-card-info' ?>">
-        <div class="hks-card-title">Gönderime Hazır</div>
+    <!-- Gönderime Hazır (kontrol edilmemiş) -->
+    <div class="hks-card <?= $counts['ready'] > 0 ? 'hks-card-warn' : 'hks-card-info' ?>">
+        <div class="hks-card-title">Hazır — Kontrol Bekliyor</div>
         <div class="hks-card-value"><?= $counts['ready'] ?></div>
-        <div class="hks-card-sub"><a href="bildirimler.php?status=ready">Listele →</a></div>
+        <div class="hks-card-sub">Zorunlu alanlar tamam, kontrol edilmemiş<br><a href="bildirimler.php?status=ready">Listele →</a></div>
+    </div>
+
+    <!-- Kontrol Edilmiş (gönderilmemiş) -->
+    <div class="hks-card <?= $counts['checked'] > 0 ? 'hks-card-ok' : 'hks-card-info' ?>">
+        <div class="hks-card-title">Kontrol Edildi — Gönderilmedi</div>
+        <div class="hks-card-value"><?= $counts['checked'] ?></div>
+        <div class="hks-card-sub">Yetkili gönderebilir<br><a href="bildirimler.php?status=checked">Listele →</a></div>
     </div>
 
     <!-- Gönderildi -->
@@ -187,6 +197,13 @@ render_flash();
         <?php if ($counts['failed'] > 0): ?>
         <div class="hks-card-sub"><a href="bildirimler.php?status=failed">İncele →</a></div>
         <?php endif; ?>
+    </div>
+
+    <!-- Mükerrer Uyarısı -->
+    <div class="hks-card <?= $dupCount > 0 ? 'hks-card-warn' : 'hks-card-info' ?>">
+        <div class="hks-card-title">Mükerrer Uyarısı</div>
+        <div class="hks-card-value"><?= $dupCount ?></div>
+        <div class="hks-card-sub">İçeriği gönderilmiş bir kayıtla eşleşen taslak/hazır kayıt</div>
     </div>
 
     <!-- Referans Durumu -->

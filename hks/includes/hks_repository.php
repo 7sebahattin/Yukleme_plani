@@ -164,13 +164,31 @@ class HksRepository {
             $rows = $this->pdo->query(
                 "SELECT status, COUNT(*) AS cnt FROM hks_notifications GROUP BY status"
             )->fetchAll();
-            $out = ['draft'=>0,'ready'=>0,'sent'=>0,'failed'=>0,'cancelled'=>0];
+            $out = ['draft'=>0,'ready'=>0,'checked'=>0,'send_pending'=>0,'sent'=>0,'failed'=>0,'cancelled'=>0];
             foreach ($rows as $r) {
                 if (isset($out[$r['status']])) $out[$r['status']] = (int)$r['cnt'];
             }
             return $out;
         } catch (Throwable) {
-            return ['draft'=>0,'ready'=>0,'sent'=>0,'failed'=>0,'cancelled'=>0];
+            return ['draft'=>0,'ready'=>0,'checked'=>0,'send_pending'=>0,'sent'=>0,'failed'=>0,'cancelled'=>0];
+        }
+    }
+
+    // Mükerrer uyarısı olan kayıt sayısı — gönderilmemiş ama içeriği bir 'sent' ile eşleşen
+    public function countDuplicateWarnings(): int {
+        try {
+            return (int)$this->pdo->query(
+                "SELECT COUNT(*) FROM hks_notifications a
+                 WHERE a.status IN ('draft','ready','checked')
+                 AND EXISTS (
+                     SELECT 1 FROM hks_notifications b
+                     WHERE b.status='sent' AND b.id<>a.id
+                       AND b.firma=a.firma AND b.urun=a.urun AND b.miktar=a.miktar
+                       AND COALESCE(b.belge_no,'')=COALESCE(a.belge_no,'')
+                 )"
+            )->fetchColumn();
+        } catch (Throwable) {
+            return 0;
         }
     }
 
@@ -183,19 +201,20 @@ class HksRepository {
     public function createNotification(array $data): int {
         $this->pdo->prepare(
             "INSERT INTO hks_notifications
-                (local_no, source_type, source_id, direction, notification_type,
+                (local_no, source_type, source_id, direction, notification_type, sifat,
                  firma, urun, urun_cinsi, miktar, birim, depo, il, ilce, belde,
                  uretici_ad, uretici_tc_vkn, alici_ad, alici_tc_vkn,
                  sevk_tarihi, arac_plaka, belge_no, reference_kunye_no,
                  status, created_by, created_at, updated_at)
              VALUES
-                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
         )->execute([
             $this->nextLocalNo(),
             $data['source_type'] ?? null,
             $data['source_id'] ?? null,
             $data['direction'] ?? null,
             $data['notification_type'] ?? null,
+            $data['sifat'] ?? null,
             $data['firma'] ?? '',
             $data['urun'] ?? '',
             $data['urun_cinsi'] ?? null,
@@ -224,14 +243,16 @@ class HksRepository {
 
         $this->pdo->prepare(
             "UPDATE hks_notifications SET
-                notification_type=?, firma=?, urun=?, urun_cinsi=?,
+                notification_type=?, sifat=?, direction=?, firma=?, urun=?, urun_cinsi=?,
                 miktar=?, birim=?, depo=?, il=?, ilce=?, belde=?,
                 uretici_ad=?, uretici_tc_vkn=?, alici_ad=?, alici_tc_vkn=?,
                 sevk_tarihi=?, arac_plaka=?, belge_no=?, reference_kunye_no=?,
                 validation_errors_json=?, status=?, updated_at=NOW()
-             WHERE id=? AND status IN ('draft','ready','failed')"
+             WHERE id=? AND status IN ('draft','ready','failed','checked')"
         )->execute([
             $data['notification_type'] ?? null,
+            $data['sifat'] ?? null,
+            $data['direction'] ?? null,
             $data['firma'] ?? '',
             $data['urun'] ?? '',
             $data['urun_cinsi'] ?? null,
@@ -270,10 +291,150 @@ class HksRepository {
     }
 
     public function cancelNotification(int $id): void {
+        // Sent ve send_pending hariç tüm durumlar iptal edilebilir
         $this->pdo->prepare(
             "UPDATE hks_notifications SET status='cancelled', updated_at=NOW()
-             WHERE id=? AND status IN ('draft','ready','failed')"
+             WHERE id=? AND status IN ('draft','ready','checked','failed')"
         )->execute([$id]);
+    }
+
+    // ── HKS-Safety-01: Kontrol akışı ─────────────────────────
+
+    // Kaydı "kontrol edildi" yap — yalnızca düzenlenebilir durumdan ve hata yokken
+    public function markChecked(int $id, ?int $userId): bool {
+        $st = $this->pdo->prepare(
+            "UPDATE hks_notifications
+                SET status='checked', validation_errors_json=NULL,
+                    checked_at=NOW(), checked_by=?, updated_at=NOW()
+             WHERE id=? AND status IN ('draft','ready','failed')"
+        );
+        $st->execute([$userId, $id]);
+        return $st->rowCount() > 0;
+    }
+
+    // Doğrulama hatalarını kaydet, durumu draft/ready olarak ayarla
+    public function setValidation(int $id, array $errors): void {
+        $status = empty($errors) ? 'ready' : 'draft';
+        $this->pdo->prepare(
+            "UPDATE hks_notifications
+                SET validation_errors_json=?, status=?, updated_at=NOW()
+             WHERE id=? AND status IN ('draft','ready','failed','checked')"
+        )->execute([
+            $errors ? json_encode($errors, JSON_UNESCAPED_UNICODE) : null,
+            $status, $id,
+        ]);
+    }
+
+    // Aynı kaynak (source_type+source_id) için gönderilmiş kayıt var mı?
+    public function findSameSourceSent(?string $sourceType, ?int $sourceId, int $excludeId = 0): ?array {
+        if (!$sourceType || !$sourceId) return null;
+        $st = $this->pdo->prepare(
+            "SELECT id, local_no FROM hks_notifications
+             WHERE source_type=? AND source_id=? AND status='sent' AND id<>? LIMIT 1"
+        );
+        $st->execute([$sourceType, $sourceId, $excludeId]);
+        return $st->fetch() ?: null;
+    }
+
+    // İçerik bazlı mükerrer: aynı belge_no+firma+urun+miktar+sevk_tarihi son N günde gönderilmiş mi?
+    public function findContentDuplicateSent(array $n, int $excludeId = 0, int $days = 30): ?array {
+        $st = $this->pdo->prepare(
+            "SELECT id, local_no, sent_at FROM hks_notifications
+             WHERE status='sent' AND id<>?
+               AND firma=? AND urun=? AND miktar=?
+               AND COALESCE(belge_no,'')=? AND COALESCE(sevk_tarihi,'0000-00-00')=?
+               AND sent_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             LIMIT 1"
+        );
+        $st->execute([
+            $excludeId,
+            $n['firma'] ?? '',
+            $n['urun'] ?? '',
+            (float)($n['miktar'] ?? 0),
+            (string)($n['belge_no'] ?? ''),
+            (string)($n['sevk_tarihi'] ?? '0000-00-00'),
+            $days,
+        ]);
+        return $st->fetch() ?: null;
+    }
+
+    // Gönderim için kaydı kilitle — transaction + FOR UPDATE + mükerrer engeli
+    // Başarılıysa status=send_pending yapılır. Dönen: ['ok'=>bool,'reason'=>?,'notification'=>?]
+    public function lockForSend(int $id): array {
+        try {
+            $this->pdo->beginTransaction();
+            $st = $this->pdo->prepare("SELECT * FROM hks_notifications WHERE id=? FOR UPDATE");
+            $st->execute([$id]);
+            $n = $st->fetch();
+
+            if (!$n) {
+                $this->pdo->rollBack();
+                return ['ok' => false, 'reason' => 'Kayıt bulunamadı.'];
+            }
+            if ($n['status'] !== 'checked') {
+                $this->pdo->rollBack();
+                return ['ok' => false, 'reason' => 'Kayıt "Kontrol Edildi" durumunda değil (mevcut: ' . $n['status'] . ').', 'notification' => $n];
+            }
+            if (!empty($n['hks_bildirim_no']) || !empty($n['hks_kunye_no'])) {
+                $this->pdo->rollBack();
+                return ['ok' => false, 'reason' => 'Bu kayıt zaten HKS numarası almış. Tekrar gönderilemez.', 'notification' => $n, 'duplicate' => true];
+            }
+            $sameSource = $this->findSameSourceSent($n['source_type'] ?? null, isset($n['source_id']) ? (int)$n['source_id'] : null, $id);
+            if ($sameSource) {
+                $this->pdo->rollBack();
+                return ['ok' => false, 'reason' => 'Aynı kaynak kayıt daha önce gönderilmiş (' . $sameSource['local_no'] . ').', 'notification' => $n, 'duplicate' => true];
+            }
+
+            $this->pdo->prepare(
+                "UPDATE hks_notifications
+                    SET status='send_pending', send_attempt_count=send_attempt_count+1, updated_at=NOW()
+                 WHERE id=?"
+            )->execute([$id]);
+            $this->pdo->commit();
+            return ['ok' => true, 'notification' => $n];
+
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            return ['ok' => false, 'reason' => 'Kilitleme hatası: ' . $e->getMessage()];
+        }
+    }
+
+    // Gönderim başarılı — sent yap
+    public function finalizeSent(int $id, ?string $hksBildirimNo, ?string $hksKunyeNo, ?string $responseJson): void {
+        $this->pdo->prepare(
+            "UPDATE hks_notifications
+                SET status='sent', hks_bildirim_no=?, hks_kunye_no=?,
+                    response_json=?, last_error=NULL, sent_at=NOW(), updated_at=NOW()
+             WHERE id=? AND status='send_pending'"
+        )->execute([$hksBildirimNo, $hksKunyeNo, $responseJson, $id]);
+    }
+
+    // Gönderim hatası — failed yap, HKS no boş kalır, otomatik tekrar YOK
+    public function markFailed(int $id, string $error, ?string $responseJson): void {
+        $this->pdo->prepare(
+            "UPDATE hks_notifications
+                SET status='failed', last_error=?, response_json=?, updated_at=NOW()
+             WHERE id=? AND status='send_pending'"
+        )->execute([$error, $responseJson, $id]);
+    }
+
+    // Gönderim yapılamadı (servis eşlenmedi vb.) — kilidi geri checked'e al
+    public function revertToChecked(int $id): void {
+        $this->pdo->prepare(
+            "UPDATE hks_notifications SET status='checked', updated_at=NOW()
+             WHERE id=? AND status='send_pending'"
+        )->execute([$id]);
+    }
+
+    public function userName(?int $id): string {
+        if (!$id) return '';
+        try {
+            $st = $this->pdo->prepare("SELECT username FROM users WHERE id=?");
+            $st->execute([$id]);
+            return (string)($st->fetchColumn() ?: '');
+        } catch (Throwable) {
+            return '';
+        }
     }
 
     private function nextLocalNo(): string {
