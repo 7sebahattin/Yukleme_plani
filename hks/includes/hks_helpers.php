@@ -297,6 +297,75 @@ function hks_normalize_response(mixed $raw): array {
     ];
 }
 
+// PHP 8.0 uyumlu liste (indexed array) kontrolü.
+function hks_is_list(array $a): bool {
+    if (function_exists('array_is_list')) return array_is_list($a);
+    if ($a === []) return true;
+    return array_keys($a) === range(0, count($a) - 1);
+}
+
+/**
+ * HKS "Sonuc" wrapper'ından gerçek DTO kayıt listesini çıkarır.
+ *
+ * HKS yanıt yapısı iç içedir ve eski parser bunun yalnızca ilk katmanını alıyordu:
+ *   Sonuc { HataKodu, Mesaj, <Koleksiyon> { <DTO>[] } }
+ *     örn: Sonuc.Urunler.UrunDTO[]            → [UrunDTO, UrunDTO, ...]
+ *          Sonuc.Bildirimler.BildirimDTO[]
+ *          Sonuc.ReferansKunyeler.ReferansKunyeDTO[]
+ *
+ * Bu metod wrapper object'lerini gevşek şekilde aşağı iner; ilk DTO dizisine
+ * ulaşana kadar tek-çocuklu sarmallayıcılara girer. Yalnızca skaler alan kalırsa
+ * node'un kendisini tek kayıt sayar (düz tekil yanıtlar için).
+ * Tek kayıt object, çok kayıt array gelebilir (SOAP_SINGLE_ELEMENT_ARRAYS değişkenliği).
+ */
+function hks_extract_records(mixed $node, int $depth = 0): array {
+    if ($node === null) return [];
+
+    // Doğrudan DTO listesi
+    if (is_array($node)) {
+        if (hks_is_list($node)) return $node;
+        $node = (object)$node; // assoc → object gibi davran
+    }
+    if (!is_object($node)) return [];
+
+    $meta = [
+        'HataKodu', 'Mesaj', 'HataKodlari', 'HataMesaji', 'IslemKodu',
+        'ToplamKayitSayisi', 'ToplamKayit', 'SayfaNo', 'SayfaBoyutu', 'SayfaSayisi',
+    ];
+
+    // Meta dışı, dolu alanları topla
+    $payload = [];
+    foreach ((array)$node as $key => $val) {
+        if (in_array($key, $meta, true)) continue;
+        if ($val === null || $val === '') continue;
+        $payload[$key] = $val;
+    }
+    if (empty($payload)) return [];
+
+    // 1) Doğrudan DTO listesi taşıyan alan (Urunler.UrunDTO[] gibi)
+    foreach ($payload as $val) {
+        if (is_array($val) && hks_is_list($val) && $val !== []) {
+            return $val;
+        }
+    }
+    // 2) İç içe wrapper — sonsuz döngüye girmeden makul derinliğe in
+    if ($depth < 6) {
+        foreach ($payload as $val) {
+            if (is_object($val) || (is_array($val) && !hks_is_list($val))) {
+                $deeper = hks_extract_records($val, $depth + 1);
+                if (!empty($deeper)) return $deeper;
+            }
+        }
+    }
+    // 3) Yalnızca skaler alanlar → bu node tek bir kayıttır
+    foreach ($payload as $val) {
+        if (!is_array($val) && !is_object($val)) {
+            return [(object)$node];
+        }
+    }
+    return [];
+}
+
 /**
  * HKS response'u kategorize eder:
  * A = SOAP teknik hata (ok:false, SoapFault)
@@ -339,7 +408,8 @@ function hks_diagnose_response(array $service_result): array {
     if ($islem_kodu === 'GTBWSRV0000001' && $first !== null) {
         $extracted = $first['Sonuc'] ?? $first['sonuc'] ?? $first['Liste'] ?? $first['liste'] ?? null;
         if ($extracted !== null) {
-            $list = is_array($extracted) ? $extracted : [$extracted];
+            // Sonuc.<Koleksiyon>.<DTO>[] iç içe yapısına in (örn. Sonuc.Urunler.UrunDTO[])
+            $list = hks_extract_records($extracted);
         } elseif (count($data) === 1) {
             // D — IslemKodu tamam ama liste alanı bulunamadı
             $has_list_fields = false;

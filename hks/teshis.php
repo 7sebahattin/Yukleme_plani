@@ -228,12 +228,18 @@ function renderResult(panelId, d, btnLabel) {
         ['data[0] key\'leri', (d.first_keys || []).join(', ') || '—'],
         ['Liste alanı (listField)', d.list_field || '(bulunamadı)'],
         ['Liste içeriği (listDesc)', d.list_desc || '—'],
-        ['İç alt liste', d.list_sub_list_field
-            ? (d.list_sub_list_field + ': ' + d.list_sub_list_count + ' kayıt')
-            : '—'],
+        ['İç alt liste (DTO alanı)', d.list_sub_list_field || '—'],
+        ['HAM gerçek kayıt sayısı', (d.real_count ?? '?') + ' kayıt'],
         ['Sistem parse sayısı', (d.diag_count ?? '?') + ' kayıt (kategori: ' + (d.diag_category || '?') + ')'],
         ['Süre', (d.duration_ms || 0) + ' ms'],
     ];
+
+    var sampleHtml = '';
+    if (d.sample_record) {
+        sampleHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;font-weight:600;font-size:.8rem">'
+            + 'Örnek Kayıt (ilk DTO)</summary>'
+            + '<pre class="diag-xml">' + esc(JSON.stringify(d.sample_record, null, 2)) + '</pre></details>';
+    }
 
     var rowsHtml = rows.map(function(r) {
         return '<div class="diag-row"><span class="diag-key">' + esc(r[0]) + '</span>'
@@ -272,7 +278,7 @@ function renderResult(panelId, d, btnLabel) {
         + '</div>'
         + bugNote
         + '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:8px 10px">'
-        + rowsHtml + '</div>' + xmlHtml + '</div>';
+        + rowsHtml + '</div>' + sampleHtml + xmlHtml + '</div>';
 
     // Özet
     summaryData.push({ panel: panelId, verdict: verdict, label: btnLabel || verdict });

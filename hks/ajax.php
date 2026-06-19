@@ -619,9 +619,9 @@ function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $re
             if (!$norm['ok']) {
                 return ['ok' => false, 'message' => $norm['message'] ?: ('HKS hata kodu: ' . ($norm['islem_kodu'] ?? ''))];
             }
-            // Sonucu bul: Sonuc / Liste / sonuc alanında olabilir
-            $list = $first['Sonuc'] ?? $first['sonuc'] ?? $first['Liste'] ?? $first['liste'] ?? null;
-            $data = is_array($list) ? $list : ($list !== null ? [$list] : []);
+            // Sonuc.<Koleksiyon>.<DTO>[] iç içe yapısına in (örn. Sonuc.Urunler.UrunDTO[])
+            $sonuc = $first['Sonuc'] ?? $first['sonuc'] ?? $first['Liste'] ?? $first['liste'] ?? null;
+            $data  = $sonuc !== null ? hks_extract_records($sonuc) : [];
         }
     }
 
@@ -629,9 +629,13 @@ function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $re
     $count = 0;
     foreach ($data as $item) {
         $item = (array)$item;
-        $code   = (string)($item['Kod'] ?? $item['kod'] ?? $item['ID'] ?? $item['id'] ?? '');
-        $name   = (string)($item['Ad'] ?? $item['ad'] ?? $item['Adi'] ?? $item['adi'] ?? $item['Unvan'] ?? $item['unvan'] ?? $item['name'] ?? $code);
-        $parent = (string)($item['IlceKodu'] ?? $item['ilce_kodu'] ?? $item['IlKodu'] ?? $item['il_kodu'] ?? $item['ParentKod'] ?? '');
+        // Alan adları HKS DTO'larında büyük/küçük harf karışık gelir (Id, UrunAdi, BirimAdi...).
+        // Case-insensitive eşleme için anahtarları küçük harfe indir.
+        $lc = [];
+        foreach ($item as $k => $v) { $lc[strtolower((string)$k)] = $v; }
+        $code   = (string)($lc['kod'] ?? $lc['id'] ?? $lc['urunid'] ?? $lc['birimid'] ?? $lc['cinsid'] ?? $lc['tipid'] ?? '');
+        $name   = (string)($lc['ad'] ?? $lc['adi'] ?? $lc['unvan'] ?? $lc['urunadi'] ?? $lc['birimadi'] ?? $lc['cinsadi'] ?? $lc['aciklama'] ?? $lc['name'] ?? $code);
+        $parent = (string)($lc['ilcekodu'] ?? $lc['ilkodu'] ?? $lc['parentkod'] ?? $lc['urunid'] ?? '');
         if ($code === '') continue;
         $repo->upsertReference($ref_type, $code, $name, $parent ?: null, json_encode($item, JSON_UNESCAPED_UNICODE));
         $count++;
