@@ -19,7 +19,30 @@ class HksRepository {
         }
     }
 
+    private function ensureSettingsColumns(): void {
+        static $done = false;
+        if ($done) return;
+        $done = true;
+        foreach ([
+            "ALTER TABLE `hks_settings` ADD COLUMN `sender_name`       VARCHAR(200) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `default_depo`      VARCHAR(100) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `default_il`        VARCHAR(100) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `default_ilce`      VARCHAR(100) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `timeout_seconds`   INT NOT NULL DEFAULT 30",
+            "ALTER TABLE `hks_settings` ADD COLUMN `live_send_enabled` TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_settings` ADD COLUMN `genel_wsdl_url`    VARCHAR(500) NOT NULL DEFAULT ''",
+            "ALTER TABLE `hks_settings` ADD COLUMN `bildirim_wsdl_url` VARCHAR(500) NOT NULL DEFAULT ''",
+            "ALTER TABLE `hks_settings` ADD COLUMN `last_test_at`      DATETIME NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `last_test_ok`      TINYINT(1) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `last_test_message` VARCHAR(500) NULL",
+            "ALTER TABLE `hks_settings` ADD COLUMN `updated_at`        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+        ] as $_sql) {
+            try { $this->pdo->exec($_sql); } catch (PDOException) { /* already exists */ }
+        }
+    }
+
     public function saveSettings(array $data): void {
+        $this->ensureSettingsColumns();
         $existing = $this->getSettings();
         if ($existing) {
             $this->pdo->prepare(
