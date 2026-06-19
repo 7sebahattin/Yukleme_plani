@@ -63,47 +63,147 @@ class HksClient {
     }
 
     /**
-     * WSDL URL'sini cURL ile çekip geçici dosyaya yazar, local path döner.
-     * allow_url_fopen=Off olan hosting ortamlarında SoapClient URL'den yükleyemez;
-     * cURL bu kısıtı bypass eder.
+     * WSDL URL'sini indirip geçici dosyaya yazar, local path döner.
+     * Sırayla cURL → file_get_contents (allow_url_fopen) → eski önbellek denenir.
+     * Hiçbiri olmazsa, hangi yöntemin neden başarısız olduğunu açıklayan hata fırlatır.
      */
     private function loadWsdl(string $url): string {
-        // Local dosya / zaten önbelleklenmiş
+        // Zaten local dosya yolu ise dokunma
         if (!preg_match('#^https?://#i', $url)) {
             return $url;
         }
 
         $cacheFile = sys_get_temp_dir() . '/hks_wsdl_' . md5($url) . '.xml';
+        $errors    = [];
 
+        // 1) cURL — allow_url_fopen=Off ortamlarında tek seçenek
         if (function_exists('curl_init')) {
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_TIMEOUT        => $this->timeout(),
-                CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout()),
-                CURLOPT_USERAGENT      => 'PHP-SOAP/HKS-Client/1.0',
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 3,
-                CURLOPT_HTTPHEADER     => ['Accept: text/xml, application/xml'],
-            ]);
-            $content  = curl_exec($ch);
-            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlErr  = curl_error($ch);
-            curl_close($ch);
-
-            if ($content !== false && $httpCode === 200 && strlen((string)$content) > 100) {
-                file_put_contents($cacheFile, $content);
+            [$content, $err] = $this->httpGetCurl($url);
+            if ($content !== null) {
+                @file_put_contents($cacheFile, $content);
                 return $cacheFile;
             }
-
-            $detail = $curlErr ?: "HTTP {$httpCode}";
-            throw new \RuntimeException("WSDL indirilemedi ({$detail}). Sunucu bu URL'ye ulaşamıyor olabilir: {$url}");
+            $errors[] = 'cURL: ' . $err;
+        } else {
+            $errors[] = 'cURL: extension yüklü değil';
         }
 
-        // cURL yoksa SoapClient'in kendi stream'ini kullan (allow_url_fopen açıksa çalışır)
-        return $url;
+        // 2) file_get_contents — allow_url_fopen açıksa
+        if (filter_var((string)ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN)) {
+            $ctx = stream_context_create([
+                'ssl'  => ['verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true],
+                'http' => ['timeout' => $this->timeout(), 'user_agent' => 'PHP-SOAP/HKS-Client'],
+            ]);
+            $content = @file_get_contents($url, false, $ctx);
+            if ($content !== false && strlen($content) > 100) {
+                @file_put_contents($cacheFile, $content);
+                return $cacheFile;
+            }
+            $errors[] = 'file_get_contents: yanıt alınamadı';
+        } else {
+            $errors[] = 'file_get_contents: allow_url_fopen=Off';
+        }
+
+        // 3) Eski önbellek varsa onu kullan (en azından çalışmaya devam etsin)
+        if (is_file($cacheFile) && (int)@filesize($cacheFile) > 100) {
+            return $cacheFile;
+        }
+
+        throw new \RuntimeException(
+            "WSDL indirilemedi. Sunucu '{$url}' adresine ulaşamıyor. Denenen yöntemler → "
+            . implode(' | ', $errors)
+        );
+    }
+
+    /**
+     * cURL ile HTTP GET. Başarıda [içerik, ''] , başarısızlıkta [null, 'sebep'] döner.
+     * 3. eleman olarak HTTP kodu da döndürülür.
+     */
+    private function httpGetCurl(string $url): array {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_TIMEOUT        => $this->timeout(),
+            CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout()),
+            CURLOPT_USERAGENT      => 'PHP-SOAP/HKS-Client/1.0',
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 3,
+            CURLOPT_HTTPHEADER     => ['Accept: text/xml, application/xml'],
+        ]);
+        $content = curl_exec($ch);
+        $code    = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err     = curl_error($ch);
+        curl_close($ch);
+
+        if ($content !== false && $code === 200 && strlen((string)$content) > 100) {
+            return [(string)$content, '', $code];
+        }
+        $reason = $err !== '' ? $err : ('HTTP ' . $code . ', ' . strlen((string)$content) . ' bayt');
+        return [null, $reason, $code];
+    }
+
+    // ── Sunucu Tanılama ──────────────────────────────────────
+    // Web servis bağlantı sorunlarının kaynağını tespit eder.
+    // Hosting ortamı (curl/allow_url_fopen/DNS/firewall/SSL) hakkında somut bilgi verir.
+    public function diagnostics(): array {
+        $wsdl = $this->genelWsdl();
+        $host = (string)(parse_url($wsdl, PHP_URL_HOST) ?: '');
+        $port = (int)(parse_url($wsdl, PHP_URL_PORT) ?: 443);
+
+        $d = [
+            'php_version'     => PHP_VERSION,
+            'soap_ext'        => extension_loaded('soap'),
+            'curl_ext'        => function_exists('curl_init'),
+            'openssl_ext'     => extension_loaded('openssl'),
+            'allow_url_fopen' => filter_var((string)ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN),
+            'environment'     => $this->getEnvironment(),
+            'wsdl_url'        => $wsdl,
+            'host'            => $host,
+            'port'            => $port,
+        ];
+
+        // DNS çözümleme
+        $ip = $host !== '' ? @gethostbyname($host) : '';
+        $d['dns_resolved'] = ($ip !== '' && $ip !== $host);
+        $d['dns_ip']       = $d['dns_resolved'] ? $ip : '';
+
+        // TCP/TLS bağlantısı (firewall tespiti)
+        $d['tcp_connect'] = false;
+        $d['tcp_error']   = '';
+        if ($host !== '') {
+            $errno = 0; $errstr = '';
+            $fp = @fsockopen('ssl://' . $host, $port, $errno, $errstr, min(8, $this->timeout()));
+            if ($fp) { $d['tcp_connect'] = true; fclose($fp); }
+            else     { $d['tcp_error'] = trim('errno ' . $errno . ': ' . $errstr); }
+        }
+
+        // Ham HTTP GET (cURL ile)
+        $d['http_code']  = null;
+        $d['http_error'] = '';
+        $d['http_bytes'] = 0;
+        if ($d['curl_ext']) {
+            [$content, $err, $code] = $this->httpGetCurl($wsdl);
+            $d['http_code']  = $code;
+            $d['http_error'] = $err;
+            $d['http_bytes'] = $content !== null ? strlen($content) : 0;
+        }
+
+        return $d;
+    }
+
+    // Tanılama dizisini tek satırlık özet metne çevirir (test mesajına eklenir)
+    private function diagSummary(array $d): string {
+        $parts = [];
+        $parts[] = 'curl=' . ($d['curl_ext'] ? 'var' : 'YOK');
+        $parts[] = 'allow_url_fopen=' . ($d['allow_url_fopen'] ? 'açık' : 'KAPALI');
+        $parts[] = 'DNS=' . ($d['dns_resolved'] ? $d['dns_ip'] : 'ÇÖZÜLEMEDİ');
+        $parts[] = 'TCP:443=' . ($d['tcp_connect'] ? 'açık' : ('KAPALI' . ($d['tcp_error'] ? ' (' . $d['tcp_error'] . ')' : '')));
+        if ($d['http_code'] !== null) {
+            $parts[] = 'HTTP=' . $d['http_code'] . ($d['http_error'] ? ' (' . $d['http_error'] . ')' : '');
+        }
+        return implode(' · ', $parts);
     }
 
     private function credentials(): array {
@@ -145,20 +245,22 @@ class HksClient {
             return ['ok' => true, 'message' => 'WSDL başarıyla yüklendi.', 'duration_ms' => $duration];
 
         } catch (SoapFault $e) {
-            $msg      = 'SOAP hatası: ' . $e->faultstring;
             $duration = (int)((microtime(true) - $start) * 1000);
+            $diag     = $this->diagnostics();
+            $msg      = 'SOAP hatası: ' . $e->faultstring . ' — [' . $this->diagSummary($diag) . ']';
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, $e->faultcode, $e->faultstring, $duration);
             $this->repo->updateTestResult(false, $msg);
-            return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration];
+            return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration, 'diag' => $diag];
 
         } catch (Throwable $e) {
-            $msg      = 'Bağlantı hatası: ' . $e->getMessage();
             $duration = (int)((microtime(true) - $start) * 1000);
+            $diag     = $this->diagnostics();
+            $msg      = 'Bağlantı hatası: ' . $e->getMessage() . ' — [' . $this->diagSummary($diag) . ']';
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, null, $e->getMessage(), $duration);
             $this->repo->updateTestResult(false, $msg);
-            return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration];
+            return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration, 'diag' => $diag];
         }
     }
 

@@ -54,15 +54,28 @@ render_flash();
         <button type="button" id="btnTest" class="btn btn-primary btn-lg">
             🔌 Bağlantıyı Test Et
         </button>
+        <button type="button" id="btnDiag" class="btn btn-ghost btn-lg">
+            🩺 Sunucu Tanılama
+        </button>
         <button type="button" id="btnInspect" class="btn btn-ghost btn-lg">
             🔎 WSDL Metodlarını Gör
         </button>
     </div>
     <span id="test-spinner" style="display:none;margin-left:10px;color:var(--muted)">Test ediliyor...</span>
+    <span id="diag-spinner" style="display:none;margin-left:10px;color:var(--muted)">Tanılanıyor...</span>
     <span id="inspect-spinner" style="display:none;margin-left:10px;color:var(--muted)">WSDL yükleniyor...</span>
 </div>
 
 <div id="test-result" style="display:none;padding:16px;border-radius:8px;margin-bottom:16px"></div>
+
+<div id="diag-result" style="display:none;margin-bottom:16px">
+    <div class="card" style="padding:20px">
+        <h3 style="margin-top:0">🩺 Sunucu Tanılama</h3>
+        <p class="muted" style="margin-top:0;font-size:.85rem">Sunucunun HKS adresine ulaşıp ulaşamadığını gösterir.</p>
+        <div id="diag-rows" style="font-size:.9rem;line-height:1.9"></div>
+        <div id="diag-verdict" style="margin-top:12px;padding:12px;border-radius:8px;font-size:.88rem"></div>
+    </div>
+</div>
 
 <div id="inspect-result" style="display:none;margin-bottom:16px">
     <div class="card" style="padding:20px">
@@ -115,6 +128,64 @@ document.getElementById('btnTest').addEventListener('click', function() {
         result.style.border='1px solid var(--danger)'; result.textContent='İstek gönderilemedi.';
     })
     .finally(() => { btn.disabled=false; spinner.style.display='none'; });
+});
+
+document.getElementById('btnDiag').addEventListener('click', function() {
+    var btn = this, spinner = document.getElementById('diag-spinner');
+    var panel = document.getElementById('diag-result');
+    var rows  = document.getElementById('diag-rows');
+    var verdict = document.getElementById('diag-verdict');
+    btn.disabled = true; spinner.style.display = 'inline';
+    fetch('ajax.php?action=diagnose', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'csrf=' + encodeURIComponent(csrfToken)
+    })
+    .then(r => r.json())
+    .then(data => {
+        panel.style.display = 'block';
+        if (!data.ok || !data.diag) { rows.textContent = '❌ ' + (data.message || 'Tanılama başarısız.'); return; }
+        var d = data.diag;
+        function row(label, ok, detail) {
+            return '<div>' + (ok ? '✅' : '❌') + ' <strong>' + label + ':</strong> ' + detail + '</div>';
+        }
+        var html = '';
+        html += row('PHP SOAP eklentisi', d.soap_ext, d.soap_ext ? 'yüklü' : 'YOK — extension=soap gerekli');
+        html += row('cURL eklentisi', d.curl_ext, d.curl_ext ? 'yüklü' : 'YOK');
+        html += row('OpenSSL eklentisi', d.openssl_ext, d.openssl_ext ? 'yüklü' : 'YOK');
+        html += row('allow_url_fopen', d.allow_url_fopen, d.allow_url_fopen ? 'açık' : 'kapalı (cURL kullanılıyor)');
+        html += row('DNS çözümleme', d.dns_resolved, d.dns_resolved ? (d.host + ' → ' + d.dns_ip) : (d.host + ' çözümlenemedi'));
+        html += row('TCP/TLS 443', d.tcp_connect, d.tcp_connect ? 'bağlantı açık' : ('engelli — ' + (d.tcp_error || 'firewall?')));
+        if (d.http_code !== null) {
+            var httpOk = d.http_code === 200 && d.http_bytes > 100;
+            html += row('HTTP yanıtı', httpOk, 'kod ' + d.http_code + ', ' + d.http_bytes + ' bayt' + (d.http_error ? ' — ' + d.http_error : ''));
+        }
+        html += '<div style="margin-top:8px;font-size:.78rem;color:var(--muted);word-break:break-all">WSDL: ' + d.wsdl_url + '</div>';
+        rows.innerHTML = html;
+
+        // Teşhis sonucu
+        var vMsg, vColor;
+        if (!d.soap_ext) {
+            vMsg = '⚠️ SOAP eklentisi yok — hostinginizden <code>extension=soap</code> aktifleştirmesini isteyin.';
+            vColor = '#fef2f2';
+        } else if (!d.dns_resolved) {
+            vMsg = '⚠️ Sunucu HKS adresini DNS\'te çözemiyor. Hostinginizde dış DNS engelli olabilir.';
+            vColor = '#fef2f2';
+        } else if (!d.tcp_connect) {
+            vMsg = '🔥 DNS çözülüyor ama 443 portu engelli. Hostinginizden <strong>hal.gov.tr</strong> adreslerine giden firewall izni (outbound 443) isteyin.';
+            vColor = '#fef2f2';
+        } else if (d.http_code !== 200) {
+            vMsg = '⚠️ Bağlantı açık ama HKS adresi ' + d.http_code + ' döndürdü. Adres/ortam (test/canlı) doğru mu kontrol edin.';
+            vColor = '#fffbeb';
+        } else {
+            vMsg = '✅ Sunucu HKS adresine ulaşabiliyor. Bağlantı testini tekrar çalıştırın.';
+            vColor = '#f0fdf4';
+        }
+        verdict.style.background = vColor;
+        verdict.innerHTML = vMsg;
+    })
+    .catch(() => { panel.style.display='block'; rows.textContent = 'İstek gönderilemedi.'; })
+    .finally(() => { btn.disabled = false; spinner.style.display = 'none'; });
 });
 
 function loadInspect(service) {

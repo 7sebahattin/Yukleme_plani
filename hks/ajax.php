@@ -42,6 +42,14 @@ switch ($action) {
         echo json_encode($client->testConnection());
         break;
 
+    // ── Sunucu Tanılama ─────────────────────────────────────
+    case 'diagnose':
+        if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
+            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+        }
+        echo json_encode(['ok' => true, 'diag' => $client->diagnostics()]);
+        break;
+
     // ── WSDL Metod Keşfi ───────────────────────────────────
     case 'inspect_wsdl':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
