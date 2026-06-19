@@ -10,10 +10,27 @@ if (function_exists('can') && !can('hks.read') && !can('records.write') && !is_a
 $repo      = new HksRepository(db());
 $companies = $repo->getAllCompanies();
 $can_cfg   = is_admin() || (function_exists('can') && can('hks.settings'));
+$valid_ids = array_column($companies, 'id');
+
+// ── Firma seç (GET) — herhangi bir çıktıdan önce ──────────
+if (isset($_GET['sec'])) {
+    $sec = (int)$_GET['sec'];
+    $dest = ($_GET['to'] ?? '') === 'ayarlar' ? 'ayarlar.php' : 'index.php';
+    if ($sec > 0 && in_array($sec, $valid_ids, false)) {
+        $_SESSION['hks_company_id'] = $sec;
+    } else {
+        $dest = 'index.php';
+    }
+    header('Location: ' . $dest); exit;
+}
+// ── Firma değiştir (GET) ─────────────────────────────────
+if (isset($_GET['switch'])) {
+    unset($_SESSION['hks_company_id']);
+    header('Location: index.php'); exit;
+}
 
 // Seçili firma ID'sini doğrula — listede yoksa temizle
 $company_id = isset($_SESSION['hks_company_id']) ? (int)$_SESSION['hks_company_id'] : null;
-$valid_ids  = array_column($companies, 'id');
 if ($company_id !== null && !in_array($company_id, $valid_ids, false)) {
     unset($_SESSION['hks_company_id']);
     $company_id = null;
@@ -53,10 +70,9 @@ if ($company_id === null) {
         $co_env = ($co['environment'] ?? 'test') === 'live' ? '🔴 Canlı' : '🟡 Test';
         $co_test = $co['last_test_ok'] ? '✅' : ($co['last_test_at'] ? '⚠️' : '—');
     ?>
-        <form method="post" action="ajax.php?action=select_company"
-              class="hks-company-card <?= $co_ok ? '' : 'hks-company-card-warn' ?>">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
+        <a href="index.php?sec=<?= (int)$co['id'] ?>"
+           class="hks-company-card <?= $co_ok ? '' : 'hks-company-card-warn' ?>"
+           style="display:block;text-decoration:none;color:inherit">
             <div class="hks-company-card-name"><?= hks_h($co['firma_adi']) ?></div>
             <div class="hks-company-card-meta">
                 <span><?= $co_env ?></span>
@@ -65,11 +81,8 @@ if ($company_id === null) {
             <?php if (!$co_ok): ?>
             <div style="font-size:.78rem;color:#92400e;margin-top:4px">⚙️ Ayarlar eksik</div>
             <?php endif; ?>
-            <button type="submit" class="hks-company-card-action"
-                    style="background:none;border:none;cursor:pointer;padding:0;margin-top:12px;font-size:.85rem;font-weight:600;color:var(--primary)">
-                Giriş Yap →
-            </button>
-        </form>
+            <div class="hks-company-card-action">Giriş Yap →</div>
+        </a>
     <?php endforeach; ?>
     </div>
 
