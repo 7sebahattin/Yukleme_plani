@@ -23,7 +23,15 @@ class HksRepository {
                  FROM hks_settings ORDER BY id ASC"
             )->fetchAll();
         } catch (Throwable) {
-            return [];
+            // firma_adi henüz eklenmemişse sütun olmadan sor
+            try {
+                return $this->pdo->query(
+                    "SELECT id, 'Firma 1' AS firma_adi, environment, username, last_test_at, last_test_ok, updated_at
+                     FROM hks_settings ORDER BY id ASC"
+                )->fetchAll();
+            } catch (Throwable) {
+                return [];
+            }
         }
     }
 

@@ -12,8 +12,6 @@ if (!$user) {
     exit;
 }
 
-header('Content-Type: application/json; charset=utf-8');
-
 // JSON body veya form body'den CSRF oku
 $raw   = file_get_contents('php://input');
 $input = [];
@@ -28,36 +26,37 @@ $input = array_merge($input, $_POST);
 csrf_check($input['csrf'] ?? null);
 
 $action = $_GET['action'] ?? ($input['action'] ?? '');
+
+// ── Firma Seçimi — redirect yaptığı için Content-Type header'dan önce işlenmeli ──
+if ($action === 'select_company') {
+    $cid = (int)($input['company_id'] ?? 0);
+    if ($cid > 0) {
+        $repo_co = new HksRepository(db());
+        $co      = $repo_co->getSettings($cid);
+        if (!$co) {
+            set_flash('error', 'Firma bulunamadı.');
+            header('Location: index.php'); exit;
+        }
+        $_SESSION['hks_company_id'] = $cid;
+    } else {
+        unset($_SESSION['hks_company_id']);
+    }
+    $redirect = $input['redirect'] ?? 'index.php';
+    $safe = preg_replace('/[^a-z0-9_.]/i', '', basename($redirect));
+    if ($safe === '') $safe = 'index.php';
+    header('Location: ' . $safe); exit;
+}
+
+header('Content-Type: application/json; charset=utf-8');
+
 $repo   = new HksRepository(db());
 $client = new HksClient($repo);
 
 switch ($action) {
 
-    // ── Firma Seçimi ────────────────────────────────────────
+    // ── Firma Seçimi — yukarıda işlendi ─────────────────────
     case 'select_company':
-        $cid = (int)($input['company_id'] ?? 0);
-        if ($cid > 0) {
-            // Geçerli mi kontrol et
-            $repo2 = new HksRepository(db());
-            $co    = $repo2->getSettings($cid);
-            if (!$co) {
-                if (!empty($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
-                    echo json_encode(['ok' => false, 'message' => 'Firma bulunamadı.']); exit;
-                }
-                set_flash('error', 'Firma bulunamadı.'); header('Location: index.php'); exit;
-            }
-            $_SESSION['hks_company_id'] = $cid;
-        } else {
-            // Firma seçimini temizle (değiştir butonu)
-            unset($_SESSION['hks_company_id']);
-        }
-        $redirect = $input['redirect'] ?? 'index.php';
-        // Güvenli redirect — sadece hks/ içi sayfalar
-        $safe = preg_replace('/[^a-z0-9_.]/i', '', basename($redirect));
-        if (!empty($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
-            echo json_encode(['ok' => true, 'redirect' => $safe]); exit;
-        }
-        header('Location: ' . $safe); exit;
+        echo json_encode(['ok' => true]); break;
 
     // ── Bağlantı Testi ──────────────────────────────────────
     case 'test_connection':
