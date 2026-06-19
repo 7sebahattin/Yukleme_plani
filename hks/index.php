@@ -146,6 +146,9 @@ render_flash();
 <?php if (!$soap_ok): ?>
 <div class="hks-error-box">⚠️ PHP SOAP extension aktif değil. Sunucuda <code>extension=soap</code> etkinleştirilmesi gerekiyor.</div>
 <?php endif; ?>
+<?php if (!hks_can_save_passwords() && $can_cfg): ?>
+<div class="hks-warning-box">🔑 <strong>HKS_CRED_KEY tanımlı değil.</strong> Şifre girişi devre dışı — <a href="ayarlar.php" style="color:inherit;font-weight:700;text-decoration:underline">Ayarlar'da anahtar oluşturun</a>.</div>
+<?php endif; ?>
 <?php if ($live_on): ?>
 <div class="hks-warning-box">🔴 <strong>Canlı gönderim açık.</strong> HKS'ye gerçek bildirimler gönderilebilir.</div>
 <?php endif; ?>
