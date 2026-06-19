@@ -87,6 +87,7 @@ class HksClient {
 
     /**
      * WSDL URL'sini indirip geçici dosyaya yazar, local path döner.
+     * İndirilen WSDL tekrarlayan XSD tanımlarından arındırılır (_dedup önbelleği).
      * Sırayla cURL → file_get_contents (allow_url_fopen) → eski önbellek denenir.
      * Hiçbiri olmazsa, hangi yöntemin neden başarısız olduğunu açıklayan hata fırlatır.
      */
@@ -96,15 +97,18 @@ class HksClient {
             return $url;
         }
 
-        $cacheFile = sys_get_temp_dir() . '/hks_wsdl_' . md5($url) . '.xml';
-        $errors    = [];
+        $cacheRaw   = sys_get_temp_dir() . '/hks_wsdl_' . md5($url) . '.xml';
+        $cacheClean = sys_get_temp_dir() . '/hks_wsdl_' . md5($url) . '_dedup.xml';
+        $errors     = [];
 
         // 1) cURL — allow_url_fopen=Off ortamlarında tek seçenek
         if (function_exists('curl_init')) {
             [$content, $err] = $this->httpGetCurl($url);
             if ($content !== null) {
-                @file_put_contents($cacheFile, $content);
-                return $cacheFile;
+                @file_put_contents($cacheRaw, $content);
+                $cleaned = $this->deduplicateWsdl($content);
+                @file_put_contents($cacheClean, $cleaned);
+                return $cacheClean;
             }
             $errors[] = 'cURL: ' . $err;
         } else {
@@ -119,23 +123,123 @@ class HksClient {
             ]);
             $content = @file_get_contents($url, false, $ctx);
             if ($content !== false && strlen($content) > 100) {
-                @file_put_contents($cacheFile, $content);
-                return $cacheFile;
+                @file_put_contents($cacheRaw, $content);
+                $cleaned = $this->deduplicateWsdl($content);
+                @file_put_contents($cacheClean, $cleaned);
+                return $cacheClean;
             }
             $errors[] = 'file_get_contents: yanıt alınamadı';
         } else {
             $errors[] = 'file_get_contents: allow_url_fopen=Off';
         }
 
-        // 3) Eski önbellek varsa onu kullan (en azından çalışmaya devam etsin)
-        if (is_file($cacheFile) && (int)@filesize($cacheFile) > 100) {
-            return $cacheFile;
+        // 3) Temizlenmiş önbellek varsa kullan
+        if (is_file($cacheClean) && (int)@filesize($cacheClean) > 100) {
+            return $cacheClean;
+        }
+
+        // 4) Ham önbellek varsa — temizleyip yeni _dedup dosyasını oluştur
+        if (is_file($cacheRaw) && (int)@filesize($cacheRaw) > 100) {
+            $raw = @file_get_contents($cacheRaw);
+            if ($raw !== false && strlen($raw) > 100) {
+                $cleaned = $this->deduplicateWsdl($raw);
+                @file_put_contents($cacheClean, $cleaned);
+                return $cacheClean;
+            }
         }
 
         throw new \RuntimeException(
             "WSDL indirilemedi. Sunucu '{$url}' adresine ulaşamıyor. Denenen yöntemler → "
             . implode(' | ', $errors)
         );
+    }
+
+    /**
+     * WSDL XML içindeki tekrarlayan XSD import ve element/type tanımlarını kaldırır.
+     * PHP SoapClient "Parsing Schema: element already defined" hatasını önler.
+     * WCF tabanlı servisler genellikle her port için aynı şemayı içe aktarır — bu metod
+     * tekrarlayan import'ları ve inline çift tanımları temizler.
+     */
+    private function deduplicateWsdl(string $xml): string {
+        if (!class_exists('DOMDocument')) {
+            return $xml;
+        }
+        $dom  = new \DOMDocument();
+        $prev = libxml_use_internal_errors(true);
+        $ok   = $dom->loadXML($xml, LIBXML_NOWARNING | LIBXML_NOERROR);
+        libxml_clear_errors();
+        libxml_use_internal_errors($prev);
+        if (!$ok) {
+            return $xml;
+        }
+
+        $remove = [];
+
+        // — Adım 1: Tekrarlayan <xs:import> / <xsd:import> bildirimleri
+        // Aynı namespace+schemaLocation çiftini ikinci kez yükleyen import'ları kaldır.
+        $seenImports = [];
+        $importList  = $dom->getElementsByTagName('import');
+        $imports     = [];
+        for ($i = 0; $i < $importList->length; $i++) {
+            $imports[] = $importList->item($i);
+        }
+        foreach ($imports as $node) {
+            if (!($node instanceof \DOMElement)) {
+                continue;
+            }
+            $ns  = $node->getAttribute('namespace')      ?: '';
+            $loc = $node->getAttribute('schemaLocation') ?: '';
+            $key = $ns . '|||' . $loc;
+            if ($key === '|||') {
+                continue;
+            }
+            if (isset($seenImports[$key])) {
+                $remove[] = $node;
+            } else {
+                $seenImports[$key] = true;
+            }
+        }
+
+        // — Adım 2: Tekrarlayan top-level XSD tanımlamaları (element, complexType, vb.)
+        // <schema> doğrudan çocuğu olan, aynı targetNamespace+kind+name sahip ikinci tanımı kaldır.
+        $seenDefs = [];
+        $topKinds = ['element', 'complexType', 'simpleType', 'group', 'attributeGroup'];
+        foreach ($topKinds as $kind) {
+            $nodeList = $dom->getElementsByTagName($kind);
+            $nodes    = [];
+            for ($i = 0; $i < $nodeList->length; $i++) {
+                $nodes[] = $nodeList->item($i);
+            }
+            foreach ($nodes as $node) {
+                if (!($node instanceof \DOMElement)) {
+                    continue;
+                }
+                $parent = $node->parentNode;
+                if (!($parent instanceof \DOMElement) || $parent->localName !== 'schema') {
+                    continue;
+                }
+                $name = $node->getAttribute('name');
+                if ($name === '') {
+                    continue;
+                }
+                $tns = $parent->getAttribute('targetNamespace') ?: '';
+                $key = $tns . '|||' . $kind . '|||' . $name;
+                if (isset($seenDefs[$key])) {
+                    $remove[] = $node;
+                } else {
+                    $seenDefs[$key] = true;
+                }
+            }
+        }
+
+        foreach ($remove as $node) {
+            if ($node->parentNode !== null) {
+                $node->parentNode->removeChild($node);
+            }
+        }
+
+        $result = $dom->saveXML();
+        return ($result !== false && strlen($result) > 100) ? $result : $xml;
     }
 
     /**
