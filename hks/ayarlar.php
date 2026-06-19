@@ -97,29 +97,6 @@ $suggested_key   = !$has_secure_key ? bin2hex(random_bytes(32)) : '';
 render_header('HKS Ayarları');
 render_flash();
 ?>
-
-<style>
-.hks-page { max-width: 900px; margin: 0 auto; }
-.hks-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 12px 0 0; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
-.hks-tab { display: flex; align-items: center; gap: 5px; padding: 8px 14px; border-radius: 8px 8px 0 0; text-decoration: none; color: var(--muted); font-size: .88rem; border: 1px solid transparent; border-bottom: none; }
-.hks-tab:hover { background: var(--bg); color: var(--text); }
-.hks-tab.active { background: var(--card); color: var(--primary); font-weight: 600; border-color: var(--border); margin-bottom: -2px; }
-.hks-tab-label { display: none; }
-@media (min-width: 600px) { .hks-tab-label { display: inline; } }
-.hks-warning-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #92400e; margin-bottom: 12px; }
-.hks-info-box    { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #1e40af; margin-bottom: 12px; }
-.hks-success-box { background: #f0fdf4; border: 1px solid var(--success); border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #065f46; margin-top: 12px; }
-.hks-error-box   { background: #fef2f2; border: 1px solid var(--danger); border-radius: 8px; padding: 12px 16px; font-size: .88rem; color: #991b1b; margin-top: 12px; }
-.hks-secret-status { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; padding: 2px 8px; border-radius: 20px; font-weight: 600; background: #d1fae5; color: #065f46; }
-.hks-secret-status.missing { background: #fef3c7; color: #92400e; }
-.hks-form .form-group { margin-bottom: 14px; }
-.hks-form .form-group label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 4px; }
-.hks-form .form-group input:not([type="checkbox"]):not([type="radio"]), .hks-form .form-group select { width: 100%; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: .95rem; background: #fff; }
-@media (max-width: 767px) { .hks-form .form-group input:not([type="checkbox"]):not([type="radio"]), .hks-form .form-group select { font-size: 16px; } }
-.form-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
-.form-section-title { font-size: .95rem; font-weight: 700; margin-bottom: 14px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-</style>
-
 <div class="hks-page">
 <?php
 $hks_active_tab = 'ayarlar.php';
@@ -128,8 +105,8 @@ include __DIR__ . '/views/_tabs.php';
 
 <div class="page-head" style="margin-top:16px">
     <div>
-        <h1>⚙️ HKS Web Servis Ayarları</h1>
-        <p class="muted">HKS kullanıcı adı, kullanıcı şifresi ve web servis şifresi bu alanda güvenli şekilde saklanır. Şifreler ekranda açık gösterilmez.</p>
+        <h1>⚙️ HKS Giriş ve Web Servis Bilgileri</h1>
+        <p class="muted">Kullanıcı adı ve şifreler şifrelenmiş olarak saklanır. Ekranda açık görünmez.</p>
     </div>
     <div class="page-head-actions">
         <a href="index.php" class="btn btn-ghost">← Panele Dön</a>
@@ -138,26 +115,24 @@ include __DIR__ . '/views/_tabs.php';
 
 <?php if (!$has_secure_key): ?>
 <div class="hks-warning-box">
-    🔑 <strong>HKS_CRED_KEY tanımlanmamış — HKS şifreleri kaydedilemez.</strong><br>
-    Şifre alanlarını etkinleştirmek için aşağıdaki butonu kullanın veya
-    <code>config/local.php</code> dosyasını elle oluşturun.<br>
+    🔑 <strong>Şifre güvenliği henüz kurulmamış</strong> — şifre alanları devre dışı.<br>
+    Şifre girişini etkinleştirmek için aşağıdaki butona tıklayın.
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <form method="post" action="ayarlar.php">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="generate_key">
             <button type="submit" class="btn btn-sm" style="background:#d97706;color:#fff;border-color:#d97706;font-weight:600">
-                🔑 Otomatik Anahtar Oluştur &amp; Kaydet
+                🔑 Güvenli Anahtar Oluştur &amp; Etkinleştir
             </button>
         </form>
-        <span style="color:#92400e;font-size:.82rem">— veya el ile —</span>
+        <details style="font-size:.82rem">
+            <summary style="cursor:pointer;color:#92400e;font-weight:600">El ile kurulum &rsaquo;</summary>
+            <div style="margin-top:6px">
+                <code>config/local.php</code> dosyasına ekleyin:<br>
+                <code style="display:block;background:#fef3c7;border-radius:4px;padding:6px 10px;margin-top:4px;word-break:break-all">define('HKS_CRED_KEY', '<?= hks_h($suggested_key) ?>');</code>
+            </div>
+        </details>
     </div>
-    <details style="margin-top:8px">
-        <summary style="cursor:pointer;font-size:.82rem;font-weight:600">El ile kurulum göster</summary>
-        <div style="margin-top:6px;font-size:.82rem">
-            <code>config/local.php</code> dosyasına ekleyin:<br>
-            <code style="display:block;background:#fef3c7;border-radius:4px;padding:6px 10px;margin-top:4px;word-break:break-all">&lt;?php<br>define('HKS_CRED_KEY', '<?= hks_h($suggested_key) ?>');</code>
-        </div>
-    </details>
 </div>
 <?php else: ?>
 <div class="hks-info-box">🔐 Şifreler AES-256-CBC ile şifrelenmiş olarak saklanmaktadır.</div>
@@ -166,16 +141,9 @@ include __DIR__ . '/views/_tabs.php';
 <form method="post" action="ayarlar.php" autocomplete="off" class="hks-form">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 
+    <!-- Bölüm 1: Giriş Bilgileri -->
     <div class="form-section">
-        <div class="form-section-title">Ortam ve Kimlik Bilgileri</div>
-
-        <div class="form-group">
-            <label for="environment">Ortam</label>
-            <select id="environment" name="environment">
-                <option value="test" <?= ($s['environment'] ?? 'test') === 'test' ? 'selected' : '' ?>>🟡 Test Ortamı</option>
-                <option value="live" <?= ($s['environment'] ?? '') === 'live' ? 'selected' : '' ?>>🔴 Canlı Ortam</option>
-            </select>
-        </div>
+        <div class="form-section-title">Giriş Bilgileri</div>
 
         <div class="form-group">
             <label for="username">HKS Kullanıcı Adı</label>
@@ -185,130 +153,137 @@ include __DIR__ . '/views/_tabs.php';
         </div>
 
         <div class="form-group">
-            <label for="password">HKS Şifresi
+            <label for="password">
+                HKS Şifresi
                 <?php if (!empty($s['password_enc'])): ?>
-                    <small class="muted">(kayıtlı — değiştirmek için yeni şifre girin)</small>
+                    <span class="hks-secret-badge hks-badge-ok">✓ Kayıtlı</span>
+                <?php else: ?>
+                    <span class="hks-secret-badge hks-badge-missing">○ Eksik</span>
                 <?php endif; ?>
             </label>
             <input type="password" id="password" name="password"
-                   placeholder="<?= !empty($s['password_enc']) ? '••••••••  (kayıtlı)' : 'HKS şifresi' ?>"
+                   placeholder="<?= !empty($s['password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'HKS kullanıcı şifresi' ?>"
                    autocomplete="new-password"
-                   <?= !$has_secure_key ? 'disabled' : '' ?>>
+                   <?= !$has_secure_key ? 'disabled title="Önce güvenli anahtar oluşturun"' : '' ?>>
         </div>
 
         <div class="form-group">
-            <label for="service_password">Web Servis Şifresi (ServicePassword)
+            <label for="service_password">
+                Web Servis Şifresi
                 <?php if (!empty($s['service_password_enc'])): ?>
-                    <small class="muted">(kayıtlı)</small>
+                    <span class="hks-secret-badge hks-badge-ok">✓ Kayıtlı</span>
+                <?php else: ?>
+                    <span class="hks-secret-badge hks-badge-missing">○ Eksik</span>
                 <?php endif; ?>
             </label>
             <input type="password" id="service_password" name="service_password"
-                   placeholder="<?= !empty($s['service_password_enc']) ? '••••••••  (kayıtlı)' : 'Servis şifresi' ?>"
+                   placeholder="<?= !empty($s['service_password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'Web servis şifresi (ServicePassword)' ?>"
                    autocomplete="new-password"
-                   <?= !$has_secure_key ? 'disabled' : '' ?>>
-        </div>
-
-        <div class="form-group">
-            <label for="security_word">Güvenlik Kelimesi (opsiyonel)
-                <?php if (!empty($s['security_word_enc'])): ?>
-                    <small class="muted">(kayıtlı)</small>
-                <?php endif; ?>
-            </label>
-            <input type="password" id="security_word" name="security_word"
-                   placeholder="<?= !empty($s['security_word_enc']) ? '••••••••  (kayıtlı)' : 'Opsiyonel' ?>"
-                   autocomplete="new-password"
-                   <?= !$has_secure_key ? 'disabled' : '' ?>>
+                   <?= !$has_secure_key ? 'disabled title="Önce güvenli anahtar oluşturun"' : '' ?>>
         </div>
     </div>
 
+    <!-- Bölüm 2: Ortam -->
     <div class="form-section">
-        <div class="form-section-title">Firma ve Varsayılan Değerler</div>
-
+        <div class="form-section-title">Ortam</div>
         <div class="form-group">
-            <label for="sender_name">Bildirimci Adı / Firma Notu</label>
-            <input type="text" id="sender_name" name="sender_name"
-                   value="<?= hks_h($s['sender_name'] ?? '') ?>" placeholder="Firma adı">
-        </div>
-
-        <div class="form-group">
-            <label for="default_depo">Varsayılan Depo</label>
-            <input type="text" id="default_depo" name="default_depo"
-                   value="<?= hks_h($s['default_depo'] ?? '') ?>" placeholder="Depo kodu veya adı">
-        </div>
-
-        <div class="form-group">
-            <label for="default_il">Varsayılan İl</label>
-            <input type="text" id="default_il" name="default_il"
-                   value="<?= hks_h($s['default_il'] ?? '') ?>" placeholder="İl kodu">
-        </div>
-
-        <div class="form-group">
-            <label for="default_ilce">Varsayılan İlçe</label>
-            <input type="text" id="default_ilce" name="default_ilce"
-                   value="<?= hks_h($s['default_ilce'] ?? '') ?>" placeholder="İlçe kodu">
+            <label for="environment">HKS Servis Ortamı</label>
+            <select id="environment" name="environment">
+                <option value="test" <?= ($s['environment'] ?? 'test') === 'test' ? 'selected' : '' ?>>🟡 Test Ortamı</option>
+                <option value="live" <?= ($s['environment'] ?? '') === 'live' ? 'selected' : '' ?>>🔴 Canlı Ortam</option>
+            </select>
         </div>
     </div>
 
-    <div class="form-section">
-        <div class="form-section-title">WSDL ve Servis Ayarları</div>
+    <!-- Gelişmiş Ayarlar (accordion) -->
+    <details class="hks-advanced">
+        <summary>Gelişmiş Ayarlar <small class="muted" style="font-weight:400;margin-left:6px">— firma, depo, WSDL, timeout</small></summary>
+        <div class="hks-advanced-body hks-form">
 
-        <div class="form-group">
-            <label for="genel_wsdl_url">GenelService WSDL URL
-                <small class="muted">(boş bırakılırsa otomatik)</small>
-            </label>
-            <input type="url" id="genel_wsdl_url" name="genel_wsdl_url"
-                   value="<?= hks_h($s['genel_wsdl_url'] ?? '') ?>"
-                   placeholder="Boş = ortama göre otomatik">
+            <div class="form-group">
+                <label for="security_word">
+                    Güvenlik Kelimesi <small class="muted">(opsiyonel)</small>
+                    <?php if (!empty($s['security_word_enc'])): ?>
+                        <span class="hks-secret-badge hks-badge-ok">✓ Kayıtlı</span>
+                    <?php endif; ?>
+                </label>
+                <input type="password" id="security_word" name="security_word"
+                       placeholder="<?= !empty($s['security_word_enc']) ? '(kayıtlı — değiştirmek için yeni değer girin)' : 'Opsiyonel' ?>"
+                       autocomplete="new-password"
+                       <?= !$has_secure_key ? 'disabled' : '' ?>>
+            </div>
+
+            <div class="form-group">
+                <label for="sender_name">Bildirimci Adı / Firma Notu</label>
+                <input type="text" id="sender_name" name="sender_name"
+                       value="<?= hks_h($s['sender_name'] ?? '') ?>" placeholder="Firma adı">
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
+                <div class="form-group">
+                    <label for="default_depo">Varsayılan Depo</label>
+                    <input type="text" id="default_depo" name="default_depo"
+                           value="<?= hks_h($s['default_depo'] ?? '') ?>" placeholder="Depo kodu">
+                </div>
+                <div class="form-group">
+                    <label for="default_il">Varsayılan İl</label>
+                    <input type="text" id="default_il" name="default_il"
+                           value="<?= hks_h($s['default_il'] ?? '') ?>" placeholder="İl kodu">
+                </div>
+                <div class="form-group">
+                    <label for="default_ilce">Varsayılan İlçe</label>
+                    <input type="text" id="default_ilce" name="default_ilce"
+                           value="<?= hks_h($s['default_ilce'] ?? '') ?>" placeholder="İlçe kodu">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="genel_wsdl_url">GenelService WSDL <small class="muted">(boş = otomatik)</small></label>
+                <input type="url" id="genel_wsdl_url" name="genel_wsdl_url"
+                       value="<?= hks_h($s['genel_wsdl_url'] ?? '') ?>"
+                       placeholder="Boş = ortama göre otomatik">
+            </div>
+
+            <div class="form-group">
+                <label for="bildirim_wsdl_url">BildirimService WSDL <small class="muted">(boş = otomatik)</small></label>
+                <input type="url" id="bildirim_wsdl_url" name="bildirim_wsdl_url"
+                       value="<?= hks_h($s['bildirim_wsdl_url'] ?? '') ?>"
+                       placeholder="Boş = ortama göre otomatik">
+            </div>
+
+            <div class="form-group">
+                <label for="timeout_seconds">Servis Timeout <small class="muted">(saniye)</small></label>
+                <input type="number" id="timeout_seconds" name="timeout_seconds" min="5" max="120"
+                       value="<?= (int)($s['timeout_seconds'] ?? 30) ?>" style="max-width:100px">
+            </div>
+
+            <div class="form-group">
+                <label style="display:flex;align-items:center;gap:8px;font-weight:normal">
+                    <input type="checkbox" name="live_send_enabled" value="1"
+                           <?= (int)($s['live_send_enabled'] ?? 0) === 1 ? 'checked' : '' ?>>
+                    <span>Canlı HKS gönderimini etkinleştir <small class="muted">(servis eşlemesi tamamlandıktan sonra açın)</small></span>
+                </label>
+            </div>
         </div>
+    </details>
 
-        <div class="form-group">
-            <label for="bildirim_wsdl_url">BildirimService WSDL URL
-                <small class="muted">(boş bırakılırsa otomatik)</small>
-            </label>
-            <input type="url" id="bildirim_wsdl_url" name="bildirim_wsdl_url"
-                   value="<?= hks_h($s['bildirim_wsdl_url'] ?? '') ?>"
-                   placeholder="Boş = ortama göre otomatik">
-        </div>
-
-        <div class="form-group">
-            <label for="timeout_seconds">Servis Timeout (saniye)</label>
-            <input type="number" id="timeout_seconds" name="timeout_seconds" min="5" max="120"
-                   value="<?= (int)($s['timeout_seconds'] ?? 30) ?>">
-        </div>
-
-        <div class="form-group">
-            <label>
-                <input type="checkbox" name="live_send_enabled" value="1"
-                       <?= (int)($s['live_send_enabled'] ?? 0) === 1 ? 'checked' : '' ?>>
-                &nbsp;Canlı HKS gönderimini etkinleştir
-                <small class="muted">(sadece servis eşlemesi tamamlandıktan sonra açın)</small>
-            </label>
-        </div>
-    </div>
-
-    <div class="form-actions">
+    <!-- Form eylemleri + bağlantı testi -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button type="submit" class="btn btn-primary btn-lg">Kaydet</button>
         <a href="index.php" class="btn btn-ghost btn-lg">İptal</a>
-        <button type="submit" class="btn btn-primary btn-lg">
-            Ayarları Kaydet
-        </button>
+        <button type="button" id="btnTest" class="btn btn-ghost" style="margin-left:auto">🔌 Bağlantı Testi</button>
     </div>
 </form>
 
-<div id="test-result" style="display:none;margin-top:16px"></div>
-<div style="margin-top:16px">
-    <button type="button" id="btnTest" class="btn btn-ghost btn-lg">🔌 Bağlantıyı Test Et</button>
-    <span id="test-spinner" style="display:none;margin-left:10px;color:var(--muted);font-size:.88rem">Test ediliyor...</span>
-    <p style="margin-top:8px;font-size:.82rem;color:var(--muted)">
-        Test: SOAP extension, WSDL erişimi kontrol edilir. Ayarların kaydedilmesi gerekmez.
-    </p>
-</div>
+<div id="test-result" style="display:none;margin-top:12px"></div>
 
 </div><!-- /.hks-page -->
 
 <script>
 document.getElementById('btnTest').addEventListener('click', function() {
-    var btn = this, spinner = document.getElementById('test-spinner'), result = document.getElementById('test-result');
-    btn.disabled = true; spinner.style.display = 'inline'; result.style.display = 'none';
+    var btn = this, result = document.getElementById('test-result');
+    btn.disabled = true; btn.textContent = '⏳ Test ediliyor...';
+    result.style.display = 'none';
     fetch('ajax.php?action=test_connection', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -320,8 +295,8 @@ document.getElementById('btnTest').addEventListener('click', function() {
         result.className = data.ok ? 'hks-success-box' : 'hks-error-box';
         result.innerHTML = (data.ok ? '✅ ' : '❌ ') + (data.message || '') + (data.duration_ms ? ' <small>('+data.duration_ms+'ms)</small>' : '');
     })
-    .catch(() => { result.style.display='block'; result.className='hks-error-box'; result.textContent='İstek gönderilemedi.'; })
-    .finally(() => { btn.disabled=false; spinner.style.display='none'; });
+    .catch(function() { result.style.display='block'; result.className='hks-error-box'; result.textContent='İstek gönderilemedi.'; })
+    .finally(function() { btn.disabled=false; btn.textContent='🔌 Bağlantı Testi'; });
 });
 </script>
 
