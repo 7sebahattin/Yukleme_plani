@@ -980,11 +980,10 @@ class HksClient {
                 }
             }
 
-            // Liste alanının iç yapısını çöz
+            // Liste alanının iç yapısını çöz (yalnızca görsel açıklama için)
             $listDesc         = 'NULL';
             $listSubKeys      = [];
             $listSubListField = null;
-            $listSubListCount = 0;
             if ($listVal !== null) {
                 if (is_array($listVal)) {
                     $listDesc    = 'array(' . count($listVal) . ')';
@@ -993,17 +992,20 @@ class HksClient {
                 } elseif (is_object($listVal)) {
                     $listSubKeys = array_keys((array)$listVal);
                     $listDesc    = 'object{' . implode(', ', $listSubKeys) . '}';
-                    // Sonuc object içindeki iç listeyi ara
+                    // Sonuc object içindeki iç koleksiyonu (wrapper) tanımla
                     foreach ((array)$listVal as $sk => $sv) {
                         if (is_array($sv)) {
-                            $listSubListField  = $sk;
-                            $listSubListCount  = count($sv);
-                            $listDesc         .= ' → ' . $sk . ':array(' . $listSubListCount . ')';
+                            $listSubListField = $sk;
+                            $listDesc        .= ' → ' . $sk . ':array(' . count($sv) . ')';
                             break;
                         } elseif (is_object($sv)) {
-                            $listSubListField  = $sk;
-                            $listSubListCount  = 1; // SOAP_SINGLE_ELEMENT_ARRAYS olmadan tekil eleman object olabilir
-                            $listDesc         .= ' → ' . $sk . ':object{' . implode(',', array_keys((array)$sv)) . '}';
+                            $innerKeys = array_keys((array)$sv);
+                            $listSubListField = $sk;
+                            // wrapper içindeki DTO dizisinin boyutu
+                            $innerArr = null;
+                            foreach ((array)$sv as $iv) { if (is_array($iv)) { $innerArr = $iv; break; } }
+                            $listDesc .= ' → ' . $sk . ':object{' . implode(',', $innerKeys) . '}'
+                                       . ($innerArr !== null ? ('[' . count($innerArr) . ']') : '');
                             break;
                         }
                     }
@@ -1012,7 +1014,11 @@ class HksClient {
                 }
             }
 
-            // Katman 4: hks_diagnose_response
+            // GERÇEK kayıt sayısı — hks_extract_records ile Sonuc.<Koleksiyon>.<DTO>[] iç içe inilir
+            $realRecords      = $listVal !== null ? hks_extract_records($listVal) : [];
+            $listSubListCount = count($realRecords);
+
+            // Katman 4: hks_diagnose_response (sistemin gerçekte parse ettiği sayı)
             $diag         = hks_diagnose_response(['ok' => true, 'data' => $extracted]);
             $diagCategory = $diag['category'] ?? 'OK';
             $diagCount    = count($diag['data'] ?? []);
@@ -1021,17 +1027,12 @@ class HksClient {
             $verdict = match(true) {
                 !$diag['ok'] && $diagCategory === 'B' => 'HKS_HATA',
                 !$diag['ok'] && $diagCategory === 'D' => 'PATH_HATASI',
-                $diagCategory === 'C'                  => 'HKS_BOŞ',
-                // PARSE_BUG: IslemKodu başarılı, iç liste var, ama sistem 0 görüyor
+                // PARSE_BUG: ham yanıtta kayıt var ama sistem daha azını çıkarıyor
                 ($islemKodu === 'GTBWSRV0000001'
-                    && $listSubListField !== null
                     && $listSubListCount > 0
                     && $diagCount < $listSubListCount) => 'PARSE_BUG',
-                ($islemKodu === 'GTBWSRV0000001'
-                    && $listField !== null
-                    && is_object($listVal)
-                    && $listSubListField === null
-                    && $diagCount === 0) => 'PARSE_BUG',
+                $diagCategory === 'C' && $listSubListCount === 0 => 'HKS_BOŞ',
+                $diagCategory === 'C'                  => 'PARSE_BUG',
                 $diagCategory === 'OK' => 'PASS',
                 default => 'BİLİNMEYEN',
             };
@@ -1055,6 +1056,8 @@ class HksClient {
                 'list_sub_keys'      => $listSubKeys,
                 'list_sub_list_field'=> $listSubListField,
                 'list_sub_list_count'=> $listSubListCount,
+                'real_count'         => $listSubListCount,
+                'sample_record'      => $realRecords[0] ?? null,
                 'diag_category'      => $diagCategory,
                 'diag_count'         => $diagCount,
                 'diag_message'       => $diag['ui_message'] ?? '',

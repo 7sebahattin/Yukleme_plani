@@ -67,6 +67,11 @@ include __DIR__ . '/views/_tabs.php';
                    style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
         </div>
         <div>
+            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:3px">UrunId (ReferansKunyeler)</label>
+            <input type="text" id="p_urun_id" placeholder="örn. 339 (ELMA), 335 (DOMATES)"
+                   style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
+        </div>
+        <div>
             <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:3px">Başlangıç</label>
             <input type="date" id="p_bas" value="<?= date('Y-m-d', strtotime('-90 days')) ?>"
                    style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
@@ -228,12 +233,18 @@ function renderResult(panelId, d, btnLabel) {
         ['data[0] key\'leri', (d.first_keys || []).join(', ') || '—'],
         ['Liste alanı (listField)', d.list_field || '(bulunamadı)'],
         ['Liste içeriği (listDesc)', d.list_desc || '—'],
-        ['İç alt liste', d.list_sub_list_field
-            ? (d.list_sub_list_field + ': ' + d.list_sub_list_count + ' kayıt')
-            : '—'],
+        ['İç alt liste (DTO alanı)', d.list_sub_list_field || '—'],
+        ['HAM gerçek kayıt sayısı', (d.real_count ?? '?') + ' kayıt'],
         ['Sistem parse sayısı', (d.diag_count ?? '?') + ' kayıt (kategori: ' + (d.diag_category || '?') + ')'],
         ['Süre', (d.duration_ms || 0) + ' ms'],
     ];
+
+    var sampleHtml = '';
+    if (d.sample_record) {
+        sampleHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;font-weight:600;font-size:.8rem">'
+            + 'Örnek Kayıt (ilk DTO)</summary>'
+            + '<pre class="diag-xml">' + esc(JSON.stringify(d.sample_record, null, 2)) + '</pre></details>';
+    }
 
     var rowsHtml = rows.map(function(r) {
         return '<div class="diag-row"><span class="diag-key">' + esc(r[0]) + '</span>'
@@ -272,7 +283,7 @@ function renderResult(panelId, d, btnLabel) {
         + '</div>'
         + bugNote
         + '<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:8px 10px">'
-        + rowsHtml + '</div>' + xmlHtml + '</div>';
+        + rowsHtml + '</div>' + sampleHtml + xmlHtml + '</div>';
 
     // Özet
     summaryData.push({ panel: panelId, verdict: verdict, label: btnLabel || verdict });
@@ -323,6 +334,8 @@ document.querySelectorAll('[data-panel]').forEach(function(btn) {
         } else if (variant === 'kunye') {
             istek = { KunyeNo: '0' };
             if (fvkn) istek.MalinSahibiTcKimlikVergiNo = fvkn;
+            var urunId = (document.getElementById('p_urun_id').value || '').trim();
+            if (urunId) istek.UrunId = urunId;
         } else if (variant === 'bl_iso') {
             istek = { BaslangicTarihi: toIso(bas), BitisTarihi: toIso(bit), KunyeTuru: '1', KunyeNo: '0' };
         } else if (variant === 'bl_tr') {
