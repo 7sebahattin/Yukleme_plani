@@ -133,21 +133,11 @@ render_flash();
         <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <!-- Firma seç -->
-                <form method="post" action="ajax.php?action=select_company">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
-                    <input type="hidden" name="redirect" value="index.php">
-                    <button type="submit" class="btn btn-sm <?= $is_selected ? 'btn-primary' : 'btn-ghost' ?>">
-                        <?= $is_selected ? '✓ Seçili' : 'Giriş Yap' ?>
-                    </button>
-                </form>
+                <a href="index.php?sec=<?= (int)$co['id'] ?>" class="btn btn-sm <?= $is_selected ? 'btn-primary' : 'btn-ghost' ?>">
+                    <?= $is_selected ? '✓ Seçili' : 'Giriş Yap' ?>
+                </a>
                 <!-- Ayarlar -->
-                <form method="post" action="ajax.php?action=select_company">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
-                    <input type="hidden" name="redirect" value="ayarlar.php">
-                    <button type="submit" class="btn btn-ghost btn-sm" title="Ayarları düzenle">⚙️</button>
-                </form>
+                <a href="index.php?sec=<?= (int)$co['id'] ?>&amp;to=ayarlar" class="btn btn-ghost btn-sm" title="Ayarları düzenle">⚙️</a>
                 <?php if (is_admin()): ?>
                 <!-- Sil -->
                 <form method="post" action="firmalar.php" onsubmit="return confirm('«<?= hks_h(addslashes($co['firma_adi'])) ?>» silinsin mi? Bu işlem geri alınamaz.')">
