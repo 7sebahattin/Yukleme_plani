@@ -66,6 +66,7 @@ class HksClient {
     }
 
     private function soapOptions(): array {
+        ini_set('soap.wsdl_cache_enabled', '0');
         $ctx = stream_context_create([
             'ssl'  => [
                 'verify_peer'       => false,
@@ -82,6 +83,7 @@ class HksClient {
             'encoding'           => 'UTF-8',
             'soap_version'       => SOAP_1_1,
             'stream_context'     => $ctx,
+            'features'           => SOAP_SINGLE_ELEMENT_ARRAYS,
         ];
     }
 
@@ -271,6 +273,150 @@ class HksClient {
         return [null, $reason, $code];
     }
 
+    /**
+     * SoapClient oluşturma — ?singleWsdl → ?wsdl → bare URL sırasıyla dener.
+     * WCF servislerinde ?singleWsdl genellikle "already defined" parse hatasını önler.
+     * Her adımda WSDL indirilip dedup edilir; ilk başarılı SoapClient döndürülür.
+     */
+    private function createSoapClientFromUrl(string $url): SoapClient {
+        $base       = preg_replace('/\?.*$/i', '', $url);
+        $candidates = [
+            $base . '?singleWsdl',
+            $base . '?wsdl',
+            $base,
+        ];
+
+        $lastError = null;
+        foreach ($candidates as $candidate) {
+            try {
+                $path   = $this->loadWsdl($candidate);
+                $client = new SoapClient($path, $this->soapOptions());
+                return $client;
+            } catch (SoapFault $e) {
+                $lastError = $e;
+                // Sonraki adayı yalnızca schema parse hataları için dene
+                if (stripos($e->faultstring, 'Parsing Schema') === false
+                    && stripos($e->faultstring, 'already defined') === false
+                    && stripos($e->faultstring, "element '") === false) {
+                    break;
+                }
+            } catch (Throwable $e) {
+                $lastError = $e;
+            }
+        }
+
+        if ($lastError instanceof SoapFault) {
+            throw $lastError;
+        }
+        throw new SoapFault('Client', $lastError ? $lastError->getMessage() : 'WSDL yüklenemedi.');
+    }
+
+    /**
+     * SoapClient ile WSDL parse edilemediğinde ham cURL ile SOAP POST çağrısı yapar.
+     * WCF SOAPAction formatı: {ns}/I{ServiceName}/{OperationName}
+     * İstek zarfı: UserName / Password / ServicePassword / Istek (kılavuz formatı)
+     */
+    private function manualSoapCall(string $serviceUrl, string $operation): array {
+        if (!function_exists('curl_init')) {
+            return ['ok' => false, 'message' => 'Manuel SOAP: cURL extension gerekli'];
+        }
+        $ns       = 'http://www.gtb.gov.tr//WebServices';
+        $endpoint = preg_replace('/\?.*$/i', '', $serviceUrl);
+
+        $svcBasename = basename(parse_url($endpoint, PHP_URL_PATH) ?? '');
+        $svcName     = preg_replace('/\.svc$/i', '', $svcBasename) ?: 'GenelService';
+        $soapAction  = $ns . '/I' . $svcName . '/' . $operation;
+
+        $creds = $this->credentials();
+        $esc   = static fn(string $v): string =>
+            htmlspecialchars($v, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+
+        $inner = "<tns:UserName>{$esc($creds['username'])}</tns:UserName>"
+               . "<tns:Password>{$esc($creds['password'])}</tns:Password>"
+               . "<tns:ServicePassword>{$esc($creds['service_password'])}</tns:ServicePassword>"
+               . '<tns:Istek/>';
+
+        $envelope = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+            . "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"{$ns}\">\n"
+            . "  <soap:Body>\n"
+            . "    <tns:{$operation}>\n"
+            . "      <tns:servisIstek>{$inner}</tns:servisIstek>\n"
+            . "    </tns:{$operation}>\n"
+            . "  </soap:Body>\n"
+            . "</soap:Envelope>";
+
+        $ch = curl_init($endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $envelope,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: text/xml; charset=utf-8',
+                'SOAPAction: "' . $soapAction . '"',
+                'Accept: text/xml, application/xml',
+            ],
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+            CURLOPT_TIMEOUT        => $this->timeout(),
+            CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout()),
+            CURLOPT_USERAGENT      => 'PHP-SOAP/HKS-Client/1.0',
+        ]);
+
+        $t0       = microtime(true);
+        $response = curl_exec($ch);
+        $ms       = (int)round((microtime(true) - $t0) * 1000);
+        $code     = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($response === false || $code === 0) {
+            return ['ok' => false, 'message' => 'cURL hatası: ' . $curlErr, 'duration_ms' => $ms];
+        }
+
+        $resp      = (string)$response;
+        $islemKodu = '';
+        if (preg_match('/<(?:\w+:)?IslemKodu[^>]*>([^<]+)<\/(?:\w+:)?IslemKodu>/i', $resp, $m)) {
+            $islemKodu = trim($m[1]);
+        }
+        $hataMesaji = '';
+        if (preg_match('/<(?:\w+:)?(?:HataKodlari|HataMesaji|faultstring)[^>]*>([^<]+)<\//i', $resp, $m)) {
+            $hataMesaji = trim($m[1]);
+        }
+
+        if ($islemKodu === 'GTBWSRV0000001') {
+            return [
+                'ok'          => true,
+                'message'     => 'Manuel SOAP başarılı (IslemKodu: ' . $islemKodu . ')',
+                'duration_ms' => $ms,
+                'islem_kodu'  => $islemKodu,
+                'method'      => 'manual_soap',
+            ];
+        }
+        if ($islemKodu !== '' || $hataMesaji !== '') {
+            return [
+                'ok'          => false,
+                'message'     => 'HKS Hata: ' . ($hataMesaji ?: $islemKodu),
+                'duration_ms' => $ms,
+                'islem_kodu'  => $islemKodu,
+                'method'      => 'manual_soap',
+            ];
+        }
+        if (stripos($resp, 'faultstring') !== false) {
+            return [
+                'ok'          => false,
+                'message'     => 'SOAP Fault — HTTP ' . $code,
+                'duration_ms' => $ms,
+                'method'      => 'manual_soap',
+            ];
+        }
+        return [
+            'ok'          => $code === 200,
+            'message'     => 'Manuel SOAP: HTTP ' . $code . ', ' . strlen($resp) . ' bayt',
+            'duration_ms' => $ms,
+            'method'      => 'manual_soap',
+        ];
+    }
+
     // ── Sunucu Tanılama ──────────────────────────────────────
     // Web servis bağlantı sorunlarının kaynağını tespit eder.
     // Hosting ortamı (curl/allow_url_fopen/DNS/firewall/SSL) hakkında somut bilgi verir.
@@ -359,22 +505,58 @@ class HksClient {
             return $this->testFail('WSDL URL tanımlanmamış.');
         }
 
+        // — Adım 1: SoapClient ile dene (?singleWsdl → ?wsdl → bare)
         try {
-            $localWsdl = $this->loadWsdl($wsdl);
-            $client    = new SoapClient($localWsdl, $this->soapOptions());
-            $duration  = (int)((microtime(true) - $start) * 1000);
+            $client   = $this->createSoapClientFromUrl($wsdl);
+            $duration = (int)((microtime(true) - $start) * 1000);
 
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], ['status' => 'wsdl_loaded'],
                 true, null, null, $duration);
 
-            $this->repo->updateTestResult(true, 'WSDL başarıyla yüklendi. ' . $wsdl);
-            return ['ok' => true, 'message' => 'WSDL başarıyla yüklendi.', 'duration_ms' => $duration];
+            $this->repo->updateTestResult(true, 'HKS servis tanımı başarıyla yüklendi. ' . $wsdl);
+            return [
+                'ok'          => true,
+                'message'     => 'HKS servis tanımı başarıyla yüklendi.',
+                'duration_ms' => $duration,
+                'method'      => 'wsdl',
+            ];
 
         } catch (SoapFault $e) {
+            $isParseError = stripos($e->faultstring, 'Parsing Schema') !== false
+                         || stripos($e->faultstring, 'already defined') !== false;
+
+            // — Adım 2: Schema parse hatası → manuel SOAP fallback
+            if ($isParseError && function_exists('curl_init')) {
+                $fallback = $this->manualSoapCall($wsdl, 'GenelServisIller');
+                if (!$fallback['ok']) {
+                    $fallback = $this->manualSoapCall($wsdl, 'GenelServisUlkeler');
+                }
+                $duration = (int)((microtime(true) - $start) * 1000);
+                if ($fallback['ok']) {
+                    $msg = 'HKS servis tanımı PHP tarafından okunamadı; ancak servis '
+                         . 'manuel SOAP ile başarıyla yanıt verdi. ('
+                         . ($fallback['message'] ?? '') . ')';
+                    $this->logService('GenelService', 'testConnection', $env,
+                        ['wsdl' => $wsdl], ['status' => 'manual_soap_ok'], true, null, null, $duration);
+                    $this->repo->updateTestResult(true, $msg);
+                    return ['ok' => true, 'message' => $msg, 'duration_ms' => $duration, 'method' => 'manual_soap'];
+                }
+                $diag = $this->diagnostics();
+                $msg  = 'HKS servis tanımı PHP tarafından okunamadı. Sistem alternatif bağlantı '
+                      . 'yöntemiyle denedi ancak sonuç alınamadı. ('
+                      . ($fallback['message'] ?? 'bilinmeyen hata') . ')'
+                      . ' — [' . $this->diagSummary($diag) . ']';
+                $this->logService('GenelService', 'testConnection', $env,
+                    ['wsdl' => $wsdl], null, false, 'parse_error', $e->faultstring, $duration);
+                $this->repo->updateTestResult(false, $msg);
+                return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration, 'diag' => $diag];
+            }
+
             $duration = (int)((microtime(true) - $start) * 1000);
             $diag     = $this->diagnostics();
-            $msg      = 'SOAP hatası: ' . $e->faultstring . ' — [' . $this->diagSummary($diag) . ']';
+            $msg      = 'HKS servis hatası: ' . $e->faultstring
+                      . ' — [' . $this->diagSummary($diag) . ']';
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, $e->faultcode, $e->faultstring, $duration);
             $this->repo->updateTestResult(false, $msg);
@@ -383,7 +565,8 @@ class HksClient {
         } catch (Throwable $e) {
             $duration = (int)((microtime(true) - $start) * 1000);
             $diag     = $this->diagnostics();
-            $msg      = 'Bağlantı hatası: ' . $e->getMessage() . ' — [' . $this->diagSummary($diag) . ']';
+            $msg      = 'Bağlantı hatası: ' . $e->getMessage()
+                      . ' — [' . $this->diagSummary($diag) . ']';
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, null, $e->getMessage(), $duration);
             $this->repo->updateTestResult(false, $msg);
@@ -467,8 +650,7 @@ class HksClient {
         }
 
         try {
-            $localWsdl = $this->loadWsdl($wsdl);
-            $client    = new SoapClient($localWsdl, $this->soapOptions());
+            $client    = $this->createSoapClientFromUrl($wsdl);
             $functions = $client->__getFunctions() ?? [];
             $duration  = (int)((microtime(true) - $start) * 1000);
 
@@ -485,10 +667,21 @@ class HksClient {
             ];
 
         } catch (SoapFault $e) {
-            $duration = (int)((microtime(true) - $start) * 1000);
+            $duration     = (int)((microtime(true) - $start) * 1000);
+            $isParseError = stripos($e->faultstring, 'Parsing Schema') !== false
+                         || stripos($e->faultstring, 'already defined') !== false;
+            $friendlyMsg  = $isParseError
+                ? 'HKS servis tanımı PHP tarafından okunamadı. Manuel SOAP fallback kullanılacak.'
+                : 'HKS servis hatası: ' . $e->faultstring;
             $this->logService($svcLabel, 'inspectWsdl', $env,
                 ['wsdl' => $wsdl], null, false, $e->faultcode, $e->faultstring, $duration);
-            return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'methods' => [], 'duration_ms' => $duration];
+            return [
+                'ok'          => false,
+                'message'     => $friendlyMsg,
+                'technical'   => $e->faultstring,
+                'methods'     => [],
+                'duration_ms' => $duration,
+            ];
 
         } catch (Throwable $e) {
             $duration = (int)((microtime(true) - $start) * 1000);
@@ -533,7 +726,7 @@ class HksClient {
         $requestParams = $this->buildRequest($params);
 
         try {
-            $client   = new SoapClient($this->loadWsdl($this->bildirimWsdl()), $this->soapOptions());
+            $client   = $this->createSoapClientFromUrl($this->bildirimWsdl());
             $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
             $data     = $this->extractResultArray($result, $method);
@@ -580,7 +773,7 @@ class HksClient {
         $requestParams = $this->buildRequest(['KunyeNo' => $kunye_no]);
 
         try {
-            $client   = new SoapClient($this->loadWsdl($this->bildirimWsdl()), $this->soapOptions());
+            $client   = $this->createSoapClientFromUrl($this->bildirimWsdl());
             $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
             $data     = $this->extractResultArray($result, $method);
@@ -631,8 +824,8 @@ class HksClient {
         $requestParams = $this->buildRequest($istek);
 
         try {
-            $client  = new SoapClient($this->loadWsdl($wsdl), $this->soapOptions());
-            $result  = $client->__soapCall($method, [$requestParams]);
+            $client   = $this->createSoapClientFromUrl($wsdl);
+            $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
 
             $data = $this->extractResultArray($result, $method);
@@ -676,7 +869,7 @@ class HksClient {
     // Verilen WSDL'den aday method adlarından birini keşfeder
     private function discoverMethod(string $wsdl, array $candidates): ?string {
         try {
-            $client    = new SoapClient($this->loadWsdl($wsdl), $this->soapOptions());
+            $client    = $this->createSoapClientFromUrl($wsdl);
             $functions = $client->__getFunctions() ?? [];
             $available = [];
             foreach ($functions as $sig) {
