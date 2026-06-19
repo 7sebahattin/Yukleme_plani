@@ -67,6 +67,11 @@ include __DIR__ . '/views/_tabs.php';
                    style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
         </div>
         <div>
+            <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:3px">UrunId (ReferansKunyeler)</label>
+            <input type="text" id="p_urun_id" placeholder="örn. 339 (ELMA), 335 (DOMATES)"
+                   style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
+        </div>
+        <div>
             <label style="display:block;font-size:.8rem;font-weight:600;margin-bottom:3px">Başlangıç</label>
             <input type="date" id="p_bas" value="<?= date('Y-m-d', strtotime('-90 days')) ?>"
                    style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:.88rem">
@@ -329,6 +334,8 @@ document.querySelectorAll('[data-panel]').forEach(function(btn) {
         } else if (variant === 'kunye') {
             istek = { KunyeNo: '0' };
             if (fvkn) istek.MalinSahibiTcKimlikVergiNo = fvkn;
+            var urunId = (document.getElementById('p_urun_id').value || '').trim();
+            if (urunId) istek.UrunId = urunId;
         } else if (variant === 'bl_iso') {
             istek = { BaslangicTarihi: toIso(bas), BitisTarihi: toIso(bit), KunyeTuru: '1', KunyeNo: '0' };
         } else if (variant === 'bl_tr') {
