@@ -181,7 +181,32 @@ class HksRepository {
 
     // ── Referans Cache ───────────────────────────────────────
 
+    private function ensureReferenceCache(): void {
+        static $done = false;
+        if ($done) return;
+        $done = true;
+        try {
+            $this->pdo->query("SELECT 1 FROM `hks_reference_cache` LIMIT 0");
+        } catch (PDOException) {
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS `hks_reference_cache` (
+                `id`              INT AUTO_INCREMENT PRIMARY KEY,
+                `ref_type`        VARCHAR(50)  NOT NULL DEFAULT '',
+                `ref_code`        VARCHAR(100) NOT NULL DEFAULT '',
+                `ref_name`        VARCHAR(300) NOT NULL DEFAULT '',
+                `ref_parent_code` VARCHAR(100) NULL,
+                `raw_json`        TEXT NULL,
+                `synced_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `is_active`       TINYINT(1) NOT NULL DEFAULT 1,
+                UNIQUE KEY `uq_ref_type_code` (`ref_type`, `ref_code`),
+                INDEX `idx_hksrc_type`   (`ref_type`),
+                INDEX `idx_hksrc_parent` (`ref_parent_code`(50)),
+                INDEX `idx_hksrc_active` (`is_active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+    }
+
     public function getReferenceStats(): array {
+        $this->ensureReferenceCache();
         try {
             $rows = $this->pdo->query(
                 "SELECT ref_type, COUNT(*) AS cnt, MAX(synced_at) AS last_sync
@@ -198,6 +223,7 @@ class HksRepository {
     }
 
     public function getReferences(string $ref_type, ?string $parent_code = null): array {
+        $this->ensureReferenceCache();
         try {
             if ($parent_code !== null) {
                 $st = $this->pdo->prepare(
@@ -217,6 +243,7 @@ class HksRepository {
     }
 
     public function upsertReference(string $ref_type, string $ref_code, string $ref_name, ?string $parent_code, ?string $raw_json): void {
+        $this->ensureReferenceCache();
         $this->pdo->prepare(
             "INSERT INTO hks_reference_cache (ref_type, ref_code, ref_name, ref_parent_code, raw_json, synced_at, is_active)
              VALUES (?,?,?,?,?,NOW(),1)
@@ -226,6 +253,7 @@ class HksRepository {
     }
 
     public function deactivateReferenceType(string $ref_type): void {
+        $this->ensureReferenceCache();
         $this->pdo->prepare(
             "UPDATE hks_reference_cache SET is_active=0 WHERE ref_type=?"
         )->execute([$ref_type]);
