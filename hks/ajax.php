@@ -33,6 +33,32 @@ $client = new HksClient($repo);
 
 switch ($action) {
 
+    // ── Firma Seçimi ────────────────────────────────────────
+    case 'select_company':
+        $cid = (int)($input['company_id'] ?? 0);
+        if ($cid > 0) {
+            // Geçerli mi kontrol et
+            $repo2 = new HksRepository(db());
+            $co    = $repo2->getSettings($cid);
+            if (!$co) {
+                if (!empty($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
+                    echo json_encode(['ok' => false, 'message' => 'Firma bulunamadı.']); exit;
+                }
+                set_flash('error', 'Firma bulunamadı.'); header('Location: index.php'); exit;
+            }
+            $_SESSION['hks_company_id'] = $cid;
+        } else {
+            // Firma seçimini temizle (değiştir butonu)
+            unset($_SESSION['hks_company_id']);
+        }
+        $redirect = $input['redirect'] ?? 'index.php';
+        // Güvenli redirect — sadece hks/ içi sayfalar
+        $safe = preg_replace('/[^a-z0-9_.]/i', '', basename($redirect));
+        if (!empty($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json')) {
+            echo json_encode(['ok' => true, 'redirect' => $safe]); exit;
+        }
+        header('Location: ' . $safe); exit;
+
     // ── Bağlantı Testi ──────────────────────────────────────
     case 'test_connection':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {

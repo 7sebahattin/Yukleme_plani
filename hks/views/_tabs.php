@@ -18,7 +18,31 @@ $_hks_tabs = [
     'servis_loglari.php' => ['icon' => '🧾', 'label' => 'Servis Logları'],
 ];
 $_hks_admin_only = ['ayarlar.php', 'referanslar.php'];
+
+// Seçili firma adı
+$_hks_company_name = '';
+if (isset($_SESSION['hks_company_id'])) {
+    $_hks_co = (new HksRepository(db()))->getSettings((int)$_SESSION['hks_company_id']);
+    $_hks_company_name = $_hks_co['firma_adi'] ?? '';
+}
 ?>
+<?php if ($_hks_company_name !== ''): ?>
+<div class="hks-company-bar">
+    <span class="hks-company-bar-name">🏢 <?= hks_h($_hks_company_name) ?></span>
+    <a href="index.php?switch=1" class="hks-company-bar-switch" onclick="return hksSwitch()">Firma Değiştir</a>
+</div>
+<script>
+function hksSwitch() {
+    if (!confirm('Firma değiştirmek istiyor musunuz?')) return false;
+    fetch('ajax.php?action=select_company', {
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'csrf='+encodeURIComponent(document.querySelector('meta[name="csrf-token"]').content)+'&company_id=0'
+    }).then(() => { window.location.href = 'index.php'; });
+    return false;
+}
+</script>
+<?php endif; ?>
 <nav class="hks-tabs" aria-label="HKS Sekmeler">
 <?php foreach ($_hks_tabs as $_hks_file => $_hks_tab):
     if (in_array($_hks_file, $_hks_admin_only, true) && !is_admin() && !(function_exists('can') && can('hks.settings'))) continue;

@@ -6,6 +6,10 @@ $auth_user = require_login();
 if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
     http_response_code(403); die('Erişim yetkiniz yok.');
 }
+if (!isset($_SESSION['hks_company_id'])) {
+    set_flash('info', 'Bağlantı testinden önce bir firma seçin.');
+    header('Location: index.php'); exit;
+}
 
 $repo   = new HksRepository(db());
 $client = new HksClient($repo);

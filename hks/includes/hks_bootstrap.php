@@ -105,6 +105,15 @@ require_once __DIR__ . '/../../config/auth.php';
         }
     }
 
+    // hks_settings çok-firma desteği — firma_adi kolonu
+    try {
+        $pdo->query("SELECT firma_adi FROM `hks_settings` LIMIT 0");
+    } catch (PDOException) {
+        try {
+            $pdo->exec("ALTER TABLE `hks_settings` ADD COLUMN `firma_adi` VARCHAR(200) NOT NULL DEFAULT 'Firma 1' AFTER `id`");
+        } catch (PDOException) { /* zaten var */ }
+    }
+
     // hks_notifications kolon migrasyonu — eski şema ile deploy edilmiş sunucularda eksik kolonlar olabilir.
     try {
         $pdo->query("SELECT firma, direction, notification_type, sifat, urun_cinsi,
