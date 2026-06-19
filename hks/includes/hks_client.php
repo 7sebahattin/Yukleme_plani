@@ -43,6 +43,14 @@ class HksClient {
     }
 
     private function soapOptions(): array {
+        $ctx = stream_context_create([
+            'ssl' => [
+                'verify_peer'       => false,
+                'verify_peer_name'  => false,
+                'allow_self_signed' => true,
+            ],
+            'http' => ['user_agent' => 'PHP-SOAP/HKS-Client'],
+        ]);
         return [
             'connection_timeout' => $this->timeout(),
             'cache_wsdl'         => WSDL_CACHE_NONE,
@@ -50,6 +58,7 @@ class HksClient {
             'trace'              => true,
             'encoding'           => 'UTF-8',
             'soap_version'       => SOAP_1_1,
+            'stream_context'     => $ctx,
         ];
     }
 
