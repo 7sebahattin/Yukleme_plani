@@ -24,7 +24,7 @@ class HksClient {
         return $this->settings['environment'] ?? 'test';
     }
 
-    private function genelWsdl(): string {
+    public function genelWsdl(): string {
         $u = trim((string)($this->settings['genel_wsdl_url'] ?? ''));
         if ($u !== '' && !$this->isStaleWsdl($u)) {
             return $u;
@@ -32,7 +32,7 @@ class HksClient {
         return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_GENEL : HKS_WSDL_TEST_GENEL;
     }
 
-    private function bildirimWsdl(): string {
+    public function bildirimWsdl(): string {
         $u = trim((string)($this->settings['bildirim_wsdl_url'] ?? ''));
         if ($u !== '' && !$this->isStaleWsdl($u)) {
             return $u;
@@ -42,7 +42,7 @@ class HksClient {
 
     // UrunService — ayrı bir WSDL alanı yok; genel WSDL override'ı varsa ondan türet,
     // yoksa ortam sabitini kullan.
-    private function urunWsdl(): string {
+    public function urunWsdl(): string {
         $g = trim((string)($this->settings['genel_wsdl_url'] ?? ''));
         if ($g !== '' && !$this->isStaleWsdl($g) && stripos($g, 'GenelService.svc') !== false) {
             return str_ireplace('GenelService.svc', 'UrunService.svc', $g);
@@ -662,6 +662,65 @@ class HksClient {
         // TcKimlikVergiNolar SOAP tipi ArrayOfstring — tek eleman bile array olarak gönderilmeli
         return $this->callService($this->bildirimWsdl(), 'BildirimService',
             'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNolar' => [$tc_vkn]]);
+    }
+
+    // Referans Künye — firma VKN + künye no ile
+    public function getReferansKunyelerByVkn(string $mal_sahibi_vkn = '', string $kunye_no = '0'): array {
+        $params = ['KunyeNo' => $kunye_no === '' ? '0' : $kunye_no];
+        if ($mal_sahibi_vkn !== '') {
+            $params['MalinSahibiTcKimlikVergiNo'] = $mal_sahibi_vkn;
+        }
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisReferansKunyeler', $params);
+    }
+
+    // Yaptığım bildirimler — KunyeTuru eklendi
+    public function getYaptigimBildirimlerEx(array $params = []): array {
+        $defaults = [
+            'KunyeTuru' => $params['KunyeTuru'] ?? '1',
+            'KunyeNo'   => $params['KunyeNo']   ?? '0',
+        ];
+        if (!empty($params['BaslangicTarihi'])) $defaults['BaslangicTarihi'] = $params['BaslangicTarihi'];
+        if (!empty($params['BitisTarihi']))     $defaults['BitisTarihi']     = $params['BitisTarihi'];
+        return $this->callService($this->bildirimWsdl(), 'BildirimService',
+            'BildirimServisBildirimcininYaptigiBildirimListesi', $defaults);
+    }
+
+    // Bana yapılan bildirimler — KunyeTuru eklendi
+    public function getBanaYapilanBildirimlerEx(array $params = []): array {
+        $defaults = [
+            'KunyeTuru' => $params['KunyeTuru'] ?? '1',
+            'KunyeNo'   => $params['KunyeNo']   ?? '0',
+        ];
+        if (!empty($params['BaslangicTarihi'])) $defaults['BaslangicTarihi'] = $params['BaslangicTarihi'];
+        if (!empty($params['BitisTarihi']))     $defaults['BitisTarihi']     = $params['BitisTarihi'];
+        return $this->callService($this->bildirimWsdl(), 'BildirimService',
+            'BildirimServisBildirimciyeYapilanBildirimListesi', $defaults);
+    }
+
+    // Ürünler tanılama — 0 gelirse detaylı teşhis
+    public function fetchUrunlerWithDiag(): array {
+        $result = $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunler');
+        $diag   = hks_diagnose_response($result);
+        if ($diag['ok'] && !empty($diag['data'])) {
+            return ['ok' => true, 'data' => $diag['data'], 'count' => count($diag['data']), 'diag_category' => 'OK'];
+        }
+        if ($diag['category'] === 'C') {
+            // Canlıda 0 ürün şüphelidir — ek teşhis
+            return [
+                'ok'           => true,
+                'data'         => [],
+                'count'        => 0,
+                'diag_category'=> 'C',
+                'ui_message'   => 'Ürün listesi boş döndü. Canlı ortamda 0 ürün şüphelidir. Ortam ve kimlik bilgilerini kontrol edin.',
+                'diag_hints'   => [
+                    'environment'  => $this->getEnvironment(),
+                    'has_username' => !empty($this->settings['username'] ?? ''),
+                    'has_password' => !empty($this->settings['password_enc'] ?? ''),
+                    'has_svc_pass' => !empty($this->settings['service_password_enc'] ?? ''),
+                ],
+            ];
+        }
+        return array_merge($result, ['diag_category' => $diag['category'], 'ui_message' => $diag['ui_message']]);
     }
 
     public function getTopluKunye(array $params = []): array {

@@ -58,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ilce        = trim($_POST['default_ilce'] ?? '');
     $timeout     = max(5, min(120, (int)($_POST['timeout_seconds'] ?? 30)));
     $live_send   = isset($_POST['live_send_enabled']) ? 1 : 0;
+    $firma_vkn   = trim($_POST['firma_vkn'] ?? '');
     $genel_wsdl  = trim($_POST['genel_wsdl_url'] ?? '');
     $bil_wsdl    = trim($_POST['bildirim_wsdl_url'] ?? '');
 
@@ -87,6 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'live_send_enabled'     => $live_send,
         'genel_wsdl_url'        => $genel_wsdl,
         'bildirim_wsdl_url'     => $bil_wsdl,
+        'firma_vkn'             => $firma_vkn,
     ]);
 
     audit_log_event('hks_settings_updated', 'hks_settings', null, null, [
@@ -106,6 +108,28 @@ render_header('HKS Ayarları — ' . $firma_baslik);
 render_flash();
 ?>
 <div class="hks-page">
+<?php
+$env_label  = ($s['environment'] ?? 'test') === 'live' ? 'CANLI HKS ORTAMI' : 'TEST HKS ORTAMI';
+$env_color  = ($s['environment'] ?? 'test') === 'live' ? '#dc2626' : '#d97706';
+$env_bg     = ($s['environment'] ?? 'test') === 'live' ? '#fef2f2' : '#fffbeb';
+?>
+<div style="background:<?= $env_bg ?>;border:2px solid <?= $env_color ?>;border-radius:8px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-weight:700;color:<?= $env_color ?>;font-size:.95rem">
+        <?= ($s['environment'] ?? 'test') === 'live' ? '🔴' : '🟡' ?> <?= $env_label ?>
+    </span>
+    <div style="font-size:.8rem;color:var(--muted);flex:1">
+        <?php
+        $client_tmp = new HksClient($repo);
+        $wsdl_urls = [
+            'GenelService'    => $client_tmp->genelWsdl(),
+            'UrunService'     => $client_tmp->urunWsdl(),
+            'BildirimService' => $client_tmp->bildirimWsdl(),
+        ];
+        foreach ($wsdl_urls as $svc => $url): ?>
+        <span style="display:inline-block;margin-right:12px"><?= $svc ?>: <code style="font-size:.75rem"><?= hks_h($url) ?></code></span>
+        <?php endforeach; ?>
+    </div>
+</div>
 <?php
 $hks_active_tab = 'ayarlar.php';
 include __DIR__ . '/views/_tabs.php';
@@ -248,6 +272,13 @@ document.getElementById('btnCopyKey').addEventListener('click', function() {
                 <input type="password" id="security_word" name="security_word"
                        placeholder="<?= !empty($s['security_word_enc']) ? '(kayıtlı — değiştirmek için yeni değer girin)' : 'Opsiyonel' ?>"
                        autocomplete="new-password">
+            </div>
+
+            <div style="margin-bottom:16px">
+                <label class="hks-label">Firma TC / VKN <small class="muted">(Referans Künye sorgularında otomatik kullanılır)</small></label>
+                <input type="text" name="firma_vkn" value="<?= hks_h($s['firma_vkn'] ?? '') ?>"
+                       placeholder="10 veya 11 haneli VKN/TC"
+                       style="width:100%;max-width:280px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
             </div>
 
             <div class="form-group">

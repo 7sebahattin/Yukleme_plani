@@ -302,6 +302,217 @@ switch ($action) {
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_byb);
         break;
 
+    // ── Veri Çekme: Ürünler ────────────────────────────────
+    case 'fetch_urunler':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->fetchUrunlerWithDiag();
+        $json_result = [
+            'ok'      => $r['ok'],
+            'message' => $r['ok']
+                ? ('Ürünler çekildi: ' . ($r['count'] ?? 0) . ' kayıt.')
+                : ($r['ui_message'] ?? $r['message'] ?? 'Servis hatası'),
+            'count'   => $r['count'] ?? 0,
+            'diag_hints' => $r['diag_hints'] ?? null,
+            'partial' => false,
+        ];
+        break;
+
+    // ── Veri Çekme: Ürün Cinsleri ─────────────────────────
+    case 'fetch_urun_cinsleri':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->getUrunCinsleri();
+        $diag = hks_diagnose_response($r);
+        $json_result = [
+            'ok'      => $diag['ok'],
+            'message' => $diag['ok']
+                ? ('Ürün cinsleri: ' . count($diag['data'] ?? []) . ' kayıt.')
+                : $diag['ui_message'],
+            'detail'  => $diag['ok'] ? null : ($diag['detail'] ?? null),
+        ];
+        break;
+
+    // ── Veri Çekme: Ürün Birimleri ────────────────────────
+    case 'fetch_urun_birimleri':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->getUrunBirimleri();
+        $diag = hks_diagnose_response($r);
+        $json_result = [
+            'ok'      => $diag['ok'],
+            'message' => $diag['ok']
+                ? ('Ürün birimleri: ' . count($diag['data'] ?? []) . ' kayıt.')
+                : $diag['ui_message'],
+            'detail'  => $diag['ok'] ? null : ($diag['detail'] ?? null),
+        ];
+        break;
+
+    // ── Veri Çekme: Ürün Miktar Birimleri ─────────────────
+    case 'fetch_urun_miktar_birimleri':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->getUrunMiktarBirimleri();
+        $diag = hks_diagnose_response($r);
+        $json_result = [
+            'ok'      => $diag['ok'],
+            'message' => $diag['ok']
+                ? ('Ürün miktar birimleri: ' . count($diag['data'] ?? []) . ' kayıt.')
+                : $diag['ui_message'],
+            'detail'  => $diag['ok'] ? null : ($diag['detail'] ?? null),
+        ];
+        break;
+
+    // ── Veri Çekme: Sıfatlar ──────────────────────────────
+    case 'fetch_sifatlar':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->getSifatlar();
+        $diag = hks_diagnose_response($r);
+        $json_result = [
+            'ok'      => $diag['ok'],
+            'message' => $diag['ok']
+                ? ('Sıfatlar: ' . count($diag['data'] ?? []) . ' kayıt.')
+                : $diag['ui_message'],
+        ];
+        break;
+
+    // ── Veri Çekme: Belge Tipleri ─────────────────────────
+    case 'fetch_belge_tipleri':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $r = $client->getBelgeTipleri();
+        $diag = hks_diagnose_response($r);
+        $json_result = [
+            'ok'      => $diag['ok'],
+            'message' => $diag['ok']
+                ? ('Belge tipleri: ' . count($diag['data'] ?? []) . ' kayıt.')
+                : $diag['ui_message'],
+        ];
+        break;
+
+    // ── Veri Çekme: Kişi Sorgu ────────────────────────────
+    case 'fetch_kisi_sorgu':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $tc_vkn_f = trim($input['tc_vkn'] ?? '');
+        if ($tc_vkn_f === '') { $json_result = ['ok' => false, 'message' => 'TC/VKN girilmedi.']; break; }
+        $r = $client->kayitliKisiSorgu($tc_vkn_f);
+        if ($r['ok']) {
+            $norm = hks_normalize_response($r['data']);
+            if ($norm['ok']) {
+                $d = $r['data'][0] ?? [];
+                $sonuc = (array)($d['Sonuc'] ?? $d['sonuc'] ?? $d);
+                $json_result = [
+                    'ok'      => true,
+                    'message' => 'Kişi sorgusu başarılı: ' . (empty($sonuc) ? 'Kayıt bulunamadı' : 'Kayıt bulundu'),
+                    'detail'  => $sonuc,
+                ];
+            } else {
+                $json_result = ['ok' => false, 'message' => $norm['message'] ?: 'Kişi HKS\'de kayıtlı bulunamadı veya bu kullanıcı ile sorgu yetkiniz yok.', 'detail' => $r['data']];
+            }
+        } else {
+            $json_result = ['ok' => false, 'message' => 'HKS servisine ulaşılamadı: ' . $r['message']];
+        }
+        $uid_fk = isset($user['id']) ? (int)$user['id'] : null;
+        $repo->saveQuery('kisi_sorgu', $tc_vkn_f, $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['detail'] ?? null, JSON_UNESCAPED_UNICODE), $uid_fk);
+        audit_log_event('hks_kisi_sorgu', 'hks_queries', null, null, ['tc_vkn' => substr($tc_vkn_f, 0, 4) . '***']);
+        break;
+
+    // ── Veri Çekme: Referans Künye ────────────────────────
+    case 'fetch_referans_kunye':
+    case 'update_stock_from_ref_kunye':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $mal_vkn_f = trim($input['mal_sahibi_vkn'] ?? '');
+        $kunye_no_f = trim($input['kunye_no'] ?? '0');
+        $r = $client->getReferansKunyelerByVkn($mal_vkn_f, $kunye_no_f);
+        $diag = hks_diagnose_response($r);
+        $uid_rkf = isset($user['id']) ? (int)$user['id'] : null;
+        if (!$diag['ok']) {
+            $json_result = ['ok' => false, 'message' => $diag['ui_message'], 'detail' => $diag['detail'] ?? null];
+            $repo->saveQuery('referans_kunye', $mal_vkn_f . '|' . $kunye_no_f, 'error', null, $uid_rkf);
+            break;
+        }
+        $list_rk = $diag['data'];
+        $stok_count = 0;
+        if ($action === 'update_stock_from_ref_kunye') {
+            foreach ($list_rk as $item) {
+                $repo->upsertStockFromHks((array)$item);
+                $stok_count++;
+            }
+        }
+        $repo->saveQuery('referans_kunye', $mal_vkn_f . '|' . $kunye_no_f, 'ok',
+            json_encode($list_rk, JSON_UNESCAPED_UNICODE), $uid_rkf);
+        $json_result = [
+            'ok'      => true,
+            'message' => count($list_rk) . ' referans künye alındı.' .
+                ($action === 'update_stock_from_ref_kunye' ? " {$stok_count} stok satırı güncellendi." : ''),
+            'count'   => count($list_rk),
+            'detail'  => count($list_rk) > 0 ? $list_rk : null,
+        ];
+        audit_log_event('hks_referans_kunye_cek', 'hks_queries', null, null, ['mal_vkn' => substr($mal_vkn_f,0,4).'***']);
+        break;
+
+    // ── Veri Çekme: Bildirim Listeleri ───────────────────
+    case 'fetch_yaptigim_bildirimler':
+    case 'fetch_bana_yapilan_bildirimler':
+    case 'update_stock_from_bildirimler':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || is_admin()))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $bl_params_f = [];
+        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
+            if (!empty($input[$inp])) {
+                $dt = hks_format_service_date($input[$inp]);
+                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Tarih formatı geçersiz.']; break 2; }
+                $bl_params_f[$hks_key] = $dt;
+            }
+        }
+        $bl_params_f['KunyeTuru'] = trim($input['kunye_turu'] ?? '1');
+        $bl_params_f['KunyeNo']   = trim($input['kunye_no']   ?? '0');
+
+        if ($action === 'fetch_bana_yapilan_bildirimler' || ($action === 'update_stock_from_bildirimler' && ($input['direction'] ?? '') === 'bana')) {
+            $r_bl = $client->getBanaYapilanBildirimlerEx($bl_params_f);
+            $lbl  = 'Bana yapılan bildirimler';
+        } else {
+            $r_bl = $client->getYaptigimBildirimlerEx($bl_params_f);
+            $lbl  = 'Yaptığım bildirimler';
+        }
+        $diag_bl = hks_diagnose_response($r_bl);
+        if (!$diag_bl['ok']) {
+            $json_result = ['ok' => false, 'message' => $diag_bl['ui_message'], 'detail' => $diag_bl['detail'] ?? null]; break;
+        }
+        $list_bl   = $diag_bl['data'];
+        $stok_bl   = 0;
+        if ($action === 'update_stock_from_bildirimler') {
+            foreach ($list_bl as $item) {
+                $repo->upsertStockFromHks((array)$item);
+                $stok_bl++;
+            }
+        }
+        $uid_bl = isset($user['id']) ? (int)$user['id'] : null;
+        $repo->saveQuery('bildirim_listesi', $lbl, 'ok',
+            json_encode(array_slice($list_bl, 0, 50), JSON_UNESCAPED_UNICODE), $uid_bl);
+        $json_result = [
+            'ok'      => true,
+            'message' => $lbl . ': ' . count($list_bl) . ' kayıt.' .
+                ($action === 'update_stock_from_bildirimler' ? " {$stok_bl} stok satırı güncellendi." : ''),
+            'count'   => count($list_bl),
+            'detail'  => count($list_bl) > 0 ? array_slice($list_bl, 0, 10) : null,
+        ];
+        audit_log_event('hks_bildirim_liste_cek', 'hks_queries', null, null, ['yön' => $lbl]);
+        break;
+
     // ── Bilinmeyen action ───────────────────────────────────
     default:
         $http_status = 400;
@@ -351,9 +562,17 @@ function hks_ajax_sync_reference(HksClient $client, HksRepository $repo, string 
         }
         audit_log_event('hks_reference_synced', 'hks_reference_cache', null, null, ['types' => 'all', 'total' => $total]);
         if ($errors) {
-            return ['ok' => false, 'message' => 'Bazı tipler başarısız: ' . implode(', ', $errors)];
+            // Bazı tipler HKS'den 0002 / parametre hatası aldı — başarıyla sync edilenleri bozmaz.
+            // Partial success: ok:true + partial:true + warnings listesi.
+            return [
+                'ok'       => true,
+                'partial'  => true,
+                'message'  => "{$total} kayıt senkronize edildi. Yanıt alınamayan tipler: " . implode(', ', $errors),
+                'warnings' => $errors,
+                'count'    => $total,
+            ];
         }
-        return ['ok' => true, 'message' => "Tüm referanslar senkronize edildi. Toplam: {$total} kayıt."];
+        return ['ok' => true, 'message' => "Tüm referanslar senkronize edildi. Toplam: {$total} kayıt.", 'count' => $total];
     }
 
     if (!isset($type_map[$ref_type])) {
