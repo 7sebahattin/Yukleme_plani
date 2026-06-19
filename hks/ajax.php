@@ -1,12 +1,23 @@
 <?php
 // HKS AJAX endpoint — tüm AJAX işlemler burada
 declare(strict_types=1);
+ob_start(); // PHP uyarı/notice'lerini JSON'a sızdırmamak için
 require_once __DIR__ . '/includes/hks_bootstrap.php';
 
 // Auth zorunlu
+set_exception_handler(function (Throwable $e): void {
+    ob_clean();
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['ok' => false, 'message' => 'Sunucu hatası: ' . $e->getMessage()]);
+    exit;
+});
+
 require_once __DIR__ . '/../config/auth.php';
 $user = current_user();
 if (!$user) {
+    ob_clean();
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'Oturum açmanız gerekiyor.']);
     exit;
@@ -47,6 +58,7 @@ if ($action === 'select_company') {
     header('Location: ' . $safe); exit;
 }
 
+ob_clean(); // select_company redirect öncesi biriken çıktıyı sil
 header('Content-Type: application/json; charset=utf-8');
 
 $repo   = new HksRepository(db());
