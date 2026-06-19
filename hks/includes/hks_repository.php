@@ -122,6 +122,7 @@ class HksRepository {
                     sender_name=?, default_depo=?, default_il=?, default_ilce=?,
                     timeout_seconds=?, live_send_enabled=?,
                     genel_wsdl_url=?, bildirim_wsdl_url=?,
+                    firma_vkn=?,
                     updated_at=NOW()
                  WHERE id=?"
             )->execute([
@@ -139,6 +140,7 @@ class HksRepository {
                 (int)($data['live_send_enabled'] ?? 0),
                 $data['genel_wsdl_url'] ?? '',
                 $data['bildirim_wsdl_url'] ?? '',
+                $data['firma_vkn'] ?? null,
                 $existing_id,
             ]);
         } else {
@@ -146,8 +148,8 @@ class HksRepository {
                 "INSERT INTO hks_settings
                     (firma_adi, environment, username, password_enc, service_password_enc,
                      security_word_enc, sender_name, default_depo, default_il, default_ilce,
-                     timeout_seconds, live_send_enabled, genel_wsdl_url, bildirim_wsdl_url)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                     timeout_seconds, live_send_enabled, genel_wsdl_url, bildirim_wsdl_url, firma_vkn)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             )->execute([
                 $data['firma_adi'] ?? 'Firma 1',
                 $data['environment'],
@@ -163,6 +165,7 @@ class HksRepository {
                 (int)($data['live_send_enabled'] ?? 0),
                 $data['genel_wsdl_url'] ?? '',
                 $data['bildirim_wsdl_url'] ?? '',
+                $data['firma_vkn'] ?? null,
             ]);
             $new_id = (int)$this->pdo->lastInsertId();
             if (session_status() === PHP_SESSION_ACTIVE && $company_id === null) {
@@ -676,6 +679,36 @@ class HksRepository {
             )->fetchAll();
         } catch (Throwable) {
             return [];
+        }
+    }
+
+    // HKS bildirim/künye verisinden stok güncelle
+    public function upsertStockFromHks(array $item): void {
+        $kunye_no = (string)($item['KunyeNo'] ?? $item['kunye_no'] ?? '');
+        $urun     = (string)($item['UrunAdi'] ?? $item['urun_adi'] ?? $item['Urun'] ?? $item['urun'] ?? '');
+        $urun_code= (string)($item['UrunKodu'] ?? $item['urun_kodu'] ?? $item['UrunId'] ?? '');
+        $depo     = (string)($item['DepoAdi'] ?? $item['Depo'] ?? $item['depo'] ?? '');
+        $kalan    = (float)($item['KalanMiktar'] ?? $item['kalan_miktar'] ?? 0);
+        $giris    = (float)($item['Miktar'] ?? $item['miktar'] ?? $item['GirisMiktar'] ?? 0);
+        $birim    = (string)($item['BirimAdi'] ?? $item['Birim'] ?? $item['birim'] ?? 'KG');
+        $ref_id   = isset($item['_source_id']) ? (int)$item['_source_id'] : null;
+
+        if ($kunye_no === '' && $urun === '') return;
+
+        $stock_key = md5($kunye_no . '|' . $urun_code . '|' . $urun . '|' . $depo);
+        try {
+            $this->pdo->prepare(
+                "INSERT INTO hks_stock
+                    (stock_key, urun, urun_code, depo, hks_kunye_no, giris_miktar, kalan_miktar, birim, source_notification_id, updated_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,NOW())
+                 ON DUPLICATE KEY UPDATE
+                    urun=VALUES(urun), urun_code=VALUES(urun_code), depo=VALUES(depo),
+                    hks_kunye_no=VALUES(hks_kunye_no), giris_miktar=VALUES(giris_miktar),
+                    kalan_miktar=VALUES(kalan_miktar), birim=VALUES(birim),
+                    source_notification_id=VALUES(source_notification_id), updated_at=NOW()"
+            )->execute([$stock_key, $urun, $urun_code, $depo, $kunye_no, $giris, $kalan, $birim, $ref_id]);
+        } catch (Throwable $e) {
+            error_log("[HKS upsertStockFromHks] " . $e->getMessage());
         }
     }
 

@@ -102,6 +102,15 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
         }
     }
 
+    // hks_settings — firma_vkn kolonu
+    try {
+        $pdo->query("SELECT firma_vkn FROM `hks_settings` LIMIT 0");
+    } catch (PDOException) {
+        try {
+            $pdo->exec("ALTER TABLE `hks_settings` ADD COLUMN `firma_vkn` VARCHAR(20) NULL COMMENT 'Firma TC/VKN — Referans Künye sorgularında kullanılır'");
+        } catch (PDOException) { /* zaten var */ }
+    }
+
     // hks_settings kolon migrasyonu — live sunucuda eski şema varsa eksik kolonları ekle.
     try {
         $pdo->query("SELECT sender_name, default_depo, default_il, default_ilce,

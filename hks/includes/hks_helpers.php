@@ -297,6 +297,87 @@ function hks_normalize_response(mixed $raw): array {
     ];
 }
 
+/**
+ * HKS response'u kategorize eder:
+ * A = SOAP teknik hata (ok:false, SoapFault)
+ * B = HKS işlem hatası (IslemKodu != 0001)
+ * C = Başarılı ama boş liste
+ * D = Response path hatası (IslemKodu tamam, liste alanı bulunamadı)
+ * OK = Normal başarılı
+ */
+function hks_diagnose_response(array $service_result): array {
+    // A — SOAP teknik hata
+    if (!$service_result['ok']) {
+        return [
+            'category' => 'A',
+            'ui_message' => 'HKS servisine ulaşılamadı.',
+            'detail'   => $service_result['message'] ?? 'SOAP hatası',
+            'ok'       => false,
+        ];
+    }
+
+    $data = $service_result['data'] ?? [];
+
+    // İlk elemanı kontrol et
+    $first = !empty($data[0]) ? (array)$data[0] : null;
+    $islem_kodu = $first ? ($first['IslemKodu'] ?? $first['islemKodu'] ?? '') : '';
+
+    // B — HKS işlem hatası
+    if ($islem_kodu !== '' && $islem_kodu !== 'GTBWSRV0000001') {
+        $norm = hks_normalize_response($data);
+        return [
+            'category' => 'B',
+            'ui_message' => 'HKS işlemi başarısız: ' . ($norm['message'] ?: 'Hata kodu: ' . $islem_kodu),
+            'detail'   => $norm['message'],
+            'islem_kodu' => $islem_kodu,
+            'ok'       => false,
+        ];
+    }
+
+    // IslemKodu başarılı — liste çıkar
+    $list = $data;
+    if ($islem_kodu === 'GTBWSRV0000001' && $first !== null) {
+        $extracted = $first['Sonuc'] ?? $first['sonuc'] ?? $first['Liste'] ?? $first['liste'] ?? null;
+        if ($extracted !== null) {
+            $list = is_array($extracted) ? $extracted : [$extracted];
+        } elseif (count($data) === 1) {
+            // D — IslemKodu tamam ama liste alanı bulunamadı
+            $has_list_fields = false;
+            foreach (['Kod','kod','ID','id','Ad','ad','Adi','adi'] as $f) {
+                if (isset($first[$f])) { $has_list_fields = true; break; }
+            }
+            if (!$has_list_fields) {
+                return [
+                    'category' => 'D',
+                    'ui_message' => 'HKS cevabı beklenenden farklı. Teknik logu kontrol edin.',
+                    'detail'   => 'IslemKodu başarılı ama liste alanı (Sonuc/Liste) bulunamadı.',
+                    'raw'      => $first,
+                    'ok'       => false,
+                ];
+            }
+            $list = $data;
+        }
+    }
+
+    // C — Başarılı ama boş
+    if (empty($list)) {
+        return [
+            'category' => 'C',
+            'ui_message' => 'HKS sorgusu başarılı ama bu parametrelerle kayıt bulunamadı.',
+            'detail'   => 'IslemKodu: ' . ($islem_kodu ?: 'yok') . ', liste boş.',
+            'ok'       => true,
+            'data'     => [],
+        ];
+    }
+
+    return [
+        'category' => 'OK',
+        'ui_message' => '',
+        'ok'       => true,
+        'data'     => $list,
+    ];
+}
+
 // ISO tarihi (YYYY-MM-DD) Türkiye formatına (DD.MM.YYYY) çevirir.
 // Boş gelirse boş döner. DD.MM.YYYY gelirse aynen döner.
 // Geçersiz tarihte null döner (ajax.php'de hata mesajı üretilir).

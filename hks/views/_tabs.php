@@ -15,6 +15,7 @@ $_hks_tabs = [
     'bildirim_form.php'  => ['icon' => '➕', 'label' => 'Yeni Bildirim'],
     'stok.php'           => ['icon' => '📦', 'label' => 'Stok Kontrol'],
     'kunye_sorgu.php'    => ['icon' => '🔍', 'label' => 'Künye / Sorgu'],
+    'veri_cek.php'       => ['icon' => '📡', 'label' => 'Veri Çek'],
     'servis_loglari.php' => ['icon' => '🧾', 'label' => 'Servis Logları'],
 ];
 $_hks_admin_only = ['ayarlar.php', 'referanslar.php'];
