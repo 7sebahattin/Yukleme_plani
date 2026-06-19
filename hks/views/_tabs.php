@@ -17,8 +17,9 @@ $_hks_tabs = [
     'kunye_sorgu.php'    => ['icon' => '🔍', 'label' => 'Künye / Sorgu'],
     'veri_cek.php'       => ['icon' => '📡', 'label' => 'Veri Çek'],
     'servis_loglari.php' => ['icon' => '🧾', 'label' => 'Servis Logları'],
+    'teshis.php'         => ['icon' => '🔬', 'label' => 'Teşhis'],
 ];
-$_hks_admin_only = ['ayarlar.php', 'referanslar.php'];
+$_hks_admin_only = ['ayarlar.php', 'referanslar.php', 'teshis.php'];
 
 // Seçili firma adı
 $_hks_company_name = '';

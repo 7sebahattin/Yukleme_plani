@@ -210,9 +210,9 @@ switch ($action) {
         if (!empty($input['kunye_no']))  $tk_params['KunyeNo'] = trim($input['kunye_no']);
         foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
             if (!empty($input[$inp])) {
-                $dt = hks_format_service_date($input[$inp]);
-                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
-                $tk_params[$hks_key] = $dt;
+                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
+                if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input[$inp])) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $tk_params[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
             }
         }
         $json_result = $client->getTopluKunye($tk_params);
@@ -257,9 +257,9 @@ switch ($action) {
         $yb_params = [];
         foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
             if (!empty($input[$inp])) {
-                $dt = hks_format_service_date($input[$inp]);
-                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
-                $yb_params[$hks_key] = $dt;
+                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
+                if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input[$inp])) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $yb_params[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
             }
         }
         if (!empty($input['kunye_no']))  $yb_params['KunyeNo'] = trim($input['kunye_no']);
@@ -284,9 +284,9 @@ switch ($action) {
         $byb_params = [];
         foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
             if (!empty($input[$inp])) {
-                $dt = hks_format_service_date($input[$inp]);
-                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
-                $byb_params[$hks_key] = $dt;
+                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
+                if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input[$inp])) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $byb_params[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
             }
         }
         if (!empty($input['kunye_no']))  $byb_params['KunyeNo'] = trim($input['kunye_no']);
@@ -473,9 +473,9 @@ switch ($action) {
         $bl_params_f = [];
         foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
             if (!empty($input[$inp])) {
-                $dt = hks_format_service_date($input[$inp]);
-                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Tarih formatı geçersiz.']; break 2; }
-                $bl_params_f[$hks_key] = $dt;
+                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
+                if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input[$inp])) { $json_result = ['ok' => false, 'message' => 'Tarih formatı geçersiz.']; break 2; }
+                $bl_params_f[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
             }
         }
         $bl_params_f['KunyeTuru'] = trim($input['kunye_turu'] ?? '1');
@@ -511,6 +511,23 @@ switch ($action) {
             'detail'  => count($list_bl) > 0 ? array_slice($list_bl, 0, 10) : null,
         ];
         audit_log_event('hks_bildirim_liste_cek', 'hks_queries', null, null, ['yön' => $lbl]);
+        break;
+
+    // ── Ham Teşhis Çağrısı (sadece admin) ─────────────────────
+    case 'diag_raw_call':
+        if (!is_admin()) {
+            $json_result = ['ok' => false, 'message' => 'Bu işlem yalnızca yöneticiler içindir.']; break;
+        }
+        $diag_wsdl   = trim($input['wsdl_type'] ?? 'genel');
+        $diag_method = trim($input['method']    ?? '');
+        $diag_istek_raw = $input['istek'] ?? '{}';
+        $diag_istek  = is_string($diag_istek_raw)
+            ? (json_decode($diag_istek_raw, true) ?? [])
+            : (is_array($diag_istek_raw) ? $diag_istek_raw : []);
+        if ($diag_method === '') {
+            $json_result = ['ok' => false, 'message' => 'method parametresi zorunlu.']; break;
+        }
+        $json_result = $client->diagCall($diag_wsdl, $diag_method, $diag_istek);
         break;
 
     // ── Bilinmeyen action ───────────────────────────────────

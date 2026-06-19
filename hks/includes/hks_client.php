@@ -915,6 +915,178 @@ class HksClient {
         }
     }
 
+    // ── Ham Teşhis Çağrısı ───────────────────────────────────
+    // SOAP yanıtının tüm katmanlarını açığa çıkarır; extract+diagnose zincirini izler.
+    // Şifreler SOAP XML içinde maskelenir. Sadece admin/teşhis ekranı çağırır.
+    public function diagCall(string $wsdl_type, string $method, array $istek = []): array {
+        if (!hks_check_soap()) {
+            return ['ok' => false, 'verdict' => 'PREREQ', 'error' => 'PHP SOAP extension yüklü değil.', 'method' => $method];
+        }
+        if (!$this->hasSettings()) {
+            return ['ok' => false, 'verdict' => 'PREREQ', 'error' => 'HKS ayarları yapılandırılmamış.', 'method' => $method];
+        }
+
+        $wsdl = match($wsdl_type) {
+            'urun'     => $this->urunWsdl(),
+            'bildirim' => $this->bildirimWsdl(),
+            default    => $this->genelWsdl(),
+        };
+
+        $creds = $this->credentials();
+        $requestParams = $this->buildRequest($istek);
+        $start = microtime(true);
+
+        try {
+            $soap   = $this->createSoapClientFromUrl($wsdl);
+            $rawObj = $soap->__soapCall($method, [$requestParams]);
+            $ms     = (int)((microtime(true) - $start) * 1000);
+
+            $reqXml = (string)($soap->__getLastRequest()  ?? '');
+            $resXml = (string)($soap->__getLastResponse() ?? '');
+            foreach ([$creds['password'], $creds['service_password']] as $secret) {
+                if ($secret !== '') {
+                    $reqXml = str_replace($secret, '***MASKED***', $reqXml);
+                    $resXml = str_replace($secret, '***MASKED***', $resXml);
+                }
+            }
+
+            // Katman 1: __soapCall döndüğü nesnenin tipi + key'leri
+            $rawType = is_object($rawObj) ? get_class($rawObj) : gettype($rawObj);
+            $rawKeys = is_object($rawObj) ? array_keys((array)$rawObj) : (is_array($rawObj) ? array_keys($rawObj) : []);
+
+            // Katman 2: extractResultArray → first element
+            $extracted  = $this->extractResultArray($rawObj, $method);
+            $first      = !empty($extracted[0]) ? (array)$extracted[0] : [];
+            $firstKeys  = array_keys($first);
+
+            $islemKodu = (string)($first['IslemKodu'] ?? $first['islemKodu'] ?? '(yok)');
+            $hatalar   = $first['HataKodlari'] ?? $first['hataKodlari'] ?? $first['HataMesaji'] ?? null;
+
+            // Katman 3: liste alanını bul (Sonuc, Liste, vb.)
+            $listCandidates = [
+                'Sonuc','sonuc','Liste','liste',
+                'Bildirimler','bildirimler',
+                'Urunler','urunler',
+                'ReferansKunyeler','KayitliKisiler','KayitliKisi',
+                'Kunye','kunye','Kayitlar','kayitlar',
+            ];
+            $listField = null;
+            $listVal   = null;
+            foreach ($listCandidates as $f) {
+                if (array_key_exists($f, $first)) {
+                    $listField = $f;
+                    $listVal   = $first[$f];
+                    break;
+                }
+            }
+
+            // Liste alanının iç yapısını çöz
+            $listDesc         = 'NULL';
+            $listSubKeys      = [];
+            $listSubListField = null;
+            $listSubListCount = 0;
+            if ($listVal !== null) {
+                if (is_array($listVal)) {
+                    $listDesc    = 'array(' . count($listVal) . ')';
+                    $firstItem   = $listVal[0] ?? null;
+                    $listSubKeys = $firstItem !== null ? array_keys((array)$firstItem) : [];
+                } elseif (is_object($listVal)) {
+                    $listSubKeys = array_keys((array)$listVal);
+                    $listDesc    = 'object{' . implode(', ', $listSubKeys) . '}';
+                    // Sonuc object içindeki iç listeyi ara
+                    foreach ((array)$listVal as $sk => $sv) {
+                        if (is_array($sv)) {
+                            $listSubListField  = $sk;
+                            $listSubListCount  = count($sv);
+                            $listDesc         .= ' → ' . $sk . ':array(' . $listSubListCount . ')';
+                            break;
+                        } elseif (is_object($sv)) {
+                            $listSubListField  = $sk;
+                            $listSubListCount  = 1; // SOAP_SINGLE_ELEMENT_ARRAYS olmadan tekil eleman object olabilir
+                            $listDesc         .= ' → ' . $sk . ':object{' . implode(',', array_keys((array)$sv)) . '}';
+                            break;
+                        }
+                    }
+                } else {
+                    $listDesc = gettype($listVal) . '(' . substr((string)$listVal, 0, 80) . ')';
+                }
+            }
+
+            // Katman 4: hks_diagnose_response
+            $diag         = hks_diagnose_response(['ok' => true, 'data' => $extracted]);
+            $diagCategory = $diag['category'] ?? 'OK';
+            $diagCount    = count($diag['data'] ?? []);
+
+            // Kesin teşhis
+            $verdict = match(true) {
+                !$diag['ok'] && $diagCategory === 'B' => 'HKS_HATA',
+                !$diag['ok'] && $diagCategory === 'D' => 'PATH_HATASI',
+                $diagCategory === 'C'                  => 'HKS_BOŞ',
+                // PARSE_BUG: IslemKodu başarılı, iç liste var, ama sistem 0 görüyor
+                ($islemKodu === 'GTBWSRV0000001'
+                    && $listSubListField !== null
+                    && $listSubListCount > 0
+                    && $diagCount < $listSubListCount) => 'PARSE_BUG',
+                ($islemKodu === 'GTBWSRV0000001'
+                    && $listField !== null
+                    && is_object($listVal)
+                    && $listSubListField === null
+                    && $diagCount === 0) => 'PARSE_BUG',
+                $diagCategory === 'OK' => 'PASS',
+                default => 'BİLİNMEYEN',
+            };
+
+            return [
+                'ok'                 => true,
+                'method'             => $method,
+                'wsdl'               => $wsdl,
+                'request_istek'      => $istek,
+                'duration_ms'        => $ms,
+                'raw_type'           => $rawType,
+                'raw_keys'           => $rawKeys,
+                'request_xml'        => $reqXml,
+                'response_xml'       => $resXml,
+                'extracted_count'    => count($extracted),
+                'first_keys'         => $firstKeys,
+                'islem_kodu'         => $islemKodu,
+                'hatalar'            => $hatalar,
+                'list_field'         => $listField,
+                'list_desc'          => $listDesc,
+                'list_sub_keys'      => $listSubKeys,
+                'list_sub_list_field'=> $listSubListField,
+                'list_sub_list_count'=> $listSubListCount,
+                'diag_category'      => $diagCategory,
+                'diag_count'         => $diagCount,
+                'diag_message'       => $diag['ui_message'] ?? '',
+                'verdict'            => $verdict,
+            ];
+
+        } catch (\SoapFault $e) {
+            return [
+                'ok'           => false,
+                'verdict'      => 'SOAP_HATASI',
+                'method'       => $method,
+                'wsdl'         => $wsdl,
+                'request_istek'=> $istek,
+                'error_type'   => 'SoapFault',
+                'error'        => $e->faultstring,
+                'fault_code'   => (string)($e->faultcode ?? ''),
+                'duration_ms'  => (int)((microtime(true) - $start) * 1000),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok'           => false,
+                'verdict'      => 'TEKNİK_HATA',
+                'method'       => $method,
+                'wsdl'         => $wsdl,
+                'request_istek'=> $istek,
+                'error_type'   => get_class($e),
+                'error'        => $e->getMessage(),
+                'duration_ms'  => (int)((microtime(true) - $start) * 1000),
+            ];
+        }
+    }
+
     // ── İç Yardımcılar ──────────────────────────────────────
 
     // HKS istek zarfı — her request UserName/Password/ServicePassword + Istek alanı taşır.
