@@ -53,19 +53,21 @@ if ($company_id === null) {
         $co_env = ($co['environment'] ?? 'test') === 'live' ? '🔴 Canlı' : '🟡 Test';
         $co_test = $co['last_test_ok'] ? '✅' : ($co['last_test_at'] ? '⚠️' : '—');
     ?>
-        <form method="post" action="ajax.php?action=select_company" style="display:contents">
+        <form method="post" action="ajax.php?action=select_company"
+              class="hks-company-card <?= $co_ok ? '' : 'hks-company-card-warn' ?>">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
-            <button type="submit" class="hks-company-card <?= $co_ok ? '' : 'hks-company-card-warn' ?>" style="text-align:left;cursor:pointer;border:none;width:100%">
-                <div class="hks-company-card-name"><?= hks_h($co['firma_adi']) ?></div>
-                <div class="hks-company-card-meta">
-                    <span><?= $co_env ?></span>
-                    <span>Bağlantı: <?= $co_test ?></span>
-                </div>
-                <?php if (!$co_ok): ?>
-                <div style="font-size:.78rem;color:#92400e;margin-top:4px">⚙️ Ayarlar eksik</div>
-                <?php endif; ?>
-                <div class="hks-company-card-action">Giriş Yap →</div>
+            <div class="hks-company-card-name"><?= hks_h($co['firma_adi']) ?></div>
+            <div class="hks-company-card-meta">
+                <span><?= $co_env ?></span>
+                <span>Bağlantı: <?= $co_test ?></span>
+            </div>
+            <?php if (!$co_ok): ?>
+            <div style="font-size:.78rem;color:#92400e;margin-top:4px">⚙️ Ayarlar eksik</div>
+            <?php endif; ?>
+            <button type="submit" class="hks-company-card-action"
+                    style="background:none;border:none;cursor:pointer;padding:0;margin-top:12px;font-size:.85rem;font-weight:600;color:var(--primary)">
+                Giriş Yap →
             </button>
         </form>
     <?php endforeach; ?>
