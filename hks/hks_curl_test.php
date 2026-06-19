@@ -4,13 +4,12 @@
 // Bu dosyayı test sonrası silin veya web'den erişilmez yapın.
 declare(strict_types=1);
 
+// IP tabanlı test adresleri (95.0.51.130) erişilemediği için kaldırıldı —
+// tüm uygulama artık canlı domain üzerinden çalışıyor.
 $targets = [
     'Canlı — GenelService'    => 'https://hks.hal.gov.tr/WebServices/GenelService.svc?wsdl',
     'Canlı — UrunService'     => 'https://hks.hal.gov.tr/WebServices/UrunService.svc?wsdl',
     'Canlı — BildirimService' => 'https://hks.hal.gov.tr/WebServices/BildirimService.svc?wsdl',
-    'Test IP — GenelService'  => 'https://95.0.51.130/WebServices/GenelService.svc?wsdl',
-    'Test IP — UrunService'   => 'https://95.0.51.130/WebServices/UrunService.svc?wsdl',
-    'Test IP — BildirimService'=>'https://95.0.51.130/WebServices/BildirimService.svc?wsdl',
 ];
 
 $timeout = 12;
@@ -128,11 +127,8 @@ h1{font-size:1.2rem;margin:0 0 4px}
 
 <?php
 $live_group = false;
-$test_group = false;
 foreach ($results as $label => $r):
-    $is_live = str_starts_with($label, 'Canlı');
-    if ($is_live && !$live_group) { echo '<hr class="sep"><p style="font-weight:700;color:#1e293b;margin:0 0 8px">🔴 Canlı Ortam (hks.hal.gov.tr)</p>'; $live_group = true; }
-    if (!$is_live && !$test_group) { echo '<hr class="sep"><p style="font-weight:700;color:#1e293b;margin:0 0 8px">🟡 Test Ortamı (95.0.51.130)</p>'; $test_group = true; }
+    if (!$live_group) { echo '<hr class="sep"><p style="font-weight:700;color:#1e293b;margin:0 0 8px">🔴 Canlı Ortam (hks.hal.gov.tr)</p>'; $live_group = true; }
     $badge_cls = $r['ok'] ? 'ok' : ($r['code'] > 0 ? 'warn' : 'fail');
     $badge_txt = $r['ok'] ? '✓ BAŞARILI' : ($r['code'] > 0 ? "HTTP {$r['code']}" : '✗ BAĞLANAMADI');
 ?>

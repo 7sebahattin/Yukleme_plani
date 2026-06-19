@@ -50,10 +50,14 @@ class HksClient {
         return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_URUN : HKS_WSDL_TEST_URUN;
     }
 
-    // Eskiden config'de olan, DNS'te çözülmeyen/yanlış yollu adresleri reddet —
-    // DB'ye kaydedilmiş olsa bile düzeltilmiş varsayılana düşülsün.
+    // Eskiden config'de olan; DNS'te çözülmeyen, erişilemeyen IP'li veya yanlış
+    // yollu adresleri reddet — DB'ye kaydedilmiş olsa bile canlı domain varsayılanına düşülür.
+    //   • hkstest.hal.gov.tr → DNS'te yok
+    //   • 95.0.51.130        → bu sunucudan TCP:443 timeout (erişilemiyor)
+    //   • /HKSService/       → yanlış servis yolu (doğrusu /WebServices/)
     private function isStaleWsdl(string $url): bool {
         return stripos($url, 'hkstest.hal.gov.tr') !== false
+            || stripos($url, '95.0.51.130') !== false
             || stripos($url, '/HKSService/') !== false;
     }
 
