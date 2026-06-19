@@ -207,9 +207,14 @@ switch ($action) {
         }
         $uid_tk = isset($user['id']) ? (int)$user['id'] : null;
         $tk_params = [];
-        if (!empty($input['kunye_no'])) $tk_params['KunyeNo']  = trim($input['kunye_no']);
-        if (!empty($input['baslangic'])) $tk_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $tk_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['kunye_no']))  $tk_params['KunyeNo'] = trim($input['kunye_no']);
+        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
+            if (!empty($input[$inp])) {
+                $dt = hks_format_service_date($input[$inp]);
+                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $tk_params[$hks_key] = $dt;
+            }
+        }
         $json_result = $client->getTopluKunye($tk_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -250,9 +255,14 @@ switch ($action) {
         }
         $uid_yb = isset($user['id']) ? (int)$user['id'] : null;
         $yb_params = [];
-        if (!empty($input['baslangic'])) $yb_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $yb_params['BitisTarihi']     = trim($input['bitis']);
-        if (!empty($input['kunye_no']))  $yb_params['KunyeNo']         = trim($input['kunye_no']);
+        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
+            if (!empty($input[$inp])) {
+                $dt = hks_format_service_date($input[$inp]);
+                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $yb_params[$hks_key] = $dt;
+            }
+        }
+        if (!empty($input['kunye_no']))  $yb_params['KunyeNo'] = trim($input['kunye_no']);
         $json_result = $client->getYaptigimBildirimler($yb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -272,9 +282,14 @@ switch ($action) {
         }
         $uid_byb = isset($user['id']) ? (int)$user['id'] : null;
         $byb_params = [];
-        if (!empty($input['baslangic'])) $byb_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $byb_params['BitisTarihi']     = trim($input['bitis']);
-        if (!empty($input['kunye_no']))  $byb_params['KunyeNo']         = trim($input['kunye_no']);
+        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
+            if (!empty($input[$inp])) {
+                $dt = hks_format_service_date($input[$inp]);
+                if ($dt === null) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
+                $byb_params[$hks_key] = $dt;
+            }
+        }
+        if (!empty($input['kunye_no']))  $byb_params['KunyeNo'] = trim($input['kunye_no']);
         $json_result = $client->getBanaYapilanBildirimler($byb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -358,6 +373,22 @@ function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $re
         return ['ok' => false, 'message' => $result['message'] ?? 'Servis hatası'];
     }
     $data = $result['data'] ?? [];
+
+    // HKS bazen IslemKodu envelope döner, bazen doğrudan liste döner.
+    // İlk eleman IslemKodu taşıyorsa: normalize et, Sonuc listesini çıkar.
+    if (!empty($data[0])) {
+        $first = (array)$data[0];
+        if (isset($first['IslemKodu']) || isset($first['islemKodu'])) {
+            $norm = hks_normalize_response($data);
+            if (!$norm['ok']) {
+                return ['ok' => false, 'message' => $norm['message'] ?: ('HKS hata kodu: ' . ($norm['islem_kodu'] ?? ''))];
+            }
+            // Sonucu bul: Sonuc / Liste / sonuc alanında olabilir
+            $list = $first['Sonuc'] ?? $first['sonuc'] ?? $first['Liste'] ?? $first['liste'] ?? null;
+            $data = is_array($list) ? $list : ($list !== null ? [$list] : []);
+        }
+    }
+
     $repo->deactivateReferenceType($ref_type);
     $count = 0;
     foreach ($data as $item) {

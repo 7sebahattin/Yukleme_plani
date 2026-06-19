@@ -659,8 +659,9 @@ class HksClient {
     }
 
     public function kayitliKisiSorgu(string $tc_vkn): array {
+        // TcKimlikVergiNolar SOAP tipi ArrayOfstring — tek eleman bile array olarak gönderilmeli
         return $this->callService($this->bildirimWsdl(), 'BildirimService',
-            'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNolar' => $tc_vkn]);
+            'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNolar' => [$tc_vkn]]);
     }
 
     public function getTopluKunye(array $params = []): array {
