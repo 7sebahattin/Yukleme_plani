@@ -10,6 +10,14 @@ require_once __DIR__ . '/hks_repository.php';
 require_once __DIR__ . '/hks_client.php';
 require_once __DIR__ . '/../../config/auth.php';
 
+// PHP oturumunu erken başlat — HKS modülü firma seçimini $_SESSION'da tutar.
+// Uygulamanın kendi auth çerezi (asya_session) ayrıdır; PHP session yalnızca
+// csrf/firma seçimi için lazy başlatılıyordu. Firma seçimini $_SESSION'a yazıp
+// okumadan ÖNCE session'ın aktif olması şart (yoksa veri kalıcı olmaz).
+if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+    session_start();
+}
+
 // HKS tablolarını garantile — config/db.php'nin eski olduğu ortamlarda da çalışır
 (function () {
     static $done = false;
