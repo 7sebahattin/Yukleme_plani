@@ -66,6 +66,8 @@ function hks_ref_type_label(string $type): string {
         'bildirim_turu'  => 'Bildirim Türü',
         'sifat'          => 'Sıfat',
         'referans_kunye' => 'Referans Künye',
+        'urun_miktar_birimi' => 'Ürün Miktar Birimi',
+        'belge_tipi'         => 'Belge Tipi',
         default          => $type,
     };
 }
@@ -247,4 +249,27 @@ function hks_create_draft_from_loading_record(int $loading_record_id, HksReposit
         'status'       => 'draft',
         'created_by'   => $_SESSION['user_id'] ?? null,
     ]);
+}
+
+// Servis yanıtını normalize eder — IslemKodu / HataKodlari kontrol eder
+function hks_normalize_response(mixed $raw): array {
+    if ($raw === null) {
+        return ['ok' => false, 'message' => 'Boş yanıt', 'islem_kodu' => ''];
+    }
+    $arr = is_object($raw) ? (array)$raw : (is_array($raw) ? $raw : []);
+    // Çeşitli case varyasyonları
+    $islem_kodu = $arr['IslemKodu'] ?? $arr['islemKodu'] ?? $arr['islem_kodu'] ?? '';
+    $hata_arr   = $arr['HataKodlari'] ?? $arr['hataKodlari'] ?? $arr['HataMesaji'] ?? '';
+    $hata_msg   = '';
+    if (is_array($hata_arr)) {
+        $hata_msg = implode('; ', array_filter(array_map(fn($h) => is_array($h) ? ($h['HataAciklamasi'] ?? json_encode($h)) : (string)$h, $hata_arr)));
+    } elseif (is_string($hata_arr) && $hata_arr !== '') {
+        $hata_msg = $hata_arr;
+    }
+    $ok = ($islem_kodu === 'GTBWSRV0000001');
+    return [
+        'ok'         => $ok,
+        'islem_kodu' => $islem_kodu,
+        'message'    => $ok ? '' : ($hata_msg ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
+    ];
 }

@@ -624,8 +624,9 @@ class HksClient {
         return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunBirimleri');
     }
 
-    public function getUrunCinsleri(): array {
-        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunCinsleri');
+    public function getUrunCinsleri(string $urun_id = ''): array {
+        $istek = $urun_id !== '' ? ['UrunId' => $urun_id] : [];
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunCinsleri', $istek);
     }
 
     public function getMalinNiteligi(): array {
@@ -636,12 +637,52 @@ class HksClient {
         return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUretimSekilleri');
     }
 
+    public function getUrunMiktarBirimleri(): array {
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunMiktarBirimleri');
+    }
+
+    // BildirimServisBildirimTurleri — kılavuzda var, WSDL'de görünmeyebilir
     public function getBildirimTurleri(): array {
-        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisBildirimTurleri');
+        $method = $this->discoverMethod($this->bildirimWsdl(), ['BildirimServisBildirimTurleri']);
+        if ($method === null) {
+            return ['ok' => false, 'message' => 'BildirimTurleri servisi WSDL\'de bulunamadı.', 'data' => [], 'wsdl_missing' => true];
+        }
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', $method);
     }
 
     public function getSifatlar(): array {
         return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisSifatListesi');
+    }
+
+    public function getReferansKunyeler(array $params = []): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisReferansKunyeler', $params);
+    }
+
+    public function kayitliKisiSorgu(string $tc_vkn): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService',
+            'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNo' => $tc_vkn]);
+    }
+
+    public function getTopluKunye(array $params = []): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisTopluKunye', $params);
+    }
+
+    public function getBildirimEtiket(array $params = []): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisBildirimEtiket', $params);
+    }
+
+    public function getBelgeTipleri(): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisBelgeTipleriListesi');
+    }
+
+    public function getYaptigimBildirimler(array $params = []): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService',
+            'BildirimServisBildirimcininYaptigiBildirimListesi', $params);
+    }
+
+    public function getBanaYapilanBildirimler(array $params = []): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService',
+            'BildirimServisBildirimciyeYapilanBildirimListesi', $params);
     }
 
     // ── WSDL İnceleme ───────────────────────────────────────
@@ -707,12 +748,17 @@ class HksClient {
     // Canlı bildirim gönderimi KAPALI — sadece sorgu metodları aktif.
 
     public function saveBildirim(array $payload): array {
-        return [
-            'ok'      => false,
-            'message' => 'HKS Bildirim Kaydet servisi henüz eşlenmedi. '
-                       . 'Kılavuzdan method adı doğrulandıktan sonra aktif edilecek.',
-            'pending' => true,
-        ];
+        // Canlı gönderim kapalı kaldığı sürece blokla
+        if (!$this->isLiveSendEnabled()) {
+            return ['ok' => false, 'message' => 'Canlı gönderim etkinleştirilmemiş (Ayarlar → Canlı gönderim).', 'blocked' => true];
+        }
+        if (!hks_can_save_passwords()) {
+            return ['ok' => false, 'message' => 'HKS_CRED_KEY tanımlı değil.', 'blocked' => true];
+        }
+        if ((int)($this->settings['last_test_ok'] ?? 0) !== 1) {
+            return ['ok' => false, 'message' => 'Son bağlantı testi başarılı değil.', 'blocked' => true];
+        }
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisBildirimKaydet', $payload);
     }
 
     public function queryBildirim(array $params): array {
