@@ -40,6 +40,16 @@ class HksClient {
         return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_BILDIRIM : HKS_WSDL_TEST_BILDIRIM;
     }
 
+    // UrunService — ayrı bir WSDL alanı yok; genel WSDL override'ı varsa ondan türet,
+    // yoksa ortam sabitini kullan.
+    private function urunWsdl(): string {
+        $g = trim((string)($this->settings['genel_wsdl_url'] ?? ''));
+        if ($g !== '' && !$this->isStaleWsdl($g) && stripos($g, 'GenelService.svc') !== false) {
+            return str_ireplace('GenelService.svc', 'UrunService.svc', $g);
+        }
+        return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_URUN : HKS_WSDL_TEST_URUN;
+    }
+
     // Eskiden config'de olan, DNS'te çözülmeyen/yanlış yollu adresleri reddet —
     // DB'ye kaydedilmiş olsa bile düzeltilmiş varsayılana düşülsün.
     private function isStaleWsdl(string $url): bool {
@@ -274,55 +284,59 @@ class HksClient {
     }
 
     // ── Referans Servisleri ──────────────────────────────────
-    // NOT: Aşağıdaki method adları HKS kılavuzuna göre güncellenmelidir.
-    // Servis eşlemesi tamamlanana kadar placeholder olarak işaretlendi.
+    // Metod adları ve servis dağılımı HKS Geliştirici Kılavuzu'na (sürüm 0.1.7) göredir.
+    //   GenelService    → /GenelService.svc     (ülke, il, ilçe, depo, şube)
+    //   UrunService     → /UrunService.svc       (ürün, birim, cins, malın niteliği, üretim şekli)
+    //   BildirimService → /BildirimService.svc   (bildirim türü, sıfat, referans künye, sorgu)
+    // İstek nesneleri liste servislerinde boştur ("create edilip gönderilmesi yeterlidir").
 
     public function getUlkeler(): array {
-        return $this->callGenelService('GetUlkeler', [], 'ulke');
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisUlkeler');
     }
 
     public function getIller(): array {
-        return $this->callGenelService('GetIller', [], 'il');
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisIller');
     }
 
     public function getIlceler(string $il_kodu): array {
-        return $this->callGenelService('GetIlceler', ['IlKodu' => $il_kodu], 'ilce');
+        // İl koduna göre ilçeler — İstek nesnesi içine il bilgisi konur (alan adı kılavuzdan doğrulanmalı)
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisIlceler', ['IlId' => $il_kodu]);
     }
 
     public function getDepolar(): array {
-        return $this->callGenelService('GetDepolar', [], 'depo');
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisDepolar');
     }
 
     public function getSubeler(): array {
-        return $this->callGenelService('GetSubeler', [], 'sube');
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisSubeler');
     }
 
     public function getUrunler(): array {
-        return $this->callGenelService('GetUrunler', [], 'urun');
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunler');
     }
 
     public function getUrunBirimleri(): array {
-        return $this->callGenelService('GetUrunBirimleri', [], 'urun_birim');
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunBirimleri');
     }
 
     public function getUrunCinsleri(): array {
-        return $this->callGenelService('GetUrunCinsleri', [], 'urun_cins');
-    }
-
-    public function getBildirimTurleri(): array {
-        return $this->callGenelService('GetBildirimTurleri', [], 'bildirim_turu');
-    }
-
-    public function getSifatlar(): array {
-        return $this->callGenelService('GetSifatlar', [], 'sifat');
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunCinsleri');
     }
 
     public function getMalinNiteligi(): array {
-        return $this->callGenelService('GetMalinNiteligi', [], 'malin_niteligi');
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceMalinNiteligi');
     }
 
     public function getUretimSekli(): array {
-        return $this->callGenelService('GetUretimSekli', [], 'uretim_sekli');
+        return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUretimSekilleri');
+    }
+
+    public function getBildirimTurleri(): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisBildirimTurleri');
+    }
+
+    public function getSifatlar(): array {
+        return $this->callService($this->bildirimWsdl(), 'BildirimService', 'BildirimServisSifatListesi');
     }
 
     // ── WSDL İnceleme ───────────────────────────────────────
@@ -338,8 +352,11 @@ class HksClient {
             return ['ok' => false, 'message' => 'HKS ayarları yapılandırılmamış.', 'methods' => []];
         }
 
-        $wsdl     = $service === 'bildirim' ? $this->bildirimWsdl() : $this->genelWsdl();
-        $svcLabel = $service === 'bildirim' ? 'BildirimService' : 'GenelService';
+        switch ($service) {
+            case 'bildirim': $wsdl = $this->bildirimWsdl(); $svcLabel = 'BildirimService'; break;
+            case 'urun':     $wsdl = $this->urunWsdl();     $svcLabel = 'UrunService';     break;
+            default:         $wsdl = $this->genelWsdl();    $svcLabel = 'GenelService';     break;
+        }
 
         try {
             $localWsdl = $this->loadWsdl($wsdl);
@@ -391,7 +408,8 @@ class HksClient {
             return ['ok' => false, 'message' => 'Servis kullanılamıyor.'];
         }
 
-        $candidates = ['GetBildirimDetay', 'BildirimSorgu', 'GetBildirim', 'BildirimDetayGetir'];
+        // Kılavuz metodu: BildirimServisBildirimSorgu. Farklı WSDL sürümleri için yedekler bırakıldı.
+        $candidates = ['BildirimServisBildirimSorgu', 'GetBildirimDetay', 'BildirimSorgu', 'GetBildirim'];
         $method = $this->discoverMethod($this->bildirimWsdl(), $candidates);
 
         if ($method === null) {
@@ -404,12 +422,7 @@ class HksClient {
             ];
         }
 
-        $creds = $this->credentials();
-        $requestParams = array_merge([
-            'KullaniciAdi' => $creds['username'],
-            'Sifre'        => $creds['password'],
-            'ServisSifre'  => $creds['service_password'],
-        ], $params);
+        $requestParams = $this->buildRequest($params);
 
         try {
             $client   = new SoapClient($this->loadWsdl($this->bildirimWsdl()), $this->soapOptions());
@@ -442,11 +455,12 @@ class HksClient {
             return ['ok' => false, 'message' => 'Servis kullanılamıyor.'];
         }
 
-        $candidates = ['GetKunyeDetay', 'KunyeSorgu', 'GetKunye', 'MalSorgu', 'KunyeliMalSorgu'];
-        $method = $this->discoverMethod($this->genelWsdl(), $candidates);
+        // Künye/referans künye sorgusu kılavuzda BildirimService altındadır (ReferansKunyeler).
+        $candidates = ['BildirimServisReferansKunyeler', 'GetKunyeDetay', 'KunyeSorgu', 'GetKunye'];
+        $method = $this->discoverMethod($this->bildirimWsdl(), $candidates);
 
         if ($method === null) {
-            $inspect = $this->inspectWsdl('genel');
+            $inspect = $this->inspectWsdl('bildirim');
             return [
                 'ok'               => false,
                 'message'          => 'Künye sorgu methodu bulunamadı. WSDL\'i inceleyin.',
@@ -455,28 +469,22 @@ class HksClient {
             ];
         }
 
-        $creds = $this->credentials();
-        $requestParams = [
-            'KullaniciAdi' => $creds['username'],
-            'Sifre'        => $creds['password'],
-            'ServisSifre'  => $creds['service_password'],
-            'KunyeNo'      => $kunye_no,
-        ];
+        $requestParams = $this->buildRequest(['KunyeNo' => $kunye_no]);
 
         try {
-            $client   = new SoapClient($this->loadWsdl($this->genelWsdl()), $this->soapOptions());
+            $client   = new SoapClient($this->loadWsdl($this->bildirimWsdl()), $this->soapOptions());
             $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
             $data     = $this->extractResultArray($result, $method);
 
-            $this->logService('GenelService', $method, $env,
+            $this->logService('BildirimService', $method, $env,
                 $requestParams, ['data' => $data], true, null, null, $duration);
 
             return ['ok' => true, 'data' => $data, 'method_used' => $method, 'duration_ms' => $duration];
 
         } catch (SoapFault $e) {
             $duration = (int)((microtime(true) - $start) * 1000);
-            $this->logService('GenelService', $method, $env,
+            $this->logService('BildirimService', $method, $env,
                 $requestParams, null, false, $e->faultcode, $e->faultstring, $duration);
             return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'duration_ms' => $duration];
 
@@ -488,7 +496,20 @@ class HksClient {
 
     // ── İç Yardımcılar ──────────────────────────────────────
 
-    private function callGenelService(string $method, array $params, string $context): array {
+    // HKS istek zarfı — her request UserName/Password/ServicePassword + Istek alanı taşır.
+    // (Kılavuz: BaseRequestMessageOf_XxxIstek). Eski KullaniciAdi/Sifre/ServisSifre adları YANLIŞTI.
+    private function buildRequest(array $istek = []): array {
+        $creds = $this->credentials();
+        return [
+            'UserName'        => $creds['username'],
+            'Password'        => $creds['password'],
+            'ServicePassword' => $creds['service_password'],
+            'Istek'           => (object)$istek,
+        ];
+    }
+
+    // Verilen servise tek bir liste/sorgu metodu çağırır.
+    private function callService(string $wsdl, string $serviceLabel, string $method, array $istek = []): array {
         $start = microtime(true);
         $env   = $this->getEnvironment();
 
@@ -499,33 +520,28 @@ class HksClient {
             return ['ok' => false, 'message' => 'HKS ayarları yapılandırılmamış.', 'data' => []];
         }
 
-        $creds = $this->credentials();
-        $requestParams = array_merge([
-            'KullaniciAdi' => $creds['username'],
-            'Sifre'        => $creds['password'],
-            'ServisSifre'  => $creds['service_password'],
-        ], $params);
+        $requestParams = $this->buildRequest($istek);
 
         try {
-            $client  = new SoapClient($this->loadWsdl($this->genelWsdl()), $this->soapOptions());
+            $client  = new SoapClient($this->loadWsdl($wsdl), $this->soapOptions());
             $result  = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
 
             $data = $this->extractResultArray($result, $method);
-            $this->logService('GenelService', $method, $env,
+            $this->logService($serviceLabel, $method, $env,
                 $requestParams, ['count' => count($data)], true, null, null, $duration);
 
             return ['ok' => true, 'data' => $data, 'duration_ms' => $duration];
 
         } catch (SoapFault $e) {
             $duration = (int)((microtime(true) - $start) * 1000);
-            $this->logService('GenelService', $method, $env,
+            $this->logService($serviceLabel, $method, $env,
                 $requestParams, null, false, $e->faultcode, $e->faultstring, $duration);
             return ['ok' => false, 'message' => 'SOAP hatası: ' . $e->faultstring, 'data' => []];
 
         } catch (Throwable $e) {
             $duration = (int)((microtime(true) - $start) * 1000);
-            $this->logService('GenelService', $method, $env,
+            $this->logService($serviceLabel, $method, $env,
                 $requestParams, null, false, null, $e->getMessage(), $duration);
             return ['ok' => false, 'message' => $e->getMessage(), 'data' => []];
         }

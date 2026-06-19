@@ -13,10 +13,16 @@ const HKS_MODULE_VERSION = '1.0.0';
 //  • Servis yolu '/WebServices/' şeklindedir ('/HKSService/' DEĞİL).
 //  • Bu adresler değişebilir; kesin değer için kendi HKS Geliştirici Kılavuzunuzu doğrulayın.
 //    Gerekirse Ayarlar → Gelişmiş Ayarlar'daki WSDL alanlarından override edebilirsiniz.
+// Kılavuza göre ÜÇ ayrı servis vardır: GenelService, UrunService, BildirimService.
 const HKS_WSDL_TEST_GENEL    = 'https://95.0.51.130/WebServices/GenelService.svc?wsdl';
+const HKS_WSDL_TEST_URUN     = 'https://95.0.51.130/WebServices/UrunService.svc?wsdl';
 const HKS_WSDL_TEST_BILDIRIM = 'https://95.0.51.130/WebServices/BildirimService.svc?wsdl';
 const HKS_WSDL_LIVE_GENEL    = 'https://hks.hal.gov.tr/WebServices/GenelService.svc?wsdl';
+const HKS_WSDL_LIVE_URUN     = 'https://hks.hal.gov.tr/WebServices/UrunService.svc?wsdl';
 const HKS_WSDL_LIVE_BILDIRIM = 'https://hks.hal.gov.tr/WebServices/BildirimService.svc?wsdl';
+
+// ServicePassword test ortamı varsayılan değeri (kılavuz: bölüm "Genel Açıklamalar")
+const HKS_TEST_SERVICE_PASSWORD = '!1QAZWSX';
 
 const HKS_DEFAULT_TIMEOUT = 30;
 
