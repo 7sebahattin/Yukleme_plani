@@ -298,8 +298,20 @@ function hks_normalize_response(mixed $raw): array {
 }
 
 // ISO tarihi (YYYY-MM-DD) Türkiye formatına (DD.MM.YYYY) çevirir.
-// HTML date input'u ISO döndürür; HKS API DD.MM.YYYY bekler.
-function hks_date_to_tr(string $iso): string {
-    $d = DateTime::createFromFormat('Y-m-d', trim($iso));
-    return $d ? $d->format('d.m.Y') : trim($iso);
+// Boş gelirse boş döner. DD.MM.YYYY gelirse aynen döner.
+// Geçersiz tarihte null döner (ajax.php'de hata mesajı üretilir).
+function hks_format_service_date(string $value): ?string {
+    $value = trim($value);
+    if ($value === '') return '';
+    // Zaten DD.MM.YYYY formatındaysa: round-trip doğrula, aynen döndür
+    if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $value)) {
+        $d = DateTime::createFromFormat('d.m.Y', $value);
+        return ($d && $d->format('d.m.Y') === $value) ? $value : null;
+    }
+    // ISO YYYY-MM-DD formatı: round-trip doğrula (ay taşması önler)
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        $d = DateTime::createFromFormat('Y-m-d', $value);
+        return ($d && $d->format('Y-m-d') === $value) ? $d->format('d.m.Y') : null;
+    }
+    return null;
 }
