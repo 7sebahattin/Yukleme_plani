@@ -157,17 +157,20 @@ switch ($action) {
 
 function hks_ajax_sync_reference(HksClient $client, HksRepository $repo, string $ref_type, array $user): array {
     $type_map = [
-        'ulke'          => 'getUlkeler',
-        'il'            => 'getIller',
-        'depo'          => 'getDepolar',
-        'sube'          => 'getSubeler',
-        'urun'          => 'getUrunler',
-        'urun_birim'    => 'getUrunBirimleri',
-        'urun_cins'     => 'getUrunCinsleri',
-        'bildirim_turu' => 'getBildirimTurleri',
-        'sifat'         => 'getSifatlar',
-        'malin_niteligi'=> 'getMalinNiteligi',
-        'uretim_sekli'  => 'getUretimSekli',
+        'ulke'           => 'getUlkeler',
+        'il'             => 'getIller',
+        'depo'           => 'getDepolar',
+        'sube'           => 'getSubeler',
+        'belde'          => 'getBeldeler',
+        'hal_ici_isyeri' => 'getHalIciIsyerleri',
+        'isletme_turu'   => 'getIsletmeTurleri',
+        'urun'           => 'getUrunler',
+        'urun_birim'     => 'getUrunBirimleri',
+        'urun_cins'      => 'getUrunCinsleri',
+        'bildirim_turu'  => 'getBildirimTurleri',
+        'sifat'          => 'getSifatlar',
+        'malin_niteligi' => 'getMalinNiteligi',
+        'uretim_sekli'   => 'getUretimSekli',
     ];
 
     if ($ref_type === 'all') {
@@ -209,8 +212,8 @@ function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $re
     foreach ($data as $item) {
         $item = (array)$item;
         $code   = (string)($item['Kod'] ?? $item['kod'] ?? $item['ID'] ?? $item['id'] ?? '');
-        $name   = (string)($item['Ad'] ?? $item['ad'] ?? $item['Adi'] ?? $item['adi'] ?? $item['name'] ?? $code);
-        $parent = (string)($item['IlKodu'] ?? $item['il_kodu'] ?? $item['ParentKod'] ?? '');
+        $name   = (string)($item['Ad'] ?? $item['ad'] ?? $item['Adi'] ?? $item['adi'] ?? $item['Unvan'] ?? $item['unvan'] ?? $item['name'] ?? $code);
+        $parent = (string)($item['IlceKodu'] ?? $item['ilce_kodu'] ?? $item['IlKodu'] ?? $item['il_kodu'] ?? $item['ParentKod'] ?? '');
         if ($code === '') continue;
         $repo->upsertReference($ref_type, $code, $name, $parent ?: null, json_encode($item, JSON_UNESCAPED_UNICODE));
         $count++;

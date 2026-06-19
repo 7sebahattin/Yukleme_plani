@@ -41,14 +41,20 @@ include __DIR__ . '/views/_tabs.php';
 </div>
 <?php endif; ?>
 
-<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">
     <button class="btn btn-primary" id="btnSyncAll">🔄 Tümünü Senkronize Et</button>
     <button class="btn btn-ghost" id="btnSyncUrun">🌿 Ürünler</button>
     <button class="btn btn-ghost" id="btnSyncDepo">🏢 Depolar</button>
     <button class="btn btn-ghost" id="btnSyncIl">🗺️ İller</button>
     <button class="btn btn-ghost" id="btnSyncBildirimTuru">📋 Bildirim Türleri</button>
     <button class="btn btn-ghost" id="btnSyncSifat">🏷️ Sıfatlar</button>
+    <button class="btn btn-ghost" id="btnSyncIsletme">🏭 İşletme Türleri</button>
+    <button class="btn btn-ghost" id="btnSyncHal">🏪 Hal İçi İşyeri</button>
+    <button class="btn btn-ghost" id="btnSyncBelde">🌆 Beldeler</button>
 </div>
+<p class="muted" style="font-size:.8rem;margin:0 0 12px">
+    ⚠️ Beldeler ilçe bazlı sorgu gerektirir — boş istek ile denenecek, servis tüm beldeleri dönmeyebilir.
+</p>
 
 <div id="sync-result" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:12px"></div>
 <div id="sync-progress" style="display:none;color:var(--muted);font-size:.9rem;margin-bottom:12px">
@@ -142,6 +148,9 @@ document.getElementById('btnSyncDepo').addEventListener('click', () => doSync('d
 document.getElementById('btnSyncIl').addEventListener('click', () => doSync('il'));
 document.getElementById('btnSyncBildirimTuru').addEventListener('click', () => doSync('bildirim_turu'));
 document.getElementById('btnSyncSifat').addEventListener('click', () => doSync('sifat'));
+document.getElementById('btnSyncIsletme').addEventListener('click', () => doSync('isletme_turu'));
+document.getElementById('btnSyncHal').addEventListener('click', () => doSync('hal_ici_isyeri'));
+document.getElementById('btnSyncBelde').addEventListener('click', () => doSync('belde'));
 
 document.querySelectorAll('.sync-single-btn').forEach(function(btn) {
     btn.addEventListener('click', function() { doSync(this.dataset.type); });
