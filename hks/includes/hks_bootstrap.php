@@ -193,4 +193,9 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
                 NOT NULL DEFAULT 'draft'");
         } catch (PDOException $_ce) { /* zaten genişletilmiş */ }
     }
+
+    // hks_queries.query_type → VARCHAR(50) (ENUM'den genişletme)
+    try {
+        $pdo->exec("ALTER TABLE `hks_queries` MODIFY COLUMN `query_type` VARCHAR(50) NOT NULL DEFAULT ''");
+    } catch (PDOException) { /* already varchar or doesn't exist */ }
 })();

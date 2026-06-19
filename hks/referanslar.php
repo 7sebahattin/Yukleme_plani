@@ -51,9 +51,15 @@ include __DIR__ . '/views/_tabs.php';
     <button class="btn btn-ghost" id="btnSyncIsletme">🏭 İşletme Türleri</button>
     <button class="btn btn-ghost" id="btnSyncHal">🏪 Hal İçi İşyeri</button>
     <button class="btn btn-ghost" id="btnSyncBelde">🌆 Beldeler</button>
+    <button class="btn btn-ghost" id="btnSyncUrunMiktarBirimi">📏 Ürün Miktar Birimleri</button>
+    <button class="btn btn-ghost" id="btnSyncBelgeTipi">📄 Belge Tipleri</button>
 </div>
 <p class="muted" style="font-size:.8rem;margin:0 0 12px">
     ⚠️ Beldeler ilçe bazlı sorgu gerektirir — boş istek ile denenecek, servis tüm beldeleri dönmeyebilir.
+</p>
+<p class="muted" style="font-size:.8rem;margin:0 0 12px">
+    ⚠️ Bildirim türleri (bildirim_turu): WSDL'de görünmedi. Senkronizasyon deneyecek, sonuç 0 kayıt olabilir.
+    Ürün cinsleri (urun_cinsi): UrunId zorunlu — tüm ürünler için senkronize etmek yerine bir ürün ID girerek bireysel senkronize edebilirsiniz.
 </p>
 
 <div id="sync-result" style="display:none;padding:12px 16px;border-radius:8px;margin-bottom:12px"></div>
@@ -151,6 +157,8 @@ document.getElementById('btnSyncSifat').addEventListener('click', () => doSync('
 document.getElementById('btnSyncIsletme').addEventListener('click', () => doSync('isletme_turu'));
 document.getElementById('btnSyncHal').addEventListener('click', () => doSync('hal_ici_isyeri'));
 document.getElementById('btnSyncBelde').addEventListener('click', () => doSync('belde'));
+document.getElementById('btnSyncUrunMiktarBirimi').addEventListener('click', () => doSync('urun_miktar_birimi'));
+document.getElementById('btnSyncBelgeTipi').addEventListener('click', () => doSync('belge_tipi'));
 
 document.querySelectorAll('.sync-single-btn').forEach(function(btn) {
     btn.addEventListener('click', function() { doSync(this.dataset.type); });

@@ -156,6 +156,101 @@ switch ($action) {
         }
         break;
 
+    // ── Kayıtlı Kişi Sorgu ──────────────────────────────────────
+    case 'query_kisi_sorgu':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $tc_vkn = trim($input['tc_vkn'] ?? '');
+        if ($tc_vkn === '') {
+            $json_result = ['ok' => false, 'message' => 'TC/VKN girilmedi.']; break;
+        }
+        $uid_ks = isset($user['id']) ? (int)$user['id'] : null;
+        $json_result = $client->kayitliKisiSorgu($tc_vkn);
+        $repo->saveQuery('kisi_sorgu', $tc_vkn,
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? $json_result, JSON_UNESCAPED_UNICODE), $uid_ks);
+        audit_log_event('hks_kisi_sorgu', 'hks_queries', null, null, ['tc_vkn' => substr($tc_vkn, 0, 4) . '***']);
+        break;
+
+    // ── Referans Künye Sorgu ────────────────────────────────
+    case 'query_referans_kunye':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $uid_rk = isset($user['id']) ? (int)$user['id'] : null;
+        $rk_params = [];
+        if (!empty($input['kunye_no'])) $rk_params['KunyeNo'] = trim($input['kunye_no']);
+        if (!empty($input['urun_id']))  $rk_params['UrunId']  = trim($input['urun_id']);
+        $json_result = $client->getReferansKunyeler($rk_params);
+        $repo->saveQuery('referans_kunye', $input['kunye_no'] ?? '*',
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_rk);
+        break;
+
+    // ── Toplu Künye Sorgu ───────────────────────────────────
+    case 'query_toplu_kunye':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $uid_tk = isset($user['id']) ? (int)$user['id'] : null;
+        $tk_params = [];
+        if (!empty($input['kunye_no'])) $tk_params['KunyeNo']  = trim($input['kunye_no']);
+        if (!empty($input['baslangic'])) $tk_params['BaslangicTarihi'] = trim($input['baslangic']);
+        if (!empty($input['bitis']))     $tk_params['BitisTarihi']     = trim($input['bitis']);
+        $json_result = $client->getTopluKunye($tk_params);
+        $repo->saveQuery('toplu_kunye', $input['kunye_no'] ?? '*',
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_tk);
+        break;
+
+    // ── Bildirim Etiketi ────────────────────────────────────
+    case 'query_bildirim_etiket':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $uid_be = isset($user['id']) ? (int)$user['id'] : null;
+        $be_params = [];
+        if (!empty($input['bildirim_no'])) $be_params['BildirimNo'] = trim($input['bildirim_no']);
+        if (!empty($input['kunye_no']))    $be_params['KunyeNo']    = trim($input['kunye_no']);
+        $json_result = $client->getBildirimEtiket($be_params);
+        $repo->saveQuery('bildirim_etiket', $input['bildirim_no'] ?? $input['kunye_no'] ?? '*',
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? $json_result, JSON_UNESCAPED_UNICODE), $uid_be);
+        break;
+
+    // ── Yaptığım Bildirimler ────────────────────────────────
+    case 'query_yaptigim_bildirimler':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $uid_yb = isset($user['id']) ? (int)$user['id'] : null;
+        $yb_params = [];
+        if (!empty($input['baslangic'])) $yb_params['BaslangicTarihi'] = trim($input['baslangic']);
+        if (!empty($input['bitis']))     $yb_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['kunye_no']))  $yb_params['KunyeNo']         = trim($input['kunye_no']);
+        $json_result = $client->getYaptigimBildirimler($yb_params);
+        $repo->saveQuery('bildirim_listesi', 'yaptigim',
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_yb);
+        break;
+
+    // ── Bana Yapılan Bildirimler ────────────────────────────
+    case 'query_bana_yapilan_bildirimler':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $uid_byb = isset($user['id']) ? (int)$user['id'] : null;
+        $byb_params = [];
+        if (!empty($input['baslangic'])) $byb_params['BaslangicTarihi'] = trim($input['baslangic']);
+        if (!empty($input['bitis']))     $byb_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['kunye_no']))  $byb_params['KunyeNo']         = trim($input['kunye_no']);
+        $json_result = $client->getBanaYapilanBildirimler($byb_params);
+        $repo->saveQuery('bildirim_listesi', 'bana_yapilan',
+            $json_result['ok'] ? 'ok' : 'error',
+            json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_byb);
+        break;
+
     // ── Bilinmeyen action ───────────────────────────────────
     default:
         $http_status = 400;
@@ -185,8 +280,10 @@ function hks_ajax_sync_reference(HksClient $client, HksRepository $repo, string 
         'urun'           => 'getUrunler',
         'urun_birim'     => 'getUrunBirimleri',
         'urun_cins'      => 'getUrunCinsleri',
+        'urun_miktar_birimi' => 'getUrunMiktarBirimleri',
         'bildirim_turu'  => 'getBildirimTurleri',
         'sifat'          => 'getSifatlar',
+        'belge_tipi'         => 'getBelgeTipleri',
         'malin_niteligi' => 'getMalinNiteligi',
         'uretim_sekli'   => 'getUretimSekli',
     ];

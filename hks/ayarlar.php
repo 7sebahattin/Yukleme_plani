@@ -61,6 +61,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $genel_wsdl  = trim($_POST['genel_wsdl_url'] ?? '');
     $bil_wsdl    = trim($_POST['bildirim_wsdl_url'] ?? '');
 
+    // HKS_CRED_KEY olmadan şifre kaydı engellenir
+    if (!hks_can_save_passwords() && ($password !== '' || $svc_pass !== '' || $sec_word !== '')) {
+        set_flash('error', 'Şifre kaydetmek için önce HKS_CRED_KEY oluşturulmalıdır. Sayfadaki talimatları izleyin.');
+        header('Location: ayarlar.php'); exit;
+    }
+
     // Boş bırakılan şifreler mevcut değeri korur
     $password_enc = $password !== '' ? hks_encrypt($password) : ($existing['password_enc'] ?? '');
     $svc_enc      = $svc_pass !== ''  ? hks_encrypt($svc_pass) : ($existing['service_password_enc'] ?? '');
@@ -119,23 +125,40 @@ include __DIR__ . '/views/_tabs.php';
 <?php if ($has_secure_key): ?>
 <div class="hks-info-box">🔐 Şifreler AES-256-CBC ile şifrelenmiş olarak saklanmaktadır.</div>
 <?php else: ?>
-<details class="hks-advanced" style="margin-bottom:12px">
-    <summary style="font-size:.85rem">🔑 Güvenlik notu — opsiyonel güçlendirme</summary>
-    <div class="hks-advanced-body" style="font-size:.85rem;color:#92400e">
-        Şifreler şifrelenmiş kaydedilmektedir ancak özel bir anahtar tanımlanmamış.
-        Daha güçlü şifreleme için <code>config/local.php</code> dosyasına ekleyin:<br>
-        <code style="display:block;background:#fef3c7;border-radius:4px;padding:6px 10px;margin-top:6px;word-break:break-all">define('HKS_CRED_KEY', '<?= hks_h($suggested_key) ?>');</code>
-        <div style="margin-top:8px">
-            <form method="post" action="ayarlar.php" style="display:inline">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <input type="hidden" name="action" value="generate_key">
-                <button type="submit" class="btn btn-sm" style="background:#d97706;color:#fff;border-color:#d97706">
-                    Otomatik Yaz (sunucu izni gerekir)
-                </button>
-            </form>
-        </div>
+<div class="hks-warning-box" style="margin-bottom:16px">
+    <strong>🔑 HKS_CRED_KEY tanımlı değil — şifre girişi devre dışı</strong><br>
+    <span style="font-size:.88rem">HKS şifreleri ancak şifreleme anahtarı tanımlandıktan sonra kaydedilebilir.</span>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+        <code id="hks-key-snippet" style="background:#fef3c7;border-radius:4px;padding:6px 10px;font-size:.8rem;word-break:break-all;flex:1 1 300px;min-width:0">define('HKS_CRED_KEY', '<?= hks_h($suggested_key) ?>');</code>
+        <button type="button" id="btnCopyKey" class="btn btn-sm" style="background:#d97706;color:#fff;border-color:#d97706;white-space:nowrap">📋 Kopyala</button>
     </div>
-</details>
+    <div style="font-size:.82rem;color:#78350f;margin-top:8px">
+        Bu satırı sunucudaki <code>config/local.php</code> dosyasına yapıştırın. Dosya yoksa oluşturun.<br>
+        Kaydettikten sonra sayfayı yenileyin — şifre alanları aktif olacak.<br>
+        <span style="margin-top:6px;display:inline-block">Veya sunucuda yazma izni varsa:</span>
+        <form method="post" action="ayarlar.php" style="display:inline;margin-left:4px">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="generate_key">
+            <button type="submit" class="btn btn-sm" style="background:#92400e;color:#fff;border-color:#92400e">Otomatik Yaz</button>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('btnCopyKey').addEventListener('click', function() {
+    var text = document.getElementById('hks-key-snippet').textContent;
+    var btn  = this;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function() {
+            btn.textContent = '✅ Kopyalandı'; setTimeout(function(){btn.textContent='📋 Kopyala';}, 2500);
+        }).catch(function() { btn.textContent = '⚠️ Hata'; });
+    } else {
+        var r = document.createRange(); r.selectNode(document.getElementById('hks-key-snippet'));
+        window.getSelection().removeAllRanges(); window.getSelection().addRange(r);
+        document.execCommand('copy'); window.getSelection().removeAllRanges();
+        btn.textContent = '✅ Kopyalandı'; setTimeout(function(){btn.textContent='📋 Kopyala';}, 2500);
+    }
+});
+</script>
 <?php endif; ?>
 
 <form method="post" action="ayarlar.php" autocomplete="off" class="hks-form">
@@ -166,28 +189,34 @@ include __DIR__ . '/views/_tabs.php';
         <div class="form-group">
             <label for="password">
                 HKS Şifresi
-                <?php if (!empty($s['password_enc'])): ?>
+                <?php if (!$has_secure_key): ?>
+                    <span class="hks-secret-badge hks-badge-missing">🔑 Anahtar gerekli</span>
+                <?php elseif (!empty($s['password_enc'])): ?>
                     <span class="hks-secret-badge hks-badge-ok">✓ Kayıtlı</span>
                 <?php else: ?>
                     <span class="hks-secret-badge hks-badge-missing">○ Eksik</span>
                 <?php endif; ?>
             </label>
             <input type="password" id="password" name="password"
-                   placeholder="<?= !empty($s['password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'HKS kullanıcı şifresi' ?>"
+                   <?= !$has_secure_key ? 'disabled' : '' ?>
+                   placeholder="<?= !$has_secure_key ? 'HKS_CRED_KEY tanımlandıktan sonra girin' : (!empty($s['password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'HKS kullanıcı şifresi') ?>"
                    autocomplete="new-password">
         </div>
 
         <div class="form-group">
             <label for="service_password">
                 Web Servis Şifresi
-                <?php if (!empty($s['service_password_enc'])): ?>
+                <?php if (!$has_secure_key): ?>
+                    <span class="hks-secret-badge hks-badge-missing">🔑 Anahtar gerekli</span>
+                <?php elseif (!empty($s['service_password_enc'])): ?>
                     <span class="hks-secret-badge hks-badge-ok">✓ Kayıtlı</span>
                 <?php else: ?>
                     <span class="hks-secret-badge hks-badge-missing">○ Eksik</span>
                 <?php endif; ?>
             </label>
             <input type="password" id="service_password" name="service_password"
-                   placeholder="<?= !empty($s['service_password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'Web servis şifresi (ServicePassword)' ?>"
+                   <?= !$has_secure_key ? 'disabled' : '' ?>
+                   placeholder="<?= !$has_secure_key ? 'HKS_CRED_KEY tanımlandıktan sonra girin' : (!empty($s['service_password_enc']) ? '(kayıtlı — değiştirmek için yeni şifre girin)' : 'Web servis şifresi (ServicePassword)') ?>"
                    autocomplete="new-password">
         </div>
     </div>

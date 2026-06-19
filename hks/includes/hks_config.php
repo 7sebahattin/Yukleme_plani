@@ -39,7 +39,7 @@ const HKS_STATUS_CANCELLED = 'cancelled';
 const HKS_REF_TYPES = [
     'ulke', 'il', 'ilce', 'belde', 'depo', 'sube',
     'isletme_turu', 'hal_ici_isyeri',
-    'urun', 'urun_birim', 'urun_cins',
+    'urun', 'urun_birim', 'urun_miktar_birimi', 'urun_cins',
     'malin_niteligi', 'uretim_sekli', 'bildirim_turu',
-    'sifat', 'referans_kunye',
+    'sifat', 'referans_kunye', 'belge_tipi',
 ];
