@@ -133,7 +133,7 @@ render_flash();
         <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
                 <!-- Firma seç -->
-                <form method="post" action="ajax.php?action=select_company" style="display:inline">
+                <form method="post" action="ajax.php?action=select_company">
                     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                     <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
                     <input type="hidden" name="redirect" value="index.php">
@@ -142,7 +142,7 @@ render_flash();
                     </button>
                 </form>
                 <!-- Ayarlar -->
-                <form method="post" action="ajax.php?action=select_company" style="display:inline">
+                <form method="post" action="ajax.php?action=select_company">
                     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                     <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
                     <input type="hidden" name="redirect" value="ayarlar.php">
