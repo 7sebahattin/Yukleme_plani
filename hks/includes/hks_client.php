@@ -602,6 +602,20 @@ class HksClient {
         return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisSubeler');
     }
 
+    public function getBeldeler(string $ilce_id = ''): array {
+        $istek = $ilce_id !== '' ? ['IlceId' => $ilce_id] : [];
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisBeldeler', $istek);
+    }
+
+    public function getHalIciIsyerleri(string $tc_vergi_no = ''): array {
+        $istek = $tc_vergi_no !== '' ? ['TcKimlikVergiNo' => $tc_vergi_no] : [];
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisHalIciIsyeri', $istek);
+    }
+
+    public function getIsletmeTurleri(): array {
+        return $this->callService($this->genelWsdl(), 'GenelService', 'GenelServisIsletmeTurleri');
+    }
+
     public function getUrunler(): array {
         return $this->callService($this->urunWsdl(), 'UrunService', 'UrunServiceUrunler');
     }

@@ -38,7 +38,8 @@ const HKS_STATUS_CANCELLED = 'cancelled';
 // Desteklenen referans tipleri
 const HKS_REF_TYPES = [
     'ulke', 'il', 'ilce', 'belde', 'depo', 'sube',
-    'isletme_turu', 'urun', 'urun_birim', 'urun_cins',
+    'isletme_turu', 'hal_ici_isyeri',
+    'urun', 'urun_birim', 'urun_cins',
     'malin_niteligi', 'uretim_sekli', 'bildirim_turu',
     'sifat', 'referans_kunye',
 ];

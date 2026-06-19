@@ -57,6 +57,7 @@ function hks_ref_type_label(string $type): string {
         'depo'           => 'Depo',
         'sube'           => 'Şube',
         'isletme_turu'   => 'İşletme Türü',
+        'hal_ici_isyeri' => 'Hal İçi İşyeri',
         'urun'           => 'Ürün',
         'urun_birim'     => 'Ürün Birimi',
         'urun_cins'      => 'Ürün Cinsi',
