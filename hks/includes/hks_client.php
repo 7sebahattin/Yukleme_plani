@@ -66,7 +66,7 @@ class HksClient {
     }
 
     private function soapOptions(): array {
-        ini_set('soap.wsdl_cache_enabled', '0');
+        @ini_set('soap.wsdl_cache_enabled', '0'); // @ — bazı hosting'lerde PHP_INI_SYSTEM olarak kilitli
         $ctx = stream_context_create([
             'ssl'  => [
                 'verify_peer'       => false,

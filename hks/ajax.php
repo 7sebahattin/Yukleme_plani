@@ -1,12 +1,23 @@
 <?php
 // HKS AJAX endpoint — tüm AJAX işlemler burada
 declare(strict_types=1);
+ob_start(); // PHP uyarı/notice'lerini JSON'a sızdırmamak için
 require_once __DIR__ . '/includes/hks_bootstrap.php';
 
 // Auth zorunlu
+set_exception_handler(function (Throwable $e): void {
+    ob_clean();
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode(['ok' => false, 'message' => 'Sunucu hatası: ' . $e->getMessage()]);
+    exit;
+});
+
 require_once __DIR__ . '/../config/auth.php';
 $user = current_user();
 if (!$user) {
+    ob_clean();
     http_response_code(403);
     echo json_encode(['ok' => false, 'message' => 'Oturum açmanız gerekiyor.']);
     exit;
@@ -47,111 +58,118 @@ if ($action === 'select_company') {
     header('Location: ' . $safe); exit;
 }
 
-header('Content-Type: application/json; charset=utf-8');
-
 $repo   = new HksRepository(db());
 $client = new HksClient($repo);
+$http_status = 200;
+$json_result = null;
 
 switch ($action) {
 
     // ── Firma Seçimi — yukarıda işlendi ─────────────────────
     case 'select_company':
-        echo json_encode(['ok' => true]); break;
+        $json_result = ['ok' => true];
+        break;
 
     // ── Bağlantı Testi ──────────────────────────────────────
     case 'test_connection':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         audit_log_event('hks_connection_tested', 'hks_settings', null, null, ['user' => $user['username'] ?? '']);
-        echo json_encode($client->testConnection());
+        $json_result = $client->testConnection();
         break;
 
     // ── Sunucu Tanılama ─────────────────────────────────────
     case 'diagnose':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
-        echo json_encode(['ok' => true, 'diag' => $client->diagnostics()]);
+        $json_result = ['ok' => true, 'diag' => $client->diagnostics()];
         break;
 
     // ── WSDL Metod Keşfi ───────────────────────────────────
     case 'inspect_wsdl':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         $wsdl_service = $input['service'] ?? 'genel';
-        echo json_encode($client->inspectWsdl($wsdl_service));
+        $json_result = $client->inspectWsdl($wsdl_service);
         break;
 
     // ── Referans Senkronizasyonu ────────────────────────────
     case 'sync_reference':
         if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         $ref_type = $input['ref_type'] ?? 'all';
-        echo json_encode(hks_ajax_sync_reference($client, $repo, $ref_type, $user));
+        $json_result = hks_ajax_sync_reference($client, $repo, $ref_type, $user);
         break;
 
     // ── Stok Yeniden Hesaplama ──────────────────────────────
     case 'rebuild_stock':
         if (!is_admin()) {
-            echo json_encode(['ok' => false, 'message' => 'Admin yetkisi gerekiyor.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Admin yetkisi gerekiyor.']; break;
         }
         try {
             $repo->rebuildStock();
-            echo json_encode(['ok' => true, 'message' => 'Stok yeniden hesaplandı.']);
+            $json_result = ['ok' => true, 'message' => 'Stok yeniden hesaplandı.'];
         } catch (Throwable $e) {
-            echo json_encode(['ok' => false, 'message' => 'Hata: ' . $e->getMessage()]);
+            $json_result = ['ok' => false, 'message' => 'Hata: ' . $e->getMessage()];
         }
         break;
 
     // ── Künye Sorgu ────────────────────────────────────────
     case 'query_kunye':
         if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         $kunye_no = trim($input['kunye_no'] ?? '');
         if ($kunye_no === '') {
-            echo json_encode(['ok' => false, 'message' => 'Künye numarası girilmedi.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Künye numarası girilmedi.']; break;
         }
         $uid = isset($user['id']) ? (int)$user['id'] : null;
-        $result = $client->queryKunye($kunye_no);
-        if ($result['ok']) {
-            $repo->saveQuery('kunye', $kunye_no, 'ok', json_encode($result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid);
+        $json_result = $client->queryKunye($kunye_no);
+        if ($json_result['ok']) {
+            $repo->saveQuery('kunye', $kunye_no, 'ok', json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid);
             audit_log_event('hks_kunye_query', 'hks_queries', null, null, ['kunye_no' => $kunye_no]);
         } else {
-            $repo->saveQuery('kunye', $kunye_no, 'error', $result['message'] ?? null, $uid);
+            $repo->saveQuery('kunye', $kunye_no, 'error', $json_result['message'] ?? null, $uid);
         }
-        echo json_encode($result);
         break;
 
     // ── Bildirim Sorgu ─────────────────────────────────────
     case 'query_bildirim':
         if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
-            echo json_encode(['ok' => false, 'message' => 'Yetki yok.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         $bildirim_no = trim($input['bildirim_no'] ?? '');
         if ($bildirim_no === '') {
-            echo json_encode(['ok' => false, 'message' => 'Bildirim numarası girilmedi.']); exit;
+            $json_result = ['ok' => false, 'message' => 'Bildirim numarası girilmedi.']; break;
         }
         $uid2 = isset($user['id']) ? (int)$user['id'] : null;
-        $result = $client->queryBildirim(['BildirimNo' => $bildirim_no]);
-        if ($result['ok']) {
-            $repo->saveQuery('bildirim', $bildirim_no, 'ok', json_encode($result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid2);
+        $json_result = $client->queryBildirim(['BildirimNo' => $bildirim_no]);
+        if ($json_result['ok']) {
+            $repo->saveQuery('bildirim', $bildirim_no, 'ok', json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid2);
             audit_log_event('hks_bildirim_query', 'hks_queries', null, null, ['bildirim_no' => $bildirim_no]);
         } else {
-            $repo->saveQuery('bildirim', $bildirim_no, 'error', $result['message'] ?? null, $uid2);
+            $repo->saveQuery('bildirim', $bildirim_no, 'error', $json_result['message'] ?? null, $uid2);
         }
-        echo json_encode($result);
         break;
 
     // ── Bilinmeyen action ───────────────────────────────────
     default:
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'message' => 'Geçersiz işlem: ' . $action]);
+        $http_status = 400;
+        $json_result = ['ok' => false, 'message' => 'Geçersiz işlem: ' . $action];
         break;
 }
+
+// SOAP/libxml işlemleri sırasında üretilen TÜM PHP uyarılarını temizle, JSON'ı kirletmesini önle
+ob_end_clean();
+if ($http_status !== 200) {
+    http_response_code($http_status);
+}
+header('Content-Type: application/json; charset=utf-8');
+echo json_encode($json_result ?? ['ok' => false, 'message' => 'İşlem tamamlanamadı.']);
 
 // ── Yardımcı fonksiyonlar ────────────────────────────────
 
