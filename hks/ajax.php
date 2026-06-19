@@ -207,9 +207,9 @@ switch ($action) {
         }
         $uid_tk = isset($user['id']) ? (int)$user['id'] : null;
         $tk_params = [];
-        if (!empty($input['kunye_no'])) $tk_params['KunyeNo']  = trim($input['kunye_no']);
-        if (!empty($input['baslangic'])) $tk_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $tk_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['kunye_no']))  $tk_params['KunyeNo']         = trim($input['kunye_no']);
+        if (!empty($input['baslangic'])) $tk_params['BaslangicTarihi'] = hks_date_to_tr($input['baslangic']);
+        if (!empty($input['bitis']))     $tk_params['BitisTarihi']     = hks_date_to_tr($input['bitis']);
         $json_result = $client->getTopluKunye($tk_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -250,8 +250,8 @@ switch ($action) {
         }
         $uid_yb = isset($user['id']) ? (int)$user['id'] : null;
         $yb_params = [];
-        if (!empty($input['baslangic'])) $yb_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $yb_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['baslangic'])) $yb_params['BaslangicTarihi'] = hks_date_to_tr($input['baslangic']);
+        if (!empty($input['bitis']))     $yb_params['BitisTarihi']     = hks_date_to_tr($input['bitis']);
         if (!empty($input['kunye_no']))  $yb_params['KunyeNo']         = trim($input['kunye_no']);
         $json_result = $client->getYaptigimBildirimler($yb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
@@ -272,8 +272,8 @@ switch ($action) {
         }
         $uid_byb = isset($user['id']) ? (int)$user['id'] : null;
         $byb_params = [];
-        if (!empty($input['baslangic'])) $byb_params['BaslangicTarihi'] = trim($input['baslangic']);
-        if (!empty($input['bitis']))     $byb_params['BitisTarihi']     = trim($input['bitis']);
+        if (!empty($input['baslangic'])) $byb_params['BaslangicTarihi'] = hks_date_to_tr($input['baslangic']);
+        if (!empty($input['bitis']))     $byb_params['BitisTarihi']     = hks_date_to_tr($input['bitis']);
         if (!empty($input['kunye_no']))  $byb_params['KunyeNo']         = trim($input['kunye_no']);
         $json_result = $client->getBanaYapilanBildirimler($byb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {

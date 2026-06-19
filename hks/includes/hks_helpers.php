@@ -296,3 +296,10 @@ function hks_normalize_response(mixed $raw): array {
         'message'    => $ok ? '' : ($hata_msg ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
     ];
 }
+
+// ISO tarihi (YYYY-MM-DD) Türkiye formatına (DD.MM.YYYY) çevirir.
+// HTML date input'u ISO döndürür; HKS API DD.MM.YYYY bekler.
+function hks_date_to_tr(string $iso): string {
+    $d = DateTime::createFromFormat('Y-m-d', trim($iso));
+    return $d ? $d->format('d.m.Y') : trim($iso);
+}
