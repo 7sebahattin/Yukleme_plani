@@ -44,7 +44,7 @@ class HksClient {
 
     private function soapOptions(): array {
         $ctx = stream_context_create([
-            'ssl' => [
+            'ssl'  => [
                 'verify_peer'       => false,
                 'verify_peer_name'  => false,
                 'allow_self_signed' => true,
@@ -60,6 +60,50 @@ class HksClient {
             'soap_version'       => SOAP_1_1,
             'stream_context'     => $ctx,
         ];
+    }
+
+    /**
+     * WSDL URL'sini cURL ile çekip geçici dosyaya yazar, local path döner.
+     * allow_url_fopen=Off olan hosting ortamlarında SoapClient URL'den yükleyemez;
+     * cURL bu kısıtı bypass eder.
+     */
+    private function loadWsdl(string $url): string {
+        // Local dosya / zaten önbelleklenmiş
+        if (!preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        $cacheFile = sys_get_temp_dir() . '/hks_wsdl_' . md5($url) . '.xml';
+
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_TIMEOUT        => $this->timeout(),
+                CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout()),
+                CURLOPT_USERAGENT      => 'PHP-SOAP/HKS-Client/1.0',
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 3,
+                CURLOPT_HTTPHEADER     => ['Accept: text/xml, application/xml'],
+            ]);
+            $content  = curl_exec($ch);
+            $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlErr  = curl_error($ch);
+            curl_close($ch);
+
+            if ($content !== false && $httpCode === 200 && strlen((string)$content) > 100) {
+                file_put_contents($cacheFile, $content);
+                return $cacheFile;
+            }
+
+            $detail = $curlErr ?: "HTTP {$httpCode}";
+            throw new \RuntimeException("WSDL indirilemedi ({$detail}). Sunucu bu URL'ye ulaşamıyor olabilir: {$url}");
+        }
+
+        // cURL yoksa SoapClient'in kendi stream'ini kullan (allow_url_fopen açıksa çalışır)
+        return $url;
     }
 
     private function credentials(): array {
@@ -89,8 +133,9 @@ class HksClient {
         }
 
         try {
-            $client = new SoapClient($wsdl, $this->soapOptions());
-            $duration = (int)((microtime(true) - $start) * 1000);
+            $localWsdl = $this->loadWsdl($wsdl);
+            $client    = new SoapClient($localWsdl, $this->soapOptions());
+            $duration  = (int)((microtime(true) - $start) * 1000);
 
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], ['status' => 'wsdl_loaded'],
@@ -100,7 +145,7 @@ class HksClient {
             return ['ok' => true, 'message' => 'WSDL başarıyla yüklendi.', 'duration_ms' => $duration];
 
         } catch (SoapFault $e) {
-            $msg = 'SOAP hatası: ' . $e->faultstring;
+            $msg      = 'SOAP hatası: ' . $e->faultstring;
             $duration = (int)((microtime(true) - $start) * 1000);
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, $e->faultcode, $e->faultstring, $duration);
@@ -108,7 +153,7 @@ class HksClient {
             return ['ok' => false, 'message' => $msg, 'duration_ms' => $duration];
 
         } catch (Throwable $e) {
-            $msg = 'Bağlantı hatası: ' . $e->getMessage();
+            $msg      = 'Bağlantı hatası: ' . $e->getMessage();
             $duration = (int)((microtime(true) - $start) * 1000);
             $this->logService('GenelService', 'testConnection', $env,
                 ['wsdl' => $wsdl], null, false, null, $e->getMessage(), $duration);
@@ -186,7 +231,8 @@ class HksClient {
         $svcLabel = $service === 'bildirim' ? 'BildirimService' : 'GenelService';
 
         try {
-            $client    = new SoapClient($wsdl, $this->soapOptions());
+            $localWsdl = $this->loadWsdl($wsdl);
+            $client    = new SoapClient($localWsdl, $this->soapOptions());
             $functions = $client->__getFunctions() ?? [];
             $duration  = (int)((microtime(true) - $start) * 1000);
 
@@ -255,7 +301,7 @@ class HksClient {
         ], $params);
 
         try {
-            $client   = new SoapClient($this->bildirimWsdl(), $this->soapOptions());
+            $client   = new SoapClient($this->loadWsdl($this->bildirimWsdl()), $this->soapOptions());
             $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
             $data     = $this->extractResultArray($result, $method);
@@ -307,7 +353,7 @@ class HksClient {
         ];
 
         try {
-            $client   = new SoapClient($this->genelWsdl(), $this->soapOptions());
+            $client   = new SoapClient($this->loadWsdl($this->genelWsdl()), $this->soapOptions());
             $result   = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
             $data     = $this->extractResultArray($result, $method);
@@ -350,7 +396,7 @@ class HksClient {
         ], $params);
 
         try {
-            $client  = new SoapClient($this->genelWsdl(), $this->soapOptions());
+            $client  = new SoapClient($this->loadWsdl($this->genelWsdl()), $this->soapOptions());
             $result  = $client->__soapCall($method, [$requestParams]);
             $duration = (int)((microtime(true) - $start) * 1000);
 
@@ -395,7 +441,7 @@ class HksClient {
     // Verilen WSDL'den aday method adlarından birini keşfeder
     private function discoverMethod(string $wsdl, array $candidates): ?string {
         try {
-            $client    = new SoapClient($wsdl, $this->soapOptions());
+            $client    = new SoapClient($this->loadWsdl($wsdl), $this->soapOptions());
             $functions = $client->__getFunctions() ?? [];
             $available = [];
             foreach ($functions as $sig) {
