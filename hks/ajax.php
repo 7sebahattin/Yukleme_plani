@@ -513,6 +513,23 @@ switch ($action) {
         audit_log_event('hks_bildirim_liste_cek', 'hks_queries', null, null, ['yön' => $lbl]);
         break;
 
+    // ── Ham Teşhis Çağrısı (sadece admin) ─────────────────────
+    case 'diag_raw_call':
+        if (!is_admin()) {
+            $json_result = ['ok' => false, 'message' => 'Bu işlem yalnızca yöneticiler içindir.']; break;
+        }
+        $diag_wsdl   = trim($input['wsdl_type'] ?? 'genel');
+        $diag_method = trim($input['method']    ?? '');
+        $diag_istek_raw = $input['istek'] ?? '{}';
+        $diag_istek  = is_string($diag_istek_raw)
+            ? (json_decode($diag_istek_raw, true) ?? [])
+            : (is_array($diag_istek_raw) ? $diag_istek_raw : []);
+        if ($diag_method === '') {
+            $json_result = ['ok' => false, 'message' => 'method parametresi zorunlu.']; break;
+        }
+        $json_result = $client->diagCall($diag_wsdl, $diag_method, $diag_istek);
+        break;
+
     // ── Bilinmeyen action ───────────────────────────────────
     default:
         $http_status = 400;
