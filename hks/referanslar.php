@@ -55,7 +55,7 @@ include __DIR__ . '/views/_tabs.php';
     <button class="btn btn-ghost" id="btnSyncBelgeTipi">📄 Belge Tipleri</button>
 </div>
 <p class="muted" style="font-size:.8rem;margin:0 0 12px">
-    ⚠️ Beldeler ilçe bazlı sorgu gerektirir — boş istek ile denenecek, servis tüm beldeleri dönmeyebilir.
+    ⚠️ Beldeler ilçe bazlı, Şubeler hal bazlı sorgu gerektirir — boş istek ile denenecek, servis 0 kayıt veya hata dönebilir.
 </p>
 <p class="muted" style="font-size:.8rem;margin:0 0 12px">
     ⚠️ Bildirim türleri (bildirim_turu): WSDL'de görünmedi. Senkronizasyon deneyecek, sonuç 0 kayıt olabilir.
@@ -121,13 +121,20 @@ var csrf = function() { return document.querySelector('meta[name="csrf-token"]')
 function showProgress(show) {
     document.getElementById('sync-progress').style.display = show ? 'block' : 'none';
 }
-function showResult(ok, msg) {
+function showResult(ok, msg, partial) {
     var el = document.getElementById('sync-result');
     el.style.display = 'block';
-    el.style.background = ok ? '#f0fdf4' : '#fef2f2';
-    el.style.border = '1px solid ' + (ok ? 'var(--success)' : 'var(--danger)');
-    el.style.color = ok ? '#065f46' : '#991b1b';
-    el.textContent = (ok ? '✅ ' : '❌ ') + msg;
+    if (partial) {
+        el.style.background = '#fffbeb';
+        el.style.border = '1px solid #f59e0b';
+        el.style.color = '#92400e';
+        el.textContent = '⚠️ ' + msg;
+    } else {
+        el.style.background = ok ? '#f0fdf4' : '#fef2f2';
+        el.style.border = '1px solid ' + (ok ? 'var(--success)' : 'var(--danger)');
+        el.style.color = ok ? '#065f46' : '#991b1b';
+        el.textContent = (ok ? '✅ ' : '❌ ') + msg;
+    }
     if (ok) setTimeout(() => location.reload(), 2000);
 }
 
@@ -142,7 +149,7 @@ function doSync(type) {
     .then(r => r.json())
     .then(data => {
         showProgress(false);
-        showResult(data.ok, data.message || (data.ok ? 'Tamamlandı.' : 'Hata.'));
+        showResult(data.ok, data.message || (data.ok ? 'Tamamlandı.' : 'Hata.'), data.partial);
     })
     .catch(() => { showProgress(false); showResult(false, 'İstek gönderilemedi.'); })
     .finally(() => document.querySelectorAll('button').forEach(b => b.disabled = false));

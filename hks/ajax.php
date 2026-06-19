@@ -351,9 +351,17 @@ function hks_ajax_sync_reference(HksClient $client, HksRepository $repo, string 
         }
         audit_log_event('hks_reference_synced', 'hks_reference_cache', null, null, ['types' => 'all', 'total' => $total]);
         if ($errors) {
-            return ['ok' => false, 'message' => 'Bazı tipler başarısız: ' . implode(', ', $errors)];
+            // Bazı tipler HKS'den 0002 / parametre hatası aldı — başarıyla sync edilenleri bozmaz.
+            // Partial success: ok:true + partial:true + warnings listesi.
+            return [
+                'ok'       => true,
+                'partial'  => true,
+                'message'  => "{$total} kayıt senkronize edildi. Yanıt alınamayan tipler: " . implode(', ', $errors),
+                'warnings' => $errors,
+                'count'    => $total,
+            ];
         }
-        return ['ok' => true, 'message' => "Tüm referanslar senkronize edildi. Toplam: {$total} kayıt."];
+        return ['ok' => true, 'message' => "Tüm referanslar senkronize edildi. Toplam: {$total} kayıt.", 'count' => $total];
     }
 
     if (!isset($type_map[$ref_type])) {
