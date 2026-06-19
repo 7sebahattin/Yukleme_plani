@@ -6,17 +6,64 @@ class HksRepository {
 
     public function __construct(private readonly PDO $pdo) {}
 
-    // ── Ayarlar ──────────────────────────────────────────────
+    // ── Firmalar / Ayarlar ───────────────────────────────────
 
-    public function getSettings(): ?array {
+    private function sessionCompanyId(): ?int {
+        if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['hks_company_id'])) {
+            return (int)$_SESSION['hks_company_id'];
+        }
+        return null;
+    }
+
+    // Tüm firmaları listele (seçim ekranı ve yönetim için)
+    public function getAllCompanies(): array {
         try {
-            $row = $this->pdo->query(
-                "SELECT * FROM hks_settings ORDER BY id DESC LIMIT 1"
-            )->fetch();
+            return $this->pdo->query(
+                "SELECT id, firma_adi, environment, username, last_test_at, last_test_ok, updated_at
+                 FROM hks_settings ORDER BY id ASC"
+            )->fetchAll();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    // Seçili firma (session) veya belirtilen ID'nin ayarlarını döndür
+    public function getSettings(?int $company_id = null): ?array {
+        $id = $company_id ?? $this->sessionCompanyId();
+        try {
+            if ($id !== null) {
+                $st = $this->pdo->prepare("SELECT * FROM hks_settings WHERE id=? LIMIT 1");
+                $st->execute([$id]);
+                return $st->fetch() ?: null;
+            }
+            // Hiç firma seçilmemişse ilk satırı döndür (backward compat)
+            $row = $this->pdo->query("SELECT * FROM hks_settings ORDER BY id ASC LIMIT 1")->fetch();
             return $row ?: null;
         } catch (Throwable) {
             return null;
         }
+    }
+
+    // Yeni firma oluştur; ID'yi döndürür
+    public function addCompany(string $firma_adi): int {
+        $this->ensureSettingsColumns();
+        $name = trim($firma_adi) !== '' ? trim($firma_adi) : 'Yeni Firma';
+        $this->pdo->prepare(
+            "INSERT INTO hks_settings (firma_adi, environment, username, password_enc, service_password_enc)
+             VALUES (?, 'test', '', '', '')"
+        )->execute([$name]);
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    // Firma adını güncelle
+    public function renameCompany(int $id, string $firma_adi): void {
+        $this->pdo->prepare("UPDATE hks_settings SET firma_adi=? WHERE id=?")
+                  ->execute([trim($firma_adi) ?: 'Firma', $id]);
+    }
+
+    // Firmayı sil
+    public function deleteCompany(int $id): void {
+        $this->pdo->prepare("DELETE FROM hks_settings WHERE id=?")->execute([$id]);
     }
 
     private function ensureSettingsColumns(): void {
@@ -24,6 +71,7 @@ class HksRepository {
         if ($done) return;
         $done = true;
         foreach ([
+            "ALTER TABLE `hks_settings` ADD COLUMN `firma_adi`         VARCHAR(200) NOT NULL DEFAULT 'Firma 1' AFTER `id`",
             "ALTER TABLE `hks_settings` ADD COLUMN `sender_name`       VARCHAR(200) NULL",
             "ALTER TABLE `hks_settings` ADD COLUMN `default_depo`      VARCHAR(100) NULL",
             "ALTER TABLE `hks_settings` ADD COLUMN `default_il`        VARCHAR(100) NULL",
@@ -41,12 +89,26 @@ class HksRepository {
         }
     }
 
-    public function saveSettings(array $data): void {
+    public function saveSettings(array $data, ?int $company_id = null): void {
         $this->ensureSettingsColumns();
-        $existing = $this->getSettings();
-        if ($existing) {
+        $id = $company_id ?? $this->sessionCompanyId();
+        // Hangi satırı güncelleyeceğimizi belirle
+        if ($id !== null) {
+            try {
+                $st = $this->pdo->prepare("SELECT id FROM hks_settings WHERE id=? LIMIT 1");
+                $st->execute([$id]);
+                $existing_id = $st->fetchColumn() ?: null;
+            } catch (Throwable) { $existing_id = null; }
+        } else {
+            $first = $this->getSettings();
+            $existing_id = $first ? $first['id'] : null;
+            $id = $existing_id;
+        }
+
+        if ($existing_id) {
             $this->pdo->prepare(
                 "UPDATE hks_settings SET
+                    firma_adi=?,
                     environment=?, username=?, password_enc=?,
                     service_password_enc=?, security_word_enc=?,
                     sender_name=?, default_depo=?, default_il=?, default_ilce=?,
@@ -55,6 +117,7 @@ class HksRepository {
                     updated_at=NOW()
                  WHERE id=?"
             )->execute([
+                $data['firma_adi'] ?? 'Firma 1',
                 $data['environment'],
                 $data['username'],
                 $data['password_enc'],
@@ -68,16 +131,17 @@ class HksRepository {
                 (int)($data['live_send_enabled'] ?? 0),
                 $data['genel_wsdl_url'] ?? '',
                 $data['bildirim_wsdl_url'] ?? '',
-                $existing['id'],
+                $existing_id,
             ]);
         } else {
             $this->pdo->prepare(
                 "INSERT INTO hks_settings
-                    (environment, username, password_enc, service_password_enc,
+                    (firma_adi, environment, username, password_enc, service_password_enc,
                      security_word_enc, sender_name, default_depo, default_il, default_ilce,
                      timeout_seconds, live_send_enabled, genel_wsdl_url, bildirim_wsdl_url)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
             )->execute([
+                $data['firma_adi'] ?? 'Firma 1',
                 $data['environment'],
                 $data['username'],
                 $data['password_enc'],
@@ -92,6 +156,10 @@ class HksRepository {
                 $data['genel_wsdl_url'] ?? '',
                 $data['bildirim_wsdl_url'] ?? '',
             ]);
+            $new_id = (int)$this->pdo->lastInsertId();
+            if (session_status() === PHP_SESSION_ACTIVE && $company_id === null) {
+                $_SESSION['hks_company_id'] = $new_id;
+            }
         }
     }
 

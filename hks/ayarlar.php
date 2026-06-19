@@ -9,6 +9,12 @@ if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
 
 $repo = new HksRepository(db());
 
+// Firma seçili olmadan ayarlar sayfası açılamaz — seçim ekranına yönlendir
+if (!isset($_SESSION['hks_company_id'])) {
+    set_flash('info', 'Ayarlara girmeden önce bir firma seçin.');
+    header('Location: index.php'); exit;
+}
+
 // HKS_CRED_KEY anahtar oluşturma
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'generate_key') {
     csrf_check($_POST['csrf'] ?? null);
@@ -39,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
     $existing    = $repo->getSettings();
+    $firma_adi   = trim($_POST['firma_adi'] ?? '') ?: ($existing['firma_adi'] ?? 'Firma 1');
     $environment = in_array($_POST['environment'] ?? '', ['test','live'], true)
                    ? $_POST['environment'] : 'test';
     $username    = trim($_POST['username'] ?? '');
@@ -60,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $sec_enc      = $sec_word !== ''  ? hks_encrypt($sec_word) : ($existing['security_word_enc'] ?? null);
 
     $repo->saveSettings([
+        'firma_adi'             => $firma_adi,
         'environment'           => $environment,
         'username'              => $username,
         'password_enc'          => $password_enc,
@@ -86,8 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $s = $repo->getSettings();
 $has_secure_key  = hks_can_save_passwords(); // sadece gösterge — artık şifre girişini bloke etmiyor
 $suggested_key   = !$has_secure_key ? bin2hex(random_bytes(32)) : '';
+$firma_baslik    = $s['firma_adi'] ?? 'Firma Ayarları';
 
-render_header('HKS Ayarları');
+render_header('HKS Ayarları — ' . $firma_baslik);
 render_flash();
 ?>
 <div class="hks-page">
@@ -98,10 +107,11 @@ include __DIR__ . '/views/_tabs.php';
 
 <div class="page-head" style="margin-top:16px">
     <div>
-        <h1>⚙️ HKS Giriş ve Web Servis Bilgileri</h1>
+        <h1>⚙️ <?= hks_h($firma_baslik) ?></h1>
         <p class="muted">Kullanıcı adı ve şifreler şifrelenmiş olarak saklanır. Ekranda açık görünmez.</p>
     </div>
     <div class="page-head-actions">
+        <a href="firmalar.php" class="btn btn-ghost btn-sm">🏢 Firmalar</a>
         <a href="index.php" class="btn btn-ghost">← Panele Dön</a>
     </div>
 </div>
@@ -130,6 +140,17 @@ include __DIR__ . '/views/_tabs.php';
 
 <form method="post" action="ayarlar.php" autocomplete="off" class="hks-form">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+
+    <!-- Firma Adı -->
+    <div class="form-section">
+        <div class="form-section-title">Firma</div>
+        <div class="form-group">
+            <label for="firma_adi">Firma Adı</label>
+            <input type="text" id="firma_adi" name="firma_adi"
+                   value="<?= hks_h($s['firma_adi'] ?? '') ?>"
+                   placeholder="Firma adı" maxlength="200" required>
+        </div>
+    </div>
 
     <!-- Bölüm 1: Giriş Bilgileri -->
     <div class="form-section">

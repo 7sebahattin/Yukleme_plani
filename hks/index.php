@@ -1,13 +1,90 @@
 <?php
-// HKS Ana Panel (Dashboard)
+// HKS Ana Giriş — Firma seçim ekranı veya dashboard
 declare(strict_types=1);
 require_once __DIR__ . '/includes/hks_bootstrap.php';
 $auth_user = require_login();
-if (function_exists('can') && !can('hks.read') && !can('records.write')) {
+if (function_exists('can') && !can('hks.read') && !can('records.write') && !is_admin()) {
     http_response_code(403); die('Bu sayfaya erişim yetkiniz yok.');
 }
 
-$repo     = new HksRepository(db());
+$repo      = new HksRepository(db());
+$companies = $repo->getAllCompanies();
+$can_cfg   = is_admin() || (function_exists('can') && can('hks.settings'));
+
+// Seçili firma ID'sini doğrula — listede yoksa temizle
+$company_id = isset($_SESSION['hks_company_id']) ? (int)$_SESSION['hks_company_id'] : null;
+$valid_ids  = array_column($companies, 'id');
+if ($company_id !== null && !in_array($company_id, $valid_ids, false)) {
+    unset($_SESSION['hks_company_id']);
+    $company_id = null;
+}
+
+// ── Firma seçim ekranı ───────────────────────────────────
+if ($company_id === null) {
+    render_header('HKS — Firma Seç');
+    render_flash();
+    ?>
+    <div class="hks-page" style="max-width:680px;margin:0 auto">
+
+    <div class="page-head" style="margin-top:16px">
+        <div>
+            <h1>🏛 Hal Bildirimi</h1>
+            <p class="muted">Devam etmek için bir firma seçin</p>
+        </div>
+        <?php if ($can_cfg): ?>
+        <div class="page-head-actions">
+            <a href="firmalar.php" class="btn btn-ghost btn-sm">🏢 Firmaları Yönet</a>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <?php if (empty($companies)): ?>
+    <div class="hks-warning-box" style="margin-bottom:16px">
+        Henüz kayıtlı firma yok.
+        <?php if ($can_cfg): ?>
+        <a href="firmalar.php" class="btn btn-sm" style="margin-left:8px;background:#f59e0b;color:#fff;border-color:#f59e0b">+ Firma Ekle</a>
+        <?php endif; ?>
+    </div>
+    <?php else: ?>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:24px">
+    <?php foreach ($companies as $co):
+        $co_ok  = !empty($co['username']);
+        $co_env = ($co['environment'] ?? 'test') === 'live' ? '🔴 Canlı' : '🟡 Test';
+        $co_test = $co['last_test_ok'] ? '✅' : ($co['last_test_at'] ? '⚠️' : '—');
+    ?>
+        <form method="post" action="ajax.php?action=select_company" style="display:contents">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="company_id" value="<?= (int)$co['id'] ?>">
+            <button type="submit" class="hks-company-card <?= $co_ok ? '' : 'hks-company-card-warn' ?>" style="text-align:left;cursor:pointer;border:none;width:100%">
+                <div class="hks-company-card-name"><?= hks_h($co['firma_adi']) ?></div>
+                <div class="hks-company-card-meta">
+                    <span><?= $co_env ?></span>
+                    <span>Bağlantı: <?= $co_test ?></span>
+                </div>
+                <?php if (!$co_ok): ?>
+                <div style="font-size:.78rem;color:#92400e;margin-top:4px">⚙️ Ayarlar eksik</div>
+                <?php endif; ?>
+                <div class="hks-company-card-action">Giriş Yap →</div>
+            </button>
+        </form>
+    <?php endforeach; ?>
+    </div>
+
+    <?php if ($can_cfg): ?>
+    <div style="text-align:center;padding:8px 0 24px">
+        <a href="firmalar.php" class="btn btn-ghost">+ Yeni Firma Ekle / Firmaları Yönet</a>
+    </div>
+    <?php endif; ?>
+
+    <?php endif; ?>
+    </div>
+    <?php render_footer(); ?>
+    <?php
+    exit;
+}
+
+// ── Dashboard (firma seçili) ─────────────────────────────
 $client   = new HksClient($repo);
 $settings = $repo->getSettings();
 
@@ -16,28 +93,26 @@ $dupCount = $repo->countDuplicateWarnings();
 $refStats = $repo->getReferenceStats();
 $recentLogs = $repo->getRecentLogs(5);
 
-$soap_ok  = hks_check_soap();
-$has_cfg  = $client->hasSettings();
-$live_on  = $client->isLiveSendEnabled();
-$test_ok  = $settings && $settings['last_test_ok'];
-$test_at  = $settings['last_test_at'] ?? null;
+$soap_ok = hks_check_soap();
+$has_cfg = $client->hasSettings();
+$live_on = $client->isLiveSendEnabled();
+$test_ok = $settings && $settings['last_test_ok'];
+$test_at = $settings['last_test_at'] ?? null;
 
+$s_user = !empty($settings['username']);
+$s_pass = !empty($settings['password_enc']);
+$s_svc  = !empty($settings['service_password_enc']);
+$s_all  = $s_user && $s_pass && $s_svc;
+
+$firma_adi   = $settings['firma_adi'] ?? 'Firma';
 $hks_page_title = 'HKS Paneli';
 $hks_active_tab = 'index.php';
 
-render_header('HKS Paneli');
+render_header('HKS Paneli — ' . $firma_adi);
 render_flash();
 ?>
 <div class="hks-page">
 <?php include __DIR__ . '/views/_tabs.php'; ?>
-
-<?php
-$s_user  = !empty($settings['username']);
-$s_pass  = !empty($settings['password_enc']);
-$s_svc   = !empty($settings['service_password_enc']);
-$s_all   = $s_user && $s_pass && $s_svc;
-$can_cfg = is_admin() || (function_exists('can') && can('hks.settings'));
-?>
 
 <div class="page-head" style="margin-top:16px">
     <div>
@@ -102,7 +177,7 @@ $can_cfg = is_admin() || (function_exists('can') && can('hks.settings'));
         <div class="hks-card-sub"><?= hks_env_label($settings['environment'] ?? 'test') ?></div>
         <?php endif; ?>
         <?php if ($can_cfg && $has_cfg): ?>
-        <div style="margin-top:12px"><a href="ayarlar.php" class="btn btn-ghost btn-sm">🔌 Bağlantı Testi →</a></div>
+        <div style="margin-top:12px"><a href="baglanti_test.php" class="btn btn-ghost btn-sm">🔌 Bağlantı Testi →</a></div>
         <?php endif; ?>
     </div>
 </div>
