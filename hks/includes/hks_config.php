@@ -4,11 +4,19 @@ declare(strict_types=1);
 
 const HKS_MODULE_VERSION = '1.0.0';
 
-// WSDL URL'leri — HKS resmi servis adresleri (kılavuz doğrulanmalı)
-const HKS_WSDL_TEST_GENEL    = 'https://hkstest.hal.gov.tr/HKSService/GenelService.svc?wsdl';
-const HKS_WSDL_TEST_BILDIRIM = 'https://hkstest.hal.gov.tr/HKSService/BildirimService.svc?wsdl';
-const HKS_WSDL_LIVE_GENEL    = 'https://hks.hal.gov.tr/HKSService/GenelService.svc?wsdl';
-const HKS_WSDL_LIVE_BILDIRIM = 'https://hks.hal.gov.tr/HKSService/BildirimService.svc?wsdl';
+// WSDL URL'leri — HKS Geliştirici Kılavuzu'ndaki resmi servis adresleri.
+// ÖNEMLİ:
+//  • TEST ortamı IP tabanlıdır → 'hkstest.hal.gov.tr' diye bir host YOKTUR (DNS'te çözülmez).
+//    Test servisi 95.0.51.130 IP'si üzerinden sunulur. IP'ye HTTPS bağlanırken sertifika
+//    adı uyuşmaz; hks_client.php SSL doğrulamayı (verify_peer=false) zaten devre dışı bırakır.
+//  • CANLI ortam 'hks.hal.gov.tr' host'u üzerindendir.
+//  • Servis yolu '/WebServices/' şeklindedir ('/HKSService/' DEĞİL).
+//  • Bu adresler değişebilir; kesin değer için kendi HKS Geliştirici Kılavuzunuzu doğrulayın.
+//    Gerekirse Ayarlar → Gelişmiş Ayarlar'daki WSDL alanlarından override edebilirsiniz.
+const HKS_WSDL_TEST_GENEL    = 'https://95.0.51.130/WebServices/GenelService.svc?wsdl';
+const HKS_WSDL_TEST_BILDIRIM = 'https://95.0.51.130/WebServices/BildirimService.svc?wsdl';
+const HKS_WSDL_LIVE_GENEL    = 'https://hks.hal.gov.tr/WebServices/GenelService.svc?wsdl';
+const HKS_WSDL_LIVE_BILDIRIM = 'https://hks.hal.gov.tr/WebServices/BildirimService.svc?wsdl';
 
 const HKS_DEFAULT_TIMEOUT = 30;
 

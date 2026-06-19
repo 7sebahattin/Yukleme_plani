@@ -25,17 +25,26 @@ class HksClient {
     }
 
     private function genelWsdl(): string {
-        if (!empty($this->settings['genel_wsdl_url'])) {
-            return $this->settings['genel_wsdl_url'];
+        $u = trim((string)($this->settings['genel_wsdl_url'] ?? ''));
+        if ($u !== '' && !$this->isStaleWsdl($u)) {
+            return $u;
         }
         return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_GENEL : HKS_WSDL_TEST_GENEL;
     }
 
     private function bildirimWsdl(): string {
-        if (!empty($this->settings['bildirim_wsdl_url'])) {
-            return $this->settings['bildirim_wsdl_url'];
+        $u = trim((string)($this->settings['bildirim_wsdl_url'] ?? ''));
+        if ($u !== '' && !$this->isStaleWsdl($u)) {
+            return $u;
         }
         return $this->getEnvironment() === 'live' ? HKS_WSDL_LIVE_BILDIRIM : HKS_WSDL_TEST_BILDIRIM;
+    }
+
+    // Eskiden config'de olan, DNS'te çözülmeyen/yanlış yollu adresleri reddet —
+    // DB'ye kaydedilmiş olsa bile düzeltilmiş varsayılana düşülsün.
+    private function isStaleWsdl(string $url): bool {
+        return stripos($url, 'hkstest.hal.gov.tr') !== false
+            || stripos($url, '/HKSService/') !== false;
     }
 
     private function timeout(): int {
