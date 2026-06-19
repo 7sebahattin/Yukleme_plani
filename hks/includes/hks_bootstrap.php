@@ -57,6 +57,21 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             INDEX `idx_hksq_date` (`created_at`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
+        'hks_reference_cache' => "CREATE TABLE IF NOT EXISTS `hks_reference_cache` (
+            `id`              INT AUTO_INCREMENT PRIMARY KEY,
+            `ref_type`        VARCHAR(50)  NOT NULL DEFAULT '',
+            `ref_code`        VARCHAR(100) NOT NULL DEFAULT '',
+            `ref_name`        VARCHAR(300) NOT NULL DEFAULT '',
+            `ref_parent_code` VARCHAR(100) NULL,
+            `raw_json`        TEXT NULL,
+            `synced_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `is_active`       TINYINT(1) NOT NULL DEFAULT 1,
+            UNIQUE KEY `uq_ref_type_code` (`ref_type`, `ref_code`),
+            INDEX `idx_hksrc_type`   (`ref_type`),
+            INDEX `idx_hksrc_parent` (`ref_parent_code`(50)),
+            INDEX `idx_hksrc_active` (`is_active`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
         'hks_service_logs' => "CREATE TABLE IF NOT EXISTS `hks_service_logs` (
             `id`                 INT AUTO_INCREMENT PRIMARY KEY,
             `service_name`       VARCHAR(100) NOT NULL DEFAULT '',
