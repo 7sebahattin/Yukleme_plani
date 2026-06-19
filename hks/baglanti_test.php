@@ -213,7 +213,11 @@ function loadInspect(service) {
                 : '(Metod bulunamadı)';
             urlEl.textContent = 'WSDL: ' + (data.wsdl || '');
         } else {
-            methods.textContent = '❌ ' + (data.message || 'Hata');
+            var msg = data.message || 'Hata';
+            var tech = data.technical || '';
+            methods.innerHTML = '❌ ' + msg
+                + (tech ? '<br><details style="margin-top:6px"><summary style="cursor:pointer;color:var(--muted);font-size:.8rem">Teknik detay</summary>'
+                    + '<span style="word-break:break-all">' + tech + '</span></details>' : '');
             urlEl.textContent = '';
         }
     })
