@@ -5,21 +5,23 @@ declare(strict_types=1);
 const HKS_MODULE_VERSION = '1.0.0';
 
 // WSDL URL'leri — HKS Geliştirici Kılavuzu'ndaki resmi servis adresleri.
-// ÖNEMLİ:
-//  • TEST ortamı IP tabanlıdır → 'hkstest.hal.gov.tr' diye bir host YOKTUR (DNS'te çözülmez).
-//    Test servisi 95.0.51.130 IP'si üzerinden sunulur. IP'ye HTTPS bağlanırken sertifika
-//    adı uyuşmaz; hks_client.php SSL doğrulamayı (verify_peer=false) zaten devre dışı bırakır.
-//  • CANLI ortam 'hks.hal.gov.tr' host'u üzerindendir.
+// ÖNEMLİ — TÜM ortamlar canlı domain (hks.hal.gov.tr) üzerinden çalışır:
+//  • IP tabanlı test adresi (95.0.51.130) bu sunucudan ERİŞİLEMİYOR
+//    (TCP:443 timeout — firewall/whitelist). cURL testinde doğrulandı.
+//  • hks.hal.gov.tr bu sunucudan HTTP 200 ile başarıyla erişiliyor (doğrulandı).
+//  • Bu nedenle IP adresleri koddan tamamen kaldırıldı; "test" ortamı da
+//    canlı domaine yönlendirildi.
 //  • Servis yolu '/WebServices/' şeklindedir ('/HKSService/' DEĞİL).
-//  • Bu adresler değişebilir; kesin değer için kendi HKS Geliştirici Kılavuzunuzu doğrulayın.
-//    Gerekirse Ayarlar → Gelişmiş Ayarlar'daki WSDL alanlarından override edebilirsiniz.
+//  • Gerçek bir test endpoint'i sağlanırsa Ayarlar → Gelişmiş Ayarlar'daki
+//    WSDL alanlarından override edilebilir.
 // Kılavuza göre ÜÇ ayrı servis vardır: GenelService, UrunService, BildirimService.
-const HKS_WSDL_TEST_GENEL    = 'https://95.0.51.130/WebServices/GenelService.svc?wsdl';
-const HKS_WSDL_TEST_URUN     = 'https://95.0.51.130/WebServices/UrunService.svc?wsdl';
-const HKS_WSDL_TEST_BILDIRIM = 'https://95.0.51.130/WebServices/BildirimService.svc?wsdl';
 const HKS_WSDL_LIVE_GENEL    = 'https://hks.hal.gov.tr/WebServices/GenelService.svc?wsdl';
 const HKS_WSDL_LIVE_URUN     = 'https://hks.hal.gov.tr/WebServices/UrunService.svc?wsdl';
 const HKS_WSDL_LIVE_BILDIRIM = 'https://hks.hal.gov.tr/WebServices/BildirimService.svc?wsdl';
+// Test ortamı da canlı domaine yönlendirildi (IP erişilemiyor).
+const HKS_WSDL_TEST_GENEL    = HKS_WSDL_LIVE_GENEL;
+const HKS_WSDL_TEST_URUN     = HKS_WSDL_LIVE_URUN;
+const HKS_WSDL_TEST_BILDIRIM = HKS_WSDL_LIVE_BILDIRIM;
 
 // ServicePassword test ortamı varsayılan değeri (kılavuz: bölüm "Genel Açıklamalar")
 const HKS_TEST_SERVICE_PASSWORD = '!1QAZWSX';
