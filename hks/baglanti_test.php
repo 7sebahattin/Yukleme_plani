@@ -82,6 +82,7 @@ render_flash();
         <h3 style="margin-top:0">🔎 WSDL Metodları</h3>
         <div style="margin-bottom:12px">
             <button type="button" class="btn btn-ghost btn-sm inspect-tab active" data-svc="genel">GenelService</button>
+            <button type="button" class="btn btn-ghost btn-sm inspect-tab" data-svc="urun">UrunService</button>
             <button type="button" class="btn btn-ghost btn-sm inspect-tab" data-svc="bildirim">BildirimService</button>
         </div>
         <div id="inspect-methods" style="font-size:.85rem;font-family:monospace;line-height:1.7;white-space:pre-wrap;max-height:320px;overflow-y:auto;background:var(--bg);padding:12px;border-radius:6px;border:1px solid var(--border)"></div>
