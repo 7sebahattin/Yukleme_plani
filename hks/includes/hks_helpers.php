@@ -251,22 +251,45 @@ function hks_create_draft_from_loading_record(int $loading_record_id, HksReposit
     ]);
 }
 
-// Servis yanıtını normalize eder — IslemKodu / HataKodlari kontrol eder
+// Servis yanıtını normalize eder — IslemKodu / HataKodlari kontrol eder.
+// $raw: callService'in döndürdüğü data dizisi veya tek bir yanıt nesnesi.
+// Dizi ise ilk elemanı alır (BildirimService envelope yapısı).
 function hks_normalize_response(mixed $raw): array {
     if ($raw === null) {
         return ['ok' => false, 'message' => 'Boş yanıt', 'islem_kodu' => ''];
     }
-    $arr = is_object($raw) ? (array)$raw : (is_array($raw) ? $raw : []);
-    // Çeşitli case varyasyonları
+    // Liste (indexed array) ise ilk elemanı al
+    $item = (is_array($raw) && isset($raw[0])) ? $raw[0] : $raw;
+    $arr  = is_object($item) ? (array)$item : (is_array($item) ? $item : []);
+
     $islem_kodu = $arr['IslemKodu'] ?? $arr['islemKodu'] ?? $arr['islem_kodu'] ?? '';
-    $hata_arr   = $arr['HataKodlari'] ?? $arr['hataKodlari'] ?? $arr['HataMesaji'] ?? '';
-    $hata_msg   = '';
-    if (is_array($hata_arr)) {
-        $hata_msg = implode('; ', array_filter(array_map(fn($h) => is_array($h) ? ($h['HataAciklamasi'] ?? json_encode($h)) : (string)$h, $hata_arr)));
-    } elseif (is_string($hata_arr) && $hata_arr !== '') {
-        $hata_msg = $hata_arr;
+    $hata_raw   = $arr['HataKodlari'] ?? $arr['hataKodlari'] ?? $arr['HataMesaji'] ?? null;
+
+    $hata_msg = '';
+    if (is_array($hata_raw)) {
+        // Yapı: {'ErrorModel': [{'HataKodu': x, 'Mesaj': '...'}]}
+        $errors = $hata_raw['ErrorModel'] ?? $hata_raw['errorModel'] ?? $hata_raw;
+        if (is_array($errors)) {
+            $msgs = [];
+            foreach ($errors as $e) {
+                if (is_array($e)) {
+                    $msgs[] = $e['Mesaj'] ?? $e['HataAciklamasi'] ?? $e['HataMesaji'] ?? json_encode($e, JSON_UNESCAPED_UNICODE);
+                } elseif (is_string($e) && $e !== '') {
+                    $msgs[] = $e;
+                }
+            }
+            $hata_msg = implode('; ', array_filter($msgs));
+        }
+    } elseif (is_string($hata_raw) && $hata_raw !== '') {
+        $hata_msg = $hata_raw;
     }
-    $ok = ($islem_kodu === 'GTBWSRV0000001');
+
+    // IslemKodu varsa explicit kontrol; yoksa hata mesajı yoksa başarılı say
+    if ($islem_kodu !== '') {
+        $ok = ($islem_kodu === 'GTBWSRV0000001');
+    } else {
+        $ok = ($hata_msg === '');
+    }
     return [
         'ok'         => $ok,
         'islem_kodu' => $islem_kodu,

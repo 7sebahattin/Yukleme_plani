@@ -660,7 +660,7 @@ class HksClient {
 
     public function kayitliKisiSorgu(string $tc_vkn): array {
         return $this->callService($this->bildirimWsdl(), 'BildirimService',
-            'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNo' => $tc_vkn]);
+            'BildirimServisKayitliKisiSorgu', ['TcKimlikVergiNolar' => $tc_vkn]);
     }
 
     public function getTopluKunye(array $params = []): array {

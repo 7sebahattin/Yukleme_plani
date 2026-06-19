@@ -167,6 +167,12 @@ switch ($action) {
         }
         $uid_ks = isset($user['id']) ? (int)$user['id'] : null;
         $json_result = $client->kayitliKisiSorgu($tc_vkn);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('kisi_sorgu', $tc_vkn,
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? $json_result, JSON_UNESCAPED_UNICODE), $uid_ks);
@@ -183,6 +189,12 @@ switch ($action) {
         if (!empty($input['kunye_no'])) $rk_params['KunyeNo'] = trim($input['kunye_no']);
         if (!empty($input['urun_id']))  $rk_params['UrunId']  = trim($input['urun_id']);
         $json_result = $client->getReferansKunyeler($rk_params);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('referans_kunye', $input['kunye_no'] ?? '*',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_rk);
@@ -199,6 +211,12 @@ switch ($action) {
         if (!empty($input['baslangic'])) $tk_params['BaslangicTarihi'] = trim($input['baslangic']);
         if (!empty($input['bitis']))     $tk_params['BitisTarihi']     = trim($input['bitis']);
         $json_result = $client->getTopluKunye($tk_params);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('toplu_kunye', $input['kunye_no'] ?? '*',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_tk);
@@ -214,6 +232,12 @@ switch ($action) {
         if (!empty($input['bildirim_no'])) $be_params['BildirimNo'] = trim($input['bildirim_no']);
         if (!empty($input['kunye_no']))    $be_params['KunyeNo']    = trim($input['kunye_no']);
         $json_result = $client->getBildirimEtiket($be_params);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('bildirim_etiket', $input['bildirim_no'] ?? $input['kunye_no'] ?? '*',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? $json_result, JSON_UNESCAPED_UNICODE), $uid_be);
@@ -230,6 +254,12 @@ switch ($action) {
         if (!empty($input['bitis']))     $yb_params['BitisTarihi']     = trim($input['bitis']);
         if (!empty($input['kunye_no']))  $yb_params['KunyeNo']         = trim($input['kunye_no']);
         $json_result = $client->getYaptigimBildirimler($yb_params);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('bildirim_listesi', 'yaptigim',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_yb);
@@ -246,6 +276,12 @@ switch ($action) {
         if (!empty($input['bitis']))     $byb_params['BitisTarihi']     = trim($input['bitis']);
         if (!empty($input['kunye_no']))  $byb_params['KunyeNo']         = trim($input['kunye_no']);
         $json_result = $client->getBanaYapilanBildirimler($byb_params);
+        if ($json_result['ok'] && !empty($json_result['data'])) {
+            $norm = hks_normalize_response($json_result['data']);
+            if (!$norm['ok']) {
+                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+            }
+        }
         $repo->saveQuery('bildirim_listesi', 'bana_yapilan',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_byb);
