@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'urun_cinsi'        => trim($_POST['urun_cinsi'] ?? '') ?: null,
         'miktar'            => hks_qty($_POST['miktar'] ?? 0),
         'birim'             => trim($_POST['birim'] ?? 'KG') ?: 'KG',
-        'depo'              => trim($_POST['depo'] ?? '') ?: null,
+        'depo'              => trim($_POST['depo'] ?? '') ?: (trim((string)($op_settings['default_depo'] ?? '')) ?: trim($_POST['gidecek_yer'] ?? '')) ?: null,
         'il'                => trim($_POST['il'] ?? '') ?: null,
         'ilce'              => trim($_POST['ilce'] ?? '') ?: null,
         'belde'             => trim($_POST['belde'] ?? '') ?: null,
@@ -102,6 +102,34 @@ foreach (hks_siralama_turu_list() as $sl) {
     $siralama_opts .= '<option value="' . hks_h($sl) . '">' . hks_h($sl) . '</option>';
 }
 
+// Adım 3 sabit listeleri
+$malin_turu_opts = '';
+foreach (hks_malin_turu_list() as $mt) {
+    $malin_turu_opts .= '<option value="' . hks_h($mt) . '">' . hks_h($mt) . '</option>';
+}
+$belge_tipi_opts = '<option value="">Seçiniz</option>';
+foreach (hks_belge_tipi_list() as $bt2) {
+    $belge_tipi_opts .= '<option value="' . hks_h($bt2) . '">' . hks_h($bt2) . '</option>';
+}
+$gidecek_yer_opts = '<option value="">Seçiniz</option>';
+foreach (hks_gidecek_yer_list() as $gy) {
+    $gidecek_yer_opts .= '<option value="' . hks_h($gy) . '">' . hks_h($gy) . '</option>';
+}
+$para_birimi_opts = '';
+foreach (hks_para_birimi_list() as $pb) {
+    $para_birimi_opts .= '<option value="' . hks_h($pb) . '">' . hks_h($pb) . '</option>';
+}
+// İhracat ülkeleri — önce HKS 'ulke' referansı, yoksa statik liste
+$ulke_refs = $op_repo->getReferences('ulke');
+$ulke_opts = '<option value="">Seçiniz</option>';
+if ($ulke_refs && !hks_refs_labels_numeric($ulke_refs)) {
+    $ulke_opts .= hks_ref_options($ulke_refs, '', false);
+} else {
+    foreach (hks_ulke_list() as $u) {
+        $ulke_opts .= '<option value="' . hks_h($u) . '">' . hks_h($u) . '</option>';
+    }
+}
+
 $op_page_title  = 'e-Bildirim Oluştur';
 $op_active_tab  = 'bildirimci';
 $op_active_menu = 'bildirim_yeni.php';
@@ -109,11 +137,9 @@ include __DIR__ . '/views/_layout_start.php';
 ?>
 
 <div class="hks-op-steps" id="opSteps">
-    <div class="hks-op-step active" data-s="1"><span class="n">1</span> Bildirimci</div>
+    <div class="hks-op-step active" data-s="1"><span class="n">1</span> Bildirim Bilgileri</div>
     <div class="hks-op-step" data-s="2"><span class="n">2</span> Referans Künye</div>
-    <div class="hks-op-step" data-s="3"><span class="n">3</span> Mal Bilgisi</div>
-    <div class="hks-op-step" data-s="4"><span class="n">4</span> Gideceği Yer</div>
-    <div class="hks-op-step" data-s="5"><span class="n">5</span> Kontrol &amp; Kaydet</div>
+    <div class="hks-op-step" data-s="3"><span class="n">3</span> Mal &amp; Gideceği Yer</div>
 </div>
 
 <?php if ($refs_missing): ?>
@@ -228,126 +254,142 @@ include __DIR__ . '/views/_layout_start.php';
         <div id="refKunyeSelected" class="hks-op-note" style="display:none;margin-top:10px"></div>
     </fieldset>
 
-    <!-- ADIM 3 — Mala İlişkin Bilgiler -->
+    <!-- ADIM 3 — Mal / Miktar-Fiyat / Gideceği Yer -->
     <fieldset class="hks-op-fieldset op-pane" data-pane="3" style="display:none">
-        <legend>Adım 3 — Mala İlişkin Bilgiler</legend>
+        <legend>Adım 3 — Mal &amp; Gideceği Yer</legend>
+
+        <!-- Mala İlişkin Bilgiler -->
+        <p class="hks-op-section-title">Mala İlişkin Bilgiler</p>
+        <div class="hks-op-field">
+            <label>Malın Niteliği</label>
+            <div style="display:flex;gap:18px;flex-wrap:wrap;padding-top:4px">
+            <?php foreach (hks_malin_niteligi_list() as $i => $mn): ?>
+                <label style="display:flex;align-items:center;gap:6px;font-weight:400">
+                    <input type="radio" name="malin_niteligi" value="<?= hks_h($mn) ?>" style="width:auto" <?= $i === 0 ? 'checked' : '' ?>> <?= hks_h($mn) ?>
+                </label>
+            <?php endforeach; ?>
+            </div>
+        </div>
         <div class="hks-op-row">
             <div class="hks-op-field">
-                <label>Malın Adı <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="urun" placeholder="Malın adı">
-            </div>
-            <div class="hks-op-field">
-                <label>Malın Cinsi</label>
-                <?php if ($urun_cinsleri): ?>
-                <select name="urun_cinsi"><?= hks_ref_options($urun_cinsleri, '') ?></select>
-                <?php else: ?>
-                <input type="text" name="urun_cinsi" placeholder="Malın cinsi">
-                <?php endif; ?>
-            </div>
-            <div class="hks-op-field">
-                <label>Malın Niteliği</label>
-                <input type="text" name="malin_niteligi" placeholder="Yaş / kuru vb.">
-            </div>
-            <div class="hks-op-field">
-                <label>Mal Kaynağı</label>
-                <select name="mal_kaynak">
-                    <option value="">— Seçin —</option>
-                    <option value="yerli">Yerli</option>
-                    <option value="ithal">İthal</option>
-                    <option value="toplama">Toplama Mal</option>
-                </select>
-            </div>
-            <div class="hks-op-field">
-                <label>Mal Miktarı <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="miktar" inputmode="decimal" placeholder="0">
-            </div>
-            <div class="hks-op-field">
-                <label>Birim</label>
-                <?php if ($birimler): ?>
-                <select name="birim"><?= hks_ref_options($birimler, 'KG', false) ?></select>
-                <?php else: ?>
-                <input type="text" name="birim" value="KG">
-                <?php endif; ?>
-            </div>
-            <div class="hks-op-field">
-                <label>Birim Fiyatı</label>
-                <input type="text" name="birim_fiyat" inputmode="decimal" placeholder="0">
-            </div>
-            <div class="hks-op-field">
-                <label>Üretici Adı / Ticari Unvan</label>
-                <input type="text" name="uretici_ad" placeholder="Üretici">
-            </div>
-            <div class="hks-op-field">
-                <label>Üretici TC / VKN</label>
+                <label>Üretici T.C. Kimlik / Vergi No</label>
                 <input type="text" name="uretici_tc_vkn" maxlength="11" placeholder="Üretici TC/VKN">
             </div>
             <div class="hks-op-field">
-                <label>Depo / Şube</label>
-                <?php if ($depolar): ?>
-                <select name="depo"><?= hks_ref_options($depolar, '') ?></select>
-                <?php else: ?>
-                <input type="text" name="depo" placeholder="Depo / şube">
-                <?php endif; ?>
+                <label>Üretici Adı Soyadı / Ticari Unvanı</label>
+                <input type="text" name="uretici_ad" placeholder="Üretici ad / ünvan">
             </div>
+        </div>
+        <p class="muted" style="font-size:.8rem;margin:6px 0 4px">Üretildiği veya Girdiği Gümrük Kapısının Bulunduğu Yer</p>
+        <div class="hks-op-row">
             <div class="hks-op-field">
-                <label>İl</label>
+                <label>İl <span style="color:var(--danger)">*</span></label>
                 <?php if ($iller): ?>
-                <select name="il"><?= hks_ref_options($iller, '') ?></select>
+                <select name="il"><option value="">Seçiniz</option><?= hks_ref_options($iller, '', false) ?></select>
                 <?php else: ?>
                 <input type="text" name="il" placeholder="İl">
                 <?php endif; ?>
             </div>
             <div class="hks-op-field">
-                <label>İlçe</label>
+                <label>İlçe <span style="color:var(--danger)">*</span></label>
                 <input type="text" name="ilce" placeholder="İlçe">
             </div>
             <div class="hks-op-field">
                 <label>Belde</label>
                 <input type="text" name="belde" placeholder="Belde">
             </div>
+            <div class="hks-op-field">
+                <label>Malın Adı <span style="color:var(--danger)">*</span></label>
+                <?php if ($urunler): ?>
+                <select name="urun" id="malAdi"><option value="">Seçiniz</option><?= hks_ref_options($urunler, '', false) ?></select>
+                <?php else: ?>
+                <input type="text" name="urun" id="malAdi" placeholder="Malın adı">
+                <?php endif; ?>
+            </div>
+            <div class="hks-op-field">
+                <label>Malın Türü</label>
+                <select name="malin_turu"><?= $malin_turu_opts ?></select>
+            </div>
+            <div class="hks-op-field">
+                <label>Malın Cinsi</label>
+                <?php if ($urun_cinsleri): ?>
+                <select name="urun_cinsi"><option value="">Seçiniz</option><?= hks_ref_options($urun_cinsleri, '', false) ?></select>
+                <?php else: ?>
+                <input type="text" name="urun_cinsi" placeholder="Malın cinsi">
+                <?php endif; ?>
+            </div>
         </div>
-    </fieldset>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:.88rem">
+            <input type="checkbox" name="analize_gonder" value="1" style="width:auto"> Analize Gönder
+        </label>
 
-    <!-- ADIM 4 — Gideceği / Tüketime Sunulduğu Yer (taşıma/sevkiyat) -->
-    <fieldset class="hks-op-fieldset op-pane" data-pane="4" style="display:none">
-        <legend>Adım 4 — Gideceği / Tüketime Sunulduğu Yer</legend>
-        <div class="hks-op-note info" style="margin-bottom:12px">Karşı taraf (alıcı/satıcı) bilgileri Adım 1'de girilir. Bu adım taşıma ve sevk bilgileri içindir.</div>
+        <!-- Miktar ve Fiyat -->
+        <p class="hks-op-section-title" style="margin-top:10px">Miktar ve Fiyat</p>
         <div class="hks-op-row">
             <div class="hks-op-field">
-                <label>Ülke</label>
-                <input type="text" name="gidecek_ulke" value="Türkiye">
+                <label>Kalan Miktar</label>
+                <input type="text" id="kalanMiktar" readonly placeholder="—" style="background:var(--bg)">
             </div>
             <div class="hks-op-field">
-                <label>İl</label>
-                <input type="text" name="gidecek_il" placeholder="Gideceği il">
+                <label>Mal Miktarı <span style="color:var(--danger)">*</span></label>
+                <div style="display:flex;gap:6px">
+                    <?php if ($birimler): ?>
+                    <select name="birim" style="flex:0 0 90px"><?= hks_ref_options($birimler, 'KG', false) ?></select>
+                    <?php else: ?>
+                    <select name="birim" style="flex:0 0 90px"><option value="KG">Kg</option><option value="TON">Ton</option><option value="ADET">Adet</option></select>
+                    <?php endif; ?>
+                    <input type="text" name="miktar" inputmode="decimal" placeholder="0" style="flex:1">
+                </div>
             </div>
             <div class="hks-op-field">
-                <label>İlçe</label>
-                <input type="text" name="gidecek_ilce" placeholder="Gideceği ilçe">
+                <label>Birim Fiyatı</label>
+                <div style="display:flex;gap:6px">
+                    <input type="text" name="birim_fiyat" inputmode="decimal" placeholder="0" style="flex:1">
+                    <select name="para_birimi" style="flex:0 0 80px"><?= $para_birimi_opts ?></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Malın Gideceği / Tüketime Sunulduğu Yere Ait Bilgiler -->
+        <p class="hks-op-section-title" style="margin-top:10px">Malın Gideceği / Tüketime Sunulduğu Yere Ait Bilgiler</p>
+        <div class="hks-op-row">
+            <div class="hks-op-field">
+                <label>Gideceği Yer Sahibi T.C. Kimlik / Vergi No</label>
+                <input type="text" name="gidecek_sahibi_tc" maxlength="11" placeholder="Gideceği yer sahibi TC/VKN">
+            </div>
+            <div class="hks-op-field" style="align-self:end">
+                <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+                    <input type="checkbox" name="gidecek_kayitli_degil" value="1" style="width:auto"> Gidecek Yer Kayıtlı Değil
+                </label>
+            </div>
+            <div class="hks-op-field">
+                <label>Gideceği Yer</label>
+                <select name="gidecek_yer" id="gidecekYer"><?= $gidecek_yer_opts ?></select>
+            </div>
+            <div class="hks-op-field" id="ihracatUlkeWrap" style="display:none">
+                <label>İhracat Yapılan Ülkeler</label>
+                <select name="ihracat_ulke" id="ihracatUlke"><?= $ulke_opts ?></select>
             </div>
             <div class="hks-op-field">
                 <label>Araç Plaka <span style="color:var(--danger)">*</span></label>
                 <input type="text" name="arac_plaka" placeholder="34ABC123">
             </div>
             <div class="hks-op-field">
-                <label>Belge No</label>
-                <input type="text" name="belge_no" placeholder="İrsaliye / belge no">
-            </div>
-            <div class="hks-op-field">
-                <label>Belge Tipi</label>
-                <input type="text" name="belge_tipi" placeholder="İrsaliye vb.">
+                <label>Belge No / Tipi</label>
+                <div style="display:flex;gap:6px">
+                    <input type="text" name="belge_no" placeholder="Belge no" style="flex:1">
+                    <select name="belge_tipi" style="flex:0 0 130px"><?= $belge_tipi_opts ?></select>
+                </div>
             </div>
             <div class="hks-op-field">
                 <label>Sevk Tarihi <span style="color:var(--danger)">*</span></label>
                 <input type="date" name="sevk_tarihi" value="<?= date('Y-m-d') ?>">
             </div>
         </div>
-    </fieldset>
 
-    <!-- ADIM 5 — Kontrol ve Taslak Kaydet -->
-    <fieldset class="hks-op-fieldset op-pane" data-pane="5" style="display:none">
-        <legend>Adım 5 — Kontrol &amp; Taslak Kaydet</legend>
-        <div class="hks-op-note info" id="opSummaryNote">
+        <!-- Kontrol & Kaydet -->
+        <p class="hks-op-section-title" style="margin-top:10px">Kontrol &amp; Taslak Kaydet</p>
+        <div class="hks-op-note info">
             Bilgileri kontrol edin. Zorunlu (*) alanlar eksikse kayıt <strong>taslak</strong> olarak kalır; tümü tamamsa <strong>gönderime hazır</strong> olur.
         </div>
         <div id="opSummary" style="font-size:.88rem"></div>
@@ -367,7 +409,7 @@ include __DIR__ . '/views/_layout_start.php';
 
 <script>
 (function() {
-    var cur = 1, max = 5;
+    var cur = 1, max = 3;
     var panes = document.querySelectorAll('.op-pane');
     var steps = document.querySelectorAll('#opSteps .hks-op-step');
     var btnPrev = document.getElementById('btnPrev');
@@ -473,9 +515,19 @@ include __DIR__ . '/views/_layout_start.php';
                 var o=rows[+btn.dataset.pick];
                 var kn=gf(o,['KunyeNo','ReferansKunyeNo','kunyeNo']);
                 document.getElementById('refKunyeNo').value=kn;
+                // Malın Adı'nı Adım 3'e taşı (input ya da select)
                 var urunAdi=gf(o,['UrunAdi','MalinAdi','Urun']);
-                var urunInput=form.querySelector('[name="urun"]');
-                if (urunInput && urunInput.tagName==='INPUT' && !urunInput.value.trim() && urunAdi) urunInput.value=urunAdi;
+                var malEl=document.getElementById('malAdi');
+                if (malEl && urunAdi) {
+                    if (malEl.tagName==='SELECT') {
+                        for (var oi=0; oi<malEl.options.length; oi++){ if (malEl.options[oi].text.toLowerCase()===String(urunAdi).toLowerCase()){ malEl.selectedIndex=oi; break; } }
+                    } else if (!malEl.value.trim()) { malEl.value=urunAdi; }
+                }
+                // Kalan miktarı göster
+                var kalan=gf(o,['KalanMiktar','Kalan']);
+                var birim=gf(o,['BirimAdi','Birim','birim'])||'KG';
+                var kEl=document.getElementById('kalanMiktar');
+                if (kEl) kEl.value = kalan!=='' ? (fmtNum(kalan)+' '+birim) : '';
                 var sel=document.getElementById('refKunyeSelected');
                 sel.style.display='block'; sel.className='hks-op-note info';
                 sel.innerHTML='✅ Referans künye seçildi: <strong>'+esc(kn)+'</strong>';
@@ -532,6 +584,15 @@ include __DIR__ . '/views/_layout_start.php';
         turuEl.addEventListener('change', refreshKarsiSifat);
         refreshKarsiSifat();
     }
+
+    // Gideceği Yer = Yurt Dışı → İhracat Yapılan Ülkeler göster
+    var gidecekYerEl = document.getElementById('gidecekYer');
+    var ihracatWrap  = document.getElementById('ihracatUlkeWrap');
+    function refreshIhracat(){
+        if (!gidecekYerEl || !ihracatWrap) return;
+        ihracatWrap.style.display = (gidecekYerEl.value === 'Yurt Dışı') ? '' : 'none';
+    }
+    if (gidecekYerEl) { gidecekYerEl.addEventListener('change', refreshIhracat); refreshIhracat(); }
 
     show(1);
 })();

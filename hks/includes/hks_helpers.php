@@ -134,6 +134,53 @@ function hks_siralama_turu_list(): array {
     return ['Tarihe Göre Azalan', 'Tarihe Göre Artan'];
 }
 
+// Malın Niteliği — Yerli / İthal / Toplama Mal (resmi HKS radyo seçenekleri).
+function hks_malin_niteligi_list(): array {
+    return ['Yerli', 'İthal', 'Toplama Mal'];
+}
+
+// Malın Türü — üretim şekli.
+function hks_malin_turu_list(): array {
+    return ['Geleneksel(Konvansiyonel)', 'Organik', 'İyi Tarım Uygulamaları'];
+}
+
+// Belge Tipi — Gideceği yer belge tipi.
+function hks_belge_tipi_list(): array {
+    return ['İrsaliye', 'Fatura', 'Gümrük Beyannamesi'];
+}
+
+// Gideceği Yer — Yurt Dışı + işyeri türleri.
+function hks_gidecek_yer_list(): array {
+    return array_merge(['Yurt Dışı'], hks_isyeri_turu_list());
+}
+
+// Para Birimi — birim fiyatı para birimi.
+function hks_para_birimi_list(): array {
+    return ['TL', 'USD', 'EUR'];
+}
+
+// İhracat Yapılan Ülkeler — statik yedek liste (HKS 'ulke' referansı senkronlanmamışsa).
+function hks_ulke_list(): array {
+    return [
+        'ABD','AFGANISTAN','ALMANYA','ANDORRA','ANGOLA','ARJANTİN','ARNAVUTLUK','ARUBA','AVUSTRALYA','AVUSTURYA',
+        'AZERBAYCAN','BAE','BAHREYN','BANGLADEŞ','BELÇİKA','BELİZE','BENİN','BEYAZ RUSYA','BHUTAN','BİRLEŞİK KRALLIK',
+        'BOLİVYA','BOSNA HERSEK','BREZİLYA','BULGARİSTAN','BURKİNA FASO','BURUNDİ','CEZAYİR','CİBUTİ','ÇAD','ÇEK CUMHURİYETİ',
+        'ÇİN','DANİMARKA','DOMİNİK CUMHURİYETİ','EKVADOR','EKVATOR GİNESİ','EL SALVADOR','ENDONEZYA','ERİTRE','ERMENİSTAN','ESTONYA',
+        'ETİYOPYA','FAS','FİLDİŞİ SAHİLİ','FİLİPİNLER','FİLİSTİN','FİNLANDİYA','FRANSA','GABON','GAMBİYA','GANA',
+        'GİNE','GÜNEY AFRİKA','GÜNEY KORE','GÜRCİSTAN','HAİTİ','HİNDİSTAN','HIRVATİSTAN','HOLLANDA','HONDURAS','IRAK',
+        'İRAN','İRLANDA','İSPANYA','İSRAİL','İSVEÇ','İSVİÇRE','İTALYA','İZLANDA','JAMAİKA','JAPONYA',
+        'KAMBOÇYA','KAMERUN','KANADA','KARADAĞ','KATAR','KAZAKİSTAN','KENYA','KIBRIS','KIRGIZİSTAN','KOLOMBİYA',
+        'KONGO','KOSOVA','KOSTA RİKA','KUVEYT','KUZEY KORE','KÜBA','LAOS','LESOTO','LETONYA','LİBERYA',
+        'LİBYA','LİHTENŞTAYN','LİTVANYA','LÜBNAN','LÜKSEMBURG','MACARİSTAN','MADAGASKAR','MAKEDONYA','MALAVİ','MALDİVLER',
+        'MALEZYA','MALİ','MALTA','MEKSİKA','MISIR','MOĞOLİSTAN','MOLDOVA','MONAKO','MORİTANYA','MOZAMBİK',
+        'MYANMAR','NAMİBYA','NEPAL','NİJER','NİJERYA','NİKARAGUA','NORVEÇ','ORTA AFRİKA CUMHURİYETİ','ÖZBEKİSTAN','PAKİSTAN',
+        'PANAMA','PARAGUAY','PERU','POLONYA','PORTEKİZ','ROMANYA','RUANDA','RUSYA','SENEGAL','SIRBİSTAN',
+        'SİERRA LEONE','SİNGAPUR','SLOVAKYA','SLOVENYA','SOMALİ','SRİ LANKA','SUDAN','SURİYE','SUUDİ ARABİSTAN','ŞİLİ',
+        'TACİKİSTAN','TANZANYA','TAYLAND','TAYVAN','TOGO','TUNUS','TÜRKMENİSTAN','UGANDA','UKRAYNA','UMMAN',
+        'URUGUAY','ÜRDÜN','VENEZUELA','VİETNAM','YEMEN','YENİ ZELANDA','YUNANİSTAN','ZAMBİYA','ZİMBABVE',
+    ];
+}
+
 function hks_ref_options(array $refs, string $selected = '', bool $include_empty = true): string {
     $out = $include_empty ? '<option value="">— Seçin —</option>' : '';
     foreach ($refs as $r) {
