@@ -113,15 +113,30 @@ function hks_payload_field_is_confirmed(string $hksField): bool {
     return isset($set[mb_strtolower($hksField)]);
 }
 
-// Tüm KRİTİK (zorunlu) alanlar WSDL'den doğrulandı mı? Manuel override de kabul edilir.
-function hks_payload_fields_confirmed(): bool {
-    if (HKS_PAYLOAD_FIELDS_CONFIRMED) return true;          // acil durum override
-    $set = hks_wsdl_all_confirmed_field_names();
-    if (empty($set)) return false;                          // introspeksiyon hiç çalışmadı
-    foreach (hks_payload_field_map() as [$local, $hks, $required, $ref, $hard]) {
-        if ($required && !isset($set[mb_strtolower($hks)])) return false;
+// Mapping KULLANICI ONAYI verildi mi? (PDF + WSDL doğrulaması sonrası, ayrı sprint)
+// Onay açık bir DB bayrağıyla (hks_reference_cache: wsdl_field:__MAPPING_APPROVED__=1)
+// VEYA HKS_PAYLOAD_FIELDS_CONFIRMED sabitiyle verilir. WSDL alan adlarının cache'te
+// bulunması TEK BAŞINA onay sayılmaz — isim benzerliği ile otomatik açılma engellenir.
+function hks_mapping_approved(): bool {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    try {
+        $st = db()->prepare("SELECT ref_code FROM hks_reference_cache
+                             WHERE ref_type='wsdl_field:__MAPPING_APPROVED__' AND is_active=1 LIMIT 1");
+        $st->execute();
+        $cache = ((string)$st->fetchColumn() === '1');
+    } catch (Throwable) {
+        $cache = false;
     }
-    return true;
+    return $cache;
+}
+
+// Gönderim alan-mapping kilidi açık mı?
+// KESİN KURAL: yalnızca açık onay (sabit override VEYA __MAPPING_APPROVED__ bayrağı)
+// kilidi açar. WSDL introspeksiyonu yalnızca rapora veri sağlar, otomatik açmaz.
+function hks_payload_fields_confirmed(): bool {
+    if (HKS_PAYLOAD_FIELDS_CONFIRMED) return true;          // manuel/acil override
+    return hks_mapping_approved();                          // açık kullanıcı onayı
 }
 
 // ── Format yardımcıları ──────────────────────────────────
@@ -280,6 +295,85 @@ function hks_payload_field_map(): array {
     ];
 }
 
+// ── Resmi mapping spesifikasyonu (PDF + WSDL) ────────────
+// KAYNAK: GTB Hal Kayıt Sistemi Web Servisleri Geliştirici Kılavuzu (Sürüm 0.1.7)
+//         §4.4 BildirimKaydet + §5 çalışma prensipleri  ·  canlı WSDL __getTypes().
+// Her alan tahminle DEĞİL, iki kaynaktan doğrulanır. Otomatik onay YOK.
+//
+// Sütunlar:
+//   local      → bizim notification alan adı ('' = formda karşılığı yok)
+//   dto        → ait olduğu HKS DTO'su (yapı)
+//   pdf_field  → resmi kılavuzdaki HKS alan adı ('' = kılavuzda yok)
+//   wsdl_field → canlı WSDL'de görülen HKS alan adı ('' = WSDL'de yok)
+//   hks_type   → HKS tipi (int/long/double/bool/string/DTO)
+//   helper     → Id'nin alınacağı yardımcı servis ('' = yok)
+//   ref_type   → hks_reference_cache ref türü (label→Id çözümü için, null=yok)
+//   transform  → dönüştürme yöntemi
+//   required   → çalışma prensiplerine göre (koşullu) zorunlu mu
+//   note       → koşul/uyarı
+//
+// pdf_field & wsdl_field karşılaştırması → durum (PDF+WSDL / PDF / WSDL / Belirsiz / Eşleşmedi)
+// runtime'da hks_payload_mapping_status_report() tarafından hesaplanır.
+function hks_payload_field_spec(): array {
+    return [
+        // ── BildirimKayitIstek (üst seviye) ──
+        ['local'=>'',                  'dto'=>'BildirimKayitIstek', 'pdf_field'=>'UniqueId',                'wsdl_field'=>'UniqueId',                'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'AF-<id> üret (idempotency)',        'required'=>false, 'note'=>'Takip numarası; her bildirime özgü.'],
+        ['local'=>'notification_type', 'dto'=>'BildirimKayitIstek', 'pdf_field'=>'BildirimTuru',            'wsdl_field'=>'BildirimTuru',            'hks_type'=>'int',    'helper'=>'BildirimServisBildirimTurleri','ref_type'=>'bildirim_turu', 'transform'=>'label→Id (cache)',                  'required'=>true,  'note'=>'PDF helper\'ı yanlışlıkla SifatListesi yazıyor; doğrusu BildirimTurleri (WSDL).'],
+        ['local'=>'reference_kunye_no','dto'=>'BildirimKayitIstek', 'pdf_field'=>'ReferansBildirimKunyeNo', 'wsdl_field'=>'ReferansBildirimKunyeNo', 'hks_type'=>'long',   'helper'=>'BildirimServisReferansKunyeler','ref_type'=>null,           'transform'=>'sayı; referanssız=0',               'required'=>false, 'note'=>'Referanssız bildirimde 0 gönderilir.'],
+
+        // ── BildirimciBilgileriDTO ──
+        ['local'=>'sifat',             'dto'=>'BildirimciBilgileri','pdf_field'=>'KisiSifat',               'wsdl_field'=>'KisiSifat',               'hks_type'=>'int',    'helper'=>'BildirimServisSifatListesi',   'ref_type'=>'sifat',         'transform'=>'label→Id (cache)',                  'required'=>true,  'note'=>'Bildirimci sıfat id\'si.'],
+
+        // ── IkinciKisiBilgileriDTO ──
+        ['local'=>'karsi_sifat',       'dto'=>'IkinciKisiBilgileri','pdf_field'=>'KisiSifat',               'wsdl_field'=>'KisiSifat',               'hks_type'=>'int',    'helper'=>'BildirimServisSifatListesi',   'ref_type'=>'sifat',         'transform'=>'label→Id (cache)',                  'required'=>false, 'note'=>'İkinci kişi sıfat id\'si (DTO içinde tek zorunlu alan).'],
+        ['local'=>'alici_tc_vkn',      'dto'=>'IkinciKisiBilgileri','pdf_field'=>'TcKimlikVergiNo',         'wsdl_field'=>'TcKimlikVergiNo',         'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string (baştaki 0 korunur)',        'required'=>false, 'note'=>'GTB\'de kayıtlıysa diğer alanlar zorunlu değil.'],
+        ['local'=>'alici_ad',          'dto'=>'IkinciKisiBilgileri','pdf_field'=>'AdSoyad',                 'wsdl_field'=>'AdSoyad',                 'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>'Kayıtsız ikinci kişide zorunlu.'],
+        ['local'=>'eposta',            'dto'=>'IkinciKisiBilgileri','pdf_field'=>'Eposta',                  'wsdl_field'=>'Eposta',                  'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>''],
+        ['local'=>'gsm',               'dto'=>'IkinciKisiBilgileri','pdf_field'=>'CepTel',                  'wsdl_field'=>'CepTel',                  'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>''],
+        ['local'=>'yurt_disi',         'dto'=>'IkinciKisiBilgileri','pdf_field'=>'YurtDisiMi',              'wsdl_field'=>'YurtDisiMi',              'hks_type'=>'bool',   'helper'=>'',                          'ref_type'=>null,            'transform'=>'0/1 → bool',                        'required'=>false, 'note'=>'true ise referanssız bildirim yapılamaz.'],
+        ['local'=>'dogum_tarihi',      'dto'=>'IkinciKisiBilgileri','pdf_field'=>'',                        'wsdl_field'=>'DogumTarihi',             'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>'WSDL\'de var, kılavuzda açıklaması yok → belirsiz.'],
+
+        // ── BildirimMalBilgileriDTO ──
+        ['local'=>'il',                'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimIlId',             'wsdl_field'=>'UretimIlId',              'hks_type'=>'int',    'helper'=>'GenelServisIller',             'ref_type'=>'il',            'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
+        ['local'=>'ilce',              'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimIlceId',           'wsdl_field'=>'UretimIlceId',            'hks_type'=>'int',    'helper'=>'GenelServisIlceler',           'ref_type'=>'ilce',          'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
+        ['local'=>'belde',             'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimBeldeId',          'wsdl_field'=>'UretimBeldeId',           'hks_type'=>'int',    'helper'=>'GenelServisBeldeler',          'ref_type'=>'belde',         'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
+        ['local'=>'malin_niteligi',    'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinNiteligi',         'wsdl_field'=>'MalinNiteligi',           'hks_type'=>'int',    'helper'=>'UrunServiceMalinNiteligi',     'ref_type'=>'malin_niteligi','transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'İthalat sıfatıyla tutarlı olmalı.'],
+        ['local'=>'urun',              'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinKodNo',             'wsdl_field'=>'MalinKodNo',              'hks_type'=>'int',    'helper'=>'UrunServiceUrunler',           'ref_type'=>'urun',          'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
+        ['local'=>'malin_turu',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimSekli',           'wsdl_field'=>'UretimSekli',             'hks_type'=>'int',    'helper'=>'UrunServiceUretimSekilleri',   'ref_type'=>'uretim_sekli',  'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz; İthalat/Toplama mal → Konvansiyonel.'],
+        ['local'=>'urun_cinsi',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinCinsiId',          'wsdl_field'=>'MalinCinsiId',            'hks_type'=>'int',    'helper'=>'UrunServiceUrunCinsleri',      'ref_type'=>'urun_cins',     'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz (kılavuz: UrunCinsi).'],
+        ['local'=>'birim',             'dto'=>'BildirimMalBilgileri','pdf_field'=>'MiktarBirimId',          'wsdl_field'=>'MiktarBirimId',           'hks_type'=>'int',    'helper'=>'UrunServiceUrunBirimleri',     'ref_type'=>'urun_birim',    'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>''],
+        ['local'=>'miktar',            'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinMiktari',           'wsdl_field'=>'MalinMiktari',            'hks_type'=>'double', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'TR ondalık → double',               'required'=>true,  'note'=>''],
+        ['local'=>'birim_fiyat',       'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinSatisFiyat',        'wsdl_field'=>'MalinSatisFiyat',         'hks_type'=>'double', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'TR ondalık → double',               'required'=>false, 'note'=>'Satış/Satın almada gerekir.'],
+        ['local'=>'',                  'dto'=>'BildirimMalBilgileri','pdf_field'=>'GelenUlkeId',            'wsdl_field'=>'GelenUlkeId',             'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'İthalat sıfatında 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'analize_gonder',    'dto'=>'BildirimMalBilgileri','pdf_field'=>'AnalizeGonderilecekMi', 'wsdl_field'=>'AnalizeGonderilecekMi',   'hks_type'=>'bool',   'helper'=>'',                          'ref_type'=>null,            'transform'=>'0/1 → bool',                        'required'=>false, 'note'=>'Sevk referanslı bildirimde analize gönderilemez.'],
+
+        // ── MalinGidecekYerBilgileriDTO ──
+        ['local'=>'gidecek_yer',       'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIsletmeTuruId','wsdl_field'=>'GidecekYerIsletmeTuruId','hks_type'=>'int', 'helper'=>'GenelServisIsletmeTurleri',    'ref_type'=>'isletme_turu',  'transform'=>'label→Id (cache); boş olamaz',      'required'=>true,  'note'=>'Her zaman 0 olamaz.'],
+        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekIsyeriId',    'wsdl_field'=>'GidecekIsyeriId',         'hks_type'=>'int',    'helper'=>'HalIciIsyeri/Depolar/Subeler', 'ref_type'=>null,            'transform'=>'ayar (depo/şube id)',               'required'=>false, 'note'=>'İşletme türüne göre Halİçi/Depo/Şube id\'si. Ayardan gelir.'],
+        ['local'=>'ihracat_ulke',      'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekUlkeId',     'wsdl_field'=>'GidecekUlkeId',           'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Gideceği yer Yurt Dışı ise 0 olamaz.'],
+        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlId',     'wsdl_field'=>'GidecekYerIlId',          'hks_type'=>'int',    'helper'=>'GenelServisIller',             'ref_type'=>'il',            'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlceId',   'wsdl_field'=>'GidecekYerIlceId',        'hks_type'=>'int',    'helper'=>'GenelServisIlceler',           'ref_type'=>'ilce',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerBeldeId',  'wsdl_field'=>'GidecekYerBeldeId',       'hks_type'=>'int',    'helper'=>'GenelServisBeldeler',          'ref_type'=>'belde',         'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'arac_plaka',        'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'AracPlakaNo',        'wsdl_field'=>'AracPlakaNo',             'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>true,  'note'=>'Her zaman boş olamaz (çalışma prensipleri).'],
+        ['local'=>'belge_no',          'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'',                   'wsdl_field'=>'BelgeNo',                 'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>'WSDL\'de var, kılavuzda yok → belirsiz.'],
+        ['local'=>'belge_tipi',        'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'',                   'wsdl_field'=>'BelgeTipi',               'hks_type'=>'int',    'helper'=>'BildirimServisBelgeTipleriListesi','ref_type'=>'belge_tipi','transform'=>'label→Id (cache)',                  'required'=>false, 'note'=>'WSDL\'de var, kılavuz alan tablosunda yok → belirsiz.'],
+    ];
+}
+
+// Bir spec satırının PDF↔WSDL doğrulama durumunu döndürür.
+//   'pdf_wsdl' | 'pdf' | 'wsdl' | 'belirsiz' | 'eslesmedi'
+function hks_payload_field_match_status(array $spec_row): string {
+    $pdf  = trim((string)($spec_row['pdf_field'] ?? '')) !== '';
+    $wsdl_name = trim((string)($spec_row['wsdl_field'] ?? ''));
+    // WSDL doğrulaması: cache'te (introspeksiyonla) gerçekten görülmüş mü?
+    $wsdl_seen = $wsdl_name !== '' && hks_payload_field_is_confirmed($wsdl_name);
+    if ($pdf && $wsdl_seen)  return 'pdf_wsdl';
+    if ($pdf && $wsdl_name !== '') return 'pdf';       // PDF + WSDL tipinde var ama introspeksiyon yok
+    if ($pdf && !$wsdl_seen)  return 'pdf';
+    if (!$pdf && $wsdl_name !== '') return 'belirsiz'; // WSDL'de var, PDF açıklaması yok
+    return 'eslesmedi';
+}
+
 // ── Mapping raporu ───────────────────────────────────────
 // Her local alan için: HKS alanı, değer, kod (varsa), durum, kesinlik.
 function hks_payload_mapping_report(array $notification, array $settings = []): array {
@@ -403,15 +497,17 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
         $errors[] = 'HKS gönderimi için varsayılan depo/şube bilgisi ayarlanmalıdır.';
     }
 
-    // Alan adı belirsizliği — kritik alanlar WSDL'den doğrulanana kadar gönderim bloke
+    // Mapping onayı — kritik kural: alan eşleştirmesi PDF + WSDL ile doğrulanıp
+    // KULLANICI ONAYI verilene kadar gönderim bloke. WSDL introspeksiyonu tek başına açmaz.
     $fields_confirmed = hks_payload_fields_confirmed();
     if (!$fields_confirmed) {
+        if (!hks_mapping_approved()) {
+            $warnings[] = 'BildirimKaydet alan eşleştirmesi henüz onaylanmadı. '
+                        . 'HKS Teknik → Mapping Raporu ekranını inceleyin; onay ayrı sprintte verilecek. Gönderim kapalı.';
+        }
         if (empty(hks_wsdl_all_confirmed_field_names())) {
-            $warnings[] = 'HKS WSDL alan adları (BildirimKayitIstek) henüz introspeksiyonla '
-                        . 'doğrulanmadı. HKS Teknik → WSDL Tipleri ekranından çalıştırın. Gönderim kapalı.';
-        } else {
-            $warnings[] = 'Bazı kritik HKS alan adları WSDL\'de bulunamadı; payload mapping güncellenene '
-                        . 'kadar gönderim kapalı.';
+            $warnings[] = 'WSDL alan adları henüz introspeksiyonla doğrulanmadı '
+                        . '(HKS Teknik → WSDL Tipleri → WSDL Oku). Rapor canlı doğrulama olmadan eksik kalır.';
         }
     }
 
