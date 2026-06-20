@@ -296,8 +296,18 @@ endif;
     if (mb_strtolower($gidecek_yer_disp) === mb_strtolower('Yurt Dışı') && !empty($n['ihracat_ulke'])) {
         $gidecek_yer_disp .= ' — ' . $n['ihracat_ulke'];
     }
+    // İşyeri tipi okunabilir etiket
+    $isyeri_tip_lbl = match (trim((string)($n['gidecek_isyeri_tipi'] ?? ''))) {
+        'depo'           => 'Depo',
+        'sube'           => 'Şube',
+        'hal_ici_isyeri' => 'Hal İçi İşyeri',
+        default          => '',
+    };
     hks_detail_card('Gideceği Yer / Sevk Bilgileri', [
-        'Gideceği Yer'         => $gidecek_yer_disp,
+        'Gideceği Yer (İşletme Türü)' => $gidecek_yer_disp,
+        'Gidecek İşyeri'       => $n['gidecek_isyeri_adi'] ?? '',
+        'Gidecek İşyeri Tipi'  => $isyeri_tip_lbl,
+        'Gidecek İşyeri Id'    => $n['gidecek_isyeri_id'] ?? '',
         'Gid. Yer Sahibi TC/VKN' => $n['gidecek_sahibi_tc'] ?? '',
         'Kayıtlı Değil'        => (int)($n['gidecek_kayitli_degil'] ?? 0) === 1 ? 'Evet' : '',
         'Gidecek Yer İl'       => $n['gidecek_yer_il'] ?? '',

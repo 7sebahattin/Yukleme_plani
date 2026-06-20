@@ -99,6 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'gidecek_yer_il'    => trim($_POST['gidecek_yer_il'] ?? '') ?: null,
         'gidecek_yer_ilce'  => trim($_POST['gidecek_yer_ilce'] ?? '') ?: null,
         'gidecek_yer_belde' => trim($_POST['gidecek_yer_belde'] ?? '') ?: null,
+        // Sprint GidecekIsyeri-Flow-01 — gidecek yer işletme türü = Gideceği Yer seçimi;
+        // işyeri Id'si (depo/şube/hal içi) + tipi + adı.
+        'gidecek_yer_isletme_turu' => trim($_POST['gidecek_yer'] ?? '') ?: null,
+        'gidecek_isyeri_id'        => trim($_POST['gidecek_isyeri_id'] ?? '') ?: null,
+        'gidecek_isyeri_tipi'      => trim($_POST['gidecek_isyeri_tipi'] ?? '') ?: null,
+        'gidecek_isyeri_adi'       => trim($_POST['gidecek_isyeri_adi'] ?? '') ?: null,
         'created_by'        => $auth_user['id'] ?? null,
     ];
 
@@ -191,10 +197,31 @@ $belge_tipi_opts = '<option value="">Seçiniz</option>';
 foreach (hks_belge_tipi_list() as $bt2) {
     $belge_tipi_opts .= '<option value="' . hks_h($bt2) . '">' . hks_h($bt2) . '</option>';
 }
+// Gideceği Yer = İşletme Türü (+ "Yurt Dışı"). HKS 'isletme_turu' referansı senkronsa
+// resmi türler kullanılır; değilse sabit liste. Her seçeneğe kılavuz §5'e göre işyeri
+// kaynağı (data-kaynak: depo|sube|hal_ici_isyeri) iliştirilir — JS işyeri listesini buna göre açar.
+$isletme_refs = $op_repo->getReferences('isletme_turu');
+$use_isletme_ref = $isletme_refs && !hks_refs_labels_numeric($isletme_refs);
+$gidecek_yer_list = $use_isletme_ref
+    ? array_merge(['Yurt Dışı'], array_map(static fn($r) => (string)$r['ref_name'], $isletme_refs))
+    : hks_gidecek_yer_list();
 $gidecek_yer_opts = '<option value="">Seçiniz</option>';
-foreach (hks_gidecek_yer_list() as $gy) {
-    $gidecek_yer_opts .= '<option value="' . hks_h($gy) . '">' . hks_h($gy) . '</option>';
+foreach ($gidecek_yer_list as $gy) {
+    $kaynak = hks_isyeri_kaynak_for_turu($gy);
+    $gidecek_yer_opts .= '<option value="' . hks_h($gy) . '" data-kaynak="' . hks_h((string)$kaynak) . '">' . hks_h($gy) . '</option>';
 }
+
+// İşyeri listeleri (kaynak tipine göre) — JS dinamik dropdown için.
+$subeler_ref = $op_repo->getReferences('sube');
+$halici_ref  = $op_repo->getReferences('hal_ici_isyeri');
+$mapRef = static fn(array $rows): array => array_map(
+    static fn($r) => ['code' => (string)$r['ref_code'], 'name' => (string)$r['ref_name']], $rows
+);
+$isyeri_lists = [
+    'depo'           => $mapRef($depolar),
+    'sube'           => $mapRef($subeler_ref),
+    'hal_ici_isyeri' => $mapRef($halici_ref),
+];
 $para_birimi_opts = '';
 foreach (hks_para_birimi_list() as $pb) {
     $para_birimi_opts .= '<option value="' . hks_h($pb) . '">' . hks_h($pb) . '</option>';
@@ -248,6 +275,9 @@ if ($is_edit && $notif) {
         'gidecek_yer_il'    => (string)($notif['gidecek_yer_il'] ?? ''),
         'gidecek_yer_ilce'  => (string)($notif['gidecek_yer_ilce'] ?? ''),
         'gidecek_yer_belde' => (string)($notif['gidecek_yer_belde'] ?? ''),
+        'gidecek_isyeri_id'   => (string)($notif['gidecek_isyeri_id'] ?? ''),
+        'gidecek_isyeri_tipi' => (string)($notif['gidecek_isyeri_tipi'] ?? ''),
+        'gidecek_isyeri_adi'  => (string)($notif['gidecek_isyeri_adi'] ?? ''),
         'arac_plaka'        => (string)($notif['arac_plaka'] ?? ''),
         'belge_no'          => (string)($notif['belge_no'] ?? ''),
         'belge_tipi'        => (string)($notif['belge_tipi'] ?? ''),
@@ -512,6 +542,14 @@ include __DIR__ . '/views/_layout_start.php';
                 <label>İhracat Yapılan Ülkeler</label>
                 <select name="ihracat_ulke" id="ihracatUlke"><?= $ulke_opts ?></select>
             </div>
+            <!-- Gidecek İşyeri — kayıtlı yurt içi gidecek yerde, işletme türüne göre liste (GidecekIsyeriId) -->
+            <div class="hks-op-field" id="gidecekIsyeriWrap" style="display:none">
+                <label>Gidecek İşyeri <span style="color:var(--danger)">*</span></label>
+                <select name="gidecek_isyeri_id" id="gidecekIsyeri"><option value="">Seçiniz</option></select>
+                <div id="gidecekIsyeriWarn" class="muted" style="font-size:.74rem;margin-top:4px;display:none"></div>
+            </div>
+            <input type="hidden" name="gidecek_isyeri_tipi" id="gidecekIsyeriTipi" value="">
+            <input type="hidden" name="gidecek_isyeri_adi"  id="gidecekIsyeriAdi"  value="">
             <div class="hks-op-field">
                 <label>Araç Plaka <span style="color:var(--danger)">*</span></label>
                 <input type="text" name="arac_plaka" placeholder="34ABC123">
@@ -792,6 +830,63 @@ include __DIR__ . '/views/_layout_start.php';
     if (gidecekYerEl)     gidecekYerEl.addEventListener('change', refreshGidecekKonum);
     refreshGidecekKonum();
 
+    // ── Gidecek İşyeri — işletme türüne göre depo/şube/hal içi listesi (GidecekIsyeriId) ──
+    var ISYERI_LISTS = <?= json_encode($isyeri_lists, JSON_UNESCAPED_UNICODE) ?>;
+    var isyeriWrap = document.getElementById('gidecekIsyeriWrap');
+    var isyeriSel  = document.getElementById('gidecekIsyeri');
+    var isyeriWarn = document.getElementById('gidecekIsyeriWarn');
+    var isyeriTipi = document.getElementById('gidecekIsyeriTipi');
+    var isyeriAdi  = document.getElementById('gidecekIsyeriAdi');
+    function gidecekYerKaynak(){
+        if (!gidecekYerEl) return '';
+        var opt = gidecekYerEl.options[gidecekYerEl.selectedIndex];
+        return opt ? (opt.getAttribute('data-kaynak') || '') : '';
+    }
+    function fillIsyeriList(kaynak, keepVal){
+        var prev = keepVal ? isyeriSel.value : '';
+        var html = '<option value="">Seçiniz</option>';
+        (ISYERI_LISTS[kaynak] || []).forEach(function(o){
+            html += '<option value="'+String(o.code).replace(/"/g,'&quot;')+'">'+String(o.name).replace(/</g,'&lt;')+'</option>';
+        });
+        isyeriSel.innerHTML = html;
+        if (prev){ isyeriSel.value = prev; }
+    }
+    function syncIsyeriHidden(){
+        var kaynak = gidecekYerKaynak();
+        isyeriTipi.value = kaynak;
+        var opt = isyeriSel.options[isyeriSel.selectedIndex];
+        isyeriAdi.value = (opt && isyeriSel.value) ? opt.textContent : '';
+    }
+    function refreshGidecekIsyeri(keepVal){
+        if (!isyeriWrap) return;
+        var yer    = gidecekYerEl ? gidecekYerEl.value : '';
+        var kaynak = gidecekYerKaynak();
+        var kayitsiz = gidecekKayitliEl && gidecekKayitliEl.checked;
+        // Yurt Dışı, boş ya da kayıtsız → işyeri seçimi yok
+        if (yer === '' || yer === 'Yurt Dışı' || kayitsiz){
+            isyeriWrap.style.display = 'none';
+            isyeriWarn.style.display = 'none';
+            isyeriTipi.value = ''; isyeriAdi.value = '';
+            return;
+        }
+        isyeriWrap.style.display = '';
+        if (!kaynak){
+            // Kılavuzda netleştirilmemiş işletme türü — listeyi açma, uyar.
+            isyeriSel.innerHTML = '<option value="">—</option>';
+            isyeriWarn.textContent = '⚠ "'+yer+'" işletme türü için HKS işyeri kaynağı netleştirilmedi.';
+            isyeriWarn.style.display = '';
+            isyeriTipi.value = ''; isyeriAdi.value = '';
+            return;
+        }
+        isyeriWarn.style.display = 'none';
+        fillIsyeriList(kaynak, keepVal);
+        syncIsyeriHidden();
+    }
+    if (isyeriSel) isyeriSel.addEventListener('change', syncIsyeriHidden);
+    if (gidecekYerEl)     gidecekYerEl.addEventListener('change', function(){ refreshGidecekIsyeri(false); });
+    if (gidecekKayitliEl) gidecekKayitliEl.addEventListener('change', function(){ refreshGidecekIsyeri(false); });
+    refreshGidecekIsyeri(false);
+
     // ── Düzenleme modu — kayıtlı değerleri forma geri bas ──
     var EDIT = <?= $is_edit && $edit_values !== null ? json_encode($edit_values, JSON_UNESCAPED_UNICODE) : 'null' ?>;
     if (EDIT) {
@@ -843,6 +938,14 @@ include __DIR__ . '/views/_layout_start.php';
         if (typeof refreshGelenUlke === 'function') refreshGelenUlke();
         if (typeof refreshGidecekKonum === 'function') refreshGidecekKonum();
         ['gelen_ulke','gidecek_yer_il','gidecek_yer_ilce','gidecek_yer_belde'].forEach(function(k){ setVal(k, EDIT[k]); });
+        // 7) Gidecek işyeri — önce işletme türüne göre liste kurulur, sonra kayıtlı Id atanır
+        if (typeof refreshGidecekIsyeri === 'function') {
+            refreshGidecekIsyeri(false);
+            if (EDIT.gidecek_isyeri_id) setVal('gidecek_isyeri_id', EDIT.gidecek_isyeri_id);
+            if (isyeriTipi && EDIT.gidecek_isyeri_tipi) isyeriTipi.value = EDIT.gidecek_isyeri_tipi;
+            if (isyeriAdi  && EDIT.gidecek_isyeri_adi)  isyeriAdi.value  = EDIT.gidecek_isyeri_adi;
+            if (typeof syncIsyeriHidden === 'function' && isyeriSel && isyeriSel.value) syncIsyeriHidden();
+        }
     }
 
     show(1);

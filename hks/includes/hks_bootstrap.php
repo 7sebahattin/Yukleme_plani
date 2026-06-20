@@ -258,4 +258,23 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
         }
     }
+
+    // hks_notifications — gidecek yer işyeri/depo/şube seçimi (Sprint HKS-GidecekIsyeri-Flow-01)
+    //   gidecek_yer_isletme_turu → GidecekYerIsletmeTuruId (işletme türü)
+    //   gidecek_isyeri_id        → GidecekIsyeriId (HKS işyeri Id'si, depo/şube/hal içi kaynağından)
+    //   gidecek_isyeri_tipi      → kaynak tipi (depo|sube|hal_ici_isyeri) — gösterim/teşhis
+    //   gidecek_isyeri_adi       → işyeri adı (kullanıcı gösterimi)
+    try {
+        $pdo->query("SELECT gidecek_yer_isletme_turu, gidecek_isyeri_id, gidecek_isyeri_tipi, gidecek_isyeri_adi
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer_isletme_turu` VARCHAR(120) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_id`        VARCHAR(50)  NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_tipi`      VARCHAR(30)  NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_adi`       VARCHAR(250) NULL",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+    }
 })();

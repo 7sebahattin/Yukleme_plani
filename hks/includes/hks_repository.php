@@ -340,10 +340,11 @@ class HksRepository {
                  karsi_sifat, bildirimci_tc_vkn, gidecek_sahibi_tc,
                  gidecek_kayitli_degil, yurt_disi,
                  gelen_ulke, gidecek_yer_il, gidecek_yer_ilce, gidecek_yer_belde,
+                 gidecek_yer_isletme_turu, gidecek_isyeri_id, gidecek_isyeri_tipi, gidecek_isyeri_adi,
                  status, created_by, created_at, updated_at)
              VALUES
                 (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
+                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
         )->execute([
             $this->nextLocalNo(),
             $data['source_type'] ?? null,
@@ -388,6 +389,10 @@ class HksRepository {
             $data['gidecek_yer_il'] ?? null,
             $data['gidecek_yer_ilce'] ?? null,
             $data['gidecek_yer_belde'] ?? null,
+            $data['gidecek_yer_isletme_turu'] ?? null,
+            $data['gidecek_isyeri_id'] ?? null,
+            $data['gidecek_isyeri_tipi'] ?? null,
+            $data['gidecek_isyeri_adi'] ?? null,
             $data['created_by'] ?? null,
         ]);
         return (int)$this->pdo->lastInsertId();
@@ -408,6 +413,7 @@ class HksRepository {
                 karsi_sifat=?, bildirimci_tc_vkn=?, gidecek_sahibi_tc=?,
                 gidecek_kayitli_degil=?, yurt_disi=?,
                 gelen_ulke=?, gidecek_yer_il=?, gidecek_yer_ilce=?, gidecek_yer_belde=?,
+                gidecek_yer_isletme_turu=?, gidecek_isyeri_id=?, gidecek_isyeri_tipi=?, gidecek_isyeri_adi=?,
                 validation_errors_json=?, status=?,
                 checked_at=NULL, checked_by=NULL, updated_at=NOW()
              WHERE id=? AND status IN ('draft','ready','failed','checked')"
@@ -452,6 +458,10 @@ class HksRepository {
             $data['gidecek_yer_il'] ?? null,
             $data['gidecek_yer_ilce'] ?? null,
             $data['gidecek_yer_belde'] ?? null,
+            $data['gidecek_yer_isletme_turu'] ?? null,
+            $data['gidecek_isyeri_id'] ?? null,
+            $data['gidecek_isyeri_tipi'] ?? null,
+            $data['gidecek_isyeri_adi'] ?? null,
             $errors ? json_encode($errors, JSON_UNESCAPED_UNICODE) : null,
             $status,
             $id,

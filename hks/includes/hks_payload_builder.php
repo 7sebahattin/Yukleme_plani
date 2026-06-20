@@ -287,7 +287,8 @@ function hks_payload_field_map(): array {
         ['il',                   'UretimIlId',                true,    'il',            true],   // Mal
         ['ilce',                 'UretimIlceId',              false,   'ilce',          false],  // Mal
         ['belde',                'UretimBeldeId',             false,   'belde',         false],  // Mal
-        ['gidecek_yer',          'GidecekYerIsletmeTuruId',   true,    'isletme_turu',  false],  // GidecekYer
+        ['gidecek_yer_isletme_turu','GidecekYerIsletmeTuruId', true,   'isletme_turu',  false],  // GidecekYer (= gidecek_yer)
+        ['gidecek_isyeri_id',    'GidecekIsyeriId',           false,   null,            false],  // GidecekYer (zaten HKS Id)
         ['ihracat_ulke',         'GidecekUlkeId',             false,   'ulke',          false],  // GidecekYer
         ['gidecek_yer_il',       'GidecekYerIlId',            false,   'il',            false],  // GidecekYer (kayıtsız yurt içinde koşullu)
         ['gidecek_yer_ilce',     'GidecekYerIlceId',          false,   'ilce',          false],  // GidecekYer
@@ -352,8 +353,8 @@ function hks_payload_field_spec(): array {
         ['local'=>'analize_gonder',    'dto'=>'BildirimMalBilgileri','pdf_field'=>'AnalizeGonderilecekMi', 'wsdl_field'=>'AnalizeGonderilecekMi',   'hks_type'=>'bool',   'helper'=>'',                          'ref_type'=>null,            'transform'=>'0/1 → bool',                        'required'=>false, 'note'=>'Sevk referanslı bildirimde analize gönderilemez.'],
 
         // ── MalinGidecekYerBilgileriDTO ──
-        ['local'=>'gidecek_yer',       'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIsletmeTuruId','wsdl_field'=>'GidecekYerIsletmeTuruId','hks_type'=>'int', 'helper'=>'GenelServisIsletmeTurleri',    'ref_type'=>'isletme_turu',  'transform'=>'label→Id (cache); boş olamaz',      'required'=>true,  'note'=>'Her zaman 0 olamaz.'],
-        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekIsyeriId',    'wsdl_field'=>'GidecekIsyeriId',         'hks_type'=>'int',    'helper'=>'HalIciIsyeri/Depolar/Subeler', 'ref_type'=>null,            'transform'=>'ayar (depo/şube id)',               'required'=>false, 'note'=>'İşletme türüne göre Halİçi/Depo/Şube id\'si. Ayardan gelir.'],
+        ['local'=>'gidecek_yer_isletme_turu','dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIsletmeTuruId','wsdl_field'=>'GidecekYerIsletmeTuruId','hks_type'=>'int', 'helper'=>'GenelServisIsletmeTurleri', 'ref_type'=>'isletme_turu',  'transform'=>'label→Id (cache); boş olamaz',      'required'=>true,  'note'=>'= Gideceği Yer seçimi (gidecek_yer). Her zaman 0 olamaz.'],
+        ['local'=>'gidecek_isyeri_id', 'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekIsyeriId',    'wsdl_field'=>'GidecekIsyeriId',         'hks_type'=>'int',    'helper'=>'HalIciIsyeri/Depolar/Subeler', 'ref_type'=>null,            'transform'=>'doğrudan HKS Id (form seçimi); boşsa ayar depo',  'required'=>false, 'note'=>'İşletme türüne göre kaynak (kılavuz §5): Hal İçi İşyeri→HalIciIsyeri; Hal Dışı İşyeri/Sınai/Perakende→Subeler; Hal İçi/Dışı Deposu→Depolar. Kayıtlı yurt içinde zorunlu.'],
         ['local'=>'ihracat_ulke',      'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekUlkeId',     'wsdl_field'=>'GidecekUlkeId',           'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Gideceği yer Yurt Dışı ise 0 olamaz.'],
         ['local'=>'gidecek_yer_il',    'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlId',     'wsdl_field'=>'GidecekYerIlId',          'hks_type'=>'int',    'helper'=>'GenelServisIller',             'ref_type'=>'il',            'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız yurt içi gidecek yerde zorunlu (form alanı eklendi).'],
         ['local'=>'gidecek_yer_ilce',  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlceId',   'wsdl_field'=>'GidecekYerIlceId',        'hks_type'=>'int',    'helper'=>'GenelServisIlceler',           'ref_type'=>'ilce',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız yurt içi gidecek yerde zorunlu (form alanı eklendi).'],
@@ -457,6 +458,7 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
         'sevk_tarihi' => 'Sevk tarihi',
         'gelen_ulke' => 'Gelen ülke', 'gidecek_yer_il' => 'Gidecek yer ili',
         'gidecek_yer_ilce' => 'Gidecek yer ilçesi', 'gidecek_yer_belde' => 'Gidecek yer beldesi',
+        'gidecek_yer_isletme_turu' => 'Gidecek yer işletme türü', 'gidecek_isyeri_id' => 'Gidecek işyeri',
     ];
     foreach ($mapping as $row) {
         $lbl = $labels[$row['local']] ?? $row['local'];
@@ -581,16 +583,23 @@ function hks_build_bildirim_kaydet_payload(array $notification, array $settings 
     ];
 
     // MalinGidecekYerBilgileriDTO
+    // GidecekIsyeriId — kullanıcının seçtiği işyeri Id'si (depo/şube/hal içi referansından,
+    // zaten HKS kodu). Boşsa ayar bazlı varsayılan depoya düşülür.
+    $isyeri_id = hks_clean_identifier($n['gidecek_isyeri_id'] ?? '');
+    $gidecek_isyeri = $isyeri_id !== '' ? (int)$isyeri_id : (int)(hks_resolve_depo($n, $settings) ?? 0);
+    // İşletme türü — kanonik alan gidecek_yer_isletme_turu; yoksa eski gidecek_yer'e düş.
+    $isletme_turu_val = hks_clean_identifier($n['gidecek_yer_isletme_turu'] ?? '');
+    if ($isletme_turu_val === '') $isletme_turu_val = hks_clean_identifier($n['gidecek_yer'] ?? '');
     $gidecek = [
         'AracPlakaNo'             => hks_clean_identifier($n['arac_plaka'] ?? ''),
         'BelgeNo'                 => hks_clean_identifier($n['belge_no'] ?? ''),
         'BelgeTipi'               => $codeInt('belge_tipi', 'belge_tipi'),
-        'GidecekIsyeriId'         => (int)(hks_resolve_depo($n, $settings) ?? 0),
+        'GidecekIsyeriId'         => $gidecek_isyeri,
         'GidecekUlkeId'           => $codeInt('ulke', 'ihracat_ulke'),
         'GidecekYerBeldeId'       => $codeInt('belde', 'gidecek_yer_belde'),
         'GidecekYerIlId'          => $codeInt('il', 'gidecek_yer_il'),
         'GidecekYerIlceId'        => $codeInt('ilce', 'gidecek_yer_ilce'),
-        'GidecekYerIsletmeTuruId' => $codeInt('isletme_turu', 'gidecek_yer'),
+        'GidecekYerIsletmeTuruId' => (int)(hks_resolve_reference_code('isletme_turu', $isletme_turu_val) ?? 0),
     ];
 
     // BildirimKayitIstek — alanlar WSDL sırasına yakın.

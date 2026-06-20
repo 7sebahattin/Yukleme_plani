@@ -45,6 +45,7 @@ include __DIR__ . '/views/_tabs.php';
     <button class="btn btn-primary" id="btnSyncAll">🔄 Tümünü Senkronize Et</button>
     <button class="btn btn-ghost" id="btnSyncUrun">🌿 Ürünler</button>
     <button class="btn btn-ghost" id="btnSyncDepo">🏢 Depolar</button>
+    <button class="btn btn-ghost" id="btnSyncSube">🏬 Şubeler</button>
     <button class="btn btn-ghost" id="btnSyncIl">🗺️ İller</button>
     <button class="btn btn-ghost" id="btnSyncBildirimTuru">📋 Bildirim Türleri</button>
     <button class="btn btn-ghost" id="btnSyncSifat">🏷️ Sıfatlar</button>
@@ -158,6 +159,7 @@ function doSync(type) {
 document.getElementById('btnSyncAll').addEventListener('click', () => doSync('all'));
 document.getElementById('btnSyncUrun').addEventListener('click', () => doSync('urun'));
 document.getElementById('btnSyncDepo').addEventListener('click', () => doSync('depo'));
+document.getElementById('btnSyncSube').addEventListener('click', () => doSync('sube'));
 document.getElementById('btnSyncIl').addEventListener('click', () => doSync('il'));
 document.getElementById('btnSyncBildirimTuru').addEventListener('click', () => doSync('bildirim_turu'));
 document.getElementById('btnSyncSifat').addEventListener('click', () => doSync('sifat'));

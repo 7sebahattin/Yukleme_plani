@@ -129,6 +129,40 @@ function hks_isyeri_turu_list(): array {
     ];
 }
 
+// Gidecek Yer İşletme Türüne göre işyeri Id'sinin alınacağı HKS referans kaynağı.
+// KAYNAK: GTB kılavuzu §5 "Malın Gidecek Yer Bilgileri" — tahmin DEĞİL:
+//   • "Hal İçi İşyeri"                                 → GenelServisHalIciIsyeri (hal_ici_isyeri)
+//   • "Hal Dışı İşyeri" / "Sınai İşletme" / "Perakende Satış Yeri" → GenelServisSubeler (sube)
+//   • "Hal İçi Deposu" / "Hal Dışı Deposu"             → GenelServisDepolar (depo)
+//   • "Yurt Dışı"                                      → işyeri yok (GidecekUlkeId kullanılır)
+// Kılavuzda eşleşmeyen türler (Tasnifleme, Dağıtım Merkezi vb.) → null (netleştirilmemiş).
+function hks_isyeri_kaynak_for_turu(?string $turu): ?string {
+    $t = mb_strtolower(trim((string)$turu), 'UTF-8');
+    // Türkçe "İ" mb_strtolower'da "i" + birleşik nokta (U+0307) üretir → eşleşmeyi bozar; temizle.
+    $t = str_replace("\u{0307}", '', $t);
+    if ($t === '') return null;
+    if (mb_strpos($t, 'yurt dış') !== false) return null;            // ihracat — işyeri yok
+    if (mb_strpos($t, 'depo')     !== false) return 'depo';          // Hal İçi/Dışı Deposu
+    if (mb_strpos($t, 'hal içi işyeri') !== false
+        || mb_strpos($t, 'hal ici isyeri') !== false) return 'hal_ici_isyeri';
+    if (mb_strpos($t, 'hal dışı işyeri') !== false
+        || mb_strpos($t, 'hal disi isyeri') !== false
+        || mb_strpos($t, 'sınai') !== false || mb_strpos($t, 'sinai') !== false
+        || mb_strpos($t, 'perakende') !== false) return 'sube';
+    if (mb_strpos($t, 'şube') !== false || mb_strpos($t, 'sube') !== false) return 'sube';
+    return null;                                                     // kılavuzda netleştirilmemiş
+}
+
+// İşyeri kaynak tipi → HKS yardımcı servis adı (rapor/uyarı metinleri için).
+function hks_isyeri_kaynak_servis(?string $kaynak): string {
+    return match ($kaynak) {
+        'depo'           => 'GenelServisDepolar',
+        'sube'           => 'GenelServisSubeler',
+        'hal_ici_isyeri' => 'GenelServisHalIciIsyeri',
+        default          => '',
+    };
+}
+
 // Sıralama Türü — Referans Künye sorgu sonuç sıralaması.
 function hks_siralama_turu_list(): array {
     return ['Tarihe Göre Azalan', 'Tarihe Göre Artan'];
@@ -265,6 +299,18 @@ function hks_validate_notification(array $n): array {
         // form akışında bloke etmiyoruz — mapping raporunda koşullu not olarak işaretli.
     }
 
+    // ── Sprint GidecekIsyeri-Flow-01 — kayıtlı yurt içi gidecek yer → işyeri zorunlu (kılavuz §5) ──
+    // İşletme türü (gidecek_yer) zaten yukarıda zorunlu. Burada işyeri Id'si ve kaynak netliği aranır.
+    if (!$gidecek_kayitsiz && !$is_yurt_disi_dest && $val('gidecek_yer') !== '') {
+        $kaynak = hks_isyeri_kaynak_for_turu($val('gidecek_yer'));
+        if ($kaynak === null) {
+            // Kılavuzda işyeri kaynağı tanımsız işletme türü — gönderime hazır sayma.
+            $errors[] = 'Seçilen işletme türü için HKS işyeri kaynağı netleştirilmelidir.';
+        } elseif ($val('gidecek_isyeri_id') === '') {
+            $errors[] = 'Gidecek işyeri seçilmelidir.';
+        }
+    }
+
     // ── Format kontrolleri ──
     // Sevk tarihi format (Y-m-d)
     $sevk = $val('sevk_tarihi');
@@ -319,6 +365,7 @@ function hks_is_ebildirim_record(array $n): bool {
         'belge_tipi', 'karsi_sifat', 'gidecek_sahibi_tc', 'gsm',
         'dogum_tarihi', 'eposta', 'bildirimci_tc_vkn',
         'gelen_ulke', 'gidecek_yer_il', 'gidecek_yer_ilce', 'gidecek_yer_belde',
+        'gidecek_isyeri_id', 'gidecek_isyeri_adi',
     ] as $f) {
         if (trim((string)($n[$f] ?? '')) !== '') return true;
     }
@@ -376,6 +423,8 @@ function hks_notification_payload_preview(array $n): array {
         'Üretici'            => trim(($n['uretici_ad'] ?? '') . ' ' . (!empty($n['uretici_tc_vkn']) ? '(' . $n['uretici_tc_vkn'] . ')' : '')),
         // — Gidecek Yer / Sevk —
         'Gideceği Yer'       => $gidecek,
+        'Gidecek İşyeri'     => trim((string)($n['gidecek_isyeri_adi'] ?? '')
+                                . (!empty($n['gidecek_isyeri_id']) ? ' (#' . $n['gidecek_isyeri_id'] . ')' : '')),
         'Gid. Yer Sahibi'    => $n['gidecek_sahibi_tc'] ?? '',
         'Gid. Yer İl / İlçe' => trim(((string)($n['gidecek_yer_il'] ?? '')) . ' / ' . ((string)($n['gidecek_yer_ilce'] ?? '')), ' /'),
         'Gid. Yer Belde'     => $n['gidecek_yer_belde'] ?? '',
