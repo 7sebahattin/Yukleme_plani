@@ -5140,3 +5140,72 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
     .beyan-match-dialog { max-width: 100%; min-height: 100vh; max-height: 100vh; border-radius: 0; }
 }
 @media print { .beyan-match-overlay { display: none !important; } }
+
+/* =========================================================
+   TASARIM REVİZYONU — Global kabuk cilası + yerleşim kayması fix
+   ---------------------------------------------------------
+   Bu blok YALNIZCA ekleme yapar; < 768px mobil kuralları korunur.
+   Amaç: sayfa geçişlerinde yatay "kayma" sorununu bitirmek,
+   tablet üst barını düzeltmek, sidebar/topbar'a kurumsal cila.
+   ========================================================= */
+
+/* — 1. Sayfa geçişlerinde yatay "kayma" fix (ASIL SORUN) —
+   Dikey scrollbar her zaman yer ayırsın. Önceden sayfa A'da scrollbar yok,
+   B'de var iken içerik ~15px yatay zıplıyordu → "üst bar kayıyor" hissi.
+   Klasik scrollbar'lı masaüstünde (Chrome/Edge/Firefox) etkilidir;
+   iOS/overlay scrollbar'da zaten kayma olmadığından mobili etkilemez. */
+html { scrollbar-gutter: stable; }
+
+/* — 2. Tutarlı, keskin odak halkası (erişilebilirlik + cila) — */
+a:focus-visible, button:focus-visible, .btn:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.pill:focus-visible, .sidebar-link:focus-visible, .topnav a:focus-visible,
+.bottomnav-item:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* — 3. Topbar cilası (mobil/tablet'te görünür) — */
+.topbar {
+    background: linear-gradient(180deg, #232c3e 0%, #1a2130 100%);
+    box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 4px 16px rgba(15,22,40,.16);
+}
+.topnav a { transition: background .14s ease; }
+
+/* — 4. Tablet (768–899px) üst bar: linkler taşmasın, tek satırda yatay kayar — */
+@media (min-width: 768px) and (max-width: 899px) {
+    .topbar-inner { flex-wrap: nowrap; gap: 10px; }
+    .brand-text { white-space: nowrap; }
+    .topnav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        min-width: 0;
+        gap: 2px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .topnav::-webkit-scrollbar { display: none; }
+    .topnav a { padding: 7px 11px; font-size: .9rem; white-space: nowrap; }
+    /* Dar alanda kullanıcı adı/rol gizlenir, çıkış butonu kalır */
+    .topnav-user-info { display: none; }
+}
+
+/* — 5. Masaüstü sidebar cilası (≥900px) — kurumsal, marka rengiyle uyumlu — */
+@media (min-width: 900px) {
+    .desktop-sidebar {
+        background: linear-gradient(180deg, #1f2738 0%, #161c29 100%);
+        border-right: 1px solid rgba(255,255,255,.06);
+        box-shadow: 1px 0 0 rgba(0,0,0,.18), 4px 0 24px rgba(15,22,40,.06);
+    }
+    .sidebar-section { letter-spacing: .1em; }
+    .sidebar-link { padding: 9px 11px; transition: background .14s ease, color .14s ease; }
+    .sidebar-link:hover { background: rgba(255,255,255,.06); }
+    /* Aktif sekme: yeşil yerine marka mavisi — tema ile bütünleşik */
+    .sidebar-link.active {
+        background: linear-gradient(90deg, rgba(29,108,240,.22), rgba(29,108,240,.04));
+        border-left-color: var(--primary);
+        color: #fff;
+        font-weight: 600;
+    }
+}
