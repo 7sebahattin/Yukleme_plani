@@ -379,6 +379,99 @@ function hks_payload_field_match_status(array $spec_row): string {
     return 'eslesmedi';
 }
 
+// ── Bilerek dışarıda bırakılan alanlar (BildirimKayitIstek'e GİRMEYEN) ──
+// Her satır gönderim dışıdır; kararın gerekçesi PDF/WSDL kanıtıyla belgelidir.
+// 'durum' => 'disarida' (kasıtlı), gönderimi bloke ETMEZ.
+function hks_payload_excluded_fields(): array {
+    return [
+        [
+            'name'   => 'Halicimi',
+            'kaynak' => 'GenelServisDepolar → DepoDTO (çıktı niteliği)',
+            'pdf'    => true,   // PDF'de var: DepoDTO + çalışma prensipleri §5
+            'wsdl_request' => false, // BildirimKayitIstek/MalinGidecekYerBilgileriDTO'da YOK
+            'durum'  => 'disarida',
+            'note'   => 'Halicimi, DEPO LİSTESİ cevabının (DepoDTO) bool alanıdır (True=hal içi, '
+                      . 'False=hal dışı). BildirimKayitIstek\'te BU AD YOK (PDF alan tablosu + WSDL doğruladı). '
+                      . 'Hal içi/dışı ayrımı zaten GidecekYerIsletmeTuruId ("Hal İçi Deposu"/"Hal Dışı Deposu") '
+                      . 'ile taşınır. Bu yüzden gönderime ayrı alan eklenmedi; yalnız depo seçiminde etiket olarak kullanılır.',
+        ],
+        [
+            'name'   => 'BildirimciTcVkn / Unvan',
+            'kaynak' => 'HKS hesabı (UserName) — örtük',
+            'pdf'    => true, 'wsdl_request' => false, 'durum' => 'disarida',
+            'note'   => 'Bildirimci kimliği istek gövdesinde değil, kimlik bilgileri üzerinden gelir.',
+        ],
+        [
+            'name'   => 'UreticiTcKimlikVergiNo',
+            'kaynak' => 'Çalışma prensipleri (senaryo kuralı)',
+            'pdf'    => true, 'wsdl_request' => false, 'durum' => 'disarida',
+            'note'   => 'Ayrı üretici alanı istek DTO\'sunda yok; "Üreticiden Sevk Alım"da IkinciKisi.TcKimlikVergiNo ile karşılanır.',
+        ],
+        [
+            'name'   => 'SevkTarihi',
+            'kaynak' => '—',
+            'pdf'    => false, 'wsdl_request' => false, 'durum' => 'disarida',
+            'note'   => 'İstek DTO\'sunda tarih alanı yok; HKS kayıt anında KayitTarihi atar.',
+        ],
+    ];
+}
+
+// ── Onaya hazırlık raporu (SALT RAPOR — kilidi AÇMAZ) ──
+// approval_ready true olsa bile HKS_PAYLOAD_FIELDS_CONFIRMED true YAPILMAZ.
+// Onay ayrı bir sprintte, kullanıcı kararıyla verilir.
+function hks_payload_approval_readiness_report(): array {
+    $spec = hks_payload_field_spec();
+    $introspected = !empty(hks_wsdl_all_confirmed_field_names());
+
+    $confirmed = 0; $uncertain = 0; $missing = 0;
+    $blocking  = []; $warnings = [];
+
+    foreach ($spec as $row) {
+        $status = hks_payload_field_match_status($row);   // pdf_wsdl|pdf|wsdl|belirsiz|eslesmedi
+        $local  = trim((string)$row['local']);
+        $req    = !empty($row['required']);
+        $label  = ($row['pdf_field'] !== '' ? $row['pdf_field'] : $row['wsdl_field']);
+
+        if ($status === 'pdf_wsdl') $confirmed++;
+        if ($status === 'belirsiz') {
+            $uncertain++;
+            $warnings[] = $label . ' — WSDL\'de var, PDF açıklaması belirsiz (gönderim için kullanılmıyor).';
+        }
+        // Zorunlu alanda form/DB karşılığı yoksa → eksik (bloke)
+        if ($req && $local === '') {
+            $missing++;
+            $blocking[] = $label . ' — zorunlu alan için form/DB karşılığı yok.';
+            continue;
+        }
+        // Zorunlu alan PDF+WSDL ile kesinleşmemişse → bloke
+        if ($req && $status !== 'pdf_wsdl') {
+            $blocking[] = $label . ' — zorunlu alan PDF+WSDL ile doğrulanmadı (mevcut durum: ' . $status . ').';
+        }
+    }
+
+    // WSDL introspeksiyonu hiç çalışmadıysa onay verilemez.
+    if (!$introspected) {
+        array_unshift($blocking,
+            'WSDL introspeksiyonu çalıştırılmadı — alan adları canlı WSDL ile teyit edilmeli (HKS Teknik → WSDL Tipleri → WSDL Oku → Doğrula ve Kaydet).');
+    }
+
+    $blocking = array_values(array_unique($blocking));
+    $warnings = array_values(array_unique($warnings));
+
+    return [
+        'approval_ready'         => empty($blocking),
+        'blocking_items'         => $blocking,
+        'warnings'               => $warnings,
+        'confirmed_fields_count' => $confirmed,
+        'uncertain_fields_count' => $uncertain,
+        'missing_fields_count'   => $missing,
+        'total_fields'           => count($spec),
+        'introspected'           => $introspected,
+        // Kesin güvence: bu rapor kilidi AÇMAZ.
+        'gate_open'              => hks_payload_fields_confirmed(),
+    ];
+}
+
 // ── Mapping raporu ───────────────────────────────────────
 // Her local alan için: HKS alanı, değer, kod (varsa), durum, kesinlik.
 function hks_payload_mapping_report(array $notification, array $settings = []): array {

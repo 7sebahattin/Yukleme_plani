@@ -14,6 +14,8 @@ $confirmed   = hks_wsdl_all_confirmed_field_names();   // WSDL introspeksiyon se
 $introspected = !empty($confirmed);
 $approved    = hks_mapping_approved();
 $gate_open   = hks_payload_fields_confirmed();
+$readiness   = hks_payload_approval_readiness_report();  // SALT RAPOR — kilidi açmaz
+$excluded    = hks_payload_excluded_fields();
 
 // DTO gruplama (rapor sırası)
 $dto_order = [
@@ -66,6 +68,42 @@ render_flash();
     <div class="muted" style="font-size:.82rem;margin-top:6px">
         ⚠️ Kilit yalnızca açık onayla açılır. WSDL alan adlarının görülmesi tek başına onay sayılmaz.
         Onay ayrı bir sprintte, bu rapor incelendikten sonra verilecektir.
+    </div>
+</div>
+
+<!-- Onaya hazırlık raporu (SALT RAPOR — kilidi açmaz) -->
+<div class="card" style="padding:14px 16px;margin-bottom:14px;border-left:4px solid <?= $readiness['approval_ready'] ? 'var(--success)' : '#f59e0b' ?>">
+    <div style="font-weight:700;font-size:1rem">
+        <?= $readiness['approval_ready'] ? '🟢 Mapping onaya HAZIR' : '🟠 Mapping onaya HAZIR DEĞİL' ?>
+    </div>
+    <div class="muted" style="font-size:.84rem;margin-top:4px">
+        Doğrulanan (PDF+WSDL): <strong><?= (int)$readiness['confirmed_fields_count'] ?></strong> /
+        <?= (int)$readiness['total_fields'] ?> ·
+        Belirsiz: <strong><?= (int)$readiness['uncertain_fields_count'] ?></strong> ·
+        Eksik: <strong><?= (int)$readiness['missing_fields_count'] ?></strong> ·
+        Bloke eden: <strong><?= count($readiness['blocking_items']) ?></strong>
+    </div>
+    <?php if (!empty($readiness['blocking_items'])): ?>
+    <div style="margin-top:8px;font-size:.83rem">
+        <div style="font-weight:600;color:#92400e">⛔ Onayı bloke eden maddeler:</div>
+        <ul style="margin:4px 0 0;padding-left:20px;color:#4b5563">
+            <?php foreach ($readiness['blocking_items'] as $bi): ?>
+            <li><?= hks_h($bi) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+    <?php if (!empty($readiness['warnings'])): ?>
+    <details style="margin-top:8px;font-size:.82rem">
+        <summary style="cursor:pointer;color:#854d0e">⚠ Uyarılar (<?= count($readiness['warnings']) ?>)</summary>
+        <ul style="margin:4px 0 0;padding-left:20px;color:#6b7280">
+            <?php foreach ($readiness['warnings'] as $w): ?><li><?= hks_h($w) ?></li><?php endforeach; ?>
+        </ul>
+    </details>
+    <?php endif; ?>
+    <div class="muted" style="font-size:.8rem;margin-top:8px">
+        ℹ️ Bu yalnızca rapordur. <strong>approval_ready true olsa bile HKS_PAYLOAD_FIELDS_CONFIRMED true YAPILMAZ</strong>
+        ve gönderim açılmaz — onay ayrı sprintte, kullanıcı kararıyla verilir.
     </div>
 </div>
 
@@ -149,6 +187,37 @@ render_flash();
     </tbody>
 </table></div>
 <?php endforeach; ?>
+
+<!-- Bilerek dışarıda bırakılan alanlar (Halicimi dahil) -->
+<h3 style="margin-top:24px">🚫 Bilerek Dışarıda Bırakılan Alanlar</h3>
+<div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.82rem">
+    <thead><tr style="background:var(--bg)">
+        <th style="padding:6px 8px;text-align:left">Alan</th>
+        <th style="padding:6px 8px;text-align:left">Kaynak</th>
+        <th style="padding:6px 8px;text-align:left">PDF</th>
+        <th style="padding:6px 8px;text-align:left">İstek WSDL'inde</th>
+        <th style="padding:6px 8px;text-align:left">Durum</th>
+        <th style="padding:6px 8px;text-align:left">Gerekçe</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($excluded as $ex): ?>
+        <tr>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border);font-family:monospace;font-weight:600"><?= hks_h($ex['name']) ?></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted)"><?= hks_h($ex['kaynak']) ?></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= $ex['pdf'] ? '✓ var' : '— yok' ?></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= $ex['wsdl_request'] ? '✓ var' : '<span style="color:#991b1b">✗ yok</span>' ?></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:8px;font-size:.72rem;font-weight:600">Bilerek dışarıda</span></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border);font-size:.78rem;color:#4b5563"><?= hks_h($ex['note']) ?></td>
+        </tr>
+    <?php endforeach; ?>
+    </tbody>
+</table></div>
+<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:11px 14px;margin-top:10px;font-size:.85rem;color:#1e40af">
+    🔎 <strong>Halicimi sonucu:</strong> PDF'de var (DepoDTO + §5) ama <strong>BildirimKayitIstek istek WSDL'inde YOK</strong>.
+    Bu bir <em>depo listesi</em> niteliğidir; hal içi/dışı ayrımı zaten <code>GidecekYerIsletmeTuruId</code>
+    ("Hal İçi Deposu"/"Hal Dışı Deposu") ile taşınır. Gönderime ayrı alan <strong>eklenmedi</strong>;
+    yalnız depo seçim listesinde etiket olarak kullanılır.
+</div>
 
 <!-- Payload'a girmeyen / eksik local alanlar -->
 <h3 style="margin-top:24px">⚠️ Bilinen Boşluklar &amp; Notlar</h3>

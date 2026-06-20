@@ -217,8 +217,31 @@ $halici_ref  = $op_repo->getReferences('hal_ici_isyeri');
 $mapRef = static fn(array $rows): array => array_map(
     static fn($r) => ['code' => (string)$r['ref_code'], 'name' => (string)$r['ref_name']], $rows
 );
+// Depo listesi — DepoDTO.Halicimi (raw_json) ile hal içi/dışı etiketi eklenir.
+// NOT: Halicimi bildirime GÖNDERİLMEZ (BildirimKayitIstek'te yok); yalnız doğru depo
+// seçimine yardımcı görsel etikettir. Hal içi/dışı ayrımı GidecekYerIsletmeTuruId ile taşınır.
+$mapDepo = static function (array $rows): array {
+    $out = [];
+    foreach ($rows as $r) {
+        $name = (string)$r['ref_name'];
+        $raw  = json_decode((string)($r['raw_json'] ?? ''), true);
+        if (is_array($raw)) {
+            $hi = null;
+            foreach ($raw as $k => $v) {
+                if (mb_strtolower((string)$k) === 'halicimi') { $hi = $v; break; }
+            }
+            if ($hi !== null) {
+                $is_ici = ($hi === true || $hi === 1 || $hi === '1'
+                          || mb_strtolower((string)$hi) === 'true');
+                $name .= $is_ici ? ' (Hal İçi)' : ' (Hal Dışı)';
+            }
+        }
+        $out[] = ['code' => (string)$r['ref_code'], 'name' => $name];
+    }
+    return $out;
+};
 $isyeri_lists = [
-    'depo'           => $mapRef($depolar),
+    'depo'           => $mapDepo($depolar),
     'sube'           => $mapRef($subeler_ref),
     'hal_ici_isyeri' => $mapRef($halici_ref),
 ];
