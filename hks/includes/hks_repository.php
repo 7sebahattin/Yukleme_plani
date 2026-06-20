@@ -335,9 +335,14 @@ class HksRepository {
                  firma, urun, urun_cinsi, miktar, birim, depo, il, ilce, belde,
                  uretici_ad, uretici_tc_vkn, alici_ad, alici_tc_vkn,
                  sevk_tarihi, arac_plaka, belge_no, reference_kunye_no,
+                 malin_niteligi, malin_turu, birim_fiyat, para_birimi, analize_gonder,
+                 gidecek_yer, ihracat_ulke, belge_tipi, gsm, dogum_tarihi, eposta,
+                 karsi_sifat, bildirimci_tc_vkn, gidecek_sahibi_tc,
+                 gidecek_kayitli_degil, yurt_disi,
                  status, created_by, created_at, updated_at)
              VALUES
-                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
         )->execute([
             $this->nextLocalNo(),
             $data['source_type'] ?? null,
@@ -362,6 +367,22 @@ class HksRepository {
             $data['arac_plaka'] ?? null,
             $data['belge_no'] ?? null,
             $data['reference_kunye_no'] ?? null,
+            $data['malin_niteligi'] ?? null,
+            $data['malin_turu'] ?? null,
+            isset($data['birim_fiyat']) && $data['birim_fiyat'] !== '' ? (float)$data['birim_fiyat'] : null,
+            $data['para_birimi'] ?? null,
+            (int)($data['analize_gonder'] ?? 0),
+            $data['gidecek_yer'] ?? null,
+            $data['ihracat_ulke'] ?? null,
+            $data['belge_tipi'] ?? null,
+            $data['gsm'] ?? null,
+            $data['dogum_tarihi'] ?? null,
+            $data['eposta'] ?? null,
+            $data['karsi_sifat'] ?? null,
+            $data['bildirimci_tc_vkn'] ?? null,
+            $data['gidecek_sahibi_tc'] ?? null,
+            (int)($data['gidecek_kayitli_degil'] ?? 0),
+            (int)($data['yurt_disi'] ?? 0),
             $data['created_by'] ?? null,
         ]);
         return (int)$this->pdo->lastInsertId();
@@ -377,6 +398,10 @@ class HksRepository {
                 miktar=?, birim=?, depo=?, il=?, ilce=?, belde=?,
                 uretici_ad=?, uretici_tc_vkn=?, alici_ad=?, alici_tc_vkn=?,
                 sevk_tarihi=?, arac_plaka=?, belge_no=?, reference_kunye_no=?,
+                malin_niteligi=?, malin_turu=?, birim_fiyat=?, para_birimi=?, analize_gonder=?,
+                gidecek_yer=?, ihracat_ulke=?, belge_tipi=?, gsm=?, dogum_tarihi=?, eposta=?,
+                karsi_sifat=?, bildirimci_tc_vkn=?, gidecek_sahibi_tc=?,
+                gidecek_kayitli_degil=?, yurt_disi=?,
                 validation_errors_json=?, status=?, updated_at=NOW()
              WHERE id=? AND status IN ('draft','ready','failed','checked')"
         )->execute([
@@ -400,6 +425,22 @@ class HksRepository {
             $data['arac_plaka'] ?? null,
             $data['belge_no'] ?? null,
             $data['reference_kunye_no'] ?? null,
+            $data['malin_niteligi'] ?? null,
+            $data['malin_turu'] ?? null,
+            isset($data['birim_fiyat']) && $data['birim_fiyat'] !== '' ? (float)$data['birim_fiyat'] : null,
+            $data['para_birimi'] ?? null,
+            (int)($data['analize_gonder'] ?? 0),
+            $data['gidecek_yer'] ?? null,
+            $data['ihracat_ulke'] ?? null,
+            $data['belge_tipi'] ?? null,
+            $data['gsm'] ?? null,
+            $data['dogum_tarihi'] ?? null,
+            $data['eposta'] ?? null,
+            $data['karsi_sifat'] ?? null,
+            $data['bildirimci_tc_vkn'] ?? null,
+            $data['gidecek_sahibi_tc'] ?? null,
+            (int)($data['gidecek_kayitli_degil'] ?? 0),
+            (int)($data['yurt_disi'] ?? 0),
             $errors ? json_encode($errors, JSON_UNESCAPED_UNICODE) : null,
             $status,
             $id,
