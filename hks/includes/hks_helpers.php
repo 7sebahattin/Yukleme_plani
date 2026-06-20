@@ -78,6 +78,29 @@ function hks_env_label(string $env): string {
 
 // ── Dropdown yardımcıları ────────────────────────────────
 
+// Bildirimci sıfatı — resmi HKS bildirim ekranındaki sabit liste.
+// (BildirimServisSifatListesi referansından farklıdır; o liste daha geniş kodlardan oluşur.)
+// Senkronize "sifat" referansının ref_name değerleri sayısal/boş kalırsa bu liste kullanılır.
+function hks_sifat_list(): array {
+    return [
+        ['code' => 'İhracat',                'name' => 'İhracat'],
+        ['code' => 'Üretici',                'name' => 'Üretici'],
+        ['code' => 'Depo/Tasnif ve Ambalaj', 'name' => 'Depo/Tasnif ve Ambalaj'],
+        ['code' => 'Tüccar (Hal Dışı)',      'name' => 'Tüccar (Hal Dışı)'],
+    ];
+}
+
+// Bir referans listesinin etiketleri (ref_name) anlamlı mı, yoksa hepsi sayısal/boş mu?
+// Senkron sırasında etiket alanı eşlenemeyip koda düşülmüşse true döner.
+function hks_refs_labels_numeric(array $refs): bool {
+    if (empty($refs)) return true;
+    foreach ($refs as $r) {
+        $name = trim((string)($r['ref_name'] ?? ''));
+        if ($name !== '' && !ctype_digit($name)) return false;
+    }
+    return true;
+}
+
 function hks_ref_options(array $refs, string $selected = '', bool $include_empty = true): string {
     $out = $include_empty ? '<option value="">— Seçin —</option>' : '';
     foreach ($refs as $r) {
