@@ -342,6 +342,105 @@ endif;
 </details>
 <?php endif; ?>
 
+<!-- HKS Gönderim Önizlemesi — yalnızca e-Bildirim kayıtlarında -->
+<?php if ($is_eb_record):
+    $pay_check  = hks_validate_bildirim_payload_mapping($n, $settings ?: []);
+    $pay_body   = hks_build_bildirim_kaydet_payload($n, $settings ?: []);
+    $pay_masked = hks_mask_payload_sensitive_fields($pay_body);
+    $pay_json   = json_encode($pay_masked, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    // Önizleme üretimi audit'e — kimlik bilgisi yok, yalnızca özet hash.
+    audit_log_event('hks_payload_preview_generated', 'hks_notifications', $id, null, [
+        'ready'        => $pay_check['ready'] ? 1 : 0,
+        'error_count'  => count($pay_check['errors']),
+        'payload_hash' => substr(hash('sha256', (string)$pay_json), 0, 16),
+    ]);
+    $live_send_on = $settings && (int)($settings['live_send_enabled'] ?? 0) === 1;
+?>
+<div class="card" style="padding:18px 20px;margin-bottom:16px">
+    <h3 style="margin-top:0">📤 HKS Gönderim Önizlemesi</h3>
+
+    <!-- 1) Gönderime hazır mı? -->
+    <?php if (!$live_send_on): ?>
+    <div class="hks-statebox hks-sb-draft">
+        🔒 HKS canlı gönderim şu anda <strong>kapalı</strong>. Bu ekranda yalnızca gönderilecek veri önizleniyor; bu sprintte hiçbir koşulda HKS'ye gönderim yapılmaz.
+    </div>
+    <?php endif; ?>
+    <?php if ($pay_check['ready']): ?>
+    <div class="hks-statebox hks-sb-checked">✅ Payload hazır.<?= !$live_send_on ? ' Ancak canlı gönderim güvenlik nedeniyle kapalı.' : '' ?></div>
+    <?php else: ?>
+    <div class="hks-statebox hks-sb-failed">⚠️ HKS gönderimi için eksikler/uyumsuzluklar tamamlanmalıdır (aşağıda).</div>
+    <?php endif; ?>
+
+    <!-- 2) Eksikler -->
+    <?php if (!empty($pay_check['errors'])): ?>
+    <div style="margin-top:10px">
+        <div style="font-weight:600;color:#991b1b;margin-bottom:4px">Eksik / Uyumsuz Alanlar</div>
+        <ul style="margin:0;padding-left:18px">
+            <?php foreach ($pay_check['errors'] as $e): ?><li style="color:#991b1b;font-size:.88rem"><?= hks_h($e) ?></li><?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- 3) Uyarılar -->
+    <?php if (!empty($pay_check['warnings'])): ?>
+    <div style="margin-top:10px">
+        <div style="font-weight:600;color:#854d0e;margin-bottom:4px">Uyarılar</div>
+        <ul style="margin:0;padding-left:18px">
+            <?php foreach ($pay_check['warnings'] as $w): ?><li style="color:#854d0e;font-size:.88rem"><?= hks_h($w) ?></li><?php endforeach; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- 4) Mapping tablosu -->
+    <div style="margin-top:14px;overflow:auto">
+        <table class="hks-check-table" style="min-width:560px">
+            <thead>
+                <tr>
+                    <th style="text-align:left">Bizim Alan</th>
+                    <th style="text-align:left">HKS Alanı</th>
+                    <th style="text-align:left">Değer</th>
+                    <th style="text-align:left">Durum</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php
+            $st_map = [
+                'ok'            => ['✓ Eşleşti', '#065f46'],
+                'wsdl_ok'       => ['✓ WSDL doğrulandı', '#065f46'],
+                'wsdl_not_found'=> ['✗ WSDL\'de bulunamadı', '#991b1b'],
+                'empty'         => ['— Boş (opsiyonel)', '#6b7280'],
+                'missing'       => ['✗ Eksik (zorunlu)', '#991b1b'],
+                'code_missing'  => ['✗ Kod eksik', '#991b1b'],
+                'ref_unsynced'  => ['⚠ Liste senkron değil', '#854d0e'],
+                'invalid'       => ['✗ Geçersiz format', '#991b1b'],
+            ];
+            foreach ($pay_check['mapping'] as $m):
+                [$st_lbl, $st_col] = $st_map[$m['status']] ?? [$m['status'], '#374151'];
+                $hks_field_disp = $m['hks_field'] . ($m['certain'] ? '' : ' (KESİN DEĞİL)');
+            ?>
+                <tr>
+                    <td><?= hks_h($m['local']) ?></td>
+                    <td style="font-family:monospace;font-size:.82rem<?= $m['certain'] ? '' : ';color:#854d0e' ?>"><?= hks_h($hks_field_disp) ?></td>
+                    <td><?= trim((string)$m['value']) !== '' ? hks_h($m['value']) : '<span style="color:var(--muted)">—</span>' ?></td>
+                    <td style="color:<?= $st_col ?>;white-space:nowrap;font-size:.84rem"><?= hks_h($st_lbl) ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p style="font-size:.78rem;color:var(--muted);margin:8px 0 0">
+            "KESİN DEĞİL" etiketli HKS alan adları WSDL'den doğrulanana kadar geçicidir; bu yüzden gönderim bloke edilir.
+        </p>
+    </div>
+
+    <!-- 5) Teknik JSON (maskeli) -->
+    <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)">🔧 Teknik SOAP Payload (maskeli JSON)</summary>
+        <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;font-size:.78rem;margin:8px 0 0;max-height:360px"><?= hks_h($pay_json) ?></pre>
+        <p style="font-size:.76rem;color:var(--muted);margin:6px 0 0">UserName / Password / ServicePassword bu önizlemeye dahil edilmez; gerçek gönderim anında HksClient ekler.</p>
+    </details>
+</div>
+<?php endif; ?>
+
 <!-- Son Kontrol bloğu (düzenlenebilir durumlar) -->
 <?php if ($can_write && in_array($n['status'], ['draft','ready','failed'], true)): ?>
 <div class="card" style="padding:18px 20px;margin-bottom:16px">

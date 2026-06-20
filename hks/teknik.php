@@ -27,6 +27,7 @@ $cards = [
     ['veri_cek.php',       '📡',  'Veri Çek',          'HKS servislerinden veri çekme / sorgu denemeleri'],
     ['servis_loglari.php', '🧾',  'Servis Logları',    'Gönderilen istek ve yanıtların teknik kaydı'],
     ['teshis.php',         '🔬',  'Teşhis',            'WSDL metod keşfi ve yanıt teşhis ekranları'],
+    ['wsdl_tipleri.php',   '🧩',  'WSDL Tipleri',      'BildirimKayitIstek gerçek alan adlarını WSDL\'den çıkar (yalnız okuma)'],
     ['firmalar.php',       '🏢',  'Firmalar',          'HKS firma tanımları ve yönetimi'],
 ];
 

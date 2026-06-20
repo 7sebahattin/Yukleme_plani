@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/hks_config.php';
 require_once __DIR__ . '/hks_security.php';
 require_once __DIR__ . '/hks_helpers.php';
+require_once __DIR__ . '/hks_payload_builder.php';
 require_once __DIR__ . '/hks_repository.php';
 require_once __DIR__ . '/hks_client.php';
 require_once __DIR__ . '/../../config/auth.php';
