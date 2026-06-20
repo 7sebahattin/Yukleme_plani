@@ -36,6 +36,8 @@ $op_menus = [
             'veri_cek.php'         => ['Veri Çek', '📡', $op_root],
             'servis_loglari.php'   => ['Servis Logları', '🧾', $op_root],
             'teshis.php'           => ['Teşhis', '🔬', $op_root],
+            'wsdl_tipleri.php'     => ['WSDL Tipleri', '🧩', $op_root],
+            'firmalar.php'         => ['Firmalar', '🏢', $op_root],
         ],
     ],
 ];
