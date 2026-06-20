@@ -121,6 +121,19 @@ function hks_karsi_taraf_sifat_map(): array {
     ];
 }
 
+// İşyeri Türü — resmi HKS Referans Künye ekranındaki sabit liste.
+function hks_isyeri_turu_list(): array {
+    return [
+        'Şube', 'Tasnifleme ve Ambalajlama', 'Hal İçi Deposu', 'Hal Dışı Deposu',
+        'Hal İçi İşyeri', 'Hal Dışı İşyeri', 'Sınai İşletme', 'Dağıtım Merkezi',
+    ];
+}
+
+// Sıralama Türü — Referans Künye sorgu sonuç sıralaması.
+function hks_siralama_turu_list(): array {
+    return ['Tarihe Göre Azalan', 'Tarihe Göre Artan'];
+}
+
 function hks_ref_options(array $refs, string $selected = '', bool $include_empty = true): string {
     $out = $include_empty ? '<option value="">— Seçin —</option>' : '';
     foreach ($refs as $r) {

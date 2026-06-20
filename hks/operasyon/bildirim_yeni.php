@@ -92,6 +92,16 @@ $karsi_sifat_map = hks_karsi_taraf_sifat_map();
 $bildirimci_vkn   = trim((string)($op_settings['firma_vkn'] ?? ''));
 $bildirimci_unvan = trim((string)($op_settings['firma_adi'] ?? ''));
 
+// İşyeri Türü ve Sıralama Türü — resmi sabit listeler
+$isyeri_turu_opts = '<option value="">Seçiniz</option>';
+foreach (hks_isyeri_turu_list() as $it) {
+    $isyeri_turu_opts .= '<option value="' . hks_h($it) . '">' . hks_h($it) . '</option>';
+}
+$siralama_opts = '';
+foreach (hks_siralama_turu_list() as $sl) {
+    $siralama_opts .= '<option value="' . hks_h($sl) . '">' . hks_h($sl) . '</option>';
+}
+
 $op_page_title  = 'e-Bildirim Oluştur';
 $op_active_tab  = 'bildirimci';
 $op_active_menu = 'bildirim_yeni.php';
@@ -188,27 +198,34 @@ include __DIR__ . '/views/_layout_start.php';
     <!-- ADIM 2 — Referans Künye -->
     <fieldset class="hks-op-fieldset op-pane" data-pane="2" style="display:none">
         <legend>Adım 2 — Referans Künye</legend>
+        <div class="hks-op-note info">ℹ️ Daha önce yapılmış bildirim işlemine ilişkin künye varsa yazınız.</div>
         <div class="hks-op-row">
             <div class="hks-op-field">
                 <label>Künye No</label>
-                <input type="text" name="reference_kunye_no" id="refKunyeNo" placeholder="Referans künye numarası (çıkışta zorunlu)">
+                <input type="text" name="reference_kunye_no" id="refKunyeNo" placeholder="Künye numarası">
             </div>
             <div class="hks-op-field">
-                <label>Referans Künyede Kullanılan Ürün</label>
+                <label>Referans Künyede kullanılan Ürün</label>
                 <?php if ($urunler): ?>
-                <select id="refUrunId"><?= hks_ref_options($urunler, '') ?></select>
+                <select id="refUrunId"><option value="">Seçiniz</option><?= hks_ref_options($urunler, '', false) ?></select>
                 <?php else: ?>
                 <input type="text" id="refUrunId" placeholder="Ürün">
                 <?php endif; ?>
             </div>
             <div class="hks-op-field">
                 <label>İşyeri Türü</label>
-                <input type="text" name="isyeri_turu" placeholder="İşyeri türü (opsiyonel)">
+                <select id="refIsyeriTuru"><?= $isyeri_turu_opts ?></select>
+            </div>
+            <div class="hks-op-field">
+                <label>Sıralama Türü</label>
+                <select id="refSiralama"><?= $siralama_opts ?></select>
             </div>
         </div>
-        <button type="button" class="hks-op-btn hks-op-btn-ghost" id="btnRefKunye" <?= $op_queries_enabled ? '' : 'disabled' ?>>🔎 Künye Sorgula</button>
+        <button type="button" class="hks-op-btn" id="btnRefKunye" <?= $op_queries_enabled ? '' : 'disabled' ?>>🔎 Künye Sorgula</button>
         <?php if (!$op_queries_enabled): ?><small class="muted" style="margin-left:8px">HKS bağlantısı yapılandırılmadığı için sorgu kapalı.</small><?php endif; ?>
         <div id="refKunyeResult" class="hks-op-result" style="display:none"></div>
+        <div id="refKunyeTable" style="margin-top:12px"></div>
+        <div id="refKunyeSelected" class="hks-op-note" style="display:none;margin-top:10px"></div>
     </fieldset>
 
     <!-- ADIM 3 — Mala İlişkin Bilgiler -->
@@ -400,6 +417,76 @@ include __DIR__ . '/views/_layout_start.php';
         document.getElementById('markChecked').value = this.checked ? '1' : '0';
     });
 
+    // ── Referans Künye sorgu + sonuç tablosu (resmi HKS Adım 2 yapısı) ──
+    var refRows = [];
+    function gf(obj, names){
+        for (var i=0;i<names.length;i++){ for (var k in obj){ if (k.toLowerCase()===names[i].toLowerCase() && obj[k]!=null && obj[k]!=='') return obj[k]; } }
+        return '';
+    }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function fmtNum(v){ var n=parseFloat(String(v).replace(',','.')); return isNaN(n)?esc(v):n.toLocaleString('tr-TR'); }
+    function renderRefTable(){
+        var box = document.getElementById('refKunyeTable');
+        var siralama = document.getElementById('refSiralama').value;
+        var isyeri   = document.getElementById('refIsyeriTuru').value;
+        var rows = refRows.slice();
+        if (isyeri){
+            rows = rows.filter(function(o){ var v=gf(o,['IsyeriTuru','GidecekYerTuru','IsYeriTuru']); return !v || String(v).toLowerCase().indexOf(isyeri.toLowerCase())!==-1; });
+        }
+        rows.sort(function(a,b){
+            var da=new Date(gf(a,['BildirimTarihi','Tarih','BildirimTarihiSaati','OlusturmaTarihi'])||0);
+            var db=new Date(gf(b,['BildirimTarihi','Tarih','BildirimTarihiSaati','OlusturmaTarihi'])||0);
+            return siralama==='Tarihe Göre Artan' ? da-db : db-da;
+        });
+        if (!rows.length){ box.innerHTML='<div class="hks-op-note empty">Aradığınız kriterlere uygun sonuç bulunamamıştır.</div>'; return; }
+        var html='<div class="table-wrap"><table class="hks-op-table"><thead><tr>'+
+            '<th>Seç</th><th>Künye No</th><th>Bildirim Tarihi</th><th>Yöntem</th>'+
+            '<th style="text-align:right">Miktar</th><th style="text-align:right">Kalan</th><th style="text-align:right">Birim Fiyat</th>'+
+            '<th>Malın Adı</th><th>Cinsi</th><th>Türü</th><th>Malın Sahibi</th><th>Bildirimci</th>'+
+            '<th>Plaka / Belge</th><th>Gidecek Yer Türü</th><th>Gidecek Yer İl/İlçe</th></tr></thead><tbody>';
+        rows.forEach(function(o,i){
+            var kn=gf(o,['KunyeNo','ReferansKunyeNo','kunyeNo']);
+            var birim=gf(o,['BirimAdi','Birim','birim'])||'KG';
+            var il=gf(o,['GidecekYerIl','GidecekIl','Il']), ilce=gf(o,['GidecekYerIlce','GidecekIlce','Ilce']);
+            var plaka=gf(o,['AracPlaka','Plaka']), belge=gf(o,['BelgeNo']);
+            html+='<tr>'+
+                '<td><button type="button" class="hks-op-btn" style="padding:4px 10px;font-size:.78rem" data-pick="'+i+'">Seç</button></td>'+
+                '<td style="font-weight:600">'+esc(kn)+'</td>'+
+                '<td style="white-space:nowrap">'+esc(gf(o,['BildirimTarihi','Tarih','BildirimTarihiSaati']))+'</td>'+
+                '<td>'+esc(gf(o,['BildirimYontemi','BildirimYontem'])||'E-Bildirim')+'</td>'+
+                '<td style="text-align:right;white-space:nowrap">'+fmtNum(gf(o,['Miktar','MalMiktar','MalinMiktari']))+' '+esc(birim)+'</td>'+
+                '<td style="text-align:right;white-space:nowrap">'+fmtNum(gf(o,['KalanMiktar','Kalan']))+' '+esc(birim)+'</td>'+
+                '<td style="text-align:right;white-space:nowrap">'+esc(gf(o,['BirimFiyat','MalinBirimFiyati','Fiyat']))+'</td>'+
+                '<td>'+esc(gf(o,['UrunAdi','MalinAdi','Urun']))+'</td>'+
+                '<td>'+esc(gf(o,['UrunCinsi','MalinCinsi','Cins']))+'</td>'+
+                '<td>'+esc(gf(o,['UrunTuru','MalinTuru','Tur']))+'</td>'+
+                '<td>'+esc(gf(o,['MalinSahibi','MalSahibi','Sahibi']))+'</td>'+
+                '<td>'+esc(gf(o,['Bildirimci','BildirimciAdi','BildirimciUnvan']))+'</td>'+
+                '<td>'+esc(plaka)+(belge?(' / '+esc(belge)):'')+'</td>'+
+                '<td>'+esc(gf(o,['GidecekYerTuru','GidecekYerTipi']))+'</td>'+
+                '<td>'+esc((il+' / '+ilce).replace(/^ \/ | \/ $/,''))+'</td></tr>';
+        });
+        html+='</tbody></table></div>';
+        box.innerHTML=html;
+        box.querySelectorAll('[data-pick]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+                var o=rows[+btn.dataset.pick];
+                var kn=gf(o,['KunyeNo','ReferansKunyeNo','kunyeNo']);
+                document.getElementById('refKunyeNo').value=kn;
+                var urunAdi=gf(o,['UrunAdi','MalinAdi','Urun']);
+                var urunInput=form.querySelector('[name="urun"]');
+                if (urunInput && urunInput.tagName==='INPUT' && !urunInput.value.trim() && urunAdi) urunInput.value=urunAdi;
+                var sel=document.getElementById('refKunyeSelected');
+                sel.style.display='block'; sel.className='hks-op-note info';
+                sel.innerHTML='✅ Referans künye seçildi: <strong>'+esc(kn)+'</strong>';
+            });
+        });
+    }
+    ['refSiralama','refIsyeriTuru'].forEach(function(id){
+        var el=document.getElementById(id);
+        if (el) el.addEventListener('change', function(){ if (refRows.length) renderRefTable(); });
+    });
+
     // Künye Sorgula (AJAX) — mevcut query_referans_kunye aksiyonu
     var btnRef = document.getElementById('btnRefKunye');
     if (btnRef) {
@@ -407,7 +494,8 @@ include __DIR__ . '/views/_layout_start.php';
             var urunEl = document.getElementById('refUrunId');
             var urunId = urunEl ? urunEl.value.trim() : '';
             var res = document.getElementById('refKunyeResult');
-            if (!urunId) { alert('Önce ürün seçin.'); return; }
+            document.getElementById('refKunyeTable').innerHTML = '';
+            if (!urunId) { alert('Önce "Referans Künyede kullanılan Ürün" seçin.'); return; }
             btnRef.disabled = true; btnRef.textContent = '⏳ Sorgulanıyor...';
             res.style.display = 'none'; res.className = 'hks-op-result';
             var csrf = document.querySelector('meta[name="csrf-token"]').content;
@@ -417,10 +505,11 @@ include __DIR__ . '/views/_layout_start.php';
             }).then(function(r){return r.json();}).then(function(d){
                 res.style.display='block'; res.classList.add(d.ok?'ok':'err');
                 if (d.ok) {
-                    var arr = d.data || [];
-                    res.innerHTML = '✅ '+(Array.isArray(arr)?arr.length+' kayıt bulundu':'Sonuç alındı')+
-                        '<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:240px;overflow:auto">'+JSON.stringify(arr,null,2)+'</pre></details>';
+                    refRows = Array.isArray(d.data) ? d.data : (d.data ? [d.data] : []);
+                    res.innerHTML = '✅ '+refRows.length+' kayıt bulundu.';
+                    renderRefTable();
                 } else {
+                    refRows = [];
                     res.innerHTML = '❌ '+(d.message || 'Künye bilgisi okunamadı.');
                 }
             }).catch(function(){ res.style.display='block'; res.classList.add('err'); res.textContent='İstek gönderilemedi.'; })
