@@ -13,11 +13,15 @@ require __DIR__ . '/views/_op_init.php';   // çıktıdan önce — guard + $op_
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
+    $bildirim_turu = trim($_POST['notification_type'] ?? '');
+
     $data = [
-        'notification_type' => trim($_POST['notification_type'] ?? ''),
+        'notification_type' => $bildirim_turu,
         'sifat'             => trim($_POST['sifat'] ?? '') ?: null,
-        'direction'         => trim($_POST['direction'] ?? '') ?: null,
-        'firma'             => trim($_POST['firma'] ?? ''),
+        // Yön bildirim türünden türetilir (Satın Alım → giriş, Satış/Sevk → çıkış)
+        'direction'         => $bildirim_turu !== '' ? hks_bildirim_turu_direction($bildirim_turu) : null,
+        // Bildirimci ünvanı = seçili firma adı (resmi HKS'de read-only gelir)
+        'firma'             => trim($_POST['firma'] ?? '') ?: ($op_settings['firma_adi'] ?? ''),
         'urun'              => trim($_POST['urun'] ?? ''),
         'urun_cinsi'        => trim($_POST['urun_cinsi'] ?? '') ?: null,
         'miktar'            => hks_qty($_POST['miktar'] ?? 0),
@@ -73,7 +77,20 @@ $depolar          = $op_repo->getReferences('depo');
 $birimler         = $op_repo->getReferences('urun_birim');
 $urun_cinsleri    = $op_repo->getReferences('urun_cins');
 $urunler          = $op_repo->getReferences('urun');
-$refs_missing     = empty($bildirim_turleri) || empty($urunler) || empty($iller);
+$refs_missing     = empty($urunler) || empty($iller);
+
+// Bildirim Türü — sabit resmi liste (Satış / Satın Alım / Sevk Etme)
+$bildirim_turu_opts = '<option value="">— Seçin —</option>';
+foreach (hks_bildirim_turu_list() as $bt) {
+    $bildirim_turu_opts .= '<option value="' . hks_h($bt) . '">' . hks_h($bt) . '</option>';
+}
+
+// Karşı taraf (Kimden/Kime) sıfatı — Bildirim Türüne göre değişen liste
+$karsi_sifat_map = hks_karsi_taraf_sifat_map();
+
+// Bildirimciye ait bilgiler — seçili firmadan gelir
+$bildirimci_vkn   = trim((string)($op_settings['firma_vkn'] ?? ''));
+$bildirimci_unvan = trim((string)($op_settings['firma_adi'] ?? ''));
 
 $op_page_title  = 'e-Bildirim Oluştur';
 $op_active_tab  = 'bildirimci';
@@ -102,44 +119,68 @@ include __DIR__ . '/views/_layout_start.php';
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="mark_checked" id="markChecked" value="0">
 
-    <!-- ADIM 1 — Bildirimciye Ait Bilgiler -->
+    <!-- ADIM 1 — Bildirimci / Genel / Kimden-Kime -->
     <fieldset class="hks-op-fieldset op-pane" data-pane="1">
-        <legend>Adım 1 — Bildirimciye Ait Bilgiler</legend>
+        <legend>Adım 1 — Bildirim Bilgileri</legend>
+
+        <!-- Bildirimciye Ait Bilgiler (seçili firmadan gelir) -->
+        <p class="hks-op-section-title">Bildirimciye Ait Bilgiler</p>
+        <?php if ($bildirimci_vkn === ''): ?>
+        <div class="hks-op-note warn">⚠️ Seçili firmanın <strong>TC/VKN</strong> bilgisi tanımlı değil. <strong>HKS Teknik → Ayarlar</strong> bölümünden ekleyin.</div>
+        <?php endif; ?>
         <div class="hks-op-row">
             <div class="hks-op-field">
-                <label>TC / VKN</label>
-                <input type="text" name="bildirimci_tc_vkn" maxlength="11" placeholder="11 haneli TC veya 10 haneli VKN">
+                <label>T.C. Kimlik / Vergi No</label>
+                <input type="text" name="bildirimci_tc_vkn" value="<?= hks_h($bildirimci_vkn) ?>" readonly style="background:var(--bg)">
             </div>
             <div class="hks-op-field">
                 <label>Sıfat <span style="color:var(--danger)">*</span></label>
                 <select name="sifat"><?= $sifat_opts ?></select>
             </div>
             <div class="hks-op-field">
-                <label>Ad Soyad / Ünvan <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="firma" placeholder="Bildirimci ad soyad veya firma ünvanı">
+                <label>Adı Soyadı / Ünvanı <span style="color:var(--danger)">*</span></label>
+                <input type="text" name="firma" value="<?= hks_h($bildirimci_unvan) ?>" readonly style="background:var(--bg)">
             </div>
+        </div>
+
+        <!-- Bildirim Genel Bilgileri -->
+        <p class="hks-op-section-title" style="margin-top:8px">Bildirim Genel Bilgileri</p>
+        <div class="hks-op-row">
             <div class="hks-op-field">
                 <label>Bildirim Türü <span style="color:var(--danger)">*</span></label>
-                <?php if ($bildirim_turleri): ?>
-                <select name="notification_type"><?= hks_ref_options($bildirim_turleri, '') ?></select>
-                <?php else: ?>
-                <input type="text" name="notification_type" placeholder="Bildirim türü">
-                <?php endif; ?>
+                <select name="notification_type" id="bildirimTuru"><?= $bildirim_turu_opts ?></select>
+            </div>
+        </div>
+
+        <!-- Kimden veya Kime Bilgileri (karşı taraf) -->
+        <p class="hks-op-section-title" style="margin-top:8px">Kimden veya Kime Bilgileri</p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:.88rem">
+            <input type="checkbox" name="yurt_disi" value="1" style="width:auto"> Yurt Dışı
+        </label>
+        <div class="hks-op-row">
+            <div class="hks-op-field">
+                <label>T.C. Kimlik / Vergi No <span style="color:var(--danger)">*</span></label>
+                <input type="text" name="alici_tc_vkn" maxlength="11" placeholder="Karşı taraf TC/VKN">
             </div>
             <div class="hks-op-field">
-                <label>Yön</label>
-                <select name="direction">
-                    <option value="">— Seçin —</option>
-                    <option value="giris">Giriş</option>
-                    <option value="cikis">Çıkış</option>
-                </select>
+                <label>Adı Soyadı / Ünvanı <span style="color:var(--danger)">*</span></label>
+                <input type="text" name="alici_ad" placeholder="Karşı taraf ad / ünvan">
             </div>
             <div class="hks-op-field">
-                <label>Yurt Dışı</label>
-                <select name="yurt_disi">
-                    <option value="0">Hayır</option>
-                    <option value="1">Evet</option>
-                </select>
+                <label>GSM Numarası</label>
+                <input type="text" name="gsm" inputmode="tel" placeholder="5xx xxx xx xx">
+            </div>
+            <div class="hks-op-field">
+                <label>Doğum Tarihi</label>
+                <input type="date" name="dogum_tarihi">
+            </div>
+            <div class="hks-op-field">
+                <label>E-postası</label>
+                <input type="email" name="eposta" placeholder="ornek@firma.com">
+            </div>
+            <div class="hks-op-field">
+                <label>Sıfatı</label>
+                <select name="karsi_sifat" id="karsiSifat"><option value="">Seçiniz</option></select>
             </div>
         </div>
     </fieldset>
@@ -250,18 +291,11 @@ include __DIR__ . '/views/_layout_start.php';
         </div>
     </fieldset>
 
-    <!-- ADIM 4 — Gideceği / Tüketime Sunulduğu Yer -->
+    <!-- ADIM 4 — Gideceği / Tüketime Sunulduğu Yer (taşıma/sevkiyat) -->
     <fieldset class="hks-op-fieldset op-pane" data-pane="4" style="display:none">
         <legend>Adım 4 — Gideceği / Tüketime Sunulduğu Yer</legend>
+        <div class="hks-op-note info" style="margin-bottom:12px">Karşı taraf (alıcı/satıcı) bilgileri Adım 1'de girilir. Bu adım taşıma ve sevk bilgileri içindir.</div>
         <div class="hks-op-row">
-            <div class="hks-op-field">
-                <label>Gideceği Yer Sahibi TC / VKN <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="alici_tc_vkn" maxlength="11" placeholder="Alıcı TC/VKN">
-            </div>
-            <div class="hks-op-field">
-                <label>Gideceği Yer / Alıcı Adı <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="alici_ad" placeholder="Alıcı ad / ünvan">
-            </div>
             <div class="hks-op-field">
                 <label>Ülke</label>
                 <input type="text" name="gidecek_ulke" value="Türkiye">
@@ -337,18 +371,18 @@ include __DIR__ . '/views/_layout_start.php';
     function val(name){ var el = form.querySelector('[name="'+name+'"]'); return el ? el.value.trim() : ''; }
     function buildSummary() {
         var rows = [
-            ['Bildirim Türü', val('notification_type')], ['Sıfat', val('sifat')],
-            ['Bildirimci', val('firma')], ['Yön', val('direction')],
+            ['Bildirimci', val('firma')], ['Bildirimci TC/VKN', val('bildirimci_tc_vkn')], ['Sıfat', val('sifat')],
+            ['Bildirim Türü', val('notification_type')],
+            ['Karşı Taraf', val('alici_ad')], ['Karşı Taraf TC/VKN', val('alici_tc_vkn')], ['Karşı Taraf Sıfatı', val('karsi_sifat')],
             ['Referans Künye', val('reference_kunye_no')],
             ['Mal', val('urun')], ['Miktar', val('miktar') + ' ' + val('birim')],
             ['Üretici', val('uretici_ad')], ['Depo/Şube', val('depo')],
             ['İl / İlçe', (val('il') + ' / ' + val('ilce')).replace(/^ \/ | \/ $/,'')],
-            ['Alıcı', val('alici_ad')], ['Alıcı TC/VKN', val('alici_tc_vkn')],
             ['Araç Plaka', val('arac_plaka')], ['Sevk Tarihi', val('sevk_tarihi')]
         ];
         var html = '<table class="hks-op-table"><tbody>';
         var missing = [];
-        var req = {'Bildirim Türü':1,'Sıfat':1,'Bildirimci':1,'Mal':1,'Alıcı':1,'Alıcı TC/VKN':1,'Araç Plaka':1,'Sevk Tarihi':1};
+        var req = {'Bildirimci':1,'Sıfat':1,'Bildirim Türü':1,'Karşı Taraf':1,'Karşı Taraf TC/VKN':1,'Mal':1,'Araç Plaka':1,'Sevk Tarihi':1};
         rows.forEach(function(r){
             var empty = !r[1] || r[1] === ' ';
             if (req[r[0]] && empty) missing.push(r[0]);
@@ -393,6 +427,23 @@ include __DIR__ . '/views/_layout_start.php';
             .finally(function(){ btnRef.disabled=false; btnRef.textContent='🔎 Künye Sorgula'; });
         });
     }
+    // Karşı taraf "Sıfatı" — Bildirim Türüne göre değişir
+    var karsiSifatMap = <?= json_encode($karsi_sifat_map, JSON_UNESCAPED_UNICODE) ?>;
+    var turuEl  = document.getElementById('bildirimTuru');
+    var sifatEl = document.getElementById('karsiSifat');
+    function refreshKarsiSifat() {
+        var list = karsiSifatMap[turuEl.value] || [];
+        var prev = sifatEl.value;
+        var html = '<option value="">Seçiniz</option>';
+        list.forEach(function(s){ html += '<option value="'+s+'">'+s+'</option>'; });
+        sifatEl.innerHTML = html;
+        if (list.indexOf(prev) !== -1) sifatEl.value = prev;
+    }
+    if (turuEl && sifatEl) {
+        turuEl.addEventListener('change', refreshKarsiSifat);
+        refreshKarsiSifat();
+    }
+
     show(1);
 })();
 </script>

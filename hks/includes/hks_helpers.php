@@ -101,6 +101,26 @@ function hks_refs_labels_numeric(array $refs): bool {
     return true;
 }
 
+// Bildirim Türü — resmi HKS e-Bildirim ekranındaki sabit liste.
+function hks_bildirim_turu_list(): array {
+    return ['Satış', 'Satın Alım', 'Sevk Etme'];
+}
+
+// Bildirim Türüne göre yön (giriş/çıkış) — referans künye zorunluluğu vb. için.
+function hks_bildirim_turu_direction(string $turu): string {
+    return $turu === 'Satın Alım' ? 'giris' : 'cikis';
+}
+
+// Karşı tarafın (Kimden/Kime) sıfatı — Bildirim Türüne göre değişir (resmi HKS davranışı).
+// Satış → alıcı işletme türleri; Satın Alım → Üretici; Sevk Etme → (boş, yalnızca Seçiniz).
+function hks_karsi_taraf_sifat_map(): array {
+    return [
+        'Satış'      => ['E-Market', 'Hastane', 'Lokanta', 'Manav', 'Market', 'Otel', 'Pazarcı', 'Yemek Fabrikası', 'Yurt'],
+        'Satın Alım' => ['Üretici'],
+        'Sevk Etme'  => [],
+    ];
+}
+
 function hks_ref_options(array $refs, string $selected = '', bool $include_empty = true): string {
     $out = $include_empty ? '<option value="">— Seçin —</option>' : '';
     foreach ($refs as $r) {
