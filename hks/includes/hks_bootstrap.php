@@ -207,4 +207,35 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
     try {
         $pdo->exec("ALTER TABLE `hks_queries` MODIFY COLUMN `query_type` VARCHAR(50) NOT NULL DEFAULT ''");
     } catch (PDOException) { /* already varchar or doesn't exist */ }
+
+    // hks_notifications — yeni e-Bildirim 3-adım form alanları (Sprint HKS-UX-Reset-01)
+    // Resmî HKS e-Bildirim ekranındaki tüm alanlar için eksik kolonları idempotent ekle.
+    try {
+        $pdo->query("SELECT malin_niteligi, malin_turu, birim_fiyat, para_birimi,
+                            analize_gonder, gidecek_yer, ihracat_ulke, belge_tipi,
+                            gsm, dogum_tarihi, eposta, karsi_sifat, bildirimci_tc_vkn,
+                            gidecek_sahibi_tc, gidecek_kayitli_degil, yurt_disi
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `malin_niteligi`        VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `malin_turu`            VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `birim_fiyat`           DECIMAL(14,2) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `para_birimi`           VARCHAR(10) NULL DEFAULT 'TL'",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `analize_gonder`        TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer`           VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `ihracat_ulke`          VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `belge_tipi`            VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gsm`                   VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `dogum_tarihi`          DATE NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `eposta`                VARCHAR(200) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_sifat`           VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `bildirimci_tc_vkn`     VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_sahibi_tc`     VARCHAR(20) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_kayitli_degil` TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `yurt_disi`             TINYINT(1) NOT NULL DEFAULT 0",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+    }
 })();

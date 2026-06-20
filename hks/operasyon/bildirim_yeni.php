@@ -38,6 +38,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'arac_plaka'        => hks_plate(trim($_POST['arac_plaka'] ?? '')),
         'belge_no'          => trim($_POST['belge_no'] ?? '') ?: null,
         'reference_kunye_no'=> trim($_POST['reference_kunye_no'] ?? '') ?: null,
+        // Adım 1 — bildirimci & karşı taraf ek alanları
+        'bildirimci_tc_vkn' => trim($_POST['bildirimci_tc_vkn'] ?? '') ?: ($op_settings['firma_vkn'] ?? null),
+        'karsi_sifat'       => trim($_POST['karsi_sifat'] ?? '') ?: null,
+        'gsm'               => trim($_POST['gsm'] ?? '') ?: null,
+        'dogum_tarihi'      => trim($_POST['dogum_tarihi'] ?? '') ?: null,
+        'eposta'            => trim($_POST['eposta'] ?? '') ?: null,
+        'yurt_disi'         => (($_POST['yurt_disi'] ?? '') === '1' || ($_POST['yurt_disi'] ?? '') === 'on') ? 1 : 0,
+        // Adım 3 — mal & gideceği yer ek alanları
+        'malin_niteligi'    => trim($_POST['malin_niteligi'] ?? '') ?: null,
+        'malin_turu'        => trim($_POST['malin_turu'] ?? '') ?: null,
+        'birim_fiyat'       => trim($_POST['birim_fiyat'] ?? ''),
+        'para_birimi'       => trim($_POST['para_birimi'] ?? '') ?: 'TL',
+        'analize_gonder'    => (($_POST['analize_gonder'] ?? '') === '1' || ($_POST['analize_gonder'] ?? '') === 'on') ? 1 : 0,
+        'gidecek_yer'       => trim($_POST['gidecek_yer'] ?? '') ?: null,
+        'ihracat_ulke'      => trim($_POST['ihracat_ulke'] ?? '') ?: null,
+        'belge_tipi'        => trim($_POST['belge_tipi'] ?? '') ?: null,
+        'gidecek_sahibi_tc' => trim($_POST['gidecek_sahibi_tc'] ?? '') ?: null,
+        'gidecek_kayitli_degil' => (($_POST['gidecek_kayitli_degil'] ?? '') === '1' || ($_POST['gidecek_kayitli_degil'] ?? '') === 'on') ? 1 : 0,
         'created_by'        => $auth_user['id'] ?? null,
     ];
 
