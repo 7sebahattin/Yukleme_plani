@@ -402,7 +402,8 @@ class HksRepository {
                 gidecek_yer=?, ihracat_ulke=?, belge_tipi=?, gsm=?, dogum_tarihi=?, eposta=?,
                 karsi_sifat=?, bildirimci_tc_vkn=?, gidecek_sahibi_tc=?,
                 gidecek_kayitli_degil=?, yurt_disi=?,
-                validation_errors_json=?, status=?, updated_at=NOW()
+                validation_errors_json=?, status=?,
+                checked_at=NULL, checked_by=NULL, updated_at=NOW()
              WHERE id=? AND status IN ('draft','ready','failed','checked')"
         )->execute([
             $data['notification_type'] ?? null,

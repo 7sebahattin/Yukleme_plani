@@ -167,8 +167,15 @@ render_flash();
     </div>
     <div class="page-head-actions">
         <a href="bildirimler.php" class="btn btn-ghost">← Liste</a>
-        <?php if ($can_write && in_array($n['status'], ['draft','ready','failed'], true)): ?>
-        <a href="bildirim_form.php?id=<?= $id ?>" class="btn btn-ghost">✏️ Düzenle</a>
+        <?php
+        // Yeni e-Bildirim kayıtları 3-adımlı operasyon formunda düzenlenir (checked dahil);
+        // eski kayıtlar eski formda kalır.
+        $is_eb_record  = hks_is_ebildirim_record($n);
+        $edit_statuses = $is_eb_record ? ['draft','ready','checked','failed'] : ['draft','ready','failed'];
+        $edit_url      = $is_eb_record ? ('operasyon/bildirim_yeni.php?id=' . $id) : ('bildirim_form.php?id=' . $id);
+        ?>
+        <?php if ($can_write && in_array($n['status'], $edit_statuses, true)): ?>
+        <a href="<?= hks_h($edit_url) ?>" class="btn btn-ghost">✏️ Düzenle</a>
         <?php endif; ?>
     </div>
 </div>

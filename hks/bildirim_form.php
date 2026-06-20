@@ -21,11 +21,11 @@ if (!$is_new) {
     }
     // GÜVENLİK: Yeni 3-adımlı e-Bildirim formundan oluşan kayıtlar bu eski formla
     // düzenlenemez — eski form yeni alanları içermediği için kaydetme sırasında
-    // (malin_niteligi, gidecek_yer, karsi_sifat vb.) verileri silerdi. Hem GET hem
-    // POST burada engellenir; kullanıcı görüntüleme ekranına yönlendirilir.
+    // (malin_niteligi, gidecek_yer, karsi_sifat vb.) verileri silerdi. Bu kayıtlar
+    // yeni 3-adımlı operasyon düzenleme formuna yönlendirilir.
     if (hks_is_ebildirim_record($notif)) {
-        set_flash('error', 'Bu bildirim yeni e-Bildirim formu ile oluşturulmuş. Eski düzenleme ekranı yeni alanları desteklemediği için açılamadı. Düzenleme ekranı sonraki sprintte güncellenecek; veriler korundu.');
-        header('Location: bildirim_view.php?id=' . $id); exit;
+        set_flash('info', 'Bu bildirim yeni e-Bildirim formu ile oluşturulmuştur; yeni düzenleme ekranına yönlendirildiniz.');
+        header('Location: operasyon/bildirim_yeni.php?id=' . $id); exit;
     }
 }
 
