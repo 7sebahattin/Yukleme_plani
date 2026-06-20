@@ -283,11 +283,15 @@ function hks_payload_field_map(): array {
         ['birim',                'MiktarBirimId',             true,    'urun_birim',    true],   // Mal
         ['miktar',               'MalinMiktari',              true,    null,            false],  // Mal
         ['birim_fiyat',          'MalinSatisFiyat',           false,   null,            false],  // Mal
+        ['gelen_ulke',           'GelenUlkeId',               false,   'ulke',          false],  // Mal (İthalde koşullu zorunlu)
         ['il',                   'UretimIlId',                true,    'il',            true],   // Mal
         ['ilce',                 'UretimIlceId',              false,   'ilce',          false],  // Mal
         ['belde',                'UretimBeldeId',             false,   'belde',         false],  // Mal
         ['gidecek_yer',          'GidecekYerIsletmeTuruId',   true,    'isletme_turu',  false],  // GidecekYer
         ['ihracat_ulke',         'GidecekUlkeId',             false,   'ulke',          false],  // GidecekYer
+        ['gidecek_yer_il',       'GidecekYerIlId',            false,   'il',            false],  // GidecekYer (kayıtsız yurt içinde koşullu)
+        ['gidecek_yer_ilce',     'GidecekYerIlceId',          false,   'ilce',          false],  // GidecekYer
+        ['gidecek_yer_belde',    'GidecekYerBeldeId',         false,   'belde',         false],  // GidecekYer
         ['arac_plaka',           'AracPlakaNo',               true,    null,            false],  // GidecekYer
         ['belge_no',             'BelgeNo',                   false,   null,            false],  // GidecekYer
         ['belge_tipi',           'BelgeTipi',                 false,   'belge_tipi',    false],  // GidecekYer
@@ -339,21 +343,21 @@ function hks_payload_field_spec(): array {
         ['local'=>'belde',             'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimBeldeId',          'wsdl_field'=>'UretimBeldeId',           'hks_type'=>'int',    'helper'=>'GenelServisBeldeler',          'ref_type'=>'belde',         'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
         ['local'=>'malin_niteligi',    'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinNiteligi',         'wsdl_field'=>'MalinNiteligi',           'hks_type'=>'int',    'helper'=>'UrunServiceMalinNiteligi',     'ref_type'=>'malin_niteligi','transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'İthalat sıfatıyla tutarlı olmalı.'],
         ['local'=>'urun',              'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinKodNo',             'wsdl_field'=>'MalinKodNo',              'hks_type'=>'int',    'helper'=>'UrunServiceUrunler',           'ref_type'=>'urun',          'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz.'],
-        ['local'=>'malin_turu',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimSekli',           'wsdl_field'=>'UretimSekli',             'hks_type'=>'int',    'helper'=>'UrunServiceUretimSekilleri',   'ref_type'=>'uretim_sekli',  'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz; İthalat/Toplama mal → Konvansiyonel.'],
+        ['local'=>'malin_turu',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'UretimSekli',           'wsdl_field'=>'UretimSekli',             'hks_type'=>'int',    'helper'=>'UrunServiceUretimSekilleri',   'ref_type'=>'uretim_sekli',  'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'KARAR: malin_turu alanı = UretimSekli. Form "Malın Türü" seçenekleri (Konvansiyonel/Organik/İyi Tarım) üretim şekilleridir; ayrı uretim_sekli alanı EKLENMEDİ. Referanssızda 0 olamaz; İthalat/Toplama mal → Konvansiyonel.'],
         ['local'=>'urun_cinsi',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinCinsiId',          'wsdl_field'=>'MalinCinsiId',            'hks_type'=>'int',    'helper'=>'UrunServiceUrunCinsleri',      'ref_type'=>'urun_cins',     'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>'Referanssızda 0 olamaz (kılavuz: UrunCinsi).'],
         ['local'=>'birim',             'dto'=>'BildirimMalBilgileri','pdf_field'=>'MiktarBirimId',          'wsdl_field'=>'MiktarBirimId',           'hks_type'=>'int',    'helper'=>'UrunServiceUrunBirimleri',     'ref_type'=>'urun_birim',    'transform'=>'label→Id (cache); boş=0',           'required'=>true,  'note'=>''],
         ['local'=>'miktar',            'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinMiktari',           'wsdl_field'=>'MalinMiktari',            'hks_type'=>'double', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'TR ondalık → double',               'required'=>true,  'note'=>''],
         ['local'=>'birim_fiyat',       'dto'=>'BildirimMalBilgileri','pdf_field'=>'MalinSatisFiyat',        'wsdl_field'=>'MalinSatisFiyat',         'hks_type'=>'double', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'TR ondalık → double',               'required'=>false, 'note'=>'Satış/Satın almada gerekir.'],
-        ['local'=>'',                  'dto'=>'BildirimMalBilgileri','pdf_field'=>'GelenUlkeId',            'wsdl_field'=>'GelenUlkeId',             'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'İthalat sıfatında 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'gelen_ulke',        'dto'=>'BildirimMalBilgileri','pdf_field'=>'GelenUlkeId',            'wsdl_field'=>'GelenUlkeId',             'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Malın niteliği "İthal" ise zorunlu (form alanı eklendi).'],
         ['local'=>'analize_gonder',    'dto'=>'BildirimMalBilgileri','pdf_field'=>'AnalizeGonderilecekMi', 'wsdl_field'=>'AnalizeGonderilecekMi',   'hks_type'=>'bool',   'helper'=>'',                          'ref_type'=>null,            'transform'=>'0/1 → bool',                        'required'=>false, 'note'=>'Sevk referanslı bildirimde analize gönderilemez.'],
 
         // ── MalinGidecekYerBilgileriDTO ──
         ['local'=>'gidecek_yer',       'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIsletmeTuruId','wsdl_field'=>'GidecekYerIsletmeTuruId','hks_type'=>'int', 'helper'=>'GenelServisIsletmeTurleri',    'ref_type'=>'isletme_turu',  'transform'=>'label→Id (cache); boş olamaz',      'required'=>true,  'note'=>'Her zaman 0 olamaz.'],
         ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekIsyeriId',    'wsdl_field'=>'GidecekIsyeriId',         'hks_type'=>'int',    'helper'=>'HalIciIsyeri/Depolar/Subeler', 'ref_type'=>null,            'transform'=>'ayar (depo/şube id)',               'required'=>false, 'note'=>'İşletme türüne göre Halİçi/Depo/Şube id\'si. Ayardan gelir.'],
         ['local'=>'ihracat_ulke',      'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekUlkeId',     'wsdl_field'=>'GidecekUlkeId',           'hks_type'=>'int',    'helper'=>'GenelServisUlkeler',           'ref_type'=>'ulke',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Gideceği yer Yurt Dışı ise 0 olamaz.'],
-        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlId',     'wsdl_field'=>'GidecekYerIlId',          'hks_type'=>'int',    'helper'=>'GenelServisIller',             'ref_type'=>'il',            'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
-        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlceId',   'wsdl_field'=>'GidecekYerIlceId',        'hks_type'=>'int',    'helper'=>'GenelServisIlceler',           'ref_type'=>'ilce',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
-        ['local'=>'',                  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerBeldeId',  'wsdl_field'=>'GidecekYerBeldeId',       'hks_type'=>'int',    'helper'=>'GenelServisBeldeler',          'ref_type'=>'belde',         'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız ikinci kişide 0 olamaz. FORM ALANI YOK (eksik).'],
+        ['local'=>'gidecek_yer_il',    'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlId',     'wsdl_field'=>'GidecekYerIlId',          'hks_type'=>'int',    'helper'=>'GenelServisIller',             'ref_type'=>'il',            'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız yurt içi gidecek yerde zorunlu (form alanı eklendi).'],
+        ['local'=>'gidecek_yer_ilce',  'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerIlceId',   'wsdl_field'=>'GidecekYerIlceId',        'hks_type'=>'int',    'helper'=>'GenelServisIlceler',           'ref_type'=>'ilce',          'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kayıtsız yurt içi gidecek yerde zorunlu (form alanı eklendi).'],
+        ['local'=>'gidecek_yer_belde', 'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'GidecekYerBeldeId',  'wsdl_field'=>'GidecekYerBeldeId',       'hks_type'=>'int',    'helper'=>'GenelServisBeldeler',          'ref_type'=>'belde',         'transform'=>'label→Id (cache); boş=0',           'required'=>false, 'note'=>'Kılavuz "0 olamaz" der; pratikte belde olmayabilir → form bloke etmez, koşullu not.'],
         ['local'=>'arac_plaka',        'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'AracPlakaNo',        'wsdl_field'=>'AracPlakaNo',             'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>true,  'note'=>'Her zaman boş olamaz (çalışma prensipleri).'],
         ['local'=>'belge_no',          'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'',                   'wsdl_field'=>'BelgeNo',                 'hks_type'=>'string', 'helper'=>'',                          'ref_type'=>null,            'transform'=>'string',                            'required'=>false, 'note'=>'WSDL\'de var, kılavuzda yok → belirsiz.'],
         ['local'=>'belge_tipi',        'dto'=>'MalinGidecekYerBilgileri','pdf_field'=>'',                   'wsdl_field'=>'BelgeTipi',               'hks_type'=>'int',    'helper'=>'BildirimServisBelgeTipleriListesi','ref_type'=>'belge_tipi','transform'=>'label→Id (cache)',                  'required'=>false, 'note'=>'WSDL\'de var, kılavuz alan tablosunda yok → belirsiz.'],
@@ -451,6 +455,8 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
         'arac_plaka' => 'Araç plaka', 'belge_tipi' => 'Belge tipi',
         'il' => 'Üretim ili', 'ilce' => 'İlçe', 'belde' => 'Belde',
         'sevk_tarihi' => 'Sevk tarihi',
+        'gelen_ulke' => 'Gelen ülke', 'gidecek_yer_il' => 'Gidecek yer ili',
+        'gidecek_yer_ilce' => 'Gidecek yer ilçesi', 'gidecek_yer_belde' => 'Gidecek yer beldesi',
     ];
     foreach ($mapping as $row) {
         $lbl = $labels[$row['local']] ?? $row['local'];
@@ -581,9 +587,9 @@ function hks_build_bildirim_kaydet_payload(array $notification, array $settings 
         'BelgeTipi'               => $codeInt('belge_tipi', 'belge_tipi'),
         'GidecekIsyeriId'         => (int)(hks_resolve_depo($n, $settings) ?? 0),
         'GidecekUlkeId'           => $codeInt('ulke', 'ihracat_ulke'),
-        'GidecekYerBeldeId'       => $codeInt('belde', 'gidecek_belde'),
-        'GidecekYerIlId'          => $codeInt('il', 'gidecek_il'),
-        'GidecekYerIlceId'        => $codeInt('ilce', 'gidecek_ilce'),
+        'GidecekYerBeldeId'       => $codeInt('belde', 'gidecek_yer_belde'),
+        'GidecekYerIlId'          => $codeInt('il', 'gidecek_yer_il'),
+        'GidecekYerIlceId'        => $codeInt('ilce', 'gidecek_yer_ilce'),
         'GidecekYerIsletmeTuruId' => $codeInt('isletme_turu', 'gidecek_yer'),
     ];
 

@@ -161,14 +161,15 @@ render_flash();
         <li><code>sevk_tarihi</code> → istekte tarih alanı yok; HKS kayıt anında <code>KayitTarihi</code> atar.</li>
         <li><code>para_birimi</code> → istekte para birimi alanı yok (fiyat double, TL varsayılır).</li>
     </ul>
-    <p style="margin:0 0 8px"><strong>FORM ALANI EKSİK olan zorunlu/koşullu HKS alanları</strong> (eklenmesi gerekebilir):</p>
-    <ul style="margin:0 0 12px;padding-left:20px;color:#4b5563">
-        <li><code>GelenUlkeId</code> — İthalat sıfatında zorunlu. Formda <code>gelen_ulke</code> alanı yok.</li>
-        <li><code>GidecekYerIlId / GidecekYerIlceId / GidecekYerBeldeId</code> — kayıtsız ikinci kişide zorunlu. Form yalnızca <em>üretim</em> il/ilçe/belde tutuyor; gideceği yer için ayrı alan yok.</li>
+    <p style="margin:0 0 8px"><strong>✅ Eklenen koşullu form alanları</strong> (Sprint HKS-eBildirim-MissingFields-01):</p>
+    <ul style="margin:0 0 12px;padding-left:20px;color:#065f46">
+        <li><code>gelen_ulke → GelenUlkeId</code> — Malın niteliği "İthal" ise görünür/zorunlu (GenelServisUlkeler).</li>
+        <li><code>gidecek_yer_il → GidecekYerIlId</code>, <code>gidecek_yer_ilce → GidecekYerIlceId</code>, <code>gidecek_yer_belde → GidecekYerBeldeId</code> — kayıtsız yurt içi gidecek yerde görünür; il/ilçe zorunlu (belde koşullu not).</li>
+        <li><strong>KARAR:</strong> <code>malin_turu</code> alanı zaten <code>UretimSekli</code> içindir (Konvansiyonel/Organik/İyi Tarım = üretim şekli). Ayrı <code>uretim_sekli</code> alanı EKLENMEDİ.</li>
     </ul>
     <p style="margin:0 0 8px"><strong>Belirsiz alanlar</strong> (WSDL'de var, kılavuzda açıklama yok — gönderim için kullanılmadan netleştirilmeli):</p>
     <ul style="margin:0;padding-left:20px;color:#4b5563">
-        <li><code>DogumTarihi</code> (IkinciKisi), <code>BelgeNo</code> / <code>BelgeTipi</code> (MalinGidecekYer).</li>
+        <li><code>DogumTarihi</code> (IkinciKisi), <code>BelgeNo</code> / <code>BelgeTipi</code> (MalinGidecekYer). BelgeNo girilirse BelgeTipi zorunlu kuralı korunur.</li>
     </ul>
 </div>
 

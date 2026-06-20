@@ -279,7 +279,8 @@ endif;
     // D) Mala İlişkin Bilgiler
     hks_detail_card('Mala İlişkin Bilgiler', [
         'Malın Niteliği' => $n['malin_niteligi'] ?? '',
-        'Malın Türü'     => $n['malin_turu'] ?? '',
+        'Gelen Ülke'     => $n['gelen_ulke'] ?? '',
+        'Malın Türü (Üretim Şekli)' => $n['malin_turu'] ?? '',
         'Malın Adı'      => $n['urun'] ?? '',
         'Malın Cinsi'    => $n['urun_cinsi'] ?? '',
         'Miktar'         => $n['miktar'] ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . $n['birim'] : '',
@@ -299,13 +300,16 @@ endif;
         'Gideceği Yer'         => $gidecek_yer_disp,
         'Gid. Yer Sahibi TC/VKN' => $n['gidecek_sahibi_tc'] ?? '',
         'Kayıtlı Değil'        => (int)($n['gidecek_kayitli_degil'] ?? 0) === 1 ? 'Evet' : '',
+        'Gidecek Yer İl'       => $n['gidecek_yer_il'] ?? '',
+        'Gidecek Yer İlçe'     => $n['gidecek_yer_ilce'] ?? '',
+        'Gidecek Yer Belde'    => $n['gidecek_yer_belde'] ?? '',
         'Araç Plaka'           => $n['arac_plaka'] ?? '',
         'Belge No'             => $n['belge_no'] ?? '',
         'Belge Tipi'           => $n['belge_tipi'] ?? '',
         'Depo / Şube'          => $n['depo'] ?? '',
-        'İl'                   => $n['il'] ?? '',
-        'İlçe'                 => $n['ilce'] ?? '',
-        'Belde'                => $n['belde'] ?? '',
+        'Üretim İl'            => $n['il'] ?? '',
+        'Üretim İlçe'          => $n['ilce'] ?? '',
+        'Üretim Belde'         => $n['belde'] ?? '',
         'Sevk Tarihi'          => $n['sevk_tarihi'] ? date('d.m.Y', strtotime((string)$n['sevk_tarihi'])) : '',
     ]);
 

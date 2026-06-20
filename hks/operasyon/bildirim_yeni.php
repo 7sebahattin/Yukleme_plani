@@ -94,6 +94,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'belge_tipi'        => trim($_POST['belge_tipi'] ?? '') ?: null,
         'gidecek_sahibi_tc' => trim($_POST['gidecek_sahibi_tc'] ?? '') ?: null,
         'gidecek_kayitli_degil' => (($_POST['gidecek_kayitli_degil'] ?? '') === '1' || ($_POST['gidecek_kayitli_degil'] ?? '') === 'on') ? 1 : 0,
+        // Sprint MissingFields-01 — koşullu HKS alanları
+        'gelen_ulke'        => trim($_POST['gelen_ulke'] ?? '') ?: null,
+        'gidecek_yer_il'    => trim($_POST['gidecek_yer_il'] ?? '') ?: null,
+        'gidecek_yer_ilce'  => trim($_POST['gidecek_yer_ilce'] ?? '') ?: null,
+        'gidecek_yer_belde' => trim($_POST['gidecek_yer_belde'] ?? '') ?: null,
         'created_by'        => $auth_user['id'] ?? null,
     ];
 
@@ -239,6 +244,10 @@ if ($is_edit && $notif) {
         'gidecek_kayitli_degil' => (int)($notif['gidecek_kayitli_degil'] ?? 0),
         'gidecek_yer'       => (string)($notif['gidecek_yer'] ?? ''),
         'ihracat_ulke'      => (string)($notif['ihracat_ulke'] ?? ''),
+        'gelen_ulke'        => (string)($notif['gelen_ulke'] ?? ''),
+        'gidecek_yer_il'    => (string)($notif['gidecek_yer_il'] ?? ''),
+        'gidecek_yer_ilce'  => (string)($notif['gidecek_yer_ilce'] ?? ''),
+        'gidecek_yer_belde' => (string)($notif['gidecek_yer_belde'] ?? ''),
         'arac_plaka'        => (string)($notif['arac_plaka'] ?? ''),
         'belge_no'          => (string)($notif['belge_no'] ?? ''),
         'belge_tipi'        => (string)($notif['belge_tipi'] ?? ''),
@@ -391,9 +400,16 @@ include __DIR__ . '/views/_layout_start.php';
             <div style="display:flex;gap:18px;flex-wrap:wrap;padding-top:4px">
             <?php foreach (hks_malin_niteligi_list() as $i => $mn): ?>
                 <label style="display:flex;align-items:center;gap:6px;font-weight:400">
-                    <input type="radio" name="malin_niteligi" value="<?= hks_h($mn) ?>" style="width:auto" <?= (!$is_edit && $i === 0) ? 'checked' : '' ?>> <?= hks_h($mn) ?>
+                    <input type="radio" name="malin_niteligi" value="<?= hks_h($mn) ?>" class="malinNiteligiRadio" style="width:auto" <?= (!$is_edit && $i === 0) ? 'checked' : '' ?>> <?= hks_h($mn) ?>
                 </label>
             <?php endforeach; ?>
+            </div>
+        </div>
+        <!-- Gelen Ülke — yalnız Malın Niteliği "İthal" iken görünür/zorunlu (GelenUlkeId) -->
+        <div class="hks-op-row" id="gelenUlkeWrap" style="display:none">
+            <div class="hks-op-field">
+                <label>Malın Geldiği (İthal) Ülke <span style="color:var(--danger)">*</span></label>
+                <select name="gelen_ulke" id="gelenUlke"><?= $ulke_opts ?></select>
             </div>
         </div>
         <div class="hks-op-row">
@@ -510,6 +526,29 @@ include __DIR__ . '/views/_layout_start.php';
             <div class="hks-op-field">
                 <label>Sevk Tarihi <span style="color:var(--danger)">*</span></label>
                 <input type="date" name="sevk_tarihi" value="<?= date('Y-m-d') ?>">
+            </div>
+        </div>
+
+        <!-- Kayıtlı olmayan yurt içi gidecek yer — il/ilçe/belde (GidecekYerIlId/IlceId/BeldeId) -->
+        <div class="hks-op-row" id="gidecekYerKonumWrap" style="display:none">
+            <div class="hks-op-note info" style="grid-column:1/-1;margin-bottom:4px">
+                ℹ️ Gidecek yer kayıtlı olmadığı için malın gideceği <strong>il / ilçe / belde</strong> bilgisi gereklidir.
+            </div>
+            <div class="hks-op-field">
+                <label>Gidecek Yer İl <span style="color:var(--danger)">*</span></label>
+                <?php if ($iller): ?>
+                <select name="gidecek_yer_il" id="gidecekYerIl"><option value="">Seçiniz</option><?= hks_ref_options($iller, '', false) ?></select>
+                <?php else: ?>
+                <input type="text" name="gidecek_yer_il" id="gidecekYerIl" placeholder="Gidecek yer ili">
+                <?php endif; ?>
+            </div>
+            <div class="hks-op-field">
+                <label>Gidecek Yer İlçe <span style="color:var(--danger)">*</span></label>
+                <input type="text" name="gidecek_yer_ilce" id="gidecekYerIlce" placeholder="Gidecek yer ilçesi">
+            </div>
+            <div class="hks-op-field">
+                <label>Gidecek Yer Belde</label>
+                <input type="text" name="gidecek_yer_belde" id="gidecekYerBelde" placeholder="Gidecek yer beldesi">
             </div>
         </div>
 
@@ -725,6 +764,34 @@ include __DIR__ . '/views/_layout_start.php';
     }
     if (gidecekYerEl) { gidecekYerEl.addEventListener('change', refreshIhracat); refreshIhracat(); }
 
+    // Malın Niteliği = İthal → Gelen Ülke göster/zorunlu (GelenUlkeId)
+    var gelenUlkeWrap = document.getElementById('gelenUlkeWrap');
+    function malinNiteligiVal(){
+        var r = form.querySelector('input[name="malin_niteligi"]:checked');
+        return r ? r.value : '';
+    }
+    function refreshGelenUlke(){
+        if (!gelenUlkeWrap) return;
+        gelenUlkeWrap.style.display = (malinNiteligiVal() === 'İthal') ? '' : 'none';
+    }
+    form.querySelectorAll('.malinNiteligiRadio').forEach(function(r){
+        r.addEventListener('change', refreshGelenUlke);
+    });
+    refreshGelenUlke();
+
+    // Gidecek yer kayıtlı değil + yurt içi → il/ilçe/belde göster (GidecekYerIl/Ilce/BeldeId)
+    var gidecekKonumWrap = document.getElementById('gidecekYerKonumWrap');
+    var gidecekKayitliEl = form.querySelector('input[name="gidecek_kayitli_degil"]');
+    function refreshGidecekKonum(){
+        if (!gidecekKonumWrap) return;
+        var kayitsiz = gidecekKayitliEl && gidecekKayitliEl.checked;
+        var yurtIci  = gidecekYerEl && gidecekYerEl.value !== 'Yurt Dışı';
+        gidecekKonumWrap.style.display = (kayitsiz && yurtIci) ? '' : 'none';
+    }
+    if (gidecekKayitliEl) gidecekKayitliEl.addEventListener('change', refreshGidecekKonum);
+    if (gidecekYerEl)     gidecekYerEl.addEventListener('change', refreshGidecekKonum);
+    refreshGidecekKonum();
+
     // ── Düzenleme modu — kayıtlı değerleri forma geri bas ──
     var EDIT = <?= $is_edit && $edit_values !== null ? json_encode($edit_values, JSON_UNESCAPED_UNICODE) : 'null' ?>;
     if (EDIT) {
@@ -762,7 +829,7 @@ include __DIR__ . '/views/_layout_start.php';
         setVal('gidecek_yer', EDIT.gidecek_yer);
         if (typeof refreshIhracat === 'function') refreshIhracat();
         setVal('ihracat_ulke', EDIT.ihracat_ulke);
-        // 4) Malın niteliği — radio
+        // 4) Malın niteliği — radio (gelen ülke görünürlüğünü tetikler)
         if (EDIT.malin_niteligi) {
             var r = form.querySelector('input[name="malin_niteligi"][value="'+String(EDIT.malin_niteligi).replace(/"/g,'\\"')+'"]');
             if (r) r.checked = true;
@@ -772,6 +839,10 @@ include __DIR__ . '/views/_layout_start.php';
             var el = form.querySelector('input[name="'+p[0]+'"]');
             if (el) el.checked = (EDIT[p[0]] == 1);
         });
+        // 6) Koşullu alanları görünür yap, sonra değerlerini bas (Sprint MissingFields-01)
+        if (typeof refreshGelenUlke === 'function') refreshGelenUlke();
+        if (typeof refreshGidecekKonum === 'function') refreshGidecekKonum();
+        ['gelen_ulke','gidecek_yer_il','gidecek_yer_ilce','gidecek_yer_belde'].forEach(function(k){ setVal(k, EDIT[k]); });
     }
 
     show(1);

@@ -241,12 +241,28 @@ function hks_validate_notification(array $n): array {
 
     // ── Koşullu zorunluluklar ──
     // Yurt Dışı → ihracat ülkesi
-    if (mb_strtolower($val('gidecek_yer')) === mb_strtolower('Yurt Dışı') && $val('ihracat_ulke') === '') {
+    $is_yurt_disi_dest = mb_strtolower($val('gidecek_yer')) === mb_strtolower('Yurt Dışı');
+    if ($is_yurt_disi_dest && $val('ihracat_ulke') === '') {
         $errors[] = 'Gideceği yer "Yurt Dışı" seçildiği için ihracat yapılan ülke seçilmelidir.';
     }
     // Belge no varsa belge tipi
     if ($val('belge_no') !== '' && $val('belge_tipi') === '') {
         $errors[] = 'Belge no girildiği için belge tipi seçilmelidir.';
+    }
+
+    // ── Sprint MissingFields-01 — kılavuz koşullu zorunlulukları ──
+    // A) Malın niteliği "İthal" ise gelen ülke zorunlu (GelenUlkeId, kılavuz §5).
+    if (mb_strtolower($val('malin_niteligi')) === mb_strtolower('İthal') && $val('gelen_ulke') === '') {
+        $errors[] = 'İthal mal için gelen ülke seçilmelidir.';
+    }
+    // B) Gidecek yer yurt içi ve kayıtlı değilse il/ilçe zorunlu (GidecekYerIlId/IlceId, kılavuz §5).
+    //    (Yurt dışı seçiliyse bu kural uygulanmaz; o durumda GidecekUlkeId/ihracat_ulke kullanılır.)
+    $gidecek_kayitsiz = (int)($n['gidecek_kayitli_degil'] ?? 0) === 1;
+    if ($gidecek_kayitsiz && !$is_yurt_disi_dest && $val('gidecek_yer') !== '') {
+        if ($val('gidecek_yer_il') === '')   $errors[] = 'Kayıtlı olmayan gidecek yer için il seçilmelidir.';
+        if ($val('gidecek_yer_ilce') === '') $errors[] = 'Kayıtlı olmayan gidecek yer için ilçe seçilmelidir.';
+        // Belde: kılavuzda "0 olamaz" geçse de pratikte her yerde belde olmayabilir;
+        // form akışında bloke etmiyoruz — mapping raporunda koşullu not olarak işaretli.
     }
 
     // ── Format kontrolleri ──
@@ -302,6 +318,7 @@ function hks_is_ebildirim_record(array $n): bool {
         'malin_niteligi', 'malin_turu', 'gidecek_yer', 'ihracat_ulke',
         'belge_tipi', 'karsi_sifat', 'gidecek_sahibi_tc', 'gsm',
         'dogum_tarihi', 'eposta', 'bildirimci_tc_vkn',
+        'gelen_ulke', 'gidecek_yer_il', 'gidecek_yer_ilce', 'gidecek_yer_belde',
     ] as $f) {
         if (trim((string)($n[$f] ?? '')) !== '') return true;
     }
@@ -349,7 +366,8 @@ function hks_notification_payload_preview(array $n): array {
         'Referans Künye'     => $n['reference_kunye_no'] ?? '',
         // — Mal Bilgileri —
         'Malın Niteliği'     => $n['malin_niteligi'] ?? '',
-        'Malın Türü'         => $n['malin_turu'] ?? '',
+        'Gelen Ülke'         => $n['gelen_ulke'] ?? '',
+        'Malın Türü (Üretim Şekli)' => $n['malin_turu'] ?? '',
         'Ürün'               => $n['urun'] ?? '',
         'Ürün Cinsi'         => $n['urun_cinsi'] ?? '',
         'Miktar'             => $miktar,
@@ -359,9 +377,11 @@ function hks_notification_payload_preview(array $n): array {
         // — Gidecek Yer / Sevk —
         'Gideceği Yer'       => $gidecek,
         'Gid. Yer Sahibi'    => $n['gidecek_sahibi_tc'] ?? '',
+        'Gid. Yer İl / İlçe' => trim(((string)($n['gidecek_yer_il'] ?? '')) . ' / ' . ((string)($n['gidecek_yer_ilce'] ?? '')), ' /'),
+        'Gid. Yer Belde'     => $n['gidecek_yer_belde'] ?? '',
         'Depo / Şube'        => $n['depo'] ?? '',
-        'İl / İlçe'          => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
-        'Belde'              => $n['belde'] ?? '',
+        'Üretim İl / İlçe'   => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
+        'Üretim Belde'       => $n['belde'] ?? '',
         'Araç Plaka'         => $n['arac_plaka'] ?? '',
         'Belge No / Tipi'    => $belge,
         'Sevk Tarihi'        => $n['sevk_tarihi'] ?? '',
