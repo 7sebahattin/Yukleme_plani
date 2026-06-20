@@ -21,6 +21,16 @@ $env = $client->getEnvironment();
 $type_keywords = [
     'BildirimKayit', 'BildirimKaydet', 'ListOf_BildirimKayit',
     'BaseRequestMessageOf_ListOf_BildirimKayitIstek', 'ArrayOfBildirim', 'BildirimCevap',
+    'BildirimMalBilgileri', 'BildirimciBilgileri', 'IkinciKisiBilgileri', 'MalinGidecekYerBilgileri',
+];
+
+// BildirimKaydet isteğini oluşturan gerçek DTO'lar — payload alan adları buradan doğrulanır.
+$request_dto_types = [
+    'BildirimKayitIstek',
+    'BildirimMalBilgileriDTO',
+    'BildirimciBilgileriDTO',
+    'IkinciKisiBilgileriDTO',
+    'MalinGidecekYerBilgileriDTO',
 ];
 
 $functions = null; $types = null; $matched_types = []; $parsed = []; $err = null;
@@ -29,14 +39,31 @@ $functions = null; $types = null; $matched_types = []; $parsed = []; $err = null
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     if (($_POST['action'] ?? '') === 'store_fields') {
-        $type_name = trim($_POST['type_name'] ?? '');
-        $fields_json = $_POST['fields_json'] ?? '';
-        $fields = json_decode((string)$fields_json, true);
-        if ($type_name !== '' && is_array($fields) && $fields) {
-            hks_wsdl_store_confirmed_fields($type_name, $fields);
+        // Tek tip ya da çok tip (types_json: {TypeName: [{name,type},...], ...}).
+        $types_json = $_POST['types_json'] ?? '';
+        $multi = json_decode((string)$types_json, true);
+        $total = 0; $stored_types = [];
+        if (is_array($multi) && $multi) {
+            foreach ($multi as $tn => $fields) {
+                $tn = trim((string)$tn);
+                if ($tn !== '' && is_array($fields) && $fields) {
+                    hks_wsdl_store_confirmed_fields($tn, $fields);
+                    $total += count($fields); $stored_types[] = $tn;
+                }
+            }
+        } else {
+            // Geriye dönük: tek tip formu
+            $type_name = trim($_POST['type_name'] ?? '');
+            $fields = json_decode((string)($_POST['fields_json'] ?? ''), true);
+            if ($type_name !== '' && is_array($fields) && $fields) {
+                hks_wsdl_store_confirmed_fields($type_name, $fields);
+                $total += count($fields); $stored_types[] = $type_name;
+            }
+        }
+        if ($stored_types) {
             audit_log_event('hks_wsdl_fields_confirmed', 'hks_reference_cache', null, null,
-                ['type' => $type_name, 'field_count' => count($fields)]);
-            set_flash('success', $type_name . ' için ' . count($fields) . ' alan adı doğrulandı ve kaydedildi.');
+                ['types' => $stored_types, 'field_count' => $total]);
+            set_flash('success', count($stored_types) . ' tip / ' . $total . ' alan adı doğrulandı ve kaydedildi.');
         } else {
             set_flash('error', 'Kaydedilecek geçerli alan listesi bulunamadı.');
         }
@@ -58,9 +85,10 @@ if ($run) {
                 if (stripos($t, $kw) !== false) { $matched_types[] = $t; break; }
             }
         }
-        // BildirimKayitIstek ve ilişkili tipleri parse et
-        foreach (['BildirimKayitIstek', 'BildirimKayitCevap', 'BildirimKaydetCevap',
-                  'BaseRequestMessageOf_ListOf_BildirimKayitIstek', 'ArrayOfBildirimKayitIstek'] as $tn) {
+        // BildirimKayitIstek, alt-DTO'lar ve ilişkili tipleri parse et
+        foreach (array_merge($request_dto_types,
+                  ['BildirimKayitCevap', 'BaseRequestMessageOf_ListOf_BildirimKayitIstek',
+                   'ArrayOfBildirimKayitIstek']) as $tn) {
             $block = hks_find_wsdl_type($types, $tn);
             if ($block !== null) $parsed[$tn] = hks_parse_wsdl_struct_fields($block);
         }
@@ -154,25 +182,33 @@ render_flash();
 <?php endif; ?>
 
 <!-- Bölüm 3 — Parse edilmiş alanlar + mapping karşılaştırma -->
-<h3 style="margin-top:20px">3) BildirimKayitIstek Alanları &amp; Mapping</h3>
+<h3 style="margin-top:20px">3) BildirimKayitIstek (iç içe DTO) Alanları &amp; Mapping</h3>
 <?php
-$bki = $parsed['BildirimKayitIstek'] ?? null;
-if ($bki && !empty($bki['fields'])):
-    // WSDL'de geçen alan adlarını küçük harfli set yap
-    $wsdl_names = [];
-    foreach ($bki['fields'] as $f) $wsdl_names[mb_strtolower($f['name'])] = $f['type'];
-    // local karşılık tahmini (provizyon HKS adımız WSDL'de var mı?)
+// İstek DTO'larının TÜM alan adlarını tek küçük-harf set'te topla (iç içe yapı).
+$wsdl_names = [];        // name(lower) => type
+$store_map  = [];        // TypeName => [{name,type},...]  (kaydetmek için)
+foreach ($request_dto_types as $tn) {
+    $blk = $parsed[$tn] ?? null;
+    if ($blk && !empty($blk['fields'])) {
+        $store_map[$tn] = $blk['fields'];
+        foreach ($blk['fields'] as $f) {
+            // Yalnız skaler alanları doğrulanmış alan kabul et (DTO referansları değil).
+            $wsdl_names[mb_strtolower($f['name'])] = $f['type'];
+        }
+    }
+}
+if (!empty($store_map)):
 ?>
-<div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.85rem">
+<?php foreach ($request_dto_types as $tn): $blk = $parsed[$tn] ?? null; if (!$blk || empty($blk['fields'])) continue; ?>
+<h4 style="margin-top:14px"><code><?= hks_h($tn) ?></code></h4>
+<div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.84rem">
     <thead><tr style="background:var(--bg)">
         <th style="padding:6px 8px;text-align:left">WSDL Alan</th>
         <th style="padding:6px 8px;text-align:left">Tip</th>
-        <th style="padding:6px 8px;text-align:left">Bizim local karşılık</th>
-        <th style="padding:6px 8px;text-align:left">Durum</th>
+        <th style="padding:6px 8px;text-align:left">Local karşılık</th>
     </tr></thead>
     <tbody>
-    <?php foreach ($bki['fields'] as $f):
-        // Provizyon haritada bu HKS adına denk gelen local alanı bul
+    <?php foreach ($blk['fields'] as $f):
         $local_match = '';
         foreach ($field_map as [$lk, $hk, $rq, $rf, $hd]) {
             if (mb_strtolower($hk) === mb_strtolower($f['name'])) { $local_match = $lk; break; }
@@ -181,25 +217,26 @@ if ($bki && !empty($bki['fields'])):
         <tr>
             <td style="padding:5px 8px;border-bottom:1px solid var(--border);font-family:monospace"><?= hks_h($f['name']) ?></td>
             <td style="padding:5px 8px;border-bottom:1px solid var(--border);color:var(--muted)"><?= hks_h($f['type']) ?></td>
-            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= $local_match !== '' ? hks_h($local_match) : '<span class="muted">— eşleşme yok —</span>' ?></td>
-            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= $local_match !== '' ? '<span style="color:#065f46">✓ haritada var</span>' : '<span style="color:#854d0e">⚠ haritada yok</span>' ?></td>
+            <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= $local_match !== '' ? hks_h($local_match) : '<span class="muted">—</span>' ?></td>
         </tr>
     <?php endforeach; ?>
     </tbody>
 </table></div>
+<?php endforeach; ?>
 
-<!-- Provizyon haritamızın WSDL karşılığı var mı? -->
-<h4 style="margin-top:16px">Provizyon Mapping → WSDL Doğrulama</h4>
+<!-- Mapping → WSDL Doğrulama -->
+<h4 style="margin-top:16px">Mapping → WSDL Doğrulama</h4>
 <div class="table-wrap"><table style="width:100%;border-collapse:collapse;font-size:.85rem">
     <thead><tr style="background:var(--bg)">
         <th style="padding:6px 8px;text-align:left">Local</th>
-        <th style="padding:6px 8px;text-align:left">Provizyon HKS Alanı</th>
+        <th style="padding:6px 8px;text-align:left">HKS Alanı</th>
         <th style="padding:6px 8px;text-align:left">Zorunlu</th>
         <th style="padding:6px 8px;text-align:left">WSDL Durumu</th>
     </tr></thead>
     <tbody>
-    <?php foreach ($field_map as [$lk, $hk, $rq, $rf, $hd]):
+    <?php $miss_required = 0; foreach ($field_map as [$lk, $hk, $rq, $rf, $hd]):
         $in_wsdl = isset($wsdl_names[mb_strtolower($hk)]);
+        if ($rq && !$in_wsdl) $miss_required++;
     ?>
         <tr>
             <td style="padding:5px 8px;border-bottom:1px solid var(--border)"><?= hks_h($lk) ?></td>
@@ -212,18 +249,26 @@ if ($bki && !empty($bki['fields'])):
     <?php endforeach; ?>
     </tbody>
 </table></div>
+<?php if ($miss_required === 0): ?>
+<div style="background:#f0fdf4;border:1px solid var(--success);border-radius:8px;padding:10px 14px;margin-top:10px;color:#065f46;font-size:.88rem">
+    ✅ Tüm zorunlu mapping alanları WSDL'de doğrulandı. "Doğrula ve Kaydet" sonrası payload mapping kilidi kalkar (gerçek gönderim yine de live_send kapalı olduğu için yapılmaz).
+</div>
+<?php else: ?>
+<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-top:10px;color:#92400e;font-size:.88rem">
+    ⚠ <?= (int)$miss_required ?> zorunlu alan WSDL'de bulunamadı. Mapping güncellenmeli.
+</div>
+<?php endif; ?>
 
 <form method="post" style="margin-top:14px">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="store_fields">
-    <input type="hidden" name="type_name" value="BildirimKayitIstek">
-    <input type="hidden" name="fields_json" value="<?= hks_h(json_encode($bki['fields'], JSON_UNESCAPED_UNICODE)) ?>">
+    <input type="hidden" name="types_json" value="<?= hks_h(json_encode($store_map, JSON_UNESCAPED_UNICODE)) ?>">
     <button type="submit" class="btn btn-primary">💾 Bu Alanları Doğrula ve Kaydet</button>
-    <span style="font-size:.82rem;color:var(--muted);margin-left:8px">Kaydedince payload mapping bu gerçek alan adlarına göre işaretlenir. Gönderim yine de live_send kapalı olduğu için yapılmaz.</span>
+    <span style="font-size:.82rem;color:var(--muted);margin-left:8px">Tüm istek DTO'larının (<?= count($store_map) ?> tip) alan adları kaydedilir. Gönderim live_send kapalı olduğu için yapılmaz.</span>
 </form>
 
 <?php else: ?>
-<p class="muted">BildirimKayitIstek tipi parse edilemedi. Ham __getTypes dump'ını aşağıdaki accordion'dan inceleyin; tip adı farklı olabilir.</p>
+<p class="muted">İstek DTO'ları parse edilemedi. Ham __getTypes dump'ını aşağıdaki accordion'dan inceleyin; tip adı farklı olabilir.</p>
 <?php endif; ?>
 
 <!-- Bölüm 4 — Ham __getTypes dump (accordion) -->

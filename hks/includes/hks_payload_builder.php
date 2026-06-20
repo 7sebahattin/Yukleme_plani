@@ -233,40 +233,50 @@ function hks_resolve_depo(array $notification, array $settings): ?string {
 }
 
 // ── Alan mapping tanımı ──────────────────────────────────
-// Her satır: local alan, provizyonel HKS alanı, zorunlu mu, kod gerektiriyor mu,
-// ref türü, kod zorunluluğu sert mi (true=eksikse hata, false=uyarı).
+// Her satır: local alan, GERÇEK HKS alanı (WSDL), zorunlu mu, ref türü, kod zorunluluğu sert mi.
+//
+// GERÇEK WSDL YAPISI (BildirimServisBildirimKaydet → BildirimKayitIstek):
+//   BildirimKayitIstek {
+//     int                          BildirimTuru;              (top-level)
+//     BildirimMalBilgileriDTO      BildirimMalBilgileri;
+//     BildirimciBilgileriDTO       BildirimciBilgileri;       { int KisiSifat; }
+//     IkinciKisiBilgileriDTO       IkinciKisiBilgileri;
+//     MalinGidecekYerBilgileriDTO  MalinGidecekYerBilgileri;
+//     long                         ReferansBildirimKunyeNo;   (top-level)
+//     string                       UniqueId;                  (idempotency)
+//   }
+//
+// NOT — payload'a GİRMEYEN local alanlar (haritada yok, gönderimi bloke etmez):
+//   bildirimci_tc_vkn, firma  → HKS hesabı (UserName) üzerinden örtük gelir, istekte yok.
+//   uretici_tc_vkn, uretici_ad → BildirimKayitIstek'te üretici alanı yok (cevapta var).
+//   gidecek_sahibi_tc          → istekte TC değil GidecekIsyeriId (id) ile gider.
+//   sevk_tarihi                → istekte tarih alanı yok; HKS kayıt anında KayitTarihi atar.
 function hks_payload_field_map(): array {
     return [
-        // local key,            HKS alanı (PROVİZYON),       zorunlu, ref türü,        sert-kod
+        // local key,            HKS alanı (GERÇEK WSDL),     zorunlu, ref türü,        sert-kod
         ['notification_type',    'BildirimTuru',              true,    'bildirim_turu', false],
-        ['sifat',                'BildirimciSifat',           true,    'sifat',         false],
-        ['bildirimci_tc_vkn',    'BildirimciTcVkn',           true,    null,            false],
-        ['firma',                'BildirimciUnvan',           true,    null,            false],
-        ['alici_tc_vkn',         'KarsiTarafTcVkn',           true,    null,            false],
-        ['alici_ad',             'KarsiTarafUnvan',           true,    null,            false],
-        ['karsi_sifat',          'KarsiTarafSifat',           false,   'sifat',         false],
-        ['gsm',                  'KarsiTarafGsm',             false,   null,            false],
-        ['eposta',               'KarsiTarafEposta',          false,   null,            false],
-        ['reference_kunye_no',   'ReferansKunyeNo',           false,   null,            false],
-        ['malin_niteligi',       'MalinNiteligi',             true,    'malin_niteligi',false],
-        ['malin_turu',           'MalinTuru',                 true,    'uretim_sekli',  false],
-        ['urun',                 'UrunKodu',                  true,    'urun',          true],
-        ['urun_cinsi',           'UrunCinsKodu',              true,    'urun_cins',     true],
-        ['birim',                'BirimKodu',                 true,    'urun_birim',    true],
-        ['miktar',               'Miktar',                    true,    null,            false],
-        ['birim_fiyat',          'BirimFiyat',                false,   null,            false],
-        ['uretici_tc_vkn',       'UreticiTcVkn',              false,   null,            false],
-        ['uretici_ad',           'UreticiUnvan',              false,   null,            false],
-        ['gidecek_yer',          'GidecekYerTuru',            true,    null,            false],
-        ['ihracat_ulke',         'IhracatUlke',               false,   'ulke',          false],
-        ['gidecek_sahibi_tc',    'GidecekYerSahibiTcVkn',     false,   null,            false],
-        ['arac_plaka',           'AracPlaka',                 true,    null,            false],
-        ['belge_no',             'BelgeNo',                   false,   null,            false],
-        ['belge_tipi',           'BelgeTipi',                 false,   'belge_tipi',    false],
-        ['il',                   'UretimIlKodu',              true,    'il',            true],
-        ['ilce',                 'UretimIlceKodu',            false,   'ilce',          false],
-        ['belde',                'UretimBeldeKodu',           false,   'belde',         false],
-        ['sevk_tarihi',          'SevkTarihi',                true,    null,            false],
+        ['sifat',                'KisiSifat',                 true,    'sifat',         false],  // BildirimciBilgileri.KisiSifat
+        ['alici_tc_vkn',         'TcKimlikVergiNo',           true,    null,            false],  // IkinciKisi
+        ['alici_ad',             'AdSoyad',                   true,    null,            false],  // IkinciKisi
+        ['karsi_sifat',          'KisiSifat',                 false,   'sifat',         false],  // IkinciKisi.KisiSifat
+        ['gsm',                  'CepTel',                    false,   null,            false],  // IkinciKisi
+        ['eposta',               'Eposta',                    false,   null,            false],  // IkinciKisi
+        ['malin_niteligi',       'MalinNiteligi',             true,    'malin_niteligi',false],  // Mal
+        ['malin_turu',           'UretimSekli',               true,    'uretim_sekli',  false],  // Mal
+        ['urun',                 'MalinKodNo',                true,    'urun',          true],   // Mal
+        ['urun_cinsi',           'MalinCinsiId',              true,    'urun_cins',     true],   // Mal
+        ['birim',                'MiktarBirimId',             true,    'urun_birim',    true],   // Mal
+        ['miktar',               'MalinMiktari',              true,    null,            false],  // Mal
+        ['birim_fiyat',          'MalinSatisFiyat',           false,   null,            false],  // Mal
+        ['il',                   'UretimIlId',                true,    'il',            true],   // Mal
+        ['ilce',                 'UretimIlceId',              false,   'ilce',          false],  // Mal
+        ['belde',                'UretimBeldeId',             false,   'belde',         false],  // Mal
+        ['gidecek_yer',          'GidecekYerIsletmeTuruId',   true,    'isletme_turu',  false],  // GidecekYer
+        ['ihracat_ulke',         'GidecekUlkeId',             false,   'ulke',          false],  // GidecekYer
+        ['arac_plaka',           'AracPlakaNo',               true,    null,            false],  // GidecekYer
+        ['belge_no',             'BelgeNo',                   false,   null,            false],  // GidecekYer
+        ['belge_tipi',           'BelgeTipi',                 false,   'belge_tipi',    false],  // GidecekYer
+        ['reference_kunye_no',   'ReferansBildirimKunyeNo',   false,   null,            false],  // top-level
     ];
 }
 
@@ -417,79 +427,97 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
 }
 
 // ── Payload builder ──────────────────────────────────────
-// DB kaydını HKS Istek gövdesine çevirir. Credentials İÇERMEZ.
-// Not: HKS alan adları provizyondur (HKS_PAYLOAD_FIELDS_CONFIRMED bkz.).
+// DB kaydını HKS BildirimKayitIstek gövdesine çevirir. Credentials İÇERMEZ
+// (UserName/Password/ServicePassword gönderim anında HksClient ekler).
+//
+// Yapı GERÇEK WSDL tiplerine birebir uyar (bkz. hks_payload_field_map() notu):
+//   BildirimMalBilgileri / BildirimciBilgileri / IkinciKisiBilgileri /
+//   MalinGidecekYerBilgileri alt-DTO'ları + BildirimTuru/ReferansBildirimKunyeNo/UniqueId.
+// Tip dönüşümleri WSDL'e göre: int/long → tamsayı, double → float, boolean → bool, string → metin.
 function hks_build_bildirim_kaydet_payload(array $notification, array $settings = []): array {
-    $code = static fn(string $type, string $key): ?string
-        => hks_resolve_reference_code($type, (string)($notification[$key] ?? ''));
+    $n = $notification;
 
-    $bildirimci = [
-        'BildirimTuru'      => $code('bildirim_turu', 'notification_type') ?? hks_clean_identifier($notification['notification_type'] ?? ''),
-        'BildirimciSifat'   => $code('sifat', 'sifat') ?? hks_clean_identifier($notification['sifat'] ?? ''),
-        'BildirimciTcVkn'   => hks_clean_identifier($notification['bildirimci_tc_vkn'] ?? ''),
-        'BildirimciUnvan'   => hks_clean_identifier($notification['firma'] ?? ''),
-    ];
+    // Ref kodunu çöz; çözülemezse ham değeri kullan (boşsa '').
+    $codeStr = static fn(string $type, string $key): string
+        => hks_resolve_reference_code($type, (string)($n[$key] ?? '')) ?? hks_clean_identifier($n[$key] ?? '');
+    // int alanlar — kod çözülür, tamsayıya çevrilir (geçersiz/boş → 0).
+    $codeInt = static fn(string $type, string $key): int
+        => (int)(hks_resolve_reference_code($type, (string)($n[$key] ?? '')) ?? ($n[$key] ?? 0));
+    // double alanlar — Türkçe ondalık normalize edilir.
+    $dec = static fn(string $key): float => (float)(hks_normalize_decimal($n[$key] ?? null) ?? 0);
 
-    $karsi = [
-        'KarsiTarafTcVkn'   => hks_clean_identifier($notification['alici_tc_vkn'] ?? ''),
-        'KarsiTarafUnvan'   => hks_clean_identifier($notification['alici_ad'] ?? ''),
-        'KarsiTarafSifat'   => $code('sifat', 'karsi_sifat') ?? hks_clean_identifier($notification['karsi_sifat'] ?? ''),
-        'KarsiTarafGsm'     => hks_clean_identifier($notification['gsm'] ?? ''),
-        'KarsiTarafEposta'  => hks_clean_identifier($notification['eposta'] ?? ''),
-        'YurtDisi'          => (int)($notification['yurt_disi'] ?? 0) === 1,
-    ];
-    if (!empty($notification['dogum_tarihi'])) {
-        $karsi['KarsiTarafDogumTarihi'] = hks_format_service_date((string)$notification['dogum_tarihi']);
-    }
-
+    // BildirimMalBilgileriDTO
     $mal = [
-        'MalinNiteligi' => $code('malin_niteligi', 'malin_niteligi') ?? hks_clean_identifier($notification['malin_niteligi'] ?? ''),
-        'MalinTuru'     => $code('uretim_sekli', 'malin_turu') ?? hks_clean_identifier($notification['malin_turu'] ?? ''),
-        'UrunKodu'      => $code('urun', 'urun') ?? '',
-        'UrunCinsKodu'  => $code('urun_cins', 'urun_cinsi') ?? '',
-        'BirimKodu'     => $code('urun_birim', 'birim') ?? '',
-        'Miktar'        => hks_normalize_decimal($notification['miktar'] ?? null),
-        'UreticiTcVkn'  => hks_clean_identifier($notification['uretici_tc_vkn'] ?? ''),
-        'UreticiUnvan'  => hks_clean_identifier($notification['uretici_ad'] ?? ''),
-        'AnalizeGonder' => (int)($notification['analize_gonder'] ?? 0) === 1,
+        'AnalizeGonderilecekMi' => (int)($n['analize_gonder'] ?? 0) === 1,
+        'GelenUlkeId'   => $codeInt('ulke', 'gelen_ulke'),       // ithalatta dolu; yoksa 0
+        'MalinCinsiId'  => $codeInt('urun_cins', 'urun_cinsi'),
+        'MalinKodNo'    => $codeInt('urun', 'urun'),
+        'MalinMiktari'  => $dec('miktar'),
+        'MalinNiteligi' => $codeInt('malin_niteligi', 'malin_niteligi'),
+        'MalinSatisFiyat' => $dec('birim_fiyat'),
+        'MiktarBirimId' => $codeInt('urun_birim', 'birim'),
+        'UretimBeldeId' => $codeInt('belde', 'belde'),
+        'UretimIlId'    => $codeInt('il', 'il'),
+        'UretimIlceId'  => $codeInt('ilce', 'ilce'),
+        'UretimSekli'   => $codeInt('uretim_sekli', 'malin_turu'),
     ];
-    $fiyat = hks_normalize_decimal($notification['birim_fiyat'] ?? null);
-    if ($fiyat !== null) {
-        $mal['BirimFiyat']  = $fiyat;
-        $mal['ParaBirimi']  = hks_clean_identifier($notification['para_birimi'] ?? 'TL') ?: 'TL';
-    }
 
+    // BildirimciBilgileriDTO — yalnız sıfat (TC/ünvan hesaptan örtük).
+    $bildirimci = [
+        'KisiSifat' => $codeInt('sifat', 'sifat'),
+    ];
+
+    // IkinciKisiBilgileriDTO — karşı taraf.
+    $ikinci = [
+        'AdSoyad'         => hks_clean_identifier($n['alici_ad'] ?? ''),
+        'CepTel'          => hks_clean_identifier($n['gsm'] ?? ''),
+        'DogumTarihi'     => hks_clean_identifier($n['dogum_tarihi'] ?? ''),
+        'Eposta'          => hks_clean_identifier($n['eposta'] ?? ''),
+        'KisiSifat'       => $codeInt('sifat', 'karsi_sifat'),
+        'TcKimlikVergiNo' => hks_clean_identifier($n['alici_tc_vkn'] ?? ''),
+        'YurtDisiMi'      => (int)($n['yurt_disi'] ?? 0) === 1,
+    ];
+
+    // MalinGidecekYerBilgileriDTO
     $gidecek = [
-        'GidecekYerTuru'        => hks_clean_identifier($notification['gidecek_yer'] ?? ''),
-        'IhracatUlke'           => $code('ulke', 'ihracat_ulke') ?? hks_clean_identifier($notification['ihracat_ulke'] ?? ''),
-        'GidecekYerSahibiTcVkn' => hks_clean_identifier($notification['gidecek_sahibi_tc'] ?? ''),
-        'GidecekYerKayitliDegil'=> (int)($notification['gidecek_kayitli_degil'] ?? 0) === 1,
-        'AracPlaka'             => hks_clean_identifier($notification['arac_plaka'] ?? ''),
-        'BelgeNo'               => hks_clean_identifier($notification['belge_no'] ?? ''),
-        'BelgeTipi'             => $code('belge_tipi', 'belge_tipi') ?? hks_clean_identifier($notification['belge_tipi'] ?? ''),
-        'Depo'                  => hks_resolve_depo($notification, $settings),
-        'UretimIlKodu'          => $code('il', 'il') ?? '',
-        'UretimIlceKodu'        => $code('ilce', 'ilce') ?? hks_clean_identifier($notification['ilce'] ?? ''),
-        'UretimBeldeKodu'       => $code('belde', 'belde') ?? hks_clean_identifier($notification['belde'] ?? ''),
-        'SevkTarihi'            => hks_format_service_date((string)($notification['sevk_tarihi'] ?? '')),
+        'AracPlakaNo'             => hks_clean_identifier($n['arac_plaka'] ?? ''),
+        'BelgeNo'                 => hks_clean_identifier($n['belge_no'] ?? ''),
+        'BelgeTipi'               => $codeInt('belge_tipi', 'belge_tipi'),
+        'GidecekIsyeriId'         => (int)(hks_resolve_depo($n, $settings) ?? 0),
+        'GidecekUlkeId'           => $codeInt('ulke', 'ihracat_ulke'),
+        'GidecekYerBeldeId'       => $codeInt('belde', 'gidecek_belde'),
+        'GidecekYerIlId'          => $codeInt('il', 'gidecek_il'),
+        'GidecekYerIlceId'        => $codeInt('ilce', 'gidecek_ilce'),
+        'GidecekYerIsletmeTuruId' => $codeInt('isletme_turu', 'gidecek_yer'),
     ];
 
-    // Referans künye — boşsa hiç gönderme (WSDL'de 0/null ayrımı doğrulanmadı).
-    $kayit = [
-        'Bildirimci' => $bildirimci,
-        'KarsiTaraf' => $karsi,
-        'Mal'        => $mal,
-        'GidecekYer' => $gidecek,
+    // BildirimKayitIstek — alanlar WSDL sırasına yakın.
+    $istek = [
+        'BildirimMalBilgileri'     => $mal,
+        'BildirimTuru'             => $codeInt('bildirim_turu', 'notification_type'),
+        'BildirimciBilgileri'      => $bildirimci,
+        'IkinciKisiBilgileri'      => $ikinci,
+        'MalinGidecekYerBilgileri' => $gidecek,
+        'UniqueId'                 => hks_payload_unique_id($n),
     ];
-    $ref = hks_clean_identifier($notification['reference_kunye_no'] ?? '');
-    if ($ref !== '') {
-        $kayit['ReferansKunyeNo'] = $ref;
+    // ReferansBildirimKunyeNo — long; boşsa 0 göndermek yerine yalnız doluysa ekle.
+    $ref = hks_clean_identifier($n['reference_kunye_no'] ?? '');
+    if ($ref !== '' && ctype_digit($ref)) {
+        $istek['ReferansBildirimKunyeNo'] = (int)$ref;
     }
 
-    // BildirimKayitIstek listesi (tek kayıt)
+    // ArrayOfBildirimKayitIstek → Istek listesi (tek kayıt).
     return [
-        'BildirimKayitIstek' => [$kayit],
+        'BildirimKayitIstek' => [$istek],
     ];
+}
+
+// UniqueId — idempotency anahtarı. Kayıt id'sinden türetilir; yoksa hash.
+function hks_payload_unique_id(array $n): string {
+    $id = hks_clean_identifier($n['id'] ?? '');
+    if ($id !== '') return 'AF-' . $id;
+    $seed = ($n['notification_type'] ?? '') . '|' . ($n['arac_plaka'] ?? '') . '|' . ($n['created_at'] ?? '');
+    return 'AF-' . substr(sha1($seed), 0, 16);
 }
 
 // ── Hassas alan maskeleme ────────────────────────────────
