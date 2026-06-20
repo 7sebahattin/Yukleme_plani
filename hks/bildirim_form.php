@@ -75,6 +75,7 @@ $iller            = $repo->getReferences('il');
 $depolar          = $repo->getReferences('depo');
 $birimler         = $repo->getReferences('urun_birim');
 $urun_cinsleri    = $repo->getReferences('urun_cins');
+$urunler          = $repo->getReferences('urun');
 
 $v = $notif ?? [];
 
@@ -101,7 +102,7 @@ include __DIR__ . '/views/_tabs.php';
     </div>
 </div>
 
-<?php if (empty($bildirim_turleri) || empty($depolar) || empty($iller)): ?>
+<?php if (empty($bildirim_turleri) || empty($depolar) || empty($iller) || empty($urunler)): ?>
 <div class="hks-warning-box">
     ⚠️ Referans verileri senkronize edilmemiş — bazı seçenekler boş olabilir.
     <a href="referanslar.php">Referansları senkronize edin →</a>
@@ -199,8 +200,14 @@ include __DIR__ . '/views/_tabs.php';
 
             <div class="form-group">
                 <label for="urun">Ürün <span style="color:var(--danger)">*</span></label>
+                <?php if ($urunler): ?>
+                <select id="urun" name="urun">
+                    <?= hks_ref_options($urunler, $v['urun'] ?? '') ?>
+                </select>
+                <?php else: ?>
                 <input type="text" id="urun" name="urun"
-                       value="<?= hks_h($v['urun'] ?? '') ?>" placeholder="Ürün adı veya kodu">
+                       value="<?= hks_h($v['urun'] ?? '') ?>" placeholder="Ürün kodu — önce referansları senkronize edin">
+                <?php endif; ?>
             </div>
 
             <div class="form-group">
