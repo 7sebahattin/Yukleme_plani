@@ -634,7 +634,9 @@ function hks_ajax_sync_single(HksClient $client, HksRepository $repo, string $re
         $lc = [];
         foreach ($item as $k => $v) { $lc[strtolower((string)$k)] = $v; }
         $code   = (string)($lc['kod'] ?? $lc['id'] ?? $lc['urunid'] ?? $lc['birimid'] ?? $lc['cinsid'] ?? $lc['tipid'] ?? '');
-        $name   = (string)($lc['ad'] ?? $lc['adi'] ?? $lc['unvan'] ?? $lc['urunadi'] ?? $lc['birimadi'] ?? $lc['cinsadi'] ?? $lc['aciklama'] ?? $lc['name'] ?? $code);
+        $name   = (string)($lc['ad'] ?? $lc['adi'] ?? $lc['unvan'] ?? $lc['urunadi'] ?? $lc['birimadi'] ?? $lc['cinsadi']
+                        ?? $lc['sifat'] ?? $lc['sifatadi'] ?? $lc['tipadi'] ?? $lc['tip'] ?? $lc['tanim'] ?? $lc['tanimi']
+                        ?? $lc['deger'] ?? $lc['value'] ?? $lc['label'] ?? $lc['aciklama'] ?? $lc['aciklamasi'] ?? $lc['name'] ?? $code);
         $parent = (string)($lc['ilcekodu'] ?? $lc['ilkodu'] ?? $lc['parentkod'] ?? $lc['urunid'] ?? '');
         if ($code === '') continue;
         $repo->upsertReference($ref_type, $code, $name, $parent ?: null, json_encode($item, JSON_UNESCAPED_UNICODE));

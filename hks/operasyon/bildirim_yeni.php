@@ -58,6 +58,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $bildirim_turleri = $op_repo->getReferences('bildirim_turu');
 $sifatlar         = $op_repo->getReferences('sifat');
 $iller            = $op_repo->getReferences('il');
+
+// Sıfat etiketleri sayısal/boş ise (senkron eşlemesi tutmamışsa) resmi sabit listeyi kullan.
+$sifat_use_static = hks_refs_labels_numeric($sifatlar);
+$sifat_opts = '<option value="">— Seçin —</option>';
+if ($sifat_use_static) {
+    foreach (hks_sifat_list() as $s) {
+        $sifat_opts .= '<option value="' . hks_h($s['code']) . '">' . hks_h($s['name']) . '</option>';
+    }
+} else {
+    $sifat_opts .= hks_ref_options($sifatlar, '', false);
+}
 $depolar          = $op_repo->getReferences('depo');
 $birimler         = $op_repo->getReferences('urun_birim');
 $urun_cinsleri    = $op_repo->getReferences('urun_cins');
@@ -101,11 +112,7 @@ include __DIR__ . '/views/_layout_start.php';
             </div>
             <div class="hks-op-field">
                 <label>Sıfat <span style="color:var(--danger)">*</span></label>
-                <?php if ($sifatlar): ?>
-                <select name="sifat"><?= hks_ref_options($sifatlar, '') ?></select>
-                <?php else: ?>
-                <input type="text" name="sifat" placeholder="Sıfat">
-                <?php endif; ?>
+                <select name="sifat"><?= $sifat_opts ?></select>
             </div>
             <div class="hks-op-field">
                 <label>Ad Soyad / Ünvan <span style="color:var(--danger)">*</span></label>
