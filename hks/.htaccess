@@ -11,6 +11,7 @@ Options -Indexes
     RewriteEngine On
     RewriteRule ^includes/.*\.php$ - [F,L]
     RewriteRule ^views/.*\.php$ - [F,L]
+    RewriteRule ^operasyon/views/.*\.php$ - [F,L]
 </IfModule>
 
 # Eski include-only dosyalar (geriye dönük uyumluluk)
