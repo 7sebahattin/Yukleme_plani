@@ -12,6 +12,7 @@ $client  = new HksClient($repo);
 $s       = $repo->getSettings();
 $env     = $s['environment'] ?? 'test';
 $queries_enabled = $client->hasSettings() && hks_check_soap();
+$urunler = $repo->getReferences('urun');
 
 $recent_queries = $repo->listQueries(30);
 
@@ -51,6 +52,17 @@ include __DIR__ . '/views/_tabs.php';
     <div class="card" style="padding:20px">
         <h3 style="margin-top:0">🏷️ Referans Künye</h3>
         <p style="font-size:.85rem;color:var(--muted)">BildirimServisReferansKunyeler</p>
+        <div style="margin-bottom:10px">
+            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Ürün <span style="color:var(--danger)">*</span></label>
+            <?php if ($urunler): ?>
+            <select id="ref_urun_id" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+                <?= hks_ref_options($urunler, '') ?>
+            </select>
+            <?php else: ?>
+            <input type="text" id="ref_urun_id" placeholder="Ürün ID (referansları önce senkronize edin)"
+                   style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+            <?php endif; ?>
+        </div>
         <div style="margin-bottom:10px">
             <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Künye No <small class="muted">(boş = tümü)</small></label>
             <input type="text" id="ref_kunye_no" placeholder="Künye numarası..."
@@ -235,8 +247,12 @@ function hksQuery(action, payload, resultEl, btn) {
 // Referans Künye
 document.getElementById('btnRefKunye').dataset.label = '🔍 Sorgula';
 document.getElementById('btnRefKunye').addEventListener('click', function() {
-    hksQuery('query_referans_kunye', {kunye_no: document.getElementById('ref_kunye_no').value.trim()},
-        document.getElementById('ref-kunye-result'), this);
+    var urunId = document.getElementById('ref_urun_id').value.trim();
+    if (!urunId) { alert('Ürün seçin — BildirimServisReferansKunyeler UrunId zorunlu kılıyor.'); return; }
+    hksQuery('query_referans_kunye', {
+        kunye_no: document.getElementById('ref_kunye_no').value.trim(),
+        urun_id:  urunId,
+    }, document.getElementById('ref-kunye-result'), this);
 });
 
 // Bildirim Sorgu
