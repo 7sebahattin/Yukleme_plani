@@ -96,7 +96,11 @@ function hks_wsdl_all_confirmed_field_names(): array {
     if ($cache !== null) return $cache;
     $set = [];
     try {
-        $st = db()->query("SELECT ref_code FROM hks_reference_cache WHERE ref_type LIKE 'wsdl_field:%' AND is_active=1");
+        // __MAPPING_APPROVED__ bir kontrol bayrağıdır, gerçek bir alan adı değildir → hariç tut.
+        $st = db()->query("SELECT ref_code FROM hks_reference_cache
+                           WHERE ref_type LIKE 'wsdl_field:%'
+                             AND ref_type <> 'wsdl_field:__MAPPING_APPROVED__'
+                             AND is_active=1");
         foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $name) {
             $set[mb_strtolower((string)$name)] = true;
         }
@@ -137,6 +141,26 @@ function hks_mapping_approved(): bool {
 function hks_payload_fields_confirmed(): bool {
     if (HKS_PAYLOAD_FIELDS_CONFIRMED) return true;          // manuel/acil override
     return hks_mapping_approved();                          // açık kullanıcı onayı
+}
+
+// Mapping onay bayrağını yaz/kaldır (hks_reference_cache: wsdl_field:__MAPPING_APPROVED__).
+// Yalnızca açık kullanıcı eylemiyle (Mapping Raporu onay butonu) çağrılmalıdır.
+// Bu fonksiyon yetki/önkoşul KONTROLÜ YAPMAZ — çağıran katman (mapping_raporu.php)
+// admin + CSRF + approval_ready=true önkoşullarını garanti eder.
+function hks_mapping_set_approved(bool $approved): void {
+    $pdo = db();
+    if ($approved) {
+        $pdo->prepare(
+            "INSERT INTO hks_reference_cache (ref_type, ref_code, ref_name, synced_at, is_active)
+             VALUES ('wsdl_field:__MAPPING_APPROVED__','1','approved',NOW(),1)
+             ON DUPLICATE KEY UPDATE ref_name='approved', synced_at=NOW(), is_active=1"
+        )->execute();
+    } else {
+        $pdo->prepare(
+            "UPDATE hks_reference_cache SET is_active=0
+             WHERE ref_type='wsdl_field:__MAPPING_APPROVED__'"
+        )->execute();
+    }
 }
 
 // ── Format yardımcıları ──────────────────────────────────

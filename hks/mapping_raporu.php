@@ -9,6 +9,49 @@ if (!is_admin() && !(function_exists('can') && can('hks.settings'))) {
     http_response_code(403); die('Bu sayfa yalnızca yöneticiler içindir.');
 }
 
+$repo = new HksRepository(db());
+
+// ── Mapping Approval Gate — onay ver / geri al (admin + CSRF + approval_ready) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check($_POST['csrf'] ?? null);
+    $action = $_POST['action'] ?? '';
+    $settings_now = $repo->getSettings();
+    $company_id   = $settings_now ? (int)$settings_now['id'] : 0;
+
+    if ($action === 'approve_mapping') {
+        // Önkoşul: onaya hazır olmalı (0 blocking item). Belirsiz alanlar engellemez.
+        $rd = hks_payload_approval_readiness_report();
+        if (empty($rd['approval_ready'])) {
+            set_flash('error', 'Mapping onaya hazır değil — önce bloke eden maddeler giderilmeli.');
+        } else {
+            hks_mapping_set_approved(true);
+            // Kullanıcının açık kararı: canlı gönderim kilidini de aç.
+            if ($company_id > 0) $repo->setLiveSendEnabled($company_id, true);
+            audit_log_event('hks_mapping_approved', 'hks_reference_cache', $company_id, null, [
+                'approval_ready'    => true,
+                'confirmed_fields'  => $rd['confirmed_fields_count'] ?? null,
+                'live_send_enabled' => 1,
+            ]);
+            set_flash('success', 'Mapping ONAYLANDI ve canlı gönderim kilidi AÇILDI. (Gerçek gönderim ayrıca son bağlantı testi + kayıtlı kimlik bilgileri gerektirir.)');
+        }
+        header('Location: mapping_raporu.php'); exit;
+    }
+
+    if ($action === 'revoke_mapping') {
+        hks_mapping_set_approved(false);
+        // Simetrik güvenlik: onay geri alınınca canlı gönderim kilidi de kapanır.
+        if ($company_id > 0) $repo->setLiveSendEnabled($company_id, false);
+        audit_log_event('hks_mapping_revoked', 'hks_reference_cache', $company_id, null, [
+            'live_send_enabled' => 0,
+        ]);
+        set_flash('success', 'Mapping onayı GERİ ALINDI ve canlı gönderim kilidi KAPATILDI.');
+        header('Location: mapping_raporu.php'); exit;
+    }
+}
+
+$op_settings  = $repo->getSettings();
+$live_send_on = $op_settings && (int)($op_settings['live_send_enabled'] ?? 0) === 1;
+
 $spec        = hks_payload_field_spec();
 $confirmed   = hks_wsdl_all_confirmed_field_names();   // WSDL introspeksiyon set'i (cache)
 $introspected = !empty($confirmed);
@@ -63,11 +106,11 @@ render_flash();
     <div class="muted" style="font-size:.86rem;margin-top:4px">
         WSDL introspeksiyonu: <strong><?= $introspected ? '✅ yapıldı ('.count($confirmed).' alan)' : '❌ yapılmadı' ?></strong> ·
         Kullanıcı onayı: <strong><?= $approved ? '✅ verildi' : '❌ verilmedi' ?></strong> ·
-        HKS_PAYLOAD_FIELDS_CONFIRMED: <strong><?= HKS_PAYLOAD_FIELDS_CONFIRMED ? 'true' : 'false' ?></strong>
+        HKS_PAYLOAD_FIELDS_CONFIRMED: <strong><?= HKS_PAYLOAD_FIELDS_CONFIRMED ? 'true' : 'false' ?></strong> ·
+        Canlı gönderim kilidi: <strong><?= $live_send_on ? '🔴 AÇIK' : '🟢 KAPALI' ?></strong>
     </div>
     <div class="muted" style="font-size:.82rem;margin-top:6px">
-        ⚠️ Kilit yalnızca açık onayla açılır. WSDL alan adlarının görülmesi tek başına onay sayılmaz.
-        Onay ayrı bir sprintte, bu rapor incelendikten sonra verilecektir.
+        ⚠️ Kilit yalnızca aşağıdaki açık onay butonuyla açılır. WSDL alan adlarının görülmesi tek başına onay sayılmaz.
     </div>
 </div>
 
@@ -102,9 +145,45 @@ render_flash();
     </details>
     <?php endif; ?>
     <div class="muted" style="font-size:.8rem;margin-top:8px">
-        ℹ️ Bu yalnızca rapordur. <strong>approval_ready true olsa bile HKS_PAYLOAD_FIELDS_CONFIRMED true YAPILMAZ</strong>
-        ve gönderim açılmaz — onay ayrı sprintte, kullanıcı kararıyla verilir.
+        ℹ️ Doğrulanan sayısı (PDF+WSDL) WSDL introspeksiyonu kaydedildikten sonra artar.
+        Belirsiz alanlar (DogumTarihi/BelgeNo/BelgeTipi) onayı engellemez.
     </div>
+</div>
+
+<!-- Mapping Approval Gate — onay ver / geri al (admin) -->
+<div class="card" style="padding:16px;margin-bottom:16px;border:2px solid <?= $approved ? 'var(--danger)' : ($readiness['approval_ready'] ? 'var(--success)' : 'var(--border)') ?>">
+    <div style="font-weight:700;font-size:1.02rem;margin-bottom:6px">🔐 Mapping Onay Kapısı (Approval Gate)</div>
+    <?php if ($approved): ?>
+        <p style="margin:0 0 10px;font-size:.9rem;color:#991b1b">
+            ✅ Mapping <strong>ONAYLI</strong> — alan kilidi açık.
+            Canlı gönderim kilidi: <strong><?= $live_send_on ? '🔴 AÇIK' : '🟢 KAPALI' ?></strong>.
+            Onayı geri almak canlı gönderim kilidini de kapatır.
+        </p>
+        <form method="post" onsubmit="return confirm('Mapping onayı geri alınacak ve canlı gönderim kilidi KAPATILACAK. Onaylıyor musunuz?');">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="revoke_mapping">
+            <button type="submit" class="btn btn-ghost" style="border-color:var(--danger);color:var(--danger)">↩ Onayı Geri Al (kilidi kapat)</button>
+        </form>
+    <?php elseif ($readiness['approval_ready']): ?>
+        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:.86rem;color:#991b1b">
+            ⚠️ <strong>Dikkat — bu işlem canlı gönderimi etkiler.</strong> Onayladığınızda:
+            <ul style="margin:6px 0 0;padding-left:20px">
+                <li><code>hks_payload_fields_confirmed()</code> → <strong>true</strong> (payload "mapping onaylı" sayılır)</li>
+                <li>seçili firmanın <code>live_send_enabled</code> → <strong>1 (canlı gönderim kilidi AÇILIR)</strong></li>
+            </ul>
+            <div style="margin-top:6px">Not: Gerçek bir BildirimKaydet gönderimi yine de son bağlantı testi + kayıtlı kimlik bilgileri gerektirir; bu kapı tek başına gönderim yapmaz.</div>
+        </div>
+        <form method="post" onsubmit="return confirm('Mapping ONAYLANACAK ve canlı gönderim kilidi (live_send_enabled) AÇILACAK. Bu, tüm sprintlerde korunan gönderim-kapalı kuralını sona erdirir. Onaylıyor musunuz?');">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="approve_mapping">
+            <button type="submit" class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)">✅ Mapping'i Onayla ve Canlı Gönderim Kilidini Aç</button>
+        </form>
+    <?php else: ?>
+        <p style="margin:0;font-size:.9rem;color:#92400e">
+            🟠 Onay verilemez — mapping henüz onaya hazır değil. Yukarıdaki <strong>bloke eden maddeleri</strong> giderin
+            (özellikle WSDL introspeksiyonunu kaydedin: <a href="wsdl_tipleri.php?service=bildirim&run=1">WSDL Tipleri → WSDL Oku</a>).
+        </p>
+    <?php endif; ?>
 </div>
 
 <!-- Özet -->

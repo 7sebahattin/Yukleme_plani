@@ -446,6 +446,10 @@ function hks_send_blockers(array $n, ?array $settings): array {
     if (!$settings || (int)($settings['live_send_enabled'] ?? 0) !== 1) {
         $blockers[] = 'Canlı gönderim ayarlardan etkinleştirilmemiş.';
     }
+    // Mapping Approval Gate — alan eşleştirmesi onaylanmadan gönderim yapılamaz.
+    if (function_exists('hks_payload_fields_confirmed') && !hks_payload_fields_confirmed()) {
+        $blockers[] = 'BildirimKaydet alan eşleştirmesi onaylanmadı (Mapping Raporu → Mapping\'i Onayla).';
+    }
     if (($n['status'] ?? '') !== 'checked') {
         $blockers[] = 'Kayıt "Kontrol Edildi" durumunda olmalı.';
     }

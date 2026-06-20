@@ -174,6 +174,14 @@ class HksRepository {
         }
     }
 
+    // Canlı gönderim kilidini aç/kapat (Mapping Approval Gate). Yalnızca açık
+    // kullanıcı eylemiyle çağrılır; yetki/önkoşul kontrolü çağıran katmandadır.
+    public function setLiveSendEnabled(int $company_id, bool $on): void {
+        $this->ensureSettingsColumns();
+        $this->pdo->prepare("UPDATE hks_settings SET live_send_enabled=?, updated_at=NOW() WHERE id=?")
+                  ->execute([$on ? 1 : 0, $company_id]);
+    }
+
     public function updateTestResult(bool $ok, string $message): void {
         $existing = $this->getSettings();
         if (!$existing) return;
