@@ -196,37 +196,62 @@ function hks_ref_options(array $refs, string $selected = '', bool $include_empty
 
 function hks_validate_notification(array $n): array {
     $errors = [];
+    $val = static fn(string $f): string => trim((string)($n[$f] ?? ''));
 
-    // Her zaman zorunlu alanlar
+    // ── Her zaman zorunlu alanlar (resmi e-Bildirim 3-adım formu) ──
     $required = [
-        'notification_type' => 'Bildirim türü',
-        'sifat'             => 'Sıfat',
-        'firma'             => 'Firma',
-        'urun'              => 'Ürün',
-        'urun_cinsi'        => 'Ürün cinsi',
-        'miktar'            => 'Miktar',
-        'birim'             => 'Birim',
-        'depo'              => 'Depo / şube',
-        'il'                => 'İl',
-        'ilce'              => 'İlçe',
-        'sevk_tarihi'       => 'Sevk tarihi',
-        'arac_plaka'        => 'Araç plaka',
-        'alici_ad'          => 'Alıcı adı',
-        'alici_tc_vkn'      => 'Alıcı TC / VKN / vergi no',
+        'notification_type' => 'Bildirim türü seçilmelidir.',
+        'sifat'             => 'Bildirimci sıfatı seçilmelidir.',
+        'firma'             => 'Bildirimci ünvanı boş olamaz.',
+        'urun'              => 'Malın adı seçilmelidir.',
+        'birim'             => 'Mal miktarı birimi seçilmelidir.',
+        'depo'              => 'Depo / şube bilgisi gereklidir.',
+        'sevk_tarihi'       => 'Sevk tarihi girilmelidir.',
+        'arac_plaka'        => 'Araç plakası girilmelidir.',
+        'gidecek_yer'       => 'Gideceği yer seçilmelidir.',
+        'malin_niteligi'    => 'Malın niteliği seçilmelidir.',
+        'malin_turu'        => 'Malın türü seçilmelidir.',
     ];
-    foreach ($required as $field => $label) {
-        if (trim((string)($n[$field] ?? '')) === '') {
-            $errors[] = $label . ' zorunludur.';
-        }
+    foreach ($required as $field => $msg) {
+        if ($val($field) === '') $errors[] = $msg;
     }
 
     // Miktar > 0
-    if (trim((string)($n['miktar'] ?? '')) !== '' && (float)$n['miktar'] <= 0) {
-        $errors[] = 'Miktar sıfırdan büyük olmalıdır.';
+    if ($val('miktar') === '' || (float)$n['miktar'] <= 0) {
+        $errors[] = 'Mal miktarı sıfırdan büyük olmalıdır.';
     }
 
-    // Sevk tarihi format kontrolü (Y-m-d)
-    $sevk = trim((string)($n['sevk_tarihi'] ?? ''));
+    // ── Karşı taraf — "Sevk Etme" dışındaki türlerde zorunlu ──
+    // (Satış / Satın Alım'da karşı taraf vardır; Sevk Etme'de yoktur.)
+    $turu = $val('notification_type');
+    $has_counterparty = $turu !== '' && mb_stripos($turu, 'Sevk') === false;
+    if ($has_counterparty) {
+        if ($val('alici_ad') === '')     $errors[] = 'Karşı taraf adı / ünvanı girilmelidir.';
+        if ($val('alici_tc_vkn') === '') $errors[] = 'Karşı taraf TC / VKN bilgisi girilmelidir.';
+        if ($val('karsi_sifat') === '')  $errors[] = 'Karşı tarafın sıfatı seçilmelidir.';
+    }
+
+    // ── Referans künye yoksa malın kaynağı daha sıkı sorulur ──
+    $has_ref = $val('reference_kunye_no') !== '';
+    if (!$has_ref) {
+        if ($val('urun_cinsi') === '') $errors[] = 'Referans künye girilmediği için malın cinsi seçilmelidir.';
+        if ($val('il') === '')         $errors[] = 'Referans künye girilmediği için üretildiği/girdiği il seçilmelidir.';
+        if ($val('ilce') === '')       $errors[] = 'Referans künye girilmediği için ilçe girilmelidir.';
+    }
+
+    // ── Koşullu zorunluluklar ──
+    // Yurt Dışı → ihracat ülkesi
+    if (mb_strtolower($val('gidecek_yer')) === mb_strtolower('Yurt Dışı') && $val('ihracat_ulke') === '') {
+        $errors[] = 'Gideceği yer "Yurt Dışı" seçildiği için ihracat yapılan ülke seçilmelidir.';
+    }
+    // Belge no varsa belge tipi
+    if ($val('belge_no') !== '' && $val('belge_tipi') === '') {
+        $errors[] = 'Belge no girildiği için belge tipi seçilmelidir.';
+    }
+
+    // ── Format kontrolleri ──
+    // Sevk tarihi format (Y-m-d)
+    $sevk = $val('sevk_tarihi');
     if ($sevk !== '') {
         $d = DateTime::createFromFormat('Y-m-d', $sevk);
         if (!$d || $d->format('Y-m-d') !== $sevk) {
@@ -234,7 +259,7 @@ function hks_validate_notification(array $n): array {
         }
     }
 
-    // Plaka format kontrolü — boş/geçersiz değil
+    // Plaka format
     $plaka = hks_plate((string)($n['arac_plaka'] ?? ''));
     if ($plaka !== '') {
         $first = explode('/', $plaka)[0];
@@ -243,46 +268,103 @@ function hks_validate_notification(array $n): array {
         }
     }
 
-    // TC/VKN uzunluk kontrolü (alıcı)
+    // TC/VKN uzunluk — karşı taraf
     $alici_no = preg_replace('/\D/', '', (string)($n['alici_tc_vkn'] ?? ''));
     if ($alici_no !== '' && !in_array(strlen($alici_no), [10, 11], true)) {
-        $errors[] = 'Alıcı TC (11) veya VKN (10) hane uzunluğunda olmalı.';
+        $errors[] = 'Karşı taraf TC (11) veya VKN (10) hane uzunluğunda olmalıdır.';
+    }
+
+    // TC/VKN uzunluk — gideceği yer sahibi (girildiyse)
+    $gys_no = preg_replace('/\D/', '', (string)($n['gidecek_sahibi_tc'] ?? ''));
+    if ($gys_no !== '' && !in_array(strlen($gys_no), [10, 11], true)) {
+        $errors[] = 'Gideceği yer sahibi TC (11) veya VKN (10) hane uzunluğunda olmalıdır.';
     }
 
     // Üretici: ikisinden biri girildiyse her ikisi de zorunlu
-    $up_ad  = trim((string)($n['uretici_ad'] ?? ''));
-    $up_vkn = trim((string)($n['uretici_tc_vkn'] ?? ''));
+    $up_ad  = $val('uretici_ad');
+    $up_vkn = $val('uretici_tc_vkn');
     if (($up_ad !== '' || $up_vkn !== '') && ($up_ad === '' || $up_vkn === '')) {
         $errors[] = 'Üretici bilgisi girilecekse hem üretici adı hem TC/VKN zorunludur.';
     }
 
     // Çıkış yönünde referans künye zorunlu
-    if (($n['direction'] ?? '') === 'cikis' && trim((string)($n['reference_kunye_no'] ?? '')) === '') {
+    if (($n['direction'] ?? '') === 'cikis' && !$has_ref) {
         $errors[] = 'Çıkış bildiriminde referans künye no zorunludur.';
     }
 
     return $errors;
 }
 
-// HKS'ye gidecek operasyonel payload önizlemesi — şifre/secret İÇERMEZ
+// Yeni e-Bildirim alanlarından biri doldurulmuş mu? (eski form koruması için)
+// Yeni 3-adımlı operasyon formundan oluşan kayıtları tespit eder.
+function hks_is_ebildirim_record(array $n): bool {
+    foreach ([
+        'malin_niteligi', 'malin_turu', 'gidecek_yer', 'ihracat_ulke',
+        'belge_tipi', 'karsi_sifat', 'gidecek_sahibi_tc', 'gsm',
+        'dogum_tarihi', 'eposta', 'bildirimci_tc_vkn',
+    ] as $f) {
+        if (trim((string)($n[$f] ?? '')) !== '') return true;
+    }
+    if ((float)($n['birim_fiyat'] ?? 0) > 0) return true;
+    if ((int)($n['yurt_disi'] ?? 0) === 1) return true;
+    if ((int)($n['gidecek_kayitli_degil'] ?? 0) === 1) return true;
+    return false;
+}
+
+// Toplam tutar (miktar × birim fiyat) — hesaplanabiliyorsa formatlı döndürür, yoksa ''.
+function hks_notification_total_amount(array $n): string {
+    $miktar = (float)($n['miktar'] ?? 0);
+    $fiyat  = (float)($n['birim_fiyat'] ?? 0);
+    if ($miktar <= 0 || $fiyat <= 0) return '';
+    $para = trim((string)($n['para_birimi'] ?? 'TL')) ?: 'TL';
+    return number_format($miktar * $fiyat, 2, ',', '.') . ' ' . $para;
+}
+
+// HKS'ye gidecek operasyonel payload önizlemesi — şifre/secret İÇERMEZ.
+// Kullanıcı kontrol/önizleme tablosu için okunabilir, bölümlere göre sıralı alanlar döndürür.
 function hks_notification_payload_preview(array $n): array {
+    $miktar = ($n['miktar'] ?? '') !== '' ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . ($n['birim'] ?? '') : '';
+    $fiyat  = (float)($n['birim_fiyat'] ?? 0) > 0
+        ? number_format((float)$n['birim_fiyat'], 2, ',', '.') . ' ' . (trim((string)($n['para_birimi'] ?? 'TL')) ?: 'TL')
+        : '';
+    $toplam = hks_notification_total_amount($n);
+    $gidecek = trim((string)($n['gidecek_yer'] ?? ''));
+    if (mb_strtolower($gidecek) === mb_strtolower('Yurt Dışı') && trim((string)($n['ihracat_ulke'] ?? '')) !== '') {
+        $gidecek .= ' (' . $n['ihracat_ulke'] . ')';
+    }
+    $belge = trim((string)($n['belge_no'] ?? ''));
+    if ($belge !== '' && trim((string)($n['belge_tipi'] ?? '')) !== '') {
+        $belge .= ' / ' . $n['belge_tipi'];
+    }
+
     return [
-        'Bildirim Türü'  => $n['notification_type'] ?? '',
-        'Sıfat'          => $n['sifat'] ?? '',
-        'Yön'            => $n['direction'] ?? '',
-        'Firma'          => $n['firma'] ?? '',
-        'Ürün'           => $n['urun'] ?? '',
-        'Ürün Cinsi'     => $n['urun_cinsi'] ?? '',
-        'Miktar'         => ($n['miktar'] ?? '') !== '' ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . ($n['birim'] ?? '') : '',
-        'Depo / Şube'    => $n['depo'] ?? '',
-        'İl / İlçe'      => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
-        'Belde'          => $n['belde'] ?? '',
-        'Üretici'        => trim(($n['uretici_ad'] ?? '') . ' ' . ($n['uretici_tc_vkn'] ? '(' . $n['uretici_tc_vkn'] . ')' : '')),
-        'Alıcı'          => trim(($n['alici_ad'] ?? '') . ' ' . ($n['alici_tc_vkn'] ? '(' . $n['alici_tc_vkn'] . ')' : '')),
-        'Araç Plaka'     => $n['arac_plaka'] ?? '',
-        'Sevk Tarihi'    => $n['sevk_tarihi'] ?? '',
-        'Belge No'       => $n['belge_no'] ?? '',
-        'Referans Künye' => $n['reference_kunye_no'] ?? '',
+        // — Bildirimci —
+        'Bildirim Türü'      => $n['notification_type'] ?? '',
+        'Bildirimci Sıfat'   => $n['sifat'] ?? '',
+        'Bildirimci'         => trim(($n['firma'] ?? '') . ' ' . (!empty($n['bildirimci_tc_vkn']) ? '(' . $n['bildirimci_tc_vkn'] . ')' : '')),
+        // — Karşı Taraf —
+        'Karşı Taraf'        => trim(($n['alici_ad'] ?? '') . ' ' . (!empty($n['alici_tc_vkn']) ? '(' . $n['alici_tc_vkn'] . ')' : '')),
+        'Karşı Taraf Sıfatı' => $n['karsi_sifat'] ?? '',
+        // — Referans Künye —
+        'Referans Künye'     => $n['reference_kunye_no'] ?? '',
+        // — Mal Bilgileri —
+        'Malın Niteliği'     => $n['malin_niteligi'] ?? '',
+        'Malın Türü'         => $n['malin_turu'] ?? '',
+        'Ürün'               => $n['urun'] ?? '',
+        'Ürün Cinsi'         => $n['urun_cinsi'] ?? '',
+        'Miktar'             => $miktar,
+        'Birim Fiyat'        => $fiyat,
+        'Toplam Tutar'       => $toplam,
+        'Üretici'            => trim(($n['uretici_ad'] ?? '') . ' ' . (!empty($n['uretici_tc_vkn']) ? '(' . $n['uretici_tc_vkn'] . ')' : '')),
+        // — Gidecek Yer / Sevk —
+        'Gideceği Yer'       => $gidecek,
+        'Gid. Yer Sahibi'    => $n['gidecek_sahibi_tc'] ?? '',
+        'Depo / Şube'        => $n['depo'] ?? '',
+        'İl / İlçe'          => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
+        'Belde'              => $n['belde'] ?? '',
+        'Araç Plaka'         => $n['arac_plaka'] ?? '',
+        'Belge No / Tipi'    => $belge,
+        'Sevk Tarihi'        => $n['sevk_tarihi'] ?? '',
     ];
 }
 

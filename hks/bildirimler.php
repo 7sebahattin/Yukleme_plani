@@ -95,10 +95,11 @@ include __DIR__ . '/views/_tabs.php';
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Tarih</th>
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Firma</th>
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Ürün</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Gidecek Yer</th>
             <th style="padding:8px 10px;text-align:right;border-bottom:2px solid var(--border)">Miktar</th>
-            <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Depo</th>
-            <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Alıcı</th>
+            <th style="padding:8px 10px;text-align:right;border-bottom:2px solid var(--border)">Birim Fiyat</th>
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Plaka</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Belge No</th>
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">Durum</th>
             <th style="padding:8px 10px;text-align:left;border-bottom:2px solid var(--border)">HKS No</th>
             <th style="padding:8px 10px;border-bottom:2px solid var(--border)">İşlem</th>
@@ -115,12 +116,15 @@ include __DIR__ . '/views/_tabs.php';
         </td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['firma']) ?></td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['urun']) ?></td>
+        <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['gidecek_yer'] ?? '') ?: '<span style="color:var(--muted)">—</span>' ?></td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">
             <?= number_format((float)$n['miktar'], 0, ',', '.') ?> <?= hks_h($n['birim']) ?>
         </td>
-        <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['depo'] ?? '') ?></td>
-        <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['alici_ad'] ?? '') ?></td>
+        <td style="padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap">
+            <?= (float)($n['birim_fiyat'] ?? 0) > 0 ? hks_h(number_format((float)$n['birim_fiyat'], 2, ',', '.') . ' ' . (trim((string)($n['para_birimi'] ?? 'TL')) ?: 'TL')) : '<span style="color:var(--muted)">—</span>' ?>
+        </td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['arac_plaka'] ?? '') ?></td>
+        <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_h($n['belge_no'] ?? '') ?: '<span style="color:var(--muted)">—</span>' ?></td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border)"><?= hks_status_badge($n['status']) ?></td>
         <td style="padding:7px 10px;border-bottom:1px solid var(--border);font-size:.82rem;color:var(--muted)">
             <?= hks_h($n['hks_bildirim_no'] ?? '') ?>

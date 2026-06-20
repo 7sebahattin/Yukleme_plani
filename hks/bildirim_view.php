@@ -216,86 +216,124 @@ if ($sm): ?>
 </div>
 <?php endif; ?>
 
-<!-- Detay kartları -->
+<!-- Detay kartları — resmi e-Bildirim alanlarına göre bölümlenmiş -->
+<?php
+// Bölüm kartı yardımcısı: boş alanlarda "—" gösterir.
+$dir_label = ['giris' => 'Giriş', 'cikis' => 'Çıkış'][$n['direction'] ?? ''] ?? ($n['direction'] ?? '');
+$toplam_tutar = hks_notification_total_amount($n);
+$birim_fiyat_disp = (float)($n['birim_fiyat'] ?? 0) > 0
+    ? number_format((float)$n['birim_fiyat'], 2, ',', '.') . ' ' . (trim((string)($n['para_birimi'] ?? 'TL')) ?: 'TL')
+    : '';
+$dogum_disp = !empty($n['dogum_tarihi']) ? date('d.m.Y', strtotime((string)$n['dogum_tarihi'])) : '';
+
+if (!function_exists('hks_detail_card')):
+function hks_detail_card(string $title, array $rows): void {
+    echo '<div class="card" style="padding:16px">';
+    echo '<div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">' . hks_h($title) . '</div>';
+    foreach ($rows as $k => $v) {
+        $v = trim((string)$v);
+        echo '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.88rem">';
+        echo '<span style="color:var(--muted);white-space:nowrap">' . hks_h($k) . ':</span>';
+        echo '<span style="font-weight:600;text-align:right;max-width:62%">' . ($v !== '' ? hks_h($v) : '<span style="color:var(--muted);font-weight:400">—</span>') . '</span>';
+        echo '</div>';
+    }
+    echo '</div>';
+}
+endif;
+?>
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:16px">
 
-    <div class="card" style="padding:16px">
-        <div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Temel Bilgiler</div>
-        <?php
-        $rows = [
-            'Bildirim Türü' => $n['notification_type'],
-            'Sıfat'         => $n['sifat'] ?? '',
-            'Yön'           => $n['direction'],
-            'Firma'         => $n['firma'],
-            'Ürün'          => $n['urun'],
-            'Ürün Cinsi'    => $n['urun_cinsi'],
-            'Miktar'        => $n['miktar'] ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . $n['birim'] : '',
-            'Sevk Tarihi'   => $n['sevk_tarihi'] ? date('d.m.Y', strtotime($n['sevk_tarihi'])) : '',
-        ];
-        foreach ($rows as $k => $v): if (!$v) continue; ?>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:.88rem">
-            <span style="color:var(--muted)"><?= hks_h($k) ?>:</span>
-            <span style="font-weight:600;text-align:right;max-width:60%"><?= hks_h($v) ?></span>
-        </div>
-        <?php endforeach; ?>
-    </div>
+    <?php
+    // A) Bildirimciye Ait Bilgiler
+    hks_detail_card('Bildirimciye Ait Bilgiler', [
+        'TC / VKN'      => $n['bildirimci_tc_vkn'] ?? '',
+        'Sıfat'         => $n['sifat'] ?? '',
+        'Ad Soyad / Ünvan' => $n['firma'] ?? '',
+        'Bildirim Türü' => $n['notification_type'] ?? '',
+        'Yön'           => $dir_label,
+    ]);
 
-    <div class="card" style="padding:16px">
-        <div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Konum ve Araç</div>
-        <?php
-        $rows2 = [
-            'Depo'          => $n['depo'],
-            'İl'            => $n['il'],
-            'İlçe'          => $n['ilce'],
-            'Belde'         => $n['belde'],
-            'Araç Plaka'    => $n['arac_plaka'],
-            'Belge No'      => $n['belge_no'],
-            'Ref. Künye No' => $n['reference_kunye_no'],
-        ];
-        foreach ($rows2 as $k => $v): if (!$v) continue; ?>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:.88rem">
-            <span style="color:var(--muted)"><?= hks_h($k) ?>:</span>
-            <span style="font-weight:600;text-align:right;max-width:60%"><?= hks_h($v) ?></span>
-        </div>
-        <?php endforeach; ?>
-    </div>
+    // B) Karşı Taraf / Kimden veya Kime Bilgileri
+    hks_detail_card('Karşı Taraf / Kimden veya Kime', [
+        'Karşı Taraf Adı / Ünvan' => $n['alici_ad'] ?? '',
+        'Karşı Taraf TC / VKN'    => $n['alici_tc_vkn'] ?? '',
+        'Karşı Taraf Sıfatı'      => $n['karsi_sifat'] ?? '',
+        'Yurt Dışı'               => (int)($n['yurt_disi'] ?? 0) === 1 ? 'Evet' : '',
+        'GSM'                     => $n['gsm'] ?? '',
+        'Doğum Tarihi'            => $dogum_disp,
+        'E-posta'                 => $n['eposta'] ?? '',
+    ]);
 
-    <div class="card" style="padding:16px">
-        <div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">Üretici / Alıcı</div>
-        <?php
-        $rows3 = [
-            'Üretici Adı'    => $n['uretici_ad'],
-            'Üretici TC/VKN' => $n['uretici_tc_vkn'],
-            'Alıcı Adı'      => $n['alici_ad'],
-            'Alıcı TC/VKN'   => $n['alici_tc_vkn'],
-        ];
-        foreach ($rows3 as $k => $v): if (!$v) continue; ?>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:.88rem">
-            <span style="color:var(--muted)"><?= hks_h($k) ?>:</span>
-            <span style="font-weight:600;text-align:right;max-width:60%"><?= hks_h($v) ?></span>
-        </div>
-        <?php endforeach; ?>
-    </div>
+    // C) Referans Künye
+    hks_detail_card('Referans Künye', [
+        'Künye No' => $n['reference_kunye_no'] ?? '',
+    ]);
 
-    <?php if ($n['hks_bildirim_no'] || $n['hks_kunye_no'] || $n['sent_at']): ?>
-    <div class="card" style="padding:16px">
-        <div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">HKS Sonuç</div>
-        <?php
-        $rows4 = [
-            'HKS Bildirim No' => $n['hks_bildirim_no'],
-            'HKS Künye No'    => $n['hks_kunye_no'],
-            'Gönderim Zamanı' => $n['sent_at'] ? date('d.m.Y H:i', strtotime($n['sent_at'])) : '',
-        ];
-        foreach ($rows4 as $k => $v): if (!$v) continue; ?>
-        <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:.88rem">
-            <span style="color:var(--muted)"><?= hks_h($k) ?>:</span>
-            <span style="font-weight:600;text-align:right;max-width:60%"><?= hks_h($v) ?></span>
-        </div>
-        <?php endforeach; ?>
-    </div>
-    <?php endif; ?>
+    // D) Mala İlişkin Bilgiler
+    hks_detail_card('Mala İlişkin Bilgiler', [
+        'Malın Niteliği' => $n['malin_niteligi'] ?? '',
+        'Malın Türü'     => $n['malin_turu'] ?? '',
+        'Malın Adı'      => $n['urun'] ?? '',
+        'Malın Cinsi'    => $n['urun_cinsi'] ?? '',
+        'Miktar'         => $n['miktar'] ? number_format((float)$n['miktar'], 3, ',', '.') . ' ' . $n['birim'] : '',
+        'Birim Fiyat'    => $birim_fiyat_disp,
+        'Toplam Tutar'   => $toplam_tutar,
+        'Üretici Adı'    => $n['uretici_ad'] ?? '',
+        'Üretici TC/VKN' => $n['uretici_tc_vkn'] ?? '',
+        'Analize Gönder' => (int)($n['analize_gonder'] ?? 0) === 1 ? 'Evet' : '',
+    ]);
+
+    // E) Gideceği Yer / Sevk Bilgileri
+    $gidecek_yer_disp = trim((string)($n['gidecek_yer'] ?? ''));
+    if (mb_strtolower($gidecek_yer_disp) === mb_strtolower('Yurt Dışı') && !empty($n['ihracat_ulke'])) {
+        $gidecek_yer_disp .= ' — ' . $n['ihracat_ulke'];
+    }
+    hks_detail_card('Gideceği Yer / Sevk Bilgileri', [
+        'Gideceği Yer'         => $gidecek_yer_disp,
+        'Gid. Yer Sahibi TC/VKN' => $n['gidecek_sahibi_tc'] ?? '',
+        'Kayıtlı Değil'        => (int)($n['gidecek_kayitli_degil'] ?? 0) === 1 ? 'Evet' : '',
+        'Araç Plaka'           => $n['arac_plaka'] ?? '',
+        'Belge No'             => $n['belge_no'] ?? '',
+        'Belge Tipi'           => $n['belge_tipi'] ?? '',
+        'Depo / Şube'          => $n['depo'] ?? '',
+        'İl'                   => $n['il'] ?? '',
+        'İlçe'                 => $n['ilce'] ?? '',
+        'Belde'                => $n['belde'] ?? '',
+        'Sevk Tarihi'          => $n['sevk_tarihi'] ? date('d.m.Y', strtotime((string)$n['sevk_tarihi'])) : '',
+    ]);
+
+    // F) Durum / Kontrol
+    hks_detail_card('Durum / Kontrol', [
+        'Durum'           => hks_status_label($n['status']),
+        'Oluşturan'       => $creator,
+        'Kontrol Eden'    => $checker,
+        'Kontrol Zamanı'  => !empty($n['checked_at']) ? date('d.m.Y H:i', strtotime((string)$n['checked_at'])) : '',
+        'Gönderim Zamanı' => !empty($n['sent_at']) ? date('d.m.Y H:i', strtotime((string)$n['sent_at'])) : '',
+        'HKS Bildirim No' => $n['hks_bildirim_no'] ?? '',
+        'HKS Künye No'    => $n['hks_kunye_no'] ?? '',
+    ]);
+    ?>
 
 </div>
+
+<!-- Teknik Detay (accordion) — JSON ana ekrana basılmaz -->
+<?php if (!empty($n['request_json']) || !empty($n['response_json']) || !empty($n['validation_errors_json'])): ?>
+<details class="card" style="padding:0;margin-bottom:16px">
+    <summary style="padding:12px 16px;cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)">🔧 Teknik Detay (JSON)</summary>
+    <div style="padding:0 16px 14px">
+        <?php foreach ([
+            'Doğrulama (validation_errors_json)' => $n['validation_errors_json'] ?? '',
+            'İstek (request_json)'               => $n['request_json'] ?? '',
+            'Yanıt (response_json)'              => $n['response_json'] ?? '',
+        ] as $lbl => $jsonv): if (trim((string)$jsonv) === '') continue; ?>
+        <div style="margin-top:10px">
+            <div style="font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:4px"><?= hks_h($lbl) ?></div>
+            <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;font-size:.78rem;margin:0;max-height:280px"><?= hks_h($jsonv) ?></pre>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</details>
+<?php endif; ?>
 
 <!-- Son Kontrol bloğu (düzenlenebilir durumlar) -->
 <?php if ($can_write && in_array($n['status'], ['draft','ready','failed'], true)): ?>
@@ -338,6 +376,9 @@ if ($sm): ?>
         <ul class="hks-blocker-list">
             <?php foreach ($blockers as $b): ?><li><?= hks_h($b) ?></li><?php endforeach; ?>
         </ul>
+        <div class="hks-statebox hks-sb-draft" style="margin-top:10px">
+            ℹ️ Canlı HKS bildirim gönderimi şu an kapalıdır. Bilgiler kaydedildi ve kontrol edildi; gönderim eşlemesi tamamlandığında bu ekrandan gönderilebilecektir.
+        </div>
     <?php else: ?>
         <p style="font-size:.88rem;color:var(--muted)">Aşağıdaki bilgiler HKS'ye gönderilecek (şifreler gösterilmez):</p>
         <table class="hks-check-table">

@@ -43,8 +43,9 @@ include __DIR__ . '/views/_layout_start.php';
 <div class="table-wrap">
 <table class="hks-op-table">
     <thead><tr>
-        <th>Tarih</th><th>Local No</th><th>HKS No</th><th>Ürün</th><th style="text-align:right">Miktar</th>
-        <th>Plaka</th><th>Alıcı</th><th>Durum</th><th>Kaynak</th><th></th>
+        <th>Tarih</th><th>Local No</th><th>HKS No</th><th>Ürün</th><th>Gidecek Yer</th>
+        <th style="text-align:right">Miktar</th><th style="text-align:right">Birim Fiyat</th>
+        <th>Plaka</th><th>Belge No</th><th>Durum</th><th>Kaynak</th><th></th>
     </tr></thead>
     <tbody>
     <?php foreach ($local as $n): ?>
@@ -53,15 +54,17 @@ include __DIR__ . '/views/_layout_start.php';
         <td style="font-weight:600"><?= hks_h($n['local_no']) ?></td>
         <td style="font-size:.8rem;color:var(--muted)"><?= $n['hks_bildirim_no'] ? hks_h($n['hks_bildirim_no']) : '—' ?></td>
         <td><?= hks_h($n['urun']) ?></td>
+        <td><?= hks_h($n['gidecek_yer'] ?? '') ?: '<span class="muted">—</span>' ?></td>
         <td style="text-align:right;white-space:nowrap"><?= number_format((float)$n['miktar'], 0, ',', '.') ?> <?= hks_h($n['birim']) ?></td>
-        <td><?= hks_h($n['arac_plaka'] ?? '') ?></td>
-        <td><?= hks_h($n['alici_ad'] ?? '') ?></td>
+        <td style="text-align:right;white-space:nowrap"><?= (float)($n['birim_fiyat'] ?? 0) > 0 ? hks_h(number_format((float)$n['birim_fiyat'], 2, ',', '.') . ' ' . (trim((string)($n['para_birimi'] ?? 'TL')) ?: 'TL')) : '<span class="muted">—</span>' ?></td>
+        <td><?= hks_h($n['arac_plaka'] ?? '') ?: '<span class="muted">—</span>' ?></td>
+        <td><?= hks_h($n['belge_no'] ?? '') ?: '<span class="muted">—</span>' ?></td>
         <td><?= hks_status_badge($n['status']) ?></td>
         <td><?= op_kaynak_label($n) ?></td>
         <td><a href="../bildirim_view.php?id=<?= (int)$n['id'] ?>" class="hks-op-btn hks-op-btn-ghost" style="padding:4px 9px;font-size:.78rem">Detay</a></td>
     </tr>
     <?php if (!empty($n['last_error']) && $n['status'] === 'failed'): ?>
-    <tr><td colspan="10" style="background:#fef2f2;color:#991b1b;font-size:.8rem">⚠️ Hata: <?= hks_h(mb_substr((string)$n['last_error'], 0, 200)) ?></td></tr>
+    <tr><td colspan="12" style="background:#fef2f2;color:#991b1b;font-size:.8rem">⚠️ Hata: <?= hks_h(mb_substr((string)$n['last_error'], 0, 200)) ?></td></tr>
     <?php endif; ?>
     <?php endforeach; ?>
     </tbody>
