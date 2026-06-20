@@ -19,6 +19,14 @@ if (!$is_new) {
     if (!in_array($notif['status'], ['draft','ready','failed'], true)) {
         set_flash('error', 'Bu bildirim düzenlenemez (durum: ' . $notif['status'] . ').'); header('Location: bildirim_view.php?id=' . $id); exit;
     }
+    // GÜVENLİK: Yeni 3-adımlı e-Bildirim formundan oluşan kayıtlar bu eski formla
+    // düzenlenemez — eski form yeni alanları içermediği için kaydetme sırasında
+    // (malin_niteligi, gidecek_yer, karsi_sifat vb.) verileri silerdi. Bu kayıtlar
+    // yeni 3-adımlı operasyon düzenleme formuna yönlendirilir.
+    if (hks_is_ebildirim_record($notif)) {
+        set_flash('info', 'Bu bildirim yeni e-Bildirim formu ile oluşturulmuştur; yeni düzenleme ekranına yönlendirildiniz.');
+        header('Location: operasyon/bildirim_yeni.php?id=' . $id); exit;
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

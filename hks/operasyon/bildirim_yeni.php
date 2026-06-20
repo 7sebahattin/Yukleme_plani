@@ -9,9 +9,47 @@ if (function_exists('can') && !can('hks.write') && !can('records.write')) {
 
 require __DIR__ . '/views/_op_init.php';   // çıktıdan önce — guard + $op_* + $op_repo
 
-// ── Taslak kaydet (POST) — mevcut repo akışını yeniden kullanır ──
+// ── Düzenleme modu — bildirim_yeni.php?id=123 ──
+$op_editable_statuses = ['draft', 'ready', 'checked', 'failed'];
+$edit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$notif   = null;
+$is_edit = false;
+if ($edit_id > 0) {
+    $notif = $op_repo->getNotification($edit_id);
+    if (!$notif) {
+        set_flash('error', 'Bildirim bulunamadı.');
+        header('Location: ../bildirim_view.php?id=' . $edit_id); exit;
+    }
+    if (!in_array($notif['status'], $op_editable_statuses, true)) {
+        $msg = match ($notif['status']) {
+            'sent'         => 'Gönderilmiş HKS bildirimi düzenlenemez.',
+            'send_pending' => 'Gönderim için kilitlenmiş bildirim düzenlenemez.',
+            'cancelled'    => 'İptal edilmiş bildirim düzenlenemez.',
+            default        => 'Bu bildirim düzenlenemez (durum: ' . $notif['status'] . ').',
+        };
+        set_flash('error', $msg);
+        header('Location: ../bildirim_view.php?id=' . $edit_id); exit;
+    }
+    $is_edit = true;
+}
+
+// ── Taslak kaydet / güncelle (POST) — mevcut repo akışını yeniden kullanır ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
+
+    // Düzenleme mi? Gizli id alanından gelir; create için 0.
+    $post_id  = (int)($_POST['id'] ?? 0);
+    $existing = $post_id > 0 ? $op_repo->getNotification($post_id) : null;
+    if ($post_id > 0) {
+        if (!$existing) {
+            set_flash('error', 'Düzenlenecek bildirim bulunamadı.');
+            header('Location: index.php'); exit;
+        }
+        if (!in_array($existing['status'], $op_editable_statuses, true)) {
+            set_flash('error', 'Bu bildirim artık düzenlenemez (durum: ' . $existing['status'] . ').');
+            header('Location: ../bildirim_view.php?id=' . $post_id); exit;
+        }
+    }
 
     $bildirim_turu = trim($_POST['notification_type'] ?? '');
 
@@ -59,6 +97,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'created_by'        => $auth_user['id'] ?? null,
     ];
 
+    if ($post_id > 0) {
+        // ── GÜNCELLEME — id/local_no/created_* korunur; updateNotification yalnızca
+        //    form alanlarını günceller, checked_at/by'ı sıfırlar ve durumu yeniden hesaplar. ──
+        $was_checked = ($existing['status'] ?? '') === 'checked';
+        $op_repo->updateNotification($post_id, $data);
+        $updated = $op_repo->getNotification($post_id);
+        audit_log_event('hks_notification_updated', 'hks_notifications', $post_id,
+            ['status' => $existing['status'] ?? null],
+            ['firma' => $data['firma'], 'urun' => $data['urun'], 'status' => $updated['status'] ?? 'draft']);
+
+        if ($was_checked) {
+            set_flash('info', 'Bildirim değiştirildiği için tekrar kontrol edilmelidir. Durum "' . hks_status_label($updated['status'] ?? 'ready') . '" olarak güncellendi.');
+        } else {
+            set_flash('success', 'Bildirim güncellendi (' . hks_h($updated['local_no'] ?? '') . ').');
+        }
+        header('Location: ../bildirim_view.php?id=' . $post_id); exit;
+    }
+
+    // ── YENİ KAYIT ──
     $new_id = $op_repo->createNotification($data);
     $op_repo->updateNotification($new_id, $data);   // doğrulama → draft/ready
     $created = $op_repo->getNotification($new_id);
@@ -148,7 +205,48 @@ if ($ulke_refs && !hks_refs_labels_numeric($ulke_refs)) {
     }
 }
 
-$op_page_title  = 'e-Bildirim Oluştur';
+// Düzenleme modunda form alanlarına geri basılacak değerler (JS ile uygulanır).
+$edit_values = null;
+if ($is_edit && $notif) {
+    $edit_values = [
+        'bildirimci_tc_vkn' => (string)($notif['bildirimci_tc_vkn'] ?? '') ?: (string)($op_settings['firma_vkn'] ?? ''),
+        'sifat'             => (string)($notif['sifat'] ?? ''),
+        'firma'             => (string)($notif['firma'] ?? '') ?: (string)($op_settings['firma_adi'] ?? ''),
+        'notification_type' => (string)($notif['notification_type'] ?? ''),
+        'alici_tc_vkn'      => (string)($notif['alici_tc_vkn'] ?? ''),
+        'alici_ad'          => (string)($notif['alici_ad'] ?? ''),
+        'gsm'               => (string)($notif['gsm'] ?? ''),
+        'dogum_tarihi'      => (string)($notif['dogum_tarihi'] ?? ''),
+        'eposta'            => (string)($notif['eposta'] ?? ''),
+        'karsi_sifat'       => (string)($notif['karsi_sifat'] ?? ''),
+        'yurt_disi'         => (int)($notif['yurt_disi'] ?? 0),
+        'reference_kunye_no'=> (string)($notif['reference_kunye_no'] ?? ''),
+        'malin_niteligi'    => (string)($notif['malin_niteligi'] ?? ''),
+        'uretici_tc_vkn'    => (string)($notif['uretici_tc_vkn'] ?? ''),
+        'uretici_ad'        => (string)($notif['uretici_ad'] ?? ''),
+        'il'                => (string)($notif['il'] ?? ''),
+        'ilce'              => (string)($notif['ilce'] ?? ''),
+        'belde'             => (string)($notif['belde'] ?? ''),
+        'urun'              => (string)($notif['urun'] ?? ''),
+        'malin_turu'        => (string)($notif['malin_turu'] ?? ''),
+        'urun_cinsi'        => (string)($notif['urun_cinsi'] ?? ''),
+        'analize_gonder'    => (int)($notif['analize_gonder'] ?? 0),
+        'birim'             => (string)($notif['birim'] ?? 'KG'),
+        'miktar'            => ($notif['miktar'] ?? '') !== '' && (float)$notif['miktar'] > 0 ? rtrim(rtrim(number_format((float)$notif['miktar'], 3, '.', ''), '0'), '.') : '',
+        'birim_fiyat'       => (float)($notif['birim_fiyat'] ?? 0) > 0 ? rtrim(rtrim(number_format((float)$notif['birim_fiyat'], 2, '.', ''), '0'), '.') : '',
+        'para_birimi'       => (string)($notif['para_birimi'] ?? 'TL') ?: 'TL',
+        'gidecek_sahibi_tc' => (string)($notif['gidecek_sahibi_tc'] ?? ''),
+        'gidecek_kayitli_degil' => (int)($notif['gidecek_kayitli_degil'] ?? 0),
+        'gidecek_yer'       => (string)($notif['gidecek_yer'] ?? ''),
+        'ihracat_ulke'      => (string)($notif['ihracat_ulke'] ?? ''),
+        'arac_plaka'        => (string)($notif['arac_plaka'] ?? ''),
+        'belge_no'          => (string)($notif['belge_no'] ?? ''),
+        'belge_tipi'        => (string)($notif['belge_tipi'] ?? ''),
+        'sevk_tarihi'       => (string)($notif['sevk_tarihi'] ?? ''),
+    ];
+}
+
+$op_page_title  = $is_edit ? 'e-Bildirim Düzenle' : 'Yeni e-Bildirim';
 $op_active_tab  = 'bildirimci';
 $op_active_menu = 'bildirim_yeni.php';
 include __DIR__ . '/views/_layout_start.php';
@@ -165,12 +263,22 @@ include __DIR__ . '/views/_layout_start.php';
     ⚠️ Referans listeleri eksik — bazı seçenekler boş görünebilir. <strong>HKS Teknik → Referanslar</strong> bölümünden senkronize edebilirsiniz.
 </div>
 <?php endif; ?>
+<?php if ($is_edit): ?>
+<div class="hks-op-note info">
+    ✏️ <strong><?= hks_h($notif['local_no'] ?? '') ?></strong> düzenleniyor (durum: <?= hks_h(hks_status_label($notif['status'] ?? '')) ?>).
+    <?php if (($notif['status'] ?? '') === 'checked'): ?>
+    Değişiklik kaydedilirse bildirim <strong>tekrar kontrol edilmek üzere</strong> "Gönderime Hazır"a döner.
+    <?php endif; ?>
+</div>
+<?php else: ?>
 <div class="hks-op-note info">
     ℹ️ Bu ekran bildirim <strong>taslağı</strong> oluşturur. HKS'ye canlı gönderim bu sprintte kapalıdır; gönderim ayrı bir adımda yapılır.
 </div>
+<?php endif; ?>
 
-<form method="post" id="opForm" autocomplete="off">
+<form method="post" id="opForm" autocomplete="off" action="bildirim_yeni.php<?= $is_edit ? '?id=' . (int)$edit_id : '' ?>">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <?php if ($is_edit): ?><input type="hidden" name="id" value="<?= (int)$edit_id ?>"><?php endif; ?>
     <input type="hidden" name="mark_checked" id="markChecked" value="0">
 
     <!-- ADIM 1 — Bildirimci / Genel / Kimden-Kime -->
@@ -411,17 +519,19 @@ include __DIR__ . '/views/_layout_start.php';
             Bilgileri kontrol edin. Zorunlu (*) alanlar eksikse kayıt <strong>taslak</strong> olarak kalır; tümü tamamsa <strong>gönderime hazır</strong> olur.
         </div>
         <div id="opSummary" style="font-size:.88rem"></div>
+        <?php if (!$is_edit): ?>
         <label style="display:flex;align-items:center;gap:8px;margin:14px 0;font-size:.9rem">
             <input type="checkbox" id="cbChecked" style="width:auto"> Eksiksizse "Kontrol Edildi" olarak işaretle
         </label>
+        <?php endif; ?>
     </fieldset>
 
     <!-- Navigasyon -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
         <button type="button" class="hks-op-btn hks-op-btn-ghost" id="btnPrev" style="display:none">← Geri</button>
         <button type="button" class="hks-op-btn" id="btnNext">İleri →</button>
-        <button type="submit" class="hks-op-btn" id="btnSave" style="display:none">💾 Taslak Kaydet</button>
-        <a href="index.php" class="hks-op-btn hks-op-btn-ghost">Vazgeç</a>
+        <button type="submit" class="hks-op-btn" id="btnSave" style="display:none"><?= $is_edit ? '💾 Değişiklikleri Kaydet' : '💾 Taslak Kaydet' ?></button>
+        <a href="<?= $is_edit ? '../bildirim_view.php?id=' . (int)$edit_id : 'index.php' ?>" class="hks-op-btn hks-op-btn-ghost">Vazgeç</a>
     </div>
 </form>
 
@@ -473,9 +583,12 @@ include __DIR__ . '/views/_layout_start.php';
     }
     btnNext.addEventListener('click', function(){ show(cur+1); });
     btnPrev.addEventListener('click', function(){ show(cur-1); });
-    document.getElementById('cbChecked').addEventListener('change', function(){
-        document.getElementById('markChecked').value = this.checked ? '1' : '0';
-    });
+    var cbChecked = document.getElementById('cbChecked');
+    if (cbChecked) {
+        cbChecked.addEventListener('change', function(){
+            document.getElementById('markChecked').value = this.checked ? '1' : '0';
+        });
+    }
 
     // ── Referans Künye sorgu + sonuç tablosu (resmi HKS Adım 2 yapısı) ──
     var refRows = [];
@@ -611,6 +724,39 @@ include __DIR__ . '/views/_layout_start.php';
         ihracatWrap.style.display = (gidecekYerEl.value === 'Yurt Dışı') ? '' : 'none';
     }
     if (gidecekYerEl) { gidecekYerEl.addEventListener('change', refreshIhracat); refreshIhracat(); }
+
+    // ── Düzenleme modu — kayıtlı değerleri forma geri bas ──
+    var EDIT = <?= $is_edit && $edit_values !== null ? json_encode($edit_values, JSON_UNESCAPED_UNICODE) : 'null' ?>;
+    if (EDIT) {
+        function setVal(name, v){
+            if (v == null || v === '') return;
+            var el = form.querySelector('[name="'+name+'"]');
+            if (el) el.value = v;
+        }
+        // 1) Bildirim türü önce → bağımlı "karşı sıfat" listesi yeniden kurulur, sonra değeri ata
+        setVal('notification_type', EDIT.notification_type);
+        if (typeof refreshKarsiSifat === 'function') refreshKarsiSifat();
+        setVal('karsi_sifat', EDIT.karsi_sifat);
+        // 2) Basit metin/select alanları
+        ['bildirimci_tc_vkn','sifat','firma','alici_tc_vkn','alici_ad','gsm','dogum_tarihi','eposta',
+         'reference_kunye_no','uretici_tc_vkn','uretici_ad','il','ilce','belde','urun','malin_turu',
+         'urun_cinsi','birim','miktar','birim_fiyat','para_birimi','gidecek_sahibi_tc',
+         'arac_plaka','belge_no','belge_tipi','sevk_tarihi'].forEach(function(k){ setVal(k, EDIT[k]); });
+        // 3) Gideceği yer → ihracat ülkesi görünürlüğü, sonra değer
+        setVal('gidecek_yer', EDIT.gidecek_yer);
+        if (typeof refreshIhracat === 'function') refreshIhracat();
+        setVal('ihracat_ulke', EDIT.ihracat_ulke);
+        // 4) Malın niteliği — radio
+        if (EDIT.malin_niteligi) {
+            var r = form.querySelector('input[name="malin_niteligi"][value="'+String(EDIT.malin_niteligi).replace(/"/g,'\\"')+'"]');
+            if (r) r.checked = true;
+        }
+        // 5) Onay kutuları
+        [['yurt_disi'], ['analize_gonder'], ['gidecek_kayitli_degil']].forEach(function(p){
+            var el = form.querySelector('input[name="'+p[0]+'"]');
+            if (el) el.checked = (EDIT[p[0]] == 1);
+        });
+    }
 
     show(1);
 })();
