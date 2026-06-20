@@ -5140,3 +5140,145 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
     .beyan-match-dialog { max-width: 100%; min-height: 100vh; max-height: 100vh; border-radius: 0; }
 }
 @media print { .beyan-match-overlay { display: none !important; } }
+
+/* =========================================================
+   TASARIM REVİZYONU — Global kabuk cilası + yerleşim kayması fix
+   ---------------------------------------------------------
+   Bu blok YALNIZCA ekleme yapar; < 768px mobil kuralları korunur.
+   Amaç: sayfa geçişlerinde yatay "kayma" sorununu bitirmek,
+   tablet üst barını düzeltmek, sidebar/topbar'a kurumsal cila.
+   ========================================================= */
+
+/* — 1. Sayfa geçişlerinde yatay "kayma" fix (ASIL SORUN) —
+   Dikey scrollbar her zaman yer ayırsın. Önceden sayfa A'da scrollbar yok,
+   B'de var iken içerik ~15px yatay zıplıyordu → "üst bar kayıyor" hissi.
+   Klasik scrollbar'lı masaüstünde (Chrome/Edge/Firefox) etkilidir;
+   iOS/overlay scrollbar'da zaten kayma olmadığından mobili etkilemez. */
+html { scrollbar-gutter: stable; }
+
+/* — 2. Tutarlı, keskin odak halkası (erişilebilirlik + cila) — */
+a:focus-visible, button:focus-visible, .btn:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.pill:focus-visible, .sidebar-link:focus-visible, .topnav a:focus-visible,
+.bottomnav-item:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* — 3. Topbar cilası (mobil/tablet'te görünür) — */
+.topbar {
+    background: linear-gradient(180deg, #232c3e 0%, #1a2130 100%);
+    box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 4px 16px rgba(15,22,40,.16);
+}
+.topnav a { transition: background .14s ease; }
+
+/* — 4. Tablet (768–899px) üst bar: linkler taşmasın, tek satırda yatay kayar — */
+@media (min-width: 768px) and (max-width: 899px) {
+    .topbar-inner { flex-wrap: nowrap; gap: 10px; }
+    .brand-text { white-space: nowrap; }
+    .topnav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        min-width: 0;
+        gap: 2px;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .topnav::-webkit-scrollbar { display: none; }
+    .topnav a { padding: 7px 11px; font-size: .9rem; white-space: nowrap; }
+    /* Dar alanda kullanıcı adı/rol gizlenir, çıkış butonu kalır */
+    .topnav-user-info { display: none; }
+}
+
+/* — 5. Masaüstü sidebar cilası (≥900px) — kurumsal, marka rengiyle uyumlu — */
+@media (min-width: 900px) {
+    .desktop-sidebar {
+        background: linear-gradient(180deg, #1f2738 0%, #161c29 100%);
+        border-right: 1px solid rgba(255,255,255,.06);
+        box-shadow: 1px 0 0 rgba(0,0,0,.18), 4px 0 24px rgba(15,22,40,.06);
+    }
+    .sidebar-section { letter-spacing: .1em; }
+    .sidebar-link { padding: 9px 11px; transition: background .14s ease, color .14s ease; }
+    .sidebar-link:hover { background: rgba(255,255,255,.06); }
+    /* Aktif sekme: yeşil yerine marka mavisi — tema ile bütünleşik */
+    .sidebar-link.active {
+        background: linear-gradient(90deg, rgba(29,108,240,.22), rgba(29,108,240,.04));
+        border-left-color: var(--primary);
+        color: #fff;
+        font-weight: 600;
+    }
+}
+
+/* =========================================================
+   TASARIM SİSTEMİ v2 — token / tipografi / form / tablo / buton
+   ---------------------------------------------------------
+   Tüm sisteme tutarlı kurumsal kimlik. Additive + token override;
+   durum satırı renkleri (islendi/yuklendi) ve mobil kuralları korunur.
+   ========================================================= */
+
+/* — 1. Rafine token'lar (mevcut değişkenler güncellenir → her yere yayılır) — */
+:root {
+    /* Daha keskin, modern iki-katmanlı gölge skalası */
+    --shadow:    0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.09);
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.06);
+    --shadow-md: 0 4px 10px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.05);
+    --shadow-lg: 0 10px 28px rgba(16,24,40,.12), 0 4px 10px rgba(16,24,40,.06);
+    --radius-lg: 14px;
+    /* Odak halkası (form kontrolleri için yumuşak parıltı) */
+    --ring: 0 0 0 3px rgba(29,108,240,.18);
+}
+
+/* — 2. Tipografi: net render + modern başlık ritmi — */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+h1, h2, h3 { letter-spacing: -.011em; }
+
+/* — 3. Form kontrolleri: modern odak halkası + yumuşak etkileşim — */
+input[type="text"], input[type="search"], input[type="tel"],
+input[type="date"], input[type="number"], input[type="email"],
+input[type="password"], select, textarea {
+    transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
+}
+input[type="text"]:hover, input[type="search"]:hover, input[type="tel"]:hover,
+input[type="date"]:hover, input[type="number"]:hover, input[type="email"]:hover,
+input[type="password"]:hover, select:hover, textarea:hover {
+    border-color: var(--border-strong);
+}
+/* Odak: sert outline yerine yumuşak halka + marka kenarlığı (mouse).
+   Klavye için :focus-visible outline ilk blokta zaten korunur. */
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+}
+::placeholder { color: #9aa3b2; opacity: 1; }
+.form-label, .grid label { letter-spacing: .005em; }
+
+/* — 4. Kart & tablo yüzeyleri: rafine derinlik — */
+.card { box-shadow: var(--shadow); }
+.table-wrap { box-shadow: var(--shadow); }
+/* Yuvarlatılmış kabuk içinde temiz alt kenar */
+.data-table tbody tr:last-child td { border-bottom: none; }
+/* Kenar nefesi — ilk/son hücre */
+.data-table th:first-child, .data-table td:first-child { padding-left: 16px; }
+.data-table th:last-child,  .data-table td:last-child  { padding-right: 16px; }
+/* Başlık biraz daha okunur kontrast */
+.data-table th { color: #586074; }
+
+/* — 5. Butonlar: hafif derinlik + dokunsal basış — */
+.btn { box-shadow: var(--shadow-sm); }
+.btn:active { transform: translateY(1px); }
+.btn-ghost { box-shadow: none; }
+.btn-primary {
+    background: linear-gradient(180deg, #2a78f5, var(--primary));
+    box-shadow: 0 1px 2px rgba(16,24,40,.12), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.btn-primary:hover { background: linear-gradient(180deg, var(--primary), var(--primary-dark)); }
+
+/* — 6. Pill filtreleri: yumuşak etkileşim — */
+.pill { transition: background .14s ease, border-color .14s ease, color .14s ease; }
+.pill:not(.active):hover { border-color: var(--border-strong); background: #f7f9fc; }
