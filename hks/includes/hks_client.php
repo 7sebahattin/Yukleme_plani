@@ -747,6 +747,77 @@ class HksClient {
 
     // ── WSDL İnceleme ───────────────────────────────────────
 
+    // Belirtilen servisin WSDL'ini seçer (genel | bildirim | urun).
+    private function resolveServiceWsdl(string $service): array {
+        switch ($service) {
+            case 'bildirim': return [$this->bildirimWsdl(), 'BildirimService'];
+            case 'urun':     return [$this->urunWsdl(),     'UrunService'];
+            default:         return [$this->genelWsdl(),    'GenelService'];
+        }
+    }
+
+    // __getFunctions() — yalnızca WSDL okur, SOAP operasyonu çağırmaz.
+    public function getServiceFunctions(string $service = 'bildirim'): array {
+        $start = microtime(true);
+        [$wsdl, $label] = $this->resolveServiceWsdl($service);
+        if (!hks_check_soap())     return ['ok' => false, 'message' => 'PHP SOAP extension aktif değil.', 'functions' => []];
+        if (!$this->hasSettings()) return ['ok' => false, 'message' => 'HKS ayarları yapılandırılmamış.', 'functions' => []];
+        try {
+            $client    = $this->createSoapClientFromUrl($wsdl);
+            $functions = $client->__getFunctions() ?? [];
+            $duration  = (int)((microtime(true) - $start) * 1000);
+            // Operasyon çağrısı DEĞİL — yalnız introspeksiyon; credentials gönderilmez.
+            $this->logService($label, 'wsdl_introspection', $this->getEnvironment(),
+                ['wsdl' => $wsdl, 'op' => '__getFunctions'], ['count' => count($functions)],
+                true, null, null, $duration);
+            return ['ok' => true, 'wsdl' => $wsdl, 'service' => $service, 'functions' => $functions, 'duration_ms' => $duration];
+        } catch (Throwable $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService($label, 'wsdl_introspection', $this->getEnvironment(),
+                ['wsdl' => $wsdl, 'op' => '__getFunctions'], null, false,
+                $e instanceof SoapFault ? $e->faultcode : null, $e->getMessage(), $duration);
+            return ['ok' => false, 'message' => $e->getMessage(), 'wsdl' => $wsdl, 'functions' => []];
+        }
+    }
+
+    // __getTypes() — yalnızca WSDL okur, SOAP operasyonu çağırmaz.
+    public function getServiceTypes(string $service = 'bildirim'): array {
+        $start = microtime(true);
+        [$wsdl, $label] = $this->resolveServiceWsdl($service);
+        if (!hks_check_soap())     return ['ok' => false, 'message' => 'PHP SOAP extension aktif değil.', 'types' => []];
+        if (!$this->hasSettings()) return ['ok' => false, 'message' => 'HKS ayarları yapılandırılmamış.', 'types' => []];
+        try {
+            $client   = $this->createSoapClientFromUrl($wsdl);
+            $types    = $client->__getTypes() ?? [];
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService($label, 'wsdl_introspection', $this->getEnvironment(),
+                ['wsdl' => $wsdl, 'op' => '__getTypes'], ['count' => count($types)],
+                true, null, null, $duration);
+            return ['ok' => true, 'wsdl' => $wsdl, 'service' => $service, 'types' => $types, 'duration_ms' => $duration];
+        } catch (Throwable $e) {
+            $duration = (int)((microtime(true) - $start) * 1000);
+            $this->logService($label, 'wsdl_introspection', $this->getEnvironment(),
+                ['wsdl' => $wsdl, 'op' => '__getTypes'], null, false,
+                $e instanceof SoapFault ? $e->faultcode : null, $e->getMessage(), $duration);
+            return ['ok' => false, 'message' => $e->getMessage(), 'wsdl' => $wsdl, 'types' => []];
+        }
+    }
+
+    // __getTypes() çıktısını anahtar kelimelere göre filtreler (yalnız okuma).
+    public function findServiceTypes(string $service, array $keywords): array {
+        $res = $this->getServiceTypes($service);
+        if (empty($res['ok'])) return $res;
+        $matched = [];
+        foreach ($res['types'] as $t) {
+            foreach ($keywords as $kw) {
+                if (stripos($t, $kw) !== false) { $matched[] = $t; break; }
+            }
+        }
+        $res['types']   = $matched;
+        $res['matched'] = count($matched);
+        return $res;
+    }
+
     public function inspectWsdl(string $service = 'genel'): array {
         $start = microtime(true);
         $env   = $this->getEnvironment();

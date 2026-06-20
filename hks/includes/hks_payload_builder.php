@@ -18,10 +18,110 @@ declare(strict_types=1);
 //   ASLA eklenmez; gerçek gönderim anında HksClient::buildRequest() ekler.
 // ───────────────────────────────────────────────────────────────────────────
 
-// HKS WSDL alan adları kanıtlandığında true yapılacak. false iken hiçbir kayıt
-// "gönderime hazır" olamaz (alan adı belirsizliği gönderimi bloke eder).
+// MANUEL master override. Normalde dokunulmaz — alan doğrulaması artık canlı
+// WSDL introspeksiyonundan (hks/wsdl_tipleri.php) elde edilen ve
+// hks_reference_cache'e yazılan gerçek alan adlarına göre DİNAMİK hesaplanır
+// (bkz. hks_payload_fields_confirmed()). Bu sabit yalnızca acil durum kilidi/açması.
 if (!defined('HKS_PAYLOAD_FIELDS_CONFIRMED')) {
     define('HKS_PAYLOAD_FIELDS_CONFIRMED', false);
+}
+
+// ── WSDL struct parser ───────────────────────────────────
+// __getTypes() çıktısındaki "struct Name { type field; ... }" bloğunu ayrıştırır.
+// Parse edilemezse 'fields' boş döner, 'raw' ham metni taşır.
+function hks_parse_wsdl_struct_fields(string $typeString): array {
+    $typeString = trim($typeString);
+    $name = '';
+    $fields = [];
+    if (preg_match('/struct\s+([A-Za-z0-9_]+)\s*\{(.*)\}/s', $typeString, $m)) {
+        $name = $m[1];
+        $body = $m[2];
+        foreach (preg_split('/;/', $body) as $line) {
+            $line = trim($line);
+            if ($line === '') continue;
+            // "type fieldName" (type birden çok kelime/namespace içerebilir)
+            if (preg_match('/^(.*\S)\s+([A-Za-z0-9_]+)$/', $line, $fm)) {
+                $fields[] = ['type' => trim($fm[1]), 'name' => $fm[2]];
+            } else {
+                $fields[] = ['type' => '', 'name' => $line];
+            }
+        }
+    }
+    return [
+        'type_name' => $name,
+        'fields'    => $fields,
+        'raw'       => $typeString,
+    ];
+}
+
+// __getTypes() dizisindeki bir tip adına ait struct bloğunu bulur.
+function hks_find_wsdl_type(array $types, string $typeName): ?string {
+    foreach ($types as $t) {
+        if (preg_match('/struct\s+' . preg_quote($typeName, '/') . '\s*\{/', $t)) {
+            return $t;
+        }
+    }
+    return null;
+}
+
+// ── Doğrulanmış WSDL alanlarını sakla / oku (hks_reference_cache) ──
+// Her tip için alan adlarını ref_type='wsdl_field:<TypeName>' altında tutar.
+// Böylece payload builder ve detay ekranı, introspeksiyon çalıştırıldıktan sonra
+// hangi HKS alanının WSDL'de gerçekten var olduğunu bilir. DB'siz ortamda sessizce geçer.
+function hks_wsdl_store_confirmed_fields(string $typeName, array $fields): void {
+    try {
+        $pdo = db();
+        // Önce bu tipin eski kayıtlarını pasifleştir
+        $pdo->prepare("UPDATE hks_reference_cache SET is_active=0 WHERE ref_type=?")
+            ->execute(['wsdl_field:' . $typeName]);
+        $st = $pdo->prepare(
+            "INSERT INTO hks_reference_cache (ref_type, ref_code, ref_name, ref_parent_code, raw_json, synced_at, is_active)
+             VALUES (?,?,?,?,?,NOW(),1)
+             ON DUPLICATE KEY UPDATE ref_name=VALUES(ref_name), synced_at=NOW(), is_active=1"
+        );
+        foreach ($fields as $f) {
+            $fname = is_array($f) ? (string)($f['name'] ?? '') : (string)$f;
+            $ftype = is_array($f) ? (string)($f['type'] ?? '') : '';
+            if ($fname === '') continue;
+            $st->execute(['wsdl_field:' . $typeName, $fname, $ftype, $typeName, null]);
+        }
+    } catch (Throwable) {
+        /* DB yok / yazılamadı — sessiz geç */
+    }
+}
+
+// Tüm doğrulanmış WSDL alan adlarını (tüm tipler) küçük harfli set olarak döndürür.
+function hks_wsdl_all_confirmed_field_names(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $set = [];
+    try {
+        $st = db()->query("SELECT ref_code FROM hks_reference_cache WHERE ref_type LIKE 'wsdl_field:%' AND is_active=1");
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $name) {
+            $set[mb_strtolower((string)$name)] = true;
+        }
+    } catch (Throwable) {
+        $set = [];
+    }
+    return $cache = $set;
+}
+
+// Bir HKS alan adı canlı WSDL'den doğrulandı mı?
+function hks_payload_field_is_confirmed(string $hksField): bool {
+    $set = hks_wsdl_all_confirmed_field_names();
+    if (empty($set)) return false;
+    return isset($set[mb_strtolower($hksField)]);
+}
+
+// Tüm KRİTİK (zorunlu) alanlar WSDL'den doğrulandı mı? Manuel override de kabul edilir.
+function hks_payload_fields_confirmed(): bool {
+    if (HKS_PAYLOAD_FIELDS_CONFIRMED) return true;          // acil durum override
+    $set = hks_wsdl_all_confirmed_field_names();
+    if (empty($set)) return false;                          // introspeksiyon hiç çalışmadı
+    foreach (hks_payload_field_map() as [$local, $hks, $required, $ref, $hard]) {
+        if ($required && !isset($set[mb_strtolower($hks)])) return false;
+    }
+    return true;
 }
 
 // ── Format yardımcıları ──────────────────────────────────
@@ -174,11 +274,13 @@ function hks_payload_field_map(): array {
 // Her local alan için: HKS alanı, değer, kod (varsa), durum, kesinlik.
 function hks_payload_mapping_report(array $notification, array $settings = []): array {
     $rows = [];
+    $introspected = !empty(hks_wsdl_all_confirmed_field_names());  // introspeksiyon çalıştı mı?
     foreach (hks_payload_field_map() as [$local, $hks_field, $required, $ref_type, $hard]) {
         $raw = trim((string)($notification[$local] ?? ''));
         $out_value = $raw;
         $status = 'ok';
 
+        // 1) Değer/kod seviyesi durumu
         if ($raw === '') {
             $status = $required ? 'missing' : 'empty';
         } elseif ($ref_type !== null) {
@@ -205,12 +307,18 @@ function hks_payload_mapping_report(array $notification, array $settings = []): 
             else $out_value = $iso;
         }
 
+        // 2) Alan adı (WSDL) seviyesi — yalnız değer/kod sorunu yoksa baskın olur
+        $certain = hks_payload_field_is_confirmed($hks_field);
+        if (in_array($status, ['ok', 'empty'], true) && $introspected) {
+            $status = $certain ? 'wsdl_ok' : 'wsdl_not_found';
+        }
+
         $rows[] = [
             'local'    => $local,
             'hks_field'=> $hks_field,
             'value'    => $out_value,
             'required' => $required,
-            'certain'  => HKS_PAYLOAD_FIELDS_CONFIRMED,  // alan adı kesin mi?
+            'certain'  => $certain,         // alan adı canlı WSDL'den doğrulandı mı?
             'status'   => $status,
         ];
     }
@@ -259,6 +367,14 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
                 elseif ($row['local'] === 'sevk_tarihi') $errors[] = 'Sevk tarihi HKS tarih formatına çevrilemedi.';
                 else $errors[] = $lbl . ' geçersiz.';
                 break;
+            case 'wsdl_not_found':
+                // İntrospeksiyon çalıştı ama bu alan adı WSDL'de bulunamadı.
+                if ($row['required']) {
+                    $errors[] = $lbl . ' alanı (HKS: ' . $row['hks_field'] . ') WSDL\'de bulunamadı — mapping düzeltilmeli.';
+                } else {
+                    $warnings[] = $lbl . ' alanı (HKS: ' . $row['hks_field'] . ') WSDL\'de bulunamadı.';
+                }
+                break;
         }
     }
 
@@ -277,13 +393,19 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
         $errors[] = 'HKS gönderimi için varsayılan depo/şube bilgisi ayarlanmalıdır.';
     }
 
-    // Alan adı belirsizliği — WSDL doğrulanana kadar gönderim bloke
-    if (!HKS_PAYLOAD_FIELDS_CONFIRMED) {
-        $warnings[] = 'HKS WSDL alan adları (BildirimKayitIstek) henüz doğrulanmadığı için '
-                    . 'gönderim güvenlik gereği kapalıdır. Mapping önizleme amaçlıdır.';
+    // Alan adı belirsizliği — kritik alanlar WSDL'den doğrulanana kadar gönderim bloke
+    $fields_confirmed = hks_payload_fields_confirmed();
+    if (!$fields_confirmed) {
+        if (empty(hks_wsdl_all_confirmed_field_names())) {
+            $warnings[] = 'HKS WSDL alan adları (BildirimKayitIstek) henüz introspeksiyonla '
+                        . 'doğrulanmadı. HKS Teknik → WSDL Tipleri ekranından çalıştırın. Gönderim kapalı.';
+        } else {
+            $warnings[] = 'Bazı kritik HKS alan adları WSDL\'de bulunamadı; payload mapping güncellenene '
+                        . 'kadar gönderim kapalı.';
+        }
     }
 
-    $ready = empty($errors) && HKS_PAYLOAD_FIELDS_CONFIRMED;
+    $ready = empty($errors) && $fields_confirmed;
 
     return [
         'ready'    => $ready,

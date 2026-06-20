@@ -405,12 +405,14 @@ endif;
             <tbody>
             <?php
             $st_map = [
-                'ok'           => ['✓ Eşleşti', '#065f46'],
-                'empty'        => ['— Boş (opsiyonel)', '#6b7280'],
-                'missing'      => ['✗ Eksik (zorunlu)', '#991b1b'],
-                'code_missing' => ['✗ HKS kodu yok', '#991b1b'],
-                'ref_unsynced' => ['⚠ Liste senkron değil', '#854d0e'],
-                'invalid'      => ['✗ Geçersiz format', '#991b1b'],
+                'ok'            => ['✓ Eşleşti', '#065f46'],
+                'wsdl_ok'       => ['✓ WSDL doğrulandı', '#065f46'],
+                'wsdl_not_found'=> ['✗ WSDL\'de bulunamadı', '#991b1b'],
+                'empty'         => ['— Boş (opsiyonel)', '#6b7280'],
+                'missing'       => ['✗ Eksik (zorunlu)', '#991b1b'],
+                'code_missing'  => ['✗ Kod eksik', '#991b1b'],
+                'ref_unsynced'  => ['⚠ Liste senkron değil', '#854d0e'],
+                'invalid'       => ['✗ Geçersiz format', '#991b1b'],
             ];
             foreach ($pay_check['mapping'] as $m):
                 [$st_lbl, $st_col] = $st_map[$m['status']] ?? [$m['status'], '#374151'];
