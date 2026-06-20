@@ -391,7 +391,7 @@ include __DIR__ . '/views/_layout_start.php';
             <div style="display:flex;gap:18px;flex-wrap:wrap;padding-top:4px">
             <?php foreach (hks_malin_niteligi_list() as $i => $mn): ?>
                 <label style="display:flex;align-items:center;gap:6px;font-weight:400">
-                    <input type="radio" name="malin_niteligi" value="<?= hks_h($mn) ?>" style="width:auto" <?= $i === 0 ? 'checked' : '' ?>> <?= hks_h($mn) ?>
+                    <input type="radio" name="malin_niteligi" value="<?= hks_h($mn) ?>" style="width:auto" <?= (!$is_edit && $i === 0) ? 'checked' : '' ?>> <?= hks_h($mn) ?>
                 </label>
             <?php endforeach; ?>
             </div>
@@ -728,10 +728,26 @@ include __DIR__ . '/views/_layout_start.php';
     // ── Düzenleme modu — kayıtlı değerleri forma geri bas ──
     var EDIT = <?= $is_edit && $edit_values !== null ? json_encode($edit_values, JSON_UNESCAPED_UNICODE) : 'null' ?>;
     if (EDIT) {
+        // Select alanlarda kayıtlı değer option olarak yoksa geçici "(kayıtlı değer)"
+        // option'ı eklenir — referans kodları değişse bile veri boş görünmez/kaybolmaz.
         function setVal(name, v){
             if (v == null || v === '') return;
+            v = String(v);
             var el = form.querySelector('[name="'+name+'"]');
-            if (el) el.value = v;
+            if (!el) return;
+            if (el.tagName === 'SELECT') {
+                el.value = v;
+                if (el.value !== v) {
+                    var opt = document.createElement('option');
+                    opt.value = v;
+                    opt.textContent = v + ' (kayıtlı değer)';
+                    opt.setAttribute('data-prefill', '1');
+                    el.appendChild(opt);
+                    el.value = v;
+                }
+            } else {
+                el.value = v;
+            }
         }
         // 1) Bildirim türü önce → bağımlı "karşı sıfat" listesi yeniden kurulur, sonra değeri ata
         setVal('notification_type', EDIT.notification_type);
