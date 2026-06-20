@@ -5209,3 +5209,76 @@ input:focus-visible, select:focus-visible, textarea:focus-visible,
         font-weight: 600;
     }
 }
+
+/* =========================================================
+   TASARIM SİSTEMİ v2 — token / tipografi / form / tablo / buton
+   ---------------------------------------------------------
+   Tüm sisteme tutarlı kurumsal kimlik. Additive + token override;
+   durum satırı renkleri (islendi/yuklendi) ve mobil kuralları korunur.
+   ========================================================= */
+
+/* — 1. Rafine token'lar (mevcut değişkenler güncellenir → her yere yayılır) — */
+:root {
+    /* Daha keskin, modern iki-katmanlı gölge skalası */
+    --shadow:    0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.09);
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.06);
+    --shadow-md: 0 4px 10px rgba(16,24,40,.07), 0 2px 4px rgba(16,24,40,.05);
+    --shadow-lg: 0 10px 28px rgba(16,24,40,.12), 0 4px 10px rgba(16,24,40,.06);
+    --radius-lg: 14px;
+    /* Odak halkası (form kontrolleri için yumuşak parıltı) */
+    --ring: 0 0 0 3px rgba(29,108,240,.18);
+}
+
+/* — 2. Tipografi: net render + modern başlık ritmi — */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+h1, h2, h3 { letter-spacing: -.011em; }
+
+/* — 3. Form kontrolleri: modern odak halkası + yumuşak etkileşim — */
+input[type="text"], input[type="search"], input[type="tel"],
+input[type="date"], input[type="number"], input[type="email"],
+input[type="password"], select, textarea {
+    transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
+}
+input[type="text"]:hover, input[type="search"]:hover, input[type="tel"]:hover,
+input[type="date"]:hover, input[type="number"]:hover, input[type="email"]:hover,
+input[type="password"]:hover, select:hover, textarea:hover {
+    border-color: var(--border-strong);
+}
+/* Odak: sert outline yerine yumuşak halka + marka kenarlığı (mouse).
+   Klavye için :focus-visible outline ilk blokta zaten korunur. */
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: var(--ring);
+}
+::placeholder { color: #9aa3b2; opacity: 1; }
+.form-label, .grid label { letter-spacing: .005em; }
+
+/* — 4. Kart & tablo yüzeyleri: rafine derinlik — */
+.card { box-shadow: var(--shadow); }
+.table-wrap { box-shadow: var(--shadow); }
+/* Yuvarlatılmış kabuk içinde temiz alt kenar */
+.data-table tbody tr:last-child td { border-bottom: none; }
+/* Kenar nefesi — ilk/son hücre */
+.data-table th:first-child, .data-table td:first-child { padding-left: 16px; }
+.data-table th:last-child,  .data-table td:last-child  { padding-right: 16px; }
+/* Başlık biraz daha okunur kontrast */
+.data-table th { color: #586074; }
+
+/* — 5. Butonlar: hafif derinlik + dokunsal basış — */
+.btn { box-shadow: var(--shadow-sm); }
+.btn:active { transform: translateY(1px); }
+.btn-ghost { box-shadow: none; }
+.btn-primary {
+    background: linear-gradient(180deg, #2a78f5, var(--primary));
+    box-shadow: 0 1px 2px rgba(16,24,40,.12), inset 0 1px 0 rgba(255,255,255,.12);
+}
+.btn-primary:hover { background: linear-gradient(180deg, var(--primary), var(--primary-dark)); }
+
+/* — 6. Pill filtreleri: yumuşak etkileşim — */
+.pill { transition: background .14s ease, border-color .14s ease, color .14s ease; }
+.pill:not(.active):hover { border-color: var(--border-strong); background: #f7f9fc; }
