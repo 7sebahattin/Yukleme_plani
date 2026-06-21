@@ -226,6 +226,45 @@ function hks_ref_options(array $refs, string $selected = '', bool $include_empty
     return $out;
 }
 
+// ── HKS kişi / künye doğrulama yardımcıları ──────────────
+
+// Karşı taraf HKS doğrulaması GEÇERLİ mi? — verified=1 VE doğrulanan TC == mevcut alici_tc_vkn.
+// TC/VKN değiştiyse (query_json'daki tc ≠ mevcut) doğrulama bayatlamış sayılır → false.
+function hks_karsi_kisi_is_verified(array $n): bool {
+    if ((int)($n['karsi_kisi_verified'] ?? 0) !== 1) return false;
+    $cur = preg_replace('/\D/', '', (string)($n['alici_tc_vkn'] ?? ''));
+    $ver = '';
+    $q = json_decode((string)($n['karsi_kisi_query_json'] ?? ''), true);
+    if (is_array($q)) $ver = preg_replace('/\D/', '', (string)($q['tc_vkn'] ?? ''));
+    return $cur !== '' && $cur === $ver;
+}
+
+// Referans künye HKS doğrulaması GEÇERLİ mi? — verified=1 VE doğrulanan künye == mevcut künye no.
+function hks_reference_kunye_is_verified(array $n): bool {
+    if ((int)($n['reference_kunye_verified'] ?? 0) !== 1) return false;
+    $cur = trim((string)($n['reference_kunye_no'] ?? ''));
+    $ver = '';
+    $q = json_decode((string)($n['reference_kunye_query_json'] ?? ''), true);
+    if (is_array($q)) $ver = trim((string)($q['kunye_no'] ?? ''));
+    return $cur !== '' && $cur === $ver;
+}
+
+// Bu bildirim türünde karşı taraf gerekiyor mu? (Sevk Etme'de yok; Satış/Satın Alım'da var.)
+function hks_karsi_taraf_required(string $bildirim_turu): bool {
+    return $bildirim_turu !== '' && mb_stripos($bildirim_turu, 'Sevk') === false;
+}
+
+// "Kayıtlı değil" karşı tarafa bu bildirim türünde izin var mı? (kılavuz §5)
+//   Satın Alım / Sevk Etme → ikinci kişi GTB'de kayıtlı olmalı → kayıtsız İZİNLİ DEĞİL.
+//   Satış → kayıtlı olmayan kişiye (tam bilgi ile) izin verilir.
+function hks_karsi_kayitsiz_allowed(string $bildirim_turu): bool {
+    $t = mb_strtolower(trim($bildirim_turu));
+    if ($t === '') return false;
+    if (mb_strpos($t, 'satın alım') !== false || mb_strpos($t, 'satin alim') !== false) return false;
+    if (mb_strpos($t, 'sevk') !== false) return false;
+    return true;
+}
+
 // ── Bildirim doğrulama ───────────────────────────────────
 
 function hks_validate_notification(array $n): array {
@@ -258,11 +297,25 @@ function hks_validate_notification(array $n): array {
     // ── Karşı taraf — "Sevk Etme" dışındaki türlerde zorunlu ──
     // (Satış / Satın Alım'da karşı taraf vardır; Sevk Etme'de yoktur.)
     $turu = $val('notification_type');
-    $has_counterparty = $turu !== '' && mb_stripos($turu, 'Sevk') === false;
+    $has_counterparty = hks_karsi_taraf_required($turu);
     if ($has_counterparty) {
         if ($val('alici_ad') === '')     $errors[] = 'Karşı taraf adı / ünvanı girilmelidir.';
         if ($val('alici_tc_vkn') === '') $errors[] = 'Karşı taraf TC / VKN bilgisi girilmelidir.';
         if ($val('karsi_sifat') === '')  $errors[] = 'Karşı tarafın sıfatı seçilmelidir.';
+
+        // HKS çalışma mantığı: TC/VKN tek başına yetmez — KayitliKisiSorgu ile doğrulanmalı.
+        $karsi_kayitsiz = (int)($n['karsi_kisi_kayitli_degil'] ?? 0) === 1;
+        if ($karsi_kayitsiz) {
+            // "Kayıtlı değil" yalnız kılavuzun izin verdiği türlerde geçerli.
+            if (!hks_karsi_kayitsiz_allowed($turu)) {
+                $errors[] = 'Bu bildirim türünde kayıtlı olmayan kişiyle devam edilemez.';
+            } elseif ($val('alici_ad') === '') {
+                $errors[] = 'Kayıtlı olmayan karşı taraf için ad / ünvan zorunludur.';
+            }
+        } elseif (!hks_karsi_kisi_is_verified($n)) {
+            // Kayıtlı kişi seçeneği: HKS doğrulaması zorunlu (TC değiştiyse bayatlamış sayılır).
+            $errors[] = 'Karşı taraf HKS\'de doğrulanmalıdır (TC/VKN için "HKS\'de Sorgula").';
+        }
     }
 
     // ── Referans künye yoksa malın kaynağı daha sıkı sorulur ──
@@ -271,6 +324,16 @@ function hks_validate_notification(array $n): array {
         if ($val('urun_cinsi') === '') $errors[] = 'Referans künye girilmediği için malın cinsi seçilmelidir.';
         if ($val('il') === '')         $errors[] = 'Referans künye girilmediği için üretildiği/girdiği il seçilmelidir.';
         if ($val('ilce') === '')       $errors[] = 'Referans künye girilmediği için ilçe girilmelidir.';
+    } else {
+        // Referans künye girildiyse HKS'de doğrulanmış olmalı (elle yazmak yetmez).
+        if (!hks_reference_kunye_is_verified($n)) {
+            $errors[] = 'Referans künye HKS\'de doğrulanmalıdır ("Künye Sorgula").';
+        }
+        // Miktar, künyedeki kalan miktardan büyük olamaz.
+        $kalan = (float)($n['reference_kunye_kalan_miktar'] ?? 0);
+        if ($kalan > 0 && (float)($n['miktar'] ?? 0) > $kalan + 1e-9) {
+            $errors[] = 'Girilen miktar referans künyedeki kalan miktardan büyük olamaz.';
+        }
     }
 
     // ── Koşullu zorunluluklar ──
