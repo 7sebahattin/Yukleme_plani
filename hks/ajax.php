@@ -139,21 +139,11 @@ switch ($action) {
 
     // ── Bildirim Sorgu ─────────────────────────────────────
     case 'query_bildirim':
-        if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {
-            $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
-        }
-        $bildirim_no = trim($input['bildirim_no'] ?? '');
-        if ($bildirim_no === '') {
-            $json_result = ['ok' => false, 'message' => 'Bildirim numarası girilmedi.']; break;
-        }
-        $uid2 = isset($user['id']) ? (int)$user['id'] : null;
-        $json_result = $client->queryBildirim(['BildirimNo' => $bildirim_no]);
-        if ($json_result['ok']) {
-            $repo->saveQuery('bildirim', $bildirim_no, 'ok', json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid2);
-            audit_log_event('hks_bildirim_query', 'hks_queries', null, null, ['bildirim_no' => $bildirim_no]);
-        } else {
-            $repo->saveQuery('bildirim', $bildirim_no, 'error', $json_result['message'] ?? null, $uid2);
-        }
+        // KALDIRILDI: HKS WSDL'inde "tek bildirim no" için ayrı bir method YOKTUR.
+        // Bildirim aramak için Künye No + Künye Türü ile liste sorgusu kullanılır
+        // (BildirimcininYaptigi / BildirimciyeYapilan → BildirimSorguIstek).
+        $json_result = ['ok' => false,
+            'message' => 'Tek bildirim no sorgusu HKS\'de ayrı bir servis değildir. Lütfen "Bildirim Listeleri" bölümünde Künye No ve Künye Türü ile sorgulayın.'];
         break;
 
     // ── Kayıtlı Kişi Sorgu ──────────────────────────────────────
@@ -271,14 +261,20 @@ switch ($action) {
             $json_result = ['ok' => false, 'message' => 'Yetki yok.']; break;
         }
         $uid_tk = isset($user['id']) ? (int)$user['id'] : null;
+        // WSDL: TopluKunyeIstek { string AracPlakaNo; string BelgeNo; dateTime BildirimTarihi; }
+        // (tarih ARALIĞI DEĞİL — tek bildirim tarihi + plaka/belge.)
         $tk_params = [];
-        if (!empty($input['kunye_no']))  $tk_params['KunyeNo'] = trim($input['kunye_no']);
-        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
-            if (!empty($input[$inp])) {
-                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
-                if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input[$inp])) { $json_result = ['ok' => false, 'message' => 'Başlangıç veya bitiş tarihi HKS formatına uygun değil.']; break 2; }
-                $tk_params[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
+        if (!empty($input['arac_plaka'])) $tk_params['AracPlakaNo'] = hks_plate(trim($input['arac_plaka']));
+        if (!empty($input['belge_no']))   $tk_params['BelgeNo']     = trim($input['belge_no']);
+        if (!empty($input['bildirim_tarihi'])) {
+            $d_obj = DateTime::createFromFormat('Y-m-d', trim($input['bildirim_tarihi']));
+            if (!$d_obj || $d_obj->format('Y-m-d') !== trim($input['bildirim_tarihi'])) {
+                $json_result = ['ok' => false, 'message' => 'Bildirim tarihi HKS formatına uygun değil.']; break;
             }
+            $tk_params['BildirimTarihi'] = $d_obj->format('Y-m-d\T00:00:00');
+        }
+        if (empty($tk_params)) {
+            $json_result = ['ok' => false, 'message' => 'Araç plakası, belge no veya bildirim tarihinden en az biri girilmelidir.']; break;
         }
         $json_result = $client->getTopluKunye($tk_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
@@ -287,7 +283,7 @@ switch ($action) {
                 $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
             }
         }
-        $repo->saveQuery('toplu_kunye', $input['kunye_no'] ?? '*',
+        $repo->saveQuery('toplu_kunye', $tk_params['BelgeNo'] ?? ($tk_params['AracPlakaNo'] ?? '*'),
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_tk);
         break;
@@ -328,6 +324,10 @@ switch ($action) {
             }
         }
         if (!empty($input['kunye_no']))  $yb_params['KunyeNo'] = trim($input['kunye_no']);
+        // WSDL BildirimSorguIstek ek alanları: KunyeTuru(int), Sifat(int), KalanMiktariSifirdanBuyukOlanlar(bool)
+        if (!empty($input['kunye_turu']))    $yb_params['KunyeTuru'] = (int)$input['kunye_turu'];
+        if (!empty($input['sifat']))         $yb_params['Sifat']     = (int)$input['sifat'];
+        if (!empty($input['kalan_pozitif'])) $yb_params['KalanMiktariSifirdanBuyukOlanlar'] = true;
         $json_result = $client->getYaptigimBildirimler($yb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -355,6 +355,10 @@ switch ($action) {
             }
         }
         if (!empty($input['kunye_no']))  $byb_params['KunyeNo'] = trim($input['kunye_no']);
+        // WSDL BildirimSorguIstek ek alanları: KunyeTuru(int), Sifat(int), KalanMiktariSifirdanBuyukOlanlar(bool)
+        if (!empty($input['kunye_turu']))    $byb_params['KunyeTuru'] = (int)$input['kunye_turu'];
+        if (!empty($input['sifat']))         $byb_params['Sifat']     = (int)$input['sifat'];
+        if (!empty($input['kalan_pozitif'])) $byb_params['KalanMiktariSifirdanBuyukOlanlar'] = true;
         $json_result = $client->getBanaYapilanBildirimler($byb_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
