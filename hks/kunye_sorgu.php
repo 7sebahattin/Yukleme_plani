@@ -209,6 +209,15 @@ include __DIR__ . '/views/_tabs.php';
 <script>
 var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 
+function hksEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function hksErrHtml(d){
+    var code = d.error_code || '';
+    var expl = d.user_message || d.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.';
+    var html = '❌ ' + (code ? ('HKS hata kodu: '+hksEsc(code)+'<br>') : '') + 'Açıklama: '+hksEsc(expl);
+    if (d.data != null) html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:240px;overflow:auto">'+hksEsc(JSON.stringify(d.data,null,2))+'</pre></details>';
+    return html;
+}
+
 function hksQuery(action, payload, resultEl, btn) {
     btn.disabled = true;
     btn.textContent = '⏳';
@@ -232,7 +241,7 @@ function hksQuery(action, payload, resultEl, btn) {
                 '<pre style="margin:6px 0 0;font-size:.78rem;white-space:pre-wrap;overflow-x:auto;max-height:300px">' +
                 JSON.stringify(d, null, 2) + '</pre></details>';
         } else {
-            resultEl.innerHTML = '❌ ' + (data.message || 'Hata');
+            resultEl.innerHTML = hksErrHtml(data);
             if (data.methods_available && data.methods_available.length) {
                 resultEl.innerHTML += '<br><small>Mevcut metodlar: ' + data.methods_available.slice(0,20).join(', ') + '</small>';
             }

@@ -579,49 +579,127 @@ function hks_create_draft_from_loading_record(int $loading_record_id, HksReposit
     ]);
 }
 
-// Servis yanıtını normalize eder — IslemKodu / HataKodlari kontrol eder.
-// $raw: callService'in döndürdüğü data dizisi veya tek bir yanıt nesnesi.
-// Dizi ise ilk elemanı alır (BildirimService envelope yapısı).
-function hks_normalize_response(mixed $raw): array {
-    if ($raw === null) {
-        return ['ok' => false, 'message' => 'Boş yanıt', 'islem_kodu' => ''];
+// HKS hata yapılarından (ErrorModel tek/çoklu, düz string, iç içe) Mesaj'ları toplar.
+// $bucket'a benzersiz, boş olmayan mesajları ekler. Derinlik sınırlı (sonsuz döngü koruması).
+function hks_collect_messages(mixed $node, array &$bucket, int $depth = 0): void {
+    if ($node === null || $depth > 6) return;
+    if (is_string($node)) {
+        $s = trim($node);
+        if ($s !== '' && !in_array($s, $bucket, true)) $bucket[] = $s;
+        return;
     }
-    // Liste (indexed array) ise ilk elemanı al
+    if (is_object($node)) $node = (array)$node;
+    if (!is_array($node)) return;
+
+    // ErrorModel sarmalını aç
+    foreach (['ErrorModel', 'errorModel'] as $wrap) {
+        if (array_key_exists($wrap, $node)) { hks_collect_messages($node[$wrap], $bucket, $depth + 1); return; }
+    }
+    // Tek hata nesnesi: {HataKodu, Mesaj}
+    foreach (['Mesaj', 'mesaj', 'HataAciklamasi', 'HataMesaji', 'Aciklama', 'aciklama'] as $mk) {
+        if (array_key_exists($mk, $node) && is_string($node[$mk])) {
+            $s = trim($node[$mk]);
+            if ($s !== '' && !in_array($s, $bucket, true)) $bucket[] = $s;
+            return;
+        }
+    }
+    // Liste / diğer: her çocuğa in
+    foreach ($node as $child) {
+        if (is_array($child) || is_object($child)) hks_collect_messages($child, $bucket, $depth + 1);
+        elseif (is_string($child)) { $s = trim($child); if ($s !== '' && !in_array($s, $bucket, true)) $bucket[] = $s; }
+    }
+}
+
+// Servis yanıtını normalize eder. IslemKodu + HataKodlari + Sonuc.Mesaj/HataKodlari yapılarını
+// destekler. GTBWSRV0000002 gibi genel kodların yanında HKS'nin GERÇEK mesajını çıkarır.
+// Geriye dönük uyumluluk: 'ok','islem_kodu','message' korunur. Ek alanlar: error_code,
+// error_message, hks_message, user_message, messages.
+function hks_normalize_response(mixed $raw): array {
+    $empty = [
+        'ok' => false, 'islem_kodu' => '', 'error_code' => '', 'error_message' => '',
+        'hks_message' => '', 'messages' => [], 'user_message' => 'Boş yanıt', 'message' => 'Boş yanıt',
+    ];
+    if ($raw === null) return $empty;
+
+    // Liste (indexed array) ise ilk elemanı al (BildirimService envelope)
     $item = (is_array($raw) && isset($raw[0])) ? $raw[0] : $raw;
     $arr  = is_object($item) ? (array)$item : (is_array($item) ? $item : []);
 
-    $islem_kodu = $arr['IslemKodu'] ?? $arr['islemKodu'] ?? $arr['islem_kodu'] ?? '';
-    $hata_raw   = $arr['HataKodlari'] ?? $arr['hataKodlari'] ?? $arr['HataMesaji'] ?? null;
+    $islem_kodu = (string)($arr['IslemKodu'] ?? $arr['islemKodu'] ?? $arr['islem_kodu'] ?? '');
 
-    $hata_msg = '';
-    if (is_array($hata_raw)) {
-        // Yapı: {'ErrorModel': [{'HataKodu': x, 'Mesaj': '...'}]}
-        $errors = $hata_raw['ErrorModel'] ?? $hata_raw['errorModel'] ?? $hata_raw;
-        if (is_array($errors)) {
-            $msgs = [];
-            foreach ($errors as $e) {
-                if (is_array($e)) {
-                    $msgs[] = $e['Mesaj'] ?? $e['HataAciklamasi'] ?? $e['HataMesaji'] ?? json_encode($e, JSON_UNESCAPED_UNICODE);
-                } elseif (is_string($e) && $e !== '') {
-                    $msgs[] = $e;
-                }
+    // 1) HataKodlari → kesin hata mesajları
+    $hata_bucket = [];
+    hks_collect_messages($arr['HataKodlari'] ?? $arr['hataKodlari'] ?? $arr['HataMesaji'] ?? null, $hata_bucket);
+
+    // 2) Sonuc.Mesaj / Sonuc.HataKodlari / Sonuc.HataKodu → bağlamsal hata açıklaması
+    $sonuc_bucket = [];
+    $sonuc = $arr['Sonuc'] ?? $arr['sonuc'] ?? null;
+    if ($sonuc !== null) {
+        $sarr = is_object($sonuc) ? (array)$sonuc : (is_array($sonuc) ? $sonuc : []);
+        foreach (['Mesaj', 'mesaj'] as $mk) {
+            if (isset($sarr[$mk]) && is_string($sarr[$mk]) && trim($sarr[$mk]) !== '') {
+                $sv = trim($sarr[$mk]);
+                if (!in_array($sv, $sonuc_bucket, true)) $sonuc_bucket[] = $sv;
             }
-            $hata_msg = implode('; ', array_filter($msgs));
         }
-    } elseif (is_string($hata_raw) && $hata_raw !== '') {
-        $hata_msg = $hata_raw;
+        hks_collect_messages($sarr['HataKodlari'] ?? null, $sonuc_bucket);
+    }
+    // 3) Üst seviye Mesaj (bazı yanıtlarda doğrudan)
+    if (isset($arr['Mesaj']) && is_string($arr['Mesaj']) && trim($arr['Mesaj']) !== '') {
+        $mv = trim($arr['Mesaj']);
+        if (!in_array($mv, $sonuc_bucket, true)) $sonuc_bucket[] = $mv;
     }
 
-    // IslemKodu varsa explicit kontrol; yoksa hata mesajı yoksa başarılı say
+    // ── Başarı kararı: IslemKodu varsa ona göre; yoksa HataKodlari boşluğuna göre
+    //    (Sonuc.Mesaj başarıyı BOZMAZ — yalnız hata gösteriminde kullanılır).
     if ($islem_kodu !== '') {
         $ok = ($islem_kodu === 'GTBWSRV0000001');
     } else {
-        $ok = ($hata_msg === '');
+        $ok = empty($hata_bucket);
     }
+
+    // Hata durumunda gösterilecek tüm mesajlar (HataKodlari + Sonuc) — benzersiz
+    $messages = [];
+    foreach (array_merge($hata_bucket, $sonuc_bucket) as $m) {
+        if ($m !== '' && !in_array($m, $messages, true)) $messages[] = $m;
+    }
+    $hks_message = implode('; ', $messages);
+
+    $error_code = $ok ? '' : $islem_kodu;
+    if ($ok) {
+        $user_message = '';
+    } elseif ($hks_message !== '') {
+        $user_message = $hks_message;
+    } elseif ($islem_kodu !== '') {
+        $user_message = 'HKS hata mesajı döndürmedi (kod: ' . $islem_kodu . '). Teknik detay servis loglarında görülebilir.';
+    } else {
+        $user_message = 'HKS bilinmeyen hata. Teknik detay servis loglarında görülebilir.';
+    }
+
     return [
-        'ok'         => $ok,
-        'islem_kodu' => $islem_kodu,
-        'message'    => $ok ? '' : ($hata_msg ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
+        'ok'            => $ok,
+        'islem_kodu'    => $islem_kodu,
+        'error_code'    => $error_code,
+        'error_message' => $hks_message,
+        'hks_message'   => $hks_message,
+        'messages'      => $messages,
+        'user_message'  => $user_message,
+        // Geriye dönük uyumluluk: eski 'message' alanı (hata ise açıklama, başarı ise '')
+        'message'       => $ok ? '' : ($user_message ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
+    ];
+}
+
+// Ajax sorgu handler'ları için tek-tip hata payload'ı — error_code + user_message taşır.
+function hks_normalize_error_payload(array $norm, mixed $data = null): array {
+    return [
+        'ok'            => false,
+        'error_code'    => $norm['error_code'] ?? ($norm['islem_kodu'] ?? ''),
+        'error_message' => $norm['error_message'] ?? '',
+        'hks_message'   => $norm['hks_message'] ?? '',
+        'user_message'  => $norm['user_message'] ?? ($norm['message'] ?? ''),
+        'message'       => $norm['user_message'] ?? ($norm['message'] ?? ''),
+        'messages'      => $norm['messages'] ?? [],
+        'data'          => $data,
     ];
 }
 

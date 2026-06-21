@@ -173,7 +173,10 @@ function doFetch(action, extra, resultEl) {
     })
     .then(r => r.json())
     .then(data => {
-        showVdcResult(data.ok, data.message || (data.ok ? 'Tamamlandı.' : 'Hata.'), data.detail || data.diag_hints || null, data.partial);
+        var vdcMsg = data.ok
+            ? (data.message || 'Tamamlandı.')
+            : ((data.error_code ? ('HKS hata kodu: ' + data.error_code + ' — ') : '') + (data.user_message || data.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.'));
+        showVdcResult(data.ok, vdcMsg, data.detail || data.diag_hints || null, data.partial);
     })
     .catch(() => showVdcResult(false, 'İstek gönderilemedi.'))
     .finally(() => buttons.forEach(b => b.disabled = false));
