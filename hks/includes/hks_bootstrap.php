@@ -302,4 +302,31 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
         }
     }
+
+    // hks_notifications — HKS kişi/künye doğrulama durumları (Sprint HKS-Workflow-Validation-01)
+    //   Karşı taraf TC/VKN, BildirimServisKayitliKisiSorgu ile doğrulanır (KayitliKisiMi + Sifatlari).
+    //   NOT: KayitliKisiSorgu ad/ünvan DÖNDÜRMEZ; unvan kolonu yalnız ileride başka kaynak için durur.
+    //   Referans künye, BildirimServisReferansKunyeler ile doğrulanır (kalan miktar + ürün bilgileri).
+    try {
+        $pdo->query("SELECT karsi_kisi_verified, reference_kunye_verified FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_verified`           TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_verified_at`        DATETIME NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_query_json`         TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_hks_unvan`          VARCHAR(250) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_hks_id`             VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_hks_sifatlari_json` TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `karsi_kisi_kayitli_degil`      TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_verified`      TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_verified_at`   DATETIME NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_query_json`    TEXT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_kalan_miktar`  DECIMAL(14,3) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_urun`          VARCHAR(200) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_urun_cinsi`    VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `reference_kunye_birim`         VARCHAR(20) NULL",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+    }
 })();

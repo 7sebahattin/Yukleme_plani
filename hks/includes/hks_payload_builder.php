@@ -636,6 +636,23 @@ function hks_validate_bildirim_payload_mapping(array $notification, array $setti
         }
     }
 
+    // HKS çalışma mantığı — kişi/künye doğrulaması (Workflow-Validation-01).
+    $turu_pm = trim((string)($notification['notification_type'] ?? ''));
+    if (function_exists('hks_karsi_taraf_required') && hks_karsi_taraf_required($turu_pm)) {
+        if ((int)($notification['karsi_kisi_kayitli_degil'] ?? 0) === 1) {
+            if (!hks_karsi_kayitsiz_allowed($turu_pm)) {
+                $errors[] = 'Bu bildirim türünde kayıtlı olmayan kişiyle gönderim yapılamaz.';
+            }
+        } elseif (!hks_karsi_kisi_is_verified($notification)) {
+            $errors[] = 'Karşı taraf HKS\'de doğrulanmadı.';
+        }
+    }
+    if (trim((string)($notification['reference_kunye_no'] ?? '')) !== ''
+        && function_exists('hks_reference_kunye_is_verified')
+        && !hks_reference_kunye_is_verified($notification)) {
+        $errors[] = 'Referans künye HKS\'de doğrulanmadı.';
+    }
+
     $ready = empty($errors) && $fields_confirmed;
 
     return [

@@ -108,6 +108,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'created_by'        => $auth_user['id'] ?? null,
     ];
 
+    // ── Sprint Workflow-Validation-01 — HKS doğrulama durumları (sunucu yeniden doğrular) ──
+    // JS'in gönderdiği "verified" bayrağı tek başına güvenilmez: doğrulanan TC/künye,
+    // gönderilen alici_tc_vkn / reference_kunye_no ile BİREBİR eşleşmiyorsa GEÇERSİZ sayılır.
+    $kk_alici_tc      = preg_replace('/\D/', '', trim($_POST['alici_tc_vkn'] ?? ''));
+    $kk_verified_tc   = preg_replace('/\D/', '', trim($_POST['karsi_kisi_verified_tc'] ?? ''));
+    $kk_valid = (($_POST['karsi_kisi_verified'] ?? '') === '1')
+                && $kk_verified_tc !== '' && $kk_verified_tc === $kk_alici_tc;
+    $kk_sifatlari_json = trim($_POST['karsi_kisi_hks_sifatlari'] ?? '');
+    $kk_hks_id         = trim($_POST['karsi_kisi_hks_id'] ?? '');
+    $data['karsi_kisi_kayitli_degil']      = (($_POST['karsi_kisi_kayitli_degil'] ?? '') === '1' || ($_POST['karsi_kisi_kayitli_degil'] ?? '') === 'on') ? 1 : 0;
+    $data['karsi_kisi_verified']           = $kk_valid ? 1 : 0;
+    $data['karsi_kisi_verified_at']        = $kk_valid ? date('Y-m-d H:i:s') : null;
+    $data['karsi_kisi_query_json']         = $kk_valid
+        ? json_encode(['tc_vkn' => $kk_alici_tc, 'hks_id' => $kk_hks_id, 'sifatlari' => $kk_sifatlari_json], JSON_UNESCAPED_UNICODE)
+        : null;
+    $data['karsi_kisi_hks_id']             = $kk_valid ? ($kk_hks_id ?: null) : null;
+    $data['karsi_kisi_hks_sifatlari_json'] = $kk_valid ? ($kk_sifatlari_json ?: null) : null;
+    $data['karsi_kisi_hks_unvan']          = null;  // KayitliKisiSorgu ünvan döndürmez
+
+    $rk_no          = trim($_POST['reference_kunye_no'] ?? '');
+    $rk_verified_no = trim($_POST['reference_kunye_verified_no'] ?? '');
+    $rk_valid = (($_POST['reference_kunye_verified'] ?? '') === '1')
+                && $rk_verified_no !== '' && $rk_verified_no === $rk_no && $rk_no !== '';
+    $rk_kalan = trim($_POST['reference_kunye_kalan_miktar'] ?? '');
+    $data['reference_kunye_verified']      = $rk_valid ? 1 : 0;
+    $data['reference_kunye_verified_at']   = $rk_valid ? date('Y-m-d H:i:s') : null;
+    $data['reference_kunye_query_json']    = $rk_valid
+        ? json_encode(['kunye_no' => $rk_no, 'urun' => trim($_POST['reference_kunye_urun'] ?? '')], JSON_UNESCAPED_UNICODE)
+        : null;
+    $data['reference_kunye_kalan_miktar']  = ($rk_valid && $rk_kalan !== '') ? hks_qty($rk_kalan) : null;
+    $data['reference_kunye_urun']          = $rk_valid ? (trim($_POST['reference_kunye_urun'] ?? '') ?: null) : null;
+    $data['reference_kunye_urun_cinsi']    = $rk_valid ? (trim($_POST['reference_kunye_urun_cinsi'] ?? '') ?: null) : null;
+    $data['reference_kunye_birim']         = $rk_valid ? (trim($_POST['reference_kunye_birim'] ?? '') ?: null) : null;
+
     if ($post_id > 0) {
         // ── GÜNCELLEME — id/local_no/created_* korunur; updateNotification yalnızca
         //    form alanlarını günceller, checked_at/by'ı sıfırlar ve durumu yeniden hesaplar. ──
@@ -301,6 +335,18 @@ if ($is_edit && $notif) {
         'gidecek_isyeri_id'   => (string)($notif['gidecek_isyeri_id'] ?? ''),
         'gidecek_isyeri_tipi' => (string)($notif['gidecek_isyeri_tipi'] ?? ''),
         'gidecek_isyeri_adi'  => (string)($notif['gidecek_isyeri_adi'] ?? ''),
+        // HKS doğrulama durumları (edit'te hidden alanlara basılır → değişmedikçe geçerli kalır)
+        'karsi_kisi_verified'     => (int)($notif['karsi_kisi_verified'] ?? 0),
+        'karsi_kisi_verified_tc'  => (string)($notif['karsi_kisi_verified'] ?? 0) === '1' ? (string)($notif['alici_tc_vkn'] ?? '') : '',
+        'karsi_kisi_hks_id'       => (string)($notif['karsi_kisi_hks_id'] ?? ''),
+        'karsi_kisi_hks_sifatlari'=> (string)($notif['karsi_kisi_hks_sifatlari_json'] ?? ''),
+        'karsi_kisi_kayitli_degil'=> (int)($notif['karsi_kisi_kayitli_degil'] ?? 0),
+        'reference_kunye_verified'    => (int)($notif['reference_kunye_verified'] ?? 0),
+        'reference_kunye_verified_no' => (string)($notif['reference_kunye_verified'] ?? 0) === '1' ? (string)($notif['reference_kunye_no'] ?? '') : '',
+        'reference_kunye_kalan_miktar'=> (string)($notif['reference_kunye_kalan_miktar'] ?? ''),
+        'reference_kunye_urun'        => (string)($notif['reference_kunye_urun'] ?? ''),
+        'reference_kunye_urun_cinsi'  => (string)($notif['reference_kunye_urun_cinsi'] ?? ''),
+        'reference_kunye_birim'       => (string)($notif['reference_kunye_birim'] ?? ''),
         'arac_plaka'        => (string)($notif['arac_plaka'] ?? ''),
         'belge_no'          => (string)($notif['belge_no'] ?? ''),
         'belge_tipi'        => (string)($notif['belge_tipi'] ?? ''),
@@ -384,11 +430,25 @@ include __DIR__ . '/views/_layout_start.php';
         <div class="hks-op-row">
             <div class="hks-op-field">
                 <label>T.C. Kimlik / Vergi No <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="alici_tc_vkn" maxlength="11" placeholder="Karşı taraf TC/VKN">
+                <div style="display:flex;gap:6px">
+                    <input type="text" name="alici_tc_vkn" id="aliciTcVkn" maxlength="11" placeholder="Karşı taraf TC/VKN" style="flex:1">
+                    <button type="button" class="hks-op-btn" id="btnVerifyKisi" <?= $op_queries_enabled ? '' : 'disabled' ?> style="white-space:nowrap">🔎 HKS'de Sorgula</button>
+                </div>
+                <div id="kisiVerifyResult" class="hks-op-result" style="display:none;margin-top:6px"></div>
+                <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:.84rem;font-weight:400">
+                    <input type="checkbox" name="karsi_kisi_kayitli_degil" id="karsiKayitliDegil" value="1" style="width:auto">
+                    Kişi HKS'de kayıtlı değil (yalnız izinli bildirim türlerinde)
+                </label>
+                <!-- HKS doğrulama durumu — hidden (sunucu yeniden doğrular) -->
+                <input type="hidden" name="karsi_kisi_verified"      id="kisiVerified" value="0">
+                <input type="hidden" name="karsi_kisi_verified_tc"   id="kisiVerifiedTc" value="">
+                <input type="hidden" name="karsi_kisi_hks_id"        id="kisiHksId" value="">
+                <input type="hidden" name="karsi_kisi_hks_sifatlari" id="kisiHksSifatlari" value="">
             </div>
             <div class="hks-op-field">
                 <label>Adı Soyadı / Ünvanı <span style="color:var(--danger)">*</span></label>
                 <input type="text" name="alici_ad" placeholder="Karşı taraf ad / ünvan">
+                <small class="muted" style="font-size:.72rem">HKS kişi sorgusu ad/ünvan döndürmez; bu alanı elle girin.</small>
             </div>
             <div class="hks-op-field">
                 <label>GSM Numarası</label>
@@ -417,6 +477,14 @@ include __DIR__ . '/views/_layout_start.php';
             <div class="hks-op-field">
                 <label>Künye No</label>
                 <input type="text" name="reference_kunye_no" id="refKunyeNo" placeholder="Künye numarası">
+                <div id="refKunyeVerifyState" class="muted" style="font-size:.76rem;margin-top:4px"></div>
+                <!-- Künye doğrulama durumu — hidden (sunucu yeniden doğrular) -->
+                <input type="hidden" name="reference_kunye_verified"     id="refKunyeVerified" value="0">
+                <input type="hidden" name="reference_kunye_verified_no"  id="refKunyeVerifiedNo" value="">
+                <input type="hidden" name="reference_kunye_kalan_miktar" id="refKunyeKalan" value="">
+                <input type="hidden" name="reference_kunye_urun"         id="refKunyeUrun" value="">
+                <input type="hidden" name="reference_kunye_urun_cinsi"   id="refKunyeUrunCinsi" value="">
+                <input type="hidden" name="reference_kunye_birim"        id="refKunyeBirim" value="">
             </div>
             <div class="hks-op-field">
                 <label>Referans Künyede kullanılan Ürün</label>
@@ -681,12 +749,103 @@ include __DIR__ . '/views/_layout_start.php';
         }
         document.getElementById('opSummary').innerHTML = html;
     }
-    btnNext.addEventListener('click', function(){ show(cur+1); });
+    // ── HKS adım kilitleri (asıl güvenlik PHP'de; bu yalnız kullanıcı yönlendirmesi) ──
+    function turuRequiresKarsi(){
+        var t = (val('notification_type') || '');
+        return t !== '' && t.toLowerCase().indexOf('sevk') === -1; // Sevk Etme'de karşı taraf yok
+    }
+    function canLeaveStep(step){
+        if (step === 1 && turuRequiresKarsi()){
+            var kayitsiz = document.getElementById('karsiKayitliDegil');
+            var verified = document.getElementById('kisiVerified');
+            if (kayitsiz && kayitsiz.checked) {
+                if (!val('alici_ad')) { alert('Kayıtlı olmayan karşı taraf için ad / ünvan giriniz.'); return false; }
+                return true;
+            }
+            if (!verified || verified.value !== '1') {
+                alert('Devam etmek için karşı taraf HKS\'de doğrulanmalıdır ("HKS\'de Sorgula").');
+                return false;
+            }
+        }
+        if (step === 2){
+            var kno = val('reference_kunye_no');
+            var rkv = document.getElementById('refKunyeVerified');
+            if (kno !== '' && (!rkv || rkv.value !== '1')){
+                alert('Referans künye girildi. Devam etmek için "Künye Sorgula" ile doğrulayın.');
+                return false;
+            }
+        }
+        return true;
+    }
+    btnNext.addEventListener('click', function(){ if (canLeaveStep(cur)) show(cur+1); });
     btnPrev.addEventListener('click', function(){ show(cur-1); });
     var cbChecked = document.getElementById('cbChecked');
     if (cbChecked) {
         cbChecked.addEventListener('change', function(){
             document.getElementById('markChecked').value = this.checked ? '1' : '0';
+        });
+    }
+
+    // ── HKS karşı taraf doğrulama (KayitliKisiSorgu) ──
+    function setHidden(id, v){ var el=document.getElementById(id); if (el) el.value = (v==null?'':String(v)); }
+    function showKisiResult(kind, msg){
+        var box=document.getElementById('kisiVerifyResult');
+        if (!box) return;
+        box.style.display='block';
+        box.className='hks-op-result ' + (kind==='ok'?'ok':'err');
+        box.innerHTML=msg;
+    }
+    function resetKisiVerify(){
+        setHidden('kisiVerified','0'); setHidden('kisiVerifiedTc',''); setHidden('kisiHksId',''); setHidden('kisiHksSifatlari','');
+        var box=document.getElementById('kisiVerifyResult'); if (box) box.style.display='none';
+    }
+    var aliciTc=document.getElementById('aliciTcVkn');
+    if (aliciTc){
+        aliciTc.addEventListener('input', function(){
+            // TC/VKN değişti → önceki doğrulama geçersiz (yeniden sorgulama zorunlu)
+            if (document.getElementById('kisiVerified').value==='1'){
+                resetKisiVerify();
+                showKisiResult('err','TC/VKN değiştirildiği için yeniden sorgulama yapılmalıdır.');
+            }
+        });
+    }
+    var btnVerify=document.getElementById('btnVerifyKisi');
+    if (btnVerify){
+        btnVerify.addEventListener('click', function(){
+            var tc=(aliciTc?aliciTc.value:'').replace(/\D/g,'');
+            if (tc.length!==10 && tc.length!==11){ showKisiResult('err','Geçerli bir TC (11) veya VKN (10) girin.'); return; }
+            btnVerify.disabled=true; var old=btnVerify.textContent; btnVerify.textContent='⏳ Sorgulanıyor...';
+            var csrf=document.querySelector('meta[name="csrf-token"]').content;
+            fetch('../ajax.php?action=verify_karsi_kisi', {
+                method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                body:'csrf='+encodeURIComponent(csrf)+'&tc_vkn='+encodeURIComponent(tc)
+            }).then(function(r){return r.json();}).then(function(d){
+                if (d.ok && d.verified){
+                    setHidden('kisiVerified','1'); setHidden('kisiVerifiedTc', d.tc_vkn||tc);
+                    setHidden('kisiHksId', d.hks_id||''); setHidden('kisiHksSifatlari', JSON.stringify(d.sifatlari||[]));
+                    var ek = (d.sifat_labels && d.sifat_labels.length) ? ' Sıfatlar: '+d.sifat_labels.join(', ') : '';
+                    showKisiResult('ok','✅ '+ (d.message||'TC/VKN HKS\'de kayıtlı bulundu.') + ek);
+                } else if (d.ok && !d.verified){
+                    resetKisiVerify();
+                    showKisiResult('err','❌ '+(d.message||'Bu TC/VKN HKS\'de kayıtlı bulunamadı.'));
+                } else {
+                    resetKisiVerify();
+                    showKisiResult('err','⚠ '+(d.message||'HKS kişi sorgusu yapılamadı.'));
+                }
+            }).catch(function(){ resetKisiVerify(); showKisiResult('err','İstek gönderilemedi.'); })
+            .finally(function(){ btnVerify.disabled=false; btnVerify.textContent=old; });
+        });
+    }
+    // Künye no elle değişirse doğrulama sıfırlanır
+    var refKunyeNoEl=document.getElementById('refKunyeNo');
+    if (refKunyeNoEl){
+        refKunyeNoEl.addEventListener('input', function(){
+            var rkv=document.getElementById('refKunyeVerified');
+            if (rkv && rkv.value==='1' && refKunyeNoEl.value.trim()!==document.getElementById('refKunyeVerifiedNo').value){
+                setHidden('refKunyeVerified','0');
+                var rks=document.getElementById('refKunyeVerifyState');
+                if (rks){ rks.style.color='#92400e'; rks.textContent='Künye değişti — yeniden "Künye Sorgula" ile doğrulayın.'; }
+            }
         });
     }
 
@@ -759,9 +918,19 @@ include __DIR__ . '/views/_layout_start.php';
                 var birim=gf(o,['BirimAdi','Birim','birim'])||'KG';
                 var kEl=document.getElementById('kalanMiktar');
                 if (kEl) kEl.value = kalan!=='' ? (fmtNum(kalan)+' '+birim) : '';
+                // HKS künye DOĞRULANDI → hidden alanlara işle (ürün/cins/kalan/birim aktarılır)
+                var urunCinsi=gf(o,['UrunCinsi','MalinCinsi','Cins']);
+                setHidden('refKunyeVerified','1');
+                setHidden('refKunyeVerifiedNo', kn);
+                setHidden('refKunyeKalan', String(kalan).replace(',','.'));
+                setHidden('refKunyeUrun', urunAdi);
+                setHidden('refKunyeUrunCinsi', urunCinsi);
+                setHidden('refKunyeBirim', birim);
+                var rks=document.getElementById('refKunyeVerifyState');
+                if (rks){ rks.style.color='#065f46'; rks.textContent='✅ Künye HKS\'de doğrulandı. Ürün bilgileri forma aktarıldı.'; }
                 var sel=document.getElementById('refKunyeSelected');
                 sel.style.display='block'; sel.className='hks-op-note info';
-                sel.innerHTML='✅ Referans künye seçildi: <strong>'+esc(kn)+'</strong>';
+                sel.innerHTML='✅ Referans künye seçildi ve doğrulandı: <strong>'+esc(kn)+'</strong>';
             });
         });
     }
@@ -969,6 +1138,20 @@ include __DIR__ . '/views/_layout_start.php';
             if (isyeriAdi  && EDIT.gidecek_isyeri_adi)  isyeriAdi.value  = EDIT.gidecek_isyeri_adi;
             if (typeof syncIsyeriHidden === 'function' && isyeriSel && isyeriSel.value) syncIsyeriHidden();
         }
+        // 8) HKS doğrulama durumlarını hidden alanlara geri bas (TC/künye değişmedikçe geçerli kalır)
+        setHidden('kisiVerified', EDIT.karsi_kisi_verified == 1 ? '1' : '0');
+        setHidden('kisiVerifiedTc', EDIT.karsi_kisi_verified_tc || '');
+        setHidden('kisiHksId', EDIT.karsi_kisi_hks_id || '');
+        setHidden('kisiHksSifatlari', EDIT.karsi_kisi_hks_sifatlari || '');
+        var kkd=document.getElementById('karsiKayitliDegil'); if (kkd) kkd.checked = (EDIT.karsi_kisi_kayitli_degil == 1);
+        if (EDIT.karsi_kisi_verified == 1) showKisiResult('ok', '✅ Karşı taraf daha önce HKS\'de doğrulandı.');
+        setHidden('refKunyeVerified', EDIT.reference_kunye_verified == 1 ? '1' : '0');
+        setHidden('refKunyeVerifiedNo', EDIT.reference_kunye_verified_no || '');
+        setHidden('refKunyeKalan', EDIT.reference_kunye_kalan_miktar || '');
+        setHidden('refKunyeUrun', EDIT.reference_kunye_urun || '');
+        setHidden('refKunyeUrunCinsi', EDIT.reference_kunye_urun_cinsi || '');
+        setHidden('refKunyeBirim', EDIT.reference_kunye_birim || '');
+        if (EDIT.reference_kunye_verified == 1){ var rks0=document.getElementById('refKunyeVerifyState'); if (rks0){ rks0.style.color='#065f46'; rks0.textContent='✅ Künye daha önce HKS\'de doğrulandı.'; } }
     }
 
     show(1);

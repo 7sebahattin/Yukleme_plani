@@ -179,6 +179,71 @@ switch ($action) {
         audit_log_event('hks_kisi_sorgu', 'hks_queries', null, null, ['tc_vkn' => substr($tc_vkn, 0, 4) . '***']);
         break;
 
+    // ── Karşı taraf HKS doğrulama (e-Bildirim adım kilidi) ──────────
+    // KayitliKisiSorgu → KayitliKisiMi + Sifatlari. NOT: ad/ünvan DÖNDÜRMEZ.
+    case 'verify_karsi_kisi':
+        if (!(function_exists('can') && (can('hks.read') || can('records.write') || can('hks.write')))) {
+            $json_result = ['ok' => false, 'verified' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $tc = preg_replace('/\D/', '', (string)($input['tc_vkn'] ?? ''));
+        if ($tc === '' || !in_array(strlen($tc), [10, 11], true)) {
+            $json_result = ['ok' => false, 'verified' => false, 'message' => 'Geçerli bir TC (11) veya VKN (10) girin.']; break;
+        }
+        $uid_vk = isset($user['id']) ? (int)$user['id'] : null;
+        $res = $client->kayitliKisiSorgu($tc);
+        if (empty($res['ok'])) {
+            $json_result = ['ok' => false, 'verified' => false,
+                'message' => 'HKS kişi sorgusu yapılamadı. Bağlantı testini kontrol edin.',
+                'detail'  => $res['message'] ?? ''];
+            break;
+        }
+        // IslemKodu / yetki hatası kontrolü
+        $vk_norm = hks_normalize_response($res['data'] ?? []);
+        if (!$vk_norm['ok'] && !empty($vk_norm['message'])) {
+            $json_result = ['ok' => false, 'verified' => false, 'message' => $vk_norm['message']];
+            break;
+        }
+        // KayitliKisiSorguDTO bul (sorgulanan TC ile eşleşeni, yoksa ilkini)
+        $vk_dto = null;
+        foreach ((array)($res['data'] ?? []) as $vk_r) {
+            $vk_lc = [];
+            foreach ((array)$vk_r as $vk_k => $vk_v) { $vk_lc[strtolower((string)$vk_k)] = $vk_v; }
+            $vk_rtc = preg_replace('/\D/', '', (string)($vk_lc['tckimlikvergino'] ?? ''));
+            if ($vk_dto === null) $vk_dto = $vk_lc;
+            if ($vk_rtc === $tc) { $vk_dto = $vk_lc; break; }
+        }
+        $vk_kayitli = false; $vk_sifat_ids = [];
+        if ($vk_dto) {
+            $vk_km = $vk_dto['kayitlikisimi'] ?? null;
+            $vk_kayitli = ($vk_km === true || $vk_km === 1 || $vk_km === '1' || mb_strtolower((string)$vk_km) === 'true');
+            $vk_sf = $vk_dto['sifatlari'] ?? null;
+            if (is_array($vk_sf)) {
+                $vk_vals = $vk_sf['int'] ?? $vk_sf;
+                foreach ((array)$vk_vals as $vk_iv) { if ($vk_iv !== '' && $vk_iv !== null) $vk_sifat_ids[] = (string)$vk_iv; }
+            } elseif ($vk_sf !== null && $vk_sf !== '') {
+                $vk_sifat_ids[] = (string)$vk_sf;
+            }
+        }
+        $repo->saveQuery('karsi_kisi_dogrula', $tc, $vk_kayitli ? 'ok' : 'not_found',
+            json_encode($res['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_vk);
+        audit_log_event('hks_karsi_kisi_dogrula', 'hks_queries', null, null,
+            ['tc_vkn' => substr($tc, 0, 4) . '***', 'verified' => $vk_kayitli ? 1 : 0]);
+        if (!$vk_kayitli) {
+            $json_result = ['ok' => true, 'verified' => false, 'tc_vkn' => $tc,
+                'message' => 'Bu TC/VKN HKS\'de kayıtlı bulunamadı. Bilgileri kontrol edin veya "kayıtlı değil" seçeneğini kullanın.'];
+            break;
+        }
+        $vk_labels = [];
+        foreach ($vk_sifat_ids as $vk_sid) {
+            $vk_lbl = function_exists('hks_resolve_reference_label') ? hks_resolve_reference_label('sifat', $vk_sid) : null;
+            $vk_labels[] = ($vk_lbl !== null && $vk_lbl !== '') ? $vk_lbl : $vk_sid;
+        }
+        $json_result = ['ok' => true, 'verified' => true, 'tc_vkn' => $tc,
+            'sifatlari' => $vk_sifat_ids, 'sifat_labels' => $vk_labels,
+            'unvan' => '',  // KayitliKisiSorgu ünvan döndürmez
+            'message' => 'TC/VKN HKS\'de kayıtlı bulundu.'];
+        break;
+
     // ── Referans Künye Sorgu ────────────────────────────────
     case 'query_referans_kunye':
         if (!(function_exists('can') && (can('hks.read') || can('records.write')))) {

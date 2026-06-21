@@ -265,9 +265,15 @@ endif;
     ]);
 
     // B) Karşı Taraf / Kimden veya Kime Bilgileri
+    $karsi_kayitsiz_v = (int)($n['karsi_kisi_kayitli_degil'] ?? 0) === 1;
+    $karsi_verified_v = hks_karsi_kisi_is_verified($n);
+    $karsi_durum = $karsi_kayitsiz_v ? 'Kayıtlı değil (manuel)'
+        : ($karsi_verified_v ? '✅ HKS\'de doğrulandı' : '❌ HKS\'de doğrulanmadı');
     hks_detail_card('Karşı Taraf / Kimden veya Kime', [
         'Karşı Taraf Adı / Ünvan' => $n['alici_ad'] ?? '',
         'Karşı Taraf TC / VKN'    => $n['alici_tc_vkn'] ?? '',
+        'HKS Doğrulama'           => $karsi_durum,
+        'Doğrulama Zamanı'        => !empty($n['karsi_kisi_verified_at']) && $karsi_verified_v ? date('d.m.Y H:i', strtotime((string)$n['karsi_kisi_verified_at'])) : '',
         'Karşı Taraf Sıfatı'      => $n['karsi_sifat'] ?? '',
         'Yurt Dışı'               => (int)($n['yurt_disi'] ?? 0) === 1 ? 'Evet' : '',
         'GSM'                     => $n['gsm'] ?? '',
@@ -276,8 +282,15 @@ endif;
     ]);
 
     // C) Referans Künye
+    $ref_verified_v = hks_reference_kunye_is_verified($n);
     hks_detail_card('Referans Künye', [
-        'Künye No' => $n['reference_kunye_no'] ?? '',
+        'Künye No'         => $n['reference_kunye_no'] ?? '',
+        'HKS Doğrulama'    => trim((string)($n['reference_kunye_no'] ?? '')) === '' ? '—'
+                              : ($ref_verified_v ? '✅ HKS\'de doğrulandı' : '❌ HKS\'de doğrulanmadı'),
+        'Doğrulama Zamanı' => !empty($n['reference_kunye_verified_at']) && $ref_verified_v ? date('d.m.Y H:i', strtotime((string)$n['reference_kunye_verified_at'])) : '',
+        'Kalan Miktar'     => ($n['reference_kunye_kalan_miktar'] ?? '') !== '' ? number_format((float)$n['reference_kunye_kalan_miktar'], 3, ',', '.') . ' ' . ($n['reference_kunye_birim'] ?? '') : '',
+        'Künye Ürün'       => $n['reference_kunye_urun'] ?? '',
+        'Künye Ürün Cinsi' => $n['reference_kunye_urun_cinsi'] ?? '',
     ]);
 
     // D) Mala İlişkin Bilgiler
