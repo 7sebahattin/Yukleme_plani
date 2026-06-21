@@ -45,8 +45,8 @@ $c_stokta  = count(array_filter($rows, fn($r) => (float)$r['kalan'] > 0));
 $c_negatif = count(array_filter($rows, fn($r) => (float)$r['kalan'] < 0));
 $c_sifir   = count(array_filter($rows, fn($r) => (float)$r['kalan'] == 0.0));
 
-// summary → 6 kolon (portrait) · detail → 10 kolon (landscape)
-$col_count   = $mode === 'detail' ? 10 : 6;
+// summary → 6 kolon (portrait) · detail → 9 kolon (landscape)
+$col_count   = $mode === 'detail' ? 9 : 6;
 $orientation = print_orientation($mode, $col_count);
 
 // ── Filtre özet metni (başlık altı) ───────────────────────
@@ -149,7 +149,6 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
                     <th class="num">Giriş</th>
                     <th class="num">Sevk</th>
                     <th class="num">Kullanım</th>
-                    <th class="num">Düzeltme</th>
                     <th class="num">Kalan</th>
                     <th>Birim</th>
                     <th>Durum</th>
@@ -179,7 +178,6 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
                         $giris = (float)$r['total_giris'];
                         $sevk  = (float)$r['total_sevk'];
                         $kull  = (float)$r['total_kullanim'];
-                        $duz   = (float)$r['total_duzeltme'];
                     ?>
                     <td style="color:#555;font-size:.92em"><?= h($tur_lbl) ?></td>
                     <td><strong><?= h($r['material_name']) ?></strong><?= (int)$r['is_active'] === 0 ? ' <span style="font-size:.7em;color:#888">(pasif)</span>' : '' ?></td>
@@ -187,7 +185,6 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
                     <td class="num"><?= $giris > 0 ? number_format($giris, 0, ',', '.') : '—' ?></td>
                     <td class="num"><?= $sevk  > 0 ? number_format($sevk, 0, ',', '.') : '—' ?></td>
                     <td class="num"><?= $kull  > 0 ? number_format($kull, 0, ',', '.') : '—' ?></td>
-                    <td class="num"><?= $duz != 0.0 ? ($duz > 0 ? '+' : '−') . number_format(abs($duz), 0, ',', '.') : '—' ?></td>
                     <td class="num <?= $is_neg ? 'kalan-neg' : '' ?>"><?= $kalan_str ?></td>
                     <td><?= h($r['unit']) ?></td>
                     <td class="<?= $dz_cls ?>"><?= $dz_lbl ?></td>
