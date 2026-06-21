@@ -181,6 +181,13 @@ if ($f_tarih_bas !== '' && $f_tarih_bit !== '') {
     $date_cols = array_keys($set);
     sort($date_cols);
 }
+// Verisi olmayan (hiçbir malzemede sıfırdan büyük kayıt içermeyen) tarihleri gizle
+$date_cols = array_values(array_filter($date_cols, function(string $d) use ($pivot): bool {
+    foreach ($pivot as $row) {
+        if (isset($row['dates'][$d]) && (float)$row['dates'][$d] > 0) return true;
+    }
+    return false;
+}));
 
 // ── Özet kartları ────────────────────────────────────────
 $sum_cesidi = count($pivot);
@@ -362,7 +369,7 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
                 <tr>
                     <th>Malzeme</th>
                     <th>Tür</th>
-                    <th class="num">Toplam</th>
+                    <th class="num mr-total-col">Toplam</th>
                     <?php foreach ($date_cols as $d): ?>
                     <th class="num"><?= date('d.m', strtotime($d)) ?></th>
                     <?php endforeach; ?>
@@ -373,7 +380,7 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
                 <tr>
                     <td><?= h($row['name']) ?></td>
                     <td><?= h(RM_GROUP_LABELS[$row['group_type']] ?? $row['group_type']) ?></td>
-                    <td class="num"><strong><?= fmt_kg($row['total']) ?></strong></td>
+                    <td class="num mr-total-col"><strong><?= fmt_kg($row['total']) ?></strong></td>
                     <?php foreach ($date_cols as $d): ?>
                     <td class="num"><?= isset($row['dates'][$d]) ? fmt_kg($row['dates'][$d]) : '-' ?></td>
                     <?php endforeach; ?>
@@ -392,6 +399,18 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
 .mr-pivot-card .table-wrap { overflow-x: auto; }
 .mr-table th, .mr-table td { white-space: nowrap; }
 .mr-table th:first-child, .mr-table td:first-child { white-space: normal; min-width: 140px; }
+
+/* Toplam kolonu vurgu */
+.mr-table th.mr-total-col {
+    background: #e0e7ff !important;
+    color: #3730a3;
+    border-left: 2px solid #6366f1;
+}
+.mr-table td.mr-total-col {
+    background: #eef2ff !important;
+    color: #3730a3;
+    border-left: 2px solid #6366f1;
+}
 
 @media (max-width: 767px) {
     .mr-table { font-size: .8rem; }
@@ -412,6 +431,8 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
     .mr-table { font-size: 6.5pt !important; }
     .mr-table th { font-size: 6pt !important; padding: 3px 4px !important; background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .mr-table td { padding: 3px 4px !important; }
+    .mr-table th.mr-total-col { background: #e0e7ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .mr-table td.mr-total-col { background: #eef2ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .mr-pivot-card { border: 1pt solid #ccc !important; box-shadow: none !important; }
 }
 </style>
