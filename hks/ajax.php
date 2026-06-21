@@ -156,17 +156,40 @@ switch ($action) {
             $json_result = ['ok' => false, 'message' => 'TC/VKN girilmedi.']; break;
         }
         $uid_ks = isset($user['id']) ? (int)$user['id'] : null;
-        $json_result = $client->kayitliKisiSorgu($tc_vkn);
-        if ($json_result['ok'] && !empty($json_result['data'])) {
-            $norm = hks_normalize_response($json_result['data']);
-            if (!$norm['ok']) {
-                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
-            }
+        $tc_ks  = preg_replace('/\D/', '', $tc_vkn);
+        $ks_res = $client->kayitliKisiSorgu($tc_vkn);
+        if (empty($ks_res['ok'])) {
+            $json_result = ['ok' => false, 'message' => $ks_res['message'] ?? 'HKS kişi sorgusu yapılamadı.'];
+            $repo->saveQuery('kisi_sorgu', $tc_vkn, 'error', json_encode($ks_res, JSON_UNESCAPED_UNICODE), $uid_ks);
+            break;
         }
-        $repo->saveQuery('kisi_sorgu', $tc_vkn,
-            $json_result['ok'] ? 'ok' : 'error',
-            json_encode($json_result['data'] ?? $json_result, JSON_UNESCAPED_UNICODE), $uid_ks);
-        audit_log_event('hks_kisi_sorgu', 'hks_queries', null, null, ['tc_vkn' => substr($tc_vkn, 0, 4) . '***']);
+        // IslemKodu / HataKodlari hatası?
+        $ks_norm = hks_normalize_response($ks_res['data'] ?? []);
+        if (!$ks_norm['ok'] && !empty($ks_norm['hks_message'])) {
+            $json_result = hks_normalize_error_payload($ks_norm, $ks_res['data']);
+            $repo->saveQuery('kisi_sorgu', $tc_vkn, 'error', json_encode($ks_res['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_ks);
+            break;
+        }
+        // KESİN KURAL: KayitliKisiMi===true → kayıtlı; false → bulunamadı (dizi uzunluğu DEĞİL).
+        $ks_kisi   = hks_extract_kayitli_kisi($ks_res['data'] ?? [], $tc_ks);
+        $ks_labels = [];
+        foreach ($ks_kisi['sifat_ids'] as $sid) {
+            $lbl = function_exists('hks_resolve_reference_label') ? hks_resolve_reference_label('sifat', $sid) : null;
+            $ks_labels[] = ($lbl !== null && $lbl !== '') ? $lbl : $sid;
+        }
+        $json_result = [
+            'ok'           => true,
+            'kayitli'      => $ks_kisi['kayitli'],
+            'sifat_labels' => $ks_labels,
+            'message'      => $ks_kisi['kayitli']
+                ? 'TC/VKN HKS\'de kayıtlı bulundu.'
+                : 'Bu TC/VKN HKS\'de kayıtlı bulunamadı.',
+            'data'         => $ks_res['data'] ?? null,
+        ];
+        $repo->saveQuery('kisi_sorgu', $tc_vkn, $ks_kisi['kayitli'] ? 'ok' : 'not_found',
+            json_encode($ks_res['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_ks);
+        audit_log_event('hks_kisi_sorgu', 'hks_queries', null, null,
+            ['tc_vkn' => substr($tc_ks, 0, 4) . '***', 'kayitli' => $ks_kisi['kayitli'] ? 1 : 0]);
         break;
 
     // ── Karşı taraf HKS doğrulama (e-Bildirim adım kilidi) ──────────
@@ -196,27 +219,10 @@ switch ($action) {
                 'user_message' => $vk_norm['user_message']];
             break;
         }
-        // KayitliKisiSorguDTO bul (sorgulanan TC ile eşleşeni, yoksa ilkini)
-        $vk_dto = null;
-        foreach ((array)($res['data'] ?? []) as $vk_r) {
-            $vk_lc = [];
-            foreach ((array)$vk_r as $vk_k => $vk_v) { $vk_lc[strtolower((string)$vk_k)] = $vk_v; }
-            $vk_rtc = preg_replace('/\D/', '', (string)($vk_lc['tckimlikvergino'] ?? ''));
-            if ($vk_dto === null) $vk_dto = $vk_lc;
-            if ($vk_rtc === $tc) { $vk_dto = $vk_lc; break; }
-        }
-        $vk_kayitli = false; $vk_sifat_ids = [];
-        if ($vk_dto) {
-            $vk_km = $vk_dto['kayitlikisimi'] ?? null;
-            $vk_kayitli = ($vk_km === true || $vk_km === 1 || $vk_km === '1' || mb_strtolower((string)$vk_km) === 'true');
-            $vk_sf = $vk_dto['sifatlari'] ?? null;
-            if (is_array($vk_sf)) {
-                $vk_vals = $vk_sf['int'] ?? $vk_sf;
-                foreach ((array)$vk_vals as $vk_iv) { if ($vk_iv !== '' && $vk_iv !== null) $vk_sifat_ids[] = (string)$vk_iv; }
-            } elseif ($vk_sf !== null && $vk_sf !== '') {
-                $vk_sifat_ids[] = (string)$vk_sf;
-            }
-        }
+        // KESİN KURAL: KayitliKisiMi===true → kayıtlı; false → bulunamadı.
+        $vk_kisi = hks_extract_kayitli_kisi($res['data'] ?? [], $tc);
+        $vk_kayitli   = $vk_kisi['kayitli'];
+        $vk_sifat_ids = $vk_kisi['sifat_ids'];
         $repo->saveQuery('karsi_kisi_dogrula', $tc, $vk_kayitli ? 'ok' : 'not_found',
             json_encode($res['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_vk);
         audit_log_event('hks_karsi_kisi_dogrula', 'hks_queries', null, null,
@@ -246,6 +252,10 @@ switch ($action) {
         $rk_params = [];
         if (!empty($input['kunye_no'])) $rk_params['KunyeNo'] = trim($input['kunye_no']);
         if (!empty($input['urun_id']))  $rk_params['UrunId']  = trim($input['urun_id']);
+        // BUGFIX: Mal Sahibi TC/VKN formdan geliyordu ama isteğe EKLENMİYORDU →
+        // HKS "MalinSahibiTcKimlikVergiNo boş olamaz" hatası veriyordu.
+        $rk_tc = preg_replace('/\D/', '', (string)($input['tc_vkn'] ?? ''));
+        if ($rk_tc !== '') $rk_params['MalinSahibiTcKimlikVergiNo'] = $rk_tc;
         $json_result = $client->getReferansKunyeler($rk_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -327,17 +337,13 @@ switch ($action) {
             }
         }
         if (!empty($input['kunye_no']))  $yb_params['KunyeNo'] = trim($input['kunye_no']);
-        // WSDL BildirimSorguIstek ek alanları: KunyeTuru(int), Sifat(int), KalanMiktariSifirdanBuyukOlanlar(bool)
-        if (!empty($input['kunye_turu']))    $yb_params['KunyeTuru'] = (int)$input['kunye_turu'];
-        if (!empty($input['sifat']))         $yb_params['Sifat']     = (int)$input['sifat'];
+        // WSDL BildirimSorguIstek ek alanları: Sifat(int), KalanMiktariSifirdanBuyukOlanlar(bool).
+        // KunyeTuru helper içinde ele alınır (asla 0 gönderilmez; Tümü → 1+2 birleşik).
+        if (!empty($input['sifat']))         $yb_params['Sifat'] = (int)$input['sifat'];
         if (!empty($input['kalan_pozitif'])) $yb_params['KalanMiktariSifirdanBuyukOlanlar'] = true;
-        $json_result = $client->getYaptigimBildirimler($yb_params);
-        if ($json_result['ok'] && !empty($json_result['data'])) {
-            $norm = hks_normalize_response($json_result['data']);
-            if (!$norm['ok']) {
-                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
-            }
-        }
+        $json_result = hks_query_bildirim_liste(
+            fn(array $p) => $client->getYaptigimBildirimler($p), $yb_params, (string)($input['kunye_turu'] ?? '')
+        );
         $repo->saveQuery('bildirim_listesi', 'yaptigim',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_yb);
@@ -358,17 +364,12 @@ switch ($action) {
             }
         }
         if (!empty($input['kunye_no']))  $byb_params['KunyeNo'] = trim($input['kunye_no']);
-        // WSDL BildirimSorguIstek ek alanları: KunyeTuru(int), Sifat(int), KalanMiktariSifirdanBuyukOlanlar(bool)
-        if (!empty($input['kunye_turu']))    $byb_params['KunyeTuru'] = (int)$input['kunye_turu'];
-        if (!empty($input['sifat']))         $byb_params['Sifat']     = (int)$input['sifat'];
+        // KunyeTuru helper içinde (asla 0; Tümü → 1+2 birleşik).
+        if (!empty($input['sifat']))         $byb_params['Sifat'] = (int)$input['sifat'];
         if (!empty($input['kalan_pozitif'])) $byb_params['KalanMiktariSifirdanBuyukOlanlar'] = true;
-        $json_result = $client->getBanaYapilanBildirimler($byb_params);
-        if ($json_result['ok'] && !empty($json_result['data'])) {
-            $norm = hks_normalize_response($json_result['data']);
-            if (!$norm['ok']) {
-                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
-            }
-        }
+        $json_result = hks_query_bildirim_liste(
+            fn(array $p) => $client->getBanaYapilanBildirimler($p), $byb_params, (string)($input['kunye_turu'] ?? '')
+        );
         $repo->saveQuery('bildirim_listesi', 'bana_yapilan',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_byb);
@@ -480,12 +481,13 @@ switch ($action) {
         if ($r['ok']) {
             $norm = hks_normalize_response($r['data']);
             if ($norm['ok']) {
-                $d = $r['data'][0] ?? [];
-                $sonuc = (array)($d['Sonuc'] ?? $d['sonuc'] ?? $d);
+                // KESİN KURAL: KayitliKisiMi'ye göre (dizi/Sonuc doluluğuna göre DEĞİL).
+                $fk = hks_extract_kayitli_kisi($r['data'] ?? [], preg_replace('/\D/', '', $tc_vkn_f));
                 $json_result = [
                     'ok'      => true,
-                    'message' => 'Kişi sorgusu başarılı: ' . (empty($sonuc) ? 'Kayıt bulunamadı' : 'Kayıt bulundu'),
-                    'detail'  => $sonuc,
+                    'kayitli' => $fk['kayitli'],
+                    'message' => $fk['kayitli'] ? 'TC/VKN HKS\'de kayıtlı bulundu.' : 'Bu TC/VKN HKS\'de kayıtlı bulunamadı.',
+                    'detail'  => $r['data'],
                 ];
             } else {
                 $json_result = [

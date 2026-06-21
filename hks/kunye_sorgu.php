@@ -233,6 +233,14 @@ function hksQuery(action, payload, resultEl, btn) {
     .then(r => r.json())
     .then(data => {
         resultEl.style.display = 'block';
+        // Kişi sorgu: kayıt "var" KayitliKisiMi'ye (data.kayitli) bağlıdır, dizi uzunluğuna değil.
+        if (data.ok && typeof data.kayitli !== 'undefined') {
+            resultEl.className = 'hks-query-result ' + (data.kayitli ? 'ok' : 'err');
+            var sfk = (data.sifat_labels && data.sifat_labels.length) ? '<br>Sıfatlar: '+hksEsc(data.sifat_labels.join(', ')) : '<br>Sıfat bilgisi yok.';
+            resultEl.innerHTML = (data.kayitli?'✅ ':'❌ ')+hksEsc(data.message||'')+(data.kayitli?sfk:'')+
+                (data.data!=null?'<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.82rem">Teknik detay (ham yanıt)</summary><pre style="margin:6px 0 0;font-size:.78rem;white-space:pre-wrap;overflow-x:auto;max-height:300px">'+hksEsc(JSON.stringify(data.data,null,2))+'</pre></details>':'');
+            return;
+        }
         resultEl.classList.add(data.ok ? 'ok' : 'err');
         if (data.ok) {
             var d = data.data ?? data;

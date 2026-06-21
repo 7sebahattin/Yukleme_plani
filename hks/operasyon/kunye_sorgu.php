@@ -38,10 +38,11 @@ include __DIR__ . '/views/_layout_start.php';
             <input type="text" id="rkKunye" placeholder="Künye numarası">
         </div>
         <div class="hks-op-field">
-            <label>Mal Sahibi TC / VKN <small class="muted">(opsiyonel)</small></label>
+            <label>Mal Sahibi TC / VKN <span style="color:var(--danger)">*</span></label>
             <input type="text" id="rkTc" maxlength="11" placeholder="11 / 10 haneli">
         </div>
     </div>
+    <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS referans künye sorgusu için <strong>Mal Sahibi TC/VKN zorunludur</strong>.</div>
     <button type="button" class="hks-op-btn" data-q="referans" <?= $op_queries_enabled ? '' : 'disabled' ?>>🔎 Künye Sorgula</button>
     <div class="hks-op-result" data-r="referans" style="display:none"></div>
 </div>
@@ -97,12 +98,21 @@ include __DIR__ . '/views/_layout_start.php';
         var body = 'csrf='+encodeURIComponent(csrf)+'&'+Object.entries(payload).map(function(kv){return encodeURIComponent(kv[0])+'='+encodeURIComponent(kv[1]);}).join('&');
         fetch('../ajax.php?action='+action, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:body})
         .then(function(r){return r.json();}).then(function(d){
-            res.style.display='block'; res.classList.add(d.ok?'ok':'err');
+            res.style.display='block';
+            // Kişi sorgu: sonuç dizi uzunluğuna DEĞİL, KayitliKisiMi'ye (d.kayitli) bağlıdır.
+            if (d.ok && typeof d.kayitli !== 'undefined') {
+                res.className='hks-op-result ' + (d.kayitli ? 'ok' : 'err');
+                var sf = (d.sifat_labels && d.sifat_labels.length) ? '<br>Sıfatlar: '+esc(d.sifat_labels.join(', ')) : '<br>Sıfat bilgisi yok.';
+                res.innerHTML = (d.kayitli?'✅ ':'❌ ')+esc(d.message||'')+(d.kayitli?sf:'')+
+                    (d.data!=null?'<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:260px;overflow:auto">'+esc(JSON.stringify(d.data,null,2))+'</pre></details>':'');
+                btn.disabled=false; btn.textContent=orig; return;
+            }
+            res.classList.add(d.ok?'ok':'err');
             if (d.ok) {
                 var arr = d.data != null ? d.data : d;
                 res.innerHTML = '✅ '+(Array.isArray(arr)? arr.length+' kayıt bulundu':'Sonuç alındı')+
                     (Array.isArray(arr) && arr.length===0 ? ' — bu kriterlere uygun kayıt bulunamadı.' : '')+
-                    '<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:260px;overflow:auto">'+JSON.stringify(arr,null,2)+'</pre></details>';
+                    '<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:260px;overflow:auto">'+esc(JSON.stringify(arr,null,2))+'</pre></details>';
             } else {
                 res.innerHTML = hksErrHtml(d);
             }
@@ -116,7 +126,9 @@ include __DIR__ . '/views/_layout_start.php';
             if (q === 'referans') {
                 var urun = (document.getElementById('rkUrun').value||'').trim();
                 if (!urun) { alert('Önce ürün seçin.'); return; }
-                run('query_referans_kunye', {urun_id:urun, kunye_no:document.getElementById('rkKunye').value.trim(), tc_vkn:document.getElementById('rkTc').value.trim()}, res, btn);
+                var rkTcVal = document.getElementById('rkTc').value.trim();
+                if (!rkTcVal) { alert('Mal sahibi TC/VKN zorunludur.'); return; }
+                run('query_referans_kunye', {urun_id:urun, kunye_no:document.getElementById('rkKunye').value.trim(), tc_vkn:rkTcVal}, res, btn);
             } else if (q === 'kisi') {
                 var tc = document.getElementById('kisiTc').value.trim();
                 if (!tc) { alert('TC veya VKN girin.'); return; }
