@@ -174,6 +174,14 @@ class HksRepository {
         }
     }
 
+    // Canlı gönderim kilidini aç/kapat (Mapping Approval Gate). Yalnızca açık
+    // kullanıcı eylemiyle çağrılır; yetki/önkoşul kontrolü çağıran katmandadır.
+    public function setLiveSendEnabled(int $company_id, bool $on): void {
+        $this->ensureSettingsColumns();
+        $this->pdo->prepare("UPDATE hks_settings SET live_send_enabled=?, updated_at=NOW() WHERE id=?")
+                  ->execute([$on ? 1 : 0, $company_id]);
+    }
+
     public function updateTestResult(bool $ok, string $message): void {
         $existing = $this->getSettings();
         if (!$existing) return;
@@ -339,10 +347,12 @@ class HksRepository {
                  gidecek_yer, ihracat_ulke, belge_tipi, gsm, dogum_tarihi, eposta,
                  karsi_sifat, bildirimci_tc_vkn, gidecek_sahibi_tc,
                  gidecek_kayitli_degil, yurt_disi,
+                 gelen_ulke, gidecek_yer_il, gidecek_yer_ilce, gidecek_yer_belde,
+                 gidecek_yer_isletme_turu, gidecek_isyeri_id, gidecek_isyeri_tipi, gidecek_isyeri_adi,
                  status, created_by, created_at, updated_at)
              VALUES
                 (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
+                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'draft',?,NOW(),NOW())"
         )->execute([
             $this->nextLocalNo(),
             $data['source_type'] ?? null,
@@ -383,6 +393,14 @@ class HksRepository {
             $data['gidecek_sahibi_tc'] ?? null,
             (int)($data['gidecek_kayitli_degil'] ?? 0),
             (int)($data['yurt_disi'] ?? 0),
+            $data['gelen_ulke'] ?? null,
+            $data['gidecek_yer_il'] ?? null,
+            $data['gidecek_yer_ilce'] ?? null,
+            $data['gidecek_yer_belde'] ?? null,
+            $data['gidecek_yer_isletme_turu'] ?? null,
+            $data['gidecek_isyeri_id'] ?? null,
+            $data['gidecek_isyeri_tipi'] ?? null,
+            $data['gidecek_isyeri_adi'] ?? null,
             $data['created_by'] ?? null,
         ]);
         return (int)$this->pdo->lastInsertId();
@@ -402,6 +420,8 @@ class HksRepository {
                 gidecek_yer=?, ihracat_ulke=?, belge_tipi=?, gsm=?, dogum_tarihi=?, eposta=?,
                 karsi_sifat=?, bildirimci_tc_vkn=?, gidecek_sahibi_tc=?,
                 gidecek_kayitli_degil=?, yurt_disi=?,
+                gelen_ulke=?, gidecek_yer_il=?, gidecek_yer_ilce=?, gidecek_yer_belde=?,
+                gidecek_yer_isletme_turu=?, gidecek_isyeri_id=?, gidecek_isyeri_tipi=?, gidecek_isyeri_adi=?,
                 validation_errors_json=?, status=?,
                 checked_at=NULL, checked_by=NULL, updated_at=NOW()
              WHERE id=? AND status IN ('draft','ready','failed','checked')"
@@ -442,6 +462,14 @@ class HksRepository {
             $data['gidecek_sahibi_tc'] ?? null,
             (int)($data['gidecek_kayitli_degil'] ?? 0),
             (int)($data['yurt_disi'] ?? 0),
+            $data['gelen_ulke'] ?? null,
+            $data['gidecek_yer_il'] ?? null,
+            $data['gidecek_yer_ilce'] ?? null,
+            $data['gidecek_yer_belde'] ?? null,
+            $data['gidecek_yer_isletme_turu'] ?? null,
+            $data['gidecek_isyeri_id'] ?? null,
+            $data['gidecek_isyeri_tipi'] ?? null,
+            $data['gidecek_isyeri_adi'] ?? null,
             $errors ? json_encode($errors, JSON_UNESCAPED_UNICODE) : null,
             $status,
             $id,

@@ -239,4 +239,42 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
         }
     }
+
+    // hks_notifications — Mapping raporundaki eksik koşullu alanlar (Sprint HKS-eBildirim-MissingFields-01)
+    //   gelen_ulke         → GelenUlkeId (İthal malda zorunlu)
+    //   gidecek_yer_il     → GidecekYerIlId (kayıtsız yurt içi gidecek yerde zorunlu)
+    //   gidecek_yer_ilce   → GidecekYerIlceId
+    //   gidecek_yer_belde  → GidecekYerBeldeId
+    try {
+        $pdo->query("SELECT gelen_ulke, gidecek_yer_il, gidecek_yer_ilce, gidecek_yer_belde
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gelen_ulke`        VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer_il`    VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer_ilce`  VARCHAR(100) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer_belde` VARCHAR(100) NULL",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+    }
+
+    // hks_notifications — gidecek yer işyeri/depo/şube seçimi (Sprint HKS-GidecekIsyeri-Flow-01)
+    //   gidecek_yer_isletme_turu → GidecekYerIsletmeTuruId (işletme türü)
+    //   gidecek_isyeri_id        → GidecekIsyeriId (HKS işyeri Id'si, depo/şube/hal içi kaynağından)
+    //   gidecek_isyeri_tipi      → kaynak tipi (depo|sube|hal_ici_isyeri) — gösterim/teşhis
+    //   gidecek_isyeri_adi       → işyeri adı (kullanıcı gösterimi)
+    try {
+        $pdo->query("SELECT gidecek_yer_isletme_turu, gidecek_isyeri_id, gidecek_isyeri_tipi, gidecek_isyeri_adi
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_yer_isletme_turu` VARCHAR(120) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_id`        VARCHAR(50)  NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_tipi`      VARCHAR(30)  NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `gidecek_isyeri_adi`       VARCHAR(250) NULL",
+        ] as $_col_sql) {
+            try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
+        }
+    }
 })();

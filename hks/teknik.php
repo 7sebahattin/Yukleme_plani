@@ -28,6 +28,7 @@ $cards = [
     ['servis_loglari.php', '🧾',  'Servis Logları',    'Gönderilen istek ve yanıtların teknik kaydı'],
     ['teshis.php',         '🔬',  'Teşhis',            'WSDL metod keşfi ve yanıt teşhis ekranları'],
     ['wsdl_tipleri.php',   '🧩',  'WSDL Tipleri',      'BildirimKayitIstek gerçek alan adlarını WSDL\'den çıkar (yalnız okuma)'],
+    ['mapping_raporu.php', '🗺',  'Mapping Raporu',    'PDF kılavuz + WSDL alan eşleştirme raporu (yalnız rapor)'],
     ['firmalar.php',       '🏢',  'Firmalar',          'HKS firma tanımları ve yönetimi'],
 ];
 

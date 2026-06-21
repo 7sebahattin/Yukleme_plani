@@ -129,6 +129,40 @@ function hks_isyeri_turu_list(): array {
     ];
 }
 
+// Gidecek Yer İşletme Türüne göre işyeri Id'sinin alınacağı HKS referans kaynağı.
+// KAYNAK: GTB kılavuzu §5 "Malın Gidecek Yer Bilgileri" — tahmin DEĞİL:
+//   • "Hal İçi İşyeri"                                 → GenelServisHalIciIsyeri (hal_ici_isyeri)
+//   • "Hal Dışı İşyeri" / "Sınai İşletme" / "Perakende Satış Yeri" → GenelServisSubeler (sube)
+//   • "Hal İçi Deposu" / "Hal Dışı Deposu"             → GenelServisDepolar (depo)
+//   • "Yurt Dışı"                                      → işyeri yok (GidecekUlkeId kullanılır)
+// Kılavuzda eşleşmeyen türler (Tasnifleme, Dağıtım Merkezi vb.) → null (netleştirilmemiş).
+function hks_isyeri_kaynak_for_turu(?string $turu): ?string {
+    $t = mb_strtolower(trim((string)$turu), 'UTF-8');
+    // Türkçe "İ" mb_strtolower'da "i" + birleşik nokta (U+0307) üretir → eşleşmeyi bozar; temizle.
+    $t = str_replace("\u{0307}", '', $t);
+    if ($t === '') return null;
+    if (mb_strpos($t, 'yurt dış') !== false) return null;            // ihracat — işyeri yok
+    if (mb_strpos($t, 'depo')     !== false) return 'depo';          // Hal İçi/Dışı Deposu
+    if (mb_strpos($t, 'hal içi işyeri') !== false
+        || mb_strpos($t, 'hal ici isyeri') !== false) return 'hal_ici_isyeri';
+    if (mb_strpos($t, 'hal dışı işyeri') !== false
+        || mb_strpos($t, 'hal disi isyeri') !== false
+        || mb_strpos($t, 'sınai') !== false || mb_strpos($t, 'sinai') !== false
+        || mb_strpos($t, 'perakende') !== false) return 'sube';
+    if (mb_strpos($t, 'şube') !== false || mb_strpos($t, 'sube') !== false) return 'sube';
+    return null;                                                     // kılavuzda netleştirilmemiş
+}
+
+// İşyeri kaynak tipi → HKS yardımcı servis adı (rapor/uyarı metinleri için).
+function hks_isyeri_kaynak_servis(?string $kaynak): string {
+    return match ($kaynak) {
+        'depo'           => 'GenelServisDepolar',
+        'sube'           => 'GenelServisSubeler',
+        'hal_ici_isyeri' => 'GenelServisHalIciIsyeri',
+        default          => '',
+    };
+}
+
 // Sıralama Türü — Referans Künye sorgu sonuç sıralaması.
 function hks_siralama_turu_list(): array {
     return ['Tarihe Göre Azalan', 'Tarihe Göre Artan'];
@@ -241,12 +275,40 @@ function hks_validate_notification(array $n): array {
 
     // ── Koşullu zorunluluklar ──
     // Yurt Dışı → ihracat ülkesi
-    if (mb_strtolower($val('gidecek_yer')) === mb_strtolower('Yurt Dışı') && $val('ihracat_ulke') === '') {
+    $is_yurt_disi_dest = mb_strtolower($val('gidecek_yer')) === mb_strtolower('Yurt Dışı');
+    if ($is_yurt_disi_dest && $val('ihracat_ulke') === '') {
         $errors[] = 'Gideceği yer "Yurt Dışı" seçildiği için ihracat yapılan ülke seçilmelidir.';
     }
     // Belge no varsa belge tipi
     if ($val('belge_no') !== '' && $val('belge_tipi') === '') {
         $errors[] = 'Belge no girildiği için belge tipi seçilmelidir.';
+    }
+
+    // ── Sprint MissingFields-01 — kılavuz koşullu zorunlulukları ──
+    // A) Malın niteliği "İthal" ise gelen ülke zorunlu (GelenUlkeId, kılavuz §5).
+    if (mb_strtolower($val('malin_niteligi')) === mb_strtolower('İthal') && $val('gelen_ulke') === '') {
+        $errors[] = 'İthal mal için gelen ülke seçilmelidir.';
+    }
+    // B) Gidecek yer yurt içi ve kayıtlı değilse il/ilçe zorunlu (GidecekYerIlId/IlceId, kılavuz §5).
+    //    (Yurt dışı seçiliyse bu kural uygulanmaz; o durumda GidecekUlkeId/ihracat_ulke kullanılır.)
+    $gidecek_kayitsiz = (int)($n['gidecek_kayitli_degil'] ?? 0) === 1;
+    if ($gidecek_kayitsiz && !$is_yurt_disi_dest && $val('gidecek_yer') !== '') {
+        if ($val('gidecek_yer_il') === '')   $errors[] = 'Kayıtlı olmayan gidecek yer için il seçilmelidir.';
+        if ($val('gidecek_yer_ilce') === '') $errors[] = 'Kayıtlı olmayan gidecek yer için ilçe seçilmelidir.';
+        // Belde: kılavuzda "0 olamaz" geçse de pratikte her yerde belde olmayabilir;
+        // form akışında bloke etmiyoruz — mapping raporunda koşullu not olarak işaretli.
+    }
+
+    // ── Sprint GidecekIsyeri-Flow-01 — kayıtlı yurt içi gidecek yer → işyeri zorunlu (kılavuz §5) ──
+    // İşletme türü (gidecek_yer) zaten yukarıda zorunlu. Burada işyeri Id'si ve kaynak netliği aranır.
+    if (!$gidecek_kayitsiz && !$is_yurt_disi_dest && $val('gidecek_yer') !== '') {
+        $kaynak = hks_isyeri_kaynak_for_turu($val('gidecek_yer'));
+        if ($kaynak === null) {
+            // Kılavuzda işyeri kaynağı tanımsız işletme türü — gönderime hazır sayma.
+            $errors[] = 'Seçilen işletme türü için HKS işyeri kaynağı netleştirilmelidir.';
+        } elseif ($val('gidecek_isyeri_id') === '') {
+            $errors[] = 'Gidecek işyeri seçilmelidir.';
+        }
     }
 
     // ── Format kontrolleri ──
@@ -302,6 +364,8 @@ function hks_is_ebildirim_record(array $n): bool {
         'malin_niteligi', 'malin_turu', 'gidecek_yer', 'ihracat_ulke',
         'belge_tipi', 'karsi_sifat', 'gidecek_sahibi_tc', 'gsm',
         'dogum_tarihi', 'eposta', 'bildirimci_tc_vkn',
+        'gelen_ulke', 'gidecek_yer_il', 'gidecek_yer_ilce', 'gidecek_yer_belde',
+        'gidecek_isyeri_id', 'gidecek_isyeri_adi',
     ] as $f) {
         if (trim((string)($n[$f] ?? '')) !== '') return true;
     }
@@ -349,7 +413,8 @@ function hks_notification_payload_preview(array $n): array {
         'Referans Künye'     => $n['reference_kunye_no'] ?? '',
         // — Mal Bilgileri —
         'Malın Niteliği'     => $n['malin_niteligi'] ?? '',
-        'Malın Türü'         => $n['malin_turu'] ?? '',
+        'Gelen Ülke'         => $n['gelen_ulke'] ?? '',
+        'Malın Türü (Üretim Şekli)' => $n['malin_turu'] ?? '',
         'Ürün'               => $n['urun'] ?? '',
         'Ürün Cinsi'         => $n['urun_cinsi'] ?? '',
         'Miktar'             => $miktar,
@@ -358,10 +423,14 @@ function hks_notification_payload_preview(array $n): array {
         'Üretici'            => trim(($n['uretici_ad'] ?? '') . ' ' . (!empty($n['uretici_tc_vkn']) ? '(' . $n['uretici_tc_vkn'] . ')' : '')),
         // — Gidecek Yer / Sevk —
         'Gideceği Yer'       => $gidecek,
+        'Gidecek İşyeri'     => trim((string)($n['gidecek_isyeri_adi'] ?? '')
+                                . (!empty($n['gidecek_isyeri_id']) ? ' (#' . $n['gidecek_isyeri_id'] . ')' : '')),
         'Gid. Yer Sahibi'    => $n['gidecek_sahibi_tc'] ?? '',
+        'Gid. Yer İl / İlçe' => trim(((string)($n['gidecek_yer_il'] ?? '')) . ' / ' . ((string)($n['gidecek_yer_ilce'] ?? '')), ' /'),
+        'Gid. Yer Belde'     => $n['gidecek_yer_belde'] ?? '',
         'Depo / Şube'        => $n['depo'] ?? '',
-        'İl / İlçe'          => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
-        'Belde'              => $n['belde'] ?? '',
+        'Üretim İl / İlçe'   => trim(($n['il'] ?? '') . ' / ' . ($n['ilce'] ?? ''), ' /'),
+        'Üretim Belde'       => $n['belde'] ?? '',
         'Araç Plaka'         => $n['arac_plaka'] ?? '',
         'Belge No / Tipi'    => $belge,
         'Sevk Tarihi'        => $n['sevk_tarihi'] ?? '',
@@ -376,6 +445,10 @@ function hks_send_blockers(array $n, ?array $settings): array {
     }
     if (!$settings || (int)($settings['live_send_enabled'] ?? 0) !== 1) {
         $blockers[] = 'Canlı gönderim ayarlardan etkinleştirilmemiş.';
+    }
+    // Mapping Approval Gate — alan eşleştirmesi onaylanmadan gönderim yapılamaz.
+    if (function_exists('hks_payload_fields_confirmed') && !hks_payload_fields_confirmed()) {
+        $blockers[] = 'BildirimKaydet alan eşleştirmesi onaylanmadı (Mapping Raporu → Mapping\'i Onayla).';
     }
     if (($n['status'] ?? '') !== 'checked') {
         $blockers[] = 'Kayıt "Kontrol Edildi" durumunda olmalı.';
@@ -397,6 +470,13 @@ function hks_send_blockers(array $n, ?array $settings): array {
     }
     if (!empty($n['validation_errors_json']) && $n['validation_errors_json'] !== '[]') {
         $blockers[] = 'Doğrulama hataları mevcut.';
+    }
+    // Payload builder hazır mı? (mapping ready=true + errors boş). Asıl SOAP gövdesi bununla üretilir.
+    if (function_exists('hks_validate_bildirim_payload_mapping')) {
+        $pm = hks_validate_bildirim_payload_mapping($n, $settings ?? []);
+        if (empty($pm['ready'])) {
+            $blockers[] = 'HKS payload doğrulaması hazır değil (' . count($pm['errors'] ?? []) . ' hata).';
+        }
     }
     if (!empty($n['hks_bildirim_no']) || !empty($n['hks_kunye_no'])) {
         $blockers[] = 'Bu kayıt zaten HKS numarası almış (mükerrer engeli).';
