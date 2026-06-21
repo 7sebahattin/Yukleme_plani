@@ -212,10 +212,21 @@ var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 function hksEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function hksErrHtml(d){
     var code = d.error_code || '';
+    var codeTxt = code + (d.error_code_aciklama ? (' ('+d.error_code_aciklama+')') : '');
     var expl = d.user_message || d.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.';
-    var html = '❌ ' + (code ? ('HKS hata kodu: '+hksEsc(code)+'<br>') : '') + 'Açıklama: '+hksEsc(expl);
+    var html = '❌ ' + (code ? ('HKS hata kodu: '+hksEsc(codeTxt)+'<br>') : '') + 'Açıklama: '+hksEsc(expl);
     if (d.data != null) html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:240px;overflow:auto">'+hksEsc(JSON.stringify(d.data,null,2))+'</pre></details>';
     return html;
+}
+function hksCritHtml(d){
+    if (!d || !d.request_criteria) return '';
+    var rows = '';
+    Object.keys(d.request_criteria).forEach(function(k){
+        rows += '<tr><td style="padding:2px 8px;color:var(--muted)">'+hksEsc(k)+'</td><td style="padding:2px 8px;font-family:monospace">'+hksEsc(String(d.request_criteria[k]))+'</td></tr>';
+    });
+    return '<div style="margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px">'+
+        '<div style="font-weight:600;font-size:.8rem;margin-bottom:4px">🔎 Bu sorguda HKS\'ye gönderilen kriterler</div>'+
+        '<table style="font-size:.78rem;border-collapse:collapse">'+rows+'</table></div>';
 }
 
 function hksQuery(action, payload, resultEl, btn) {
@@ -254,6 +265,7 @@ function hksQuery(action, payload, resultEl, btn) {
                 resultEl.innerHTML += '<br><small>Mevcut metodlar: ' + data.methods_available.slice(0,20).join(', ') + '</small>';
             }
         }
+        resultEl.innerHTML += hksCritHtml(data);  // gönderilen kriter teşhis kutusu (varsa)
     })
     .catch(() => {
         resultEl.style.display = 'block';

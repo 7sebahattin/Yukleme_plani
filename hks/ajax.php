@@ -252,10 +252,30 @@ switch ($action) {
         $rk_params = [];
         if (!empty($input['kunye_no'])) $rk_params['KunyeNo'] = trim($input['kunye_no']);
         if (!empty($input['urun_id']))  $rk_params['UrunId']  = trim($input['urun_id']);
-        // BUGFIX: Mal Sahibi TC/VKN formdan geliyordu ama isteğe EKLENMİYORDU →
-        // HKS "MalinSahibiTcKimlikVergiNo boş olamaz" hatası veriyordu.
         $rk_tc = preg_replace('/\D/', '', (string)($input['tc_vkn'] ?? ''));
         if ($rk_tc !== '') $rk_params['MalinSahibiTcKimlikVergiNo'] = $rk_tc;
+        if (!empty($input['kisi_sifat']))  $rk_params['KisiSifat'] = (int)$input['kisi_sifat'];
+        if (!empty($input['kalan_pozitif'])) $rk_params['KalanMiktariSifirdanBuyukOlanlar'] = true;
+        foreach (['baslangic' => 'BaslangicTarihi', 'bitis' => 'BitisTarihi'] as $inp => $hks_key) {
+            if (!empty($input[$inp])) {
+                $d_obj = DateTime::createFromFormat('Y-m-d', trim($input[$inp]));
+                if ($d_obj && $d_obj->format('Y-m-d') === trim($input[$inp])) {
+                    $rk_params[$hks_key] = $d_obj->format('Y-m-d\T00:00:00');
+                }
+            }
+        }
+        // ── TEŞHİS: ReferansKunyeIstek 7 alanının GİDEN durumu (maskeli) ──
+        // Hangi alan dolu / hangi alan gönderilmedi (HKS'de 0/null kalır) görünür.
+        $maskTc = static fn(string $t): string => strlen($t) > 6 ? substr($t,0,4).'***'.substr($t,-4) : $t;
+        $rk_criteria = [
+            'UrunId'                           => $rk_params['UrunId'] ?? '(gönderilmedi → 0)',
+            'MalinSahibiTcKimlikVergiNo'       => isset($rk_params['MalinSahibiTcKimlikVergiNo']) ? $maskTc($rk_params['MalinSahibiTcKimlikVergiNo']) : '(gönderilmedi)',
+            'KunyeNo'                          => $rk_params['KunyeNo'] ?? '(gönderilmedi → 0)',
+            'KisiSifat'                        => $rk_params['KisiSifat'] ?? '(gönderilmedi → 0)',
+            'BaslangicTarihi'                  => $rk_params['BaslangicTarihi'] ?? '(gönderilmedi)',
+            'BitisTarihi'                      => $rk_params['BitisTarihi'] ?? '(gönderilmedi)',
+            'KalanMiktariSifirdanBuyukOlanlar' => array_key_exists('KalanMiktariSifirdanBuyukOlanlar', $rk_params) ? 'true' : '(gönderilmedi → false)',
+        ];
         $json_result = $client->getReferansKunyeler($rk_params);
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
@@ -263,6 +283,9 @@ switch ($action) {
                 $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
+        // Teşhis kriterleri ve maskeli request'i her durumda yanıta ekle.
+        $json_result['request_criteria'] = $rk_criteria;
+        $json_result['request_safe']     = hks_mask_sensitive($rk_params);
         $repo->saveQuery('referans_kunye', $input['kunye_no'] ?? '*',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_rk);

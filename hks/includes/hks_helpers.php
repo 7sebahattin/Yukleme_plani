@@ -610,6 +610,26 @@ function hks_collect_messages(mixed $node, array &$bucket, int $depth = 0): void
     }
 }
 
+// HKS genel işlem/hata kodları → insan-okur açıklama (resmi kılavuz §1.1).
+function hks_islem_kodu_aciklama(string $code): string {
+    static $map = [
+        'GTBWSRV0000001' => 'İşlem başarılı',
+        'GTBWSRV0000002' => 'İşlem başarısız',
+        'GTBGLB00000001' => 'Beklenmeyen hata oluştu',
+        'GTBGLB00000011' => 'Kullanıcı bilgileri yanlış',
+    ];
+    return $map[strtoupper(trim($code))] ?? '';
+}
+
+// Bir metin içindeki HKS kodlarını "KOD (açıklama)" biçiminde zenginleştirir.
+function hks_enrich_code_messages(string $msg): string {
+    if ($msg === '') return $msg;
+    return (string)preg_replace_callback('/\bGTB[A-Z]{2,4}\d{6,}\b/', static function ($m) {
+        $a = hks_islem_kodu_aciklama($m[0]);
+        return $a !== '' ? ($m[0] . ' (' . $a . ')') : $m[0];
+    }, $msg);
+}
+
 // Servis yanıtını normalize eder. IslemKodu + HataKodlari + Sonuc.Mesaj/HataKodlari yapılarını
 // destekler. GTBWSRV0000002 gibi genel kodların yanında HKS'nin GERÇEK mesajını çıkarır.
 // Geriye dönük uyumluluk: 'ok','islem_kodu','message' korunur. Ek alanlar: error_code,
@@ -658,34 +678,39 @@ function hks_normalize_response(mixed $raw): array {
         $ok = empty($hata_bucket);
     }
 
-    // Hata durumunda gösterilecek tüm mesajlar (HataKodlari + Sonuc) — benzersiz
+    // Hata durumunda gösterilecek tüm mesajlar (HataKodlari + Sonuc) — benzersiz + kod açıklamalı
     $messages = [];
     foreach (array_merge($hata_bucket, $sonuc_bucket) as $m) {
+        $m = hks_enrich_code_messages($m);   // "GTBGLB00000001" → "GTBGLB00000001 (Beklenmeyen hata oluştu)"
         if ($m !== '' && !in_array($m, $messages, true)) $messages[] = $m;
     }
     $hks_message = implode('; ', $messages);
 
     $error_code = $ok ? '' : $islem_kodu;
+    $error_code_aciklama = $error_code !== '' ? hks_islem_kodu_aciklama($error_code) : '';
     if ($ok) {
         $user_message = '';
     } elseif ($hks_message !== '') {
         $user_message = $hks_message;
     } elseif ($islem_kodu !== '') {
-        $user_message = 'HKS hata mesajı döndürmedi (kod: ' . $islem_kodu . '). Teknik detay servis loglarında görülebilir.';
+        $aks = hks_islem_kodu_aciklama($islem_kodu);
+        $user_message = 'HKS hata mesajı döndürmedi (kod: ' . $islem_kodu
+            . ($aks !== '' ? ' — ' . $aks : '') . '). Teknik detay servis loglarında görülebilir.';
     } else {
         $user_message = 'HKS bilinmeyen hata. Teknik detay servis loglarında görülebilir.';
     }
 
     return [
-        'ok'            => $ok,
-        'islem_kodu'    => $islem_kodu,
-        'error_code'    => $error_code,
-        'error_message' => $hks_message,
-        'hks_message'   => $hks_message,
-        'messages'      => $messages,
-        'user_message'  => $user_message,
+        'ok'                  => $ok,
+        'islem_kodu'          => $islem_kodu,
+        'error_code'          => $error_code,
+        'error_code_aciklama' => $error_code_aciklama,
+        'error_message'       => $hks_message,
+        'hks_message'         => $hks_message,
+        'messages'            => $messages,
+        'user_message'        => $user_message,
         // Geriye dönük uyumluluk: eski 'message' alanı (hata ise açıklama, başarı ise '')
-        'message'       => $ok ? '' : ($user_message ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
+        'message'             => $ok ? '' : ($user_message ?: ('HKS hata kodu: ' . ($islem_kodu ?: 'bilinmiyor'))),
     ];
 }
 
@@ -757,14 +782,15 @@ function hks_query_bildirim_liste(callable $serviceFn, array $baseParams, string
 // Ajax sorgu handler'ları için tek-tip hata payload'ı — error_code + user_message taşır.
 function hks_normalize_error_payload(array $norm, mixed $data = null): array {
     return [
-        'ok'            => false,
-        'error_code'    => $norm['error_code'] ?? ($norm['islem_kodu'] ?? ''),
-        'error_message' => $norm['error_message'] ?? '',
-        'hks_message'   => $norm['hks_message'] ?? '',
-        'user_message'  => $norm['user_message'] ?? ($norm['message'] ?? ''),
-        'message'       => $norm['user_message'] ?? ($norm['message'] ?? ''),
-        'messages'      => $norm['messages'] ?? [],
-        'data'          => $data,
+        'ok'                  => false,
+        'error_code'          => $norm['error_code'] ?? ($norm['islem_kodu'] ?? ''),
+        'error_code_aciklama' => $norm['error_code_aciklama'] ?? '',
+        'error_message'       => $norm['error_message'] ?? '',
+        'hks_message'         => $norm['hks_message'] ?? '',
+        'user_message'        => $norm['user_message'] ?? ($norm['message'] ?? ''),
+        'message'             => $norm['user_message'] ?? ($norm['message'] ?? ''),
+        'messages'            => $norm['messages'] ?? [],
+        'data'                => $data,
     ];
 }
 
