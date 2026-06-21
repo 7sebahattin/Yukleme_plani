@@ -689,6 +689,71 @@ function hks_normalize_response(mixed $raw): array {
     ];
 }
 
+// KayitliKisiSorgu yanıtından kişiyi çözer. KESİN KURAL: kayıt "var" sayılması
+// dizi uzunluğuna DEĞİL, KayitliKisiMi===true alanına bağlıdır. Sifatlari null ise boş.
+// Dönüş: ['kayitli'=>bool, 'sifat_ids'=>[...]]
+function hks_extract_kayitli_kisi(mixed $records, string $tc): array {
+    $tc = preg_replace('/\D/', '', $tc);
+    $dto = null;
+    foreach ((array)$records as $r) {
+        $lc = [];
+        foreach ((array)$r as $k => $v) { $lc[strtolower((string)$k)] = $v; }
+        // Sonuc sarmalı gelebilir → TcKimlikVergiNolar.KayitliKisiSorguDTO içine in
+        if (!array_key_exists('kayitlikisimi', $lc)) {
+            foreach ($lc as $vv) {
+                if (is_array($vv) || is_object($vv)) {
+                    $inner = hks_extract_kayitli_kisi([$vv], $tc);
+                    if ($inner['kayitli'] || $inner['sifat_ids']) return $inner;
+                }
+            }
+        }
+        $rtc = preg_replace('/\D/', '', (string)($lc['tckimlikvergino'] ?? ''));
+        if ($dto === null) $dto = $lc;
+        if ($tc !== '' && $rtc === $tc) { $dto = $lc; break; }
+    }
+    $kayitli = false; $sifat_ids = [];
+    if ($dto && array_key_exists('kayitlimi', $dto)) { /* alternatif ad */ }
+    if ($dto) {
+        $km = $dto['kayitlikisimi'] ?? $dto['kayitlimi'] ?? null;
+        $kayitli = ($km === true || $km === 1 || $km === '1' || mb_strtolower((string)$km) === 'true');
+        $sf = $dto['sifatlari'] ?? null;   // null → sıfat yok
+        if (is_array($sf)) {
+            $vals = $sf['int'] ?? $sf;
+            foreach ((array)$vals as $iv) { if ($iv !== '' && $iv !== null) $sifat_ids[] = (string)$iv; }
+        } elseif ($sf !== null && $sf !== '') {
+            $sifat_ids[] = (string)$sf;
+        }
+    }
+    return ['kayitli' => $kayitli, 'sifat_ids' => $sifat_ids];
+}
+
+// Bildirim listesi sorgusu — KunyeTuru'yu ASLA 0 göndermez.
+// 1/2 seçiliyse o değer; "Tümü" (boş/0) ise HKS'ye iki ayrı sorgu (1 ve 2) yapıp birleştirir.
+// $serviceFn: array $params => ['ok'=>bool,'data'=>..., 'message'=>...] döndüren çağrılabilir.
+function hks_query_bildirim_liste(callable $serviceFn, array $baseParams, string $kunyeTuruInput): array {
+    $kt     = trim($kunyeTuruInput);
+    $turler = ($kt === '1' || $kt === '2') ? [(int)$kt] : [1, 2];  // boş/0 → asla; Tümü = 1+2
+    $merged = []; $err_payload = null; $any_ok = false;
+    foreach ($turler as $ktv) {
+        $params = $baseParams;
+        $params['KunyeTuru'] = $ktv;   // her zaman geçerli (1 veya 2)
+        $res = $serviceFn($params);
+        if (empty($res['ok'])) {
+            if ($err_payload === null) $err_payload = ['ok' => false, 'message' => $res['message'] ?? 'HKS servisine ulaşılamadı.'];
+            continue;
+        }
+        $norm = hks_normalize_response($res['data'] ?? []);
+        if (!$norm['ok']) {
+            if ($err_payload === null) $err_payload = hks_normalize_error_payload($norm, $res['data']);
+            continue;
+        }
+        $any_ok = true;
+        foreach ((array)($res['data'] ?? []) as $row) $merged[] = $row;
+    }
+    if ($any_ok) return ['ok' => true, 'data' => $merged, 'kunye_turleri' => $turler];
+    return $err_payload ?? ['ok' => true, 'data' => []];
+}
+
 // Ajax sorgu handler'ları için tek-tip hata payload'ı — error_code + user_message taşır.
 function hks_normalize_error_payload(array $norm, mixed $data = null): array {
     return [

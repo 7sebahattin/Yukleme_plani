@@ -951,9 +951,11 @@ include __DIR__ . '/views/_layout_start.php';
             btnRef.disabled = true; btnRef.textContent = '⏳ Sorgulanıyor...';
             res.style.display = 'none'; res.className = 'hks-op-result';
             var csrf = document.querySelector('meta[name="csrf-token"]').content;
+            // Mal Sahibi TC/VKN = bildirimci firma VKN (HKS referans künye sorgusu bunu zorunlu ister)
+            var malSahibiVkn = <?= json_encode($bildirimci_vkn, JSON_UNESCAPED_UNICODE) ?>;
             fetch('../ajax.php?action=query_referans_kunye', {
                 method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-                body:'csrf='+encodeURIComponent(csrf)+'&urun_id='+encodeURIComponent(urunId)+'&kunye_no='+encodeURIComponent(document.getElementById('refKunyeNo').value.trim())
+                body:'csrf='+encodeURIComponent(csrf)+'&urun_id='+encodeURIComponent(urunId)+'&kunye_no='+encodeURIComponent(document.getElementById('refKunyeNo').value.trim())+'&tc_vkn='+encodeURIComponent(malSahibiVkn)
             }).then(function(r){return r.json();}).then(function(d){
                 res.style.display='block'; res.classList.add(d.ok?'ok':'err');
                 if (d.ok) {

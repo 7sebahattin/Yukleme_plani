@@ -47,20 +47,34 @@ function hks_decrypt(string $encoded): string {
     }
 }
 
-// Hassas alanları maskele (log yazmadan önce)
+// Hassas alanları maskele (log yazmadan önce). Derinlemesine (nested Istek dahil).
+//   - Kimlik bilgileri (UserName/Password/ServicePassword vb.) TAM maskelenir (***).
+//   - TC/VKN alanları (MalinSahibiTcKimlikVergiNo, TcKimlikVergiNo vb.) KISMİ maskelenir
+//     (ilk 4 + *** + son 4) → değerin gittiği teyit edilebilir ama tam görünmez.
 function hks_mask_sensitive(array $data): array {
-    static $sensitive = [
-        'UserName','Password','ServicePassword','SecurityWord',
-        'KullaniciAdi','Sifre','ServisSifre','GuvenlikKelimesi',
-        'username','password','service_password','security_word',
+    static $full = [
+        'username','password','servicepassword','securityword',
+        'kullaniciadi','sifre','servissifre','guvenlikkelimesi',
         'password_enc','service_password_enc','security_word_enc',
     ];
-    foreach ($sensitive as $key) {
-        if (array_key_exists($key, $data)) {
-            $data[$key] = '***';
+    static $partial = [
+        'malinsahibitckimlikvergino','tckimlikvergino','bildirimcitckimlikvergino',
+        'ureticitckimlikvergino','tckimlikno','vergino',
+    ];
+    $walk = static function ($node) use (&$walk, $full, $partial) {
+        if (!is_array($node)) return $node;
+        $out = [];
+        foreach ($node as $k => $v) {
+            $lk = is_string($k) ? mb_strtolower($k) : '';
+            if ($lk !== '' && in_array($lk, $full, true)) { $out[$k] = '***'; continue; }
+            if ($lk !== '' && in_array($lk, $partial, true) && is_string($v) && strlen($v) > 6) {
+                $out[$k] = substr($v, 0, 4) . '***' . substr($v, -4); continue;
+            }
+            $out[$k] = is_array($v) ? $walk($v) : $v;
         }
-    }
-    return $data;
+        return $out;
+    };
+    return $walk($data);
 }
 
 // JSON string içindeki hassas alanları maskele
