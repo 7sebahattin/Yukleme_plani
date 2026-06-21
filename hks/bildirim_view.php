@@ -89,7 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         audit_log_event('hks_notification_send_attempt', 'hks_notifications', $id, null, ['local_no' => $n['local_no']]);
 
         $client = new HksClient($repo);
-        $payload = hks_notification_payload_preview($n);
+        // GERÇEK gönderim payload'ı = nested BildirimKayitIstek (ArrayOfBildirimKayitIstek).
+        // hks_notification_payload_preview() yalnız insan-okur önizleme içindir; SOAP'a GİTMEZ.
+        // Credentials burada EKLENMEZ — HksClient::buildRequest() UserName/Password/ServicePassword
+        // zarfını tek sefer ekler (çift-zarf riski yok).
+        $payload = hks_build_bildirim_kaydet_payload($n, $settings ?: []);
         $result  = $client->saveBildirim($payload);
 
         if (!empty($result['ok'])) {
@@ -451,6 +455,36 @@ endif;
         <summary style="cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)">🔧 Teknik SOAP Payload (maskeli JSON)</summary>
         <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;font-size:.78rem;margin:8px 0 0;max-height:360px"><?= hks_h($pay_json) ?></pre>
         <p style="font-size:.76rem;color:var(--muted);margin:6px 0 0">UserName / Password / ServicePassword bu önizlemeye dahil edilmez; gerçek gönderim anında HksClient ekler.</p>
+    </details>
+
+    <!-- 6) Gönderim Hazırlık Kontrolü (DRY-RUN) — SOAP çağrısı YOK -->
+    <?php
+    $dry = hks_prepare_bildirim_send_request($id);
+    $dry_json = json_encode($dry['payload'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    audit_log_event('hks_send_dry_run_checked', 'hks_notifications', $id, null, [
+        'ready'            => $dry['ready'] ? 1 : 0,
+        'blocker_count'    => count($dry['blockers']),
+        'request_shape_ok' => $dry['request_shape_ok'] ? 1 : 0,
+        'istek_count'      => $dry['istek_count'] ?? 0,
+    ]);
+    ?>
+    <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-weight:600;font-size:.9rem;color:var(--muted)">🧪 Gönderim Hazırlık Kontrolü (Dry-run — gerçek gönderim YOK)</summary>
+        <div style="margin:8px 0 0;font-size:.85rem">
+            <div>Request şekli (UserName/Password/ServicePassword/Istek tekil, gövdede credentials yok):
+                <strong style="color:<?= $dry['request_shape_ok'] ? '#065f46' : '#991b1b' ?>"><?= $dry['request_shape_ok'] ? '✅ UYUMLU' : '❌ UYUMSUZ' ?></strong></div>
+            <div>Istek içindeki BildirimKayitIstek sayısı: <strong><?= (int)($dry['istek_count'] ?? 0) ?></strong></div>
+            <div>Gönderime hazır mı: <strong style="color:<?= $dry['ready'] ? '#065f46' : '#854d0e' ?>"><?= $dry['ready'] ? 'Evet' : 'Hayır' ?></strong></div>
+            <?php if (!empty($dry['blockers'])): ?>
+            <div style="margin-top:6px;font-weight:600;color:#92400e">Engelleyiciler:</div>
+            <ul style="margin:2px 0 0;padding-left:18px;color:#4b5563">
+                <?php foreach ($dry['blockers'] as $b): ?><li style="font-size:.82rem"><?= hks_h($b) ?></li><?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+        </div>
+        <div style="font-weight:600;font-size:.82rem;color:var(--muted);margin:10px 0 4px">Final request şekli (credentials maskeli):</div>
+        <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;overflow:auto;font-size:.76rem;margin:0;max-height:360px"><?= hks_h($dry_json) ?></pre>
+        <p style="font-size:.76rem;color:var(--muted);margin:6px 0 0">Bu kontrol BildirimServisBildirimKaydet'i ÇAĞIRMAZ; yalnızca payload + zarf yapısını doğrular.</p>
     </details>
 </div>
 <?php endif; ?>

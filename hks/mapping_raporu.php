@@ -25,26 +25,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_flash('error', 'Mapping onaya hazır değil — önce bloke eden maddeler giderilmeli.');
         } else {
             hks_mapping_set_approved(true);
-            // Kullanıcının açık kararı: canlı gönderim kilidini de aç.
-            if ($company_id > 0) $repo->setLiveSendEnabled($company_id, true);
+            // KRİTİK: Mapping onayı canlı gönderimi AÇMAZ. live_send_enabled ayrı bir
+            // güvenlik adımıdır ve bu işlemde DEĞİŞTİRİLMEZ.
             audit_log_event('hks_mapping_approved', 'hks_reference_cache', $company_id, null, [
-                'approval_ready'    => true,
-                'confirmed_fields'  => $rd['confirmed_fields_count'] ?? null,
-                'live_send_enabled' => 1,
+                'approval_ready'   => true,
+                'confirmed_fields' => $rd['confirmed_fields_count'] ?? null,
             ]);
-            set_flash('success', 'Mapping ONAYLANDI ve canlı gönderim kilidi AÇILDI. (Gerçek gönderim ayrıca son bağlantı testi + kayıtlı kimlik bilgileri gerektirir.)');
+            set_flash('success', 'Mapping ONAYLANDI. Bu işlem canlı gönderimi AÇMAZ — canlı gönderim ayrı güvenlik adımıyla açılır.');
         }
         header('Location: mapping_raporu.php'); exit;
     }
 
     if ($action === 'revoke_mapping') {
         hks_mapping_set_approved(false);
-        // Simetrik güvenlik: onay geri alınınca canlı gönderim kilidi de kapanır.
-        if ($company_id > 0) $repo->setLiveSendEnabled($company_id, false);
-        audit_log_event('hks_mapping_revoked', 'hks_reference_cache', $company_id, null, [
-            'live_send_enabled' => 0,
-        ]);
-        set_flash('success', 'Mapping onayı GERİ ALINDI ve canlı gönderim kilidi KAPATILDI.');
+        // live_send_enabled bu işlemde değiştirilmez (ayrı güvenlik adımı).
+        audit_log_event('hks_mapping_unapproved', 'hks_reference_cache', $company_id, null, []);
+        set_flash('success', 'Mapping onayı GERİ ALINDI. (Canlı gönderim ayarı bu işlemden etkilenmez.)');
         header('Location: mapping_raporu.php'); exit;
     }
 }
@@ -153,30 +149,31 @@ render_flash();
 <!-- Mapping Approval Gate — onay ver / geri al (admin) -->
 <div class="card" style="padding:16px;margin-bottom:16px;border:2px solid <?= $approved ? 'var(--danger)' : ($readiness['approval_ready'] ? 'var(--success)' : 'var(--border)') ?>">
     <div style="font-weight:700;font-size:1.02rem;margin-bottom:6px">🔐 Mapping Onay Kapısı (Approval Gate)</div>
+    <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:9px 13px;margin-bottom:12px;font-size:.83rem;color:#1e40af">
+        ℹ️ <strong>Mapping onayı canlı gönderimi AÇMAZ.</strong> Onay yalnızca alan eşleştirmesinin
+        doğrulandığını kaydeder (<code>__MAPPING_APPROVED__</code>). Canlı gönderim
+        (<code>live_send_enabled</code>) ayrı bir güvenlik adımıyla açılır ve bu işlemden etkilenmez.
+        Mevcut canlı gönderim durumu: <strong><?= $live_send_on ? '🔴 AÇIK' : '🟢 KAPALI' ?></strong>.
+    </div>
     <?php if ($approved): ?>
-        <p style="margin:0 0 10px;font-size:.9rem;color:#991b1b">
-            ✅ Mapping <strong>ONAYLI</strong> — alan kilidi açık.
-            Canlı gönderim kilidi: <strong><?= $live_send_on ? '🔴 AÇIK' : '🟢 KAPALI' ?></strong>.
-            Onayı geri almak canlı gönderim kilidini de kapatır.
+        <p style="margin:0 0 10px;font-size:.9rem;color:#065f46">
+            ✅ Mapping <strong>ONAYLI</strong> — alan kilidi açık (<code>hks_payload_fields_confirmed()=true</code>).
         </p>
-        <form method="post" onsubmit="return confirm('Mapping onayı geri alınacak ve canlı gönderim kilidi KAPATILACAK. Onaylıyor musunuz?');">
+        <form method="post" onsubmit="return confirm('Mapping onayı geri alınacak. (Canlı gönderim ayarı etkilenmez.) Onaylıyor musunuz?');">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="revoke_mapping">
-            <button type="submit" class="btn btn-ghost" style="border-color:var(--danger);color:var(--danger)">↩ Onayı Geri Al (kilidi kapat)</button>
+            <button type="submit" class="btn btn-ghost" style="border-color:var(--danger);color:var(--danger)">↩ Mapping Onayını Geri Al</button>
         </form>
     <?php elseif ($readiness['approval_ready']): ?>
-        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:.86rem;color:#991b1b">
-            ⚠️ <strong>Dikkat — bu işlem canlı gönderimi etkiler.</strong> Onayladığınızda:
-            <ul style="margin:6px 0 0;padding-left:20px">
-                <li><code>hks_payload_fields_confirmed()</code> → <strong>true</strong> (payload "mapping onaylı" sayılır)</li>
-                <li>seçili firmanın <code>live_send_enabled</code> → <strong>1 (canlı gönderim kilidi AÇILIR)</strong></li>
-            </ul>
-            <div style="margin-top:6px">Not: Gerçek bir BildirimKaydet gönderimi yine de son bağlantı testi + kayıtlı kimlik bilgileri gerektirir; bu kapı tek başına gönderim yapmaz.</div>
-        </div>
-        <form method="post" onsubmit="return confirm('Mapping ONAYLANACAK ve canlı gönderim kilidi (live_send_enabled) AÇILACAK. Bu, tüm sprintlerde korunan gönderim-kapalı kuralını sona erdirir. Onaylıyor musunuz?');">
+        <p style="margin:0 0 10px;font-size:.88rem;color:#4b5563">
+            Onayladığınızda <code>hks_payload_fields_confirmed()</code> → <strong>true</strong> olur
+            (payload "mapping onaylı" sayılır). Gerçek gönderim yine de ayrıca
+            <code>live_send_enabled</code> + son bağlantı testi + kimlik bilgileri gerektirir.
+        </p>
+        <form method="post" onsubmit="return confirm('Mapping ONAYLANACAK (alan eşleştirmesi doğrulandı olarak işaretlenir). Bu işlem canlı gönderimi AÇMAZ. Onaylıyor musunuz?');">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="approve_mapping">
-            <button type="submit" class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)">✅ Mapping'i Onayla ve Canlı Gönderim Kilidini Aç</button>
+            <button type="submit" class="btn btn-primary">✅ Mapping'i Onayla</button>
         </form>
     <?php else: ?>
         <p style="margin:0;font-size:.9rem;color:#92400e">

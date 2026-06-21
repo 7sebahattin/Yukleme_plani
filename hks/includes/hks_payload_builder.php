@@ -748,6 +748,64 @@ function hks_payload_unique_id(array $n): string {
     return 'AF-' . substr(sha1($seed), 0, 16);
 }
 
+// Payload (Istek gövdesi) içinde kimlik bilgisi anahtarı var mı? — çift-zarf koruması.
+// Builder credentials EKLEMEMELİDİR; bunlar yalnız HksClient::buildRequest()'te eklenir.
+function hks_payload_has_credentials(mixed $node): bool {
+    if (!is_array($node)) return false;
+    $creds = ['username', 'password', 'servicepassword'];
+    foreach ($node as $k => $v) {
+        if (is_string($k) && in_array(mb_strtolower($k), $creds, true)) return true;
+        if (is_array($v) && hks_payload_has_credentials($v)) return true;
+    }
+    return false;
+}
+
+// ── Gönderim Hazırlık Kontrolü (DRY-RUN) ──────────────────
+// Gerçek SOAP çağrısı YAPMADAN gönderim hattını test eder:
+//   - payload builder'ı çalıştırır (nested BildirimKayitIstek)
+//   - blocker'ları kontrol eder
+//   - final request ŞEKLİNİ (credentials maskeli) kurar
+//   - çift-zarf (credentials payload içinde mi) ve tekil-Istek kontrolü yapar
+// callService / BildirimServisBildirimKaydet KESİNLİKLE çağrılmaz.
+function hks_prepare_bildirim_send_request(int $notificationId): array {
+    $repo = new HksRepository(db());
+    $n = $repo->getNotification($notificationId);
+    if (!$n) {
+        return ['ready' => false, 'blockers' => ['Kayıt bulunamadı.'], 'payload' => null, 'request_shape_ok' => false];
+    }
+    $settings = $repo->getSettings() ?: [];
+    $blockers = hks_send_blockers($n, $settings);
+
+    // Asıl gönderim gövdesi (ArrayOfBildirimKayitIstek). Credentials İÇERMEZ.
+    $istek_body = hks_build_bildirim_kaydet_payload($n, $settings);
+
+    // Final request ŞEKLİ — HksClient::buildRequest() ile birebir; credentials MASKELİ.
+    // Gerçek gönderimde UserName/Password/ServicePassword burada DEĞİL, HksClient'te eklenir.
+    $request_shape = [
+        'UserName'        => '***',
+        'Password'        => '***',
+        'ServicePassword' => '***',
+        'Istek'           => $istek_body,   // { BildirimKayitIstek: [ {...} ] }
+    ];
+
+    // Şekil doğrulaması: tam olarak bir BildirimKayitIstek listesi + builder'da creds YOK +
+    // zarf alanları tekil (yapı gereği buildRequest her birini bir kez ekler).
+    $has_list = isset($istek_body['BildirimKayitIstek'])
+        && is_array($istek_body['BildirimKayitIstek'])
+        && count($istek_body['BildirimKayitIstek']) >= 1;
+    $no_creds_in_body = !hks_payload_has_credentials($istek_body);
+    $envelope_singular = (count(array_intersect(array_keys($request_shape), ['UserName','Password','ServicePassword','Istek'])) === 4);
+    $request_shape_ok = $has_list && $no_creds_in_body && $envelope_singular;
+
+    return [
+        'ready'            => empty($blockers),
+        'blockers'         => $blockers,
+        'payload'          => hks_mask_payload_sensitive_fields($request_shape),
+        'request_shape_ok' => $request_shape_ok,
+        'istek_count'      => $has_list ? count($istek_body['BildirimKayitIstek']) : 0,
+    ];
+}
+
 // ── Hassas alan maskeleme ────────────────────────────────
 // Önizlemede UserName/Password/ServicePassword vb. asla görünmemeli.
 // Builder bunları eklemez; bu fonksiyon defansif olarak yine de maskeler.

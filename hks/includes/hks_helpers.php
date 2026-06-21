@@ -471,6 +471,13 @@ function hks_send_blockers(array $n, ?array $settings): array {
     if (!empty($n['validation_errors_json']) && $n['validation_errors_json'] !== '[]') {
         $blockers[] = 'Doğrulama hataları mevcut.';
     }
+    // Payload builder hazır mı? (mapping ready=true + errors boş). Asıl SOAP gövdesi bununla üretilir.
+    if (function_exists('hks_validate_bildirim_payload_mapping')) {
+        $pm = hks_validate_bildirim_payload_mapping($n, $settings ?? []);
+        if (empty($pm['ready'])) {
+            $blockers[] = 'HKS payload doğrulaması hazır değil (' . count($pm['errors'] ?? []) . ' hata).';
+        }
+    }
     if (!empty($n['hks_bildirim_no']) || !empty($n['hks_kunye_no'])) {
         $blockers[] = 'Bu kayıt zaten HKS numarası almış (mükerrer engeli).';
     }
