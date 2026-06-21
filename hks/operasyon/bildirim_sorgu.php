@@ -9,6 +9,17 @@ if (function_exists('can') && !can('hks.read') && !can('records.write')) {
 
 require __DIR__ . '/views/_op_init.php';
 
+// BildirimSorguIstek.Sifat filtresi için sıfat listesi (referans, yoksa statik)
+$sifatlar = $op_repo->getReferences('sifat');
+$sifat_opts_q = '<option value="">Tümü</option>';
+if ($sifatlar && !hks_refs_labels_numeric($sifatlar)) {
+    $sifat_opts_q .= hks_ref_options($sifatlar, '', false);
+} else {
+    foreach (hks_sifat_list() as $s) {
+        $sifat_opts_q .= '<option value="' . hks_h($s['code']) . '">' . hks_h($s['name']) . '</option>';
+    }
+}
+
 $op_page_title  = 'HKS Bildirim Sorgulama';
 $op_active_tab  = 'bildirimci';
 $op_active_menu = 'bildirim_sorgu.php';
@@ -21,21 +32,12 @@ include __DIR__ . '/views/_layout_start.php';
 <div class="hks-op-note info">📡 Ortam: <strong><?= hks_h(strtoupper($op_env)) ?></strong> — Sorgular HKS web servisine gönderilir.</div>
 <?php endif; ?>
 
-<p class="hks-op-section-title">Tek Bildirim Sorgu</p>
-<div class="hks-op-card" style="margin-bottom:16px">
-    <div class="hks-op-row">
-        <div class="hks-op-field">
-            <label>Bildirim No</label>
-            <input type="text" id="bNo" placeholder="HKS bildirim numarası">
-        </div>
-    </div>
-    <button type="button" class="hks-op-btn" id="btnTek" <?= $op_queries_enabled ? '' : 'disabled' ?>>🔎 Sorgula</button>
-    <button type="button" class="hks-op-btn hks-op-btn-ghost" disabled title="İptal işlemi sonraki sprintte eklenecek">🚫 İptal Et</button>
-    <small class="muted" style="margin-left:6px">İptal işlemi sonraki sprintte eklenecek.</small>
-    <div class="hks-op-result" id="rTek" style="display:none"></div>
+<div class="hks-op-note info" style="margin-bottom:16px">
+    ℹ️ HKS'de <strong>tek bildirim numarası</strong> için ayrı bir sorgu servisi yoktur. Bir bildirimi
+    bulmak için aşağıda <strong>Künye No + Künye Türü</strong> ile listeden sorgulayın.
 </div>
 
-<p class="hks-op-section-title">Bildirim Listeleri (Tarih Aralığı)</p>
+<p class="hks-op-section-title">Bildirim Listeleri (HKS BildirimSorguIstek)</p>
 <div class="hks-op-card">
     <div class="hks-op-row">
         <div class="hks-op-field">
@@ -49,6 +51,23 @@ include __DIR__ . '/views/_layout_start.php';
         <div class="hks-op-field">
             <label>Künye No <small class="muted">(boş = tümü)</small></label>
             <input type="text" id="blKunye" placeholder="Boş = tümü">
+        </div>
+        <div class="hks-op-field">
+            <label>Künye Türü</label>
+            <select id="blKunyeTuru">
+                <option value="">Tümü</option>
+                <option value="1">1 — Referans</option>
+                <option value="2">2 — Nihai Tüketim</option>
+            </select>
+        </div>
+        <div class="hks-op-field">
+            <label>Sıfat <small class="muted">(opsiyonel)</small></label>
+            <select id="blSifat"><?= $sifat_opts_q ?></select>
+        </div>
+        <div class="hks-op-field" style="align-self:end">
+            <label style="display:flex;align-items:center;gap:7px;font-weight:400">
+                <input type="checkbox" id="blKalanPozitif" style="width:auto"> Yalnız kalan miktarı 0'dan büyük olanlar
+            </label>
         </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -80,12 +99,16 @@ include __DIR__ . '/views/_layout_start.php';
         }).catch(function(){ res.style.display='block'; res.classList.add('err'); res.textContent='İstek gönderilemedi.'; })
         .finally(function(){ btn.disabled=false; btn.textContent=orig; });
     }
-    document.getElementById('btnTek').addEventListener('click', function(){
-        var no = document.getElementById('bNo').value.trim();
-        if (!no) { alert('Bildirim numarası girin.'); return; }
-        run('query_bildirim', {bildirim_no:no}, document.getElementById('rTek'), this);
-    });
-    function listeArgs(){ return {baslangic:document.getElementById('blBas').value, bitis:document.getElementById('blBit').value, kunye_no:document.getElementById('blKunye').value.trim()}; }
+    function listeArgs(){
+        return {
+            baslangic: document.getElementById('blBas').value,
+            bitis:     document.getElementById('blBit').value,
+            kunye_no:  document.getElementById('blKunye').value.trim(),
+            kunye_turu:document.getElementById('blKunyeTuru').value,
+            sifat:     document.getElementById('blSifat').value,
+            kalan_pozitif: document.getElementById('blKalanPozitif').checked ? '1' : ''
+        };
+    }
     document.getElementById('btnYaptigim').addEventListener('click', function(){ run('query_yaptigim_bildirimler', listeArgs(), document.getElementById('rListe'), this); });
     document.getElementById('btnBana').addEventListener('click', function(){ run('query_bana_yapilan_bildirimler', listeArgs(), document.getElementById('rListe'), this); });
     document.getElementById('btnSon30').addEventListener('click', function(){

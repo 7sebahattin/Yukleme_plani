@@ -72,30 +72,32 @@ include __DIR__ . '/views/_tabs.php';
         <div id="ref-kunye-result" class="hks-query-result" style="display:none;margin-top:10px"></div>
     </div>
 
-    <!-- Bildirim Sorgu -->
+    <!-- Bildirim Sorgu — tek bildirim no için HKS'de method YOK -->
     <div class="card" style="padding:20px">
         <h3 style="margin-top:0">📋 Bildirim Sorgu</h3>
-        <p style="font-size:.85rem;color:var(--muted)">BildirimServisBildirimcininYaptigiBildirimListesi</p>
-        <div style="margin-bottom:10px">
-            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Bildirim No</label>
-            <input type="text" id="bildirim_no" placeholder="Bildirim numarası..."
-                   style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+        <p style="font-size:.85rem;color:var(--muted)">BildirimSorguIstek (liste)</p>
+        <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:10px 12px;font-size:.85rem;color:#92400e">
+            ℹ️ HKS'de <strong>tek bildirim numarası</strong> için ayrı bir sorgu servisi yoktur.
+            Bir bildirimi bulmak için aşağıdaki <strong>Bildirim Listeleri</strong> bölümünde
+            Künye No (+ tarih aralığı) ile sorgulayın.
         </div>
-        <button class="btn btn-primary btn-sm" id="btnBildirimSorgu" <?= !$queries_enabled ? 'disabled' : '' ?>>🔍 Sorgula</button>
-        <div id="bildirim-result" class="hks-query-result" style="display:none;margin-top:10px"></div>
     </div>
 
     <!-- Toplu Künye -->
     <div class="card" style="padding:20px">
         <h3 style="margin-top:0">📦 Toplu Künye</h3>
-        <p style="font-size:.85rem;color:var(--muted)">BildirimServisTopluKunye</p>
+        <p style="font-size:.85rem;color:var(--muted)">TopluKunyeIstek — plaka / belge / bildirim tarihi (tarih aralığı değil)</p>
         <div style="margin-bottom:8px">
-            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Başlangıç</label>
-            <input type="date" id="tk_baslangic" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Araç Plaka</label>
+            <input type="text" id="tk_plaka" placeholder="34ABC123" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+        </div>
+        <div style="margin-bottom:8px">
+            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Belge No</label>
+            <input type="text" id="tk_belge" placeholder="İrsaliye / fatura no" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
         </div>
         <div style="margin-bottom:10px">
-            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Bitiş</label>
-            <input type="date" id="tk_bitis" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+            <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">Bildirim Tarihi</label>
+            <input type="date" id="tk_tarih" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
         </div>
         <button class="btn btn-primary btn-sm" id="btnTopluKunye" <?= !$queries_enabled ? 'disabled' : '' ?>>🔍 Sorgula</button>
         <div id="toplu-kunye-result" class="hks-query-result" style="display:none;margin-top:10px"></div>
@@ -123,7 +125,7 @@ include __DIR__ . '/views/_tabs.php';
     <!-- Kayıtlı Kişi Sorgu -->
     <div class="card" style="padding:20px">
         <h3 style="margin-top:0">👤 Kayıtlı Kişi Sorgu</h3>
-        <p style="font-size:.85rem;color:var(--muted)">BildirimServisKayitliKisiSorgu — TC/VKN ile kişi/firma doğrulama.</p>
+        <p style="font-size:.85rem;color:var(--muted)">BildirimServisKayitliKisiSorgu — yalnızca <strong>KayitliKisiMi</strong> + <strong>Sifatlari</strong> döner; <strong>ad/ünvan döndürmez</strong>.</p>
         <div style="margin-bottom:10px">
             <label style="display:block;font-size:.85rem;font-weight:600;margin-bottom:4px">TC / VKN</label>
             <input type="text" id="kisi_tc_vkn" placeholder="11 haneli TC veya 10 haneli VKN"
@@ -256,20 +258,17 @@ document.getElementById('btnRefKunye').addEventListener('click', function() {
 });
 
 // Bildirim Sorgu
-document.getElementById('btnBildirimSorgu').dataset.label = '🔍 Sorgula';
-document.getElementById('btnBildirimSorgu').addEventListener('click', function() {
-    var no = document.getElementById('bildirim_no').value.trim();
-    if (!no) { alert('Bildirim numarası girin.'); return; }
-    hksQuery('query_bildirim', {bildirim_no: no},
-        document.getElementById('bildirim-result'), this);
-});
+// Bildirim Sorgu (tek no) kaldırıldı — HKS'de ayrı method yok.
 
-// Toplu Künye
+// Toplu Künye — TopluKunyeIstek: plaka / belge / bildirim tarihi
 document.getElementById('btnTopluKunye').dataset.label = '🔍 Sorgula';
 document.getElementById('btnTopluKunye').addEventListener('click', function() {
+    var plaka=document.getElementById('tk_plaka').value.trim();
+    var belge=document.getElementById('tk_belge').value.trim();
+    var tarih=document.getElementById('tk_tarih').value;
+    if (!plaka && !belge && !tarih) { alert('Araç plakası, belge no veya bildirim tarihinden en az biri gerekli.'); return; }
     hksQuery('query_toplu_kunye', {
-        baslangic: document.getElementById('tk_baslangic').value,
-        bitis:     document.getElementById('tk_bitis').value,
+        arac_plaka: plaka, belge_no: belge, bildirim_tarihi: tarih
     }, document.getElementById('toplu-kunye-result'), this);
 });
 

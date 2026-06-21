@@ -48,6 +48,7 @@ include __DIR__ . '/views/_layout_start.php';
 
 <p class="hks-op-section-title">Kayıtlı Kişi / Firma Sorgu</p>
 <div class="hks-op-card" style="margin-bottom:16px">
+    <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS kişi sorgusu <strong>ad/ünvan döndürmez</strong>; yalnızca kişinin HKS'de <strong>kayıtlı olup olmadığını (KayitliKisiMi)</strong> ve <strong>sıfatlarını</strong> verir.</div>
     <div class="hks-op-row">
         <div class="hks-op-field">
             <label>TC / VKN</label>
@@ -58,16 +59,21 @@ include __DIR__ . '/views/_layout_start.php';
     <div class="hks-op-result" data-r="kisi" style="display:none"></div>
 </div>
 
-<p class="hks-op-section-title">Toplu Künye (Tarih Aralığı)</p>
+<p class="hks-op-section-title">Toplu Künye (HKS TopluKunyeIstek)</p>
 <div class="hks-op-card">
+    <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS Toplu Künye <strong>tarih aralığı değil</strong>; araç plakası, belge no ve bildirim tarihiyle sorgular.</div>
     <div class="hks-op-row">
         <div class="hks-op-field">
-            <label>Başlangıç</label>
-            <input type="date" id="tkBas" value="<?= date('Y-m-01') ?>">
+            <label>Araç Plaka</label>
+            <input type="text" id="tkPlaka" placeholder="34ABC123">
         </div>
         <div class="hks-op-field">
-            <label>Bitiş</label>
-            <input type="date" id="tkBit" value="<?= date('Y-m-d') ?>">
+            <label>Belge No</label>
+            <input type="text" id="tkBelge" placeholder="İrsaliye / fatura no">
+        </div>
+        <div class="hks-op-field">
+            <label>Bildirim Tarihi</label>
+            <input type="date" id="tkTarih" value="<?= date('Y-m-d') ?>">
         </div>
     </div>
     <button type="button" class="hks-op-btn" data-q="toplu" <?= $op_queries_enabled ? '' : 'disabled' ?>>🔎 Toplu Künye Getir</button>
@@ -108,7 +114,11 @@ include __DIR__ . '/views/_layout_start.php';
                 if (!tc) { alert('TC veya VKN girin.'); return; }
                 run('query_kisi_sorgu', {tc_vkn:tc}, res, btn);
             } else if (q === 'toplu') {
-                run('query_toplu_kunye', {baslangic:document.getElementById('tkBas').value, bitis:document.getElementById('tkBit').value}, res, btn);
+                var plaka=document.getElementById('tkPlaka').value.trim();
+                var belge=document.getElementById('tkBelge').value.trim();
+                var tarih=document.getElementById('tkTarih').value;
+                if (!plaka && !belge && !tarih) { alert('Araç plakası, belge no veya bildirim tarihinden en az biri gerekli.'); return; }
+                run('query_toplu_kunye', {arac_plaka:plaka, belge_no:belge, bildirim_tarihi:tarih}, res, btn);
             }
         });
     });
