@@ -81,6 +81,15 @@ include __DIR__ . '/views/_layout_start.php';
 <script>
 (function(){
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    // Hata kodunun yanında HKS'nin gerçek mesajını + ham yanıt accordion'unu gösterir.
+    function hksErrHtml(d){
+        var code = d.error_code || '';
+        var expl = d.user_message || d.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.';
+        var html = '❌ ' + (code ? ('HKS hata kodu: '+esc(code)+'<br>') : '') + 'Açıklama: '+esc(expl);
+        if (d.data != null) html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:240px;overflow:auto">'+esc(JSON.stringify(d.data,null,2))+'</pre></details>';
+        return html;
+    }
     function run(action, payload, res, btn){
         btn.disabled = true; var orig = btn.textContent; btn.textContent = '⏳ Sorgulanıyor...';
         res.style.display='none'; res.className='hks-op-result';
@@ -94,7 +103,7 @@ include __DIR__ . '/views/_layout_start.php';
                     (Array.isArray(arr) && arr.length===0 ? ' — bu kriterlere uygun kayıt bulunamadı.' : '')+
                     '<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:280px;overflow:auto">'+JSON.stringify(arr,null,2)+'</pre></details>';
             } else {
-                res.innerHTML = '❌ '+(d.message || 'HKS’den gelen cevap beklenen formatta değil. Teknik logu kontrol edin.');
+                res.innerHTML = hksErrHtml(d);
             }
         }).catch(function(){ res.style.display='block'; res.classList.add('err'); res.textContent='İstek gönderilemedi.'; })
         .finally(function(){ btn.disabled=false; btn.textContent=orig; });

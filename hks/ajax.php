@@ -160,7 +160,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('kisi_sorgu', $tc_vkn,
@@ -189,8 +189,11 @@ switch ($action) {
         }
         // IslemKodu / yetki hatası kontrolü
         $vk_norm = hks_normalize_response($res['data'] ?? []);
-        if (!$vk_norm['ok'] && !empty($vk_norm['message'])) {
-            $json_result = ['ok' => false, 'verified' => false, 'message' => $vk_norm['message']];
+        if (!$vk_norm['ok'] && !empty($vk_norm['hks_message'])) {
+            $json_result = ['ok' => false, 'verified' => false,
+                'message'      => $vk_norm['user_message'],
+                'error_code'   => $vk_norm['error_code'],
+                'user_message' => $vk_norm['user_message']];
             break;
         }
         // KayitliKisiSorguDTO bul (sorgulanan TC ile eşleşeni, yoksa ilkini)
@@ -247,7 +250,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('referans_kunye', $input['kunye_no'] ?? '*',
@@ -280,7 +283,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('toplu_kunye', $tk_params['BelgeNo'] ?? ($tk_params['AracPlakaNo'] ?? '*'),
@@ -301,7 +304,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('bildirim_etiket', $input['bildirim_no'] ?? $input['kunye_no'] ?? '*',
@@ -332,7 +335,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('bildirim_listesi', 'yaptigim',
@@ -363,7 +366,7 @@ switch ($action) {
         if ($json_result['ok'] && !empty($json_result['data'])) {
             $norm = hks_normalize_response($json_result['data']);
             if (!$norm['ok']) {
-                $json_result = ['ok' => false, 'message' => $norm['message'], 'data' => $json_result['data']];
+                $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
         $repo->saveQuery('bildirim_listesi', 'bana_yapilan',
@@ -485,7 +488,13 @@ switch ($action) {
                     'detail'  => $sonuc,
                 ];
             } else {
-                $json_result = ['ok' => false, 'message' => $norm['message'] ?: 'Kişi HKS\'de kayıtlı bulunamadı veya bu kullanıcı ile sorgu yetkiniz yok.', 'detail' => $r['data']];
+                $json_result = [
+                    'ok'           => false,
+                    'error_code'   => $norm['error_code'],
+                    'user_message' => $norm['user_message'],
+                    'message'      => $norm['user_message'] ?: 'Kişi HKS\'de kayıtlı bulunamadı veya bu kullanıcı ile sorgu yetkiniz yok.',
+                    'detail'       => $r['data'],
+                ];
             }
         } else {
             $json_result = ['ok' => false, 'message' => 'HKS servisine ulaşılamadı: ' . $r['message']];
