@@ -3669,8 +3669,8 @@ body.notes-modal-open { overflow: hidden; }
     white-space: nowrap;
 }
 .ms-act-btn.ms-move-btn { background: var(--primary-light, #e8f0fe); color: var(--primary, #1a73e8); }
-.ms-act-btn.ms-rev-btn  { background: var(--warn-light, #fff3cd); color: var(--warn-dark, #856404); }
 .ms-act-btn.ms-edit-btn { background: var(--bg-alt, #f1f3f5); color: var(--text, #222); }
+.ms-act-btn.ms-del-btn  { background: #fff5f5; color: var(--danger, #dc2626); }
 .mh-act-cell .ms-act-btn { margin: 0 1px; }
 
 /* ── Malzeme Hareketleri: mobil kart görünümü (Pro-07) ─── */
@@ -4018,6 +4018,7 @@ body.notes-modal-open { overflow: hidden; }
     background: #fff; border-radius: var(--radius); width: 100%; max-width: 640px;
     margin: auto; box-shadow: 0 20px 50px rgba(0, 0, 0, .3);
 }
+.ms-edit-modal-wide { max-width: 780px; }
 .ms-edit-head {
     padding: 14px 18px; border-bottom: 1px solid var(--border);
     display: flex; align-items: center; justify-content: space-between; gap: 10px;

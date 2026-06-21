@@ -96,7 +96,7 @@ if ($is_csv && ($_GET['csv'] ?? '') === 'ozet') {
     header('Content-Disposition: attachment; filename="malzeme_stok_ozet_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
     fprintf($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['Kategori', 'Tür', 'Malzeme', 'Depo', 'Giriş', 'Sevk', 'Kullanım', 'Düzeltme', 'Kalan', 'Birim'], ';', '"', '\\');
+    fputcsv($out, ['Kategori', 'Tür', 'Malzeme', 'Depo', 'Giriş', 'Çıkış', 'Kalan', 'Birim'], ';', '"', '\\');
     foreach ($ozet_rows as $r) {
         fputcsv($out, [
             $ms_cat_labels[$r['category']] ?? $r['category'],
@@ -104,9 +104,7 @@ if ($is_csv && ($_GET['csv'] ?? '') === 'ozet') {
             $r['material_name'],
             $r['depo'] !== '' ? $r['depo'] : 'Depo Boş',
             number_format($r['total_giris'], 3, ',', '.'),
-            number_format($r['total_sevk'], 3, ',', '.'),
-            number_format($r['total_kullanim'], 3, ',', '.'),
-            number_format($r['total_duzeltme'], 3, ',', '.'),
+            number_format($r['total_cikis'], 3, ',', '.'),
             number_format($r['kalan'], 3, ',', '.'),
             $r['unit'],
         ], ';', '"', '\\');
@@ -147,7 +145,6 @@ $ms_row_ctx = function (array $oz): array {
         'kalan'     => $kalan,
         'is_neg'    => $is_neg,
         'cikis'     => (float)$oz['total_cikis'],   // sevk + kullanım
-        'duz'       => (float)$oz['total_duzeltme'],
         'durum_lbl' => $durum_lbl,
         'durum_cls' => $durum_cls,
         'durum_key' => $durum_key,
@@ -331,7 +328,6 @@ render_flash();
                     <th class="stok-hide-sm">Depo</th>
                     <th style="text-align:right">Giriş</th>
                     <th style="text-align:right;color:var(--danger)">Çıkış</th>
-                    <th style="text-align:right;color:var(--warn)" class="stok-hide-sm">Düzeltme</th>
                     <th style="text-align:right">Kalan</th>
                     <th>Durum</th>
                     <th></th>
@@ -343,7 +339,6 @@ render_flash();
                 $kalan     = $c['kalan'];
                 $is_neg    = $c['is_neg'];
                 $kalan_cls = $is_neg ? 'stok-negatif' : ($kalan > 0 ? '' : 'color:var(--muted)');
-                $duz       = $c['duz'];
                 $cikis     = $c['cikis'];
             ?>
                 <tr class="<?= $is_neg ? 'ms-row-negatif' : '' ?>">
@@ -356,7 +351,6 @@ render_flash();
                     <td class="stok-hide-sm"><?= $oz['depo'] !== '' ? h($oz['depo']) : '<span style="color:var(--muted)">Depo Boş</span>' ?></td>
                     <td style="text-align:right;color:var(--success)"><?= (float)$oz['total_giris'] > 0 ? '+' . number_format((float)$oz['total_giris'], 0, ',', '.') : '—' ?></td>
                     <td style="text-align:right;color:var(--danger)"><?= $cikis > 0 ? '−' . number_format($cikis, 0, ',', '.') : '—' ?></td>
-                    <td style="text-align:right;color:var(--warn)" class="stok-hide-sm"><?= $duz != 0.0 ? ($duz > 0 ? '+' : '−') . number_format(abs($duz), 0, ',', '.') : '—' ?></td>
                     <td style="text-align:right;font-weight:700;<?= $kalan_cls ?>">
                         <?= number_format($kalan, 0, ',', '.') ?>
                         <small style="font-weight:400;color:var(--muted)"><?= h($oz['unit']) ?></small>
@@ -380,7 +374,6 @@ render_flash();
             $c       = $ms_row_ctx($oz);
             $kalan   = $c['kalan'];
             $is_neg  = $c['is_neg'];
-            $duz     = $c['duz'];
             $cikis   = $c['cikis'];
             $giris   = (float)$oz['total_giris'];
             $kalan_color = $is_neg ? 'var(--danger)' : ($kalan > 0 ? 'var(--success)' : 'var(--muted)');
@@ -405,7 +398,6 @@ render_flash();
             <div class="ms-scard-grid">
                 <div><span>Giriş</span><b style="color:var(--success)"><?= $giris > 0 ? '+' . number_format($giris, 0, ',', '.') : '—' ?></b></div>
                 <div><span>Çıkış</span><b style="color:var(--danger)"><?= $cikis > 0 ? '−' . number_format($cikis, 0, ',', '.') : '—' ?></b></div>
-                <div><span>Düzeltme</span><b style="color:var(--warn)"><?= $duz != 0.0 ? ($duz > 0 ? '+' : '−') . number_format(abs($duz), 0, ',', '.') : '—' ?></b></div>
             </div>
             <div class="ms-scard-actions">
                 <a href="<?= h($c['oz_link']) ?>" class="btn btn-sm btn-ghost">🔍 Hareketler</a>

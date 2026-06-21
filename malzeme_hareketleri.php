@@ -48,140 +48,144 @@ $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['giris', 'sevk', 'kullanim', 'duzeltme', ''], true)) $f_hareket_tipi = '';
 $mv_page        = max(1, (int)($_GET['page'] ?? 1)); // redirect'te sayfa da korunsun (clamp render'da)
 
-// ── POST: Ters Kayıt — zıt miktarlı duzeltme hareketi ────
-// Admin-only. Orijinal hareketi silmez; iz bırakarak iptal eder.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_reverse') {
-    csrf_check($_POST['csrf'] ?? null);
-    if (!is_admin()) {
-        set_flash('error', 'Ters kayıt işlemi yalnızca yöneticiler tarafından yapılabilir.');
-        header('Location: ' . mh_url());
-        exit;
-    }
-    $rev_id     = (int)($_POST['rev_id']     ?? 0);
-    $rev_reason = trim($_POST['rev_reason']  ?? '');
-
-    $err = '';
-    $orig = null;
-    if ($rev_id <= 0) {
-        $err = 'Geçersiz kayıt.';
-    } else {
-        $stmt = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
-        $stmt->execute([$rev_id]);
-        $orig = $stmt->fetch();
-        if (!$orig) {
-            $err = 'Kayıt bulunamadı.';
-        } elseif ($orig['source_type'] === 'loading') {
-            $err = 'Yükleme kaynaklı hareketler ters kayıt ile iptal edilemez.';
-        } elseif ($rev_reason === '') {
-            $err = 'İptal sebebi zorunludur.';
-        }
-    }
-
-    if ($err !== '') {
-        set_flash('error', $err);
-    } else {
-        $orig_qty  = (float)$orig['quantity'];
-        $orig_type = $orig['movement_type'];
-        // Ters miktar: giriş→negatif düzeltme, sevk/kullanım→pozitif düzeltme, düzeltme→zıt işaret
-        $rev_qty = match ($orig_type) {
-            'giris'    => -abs($orig_qty),
-            'sevk'     => abs($orig_qty),
-            'kullanim' => abs($orig_qty),
-            default    => -$orig_qty,
-        };
-
-        $orig_unit_dara = (float)($orig['unit_dara_kg'] ?? 0);
-        $rev_total_dara = round(abs($rev_qty) * $orig_unit_dara, 3);
-        $rev_note  = 'TERS KAYIT: #' . $rev_id . ' nolu hareket iptali. Sebep: ' . $rev_reason;
-        $rev_belge = 'REV-#' . $rev_id;
-
-        $pdo->prepare(
-            "INSERT INTO material_stock_movements
-             (movement_date, movement_type, material_id, material_name, material_type,
-              depo, quantity, unit, unit_dara_kg, total_dara_kg, source_type, source_id, belge_no, firma, note)
-             VALUES (?, 'duzeltme', ?, ?, ?, ?, ?, ?, ?, ?, 'manual_reverse', ?, ?, ?, ?)"
-        )->execute([
-            date('Y-m-d'),
-            $orig['material_id'], $orig['material_name'], $orig['material_type'],
-            $orig['depo'], $rev_qty, $orig['unit'], $orig_unit_dara, $rev_total_dara,
-            $rev_id, $rev_belge, $orig['firma'] ?? '', $rev_note,
-        ]);
-
-        audit_log_event('material_stock_reverse', 'malzeme_stok', $rev_id, [
-            'original_type'     => $orig_type,
-            'original_qty'      => $orig_qty,
-            'original_material' => $orig['material_name'],
-            'depo'              => $orig['depo'],
-        ], [
-            'reverse_qty'  => $rev_qty,
-            'reason'       => $rev_reason,
-            'new_movement' => 'duzeltme · manual_reverse · ' . $rev_belge,
-        ]);
-
-        set_flash('success', '#' . $rev_id . ' nolu hareket ters kayıt ile iptal edildi (' . $rev_belge . ').');
-    }
-    header('Location: ' . mh_url());
-    exit;
-}
-
-// ── POST: Hareket Meta Düzenle — admin-only (Pro-04C) ────
-// Sadece belge_no, firma, note güncellenir.
-// Stok etkileyen alanlar (tarih, malzeme, miktar, depo) değiştirilemez.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_update') {
+// ── POST: Hareket Düzenle — admin-only ───────────────────
+// Tüm alanlar düzenlenebilir (tarih, tür, malzeme, depo, miktar, birim, meta).
+// Yükleme kaynaklı hareketler düzenlenemez.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_edit') {
     csrf_check($_POST['csrf'] ?? null);
     if (!is_admin()) {
         set_flash('error', 'Bu işlem sadece admin tarafından yapılabilir.');
         header('Location: ' . mh_url());
         exit;
     }
-    $up_id    = (int)($_POST['up_id']   ?? 0);
-    $up_belge = trim($_POST['up_belge'] ?? '');
-    $up_firma = trim($_POST['up_firma'] ?? '');
-    $up_note  = trim($_POST['up_note']  ?? '');
+    $edit_id       = (int)($_POST['edit_id']       ?? 0);
+    $edit_date     = trim($_POST['edit_date']       ?? '');
+    $edit_type     = trim($_POST['edit_type']       ?? '');
+    $edit_mat_type = trim($_POST['edit_mat_type']   ?? '');
+    $edit_mat_name = trim($_POST['edit_mat_name']   ?? '');
+    $edit_depo     = trim($_POST['edit_depo']       ?? '');
+    $edit_qty_raw  = str_replace(',', '.', trim($_POST['edit_qty'] ?? '0'));
+    $edit_qty      = (float)$edit_qty_raw;
+    $edit_unit     = trim($_POST['edit_unit']       ?? 'adet');
+    $edit_belge    = trim($_POST['edit_belge']      ?? '');
+    $edit_firma    = trim($_POST['edit_firma']      ?? '');
+    $edit_note     = trim($_POST['edit_note']       ?? '');
+
+    $ms_units_valid = ms_stock_units();
 
     $err  = '';
     $base = null;
-    if ($up_id <= 0) {
+    if ($edit_id <= 0) {
         $err = 'Geçersiz kayıt.';
-    } else {
+    } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $edit_date)) {
+        $err = 'Geçersiz tarih.';
+    } elseif (!in_array($edit_type, ['giris', 'sevk', 'kullanim', 'duzeltme'], true)) {
+        $err = 'Geçersiz hareket tipi.';
+    } elseif ($edit_mat_name === '') {
+        $err = 'Malzeme adı zorunludur.';
+    } elseif ($edit_depo === '') {
+        $err = 'Depo zorunludur.';
+    } elseif ($edit_qty == 0) {
+        $err = 'Miktar sıfır olamaz.';
+    } elseif (!in_array($edit_unit, $ms_units_valid, true)) {
+        $edit_unit = 'adet';
+    }
+
+    if ($err === '') {
         $stmt = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
-        $stmt->execute([$up_id]);
+        $stmt->execute([$edit_id]);
         $base = $stmt->fetch();
         if (!$base) {
             $err = 'Kayıt bulunamadı.';
         } elseif ($base['source_type'] === 'loading') {
-            $err = 'Yükleme kaynaklı hareketler buradan düzenlenemez. Kaynak yükleme kaydı düzenlenmelidir.';
+            $err = 'Yükleme kaynaklı hareketler buradan düzenlenemez. Kaynak yükleme kaydını düzenleyin.';
         }
     }
 
     if ($err !== '') {
         set_flash('error', $err);
     } else {
-        $pdo->prepare(
-            "UPDATE material_stock_movements SET belge_no=?, firma=?, note=? WHERE id=?"
-        )->execute([$up_belge ?: null, $up_firma ?: null, $up_note ?: null, $up_id]);
+        $mat_row    = ms_find_material_definition($pdo, $edit_mat_type, $edit_mat_name);
+        $mat_id     = $mat_row ? (int)$mat_row['id'] : null;
+        $unit_dara  = $mat_row ? (float)$mat_row['unit_dara_kg'] : 0.0;
+        $total_dara = round(abs($edit_qty) * $unit_dara, 3);
 
-        audit_log_event('material_stock_meta_update', 'malzeme_stok', $up_id, [
-            'old_belge_no' => $base['belge_no'],
-            'old_firma'    => $base['firma'],
-            'old_note'     => $base['note'],
-        ], [
-            'new_belge_no' => $up_belge,
-            'new_firma'    => $up_firma,
-            'new_note'     => $up_note,
+        $pdo->prepare(
+            "UPDATE material_stock_movements
+                SET movement_date=?, movement_type=?, material_id=?, material_name=?,
+                    material_type=?, depo=?, quantity=?, unit=?, unit_dara_kg=?, total_dara_kg=?,
+                    belge_no=?, firma=?, note=?
+              WHERE id=?"
+        )->execute([
+            $edit_date, $edit_type, $mat_id, $edit_mat_name, $edit_mat_type,
+            $edit_depo, $edit_qty, $edit_unit, $unit_dara, $total_dara,
+            $edit_belge ?: null, $edit_firma ?: null, $edit_note ?: null,
+            $edit_id,
         ]);
-        set_flash('success', 'Hareket meta bilgileri güncellendi (#' . $up_id . ').');
+
+        audit_log_event('material_stock_edit', 'malzeme_stok', $edit_id, [
+            'old_date'     => $base['movement_date'],
+            'old_type'     => $base['movement_type'],
+            'old_material' => $base['material_name'],
+            'old_depo'     => $base['depo'],
+            'old_qty'      => $base['quantity'],
+            'old_unit'     => $base['unit'],
+        ], [
+            'new_date'     => $edit_date,
+            'new_type'     => $edit_type,
+            'new_material' => $edit_mat_name,
+            'new_depo'     => $edit_depo,
+            'new_qty'      => $edit_qty,
+            'new_unit'     => $edit_unit,
+        ]);
+        set_flash('success', '#' . $edit_id . ' nolu hareket düzenlendi.');
     }
     header('Location: ' . mh_url());
     exit;
 }
 
-// ── POST: ms_delete — DEVRE DIŞI (Pro-04B) ───────────────
-// Kalıcı silme kaldırıldı. Yanlış hareketler için Ters Kayıt veya Taşı kullanılır.
-// TODO Pro-04C: ms_update da sadece meta alanlara (belge/not) kısıtlanacak.
+// ── POST: Hareket Sil — admin-only ───────────────────────
+// Yükleme kaynaklı hareketler silinemez.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_delete') {
     csrf_check($_POST['csrf'] ?? null);
-    set_flash('error', 'Kalıcı silme devre dışıdır. Yanlış hareketler için Ters Kayıt veya Taşı işlemini kullanın.');
+    if (!is_admin()) {
+        set_flash('error', 'Silme işlemi yalnızca admin tarafından yapılabilir.');
+        header('Location: ' . mh_url());
+        exit;
+    }
+    $del_id = (int)($_POST['del_id'] ?? 0);
+
+    $err  = '';
+    $base = null;
+    if ($del_id <= 0) {
+        $err = 'Geçersiz kayıt.';
+    } else {
+        $stmt = $pdo->prepare("SELECT * FROM material_stock_movements WHERE id=? LIMIT 1");
+        $stmt->execute([$del_id]);
+        $base = $stmt->fetch();
+        if (!$base) {
+            $err = 'Kayıt bulunamadı.';
+        } elseif ($base['source_type'] === 'loading') {
+            $err = 'Yükleme kaynaklı hareketler silinemez. Kaynak yükleme kaydını düzenleyin.';
+        }
+    }
+
+    if ($err !== '') {
+        set_flash('error', $err);
+    } else {
+        $pdo->prepare("DELETE FROM material_stock_movements WHERE id=?")->execute([$del_id]);
+        audit_log_event('material_stock_delete', 'malzeme_stok', $del_id, [
+            'movement_type' => $base['movement_type'],
+            'movement_date' => $base['movement_date'],
+            'material_name' => $base['material_name'],
+            'material_type' => $base['material_type'],
+            'depo'          => $base['depo'],
+            'quantity'      => $base['quantity'],
+            'unit'          => $base['unit'],
+            'source_type'   => $base['source_type'],
+        ], null);
+        set_flash('success', '#' . $del_id . ' nolu hareket silindi.');
+    }
     header('Location: ' . mh_url());
     exit;
 }
@@ -308,6 +312,7 @@ $ms_dd             = get_material_dropdown_data($pdo);
 $depo_list         = $ms_dd['depo_list'];
 $mat_names_by_type = $ms_dd['mat_names_by_type'];
 $firma_list        = $ms_dd['firma_list'];
+$ms_units          = ms_stock_units();
 
 // Taşı modal için: aynı type içinde hedef seçimi (admin-only modal)
 $move_defs_by_type = [];
@@ -369,28 +374,24 @@ $mv_page        = min($mv_page, $mv_total_pages);
 $mv_offset      = ($mv_page - 1) * $mv_per_page;
 $hareket_rows   = get_material_movements($pdo, $mv_filters, $mv_per_page, $mv_offset);
 
-// ── Aksiyon butonları — tablo + mobil kart ortak (Pro-07) ─
-// Admin + non-loading hareketlerde Taşı / Ters Kayıt / Bilgi Düzenle döndürür.
-// Aynı modal JS fonksiyonlarını çağırır (msMoveOpen / msRevOpen / msOpenEdit).
+// ── Aksiyon butonları — tablo + mobil kart ortak ──────────
+// Admin + non-loading hareketlerde Taşı / Düzenle / Sil döndürür.
 $mh_action_buttons = function (array $r) use ($ms_is_admin): string {
     if (!$ms_is_admin) return '';
+    $can_act  = !in_array($r['source_type'], ['loading'], true);
     $can_move = !in_array($r['source_type'], ['loading', 'manual_reverse'], true);
+    if (!$can_act) return '';
     $id = (int)$r['id'];
-    // json_encode + h(): çift tırnak &quot; olur, onclick="" attribute içinde güvenli kalır.
     $j  = fn($v) => h(json_encode($v, JSON_UNESCAPED_UNICODE));
     ob_start();
     if ($can_move): ?>
         <button type="button" class="btn btn-sm ms-act-btn ms-move-btn" title="Başka malzeme tanımına taşı"
                 onclick="msMoveOpen(<?= $id ?>, <?= $j($r['movement_date']) ?>, <?= $j($r['movement_type']) ?>, <?= $j($r['material_type']) ?>, <?= $j((string)($r['material_id'] ?? '')) ?>, <?= $j($r['material_name']) ?>, <?= $j($r['depo'] ?? '') ?>, <?= $j((string)$r['quantity']) ?>, <?= $j($r['unit']) ?>, <?= $j($r['belge_no'] ?? '') ?>, <?= $j($r['firma'] ?? '') ?>, <?= $j($r['note'] ?? '') ?>)">⇄ Taşı</button>
     <?php endif; ?>
-        <button type="button" class="btn btn-sm ms-act-btn ms-rev-btn" title="Ters Kayıt Oluştur — orijinal hareketi silmeden iptal eder"
-                onclick="msRevOpen(<?= $id ?>, <?= $j($r['movement_date']) ?>, <?= $j($r['movement_type']) ?>, <?= $j($r['material_name']) ?>, <?= $j($r['depo'] ?? '') ?>, <?= $j((string)$r['quantity']) ?>, <?= $j($r['unit']) ?>)">↩ Ters Kayıt</button>
-        <button type="button" class="btn btn-sm ms-act-btn ms-edit-btn" title="Bilgi Düzenle (belge no / firma / not)"
-                data-id="<?= $id ?>" data-date="<?= h($r['movement_date']) ?>" data-mtype="<?= h($r['movement_type']) ?>"
-                data-mattype="<?= h($r['material_type']) ?>" data-matname="<?= h($r['material_name']) ?>"
-                data-depo="<?= h($r['depo'] ?? '') ?>" data-qty="<?= h((string)$r['quantity']) ?>" data-unit="<?= h($r['unit']) ?>"
-                data-belge="<?= h($r['belge_no'] ?? '') ?>" data-firma="<?= h($r['firma'] ?? '') ?>" data-note="<?= h($r['note'] ?? '') ?>"
-                onclick="msOpenEdit(this)">✎ Bilgi</button>
+        <button type="button" class="btn btn-sm ms-act-btn ms-edit-btn" title="Hareketi düzenle"
+                onclick="msEditOpen(<?= $j(['id'=>$id,'date'=>$r['movement_date'],'type'=>$r['movement_type'],'mat_type'=>$r['material_type'],'mat_id'=>(string)($r['material_id']??''),'mat_name'=>$r['material_name'],'depo'=>$r['depo']??'','qty'=>(string)$r['quantity'],'unit'=>$r['unit'],'belge'=>$r['belge_no']??'','firma'=>$r['firma']??'','note'=>$r['note']??'']) ?>)">✎ Düzenle</button>
+        <button type="button" class="btn btn-sm ms-act-btn ms-del-btn" title="Hareketi sil"
+                onclick="msDelOpen(<?= $id ?>, <?= $j($r['movement_date']) ?>, <?= $j($r['movement_type']) ?>, <?= $j($r['material_name']) ?>, <?= $j((string)$r['quantity']) ?>, <?= $j($r['unit']) ?>)">🗑 Sil</button>
     <?php
     return ob_get_clean();
 };
@@ -414,7 +415,7 @@ render_flash();
 
 <?php if ($ms_is_admin): ?>
 <div style="font-size:.78rem;color:var(--muted);background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:10px">
-    ℹ️ Kalıcı silme devre dışıdır. Yanlış hareketler için <b>⇄ Taşı</b> veya <b>↩ Ters Kayıt</b> kullanılır.
+    ℹ️ Manuel hareketleri <b>✎ Düzenle</b> ile değiştirebilir veya <b>🗑 Sil</b> ile kalıcı olarak silebilirsiniz. Yükleme kaynaklı (🔒) hareketler yalnızca ilgili yükleme kaydından değiştirilebilir.
 </div>
 <?php endif; ?>
 
@@ -673,46 +674,123 @@ render_flash();
 </div>
 
 <?php if ($ms_is_admin): ?>
-<!-- ── Hareket Bilgi Düzenle Modal (admin-only, Pro-04C) ── -->
-<!-- Sadece meta alanlar: belge_no, firma, note. Stok alanları readonly. -->
-<div id="msEditOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msCloseEdit()">
-    <div class="ms-edit-modal" role="dialog" aria-modal="true" aria-labelledby="msEditTitle">
+<!-- ── Hareket Düzenle Modal (admin-only) ────────────────── -->
+<div id="msEditOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msEditClose()">
+    <div class="ms-edit-modal ms-edit-modal-wide" role="dialog" aria-modal="true" aria-labelledby="msEditTitle">
         <div class="ms-edit-head">
-            <h3 id="msEditTitle">✎ Hareket Bilgi Düzenle <span id="msEditTypeBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
-            <button type="button" class="ms-edit-close" onclick="msCloseEdit()" aria-label="Kapat">×</button>
+            <h3 id="msEditTitle">✎ Hareket Düzenle <span id="msEditIdBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
+            <button type="button" class="ms-edit-close" onclick="msEditClose()" aria-label="Kapat">×</button>
         </div>
         <form method="post" action="<?= h(mh_url()) ?>" autocomplete="off" id="msEditForm">
-            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="ms_update">
-            <input type="hidden" name="up_id"  id="msEditId" value="">
+            <input type="hidden" name="csrf"    value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action"  value="ms_edit">
+            <input type="hidden" name="edit_id" id="msEditId" value="">
             <div class="ms-edit-body">
-                <div id="msEditInfoPanel" style="background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:.85rem;line-height:1.7"></div>
-                <div style="font-size:.8rem;color:var(--warn-dark,#856404);background:var(--warn-bg,#fffbf0);border:1px solid var(--warn,#e6a817);border-radius:5px;padding:7px 12px;margin-bottom:14px">
-                    ⚠ Bu ekranda stok miktarı, malzeme, tarih veya depo değiştirilemez. Yanlış hareket için <b>⇄ Taşı</b> veya <b>↩ Ters Kayıt</b> kullanın.
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Belge / İrsaliye No</label>
-                    <input type="text" name="up_belge" id="msEditBelge" class="form-control"
-                           placeholder="İsteğe bağlı" data-uppercase="tr">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Firma</label>
-                    <input type="text" name="up_firma" id="msEditFirma" class="form-control"
-                           list="mh-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
-                    <datalist id="mh-firma-list">
-                        <?php foreach ($firma_list as $fv): ?>
-                        <option value="<?= h($fv) ?>">
-                        <?php endforeach; ?>
-                    </datalist>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Not</label>
-                    <input type="text" name="up_note" id="msEditNote" class="form-control" placeholder="İsteğe bağlı">
+                <div class="ms-form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Tarih <span class="req">*</span></label>
+                        <input type="date" name="edit_date" id="msEditDate" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Hareket Tipi <span class="req">*</span></label>
+                        <select name="edit_type" id="msEditType" class="form-control" required>
+                            <option value="giris">Giriş</option>
+                            <option value="sevk">Sevk</option>
+                            <option value="kullanim">Kullanım</option>
+                            <option value="duzeltme">Düzeltme</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Malzeme Türü <span class="req">*</span></label>
+                        <select name="edit_mat_type" id="msEditMatType" class="form-control" required onchange="msEditUpdateNames()">
+                            <option value="">— seçiniz —</option>
+                            <?php foreach ($ms_types as $k => $lbl): ?>
+                            <option value="<?= h($k) ?>"><?= h($lbl) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Malzeme Adı <span class="req">*</span></label>
+                        <select name="edit_mat_name" id="msEditMatName" class="form-control" required>
+                            <option value="">— önce tür seçin —</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Depo <span class="req">*</span></label>
+                        <select name="edit_depo" id="msEditDepo" class="form-control" required>
+                            <option value="">— seçiniz —</option>
+                            <?php foreach ($depo_list as $dv): ?>
+                            <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Miktar <span class="req">*</span></label>
+                        <input type="number" name="edit_qty" id="msEditQty" class="form-control" required step="any" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Birim</label>
+                        <select name="edit_unit" id="msEditUnit" class="form-control">
+                            <?php foreach ($ms_units as $u): ?>
+                            <option value="<?= h($u) ?>"><?= h($u) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Belge / İrsaliye No</label>
+                        <input type="text" name="edit_belge" id="msEditBelge" class="form-control"
+                               placeholder="İsteğe bağlı" data-uppercase="tr">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Firma</label>
+                        <input type="text" name="edit_firma" id="msEditFirma" class="form-control"
+                               list="mh-firma-list" placeholder="İsteğe bağlı" autocomplete="off" data-uppercase="tr">
+                        <datalist id="mh-firma-list">
+                            <?php foreach ($firma_list as $fv): ?>
+                            <option value="<?= h($fv) ?>">
+                            <?php endforeach; ?>
+                        </datalist>
+                    </div>
+                    <div class="form-group ms-form-full">
+                        <label class="form-label">Not</label>
+                        <input type="text" name="edit_note" id="msEditNote" class="form-control" placeholder="İsteğe bağlı">
+                    </div>
                 </div>
             </div>
             <div class="ms-edit-foot">
-                <button type="button" class="btn btn-ghost" onclick="msCloseEdit()">Vazgeç</button>
-                <button type="submit" class="btn btn-primary">💾 Meta Güncelle</button>
+                <button type="button" class="btn btn-ghost" onclick="msEditClose()">Vazgeç</button>
+                <button type="submit" class="btn btn-primary">💾 Kaydet</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ── Hareket Sil Modal (admin-only) ────────────────────── -->
+<div id="msDelOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msDelClose()">
+    <div class="ms-edit-modal" role="dialog" aria-modal="true" aria-labelledby="msDelTitle">
+        <div class="ms-edit-head">
+            <h3 id="msDelTitle">🗑 Hareketi Sil</h3>
+            <button type="button" class="ms-edit-close" onclick="msDelClose()" aria-label="Kapat">×</button>
+        </div>
+        <form method="post" action="<?= h(mh_url()) ?>" autocomplete="off" id="msDelForm">
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="ms_delete">
+            <input type="hidden" name="del_id" id="msDelId" value="">
+            <div class="ms-edit-body">
+                <div id="msDelDetails" style="background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:.86rem;line-height:1.7"></div>
+                <div style="font-size:.85rem;color:var(--danger,#dc2626);background:#fff5f5;border:1px solid var(--danger,#dc2626);border-radius:5px;padding:8px 12px;margin-bottom:14px">
+                    ⚠ Bu hareket kalıcı olarak silinecek. Bu işlem geri alınamaz.
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:.85rem;cursor:pointer;line-height:1.4">
+                        <input type="checkbox" id="msDelConfirm" style="margin-top:2px;flex-shrink:0" required>
+                        <span>Bu hareketi kalıcı olarak silmek istediğimi onaylıyorum.</span>
+                    </label>
+                </div>
+            </div>
+            <div class="ms-edit-foot">
+                <button type="button" class="btn btn-ghost" onclick="msDelClose()">Vazgeç</button>
+                <button type="submit" class="btn" style="background:var(--danger,#dc2626);color:#fff">🗑 Kalıcı Sil</button>
             </div>
         </form>
     </div>
@@ -771,43 +849,11 @@ render_flash();
     </div>
 </div>
 
-<!-- ── Ters Kayıt Modal (admin-only) ─────────────────────── -->
-<div id="msRevOverlay" class="ms-edit-overlay" onclick="if(event.target===this)msRevClose()">
-    <div class="ms-edit-modal" role="dialog" aria-modal="true" aria-labelledby="msRevTitle">
-        <div class="ms-edit-head">
-            <h3 id="msRevTitle">↩ Ters Kayıt Oluştur <span id="msRevIdBadge" style="font-size:.78rem;color:var(--muted)"></span></h3>
-            <button type="button" class="ms-edit-close" onclick="msRevClose()" aria-label="Kapat">×</button>
-        </div>
-        <form method="post" action="<?= h(mh_url()) ?>" autocomplete="off" id="msRevForm">
-            <input type="hidden" name="csrf"       value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action"     value="ms_reverse">
-            <input type="hidden" name="rev_id"     id="msRevId" value="">
-            <div class="ms-edit-body">
-                <div id="msRevDetails" style="background:var(--bg-alt,#f6f8fa);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:.86rem;line-height:1.7"></div>
-                <div class="form-group">
-                    <label class="form-label">İptal Sebebi <span class="req">*</span></label>
-                    <input type="text" name="rev_reason" id="msRevReason" class="form-control" required
-                           placeholder="Örn: Yanlış miktar girildi, yanlış depo seçildi…" maxlength="255"
-                           data-uppercase="tr">
-                </div>
-                <div class="form-group" style="margin-top:10px">
-                    <label style="display:flex;align-items:flex-start;gap:8px;font-size:.85rem;cursor:pointer;line-height:1.4">
-                        <input type="checkbox" id="msRevConfirm" style="margin-top:2px;flex-shrink:0" required>
-                        <span>Orijinal hareket silinmez — zıt miktarlı bir düzeltme kaydı oluşturulur. Bu işlemin geri alınamayacağını anlıyorum.</span>
-                    </label>
-                </div>
-            </div>
-            <div class="ms-edit-foot">
-                <button type="button" class="btn btn-ghost" onclick="msRevClose()">Vazgeç</button>
-                <button type="submit" class="btn" style="background:var(--warn,#e6a817);color:#fff">↩ Ters Kayıt Oluştur</button>
-            </div>
-        </form>
-    </div>
-</div>
 <?php endif; ?>
 
 <script>
 var msMoveDefs   = <?= json_encode($move_defs_by_type, JSON_UNESCAPED_UNICODE) ?>;
+var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msMoveCtx    = {};
 
 // ── Hareket Taşı Modal ────────────────────────────────────
@@ -906,74 +952,105 @@ function msMoveClose() {
     if (ov) ov.classList.remove('open');
 }
 
-// ── Hareket Bilgi Düzenle Modal (meta-only, Pro-04C) ─────
-function msOpenEdit(btn) {
-    var d = btn.dataset;
-    document.getElementById('msEditId').value    = d.id    || '';
-    document.getElementById('msEditBelge').value = d.belge || '';
-    document.getElementById('msEditFirma').value = d.firma || '';
-    document.getElementById('msEditNote').value  = d.note  || '';
+// ── Hareket Düzenle Modal ─────────────────────────────────
+function msEditOpen(data) {
+    document.getElementById('msEditId').value       = data.id     || '';
+    document.getElementById('msEditDate').value     = data.date   || '';
+    document.getElementById('msEditQty').value      = data.qty    || '';
+    document.getElementById('msEditBelge').value    = data.belge  || '';
+    document.getElementById('msEditFirma').value    = data.firma  || '';
+    document.getElementById('msEditNote').value     = data.note   || '';
+    document.getElementById('msEditIdBadge').textContent = '· #' + (data.id || '');
 
-    var typeLbl = {giris:'Giriş', sevk:'Sevk', kullanim:'Kullanım', duzeltme:'Düzeltme'}[d.mtype] || d.mtype;
-    var qty     = parseFloat((d.qty || '0').replace(',', '.')) || 0;
-    var qSign   = (d.mtype === 'giris' || (d.mtype === 'duzeltme' && qty >= 0)) ? '+' : '−';
-    var matTypeLbl = (d.mattype || '').replace(/_/g, ' ');
-    var panel = document.getElementById('msEditInfoPanel');
-    if (panel) {
-        panel.innerHTML =
-            '<b>Hareket #' + d.id + '</b> · ' + typeLbl + ' · ' + (d.date || '') + '<br>' +
-            '<b>Malzeme:</b> ' + (d.matname || '—') + '<br>' +
-            '<b>Tür:</b> '     + matTypeLbl + '<br>' +
-            '<b>Depo:</b> '    + (d.depo || '—') + '<br>' +
-            '<b>Miktar:</b> '  + qSign + Math.abs(qty) + ' ' + (d.unit || '');
+    // Hareket tipi seç
+    var typeSel = document.getElementById('msEditType');
+    if (typeSel) typeSel.value = data.type || 'giris';
+
+    // Malzeme türü + adı seç
+    var matTypeSel = document.getElementById('msEditMatType');
+    if (matTypeSel) {
+        matTypeSel.value = data.mat_type || '';
+        msEditUpdateNames(data.mat_name || '');
     }
-    document.getElementById('msEditTypeBadge').textContent = '· ' + typeLbl + ' #' + (d.id || '');
+
+    // Depo seç (listede yoksa ekle)
+    var depoSel = document.getElementById('msEditDepo');
+    if (depoSel && data.depo) {
+        var found = false;
+        for (var i = 0; i < depoSel.options.length; i++) {
+            if (depoSel.options[i].value === data.depo) { found = true; break; }
+        }
+        if (!found) {
+            var opt = document.createElement('option');
+            opt.value = data.depo; opt.textContent = data.depo;
+            depoSel.appendChild(opt);
+        }
+        depoSel.value = data.depo;
+    }
+
+    // Birim seç
+    var unitSel = document.getElementById('msEditUnit');
+    if (unitSel && data.unit) unitSel.value = data.unit;
+
     document.getElementById('msEditOverlay').classList.add('open');
+    setTimeout(function() {
+        var df = document.getElementById('msEditDate');
+        if (df) df.focus();
+    }, 80);
 }
 
-function msCloseEdit() {
+function msEditUpdateNames(selectedName) {
+    var matTypeSel = document.getElementById('msEditMatType');
+    var matNameSel = document.getElementById('msEditMatName');
+    if (!matTypeSel || !matNameSel) return;
+    var names = msNamesData[matTypeSel.value] || [];
+    matNameSel.innerHTML = '<option value="">— seçiniz —</option>';
+    var found = false;
+    names.forEach(function(n) {
+        var opt = document.createElement('option');
+        opt.value = n; opt.textContent = n;
+        if (selectedName && n === selectedName) { opt.selected = true; found = true; }
+        matNameSel.appendChild(opt);
+    });
+    if (!found && selectedName) {
+        var opt = document.createElement('option');
+        opt.value = selectedName; opt.textContent = selectedName; opt.selected = true;
+        matNameSel.appendChild(opt);
+    }
+}
+
+function msEditClose() {
     var ov = document.getElementById('msEditOverlay');
     if (ov) ov.classList.remove('open');
 }
 
-// ── Ters Kayıt Modal ──────────────────────────────────────
-function msRevOpen(id, date, mtype, matname, depo, qty, unit) {
-    document.getElementById('msRevId').value = id;
-    document.getElementById('msRevIdBadge').textContent = '· #' + id;
-    document.getElementById('msRevReason').value = '';
-    var cb = document.getElementById('msRevConfirm');
+// ── Hareket Sil Modal ────────────────────────────────────
+function msDelOpen(id, date, mtype, matname, qty, unit) {
+    document.getElementById('msDelId').value = id;
+    var cb = document.getElementById('msDelConfirm');
     if (cb) cb.checked = false;
 
-    var origQty = parseFloat((String(qty)).replace(',', '.')) || 0;
-    var revQty;
-    if      (mtype === 'giris')    revQty = -Math.abs(origQty);
-    else if (mtype === 'sevk')     revQty = Math.abs(origQty);
-    else if (mtype === 'kullanim') revQty = Math.abs(origQty);
-    else                           revQty = -origQty;
-
     var typeLbl = {giris:'Giriş', sevk:'Sevk', kullanim:'Kullanım', duzeltme:'Düzeltme'}[mtype] || mtype;
-    var origSign = origQty >= 0 ? '+' : '−';
-    var revSign  = revQty  >= 0 ? '+' : '−';
-    var details  = document.getElementById('msRevDetails');
+    var origQty = parseFloat((String(qty)).replace(',', '.')) || 0;
+    var details = document.getElementById('msDelDetails');
     if (details) {
         details.innerHTML =
-            '<b>Hareket:</b> ' + typeLbl + ' #' + id + ' · ' + matname + ' · ' + (depo || '—') + '<br>' +
+            '<b>Hareket #' + id + '</b><br>' +
+            '<b>Tür:</b> ' + typeLbl + '<br>' +
             '<b>Tarih:</b> ' + date + '<br>' +
-            '<b>Orijinal Miktar:</b> ' + origSign + Math.abs(origQty) + ' ' + unit + '<br>' +
-            '<b style="color:var(--warn-dark,#856404)">Oluşturulacak Ters Kayıt:</b> ' +
-            'Düzeltme · ' + revSign + Math.abs(revQty) + ' ' + unit + ' (REV-#' + id + ')';
+            '<b>Malzeme:</b> ' + matname + '<br>' +
+            '<b>Miktar:</b> ' + Math.abs(origQty) + ' ' + unit;
     }
-
-    document.getElementById('msRevOverlay').classList.add('open');
+    document.getElementById('msDelOverlay').classList.add('open');
 }
 
-function msRevClose() {
-    var ov = document.getElementById('msRevOverlay');
+function msDelClose() {
+    var ov = document.getElementById('msDelOverlay');
     if (ov) ov.classList.remove('open');
 }
 
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { msCloseEdit(); msRevClose(); msMoveClose(); }
+    if (e.key === 'Escape') { msEditClose(); msDelClose(); msMoveClose(); }
 });
 </script>
 
