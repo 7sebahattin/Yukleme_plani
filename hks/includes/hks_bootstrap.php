@@ -147,6 +147,31 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
         } catch (PDOException) { /* zaten var */ }
     }
 
+    // hks_notifications — ÇEKİRDEK kolonlar (local_no/status/zaman damgaları).
+    // Çok eski şemalı sunucularda bu kolonlar olmayabilir ve CREATE TABLE IF NOT EXISTS
+    // mevcut tabloyu değiştirmediği için eksik kalır → createNotification "Unknown column
+    // 'local_no'" hatası verir. Bunları idempotent olarak ekle.
+    // Bu kolonlar hiçbir probe'a dahil değildi (local_no/status/zaman damgaları) veya yalnız
+    // eski batch'in ADD listesinde olup probe'da yoktu (source_type/source_id/created_by) →
+    // drift etmiş tabloda eksik kalabilir. Hepsini tek probe + idempotent ADD ile garanti et.
+    try {
+        $pdo->query("SELECT local_no, status, created_at, updated_at, source_type, source_id, created_by
+                     FROM `hks_notifications` LIMIT 0");
+    } catch (PDOException $_probe_core) {
+        foreach ([
+            "ALTER TABLE `hks_notifications` ADD COLUMN `local_no`    VARCHAR(30) NOT NULL DEFAULT '' AFTER `id`",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `status`      ENUM('draft','ready','checked','send_pending','sent','failed','cancelled') NOT NULL DEFAULT 'draft'",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `source_type` VARCHAR(50) NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `source_id`   INT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `created_by`  INT NULL",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+            "ALTER TABLE `hks_notifications` ADD COLUMN `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+        ] as $_core_sql) {
+            try { $pdo->exec($_core_sql); } catch (PDOException) { /* zaten var */ }
+        }
+        try { $pdo->exec("ALTER TABLE `hks_notifications` ADD INDEX `idx_hksn_local_no` (`local_no`)"); } catch (PDOException) { /* index zaten var */ }
+    }
+
     // hks_notifications kolon migrasyonu — eski şema ile deploy edilmiş sunucularda eksik kolonlar olabilir.
     try {
         $pdo->query("SELECT firma, direction, notification_type, sifat, urun_cinsi,
