@@ -40,6 +40,7 @@ include __DIR__ . '/views/_layout_start.php';
         <div class="hks-op-field">
             <label>Mal Sahibi TC / VKN <span style="color:var(--danger)">*</span></label>
             <input type="text" id="rkTc" maxlength="11" placeholder="11 / 10 haneli">
+            <small class="muted" style="font-size:.72rem;display:block;margin-top:3px">Bu alan, künyenin <strong>mal sahibi</strong> TC/VKN bilgisidir. Firma VKN veya üretici TC/VKN farklı olabilir.</small>
         </div>
     </div>
     <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS referans künye sorgusu için <strong>Mal Sahibi TC/VKN zorunludur</strong>.</div>
@@ -87,10 +88,23 @@ include __DIR__ . '/views/_layout_start.php';
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function hksErrHtml(d){
         var code = d.error_code || '';
+        var codeTxt = code + (d.error_code_aciklama ? (' ('+d.error_code_aciklama+')') : '');
         var expl = d.user_message || d.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.';
-        var html = '❌ ' + (code ? ('HKS hata kodu: '+esc(code)+'<br>') : '') + 'Açıklama: '+esc(expl);
+        var html = '❌ ' + (code ? ('HKS hata kodu: '+esc(codeTxt)+'<br>') : '') + 'Açıklama: '+esc(expl);
         if (d.data != null) html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:240px;overflow:auto">'+esc(JSON.stringify(d.data,null,2))+'</pre></details>';
         return html;
+    }
+    // "Bu sorguda HKS'ye gönderilen kriterler" teşhis kutusu (referans künye vb.)
+    function critHtml(d){
+        if (!d || !d.request_criteria) return '';
+        var rows = '';
+        Object.keys(d.request_criteria).forEach(function(k){
+            rows += '<tr><td style="padding:2px 8px;color:var(--muted)">'+esc(k)+'</td><td style="padding:2px 8px;font-family:monospace">'+esc(String(d.request_criteria[k]))+'</td></tr>';
+        });
+        return '<div style="margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px">'+
+            '<div style="font-weight:600;font-size:.8rem;margin-bottom:4px">🔎 Bu sorguda HKS\'ye gönderilen kriterler</div>'+
+            '<table style="font-size:.78rem;border-collapse:collapse">'+rows+'</table>'+
+            '<div style="font-size:.72rem;color:var(--muted);margin-top:4px">"(gönderilmedi)" olan alanlar HKS\'ye 0/null gider; şifre/kullanıcı bilgileri maskelidir.</div></div>';
     }
     function run(action, payload, res, btn){
         btn.disabled = true; var orig = btn.textContent; btn.textContent = '⏳ Sorgulanıyor...';
@@ -116,6 +130,7 @@ include __DIR__ . '/views/_layout_start.php';
             } else {
                 res.innerHTML = hksErrHtml(d);
             }
+            res.innerHTML += critHtml(d);  // gönderilen kriter teşhis kutusu (varsa)
         }).catch(function(){ res.style.display='block'; res.classList.add('err'); res.textContent='İstek gönderilemedi.'; })
         .finally(function(){ btn.disabled=false; btn.textContent=orig; });
     }

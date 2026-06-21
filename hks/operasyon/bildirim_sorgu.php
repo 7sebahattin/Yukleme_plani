@@ -85,8 +85,9 @@ include __DIR__ . '/views/_layout_start.php';
     // Hata kodunun yanında HKS'nin gerçek mesajını + ham yanıt accordion'unu gösterir.
     function hksErrHtml(d){
         var code = d.error_code || '';
+        var codeTxt = code + (d.error_code_aciklama ? (' ('+d.error_code_aciklama+')') : '');
         var expl = d.user_message || d.message || 'HKS hata mesajı döndürmedi. Teknik detay servis loglarında görülebilir.';
-        var html = '❌ ' + (code ? ('HKS hata kodu: '+esc(code)+'<br>') : '') + 'Açıklama: '+esc(expl);
+        var html = '❌ ' + (code ? ('HKS hata kodu: '+esc(codeTxt)+'<br>') : '') + 'Açıklama: '+esc(expl);
         if (d.data != null) html += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:.8rem">Teknik detay (ham yanıt)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:240px;overflow:auto">'+esc(JSON.stringify(d.data,null,2))+'</pre></details>';
         return html;
     }
