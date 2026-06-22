@@ -155,6 +155,7 @@ function definition_types(): array {
         'depo'          => 'Depo',
         'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
+        'marka'         => 'Marka',
         'lokasyon'      => 'Lokasyon',
         'kasa_cinsi'    => 'Kasa Cinsi',
         'palet_tipi'    => 'Palet Tipi',

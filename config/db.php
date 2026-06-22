@@ -64,6 +64,16 @@ function db(): PDO {
                     $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL");
                 } catch (PDOException $mig_e) { /* eklenememişse view/form defansif çalışır */ }
             }
+            // Başlangıç marka tanımlarını seed et (yalnızca henüz hiç marka tanımı yoksa)
+            try {
+                $brand_count = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE type='marka'")->fetchColumn();
+                if ($brand_count === 0) {
+                    $ins_brand = $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES ('marka', ?, 0, 1)");
+                    foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_b) {
+                        $ins_brand->execute([$_b]);
+                    }
+                }
+            } catch (PDOException $mig_e) { /* material_definitions yoksa sessiz geç */ }
         }
 
         // Hesap modülü tabloları

@@ -23,8 +23,8 @@ $type_labels = definition_types();
 $SECTIONS = [
     'ticari'  => [
         'label' => 'Ticari Tanımlar', 'icon' => '🏢',
-        'desc'  => 'Firma, depo, bölge, ürün, lokasyon',
-        'types' => ['firma', 'depo', 'bolge', 'urun', 'lokasyon'],
+        'desc'  => 'Firma, depo, bölge, ürün, marka, lokasyon',
+        'types' => ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'],
     ],
     'ambalaj' => [
         'label' => 'Ambalaj · Kasa · Palet', 'icon' => '📦',
@@ -41,7 +41,7 @@ $SECTIONS = [
 ];
 
 $cat_types = $SECTIONS['ticari']['types'];                 // dara gerektirmeyen tipler
-$cat_icons = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'lokasyon' => '📍'];
+$cat_icons = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍'];
 
 // type → section eşlemesi
 $type_section = [];
@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } catch (Throwable $e) {}
                 // isim bazlı kullanım (ticari tipler)
                 $catCol = match ($dd['type']) {
-                    'firma' => 'firma', 'urun' => 'urun', 'bolge' => 'bolge', default => null,
+                    'firma' => 'firma', 'urun' => 'urun', 'bolge' => 'bolge', 'marka' => 'brand', default => null,
                 };
                 if ($catCol) {
                     $c = db()->prepare("SELECT COUNT(*) FROM loading_records WHERE `$catCol` = ?");
@@ -206,6 +206,9 @@ $usage_cat['firma']    = db()->query("SELECT firma, COUNT(*) FROM loading_record
 $usage_cat['urun']     = db()->query("SELECT urun, COUNT(*) FROM loading_records WHERE urun != '' GROUP BY urun")->fetchAll(PDO::FETCH_KEY_PAIR);
 $usage_cat['bolge']    = db()->query("SELECT bolge, COUNT(*) FROM loading_records WHERE bolge != '' GROUP BY bolge")->fetchAll(PDO::FETCH_KEY_PAIR);
 $usage_cat['depo']     = db()->query("SELECT depo, COUNT(DISTINCT loading_record_id) FROM loading_pallets WHERE depo != '' GROUP BY depo")->fetchAll(PDO::FETCH_KEY_PAIR);
+try {
+    $usage_cat['marka'] = db()->query("SELECT brand, COUNT(*) FROM loading_records WHERE brand IS NOT NULL AND brand != '' GROUP BY brand")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (Throwable $e) { $usage_cat['marka'] = []; }
 try {
     $usage_cat['lokasyon'] = db()->query("SELECT name, COUNT(*) FROM (SELECT geldigi_yer AS name FROM kantar_fisleri WHERE geldigi_yer!='' UNION ALL SELECT gittigi_yer FROM kantar_fisleri WHERE gittigi_yer!='') t GROUP BY name")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['lokasyon'] = []; }
