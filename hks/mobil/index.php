@@ -81,23 +81,25 @@ function mob_contact_options(array $list, string $placeholder): string {
     </div>
 
     <div class="mob-actions">
-        <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Künye Sorgula</button>
+        <button class="mob-btn mob-btn-outline disabled" disabled title="Satın alma bildirimi sonraki sprintte eklenecek">Künye Sorgula</button>
         <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Bildir</button>
     </div>
-    <p class="mob-sprint-note">Bildir ve Künye Sorgula sonraki sprintte aktif olacak.</p>
+    <p class="mob-sprint-note">Satın alma bildirimi sonraki sprintte eklenecek.</p>
 
 </div>
 
 <!-- ── Satış ──────────────────────────────── -->
 <div id="pnl-satis" class="mob-card" style="display:none;">
+<form action="kunye_sorgula.php" method="get" id="form-satis" style="margin:0;padding:0;">
+<input type="hidden" name="mode" value="satis">
 
     <div class="mob-row" style="margin-bottom:10px;">
         <div class="mob-input-group">
             <?php if (empty($customers)): ?>
             <input class="mob-input" type="text" placeholder="Müşteri — önce müşteri ekleyin" disabled>
             <?php else: ?>
-            <select class="mob-input" style="color:#1a2236;">
-                <?= mob_contact_options($customers, 'Müşteri seçin…') ?>
+            <select class="mob-input" name="musteri" style="color:#1a2236;">
+                <?= mob_contact_options($customers, 'Müşteri (opsiyonel)') ?>
             </select>
             <?php endif; ?>
         </div>
@@ -113,38 +115,41 @@ function mob_contact_options(array $list, string $placeholder): string {
     </div>
 
     <div class="mob-input-group" style="margin-top:10px;">
-        <input class="mob-input" type="text" placeholder="Plaka" disabled>
+        <input class="mob-input" name="plaka" type="text" placeholder="Plaka (opsiyonel)" autocomplete="off" style="text-transform:uppercase;">
     </div>
 
     <div class="mob-row" style="margin-top:10px;align-items:stretch;">
         <div class="mob-date-group">
             <label>Başlangıç Tarihi</label>
-            <input class="mob-input" type="text" value="<?= date('d-m-Y', strtotime('-14 days')) ?>" disabled>
+            <input class="mob-input" name="baslangic" type="date" value="<?= date('Y-m-d', strtotime('-14 days')) ?>">
         </div>
         <div class="mob-date-group">
             <label>Bitiş Tarihi</label>
-            <input class="mob-input" type="text" value="<?= date('d-m-Y') ?>" disabled>
+            <input class="mob-input" name="bitis" type="date" value="<?= date('Y-m-d') ?>">
         </div>
     </div>
 
     <div class="mob-actions">
-        <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Künye Sorgula</button>
+        <button class="mob-btn mob-btn-solid" type="submit">Künye Sorgula</button>
         <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Bildir</button>
     </div>
-    <p class="mob-sprint-note">Bildir ve Künye Sorgula sonraki sprintte aktif olacak.</p>
+    <p class="mob-sprint-note">Bildir sonraki sprintte aktif olacak.</p>
 
+</form>
 </div>
 
 <!-- ── Sevk Etme ───────────────────────────── -->
 <div id="pnl-sevk-etme" class="mob-card" style="display:none;">
+<form action="kunye_sorgula.php" method="get" id="form-sevk" style="margin:0;padding:0;">
+<input type="hidden" name="mode" value="sevk">
 
     <div class="mob-row" style="margin-bottom:10px;">
         <div class="mob-input-group">
             <?php if (empty($customers)): ?>
             <input class="mob-input" type="text" placeholder="Müşteri — önce müşteri ekleyin" disabled>
             <?php else: ?>
-            <select class="mob-input" style="color:#1a2236;">
-                <?= mob_contact_options($customers, 'Müşteri seçin…') ?>
+            <select class="mob-input" name="musteri" style="color:#1a2236;">
+                <?= mob_contact_options($customers, 'Müşteri (opsiyonel)') ?>
             </select>
             <?php endif; ?>
         </div>
@@ -160,26 +165,27 @@ function mob_contact_options(array $list, string $placeholder): string {
     </div>
 
     <div class="mob-input-group" style="margin-top:10px;">
-        <input class="mob-input" type="text" placeholder="Plaka" disabled>
+        <input class="mob-input" name="plaka" type="text" placeholder="Plaka (opsiyonel)" autocomplete="off" style="text-transform:uppercase;">
     </div>
 
     <div class="mob-row" style="margin-top:10px;align-items:stretch;">
         <div class="mob-date-group">
             <label>Başlangıç Tarihi</label>
-            <input class="mob-input" type="text" value="<?= date('d-m-Y', strtotime('-14 days')) ?>" disabled>
+            <input class="mob-input" name="baslangic" type="date" value="<?= date('Y-m-d', strtotime('-14 days')) ?>">
         </div>
         <div class="mob-date-group">
             <label>Bitiş Tarihi</label>
-            <input class="mob-input" type="text" value="<?= date('d-m-Y') ?>" disabled>
+            <input class="mob-input" name="bitis" type="date" value="<?= date('Y-m-d') ?>">
         </div>
     </div>
 
     <div class="mob-actions">
-        <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Künye Sorgula</button>
+        <button class="mob-btn mob-btn-solid" type="submit">Künye Sorgula</button>
         <button class="mob-btn mob-btn-outline disabled" disabled title="Sonraki sprintte">Bildir</button>
     </div>
-    <p class="mob-sprint-note">Bildir ve Künye Sorgula sonraki sprintte aktif olacak.</p>
+    <p class="mob-sprint-note">Bildir sonraki sprintte aktif olacak.</p>
 
+</form>
 </div>
 
 <script>
