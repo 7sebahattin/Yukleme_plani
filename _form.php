@@ -152,9 +152,16 @@ $form_is_cikma = $form_is_cikma ?? false;
             </div>
             <?php endif; ?>
             <label class="span-2">Marka
-                <?php $_cur_brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
+                <?php
+                $_cur_brand = strtoupper(trim((string)($record['brand'] ?? '')));
+                try {
+                    $_brand_opts = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+                } catch (Throwable $_be) {
+                    $_brand_opts = ['ASYA', 'URAL', 'URAS', 'AGRO'];
+                }
+                ?>
                 <div class="brand-seg" role="radiogroup" aria-label="Marka">
-                    <?php foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_bv): ?>
+                    <?php foreach ($_brand_opts as $_bv): $_bv = strtoupper($_bv); ?>
                     <label class="brand-seg-opt<?= $_cur_brand === $_bv ? ' active' : '' ?>">
                         <input type="radio" name="brand" value="<?= h($_bv) ?>" <?= $_cur_brand === $_bv ? 'checked' : '' ?>>
                         <span><?= h($_bv) ?></span>
@@ -165,7 +172,7 @@ $form_is_cikma = $form_is_cikma ?? false;
                         <span>—</span>
                     </label>
                 </div>
-                <small class="muted">Etiket çıktısında işaretlenecek marka.</small>
+                <small class="muted">Etiket çıktısında işaretlenecek marka. <a href="definitions.php?section=ticari" target="_blank" style="font-size:.85em">Markaları düzenle →</a></small>
             </label>
             <label class="span-2">Not
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">

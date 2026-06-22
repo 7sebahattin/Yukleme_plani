@@ -93,7 +93,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($record[$_tf]) && $record[$_tf] !== '') $record[$_tf] = tr_upper($record[$_tf]);
     }
     if (!$edit_is_cikma) {
-        $record['brand'] = in_array(strtoupper($record['brand']), ['ASYA', 'URAL', 'URAS', 'AGRO'], true) ? strtoupper($record['brand']) : null;
+        try {
+            $_valid_brands = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1")->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Throwable $_be) { $_valid_brands = ['ASYA', 'URAL', 'URAS', 'AGRO']; }
+        $record['brand'] = in_array(strtoupper($record['brand']), array_map('strtoupper', $_valid_brands), true) ? strtoupper($record['brand']) : null;
         // Geçersiz firma ID → NULL yap (form akışını bozma)
         if (!empty($record['urun_sahibi_id'])) {
             $_us_check = db()->prepare("SELECT id FROM material_definitions WHERE id=:id AND type='firma' AND is_active=1");
