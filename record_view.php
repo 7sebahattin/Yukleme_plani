@@ -647,8 +647,9 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
 <?php else: ?>
 <?php
 $_b = strtoupper(trim((string)($record['brand'] ?? '')));
+// Eski kısa kodlar için geriye dönük uyumluluk; yeni markalar doğrudan ad olarak saklanır
 $_brand_names = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
-$brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
+$brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
 ?>
 <!-- ── YÜKLEME ŞABLONU ── -->
 <div class="asya-sheet">
