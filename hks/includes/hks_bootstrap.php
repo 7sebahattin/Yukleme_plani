@@ -329,4 +329,35 @@ if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
             try { $pdo->exec($_col_sql); } catch (PDOException $_ce) { /* zaten var */ }
         }
     }
+
+    // hks_mobile_contacts — Mobil kişi defteri (üretici/müşteri)
+    try {
+        $pdo->query("SELECT id, company_id, contact_type, tc_vkn, display_name FROM `hks_mobile_contacts` LIMIT 0");
+    } catch (PDOException) {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_mobile_contacts` (
+                `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+                `company_id`         INT          NOT NULL DEFAULT 0,
+                `contact_type`       ENUM('producer','customer') NOT NULL,
+                `tc_vkn`             VARCHAR(20)  NOT NULL DEFAULT '',
+                `display_name`       VARCHAR(255) NOT NULL DEFAULT '',
+                `phone`              VARCHAR(50)  NULL,
+                `plate`              VARCHAR(20)  NULL,
+                `hks_registered`     TINYINT(1)   NOT NULL DEFAULT 0,
+                `hks_sifatlari_json` TEXT         NULL,
+                `last_verified_at`   DATETIME     NULL,
+                `raw_response_json`  MEDIUMTEXT   NULL,
+                `is_active`          TINYINT(1)   NOT NULL DEFAULT 1,
+                `created_by`         INT          NULL,
+                `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY `uq_contact` (`company_id`, `contact_type`, `tc_vkn`),
+                INDEX `idx_mc_type`    (`contact_type`),
+                INDEX `idx_mc_company` (`company_id`),
+                INDEX `idx_mc_active`  (`is_active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (PDOException $_ce) {
+            error_log("[HKS bootstrap hks_mobile_contacts] " . $_ce->getMessage());
+        }
+    }
 })();

@@ -11,8 +11,28 @@ $op_settings     = $op_repo->getSettings();
 $op_company_name = $op_settings['firma_adi'] ?? 'AGRONATURAL';
 $op_env          = $op_settings['environment'] ?? 'test';
 
+$company_id = isset($_SESSION['hks_company_id']) ? (int)$_SESSION['hks_company_id'] : 0;
+if ($company_id === 0) {
+    $all_cos    = $op_repo->getAllCompanies();
+    $company_id = !empty($all_cos) ? (int)$all_cos[0]['id'] : 0;
+}
+
+$producers = $op_repo->listMobileContacts('producer', $company_id);
+$customers = $op_repo->listMobileContacts('customer', $company_id);
+
 include __DIR__ . '/_layout.php';
 hks_mob_start('Ana Sayfa', 'anasayfa');
+
+// Helper: <option> listesi üret
+function mob_contact_options(array $list, string $placeholder): string {
+    $out = '<option value="">' . hks_mob_h($placeholder) . '</option>';
+    foreach ($list as $c) {
+        $out .= '<option value="' . hks_mob_h($c['tc_vkn']) . '">'
+              . hks_mob_h($c['display_name']) . ' (' . hks_mob_h($c['tc_vkn']) . ')'
+              . '</option>';
+    }
+    return $out;
+}
 ?>
 
 <div id="mob-tabs" class="mob-tabs">
@@ -26,7 +46,13 @@ hks_mob_start('Ana Sayfa', 'anasayfa');
 
     <div class="mob-row" style="align-items:center;margin-bottom:10px;">
         <div class="mob-input-group" style="flex:1;margin-bottom:0;">
-            <input class="mob-input" type="text" placeholder="Üretici" disabled>
+            <?php if (empty($producers)): ?>
+            <input class="mob-input" type="text" placeholder="Üretici — önce üretici ekleyin" disabled>
+            <?php else: ?>
+            <select class="mob-input" style="color:#1a2236;">
+                <?= mob_contact_options($producers, 'Üretici seçin…') ?>
+            </select>
+            <?php endif; ?>
         </div>
         <label class="mob-check-row" style="flex-shrink:0;margin-bottom:0;padding:0 4px;">
             <input type="checkbox" disabled>
@@ -66,8 +92,16 @@ hks_mob_start('Ana Sayfa', 'anasayfa');
 <div id="pnl-satis" class="mob-card" style="display:none;">
 
     <div class="mob-row" style="margin-bottom:10px;">
-        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Müşteri" disabled></div>
-        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Sıfat"   disabled></div>
+        <div class="mob-input-group">
+            <?php if (empty($customers)): ?>
+            <input class="mob-input" type="text" placeholder="Müşteri — önce müşteri ekleyin" disabled>
+            <?php else: ?>
+            <select class="mob-input" style="color:#1a2236;">
+                <?= mob_contact_options($customers, 'Müşteri seçin…') ?>
+            </select>
+            <?php endif; ?>
+        </div>
+        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Sıfat" disabled></div>
     </div>
 
     <div class="mob-input-group">
@@ -105,8 +139,16 @@ hks_mob_start('Ana Sayfa', 'anasayfa');
 <div id="pnl-sevk-etme" class="mob-card" style="display:none;">
 
     <div class="mob-row" style="margin-bottom:10px;">
-        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Müşteri" disabled></div>
-        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Sıfat"   disabled></div>
+        <div class="mob-input-group">
+            <?php if (empty($customers)): ?>
+            <input class="mob-input" type="text" placeholder="Müşteri — önce müşteri ekleyin" disabled>
+            <?php else: ?>
+            <select class="mob-input" style="color:#1a2236;">
+                <?= mob_contact_options($customers, 'Müşteri seçin…') ?>
+            </select>
+            <?php endif; ?>
+        </div>
+        <div class="mob-input-group"><input class="mob-input" type="text" placeholder="Sıfat" disabled></div>
     </div>
 
     <div class="mob-input-group">
@@ -142,7 +184,7 @@ hks_mob_start('Ana Sayfa', 'anasayfa');
 
 <script>
 function mobSetTab(tab, btn) {
-    document.querySelectorAll('.mob-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.mob-tab-btn').forEach(function(b){ b.classList.remove('active'); });
     btn.classList.add('active');
     ['satin-alma','satis','sevk-etme'].forEach(function(t) {
         var el = document.getElementById('pnl-' + t);
