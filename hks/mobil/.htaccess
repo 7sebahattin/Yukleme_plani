@@ -1,0 +1,7 @@
+Options -Indexes
+
+# _layout.php web'den doğrudan erişilemez
+<FilesMatch "^_.*\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
