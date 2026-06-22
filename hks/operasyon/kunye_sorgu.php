@@ -63,7 +63,7 @@ include __DIR__ . '/views/_layout_start.php';
 
 <p class="hks-op-section-title">Toplu Künye (HKS TopluKunyeIstek)</p>
 <div class="hks-op-card">
-    <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS Toplu Künye <strong>tarih aralığı değil</strong>; araç plakası, belge no ve bildirim tarihiyle sorgular.</div>
+    <div class="hks-op-note info" style="margin-bottom:10px">ℹ️ HKS Toplu Künye sorgusu <strong>künye no ile değil</strong>; araç plakası, belge no ve bildirim tarihiyle çalışır. <strong>Belge No, künye numarası değildir.</strong> Künye No ile arama için <strong>Bildirim Sorgulama</strong> ekranını kullanın.</div>
     <div class="hks-op-row">
         <div class="hks-op-field">
             <label>Araç Plaka</label>
@@ -86,6 +86,33 @@ include __DIR__ . '/views/_layout_start.php';
 (function(){
     var csrf = document.querySelector('meta[name="csrf-token"]').content;
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function gf(o, names){ for (var i=0;i<names.length;i++){ for (var k in o){ if (k.toLowerCase()===names[i].toLowerCase() && o[k]!=null && o[k]!==''){ return o[k]; } } } return ''; }
+    function fmtNum(v){ var n=parseFloat(String(v).replace(',','.')); return isNaN(n)?esc(v):n.toLocaleString('tr-TR'); }
+    function rawDetails(rawData){ if (rawData==null) return ''; return '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.8rem;color:var(--muted)">🔧 Teknik Detay (ham JSON)</summary><pre style="white-space:pre-wrap;font-size:.76rem;max-height:280px;overflow:auto">'+esc(JSON.stringify(rawData,null,2))+'</pre></details>'; }
+    function renderRecords(records, rawData){
+        if (!records || !records.length){ return '✅ 0 kayıt — bu kriterlerle kayıt bulunamadı.'+rawDetails(rawData); }
+        var html = '✅ '+records.length+' kayıt bulundu.<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:8px">';
+        records.forEach(function(o){
+            var rows = [
+                ['Künye No', gf(o,['KunyeNo','MalinKunyeNo','ReferansKunyeNo'])],
+                ['Tarih', gf(o,['BildirimTarihi','KayitTarihi','Tarih'])],
+                ['Araç Plaka', gf(o,['AracPlakaNo','AracPlaka','Plaka'])],
+                ['Ürün', gf(o,['MalinAdi','UrunAdi','Urun'])],
+                ['Ürün Cinsi', gf(o,['MalinCinsi','UrunCinsi','Cins'])],
+                ['Malın Türü', gf(o,['MalinTuru','UrunTuru','Tur'])],
+                ['Miktar', (function(){ var m=gf(o,['MalinMiktar','MalinMiktari','Miktar']); var b=gf(o,['MiktarBirimAd','MiktarBirimiAd','BirimAdi','Birim']); return m!==''?(fmtNum(m)+' '+esc(b)):''; })()],
+                ['Kalan', (function(){ var m=gf(o,['KalanMiktar','Kalan']); return m!==''?fmtNum(m):''; })()],
+                ['Mal Sahibi', gf(o,['MalinSahibAdi','MalinSahibiTcVergiNo','MalinSahibiTcKimlikVergiNo','MalinSahibi'])],
+                ['Bildirimci', gf(o,['Bildirimci','BildirimciAdi'])],
+                ['Belge No / Tipi', (function(){ var bn=gf(o,['BelgeNo']); var bt=gf(o,['BelgeTipiAdi','BelgeTipi']); return (esc(bn)+(bt?(' / '+esc(bt)):'')).replace(/^ \/ /,''); })()],
+                ['Nereden → Nereye', (function(){ var a=gf(o,['Nereden']); var b=gf(o,['Nereye']); return (a||b)?(esc(a)+' → '+esc(b)):''; })()]
+            ];
+            var inner='';
+            rows.forEach(function(r){ if (r[1]!=='' && r[1]!=null) inner+='<tr><td style="padding:2px 6px;color:var(--muted);white-space:nowrap">'+esc(r[0])+'</td><td style="padding:2px 6px;font-weight:600">'+(typeof r[1]==='string'&&r[1].indexOf('<')===-1?esc(r[1]):r[1])+'</td></tr>'; });
+            html += '<div class="hks-op-card" style="padding:10px"><table style="width:100%;border-collapse:collapse;font-size:.8rem">'+inner+'</table></div>';
+        });
+        return html + '</div>' + rawDetails(rawData);
+    }
     function hksErrHtml(d){
         var code = d.error_code || '';
         var codeTxt = code + (d.error_code_aciklama ? (' ('+d.error_code_aciklama+')') : '');
@@ -123,10 +150,14 @@ include __DIR__ . '/views/_layout_start.php';
             }
             res.classList.add(d.ok?'ok':'err');
             if (d.ok) {
-                var arr = d.data != null ? d.data : d;
-                res.innerHTML = '✅ '+(Array.isArray(arr)? arr.length+' kayıt bulundu':'Sonuç alındı')+
-                    (Array.isArray(arr) && arr.length===0 ? ' — bu kriterlere uygun kayıt bulunamadı.' : '')+
-                    '<details style="margin-top:6px"><summary style="cursor:pointer">Teknik detay</summary><pre style="white-space:pre-wrap;font-size:.78rem;max-height:260px;overflow:auto">'+esc(JSON.stringify(arr,null,2))+'</pre></details>';
+                if (typeof d.records !== 'undefined') {
+                    // Toplu künye: Kunyeler {}/null → 0; sayım kayıt listesinden gelir.
+                    res.innerHTML = renderRecords(d.records || [], d.data != null ? d.data : null);
+                } else {
+                    var arr = d.data != null ? d.data : d;
+                    res.innerHTML = '✅ '+(Array.isArray(arr)? arr.length+' kayıt bulundu':'Sonuç alındı')+
+                        rawDetails(arr);
+                }
             } else {
                 res.innerHTML = hksErrHtml(d);
             }
@@ -149,9 +180,17 @@ include __DIR__ . '/views/_layout_start.php';
                 if (!tc) { alert('TC veya VKN girin.'); return; }
                 run('query_kisi_sorgu', {tc_vkn:tc}, res, btn);
             } else if (q === 'toplu') {
-                var plaka=document.getElementById('tkPlaka').value.trim();
+                // Plaka normalize: büyük harf + boşluksuz (55asy19 → 55ASY19)
+                var plakaEl=document.getElementById('tkPlaka');
+                var plaka=plakaEl.value.toUpperCase().replace(/\s+/g,'');
+                plakaEl.value=plaka;
                 var belge=document.getElementById('tkBelge').value.trim();
                 var tarih=document.getElementById('tkTarih').value;
+                // Belge No alanına künye no benzeri (15+ hane) yazılmışsa uyar
+                if (/^\d{15,}$/.test(belge)) {
+                    alert('Bu değer künye numarasına benziyor. Künye No ile arama için "Bildirim Sorgulama" ekranını kullanın. Toplu Künye, belge no/plaka/tarih ile çalışır.');
+                    return;
+                }
                 if (!plaka && !belge && !tarih) { alert('Araç plakası, belge no veya bildirim tarihinden en az biri gerekli.'); return; }
                 run('query_toplu_kunye', {arac_plaka:plaka, belge_no:belge, bildirim_tarihi:tarih}, res, btn);
             }

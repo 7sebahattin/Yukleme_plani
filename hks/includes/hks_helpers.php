@@ -610,6 +610,25 @@ function hks_collect_messages(mixed $node, array &$bucket, int $depth = 0): void
     }
 }
 
+// Bir veya birden çok envelope'tan (IslemKodu/Sonuc sarmalı) düz DTO kayıt listesi çıkarır.
+// Sonuc.Bildirimler.BildirimSorguDTO[] / Sonuc.Kunyeler.TopluKunyeDTO[] gibi yapıları çözer.
+// Kunyeler {} (boş obje) / null / [] → 0 kayıt. Tek DTO obje → 1 kayıt. Dizi → count.
+function hks_collect_dto_records(mixed $data): array {
+    if (!is_array($data)) return [];
+    $out = [];
+    foreach ($data as $env) {
+        $earr = is_object($env) ? (array)$env : (is_array($env) ? $env : []);
+        if (empty($earr)) continue;
+        $sonuc = $earr['Sonuc'] ?? $earr['sonuc'] ?? null;
+        $recs  = $sonuc !== null ? hks_extract_records($sonuc) : hks_extract_records($earr);
+        foreach ($recs as $r) {
+            $ra = is_object($r) ? (array)$r : (is_array($r) ? $r : null);
+            if ($ra !== null && $ra !== []) $out[] = $ra;
+        }
+    }
+    return $out;
+}
+
 // HKS genel işlem/hata kodları → insan-okur açıklama (resmi kılavuz §1.1).
 function hks_islem_kodu_aciklama(string $code): string {
     static $map = [
