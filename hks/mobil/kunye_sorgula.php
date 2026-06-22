@@ -115,6 +115,33 @@ if ($dates_valid) {
     $query_error = 'Geçersiz tarih aralığı.';
 }
 
+// CSRF token for Seç form
+$csrf_token = csrf_token();
+
+// Cache filtered records in session for secure Seç POST flow (single-use token)
+$session_token = '';
+if (!empty($records)) {
+    $session_token = bin2hex(random_bytes(16));
+    if (!isset($_SESSION['hks_mobile_kunye_results'])) {
+        $_SESSION['hks_mobile_kunye_results'] = [];
+    }
+    // Prune expired tokens; keep max 5 live entries
+    $now = time();
+    $_SESSION['hks_mobile_kunye_results'] = array_filter(
+        $_SESSION['hks_mobile_kunye_results'],
+        fn($e) => ($e['expires'] ?? 0) > $now
+    );
+    if (count($_SESSION['hks_mobile_kunye_results']) >= 5) {
+        array_shift($_SESSION['hks_mobile_kunye_results']);
+    }
+    $_SESSION['hks_mobile_kunye_results'][$session_token] = [
+        'expires'    => $now + 600,  // 10 minutes
+        'mode'       => $mode,
+        'musteri_tc' => $musteri_tc,
+        'records'    => $records,
+    ];
+}
+
 include __DIR__ . '/_layout.php';
 hks_mob_start($mode_label . ' Künye Sorgula', 'anasayfa');
 
@@ -255,7 +282,17 @@ function ks_gf(mixed $o, array $names): string {
     </div>
 
     <div class="ks-card-footer">
-        <button class="mob-btn mob-btn-outline disabled ks-sec-btn" disabled title="Sonraki sprintte">Seç</button>
+        <?php if ($session_token !== ''): ?>
+        <form method="post" action="taslak_olustur.php" style="margin:0;flex-shrink:0;">
+            <input type="hidden" name="csrf"  value="<?= hks_mob_h($csrf_token) ?>">
+            <input type="hidden" name="token" value="<?= hks_mob_h($session_token) ?>">
+            <input type="hidden" name="idx"   value="<?= $i ?>">
+            <input type="hidden" name="mode"  value="<?= hks_mob_h($mode) ?>">
+            <button type="submit" class="mob-btn mob-btn-solid ks-sec-btn">Seç</button>
+        </form>
+        <?php else: ?>
+        <button class="mob-btn mob-btn-outline disabled ks-sec-btn" disabled>Seç</button>
+        <?php endif; ?>
         <details style="flex:1;">
             <summary class="ks-details-toggle">Teknik Detay</summary>
             <pre class="ks-raw-json"><?= hks_mob_h(json_encode(
@@ -279,7 +316,7 @@ function ks_gf(mixed $o, array $names): string {
 
 <?php endif; ?>
 
-<p class="mob-sprint-note" style="margin-top:16px;">Seç butonu sonraki sprintte aktif olacak.</p>
+<p class="mob-sprint-note" style="margin-top:16px;">Seçilen künye e-Bildirim taslağına dönüştürülür. Gönderim sonraki sprintte etkinleşecek.</p>
 
 <style>
 .ks-header {
