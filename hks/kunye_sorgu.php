@@ -255,8 +255,11 @@ function hksQuery(action, payload, resultEl, btn) {
         resultEl.classList.add(data.ok ? 'ok' : 'err');
         if (data.ok) {
             var d = data.data ?? data;
-            resultEl.innerHTML = '✅ ' +
-                '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.82rem">Yanıtı Göster (' + (Array.isArray(d) ? d.length + ' kayıt' : 'detay') + ')</summary>' +
+            // Sayım kayıt listesinden (records) gelir → Kunyeler {} artık "1 kayıt" demez.
+            var cnt = (typeof data.records !== 'undefined') ? data.records.length : (Array.isArray(d) ? d.length : null);
+            var cntTxt = (cnt===null) ? 'detay' : (cnt + ' kayıt');
+            resultEl.innerHTML = '✅ ' + (cnt===0 ? '0 kayıt — bu kriterlerle kayıt bulunamadı. ' : '') +
+                '<details style="margin-top:4px"><summary style="cursor:pointer;font-size:.82rem">Yanıtı Göster (' + cntTxt + ')</summary>' +
                 '<pre style="margin:6px 0 0;font-size:.78rem;white-space:pre-wrap;overflow-x:auto;max-height:300px">' +
                 JSON.stringify(d, null, 2) + '</pre></details>';
         } else {
@@ -292,9 +295,11 @@ document.getElementById('btnRefKunye').addEventListener('click', function() {
 // Toplu Künye — TopluKunyeIstek: plaka / belge / bildirim tarihi
 document.getElementById('btnTopluKunye').dataset.label = '🔍 Sorgula';
 document.getElementById('btnTopluKunye').addEventListener('click', function() {
-    var plaka=document.getElementById('tk_plaka').value.trim();
+    var plakaEl=document.getElementById('tk_plaka');
+    var plaka=plakaEl.value.toUpperCase().replace(/\s+/g,''); plakaEl.value=plaka;  // 55asy19 → 55ASY19
     var belge=document.getElementById('tk_belge').value.trim();
     var tarih=document.getElementById('tk_tarih').value;
+    if (/^\d{15,}$/.test(belge)) { alert('Bu değer künye numarasına benziyor. Künye No ile arama için "Bildirim Listeleri" bölümünü kullanın. Toplu Künye belge no/plaka/tarih ile çalışır.'); return; }
     if (!plaka && !belge && !tarih) { alert('Araç plakası, belge no veya bildirim tarihinden en az biri gerekli.'); return; }
     hksQuery('query_toplu_kunye', {
         arac_plaka: plaka, belge_no: belge, bildirim_tarihi: tarih

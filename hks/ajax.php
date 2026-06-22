@@ -319,6 +319,8 @@ switch ($action) {
                 $json_result = hks_normalize_error_payload($norm, $json_result['data']);
             }
         }
+        // Kunyeler {}/null/[] → 0 kayıt; tek DTO → 1; dizi → count (UI'da doğru sayım için)
+        if (!empty($json_result['ok'])) $json_result['records'] = hks_collect_dto_records($json_result['data'] ?? []);
         $repo->saveQuery('toplu_kunye', $tk_params['BelgeNo'] ?? ($tk_params['AracPlakaNo'] ?? '*'),
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_tk);
@@ -367,6 +369,7 @@ switch ($action) {
         $json_result = hks_query_bildirim_liste(
             fn(array $p) => $client->getYaptigimBildirimler($p), $yb_params, (string)($input['kunye_turu'] ?? '')
         );
+        if (!empty($json_result['ok'])) $json_result['records'] = hks_collect_dto_records($json_result['data'] ?? []);
         $repo->saveQuery('bildirim_listesi', 'yaptigim',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_yb);
@@ -393,6 +396,7 @@ switch ($action) {
         $json_result = hks_query_bildirim_liste(
             fn(array $p) => $client->getBanaYapilanBildirimler($p), $byb_params, (string)($input['kunye_turu'] ?? '')
         );
+        if (!empty($json_result['ok'])) $json_result['records'] = hks_collect_dto_records($json_result['data'] ?? []);
         $repo->saveQuery('bildirim_listesi', 'bana_yapilan',
             $json_result['ok'] ? 'ok' : 'error',
             json_encode($json_result['data'] ?? null, JSON_UNESCAPED_UNICODE), $uid_byb);
