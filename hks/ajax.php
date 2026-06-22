@@ -637,6 +637,102 @@ switch ($action) {
         $json_result = $client->diagCall($diag_wsdl, $diag_method, $diag_istek);
         break;
 
+    // ── Mobil Kişi Doğrulama ve Kayıt ──────────────────────────
+    // KayitliKisiSorgu → KayitliKisiMi=true ise kaydeder; false ise reddet.
+    // BildirimKaydet çağrılmaz. live_send_enabled değiştirilmez.
+    case 'mobile_verify_contact':
+        if (!(function_exists('can') && (can('hks.read') || is_admin()))) {
+            $json_result = ['ok' => false, 'saved' => false, 'message' => 'Yetki yok.']; break;
+        }
+        $mvc_type = trim($input['type'] ?? '');
+        if (!in_array($mvc_type, ['producer', 'customer'], true)) {
+            $json_result = ['ok' => false, 'saved' => false, 'message' => 'Geçersiz kişi türü.']; break;
+        }
+        $mvc_tc    = preg_replace('/\D/', '', (string)($input['tc_vkn']      ?? ''));
+        $mvc_name  = trim((string)($input['display_name'] ?? ''));
+        $mvc_phone = trim((string)($input['phone']        ?? ''));
+        $mvc_plate = trim((string)($input['plate']        ?? ''));
+
+        if (!in_array(strlen($mvc_tc), [10, 11], true)) {
+            $json_result = ['ok' => false, 'saved' => false, 'message' => 'Geçerli bir TC (11 hane) veya VKN (10 hane) girin.']; break;
+        }
+        if ($mvc_name === '') {
+            $json_result = ['ok' => false, 'saved' => false, 'message' => 'Ad/ünvan girilmelidir.']; break;
+        }
+
+        $mvc_res = $client->kayitliKisiSorgu($mvc_tc);
+        if (empty($mvc_res['ok'])) {
+            $json_result = ['ok' => false, 'saved' => false,
+                'message' => 'HKS kişi sorgusu yapılamadı. Bağlantı testini kontrol edin.',
+                'detail'  => $mvc_res['message'] ?? ''];
+            break;
+        }
+        $mvc_norm = hks_normalize_response($mvc_res['data'] ?? []);
+        if (!$mvc_norm['ok'] && !empty($mvc_norm['hks_message'])) {
+            $json_result = ['ok' => false, 'saved' => false,
+                'message' => $mvc_norm['user_message'] ?: 'HKS servis hatası. Ayarları kontrol edin.'];
+            break;
+        }
+
+        // KESİN KURAL: KayitliKisiMi===true → kayıtlı; false → reddet
+        $mvc_kisi = hks_extract_kayitli_kisi($mvc_res['data'] ?? [], $mvc_tc);
+        if (!$mvc_kisi['kayitli']) {
+            $repo->saveQuery('kisi_sorgu', $mvc_tc, 'not_found',
+                json_encode($mvc_res['data'] ?? null, JSON_UNESCAPED_UNICODE),
+                isset($user['id']) ? (int)$user['id'] : null);
+            $json_result = ['ok' => true, 'saved' => false,
+                'message' => 'Bu TC/VKN HKS\'de kayıtlı bulunamadı. Kayıt eklenmedi.'];
+            break;
+        }
+
+        $mvc_sifat_labels = [];
+        foreach ($mvc_kisi['sifat_ids'] as $mvc_sid) {
+            $lbl = function_exists('hks_resolve_reference_label') ? hks_resolve_reference_label('sifat', $mvc_sid) : null;
+            $mvc_sifat_labels[] = ($lbl !== null && $lbl !== '') ? $lbl : $mvc_sid;
+        }
+
+        // Hassas alanlar ham yanıtta maskelenir — şifre/kullanıcı adı loglanmaz
+        $mvc_safe_raw = hks_mask_sensitive((array)($mvc_res['data'] ?? []));
+
+        $mvc_company_id = isset($_SESSION['hks_company_id']) ? (int)$_SESSION['hks_company_id'] : 0;
+        if ($mvc_company_id === 0) {
+            $mvc_all = $repo->getAllCompanies();
+            $mvc_company_id = !empty($mvc_all) ? (int)$mvc_all[0]['id'] : 0;
+        }
+
+        $mvc_saved_id = $repo->upsertMobileContact($mvc_type, [
+            'tc_vkn'             => $mvc_tc,
+            'display_name'       => $mvc_name,
+            'phone'              => $mvc_phone,
+            'plate'              => $mvc_plate,
+            'hks_registered'     => 1,
+            'hks_sifatlari_json' => json_encode($mvc_kisi['sifat_ids'], JSON_UNESCAPED_UNICODE),
+            'last_verified_at'   => date('Y-m-d H:i:s'),
+            'raw_response_json'  => json_encode($mvc_safe_raw, JSON_UNESCAPED_UNICODE),
+            'created_by'         => isset($user['id']) ? (int)$user['id'] : null,
+        ], $mvc_company_id);
+
+        $mvc_contact = $repo->getMobileContact($mvc_saved_id) ?: [];
+
+        audit_log_event('hks_mobile_contact_saved', 'hks_mobile_contacts', $mvc_saved_id, null, [
+            'type'   => $mvc_type,
+            'tc_vkn' => substr($mvc_tc, 0, 4) . '***',
+            'name'   => $mvc_name,
+        ]);
+        $repo->saveQuery('kisi_sorgu', $mvc_tc, 'ok',
+            json_encode($mvc_safe_raw, JSON_UNESCAPED_UNICODE),
+            isset($user['id']) ? (int)$user['id'] : null);
+
+        $json_result = [
+            'ok'          => true,
+            'saved'       => true,
+            'message'     => 'Bu kişi HKS\'de kayıtlı. Listeye eklendi.',
+            'contact'     => $mvc_contact,
+            'sifatlari'   => $mvc_kisi['sifat_ids'],
+            'sifat_labels'=> $mvc_sifat_labels,
+        ];
+        break;
+
     // ── Bilinmeyen action ───────────────────────────────────
     default:
         $http_status = 400;

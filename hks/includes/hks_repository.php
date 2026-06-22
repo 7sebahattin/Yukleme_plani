@@ -855,4 +855,90 @@ class HksRepository {
             return [];
         }
     }
+
+    // ── Mobil Kişi Defteri ────────────────────────────────────
+
+    public function listMobileContacts(string $type, int $company_id): array {
+        try {
+            $st = $this->pdo->prepare(
+                "SELECT * FROM hks_mobile_contacts
+                 WHERE contact_type=? AND company_id=? AND is_active=1
+                 ORDER BY display_name ASC"
+            );
+            $st->execute([$type, $company_id]);
+            return $st->fetchAll();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    public function getMobileContact(int $id): ?array {
+        try {
+            $st = $this->pdo->prepare("SELECT * FROM hks_mobile_contacts WHERE id=? LIMIT 1");
+            $st->execute([$id]);
+            return $st->fetch() ?: null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public function findMobileContactByTc(string $type, string $tc_vkn, int $company_id): ?array {
+        try {
+            $st = $this->pdo->prepare(
+                "SELECT * FROM hks_mobile_contacts
+                 WHERE contact_type=? AND tc_vkn=? AND company_id=? LIMIT 1"
+            );
+            $st->execute([$type, $tc_vkn, $company_id]);
+            return $st->fetch() ?: null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    // INSERT yeni kayıt; TC/VKN zaten varsa UPDATE (is_active=1 olarak geri getirir).
+    // Dönüş: yeni ya da mevcut kaydın id'si.
+    public function upsertMobileContact(string $type, array $data, int $company_id): int {
+        $tc       = (string)($data['tc_vkn']             ?? '');
+        $name     = (string)($data['display_name']       ?? '');
+        $phone    = ($data['phone']  ?? '') !== '' ? (string)$data['phone']  : null;
+        $plate    = ($data['plate']  ?? '') !== '' ? (string)$data['plate']  : null;
+        $reg      = (int)($data['hks_registered']        ?? 0);
+        $sif_json = ($data['hks_sifatlari_json'] ?? null) !== null ? (string)$data['hks_sifatlari_json'] : null;
+        $raw_json = ($data['raw_response_json']  ?? null) !== null ? (string)$data['raw_response_json']  : null;
+        $verified = ($data['last_verified_at']   ?? null) !== null ? (string)$data['last_verified_at']   : null;
+        $by       = ($data['created_by']         ?? null) !== null ? (int)$data['created_by']            : null;
+
+        $this->pdo->prepare(
+            "INSERT INTO hks_mobile_contacts
+                (company_id, contact_type, tc_vkn, display_name, phone, plate,
+                 hks_registered, hks_sifatlari_json, last_verified_at, raw_response_json,
+                 is_active, created_by, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,1,?,NOW(),NOW())
+             ON DUPLICATE KEY UPDATE
+                display_name=VALUES(display_name),
+                phone=VALUES(phone),
+                plate=VALUES(plate),
+                hks_registered=VALUES(hks_registered),
+                hks_sifatlari_json=VALUES(hks_sifatlari_json),
+                last_verified_at=VALUES(last_verified_at),
+                raw_response_json=VALUES(raw_response_json),
+                is_active=1,
+                updated_at=NOW()"
+        )->execute([$company_id, $type, $tc, $name, $phone, $plate,
+                    $reg, $sif_json, $verified, $raw_json, $by]);
+
+        $inserted_id = (int)$this->pdo->lastInsertId();
+        if ($inserted_id > 0) return $inserted_id;
+        // ON DUPLICATE KEY UPDATE → lastInsertId()=0; ID'yi TC/VKN ile bul
+        $existing = $this->findMobileContactByTc($type, $tc, $company_id);
+        return $existing ? (int)$existing['id'] : 0;
+    }
+
+    public function softDeleteMobileContact(int $id): void {
+        try {
+            $this->pdo->prepare(
+                "UPDATE hks_mobile_contacts SET is_active=0, updated_at=NOW() WHERE id=?"
+            )->execute([$id]);
+        } catch (Throwable) {}
+    }
 }
