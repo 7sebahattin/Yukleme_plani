@@ -87,6 +87,14 @@ $all_defs = db()->query("SELECT id, type, name, unit_dara_kg
 $defs_by_id = [];
 foreach ($all_defs as $d) $defs_by_id[(int)$d['id']] = $d;
 
+// ── Aktif marka listesi (marka kutucukları için) ──
+try {
+    $_bp_marka_opts = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $_be) {
+    $_bp_marka_opts = ['ASYA', 'URAL', 'URAS', 'AGRO'];
+}
+$_bp_brand_names_global = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
+
 // ── Palet sorgusu (hazır statement) ──
 $st_pallets = db()->prepare("
     SELECT p.*,
@@ -198,6 +206,9 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
     $st_r->execute([$_rid]);
     $record = $st_r->fetch();
     if (!$record) continue;
+    $_bp_b = strtoupper(trim((string)($record['brand'] ?? '')));
+    $_bp_brand_names = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
+    $_bp_brand_label = $_bp_b !== '' ? ($_bp_brand_names[$_bp_b] ?? $_bp_b) : 'ASYA FRESH';
 
     // Paletler
     $st_pallets->execute([$_rid]);
@@ -294,7 +305,7 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
 <div class="asya-sheet<?= $_last ? '' : ' bp-page-break' ?>">
 
     <div class="asya-top">
-        <div class="asya-brand-full">ASYA FRESH</div>
+        <div class="asya-brand-full"><?= h($_bp_brand_label) ?></div>
         <div class="asya-top-body">
             <table class="asya-info">
                 <tr><th>FİRMA</th><td colspan="3"><?= h($record['firma']) ?></td></tr>
@@ -317,15 +328,14 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
                 <tr><th>TARİH</th><td colspan="3"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>
             <div class="asya-right-top">
-                <?php $brand = strtoupper(trim((string)($record['brand'] ?? ''))); ?>
                 <div class="asya-marka-row">
-                    <?php foreach (['ASYA', 'URAL', 'URAS', 'AGRO'] as $_bv): $_on = ($brand === $_bv); ?>
+                    <?php foreach ($_bp_marka_opts as $_bv): $_bv = strtoupper($_bv); $_on = ($_bp_b === $_bv); ?>
                     <div class="marka-cell<?= $_on ? ' marka-on' : '' ?>">
-                        <span><?= $_on ? '✓ ' : '' ?><?= $_bv ?></span><strong>MARKA</strong>
+                        <span><?= $_on ? '✓ ' : '' ?><?= h($_bv) ?></span><strong>MARKA</strong>
                     </div>
                     <?php endforeach; ?>
                 </div>
-                <?php if ($brand === ''): ?>
+                <?php if ($_bp_b === ''): ?>
                 <div class="marka-uyari">⚠ Marka seçilmedi</div>
                 <?php endif; ?>
                 <div class="asya-alici-urun-row">

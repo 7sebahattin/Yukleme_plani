@@ -213,7 +213,7 @@ foreach ($pallets as $p) {
 // ── Brand etiketi ─────────────────────────────────────────
 $_b = strtoupper(trim((string)($record['brand'] ?? '')));
 $_brand_names = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
-$brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
+$brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
 
 // ── Not alanı ─────────────────────────────────────────────
 $note_val = trim((string)($record['etiket'] ?? ''));
