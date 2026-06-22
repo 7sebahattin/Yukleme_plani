@@ -28,6 +28,28 @@ if (!empty($notif['validation_errors_json'])) {
     $validation_errors = json_decode($notif['validation_errors_json'], true) ?: [];
 }
 
+// Decode stored masked DTO for "Kaynak HKS Bilgileri" audit section
+$ref_dto = [];
+if (!empty($notif['reference_kunye_query_json'])) {
+    $decoded = json_decode((string)$notif['reference_kunye_query_json'], true);
+    if (is_array($decoded)) $ref_dto = $decoded;
+}
+function td_dto_get(array $dto, array $names): string {
+    foreach ($names as $name) {
+        foreach ($dto as $k => $v) {
+            if (strtolower($k) === strtolower($name) && $v !== null && $v !== '') {
+                return (string)$v;
+            }
+        }
+    }
+    return '';
+}
+$hks_bildirim_turu = td_dto_get($ref_dto, ['BildirimTuru','BildirimTuruAdi']);
+$hks_belge_tipi    = td_dto_get($ref_dto, ['BelgeTipi','BelgeTipiAdi']);
+$hks_belge_no      = td_dto_get($ref_dto, ['BelgeNo']);
+$hks_kunye_no      = td_dto_get($ref_dto, ['KunyeNo','MalinKunyeNo','ReferansKunyeNo']);
+$hks_kalan         = td_dto_get($ref_dto, ['KalanMiktar','Kalan']);
+
 $status        = $notif['status'] ?? 'draft';
 $local_no      = $notif['local_no'] ?? '';
 $kunye_no      = $notif['reference_kunye_no'] ?? '';
@@ -194,6 +216,45 @@ function td_status_cls(string $s): string {
 
 </div>
 
+<!-- Kaynak HKS Bilgileri — denetim amaçlı, collapsible -->
+<?php if (!empty($ref_dto)): ?>
+<details class="td-hks-src">
+    <summary class="td-hks-src-toggle">Kaynak HKS Bilgileri</summary>
+    <div class="td-card" style="margin-top:8px;">
+        <?php if ($hks_kunye_no !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label">Künye No</span>
+            <span class="td-val td-kunye-no"><?= td_h($hks_kunye_no) ?></span>
+        </div>
+        <?php endif; ?>
+        <?php if ($hks_bildirim_turu !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label">HKS Bildirim Türü</span>
+            <span class="td-val"><?= td_h($hks_bildirim_turu) ?></span>
+        </div>
+        <?php endif; ?>
+        <?php if ($hks_belge_tipi !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label">HKS Belge Tipi</span>
+            <span class="td-val"><?= td_h($hks_belge_tipi) ?></span>
+        </div>
+        <?php endif; ?>
+        <?php if ($hks_belge_no !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label">HKS Belge No</span>
+            <span class="td-val"><?= td_h($hks_belge_no) ?></span>
+        </div>
+        <?php endif; ?>
+        <?php if ($hks_kalan !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label">Kalan Miktar</span>
+            <span class="td-val"><?= td_h($hks_kalan) ?></span>
+        </div>
+        <?php endif; ?>
+    </div>
+</details>
+<?php endif; ?>
+
 <!-- Actions -->
 <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0;">
     <a href="../operasyon/bildirim_form.php?id=<?= $notif_id ?>"
@@ -247,6 +308,14 @@ function td_status_cls(string $s): string {
 .td-label { color:#7b8fa8; flex-shrink:0; margin-right:8px; padding-top:1px; min-width:100px; }
 .td-val   { color:#1a2236; font-weight:500; text-align:right; word-break:break-all; }
 .td-kunye-no { color:#1565c0; font-weight:700; }
+.td-hks-src { margin-bottom:12px; }
+.td-hks-src-toggle {
+    font-size:13px; color:#1565c0; cursor:pointer; padding:6px 0;
+    list-style:none; display:flex; align-items:center; gap:6px;
+}
+.td-hks-src-toggle::-webkit-details-marker { display:none; }
+.td-hks-src-toggle::before { content:'▶'; font-size:10px; transition:transform .2s; }
+details[open].td-hks-src > .td-hks-src-toggle::before { transform:rotate(90deg); }
 </style>
 
 <?php hks_mob_end(); ?>

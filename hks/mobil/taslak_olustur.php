@@ -57,7 +57,7 @@ function mob_dto_get(array $rec, array $names): string {
 $kunye_no         = mob_dto_get($rec, ['KunyeNo','MalinKunyeNo','ReferansKunyeNo']);
 $plaka            = mob_dto_get($rec, ['AracPlakaNo','AracPlaka','Plaka']);
 $belge_no         = mob_dto_get($rec, ['BelgeNo']);
-$belge_tipi       = mob_dto_get($rec, ['BelgeTipiAdi','BelgeTipi']);
+$belge_tipi       = mob_dto_get($rec, ['BelgeTipi','BelgeTipiAdi']); // ID code first
 $tarih_raw        = mob_dto_get($rec, ['BildirimTarihi','KayitTarihi','Tarih']);
 $urun_adi         = mob_dto_get($rec, ['MalinAdi','UrunAdi','Urun']);
 $urun_kodu        = mob_dto_get($rec, ['MalinKodNo']);
@@ -159,7 +159,7 @@ $data = [
     'malin_turu'                   => $turu_kodu,
     'arac_plaka'                   => $plaka,
     'belge_no'                     => $belge_no,
-    'belge_tipi'                   => $bildirim_turu !== '' ? $bildirim_turu : $belge_tipi,
+    'belge_tipi'                   => $belge_tipi,   // BelgeTipi (ID/kod) — BildirimTuru buraya yazılmaz
     'sevk_tarihi'                  => $sevk_tarihi,
     'reference_kunye_no'           => $kunye_no,
     'uretici_tc_vkn'               => $uretici_tc,
