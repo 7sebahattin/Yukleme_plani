@@ -46,27 +46,35 @@ function mob_status_badge(string $status): string {
 </div>
 <?php else: ?>
 <?php foreach ($notifications as $n): ?>
-<a class="mob-notif-item" href="../operasyon/son_bildirimler.php">
+<?php
+    $urun_label = $n['reference_kunye_urun'] ?? ($n['urun'] ?? '—');
+    $birim_label = $n['reference_kunye_birim'] ?? ($n['birim'] ?? 'KG');
+    $miktar_val  = (float)($n['miktar'] ?? 0);
+?>
+<a class="mob-notif-item" href="taslak_detay.php?id=<?= (int)$n['id'] ?>">
     <div class="mob-notif-meta">
         <?= $n['created_at'] ? hks_mob_h(date('d.m.Y H:i', strtotime($n['created_at']))) : '' ?>
         &nbsp;·&nbsp;<?= hks_mob_h($n['local_no'] ?? '') ?>
         &nbsp;<?= mob_status_badge($n['status'] ?? 'draft') ?>
     </div>
     <div class="mob-notif-title">
-        <?= hks_mob_h($n['urun'] ?? '—') ?>
-        <?php if (!empty($n['miktar'])): ?>
-            — <?= hks_mob_h(number_format((float)$n['miktar'], 0, ',', '.')) ?> <?= hks_mob_h($n['birim'] ?? 'KG') ?>
+        <?= hks_mob_h($urun_label) ?>
+        <?php if ($miktar_val > 0): ?>
+            — <?= hks_mob_h(number_format($miktar_val, 0, ',', '.')) ?> <?= hks_mob_h($birim_label) ?>
         <?php endif; ?>
     </div>
+    <?php if (!empty($n['reference_kunye_no'])): ?>
+    <div class="mob-notif-meta" style="margin-top:3px;">Künye: <?= hks_mob_h($n['reference_kunye_no']) ?></div>
+    <?php endif; ?>
     <?php if (!empty($n['arac_plaka'])): ?>
-    <div class="mob-notif-meta" style="margin-top:4px;"><?= hks_mob_h($n['arac_plaka']) ?></div>
+    <div class="mob-notif-meta" style="margin-top:2px;"><?= hks_mob_h($n['arac_plaka']) ?></div>
     <?php endif; ?>
 </a>
 <?php endforeach; ?>
 
 <div style="text-align:center;padding:12px 0;">
     <a href="../operasyon/son_bildirimler.php" style="color:#1565c0;font-size:14px;text-decoration:none;">
-        Tümünü Görüntüle →
+        Tüm Bildirimler (Masaüstü) →
     </a>
 </div>
 <?php endif; ?>
