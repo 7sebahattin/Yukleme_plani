@@ -64,9 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ms_ed
     $edit_mat_type = trim($_POST['edit_mat_type']   ?? '');
     $edit_mat_name = trim($_POST['edit_mat_name']   ?? '');
     $edit_depo     = trim($_POST['edit_depo']       ?? '');
-    $edit_qty_raw  = str_replace(',', '.', trim($_POST['edit_qty'] ?? '0'));
-    $edit_qty      = (float)$edit_qty_raw;
     $edit_unit     = trim($_POST['edit_unit']       ?? 'adet');
+    $edit_qty      = parse_stock_quantity(trim($_POST['edit_qty'] ?? '0'), $edit_unit);
     $edit_belge    = trim($_POST['edit_belge']      ?? '');
     $edit_firma    = trim($_POST['edit_firma']      ?? '');
     $edit_note     = trim($_POST['edit_note']       ?? '');
@@ -855,6 +854,19 @@ render_flash();
 var msMoveDefs   = <?= json_encode($move_defs_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msMoveCtx    = {};
+var msEditOrigQty = 0;
+
+// Tam sayı birimi mi? (adet/paket/koli/top/set/çift)
+var MS_INT_UNITS = ['adet', 'paket', 'koli', 'top', 'set', 'çift'];
+function msIsIntUnit(unit) { return MS_INT_UNITS.indexOf(unit) >= 0; }
+
+// DB float değerini input için formatla: adet→"1112", kg→"12.5" (sıfırları at)
+function msFormatQtyForInput(value, unit) {
+    var v = parseFloat(String(value).replace(',', '.')) || 0;
+    if (msIsIntUnit(unit || 'adet')) return String(Math.round(Math.abs(v)));
+    var s = Math.abs(v).toFixed(3);
+    return parseFloat(s).toString(); // "12.500" → "12.5"
+}
 
 // ── Hareket Taşı Modal ────────────────────────────────────
 function msMoveOpen(id, date, mtype, mattype, matid, matname, depo, qty, unit, belge, firma, note) {
@@ -956,11 +968,11 @@ function msMoveClose() {
 function msEditOpen(data) {
     document.getElementById('msEditId').value       = data.id     || '';
     document.getElementById('msEditDate').value     = data.date   || '';
-    document.getElementById('msEditQty').value      = data.qty    || '';
     document.getElementById('msEditBelge').value    = data.belge  || '';
     document.getElementById('msEditFirma').value    = data.firma  || '';
     document.getElementById('msEditNote').value     = data.note   || '';
     document.getElementById('msEditIdBadge').textContent = '· #' + (data.id || '');
+    msEditOrigQty = parseFloat(String(data.qty || '0').replace(',', '.')) || 0;
 
     // Hareket tipi seç
     var typeSel = document.getElementById('msEditType');
@@ -991,6 +1003,10 @@ function msEditOpen(data) {
     // Birim seç
     var unitSel = document.getElementById('msEditUnit');
     if (unitSel && data.unit) unitSel.value = data.unit;
+
+    // Miktarı birime göre formatla (adet → "1112", kg → "12.5", sıfır yok)
+    var qtyUnit = (unitSel && unitSel.value) ? unitSel.value : (data.unit || 'adet');
+    document.getElementById('msEditQty').value = msFormatQtyForInput(data.qty || '0', qtyUnit);
 
     document.getElementById('msEditOverlay').classList.add('open');
     setTimeout(function() {
@@ -1047,6 +1063,20 @@ function msDelOpen(id, date, mtype, matname, qty, unit) {
 function msDelClose() {
     var ov = document.getElementById('msDelOverlay');
     if (ov) ov.classList.remove('open');
+}
+
+// Büyük miktar değişikliği uyarısı
+var msEditFormEl = document.getElementById('msEditForm');
+if (msEditFormEl) {
+    msEditFormEl.addEventListener('submit', function(e) {
+        var newQtyRaw = document.getElementById('msEditQty') ? document.getElementById('msEditQty').value : '';
+        var newQty = parseFloat(newQtyRaw.replace(',', '.')) || 0;
+        var origQty = Math.abs(msEditOrigQty);
+        if (origQty > 0 && newQty > origQty * 10) {
+            var msg = '⚠ Yeni miktar (' + newQty + ') eski değerden (' + origQty + ') 10 kat veya daha fazla büyük.\n\nDevam etmek istediğinizden emin misiniz?';
+            if (!confirm(msg)) { e.preventDefault(); }
+        }
+    });
 }
 
 document.addEventListener('keydown', function(e) {

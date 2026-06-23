@@ -56,8 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     $mv_mat_type = trim($_POST['mv_mat_type'] ?? '');
     $mv_mat_name = trim($_POST['mv_mat_name'] ?? '');
     $mv_depo     = trim($_POST['mv_depo']    ?? '');
-    $mv_qty      = num($_POST['mv_qty']      ?? '0');
     $mv_unit     = trim($_POST['mv_unit']    ?? 'adet');
+    $mv_qty      = parse_stock_quantity(trim($_POST['mv_qty'] ?? ''), $mv_unit);
     $mv_belge    = trim($_POST['mv_belge']   ?? '');
     $mv_firma    = trim($_POST['mv_firma']   ?? '');
     $mv_note     = trim($_POST['mv_note']    ?? '');

@@ -667,6 +667,79 @@ if ($has_msm) {
 }
 $veri_giris_sorun = $kasa_tipsiz_count + $palet_tipsiz_count + $miktar_sifir_count;
 
+// ── J) Miktar format kalitesi ────────────────────────────────
+// J1: adet biriminde ondalıklı (küsuratlı) kayıtlar
+$adet_ondal_rows  = [];
+$adet_ondal_count = 0;
+if ($has_msm) {
+    try {
+        $adet_ondal_count = (int)$pdo->query(
+            "SELECT COUNT(*) FROM material_stock_movements WHERE unit='adet' AND quantity != FLOOR(quantity)"
+        )->fetchColumn();
+        if ($adet_ondal_count > 0) {
+            $adet_ondal_rows = $pdo->query(
+                "SELECT id, movement_date, movement_type, material_name, material_type,
+                        depo, quantity, unit, source_type
+                   FROM material_stock_movements
+                  WHERE unit='adet' AND quantity != FLOOR(quantity)
+                  ORDER BY id DESC LIMIT 100"
+            )->fetchAll();
+        }
+    } catch (PDOException $e) { $adet_ondal_count = 0; $adet_ondal_rows = []; }
+}
+
+// J2: Şüpheli yüksek miktarlar
+// adet > 100000, kg/m/m² > 50000, diğer > 10000
+$suph_yuksek_rows  = [];
+$suph_yuksek_count = 0;
+if ($has_msm) {
+    try {
+        $suph_yuksek_count = (int)$pdo->query("
+            SELECT COUNT(*) FROM material_stock_movements
+             WHERE (unit = 'adet' AND quantity > 100000)
+                OR (unit IN ('kg','m','m²') AND quantity > 50000)
+                OR (unit NOT IN ('adet','kg','m','m²') AND quantity > 10000)
+        ")->fetchColumn();
+        if ($suph_yuksek_count > 0) {
+            $suph_yuksek_rows = $pdo->query("
+                SELECT id, movement_date, movement_type, material_name, material_type,
+                       depo, quantity, unit, source_type, source_id, note
+                  FROM material_stock_movements
+                 WHERE (unit = 'adet' AND quantity > 100000)
+                    OR (unit IN ('kg','m','m²') AND quantity > 50000)
+                    OR (unit NOT IN ('adet','kg','m','m²') AND quantity > 10000)
+                 ORDER BY quantity DESC LIMIT 100
+            ")->fetchAll();
+        }
+    } catch (PDOException $e) { $suph_yuksek_count = 0; $suph_yuksek_rows = []; }
+}
+
+// J3: Aynı material_id için karışık birim kullanan hareketler
+$birim_karisik_rows  = [];
+$birim_karisik_count = 0;
+if ($has_msm) {
+    try {
+        $birim_karisik_rows = $pdo->query("
+            SELECT m.material_id,
+                   COALESCE(md.name, MAX(m.material_name)) AS mat_name,
+                   COUNT(DISTINCT m.unit)       AS unit_cesit,
+                   GROUP_CONCAT(DISTINCT m.unit ORDER BY m.unit SEPARATOR ', ') AS birimler,
+                   COUNT(*)                     AS hareket_sayisi,
+                   GROUP_CONCAT(DISTINCT COALESCE(NULLIF(m.depo,''),'[Boş]') ORDER BY m.depo SEPARATOR ', ') AS depolar
+              FROM material_stock_movements m
+              LEFT JOIN material_definitions md ON md.id = m.material_id
+             WHERE m.material_id IS NOT NULL
+             GROUP BY m.material_id
+            HAVING COUNT(DISTINCT m.unit) > 1
+             ORDER BY unit_cesit DESC, mat_name
+             LIMIT 100
+        ")->fetchAll();
+        $birim_karisik_count = count($birim_karisik_rows);
+    } catch (PDOException $e) { $birim_karisik_count = 0; $birim_karisik_rows = []; }
+}
+
+$qty_sorun_toplam = $adet_ondal_count + $suph_yuksek_count + $birim_karisik_count;
+
 // ── Özet sayılar ─────────────────────────────────────────────
 $summary = [
     'duplicate_grup'    => count($duplicate_groups),
@@ -677,10 +750,12 @@ $summary = [
     'sync_eksik'        => $sync_eksik_count,
     'pasif_kullanim'    => count($pasif_kullanim_rows),
     'veri_giris'        => $veri_giris_sorun,
+    'qty_sorun'         => $qty_sorun_toplam,
 ];
 $toplam_sorun = $summary['duplicate_grup'] + ($summary['null_mid'] > 0 ? 1 : 0)
               + ($summary['split_risk'])    + ($summary['orphan'] > 0 ? 1 : 0)
-              + ($summary['sync_eksik'] > 0 ? 1 : 0) + ($summary['veri_giris'] > 0 ? 1 : 0);
+              + ($summary['sync_eksik'] > 0 ? 1 : 0) + ($summary['veri_giris'] > 0 ? 1 : 0)
+              + ($summary['qty_sorun'] > 0 ? 1 : 0);
 
 // ============================================================
 // HTML
@@ -774,6 +849,10 @@ render_header('Malzeme Stok Teşhis');
     <div class="tehis-kart <?= $summary['veri_giris'] > 0 ? 'warn' : 'ok' ?>">
         <div class="tehis-kart-num"><?= $summary['veri_giris'] ?></div>
         <div class="tehis-kart-lbl">Veri Giriş Kalitesi</div>
+    </div>
+    <div class="tehis-kart <?= $summary['qty_sorun'] > 0 ? 'warn' : 'ok' ?>">
+        <div class="tehis-kart-num"><?= $summary['qty_sorun'] ?></div>
+        <div class="tehis-kart-lbl">Miktar Format Sorunu</div>
     </div>
 </div>
 
@@ -1808,6 +1887,169 @@ $vg_kayit_tip = fn($t) => ($t ?? 'yukleme') === 'cikma' ? 'Çıkma' : 'Yükleme'
     <?php endforeach; ?>
     </tbody>
 </table>
+</div>
+<?php endif; ?>
+
+<?php endif; ?>
+<?php tehis_section_close(); ?>
+
+<!-- ──────────────────────────────────────────────────────────
+     BÖLÜM 14: Miktar Format Sorunları (QA)
+     ────────────────────────────────────────────────────────── -->
+<?php
+$qty_badge = $summary['qty_sorun'] > 0
+    ? '<span class="tehis-badge badge-warn">'.$summary['qty_sorun'].' kayıt</span>'
+    : '<span class="tehis-badge badge-ok">Temiz</span>';
+tehis_section_open('b14', '14 · Miktar Format Sorunları', $qty_badge, $summary['qty_sorun'] > 0);
+$vg_tip_lbl14 = fn($t) => match ($t) {
+    'giris' => 'Giriş', 'sevk' => 'Sevk', 'kullanim' => 'Kullanım', 'duzeltme' => 'Düzeltme', default => (string)$t,
+};
+?>
+<p class="tehis-sub">
+    Birim-miktar uyumsuzlukları, adet biriminde ondalıklı kayıtlar ve olağan dışı yüksek miktarlar.
+    Bu bölüm <strong>yalnızca tespit eder</strong> — otomatik düzeltme yapılmaz.
+    Düzeltme yapılacaksa Hareketler sayfasından her kayıt tek tek düzenlenebilir (admin-only, audit log tutulur).
+</p>
+
+<?php if ($summary['qty_sorun'] === 0): ?>
+    <p style="color:#16a34a">✓ Miktar format sorunu tespit edilmedi.</p>
+<?php else: ?>
+
+<?php if ($birim_karisik_count > 0): ?>
+<h4 style="margin:4px 0 4px;font-size:.86rem">
+    A) Aynı malzeme, karışık birim kullanan hareketler
+    <span class="tehis-badge badge-warn"><?= $birim_karisik_count ?> malzeme</span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">
+    Aynı material_id için farklı birimde (ör. hem adet hem kg) hareket girilmiş.
+    Stok toplamı birim bazında ayrıştırılmadığı için elma + armut toplanmış olabilir.
+    <strong>Öneri (otomatik müdahale yok):</strong> hareketleri Hareketler sayfasında inceleyin, yanlış birimli olanı düzeltin.
+</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th class="num">Mat. ID</th><th>Malzeme</th><th class="num">Birim Çeşit</th>
+        <th>Kullanılan Birimler</th><th class="num">Hareket</th><th>Depolar</th><th></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($birim_karisik_rows as $r): ?>
+    <tr class="warn-row">
+        <td class="num"><strong><?= (int)$r['material_id'] ?></strong></td>
+        <td><?= h($r['mat_name'] ?? '—') ?></td>
+        <td class="num"><?= (int)$r['unit_cesit'] ?></td>
+        <td><strong><?= h($r['birimler']) ?></strong></td>
+        <td class="num"><?= (int)$r['hareket_sayisi'] ?></td>
+        <td style="font-size:.74rem"><?= h($r['depolar'] ?? '—') ?></td>
+        <td><a href="malzeme_hareketleri.php?mat_id=<?= (int)$r['material_id'] ?>" class="tehis-badge badge-info" style="text-decoration:none">🔍 Hareketler</a></td>
+    </tr>
+    <?php endforeach; ?>
+    <?php if ($birim_karisik_count > 100): ?>
+    <tr><td colspan="7" style="text-align:center;color:var(--muted);font-size:.8rem">… ilk 100 gösteriliyor</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+
+<?php if ($adet_ondal_count > 0): ?>
+<h4 style="margin:16px 0 4px;font-size:.86rem">
+    B) Adet biriminde ondalıklı (küsuratlı) kayıtlar
+    <span class="tehis-badge badge-warn"><?= $adet_ondal_count ?></span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">
+    Birim <code>adet</code> iken miktar tam sayı değil (ör. 1112.500).
+    Büyük ihtimalle düzenleme sırasında virgüllü değer yanlış parse edilmiş.
+    <strong>Öneri:</strong> Her kayıt için eski ve yeni değer incelenerek tek tek düzeltme yapın.
+</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th class="num">ID</th><th>Tarih</th><th>Hareket</th><th>Malzeme</th><th>Depo</th>
+        <th class="num">Miktar (Hatalı)</th><th>Birim</th><th>Öneri</th><th></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($adet_ondal_rows as $r):
+        $qty_ham  = (float)$r['quantity'];
+        $qty_tam  = (int)round($qty_ham);
+        $fark_kat = $qty_ham > 0 ? ($qty_ham / max(1, $qty_tam)) : 0;
+        $suph = ($fark_kat > 10 || $fark_kat < 0.1);
+    ?>
+    <tr class="<?= $suph ? 'crit-row' : 'warn-row' ?>">
+        <td class="num"><?= (int)$r['id'] ?></td>
+        <td><?= h(fmt_date($r['movement_date'])) ?></td>
+        <td><?= h($vg_tip_lbl14($r['movement_type'])) ?></td>
+        <td><strong><?= h($r['material_name'] ?: '—') ?></strong>
+            <div style="font-size:.72rem;color:var(--muted)"><?= h($r['material_type'] ?: '') ?></div></td>
+        <td><?= h($r['depo'] ?: '—') ?></td>
+        <td class="num <?= $suph ? 'neg' : '' ?>"><?= number_format($qty_ham, 3, ',', '.') ?></td>
+        <td><?= h($r['unit']) ?></td>
+        <td style="font-size:.78rem">
+            <?php if ($suph): ?>
+            <span class="tehis-badge badge-crit">Şüpheli: ~<?= number_format($qty_ham, 0) ?> adet olabilir</span>
+            <?php else: ?>
+            <span class="tehis-badge badge-warn"><?= $qty_tam ?> adet olabilir</span>
+            <?php endif; ?>
+        </td>
+        <td><a href="malzeme_hareketleri.php?mat_id=<?= (int)($r['material_id'] ?? 0) ?: '' ?>" class="tehis-badge badge-info" style="text-decoration:none">🔍</a></td>
+    </tr>
+    <?php endforeach; ?>
+    <?php if ($adet_ondal_count > 100): ?>
+    <tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:.8rem">… ilk 100 gösteriliyor (toplam <?= $adet_ondal_count ?>)</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+</div>
+<?php endif; ?>
+
+<?php if ($suph_yuksek_count > 0): ?>
+<h4 style="margin:16px 0 4px;font-size:.86rem">
+    C) Şüpheli yüksek miktarlar
+    <span class="tehis-badge badge-warn"><?= $suph_yuksek_count ?></span>
+</h4>
+<p class="tehis-sub" style="margin-top:2px">
+    Eşikler: <code>adet &gt; 100.000</code> · <code>kg/m/m² &gt; 50.000</code> · <code>diğer &gt; 10.000</code>.
+    Düzenleme sırasında <em>1112 → 1112.000 → num() → 1.112.000</em> türü format hatası bu kayıtlarda görünebilir.
+    <strong>Otomatik müdahale yapılmaz</strong> — her kayıt tek tek incelenip admin onaylı düzeltme yapılmalıdır.
+</p>
+<div class="table-wrap">
+<table class="tehis-table">
+    <thead><tr>
+        <th class="num">ID</th><th>Tarih</th><th>Hareket</th><th>Malzeme</th><th>Depo</th>
+        <th class="num">Miktar</th><th>Birim</th><th>Kaynak</th><th></th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($suph_yuksek_rows as $r): ?>
+    <tr class="warn-row">
+        <td class="num"><?= (int)$r['id'] ?></td>
+        <td><?= h(fmt_date($r['movement_date'])) ?></td>
+        <td><?= h($vg_tip_lbl14($r['movement_type'])) ?></td>
+        <td><strong><?= h($r['material_name'] ?: '—') ?></strong>
+            <div style="font-size:.72rem;color:var(--muted)"><?= h($r['material_type'] ?: '') ?></div></td>
+        <td><?= h($r['depo'] ?: '—') ?></td>
+        <td class="num neg"><strong><?= number_format((float)$r['quantity'], 0, ',', '.') ?></strong></td>
+        <td><?= h($r['unit']) ?></td>
+        <td style="font-size:.74rem">
+            <?= $r['source_type'] && $r['source_type'] !== '' ? h($r['source_type']) . ($r['source_id'] ? ' #'.(int)$r['source_id'] : '') : 'manuel' ?>
+        </td>
+        <td>
+            <?php if ($r['source_type'] === 'loading' && $r['source_id']): ?>
+            <a href="record_view.php?id=<?= (int)$r['source_id'] ?>" class="tehis-badge badge-info" style="text-decoration:none">Yük #<?= (int)$r['source_id'] ?></a>
+            <?php else: ?>
+            <a href="malzeme_hareketleri.php" class="tehis-badge badge-warn" style="text-decoration:none">🔍 Düzenle</a>
+            <?php endif; ?>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+    <?php if ($suph_yuksek_count > 100): ?>
+    <tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:.8rem">… ilk 100 gösteriliyor (toplam <?= $suph_yuksek_count ?>)</td></tr>
+    <?php endif; ?>
+    </tbody>
+</table>
+</div>
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:.82rem;color:#92400e">
+    ⚠ <strong>Düzeltme prosedürü (otomatik değil — tek tek):</strong>
+    Hareketler sayfasını açın → ✎ Düzenle butonuna tıklayın → eski ve yeni değeri karşılaştırın →
+    açıklama zorunlu olarak girin → kaydedin. Her değişiklik audit log'a yazılır.
 </div>
 <?php endif; ?>
 

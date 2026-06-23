@@ -27,6 +27,67 @@ function ms_stock_units(): array {
     return ['adet', 'kg', 'm', 'm²', 'paket', 'rulo', 'top', 'çift', 'set'];
 }
 
+// ── Miktar yardımcıları (Miktar-Format-QA) ────────────────
+// Tam sayı birimi mi? (adet/paket/koli/top/set/çift → ondalık olmaz)
+function ms_is_integer_unit(string $unit): bool {
+    return in_array($unit, ['adet', 'paket', 'koli', 'top', 'set', 'çift'], true);
+}
+
+// Kullanıcı girişini birime göre güvenli parse et.
+// type=number input'tan gelen değerlerde nokta ONDALIK ayracıdır (browser standardı).
+// Türkçe format (1.234,56) da desteklenir: hem nokta hem virgül varsa Türkçe format.
+// Yalnızca virgül: ondalık virgül (12,5 → 12.5).
+// Yalnızca nokta: ondalık ayraç (type=number'dan 12.5 → 12.5).
+// NOT: num() fonksiyonu stok miktarı için KULLANILMAZ; o fonksiyon yalnızca nokta
+//      varsa onu binler ayracı sayıp kaldırır (ör. "40.960" → 40960), bu davranış
+//      type=number input'tan gelen "12.5" gibi ondalık değerleri bozar.
+function parse_stock_quantity(string $input, string $unit = ''): float {
+    $s = trim(str_replace([' ', "\xc2\xa0"], '', $input));
+    if ($s === '') return 0.0;
+    if (str_contains($s, ',') && str_contains($s, '.')) {
+        // Türkçe format: 1.234,56 → binler noktayı sil, virgülü ondalık yap
+        $s = str_replace('.', '', $s);
+        $s = str_replace(',', '.', $s);
+    } elseif (str_contains($s, ',')) {
+        // Yalnızca virgül: ondalık ayraç (12,5 → 12.5)
+        $s = str_replace(',', '.', $s);
+    }
+    // Yalnızca nokta veya ayraç yok: olduğu gibi bırak (type=number ondalık standardı)
+    $v = is_numeric($s) ? (float)$s : 0.0;
+    if (ms_is_integer_unit($unit)) {
+        return (float)(int)round($v);
+    }
+    return round($v, 3);
+}
+
+// DB'den gelen float değeri düzenleme input'u için formatla.
+// adet → "1112" (nokta/sıfır yok), kg/m → "12.5" (gereksiz sıfırlar yok)
+// Sıfır/null → '' (input boş kalır).
+function format_stock_quantity_for_input(float $value, string $unit = ''): string {
+    if ($value == 0.0) return '';
+    if (ms_is_integer_unit($unit)) {
+        return (string)(int)round($value);
+    }
+    $s = number_format($value, 3, '.', '');
+    // Gereksiz sıfırları kaldır: "12.500" → "12.5", "12.000" → "12"
+    return rtrim(rtrim($s, '0'), '.');
+}
+
+// Görüntüleme için birime göre Türkçe format (Türkçe: ondalık virgül, binler nokta).
+// adet → "1.112" (tam sayı, binler nokta), kg → "12,5" (sıfır içeren → "12,500")
+function format_stock_quantity_for_display(float $value, string $unit = ''): string {
+    if (ms_is_integer_unit($unit)) {
+        return number_format((int)round($value), 0, ',', '.');
+    }
+    $s = number_format($value, 3, ',', '.');
+    // Gereksiz sıfırlar kaldır: "12,500" → "12,5" ama "0,000" → "0"
+    if (str_contains($s, ',')) {
+        $s = rtrim($s, '0');
+        $s = rtrim($s, ',');
+    }
+    return $s;
+}
+
 // ── Stok kategorileri (Kasa / Palet / Sarf / Diğer) ───────
 function ms_cat_labels(): array {
     return ['kasa' => 'Kasa', 'palet' => 'Palet', 'sarf' => 'Sarf', 'diger' => 'Diğer'];
