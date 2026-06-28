@@ -54,6 +54,7 @@ function col_label(string $c): string {
         'durum'=>'Durum','palet_sayisi'=>'Palet','toplam_kasa'=>'Kasa',
         'toplam_brut'=>'Brüt KG','toplam_dara'=>'Dara KG','toplam_net'=>'Net KG',
         'nakliye_bedeli'=>'Nakliye Bedeli','avans'=>'Avans','created_at'=>'Oluşturulma',
+        'kasa_cinsi_listesi'=>'Kasa Cinsi',
         'depo'=>'Depo','kayit_sayisi'=>'Kayıt Sayısı','ilk_tarih'=>'İlk Tarih','son_tarih'=>'Son Tarih',
         'toplam_kayit'=>'Toplam Kayıt','yukleme_sayisi'=>'Yükleme','cikma_sayisi'=>'Çıkma',
         'material_type'=>'Tür','material_name'=>'Malzeme','unit_dara_kg'=>'Birim Dara (kg)',
@@ -141,6 +142,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
                    (SELECT p2.depo FROM loading_pallets p2
                     WHERE p2.loading_record_id = r.id AND p2.depo != ''
                     ORDER BY p2.id LIMIT 1)  AS depo,
+                   (SELECT GROUP_CONCAT(DISTINCT md2.name ORDER BY md2.name SEPARATOR ', ')
+                    FROM loading_pallets p3
+                    JOIN material_definitions md2 ON md2.id = p3.kasa_cinsi_id
+                    WHERE p3.loading_record_id = r.id) AS kasa_cinsi_listesi,
                    {$agg_palet}              AS palet_sayisi,
                    {$agg_kasa}               AS toplam_kasa,
                    {$agg_brut}               AS toplam_brut,
@@ -203,10 +208,10 @@ if ($type === 'yukleme' || $type === 'cikma') {
         // Kolon grupları: Temel | Ürün | Nakliye | Toplamlar | Durum
         $cols = [
             'id','tarih','firma','bolge','parti_no',
-            'alici','urun','brand','urun_sahibi_adi','etiket','gumruk','fatura_no','casus_no','depo',
-            'sofor_adi','telefon','on_plaka','nakliye_sirketi','nakliye_bedeli','avans',
+            'alici','urun','brand','urun_sahibi_adi','etiket','gumruk','casus_no','depo',
+            'sofor_adi','telefon','on_plaka','nakliye_sirketi',
             'palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net',
-            'durum',
+            'kasa_cinsi_listesi','durum',
         ];
     } else { // cikma — durum sütunu yok, alıcı yok, çıkma nedeni göster
         $cols = ['tarih','firma','bolge','depo','urun','cikis_nedeni','palet_sayisi','toplam_kasa','toplam_brut','toplam_dara','toplam_net'];
@@ -217,7 +222,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $totals['toplam_brut']    = ($totals['toplam_brut']    ?? 0) + (float)$r['toplam_brut'];
         $totals['toplam_dara']    = ($totals['toplam_dara']    ?? 0) + (float)$r['toplam_dara'];
         $totals['toplam_net']     = ($totals['toplam_net']     ?? 0) + (float)$r['toplam_net'];
-        $totals['nakliye_bedeli'] = ($totals['nakliye_bedeli'] ?? 0) + (float)$r['nakliye_bedeli'];
+        // nakliye_bedeli ekranda gösterilmiyor, toplam hesaplanmıyor
     }
 
     // İşaretli / İşaretsiz palet ayrımı
@@ -1804,9 +1809,6 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <?php if (isset($totals['toplam_dara_kg'])): ?>
     <div class="rpt-sum-item"><span>Toplam Dara</span><strong><?= fmt_kg($totals['toplam_dara_kg']) ?></strong></div>
     <?php endif; ?>
-    <?php if (isset($totals['nakliye_bedeli']) && $totals['nakliye_bedeli'] > 0): ?>
-    <div class="rpt-sum-item"><span>Nakliye Bedeli</span><strong><?= fmt_money($totals['nakliye_bedeli']) ?></strong></div>
-    <?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -1857,14 +1859,14 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <thead>
     <tr>
         <?php foreach ($cols as $c): ?>
-        <th class="<?= in_array($c, ['id','toplam_brut','toplam_dara','toplam_net','toplam_kasa','palet_sayisi','kayit_sayisi','toplam_adet','toplam_dara_kg','kullanim_sayisi','unit_dara_kg','net_kg','tartim1','tartim2','nakliye_bedeli','avans','toplam_kayit','yukleme_sayisi','cikma_sayisi','kasa_sayisi'], true) ? 'num' : '' ?>"><?= h(col_label($c)) ?></th>
+        <th class="<?= in_array($c, ['id','toplam_brut','toplam_dara','toplam_net','toplam_kasa','palet_sayisi','kayit_sayisi','toplam_adet','toplam_dara_kg','kullanim_sayisi','unit_dara_kg','net_kg','tartim1','tartim2','toplam_kayit','yukleme_sayisi','cikma_sayisi','kasa_sayisi'], true) ? 'num' : '' ?>"><?= h(col_label($c)) ?></th>
         <?php endforeach; ?>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?><th class="actions-col rpt-no-print">Bağlantı</th><?php endif; ?>
         <?php if ($type === 'kantar'): ?><th class="actions-col rpt-no-print">Bağlantı</th><?php endif; ?>
     </tr>
     </thead>
     <tbody>
-    <?php $num_cols = ['toplam_brut','toplam_dara','toplam_net','toplam_kasa','toplam_adet','toplam_dara_kg','unit_dara_kg','net_kg','tartim1','tartim2','nakliye_bedeli','avans','toplam_brut','stok_giris','stok_sevk']; ?>
+    <?php $num_cols = ['toplam_brut','toplam_dara','toplam_net','toplam_kasa','toplam_adet','toplam_dara_kg','unit_dara_kg','net_kg','tartim1','tartim2','stok_giris','stok_sevk']; ?>
     <?php $int_cols = ['id','palet_sayisi','kayit_sayisi','kullanim_sayisi','toplam_kayit','yukleme_sayisi','cikma_sayisi','kasa_sayisi','palet_sayisi']; ?>
     <?php foreach ($rows as $r): ?>
     <tr>
