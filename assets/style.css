@@ -1879,7 +1879,7 @@ body.print-mode .asya-sheet {
 .pm-overlay[hidden] { display: none !important; }
 .pm-overlay {
     position: fixed; inset: 0; z-index: 600;
-    background: rgba(0,0,0,0.45);
+    background: rgba(0,0,0,0.6);
     display: flex; align-items: flex-end; justify-content: center;
     animation: pmFadeIn .15s ease;
 }
@@ -2880,8 +2880,8 @@ body.notes-modal-open { overflow: hidden; }
 }
 
 /* ── record_view: iki kolon düzen + malzeme sidebar ── */
-.rv-layout { display: flex; flex-direction: column; }
-.rv-pallet-col { min-width: 0; overflow: hidden; }
+.rv-layout { display: flex; flex-direction: column; overflow-x: clip; }
+.rv-pallet-col { min-width: 0; overflow-x: clip; }
 .rv-materials-col {
     margin-top: 12px;
     border: 1px solid var(--border);
