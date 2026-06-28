@@ -1077,7 +1077,7 @@ $brand_label = $_brand_names[$_b] ?? 'ASYA FRESH';
         <label class="bm-check-label">
           <input type="checkbox" class="bm-pallet-cb" value="<?= (int)$p['id'] ?>" checked>
           <span>Palet <?= h($p['palet_no']) ?></span>
-          <span class="muted"><?= (int)$p['kasa_adeti'] ?> kasa · <?= h(fmt_kg($p['brut_kg'])) ?> kg</span>
+          <span class="muted"><?php if (!empty($p['kasa_cinsi_adi'])): ?><?= h($p['kasa_cinsi_adi']) ?> · <?php endif; ?><?= (int)$p['kasa_adeti'] ?> kasa · <?= h(fmt_kg($p['brut_kg'])) ?> kg</span>
         </label>
         <?php endforeach; ?>
       </div>
