@@ -58,7 +58,9 @@ function valid_username(string $u): bool {
 $all_roles  = $pdo->query("SELECT id, slug, label FROM roles ORDER BY id")->fetchAll();
 $admin_role = array_values(array_filter($all_roles, fn($r) => $r['slug'] === 'admin'))[0] ?? null;
 $admin_rid  = $admin_role ? (int)$admin_role['id'] : 0;
-$valid_rids = array_column($all_roles, 'id');
+// KRİTİK: PDO id'leri string döndürebilir; strict in_array için int'e zorla.
+// Aksi halde role_id eşleşmez ve user_roles'a HİÇ rol yazılmaz → kullanıcı yetkisiz kalır.
+$valid_rids = array_map('intval', array_column($all_roles, 'id'));
 
 // ── POST Handler ──────────────────────────────────────────────────────────
 $action  = '';
