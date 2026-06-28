@@ -16,6 +16,18 @@ function fmt_tarih_tr(?string $d): string {
     return $ts ? (int)date('j', $ts) . ' ' . $ay[(int)date('n', $ts)] : '';
 }
 
+// Ürün sahibi firma adına göre belirgin, sabit renk üret.
+// CİHAT → kırmızı, ASYA → mavi; diğer firmalar paletten otomatik (aynı ad hep aynı renk).
+function urun_sahibi_renk(string $name): string {
+    $norm = mb_strtoupper(trim($name), 'UTF-8');
+    $norm = strtr($norm, ['İ'=>'I','I'=>'I','Ş'=>'S','Ğ'=>'G','Ü'=>'U','Ö'=>'O','Ç'=>'C']);
+    if ($norm === '') return '#6b7280';
+    if (strpos($norm, 'CIHAT') !== false) return '#dc2626'; // kırmızı
+    if (strpos($norm, 'ASYA')  !== false) return '#2563eb'; // mavi
+    $palette = ['#059669','#7c3aed','#d97706','#db2777','#0891b2','#65a30d','#9333ea','#ea580c','#0d9488','#c026d3'];
+    return $palette[crc32($norm) % count($palette)];
+}
+
 function valid_date(string $d): bool {
     return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
 }
@@ -242,7 +254,7 @@ render_flash();
                         <div class="td-son-duz"><?= h(fmt_dt_short($r['updated_at'])) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td class="td-urun-sahibi"><?= $r['urun_sahibi_adi'] ? h($r['urun_sahibi_adi']) : '<span class="muted">—</span>' ?></td>
+                    <td class="td-urun-sahibi"><?php if ($r['urun_sahibi_adi']): ?><strong style="color:<?= urun_sahibi_renk($r['urun_sahibi_adi']) ?>"><?= h($r['urun_sahibi_adi']) ?></strong><?php else: ?><span class="muted">—</span><?php endif; ?></td>
                     <td>
                         <?= h($r['firma']) ?>
                         <?php if ($locked): ?><span class="badge-locked">🔒</span><?php endif; ?>
@@ -316,7 +328,7 @@ render_flash();
                             if ($r['casus_no']) echo 'Casus: ' . h($r['casus_no']);
                         ?></div><?php endif; ?>
                         <?php if ($r['etiket']): ?><div style="color:#2563eb;font-size:.82rem"><?= h($r['etiket']) ?></div><?php endif; ?>
-                        <?php if ($r['urun_sahibi_adi']): ?><div style="color:#c00000;font-size:.85rem">Ürün Sahibi: <?= h($r['urun_sahibi_adi']) ?></div><?php endif; ?>
+                        <?php if ($r['urun_sahibi_adi']): ?><div style="font-size:.85rem">Ürün Sahibi: <strong style="color:<?= urun_sahibi_renk($r['urun_sahibi_adi']) ?>"><?= h($r['urun_sahibi_adi']) ?></strong></div><?php endif; ?>
                     </div>
                     <div class="pc-kebab-wrap">
                         <button class="pc-kebab" type="button" title="İşlemler">⋮</button>
