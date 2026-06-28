@@ -678,8 +678,8 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .info-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px 14px;
-    margin-bottom: 16px;
+    gap: 6px 14px;
+    margin-bottom: 10px;
     font-size: .9rem;
 }
 .info-grid > div {
@@ -709,7 +709,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 
 .section-title {
     font-weight: 700; font-size: 1rem;
-    margin: 16px 0 8px;
+    margin: 10px 0 6px;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--border);
 }
@@ -848,8 +848,8 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 
 /* View ekranı başlık kartı */
 .view-hdr-card {
-    padding-bottom: 12px;
-    margin-bottom: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
     border-bottom: 2px solid var(--text);
 }
 .view-hdr-firma {
@@ -2872,6 +2872,47 @@ body.notes-modal-open { overflow: hidden; }
 @media (max-width: 767px) {
     .rv-head .rv-back { font-size: .8rem; padding: 6px 10px; }
     .rv-actions .btn { font-size: .8rem; padding: 6px 10px; }
+}
+
+/* ── record_view: iki kolon düzen + malzeme sidebar ── */
+.rv-layout { display: flex; flex-direction: column; }
+.rv-pallet-col { min-width: 0; }
+.rv-materials-col {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    background: #fafbfd;
+    font-size: .88rem;
+    align-self: start;
+}
+.rv-mat-section { margin-bottom: 14px; }
+.rv-mat-section:last-child { margin-bottom: 0; }
+.rv-mat-section-title {
+    font-size: .7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin-bottom: 7px;
+    padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.rv-mat-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0; border-bottom: 1px dashed var(--border);
+    gap: 8px; font-size: .86rem;
+}
+.rv-mat-row:last-child { border-bottom: none; }
+.rv-mat-total { font-weight: 700; border-top: 1px solid var(--border-strong, #9ca3af); border-bottom: none; margin-top: 2px; padding-top: 5px; }
+.rv-mat-item { padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.rv-mat-item:last-child { border-bottom: none; }
+.rv-mat-name { font-weight: 600; font-size: .86rem; }
+.rv-mat-meta { font-size: .76rem; color: var(--muted); margin-top: 1px; }
+@media (min-width: 900px) {
+    .rv-layout {
+        display: grid;
+        grid-template-columns: 1fr 260px;
+        gap: 16px;
+        align-items: start;
+    }
+    .rv-materials-col { margin-top: 0; }
 }
 
 /* ── Kantar: canlı Brüt/Dara/Net hesap ── */

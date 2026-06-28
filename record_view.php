@@ -265,6 +265,19 @@ foreach ($pallets as $p) {
 $depo_values = array_unique(array_filter(array_map('trim', array_column($pallets, 'depo'))));
 $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 
+// Ek malzemeleri material_id'ye göre grupla (sağ sidebar için)
+$em_groups = [];
+foreach ($pallets as $p) {
+    foreach (($p['materials'] ?? []) as $m) {
+        $kid = (int)$m['def_id'];
+        if (!isset($em_groups[$kid])) {
+            $em_groups[$kid] = ['name' => $m['material_name'], 'palet_count' => 0, 'total_qty' => 0.0];
+        }
+        $em_groups[$kid]['palet_count']++;
+        $em_groups[$kid]['total_qty'] += (float)$m['quantity'];
+    }
+}
+
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <?php if ($print): ?>
@@ -421,10 +434,12 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
 </div>
 <?php endif; ?>
 
+<div class="rv-layout">
+<div class="rv-pallet-col">
 <?php if (!$_rv_is_yukleme): ?>
-<h3 class="section-title">Palet Listesi</h3>
+<h3 class="section-title" style="margin-top:0">Palet Listesi</h3>
 <?php else: ?>
-<h3 class="section-title">Yükleme Planı</h3>
+<h3 class="section-title" style="margin-top:0">Yükleme Planı</h3>
 <?php endif; ?>
 
 <!-- PC tablo -->
@@ -466,16 +481,7 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
         <tfoot>
         <tr class="totals-row">
             <td class="right strong">TOPLAM</td>
-            <td class="num strong">
-                <?= (int)$tot['toplam_kasa'] ?>
-                <?php if (!empty($kasa_breakdown)): ?>
-                <div style="font-size:.72rem;font-weight:normal;margin-top:3px;line-height:1.5;white-space:nowrap">
-                    <?php foreach ($kasa_breakdown as $name => $adet): ?>
-                    <div><?= h($name) ?>: <b><?= $adet ?></b></div>
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
-            </td>
+            <td class="num strong"><?= (int)$tot['toplam_kasa'] ?></td>
             <td colspan="5"></td>
             <td class="num strong"><?= h(fmt_kg($tot['toplam_brut'])) ?></td>
             <td class="num strong tot-orange"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td>
@@ -525,22 +531,47 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
         </div>
     <?php endforeach; ?>
     <div class="totals view-totals-mobile">
-        <div>
-            <span>Toplam Kasa</span>
-            <strong><?= (int)$tot['toplam_kasa'] ?></strong>
-            <?php if (!empty($kasa_breakdown)): ?>
-            <div style="font-size:.75rem;font-weight:normal;margin-top:2px;line-height:1.5">
-                <?php foreach ($kasa_breakdown as $name => $adet): ?>
-                <div><?= h($name) ?>: <b><?= $adet ?></b></div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; ?>
-        </div>
+        <div><span>Toplam Kasa</span><strong><?= (int)$tot['toplam_kasa'] ?></strong></div>
         <div><span>Toplam Brüt</span><strong><?= h(fmt_kg($tot['toplam_brut'])) ?></strong></div>
         <div class="tot-orange"><span>Toplam Dara</span><strong><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></strong></div>
         <div class="tot-orange"><span>Toplam Net</span><strong class="strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></strong></div>
     </div>
 </div>
+</div><!-- /.rv-pallet-col -->
+
+<!-- Sağ: Kasa dağılımı + Ek malzemeler -->
+<div class="rv-materials-col">
+    <?php if (!empty($kasa_breakdown)): ?>
+    <div class="rv-mat-section">
+        <div class="rv-mat-section-title">Kasa Dağılımı</div>
+        <?php foreach ($kasa_breakdown as $name => $adet): ?>
+        <div class="rv-mat-row">
+            <span><?= h($name) ?></span>
+            <strong><?= $adet ?></strong>
+        </div>
+        <?php endforeach; ?>
+        <div class="rv-mat-row rv-mat-total">
+            <span>Toplam</span>
+            <strong><?= (int)$tot['toplam_kasa'] ?></strong>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if (!empty($em_groups)): ?>
+    <div class="rv-mat-section">
+        <div class="rv-mat-section-title">Ek Malzemeler</div>
+        <?php foreach ($em_groups as $eg): ?>
+        <div class="rv-mat-item">
+            <div class="rv-mat-name"><?= h($eg['name']) ?></div>
+            <div class="rv-mat-meta"><?= $eg['palet_count'] ?> palet · <?= h(fmt_kg($eg['total_qty'])) ?> adet</div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php if (empty($kasa_breakdown) && empty($em_groups)): ?>
+    <p class="muted" style="font-size:.85rem;margin:0">Malzeme bilgisi yok.</p>
+    <?php endif; ?>
+</div><!-- /.rv-materials-col -->
+</div><!-- /.rv-layout -->
 </section>
 
 <?php else: ?>
