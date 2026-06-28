@@ -266,15 +266,20 @@ $depo_values = array_unique(array_filter(array_map('trim', array_column($pallets
 $depo_str = !empty($depo_values) ? implode(', ', $depo_values) : '—';
 
 // Ek malzemeleri material_id'ye göre grupla (sağ sidebar için)
+// Kasa bazlı malzemelerde quantity × kasa_adeti uygulanır (stok_use ile aynı mantık)
 $em_groups = [];
 foreach ($pallets as $p) {
     foreach (($p['materials'] ?? []) as $m) {
         $kid = (int)$m['def_id'];
+        $basis = material_calc_basis($m['material_type'], $m['material_name']);
+        $eff   = ($basis === 'kasa')
+            ? (float)$m['quantity'] * (int)$p['kasa_adeti']
+            : (float)$m['quantity'];
         if (!isset($em_groups[$kid])) {
             $em_groups[$kid] = ['name' => $m['material_name'], 'palet_count' => 0, 'total_qty' => 0.0];
         }
         $em_groups[$kid]['palet_count']++;
-        $em_groups[$kid]['total_qty'] += (float)$m['quantity'];
+        $em_groups[$kid]['total_qty'] += $eff;
     }
 }
 

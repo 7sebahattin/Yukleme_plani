@@ -2229,6 +2229,10 @@ body.print-mode .asya-sheet {
 /* ── BM Tabs ── */
 .bm-tabs {
     display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     margin: 0 -20px;
@@ -2237,6 +2241,7 @@ body.print-mode .asya-sheet {
 .bm-tab-btn {
     background: none; border: none; cursor: pointer;
     padding: 11px 16px; font-size: .9rem; font-weight: 500;
+    flex-shrink: 0; white-space: nowrap;
     color: var(--muted); border-bottom: 2px solid transparent;
     margin-bottom: -1px; font-family: inherit;
 }
@@ -2876,7 +2881,7 @@ body.notes-modal-open { overflow: hidden; }
 
 /* ── record_view: iki kolon düzen + malzeme sidebar ── */
 .rv-layout { display: flex; flex-direction: column; }
-.rv-pallet-col { min-width: 0; }
+.rv-pallet-col { min-width: 0; overflow: hidden; }
 .rv-materials-col {
     margin-top: 12px;
     border: 1px solid var(--border);
