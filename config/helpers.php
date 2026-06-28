@@ -1078,6 +1078,19 @@ function db_has_column(string $table, string $column): bool {
             }
         } catch (PDOException $e) {}
 
+        // 11b) Depo sorumluluğu — user_depolar (kullanıcı → depo ataması)
+        // Yeni tablo; mevcut veriye dokunmaz. Atama YOKSA kullanıcı kısıtsızdır (her şeyi görür).
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `user_depolar` (
+                `user_id`    INT NOT NULL,
+                `depo`       VARCHAR(100) NOT NULL,
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`user_id`, `depo`),
+                INDEX `idx_ud_user` (`user_id`),
+                INDEX `idx_ud_depo` (`depo`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) { error_log('[migration user_depolar] ' . $e->getMessage()); }
+
         // 12) Audit log tablosu
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `audit_log` (

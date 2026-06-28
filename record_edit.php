@@ -16,6 +16,17 @@ if ($id <= 0) {
     header('Location: records.php'); exit;
 }
 
+// Depo sorumluluğu: kısıtlı kullanıcı, kendi depolarına ait OLMAYAN kaydı düzenleyemez.
+$_allowed_depots = function_exists('user_allowed_depots') ? user_allowed_depots() : null;
+if ($_allowed_depots !== null) {
+    $_dp = db()->prepare("SELECT DISTINCT depo FROM loading_pallets WHERE loading_record_id = ?");
+    $_dp->execute([$id]);
+    $_rec_depots = array_map(fn($d) => trim((string)$d), $_dp->fetchAll(PDO::FETCH_COLUMN));
+    if (empty(array_intersect($_rec_depots, $_allowed_depots))) {
+        forbidden('Bu kayıt sizin sorumlu olduğunuz depolara ait değil.');
+    }
+}
+
 $errors  = [];
 $pallets = [];
 

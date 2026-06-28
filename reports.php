@@ -189,6 +189,11 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $sql .= " AND (r.firma LIKE :q OR r.parti_no LIKE :q OR r.alici LIKE :q OR r.urun LIKE :q)";
         $p[':q'] = '%'.$f_q.'%';
     }
+    // Depo sorumluluğu: kısıtlı kullanıcı yalnız kendi depolarına ait kayıtları görür
+    if (function_exists('depo_sql_records')) {
+        [$_drs, $_drp] = depo_sql_records('r');
+        if ($_drs !== '') { $sql .= $_drs; $p = array_merge($p, $_drp); }
+    }
     rpt_date_filter($sql, $p, 'r.tarih', $f_from, $f_to);
     $sort_map = [
         'tarih' => 'r.tarih DESC, r.id DESC',

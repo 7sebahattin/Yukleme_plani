@@ -258,6 +258,83 @@ function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
     exit;
 }
 
+// ── Depo Sorumluluğu (çoklu depo) ─────────────────────────
+//
+// Kural (fail-open):
+//   • Admin            → null  (kısıtsız, tüm depolar)
+//   • Atama YOK         → null  (kısıtsız — mevcut kullanıcılar etkilenmez)
+//   • Atama VAR         → ['Depo A', 'Depo B', ...] (yalnız bunları görür)
+//   • Tablo yok / hata  → null  (fail-open: kimseyi kilitleme)
+//
+// null döndüğünde çağıran taraf HİÇ filtre uygulamaz (her şeyi gösterir).
+function user_allowed_depots(?int $user_id = null): ?array {
+    static $cache = [];
+
+    if ($user_id === null) {
+        $u = current_user();
+        if ($u === null) return [];        // giriş yok → hiçbir şey
+        $user_id = (int)$u['id'];
+    }
+    if (array_key_exists($user_id, $cache)) return $cache[$user_id];
+
+    // Admin → kısıtsız
+    try {
+        $st = db()->prepare("
+            SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = ? AND r.slug = 'admin' LIMIT 1
+        ");
+        $st->execute([$user_id]);
+        if ($st->fetchColumn()) { return $cache[$user_id] = null; }
+    } catch (PDOException $e) { return $cache[$user_id] = null; }
+
+    try {
+        $st = db()->prepare("SELECT depo FROM user_depolar WHERE user_id = ?");
+        $st->execute([$user_id]);
+        $rows = array_values(array_filter(array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN)), fn($d) => $d !== ''));
+        // Atama yoksa kısıtsız (null); varsa o listeyle sınırlı
+        return $cache[$user_id] = (count($rows) === 0) ? null : $rows;
+    } catch (PDOException $e) {
+        // user_depolar henüz yoksa veya hata → fail-open
+        return $cache[$user_id] = null;
+    }
+}
+
+function user_is_depot_restricted(): bool {
+    return user_allowed_depots() !== null;
+}
+
+// Belirli bir depo, geçerli kullanıcı için görünür mü?
+function depot_visible_to_user(?string $depo): bool {
+    $allowed = user_allowed_depots();
+    if ($allowed === null) return true;          // kısıtsız
+    if ($depo === null || $depo === '') return false;
+    return in_array($depo, $allowed, true);
+}
+
+// loading_records'ı palet deposuna göre kapsayan WHERE parçası döndürür.
+// NAMED parametre üretir ($prefix0, $prefix1 ...) — named-param sorgularla birlikte kullanılır.
+// Dönen: [' AND EXISTS(...) ', [':udp0'=>'Depo', ...]]  — kısıtsızsa ['', []].
+function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'): array {
+    $allowed = user_allowed_depots();
+    if ($allowed === null || count($allowed) === 0) return ['', []];
+    $names = []; $params = [];
+    foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
+    $sql = " AND EXISTS (SELECT 1 FROM loading_pallets _udp
+                         WHERE _udp.loading_record_id = {$records_alias}.id
+                         AND _udp.depo IN (" . implode(',', $names) . ")) ";
+    return [$sql, $params];
+}
+
+// depo kolonu OLAN tablolar (kantar vb.) için NAMED parametreli WHERE parçası.
+// Dönen: [' AND col IN (...) ', [':udc0'=>'Depo', ...]]  — kısıtsızsa ['', []].
+function depo_sql_column(string $col, string $prefix = ':udc'): array {
+    $allowed = user_allowed_depots();
+    if ($allowed === null || count($allowed) === 0) return ['', []];
+    $names = []; $params = [];
+    foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
+    return [" AND $col IN (" . implode(',', $names) . ") ", $params];
+}
+
 function require_perm(string $permission): void {
     if (current_user() === null) {
         $next = urlencode($_SERVER['REQUEST_URI'] ?? '');

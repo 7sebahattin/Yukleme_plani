@@ -114,6 +114,13 @@ if ($tarih_bit !== '') {
     $params[':tarih_bit'] = $tarih_bit;
 }
 
+// Depo sorumluluğu: kullanıcı belirli depolarla sınırlıysa yalnız o depodaki paletleri olan kayıtlar
+[$_depo_sql, $_depo_params] = depo_sql_records('r');
+if ($_depo_sql !== '') {
+    $where  .= $_depo_sql;
+    $params  = array_merge($params, $_depo_params);
+}
+
 // ── Toplam kayıt (sayfalama için) ──────────────────────────
 $st_count = db()->prepare("SELECT COUNT(*) FROM loading_records r $where");
 $st_count->execute($params);
