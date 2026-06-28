@@ -8,15 +8,15 @@
 declare(strict_types=1);
 
 // ── Modülün takip ettiği malzeme türleri ──────────────────
-// firma/depo/bolge/urun hariç tüm tanım türleri (formlar ve filtreler için).
+// firma/depo/bolge/urun/marka/lokasyon hariç tüm tanım türleri (formlar ve filtreler için).
 function ms_material_types(): array {
-    $skip = ['firma', 'depo', 'bolge', 'urun'];
+    $skip = ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
     return array_filter(definition_types(), fn($k) => !in_array($k, $skip), ARRAY_FILTER_USE_KEY);
 }
 
-// Stok özetinden hariç tutulan türler (lokasyon da özet dışı).
+// Stok özetinden hariç tutulan türler (marka/lokasyon da özet dışı).
 function ms_excluded_types(): array {
-    return ['firma', 'depo', 'bolge', 'urun', 'lokasyon'];
+    return ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
 }
 
 function ms_summary_types(): array {
