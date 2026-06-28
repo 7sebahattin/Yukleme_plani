@@ -434,13 +434,14 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
 </div>
 <?php endif; ?>
 
+<?php if (!$_rv_is_yukleme): ?>
+<h3 class="section-title">Palet Listesi</h3>
+<?php else: ?>
+<h3 class="section-title">Yükleme Planı</h3>
+<?php endif; ?>
+
 <div class="rv-layout">
 <div class="rv-pallet-col">
-<?php if (!$_rv_is_yukleme): ?>
-<h3 class="section-title" style="margin-top:0">Palet Listesi</h3>
-<?php else: ?>
-<h3 class="section-title" style="margin-top:0">Yükleme Planı</h3>
-<?php endif; ?>
 
 <!-- PC tablo -->
 <div class="view-table-wrap">
