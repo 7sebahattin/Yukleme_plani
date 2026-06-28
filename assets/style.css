@@ -1892,6 +1892,7 @@ body.print-mode .asya-sheet {
     width: 100%;
     max-height: 92vh;
     display: flex; flex-direction: column;
+    overflow: hidden; /* hiçbir çocuk yuvarlatılmış köşeleri taşmasın */
     box-shadow: 0 -6px 32px rgba(0,0,0,0.13);
     animation: pmSlideUp .22s cubic-bezier(.32,.72,0,1);
 }
@@ -2226,26 +2227,29 @@ body.print-mode .asya-sheet {
 }
 .bm-status { font-size: .85rem; min-height: 1.4em; margin-top: 2px; }
 
-/* ── BM Tabs ── */
+/* ── BM Tabs — 3 eşit genişlikte sekme, taşma yok ── */
 .bm-tabs {
     display: flex;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
     border-bottom: 1px solid var(--border);
     background: var(--bg);
-    margin: 0 -20px;
-    padding: 0 20px;
+    flex-shrink: 0;
 }
 .bm-tab-btn {
+    flex: 1 1 0; min-width: 0;
     background: none; border: none; cursor: pointer;
-    padding: 11px 16px; font-size: .9rem; font-weight: 500;
-    flex-shrink: 0; white-space: nowrap;
+    padding: 12px 6px; font-size: .85rem; font-weight: 600;
+    text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     color: var(--muted); border-bottom: 2px solid transparent;
     margin-bottom: -1px; font-family: inherit;
+    transition: color .15s, border-color .15s, background .15s;
 }
+.bm-tab-btn:hover { background: rgba(0,0,0,.025); }
 .bm-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+#bmRmCount { font-size: .82em; opacity: .7; font-weight: 500; }
+@media (max-width: 400px) {
+    .bm-tab-btn { font-size: .78rem; padding: 11px 4px; }
+}
 .bm-panel { margin-bottom: 4px; }
 
 /* ── Şablon listesi ── */
