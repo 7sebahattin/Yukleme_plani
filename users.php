@@ -13,7 +13,7 @@ $me  = (int)$auth_user['id'];
 
 // ── Rol rozeti HTML üret ───────────────────────────────────────────────────
 function render_role_badges(string $slugs_str, string $labels_str): string {
-    if ($slugs_str === '') return '<span style="color:var(--muted);font-size:.8rem">—</span>';
+    if ($slugs_str === '') return '<span class="usr-norole">⚠ Rol atanmamış — giriş yapamaz</span>';
     $slugs  = explode(',', $slugs_str);
     $labels = explode(', ', $labels_str);
     $out = '';
@@ -398,6 +398,11 @@ render_header('Kullanıcı Yönetimi');
     border: 1px solid #a7f3d0; white-space: nowrap;
 }
 .usr-depo-all { font-size: .72rem; color: var(--muted); font-style: italic; }
+.usr-norole {
+    display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-size: .73rem; font-weight: 700; background: #fef2f2; color: #b91c1c;
+    border: 1px solid #fca5a5; white-space: nowrap;
+}
 </style>
 
 <div class="page-head">
