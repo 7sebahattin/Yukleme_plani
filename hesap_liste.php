@@ -115,17 +115,48 @@ render_flash();
 </div>
 
 <!-- Tarih aralığı seçici -->
-<div class="filter-pills">
-    <form method="get" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <?php foreach (['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'muh'=>$muh_f] as $k => $v): if ($v !== ''): ?>
-        <input type="hidden" name="<?= $k ?>" value="<?= h($v) ?>">
-        <?php endif; endforeach; ?>
-        <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>" class="btn btn-ghost" style="padding:4px 8px">
-        <span>—</span>
-        <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>" class="btn btn-ghost" style="padding:4px 8px">
-        <button class="btn btn-sm">Uygula</button>
-    </form>
-</div>
+<style>
+.hesap-date-range {
+    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px;
+}
+.hesap-date-field { display: flex; flex-direction: column; gap: 3px; }
+.hesap-date-field > span {
+    font-size: .7rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .03em;
+}
+.hesap-date-field input[type=date] {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 7px 10px; font-size: .9rem; background: #fff; color: var(--text);
+    min-width: 150px;
+}
+.hesap-date-field input[type=date]:focus { border-color: var(--primary); outline: none; }
+.hesap-date-sep { padding-bottom: 9px; color: var(--muted); }
+@media (max-width: 520px) {
+    .hesap-date-field, .hesap-date-field input[type=date] { width: 100%; }
+    .hesap-date-range { gap: 8px; }
+}
+</style>
+<form method="get" class="hesap-date-range">
+    <?php foreach (['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'muh'=>$muh_f] as $k => $v): if ($v !== ''): ?>
+    <input type="hidden" name="<?= $k ?>" value="<?= h($v) ?>">
+    <?php endif; endforeach; ?>
+    <label class="hesap-date-field">
+        <span>Başlangıç</span>
+        <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>">
+    </label>
+    <span class="hesap-date-sep">—</span>
+    <label class="hesap-date-field">
+        <span>Bitiş</span>
+        <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>">
+    </label>
+    <button class="btn btn-primary btn-sm">Uygula</button>
+    <?php if ($tarih_b !== '' || $tarih_s !== ''): ?>
+    <a href="hesap_liste.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'muh'=>$muh_f])) ?>"
+       class="btn btn-ghost btn-sm">✕ Tarihi Temizle</a>
+    <?php endif; ?>
+</form>
 
 <!-- Özet -->
 <?php if ($total > 0): ?>
