@@ -36,6 +36,18 @@ $st = db()->prepare("
 $st->execute([':r' => $id]);
 $pallets = $st->fetchAll();
 
+// Depo sorumluluğu: kısıtlı kullanıcı, deposu kendi listesinde OLMAYAN kayda doğrudan URL ile giremez.
+$_allowed_depots = function_exists('user_allowed_depots') ? user_allowed_depots() : null;
+if ($_allowed_depots !== null) {
+    $_visible = false;
+    foreach ($pallets as $_pp) {
+        if (in_array(trim((string)($_pp['depo'] ?? '')), $_allowed_depots, true)) { $_visible = true; break; }
+    }
+    if (!$_visible) {
+        forbidden('Bu kayıt sizin sorumlu olduğunuz depolara ait değil.');
+    }
+}
+
 $st_pm = db()->prepare("
     SELECT pm.*, m.id AS def_id, m.name AS material_name, m.type AS material_type, m.unit_dara_kg AS material_unit
     FROM pallet_materials pm

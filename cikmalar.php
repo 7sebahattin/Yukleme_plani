@@ -46,6 +46,12 @@ if ($lr_rep_col) {
     if ($rapor_filter === 'raporlanmamis') { $sql .= " AND r.reported_at IS NULL "; }
     if ($rapor_filter === 'raporlandi')    { $sql .= " AND r.reported_at IS NOT NULL "; }
 }
+// Depo sorumluluğu kısıtı
+[$_depo_sql, $_depo_params] = depo_sql_records('r');
+if ($_depo_sql !== '') {
+    $sql    .= $_depo_sql;
+    $params  = array_merge($params, $_depo_params);
+}
 $sql .= " ORDER BY r.id DESC LIMIT 500";
 
 $st = db()->prepare($sql);

@@ -32,6 +32,15 @@ function render_role_badges(string $slugs_str, string $labels_str): string {
     return $out;
 }
 
+// ── Atanmış depoları rozet olarak göster ────────────────────────────────────
+function render_depo_tags(array $depots, bool $is_admin_user): string {
+    if ($is_admin_user) return '<span class="usr-depo-all">Tüm depolar (admin)</span>';
+    if (empty($depots))  return '<span class="usr-depo-all">Tüm depolar</span>';
+    $out = '<div class="usr-depo-tags">';
+    foreach ($depots as $d) $out .= '<span class="usr-depo-tag">' . h($d) . '</span>';
+    return $out . '</div>';
+}
+
 // ── Yardımcılar ────────────────────────────────────────────────────────────
 function count_active_admins(PDO $pdo): int {
     return (int)$pdo->query("
@@ -58,7 +67,36 @@ function valid_username(string $u): bool {
 $all_roles  = $pdo->query("SELECT id, slug, label FROM roles ORDER BY id")->fetchAll();
 $admin_role = array_values(array_filter($all_roles, fn($r) => $r['slug'] === 'admin'))[0] ?? null;
 $admin_rid  = $admin_role ? (int)$admin_role['id'] : 0;
-$valid_rids = array_column($all_roles, 'id');
+// KRİTİK: PDO id'leri string döndürebilir; strict in_array için int'e zorla.
+// Aksi halde role_id eşleşmez ve user_roles'a HİÇ rol yazılmaz → kullanıcı yetkisiz kalır.
+$valid_rids = array_map('intval', array_column($all_roles, 'id'));
+
+// ── Depolar (depo sorumluluğu için) ─────────────────────────────────────────
+$all_depots = [];
+try {
+    $all_depots = $pdo->query(
+        "SELECT name FROM material_definitions WHERE type='depo' AND is_active=1 ORDER BY name"
+    )->fetchAll(PDO::FETCH_COLUMN);
+} catch (PDOException $_e) { $all_depots = []; }
+
+// Kullanıcı → atanmış depolar haritası
+$user_depots_map = [];
+try {
+    foreach ($pdo->query("SELECT user_id, depo FROM user_depolar")->fetchAll() as $_ud) {
+        $user_depots_map[(int)$_ud['user_id']][] = (string)$_ud['depo'];
+    }
+} catch (PDOException $_e) { $user_depots_map = []; }
+
+// Bir kullanıcının depolarını POST'tan kaydet (yalnız geçerli depo adları)
+$save_user_depots = function (int $uid, array $posted) use ($pdo, $all_depots): void {
+    $pdo->prepare("DELETE FROM user_depolar WHERE user_id = ?")->execute([$uid]);
+    if (empty($all_depots)) return;
+    $ins = $pdo->prepare("INSERT IGNORE INTO user_depolar (user_id, depo) VALUES (?, ?)");
+    foreach ($posted as $d) {
+        $d = trim((string)$d);
+        if ($d !== '' && in_array($d, $all_depots, true)) $ins->execute([$uid, $d]);
+    }
+};
 
 // ── POST Handler ──────────────────────────────────────────────────────────
 $action  = '';
@@ -110,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($roles_post as $rid) {
                 if (in_array($rid, $valid_rids, true)) $ins_r->execute([$new_id, $rid]);
             }
+            $save_user_depots($new_id, (array)($_POST['depots'] ?? []));
             $role_labels = array_filter(array_map(
                 fn($r) => in_array((int)$r['id'], $roles_post, true) ? $r['label'] : null,
                 $all_roles
@@ -184,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($roles_post as $rid) {
                 if (in_array($rid, $valid_rids, true)) $ins_r->execute([$uid, $rid]);
             }
+            $save_user_depots($uid, (array)($_POST['depots'] ?? []));
             $role_labels = array_filter(array_map(
                 fn($r) => in_array((int)$r['id'], $roles_post, true) ? $r['label'] : null,
                 $all_roles
@@ -350,6 +390,14 @@ render_header('Kullanıcı Yönetimi');
 .usr-role-check:has(input:checked) {
     border-color: var(--primary); background: var(--primary-soft);
 }
+.usr-depo-note { font-size: .78rem; color: var(--muted); margin: 2px 0 8px; line-height: 1.4; }
+.usr-depo-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.usr-depo-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 12px;
+    font-size: .7rem; font-weight: 600; background: #ecfdf5; color: #047857;
+    border: 1px solid #a7f3d0; white-space: nowrap;
+}
+.usr-depo-all { font-size: .72rem; color: var(--muted); font-style: italic; }
 </style>
 
 <div class="page-head">
@@ -403,6 +451,7 @@ render_header('Kullanıcı Yönetimi');
     <th>Ad Soyad</th>
     <th>E-posta</th>
     <th>Roller</th>
+    <th>Depolar</th>
     <th>Durum</th>
     <th>Son Giriş</th>
     <th>Kayıt</th>
@@ -418,6 +467,7 @@ render_header('Kullanıcı Yönetimi');
     <td><?= h($u['display_name']) ?></td>
     <td style="font-size:.85rem"><?= h($u['email']) ?></td>
     <td><?= render_role_badges($u['role_slugs'] ?? '', $u['roles'] ?? '') ?></td>
+    <td><?= render_depo_tags($user_depots_map[(int)$u['id']] ?? [], strpos((string)($u['role_slugs'] ?? ''), 'admin') !== false) ?></td>
     <td>
         <?php if ($u['is_active']): ?>
             <span class="usr-active">● Aktif</span>
@@ -439,6 +489,7 @@ render_header('Kullanıcı Yönetimi');
                     'email'        => $u['email'],
                     'is_active'    => (int)$u['is_active'],
                     'role_ids'     => $u['role_ids'] ? array_map('intval', explode(',', $u['role_ids'])) : [],
+                    'depots'       => $user_depots_map[(int)$u['id']] ?? [],
                 ])) ?>)'>Düzenle</button>
             <button type="button" class="btn btn-sm btn-ghost"
                 onclick="usrOpenPwReset(<?= (int)$u['id'] ?>, <?= h(json_encode($u['username'])) ?>)">Şifre</button>
@@ -475,6 +526,9 @@ render_header('Kullanıcı Yönetimi');
     </div>
     <div class="usr-card-meta">
         <?= render_role_badges($u['role_slugs'] ?? '', $u['roles'] ?? '') ?>
+    </div>
+    <div style="margin-top:6px">
+        <?= render_depo_tags($user_depots_map[(int)$u['id']] ?? [], strpos((string)($u['role_slugs'] ?? ''), 'admin') !== false) ?>
     </div>
     <?php if ($u['last_login_at']): ?>
     <div style="font-size:.78rem;color:var(--muted);margin-top:6px">
@@ -568,6 +622,24 @@ render_header('Kullanıcı Yönetimi');
             <?php endforeach; ?>
             </div>
         </div>
+        <?php if (!empty($all_depots)): ?>
+        <div style="margin-top:14px">
+            <div class="form-label">Depo Sorumluluğu</div>
+            <p class="usr-depo-note">Hiç depo seçilmezse kullanıcı <strong>tüm depoları</strong> görür. Seçim yaparsanız yalnız o depo(lar)daki verileri görür.</p>
+            <div class="usr-roles-grid">
+            <?php
+            $c_depots_post = ($action === 'create_user') ? (array)($_POST['depots'] ?? []) : [];
+            foreach ($all_depots as $dep):
+            ?>
+                <label class="usr-role-check">
+                    <input type="checkbox" name="depots[]" value="<?= h($dep) ?>"
+                        <?= in_array($dep, $c_depots_post, true) ? 'checked' : '' ?>>
+                    <?= h($dep) ?>
+                </label>
+            <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
         <div style="margin-top:14px">
             <label class="usr-role-check" style="display:inline-flex">
                 <input type="checkbox" name="is_active" value="1"
@@ -623,6 +695,20 @@ render_header('Kullanıcı Yönetimi');
             <?php endforeach; ?>
             </div>
         </div>
+        <?php if (!empty($all_depots)): ?>
+        <div style="margin-top:14px">
+            <div class="form-label">Depo Sorumluluğu</div>
+            <p class="usr-depo-note">Hiç depo seçilmezse kullanıcı <strong>tüm depoları</strong> görür.</p>
+            <div class="usr-roles-grid" id="e_depots_wrap">
+            <?php foreach ($all_depots as $dep): ?>
+                <label class="usr-role-check">
+                    <input type="checkbox" name="depots[]" value="<?= h($dep) ?>" data-depo="<?= h($dep) ?>">
+                    <?= h($dep) ?>
+                </label>
+            <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
         <div style="margin-top:14px;display:flex;align-items:center;gap:10px">
             <label class="usr-role-check" style="display:inline-flex">
                 <input type="checkbox" id="e_is_active" name="is_active" value="1">
@@ -712,6 +798,11 @@ render_header('Kullanıcı Yönetimi');
 
         document.querySelectorAll('#e_roles_wrap input[type=checkbox]').forEach(function (cb) {
             cb.checked = data.role_ids && data.role_ids.indexOf(parseInt(cb.dataset.rid)) !== -1;
+        });
+
+        var depots = data.depots || [];
+        document.querySelectorAll('#e_depots_wrap input[type=checkbox]').forEach(function (cb) {
+            cb.checked = depots.indexOf(cb.dataset.depo) !== -1;
         });
 
         openModal('usrEditModal');

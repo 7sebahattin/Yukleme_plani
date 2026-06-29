@@ -28,17 +28,22 @@ if ($has_reported_col) {
 
 $sel_rep = $has_reported_col ? ", reported_at" : ", NULL as reported_at";
 
+// Depo sorumluluğu kısıtı (kantar_fisleri.depo)
+[$_depo_sql, $_depo_params] = depo_sql_column('depo');
+
 $rows = [];
 try {
-    $rows = db()->query(
+    $st_kf = db()->prepare(
         "SELECT id, fis_no, giris_tarih, plaka, firma_adi, malin_cinsi,
                 palet_sayisi, kasa_cinsi, kasa_sayisi, tartim1, tartim2,
                 depo, created_at{$sel_rep}
          FROM kantar_fisleri
-         WHERE {$kf_where}
+         WHERE {$kf_where}{$_depo_sql}
          ORDER BY CAST(fis_no AS UNSIGNED) DESC, id DESC
          LIMIT 500"
-    )->fetchAll();
+    );
+    $st_kf->execute($_depo_params);
+    $rows = $st_kf->fetchAll();
 } catch (PDOException $e) {}
 
 $can_write = can('kantar.write');
