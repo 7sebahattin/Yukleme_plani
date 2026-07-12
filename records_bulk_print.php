@@ -87,14 +87,6 @@ $all_defs = db()->query("SELECT id, type, name, unit_dara_kg
 $defs_by_id = [];
 foreach ($all_defs as $d) $defs_by_id[(int)$d['id']] = $d;
 
-// ── Aktif marka listesi (marka kutucukları için) ──
-try {
-    $_bp_marka_opts = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-} catch (Throwable $_be) {
-    $_bp_marka_opts = ['ASYA', 'URAL', 'URAS', 'AGRO'];
-}
-$_bp_brand_names_global = ['ASYA' => 'ASYA FRESH', 'URAL' => 'URAL', 'URAS' => 'URAS ENERGY', 'AGRO' => 'AGRONATURAL'];
-
 // ── Palet sorgusu (hazır statement) ──
 $st_pallets = db()->prepare("
     SELECT p.*,
@@ -312,32 +304,16 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
                 <tr><th>BÖLGE</th><td colspan="3"><?= h($record['bolge']) ?></td></tr>
                 <tr><th>PARTİ NO</th><td class="parti-no-val" colspan="3"><?= h($record['parti_no']) ?></td></tr>
                 <tr><th>GÜMRÜK</th><td colspan="3"><?= h($record['gumruk']) ?></td></tr>
-                <tr>
-                    <th>NAKLİYE BEDELİ</th>
-                    <td><?= h($record['nakliye_bedeli'] > 0 ? fmt_money($record['nakliye_bedeli']) : '') ?></td>
-                    <th class="avans-th">AVANS</th>
-                    <td class="avans-td"><?= h($record['avans'] > 0 ? fmt_money($record['avans']) : '') ?></td>
-                </tr>
                 <tr><th>ŞOFÖR ADI</th><td colspan="3"><?= h($record['sofor_adi']) ?></td></tr>
-                <tr><th>FATURA NO</th><td colspan="3"><?= h($record['fatura_no']) ?></td></tr>
-                <tr><th>CASUS NO</th><td colspan="3"><?= h($record['casus_no']) ?></td></tr>
-                <tr><th>ÖN PLAKA NO</th><td colspan="3"><?= h($record['on_plaka']) ?></td></tr>
-                <tr><th>ARKA PLAKA NO</th><td colspan="3"><?= h($record['arka_plaka']) ?></td></tr>
+                <tr><th>CASUS NO</th><td colspan="3" class="ai-casus"><?= h($record['casus_no']) ?></td></tr>
+                <tr><th>ÖN PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['on_plaka']) ?></td></tr>
+                <tr><th>ARKA PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['arka_plaka']) ?></td></tr>
                 <tr><th>NAKLİYE ŞİRKETİ</th><td colspan="3"><?= h($record['nakliye_sirketi']) ?></td></tr>
+                <tr><th>ULAŞIM</th><td colspan="3"><?= h($record['ulasim'] ?? '') ?></td></tr>
                 <tr><th>TELEFON</th><td colspan="3"><?= h($record['telefon']) ?></td></tr>
-                <tr><th>TARİH</th><td colspan="3"><?= h(fmt_date($record['tarih'])) ?></td></tr>
+                <tr><th>TARİH</th><td colspan="3" class="ai-emph"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>
             <div class="asya-right-top">
-                <div class="asya-marka-row">
-                    <?php foreach ($_bp_marka_opts as $_bv): $_bv = strtoupper($_bv); $_on = ($_bp_b === $_bv); ?>
-                    <div class="marka-cell<?= $_on ? ' marka-on' : '' ?>">
-                        <span><?= $_on ? '✓ ' : '' ?><?= h($_bv) ?></span><strong>MARKA</strong>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-                <?php if ($_bp_b === ''): ?>
-                <div class="marka-uyari">⚠ Marka seçilmedi</div>
-                <?php endif; ?>
                 <div class="asya-alici-urun-row">
                     <div class="cell-pair asya-alici-cell">
                         <span>ALICI</span>
@@ -394,7 +370,7 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
         <!-- Sağ sütun: Stok Çıkışları üstte + Genel Toplam altta -->
         <div class="asya-right-col">
 
-        <table class="asya-stok">
+        <table class="asya-stok" style="height:auto;align-self:start">
             <thead>
             <tr><th class="th-banner" colspan="2">STOK ÇIKIŞLARI</th></tr>
             <tr><th class="stok-name">MALZEME</th><th class="stok-adet">ADET</th></tr>
@@ -422,17 +398,26 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
             <tr><th>BRÜT</th><td class="num"><?= h(fmt_kg($tot['toplam_brut'])) ?></td></tr>
             <tr><th>DARA</th><td class="num"><?= h(fmt_kg(round((float)$tot['toplam_dara']))) ?></td></tr>
             <tr><th>NET</th><td class="num strong"><?= h(fmt_kg(round((float)$tot['toplam_net']))) ?></td></tr>
-            <?php for ($i = 0; $i < 4; $i++):
-                $key = $urun_keys[$i] ?? null;
-                $g   = $key ? $urun_groups[$key] : null;
+            <?php foreach ($urun_keys as $key):
+                $g = $urun_groups[$key] ?? null;
             ?>
-                <tr><th class="urun-banner<?= $key ? '' : ' urun-banner-empty' ?>" colspan="2"><?= $key ? h(mb_strtoupper($key, 'UTF-8')) : '' ?></th></tr>
+                <tr><th class="urun-banner" colspan="2"><?= h(mb_strtoupper($key, 'UTF-8')) ?></th></tr>
                 <tr><th>KASA</th><td class="num"><?= $g ? (int)$g['kasa'] : '' ?></td></tr>
                 <tr><th>BRÜT</th><td class="num"><?= $g ? h(fmt_kg($g['brut'])) : '' ?></td></tr>
                 <tr><th>DARA</th><td class="num"><?= $g ? h(fmt_kg(round($g['dara']))) : '' ?></td></tr>
                 <tr><th>NET</th> <td class="num"><?= $g ? h(fmt_kg(round((float)$g['net']))) : '' ?></td></tr>
-            <?php endfor; ?>
+            <?php endforeach; ?>
         </table>
+
+        <?php
+            $_note_val = trim((string)($record['etiket'] ?? ''));
+            if ($_note_val !== ''):
+        ?>
+        <div class="print-note-box">
+            <div class="print-note-title">NOT</div>
+            <div class="print-note-text"><?= nl2br(h($_note_val)) ?></div>
+        </div>
+        <?php endif; ?>
 
         </div><!-- /.asya-right-col -->
     </div>
