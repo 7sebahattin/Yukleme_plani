@@ -189,6 +189,22 @@ $date_cols = array_values(array_filter($date_cols, function(string $d) use ($piv
     return false;
 }));
 
+// ── Tarih başına parti numaraları ──────────────────────────
+$parti_by_date = [];
+if (!empty($record_ids)) {
+    $ids = array_map('intval', array_keys($record_ids));
+    $in  = implode(',', array_fill(0, count($ids), '?'));
+    $st  = $pdo->prepare("SELECT tarih, parti_no FROM loading_records WHERE id IN ($in) ORDER BY tarih ASC, id ASC");
+    $st->execute($ids);
+    foreach ($st->fetchAll() as $row) {
+        $d  = $row['tarih'];
+        $pn = trim((string)$row['parti_no']);
+        if ($pn === '') continue;
+        if (!isset($parti_by_date[$d])) $parti_by_date[$d] = [];
+        if (!in_array($pn, $parti_by_date[$d], true)) $parti_by_date[$d][] = $pn;
+    }
+}
+
 // ── Özet kartları ────────────────────────────────────────
 $sum_cesidi = count($pivot);
 $sum_kayit  = count($record_ids);
@@ -374,6 +390,12 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
                     <th class="num"><?= date('d.m', strtotime($d)) ?></th>
                     <?php endforeach; ?>
                 </tr>
+                <tr class="mr-parti-row">
+                    <th colspan="3" class="mr-parti-label">Parti No</th>
+                    <?php foreach ($date_cols as $d): ?>
+                    <th class="num mr-parti-cell"><?= h(implode(' / ', $parti_by_date[$d] ?? [])) ?></th>
+                    <?php endforeach; ?>
+                </tr>
             </thead>
             <tbody>
             <?php foreach ($pivot as $row): ?>
@@ -399,6 +421,11 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
 .mr-pivot-card .table-wrap { overflow-x: auto; }
 .mr-table th, .mr-table td { white-space: nowrap; }
 .mr-table th:first-child, .mr-table td:first-child { white-space: normal; min-width: 140px; }
+
+/* Parti no satırı */
+.mr-parti-row th { background: #f8fafc !important; font-weight: 600; }
+.mr-parti-label { text-align: left; color: #64748b; font-size: .75rem; }
+.mr-parti-cell { white-space: normal !important; font-size: .7rem; color: #475569; max-width: 110px; line-height: 1.3; }
 
 /* Toplam kolonu vurgu */
 .mr-table th.mr-total-col {
@@ -430,6 +457,7 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
 
     .mr-table { font-size: 6.5pt !important; }
     .mr-table th { font-size: 6pt !important; padding: 3px 4px !important; background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .mr-parti-cell { font-size: 5.5pt !important; white-space: normal !important; }
     .mr-table td { padding: 3px 4px !important; }
     .mr-table th.mr-total-col { background: #e0e7ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .mr-table td.mr-total-col { background: #eef2ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
