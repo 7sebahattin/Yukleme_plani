@@ -250,6 +250,9 @@ if ($is_csv) {
     $header = ['Malzeme', 'Tür', 'Toplam'];
     foreach ($date_cols as $d) $header[] = date('d.m.Y', strtotime($d));
     fputcsv($out, $header, ';', '"', '\\');
+    $parti_line = ['Parti No', '', ''];
+    foreach ($date_cols as $d) $parti_line[] = implode(' / ', $parti_by_date[$d] ?? []);
+    fputcsv($out, $parti_line, ';', '"', '\\');
     foreach ($pivot as $row) {
         $line = [$row['name'], RM_GROUP_LABELS[$row['group_type']] ?? $row['group_type'], (int)round($row['total'])];
         foreach ($date_cols as $d) $line[] = (int)round($row['dates'][$d] ?? 0);
