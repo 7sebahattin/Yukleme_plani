@@ -38,6 +38,8 @@ $f_tarih_bit = trim($_GET['tarih_bit'] ?? '');
 $f_firma     = trim($_GET['firma']     ?? '');
 $f_malin     = trim($_GET['malin']     ?? '');
 $f_depo      = trim($_GET['depo']      ?? '');
+$f_tur       = trim($_GET['tur']       ?? '');
+if (!in_array($f_tur, ['gruplu', 'tek'], true)) $f_tur = '';
 $is_csv      = isset($_GET['csv']);
 
 // ── SQL ───────────────────────────────────────────────────
@@ -113,6 +115,10 @@ foreach ($fisleri as $fis) {
     $gruplar  = $grup_map[$fid] ?? [];
     $kp_rows  = $kp_map[$fid]   ?? [];
     $has_grup = !empty($gruplar);
+
+    // Kayıt türü filtresi (sadece gruplu / tek firma)
+    if ($f_tur === 'gruplu' && !$has_grup) continue;
+    if ($f_tur === 'tek'    &&  $has_grup) continue;
 
     // Firma filtresi
     if ($f_firma !== '') {
@@ -236,6 +242,7 @@ $filter_parts = [];
 if ($f_tarih_bas || $f_tarih_bit)
     $filter_parts[] = ($f_tarih_bas ? fmt_date($f_tarih_bas) : '…') . ' – ' . ($f_tarih_bit ? fmt_date($f_tarih_bit) : '…');
 if ($f_firma) $filter_parts[] = $f_firma;
+if ($f_tur)   $filter_parts[] = ($f_tur === 'gruplu' ? 'Sadece Gruplu' : 'Tek Firma');
 if ($f_malin) $filter_parts[] = $f_malin;
 if ($f_depo)  $filter_parts[] = $f_depo;
 $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
@@ -267,7 +274,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="kantar.php" class="btn btn-ghost btn-sm">← Fişler</a>
-        <a href="?<?= h(http_build_query(array_filter(['tarih_bas'=>$f_tarih_bas,'tarih_bit'=>$f_tarih_bit,'firma'=>$f_firma,'malin'=>$f_malin,'depo'=>$f_depo,'csv'=>'1'],fn($v)=>$v!==''))) ?>" class="btn btn-ghost btn-sm">⬇ CSV</a>
+        <a href="?<?= h(http_build_query(array_filter(['tarih_bas'=>$f_tarih_bas,'tarih_bit'=>$f_tarih_bit,'firma'=>$f_firma,'malin'=>$f_malin,'depo'=>$f_depo,'tur'=>$f_tur,'csv'=>'1'],fn($v)=>$v!==''))) ?>" class="btn btn-ghost btn-sm">⬇ CSV</a>
         <?php if ($entries): ?>
         <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Yazdır</button>
         <?php endif; ?>
@@ -293,6 +300,14 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
                     <?php foreach ($filter_firms as $fw): ?>
                     <option value="<?= h($fw) ?>"<?= $f_firma===$fw?' selected':'' ?>><?= h($fw) ?></option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Kayıt Türü</label>
+                <select name="tur" class="form-control">
+                    <option value="">— Tümü —</option>
+                    <option value="gruplu"<?= $f_tur==='gruplu'?' selected':'' ?>>Sadece Gruplu</option>
+                    <option value="tek"<?= $f_tur==='tek'?' selected':'' ?>>Tek Firma</option>
                 </select>
             </div>
             <div class="form-group">
