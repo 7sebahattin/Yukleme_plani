@@ -163,6 +163,54 @@ $st->bindValue(':off', $offset,      PDO::PARAM_INT);
 $st->execute();
 $rows = $st->fetchAll();
 
+// ── Detay satırı verisi: kasa dağılımı + ek malzemeler (batch, N+1 yok) ──
+$kasa_bd_map = [];  // [rid][kasa_cinsi_adi] => toplam kasa_adeti
+$em_map      = [];  // [rid][material_id]    => ['name','palet_count','total_qty']
+if (!empty($rows)) {
+    $rid_list = array_map(fn($r) => (int)$r['id'], $rows);
+    $in_ph    = implode(',', array_fill(0, count($rid_list), '?'));
+
+    // Kasa dağılımı
+    $st_kbd = db()->prepare("
+        SELECT p.loading_record_id AS rid, p.kasa_adeti,
+               COALESCE(kc.name, '—') AS kasa_cinsi_adi
+        FROM loading_pallets p
+        LEFT JOIN material_definitions kc ON kc.id = p.kasa_cinsi_id
+        WHERE p.loading_record_id IN ($in_ph) AND p.kasa_adeti > 0
+    ");
+    $st_kbd->execute($rid_list);
+    foreach ($st_kbd->fetchAll() as $row) {
+        $rid  = (int)$row['rid'];
+        $name = trim((string)$row['kasa_cinsi_adi']) ?: '—';
+        $kasa_bd_map[$rid][$name] = ($kasa_bd_map[$rid][$name] ?? 0) + (int)$row['kasa_adeti'];
+    }
+
+    // Ek malzemeler — kasa bazlı: quantity × kasa_adeti; palet bazlı: quantity
+    $st_em = db()->prepare("
+        SELECT p.loading_record_id AS rid, p.kasa_adeti,
+               pm.material_id, pm.quantity,
+               m.name AS material_name, m.type AS material_type
+        FROM pallet_materials pm
+        JOIN loading_pallets p ON p.id = pm.loading_pallet_id
+        JOIN material_definitions m ON m.id = pm.material_id
+        WHERE p.loading_record_id IN ($in_ph) AND pm.quantity > 0
+    ");
+    $st_em->execute($rid_list);
+    foreach ($st_em->fetchAll() as $row) {
+        $rid   = (int)$row['rid'];
+        $kid   = (int)$row['material_id'];
+        $basis = material_calc_basis((string)$row['material_type'], (string)$row['material_name']);
+        $eff   = ($basis === 'kasa')
+            ? (float)$row['quantity'] * (int)$row['kasa_adeti']
+            : (float)$row['quantity'];
+        if (!isset($em_map[$rid][$kid])) {
+            $em_map[$rid][$kid] = ['name' => $row['material_name'], 'palet_count' => 0, 'total_qty' => 0.0];
+        }
+        $em_map[$rid][$kid]['palet_count']++;
+        $em_map[$rid][$kid]['total_qty'] += $eff;
+    }
+}
+
 $can_unlock = function_exists('can') && can('records.unlock');
 
 render_header('Kayıtlar');
@@ -344,6 +392,36 @@ render_flash();
                             </div>
                             <?php endforeach; endif; ?>
                         </div>
+                        <?php
+                        $_kbd = $kasa_bd_map[(int)$r['id']] ?? [];
+                        $_em  = $em_map[(int)$r['id']]      ?? [];
+                        if (!empty($_kbd) || !empty($_em)):
+                        ?>
+                        <div class="rec-detail-stok">
+                            <?php if (!empty($_kbd)): ?>
+                            <div class="rds-block">
+                                <div class="rds-title">Kasa Dağılımı</div>
+                                <?php foreach ($_kbd as $kn => $ka): ?>
+                                <div class="rds-row"><span><?= h($kn) ?></span><strong><?= (int)$ka ?></strong></div>
+                                <?php endforeach; ?>
+                                <div class="rds-row rds-total"><span>Toplam</span><strong><?= (int)$r['toplam_kasa'] ?></strong></div>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (!empty($_em)): ?>
+                            <div class="rds-block rds-block-em">
+                                <div class="rds-title">Ek Malzemeler</div>
+                                <div class="rds-em-grid">
+                                    <?php foreach ($_em as $eg): ?>
+                                    <div class="rds-em-item">
+                                        <span class="rds-em-name"><?= h($eg['name']) ?></span>
+                                        <span class="rds-em-meta"><?= (int)$eg['palet_count'] ?> palet · <?= h(fmt_kg($eg['total_qty'])) ?> adet</span>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -696,6 +774,33 @@ render_flash();
 }
 .rdi-value { font-size: .88rem; color: #1e293b; margin-top: 1px; }
 .rec-detail-empty { color: #94a3b8; font-style: italic; font-size: .85rem; }
+
+/* Kasa Dağılımı + Ek Malzemeler */
+.rec-detail-stok {
+    display: flex; flex-wrap: wrap; gap: 14px 30px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1;
+}
+.rds-block { min-width: 200px; }
+.rds-block-em { flex: 1; }
+.rds-title {
+    font-size: .66rem; text-transform: uppercase; letter-spacing: .4px;
+    color: #64748b; font-weight: 700; margin-bottom: 6px;
+}
+.rds-row {
+    display: flex; justify-content: space-between; gap: 24px;
+    font-size: .84rem; color: #1e293b; padding: 2px 0; max-width: 280px;
+}
+.rds-row.rds-total {
+    border-top: 1px solid #e2e8f0; margin-top: 3px; padding-top: 4px; font-weight: 700;
+}
+.rds-em-grid { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.rds-em-item {
+    display: flex; flex-direction: column;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 4px 10px; min-width: 110px;
+}
+.rds-em-name { font-size: .82rem; color: #1e293b; font-weight: 600; }
+.rds-em-meta { font-size: .72rem; color: #64748b; margin-top: 1px; }
 </style>
 
 <?php render_footer(); ?>
