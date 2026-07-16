@@ -251,10 +251,11 @@ render_flash();
                 $durum   = $r['durum'] ?? '';
                 $locked  = !empty($r['locked_at']);
             ?>
-                <tr class="<?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
+                <tr class="rec-main-row <?= $durum === 'islendi' ? 'tr-islendi' : ($durum === 'yuklendi' ? 'tr-yuklendi' : '') ?>"
                     data-record-id="<?= (int)$r['id'] ?>"
                     data-durum="<?= h($durum) ?>"
-                    data-tarih="<?= h($r['tarih'] ?? '') ?>">
+                    data-tarih="<?= h($r['tarih'] ?? '') ?>"
+                    title="Detay için tıklayın">
                     <td class="td-tarih-cell">
                         <div><?= $r['tarih'] ? h(fmt_date_short($r['tarih'])) : '—' ?></div>
                         <?php if (!empty($r['updated_at'])): ?>
@@ -304,6 +305,44 @@ render_flash();
                                 <span class="pc-drop-disabled">🔒 Kilitli kayıt</span>
                                 <?php endif; ?>
                             </div>
+                        </div>
+                    </td>
+                </tr>
+                <?php
+                // ── Açılır detay satırı: tabloda yer almayan tüm alanlar ──
+                $_b = strtoupper(trim((string)($r['brand'] ?? '')));
+                $_brand_names = ['ASYA'=>'ASYA FRESH','URAL'=>'URAL','URAS'=>'URAS ENERGY','AGRO'=>'AGRONATURAL'];
+                $_brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : '';
+                $detail_pairs = [];
+                $_add = function(string $label, $val) use (&$detail_pairs): void {
+                    $val = trim((string)$val);
+                    if ($val !== '') $detail_pairs[] = [$label, $val];
+                };
+                $_add('Gümrük',          $r['gumruk']          ?? '');
+                $_add('Şoför Adı',       $r['sofor_adi']       ?? '');
+                $_add('Nakliye Şirketi', $r['nakliye_sirketi'] ?? '');
+                $_add('Ulaşım',          $r['ulasim']          ?? '');
+                $_add('Telefon',         $r['telefon']         ?? '');
+                $_add('Fatura No',       $r['fatura_no']       ?? '');
+                if ((float)($r['nakliye_bedeli'] ?? 0) > 0) $_add('Nakliye Bedeli', fmt_money($r['nakliye_bedeli']));
+                if ((float)($r['avans'] ?? 0) > 0)          $_add('Avans',         fmt_money($r['avans']));
+                $_add('Marka',           $_brand_label);
+                $_add('Not',             $r['etiket']     ?? '');
+                $_add('Oluşturma',       fmt_dt_short($r['created_at'] ?? ''));
+                $_add('Son Düzenleme',   fmt_dt_short($r['updated_at'] ?? ''));
+                if ($locked && !empty($r['revision_reason'])) $_add('Revizyon Nedeni', $r['revision_reason']);
+                ?>
+                <tr class="rec-detail-row" hidden>
+                    <td colspan="15">
+                        <div class="rec-detail-wrap">
+                            <?php if (empty($detail_pairs)): ?>
+                            <span class="rec-detail-empty">Ek bilgi bulunmuyor.</span>
+                            <?php else: foreach ($detail_pairs as [$lbl, $val]): ?>
+                            <div class="rec-detail-item">
+                                <span class="rdi-label"><?= h($lbl) ?></span>
+                                <span class="rdi-value"><?= h($val) ?></span>
+                            </div>
+                            <?php endforeach; endif; ?>
                         </div>
                     </td>
                 </tr>
@@ -613,7 +652,50 @@ render_flash();
             }
         }
     });
+
+    /* ── Satıra tıklayınca detay aç/kapa (PC tablo) ── */
+    document.addEventListener('click', function (e) {
+        // Buton/link/kebab/aksiyon sütunu tıklanınca detay açma
+        if (e.target.closest('.actions-col') || e.target.closest('a') ||
+            e.target.closest('button') || e.target.closest('input')) return;
+        var row = e.target.closest('.rec-main-row');
+        if (!row) return;
+        var detail = row.nextElementSibling;
+        if (!detail || !detail.classList.contains('rec-detail-row')) return;
+        if (detail.hasAttribute('hidden')) {
+            detail.removeAttribute('hidden');
+            row.classList.add('rec-row-expanded');
+        } else {
+            detail.setAttribute('hidden', '');
+            row.classList.remove('rec-row-expanded');
+        }
+    });
 })();
 </script>
+
+<style>
+/* ── Açılır detay satırı (PC tablo) ─────────────────────── */
+.rec-main-row { cursor: pointer; }
+.rec-main-row:hover { background: #f1f5f9; }
+.rec-row-expanded { background: #eef2ff !important; }
+.rec-detail-row > td {
+    background: #f8fafc;
+    padding: 10px 16px !important;
+    border-bottom: 2px solid #e2e8f0;
+}
+.rec-detail-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px 22px;
+    align-items: flex-start;
+}
+.rec-detail-item { display: flex; flex-direction: column; min-width: 90px; }
+.rdi-label {
+    font-size: .66rem; text-transform: uppercase; letter-spacing: .4px;
+    color: #94a3b8; font-weight: 700;
+}
+.rdi-value { font-size: .88rem; color: #1e293b; margin-top: 1px; }
+.rec-detail-empty { color: #94a3b8; font-style: italic; font-size: .85rem; }
+</style>
 
 <?php render_footer(); ?>
