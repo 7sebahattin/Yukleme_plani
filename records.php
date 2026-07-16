@@ -285,7 +285,6 @@ render_flash();
                 <th>Bölge</th>
                 <th>Ürün</th>
                 <?= $_sth('Casus No', 'casus_no') ?>
-                <th>Plaka</th>
                 <th class="num">Palet</th>
                 <th class="num">Kasa</th>
                 <th class="num">Brüt</th>
@@ -320,7 +319,6 @@ render_flash();
                     <td><?= h($r['bolge']) ?></td>
                     <td><?= h($r['urun']) ?></td>
                     <td class="td-casus-no"><?= h($r['casus_no']) ?></td>
-                    <td><?= h(trim($r['on_plaka'] . ' / ' . $r['arka_plaka'], ' /')) ?></td>
                     <td class="num"><?= (int)$r['toplam_palet'] ?></td>
                     <td class="num"><?= (int)$r['toplam_kasa'] ?></td>
                     <td class="num"><?= fmt_kg($r['toplam_brut']) ?></td>
@@ -368,6 +366,7 @@ render_flash();
                 };
                 $_add('Gümrük',          $r['gumruk']          ?? '');
                 $_add('Şoför Adı',       $r['sofor_adi']       ?? '');
+                $_add('Plaka',           trim(($r['on_plaka'] ?? '') . ' / ' . ($r['arka_plaka'] ?? ''), ' /'));
                 $_add('Nakliye Şirketi', $r['nakliye_sirketi'] ?? '');
                 $_add('Ulaşım',          $r['ulasim']          ?? '');
                 $_add('Telefon',         $r['telefon']         ?? '');
@@ -381,7 +380,7 @@ render_flash();
                 if ($locked && !empty($r['revision_reason'])) $_add('Revizyon Nedeni', $r['revision_reason']);
                 ?>
                 <tr class="rec-detail-row" hidden>
-                    <td colspan="15">
+                    <td colspan="14">
                         <div class="rec-detail-wrap">
                             <?php if (empty($detail_pairs)): ?>
                             <span class="rec-detail-empty">Ek bilgi bulunmuyor.</span>
