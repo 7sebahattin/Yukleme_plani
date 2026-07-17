@@ -218,7 +218,8 @@ function render_desktop_sidebar(string $base): void {
     $a_not   = $cur === 'notes.php';
     $a_beyan = in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php','beyan_delete.php'], true);
     $a_ustok = $cur === 'stok.php';
-    $a_mstok = $cur === 'malzeme_stok.php';
+    $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
+                               'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
     $a_rep   = $cur === 'reports.php';
     $a_hes   = $cur === 'hesap.php';
     $a_def   = $cur === 'definitions.php';
@@ -265,10 +266,9 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_recw) $lnk('hks/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
 
-        <?php if ($p_rep): ?>
-        <?php $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
-        <?php $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
-        <?php endif; ?>
+        <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
+        <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
+        <?php if ($p_rep)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
         <div class="sidebar-section">Yönetim</div>

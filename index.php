@@ -141,7 +141,16 @@ if ($db_backup_result !== null): ?>
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
         <div class="home-card-title">Raporlar</div>
     </a>
+<?php endif; ?>
 
+<?php if (can('stok.read')): ?>
+    <a href="malzeme_stok.php" class="home-card">
+        <div class="home-card-icon" style="background:#fdf2f8">📦</div>
+        <div class="home-card-title">Malzeme Stok</div>
+    </a>
+<?php endif; ?>
+
+<?php if (can('reports.read')): ?>
     <a href="hesap.php" class="home-card">
         <div class="home-card-icon" style="background:#fff3e0">🏦</div>
         <div class="home-card-title">Hesap</div>
