@@ -37,6 +37,9 @@ if ($f_depo  !== '') {
     $w[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
     $p[] = $f_depo;
 }
+// Aktif depo kapsamı — toplu yazdırma seçili depoya daraltılır
+[$_ds_bp, $_ds_bp_v] = depo_sql_records_in('r');
+if ($_ds_bp !== '') { $w[] = $_ds_bp; $p = array_merge($p, $_ds_bp_v); }
 if ($f_q !== '') {
     $w[] = "(r.firma LIKE ? OR r.parti_no LIKE ? OR r.alici LIKE ? OR r.urun LIKE ?)";
     $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%'; $p[] = '%'.$f_q.'%';

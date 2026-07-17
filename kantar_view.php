@@ -17,6 +17,11 @@ if ($id <= 0) {
 $st = db()->prepare("SELECT * FROM kantar_fisleri WHERE id = ?");
 $st->execute([$id]);
 $fis = $st->fetch();
+// Aktif depo kapsamı: başka deponun fişine doğrudan URL ile girilemez
+if ($fis && function_exists('depot_visible_to_user')
+    && !depot_visible_to_user(trim((string)($fis['depo'] ?? '')))) {
+    forbidden('Bu fiş aktif deponuza ait değil. Depo değiştirmek için üstteki depo rozetini kullanın.');
+}
 if (!$fis) {
     set_flash('error', 'Fiş bulunamadı.');
     header('Location: kantar.php'); exit;

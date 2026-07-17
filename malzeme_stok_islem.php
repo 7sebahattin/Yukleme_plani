@@ -272,10 +272,11 @@ render_flash();
                 </div>
                 <div class="form-group">
                     <label class="form-label">Depo <span class="req">*</span></label>
+                    <?php $_aktif_depo_ms = (function_exists('active_depot') ? active_depot() : null) ?? ''; ?>
                     <select name="mv_depo" id="girisDepo" class="form-control" required>
                         <option value="">— seçiniz —</option>
                         <?php foreach ($depo_list as $dv): ?>
-                        <option value="<?= h($dv) ?>"><?= h($dv) ?></option>
+                        <option value="<?= h($dv) ?>"<?= ($prefill['depo'] !== '' ? $prefill['depo'] : $_aktif_depo_ms) === $dv ? ' selected' : '' ?>><?= h($dv) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

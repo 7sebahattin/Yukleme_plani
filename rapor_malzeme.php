@@ -31,6 +31,11 @@ function rm_filters(array $f, bool $us_col_ok): array {
     if ($f['firma']     !== '') { $where[] = 'r.firma = ?';  $params[] = $f['firma']; }
     if ($f['urun']      !== '') { $where[] = 'r.urun = ?';   $params[] = $f['urun']; }
     if ($f['depo']      !== '') { $where[] = 'p.depo = ?';   $params[] = $f['depo']; }
+    // Aktif depo kapsamı — malzeme raporu seçili depoya daraltılır
+    if (function_exists('depo_sql_in')) {
+        [$_ds_rm, $_ds_rm_v] = depo_sql_in('p.depo');
+        if ($_ds_rm !== '') { $where[] = $_ds_rm; foreach ($_ds_rm_v as $_dv) $params[] = $_dv; }
+    }
     if ($us_col_ok && $f['urun_sahibi'] !== '') {
         if ($f['urun_sahibi'] === '0') {
             $where[] = 'r.urun_sahibi_id IS NULL';

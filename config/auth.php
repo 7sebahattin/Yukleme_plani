@@ -76,6 +76,7 @@ function require_login(): array {
         header('Location: ' . base_url() . 'login.php' . ($next !== '' ? '?next=' . $next : ''));
         exit;
     }
+    if (function_exists('enforce_active_depot')) enforce_active_depot();
     return $user;
 }
 
@@ -267,7 +268,7 @@ function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
 //   • Tablo yok / hata  → null  (fail-open: kimseyi kilitleme)
 //
 // null döndüğünde çağıran taraf HİÇ filtre uygulamaz (her şeyi gösterir).
-function user_allowed_depots(?int $user_id = null): ?array {
+function user_assigned_depots(?int $user_id = null): ?array {
     static $cache = [];
 
     if ($user_id === null) {
@@ -299,6 +300,101 @@ function user_allowed_depots(?int $user_id = null): ?array {
     }
 }
 
+// ── Aktif Depo (oturum bazlı tek depo kapsamı) ────────────
+//
+// Kullanıcı girişten sonra TEK bir depo seçer (zorunlu). Tüm listeleme,
+// stok, kantar ve rapor sorguları bu depoya daraltılır. Depo değiştirme
+// her ekrandan depo_sec.php ile yapılır. Saklama: cookie (DB migration yok).
+
+const DEPOT_COOKIE_NAME = 'asya_depo';
+
+// Kullanıcının seçebileceği depolar: Tanımlar (type='depo', aktif)
+// ∩ user_depolar ataması (varsa). Atanan ama tanımda olmayan depo da listelenir
+// (eski serbest-metin veriler kaybolmasın).
+function depot_options(): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $defs = [];
+    try {
+        $st = db()->query("SELECT name FROM material_definitions WHERE type = 'depo' AND is_active = 1 ORDER BY name");
+        $defs = array_values(array_filter(array_map('strval', $st->fetchAll(PDO::FETCH_COLUMN)), fn($d) => trim($d) !== ''));
+    } catch (PDOException $e) { /* tanım tablosu yoksa boş liste */ }
+
+    $assigned = user_assigned_depots();
+    if ($assigned !== null) {
+        $defs = array_values(array_filter($defs, fn($d) => in_array($d, $assigned, true)));
+        foreach ($assigned as $a) {
+            if ($a !== '' && !in_array($a, $defs, true)) $defs[] = $a;
+        }
+    }
+    return $cache = $defs;
+}
+
+// Geçerli aktif depo — cookie'den okunur, seçilebilir listeye göre doğrulanır.
+// null → henüz seçilmemiş / geçersiz (require_login depo seçimine yönlendirir).
+function active_depot(): ?string {
+    static $cache = false;
+    if ($cache !== false) return $cache;
+
+    if (current_user() === null) return $cache = null;
+
+    $raw = trim((string)($_COOKIE[DEPOT_COOKIE_NAME] ?? ''));
+    if ($raw === '' || mb_strlen($raw) > 150) return $cache = null;
+    if (!in_array($raw, depot_options(), true)) return $cache = null;
+    return $cache = $raw;
+}
+
+function set_active_depot(string $depo): void {
+    $opts = auth_cookie_options();
+    $opts['expires'] = time() + 180 * 24 * 3600; // 180 gün — depo tercihi kalıcı
+    setcookie(DEPOT_COOKIE_NAME, $depo, $opts);
+    $_COOKIE[DEPOT_COOKIE_NAME] = $depo; // aynı istek içinde de geçerli olsun
+}
+
+function clear_active_depot(): void {
+    $opts = auth_cookie_options();
+    $opts['expires'] = time() - 3600;
+    setcookie(DEPOT_COOKIE_NAME, '', $opts);
+    unset($_COOKIE[DEPOT_COOKIE_NAME]);
+}
+
+// Aktif depo seçilmeden hiçbir sayfa açılmaz (zorunlu tek depo).
+// Depo seçim/giriş/çıkış sayfaları hariç. JSON isteklerde 403+JSON döner.
+function enforce_active_depot(): void {
+    if (current_user() === null) return; // login kontrolü çağıran tarafta
+    if (active_depot() !== null) return;
+
+    $cur = basename($_SERVER['PHP_SELF'] ?? '');
+    if (in_array($cur, ['depo_sec.php', 'login.php', 'logout.php'], true)) return;
+
+    $is_json = (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest')
+        || str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')
+        || str_contains($_SERVER['CONTENT_TYPE'] ?? '', 'application/json');
+    if ($is_json) {
+        http_response_code(403);
+        if (!headers_sent()) header('Content-Type: application/json');
+        echo json_encode(['ok' => false, 'error' => 'Önce depo seçmelisiniz.', 'code' => 'depo_secilmedi']);
+        exit;
+    }
+
+    $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
+    header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'depo_sec.php' . ($next !== '' ? '?next=' . $next : ''));
+    exit;
+}
+
+// user_allowed_depots — TÜM depo filtrelerinin girdiği tek kapı.
+// Aktif depo seçiliyse her sorgu o depoya daraltılır; seçim yoksa
+// (henüz depo_sec'e yönlenmemiş uç durumlar) eski atama davranışı sürer.
+function user_allowed_depots(?int $user_id = null): ?array {
+    $u = current_user();
+    if ($u !== null && ($user_id === null || $user_id === (int)$u['id'])) {
+        $act = active_depot();
+        if ($act !== null) return [$act];
+    }
+    return user_assigned_depots($user_id);
+}
+
 function user_is_depot_restricted(): bool {
     return user_allowed_depots() !== null;
 }
@@ -325,6 +421,27 @@ function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'):
     return [$sql, $params];
 }
 
+// depo kolonu OLAN tablolar için POZİSYONEL (?) parametreli WHERE parçası.
+// Pozisyonel sorgu kuran sayfalarda (stok.php vb.) kullanılır.
+// Dönen: ['col IN (?,?)', ['Depo A','Depo B']] — kısıtsızsa ['', []].
+function depo_sql_in(string $col): array {
+    $allowed = user_allowed_depots();
+    if ($allowed === null || count($allowed) === 0) return ['', []];
+    return [$col . ' IN (' . implode(',', array_fill(0, count($allowed), '?')) . ')', array_values($allowed)];
+}
+
+// loading_records için POZİSYONEL (?) parametreli EXISTS parçası
+// (palet deposu üzerinden kapsar). Pozisyonel sorgu kuran sayfalarda kullanılır.
+// Dönen: ['EXISTS(...)', ['Depo A']] — kısıtsızsa ['', []].
+function depo_sql_records_in(string $records_ref = 'loading_records'): array {
+    $allowed = user_allowed_depots();
+    if ($allowed === null || count($allowed) === 0) return ['', []];
+    $ph = implode(',', array_fill(0, count($allowed), '?'));
+    return ["EXISTS (SELECT 1 FROM loading_pallets _udpi
+             WHERE _udpi.loading_record_id = {$records_ref}.id
+             AND _udpi.depo IN ($ph))", array_values($allowed)];
+}
+
 // depo kolonu OLAN tablolar (kantar vb.) için NAMED parametreli WHERE parçası.
 // Dönen: [' AND col IN (...) ', [':udc0'=>'Depo', ...]]  — kısıtsızsa ['', []].
 function depo_sql_column(string $col, string $prefix = ':udc'): array {
@@ -341,6 +458,7 @@ function require_perm(string $permission): void {
         header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
         exit;
     }
+    enforce_active_depot();
     if (!can($permission)) {
         forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: {$permission})");
     }
@@ -352,6 +470,7 @@ function require_any_perm(array $permissions): void {
         header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
         exit;
     }
+    enforce_active_depot();
     foreach ($permissions as $p) {
         if (can($p)) return;
     }

@@ -162,6 +162,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         if ($pf_tarih_bit !== '') { $pk_base[] = "kf.giris_tarih <= ?";   $pk_base_p[] = $pf_tarih_bit . ' 23:59:59'; }
         if ($pf_urun      !== '') { $pk_base[] = "kf.malin_cinsi LIKE ?"; $pk_base_p[] = '%' . $pf_urun . '%'; }
         if ($pf_depo      !== '') { $pk_base[] = "kf.depo LIKE ?";        $pk_base_p[] = '%' . $pf_depo . '%'; }
+        // Aktif depo kapsamı — sayım hesabı da seçili depoya daraltılır
+        [$_pds_kf, $_pds_kf_v] = depo_sql_in('kf.depo');
+        if ($_pds_kf !== '') { $pk_base[] = $_pds_kf; $pk_base_p = array_merge($pk_base_p, $_pds_kf_v); }
         // Grouped: firma filter on grup_adi
         $pk_gk = $pk_base; $pk_gk_p = $pk_base_p;
         if ($pf_firma !== '') { $pk_gk[] = "kg.grup_adi LIKE ?"; $pk_gk_p[] = '%' . $pf_firma . '%'; }
@@ -196,6 +199,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         if ($pf_urun      !== '') { $pl_where[] = "lp.urun_cinsi LIKE ?"; $pl_p[] = '%' . $pf_urun . '%'; }
         if ($pf_depo      !== '') { $pl_where[] = "lp.depo LIKE ?";       $pl_p[] = '%' . $pf_depo . '%'; }
         if ($pf_parti     !== '') { $pl_where[] = "lr.parti_no LIKE ?";   $pl_p[] = '%' . $pf_parti . '%'; }
+        [$_pds_lp, $_pds_lp_v] = depo_sql_in('lp.depo');
+        if ($_pds_lp !== '') { $pl_where[] = $_pds_lp; $pl_p = array_merge($pl_p, $_pds_lp_v); }
         $pl_where_sql = 'WHERE ' . implode(' AND ', $pl_where);
 
         $st = $pdo->prepare("SELECT COALESCE(SUM(lp.net_kg),0)
@@ -255,6 +260,9 @@ if ($f_tarih_bit !== '') { $k_where[] = "giris_tarih <= ?";   $k_params[] = $f_t
 if ($f_firma     !== '') { $k_where[] = "LOWER(TRIM(firma_adi)) LIKE LOWER(?)";   $k_params[] = '%' . $f_firma . '%'; }
 if ($f_urun      !== '') { $k_where[] = "LOWER(TRIM(malin_cinsi)) LIKE LOWER(?)"; $k_params[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $k_where[] = "LOWER(TRIM(depo)) LIKE LOWER(?)";        $k_params[] = '%' . $f_depo . '%'; }
+// Aktif depo kapsamı — ürün stok tümüyle seçili depoya daraltılır
+[$_ds_depo, $_ds_vals] = depo_sql_in('depo');
+if ($_ds_depo !== '') { $k_where[] = $_ds_depo; $k_params = array_merge($k_params, $_ds_vals); }
 // NOT: $f_parti kantar tarafına uygulanmaz — kantar kayıtları partiye bağlı değildir
 $k_where_sql = $k_where ? 'WHERE ' . implode(' AND ', $k_where) : '';
 
@@ -264,6 +272,8 @@ if ($f_tarih_bas !== '') { $gk_base[] = "kf.giris_tarih >= ?";   $gk_base_p[] = 
 if ($f_tarih_bit !== '') { $gk_base[] = "kf.giris_tarih <= ?";   $gk_base_p[] = $f_tarih_bit . ' 23:59:59'; }
 if ($f_urun      !== '') { $gk_base[] = "LOWER(TRIM(kf.malin_cinsi)) LIKE LOWER(?)"; $gk_base_p[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $gk_base[] = "LOWER(TRIM(kf.depo)) LIKE LOWER(?)";        $gk_base_p[] = '%' . $f_depo . '%'; }
+[$_ds_kf, $_ds_kf_v] = depo_sql_in('kf.depo');
+if ($_ds_kf !== '') { $gk_base[] = $_ds_kf; $gk_base_p = array_merge($gk_base_p, $_ds_kf_v); }
 $gk_conds = $gk_base; $gk_p = $gk_base_p;
 if ($f_firma !== '') { $gk_conds[] = "LOWER(TRIM(kg.grup_adi)) LIKE LOWER(?)"; $gk_p[] = '%' . $f_firma . '%'; }
 $gk_sql = $gk_conds ? 'WHERE ' . implode(' AND ', $gk_conds) : '';
@@ -298,6 +308,8 @@ if ($f_firma     !== '') { $l_where[] = "LOWER(TRIM(lr.firma)) LIKE LOWER(?)";  
 if ($f_urun      !== '') { $l_where[] = "LOWER(TRIM(lp.urun_cinsi)) LIKE LOWER(?)"; $l_params[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $l_where[] = "LOWER(TRIM(lp.depo)) LIKE LOWER(?)";       $l_params[] = '%' . $f_depo . '%'; }
 if ($f_parti     !== '') { $l_where[] = "lr.parti_no LIKE ?";   $l_params[] = '%' . $f_parti . '%'; }
+[$_ds_lp, $_ds_lp_v] = depo_sql_in('lp.depo');
+if ($_ds_lp !== '') { $l_where[] = $_ds_lp; $l_params = array_merge($l_params, $_ds_lp_v); }
 $l_where_sql = 'WHERE ' . implode(' AND ', $l_where);
 
 // Yükleme / Çıkma kırılımı (tek sorgu)
@@ -386,6 +398,8 @@ try {
     if ($f_urun  !== '') { $sc_where[] = "urun LIKE ?";     $sc_params[] = '%' . $f_urun . '%'; }
     if ($f_depo  !== '') { $sc_where[] = "depo LIKE ?";     $sc_params[] = '%' . $f_depo . '%'; }
     if ($f_parti !== '') { $sc_where[] = "parti_no LIKE ?"; $sc_params[] = '%' . $f_parti . '%'; }
+    [$_ds_sc, $_ds_sc_v] = depo_sql_in('depo');
+    if ($_ds_sc !== '') { $sc_where[] = $_ds_sc; $sc_params = array_merge($sc_params, $_ds_sc_v); }
     $sc_where_sql = $sc_where ? 'WHERE ' . implode(' AND ', $sc_where) : '';
     $st = $pdo->prepare("SELECT * FROM stock_counts $sc_where_sql ORDER BY count_date DESC, id DESC LIMIT 20");
     $st->execute($sc_params);
@@ -402,6 +416,8 @@ if ($f_tarih_bit !== '') { $qc_lp_where[] = "lr.tarih <= ?";        $qc_lp_param
 if ($f_firma     !== '') { $qc_lp_where[] = "lr.firma LIKE ?";      $qc_lp_params[] = '%' . $f_firma . '%'; }
 if ($f_urun      !== '') { $qc_lp_where[] = "lp.urun_cinsi LIKE ?"; $qc_lp_params[] = '%' . $f_urun . '%'; }
 if ($f_depo      !== '') { $qc_lp_where[] = "lp.depo LIKE ?";       $qc_lp_params[] = '%' . $f_depo . '%'; }
+[$_ds_qlp, $_ds_qlp_v] = depo_sql_in('lp.depo');
+if ($_ds_qlp !== '') { $qc_lp_where[] = $_ds_qlp; $qc_lp_params = array_merge($qc_lp_params, $_ds_qlp_v); }
 $qc_lp_sql = 'WHERE ' . implode(' AND ', $qc_lp_where);
 
 $qc_lr_where  = ["type IN ('yukleme','cikma')"];
@@ -409,6 +425,8 @@ $qc_lr_params = [];
 if ($f_tarih_bas !== '') { $qc_lr_where[] = "tarih >= ?";   $qc_lr_params[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $qc_lr_where[] = "tarih <= ?";   $qc_lr_params[] = $f_tarih_bit; }
 if ($f_firma     !== '') { $qc_lr_where[] = "firma LIKE ?"; $qc_lr_params[] = '%' . $f_firma . '%'; }
+[$_ds_qlr, $_ds_qlr_v] = depo_sql_records_in('loading_records');
+if ($_ds_qlr !== '') { $qc_lr_where[] = $_ds_qlr; $qc_lr_params = array_merge($qc_lr_params, $_ds_qlr_v); }
 $qc_lr_sql = 'WHERE ' . implode(' AND ', $qc_lr_where);
 
 $qc_cn_where  = ["type = 'cikma'"];
@@ -416,6 +434,8 @@ $qc_cn_params = [];
 if ($f_tarih_bas !== '') { $qc_cn_where[] = "tarih >= ?";   $qc_cn_params[] = $f_tarih_bas; }
 if ($f_tarih_bit !== '') { $qc_cn_where[] = "tarih <= ?";   $qc_cn_params[] = $f_tarih_bit; }
 if ($f_firma     !== '') { $qc_cn_where[] = "firma LIKE ?"; $qc_cn_params[] = '%' . $f_firma . '%'; }
+[$_ds_qcn, $_ds_qcn_v] = depo_sql_records_in('loading_records');
+if ($_ds_qcn !== '') { $qc_cn_where[] = $_ds_qcn; $qc_cn_params = array_merge($qc_cn_params, $_ds_qcn_v); }
 $qc_cn_sql = 'WHERE ' . implode(' AND ', $qc_cn_where);
 
 // Pre-compute: normalize_text_v2 ile tanımsız kantar grubu ID'leri

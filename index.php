@@ -19,13 +19,17 @@ if (is_admin()) {
     }
 }
 
-// Temel sayaçlar
-$stats = db()->query("
+// Temel sayaçlar — aktif depo kapsamında
+[$_ds_ix, $_ds_ix_v] = depo_sql_records_in('loading_records');
+$_ds_ix_and = $_ds_ix !== '' ? " AND $_ds_ix" : '';
+$_st_ix = db()->prepare("
     SELECT
-        (SELECT COUNT(*) FROM loading_records WHERE type='yukleme') AS toplam_kayit,
-        (SELECT COUNT(*) FROM loading_records WHERE type='cikma')   AS toplam_cikma,
+        (SELECT COUNT(*) FROM loading_records WHERE type='yukleme'{$_ds_ix_and}) AS toplam_kayit,
+        (SELECT COUNT(*) FROM loading_records WHERE type='cikma'{$_ds_ix_and})   AS toplam_cikma,
         (SELECT COUNT(*) FROM material_definitions WHERE is_active=1) AS tanim_sayisi
-")->fetch();
+");
+$_st_ix->execute(array_merge($_ds_ix_v, $_ds_ix_v));
+$stats = $_st_ix->fetch();
 
 // HKS taslak sayısı
 try {

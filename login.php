@@ -33,11 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setcookie(AUTH_COOKIE_NAME, $token, auth_cookie_options());
         audit_log_event('login_success', 'auth', null, null, null, (int)$user['id']);
 
-        // Güvenli yönlendirme: sadece kendi domain'e, '//' ile başlamamalı
+        // Girişten sonra 2. pencere: depo seçimi (zorunlu tek depo).
+        // Güvenli yönlendirme hedefi depo_sec sonrasına taşınır (next paramı).
         if ($next !== '' && str_starts_with($next, '/') && !str_starts_with($next, '//')) {
-            header('Location: ' . $next);
+            header('Location: depo_sec.php?next=' . urlencode($next));
         } else {
-            header('Location: index.php');
+            header('Location: depo_sec.php');
         }
         exit;
     }

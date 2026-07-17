@@ -166,6 +166,18 @@ $net  = round(max(0, $brut - $dara), 3);
 
 ---
 
+## Aktif Depo Sistemi (Sprint Depo-01)
+
+- **Zorunlu tek depo:** Girişten sonra `depo_sec.php` depo seçtirir; seçilmeden hiçbir sayfa açılmaz ("Tüm Depolar" yok). Cookie: `asya_depo` (180 gün).
+- **Tek kapı:** `user_allowed_depots()` (config/auth.php) aktif depo seçiliyse `[aktif_depo]` döner — TÜM filtre yardımcıları buradan beslenir.
+- **Filtre yardımcıları:** `depo_sql_records()` (named), `depo_sql_column()` (named), `depo_sql_in()` (pozisyonel, kolon), `depo_sql_records_in()` (pozisyonel, EXISTS).
+- **Yeni sorgu yazarken:** loading_records → `depo_sql_records[_in]`, depo kolonu olan tablo → `depo_sql_column`/`depo_sql_in`. UNUTMA!
+- **Damgalama:** Yeni kayıt formlarında depo varsayılanı = `active_depot()` (_form.php, kantar_create, malzeme_stok_islem).
+- **Tekil görüntüleme koruması:** record_view (palet depo kontrolü), kantar_view (`depot_visible_to_user`).
+- **Depo değiştirme:** topbar `.depo-badge` + sidebar `.sidebar-depo` → depo_sec.php. Audit: `depot_switch`.
+- **Eski depo'suz veri:** `depo_tasima.php` (yalnız admin, onaylı GO butonu) boş depolu satırları hedef depoya taşır.
+- **Depo listesi kaynağı:** `material_definitions type='depo'` (`depot_options()` = tanımlar ∩ `user_depolar` ataması).
+
 ## Önemli Desenler
 
 ```php

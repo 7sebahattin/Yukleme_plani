@@ -262,6 +262,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
             $sp2[':urun_sahibi2'] = (int)$f_urun_sahibi;
         }
     }
+    // Aktif depo kapsamı — özet kartları da seçili depoya daraltılır
+    [$_drs_sp, $_drp_sp] = depo_sql_records('r', ':udps');
+    if ($_drs_sp !== '') { $sp .= $_drs_sp; $sp2 = array_merge($sp2, $_drp_sp); }
     if ($f_palet_islendi === 'isaretli') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN p.islendi=1  THEN 1 END)>0"; }
     elseif ($f_palet_islendi === 'hicbiri') { $sp .= " GROUP BY r.id HAVING COUNT(CASE WHEN (p.islendi IS NULL OR p.islendi=0) THEN 1 END)>0"; }
     $sp_st = db()->prepare($sp); $sp_st->execute($sp2);
@@ -311,6 +314,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
     if ($f_urun  !== '') { $sql .= " AND r.urun LIKE :urun";    $p[':urun']  = '%'.$f_urun.'%'; }
     if ($f_firma !== '') { $sql .= " AND r.firma LIKE :firma";  $p[':firma'] = '%'.$f_firma.'%'; }
     rpt_date_filter($sql, $p, 'r.tarih', $f_from, $f_to);
+    // Aktif depo kapsamı
+    [$_drs_u, $_drp_u] = depo_sql_records('r', ':udpu');
+    if ($_drs_u !== '') { $sql .= $_drs_u; $p = array_merge($p, $_drp_u); }
     $sql .= " GROUP BY r.urun ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -340,6 +346,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $p = [];
     if ($f_firma !== '') { $sql .= " AND r.firma LIKE :firma"; $p[':firma'] = '%'.$f_firma.'%'; }
     rpt_date_filter($sql, $p, 'r.tarih', $f_from, $f_to);
+    // Aktif depo kapsamı
+    [$_drs_f, $_drp_f] = depo_sql_records('r', ':udpf');
+    if ($_drs_f !== '') { $sql .= $_drs_f; $p = array_merge($p, $_drp_f); }
     $sql .= " GROUP BY r.firma ORDER BY toplam_kasa DESC LIMIT 500";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -412,6 +421,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
     }
     if ($f_from !== '') { $sql .= " AND giris_tarih >= :df"; $p[':df'] = $f_from; }
     if ($f_to   !== '') { $sql .= " AND giris_tarih <= :dt"; $p[':dt'] = $f_to; }
+    // Aktif depo kapsamı
+    [$_ds_krap, $_ds_krap_p] = depo_sql_column('depo');
+    if ($_ds_krap !== '') { $sql .= $_ds_krap; $p = array_merge($p, $_ds_krap_p); }
     $sql .= " ORDER BY id DESC LIMIT 1000";
     $st = db()->prepare($sql); $st->execute($p);
     $rows = $st->fetchAll();
@@ -448,6 +460,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
         if ($f_kantar_firma !== '') { $kw[] = "(EXISTS (SELECT 1 FROM kantar_gruplar _kg WHERE _kg.fis_id=kf.id AND _kg.grup_adi = ?) OR NOT EXISTS (SELECT 1 FROM kantar_gruplar _kg2 WHERE _kg2.fis_id=kf.id))"; $kp[] = $f_kantar_firma; }
         if ($f_depo  !== '') { $kw[] = "kf.depo = ?";            $kp[] = $f_depo;  }
         if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?";  $kp[] = '%'.$f_urun.'%'; }
+        // Aktif depo kapsamı
+        [$_ds_gkf, $_ds_gkf_v] = depo_sql_in('kf.depo');
+        if ($_ds_gkf !== '') { $kw[] = $_ds_gkf; $kp = array_merge($kp, $_ds_gkf_v); }
         $st = db()->prepare("SELECT kf.*,
             (SELECT COUNT(*) FROM kantar_gruplar WHERE fis_id=kf.id) AS grup_count
             FROM kantar_fisleri kf
@@ -481,6 +496,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $yw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
         $yp[] = $f_depo;
     }
+    // Aktif depo kapsamı
+    [$_ds_yk, $_ds_yk_v] = depo_sql_records_in('r');
+    if ($_ds_yk !== '') { $yw[] = $_ds_yk; $yp = array_merge($yp, $_ds_yk_v); }
     $st = db()->prepare("
         SELECT r.id, r.tarih, r.firma, r.urun, r.parti_no, r.durum, r.on_plaka,
                (SELECT _p.depo FROM loading_pallets _p
@@ -519,6 +537,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $cw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
         $cp[] = $f_depo;
     }
+    // Aktif depo kapsamı
+    [$_ds_ck, $_ds_ck_v] = depo_sql_records_in('r');
+    if ($_ds_ck !== '') { $cw[] = $_ds_ck; $cp = array_merge($cp, $_ds_ck_v); }
     if ($f_from !== '') { $cw[] = "r.tarih >= ?"; $cp[] = $f_from; }
     if ($f_to   !== '') { $cw[] = "r.tarih <= ?"; $cp[] = $f_to; }
     $st = db()->prepare("
@@ -573,6 +594,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
         $mkw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
         $mkp[] = $f_depo;
     }
+    // Aktif depo kapsamı
+    [$_ds_mk, $_ds_mk_v] = depo_sql_records_in('r');
+    if ($_ds_mk !== '') { $mkw[] = $_ds_mk; $mkp = array_merge($mkp, $_ds_mk_v); }
     $st = db()->prepare("
         SELECT r.id, r.tarih, r.firma, r.bolge, r.alici, r.urun, r.parti_no, r.durum,
                (SELECT _p.depo FROM loading_pallets _p
@@ -599,6 +623,9 @@ if ($type === 'yukleme' || $type === 'cikma') {
         if ($f_firma !== '') { $hw[] = "lr.firma=?"; $hp[] = $f_firma; }
         if ($f_urun  !== '') { $hw[] = "lr.urun=?";  $hp[] = $f_urun; }
         if ($f_depo  !== '') { $hw[] = "lp.depo=?";  $hp[] = $f_depo; }
+        // Aktif depo kapsamı
+        [$_ds_hz, $_ds_hz_v] = depo_sql_in('lp.depo');
+        if ($_ds_hz !== '') { $hw[] = $_ds_hz; $hp = array_merge($hp, $_ds_hz_v); }
         $st = db()->prepare("
             SELECT COUNT(DISTINCT lr.id) AS record_count,
                    COUNT(lp.id)          AS palet_count,
@@ -823,6 +850,9 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
             $det_p[':q'] = '%'.$f_q.'%';
         }
         rpt_date_filter($det_sql, $det_p, 'lr.tarih', $f_from, $f_to);
+        // Aktif depo kapsamı
+        [$_drs_d, $_drp_d] = depo_sql_records('lr', ':udpd');
+        if ($_drs_d !== '') { $det_sql .= $_drs_d; $det_p = array_merge($det_p, $_drp_d); }
         $det_sql .= " GROUP BY lr.id, lp.id ORDER BY lr.tarih DESC, lr.id DESC, lp.sira_no ASC";
 
         $det_st = db()->prepare($det_sql);

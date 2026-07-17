@@ -5334,3 +5334,46 @@ input:focus, select:focus, textarea:focus {
 /* — 6. Pill filtreleri: yumuşak etkileşim — */
 .pill { transition: background .14s ease, border-color .14s ease, color .14s ease; }
 .pill:not(.active):hover { border-color: var(--border-strong); background: #f7f9fc; }
+
+/* ---------- Aktif Depo Rozeti (Sprint Depo-01) ---------- */
+/* Topbar: koyu zemin üzerinde açık çip — tıklayınca depo_sec.php */
+.depo-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff; font-weight: 700; font-size: .82rem;
+    white-space: nowrap; flex-shrink: 1; min-width: 0;
+    transition: background .15s, border-color .15s;
+}
+.depo-badge:hover { background: rgba(255,255,255,0.24); text-decoration: none; }
+.depo-badge-icon { font-size: .95rem; }
+.depo-badge-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.depo-badge-caret { font-size: .65rem; opacity: .7; }
+
+@media (max-width: 767px) {
+    .depo-badge { padding: 5px 10px; font-size: .76rem; }
+    .depo-badge-name { max-width: 92px; }
+}
+
+/* Sidebar (≥900px): marka altında aktif depo kartı */
+.sidebar-depo {
+    display: flex; align-items: center; gap: 10px;
+    margin: 10px 12px 4px; padding: 9px 12px;
+    border-radius: 10px;
+    background: rgba(29,108,240,0.10);
+    border: 1px solid rgba(29,108,240,0.25);
+    transition: background .15s, border-color .15s;
+}
+.sidebar-depo:hover { background: rgba(29,108,240,0.18); text-decoration: none; }
+.sidebar-depo-icon { font-size: 1.1rem; flex-shrink: 0; }
+.sidebar-depo-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.sidebar-depo-label {
+    font-size: .62rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .05em; color: #64748b;
+}
+.sidebar-depo-name {
+    font-size: .86rem; font-weight: 800; color: #1d6cf0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sidebar-depo-caret { font-size: .65rem; color: #94a3b8; flex-shrink: 0; }

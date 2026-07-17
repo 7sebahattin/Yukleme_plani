@@ -40,7 +40,10 @@ $fis = [
     'fis_no' => '', 'plaka' => '', 'firma_adi' => '',
     'giris_tarih' => '', 'cikis_tarih' => '', 'operator_adi' => '',
     'malin_cinsi' => '', 'geldigi_yer' => '', 'gittigi_yer' => '',
-    'aciklama' => '', 'depo' => '', 'parti_no' => '',
+    'aciklama' => '',
+    // Yeni fişte depo varsayılanı = aktif depo
+    'depo' => (function_exists('active_depot') ? active_depot() : null) ?? '',
+    'parti_no' => '',
     'tartim1' => '', 'alibi1' => '',
     'tartim2' => '', 'alibi2' => '',
 ];

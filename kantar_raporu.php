@@ -48,6 +48,9 @@ if ($f_tarih_bas !== '') { $where[] = "kf.giris_tarih >= ?"; $params[] = $f_tari
 if ($f_tarih_bit !== '') { $where[] = "kf.giris_tarih <= ?"; $params[] = $f_tarih_bit . ' 23:59:59'; }
 if ($f_malin     !== '') { $where[] = "kf.malin_cinsi = ?";  $params[] = $f_malin; }
 if ($f_depo      !== '') { $where[] = "kf.depo = ?";         $params[] = $f_depo; }
+// Aktif depo kapsamı — rapor seçili depoya daraltılır
+[$_ds_kfr, $_ds_kfr_v] = depo_sql_in('kf.depo');
+if ($_ds_kfr !== '') { $where[] = $_ds_kfr; $params = array_merge($params, $_ds_kfr_v); }
 $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $st = $pdo->prepare("

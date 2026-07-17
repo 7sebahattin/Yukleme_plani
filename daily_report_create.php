@@ -64,6 +64,9 @@ try {
     if ($f_firma !== '') { $kw[] = "kf.firma_adi = ?";      $kp[] = $f_firma; }
     if ($f_depo  !== '') { $kw[] = "kf.depo = ?";           $kp[] = $f_depo; }
     if ($f_urun  !== '') { $kw[] = "kf.malin_cinsi LIKE ?"; $kp[] = '%' . $f_urun . '%'; }
+    // Aktif depo kapsamı — günlük rapor seçili depoya daraltılır
+    [$_ds_gk, $_ds_gk_v] = depo_sql_in('kf.depo');
+    if ($_ds_gk !== '') { $kw[] = $_ds_gk; $kp = array_merge($kp, $_ds_gk_v); }
     $st = db()->prepare(
         "SELECT kf.* FROM kantar_fisleri kf
          WHERE " . implode(' AND ', $kw) . "
@@ -85,6 +88,9 @@ try {
         $cw[] = "EXISTS (SELECT 1 FROM loading_pallets _p2 WHERE _p2.loading_record_id=r.id AND _p2.depo=?)";
         $cp[] = $f_depo;
     }
+    // Aktif depo kapsamı
+    [$_ds_cr, $_ds_cr_v] = depo_sql_records_in('r');
+    if ($_ds_cr !== '') { $cw[] = $_ds_cr; $cp = array_merge($cp, $_ds_cr_v); }
     if ($f_from !== '') { $cw[] = "r.tarih >= ?"; $cp[] = $f_from; }
     if ($f_to   !== '') { $cw[] = "r.tarih <= ?"; $cp[] = $f_to; }
     $st = db()->prepare("
@@ -119,6 +125,9 @@ try {
     if ($f_firma !== '') { $pw[] = "lr.firma = ?"; $pp[] = $f_firma; }
     if ($f_urun  !== '') { $pw[] = "lr.urun = ?";  $pp[] = $f_urun; }
     if ($f_depo  !== '') { $pw[] = "lp.depo = ?";  $pp[] = $f_depo; }
+    // Aktif depo kapsamı
+    [$_ds_pw, $_ds_pw_v] = depo_sql_in('lp.depo');
+    if ($_ds_pw !== '') { $pw[] = $_ds_pw; $pp = array_merge($pp, $_ds_pw_v); }
     $st = db()->prepare("
         SELECT lp.id AS palet_id, lp.loading_record_id,
                lp.palet_no, lp.kasa_adeti, lp.brut_kg, lp.dara_kg, lp.net_kg,

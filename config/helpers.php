@@ -225,6 +225,7 @@ function render_desktop_sidebar(string $base): void {
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
     $a_mig   = $cur === 'migrate.php';
+    $a_dtas  = $cur === 'depo_tasima.php';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
@@ -240,6 +241,18 @@ function render_desktop_sidebar(string $base): void {
             <span class="sidebar-brand-sub">Operasyon Paneli</span>
         </span>
     </a>
+
+    <?php if (function_exists('active_depot') && ($__sdp = active_depot()) !== null): ?>
+    <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
+       class="sidebar-depo" title="Depo değiştir">
+        <span class="sidebar-depo-icon" aria-hidden="true">🏭</span>
+        <span class="sidebar-depo-txt">
+            <span class="sidebar-depo-label">Aktif Depo</span>
+            <span class="sidebar-depo-name"><?= h($__sdp) ?></span>
+        </span>
+        <span class="sidebar-depo-caret" aria-hidden="true">▾</span>
+    </a>
+    <?php unset($__sdp); endif; ?>
 
     <nav class="sidebar-nav">
         <div class="sidebar-section">Operasyon</div>
@@ -262,6 +275,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
+        <?php if ($p_adm) $lnk('depo_tasima.php', '📦', 'Depo Taşıma',    $a_dtas); ?>
         <?php endif; ?>
     </nav>
 
@@ -339,6 +353,12 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <?php endif; ?>
         </nav>
+        <?php if (function_exists('active_depot') && ($__adp = active_depot()) !== null): ?>
+        <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
+           class="depo-badge" title="Depo değiştir">
+            <span class="depo-badge-icon" aria-hidden="true">🏭</span><span class="depo-badge-name"><?= h($__adp) ?></span><span class="depo-badge-caret" aria-hidden="true">▾</span>
+        </a>
+        <?php unset($__adp); endif; ?>
         <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>
         <div class="topnav-user-wrap">
             <div class="topnav-user-info">

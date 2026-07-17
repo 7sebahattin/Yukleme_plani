@@ -22,7 +22,10 @@ $_depo_names   = array_column($depo_list,   'name');
 $_bolge_names  = array_column($bolge_list,  'name');
 $_cur_firma    = $record['firma']         ?? '';
 $_cur_urun     = $record['urun']          ?? '';
-$_cur_depo     = $pallets[0]['depo']      ?? '';
+// Yeni kayıtta depo varsayılanı = aktif depo (depo döngüsü: OLUŞTUR adımı)
+$_cur_depo     = ($pallets[0]['depo'] ?? '') !== ''
+    ? $pallets[0]['depo']
+    : ((function_exists('active_depot') ? active_depot() : null) ?? '');
 $_cur_bolge    = $record['bolge']         ?? '';
 
 // Helper: render select options with optional legacy value fallback
