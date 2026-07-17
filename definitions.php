@@ -87,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $new_def_id = (int)db()->lastInsertId();
             audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
             set_flash('success', '"' . $name . '" eklendi.');
+            $back = 'sel=' . $new_def_id; // yeni kayıt listede seçili gelsin
 
         } elseif ($action === 'update') {
             $id        = (int)($_POST['id'] ?? 0);
@@ -172,21 +173,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// ── GET filtreleri ───────────────────────────────────────
-$f_q       = trim((string)($_GET['q'] ?? ''));
-$f_section = (string)($_GET['section'] ?? '');
-$f_durum   = (string)($_GET['durum'] ?? '');           // '', 'aktif', 'pasif'
-$f_dara    = !empty($_GET['dara']);                    // sadece dara içerenler
-if ($f_section !== '' && $f_section !== 'operasyon' && !isset($SECTIONS[$f_section])) $f_section = '';
-if (!in_array($f_durum, ['aktif', 'pasif'], true)) $f_durum = '';
-
-// Geri dönüş query (POST sonrası bağlamı koru)
-$back_qs = http_build_query(array_filter([
-    'section' => $f_section,
-    'q'       => $f_q,
-    'durum'   => $f_durum,
-    'dara'    => $f_dara ? '1' : '',
-], fn($v) => $v !== '' && $v !== null));
+// ── GET parametreleri ────────────────────────────────────
+// sel  = kayıt sonrası panele yüklenecek tanım id'si
+// type = dış bağlantı ön seçimi (örn. definitions.php?type=depo)
+$g_sel  = (int)($_GET['sel'] ?? 0);
+$g_type = (string)($_GET['type'] ?? '');
+if ($g_type !== '' && !isset($type_labels[$g_type])) $g_type = '';
 
 // ── Tüm tanımları çek ────────────────────────────────────
 $all = db()->query("SELECT * FROM material_definitions ORDER BY type, name")->fetchAll();
@@ -223,20 +215,7 @@ function def_usage_count(array $d, array $kasa, array $palet, array $mat, array 
     return (int)($mat[$id] ?? 0) + (int)($mov[$id] ?? 0);
 }
 
-// ── Özet istatistik (filtreden bağımsız) ─────────────────
-$stat_total = count($all);
-$stat_aktif = 0; $stat_ambalaj = 0; $stat_malzeme = 0; $stat_ticari = 0;
-foreach ($all as $d) {
-    if ($d['is_active']) $stat_aktif++;
-    $sec = $type_section[$d['type']] ?? null;
-    if ($sec === 'ambalaj') $stat_ambalaj++;
-    elseif ($sec === 'malzeme') $stat_malzeme++;
-    elseif ($sec === 'ticari') $stat_ticari++;
-}
-$stat_pasif = $stat_total - $stat_aktif;
-
-// Arama için Türkçe-bağışlayıcı katlama (sadece arama; duplicate guard normalize_text_v2 ile katı kalır).
-// MySQL LOWER kullanılmaz — tamamen PHP tarafında.
+// Arama için Türkçe-bağışlayıcı katlama (JS tarafındaki fold ile aynı kurallar)
 function def_search_fold(string $s): string {
     $s = strtr($s, [
         'İ'=>'i','I'=>'i','Ş'=>'s','Ğ'=>'g','Ü'=>'u','Ö'=>'o','Ç'=>'c',
@@ -246,31 +225,21 @@ function def_search_fold(string $s): string {
     return mb_strtolower($s, 'UTF-8');
 }
 
-// ── Filtre uygula (PHP tarafı, Türkçe uyumlu) ────────────
-$q_fold = $f_q !== '' ? def_search_fold($f_q) : '';
-$filtered = [];
-foreach ($all as $d) {
-    $sec = $type_section[$d['type']] ?? 'malzeme';
-    if ($f_section !== '' && $f_section !== 'operasyon' && $sec !== $f_section) continue;
-    if ($f_durum === 'aktif' && !$d['is_active']) continue;
-    if ($f_durum === 'pasif' && $d['is_active']) continue;
-    if ($f_dara && !(def_has_dara($d['type']) && (float)$d['unit_dara_kg'] > 0)) continue;
-    if ($q_fold !== '') {
-        // Türkçe-bağışlayıcı: ad + tip etiketi içinde ara (ı/i, ş/s, büyük/küçük harf duyarsız)
-        $hay = def_search_fold($d['name'] . ' ' . ($type_labels[$d['type']] ?? $d['type']));
-        if (mb_strpos($hay, $q_fold, 0, 'UTF-8') === false) continue;
-    }
-    $filtered[] = $d;
-}
-
-// Bölüm > tip > kayıtlar şeklinde grupla
+// Bölüm > tip > kayıtlar şeklinde grupla (filtre yok — arama tamamen istemci tarafında)
 $grouped = [];
-foreach ($filtered as $d) {
+foreach ($all as $d) {
     $sec = $type_section[$d['type']] ?? 'malzeme';
     $grouped[$sec][$d['type']][] = $d;
 }
 
-$show_operasyon = ($f_section === '' || $f_section === 'operasyon') && $f_q === '' && !$f_dara && $f_durum === '';
+// sel → hangi bölüm açık başlasın
+$sel_section = '';
+if ($g_sel > 0) {
+    foreach ($all as $d) {
+        if ((int)$d['id'] === $g_sel) { $sel_section = $type_section[$d['type']] ?? 'malzeme'; break; }
+    }
+}
+if ($sel_section === '' && $g_type !== '') $sel_section = $type_section[$g_type] ?? '';
 
 render_header('Tanımlar');
 render_flash();
@@ -279,226 +248,330 @@ render_flash();
 <div class="page-head">
     <div>
         <h1>⚙️ Tanımlar</h1>
-        <p class="muted">Firma, depo, ürün, kasa/palet ve malzeme tanımlarını tek yerden yönetin</p>
+        <p class="muted">Soldan ekle/düzenle · sağda listeden seç</p>
     </div>
     <a href="index.php" class="btn btn-ghost">← Ana Sayfa</a>
 </div>
 
-<!-- ── Özet kartları ── -->
-<div class="def2-stats">
-    <div class="def2-stat"><span>Toplam Tanım</span><strong><?= $stat_total ?></strong></div>
-    <div class="def2-stat def2-stat-ok"><span>Aktif</span><strong><?= $stat_aktif ?></strong></div>
-    <div class="def2-stat def2-stat-off"><span>Pasif</span><strong><?= $stat_pasif ?></strong></div>
-    <div class="def2-stat"><span>Ticari</span><strong><?= $stat_ticari ?></strong></div>
-    <div class="def2-stat"><span>Kasa / Palet</span><strong><?= $stat_ambalaj ?></strong></div>
-    <div class="def2-stat"><span>Malzeme</span><strong><?= $stat_malzeme ?></strong></div>
-</div>
+<div class="def3-layout">
 
-<!-- ── Filtre & arama ── -->
-<form method="get" class="def2-filter">
-    <div class="def2-filter-search">
-        <input type="search" name="q" value="<?= h($f_q) ?>" placeholder="Tanım ara (firma, kasa, malzeme...)" autocomplete="off">
-        <button class="btn btn-primary btn-sm">Ara</button>
-    </div>
-    <div class="def2-filter-row">
-        <select name="section" onchange="this.form.submit()">
-            <option value="">Tüm Bölümler</option>
-            <?php foreach ($SECTIONS as $sk => $sv): ?>
-            <option value="<?= h($sk) ?>" <?= $f_section === $sk ? 'selected' : '' ?>><?= $sv['icon'] ?> <?= h($sv['label']) ?></option>
-            <?php endforeach; ?>
-            <option value="operasyon" <?= $f_section === 'operasyon' ? 'selected' : '' ?>>🚪 Operasyon</option>
-        </select>
-        <select name="durum" onchange="this.form.submit()">
-            <option value="">Tümü (Aktif+Pasif)</option>
-            <option value="aktif" <?= $f_durum === 'aktif' ? 'selected' : '' ?>>Sadece Aktif</option>
-            <option value="pasif" <?= $f_durum === 'pasif' ? 'selected' : '' ?>>Sadece Pasif</option>
-        </select>
-        <label class="def2-check">
-            <input type="checkbox" name="dara" value="1" <?= $f_dara ? 'checked' : '' ?> onchange="this.form.submit()">
-            Sadece dara içerenler
-        </label>
-        <?php if ($f_q !== '' || $f_section !== '' || $f_durum !== '' || $f_dara): ?>
-        <a href="definitions.php" class="btn btn-ghost btn-sm">Temizle</a>
-        <?php endif; ?>
-    </div>
-</form>
+    <!-- ── SOL: Sabit Ekle / Düzenle Paneli ── -->
+    <aside class="def3-panel card">
+        <div class="def3-panel-head">
+            <h2 id="d3Title">➕ Yeni Tanım</h2>
+            <button type="button" id="d3NewBtn" class="btn btn-sm btn-ghost" hidden>+ Yeni</button>
+        </div>
 
-<!-- ── Yeni tanım ekle ── -->
-<section class="card def2-add-card">
-    <div class="card-head"><h2>➕ Yeni Tanım Ekle</h2></div>
-    <div class="card-body">
-        <form method="post" class="def2-add-form" id="defAddForm">
+        <form method="post" id="d3Form" autocomplete="off">
             <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="create">
-            <input type="hidden" name="back"   value="<?= h($back_qs) ?>">
-            <div class="def2-add-grid">
-                <label>Kategori / Tür
-                    <select name="type" id="defAddType" required>
-                        <?php foreach ($SECTIONS as $sk => $sv): ?>
-                        <optgroup label="<?= h($sv['icon'] . ' ' . $sv['label']) ?>">
-                            <?php foreach ($sv['types'] as $t): ?>
-                            <option value="<?= h($t) ?>"
-                                    data-dara="<?= def_has_dara($t) ? '1' : '0' ?>"
-                                    data-help="<?= h(def_help($t)) ?>"><?= h($type_labels[$t] ?? $t) ?></option>
-                            <?php endforeach; ?>
-                        </optgroup>
+            <input type="hidden" name="action" value="create" id="d3Action">
+            <input type="hidden" name="id"     value=""       id="d3Id" disabled>
+            <input type="hidden" name="back"   value=""       id="d3Back">
+
+            <label class="def3-field">Kategori / Tür
+                <select name="type" id="d3Type" required>
+                    <?php foreach ($SECTIONS as $sk => $sv): ?>
+                    <optgroup label="<?= h($sv['icon'] . ' ' . $sv['label']) ?>">
+                        <?php foreach ($sv['types'] as $t): ?>
+                        <option value="<?= h($t) ?>"
+                                data-dara="<?= def_has_dara($t) ? '1' : '0' ?>"
+                                <?= $g_type === $t ? 'selected' : '' ?>><?= h($type_labels[$t] ?? $t) ?></option>
                         <?php endforeach; ?>
-                    </select>
-                </label>
-                <label>Tanım Adı
-                    <input type="text" name="name" required autocomplete="off" placeholder="Örn: Karaman Cihat" data-uppercase="tr">
-                </label>
-                <label id="defAddDaraWrap">Birim Dara (kg)
-                    <input type="text" name="unit_dara_kg" inputmode="decimal" value="0">
-                </label>
-                <div class="def2-add-submit">
-                    <button class="btn btn-primary">+ Ekle</button>
+                    </optgroup>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+
+            <label class="def3-field">Tanım Adı
+                <input type="text" name="name" id="d3Name" required
+                       placeholder="Örn: KARAMAN" data-uppercase="tr">
+            </label>
+
+            <label class="def3-field" id="d3DaraWrap" hidden>Birim Dara (kg)
+                <input type="text" name="unit_dara_kg" id="d3Dara" inputmode="decimal" value="0">
+            </label>
+
+            <label class="def3-active" id="d3ActiveWrap" hidden>
+                <input type="checkbox" name="is_active" id="d3Active" checked> Aktif
+            </label>
+
+            <div class="def3-panel-meta" id="d3Meta" hidden></div>
+
+            <div class="def3-panel-actions">
+                <button class="btn btn-primary" id="d3Submit">+ Ekle</button>
+                <button type="button" class="btn btn-ghost def3-del" id="d3DelBtn" hidden>🗑 Sil</button>
+            </div>
+        </form>
+
+        <form method="post" id="d3DelForm" hidden>
+            <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id"     value="" id="d3DelId">
+            <input type="hidden" name="back"   value="">
+        </form>
+    </aside>
+
+    <!-- ── SAĞ: Başlıklı liste (akordiyon) ── -->
+    <div class="def3-list">
+        <div class="def3-search card">
+            <input type="search" id="d3Search" placeholder="🔍 Tüm tanımlarda ara..." autocomplete="off">
+            <label class="def3-showoff"><input type="checkbox" id="d3ShowOff" checked> Pasifler</label>
+        </div>
+
+        <?php foreach ($SECTIONS as $sk => $sv):
+            $sec_groups = $grouped[$sk] ?? [];
+            $sec_count  = 0;
+            foreach ($sec_groups as $items) $sec_count += count($items);
+            $is_open = ($sel_section !== '' ? $sel_section === $sk : $sk === 'ticari');
+        ?>
+        <section class="def3-sec card<?= $is_open ? ' open' : '' ?>" data-sec="<?= h($sk) ?>">
+            <button type="button" class="def3-sec-head">
+                <span class="def3-sec-icon"><?= $sv['icon'] ?></span>
+                <span class="def3-sec-txt">
+                    <span class="def3-sec-label"><?= h($sv['label']) ?></span>
+                    <span class="def3-sec-desc"><?= h($sv['desc']) ?></span>
+                </span>
+                <span class="def3-sec-count"><?= $sec_count ?></span>
+                <span class="def3-sec-caret">▾</span>
+            </button>
+            <div class="def3-sec-body">
+                <?php foreach ($sv['types'] as $t):
+                    $items = $sec_groups[$t] ?? [];
+                    $has_dara = def_has_dara($t);
+                ?>
+                <div class="def3-tgroup" data-type="<?= h($t) ?>">
+                    <div class="def3-tgroup-head">
+                        <span><?= h($cat_icons[$t] ?? '•') ?> <?= h($type_labels[$t] ?? $t) ?>
+                            <small class="muted">· <?= count($items) ?></small></span>
+                        <button type="button" class="def3-tgroup-add" data-type="<?= h($t) ?>"
+                                title="Bu türde yeni ekle">+ Ekle</button>
+                    </div>
+                    <?php if (empty($items)): ?>
+                    <div class="def3-empty-type muted">Henüz tanım yok</div>
+                    <?php else: foreach ($items as $d):
+                        $ucnt = def_usage_count($d, $usage_kasa, $usage_palet, $usage_mat, $usage_mov, $usage_cat);
+                    ?>
+                    <button type="button"
+                            class="def3-row<?= !$d['is_active'] ? ' off' : '' ?>"
+                            data-id="<?= (int)$d['id'] ?>"
+                            data-name="<?= h($d['name']) ?>"
+                            data-type="<?= h($d['type']) ?>"
+                            data-typelabel="<?= h($type_labels[$d['type']] ?? $d['type']) ?>"
+                            data-hasdara="<?= $has_dara ? '1' : '0' ?>"
+                            data-dara="<?= h($d['unit_dara_kg']) ?>"
+                            data-active="<?= $d['is_active'] ? '1' : '0' ?>"
+                            data-usage="<?= $ucnt ?>"
+                            data-q="<?= h(def_search_fold($d['name'] . ' ' . ($type_labels[$d['type']] ?? $d['type']))) ?>">
+                        <span class="def3-row-name"><?= h($d['name']) ?></span>
+                        <span class="def3-row-meta">
+                            <?php if ($has_dara && (float)$d['unit_dara_kg'] > 0): ?>
+                            <span class="def3-chip def3-chip-dara"><?= h($d['unit_dara_kg']) ?> kg</span>
+                            <?php endif; ?>
+                            <?php if ($ucnt > 0): ?>
+                            <span class="def3-chip"><?= $ucnt ?> kayıt</span>
+                            <?php endif; ?>
+                            <span class="def3-dot <?= $d['is_active'] ? 'on' : '' ?>"
+                                  title="<?= $d['is_active'] ? 'Aktif' : 'Pasif' ?>"></span>
+                        </span>
+                    </button>
+                    <?php endforeach; endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </section>
+        <?php endforeach; ?>
+
+        <!-- Operasyon (salt okunur) -->
+        <section class="def3-sec card" data-sec="operasyon">
+            <button type="button" class="def3-sec-head">
+                <span class="def3-sec-icon">🚪</span>
+                <span class="def3-sec-txt">
+                    <span class="def3-sec-label">Operasyon Tanımları</span>
+                    <span class="def3-sec-desc">Çıkış nedenleri — kodda sabittir, düzenlenemez</span>
+                </span>
+                <span class="def3-sec-count"><?= count(cikis_nedeni_listesi()) ?></span>
+                <span class="def3-sec-caret">▾</span>
+            </button>
+            <div class="def3-sec-body">
+                <div class="def3-readonly-chips">
+                    <?php foreach (cikis_nedeni_listesi() as $cn): ?>
+                    <span class="def3-ro-chip"><?= h($cn) ?></span>
+                    <?php endforeach; ?>
                 </div>
             </div>
-            <p class="def2-add-help" id="defAddHelp"></p>
-        </form>
+        </section>
+
+        <div class="def3-noresult muted" id="d3NoResult" hidden>Aramaya uyan tanım bulunamadı.</div>
     </div>
-</section>
-
-<?php
-// ── Bölümleri sırayla bas ──
-$rendered_any = false;
-foreach ($SECTIONS as $sk => $sv):
-    if ($f_section !== '' && $f_section !== $sk && $f_section !== 'operasyon') continue;
-    if ($f_section === 'operasyon') continue;
-    $sec_groups = $grouped[$sk] ?? [];
-    $sec_count  = 0;
-    foreach ($sec_groups as $items) $sec_count += count($items);
-    if (empty($sec_groups)) continue;
-    $rendered_any = true;
-?>
-<section class="card def2-section">
-    <div class="def2-section-head">
-        <div class="def2-section-title">
-            <span class="def2-section-icon"><?= $sv['icon'] ?></span>
-            <div>
-                <h2><?= h($sv['label']) ?> <span class="muted">(<?= $sec_count ?>)</span></h2>
-                <p class="muted def2-section-desc"><?= h($sv['desc']) ?></p>
-            </div>
-        </div>
-    </div>
-
-    <?php foreach ($sv['types'] as $t):
-        $items = $sec_groups[$t] ?? [];
-        if (empty($items)) continue;
-        $has_dara = def_has_dara($t);
-    ?>
-    <div class="def2-typegroup">
-        <div class="def2-typegroup-label">
-            <?= h($cat_icons[$t] ?? '•') ?> <?= h($type_labels[$t] ?? $t) ?>
-            <span class="muted">· <?= count($items) ?></span>
-        </div>
-        <div class="def2-items">
-            <?php foreach ($items as $d):
-                $ucnt = def_usage_count($d, $usage_kasa, $usage_palet, $usage_mat, $usage_mov, $usage_cat);
-            ?>
-            <div class="def2-item<?= !$d['is_active'] ? ' def2-item-off' : '' ?>">
-                <form method="post" class="def2-item-form">
-                    <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="action" value="update">
-                    <input type="hidden" name="id"     value="<?= (int)$d['id'] ?>">
-                    <input type="hidden" name="back"   value="<?= h($back_qs) ?>">
-                    <?php if (!$has_dara): ?><input type="hidden" name="unit_dara_kg" value="0"><?php endif; ?>
-
-                    <div class="def2-item-main">
-                        <input type="text" name="name" value="<?= h($d['name']) ?>"
-                               class="def2-item-name" required autocomplete="off" data-uppercase="tr">
-                        <?php if ($has_dara): ?>
-                        <span class="def2-item-dara">
-                            <input type="text" name="unit_dara_kg" inputmode="decimal"
-                                   value="<?= h($d['unit_dara_kg']) ?>" title="Birim dara (kg)">
-                            <small>kg</small>
-                        </span>
-                        <?php endif; ?>
-                    </div>
-
-                    <div class="def2-item-meta">
-                        <?php if ($ucnt > 0): ?>
-                        <span class="def2-usage def2-usage-on" title="Geçmiş kayıtlarda kullanılıyor"><?= $ucnt ?> kayıt</span>
-                        <?php else: ?>
-                        <span class="def2-usage def2-usage-none" title="Hiç kullanılmamış">Kullanılmıyor</span>
-                        <?php endif; ?>
-                        <label class="def2-switch">
-                            <input type="checkbox" name="is_active" <?= $d['is_active'] ? 'checked' : '' ?>>
-                            <span class="def2-badge <?= $d['is_active'] ? 'def2-badge-on' : 'def2-badge-off' ?>"><?= $d['is_active'] ? 'Aktif' : 'Pasif' ?></span>
-                        </label>
-                        <button class="btn btn-sm btn-primary def2-save">Kaydet</button>
-                    </div>
-                </form>
-                <form method="post" class="def2-item-del">
-                    <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id"     value="<?= (int)$d['id'] ?>">
-                    <input type="hidden" name="back"   value="<?= h($back_qs) ?>">
-                    <button class="btn btn-sm btn-ghost def2-del-btn"
-                            title="<?= $ucnt > 0 ? 'Kullanımda — silmek yerine pasifleştirilir' : 'Sil' ?>"
-                            onclick="return confirm(<?= $ucnt > 0
-                                ? "'Bu tanım geçmiş kayıtlarda kullanılıyor. Silinemez, pasif yapılacak. Devam edilsin mi?'"
-                                : "'Bu tanım silinsin mi?'" ?>)">✕</button>
-                </form>
-            </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endforeach; ?>
-</section>
-<?php endforeach; ?>
-
-<?php if (!$rendered_any && $f_section !== 'operasyon'): ?>
-<div class="empty">
-    <p><?= $f_q !== '' || $f_durum !== '' || $f_dara ? 'Filtreye uyan tanım bulunamadı.' : 'Henüz tanım yok.' ?></p>
-    <?php if ($f_q !== '' || $f_section !== '' || $f_durum !== '' || $f_dara): ?>
-    <a href="definitions.php" class="btn btn-ghost">Filtreleri temizle</a>
-    <?php endif; ?>
 </div>
-<?php endif; ?>
-
-<?php if ($show_operasyon): ?>
-<!-- ── Operasyon Tanımları (kod tabanlı, salt okunur) ── -->
-<section class="card def2-section">
-    <div class="def2-section-head">
-        <div class="def2-section-title">
-            <span class="def2-section-icon">🚪</span>
-            <div>
-                <h2>Operasyon Tanımları</h2>
-                <p class="muted def2-section-desc">Çıkış nedenleri — sistemde sabittir</p>
-            </div>
-        </div>
-    </div>
-    <div class="def2-typegroup">
-        <div class="def2-typegroup-label">Çıkış Nedenleri <span class="muted">· <?= count(cikis_nedeni_listesi()) ?></span></div>
-        <div class="def2-readonly-chips">
-            <?php foreach (cikis_nedeni_listesi() as $cn): ?>
-            <span class="def2-ro-chip"><?= h($cn) ?></span>
-            <?php endforeach; ?>
-        </div>
-        <p class="def2-add-help">ℹ️ Çıkış nedenleri uygulama kodunda tanımlıdır (<code>config/helpers.php</code>). Değiştirmek için kod güncellemesi gerekir.</p>
-    </div>
-</section>
-<?php endif; ?>
 
 <script>
 (function () {
-    var sel  = document.getElementById('defAddType');
-    var help = document.getElementById('defAddHelp');
-    var dWrap = document.getElementById('defAddDaraWrap');
-    if (!sel) return;
-    function sync() {
-        var opt = sel.options[sel.selectedIndex];
-        if (!opt) return;
-        help.textContent = opt.getAttribute('data-help') || '';
-        var hasDara = opt.getAttribute('data-dara') === '1';
-        dWrap.style.display = hasDara ? '' : 'none';
-        var inp = dWrap.querySelector('input');
-        if (inp && !hasDara) inp.value = '0';
+    var form    = document.getElementById('d3Form');
+    var title   = document.getElementById('d3Title');
+    var fAction = document.getElementById('d3Action');
+    var fId     = document.getElementById('d3Id');
+    var fBack   = document.getElementById('d3Back');
+    var fType   = document.getElementById('d3Type');
+    var fName   = document.getElementById('d3Name');
+    var daraWrap= document.getElementById('d3DaraWrap');
+    var fDara   = document.getElementById('d3Dara');
+    var actWrap = document.getElementById('d3ActiveWrap');
+    var fActive = document.getElementById('d3Active');
+    var meta    = document.getElementById('d3Meta');
+    var submit  = document.getElementById('d3Submit');
+    var newBtn  = document.getElementById('d3NewBtn');
+    var delBtn  = document.getElementById('d3DelBtn');
+    var delForm = document.getElementById('d3DelForm');
+    var delId   = document.getElementById('d3DelId');
+    var panel   = document.querySelector('.def3-panel');
+    var selRow  = null;
+
+    // ── Panel modları ──────────────────────────────
+    function syncDaraByType() {
+        var opt = fType.options[fType.selectedIndex];
+        var has = opt && opt.getAttribute('data-dara') === '1';
+        daraWrap.hidden = !has;
+        if (!has) fDara.value = '0';
     }
-    sel.addEventListener('change', sync);
-    sync();
+
+    function newMode(presetType) {
+        if (selRow) { selRow.classList.remove('sel'); selRow = null; }
+        title.textContent = '➕ Yeni Tanım';
+        fAction.value = 'create';
+        fId.disabled  = true; fId.value = '';
+        fBack.value   = '';
+        fType.disabled = false;
+        if (presetType) fType.value = presetType;
+        fName.value = '';
+        fDara.value = '0';
+        actWrap.hidden = true; fActive.checked = true;
+        meta.hidden = true;
+        submit.textContent = '+ Ekle';
+        newBtn.hidden = true;
+        delBtn.hidden = true;
+        syncDaraByType();
+        fName.focus();
+    }
+
+    function editMode(row) {
+        if (selRow) selRow.classList.remove('sel');
+        selRow = row; row.classList.add('sel');
+
+        var usage = parseInt(row.dataset.usage || '0', 10);
+        title.textContent = '✏️ ' + row.dataset.typelabel + ' Düzenle';
+        fAction.value = 'update';
+        fId.disabled  = false; fId.value = row.dataset.id;
+        fBack.value   = 'sel=' + row.dataset.id;
+        fType.value   = row.dataset.type;
+        fType.disabled = true;                 // tür güncellemede değişmez
+        fName.value   = row.dataset.name;
+        daraWrap.hidden = row.dataset.hasdara !== '1';
+        fDara.value   = row.dataset.dara || '0';
+        actWrap.hidden = false;
+        fActive.checked = row.dataset.active === '1';
+        meta.hidden = false;
+        meta.textContent = usage > 0
+            ? '📊 ' + usage + ' kayıtta kullanılıyor — silinirse pasifleştirilir.'
+            : 'Hiç kullanılmamış — güvenle silinebilir.';
+        submit.textContent = '💾 Kaydet';
+        newBtn.hidden = false;
+        delBtn.hidden = false;
+        delBtn.dataset.usage = usage;
+
+        // Mobilde panel yukarıda — seçince görünür yap
+        if (window.innerWidth < 900) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        fName.focus();
+    }
+
+    fType.addEventListener('change', syncDaraByType);
+    newBtn.addEventListener('click', function () { newMode(); });
+
+    delBtn.addEventListener('click', function () {
+        if (!fId.value) return;
+        var usage = parseInt(delBtn.dataset.usage || '0', 10);
+        var msg = usage > 0
+            ? 'Bu tanım ' + usage + ' kayıtta kullanılıyor. Silinemez, pasif yapılacak. Devam edilsin mi?'
+            : '"' + fName.value + '" silinsin mi?';
+        if (!confirm(msg)) return;
+        delId.value = fId.value;
+        delForm.submit();
+    });
+
+    // ── Liste: satır seçimi + tür-içi hızlı ekle ──
+    document.querySelectorAll('.def3-row').forEach(function (row) {
+        row.addEventListener('click', function () { editMode(row); });
+    });
+    document.querySelectorAll('.def3-tgroup-add').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            newMode(btn.dataset.type);
+            if (window.innerWidth < 900) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+
+    // ── Akordiyon ──────────────────────────────────
+    document.querySelectorAll('.def3-sec-head').forEach(function (head) {
+        head.addEventListener('click', function () {
+            head.closest('.def3-sec').classList.toggle('open');
+        });
+    });
+
+    // ── Arama (istemci tarafı, anında) ─────────────
+    var search   = document.getElementById('d3Search');
+    var showOff  = document.getElementById('d3ShowOff');
+    var noResult = document.getElementById('d3NoResult');
+
+    function fold(s) {
+        return (s || '').replace(/İ/g,'i').replace(/I/g,'i').replace(/Ş/g,'s').replace(/Ğ/g,'g')
+            .replace(/Ü/g,'u').replace(/Ö/g,'o').replace(/Ç/g,'c')
+            .replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g')
+            .replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').toLowerCase();
+    }
+
+    function applyFilter() {
+        var q = fold(search.value.trim());
+        var offOk = showOff.checked;
+        var anyVisible = false;
+
+        document.querySelectorAll('.def3-sec').forEach(function (sec) {
+            if (sec.dataset.sec === 'operasyon') {
+                sec.hidden = q !== '';
+                return;
+            }
+            var secHas = false;
+            sec.querySelectorAll('.def3-tgroup').forEach(function (tg) {
+                var tgHas = false;
+                tg.querySelectorAll('.def3-row').forEach(function (row) {
+                    var show = (offOk || row.dataset.active === '1')
+                        && (q === '' || (row.dataset.q || '').indexOf(q) !== -1);
+                    row.hidden = !show;
+                    if (show) tgHas = true;
+                });
+                var emptyNote = tg.querySelector('.def3-empty-type');
+                if (emptyNote) emptyNote.hidden = q !== '';
+                tg.hidden = q !== '' && !tgHas;
+                if (tgHas || (q === '' && !tg.hidden)) secHas = true;
+            });
+            sec.hidden = q !== '' && !secHas;
+            if (q !== '' && secHas) sec.classList.add('open');   // arama sırasında sonuçlu bölümler açılır
+            if (secHas) anyVisible = true;
+        });
+        noResult.hidden = !(q !== '' && !anyVisible);
+    }
+    search.addEventListener('input', applyFilter);
+    showOff.addEventListener('change', applyFilter);
+
+    // ── Açılış durumu: sel / type paramı ───────────
+    syncDaraByType();
+    var selId = <?= (int)$g_sel ?>;
+    if (selId > 0) {
+        var row = document.querySelector('.def3-row[data-id="' + selId + '"]');
+        if (row) {
+            editMode(row);
+            row.scrollIntoView({ block: 'center' });
+        }
+    }
 })();
 </script>
 
