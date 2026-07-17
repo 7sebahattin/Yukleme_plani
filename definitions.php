@@ -23,8 +23,8 @@ $type_labels = definition_types();
 $SECTIONS = [
     'ticari'  => [
         'label' => 'Ticari Tanımlar', 'icon' => '🏢',
-        'desc'  => 'Firma, depo, bölge, ürün, marka, lokasyon',
-        'types' => ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'],
+        'desc'  => 'Firma, tedarikçi, depo, bölge, ürün, marka, lokasyon',
+        'types' => ['firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'],
     ],
     'ambalaj' => [
         'label' => 'Ambalaj · Kasa · Palet', 'icon' => '📦',
@@ -41,7 +41,7 @@ $SECTIONS = [
 ];
 
 $cat_types = $SECTIONS['ticari']['types'];                 // dara gerektirmeyen tipler
-$cat_icons = ['firma' => '🏢', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍'];
+$cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍'];
 
 // type → section eşlemesi
 $type_section = [];
@@ -155,6 +155,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $c->execute([$dd['name']]);
                     $used += (int)$c->fetchColumn();
                 }
+                if ($dd['type'] === 'tedarikci') {
+                    try {
+                        $c = db()->prepare("SELECT COUNT(*) FROM material_stock_movements WHERE firma = ?");
+                        $c->execute([$dd['name']]);
+                        $used += (int)$c->fetchColumn();
+                    } catch (Throwable $e) {}
+                }
             }
             if ($used > 0) {
                 db()->prepare("UPDATE material_definitions SET is_active=0 WHERE id=?")->execute([$id]);
@@ -201,6 +208,9 @@ $usage_cat['depo']     = db()->query("SELECT depo, COUNT(DISTINCT loading_record
 try {
     $usage_cat['marka'] = db()->query("SELECT brand, COUNT(*) FROM loading_records WHERE brand IS NOT NULL AND brand != '' GROUP BY brand")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['marka'] = []; }
+try {
+    $usage_cat['tedarikci'] = db()->query("SELECT firma, COUNT(*) FROM material_stock_movements WHERE firma != '' GROUP BY firma")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (Throwable $e) { $usage_cat['tedarikci'] = []; }
 try {
     $usage_cat['lokasyon'] = db()->query("SELECT name, COUNT(*) FROM (SELECT geldigi_yer AS name FROM kantar_fisleri WHERE geldigi_yer!='' UNION ALL SELECT gittigi_yer FROM kantar_fisleri WHERE gittigi_yer!='') t GROUP BY name")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['lokasyon'] = []; }

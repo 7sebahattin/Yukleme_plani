@@ -152,6 +152,7 @@ function get_all_active_materials(): array {
 function definition_types(): array {
     return [
         'firma'         => 'Firma',
+        'tedarikci'     => 'Tedarikçi',
         'depo'          => 'Depo',
         'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
@@ -277,7 +278,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
         <?php if ($p_adm) $lnk('depo_tasima.php', '📦', 'Depo Taşıma',    $a_dtas); ?>
-        <?php if ($p_adm) $lnk('firma_eslestirme.php', '🔗', 'Firma Eşleştirme', $a_fes); ?>
+        <?php if ($p_adm) $lnk('firma_eslestirme.php', '🔗', 'Tedarikçi Eşleştirme', $a_fes); ?>
         <?php endif; ?>
     </nav>
 

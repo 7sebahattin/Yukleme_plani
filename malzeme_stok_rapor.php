@@ -259,7 +259,7 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
                 </select>
             </div>
             <div class="rapor-fg">
-                <label>Tedarikçi / Firma</label>
+                <label>Tedarikçi</label>
                 <select name="firma">
                     <option value="">Tümü</option>
                     <?php foreach ($firma_filter_opts as $fv): ?>

@@ -5362,15 +5362,25 @@ input:focus, select:focus, textarea:focus {
 }
 .sidebar-depo-caret { font-size: .65rem; color: #94a3b8; flex-shrink: 0; }
 
-/* ── Tedarikçi/Firma hızlı ekleme (malzeme_stok_islem) ── */
-.ms-firma-wrap { position: relative; }
-.ms-firma-add {
-    display: block; width: 100%; margin-top: 6px;
-    padding: 7px 12px; border-radius: var(--radius-sm);
-    border: 1.5px dashed #16a34a; background: #f0fdf4; color: #15803d;
-    font: inherit; font-size: .82rem; font-weight: 700;
-    cursor: pointer; text-align: left;
-    transition: background .12s, border-color .12s;
+/* ── Tedarikçi öneri kutusu (malzeme_stok_islem) ── */
+.ms-sug-wrap { position: relative; }
+.ms-sug-list {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 700;
+    margin-top: 3px; max-height: 260px; overflow-y: auto;
+    background: #fff; border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
 }
-.ms-firma-add:hover { background: #dcfce7; }
-.ms-firma-add:disabled { opacity: .6; cursor: wait; }
+.ms-sug-row {
+    padding: 9px 12px; font-size: .9rem; font-weight: 600;
+    color: var(--text); cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+}
+.ms-sug-row:last-child { border-bottom: none; }
+.ms-sug-row:hover, .ms-sug-row.active { background: #eff6ff; }
+.ms-sug-add {
+    color: #15803d; background: #f0fdf4;
+    border-top: 1.5px dashed #16a34a;
+}
+.ms-sug-add:hover, .ms-sug-add.active { background: #dcfce7; }
+.ms-sug-add.busy { opacity: .7; cursor: wait; }

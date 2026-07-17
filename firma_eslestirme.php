@@ -1,7 +1,7 @@
 <?php
 // =========================================================
 // firma_eslestirme.php — Malzeme hareketlerindeki serbest metin
-// Tedarikçi/Firma isimlerini firma tanımlarıyla eşleştirme (admin).
+// Tedarikçi/Tedarikçi isimlerini tedarikçi tanımlarıyla eşleştirme (admin).
 // depo_tasima.php ile aynı desen: listele → hedef seç → onayla → UPDATE + audit.
 // =========================================================
 
@@ -10,7 +10,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
-if (!is_admin()) forbidden('Firma eşleştirme yalnızca yöneticiler içindir.');
+if (!is_admin()) forbidden('Tedarikçi eşleştirme yalnızca yöneticiler içindir.');
 
 $pdo = db();
 
@@ -26,9 +26,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($eski === '' || $yeni === '') throw new RuntimeException('Kaynak ve hedef firma zorunlu.');
             if ($eski === $yeni) throw new RuntimeException('Kaynak ve hedef aynı — işlem gerekmez.');
             // Hedef, firma tanımlarından biri olmalı (serbest hedefe izin yok)
-            $chk = $pdo->prepare("SELECT COUNT(*) FROM material_definitions WHERE type='firma' AND name = ?");
+            $chk = $pdo->prepare("SELECT COUNT(*) FROM material_definitions WHERE type='tedarikci' AND name = ?");
             $chk->execute([$yeni]);
-            if (!(int)$chk->fetchColumn()) throw new RuntimeException('Hedef, firma tanımlarından biri olmalı.');
+            if (!(int)$chk->fetchColumn()) throw new RuntimeException('Hedef, tedarikçi tanımlarından biri olmalı.');
 
             $st = $pdo->prepare("UPDATE material_stock_movements SET firma = ? WHERE firma = ?");
             $st->execute([$yeni, $eski]);
@@ -40,13 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'tanim_ekle') {
             $isim = normalize_firma(trim((string)($_POST['isim'] ?? '')));
             if ($isim === '' || mb_strlen($isim) > 200) throw new RuntimeException('Geçersiz isim.');
-            ensure_definition('firma', $isim);
+            ensure_definition('tedarikci', $isim);
             audit_log_event('create', 'definitions', null, null,
-                ['type' => 'firma', 'name' => $isim, 'source' => 'firma_eslestirme']);
+                ['type' => 'tedarikci', 'name' => $isim, 'source' => 'firma_eslestirme']);
             // Serbest metin büyük/küçük farklıysa hareketleri de normalize et
             $st = $pdo->prepare("UPDATE material_stock_movements SET firma = ? WHERE firma = ? AND firma != ?");
             $st->execute([$isim, trim((string)($_POST['isim'] ?? '')), $isim]);
-            set_flash('success', '"' . $isim . '" firma tanımlarına eklendi.');
+            set_flash('success', '"' . $isim . '" tedarikçi tanımlarına eklendi.');
         }
     } catch (Throwable $e) {
         set_flash('error', $e->getMessage());
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── Veri: hareketlerdeki firma değerleri + tanımlar ───────
 $firma_defs = [];
 try {
-    $firma_defs = $pdo->query("SELECT name FROM material_definitions WHERE type='firma' ORDER BY name")
+    $firma_defs = $pdo->query("SELECT name FROM material_definitions WHERE type='tedarikci' ORDER BY name")
         ->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) {}
 
@@ -95,23 +95,23 @@ foreach ($kullanimlar as $k) {
 usort($satirlar, fn($a, $b) => [$a['tanim'] !== null, -$a['adet']] <=> [$b['tanim'] !== null, -$b['adet']]);
 
 $csrf = csrf_token();
-render_header('Firma Eşleştirme');
+render_header('Tedarikçi Eşleştirme');
 render_flash();
 ?>
 <div class="page-head">
-    <h1>🔗 Firma Eşleştirme</h1>
+    <h1>🔗 Tedarikçi Eşleştirme</h1>
 </div>
 
 <div class="card" style="max-width:900px">
     <p class="muted" style="margin-top:0">
         Malzeme hareketlerinde elle girilmiş <b>Tedarikçi/Firma</b> isimlerini
-        firma tanımlarıyla eşleştirir. Eşleştirince geçmiş hareketlerdeki isim
+        tedarikçi tanımlarıyla eşleştirir. Eşleştirince geçmiş hareketlerdeki isim
         toplu olarak düzeltilir — raporlarda tek isim altında toplanır.
     </p>
     <p style="font-size:.85rem">
         <span class="def3-chip" style="background:#dcfce7;color:#15803d">✓ Tanımlı: <?= $sayi_esli ?></span>
         &nbsp;<span class="def3-chip" style="background:#fee2e2;color:#b91c1c">Tanımsız: <?= $sayi_essiz ?></span>
-        &nbsp;<a href="definitions.php?type=firma" class="muted" style="font-size:.82rem">Tanımlar → Firma ↗</a>
+        &nbsp;<a href="definitions.php?type=tedarikci" class="muted" style="font-size:.82rem">Tanımlar → Tedarikçi ↗</a>
     </p>
 
     <?php if (empty($satirlar)): ?>
@@ -161,7 +161,7 @@ render_flash();
                                 <input type="hidden" name="csrf"   value="<?= h($csrf) ?>">
                                 <input type="hidden" name="action" value="tanim_ekle">
                                 <input type="hidden" name="isim"   value="<?= h($s['isim']) ?>">
-                                <button class="btn btn-sm btn-ghost" title="Bu ismi olduğu gibi firma tanımlarına ekle">➕ Tanım yap</button>
+                                <button class="btn btn-sm btn-ghost" title="Bu ismi olduğu gibi tedarikçi tanımlarına ekle">➕ Tanım yap</button>
                             </form>
                             <?php endif; ?>
                         </div>

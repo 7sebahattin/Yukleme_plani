@@ -10,13 +10,13 @@ declare(strict_types=1);
 // ── Modülün takip ettiği malzeme türleri ──────────────────
 // firma/depo/bolge/urun/marka/lokasyon hariç tüm tanım türleri (formlar ve filtreler için).
 function ms_material_types(): array {
-    $skip = ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
+    $skip = ['firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
     return array_filter(definition_types(), fn($k) => !in_array($k, $skip), ARRAY_FILTER_USE_KEY);
 }
 
 // Stok özetinden hariç tutulan türler (marka/lokasyon da özet dışı).
 function ms_excluded_types(): array {
-    return ['firma', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
+    return ['firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon'];
 }
 
 function ms_summary_types(): array {
@@ -413,9 +413,18 @@ function get_material_dropdown_data(PDO $pdo): array {
         }
     } catch (PDOException $e2) {}
 
+    // Tedarikçi önerileri: tedarikci tanımları ∪ hareketlerde geçmiş isimler.
+    // DİKKAT: type='firma' (ihracat müşterileri) burada KULLANILMAZ —
+    // tedarikçi ile müşteri firma kavramları ayrıdır.
     $firma_list = [];
     try {
-        $firma_list = $pdo->query("SELECT name FROM material_definitions WHERE type='firma' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+        $firma_list = $pdo->query("SELECT name FROM material_definitions WHERE type='tedarikci' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {}
+    try {
+        foreach ($pdo->query("SELECT DISTINCT firma FROM material_stock_movements WHERE firma IS NOT NULL AND firma != '' ORDER BY firma")->fetchAll(PDO::FETCH_COLUMN) as $_tf) {
+            if (!in_array($_tf, $firma_list, true)) $firma_list[] = $_tf;
+        }
+        sort($firma_list);
     } catch (PDOException $e) {}
 
     return [

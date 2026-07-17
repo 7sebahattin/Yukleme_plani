@@ -329,7 +329,7 @@ try {
 $move_defs_by_type = [];
 $stmt = $pdo->query(
     "SELECT id, type, name, is_active FROM material_definitions
-      WHERE type NOT IN ('firma','depo','bolge','urun','lokasyon')
+      WHERE type NOT IN ('firma','tedarikci','depo','bolge','urun','lokasyon')
       ORDER BY is_active DESC, name"
 );
 while ($mrow = $stmt->fetch()) {
@@ -474,7 +474,7 @@ render_flash();
                 </select>
             </div>
             <div class="form-group stok-fg stok-fg-wide">
-                <label class="form-label">Tedarikçi / Firma</label>
+                <label class="form-label">Tedarikçi</label>
                 <select name="firma" class="form-control">
                     <option value="">Hepsi</option>
                     <?php foreach ($firma_filter_opts as $fv): ?>
