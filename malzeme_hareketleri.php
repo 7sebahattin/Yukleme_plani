@@ -18,7 +18,7 @@ $ms_types = ms_material_types();
 // ── URL oluşturucu — filtre + sayfa durumunu korur ────────
 function mh_url(array $override = [], array $drop = []): string {
     global $f_tarih_bas, $f_tarih_bit, $f_mat_id, $f_mat_type, $f_mat_name,
-           $f_depo, $f_hareket_tipi, $mv_page;
+           $f_depo, $f_hareket_tipi, $f_firma, $mv_page;
     $base = [
         'tarih_bas'    => $f_tarih_bas    ?? '',
         'tarih_bit'    => $f_tarih_bit    ?? '',
@@ -27,6 +27,7 @@ function mh_url(array $override = [], array $drop = []): string {
         'mat_name'     => $f_mat_name     ?? '',
         'depo'         => $f_depo         ?? '',
         'hareket_tipi' => $f_hareket_tipi ?? '',
+        'firma'        => $f_firma        ?? '',
         'page'         => (isset($mv_page) && $mv_page > 1) ? (string)$mv_page : '',
     ];
     foreach ($override as $k => $v) { $base[$k] = (string)$v; }
@@ -46,6 +47,7 @@ $f_depo         = trim($_GET['depo']         ?? '');
 $is_csv         = isset($_GET['csv']);
 $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['giris', 'sevk', 'kullanim', 'duzeltme', ''], true)) $f_hareket_tipi = '';
+$f_firma        = trim($_GET['firma'] ?? '');
 $mv_page        = max(1, (int)($_GET['page'] ?? 1)); // redirect'te sayfa da korunsun (clamp render'da)
 
 // ── POST: Hareket Düzenle — admin-only ───────────────────
@@ -197,6 +199,7 @@ $mv_filters = [
     'mat_name'     => $f_mat_name,
     'depo'         => $f_depo,
     'hareket_tipi' => $f_hareket_tipi,
+    'firma'        => $f_firma,
 ];
 
 // ── POST: Hareket Taşı — admin-only ──────────────────────
@@ -313,6 +316,15 @@ $mat_names_by_type = $ms_dd['mat_names_by_type'];
 $firma_list        = $ms_dd['firma_list'];
 $ms_units          = ms_stock_units();
 
+// Firma filtre seçenekleri: tanımlar ∪ hareketlerde geçmiş serbest metin isimler
+$firma_filter_opts = $firma_list;
+try {
+    foreach ($pdo->query("SELECT DISTINCT firma FROM material_stock_movements WHERE firma IS NOT NULL AND firma != '' ORDER BY firma")->fetchAll(PDO::FETCH_COLUMN) as $_fv) {
+        if (!in_array($_fv, $firma_filter_opts, true)) $firma_filter_opts[] = $_fv;
+    }
+    sort($firma_filter_opts);
+} catch (PDOException $_e) {}
+
 // Taşı modal için: aynı type içinde hedef seçimi (admin-only modal)
 $move_defs_by_type = [];
 $stmt = $pdo->query(
@@ -329,7 +341,8 @@ while ($mrow = $stmt->fetch()) {
 }
 
 $herhangi_filtre = $f_tarih_bas !== '' || $f_tarih_bit !== '' || $f_mat_id > 0
-                || $f_mat_type !== '' || $f_mat_name !== '' || $f_depo !== '' || $f_hareket_tipi !== '';
+                || $f_mat_type !== '' || $f_mat_name !== '' || $f_depo !== '' || $f_hareket_tipi !== ''
+                || $f_firma !== '';
 $ms_can_write = can('stok.write');
 $ms_is_admin  = is_admin();
 
@@ -457,6 +470,15 @@ render_flash();
                     <option value="">Hepsi</option>
                     <?php foreach ($depo_list as $dv): ?>
                     <option value="<?= h($dv) ?>" <?= $f_depo === $dv ? 'selected' : '' ?>><?= h($dv) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group stok-fg stok-fg-wide">
+                <label class="form-label">Tedarikçi / Firma</label>
+                <select name="firma" class="form-control">
+                    <option value="">Hepsi</option>
+                    <?php foreach ($firma_filter_opts as $fv): ?>
+                    <option value="<?= h($fv) ?>" <?= $f_firma === $fv ? 'selected' : '' ?>><?= h($fv) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>

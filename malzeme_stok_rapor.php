@@ -31,8 +31,20 @@ $f_depo            = trim($_GET['depo'] ?? '');
 $f_durum           = trim($_GET['durum'] ?? '');
 if (!in_array($f_durum, ['stokta', 'negatif', 'sifir', ''], true)) $f_durum = '';
 $f_hide_empty_depo = (($_GET['hide_empty_depo'] ?? '') === '1');
+$f_firma           = trim($_GET['firma'] ?? '');
+$f_firma_bazli     = (($_GET['firma_bazli'] ?? '') === '1');
+$firma_mode        = ($f_firma !== '' || $f_firma_bazli); // firmaya göre döküm görünümü
 
 $mode = print_mode(); // summary | detail (varsayılan summary)
+
+// Firma filtre seçenekleri: tanımlar ∪ hareketlerdeki geçmiş isimler
+$firma_filter_opts = $ms_dd['firma_list'] ?? [];
+try {
+    foreach ($pdo->query("SELECT DISTINCT firma FROM material_stock_movements WHERE firma IS NOT NULL AND firma != '' ORDER BY firma")->fetchAll(PDO::FETCH_COLUMN) as $_fv) {
+        if (!in_array($_fv, $firma_filter_opts, true)) $firma_filter_opts[] = $_fv;
+    }
+    sort($firma_filter_opts);
+} catch (PDOException $_e) {}
 
 // ── Stok özeti — ana sayfayla AYNI veri yolu ──────────────
 $all_rows = get_material_stock_summary($pdo, []);
@@ -47,7 +59,54 @@ if ($f_hide_empty_depo) {
     $rows = array_values(array_filter($rows, fn($r) => $r['depo'] !== ''));
 }
 
-$c_toplam = count($rows);
+// ── Firma bazlı döküm — hareketlerden firma × malzeme kırılımı ──
+$firma_rows = [];
+if ($firma_mode) {
+    $fw = ["firma IS NOT NULL", "firma != ''"];
+    $fp = [];
+    if ($f_firma !== '') { $fw[] = "firma = ?"; $fp[] = $f_firma; }
+    if ($f_depo  !== '') { $fw[] = "depo = ?";  $fp[] = $f_depo; }
+    // Aktif depo kapsamı
+    [$_ds_fr, $_ds_fr_v] = depo_sql_in('depo');
+    if ($_ds_fr !== '') { $fw[] = $_ds_fr; $fp = array_merge($fp, $_ds_fr_v); }
+    try {
+        $st = $pdo->prepare("
+            SELECT firma,
+                   MAX(material_type) AS material_type,
+                   MAX(material_name) AS material_name,
+                   depo, unit,
+                   SUM(CASE WHEN movement_type='giris'    THEN quantity ELSE 0 END) AS total_giris,
+                   SUM(CASE WHEN movement_type='sevk'     THEN quantity ELSE 0 END) AS total_sevk,
+                   SUM(CASE WHEN movement_type='kullanim' THEN quantity ELSE 0 END) AS total_kullanim,
+                   SUM(CASE WHEN movement_type='giris'    THEN quantity
+                            WHEN movement_type='duzeltme' THEN quantity
+                            ELSE -quantity END) AS net
+            FROM material_stock_movements
+            WHERE " . implode(' AND ', $fw) . "
+            GROUP BY firma, material_id,
+                (CASE WHEN material_id IS NULL THEN material_name ELSE NULL END),
+                depo, unit
+            ORDER BY firma, material_name
+        ");
+        $st->execute($fp);
+        $firma_rows = $st->fetchAll();
+    } catch (PDOException $_e) { $firma_rows = []; }
+
+    // Kalan filtreleri PHP tarafında (q / tür / kategori / durum / boş depo)
+    $firma_rows = array_values(array_filter($firma_rows, function ($r) use ($f_q, $f_tur, $f_kategori, $f_durum, $f_hide_empty_depo) {
+        if ($f_q !== '' && mb_stripos((string)$r['material_name'], $f_q, 0, 'UTF-8') === false) return false;
+        if ($f_tur !== '' && $r['material_type'] !== $f_tur) return false;
+        if ($f_kategori !== '' && ms_cat_of((string)$r['material_type']) !== $f_kategori) return false;
+        $net = (float)$r['net'];
+        if ($f_durum === 'stokta'  && !($net > 0))  return false;
+        if ($f_durum === 'negatif' && !($net < 0))  return false;
+        if ($f_durum === 'sifir'   && $net != 0.0)  return false;
+        if ($f_hide_empty_depo && (string)$r['depo'] === '') return false;
+        return true;
+    }));
+}
+
+$c_toplam = $firma_mode ? count($firma_rows) : count($rows);
 
 // summary → 5 kolon (portrait) · detail → 8 kolon (landscape)
 $col_count   = $mode === 'detail' ? 8 : 5;
@@ -61,11 +120,13 @@ if ($f_tur             !== '') $filtre_parts[] = 'Tür: ' . ($ms_types[$f_tur] ?
 if ($f_depo            !== '') $filtre_parts[] = 'Depo: ' . $f_depo;
 if ($f_durum           !== '') $filtre_parts[] = 'Durum: ' . (['stokta' => 'Stokta', 'negatif' => 'Negatif', 'sifir' => 'Sıfır'][$f_durum] ?? $f_durum);
 if ($f_hide_empty_depo)        $filtre_parts[] = 'Boş depo gizli';
+if ($f_firma           !== '') $filtre_parts[] = 'Firma: ' . $f_firma;
+if ($f_firma_bazli)            $filtre_parts[] = 'Firma bazlı döküm';
 $filtre_text = $filtre_parts ? implode(' · ', $filtre_parts) : 'Tüm güncel stok';
 
 // ── URL üreticiler ────────────────────────────────────────
 function rapor_url(array $override = []): string {
-    global $f_q, $f_kategori, $f_tur, $f_depo, $f_durum, $f_hide_empty_depo, $mode;
+    global $f_q, $f_kategori, $f_tur, $f_depo, $f_durum, $f_hide_empty_depo, $mode, $f_firma, $f_firma_bazli;
     $base = [
         'mode'             => $mode,
         'q'                => $f_q,
@@ -74,6 +135,8 @@ function rapor_url(array $override = []): string {
         'depo'             => $f_depo,
         'durum'            => $f_durum,
         'hide_empty_depo'  => $f_hide_empty_depo ? '1' : '',
+        'firma'            => $f_firma,
+        'firma_bazli'      => $f_firma_bazli ? '1' : '',
     ];
     foreach ($override as $k => $v) { $base[$k] = (string)$v; }
     return 'malzeme_stok_rapor.php' . (($q = array_filter($base, fn($v) => $v !== '')) ? '?' . http_build_query($q) : '');
@@ -195,6 +258,19 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
                     <option value="sifir"   <?= $f_durum === 'sifir'   ? 'selected' : '' ?>>Sıfır</option>
                 </select>
             </div>
+            <div class="rapor-fg">
+                <label>Tedarikçi / Firma</label>
+                <select name="firma">
+                    <option value="">Tümü</option>
+                    <?php foreach ($firma_filter_opts as $fv): ?>
+                    <option value="<?= h($fv) ?>" <?= $f_firma === $fv ? 'selected' : '' ?>><?= h($fv) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <label class="rapor-fg-check" title="Malzemeleri tedarikçi firma kırılımında listeler">
+                <input type="checkbox" name="firma_bazli" value="1" <?= $f_firma_bazli ? 'checked' : '' ?>>
+                Firma bazında
+            </label>
             <label class="rapor-fg-check">
                 <input type="checkbox" name="hide_empty_depo" value="1" <?= $f_hide_empty_depo ? 'checked' : '' ?>>
                 Boş depoyu gizle
@@ -207,12 +283,74 @@ render_print_page_start('Malzeme Stok Raporu', 'stok', $mode, $orientation);
     </div>
 
     <?= render_print_header_html(
-        'Malzeme Stok Raporu' . ($mode === 'detail' ? ' (Detay)' : ' (Özet)'),
+        'Malzeme Stok Raporu' . ($firma_mode ? ' (Firma Bazlı)' : ($mode === 'detail' ? ' (Detay)' : ' (Özet)')),
         $filtre_text,
         'Rapor Tarihi: ' . date('d.m.Y H:i') . ' · ' . $c_toplam . ' satır'
     ) ?>
 
-    <?php if (empty($rows)): ?>
+    <?php if ($firma_mode): ?>
+        <?php if (empty($firma_rows)): ?>
+        <p style="padding:24px;text-align:center;color:#64748b">Filtre kriterlerine uygun firma hareketi bulunamadı.</p>
+        <?php else: ?>
+        <div class="rapor-table-wrap">
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>Firma</th>
+                        <th>Tür</th>
+                        <th>Malzeme</th>
+                        <th>Depo</th>
+                        <th class="num">Giriş</th>
+                        <th class="num">Sevk</th>
+                        <th class="num">Kullanım</th>
+                        <th class="num kalan-col">Net</th>
+                        <th>Birim</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php
+                $prev_firma = null;
+                $sub = ['giris' => 0.0, 'sevk' => 0.0, 'kull' => 0.0, 'net' => 0.0];
+                $render_sub = function (array $s, string $firma) {
+                    echo '<tr style="background:#f1f5f9;font-weight:700">'
+                       . '<td colspan="4" style="text-align:right">' . h($firma) . ' Ara Toplam:</td>'
+                       . '<td class="num">' . number_format($s['giris'], 0, ',', '.') . '</td>'
+                       . '<td class="num">' . number_format($s['sevk'],  0, ',', '.') . '</td>'
+                       . '<td class="num">' . number_format($s['kull'],  0, ',', '.') . '</td>'
+                       . '<td class="num kalan-col">' . number_format($s['net'], 0, ',', '.') . '</td>'
+                       . '<td></td></tr>';
+                };
+                foreach ($firma_rows as $r):
+                    $frm = (string)$r['firma'];
+                    if ($prev_firma !== null && $frm !== $prev_firma) {
+                        $render_sub($sub, $prev_firma);
+                        $sub = ['giris' => 0.0, 'sevk' => 0.0, 'kull' => 0.0, 'net' => 0.0];
+                    }
+                    $prev_firma = $frm;
+                    $g = (float)$r['total_giris']; $s = (float)$r['total_sevk'];
+                    $k = (float)$r['total_kullanim']; $n = (float)$r['net'];
+                    $sub['giris'] += $g; $sub['sevk'] += $s; $sub['kull'] += $k; $sub['net'] += $n;
+                    $net_cls = 'num kalan-col' . ($n < 0 ? ' kalan-neg' : ($n == 0.0 ? ' kalan-sifir' : ''));
+                ?>
+                    <tr>
+                        <td><strong><?= h($frm) ?></strong></td>
+                        <td style="color:#555;font-size:.92em"><?= h($ms_types[$r['material_type']] ?? $r['material_type']) ?></td>
+                        <td><?= h($r['material_name']) ?></td>
+                        <td><?= h($r['depo'] !== '' ? $r['depo'] : 'Depo Boş') ?></td>
+                        <td class="num"><?= $g > 0 ? number_format($g, 0, ',', '.') : '—' ?></td>
+                        <td class="num"><?= $s > 0 ? number_format($s, 0, ',', '.') : '—' ?></td>
+                        <td class="num"><?= $k > 0 ? number_format($k, 0, ',', '.') : '—' ?></td>
+                        <td class="<?= $net_cls ?>"><?= number_format($n, 0, ',', '.') ?></td>
+                        <td><?= h($r['unit']) ?></td>
+                    </tr>
+                <?php endforeach;
+                if ($prev_firma !== null) $render_sub($sub, $prev_firma);
+                ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    <?php elseif (empty($rows)): ?>
     <p style="padding:24px;text-align:center;color:#64748b">Filtre kriterlerine uygun malzeme bulunamadı.</p>
     <?php else: ?>
     <div class="rapor-table-wrap">

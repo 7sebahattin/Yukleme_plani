@@ -5361,3 +5361,16 @@ input:focus, select:focus, textarea:focus {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sidebar-depo-caret { font-size: .65rem; color: #94a3b8; flex-shrink: 0; }
+
+/* ── Tedarikçi/Firma hızlı ekleme (malzeme_stok_islem) ── */
+.ms-firma-wrap { position: relative; }
+.ms-firma-add {
+    display: block; width: 100%; margin-top: 6px;
+    padding: 7px 12px; border-radius: var(--radius-sm);
+    border: 1.5px dashed #16a34a; background: #f0fdf4; color: #15803d;
+    font: inherit; font-size: .82rem; font-weight: 700;
+    cursor: pointer; text-align: left;
+    transition: background .12s, border-color .12s;
+}
+.ms-firma-add:hover { background: #dcfce7; }
+.ms-firma-add:disabled { opacity: .6; cursor: wait; }

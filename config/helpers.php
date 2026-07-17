@@ -226,6 +226,7 @@ function render_desktop_sidebar(string $base): void {
     $a_aud   = $cur === 'audit.php';
     $a_mig   = $cur === 'migrate.php';
     $a_dtas  = $cur === 'depo_tasima.php';
+    $a_fes   = $cur === 'firma_eslestirme.php';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
@@ -276,6 +277,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
         <?php if ($p_adm) $lnk('depo_tasima.php', '📦', 'Depo Taşıma',    $a_dtas); ?>
+        <?php if ($p_adm) $lnk('firma_eslestirme.php', '🔗', 'Firma Eşleştirme', $a_fes); ?>
         <?php endif; ?>
     </nav>
 

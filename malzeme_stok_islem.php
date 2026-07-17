@@ -12,6 +12,25 @@ require_perm('stok.write');
 
 $pdo = db();
 
+// ── AJAX: Tedarikçi/Firma hızlı ekleme ────────────────────
+// Yazılan isim firma tanımlarında yoksa formdaki "+" butonu buraya POST eder;
+// isim arka planda tanımlara eklenir (form gönderimi kesilmez).
+if (($_GET['ajax'] ?? '') === 'firma_ekle' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $in = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    csrf_check($in['csrf'] ?? null); // JSON-aware: hata halinde 403+JSON döner
+    $name = normalize_firma(trim((string)($in['name'] ?? '')));
+    if ($name === '' || mb_strlen($name) > 200) {
+        echo json_encode(['ok' => false, 'error' => 'Geçersiz firma adı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    ensure_definition('firma', $name); // TR-duyarsız mükerrer kontrolü içerir
+    audit_log_event('create', 'definitions', null, null,
+        ['type' => 'firma', 'name' => $name, 'source' => 'malzeme_stok_islem']);
+    echo json_encode(['ok' => true, 'name' => $name], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $ms_types = ms_material_types();
 $ms_units = ms_stock_units();
 
@@ -571,6 +590,75 @@ document.addEventListener('DOMContentLoaded', function() {
     // 6) Sayfa açılışında hint durumunu kontrol et
     msCheckHint();
 });
+</script>
+
+<!-- ── Tedarikçi/Firma hızlı ekleme: listede yoksa "+" göster ── -->
+<script>
+(function () {
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var knownFirmas = <?= json_encode(array_values($firma_list), JSON_UNESCAPED_UNICODE) ?>;
+
+    // TR-duyarsız katlama (definitions.php ile aynı kurallar)
+    function fold(s) {
+        return (s || '').replace(/İ/g,'i').replace(/I/g,'i').replace(/Ş/g,'s').replace(/Ğ/g,'g')
+            .replace(/Ü/g,'u').replace(/Ö/g,'o').replace(/Ç/g,'c')
+            .replace(/ı/g,'i').replace(/ş/g,'s').replace(/ğ/g,'g')
+            .replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').toLowerCase().trim();
+    }
+    var knownSet = {};
+    knownFirmas.forEach(function (f) { knownSet[fold(f)] = true; });
+
+    function attach(input) {
+        if (!input) return;
+        // Sarmalayıcı + buton
+        var wrap = document.createElement('div');
+        wrap.className = 'ms-firma-wrap';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ms-firma-add';
+        btn.hidden = true;
+        wrap.appendChild(btn);
+
+        function sync() {
+            var v = input.value.trim();
+            if (v === '' || knownSet[fold(v)]) { btn.hidden = true; return; }
+            btn.textContent = '+ "' + v.toUpperCase() + '" firmasını ekle';
+            btn.hidden = false;
+        }
+        input.addEventListener('input', sync);
+        input.addEventListener('change', sync);
+
+        btn.addEventListener('click', function () {
+            var v = input.value.trim();
+            if (v === '') return;
+            btn.disabled = true;
+            btn.textContent = '⏳ Ekleniyor...';
+            fetch('malzeme_stok_islem.php?ajax=firma_ekle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ csrf: csrf, name: v })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                btn.disabled = false;
+                if (!j.ok) { btn.textContent = '⚠ ' + (j.error || 'Eklenemedi'); return; }
+                knownSet[fold(j.name)] = true;
+                input.value = j.name;
+                // datalist'e de ekle — bir sonraki girişte önerilsin
+                var dl = document.getElementById('ms-firma-list');
+                if (dl) { var o = document.createElement('option'); o.value = j.name; dl.appendChild(o); }
+                btn.textContent = '✓ Eklendi';
+                setTimeout(function () { btn.hidden = true; }, 1500);
+            }).catch(function () {
+                btn.disabled = false;
+                btn.textContent = '⚠ Bağlantı hatası';
+            });
+        });
+    }
+
+    attach(document.getElementById('girisFirma'));
+    attach(document.getElementById('sevkFirma'));
+})();
 </script>
 
 <?php render_footer(); ?>

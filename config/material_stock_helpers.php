@@ -315,8 +315,10 @@ function ms_movements_where(array $filters): array {
     $f_mat_name     = (string)($filters['mat_name']     ?? '');
     $f_depo         = (string)($filters['depo']         ?? '');
     $f_hareket_tipi = (string)($filters['hareket_tipi'] ?? '');
+    $f_firma        = (string)($filters['firma']        ?? '');
 
     $where = []; $params = [];
+    if ($f_firma !== '') { $where[] = "firma = ?"; $params[] = $f_firma; }
     if ($f_tarih_bas !== '') { $where[] = "movement_date >= ?"; $params[] = $f_tarih_bas; }
     if ($f_tarih_bit !== '') { $where[] = "movement_date <= ?"; $params[] = $f_tarih_bit; }
     if ($f_mat_id > 0) {
