@@ -318,22 +318,27 @@ render_flash();
             <label class="def3-showoff"><input type="checkbox" id="d3ShowOff" checked> Pasifler</label>
         </div>
 
+        <!-- ── Bölüm sekmeleri ── -->
+        <?php $active_sec = ($sel_section !== '' && $sel_section !== 'operasyon') ? $sel_section : 'ticari'; ?>
+        <div class="def3-tabs card">
+            <?php foreach ($SECTIONS as $sk => $sv):
+                $sec_groups = $grouped[$sk] ?? [];
+                $sec_count  = 0;
+                foreach ($sec_groups as $items) $sec_count += count($items);
+            ?>
+            <button type="button" class="def3-tab<?= $active_sec === $sk ? ' active' : '' ?>" data-sec="<?= h($sk) ?>">
+                <?= $sv['icon'] ?> <?= h($sv['label']) ?> <span class="def3-tab-count"><?= $sec_count ?></span>
+            </button>
+            <?php endforeach; ?>
+            <button type="button" class="def3-tab" data-sec="operasyon">
+                🚪 Operasyon <span class="def3-tab-count"><?= count(cikis_nedeni_listesi()) ?></span>
+            </button>
+        </div>
+
         <?php foreach ($SECTIONS as $sk => $sv):
             $sec_groups = $grouped[$sk] ?? [];
-            $sec_count  = 0;
-            foreach ($sec_groups as $items) $sec_count += count($items);
-            $is_open = ($sel_section !== '' ? $sel_section === $sk : $sk === 'ticari');
         ?>
-        <section class="def3-sec card<?= $is_open ? ' open' : '' ?>" data-sec="<?= h($sk) ?>">
-            <button type="button" class="def3-sec-head">
-                <span class="def3-sec-icon"><?= $sv['icon'] ?></span>
-                <span class="def3-sec-txt">
-                    <span class="def3-sec-label"><?= h($sv['label']) ?></span>
-                    <span class="def3-sec-desc"><?= h($sv['desc']) ?></span>
-                </span>
-                <span class="def3-sec-count"><?= $sec_count ?></span>
-                <span class="def3-sec-caret">▾</span>
-            </button>
+        <section class="def3-sec card<?= $active_sec === $sk ? ' active' : '' ?>" data-sec="<?= h($sk) ?>">
             <div class="def3-sec-body">
                 <?php foreach ($sv['types'] as $t):
                     $items = $sec_groups[$t] ?? [];
@@ -383,16 +388,8 @@ render_flash();
 
         <!-- Operasyon (salt okunur) -->
         <section class="def3-sec card" data-sec="operasyon">
-            <button type="button" class="def3-sec-head">
-                <span class="def3-sec-icon">🚪</span>
-                <span class="def3-sec-txt">
-                    <span class="def3-sec-label">Operasyon Tanımları</span>
-                    <span class="def3-sec-desc">Çıkış nedenleri — kodda sabittir, düzenlenemez</span>
-                </span>
-                <span class="def3-sec-count"><?= count(cikis_nedeni_listesi()) ?></span>
-                <span class="def3-sec-caret">▾</span>
-            </button>
             <div class="def3-sec-body">
+                <p class="muted def3-sec-note">Çıkış nedenleri — kodda sabittir, düzenlenemez</p>
                 <div class="def3-readonly-chips">
                     <?php foreach (cikis_nedeni_listesi() as $cn): ?>
                     <span class="def3-ro-chip"><?= h($cn) ?></span>
@@ -510,10 +507,19 @@ render_flash();
         });
     });
 
-    // ── Akordiyon ──────────────────────────────────
-    document.querySelectorAll('.def3-sec-head').forEach(function (head) {
-        head.addEventListener('click', function () {
-            head.closest('.def3-sec').classList.toggle('open');
+    // ── Sekmeler: tıklanan başlığın içeriği gösterilir ──
+    function activateTab(sec) {
+        document.querySelectorAll('.def3-tab').forEach(function (t) {
+            t.classList.toggle('active', t.dataset.sec === sec);
+        });
+        document.querySelectorAll('.def3-sec').forEach(function (s) {
+            s.classList.toggle('active', s.dataset.sec === sec);
+        });
+    }
+    document.querySelectorAll('.def3-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            if (search.value.trim() !== '') { search.value = ''; applyFilter(); }
+            activateTab(tab.dataset.sec);
         });
     });
 
@@ -536,7 +542,8 @@ render_flash();
 
         document.querySelectorAll('.def3-sec').forEach(function (sec) {
             if (sec.dataset.sec === 'operasyon') {
-                sec.hidden = q !== '';
+                // Arama sırasında operasyon sekmesi gizlenir (aranabilir veri değil)
+                sec.classList.toggle('search-hide', q !== '');
                 return;
             }
             var secHas = false;
@@ -551,10 +558,11 @@ render_flash();
                 var emptyNote = tg.querySelector('.def3-empty-type');
                 if (emptyNote) emptyNote.hidden = q !== '';
                 tg.hidden = q !== '' && !tgHas;
-                if (tgHas || (q === '' && !tg.hidden)) secHas = true;
+                if (tgHas) secHas = true;
             });
-            sec.hidden = q !== '' && !secHas;
-            if (q !== '' && secHas) sec.classList.add('open');   // arama sırasında sonuçlu bölümler açılır
+            // Arama varken: sekme seçiminden bağımsız, eşleşen TÜM bölümler görünür
+            sec.classList.toggle('search-show', q !== '' && secHas);
+            sec.classList.toggle('search-hide', q !== '' && !secHas);
             if (secHas) anyVisible = true;
         });
         noResult.hidden = !(q !== '' && !anyVisible);

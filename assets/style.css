@@ -3179,27 +3179,33 @@ body.notes-modal-open { overflow: hidden; }
 .def3-search input[type="search"]:focus { border-color: var(--primary); background: #fff; outline: none; }
 .def3-showoff { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--muted); white-space: nowrap; }
 
-/* Bölüm (akordiyon) */
-.def3-sec { padding: 0; overflow: hidden; }
-.def3-sec-head {
-    display: flex; align-items: center; gap: 12px;
-    width: 100%; padding: 13px 14px;
-    background: none; border: none; cursor: pointer;
-    text-align: left; font: inherit;
+/* Bölüm sekmeleri — tıklanan başlığın içeriği altta listelenir */
+.def3-tabs {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px; position: sticky; top: 58px; z-index: 4;
 }
-.def3-sec-head:hover { background: #f8fafc; }
-.def3-sec-icon { font-size: 1.3rem; }
-.def3-sec-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.def3-sec-label { font-weight: 700; font-size: .95rem; }
-.def3-sec-desc { font-size: .74rem; color: var(--muted); }
-.def3-sec-count {
-    font-size: .78rem; font-weight: 700; color: var(--primary);
-    background: #eff6ff; padding: 3px 10px; border-radius: 999px;
+.def3-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 999px;
+    background: #f1f5f9; border: 1.5px solid transparent;
+    font: inherit; font-size: .84rem; font-weight: 700; color: var(--text);
+    cursor: pointer; transition: background .12s, border-color .12s, color .12s;
 }
-.def3-sec-caret { font-size: .8rem; color: var(--muted); transition: transform .18s; }
-.def3-sec.open .def3-sec-caret { transform: rotate(180deg); }
-.def3-sec-body { display: none; border-top: 1px solid var(--border); padding: 8px 12px 12px; }
-.def3-sec.open .def3-sec-body { display: block; }
+.def3-tab:hover { border-color: var(--primary); background: #eff6ff; }
+.def3-tab.active { background: var(--primary); color: #fff; }
+.def3-tab-count {
+    font-size: .7rem; font-weight: 800;
+    background: rgba(0,0,0,.08); padding: 1px 8px; border-radius: 999px;
+}
+.def3-tab.active .def3-tab-count { background: rgba(255,255,255,.25); }
+
+/* Bölüm panelleri: yalnız aktif sekme görünür; arama tümünü tarar */
+.def3-sec { display: none; padding: 0; overflow: hidden; }
+.def3-sec.active { display: block; }
+.def3-sec.search-show { display: block; }
+.def3-sec.search-hide { display: none; }
+.def3-sec-body { padding: 8px 12px 12px; }
+.def3-sec-note { margin: 8px 2px 0; font-size: .8rem; }
 
 /* Tür grubu */
 .def3-tgroup { margin-top: 8px; }
@@ -3253,6 +3259,7 @@ body.notes-modal-open { overflow: hidden; }
     .def3-layout { grid-template-columns: 1fr; }
     .def3-panel { position: static; }
     .def3-search { position: static; }
+    .def3-tabs { position: static; }
     .def3-field input, .def3-field select { font-size: 16px; }
     .def3-search input[type="search"] { font-size: 16px; }
 }
