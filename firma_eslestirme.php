@@ -1,8 +1,10 @@
 <?php
 // =========================================================
-// firma_eslestirme.php — Malzeme hareketlerindeki serbest metin
-// Tedarikçi/Tedarikçi isimlerini tedarikçi tanımlarıyla eşleştirme (admin).
-// depo_tasima.php ile aynı desen: listele → hedef seç → onayla → UPDATE + audit.
+// firma_eslestirme.php — Tedarikçi Eşleştirme (admin)
+// 1) Hareketlerdeki serbest metin tedarikçi isimlerini tanımlarla eşleştirir.
+// 2) Yanlışlıkla type='firma' altına eklenmiş tedarikçileri
+//    type='tedarikci'ye taşır (Firma → Tedarikçi Taşıma bölümü).
+// depo_tasima.php ile aynı desen: listele → seç → onayla → UPDATE + audit.
 // =========================================================
 
 declare(strict_types=1);
@@ -47,6 +49,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st = $pdo->prepare("UPDATE material_stock_movements SET firma = ? WHERE firma = ? AND firma != ?");
             $st->execute([$isim, trim((string)($_POST['isim'] ?? '')), $isim]);
             set_flash('success', '"' . $isim . '" tedarikçi tanımlarına eklendi.');
+
+        } elseif ($action === 'firma_to_tedarikci') {
+            // Seçilen firma tanımlarını tedarikçi türüne taşı.
+            // Aynı isimde tedarikçi zaten varsa firma kaydı silinir (birleştirme).
+            $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])), fn($i) => $i > 0));
+            if (empty($ids)) throw new RuntimeException('Taşınacak firma seçilmedi.');
+
+            $ted_norm = [];
+            foreach ($pdo->query("SELECT name FROM material_definitions WHERE type='tedarikci'")->fetchAll(PDO::FETCH_COLUMN) as $_tn) {
+                $ted_norm[normalize_text_v2($_tn)] = true;
+            }
+
+            $tasindi = 0; $birlesti = 0;
+            $sel = $pdo->prepare("SELECT id, name FROM material_definitions WHERE id = ? AND type = 'firma'");
+            foreach ($ids as $id) {
+                $sel->execute([$id]);
+                $row = $sel->fetch();
+                if (!$row) continue;
+                if (isset($ted_norm[normalize_text_v2((string)$row['name'])])) {
+                    // Tedarikçide zaten var → mükerrer firma kaydını sil
+                    $pdo->prepare("DELETE FROM material_definitions WHERE id = ?")->execute([$id]);
+                    audit_log_event('delete', 'definitions', $id,
+                        ['type' => 'firma', 'name' => $row['name']],
+                        ['reason' => 'tedarikci_duplicate']);
+                    $birlesti++;
+                } else {
+                    $pdo->prepare("UPDATE material_definitions SET type = 'tedarikci' WHERE id = ?")->execute([$id]);
+                    audit_log_event('type_change', 'definitions', $id,
+                        ['type' => 'firma', 'name' => $row['name']],
+                        ['type' => 'tedarikci']);
+                    $ted_norm[normalize_text_v2((string)$row['name'])] = true;
+                    $tasindi++;
+                }
+            }
+            set_flash('success', $tasindi . ' firma tedarikçiye taşındı'
+                . ($birlesti > 0 ? ', ' . $birlesti . ' mükerrer kayıt birleştirildi' : '') . '.');
         }
     } catch (Throwable $e) {
         set_flash('error', $e->getMessage());
@@ -93,6 +131,36 @@ foreach ($kullanimlar as $k) {
 }
 // Tanımsızlar üstte
 usort($satirlar, fn($a, $b) => [$a['tanim'] !== null, -$a['adet']] <=> [$b['tanim'] !== null, -$b['adet']]);
+
+// ── Firma → Tedarikçi taşıma verisi ───────────────────────
+// Müşteri kullanımı (yükleme + kantar) sıfır olan firma tanımları
+// muhtemel tedarikçidir → önceden işaretli gelir.
+$yuk_use = []; $kan_use = []; $mov_use = [];
+try {
+    $yuk_use = $pdo->query("SELECT firma, COUNT(*) FROM loading_records WHERE firma != '' GROUP BY firma")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (PDOException $e) {}
+try {
+    $kan_use = $pdo->query("SELECT firma_adi, COUNT(*) FROM kantar_fisleri WHERE firma_adi != '' GROUP BY firma_adi")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (PDOException $e) {}
+try {
+    $mov_use = $pdo->query("SELECT firma, COUNT(*) FROM material_stock_movements WHERE firma != '' GROUP BY firma")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (PDOException $e) {}
+
+$firma_tasi = [];
+try {
+    foreach ($pdo->query("SELECT id, name, is_active FROM material_definitions WHERE type='firma' ORDER BY name")->fetchAll() as $fd) {
+        $musteri = (int)($yuk_use[$fd['name']] ?? 0) + (int)($kan_use[$fd['name']] ?? 0);
+        $firma_tasi[] = [
+            'id'      => (int)$fd['id'],
+            'name'    => (string)$fd['name'],
+            'musteri' => $musteri,
+            'hareket' => (int)($mov_use[$fd['name']] ?? 0),
+            'oneri'   => $musteri === 0, // hiç müşteri olarak kullanılmamış
+        ];
+    }
+} catch (PDOException $e) {}
+// Önerilenler (muhtemel tedarikçiler) üstte
+usort($firma_tasi, fn($a, $b) => [!$a['oneri'], $a['name']] <=> [!$b['oneri'], $b['name']]);
 
 $csrf = csrf_token();
 render_header('Tedarikçi Eşleştirme');
@@ -171,6 +239,58 @@ render_flash();
             </tbody>
         </table>
     </div>
+    <?php endif; ?>
+</div>
+
+<!-- ── Firma → Tedarikçi Taşıma ─────────────────────────── -->
+<div class="card" style="max-width:900px;margin-top:14px">
+    <h2 style="margin-top:0;font-size:1.05rem">🚚 Firma → Tedarikçi Taşıma</h2>
+    <p class="muted">
+        Daha önce yanlışlıkla <b>Firma</b> (ihracat müşterisi) altına eklenmiş tedarikçileri
+        seçip <b>Tedarikçi</b> türüne taşıyın. Yükleme/kantarda hiç kullanılmamış firmalar
+        muhtemel tedarikçi kabul edilip önceden işaretli gelir — müşterileri işaretlemeyin.
+    </p>
+
+    <?php if (empty($firma_tasi)): ?>
+    <div class="empty"><p>Firma tanımı yok.</p></div>
+    <?php else: ?>
+    <form method="post" onsubmit="return confirm('Seçilen firmalar Tedarikçi türüne taşınacak. Onaylıyor musunuz?')">
+        <input type="hidden" name="csrf"   value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="firma_to_tedarikci">
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>Firma Tanımı</th>
+                        <th title="Yükleme + kantar kayıtlarında müşteri olarak kullanım">Müşteri Kullanımı</th>
+                        <th title="Malzeme stok hareketlerinde tedarikçi olarak kullanım">Malzeme Hareketi</th>
+                        <th>Öneri</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($firma_tasi as $f): ?>
+                    <tr>
+                        <td><input type="checkbox" name="ids[]" value="<?= $f['id'] ?>" <?= $f['oneri'] ? 'checked' : '' ?>></td>
+                        <td><strong><?= h($f['name']) ?></strong></td>
+                        <td><?= $f['musteri'] > 0 ? '<b>' . $f['musteri'] . ' kayıt</b>' : '<span class="muted">—</span>' ?></td>
+                        <td><?= $f['hareket'] > 0 ? $f['hareket'] . ' hareket' : '<span class="muted">—</span>' ?></td>
+                        <td>
+                            <?php if ($f['oneri']): ?>
+                            <span style="color:#16a34a;font-weight:700">Tedarikçi olabilir</span>
+                            <?php else: ?>
+                            <span style="color:#64748b">Müşteri görünüyor</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top:12px">
+            <button class="btn btn-primary">🚚 Seçilenleri Tedarikçiye Taşı</button>
+        </div>
+    </form>
     <?php endif; ?>
 </div>
 <?php render_footer(); ?>
