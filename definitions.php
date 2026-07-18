@@ -512,6 +512,8 @@ render_flash();
         if (!isDepo) fColorReset.value = '0';
     }
 
+    var fColorLoadedValue = fColor.value; // panel açıldığındaki renk — submit'te karşılaştırma için
+
     function setColorAuto() {
         fColorReset.value = '1';
         fColor.classList.add('is-auto');
@@ -533,6 +535,7 @@ render_flash();
         fDara.value = '0';
         fColor.value = '#2563eb';
         setColorAuto(); // yeni depo varsayılan olarak otomatik renk alır
+        fColorLoadedValue = fColor.value;
         actWrap.hidden = true; fActive.checked = true;
         meta.hidden = true;
         submit.textContent = '+ Ekle';
@@ -560,6 +563,7 @@ render_flash();
         if (row.dataset.type === 'depo') {
             fColor.value = row.dataset.color || '#2563eb';
             if (row.dataset.colorset === '1') setColorManual(); else setColorAuto();
+            fColorLoadedValue = fColor.value;
         }
         actWrap.hidden = false;
         fActive.checked = row.dataset.active === '1';
@@ -579,7 +583,15 @@ render_flash();
 
     fType.addEventListener('change', syncDaraByType);
     newBtn.addEventListener('click', function () { newMode(); });
+    // Mobil tarayıcılarda <input type=color> bazen yalnız 'change' tetikler,
+    // masaüstünde 'input' de tetiklenir — ikisini de dinle (kaçırma riski olmasın).
     fColor.addEventListener('input', setColorManual);
+    fColor.addEventListener('change', setColorManual);
+    // Son güvenlik ağı: olaylar hiç tetiklenmese bile, gönderim anında
+    // panel açılışındaki renkle karşılaştır — farklıysa manuel işaretle.
+    form.addEventListener('submit', function () {
+        if (!colorWrap.hidden && fColor.value !== fColorLoadedValue) setColorManual();
+    });
     colorAutoBtn.addEventListener('click', function () {
         setColorAuto();
         // Görsel önizleme: mevcut isme göre PHP ile aynı algoritmayla türetilen renk yoksa
