@@ -399,12 +399,34 @@ function user_is_depot_restricted(): bool {
     return user_allowed_depots() !== null;
 }
 
+// Depo adı karşılaştırma için TR-duyarsız katlama — MySQL utf8mb4_unicode_ci
+// (liste sorguları) ile tekil sayfa PHP kontrollerini tutarlı kılar.
+// "KARAMAN CİHAT" == "Karaman Cihat" eşleşir.
+function depo_fold(string $s): string {
+    $s = strtr($s, [
+        'İ'=>'i','I'=>'i','Ş'=>'s','Ğ'=>'g','Ü'=>'u','Ö'=>'o','Ç'=>'c',
+        'ı'=>'i','ş'=>'s','ğ'=>'g','ü'=>'u','ö'=>'o','ç'=>'c',
+    ]);
+    return mb_strtolower(trim($s), 'UTF-8');
+}
+
+// Bir depo, verilen izinli depo listesinde var mı? (TR-duyarsız)
+function depo_in_allowed(string $depo, array $allowed): bool {
+    $d = depo_fold($depo);
+    foreach ($allowed as $a) {
+        if (depo_fold((string)$a) === $d) return true;
+    }
+    return false;
+}
+
 // Belirli bir depo, geçerli kullanıcı için görünür mü?
+// Kısıtsız (admin/atama yok) → true · Atanmamış (boş) → true (her depoda görünür)
+// · Aksi halde TR-duyarsız eşleşme.
 function depot_visible_to_user(?string $depo): bool {
     $allowed = user_allowed_depots();
-    if ($allowed === null) return true;          // kısıtsız
-    if ($depo === null || $depo === '') return false;
-    return in_array($depo, $allowed, true);
+    if ($allowed === null) return true;                 // kısıtsız
+    if ($depo === null || trim($depo) === '') return true; // atanmamış → her depoda
+    return depo_in_allowed($depo, $allowed);
 }
 
 // ── Atanmamış veri kuralı ─────────────────────────────────

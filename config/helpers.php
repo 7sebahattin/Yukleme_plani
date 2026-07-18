@@ -1311,6 +1311,50 @@ function normalize_firma(string $v): string { return tr_upper($v); }
 function normalize_urun(string $v): string  { return tr_upper($v); }
 function normalize_depo(string $v): string  { return tr_upper($v); }
 
+// ── Depo adı → veri yayma / eşitleme ─────────────────────
+// Depo tanımı adı değişince (veya yalnızca büyük/küçük harf farkı oluşunca)
+// tüm depo kolonlarını canonical (tanımdaki) yazıma çeker. TR-duyarsız eşleşme
+// PHP tarafında yapılır — MySQL collation belirsizliğine takılmaz.
+// $old boş verilirse yalnız casing eşitlemesi yapar; doluysa gerçek A→B rename.
+// Dönen: güncellenen toplam satır sayısı.
+function sync_depot_name_in_data(string $canonical, string $old = ''): int {
+    $canon = trim($canonical);
+    if ($canon === '') return 0;
+    $fold = function (string $s): string {
+        $s = strtr($s, ['İ'=>'i','I'=>'i','Ş'=>'s','Ğ'=>'g','Ü'=>'u','Ö'=>'o','Ç'=>'c',
+                        'ı'=>'i','ş'=>'s','ğ'=>'g','ü'=>'u','ö'=>'o','ç'=>'c']);
+        return mb_strtolower(trim($s), 'UTF-8');
+    };
+    // Hangi eski yazımlar canonical'a çekilecek? casing varyantları + (varsa) eski ad
+    $targets = [$fold($canon)];
+    if ($old !== '') $targets[] = $fold($old);
+
+    $pdo = db();
+    $cols = [
+        ['loading_pallets',          'depo'],
+        ['kantar_fisleri',           'depo'],
+        ['material_stock_movements', 'depo'],
+        ['stock_counts',             'depo'],
+        ['customs_declarations',     'exit_depot'],
+    ];
+    $total = 0;
+    foreach ($cols as [$t, $c]) {
+        try {
+            $vals = $pdo->query("SELECT DISTINCT `$c` FROM `$t` WHERE `$c` IS NOT NULL AND `$c` <> ''")
+                ->fetchAll(PDO::FETCH_COLUMN);
+            foreach ($vals as $v) {
+                $v = (string)$v;
+                if ($v !== $canon && in_array($fold($v), $targets, true)) {
+                    $st = $pdo->prepare("UPDATE `$t` SET `$c` = ? WHERE `$c` = ?");
+                    $st->execute([$canon, $v]);
+                    $total += $st->rowCount();
+                }
+            }
+        } catch (PDOException $e) { /* tablo/kolon yok — sessiz geç */ }
+    }
+    return $total;
+}
+
 // ── Tanım Tablosuna Otomatik Ekle ────────────────────────
 // Case-insensitive kontrol; aynı isim iki kez eklenmez.
 // type: 'firma' | 'depo' | 'urun'

@@ -21,7 +21,7 @@ $fis = $st->fetch();
 // Deposu boş (atanmamış) fişler her depoda görünür.
 $_kf_depo = $fis ? trim((string)($fis['depo'] ?? '')) : '';
 if ($fis && $_kf_depo !== '' && function_exists('depot_visible_to_user')
-    && !depot_visible_to_user($_kf_depo)) {
+    && !depot_visible_to_user($_kf_depo)) {  // TR-duyarsız + boş depo görünür
     forbidden('Bu fiş başka depoya ait (' . h($_kf_depo)
         . '). Görüntülemek için üstteki depo rozetinden o depoya geçin.');
 }

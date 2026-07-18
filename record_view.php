@@ -46,7 +46,7 @@ if ($_allowed_depots !== null) {
         $_d = trim((string)($_pp['depo'] ?? ''));
         if ($_d === '') continue;
         $_rec_depots[$_d] = true;
-        if (in_array($_d, $_allowed_depots, true)) { $_match = true; break; }
+        if (depo_in_allowed($_d, $_allowed_depots)) { $_match = true; break; }
     }
     if (!$_match && !empty($_rec_depots)) {
         forbidden('Bu kayıt başka depoya ait (' . h(implode(', ', array_keys($_rec_depots)))

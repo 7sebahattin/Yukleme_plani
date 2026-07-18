@@ -94,9 +94,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name      = tr_upper((string)($_POST['name'] ?? ''));
             $is_active = !empty($_POST['is_active']) ? 1 : 0;
             if ($id <= 0 || $name === '') throw new RuntimeException('Geçersiz veri.');
-            $row = db()->prepare("SELECT type FROM material_definitions WHERE id = ?");
+            $row = db()->prepare("SELECT type, name FROM material_definitions WHERE id = ?");
             $row->execute([$id]);
-            $type = (string)($row->fetchColumn() ?: '');
+            $row_data = $row->fetch();
+            $type     = (string)($row_data['type'] ?? '');
+            $old_name = (string)($row_data['name'] ?? '');
             // Sprint 36: dara yalnız kasa/palet; sarf tiplerinde her zaman 0
             $unit = def_has_dara($type) ? num($_POST['unit_dara_kg'] ?? 0) : 0;
             if ($type !== '') {
@@ -111,7 +113,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
                 ->execute([$name, $unit, $is_active, $id]);
             audit_log_event('update', 'definitions', $id, null, ['name' => $name, 'type' => $type]);
-            set_flash('success', 'Güncellendi.');
+            // Depo adı değişti/eşitlenmeli → tüm depo kolonlarını canonical yazıma çek
+            $_synced = 0;
+            if ($type === 'depo') {
+                $_synced = sync_depot_name_in_data($name, $old_name !== $name ? $old_name : '');
+                if ($_synced > 0) {
+                    audit_log_event('depot_rename_sync', 'definitions', $id,
+                        ['old' => $old_name], ['new' => $name, 'satir' => $_synced]);
+                }
+            }
+            set_flash('success', 'Güncellendi.' . ($_synced > 0 ? ' ' . $_synced . ' kayıttaki depo adı eşitlendi.' : ''));
 
         } elseif ($action === 'toggle') {
             $id = (int)($_POST['id'] ?? 0);

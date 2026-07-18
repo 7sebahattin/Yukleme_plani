@@ -38,7 +38,23 @@ foreach ($tables as [$t, $col, $label]) {
 // Hedef depo listesi — tanımlardaki aktif depolar (admin kısıtsız görür)
 $depolar = depot_options();
 
-$done = null; $error = '';
+$done = null; $error = ''; $sync_done = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'sync') {
+    csrf_check($_POST['csrf'] ?? null);
+    // Tüm depo tanımlarının canonical yazımını veriye yay (büyük/küçük harf + rename artığı)
+    $_total = 0;
+    foreach ($depolar as $_dn) {
+        $_total += sync_depot_name_in_data($_dn);
+    }
+    if ($_total > 0) {
+        audit_log_event('depot_sync_all', 'admin', null, null, ['satir' => $_total]);
+    }
+    set_flash('success', $_total > 0
+        ? $_total . ' kayıttaki depo adı tanımlarla eşitlendi.'
+        : 'Tüm depo adları zaten tanımlarla uyumlu.');
+    header('Location: depo_tasima.php');
+    exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
@@ -90,6 +106,24 @@ render_header('Depo Taşıma');
 ?>
 <div class="page-head">
     <h1>📦 Depo Taşıma</h1>
+</div>
+
+<?php render_flash(); ?>
+
+<!-- ── Depo adı eşitleme (rename sonrası büyük/küçük harf uyumsuzluğu) ── -->
+<div class="card" style="max-width:760px;margin-bottom:14px">
+    <h2 style="margin-top:0;font-size:1.05rem">🔤 Depo Adlarını Eşitle</h2>
+    <p class="muted">
+        Bir depo tanımının adını sonradan değiştirdiyseniz (örn. büyük/küçük harf),
+        eski kayıtlardaki depo yazımı tanımla uyuşmayabilir — bu da kayda girerken
+        "başka depoya ait" hatası verir. Bu buton tüm kayıtlardaki depo adlarını
+        güncel tanımlara göre eşitler (yalnız yazım düzeltir, taşıma yapmaz).
+    </p>
+    <form method="post" action="depo_tasima.php">
+        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+        <input type="hidden" name="action" value="sync">
+        <button class="btn btn-primary">🔤 Depo Adlarını Tanımlarla Eşitle</button>
+    </form>
 </div>
 
 <div class="card" style="max-width:760px">
