@@ -24,6 +24,7 @@ $migrations = [
     ['loading_records', 'report_id',      "ALTER TABLE `loading_records` ADD COLUMN `report_id` INT NULL"],
     ['loading_records', 'reported_at',    "ALTER TABLE `loading_records` ADD COLUMN `reported_at` DATETIME NULL"],
     ['loading_records', 'reported_by',    "ALTER TABLE `loading_records` ADD COLUMN `reported_by` INT NULL"],
+    ['material_definitions', 'color',     "ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL"],
 ];
 
 function mig_table_exists(PDO $pdo, string $t): bool {

@@ -67,6 +67,22 @@ function def_color_value(array $post): ?string {
     return preg_match('/^#[0-9a-fA-F]{6}$/', $v) ? strtolower($v) : null;
 }
 
+// Kendi kendini onaran kolon kontrolü: config/db.php'deki otomatik migration
+// paylaşımlı sunucularda (ALTER yetkisi yoksa) sessizce başarısız olabilir —
+// bu durumda renk hiç kaydedilmeden "Güncellendi" görünürdü. Burada bir kez
+// daha denenir; hâlâ yoksa çağıran taraf kullanıcıyı açıkça uyarır.
+function ensure_depot_color_column(): bool {
+    if (db_has_column('material_definitions', 'color')) return true;
+    try {
+        db()->exec("ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL");
+    } catch (Throwable $e) { /* yetki yoksa aşağıda kullanıcıya bildirilir */ }
+    // db_has_column statik önbelleğe alıyor — yeniden hesapla
+    try {
+        $cols = db()->query("SHOW COLUMNS FROM `material_definitions`")->fetchAll(PDO::FETCH_COLUMN);
+        return in_array('color', $cols, true);
+    } catch (Throwable $e) { return false; }
+}
+
 // Ekleme formu açıklaması
 function def_help(string $type): string {
     return match ($type) {
@@ -96,7 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
                 }
             }
-            $color_col = ($type === 'depo') && db_has_column('material_definitions', 'color');
+            $color_col = ($type === 'depo') && ensure_depot_color_column();
+            $color_warn = ($type === 'depo' && !$color_col);
             $color_val = $color_col ? def_color_value($_POST) : null;
             if ($color_col) {
                 db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active, color) VALUES (?,?,?,1,?)")
@@ -107,7 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $new_def_id = (int)db()->lastInsertId();
             audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
-            set_flash('success', '"' . $name . '" eklendi.');
+            set_flash('success', '"' . $name . '" eklendi.'
+                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
             $back = 'sel=' . $new_def_id; // yeni kayıt listede seçili gelsin
 
         } elseif ($action === 'update') {
@@ -131,7 +149,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            $color_col = ($type === 'depo') && db_has_column('material_definitions', 'color');
+            $color_col  = ($type === 'depo') && ensure_depot_color_column();
+            $color_warn = ($type === 'depo' && !$color_col);
             if ($color_col) {
                 $color_val = def_color_value($_POST);
                 db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=?, color=? WHERE id=?")
@@ -163,7 +182,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 } catch (Throwable $e) {}
             }
-            set_flash('success', 'Güncellendi.' . ($_synced > 0 ? ' ' . $_synced . ' kayıttaki depo adı eşitlendi.' : ''));
+            set_flash('success', 'Güncellendi.' . ($_synced > 0 ? ' ' . $_synced . ' kayıttaki depo adı eşitlendi.' : '')
+                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
 
         } elseif ($action === 'toggle') {
             $id = (int)($_POST['id'] ?? 0);
