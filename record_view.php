@@ -36,15 +36,21 @@ $st = db()->prepare("
 $st->execute([':r' => $id]);
 $pallets = $st->fetchAll();
 
-// Depo sorumluluğu: kısıtlı kullanıcı, deposu kendi listesinde OLMAYAN kayda doğrudan URL ile giremez.
+// Depo sorumluluğu: aktif depo kapsamı dışındaki kayda doğrudan URL ile girilemez.
+// Deposu boş (henüz atanmamış) kayıtlar her depoda görünür — taşıma öncesi erişilebilir kalır.
 $_allowed_depots = function_exists('user_allowed_depots') ? user_allowed_depots() : null;
 if ($_allowed_depots !== null) {
-    $_visible = false;
+    $_match = false;
+    $_rec_depots = [];
     foreach ($pallets as $_pp) {
-        if (in_array(trim((string)($_pp['depo'] ?? '')), $_allowed_depots, true)) { $_visible = true; break; }
+        $_d = trim((string)($_pp['depo'] ?? ''));
+        if ($_d === '') continue;
+        $_rec_depots[$_d] = true;
+        if (in_array($_d, $_allowed_depots, true)) { $_match = true; break; }
     }
-    if (!$_visible) {
-        forbidden('Bu kayıt sizin sorumlu olduğunuz depolara ait değil.');
+    if (!$_match && !empty($_rec_depots)) {
+        forbidden('Bu kayıt başka depoya ait (' . h(implode(', ', array_keys($_rec_depots)))
+            . '). Görüntülemek için üstteki depo rozetinden o depoya geçin.');
     }
 }
 

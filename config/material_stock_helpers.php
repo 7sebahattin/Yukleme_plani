@@ -147,11 +147,11 @@ function get_material_stock_summary(PDO $pdo, array $filters = []): array {
         $agg_where = []; $agg_params = [];
         if ($f_tarih_bas !== '') { $agg_where[] = "movement_date >= ?"; $agg_params[] = $f_tarih_bas; }
         if ($f_tarih_bit !== '') { $agg_where[] = "movement_date <= ?"; $agg_params[] = $f_tarih_bit; }
-        // Depo sorumluluğu: kısıtlı kullanıcı yalnız kendi depolarının hareketlerini görür
+        // Depo sorumluluğu: aktif depo + atanmamış (deposu boş) hareketler görünür
         if (function_exists('user_allowed_depots')) {
             $_ad = user_allowed_depots();
             if (is_array($_ad) && count($_ad) > 0) {
-                $agg_where[] = "depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ")";
+                $agg_where[] = "(depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
                 foreach ($_ad as $_d) $agg_params[] = $_d;
             }
         }
@@ -329,11 +329,11 @@ function ms_movements_where(array $filters): array {
     }
     if ($f_depo         !== '') { $where[] = "depo LIKE ?";       $params[] = '%' . $f_depo . '%'; }
     if ($f_hareket_tipi !== '') { $where[] = "movement_type = ?"; $params[] = $f_hareket_tipi; }
-    // Depo sorumluluğu: kısıtlı kullanıcı yalnız kendi depolarının hareketlerini görür
+    // Depo sorumluluğu: aktif depo + atanmamış (deposu boş) hareketler görünür
     if (function_exists('user_allowed_depots')) {
         $_ad = user_allowed_depots();
         if (is_array($_ad) && count($_ad) > 0) {
-            $where[] = "depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ")";
+            $where[] = "(depo IN (" . implode(',', array_fill(0, count($_ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
             foreach ($_ad as $_d) $params[] = $_d;
         }
     }

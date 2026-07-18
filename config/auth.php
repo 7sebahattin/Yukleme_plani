@@ -407,49 +407,62 @@ function depot_visible_to_user(?string $depo): bool {
     return in_array($depo, $allowed, true);
 }
 
+// ── Atanmamış veri kuralı ─────────────────────────────────
+// Deposu BOŞ (henüz atanmamış) kayıtlar TÜM depolarda görünür ve erişilebilir
+// kalır — depo özelliği yüzünden hiçbir eski veri kaybolmaz/kilitlenmez.
+// Bir depoya atanınca (kayıt düzenleme veya Depo Taşıma) yalnız o depoda görünür.
+// Aşağıdaki filtreler bu nedenle "IN (aktif depo) VEYA depo boş" kurar.
+
 // loading_records'ı palet deposuna göre kapsayan WHERE parçası döndürür.
 // NAMED parametre üretir ($prefix0, $prefix1 ...) — named-param sorgularla birlikte kullanılır.
-// Dönen: [' AND EXISTS(...) ', [':udp0'=>'Depo', ...]]  — kısıtsızsa ['', []].
+// Dönen: [' AND (EXISTS(...) OR atanmamış) ', [':udp0'=>'Depo', ...]]  — kısıtsızsa ['', []].
 function depo_sql_records(string $records_alias = 'r', string $prefix = ':udp'): array {
     $allowed = user_allowed_depots();
     if ($allowed === null || count($allowed) === 0) return ['', []];
     $names = []; $params = [];
     foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
-    $sql = " AND EXISTS (SELECT 1 FROM loading_pallets _udp
-                         WHERE _udp.loading_record_id = {$records_alias}.id
-                         AND _udp.depo IN (" . implode(',', $names) . ")) ";
+    $sql = " AND (EXISTS (SELECT 1 FROM loading_pallets _udp
+                          WHERE _udp.loading_record_id = {$records_alias}.id
+                          AND _udp.depo IN (" . implode(',', $names) . "))
+                  OR NOT EXISTS (SELECT 1 FROM loading_pallets _udpu
+                                 WHERE _udpu.loading_record_id = {$records_alias}.id
+                                 AND TRIM(COALESCE(_udpu.depo,'')) <> '')) ";
     return [$sql, $params];
 }
 
 // depo kolonu OLAN tablolar için POZİSYONEL (?) parametreli WHERE parçası.
 // Pozisyonel sorgu kuran sayfalarda (stok.php vb.) kullanılır.
-// Dönen: ['col IN (?,?)', ['Depo A','Depo B']] — kısıtsızsa ['', []].
+// Dönen: ['(col IN (?,?) OR col boş)', ['Depo A','Depo B']] — kısıtsızsa ['', []].
 function depo_sql_in(string $col): array {
     $allowed = user_allowed_depots();
     if ($allowed === null || count($allowed) === 0) return ['', []];
-    return [$col . ' IN (' . implode(',', array_fill(0, count($allowed), '?')) . ')', array_values($allowed)];
+    $ph = implode(',', array_fill(0, count($allowed), '?'));
+    return ["($col IN ($ph) OR TRIM(COALESCE($col,'')) = '')", array_values($allowed)];
 }
 
 // loading_records için POZİSYONEL (?) parametreli EXISTS parçası
 // (palet deposu üzerinden kapsar). Pozisyonel sorgu kuran sayfalarda kullanılır.
-// Dönen: ['EXISTS(...)', ['Depo A']] — kısıtsızsa ['', []].
+// Dönen: ['(EXISTS(...) OR atanmamış)', ['Depo A']] — kısıtsızsa ['', []].
 function depo_sql_records_in(string $records_ref = 'loading_records'): array {
     $allowed = user_allowed_depots();
     if ($allowed === null || count($allowed) === 0) return ['', []];
     $ph = implode(',', array_fill(0, count($allowed), '?'));
-    return ["EXISTS (SELECT 1 FROM loading_pallets _udpi
-             WHERE _udpi.loading_record_id = {$records_ref}.id
-             AND _udpi.depo IN ($ph))", array_values($allowed)];
+    return ["(EXISTS (SELECT 1 FROM loading_pallets _udpi
+              WHERE _udpi.loading_record_id = {$records_ref}.id
+              AND _udpi.depo IN ($ph))
+             OR NOT EXISTS (SELECT 1 FROM loading_pallets _udpiu
+              WHERE _udpiu.loading_record_id = {$records_ref}.id
+              AND TRIM(COALESCE(_udpiu.depo,'')) <> ''))", array_values($allowed)];
 }
 
 // depo kolonu OLAN tablolar (kantar vb.) için NAMED parametreli WHERE parçası.
-// Dönen: [' AND col IN (...) ', [':udc0'=>'Depo', ...]]  — kısıtsızsa ['', []].
+// Dönen: [' AND (col IN (...) OR col boş) ', [':udc0'=>'Depo', ...]]  — kısıtsızsa ['', []].
 function depo_sql_column(string $col, string $prefix = ':udc'): array {
     $allowed = user_allowed_depots();
     if ($allowed === null || count($allowed) === 0) return ['', []];
     $names = []; $params = [];
     foreach (array_values($allowed) as $i => $d) { $k = $prefix . $i; $names[] = $k; $params[$k] = $d; }
-    return [" AND $col IN (" . implode(',', $names) . ") ", $params];
+    return [" AND ($col IN (" . implode(',', $names) . ") OR TRIM(COALESCE($col,'')) = '') ", $params];
 }
 
 function require_perm(string $permission): void {
