@@ -53,6 +53,15 @@ foreach ($SECTIONS as $sk => $sv) {
 function def_has_dara(string $type): bool {
     return in_array($type, ['kasa_cinsi', 'palet_tipi'], true);
 }
+// Depo renk seçicisinden gelen değeri doğrular. color_reset=1 gönderilmişse
+// (kullanıcı "Otomatik" butonuna bastıysa) her zaman null — isimden türetilen
+// otomatik palet rengi devreye girer.
+function def_color_value(array $post): ?string {
+    if (($post['color_reset'] ?? '') === '1') return null;
+    $v = trim((string)($post['color'] ?? ''));
+    return preg_match('/^#[0-9a-fA-F]{6}$/', $v) ? strtolower($v) : null;
+}
+
 // Ekleme formu açıklaması
 function def_help(string $type): string {
     return match ($type) {
@@ -82,8 +91,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('"' . $name . '" bu türde zaten mevcut.');
                 }
             }
-            db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
-                ->execute([$type, $name, $unit]);
+            $color_col = ($type === 'depo') && db_has_column('material_definitions', 'color');
+            $color_val = $color_col ? def_color_value($_POST) : null;
+            if ($color_col) {
+                db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active, color) VALUES (?,?,?,1,?)")
+                    ->execute([$type, $name, $unit, $color_val]);
+            } else {
+                db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
+                    ->execute([$type, $name, $unit]);
+            }
             $new_def_id = (int)db()->lastInsertId();
             audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
             set_flash('success', '"' . $name . '" eklendi.');
@@ -110,8 +126,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
-                ->execute([$name, $unit, $is_active, $id]);
+            $color_col = ($type === 'depo') && db_has_column('material_definitions', 'color');
+            if ($color_col) {
+                $color_val = def_color_value($_POST);
+                db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=?, color=? WHERE id=?")
+                    ->execute([$name, $unit, $is_active, $color_val, $id]);
+            } else {
+                db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
+                    ->execute([$name, $unit, $is_active, $id]);
+            }
             audit_log_event('update', 'definitions', $id, null, ['name' => $name, 'type' => $type]);
             // Depo adı değişti/eşitlenmeli → tüm depo kolonlarını canonical yazıma çek
             $_synced = 0;
@@ -288,6 +311,7 @@ render_flash();
             <input type="hidden" name="action" value="create" id="d3Action">
             <input type="hidden" name="id"     value=""       id="d3Id" disabled>
             <input type="hidden" name="back"   value=""       id="d3Back">
+            <input type="hidden" name="color_reset" value="0" id="d3ColorReset">
 
             <label class="def3-field">Kategori / Tür
                 <select name="type" id="d3Type" required>
@@ -310,6 +334,15 @@ render_flash();
 
             <label class="def3-field" id="d3DaraWrap" hidden>Birim Dara (kg)
                 <input type="text" name="unit_dara_kg" id="d3Dara" inputmode="decimal" value="0">
+            </label>
+
+            <label class="def3-field def3-color-field" id="d3ColorWrap" hidden>
+                Depo Rengi
+                <span class="def3-color-row">
+                    <input type="color" name="color" id="d3Color" value="#2563eb">
+                    <button type="button" class="btn btn-sm btn-ghost" id="d3ColorAuto">Otomatik</button>
+                </span>
+                <small class="muted">Sidebar, üst bar ve mobil menüde bu depo aktifken kullanılır.</small>
             </label>
 
             <label class="def3-active" id="d3ActiveWrap" hidden>
@@ -387,8 +420,14 @@ render_flash();
                             data-dara="<?= h($d['unit_dara_kg']) ?>"
                             data-active="<?= $d['is_active'] ? '1' : '0' ?>"
                             data-usage="<?= $ucnt ?>"
+                            <?php if ($t === 'depo'): ?>data-color="<?= h(depot_color($d['name'])) ?>" data-colorset="<?= !empty($d['color']) ? '1' : '0' ?>"<?php endif; ?>
                             data-q="<?= h(def_search_fold($d['name'] . ' ' . ($type_labels[$d['type']] ?? $d['type']))) ?>">
-                        <span class="def3-row-name"><?= h($d['name']) ?></span>
+                        <span class="def3-row-name">
+                            <?php if ($t === 'depo'): ?>
+                            <span class="def3-color-dot" style="background:<?= h(depot_color($d['name'])) ?>"></span>
+                            <?php endif; ?>
+                            <?= h($d['name']) ?>
+                        </span>
                         <span class="def3-row-meta">
                             <?php if ($has_dara && (float)$d['unit_dara_kg'] > 0): ?>
                             <span class="def3-chip def3-chip-dara"><?= h($d['unit_dara_kg']) ?> kg</span>
@@ -434,6 +473,10 @@ render_flash();
     var fName   = document.getElementById('d3Name');
     var daraWrap= document.getElementById('d3DaraWrap');
     var fDara   = document.getElementById('d3Dara');
+    var colorWrap = document.getElementById('d3ColorWrap');
+    var fColor    = document.getElementById('d3Color');
+    var fColorReset = document.getElementById('d3ColorReset');
+    var colorAutoBtn = document.getElementById('d3ColorAuto');
     var actWrap = document.getElementById('d3ActiveWrap');
     var fActive = document.getElementById('d3Active');
     var meta    = document.getElementById('d3Meta');
@@ -451,6 +494,18 @@ render_flash();
         var has = opt && opt.getAttribute('data-dara') === '1';
         daraWrap.hidden = !has;
         if (!has) fDara.value = '0';
+        var isDepo = fType.value === 'depo';
+        colorWrap.hidden = !isDepo;
+        if (!isDepo) fColorReset.value = '0';
+    }
+
+    function setColorAuto() {
+        fColorReset.value = '1';
+        fColor.classList.add('is-auto');
+    }
+    function setColorManual() {
+        fColorReset.value = '0';
+        fColor.classList.remove('is-auto');
     }
 
     function newMode(presetType) {
@@ -463,6 +518,8 @@ render_flash();
         if (presetType) fType.value = presetType;
         fName.value = '';
         fDara.value = '0';
+        fColor.value = '#2563eb';
+        setColorAuto(); // yeni depo varsayılan olarak otomatik renk alır
         actWrap.hidden = true; fActive.checked = true;
         meta.hidden = true;
         submit.textContent = '+ Ekle';
@@ -486,6 +543,11 @@ render_flash();
         fName.value   = row.dataset.name;
         daraWrap.hidden = row.dataset.hasdara !== '1';
         fDara.value   = row.dataset.dara || '0';
+        colorWrap.hidden = row.dataset.type !== 'depo';
+        if (row.dataset.type === 'depo') {
+            fColor.value = row.dataset.color || '#2563eb';
+            if (row.dataset.colorset === '1') setColorManual(); else setColorAuto();
+        }
         actWrap.hidden = false;
         fActive.checked = row.dataset.active === '1';
         meta.hidden = false;
@@ -504,6 +566,12 @@ render_flash();
 
     fType.addEventListener('change', syncDaraByType);
     newBtn.addEventListener('click', function () { newMode(); });
+    fColor.addEventListener('input', setColorManual);
+    colorAutoBtn.addEventListener('click', function () {
+        setColorAuto();
+        // Görsel önizleme: mevcut isme göre PHP ile aynı algoritmayla türetilen renk yoksa
+        // sunucudan gelen efektif renk zaten inputta duruyor; sadece "otomatik" işaretlenir.
+    });
 
     delBtn.addEventListener('click', function () {
         if (!fId.value) return;

@@ -61,6 +61,8 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
     background: var(--text); color: #fff;
     position: sticky; top: 0; z-index: 100;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    border-bottom: 3px solid var(--depot-accent, transparent);
+    transition: border-bottom-color .2s ease;
 }
 .topbar-inner {
     max-width: 1500px; margin: 0 auto;
@@ -2695,9 +2697,10 @@ body.print-mode .asya-sheet {
     bottom: 0; left: 0; right: 0;
     z-index: 500;
     background: var(--text);
-    border-top: 1px solid rgba(255,255,255,0.08);
+    border-top: 3px solid var(--depot-accent, rgba(255,255,255,0.08));
     padding: 6px 0;
     padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+    transition: border-top-color .2s ease;
 }
 
 @media (max-width: 767px) {
@@ -3154,6 +3157,25 @@ body.notes-modal-open { overflow: hidden; }
 }
 .def3-field input:focus, .def3-field select:focus { border-color: var(--primary); background: #fff; outline: none; }
 .def3-field select:disabled { opacity: .7; background: #eef2f7; }
+
+/* Depo renk seçici (definitions.php sol panel) */
+.def3-color-field small { display: block; margin-top: 5px; font-size: .74rem; }
+.def3-color-row { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.def3-color-row input[type="color"] {
+    width: 46px; height: 38px; padding: 3px;
+    margin-top: 0; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    cursor: pointer; background: #fff;
+}
+.def3-color-row input[type="color"].is-auto { border-style: dashed; border-color: var(--muted); }
+.def3-color-row .btn { margin-top: 0; }
+
+/* Liste satırındaki depo renk noktası */
+.def3-color-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle; flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+}
+
 .def3-active { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: .88rem; font-weight: 600; }
 .def3-panel-meta {
     font-size: .78rem; color: var(--muted);
@@ -4646,6 +4668,8 @@ body.notes-modal-open { overflow: hidden; }
         color: #fff;
         z-index: 100;
         box-shadow: 2px 0 8px rgba(0,0,0,.08);
+        border-left: 4px solid var(--depot-accent, transparent);
+        transition: border-left-color .2s ease;
     }
 
     /* Marka */
@@ -4653,7 +4677,8 @@ body.notes-modal-open { overflow: hidden; }
         display: flex; align-items: center; gap: 10px;
         padding: 16px 16px 14px;
         color: #fff; text-decoration: none;
-        border-bottom: 1px solid rgba(255,255,255,.08);
+        border-bottom: 2px solid var(--depot-accent, rgba(255,255,255,.08));
+        transition: border-bottom-color .2s ease;
     }
     .sidebar-brand:hover { text-decoration: none; }
     .sidebar-brand-logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
@@ -5319,18 +5344,21 @@ input:focus, select:focus, textarea:focus {
 .pill { transition: background .14s ease, border-color .14s ease, color .14s ease; }
 .pill:not(.active):hover { border-color: var(--border-strong); background: #f7f9fc; }
 
-/* ---------- Aktif Depo Rozeti (Sprint Depo-01) ---------- */
-/* Topbar: koyu zemin üzerinde açık çip — tıklayınca depo_sec.php */
+/* ---------- Aktif Depo Rozeti (Sprint Depo-01/02) ---------- */
+/* Renk: --depot-accent* değişkenleri render_header()'da <body>'ye enjekte
+   edilir (depot_color() — admin definitions.php'den seçebilir, yoksa
+   isimden türetilen sabit palet rengi). Depo değişince otomatik güncellenir. */
+/* Topbar: aktif depo rengiyle dolu çip — tıklayınca depo_sec.php */
 .depo-badge {
     display: flex; align-items: center; gap: 6px;
     padding: 6px 12px; border-radius: 999px;
-    background: rgba(255,255,255,0.14);
-    border: 1px solid rgba(255,255,255,0.25);
-    color: #fff; font-weight: 700; font-size: .82rem;
+    background: var(--depot-accent, rgba(255,255,255,0.14));
+    border: 1px solid rgba(255,255,255,0.35);
+    color: var(--depot-accent-text, #fff); font-weight: 700; font-size: .82rem;
     white-space: nowrap; flex-shrink: 1; min-width: 0;
-    transition: background .15s, border-color .15s;
+    transition: background .2s, border-color .2s;
 }
-.depo-badge:hover { background: rgba(255,255,255,0.24); text-decoration: none; }
+.depo-badge:hover { filter: brightness(1.1); text-decoration: none; }
 .depo-badge-icon { font-size: .95rem; }
 .depo-badge-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .depo-badge-caret { font-size: .65rem; opacity: .7; }
@@ -5340,16 +5368,16 @@ input:focus, select:focus, textarea:focus {
     .depo-badge-name { max-width: 92px; }
 }
 
-/* Sidebar (≥900px): marka altında aktif depo kartı */
+/* Sidebar (≥900px): marka altında aktif depo kartı — depo rengiyle vurgulu */
 .sidebar-depo {
     display: flex; align-items: center; gap: 10px;
     margin: 10px 12px 4px; padding: 9px 12px;
     border-radius: 10px;
-    background: rgba(29,108,240,0.10);
-    border: 1px solid rgba(29,108,240,0.25);
-    transition: background .15s, border-color .15s;
+    background: rgba(var(--depot-accent-rgb, 29,108,240), 0.16);
+    border: 1px solid rgba(var(--depot-accent-rgb, 29,108,240), 0.4);
+    transition: background .2s, border-color .2s;
 }
-.sidebar-depo:hover { background: rgba(29,108,240,0.18); text-decoration: none; }
+.sidebar-depo:hover { background: rgba(var(--depot-accent-rgb, 29,108,240), 0.26); text-decoration: none; }
 .sidebar-depo-icon { font-size: 1.1rem; flex-shrink: 0; }
 .sidebar-depo-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
 .sidebar-depo-label {
@@ -5357,7 +5385,7 @@ input:focus, select:focus, textarea:focus {
     letter-spacing: .05em; color: #64748b;
 }
 .sidebar-depo-name {
-    font-size: .86rem; font-weight: 800; color: #1d6cf0;
+    font-size: .86rem; font-weight: 800; color: var(--depot-accent, #1d6cf0);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .sidebar-depo-caret { font-size: .65rem; color: #94a3b8; flex-shrink: 0; }

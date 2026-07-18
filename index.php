@@ -136,6 +136,11 @@ if ($db_backup_result !== null): ?>
     </a>
     <?php endif; ?>
 
+    <a href="notes.php" class="home-card">
+        <div class="home-card-icon" style="background:#fef9e7">📝</div>
+        <div class="home-card-title">Notlar</div>
+    </a>
+
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
@@ -201,6 +206,18 @@ if ($db_backup_result !== null): ?>
         <div class="home-card-icon" style="background:#e8f5e9">🗄️</div>
         <div class="home-card-title">Veritabanı Yedekleri</div>
         <div class="home-card-sub">Günlük otomatik</div>
+    </a>
+    <a href="migrate.php" class="home-card">
+        <div class="home-card-icon" style="background:#f1f5f9">🛠</div>
+        <div class="home-card-title">Şema Migrasyon</div>
+    </a>
+    <a href="depo_tasima.php" class="home-card">
+        <div class="home-card-icon" style="background:#fff7ed">📦</div>
+        <div class="home-card-title">Depo Taşıma</div>
+    </a>
+    <a href="firma_eslestirme.php" class="home-card">
+        <div class="home-card-icon" style="background:#eff6ff">🔗</div>
+        <div class="home-card-title">Tedarikçi Eşleştirme</div>
     </a>
 <?php endif; ?>
 

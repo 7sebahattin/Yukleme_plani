@@ -229,6 +229,7 @@ function render_desktop_sidebar(string $base): void {
     $a_mig   = $cur === 'migrate.php';
     $a_dtas  = $cur === 'depo_tasima.php';
     $a_fes   = $cur === 'firma_eslestirme.php';
+    $a_bkp   = $cur === 'admin_db_backups.php';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
@@ -276,6 +277,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
+        <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
         <?php if ($p_adm) $lnk('depo_tasima.php', '📦', 'Depo Taşıma',    $a_dtas); ?>
         <?php if ($p_adm) $lnk('firma_eslestirme.php', '🔗', 'Tedarikçi Eşleştirme', $a_fes); ?>
@@ -319,7 +321,18 @@ function render_header(string $title, bool $print_mode = false): void {
     <title><?= h($title) ?> · Asya Fresh</title>
     <link rel="stylesheet" href="<?= $base ?>assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
-<body class="<?= $print_mode ? 'print-mode' : '' ?>">
+<?php
+    // Aktif depo rengi: CSS değişkeni olarak body'ye enjekte edilir.
+    // Sidebar, topbar rozeti ve bottomnav bu değişkeni kullanarak depo değişince renk değiştirir.
+    $__body_style = '';
+    if (!$print_mode && function_exists('active_depot') && ($__hdp = active_depot()) !== null) {
+        $__dc = depot_color($__hdp);
+        $__body_style = ' style="--depot-accent:' . h($__dc)
+            . ';--depot-accent-rgb:' . h(color_rgb_triplet($__dc))
+            . ';--depot-accent-text:' . h(color_readable_text($__dc)) . ';"';
+    }
+?>
+<body class="<?= $print_mode ? 'print-mode' : '' ?>"<?= $__body_style ?>>
 <?php if (!$print_mode): ?>
 <header class="topbar">
     <div class="topbar-inner">
@@ -1305,6 +1318,50 @@ function tr_upper_or_null($value): ?string
 {
     $v = tr_upper(is_null($value) ? null : (string)$value);
     return $v === '' ? null : $v;
+}
+
+// ── Depo Rengi (Sprint Depo-02) ───────────────────────────
+// Her depoya görsel bir renk atanır: admin definitions.php'den elle
+// seçebilir (material_definitions.color); seçilmemişse isimden türetilen
+// sabit bir palet rengi kullanılır (aynı depo her zaman aynı rengi alır).
+function depot_color_palette(): array {
+    return ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#0891b2',
+            '#db2777', '#65a30d', '#ea580c', '#0d9488', '#4f46e5', '#be123c'];
+}
+
+function depot_color(string $name): string {
+    static $cache = [];
+    if (isset($cache[$name])) return $cache[$name];
+    $stored = null;
+    try {
+        $st = db()->prepare("SELECT color FROM material_definitions WHERE type='depo' AND name = ? LIMIT 1");
+        $st->execute([$name]);
+        $stored = $st->fetchColumn() ?: null;
+    } catch (Throwable $e) { /* kolon henüz yoksa — otomatik palete düş */ }
+
+    if (is_string($stored) && preg_match('/^#[0-9a-fA-F]{6}$/', $stored)) {
+        return $cache[$name] = $stored;
+    }
+    $palette = depot_color_palette();
+    $idx = crc32($name) % count($palette);
+    return $cache[$name] = $palette[$idx];
+}
+
+// Verilen hex rengin üzerine beyaz mı koyu mu yazı okunur? (WCAG basit luminans)
+function color_readable_text(string $hex): string {
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) !== 6) return '#ffffff';
+    $r = hexdec(substr($hex, 0, 2)); $g = hexdec(substr($hex, 2, 2)); $b = hexdec(substr($hex, 4, 2));
+    $lum = (0.299 * $r + 0.587 * $g + 0.114 * $b) / 255;
+    return $lum > 0.6 ? '#111827' : '#ffffff';
+}
+
+// Hex rengi "r, g, b" formatına çevirir — CSS rgba(var(--x), alpha) kalıbı için.
+// color-mix() gibi yeni CSS fonksiyonlarına gerek kalmadan eski tarayıcılarda da çalışır.
+function color_rgb_triplet(string $hex): string {
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) !== 6) return '29,108,240';
+    return hexdec(substr($hex, 0, 2)) . ',' . hexdec(substr($hex, 2, 2)) . ',' . hexdec(substr($hex, 4, 2));
 }
 
 function normalize_firma(string $v): string { return tr_upper($v); }

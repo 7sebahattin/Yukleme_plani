@@ -64,6 +64,13 @@ function db(): PDO {
                     $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL");
                 } catch (PDOException $mig_e) { /* eklenememişse view/form defansif çalışır */ }
             }
+            // Sprint Depo-02: depo rengi — material_definitions.color (opsiyonel, NULL = otomatik palet)
+            try {
+                $has_color = (bool)$pdo->query("SHOW COLUMNS FROM `material_definitions` LIKE 'color'")->fetchColumn();
+                if (!$has_color) {
+                    $pdo->exec("ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL");
+                }
+            } catch (PDOException $mig_e) { /* material_definitions yoksa — sessizce geç */ }
             // Başlangıç marka tanımlarını seed et (yalnızca henüz hiç marka tanımı yoksa)
             try {
                 $brand_count = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE type='marka'")->fetchColumn();

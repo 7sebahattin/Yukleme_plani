@@ -108,6 +108,7 @@ $kullanici = $user['display_name'] ?: $user['username'];
         .dsc-depo:hover { border-color: #1d6cf0; background: #fff; }
         .dsc-depo.aktif { border-color: #1d6cf0; background: #eff6ff; }
         .dsc-depo-ikon { font-size: 1.3rem; }
+        .dsc-depo-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
         .dsc-depo-ad { flex: 1; }
         .dsc-depo-rozet {
             font-size: .7rem; font-weight: 700; color: #1d6cf0;
@@ -158,8 +159,10 @@ $kullanici = $user['display_name'] ?: $user['username'];
             <?php if ($next !== ''): ?><input type="hidden" name="next" value="<?= h($next) ?>"><?php endif; ?>
             <?php foreach ($depolar as $d): ?>
             <button type="submit" name="depo" value="<?= h($d) ?>"
-                    class="dsc-depo<?= $aktif === $d ? ' aktif' : '' ?>">
+                    class="dsc-depo<?= $aktif === $d ? ' aktif' : '' ?>"
+                    style="border-left:4px solid <?= h(depot_color($d)) ?>">
                 <span class="dsc-depo-ikon">🏭</span>
+                <span class="dsc-depo-dot" style="background:<?= h(depot_color($d)) ?>"></span>
                 <span class="dsc-depo-ad"><?= h($d) ?></span>
                 <?php if ($aktif === $d): ?><span class="dsc-depo-rozet">Aktif</span><?php endif; ?>
             </button>
