@@ -5412,3 +5412,19 @@ input:focus, select:focus, textarea:focus {
 }
 .ms-sug-add:hover, .ms-sug-add.active { background: #dcfce7; }
 .ms-sug-add.busy { opacity: .7; cursor: wait; }
+
+/* ---------- Depo Tema Tonu (Sprint Depo-02b) ---------- */
+/* İçerik arka planına aktif depo renginin ÇOK hafif tonu (%4.5) verilir.
+   Kartlar beyaz kalır — kontrast ve okunabilirlik bozulmaz, göz yormaz.
+   Depo seçili değilken fallback triplet --bg ile aynı → ton görünmez. */
+:root { --depot-accent-rgb: 244,246,250; }
+body:not(.print-mode) {
+    min-height: 100vh;
+    background: linear-gradient(
+        rgba(var(--depot-accent-rgb), 0.045),
+        rgba(var(--depot-accent-rgb), 0.045)
+    ), var(--bg);
+}
+@media print {
+    body { background: #fff !important; }
+}
