@@ -391,7 +391,7 @@ if ($type === 'yukleme' || $type === 'cikma') {
                 WHERE movement_type = 'sevk' AND material_id IS NOT NULL
                 GROUP BY material_id
             ) ms_s ON ms_s.material_id = md.id
-            WHERE md.type NOT IN ('firma','tedarikci','depo','urun')";
+            WHERE md.type NOT IN ('firma','tedarikci','depo','urun','cikis_nedeni')";
     $p = [];
     if ($f_mtype !== '') { $sql .= " AND md.type = :mtype"; $p[':mtype'] = $f_mtype; }
     if ($f_q     !== '') { $sql .= " AND md.name LIKE :q";  $p[':q']     = '%'.$f_q.'%'; }

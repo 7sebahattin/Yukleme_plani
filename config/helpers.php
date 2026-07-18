@@ -154,6 +154,7 @@ function definition_types(): array {
         'firma'         => 'Firma',
         'tedarikci'     => 'Tedarikçi',
         'depo'          => 'Depo',
+        'cikis_nedeni'  => 'Çıkış Nedeni',
         'bolge'         => 'Bölge',
         'urun'          => 'Ürün',
         'marka'         => 'Marka',
@@ -1677,8 +1678,19 @@ function kantar_grup_dist(array $gruplar, float $brut, float $eff_kdu, float $ef
 }
 
 // ── İzin Verilen Çıkış Nedenleri ─────────────────────────
+// Çıkış nedenleri — Tanımlar'dan yönetilir (type='cikis_nedeni').
+// db.php ilk açılışta eski sabit listeyi tanım olarak seed eder.
+// Tanım tablosu yoksa/boşsa eski sabit listeye düşer (fail-safe).
 function cikis_nedeni_listesi(): array {
-    return ['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    try {
+        $rows = db()->query(
+            "SELECT name FROM material_definitions WHERE type='cikis_nedeni' AND is_active=1 ORDER BY id"
+        )->fetchAll(PDO::FETCH_COLUMN);
+        if (!empty($rows)) return $cache = $rows;
+    } catch (Throwable $e) { /* tanım tablosu yok — fallback */ }
+    return $cache = ['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'];
 }
 
 // ── Beyan Modülü Yardımcıları (Sprint Beyan-01) ──────────

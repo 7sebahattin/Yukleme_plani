@@ -81,6 +81,17 @@ function db(): PDO {
                     }
                 }
             } catch (PDOException $mig_e) { /* material_definitions yoksa sessiz geç */ }
+            // Çıkış nedenlerini seed et — eski koddaki sabit liste tanımlara taşınır
+            // (yalnızca henüz hiç cikis_nedeni tanımı yoksa; sırası korunur)
+            try {
+                $cn_count = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE type='cikis_nedeni'")->fetchColumn();
+                if ($cn_count === 0) {
+                    $ins_cn = $pdo->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES ('cikis_nedeni', ?, 0, 1)");
+                    foreach (['ÇIKMA', 'KÜÇÜK BOY (2.)', 'MEYSU', 'Fire', 'Kötü Ürün', 'Çürük', 'Iskarta', 'Numune', 'İç Kullanım', 'Düzeltme', 'Diğer'] as $_cn) {
+                        $ins_cn->execute([$_cn]);
+                    }
+                }
+            } catch (PDOException $mig_e) { /* material_definitions yoksa sessiz geç */ }
         }
 
         // Hesap modülü tabloları

@@ -329,7 +329,7 @@ try {
 $move_defs_by_type = [];
 $stmt = $pdo->query(
     "SELECT id, type, name, is_active FROM material_definitions
-      WHERE type NOT IN ('firma','tedarikci','depo','bolge','urun','lokasyon')
+      WHERE type NOT IN ('firma','tedarikci','depo','bolge','urun','lokasyon','cikis_nedeni')
       ORDER BY is_active DESC, name"
 );
 while ($mrow = $stmt->fetch()) {

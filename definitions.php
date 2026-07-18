@@ -38,10 +38,15 @@ $SECTIONS = [
                     'kenar_kartonu', 'taban_kagidi', 'sale', 'viyol', 'kose_karton',
                     'kraft_kagit', 'file', 'diger'],
     ],
+    'operasyon' => [
+        'label' => 'Operasyon', 'icon' => '🚪',
+        'desc'  => 'Çıkış nedenleri — çıkma kayıtlarında kullanılır',
+        'types' => ['cikis_nedeni'],
+    ],
 ];
 
 $cat_types = $SECTIONS['ticari']['types'];                 // dara gerektirmeyen tipler
-$cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍'];
+$cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍', 'cikis_nedeni' => '🚪'];
 
 // type → section eşlemesi
 $type_section = [];
@@ -145,6 +150,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ['old' => $old_name], ['new' => $name, 'satir' => $_synced]);
                 }
             }
+            // Çıkış nedeni adı değişti → çıkma kayıtlarındaki eski değeri de güncelle
+            // (veri serbest metin tutulur; sync olmadan eski kayıtlar filtrelerden düşer)
+            if ($type === 'cikis_nedeni' && $old_name !== '' && $old_name !== $name) {
+                try {
+                    $st_cn = db()->prepare("UPDATE loading_records SET cikis_nedeni = ? WHERE type='cikma' AND cikis_nedeni = ?");
+                    $st_cn->execute([$name, $old_name]);
+                    $_synced = $st_cn->rowCount();
+                    if ($_synced > 0) {
+                        audit_log_event('cikis_nedeni_rename_sync', 'definitions', $id,
+                            ['old' => $old_name], ['new' => $name, 'satir' => $_synced]);
+                    }
+                } catch (Throwable $e) {}
+            }
             set_flash('success', 'Güncellendi.' . ($_synced > 0 ? ' ' . $_synced . ' kayıttaki depo adı eşitlendi.' : ''));
 
         } elseif ($action === 'toggle') {
@@ -192,6 +210,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($dd['type'] === 'tedarikci') {
                     try {
                         $c = db()->prepare("SELECT COUNT(*) FROM material_stock_movements WHERE firma = ?");
+                        $c->execute([$dd['name']]);
+                        $used += (int)$c->fetchColumn();
+                    } catch (Throwable $e) {}
+                }
+                if ($dd['type'] === 'cikis_nedeni') {
+                    try {
+                        $c = db()->prepare("SELECT COUNT(*) FROM loading_records WHERE type='cikma' AND cikis_nedeni = ?");
                         $c->execute([$dd['name']]);
                         $used += (int)$c->fetchColumn();
                     } catch (Throwable $e) {}
@@ -245,6 +270,9 @@ try {
 try {
     $usage_cat['tedarikci'] = db()->query("SELECT firma, COUNT(*) FROM material_stock_movements WHERE firma != '' GROUP BY firma")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['tedarikci'] = []; }
+try {
+    $usage_cat['cikis_nedeni'] = db()->query("SELECT cikis_nedeni, COUNT(*) FROM loading_records WHERE type='cikma' AND cikis_nedeni != '' GROUP BY cikis_nedeni")->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (Throwable $e) { $usage_cat['cikis_nedeni'] = []; }
 try {
     $usage_cat['lokasyon'] = db()->query("SELECT name, COUNT(*) FROM (SELECT geldigi_yer AS name FROM kantar_fisleri WHERE geldigi_yer!='' UNION ALL SELECT gittigi_yer FROM kantar_fisleri WHERE gittigi_yer!='') t GROUP BY name")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['lokasyon'] = []; }
@@ -373,7 +401,7 @@ render_flash();
         </div>
 
         <!-- ── Bölüm sekmeleri ── -->
-        <?php $active_sec = ($sel_section !== '' && $sel_section !== 'operasyon') ? $sel_section : 'ticari'; ?>
+        <?php $active_sec = $sel_section !== '' ? $sel_section : 'ticari'; ?>
         <div class="def3-tabs card">
             <?php foreach ($SECTIONS as $sk => $sv):
                 $sec_groups = $grouped[$sk] ?? [];
@@ -384,9 +412,6 @@ render_flash();
                 <?= $sv['icon'] ?> <?= h($sv['label']) ?> <span class="def3-tab-count"><?= $sec_count ?></span>
             </button>
             <?php endforeach; ?>
-            <button type="button" class="def3-tab" data-sec="operasyon">
-                🚪 Operasyon <span class="def3-tab-count"><?= count(cikis_nedeni_listesi()) ?></span>
-            </button>
         </div>
 
         <?php foreach ($SECTIONS as $sk => $sv):
@@ -445,18 +470,6 @@ render_flash();
             </div>
         </section>
         <?php endforeach; ?>
-
-        <!-- Operasyon (salt okunur) -->
-        <section class="def3-sec card" data-sec="operasyon">
-            <div class="def3-sec-body">
-                <p class="muted def3-sec-note">Çıkış nedenleri — kodda sabittir, düzenlenemez</p>
-                <div class="def3-readonly-chips">
-                    <?php foreach (cikis_nedeni_listesi() as $cn): ?>
-                    <span class="def3-ro-chip"><?= h($cn) ?></span>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </section>
 
         <div class="def3-noresult muted" id="d3NoResult" hidden>Aramaya uyan tanım bulunamadı.</div>
     </div>
@@ -630,11 +643,6 @@ render_flash();
         var anyVisible = false;
 
         document.querySelectorAll('.def3-sec').forEach(function (sec) {
-            if (sec.dataset.sec === 'operasyon') {
-                // Arama sırasında operasyon sekmesi gizlenir (aranabilir veri değil)
-                sec.classList.toggle('search-hide', q !== '');
-                return;
-            }
             var secHas = false;
             sec.querySelectorAll('.def3-tgroup').forEach(function (tg) {
                 var tgHas = false;
