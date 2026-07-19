@@ -227,9 +227,6 @@ function render_desktop_sidebar(string $base): void {
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
-    $a_mig   = $cur === 'migrate.php';
-    $a_dtas  = $cur === 'depo_tasima.php';
-    $a_fes   = $cur === 'firma_eslestirme.php';
     $a_bkp   = $cur === 'admin_db_backups.php';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
@@ -279,10 +276,12 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
-        <?php if ($p_adm) $lnk('migrate.php',     '🛠', 'Şema Migrasyon', $a_mig); ?>
-        <?php if ($p_adm) $lnk('depo_tasima.php', '📦', 'Depo Taşıma',    $a_dtas); ?>
-        <?php if ($p_adm) $lnk('firma_eslestirme.php', '🔗', 'Tedarikçi Eşleştirme', $a_fes); ?>
         <?php endif; ?>
+        <!-- Şema Migrasyon / Depo Taşıma / Tedarikçi Eşleştirme: menüden kaldırıldı
+             (tek seferlik kurulum araçları) — dosyalar silinmedi, gerekirse
+             doğrudan URL ile (migrate.php, depo_tasima.php, firma_eslestirme.php)
+             admin erişebilir. render_desktop_sidebar'daki $a_mig/$a_dtas/$a_fes
+             aktif-sayfa değişkenleri de bu yüzden burada bilinçli kullanılmıyor. -->
     </nav>
 
     <?php if (function_exists('current_user') && ($__su = current_user()) !== null): ?>

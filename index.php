@@ -207,18 +207,10 @@ if ($db_backup_result !== null): ?>
         <div class="home-card-title">Veritabanı Yedekleri</div>
         <div class="home-card-sub">Günlük otomatik</div>
     </a>
-    <a href="migrate.php" class="home-card">
-        <div class="home-card-icon" style="background:#f1f5f9">🛠</div>
-        <div class="home-card-title">Şema Migrasyon</div>
-    </a>
-    <a href="depo_tasima.php" class="home-card">
-        <div class="home-card-icon" style="background:#fff7ed">📦</div>
-        <div class="home-card-title">Depo Taşıma</div>
-    </a>
-    <a href="firma_eslestirme.php" class="home-card">
-        <div class="home-card-icon" style="background:#eff6ff">🔗</div>
-        <div class="home-card-title">Tedarikçi Eşleştirme</div>
-    </a>
+    <!-- Şema Migrasyon / Depo Taşıma / Tedarikçi Eşleştirme: karttan kaldırıldı
+         (tek seferlik kurulum araçları) — dosyalar silinmedi, gerekirse
+         doğrudan URL ile (migrate.php, depo_tasima.php, firma_eslestirme.php)
+         admin erişebilir. -->
 <?php endif; ?>
 
 <?php endif; ?>
