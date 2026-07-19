@@ -414,7 +414,14 @@
             <button type="button" class="btn btn-sm btn-ghost btn-icon mat-remove" title="Sil">×</button>
         `;
         pmMatList.appendChild(row);
-        row.querySelector('.mat-select').addEventListener('change', updateModalCalc);
+        row.querySelector('.mat-select').addEventListener('change', function() {
+            const mid = this.value;
+            if (mid && MATERIALS[mid] && MATERIALS[mid].type === 'sale') {
+                const ka = parseInt2(pmKasaAdeti.value);
+                if (ka > 0) row.querySelector('.mat-qty').value = String(ka);
+            }
+            updateModalCalc();
+        });
         row.querySelector('.mat-qty').addEventListener('input', updateModalCalc);
         row.querySelector('.mat-remove').addEventListener('click', () => {
             row.remove();
@@ -745,6 +752,22 @@
         el.addEventListener('input',  updateModalCalc);
         el.addEventListener('change', updateModalCalc);
     });
+
+    /* Sprint Şale-01: kasa sayısı değişince şale satırlarını senkronize et */
+    function syncSaleQty() {
+        const ka = parseInt2(pmKasaAdeti.value);
+        if (!ka) return;
+        pmMatList?.querySelectorAll('.pm-mat-row').forEach(r => {
+            const sel = r.querySelector('.mat-select');
+            if (sel?.value && MATERIALS[sel.value]?.type === 'sale') {
+                r.querySelector('.mat-qty').value = String(ka);
+            }
+        });
+    }
+    if (pmKasaAdeti) {
+        pmKasaAdeti.addEventListener('input',  syncSaleQty);
+        pmKasaAdeti.addEventListener('change', syncSaleQty);
+    }
 
     /* Overlay tıklama → kapat */
     pmOverlay?.addEventListener('click', e => { if (e.target === pmOverlay) closeModal(); });
