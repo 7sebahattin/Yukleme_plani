@@ -47,15 +47,24 @@ function mob_status_badge(string $status): string {
 <?php else: ?>
 <?php foreach ($notifications as $n): ?>
 <?php
-    $urun_label = $n['reference_kunye_urun'] ?? ($n['urun'] ?? '—');
+    $urun_label  = $n['reference_kunye_urun'] ?? ($n['urun'] ?? '—');
     $birim_label = $n['reference_kunye_birim'] ?? ($n['birim'] ?? 'KG');
     $miktar_val  = (float)($n['miktar'] ?? 0);
+    $n_status    = $n['status'] ?? 'draft';
+    $err_cnt     = 0;
+    if ($n_status === 'draft' && !empty($n['validation_errors_json'])) {
+        $errs    = json_decode($n['validation_errors_json'], true);
+        $err_cnt = is_array($errs) ? count($errs) : 0;
+    }
 ?>
 <a class="mob-notif-item" href="taslak_detay.php?id=<?= (int)$n['id'] ?>">
     <div class="mob-notif-meta">
         <?= $n['created_at'] ? hks_mob_h(date('d.m.Y H:i', strtotime($n['created_at']))) : '' ?>
         &nbsp;·&nbsp;<?= hks_mob_h($n['local_no'] ?? '') ?>
-        &nbsp;<?= mob_status_badge($n['status'] ?? 'draft') ?>
+        &nbsp;<?= mob_status_badge($n_status) ?>
+        <?php if ($err_cnt > 0): ?>
+        <span style="font-size:11px;background:#fef9c3;color:#92400e;border-radius:6px;padding:2px 7px;font-weight:600;margin-left:2px;">Eksik&nbsp;<?= $err_cnt ?></span>
+        <?php endif; ?>
     </div>
     <div class="mob-notif-title">
         <?= hks_mob_h($urun_label) ?>

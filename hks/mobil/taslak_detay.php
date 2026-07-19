@@ -13,6 +13,7 @@ $op_env          = $op_settings['environment'] ?? 'test';
 
 $notif_id = (int)($_GET['id'] ?? 0);
 $msg      = trim($_GET['msg'] ?? '');
+$err      = trim($_GET['err'] ?? '');
 
 if ($notif_id === 0) {
     header('Location: bildirimler.php'); exit;
@@ -102,10 +103,16 @@ function td_status_cls(string $s): string {
     <span class="td-badge <?= td_status_cls($status) ?>"><?= td_status_label($status) ?></span>
 </div>
 
-<?php if ($msg === 'created'): ?>
-<div class="td-alert td-alert-ok">Taslak oluşturuldu. Gönderim için düzenleme ekranından eksik alanları tamamlayın.</div>
+<?php if ($err === 'readonly'): ?>
+<div class="td-alert" style="background:#fee2e2;color:#991b1b;">Bu kayıt düzenlenemez (gönderilmiş veya iptal edilmiş).</div>
+<?php elseif ($msg === 'created'): ?>
+<div class="td-alert td-alert-ok">Taslak oluşturuldu. Eksik alanları tamamlamak için "Eksikleri Tamamla" butonunu kullanın.</div>
 <?php elseif ($msg === 'duplicate'): ?>
 <div class="td-alert td-alert-info">Bu künye için zaten bir taslak mevcut.</div>
+<?php elseif ($msg === 'ready'): ?>
+<div class="td-alert td-alert-ok">Taslak gönderim kontrolüne hazır duruma geçti.</div>
+<?php elseif ($msg === 'saved_draft'): ?>
+<div class="td-alert" style="background:#fef9c3;color:#92400e;border:1px solid #fde68a;">Eksikler var, taslak olarak kaydedildi. Eksik alanları tamamlayın.</div>
 <?php endif; ?>
 
 <?php if (!empty($validation_errors)): ?>
@@ -255,11 +262,49 @@ function td_status_cls(string $s): string {
 </details>
 <?php endif; ?>
 
+<!-- Gönderim Hazırlık Kontrolü -->
+<?php
+$send_blockers   = hks_send_blockers($notif, $op_settings);
+$payload_preview = hks_notification_payload_preview($notif);
+?>
+<div class="td-card" style="margin-bottom:12px;">
+    <div style="font-size:13px;font-weight:700;color:#1a2236;margin-bottom:10px;">Gönderim Hazırlık Kontrolü</div>
+    <?php if (empty($send_blockers)): ?>
+    <div style="color:#059669;font-size:13px;">&#10003; Tüm gönderim koşulları sağlandı.</div>
+    <?php else: ?>
+    <?php foreach ($send_blockers as $blk): ?>
+    <div style="font-size:12px;color:#92400e;padding:3px 0;">&#8226; <?= td_h($blk) ?></div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+</div>
+
+<details class="td-hks-src">
+    <summary class="td-hks-src-toggle">Payload Önizleme</summary>
+    <div class="td-card" style="margin-top:8px;">
+        <?php foreach ($payload_preview as $lbl => $pval): ?>
+        <?php if ((string)$pval !== ''): ?>
+        <div class="td-card-row">
+            <span class="td-label"><?= td_h($lbl) ?></span>
+            <span class="td-val"><?= td_h((string)$pval) ?></span>
+        </div>
+        <?php endif; ?>
+        <?php endforeach; ?>
+    </div>
+</details>
+
 <!-- Actions -->
+<?php $is_editable = !in_array($status, ['sent', 'send_pending', 'cancelled'], true); ?>
 <div style="display:flex;flex-direction:column;gap:10px;margin:16px 0;">
+    <?php if ($is_editable): ?>
+    <a href="taslak_duzenle.php?id=<?= $notif_id ?>"
+       class="mob-btn mob-btn-solid"
+       style="text-align:center;text-decoration:none;padding:14px;font-size:15px;">
+        Eksikleri Tamamla
+    </a>
+    <?php endif; ?>
     <a href="../operasyon/bildirim_form.php?id=<?= $notif_id ?>"
        class="mob-btn mob-btn-outline"
-       style="text-align:center;text-decoration:none;padding:12px;">
+       style="text-align:center;text-decoration:none;padding:12px;font-size:14px;">
         Düzenle (Masaüstü Formu)
     </a>
     <div class="mob-btn mob-btn-outline disabled" style="text-align:center;opacity:.5;cursor:not-allowed;padding:12px;">
@@ -267,7 +312,7 @@ function td_status_cls(string $s): string {
     </div>
 </div>
 
-<p class="mob-sprint-note">Gönderim (BildirimKaydet) bu sprintte aktif değil. Eksik alanları düzenleme ekranından tamamlayın.</p>
+<p class="mob-sprint-note">Gönderim (BildirimKaydet) bu sprintte aktif değil.</p>
 
 <style>
 .td-header {
