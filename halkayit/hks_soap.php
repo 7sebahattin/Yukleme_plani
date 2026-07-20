@@ -240,26 +240,49 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
 }
 
 // ── Stok Özeti ────────────────────────────────────────────────────────────
-// HKS'te ayrı bir "stok" web servisi YOKTUR. Sitedeki "Stok Sorgulama" raporu,
+// HKS'te ayrı bir "stok" web servisi yoktur. Sitedeki "Stok Sorgulama" raporu,
 // referans künyelerin (kalan miktar > 0) ürün / cins / tür bazında toplamıdır.
-// Bu fonksiyon son $aySayisi aylık referans künyeleri UrunId GÖNDERMEDEN (tüm
-// ürünler) çeker ve gruplayıp toplar. (Kılavuz: ReferansKunyeler'de UrunId
-// zorunlu değildir; tarih aralığı verildiği için 50 kayıt sınırı da yoktur.)
+//
+// Doğru kaynak: BildirimServisBildirimSorgu — KunyeTuru=1 (referans) +
+// KalanMiktariSifirdanBuyukOlanlar=true + tarih aralığı. Bu metod UrunId
+// GEREKTİRMEZ (ReferansKunyeler UrunId ister) ve tüm ürünlerin kalan stoğunu
+// tek çağrıda döndürür. Dönen BildirimSorguDTO alanları: KalanMiktar, MalinAdi,
+// MalinCinsi, MalinTuru, MiktarBirimiAd. (Site bir yıllık aralığı tek sorguda
+// getiriyor; alan sırası DataContract için alfabetik.)
 function hks_stok_ozet($cfg, $aySayisi = 12) {
-  $kunyeler = hks_kunyeleri_getir($cfg, ['aySayisi' => $aySayisi]); // UrunId yok → tüm ürünler
+  $ay = max(1, min(24, (int)$aySayisi));
+  $bitis     = new DateTime();
+  $baslangic = (clone $bitis)->modify('-' . $ay . ' months');
+
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  // Alfabetik alan sırası (DataContract serileştirmesi):
+  $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
+  $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
+  $p[] = '<a:KunyeNo>0</a:KunyeNo>';        // 0 → tüm bildirimler
+  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';    // 1 = referans (stok), 2 = nihai tüketim
+  $p[] = '</Istek>';
+
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimSorgu',
+    hks_taban_istek('BaseRequestMessageOf_BildirimSorguIstek', implode('', $p), $cfg));
+  $duz  = hks_sadelestir($xml);
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($hata);
+
   $grup = [];
-  foreach ($kunyeler as $k) {
-    if ((float)$k['kalan'] <= 0) continue;
-    $urun  = trim((string)($k['urun']  ?? ''));
-    $cins  = trim((string)($k['cins']  ?? ''));
-    $tur   = trim((string)($k['tur']   ?? ''));
-    $birim = trim((string)($k['birim'] ?? '')) ?: 'Kg';
+  foreach (hks_bloklar($duz, 'BildirimSorguDTO') as $b) {
+    $kalan = (float)hks_deger($b, 'KalanMiktar');
+    if ($kalan <= 0) continue;
+    $urun  = trim((string)hks_deger($b, 'MalinAdi'));
+    $cins  = trim((string)hks_deger($b, 'MalinCinsi'));
+    $tur   = trim((string)hks_deger($b, 'MalinTuru'));
+    $birim = trim((string)hks_deger($b, 'MiktarBirimiAd')) ?: 'Kg';
     $anahtar = mb_strtolower($urun . '|' . $cins . '|' . $tur . '|' . $birim, 'UTF-8');
     if (!isset($grup[$anahtar])) {
       $grup[$anahtar] = ['urun' => $urun, 'cins' => $cins, 'tur' => $tur,
                          'birim' => $birim, 'kalan' => 0.0, 'kunyeAdet' => 0];
     }
-    $grup[$anahtar]['kalan']     += (float)$k['kalan'];
+    $grup[$anahtar]['kalan']     += $kalan;
     $grup[$anahtar]['kunyeAdet'] += 1;
   }
   $liste = array_values($grup);
