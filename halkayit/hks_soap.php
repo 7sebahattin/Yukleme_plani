@@ -261,6 +261,7 @@ function hks_stok_ozet($cfg, $aySayisi = 12) {
   $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
   $p[] = '<a:KunyeNo>0</a:KunyeNo>';        // 0 → tüm bildirimler
+  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';    // ZORUNLU: 1 = referans (stok), 2 = nihai tüketim
   $p[] = '</Istek>';
 
   $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimciyeYapilanBildirimListesi',
