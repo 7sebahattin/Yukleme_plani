@@ -17,7 +17,7 @@ render_header('Hal Kayıt');
 ?>
 <script>document.body.classList.add('hk-page');</script>
 
-<iframe src="app.php" class="hk-frame" title="Hal Kayıt Paneli" loading="eager"></iframe>
+<iframe src="app.php?v=<?= @filemtime(__DIR__ . '/app.html') ?: time() ?>" class="hk-frame" title="Hal Kayıt Paneli" loading="eager"></iframe>
 
 <style>
 /* Bu sayfaya özel: içerik alanını tam-ekran iframe'e çevir.
