@@ -180,6 +180,16 @@ try {
       hks_json_cikti(['kunyeler' => $liste]);
     }
 
+    // ---- STOK ÖZETİ (referans künye kalanlarının ürün bazında toplamı) ----
+    case 'stok': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      $ay = isset($g['aySayisi']) ? max(1, min(24, (int)$g['aySayisi'])) : 12;
+      $liste  = hks_stok_ozet($cfg, $ay);
+      $toplam = array_sum(array_map(fn($s) => (float)$s['kalan'], $liste));
+      hks_json_cikti(['stok' => $liste, 'toplam' => $toplam, 'zaman' => date('c')]);
+    }
+
     // ---- TASLAKLAR ----
     case 'taslaklar': {
       $rows = $db->query('SELECT * FROM ' . hks_tablo('taslaklar') . ' ORDER BY zaman DESC')->fetchAll();
