@@ -293,6 +293,9 @@
   @media (min-width:900px) {
     .ustbar { max-width:1180px; margin:0; padding-left:24px; padding-right:24px; }
     .firma-izgara { grid-template-columns:repeat(4,1fr); }
+    /* Alt özet çubuğu: buton içerikten uzağa (sağa) kaymasın, sola topla */
+    .ozet { justify-content:flex-start; gap:28px; padding-left:24px; }
+    .ozet button { margin-left:0; }
   }
 
   /* ── Toplu Künye (Bildirim Çoklu Künye Basım) ── */
@@ -842,7 +845,12 @@ $('btnTopluSorgula').onclick = async () => {
       $('btnTopluYazdir').classList.remove('gizli');
     }
   } catch (e) {
-    mesajGoster('tkMesaj', e.message, 'hata');
+    let msg = e.message || 'Hata';
+    if (/GTBGLB00000001/.test(msg)) {
+      msg += ' — İpucu: Bu plaka/tarih için SEÇİLİ FİRMAYA ait künye bulunamadı olabilir. ' +
+             'Plakanın ait olduğu firmayı ve doğru bildirim tarihini seçtiğinizden emin olun.';
+    }
+    mesajGoster('tkMesaj', msg, 'hata');
     $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
     $('btnTopluYazdir').classList.add('gizli');
   }
