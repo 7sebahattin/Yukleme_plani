@@ -1,0 +1,26 @@
+# Hal Kayıt paneli — yalnızca index.php ve api.php doğrudan erişilebilir.
+# include-only PHP dosyaları, SPA kabuğu, şema ve kılavuz doğrudan çağrıya kapalı.
+
+<FilesMatch "^(config|db|hks_soap)\.php$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(html|sql|md)$">
+    Require all denied
+</FilesMatch>
+
+# Apache 2.2 geriye dönük uyumluluk
+<IfModule !mod_authz_core.c>
+    <FilesMatch "^(config|db|hks_soap)\.php$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+    <FilesMatch "\.(html|sql|md)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# Dizin listelemeyi kapat
+Options -Indexes
+DirectoryIndex index.php

@@ -31,9 +31,9 @@ $_st_ix = db()->prepare("
 $_st_ix->execute(array_merge($_ds_ix_v, $_ds_ix_v));
 $stats = $_st_ix->fetch();
 
-// HKS taslak sayısı
+// Hal Kayıt bekleyen taslak sayısı (yeni halkayit paneli — hks_taslaklar tablosu)
 try {
-    $hks_taslak = (int)db()->query("SELECT COUNT(*) FROM hks_notifications WHERE status='draft'")->fetchColumn();
+    $hks_taslak = (int)db()->query("SELECT COUNT(*) FROM hks_taslaklar")->fetchColumn();
 } catch (PDOException $e) { $hks_taslak = 0; }
 
 // Hesap modülü özet
@@ -127,7 +127,7 @@ if ($db_backup_result !== null): ?>
     <?php endif; ?>
 
     <?php if (can('records.write')): ?>
-    <a href="hks/index.php" class="home-card">
+    <a href="halkayit/index.php" class="home-card">
         <div class="home-card-icon" style="background:#e8f0fe">🏛</div>
         <div class="home-card-title">Hal Bildirimi</div>
         <?php if ($hks_taslak > 0): ?>

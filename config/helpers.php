@@ -195,7 +195,7 @@ function base_url(): string {
 function render_desktop_sidebar(string $base): void {
     $self   = $_SERVER['PHP_SELF'] ?? '';
     $cur    = basename($self);
-    $in_hks = strpos($self, '/hks/') !== false;
+    $in_hks = strpos($self, '/halkayit/') !== false;
     $cikma  = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
 
     $_fn   = function_exists('can');
@@ -263,7 +263,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rec)   $lnk('cikmalar.php',  '🚚', 'Çıkmalar',  $a_cik);   ?>
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_kant)  $lnk('kantar.php',   '⚖️', 'Kantar',    $a_kant);  ?>
-        <?php if ($p_recw) $lnk('hks/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
+        <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
         <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
 
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
