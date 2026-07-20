@@ -36,8 +36,6 @@
   @media (min-width:900px) {
     /* Ortalama yerine sola hizala — panel sidebar'ına yakın, az boşluk */
     main { max-width:1180px; padding:22px 24px; margin:0; }
-    .ustbar { max-width:1180px; margin:0; padding-left:24px; padding-right:24px; }
-    .firma-izgara { grid-template-columns:repeat(4,1fr); }
     #ekranBildirim main {
       display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start;
     }
@@ -290,6 +288,26 @@
     transition:opacity .25s, transform .25s; z-index:30; max-width:90%; text-align:center;
   }
   #toast.acik { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ── Masaüstü sola-hizalama override'ları (temel kuralları ezmek için EN SONDA) ── */
+  @media (min-width:900px) {
+    .ustbar { max-width:1180px; margin:0; padding-left:24px; padding-right:24px; }
+    .firma-izgara { grid-template-columns:repeat(4,1fr); }
+  }
+
+  /* ── Toplu Künye (Bildirim Çoklu Künye Basım) ── */
+  .tk-form { background:#fff; border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--golge); }
+  .tk-sonuc-ozet { font-size:14px; color:var(--metin); background:#fff; border-radius:14px; padding:12px 16px; margin-bottom:12px; box-shadow:var(--golge); }
+  .tk-sonuc-ozet:empty { display:none; }
+  .tk-sonuc-ozet b { color:var(--navy); font-weight:800; }
+  .tk-tablo-sarma { background:#fff; border-radius:var(--radius); box-shadow:var(--golge); padding:6px; overflow-x:auto; }
+  .tk-tablo { width:100%; border-collapse:collapse; font-size:13px; }
+  .tk-tablo th, .tk-tablo td { padding:10px 12px; text-align:left; white-space:nowrap; }
+  .tk-tablo thead th { background:var(--navy); color:#fff; font-weight:700; }
+  .tk-tablo tbody tr { border-bottom:1px solid #eef4f7; }
+  .tk-tablo tbody tr:nth-child(even) { background:#f6fafb; }
+  .tk-tablo .sag { text-align:right; font-variant-numeric:tabular-nums; }
+  .tk-tablo tbody b { color:var(--navy); }
 </style>
 </head>
 <body>
@@ -346,7 +364,7 @@
         <button type="button">💳 Borç Sorgulama</button>
         <button type="button">🧾 Satış Bordrosu Çıkar</button>
         <button type="button">💰 Rüsum Sorgulama</button>
-        <button type="button">🖨️ Bildirim Çoklu Künye Basım</button>
+        <button type="button" id="btnTopluKunye">🖨️ Bildirim Çoklu Künye Basım</button>
       </div>
     </details>
 
@@ -478,6 +496,35 @@
   </main>
 </div>
 
+<!-- ============ EKRAN: ÇOKLU KÜNYE BASIM ============ -->
+<div id="ekranToplu" class="gizli">
+  <div class="ustbar">
+    <button class="geri" id="btnTopluGeri">‹</button>
+    <div class="baslik">🖨️ Çoklu Künye Basım</div>
+  </div>
+  <main>
+    <div class="tk-form">
+      <div class="satir2">
+        <div>
+          <label class="label-vurgu">Araç Plaka</label>
+          <input id="tkPlaka" class="input-turuncu" placeholder="ÖRN: 55ASY19" style="text-transform:uppercase" autocomplete="off">
+        </div>
+        <div>
+          <label>Tarih</label>
+          <input id="tkTarih" type="date">
+        </div>
+      </div>
+      <label style="margin-top:10px">Belge No (plaka yoksa)</label>
+      <input id="tkBelge" autocomplete="off" placeholder="İrsaliye / beyanname no">
+      <button class="btn btn-teal" id="btnTopluSorgula">🔍 Sorgula</button>
+      <div class="mesaj" id="tkMesaj"></div>
+    </div>
+    <div class="tk-sonuc-ozet" id="tkOzet"></div>
+    <div id="tkSonucSarma"></div>
+    <button class="btn btn-ana gizli" id="btnTopluYazdir" style="margin-top:8px">🖨️ Yazdır</button>
+  </main>
+</div>
+
 <!-- Alt çubuk (bildirim ekranı) -->
 <div class="ozet gizli" id="ozet">
   <div>
@@ -555,6 +602,7 @@ const API_ROTA = {
   'POST /api/listeler': 'listeler_yenile',
   'POST /api/kunyeler': 'kunyeler',
   'POST /api/stok': 'stok',
+  'POST /api/toplu_kunye': 'toplu_kunye',
   'GET /api/taslaklar': 'taslaklar',
   'POST /api/taslaklar': 'taslak_kaydet',
   'POST /api/taslaklar/sil': 'taslak_sil',
@@ -592,7 +640,7 @@ function toast(metin) {
 }
 
 function ekranGoster(ad) {
-  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen']
+  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
@@ -743,6 +791,94 @@ async function stokListele() {
 document.querySelectorAll('.grup-liste button').forEach(b => {
   b.onclick = () => toast('Bu butonun içeriği sonraki adımda eklenecek.');
 });
+
+// ── Bildirim Çoklu Künye Basım (Toplu Künye) ──
+let topluSonuc = [];
+if ($('btnTopluKunye')) $('btnTopluKunye').onclick = () => {
+  ekranGoster('ekranToplu');
+  $('tkTarih').value = new Date().toISOString().slice(0, 10);
+  $('tkPlaka').value = ''; $('tkBelge').value = '';
+  $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
+  $('tkMesaj').className = 'mesaj';
+  $('btnTopluYazdir').classList.add('gizli');
+  topluSonuc = [];
+};
+$('btnTopluGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
+
+$('btnTopluSorgula').onclick = async () => {
+  const plaka = $('tkPlaka').value.trim().toUpperCase();
+  const belge = $('tkBelge').value.trim();
+  const tarih = $('tkTarih').value;
+  if (!tarih) { mesajGoster('tkMesaj', 'Tarih seçiniz.', 'hata'); return; }
+  if (!plaka && !belge) { mesajGoster('tkMesaj', 'Araç plakası veya belge no giriniz.', 'hata'); return; }
+  $('btnTopluSorgula').disabled = true; $('btnTopluSorgula').textContent = '⏳ Sorgulanıyor...';
+  $('tkMesaj').className = 'mesaj';
+  try {
+    const j = await api('/api/toplu_kunye', 'POST', { firmaId: aktifFirma.id, plaka, belgeNo: belge, tarih });
+    topluSonuc = j.kunyeler || [];
+    const kap = $('tkSonucSarma'), oz = $('tkOzet');
+    if (!topluSonuc.length) {
+      oz.textContent = '';
+      kap.innerHTML = '<div class="yukleniyor">Bu kritere uygun künye bulunamadı.</div>';
+      $('btnTopluYazdir').classList.add('gizli');
+    } else {
+      oz.innerHTML = `<b>${topluSonuc.length}</b> künye · Toplam <b>${fmt(j.toplam)} KG</b>`;
+      let h = '<div class="tk-tablo-sarma"><table class="tk-tablo"><thead><tr>' +
+        '<th>Künye No</th><th>Malın Adı</th><th class="sag">Miktar</th><th>Birim</th>' +
+        '<th>Nereden</th><th>Nereye</th><th>Malın Sahibi</th></tr></thead><tbody>';
+      topluSonuc.forEach(s => {
+        h += '<tr>' +
+          `<td><b>${eHtml(s.kunyeNo)}</b></td>` +
+          `<td>${eHtml(s.urun)}</td>` +
+          `<td class="sag">${fmt(s.miktar)}</td>` +
+          `<td>${eHtml(s.birim)}</td>` +
+          `<td>${eHtml(s.nereden)}</td>` +
+          `<td>${eHtml(s.nereye)}</td>` +
+          `<td>${eHtml(s.malSahibi)}</td>` +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      kap.innerHTML = h;
+      $('btnTopluYazdir').classList.remove('gizli');
+    }
+  } catch (e) {
+    mesajGoster('tkMesaj', e.message, 'hata');
+    $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
+    $('btnTopluYazdir').classList.add('gizli');
+  }
+  $('btnTopluSorgula').disabled = false; $('btnTopluSorgula').textContent = '🔍 Sorgula';
+};
+
+$('btnTopluYazdir').onclick = () => {
+  if (!topluSonuc.length) return;
+  const tarih = $('tkTarih').value;
+  const plaka = $('tkPlaka').value.trim().toUpperCase();
+  const belge = $('tkBelge').value.trim();
+  const toplam = topluSonuc.reduce((t, s) => t + Number(s.miktar || 0), 0);
+  const rows = topluSonuc.map(s =>
+    `<tr><td>${eHtml(s.kunyeNo)}</td><td>${eHtml(s.urun)}</td>` +
+    `<td style="text-align:right">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` +
+    `<td>${eHtml(s.nereden)}</td><td>${eHtml(s.nereye)}</td><td>${eHtml(s.bildirimci)}</td></tr>`).join('');
+  const w = window.open('', '_blank');
+  if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
+  w.document.write(
+    '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Çoklu Künye Basım</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#111}' +
+    'h2{font-size:15px;margin:0 0 4px}.meta{font-size:12px;margin-bottom:10px;color:#333}' +
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left}' +
+    'thead th{background:#eee}tfoot td{font-weight:bold}@media print{.yzbtn{display:none}}</style></head><body>' +
+    '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</h2>' +
+    '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
+    eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
+    '<table><thead><tr><th>Künye No</th><th>Malın Adı</th><th style="text-align:right">Miktar</th>' +
+    '<th>Nereden</th><th>Nereye</th><th>Bildirimci</th></tr></thead><tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td colspan="2">TOPLAM</td><td style="text-align:right">' + fmt(toplam) +
+    ' KG</td><td colspan="3"></td></tr></tfoot></table>' +
+    '<button class="yzbtn" onclick="window.print()" style="margin-top:14px;padding:8px 16px;cursor:pointer">🖨️ Yazdır</button>' +
+    '</body></html>');
+  w.document.close();
+};
+
 $('btnMenuyeDon').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 $('btnTaslaklar').onclick = () => taslakEkraniAc();
 $('btnGonderilenler').onclick = () => gonderilenEkraniAc();

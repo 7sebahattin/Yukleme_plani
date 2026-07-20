@@ -191,6 +191,16 @@ try {
       hks_json_cikti(['stok' => $liste, 'toplam' => $toplam, 'zaman' => date('c')]);
     }
 
+    // ---- TOPLU KÜNYE (Bildirim Çoklu Künye Basım) ----
+    case 'toplu_kunye': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(120);
+      $liste  = hks_toplu_kunye($cfg, trim($g['tarih'] ?? ''), trim($g['plaka'] ?? ''), trim($g['belgeNo'] ?? ''));
+      $toplam = array_sum(array_map(fn($s) => (float)$s['miktar'], $liste));
+      hks_json_cikti(['kunyeler' => $liste, 'toplam' => $toplam]);
+    }
+
     // ---- TASLAKLAR ----
     case 'taslaklar': {
       $rows = $db->query('SELECT * FROM ' . hks_tablo('taslaklar') . ' ORDER BY zaman DESC')->fetchAll();
