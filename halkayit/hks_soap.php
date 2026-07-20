@@ -318,3 +318,53 @@ function hks_stok_ozet($cfg, $aySayisi = 12) {
   });
   return $liste;
 }
+
+// ── Toplu Künye (Bildirim Çoklu Künye Basım) ──────────────────────────────
+// BildirimServisTopluKunye — bir plakaya/belgeye ait künyeleri tarih ile listeler.
+// Kural: BildirimTarihi zorunlu; AracPlakaNo veya BelgeNo'dan en az biri dolu olmalı.
+// Dönen TopluKunyeDTO: MalinKunyeNo, MalinAdi, MalinMiktar, MiktarBirimAd,
+// Nereden, Nereye, Bildirimci, MalınSahibAdi, AracPlakaNo, KayitTarihi, BelgeNo...
+function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
+  $tarih   = trim((string)$tarih);
+  $plaka   = trim((string)$plaka);
+  $belgeNo = trim((string)$belgeNo);
+  if ($tarih === '') throw new Exception('Bildirim tarihi zorunludur.');
+  if ($plaka === '' && $belgeNo === '') throw new Exception('Araç plakası veya belge no girilmelidir.');
+
+  $td = DateTime::createFromFormat('Y-m-d', substr($tarih, 0, 10)) ?: null;
+  $tarihXml = $td ? $td->format('Y-m-d\T00:00:00') : $tarih;
+
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  // Alfabetik alan sırası (DataContract): AracPlakaNo, BelgeNo, BildirimTarihi
+  if ($plaka   !== '') $p[] = '<a:AracPlakaNo>' . hks_esc(strtoupper($plaka)) . '</a:AracPlakaNo>';
+  if ($belgeNo !== '') $p[] = '<a:BelgeNo>' . hks_esc($belgeNo) . '</a:BelgeNo>';
+  $p[] = '<a:BildirimTarihi>' . $tarihXml . '</a:BildirimTarihi>';
+  $p[] = '</Istek>';
+
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisTopluKunye',
+    hks_taban_istek('BaseRequestMessageOf_TopluKunyeIstek', implode('', $p), $cfg));
+  $duz  = hks_sadelestir($xml);
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($hata);
+
+  $rows = [];
+  foreach (hks_bloklar($duz, 'TopluKunyeDTO') as $b) {
+    $malSahibi = hks_deger($b, 'MalinSahibAdi');
+    if ($malSahibi === null || $malSahibi === '') $malSahibi = hks_deger($b, 'MalınSahibAdi');
+    if ($malSahibi === null || $malSahibi === '') $malSahibi = hks_deger($b, 'MalinSahibiAdi');
+    $rows[] = [
+      'kunyeNo'    => (string)hks_deger($b, 'MalinKunyeNo'),
+      'urun'       => trim((string)hks_deger($b, 'MalinAdi')),
+      'miktar'     => (float)hks_deger($b, 'MalinMiktar'),
+      'birim'      => trim((string)hks_deger($b, 'MiktarBirimAd')) ?: 'Kg',
+      'nereden'    => trim((string)hks_deger($b, 'Nereden')),
+      'nereye'     => trim((string)hks_deger($b, 'Nereye')),
+      'bildirimci' => trim((string)hks_deger($b, 'Bildirimci')),
+      'malSahibi'  => trim((string)$malSahibi),
+      'plaka'      => trim((string)hks_deger($b, 'AracPlakaNo')),
+      'belgeNo'    => trim((string)hks_deger($b, 'BelgeNo')),
+      'tarih'      => substr((string)hks_deger($b, 'KayitTarihi'), 0, 10),
+    ];
+  }
+  return $rows;
+}
