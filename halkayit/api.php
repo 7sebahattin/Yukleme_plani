@@ -9,13 +9,29 @@
 // yerine mevcut login sisteminizi kullanmanız önerilir.
 // =============================================================================
 
-require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/config.php';        // ../config/db.php -> helpers.php de yüklenir
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/hks_soap.php';
+require_once __DIR__ . '/../config/auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-// --- Opsiyonel basit giriş koruması ---
+// --- Ana panel oturum koruması (JSON-güvenli: redirect etmez, JSON döner) ---
+// require_login() kullanmıyoruz çünkü depo seçili değilse HTML redirect yapardı;
+// bu uç JSON döndürmeli. Bu yüzden current_user() + can() ile elle kontrol.
+$__hks_user = function_exists('current_user') ? current_user() : null;
+if ($__hks_user === null) {
+  http_response_code(401);
+  echo json_encode(['hata' => 'Oturum gerekli. Lütfen tekrar giriş yapın.'], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+if (!(can('records.write') || (function_exists('is_admin') && is_admin()))) {
+  http_response_code(403);
+  echo json_encode(['hata' => 'Bu işlem için yetkiniz yok (records.write).'], JSON_UNESCAPED_UNICODE);
+  exit;
+}
+
+// Bağımsız (standalone) çalıştırma için geriye dönük opsiyonel Basic Auth desteği.
 if (HKS_BASIT_GIRIS) {
   $u = $_SERVER['PHP_AUTH_USER'] ?? '';
   $p = $_SERVER['PHP_AUTH_PW'] ?? '';

@@ -1,32 +1,35 @@
 <?php
 // =============================================================================
-// HKS PANEL - YAPILANDIRMA
-// Bu dosyayı kendi sunucu bilgilerinizle doldurun.
-// ENTEGRASYON NOTU (diğer AI için): Eğer ana paneliniz zaten bir PDO/MySQLi
-// bağlantısı kuruyorsa, aşağıdaki DB sabitleri yerine mevcut bağlantınızı
-// db.php içindeki hks_db() fonksiyonuna verebilirsiniz.
+// HKS PANEL - YAPILANDIRMA (Asya Fresh paneline entegre edilmiş sürüm)
+// Ana panelin config/db.php bağlantısı yeniden kullanılır; buradaki HKS_DB_*
+// sabitleri yalnızca yedek (fallback) olarak panelin DB_* değerlerinden türetilir.
 // =============================================================================
 
-// --- MySQL bağlantı bilgileri ---
-define('HKS_DB_HOST', 'localhost');
-define('HKS_DB_NAME', 'VERITABANI_ADI');       // <-- doldurun
-define('HKS_DB_USER', 'VERITABANI_KULLANICI');  // <-- doldurun
-define('HKS_DB_PASS', 'VERITABANI_SIFRE');      // <-- doldurun
-define('HKS_DB_CHARSET', 'utf8mb4');
+// Ana panel altyapısı: DB_* sabitleri + db() + config/local.php (HKS_CRED_KEY)
+require_once __DIR__ . '/../config/db.php';
+
+// --- MySQL bağlantı bilgileri (panelden devralınır) ---
+define('HKS_DB_HOST', DB_HOST);
+define('HKS_DB_NAME', DB_NAME);
+define('HKS_DB_USER', DB_USER);
+define('HKS_DB_PASS', DB_PASS);
+define('HKS_DB_CHARSET', DB_CHARSET);
 
 // Tablo ön eki (mevcut tablolarınızla çakışmasın diye). İsterseniz değiştirin.
 define('HKS_TABLO_ON', 'hks_');
 
 // --- Şifreleme anahtarı ---
 // Firma HKS şifreleri veritabanına AES-256 ile ŞİFRELİ yazılır.
-// Aşağıdaki anahtarı MUTLAKA değiştirin (rastgele 32+ karakter).
-// Değiştirdikten sonra daha önce kaydedilmiş firmalar okunamaz; yeniden girin.
-define('HKS_SIFRELEME_ANAHTARI', 'BURAYA-RASTGELE-UZUN-BIR-ANAHTAR-YAZIN-32+');
+// Öncelik: sunucudaki config/local.php içindeki HKS_CRED_KEY (git dışında).
+// O yoksa aşağıdaki sabit kullanılır. Anahtar sonradan değişirse daha önce
+// kaydedilmiş firma şifreleri çözülemez; firmaları yeniden girmeniz gerekir.
+define('HKS_SIFRELEME_ANAHTARI', defined('HKS_CRED_KEY')
+    ? HKS_CRED_KEY
+    : 'AsyaFresh-HKS-2026-vAq7kTz3RmNe9XuB4pWcJdH6yLgS8fKo');
 
-// --- Panel giriş koruması (opsiyonel) ---
-// Ana paneliniz zaten oturum (login) kontrolü yapıyorsa burayı boş bırakın;
-// panel sizin oturumunuzla korunur. Bağımsız çalıştıracaksanız true yapıp
-// aşağıdaki kullanıcı/şifreyi doldurun (HTTP Basic Auth).
+// --- Panel giriş koruması ---
+// Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;
+// bu yüzden HTTP Basic Auth kapalı kalır.
 define('HKS_BASIT_GIRIS', false);
 define('HKS_GIRIS_KULLANICI', 'admin');
 define('HKS_GIRIS_SIFRE', 'degistirin');
