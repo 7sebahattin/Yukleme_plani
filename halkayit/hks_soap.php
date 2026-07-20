@@ -250,11 +250,9 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
 // alanları: KalanMiktar, MalinAdi, MalinCinsi, MalinTuru, MiktarBirimiAd.
 // (Not: generic BildirimServisBildirimSorgu üretimde ActionNotSupported veriyor;
 // bu yüzden yönlü liste metodu kullanılır. Alan sırası DataContract için alfabetik.)
-function hks_stok_ozet($cfg, $aySayisi = 12) {
-  $ay = max(1, min(24, (int)$aySayisi));
-  $bitis     = new DateTime();
-  $baslangic = (clone $bitis)->modify('-' . $ay . ' months');
-
+// Tek aylık pencere için firmaya yapılan (gelen) künyeleri getirir.
+// Bu metod da "en fazla 1 ay" kuralına tabidir; bu yüzden pencere pencere çağrılır.
+function hks_stok_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
   $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
   // Alfabetik alan sırası (DataContract serileştirmesi):
   $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
@@ -270,20 +268,47 @@ function hks_stok_ozet($cfg, $aySayisi = 12) {
   $hata = hks_islem_kontrol($duz);
   if ($hata) throw new Exception($hata);
 
-  $grup = [];
+  $rows = [];
   foreach (hks_bloklar($duz, 'BildirimSorguDTO') as $b) {
     $kalan = (float)hks_deger($b, 'KalanMiktar');
     if ($kalan <= 0) continue;
-    $urun  = trim((string)hks_deger($b, 'MalinAdi'));
-    $cins  = trim((string)hks_deger($b, 'MalinCinsi'));
-    $tur   = trim((string)hks_deger($b, 'MalinTuru'));
-    $birim = trim((string)hks_deger($b, 'MiktarBirimiAd')) ?: 'Kg';
+    $rows[] = [
+      'kunyeNo' => (string)hks_deger($b, 'KunyeNo'),
+      'urun'    => trim((string)hks_deger($b, 'MalinAdi')),
+      'cins'    => trim((string)hks_deger($b, 'MalinCinsi')),
+      'tur'     => trim((string)hks_deger($b, 'MalinTuru')),
+      'birim'   => trim((string)hks_deger($b, 'MiktarBirimiAd')) ?: 'Kg',
+      'kalan'   => $kalan,
+    ];
+  }
+  return $rows;
+}
+
+function hks_stok_ozet($cfg, $aySayisi = 12) {
+  $ay = max(1, min(24, (int)$aySayisi));
+
+  // Aylık (takvim ayı) pencereleri sırayla sorgula, künyeleri KunyeNo ile birleştir.
+  $birlesik = [];
+  $bitis = new DateTime();
+  for ($i = 0; $i < $ay; $i++) {
+    $baslangic = hks_bir_ay_once($bitis);
+    foreach (hks_stok_penceresi($cfg, $baslangic, $bitis) as $r) {
+      $k = $r['kunyeNo'] !== '' ? $r['kunyeNo'] : ('idx_' . $i . '_' . count($birlesik));
+      $birlesik[$k] = $r;   // aynı künye tek kez sayılır
+    }
+    $bitis = $baslangic;
+  }
+
+  $grup = [];
+  foreach ($birlesik as $r) {
+    $urun  = $r['urun']; $cins = $r['cins']; $tur = $r['tur'];
+    $birim = $r['birim'] !== '' ? $r['birim'] : 'Kg';
     $anahtar = mb_strtolower($urun . '|' . $cins . '|' . $tur . '|' . $birim, 'UTF-8');
     if (!isset($grup[$anahtar])) {
       $grup[$anahtar] = ['urun' => $urun, 'cins' => $cins, 'tur' => $tur,
                          'birim' => $birim, 'kalan' => 0.0, 'kunyeAdet' => 0];
     }
-    $grup[$anahtar]['kalan']     += $kalan;
+    $grup[$anahtar]['kalan']     += (float)$r['kalan'];
     $grup[$anahtar]['kunyeAdet'] += 1;
   }
   $liste = array_values($grup);
