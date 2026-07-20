@@ -25,8 +25,24 @@
   body[data-tema="navy"]   { background:linear-gradient(165deg,#f2f6fa 0%,#dde8f1 55%,#cfdeeb 100%); background-attachment:fixed; }
   body[data-tema="indigo"] { background:linear-gradient(165deg,#f4f5fa 0%,#e2e5f1 55%,#d6daeb 100%); background-attachment:fixed; }
   body[data-tema="amber"]  { background:linear-gradient(165deg,#fdfaf2 0%,#f7eed7 55%,#f2e5c4 100%); background-attachment:fixed; }
+  body[data-tema="emerald"]{ background:linear-gradient(165deg,#f2fbf7 0%,#d9f2e6 55%,#c6ecd8 100%); background-attachment:fixed; }
+  body[data-tema="rose"]   { background:linear-gradient(165deg,#fdf3f5 0%,#f7dde3 55%,#f2cdd6 100%); background-attachment:fixed; }
+  body[data-tema="violet"] { background:linear-gradient(165deg,#f7f4fd 0%,#e7ddf7 55%,#dccef2 100%); background-attachment:fixed; }
+  body[data-tema="orange"] { background:linear-gradient(165deg,#fdf6f0 0%,#f7e5d5 55%,#f2d7c2 100%); background-attachment:fixed; }
 
   main { max-width:640px; margin:0 auto; padding:16px; }
+
+  /* ── Masaüstü yerleşimi (≥900px): daha geniş, çok kolon ── */
+  @media (min-width:900px) {
+    main { max-width:1080px; padding:22px 26px; }
+    .ustbar { max-width:1080px; }
+    .firma-izgara { grid-template-columns:repeat(4,1fr); }
+    #ekranBildirim main {
+      display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;
+    }
+    #ekranBildirim main > .kart { margin-bottom:0; }
+    #ekranBildirim #kartKunyeler { grid-column:1 / -1; }
+  }
   .kart { background:var(--kart); border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--golge); }
   .kart h2 { font-size:14px; color:var(--vurgu); margin-bottom:12px; letter-spacing:.3px; }
   label { display:block; font-size:12px; font-weight:600; color:var(--soluk); margin:10px 0 4px; }
@@ -83,10 +99,14 @@
     position:absolute; top:10px; right:10px; background:rgba(255,255,255,.28);
     border:none; color:#fff; width:30px; height:30px; border-radius:9px; cursor:pointer; font-size:13px;
   }
-  .firma-kart.r-teal   { background:linear-gradient(140deg,#54c3cf,#2a9aa7); }
-  .firma-kart.r-navy   { background:linear-gradient(140deg,#3e6f96,#1c4a6e); }
-  .firma-kart.r-indigo { background:linear-gradient(140deg,#7d8bbc,#4d5a8c); }
-  .firma-kart.r-amber  { background:linear-gradient(140deg,#f7c94e,#e0a400); }
+  .firma-kart.r-teal    { background:linear-gradient(140deg,#54c3cf,#2a9aa7); }
+  .firma-kart.r-navy    { background:linear-gradient(140deg,#3e6f96,#1c4a6e); }
+  .firma-kart.r-indigo  { background:linear-gradient(140deg,#7d8bbc,#4d5a8c); }
+  .firma-kart.r-amber   { background:linear-gradient(140deg,#f7c94e,#e0a400); }
+  .firma-kart.r-emerald { background:linear-gradient(140deg,#34d399,#059669); }
+  .firma-kart.r-rose    { background:linear-gradient(140deg,#fb7185,#be123c); }
+  .firma-kart.r-violet  { background:linear-gradient(140deg,#a78bfa,#6d28d9); }
+  .firma-kart.r-orange  { background:linear-gradient(140deg,#fb923c,#c2410c); }
   .firma-ekle {
     border:2px dashed #a9c6cf; background:rgba(255,255,255,.5);
     color:var(--navy); font-size:14px; font-weight:700; align-items:center; justify-content:center;
@@ -192,11 +212,45 @@
   #modal h3 { color:var(--navy); font-size:16px; margin-bottom:12px; }
   .onay-satir { font-size:13px; padding:6px 0; border-bottom:1px solid #eef4f7; display:flex; justify-content:space-between; gap:10px; }
 
-  .renk-secim { display:flex; gap:12px; margin-top:6px; }
+  .renk-secim { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
   .renk-top { width:42px; height:42px; border-radius:14px; cursor:pointer; border:3px solid transparent; }
   .renk-top.secili { border-color:#12303f; }
   .renk-top.r-teal { background:#2fb4c2; } .renk-top.r-navy { background:#0f3a5a; }
   .renk-top.r-indigo { background:#4d5a8c; } .renk-top.r-amber { background:#f5b301; }
+  .renk-top.r-emerald { background:#10b981; } .renk-top.r-rose { background:#e11d48; }
+  .renk-top.r-violet { background:#7c3aed; } .renk-top.r-orange { background:#ea580c; }
+
+  /* Belirgin (vurgulu) etiketler — Araç Plaka / İhracat Ülke / Ürün */
+  label.label-vurgu {
+    font-size:16px; font-weight:800; color:var(--navy);
+    margin-top:14px; letter-spacing:.2px;
+  }
+  /* Turuncu (dikkat çekici) giriş kutuları — Kilo / Birim Fiyat / Plaka */
+  input.input-turuncu {
+    background:#fff3e0; border:2px solid #f5a623; color:#7a4a00; font-weight:700;
+  }
+  input.input-turuncu::placeholder { color:#c98a3a; font-weight:600; }
+  input.input-turuncu:focus {
+    background:#fff; border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.18);
+  }
+
+  /* Sabit (yapışkan) aktif firma başlığı — yanlış firmadan bildirimi önler */
+  .firma-sabit {
+    position:sticky; top:0; z-index:16;
+    background:linear-gradient(135deg,var(--navy),#0b2e49); color:#fff;
+    font-weight:800; font-size:15px; letter-spacing:.3px;
+    padding:11px 16px; text-align:center;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    box-shadow:0 3px 12px rgba(15,58,90,.28);
+  }
+  .firma-sabit::before { content:'🏢'; font-size:16px; }
+  .firma-sabit:empty { display:none; }
+
+  /* Bildirim kartları — her biri farklı, şeffaftan koyuya inen arka plan */
+  #ekranBildirim main > .kart:nth-child(1) { background:linear-gradient(180deg,#ffffff 0%, rgba(47,180,194,.18) 100%); }
+  #ekranBildirim main > .kart:nth-child(2) { background:linear-gradient(180deg,#ffffff 0%, rgba(124,58,237,.16) 100%); }
+  #ekranBildirim main > .kart:nth-child(3) { background:linear-gradient(180deg,#ffffff 0%, rgba(16,185,129,.18) 100%); }
+  #ekranBildirim main > .kart:nth-child(4) { background:linear-gradient(180deg,#ffffff 0%, rgba(245,158,1,.20) 100%); }
 
   .yukleniyor { text-align:center; color:var(--soluk); padding:18px; font-size:13px; }
 
@@ -277,6 +331,7 @@
     <div class="baslik">e Bildirim</div>
     <button class="mini" id="btnListeler">🔄 Listeler</button>
   </div>
+  <div class="firma-sabit" id="firmaSabit"></div>
   <main>
     <div class="kart">
       <h2>1 · Bildirim Ayarları</h2>
@@ -302,11 +357,11 @@
       <h2>2 · Sevkiyat Bilgileri</h2>
       <label>Son Kullanılan Plakalar</label>
       <div class="cipler" id="plakaCipler"><span class="cip-bos">Henüz plaka geçmişi yok</span></div>
-      <label>Araç Plaka</label>
-      <input id="oPlaka" placeholder="Örn: 07BIR239" style="text-transform:uppercase" autocomplete="off">
+      <label class="label-vurgu">Araç Plaka</label>
+      <input id="oPlaka" class="input-turuncu" placeholder="ÖRN: 55ASY19" style="text-transform:uppercase" autocomplete="off">
       <label>Son Kullanılan Ülkeler</label>
       <div class="cipler" id="ulkeCipler"><span class="cip-bos">Henüz ülke geçmişi yok</span></div>
-      <label>İhracat Yapılan Ülke</label>
+      <label class="label-vurgu">İhracat Yapılan Ülke</label>
       <select id="sUlke"></select>
       <div class="satir2">
         <div>
@@ -326,11 +381,11 @@
       <div class="cipler" id="urunCipler"><span class="cip-bos">Henüz ürün geçmişi yok</span></div>
       <div class="satir2">
         <div>
-          <label>Ürün * <span style="font-weight:400">(servis ürünsüz sorguya izin vermiyor)</span></label>
+          <label class="label-vurgu">Ürün *</label>
           <select id="sUrun"><option value="">— Ürün Seçiniz —</option></select>
         </div>
         <div>
-          <label>Ne kadar geriye bakılsın</label>
+          <label>Tarih</label>
           <select id="sGun">
             <option value="1">Son 1 ay</option>
             <option value="3">Son 3 ay</option>
@@ -346,12 +401,12 @@
 
     <div class="kart gizli" id="kartKunyeler">
       <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
-      <label>💰 Birim Fiyat (TL — kuruş girilebilir, örn: 100,25) *</label>
-      <input id="oFiyat" inputmode="decimal" placeholder="Örn: 100,25" autocomplete="off">
+      <label>💰 Birim Fiyat *</label>
+      <input id="oFiyat" class="input-turuncu" inputmode="decimal" placeholder="Örn: 100,25" autocomplete="off">
       <div class="satir2" style="margin-top:6px">
         <div>
-          <label>🎯 Hedef Kilo</label>
-          <input id="hedefKilo" inputmode="decimal" placeholder="Örn: 19500">
+          <label>🎯 Toplam kilo</label>
+          <input id="hedefKilo" class="input-turuncu" inputmode="decimal" placeholder="Örn: 19500">
         </div>
         <div>
           <label>&nbsp;</label>
@@ -421,6 +476,10 @@
       <div class="renk-top r-navy" data-renk="navy"></div>
       <div class="renk-top r-indigo" data-renk="indigo"></div>
       <div class="renk-top r-amber" data-renk="amber"></div>
+      <div class="renk-top r-emerald" data-renk="emerald"></div>
+      <div class="renk-top r-rose" data-renk="rose"></div>
+      <div class="renk-top r-violet" data-renk="violet"></div>
+      <div class="renk-top r-orange" data-renk="orange"></div>
     </div>
     <div class="mesaj" id="firmaFormMesaj"></div>
     <button class="btn btn-teal" id="btnFirmaKaydet">Kaydet</button>
@@ -595,6 +654,7 @@ $('btnFirmaVazgec').onclick = () => $('modal').classList.remove('acik');
 // ================= MENÜ =================
 $('btnEBildirim').onclick = async () => {
   formuTemizle();
+  $('firmaSabit').textContent = aktifFirma ? aktifFirma.ad : '';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
