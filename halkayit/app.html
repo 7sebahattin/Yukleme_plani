@@ -38,11 +38,30 @@
     .ustbar { max-width:1080px; }
     .firma-izgara { grid-template-columns:repeat(4,1fr); }
     #ekranBildirim main {
-      display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;
+      display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start;
     }
     #ekranBildirim main > .kart { margin-bottom:0; }
     #ekranBildirim #kartKunyeler { grid-column:1 / -1; }
   }
+
+  /* Stok Sorgulama tablosu */
+  .stok-ozet {
+    font-size:14px; color:var(--metin); background:#fff; border-radius:14px;
+    padding:12px 16px; margin-bottom:12px; box-shadow:var(--golge);
+  }
+  .stok-ozet:empty { display:none; }
+  .stok-ozet b { color:var(--navy); font-weight:800; }
+  .stok-sarma {
+    background:#fff; border-radius:var(--radius); box-shadow:var(--golge);
+    padding:6px; overflow-x:auto;
+  }
+  .stok-tablo { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .stok-tablo th, .stok-tablo td { padding:11px 12px; text-align:left; white-space:nowrap; }
+  .stok-tablo thead th { background:var(--navy); color:#fff; font-weight:700; }
+  .stok-tablo tbody tr { border-bottom:1px solid #eef4f7; }
+  .stok-tablo tbody tr:nth-child(even) { background:#f6fafb; }
+  .stok-tablo .sag { text-align:right; font-variant-numeric:tabular-nums; }
+  .stok-tablo tbody b { color:var(--navy); }
   .kart { background:var(--kart); border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--golge); }
   .kart h2 { font-size:14px; color:var(--vurgu); margin-bottom:12px; letter-spacing:.3px; }
   label { display:block; font-size:12px; font-weight:600; color:var(--soluk); margin:10px 0 4px; }
@@ -234,17 +253,16 @@
     background:#fff; border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.18);
   }
 
-  /* Sabit (yapışkan) aktif firma başlığı — yanlış firmadan bildirimi önler */
-  .firma-sabit {
-    position:sticky; top:0; z-index:16;
-    background:linear-gradient(135deg,var(--navy),#0b2e49); color:#fff;
-    font-weight:800; font-size:15px; letter-spacing:.3px;
-    padding:11px 16px; text-align:center;
-    display:flex; align-items:center; justify-content:center; gap:8px;
-    box-shadow:0 3px 12px rgba(15,58,90,.28);
+  /* Bildirim kartı başlıkları — 2 kat büyük, belirgin */
+  #ekranBildirim .kart h2 {
+    font-size:26px; line-height:1.25; font-weight:800;
+    color:var(--vurgu); margin-bottom:14px; letter-spacing:.2px;
   }
-  .firma-sabit::before { content:'🏢'; font-size:16px; }
-  .firma-sabit:empty { display:none; }
+
+  /* İki-kolonlu satırlarda kutu hizası: etiket boyu farklı olsa da kutular
+     alt kenardan hizalanır (Ürün/Tarih vb. kayması giderilir) */
+  .satir2 > div { display:flex; flex-direction:column; }
+  .satir2 > div > input, .satir2 > div > select { margin-top:auto; }
 
   /* Bildirim kartları — her biri farklı, şeffaftan koyuya inen arka plan */
   #ekranBildirim main > .kart:nth-child(1) { background:linear-gradient(180deg,#ffffff 0%, rgba(47,180,194,.18) 100%); }
@@ -331,10 +349,9 @@
     <div class="baslik">e Bildirim</div>
     <button class="mini" id="btnListeler">🔄 Listeler</button>
   </div>
-  <div class="firma-sabit" id="firmaSabit"></div>
   <main>
     <div class="kart">
-      <h2>1 · Bildirim Ayarları</h2>
+      <h2 id="kart1Baslik">1 · Bildirim Ayarları</h2>
       <div class="satir2">
         <div>
           <label>Sıfat</label>
@@ -441,6 +458,19 @@
   </main>
 </div>
 
+<!-- ============ EKRAN: STOK SORGULAMA ============ -->
+<div id="ekranStok" class="gizli">
+  <div class="ustbar">
+    <button class="geri" id="btnStokGeri">‹</button>
+    <div class="baslik">📦 Stok Sorgulama</div>
+    <button class="mini" id="btnStokYenile">🔄 Yenile</button>
+  </div>
+  <main>
+    <div class="stok-ozet" id="stokOzet"></div>
+    <div class="stok-sarma" id="stokListe"></div>
+  </main>
+</div>
+
 <!-- Alt çubuk (bildirim ekranı) -->
 <div class="ozet gizli" id="ozet">
   <div>
@@ -505,6 +535,7 @@ const $ = (id) => document.getElementById(id);
 const trNorm = (s) => (s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
 const trSayi = (s) => parseFloat(String(s || '0').replace(/\./g, '').replace(',', '.')) || 0;
 const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('tr-TR');
+const eHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // PHP sürümü: eski /api/... rotalarını api.php?action=XXX'e eşle.
 // Her istek POST edilir (gövde JSON). Böylece backend tek dosyada toplanır.
@@ -516,6 +547,7 @@ const API_ROTA = {
   'GET /api/listeler': 'listeler',
   'POST /api/listeler': 'listeler_yenile',
   'POST /api/kunyeler': 'kunyeler',
+  'POST /api/stok': 'stok',
   'GET /api/taslaklar': 'taslaklar',
   'POST /api/taslaklar': 'taslak_kaydet',
   'POST /api/taslaklar/sil': 'taslak_sil',
@@ -553,7 +585,7 @@ function toast(metin) {
 }
 
 function ekranGoster(ad) {
-  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen']
+  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranStok']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
@@ -654,11 +686,49 @@ $('btnFirmaVazgec').onclick = () => $('modal').classList.remove('acik');
 // ================= MENÜ =================
 $('btnEBildirim').onclick = async () => {
   formuTemizle();
-  $('firmaSabit').textContent = aktifFirma ? aktifFirma.ad : '';
+  $('kart1Baslik').textContent = '1. ' + (aktifFirma ? aktifFirma.ad : '') + ' Bildirim ayarları';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
-$('btnStok').onclick = () => toast('Bu butonun içeriği sonraki adımda eklenecek.');
+$('btnStok').onclick = () => stokEkraniAc();
+$('btnStokGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
+$('btnStokYenile').onclick = () => stokEkraniAc();
+
+// Stok Sorgulama — son 1 yıl referans künye kalanlarını ürün bazında listeler
+async function stokEkraniAc() {
+  ekranGoster('ekranStok');
+  const kap = $('stokListe');
+  const oz  = $('stokOzet');
+  oz.textContent = '';
+  kap.innerHTML = '<div class="yukleniyor">Son 1 yıl stok sorgulanıyor… (biraz sürebilir)</div>';
+  try {
+    const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi: 12 });
+    const liste = j.stok || [];
+    if (!liste.length) {
+      oz.textContent = '';
+      kap.innerHTML = '<div class="yukleniyor">Stokta (kalan miktarı olan) ürün bulunamadı.</div>';
+      return;
+    }
+    oz.innerHTML = `<b>${liste.length}</b> ürün · Toplam <b>${fmt(j.toplam)} KG</b>`;
+    let h = '<table class="stok-tablo"><thead><tr>' +
+      '<th>Ürün</th><th>Ürün Cinsi</th><th>Ürün Türü</th>' +
+      '<th class="sag">Stoktaki Miktar</th><th>Birim</th></tr></thead><tbody>';
+    liste.forEach(s => {
+      h += '<tr>' +
+        `<td><b>${eHtml(s.urun)}</b></td>` +
+        `<td>${eHtml(s.cins)}</td>` +
+        `<td>${eHtml(s.tur)}</td>` +
+        `<td class="sag"><b>${fmt(s.kalan)}</b></td>` +
+        `<td>${eHtml(s.birim || 'Kg')}</td>` +
+        '</tr>';
+    });
+    h += '</tbody></table>';
+    kap.innerHTML = h;
+  } catch (e) {
+    oz.textContent = '';
+    kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${eHtml(e.message)}</div>`;
+  }
+}
 document.querySelectorAll('.grup-liste button').forEach(b => {
   b.onclick = () => toast('Bu butonun içeriği sonraki adımda eklenecek.');
 });

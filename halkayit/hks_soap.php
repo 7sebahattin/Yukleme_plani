@@ -238,3 +238,34 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
   }
   return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar];
 }
+
+// ── Stok Özeti ────────────────────────────────────────────────────────────
+// HKS'te ayrı bir "stok" web servisi YOKTUR. Sitedeki "Stok Sorgulama" raporu,
+// referans künyelerin (kalan miktar > 0) ürün / cins / tür bazında toplamıdır.
+// Bu fonksiyon son $aySayisi aylık referans künyeleri UrunId GÖNDERMEDEN (tüm
+// ürünler) çeker ve gruplayıp toplar. (Kılavuz: ReferansKunyeler'de UrunId
+// zorunlu değildir; tarih aralığı verildiği için 50 kayıt sınırı da yoktur.)
+function hks_stok_ozet($cfg, $aySayisi = 12) {
+  $kunyeler = hks_kunyeleri_getir($cfg, ['aySayisi' => $aySayisi]); // UrunId yok → tüm ürünler
+  $grup = [];
+  foreach ($kunyeler as $k) {
+    if ((float)$k['kalan'] <= 0) continue;
+    $urun  = trim((string)($k['urun']  ?? ''));
+    $cins  = trim((string)($k['cins']  ?? ''));
+    $tur   = trim((string)($k['tur']   ?? ''));
+    $birim = trim((string)($k['birim'] ?? '')) ?: 'Kg';
+    $anahtar = mb_strtolower($urun . '|' . $cins . '|' . $tur . '|' . $birim, 'UTF-8');
+    if (!isset($grup[$anahtar])) {
+      $grup[$anahtar] = ['urun' => $urun, 'cins' => $cins, 'tur' => $tur,
+                         'birim' => $birim, 'kalan' => 0.0, 'kunyeAdet' => 0];
+    }
+    $grup[$anahtar]['kalan']     += (float)$k['kalan'];
+    $grup[$anahtar]['kunyeAdet'] += 1;
+  }
+  $liste = array_values($grup);
+  usort($liste, function ($a, $b) {
+    $c = strcmp((string)$a['urun'], (string)$b['urun']);
+    return $c !== 0 ? $c : strcmp((string)$a['cins'], (string)$b['cins']);
+  });
+  return $liste;
+}
