@@ -57,7 +57,7 @@ function hks_soap_cagir($servis, $metod, $icerikXml) {
   $kod = curl_getinfo($ch, CURLINFO_HTTP_CODE);
   curl_close($ch);
   if ($kod !== 200) {
-    throw new Exception('HTTP ' . $kod . ': ' . substr($cevap, 0, 300));
+    throw new Exception('HTTP ' . $kod . ': ' . substr($cevap, 0, 800));
   }
   return $cevap;
 }
@@ -241,14 +241,15 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
 
 // ── Stok Özeti ────────────────────────────────────────────────────────────
 // HKS'te ayrı bir "stok" web servisi yoktur. Sitedeki "Stok Sorgulama" raporu,
-// referans künyelerin (kalan miktar > 0) ürün / cins / tür bazında toplamıdır.
+// firmaya YAPILAN bildirimlerin (gelen mal = referans künyeler) kalan miktar > 0
+// olanlarının ürün / cins / tür bazında toplamıdır.
 //
-// Doğru kaynak: BildirimServisBildirimSorgu — KunyeTuru=1 (referans) +
-// KalanMiktariSifirdanBuyukOlanlar=true + tarih aralığı. Bu metod UrunId
-// GEREKTİRMEZ (ReferansKunyeler UrunId ister) ve tüm ürünlerin kalan stoğunu
-// tek çağrıda döndürür. Dönen BildirimSorguDTO alanları: KalanMiktar, MalinAdi,
-// MalinCinsi, MalinTuru, MiktarBirimiAd. (Site bir yıllık aralığı tek sorguda
-// getiriyor; alan sırası DataContract için alfabetik.)
+// Kaynak: BildirimServisBildirimciyeYapilanBildirimListesi — firmaya yapılan
+// (gelen) bildirimleri KalanMiktariSifirdanBuyukOlanlar=true + tarih aralığı ile
+// getirir. UrunId GEREKTİRMEZ (ReferansKunyeler ister). Dönen BildirimSorguDTO
+// alanları: KalanMiktar, MalinAdi, MalinCinsi, MalinTuru, MiktarBirimiAd.
+// (Not: generic BildirimServisBildirimSorgu üretimde ActionNotSupported veriyor;
+// bu yüzden yönlü liste metodu kullanılır. Alan sırası DataContract için alfabetik.)
 function hks_stok_ozet($cfg, $aySayisi = 12) {
   $ay = max(1, min(24, (int)$aySayisi));
   $bitis     = new DateTime();
@@ -260,10 +261,9 @@ function hks_stok_ozet($cfg, $aySayisi = 12) {
   $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
   $p[] = '<a:KunyeNo>0</a:KunyeNo>';        // 0 → tüm bildirimler
-  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';    // 1 = referans (stok), 2 = nihai tüketim
   $p[] = '</Istek>';
 
-  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimSorgu',
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimciyeYapilanBildirimListesi',
     hks_taban_istek('BaseRequestMessageOf_BildirimSorguIstek', implode('', $p), $cfg));
   $duz  = hks_sadelestir($xml);
   $hata = hks_islem_kontrol($duz);
