@@ -32,10 +32,11 @@
 
   main { max-width:640px; margin:0 auto; padding:16px; }
 
-  /* ── Masaüstü yerleşimi (≥900px): daha geniş, çok kolon ── */
+  /* ── Masaüstü yerleşimi (≥900px): sola hizalı, geniş, çok kolon ── */
   @media (min-width:900px) {
-    main { max-width:1080px; padding:22px 26px; }
-    .ustbar { max-width:1080px; }
+    /* Ortalama yerine sola hizala — panel sidebar'ına yakın, az boşluk */
+    main { max-width:1180px; padding:22px 24px; margin:0; }
+    .ustbar { max-width:1180px; margin:0; padding-left:24px; padding-right:24px; }
     .firma-izgara { grid-template-columns:repeat(4,1fr); }
     #ekranBildirim main {
       display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:start;
@@ -45,6 +46,15 @@
   }
 
   /* Stok Sorgulama tablosu */
+  #stokBolum { margin-top:8px; }
+  .stok-baslik {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    margin:14px 2px 8px; font-size:15px; font-weight:800; color:var(--navy);
+  }
+  .stok-baslik .mini {
+    background:#fff; border:none; color:var(--navy); font-size:13px; font-weight:700;
+    padding:8px 12px; border-radius:12px; cursor:pointer; box-shadow:var(--golge); flex-shrink:0;
+  }
   .stok-ozet {
     font-size:14px; color:var(--metin); background:#fff; border-radius:14px;
     padding:12px 16px; margin-bottom:12px; box-shadow:var(--golge);
@@ -339,6 +349,16 @@
         <button type="button">🖨️ Bildirim Çoklu Künye Basım</button>
       </div>
     </details>
+
+    <!-- Stok Sorgulama sonuçları — ana sayfada inline -->
+    <div id="stokBolum" class="gizli">
+      <div class="stok-baslik">
+        <span>📦 Stok Durumu</span>
+        <button type="button" class="mini" id="btnStokYenile">🔄 Yenile</button>
+      </div>
+      <div class="stok-ozet" id="stokOzet"></div>
+      <div class="stok-sarma" id="stokListe"></div>
+    </div>
   </main>
 </div>
 
@@ -458,19 +478,6 @@
   </main>
 </div>
 
-<!-- ============ EKRAN: STOK SORGULAMA ============ -->
-<div id="ekranStok" class="gizli">
-  <div class="ustbar">
-    <button class="geri" id="btnStokGeri">‹</button>
-    <div class="baslik">📦 Stok Sorgulama</div>
-    <button class="mini" id="btnStokYenile">🔄 Yenile</button>
-  </div>
-  <main>
-    <div class="stok-ozet" id="stokOzet"></div>
-    <div class="stok-sarma" id="stokListe"></div>
-  </main>
-</div>
-
 <!-- Alt çubuk (bildirim ekranı) -->
 <div class="ozet gizli" id="ozet">
   <div>
@@ -585,7 +592,7 @@ function toast(metin) {
 }
 
 function ekranGoster(ad) {
-  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranStok']
+  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
@@ -626,6 +633,10 @@ function firmaSec(f) {
   aktifFirma = f;
   document.body.dataset.tema = f.renk || 'teal';
   $('menuFirmaAd').textContent = f.ad;
+  // Farklı firmaya geçince önceki stok sonucunu temizle
+  $('stokBolum').classList.add('gizli');
+  $('stokOzet').textContent = '';
+  $('stokListe').innerHTML = '';
   ekranGoster('ekranMenu');
   taslakSayiGuncelle();
 }
@@ -690,17 +701,17 @@ $('btnEBildirim').onclick = async () => {
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
-$('btnStok').onclick = () => stokEkraniAc();
-$('btnStokGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
-$('btnStokYenile').onclick = () => stokEkraniAc();
+$('btnStok').onclick = () => stokListele();
+$('btnStokYenile').onclick = () => stokListele();
 
-// Stok Sorgulama — son 1 yıl referans künye kalanlarını ürün bazında listeler
-async function stokEkraniAc() {
-  ekranGoster('ekranStok');
+// Stok Sorgulama — son 1 yıl kalan stoğu ANA SAYFADA (menüde) inline listeler
+async function stokListele() {
+  $('stokBolum').classList.remove('gizli');
   const kap = $('stokListe');
   const oz  = $('stokOzet');
   oz.textContent = '';
   kap.innerHTML = '<div class="yukleniyor">Son 1 yıl stok sorgulanıyor… (biraz sürebilir)</div>';
+  $('stokBolum').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
     const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi: 12 });
     const liste = j.stok || [];
