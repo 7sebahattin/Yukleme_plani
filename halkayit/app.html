@@ -1353,6 +1353,13 @@ $('btnOnay').onclick = async () => {
         `</div>`;
     });
     if (!html) html = '<div class="yukleniyor">Cevap boş döndü.</div>';
+    // TEŞHİS: hata varsa ham SOAP yanıtını daraltılabilir teknik detayda göster.
+    if (j.ham) {
+      html += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:#8c1d13">' +
+        'Teknik Detay (ham yanıt)</summary>' +
+        '<div style="font-size:11px;color:#555;word-break:break-all;background:#f6f6f6;padding:8px;border-radius:8px;margin-top:6px">' +
+        eHtml(j.ham) + '</div></details>';
+    }
     $('modalBaslik').textContent = '📬 Gönderim Sonucu';
     $('modalIcerik').innerHTML = html;
     $('btnOnay').classList.add('gizli');
