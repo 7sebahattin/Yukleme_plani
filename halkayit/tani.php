@@ -49,6 +49,7 @@ if (!is_admin()) {
   <div class="card">
     <label>Firma (kimlik doğrulama için)</label>
     <select id="firma"><option value="">— yükleniyor —</option></select>
+    <label style="margin-top:12px;"><input type="checkbox" id="debug" style="width:auto;margin-right:6px;">Ham XML (namespace'li) göster — teşhis</label>
   </div>
 
   <div class="card">
@@ -123,8 +124,9 @@ async function cagir(action, extra) {
   const firmaId = val('firma');
   if (!firmaId) { cikti.textContent = 'Önce firma seç.'; return; }
   cikti.textContent = '⏳ ' + action + ' sorgulanıyor...';
+  const debug = $('#debug').checked ? 1 : 0;
   try {
-    const { ok, json } = await post(action, Object.assign({ firmaId }, extra));
+    const { ok, json } = await post(action, Object.assign({ firmaId, debug }, extra));
     cikti.innerHTML = (ok && !json.hata ? '<span class="ok">✔ ' : '<span class="err">✖ ')
       + action + '</span>\n\n'
       + JSON.stringify(json, null, 2);

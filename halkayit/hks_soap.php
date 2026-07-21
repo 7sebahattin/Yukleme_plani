@@ -54,12 +54,19 @@ function hks_soap_cagir($servis, $metod, $icerikXml) {
     curl_close($ch);
     throw new Exception('Bağlantı hatası: ' . $hata);
   }
+  $GLOBALS['HKS_SON_HAM'] = is_string($cevap) ? $cevap : '';  // teşhis: son ham (namespace'li) yanıt
   $kod = curl_getinfo($ch, CURLINFO_HTTP_CODE);
   curl_close($ch);
   if ($kod !== 200) {
     throw new Exception('HTTP ' . $kod . ': ' . substr($cevap, 0, 800));
   }
   return $cevap;
+}
+
+// Teşhis: en son SOAP çağrısının ham (namespace'li) yanıtı — kırpılmış.
+function hks_son_ham($limit = 3500) {
+  $h = $GLOBALS['HKS_SON_HAM'] ?? '';
+  return preg_replace('/\s+/', ' ', substr((string)$h, 0, $limit));
 }
 
 // Namespace öneklerini soy: <a:KunyeNo> -> <KunyeNo>
