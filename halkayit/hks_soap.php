@@ -236,10 +236,11 @@ function hks_bildirim_xml($satirlar, $ortak) {
     $mal = '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>';
     if ($fiyatGonder) $mal .= '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
 
-    // — İkinci kişi (b: alfabetik: AdSoyad, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
+    // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
     if ($yurtIci) {
       $ik = [];
-      if (!empty($ortak['ikinciAd'])) $ik[] = '<b:AdSoyad>' . hks_esc($ortak['ikinciAd']) . '</b:AdSoyad>';
+      if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc($ortak['ikinciAd']) . '</b:AdSoyad>';
+      if (!empty($ortak['ikinciCep'])) $ik[] = '<b:CepTel>' . hks_esc($ortak['ikinciCep']) . '</b:CepTel>';
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
       $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
@@ -253,8 +254,15 @@ function hks_bildirim_xml($satirlar, $ortak) {
     if (!empty($ortak['plaka']))      $gidecek[] = '<b:AracPlakaNo>' . hks_esc($ortak['plaka']) . '</b:AracPlakaNo>';
     if (!empty($ortak['belgeNo']))    $gidecek[] = '<b:BelgeNo>' . hks_esc($ortak['belgeNo']) . '</b:BelgeNo>';
     if (!empty($ortak['belgeTipiId'])) $gidecek[] = '<b:BelgeTipi>' . (int)$ortak['belgeTipiId'] . '</b:BelgeTipi>';
-    if ($yurtIci) {
-      // GidecekIsyeriId (‹ GidecekYerIsletmeTuruId, alfabetik: "GidecekI" < "GidecekY")
+    if ($yurtIci && !empty($ortak['hedefAdres'])) {
+      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde adresi.
+      // Alfabetik: GidecekYerBeldeId, GidecekYerIlId, GidecekYerIlceId, GidecekYerIsletmeTuruId
+      $gidecek[] = '<b:GidecekYerBeldeId>' . (int)$ortak['beldeId'] . '</b:GidecekYerBeldeId>';
+      $gidecek[] = '<b:GidecekYerIlId>' . (int)$ortak['ilId'] . '</b:GidecekYerIlId>';
+      $gidecek[] = '<b:GidecekYerIlceId>' . (int)$ortak['ilceId'] . '</b:GidecekYerIlceId>';
+      $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
+    } elseif ($yurtIci) {
+      // Kayıtlı alıcı / Sevk Etme: GidecekIsyeriId (‹ GidecekYerIsletmeTuruId)
       $gidecek[] = '<b:GidecekIsyeriId>' . (int)$ortak['gidecekIsyeriId'] . '</b:GidecekIsyeriId>';
       $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
     } else {

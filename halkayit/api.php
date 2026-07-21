@@ -83,11 +83,19 @@ function hks_bildirim_dogrula($g) {
     return 'Araç plakası veya belge no + belge tipi girilmelidir.';
   }
   if (!empty($o['yurtIci'])) {
-    // Yurt içi: karşı taraf (GTB kayıtlı) + gidecek işyeri zorunlu.
-    if (empty($o['ikinciTc']))        return 'Karşı taraf TC/Vergi No gerekli.';
-    if (empty($o['ikinciSifatId']))   return 'Karşı taraf sıfatı gerekli.';
-    if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
-    // Fiyat yalnızca Sevk Etme dışındaki türlerde (fiyatGonder=true) zorunlu.
+    // Yurt içi: karşı taraf + hedef zorunlu.
+    if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
+    if (empty($o['ikinciSifatId'])) return 'Karşı taraf sıfatı gerekli.';
+    if (!empty($o['hedefAdres'])) {
+      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde + ad + cep.
+      if (empty($o['ilId']) || empty($o['ilceId']) || empty($o['beldeId'])) return 'İl / İlçe / Belde seçilmeli.';
+      if (empty($o['ikinciAd']))  return 'Kayıtsız alıcı için Ad/Ünvan gerekli.';
+      if (empty($o['ikinciCep'])) return 'Kayıtsız alıcı için Cep Telefonu gerekli.';
+    } else {
+      // Kayıtlı alıcı / Sevk Etme: gidecek işyeri.
+      if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
+    }
+    // Fiyat yalnızca Sevk Etme dışında (fiyatGonder=true) zorunlu.
     if (!empty($o['fiyatGonder']) && empty($o['fiyat'])) return 'Birim fiyat gerekli.';
   } else {
     // Yurt dışı (mevcut export): ülke + fiyat zorunlu.

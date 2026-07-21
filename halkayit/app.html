@@ -432,15 +432,18 @@
           <select id="sTur"></select>
         </div>
       </div>
-      <label style="margin-top:12px">İşletme</label>
-      <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin:0">
-        <input type="checkbox" id="chkYurtDisi" checked disabled style="width:20px;height:20px;accent-color:var(--teal)">
-        Yurt Dışı <span id="yurtDisiNot" style="color:var(--soluk);font-weight:400;font-size:12px">(yurt dışı)</span>
-      </label>
+      <!-- Yurt Dışı seçeneği — yalnızca Satış türünde anlamlı; Sevk Etme'de gizlenir -->
+      <div id="yurtDisiBlok">
+        <label style="margin-top:12px">İşletme</label>
+        <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin:0">
+          <input type="checkbox" id="chkYurtDisi" checked style="width:20px;height:20px;accent-color:var(--teal)">
+          Yurt Dışı <span id="yurtDisiNot" style="color:var(--soluk);font-weight:400;font-size:12px">(yurt dışı)</span>
+        </label>
+      </div>
 
-      <!-- Karşı Taraf — yalnızca yurt içi (Sevk Etme) modunda görünür -->
+      <!-- Karşı Taraf — yurt içi (Sevk Etme / yurt içi Satış) modunda görünür -->
       <div id="karsiTarafBlok" class="gizli" style="margin-top:14px;padding-top:12px;border-top:1px dashed #d7e2ea">
-        <label class="label-vurgu">Karşı Taraf (Alıcı) — GTB'de kayıtlı olmalı</label>
+        <label class="label-vurgu">Karşı Taraf (Alıcı)</label>
         <div class="satir2">
           <div>
             <label>TC / Vergi No</label>
@@ -452,8 +455,13 @@
           </div>
         </div>
         <div class="mesaj" id="ikDurum"></div>
-        <label>Ad / Ünvan</label>
-        <input id="oIkAd" autocomplete="off" placeholder="alıcı adı / ünvanı (kayıtlıysa opsiyonel)">
+        <label>Ad / Ünvan <span id="ikAdZorunlu" class="gizli" style="color:#8c1d13">* zorunlu</span></label>
+        <input id="oIkAd" autocomplete="off" placeholder="alıcı adı / ünvanı">
+        <div id="cepTelBlok" class="gizli">
+          <label>Cep Telefonu <span style="color:#8c1d13">*</span>
+            <span style="color:var(--soluk);font-weight:400;font-size:12px">(kayıtsız alıcıda zorunlu)</span></label>
+          <input id="oIkCep" inputmode="numeric" autocomplete="off" placeholder="05xxxxxxxxx">
+        </div>
         <label>Karşı Taraf Sıfatı</label>
         <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
       </div>
@@ -476,13 +484,28 @@
         <select id="sUlke"></select>
       </div>
 
-      <!-- Yurt içi (Sevk Etme): işletme türü + gidecek işyeri -->
+      <!-- Yurt içi (Sevk Etme / yurt içi Satış): işletme türü + hedef -->
       <div id="hedefBlok" class="gizli">
         <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
         <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
-        <label class="label-vurgu">Gidecek İşyeri (karşı tarafın)</label>
-        <select id="sIsyeri"><option value="">— önce işletme türü seçin —</option></select>
-        <div class="mesaj" id="isyeriMesaj"></div>
+
+        <!-- Kayıtlı alıcı / Sevk Etme: karşı tarafın işyeri -->
+        <div id="isyeriAltBlok">
+          <label class="label-vurgu">Gidecek İşyeri (karşı tarafın)</label>
+          <select id="sIsyeri"><option value="">— önce işletme türü seçin —</option></select>
+          <div class="mesaj" id="isyeriMesaj"></div>
+        </div>
+
+        <!-- Kayıtsız alıcı (yurt içi Satış): il / ilçe / belde -->
+        <div id="adresAltBlok" class="gizli">
+          <div class="satir2">
+            <div><label class="label-vurgu">İl</label><select id="sIl"><option value="">— Seçiniz —</option></select></div>
+            <div><label class="label-vurgu">İlçe</label><select id="sIlce"><option value="">— önce il —</option></select></div>
+          </div>
+          <label class="label-vurgu">Belde</label>
+          <select id="sBelde"><option value="">— önce ilçe —</option></select>
+          <div class="mesaj" id="adresMesaj"></div>
+        </div>
       </div>
 
       <div class="satir2">
@@ -1040,7 +1063,7 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd'].forEach(id => { $(id).value = ''; });
+  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep'].forEach(id => { $(id).value = ''; });
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
@@ -1048,12 +1071,15 @@ function formuTemizle() {
   $('sIkSifat').value = '';
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
+  $('sIl').value = '';
+  $('sIlce').innerHTML = '<option value="">— önce il —</option>';
+  $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
   ikDogrulandi = null;
   kunyeler = [];
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
-  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   ozetGuncelle();
 }
@@ -1126,25 +1152,57 @@ function listeleriDoldur() {
   turDegisti();  // seçili türe göre kart görünürlüğünü ayarla
 }
 
-// ===== YURT İÇİ (Sevk Etme) MODU =====
+// ===== YURT İÇİ MODU (Sevk Etme + yurt içi Satış) =====
 let ikDogrulandi = null;  // { tcVkn, kayitliMi, sifatlar } — doğrulanan karşı taraf
+let illerYuklendi = false;
+
+function doldurSel(id, dizi, ilk) {
+  const sel = $(id);
+  sel.innerHTML = ilk ? `<option value="">${ilk}</option>` : '';
+  (dizi || []).forEach(x => {
+    const o = document.createElement('option');
+    o.value = x.id; o.textContent = x.ad;
+    sel.appendChild(o);
+  });
+}
 
 function turAdiById(id) {
   const t = ((listeler && listeler.bildirimTurleri) || []).find(x => String(x.id) === String(id));
   return t ? t.ad : '';
 }
 function sevkModuMu() { return trNorm(turAdiById($('sTur').value)).includes('sevk'); }
+// Yurt içi mi? Sevk Etme her zaman yurt içi; Satış'ta "Yurt Dışı" tiki kaldırılınca.
+function yurtIciMi() { return sevkModuMu() || !$('chkYurtDisi').checked; }
+// Doğrulanmış karşı taraf GTB'de kayıtlı mı?
+function kayitliMi() { return !!(ikDogrulandi && ikDogrulandi.kayitliMi); }
 
-// Seçili türe göre kartların görünürlüğünü ayarlar. Satış(yurtdışı)=mevcut düzen.
+// Tüm koşullu alanların görünürlüğünü tek yerden ayarlar.
 function turDegisti() {
   const sevk = sevkModuMu();
-  $('karsiTarafBlok').classList.toggle('gizli', !sevk);   // Kart 1: alıcı bilgileri
-  $('ulkeBlok').classList.toggle('gizli', sevk);          // Kart 2: ülke (yurt dışı)
-  $('hedefBlok').classList.toggle('gizli', !sevk);        // Kart 2: işyeri (yurt içi)
-  $('fiyatBlok').classList.toggle('gizli', sevk);         // Kart 4: fiyat (sevk'te yok)
-  $('chkYurtDisi').checked = !sevk;
-  $('yurtDisiNot').textContent = sevk ? '(yurt içi)' : '(yurt dışı)';
-  $('kart2Baslik').textContent = sevk ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
+  const yurtIci = yurtIciMi();
+  const kayitli = kayitliMi();
+  // İşyeri hedefi: Sevk Etme, ya da yurt içi Satış + kayıtlı alıcı.
+  const isyeriMod = yurtIci && (sevk || kayitli);
+  // Adres hedefi: yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
+  const adresMod  = yurtIci && !sevk && !!ikDogrulandi && !kayitli;
+
+  // Kart 1 — Yurt Dışı tiki yalnız Satış'ta; Sevk Etme'de gizli.
+  $('yurtDisiBlok').classList.toggle('gizli', sevk);
+  $('yurtDisiNot').textContent = yurtIci ? '(yurt içi)' : '(yurt dışı)';
+  $('karsiTarafBlok').classList.toggle('gizli', !yurtIci);
+  $('cepTelBlok').classList.toggle('gizli', !adresMod);   // kayıtsızda cep tel
+  $('ikAdZorunlu').classList.toggle('gizli', !adresMod);  // kayıtsızda ad zorunlu
+
+  // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
+  $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
+  $('ulkeBlok').classList.toggle('gizli', yurtIci);
+  $('hedefBlok').classList.toggle('gizli', !yurtIci);
+  $('isyeriAltBlok').classList.toggle('gizli', !isyeriMod);
+  $('adresAltBlok').classList.toggle('gizli', !adresMod);
+  if (adresMod) illeriYukleGerekiyorsa();
+
+  // Kart 4 — fiyat yalnız Sevk Etme'de gizli (Satış her zaman fiyatlı).
+  $('fiyatBlok').classList.toggle('gizli', sevk);
 }
 
 // İşletme türü adına göre hangi işyeri servisinin sorgulanacağını belirler (docx).
@@ -1155,39 +1213,57 @@ function isyeriServisi(isletmeTuruAd) {
   return 'sube';   // Hal Dışı İşyeri / Sınai İşletme / Perakende Satış Yeri
 }
 
-// Karşı taraf doğrulama (KayıtlıKişi)
+async function illeriYukleGerekiyorsa() {
+  if (illerYuklendi || !aktifFirma) return;
+  try {
+    const j = await api('/api/iller', 'POST', { firmaId: aktifFirma.id });
+    doldurSel('sIl', j.iller, '— Seçiniz —');
+    illerYuklendi = true;
+  } catch (e) { mesajGoster('adresMesaj', 'İller yüklenemedi: ' + e.message, 'hata'); }
+}
+
+// Karşı taraf doğrulama (KayıtlıKişi). Kayıtsız alıcı yurt içi Satış'ta geçerlidir;
+// Sevk Etme'de kayıtlı olması zorunludur (kayıt kontrolü göndermede yapılır).
 $('btnIkDogrula').onclick = async () => {
   const tc = $('oIkTc').value.trim();
   if (!tc) { mesajGoster('ikDurum', 'TC/Vergi No girin.', 'hata'); return; }
   $('btnIkDogrula').disabled = true; $('btnIkDogrula').textContent = '⏳';
   try {
     const j = await api('/api/kayitli_kisi', 'POST', { firmaId: aktifFirma.id, tcVkn: tc });
-    if (j.kisi && j.kisi.kayitliMi) {
-      ikDogrulandi = j.kisi;
-      mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı. Sıfatları: ' + (j.kisi.sifatlar.join(', ') || '—'), 'tamam');
+    ikDogrulandi = j.kisi || { tcVkn: tc, kayitliMi: false, sifatlar: [] };
+    if (ikDogrulandi.kayitliMi) {
+      mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı. Sıfatları: ' + (ikDogrulandi.sifatlar.join(', ') || '—'), 'tamam');
+    } else if (sevkModuMu()) {
+      mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — Sevk Etme için karşı taraf kayıtlı olmalıdır.', 'hata');
     } else {
-      ikDogrulandi = null;
-      mesajGoster('ikDurum', '⚠️ Bu TC/VKN GTB\'de KAYITLI DEĞİL. Sevk Etme için karşı taraf kayıtlı olmalıdır.', 'hata');
+      mesajGoster('ikDurum', 'ℹ️ Kayıtsız alıcı. Ad/Ünvan, Cep Telefonu ve İl/İlçe/Belde zorunludur.', 'tamam');
     }
   } catch (e) { ikDogrulandi = null; mesajGoster('ikDurum', e.message, 'hata'); }
   $('btnIkDogrula').disabled = false; $('btnIkDogrula').textContent = '✔️ Doğrula';
+  turDegisti();  // doğrulama sonucuna göre hedef alt-modunu ayarla
 };
+
 $('oIkTc').oninput = () => {
-  // TC değişince doğrulama + hedef işyeri seçimi sıfırlanır (eski TC'ye ait işyeri
-  // yeni karşı tarafla gönderilmesin).
+  // TC değişince doğrulama + hedef seçimleri sıfırlanır (eski TC'ye ait hedef gitmesin).
   ikDogrulandi = null;
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
-  $('isyeriMesaj').className = 'mesaj';
+  $('sIl').value = ''; $('sIlce').innerHTML = '<option value="">— önce il —</option>';
+  $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  ['isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  turDegisti();
 };
 $('sTur').onchange = turDegisti;
+$('chkYurtDisi').onchange = turDegisti;
 
-// İşletme türü seçilince, karşı tarafın o türdeki işyerlerini getir.
+// İşletme türü seçilince (işyeri modunda) karşı tarafın o türdeki işyerlerini getir.
 $('sIsletmeTuru').onchange = async () => {
   const isyeriSel = $('sIsyeri');
   isyeriSel.innerHTML = '<option value="">— önce işletme türü seçin —</option>';
   const turId = $('sIsletmeTuru').value;
   if (!turId) return;
+  // Adres modunda işletme türü sadece GidecekYerIsletmeTuruId'yi belirler; işyeri sorgusu yok.
+  if (!$('adresAltBlok').classList.contains('gizli')) return;
   const tc = $('oIkTc').value.trim();
   if (!tc) { mesajGoster('isyeriMesaj', 'Önce karşı tarafın TC/VKN\'sini girip "Doğrula"ya basın.', 'hata'); return; }
   const servis = isyeriServisi($('sIsletmeTuru').selectedOptions[0].textContent);
@@ -1205,6 +1281,31 @@ $('sIsletmeTuru').onchange = async () => {
     });
     mesajGoster('isyeriMesaj', liste.length + ' işyeri bulundu.', 'tamam');
   } catch (e) { mesajGoster('isyeriMesaj', e.message, 'hata'); }
+};
+
+// İl → İlçe → Belde zinciri (yurt içi Satış, kayıtsız alıcı)
+$('sIl').onchange = async () => {
+  $('sIlce').innerHTML = '<option value="">— önce il —</option>';
+  $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  const ilId = $('sIl').value;
+  if (!ilId) return;
+  mesajGoster('adresMesaj', '⏳ İlçeler...', 'tamam');
+  try {
+    const j = await api('/api/ilceler', 'POST', { firmaId: aktifFirma.id, ilId });
+    doldurSel('sIlce', j.ilceler, '— Seçiniz —');
+    $('adresMesaj').className = 'mesaj';
+  } catch (e) { mesajGoster('adresMesaj', e.message, 'hata'); }
+};
+$('sIlce').onchange = async () => {
+  $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  const ilceId = $('sIlce').value;
+  if (!ilceId) return;
+  mesajGoster('adresMesaj', '⏳ Beldeler...', 'tamam');
+  try {
+    const j = await api('/api/beldeler', 'POST', { firmaId: aktifFirma.id, ilceId });
+    doldurSel('sBelde', j.beldeler, '— Seçiniz —');
+    $('adresMesaj').className = 'mesaj';
+  } catch (e) { mesajGoster('adresMesaj', e.message, 'hata'); }
 };
 
 async function listeleriHazirla() {
@@ -1390,26 +1491,52 @@ $('btnTaslakKaydet').onclick = async () => {
   };
 
   let ortak;
-  if (sevkModuMu()) {
-    // ---- YURT İÇİ: Sevk Etme ----
+  if (yurtIciMi()) {
+    // ---- YURT İÇİ: Sevk Etme veya yurt içi Satış ----
+    const sevk = sevkModuMu();
     const tc = $('oIkTc').value.trim();
     if (!tc) { alert('Karşı taraf TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
     if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) {
-      alert('Karşı tarafı "Doğrula" ile GTB\'de doğrulayın — Sevk Etme için kayıtlı olmalıdır.'); return;
+      alert('Karşı tarafı "Doğrula" ile GTB\'de kontrol edin.'); return;
     }
-    if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı seçiniz.'); return; }
-    if (!$('sIsletmeTuru').value)  { alert('İşletme türü (gidilen yer) seçiniz.'); return; }
-    if (!$('sIsyeri').value)       { alert('Gidecek işyeri seçiniz.'); return; }
+    if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
+    if (!$('sIsletmeTuru').value) { alert('İşletme türü (gidilen yer) seçiniz.'); return; }
+
+    const kayitli = kayitliMi();
+    if (sevk && !kayitli) { alert('Sevk Etme için karşı taraf GTB\'de KAYITLI olmalıdır.'); return; }
+    const fiyatGerekli = !sevk;   // Satış fiyatlı; Sevk Etme fiyatsız
+    if (fiyatGerekli && !trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
+
     ortak = Object.assign({}, ortakBase, {
-      yurtIci: true, fiyatGonder: false,       // Sevk Etme: fiyat yok
+      yurtIci: true,
+      fiyatGonder: fiyatGerekli,
+      fiyat: fiyatGerekli ? trSayi($('oFiyat').value) : 0,
       isletmeTuruId: $('sIsletmeTuru').value,
       ikinciTc: tc,
       ikinciSifatId: $('sIkSifat').value,
       ikinciAd: $('oIkAd').value.trim(),
-      gidecekIsyeriId: $('sIsyeri').value,
-      gidecekIsyeriAd: $('sIsyeri').selectedOptions[0].textContent,
-      ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc),  // Gönderilenler etiketi
     });
+
+    const adresMod = !sevk && !kayitli;   // yurt içi Satış + kayıtsız → il/ilçe/belde
+    if (adresMod) {
+      if (!$('oIkAd').value.trim())  { alert('Kayıtsız alıcı için Ad/Ünvan zorunludur.'); return; }
+      if (!$('oIkCep').value.trim()) { alert('Kayıtsız alıcı için Cep Telefonu zorunludur.'); return; }
+      if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
+      Object.assign(ortak, {
+        hedefAdres: true,
+        ikinciCep: $('oIkCep').value.trim(),
+        ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
+        ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc) + ' (' +
+                $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
+      });
+    } else {
+      if (!$('sIsyeri').value) { alert('Gidecek işyeri seçiniz.'); return; }
+      Object.assign(ortak, {
+        gidecekIsyeriId: $('sIsyeri').value,
+        gidecekIsyeriAd: $('sIsyeri').selectedOptions[0].textContent,
+        ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc),
+      });
+    }
   } else {
     // ---- YURT DIŞI: mevcut ihracat ----
     if (!trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
@@ -1461,7 +1588,7 @@ async function taslakEkraniAc() {
           : `🌍 ${eHtml(t.ortak.ulkeAd || '—')}`) +
         (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${eHtml(t.ortak.urunAd)}` : '') + `<br>` +
         `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b>` +
-        (t.ortak.yurtIci ? '' : ` · 💰 ${fmt(t.ortak.fiyat)} TL/KG`) +
+        ((t.ortak.yurtIci && !t.ortak.fiyatGonder) ? '' : ` · 💰 ${fmt(t.ortak.fiyat)} TL/KG`) +
         `</div>` +
         `<div class="tk-butonlar">` +
         `<button class="btn btn-amber" data-gonder="${t.id}" style="margin-top:10px">📤 Gönder</button>` +
@@ -1492,9 +1619,14 @@ function taslakOnayAc(t) {
     `<div class="onay-satir"><span>${s.kunyeNo}</span><b>${fmt(Number(s.miktar))} KG</b></div>`).join('');
   html += `<div class="onay-satir"><span>TOPLAM</span><b>${fmt(toplam)} KG</b></div>`;
   if (t.ortak.yurtIci) {
-    html += `<div class="onay-satir"><span>Tür</span><b>Sevk Etme (yurt içi)</b></div>`;
+    html += `<div class="onay-satir"><span>Tür</span><b>${t.ortak.fiyatGonder ? 'Satış (yurt içi)' : 'Sevk Etme'}</b></div>`;
+    if (t.ortak.fiyatGonder) html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
     html += `<div class="onay-satir"><span>Karşı Taraf</span><b>${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || '—')}</b></div>`;
-    html += `<div class="onay-satir"><span>Gidecek İşyeri</span><b>${eHtml(t.ortak.gidecekIsyeriAd || t.ortak.gidecekIsyeriId || '—')}</b></div>`;
+    if (t.ortak.hedefAdres) {
+      html += `<div class="onay-satir"><span>Hedef Adres</span><b>${eHtml(t.ortak.ulkeAd || '—')}</b></div>`;
+    } else {
+      html += `<div class="onay-satir"><span>Gidecek İşyeri</span><b>${eHtml(t.ortak.gidecekIsyeriAd || t.ortak.gidecekIsyeriId || '—')}</b></div>`;
+    }
   } else {
     html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
     html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
