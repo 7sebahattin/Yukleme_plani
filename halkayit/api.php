@@ -83,9 +83,16 @@ function hks_bildirim_dogrula($g) {
   return null;
 }
 
-// Son kullanılan plaka/ülke/ürün güncelle
-function hks_son_guncelle($ortak) {
-  $son = hks_kv_oku('sonlar', ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]);
+// "Son kullanılanlar" anahtarı FİRMA BAZLIDIR — firmalar arasında veri karışmaz.
+function hks_sonlar_key($firmaId) {
+  $firmaId = trim((string)$firmaId);
+  return $firmaId !== '' ? ('sonlar_' . $firmaId) : 'sonlar';
+}
+
+// Son kullanılan plaka/ülke/ürün güncelle (yalnızca ilgili firma için)
+function hks_son_guncelle($ortak, $firmaId) {
+  $key = hks_sonlar_key($firmaId);
+  $son = hks_kv_oku($key, ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]);
   if (!empty($ortak['plaka'])) {
     $son['plakalar'] = array_slice(array_merge([$ortak['plaka']],
       array_values(array_filter($son['plakalar'], fn($p) => $p !== $ortak['plaka']))), 0, 10);
@@ -98,7 +105,7 @@ function hks_son_guncelle($ortak) {
     $son['urunler'] = array_slice(array_merge([['id' => $ortak['urunId'], 'ad' => $ortak['urunAd']]],
       array_values(array_filter($son['urunler'], fn($u) => (string)$u['id'] !== (string)$ortak['urunId']))), 0, 3);
   }
-  hks_kv_yaz('sonlar', $son);
+  hks_kv_yaz($key, $son);
 }
 
 // =============================================================================
@@ -154,9 +161,10 @@ try {
       hks_json_cikti(['tamam' => true]);
     }
 
-    // ---- SON KULLANILANLAR ----
+    // ---- SON KULLANILANLAR (firma bazlı) ----
     case 'sonlar': {
-      hks_json_cikti(hks_kv_oku('sonlar', ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]));
+      $sonKey = hks_sonlar_key($g['firmaId'] ?? '');
+      hks_json_cikti(hks_kv_oku($sonKey, ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]));
     }
 
     // ---- REFERANS LİSTELERİ ----
@@ -201,9 +209,13 @@ try {
       hks_json_cikti(['kunyeler' => $liste, 'toplam' => $toplam]);
     }
 
-    // ---- TASLAKLAR ----
+    // ---- TASLAKLAR (yalnızca seçili firmanın taslakları) ----
     case 'taslaklar': {
-      $rows = $db->query('SELECT * FROM ' . hks_tablo('taslaklar') . ' ORDER BY zaman DESC')->fetchAll();
+      $fid = trim($g['firmaId'] ?? '');
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE firma_id = ? ORDER BY zaman DESC');
+      $st->execute([$fid]);
+      $rows = $st->fetchAll();
       $taslaklar = array_map(function ($r) {
         $veri = json_decode($r['veri'], true);
         return [
@@ -227,15 +239,19 @@ try {
       hks_json_cikti(['tamam' => true]);
     }
     case 'taslak_sil': {
-      $st = $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ?');
-      $st->execute([$g['id'] ?? '']);
+      // Yalnızca seçili firmanın taslağı silinebilir (firma-izolasyonu).
+      $fid = trim($g['firmaId'] ?? '');
+      $st = $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $st->execute([$g['id'] ?? '', $fid]);
       hks_json_cikti(['tamam' => true]);
     }
     case 'taslak_gonder': {
-      $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE id = ?');
-      $st->execute([$g['id'] ?? '']);
+      // Yalnızca seçili firmanın taslağı gönderilebilir (firma-izolasyonu).
+      $fid = trim($g['firmaId'] ?? '');
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $st->execute([$g['id'] ?? '', $fid]);
       $t = $st->fetch();
-      if (!$t) hks_json_cikti(['hata' => 'Taslak bulunamadı.'], 400);
+      if (!$t) hks_json_cikti(['hata' => 'Taslak bulunamadı (veya bu firmaya ait değil).'], 400);
       $cfg = hks_firma_bul($t['firma_id']);
       if (!$cfg) hks_json_cikti(['hata' => 'Taslağın firması artık kayıtlı değil.'], 400);
       $veri = json_decode($t['veri'], true);
@@ -243,7 +259,7 @@ try {
       $ortak = $veri['ortak'];
 
       $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
-      hks_son_guncelle($ortak);
+      hks_son_guncelle($ortak, $t['firma_id']);
 
       // Gönderilenler kaydı (tek satır özet)
       $basarili = array_filter($sonuc['sonuclar'], fn($s) => $s['yeniKunyeNo'] && $s['yeniKunyeNo'] !== '0' && !$s['hataKodu']);
@@ -265,9 +281,18 @@ try {
       hks_json_cikti($sonuc);
     }
 
-    // ---- GÖNDERİLENLER ----
+    // ---- GÖNDERİLENLER (yalnızca seçili firma) ----
     case 'gonderilenler': {
-      $rows = $db->query('SELECT * FROM ' . hks_tablo('gonderilenler') . ' ORDER BY zaman DESC LIMIT 500')->fetchAll();
+      $fid = trim($g['firmaId'] ?? '');
+      $fad = trim($g['firmaAd'] ?? '');
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      // firma_id ile eşleş; firma_id'si olmayan ESKİ kayıtlar için yalnızca
+      // aynı firma ADINA sahip olanları göster (firma-izolasyonu korunur).
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('gonderilenler') . '
+        WHERE firma_id = ? OR (COALESCE(firma_id, \'\') = \'\' AND firma_ad = ?)
+        ORDER BY zaman DESC LIMIT 500');
+      $st->execute([$fid, $fad]);
+      $rows = $st->fetchAll();
       $liste = array_map(function ($r) {
         $veri = json_decode($r['veri'], true) ?: [];
         return [
