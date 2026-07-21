@@ -293,6 +293,8 @@
   @media (min-width:900px) {
     .ustbar { max-width:1180px; margin:0; padding-left:24px; padding-right:24px; }
     .firma-izgara { grid-template-columns:repeat(4,1fr); }
+    /* Firma seçim başlığı da sola hizalı (ortada kalmasın) */
+    .logo { text-align:left; padding-left:24px; }
     /* Alt özet çubuğu: buton içerikten uzağa (sağa) kaymasın, sola topla */
     .ozet { justify-content:flex-start; gap:28px; padding-left:24px; }
     .ozet button { margin-left:0; }
@@ -460,17 +462,18 @@
     <div class="kart gizli" id="kartKunyeler">
       <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
       <label>💰 Birim Fiyat *</label>
-      <input id="oFiyat" class="input-turuncu" inputmode="decimal" placeholder="Örn: 100,25" autocomplete="off">
+      <input id="oFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
       <div class="satir2" style="margin-top:6px">
         <div>
           <label>🎯 Toplam kilo</label>
-          <input id="hedefKilo" class="input-turuncu" inputmode="decimal" placeholder="Örn: 19500">
+          <input id="hedefKilo" class="input-turuncu" inputmode="decimal">
         </div>
         <div>
           <label>&nbsp;</label>
           <button class="btn btn-ana" id="btnDagit" style="margin-top:0">⚡ Otomatik Dağıt</button>
         </div>
       </div>
+      <button class="btn btn-soluk" id="btnSecimKaldir" style="margin-top:8px">✖️ Tüm Seçimi Kaldır</button>
       <div class="mesaj" id="dagitMesaj"></div>
       <div id="kunyeListe" style="margin-top:12px"></div>
     </div>
@@ -1099,6 +1102,16 @@ $('btnDagit').onclick = () => {
   } else {
     mesajGoster('dagitMesaj', `✓ Hedefin tamamı (${fmt(hedef)} KG) künyelere dağıtıldı.`, 'tamam');
   }
+  ozetGuncelle();
+};
+
+// Tüm seçimi kaldır — otomatik dağıt sonrası seçilenleri geri al
+$('btnSecimKaldir').onclick = () => {
+  const kap = $('kunyeListe');
+  kap.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = false; });
+  kap.querySelectorAll('input.miktar').forEach(inp => { inp.value = ''; inp.disabled = true; });
+  kap.querySelectorAll('.kunye').forEach(k => k.classList.remove('secili'));
+  $('dagitMesaj').className = 'mesaj';
   ozetGuncelle();
 };
 
