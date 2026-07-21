@@ -9,6 +9,12 @@
 const HKS_SVC_NS = 'http://www.gtb.gov.tr//WebServices';
 const HKS_NS_SC = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Bildirim.ServiceContract';
 const HKS_NS_MODEL = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Bildirim.Model';
+// Genel servisi (Iller/Ilceler/Beldeler/Depolar/Subeler/HalIciIsyeri) DTO'ları
+// AYRI namespace kullanır — Bildirim.ServiceContract DEĞİL. İstek parametreleri
+// (IlId, IlceId, TcKimlikVergiNo) bu namespace'te gönderilmezse sunucu 0 kabul
+// edip boş liste döner. (Canlı İller yanıtından doğrulandı.)
+const HKS_NS_GENEL_SC = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Genel.ServiceContract';
+const HKS_NS_GENEL_MODEL = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Genel.Model';
 
 function hks_endpoint($servis) {
   return 'https://hks.hal.gov.tr/WebServices/' . $servis . 'Service.svc';
@@ -404,10 +410,11 @@ function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
 // döndürür ($ham referansı) — böylece doğru etiketleri görüp ayarlayabiliriz.
 
 // Genel Ad/Id listesi (opsiyonel parametreli Istek). $istekIc boşsa <Istek/> kullanılır.
+// Genel servisi istek parametreleri HKS_NS_GENEL_SC namespace'inde (a: prefix) gider.
 function hks_genel_liste($servis, $metod, $zarfAdi, $istekIc, $dtoEtiket, $alanlar, $cfg, &$ham = null) {
   $istek = ($istekIc === '' || $istekIc === null)
     ? '<Istek/>'
-    : ('<Istek xmlns:a="' . HKS_NS_SC . '">' . $istekIc . '</Istek>');
+    : ('<Istek xmlns:a="' . HKS_NS_GENEL_SC . '">' . $istekIc . '</Istek>');
   $xml = hks_soap_cagir($servis, $metod, hks_taban_istek($zarfAdi, $istek, $cfg));
   $duz = hks_sadelestir($xml);
   $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1400));
@@ -455,8 +462,9 @@ function hks_isyerleri($cfg, $tur, $tcVkn, &$ham = null) {
   ];
   if (!isset($map[$tur])) throw new Exception('Geçersiz işyeri türü: ' . $tur);
   [$metod, $zarf, $dto] = $map[$tur];
+  // Genel servisi: parametre Genel.ServiceContract namespace'inde gönderilmeli.
   $ic = '<a:TcKimlikVergiNo>' . hks_esc(trim((string)$tcVkn)) . '</a:TcKimlikVergiNo>';
-  $istek = '<Istek xmlns:a="' . HKS_NS_SC . '">' . $ic . '</Istek>';
+  $istek = '<Istek xmlns:a="' . HKS_NS_GENEL_SC . '">' . $ic . '</Istek>';
   $xml = hks_soap_cagir('Genel', $metod, hks_taban_istek($zarf, $istek, $cfg));
   $duz = hks_sadelestir($xml);
   $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1600));
