@@ -236,7 +236,13 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
       'uniqueId' => hks_deger($b, 'UniqueId'),
     ];
   }
-  return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar];
+
+  // TEŞHİS: hata varsa ham (şifresiz) yanıtı da döndür — kök nedeni görmek için.
+  // ($duz namespace'siz yanıttır; şifreler yalnızca İSTEK'te bulunur, yanıtta değil.)
+  $hataVar = $genelHata !== null || count(array_filter($sonuclar, fn($s) => (int)$s['hataKodu'] !== 0)) > 0;
+  $ham = $hataVar ? preg_replace('/\s+/', ' ', substr($duz, 0, 1500)) : '';
+
+  return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar, 'ham' => $ham];
 }
 
 // ── Stok Özeti ────────────────────────────────────────────────────────────
