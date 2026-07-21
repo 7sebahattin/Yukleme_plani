@@ -69,16 +69,30 @@ function hks_firma_bul($id) {
   ];
 }
 
-// Doğrulama (taslak/bildirim ortak)
+// Doğrulama (taslak/bildirim ortak) — yurt dışı (mevcut export) ve yurt içi (Sevk
+// Etme / yurt içi Satış) için ayrı kurallar. Yurt dışı yolu birebir korunur.
 function hks_bildirim_dogrula($g) {
   if (empty($g['satirlar']) || !is_array($g['satirlar'])) return 'En az bir künye satırı gerekli.';
   if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
   $o = $g['ortak'] ?? [];
-  foreach (['fiyat', 'sifatId', 'bildirimTuruId', 'isletmeTuruId', 'ulkeId'] as $alan) {
+  // Her iki modda zorunlu ortak alanlar
+  foreach (['sifatId', 'bildirimTuruId', 'isletmeTuruId'] as $alan) {
     if (empty($o[$alan])) return 'Eksik alan: ' . $alan;
   }
   if (empty($o['plaka']) && !(!empty($o['belgeNo']) && !empty($o['belgeTipiId']))) {
     return 'Araç plakası veya belge no + belge tipi girilmelidir.';
+  }
+  if (!empty($o['yurtIci'])) {
+    // Yurt içi: karşı taraf (GTB kayıtlı) + gidecek işyeri zorunlu.
+    if (empty($o['ikinciTc']))        return 'Karşı taraf TC/Vergi No gerekli.';
+    if (empty($o['ikinciSifatId']))   return 'Karşı taraf sıfatı gerekli.';
+    if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
+    // Fiyat yalnızca Sevk Etme dışındaki türlerde (fiyatGonder=true) zorunlu.
+    if (!empty($o['fiyatGonder']) && empty($o['fiyat'])) return 'Birim fiyat gerekli.';
+  } else {
+    // Yurt dışı (mevcut export): ülke + fiyat zorunlu.
+    if (empty($o['ulkeId'])) return 'Eksik alan: ulkeId';
+    if (empty($o['fiyat']))  return 'Eksik alan: fiyat';
   }
   return null;
 }
@@ -306,6 +320,16 @@ try {
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);
+    }
+
+    // ---- BİLDİRİM PAYLOAD ÖNİZLEME (dry-run: GÖNDERMEZ, sadece XML kurar) ----
+    // İrreversible göndermeden önce yurt içi payload'ı gözle doğrulamak için.
+    case 'bildirim_onizle': {
+      $hata = hks_bildirim_dogrula($g);
+      if ($hata) hks_json_cikti(['hata' => $hata], 400);
+      // hks_bildirim_xml şifre İÇERMEZ (yalnızca Istek gövdesi) — güvenle döndürülür.
+      $xml = hks_bildirim_xml($g['satirlar'] ?? [], $g['ortak'] ?? []);
+      hks_json_cikti(['xml' => $xml, 'gonderilmedi' => true]);
     }
 
     // ---- YURT İÇİ ADRES / KİŞİ REFERANSLARI (Sevk Etme + yurt içi satış) ----

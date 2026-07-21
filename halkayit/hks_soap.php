@@ -215,25 +215,58 @@ function hks_kunyeleri_getir($cfg, $secenek) {
 }
 
 // Bildirim kayıt XML'i (100 künyeye kadar tek istekte)
+// İki mod:
+//  • YURT DIŞI (mevcut/varsayılan): IkinciKisi.YurtDisiMi=true, GidecekUlkeId,
+//    MalinSatisFiyat gönderilir. (Satış + yurt dışı ihracat)
+//  • YURT İÇİ ($ortak['yurtIci']): IkinciKisi (KisiSifat+TcKimlikVergiNo+YurtDisiMi=false),
+//    GidecekIsyeriId (işletme türüne göre depo/şube/hal içi), Sevk Etme'de fiyat YOK.
+// DataContract alan sırası her karmaşık tipte ALFABETİK (case-sensitive).
 function hks_bildirim_xml($satirlar, $ortak) {
+  $yurtIci = !empty($ortak['yurtIci']);
+  // Fiyat gönderilsin mi? Yurt dışı (mevcut) → her zaman. Yurt içi → frontend'in
+  // 'fiyatGonder' bayrağı (Sevk Etme=false, yurt içi Satış=true). Geriye dönük:
+  // bayrak yoksa (mevcut export) fiyat gönderilir.
+  $fiyatGonder = $yurtIci ? !empty($ortak['fiyatGonder']) : true;
+
   $kayitlar = [];
   foreach ($satirlar as $i => $s) {
     $uid = 'HKSPHP-' . time() . '-' . $i . '-' . bin2hex(random_bytes(3));
+
+    // — Mal bilgileri (b: alfabetik: MalinMiktari, MalinSatisFiyat) —
+    $mal = '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>';
+    if ($fiyatGonder) $mal .= '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
+
+    // — İkinci kişi (b: alfabetik: AdSoyad, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
+    if ($yurtIci) {
+      $ik = [];
+      if (!empty($ortak['ikinciAd'])) $ik[] = '<b:AdSoyad>' . hks_esc($ortak['ikinciAd']) . '</b:AdSoyad>';
+      $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
+      $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
+      $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
+      $ikinci = implode('', $ik);
+    } else {
+      $ikinci = '<b:YurtDisiMi>true</b:YurtDisiMi>';
+    }
+
+    // — Gidecek yer (b: alfabetik) —
     $gidecek = [];
-    if (!empty($ortak['plaka'])) $gidecek[] = '<b:AracPlakaNo>' . hks_esc($ortak['plaka']) . '</b:AracPlakaNo>';
-    if (!empty($ortak['belgeNo'])) $gidecek[] = '<b:BelgeNo>' . hks_esc($ortak['belgeNo']) . '</b:BelgeNo>';
+    if (!empty($ortak['plaka']))      $gidecek[] = '<b:AracPlakaNo>' . hks_esc($ortak['plaka']) . '</b:AracPlakaNo>';
+    if (!empty($ortak['belgeNo']))    $gidecek[] = '<b:BelgeNo>' . hks_esc($ortak['belgeNo']) . '</b:BelgeNo>';
     if (!empty($ortak['belgeTipiId'])) $gidecek[] = '<b:BelgeTipi>' . (int)$ortak['belgeTipiId'] . '</b:BelgeTipi>';
-    $gidecek[] = '<b:GidecekUlkeId>' . (int)$ortak['ulkeId'] . '</b:GidecekUlkeId>';
-    $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
+    if ($yurtIci) {
+      // GidecekIsyeriId (‹ GidecekYerIsletmeTuruId, alfabetik: "GidecekI" < "GidecekY")
+      $gidecek[] = '<b:GidecekIsyeriId>' . (int)$ortak['gidecekIsyeriId'] . '</b:GidecekIsyeriId>';
+      $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
+    } else {
+      $gidecek[] = '<b:GidecekUlkeId>' . (int)$ortak['ulkeId'] . '</b:GidecekUlkeId>';
+      $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
+    }
 
     $kayitlar[] = '<a:BildirimKayitIstek>' .
-      '<a:BildirimMalBilgileri>' .
-      '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>' .
-      '<b:MalinSatisFiyat>' . (float)$ortak['fiyat'] . '</b:MalinSatisFiyat>' .
-      '</a:BildirimMalBilgileri>' .
+      '<a:BildirimMalBilgileri>' . $mal . '</a:BildirimMalBilgileri>' .
       '<a:BildirimTuru>' . (int)$ortak['bildirimTuruId'] . '</a:BildirimTuru>' .
       '<a:BildirimciBilgileri><b:KisiSifat>' . (int)$ortak['sifatId'] . '</b:KisiSifat></a:BildirimciBilgileri>' .
-      '<a:IkinciKisiBilgileri><b:YurtDisiMi>true</b:YurtDisiMi></a:IkinciKisiBilgileri>' .
+      '<a:IkinciKisiBilgileri>' . $ikinci . '</a:IkinciKisiBilgileri>' .
       '<a:MalinGidecekYerBilgileri>' . implode('', $gidecek) . '</a:MalinGidecekYerBilgileri>' .
       '<a:ReferansBildirimKunyeNo>' . preg_replace('/\D/', '', (string)$s['kunyeNo']) . '</a:ReferansBildirimKunyeNo>' .
       '<a:UniqueId>' . $uid . '</a:UniqueId>' .
