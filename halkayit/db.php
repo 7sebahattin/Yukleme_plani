@@ -51,6 +51,7 @@ function hks_tablolari_hazirla() {
   $db->exec("CREATE TABLE IF NOT EXISTS {$t}gonderilenler (
     id VARCHAR(40) PRIMARY KEY,
     zaman DATETIME NOT NULL,
+    firma_id VARCHAR(40),
     firma_ad VARCHAR(200),
     plaka VARCHAR(30),
     belge_no VARCHAR(60),
@@ -64,6 +65,10 @@ function hks_tablolari_hazirla() {
     genel_hata TEXT,
     veri MEDIUMTEXT
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  // Eski kurulumlarda firma_id kolonu eksik olabilir (idempotent ekleme).
+  try { $db->exec("ALTER TABLE {$t}gonderilenler ADD COLUMN firma_id VARCHAR(40) AFTER zaman"); }
+  catch (PDOException $e) { /* zaten var */ }
 
   // Son kullanılanlar ve liste önbelleği: basit anahtar-değer
   $db->exec("CREATE TABLE IF NOT EXISTS {$t}kv (

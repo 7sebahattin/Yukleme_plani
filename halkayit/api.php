@@ -252,9 +252,9 @@ try {
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
       $yeniKunyeler = array_values(array_map(fn($s) => $s['yeniKunyeNo'], $basarili));
       $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
-        (id, zaman, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, veri)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
-      $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_ad'],
+        (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, veri)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+      $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
         count($satirlar), $toplamKg, $ortak['fiyat'], $rusum,
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'],
@@ -272,7 +272,8 @@ try {
         $veri = json_decode($r['veri'], true) ?: [];
         return [
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
-          'firmaAd' => $r['firma_ad'], 'plaka' => $r['plaka'], 'belgeNo' => $r['belge_no'],
+          'firmaId' => $r['firma_id'] ?? '', 'firmaAd' => $r['firma_ad'],
+          'plaka' => $r['plaka'], 'belgeNo' => $r['belge_no'],
           'ulkeAd' => $r['ulke_ad'], 'urunAd' => $r['urun_ad'], 'adet' => (int)$r['adet'],
           'toplamKg' => (float)$r['toplam_kg'], 'fiyat' => (float)$r['fiyat'], 'rusum' => (float)$r['rusum'],
           'hataSayisi' => (int)$r['hata_sayisi'], 'genelHata' => $r['genel_hata'],

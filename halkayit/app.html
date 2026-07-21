@@ -212,14 +212,32 @@
   .taslak-kart .tk-detay { font-size:13px; color:var(--metin); margin-top:8px; line-height:1.8; }
   .taslak-kart .tk-butonlar { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
-  /* Gönderilen satırları */
-  .gonderilen-liste { background:#fff; border-radius:var(--radius); box-shadow:var(--golge); padding:8px 0; overflow-x:auto; }
-  .g-satir {
-    white-space:nowrap; padding:11px 16px; font-size:13px; border-bottom:1px solid #eef4f7;
-    font-variant-numeric:tabular-nums;
+  /* Gönderilenler — tıklanabilir, genişleyen kart (Yüklemeler kart tasarımına benzer) */
+  .gonderilen-liste { display:flex; flex-direction:column; gap:10px; }
+  .g-kart {
+    background:#fff; border-radius:var(--radius); box-shadow:var(--golge);
+    padding:14px 16px; font-variant-numeric:tabular-nums; overflow:hidden;
   }
-  .g-satir b { color:var(--navy); }
-  .g-satir .ayrac { color:#c3d2da; margin:0 6px; }
+  .g-kart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; cursor:pointer; }
+  .g-kart-baslik { font-weight:800; color:var(--navy); font-size:14.5px; }
+  .g-kart-tarih { font-size:11.5px; color:var(--soluk); margin-top:2px; }
+  .g-kart-ok { color:var(--soluk); flex-shrink:0; transition:transform .2s; margin-top:2px; }
+  .g-kart.acik .g-kart-ok { transform:rotate(180deg); }
+  .g-kart-body {
+    font-size:12.5px; color:var(--metin); margin-top:8px; line-height:1.7;
+  }
+  .g-kart-body b { color:var(--navy); }
+  .g-kart-detay {
+    display:none; margin-top:12px; padding-top:12px; border-top:1px solid #eef4f7;
+  }
+  .g-kart.acik .g-kart-detay { display:block; }
+  .g-detay-baslik { font-size:11px; font-weight:700; color:var(--soluk); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+  .g-kunye-cip {
+    display:inline-block; background:#e6f6f8; color:var(--navy); border:1.5px solid #bfe6ea;
+    padding:5px 10px; border-radius:16px; font-size:11.5px; font-weight:700; margin:0 6px 6px 0;
+  }
+  .g-yazdir-btn { margin-top:10px; width:auto; padding:9px 18px; }
+  .g-yazdir-mesaj:empty { display:none; }
 
   /* Alt çubuk */
   .ozet {
@@ -261,11 +279,12 @@
     background:#fff; border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.18);
   }
 
-  /* Bildirim kartı başlıkları — 2 kat büyük, belirgin */
+  /* Bildirim kartı başlıkları — büyük, belirgin */
   #ekranBildirim .kart h2 {
-    font-size:26px; line-height:1.25; font-weight:800;
+    font-size:23px; line-height:1.25; font-weight:800;
     color:var(--vurgu); margin-bottom:14px; letter-spacing:.2px;
   }
+  #ekranBildirim .kart h2 .kart1-firma { color:#dc2626; }
 
   /* İki-kolonlu satırlarda kutu hizası: etiket boyu farklı olsa da kutular
      alt kenardan hizalanır (Ürün/Tarih vb. kayması giderilir) */
@@ -338,21 +357,21 @@
   <main>
     <div class="fav-izgara">
       <button class="fav-btn fav-bildirim" id="btnEBildirim">
-        <span class="ikon">📤</span> e Bildirim
+        <span class="ikon">📤</span> Bildirim Yap
       </button>
-      <button class="fav-btn fav-stok" id="btnStok">
-        <span class="ikon">📦</span> Stok Sorgulama
+      <button class="fav-btn fav-stok" id="btnGonderilenler">
+        <span class="ikon">📚</span> Gönderilenler
       </button>
     </div>
     <div class="alt-izgara">
       <button class="alt-btn" id="btnTaslaklar">📝 Taslaklar <span class="sayi gizli" id="taslakSayi">0</span></button>
-      <button class="alt-btn" id="btnGonderilenler">📚 Gönderilenler</button>
+      <button class="alt-btn" id="btnStok">📦 Stok Sorgulama</button>
     </div>
 
     <details class="grup">
       <summary>📋 Bildirim İşlemleri <span class="ok">▾</span></summary>
       <div class="grup-liste">
-        <button type="button">📤 e Bildirim</button>
+        <button type="button" id="btnEBildirimGrup">📤 Bildirim Yap</button>
         <button type="button">🔍 Bildirim Sorgulama / İptal</button>
         <button type="button">🏷️ Bildirim Etiket Basım</button>
         <button type="button">🗑️ e Fire Bildirim</button>
@@ -752,7 +771,7 @@ $('btnFirmaVazgec').onclick = () => $('modal').classList.remove('acik');
 // ================= MENÜ =================
 $('btnEBildirim').onclick = async () => {
   formuTemizle();
-  $('kart1Baslik').textContent = '1. ' + (aktifFirma ? aktifFirma.ad : '') + ' Bildirim ayarları';
+  $('kart1Baslik').innerHTML = '1. <span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
@@ -795,9 +814,11 @@ async function stokListele() {
     kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${eHtml(e.message)}</div>`;
   }
 }
-document.querySelectorAll('.grup-liste button').forEach(b => {
+document.querySelectorAll('.grup-liste button:not(#btnEBildirimGrup)').forEach(b => {
   b.onclick = () => toast('Bu butonun içeriği sonraki adımda eklenecek.');
 });
+// Bildirim İşlemleri menüsündeki "Bildirim Yap" — ana ekrandaki butonla aynı işlevi açar.
+if ($('btnEBildirimGrup')) $('btnEBildirimGrup').onclick = () => $('btnEBildirim').click();
 
 // ── Bildirim Çoklu Künye Basım (Toplu Künye) ──
 let topluSonuc = [];
@@ -872,13 +893,11 @@ function kunyeQrDataUrl(text) {
   } catch (e) { return ''; }
 }
 
-$('btnTopluYazdir').onclick = () => {
-  if (!topluSonuc.length) return;
-  const tarih = $('tkTarih').value;
-  const plaka = $('tkPlaka').value.trim().toUpperCase();
-  const belge = $('tkBelge').value.trim();
-  const toplam = topluSonuc.reduce((t, s) => t + Number(s.miktar || 0), 0);
-  const rows = topluSonuc.map(s => {
+// Ortak yazdırma penceresi — hem Çoklu Künye ekranından hem Gönderilenler kartından çağrılır.
+function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
+  if (!kunyeler || !kunyeler.length) return;
+  const toplam = kunyeler.reduce((t, s) => t + Number(s.miktar || 0), 0);
+  const rows = kunyeler.map(s => {
     const qr = kunyeQrDataUrl(s.kunyeNo);
     const qrCell = qr
       ? `<div class="qrbox"><img src="${qr}" width="88" height="88" alt=""><div class="qrno">${eHtml(s.kunyeNo)}</div></div>`
@@ -900,7 +919,7 @@ $('btnTopluYazdir').onclick = () => {
     'thead th{background:#eee}tfoot td{font-weight:bold}' +
     '.qrtd{width:110px;text-align:center}.qrbox{text-align:center}.qrno{font-size:9px;word-break:break-all;margin-top:2px}' +
     '@media print{.yzbtn{display:none}}</style></head><body>' +
-    '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</h2>' +
+    '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(firmaAdi || '') + '</h2>' +
     '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
     eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
     '<table><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
@@ -909,6 +928,13 @@ $('btnTopluYazdir').onclick = () => {
     '<button class="yzbtn" onclick="window.print()" style="margin-top:14px;padding:8px 16px;cursor:pointer">🖨️ Yazdır</button>' +
     '</body></html>');
   w.document.close();
+}
+
+$('btnTopluYazdir').onclick = () => {
+  const tarih = $('tkTarih').value;
+  const plaka = $('tkPlaka').value.trim().toUpperCase();
+  const belge = $('tkBelge').value.trim();
+  topluYazdirPenceresiAc(aktifFirma ? aktifFirma.ad : '', tarih, plaka, belge, topluSonuc);
 };
 
 $('btnMenuyeDon').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
@@ -1297,42 +1323,91 @@ $('btnOnay').onclick = async () => {
   $('btnOnay').textContent = 'Evet, Gönder';
 };
 
-// ================= GÖNDERİLENLER EKRANI =================
+// ================= GÖNDERİLENLER EKRANI (kart + genişleyen detay) =================
+let gonderilenVeri = [];
+
 async function gonderilenEkraniAc() {
   ekranGoster('ekranGonderilen');
   const kap = $('gonderilenListe');
   kap.innerHTML = '<div class="yukleniyor">Yükleniyor...</div>';
   try {
     const j = await api('/api/gonderilenler');
-    const liste = j.gonderilenler || [];
-    if (liste.length === 0) {
+    gonderilenVeri = j.gonderilenler || [];
+    if (gonderilenVeri.length === 0) {
       kap.innerHTML = '<div class="yukleniyor">Henüz gönderim yapılmadı.</div>';
       return;
     }
     kap.innerHTML = '';
-    liste.forEach(g => {
+    gonderilenVeri.forEach((g, i) => {
       const div = document.createElement('div');
-      div.className = 'g-satir';
-      const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      div.className = 'g-kart';
+      div.dataset.i = i;
+      const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const durumRozet = (g.hataSayisi > 0 || g.genelHata)
+        ? `<span class="rozet rozet-kirmizi">✗ ${g.hataSayisi || ''} hata</span>`
+        : `<span class="rozet rozet-yesil">✓ tamam</span>`;
+      const kunyeChips = (g.yeniKunyeler || []).length
+        ? g.yeniKunyeler.map(k => `<span class="g-kunye-cip">${eHtml(k)}</span>`).join('')
+        : '<span class="cip-bos">Bu gönderide yeni künye oluşmadı.</span>';
       div.innerHTML =
-        `<b>${tarih}</b><span class="ayrac">|</span>${g.firmaAd}` +
-        `<span class="ayrac">|</span>🚛 <b>${g.plaka || g.belgeNo || '—'}</b>` +
-        `<span class="ayrac">|</span>🌍 ${g.ulkeAd || '—'}` +
-        (g.urunAd ? `<span class="ayrac">|</span>🍒 ${g.urunAd}` : '') +
-        `<span class="ayrac">|</span>📦 ${g.adet} künye` +
-        `<span class="ayrac">|</span>⚖️ <b>${fmt(g.toplamKg)} KG</b>` +
-        `<span class="ayrac">|</span>💰 ${fmt(g.fiyat)} TL` +
-        (g.rusum ? `<span class="ayrac">|</span>Rüsum: ${fmt(g.rusum)} TL` : '') +
-        `<span class="ayrac">|</span>` +
-        (g.hataSayisi > 0 || g.genelHata
-          ? `<span class="rozet rozet-kirmizi">✗ ${g.hataSayisi || ''} hata</span>`
-          : `<span class="rozet rozet-yesil">✓ tamam</span>`) +
-        (g.yeniKunyeler && g.yeniKunyeler.length
-          ? `<span class="ayrac">|</span>Yeni: ${g.yeniKunyeler.join(', ')}` : '');
+        `<div class="g-kart-head">` +
+        `<div><div class="g-kart-baslik">${eHtml(g.firmaAd)}</div>` +
+        `<div class="g-kart-tarih">${tarih}</div></div>` +
+        `<span class="g-kart-ok">▾</span>` +
+        `</div>` +
+        `<div class="g-kart-body">` +
+        `🚛 <b>${eHtml(g.plaka || g.belgeNo || '—')}</b>` +
+        (g.ulkeAd ? ` · 🌍 ${eHtml(g.ulkeAd)}` : '') +
+        (g.urunAd ? ` · 🍒 ${eHtml(g.urunAd)}` : '') +
+        ` · 📦 ${g.adet} künye · ⚖️ <b>${fmt(g.toplamKg)} KG</b> · 💰 ${fmt(g.fiyat)} TL` +
+        (g.rusum ? ` · Rüsum: ${fmt(g.rusum)} TL` : '') +
+        ` · ${durumRozet}` +
+        `</div>` +
+        `<div class="g-kart-detay">` +
+        `<div class="g-detay-baslik">Künye Numaraları</div>` +
+        `<div class="cipler">${kunyeChips}</div>` +
+        `<button type="button" class="btn btn-teal g-yazdir-btn" data-i="${i}">🖨️ Yazdır</button>` +
+        `<div class="mesaj g-yazdir-mesaj" data-i="${i}"></div>` +
+        `</div>`;
+      div.querySelector('.g-kart-head').onclick = () => div.classList.toggle('acik');
       kap.appendChild(div);
     });
+    kap.querySelectorAll('.g-yazdir-btn').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const i = +btn.dataset.i;
+        const g = gonderilenVeri[i];
+        const msgEl = kap.querySelector(`.g-yazdir-mesaj[data-i="${i}"]`);
+        if (!g.firmaId) {
+          msgEl.textContent = 'Bu eski kayıt için firma bilgisi eksik, yazdırılamıyor.';
+          msgEl.className = 'mesaj hata g-yazdir-mesaj';
+          return;
+        }
+        btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...';
+        msgEl.className = 'mesaj g-yazdir-mesaj';
+        try {
+          // g.zaman ISO-8601 offset'li ('c' formatı) — YYYY-MM-DD baştaki 10 karakter,
+          // UTC'ye çevirip gün kaymasına (gece yarısına yakın kayıtlarda) sebep olmaz.
+          const tarihStr = String(g.zaman).slice(0, 10);
+          const r = await api('/api/toplu_kunye', 'POST', {
+            firmaId: g.firmaId, plaka: g.plaka || '', belgeNo: g.belgeNo || '', tarih: tarihStr,
+          });
+          const kunyeler = r.kunyeler || [];
+          if (!kunyeler.length) {
+            msgEl.textContent = 'Bu plaka/tarih için künye detayı bulunamadı.';
+            msgEl.className = 'mesaj hata g-yazdir-mesaj';
+          } else {
+            topluYazdirPenceresiAc(g.firmaAd, tarihStr, g.plaka, g.belgeNo, kunyeler);
+          }
+        } catch (err) {
+          msgEl.textContent = err.message;
+          msgEl.className = 'mesaj hata g-yazdir-mesaj';
+        }
+        btn.disabled = false; btn.textContent = '🖨️ Yazdır';
+      };
+    });
   } catch (e) {
-    kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${e.message}</div>`;
+    kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${eHtml(e.message)}</div>`;
   }
 }
 
