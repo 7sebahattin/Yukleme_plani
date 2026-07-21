@@ -376,3 +376,127 @@ function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
   }
   return $rows;
 }
+
+// ── Yurt İçi Adres / Kişi Referansları (Sevk Etme + yurt içi satış için) ────
+// Bu servislerin tamamı SALT-OKUNUR'dur: bildirim OLUŞTURMAZ, rüsum doğurmaz.
+// Yalnızca il/ilçe/belde/işyeri listeler ve TC/VKN doğrular. Bu yüzden canlı
+// sistemde güvenle test edilebilir. Alan/etiket adları docx'ten türetildiği için
+// KESİN değildir; her fonksiyon hata VEYA boş liste durumunda HAM yanıtı da
+// döndürür ($ham referansı) — böylece doğru etiketleri görüp ayarlayabiliriz.
+
+// Genel Ad/Id listesi (opsiyonel parametreli Istek). $istekIc boşsa <Istek/> kullanılır.
+function hks_genel_liste($servis, $metod, $zarfAdi, $istekIc, $dtoEtiket, $alanlar, $cfg, &$ham = null) {
+  $istek = ($istekIc === '' || $istekIc === null)
+    ? '<Istek/>'
+    : ('<Istek xmlns:a="' . HKS_NS_SC . '">' . $istekIc . '</Istek>');
+  $xml = hks_soap_cagir($servis, $metod, hks_taban_istek($zarfAdi, $istek, $cfg));
+  $duz = hks_sadelestir($xml);
+  $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1400));
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($metod . ': ' . $hata . ' || HAM: ' . $ham);
+  $sonuc = [];
+  foreach (hks_bloklar($duz, $dtoEtiket) as $b) {
+    $satir = [];
+    foreach ($alanlar as $anahtar => $etiket) {
+      $v = trim((string)hks_deger($b, $etiket));
+      $satir[$anahtar] = ($anahtar === 'id') ? (int)$v : $v;
+    }
+    if (($satir['ad'] ?? '') !== '' || ($satir['id'] ?? 0) > 0) $sonuc[] = $satir;
+  }
+  return $sonuc;
+}
+
+// İller (parametresiz) → IlDTO { Id, IlAdi }
+function hks_iller($cfg, &$ham = null) {
+  return hks_genel_liste('Genel', 'GenelServisIller', 'BaseRequestMessageOf_IllerIstek',
+    '', 'IlDTO', ['id' => 'Id', 'ad' => 'IlAdi'], $cfg, $ham);
+}
+
+// İlçeler (IlId) → IlceDTO { Id, IlceAdi }
+function hks_ilceler($cfg, $ilId, &$ham = null) {
+  $ic = '<a:IlId>' . (int)$ilId . '</a:IlId>';
+  return hks_genel_liste('Genel', 'GenelServisIlceler', 'BaseRequestMessageOf_IlcelerIstek',
+    $ic, 'IlceDTO', ['id' => 'Id', 'ad' => 'IlceAdi'], $cfg, $ham);
+}
+
+// Beldeler (IlceId) → BeldeDTO { Id, BeldeAdi }
+function hks_beldeler($cfg, $ilceId, &$ham = null) {
+  $ic = '<a:IlceId>' . (int)$ilceId . '</a:IlceId>';
+  return hks_genel_liste('Genel', 'GenelServisBeldeler', 'BaseRequestMessageOf_BeldelerIstek',
+    $ic, 'BeldeDTO', ['id' => 'Id', 'ad' => 'BeldeAdi'], $cfg, $ham);
+}
+
+// İşyerleri: karşı tarafın TC/VKN'sine göre depo / şube / hal içi işyeri listesi.
+// $tur: 'depo' | 'sube' | 'halici'. GidecekIsyeriId için kaynak liste budur.
+function hks_isyerleri($cfg, $tur, $tcVkn, &$ham = null) {
+  $map = [
+    'depo'   => ['GenelServisDepolar',      'BaseRequestMessageOf_DepolarIstek',      'DepoDTO'],
+    'sube'   => ['GenelServisSubeler',      'BaseRequestMessageOf_SubelerIstek',      'SubeDTO'],
+    'halici' => ['GenelServisHalIciIsyeri', 'BaseRequestMessageOf_HalIciIsyeriIstek', 'HalIciIsyeriDTO'],
+  ];
+  if (!isset($map[$tur])) throw new Exception('Geçersiz işyeri türü: ' . $tur);
+  [$metod, $zarf, $dto] = $map[$tur];
+  $ic = '<a:TcKimlikVergiNo>' . hks_esc(trim((string)$tcVkn)) . '</a:TcKimlikVergiNo>';
+  $istek = '<Istek xmlns:a="' . HKS_NS_SC . '">' . $ic . '</Istek>';
+  $xml = hks_soap_cagir('Genel', $metod, hks_taban_istek($zarf, $istek, $cfg));
+  $duz = hks_sadelestir($xml);
+  $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1600));
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($metod . ': ' . $hata . ' || HAM: ' . $ham);
+  $sonuc = [];
+  foreach (hks_bloklar($duz, $dto) as $b) {
+    $ad = '';
+    foreach (['DepoAdi','SubeAdi','IsyeriAdi','HalIciIsyeriAdi','Adi','Ad','ad'] as $et) {
+      $v = trim((string)hks_deger($b, $et));
+      if ($v !== '') { $ad = $v; break; }
+    }
+    $hi = (string)hks_deger($b, 'Halicimi');
+    if ($hi === '') $hi = (string)hks_deger($b, 'HalIciMi');
+    $sonuc[] = [
+      'id'      => (int)hks_deger($b, 'Id'),
+      'ad'      => $ad,
+      'adres'   => trim((string)hks_deger($b, 'Adres')),
+      'ilId'    => (int)hks_deger($b, 'IlId'),
+      'ilceId'  => (int)hks_deger($b, 'IlceId'),
+      'beldeId' => (int)hks_deger($b, 'BeldeId'),
+      'halIci'  => (stripos($hi, 'true') !== false),
+    ];
+  }
+  return $sonuc;
+}
+
+// Kayıtlı Kişi Sorgu: karşı tarafın (firma/şahıs) HKS'te kayıtlı olup olmadığını
+// ve sahip olduğu sıfatları döndürür. Ad/soyad DÖNMEZ (elle girilir).
+// İstek: TcKimlikVergiNolar = List<string> (Microsoft Arrays serileştirmesi).
+function hks_kayitli_kisi_sorgu($cfg, $tcVknList, &$ham = null) {
+  $arr = '';
+  foreach ((array)$tcVknList as $tc) {
+    $tc = trim((string)$tc);
+    if ($tc === '') continue;
+    $arr .= '<c:string>' . hks_esc($tc) . '</c:string>';
+  }
+  $ic = '<a:TcKimlikVergiNolar xmlns:c="http://schemas.microsoft.com/2003/10/Serialization/Arrays">'
+      . $arr . '</a:TcKimlikVergiNolar>';
+  $istek = '<Istek xmlns:a="' . HKS_NS_SC . '">' . $ic . '</Istek>';
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisKayitliKisiSorgu',
+    hks_taban_istek('BaseRequestMessageOf_KayitliKisiSorguIstek', $istek, $cfg));
+  $duz = hks_sadelestir($xml);
+  $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1400));
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception('KayitliKisiSorgu: ' . $hata . ' || HAM: ' . $ham);
+  $sonuc = [];
+  foreach (hks_bloklar($duz, 'KayitliKisiSorguDTO') as $b) {
+    $sifatlar = [];
+    foreach (hks_bloklar($b, 'int') as $iv) {
+      $n = (int)trim((string)$iv);
+      if ($n > 0) $sifatlar[] = $n;
+    }
+    $km = (string)hks_deger($b, 'KayitliKisiMi');
+    $sonuc[] = [
+      'tcVkn'     => trim((string)hks_deger($b, 'TcKimlikVergiNo')),
+      'kayitliMi' => (stripos($km, 'true') !== false),
+      'sifatlar'  => $sifatlar,
+    ];
+  }
+  return $sonuc;
+}
