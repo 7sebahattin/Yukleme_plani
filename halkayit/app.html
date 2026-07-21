@@ -580,6 +580,7 @@
 
 <div id="toast"></div>
 
+<script src="qrcode.js"></script>
 <script>
 'use strict';
 let firmalar = [];
@@ -860,31 +861,51 @@ $('btnTopluSorgula').onclick = async () => {
   $('btnTopluSorgula').disabled = false; $('btnTopluSorgula').textContent = '🔍 Sorgula';
 };
 
+// Künye numarasından QR (data-URI) üret — HKS etiketleriyle aynı biçim (numara kodlanır)
+function kunyeQrDataUrl(text) {
+  try {
+    if (typeof qrcode !== 'function') return '';
+    const qr = qrcode(0, 'M');       // 0 = otomatik boyut, 'M' hata düzeltme
+    qr.addData(String(text || ''));
+    qr.make();
+    return qr.createDataURL(3, 8);   // hücre 3px, kenar boşluğu 8px → GIF data-URI
+  } catch (e) { return ''; }
+}
+
 $('btnTopluYazdir').onclick = () => {
   if (!topluSonuc.length) return;
   const tarih = $('tkTarih').value;
   const plaka = $('tkPlaka').value.trim().toUpperCase();
   const belge = $('tkBelge').value.trim();
   const toplam = topluSonuc.reduce((t, s) => t + Number(s.miktar || 0), 0);
-  const rows = topluSonuc.map(s =>
-    `<tr><td>${eHtml(s.kunyeNo)}</td><td>${eHtml(s.urun)}</td>` +
-    `<td style="text-align:right">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` +
-    `<td>${eHtml(s.nereden)}</td><td>${eHtml(s.nereye)}</td><td>${eHtml(s.bildirimci)}</td></tr>`).join('');
+  const rows = topluSonuc.map(s => {
+    const qr = kunyeQrDataUrl(s.kunyeNo);
+    const qrCell = qr
+      ? `<div class="qrbox"><img src="${qr}" width="88" height="88" alt=""><div class="qrno">${eHtml(s.kunyeNo)}</div></div>`
+      : `<div class="qrno">${eHtml(s.kunyeNo)}</div>`;
+    return '<tr>' +
+      `<td class="qrtd">${qrCell}</td>` +
+      `<td>${eHtml(s.urun)}<br><b>${fmt(s.miktar)} ${eHtml(s.birim)}</b></td>` +
+      `<td>${eHtml(s.nereden)}<br>${eHtml(s.nereye)}</td>` +
+      `<td>${eHtml(s.bildirimci)}${s.malSahibi ? '<br>' + eHtml(s.malSahibi) : ''}</td>` +
+      '</tr>';
+  }).join('');
   const w = window.open('', '_blank');
   if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
   w.document.write(
     '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Çoklu Künye Basım</title>' +
     '<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#111}' +
     'h2{font-size:15px;margin:0 0 4px}.meta{font-size:12px;margin-bottom:10px;color:#333}' +
-    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left}' +
-    'thead th{background:#eee}tfoot td{font-weight:bold}@media print{.yzbtn{display:none}}</style></head><body>' +
+    'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}' +
+    'thead th{background:#eee}tfoot td{font-weight:bold}' +
+    '.qrtd{width:110px;text-align:center}.qrbox{text-align:center}.qrno{font-size:9px;word-break:break-all;margin-top:2px}' +
+    '@media print{.yzbtn{display:none}}</style></head><body>' +
     '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</h2>' +
     '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
     eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
-    '<table><thead><tr><th>Künye No</th><th>Malın Adı</th><th style="text-align:right">Miktar</th>' +
-    '<th>Nereden</th><th>Nereye</th><th>Bildirimci</th></tr></thead><tbody>' + rows + '</tbody>' +
-    '<tfoot><tr><td colspan="2">TOPLAM</td><td style="text-align:right">' + fmt(toplam) +
-    ' KG</td><td colspan="3"></td></tr></tfoot></table>' +
+    '<table><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
+    '<th>Nereden / Nereye</th><th>Bildirimci / Malın Sahibi</th></tr></thead><tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td class="qrtd">TOPLAM</td><td><b>' + fmt(toplam) + ' KG</b></td><td colspan="2"></td></tr></tfoot></table>' +
     '<button class="yzbtn" onclick="window.print()" style="margin-top:14px;padding:8px 16px;cursor:pointer">🖨️ Yazdır</button>' +
     '</body></html>');
   w.document.close();
