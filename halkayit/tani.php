@@ -99,6 +99,30 @@ if (!is_admin()) {
   </div>
 
   <div class="card">
+    <h2>6 · Sevk Etme (yurt içi) — Payload ÖNİZLE (göndermez)</h2>
+    <p class="mut">Yalnızca kurulacak SOAP payload'ını gösterir; HKS'e GÖNDERMEZ. Yapı doğrulaması içindir.</p>
+    <div class="row">
+      <div><label>Referans Künye No</label><input id="seKunye" inputmode="numeric" placeholder="stok künyesi"></div>
+      <div><label>Miktar (kg)</label><input id="seMiktar" inputmode="decimal" placeholder="örn. 1000"></div>
+    </div>
+    <div class="row">
+      <div><label>Bildirim Türü Id (Sevk Etme)</label><input id="seTur" inputmode="numeric"></div>
+      <div><label>Bildirimci Sıfat Id</label><input id="seSifat" inputmode="numeric"></div>
+    </div>
+    <div class="row">
+      <div><label>Karşı Taraf TC/VKN</label><input id="seIkTc" inputmode="numeric"></div>
+      <div><label>Karşı Taraf Sıfat Id</label><input id="seIkSifat" inputmode="numeric"></div>
+    </div>
+    <label>Karşı Taraf Ad/Ünvan (opsiyonel)</label><input id="seIkAd" placeholder="kayıtlıysa boş bırakılabilir">
+    <div class="row">
+      <div><label>İşletme Türü Id</label><input id="seIslTur" inputmode="numeric"></div>
+      <div><label>Gidecek İşyeri Id</label><input id="seIsyeri" inputmode="numeric"></div>
+    </div>
+    <label>Araç Plaka</label><input id="sePlaka" placeholder="örn. 55ASY19">
+    <button onclick="sevkOnizle()">Payload Önizle</button>
+  </div>
+
+  <div class="card">
     <h2>Çıktı</h2>
     <pre id="cikti">—</pre>
   </div>
@@ -131,6 +155,31 @@ async function cagir(action, extra) {
       + JSON.stringify(json, null, 2);
   } catch (e) {
     cikti.textContent = '✖ Ağ hatası\n' + e.message;
+  }
+}
+
+async function sevkOnizle() {
+  const firmaId = val('firma');
+  if (!firmaId) { cikti.textContent = 'Önce firma seç.'; return; }
+  const body = {
+    firmaId,
+    satirlar: [{ kunyeNo: val('seKunye'), miktar: parseFloat(val('seMiktar') || '0') }],
+    ortak: {
+      yurtIci: true, fiyatGonder: false,          // Sevk Etme → fiyat yok
+      bildirimTuruId: val('seTur'), sifatId: val('seSifat'),
+      ikinciTc: val('seIkTc'), ikinciSifatId: val('seIkSifat'), ikinciAd: val('seIkAd'),
+      isletmeTuruId: val('seIslTur'), gidecekIsyeriId: val('seIsyeri'),
+      plaka: val('sePlaka')
+    }
+  };
+  cikti.textContent = '⏳ payload kuruluyor...';
+  const { ok, json } = await post('bildirim_onizle', body);
+  if (json.xml) {
+    // XML'i okunur kıl (etiketler yutulmasın)
+    const gorunur = json.xml.replace(/</g, '‹').replace(/>/g, '›');
+    cikti.textContent = (ok ? '✔ ' : '✖ ') + 'payload (GÖNDERİLMEDİ)\n\n' + gorunur;
+  } else {
+    cikti.textContent = (ok ? '✔ ' : '✖ ') + JSON.stringify(json, null, 2);
   }
 }
 
