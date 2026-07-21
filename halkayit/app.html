@@ -328,9 +328,10 @@
 
   /* ── Toplu Künye (Bildirim Çoklu Künye Basım) ── */
   .tk-form { background:#fff; border-radius:var(--radius); padding:16px; margin-bottom:12px; box-shadow:var(--golge); }
-  .tk-sonuc-ozet { font-size:14px; color:var(--metin); background:#fff; border-radius:14px; padding:12px 16px; margin-bottom:12px; box-shadow:var(--golge); }
-  .tk-sonuc-ozet:empty { display:none; }
+  .tk-sonuc-bar { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .tk-sonuc-ozet { flex:1; font-size:14px; color:var(--metin); background:#fff; border-radius:14px; padding:12px 16px; box-shadow:var(--golge); }
   .tk-sonuc-ozet b { color:var(--navy); font-weight:800; }
+  .tk-yazdir-btn { width:auto; margin:0; padding:12px 20px; flex-shrink:0; white-space:nowrap; }
   .tk-tablo-sarma { background:#fff; border-radius:var(--radius); box-shadow:var(--golge); padding:6px; overflow-x:auto; }
   .tk-tablo { width:100%; border-collapse:collapse; font-size:13px; }
   .tk-tablo th, .tk-tablo td { padding:10px 12px; text-align:left; white-space:nowrap; }
@@ -551,9 +552,11 @@
       <button class="btn btn-teal" id="btnTopluSorgula">🔍 Sorgula</button>
       <div class="mesaj" id="tkMesaj"></div>
     </div>
-    <div class="tk-sonuc-ozet" id="tkOzet"></div>
+    <div class="tk-sonuc-bar gizli" id="tkSonucBar">
+      <div class="tk-sonuc-ozet" id="tkOzet"></div>
+      <button class="btn btn-ana tk-yazdir-btn" id="btnTopluYazdir">🖨️ Yazdır</button>
+    </div>
     <div id="tkSonucSarma"></div>
-    <button class="btn btn-ana gizli" id="btnTopluYazdir" style="margin-top:8px">🖨️ Yazdır</button>
   </main>
 </div>
 
@@ -836,7 +839,7 @@ function topluKunyeEkraniAc(plaka, belge, tarih) {
   $('tkBelge').value = belge || '';
   $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
   $('tkMesaj').className = 'mesaj';
-  $('btnTopluYazdir').classList.add('gizli');
+  $('tkSonucBar').classList.add('gizli');
   topluSonuc = [];
 }
 if ($('btnTopluKunye')) $('btnTopluKunye').onclick = () => topluKunyeEkraniAc();
@@ -863,7 +866,7 @@ async function topluSorgulaCalistir(firmaIdOverride) {
     if (!topluSonuc.length) {
       oz.textContent = '';
       kap.innerHTML = '<div class="yukleniyor">Bu kritere uygun künye bulunamadı.</div>';
-      $('btnTopluYazdir').classList.add('gizli');
+      $('tkSonucBar').classList.add('gizli');
     } else {
       oz.innerHTML = `<b>${topluSonuc.length}</b> künye · Toplam <b>${fmt(j.toplam)} KG</b>`;
       let h = '<div class="tk-tablo-sarma"><table class="tk-tablo"><thead><tr>' +
@@ -882,7 +885,7 @@ async function topluSorgulaCalistir(firmaIdOverride) {
       });
       h += '</tbody></table></div>';
       kap.innerHTML = h;
-      $('btnTopluYazdir').classList.remove('gizli');
+      $('tkSonucBar').classList.remove('gizli');
     }
   } catch (e) {
     let msg = e.message || 'Hata';
@@ -892,7 +895,7 @@ async function topluSorgulaCalistir(firmaIdOverride) {
     }
     mesajGoster('tkMesaj', msg, 'hata');
     $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
-    $('btnTopluYazdir').classList.add('gizli');
+    $('tkSonucBar').classList.add('gizli');
   }
   $('btnTopluSorgula').disabled = false; $('btnTopluSorgula').textContent = '🔍 Sorgula';
 }
@@ -934,14 +937,19 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
     'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}' +
     'thead th{background:#eee}tfoot td{font-weight:bold}' +
     '.qrtd{width:110px;text-align:center}.qrbox{text-align:center}.qrno{font-size:9px;word-break:break-all;margin-top:2px}' +
+    '.ustbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}' +
+    '.yzbtn{padding:9px 18px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid #1c4a6e;background:#1c4a6e;color:#fff;border-radius:8px;white-space:nowrap}' +
     '@media print{.yzbtn{display:none}}</style></head><body>' +
+    '<div class="ustbar"><div>' +
     '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(firmaAdi || '') + '</h2>' +
     '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
     eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
+    '</div>' +
+    '<button class="yzbtn" onclick="window.print()">🖨️ Yazdır</button>' +
+    '</div>' +
     '<table><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
     '<th>Nereden / Nereye</th><th>Bildirimci / Malın Sahibi</th></tr></thead><tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td class="qrtd">TOPLAM</td><td><b>' + fmt(toplam) + ' KG</b></td><td colspan="2"></td></tr></tfoot></table>' +
-    '<button class="yzbtn" onclick="window.print()" style="margin-top:14px;padding:8px 16px;cursor:pointer">🖨️ Yazdır</button>' +
     '</body></html>');
   w.document.close();
 }
@@ -960,8 +968,9 @@ $('btnTaslakGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncell
 $('btnGonderilenGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 
 async function taslakSayiGuncelle() {
+  if (!aktifFirma) return;
   try {
-    const j = await api('/api/taslaklar');
+    const j = await api('/api/taslaklar', 'GET', { firmaId: aktifFirma.id });
     const n = (j.taslaklar || []).length;
     $('taslakSayi').textContent = n;
     $('taslakSayi').classList.toggle('gizli', n === 0);
@@ -1066,7 +1075,7 @@ $('btnListeler').onclick = async () => {
 // ================= SON KULLANILANLAR =================
 async function sonlariYukle() {
   try {
-    const j = await api('/api/sonlar');
+    const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
     cipCiz('plakaCipler', j.plakalar || [], p => p, p => { $('oPlaka').value = p; }, 'Henüz plaka geçmişi yok');
     cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => { $('sUlke').value = u.id; }, 'Henüz ülke geçmişi yok');
     cipCiz('urunCipler', j.urunler || [], u => u.ad, u => { $('sUrun').value = u.id; }, 'Henüz ürün geçmişi yok');
@@ -1246,7 +1255,7 @@ async function taslakEkraniAc() {
   const kap = $('taslakListe');
   kap.innerHTML = '<div class="yukleniyor">Yükleniyor...</div>';
   try {
-    const j = await api('/api/taslaklar');
+    const j = await api('/api/taslaklar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
     const taslaklar = j.taslaklar || [];
     if (taslaklar.length === 0) {
       kap.innerHTML = '<div class="kart yukleniyor">Bekleyen taslak yok.</div>';
@@ -1277,7 +1286,7 @@ async function taslakEkraniAc() {
     kap.querySelectorAll('[data-sil]').forEach(b => {
       b.onclick = async () => {
         if (!confirm('Bu taslak silinsin mi?')) return;
-        await api('/api/taslaklar/sil', 'POST', { id: b.dataset.sil });
+        await api('/api/taslaklar/sil', 'POST', { id: b.dataset.sil, firmaId: aktifFirma ? aktifFirma.id : '' });
         taslakEkraniAc();
       };
     });
@@ -1312,7 +1321,7 @@ $('btnOnay').onclick = async () => {
   $('btnOnay').disabled = true;
   $('btnOnay').textContent = '⏳ Gönderiliyor...';
   try {
-    const j = await api('/api/taslaklar/gonder', 'POST', { id: gonderilecekTaslakId });
+    const j = await api('/api/taslaklar/gonder', 'POST', { id: gonderilecekTaslakId, firmaId: aktifFirma ? aktifFirma.id : '' });
     // Sonuçları aynı pencerede göster
     let html = '';
     if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${j.genelHata}</div>`;
@@ -1347,7 +1356,9 @@ async function gonderilenEkraniAc() {
   const kap = $('gonderilenListe');
   kap.innerHTML = '<div class="yukleniyor">Yükleniyor...</div>';
   try {
-    const j = await api('/api/gonderilenler');
+    const j = await api('/api/gonderilenler', 'GET', {
+      firmaId: aktifFirma ? aktifFirma.id : '', firmaAd: aktifFirma ? aktifFirma.ad : '',
+    });
     gonderilenVeri = j.gonderilenler || [];
     if (gonderilenVeri.length === 0) {
       kap.innerHTML = '<div class="yukleniyor">Henüz gönderim yapılmadı.</div>';
@@ -1396,17 +1407,13 @@ async function gonderilenEkraniAc() {
     kap.querySelectorAll('.g-yazdir-btn-ust').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
-        const i = +btn.dataset.i;
-        const g = gonderilenVeri[i];
-        if (!g.firmaId) {
-          toast('Bu eski kayıt için firma bilgisi eksik, sorgulanamıyor.');
-          return;
-        }
-        // g.zaman ISO-8601 offset'li ('c' formatı) — YYYY-MM-DD baştaki 10 karakter,
-        // UTC'ye çevirip gün kaymasına (gece yarısına yakın kayıtlarda) sebep olmaz.
+        const g = gonderilenVeri[+btn.dataset.i];
+        // Yalnızca yönlendirme: Çoklu Künye ekranını aç, alanları doldur, Sorgula'ya bas.
+        // Liste zaten aktif firmaya filtreli olduğu için sorgu aktif firmayla yapılır.
+        // g.zaman ISO-8601 offset'li ('c' formatı) — baştaki 10 karakter YYYY-MM-DD.
         const tarihStr = String(g.zaman).slice(0, 10);
         topluKunyeEkraniAc(g.plaka || '', g.belgeNo || '', tarihStr);
-        topluSorgulaCalistir(g.firmaId);
+        $('btnTopluSorgula').click();
       };
     });
   } catch (e) {
