@@ -308,6 +308,57 @@ try {
       hks_json_cikti(['gonderilenler' => $liste]);
     }
 
+    // ---- YURT İÇİ ADRES / KİŞİ REFERANSLARI (Sevk Etme + yurt içi satış) ----
+    // Tümü SALT-OKUNUR; bildirim oluşturmaz. Boş liste dönerse ham yanıt eklenir.
+    case 'iller': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_iller($cfg, $ham);
+      hks_json_cikti(['iller' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+    }
+    case 'ilceler': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
+      if (empty($g['ilId'])) hks_json_cikti(['hata' => 'İl seçilmedi.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_ilceler($cfg, (int)$g['ilId'], $ham);
+      hks_json_cikti(['ilceler' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+    }
+    case 'beldeler': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
+      if (empty($g['ilceId'])) hks_json_cikti(['hata' => 'İlçe seçilmedi.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_beldeler($cfg, (int)$g['ilceId'], $ham);
+      hks_json_cikti(['beldeler' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+    }
+    case 'isyerleri': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
+      $tur = trim($g['tur'] ?? '');
+      $tc  = trim($g['tcVkn'] ?? '');
+      if ($tc === '') hks_json_cikti(['hata' => 'TC/Vergi No gerekli.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_isyerleri($cfg, $tur, $tc, $ham);
+      hks_json_cikti(['isyerleri' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+    }
+    case 'kayitli_kisi': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
+      $tc = trim($g['tcVkn'] ?? '');
+      if ($tc === '') hks_json_cikti(['hata' => 'TC/Vergi No gerekli.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_kayitli_kisi_sorgu($cfg, [$tc], $ham);
+      $kisi = $liste[0] ?? null;
+      hks_json_cikti(['kisi' => $kisi] + ($kisi ? [] : ['ham' => $ham]));
+    }
+
     default:
       hks_json_cikti(['hata' => 'Bilinmeyen işlem: ' . $action], 404);
   }
