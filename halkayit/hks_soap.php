@@ -68,6 +68,18 @@ function hks_son_ham($limit = 3500) {
   $h = $GLOBALS['HKS_SON_HAM'] ?? '';
   return preg_replace('/\s+/', ' ', substr((string)$h, 0, $limit));
 }
+// Teşhis: son yanıttaki tüm xmlns URI'lerini (benzersiz) listeler — namespace tespiti için.
+function hks_ns_listesi() {
+  $h = $GLOBALS['HKS_SON_HAM'] ?? '';
+  preg_match_all('/xmlns(?::[A-Za-z0-9_]+)?="([^"]+)"/', (string)$h, $m);
+  return array_values(array_unique($m[1]));
+}
+// Teşhis: son yanıtın ilk ~1200 karakterini XML etiketleri GÖRÜNÜR biçimde döndürür
+// (< ve > yerine ‹ › konur — böylece tarayıcı innerHTML'de etiketleri yutmaz).
+function hks_son_ham_gorunur($limit = 1600) {
+  $h = preg_replace('/\s+/', ' ', substr((string)($GLOBALS['HKS_SON_HAM'] ?? ''), 0, $limit));
+  return strtr($h, ['<' => '‹', '>' => '›']);
+}
 
 // Namespace öneklerini soy: <a:KunyeNo> -> <KunyeNo>
 function hks_sadelestir($xml) {
