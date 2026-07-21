@@ -316,7 +316,9 @@ try {
       @set_time_limit(60);
       $ham = null;
       $liste = hks_iller($cfg, $ham);
-      hks_json_cikti(['iller' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+      $out = ['iller' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
+      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      hks_json_cikti($out);
     }
     case 'ilceler': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
@@ -325,7 +327,9 @@ try {
       @set_time_limit(60);
       $ham = null;
       $liste = hks_ilceler($cfg, (int)$g['ilId'], $ham);
-      hks_json_cikti(['ilceler' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+      $out = ['ilceler' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
+      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      hks_json_cikti($out);
     }
     case 'beldeler': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
@@ -334,7 +338,9 @@ try {
       @set_time_limit(60);
       $ham = null;
       $liste = hks_beldeler($cfg, (int)$g['ilceId'], $ham);
-      hks_json_cikti(['beldeler' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+      $out = ['beldeler' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
+      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      hks_json_cikti($out);
     }
     case 'isyerleri': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
@@ -345,7 +351,9 @@ try {
       @set_time_limit(60);
       $ham = null;
       $liste = hks_isyerleri($cfg, $tur, $tc, $ham);
-      hks_json_cikti(['isyerleri' => $liste] + (count($liste) ? [] : ['ham' => $ham]));
+      $out = ['isyerleri' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
+      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      hks_json_cikti($out);
     }
     case 'kayitli_kisi': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
@@ -356,7 +364,9 @@ try {
       $ham = null;
       $liste = hks_kayitli_kisi_sorgu($cfg, [$tc], $ham);
       $kisi = $liste[0] ?? null;
-      hks_json_cikti(['kisi' => $kisi] + ($kisi ? [] : ['ham' => $ham]));
+      $out = ['kisi' => $kisi] + ($kisi ? [] : ['ham' => $ham]);
+      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      hks_json_cikti($out);
     }
 
     default:
