@@ -347,11 +347,7 @@ function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
     hks_taban_istek('BaseRequestMessageOf_TopluKunyeIstek', implode('', $p), $cfg));
   $duz  = hks_sadelestir($xml);
   $hata = hks_islem_kontrol($duz);
-  if ($hata) {
-    // TEŞHİS: ham yanıtı (şifre içermez) hata mesajına ekle — kök nedeni görmek için.
-    $ham = preg_replace('/\s+/', ' ', substr($duz, 0, 1000));
-    throw new Exception($hata . ' [TEŞHİS-YANIT] ' . $ham);
-  }
+  if ($hata) throw new Exception($hata);
 
   $rows = [];
   foreach (hks_bloklar($duz, 'TopluKunyeDTO') as $b) {
