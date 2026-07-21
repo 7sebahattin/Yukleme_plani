@@ -435,21 +435,56 @@
       <label style="margin-top:12px">İşletme</label>
       <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin:0">
         <input type="checkbox" id="chkYurtDisi" checked disabled style="width:20px;height:20px;accent-color:var(--teal)">
-        Yurt Dışı <span style="color:var(--soluk);font-weight:400;font-size:12px">(şimdilik sabit)</span>
+        Yurt Dışı <span id="yurtDisiNot" style="color:var(--soluk);font-weight:400;font-size:12px">(yurt dışı)</span>
       </label>
+
+      <!-- Karşı Taraf — yalnızca yurt içi (Sevk Etme) modunda görünür -->
+      <div id="karsiTarafBlok" class="gizli" style="margin-top:14px;padding-top:12px;border-top:1px dashed #d7e2ea">
+        <label class="label-vurgu">Karşı Taraf (Alıcı) — GTB'de kayıtlı olmalı</label>
+        <div class="satir2">
+          <div>
+            <label>TC / Vergi No</label>
+            <input id="oIkTc" inputmode="numeric" autocomplete="off" placeholder="alıcının TC/VKN">
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn btn-teal" id="btnIkDogrula" style="margin-top:0">✔️ Doğrula</button>
+          </div>
+        </div>
+        <div class="mesaj" id="ikDurum"></div>
+        <label>Ad / Ünvan</label>
+        <input id="oIkAd" autocomplete="off" placeholder="alıcı adı / ünvanı (kayıtlıysa opsiyonel)">
+        <label>Karşı Taraf Sıfatı</label>
+        <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
+      </div>
+
       <div class="mesaj" id="bildirimMesaj"></div>
     </div>
 
     <div class="kart">
-      <h2>2 · Sevkiyat Bilgileri</h2>
+      <h2 id="kart2Baslik">2 · Sevkiyat Bilgileri</h2>
       <label>Son Kullanılan Plakalar</label>
       <div class="cipler" id="plakaCipler"><span class="cip-bos">Henüz plaka geçmişi yok</span></div>
       <label class="label-vurgu">Araç Plaka</label>
       <input id="oPlaka" class="input-turuncu" placeholder="ÖRN: 55ASY19" style="text-transform:uppercase" autocomplete="off">
-      <label>Son Kullanılan Ülkeler</label>
-      <div class="cipler" id="ulkeCipler"><span class="cip-bos">Henüz ülke geçmişi yok</span></div>
-      <label class="label-vurgu">İhracat Yapılan Ülke</label>
-      <select id="sUlke"></select>
+
+      <!-- Yurt dışı: ihracat ülkesi -->
+      <div id="ulkeBlok">
+        <label>Son Kullanılan Ülkeler</label>
+        <div class="cipler" id="ulkeCipler"><span class="cip-bos">Henüz ülke geçmişi yok</span></div>
+        <label class="label-vurgu">İhracat Yapılan Ülke</label>
+        <select id="sUlke"></select>
+      </div>
+
+      <!-- Yurt içi (Sevk Etme): işletme türü + gidecek işyeri -->
+      <div id="hedefBlok" class="gizli">
+        <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
+        <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
+        <label class="label-vurgu">Gidecek İşyeri (karşı tarafın)</label>
+        <select id="sIsyeri"><option value="">— önce işletme türü seçin —</option></select>
+        <div class="mesaj" id="isyeriMesaj"></div>
+      </div>
+
       <div class="satir2">
         <div>
           <label>Belge Tipi (plaka yoksa)</label>
@@ -488,8 +523,10 @@
 
     <div class="kart gizli" id="kartKunyeler">
       <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
-      <label>💰 Birim Fiyat *</label>
-      <input id="oFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
+      <div id="fiyatBlok">
+        <label>💰 Birim Fiyat *</label>
+        <input id="oFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
+      </div>
       <div class="satir2" style="margin-top:6px">
         <div>
           <label>🎯 Toplam kilo</label>
@@ -660,6 +697,13 @@ const API_ROTA = {
   'POST /api/taslaklar/sil': 'taslak_sil',
   'POST /api/taslaklar/gonder': 'taslak_gonder',
   'GET /api/gonderilenler': 'gonderilenler',
+  // Yurt içi (Sevk Etme) referans/doğrulama
+  'POST /api/kayitli_kisi': 'kayitli_kisi',
+  'POST /api/isyerleri': 'isyerleri',
+  'POST /api/iller': 'iller',
+  'POST /api/ilceler': 'ilceler',
+  'POST /api/beldeler': 'beldeler',
+  'POST /api/bildirim_onizle': 'bildirim_onizle',
 };
 async function api(yol, metod, govde) {
   metod = metod || 'GET';
@@ -996,17 +1040,21 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo'].forEach(id => { $(id).value = ''; });
+  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd'].forEach(id => { $(id).value = ''; });
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
   $('sGun').value = '12';
+  $('sIkSifat').value = '';
+  $('sIsletmeTuru').value = '';
+  $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
+  ikDogrulandi = null;
   kunyeler = [];
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
-  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj'].forEach(id => { $(id).className = 'mesaj'; });
-  if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner
+  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   ozetGuncelle();
 }
 
@@ -1032,6 +1080,14 @@ function listeleriDoldur() {
   doldur('sUrun', listeler.urunler, '— Ürün Seçiniz —');
   doldur('sUlke', listeler.ulkeler, '— Seçiniz —');
   doldur('sBelgeTipi', listeler.belgeTipleri, '— Seçiniz —');
+  // Karşı taraf sıfatı: tüm sıfatlar (alıcı farklı sıfatta olabilir)
+  doldur('sIkSifat', listeler.sifatlar, '— Seçiniz —');
+  // Gidilen işletme türü: "Yurt Dışı" hariç (Sevk Etme yurt içidir)
+  const isletmeIci = (listeler.isletmeTurleri || []).filter(x => {
+    const n = trNorm(x.ad);
+    return !(n.includes('yurt') && (n.includes('dışı') || n.includes('disi')));
+  });
+  doldur('sIsletmeTuru', isletmeIci, '— Seçiniz —');
 
   // Sıfat: sistemde kullanılan yalnızca 2 sıfat gösterilir (İhracat + Tüccar Hal Dışı)
   const sifatFiltre = (listeler.sifatlar || []).filter(x => {
@@ -1048,6 +1104,7 @@ function listeleriDoldur() {
     const n = trNorm(ad);
     return (n.includes('satış') || n.includes('satis')) && !n.includes('alım') && !n.includes('alim');
   };
+  const sevkMi = (ad) => trNorm(ad).includes('sevk');
   const turFiltre = (listeler.bildirimTurleri || []).filter(x => {
     const n = trNorm(x.ad);
     if (n.includes('üretici') || n.includes('uretici')) return false;
@@ -1058,14 +1115,97 @@ function listeleriDoldur() {
   (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
-    if (!satisMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
+    // Aktif: Satış (yurt dışı) + Sevk Etme (yurt içi). Satın Alım şimdilik kapalı.
+    if (!satisMi(x.ad) && !sevkMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
     turSel.appendChild(o);
   });
   const satis = (listeler.bildirimTurleri || []).find(x => satisMi(x.ad));
   if (satis) turSel.value = satis.id;
 
   otomatikBul();
+  turDegisti();  // seçili türe göre kart görünürlüğünü ayarla
 }
+
+// ===== YURT İÇİ (Sevk Etme) MODU =====
+let ikDogrulandi = null;  // { tcVkn, kayitliMi, sifatlar } — doğrulanan karşı taraf
+
+function turAdiById(id) {
+  const t = ((listeler && listeler.bildirimTurleri) || []).find(x => String(x.id) === String(id));
+  return t ? t.ad : '';
+}
+function sevkModuMu() { return trNorm(turAdiById($('sTur').value)).includes('sevk'); }
+
+// Seçili türe göre kartların görünürlüğünü ayarlar. Satış(yurtdışı)=mevcut düzen.
+function turDegisti() {
+  const sevk = sevkModuMu();
+  $('karsiTarafBlok').classList.toggle('gizli', !sevk);   // Kart 1: alıcı bilgileri
+  $('ulkeBlok').classList.toggle('gizli', sevk);          // Kart 2: ülke (yurt dışı)
+  $('hedefBlok').classList.toggle('gizli', !sevk);        // Kart 2: işyeri (yurt içi)
+  $('fiyatBlok').classList.toggle('gizli', sevk);         // Kart 4: fiyat (sevk'te yok)
+  $('chkYurtDisi').checked = !sevk;
+  $('yurtDisiNot').textContent = sevk ? '(yurt içi)' : '(yurt dışı)';
+  $('kart2Baslik').textContent = sevk ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
+}
+
+// İşletme türü adına göre hangi işyeri servisinin sorgulanacağını belirler (docx).
+function isyeriServisi(isletmeTuruAd) {
+  const n = trNorm(isletmeTuruAd);
+  if (n.includes('depo')) return 'depo';                          // Hal İçi/Dışı Deposu
+  if (n.includes('hal') && n.includes('içi') && n.includes('işyeri')) return 'halici';
+  return 'sube';   // Hal Dışı İşyeri / Sınai İşletme / Perakende Satış Yeri
+}
+
+// Karşı taraf doğrulama (KayıtlıKişi)
+$('btnIkDogrula').onclick = async () => {
+  const tc = $('oIkTc').value.trim();
+  if (!tc) { mesajGoster('ikDurum', 'TC/Vergi No girin.', 'hata'); return; }
+  $('btnIkDogrula').disabled = true; $('btnIkDogrula').textContent = '⏳';
+  try {
+    const j = await api('/api/kayitli_kisi', 'POST', { firmaId: aktifFirma.id, tcVkn: tc });
+    if (j.kisi && j.kisi.kayitliMi) {
+      ikDogrulandi = j.kisi;
+      mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı. Sıfatları: ' + (j.kisi.sifatlar.join(', ') || '—'), 'tamam');
+    } else {
+      ikDogrulandi = null;
+      mesajGoster('ikDurum', '⚠️ Bu TC/VKN GTB\'de KAYITLI DEĞİL. Sevk Etme için karşı taraf kayıtlı olmalıdır.', 'hata');
+    }
+  } catch (e) { ikDogrulandi = null; mesajGoster('ikDurum', e.message, 'hata'); }
+  $('btnIkDogrula').disabled = false; $('btnIkDogrula').textContent = '✔️ Doğrula';
+};
+$('oIkTc').oninput = () => {
+  // TC değişince doğrulama + hedef işyeri seçimi sıfırlanır (eski TC'ye ait işyeri
+  // yeni karşı tarafla gönderilmesin).
+  ikDogrulandi = null;
+  $('sIsletmeTuru').value = '';
+  $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
+  $('isyeriMesaj').className = 'mesaj';
+};
+$('sTur').onchange = turDegisti;
+
+// İşletme türü seçilince, karşı tarafın o türdeki işyerlerini getir.
+$('sIsletmeTuru').onchange = async () => {
+  const isyeriSel = $('sIsyeri');
+  isyeriSel.innerHTML = '<option value="">— önce işletme türü seçin —</option>';
+  const turId = $('sIsletmeTuru').value;
+  if (!turId) return;
+  const tc = $('oIkTc').value.trim();
+  if (!tc) { mesajGoster('isyeriMesaj', 'Önce karşı tarafın TC/VKN\'sini girip "Doğrula"ya basın.', 'hata'); return; }
+  const servis = isyeriServisi($('sIsletmeTuru').selectedOptions[0].textContent);
+  mesajGoster('isyeriMesaj', '⏳ İşyerleri getiriliyor...', 'tamam');
+  try {
+    const j = await api('/api/isyerleri', 'POST', { firmaId: aktifFirma.id, tur: servis, tcVkn: tc });
+    const liste = j.isyerleri || [];
+    isyeriSel.innerHTML = '<option value="">— Seçiniz —</option>';
+    if (!liste.length) { mesajGoster('isyeriMesaj', 'Karşı tarafa ait bu türde işyeri bulunamadı.', 'hata'); return; }
+    liste.forEach(w => {
+      const o = document.createElement('option');
+      o.value = w.id;
+      o.textContent = w.ad + (w.adres ? ' — ' + w.adres.slice(0, 45) : '');
+      isyeriSel.appendChild(o);
+    });
+    mesajGoster('isyeriMesaj', liste.length + ' işyeri bulundu.', 'tamam');
+  } catch (e) { mesajGoster('isyeriMesaj', e.message, 'hata'); }
+};
 
 async function listeleriHazirla() {
   if (listeler) return;
@@ -1233,31 +1373,60 @@ $('btnTaslakKaydet').onclick = async () => {
     alert(`Künye ${hatali.kunyeNo}: girilen miktar (${fmt(hatali.miktar)}) kalandan (${fmt(hatali.kalan)}) fazla!`);
     return;
   }
-  if (!trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
-  if (!$('sUlke').value) { alert('Ülke seçiniz.'); return; }
   if (!$('sSifat').value || !$('sTur').value) { alert('Sıfat ve tür seçiniz (listeleri güncelleyin).'); return; }
   if (!$('oPlaka').value.trim() && !($('oBelgeNo').value.trim() && $('sBelgeTipi').value)) {
     alert('Araç plakası veya belge no + belge tipi giriniz.'); return;
   }
 
   const urunSecili = $('sUrun').value;
+  const ortakBase = {
+    sifatId: $('sSifat').value,
+    bildirimTuruId: $('sTur').value,
+    urunId: urunSecili || 0,
+    urunAd: urunSecili ? $('sUrun').selectedOptions[0].textContent : '',
+    plaka: $('oPlaka').value.trim().toUpperCase(),
+    belgeNo: $('oBelgeNo').value.trim(),
+    belgeTipiId: $('sBelgeTipi').value || 0,
+  };
+
+  let ortak;
+  if (sevkModuMu()) {
+    // ---- YURT İÇİ: Sevk Etme ----
+    const tc = $('oIkTc').value.trim();
+    if (!tc) { alert('Karşı taraf TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
+    if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) {
+      alert('Karşı tarafı "Doğrula" ile GTB\'de doğrulayın — Sevk Etme için kayıtlı olmalıdır.'); return;
+    }
+    if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı seçiniz.'); return; }
+    if (!$('sIsletmeTuru').value)  { alert('İşletme türü (gidilen yer) seçiniz.'); return; }
+    if (!$('sIsyeri').value)       { alert('Gidecek işyeri seçiniz.'); return; }
+    ortak = Object.assign({}, ortakBase, {
+      yurtIci: true, fiyatGonder: false,       // Sevk Etme: fiyat yok
+      isletmeTuruId: $('sIsletmeTuru').value,
+      ikinciTc: tc,
+      ikinciSifatId: $('sIkSifat').value,
+      ikinciAd: $('oIkAd').value.trim(),
+      gidecekIsyeriId: $('sIsyeri').value,
+      gidecekIsyeriAd: $('sIsyeri').selectedOptions[0].textContent,
+      ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc),  // Gönderilenler etiketi
+    });
+  } else {
+    // ---- YURT DIŞI: mevcut ihracat ----
+    if (!trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
+    if (!$('sUlke').value) { alert('Ülke seçiniz.'); return; }
+    ortak = Object.assign({}, ortakBase, {
+      fiyat: trSayi($('oFiyat').value),
+      isletmeTuruId: oto.isletmeTuruId,
+      ulkeId: $('sUlke').value,
+      ulkeAd: $('sUlke').selectedOptions[0].textContent,
+    });
+  }
+
   try {
     await api('/api/taslaklar', 'POST', {
       firmaId: aktifFirma.id,
       satirlar: satirlar.map(s => ({ kunyeNo: s.kunyeNo, miktar: s.miktar })),
-      ortak: {
-        fiyat: trSayi($('oFiyat').value),
-        sifatId: $('sSifat').value,
-        bildirimTuruId: $('sTur').value,
-        isletmeTuruId: oto.isletmeTuruId,
-        ulkeId: $('sUlke').value,
-        ulkeAd: $('sUlke').selectedOptions[0].textContent,
-        urunId: urunSecili || 0,
-        urunAd: urunSecili ? $('sUrun').selectedOptions[0].textContent : '',
-        plaka: $('oPlaka').value.trim().toUpperCase(),
-        belgeNo: $('oBelgeNo').value.trim(),
-        belgeTipiId: $('sBelgeTipi').value || 0,
-      },
+      ortak,
     });
     toast('💾 Taslak kaydedildi');
     formuTemizle();
@@ -1286,9 +1455,13 @@ async function taslakEkraniAc() {
         `<div class="tk-baslik"><span>${t.firmaAd}</span>` +
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         `<div class="tk-detay">` +
-        `🚛 ${t.ortak.plaka || t.ortak.belgeNo || '—'} · 🌍 ${t.ortak.ulkeAd || '—'}` +
-        (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${t.ortak.urunAd}` : '') + `<br>` +
-        `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b> · 💰 ${fmt(t.ortak.fiyat)} TL/KG` +
+        `🚛 ${eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')} · ` +
+        (t.ortak.yurtIci
+          ? `🏠 ${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || 'yurt içi')}`
+          : `🌍 ${eHtml(t.ortak.ulkeAd || '—')}`) +
+        (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${eHtml(t.ortak.urunAd)}` : '') + `<br>` +
+        `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b>` +
+        (t.ortak.yurtIci ? '' : ` · 💰 ${fmt(t.ortak.fiyat)} TL/KG`) +
         `</div>` +
         `<div class="tk-butonlar">` +
         `<button class="btn btn-amber" data-gonder="${t.id}" style="margin-top:10px">📤 Gönder</button>` +
@@ -1318,8 +1491,14 @@ function taslakOnayAc(t) {
   html += t.satirlar.map(s =>
     `<div class="onay-satir"><span>${s.kunyeNo}</span><b>${fmt(Number(s.miktar))} KG</b></div>`).join('');
   html += `<div class="onay-satir"><span>TOPLAM</span><b>${fmt(toplam)} KG</b></div>`;
-  html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
-  html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
+  if (t.ortak.yurtIci) {
+    html += `<div class="onay-satir"><span>Tür</span><b>Sevk Etme (yurt içi)</b></div>`;
+    html += `<div class="onay-satir"><span>Karşı Taraf</span><b>${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || '—')}</b></div>`;
+    html += `<div class="onay-satir"><span>Gidecek İşyeri</span><b>${eHtml(t.ortak.gidecekIsyeriAd || t.ortak.gidecekIsyeriId || '—')}</b></div>`;
+  } else {
+    html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
+    html += `<div class="onay-satir"><span>Ülke</span><b>${t.ortak.ulkeAd || '—'}</b></div>`;
+  }
   html += `<div class="onay-satir"><span>Plaka/Belge</span><b>${t.ortak.plaka || t.ortak.belgeNo || '—'}</b></div>`;
   html += `<p style="font-size:12px;color:#8c1d13;margin-top:10px">Bu işlem GERÇEK bildirim oluşturur ve geri alınamaz!</p>`;
   $('modalBaslik').textContent = '⚠️ Gönderim Onayı — CANLI SİSTEM';

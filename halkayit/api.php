@@ -286,7 +286,7 @@ try {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
       $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
-        count($satirlar), $toplamKg, $ortak['fiyat'], $rusum,
+        count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'],
         json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar']], JSON_UNESCAPED_UNICODE)]);
 
