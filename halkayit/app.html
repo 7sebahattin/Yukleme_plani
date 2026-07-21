@@ -218,11 +218,20 @@
     background:#fff; border-radius:var(--radius); box-shadow:var(--golge);
     padding:14px 16px; font-variant-numeric:tabular-nums; overflow:hidden;
   }
-  .g-kart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; cursor:pointer; }
+  .g-kart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .g-kart-head-sol { cursor:pointer; flex:1; min-width:0; }
+  .g-kart-head-sag { display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .g-kart-baslik { font-weight:800; color:var(--navy); font-size:14.5px; }
   .g-kart-tarih { font-size:11.5px; color:var(--soluk); margin-top:2px; }
-  .g-kart-ok { color:var(--soluk); flex-shrink:0; transition:transform .2s; margin-top:2px; }
+  .g-kart-ok { color:var(--soluk); flex-shrink:0; transition:transform .2s; cursor:pointer; }
   .g-kart.acik .g-kart-ok { transform:rotate(180deg); }
+  /* Üstte, sağ köşede — Yüklemeler tablosundaki "Görüntüle" butonu gibi konumlandırılmış */
+  .g-yazdir-btn-ust {
+    background:#fff; border:1.5px solid #bfe6ea; color:var(--navy);
+    font-size:12px; font-weight:700; padding:7px 12px; border-radius:10px; cursor:pointer;
+    white-space:nowrap; font-family:inherit;
+  }
+  .g-yazdir-btn-ust:active { background:#eef4f7; }
   .g-kart-body {
     font-size:12.5px; color:var(--metin); margin-top:8px; line-height:1.7;
   }
@@ -236,8 +245,6 @@
     display:inline-block; background:#e6f6f8; color:var(--navy); border:1.5px solid #bfe6ea;
     padding:5px 10px; border-radius:16px; font-size:11.5px; font-weight:700; margin:0 6px 6px 0;
   }
-  .g-yazdir-btn { margin-top:10px; width:auto; padding:9px 18px; }
-  .g-yazdir-mesaj:empty { display:none; }
 
   /* Alt çubuk */
   .ozet {
@@ -365,7 +372,7 @@
     </div>
     <div class="alt-izgara">
       <button class="alt-btn" id="btnTaslaklar">📝 Taslaklar <span class="sayi gizli" id="taslakSayi">0</span></button>
-      <button class="alt-btn" id="btnStok">📦 Stok Sorgulama</button>
+      <button class="alt-btn" id="btnTopluKunyeAna">🖨️ Çoklu Künye Basım</button>
     </div>
 
     <details class="grup">
@@ -384,7 +391,7 @@
       <summary>📊 Raporlama İşlemleri <span class="ok">▾</span></summary>
       <div class="grup-liste">
         <button type="button">🕓 Geçmiş Dönem Borçları</button>
-        <button type="button">📦 Stok Sorgulama</button>
+        <button type="button" id="btnStok">📦 Stok Sorgulama</button>
         <button type="button">💳 Borç Sorgulama</button>
         <button type="button">🧾 Satış Bordrosu Çıkar</button>
         <button type="button">💰 Rüsum Sorgulama</button>
@@ -707,12 +714,9 @@ function firmaSec(f) {
   aktifFirma = f;
   document.body.dataset.tema = f.renk || 'teal';
   $('menuFirmaAd').textContent = f.ad;
-  // Farklı firmaya geçince önceki stok sonucunu temizle
-  $('stokBolum').classList.add('gizli');
-  $('stokOzet').textContent = '';
-  $('stokListe').innerHTML = '';
   ekranGoster('ekranMenu');
   taslakSayiGuncelle();
+  stokListele(); // Firma seçilince stok otomatik sorgulanıp ana sayfada gösterilir
 }
 
 $('btnFirmaDegis').onclick = () => {
@@ -775,7 +779,8 @@ $('btnEBildirim').onclick = async () => {
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
-$('btnStok').onclick = () => stokListele();
+// Not: btnStok artık "Raporlama İşlemleri" menüsünde — handler'ı .grup-liste
+// toast bağlamasından SONRA (aşağıda) atanır ki generic handler onu ezmesin.
 $('btnStokYenile').onclick = () => stokListele();
 
 // Stok Sorgulama — son 1 yıl kalan stoğu ANA SAYFADA (menüde) inline listeler
@@ -814,26 +819,36 @@ async function stokListele() {
     kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${eHtml(e.message)}</div>`;
   }
 }
-document.querySelectorAll('.grup-liste button:not(#btnEBildirimGrup)').forEach(b => {
+document.querySelectorAll('.grup-liste button:not(#btnEBildirimGrup):not(#btnStok)').forEach(b => {
   b.onclick = () => toast('Bu butonun içeriği sonraki adımda eklenecek.');
 });
 // Bildirim İşlemleri menüsündeki "Bildirim Yap" — ana ekrandaki butonla aynı işlevi açar.
 if ($('btnEBildirimGrup')) $('btnEBildirimGrup').onclick = () => $('btnEBildirim').click();
+// Raporlama İşlemleri menüsündeki "Stok Sorgulama" — ana sayfadaki stok listesini açar/günceller.
+if ($('btnStok')) $('btnStok').onclick = () => stokListele();
 
 // ── Bildirim Çoklu Künye Basım (Toplu Künye) ──
 let topluSonuc = [];
-if ($('btnTopluKunye')) $('btnTopluKunye').onclick = () => {
+function topluKunyeEkraniAc(plaka, belge, tarih) {
   ekranGoster('ekranToplu');
-  $('tkTarih').value = new Date().toISOString().slice(0, 10);
-  $('tkPlaka').value = ''; $('tkBelge').value = '';
+  $('tkTarih').value = tarih || new Date().toISOString().slice(0, 10);
+  $('tkPlaka').value = (plaka || '').toUpperCase();
+  $('tkBelge').value = belge || '';
   $('tkOzet').textContent = ''; $('tkSonucSarma').innerHTML = '';
   $('tkMesaj').className = 'mesaj';
   $('btnTopluYazdir').classList.add('gizli');
   topluSonuc = [];
-};
+}
+if ($('btnTopluKunye')) $('btnTopluKunye').onclick = () => topluKunyeEkraniAc();
+if ($('btnTopluKunyeAna')) $('btnTopluKunyeAna').onclick = () => topluKunyeEkraniAc();
 $('btnTopluGeri').onclick = () => { ekranGoster('ekranMenu'); taslakSayiGuncelle(); };
 
-$('btnTopluSorgula').onclick = async () => {
+// Çoklu Künye sorgusu — hem manuel "Sorgula" butonundan hem Gönderilenler
+// kartındaki "Yazdır" butonundan (otomatik doldurma sonrası) çağrılır.
+// firmaIdOverride verilirse (Gönderilenler'den geldiğinde) o firma kullanılır;
+// yoksa ekranda seçili aktif firma sorgulanır.
+async function topluSorgulaCalistir(firmaIdOverride) {
+  const firmaId = firmaIdOverride || (aktifFirma ? aktifFirma.id : '');
   const plaka = $('tkPlaka').value.trim().toUpperCase();
   const belge = $('tkBelge').value.trim();
   const tarih = $('tkTarih').value;
@@ -842,7 +857,7 @@ $('btnTopluSorgula').onclick = async () => {
   $('btnTopluSorgula').disabled = true; $('btnTopluSorgula').textContent = '⏳ Sorgulanıyor...';
   $('tkMesaj').className = 'mesaj';
   try {
-    const j = await api('/api/toplu_kunye', 'POST', { firmaId: aktifFirma.id, plaka, belgeNo: belge, tarih });
+    const j = await api('/api/toplu_kunye', 'POST', { firmaId, plaka, belgeNo: belge, tarih });
     topluSonuc = j.kunyeler || [];
     const kap = $('tkSonucSarma'), oz = $('tkOzet');
     if (!topluSonuc.length) {
@@ -880,7 +895,8 @@ $('btnTopluSorgula').onclick = async () => {
     $('btnTopluYazdir').classList.add('gizli');
   }
   $('btnTopluSorgula').disabled = false; $('btnTopluSorgula').textContent = '🔍 Sorgula';
-};
+}
+$('btnTopluSorgula').onclick = () => topluSorgulaCalistir();
 
 // Künye numarasından QR (data-URI) üret — HKS etiketleriyle aynı biçim (numara kodlanır)
 function kunyeQrDataUrl(text) {
@@ -1351,9 +1367,14 @@ async function gonderilenEkraniAc() {
         : '<span class="cip-bos">Bu gönderide yeni künye oluşmadı.</span>';
       div.innerHTML =
         `<div class="g-kart-head">` +
-        `<div><div class="g-kart-baslik">${eHtml(g.firmaAd)}</div>` +
-        `<div class="g-kart-tarih">${tarih}</div></div>` +
+        `<div class="g-kart-head-sol">` +
+        `<div class="g-kart-baslik">${eHtml(g.firmaAd)}</div>` +
+        `<div class="g-kart-tarih">${tarih}</div>` +
+        `</div>` +
+        `<div class="g-kart-head-sag">` +
+        `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula">🖨️ Yazdır</button>` +
         `<span class="g-kart-ok">▾</span>` +
+        `</div>` +
         `</div>` +
         `<div class="g-kart-body">` +
         `🚛 <b>${eHtml(g.plaka || g.belgeNo || '—')}</b>` +
@@ -1366,44 +1387,26 @@ async function gonderilenEkraniAc() {
         `<div class="g-kart-detay">` +
         `<div class="g-detay-baslik">Künye Numaraları</div>` +
         `<div class="cipler">${kunyeChips}</div>` +
-        `<button type="button" class="btn btn-teal g-yazdir-btn" data-i="${i}">🖨️ Yazdır</button>` +
-        `<div class="mesaj g-yazdir-mesaj" data-i="${i}"></div>` +
         `</div>`;
-      div.querySelector('.g-kart-head').onclick = () => div.classList.toggle('acik');
+      const acKapa = () => div.classList.toggle('acik');
+      div.querySelector('.g-kart-head-sol').onclick = acKapa;
+      div.querySelector('.g-kart-ok').onclick = acKapa;
       kap.appendChild(div);
     });
-    kap.querySelectorAll('.g-yazdir-btn').forEach(btn => {
-      btn.onclick = async (e) => {
+    kap.querySelectorAll('.g-yazdir-btn-ust').forEach(btn => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         const i = +btn.dataset.i;
         const g = gonderilenVeri[i];
-        const msgEl = kap.querySelector(`.g-yazdir-mesaj[data-i="${i}"]`);
         if (!g.firmaId) {
-          msgEl.textContent = 'Bu eski kayıt için firma bilgisi eksik, yazdırılamıyor.';
-          msgEl.className = 'mesaj hata g-yazdir-mesaj';
+          toast('Bu eski kayıt için firma bilgisi eksik, sorgulanamıyor.');
           return;
         }
-        btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...';
-        msgEl.className = 'mesaj g-yazdir-mesaj';
-        try {
-          // g.zaman ISO-8601 offset'li ('c' formatı) — YYYY-MM-DD baştaki 10 karakter,
-          // UTC'ye çevirip gün kaymasına (gece yarısına yakın kayıtlarda) sebep olmaz.
-          const tarihStr = String(g.zaman).slice(0, 10);
-          const r = await api('/api/toplu_kunye', 'POST', {
-            firmaId: g.firmaId, plaka: g.plaka || '', belgeNo: g.belgeNo || '', tarih: tarihStr,
-          });
-          const kunyeler = r.kunyeler || [];
-          if (!kunyeler.length) {
-            msgEl.textContent = 'Bu plaka/tarih için künye detayı bulunamadı.';
-            msgEl.className = 'mesaj hata g-yazdir-mesaj';
-          } else {
-            topluYazdirPenceresiAc(g.firmaAd, tarihStr, g.plaka, g.belgeNo, kunyeler);
-          }
-        } catch (err) {
-          msgEl.textContent = err.message;
-          msgEl.className = 'mesaj hata g-yazdir-mesaj';
-        }
-        btn.disabled = false; btn.textContent = '🖨️ Yazdır';
+        // g.zaman ISO-8601 offset'li ('c' formatı) — YYYY-MM-DD baştaki 10 karakter,
+        // UTC'ye çevirip gün kaymasına (gece yarısına yakın kayıtlarda) sebep olmaz.
+        const tarihStr = String(g.zaman).slice(0, 10);
+        topluKunyeEkraniAc(g.plaka || '', g.belgeNo || '', tarihStr);
+        topluSorgulaCalistir(g.firmaId);
       };
     });
   } catch (e) {
