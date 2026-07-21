@@ -627,6 +627,22 @@ const trSayi = (s) => parseFloat(String(s || '0').replace(/\./g, '').replace(','
 const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('tr-TR');
 const eHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+// Ürün adına göre ikon — bilinen meyve/sebzeler için özel, diğerleri için genel ikon.
+// Resmi Unicode karşılığı olmayanlar (nar, incir) için renkli daire kullanılır;
+// portakal/mandalina Unicode'da aynı emojiyi paylaştığından mandalinaya ayrı renk verildi.
+const URUN_IKON_ESLESME = [
+  ['kayısı', '🍑'], ['kiraz', '🍒'], ['nar', '🔴'], ['kabak', '🎃'],
+  ['domates', '🍅'], ['portakal', '🍊'], ['mandalin', '🟠'], ['salatalık', '🥒'],
+  ['biber', '🫑'], ['üzüm', '🍇'], ['incir', '🟤'],
+];
+function urunIkonu(urunAdi) {
+  const u = trNorm(urunAdi);
+  for (const [anahtar, ikon] of URUN_IKON_ESLESME) {
+    if (u.includes(anahtar)) return ikon;
+  }
+  return '🌱'; // eşleşmeyen ürünler için genel ikon
+}
+
 // PHP sürümü: eski /api/... rotalarını api.php?action=XXX'e eşle.
 // Her istek POST edilir (gövde JSON). Böylece backend tek dosyada toplanır.
 const API_ROTA = {
@@ -1271,7 +1287,7 @@ async function taslakEkraniAc() {
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
         `<div class="tk-detay">` +
         `🚛 ${t.ortak.plaka || t.ortak.belgeNo || '—'} · 🌍 ${t.ortak.ulkeAd || '—'}` +
-        (t.ortak.urunAd ? ` · 🍒 ${t.ortak.urunAd}` : '') + `<br>` +
+        (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${t.ortak.urunAd}` : '') + `<br>` +
         `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b> · 💰 ${fmt(t.ortak.fiyat)} TL/KG` +
         `</div>` +
         `<div class="tk-butonlar">` +
@@ -1324,9 +1340,11 @@ $('btnOnay').onclick = async () => {
     const j = await api('/api/taslaklar/gonder', 'POST', { id: gonderilecekTaslakId, firmaId: aktifFirma ? aktifFirma.id : '' });
     // Sonuçları aynı pencerede göster
     let html = '';
+    let herhangiBasarili = false;
     if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${j.genelHata}</div>`;
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
+      if (tamam) herhangiBasarili = true;
       html += `<div class="sonuc-satir">` +
         (tamam
           ? `<span class="rozet rozet-yesil">✓ KAYDEDİLDİ</span> Yeni Künye: <b>${s.yeniKunyeNo}</b> · ${fmt(s.miktar)} KG` +
@@ -1338,8 +1356,16 @@ $('btnOnay').onclick = async () => {
     $('modalBaslik').textContent = '📬 Gönderim Sonucu';
     $('modalIcerik').innerHTML = html;
     $('btnOnay').classList.add('gizli');
-    $('btnVazgec').textContent = 'Kapat';
-    taslakEkraniAc();
+    // Başarılı gönderimde modal kapanınca DOĞRUDAN Gönderilenler'e geçilir — liste
+    // orada her açılışta taze fetch ile çekildiği için son gönderim garanti görünür.
+    $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : 'Kapat';
+    $('btnVazgec').onclick = () => {
+      $('modal').classList.remove('acik');
+      $('btnVazgec').onclick = () => $('modal').classList.remove('acik'); // sonraki kullanım için varsayılana dön
+      if (herhangiBasarili) gonderilenEkraniAc();
+      else taslakEkraniAc();
+    };
+    taslakSayiGuncelle();
   } catch (e) {
     alert('HATA: ' + e.message);
     $('modal').classList.remove('acik');
@@ -1390,7 +1416,7 @@ async function gonderilenEkraniAc() {
         `<div class="g-kart-body">` +
         `🚛 <b>${eHtml(g.plaka || g.belgeNo || '—')}</b>` +
         (g.ulkeAd ? ` · 🌍 ${eHtml(g.ulkeAd)}` : '') +
-        (g.urunAd ? ` · 🍒 ${eHtml(g.urunAd)}` : '') +
+        (g.urunAd ? ` · ${urunIkonu(g.urunAd)} ${eHtml(g.urunAd)}` : '') +
         ` · 📦 ${g.adet} künye · ⚖️ <b>${fmt(g.toplamKg)} KG</b> · 💰 ${fmt(g.fiyat)} TL` +
         (g.rusum ? ` · Rüsum: ${fmt(g.rusum)} TL` : '') +
         ` · ${durumRozet}` +
