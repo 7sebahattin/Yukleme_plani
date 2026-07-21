@@ -127,11 +127,10 @@ async function cagir(action, extra) {
   const debug = $('#debug').checked ? 1 : 0;
   try {
     const { ok, json } = await post(action, Object.assign({ firmaId, debug }, extra));
-    cikti.innerHTML = (ok && !json.hata ? '<span class="ok">✔ ' : '<span class="err">✖ ')
-      + action + '</span>\n\n'
+    cikti.textContent = (ok && !json.hata ? '✔ ' : '✖ ') + action + '\n\n'
       + JSON.stringify(json, null, 2);
   } catch (e) {
-    cikti.innerHTML = '<span class="err">✖ Ağ hatası</span>\n' + e.message;
+    cikti.textContent = '✖ Ağ hatası\n' + e.message;
   }
 }
 

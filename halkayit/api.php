@@ -317,7 +317,7 @@ try {
       $ham = null;
       $liste = hks_iller($cfg, $ham);
       $out = ['iller' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
     case 'ilceler': {
@@ -328,7 +328,7 @@ try {
       $ham = null;
       $liste = hks_ilceler($cfg, (int)$g['ilId'], $ham);
       $out = ['ilceler' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
     case 'beldeler': {
@@ -339,7 +339,7 @@ try {
       $ham = null;
       $liste = hks_beldeler($cfg, (int)$g['ilceId'], $ham);
       $out = ['beldeler' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
     case 'isyerleri': {
@@ -352,7 +352,7 @@ try {
       $ham = null;
       $liste = hks_isyerleri($cfg, $tur, $tc, $ham);
       $out = ['isyerleri' => $liste] + (count($liste) ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
     case 'kayitli_kisi': {
@@ -365,7 +365,7 @@ try {
       $liste = hks_kayitli_kisi_sorgu($cfg, [$tc], $ham);
       $kisi = $liste[0] ?? null;
       $out = ['kisi' => $kisi] + ($kisi ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) $out['hamXml'] = hks_son_ham();
+      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
       hks_json_cikti($out);
     }
 
