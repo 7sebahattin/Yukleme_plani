@@ -336,8 +336,10 @@ function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
 
   $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
   // Alfabetik alan sırası (DataContract): AracPlakaNo, BelgeNo, BildirimTarihi
-  if ($plaka   !== '') $p[] = '<a:AracPlakaNo>' . hks_esc(strtoupper($plaka)) . '</a:AracPlakaNo>';
-  if ($belgeNo !== '') $p[] = '<a:BelgeNo>' . hks_esc($belgeNo) . '</a:BelgeNo>';
+  // ÖNEMLİ: string alanlar HER ZAMAN gönderilir (boşsa boş string). Alan atlanınca
+  // sunucuda null gelip beklenmeyen hata (GTBGLB00000001) oluşuyor.
+  $p[] = '<a:AracPlakaNo>' . hks_esc(strtoupper($plaka)) . '</a:AracPlakaNo>';
+  $p[] = '<a:BelgeNo>' . hks_esc($belgeNo) . '</a:BelgeNo>';
   $p[] = '<a:BildirimTarihi>' . $tarihXml . '</a:BildirimTarihi>';
   $p[] = '</Istek>';
 
