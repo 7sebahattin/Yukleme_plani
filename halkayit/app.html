@@ -279,7 +279,7 @@
   }
   /* Turuncu (dikkat çekici) giriş kutuları — Kilo / Birim Fiyat / Plaka */
   input.input-turuncu {
-    background:#fff3e0; border:2px solid #f5a623; color:#7a4a00; font-weight:700;
+    background:rgba(245,166,35,.12); border:2px solid #f5a623; color:#7a4a00; font-weight:700;
   }
   input.input-turuncu::placeholder { color:#c98a3a; font-weight:600; }
   input.input-turuncu:focus {
@@ -288,7 +288,7 @@
 
   /* Bildirim kartı başlıkları — büyük, belirgin */
   #ekranBildirim .kart h2 {
-    font-size:23px; line-height:1.25; font-weight:800;
+    font-size:19px; line-height:1.25; font-weight:800;
     color:var(--vurgu); margin-bottom:14px; letter-spacing:.2px;
   }
   #ekranBildirim .kart h2 .kart1-firma { color:#dc2626; }
@@ -478,7 +478,7 @@
       <label>Son Kullanılan Plakalar</label>
       <div class="cipler" id="plakaCipler"><span class="cip-bos">Henüz plaka geçmişi yok</span></div>
       <label class="label-vurgu">Araç Plaka</label>
-      <input id="oPlaka" class="input-turuncu" placeholder="ÖRN: 55ASY19" style="text-transform:uppercase" autocomplete="off">
+      <input id="oPlaka" class="input-turuncu" placeholder="Plaka giriniz.." style="text-transform:uppercase" autocomplete="off">
 
       <!-- Yurt dışı: ihracat ülkesi -->
       <div id="ulkeBlok">
@@ -604,7 +604,7 @@
       <div class="satir2">
         <div>
           <label class="label-vurgu">Araç Plaka</label>
-          <input id="tkPlaka" class="input-turuncu" placeholder="ÖRN: 55ASY19" style="text-transform:uppercase" autocomplete="off">
+          <input id="tkPlaka" class="input-turuncu" placeholder="Plaka giriniz.." style="text-transform:uppercase" autocomplete="off">
         </div>
         <div>
           <label>Tarih</label>
@@ -1232,7 +1232,9 @@ function ikSifatlariDoldur(sifatIdListesi) {
     : [];
   const dizi = kisitli.length ? kisitli : tum;   // eşleşme yoksa güvenli geri dönüş
   doldurSel('sIkSifat', dizi, '— Seçiniz —');
-  if (kisitli.length === 1) $('sIkSifat').value = String(kisitli[0].id);
+  // HKS sitesindeki gibi: sorgu sonrası sıfat otomatik gelir (ilki seçilir,
+  // birden fazlaysa kullanıcı listeden değiştirebilir).
+  if (kisitli.length) $('sIkSifat').value = String(kisitli[0].id);
 }
 
 // İşletme türü adına göre hangi işyeri servisinin sorgulanacağını belirler (docx).
