@@ -5552,3 +5552,46 @@ html[data-theme="dark"] body.print-mode {
 }
 .tema-dongu:hover { background: rgba(255,255,255,.2); }
 @media print { .tema-secim, .tema-dongu { display: none !important; } }
+
+/* =========================================================
+   KOYU TEMA v2 — okunabilirlik düzeltmeleri (kullanıcı geri bildirimi)
+   Hardcoded açık arka planlı bileşenler: tablolar, düz butonlar,
+   filtre hapları, kayıt görüntüleme kağıdı, rapor rozetleri.
+   ========================================================= */
+
+/* — Tablolar: beyaz gövde → kart yüzeyi — */
+html[data-theme="dark"] .table-wrap { background: var(--card); }
+html[data-theme="dark"] .data-table tr:hover td { background: #1b2430; }
+html[data-theme="dark"] .data-table tbody th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] .th-sort-active { background: #1a2740 !important; }
+html[data-theme="dark"] .rpt-table .totals-row td,
+html[data-theme="dark"] .rpt-table tfoot td { background: #1a2331; }
+
+/* — Düz (beyaz) butonlar — renkli varyantlar hariç — */
+html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-ghost):not(.btn-durum-islendi):not(.btn-durum-yuklendi) {
+    background: #1d2635; color: var(--text); border-color: var(--border-strong);
+}
+html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-ghost):not(.btn-durum-islendi):not(.btn-durum-yuklendi):hover {
+    background: #243044;
+}
+
+/* — Filtre hapları (Bugün / Bu hafta / İşlendi ...) — */
+html[data-theme="dark"] .pill { background: #1d2635; }
+html[data-theme="dark"] .durum-opt-active.durum-opt-beklemede { background: #1d2635; }
+
+/* — Kayıt görüntüleme "kağıdı" ve yan panelleri (ekranda koyu kart;
+     @media print kuralları yazdırmada zaten beyaza zorlar) — */
+html[data-theme="dark"] .print-sheet { background: var(--card); }
+html[data-theme="dark"] .rv-materials-col { background: var(--card); }
+html[data-theme="dark"] .pf-dara { background: #1b2430; }
+
+/* — Rapor rozetleri: pastel → koyu ton — */
+html[data-theme="dark"] .rpt-badge.badge-islendi  { background: #3a2c0a; color: #fbbf24; }
+html[data-theme="dark"] .rpt-badge.badge-yuklendi { background: #0d3327; color: #34d399; }
+html[data-theme="dark"] .dr-type-x { background: #17263d; color: #7db2ff; }
+html[data-theme="dark"] .dr-type-z { background: #12301e; color: #4ade80; }
+
+/* — Stok kritik satırı + toplu beyan kutusu — */
+html[data-theme="dark"] .dkk-row-kritik { background: #2e1a1a; }
+html[data-theme="dark"] #beyanBulkPreview { background: var(--card); }
+html[data-theme="dark"] .beyan-bulk-head { background: #1a2740; }
