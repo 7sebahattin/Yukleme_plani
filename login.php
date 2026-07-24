@@ -54,6 +54,21 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
     <meta name="csrf-token" content="<?= h($csrf) ?>">
     <meta name="theme-color" content="#1d6cf0">
     <title>Giriş · Asya Fresh</title>
+    <script>
+    /* Tema — render_header kullanmayan sayfa: aynı anahtar (asya_tema) uygulanır */
+    (function () {
+        function uygula() {
+            var t; try { t = localStorage.getItem('asya_tema') || 'sistem'; } catch (e) { t = 'sistem'; }
+            var koyu = t === 'koyu' || (t === 'sistem' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-theme', koyu ? 'dark' : 'light');
+        }
+        uygula();
+        try {
+            matchMedia('(prefers-color-scheme: dark)').addEventListener('change', uygula);
+            window.addEventListener('storage', function (e) { if (e.key === 'asya_tema') uygula(); });
+        } catch (e) {}
+    })();
+    </script>
     <link rel="stylesheet" href="assets/style.css?v=<?= $css_v ?>">
     <style>
         html, body {
