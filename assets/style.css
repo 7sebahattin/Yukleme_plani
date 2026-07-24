@@ -5595,3 +5595,69 @@ html[data-theme="dark"] .dr-type-z { background: #12301e; color: #4ade80; }
 html[data-theme="dark"] .dkk-row-kritik { background: #2e1a1a; }
 html[data-theme="dark"] #beyanBulkPreview { background: var(--card); }
 html[data-theme="dark"] .beyan-bulk-head { background: #1a2740; }
+
+/* =========================================================
+   KOYU TEMA v3 — sistematik tarama: token-metinli açık yüzeyler
+   (arka plan hardcoded açık + metin var(--text)/var(--muted) olan
+   tüm bileşenler). print-mode sayfaları bilinçli KAPSAM DIŞI.
+   ========================================================= */
+
+/* — Form vurgulu girişler (kayıt formu) — */
+html[data-theme="dark"] body:not(.print-mode) input.kasa-adeti { background: #182740; }
+html[data-theme="dark"] body:not(.print-mode) input.brut-kg   { background: #2b2410; }
+html[data-theme="dark"] body:not(.print-mode) .brand-seg-opt.active,
+html[data-theme="dark"] body:not(.print-mode) .brand-seg-opt:has(input:checked) {
+    background: #1a2740; color: var(--text);
+}
+
+/* — Görüntüleme kartları / malzeme blokları — */
+html[data-theme="dark"] body:not(.print-mode) .view-card { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .vc-materials,
+html[data-theme="dark"] body:not(.print-mode) .materials-block { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .ym-hint { background: #1a2331; }
+
+/* — Kantar (grup hesap / tartım) — */
+html[data-theme="dark"] body:not(.print-mode) .grup-row-inputs,
+html[data-theme="dark"] body:not(.print-mode) .grup-sapma-row,
+html[data-theme="dark"] body:not(.print-mode) .kantar-tartim-row { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .grup-calc-bar,
+html[data-theme="dark"] body:not(.print-mode) .kv-grup-table tfoot td { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .grup-sum-row,
+html[data-theme="dark"] body:not(.print-mode) .grup-ozel-inputs { background: #1a2740; }
+
+/* — Tanımlar (def3) — */
+html[data-theme="dark"] body:not(.print-mode) .def3-field select:disabled { background: #1b2430; }
+html[data-theme="dark"] body:not(.print-mode) .def3-color-row input[type="color"] { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .def3-panel-meta { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .def3-tab { background: #1d2635; }
+html[data-theme="dark"] body:not(.print-mode) .def3-tab:hover,
+html[data-theme="dark"] body:not(.print-mode) .def3-tgroup-add:hover { background: #1a2740; }
+html[data-theme="dark"] body:not(.print-mode) .def3-row { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .def3-row:hover { background: #1b2430; }
+html[data-theme="dark"] body:not(.print-mode) .def3-row.sel { background: #1a2740; }
+html[data-theme="dark"] body:not(.print-mode) .def3-chip,
+html[data-theme="dark"] body:not(.print-mode) .def3-ro-chip { background: #232d3c; }
+
+/* — Hesap / Stok / Malzeme Stok — */
+html[data-theme="dark"] body:not(.print-mode) .hesap-stat { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .hesap-stat.blue { background: #16233a; }
+html[data-theme="dark"] body:not(.print-mode) .dkk-detail-group { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .dkk-detail-group-head { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .hd-select,
+html[data-theme="dark"] body:not(.print-mode) .hd-input { background: #101722; color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) .ms-tab-btn:hover { background: #1a2740; }
+html[data-theme="dark"] body:not(.print-mode) .ms-tab-btn.ms-tab-active,
+html[data-theme="dark"] body:not(.print-mode) .ms-form-tabs .ms-tab-btn.ms-tab-active { background: var(--card); color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) .ms-action-card .form-control { background: #101722; color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) .ms-last-hint-panel { background: #1a2331; }
+
+/* — Beyanlar — */
+html[data-theme="dark"] body:not(.print-mode) .beyan-card,
+html[data-theme="dark"] body:not(.print-mode) .beyan-section,
+html[data-theme="dark"] body:not(.print-mode) .beyan-match-dialog { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .beyan-collapsible-body,
+html[data-theme="dark"] body:not(.print-mode) .beyan-bulk-item { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-match-table thead th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] body:not(.print-mode) .beyan-match-row:hover { background: #1b2430; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed td,
+html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed th { background: #2b2410; }
