@@ -5428,3 +5428,127 @@ body:not(.print-mode) {
 @media print {
     body { background: #fff !important; }
 }
+
+/* =========================================================
+   TEMA SİSTEMİ — Açık / Koyu / Sistem (asya_tema)
+   ---------------------------------------------------------
+   html[data-theme] helpers.php head script'i ile CSS'ten önce
+   set edilir (FOUC yok). Koyu tema = token override + hardcoded
+   yüzeylerin hedefli düzeltmesi. Additive katman: açık tema ve
+   print çıktısı birebir korunur.
+   ========================================================= */
+
+/* — Koyu tema token'ları — */
+html[data-theme="dark"] {
+    --bg: #0f141b;
+    --card: #161d27;
+    --border: #273140;
+    --border-strong: #3a4658;
+    --text: #e7ecf4;
+    --muted: #93a0b4;
+    --primary: #4d8dff;
+    --primary-dark: #2f6fe0;
+    --primary-soft: #1a2740;
+    --danger: #f06b64;
+    --danger-soft: #34201f;
+    --success: #2ecc8f;
+    --success-soft: #14302a;
+    --warn: #e6a93c;
+    --warn-soft: #332916;
+    --shadow:    0 1px 2px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.4);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-md: 0 4px 10px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.3);
+    --shadow-lg: 0 10px 28px rgba(0,0,0,.55), 0 4px 10px rgba(0,0,0,.35);
+    --ring: 0 0 0 3px rgba(77,141,255,.28);
+    color-scheme: dark;
+}
+
+/* — Chrome yüzeyleri: topbar/sidebar/bottomnav açıkta lacivert (var(--text))
+     kullanır; koyu temada --text açık renge döndüğü için sabitlenir — */
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .bottomnav { background: #121924; }
+@media (min-width: 900px) {
+    html[data-theme="dark"] .desktop-sidebar { background: #121924; box-shadow: 2px 0 10px rgba(0,0,0,.45); }
+}
+
+/* — Form kontrolleri (açıkta hardcoded #fff) — */
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="search"],
+html[data-theme="dark"] input[type="tel"],
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="email"],
+html[data-theme="dark"] input[type="password"],
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+    background: #101722; color: var(--text); border-color: var(--border-strong);
+}
+html[data-theme="dark"] ::placeholder { color: #64718a; }
+
+/* — Tablolar — */
+html[data-theme="dark"] .data-table th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] .data-table td { border-color: var(--border); }
+
+/* — Sık kullanılan hardcoded-açık yüzeyler — */
+html[data-theme="dark"] .empty,
+html[data-theme="dark"] .record-card,
+html[data-theme="dark"] .pallet-row,
+html[data-theme="dark"] .def-card,
+html[data-theme="dark"] .lock-banner { background: var(--card); }
+html[data-theme="dark"] .pill:not(.active):hover { background: #1b2432; }
+html[data-theme="dark"] .ms-sug-list { background: var(--card); border-color: var(--border); }
+html[data-theme="dark"] .ms-sug-row { color: var(--text); border-bottom-color: #202a38; }
+html[data-theme="dark"] .ms-sug-row:hover,
+html[data-theme="dark"] .ms-sug-row.active { background: #1a2740; }
+
+/* — Modal / overlay kutuları — */
+html[data-theme="dark"] .ym-box,
+html[data-theme="dark"] .pm-dialog,
+html[data-theme="dark"] .ms-edit-modal,
+html[data-theme="dark"] .hesap-crop-dialog { background: var(--card); color: var(--text); }
+
+/* — Durum satırları (islendi/yuklendi): açık pastel yerine koyu ton — */
+html[data-theme="dark"] .record-card.durum-islendi { background: #2b2410; }
+html[data-theme="dark"] .record-card.durum-yuklendi { background: #122b20; }
+html[data-theme="dark"] .data-table tr.tr-islendi > td { background: #2b2410; }
+html[data-theme="dark"] .data-table tr.tr-yuklendi > td { background: #122b20; }
+
+/* — Print sayfaları HER temada açık kalır (kağıt çıktısı bozulmaz) — */
+html[data-theme="dark"] body.print-mode {
+    --bg: #f4f6fa; --card: #ffffff; --border: #e3e7ee; --border-strong: #c7cdd9;
+    --text: #1c2230; --muted: #6b7385;
+    background: #fff; color-scheme: light;
+}
+
+/* =========================================================
+   TEMA SEÇİCİ — sidebar 3'lü segment + mobil topbar döngü butonu
+   ========================================================= */
+.tema-secim {
+    display: flex; gap: 6px;
+    margin: 10px 12px; padding: 4px;
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px;
+}
+.tema-secim button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 2px; border: 0; border-radius: 7px;
+    background: transparent; color: rgba(255,255,255,.75);
+    font-size: .68rem; font-weight: 700; cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+}
+.tema-secim button span { font-size: .95rem; line-height: 1; }
+.tema-secim button:hover { background: rgba(255,255,255,.1); color: #fff; }
+.tema-secim button.aktif { background: rgba(255,255,255,.16); color: #fff; }
+
+.tema-dongu {
+    flex-shrink: 0;
+    width: 34px; height: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,.3); border-radius: 50%;
+    background: rgba(255,255,255,.1); color: #fff;
+    font-size: .95rem; cursor: pointer;
+    transition: background .15s ease;
+}
+.tema-dongu:hover { background: rgba(255,255,255,.2); }
+@media print { .tema-secim, .tema-dongu { display: none !important; } }
