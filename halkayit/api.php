@@ -330,6 +330,31 @@ try {
       hks_json_cikti(['gonderilenler' => $liste]);
     }
 
+    // ---- BİLDİRİM SORGULAMA (yaptığım bildirimler) ----
+    case 'sorgu': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(180);
+      $ay = isset($g['aySayisi']) ? max(1, min(24, (int)$g['aySayisi'])) : 1;
+      $ham = null;
+      $liste = hks_yaptigim_bildirimler($cfg, $ay, $ham);
+      $out = ['bildirimler' => $liste, 'zaman' => date('c')];
+      if (!count($liste)) $out['ham'] = $ham;
+      hks_json_cikti($out);
+    }
+
+    // ---- BİLDİRİM ETİKET (2'li künye etiketleri) ----
+    case 'etiket': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(120);
+      $ham = null;
+      $liste = hks_etiketler($cfg, trim($g['tarih'] ?? ''), trim($g['plaka'] ?? ''), trim($g['belgeNo'] ?? ''), $ham);
+      $out = ['etiketler' => $liste];
+      if (!count($liste)) $out['ham'] = $ham;
+      hks_json_cikti($out);
+    }
+
     // ---- BİLDİRİM PAYLOAD ÖNİZLEME (dry-run: GÖNDERMEZ, sadece XML kurar) ----
     // İrreversible göndermeden önce yurt içi payload'ı gözle doğrulamak için.
     case 'bildirim_onizle': {

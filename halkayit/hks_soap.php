@@ -443,6 +443,123 @@ function hks_toplu_kunye($cfg, $tarih, $plaka = '', $belgeNo = '') {
   return $rows;
 }
 
+// ── Bildirim Sorgulama (yaptığım bildirimler) ─────────────────────────────
+// BildirimServisBildirimcininYaptigiBildirimListesi — bildirimcinin YAPTIĞI
+// bildirimleri tarih aralığıyla listeler (BildirimSorguIstek; 1 ay sınırına
+// tabi → pencere pencere). NOT: HKS web servislerinde bildirim İPTAL metodu
+// YOKTUR; iptal yalnız hks.hal.gov.tr sitesinden yapılabilir.
+function hks_yaptigim_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  // Alfabetik alan sırası (DataContract):
+  $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
+  $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>false</a:KalanMiktariSifirdanBuyukOlanlar>';
+  $p[] = '<a:KunyeNo>0</a:KunyeNo>';
+  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';
+  $p[] = '</Istek>';
+
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimcininYaptigiBildirimListesi',
+    hks_taban_istek('BaseRequestMessageOf_BildirimSorguIstek', implode('', $p), $cfg));
+  $duz  = hks_sadelestir($xml);
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($hata);
+
+  $rows = [];
+  foreach (hks_bloklar($duz, 'BildirimSorguDTO') as $b) {
+    $tarih = (string)hks_deger($b, 'BildirimTarihi');
+    if ($tarih === '') $tarih = (string)hks_deger($b, 'KayitTarihi');
+    $rows[] = [
+      'kunyeNo' => (string)hks_deger($b, 'KunyeNo'),
+      'tarih'   => substr($tarih, 0, 10),
+      'urun'    => trim((string)hks_deger($b, 'MalinAdi')),
+      'cins'    => trim((string)hks_deger($b, 'MalinCinsi')),
+      'miktar'  => (float)hks_deger($b, 'MalinMiktari'),
+      'kalan'   => (float)hks_deger($b, 'KalanMiktar'),
+      'birim'   => trim((string)hks_deger($b, 'MiktarBirimiAd')) ?: 'Kg',
+      'plaka'   => trim((string)hks_deger($b, 'AracPlakaNo')),
+      'belgeNo' => trim((string)hks_deger($b, 'BelgeNo')),
+    ];
+  }
+  return $rows;
+}
+
+function hks_yaptigim_bildirimler($cfg, $aySayisi = 1, &$ham = null) {
+  $ay = max(1, min(24, (int)$aySayisi));
+  $birlesik = [];
+  $bitis = new DateTime();
+  for ($i = 0; $i < $ay; $i++) {
+    $baslangic = hks_bir_ay_once($bitis);
+    foreach (hks_yaptigim_penceresi($cfg, $baslangic, $bitis) as $r) {
+      $k = $r['kunyeNo'] !== '' ? $r['kunyeNo'] : ('x' . $i . '_' . count($birlesik));
+      $birlesik[$k] = $r;
+    }
+    $bitis = $baslangic;
+  }
+  $ham = hks_son_ham(1200);
+  $sonuc = array_values($birlesik);
+  usort($sonuc, function ($a, $b) { return strcmp($b['tarih'], $a['tarih']); }); // yeni → eski
+  return $sonuc;
+}
+
+// ── Bildirim Etiket (2'li künye etiketleri) ───────────────────────────────
+// BildirimServisBildirimEtiket — daha önce girilmiş 2'li künyeleri etiket
+// formunda toplu basım için sorgular. Kural (docx): MalinSahibiTcKimlikVergiNo
+// ve BildirimTarihi zorunlu; AracPlakaNo/BelgeNo'dan en az biri dolu olmalı.
+function hks_etiketler($cfg, $tarih, $plaka = '', $belgeNo = '', &$ham = null) {
+  $tarih   = trim((string)$tarih);
+  $plaka   = trim((string)$plaka);
+  $belgeNo = trim((string)$belgeNo);
+  if ($tarih === '') throw new Exception('Bildirim tarihi zorunludur.');
+  if ($plaka === '' && $belgeNo === '') throw new Exception('Araç plakası veya belge no girilmelidir.');
+
+  $td = DateTime::createFromFormat('Y-m-d', substr($tarih, 0, 10)) ?: null;
+  $tarihXml = $td ? $td->format('Y-m-d\T00:00:00') : $tarih;
+
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  // Alfabetik: AracPlakaNo, BelgeNo, BildirimTarihi, MalinSahibiTcKimlikVergiNo.
+  // String alanlar boş da olsa gönderilir (TopluKunye'deki null-ref dersinden).
+  $p[] = '<a:AracPlakaNo>' . hks_esc(strtoupper($plaka)) . '</a:AracPlakaNo>';
+  $p[] = '<a:BelgeNo>' . hks_esc($belgeNo) . '</a:BelgeNo>';
+  $p[] = '<a:BildirimTarihi>' . $tarihXml . '</a:BildirimTarihi>';
+  $p[] = '<a:MalinSahibiTcKimlikVergiNo>' . hks_esc($cfg['vergiNo']) . '</a:MalinSahibiTcKimlikVergiNo>';
+  $p[] = '</Istek>';
+
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimEtiket',
+    hks_taban_istek('BaseRequestMessageOf_BildirimEtiketIstek', implode('', $p), $cfg));
+  $duz  = hks_sadelestir($xml);
+  $ham  = preg_replace('/\s+/', ' ', substr($duz, 0, 1600));
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception('BildirimEtiket: ' . $hata . ' || HAM: ' . $ham);
+
+  // DTO etiketi belirsiz olabilir → önce BildirimEtiketDTO, yoksa EtiketDTO dene.
+  $bloklar = hks_bloklar($duz, 'BildirimEtiketDTO');
+  if (!count($bloklar)) $bloklar = hks_bloklar($duz, 'EtiketDTO');
+
+  $rows = [];
+  foreach ($bloklar as $b) {
+    $kunye = (string)hks_deger($b, 'MalinKunyeNo');
+    if ($kunye === '') $kunye = (string)hks_deger($b, 'KunyeNo');
+    $miktar = hks_deger($b, 'MalinMiktar');
+    if ($miktar === null) $miktar = hks_deger($b, 'MalinMiktari');
+    $birim = trim((string)hks_deger($b, 'MiktarBirimAd'));
+    if ($birim === '') $birim = trim((string)hks_deger($b, 'MiktarBirimiAd'));
+    $sahibi = hks_deger($b, 'MalinSahibAdi');
+    if ($sahibi === null || $sahibi === '') $sahibi = hks_deger($b, 'MalinSahibiAdi');
+    $rows[] = [
+      'kunyeNo'   => $kunye,
+      'urun'      => trim((string)hks_deger($b, 'MalinAdi')),
+      'miktar'    => (float)$miktar,
+      'birim'     => $birim !== '' ? $birim : 'Kg',
+      'sahibi'    => trim((string)$sahibi),
+      'bildirimci'=> trim((string)hks_deger($b, 'Bildirimci')),
+      'plaka'     => trim((string)hks_deger($b, 'AracPlakaNo')),
+      'belgeNo'   => trim((string)hks_deger($b, 'BelgeNo')),
+      'tarih'     => substr((string)hks_deger($b, 'KayitTarihi'), 0, 10),
+    ];
+  }
+  return $rows;
+}
+
 // ── Yurt İçi Adres / Kişi Referansları (Sevk Etme + yurt içi satış için) ────
 // Bu servislerin tamamı SALT-OKUNUR'dur: bildirim OLUŞTURMAZ, rüsum doğurmaz.
 // Yalnızca il/ilçe/belde/işyeri listeler ve TC/VKN doğrular. Bu yüzden canlı

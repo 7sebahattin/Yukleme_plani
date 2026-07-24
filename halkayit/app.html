@@ -423,23 +423,21 @@
       <summary>📋 Bildirim İşlemleri <span class="ok">▾</span></summary>
       <div class="grup-liste">
         <button type="button" id="btnEBildirimGrup">📤 Bildirim Yap</button>
-        <button type="button">🔍 Bildirim Sorgulama / İptal</button>
-        <button type="button">🏷️ Bildirim Etiket Basım</button>
-        <button type="button">🗑️ e Fire Bildirim</button>
-        <button type="button">✅ Güvenilir Bildirimci Listesi</button>
-        <button type="button">🚫 Engellenen Bildirimci Listesi</button>
+        <button type="button" id="btnSorgu">🔍 Bildirim Sorgulama</button>
+        <button type="button" id="btnEtiket">🏷️ Bildirim Etiket Basım</button>
+        <!-- e Fire / Güvenilir / Engellenen Bildirimci: HKS web servislerinde
+             karşılığı YOK (yalnız hks.hal.gov.tr sitesinde) — menüden kaldırıldı. -->
       </div>
     </details>
 
     <details class="grup">
       <summary>📊 Raporlama İşlemleri <span class="ok">▾</span></summary>
       <div class="grup-liste">
-        <button type="button">🕓 Geçmiş Dönem Borçları</button>
         <button type="button" id="btnStok">📦 Stok Sorgulama</button>
-        <button type="button">💳 Borç Sorgulama</button>
-        <button type="button">🧾 Satış Bordrosu Çıkar</button>
-        <button type="button">💰 Rüsum Sorgulama</button>
         <button type="button" id="btnTopluKunye">🖨️ Bildirim Çoklu Künye Basım</button>
+        <!-- Geçmiş Dönem Borçları / Borç / Bordro / Rüsum Sorgulama: HKS web
+             servislerinde karşılığı YOK — menüden kaldırıldı. Rüsum, gönderim
+             cevabında döner ve Gönderilenler kartlarında gösterilir. -->
       </div>
     </details>
 
@@ -667,6 +665,71 @@
   </main>
 </div>
 
+<!-- ============ EKRAN: BİLDİRİM SORGULAMA ============ -->
+<div id="ekranSorgu" class="gizli">
+  <div class="ustbar">
+    <button class="geri" id="btnSorguGeri">‹</button>
+    <div class="baslik">🔍 Bildirim Sorgulama</div>
+  </div>
+  <main>
+    <div class="tk-form">
+      <div class="satir2">
+        <div>
+          <label>Dönem</label>
+          <select id="sgAy">
+            <option value="1" selected>Son 1 ay</option>
+            <option value="3">Son 3 ay</option>
+            <option value="6">Son 6 ay</option>
+            <option value="12">Son 1 yıl</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn btn-teal" id="btnSorgula" style="margin-top:0">🔍 Sorgula</button>
+        </div>
+      </div>
+      <div class="mesaj" id="sgMesaj"></div>
+      <p style="font-size:11.5px;color:var(--soluk);margin-top:8px">
+        Not: Bildirim <b>iptali</b> HKS web servislerinde sunulmuyor — iptal yalnız
+        hks.hal.gov.tr sitesinden yapılabilir.
+      </p>
+    </div>
+    <div class="stok-ozet" id="sgOzet"></div>
+    <div id="sgSonucSarma"></div>
+  </main>
+</div>
+
+<!-- ============ EKRAN: BİLDİRİM ETİKET BASIM ============ -->
+<div id="ekranEtiket" class="gizli">
+  <div class="ustbar">
+    <button class="geri" id="btnEtiketGeri">‹</button>
+    <div class="baslik">🏷️ Bildirim Etiket Basım</div>
+  </div>
+  <main>
+    <div class="tk-form">
+      <div class="satir2">
+        <div>
+          <label class="label-vurgu">Araç Plaka</label>
+          <input id="etPlaka" class="input-turuncu" placeholder="Plaka giriniz.." style="text-transform:uppercase" autocomplete="off">
+        </div>
+        <div>
+          <label>Tarih</label>
+          <input id="etTarih" type="date">
+        </div>
+      </div>
+      <label style="margin-top:10px">Belge No (plaka yoksa)</label>
+      <input id="etBelge" autocomplete="off" placeholder="İrsaliye / beyanname no">
+      <button class="btn btn-teal" id="btnEtiketSorgula">🔍 Sorgula</button>
+      <div class="mesaj" id="etMesaj"></div>
+    </div>
+    <div class="tk-sonuc-bar gizli" id="etSonucBar">
+      <div class="tk-sonuc-ozet" id="etOzet"></div>
+      <button class="btn btn-ana tk-yazdir-btn" id="btnEtiketYazdir">🖨️ Etiketleri Yazdır</button>
+    </div>
+    <div id="etSonucSarma"></div>
+  </main>
+</div>
+
 <!-- Alt çubuk (bildirim ekranı) -->
 <div class="ozet gizli" id="ozet">
   <div>
@@ -774,6 +837,8 @@ const API_ROTA = {
   'POST /api/ilceler': 'ilceler',
   'POST /api/beldeler': 'beldeler',
   'POST /api/bildirim_onizle': 'bildirim_onizle',
+  'POST /api/sorgu': 'sorgu',
+  'POST /api/etiket': 'etiket',
 };
 async function api(yol, metod, govde) {
   metod = metod || 'GET';
@@ -806,7 +871,7 @@ function toast(metin) {
 }
 
 function ekranGoster(ad) {
-  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu']
+  ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu', 'ekranSorgu', 'ekranEtiket']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
@@ -1030,6 +1095,130 @@ async function topluSorgulaCalistir(firmaIdOverride) {
   $('btnTopluSorgula').disabled = false; $('btnTopluSorgula').textContent = '🔍 Sorgula';
 }
 $('btnTopluSorgula').onclick = () => topluSorgulaCalistir();
+
+// ================= BİLDİRİM SORGULAMA (yaptığım bildirimler) =================
+$('btnSorgu').onclick = () => { ekranGoster('ekranSorgu'); };
+$('btnSorguGeri').onclick = () => ekranGoster('ekranMenu');
+
+$('btnSorgula').onclick = async () => {
+  if (!aktifFirma) return;
+  $('btnSorgula').disabled = true; $('btnSorgula').textContent = '⏳ Sorgulanıyor...';
+  $('sgMesaj').className = 'mesaj';
+  $('sgOzet').textContent = ''; $('sgSonucSarma').innerHTML = '<div class="yukleniyor">Sorgulanıyor...</div>';
+  try {
+    const j = await api('/api/sorgu', 'POST', { firmaId: aktifFirma.id, aySayisi: parseInt($('sgAy').value, 10) });
+    const liste = j.bildirimler || [];
+    if (!liste.length) {
+      $('sgSonucSarma').innerHTML = '<div class="yukleniyor">Bu dönemde bildirim bulunamadı.</div>';
+    } else {
+      const topKg = liste.reduce((t, s) => t + Number(s.miktar || 0), 0);
+      $('sgOzet').innerHTML = `<b>${liste.length}</b> bildirim · Toplam <b>${fmt(topKg)} KG</b>`;
+      let h = '<div class="tk-tablo-sarma"><table class="tk-tablo"><thead><tr>' +
+        '<th>Tarih</th><th>Künye No</th><th>Ürün</th><th class="sag">Miktar</th>' +
+        '<th class="sag">Kalan</th><th>Plaka/Belge</th></tr></thead><tbody>';
+      liste.forEach(s => {
+        h += '<tr>' +
+          `<td>${eHtml(s.tarih)}</td>` +
+          `<td><b>${eHtml(s.kunyeNo)}</b></td>` +
+          `<td>${urunIkonu(s.urun)} ${eHtml(s.urun)}${s.cins ? ' · ' + eHtml(s.cins) : ''}</td>` +
+          `<td class="sag">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` +
+          `<td class="sag">${fmt(s.kalan)}</td>` +
+          `<td>${eHtml(s.plaka || s.belgeNo || '—')}</td>` +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      $('sgSonucSarma').innerHTML = h;
+    }
+  } catch (e) {
+    mesajGoster('sgMesaj', e.message, 'hata');
+    $('sgSonucSarma').innerHTML = '';
+  }
+  $('btnSorgula').disabled = false; $('btnSorgula').textContent = '🔍 Sorgula';
+};
+
+// ================= BİLDİRİM ETİKET BASIM =================
+let etiketSonuc = [];
+
+$('btnEtiket').onclick = () => {
+  ekranGoster('ekranEtiket');
+  if (!$('etTarih').value) $('etTarih').value = new Date().toISOString().slice(0, 10);
+};
+$('btnEtiketGeri').onclick = () => ekranGoster('ekranMenu');
+
+$('btnEtiketSorgula').onclick = async () => {
+  if (!aktifFirma) return;
+  const plaka = $('etPlaka').value.trim().toUpperCase();
+  const belge = $('etBelge').value.trim();
+  const tarih = $('etTarih').value;
+  if (!tarih) { mesajGoster('etMesaj', 'Tarih seçiniz.', 'hata'); return; }
+  if (!plaka && !belge) { mesajGoster('etMesaj', 'Araç plakası veya belge no giriniz.', 'hata'); return; }
+  $('btnEtiketSorgula').disabled = true; $('btnEtiketSorgula').textContent = '⏳ Sorgulanıyor...';
+  $('etMesaj').className = 'mesaj';
+  try {
+    const j = await api('/api/etiket', 'POST', { firmaId: aktifFirma.id, plaka, belgeNo: belge, tarih });
+    etiketSonuc = j.etiketler || [];
+    const kap = $('etSonucSarma'), oz = $('etOzet');
+    if (!etiketSonuc.length) {
+      oz.textContent = '';
+      kap.innerHTML = '<div class="yukleniyor">Bu kritere uygun etiket bulunamadı.' +
+        (j.ham ? '<br><small style="word-break:break-all">' + eHtml(String(j.ham).slice(0, 400)) + '</small>' : '') + '</div>';
+      $('etSonucBar').classList.add('gizli');
+    } else {
+      const topKg = etiketSonuc.reduce((t, s) => t + Number(s.miktar || 0), 0);
+      oz.innerHTML = `<b>${etiketSonuc.length}</b> etiket · Toplam <b>${fmt(topKg)} KG</b>`;
+      let h = '<div class="tk-tablo-sarma"><table class="tk-tablo"><thead><tr>' +
+        '<th>Künye No</th><th>Malın Adı</th><th class="sag">Miktar</th><th>Malın Sahibi</th><th>Tarih</th></tr></thead><tbody>';
+      etiketSonuc.forEach(s => {
+        h += '<tr>' +
+          `<td><b>${eHtml(s.kunyeNo)}</b></td>` +
+          `<td>${eHtml(s.urun)}</td>` +
+          `<td class="sag">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` +
+          `<td>${eHtml(s.sahibi || s.bildirimci || '—')}</td>` +
+          `<td>${eHtml(s.tarih)}</td>` +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      kap.innerHTML = h;
+      $('etSonucBar').classList.remove('gizli');
+    }
+  } catch (e) {
+    mesajGoster('etMesaj', e.message, 'hata');
+    $('etOzet').textContent = ''; $('etSonucSarma').innerHTML = '';
+    $('etSonucBar').classList.add('gizli');
+  }
+  $('btnEtiketSorgula').disabled = false; $('btnEtiketSorgula').textContent = '🔍 Sorgula';
+};
+
+// Etiket yazdırma: 2 sütunlu etiket kartları — büyük QR + künye + ürün + sahibi.
+$('btnEtiketYazdir').onclick = () => {
+  if (!etiketSonuc.length) return;
+  const kartlar = etiketSonuc.map(s => {
+    const qr = kunyeQrDataUrl(s.kunyeNo);
+    return '<div class="etk">' +
+      (qr ? `<img src="${qr}" width="120" height="120" alt="">` : '') +
+      `<div class="etk-no">${eHtml(s.kunyeNo)}</div>` +
+      `<div class="etk-urun">${eHtml(s.urun)} — <b>${fmt(s.miktar)} ${eHtml(s.birim)}</b></div>` +
+      `<div class="etk-alt">${eHtml(s.sahibi || s.bildirimci || '')}</div>` +
+      `<div class="etk-alt">${eHtml(s.plaka || s.belgeNo || '')} · ${eHtml(s.tarih)}</div>` +
+      '</div>';
+  }).join('');
+  const w = window.open('', '_blank');
+  if (!w) { toast('Açılır pencere engellendi'); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Künye Etiketleri</title><style>' +
+    'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:10mm;color:#111}' +
+    '.sarma{display:grid;grid-template-columns:1fr 1fr;gap:8mm}' +
+    '.etk{border:1.5px solid #333;border-radius:8px;padding:6mm;text-align:center;page-break-inside:avoid}' +
+    '.etk img{display:block;margin:0 auto 3mm}' +
+    '.etk-no{font-weight:800;font-size:13px;word-break:break-all}' +
+    '.etk-urun{font-size:13px;margin-top:2mm}' +
+    '.etk-alt{font-size:11px;color:#444;margin-top:1mm}' +
+    '.yzbtn{position:fixed;top:8px;right:8px;padding:8px 16px;font-size:14px;cursor:pointer}' +
+    '@media print{.yzbtn{display:none}}</style></head><body>' +
+    '<button class="yzbtn" onclick="print()">🖨️ Yazdır</button>' +
+    '<div class="sarma">' + kartlar + '</div></body></html>');
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+};
 
 // Künye numarasından QR (data-URI) üret — HKS etiketleriyle aynı biçim (numara kodlanır)
 function kunyeQrDataUrl(text) {
