@@ -284,6 +284,12 @@ function render_desktop_sidebar(string $base): void {
              aktif-sayfa değişkenleri de bu yüzden burada bilinçli kullanılmıyor. -->
     </nav>
 
+    <div class="tema-secim" role="group" aria-label="Tema seçimi">
+        <button type="button" data-tema="acik"   onclick="asyaTemaSec('acik')"><span>☀️</span>Açık</button>
+        <button type="button" data-tema="koyu"   onclick="asyaTemaSec('koyu')"><span>🌙</span>Koyu</button>
+        <button type="button" data-tema="sistem" onclick="asyaTemaSec('sistem')"><span>🖥️</span>Sistem</button>
+    </div>
+
     <?php if (function_exists('current_user') && ($__su = current_user()) !== null): ?>
     <div class="sidebar-user">
         <div class="sidebar-user-info">
@@ -319,6 +325,41 @@ function render_header(string $title, bool $print_mode = false): void {
     <link rel="manifest" href="<?= $base ?>manifest.json">
     <link rel="apple-touch-icon" href="<?= $base ?>assets/logo.jpg">
     <title><?= h($title) ?> · Asya Fresh</title>
+    <script>
+    /* Tema (Açık/Koyu/Sistem) — CSS yüklenmeden ÖNCE uygulanır (beyaz parlama olmaz).
+       localStorage 'asya_tema' ∈ acik|koyu|sistem. halkayit iframe'i aynı anahtarı
+       okur; storage olayı ile tüm sekmeler/iframe'ler anında senkron değişir. */
+    (function () {
+        function oku() { try { return localStorage.getItem('asya_tema') || 'sistem'; } catch (e) { return 'sistem'; } }
+        function uygula() {
+            var t = oku();
+            var koyu = t === 'koyu' || (t === 'sistem' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-theme', koyu ? 'dark' : 'light');
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', koyu ? '#10151c' : '#1d6cf0');
+            /* Seçici butonlarının aktif durumu */
+            document.querySelectorAll('[data-tema]').forEach(function (b) {
+                b.classList.toggle('aktif', b.getAttribute('data-tema') === t);
+            });
+            var d = document.getElementById('temaDongu');
+            if (d) d.textContent = t === 'acik' ? '☀️' : (t === 'koyu' ? '🌙' : '🖥️');
+        }
+        window.asyaTemaSec = function (t) {
+            try { localStorage.setItem('asya_tema', t); } catch (e) {}
+            uygula();
+        };
+        window.asyaTemaDondur = function () {
+            var sira = ['sistem', 'acik', 'koyu'];
+            window.asyaTemaSec(sira[(sira.indexOf(oku()) + 1) % 3]);
+        };
+        uygula();
+        try {
+            matchMedia('(prefers-color-scheme: dark)').addEventListener('change', uygula);
+            window.addEventListener('storage', function (e) { if (e.key === 'asya_tema') uygula(); });
+            document.addEventListener('DOMContentLoaded', uygula); /* butonlar DOM'a gelince durumları işle */
+        } catch (e) {}
+    })();
+    </script>
     <link rel="stylesheet" href="<?= $base ?>assets/style.css?v=<?= filemtime(__DIR__ . '/../assets/style.css') ?>">
 </head>
 <?php
@@ -369,6 +410,8 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <?php endif; ?>
         </nav>
+        <button type="button" class="tema-dongu" id="temaDongu" onclick="asyaTemaDondur()"
+                title="Tema değiştir (Açık / Koyu / Sistem)" aria-label="Tema değiştir">🖥️</button>
         <?php if (function_exists('active_depot') && ($__adp = active_depot()) !== null): ?>
         <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
            class="depo-badge" title="Depo değiştir">
