@@ -236,7 +236,8 @@
   .taslak-kart .tk-baslik { display:flex; justify-content:space-between; font-weight:800; font-size:14px; color:var(--navy); }
   .taslak-kart .tk-zaman { font-size:11px; color:var(--soluk); font-weight:400; }
   .taslak-kart .tk-detay { font-size:13px; color:var(--metin); margin-top:8px; line-height:1.8; }
-  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .taslak-kart .tk-butonlar .btn { padding:12px 6px; font-size:13.5px; }
 
   /* Gönderilenler — tıklanabilir, genişleyen kart (Yüklemeler kart tasarımına benzer) */
   .gonderilen-liste { display:flex; flex-direction:column; gap:10px; }
@@ -790,6 +791,7 @@ let oto = { isletmeTuruId: 0 };
 let duzenlenenFirmaId = null;
 let seciliRenk = 'teal';
 let gonderilecekTaslakId = null;
+let duzenlenenTaslakId = null;   // Düzenle ile forma yüklenen taslak — kayıtta eskisi silinir
 
 const $ = (id) => document.getElementById(id);
 const trNorm = (s) => (s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
@@ -1311,6 +1313,7 @@ function formuTemizle() {
   $('sIlce').innerHTML = '<option value="">— önce il —</option>';
   $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
   ikDogrulandi = null;
+  duzenlenenTaslakId = null;
   kunyeler = [];
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
@@ -1841,7 +1844,15 @@ $('btnTaslakKaydet').onclick = async () => {
       satirlar: satirlar.map(s => ({ kunyeNo: s.kunyeNo, miktar: s.miktar })),
       ortak,
     });
-    toast('💾 Taslak kaydedildi');
+    // Düzenleme modu: yeni taslak başarıyla kaydedildi → eski kopyayı sil.
+    if (duzenlenenTaslakId) {
+      try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); }
+      catch (e) { /* silinemezse kopya kalır — kullanıcı listeden silebilir */ }
+      toast('💾 Taslak güncellendi');
+      duzenlenenTaslakId = null;
+    } else {
+      toast('💾 Taslak kaydedildi');
+    }
     formuTemizle();
     taslakEkraniAc();
   } catch (e) { alert('HATA: ' + e.message); }
@@ -1878,12 +1889,16 @@ async function taslakEkraniAc() {
         `</div>` +
         `<div class="tk-butonlar">` +
         `<button class="btn btn-amber" data-gonder="${t.id}" style="margin-top:10px">📤 Gönder</button>` +
+        `<button class="btn btn-soluk" data-duzenle="${t.id}" style="margin-top:10px">✏️ Düzenle</button>` +
         `<button class="btn btn-soluk" data-sil="${t.id}" style="margin-top:10px;color:var(--hata-tx)">🗑️ Sil</button>` +
         `</div>`;
       kap.appendChild(div);
     });
     kap.querySelectorAll('[data-gonder]').forEach(b => {
       b.onclick = () => taslakOnayAc(taslaklar.find(t => t.id === b.dataset.gonder));
+    });
+    kap.querySelectorAll('[data-duzenle]').forEach(b => {
+      b.onclick = () => taslakDuzenle(taslaklar.find(t => t.id === b.dataset.duzenle));
     });
     kap.querySelectorAll('[data-sil]').forEach(b => {
       b.onclick = async () => {
@@ -1895,6 +1910,77 @@ async function taslakEkraniAc() {
   } catch (e) {
     kap.innerHTML = `<div class="kart"><div class="mesaj hata" style="display:block">${e.message}</div></div>`;
   }
+}
+
+// Taslağı forma geri yükle (düzenleme). Künyeler GÜNCEL sorgudan çekilir
+// (gerçek kalan görünür); taslak satırları listede işaretlenip miktarları yazılır.
+// Yeni "Taslağa Kaydet" başarılı olunca ESKİ taslak silinir (kopya kalmaz).
+async function taslakDuzenle(t) {
+  formuTemizle();                 // duzenlenenTaslakId'yi de sıfırlar — sonra set
+  duzenlenenTaslakId = t.id;
+  $('kart1Baslik').innerHTML = '1. <span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
+  ekranGoster('ekranBildirim');
+  await Promise.all([listeleriHazirla(), sonlariYukle()]);
+
+  const o = t.ortak || {};
+  if (o.sifatId)        $('sSifat').value = String(o.sifatId);
+  if (o.bildirimTuruId) $('sTur').value = String(o.bildirimTuruId);
+  $('oPlaka').value   = o.plaka || '';
+  $('oBelgeNo').value = o.belgeNo || '';
+  if (o.belgeTipiId && String(o.belgeTipiId) !== '0') $('sBelgeTipi').value = String(o.belgeTipiId);
+
+  if (o.yurtIci) {
+    // Yurt içi Satış'ta tik kaldırılmış olmalı (Sevk/Satın Alım türden bellidir)
+    if (!sevkModuMu() && !satinAlimModuMu()) $('chkYurtDisi').checked = false;
+    turDegisti();
+    $('oIkTc').value = o.ikinciTc || '';
+    $('oIkAd').value = o.ikinciAd || '';
+    if (o.ikinciCep) $('oIkCep').value = o.ikinciCep;
+    if (o.ikinciTc) await $('btnIkDogrula').onclick();     // GTB doğrulaması yeniden
+    if (o.ikinciSifatId) $('sIkSifat').value = String(o.ikinciSifatId);
+    if (o.isletmeTuruId) {
+      $('sIsletmeTuru').value = String(o.isletmeTuruId);
+      if (o.hedefAdres) {
+        await illeriYukleGerekiyorsa();
+        if (o.ilId)   { $('sIl').value = String(o.ilId);     await $('sIl').onchange(); }
+        if (o.ilceId) { $('sIlce').value = String(o.ilceId); await $('sIlce').onchange(); }
+        if (o.beldeId)  $('sBelde').value = String(o.beldeId);
+      } else {
+        await $('sIsletmeTuru').onchange();                // işyerlerini getir
+        if (o.gidecekIsyeriId) $('sIsyeri').value = String(o.gidecekIsyeriId);
+      }
+    }
+    if (o.fiyatGonder && o.fiyat) $('oFiyat').value = String(o.fiyat).replace('.', ',');
+  } else {
+    turDegisti();
+    if (o.ulkeId) $('sUlke').value = String(o.ulkeId);
+    if (o.fiyat)  $('oFiyat').value = String(o.fiyat).replace('.', ',');
+  }
+
+  // Ürün + künyeler: güncel sorgu → taslak satırlarını işaretle
+  if (o.urunId && String(o.urunId) !== '0') {
+    $('sUrun').value = String(o.urunId);
+    await $('btnKunyeler').onclick();
+    const kap = $('kunyeListe');
+    const bulunamayan = [];
+    (t.satirlar || []).forEach(s => {
+      const idx = kunyeler.findIndex(k => String(k.kunyeNo) === String(s.kunyeNo));
+      if (idx === -1) { bulunamayan.push(s.kunyeNo); return; }
+      const cb = kap.querySelector(`input[type=checkbox][data-i="${idx}"]`);
+      const mi = kap.querySelector(`input.miktar[data-i="${idx}"]`);
+      if (cb && mi) {
+        cb.checked = true; mi.disabled = false;
+        mi.value = String(s.miktar).replace('.', ',');
+        cb.closest('.kunye').classList.add('secili');
+      }
+    });
+    ozetGuncelle();
+    if (bulunamayan.length) {
+      mesajGoster('kunyeMesaj', '⚠️ Taslaktaki şu künyeler güncel listede yok (kalan bitmiş olabilir): ' +
+        bulunamayan.join(', '), 'hata');
+    }
+  }
+  toast('✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
 }
 
 function taslakOnayAc(t) {
