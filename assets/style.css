@@ -5661,3 +5661,108 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-match-table thead th { back
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-row:hover { background: #1b2430; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed td,
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed th { background: #2b2410; }
+
+/* =========================================================
+   KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,
+   record_view plan tablosu, rapor_malzeme, kantar_raporu, kantar_view,
+   audit, malzeme_stok(+rapor), yedekler, depo_sec, login).
+   html[data-theme] özgüllüğü inline sayfa stillerini ezer.
+   Yalnız EKRAN (@media screen) — yazdırma hiç etkilenmez.
+   ========================================================= */
+@media screen {
+
+/* — Global güvence: sayfa gövdesi inline #fff dese bile koyu kalır (depo tonu korunur) — */
+html[data-theme="dark"] body:not(.print-mode) {
+    background: linear-gradient(
+        rgba(var(--depot-accent-rgb), 0.045),
+        rgba(var(--depot-accent-rgb), 0.045)
+    ), var(--bg);
+}
+
+/* — Yüklemeler: genişleyen satır detayı — */
+html[data-theme="dark"] .rec-main-row:hover { background: #1b2430; }
+html[data-theme="dark"] .rec-row-expanded { background: #1a2740; }
+html[data-theme="dark"] .rec-detail-row > td { background: #1a2331; }
+html[data-theme="dark"] .rds-em-item { background: var(--card); border-color: var(--border); }
+
+/* — Kayıt görüntüleme: plan tablosu (ekran) — */
+html[data-theme="dark"] body:not(.print-mode) .print-table th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] body:not(.print-mode) .print-table .totals-row td { background: #2b2410; }
+html[data-theme="dark"] body:not(.print-mode) .data-table .totals-row td { background: #2b2410; }
+
+/* — Malzeme Kullanım Raporu (rapor_malzeme.php) — */
+html[data-theme="dark"] .mr-table th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] .mr-parti-row th { background: #161d27; color: var(--muted); }
+html[data-theme="dark"] .mr-table th.mr-total-col { background: #1f2a44; color: #a5b4fc; }
+html[data-theme="dark"] .mr-table td.mr-total-col { background: #1a2740; color: #a5b4fc; }
+
+/* — Kantar Raporu — */
+html[data-theme="dark"] .kr-stat-item { background: var(--card); }
+html[data-theme="dark"] .kr-row-tek { background: #16233a; }
+html[data-theme="dark"] .kr-row-grup-head { background: #2b2410; }
+html[data-theme="dark"] .kr-row-grup-item { background: #221d10; }
+html[data-theme="dark"] .kr-row-grup-item:hover { background: #2b2410; }
+html[data-theme="dark"] .kr-total-row { background: #1a2331; }
+html[data-theme="dark"] .kr-fo-card { background: var(--card); }
+html[data-theme="dark"] .kr-fo-total { background: #1a2331; }
+html[data-theme="dark"] .kr-depo-chip { background: #1f2a44; color: #a5b4fc; }
+html[data-theme="dark"] .kr-kp-chip { background: #232d3c; color: var(--text); }
+html[data-theme="dark"] .kr-tag-oto { background: #232d3c; color: var(--muted); }
+html[data-theme="dark"] .kr-sapma-uyari { background: #34201f; color: #f0938d; }
+
+/* — Kantar fiş görüntüleme (ekran) — */
+html[data-theme="dark"] body:not(.print-mode) .kv-photo-wrap { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .kv-grup-table th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] body:not(.print-mode) .kv-sapma-uyari { background: #34201f; color: #f0938d; }
+
+/* — İşlem Geçmişi (audit) — */
+html[data-theme="dark"] .au-risk { background: #2b2410; }
+html[data-theme="dark"] .au-fix { background: #16233a; }
+html[data-theme="dark"] .nmq-filters,
+html[data-theme="dark"] .al-filters,
+html[data-theme="dark"] .al-detail,
+html[data-theme="dark"] .nmq-sub summary { background: #1a2331; }
+html[data-theme="dark"] .nmq-btn { background: #1d2635; color: var(--text); }
+html[data-theme="dark"] .nmq-btn-ex:hover:not(:disabled),
+html[data-theme="dark"] .nmq-btn-rst:hover:not(:disabled) { background: #243044; }
+html[data-theme="dark"] tr[data-status=approved] { background: #122b20; }
+html[data-theme="dark"] tr[data-status=excluded] { background: #1a2331; }
+html[data-theme="dark"] .al-row-toggle:hover td { background: #1b2430; }
+
+/* — Malzeme Stok + Raporu — */
+html[data-theme="dark"] .stok-table thead tr,
+html[data-theme="dark"] .stok-table thead th { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] .rapor-btn { background: #1d2635; color: var(--text); }
+html[data-theme="dark"] .rapor-btn:hover { background: #243044; }
+html[data-theme="dark"] .rapor-btn-active { background: #1a2740; color: #a5b4fc; }
+html[data-theme="dark"] .rapor-filter-card { background: #1a2331; }
+html[data-theme="dark"] .rapor-fg select,
+html[data-theme="dark"] .rapor-fg input[type=text] { background: #101722; color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) table.print-table td.kalan-col { background: #16233a; }
+html[data-theme="dark"] body:not(.print-mode) table.print-table td.kalan-col.kalan-neg { background: #34201f; }
+html[data-theme="dark"] body:not(.print-mode) table.print-table td.kalan-col.kalan-sifir { background: #1a2331; color: var(--muted); }
+html[data-theme="dark"] body:not(.print-mode) tr.row-neg td { background: #2e1a1a; }
+
+/* — Rapor rozet tabanı + Veritabanı Yedekleri — */
+html[data-theme="dark"] .rpt-badge { background: #232d3c; }
+html[data-theme="dark"] .gl-mv-badge { background: #232d3c; }
+html[data-theme="dark"] .bkp-stat { background: #1a2331; }
+html[data-theme="dark"] table.bkp-table th { background: #1a2331; }
+
+/* — Depo Seçimi + Giriş (render_header'sız sayfalar; head'lerine tema
+     script'i eklendi; kart stilleri burada koyulaştırılır) — */
+html[data-theme="dark"] .dsc, html[data-theme="dark"] .lc { background: var(--card); }
+html[data-theme="dark"] .dsc-depo { background: #1a2331; color: var(--text); }
+html[data-theme="dark"] .dsc-depo:hover { background: #243044; }
+html[data-theme="dark"] .dsc-depo.aktif { background: #1a2740; }
+html[data-theme="dark"] .dsc-depo-rozet { background: #1f2a44; color: #7db2ff; }
+html[data-theme="dark"] .dsc-bos { background: #1a2331; }
+html[data-theme="dark"] .dsc-yeni-satir input { background: #101722; color: var(--text); }
+html[data-theme="dark"] .dsc-yeni-satir input:focus { background: #101722; }
+html[data-theme="dark"] .dsc-error, html[data-theme="dark"] .lc-error { background: #34201f; color: #f0938d; }
+html[data-theme="dark"] .lc-field input { background: #101722; color: var(--text); }
+html[data-theme="dark"] .lc-field input:focus { background: #101722; }
+html[data-theme="dark"] .lc-field label, html[data-theme="dark"] .dsc-yeni-baslik { color: var(--muted); }
+html[data-theme="dark"] .dsc-subtitle, html[data-theme="dark"] .lc-subtitle { color: var(--muted); }
+
+} /* @media screen */
