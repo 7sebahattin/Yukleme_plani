@@ -242,6 +242,12 @@ function hks_kunye_penceresi($cfg, $secenek, ?DateTime $baslangic = null, ?DateT
   if ($baslangic && $bitis) {
     $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
     $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  } else {
+    // "Son 50 künye" modu: tarih alanlarını ATLAMAK sunucuda beklenmeyen hata
+    // (GTBGLB00000001) veriyor — TopluKunye'de de aynı ders alınmıştı: alan
+    // her zaman gönderilir. .NET DateTime.MinValue = 0001-01-01 → "boş tarih".
+    $p[] = '<a:BaslangicTarihi>0001-01-01T00:00:00</a:BaslangicTarihi>';
+    $p[] = '<a:BitisTarihi>0001-01-01T00:00:00</a:BitisTarihi>';
   }
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
   // KisiSifat BİLEREK gönderilmiyor: gönderilince bazı künyeler listeden düşüyor.
@@ -279,14 +285,23 @@ function hks_kunye_penceresi($cfg, $secenek, ?DateTime $baslangic = null, ?DateT
 }
 
 // Aylık pencereleri sırayla sorgula, birleştir (mükerrer künyeleri ayıkla)
-function hks_kunyeleri_getir($cfg, $secenek) {
+function hks_kunyeleri_getir($cfg, $secenek, &$not = null) {
   $ay = (int)($secenek['aySayisi'] ?? 0);
   $birlesik = [];
   if ($ay <= 0) {
-    // VARSAYILAN (HKS sitesi gibi): tarihsiz tek çağrı → son 50 künye.
+    // VARSAYILAN (HKS sitesi gibi): boş tarihli tek çağrı → son 50 künye.
     // Hızlıdır ve tarih penceresine takılmadığı için ESKİ stoğu da getirir.
-    foreach (hks_kunye_penceresi($cfg, $secenek) as $k) $birlesik[$k['kunyeNo']] = $k;
-  } else {
+    try {
+      foreach (hks_kunye_penceresi($cfg, $secenek) as $k) $birlesik[$k['kunyeNo']] = $k;
+    } catch (Exception $e) {
+      // Sunucu boş tarihli isteği kabul etmezse kullanıcı boşta kalmasın:
+      // 12 aylık geniş taramaya düş ve durumu bildir.
+      $not = 'Son 50 künye sorgusu HKS tarafından reddedildi (' . $e->getMessage() .
+             ') — otomatik olarak 1 yıllık geniş taramaya geçildi.';
+      $ay = 12;
+    }
+  }
+  if ($ay > 0) {
     // GENİŞ TARAMA: aylık pencerelerle 50 kayıt sınırını aşar (yavaş — ay başına
     // 1 SOAP çağrısı). Çok künyesi olanlar için.
     $ay = min(24, $ay);

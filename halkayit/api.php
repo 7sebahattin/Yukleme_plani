@@ -225,8 +225,10 @@ try {
     case 'kunyeler': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
       if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
-      $liste = hks_kunyeleri_getir($cfg, $g);
-      hks_json_cikti(['kunyeler' => $liste]);
+      @set_time_limit(180);   // geniş taramaya düşerse 12 ardışık SOAP çağrısı
+      $not = null;
+      $liste = hks_kunyeleri_getir($cfg, $g, $not);
+      hks_json_cikti(['kunyeler' => $liste] + ($not ? ['not' => $not] : []));
     }
 
     // ---- STOK ÖZETİ (referans künye kalanlarının ürün bazında toplamı) ----
