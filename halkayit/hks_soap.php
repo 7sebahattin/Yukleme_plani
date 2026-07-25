@@ -193,6 +193,11 @@ function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $biti
       'miktar' => (float)hks_deger($b, 'MalinMiktari'),
       'birim' => hks_deger($b, 'MiktarBirimiAd'),
       'uretici' => hks_deger($b, 'UreticiTcKimlikVergiNo'),
+      // Malın GELDİĞİ yerin işletme türü / işyeri (docx: ReferansKunyeDTO'ya
+      // GidecekYerTuruId + GidecekIsyeriId eklendi). İstek şemasında işyeri
+      // türü FİLTRESİ yok; bu yüzden filtre yanıt üzerinden uygulanır.
+      'isletmeTuruId' => (int)hks_deger($b, 'GidecekYerTuruId'),
+      'isyeriId'      => (int)hks_deger($b, 'GidecekIsyeriId'),
     ];
   }
   return $sonuc;
@@ -210,7 +215,20 @@ function hks_kunyeleri_getir($cfg, $secenek) {
     $bitis = $baslangic;
   }
   $sonuc = array_values($birlesik);
-  usort($sonuc, function ($a, $b) { return strcmp($a['tarih'], $b['tarih']); });
+
+  // İşyeri türü filtresi — HKS istek şemasında böyle bir alan YOK; künyenin
+  // GidecekYerTuruId'si (yanıttan) ile eşleşenler süzülür. 0/boş = tüm türler.
+  $isyTur = (int)($secenek['isletmeTuruId'] ?? 0);
+  if ($isyTur > 0) {
+    $sonuc = array_values(array_filter($sonuc, fn($k) => (int)$k['isletmeTuruId'] === $isyTur));
+  }
+
+  // Sıralama: 'azalan' = yeni → eski (HKS sitesi varsayılanı), 'artan' = eski → yeni.
+  $azalan = (($secenek['sirala'] ?? 'artan') === 'azalan');
+  usort($sonuc, function ($a, $b) use ($azalan) {
+    $c = strcmp((string)$a['tarih'], (string)$b['tarih']);
+    return $azalan ? -$c : $c;
+  });
   return $sonuc;
 }
 
