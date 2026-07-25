@@ -217,7 +217,6 @@ function render_desktop_sidebar(string $base): void {
     $a_kant  = in_array($cur, ['kantar.php','kantar_view.php'], true);
     $a_krap  = $cur === 'kantar_raporu.php';
     $a_hks   = $in_hks;
-    $a_not   = $cur === 'notes.php';
     $a_beyan = in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php','beyan_delete.php'], true);
     $a_ustok = $cur === 'stok.php';
     $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
@@ -264,7 +263,6 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_kant)  $lnk('kantar.php',   '⚖️', 'Kantar',    $a_kant);  ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
-        <?php $lnk('notes.php', '📝', 'Notlar', $a_not); ?>
 
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
@@ -455,7 +453,7 @@ function render_footer(bool $print_mode = false): void {
         $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']) || $_cikma_hint;
         $is_defs     = $cur === 'definitions.php';
         $is_reports  = $cur === 'reports.php';
-        $is_notes    = $cur === 'notes.php';
+        $is_hks      = strpos((string)($_SERVER['REQUEST_URI'] ?? ''), '/halkayit/') !== false;
         echo '</main>';
         ?>
 <nav class="bottomnav" role="navigation" aria-label="Ana gezinme">
@@ -469,10 +467,12 @@ function render_footer(bool $print_mode = false): void {
         <span class="bottomnav-label">Yüklemeler</span>
     </a>
     <?php endif; ?>
-    <button type="button" id="notesOpenBtn" class="bottomnav-item bottomnav-notes<?= $is_notes ? ' active' : '' ?>">
-        <span class="bottomnav-notes-circle">📝</span>
-        <span class="bottomnav-label">Not</span>
-    </button>
+    <?php if (!function_exists('can') || can('records.write')): ?>
+    <a href="<?= $base ?>halkayit/index.php" class="bottomnav-item bottomnav-raised<?= $is_hks ? ' active' : '' ?>">
+        <span class="bottomnav-raised-circle">🏛</span>
+        <span class="bottomnav-label">Bildirim</span>
+    </a>
+    <?php endif; ?>
     <?php if (!function_exists('can') || can('records.read')): ?>
     <a href="<?= $base ?>cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
         <span class="bottomnav-icon">🚚</span>
@@ -487,235 +487,6 @@ function render_footer(bool $print_mode = false): void {
     <?php endif; ?>
 </nav>
 
-<!-- ── Notlar Modal ── -->
-<div id="notesModal" class="notes-overlay" hidden aria-modal="true" role="dialog">
-    <div class="notes-modal">
-        <div class="notes-modal-head">
-            <span class="notes-modal-title">📝 Not Ekle</span>
-            <div class="notes-modal-head-actions">
-                <a href="<?= $base ?>notes.php" class="btn btn-sm btn-ghost">Tümü →</a>
-                <button type="button" id="notesCloseBtn" class="notes-close-btn" aria-label="Kapat">✕</button>
-            </div>
-        </div>
-
-        <div class="notes-add-section">
-            <div class="notes-page-tag" id="notesPageTag"></div>
-            <textarea id="notesTextarea" class="notes-textarea" rows="3" placeholder="Not, fikir veya hata..."></textarea>
-            <button type="button" id="notesSaveBtn" class="btn btn-primary btn-sm">Kaydet</button>
-        </div>
-
-        <div class="notes-list-section">
-            <div class="notes-list-head">
-                <span>Son Notlar</span>
-                <button type="button" id="notesCopyBtn" class="btn btn-sm btn-ghost">📋 Claude için Kopyala</button>
-            </div>
-            <div id="notesListContainer" class="notes-list-container">
-                <div class="notes-loading">Yükleniyor…</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-(function () {
-    var csrf    = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    var baseUrl = <?= json_encode($base) ?>;
-    var modal = document.getElementById('notesModal');
-    var openBtn  = document.getElementById('notesOpenBtn');
-    var closeBtn = document.getElementById('notesCloseBtn');
-    var textarea = document.getElementById('notesTextarea');
-    var saveBtn  = document.getElementById('notesSaveBtn');
-    var listEl   = document.getElementById('notesListContainer');
-    var pageTagEl = document.getElementById('notesPageTag');
-    var copyBtn  = document.getElementById('notesCopyBtn');
-
-    if (!modal || !openBtn) return;
-
-    var pageUrl  = window.location.pathname + (window.location.search || '');
-    var pageName = (document.title || '').replace(' · Asya Fresh', '').trim();
-
-    function postJson(url, body) {
-        body.csrf = csrf;
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        }).then(function (r) { return r.json(); });
-    }
-
-    function escHtml(s) {
-        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
-    function renderNote(n) {
-        var done = parseInt(n.done, 10) === 1;
-        var div = document.createElement('div');
-        div.className = 'notes-row' + (done ? ' notes-done' : '');
-        div.dataset.noteId = n.id;
-        div.innerHTML =
-            '<div class="notes-row-page">' + escHtml(n.page_name || n.page_url || '—') + '</div>' +
-            '<div class="notes-row-text">' + escHtml(n.note) + '</div>' +
-            '<div class="notes-row-actions">' +
-                '<button class="notes-check-btn" data-id="' + n.id + '" title="' + (done ? 'Geri Al' : 'Tamamlandı') + '">' +
-                    (done ? '↩' : '✓') + '</button>' +
-                '<button class="notes-del-btn" data-id="' + n.id + '" title="Sil">✕</button>' +
-            '</div>';
-        return div;
-    }
-
-    function loadNotes() {
-        listEl.innerHTML = '<div class="notes-loading">Yükleniyor…</div>';
-        fetch(baseUrl + 'note_save.php')
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                listEl.innerHTML = '';
-                if (!d.notes || !d.notes.length) {
-                    listEl.innerHTML = '<div class="notes-empty">Henüz not yok.</div>';
-                    return;
-                }
-                var doneCount = 0;
-                d.notes.forEach(function (n) {
-                    if (parseInt(n.done, 10) === 1) { doneCount++; return; }
-                    listEl.appendChild(renderNote(n));
-                });
-                if (!listEl.children.length) {
-                    listEl.innerHTML = '<div class="notes-empty">Bekleyen not yok.</div>';
-                }
-                if (doneCount > 0) {
-                    var inf = document.createElement('div');
-                    inf.className = 'notes-done-info';
-                    inf.textContent = doneCount + ' tamamlanan not gizlendi';
-                    listEl.appendChild(inf);
-                }
-            })
-            .catch(function () {
-                listEl.innerHTML = '<div class="notes-empty">Yüklenemedi.</div>';
-            });
-    }
-
-    openBtn.addEventListener('click', function () {
-        pageTagEl.textContent = '📍 ' + pageName;
-        modal.hidden = false;
-        document.body.classList.add('notes-modal-open');
-        textarea.focus();
-        loadNotes();
-    });
-
-    function closeModal() {
-        modal.hidden = true;
-        document.body.classList.remove('notes-modal-open');
-        textarea.value = '';
-    }
-
-    closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) {
-        if (e.target === modal) closeModal();
-    });
-
-    saveBtn.addEventListener('click', function () {
-        var note = textarea.value.trim();
-        if (!note) { textarea.focus(); return; }
-        saveBtn.disabled = true;
-        postJson(baseUrl + 'note_save.php', { page_url: pageUrl, page_name: pageName, note: note })
-            .then(function (d) {
-                saveBtn.disabled = false;
-                if (!d.ok) { alert(d.msg || 'Hata'); return; }
-                textarea.value = '';
-                var emptyEl = listEl.querySelector('.notes-empty');
-                if (emptyEl) emptyEl.remove();
-                listEl.insertBefore(renderNote(d.note), listEl.firstChild);
-            })
-            .catch(function () { saveBtn.disabled = false; alert('Bağlantı hatası.'); });
-    });
-
-    textarea.addEventListener('keydown', function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') saveBtn.click();
-    });
-
-    listEl.addEventListener('click', function (e) {
-        var checkBtn = e.target.closest('.notes-check-btn');
-        var delBtn   = e.target.closest('.notes-del-btn');
-
-        if (checkBtn) {
-            var id  = parseInt(checkBtn.dataset.id, 10);
-            var row = listEl.querySelector('.notes-row[data-note-id="' + id + '"]');
-            checkBtn.disabled = true;
-            postJson('note_update.php', { action: 'toggle', id: id })
-                .then(function (d) {
-                    if (!d.ok) { checkBtn.disabled = false; alert(d.msg || 'Hata'); return; }
-                    // done=1 → gizle (Son Notlar sadece actif olanları gösterir)
-                    row.remove();
-                    var remaining = listEl.querySelectorAll('.notes-row');
-                    var doneInf = listEl.querySelector('.notes-done-info');
-                    if (!remaining.length) {
-                        listEl.innerHTML = '<div class="notes-empty">Bekleyen not yok.</div>';
-                    } else {
-                        if (doneInf) {
-                            var prev = parseInt(doneInf.textContent, 10) || 0;
-                            doneInf.textContent = (prev + 1) + ' tamamlanan not gizlendi';
-                        } else {
-                            var inf = document.createElement('div');
-                            inf.className = 'notes-done-info';
-                            inf.textContent = '1 tamamlanan not gizlendi';
-                            listEl.appendChild(inf);
-                        }
-                    }
-                });
-        }
-
-        if (delBtn) {
-            var id  = parseInt(delBtn.dataset.id, 10);
-            var row = listEl.querySelector('.notes-row[data-note-id="' + id + '"]');
-            delBtn.disabled = true;
-            postJson('note_update.php', { action: 'delete', id: id })
-                .then(function (d) {
-                    if (!d.ok) { delBtn.disabled = false; alert(d.msg || 'Hata'); return; }
-                    row.remove();
-                    if (!listEl.querySelector('.notes-row')) {
-                        listEl.innerHTML = '<div class="notes-empty">Henüz not yok.</div>';
-                    }
-                });
-        }
-    });
-
-    copyBtn.addEventListener('click', function () {
-        var rows = listEl.querySelectorAll('.notes-row');
-        if (!rows.length) { alert('Kopyalanacak not yok.'); return; }
-
-        var groups = {};
-        rows.forEach(function (row) {
-            var page = (row.querySelector('.notes-row-page') || {}).textContent || '—';
-            if (!groups[page]) groups[page] = [];
-            var note = (row.querySelector('.notes-row-text') || {}).textContent || '';
-            groups[page].push({ note: note.trim(), done: row.classList.contains('notes-done') });
-        });
-
-        var md = '## Geliştirme Notları\n\n';
-        Object.keys(groups).forEach(function (page) {
-            md += '### ' + page + '\n';
-            groups[page].forEach(function (n) {
-                md += (n.done ? '- [x] ' : '- [ ] ') + n.note + '\n';
-            });
-            md += '\n';
-        });
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(md).then(function () {
-                copyBtn.textContent = '✓ Kopyalandı!';
-                setTimeout(function () { copyBtn.textContent = '📋 Claude için Kopyala'; }, 2000);
-            });
-        } else {
-            var ta = document.createElement('textarea');
-            ta.value = md; ta.style.position = 'fixed'; ta.style.opacity = '0';
-            document.body.appendChild(ta); ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            copyBtn.textContent = '✓ Kopyalandı!';
-            setTimeout(function () { copyBtn.textContent = '📋 Claude için Kopyala'; }, 2000);
-        }
-    });
-})();
-</script>
 <?php
         echo '<script src="' . base_url() . 'assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
     } else {

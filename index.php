@@ -136,11 +136,6 @@ if ($db_backup_result !== null): ?>
     </a>
     <?php endif; ?>
 
-    <a href="notes.php" class="home-card">
-        <div class="home-card-icon" style="background:#fef9e7">📝</div>
-        <div class="home-card-title">Notlar</div>
-    </a>
-
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>

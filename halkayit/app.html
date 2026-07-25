@@ -523,6 +523,7 @@
         </div>
         <label>Karşı Taraf Sıfatı</label>
         <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
+        <div class="mesaj tamam gizli" id="ikCokluSifatUyari"></div>
       </div>
 
       <div class="mesaj" id="bildirimMesaj"></div>
@@ -1536,6 +1537,7 @@ function formuTemizle() {
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
   ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  $('ikCokluSifatUyari').classList.add('gizli');
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   ozetGuncelle();
 }
@@ -1799,16 +1801,43 @@ $('sUretimIlce').onchange = async () => {
 
 // Karşı taraf sıfat listesini kişinin GERÇEK sıfatlarıyla sınırla (docx kuralı:
 // kişi hangi sıfatla bildirim aldıysa o sıfatla referans kullanabilir).
+// ÖNEMLİ (docx doğrulaması): IkinciKisiBilgileriDTO.KisiSifat açıklaması yalnız
+// "BildirimServisSifatListesi'nden bir Id olmalı" der — karşı tarafın GTB'de
+// SAHİP OLDUĞU sıfatlarla sınırlı olması gerektiğine dair HİÇBİR kural yoktur.
+// (O kısıtlama yalnız ReferansKunyeIstek.KisiSifat için geçerlidir — "kişi
+// hangi sıfatla bildirim aldıysa o sıfatla referans künye kullanabilir" —
+// tamamen farklı bir alan/bağlam.) Bu yüzden dropdown HER ZAMAN TAM KATALOĞU
+// gösterir; KayıtlıKişiSorgu'nun döndürdüğü sıfatlar yalnızca YÖNLENDİRİCİ
+// bilgi olarak gösterilir, seçenekleri ASLA kısıtlamaz. Önceki sürümde bu
+// kısıtlama vardı ve HKS sitesinde çalışan bir sıfatın (örn. İhracat) bizim
+// dropdown'ımızda hiç görünmemesine, dolayısıyla seçilememesine sebep oluyordu.
 function ikSifatlariDoldur(sifatIdListesi) {
   const tum = (listeler && listeler.sifatlar) || [];
-  const kisitli = (sifatIdListesi || []).length
-    ? tum.filter(s => sifatIdListesi.some(id => String(id) === String(s.id)))
-    : [];
-  const dizi = kisitli.length ? kisitli : tum;   // eşleşme yoksa güvenli geri dönüş
-  doldurSel('sIkSifat', dizi, '— Seçiniz —');
-  // HKS sitesindeki gibi: sorgu sonrası sıfat otomatik gelir (ilki seçilir,
-  // birden fazlaysa kullanıcı listeden değiştirebilir).
-  if (kisitli.length) $('sIkSifat').value = String(kisitli[0].id);
+  doldurSel('sIkSifat', tum, '— Seçiniz —');
+
+  const kayitliSahip = (sifatIdListesi || [])
+    .map(id => tum.find(s => String(s.id) === String(id)))
+    .filter(Boolean);
+
+  const bilgiEl = $('ikCokluSifatUyari');
+  if (kayitliSahip.length === 1) {
+    // Tek sıfata sahipse muhtemel doğru seçenek budur — öneri olarak ön-seçilir,
+    // kullanıcı dilerse tam katalogdan başka birini seçebilir.
+    $('sIkSifat').value = String(kayitliSahip[0].id);
+    if (bilgiEl) bilgiEl.classList.add('gizli');
+  } else {
+    $('sIkSifat').value = '';
+    if (bilgiEl) {
+      if (kayitliSahip.length > 1) {
+        bilgiEl.innerHTML = 'ℹ️ Bu TC/VKN, HKS\'te şu sıfatlarla kayıtlı: <b>' +
+          eHtml(kayitliSahip.map(s => s.ad).join(', ')) +
+          '</b>. Bildirim türünüze uygun olanı seçin — farklı bir sıfat da seçebilirsiniz.';
+        bilgiEl.classList.remove('gizli');
+      } else {
+        bilgiEl.classList.add('gizli');
+      }
+    }
+  }
 }
 
 // İşletme türü adına göre hangi işyeri servisinin sorgulanacağını belirler (docx).
@@ -2452,6 +2481,11 @@ $('btnOnay').onclick = async () => {
     // Sonuçları aynı pencerede göster
     let html = '';
     let herhangiBasarili = false;
+    if (j.taslakKorundu) {
+      html += '<div class="mesaj tamam" style="display:block">💾 Hiçbir künye gönderilmedi — ' +
+        '<b>taslağınız SİLİNMEDİ</b>. Aşağıdaki hatayı düzeltip (örn. karşı taraf sıfatı) ' +
+        'Taslaklar\'dan "✏️ Düzenle" ile aynı formu tekrar gönderebilirsiniz.</div>';
+    }
     if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${j.genelHata}</div>`;
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
@@ -2476,7 +2510,7 @@ $('btnOnay').onclick = async () => {
     $('btnOnay').classList.add('gizli');
     // Başarılı gönderimde modal kapanınca DOĞRUDAN Gönderilenler'e geçilir — liste
     // orada her açılışta taze fetch ile çekildiği için son gönderim garanti görünür.
-    $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : 'Kapat';
+    $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : (j.taslakKorundu ? 'Taslağa Dön' : 'Kapat');
     $('btnVazgec').onclick = () => {
       $('modal').classList.remove('acik');
       $('btnVazgec').onclick = () => $('modal').classList.remove('acik'); // sonraki kullanım için varsayılana dön
