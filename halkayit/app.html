@@ -572,7 +572,7 @@
       </div>
     </div>
 
-    <div class="kart">
+    <div class="kart" id="kartUrunKunye">
       <h2>3 · Ürün ve Künyeler</h2>
       <label>Son Kullanılan Ürünler</label>
       <div class="cipler" id="urunCipler"><span class="cip-bos">Henüz ürün geçmişi yok</span></div>
@@ -582,13 +582,15 @@
           <select id="sUrun"><option value="">— Ürün Seçiniz —</option></select>
         </div>
         <div>
-          <label>Tarih</label>
+          <label>Kapsam</label>
           <select id="sGun">
-            <option value="1">Son 1 ay</option>
-            <option value="3">Son 3 ay</option>
-            <option value="6">Son 6 ay</option>
-            <option value="12" selected>Son 1 yıl</option>
-            <option value="24">Tümü (son 2 yıl)</option>
+            <!-- 0 = tarihsiz sorgu → HKS'in kendi davranışı: son 50 künye.
+                 Tek çağrı, hızlı; tarih penceresine takılmadığı için eski stok da gelir. -->
+            <option value="0" selected>Son 50 künye (HKS)</option>
+            <option value="3">Geniş tarama — 3 ay</option>
+            <option value="6">Geniş tarama — 6 ay</option>
+            <option value="12">Geniş tarama — 1 yıl</option>
+            <option value="24">Geniş tarama — 2 yıl</option>
           </select>
         </div>
       </div>
@@ -607,6 +609,58 @@
       </div>
       <button class="btn btn-teal" id="btnKunyeler">🔍 Künyeleri Getir</button>
       <div class="mesaj" id="kunyeMesaj"></div>
+    </div>
+
+    <!-- REFERANSSIZ (Satın Alım): malın tam tanımı. Künye seçimi YERİNE gelir. -->
+    <div class="kart gizli" id="kartMal">
+      <h2>3 · Mal Bilgileri <span style="color:var(--soluk);font-weight:400;font-size:13px">(referanssız)</span></h2>
+      <div class="satir2">
+        <div>
+          <label class="label-vurgu">Malın Niteliği *</label>
+          <select id="sMalNitelik"><option value="">— Seçiniz —</option></select>
+        </div>
+        <div>
+          <label class="label-vurgu">Üretim Şekli *</label>
+          <select id="sUretimSekli"><option value="">— Seçiniz —</option></select>
+        </div>
+      </div>
+      <div id="gelenUlkeBlok" class="gizli">
+        <label class="label-vurgu">Gelen Ülke * <span style="color:var(--soluk);font-weight:400;font-size:12px">(ithalatta zorunlu)</span></label>
+        <select id="sGelenUlke"><option value="">— Seçiniz —</option></select>
+      </div>
+      <label class="label-vurgu">Malın Adı (Ürün) *</label>
+      <select id="sMalUrun"><option value="">— Ürün Seçiniz —</option></select>
+      <label class="label-vurgu">Malın Cinsi *</label>
+      <select id="sMalCins"><option value="">— önce ürün ve üretim şekli seçin —</option></select>
+      <div class="mesaj" id="malCinsMesaj"></div>
+
+      <label style="margin-top:14px;font-size:13px;font-weight:800;color:var(--vurgu)">Üretildiği / Girdiği Gümrük Kapısının Bulunduğu Yer</label>
+      <div class="satir2">
+        <div><label>İl *</label><select id="sUretimIl"><option value="">— Seçiniz —</option></select></div>
+        <div><label>İlçe *</label><select id="sUretimIlce"><option value="">— önce il —</option></select></div>
+      </div>
+      <label>Belde *</label>
+      <select id="sUretimBelde"><option value="">— önce ilçe —</option></select>
+      <div class="mesaj" id="uretimYerMesaj"></div>
+
+      <div class="satir2" style="margin-top:10px">
+        <div>
+          <label class="label-vurgu">Miktar *</label>
+          <input id="oMalMiktar" class="input-turuncu" inputmode="decimal" autocomplete="off" placeholder="örn. 1000">
+        </div>
+        <div>
+          <label class="label-vurgu">Birim *</label>
+          <select id="sMiktarBirim"><option value="">— Seçiniz —</option></select>
+        </div>
+      </div>
+      <label class="label-vurgu">💰 Birim Fiyat *</label>
+      <input id="oMalFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
+      <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin-top:12px">
+        <input type="checkbox" id="chkAnaliz" style="width:20px;height:20px;accent-color:var(--teal)">
+        Analize Gönder
+      </label>
+      <button class="btn btn-amber" id="btnMalTaslak">💾 Taslağa Kaydet</button>
+      <div class="mesaj" id="malMesaj"></div>
     </div>
 
     <div class="kart gizli" id="kartKunyeler">
@@ -1324,9 +1378,19 @@ function formuTemizle() {
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
-  $('sGun').value = '12';
+  $('sGun').value = '0';
   $('sKunyeIsyeriTuru').value = '';
   $('sKunyeSirala').value = 'azalan';
+  // Referanssız (Satın Alım) mal bilgileri
+  ['oMalMiktar', 'oMalFiyat'].forEach(id => { $(id).value = ''; });
+  ['sMalNitelik', 'sUretimSekli', 'sMalUrun', 'sGelenUlke', 'sUretimIl'].forEach(id => { $(id).value = ''; });
+  $('sMalCins').innerHTML = '<option value="">— önce ürün ve üretim şekli seçin —</option>';
+  $('sUretimIlce').innerHTML = '<option value="">— önce il —</option>';
+  $('sUretimBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  $('sMiktarBirim').value = '';
+  $('chkAnaliz').checked = false;
+  $('gelenUlkeBlok').classList.add('gizli');
+  ['malMesaj', 'malCinsMesaj', 'uretimYerMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('sIkSifat').value = '';
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
@@ -1487,7 +1551,119 @@ function turDegisti() {
 
   // Kart 4 — fiyat yalnız Sevk Etme'de gizli (Satış ve Satın Alım fiyatlı).
   $('fiyatBlok').classList.toggle('gizli', sevk);
+
+  // REFERANSSIZ MOD (Satın Alım): künye seçimi YOK — malın tam tanımı girilir.
+  // Satın alımda mal bize DIŞARIDAN gelir; kendi stok künyemizi referans
+  // göstermek anlamsız olurdu (docx: referanssız bildirimde malın tanımı zorunlu).
+  const referanssiz = satin;
+  $('kartUrunKunye').classList.toggle('gizli', referanssiz);
+  $('kartMal').classList.toggle('gizli', !referanssiz);
+  if (referanssiz) {
+    $('kartKunyeler').classList.add('gizli');
+    $('ozet').classList.add('gizli');
+    malListeleriHazirla();
+  }
 }
+
+// ===== REFERANSSIZ MAL BİLGİLERİ (Satın Alım) =====
+let malListeler = null;      // { nitelikler, uretimSekli, birimler }
+let malIllerYuklendi = false;
+
+async function malListeleriHazirla() {
+  if (!aktifFirma) return;
+  // Ürün + ülke listeleri ana referans önbelleğinden gelir
+  if (listeler) {
+    if (!$('sMalUrun').options.length || $('sMalUrun').options.length < 2) {
+      doldurSel('sMalUrun', listeler.urunler, '— Ürün Seçiniz —');
+      doldurSel('sGelenUlke', listeler.ulkeler, '— Seçiniz —');
+    }
+  }
+  if (!malIllerYuklendi) {
+    try {
+      const j = await api('/api/iller', 'POST', { firmaId: aktifFirma.id });
+      doldurSel('sUretimIl', j.iller, '— Seçiniz —');
+      malIllerYuklendi = true;
+    } catch (e) { mesajGoster('uretimYerMesaj', 'İller yüklenemedi: ' + e.message, 'hata'); }
+  }
+  if (malListeler) return;
+  try {
+    const j = await api('/api/urun_listeleri', 'POST', { firmaId: aktifFirma.id });
+    malListeler = j;
+    doldurSel('sMalNitelik', j.nitelikler, '— Seçiniz —');
+    doldurSel('sUretimSekli', j.uretimSekli, '— Seçiniz —');
+    doldurSel('sMiktarBirim', j.birimler, '— Seçiniz —');
+  } catch (e) { mesajGoster('malMesaj', 'Ürün referansları alınamadı: ' + e.message, 'hata'); }
+}
+
+// Nitelik "İthalat" ise gelen ülke zorunlu; "İthalat"/"Toplamamal" ise üretim
+// şekli "Geleneksel(Konvansiyonel)" olmalıdır (docx kuralı).
+function malNitelikAdi() {
+  const o = $('sMalNitelik').selectedOptions[0];
+  return o ? trNorm(o.textContent) : '';
+}
+function ithalatMi() { return malNitelikAdi().includes('ithal'); }
+
+$('sMalNitelik').onchange = () => {
+  const ith = ithalatMi();
+  $('gelenUlkeBlok').classList.toggle('gizli', !ith);
+  const n = malNitelikAdi();
+  if (ith || n.includes('toplama')) {
+    // Konvansiyonel/Geleneksel'e sabitle
+    const gel = ((malListeler && malListeler.uretimSekli) || [])
+      .find(x => trNorm(x.ad).includes('gelenek') || trNorm(x.ad).includes('konvansiyonel'));
+    if (gel) $('sUretimSekli').value = String(gel.id);
+    mesajGoster('malMesaj', 'ℹ️ "' + $('sMalNitelik').selectedOptions[0].textContent +
+      '" niteliğinde üretim şekli Geleneksel(Konvansiyonel) olmalıdır (otomatik seçildi).', 'tamam');
+  }
+  malCinsleriYukle();
+};
+$('sMalUrun').onchange = malCinsleriYukle;
+$('sUretimSekli').onchange = malCinsleriYukle;
+
+// Ürün cinsleri ÜRÜNE bağlı gelir; aynı cins her üretim şekli için ayrı kayıttır.
+// Seçili üretim şekline ve ithal durumuna göre süzülür (docx: ithalat işlemlerinde
+// yalnız Ithalmi=true, diğerlerinde yalnız Ithalmi=false cinsler kullanılabilir).
+async function malCinsleriYukle() {
+  const urunId = $('sMalUrun').value;
+  const sel = $('sMalCins');
+  sel.innerHTML = '<option value="">— önce ürün ve üretim şekli seçin —</option>';
+  if (!urunId) return;
+  mesajGoster('malCinsMesaj', '⏳ Cinsler getiriliyor...', 'tamam');
+  try {
+    const j = await api('/api/urun_cinsleri', 'POST', { firmaId: aktifFirma.id, urunId });
+    let liste = j.cinsler || [];
+    const usId = $('sUretimSekli').value;
+    if (usId) liste = liste.filter(c => String(c.uretimSekliId) === String(usId));
+    const ith = ithalatMi();
+    liste = liste.filter(c => !!c.ithal === ith);
+    doldurSel('sMalCins', liste, '— Seçiniz —');
+    if (!liste.length) {
+      mesajGoster('malCinsMesaj', 'Bu ürün + üretim şekli' + (ith ? ' + ithal' : '') +
+        ' için cins bulunamadı. Üretim şeklini değiştirip deneyin.', 'hata');
+    } else {
+      mesajGoster('malCinsMesaj', liste.length + ' cins bulundu.', 'tamam');
+    }
+  } catch (e) { mesajGoster('malCinsMesaj', e.message, 'hata'); }
+}
+
+// Üretim yeri zinciri
+$('sUretimIl').onchange = async () => {
+  $('sUretimIlce').innerHTML = '<option value="">— önce il —</option>';
+  $('sUretimBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  if (!$('sUretimIl').value) return;
+  try {
+    const j = await api('/api/ilceler', 'POST', { firmaId: aktifFirma.id, ilId: $('sUretimIl').value });
+    doldurSel('sUretimIlce', j.ilceler, '— Seçiniz —');
+  } catch (e) { mesajGoster('uretimYerMesaj', e.message, 'hata'); }
+};
+$('sUretimIlce').onchange = async () => {
+  $('sUretimBelde').innerHTML = '<option value="">— önce ilçe —</option>';
+  if (!$('sUretimIlce').value) return;
+  try {
+    const j = await api('/api/beldeler', 'POST', { firmaId: aktifFirma.id, ilceId: $('sUretimIlce').value });
+    doldurSel('sUretimBelde', j.beldeler, '— Seçiniz —');
+  } catch (e) { mesajGoster('uretimYerMesaj', e.message, 'hata'); }
+};
 
 // Karşı taraf sıfat listesini kişinin GERÇEK sıfatlarıyla sınırla (docx kuralı:
 // kişi hangi sıfatla bildirim aldıysa o sıfatla referans kullanabilir).
@@ -1788,6 +1964,82 @@ function ozetGuncelle() {
 }
 
 // ================= TASLAĞA KAYDET =================
+// REFERANSSIZ (Satın Alım) taslak kaydı — künye yok, malın tanımı gönderilir.
+$('btnMalTaslak').onclick = async () => {
+  if (!aktifFirma) return;
+  const miktar = trSayi($('oMalMiktar').value);
+  const fiyat  = trSayi($('oMalFiyat').value);
+  const zorunlu = [
+    ['sMalNitelik', 'Malın niteliği'], ['sUretimSekli', 'Üretim şekli'],
+    ['sMalUrun', 'Malın adı (ürün)'], ['sMalCins', 'Malın cinsi'],
+    ['sUretimIl', 'Üretim ili'], ['sUretimIlce', 'Üretim ilçesi'],
+    ['sUretimBelde', 'Üretim beldesi'], ['sMiktarBirim', 'Miktar birimi'],
+  ];
+  for (const [id, ad] of zorunlu) {
+    if (!$(id).value) { alert(ad + ' seçiniz.'); $(id).focus(); return; }
+  }
+  if (miktar <= 0) { alert('Miktar giriniz.'); $('oMalMiktar').focus(); return; }
+  if (fiyat  <= 0) { alert('Birim fiyat giriniz.'); $('oMalFiyat').focus(); return; }
+  if (ithalatMi() && !$('sGelenUlke').value) { alert('İthalatta gelen ülke seçiniz.'); return; }
+
+  // Karşı taraf + hedef (Kart 1 & 2) doğrulaması
+  const tc = $('oIkTc').value.trim();
+  if (!tc) { alert('Karşı taraf (satıcı) TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
+  if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) { alert('Karşı tarafı "Doğrula" ile kontrol edin.'); return; }
+  if (!kayitliMi()) { alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı).'); return; }
+  if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
+  if (!$('sIsletmeTuru').value) { alert('İşletme türü seçiniz.'); return; }
+  if (!$('sIsyeri').value)      { alert('İşyeri / depo seçiniz.'); return; }
+  if (!$('oPlaka').value.trim() && !($('oBelgeNo').value.trim() && $('sBelgeTipi').value)) {
+    alert('Araç plakası veya belge no + belge tipi giriniz.'); return;
+  }
+
+  const ad = (id) => ($(id).selectedOptions[0] ? $(id).selectedOptions[0].textContent : '');
+  try {
+    await api('/api/taslaklar', 'POST', {
+      firmaId: aktifFirma.id,
+      // Referanssız: tek satır, künye no 0
+      satirlar: [{ kunyeNo: '0', miktar }],
+      ortak: {
+        yurtIci: true, referanssiz: true, kayitZorunlu: true,
+        fiyatGonder: true, fiyat,
+        sifatId: $('sSifat').value,
+        bildirimTuruId: $('sTur').value,
+        turAd: ad('sTur'),
+        // Mal tanımı
+        malinNiteligi: $('sMalNitelik').value,
+        malinKodNo:    $('sMalUrun').value,
+        malinCinsiId:  $('sMalCins').value,
+        uretimSekli:   $('sUretimSekli').value,
+        miktarBirimId: $('sMiktarBirim').value,
+        uretimIlId:    $('sUretimIl').value,
+        uretimIlceId:  $('sUretimIlce').value,
+        uretimBeldeId: $('sUretimBelde').value,
+        ithalat:       ithalatMi(),
+        gelenUlkeId:   ithalatMi() ? $('sGelenUlke').value : 0,
+        analiz:        $('chkAnaliz').checked,
+        urunAd:        ad('sMalUrun'),
+        // Karşı taraf + hedef
+        ikinciTc: tc, ikinciSifatId: $('sIkSifat').value, ikinciAd: $('oIkAd').value.trim(),
+        isletmeTuruId: $('sIsletmeTuru').value,
+        gidecekIsyeriId: $('sIsyeri').value,
+        gidecekIsyeriAd: ad('sIsyeri'),
+        plaka: $('oPlaka').value.trim().toUpperCase(),
+        belgeNo: $('oBelgeNo').value.trim(),
+        belgeTipiId: $('sBelgeTipi').value || 0,
+        ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
+      },
+    });
+    if (duzenlenenTaslakId) {
+      try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); } catch (e) {}
+      duzenlenenTaslakId = null;
+      toast('💾 Taslak güncellendi');
+    } else { toast('💾 Taslak kaydedildi'); }
+    formuTemizle();
+    taslakEkraniAc();
+  } catch (e) { alert('HATA: ' + e.message); }
+};
+
 $('btnTaslakKaydet').onclick = async () => {
   const satirlar = seciliSatirlar();
   if (satirlar.length === 0) return;

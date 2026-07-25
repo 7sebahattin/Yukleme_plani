@@ -82,6 +82,25 @@ function hks_bildirim_dogrula($g) {
   if (empty($o['plaka']) && !(!empty($o['belgeNo']) && !empty($o['belgeTipiId']))) {
     return 'Araç plakası veya belge no + belge tipi girilmelidir.';
   }
+  // REFERANSSIZ (Satın Alım): malın tam tanımı zorunlu — docx "Referanssız
+  // Bildirimlerde" kuralları.
+  if (!empty($o['referanssiz'])) {
+    foreach ([
+      'malinNiteligi' => 'Malın niteliği',
+      'malinKodNo'    => 'Ürün (malın adı)',
+      'malinCinsiId'  => 'Ürün cinsi',
+      'uretimSekli'   => 'Üretim şekli',
+      'miktarBirimId' => 'Miktar birimi',
+      'uretimIlId'    => 'Üretim ili',
+      'uretimIlceId'  => 'Üretim ilçesi',
+      'uretimBeldeId' => 'Üretim beldesi',
+    ] as $alan => $etiket) {
+      if (empty($o[$alan])) return $etiket . ' seçilmeli (referanssız bildirim).';
+    }
+    if (!empty($o['ithalat']) && empty($o['gelenUlkeId'])) {
+      return 'İthalat işleminde gelen ülke seçilmeli.';
+    }
+  }
   if (!empty($o['yurtIci'])) {
     // Yurt içi: karşı taraf + hedef zorunlu.
     if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';

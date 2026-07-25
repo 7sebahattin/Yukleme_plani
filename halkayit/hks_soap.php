@@ -233,11 +233,16 @@ function hks_bir_ay_once(DateTime $t) {
   return $x;
 }
 
-// Tek pencere için referans künye sorgusu
-function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $bitis) {
+// Tek pencere için referans künye sorgusu.
+// $baslangic/$bitis NULL ise tarih GÖNDERİLMEZ → HKS "son 50 künye" döndürür
+// (docx: tarihler opsiyonel; verilirse 50 sınırı kalkar ama en fazla 1 ay aralık).
+// HKS web sitesindeki künye ekranı da tarihsiz çalışır.
+function hks_kunye_penceresi($cfg, $secenek, ?DateTime $baslangic = null, ?DateTime $bitis = null) {
   $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
-  $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
-  $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  if ($baslangic && $bitis) {
+    $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
+    $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  }
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
   // KisiSifat BİLEREK gönderilmiyor: gönderilince bazı künyeler listeden düşüyor.
   $p[] = '<a:KunyeNo>0</a:KunyeNo>';
@@ -275,14 +280,22 @@ function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $biti
 
 // Aylık pencereleri sırayla sorgula, birleştir (mükerrer künyeleri ayıkla)
 function hks_kunyeleri_getir($cfg, $secenek) {
-  $ay = max(1, min(24, (int)($secenek['aySayisi'] ?? 1)));
+  $ay = (int)($secenek['aySayisi'] ?? 0);
   $birlesik = [];
-  $bitis = new DateTime();
-  for ($i = 0; $i < $ay; $i++) {
-    $baslangic = hks_bir_ay_once($bitis);
-    $liste = hks_kunye_penceresi($cfg, $secenek, $baslangic, $bitis);
-    foreach ($liste as $k) $birlesik[$k['kunyeNo']] = $k;
-    $bitis = $baslangic;
+  if ($ay <= 0) {
+    // VARSAYILAN (HKS sitesi gibi): tarihsiz tek çağrı → son 50 künye.
+    // Hızlıdır ve tarih penceresine takılmadığı için ESKİ stoğu da getirir.
+    foreach (hks_kunye_penceresi($cfg, $secenek) as $k) $birlesik[$k['kunyeNo']] = $k;
+  } else {
+    // GENİŞ TARAMA: aylık pencerelerle 50 kayıt sınırını aşar (yavaş — ay başına
+    // 1 SOAP çağrısı). Çok künyesi olanlar için.
+    $ay = min(24, $ay);
+    $bitis = new DateTime();
+    for ($i = 0; $i < $ay; $i++) {
+      $baslangic = hks_bir_ay_once($bitis);
+      foreach (hks_kunye_penceresi($cfg, $secenek, $baslangic, $bitis) as $k) $birlesik[$k['kunyeNo']] = $k;
+      $bitis = $baslangic;
+    }
   }
   $sonuc = array_values($birlesik);
 
@@ -320,9 +333,31 @@ function hks_bildirim_xml($satirlar, $ortak) {
   foreach ($satirlar as $i => $s) {
     $uid = 'HKSPHP-' . time() . '-' . $i . '-' . bin2hex(random_bytes(3));
 
-    // — Mal bilgileri (b: alfabetik: MalinMiktari, MalinSatisFiyat) —
-    $mal = '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>';
-    if ($fiyatGonder) $mal .= '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
+    // — Mal bilgileri —
+    // REFERANSSIZ ($ortak['referanssiz']): malın TAM tanımı zorunlu (docx
+    // "Referanssız Bildirimlerde": MalinKodNo, UrunCinsi, UretimSekli,
+    // UretimIl/Ilce/BeldeId boş olamaz; İthalat sıfatında GelenUlkeId de).
+    // REFERANSLI: künye zaten malı tanımlar → miktar (+ Satış/Satın Alım'da fiyat).
+    // DataContract alfabetik sıra korunur.
+    if (!empty($ortak['referanssiz'])) {
+      $m = [];
+      $m[] = '<b:AnalizeGonderilecekMi>' . (!empty($ortak['analiz']) ? 'true' : 'false') . '</b:AnalizeGonderilecekMi>';
+      if (!empty($ortak['gelenUlkeId'])) $m[] = '<b:GelenUlkeId>' . (int)$ortak['gelenUlkeId'] . '</b:GelenUlkeId>';
+      $m[] = '<b:MalinCinsiId>' . (int)$ortak['malinCinsiId'] . '</b:MalinCinsiId>';
+      $m[] = '<b:MalinKodNo>' . (int)$ortak['malinKodNo'] . '</b:MalinKodNo>';
+      $m[] = '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>';
+      $m[] = '<b:MalinNiteligi>' . (int)$ortak['malinNiteligi'] . '</b:MalinNiteligi>';
+      if ($fiyatGonder) $m[] = '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
+      $m[] = '<b:MiktarBirimId>' . (int)$ortak['miktarBirimId'] . '</b:MiktarBirimId>';
+      $m[] = '<b:UretimBeldeId>' . (int)$ortak['uretimBeldeId'] . '</b:UretimBeldeId>';
+      $m[] = '<b:UretimIlId>' . (int)$ortak['uretimIlId'] . '</b:UretimIlId>';
+      $m[] = '<b:UretimIlceId>' . (int)$ortak['uretimIlceId'] . '</b:UretimIlceId>';
+      $m[] = '<b:UretimSekli>' . (int)$ortak['uretimSekli'] . '</b:UretimSekli>';
+      $mal = implode('', $m);
+    } else {
+      $mal = '<b:MalinMiktari>' . (float)$s['miktar'] . '</b:MalinMiktari>';
+      if ($fiyatGonder) $mal .= '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
+    }
 
     // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
     if ($yurtIci) {
@@ -364,7 +399,10 @@ function hks_bildirim_xml($satirlar, $ortak) {
       '<a:BildirimciBilgileri><b:KisiSifat>' . (int)$ortak['sifatId'] . '</b:KisiSifat></a:BildirimciBilgileri>' .
       '<a:IkinciKisiBilgileri>' . $ikinci . '</a:IkinciKisiBilgileri>' .
       '<a:MalinGidecekYerBilgileri>' . implode('', $gidecek) . '</a:MalinGidecekYerBilgileri>' .
-      '<a:ReferansBildirimKunyeNo>' . preg_replace('/\D/', '', (string)$s['kunyeNo']) . '</a:ReferansBildirimKunyeNo>' .
+      // Referanssız bildirimlerde "0" gönderilir (docx).
+      '<a:ReferansBildirimKunyeNo>' .
+        (!empty($ortak['referanssiz']) ? '0' : preg_replace('/\D/', '', (string)$s['kunyeNo'])) .
+      '</a:ReferansBildirimKunyeNo>' .
       '<a:UniqueId>' . $uid . '</a:UniqueId>' .
       '</a:BildirimKayitIstek>';
   }
