@@ -391,7 +391,7 @@
 <!-- ============ EKRAN: FİRMA SEÇİM ============ -->
 <div id="ekranFirma">
   <div class="logo">
-    <h1><svg width="32" height="32" viewBox="0 0 32 32" style="vertical-align:-5px"><path d="M12 6 L13.5 2.5 L15 5 L16 2 L17 5 L18.5 2.5 L20 6 Z" fill="#7a2e1d"/><circle cx="16" cy="18" r="11.5" fill="#b71c1c"/><circle cx="16" cy="18" r="8" fill="#d32f2f"/><g fill="#ffcdd2"><circle cx="12.8" cy="15" r="1.7"/><circle cx="19.2" cy="15" r="1.7"/><circle cx="16" cy="18.6" r="1.7"/><circle cx="12.4" cy="21.4" r="1.7"/><circle cx="19.6" cy="21.4" r="1.7"/><circle cx="16" cy="24.6" r="1.7"/></g></svg> HKS Panel</h1>
+    <h1>HKS Panel</h1>
     <p>İşlem yapılacak firmayı seçin</p>
   </div>
   <main>
@@ -532,8 +532,14 @@
 
       <!-- Yurt içi (Sevk Etme / yurt içi Satış): işletme türü + hedef -->
       <div id="hedefBlok" class="gizli">
-        <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
-        <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
+        <div id="hedefBekle" class="mesaj tamam gizli" style="display:block">
+          ⬆️ Önce Kart 1'de karşı tarafın TC/Vergi No'sunu girip <b>Doğrula</b>'ya basın —
+          hedef seçenekleri ona göre açılacak.
+        </div>
+        <div id="isletmeTuruBlok">
+          <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
+          <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
+        </div>
 
         <!-- Kayıtlı alıcı / Sevk Etme: karşı tarafın işyeri · Satın Alım: kendi işyerin -->
         <div id="isyeriAltBlok">
@@ -583,6 +589,19 @@
             <option value="6">Son 6 ay</option>
             <option value="12" selected>Son 1 yıl</option>
             <option value="24">Tümü (son 2 yıl)</option>
+          </select>
+        </div>
+      </div>
+      <div class="satir2">
+        <div>
+          <label>İşyeri Türü</label>
+          <select id="sKunyeIsyeriTuru"><option value="">— Tümü —</option></select>
+        </div>
+        <div>
+          <label>Sıralama Türü</label>
+          <select id="sKunyeSirala">
+            <option value="azalan" selected>Tarihe Göre Azalan</option>
+            <option value="artan">Tarihe Göre Artan</option>
           </select>
         </div>
       </div>
@@ -1306,6 +1325,8 @@ function formuTemizle() {
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
   $('sGun').value = '12';
+  $('sKunyeIsyeriTuru').value = '';
+  $('sKunyeSirala').value = 'azalan';
   $('sIkSifat').value = '';
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
@@ -1353,6 +1374,8 @@ function listeleriDoldur() {
     return !(n.includes('yurt') && (n.includes('dışı') || n.includes('disi')));
   });
   doldur('sIsletmeTuru', isletmeIci, '— Seçiniz —');
+  // Künye sorgusu işyeri türü FİLTRESİ: gelen künyeler her türden olabilir → tümü
+  doldur('sKunyeIsyeriTuru', listeler.isletmeTurleri, '— Tümü —');
 
   // Sıfat: sistemde kullanılan yalnızca 2 sıfat gösterilir (İhracat + Tüccar Hal Dışı)
   const sifatFiltre = (listeler.sifatlar || []).filter(x => {
@@ -1381,8 +1404,10 @@ function listeleriDoldur() {
   (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
-    // Aktif: Satış + Sevk Etme + Satın Alım. Diğerleri (varsa) kapalı.
-    if (!satisMi(x.ad) && !sevkMi(x.ad) && !satinMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
+    // Aktif: Satış + Sevk Etme. Satın Alım GEÇİCİ KAPALI — HKS'te REFERANSSIZ
+    // bildirimdir (künye seçimi yok; malın tam tanımı + üretici + üretim yeri
+    // girilir). Mevcut referanslı akış yanlış olur, stok düşürebilir.
+    if (!satisMi(x.ad) && !sevkMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
     turSel.appendChild(o);
   });
   const satis = (listeler.bildirimTurleri || []).find(x => satisMi(x.ad));
@@ -1428,10 +1453,14 @@ function turDegisti() {
   const satin = satinAlimModuMu();
   const yurtIci = yurtIciMi();
   const kayitli = kayitliMi();
-  // İşyeri hedefi: Sevk Etme / Satın Alım, ya da yurt içi Satış + kayıtlı alıcı.
-  const isyeriMod = yurtIci && (sevk || satin || kayitli);
+  // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (her yurt içi türde).
+  // Doğrulanmadan hedef alanları açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle
+  // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
+  const isyeriMod = yurtIci && kayitli;
   // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
   const adresMod  = yurtIci && !sevk && !satin && !!ikDogrulandi && !kayitli;
+  // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
+  const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
   // Kart 1 — Yurt Dışı tiki yalnız Satış'ta anlamlı; Sevk/Satın Alım'da gizli.
   $('yurtDisiBlok').classList.toggle('gizli', sevk || satin);
@@ -1450,6 +1479,8 @@ function turDegisti() {
   $('hedefBlok').classList.toggle('gizli', !yurtIci);
   $('isyeriAltBlok').classList.toggle('gizli', !isyeriMod);
   $('adresAltBlok').classList.toggle('gizli', !adresMod);
+  $('hedefBekle').classList.toggle('gizli', !bekliyor);
+  $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
   // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir.
   $('isyeriBaslik').textContent = satin ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
   if (adresMod) illeriYukleGerekiyorsa();
@@ -1649,12 +1680,19 @@ $('btnKunyeler').onclick = async () => {
       firmaId: aktifFirma.id,
       urunId: $('sUrun').value || 0,
       aySayisi: parseInt($('sGun').value, 10),
+      // İşyeri türü filtresi + sıralama sunucuda yanıt üzerinden uygulanır
+      // (HKS istek şemasında bu alanlar yok — künyenin GidecekYerTuruId'si süzülür).
+      isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
+      sirala: $('sKunyeSirala').value,
     });
     kunyeler = j.kunyeler;
     kunyeCiz();
     $('kartKunyeler').classList.remove('gizli');
     $('kunyeSayi').textContent = `(${kunyeler.length} künye, kalan ${fmt(kunyeler.reduce((t, k) => t + k.kalan, 0))} KG)`;
-    if (kunyeler.length === 0) mesajGoster('kunyeMesaj', 'Kriterlere uygun künye bulunamadı.', 'hata');
+    if (kunyeler.length === 0) {
+      mesajGoster('kunyeMesaj', 'Kriterlere uygun künye bulunamadı.' +
+        ($('sKunyeIsyeriTuru').value ? ' İşyeri türü filtresini "— Tümü —" yapıp tekrar deneyin.' : ''), 'hata');
+    }
     else $('kartKunyeler').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { mesajGoster('kunyeMesaj', e.message, 'hata'); }
   $('btnKunyeler').disabled = false;
@@ -1797,6 +1835,9 @@ $('btnTaslakKaydet').onclick = async () => {
 
     ortak = Object.assign({}, ortakBase, {
       yurtIci: true,
+      // Sevk Etme / Satın Alım: karşı taraf GTB'de kayıtlı OLMALI (docx).
+      // Sunucu, gönderim anında bunu tekrar doğrular.
+      kayitZorunlu: (sevk || satin),
       fiyatGonder: fiyatGerekli,
       fiyat: fiyatGerekli ? trSayi($('oFiyat').value) : 0,
       isletmeTuruId: $('sIsletmeTuru').value,

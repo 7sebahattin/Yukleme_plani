@@ -152,6 +152,39 @@ function hks_tum_listeler($cfg) {
   ];
 }
 
+// ── Referanssız bildirim için ürün referansları (Satın Alım akışı) ────────
+// HKS'te Satın Alım REFERANSSIZ bildirimdir: künye seçilmez, malın tam tanımı
+// girilir. docx (BildirimMalBilgileriDTO) şu yardımcı servisleri işaret eder:
+//   MalinNiteligi → UrunServiceMalinNiteligi
+//   MalinKodNo    → UrunServiceUrunler        (zaten 'urunler' olarak var)
+//   UretimSekli   → UrunServiceUretimSekilleri
+//   MalinCinsiId  → UrunServiceUrunCinsleri
+//   MiktarBirimId → UrunServiceUrunBirimleri
+// Zarf/DTO adları mevcut desenden türetildi; KESİN DEĞİL. Bu yüzden her servis
+// TEK TEK denenir — biri hata verse de diğerleri döner, hata metni raporlanır.
+function hks_urun_listeleri($cfg) {
+  $tanim = [
+    'nitelikler'    => ['UrunServiceMalinNiteligi',    'BaseRequestMessageOf_MalinNiteligiIstek',   'MalinNiteligiDTO',  'MalinNiteligiAdi'],
+    'cinsler'       => ['UrunServiceUrunCinsleri',     'BaseRequestMessageOf_UrunCinsleriIstek',    'UrunCinsiDTO',      'UrunCinsiAdi'],
+    'uretimSekli'   => ['UrunServiceUretimSekilleri',  'BaseRequestMessageOf_UretimSekilleriIstek', 'UretimSekliDTO',    'UretimSekliAdi'],
+    'birimler'      => ['UrunServiceUrunBirimleri',    'BaseRequestMessageOf_UrunBirimleriIstek',   'UrunBirimiDTO',     'UrunBirimiAdi'],
+  ];
+  $sonuc = ['zaman' => date('c'), 'hatalar' => []];
+  foreach ($tanim as $anahtar => [$metod, $zarf, $dto, $adAlani]) {
+    try {
+      $sonuc[$anahtar] = hks_liste_getir('Urun', $metod, $zarf, $dto, $adAlani, $cfg);
+      if (!count($sonuc[$anahtar])) {
+        // Servis çalıştı ama liste boş → etiket/alan adı yanlış olabilir: ham ver.
+        $sonuc['hatalar'][$anahtar] = 'Boş liste döndü. HAM: ' . hks_son_ham(700);
+      }
+    } catch (Throwable $e) {
+      $sonuc[$anahtar] = [];
+      $sonuc['hatalar'][$anahtar] = $e->getMessage();
+    }
+  }
+  return $sonuc;
+}
+
 // Bir takvim ayı geri git (servis "1 ay" sınırını takvim ayı olarak sayıyor)
 function hks_bir_ay_once(DateTime $t) {
   $x = clone $t;
@@ -193,6 +226,11 @@ function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $biti
       'miktar' => (float)hks_deger($b, 'MalinMiktari'),
       'birim' => hks_deger($b, 'MiktarBirimiAd'),
       'uretici' => hks_deger($b, 'UreticiTcKimlikVergiNo'),
+      // Malın GELDİĞİ yerin işletme türü / işyeri (docx: ReferansKunyeDTO'ya
+      // GidecekYerTuruId + GidecekIsyeriId eklendi). İstek şemasında işyeri
+      // türü FİLTRESİ yok; bu yüzden filtre yanıt üzerinden uygulanır.
+      'isletmeTuruId' => (int)hks_deger($b, 'GidecekYerTuruId'),
+      'isyeriId'      => (int)hks_deger($b, 'GidecekIsyeriId'),
     ];
   }
   return $sonuc;
@@ -210,7 +248,20 @@ function hks_kunyeleri_getir($cfg, $secenek) {
     $bitis = $baslangic;
   }
   $sonuc = array_values($birlesik);
-  usort($sonuc, function ($a, $b) { return strcmp($a['tarih'], $b['tarih']); });
+
+  // İşyeri türü filtresi — HKS istek şemasında böyle bir alan YOK; künyenin
+  // GidecekYerTuruId'si (yanıttan) ile eşleşenler süzülür. 0/boş = tüm türler.
+  $isyTur = (int)($secenek['isletmeTuruId'] ?? 0);
+  if ($isyTur > 0) {
+    $sonuc = array_values(array_filter($sonuc, fn($k) => (int)$k['isletmeTuruId'] === $isyTur));
+  }
+
+  // Sıralama: 'azalan' = yeni → eski (HKS sitesi varsayılanı), 'artan' = eski → yeni.
+  $azalan = (($secenek['sirala'] ?? 'artan') === 'azalan');
+  usort($sonuc, function ($a, $b) use ($azalan) {
+    $c = strcmp((string)$a['tarih'], (string)$b['tarih']);
+    return $azalan ? -$c : $c;
+  });
   return $sonuc;
 }
 
