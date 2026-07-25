@@ -532,8 +532,14 @@
 
       <!-- Yurt içi (Sevk Etme / yurt içi Satış): işletme türü + hedef -->
       <div id="hedefBlok" class="gizli">
-        <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
-        <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
+        <div id="hedefBekle" class="mesaj tamam gizli" style="display:block">
+          ⬆️ Önce Kart 1'de karşı tarafın TC/Vergi No'sunu girip <b>Doğrula</b>'ya basın —
+          hedef seçenekleri ona göre açılacak.
+        </div>
+        <div id="isletmeTuruBlok">
+          <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
+          <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
+        </div>
 
         <!-- Kayıtlı alıcı / Sevk Etme: karşı tarafın işyeri · Satın Alım: kendi işyerin -->
         <div id="isyeriAltBlok">
@@ -1445,10 +1451,14 @@ function turDegisti() {
   const satin = satinAlimModuMu();
   const yurtIci = yurtIciMi();
   const kayitli = kayitliMi();
-  // İşyeri hedefi: Sevk Etme / Satın Alım, ya da yurt içi Satış + kayıtlı alıcı.
-  const isyeriMod = yurtIci && (sevk || satin || kayitli);
+  // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (her yurt içi türde).
+  // Doğrulanmadan hedef alanları açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle
+  // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
+  const isyeriMod = yurtIci && kayitli;
   // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
   const adresMod  = yurtIci && !sevk && !satin && !!ikDogrulandi && !kayitli;
+  // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
+  const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
   // Kart 1 — Yurt Dışı tiki yalnız Satış'ta anlamlı; Sevk/Satın Alım'da gizli.
   $('yurtDisiBlok').classList.toggle('gizli', sevk || satin);
@@ -1467,6 +1477,8 @@ function turDegisti() {
   $('hedefBlok').classList.toggle('gizli', !yurtIci);
   $('isyeriAltBlok').classList.toggle('gizli', !isyeriMod);
   $('adresAltBlok').classList.toggle('gizli', !adresMod);
+  $('hedefBekle').classList.toggle('gizli', !bekliyor);
+  $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
   // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir.
   $('isyeriBaslik').textContent = satin ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
   if (adresMod) illeriYukleGerekiyorsa();
@@ -1821,6 +1833,9 @@ $('btnTaslakKaydet').onclick = async () => {
 
     ortak = Object.assign({}, ortakBase, {
       yurtIci: true,
+      // Sevk Etme / Satın Alım: karşı taraf GTB'de kayıtlı OLMALI (docx).
+      // Sunucu, gönderim anında bunu tekrar doğrular.
+      kayitZorunlu: (sevk || satin),
       fiyatGonder: fiyatGerekli,
       fiyat: fiyatGerekli ? trSayi($('oFiyat').value) : 0,
       isletmeTuruId: $('sIsletmeTuru').value,

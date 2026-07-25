@@ -280,6 +280,20 @@ try {
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
 
+      // GÖNDERİM ÖNCESİ SON GÜVENLİK — Sevk Etme / Satın Alım'da karşı tarafın
+      // GTB'de KAYITLI olması zorunludur (docx). Taslak kaydedildikten sonra
+      // durum değişmiş olabilir; geri alınamaz bildirimden önce tekrar sorulur.
+      if (!empty($ortak['kayitZorunlu']) && !empty($ortak['ikinciTc'])) {
+        $__kkHam = null;
+        $__kk = hks_kayitli_kisi_sorgu($cfg, [$ortak['ikinciTc']], $__kkHam);
+        $__k0 = $__kk[0] ?? null;
+        if (!$__k0 || empty($__k0['kayitliMi'])) {
+          hks_json_cikti(['hata' => 'Gönderim DURDURULDU: karşı taraf (' . $ortak['ikinciTc'] .
+            ') GTB sisteminde kayıtlı değil. Sevk Etme / Satın Alım için karşı tarafın ' .
+            'kayıtlı olması zorunludur. Taslak silinmedi.'], 400);
+        }
+      }
+
       $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
       hks_son_guncelle($ortak, $t['firma_id']);
 
