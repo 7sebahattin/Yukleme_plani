@@ -584,14 +584,14 @@
         <div>
           <label>Kapsam</label>
           <select id="sGun">
-            <!-- 0 = tarihsiz sorgu → HKS'in kendi davranışı: son 50 künye.
-                 Tek çağrı, hızlı; tarih penceresine takılmadığı için eski stok da gelir. -->
-            <option value="0" selected>Son 50 künye (HKS)</option>
-            <option value="3">Geniş tarama — 3 ay</option>
-            <option value="6">Geniş tarama — 6 ay</option>
-            <option value="12">Geniş tarama — 1 yıl</option>
-            <option value="24">Geniş tarama — 2 yıl</option>
-            <option value="36">Geniş tarama — 3 yıl</option>
+            <!-- Tarihli aylık pencerelerle tarama (HKS: iki tarih arası en fazla
+                 1 ay). Uzun aralık = daha çok SOAP çağrısı, daha yavaş. -->
+            <option value="3">Geçmiş tarama — 3 ay</option>
+            <option value="6">Geçmiş tarama — 6 ay</option>
+            <option value="12" selected>Geçmiş tarama — 1 yıl</option>
+            <option value="24">Geçmiş tarama — 2 yıl</option>
+            <option value="36">Geçmiş tarama — 3 yıl</option>
+            <option value="60">Geçmiş tarama — 5 yıl</option>
           </select>
         </div>
       </div>
@@ -609,13 +609,6 @@
         </div>
       </div>
       <button class="btn btn-teal" id="btnKunyeler">🔍 Künyeleri Getir</button>
-      <!-- HKS sitesindeki "Künye No + Künye Sorgula" — çok eski künyeye
-           doğrudan erişim (tarama beklemeden). -->
-      <label style="margin-top:12px">Künye No ile doğrudan ara</label>
-      <div class="satir2">
-        <div><input id="oKunyeNo" inputmode="numeric" autocomplete="off" placeholder="künye numarası"></div>
-        <div><button class="btn btn-soluk" id="btnKunyeNoAra" style="margin-top:0">🔎 Künye Sorgula</button></div>
-      </div>
       <div class="mesaj" id="kunyeMesaj"></div>
     </div>
 
@@ -922,6 +915,9 @@ const API_ROTA = {
   'POST /api/bildirim_onizle': 'bildirim_onizle',
   'POST /api/sorgu': 'sorgu',
   'POST /api/etiket': 'etiket',
+  // Referanssız (Satın Alım) mal bilgileri referansları
+  'POST /api/urun_listeleri': 'urun_listeleri',
+  'POST /api/urun_cinsleri': 'urun_cinsleri',
 };
 async function api(yol, metod, govde) {
   metod = metod || 'GET';
@@ -1382,11 +1378,11 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oKunyeNo'].forEach(id => { $(id).value = ''; });
+  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep'].forEach(id => { $(id).value = ''; });
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
-  $('sGun').value = '0';
+  $('sGun').value = '12';
   $('sKunyeIsyeriTuru').value = '';
   $('sKunyeSirala').value = 'azalan';
   // Referanssız (Satın Alım) mal bilgileri
@@ -1852,15 +1848,16 @@ function cipCiz(kapId, dizi, etiketFn, tikla, bosMetin) {
 }
 
 // ================= KÜNYELER =================
-// Ortak künye çekme — hem "Künyeleri Getir" hem "Künye Sorgula" kullanır.
-// kunyeNo verilirse ürün/kapsam gözardı edilir, doğrudan o künye gelir.
-async function kunyeGetir(btnId, ekstra) {
-  const btn = $(btnId);
-  const eskiMetin = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Sorgulanıyor...';
+$('btnKunyeler').onclick = async () => {
+  if (!$('sUrun').value) {
+    mesajGoster('kunyeMesaj', 'Lütfen ürün seçin — HKS servisi ürün seçilmeden künye sorgusuna izin vermiyor.', 'hata');
+    return;
+  }
+  $('btnKunyeler').disabled = true;
+  $('btnKunyeler').textContent = '⏳ Sorgulanıyor...';
   $('kunyeMesaj').className = 'mesaj';
   try {
-    const j = await api('/api/kunyeler', 'POST', Object.assign({
+    const j = await api('/api/kunyeler', 'POST', {
       firmaId: aktifFirma.id,
       urunId: $('sUrun').value || 0,
       aySayisi: parseInt($('sGun').value, 10),
@@ -1868,7 +1865,7 @@ async function kunyeGetir(btnId, ekstra) {
       // (HKS istek şemasında bu alanlar yok — künyenin GidecekYerTuruId'si süzülür).
       isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
       sirala: $('sKunyeSirala').value,
-    }, ekstra || {}));
+    });
     kunyeler = j.kunyeler || [];
     kunyeCiz();
     $('kartKunyeler').classList.remove('gizli');
@@ -1876,29 +1873,12 @@ async function kunyeGetir(btnId, ekstra) {
     if (kunyeler.length === 0) {
       mesajGoster('kunyeMesaj', 'Kriterlere uygun künye bulunamadı.' +
         ($('sKunyeIsyeriTuru').value ? ' İşyeri türü filtresini "— Tümü —" yapıp tekrar deneyin.' : ''), 'hata');
-    } else if (j.not) {
-      mesajGoster('kunyeMesaj', 'ℹ️ ' + j.not, 'tamam');
     } else {
       $('kartKunyeler').scrollIntoView({ behavior: 'smooth' });
     }
   } catch (e) { mesajGoster('kunyeMesaj', e.message, 'hata'); }
-  btn.disabled = false; btn.textContent = eskiMetin;
-}
-
-$('btnKunyeler').onclick = async () => {
-  if (!$('sUrun').value) {
-    mesajGoster('kunyeMesaj', 'Lütfen ürün seçin — HKS servisi ürün seçilmeden künye sorgusuna izin vermiyor.', 'hata');
-    return;
-  }
-  await kunyeGetir('btnKunyeler');
-};
-
-// Künye No ile doğrudan arama (HKS sitesindeki "Künye Sorgula") — çok eski
-// künyelere tarama beklemeden erişim.
-$('btnKunyeNoAra').onclick = async () => {
-  const no = $('oKunyeNo').value.replace(/\D/g, '');
-  if (!no) { mesajGoster('kunyeMesaj', 'Künye numarası giriniz.', 'hata'); return; }
-  await kunyeGetir('btnKunyeNoAra', { kunyeNo: no, aySayisi: 0, isletmeTuruId: 0 });
+  $('btnKunyeler').disabled = false;
+  $('btnKunyeler').textContent = '🔍 Künyeleri Getir';
 };
 
 function kunyeCiz() {
