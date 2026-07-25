@@ -1868,6 +1868,8 @@ $('btnKunyeler').onclick = async () => {
     if (kunyeler.length === 0) {
       mesajGoster('kunyeMesaj', 'Kriterlere uygun künye bulunamadı.' +
         ($('sKunyeIsyeriTuru').value ? ' İşyeri türü filtresini "— Tümü —" yapıp tekrar deneyin.' : ''), 'hata');
+    } else if (j.not) {
+      mesajGoster('kunyeMesaj', 'ℹ️ ' + j.not, 'tamam');
     }
     else $('kartKunyeler').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { mesajGoster('kunyeMesaj', e.message, 'hata'); }
