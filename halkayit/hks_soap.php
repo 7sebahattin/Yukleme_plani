@@ -165,7 +165,6 @@ function hks_tum_listeler($cfg) {
 function hks_urun_listeleri($cfg) {
   $tanim = [
     'nitelikler'    => ['UrunServiceMalinNiteligi',    'BaseRequestMessageOf_MalinNiteligiIstek',   'MalinNiteligiDTO',  'MalinNiteligiAdi'],
-    'cinsler'       => ['UrunServiceUrunCinsleri',     'BaseRequestMessageOf_UrunCinsleriIstek',    'UrunCinsiDTO',      'UrunCinsiAdi'],
     'uretimSekli'   => ['UrunServiceUretimSekilleri',  'BaseRequestMessageOf_UretimSekilleriIstek', 'UretimSekliDTO',    'UretimSekliAdi'],
     // DİKKAT: alan adı UrunBirimAdi (UrunBirim*i*Adi DEĞİL) — canlı yanıttan doğrulandı.
     'birimler'      => ['UrunServiceUrunBirimleri',    'BaseRequestMessageOf_UrunBirimleriIstek',   'UrunBirimiDTO',     'UrunBirimAdi'],
@@ -187,6 +186,38 @@ function hks_urun_listeleri($cfg) {
       $sonuc[$anahtar] = [];
       $sonuc['hatalar'][$anahtar] = $e->getMessage();
     }
+  }
+  return $sonuc;
+}
+
+// Ürün cinsleri — ÜRÜNE BAĞLIDIR (istek UrunId alır). DTO: UrunCinsiAdi, Id,
+// UretimSekliId, UrunId, UrunKodu, Ithalmi. Aynı cins adı her ÜRETİM ŞEKLİ için
+// ayrı kayıt olarak döner (Geleneksel/Organik/İyi Tarım) — bu yüzden seçim
+// yapılırken üretim şekline göre de süzülmelidir.
+// docx kuralı: İthalat işlemlerinde yalnız Ithalmi=true olan cinsler, ithalat
+// dışı işlemlerde yalnız Ithalmi=false olanlar kullanılabilir.
+function hks_urun_cinsleri($cfg, $urunId, &$ham = null) {
+  $istek = '<Istek xmlns:a="' . HKS_NS_SC . '"><a:UrunId>' . (int)$urunId . '</a:UrunId></Istek>';
+  $xml = hks_soap_cagir('Urun', 'UrunServiceUrunCinsleri',
+    hks_taban_istek('BaseRequestMessageOf_UrunCinsleriIstek', $istek, $cfg));
+  $duz  = hks_sadelestir($xml);
+  $ham  = preg_replace('/\s+/', ' ', substr($duz, 0, 1200));
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception('UrunCinsleri: ' . $hata . ' || HAM: ' . $ham);
+
+  $sonuc = [];
+  foreach (hks_bloklar($duz, 'UrunCinsiDTO') as $b) {
+    $ad = trim((string)hks_deger($b, 'UrunCinsiAdi'));
+    if ($ad === '') continue;
+    $ith = (string)hks_deger($b, 'Ithalmi');
+    $sonuc[] = [
+      'id'            => (int)hks_deger($b, 'Id'),
+      'ad'            => $ad,
+      'uretimSekliId' => (int)hks_deger($b, 'UretimSekliId'),
+      'urunId'        => (int)hks_deger($b, 'UrunId'),
+      'urunKodu'      => trim((string)hks_deger($b, 'UrunKodu')),
+      'ithal'         => (stripos($ith, 'true') !== false),
+    ];
   }
   return $sonuc;
 }

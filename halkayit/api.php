@@ -353,6 +353,19 @@ try {
       hks_json_cikti(hks_urun_listeleri($cfg));
     }
 
+    // ---- ÜRÜN CİNSLERİ (ürüne bağlı; UrunId zorunlu) ----
+    case 'urun_cinsleri': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
+      if (empty($g['urunId'])) hks_json_cikti(['hata' => 'Ürün seçilmedi.'], 400);
+      @set_time_limit(60);
+      $ham = null;
+      $liste = hks_urun_cinsleri($cfg, (int)$g['urunId'], $ham);
+      $out = ['cinsler' => $liste];
+      if (!count($liste)) $out['ham'] = $ham;
+      hks_json_cikti($out);
+    }
+
     // ---- BİLDİRİM SORGULAMA (yaptığım bildirimler) ----
     case 'sorgu': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
