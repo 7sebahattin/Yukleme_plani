@@ -1404,10 +1404,10 @@ function listeleriDoldur() {
   (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
-    // Aktif: Satış + Sevk Etme. Satın Alım GEÇİCİ KAPALI — HKS'te REFERANSSIZ
-    // bildirimdir (künye seçimi yok; malın tam tanımı + üretici + üretim yeri
-    // girilir). Mevcut referanslı akış yanlış olur, stok düşürebilir.
-    if (!satisMi(x.ad) && !sevkMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
+    // Aktif: Satış + Sevk Etme + Satın Alım (üçü de REFERANSLI akış — docx 0.1.14).
+    // "Üreticiden Sevk Alım" kapalı: docx'e göre referanslı yapılamaz (satır 4076),
+    // referanssız + malın tam tanımı gerektirir — ayrı akış olarak eklenecek.
+    if (!satisMi(x.ad) && !sevkMi(x.ad) && !satinMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
     turSel.appendChild(o);
   });
   const satis = (listeler.bildirimTurleri || []).find(x => satisMi(x.ad));
