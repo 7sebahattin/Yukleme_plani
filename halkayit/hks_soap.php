@@ -476,8 +476,8 @@ function hks_stok_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
   return $rows;
 }
 
-function hks_stok_ozet($cfg, $aySayisi = 12) {
-  $ay = max(1, min(36, (int)$aySayisi));
+function hks_stok_ozet($cfg, $aySayisi = 60) {
+  $ay = max(1, min(60, (int)$aySayisi));
 
   // Aylık (takvim ayı) pencereleri sırayla sorgula, künyeleri KunyeNo ile birleştir.
   $birlesik = [];

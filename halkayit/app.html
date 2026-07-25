@@ -312,6 +312,19 @@
   input.input-turuncu:focus {
     background:var(--kart); border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.18);
   }
+  /* Yeşil (para) giriş kutusu — Birim Fiyat */
+  input.input-yesil {
+    background:rgba(22,163,74,.12); border:2px solid #16a34a; color:#14532d; font-weight:700;
+  }
+  input.input-yesil::placeholder { color:#4d9c68; font-weight:600; }
+  input.input-yesil:focus {
+    background:var(--kart); border-color:#15803d; box-shadow:0 0 0 3px rgba(22,163,74,.18);
+  }
+  html[data-theme="dark"] input.input-yesil {
+    background:rgba(34,197,94,.10); border-color:#2f6f45; color:#86e6ac;
+  }
+  html[data-theme="dark"] input.input-yesil::placeholder { color:#4d9c68; }
+  html[data-theme="dark"] input.input-yesil:focus { background:var(--kart); border-color:#22c55e; }
 
   /* Bildirim kartı başlıkları — büyük, belirgin */
   #ekranBildirim .kart h2 {
@@ -666,21 +679,21 @@
 
     <div class="kart gizli" id="kartKunyeler">
       <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
-      <div id="fiyatBlok">
-        <label>💰 Birim Fiyat *</label>
-        <input id="oFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
-      </div>
-      <div class="satir2" style="margin-top:6px">
+      <!-- Birim fiyat + toplam kilo yan yana; altlarında iki işlem butonu yan yana -->
+      <div class="satir2">
+        <div id="fiyatBlok">
+          <label>💰 Birim Fiyat *</label>
+          <input id="oFiyat" class="input-yesil" inputmode="decimal" autocomplete="off">
+        </div>
         <div>
           <label>🎯 Toplam kilo</label>
           <input id="hedefKilo" class="input-turuncu" inputmode="decimal">
         </div>
-        <div>
-          <label>&nbsp;</label>
-          <button class="btn btn-ana" id="btnDagit" style="margin-top:0">⚡ Otomatik Dağıt</button>
-        </div>
       </div>
-      <button class="btn btn-soluk" id="btnSecimKaldir" style="margin-top:8px">✖️ Tüm Seçimi Kaldır</button>
+      <div class="satir2" style="margin-top:8px">
+        <div><button class="btn btn-ana" id="btnDagit" style="margin-top:0">⚡ Otomatik Dağıt</button></div>
+        <div><button class="btn btn-soluk" id="btnSecimKaldir" style="margin-top:0">✖️ Seçimi Kaldır</button></div>
+      </div>
       <div class="mesaj" id="dagitMesaj"></div>
       <div id="kunyeListe" style="margin-top:12px"></div>
     </div>
@@ -1066,10 +1079,11 @@ async function stokListele() {
   const kap = $('stokListe');
   const oz  = $('stokOzet');
   oz.textContent = '';
-  kap.innerHTML = '<div class="yukleniyor">Son 1 yıl stok sorgulanıyor… (biraz sürebilir)</div>';
+  kap.innerHTML = '<div class="yukleniyor">Son 5 yıl stok sorgulanıyor… (60 aylık tarama, biraz sürebilir)</div>';
   $('stokBolum').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
-    const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi: 12 });
+    // 5 yıl: HKS penceresi ayda 1 ile sınırlı olduğundan 60 ardışık sorgu yapılır.
+    const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi: 60 });
     const liste = j.stok || [];
     if (!liste.length) {
       oz.textContent = '';
@@ -1326,30 +1340,110 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
       `<td>${eHtml(s.bildirimci)}${s.malSahibi ? '<br>' + eHtml(s.malSahibi) : ''}</td>` +
       '</tr>';
   }).join('');
+  // PDF/paylaşım dosya adı: "PLAKA-FİRMA" (örn. 55ASY19-ASYA FRESH).
+  // Dosya adında kullanılamayan karakterler ayıklanır. Bu ad aynı zamanda
+  // pencere <title>'ı olur → tarayıcıdan "PDF olarak kaydet" deyince de aynı ad gelir.
+  const dosyaAdi = ((plaka || belge || 'kunye') + '-' + (firmaAdi || ''))
+    .replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+
   const w = window.open('', '_blank');
   if (!w) { toast('Yazdırma penceresi engellendi. Açılır pencere izni verin.'); return; }
   w.document.write(
-    '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Çoklu Künye Basım</title>' +
-    '<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#111}' +
+    '<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>' + eHtml(dosyaAdi) + '</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:12px;padding:16px;color:#111;background:#fff}' +
     'h2{font-size:15px;margin:0 0 4px}.meta{font-size:12px;margin-bottom:10px;color:#333}' +
     'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}' +
     'thead th{background:#eee}tfoot td{font-weight:bold}' +
     '.qrtd{width:110px;text-align:center}.qrbox{text-align:center}.qrno{font-size:9px;word-break:break-all;margin-top:2px}' +
     '.ustbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}' +
+    '.btnlar{display:flex;gap:8px;flex-shrink:0}' +
     '.yzbtn{padding:9px 18px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid #1c4a6e;background:#1c4a6e;color:#fff;border-radius:8px;white-space:nowrap}' +
-    '@media print{.yzbtn{display:none}}</style></head><body>' +
+    '.pybtn{background:#25D366;border-color:#1da851}' +
+    '.yzbtn:disabled{opacity:.6;cursor:wait}' +
+    '@media print{.btnlar{display:none}}</style></head><body>' +
     '<div class="ustbar"><div>' +
     '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(firmaAdi || '') + '</h2>' +
     '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
     eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
     '</div>' +
+    '<div class="btnlar">' +
     '<button class="yzbtn" onclick="window.print()">🖨️ Yazdır</button>' +
-    '</div>' +
-    '<table><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
+    '<button class="yzbtn pybtn" id="btnPaylas">📤 Paylaş</button>' +
+    '</div></div>' +
+    '<table id="kunyeTablo"><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
     '<th>Nereden / Nereye</th><th>Bildirimci / Malın Sahibi</th></tr></thead><tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td class="qrtd">TOPLAM</td><td><b>' + fmt(toplam) + ' KG</b></td><td colspan="2"></td></tr></tfoot></table>' +
     '</body></html>');
   w.document.close();
+
+  // ── Paylaş: sayfayı PDF'e çevirip WhatsApp'a (Web Share API) gönder ──
+  // Kütüphaneler (jsPDF + html2canvas) SADECE Paylaş'a basılınca yüklenir;
+  // normal yazdırma bu ~560KB'ı hiç indirmez.
+  const kokUrl = location.origin + location.pathname.replace(/[^/]*$/, '');
+  w.addEventListener('load', () => {}, { once: true });
+  const btn = w.document.getElementById('btnPaylas');
+  if (btn) btn.onclick = () => topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, kunyeler.length, toplam);
+}
+
+// Yazdırma penceresindeki içeriği PDF yapıp paylaşır.
+async function topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, adet, toplam) {
+  const btn = w.document.getElementById('btnPaylas');
+  const eski = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ PDF hazırlanıyor...';
+  try {
+    // Kütüphaneleri hedef pencereye bir kez enjekte et
+    const yukle = (src) => new Promise((ok, hata) => {
+      const s = w.document.createElement('script');
+      s.src = src; s.onload = ok; s.onerror = () => hata(new Error(src + ' yüklenemedi'));
+      w.document.head.appendChild(s);
+    });
+    if (!w.html2canvas) await yukle(kokUrl + 'html2canvas.min.js');
+    if (!w.jspdf)      await yukle(kokUrl + 'jspdf.umd.min.js');
+
+    // Tabloyu görüntüye çevir (Türkçe karakterler tarayıcı tarafından işlendiği
+    // için font gömme derdi olmaz), sonra A4 sayfalara böl.
+    const kanvas = await w.html2canvas(w.document.body, { scale: 2, backgroundColor: '#ffffff' });
+    const { jsPDF } = w.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const sayfaG = pdf.internal.pageSize.getWidth();
+    const sayfaY = pdf.internal.pageSize.getHeight();
+    const kenar = 8;
+    const gorselG = sayfaG - kenar * 2;
+    const gorselY = (kanvas.height * gorselG) / kanvas.width;
+    const png = kanvas.toDataURL('image/png');
+
+    let kalan = gorselY, ofset = 0;
+    pdf.addImage(png, 'PNG', kenar, kenar, gorselG, gorselY);
+    kalan -= (sayfaY - kenar * 2);
+    while (kalan > 0) {
+      ofset += (sayfaY - kenar * 2);
+      pdf.addPage();
+      pdf.addImage(png, 'PNG', kenar, kenar - ofset, gorselG, gorselY);
+      kalan -= (sayfaY - kenar * 2);
+    }
+
+    const blob = pdf.output('blob');
+    const dosya = new File([blob], dosyaAdi + '.pdf', { type: 'application/pdf' });
+    const metin = `${firmaAdi || ''} · ${plaka || ''}\n${adet} künye · Toplam ${fmt(toplam)} KG`;
+
+    if (w.navigator.canShare && w.navigator.canShare({ files: [dosya] })) {
+      // Paylaşım sayfası açılır → WhatsApp → kişi/grup seçilip gönderilir
+      await w.navigator.share({ files: [dosya], title: dosyaAdi, text: metin });
+    } else {
+      // Dosya paylaşımı desteklenmiyorsa (çoğu masaüstü tarayıcı): PDF'i indir
+      // ve WhatsApp Web'i aç — kullanıcı indirilen dosyayı ekler.
+      const url = w.URL.createObjectURL(blob);
+      const a = w.document.createElement('a');
+      a.href = url; a.download = dosyaAdi + '.pdf';
+      w.document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => w.URL.revokeObjectURL(url), 4000);
+      w.open('https://web.whatsapp.com/', '_blank');
+      w.alert('PDF indirildi: ' + dosyaAdi + '.pdf\n\nWhatsApp Web açıldı — kişi/grubu seçip indirilen PDF\'i ekleyebilirsiniz.\n(Telefondan paylaşırsanız doğrudan WhatsApp\'a gönderilir.)');
+    }
+  } catch (e) {
+    w.alert('Paylaşım hazırlanamadı: ' + (e && e.message ? e.message : e));
+  }
+  btn.disabled = false; btn.textContent = eski;
 }
 
 $('btnTopluYazdir').onclick = () => {
