@@ -167,15 +167,21 @@ function hks_urun_listeleri($cfg) {
     'nitelikler'    => ['UrunServiceMalinNiteligi',    'BaseRequestMessageOf_MalinNiteligiIstek',   'MalinNiteligiDTO',  'MalinNiteligiAdi'],
     'cinsler'       => ['UrunServiceUrunCinsleri',     'BaseRequestMessageOf_UrunCinsleriIstek',    'UrunCinsiDTO',      'UrunCinsiAdi'],
     'uretimSekli'   => ['UrunServiceUretimSekilleri',  'BaseRequestMessageOf_UretimSekilleriIstek', 'UretimSekliDTO',    'UretimSekliAdi'],
-    'birimler'      => ['UrunServiceUrunBirimleri',    'BaseRequestMessageOf_UrunBirimleriIstek',   'UrunBirimiDTO',     'UrunBirimiAdi'],
+    // DİKKAT: alan adı UrunBirimAdi (UrunBirim*i*Adi DEĞİL) — canlı yanıttan doğrulandı.
+    'birimler'      => ['UrunServiceUrunBirimleri',    'BaseRequestMessageOf_UrunBirimleriIstek',   'UrunBirimiDTO',     'UrunBirimAdi'],
   ];
   $sonuc = ['zaman' => date('c'), 'hatalar' => []];
   foreach ($tanim as $anahtar => [$metod, $zarf, $dto, $adAlani]) {
     try {
       $sonuc[$anahtar] = hks_liste_getir('Urun', $metod, $zarf, $dto, $adAlani, $cfg);
+      // Teşhis: DTO'nun TÜM alanlarını görmek için ilk bloğu ham olarak da ver
+      // (UrunCinsiDTO'da hangi üst-kimlik alanı var — ürün/tür — bunu gösterir).
+      $__h = hks_son_ham(4000);
+      if (preg_match('/<[a-z]:' . $dto . '>.*?<\/[a-z]:' . $dto . '>/s', $__h, $__m)) {
+        $sonuc['ornek'][$anahtar] = strtr($__m[0], ['<' => '‹', '>' => '›']);
+      }
       if (!count($sonuc[$anahtar])) {
-        // Servis çalıştı ama liste boş → etiket/alan adı yanlış olabilir: ham ver.
-        $sonuc['hatalar'][$anahtar] = 'Boş liste döndü. HAM: ' . hks_son_ham(700);
+        $sonuc['hatalar'][$anahtar] = 'Boş liste döndü. HAM: ' . substr($__h, 0, 700);
       }
     } catch (Throwable $e) {
       $sonuc[$anahtar] = [];
