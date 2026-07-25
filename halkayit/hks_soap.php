@@ -237,21 +237,31 @@ function hks_bir_ay_once(DateTime $t) {
 // $baslangic/$bitis NULL ise tarih GÖNDERİLMEZ → HKS "son 50 künye" döndürür
 // (docx: tarihler opsiyonel; verilirse 50 sınırı kalkar ama en fazla 1 ay aralık).
 // HKS web sitesindeki künye ekranı da tarihsiz çalışır.
-function hks_kunye_penceresi($cfg, $secenek, ?DateTime $baslangic = null, ?DateTime $bitis = null) {
-  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+// "Boş tarih" gönderim stratejileri — hangisinin kabul edildiği sunucuya bağlı:
+//  nil  : <a:BaslangicTarihi i:nil="true"/>  → DataContract nullable DateTime
+//  atla : alan hiç gönderilmez
+//  eski : 1900-01-01 (SQL Server datetime alt sınırı 1753 — MinValue 0001-01-01
+//         bu aralığın DIŞINDA kaldığı için dönüşüm hatası veriyor olabilir)
+const HKS_BOS_TARIH_STRATEJILERI = ['nil', 'atla', 'eski'];
+
+function hks_kunye_penceresi($cfg, $secenek, ?DateTime $baslangic = null, ?DateTime $bitis = null, $bosStrateji = 'nil') {
+  $ns = '<Istek xmlns:a="' . HKS_NS_SC . '" xmlns:i="http://www.w3.org/2001/XMLSchema-instance">';
+  $p = [$ns];
   if ($baslangic && $bitis) {
     $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
     $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
-  } else {
-    // "Son 50 künye" modu: tarih alanlarını ATLAMAK sunucuda beklenmeyen hata
-    // (GTBGLB00000001) veriyor — TopluKunye'de de aynı ders alınmıştı: alan
-    // her zaman gönderilir. .NET DateTime.MinValue = 0001-01-01 → "boş tarih".
-    $p[] = '<a:BaslangicTarihi>0001-01-01T00:00:00</a:BaslangicTarihi>';
-    $p[] = '<a:BitisTarihi>0001-01-01T00:00:00</a:BitisTarihi>';
-  }
+  } elseif ($bosStrateji === 'nil') {
+    $p[] = '<a:BaslangicTarihi i:nil="true"/>';
+    $p[] = '<a:BitisTarihi i:nil="true"/>';
+  } elseif ($bosStrateji === 'eski') {
+    $p[] = '<a:BaslangicTarihi>1900-01-01T00:00:00</a:BaslangicTarihi>';
+    $p[] = '<a:BitisTarihi>1900-01-01T00:00:00</a:BitisTarihi>';
+  } // 'atla' → tarih alanları hiç eklenmez
   $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
   // KisiSifat BİLEREK gönderilmiyor: gönderilince bazı künyeler listeden düşüyor.
-  $p[] = '<a:KunyeNo>0</a:KunyeNo>';
+  // Künye No verilirse doğrudan o künye getirilir (HKS sitesindeki "Künye Sorgula"),
+  // 0 → mal sahibinin son künyeleri.
+  $p[] = '<a:KunyeNo>' . preg_replace('/\D/', '', (string)($secenek['kunyeNo'] ?? '0')) . '</a:KunyeNo>';
   $p[] = '<a:MalinSahibiTcKimlikVergiNo>' . hks_esc($cfg['vergiNo']) . '</a:MalinSahibiTcKimlikVergiNo>';
   if (!empty($secenek['urunId'])) $p[] = '<a:UrunId>' . (int)$secenek['urunId'] . '</a:UrunId>';
   $p[] = '</Istek>';
@@ -291,20 +301,28 @@ function hks_kunyeleri_getir($cfg, $secenek, &$not = null) {
   if ($ay <= 0) {
     // VARSAYILAN (HKS sitesi gibi): boş tarihli tek çağrı → son 50 künye.
     // Hızlıdır ve tarih penceresine takılmadığı için ESKİ stoğu da getirir.
-    try {
-      foreach (hks_kunye_penceresi($cfg, $secenek) as $k) $birlesik[$k['kunyeNo']] = $k;
-    } catch (Exception $e) {
-      // Sunucu boş tarihli isteği kabul etmezse kullanıcı boşta kalmasın:
-      // 12 aylık geniş taramaya düş ve durumu bildir.
-      $not = 'Son 50 künye sorgusu HKS tarafından reddedildi (' . $e->getMessage() .
-             ') — otomatik olarak 1 yıllık geniş taramaya geçildi.';
-      $ay = 12;
+    // Sunucunun hangi "boş tarih" biçimini kabul ettiği belirsiz olduğundan
+    // stratejiler sırayla denenir; ilk başarılı olan kullanılır.
+    $sonHata = null; $oldu = false;
+    foreach (HKS_BOS_TARIH_STRATEJILERI as $str) {
+      try {
+        foreach (hks_kunye_penceresi($cfg, $secenek, null, null, $str) as $k) $birlesik[$k['kunyeNo']] = $k;
+        $oldu = true;
+        break;
+      } catch (Exception $e) { $sonHata = $e->getMessage(); $birlesik = []; }
+    }
+    if (!$oldu) {
+      // Hiçbiri kabul edilmediyse kullanıcı boşta kalmasın: 24 aylık taramaya düş.
+      $not = 'Son 50 künye sorgusu HKS tarafından kabul edilmedi (' . $sonHata .
+             ') — otomatik olarak 2 yıllık geniş taramaya geçildi. Daha eski künyeler için ' .
+             '"Geniş tarama — 3 yıl" seçeneğini veya Künye No ile doğrudan aramayı kullanın.';
+      $ay = 24;
     }
   }
   if ($ay > 0) {
     // GENİŞ TARAMA: aylık pencerelerle 50 kayıt sınırını aşar (yavaş — ay başına
     // 1 SOAP çağrısı). Çok künyesi olanlar için.
-    $ay = min(24, $ay);
+    $ay = min(36, $ay);
     $bitis = new DateTime();
     for ($i = 0; $i < $ay; $i++) {
       $baslangic = hks_bir_ay_once($bitis);
@@ -498,7 +516,7 @@ function hks_stok_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
 }
 
 function hks_stok_ozet($cfg, $aySayisi = 12) {
-  $ay = max(1, min(24, (int)$aySayisi));
+  $ay = max(1, min(36, (int)$aySayisi));
 
   // Aylık (takvim ayı) pencereleri sırayla sorgula, künyeleri KunyeNo ile birleştir.
   $birlesik = [];
@@ -625,7 +643,7 @@ function hks_yaptigim_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
 }
 
 function hks_yaptigim_bildirimler($cfg, $aySayisi = 1, &$ham = null) {
-  $ay = max(1, min(24, (int)$aySayisi));
+  $ay = max(1, min(36, (int)$aySayisi));
   $birlesik = [];
   $bitis = new DateTime();
   for ($i = 0; $i < $ay; $i++) {
