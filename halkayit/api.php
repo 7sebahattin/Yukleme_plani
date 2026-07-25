@@ -344,6 +344,15 @@ try {
       hks_json_cikti(['gonderilenler' => $liste]);
     }
 
+    // ---- ÜRÜN REFERANSLARI (referanssız bildirim / Satın Alım için) ----
+    // Salt-okunur. Mevcut 'listeler' önbelleğine DOKUNMAZ — orası bozulmasın.
+    case 'urun_listeleri': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(120);
+      hks_json_cikti(hks_urun_listeleri($cfg));
+    }
+
     // ---- BİLDİRİM SORGULAMA (yaptığım bildirimler) ----
     case 'sorgu': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');

@@ -99,6 +99,14 @@ if (!is_admin()) {
   </div>
 
   <div class="card">
+    <h2>0 · Ürün Referansları (referanssız / Satın Alım)</h2>
+    <p class="mut">Malın Niteliği · Ürün Cinsleri · Üretim Şekilleri · Ürün Birimleri.
+       Salt-okunur. Zarf/DTO adları tahmin — hangisi boş/hatalı dönüyor, çıktıdaki
+       <b>hatalar</b> alanında görünür.</p>
+    <button onclick="cagir('urun_listeleri', {})">Ürün Referanslarını Getir</button>
+  </div>
+
+  <div class="card">
     <h2>6 · Sevk Etme (yurt içi) — Payload ÖNİZLE (göndermez)</h2>
     <p class="mut">Yalnızca kurulacak SOAP payload'ını gösterir; HKS'e GÖNDERMEZ. Yapı doğrulaması içindir.</p>
     <div class="row">
