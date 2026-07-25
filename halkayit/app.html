@@ -1355,24 +1355,25 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
     'table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px 8px;text-align:left;vertical-align:top}' +
     'thead th{background:#eee}tfoot td{font-weight:bold}' +
     '.qrtd{width:110px;text-align:center}.qrbox{text-align:center}.qrno{font-size:9px;word-break:break-all;margin-top:2px}' +
-    '.ustbar{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}' +
-    '.btnlar{display:flex;gap:8px;flex-shrink:0}' +
+    '.btnlar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:14px}' +
     '.yzbtn{padding:9px 18px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid #1c4a6e;background:#1c4a6e;color:#fff;border-radius:8px;white-space:nowrap}' +
     '.pybtn{background:#25D366;border-color:#1da851}' +
     '.yzbtn:disabled{opacity:.6;cursor:wait}' +
     '@media print{.btnlar{display:none}}</style></head><body>' +
-    '<div class="ustbar"><div>' +
-    '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(firmaAdi || '') + '</h2>' +
-    '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
-    eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
-    '</div>' +
+    // Buton çubuğu: sağa hizalı, tek yerde. pdfIcerik'in DIŞINDA — PDF/paylaşıma
+    // hiç girmez (yakalanan görüntü yalnızca pdfIcerik'tir).
     '<div class="btnlar">' +
     '<button class="yzbtn" onclick="window.print()">🖨️ Yazdır</button>' +
     '<button class="yzbtn pybtn" id="btnPaylas">📤 Paylaş</button>' +
-    '</div></div>' +
+    '</div>' +
+    '<div id="pdfIcerik">' +
+    '<h2>Bildirim Çoklu Künye Basım — ' + eHtml(firmaAdi || '') + '</h2>' +
+    '<div class="meta">Bildirim Tarihi: <b>' + eHtml(tarih) + '</b> &nbsp;|&nbsp; Araç Plaka: <b>' +
+    eHtml(plaka || '-') + '</b> &nbsp;|&nbsp; Belge No: <b>' + eHtml(belge || '-') + '</b></div>' +
     '<table id="kunyeTablo"><thead><tr><th class="qrtd">Künye</th><th>Malın Adı / Miktarı</th>' +
     '<th>Nereden / Nereye</th><th>Bildirimci / Malın Sahibi</th></tr></thead><tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td class="qrtd">TOPLAM</td><td><b>' + fmt(toplam) + ' KG</b></td><td colspan="2"></td></tr></tfoot></table>' +
+    '</div>' +
     '</body></html>');
   w.document.close();
 
@@ -1400,9 +1401,11 @@ async function topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, adet, toplam
     if (!w.html2canvas) await yukle(kokUrl + 'html2canvas.min.js');
     if (!w.jspdf)      await yukle(kokUrl + 'jspdf.umd.min.js');
 
-    // Tabloyu görüntüye çevir (Türkçe karakterler tarayıcı tarafından işlendiği
-    // için font gömme derdi olmaz), sonra A4 sayfalara böl.
-    const kanvas = await w.html2canvas(w.document.body, { scale: 2, backgroundColor: '#ffffff' });
+    // YALNIZ belge içeriğini yakala (#pdfIcerik) — buton çubuğu asla dahil olmaz.
+    // scale 1.25 + JPEG: PNG@2x'te 20-30MB'a çıkan dosya boyutu bu şekilde
+    // birkaç MB'a iner (QR'lar 88px zaten küçük, 1.25x hâlâ net okunur).
+    const el = w.document.getElementById('pdfIcerik');
+    const kanvas = await w.html2canvas(el, { scale: 1.25, backgroundColor: '#ffffff' });
     const { jsPDF } = w.jspdf;
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     const sayfaG = pdf.internal.pageSize.getWidth();
@@ -1410,15 +1413,15 @@ async function topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, adet, toplam
     const kenar = 8;
     const gorselG = sayfaG - kenar * 2;
     const gorselY = (kanvas.height * gorselG) / kanvas.width;
-    const png = kanvas.toDataURL('image/png');
+    const jpg = kanvas.toDataURL('image/jpeg', 0.88);
 
     let kalan = gorselY, ofset = 0;
-    pdf.addImage(png, 'PNG', kenar, kenar, gorselG, gorselY);
+    pdf.addImage(jpg, 'JPEG', kenar, kenar, gorselG, gorselY);
     kalan -= (sayfaY - kenar * 2);
     while (kalan > 0) {
       ofset += (sayfaY - kenar * 2);
       pdf.addPage();
-      pdf.addImage(png, 'PNG', kenar, kenar - ofset, gorselG, gorselY);
+      pdf.addImage(jpg, 'JPEG', kenar, kenar - ofset, gorselG, gorselY);
       kalan -= (sayfaY - kenar * 2);
     }
 
@@ -1426,22 +1429,23 @@ async function topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, adet, toplam
     const dosya = new File([blob], dosyaAdi + '.pdf', { type: 'application/pdf' });
     const metin = `${firmaAdi || ''} · ${plaka || ''}\n${adet} künye · Toplam ${fmt(toplam)} KG`;
 
+    // Mobil: dosya paylaşımı destekleniyorsa paylaşım sayfası açılır (WhatsApp
+    // dahil, kişi/grup seçilip gönderilir). Masaüstü tarayıcılar dosya
+    // paylaşımını desteklemez — orada Paylaş sade PDF indirmeye düşer.
     if (w.navigator.canShare && w.navigator.canShare({ files: [dosya] })) {
-      // Paylaşım sayfası açılır → WhatsApp → kişi/grup seçilip gönderilir
       await w.navigator.share({ files: [dosya], title: dosyaAdi, text: metin });
     } else {
-      // Dosya paylaşımı desteklenmiyorsa (çoğu masaüstü tarayıcı): PDF'i indir
-      // ve WhatsApp Web'i aç — kullanıcı indirilen dosyayı ekler.
       const url = w.URL.createObjectURL(blob);
       const a = w.document.createElement('a');
       a.href = url; a.download = dosyaAdi + '.pdf';
       w.document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => w.URL.revokeObjectURL(url), 4000);
-      w.open('https://web.whatsapp.com/', '_blank');
-      w.alert('PDF indirildi: ' + dosyaAdi + '.pdf\n\nWhatsApp Web açıldı — kişi/grubu seçip indirilen PDF\'i ekleyebilirsiniz.\n(Telefondan paylaşırsanız doğrudan WhatsApp\'a gönderilir.)');
     }
   } catch (e) {
-    w.alert('Paylaşım hazırlanamadı: ' + (e && e.message ? e.message : e));
+    // Kullanıcı paylaşım sayfasını kapatırsa (AbortError) sessizce çık — hata değil.
+    if (!e || e.name !== 'AbortError') {
+      w.alert('Paylaşım hazırlanamadı: ' + (e && e.message ? e.message : e));
+    }
   }
   btn.disabled = false; btn.textContent = eski;
 }
