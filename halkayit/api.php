@@ -315,10 +315,21 @@ try {
       }
 
       $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
-      hks_son_guncelle($ortak, $t['firma_id']);
 
       // Gönderilenler kaydı (tek satır özet)
       $basarili = array_filter($sonuc['sonuclar'], fn($s) => $s['yeniKunyeNo'] && $s['yeniKunyeNo'] !== '0' && !$s['hataKodu']);
+
+      // KRİTİK: HKS'e TEK KÜNYE bile gitmediyse (tam başarısızlık — ör. sıfat
+      // uyumsuzluğu, GTBGLB00000001 vb.) taslak SİLİNMEZ ve "Gönderilenler"e
+      // sahte bir kayıt atılmaz (orada hiçbir şey gönderilmedi). Kullanıcı
+      // taslağa geri döner, hatalı alanı (ör. karşı taraf sıfatı) "Düzenle" ile
+      // değiştirip AYNI taslağı tekrar gönderebilir — formu baştan doldurmaz.
+      if (count($basarili) === 0) {
+        hks_json_cikti($sonuc + ['taslakKorundu' => true]);
+      }
+
+      // En az bir künye gerçekten oluştu → bu GERİ ALINAMAZ, kayıt tutulmalı.
+      hks_son_guncelle($ortak, $t['firma_id']);
       $gid = 'g' . round(microtime(true) * 1000);
       $toplamKg = array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
@@ -332,7 +343,10 @@ try {
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'],
         json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar']], JSON_UNESCAPED_UNICODE)]);
 
-      // Taslağı sil
+      // Kısmi başarısızlık varsa (bazı satırlar hata verdi) taslak yine silinir
+      // çünkü BAŞARILI satırlar zaten geri alınamaz şekilde gönderildi; aynı
+      // taslağı tekrar göndermek o satırları MÜKERRER göndermeye çalışırdı.
+      // Hangi satırların başarısız olduğu $sonuc.sonuclar içinde döner.
       $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ?')->execute([$t['id']]);
       hks_json_cikti($sonuc);
     }

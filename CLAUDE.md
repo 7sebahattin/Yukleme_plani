@@ -23,7 +23,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 ├── stok.php / malzeme_stok.php
 ├── reports.php / hesap.php
 ├── definitions.php / users.php / audit.php
-├── notes.php / logout.php
+├── logout.php
 ├── sw.js / manifest.json  # PWA
 ├── config/
 │   ├── db.php             # PDO + auto-migration
