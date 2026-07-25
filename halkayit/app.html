@@ -1381,9 +1381,16 @@ function topluYazdirPenceresiAc(firmaAdi, tarih, plaka, belge, kunyeler) {
   // Kütüphaneler (jsPDF + html2canvas) SADECE Paylaş'a basılınca yüklenir;
   // normal yazdırma bu ~560KB'ı hiç indirmez.
   const kokUrl = location.origin + location.pathname.replace(/[^/]*$/, '');
-  w.addEventListener('load', () => {}, { once: true });
   const btn = w.document.getElementById('btnPaylas');
-  if (btn) btn.onclick = () => topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, kunyeler.length, toplam);
+  if (btn) {
+    // Masaüstünde bu buton PDF indirir (paylaşım sayfası yalnız mobilde açılır) —
+    // etiket buna göre yazılır ki kullanıcı ne olacağını bilsin.
+    const ua = w.navigator.userAgent || '';
+    const mobil = /Android|iPhone|iPod|iPad/i.test(ua) ||
+                  (/Macintosh/.test(ua) && (w.navigator.maxTouchPoints || 0) > 1);
+    btn.textContent = mobil ? '📤 Paylaş' : '⬇️ PDF İndir';
+    btn.onclick = () => topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, kunyeler.length, toplam);
+  }
 }
 
 // Yazdırma penceresindeki içeriği PDF yapıp paylaşır.
@@ -1402,37 +1409,60 @@ async function topluPdfPaylas(w, dosyaAdi, kokUrl, plaka, firmaAdi, adet, toplam
     if (!w.jspdf)      await yukle(kokUrl + 'jspdf.umd.min.js');
 
     // YALNIZ belge içeriğini yakala (#pdfIcerik) — buton çubuğu asla dahil olmaz.
-    // scale 1.25 + JPEG: PNG@2x'te 20-30MB'a çıkan dosya boyutu bu şekilde
-    // birkaç MB'a iner (QR'lar 88px zaten küçük, 1.25x hâlâ net okunur).
+    // scale 1.25 + JPEG: PNG@2x'te 20-30MB'a çıkan dosya boyutu birkaç yüz KB'a iner.
     const el = w.document.getElementById('pdfIcerik');
-    const kanvas = await w.html2canvas(el, { scale: 1.25, backgroundColor: '#ffffff' });
+    const olcek = 1.25;
+    const kanvas = await w.html2canvas(el, { scale: olcek, backgroundColor: '#ffffff' });
+
     const { jsPDF } = w.jspdf;
     const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    const sayfaG = pdf.internal.pageSize.getWidth();
-    const sayfaY = pdf.internal.pageSize.getHeight();
     const kenar = 8;
-    const gorselG = sayfaG - kenar * 2;
-    const gorselY = (kanvas.height * gorselG) / kanvas.width;
-    const jpg = kanvas.toDataURL('image/jpeg', 0.88);
+    const icerikG = pdf.internal.pageSize.getWidth() - kenar * 2;
+    const icerikY = pdf.internal.pageSize.getHeight() - kenar * 2;
+    const pxPerMm = kanvas.width / icerikG;          // canvas pikseli ↔ mm
+    const sayfaMaxPx = Math.floor(icerikY * pxPerMm); // bir A4'e sığan canvas yüksekliği
 
-    let kalan = gorselY, ofset = 0;
-    pdf.addImage(jpg, 'JPEG', kenar, kenar, gorselG, gorselY);
-    kalan -= (sayfaY - kenar * 2);
-    while (kalan > 0) {
-      ofset += (sayfaY - kenar * 2);
-      pdf.addPage();
-      pdf.addImage(jpg, 'JPEG', kenar, kenar - ofset, gorselG, gorselY);
-      kalan -= (sayfaY - kenar * 2);
+    // SAYFA KESİMİ SATIR SINIRINDA yapılır — aksi halde sabit yükseklikte kesince
+    // künye satırı/QR ortadan bölünüyordu. Tablo satırlarının alt kenarları canvas
+    // piksel cinsine çevrilip kesim noktası olarak kullanılır.
+    const kokUst = el.getBoundingClientRect().top;
+    const sinirlar = [];
+    el.querySelectorAll('#kunyeTablo tbody tr, #kunyeTablo tfoot tr').forEach(tr => {
+      sinirlar.push(Math.round((tr.getBoundingClientRect().bottom - kokUst) * olcek));
+    });
+    if (!sinirlar.length || sinirlar[sinirlar.length - 1] < kanvas.height) sinirlar.push(kanvas.height);
+
+    let bas = 0, ilk = true;
+    while (bas < kanvas.height) {
+      // Bu sayfaya sığan EN SON satır sınırını seç
+      let son = 0;
+      for (const s of sinirlar) { if (s > bas && s - bas <= sayfaMaxPx) son = s; }
+      // Tek satır bir sayfadan uzunsa (olağandışı) zorunlu kesim yap
+      if (son <= bas) son = Math.min(bas + sayfaMaxPx, kanvas.height);
+
+      const dilimY = son - bas;
+      const dilim = w.document.createElement('canvas');
+      dilim.width = kanvas.width; dilim.height = dilimY;
+      dilim.getContext('2d').drawImage(kanvas, 0, bas, kanvas.width, dilimY, 0, 0, kanvas.width, dilimY);
+
+      if (!ilk) pdf.addPage();
+      pdf.addImage(dilim.toDataURL('image/jpeg', 0.88), 'JPEG', kenar, kenar, icerikG, dilimY / pxPerMm);
+      ilk = false;
+      bas = son;
     }
 
     const blob = pdf.output('blob');
     const dosya = new File([blob], dosyaAdi + '.pdf', { type: 'application/pdf' });
     const metin = `${firmaAdi || ''} · ${plaka || ''}\n${adet} künye · Toplam ${fmt(toplam)} KG`;
 
-    // Mobil: dosya paylaşımı destekleniyorsa paylaşım sayfası açılır (WhatsApp
-    // dahil, kişi/grup seçilip gönderilir). Masaüstü tarayıcılar dosya
-    // paylaşımını desteklemez — orada Paylaş sade PDF indirmeye düşer.
-    if (w.navigator.canShare && w.navigator.canShare({ files: [dosya] })) {
+    // Paylaşım sayfası YALNIZ gerçek mobil cihazda açılır. Windows/Edge de
+    // canShare=true döndürüp kendi "Paylaş" penceresini açıyor ama oradan
+    // WhatsApp'a dosya gitmiyor — masaüstünde doğrudan PDF indirmek daha faydalı.
+    const ua = w.navigator.userAgent || '';
+    const dokunma = (w.navigator.maxTouchPoints || 0) > 1;
+    const mobilMi = /Android|iPhone|iPod|iPad/i.test(ua) || (/Macintosh/.test(ua) && dokunma);
+
+    if (mobilMi && w.navigator.canShare && w.navigator.canShare({ files: [dosya] })) {
       await w.navigator.share({ files: [dosya], title: dosyaAdi, text: metin });
     } else {
       const url = w.URL.createObjectURL(blob);
