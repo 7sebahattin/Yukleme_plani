@@ -600,12 +600,12 @@
           <select id="sGun">
             <!-- Tarihli aylık pencerelerle tarama (HKS: iki tarih arası en fazla
                  1 ay). Uzun aralık = daha çok SOAP çağrısı, daha yavaş. -->
-            <option value="3">Geçmiş tarama — 3 ay</option>
-            <option value="6">Geçmiş tarama — 6 ay</option>
-            <option value="12" selected>Geçmiş tarama — 1 yıl</option>
-            <option value="24">Geçmiş tarama — 2 yıl</option>
-            <option value="36">Geçmiş tarama — 3 yıl</option>
-            <option value="60">Geçmiş tarama — 5 yıl</option>
+            <option value="3">3 ay</option>
+            <option value="6">6 ay</option>
+            <option value="12" selected>1 yıl</option>
+            <option value="24">2 yıl</option>
+            <option value="36">3 yıl</option>
+            <option value="60">5 yıl</option>
           </select>
         </div>
       </div>
@@ -1007,7 +1007,10 @@ function firmaSec(f) {
   $('menuFirmaAd').textContent = f.ad;
   ekranGoster('ekranMenu');
   taslakSayiGuncelle();
-  stokListele(); // Firma seçilince stok otomatik sorgulanıp ana sayfada gösterilir
+  // Firma seçilince stok otomatik sorgulanıp ana sayfada gösterilir.
+  // Otomatik açılış HIZLI olsun diye 6 ay ile sınırlı; tam (5 yıllık) geçmiş
+  // için "Raporlama İşlemleri → Stok Sorgulama" kullanılır.
+  stokListele(6);
 }
 
 $('btnFirmaDegis').onclick = () => {
@@ -1074,17 +1077,32 @@ $('btnEBildirim').onclick = async () => {
 // toast bağlamasından SONRA (aşağıda) atanır ki generic handler onu ezmesin.
 $('btnStokYenile').onclick = () => stokListele();
 
-// Stok Sorgulama — son 1 yıl kalan stoğu ANA SAYFADA (menüde) inline listeler
-async function stokListele() {
+// Aylık kapsamı okunur etikete çevirir (ör. 6 → "6 ay", 60 → "5 yıl")
+function aySayisiEtiket(ay) {
+  if (ay % 12 === 0 && ay >= 12) return (ay / 12) + ' yıl';
+  return ay + ' ay';
+}
+
+// Stok Sorgulama — kalan stoğu ANA SAYFADA (menüde) inline listeler.
+// aySayisi: firma seçilince otomatik açılışta ve "Yenile"de 6 ay (hızlı);
+// "Raporlama İşlemleri → Stok Sorgulama" butonunda 5 yıl (60 ay, yavaş
+// ama tam geçmiş) — HKS penceresi ayda 1 ile sınırlı olduğundan uzun
+// aralık = daha çok ardışık SOAP çağrısı.
+let sonStokAySayisi = 6; // "Yenile" son görüntülenen kapsamı tekrarlar
+async function stokListele(aySayisi) {
+  if (aySayisi == null) aySayisi = sonStokAySayisi;
+  sonStokAySayisi = aySayisi;
+  const etiket = aySayisiEtiket(aySayisi);
   $('stokBolum').classList.remove('gizli');
   const kap = $('stokListe');
   const oz  = $('stokOzet');
   oz.textContent = '';
-  kap.innerHTML = '<div class="yukleniyor">Son 5 yıl stok sorgulanıyor… (60 aylık tarama, biraz sürebilir)</div>';
+  kap.innerHTML = aySayisi > 12
+    ? `<div class="yukleniyor">Son ${etiket} stok sorgulanıyor… (${aySayisi} aylık tarama, biraz sürebilir)</div>`
+    : `<div class="yukleniyor">Son ${etiket} stok sorgulanıyor…</div>`;
   $('stokBolum').scrollIntoView({ behavior: 'smooth', block: 'start' });
   try {
-    // 5 yıl: HKS penceresi ayda 1 ile sınırlı olduğundan 60 ardışık sorgu yapılır.
-    const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi: 60 });
+    const j = await api('/api/stok', 'POST', { firmaId: aktifFirma.id, aySayisi });
     const liste = j.stok || [];
     if (!liste.length) {
       oz.textContent = '';
@@ -1116,8 +1134,9 @@ document.querySelectorAll('.grup-liste button:not(#btnEBildirimGrup):not(#btnSto
 });
 // Bildirim İşlemleri menüsündeki "Bildirim Yap" — ana ekrandaki butonla aynı işlevi açar.
 if ($('btnEBildirimGrup')) $('btnEBildirimGrup').onclick = () => $('btnEBildirim').click();
-// Raporlama İşlemleri menüsündeki "Stok Sorgulama" — ana sayfadaki stok listesini açar/günceller.
-if ($('btnStok')) $('btnStok').onclick = () => stokListele();
+// Raporlama İşlemleri menüsündeki "Stok Sorgulama" — ana sayfadaki stok
+// listesini TAM (5 yıllık) geçmişle açar/günceller.
+if ($('btnStok')) $('btnStok').onclick = () => stokListele(60);
 
 // ── Bildirim Çoklu Künye Basım (Toplu Künye) ──
 let topluSonuc = [];
