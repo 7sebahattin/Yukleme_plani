@@ -327,6 +327,33 @@
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    /* ── Pano (clipboard) yardımcıları — Excel'den kopyala/yapıştır ──
+       Excel bir sütunu kopyalarken satırları \n, hücreleri \t ile ayırır.
+       Türkçe CSV kopyalamalarında ayraç ";" olabilir. */
+    function isNumericToken(s) {
+        s = String(s == null ? '' : s).trim();
+        if (s === '') return false;
+        return /^-?[\d.,\s\u00a0]*\d[\d.,\s\u00a0]*$/.test(s);
+    }
+    /* Pano metnini satır/hücre ızgarasına çevirir. Boş satırlar ve
+       (varsa) başlık satırı atılır. */
+    function parseClipGrid(text) {
+        const out = [];
+        String(text == null ? '' : text).replace(/\r\n?/g, '\n').split('\n').forEach(line => {
+            if (line.trim() === '') return;
+            let cells;
+            if (line.indexOf('\t') !== -1)      cells = line.split('\t');
+            else if (line.indexOf(';') !== -1)  cells = line.split(';');
+            else                                cells = [line];
+            cells = cells.map(c => String(c).replace(/\u00a0/g, ' ').trim());
+            if (cells.every(c => c === '')) return;
+            out.push(cells);
+        });
+        // "Kasa Adeti" gibi başlık satırını at (hiçbir hücresi sayı değilse)
+        if (out.length > 1 && !out[0].some(isNumericToken)) out.shift();
+        return out;
+    }
+
     /* ── Durum ── */
     let pallets = [];
     let editingIdx = -1; /* -1 = yeni, 0+ = mevcut */
@@ -826,6 +853,7 @@
             tbody.querySelectorAll('tr').forEach((tr, i) => {
                 tr.querySelector('.tp-no').textContent = i + 1;
             });
+            snapshotFirstRow();
         }
 
         /* Satır oluştur — from: pallet objesi, origIdx: orijinal indeks (-1 = yeni) */
@@ -940,14 +968,17 @@
 
             tbody.appendChild(tr);
             calcRow(tr);
+            snapshotFirstRow();
             return tr;
         }
 
         /* Panel aç: mevcut paletleri yükle */
         acBtn.addEventListener('click', () => {
             if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
-            const ep = document.getElementById('excelPanel');
-            if (ep) ep.style.display = 'none';
+            ['excelPanel', 'yapistirPanel'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
 
             origPallets = pallets.map(p => Object.assign({}, p, {
                 materials: Array.isArray(p.materials) ? p.materials.map(m => Object.assign({}, m)) : []
@@ -973,6 +1004,159 @@
         satirEkleBtn.addEventListener('click', () => {
             const tr = addRow(refData(), -1);
             setTimeout(() => tr.querySelector('[data-key=kasa_adeti]').focus(), 40);
+        });
+
+        /* ── 1. satır → aşağıya yayılım ──
+           "Kasa cinsi / palet tipi / depo / ürün 1. satırda ne ise öyle olsun":
+           1. satırdaki bir seçim değişince, o ana kadar AYNI değere sahip olan
+           alt satırlar da güncellenir. Bilerek farklı yapılmış satırlara dokunulmaz. */
+        const SYNC_KEYS  = ['kasa_cinsi_id', 'palet_tipi_id', 'depo', 'urun_cinsi'];
+        const prevFirst  = {};
+
+        function setSelectValue(sel, val) {
+            sel.value = val;
+            if (sel.value !== val) {            // seçenek listede yoksa ekle
+                const o = document.createElement('option');
+                o.value = val; o.textContent = val || '—';
+                sel.appendChild(o);
+                sel.value = val;
+            }
+        }
+
+        function snapshotFirstRow() {
+            const first = tbody.querySelector('tr');
+            SYNC_KEYS.forEach(k => {
+                const el = first ? first.querySelector('[data-key=' + k + ']') : null;
+                prevFirst[k] = el ? el.value : '';
+            });
+        }
+
+        tbody.addEventListener('change', function (e) {
+            const el = e.target;
+            if (!el || !el.dataset || SYNC_KEYS.indexOf(el.dataset.key) < 0) return;
+            if (el.closest('tr') !== tbody.querySelector('tr')) { snapshotFirstRow(); return; }
+            const key = el.dataset.key;
+            const oldVal = prevFirst[key];
+            const newVal = el.value;
+            prevFirst[key] = newVal;
+            if (oldVal === newVal) return;
+            Array.from(tbody.querySelectorAll('tr')).slice(1).forEach(row => {
+                const cell = row.querySelector('[data-key=' + key + ']');
+                if (cell && cell.value === oldVal) {
+                    setSelectValue(cell, newVal);
+                    calcRow(row);
+                }
+            });
+        });
+
+        /* ── Yapıştır (fill-down) ──
+           Excel'den kopyalanan çok satırlı veri bir hücreye yapıştırılınca
+           sıra bozulmadan aşağıya doğru dolar; satır yetmezse yenisi açılır.
+           Yeni satırların kasa cinsi / palet tipi / depo / ürün değerleri
+           1. satırdan kopyalanır. */
+        const PASTE_KEYS = ['palet_sayisi', 'kasa_adeti', 'brut_kg'];
+
+        /* 1. satırın seçim alanları — yeni satırlar için şablon */
+        function firstRowTemplate() {
+            const first = tbody.querySelector('tr');
+            if (first) {
+                return {
+                    palet_sayisi:  '1',
+                    kasa_adeti:    '',
+                    brut_kg:       '',
+                    kasa_cinsi_id: first.querySelector('[data-key=kasa_cinsi_id]').value,
+                    palet_tipi_id: first.querySelector('[data-key=palet_tipi_id]').value,
+                    depo:          first.querySelector('[data-key=depo]').value,
+                    urun_cinsi:    first.querySelector('[data-key=urun_cinsi]').value,
+                };
+            }
+            const p = pallets[0] || {};
+            return {
+                palet_sayisi:  '1',
+                kasa_adeti:    '',
+                brut_kg:       '',
+                kasa_cinsi_id: p.kasa_cinsi_id || '',
+                palet_tipi_id: p.palet_tipi_id || '',
+                depo:          p.depo || '',
+                urun_cinsi:    p.urun_cinsi || '',
+            };
+        }
+
+        function setPasteCell(tr, key, raw) {
+            const el = tr.querySelector('[data-key=' + key + ']');
+            if (!el) return;
+            const s = String(raw == null ? '' : raw).trim();
+            if (s === '') return;                       // boş hücre → mevcut değeri koru
+            if (key === 'brut_kg')      el.value = fmtInput(parseNum(s));
+            else if (key === 'palet_sayisi') el.value = String(Math.max(1, parseInt2(s) || 1));
+            else                        el.value = String(parseInt2(s));
+        }
+
+        /* grid'i startCell'den başlayarak aşağı + sağa doğru uygula */
+        function applyPasteGrid(startCell, grid) {
+            const kIdx = PASTE_KEYS.indexOf(startCell.dataset.key);
+            if (kIdx < 0) return 0;
+            const startRowIdx = Array.from(tbody.querySelectorAll('tr')).indexOf(startCell.closest('tr'));
+            if (startRowIdx < 0) return 0;
+
+            const tpl = firstRowTemplate();
+            let lastTr = null;
+            grid.forEach((cells, i) => {
+                let tr = tbody.querySelectorAll('tr')[startRowIdx + i];
+                if (!tr) tr = addRow(tpl, -1);
+                cells.forEach((v, j) => {
+                    const key = PASTE_KEYS[kIdx + j];
+                    if (key) setPasteCell(tr, key, v);
+                });
+                calcRow(tr);
+                lastTr = tr;
+            });
+            updateNos();
+            const total = tbody.querySelectorAll('tr').length;
+            countEl.textContent = total + ' palet';
+            if (lastTr) lastTr.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            return grid.length;
+        }
+
+        /* clipboardData vermeyen tarayıcılar için yedek yol:
+           input tek satıra düzleştirir → boşluklardan böl */
+        function pasteFallback(cell) {
+            const before = cell.value;
+            setTimeout(() => {
+                const after = cell.value;
+                if (after === before) return;
+                const toks = after.trim().split(/[\s\u00a0]+/).filter(Boolean);
+                if (toks.length < 2 || !toks.every(isNumericToken)) return;
+                cell.value = before;
+                applyPasteGrid(cell, toks.map(t => [t]));
+                flashPasteInfo(toks.length);
+            }, 0);
+        }
+
+        function flashPasteInfo(n) {
+            if (!countEl) return;
+            const total = tbody.querySelectorAll('tr').length;
+            countEl.textContent = '📋 ' + n + ' satır yapıştırıldı · ' + total + ' palet';
+            countEl.classList.add('tp-paste-flash');
+            setTimeout(() => {
+                countEl.classList.remove('tp-paste-flash');
+                countEl.textContent = tbody.querySelectorAll('tr').length + ' palet';
+            }, 2500);
+        }
+
+        tbody.addEventListener('paste', function (e) {
+            const cell = e.target;
+            if (!cell || !cell.matches || !cell.matches('input[data-key]')) return;
+            const cd = e.clipboardData || window.clipboardData;
+            const text = cd ? cd.getData('text') : '';
+            if (!text) { pasteFallback(cell); return; }
+            const grid = parseClipGrid(text);
+            if (!grid.length) return;
+            // Tek hücre → tarayıcının normal yapıştırması
+            if (grid.length === 1 && grid[0].length === 1) return;
+            e.preventDefault();
+            const n = applyPasteGrid(cell, grid);
+            if (n) flashPasteInfo(n);
         });
 
         /* Enter → aynı sütunda alt satıra */
@@ -1157,9 +1341,11 @@
 
         acBtn.addEventListener('click', () => {
             if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
-            // diğer paneli kapat
-            const tp = document.getElementById('topluPanel');
-            if (tp) tp.style.display = 'none';
+            // diğer panelleri kapat
+            ['topluPanel', 'yapistirPanel'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
             initSelects();
             tbody.innerHTML = '';
             previewWrap.style.display = 'none';
@@ -1203,6 +1389,228 @@
             });
             renderCards();
             recomputeTotals();
+            panel.style.display = 'none';
+        });
+    })();
+
+    /* ── Yapıştır Paneli — Excel sütunlarını kopyala/yapıştır ──
+       Mobil öncelikli: hücreye uzun basıp yapıştırmak yerine büyük
+       textarea'lara yapıştırılır, satır sırası korunur. */
+    (function () {
+        const panel    = document.getElementById('yapistirPanel');
+        const acBtn    = document.getElementById('yapistirAcBtn');
+        if (!panel || !acBtn) return;
+        const kapatBtn = document.getElementById('ypKapat');
+        const temizBtn = document.getElementById('ypTemizle');
+        const taKasa   = document.getElementById('ypKasa');
+        const taBrut   = document.getElementById('ypBrut');
+        const infoKasa = document.getElementById('ypKasaInfo');
+        const infoBrut = document.getElementById('ypBrutInfo');
+        const kcSel    = document.getElementById('ypKasaCinsi');
+        const ptSel    = document.getElementById('ypPaletTipi');
+        const depSel   = document.getElementById('ypDepo');
+        const urunSel  = document.getElementById('ypUrun');
+        const uyariEl  = document.getElementById('ypUyari');
+        const onizWrap = document.getElementById('ypOnizlemeWrap');
+        const onizBody = document.getElementById('ypTbody');
+        const ozetEl   = document.getElementById('ypOzet');
+        const countEl  = document.getElementById('ypCount');
+        const rowCntEl = document.getElementById('ypRowCount');
+        const uygulaBtn = document.getElementById('ypUygula');
+
+        const MAX_PREVIEW = 300;   // çok uzun listelerde DOM'u şişirme
+
+        /* Referans palet = 1. palet (yoksa genel alanlar) */
+        function refPallet() { return pallets[0] || {}; }
+
+        function initSelects() {
+            const rp = refPallet();
+            kcSel.innerHTML  = buildOptions(KASA_LIST,  rp.kasa_cinsi_id || '', '— seçiniz —');
+            ptSel.innerHTML  = buildOptions(PALET_LIST, rp.palet_tipi_id || '', '— seçiniz —');
+            depSel.innerHTML = buildTextOptions(DEPO_LIST,
+                rp.depo || (document.getElementById('genelDepo') || {}).value || '', '— seçiniz —');
+            urunSel.innerHTML = buildTextOptions(URUN_LIST,
+                rp.urun_cinsi || (document.getElementById('genelUrun') || {}).value || '', '— seçiniz —');
+        }
+
+        /* Textarea içeriğini satır dizisine çevir */
+        function lines(ta) {
+            return String(ta.value || '').replace(/\r\n?/g, '\n').split('\n')
+                .map(s => s.replace(/\u00a0/g, ' ').trim())
+                .filter(s => s !== '');
+        }
+
+        /* Bir kutuya çok sütunlu veri yapıştırılırsa: 1. sütun bu kutuya,
+           2. sütun diğer kutuya gider (Excel'de iki sütun birden kopyalama). */
+        function attachPaste(ta, other) {
+            ta.addEventListener('paste', function (e) {
+                const cd = e.clipboardData || window.clipboardData;
+                const text = cd ? cd.getData('text') : '';
+                if (!text) { setTimeout(refresh, 0); return; }
+                const grid = parseClipGrid(text);
+                if (!grid.length) return;
+                // Tek değer → normal yapıştırma (kutunun içeriğini silme)
+                if (grid.length === 1 && grid[0].length === 1) { setTimeout(refresh, 0); return; }
+                e.preventDefault();
+                ta.value = grid.map(r => r[0] || '').join('\n');
+                if (grid.some(r => r.length > 1 && String(r[1]).trim() !== '')) {
+                    other.value = grid.map(r => r[1] || '').join('\n');
+                }
+                refresh();
+            });
+            ta.addEventListener('input', refresh);
+        }
+
+        function unitOf(sel) {
+            const o = sel.options[sel.selectedIndex];
+            return parseNum((o && o.dataset ? o.dataset.unit : 0) || 0);
+        }
+
+        function refresh() {
+            const kasa = lines(taKasa);
+            const brut = lines(taBrut);
+            infoKasa.textContent = kasa.length + ' satır';
+            infoBrut.textContent = brut.length + ' satır';
+
+            const n = Math.max(kasa.length, brut.length);
+            rowCntEl.textContent = n;
+            countEl.textContent  = n ? n + ' satır hazır' : '';
+
+            /* Uyarılar */
+            const uyarilar = [];
+            if (kasa.length && brut.length && kasa.length !== brut.length) {
+                uyarilar.push('⚠ Kasa adeti <b>' + kasa.length + '</b> satır, brüt KG <b>' + brut.length +
+                              '</b> satır — eşleşmiyor. Eksik hücreler boş bırakılacak.');
+            }
+            const bozuk = [];
+            kasa.forEach((v, i) => { if (!isNumericToken(v)) bozuk.push((i + 1) + '. satır kasa: "' + escHtml(v) + '"'); });
+            brut.forEach((v, i) => { if (!isNumericToken(v)) bozuk.push((i + 1) + '. satır brüt: "' + escHtml(v) + '"'); });
+            if (bozuk.length) {
+                uyarilar.push('⚠ Sayı olarak okunamayan değerler 0 kabul edilir: ' +
+                              bozuk.slice(0, 5).join(', ') + (bozuk.length > 5 ? ' …' : ''));
+            }
+            uyariEl.innerHTML = uyarilar.join('<br>');
+            uyariEl.style.display = uyarilar.length ? '' : 'none';
+
+            /* Önizleme */
+            onizBody.innerHTML = '';
+            if (!n) {
+                onizWrap.style.display = 'none';
+                uygulaBtn.disabled = true;
+                return;
+            }
+            const kasaUnit = unitOf(kcSel);
+            const palUnit  = unitOf(ptSel);
+            let tKasa = 0, tBrut = 0, tDara = 0, tNet = 0;
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < n; i++) {
+                const ka = parseInt2(kasa[i] || 0);
+                const br = parseNum(brut[i] || 0);
+                const da = ka * kasaUnit + palUnit;
+                const ne = Math.max(0, br - da);
+                tKasa += ka; tBrut += br; tDara += da; tNet += ne;
+                if (i >= MAX_PREVIEW) continue;
+                const tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td class="tp-no-td"><span class="tp-no">' + (i + 1) + '</span></td>' +
+                    '<td>' + (kasa[i] != null ? fmtKg(ka) : '<span class="yp-bos">—</span>') + '</td>' +
+                    '<td>' + (brut[i] != null ? fmtKg(br) : '<span class="yp-bos">—</span>') + '</td>' +
+                    '<td class="tp-num">' + fmtKg(da) + '</td>' +
+                    '<td class="tp-num">' + fmtKg(ne) + '</td>';
+                // Net ≤ 0 yalnızca brüt girilmişken hata sayılır
+                if (brut[i] != null && ne <= 0) tr.classList.add('yp-satir-hata');
+                frag.appendChild(tr);
+            }
+            onizBody.appendChild(frag);
+            if (n > MAX_PREVIEW) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="5" class="muted" style="text-align:center;padding:6px">' +
+                               '… ve ' + (n - MAX_PREVIEW) + ' satır daha</td>';
+                onizBody.appendChild(tr);
+            }
+            ozetEl.innerHTML =
+                '<span>Palet <strong>' + n + '</strong></span>' +
+                '<span>Kasa <strong>' + fmtKg(tKasa) + '</strong></span>' +
+                '<span>Brüt <strong>' + fmtKg(tBrut) + '</strong></span>' +
+                '<span>Dara <strong>' + fmtKg(tDara) + '</strong></span>' +
+                '<span>Net <strong>' + fmtKg(tNet) + '</strong></span>';
+            onizWrap.style.display = '';
+            uygulaBtn.disabled = false;
+        }
+
+        [kcSel, ptSel, depSel, urunSel].forEach(s => s.addEventListener('change', () => {
+            s.classList.remove('error');
+            refresh();
+        }));
+        attachPaste(taKasa, taBrut);
+        attachPaste(taBrut, taKasa);
+
+        function temizle() {
+            taKasa.value = ''; taBrut.value = '';
+            refresh();
+        }
+
+        acBtn.addEventListener('click', () => {
+            if (panel.style.display !== 'none') { panel.style.display = 'none'; return; }
+            ['topluPanel', 'excelPanel'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+            initSelects();
+            temizle();
+            panel.style.display = '';
+            panel.scrollIntoView({ block: 'nearest' });
+            setTimeout(() => taKasa.focus(), 80);
+        });
+        kapatBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+        temizBtn.addEventListener('click', temizle);
+
+        uygulaBtn.addEventListener('click', () => {
+            const kasa = lines(taKasa);
+            const brut = lines(taBrut);
+            const n = Math.max(kasa.length, brut.length);
+            if (!n) return;
+
+            /* Zorunlu alanlar — kayıt sırasında sunucu da arıyor, burada uyar */
+            let eksik = false;
+            [[kcSel, 'Kasa Cinsi'], [ptSel, 'Palet Tipi'], [depSel, 'Depo']].forEach(([el]) => {
+                if (!el.value) { el.classList.add('error'); eksik = true; }
+                else el.classList.remove('error');
+            });
+            if (eksik) {
+                alert('Kasa Cinsi, Palet Tipi ve Depo seçilmelidir.');
+                return;
+            }
+
+            const mode = (panel.querySelector('input[name=ypMode]:checked') || {}).value || 'ekle';
+            if (mode === 'degistir' && pallets.length) {
+                if (!confirm('Mevcut ' + pallets.length + ' palet silinip ' + n + ' yeni palet oluşturulacak. Onaylıyor musunuz?')) return;
+            }
+
+            /* Malzemeler 1. paletten kopyalanır (Excel Yükle ile aynı davranış) */
+            const rp   = refPallet();
+            const mats = Array.isArray(rp.materials) ? rp.materials : [];
+
+            if (mode === 'degistir') pallets.length = 0;
+
+            for (let i = 0; i < n; i++) {
+                pallets.push({
+                    palet_no:      String(pallets.length + 1),
+                    kasa_adeti:    parseInt2(kasa[i] || 0),
+                    size:          '',
+                    brut_kg:       parseNum(brut[i] || 0),
+                    kasa_cinsi_id: kcSel.value,
+                    palet_tipi_id: ptSel.value,
+                    urun_cinsi:    urunSel.value,
+                    depo:          depSel.value,
+                    islendi:       false,
+                    materials:     mats.map(m => ({ material_id: m.material_id, quantity: m.quantity })),
+                });
+            }
+
+            renderCards();
+            recomputeTotals();
+            temizle();
             panel.style.display = 'none';
         });
     })();

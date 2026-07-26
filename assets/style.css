@@ -2072,6 +2072,21 @@ body.print-mode .asya-sheet {
     white-space: nowrap;
     text-align: center;
 }
+/* Mobil: 4 ikincil buton düzensiz sarmasın — sabit 2×2 ızgara, 44px dokunma hedefi */
+@media (max-width: 767px) {
+    .pallet-sec-btns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+    }
+    .pallet-sec-btns .btn {
+        width: 100%;
+        min-height: 44px;
+        padding-left: 4px;
+        padding-right: 4px;
+        font-size: .8rem;
+    }
+}
 .pallet-add-main {
     width: 100%;
     min-height: 48px;
@@ -3404,6 +3419,8 @@ body.print-mode .asya-sheet {
 .toplu-tablo input.tp-cell { min-width: 80px; }
 .toplu-tablo select.tp-cell { min-width: 120px; }
 .tp-num { text-align: right; white-space: nowrap; font-size: .82rem; color: var(--muted); padding-right: 8px; }
+/* Sayısal sütun başlıkları da sağa dayalı olsun (th kuralı text-align:left eziyordu) */
+.toplu-tablo th.tp-num { text-align: right; padding-right: 8px; }
 .tp-del { opacity: .5; }
 .tp-del:hover { opacity: 1; }
 @media (max-width: 767px) {
@@ -3463,6 +3480,80 @@ body.print-mode .asya-sheet {
     .excel-bulk-grid { grid-template-columns: repeat(2, 1fr); }
     .excel-bulk-grid select,
     .excel-bulk-grid input { font-size: 16px; }
+}
+
+/* ── Yapıştır Paneli (Excel sütunu kopyala/yapıştır) ── */
+.yp-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.yp-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.yp-col-head {
+    font-size: .8rem; font-weight: 700; color: var(--text);
+}
+.yp-ta {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .9rem;
+    line-height: 1.5;
+    min-height: 120px;
+}
+.yp-ta:focus { border-color: var(--primary); outline: none; box-shadow: var(--ring); }
+.yp-col-info { font-size: .75rem; color: var(--muted); }
+.yp-hint {
+    font-size: .78rem; color: var(--muted);
+    margin: 8px 0 0; line-height: 1.45;
+}
+.yp-uyari {
+    margin-top: 10px; padding: 8px 10px;
+    border: 1px solid #f0c14b; border-left-width: 4px;
+    border-radius: var(--radius-sm);
+    background: #fff8e6; color: #7a5300;
+    font-size: .8rem; line-height: 1.5;
+}
+/* Önizleme yalnız 5 dar sütun — mobilde yatay kaydırma gerekmesin */
+.yp-onizleme { min-width: 0; }
+.yp-onizleme td { padding: 4px 7px; }
+.yp-bos { color: var(--muted); }
+.yp-satir-hata td { background: #fdecec; }
+.yp-ozet {
+    display: flex; flex-wrap: wrap; gap: 6px 16px;
+    margin-top: 6px; padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: #eef4ff; border: 1px solid #c7d7f5;
+    font-size: .8rem; color: var(--muted);
+}
+.yp-ozet strong { color: var(--text); font-size: .9rem; }
+.yp-mode-row {
+    display: flex; flex-wrap: wrap; gap: 8px 18px;
+    margin-top: 10px;
+}
+.yp-mode {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: .82rem; color: var(--text); cursor: pointer;
+}
+.yp-mode input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+.yp-uygula { margin-top: 10px; min-height: 44px; font-size: .95rem; }
+.yp-uygula[disabled] { opacity: .5; cursor: not-allowed; }
+/* Toplu Düzenle: yapıştırma bildirimi */
+.tp-paste-flash { color: var(--primary) !important; font-weight: 700; }
+
+@media (max-width: 767px) {
+    /* Mobil: sütunlar alt alta, yazı 16px (iOS zoom önleme), dokunma hedefleri büyük */
+    .yp-cols { grid-template-columns: 1fr; gap: 12px; }
+    .yp-ta { font-size: 16px; min-height: 140px; }
+    .yp-uygula { width: 100%; min-height: 50px; font-size: 1rem; border-radius: 12px; }
+    .yp-mode-row { flex-direction: column; gap: 10px; }
+    .yp-mode { min-height: 32px; }
+    .yp-ozet { gap: 4px 12px; }
 }
 
 @media (max-width: 767px) {
@@ -5633,5 +5724,28 @@ html[data-theme="dark"] .lc-field input { background: #101722; color: var(--text
 html[data-theme="dark"] .lc-field input:focus { background: #101722; }
 html[data-theme="dark"] .lc-field label, html[data-theme="dark"] .dsc-yeni-baslik { color: var(--muted); }
 html[data-theme="dark"] .dsc-subtitle, html[data-theme="dark"] .lc-subtitle { color: var(--muted); }
+
+} /* @media screen */
+
+/* =========================================================
+   KOYU TEMA v5 — palet toplu giriş panelleri
+   (Toplu Düzenle · Excel Yükle · Yapıştır)
+   Yalnız EKRAN; yazdırma çıktısı etkilenmez.
+   ========================================================= */
+@media screen {
+
+html[data-theme="dark"] body:not(.print-mode) .toplu-panel { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .toplu-tablo th { background: #232d3c; color: var(--muted); }
+html[data-theme="dark"] body:not(.print-mode) .toplu-tablo td { border-bottom-color: #232d3c; }
+html[data-theme="dark"] body:not(.print-mode) .tp-cell:focus { background: #101722; color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) .excel-bulk-section { background: #16233a; border-color: #2b3d5e; }
+html[data-theme="dark"] body:not(.print-mode) .excel-drop-zone:hover,
+html[data-theme="dark"] body:not(.print-mode) .excel-drop-zone.drag-over { background: #16233a; }
+
+/* Yapıştır paneli */
+html[data-theme="dark"] body:not(.print-mode) .yp-ta { background: #101722; color: var(--text); }
+html[data-theme="dark"] body:not(.print-mode) .yp-uyari { background: #332916; border-color: #6b5320; color: #e6bf6b; }
+html[data-theme="dark"] body:not(.print-mode) .yp-ozet { background: #16233a; border-color: #2b3d5e; }
+html[data-theme="dark"] body:not(.print-mode) .yp-satir-hata td { background: #34201f; }
 
 } /* @media screen */

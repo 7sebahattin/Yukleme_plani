@@ -231,6 +231,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <div class="pallet-sec-btns">
                 <button type="button" class="btn btn-ghost btn-sm" id="excelAcBtn">📥 Excel Yükle</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="topluAcBtn">⊞ Toplu Düzenle</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="yapistirAcBtn">📋 Yapıştır</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="topluIsleBtn">✓ Toplu Raporla</button>
             </div>
             <button type="button" class="btn btn-primary pallet-add-main" id="addPalletBtn">+ Yeni Palet Ekle</button>
@@ -311,7 +312,77 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <tbody id="topluTbody"></tbody>
             </table>
         </div>
-        <p class="muted" style="font-size:.78rem;margin:6px 0 0">Enter → aynı sütunda alt satıra geç &nbsp;·&nbsp; Tab → sağ hücre</p>
+        <p class="muted" style="font-size:.78rem;margin:6px 0 0">
+            Enter → aynı sütunda alt satıra geç &nbsp;·&nbsp; Tab → sağ hücre &nbsp;·&nbsp;
+            <strong>Bir hücreye çok satırlı veri yapıştırırsanız aşağıya doğru dolar.</strong>
+        </p>
+    </div>
+
+    <!-- Yapıştır — Excel sütunu kopyala/yapıştır -->
+    <div id="yapistirPanel" class="toplu-panel" style="display:none">
+        <div class="toplu-panel-head">
+            <strong>📋 Excel'den Yapıştır</strong>
+            <span class="muted" id="ypCount" style="font-size:.82rem"></span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+                <button type="button" id="ypTemizle" class="btn btn-sm btn-ghost">Temizle</button>
+                <button type="button" id="ypKapat" class="btn btn-sm btn-ghost">✕</button>
+            </div>
+        </div>
+
+        <div class="yp-cols">
+            <div class="yp-col">
+                <label class="yp-col-head" for="ypKasa">Kasa Adeti sütunu</label>
+                <textarea id="ypKasa" class="yp-ta" rows="6" spellcheck="false" autocomplete="off"
+                          inputmode="numeric" placeholder="150&#10;150&#10;380&#10;…"></textarea>
+                <small class="yp-col-info" id="ypKasaInfo">0 satır</small>
+            </div>
+            <div class="yp-col">
+                <label class="yp-col-head" for="ypBrut">Brüt KG sütunu</label>
+                <textarea id="ypBrut" class="yp-ta" rows="6" spellcheck="false" autocomplete="off"
+                          inputmode="decimal" placeholder="828&#10;823&#10;830&#10;…"></textarea>
+                <small class="yp-col-info" id="ypBrutInfo">0 satır</small>
+            </div>
+        </div>
+        <p class="yp-hint">
+            Excel'de sütunu seçip kopyalayın, ilgili kutuya yapıştırın — satır sırası korunur.
+            İki sütunu birlikte kopyalarsanız otomatik olarak ayrılır.
+        </p>
+
+        <div class="excel-bulk-section">
+            <strong style="font-size:.85rem">Tüm Satırlara Uygulanacak (1. satır değerleri):</strong>
+            <div class="excel-bulk-grid">
+                <label><span>Kasa Cinsi <span class="req">*</span></span><select id="ypKasaCinsi"></select></label>
+                <label><span>Palet Tipi <span class="req">*</span></span><select id="ypPaletTipi"></select></label>
+                <label><span>Depo <span class="req">*</span></span><select id="ypDepo"></select></label>
+                <label><span>Ürün Cinsi</span><select id="ypUrun"></select></label>
+            </div>
+        </div>
+
+        <div id="ypUyari" class="yp-uyari" style="display:none"></div>
+
+        <div id="ypOnizlemeWrap" style="display:none">
+            <div class="toplu-tablo-wrap" style="margin-top:10px">
+                <table class="toplu-tablo yp-onizleme">
+                    <thead><tr>
+                        <th>#</th><th>Kasa Adeti</th><th>Brüt KG</th>
+                        <th class="tp-num">Dara</th><th class="tp-num">Net</th>
+                    </tr></thead>
+                    <tbody id="ypTbody"></tbody>
+                </table>
+            </div>
+            <div class="yp-ozet" id="ypOzet"></div>
+        </div>
+
+        <div class="yp-mode-row">
+            <label class="yp-mode"><input type="radio" name="ypMode" value="ekle" checked> Mevcut listeye ekle</label>
+            <label class="yp-mode"><input type="radio" name="ypMode" value="degistir"> Listenin yerine geçsin</label>
+        </div>
+
+        <div class="toplu-actions">
+            <button type="button" id="ypUygula" class="btn btn-primary yp-uygula" disabled>
+                ✓ Paletleri Oluştur (<span id="ypRowCount">0</span>)
+            </button>
+        </div>
     </div>
 
     <div id="palletList" class="pallet-cards"></div>
