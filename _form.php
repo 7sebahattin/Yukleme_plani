@@ -150,7 +150,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
             </label>
             <?php if (!$form_is_cikma): ?>
             <?php $_cur_urun_sahibi = (int)($record['urun_sahibi_id'] ?? 0); ?>
-            <label class="span-2">Ürün Sahibi
+            <label>Ürün Sahibi
                 <select name="urun_sahibi_id" id="urunSahibiSel"
                         class="<?= $_cur_urun_sahibi > 0 ? 'urun-sahibi-selected' : '' ?>">
                     <option value="">Seçilmedi</option>
@@ -174,11 +174,11 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                 <?php endif; ?>
             </div>
             <?php endif; ?>
-            <label class="span-2">Marka
+            <label>Marka
                 <input type="text" name="brand" value="<?= h($record['brand'] ?? '') ?>" data-uppercase="tr"
                        placeholder="yazın veya listeden seçin" <?= suggest_attrs('brand') ?>>
             </label>
-            <label class="span-2">Not
+            <label>Not
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">
             </label>
             <label>Gümrük
