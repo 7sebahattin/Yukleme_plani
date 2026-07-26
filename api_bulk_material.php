@@ -278,13 +278,26 @@ if ($record_id <= 0 || empty($materials_input) || empty($pallet_ids)) {
 // Tüm malzemelerin aktif olduğunu doğrula
 $mat_ids = array_values(array_unique(array_column($materials_input, 'material_id')));
 $place   = implode(',', array_fill(0, count($mat_ids), '?'));
-$st      = db()->prepare("SELECT id, unit_dara_kg, type FROM material_definitions WHERE id IN ($place) AND is_active=1");
+$st      = db()->prepare("SELECT id, name, unit_dara_kg, type FROM material_definitions WHERE id IN ($place) AND is_active=1");
 $st->execute($mat_ids);
 $mats_db = array_column($st->fetchAll(), null, 'id');
 
 foreach ($materials_input as $m) {
     if (!isset($mats_db[$m['material_id']])) {
         echo json_encode(['error' => 'Malzeme bulunamadı: #' . $m['material_id']]);
+        exit;
+    }
+    // TÜR DOĞRULAMASI — asıl koruma burada. Önceden yalnız "var mı, aktif mi"
+    // kontrol ediliyordu; bu yüzden lookup tanımları (telefon, alıcı, şoför,
+    // plaka, firma…) palete MALZEME olarak kaydedilebiliyordu. Böyle bir satır
+    // dara/stok hesaplarına ve malzeme raporlarına karışır.
+    $_mtype = (string)($mats_db[$m['material_id']]['type'] ?? '');
+    if (!is_pallet_material_type($_mtype)) {
+        echo json_encode([
+            'error' => 'Bu tanım palete malzeme olarak eklenemez: '
+                     . ($mats_db[$m['material_id']]['name'] ?? ('#' . $m['material_id']))
+                     . ' (tür: ' . ($_mtype !== '' ? $_mtype : '?') . ')',
+        ]);
         exit;
     }
 }

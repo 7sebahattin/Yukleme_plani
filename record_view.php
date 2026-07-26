@@ -262,8 +262,11 @@ $urun_keys = array_slice(array_keys($urun_groups), 0, 4);
 
 // Toplu malzeme ekleme modalı için aktif malzemeleri çek
 $bm_materials = get_all_active_materials();
-// Yalnız palete giydirilen sarf malzemeler listelenir — ticari/yapısal tipler hariç
-$bm_skip_types = ['firma', 'depo', 'bolge', 'urun', 'lokasyon', 'kasa_cinsi', 'palet_tipi'];
+// Yalnız palete giydirilen sarf malzemeler listelenir — ticari/yapısal tipler hariç.
+// TEK KAYNAK: config/helpers.php → pallet_material_types(). Önceden burada
+// sabit bir liste vardı ve yeni lookup türleri (alıcı, telefon, şoför, plaka…)
+// eklendikçe listeye SIZIYORDU.
+$bm_allowed_types = pallet_material_types();
 
 // "Eklenenleri Sil" sekmesi — bu kayda eklenmiş sarf/giydirme malzemeleri (pallet_materials)
 $extra_materials = [];
@@ -1031,7 +1034,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
               <?php
               $bm_by_type = [];
               foreach ($bm_materials as $m) {
-                  if (in_array($m['type'], $bm_skip_types, true)) continue;
+                  if (!in_array($m['type'], $bm_allowed_types, true)) continue;
                   $bm_by_type[$m['type']][] = $m;
               }
               foreach ($bm_by_type as $btype => $blist):
@@ -1129,7 +1132,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
     <?php
     $bm_mat_list = [];
     foreach ($bm_materials as $m) {
-        if (in_array($m['type'], $bm_skip_types, true)) continue;
+        if (!in_array($m['type'], $bm_allowed_types, true)) continue;
         $bm_mat_list[] = [
             'id'   => (int)$m['id'],
             'name' => $m['name'],

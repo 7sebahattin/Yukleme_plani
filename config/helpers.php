@@ -202,6 +202,23 @@ function non_material_definition_types(): array {
     ];
 }
 
+// ── PALETE GİYDİRİLEN SARF MALZEME TÜRLERİ — TEK KAYNAK ────
+// "Malzeme Ekle" listeleri (record_view toplu modal + palet modalı) ve
+// api_bulk_material doğrulaması buradan beslenir.
+// Hariç tutulanlar:
+//   - non_material_definition_types(): lookup/ticari türler (firma, depo,
+//     alıcı, telefon, şoför, plaka…) — bunlar MALZEME DEĞİL.
+//   - kasa_cinsi / palet_tipi: malzeme türü olsalar da yapısaldır, kendi
+//     ayrı seçim alanları var; giydirme malzemesi olarak eklenmezler.
+function pallet_material_types(): array {
+    $skip = array_merge(non_material_definition_types(), ['kasa_cinsi', 'palet_tipi']);
+    return array_values(array_diff(array_keys(definition_types()), $skip));
+}
+
+function is_pallet_material_type(string $type): bool {
+    return in_array($type, pallet_material_types(), true);
+}
+
 // Subdirectory-safe base URL (kök için '', hks/ için '../', vb.)
 function base_url(): string {
     $dir   = dirname($_SERVER['SCRIPT_NAME'] ?? '/');

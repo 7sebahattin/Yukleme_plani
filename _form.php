@@ -447,6 +447,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
 <script id="kasaCinsiData" type="application/json"><?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'name'=>$r['name'],'unit'=>(float)$r['unit_dara_kg']], $kasa_cinsi_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="paletTipiData" type="application/json"><?= json_encode(array_map(fn($r)=>['id'=>(int)$r['id'],'name'=>$r['name'],'unit'=>(float)$r['unit_dara_kg']], $palet_tipi_list), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="materialTypesData" type="application/json"><?= json_encode($type_labels, JSON_UNESCAPED_UNICODE) ?></script>
+<script id="palletMaterialTypesData" type="application/json"><?= json_encode(pallet_material_types(), JSON_UNESCAPED_UNICODE) ?></script>
 <script id="palletsInit" type="application/json"><?= json_encode(
     array_map(fn($p) => array_merge($p, [
         'brut_kg'    => isset($p['brut_kg'])    ? (float)$p['brut_kg']    : null,

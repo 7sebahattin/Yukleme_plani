@@ -267,6 +267,13 @@
     const KASA_LIST  = JSON.parse(document.getElementById('kasaCinsiData').textContent  || '[]');
     const PALET_LIST = JSON.parse(document.getElementById('paletTipiData').textContent  || '[]');
     const TYPE_LABELS = JSON.parse(document.getElementById('materialTypesData').textContent || '{}');
+    /* Palete giydirilebilen sarf malzeme türleri — TEK KAYNAK PHP'de
+       (config/helpers.php → pallet_material_types()). Önceden burada sabit bir
+       liste vardı; yeni lookup türleri (alıcı, telefon, şoför, plaka…)
+       eklendikçe malzeme listesine SIZIYORDU. */
+    const PALLET_MAT_TYPES = JSON.parse(
+        (document.getElementById('palletMaterialTypesData') || {}).textContent || '[]'
+    );
     const palletsInit = JSON.parse(document.getElementById('palletsInit').textContent   || '[]');
     const DEPO_LIST  = JSON.parse((document.getElementById('depoListData') || {}).textContent || '[]');
     const URUN_LIST  = JSON.parse((document.getElementById('urunListData') || {}).textContent || '[]');
@@ -438,11 +445,18 @@
 
         let opts = '<option value="">-- malzeme seçiniz --</option>';
         Object.keys(matsByType).sort().forEach(t => {
-            if (['kasa_cinsi','palet_tipi','firma','depo','urun'].includes(t)) return;
+            // İzinli sarf türü değilse gösterme. TEK İSTİSNA: bu satırda ZATEN
+            // seçili olan malzeme — eski/hatalı veri sessizce kaybolmasın,
+            // kullanıcı görüp değiştirebilsin.
+            const izinli = PALLET_MAT_TYPES.length === 0 || PALLET_MAT_TYPES.includes(t);
+            const seciliBurada = matsByType[t].some(it => String(it.id) === String(d.material_id));
+            if (!izinli && !seciliBurada) return;
             const label = TYPE_LABELS[t] || t;
             opts += `<optgroup label="${escHtml(label)}">`;
             matsByType[t].forEach(it => {
                 const sel = String(it.id) === String(d.material_id) ? ' selected' : '';
+                // İzinsiz türde yalnız seçili olanı göster (liste kirlenmesin)
+                if (!izinli && !sel) return;
                 opts += `<option value="${it.id}" data-unit="${it.unit}"${sel}>${escHtml(it.name)} (${fmtUnitKg(it.unit)} kg)</option>`;
             });
             opts += '</optgroup>';
