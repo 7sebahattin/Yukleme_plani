@@ -175,6 +175,30 @@ function definition_types(): array {
         'kraft_kagit'   => 'Kraft Kağıt',
         'file'          => 'File',
         'diger'         => 'Diğer',
+        // ── Sevkiyat / kayıt alanı tanımları (Sprint Öneri-01) ──
+        // Yükleme kaydı formundaki serbest metin alanlarının öneri havuzu.
+        // MALZEME DEĞİLLER — non_material_definition_types() ile stok
+        // modülünün tür listelerinden hariç tutulurlar.
+        'alici'           => 'Alıcı',
+        'gumruk'          => 'Gümrük',
+        'nakliye_sirketi' => 'Nakliye Şirketi',
+        'sofor'           => 'Şoför',
+        'telefon'         => 'Telefon',
+        'on_plaka'        => 'Ön Plaka',
+        'arka_plaka'      => 'Arka Plaka',
+        'ulasim'          => 'Ulaşım',
+    ];
+}
+
+// ── Malzeme OLMAYAN tanım türleri — TEK KAYNAK ────────────
+// Stok modülü "Malzeme Türü" listeleri bu türleri göstermemeli.
+// ms_material_types(), ms_excluded_types(), malzeme_stok_import ve
+// reports.php hepsi buradan beslenir; yeni bir lookup türü eklenince
+// tek yerde güncellenir (önceden 4 ayrı kopya vardı).
+function non_material_definition_types(): array {
+    return [
+        'firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon', 'cikis_nedeni',
+        'alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim',
     ];
 }
 
@@ -516,6 +540,7 @@ function render_flash(): void {
 }
 
 // --- Şema yardımcı: kolon var mı? (request başına cache'li) ---
+if (!function_exists('db_has_column')):
 function db_has_column(string $table, string $column): bool {
     static $cache = [];
     $key = $table . '::' . $column;
@@ -531,6 +556,7 @@ function db_has_column(string $table, string $column): bool {
     }
     return $cache[$key];
 }
+endif;
 
 // --- Tek seferlik otomatik migrasyon ---
 (function () {
@@ -1243,6 +1269,148 @@ function ensure_definition(string $type, string $name): void {
             "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?, ?, 0, 1)"
         )->execute([$type, $name]);
     } catch (PDOException $e) {}
+}
+
+// ═══════════════════════════════════════════════════════════
+// ÖNERİLİ SERBEST METİN ALANLARI (Sprint Öneri-01)
+// Yükleme kaydı formunda yazarken öneri sunulan, eşleşme yoksa
+// "+ ekle" ile tanımlara kaydedilen alanlar.
+// ═══════════════════════════════════════════════════════════
+
+// form alanı => [tanım tipi, etiket, en fazla karakter, TR-büyük harf mi]
+// 'max' = min(loading_records kolon uzunluğu, material_definitions.name=150)
+function record_suggest_fields(): array {
+    return [
+        'alici'           => ['type' => 'alici',           'label' => 'alıcı',           'max' => 150, 'upper' => true],
+        'gumruk'          => ['type' => 'gumruk',          'label' => 'gümrük',          'max' => 150, 'upper' => true],
+        'nakliye_sirketi' => ['type' => 'nakliye_sirketi', 'label' => 'nakliye şirketi', 'max' => 150, 'upper' => true],
+        'sofor_adi'       => ['type' => 'sofor',           'label' => 'şoför',           'max' => 150, 'upper' => true],
+        'telefon'         => ['type' => 'telefon',         'label' => 'telefon',         'max' => 40,  'upper' => false],
+        'on_plaka'        => ['type' => 'on_plaka',        'label' => 'ön plaka',        'max' => 30,  'upper' => true],
+        'arka_plaka'      => ['type' => 'arka_plaka',      'label' => 'arka plaka',      'max' => 30,  'upper' => true],
+        'ulasim'          => ['type' => 'ulasim',          'label' => 'ulaşım',          'max' => 100, 'upper' => true],
+    ];
+}
+
+// Alan değerini kanonik hâle getirir: boşluk sadeleştir, (telefon hariç)
+// TR-büyük harfe çevir, kolon uzunluğuna göre kırp.
+function normalize_suggest_value(string $field, string $raw): string {
+    $meta = record_suggest_fields()[$field] ?? null;
+    if ($meta === null) return '';
+    $v = trim(str_replace("\xc2\xa0", ' ', $raw));
+    $v = (string)preg_replace('/\s+/u', ' ', $v);
+    if ($v === '') return '';
+    $v = $meta['upper'] ? tr_upper($v) : $v;
+    return mb_substr($v, 0, $meta['max'], 'UTF-8');
+}
+
+// Anlamlı bir değer mi? En az bir harf veya rakam içermeli —
+// "-", "...", "??" gibi çöp tanımların oluşmasını engeller.
+function suggest_value_is_meaningful(string $v): bool {
+    return $v !== '' && (bool)preg_match('/[\p{L}\p{N}]/u', $v);
+}
+
+// ── loading_records metin kolonlarının uzunluk sınırları ───
+// INSERT/UPDATE öncesi kırpma için. Strict mode'da uzun değer hata
+// verir, strict değilse SESSİZCE kırpılır — ikisi de istenmez.
+function loading_record_text_limits(): array {
+    return [
+        'firma' => 150, 'bolge' => 150, 'parti_no' => 80, 'gumruk' => 150,
+        'sofor_adi' => 150, 'fatura_no' => 80, 'casus_no' => 80,
+        'on_plaka' => 30, 'arka_plaka' => 30, 'nakliye_sirketi' => 150,
+        'telefon' => 40, 'ulasim' => 100, 'alici' => 150, 'urun' => 150,
+        'etiket' => 255, 'cikis_nedeni' => 100,
+    ];
+}
+
+// Kayıt dizisindeki metin alanlarını kolon uzunluğuna göre kırpar.
+function clamp_loading_record_fields(array $record): array {
+    foreach (loading_record_text_limits() as $col => $len) {
+        if (!array_key_exists($col, $record)) continue;
+        if (!is_string($record[$col])) continue;
+        if (mb_strlen($record[$col], 'UTF-8') > $len) {
+            $record[$col] = mb_substr($record[$col], 0, $len, 'UTF-8');
+        }
+    }
+    return $record;
+}
+
+// ── Öneri havuzu ──────────────────────────────────────────
+// Her alan için: tanımlar (material_definitions) ∪ geçmiş kayıtlardaki
+// mevcut değerler. Böylece özellik ilk günden dolu listeyle çalışır.
+// Geçmiş değerler AKTİF DEPO kapsamıyla süzülür (depo izolasyonu).
+function record_suggest_lists(): array {
+    $fields = record_suggest_fields();
+    $out = [];
+    foreach ($fields as $f => $m) $out[$f] = [];
+
+    // 1) Tanımlar
+    try {
+        $types = array_column($fields, 'type');
+        $ph = implode(',', array_fill(0, count($types), '?'));
+        $st = db()->prepare("SELECT type, name FROM material_definitions
+                             WHERE type IN ($ph) AND is_active = 1");
+        $st->execute($types);
+        $byType = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $byType[$r['type']][] = (string)$r['name'];
+        }
+        foreach ($fields as $f => $m) {
+            if (!empty($byType[$m['type']])) $out[$f] = $byType[$m['type']];
+        }
+    } catch (Throwable $e) {
+        error_log('[record_suggest_lists] tanımlar: ' . $e->getMessage());
+    }
+
+    // 2) Geçmiş kayıtlar (aktif depo kapsamında)
+    try {
+        // depo_sql_records_in() config/auth.php'de tanımlı. Bu dosya auth.php
+        // olmadan yüklenirse depo süzgeci UYGULANAMAZ — o durumda geçmiş
+        // değerleri hiç okumayız (başka deponun verisi sızmasın).
+        if (!function_exists('depo_sql_records_in')) {
+            throw new RuntimeException('depo_sql_records_in yok — geçmiş öneriler atlandı');
+        }
+        [$depo_sql, $depo_params] = depo_sql_records_in('loading_records');
+        // Yalnız SON 24 AY: form her açılışta çalışan bir sorgu, tablo
+        // büyüdükçe maliyeti sabit kalsın. Eski alıcı/şoför zaten öneri
+        // olarak anlamlı değil; kalıcı olması gerekenler tanıma eklenir.
+        $recent = " AND (tarih IS NULL OR tarih >= DATE_SUB(CURDATE(), INTERVAL 24 MONTH))";
+        $parts = [];
+        $params = [];
+        foreach ($fields as $f => $m) {
+            // Eski veritabanında olmayan kolon (ör. ulasim) TÜM sorguyu
+            // düşürmesin — o alanı listeden çıkar, diğerleri çalışsın.
+            if (function_exists('db_has_column') && !db_has_column('loading_records', $f)) continue;
+            $w = "`$f` <> ''" . $recent . ($depo_sql !== '' ? " AND $depo_sql" : '');
+            $parts[] = "SELECT '" . $f . "' AS k, `$f` AS v FROM loading_records WHERE $w";
+            foreach ($depo_params as $dp) $params[] = $dp;
+        }
+        if (empty($parts)) throw new RuntimeException('öneri kolonu yok');
+        $st = db()->prepare(implode(' UNION ', $parts));
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[$r['k']][] = (string)$r['v'];
+        }
+    } catch (Throwable $e) {
+        error_log('[record_suggest_lists] geçmiş: ' . $e->getMessage());
+    }
+
+    // 3) TR-duyarsız tekilleştir + sırala
+    foreach ($out as $f => $vals) {
+        $seen = [];
+        $uniq = [];
+        foreach ($vals as $v) {
+            $v = trim($v);
+            if ($v === '') continue;
+            $key = function_exists('depo_fold') ? depo_fold($v) : mb_strtolower($v, 'UTF-8');
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $uniq[] = $v;
+        }
+        usort($uniq, fn($a, $b) => strcoll($a, $b) ?: strcmp($a, $b));
+        $out[$f] = $uniq;
+    }
+    return $out;
 }
 
 // ── Palet Satırı Validasyonu ──────────────────────────────

@@ -1789,7 +1789,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <label>Tür
             <select name="mat_type">
                 <option value="">Tüm Türler</option>
-                <?php foreach ($type_labels as $tk => $tl): if (in_array($tk,['firma','depo','urun'],true)) continue; ?>
+                <?php foreach ($type_labels as $tk => $tl): if (in_array($tk, non_material_definition_types(), true)) continue; ?>
                 <option value="<?= h($tk) ?>" <?= $f_mtype===$tk?'selected':'' ?>><?= h($tl) ?></option>
                 <?php endforeach; ?>
             </select>

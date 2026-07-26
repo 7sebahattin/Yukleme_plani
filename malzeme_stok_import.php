@@ -11,7 +11,8 @@ require_perm('stok.write');
 $pdo = db();
 
 function msi_types(): array {
-    $skip = ['firma', 'depo', 'bolge', 'urun'];
+    // TEK KAYNAK: config/helpers.php → non_material_definition_types()
+    $skip = non_material_definition_types();
     return array_filter(definition_types(), fn($k) => !in_array($k, $skip), ARRAY_FILTER_USE_KEY);
 }
 $ms_types = msi_types();

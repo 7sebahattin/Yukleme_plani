@@ -1717,6 +1717,175 @@
 })();
 
 /* =========================================================
+   ÖNERİ KUTUSU — data-suggest'li serbest metin alanları
+   (Alıcı · Gümrük · Nakliye Şirketi · Şoför · Telefon ·
+    Ön/Arka Plaka · Ulaşım)
+
+   Yazarken mevcut değerleri süzer; birebir eşleşme yoksa listenin
+   sonuna "+ ekle" satırı koyar. Ekleme api_tanim_ekle.php'ye gider
+   ve YALNIZCA kullanıcı bu satıra bastığında olur — kayıt kaydetmek
+   tanım OLUŞTURMAZ, böylece yanlış yazımlar tanımları kirletmez.
+
+   Serbest metin alanı olmayı sürdürür: listede olmayan bir değer
+   yazılıp kaydedilebilir, tanıma eklenmesi zorunlu değildir.
+   ========================================================= */
+(function () {
+    'use strict';
+
+    var dataEl = document.getElementById('suggestData');
+    if (!dataEl) return;
+    var POOL;
+    try { POOL = JSON.parse(dataEl.textContent || '{}'); } catch (_) { return; }
+    if (!POOL || typeof POOL !== 'object') return;
+
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    /* TR-duyarsız katlama — malzeme_stok_islem ve depo_fold ile aynı kurallar */
+    function fold(s) {
+        return String(s == null ? '' : s)
+            .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/Ş/g, 's').replace(/Ğ/g, 'g')
+            .replace(/Ü/g, 'u').replace(/Ö/g, 'o').replace(/Ç/g, 'c')
+            .replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c')
+            .toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+    /* En az bir harf/rakam — sunucudaki suggest_value_is_meaningful ile aynı kural */
+    function anlamli(v) { return /[0-9A-Za-zÇĞİIÖŞÜçğıiöşü]/.test(String(v || '')); }
+
+    function attach(input) {
+        var field = input.dataset.suggest;
+        var label = input.dataset.suggestLabel || 'değer';
+        var list0 = POOL[field];
+        if (!Array.isArray(list0)) list0 = [];
+        var items = list0.slice();
+
+        var wrap = document.createElement('div');
+        wrap.className = 'ms-sug-wrap';
+        input.parentNode.insertBefore(wrap, input);
+        wrap.appendChild(input);
+        var list = document.createElement('div');
+        list.className = 'ms-sug-list';
+        list.hidden = true;
+        wrap.appendChild(list);
+        var active = -1;
+
+        var suppress = false;   // programatik olay sırasında listeyi yeniden açma
+
+        function close() { list.hidden = true; active = -1; }
+        function hasExact(v) {
+            var f = fold(v);
+            return items.some(function (s) { return fold(s) === f; });
+        }
+        function pick(name) {
+            input.value = name;
+            // data-uppercase ve bağımlı alanlar tetiklensin. Bu 'input' olayı
+            // kendi render()'ımızı da çağırır ve listeyi yeniden açardı —
+            // suppress bayrağı bunu engeller.
+            suppress = true;
+            input.dispatchEvent(new Event('input',  { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            suppress = false;
+            close();
+        }
+
+        function ekle(name, row) {
+            if (row.dataset.busy === '1') return;      // çift dokunuş koruması
+            row.dataset.busy = '1';
+            row.classList.add('busy');
+            row.textContent = '⏳ Ekleniyor…';
+            fetch('api_tanim_ekle.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ csrf: csrf, field: field, name: name })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+                if (!j || !j.ok) {
+                    row.textContent = '⚠ ' + ((j && j.error) || 'Eklenemedi');
+                    row.classList.remove('busy');
+                    row.dataset.busy = '';
+                    return;
+                }
+                if (!hasExact(j.name)) items.push(j.name);
+                if (Array.isArray(POOL[field]) && POOL[field].indexOf(j.name) === -1) {
+                    POOL[field].push(j.name);          // aynı alanın diğer örnekleri de görsün
+                }
+                pick(j.name);
+            }).catch(function () {
+                row.textContent = '⚠ Bağlantı hatası';
+                row.classList.remove('busy');
+                row.dataset.busy = '';
+            });
+        }
+
+        /* mousedown + touchstart: input blur'undan ÖNCE çalışır.
+           İkisi birden tetiklenirse tek sefer çalışsın diye kilit var. */
+        function onTap(el, fn) {
+            var kilit = false;
+            function handler(e) {
+                if (kilit) return;
+                kilit = true;
+                setTimeout(function () { kilit = false; }, 400);
+                e.preventDefault();
+                fn();
+            }
+            el.addEventListener('mousedown', handler);
+            el.addEventListener('touchstart', handler, { passive: false });
+        }
+
+        function render() {
+            if (suppress) return;
+            var v = input.value.trim();
+            var q = fold(v);
+            var matches = items.filter(function (s) {
+                return q === '' || fold(s).indexOf(q) !== -1;
+            }).slice(0, 8);
+
+            list.innerHTML = '';
+            matches.forEach(function (name) {
+                var row = document.createElement('div');
+                row.className = 'ms-sug-row';
+                row.textContent = name;
+                onTap(row, function () { pick(name); });
+                list.appendChild(row);
+            });
+            // Birebir eşleşme yoksa "+ ekle" satırı — boş/anlamsız değerde gösterme
+            if (v !== '' && anlamli(v) && !hasExact(v)) {
+                var add = document.createElement('div');
+                add.className = 'ms-sug-row ms-sug-add';
+                add.textContent = '➕ "' + v + '" ' + label + ' olarak ekle';
+                onTap(add, function () { ekle(v, add); });
+                list.appendChild(add);
+            }
+            list.hidden = list.childNodes.length === 0;
+            active = -1;
+        }
+
+        function rows() { return list.querySelectorAll('.ms-sug-row'); }
+
+        input.addEventListener('input', render);
+        input.addEventListener('focus', render);
+        input.addEventListener('blur', function () { setTimeout(close, 180); });
+        input.addEventListener('keydown', function (e) {
+            if (list.hidden) return;
+            var rs = rows();
+            if (e.key === 'ArrowDown')      { e.preventDefault(); active = Math.min(active + 1, rs.length - 1); }
+            else if (e.key === 'ArrowUp')   { e.preventDefault(); active = Math.max(active - 1, 0); }
+            else if (e.key === 'Enter') {
+                if (active >= 0 && rs[active]) {
+                    e.preventDefault();
+                    rs[active].dispatchEvent(new Event('mousedown'));
+                }
+                return;
+            }
+            else if (e.key === 'Escape')    { close(); return; }
+            else return;
+            rs.forEach(function (r, i) { r.classList.toggle('active', i === active); });
+        });
+    }
+
+    document.querySelectorAll('input[data-suggest]').forEach(attach);
+})();
+
+/* =========================================================
    Liste Scroll Koruma — records.php / cikmalar.php
    Kayıt linkine tıklanınca scroll kaydedilir; geri dönünce
    aynı karta scroll restore yapılır.

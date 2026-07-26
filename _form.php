@@ -43,6 +43,19 @@ if (!function_exists('sel_opt')) {
     }
 }
 
+// Input'a data-suggest + maxlength ekler. Kolon uzunluğu maxlength olarak
+// verilir; sunucu tarafı da clamp_loading_record_fields() ile kırpar.
+if (!function_exists('suggest_attrs')) {
+    function suggest_attrs(string $field): string {
+        $m = record_suggest_fields()[$field] ?? null;
+        if ($m === null) return '';
+        return 'data-suggest="' . htmlspecialchars($field, ENT_QUOTES) . '"'
+             . ' data-suggest-label="' . htmlspecialchars($m['label'], ENT_QUOTES) . '"'
+             . ' maxlength="' . (int)$m['max'] . '"'
+             . ' autocomplete="off"';
+    }
+}
+
 $mat_js = [];
 foreach ($all_materials as $m) {
     $mat_js[(int)$m['id']] = [
@@ -56,6 +69,11 @@ foreach ($all_materials as $m) {
 $is_edit_mode  = !empty($record['id']);
 $collapsed_class = $is_edit_mode ? ' collapsed' : '';
 $form_is_cikma = $form_is_cikma ?? false;
+
+// ── Önerili serbest metin alanları (Sprint Öneri-01) ──────
+// $form_is_cikma NORMALİZE EDİLDİKTEN SONRA hesaplanmalı. Çıkma formunda
+// bu alanlar hiç render edilmiyor → boşuna sorgu atma.
+$_suggest_lists = $form_is_cikma ? [] : record_suggest_lists();
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="recordForm" class="record-form" novalidate>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -116,7 +134,8 @@ $form_is_cikma = $form_is_cikma ?? false;
             <?php endif; ?>
             <?php if (!$form_is_cikma): ?>
             <label>Alıcı
-                <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="alici" value="<?= h($record['alici'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('alici') ?>>
             </label>
             <?php endif; ?>
             <label>Ürün <span class="req">*</span>
@@ -181,7 +200,8 @@ $form_is_cikma = $form_is_cikma ?? false;
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">
             </label>
             <label>Gümrük
-                <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="gumruk" value="<?= h($record['gumruk'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('gumruk') ?>>
             </label>
             <label>Casus No
                 <input type="text" name="casus_no" value="<?= h($record['casus_no'] ?? '') ?>" data-uppercase="tr">
@@ -201,22 +221,28 @@ $form_is_cikma = $form_is_cikma ?? false;
     <div class="card-body">
         <div class="grid">
             <label>Nakliye Şirketi
-                <input type="text" name="nakliye_sirketi" value="<?= h($record['nakliye_sirketi'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="nakliye_sirketi" value="<?= h($record['nakliye_sirketi'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('nakliye_sirketi') ?>>
             </label>
             <label>Şoför Adı
-                <input type="text" name="sofor_adi" value="<?= h($record['sofor_adi'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="sofor_adi" value="<?= h($record['sofor_adi'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('sofor_adi') ?>>
             </label>
             <label>Telefon
-                <input type="tel" name="telefon" value="<?= h($record['telefon'] ?? '') ?>" inputmode="tel">
+                <input type="tel" name="telefon" value="<?= h($record['telefon'] ?? '') ?>" inputmode="tel"
+                       <?= suggest_attrs('telefon') ?>>
             </label>
             <label>Ön Plaka No
-                <input type="text" name="on_plaka" value="<?= h($record['on_plaka'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="on_plaka" value="<?= h($record['on_plaka'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('on_plaka') ?>>
             </label>
             <label>Arka Plaka No
-                <input type="text" name="arka_plaka" value="<?= h($record['arka_plaka'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="arka_plaka" value="<?= h($record['arka_plaka'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('arka_plaka') ?>>
             </label>
             <label>Ulaşım
-                <input type="text" name="ulasim" value="<?= h($record['ulasim'] ?? '') ?>" data-uppercase="tr">
+                <input type="text" name="ulasim" value="<?= h($record['ulasim'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('ulasim') ?>>
             </label>
         </div>
     </div>
@@ -454,6 +480,7 @@ $form_is_cikma = $form_is_cikma ?? false;
         ], $p['materials'] ?? []),
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
+<script id="suggestData" type="application/json"><?= json_encode($_suggest_lists, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="urunListData" type="application/json"><?= json_encode($_urun_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>

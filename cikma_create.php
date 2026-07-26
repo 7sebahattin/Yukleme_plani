@@ -26,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
+    $record = clamp_loading_record_fields($record);   // kolon uzunluğu güvencesi
     if ($record['tarih']        === '') $errors[] = 'Tarih zorunludur.';
     if ($record['firma']        === '') $errors[] = 'Firma zorunludur.';
     if ($record['urun']         === '') $errors[] = 'Ürün zorunludur.';

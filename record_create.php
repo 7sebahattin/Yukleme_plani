@@ -48,6 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $record['urun_sahibi_id'] = null;
         }
     }
+    // Kolon uzunluğuna kırp — strict mode'da INSERT hatası, değilse sessiz
+    // kırpma olurdu; ikisi de olmasın (Sprint Öneri-01).
+    $record = clamp_loading_record_fields($record);
+
     if ($record['tarih'] === '') $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '') $errors[] = 'Firma zorunludur.';
     if ($record['urun']  === '') $errors[] = 'Ürün zorunludur.';

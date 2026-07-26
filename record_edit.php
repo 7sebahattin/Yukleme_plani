@@ -132,6 +132,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     unset($p);
 
+    // Kolon uzunluğuna kırp — strict mode'da UPDATE hatası, değilse sessiz
+    // kırpma olurdu; ikisi de olmasın (Sprint Öneri-01).
+    $record = clamp_loading_record_fields($record);
+
     // Validate
     if (empty($record['tarih'])) $errors[] = 'Tarih zorunludur.';
     if ($record['firma'] === '')  $errors[] = 'Firma zorunludur.';

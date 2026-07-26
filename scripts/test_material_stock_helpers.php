@@ -12,6 +12,10 @@ function definition_types(): array {
         'kasa_cinsi' => 'Kasa Cinsi', 'palet_tipi' => 'Palet Tipi', 'sapka' => 'Şapka',
     ];
 }
+function non_material_definition_types(): array {
+    return ['firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon', 'cikis_nedeni',
+            'alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim'];
+}
 function normalize_text_v2(string $s): string {
     return mb_strtoupper(trim(preg_replace('/\s+/', ' ', $s)), 'UTF-8');
 }

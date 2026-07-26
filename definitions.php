@@ -19,6 +19,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $type_labels = definition_types();
 
+// Sevkiyat tanım tipi → loading_records kolonu (kullanım sayımı için).
+// 'sofor' tipinin kolonu 'sofor_adi' — isimler birebir aynı DEĞİL.
+const DEF_SEVKIYAT_COLS = [
+    'alici'           => 'alici',
+    'gumruk'          => 'gumruk',
+    'nakliye_sirketi' => 'nakliye_sirketi',
+    'sofor'           => 'sofor_adi',
+    'telefon'         => 'telefon',
+    'on_plaka'        => 'on_plaka',
+    'arka_plaka'      => 'arka_plaka',
+    'ulasim'          => 'ulasim',
+];
+
 // ── Bölüm tanımları ──────────────────────────────────────
 $SECTIONS = [
     'ticari'  => [
@@ -38,6 +51,11 @@ $SECTIONS = [
                     'kenar_kartonu', 'taban_kagidi', 'sale', 'viyol', 'kose_karton',
                     'kraft_kagit', 'file', 'diger'],
     ],
+    'sevkiyat' => [
+        'label' => 'Sevkiyat Bilgileri', 'icon' => '🚚',
+        'desc'  => 'Kayıt formunda öneri olarak çıkan alıcı, gümrük, nakliye, şoför, plaka bilgileri',
+        'types' => ['alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim'],
+    ],
     'operasyon' => [
         'label' => 'Operasyon', 'icon' => '🚪',
         'desc'  => 'Çıkış nedenleri — çıkma kayıtlarında kullanılır',
@@ -45,8 +63,10 @@ $SECTIONS = [
     ],
 ];
 
-$cat_types = $SECTIONS['ticari']['types'];                 // dara gerektirmeyen tipler
-$cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍', 'cikis_nedeni' => '🚪'];
+// Dara (birim ağırlık) gerektirmeyen tipler — ticari + sevkiyat lookup'ları
+$cat_types = array_merge($SECTIONS['ticari']['types'], $SECTIONS['sevkiyat']['types']);
+$cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍', 'cikis_nedeni' => '🚪',
+              'alici' => '📥', 'gumruk' => '🛃', 'nakliye_sirketi' => '🚛', 'sofor' => '🧑‍✈️', 'telefon' => '📞', 'on_plaka' => '🔢', 'arka_plaka' => '🔢', 'ulasim' => '🛳️'];
 
 // type → section eşlemesi
 $type_section = [];
@@ -213,14 +233,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $m->execute([$id]);
                     $used += (int)$m->fetchColumn();
                 } catch (Throwable $e) {}
-                // isim bazlı kullanım (ticari tipler)
+                // isim bazlı kullanım (ticari + sevkiyat tipleri)
                 $catCol = match ($dd['type']) {
-                    'firma' => 'firma', 'urun' => 'urun', 'bolge' => 'bolge', 'marka' => 'brand', default => null,
+                    'firma' => 'firma', 'urun' => 'urun', 'bolge' => 'bolge', 'marka' => 'brand',
+                    default => DEF_SEVKIYAT_COLS[$dd['type']] ?? null,
                 };
                 if ($catCol) {
-                    $c = db()->prepare("SELECT COUNT(*) FROM loading_records WHERE `$catCol` = ?");
-                    $c->execute([$dd['name']]);
-                    $used += (int)$c->fetchColumn();
+                    try {
+                        $c = db()->prepare("SELECT COUNT(*) FROM loading_records WHERE `$catCol` = ?");
+                        $c->execute([$dd['name']]);
+                        $used += (int)$c->fetchColumn();
+                    } catch (Throwable $e) { /* kolon yoksa sayma */ }
                 }
                 if ($dd['type'] === 'depo') {
                     $c = db()->prepare("SELECT COUNT(*) FROM loading_pallets WHERE depo = ?");
@@ -296,6 +319,21 @@ try {
 try {
     $usage_cat['lokasyon'] = db()->query("SELECT name, COUNT(*) FROM (SELECT geldigi_yer AS name FROM kantar_fisleri WHERE geldigi_yer!='' UNION ALL SELECT gittigi_yer FROM kantar_fisleri WHERE gittigi_yer!='') t GROUP BY name")->fetchAll(PDO::FETCH_KEY_PAIR);
 } catch (Throwable $e) { $usage_cat['lokasyon'] = []; }
+
+// ── Sevkiyat tipleri: isim bazlı kullanım (Sprint Öneri-01) ──
+// ÖNEMLİ: def_usage_count() bir tip için $usage_cat girdisi yoksa
+// ID bazlı sayıma düşer ve alakasız bir malzeme ID'siyle çakışıp
+// yanlış "kullanımda" sayısı üretebilir. Bu yüzden 8 tipin HEPSİ
+// (sorgu patlasa bile) boş dizi ile de olsa set edilir.
+$def_sevk_cols = DEF_SEVKIYAT_COLS;
+foreach ($def_sevk_cols as $_t => $_c) $usage_cat[$_t] = [];
+foreach ($def_sevk_cols as $_t => $_c) {
+    try {
+        $usage_cat[$_t] = db()->query(
+            "SELECT `$_c`, COUNT(*) FROM loading_records WHERE `$_c` <> '' GROUP BY `$_c`"
+        )->fetchAll(PDO::FETCH_KEY_PAIR);
+    } catch (Throwable $e) { /* kolon yoksa (ör. eski DB'de ulasim) boş kalsın */ }
+}
 
 // Bir tanımın kullanım sayısı
 function def_usage_count(array $d, array $kasa, array $palet, array $mat, array $mov, array $cat): int {
