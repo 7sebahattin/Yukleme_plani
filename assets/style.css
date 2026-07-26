@@ -941,6 +941,9 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     .mobile-only { display: none; }
     .grid { grid-template-columns: repeat(4, 1fr); }
     .info-grid { grid-template-columns: repeat(4, 1fr); }
+    /* Nakliye Bilgileri: tam 6 alan var — 4 sütunda son satır yarı boş kalıp
+       dengesiz görünüyordu. 3 sütun → tam iki satır (3+3), boşluk kalmaz. */
+    .grid-nakliye { grid-template-columns: repeat(3, 1fr); }
 
     /* Görüntüleme: PC'de tablo, mobil kart yerine */
     .view-table-wrap { display: block !important; overflow-x: auto; }

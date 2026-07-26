@@ -177,7 +177,6 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
             <label class="span-2">Marka
                 <input type="text" name="brand" value="<?= h($record['brand'] ?? '') ?>" data-uppercase="tr"
                        placeholder="yazın veya listeden seçin" <?= suggest_attrs('brand') ?>>
-                <small class="muted">Etiket çıktısında görünecek marka. Boş bırakılabilir. <a href="definitions.php?section=ticari" target="_blank" style="font-size:.85em">Markaları düzenle →</a></small>
             </label>
             <label class="span-2">Not
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">
@@ -202,7 +201,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
         <button type="button" class="toggle-arrow" aria-label="Aç/Kapat">▾</button>
     </div>
     <div class="card-body">
-        <div class="grid">
+        <div class="grid grid-nakliye">
             <label>Nakliye Şirketi
                 <input type="text" name="nakliye_sirketi" value="<?= h($record['nakliye_sirketi'] ?? '') ?>" data-uppercase="tr"
                        <?= suggest_attrs('nakliye_sirketi') ?>>

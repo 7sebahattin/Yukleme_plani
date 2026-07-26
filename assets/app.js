@@ -1917,13 +1917,27 @@
             if (mevcut === tel) return;
             telEl.value = tel;
             otoDolan = tel;
+            // Şoför alanından Tab ile doğrudan telefon kutusuna geçilen akışta
+            // (çok yaygın): odak zaten telefon kutusundadır ve kullanıcı hemen
+            // yazmaya başlayabilir. Doldurulan değeri SEÇİLİ bırakmak — tarayıcı
+            // otomatik tamamlama önerileri gibi — sonraki tuş vuruşunun EKLENMEK
+            // yerine SEÇİLİ metnin YERİNE geçmesini sağlar. Aksi halde kullanıcının
+            // kendi yazdığı numara, otomatik dolan numaranın sonuna eklenip
+            // "0545...0545..." gibi bozuk bir değer oluşurdu.
+            if (document.activeElement === telEl) {
+                try { telEl.select(); } catch (_) {}
+            }
             telEl.dispatchEvent(new Event('change', { bubbles: true }));
             telEl.classList.add('oto-dolan');
             setTimeout(function () { telEl.classList.remove('oto-dolan'); }, 1200);
         }
 
+        // Yalnız 'change' yeterli: gerçek kullanıcı yazıp alandan çıkınca native
+        // 'change' zaten ateşlenir; öneri listesinden seçim de pick() içinde
+        // manuel 'change' dispatch eder. Ayrıca bir 'blur'+setTimeout tetikleyicisi
+        // DAHA eklemek gereksiz ikinci bir tetikleyici yaratıp gecikmeli/iç içe
+        // çağrılara (ve programatik doldurma sırasında yarış durumuna) yol açardı.
         soforEl.addEventListener('change', uygula);
-        soforEl.addEventListener('blur', function () { setTimeout(uygula, 200); });
     })();
 })();
 
