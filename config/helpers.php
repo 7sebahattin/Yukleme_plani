@@ -250,6 +250,7 @@ function render_desktop_sidebar(string $base): void {
     $p_usr   = $_fn && can('users.admin');
     $p_adm   = function_exists('is_admin') && is_admin();
     $p_beyan = !$_fn || can('beyan.read') || $p_adm;
+    $p_mal   = ($_fn && can('maliyet.read')) || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -264,6 +265,8 @@ function render_desktop_sidebar(string $base): void {
                                'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
     $a_rep   = $cur === 'reports.php';
     $a_hes   = $cur === 'hesap.php';
+    $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
+                               'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -308,6 +311,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_rep)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
+        <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
         <div class="sidebar-section">Yönetim</div>
@@ -943,12 +947,12 @@ endif;
             $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // Yetki tanımları
-            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete'];
+            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin'];
             $rp_map = [
                 'admin'    => $all_p,
-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write'],
+                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write'],
                 'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read'],
-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read'],
+                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {

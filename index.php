@@ -163,6 +163,14 @@ if ($db_backup_result !== null): ?>
     </a>
 <?php endif; ?>
 
+<?php if (can('maliyet.read') || is_admin()): ?>
+    <a href="maliyet.php" class="home-card">
+        <div class="home-card-icon" style="background:#e0f2f1">🧮</div>
+        <div class="home-card-title">Maliyet</div>
+        <div class="home-card-sub">Parti bazlı maliyet hesabı</div>
+    </a>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <?php if ($_ynt_show): ?>
