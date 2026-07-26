@@ -1771,7 +1771,50 @@
 
         var suppress = false;   // programatik olay sırasında listeyi yeniden açma
 
-        function close() { list.hidden = true; active = -1; }
+        /* ── Kırpılmayı aşmak için sabit (fixed) konumlandırma ──
+           .collapsible-card .card-body'de kapanma animasyonu için
+           `overflow: hidden` var. Liste normal akışta (absolute) açılınca,
+           kartın SON SATIRINDAKİ alanlarda (Ulaşım, Ön/Arka Plaka, Gümrük)
+           kart gövdesinin dışına taştığı için TAMAMEN kırpılıyordu — kutu
+           açılıyor ama hiç görünmüyordu. İlk satırdaki alanlar taşmadığı
+           için sorunsuz çalışıyordu; bu yüzden hata yalnız bazı alanlarda
+           görülüyordu.
+           Çözüm, projede kebab menüsü için zaten kullanılan desen
+           (bkz. CLAUDE.md "Dropdown overflow'da kesiyor"):
+           position: fixed + getBoundingClientRect(). */
+        function positionList() {
+            if (list.hidden) return;
+            var r = input.getBoundingClientRect();
+            list.style.position = 'fixed';
+            list.style.left     = r.left + 'px';
+            list.style.width    = r.width + 'px';
+            list.style.right    = 'auto';
+            var altBosluk = window.innerHeight - r.bottom;
+            var h = list.offsetHeight || 0;
+            if (altBosluk < h + 8 && r.top > altBosluk) {
+                // Aşağıda yer yok → yukarı aç
+                list.style.top    = 'auto';
+                list.style.bottom = (window.innerHeight - r.top + 3) + 'px';
+            } else {
+                list.style.bottom = 'auto';
+                list.style.top    = (r.bottom + 3) + 'px';
+            }
+        }
+        // Açıkken sayfa/kapsayıcı kaydırılırsa liste input'la birlikte gitsin
+        window.addEventListener('scroll', positionList, true);
+        window.addEventListener('resize', positionList);
+
+        function close() {
+            list.hidden = true;
+            active = -1;
+            // Satır içi konum stillerini temizle — CSS varsayılanına dön
+            list.style.position = '';
+            list.style.top      = '';
+            list.style.bottom   = '';
+            list.style.left     = '';
+            list.style.width    = '';
+            list.style.right    = '';
+        }
         function hasExact(v) {
             var f = fold(v);
             return items.some(function (s) { return fold(s) === f; });
@@ -1857,6 +1900,7 @@
             }
             list.hidden = list.childNodes.length === 0;
             active = -1;
+            positionList();   // satırlar eklendikten SONRA — yükseklik ölçülebilsin
         }
 
         function rows() { return list.querySelectorAll('.ms-sug-row'); }
@@ -1882,7 +1926,17 @@
         });
     }
 
-    document.querySelectorAll('input[data-suggest]').forEach(attach);
+    // Her alanı AYRI ayrı dene: forEach callback'i throw ederse tüm iterasyon
+    // durur — bir alanın kurulumu (ör. üretimdeki eski/beklenmedik veri)
+    // patlarsa, DOM sırasında ONDAN SONRAKİ TÜM alanlar (Ulaşım genelde en
+    // sonda) sessizce hiç kurulmamış olurdu. try/catch bunu izole eder.
+    document.querySelectorAll('input[data-suggest]').forEach(function (input) {
+        try {
+            attach(input);
+        } catch (err) {
+            console.error('[öneri kutusu] "' + (input.name || input.dataset.suggest) + '" alanı kurulamadı:', err);
+        }
+    });
 
     /* ── Şoför → Telefon otomatik doldurma ──
        Şoför adı bilinen bir şoföre eşitlenince telefon kutusu dolar.
@@ -1902,12 +1956,31 @@
         var byFold = {};
         Object.keys(MAP).forEach(function (ad) { byFold[fold(ad)] = MAP[ad]; });
 
-        var otoDolan = null;   // en son bizim yazdığımız değer
+        var otoDolan = null;      // en son bizim yazdığımız değer
+        var otoOnaylanmadi = false; // otomatik dolan değere kullanıcı hiç dokunmadı
 
         // Kullanıcı telefonu elle değiştirirse otomatik dolduruma son ver
         telEl.addEventListener('input', function () {
             if (telEl.value !== otoDolan) otoDolan = null;
         });
+
+        /* Otomatik dolan değeri, kullanıcı yazmaya başlayınca TEMİZLE.
+           Neden seçili bırakmak (select) tek başına YETMİYOR: fareyle telefon
+           kutusuna tıklanınca sıra şöyle işliyor — mousedown şoförü blur eder,
+           'change' tetiklenir, biz değeri yazıp seçeriz; ARDINDAN tarayıcı
+           tıklama noktasına imleci koyar ve SEÇİMİ BOZAR. Sonraki tuş vuruşu
+           da değerin SONUNA eklenir ("0545...05559...").
+           beforeinput ile ilk yazımda alanı boşaltmak her iki akışta da
+           (Tab ve fare) doğru davranışı garanti eder. */
+        telEl.addEventListener('beforeinput', function (e) {
+            if (!otoOnaylanmadi) return;
+            if (!e.inputType || e.inputType.indexOf('insert') !== 0) return;
+            if (telEl.value !== otoDolan) { otoOnaylanmadi = false; return; }
+            otoOnaylanmadi = false;
+            telEl.value = '';       // yazılan, otomatik değerin YERİNE geçsin
+        });
+        // Alandan çıkıldıysa değer kabul edilmiş sayılır; sonraki yazımlar normal düzenleme
+        telEl.addEventListener('blur', function () { otoOnaylanmadi = false; });
 
         function uygula() {
             var tel = byFold[fold(soforEl.value)];
@@ -1917,13 +1990,9 @@
             if (mevcut === tel) return;
             telEl.value = tel;
             otoDolan = tel;
-            // Şoför alanından Tab ile doğrudan telefon kutusuna geçilen akışta
-            // (çok yaygın): odak zaten telefon kutusundadır ve kullanıcı hemen
-            // yazmaya başlayabilir. Doldurulan değeri SEÇİLİ bırakmak — tarayıcı
-            // otomatik tamamlama önerileri gibi — sonraki tuş vuruşunun EKLENMEK
-            // yerine SEÇİLİ metnin YERİNE geçmesini sağlar. Aksi halde kullanıcının
-            // kendi yazdığı numara, otomatik dolan numaranın sonuna eklenip
-            // "0545...0545..." gibi bozuk bir değer oluşurdu.
+            otoOnaylanmadi = true;
+            // Odaktaysa ayrıca seçili bırak — kullanıcı doldurulanı görsün
+            // (asıl koruma yukarıdaki beforeinput; bu yalnız görsel ipucu).
             if (document.activeElement === telEl) {
                 try { telEl.select(); } catch (_) {}
             }
