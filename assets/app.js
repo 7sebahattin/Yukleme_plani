@@ -1883,6 +1883,48 @@
     }
 
     document.querySelectorAll('input[data-suggest]').forEach(attach);
+
+    /* ── Şoför → Telefon otomatik doldurma ──
+       Şoför adı bilinen bir şoföre eşitlenince telefon kutusu dolar.
+       Kullanıcının ELLE yazdığı telefon EZİLMEZ: yalnızca kutu boşsa ya da
+       içindeki değer bizim önceki otomatik doldurmamızsa değiştirilir. */
+    (function () {
+        var telEl   = document.querySelector('input[name="telefon"]');
+        var soforEl = document.querySelector('input[name="sofor_adi"]');
+        var mapEl   = document.getElementById('soforTelefonData');
+        if (!telEl || !soforEl || !mapEl) return;
+
+        var MAP;
+        try { MAP = JSON.parse(mapEl.textContent || '{}'); } catch (_) { return; }
+        if (!MAP || typeof MAP !== 'object') return;
+
+        // ad → telefon (TR-duyarsız anahtar)
+        var byFold = {};
+        Object.keys(MAP).forEach(function (ad) { byFold[fold(ad)] = MAP[ad]; });
+
+        var otoDolan = null;   // en son bizim yazdığımız değer
+
+        // Kullanıcı telefonu elle değiştirirse otomatik dolduruma son ver
+        telEl.addEventListener('input', function () {
+            if (telEl.value !== otoDolan) otoDolan = null;
+        });
+
+        function uygula() {
+            var tel = byFold[fold(soforEl.value)];
+            if (!tel) return;
+            var mevcut = telEl.value.trim();
+            if (mevcut !== '' && mevcut !== otoDolan) return;   // elle girilmiş → dokunma
+            if (mevcut === tel) return;
+            telEl.value = tel;
+            otoDolan = tel;
+            telEl.dispatchEvent(new Event('change', { bubbles: true }));
+            telEl.classList.add('oto-dolan');
+            setTimeout(function () { telEl.classList.remove('oto-dolan'); }, 1200);
+        }
+
+        soforEl.addEventListener('change', uygula);
+        soforEl.addEventListener('blur', function () { setTimeout(uygula, 200); });
+    })();
 })();
 
 /* =========================================================

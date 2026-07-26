@@ -74,6 +74,8 @@ $form_is_cikma = $form_is_cikma ?? false;
 // $form_is_cikma NORMALİZE EDİLDİKTEN SONRA hesaplanmalı. Çıkma formunda
 // bu alanlar hiç render edilmiyor → boşuna sorgu atma.
 $_suggest_lists = $form_is_cikma ? [] : record_suggest_lists();
+// Şoför seçilince telefonu otomatik dolsun diye ad → son telefon eşlemesi
+$_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
 ?>
 <form method="post" action="<?= h($form_action) ?>" id="recordForm" class="record-form" novalidate>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
@@ -151,14 +153,13 @@ $_suggest_lists = $form_is_cikma ? [] : record_suggest_lists();
             <label class="span-2">Ürün Sahibi
                 <select name="urun_sahibi_id" id="urunSahibiSel"
                         class="<?= $_cur_urun_sahibi > 0 ? 'urun-sahibi-selected' : '' ?>">
-                    <option value="">Seçilmedi — Asya Fresh kabul edilir</option>
+                    <option value="">Seçilmedi</option>
                     <?php foreach ($firma_list as $_us): ?>
                     <option value="<?= (int)$_us['id'] ?>"<?= $_cur_urun_sahibi === (int)$_us['id'] ? ' selected' : '' ?>>
                         <?= h($_us['name']) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
-                <small class="muted">Boş bırakılırsa Asya Fresh malı sayılır.</small>
             </label>
             <?php $_brand_col_ok = !function_exists('db_has_column') || db_has_column('loading_records', 'brand'); ?>
             <?php if (!$_brand_col_ok): ?>
@@ -174,27 +175,9 @@ $_suggest_lists = $form_is_cikma ? [] : record_suggest_lists();
             </div>
             <?php endif; ?>
             <label class="span-2">Marka
-                <?php
-                $_cur_brand = strtoupper(trim((string)($record['brand'] ?? '')));
-                try {
-                    $_brand_opts = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
-                } catch (Throwable $_be) {
-                    $_brand_opts = ['ASYA', 'URAL', 'URAS', 'AGRO'];
-                }
-                ?>
-                <div class="brand-seg" role="radiogroup" aria-label="Marka">
-                    <?php foreach ($_brand_opts as $_bv): $_bv = strtoupper($_bv); ?>
-                    <label class="brand-seg-opt<?= $_cur_brand === $_bv ? ' active' : '' ?>">
-                        <input type="radio" name="brand" value="<?= h($_bv) ?>" <?= $_cur_brand === $_bv ? 'checked' : '' ?>>
-                        <span><?= h($_bv) ?></span>
-                    </label>
-                    <?php endforeach; ?>
-                    <label class="brand-seg-opt brand-seg-clear<?= $_cur_brand === '' ? ' active' : '' ?>">
-                        <input type="radio" name="brand" value="" <?= $_cur_brand === '' ? 'checked' : '' ?>>
-                        <span>—</span>
-                    </label>
-                </div>
-                <small class="muted">Etiket çıktısında işaretlenecek marka. <a href="definitions.php?section=ticari" target="_blank" style="font-size:.85em">Markaları düzenle →</a></small>
+                <input type="text" name="brand" value="<?= h($record['brand'] ?? '') ?>" data-uppercase="tr"
+                       placeholder="yazın veya listeden seçin" <?= suggest_attrs('brand') ?>>
+                <small class="muted">Etiket çıktısında görünecek marka. Boş bırakılabilir. <a href="definitions.php?section=ticari" target="_blank" style="font-size:.85em">Markaları düzenle →</a></small>
             </label>
             <label class="span-2">Not
                 <input type="text" name="etiket" value="<?= h($record['etiket'] ?? '') ?>" placeholder="Yazdırmada görünecek not" style="border:2px solid #c00000;">
@@ -481,6 +464,7 @@ $_suggest_lists = $form_is_cikma ? [] : record_suggest_lists();
     ]), $pallets),
     JSON_UNESCAPED_UNICODE) ?></script>
 <script id="suggestData" type="application/json"><?= json_encode($_suggest_lists, JSON_UNESCAPED_UNICODE) ?></script>
+<script id="soforTelefonData" type="application/json"><?= json_encode($_sofor_tel, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="depoListData" type="application/json"><?= json_encode($_depo_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script id="urunListData" type="application/json"><?= json_encode($_urun_names, JSON_UNESCAPED_UNICODE) ?></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>

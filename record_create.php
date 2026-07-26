@@ -33,10 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $record['firma'] = normalize_firma($record['firma']);
     $record['urun']  = normalize_urun($record['urun']);
-    try {
-        $_valid_brands = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1")->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Throwable $_be) { $_valid_brands = ['ASYA', 'URAL', 'URAS', 'AGRO']; }
-    $record['brand'] = in_array(strtoupper($record['brand']), array_map('strtoupper', $_valid_brands), true) ? strtoupper($record['brand']) : '';
+    // Marka artık serbest metin kutusu. Tanımda yoksa SESSİZCE silme —
+    // kullanıcıya söyle ki "+ ekle" ile eklesin veya düzeltsin.
+    [$_brand_ok_val, $_brand_valid] = resolve_brand_value($record['brand']);
+    if (!$_brand_valid) {
+        $errors[] = 'Marka tanımlarda yok: "' . $record['brand'] . '". Listeden seçin veya kutudaki "+ ekle" ile tanımlara ekleyin.';
+    }
+    $record['brand'] = $_brand_ok_val ?? '';
     foreach (['parti_no', 'bolge', 'gumruk', 'alici', 'sofor_adi', 'fatura_no', 'casus_no', 'on_plaka', 'arka_plaka', 'nakliye_sirketi'] as $_tf) {
         if (isset($record[$_tf]) && $record[$_tf] !== '') $record[$_tf] = tr_upper($record[$_tf]);
     }

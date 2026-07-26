@@ -5757,3 +5757,12 @@ html[data-theme="dark"] body:not(.print-mode) .yp-satir-atlandi td { background:
 html[data-theme="dark"] body:not(.print-mode) .yp-ops { background: rgba(255,255,255,.08); }
 
 } /* @media screen */
+
+/* Şoför seçilince otomatik dolan telefon kutusu — kısa vurgu */
+.oto-dolan {
+    animation: oto-dolan-flash 1.2s ease-out;
+}
+@keyframes oto-dolan-flash {
+    0%   { background: #dcfce7; border-color: #16a34a; }
+    100% { background: inherit; border-color: inherit; }
+}

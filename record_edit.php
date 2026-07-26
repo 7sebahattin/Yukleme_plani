@@ -108,10 +108,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($record[$_tf]) && $record[$_tf] !== '') $record[$_tf] = tr_upper($record[$_tf]);
     }
     if (!$edit_is_cikma) {
+        // Marka artık serbest metin kutusu — tanımda yoksa sessizce NULL'lama, uyar.
+        // AMA: eski kayıtlarda tanımlardan silinmiş/değişmiş marka olabilir
+        // (ör. eskiden 'ASYA' kodu, bugün tanım 'ASYA FRESH'). Kullanıcı
+        // markaya DOKUNMADIYSA eski değer aynen korunur — yoksa tarihi
+        // düzeltmek isteyen kişi marka yüzünden kaydedemezdi.
+        $_old_brand = '';
         try {
-            $_valid_brands = db()->query("SELECT name FROM material_definitions WHERE type='marka' AND is_active=1")->fetchAll(PDO::FETCH_COLUMN);
-        } catch (Throwable $_be) { $_valid_brands = ['ASYA', 'URAL', 'URAS', 'AGRO']; }
-        $record['brand'] = in_array(strtoupper($record['brand']), array_map('strtoupper', $_valid_brands), true) ? strtoupper($record['brand']) : null;
+            $_ob = db()->prepare("SELECT brand FROM loading_records WHERE id=:id");
+            $_ob->execute([':id' => $id]);
+            $_old_brand = (string)($_ob->fetchColumn() ?: '');
+        } catch (Throwable $e) { /* brand kolonu yoksa boş kalsın */ }
+
+        if ($_old_brand !== '' && tr_upper((string)$record['brand']) === tr_upper($_old_brand)) {
+            $record['brand'] = $_old_brand;              // değişmemiş → olduğu gibi bırak
+        } else {
+            [$_brand_ok_val, $_brand_valid] = resolve_brand_value((string)$record['brand']);
+            if (!$_brand_valid) {
+                $errors[] = 'Marka tanımlarda yok: "' . $record['brand'] . '". Listeden seçin veya kutudaki "+ ekle" ile tanımlara ekleyin.';
+            }
+            $record['brand'] = $_brand_ok_val;
+        }
         // Geçersiz firma ID → NULL yap (form akışını bozma)
         if (!empty($record['urun_sahibi_id'])) {
             $_us_check = db()->prepare("SELECT id FROM material_definitions WHERE id=:id AND type='firma' AND is_active=1");

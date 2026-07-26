@@ -1289,6 +1289,9 @@ function record_suggest_fields(): array {
         'on_plaka'        => ['type' => 'on_plaka',        'label' => 'ön plaka',        'max' => 30,  'upper' => true],
         'arka_plaka'      => ['type' => 'arka_plaka',      'label' => 'arka plaka',      'max' => 30,  'upper' => true],
         'ulasim'          => ['type' => 'ulasim',          'label' => 'ulaşım',          'max' => 100, 'upper' => true],
+        // DİKKAT: loading_records.brand VARCHAR(20) — tanım adı 150'ye kadar
+        // olabilir ama kayda 20'den fazlası yazılamaz, o yüzden sınır 20.
+        'brand'           => ['type' => 'marka',           'label' => 'marka',           'max' => 20,  'upper' => true],
     ];
 }
 
@@ -1319,8 +1322,57 @@ function loading_record_text_limits(): array {
         'sofor_adi' => 150, 'fatura_no' => 80, 'casus_no' => 80,
         'on_plaka' => 30, 'arka_plaka' => 30, 'nakliye_sirketi' => 150,
         'telefon' => 40, 'ulasim' => 100, 'alici' => 150, 'urun' => 150,
-        'etiket' => 255, 'cikis_nedeni' => 100,
+        'etiket' => 255, 'cikis_nedeni' => 100, 'brand' => 20,
     ];
+}
+
+// ── Marka doğrulama (TR-duyarlı) ──────────────────────────
+// brand serbest metin kutusu oldu; tanımlarda olmayan değer sessizce
+// NULL'lanmasın diye çağıran taraf hata gösterebilsin.
+// strtoupper() ASCII'dir: "cihat karaköse" → "CIHAT KARAKöSE" olur ve
+// "CİHAT KARAKÖSE" ile EŞLEŞMEZ. Bu yüzden tr_upper ile karşılaştırılır.
+// Döner: [kanonik_ad|null, gecerli_mi]  (boş değer → [null, true])
+function resolve_brand_value(string $raw): array {
+    $v = tr_upper($raw);
+    if ($v === '') return [null, true];
+    try {
+        $names = db()->query("SELECT name FROM material_definitions
+                              WHERE type='marka' AND is_active=1")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        $names = ['ASYA', 'URAL', 'URAS', 'AGRO'];
+    }
+    foreach ($names as $n) {
+        if (tr_upper((string)$n) === $v) return [mb_substr((string)$n, 0, 20, 'UTF-8'), true];
+    }
+    return [null, false];   // tanımlarda yok → çağıran hata üretmeli
+}
+
+// ── Şoför → telefon eşlemesi ──────────────────────────────
+// Şoför adı seçilince telefonu otomatik dolsun diye. Her şoför için EN SON
+// kullanılan telefon alınır. Aktif depo kapsamı + son 24 ay ile sınırlı
+// (record_suggest_lists ile aynı kurallar).
+function record_sofor_phone_map(): array {
+    $map = [];
+    try {
+        if (!function_exists('depo_sql_records_in')) return [];
+        foreach (['sofor_adi', 'telefon'] as $c) {
+            if (function_exists('db_has_column') && !db_has_column('loading_records', $c)) return [];
+        }
+        [$depo_sql, $params] = depo_sql_records_in('loading_records');
+        $sql = "SELECT sofor_adi, telefon FROM loading_records
+                WHERE sofor_adi <> '' AND telefon <> ''
+                  AND (tarih IS NULL OR tarih >= DATE_SUB(CURDATE(), INTERVAL 24 MONTH))"
+             . ($depo_sql !== '' ? " AND $depo_sql" : '')
+             . " ORDER BY tarih ASC, id ASC";   // sonraki satır öncekini ezer → en güncel kalır
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $map[(string)$r['sofor_adi']] = (string)$r['telefon'];
+        }
+    } catch (Throwable $e) {
+        error_log('[record_sofor_phone_map] ' . $e->getMessage());
+    }
+    return $map;
 }
 
 // Kayıt dizisindeki metin alanlarını kolon uzunluğuna göre kırpar.
