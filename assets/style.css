@@ -3485,12 +3485,16 @@ body.print-mode .asya-sheet {
 /* ── Yapıştır Paneli (Excel sütunu kopyala/yapıştır) ── */
 .yp-cols {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
 }
 .yp-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .yp-col-head {
     font-size: .8rem; font-weight: 700; color: var(--text);
+}
+.yp-ops {
+    font-size: .7rem; font-weight: 600; color: var(--muted);
+    background: rgba(0,0,0,.05); border-radius: 999px; padding: 1px 7px; margin-left: 4px;
 }
 .yp-ta {
     width: 100%;
@@ -3523,7 +3527,9 @@ body.print-mode .asya-sheet {
 .yp-onizleme { min-width: 0; }
 .yp-onizleme td { padding: 4px 7px; }
 .yp-bos { color: var(--muted); }
+.yp-size-td { font-size: .82rem; }
 .yp-satir-hata td { background: #fdecec; }
+.yp-satir-atlandi td { background: #f4f5f7; font-size: .78rem; font-style: italic; }
 .yp-ozet {
     display: flex; flex-wrap: wrap; gap: 6px 16px;
     margin-top: 6px; padding: 8px 10px;
@@ -5747,5 +5753,7 @@ html[data-theme="dark"] body:not(.print-mode) .yp-ta { background: #101722; colo
 html[data-theme="dark"] body:not(.print-mode) .yp-uyari { background: #332916; border-color: #6b5320; color: #e6bf6b; }
 html[data-theme="dark"] body:not(.print-mode) .yp-ozet { background: #16233a; border-color: #2b3d5e; }
 html[data-theme="dark"] body:not(.print-mode) .yp-satir-hata td { background: #34201f; }
+html[data-theme="dark"] body:not(.print-mode) .yp-satir-atlandi td { background: #1d2635; }
+html[data-theme="dark"] body:not(.print-mode) .yp-ops { background: rgba(255,255,255,.08); }
 
 } /* @media screen */

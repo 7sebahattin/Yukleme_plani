@@ -342,10 +342,17 @@ $form_is_cikma = $form_is_cikma ?? false;
                           inputmode="decimal" placeholder="828&#10;823&#10;830&#10;…"></textarea>
                 <small class="yp-col-info" id="ypBrutInfo">0 satır</small>
             </div>
+            <div class="yp-col">
+                <label class="yp-col-head" for="ypSize">Size sütunu <span class="yp-ops">opsiyonel</span></label>
+                <textarea id="ypSize" class="yp-ta" rows="6" spellcheck="false" autocomplete="off"
+                          placeholder="60/70&#10;60/70&#10;70/80&#10;…"></textarea>
+                <small class="yp-col-info" id="ypSizeInfo">0 satır</small>
+            </div>
         </div>
         <p class="yp-hint">
             Excel'de sütunu seçip kopyalayın, ilgili kutuya yapıştırın — satır sırası korunur.
-            İki sütunu birlikte kopyalarsanız otomatik olarak ayrılır.
+            Birden fazla sütunu birlikte kopyalarsanız soldan sağa otomatik dağıtılır.
+            Size boş bırakılabilir; tek bir değer yazarsanız tüm satırlara uygulanır.
         </p>
 
         <div class="excel-bulk-section">
@@ -364,7 +371,7 @@ $form_is_cikma = $form_is_cikma ?? false;
             <div class="toplu-tablo-wrap" style="margin-top:10px">
                 <table class="toplu-tablo yp-onizleme">
                     <thead><tr>
-                        <th>#</th><th>Kasa Adeti</th><th>Brüt KG</th>
+                        <th>#</th><th>Kasa Adeti</th><th>Brüt KG</th><th>Size</th>
                         <th class="tp-num">Dara</th><th class="tp-num">Net</th>
                     </tr></thead>
                     <tbody id="ypTbody"></tbody>

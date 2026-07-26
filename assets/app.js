@@ -335,22 +335,36 @@
         if (s === '') return false;
         return /^-?[\d.,\s\u00a0]*\d[\d.,\s\u00a0]*$/.test(s);
     }
-    /* Pano metnini satır/hücre ızgarasına çevirir. Boş satırlar ve
+    /* Bilinen sütun başlıkları — "Size" gibi sayısal olmayan başlıkları
+       gerçek veriden ayırmak için (yoksa ilk size değeri başlık sanılır). */
+    const HEADER_WORDS = /^(#|s[ıi]ra|s[ıi]ra\s*no|palet|palet\s*no|palet\s*say[ıi]s[ıi]|no|kasa|kasa\s*adeti|kasa\s*cinsi|adet|br[üu]t|br[üu]t\s*kg|kg|kilo|a[ğg][ıi]rl[ıi]k|net|net\s*kg|dara|dara\s*kg|size|boy|boyut|[üu]r[üu]n|[üu]r[üu]n\s*cinsi|cins|depo|a[çc][ıi]klama|not)$/i;
+    function looksLikeHeaderRow(cells) {
+        const dolu = cells.filter(c => c !== '');
+        return dolu.length > 0 && dolu.every(c => HEADER_WORDS.test(c));
+    }
+    /* Pano metnini satır/hücre ızgarasına çevirir.
+       ARADAKİ boş satırlar KORUNUR — sütunlar ayrı ayrı yapıştırıldığında
+       hizalama kaymasın diye. Yalnız baştaki/sondaki boş satırlar ve
        (varsa) başlık satırı atılır. */
     function parseClipGrid(text) {
         const out = [];
         String(text == null ? '' : text).replace(/\r\n?/g, '\n').split('\n').forEach(line => {
-            if (line.trim() === '') return;
             let cells;
             if (line.indexOf('\t') !== -1)      cells = line.split('\t');
             else if (line.indexOf(';') !== -1)  cells = line.split(';');
             else                                cells = [line];
-            cells = cells.map(c => String(c).replace(/\u00a0/g, ' ').trim());
-            if (cells.every(c => c === '')) return;
-            out.push(cells);
+            out.push(cells.map(c => String(c).replace(/\u00a0/g, ' ').trim()));
         });
-        // "Kasa Adeti" gibi başlık satırını at (hiçbir hücresi sayı değilse)
-        if (out.length > 1 && !out[0].some(isNumericToken)) out.shift();
+        const bos = r => r.every(c => c === '');
+        while (out.length && bos(out[0]))              out.shift();
+        while (out.length && bos(out[out.length - 1])) out.pop();
+        // Başlık satırını at: ya bilinen bir başlık sözcüğü, ya da kendisi
+        // sayı değilken hemen altındaki satır sayı olan bir satır.
+        if (out.length > 1 &&
+            (looksLikeHeaderRow(out[0]) ||
+             (!out[0].some(isNumericToken) && out[1].some(isNumericToken)))) {
+            out.shift();
+        }
         return out;
     }
 
@@ -1404,8 +1418,11 @@
         const temizBtn = document.getElementById('ypTemizle');
         const taKasa   = document.getElementById('ypKasa');
         const taBrut   = document.getElementById('ypBrut');
+        const taSize   = document.getElementById('ypSize');
         const infoKasa = document.getElementById('ypKasaInfo');
         const infoBrut = document.getElementById('ypBrutInfo');
+        const infoSize = document.getElementById('ypSizeInfo');
+        const BOXES    = [taKasa, taBrut, taSize];   // yapıştırmada soldan sağa sıra
         const kcSel    = document.getElementById('ypKasaCinsi');
         const ptSel    = document.getElementById('ypPaletTipi');
         const depSel   = document.getElementById('ypDepo');
@@ -1433,16 +1450,20 @@
                 rp.urun_cinsi || (document.getElementById('genelUrun') || {}).value || '', '— seçiniz —');
         }
 
-        /* Textarea içeriğini satır dizisine çevir */
+        /* Textarea içeriğini satır dizisine çevir.
+           Sadece SONDAKİ boş satırlar atılır — aradaki boşluklar korunur, yoksa
+           sütunlar arasındaki hizalama kayar (ör. size bazı satırlarda boş). */
         function lines(ta) {
-            return String(ta.value || '').replace(/\r\n?/g, '\n').split('\n')
-                .map(s => s.replace(/\u00a0/g, ' ').trim())
-                .filter(s => s !== '');
+            const arr = String(ta.value || '').replace(/\r\n?/g, '\n').split('\n')
+                .map(s => s.replace(/\u00a0/g, ' ').trim());
+            while (arr.length && arr[arr.length - 1] === '') arr.pop();
+            return arr;
         }
+        const has = v => v != null && v !== '';
 
-        /* Bir kutuya çok sütunlu veri yapıştırılırsa: 1. sütun bu kutuya,
-           2. sütun diğer kutuya gider (Excel'de iki sütun birden kopyalama). */
-        function attachPaste(ta, other) {
+        /* Çok sütunlu veri yapıştırılırsa sütunlar soldan sağa kutulara dağıtılır:
+           kasa kutusuna 3 sütun → kasa / brüt / size. */
+        function attachPaste(ta) {
             ta.addEventListener('paste', function (e) {
                 const cd = e.clipboardData || window.clipboardData;
                 const text = cd ? cd.getData('text') : '';
@@ -1452,9 +1473,14 @@
                 // Tek değer → normal yapıştırma (kutunun içeriğini silme)
                 if (grid.length === 1 && grid[0].length === 1) { setTimeout(refresh, 0); return; }
                 e.preventDefault();
-                ta.value = grid.map(r => r[0] || '').join('\n');
-                if (grid.some(r => r.length > 1 && String(r[1]).trim() !== '')) {
-                    other.value = grid.map(r => r[1] || '').join('\n');
+                const idx = BOXES.indexOf(ta);
+                const colCount = grid.reduce((m, r) => Math.max(m, r.length), 0);
+                for (let c = 0; c < colCount; c++) {
+                    const box = BOXES[idx + c];
+                    if (!box) break;                                  // sağda kutu kalmadı
+                    const col = grid.map(r => r[c] || '');
+                    if (c > 0 && col.every(v => v === '')) continue;   // tamamen boş sütunu yazma
+                    box.value = col.join('\n');
                 }
                 refresh();
             });
@@ -1466,15 +1492,36 @@
             return parseNum((o && o.dataset ? o.dataset.unit : 0) || 0);
         }
 
-        function refresh() {
+        /* Kutulardan hizalı satır listesi üret.
+           Size tek değerse tüm satırlara uygulanır (ör. tüm paletler "60/70"). */
+        function collect() {
             const kasa = lines(taKasa);
             const brut = lines(taBrut);
+            const size = lines(taSize);
+            const n = Math.max(kasa.length, brut.length, size.length);
+            const tekSize = (size.length === 1 && n > 1) ? size[0] : null;
+            const rows = [];
+            for (let i = 0; i < n; i++) {
+                rows.push({
+                    kasa: kasa[i], brut: brut[i],
+                    size: tekSize != null ? tekSize : size[i],
+                    // Kasa ve brüt birlikte boşsa bu satır palet olmaz (araya kaçmış boş satır)
+                    atla: !has(kasa[i]) && !has(brut[i]),
+                });
+            }
+            return { rows, kasa, brut, size, tekSize };
+        }
+
+        function refresh() {
+            const { rows, kasa, brut, size, tekSize } = collect();
             infoKasa.textContent = kasa.length + ' satır';
             infoBrut.textContent = brut.length + ' satır';
+            infoSize.textContent = tekSize != null ? 'tümüne uygulanır'
+                                 : (size.length ? size.length + ' satır' : 'boş');
 
-            const n = Math.max(kasa.length, brut.length);
-            rowCntEl.textContent = n;
-            countEl.textContent  = n ? n + ' satır hazır' : '';
+            const gecerli = rows.filter(r => !r.atla);
+            rowCntEl.textContent = gecerli.length;
+            countEl.textContent  = gecerli.length ? gecerli.length + ' satır hazır' : '';
 
             /* Uyarılar */
             const uyarilar = [];
@@ -1482,9 +1529,20 @@
                 uyarilar.push('⚠ Kasa adeti <b>' + kasa.length + '</b> satır, brüt KG <b>' + brut.length +
                               '</b> satır — eşleşmiyor. Eksik hücreler boş bırakılacak.');
             }
+            if (tekSize == null && size.length && size.length !== rows.length) {
+                uyarilar.push('⚠ Size <b>' + size.length + '</b> satır, diğer sütunlar <b>' + rows.length +
+                              '</b> satır — eşleşmeyen satırların size değeri boş kalacak.');
+            }
+            const atlanan = rows.length - gecerli.length;
+            if (atlanan > 0) {
+                uyarilar.push('ℹ Kasa ve brütü boş olan <b>' + atlanan + '</b> satır atlanacak.');
+            }
             const bozuk = [];
-            kasa.forEach((v, i) => { if (!isNumericToken(v)) bozuk.push((i + 1) + '. satır kasa: "' + escHtml(v) + '"'); });
-            brut.forEach((v, i) => { if (!isNumericToken(v)) bozuk.push((i + 1) + '. satır brüt: "' + escHtml(v) + '"'); });
+            rows.forEach((r, i) => {
+                if (r.atla) return;
+                if (has(r.kasa) && !isNumericToken(r.kasa)) bozuk.push((i + 1) + '. satır kasa: "' + escHtml(r.kasa) + '"');
+                if (has(r.brut) && !isNumericToken(r.brut)) bozuk.push((i + 1) + '. satır brüt: "' + escHtml(r.brut) + '"');
+            });
             if (bozuk.length) {
                 uyarilar.push('⚠ Sayı olarak okunamayan değerler 0 kabul edilir: ' +
                               bozuk.slice(0, 5).join(', ') + (bozuk.length > 5 ? ' …' : ''));
@@ -1494,42 +1552,54 @@
 
             /* Önizleme */
             onizBody.innerHTML = '';
-            if (!n) {
+            if (!gecerli.length) {
                 onizWrap.style.display = 'none';
                 uygulaBtn.disabled = true;
                 return;
             }
             const kasaUnit = unitOf(kcSel);
             const palUnit  = unitOf(ptSel);
-            let tKasa = 0, tBrut = 0, tDara = 0, tNet = 0;
+            let tKasa = 0, tBrut = 0, tDara = 0, tNet = 0, no = 0;
             const frag = document.createDocumentFragment();
-            for (let i = 0; i < n; i++) {
-                const ka = parseInt2(kasa[i] || 0);
-                const br = parseNum(brut[i] || 0);
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                const tr = document.createElement('tr');
+                if (r.atla) {
+                    if (no < MAX_PREVIEW) {
+                        tr.className = 'yp-satir-atlandi';
+                        tr.innerHTML = '<td class="tp-no-td"><span class="tp-no">·</span></td>' +
+                                       '<td colspan="5" class="yp-bos">boş satır — atlanacak</td>';
+                        frag.appendChild(tr);
+                    }
+                    continue;
+                }
+                no++;
+                const ka = parseInt2(r.kasa || 0);
+                const br = parseNum(r.brut || 0);
                 const da = ka * kasaUnit + palUnit;
                 const ne = Math.max(0, br - da);
                 tKasa += ka; tBrut += br; tDara += da; tNet += ne;
-                if (i >= MAX_PREVIEW) continue;
-                const tr = document.createElement('tr');
+                if (no > MAX_PREVIEW) continue;
                 tr.innerHTML =
-                    '<td class="tp-no-td"><span class="tp-no">' + (i + 1) + '</span></td>' +
-                    '<td>' + (kasa[i] != null ? fmtKg(ka) : '<span class="yp-bos">—</span>') + '</td>' +
-                    '<td>' + (brut[i] != null ? fmtKg(br) : '<span class="yp-bos">—</span>') + '</td>' +
+                    '<td class="tp-no-td"><span class="tp-no">' + no + '</span></td>' +
+                    '<td>' + (has(r.kasa) ? fmtKg(ka)  : '<span class="yp-bos">—</span>') + '</td>' +
+                    '<td>' + (has(r.brut) ? fmtKg(br)  : '<span class="yp-bos">—</span>') + '</td>' +
+                    '<td class="yp-size-td">' + (has(r.size) ? escHtml(r.size) : '<span class="yp-bos">—</span>') + '</td>' +
                     '<td class="tp-num">' + fmtKg(da) + '</td>' +
                     '<td class="tp-num">' + fmtKg(ne) + '</td>';
                 // Net ≤ 0 yalnızca brüt girilmişken hata sayılır
-                if (brut[i] != null && ne <= 0) tr.classList.add('yp-satir-hata');
+                if (has(r.brut) && ne <= 0) tr.classList.add('yp-satir-hata');
                 frag.appendChild(tr);
             }
             onizBody.appendChild(frag);
-            if (n > MAX_PREVIEW) {
+            if (no > MAX_PREVIEW) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = '<td colspan="5" class="muted" style="text-align:center;padding:6px">' +
-                               '… ve ' + (n - MAX_PREVIEW) + ' satır daha</td>';
+                tr.innerHTML = '<td colspan="6" class="muted" style="text-align:center;padding:6px">' +
+                               '… ve ' + (no - MAX_PREVIEW) + ' satır daha</td>';
                 onizBody.appendChild(tr);
             }
             ozetEl.innerHTML =
-                '<span>Palet <strong>' + n + '</strong></span>' +
+                '<span>Palet <strong>' + no + '</strong></span>' +
                 '<span>Kasa <strong>' + fmtKg(tKasa) + '</strong></span>' +
                 '<span>Brüt <strong>' + fmtKg(tBrut) + '</strong></span>' +
                 '<span>Dara <strong>' + fmtKg(tDara) + '</strong></span>' +
@@ -1542,11 +1612,10 @@
             s.classList.remove('error');
             refresh();
         }));
-        attachPaste(taKasa, taBrut);
-        attachPaste(taBrut, taKasa);
+        BOXES.forEach(attachPaste);
 
         function temizle() {
-            taKasa.value = ''; taBrut.value = '';
+            BOXES.forEach(b => { b.value = ''; });
             refresh();
         }
 
@@ -1566,9 +1635,8 @@
         temizBtn.addEventListener('click', temizle);
 
         uygulaBtn.addEventListener('click', () => {
-            const kasa = lines(taKasa);
-            const brut = lines(taBrut);
-            const n = Math.max(kasa.length, brut.length);
+            const gecerli = collect().rows.filter(r => !r.atla);
+            const n = gecerli.length;
             if (!n) return;
 
             /* Zorunlu alanlar — kayıt sırasında sunucu da arıyor, burada uyar */
@@ -1593,12 +1661,12 @@
 
             if (mode === 'degistir') pallets.length = 0;
 
-            for (let i = 0; i < n; i++) {
+            gecerli.forEach(r => {
                 pallets.push({
                     palet_no:      String(pallets.length + 1),
-                    kasa_adeti:    parseInt2(kasa[i] || 0),
-                    size:          '',
-                    brut_kg:       parseNum(brut[i] || 0),
+                    kasa_adeti:    parseInt2(r.kasa || 0),
+                    size:          has(r.size) ? String(r.size) : '',
+                    brut_kg:       parseNum(r.brut || 0),
                     kasa_cinsi_id: kcSel.value,
                     palet_tipi_id: ptSel.value,
                     urun_cinsi:    urunSel.value,
@@ -1606,7 +1674,7 @@
                     islendi:       false,
                     materials:     mats.map(m => ({ material_id: m.material_id, quantity: m.quantity })),
                 });
-            }
+            });
 
             renderCards();
             recomputeTotals();
