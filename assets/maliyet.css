@@ -41,6 +41,36 @@
 .mly-card-stats em { font-style: normal; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .mly-card-stats b { font-size: .95rem; font-variant-numeric: tabular-nums; }
 
+/* ---------- Parti No autocomplete (Adım 4) ---------- */
+.mly-parti-search { margin-bottom: 14px; position: relative; }
+.mly-parti-search > label { display: block; font-weight: 600; margin-bottom: 6px; }
+.mly-parti-search > label small { color: var(--muted); font-weight: 400; font-size: .74rem; }
+.mly-parti-search-box { display: flex; gap: 8px; align-items: center; }
+.mly-parti-search-box input {
+    flex: 1; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--card); color: var(--text); font-size: 16px;
+}
+.mly-parti-status { margin-top: 6px; font-size: .82rem; color: var(--muted); min-height: 1.2em; }
+
+/* Dropdown panel — CLAUDE.md kuralı: overflow'da kesilmesin diye fixed +
+   getBoundingClientRect() konumlama (JS tarafı), z-index kebab/topbar
+   üstünde ama modallerin (600+) altında kalmasın diye 600. */
+.mly-parti-panel {
+    position: fixed; z-index: 600; max-height: 320px; overflow-y: auto;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+}
+.mly-parti-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.mly-parti-item:last-child { border-bottom: 0; }
+.mly-parti-item strong { display: block; }
+.mly-parti-item small { color: var(--muted); font-size: .78rem; }
+.mly-parti-item:hover, .mly-parti-item.is-active { background: var(--primary-soft); }
+.mly-parti-empty { padding: 10px; color: var(--muted); font-size: .85rem; }
+
+/* Yükleme planından otomatik dolan satır — hafif vurgu */
+tr.mly-row.mly-from-record { background: var(--primary-soft); }
+tr.mly-row.mly-from-record .mly-label { border-left: 3px solid var(--primary); padding-left: 6px; }
+
 /* ---------- Form: genel bilgiler ---------- */
 .mly-grid label.mly-hl { position: relative; }
 .mly-grid label.mly-hl > input {

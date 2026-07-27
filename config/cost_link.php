@@ -313,8 +313,16 @@ function cost_link_packaging_price(string $urun_adi): float
  */
 function cost_link_apply(array $sections, array $items, array $materials): array
 {
+    // Bölüm yoksa (ör. "Boş sayfa" / tpl=-1) ERKEN ÇIKILMAZ — aksi halde
+    // malzemeler sessizce kaybolur. Yerine maliyet_form.php/cost_compute()'daki
+    // AYNI varsayılan-tek-bölüm deseni fabrikatörlenir; eşleşecek kalem
+    // olmadığı için tüm malzemeler doğal olarak YENİ satır olarak eklenir.
     if (!$sections) {
-        return ['sections' => $sections, 'items' => $items, 'matched' => 0, 'unmatched' => 0, 'matched_codes' => []];
+        $sections = [[
+            'id' => 's1', 'code' => 'genel', 'title' => 'Maliyet Kalemleri', 'basis_type' => 'sheet',
+            'basis_value' => 0, 'basis_formula' => '', 'basis_label' => 'NET KG',
+            'include_in_total' => 1, 'sort_order' => 1,
+        ]];
     }
 
     // Miktarı ezilecek/eşleşmeye açık şablon kalemleri: ETİKET → items dizisindeki anahtar.

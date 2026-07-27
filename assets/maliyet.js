@@ -622,6 +622,7 @@ function addRow(secEl, focus) {
     }
     renumber();
     recalc();
+    return tr;
 }
 
 function addSection() {
@@ -679,6 +680,230 @@ function moveRow(tr, dir) {
     }
     renumber();
     recalc();
+}
+
+/* ---------- Parti No autocomplete (Adım 4) ----------
+   JS burada SADECE api_maliyet_link.php'den veri getirip DOM'a yazar.
+   Hiçbir tutar burada hesaplanmaz — yazılan qty/net_kg değerleri recalc()
+   (bu dosyanın kendi canlı önizlemesi) ile normal satır gibi işlenir;
+   kaydedilen tutarlar her zaman PHP cost_compute() tarafından belirlenir. */
+var mlyPartiAbort      = null;
+var mlyPartiDebounce   = null;
+var mlyPartiItems      = [];
+var mlyPartiActiveIdx  = -1;
+
+function mlyEsc(s) {
+    return String(s == null ? '' : s).replace(/[<>&]/g, function (c) {
+        return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c];
+    });
+}
+
+function mlyPartiFetch(url) {
+    if (mlyPartiAbort) mlyPartiAbort.abort();
+    mlyPartiAbort = ('AbortController' in window) ? new AbortController() : null;
+    return fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        signal: mlyPartiAbort ? mlyPartiAbort.signal : undefined
+    }).then(function (r) { return r.json(); });
+}
+
+function mlyPartiPositionPanel(input, panel) {
+    var r = input.getBoundingClientRect();
+    panel.style.left  = r.left + 'px';
+    panel.style.top   = (r.bottom + 4) + 'px';
+    panel.style.width = r.width + 'px';
+}
+
+function mlyPartiRenderPanel(panel, items, activeIdx) {
+    if (!items.length) {
+        panel.innerHTML = '<div class="mly-parti-empty">Kayıt bulunamadı</div>';
+        panel.hidden = false;
+        return;
+    }
+    panel.innerHTML = items.map(function (it, i) {
+        var cls   = 'mly-parti-item' + (i === activeIdx ? ' is-active' : '');
+        var line2 = [it.firma, it.plaka, it.tarih].filter(Boolean).join(' · ');
+        return '<div class="' + cls + '" data-idx="' + i + '">' +
+            '<strong>' + mlyEsc(it.parti_no || '(parti no yok)') + '</strong>' +
+            '<small>' + mlyEsc(line2) + '</small></div>';
+    }).join('');
+    panel.hidden = false;
+}
+
+function mlySetByName(form, name, value) {
+    var el = form.elements[name];
+    if (el) el.value = (value === null || value === undefined) ? '' : value;
+}
+
+// .mly-code her satırın GİZLİ "detay" satırındadır (⋯ butonuyla açılır) —
+// ana satırda değil. API'nin 'rows' anahtarı bu koddur (label değil).
+function mlyFindRowByCode(code) {
+    var codes = document.querySelectorAll('.mly-code');
+    for (var i = 0; i < codes.length; i++) {
+        if ((codes[i].value || '').trim() === code) {
+            var det = codes[i].closest('tr.mly-row-detail');
+            var key = det && det.getAttribute('data-for');
+            if (key) return document.querySelector('tr.mly-row[data-key="' + key + '"]');
+        }
+    }
+    return null;
+}
+
+// Yeni kalemler sunucudaki kuralla AYNI bölüme düşer: ilk include_in_total.
+function mlyFirstIncludedSection() {
+    var secs = document.querySelectorAll('#mlySections .mly-section');
+    for (var i = 0; i < secs.length; i++) {
+        var cb = secs[i].querySelector('.mly-sec-include');
+        if (!cb || cb.checked) return secs[i];
+    }
+    return secs[0] || null;
+}
+
+function mlyApplyPartyDetail(form, data) {
+    var h = data.header || {};
+    mlySetByName(form, 'product', h.product);
+    mlySetByName(form, 'firma', h.firma);
+    mlySetByName(form, 'alici', h.alici);
+    mlySetByName(form, 'brand', h.brand);
+    mlySetByName(form, 'gumruk', h.gumruk);
+    mlySetByName(form, 'plaka', h.plaka);
+    mlySetByName(form, 'sheet_date', h.sheet_date);
+    if (h.net_kg != null)  mlySetByName(form, 'net_kg',  fmtQty(Number(h.net_kg)));
+    if (h.brut_kg != null) mlySetByName(form, 'brut_kg', fmt(Number(h.brut_kg), 3));
+
+    var rows = data.rows || {};
+    Object.keys(rows).forEach(function (code) {
+        var tr = mlyFindRowByCode(code);
+        if (!tr) return;
+        var q = tr.querySelector('.mly-qty');
+        if (q && !q.hasAttribute('readonly')) q.value = fmtQty(Number(rows[code].qty));
+        tr.classList.add('mly-from-record');
+    });
+
+    (data.newRows || []).forEach(function (nr) {
+        var secEl = mlyFirstIncludedSection();
+        if (!secEl) return;
+        var tr = addRow(secEl, false);
+        if (!tr) return;
+        var l = tr.querySelector('.mly-label'); if (l) l.value = nr.label || '';
+        var u = tr.querySelector('.mly-unit');  if (u) u.value = nr.unit || '';
+        var p = tr.querySelector('.mly-price'); if (p) p.value = fmt(Number(nr.unit_price || 0), 4);
+        var q = tr.querySelector('.mly-qty');   if (q) q.value = fmtQty(Number(nr.qty || 0));
+        var det = tr.parentNode.querySelector('tr.mly-row-detail[data-for="' + tr.getAttribute('data-key') + '"]');
+        var c   = det && det.querySelector('.mly-code');
+        if (c) c.value = nr.code || '';
+        tr.classList.add('mly-from-record');
+    });
+
+    renumber();
+    recalc();
+
+    var status = document.getElementById('mlyPartiStatus');
+    if (status) {
+        var info = data.info || {};
+        status.textContent = '✓ ' + (info.parti_no || '') + ' — ' + (info.matched || 0) + ' kalem eşleşti' +
+            (info.unmatched ? ', ' + info.unmatched + ' yeni kalem eklendi' : '');
+    }
+}
+
+function mlyPartiHasFormData(form) {
+    var netKg   = num((form.elements.net_kg || {}).value || '0');
+    var firma   = ((form.elements.firma || {}).value || '').trim();
+    var product = ((form.elements.product || {}).value || '').trim();
+    return netKg > 0 || firma !== '' || product !== '';
+}
+
+function initPartiSearch() {
+    var wrap = document.getElementById('mlyPartiSearchWrap');
+    if (!wrap) return;                                  // düzenleme modu: arama kutusu yok (madde 8)
+    var form  = document.getElementById('mlyForm');
+    var input = document.getElementById('mlyPartiInput');
+    var panel = document.getElementById('mlyPartiPanel');
+    var clearBtn     = document.getElementById('mlyPartiClear');
+    var recordField  = form.elements.record_id;
+
+    function closePanel() { panel.hidden = true; mlyPartiActiveIdx = -1; }
+
+    function selectItem(it) {
+        if (mlyPartiHasFormData(form)) {
+            if (!confirm('Formdaki bilgiler yükleme planından gelen verilerle değiştirilecek. Devam edilsin mi?')) return;
+        }
+        recordField.value = it.id;
+        input.value = (it.parti_no || '') + (it.firma ? ' · ' + it.firma : '');
+        clearBtn.hidden = false;
+        closePanel();
+
+        // template_id AÇIKÇA gönderilir — açık sayfanın DOM'da render ettiği
+        // şablonla API'nin eşleştirdiği şablon AYNI olmalı (0/-1 = "Boş sayfa",
+        // API bunu "hiçbir şablona eşleştirme yapma" sinyali olarak alır).
+        mlyPartiFetch('api_maliyet_link.php?action=detail&record_id=' + encodeURIComponent(it.id) +
+            '&template_id=' + encodeURIComponent(CFG.tplId || 0))
+            .then(function (res) {
+                if (res && res.ok) { mlyApplyPartyDetail(form, res); return; }
+                var status = document.getElementById('mlyPartiStatus');
+                if (status) status.textContent = '⚠ ' + ((res && res.error) || 'Veri alınamadı');
+            })
+            .catch(function (e) { /* AbortError beklenen durumdur — sessiz geç, form bozulmaz */ });
+    }
+
+    input.addEventListener('input', function () {
+        // Elle yazınca önceki bağ geçersizleşir — yanlış kayda bağlı kalınmaz.
+        if (recordField.value) { recordField.value = ''; clearBtn.hidden = true; }
+
+        var q = input.value.trim();
+        clearTimeout(mlyPartiDebounce);
+        if (q.length < 2) { closePanel(); return; }
+        mlyPartiDebounce = setTimeout(function () {
+            mlyPartiFetch('api_maliyet_link.php?action=search&q=' + encodeURIComponent(q))
+                .then(function (res) {
+                    mlyPartiItems     = (res && res.ok) ? (res.items || []) : [];
+                    mlyPartiActiveIdx = -1;
+                    mlyPartiPositionPanel(input, panel);
+                    mlyPartiRenderPanel(panel, mlyPartiItems, mlyPartiActiveIdx);
+                })
+                .catch(function (e) { closePanel(); });
+        }, 250);
+    });
+
+    input.addEventListener('keydown', function (e) {
+        if (panel.hidden || !mlyPartiItems.length) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            mlyPartiActiveIdx = Math.min(mlyPartiActiveIdx + 1, mlyPartiItems.length - 1);
+            mlyPartiRenderPanel(panel, mlyPartiItems, mlyPartiActiveIdx);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            mlyPartiActiveIdx = Math.max(mlyPartiActiveIdx - 1, 0);
+            mlyPartiRenderPanel(panel, mlyPartiItems, mlyPartiActiveIdx);
+        } else if (e.key === 'Enter') {
+            if (mlyPartiActiveIdx >= 0) { e.preventDefault(); selectItem(mlyPartiItems[mlyPartiActiveIdx]); }
+        } else if (e.key === 'Escape') {
+            closePanel();
+        }
+    });
+
+    panel.addEventListener('click', function (e) {
+        var row = e.target.closest && e.target.closest('.mly-parti-item');
+        if (!row) return;
+        var idx = parseInt(row.getAttribute('data-idx'), 10);
+        if (mlyPartiItems[idx]) selectItem(mlyPartiItems[idx]);
+    });
+
+    clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        recordField.value = '';
+        input.value = '';
+        clearBtn.hidden = true;
+        var status = document.getElementById('mlyPartiStatus');
+        if (status) status.textContent = '';
+        closePanel();
+    });
+
+    document.addEventListener('click', function (e) {
+        if (e.target !== input && !panel.contains(e.target)) closePanel();
+    });
+    window.addEventListener('resize', function () { if (!panel.hidden) mlyPartiPositionPanel(input, panel); });
+    window.addEventListener('scroll', function () { if (!panel.hidden) mlyPartiPositionPanel(input, panel); }, true);
 }
 
 /* ---------- Olay bağlama ---------- */
@@ -786,6 +1011,7 @@ function init() {
     document.querySelectorAll('tr.mly-row').forEach(applyRowType);
     renumber();
     recalc();
+    initPartiSearch();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

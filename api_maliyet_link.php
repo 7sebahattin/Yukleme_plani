@@ -72,21 +72,31 @@ switch ($action) {
             err('Bu kayıt aktif deponuzda görünmüyor', 403);
         }
 
-        // Verilen template_id geçersiz/pasif/silinmişse sessizce boş sonuç
-        // dönmek yerine varsayılan şablona düşülür — bu uç nokta en-iyi-çaba
-        // bir ön-doldurma katmanıdır, katı bir doğrulayıcı değil.
-        $template_id = (int)($_GET['template_id'] ?? 0);
-        if ($template_id > 0) {
-            $st = db()->prepare("SELECT 1 FROM cost_templates WHERE id=? AND is_active=1");
-            $st->execute([$template_id]);
-            if (!$st->fetchColumn()) $template_id = 0;
-        }
-        if ($template_id <= 0) {
+        // template_id parametresi HİÇ verilmemişse (isset değil) çağıran
+        // hangi şablonu istediğini belirtmemiştir → sitenin varsayılan
+        // şablonuna düşülür (basit manuel test/URL çağrıları için).
+        //
+        // AÇIKÇA 0 veya negatif verilmişse (maliyet_form.php'nin JS'i açık
+        // sayfanın gerçek tpl'ini — "Boş sayfa"da -1 — her zaman gönderir)
+        // bu bir "boş sayfa" SİNYALİDİR: hiçbir şablona eşleştirme yapılmaz,
+        // DOM'da zaten var olan kalem yoktur, tüm malzemeler 'newRows' olarak
+        // döner. Varsayılana DÜŞÜLMEZ — aksi halde sayfa boşken JS'in
+        // bulamayacağı "eşleşme" sayıları üretilir (bkz. Adım 4 test notu).
+        if (!isset($_GET['template_id'])) {
             $template_id = (int)(db()->query(
                 "SELECT id FROM cost_templates WHERE is_active=1 ORDER BY is_default DESC, id ASC LIMIT 1"
             )->fetchColumn() ?: 0);
+            if ($template_id <= 0) err('Aktif şablon bulunamadı', 404);
+        } else {
+            $template_id = (int)$_GET['template_id'];
+            if ($template_id > 0) {
+                $st = db()->prepare("SELECT 1 FROM cost_templates WHERE id=? AND is_active=1");
+                $st->execute([$template_id]);
+                if (!$st->fetchColumn()) $template_id = 0; // geçersiz/pasif → boş kabul edilir, HATA değil
+            } else {
+                $template_id = 0;
+            }
         }
-        if ($template_id <= 0) err('Aktif şablon bulunamadı', 404);
 
         $tpl       = cost_link_load_template($template_id);
         $materials = cost_link_materials($record_id);

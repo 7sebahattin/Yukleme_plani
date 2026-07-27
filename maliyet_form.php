@@ -423,6 +423,13 @@ $pkg_prices   = db()->query("SELECT id, firma, urun, fiyat, birim FROM cost_pack
 $brand_defs   = get_definitions_by_type('marka');
 $urun_defs    = get_definitions_by_type('urun');
 
+// Düzenleme modunda: bağlı olduğu parti no'yu göstermek için (salt-okunur,
+// madde 8 — burada hiçbir alan yeniden doldurulmaz, sadece bilgi amaçlı okunur).
+$edit_record_parti = null;
+if ($is_edit && !empty($sheet['record_id'])) {
+    $edit_record_parti = cost_link_record_summary((int)$sheet['record_id'])['parti_no'] ?? null;
+}
+
 render_header($is_edit ? 'Maliyet Hesabı Düzenle' : 'Yeni Maliyet Hesabı');
 render_flash();
 ?>
@@ -478,6 +485,28 @@ render_flash();
 <!-- ═══ GENEL BİLGİLER ═══ -->
 <div class="form-section">
     <div class="form-section-title">📋 Genel Bilgiler</div>
+
+    <?php if (!$is_edit): ?>
+    <div class="mly-parti-search no-print" id="mlyPartiSearchWrap">
+        <label for="mlyPartiInput">Parti No <small>(opsiyonel — yükleme planından doldurmak için)</small></label>
+        <div class="mly-parti-search-box">
+            <input type="text" id="mlyPartiInput" autocomplete="off" spellcheck="false"
+                   placeholder="Parti no, firma veya plaka yazın…"
+                   value="<?= $record_summary !== null
+                        ? h(trim($record_summary['parti_no'] . ' · ' . ($record_summary['firma'] ?: '—')))
+                        : '' ?>">
+            <button type="button" id="mlyPartiClear" class="btn btn-sm" <?= $record_id > 0 ? '' : 'hidden' ?>>✕ Temizle</button>
+        </div>
+        <div class="mly-parti-panel" id="mlyPartiPanel" hidden></div>
+        <div class="mly-parti-status" id="mlyPartiStatus"></div>
+    </div>
+    <?php elseif ($edit_record_parti !== null): ?>
+    <div class="mly-parti-search no-print">
+        <span class="muted">Parti No: <strong><?= h($edit_record_parti) ?></strong>
+            <small>— yükleme planından bağlı, değiştirilemez</small></span>
+    </div>
+    <?php endif; ?>
+
     <div class="grid mly-grid">
         <label>Belge No
             <input type="text" name="sheet_no" value="<?= h($sheet['sheet_no']) ?>" placeholder="Serbest belge/dosya no">
@@ -845,6 +874,11 @@ window.MLY_CONFIG = <?= json_encode([
     'pkgPrices'   => array_map(static fn($p) => [
         'urun' => $p['urun'], 'firma' => $p['firma'], 'fiyat' => (float)$p['fiyat'], 'birim' => $p['birim'],
     ], $pkg_prices),
+    // Parti No autocomplete'in (Adım 4) api_maliyet_link.php?action=detail
+    // çağrısına EKLEMESİ gereken şablon id'si — açık sayfanın DOM'da hangi
+    // kalemleri render ettiğiyle AYNI şablon olmalı, aksi halde API'nin
+    // eşleştirdiği kodlar DOM'da bulunamaz (bkz. cost_link_apply() notu).
+    'tplId'       => (int)$tpl_id,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 <script src="assets/maliyet.js?v=<?= @filemtime(__DIR__ . '/assets/maliyet.js') ?: time() ?>"></script>
