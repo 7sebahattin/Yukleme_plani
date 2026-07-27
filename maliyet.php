@@ -25,34 +25,42 @@ if ($tarih_bas !== '' && !$valid_date($tarih_bas)) $tarih_bas = '';
 if ($tarih_bit !== '' && !$valid_date($tarih_bit)) $tarih_bit = '';
 if (!in_array($f_status, ['taslak', 'kesin'], true)) $f_status = '';
 
-$where  = "WHERE deleted_at IS NULL";
+// cs. öneki zorunlu: aşağıdaki JOIN sonrası firma/alici gibi kolonlar
+// loading_records'ta da var — önek olmadan "ambiguous column" hatası olur.
+$where  = "WHERE cs.deleted_at IS NULL";
 $params = [];
 
 if ($q !== '') {
-    $where .= " AND (sheet_no LIKE :q OR title LIKE :q OR product LIKE :q OR firma LIKE :q
-                     OR alici LIKE :q OR plaka LIKE :q OR gidecegi_yer LIKE :q OR brand LIKE :q)";
+    $where .= " AND (cs.sheet_no LIKE :q OR cs.title LIKE :q OR cs.product LIKE :q OR cs.firma LIKE :q
+                     OR cs.alici LIKE :q OR cs.plaka LIKE :q OR cs.gidecegi_yer LIKE :q OR cs.brand LIKE :q)";
     $params[':q'] = '%' . $q . '%';
 }
-if ($f_urun !== '')   { $where .= " AND product LIKE :urun";   $params[':urun']   = '%' . $f_urun . '%'; }
-if ($f_status !== '') { $where .= " AND status = :status";     $params[':status'] = $f_status; }
-if ($tarih_bas !== '') { $where .= " AND sheet_date >= :tb";   $params[':tb'] = $tarih_bas; }
-if ($tarih_bit !== '') { $where .= " AND sheet_date <= :tbt";  $params[':tbt'] = $tarih_bit; }
+if ($f_urun !== '')   { $where .= " AND cs.product LIKE :urun";   $params[':urun']   = '%' . $f_urun . '%'; }
+if ($f_status !== '') { $where .= " AND cs.status = :status";     $params[':status'] = $f_status; }
+if ($tarih_bas !== '') { $where .= " AND cs.sheet_date >= :tb";   $params[':tb'] = $tarih_bas; }
+if ($tarih_bit !== '') { $where .= " AND cs.sheet_date <= :tbt";  $params[':tbt'] = $tarih_bit; }
 
 // Aktif depo kapsamı — deposu boş sayfalar tüm depolarda görünür
-[$depo_sql, $depo_params] = depo_sql_column('depo', ':udm');
+[$depo_sql, $depo_params] = depo_sql_column('cs.depo', ':udm');
 $where .= $depo_sql;
 $params = array_merge($params, $depo_params);
 
 $total = 0;
 $rows  = [];
 try {
-    $st = db()->prepare("SELECT COUNT(*) FROM cost_sheets $where");
+    $st = db()->prepare("SELECT COUNT(*) FROM cost_sheets cs $where");
     $st->execute($params);
     $total = (int)$st->fetchColumn();
 
+    // Parti No CANLI okunur (LEFT JOIN) — cost_sheets'e kopyalanmış bir alan
+    // değildir (bkz. config/cost_link.php madde 1: Belge No ≠ Parti No).
+    // 1:1 ilişki (loading_records.id PRIMARY KEY) → satır sayısı çoğalmaz.
     $offset = ($page - 1) * MALIYET_PER_PAGE;
-    $st = db()->prepare("SELECT * FROM cost_sheets $where
-                         ORDER BY COALESCE(sheet_date, DATE(created_at)) DESC, id DESC
+    $st = db()->prepare("SELECT cs.*, lr.parti_no AS linked_parti_no
+                         FROM cost_sheets cs
+                         LEFT JOIN loading_records lr ON lr.id = cs.record_id
+                         $where
+                         ORDER BY COALESCE(cs.sheet_date, DATE(cs.created_at)) DESC, cs.id DESC
                          LIMIT " . MALIYET_PER_PAGE . " OFFSET " . (int)$offset);
     $st->execute($params);
     $rows = $st->fetchAll();
@@ -170,7 +178,7 @@ render_flash();
         <thead>
             <tr>
                 <th>Tarih</th>
-                <th>Parti No</th>
+                <th>Belge No / Parti No</th>
                 <th>Ürün / Marka</th>
                 <th>Alıcı / Gideceği Yer</th>
                 <th class="num">Net KG</th>
@@ -192,7 +200,12 @@ render_flash();
         ?>
             <tr>
                 <td><?= $r['sheet_date'] ? h(date('d.m.Y', strtotime((string)$r['sheet_date']))) : '—' ?></td>
-                <td><a href="maliyet_view.php?id=<?= (int)$r['id'] ?>"><strong><?= h($r['sheet_no'] ?: ('#' . $r['id'])) ?></strong></a></td>
+                <td>
+                    <a href="maliyet_view.php?id=<?= (int)$r['id'] ?>"><strong><?= h($r['sheet_no'] ?: ('#' . $r['id'])) ?></strong></a>
+                    <?php if (!empty($r['linked_parti_no'])): ?>
+                    <div class="muted" style="font-size:.78rem">Parti: <?= h($r['linked_parti_no']) ?></div>
+                    <?php endif; ?>
+                </td>
                 <td><?= h($r['product']) ?><?= $r['brand'] ? ' <span class="muted">· ' . h($r['brand']) . '</span>' : '' ?></td>
                 <td><?= h($r['alici'] ?: $r['firma']) ?><?= $r['gidecegi_yer'] ? ' <span class="muted">→ ' . h($r['gidecegi_yer']) . '</span>' : '' ?></td>
                 <td class="num"><?= cost_fmt_qty($r['net_kg']) ?></td>
@@ -234,6 +247,7 @@ render_flash();
             <?= h($r['product'] ?: '—') ?>
             <?= $r['brand'] ? ' · ' . h($r['brand']) : '' ?>
             <?= $r['sheet_date'] ? ' · ' . h(date('d.m.Y', strtotime((string)$r['sheet_date']))) : '' ?>
+            <?= !empty($r['linked_parti_no']) ? ' · Parti: ' . h($r['linked_parti_no']) : '' ?>
         </div>
         <div class="mly-card-stats">
             <span><em>Net KG</em><b><?= cost_fmt_qty($r['net_kg']) ?></b></span>

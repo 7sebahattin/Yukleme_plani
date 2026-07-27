@@ -7,6 +7,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/cost_calc.php';
 $auth_user = require_login();
 require_perm('records.read');
 
@@ -304,6 +305,20 @@ foreach ($pallets as $p) {
     }
 }
 
+// Maliyet bağlantısı — salt gösterim/yönlendirme, hiçbir veri senkronize
+// edilmez (bkz. config/cost_link.php). cost_migrate() BİLEREK çağrılmaz —
+// bu sayfa maliyet modülünden bağımsız çalışmalı; tablo yoksa (modül hiç
+// açılmamış) sorgu sessizce boş sonuç kabul edilir, sayfa çökmez.
+$maliyet_links = [];
+if ($_is_maliyet_eligible = (($record['type'] ?? 'yukleme') === 'yukleme' && can_maliyet('read'))) {
+    try {
+        $st_ml = db()->prepare("SELECT id, sheet_no, status FROM cost_sheets
+                                WHERE record_id = ? AND deleted_at IS NULL ORDER BY id DESC");
+        $st_ml->execute([$id]);
+        $maliyet_links = $st_ml->fetchAll();
+    } catch (PDOException $e) { /* cost_sheets yoksa — sessizce geç */ }
+}
+
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <?php if ($print): ?>
@@ -366,6 +381,13 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
+        <?php if ($maliyet_links): ?>
+        <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>" class="btn btn-ghost">
+            🧮 Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?>
+        </a>
+        <?php elseif ($_is_maliyet_eligible && can_maliyet('write')): ?>
+        <a href="maliyet_form.php?record=<?= (int)$id ?>" class="btn btn-ghost">🧮 Maliyet Oluştur</a>
+        <?php endif; ?>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>

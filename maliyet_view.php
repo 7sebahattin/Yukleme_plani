@@ -6,6 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cost_calc.php';
+require_once __DIR__ . '/config/cost_link.php';
 
 $auth_user = require_login();
 cost_migrate();
@@ -22,6 +23,17 @@ if (!$sheet) { set_flash('error', 'Maliyet hesabı bulunamadı.'); header('Locat
 if (!depot_visible_to_user((string)$sheet['depo'])) {
     forbidden('Bu maliyet hesabı “' . h((string)$sheet['depo']) . '” deposuna ait — aktif deponuzda görünmüyor.');
 }
+
+// Kaynak yükleme planı — CANLI okunur (JOIN gibi), cost_sheets'e hiçbir
+// alan kopyalanmaz. Kayıt silinmiş/görünmüyor olabilir → linkler o zaman gösterilmez.
+$linked_record = null;
+$stale_info    = null;
+if (!empty($sheet['record_id'])) {
+    $linked_record = cost_link_record_summary((int)$sheet['record_id']);
+    $stale_info    = cost_link_stale_info((int)$sheet['record_id'], $sheet['linked_at'] ?? null);
+}
+$show_record_link = $linked_record !== null && can('records.read')
+    && depot_visible_to_user($linked_record['depo']);
 
 $st = db()->prepare("SELECT * FROM cost_sheet_sections WHERE sheet_id=? ORDER BY sort_order ASC, id ASC");
 $st->execute([$id]);
@@ -66,6 +78,9 @@ if (!$print_mode) render_flash();
     </div>
     <div class="page-head-actions">
         <a href="maliyet.php" class="btn">← Liste</a>
+        <?php if ($show_record_link): ?>
+        <a href="record_view.php?id=<?= (int)$sheet['record_id'] ?>" class="btn no-print">📦 Kaynak Yükleme Planı</a>
+        <?php endif; ?>
         <a href="maliyet_view.php?id=<?= $id ?>&print=1" class="btn" target="_blank">🖨️ Yazdır</a>
         <?php if (can_maliyet('write')): ?>
         <a href="maliyet_form.php?id=<?= $id ?>" class="btn btn-primary">✏️ Düzenle</a>
@@ -91,6 +106,15 @@ if (!$print_mode) render_flash();
 </div>
 <?php endif; ?>
 
+<?php if ($stale_info !== null): ?>
+<div class="flash flash-error no-print">
+    ⚠️ Bu maliyet oluşturulduktan sonra yükleme planı değiştirilmiştir. Verileri kontrol etmeniz önerilir.
+    <?php if ($show_record_link): ?>
+        <a href="record_view.php?id=<?= (int)$sheet['record_id'] ?>">Kaynak yükleme planını gör</a>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if ($calc['errors']): ?>
 <div class="flash flash-error no-print">
     <strong>Formül uyarıları:</strong>
@@ -103,7 +127,16 @@ if (!$print_mode) render_flash();
 <div class="mly-view-head">
     <h2><?= h($sheet['title'] ?: ('ASYA FRESH — ' . ($sheet['product'] ?: 'MALİYET') . ' HESABI')) ?></h2>
     <div class="mly-meta">
-        <div><em>Parti No</em><b><?= h($sheet['sheet_no'] ?: '—') ?></b></div>
+        <div><em>Belge No</em><b><?= h($sheet['sheet_no'] ?: '—') ?></b></div>
+        <div><em>Parti No</em><b>
+            <?php if ($linked_record !== null): ?>
+                <?= h($linked_record['parti_no'] ?: '—') ?>
+            <?php elseif (!empty($sheet['record_id'])): ?>
+                <span class="muted">(kayıt bulunamadı)</span>
+            <?php else: ?>
+                <span class="muted">Bağsız</span>
+            <?php endif; ?>
+        </b></div>
         <div><em>Tarih</em><b><?= $sheet['sheet_date'] ? h(date('d.m.Y', strtotime((string)$sheet['sheet_date']))) : '—' ?></b></div>
         <div><em>Ürün</em><b><?= h($sheet['product'] ?: '—') ?></b></div>
         <div><em>Marka</em><b><?= h($sheet['brand'] ?: '—') ?></b></div>
@@ -115,6 +148,11 @@ if (!$print_mode) render_flash();
         <div><em>Ambalaj / Tip</em><b><?= h($sheet['ambalaj_tipi'] ?: '—') ?></b></div>
         <div><em>Net KG</em><b><?= cost_fmt_qty($sheet['net_kg']) ?></b></div>
         <div><em>Depo</em><b><?= h($sheet['depo'] ?: 'Atanmamış') ?></b></div>
+        <?php if (!empty($sheet['linked_at'])): ?>
+        <div><em>Bağlantı Tarihi</em><b class="muted" style="font-weight:400">
+            <?= h(date('d.m.Y H:i', strtotime((string)$sheet['linked_at']))) ?>
+        </b></div>
+        <?php endif; ?>
         <?php foreach ($field_defs as $fd):
             $code = (string)$fd['code'];
             if ($fd['field_type'] === 'formula') {

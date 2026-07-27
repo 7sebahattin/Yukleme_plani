@@ -426,8 +426,12 @@ $urun_defs    = get_definitions_by_type('urun');
 // Düzenleme modunda: bağlı olduğu parti no'yu göstermek için (salt-okunur,
 // madde 8 — burada hiçbir alan yeniden doldurulmaz, sadece bilgi amaçlı okunur).
 $edit_record_parti = null;
+$edit_stale_info    = null;
 if ($is_edit && !empty($sheet['record_id'])) {
     $edit_record_parti = cost_link_record_summary((int)$sheet['record_id'])['parti_no'] ?? null;
+    // Bilgi amaçlı, buluşsal bir uyarı — hiçbir alanı değiştirmez, kaydetmeyi
+    // engellemez (bkz. config/cost_link.php::cost_link_stale_info()).
+    $edit_stale_info = cost_link_stale_info((int)$sheet['record_id'], $sheet['linked_at'] ?? null);
 }
 
 render_header($is_edit ? 'Maliyet Hesabı Düzenle' : 'Yeni Maliyet Hesabı');
@@ -504,6 +508,11 @@ render_flash();
     <div class="mly-parti-search no-print">
         <span class="muted">Parti No: <strong><?= h($edit_record_parti) ?></strong>
             <small>— yükleme planından bağlı, değiştirilemez</small></span>
+        <?php if ($edit_stale_info !== null): ?>
+        <div class="flash flash-error" style="margin-top:8px">
+            ⚠️ Bu maliyet oluşturulduktan sonra yükleme planı değiştirilmiştir. Verileri kontrol etmeniz önerilir.
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
