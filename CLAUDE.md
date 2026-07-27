@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v8` (sw.js — değişiklikte artır)
+**SW Cache:** `yukleme-plani-v160` (sw.js — değişiklikte artır)
 
 ---
 
@@ -20,6 +20,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 ├── record_view.php        # Görüntüleme + yazdırma
 ├── record_create/edit.php # Form sayfaları
 ├── kantar.php / kantar_view.php / kantar_raporu.php
+├── tarama.php             # Görselden metin (OCR) — tek dosya, DB kullanmaz
 ├── stok.php / malzeme_stok.php
 ├── reports.php / hesap.php
 ├── definitions.php / users.php / audit.php
@@ -236,6 +237,37 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 - Kaydetme bölüm/kalemleri silip yeniden yazar (sıralama sadeliği için); id'ler değişir, dışarıdan referans verme.
 - `status='kesin'` kilitler; açmak `maliyet.unlock` + revizyon nedeni ister.
 - Depo damgası `cost_sheets.depo`; liste `depo_sql_column('depo')`, tekil erişim `depot_visible_to_user()`.
+
+---
+
+## Tarama (OCR) Modülü
+
+Görselden metin çıkarma aracı. **Tek dosya:** `tarama.php` (PHP + HTML + CSS + JS içinde;
+`style.css`/`app.js`'e dokunulmaz — CSS, style.css değişkenlerini kullanır → açık/koyu tema otomatik).
+
+**Veritabanı kullanmaz** — tablo/migration yok, hiçbir şey kaydedilmez.
+Yetki: `records.read` (`require_perm`), erişim depo seçimine tabidir (`require_login`).
+
+**Akış:** dosya seç / sürükle-bırak / Ctrl+V yapıştır / mobilde kamera → `Tara` →
+`shell_exec` ile `tesseract` → metin sayfada (düzenlenebilir) → `.txt` veya `.xlsx` indir.
+
+**Uç noktalar (aynı dosya, POST):**
+- `action=ocr` → JSON (`X-Requested-With: XMLHttpRequest`, XHR ile ilerleme çubuğu)
+- `action=export` + `format=txt|xlsx` → dosya indirme (gizli form POST)
+
+**Tesseract:** yol sırası `TESSERACT_BIN` sabiti (config/local.php) → env → `command -v` →
+`/usr/bin`, `/usr/local/bin`. Bulunamazsa sayfa kırmızı uyarı gösterir, `Tara` pasif olur.
+Diller `--list-langs` ile okunur; `tur` yoksa ayrıca uyarı çıkar.
+Sunucu kurulumu: `apt-get install tesseract-ocr tesseract-ocr-tur`.
+
+**Sınırlar / güvenlik:**
+- 10 MB üst sınır; `upload_max_filesize`/`post_max_size` daha düşükse UI gerçek sınırı yazar.
+- `post_max_size` aşımında PHP `$_POST`'u boşaltır → dosyanın başındaki 413 guard'ı JSON döner (silme).
+- Tür doğrulaması uzantıdan değil `getimagesize()` ile: JPG/PNG/TIFF/BMP/WEBP.
+- Dil ve `--psm` yalnız beyaz listeden; tüm yollar `escapeshellarg`; `timeout` varsa 120 sn sınır.
+- Geçici dosya `sys_get_temp_dir()` (yazılamazsa `storage/tmp`), `finally` içinde **her durumda** silinir.
+- Excel çıktısı `DataType::TYPE_STRING` ile yazılır (formül enjeksiyonu olmaz); PhpSpreadsheet
+  yoksa CSV'ye düşer (BOM + `;`, formül karakteriyle başlayan satıra `'` öneki).
 
 ---
 

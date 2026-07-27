@@ -257,6 +257,7 @@ function render_desktop_sidebar(string $base): void {
     $a_yuk   = !$cikma && !$in_hks && in_array($cur, ['records.php','record_view.php','record_edit.php','record_create.php','record_new.php'], true);
     $a_cik   = $cikma || in_array($cur, ['cikmalar.php','cikma_create.php'], true);
     $a_kant  = in_array($cur, ['kantar.php','kantar_view.php'], true);
+    $a_tara  = $cur === 'tarama.php';
     $a_krap  = $cur === 'kantar_raporu.php';
     $a_hks   = $in_hks;
     $a_beyan = in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php','beyan_delete.php'], true);
@@ -307,6 +308,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_beyan) $lnk('beyanlar.php', '🧾', 'Beyanlar',  $a_beyan); ?>
         <?php if ($p_kant)  $lnk('kantar.php',   '⚖️', 'Kantar',    $a_kant);  ?>
         <?php if ($p_recw) $lnk('halkayit/index.php', '🏛', 'Hal Bildirimi', $a_hks);  ?>
+        <?php if ($p_rec)  $lnk('tarama.php',    '📄', 'Tarama',    $a_tara); ?>
 
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>

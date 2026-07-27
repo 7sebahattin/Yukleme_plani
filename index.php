@@ -136,6 +136,14 @@ if ($db_backup_result !== null): ?>
     </a>
     <?php endif; ?>
 
+<?php if (can('records.read')): ?>
+    <a href="tarama.php" class="home-card">
+        <div class="home-card-icon" style="background:#e0f7fa">📄</div>
+        <div class="home-card-title">Tarama</div>
+        <div class="home-card-sub">Görselden metin (OCR)</div>
+    </a>
+<?php endif; ?>
+
 <?php if (can('reports.read')): ?>
     <a href="reports.php" class="home-card">
         <div class="home-card-icon" style="background:#faf0ff">📊</div>
