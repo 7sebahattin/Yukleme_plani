@@ -381,16 +381,16 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
         <a href="record_edit.php?id=<?= (int)$id ?>" class="btn">✎ Düzenle</a>
         <?php endif; ?>
         <a href="record_view.php?id=<?= (int)$id ?>&print=1" class="btn btn-primary" target="_blank">🖨 Yazdır</a>
-        <?php if ($maliyet_links): ?>
-        <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>" class="btn btn-ghost">
-            🧮 Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?>
-        </a>
-        <?php elseif ($_is_maliyet_eligible && can_maliyet('write')): ?>
-        <a href="maliyet_form.php?record=<?= (int)$id ?>" class="btn btn-ghost">🧮 Maliyet Oluştur</a>
-        <?php endif; ?>
         <div class="pc-kebab-wrap">
             <button class="btn pc-kebab" type="button" title="Diğer İşlemler">⋮</button>
             <div class="pc-dropdown" hidden>
+                <?php if ($maliyet_links): ?>
+                <a href="maliyet_view.php?id=<?= (int)$maliyet_links[0]['id'] ?>">
+                    🧮 Maliyet<?= count($maliyet_links) > 1 ? ' (' . count($maliyet_links) . ')' : '' ?>
+                </a>
+                <?php elseif ($_is_maliyet_eligible && can_maliyet('write')): ?>
+                <a href="maliyet_form.php?record=<?= (int)$id ?>">🧮 Maliyet Oluştur</a>
+                <?php endif; ?>
                 <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
                 <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" target="_blank">📄 Özet Yazdır</a>
                 <?php endif; ?>
