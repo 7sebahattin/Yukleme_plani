@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/cost_calc.php';
+require_once __DIR__ . '/config/cost_link.php';
 
 $auth_user = require_login();
 cost_migrate();
@@ -23,6 +24,13 @@ $sheet    = null;
 $sections = [];
 $items    = [];
 $errors   = [];
+
+// Yükleme planından ön-doldurma (?record=<id>) — YALNIZ ilk oluşturma GET'inde
+// doldurulur (aşağıdaki !$is_edit && REQUEST_METHOD!=='POST' bloğu içinde).
+// Düzenlemede ve POST-hata-sonrası yeniden gösterimde bu blok HİÇ çalışmaz —
+// senkronizasyon değil, tek seferlik öneri (bkz. config/cost_link.php).
+$record_id       = 0;
+$record_summary  = null;
 
 // ── Mevcut kaydı yükle ───────────────────────────────────
 if ($is_edit) {
@@ -219,8 +227,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute($bind);
                 $sheet_id = $id;
             } else {
+                $record_id_post = (int)($_POST['record_id'] ?? 0);
+
                 $data['depo']       = (string)(active_depot() ?? '');
                 $data['template_id']= $tpl_id ?: null;
+                // record_id/brut_kg BİLEREK $data'nın (ve dolayısıyla yukarıdaki
+                // UPDATE dalının) dışında tutulur — ikisi de yalnız İLK OLUŞTURMADA
+                // yazılır, sonradan hiçbir düzenleme bunlara dokunmaz (madde 8).
+                $data['record_id']  = $record_id_post ?: null;
+                $data['brut_kg']    = num($_POST['brut_kg'] ?? 0);
+
                 $cols = array_keys($data);
                 $st = db()->prepare("INSERT INTO cost_sheets (`" . implode('`,`', $cols) . "`, `created_by`)
                                      VALUES (:" . implode(',:', $cols) . ", :cb)");
@@ -228,6 +244,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sheet_id = (int)db()->lastInsertId();
                 if ($post_status === 'kesin') {
                     db()->prepare("UPDATE cost_sheets SET locked_at=NOW(), locked_by=? WHERE id=?")->execute([$uid, $sheet_id]);
+                }
+                // linked_at: SADECE ilk oluşturma anında, SQL NOW() ile (loading_records
+                // ile aynı saat kaynağı — bkz. cost_link_stale_info() PHP/DB saat kayması notu).
+                // Asla güncellenmez; bu satır bu kod yolunda BİR KEZ çalışır.
+                if ($record_id_post > 0) {
+                    db()->prepare("UPDATE cost_sheets SET linked_at = NOW() WHERE id = ?")->execute([$sheet_id]);
                 }
             }
 
@@ -268,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_edit ? ['status' => $sheet['status'], 'net_kg' => $sheet['net_kg']] : null,
                 ['sheet_no' => $data['sheet_no'], 'product' => $data['product'], 'status' => $post_status,
                  'net_kg' => $data['net_kg'], 'toplam' => $calc['totals']['grand_total'],
-                 'kalem_sayisi' => count($new_items)]
+                 'kalem_sayisi' => count($new_items), 'record_id' => $data['record_id'] ?? null]
             );
 
             $msg = 'Maliyet hesabı kaydedildi.';
@@ -284,8 +306,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // Hata varsa girilen veriyi forma geri bas
-    $sheet    = $data + ['id' => $id, 'depo' => $sheet['depo'] ?? (string)(active_depot() ?? '')];
+    // Hata varsa girilen veriyi forma geri bas — record_id/brut_kg şu an
+    // $data'nın DIŞINDA tutuluyor (bkz. aşağıdaki !$is_edit dalı), o yüzden
+    // redisplay'de kaybolmasınlar diye burada elle eklenir.
+    $sheet    = $data + [
+        'id' => $id,
+        'depo' => $sheet['depo'] ?? (string)(active_depot() ?? ''),
+        'record_id' => (int)($_POST['record_id'] ?? 0),
+        'brut_kg'   => num($_POST['brut_kg'] ?? 0),
+    ];
     $sections = [];
     foreach ($new_secs as $ns) { $ns['id'] = $ns['form_key']; $sections[] = $ns; }
     $items = [];
@@ -297,38 +326,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── Yeni kayıt: şablondan doldur ─────────────────────────
+// ── Yeni kayıt: şablondan doldur (+ opsiyonel: yükleme planından ön-doldur) ──
 if (!$is_edit && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     if ($tpl_id === 0) {
         $tpl_id = (int)(db()->query("SELECT id FROM cost_templates WHERE is_active=1
                                      ORDER BY is_default DESC, id ASC LIMIT 1")->fetchColumn() ?: 0);
     }
     if ($tpl_id > 0) {
-        $st = db()->prepare("SELECT * FROM cost_template_sections WHERE template_id=? ORDER BY sort_order ASC, id ASC");
-        $st->execute([$tpl_id]);
-        $tsecs = $st->fetchAll();
-        $st = db()->prepare("SELECT * FROM cost_template_items WHERE template_id=? ORDER BY sort_order ASC, id ASC");
-        $st->execute([$tpl_id]);
-        $titems = $st->fetchAll();
-
-        $code_key = [];
-        foreach ($tsecs as $i => $ts) {
-            $key = 's' . ($i + 1);
-            $code_key[$ts['code']] = $key;
-            $ts['id'] = $key;
-            $sections[] = $ts;
-        }
-        foreach ($titems as $i => $ti) {
-            $ti['id']          = 'n' . ($i + 1);
-            $ti['section_key'] = $code_key[$ti['section_code']] ?? ($sections[0]['id'] ?? 's1');
-            $items[] = $ti;
-        }
+        $tpl      = cost_link_load_template($tpl_id);
+        $sections = $tpl['sections'];
+        $items    = $tpl['items'];
     }
     $tpl_row = null;
     if ($tpl_id > 0) {
         $st = db()->prepare("SELECT * FROM cost_templates WHERE id=?");
         $st->execute([$tpl_id]);
         $tpl_row = $st->fetch() ?: null;
+    }
+
+    // Parti No'dan ön-doldurma — bu blok yalnız burada, yalnız bir kez çalışır.
+    $record_id = (int)($_GET['record'] ?? 0);
+    if ($record_id > 0) {
+        $record_summary = cost_link_record_summary($record_id);
+        if ($record_summary === null) {
+            set_flash('error', 'Seçilen yükleme kaydı bulunamadı.');
+            $record_id = 0;
+        } elseif (!depot_visible_to_user($record_summary['depo'])) {
+            set_flash('error', 'Bu yükleme kaydı “' . $record_summary['depo'] . '” deposuna ait — aktif deponuzda görünmüyor.');
+            $record_id      = 0;
+            $record_summary = null;
+        } else {
+            $materials = cost_link_materials($record_id);
+            $applied   = cost_link_apply($sections, $items, $materials);
+            $sections  = $applied['sections'];
+            $items     = $applied['items'];
+        }
     }
 }
 
@@ -340,6 +372,23 @@ $sheet = $sheet ?: [
     'sale_qty' => 0, 'sale_unit_price' => 0, 'extra_json' => '', 'notes' => '', 'status' => 'taslak',
     'depo' => (string)(active_depot() ?? ''),
 ];
+
+// Yükleme planından ön-doldurulan başlık alanları. sheet_no'ya KESİNLİKLE
+// dokunulmaz — Sheet No (belge no) ile Parti No ayrı kavramlardır (bkz.
+// config/cost_link.php). brut_kg burada Adım 1'de eklenen bilgi amaçlı
+// kolondur; hesaba girmez, yalnız gösterim/kayıt amaçlıdır.
+if ($record_summary !== null) {
+    $sheet['product']  = $record_summary['product'];
+    $sheet['firma']    = $record_summary['firma'];
+    $sheet['alici']    = $record_summary['alici'];
+    $sheet['brand']    = $record_summary['brand'];
+    $sheet['gumruk']   = $record_summary['gumruk'];
+    $sheet['plaka']    = $record_summary['plaka'];
+    if ($record_summary['sheet_date']) $sheet['sheet_date'] = $record_summary['sheet_date'];
+    $sheet['net_kg']   = $record_summary['net_kg'];
+    $sheet['brut_kg']  = $record_summary['brut_kg'];
+}
+
 if (!$sections) {
     $sections = [[
         'id' => 's1', 'code' => 'genel', 'title' => 'Maliyet Kalemleri', 'basis_type' => 'sheet',
@@ -384,7 +433,10 @@ render_flash();
         <h1><?= $is_edit ? '✏️ Maliyet Hesabı Düzenle' : '🧮 Yeni Maliyet Hesabı' ?></h1>
         <p class="muted">
             <?php if ($is_edit): ?>
-                #<?= (int)$sheet['id'] ?> · <?= h($sheet['sheet_no'] ?: 'Parti no yok') ?>
+                #<?= (int)$sheet['id'] ?> · <?= h($sheet['sheet_no'] ?: 'Belge no yok') ?>
+            <?php elseif ($record_summary !== null): ?>
+                Parti: <strong><?= h($record_summary['parti_no'] ?: '—') ?></strong> — yükleme planından dolduruldu
+                <?php if (!empty($tpl_row)): ?> · Şablon: <strong><?= h($tpl_row['name']) ?></strong><?php endif; ?>
             <?php elseif (!empty($tpl_row)): ?>
                 Şablon: <strong><?= h($tpl_row['name']) ?></strong>
             <?php else: ?>
@@ -420,13 +472,15 @@ render_flash();
 <form method="post" id="mlyForm" autocomplete="off">
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 <input type="hidden" name="status" id="mlyStatus" value="<?= h($sheet['status']) ?>">
+<input type="hidden" name="record_id" value="<?= (int)($sheet['record_id'] ?? $record_id) ?>">
+<input type="hidden" name="brut_kg" value="<?= fmt_edit_num($sheet['brut_kg'] ?? 0, 3) ?>">
 
 <!-- ═══ GENEL BİLGİLER ═══ -->
 <div class="form-section">
     <div class="form-section-title">📋 Genel Bilgiler</div>
     <div class="grid mly-grid">
-        <label>Parti No
-            <input type="text" name="sheet_no" value="<?= h($sheet['sheet_no']) ?>" placeholder="Parti / dosya no">
+        <label>Belge No
+            <input type="text" name="sheet_no" value="<?= h($sheet['sheet_no']) ?>" placeholder="Serbest belge/dosya no">
         </label>
         <label>Tarih
             <input type="date" name="sheet_date" value="<?= h($sheet['sheet_date']) ?>">
