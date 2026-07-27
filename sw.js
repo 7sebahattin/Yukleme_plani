@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v160';
+const CACHE_NAME = 'yukleme-plani-v161';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -36,6 +36,23 @@ self.addEventListener('activate', function(e) {
 // Network-first: önce ağ dene, başarısız olursa önbellekten sun
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
+
+  // OCR motoru + dil verisi (assets/ocr/): MB'larca, sürümle sabit dosyalar.
+  // Cache-first — her taramada yeniden doğrulama için beklenmesin, çevrimdışı da çalışsın.
+  if (e.request.url.indexOf('/assets/ocr/') !== -1) {
+    e.respondWith(
+      caches.match(e.request).then(function(hit) {
+        if (hit) return hit;
+        return fetch(e.request).then(function(response) {
+          var clone = response.clone();
+          caches.open(CACHE_NAME).then(function(cache) { cache.put(e.request, clone); });
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
   e.respondWith(
     fetch(e.request).then(function(response) {
       var clone = response.clone();

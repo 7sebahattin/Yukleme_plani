@@ -1,0 +1,25 @@
+# assets/ocr/ — tarayıcı içi OCR (tesseract.js) dosyaları
+#
+# .gz dil dosyaları ham ikili olarak sunulsun: Apache'nin varsayılan
+# "AddEncoding x-gzip .gz" ayarı devredeyse tarayıcı dosyayı yolda açar ve
+# Content-Length/aralık istekleri beklenmedik davranabilir. (tesseract.js gzip'i
+# sihirli baytlardan tanıdığı için tek başına bu ayar tarama hatası vermez —
+# test edildi; kural yine de aktarımı öngörülebilir tutmak için burada.)
+<IfModule mod_mime.c>
+    RemoveEncoding .gz
+    AddType application/octet-stream .gz
+</IfModule>
+
+# Motor ve dil dosyaları sürümle birlikte sabittir — uzun süre önbelleklensin.
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType application/octet-stream "access plus 1 year"
+    ExpiresByType application/javascript   "access plus 1 year"
+</IfModule>
+
+# PHP çalıştırma kapalı (uploads/ ile aynı yaklaşım)
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+Options -ExecCGI -Indexes
+RemoveHandler .php .phtml .php3 .php4 .php5

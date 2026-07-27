@@ -470,6 +470,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'expor
     exit;
 }
 
+/**
+ * Tarayıcı içi OCR (tesseract.js) dosyaları yerinde mi?
+ * Sunucuda tesseract çalıştırılamadığında bu motor devreye girer —
+ * dosyalar assets/ocr/ altında kendi sitemizden servis edilir, CDN yok.
+ */
+function tarama_browser_assets(): array {
+    $dir  = __DIR__ . '/assets/ocr';
+    $core = $dir . '/core/tesseract-core-simd-lstm.wasm.js';
+
+    $langs = [];
+    foreach (['tur' => 'Türkçe', 'eng' => 'İngilizce'] as $code => $label) {
+        $f = $dir . '/lang/' . $code . '.traineddata.gz';
+        if (is_file($f)) $langs[$code] = ['label' => $label, 'size' => (int)filesize($f)];
+    }
+
+    $ok = is_file($dir . '/tesseract.min.js')
+       && is_file($dir . '/worker.min.js')
+       && is_file($core)
+       && $langs !== [];
+
+    return [
+        'ok'        => $ok,
+        'langs'     => $langs,
+        'core_size' => is_file($core) ? (int)filesize($core) : 0,
+    ];
+}
+
+/** Tarayıcı motoru için dil seçenekleri (yerelde bulunan dil dosyalarından). */
+function tarama_browser_lang_options(array $langs): array {
+    $opts = [];
+    if (isset($langs['tur']))                          $opts['tur']     = 'Türkçe';
+    if (isset($langs['tur']) && isset($langs['eng']))  $opts['tur+eng'] = 'Türkçe + İngilizce';
+    if (isset($langs['eng']))                          $opts['eng']     = 'İngilizce';
+    return $opts;
+}
+
 // =========================================================
 // GET — Sayfa
 // =========================================================
@@ -477,9 +513,30 @@ $tess_bin     = tarama_tesseract_bin();
 $tess_ok      = $tess_bin !== null;
 $shell_ok     = tarama_fn_available('shell_exec');
 $tess_version = $tess_ok ? tarama_tesseract_version() : '';
-$lang_opts    = tarama_lang_options();
 $psm_opts     = tarama_psm_options();
 $has_xlsx     = is_file(__DIR__ . '/vendor/autoload.php');
+
+// Motor seçimi: sunucuda tesseract varsa o (hızlı, indirme yok),
+// yoksa tarayıcı içi tesseract.js, o da yoksa tarama kapalı.
+$server_ocr = $tess_ok && $shell_ok;
+$browser    = tarama_browser_assets();
+$engine     = $server_ocr ? 'server' : ($browser['ok'] ? 'browser' : 'none');
+
+$lang_opts = $engine === 'browser'
+    ? tarama_browser_lang_options($browser['langs'])
+    : tarama_lang_options();
+
+// Tarayıcı motorunda ilk taramada inen yaklaşık boyut (motor + varsayılan dil verisi)
+$browser_mb = 0;
+if ($engine === 'browser') {
+    if (isset($browser['langs']['tur'])) {
+        $lang_bytes = (int)$browser['langs']['tur']['size'];
+    } else {
+        $first      = reset($browser['langs']);
+        $lang_bytes = is_array($first) ? (int)$first['size'] : 0;
+    }
+    $browser_mb = (int)round(($browser['core_size'] + $lang_bytes) / 1048576);
+}
 
 // Sunucu yükleme sınırı 10 MB'ın altındaysa kullanıcıya gerçek sınırı söyle
 $ini_to_bytes = function (string $v): int {
@@ -496,7 +553,8 @@ $srv_limit = min(
     $ini_to_bytes((string)ini_get('upload_max_filesize')) ?: PHP_INT_MAX,
     $ini_to_bytes((string)ini_get('post_max_size')) ?: PHP_INT_MAX
 );
-$eff_limit = min(TARAMA_MAX_BYTES, $srv_limit);
+// Tarayıcı motorunda görsel sunucuya hiç gitmez → PHP yükleme sınırları geçerli değil
+$eff_limit = $engine === 'browser' ? TARAMA_MAX_BYTES : min(TARAMA_MAX_BYTES, $srv_limit);
 
 render_header('Tarama');
 ?>
@@ -603,25 +661,28 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
     </div>
 </div>
 
-<?php if (!$tess_ok): ?>
+<?php if ($engine === 'none'): ?>
 <div class="ocr-note ocr-note-err">
     <span style="font-size:1.2rem;line-height:1">⚠️</span>
     <div>
-        <strong>Tesseract sunucuda kurulu değil.</strong><br>
-        OCR taraması yapılamaz. Sunucuya kurulum (Debian/Ubuntu):
-        <code>sudo apt-get install tesseract-ocr tesseract-ocr-tur</code><br>
-        Farklı bir konumdaysa <code>config/local.php</code> içine
-        <code>define('TESSERACT_BIN', '/tam/yol/tesseract');</code> ekleyin.
-        <?php if (!$shell_ok): ?>
-        <br><strong>Ayrıca <code>shell_exec</code> PHP ayarlarında kapalı</strong> — <code>disable_functions</code> listesinden çıkarılmalı.
-        <?php endif; ?>
+        <strong>OCR motoru bulunamadı.</strong><br>
+        Sunucuda tesseract çalıştırılamıyor
+        <?= !$tess_ok ? '(binary kurulu değil)' : '' ?><?= !$shell_ok ? ' (<code>shell_exec</code> kapalı)' : '' ?>
+        ve tarayıcı motoru dosyaları da eksik.<br>
+        Tarayıcı motoru için <code>assets/ocr/</code> altındaki dosyaların yüklendiğinden emin olun
+        (bkz. <code>assets/ocr/README.md</code>).
     </div>
 </div>
-<?php elseif (!$shell_ok): ?>
-<div class="ocr-note ocr-note-err">
-    <span style="font-size:1.2rem;line-height:1">⚠️</span>
-    <div><strong><code>shell_exec</code> PHP ayarlarında kapalı.</strong> Tesseract kurulu olsa da çalıştırılamıyor —
-        <code>php.ini</code> içindeki <code>disable_functions</code> listesinden çıkarın.</div>
+<?php elseif ($engine === 'browser'): ?>
+<div class="ocr-note">
+    <span style="font-size:1.2rem;line-height:1">💻</span>
+    <div>
+        <strong>Tarama cihazınızda yapılıyor.</strong>
+        Sunucuda tesseract kurulu olmadığı için OCR motoru tarayıcınızda çalışır —
+        <strong>görsel sunucuya hiç gönderilmez.</strong>
+        İlk taramada motor + dil verisi (~<?= (int)$browser_mb ?> MB) indirilir, sonraki taramalar önbellekten anında başlar.
+        <span class="muted">Sunucuya tesseract kurulursa sayfa otomatik olarak (daha hızlı olan) sunucu taramasına geçer.</span>
+    </div>
 </div>
 <?php elseif (!in_array('tur', tarama_installed_langs(), true)): ?>
 <div class="ocr-note ocr-note-warn">
@@ -676,7 +737,7 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
         </div>
 
         <div class="ocr-actions">
-            <button type="button" class="btn btn-primary btn-lg" id="ocrRun" <?= $tess_ok && $shell_ok ? '' : 'disabled' ?>>🔍 Tara</button>
+            <button type="button" class="btn btn-primary btn-lg" id="ocrRun" <?= $engine === 'none' ? 'disabled' : '' ?>>🔍 Tara</button>
             <button type="button" class="btn btn-lg" id="ocrCamBtn">📷 Fotoğraf Çek</button>
         </div>
 
@@ -687,9 +748,15 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
 
         <div class="ocr-msg" id="ocrMsg" role="status"></div>
 
-        <?php if ($tess_version !== ''): ?>
-        <p class="muted" style="margin:12px 0 0"><?= h($tess_version) ?></p>
-        <?php endif; ?>
+        <p class="muted" style="margin:12px 0 0">
+            <?php if ($engine === 'server'): ?>
+                Motor: sunucu · <?= h($tess_version !== '' ? $tess_version : 'tesseract') ?>
+            <?php elseif ($engine === 'browser'): ?>
+                Motor: tarayıcı (tesseract.js) · görsel cihazınızdan çıkmaz
+            <?php else: ?>
+                Motor yok
+            <?php endif; ?>
+        </p>
     </section>
 
     <!-- ── SAĞ: Metin ────────────────────────────────────── -->
@@ -729,6 +796,8 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
 
     var MAX_BYTES = <?= (int)$eff_limit ?>;
     var CSRF      = <?= json_encode(csrf_token(), JSON_UNESCAPED_UNICODE) ?>;
+    var ENGINE    = <?= json_encode($engine) ?>;   // 'server' | 'browser' | 'none'
+    var OCR_BASE  = new URL('assets/ocr/', document.baseURI).href;
     var OK_TYPES  = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png',
                      'image/tiff', 'image/x-tiff', 'image/bmp', 'image/x-ms-bmp', 'image/webp'];
 
@@ -869,18 +938,43 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
         }
     });
 
-    // ── Tara ────────────────────────────────────────────
-    function runOcr() {
-        if (busy) return;
-        if (!current) { say('err', 'Önce bir görsel seçin, sürükleyin veya yapıştırın.'); return; }
-
+    // ── Tarama: ortak başlangıç / bitiş ─────────────────
+    function ocrStart(firstText) {
         busy = true;
         runBt.disabled = true;
         hideMsg();
         prog.classList.add('on');
         bar.className = 'ocr-bar-fill';
         bar.style.width = '0%';
-        progTxt.textContent = 'Yükleniyor…';
+        progTxt.textContent = firstText;
+    }
+    function ocrEnd() {
+        busy = false;
+        runBt.disabled = false;
+        prog.classList.remove('on');
+    }
+    function ocrResult(txt, ms) {
+        text.value = txt || '';
+        refreshStats();
+        if (!txt) {
+            say('warn', 'Görselde okunabilir metin bulunamadı. Daha net/yüksek çözünürlüklü bir ' +
+                        'görsel veya farklı bir sayfa düzeni deneyin.');
+        } else {
+            say('ok', 'Tarama tamam · ' + (ms / 1000).toFixed(1).replace('.', ',') + ' sn · ' +
+                      txt.length + ' karakter okundu.');
+        }
+    }
+
+    function runOcr() {
+        if (busy) return;
+        if (!current) { say('err', 'Önce bir görsel seçin, sürükleyin veya yapıştırın.'); return; }
+        if (ENGINE === 'browser') runBrowserOcr(); else runServerOcr();
+    }
+    runBt.addEventListener('click', runOcr);
+
+    // ── Motor A: sunucu (tesseract + shell_exec) ────────
+    function runServerOcr() {
+        ocrStart('Yükleniyor…');
 
         var fd = new FormData();
         fd.append('action', 'ocr');
@@ -905,9 +999,7 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
         };
 
         xhr.onload = function () {
-            busy = false;
-            runBt.disabled = false;
-            prog.classList.remove('on');
+            ocrEnd();
 
             var res = null;
             try { res = JSON.parse(xhr.responseText); } catch (err) { res = null; }
@@ -933,15 +1025,162 @@ html[data-theme="dark"] .ocr-msg.ok   { border-color: #2b3d5e; color: var(--prim
         };
 
         xhr.onerror = function () {
-            busy = false;
-            runBt.disabled = false;
-            prog.classList.remove('on');
+            ocrEnd();
             say('err', 'Bağlantı hatası. İnternet bağlantınızı kontrol edip tekrar deneyin.');
         };
 
         xhr.send(fd);
     }
-    runBt.addEventListener('click', runOcr);
+
+    // ── Motor B: tarayıcı (tesseract.js — WASM) ─────────
+    // Görsel sunucuya gitmez; motor ve dil verisi kendi sitemizden indirilir.
+    var tjsWorker = null, tjsLang = null;
+
+    function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = function () { reject(new Error('Dosya yüklenemedi: ' + src)); };
+            document.head.appendChild(s);
+        });
+    }
+
+    /* WebAssembly SIMD desteği — core dosyasını buna göre seçiyoruz.
+       (wasm-feature-detect'in ürettiği en küçük SIMD modülü) */
+    function simdOk() {
+        try {
+            return WebAssembly.validate(new Uint8Array([
+                0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123,
+                3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
+            ]));
+        } catch (e) { return false; }
+    }
+
+    /* Worker hataları ve ilerleme takibi modül seviyesinde tutulur:
+       tesseract.js dil indirme hatasını createWorker promise'ine İLETMEZ
+       (errorHandler yoksa mesaj işleyicisinin içinde throw eder), bu yüzden
+       hatayı buradan kendi zincirimize aktarıyoruz. */
+    var tjsFail = null;        // o anki çalışmanın reject fonksiyonu
+    var tjsLastTick = 0;       // son ilerleme anı (takılma bekçisi için)
+
+    function tjsErrorHandler(e) {
+        var m = (e && e.message) ? e.message : String(e || 'bilinmeyen hata');
+        if (tjsFail) tjsFail(new Error(m));
+    }
+
+    var STATUS_TR = {
+        'loading tesseract core':     'OCR motoru yükleniyor',
+        'initializing tesseract':     'Motor hazırlanıyor',
+        'loading language traineddata': 'Dil verisi indiriliyor',
+        'loaded language traineddata':  'Dil verisi hazır',
+        'initializing api':           'Hazırlanıyor',
+        'recognizing text':           'Metin okunuyor'
+    };
+
+    function onTjsLog(m) {
+        tjsLastTick = Date.now();
+        var label = STATUS_TR[m.status] || m.status || 'Çalışıyor';
+        var pct   = Math.round((m.progress || 0) * 100);
+        bar.className = 'ocr-bar-fill';
+        bar.style.width = pct + '%';
+        progTxt.textContent = label + ' · %' + pct;
+    }
+
+    /* Hata sonrası tanılama: motor/dil dosyaları sunucuda gerçekten duruyor mu?
+       (En sık sebep: assets/ocr/ klasörünün siteye yüklenmemiş olması.)
+       Gzip çözümünü tesseract.js sihirli baytlara bakarak kendi hallediyor,
+       bu yüzden Content-Encoding burada bir hata sebebi değil. */
+    function diagnoseLang(lang) {
+        var first = String(lang).split('+')[0];
+        var files = ['lang/' + first + '.traineddata.gz', 'worker.min.js',
+                     'core/' + (simdOk() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js')];
+        return Promise.all(files.map(function (f) {
+            return fetch(OCR_BASE + f, { method: 'HEAD' })
+                .then(function (r) { return r.ok ? null : f + ' (HTTP ' + r.status + ')'; })
+                .catch(function () { return f + ' (erişilemedi)'; });
+        })).then(function (bad) {
+            bad = bad.filter(Boolean);
+            if (bad.length) {
+                return 'Sunucuda bulunamayan dosyalar: ' + bad.join(', ') +
+                       ' — assets/ocr/ klasörünün siteye yüklendiğinden emin olun.';
+            }
+            if (!navigator.onLine) return 'Cihaz çevrimdışı görünüyor.';
+            return '';
+        }).catch(function () { return ''; });
+    }
+
+    function runBrowserOcr() {
+        var lang = document.getElementById('ocrLang').value;
+        var psm  = document.getElementById('ocrPsm').value;
+        var t0   = Date.now();
+
+        ocrStart('OCR motoru hazırlanıyor…');
+
+        // Hata kanalı: worker'dan gelen hatalar ve takılma bu promise'i reddeder
+        var failure = new Promise(function (_, reject) { tjsFail = reject; });
+        tjsLastTick = Date.now();
+        var watchdog = setInterval(function () {
+            // İlerleme 90 sn'dir gelmiyorsa kullanıcıyı sonsuza kadar bekletme
+            if (Date.now() - tjsLastTick > 90000 && tjsFail) {
+                tjsFail(new Error('Motor yanıt vermiyor (zaman aşımı). İnternet bağlantınızı kontrol edip tekrar deneyin.'));
+            }
+        }, 5000);
+
+        var chain = window.Tesseract
+            ? Promise.resolve()
+            : loadScript(OCR_BASE + 'tesseract.min.js');
+
+        var work = chain.then(function () {
+            if (tjsWorker && tjsLang === lang) return tjsWorker;
+            var old = tjsWorker;
+            tjsWorker = null;
+            tjsLang = null;
+            return Promise.resolve(old ? old.terminate() : null).then(function () {
+                return Tesseract.createWorker(lang, 1, {
+                    workerPath: OCR_BASE + 'worker.min.js',
+                    // corePath DOSYA yolu olmalı — dizin verilirse kütüphane
+                    // burada bulunmayan relaxedsimd varyantını isteyebilir.
+                    corePath: OCR_BASE + 'core/' +
+                              (simdOk() ? 'tesseract-core-simd-lstm.wasm.js' : 'tesseract-core-lstm.wasm.js'),
+                    langPath: OCR_BASE + 'lang',
+                    gzip: true,
+                    logger: onTjsLog,
+                    errorHandler: tjsErrorHandler
+                }).then(function (w) {
+                    tjsWorker = w;
+                    tjsLang = lang;
+                    return w;
+                });
+            });
+        }).then(function (w) {
+            return w.setParameters({ tessedit_pageseg_mode: String(psm) }).then(function () {
+                return w.recognize(current);
+            });
+        });
+
+        // Hangisi önce biterse: iş bitti mi, yoksa hata/takılma mı
+        Promise.race([work, failure]).then(function (res) {
+            clearInterval(watchdog);
+            tjsFail = null;
+            ocrEnd();
+            ocrResult(((res && res.data && res.data.text) || '').replace(/[ \t]+\n/g, '\n').trim(), Date.now() - t0);
+        }, function (err) {
+            clearInterval(watchdog);
+            tjsFail = null;
+            ocrEnd();
+            // Bozuk worker'ı bırakma — sonraki denemede temiz kurulsun
+            if (tjsWorker) { try { tjsWorker.terminate(); } catch (e) {} tjsWorker = null; tjsLang = null; }
+            var base = 'Tarama başarısız: ' + (err && err.message ? err.message : err);
+            diagnoseLang(lang).then(function (hint) {
+                say('err', hint ? base + ' — ' + hint : base);
+            });
+        });
+    }
+
+    window.addEventListener('pagehide', function () {
+        if (tjsWorker) { try { tjsWorker.terminate(); } catch (e) {} tjsWorker = null; }
+    });
 
     // ── Metin işlemleri ─────────────────────────────────
     text.addEventListener('input', refreshStats);
