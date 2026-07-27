@@ -219,6 +219,41 @@ function cost_link_match_key(array $material_def): string
 }
 
 /**
+ * material_definitions.type → şablon kalem KODU adayları.
+ *
+ * Eşleştirmenin BİRİNCİL anahtarı budur; isim değil. Sebebi: malzeme adları
+ * kuruluma göre serbestçe değişir ("30X50X14 CEKOK A-9" vs şablondaki
+ * "PLASTİK KASA 30X40X18") ve isim eşleştirmesi gerçek veride pratikte hiç
+ * tutmaz. Tip ise yapısal bir bilgidir — kasa/palet zaten TİPLİ FK'lardır
+ * (loading_pallets.kasa_cinsi_id / palet_tipi_id) ve şablonun hazır kodları
+ * (kasa, palet, kosebent, sapka, serit…) tip adlarıyla neredeyse birebir örtüşür.
+ * Yalnız yazım farkı olan birkaç tip için burada takma ad tanımlanır.
+ */
+function cost_link_type_aliases(): array
+{
+    return [
+        'kasa_cinsi'    => ['kasa', 'kasa_cinsi'],
+        'palet_tipi'    => ['palet', 'palet_tipi'],
+        'kasa_etiketi'  => ['kasa_etiket', 'kasa_etiketi', 'etiket'],
+        'taban_kagidi'  => ['taban_kagit', 'taban_kagidi'],
+        'kenar_kartonu' => ['kenar_karton', 'kenar_kartonu'],
+        'kose_karton'   => ['kose_karton', 'kose_kartonu'],
+        'kraft_kagit'   => ['kraft_kagit', 'kraft_kagidi'],
+    ];
+}
+
+/** Bir malzeme satırı için denenecek şablon kodu adayları (öncelik sırasıyla) */
+function cost_link_code_candidates(array $material_def): array
+{
+    $type = cost_normalize_var((string)($material_def['type'] ?? ''));
+    if ($type === '') return [];
+    $aliases = cost_link_type_aliases();
+    $cands   = $aliases[$type] ?? [$type];
+    if (!in_array($type, $cands, true)) $cands[] = $type;
+    return array_values(array_unique(array_filter($cands)));
+}
+
+/**
  * Bir loading_record'a bağlı malzemeleri gruplayıp toplar: kasa cinsi,
  * palet tipi ve pallet_materials — üçü de material_definitions'a bağlı
  * "malzeme" satırlarıdır (lookup tipleri hariç tutulur).
@@ -231,21 +266,28 @@ function cost_link_materials(int $record_id): array
     $lookup_types = cost_link_lookup_types();
     $ph = implode(',', array_fill(0, count($lookup_types), '?'));
 
-    $sql = "SELECT md.id AS material_id, md.name, md.type, SUM(x.qty) AS qty
+    // Hem ham toplam hem KASA-çarpanlı toplam çekilir; hangisinin geçerli
+    // olduğunu material_calc_basis() belirler (aşağıda). Bazı malzemeler
+    // (etiket, şale, taban kâğıdı, kenar kartonu) palet başına DEĞİL kasa
+    // başına kullanılır — record_view.php'nin sağ paneli de aynı mantığı
+    // uygular. Ham toplam bunları kasa sayısı katı kadar EKSİK gösterirdi.
+    $sql = "SELECT md.id AS material_id, md.name, md.type,
+                   SUM(x.qty) AS qty_raw, SUM(x.qty_kasa) AS qty_kasa
             FROM (
-                SELECT kasa_cinsi_id AS material_id, kasa_adeti AS qty
+                SELECT kasa_cinsi_id AS material_id, kasa_adeti AS qty, kasa_adeti AS qty_kasa
                 FROM loading_pallets
                 WHERE loading_record_id = ? AND kasa_cinsi_id IS NOT NULL AND kasa_adeti > 0
 
                 UNION ALL
 
-                SELECT palet_tipi_id AS material_id, 1 AS qty
+                SELECT palet_tipi_id AS material_id, 1 AS qty, 1 AS qty_kasa
                 FROM loading_pallets
                 WHERE loading_record_id = ? AND palet_tipi_id IS NOT NULL
 
                 UNION ALL
 
-                SELECT pm.material_id AS material_id, pm.quantity AS qty
+                SELECT pm.material_id AS material_id, pm.quantity AS qty,
+                       pm.quantity * lp.kasa_adeti AS qty_kasa
                 FROM pallet_materials pm
                 JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
                 WHERE lp.loading_record_id = ?
@@ -267,12 +309,20 @@ function cost_link_materials(int $record_id): array
 
     $out = [];
     foreach ($rows as $r) {
+        // Kasa bazlı malzemelerde miktar = birim × kasa adedi (helpers.php'deki
+        // material_calc_basis() tek otoritedir — stok/görüntüleme ile tutarlı kalsın).
+        $basis = function_exists('material_calc_basis')
+            ? material_calc_basis((string)$r['type'], (string)$r['name'])
+            : 'palet';
+        $qty = ($basis === 'kasa') ? (float)$r['qty_kasa'] : (float)$r['qty_raw'];
+
         $out[] = [
             'material_id' => (int)$r['material_id'],
             'name'        => (string)$r['name'],
             'type'        => (string)$r['type'],
-            'qty'         => (float)$r['qty'],
+            'qty'         => $qty,
             'key'         => cost_link_match_key($r),
+            'code_keys'   => cost_link_code_candidates($r),
         ];
     }
     return $out;
@@ -325,17 +375,28 @@ function cost_link_apply(array $sections, array $items, array $materials): array
         ]];
     }
 
-    // Miktarı ezilecek/eşleşmeye açık şablon kalemleri: ETİKET → items dizisindeki anahtar.
-    // Eşleştirme 'code' (kasa, kosebent — formül içi kısa referans) üzerinden DEĞİL,
-    // 'label' (PLASTİK KASA 30X40X18 — material_definitions.name ile aynı görünen ad)
-    // üzerinden yapılır. cost_link_match_key() malzeme tarafında da 'name'i kullanıyor —
-    // iki taraf da aynı normalize edilmiş görünen-ad uzayında buluşur.
-    $label_to_key = [];
+    // Eşleşmeye açık şablon kalemleri iki ayrı indekste tutulur:
+    //   1) KOD indeksi  → birincil eşleştirme (malzeme TİPİ üzerinden, güvenilir)
+    //   2) ETİKET indeksi → yedek (kullanıcı şablon kalemini malzeme adıyla
+    //      birebir adlandırdıysa yine tutar)
+    // Yalnız qty_price + qty_formula'sı boş kalemler adaydır; formüllü/per_kg/
+    // fixed/percent kalemlerin miktar kavramı farklıdır, ezmek onları bozar.
+    $code_to_key   = [];
+    $label_to_key  = [];
+    $formula_codes = []; // miktarı FORMÜLLE türeyen kalemler — ezilmez ama "sahiplenir"
     foreach ($items as $ikey => $it) {
         if ((string)($it['calc_type'] ?? 'qty_price') !== 'qty_price') continue;
-        if (trim((string)($it['qty_formula'] ?? '')) !== '') continue;
+        $code_key  = cost_normalize_var((string)($it['code'] ?? ''));
+        $has_qtyf  = trim((string)($it['qty_formula'] ?? '')) !== '';
+        if ($has_qtyf) {
+            // Miktarı [kasa.miktar] gibi bir formülden gelir → miktarına DOKUNULMAZ,
+            // ama malzemeyi temsil ettiği için mükerrer yeni satır da açılmamalı.
+            if ($code_key !== '' && !isset($formula_codes[$code_key])) $formula_codes[$code_key] = $ikey;
+            continue;
+        }
+        if ($code_key !== '' && !isset($code_to_key[$code_key])) $code_to_key[$code_key] = $ikey;
         $label_key = cost_normalize_var((string)($it['label'] ?? ''));
-        if ($label_key !== '') $label_to_key[$label_key] = $ikey;
+        if ($label_key !== '' && !isset($label_to_key[$label_key])) $label_to_key[$label_key] = $ikey;
     }
 
     // Yeni kalemlerin düşeceği bölüm: ilk include_in_total=1, yoksa ilk bölüm
@@ -348,13 +409,54 @@ function cost_link_apply(array $sections, array $items, array $materials): array
     $unmatched = 0;
     $tmp = 0;
     $matched_codes = []; // hangi kalem KODLARI gerçekten bir malzemeyle eşleşti (çağıran taraf için)
+    $used_keys     = []; // bir şablon satırı yalnız BİR malzemeye verilir (aynı tipten
+                         // iki malzeme varsa ikincisi yeni satır olur — veri kaybı yok)
 
     foreach ($materials as $m) {
-        $key = (string)$m['key'];
-        if ($key !== '' && isset($label_to_key[$key])) {
-            $ikey = $label_to_key[$key];
+        $ikey = null;
+
+        // 1) TİP bazlı eşleştirme (birincil)
+        foreach (($m['code_keys'] ?? []) as $cand) {
+            if (isset($code_to_key[$cand]) && !isset($used_keys[$code_to_key[$cand]])) {
+                $ikey = $code_to_key[$cand];
+                break;
+            }
+        }
+
+        // 2) İSİM bazlı eşleştirme (yedek)
+        if ($ikey === null) {
+            $key = (string)$m['key'];
+            if ($key !== '' && isset($label_to_key[$key]) && !isset($used_keys[$label_to_key[$key]])) {
+                $ikey = $label_to_key[$key];
+            }
+        }
+
+        if ($ikey !== null) {
+            $used_keys[$ikey] = true;
             $items[$ikey]['qty'] = $m['qty'];
+            // Etiket, sevkiyatta GERÇEKTEN kullanılan malzemenin adına çekilir —
+            // aksi halde belge "PLASTİK KASA 30X40X18" derken 2.696 adet
+            // "30X50X14 CEKOK A-9" faturalanmış olur (yanıltıcı kayıt).
+            // Kod ve birim fiyat şablondan KORUNUR (formüller ve fiyat listesi bozulmasın).
+            $items[$ikey]['label'] = $m['name'];
             $matched_codes[] = (string)($items[$ikey]['code'] ?? '');
+            $matched++;
+            continue;
+        }
+
+        // 3) Formüllü kalem SAHİPLENMESİ — miktara dokunulmaz (formül yönetir),
+        //    ama malzeme sayfada zaten temsil edildiği için mükerrer satır açılmaz.
+        $claimed = null;
+        foreach (($m['code_keys'] ?? []) as $cand) {
+            if (isset($formula_codes[$cand]) && !isset($used_keys[$formula_codes[$cand]])) {
+                $claimed = $formula_codes[$cand];
+                break;
+            }
+        }
+        if ($claimed !== null) {
+            $used_keys[$claimed] = true;
+            $items[$claimed]['label'] = $m['name'];
+            $matched_codes[] = (string)($items[$claimed]['code'] ?? '');
             $matched++;
             continue;
         }

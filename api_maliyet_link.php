@@ -123,7 +123,13 @@ switch ($action) {
             }
             $code = (string)($it['code'] ?? '');
             if ($code !== '' && isset($matched_set[$code])) {
-                $rows[$code] = ['qty' => (float)$it['qty']];
+                // label de gönderilir — cost_link_apply() eşleşen satırın adını
+                // sevkiyatta GERÇEKTEN kullanılan malzemeye çeker; AJAX yolu bunu
+                // yazmazsa sunucu tarafı (?record=) yoluyla tutarsız kalır.
+                $rows[$code] = [
+                    'qty'   => (float)$it['qty'],
+                    'label' => (string)($it['label'] ?? ''),
+                ];
             }
         }
 

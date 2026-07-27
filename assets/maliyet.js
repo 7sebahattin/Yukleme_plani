@@ -776,7 +776,11 @@ function mlyApplyPartyDetail(form, data) {
         var tr = mlyFindRowByCode(code);
         if (!tr) return;
         var q = tr.querySelector('.mly-qty');
+        // readonly miktar = formülle türeyen satır → miktarına dokunulmaz (formül yönetir),
+        // ama adı yine gerçek malzemeye çekilir (sunucu tarafı yoluyla tutarlı kalsın).
         if (q && !q.hasAttribute('readonly')) q.value = fmtQty(Number(rows[code].qty));
+        var lbl = tr.querySelector('.mly-label');
+        if (lbl && rows[code].label) lbl.value = rows[code].label;
         tr.classList.add('mly-from-record');
     });
 
