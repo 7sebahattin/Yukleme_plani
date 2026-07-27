@@ -806,11 +806,55 @@ function mlyApplyPartyDetail(form, data) {
     }
 }
 
+// Genel bilgiler alanlarından yalnız yükleme planının doldurduğu alanlar —
+// "temiz sayfa" sıfırlaması bunları kapsar (Kur/Navlun/Not gibi maliyetin
+// KENDİ alanlarına dokunulmaz, onlar plan verisiyle zaten ilgisizdir).
+var mlyHeaderFieldNames = ['product', 'firma', 'alici', 'brand', 'gumruk', 'plaka', 'sheet_date', 'net_kg', 'brut_kg'];
+var mlyPristineHeader       = null;
+var mlyPristineSectionsHTML = null;
+
+// Sayfa İLK AÇILDIĞINDAKİ (henüz hiçbir parti uygulanmamış) hâlin
+// anlık görüntüsü. record_id zaten doluysa (?record= derin linkiyle
+// açılmış) gerçek bir "boş" taban yok demektir — o durumda sıfırlama
+// atlanır (mlyResetToPristine no-op kalır), eski birleştirme davranışı sürer.
+function mlySnapshotPristine(form) {
+    // DİKKAT: value="0" boş sayfada bile dolu STRING'tir ve JS'te "0" truthy'dir
+    // — düz bir truthy kontrolü burada YANLIŞ pozitif verir (parseInt şart).
+    if (parseInt((form.elements.record_id || {}).value || '0', 10) > 0) return;
+    mlyPristineHeader = {};
+    mlyHeaderFieldNames.forEach(function (name) {
+        var el = form.elements[name];
+        mlyPristineHeader[name] = el ? el.value : '';
+    });
+    var secsEl = document.getElementById('mlySections');
+    mlyPristineSectionsHTML = secsEl ? secsEl.innerHTML : '';
+}
+
+// Formu sayfa ilk açıldığındaki temiz hâline döndürür — kullanıcının o ana
+// kadar elle girdiği/eklediği HER ŞEYİ (kalemler dahil) siler. Parti
+// seçiminin "temiz sayfaya veri çeker" davranışının temelidir: aksi halde
+// ikinci bir seçim, elle girilenlerle veya önceki partiden kalan
+// satırlarla KARIŞIR/ÇOĞALIR (bkz. kullanıcı geri bildirimi).
+function mlyResetToPristine(form) {
+    if (mlyPristineSectionsHTML === null) return;
+    mlyHeaderFieldNames.forEach(function (name) {
+        var el = form.elements[name];
+        if (el) el.value = mlyPristineHeader[name] || '';
+    });
+    var secsEl = document.getElementById('mlySections');
+    if (secsEl) secsEl.innerHTML = mlyPristineSectionsHTML;
+    document.querySelectorAll('tr.mly-row').forEach(applyRowType);
+    renumber();
+    recalc();
+}
+
 function mlyPartiHasFormData(form) {
     var netKg   = num((form.elements.net_kg || {}).value || '0');
     var firma   = ((form.elements.firma || {}).value || '').trim();
     var product = ((form.elements.product || {}).value || '').trim();
-    return netKg > 0 || firma !== '' || product !== '';
+    var secsEl  = document.getElementById('mlySections');
+    var itemsChanged = !!secsEl && mlyPristineSectionsHTML !== null && secsEl.innerHTML !== mlyPristineSectionsHTML;
+    return netKg > 0 || firma !== '' || product !== '' || itemsChanged;
 }
 
 function initPartiSearch() {
@@ -822,12 +866,15 @@ function initPartiSearch() {
     var clearBtn     = document.getElementById('mlyPartiClear');
     var recordField  = form.elements.record_id;
 
+    mlySnapshotPristine(form);
+
     function closePanel() { panel.hidden = true; mlyPartiActiveIdx = -1; }
 
     function selectItem(it) {
         if (mlyPartiHasFormData(form)) {
-            if (!confirm('Formdaki bilgiler yükleme planından gelen verilerle değiştirilecek. Devam edilsin mi?')) return;
+            if (!confirm('Formdaki mevcut kalemler ve bilgiler silinip seçilen partinin verileriyle değiştirilecek. Devam edilsin mi?')) return;
         }
+        mlyResetToPristine(form);
         recordField.value = it.id;
         input.value = (it.parti_no || '') + (it.firma ? ' · ' + it.firma : '');
         clearBtn.hidden = false;
