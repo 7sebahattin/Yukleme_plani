@@ -156,6 +156,53 @@ function cost_link_record_summary(int $record_id): ?array
 }
 
 /**
+ * Bir cost_templates id'sinden $sections/$items dizilerini, maliyet_form.php'nin
+ * !$is_edit bloğundaki AYNI biçimde (form anahtarları 's1'/'n1' vb.) kurar.
+ * cost_link_apply()'ın beklediği girdi budur. Şablon bulunamazsa boş diziler döner
+ * (çağıran taraf hata üretmeli — bu fonksiyon sessizce boş sayfa varsaymaz).
+ *
+ * NOT: Bu, maliyet_form.php'deki şablon-yükleme mantığının BİREBİR aynısıdır —
+ * iki yerde ayrı ayrı yazılmasın diye buraya taşınmıştır (api_maliyet_link.php
+ * ve maliyet_form.php aynı fonksiyonu çağırır).
+ */
+function cost_link_load_template(int $template_id): array
+{
+    $sections = [];
+    $code_key = [];
+    if ($template_id > 0) {
+        try {
+            $st = db()->prepare("SELECT * FROM cost_template_sections WHERE template_id=? ORDER BY sort_order ASC, id ASC");
+            $st->execute([$template_id]);
+            foreach ($st->fetchAll() as $i => $ts) {
+                $key = 's' . ($i + 1);
+                $code_key[$ts['code']] = $key;
+                $ts['id'] = $key;
+                $sections[] = $ts;
+            }
+        } catch (PDOException $e) {
+            error_log('[cost_link_load_template] ' . $e->getMessage());
+        }
+    }
+
+    $items = [];
+    if ($template_id > 0) {
+        try {
+            $st = db()->prepare("SELECT * FROM cost_template_items WHERE template_id=? ORDER BY sort_order ASC, id ASC");
+            $st->execute([$template_id]);
+            foreach ($st->fetchAll() as $i => $ti) {
+                $ti['id']          = 'n' . ($i + 1);
+                $ti['section_key'] = $code_key[$ti['section_code']] ?? ($sections[0]['id'] ?? 's1');
+                $items[] = $ti;
+            }
+        } catch (PDOException $e) {
+            error_log('[cost_link_load_template] ' . $e->getMessage());
+        }
+    }
+
+    return ['sections' => $sections, 'items' => $items];
+}
+
+/**
  * Bir malzeme tanımı için eşleşme anahtarını üretir.
  *
  * GELECEK KANCASI: material_definitions.cost_item_code alanı eklendiğinde
@@ -258,12 +305,17 @@ function cost_link_packaging_price(string $urun_adi): float
  *   - Eşleşmeyen malzeme → yeni bir qty_price kalemi olarak eklenir
  *     (ilk include_in_total=1 bölüme; fiyatı varsa cost_packaging_prices'tan)
  *
- * Dönen: ['sections'=>..., 'items'=>..., 'matched'=>int, 'unmatched'=>int]
+ * Dönen: ['sections'=>..., 'items'=>..., 'matched'=>int, 'unmatched'=>int,
+ *         'matched_codes'=>string[]] — matched_codes, gerçekten bir malzemeyle
+ * eşleşmiş kalem kodlarıdır (çağıran taraf "hangi alan yükleme planından
+ * geldi" ayrımını buradan yapar — calc_type='qty_price' olan HER kalemi değil).
  * Hiçbir DB yazımı yapmaz.
  */
 function cost_link_apply(array $sections, array $items, array $materials): array
 {
-    if (!$sections) return ['sections' => $sections, 'items' => $items, 'matched' => 0, 'unmatched' => 0];
+    if (!$sections) {
+        return ['sections' => $sections, 'items' => $items, 'matched' => 0, 'unmatched' => 0, 'matched_codes' => []];
+    }
 
     // Miktarı ezilecek/eşleşmeye açık şablon kalemleri: ETİKET → items dizisindeki anahtar.
     // Eşleştirme 'code' (kasa, kosebent — formül içi kısa referans) üzerinden DEĞİL,
@@ -287,11 +339,14 @@ function cost_link_apply(array $sections, array $items, array $materials): array
     $matched = 0;
     $unmatched = 0;
     $tmp = 0;
+    $matched_codes = []; // hangi kalem KODLARI gerçekten bir malzemeyle eşleşti (çağıran taraf için)
 
     foreach ($materials as $m) {
         $key = (string)$m['key'];
         if ($key !== '' && isset($label_to_key[$key])) {
-            $items[$label_to_key[$key]]['qty'] = $m['qty'];
+            $ikey = $label_to_key[$key];
+            $items[$ikey]['qty'] = $m['qty'];
+            $matched_codes[] = (string)($items[$ikey]['code'] ?? '');
             $matched++;
             continue;
         }
@@ -316,7 +371,13 @@ function cost_link_apply(array $sections, array $items, array $materials): array
         ];
     }
 
-    return ['sections' => $sections, 'items' => $items, 'matched' => $matched, 'unmatched' => $unmatched];
+    return [
+        'sections'      => $sections,
+        'items'         => $items,
+        'matched'       => $matched,
+        'unmatched'     => $unmatched,
+        'matched_codes' => $matched_codes,
+    ];
 }
 
 /**
