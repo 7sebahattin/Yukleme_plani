@@ -293,6 +293,20 @@ function db(): PDO {
         } catch (PDOException $_e) { /* role_permissions yoksa sessizce geç */ }
         // ── Eski HKS temizliği sonu ──────────────────────────────────────────────
 
+        // Maliyet-Yükleme-01: cost_sheets'e record_id + brut_kg + linked_at ekle (idempotent)
+        // record_id: kaynak loading_records bağlantısı (UNIQUE değil — alternatif senaryo/revizyon serbest)
+        // linked_at: yalnız ilk oluşturmada NOW() yazılır, asla UPDATE edilmez (bkz. config/cost_link.php)
+        try {
+            $pdo->query("SELECT 1 FROM `cost_sheets` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `cost_sheets` LIKE 'record_id'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `cost_sheets`
+                    ADD COLUMN `record_id` INT NULL,
+                    ADD COLUMN `brut_kg`   DECIMAL(16,3) NOT NULL DEFAULT 0,
+                    ADD COLUMN `linked_at` DATETIME NULL,
+                    ADD INDEX  `idx_cs_record` (`record_id`)");
+            }
+        } catch (PDOException $_csm) { /* cost_sheets yoksa (maliyet modülü henüz açılmamış) — sessizce geç */ }
+
         // DB-Backup-01: database_backups — yedek takip tablosu (idempotent)
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `database_backups` (

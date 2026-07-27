@@ -33,6 +33,9 @@ function cost_migrate(): void
             `product`         VARCHAR(150) NOT NULL DEFAULT '',
             `brand`           VARCHAR(60)  NOT NULL DEFAULT '',
             `depo`            VARCHAR(100) NOT NULL DEFAULT '',
+            `record_id`       INT          NULL,
+            `brut_kg`         DECIMAL(16,3) NOT NULL DEFAULT 0,
+            `linked_at`       DATETIME     NULL,
             `gumruk`          VARCHAR(150) NOT NULL DEFAULT '',
             `plaka`           VARCHAR(60)  NOT NULL DEFAULT '',
             `alici`           VARCHAR(200) NOT NULL DEFAULT '',
@@ -62,7 +65,8 @@ function cost_migrate(): void
             INDEX `idx_cs_product` (`product`),
             INDEX `idx_cs_depo`    (`depo`),
             INDEX `idx_cs_status`  (`status`),
-            INDEX `idx_cs_deleted` (`deleted_at`)
+            INDEX `idx_cs_deleted` (`deleted_at`),
+            INDEX `idx_cs_record`  (`record_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
         "CREATE TABLE IF NOT EXISTS `cost_sheet_sections` (
