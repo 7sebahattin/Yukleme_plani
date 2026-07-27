@@ -196,6 +196,29 @@ function cost_migrate(): void
         catch (PDOException $e) { error_log('[MALIYET MIGRATION] ' . $e->getMessage()); }
     }
 
+    // Maliyet-Yükleme-01 bağlantı kolonları — config/db.php'de de var, burada
+    // TEKRAR denenir çünkü: (a) bu dosya maliyet modülünün kendi migration
+    // girişidir, (b) db.php güncellenmemiş bir kurulumda da modül kendini
+    // onarabilmeli. İdempotent; hata YUTULMAZ, loglanır (yetki eksikse görülsün).
+    try {
+        $pdo->query("SELECT 1 FROM `cost_sheets` LIMIT 0");
+        $cs_cols = $pdo->query("SHOW COLUMNS FROM `cost_sheets`")->fetchAll(PDO::FETCH_COLUMN);
+        $add = [];
+        if (!in_array('record_id', $cs_cols, true)) $add[] = "ADD COLUMN `record_id` INT NULL";
+        if (!in_array('brut_kg',   $cs_cols, true)) $add[] = "ADD COLUMN `brut_kg` DECIMAL(16,3) NOT NULL DEFAULT 0";
+        if (!in_array('linked_at', $cs_cols, true)) $add[] = "ADD COLUMN `linked_at` DATETIME NULL";
+        if ($add) {
+            try {
+                $pdo->exec("ALTER TABLE `cost_sheets` " . implode(', ', $add));
+                error_log('[MALIYET MIGRATION] cost_sheets bağlantı kolonları eklendi: ' . implode(', ', $add));
+            } catch (PDOException $e) {
+                error_log('[MALIYET MIGRATION] cost_sheets ALTER BAŞARISIZ (yetki?): ' . $e->getMessage());
+            }
+        }
+        try { $pdo->exec("ALTER TABLE `cost_sheets` ADD INDEX `idx_cs_record` (`record_id`)"); }
+        catch (PDOException $e) { /* index zaten var veya kolon yok — sorun değil */ }
+    } catch (PDOException $e) { /* cost_sheets yoksa yukarıdaki CREATE zaten oluşturdu */ }
+
     cost_seed_default_template();
 }
 

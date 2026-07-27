@@ -55,10 +55,16 @@ try {
     // Parti No CANLI okunur (LEFT JOIN) — cost_sheets'e kopyalanmış bir alan
     // değildir (bkz. config/cost_link.php madde 1: Belge No ≠ Parti No).
     // 1:1 ilişki (loading_records.id PRIMARY KEY) → satır sayısı çoğalmaz.
+    // record_id kolonu yoksa (migration çalışmamış kurulum) JOIN atlanır —
+    // aksi halde SQL hatası TÜM listeyi boş gösterirdi.
+    $has_link_col = db_has_column('cost_sheets', 'record_id');
+    $link_select  = $has_link_col ? "cs.*, lr.parti_no AS linked_parti_no" : "cs.*, NULL AS linked_parti_no";
+    $link_join    = $has_link_col ? "LEFT JOIN loading_records lr ON lr.id = cs.record_id" : "";
+
     $offset = ($page - 1) * MALIYET_PER_PAGE;
-    $st = db()->prepare("SELECT cs.*, lr.parti_no AS linked_parti_no
+    $st = db()->prepare("SELECT $link_select
                          FROM cost_sheets cs
-                         LEFT JOIN loading_records lr ON lr.id = cs.record_id
+                         $link_join
                          $where
                          ORDER BY COALESCE(cs.sheet_date, DATE(cs.created_at)) DESC, cs.id DESC
                          LIMIT " . MALIYET_PER_PAGE . " OFFSET " . (int)$offset);

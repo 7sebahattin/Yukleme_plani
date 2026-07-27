@@ -234,8 +234,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // record_id/brut_kg BİLEREK $data'nın (ve dolayısıyla yukarıdaki
                 // UPDATE dalının) dışında tutulur — ikisi de yalnız İLK OLUŞTURMADA
                 // yazılır, sonradan hiçbir düzenleme bunlara dokunmaz (madde 8).
-                $data['record_id']  = $record_id_post ?: null;
-                $data['brut_kg']    = num($_POST['brut_kg'] ?? 0);
+                //
+                // Kolon VARLIĞI kontrol edilir: migration (ALTER) bir kurulumda
+                // çalışmamış olabilir (ör. DB kullanıcısının ALTER yetkisi yok).
+                // O durumda bağlantı özelliği devre dışı kalır ama KAYIT ÇALIŞMAYA
+                // DEVAM EDER — maliyet hesabı, bağlantı kolonlarına bağımlı değildir.
+                if (db_has_column('cost_sheets', 'record_id')) $data['record_id'] = $record_id_post ?: null;
+                if (db_has_column('cost_sheets', 'brut_kg'))   $data['brut_kg']   = num($_POST['brut_kg'] ?? 0);
 
                 $cols = array_keys($data);
                 $st = db()->prepare("INSERT INTO cost_sheets (`" . implode('`,`', $cols) . "`, `created_by`)
@@ -248,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // linked_at: SADECE ilk oluşturma anında, SQL NOW() ile (loading_records
                 // ile aynı saat kaynağı — bkz. cost_link_stale_info() PHP/DB saat kayması notu).
                 // Asla güncellenmez; bu satır bu kod yolunda BİR KEZ çalışır.
-                if ($record_id_post > 0) {
+                if ($record_id_post > 0 && db_has_column('cost_sheets', 'linked_at')) {
                     db()->prepare("UPDATE cost_sheets SET linked_at = NOW() WHERE id = ?")->execute([$sheet_id]);
                 }
             }
@@ -302,7 +307,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (PDOException $e) {
             if (db()->inTransaction()) db()->rollBack();
             error_log('[maliyet_form save] ' . $e->getMessage());
-            $errors[] = 'Kayıt sırasında veritabanı hatası oluştu.';
+            // Yöneticiye gerçek hatayı göster — aksi halde canlıda teşhis
+            // imkansız oluyor (log erişimi olmayabilir). Diğer roller için
+            // hassas ayrıntı sızdırmayan genel mesaj korunur.
+            $errors[] = (function_exists('is_admin') && is_admin())
+                ? 'Kayıt sırasında veritabanı hatası: ' . $e->getMessage()
+                : 'Kayıt sırasında veritabanı hatası oluştu.';
         }
     }
 
