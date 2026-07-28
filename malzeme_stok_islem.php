@@ -32,6 +32,23 @@ if (($_GET['ajax'] ?? '') === 'tedarikci_ekle' && $_SERVER['REQUEST_METHOD'] ===
     exit;
 }
 
+// ── AJAX: Seçilen malzeme için güncel stok + son giriş/sevk hareketleri ────
+if (($_GET['ajax'] ?? '') === 'malzeme_bilgi' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $in = json_decode((string)file_get_contents('php://input'), true) ?: [];
+    csrf_check($in['csrf'] ?? null);
+    $mtype = trim((string)($in['mat_type'] ?? ''));
+    $mname = trim((string)($in['mat_name'] ?? ''));
+    $tur   = ($in['tur'] ?? '') === 'sevk' ? 'sevk' : 'giris';
+    if (!isset(ms_material_types()[$mtype]) || $mname === '') {
+        echo json_encode(['ok' => true, 'stok' => [], 'hareketler' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $bilgi = ms_malzeme_bilgi($pdo, $mtype, $mname, $tur);
+    echo json_encode(['ok' => true] + $bilgi, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $ms_types = ms_material_types();
 $ms_units = ms_stock_units();
 
@@ -258,12 +275,6 @@ render_flash();
         </button>
     </div>
 
-    <!-- Son kullanılan firma+belge önerisi -->
-    <div id="ms-last-hint" class="ms-last-hint-panel" hidden>
-        <span class="ms-last-hint-text">Son: <span id="ms-last-hint-info"></span></span>
-        <button type="button" class="btn btn-sm btn-ghost ms-last-hint-btn" onclick="msFillLastHint()">Son bilgileri doldur</button>
-    </div>
-
     <!-- Giriş formu -->
     <div id="msFormGiris" class="card ms-form-card ms-action-card"<?= $mode === 'giris' ? '' : ' hidden' ?>>
         <form method="post" action="<?= h(islem_self_url('giris', $return)) ?>" autocomplete="off">
@@ -326,6 +337,16 @@ render_flash();
                     <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
                 </div>
             </div>
+
+            <!-- Seçili malzeme için güncel stok + son girişler (Pro-09) -->
+            <div id="girisStokInfo" class="ms-stok-info" hidden>
+                <div class="ms-stok-satir" id="girisStokSatir"></div>
+            </div>
+            <div id="girisSonHareket" class="ms-son-hareket" hidden>
+                <div class="ms-son-hareket-baslik">🕘 Son Girişler</div>
+                <div class="ms-son-hareket-liste" id="girisSonHareketListe"></div>
+            </div>
+
             <div style="margin-top:12px">
                 <button type="submit" class="btn btn-primary">💾 Girişi Kaydet</button>
             </div>
@@ -393,6 +414,16 @@ render_flash();
                     <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
                 </div>
             </div>
+
+            <!-- Seçili malzeme için güncel stok + son sevkler (Pro-09) -->
+            <div id="sevkStokInfo" class="ms-stok-info" hidden>
+                <div class="ms-stok-satir" id="sevkStokSatir"></div>
+            </div>
+            <div id="sevkSonHareket" class="ms-son-hareket" hidden>
+                <div class="ms-son-hareket-baslik">🕘 Son Sevkler</div>
+                <div class="ms-son-hareket-liste" id="sevkSonHareketListe"></div>
+            </div>
+
             <div style="margin-top:12px">
                 <button type="submit" class="btn btn-danger">↗ Sevki Kaydet</button>
             </div>
@@ -405,8 +436,6 @@ render_flash();
 var msNamesData  = <?= json_encode($mat_names_by_type, JSON_UNESCAPED_UNICODE) ?>;
 var msPrefill    = <?= json_encode($prefill, JSON_UNESCAPED_UNICODE) ?>;
 var msDepoKey    = 'asyaFresh.materialStock.lastDepo';
-var msFirmaKey   = 'asyaFresh.materialStock.lastFirma';
-var msBelgeKey   = 'asyaFresh.materialStock.lastBelgeNo';
 var msCurrentTab = <?= json_encode($mode, JSON_UNESCAPED_UNICODE) ?>;
 
 function msUpdateNames(form, selectedName) {
@@ -431,6 +460,11 @@ function msUpdateNames(form, selectedName) {
         nameSel.appendChild(opt);
     }
     nameSel.disabled = names.length === 0 && !selectedName;
+    // Liste yeniden kurulduğu için stok/son hareket panelleri güncel değil —
+    // isim seçili kaldıysa (found) yeniden getir, boşaldıysa gizle.
+    // (nameSel.innerHTML değişimi 'change' olayını tetiklemez, bu yüzden
+    // buradan elle çağrılması gerekir.)
+    msLoadMalzemeBilgi(form);
 }
 
 function msTab(tab) {
@@ -467,7 +501,7 @@ function msTab(tab) {
         if (toBelge && carry.belge) toBelge.value = carry.belge;
     }
     msCurrentTab = tab;
-    msCheckHint();
+    msLoadMalzemeBilgi(tab);
 }
 
 function msSetSelect(id, val) {
@@ -487,44 +521,78 @@ function msSetSelect(id, val) {
 
 function msReadLastDepo()  { try { return localStorage.getItem(msDepoKey)  || ''; } catch(e) { return ''; } }
 function msSaveLastDepo(v) { if (!v) return; try { localStorage.setItem(msDepoKey, v);  } catch(e) {} }
-function msReadLastFirma() { try { return localStorage.getItem(msFirmaKey) || ''; } catch(e) { return ''; } }
-function msSaveLastFirma(v){ if (!v) return; try { localStorage.setItem(msFirmaKey, v); } catch(e) {} }
-function msReadLastBelge() { try { return localStorage.getItem(msBelgeKey) || ''; } catch(e) { return ''; } }
-function msSaveLastBelge(v){ if (!v) return; try { localStorage.setItem(msBelgeKey, v); } catch(e) {} }
 
-function msCheckHint() {
-    var hint = document.getElementById('ms-last-hint');
-    if (!hint) return;
-    var firma = msReadLastFirma();
-    var belge = msReadLastBelge();
-    if (!firma && !belge) { hint.hidden = true; return; }
-    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
-    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
-    var firmaFilled = firmaEl && firmaEl.value;
-    var belgeFilled = belgeEl && belgeEl.value;
-    // Göster: en az bir localStorage değeri var VE ilgili alanlar boş
-    if (!firmaFilled && !belgeFilled) {
-        hint.hidden = false;
-        var infoEl = document.getElementById('ms-last-hint-info');
-        if (infoEl) {
-            var parts = [];
-            if (firma) parts.push('Firma: ' + firma);
-            if (belge) parts.push('Belge: ' + belge);
-            infoEl.textContent = parts.join(' · ');
-        }
-    } else {
-        hint.hidden = true;
-    }
+// ── Pro-09: Seçili malzeme için güncel stok + son giriş/sevk hareketleri ──
+var msCsrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+// Yarış durumu koruması FORM BAZLI: giris ve sevk panelleri bağımsızdır — ortak
+// tek sayaç kullanılsaydı, ikisi art arda tetiklendiğinde (ör. ön-dolumda) ilk
+// formun geçerli cevabı "eskimiş" sayılıp atılırdı.
+var msBilgiSeq = { giris: 0, sevk: 0 };
+
+function msFmtMiktar(v, unit) {
+    var n = parseFloat(v) || 0;
+    var opt = (unit === 'adet' || unit === 'paket' || unit === 'top' || unit === 'set' || unit === 'çift')
+        ? { maximumFractionDigits: 0 } : { maximumFractionDigits: 2 };
+    return n.toLocaleString('tr-TR', opt) + ' ' + (unit || '');
+}
+function msFmtTarih(iso) {
+    if (!iso) return '';
+    var p = String(iso).split('-');
+    return p.length === 3 ? (p[2] + '.' + p[1] + '.' + p[0]) : iso;
 }
 
-function msFillLastHint() {
-    var firma = msReadLastFirma();
-    var belge = msReadLastBelge();
-    var firmaEl = document.getElementById(msCurrentTab + 'Firma');
-    var belgeEl = document.getElementById(msCurrentTab + 'Belge');
-    if (firmaEl && !firmaEl.value && firma) firmaEl.value = firma;
-    if (belgeEl && !belgeEl.value && belge) belgeEl.value = belge;
-    msCheckHint();
+function msLoadMalzemeBilgi(form) {
+    var typeSel = document.getElementById(form + 'MatType');
+    var nameSel = document.getElementById(form + 'MatName');
+    var stokBox = document.getElementById(form + 'StokInfo');
+    var stokRow = document.getElementById(form + 'StokSatir');
+    var hkBox   = document.getElementById(form + 'SonHareket');
+    var hkList  = document.getElementById(form + 'SonHareketListe');
+    if (!typeSel || !nameSel || !stokBox || !hkBox) return;
+
+    var mtype = typeSel.value, mname = nameSel.value;
+    if (!mtype || !mname) {
+        stokBox.hidden = true; hkBox.hidden = true;
+        return;
+    }
+
+    var seq = ++msBilgiSeq[form];
+    fetch('malzeme_stok_islem.php?ajax=malzeme_bilgi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        body: JSON.stringify({ csrf: msCsrf, mat_type: mtype, mat_name: mname, tur: form })
+    }).then(function(r) { return r.json(); }).then(function(j) {
+        if (seq !== msBilgiSeq[form] || !j || !j.ok) return;   // eskimiş yanıt veya hata — sessizce geç
+
+        // Güncel stok
+        if (j.stok && j.stok.length) {
+            stokRow.innerHTML = j.stok.map(function(s) {
+                var depoTxt = s.depo ? s.depo : '(depo atanmamış)';
+                return '<span class="ms-stok-chip"><b>' + depoTxt + ':</b> ' + msFmtMiktar(s.kalan, s.unit) + '</span>';
+            }).join('');
+            stokBox.hidden = false;
+        } else {
+            stokRow.innerHTML = '<span class="ms-stok-chip ms-stok-yok">Bu malzemede kayıtlı stok yok (kalan: 0).</span>';
+            stokBox.hidden = false;
+        }
+
+        // Son hareketler — kayıt yoksa panel tamamen gizlenir
+        if (j.hareketler && j.hareketler.length) {
+            hkList.innerHTML = j.hareketler.map(function(h) {
+                var parcalar = [msFmtTarih(h.movement_date), h.depo || '—', msFmtMiktar(h.quantity, h.unit)];
+                if (h.firma) parcalar.push(h.firma);
+                if (h.belge_no) parcalar.push('Belge: ' + h.belge_no);
+                return '<div class="ms-son-hareket-satir">' + parcalar.map(function(p) {
+                    return '<span>' + p.replace(/[&<>"]/g, function(c) {
+                        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c];
+                    }) + '</span>';
+                }).join('') + '</div>';
+            }).join('');
+            hkBox.hidden = false;
+        } else {
+            hkBox.hidden = true;
+        }
+    }).catch(function() { /* sessiz geç — form akışını bozma */ });
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -558,12 +626,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sel) sel.addEventListener('change', function() { msSaveLastDepo(sel.value); });
     });
 
-    // 4) Firma+belge değişince localStorage'a kaydet
+    // 4) Malzeme adı seçilince/değişince güncel stok + son hareketleri getir
     forms.forEach(function(form) {
-        var firmaEl = document.getElementById(form + 'Firma');
-        var belgeEl = document.getElementById(form + 'Belge');
-        if (firmaEl) firmaEl.addEventListener('change', function() { msSaveLastFirma(firmaEl.value); msCheckHint(); });
-        if (belgeEl) belgeEl.addEventListener('change', function() { msSaveLastBelge(belgeEl.value); msCheckHint(); });
+        var nameSel = document.getElementById(form + 'MatName');
+        if (nameSel) nameSel.addEventListener('change', function() { msLoadMalzemeBilgi(form); });
     });
 
     // 5) Çift gönderim engeli: submit'te kaydet butonunu kilitle
@@ -583,8 +649,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // 6) Sayfa açılışında hint durumunu kontrol et
-    msCheckHint();
+    // NOT: ön-dolum ile malzeme adı geldiyse msUpdateNames() (adım 1 içinde
+    // çağrılır) zaten msLoadMalzemeBilgi()'yi tetikler — ayrıca çağırmaya gerek yok.
 });
 </script>
 

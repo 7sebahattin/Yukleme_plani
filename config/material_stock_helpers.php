@@ -436,3 +436,67 @@ function get_material_dropdown_data(PDO $pdo): array {
         'firma_list'        => $firma_list,
     ];
 }
+
+// ── Seçilen malzeme için güncel stok + son hareketler (Pro-09) ───
+// material_id tanımdan çözülebiliyorsa ona göre (isim değişikliğine dayanıklı),
+// çözülemiyorsa (tanımı silinmiş/özel isim) tür+isim eşleşmesiyle filtrelenir.
+// Depo sorumluluğu diğer sorgularla aynı: aktif depo + deposu boş hareketler.
+function ms_malzeme_bilgi(PDO $pdo, string $type, string $name, string $hareket_tipi, int $limit = 5): array {
+    $result = ['stok' => [], 'hareketler' => []];
+    if ($type === '' || $name === '') return $result;
+
+    $mat = ms_find_material_definition($pdo, $type, $name);
+    $mid = $mat ? (int)$mat['id'] : null;
+
+    $where = []; $params = [];
+    if ($mid !== null) {
+        $where[] = "material_id = ?"; $params[] = $mid;
+    } else {
+        $where[] = "material_type = ? AND material_name = ?";
+        $params[] = $type; $params[] = $name;
+    }
+    if (function_exists('user_allowed_depots')) {
+        $ad = user_allowed_depots();
+        if (is_array($ad) && count($ad) > 0) {
+            $where[] = "(depo IN (" . implode(',', array_fill(0, count($ad), '?')) . ") OR TRIM(COALESCE(depo,'')) = '')";
+            foreach ($ad as $d) $params[] = $d;
+        }
+    }
+    $where_sql = 'WHERE ' . implode(' AND ', $where);
+
+    try {
+        // Güncel stok: depo kırılımında kalan miktar (özet ile aynı formül)
+        $st = $pdo->prepare("
+            SELECT depo, unit,
+                SUM(CASE WHEN movement_type='giris' THEN quantity
+                         WHEN movement_type IN ('sevk','kullanim') THEN -quantity
+                         WHEN movement_type='duzeltme' THEN quantity
+                         ELSE 0 END) AS kalan
+            FROM material_stock_movements
+            $where_sql
+            GROUP BY depo, unit
+            HAVING kalan != 0
+            ORDER BY depo
+        ");
+        $st->execute($params);
+        $result['stok'] = $st->fetchAll();
+    } catch (PDOException $e) {}
+
+    try {
+        // Son hareketler: yalnız istenen tür (giris/sevk)
+        $hw = $where; $hp = $params;
+        $hw[] = "movement_type = ?"; $hp[] = $hareket_tipi;
+        $limit = max(1, min(20, $limit));
+        $st = $pdo->prepare("
+            SELECT movement_date, depo, quantity, unit, firma, belge_no
+            FROM material_stock_movements
+            WHERE " . implode(' AND ', $hw) . "
+            ORDER BY movement_date DESC, id DESC
+            LIMIT $limit
+        ");
+        $st->execute($hp);
+        $result['hareketler'] = $st->fetchAll();
+    } catch (PDOException $e) {}
+
+    return $result;
+}

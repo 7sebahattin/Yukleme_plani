@@ -3976,14 +3976,30 @@ body.print-mode .asya-sheet {
     .ms-quick-btns .btn { flex: 1 1 100%; min-height: 44px; }
 }
 
-/* ── Pro-08B: Son firma+belge öneri paneli ────────────── */
-.ms-last-hint-panel {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    background: #f0f9ff; border: 1px solid #bae6fd; border-radius: var(--radius);
-    padding: 7px 12px; margin-bottom: 10px; font-size: .84rem; color: #0369a1;
+/* ── Pro-09: Seçili malzeme için güncel stok paneli ───── */
+.ms-stok-info {
+    margin-top: 12px; padding: 8px 12px; border-radius: var(--radius);
+    background: #f0f9ff; border: 1px solid #bae6fd;
 }
-.ms-last-hint-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-last-hint-btn  { white-space: nowrap; flex-shrink: 0; }
+.ms-stok-satir { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ms-stok-chip { font-size: .84rem; color: #0369a1; }
+.ms-stok-chip b { font-weight: 600; }
+.ms-stok-chip.ms-stok-yok { color: var(--muted); font-style: italic; }
+
+/* ── Pro-09: Seçili malzeme için son giriş/sevk hareketleri ── */
+.ms-son-hareket {
+    margin-top: 10px; padding: 8px 12px; border-radius: var(--radius);
+    background: var(--surface-2, #f8fafc); border: 1px solid var(--border);
+}
+.ms-son-hareket-baslik { font-weight: 600; font-size: .82rem; color: var(--muted); margin-bottom: 6px; }
+.ms-son-hareket-liste { display: flex; flex-direction: column; gap: 4px; }
+.ms-son-hareket-satir {
+    display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .82rem;
+    padding: 4px 0; border-bottom: 1px dashed var(--border);
+}
+.ms-son-hareket-satir:last-child { border-bottom: none; }
+.ms-son-hareket-satir span:first-child { color: var(--muted); min-width: 74px; }
+.ms-son-hareket-satir span:nth-child(2) { font-weight: 600; }
 
 /* ── Pro-08B: Hızlı tekrar kartı detay satırı ─────────── */
 .ms-quick-detail {
@@ -5618,7 +5634,9 @@ html[data-theme="dark"] body:not(.print-mode) .ms-tab-btn:hover { background: #1
 html[data-theme="dark"] body:not(.print-mode) .ms-tab-btn.ms-tab-active,
 html[data-theme="dark"] body:not(.print-mode) .ms-form-tabs .ms-tab-btn.ms-tab-active { background: var(--card); color: var(--text); }
 html[data-theme="dark"] body:not(.print-mode) .ms-action-card .form-control { background: #101722; color: var(--text); }
-html[data-theme="dark"] body:not(.print-mode) .ms-last-hint-panel { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .ms-stok-info { background: #14293a; border-color: #1e3a52; }
+html[data-theme="dark"] body:not(.print-mode) .ms-stok-chip { color: #7dd3fc; }
+html[data-theme="dark"] body:not(.print-mode) .ms-son-hareket { background: #1a2331; }
 
 /* — Beyanlar — */
 html[data-theme="dark"] body:not(.print-mode) .beyan-card,
