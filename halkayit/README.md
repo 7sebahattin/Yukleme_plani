@@ -102,7 +102,7 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 | Satış (yurt içi) | kayıtlı **veya** kayıtsız | referanslı | kayıtlıda işyeri, kayıtsızda adres | var |
 | Sevk Etme | **kayıtlı ZORUNLU** | referanslı | işyeri | yok |
 | Satın Alım | **kayıtlı ZORUNLU** | referanssız | işyeri (kendi) | var |
-| Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | adres | var |
+| Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | işyeri (kendi) | var |
 
 Kılavuzun birebir ifadeleri:
 - *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde kayıtlı
@@ -115,9 +115,14 @@ Kılavuzun birebir ifadeleri:
 - *"İkinci kisi GTB sisteminde kayıtlı kişi değil ise ... GidecekYerIl/Ilce/BeldeId
   '0' olamaz"* → kayıtsız karşı tarafta hedef, işyeri kaydıyla değil **adresle** bildirilir.
 
-**Üreticiden Sevk Alım'da adres ne demek?** Mal üreticiden size gelir; buradaki
-il/ilçe/belde **malın geldiği yeri** (kayıtsız üreticinin bulunduğu yeri) belirtir,
-kendi tesisinizi değil. Arayüzdeki açıklama da bunu söyler.
+**Üreticiden Sevk Alım'da hedef — kılavuzdan bilinçli sapma.** Kılavuz kayıtsız
+ikinci kişide `GidecekYerIl/Ilce/BeldeId` ister; ancak HKS sitesinde bu tür,
+diğer türlerdeki gibi **İşletme Türü → sorgu → işyeri seçimi** ile ilerliyor.
+Bu yüzden `GidecekIsyeriId` gönderiyoruz (mal bize geldiği için işyeri sorgusu
+Satın Alım'daki gibi **kendi vergi numaramızla** yapılır — üreticinin zaten
+HKS'te kaydı yoktur, onun TC'siyle sorgu boş döner). İlk canlı testte HKS
+adres alanlarını isterse `hedefAdres` moduna dönmek yeterlidir; `hks_soap.php`
+her iki biçimi de üretebiliyor.
 
 **Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
 `TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi

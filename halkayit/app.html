@@ -551,7 +551,7 @@
           hedef seçenekleri ona göre açılacak.
         </div>
         <div id="isletmeTuruBlok">
-          <label class="label-vurgu" id="isletmeTuruEtiket">İşletme Türü (gidilen yer)</label>
+          <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
           <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
         </div>
 
@@ -562,14 +562,8 @@
           <div class="mesaj" id="isyeriMesaj"></div>
         </div>
 
-        <!-- Kayıtsız karşı taraf: il / ilçe / belde (yurt içi Satış + Üreticiden Sevk Alım) -->
+        <!-- Kayıtsız alıcı (yurt içi Satış): il / ilçe / belde -->
         <div id="adresAltBlok" class="gizli">
-          <div class="mesaj tamam gizli" id="adresUretNot" style="display:block">
-            ℹ️ Üreticiden Sevk Alım'da mal size gelir; buradaki adres <b>malın geldiği
-            yeri</b> (üreticinin / müstahsilin bulunduğu il / ilçe / belde) belirtir.
-            Karşı taraf GTB'de kayıtlı olmadığı için hedef, işyeri kaydıyla değil
-            adresle bildirilir (kılavuz kuralı).
-          </div>
           <div class="satir2">
             <div><label class="label-vurgu">İl</label><select id="sIl"><option value="">— Seçiniz —</option></select></div>
             <div><label class="label-vurgu">İlçe</label><select id="sIlce"><option value="">— önce il —</option></select></div>
@@ -1708,13 +1702,14 @@ function turDegisti() {
   // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (her yurt içi türde).
   // Doğrulanmadan hedef alanları açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle
   // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
-  // Üreticiden Sevk Alım'da karşı taraf tanım gereği KAYITSIZ → işyeri modu yok.
-  const isyeriMod = yurtIci && kayitli && !uret;
-  // Adres hedefi (il/ilçe/belde): docx — "İkinci kişi GTB'de kayıtlı değilse
-  // GidecekYerIl/Ilce/BeldeId 0 olamaz". Yurt içi Satış'ta kayıtsız alıcı,
-  // Üreticiden Sevk Alım'da ise kayıtsız üretici bu moda girer.
-  const adresMod  = !!ikDogrulandi && !kayitli &&
-                    ((yurtIci && !sevk && !satin && !uret) || uret);
+  // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olduğu hâlde hedef yine işyeri
+  // seçimiyle belirlenir (mal bize gelir → kendi işyerimiz sorgulanır).
+  const isyeriMod = yurtIci && ((kayitli && !uret) || (uret && !!ikDogrulandi));
+  // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
+  const adresMod  = yurtIci && !sevk && !satin && !uret && !!ikDogrulandi && !kayitli;
+  // Ad/Ünvan + Cep: kayıtsız alıcıda ve Üreticiden Sevk Alım'da zorunlu
+  // (docx: ikinci kişi kayıtlı değilse Eposta hariç tüm bilgileri gönderilmeli).
+  const adCepMod  = adresMod || (uret && !!ikDogrulandi);
   // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
   const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
@@ -1729,9 +1724,9 @@ function turDegisti() {
       : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)'));
   // Üreticiden Sevk Alım: ikinci kişi sıfatı "Üretici" olmak ZORUNDA (docx) → kilitli.
   if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
-  // Ad/Ünvan + Cep yalnız KAYITSIZ alıcıda (kayıtlıda HKS kendi kaydından doldurur).
-  $('adBlok').classList.toggle('gizli', !adresMod);
-  $('cepTelBlok').classList.toggle('gizli', !adresMod);
+  // Ad/Ünvan + Cep yalnız KAYITSIZ karşı tarafta (kayıtlıda HKS kendi kaydından doldurur).
+  $('adBlok').classList.toggle('gizli', !adCepMod);
+  $('cepTelBlok').classList.toggle('gizli', !adCepMod);
 
   // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
   $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
@@ -1741,12 +1736,10 @@ function turDegisti() {
   $('adresAltBlok').classList.toggle('gizli', !adresMod);
   $('hedefBekle').classList.toggle('gizli', !bekliyor);
   $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
-  // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir.
-  $('isyeriBaslik').textContent = satin ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
-  // Üreticiden Sevk Alım'da adres malın GELDİĞİ yeri (üreticinin yerini) belirtir.
-  $('isletmeTuruEtiket').textContent = uret
-    ? 'İşletme Türü' : 'İşletme Türü (gidilen yer)';
-  $('adresUretNot').classList.toggle('gizli', !uret);
+  // Satın Alım ve Üreticiden Sevk Alım'da mal SANA gelir: işyeri kendi firmanın
+  // kaydından seçilir (HKS sitesindeki davranışla aynı).
+  $('isyeriBaslik').textContent = (satin || uret)
+    ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
   if (adresMod) illeriYukleGerekiyorsa();
 
   // Kart 4 — fiyat yalnız Sevk Etme'de gizli (Satış, Satın Alım ve
@@ -1962,7 +1955,7 @@ $('btnIkDogrula').onclick = async () => {
       const u = ureticiSifati();
       mesajGoster('ikDurum', u
         ? '✔️ Kayıtsız üretici — bu tür için doğru. Sıfat "Üretici" olarak sabitlendi. ' +
-          'Ad/Soyad, Cep Telefonu ve İl/İlçe/Belde zorunludur.'
+          'Ad/Soyad ve Cep Telefonu zorunludur; malın geleceği işyeri/depoyu Kart 2\'den seçin.'
         : '⚠️ Kayıtsız üretici, ancak HKS sıfat listesinde "Üretici" bulunamadı — ' +
           'listeleri güncelleyin, bu tür sıfat olmadan gönderilemez.', u ? 'tamam' : 'hata');
     } else if (kayitZorunluMu()) {
@@ -1995,7 +1988,9 @@ $('chkYurtDisi').onchange = turDegisti;
 
 // İşletme türü seçilince işyerlerini getir. Kimin işyeri?
 //  • Satış / Sevk Etme → KARŞI TARAFIN TC'siyle (mal ona gidiyor).
-//  • Satın Alım → KENDİ firmanın vergi no'suyla (mal sana geliyor — HKS sitesiyle aynı).
+//  • Satın Alım / Üreticiden Sevk Alım → KENDİ firmanın vergi no'suyla
+//    (mal sana geliyor — HKS sitesiyle aynı). Üreticide zaten kayıt yok,
+//    karşı tarafın TC'siyle sorgu boş dönerdi.
 $('sIsletmeTuru').onchange = async () => {
   const isyeriSel = $('sIsyeri');
   isyeriSel.innerHTML = '<option value="">— önce işletme türü seçin —</option>';
@@ -2003,10 +1998,10 @@ $('sIsletmeTuru').onchange = async () => {
   if (!turId) return;
   // Adres modunda işletme türü sadece GidecekYerIsletmeTuruId'yi belirler; işyeri sorgusu yok.
   if (!$('adresAltBlok').classList.contains('gizli')) return;
-  const satin = satinAlimModuMu();
-  const tc = satin ? String(aktifFirma.vergiNo || '').trim() : $('oIkTc').value.trim();
+  const kendi = satinAlimModuMu() || uretSevkModuMu();
+  const tc = kendi ? String(aktifFirma.vergiNo || '').trim() : $('oIkTc').value.trim();
   if (!tc) {
-    mesajGoster('isyeriMesaj', satin
+    mesajGoster('isyeriMesaj', kendi
       ? 'Firma vergi no bulunamadı — firma kartını kontrol edin.'
       : 'Önce karşı tarafın TC/VKN\'sini girip "Doğrula"ya basın.', 'hata');
     return;
@@ -2018,7 +2013,7 @@ $('sIsletmeTuru').onchange = async () => {
     const liste = j.isyerleri || [];
     isyeriSel.innerHTML = '<option value="">— Seçiniz —</option>';
     if (!liste.length) {
-      mesajGoster('isyeriMesaj', (satin ? 'Firmanıza' : 'Karşı tarafa') + ' ait bu türde işyeri bulunamadı.', 'hata');
+      mesajGoster('isyeriMesaj', (kendi ? 'Firmanıza' : 'Karşı tarafa') + ' ait bu türde işyeri bulunamadı.', 'hata');
       return;
     }
     liste.forEach(w => {
@@ -2249,8 +2244,8 @@ $('btnMalTaslak').onclick = async () => {
 
   if (uret) {
     // ÜRETİCİDEN SEVK ALIM — docx: yalnız KAYITSIZ üretici; ikinci kişi sıfatı
-    // "Üretici"; kayıtsız ikinci kişide Eposta hariç tüm bilgiler zorunlu;
-    // gidecek yer adresle (il/ilçe/belde) bildirilir.
+    // "Üretici"; kayıtsız ikinci kişide Eposta hariç tüm bilgiler zorunlu.
+    // Hedef, diğer türlerdeki gibi işletme türü → işyeri sorgusuyla seçilir.
     if (kayitliMi()) {
       alert('Bu TC GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca kayıtsız üretici içindir — ' +
             'kayıtlı kişiden alım için bildirim türünü "Satın Alım" seçin.'); return;
@@ -2260,9 +2255,7 @@ $('btnMalTaslak').onclick = async () => {
     if (!$('oIkAd').value.trim())  { alert('Kayıtsız üretici için Ad / Soyad zorunludur.'); $('oIkAd').focus(); return; }
     if (!$('oIkCep').value.trim()) { alert('Kayıtsız üretici için Cep Telefonu zorunludur.'); $('oIkCep').focus(); return; }
     if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
-    if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) {
-      alert('Malın geldiği yer için İl / İlçe / Belde seçiniz.'); return;
-    }
+    if (!$('sIsyeri').value)       { alert('İşyeri / depo seçiniz.'); return; }
   } else {
     if (!kayitliMi()) {
       alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı). ' +
@@ -2278,22 +2271,15 @@ $('btnMalTaslak').onclick = async () => {
 
   const ad = (id) => ($(id).selectedOptions[0] ? $(id).selectedOptions[0].textContent : '');
 
-  // Hedef: kayıtlı karşı tarafta işyeri kaydı, kayıtsız üreticide adres (docx).
-  const hedef = uret
-    ? {
-        hedefAdres: true,
-        isletmeTuruId: $('sIsletmeTuru').value,
-        ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
-        ikinciCep: $('oIkCep').value.trim(),
-        ulkeAd: 'Üreticiden Sevk Alım ← ' + ($('oIkAd').value.trim() || tc) + ' (' +
-                ad('sIl') + '/' + ad('sIlce') + ')',
-      }
-    : {
-        isletmeTuruId: $('sIsletmeTuru').value,
-        gidecekIsyeriId: $('sIsyeri').value,
-        gidecekIsyeriAd: ad('sIsyeri'),
-        ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
-      };
+  // Hedef her iki türde de işyeri kaydıyla bildirilir (mal bize gelir → kendi işyerimiz).
+  // Fark: Üreticiden Sevk Alım'da karşı taraf kayıtsız olduğu için ayrıca cep telefonu gider.
+  const hedef = {
+    isletmeTuruId: $('sIsletmeTuru').value,
+    gidecekIsyeriId: $('sIsyeri').value,
+    gidecekIsyeriAd: ad('sIsyeri'),
+    ulkeAd: (uret ? 'Üreticiden Sevk Alım ← ' : 'Satın Alım ← ') + ($('oIkAd').value.trim() || tc),
+  };
+  if (uret) hedef.ikinciCep = $('oIkCep').value.trim();
 
   try {
     await api('/api/taslaklar', 'POST', {
