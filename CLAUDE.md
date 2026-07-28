@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v161` (sw.js — değişiklikte artır)
+**SW Cache:** `yukleme-plani-v162` (sw.js — değişiklikte artır)
 
 ---
 
@@ -20,8 +20,6 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 ├── record_view.php        # Görüntüleme + yazdırma
 ├── record_create/edit.php # Form sayfaları
 ├── kantar.php / kantar_view.php / kantar_raporu.php
-├── tarama.php             # Görselden metin (OCR) — tek dosya, DB kullanmaz
-│                          # assets/ocr/ = tarayıcı içi OCR motoru (tesseract.js)
 ├── stok.php / malzeme_stok.php
 ├── reports.php / hesap.php
 ├── definitions.php / users.php / audit.php
@@ -238,63 +236,6 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 - Kaydetme bölüm/kalemleri silip yeniden yazar (sıralama sadeliği için); id'ler değişir, dışarıdan referans verme.
 - `status='kesin'` kilitler; açmak `maliyet.unlock` + revizyon nedeni ister.
 - Depo damgası `cost_sheets.depo`; liste `depo_sql_column('depo')`, tekil erişim `depot_visible_to_user()`.
-
----
-
-## Tarama (OCR) Modülü
-
-Görselden metin çıkarma aracı. **Tek dosya:** `tarama.php` (PHP + HTML + CSS + JS içinde;
-`style.css`/`app.js`'e dokunulmaz — CSS, style.css değişkenlerini kullanır → açık/koyu tema otomatik).
-
-**Veritabanı kullanmaz** — tablo/migration yok, hiçbir şey kaydedilmez.
-Yetki: `records.read` (`require_perm`), erişim depo seçimine tabidir (`require_login`).
-
-**Akış:** dosya seç / sürükle-bırak / Ctrl+V yapıştır / mobilde kamera → `Tara` →
-OCR → metin sayfada (düzenlenebilir) → `.txt` veya `.xlsx` indir.
-
-### İki motor — otomatik seçim (`$engine`)
-
-| Motor | Koşul | Davranış |
-|---|---|---|
-| `server` | `tesseract` binary'si var **ve** `shell_exec` açık | Görsel POST edilir, sunucu tarar (hızlı, indirme yok) |
-| `browser` | Sunucu olmaz, `assets/ocr/` dosyaları yerinde | tesseract.js (WASM) tarayıcıda tarar — **görsel sunucuya hiç gitmez** |
-| `none` | İkisi de yok | Kırmızı uyarı, `Tara` pasif |
-
-**Canlı sunucu (paylaşımlı hosting) `browser` modunda çalışır** — `shell_exec`
-`disable_functions` içinde ve tesseract kurulu değil. Sunucuya tesseract kurulursa
-sayfa kod değişikliği olmadan `server` moduna geçer.
-
-**Uç noktalar (aynı dosya, POST):**
-- `action=ocr` → JSON (yalnız `server` modunda kullanılır; XHR ile ilerleme çubuğu)
-- `action=export` + `format=txt|xlsx` → dosya indirme (her iki motorda da sunucu üretir)
-
-**Tesseract (server modu):** yol sırası `TESSERACT_BIN` sabiti (config/local.php) → env →
-`command -v` → `/usr/bin`, `/usr/local/bin`. Diller `--list-langs` ile okunur.
-Sunucu kurulumu: `apt-get install tesseract-ocr tesseract-ocr-tur`.
-
-**tesseract.js (browser modu):** dosyalar `assets/ocr/` altında, **CDN yok** —
-bkz. `assets/ocr/README.md` (sürümler + güncelleme komutları). Dikkat edilecekler:
-- `corePath` **dizin değil tam dosya yolu** verilir; SIMD desteği `WebAssembly.validate`
-  ile ölçülüp `tesseract-core-simd-lstm.wasm.js` / `tesseract-core-lstm.wasm.js` seçilir.
-  Dizin verilirse kütüphane repoda olmayan `relaxedsimd` varyantını ister.
-- Ayrı `.js` + `.wasm` ikilisi **çalışmaz** (worker blob URL'den koştuğu için kardeş
-  `.wasm` çözülemiyor) — gömülü `.wasm.js` varyantı kullanılır.
-- Kütüphane dil indirme hatasını `createWorker` promise'ine iletmez → `errorHandler`
-  + 90 sn ilerleme bekçisi (`tjsFail`/`tjsLastTick`) ile hata kendi zincirimize aktarılır.
-  Bunları kaldırma: aksi hâlde eksik dosyada ilerleme çubuğu sonsuza kadar döner.
-- Worker dil değişmedikçe yeniden kullanılır (2. tarama ~0,3 sn).
-- `sw.js` `assets/ocr/` için **cache-first** — MB'lık dosyalar her taramada yeniden
-  doğrulanmasın, çevrimdışı da çalışsın.
-
-**Sınırlar / güvenlik:**
-- 10 MB üst sınır; `server` modunda `upload_max_filesize`/`post_max_size` daha düşükse
-  UI gerçek sınırı yazar (`browser` modunda görsel yüklenmediği için PHP sınırları geçmez).
-- `post_max_size` aşımında PHP `$_POST`'u boşaltır → dosyanın başındaki 413 guard'ı JSON döner (silme).
-- Tür doğrulaması uzantıdan değil `getimagesize()` ile: JPG/PNG/TIFF/BMP/WEBP.
-- Dil ve `--psm` yalnız beyaz listeden; tüm yollar `escapeshellarg`; `timeout` varsa 120 sn sınır.
-- Geçici dosya `sys_get_temp_dir()` (yazılamazsa `storage/tmp`), `finally` içinde **her durumda** silinir.
-- Excel çıktısı `DataType::TYPE_STRING` ile yazılır (formül enjeksiyonu olmaz); PhpSpreadsheet
-  yoksa CSV'ye düşer (BOM + `;`, formül karakteriyle başlayan satıra `'` öneki).
 
 ---
 
