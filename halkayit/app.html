@@ -551,7 +551,7 @@
           hedef seçenekleri ona göre açılacak.
         </div>
         <div id="isletmeTuruBlok">
-          <label class="label-vurgu">İşletme Türü (gidilen yer)</label>
+          <label class="label-vurgu" id="isletmeTuruEtiket">İşletme Türü (gidilen yer)</label>
           <select id="sIsletmeTuru"><option value="">— Seçiniz —</option></select>
         </div>
 
@@ -562,8 +562,13 @@
           <div class="mesaj" id="isyeriMesaj"></div>
         </div>
 
-        <!-- Kayıtsız alıcı (yurt içi Satış): il / ilçe / belde -->
+        <!-- Kayıtsız karşı taraf: il / ilçe / belde (yurt içi Satış + Üreticiden Sevk Alım) -->
         <div id="adresAltBlok" class="gizli">
+          <div class="mesaj tamam gizli" id="adresUretNot" style="display:block">
+            ℹ️ Üreticiden Sevk Alım'da mal size gelir — buraya <b>malın varacağı kendi
+            tesisinizin</b> il / ilçe / beldesini seçin. (Kılavuz: karşı taraf GTB'de
+            kayıtlı değilse gidecek yer işyeri kaydıyla değil adresle bildirilir.)
+          </div>
           <div class="satir2">
             <div><label class="label-vurgu">İl</label><select id="sIl"><option value="">— Seçiniz —</option></select></div>
             <div><label class="label-vurgu">İlçe</label><select id="sIlce"><option value="">— önce il —</option></select></div>
@@ -1613,7 +1618,6 @@ function listeleriDoldur() {
   const satinMi = (ad) => { const n = trNorm(ad); return n.includes('satın') || n.includes('satin'); };
   const turFiltre = (listeler.bildirimTurleri || []).filter(x => {
     const n = trNorm(x.ad);
-    if (n.includes('üretici') || n.includes('uretici')) return false;
     return satinMi(x.ad) || n.includes('sevk') || satisMi(x.ad);
   });
   const turSel = $('sTur');
@@ -1621,9 +1625,8 @@ function listeleriDoldur() {
   (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
-    // Aktif: Satış + Sevk Etme + Satın Alım (üçü de REFERANSLI akış — docx 0.1.14).
-    // "Üreticiden Sevk Alım" kapalı: docx'e göre referanslı yapılamaz (satır 4076),
-    // referanssız + malın tam tanımı gerektirir — ayrı akış olarak eklenecek.
+    // Aktif türler: Satış + Sevk Etme + Satın Alım (referanslı) ve
+    // Üreticiden Sevk Alım (referanssız — kayıtsız müstahsilden alım).
     if (!satisMi(x.ad) && !sevkMi(x.ad) && !satinMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
     turSel.appendChild(o);
   });
@@ -1652,40 +1655,79 @@ function turAdiById(id) {
   const t = ((listeler && listeler.bildirimTurleri) || []).find(x => String(x.id) === String(id));
   return t ? t.ad : '';
 }
-function sevkModuMu() { return trNorm(turAdiById($('sTur').value)).includes('sevk'); }
+// "Üreticiden Sevk Alım" — docx: "Sadece kayıtsız üreticiden yapılan sevkiyat
+// işlemlerinde kullanılacak bildirim türüdür." Kayıtsız müstahsilden alımın
+// TEK geçerli yolu budur; Satın Alım'da karşı taraf kayıtlı OLMAK ZORUNDA.
+// DİKKAT: türün adı "Sevk" içerdiği için sevkModuMu() bunu DIŞLAR — yoksa
+// Sevk Etme kurallarına (kayıtlı zorunlu + referanslı) düşer.
+function uretSevkModuMu() {
+  const n = trNorm(turAdiById($('sTur').value));
+  return n.includes('üretici') || n.includes('uretici');
+}
+function sevkModuMu() {
+  return !uretSevkModuMu() && trNorm(turAdiById($('sTur').value)).includes('sevk');
+}
 function satinAlimModuMu() {
+  if (uretSevkModuMu()) return false;
   const n = trNorm(turAdiById($('sTur').value));
   return n.includes('satın') || n.includes('satin');
 }
-// Yurt içi mi? Sevk Etme ve Satın Alım her zaman yurt içi; Satış'ta tik kaldırılınca.
-function yurtIciMi() { return sevkModuMu() || satinAlimModuMu() || !$('chkYurtDisi').checked; }
+// Yurt içi mi? Sevk Etme / Satın Alım / Üreticiden Sevk Alım her zaman yurt içi.
+function yurtIciMi() {
+  return sevkModuMu() || satinAlimModuMu() || uretSevkModuMu() || !$('chkYurtDisi').checked;
+}
 // Doğrulanmış karşı taraf GTB'de kayıtlı mı?
 function kayitliMi() { return !!(ikDogrulandi && ikDogrulandi.kayitliMi); }
 // Karşı tarafın kayıtlı olması ZORUNLU mu? (docx: Sevk Etme + Satın Alım)
+// Üreticiden Sevk Alım BUNUN DIŞINDA — orada kayıtsız olması gerekir.
 function kayitZorunluMu() { return sevkModuMu() || satinAlimModuMu(); }
+
+// Üreticiden Sevk Alım'da ikinci kişi sıfatı "Üretici" OLMALIDIR (docx).
+// Listede Üretici sıfatı varsa seçilip kilitlenir; yoksa null döner (kayıt engellenir).
+function ureticiSifati() {
+  return ((listeler && listeler.sifatlar) || []).find(s => {
+    const n = trNorm(s.ad);
+    return n.includes('üretici') || n.includes('uretici');
+  }) || null;
+}
+function ikSifatUreticiSabitle() {
+  const u = ureticiSifati();
+  const sel = $('sIkSifat');
+  if (u) { sel.value = String(u.id); sel.disabled = true; }
+  else   { sel.disabled = false; }
+}
 
 // Tüm koşullu alanların görünürlüğünü tek yerden ayarlar.
 function turDegisti() {
   const sevk = sevkModuMu();
   const satin = satinAlimModuMu();
+  const uret = uretSevkModuMu();
   const yurtIci = yurtIciMi();
   const kayitli = kayitliMi();
   // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (her yurt içi türde).
   // Doğrulanmadan hedef alanları açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle
   // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
-  const isyeriMod = yurtIci && kayitli;
-  // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
-  const adresMod  = yurtIci && !sevk && !satin && !!ikDogrulandi && !kayitli;
+  // Üreticiden Sevk Alım'da karşı taraf tanım gereği KAYITSIZ → işyeri modu yok.
+  const isyeriMod = yurtIci && kayitli && !uret;
+  // Adres hedefi (il/ilçe/belde): docx — "İkinci kişi GTB'de kayıtlı değilse
+  // GidecekYerIl/Ilce/BeldeId 0 olamaz". Yurt içi Satış'ta kayıtsız alıcı,
+  // Üreticiden Sevk Alım'da ise kayıtsız üretici bu moda girer.
+  const adresMod  = !!ikDogrulandi && !kayitli &&
+                    ((yurtIci && !sevk && !satin && !uret) || uret);
   // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
   const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
-  // Kart 1 — Yurt Dışı tiki yalnız Satış'ta anlamlı; Sevk/Satın Alım'da gizli.
-  $('yurtDisiBlok').classList.toggle('gizli', sevk || satin);
+  // Kart 1 — Yurt Dışı tiki yalnız Satış'ta anlamlı; diğer yurt içi türlerde gizli.
+  $('yurtDisiBlok').classList.toggle('gizli', sevk || satin || uret);
   $('yurtDisiNot').textContent = yurtIci ? '(yurt içi)' : '(yurt dışı)';
   $('karsiTarafBlok').classList.toggle('gizli', !yurtIci);
-  $('karsiBaslik').textContent = satin
-    ? 'Karşı Taraf (Satıcı) — GTB\'de kayıtlı olmalı'
-    : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)');
+  $('karsiBaslik').textContent = uret
+    ? 'Karşı Taraf (Üretici / Müstahsil) — GTB\'de KAYITSIZ olmalı'
+    : (satin
+      ? 'Karşı Taraf (Satıcı) — GTB\'de kayıtlı olmalı'
+      : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)'));
+  // Üreticiden Sevk Alım: ikinci kişi sıfatı "Üretici" olmak ZORUNDA (docx) → kilitli.
+  if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
   // Ad/Ünvan + Cep yalnız KAYITSIZ alıcıda (kayıtlıda HKS kendi kaydından doldurur).
   $('adBlok').classList.toggle('gizli', !adresMod);
   $('cepTelBlok').classList.toggle('gizli', !adresMod);
@@ -1700,15 +1742,21 @@ function turDegisti() {
   $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
   // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir.
   $('isyeriBaslik').textContent = satin ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
+  // Üreticiden Sevk Alım'da mal üreticiden SİZE gelir → adres, malın varacağı yer.
+  $('isletmeTuruEtiket').textContent = uret
+    ? 'İşletme Türü (malın geleceği kendi tesisiniz)' : 'İşletme Türü (gidilen yer)';
+  $('adresUretNot').classList.toggle('gizli', !uret);
   if (adresMod) illeriYukleGerekiyorsa();
 
-  // Kart 4 — fiyat yalnız Sevk Etme'de gizli (Satış ve Satın Alım fiyatlı).
+  // Kart 4 — fiyat yalnız Sevk Etme'de gizli (Satış, Satın Alım ve
+  // Üreticiden Sevk Alım fiyatlı — alım işlemi).
   $('fiyatBlok').classList.toggle('gizli', sevk);
 
-  // REFERANSSIZ MOD (Satın Alım): künye seçimi YOK — malın tam tanımı girilir.
-  // Satın alımda mal bize DIŞARIDAN gelir; kendi stok künyemizi referans
-  // göstermek anlamsız olurdu (docx: referanssız bildirimde malın tanımı zorunlu).
-  const referanssiz = satin;
+  // REFERANSSIZ MOD (Satın Alım + Üreticiden Sevk Alım): künye seçimi YOK —
+  // malın tam tanımı girilir. Satın alımda mal bize DIŞARIDAN gelir; kendi stok
+  // künyemizi referans göstermek anlamsız olurdu. Üreticiden Sevk Alım'da ise
+  // docx zaten referanslı bildirimi YASAKLIYOR.
+  const referanssiz = satin || uret;
   $('kartUrunKunye').classList.toggle('gizli', referanssiz);
   $('kartMal').classList.toggle('gizli', !referanssiz);
   if (referanssiz) {
@@ -1888,11 +1936,28 @@ $('btnIkDogrula').onclick = async () => {
     if (ikDogrulandi.kayitliMi) {
       // Sıfat listesini kişinin gerçek sıfatlarıyla sınırla (tek sıfatsa otomatik seç).
       ikSifatlariDoldur(ikDogrulandi.sifatlar);
-      mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı — ad/ünvan HKS kaydından alınacak, girmenize gerek yok.', 'tamam');
+      if (uretSevkModuMu()) {
+        // docx: bu tür "sadece kayıtsız üreticiden" yapılan işlemler içindir.
+        mesajGoster('ikDurum', '⚠️ Bu kişi GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca ' +
+          'KAYITSIZ üretici içindir — kayıtlı kişiden alım için bildirim türünü ' +
+          '"Satın Alım" yapın.', 'hata');
+      } else {
+        mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı — ad/ünvan HKS kaydından alınacak, girmenize gerek yok.', 'tamam');
+      }
+    } else if (uretSevkModuMu()) {
+      // Kayıtsız üretici → bu türün tam hedef kitlesi.
+      ikSifatlariDoldur([]);
+      const u = ureticiSifati();
+      mesajGoster('ikDurum', u
+        ? '✔️ Kayıtsız üretici — bu tür için doğru. Sıfat "Üretici" olarak sabitlendi. ' +
+          'Ad/Soyad, Cep Telefonu ve İl/İlçe/Belde zorunludur.'
+        : '⚠️ Kayıtsız üretici, ancak HKS sıfat listesinde "Üretici" bulunamadı — ' +
+          'listeleri güncelleyin, bu tür sıfat olmadan gönderilemez.', u ? 'tamam' : 'hata');
     } else if (kayitZorunluMu()) {
       mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — ' +
         (satinAlimModuMu() ? 'Satın Alım' : 'Sevk Etme') +
-        ' için karşı taraf GTB\'de kayıtlı olmalıdır. Bu kişiyle bu işlem yapılamaz.', 'hata');
+        ' için karşı taraf GTB\'de kayıtlı olmalıdır. Kayıtsız müstahsilden alım için ' +
+        'bildirim türünü "Üreticiden Sevk Alım" seçin.', 'hata');
     } else {
       ikSifatlariDoldur([]);  // kayıtsız: tüm sıfatlar seçilebilir
       mesajGoster('ikDurum', 'ℹ️ Kayıtsız alıcı. Ad/Ünvan, Cep Telefonu ve İl/İlçe/Belde zorunludur.', 'tamam');
@@ -2165,25 +2230,69 @@ $('btnMalTaslak').onclick = async () => {
   if (ithalatMi() && !$('sGelenUlke').value) { alert('İthalatta gelen ülke seçiniz.'); return; }
 
   // Karşı taraf + hedef (Kart 1 & 2) doğrulaması
+  const uret = uretSevkModuMu();
   const tc = $('oIkTc').value.trim();
   if (!tc) { alert('Karşı taraf (satıcı) TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
   if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) { alert('Karşı tarafı "Doğrula" ile kontrol edin.'); return; }
-  if (!kayitliMi()) { alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı).'); return; }
-  if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
-  if (!$('sIsletmeTuru').value) { alert('İşletme türü seçiniz.'); return; }
-  if (!$('sIsyeri').value)      { alert('İşyeri / depo seçiniz.'); return; }
+
+  if (uret) {
+    // ÜRETİCİDEN SEVK ALIM — docx: yalnız KAYITSIZ üretici; ikinci kişi sıfatı
+    // "Üretici"; kayıtsız ikinci kişide Eposta hariç tüm bilgiler zorunlu;
+    // gidecek yer adresle (il/ilçe/belde) bildirilir.
+    if (kayitliMi()) {
+      alert('Bu TC GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca kayıtsız üretici içindir — ' +
+            'kayıtlı kişiden alım için bildirim türünü "Satın Alım" seçin.'); return;
+    }
+    if (!ureticiSifati())          { alert('HKS sıfat listesinde "Üretici" bulunamadı. Listeleri güncelleyin.'); return; }
+    if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı belirlenemedi ("Üretici" olmalı).'); return; }
+    if (!$('oIkAd').value.trim())  { alert('Kayıtsız üretici için Ad / Soyad zorunludur.'); $('oIkAd').focus(); return; }
+    if (!$('oIkCep').value.trim()) { alert('Kayıtsız üretici için Cep Telefonu zorunludur.'); $('oIkCep').focus(); return; }
+    if (!$('sIsletmeTuru').value)  { alert('İşletme türü (malın geleceği tesis) seçiniz.'); return; }
+    if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) {
+      alert('Malın varacağı yer için İl / İlçe / Belde seçiniz.'); return;
+    }
+  } else {
+    if (!kayitliMi()) {
+      alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı). ' +
+            'Kayıtsız müstahsilden alım için "Üreticiden Sevk Alım" türünü seçin.'); return;
+    }
+    if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
+    if (!$('sIsletmeTuru').value) { alert('İşletme türü seçiniz.'); return; }
+    if (!$('sIsyeri').value)      { alert('İşyeri / depo seçiniz.'); return; }
+  }
   if (!$('oPlaka').value.trim() && !($('oBelgeNo').value.trim() && $('sBelgeTipi').value)) {
     alert('Araç plakası veya belge no + belge tipi giriniz.'); return;
   }
 
   const ad = (id) => ($(id).selectedOptions[0] ? $(id).selectedOptions[0].textContent : '');
+
+  // Hedef: kayıtlı karşı tarafta işyeri kaydı, kayıtsız üreticide adres (docx).
+  const hedef = uret
+    ? {
+        hedefAdres: true,
+        isletmeTuruId: $('sIsletmeTuru').value,
+        ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
+        ikinciCep: $('oIkCep').value.trim(),
+        ulkeAd: 'Üreticiden Sevk Alım ← ' + ($('oIkAd').value.trim() || tc) + ' (' +
+                ad('sIl') + '/' + ad('sIlce') + ')',
+      }
+    : {
+        isletmeTuruId: $('sIsletmeTuru').value,
+        gidecekIsyeriId: $('sIsyeri').value,
+        gidecekIsyeriAd: ad('sIsyeri'),
+        ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
+      };
+
   try {
     await api('/api/taslaklar', 'POST', {
       firmaId: aktifFirma.id,
       // Referanssız: tek satır, künye no 0
       satirlar: [{ kunyeNo: '0', miktar }],
-      ortak: {
-        yurtIci: true, referanssiz: true, kayitZorunlu: true,
+      ortak: Object.assign({
+        yurtIci: true, referanssiz: true,
+        // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olmalı → sunucudaki
+        // "kayıtlı mı" son kontrolü bu türde çalıştırılmaz.
+        kayitZorunlu: !uret,
         fiyatGonder: true, fiyat,
         sifatId: $('sSifat').value,
         bildirimTuruId: $('sTur').value,
@@ -2201,16 +2310,12 @@ $('btnMalTaslak').onclick = async () => {
         gelenUlkeId:   ithalatMi() ? $('sGelenUlke').value : 0,
         analiz:        $('chkAnaliz').checked,
         urunAd:        ad('sMalUrun'),
-        // Karşı taraf + hedef
+        // Karşı taraf (hedef alanları aşağıdaki `hedef` nesnesinden gelir)
         ikinciTc: tc, ikinciSifatId: $('sIkSifat').value, ikinciAd: $('oIkAd').value.trim(),
-        isletmeTuruId: $('sIsletmeTuru').value,
-        gidecekIsyeriId: $('sIsyeri').value,
-        gidecekIsyeriAd: ad('sIsyeri'),
         plaka: $('oPlaka').value.trim().toUpperCase(),
         belgeNo: $('oBelgeNo').value.trim(),
         belgeTipiId: $('sBelgeTipi').value || 0,
-        ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
-      },
+      }, hedef),
     });
     if (duzenlenenTaslakId) {
       try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); } catch (e) {}

@@ -94,6 +94,33 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
   doğurur. Bu yüzden arayüzde "önce taslağa kaydet → sonra onayla → gönder"
   akışı var. Bu iki aşamalı güvenlik akışını kaldırmayın.
 
+### 5.1 Bildirim türleri ve karşı taraf kuralı (kılavuz 0.1.14)
+
+| Tür | Karşı taraf | Referans | Hedef | Fiyat |
+|---|---|---|---|---|
+| Satış (yurt dışı) | gerekmez (`YurtDisiMi=true`) | referanslı | ülke | var |
+| Satış (yurt içi) | kayıtlı **veya** kayıtsız | referanslı | kayıtlıda işyeri, kayıtsızda adres | var |
+| Sevk Etme | **kayıtlı ZORUNLU** | referanslı | işyeri | yok |
+| Satın Alım | **kayıtlı ZORUNLU** | referanssız | işyeri (kendi) | var |
+| Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | adres | var |
+
+Kılavuzun birebir ifadeleri:
+- *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde kayıtlı
+  bir kişi olmalıdır."* → kayıtsız müstahsilden **Satın Alım yapılamaz**, servis reddeder.
+- *"Üreticiden Sevk Alım: Sadece kayıtsız üreticiden yapılan sevkiyat işlemlerinde
+  kullanılacak bildirim türüdür."* → kayıtsız müstahsilin TEK geçerli yolu budur.
+- *"Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi 'Üretici' olmalıdır."*
+- *"İkinci kişi ... GTB sisteminde kayıtlı değilse 'Eposta' bilgisi hariç diğer
+  bilgilerinde gönderilmesi gerekir."* → `AdSoyad` + `CepTel` zorunlu olur.
+- *"İkinci kisi GTB sisteminde kayıtlı kişi değil ise ... GidecekYerIl/Ilce/BeldeId
+  '0' olamaz"* → kayıtsız karşı tarafta hedef, işyeri kaydıyla değil **adresle** bildirilir.
+
+**Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
+`TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi
+alanı **yoktur**. HKS web portalı kayıtsız üretici tanımlarken doğum tarihi isteyebilir;
+servis şemasında karşılığı bulunmadığı için gönderilmez. Canlı şema değişmişse
+`BildirimService.svc?xsd=xsd2` çıktısıyla doğrulayıp buraya not düşün.
+
 ---
 
 ## 6. İlk test önerisi
