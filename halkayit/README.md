@@ -115,6 +115,10 @@ Kılavuzun birebir ifadeleri:
 - *"İkinci kisi GTB sisteminde kayıtlı kişi değil ise ... GidecekYerIl/Ilce/BeldeId
   '0' olamaz"* → kayıtsız karşı tarafta hedef, işyeri kaydıyla değil **adresle** bildirilir.
 
+**Üreticiden Sevk Alım'da adres ne demek?** Mal üreticiden size gelir; buradaki
+il/ilçe/belde **malın geldiği yeri** (kayıtsız üreticinin bulunduğu yeri) belirtir,
+kendi tesisinizi değil. Arayüzdeki açıklama da bunu söyler.
+
 **Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
 `TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi
 alanı **yoktur**. HKS web portalı kayıtsız üretici tanımlarken doğum tarihi isteyebilir;

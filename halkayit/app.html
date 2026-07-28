@@ -565,9 +565,10 @@
         <!-- Kayıtsız karşı taraf: il / ilçe / belde (yurt içi Satış + Üreticiden Sevk Alım) -->
         <div id="adresAltBlok" class="gizli">
           <div class="mesaj tamam gizli" id="adresUretNot" style="display:block">
-            ℹ️ Üreticiden Sevk Alım'da mal size gelir — buraya <b>malın varacağı kendi
-            tesisinizin</b> il / ilçe / beldesini seçin. (Kılavuz: karşı taraf GTB'de
-            kayıtlı değilse gidecek yer işyeri kaydıyla değil adresle bildirilir.)
+            ℹ️ Üreticiden Sevk Alım'da mal size gelir; buradaki adres <b>malın geldiği
+            yeri</b> (üreticinin / müstahsilin bulunduğu il / ilçe / belde) belirtir.
+            Karşı taraf GTB'de kayıtlı olmadığı için hedef, işyeri kaydıyla değil
+            adresle bildirilir (kılavuz kuralı).
           </div>
           <div class="satir2">
             <div><label class="label-vurgu">İl</label><select id="sIl"><option value="">— Seçiniz —</option></select></div>
@@ -1742,9 +1743,9 @@ function turDegisti() {
   $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
   // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir.
   $('isyeriBaslik').textContent = satin ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
-  // Üreticiden Sevk Alım'da mal üreticiden SİZE gelir → adres, malın varacağı yer.
+  // Üreticiden Sevk Alım'da adres malın GELDİĞİ yeri (üreticinin yerini) belirtir.
   $('isletmeTuruEtiket').textContent = uret
-    ? 'İşletme Türü (malın geleceği kendi tesisiniz)' : 'İşletme Türü (gidilen yer)';
+    ? 'İşletme Türü' : 'İşletme Türü (gidilen yer)';
   $('adresUretNot').classList.toggle('gizli', !uret);
   if (adresMod) illeriYukleGerekiyorsa();
 
@@ -1766,12 +1767,23 @@ function turDegisti() {
   }
 }
 
-// ===== REFERANSSIZ MAL BİLGİLERİ (Satın Alım) =====
+// ===== REFERANSSIZ MAL BİLGİLERİ (Satın Alım + Üreticiden Sevk Alım) =====
 let malListeler = null;      // { nitelikler, uretimSekli, birimler }
 let malIllerYuklendi = false;
+let malHazirIslem = null;    // devam eden hazırlık — eşzamanlı çağrılar aynı işi bekler
 
-async function malListeleriHazirla() {
-  if (!aktifFirma) return;
+// turDegisti() bunu await etmeden çağırır; taslak geri yüklemesi ise await eder.
+// İkisi aynı anda çalışırsa doldurSel select'i yeniden kurup geri yüklenen
+// seçimi silebilir — bu yüzden hazırlık tek sefere indirgenir.
+function malListeleriHazirla() {
+  if (!malHazirIslem) {
+    malHazirIslem = malListeleriHazirlaIc().catch(e => { malHazirIslem = null; throw e; });
+  }
+  return malHazirIslem;
+}
+
+async function malListeleriHazirlaIc() {
+  if (!aktifFirma) { malHazirIslem = null; return; }
   // Ürün + ülke listeleri ana referans önbelleğinden gelir
   if (listeler) {
     if (!$('sMalUrun').options.length || $('sMalUrun').options.length < 2) {
@@ -2247,9 +2259,9 @@ $('btnMalTaslak').onclick = async () => {
     if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı belirlenemedi ("Üretici" olmalı).'); return; }
     if (!$('oIkAd').value.trim())  { alert('Kayıtsız üretici için Ad / Soyad zorunludur.'); $('oIkAd').focus(); return; }
     if (!$('oIkCep').value.trim()) { alert('Kayıtsız üretici için Cep Telefonu zorunludur.'); $('oIkCep').focus(); return; }
-    if (!$('sIsletmeTuru').value)  { alert('İşletme türü (malın geleceği tesis) seçiniz.'); return; }
+    if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) {
-      alert('Malın varacağı yer için İl / İlçe / Belde seçiniz.'); return;
+      alert('Malın geldiği yer için İl / İlçe / Belde seçiniz.'); return;
     }
   } else {
     if (!kayitliMi()) {
@@ -2535,6 +2547,31 @@ async function taslakDuzenle(t) {
     turDegisti();
     if (o.ulkeId) $('sUlke').value = String(o.ulkeId);
     if (o.fiyat)  $('oFiyat').value = String(o.fiyat).replace('.', ',');
+  }
+
+  // REFERANSSIZ (Satın Alım + Üreticiden Sevk Alım): malın tam tanımı künye
+  // listesinden değil bu karttan gelir — taslaktan geri yüklenmesi gerekir.
+  // Kademeli listeler (cins ← ürün+üretim şekli, ilçe ← il, belde ← ilçe) sırayla
+  // beklenir; aksi hâlde alt seçenekler dolmadan value atanır ve boş kalır.
+  if (o.referanssiz) {
+    await malListeleriHazirla();
+    if (o.malinNiteligi) $('sMalNitelik').value = String(o.malinNiteligi);
+    // sMalNitelik.onchange BİLEREK çağrılmıyor: ithalat/toplama niteliğinde
+    // üretim şeklini kendiliğinden değiştirip taslaktaki değeri ezerdi.
+    $('gelenUlkeBlok').classList.toggle('gizli', !ithalatMi());
+    if (o.gelenUlkeId && String(o.gelenUlkeId) !== '0') $('sGelenUlke').value = String(o.gelenUlkeId);
+    if (o.uretimSekli)   $('sUretimSekli').value = String(o.uretimSekli);
+    if (o.malinKodNo)    $('sMalUrun').value = String(o.malinKodNo);
+    await malCinsleriYukle();
+    if (o.malinCinsiId)  $('sMalCins').value = String(o.malinCinsiId);
+    if (o.miktarBirimId) $('sMiktarBirim').value = String(o.miktarBirimId);
+    $('chkAnaliz').checked = !!o.analiz;
+    if (o.uretimIlId)    { $('sUretimIl').value = String(o.uretimIlId);     await $('sUretimIl').onchange(); }
+    if (o.uretimIlceId)  { $('sUretimIlce').value = String(o.uretimIlceId); await $('sUretimIlce').onchange(); }
+    if (o.uretimBeldeId) $('sUretimBelde').value = String(o.uretimBeldeId);
+    const ms = (t.satirlar || [])[0];
+    if (ms && ms.miktar) $('oMalMiktar').value = String(ms.miktar).replace('.', ',');
+    if (o.fiyat)         $('oMalFiyat').value = String(o.fiyat).replace('.', ',');
   }
 
   // Ürün + künyeler: güncel sorgu → taslak satırlarını işaretle
