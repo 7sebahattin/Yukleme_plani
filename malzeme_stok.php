@@ -15,13 +15,14 @@ $pdo = db();
 // Yalnızca güncel stok filtreleri: q / kategori / tur / depo / durum (+ csv).
 // Tarih, hareket tipi ve eski ozet_* parametreleri kaldırıldı.
 function ms_url(array $override = [], array $drop = []): string {
-    global $f_q, $f_kategori, $f_tur, $f_depo, $f_durum;
+    global $f_q, $f_kategori, $f_tur, $f_depo, $f_durum, $f_tumu;
     $base = [
         'q'        => $f_q        ?? '',
         'kategori' => $f_kategori ?? '',
         'tur'      => $f_tur      ?? '',
         'depo'     => $f_depo     ?? '',
         'durum'    => $f_durum    ?? '',
+        'tumu'     => !empty($f_tumu) ? '1' : '',
     ];
     foreach ($override as $k => $v) { $base[$k] = (string)$v; }
     foreach ($drop as $k) { unset($base[$k]); }
@@ -60,6 +61,9 @@ $f_tur      = trim($_GET['tur']  ?? '');
 $f_depo     = trim($_GET['depo'] ?? '');
 $f_durum    = trim($_GET['durum'] ?? '');
 if (!in_array($f_durum, ['stokta', 'negatif', 'sifir', ''], true)) $f_durum = '';
+// Hareketsizleri göster: varsayılan KAPALI — hiç giriş/çıkışı olmayan (yalnızca
+// tanımlı, hiç işlem görmemiş) malzeme/depo satırları sayfa açılışında gizlenir.
+$f_tumu     = ($_GET['tumu'] ?? '') === '1';
 $is_csv     = isset($_GET['csv']);
 
 // ── Stok özeti — config/material_stock_helpers.php ────────
@@ -74,19 +78,20 @@ $ozet_rows = ms_filter_summary_rows($all_rows, [
     'depo'     => $f_depo,
     'durum'    => $f_durum,
 ]);
+if (!$f_tumu) {
+    $ozet_rows = array_values(array_filter($ozet_rows,
+        fn($r) => (float)$r['total_giris'] > 0 || (float)$r['total_cikis'] > 0));
+}
 
-// ── Kart sayıları — tam setten (filtreden bağımsız genel stok sağlığı) ──
-$card_toplam  = count($all_rows);
-$card_stokta  = count(array_filter($all_rows, fn($r) => (float)$r['kalan'] > 0));
+// ── Negatif stok sayısı — tam setten (filtreden bağımsız, alt uyarı için) ──
 $card_negatif = count(array_filter($all_rows, fn($r) => (float)$r['kalan'] < 0));
-$card_sifir   = count(array_filter($all_rows, fn($r) => (float)$r['kalan'] == 0.0));
 
 // ── Dropdown listeleri (filtre çubuğu için: depo + ad datalist) ──
 $ms_dd             = get_material_dropdown_data($pdo);
 $depo_list         = $ms_dd['depo_list'];
 $mat_names_by_type = $ms_dd['mat_names_by_type'];
 
-$herhangi_filtre = $f_q !== '' || $f_kategori !== '' || $f_tur !== '' || $f_depo !== '' || $f_durum !== '';
+$herhangi_filtre = $f_q !== '' || $f_kategori !== '' || $f_tur !== '' || $f_depo !== '' || $f_durum !== '' || $f_tumu;
 $ms_can_write    = can('stok.write');
 
 // ── CSV export — Stok Özeti (csv=ozet) ─────────────────────
@@ -253,6 +258,12 @@ render_flash();
                     <option value="sifir"   <?= $f_durum === 'sifir'   ? 'selected' : '' ?>>Sıfır</option>
                 </select>
             </div>
+            <div class="form-group stok-fg-check">
+                <label class="stok-fg-check-label">
+                    <input type="checkbox" name="tumu" value="1" <?= $f_tumu ? 'checked' : '' ?>>
+                    Hareketsizleri de göster
+                </label>
+            </div>
         </div>
         <div class="stok-filter-actions">
             <button type="submit" class="btn btn-primary">Filtrele</button>
@@ -261,30 +272,6 @@ render_flash();
             <?php endif; ?>
         </div>
     </form>
-</div>
-
-<!-- ── Özet kartları (Pro-01) — kalan bazlı, tıklanabilir filtre ── -->
-<div class="stok-ozet-grid stok-ozet-grid-4">
-    <a href="<?= ms_url([], ['durum']) ?>" class="stok-kart stok-kart-sayim" style="text-decoration:none;color:inherit">
-        <div class="stok-kart-label">Toplam Malzeme</div>
-        <div class="stok-kart-val"><?= $card_toplam ?></div>
-        <div class="stok-kart-sub">farklı malzeme/depo</div>
-    </a>
-    <a href="<?= ms_url(['durum' => 'stokta']) ?>" class="stok-kart stok-kart-kalan" style="text-decoration:none;color:inherit">
-        <div class="stok-kart-label">Stokta Olan</div>
-        <div class="stok-kart-val"><?= $card_stokta ?></div>
-        <div class="stok-kart-sub">kalan &gt; 0</div>
-    </a>
-    <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="stok-kart <?= $card_negatif > 0 ? 'stok-kart-fire' : 'stok-kart-sayim' ?>" style="text-decoration:none;color:inherit">
-        <div class="stok-kart-label">Negatif Stok<?= $card_negatif > 0 ? ' ⚠' : '' ?></div>
-        <div class="stok-kart-val <?= $card_negatif > 0 ? 'stok-negatif' : '' ?>"><?= $card_negatif ?></div>
-        <div class="stok-kart-sub">kalan &lt; 0</div>
-    </a>
-    <a href="<?= ms_url(['durum' => 'sifir']) ?>" class="stok-kart stok-kart-sayim" style="text-decoration:none;color:inherit">
-        <div class="stok-kart-label">Sıfır Stok</div>
-        <div class="stok-kart-val"><?= $card_sifir ?></div>
-        <div class="stok-kart-sub">kalan = 0</div>
-    </a>
 </div>
 
 <!-- ── Stok Özeti Tablosu ─────────────────────────────────── -->
@@ -404,17 +391,12 @@ render_flash();
     <?php endif; ?>
 </div>
 
-<!-- ── Alt eylem linkleri (formlar Pro-03'te, hareketler Pro-02'de ayrıldı) ── -->
-<div style="margin-top:18px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-    <?php if ($ms_can_write): ?>
-    <a href="malzeme_stok_islem.php?mode=giris" class="btn btn-primary">➕ Stok İşlemi Yap</a>
-    <?php endif; ?>
-    <a href="malzeme_hareketleri.php" class="btn btn-secondary">📜 Tüm Stok Hareketlerini Gör →</a>
-</div>
+<!-- NOT: Alt eylem linkleri (➕ Stok İşlemi Yap / 📜 Tüm Stok Hareketlerini Gör)
+     kaldırıldı — page-head'te aynı bağlantılar zaten var, tekrarıydı. -->
 
 <?php if ($card_negatif > 0 && $f_durum !== 'negatif'): ?>
 <!-- ── Negatif Stok Uyarısı (kısa) ─────────────────────────── -->
-<div class="ms-neg-uyari" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px">
+<div class="ms-neg-uyari" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:18px">
     <div class="ms-neg-uyari-head" style="margin:0">⚠ Negatif stokta <?= $card_negatif ?> malzeme/depo var — çıkış girişten fazla olabilir.</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
         <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="btn btn-sm btn-danger" style="white-space:nowrap">Negatifleri Göster</a>

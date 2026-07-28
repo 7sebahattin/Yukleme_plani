@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v165` (sw.js — değişiklikte artır)
+**SW Cache:** `yukleme-plani-v166` (sw.js — değişiklikte artır)
 
 ---
 

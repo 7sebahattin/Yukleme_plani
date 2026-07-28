@@ -3583,6 +3583,12 @@ body.print-mode .asya-sheet {
 
 .stok-fg       { flex: 1; min-width: 140px; }
 .stok-fg-wide  { flex: 1.5; min-width: 150px; }
+.stok-fg-check { flex: 0 0 auto; display: flex; align-items: flex-end; padding-bottom: 2px; }
+.stok-fg-check-label {
+    display: flex; align-items: center; gap: 6px; font-size: .86rem; color: var(--text);
+    white-space: nowrap; cursor: pointer; user-select: none;
+}
+.stok-fg-check-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); }
 
 .stok-ozet-grid {
     display: grid;
@@ -3680,6 +3686,7 @@ body.print-mode .asya-sheet {
     .stok-sayim-input { font-size: 16px !important; }
     .stok-kart-val    { font-size: 1.1rem; }
     .stok-fg, .stok-fg-wide { flex: 1 1 calc(50% - 5px); min-width: 130px; }
+    .stok-fg-check { flex: 1 1 100%; padding-bottom: 4px; }
 }
 @media (max-width: 480px) {
     .stok-fg, .stok-fg-wide { flex: 1 1 100%; }
