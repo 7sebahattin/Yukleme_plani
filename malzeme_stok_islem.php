@@ -332,10 +332,14 @@ render_flash();
                     <input type="text" name="mv_firma" id="girisFirma" class="form-control"
                            placeholder="Yazmaya başlayın…" autocomplete="off" data-uppercase="tr">
                 </div>
-                <div class="form-group ms-form-full">
+                <div class="form-group">
                     <label class="form-label">Not</label>
                     <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
                 </div>
+            </div>
+
+            <div class="ms-submit-row">
+                <button type="submit" class="btn btn-primary">💾 Girişi Kaydet</button>
             </div>
 
             <!-- Seçili malzeme için güncel stok + son girişler (Pro-09) -->
@@ -345,10 +349,6 @@ render_flash();
             <div id="girisSonHareket" class="ms-son-hareket" hidden>
                 <div class="ms-son-hareket-baslik">🕘 Son Girişler</div>
                 <div class="ms-son-hareket-liste" id="girisSonHareketListe"></div>
-            </div>
-
-            <div style="margin-top:12px">
-                <button type="submit" class="btn btn-primary">💾 Girişi Kaydet</button>
             </div>
         </form>
     </div>
@@ -409,10 +409,14 @@ render_flash();
                     <input type="text" name="mv_firma" id="sevkFirma" class="form-control"
                            placeholder="Yazmaya başlayın…" autocomplete="off" data-uppercase="tr">
                 </div>
-                <div class="form-group ms-form-full">
+                <div class="form-group">
                     <label class="form-label">Not</label>
                     <input type="text" name="mv_note" class="form-control" placeholder="İsteğe bağlı">
                 </div>
+            </div>
+
+            <div class="ms-submit-row">
+                <button type="submit" class="btn btn-danger">↗ Sevki Kaydet</button>
             </div>
 
             <!-- Seçili malzeme için güncel stok + son sevkler (Pro-09) -->
@@ -422,10 +426,6 @@ render_flash();
             <div id="sevkSonHareket" class="ms-son-hareket" hidden>
                 <div class="ms-son-hareket-baslik">🕘 Son Sevkler</div>
                 <div class="ms-son-hareket-liste" id="sevkSonHareketListe"></div>
-            </div>
-
-            <div style="margin-top:12px">
-                <button type="submit" class="btn btn-danger">↗ Sevki Kaydet</button>
             </div>
         </form>
     </div>

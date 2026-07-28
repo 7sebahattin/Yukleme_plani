@@ -3946,6 +3946,11 @@ body.print-mode .asya-sheet {
     .ms-form-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* ── Pro-10: Kaydet butonu — form alanlarının hemen altında, masaüstünde
+   sağa yaslı (stok/son hareket panelleri kalabalıklaşınca altta kalmasın) ── */
+.ms-submit-row { margin-top: 14px; display: flex; justify-content: flex-end; }
+@media (max-width: 767px) { .ms-submit-row { justify-content: stretch; } }
+
 /* ── Sprint 33: Giriş/Sevk/Düzeltme açık turuncu panel ── */
 .ms-action-card {
     background: #fff7ed;

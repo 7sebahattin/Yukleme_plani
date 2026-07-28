@@ -197,17 +197,6 @@ render_flash();
     </div>
 </div>
 
-<?php if ($card_negatif > 0 && $f_durum !== 'negatif'): ?>
-<!-- ── Negatif Stok Uyarısı (kısa) ─────────────────────────── -->
-<div class="ms-neg-uyari" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-    <div class="ms-neg-uyari-head" style="margin:0">⚠ Negatif stokta <?= $card_negatif ?> malzeme/depo var — çıkış girişten fazla olabilir.</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="btn btn-sm btn-danger" style="white-space:nowrap">Negatifleri Göster</a>
-        <a href="malzeme_stok_rapor.php?durum=negatif" class="btn btn-sm btn-ghost" style="white-space:nowrap">🖨️ Negatif Raporu</a>
-    </div>
-</div>
-<?php endif; ?>
-
 <!-- ── Güncel stok bilgisi ─────────────────────────────────── -->
 <p class="ms-info-note" style="font-size:.82rem;color:var(--muted);margin:0 0 12px">
     ℹ️ Bu ekran <strong>güncel stok durumunu</strong> gösterir. Tarih bazlı giriş/çıkış incelemek için
@@ -422,6 +411,17 @@ render_flash();
     <?php endif; ?>
     <a href="malzeme_hareketleri.php" class="btn btn-secondary">📜 Tüm Stok Hareketlerini Gör →</a>
 </div>
+
+<?php if ($card_negatif > 0 && $f_durum !== 'negatif'): ?>
+<!-- ── Negatif Stok Uyarısı (kısa) ─────────────────────────── -->
+<div class="ms-neg-uyari" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px">
+    <div class="ms-neg-uyari-head" style="margin:0">⚠ Negatif stokta <?= $card_negatif ?> malzeme/depo var — çıkış girişten fazla olabilir.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="<?= ms_url(['durum' => 'negatif']) ?>" class="btn btn-sm btn-danger" style="white-space:nowrap">Negatifleri Göster</a>
+        <a href="malzeme_stok_rapor.php?durum=negatif" class="btn btn-sm btn-ghost" style="white-space:nowrap">🖨️ Negatif Raporu</a>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Stok giriş/sevk/düzeltme formları Pro-03'te malzeme_stok_islem.php'ye taşındı. -->
 <!-- Hareket listesi + düzenleme modalı Pro-02'de malzeme_hareketleri.php'ye taşındı. -->
