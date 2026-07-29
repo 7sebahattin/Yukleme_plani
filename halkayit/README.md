@@ -83,8 +83,17 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 - **Namespace çift slash içerir:** `http://www.gtb.gov.tr//WebServices` (yazım hatası değil).
 - **Alan sırası şemaya bağlı:** zarf sırası `Istek, Password, ServicePassword, UserName`.
 - **Referans künye sorgusunda tarih ZORUNLU.** Tarihsiz sorgu `GTBGLB00000001` verir.
-- **"1 ay" sınırı takvim ayıdır** (30 gün değil). Bu yüzden geriye dönük sorgu
-  takvim ayı pencerelerine bölünür.
+- **"1 ay" sınırı, takvim ayı (AddMonths) aritmetiğiyle ölçülüyor, gün sayısıyla
+  DEĞİL.** Geriye dönük sorgu bu yüzden pencerelere bölünür (`hks_guvenli_pencereler()`).
+  İlk yaklaşım "bitişin günü, bir önceki ayın aynı gününe (kısaysa kırpılarak)
+  taşınması" şeklindeydi; bitiş günü 29/30/31 olup hedef Şubat'a denk geldiğinde
+  (örn. 29 Mart → 28 Şubat) bu, HKS'in kabul ettiğinden 1-3 gün daha uzun bir
+  pencere üretip **"Bitiş Tarihi, başlangıç tarihinden en fazla 1 ay büyük
+  olabilir"** hatasını tetikliyordu — çünkü Şubat'ın en geç günü (28/29), "1 ay
+  sonrası"na hiçbir şekilde ulaşamıyor (matematiksel olarak imkânsız bir kısıt).
+  Çözüm: sabit **27 günlük** adımlarla pencereleme — en kısa ay olan Şubat'ın
+  (28 gün) bile altında kaldığından, HKS hangi kesin algoritmayı kullanırsa
+  kullansın sınırı asla aşmaz.
 - **`UrunId` fiilen zorunludur** (şemada opsiyonel görünse de). Arayüz ürün seçtirir.
 - **`KisiSifat` filtresi bilerek gönderilmez** — gönderilince bazı künyeler (farklı
   sıfatla bildirilmiş olanlar) listeden düşüyor.
