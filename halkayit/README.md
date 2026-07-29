@@ -124,6 +124,34 @@ HKS'te kaydı yoktur, onun TC'siyle sorgu boş döner). İlk canlı testte HKS
 adres alanlarını isterse `hedefAdres` moduna dönmek yeterlidir; `hks_soap.php`
 her iki biçimi de üretebiliyor.
 
+**Üreticiden Sevk Alım — kuralların nerede uygulandığı.** Bu türün tüm kılavuz
+kuralları hem tarayıcıda hem **sunucuda** denetlenir. `app.html` statik bir dosyadır
+ve tarayıcı/SW önbelleğinden eski sürümü sunulabilir; CANLI ve geri alınamaz bir
+sisteme giden alanların doğruluğu yalnız arayüze bırakılamaz.
+
+| Kural (kılavuz) | Arayüz | Sunucu |
+|---|---|---|
+| `AdSoyad` + `CepTel` zorunlu (kayıtsız ikinci kişi) | `btnMalTaslak` | `hks_bildirim_dogrula()` |
+| İkinci kişi sıfatı = **Üretici** | `ureticiSifati()` + kilitli alan | `hks_bildirim_dogrula()` (ad, `listeler_cache`'ten) |
+| Referanslı bildirim **YASAK** | künye kartı gizli | `hks_bildirim_dogrula()` (`referanssiz` + künye no "0") |
+| Üretici GTB'de **KAYITSIZ** olmalı | `btnIkDogrula` sonrası engel | `taslak_gonder` — gönderim öncesi GTB sorgusu |
+
+Sunucudaki tür tespiti `ortak.uretSevk` bayrağı **veya** `ortak.turAd` içinde
+"üretici" geçmesiyle yapılır (`hks_uret_sevk_mi()`) — eski taslaklarda yalnız
+`turAd` bulunur, onlar da denetimden geçer.
+
+`CepTel` CANLI servise **yalnız rakam** olarak gider: "0532 123 45 67" / "+90 532…"
+gibi girişler `hks_bildirim_xml()` içinde temizlenir (tek otorite), arayüz de alandan
+çıkışta aynı temizliği gösterir. `Eposta` hiçbir durumda gönderilmez (kılavuz: kayıtsız
+ikinci kişide zorunlu alan olmaktan çıkarıldı).
+
+**Gönderim öncesi AYNA denetimi.** `taslak_gonder`, geri alınamaz bildirimden hemen
+önce karşı tarafın GTB kayıt durumunu **tekrar** sorar; taslak kaydedildikten sonra
+durum değişmiş olabilir. İki yön de kapalıdır: Sevk Etme / Satın Alım'da karşı taraf
+kayıtlı **değilse**, Üreticiden Sevk Alım'da üretici kayıtlı **ise** gönderim durur ve
+taslak silinmez. (Üretici sevk `kayitZorunlu=false` gönderdiği için bu türde eskiden
+hiçbir ön denetim çalışmıyordu — arada GTB'ye kaydolan üretici fark edilmiyordu.)
+
 **Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
 `TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi
 alanı **yoktur**. HKS web portalı kayıtsız üretici tanımlarken doğum tarihi isteyebilir;

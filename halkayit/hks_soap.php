@@ -354,10 +354,14 @@ function hks_bildirim_xml($satirlar, $ortak) {
     }
 
     // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
+    // docx: karşı taraf GTB'de KAYITLI değilse "Eposta" hariç tüm bilgileri
+    // gönderilmelidir (AdSoyad + CepTel). Eposta hiçbir durumda gönderilmez.
+    // CepTel yalnız RAKAM olarak gider — kullanıcı "0532 123 45 67" yazmış olabilir.
     if ($yurtIci) {
+      $cep = preg_replace('/\D+/', '', (string)($ortak['ikinciCep'] ?? ''));
       $ik = [];
-      if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc($ortak['ikinciAd']) . '</b:AdSoyad>';
-      if (!empty($ortak['ikinciCep'])) $ik[] = '<b:CepTel>' . hks_esc($ortak['ikinciCep']) . '</b:CepTel>';
+      if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc(trim($ortak['ikinciAd'])) . '</b:AdSoyad>';
+      if ($cep !== '')                 $ik[] = '<b:CepTel>' . $cep . '</b:CepTel>';
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
       $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
