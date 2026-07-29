@@ -69,8 +69,41 @@ function hks_firma_bul($id) {
   ];
 }
 
+// Bildirim türü "Üreticiden Sevk Alım" mı? Tür ID'leri HKS'ten gelir ve sabit
+// olduklarını varsayamayız; karar tür ADINDAN verilir. Arayüz ayrıca açık bir
+// `uretSevk` bayrağı gönderir — eski taslaklarda yalnız `turAd` bulunduğu için
+// ikisi birden desteklenir.
+function hks_uret_sevk_mi($o) {
+  if (!empty($o['uretSevk'])) return true;
+  $ad = trim((string)($o['turAd'] ?? ''));
+  return $ad !== '' && mb_stripos($ad, 'üretici', 0, 'UTF-8') !== false;
+}
+
+// Cep telefonu: yalnız rakamlar. Kullanıcı "0532 123 45 67" / "+90 532..." gibi
+// yazabilir; CANLI servise ham metin gitmesin.
+function hks_cep_rakam($s) {
+  return preg_replace('/\D+/', '', (string)$s);
+}
+
+// Sıfat id'sinin adı — önbellekteki referans listesinden (listeler_cache).
+// Liste henüz indirilmemişse null döner (o zaman ad denetimi atlanır).
+function hks_sifat_adi($sifatId) {
+  $cache = hks_kv_oku('listeler_cache', null);
+  if (!$cache || empty($cache['sifatlar'])) return null;
+  foreach ($cache['sifatlar'] as $s) {
+    if ((string)($s['id'] ?? '') === (string)$sifatId) return (string)($s['ad'] ?? '');
+  }
+  return null;
+}
+
 // Doğrulama (taslak/bildirim ortak) — yurt dışı (mevcut export) ve yurt içi (Sevk
-// Etme / yurt içi Satış) için ayrı kurallar. Yurt dışı yolu birebir korunur.
+// Etme / yurt içi Satış / Satın Alım / Üreticiden Sevk Alım) için ayrı kurallar.
+// Yurt dışı yolu birebir korunur.
+//
+// NOT: Bu denetimler tarayıcıdaki denetimlerin KOPYASI değil, SON SÖZÜdür.
+// `app.html` statik dosyadır ve tarayıcı/SW önbelleğinden eski sürümü sunulabilir;
+// CANLI ve geri alınamaz bir sisteme giden alanların doğruluğu sunucuda da
+// güvence altına alınmalıdır.
 function hks_bildirim_dogrula($g) {
   if (empty($g['satirlar']) || !is_array($g['satirlar'])) return 'En az bir künye satırı gerekli.';
   if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
@@ -102,16 +135,60 @@ function hks_bildirim_dogrula($g) {
     }
   }
   if (!empty($o['yurtIci'])) {
+    $uret = hks_uret_sevk_mi($o);
     // Yurt içi: karşı taraf + hedef zorunlu.
     if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
     if (empty($o['ikinciSifatId'])) return 'Karşı taraf sıfatı gerekli.';
+
+    // ── ÜRETİCİDEN SEVK ALIM (docx kuralları) ──────────────────────────────
+    // • "Sadece kayıtsız üreticiden yapılan sevkiyat işlemlerinde kullanılacak
+    //    bildirim türüdür."   → karşı tarafın KAYITLI olması yasak (gönderim
+    //    anında `taslak_gonder` içinde GTB'ye tekrar sorulur).
+    // • "Bildirim türü 'Üreticiden Sevk Alım'sa referanslı bildirim yapılamaz."
+    // • "Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi
+    //    'Üretici' olmalıdır."
+    if ($uret) {
+      if (empty($o['referanssiz'])) {
+        return '"Üreticiden Sevk Alım" referanslı yapılamaz (kılavuz kuralı) — künye seçilemez.';
+      }
+      foreach ((array)($g['satirlar'] ?? []) as $s) {
+        // Yalnız sıfırlardan (ya da hiç rakamdan) oluşmayan künye no = referanslı.
+        if (ltrim(preg_replace('/\D/', '', (string)($s['kunyeNo'] ?? '0')), '0') !== '') {
+          return '"Üreticiden Sevk Alım" referanslı yapılamaz — referans künye no "0" olmalıdır.';
+        }
+      }
+      if (!empty($o['kayitZorunlu'])) {
+        return '"Üreticiden Sevk Alım" yalnızca GTB\'de KAYITSIZ üretici içindir.';
+      }
+      $sifatAd = hks_sifat_adi($o['ikinciSifatId']);
+      if ($sifatAd !== null && mb_stripos($sifatAd, 'üretici', 0, 'UTF-8') === false) {
+        return '"Üreticiden Sevk Alım"da karşı taraf sıfatı "Üretici" olmalıdır (gönderilen: ' .
+               $sifatAd . ').';
+      }
+    }
+
+    // ── KAYITSIZ İKİNCİ KİŞİ (docx) ────────────────────────────────────────
+    // "İkinci kişi 'TcKimlikVergiNo' alanı GTB sisteminde kayıtlı değilse
+    //  'Eposta' bilgisi hariç diğer bilgilerinde gönderilmesi gerekir."
+    // → AdSoyad + CepTel zorunlu. İki durumda karşı taraf kayıtsızdır:
+    //   yurt içi Satış'ta adres hedefi (hedefAdres) ve Üreticiden Sevk Alım.
+    // Üretici sevkte hedef işyeri seçimiyle bildirildiği için bu denetim
+    // eskiden yalnız `hedefAdres` dalındaydı ve üretici sevkte hiç çalışmıyordu.
+    if ($uret || !empty($o['hedefAdres'])) {
+      $kim = $uret ? 'üretici' : 'alıcı';
+      if (empty($o['ikinciAd'])) return 'Kayıtsız ' . $kim . ' için Ad/Ünvan gerekli.';
+      $cep = hks_cep_rakam($o['ikinciCep'] ?? '');
+      if ($cep === '') return 'Kayıtsız ' . $kim . ' için Cep Telefonu gerekli.';
+      if (strlen($cep) < 10 || strlen($cep) > 13) {
+        return 'Cep telefonu geçersiz — en az 10 rakam olmalıdır (örn. 05001112233).';
+      }
+    }
+
     if (!empty($o['hedefAdres'])) {
-      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde + ad + cep.
+      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde.
       if (empty($o['ilId']) || empty($o['ilceId']) || empty($o['beldeId'])) return 'İl / İlçe / Belde seçilmeli.';
-      if (empty($o['ikinciAd']))  return 'Kayıtsız alıcı için Ad/Ünvan gerekli.';
-      if (empty($o['ikinciCep'])) return 'Kayıtsız alıcı için Cep Telefonu gerekli.';
     } else {
-      // Kayıtlı alıcı / Sevk Etme: gidecek işyeri.
+      // Kayıtlı alıcı / Sevk Etme / Satın Alım / Üreticiden Sevk Alım: gidecek işyeri.
       if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
     }
     // Fiyat yalnızca Sevk Etme dışında (fiyatGonder=true) zorunlu.
@@ -300,17 +377,32 @@ try {
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
 
-      // GÖNDERİM ÖNCESİ SON GÜVENLİK — Sevk Etme / Satın Alım'da karşı tarafın
-      // GTB'de KAYITLI olması zorunludur (docx). Taslak kaydedildikten sonra
-      // durum değişmiş olabilir; geri alınamaz bildirimden önce tekrar sorulur.
-      if (!empty($ortak['kayitZorunlu']) && !empty($ortak['ikinciTc'])) {
+      // GÖNDERİM ÖNCESİ SON GÜVENLİK — karşı tarafın GTB kayıt durumu, taslak
+      // kaydedildikten sonra değişmiş olabilir. Geri alınamaz bildirimden önce
+      // GTB'ye tekrar sorulur. İki AYNA kural (docx):
+      //   • Sevk Etme / Satın Alım  → karşı taraf KAYITLI olmalı.
+      //   • Üreticiden Sevk Alım    → üretici KAYITSIZ olmalı ("sadece kayıtsız
+      //     üreticiden yapılan sevkiyat işlemlerinde kullanılacak bildirim türü").
+      // Üretici sevk `kayitZorunlu=false` gönderdiği için eskiden bu türde hiçbir
+      // ön denetim çalışmıyordu; arada GTB'ye kaydolan bir üretici fark edilmeden
+      // geçiyordu.
+      $__uretSevk = hks_uret_sevk_mi($ortak);
+      if (!empty($ortak['ikinciTc']) && ($__uretSevk || !empty($ortak['kayitZorunlu']))) {
         $__kkHam = null;
         $__kk = hks_kayitli_kisi_sorgu($cfg, [$ortak['ikinciTc']], $__kkHam);
         $__k0 = $__kk[0] ?? null;
-        if (!$__k0 || empty($__k0['kayitliMi'])) {
+        $__kayitli = $__k0 && !empty($__k0['kayitliMi']);
+        if ($__uretSevk && $__kayitli) {
+          hks_json_cikti(['hata' => 'Gönderim DURDURULDU: üretici (' . $ortak['ikinciTc'] .
+            ') GTB sisteminde KAYITLI görünüyor. "Üreticiden Sevk Alım" yalnızca kayıtsız ' .
+            'üretici içindir; kayıtlı kişiden alım için bildirim türünü "Satın Alım" yapın. ' .
+            'Taslak silinmedi.'], 400);
+        }
+        if (!$__uretSevk && !$__kayitli) {
           hks_json_cikti(['hata' => 'Gönderim DURDURULDU: karşı taraf (' . $ortak['ikinciTc'] .
             ') GTB sisteminde kayıtlı değil. Sevk Etme / Satın Alım için karşı tarafın ' .
-            'kayıtlı olması zorunludur. Taslak silinmedi.'], 400);
+            'kayıtlı olması zorunludur. Kayıtsız müstahsilden alım için "Üreticiden Sevk Alım" ' .
+            'türünü kullanın. Taslak silinmedi.'], 400);
         }
       }
 

@@ -83,8 +83,17 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 - **Namespace çift slash içerir:** `http://www.gtb.gov.tr//WebServices` (yazım hatası değil).
 - **Alan sırası şemaya bağlı:** zarf sırası `Istek, Password, ServicePassword, UserName`.
 - **Referans künye sorgusunda tarih ZORUNLU.** Tarihsiz sorgu `GTBGLB00000001` verir.
-- **"1 ay" sınırı takvim ayıdır** (30 gün değil). Bu yüzden geriye dönük sorgu
-  takvim ayı pencerelerine bölünür.
+- **"1 ay" sınırı, takvim ayı (AddMonths) aritmetiğiyle ölçülüyor, gün sayısıyla
+  DEĞİL.** Geriye dönük sorgu bu yüzden pencerelere bölünür (`hks_guvenli_pencereler()`).
+  İlk yaklaşım "bitişin günü, bir önceki ayın aynı gününe (kısaysa kırpılarak)
+  taşınması" şeklindeydi; bitiş günü 29/30/31 olup hedef Şubat'a denk geldiğinde
+  (örn. 29 Mart → 28 Şubat) bu, HKS'in kabul ettiğinden 1-3 gün daha uzun bir
+  pencere üretip **"Bitiş Tarihi, başlangıç tarihinden en fazla 1 ay büyük
+  olabilir"** hatasını tetikliyordu — çünkü Şubat'ın en geç günü (28/29), "1 ay
+  sonrası"na hiçbir şekilde ulaşamıyor (matematiksel olarak imkânsız bir kısıt).
+  Çözüm: sabit **27 günlük** adımlarla pencereleme — en kısa ay olan Şubat'ın
+  (28 gün) bile altında kaldığından, HKS hangi kesin algoritmayı kullanırsa
+  kullansın sınırı asla aşmaz.
 - **`UrunId` fiilen zorunludur** (şemada opsiyonel görünse de). Arayüz ürün seçtirir.
 - **`KisiSifat` filtresi bilerek gönderilmez** — gönderilince bazı künyeler (farklı
   sıfatla bildirilmiş olanlar) listeden düşüyor.
@@ -123,6 +132,34 @@ Satın Alım'daki gibi **kendi vergi numaramızla** yapılır — üreticinin za
 HKS'te kaydı yoktur, onun TC'siyle sorgu boş döner). İlk canlı testte HKS
 adres alanlarını isterse `hedefAdres` moduna dönmek yeterlidir; `hks_soap.php`
 her iki biçimi de üretebiliyor.
+
+**Üreticiden Sevk Alım — kuralların nerede uygulandığı.** Bu türün tüm kılavuz
+kuralları hem tarayıcıda hem **sunucuda** denetlenir. `app.html` statik bir dosyadır
+ve tarayıcı/SW önbelleğinden eski sürümü sunulabilir; CANLI ve geri alınamaz bir
+sisteme giden alanların doğruluğu yalnız arayüze bırakılamaz.
+
+| Kural (kılavuz) | Arayüz | Sunucu |
+|---|---|---|
+| `AdSoyad` + `CepTel` zorunlu (kayıtsız ikinci kişi) | `btnMalTaslak` | `hks_bildirim_dogrula()` |
+| İkinci kişi sıfatı = **Üretici** | `ureticiSifati()` + kilitli alan | `hks_bildirim_dogrula()` (ad, `listeler_cache`'ten) |
+| Referanslı bildirim **YASAK** | künye kartı gizli | `hks_bildirim_dogrula()` (`referanssiz` + künye no "0") |
+| Üretici GTB'de **KAYITSIZ** olmalı | `btnIkDogrula` sonrası engel | `taslak_gonder` — gönderim öncesi GTB sorgusu |
+
+Sunucudaki tür tespiti `ortak.uretSevk` bayrağı **veya** `ortak.turAd` içinde
+"üretici" geçmesiyle yapılır (`hks_uret_sevk_mi()`) — eski taslaklarda yalnız
+`turAd` bulunur, onlar da denetimden geçer.
+
+`CepTel` CANLI servise **yalnız rakam** olarak gider: "0532 123 45 67" / "+90 532…"
+gibi girişler `hks_bildirim_xml()` içinde temizlenir (tek otorite), arayüz de alandan
+çıkışta aynı temizliği gösterir. `Eposta` hiçbir durumda gönderilmez (kılavuz: kayıtsız
+ikinci kişide zorunlu alan olmaktan çıkarıldı).
+
+**Gönderim öncesi AYNA denetimi.** `taslak_gonder`, geri alınamaz bildirimden hemen
+önce karşı tarafın GTB kayıt durumunu **tekrar** sorar; taslak kaydedildikten sonra
+durum değişmiş olabilir. İki yön de kapalıdır: Sevk Etme / Satın Alım'da karşı taraf
+kayıtlı **değilse**, Üreticiden Sevk Alım'da üretici kayıtlı **ise** gönderim durur ve
+taslak silinmez. (Üretici sevk `kayitZorunlu=false` gönderdiği için bu türde eskiden
+hiçbir ön denetim çalışmıyordu — arada GTB'ye kaydolan üretici fark edilmiyordu.)
 
 **Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
 `TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi

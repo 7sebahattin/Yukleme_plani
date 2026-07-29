@@ -222,15 +222,36 @@ function hks_urun_cinsleri($cfg, $urunId, &$ham = null) {
   return $sonuc;
 }
 
-// Bir takvim ayı geri git (servis "1 ay" sınırını takvim ayı olarak sayıyor)
-function hks_bir_ay_once(DateTime $t) {
-  $x = clone $t;
-  $gun = (int)$x->format('j');
-  $x->modify('first day of this month');
-  $x->modify('-1 month');
-  $ayGun = (int)$x->format('t'); // önceki ayın gün sayısı
-  $x->setDate((int)$x->format('Y'), (int)$x->format('n'), min($gun, $ayGun));
-  return $x;
+// Güvenli tarih pencereleri — HKS "iki tarih arası en fazla 1 ay" sınırına
+// (docx: "İki tarih arasındaki en fazla 1 ay gönderilmesine izin verilmiştir")
+// KESİN uyumlu [baslangic, bitis] çiftleri üretir; en yeniden en eskiye sıralı.
+//
+// ÖNCEKİ SÜRÜM (hks_bir_ay_once) takvim ayı aritmetiği kullanıyordu: bitişin
+// GÜNÜNÜ bir önceki aya taşı, ay daha kısaysa güne kırp (örn. 31 Mart → 28 Şubat).
+// Bu, bitiş günü 29/30/31 olup "1 ay önce"si Şubat'a denk geldiğinde HKS'in
+// kabul ettiğinden 1-3 gün DAHA UZUN bir pencere üretiyordu: 28 Şubat → 29 Mart
+// gerçekte 29 gündür, ama HKS'in "1 ay" ölçütü (28 Şubat + 1 ay = 28 Mart) bunu
+// aşıyor sayıyor → servis "Bitiş Tarihi, başlangıç tarihinden en fazla 1 ay
+// büyük olabilir" hatasıyla reddediyordu (Şubat'ın en geç günü 28/29 olduğu için
+// bu aralıkta HİÇBİR takvim-ayı-eşleşmesi bu kısıtı sağlayamaz — matematiksel
+// olarak imkânsız). Sabit 27 günlük adım, en kısa ay olan Şubat'ın (28 gün)
+// bile altında kalır; bu yüzden HKS hangi kesin algoritmayı kullanırsa kullansın
+// üretilen pencere "1 ay" sınırını asla aşmaz. Dış sınır ($hedef) yalnızca kaç
+// pencere gerektiğini belirler, HKS'e hiç gönderilmez — küçük gün oynamaları
+// zararsızdır.
+function hks_guvenli_pencereler($aySayisi) {
+  $ay = max(1, (int)$aySayisi);
+  $simdi = new DateTime();
+  $hedef = (clone $simdi)->modify('-' . $ay . ' months');
+  $pencereler = [];
+  $bitis = $simdi;
+  while ($bitis > $hedef) {
+    $baslangic = (clone $bitis)->modify('-27 days');
+    if ($baslangic < $hedef) $baslangic = clone $hedef;
+    $pencereler[] = [$baslangic, $bitis];
+    $bitis = $baslangic;
+  }
+  return $pencereler;
 }
 
 // Tek pencere için referans künye sorgusu.
@@ -279,17 +300,14 @@ function hks_kunye_penceresi($cfg, $secenek, DateTime $baslangic, DateTime $biti
   return $sonuc;
 }
 
-// Aylık pencereleri sırayla sorgula, birleştir (mükerrer künyeleri ayıkla).
+// Güvenli pencereleri sırayla sorgula, birleştir (mükerrer künyeleri ayıkla).
 // Tarih HER ZAMAN gönderilir (docx: pencere başına en fazla 1 ay) — bu yüzden
-// geniş bir aralık için ay sayısı kadar ardışık SOAP çağrısı gerekir.
+// geniş bir aralık için birden çok ardışık SOAP çağrısı gerekir.
 function hks_kunyeleri_getir($cfg, $secenek) {
   $ay = max(1, min(60, (int)($secenek['aySayisi'] ?? 12)));  // varsayılan 1 yıl, azami 5 yıl
   $birlesik = [];
-  $bitis = new DateTime();
-  for ($i = 0; $i < $ay; $i++) {
-    $baslangic = hks_bir_ay_once($bitis);
+  foreach (hks_guvenli_pencereler($ay) as [$baslangic, $bitis]) {
     foreach (hks_kunye_penceresi($cfg, $secenek, $baslangic, $bitis) as $k) $birlesik[$k['kunyeNo']] = $k;
-    $bitis = $baslangic;
   }
   $sonuc = array_values($birlesik);
 
@@ -354,10 +372,14 @@ function hks_bildirim_xml($satirlar, $ortak) {
     }
 
     // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
+    // docx: karşı taraf GTB'de KAYITLI değilse "Eposta" hariç tüm bilgileri
+    // gönderilmelidir (AdSoyad + CepTel). Eposta hiçbir durumda gönderilmez.
+    // CepTel yalnız RAKAM olarak gider — kullanıcı "0532 123 45 67" yazmış olabilir.
     if ($yurtIci) {
+      $cep = preg_replace('/\D+/', '', (string)($ortak['ikinciCep'] ?? ''));
       $ik = [];
-      if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc($ortak['ikinciAd']) . '</b:AdSoyad>';
-      if (!empty($ortak['ikinciCep'])) $ik[] = '<b:CepTel>' . hks_esc($ortak['ikinciCep']) . '</b:CepTel>';
+      if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc(trim($ortak['ikinciAd'])) . '</b:AdSoyad>';
+      if ($cep !== '')                 $ik[] = '<b:CepTel>' . $cep . '</b:CepTel>';
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
       $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
@@ -479,16 +501,13 @@ function hks_stok_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
 function hks_stok_ozet($cfg, $aySayisi = 60) {
   $ay = max(1, min(60, (int)$aySayisi));
 
-  // Aylık (takvim ayı) pencereleri sırayla sorgula, künyeleri KunyeNo ile birleştir.
+  // Güvenli pencereleri sırayla sorgula, künyeleri KunyeNo ile birleştir.
   $birlesik = [];
-  $bitis = new DateTime();
-  for ($i = 0; $i < $ay; $i++) {
-    $baslangic = hks_bir_ay_once($bitis);
+  foreach (hks_guvenli_pencereler($ay) as $i => [$baslangic, $bitis]) {
     foreach (hks_stok_penceresi($cfg, $baslangic, $bitis) as $r) {
       $k = $r['kunyeNo'] !== '' ? $r['kunyeNo'] : ('idx_' . $i . '_' . count($birlesik));
       $birlesik[$k] = $r;   // aynı künye tek kez sayılır
     }
-    $bitis = $baslangic;
   }
 
   $grup = [];
@@ -606,14 +625,11 @@ function hks_yaptigim_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
 function hks_yaptigim_bildirimler($cfg, $aySayisi = 1, &$ham = null) {
   $ay = max(1, min(36, (int)$aySayisi));
   $birlesik = [];
-  $bitis = new DateTime();
-  for ($i = 0; $i < $ay; $i++) {
-    $baslangic = hks_bir_ay_once($bitis);
+  foreach (hks_guvenli_pencereler($ay) as $i => [$baslangic, $bitis]) {
     foreach (hks_yaptigim_penceresi($cfg, $baslangic, $bitis) as $r) {
       $k = $r['kunyeNo'] !== '' ? $r['kunyeNo'] : ('x' . $i . '_' . count($birlesik));
       $birlesik[$k] = $r;
     }
-    $bitis = $baslangic;
   }
   $ham = hks_son_ham(1200);
   $sonuc = array_values($birlesik);

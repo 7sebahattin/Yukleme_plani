@@ -518,10 +518,10 @@
         </div>
         <div id="cepTelBlok" class="gizli">
           <label>Cep Telefonu <span style="color:var(--hata-tx)">*</span>
-            <span style="color:var(--soluk);font-weight:400;font-size:12px">(kayıtsız alıcıda zorunlu)</span></label>
+            <span id="cepTelNot" style="color:var(--soluk);font-weight:400;font-size:12px">(kayıtsız alıcıda zorunlu)</span></label>
           <input id="oIkCep" inputmode="numeric" autocomplete="off" placeholder="05xxxxxxxxx">
         </div>
-        <label>Karşı Taraf Sıfatı</label>
+        <label id="ikSifatEtiket">Karşı Taraf Sıfatı</label>
         <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
         <div class="mesaj tamam gizli" id="ikCokluSifatUyari"></div>
       </div>
@@ -886,6 +886,11 @@ const trNorm = (s) => (s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerC
 const trSayi = (s) => parseFloat(String(s || '0').replace(/\./g, '').replace(',', '.')) || 0;
 const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('tr-TR');
 const eHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Cep telefonu — CANLI servise yalnız RAKAM gider. Kullanıcı "0532 123 45 67" ya da
+// "+90 532 ..." yazabilir; boşluk/tire/parantez temizlenir. (docx: karşı taraf GTB'de
+// kayıtlı değilse CepTel zorunludur.) Sunucu da aynı temizliği/denetimi uygular.
+const cepRakam   = (s) => String(s || '').replace(/\D+/g, '');
+const cepGecerli = (s) => { const d = cepRakam(s); return d.length >= 10 && d.length <= 13; };
 
 // Ürün adına göre ikon — bilinen meyve/sebzeler için özel, diğerleri için genel ikon.
 // Resmi Unicode karşılığı olmayanlar (nar, incir) için renkli daire kullanılır;
@@ -1679,11 +1684,18 @@ function kayitZorunluMu() { return sevkModuMu() || satinAlimModuMu(); }
 
 // Üreticiden Sevk Alım'da ikinci kişi sıfatı "Üretici" OLMALIDIR (docx).
 // Listede Üretici sıfatı varsa seçilip kilitlenir; yoksa null döner (kayıt engellenir).
+// ÖNCELİK SIRASI ÖNEMLİ: HKS sıfat listesinde "Üretici" yanında "Üretici Örgütü" /
+// "Üretici Birliği" gibi BAŞKA sıfatlar da bulunabilir. Düz `includes` + `find`
+// listede önce hangisi geliyorsa onu seçerdi — yanlış KisiSifat ile CANLI bildirim
+// gitmesi demek. Bu yüzden önce TAM eşleşme, sonra "üretici" ile BAŞLAYAN,
+// en son alt dize aranır.
 function ureticiSifati() {
-  return ((listeler && listeler.sifatlar) || []).find(s => {
-    const n = trNorm(s.ad);
-    return n.includes('üretici') || n.includes('uretici');
-  }) || null;
+  const liste = (listeler && listeler.sifatlar) || [];
+  const ur = (s) => trNorm(s.ad).replace(/uretici/g, 'üretici').trim();
+  return liste.find(s => ur(s) === 'üretici')
+      || liste.find(s => ur(s).startsWith('üretici'))
+      || liste.find(s => ur(s).includes('üretici'))
+      || null;
 }
 function ikSifatUreticiSabitle() {
   const u = ureticiSifati();
@@ -1704,12 +1716,14 @@ function turDegisti() {
   // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
   // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olduğu hâlde hedef yine işyeri
   // seçimiyle belirlenir (mal bize gelir → kendi işyerimiz sorgulanır).
-  const isyeriMod = yurtIci && ((kayitli && !uret) || (uret && !!ikDogrulandi));
+  // Üreticide KAYITLI çıkan kişide hedef AÇILMAZ: docx bu türü yalnız kayıtsız
+  // üreticiye izinli kılıyor, kullanıcı boşuna doldurup sonda engellenmesin.
+  const isyeriMod = yurtIci && !!ikDogrulandi && (uret ? !kayitli : kayitli);
   // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
   const adresMod  = yurtIci && !sevk && !satin && !uret && !!ikDogrulandi && !kayitli;
   // Ad/Ünvan + Cep: kayıtsız alıcıda ve Üreticiden Sevk Alım'da zorunlu
   // (docx: ikinci kişi kayıtlı değilse Eposta hariç tüm bilgileri gönderilmeli).
-  const adCepMod  = adresMod || (uret && !!ikDogrulandi);
+  const adCepMod  = adresMod || (uret && !!ikDogrulandi && !kayitli);
   // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
   const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
@@ -1724,9 +1738,13 @@ function turDegisti() {
       : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)'));
   // Üreticiden Sevk Alım: ikinci kişi sıfatı "Üretici" olmak ZORUNDA (docx) → kilitli.
   if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
+  $('ikSifatEtiket').textContent = uret
+    ? 'Karşı Taraf Sıfatı — "Üretici" (kılavuz gereği sabit)' : 'Karşı Taraf Sıfatı';
   // Ad/Ünvan + Cep yalnız KAYITSIZ karşı tarafta (kayıtlıda HKS kendi kaydından doldurur).
   $('adBlok').classList.toggle('gizli', !adCepMod);
   $('cepTelBlok').classList.toggle('gizli', !adCepMod);
+  $('cepTelNot').textContent = uret
+    ? '(kayıtsız üreticide zorunlu — yalnız rakam)' : '(kayıtsız alıcıda zorunlu — yalnız rakam)';
 
   // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
   $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
@@ -1736,6 +1754,16 @@ function turDegisti() {
   $('adresAltBlok').classList.toggle('gizli', !adresMod);
   $('hedefBekle').classList.toggle('gizli', !bekliyor);
   $('isletmeTuruBlok').classList.toggle('gizli', bekliyor);
+  // Bekleme ipucu: doğrulama yapılmadıysa "Doğrula'ya bas", üretici sevkte
+  // KAYITLI kişi doğrulandıysa türün yanlış seçildiğini söyle (hedef açılmaz).
+  $('hedefBekle').innerHTML = (uret && kayitli)
+    ? '⛔ Bu TC/VKN GTB\'de <b>KAYITLI</b>. "Üreticiden Sevk Alım" yalnızca ' +
+      '<b>kayıtsız</b> üretici içindir — kayıtlı kişiden alım için Kart 1\'de ' +
+      'bildirim türünü <b>"Satın Alım"</b> yapın.'
+    : '⬆️ Önce Kart 1\'de karşı tarafın TC/Vergi No\'sunu girip <b>Doğrula</b>\'ya basın — ' +
+      'hedef seçenekleri ona göre açılacak.';
+  $('hedefBekle').classList.toggle('tamam', !(uret && kayitli));
+  $('hedefBekle').classList.toggle('hata', uret && kayitli);
   // Satın Alım ve Üreticiden Sevk Alım'da mal SANA gelir: işyeri kendi firmanın
   // kaydından seçilir (HKS sitesindeki davranışla aynı).
   $('isyeriBaslik').textContent = (satin || uret)
@@ -1983,6 +2011,9 @@ $('oIkTc').oninput = () => {
   ['isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   turDegisti();
 };
+// Cep telefonu alandan çıkınca rakamlara indirgenir — operatör, CANLI servise
+// tam olarak neyin gideceğini onay ekranından önce görsün.
+$('oIkCep').onblur = () => { $('oIkCep').value = cepRakam($('oIkCep').value); };
 $('sTur').onchange = turDegisti;
 $('chkYurtDisi').onchange = turDegisti;
 
@@ -2250,10 +2281,19 @@ $('btnMalTaslak').onclick = async () => {
       alert('Bu TC GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca kayıtsız üretici içindir — ' +
             'kayıtlı kişiden alım için bildirim türünü "Satın Alım" seçin.'); return;
     }
-    if (!ureticiSifati())          { alert('HKS sıfat listesinde "Üretici" bulunamadı. Listeleri güncelleyin.'); return; }
+    const uSifat = ureticiSifati();
+    if (!uSifat)                   { alert('HKS sıfat listesinde "Üretici" bulunamadı. Listeleri güncelleyin.'); return; }
     if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı belirlenemedi ("Üretici" olmalı).'); return; }
+    // docx: "Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi
+    // 'Üretici' olmalıdır." Alan kilitli olsa da gönderilen değer denetlenir.
+    if (String($('sIkSifat').value) !== String(uSifat.id)) {
+      alert('Karşı taraf sıfatı "Üretici" olmalıdır (kılavuz kuralı).'); return;
+    }
     if (!$('oIkAd').value.trim())  { alert('Kayıtsız üretici için Ad / Soyad zorunludur.'); $('oIkAd').focus(); return; }
-    if (!$('oIkCep').value.trim()) { alert('Kayıtsız üretici için Cep Telefonu zorunludur.'); $('oIkCep').focus(); return; }
+    if (!cepGecerli($('oIkCep').value)) {
+      alert('Kayıtsız üretici için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
+      $('oIkCep').focus(); return;
+    }
     if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIsyeri').value)       { alert('İşyeri / depo seçiniz.'); return; }
   } else {
@@ -2279,7 +2319,7 @@ $('btnMalTaslak').onclick = async () => {
     gidecekIsyeriAd: ad('sIsyeri'),
     ulkeAd: (uret ? 'Üreticiden Sevk Alım ← ' : 'Satın Alım ← ') + ($('oIkAd').value.trim() || tc),
   };
-  if (uret) hedef.ikinciCep = $('oIkCep').value.trim();
+  if (uret) hedef.ikinciCep = cepRakam($('oIkCep').value);
 
   try {
     await api('/api/taslaklar', 'POST', {
@@ -2288,9 +2328,10 @@ $('btnMalTaslak').onclick = async () => {
       satirlar: [{ kunyeNo: '0', miktar }],
       ortak: Object.assign({
         yurtIci: true, referanssiz: true,
-        // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olmalı → sunucudaki
-        // "kayıtlı mı" son kontrolü bu türde çalıştırılmaz.
+        // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olmalı → sunucu, gönderim
+        // öncesi son denetimde AYNA kuralı uygular (kayıtlıysa gönderimi durdurur).
         kayitZorunlu: !uret,
+        uretSevk: uret,
         fiyatGonder: true, fiyat,
         sifatId: $('sSifat').value,
         bildirimTuruId: $('sTur').value,
@@ -2386,11 +2427,14 @@ $('btnTaslakKaydet').onclick = async () => {
     const adresMod = !sevk && !satin && !kayitli;   // yalnız yurt içi Satış + kayıtsız
     if (adresMod) {
       if (!$('oIkAd').value.trim())  { alert('Kayıtsız alıcı için Ad/Ünvan zorunludur.'); return; }
-      if (!$('oIkCep').value.trim()) { alert('Kayıtsız alıcı için Cep Telefonu zorunludur.'); return; }
+      if (!cepGecerli($('oIkCep').value)) {
+        alert('Kayıtsız alıcı için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
+        $('oIkCep').focus(); return;
+      }
       if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
       Object.assign(ortak, {
         hedefAdres: true,
-        ikinciCep: $('oIkCep').value.trim(),
+        ikinciCep: cepRakam($('oIkCep').value),
         ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
         ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc) + ' (' +
                 $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
@@ -2513,9 +2557,13 @@ async function taslakDuzenle(t) {
     turDegisti();
     $('oIkTc').value = o.ikinciTc || '';
     $('oIkAd').value = o.ikinciAd || '';
-    if (o.ikinciCep) $('oIkCep').value = o.ikinciCep;
+    if (o.ikinciCep) $('oIkCep').value = cepRakam(o.ikinciCep);
     if (o.ikinciTc) await $('btnIkDogrula').onclick();     // GTB doğrulaması yeniden
     if (o.ikinciSifatId) $('sIkSifat').value = String(o.ikinciSifatId);
+    // Üreticiden Sevk Alım'da sıfat "Üretici" olmak ZORUNDA (docx). Taslak eski bir
+    // sürümde başka bir sıfatla kaydedilmiş olabilir — geri yüklerken tekrar kilitle,
+    // yoksa yukarıdaki atama kilidi ezip yanlış KisiSifat'ı forma geri getirirdi.
+    if (uretSevkModuMu()) ikSifatUreticiSabitle();
     if (o.isletmeTuruId) {
       $('sIsletmeTuru').value = String(o.isletmeTuruId);
       if (o.hedefAdres) {
@@ -2598,6 +2646,15 @@ function taslakOnayAc(t) {
     html += `<div class="onay-satir"><span>Tür</span><b>${eHtml(turEtiket)} (yurt içi)</b></div>`;
     if (t.ortak.fiyatGonder) html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
     html += `<div class="onay-satir"><span>Karşı Taraf</span><b>${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || '—')}</b></div>`;
+    // Kayıtsız karşı tarafta (üretici sevk / kayıtsız alıcı) docx "Eposta hariç tüm
+    // bilgiler" ister — gönderilecek TC ve cep, geri alınamaz onaydan önce görünsün.
+    if (t.ortak.uretSevk || t.ortak.hedefAdres) {
+      html += `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(t.ortak.ikinciTc || '—')}</b></div>`;
+      html += `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(t.ortak.ikinciCep || '—')}</b></div>`;
+    }
+    if (t.ortak.uretSevk) {
+      html += `<div class="onay-satir"><span>Karşı Taraf Sıfatı</span><b>Üretici</b></div>`;
+    }
     if (t.ortak.hedefAdres) {
       html += `<div class="onay-satir"><span>Hedef Adres</span><b>${eHtml(t.ortak.ulkeAd || '—')}</b></div>`;
     } else {
