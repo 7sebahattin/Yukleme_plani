@@ -71,16 +71,7 @@ if ($f_depo !== '') {
     $where .= " AND exit_depot LIKE :depo";
     $params[':depo'] = '%' . $f_depo . '%';
 }
-// Aktif depo kapsamı — beyanlar seçili depoya daraltılır
-// (deposu boş beyanlar da görünür: beyan hazırlık aşamasında depo atanmamış olabilir)
-if (function_exists('user_allowed_depots')) {
-    $_bd = user_allowed_depots();
-    if (is_array($_bd) && count($_bd) > 0) {
-        $_bd_names = [];
-        foreach (array_values($_bd) as $_bi => $_bv) { $_bk = ':udb' . $_bi; $_bd_names[] = $_bk; $params[$_bk] = $_bv; }
-        $where .= " AND (COALESCE(exit_depot,'') = '' OR exit_depot IN (" . implode(',', $_bd_names) . "))";
-    }
-}
+// Beyanlar tüm kullanıcılara ve tüm depolarda görünür — depo kapsamı uygulanmaz.
 if ($tarih_bas !== '') {
     $where .= " AND DATE(created_at) >= :tarih_bas";
     $params[':tarih_bas'] = $tarih_bas;
