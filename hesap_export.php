@@ -29,6 +29,20 @@ $st = db()->prepare("SELECT * FROM account_transactions WHERE $wstr ORDER BY tra
 $st->execute($params);
 $rows = $st->fetchAll();
 
+// Devir — tarih_bas verilmişse, o tarihten ÖNCEKİ tüm kayıtların net bakiyesi (hesap.php ile aynı mantık)
+$devir = 0.0;
+if ($tarih_b !== '') {
+    $dst = db()->prepare("
+        SELECT
+            COALESCE(SUM(CASE WHEN type='gelir' THEN amount END),0) AS devir_gelir,
+            COALESCE(SUM(CASE WHEN type IN ('gider','nakit','havale') THEN amount END),0) AS devir_gider
+        FROM account_transactions WHERE currency='TRY' AND transaction_date<?
+    ");
+    $dst->execute([$tarih_b]);
+    $dv = $dst->fetch();
+    $devir = (float)$dv['devir_gelir'] - (float)$dv['devir_gider'];
+}
+
 // Audit — dışa aktarma (içerik loglanmaz, sadece filtre ve kayıt sayısı)
 audit_log_event('export', 'hesap', null, null, [
     'format'    => 'xls',
@@ -121,9 +135,21 @@ foreach ($rows as $i => $r):
     <td colspan="6"></td>
 </tr>
 <tr class="total">
-    <td colspan="7">NET BAKİYE</td>
+    <td colspan="7">DÖNEM NETİ</td>
     <td class="num"><?= number_format($totals['gelir'] - $totals['gider'] - $totals['havale'] - $totals['nakit'], 2, ',', '.') ?></td>
     <td colspan="6"></td>
 </tr>
+<?php if ($tarih_b !== ''): $donem_neti = $totals['gelir'] - $totals['gider'] - $totals['havale'] - $totals['nakit']; ?>
+<tr class="total">
+    <td colspan="7">DEVİR (<?= h($tarih_b) ?> öncesi bakiye)</td>
+    <td class="num"><?= number_format($devir, 2, ',', '.') ?></td>
+    <td colspan="6"></td>
+</tr>
+<tr class="total">
+    <td colspan="7">GÜNCEL BAKİYE (Devir + Dönem Neti)</td>
+    <td class="num"><?= number_format($devir + $donem_neti, 2, ',', '.') ?></td>
+    <td colspan="6"></td>
+</tr>
+<?php endif; ?>
 </table>
 </body></html>

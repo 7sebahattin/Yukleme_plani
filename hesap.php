@@ -94,8 +94,8 @@ render_flash();
     <a href="hesap_liste.php" class="btn btn-ghost">📋 Tüm Kayıtlar (<?= (int)$st['toplam_kayit'] ?>)</a>
     <a href="hesap_muhasebe.php" class="btn btn-ghost">🗂️ Muhasebe Dökümü</a>
     <a href="hesap_muhasebe_fis_pdf.php" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
-    <a href="hesap_export.php" class="btn btn-ghost">📊 Excel Export</a>
-    <a href="hesap_yazdir.php" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
+    <a href="hesap_export.php?tarih_bas=<?= h($ay_bas) ?>&tarih_son=<?= h(date('Y-m-d', strtotime($ay_son . ' -1 day'))) ?>" class="btn btn-ghost">📊 Excel Export</a>
+    <a href="hesap_yazdir.php?tarih_bas=<?= h($ay_bas) ?>&tarih_son=<?= h(date('Y-m-d', strtotime($ay_son . ' -1 day'))) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
 </div>
 
 <!-- Son İşlemler -->

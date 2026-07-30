@@ -23,6 +23,19 @@ $rows = $st->fetchAll();
 
 $toplam_gelir = (float)array_sum(array_column(array_filter($rows, fn($r) => $r['type'] === 'gelir'), 'amount'));
 $toplam_gider = (float)array_sum(array_column(array_filter($rows, fn($r) => in_array($r['type'], ['gider','havale','nakit'])), 'amount'));
+$donem_neti   = $toplam_gelir - $toplam_gider;
+
+// Devir — seçili tarih aralığından ÖNCEKİ tüm kayıtların net bakiyesi (hesap.php ile aynı mantık)
+$dst = db()->prepare("
+    SELECT
+        COALESCE(SUM(CASE WHEN type='gelir' THEN amount END),0) AS devir_gelir,
+        COALESCE(SUM(CASE WHEN type IN ('gider','nakit','havale') THEN amount END),0) AS devir_gider
+    FROM account_transactions WHERE currency='TRY' AND transaction_date<?
+");
+$dst->execute([$tarih_b]);
+$dv = $dst->fetch();
+$devir         = (float)$dv['devir_gelir'] - (float)$dv['devir_gider'];
+$guncel_bakiye = $devir + $donem_neti;
 ?><!doctype html>
 <html lang="tr"><head><meta charset="utf-8">
 <title>Hesap Raporu <?= h($tarih_b) ?> — <?= h($tarih_s) ?></title>
@@ -58,8 +71,15 @@ td { padding: 4px 8px; border: 1px solid #ddd; }
     <div style="text-align:right">
         <div style="font-size:11pt"><strong>Toplam Gelir:</strong> <span class="gelir"><?= fmt_para($toplam_gelir) ?></span></div>
         <div style="font-size:11pt"><strong>Toplam Gider:</strong> <span class="gider"><?= fmt_para($toplam_gider) ?></span></div>
+        <div style="font-size:11pt">
+            <strong>Dönem Neti:</strong> <span class="<?= $donem_neti >= 0 ? 'gelir' : 'gider' ?>"><?= fmt_para($donem_neti) ?></span>
+        </div>
+        <div style="font-size:11pt;margin-top:2px">
+            <strong>Devir (<?= h(date('d.m.Y', strtotime($tarih_b))) ?> öncesi):</strong>
+            <span class="<?= $devir >= 0 ? 'gelir' : 'gider' ?>"><?= fmt_para($devir) ?></span>
+        </div>
         <div style="font-size:12pt;font-weight:bold;border-top:2px solid #333;margin-top:4px;padding-top:4px">
-            Net Bakiye: <?= fmt_para($toplam_gelir - $toplam_gider) ?>
+            Güncel Bakiye: <span class="<?= $guncel_bakiye >= 0 ? 'gelir' : 'gider' ?>"><?= fmt_para($guncel_bakiye) ?></span>
         </div>
     </div>
 </div>
@@ -78,6 +98,13 @@ td { padding: 4px 8px; border: 1px solid #ddd; }
     <th>Fiş</th>
 </tr></thead>
 <tbody>
+<?php if ($devir != 0): ?>
+<tr style="background:#fff7e6;font-weight:bold">
+    <td colspan="7">DEVİR — <?= h(date('d.m.Y', strtotime($tarih_b))) ?> öncesi bakiye</td>
+    <td class="num <?= $devir >= 0 ? 'gelir' : 'gider' ?>"><?= fmt_para($devir) ?></td>
+    <td colspan="2"></td>
+</tr>
+<?php endif; ?>
 <?php foreach ($rows as $i => $r): ?>
 <tr>
     <td><?= $i + 1 ?></td>
@@ -100,6 +127,11 @@ td { padding: 4px 8px; border: 1px solid #ddd; }
 <tr class="total-row">
     <td colspan="7">TOPLAM GİDER</td>
     <td class="num gider"><?= fmt_para($toplam_gider) ?></td>
+    <td colspan="2"></td>
+</tr>
+<tr class="total-row" style="background:#eef7ff">
+    <td colspan="7">GÜNCEL BAKİYE (Devir + Dönem Neti)</td>
+    <td class="num <?= $guncel_bakiye >= 0 ? 'gelir' : 'gider' ?>"><?= fmt_para($guncel_bakiye) ?></td>
     <td colspan="2"></td>
 </tr>
 </tbody>
