@@ -1532,7 +1532,7 @@ function material_calc_basis(string $type, string $name): string {
     $n = str_replace([' ', '-', '.', ',', '_'], '', $n);
 
     // Kasa bazlı: her kasa için hesaplanır
-    $kasa_kw = ['kenarkartonu', 'kenarkart', 'kenarkagidi', 'kenarkagit', 'tabankagidi', 'tabankagit', 'sale', 'kasaetiketi'];
+    $kasa_kw = ['kenarkartonu', 'kenarkart', 'kenarkagidi', 'kenarkagit', 'tabankagidi', 'tabankagit', 'sale', 'kasaetiketi', 'viyol'];
     foreach ($kasa_kw as $kw) {
         if (str_contains($n, $kw)) return 'kasa';
     }
