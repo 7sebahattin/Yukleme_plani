@@ -492,7 +492,7 @@
         <label style="margin-top:12px">İşletme</label>
         <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin:0">
           <input type="checkbox" id="chkYurtDisi" checked style="width:20px;height:20px;accent-color:var(--teal)">
-          Yurt Dışı <span id="yurtDisiNot" style="color:var(--soluk);font-weight:400;font-size:12px">(yurt dışı)</span>
+          <span id="yurtDisiEtiket">Yurt Dışı</span>
         </label>
       </div>
 
@@ -1609,25 +1609,20 @@ function listeleriDoldur() {
   const ihracat = (listeler.sifatlar || []).find(x => trNorm(x.ad).includes('ihracat'));
   if (ihracat) $('sSifat').value = ihracat.id;
 
-  // Bildirim türü: sitedeki gibi Satın Alım / Sevk Etme / Satış (Üreticiden Sevk Alım hariç)
+  // Bildirim türü: yalnızca Satış (yurt içi/dışı — tik ile) ve Sevk Etme gösterilir.
+  // Satın Alım / Üreticiden Sevk Alım GTB'de doğum tarihi istediği için (bkz. doğrulayıcı
+  // kılavuzu — servis şemasında karşılığı yok) listeden tamamen kaldırıldı.
   const satisMi = (ad) => {
     const n = trNorm(ad);
     return (n.includes('satış') || n.includes('satis')) && !n.includes('alım') && !n.includes('alim');
   };
-  const sevkMi = (ad) => trNorm(ad).includes('sevk');
-  const satinMi = (ad) => { const n = trNorm(ad); return n.includes('satın') || n.includes('satin'); };
-  const turFiltre = (listeler.bildirimTurleri || []).filter(x => {
-    const n = trNorm(x.ad);
-    return satinMi(x.ad) || n.includes('sevk') || satisMi(x.ad);
-  });
+  const sevkMi = (ad) => { const n = trNorm(ad); return n.includes('sevk') && !n.includes('uretici'); };
+  const turFiltre = (listeler.bildirimTurleri || []).filter(x => satisMi(x.ad) || sevkMi(x.ad));
   const turSel = $('sTur');
   turSel.innerHTML = '';
   (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
-    // Aktif türler: Satış + Sevk Etme + Satın Alım (referanslı) ve
-    // Üreticiden Sevk Alım (referanssız — kayıtsız müstahsilden alım).
-    if (!satisMi(x.ad) && !sevkMi(x.ad) && !satinMi(x.ad)) { o.disabled = true; o.textContent += ' (yakında)'; }
     turSel.appendChild(o);
   });
   const satis = (listeler.bildirimTurleri || []).find(x => satisMi(x.ad));
@@ -1729,7 +1724,7 @@ function turDegisti() {
 
   // Kart 1 — Yurt Dışı tiki yalnız Satış'ta anlamlı; diğer yurt içi türlerde gizli.
   $('yurtDisiBlok').classList.toggle('gizli', sevk || satin || uret);
-  $('yurtDisiNot').textContent = yurtIci ? '(yurt içi)' : '(yurt dışı)';
+  $('yurtDisiEtiket').textContent = yurtIci ? 'Yurt İçi' : 'Yurt Dışı';
   $('karsiTarafBlok').classList.toggle('gizli', !yurtIci);
   $('karsiBaslik').textContent = uret
     ? 'Karşı Taraf (Üretici / Müstahsil) — GTB\'de KAYITSIZ olmalı'
