@@ -1523,7 +1523,9 @@ function validate_pallet_rows(array $computed, bool $require_urun_cinsi = false)
 // kasa_adeti ile çarpım YALNIZCA burada (görüntü/stok/excel hesabında) bir kez yapılır.
 // Böylece ekle→düzenle döngüsünde çift çarpım/balon (ör. 8→896→100352) oluşamaz.
 function material_calc_basis(string $type, string $name): string {
-    if ($type === 'kasa_etiketi') return 'kasa'; // ham sakla, çarpımı burada yap (tek nokta)
+    // kasa_etiketi/viyol gibi türler kendi ismiyle (ör. "30X50 SİYAH 12") tanımlanır,
+    // isimde "kasa"/"viyol" geçmez — bu yüzden tür doğrudan kontrol edilir.
+    if ($type === 'kasa_etiketi' || $type === 'viyol') return 'kasa'; // ham sakla, çarpımı burada yap (tek nokta)
 
     // İsim normalizasyonu (tr_norm benzeri, helpers.php içi)
     $n = mb_strtolower($name, 'UTF-8');
@@ -1532,7 +1534,7 @@ function material_calc_basis(string $type, string $name): string {
     $n = str_replace([' ', '-', '.', ',', '_'], '', $n);
 
     // Kasa bazlı: her kasa için hesaplanır
-    $kasa_kw = ['kenarkartonu', 'kenarkart', 'kenarkagidi', 'kenarkagit', 'tabankagidi', 'tabankagit', 'sale', 'kasaetiketi', 'viyol'];
+    $kasa_kw = ['kenarkartonu', 'kenarkart', 'kenarkagidi', 'kenarkagit', 'tabankagidi', 'tabankagit', 'sale', 'kasaetiketi'];
     foreach ($kasa_kw as $kw) {
         if (str_contains($n, $kw)) return 'kasa';
     }
