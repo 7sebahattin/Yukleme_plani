@@ -121,6 +121,31 @@ function hesap_report_data(array $f): array
     unset($t);
     uksort($toplamlar, fn($a, $b) => ($b === 'TRY' ? 1 : 0) <=> ($a === 'TRY' ? 1 : 0) ?: strcmp($a, $b));
 
+    // ── Bakiye durumu: DEVİR + dönem hareketi + KAPANIŞ ──
+    // Panodaki "Geçen Aydan Devir" / "Güncel Bakiye" ile birebir aynı mantık:
+    // yalnız bakiyeye giren durumlar (approved / pending_payment / paid) sayılır.
+    // Bu bölüm olmadan rapor "kim kime borçlu" sorusunu yanıtlayamaz — dönemde
+    // hiç hareket yoksa (boş ay) tüm rakamlar sıfır görünür ama borç durur.
+    $tarih_s_ertesi = date('Y-m-d', strtotime($tarih_s . ' +1 day'));
+    $devir_bal = hesap_balance(null, null, $tarih_b);            // dönem başından ÖNCESİ
+    $donem_bal = hesap_balance(null, $tarih_b, $tarih_s_ertesi); // dönem İÇİ (onaylı)
+
+    $bakiye = [];
+    $kurlar = array_unique(array_merge(
+        array_keys($devir_bal), array_keys($donem_bal), array_keys($toplamlar)
+    ));
+    foreach ($kurlar as $cur) {
+        $d = (float)($devir_bal[$cur]['net'] ?? 0.0);
+        $hrk = (float)($donem_bal[$cur]['net'] ?? 0.0);
+        $bakiye[$cur] = [
+            'devir'    => $d,
+            'donem'    => $hrk,
+            'kapanis'  => $d + $hrk,
+            'bekleyen' => (float)($donem_bal[$cur]['bekleyen'] ?? 0.0),
+        ];
+    }
+    uksort($bakiye, fn($a, $b) => ($b === 'TRY' ? 1 : 0) <=> ($a === 'TRY' ? 1 : 0) ?: strcmp($a, $b));
+
     // ── Personel kırılımı (yalnız bakiyeye giren durumlar, TRY) ──
     $personel = [];
     foreach ($rows as $r) {
@@ -133,6 +158,21 @@ function hesap_report_data(array $f): array
         $personel[$ad]['adet']++;
     }
     foreach ($personel as &$p) { $p['net'] = $p['gelir'] - $p['gider']; }
+    unset($p);
+
+    // Personel bazında devir ve kapanış — "kim kime ne kadar borçlu" bu satırdan okunur.
+    $p_devir = [];
+    foreach (hesap_balance_by_user(null, $tarih_b) as $pr) {
+        $p_devir[$pr['personel']] = (float)$pr['net'];
+    }
+    // Dönemde hareketi olmayan ama devri olan personel de raporda görünmeli
+    foreach ($p_devir as $ad => $dv) {
+        $personel[$ad] ??= ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0, 'net' => 0.0];
+    }
+    foreach ($personel as $ad => &$p) {
+        $p['devir']   = $p_devir[$ad] ?? 0.0;
+        $p['kapanis'] = $p['devir'] + $p['net'];
+    }
     unset($p);
     ksort($personel);
 
@@ -167,6 +207,7 @@ function hesap_report_data(array $f): array
     return [
         'rows'        => $rows,
         'toplamlar'   => $toplamlar,
+        'bakiye'      => $bakiye,
         'personel'    => $personel,
         'kategoriler' => $kategoriler,
         'kat_toplam'  => $kat_toplam,
@@ -306,7 +347,7 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
 
 <!-- ═══ Para birimi özeti ═══ -->
 <div class="sec">
-    <h2>Dönem Özeti</h2>
+    <h2>Dönem Hareketleri <span class="muted" style="font-weight:normal">(seçilen tarih aralığındaki tüm kayıtlar)</span></h2>
     <?php foreach ($d['toplamlar'] as $cur => $t): $bi = hesap_balance_label($t['net']); ?>
     <table class="sum"><tr>
         <td>
@@ -318,8 +359,10 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
             <div class="val neg"><?= fmt_para($t['gider'], $cur) ?></div>
         </td>
         <td>
-            <div class="lbl">Net · <?= h($bi['label']) ?></div>
-            <div class="val <?= $bi['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($bi['tutar'], $cur) ?></div>
+            <div class="lbl">Dönem Neti</div>
+            <div class="val <?= $bi['yon'] === 'borc' ? 'neg' : 'pos' ?>">
+                <?= ($t['net'] >= 0 ? '+' : '−') . fmt_para(abs($t['net']), $cur) ?>
+            </div>
         </td>
     </tr></table>
     <?php endforeach; ?>
@@ -332,34 +375,89 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
     <?php endif; ?>
 </div>
 
+<!-- ═══ Bakiye durumu: devir → dönem → kapanış ═══ -->
+<?php if (!empty($d['bakiye'])): ?>
+<div class="sec">
+    <h2>Bakiye Durumu <span class="muted" style="font-weight:normal">(onaylanan ve ödenen kayıtlar)</span></h2>
+    <table class="data">
+    <thead><tr>
+        <th>Para Birimi</th>
+        <th class="num">Devir<br><span style="font-weight:normal">(<?= h(date('d.m.Y', strtotime($m['tarih_bas']))) ?> öncesi)</span></th>
+        <th class="num">Dönem Hareketi</th>
+        <th class="num">Dönem Sonu Bakiye</th>
+        <th>Durum</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach ($d['bakiye'] as $cur => $b):
+        $dv = hesap_balance_label($b['devir']);
+        $kp = hesap_balance_label($b['kapanis']); ?>
+    <tr>
+        <td class="b"><?= h($cur) ?></td>
+        <td class="num <?= $dv['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($dv['tutar'], $cur) ?></td>
+        <td class="num"><?= ($b['donem'] >= 0 ? '+' : '−') . fmt_para(abs($b['donem']), $cur) ?></td>
+        <td class="num b <?= $kp['yon'] === 'borc' ? 'neg' : 'pos' ?>" style="font-size:9pt">
+            <?= fmt_para($kp['tutar'], $cur) ?>
+        </td>
+        <td class="b <?= $kp['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= h($kp['label']) ?></td>
+    </tr>
+    <?php if (abs($b['bekleyen']) > 0.005): ?>
+    <tr>
+        <td colspan="5" class="muted" style="font-size:6.5pt">
+            <?= h($cur) ?> · Onay bekleyen <?= fmt_para(abs($b['bekleyen']), $cur) ?> —
+            bakiyeye dahil DEĞİL, onaylandığında yukarıdaki tutarı değiştirir.
+        </td>
+    </tr>
+    <?php endif; ?>
+    <?php endforeach; ?>
+    </tbody>
+    </table>
+    <p class="muted" style="font-size:6.5pt;margin:4px 0 0">
+        Devir + Dönem Hareketi = Dönem Sonu Bakiye. Eksi bakiye şirketin personele,
+        artı bakiye personelin şirkete borçlu olduğunu gösterir.
+    </p>
+</div>
+<?php endif; ?>
+
 <!-- ═══ Personel özeti ═══ -->
 <?php if (!empty($d['personel'])): ?>
 <div class="sec">
     <h2>Personel Özeti <span class="muted" style="font-weight:normal">(TRY · onaylanan ve ödenen kayıtlar)</span></h2>
     <table class="data">
     <thead><tr>
-        <th>Personel</th><th class="num">Gelir</th><th class="num">Gider</th>
-        <th class="num">Net</th><th>Yön</th><th class="num">Kayıt</th>
+        <th>Personel</th>
+        <th class="num">Devir</th>
+        <th class="num">Gelir</th><th class="num">Gider</th>
+        <th class="num">Dönem Net</th>
+        <th class="num">Dönem Sonu Bakiye</th>
+        <th>Durum</th>
+        <th class="num">Kayıt</th>
     </tr></thead>
     <tbody>
-    <?php $p_g = 0.0; $p_gd = 0.0; $p_a = 0;
-    foreach ($d['personel'] as $ad => $p): $bi = hesap_balance_label($p['net']);
-        $p_g += $p['gelir']; $p_gd += $p['gider']; $p_a += $p['adet']; ?>
+    <?php $p_g = 0.0; $p_gd = 0.0; $p_a = 0; $p_dv = 0.0; $p_kp = 0.0;
+    foreach ($d['personel'] as $ad => $p):
+        $dv = hesap_balance_label($p['devir']);
+        $kp = hesap_balance_label($p['kapanis']);
+        $p_g += $p['gelir']; $p_gd += $p['gider']; $p_a += $p['adet'];
+        $p_dv += $p['devir']; $p_kp += $p['kapanis']; ?>
     <tr>
         <td><?= h($ad) ?></td>
+        <td class="num <?= $dv['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($dv['tutar']) ?></td>
         <td class="num"><?= fmt_para($p['gelir']) ?></td>
         <td class="num"><?= fmt_para($p['gider']) ?></td>
-        <td class="num b <?= $bi['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($bi['tutar']) ?></td>
-        <td class="muted"><?= h($bi['label']) ?></td>
+        <td class="num"><?= ($p['net'] >= 0 ? '+' : '−') . fmt_para(abs($p['net'])) ?></td>
+        <td class="num b <?= $kp['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($kp['tutar']) ?></td>
+        <td class="<?= $kp['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= h($kp['label']) ?></td>
         <td class="num muted"><?= (int)$p['adet'] ?></td>
     </tr>
     <?php endforeach; ?>
     <tr class="total">
         <td>TOPLAM</td>
+        <td class="num"><?= fmt_para(abs($p_dv)) ?></td>
         <td class="num"><?= fmt_para($p_g) ?></td>
         <td class="num"><?= fmt_para($p_gd) ?></td>
-        <td class="num"><?= fmt_para(abs($p_g - $p_gd)) ?></td>
-        <td class="muted"><?= h(hesap_balance_label($p_g - $p_gd)['label']) ?></td>
+        <td class="num"><?= (($p_g - $p_gd) >= 0 ? '+' : '−') . fmt_para(abs($p_g - $p_gd)) ?></td>
+        <td class="num"><?= fmt_para(abs($p_kp)) ?></td>
+        <td><?= h(hesap_balance_label($p_kp)['label']) ?></td>
         <td class="num"><?= $p_a ?></td>
     </tr>
     </tbody>

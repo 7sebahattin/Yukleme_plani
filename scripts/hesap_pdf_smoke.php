@@ -141,6 +141,16 @@ ok('personel kırılımı 2 kişi',             count($d['personel']) === 2);
 ok('reddedilen personel özetine girmedi',  abs($d['personel']['Test Personel']['gider'] - 880) < 0.01,
                                            'beklenen 480+350+50, red 221 hariç');
 ok('kategori kırılımı yüzdeleri toplam 100', abs(array_sum(array_column($d['kategoriler'],'yuzde')) - 100) < 0.5);
+
+// ── Bakiye durumu: devir + dönem = kapanış ──
+ok('bakiye bölümü üretildi',               isset($d['bakiye']['TRY']));
+ok('devir dönem öncesini kapsıyor (0)',    abs($d['bakiye']['TRY']['devir']) < 0.01, 'temmuz öncesi kayıt yok');
+ok('dönem hareketi onaylı net (+1.595)',   abs($d['bakiye']['TRY']['donem'] - 1595) < 0.01,
+                                           '3975 gelir - 2380 onaylı gider (iki personel)');
+ok('kapanış = devir + dönem',              abs($d['bakiye']['TRY']['kapanis']
+                                               - ($d['bakiye']['TRY']['devir'] + $d['bakiye']['TRY']['donem'])) < 0.01);
+ok('personel devir/kapanış hesaplandı',    isset($d['personel']['Test Personel']['kapanis']));
+ok('USD bakiyesi ayrı tutuldu',            isset($d['bakiye']['USD']) && abs($d['bakiye']['USD']['kapanis'] + 100) < 0.01);
 ok('en büyük kategori Otel (1500)',        array_key_first($d['kategoriler']) === 'Otel / Konaklama');
 ok('fiş görselleri toplandı (3)',          count($d['fisler']) === 3);
 ok('görsel sınırı aşılmadı',               $d['kirpildi'] === 0);
@@ -149,7 +159,10 @@ ok('görsel sınırı aşılmadı',               $d['kirpildi'] === 0);
 echo "\n── Rapor HTML ──\n";
 $html = hesap_report_html($d, true);
 ok('şirket logosu gömüldü',                str_contains($html, 'data:image/jpeg;base64'));
-ok('dönem özeti bölümü',                   str_contains($html, 'Dönem Özeti'));
+ok('dönem hareketleri bölümü',             str_contains($html, 'Dönem Hareketleri'));
+ok('bakiye durumu bölümü',                 str_contains($html, 'Bakiye Durumu'));
+ok('devir sütunu başlığı',                 str_contains($html, 'Devir'));
+ok('dönem sonu bakiye sütunu',             str_contains($html, 'Dönem Sonu Bakiye'));
 ok('personel özeti bölümü',                str_contains($html, 'Personel Özeti'));
 ok('kategori kırılımı bölümü',             str_contains($html, 'Kategori Kırılımı'));
 ok('işlem listesi bölümü',                 str_contains($html, 'İşlem Listesi'));
@@ -207,6 +220,25 @@ $bos = hesap_report_data(['tarih_bas'=>'2020-01-01','tarih_son'=>'2020-01-31']);
 ok('boş dönem çökmüyor',                   $bos['meta']['adet'] === 0);
 $bos_html = hesap_report_html($bos, true);
 ok('boş dönem HTML üretiyor',              str_contains($bos_html, 'Bu dönemde kayıt bulunmuyor'));
+
+// ── Hareketi olmayan ama devri olan ay (kullanıcının bildirdiği durum) ──
+// Ağustos'ta hiç kayıt yok ama Temmuz'dan devreden bakiye var: rapor sıfır
+// göstermemeli, devri ve kapanış bakiyesini taşımalı.
+$agustos = hesap_report_data(['tarih_bas'=>'2026-08-01','tarih_son'=>'2026-08-31']);
+ok('boş ayda kayıt yok',                   $agustos['meta']['adet'] === 0);
+ok('boş ayda DEVİR taşınıyor',             abs($agustos['bakiye']['TRY']['devir'] - 1595) < 0.01,
+                                           'devir kayboldu — asıl şikâyet buydu');
+ok('boş ayda dönem hareketi sıfır',        abs($agustos['bakiye']['TRY']['donem']) < 0.01);
+ok('boş ayda KAPANIŞ devirle aynı',        abs($agustos['bakiye']['TRY']['kapanis'] - 1595) < 0.01);
+$ag_html = hesap_report_html($agustos, true);
+ok('boş ay raporunda bakiye bölümü var',   str_contains($ag_html, 'Bakiye Durumu'));
+ok('boş ay raporunda devir tutarı yazılı', str_contains($ag_html, '1.595,00'));
+ok('personel devirleri ayrı ayrı yazılı',  str_contains($ag_html, '3.095,00') && str_contains($ag_html, '1.500,00'),
+                                           'kişi bazlı borç okunamıyor');
+ok('boş ay raporu yön etiketi veriyor',    str_contains($ag_html, 'Şirkete borçlusunuz')
+                                           || str_contains($ag_html, 'Şirket size borçlu'));
+ok('devri olan personel raporda görünüyor', str_contains($ag_html, 'Test Personel'),
+                                            'dönemde hareketi yok ama devri var');
 if (class_exists(\Dompdf\Dompdf::class)) {
     $bos_pdf = hesap_report_pdf($bos);
     ok('boş dönem PDF üretiyor',           is_string($bos_pdf) && str_starts_with($bos_pdf, '%PDF-'));
@@ -304,7 +336,7 @@ ok('uç nokta çıktısı tam',                 str_contains((string)$out, '%%EO
 $args_html = escapeshellarg(json_encode(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','goruntule'=>'html']));
 $out_html  = shell_exec('php ' . escapeshellarg($boot) . ' ' . $args_html . ' 2>&1');
 ok('?goruntule=html HTML döndürüyor',      str_contains((string)$out_html, '<!doctype html>')
-                                           && str_contains((string)$out_html, 'Dönem Özeti'));
+                                           && str_contains((string)$out_html, 'Bakiye Durumu'));
 ok('HTML görünümünde PHP uyarısı yok',     !preg_match('/(Warning|Fatal error|Notice)/i', (string)$out_html));
 
 echo $fail === 0 ? "\n>>> TÜM PDF TESTLERİ GEÇTİ\n" : "\n>>> $fail TEST BAŞARISIZ\n";
