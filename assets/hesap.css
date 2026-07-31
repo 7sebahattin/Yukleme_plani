@@ -1,0 +1,52 @@
+/* =========================================================
+   assets/hesap.css — Hesap modülüne özel stiller
+   Yalnız hesap_*.php sayfalarında yüklenir (maliyet.css emsali).
+   assets/style.css'e HİÇ dokunmaz — mevcut mobil düzen etkilenmez.
+   Faz 1'de tasarım sistemi bu dosya üzerinde genişletilecek;
+   şimdilik yalnız durum makinesinin (Faz 4) ihtiyaç duyduğu bileşenler var.
+   ========================================================= */
+
+/* ── Durum rozeti ───────────────────────────────────────── */
+.hs-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: .72rem;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.hs-badge--draft     { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+.hs-badge--submitted { background: #eff6ff; color: #1e40af; border-color: #93c5fd; }
+.hs-badge--approved  { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+.hs-badge--pending   { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+.hs-badge--paid      { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.hs-badge--rejected  { background: #fef2f2; color: #991b1b; border-color: #fca5a5; }
+
+.hs-badge-sm { font-size: .66rem; padding: 1px 6px; }
+
+/* ── Durum eylem butonları (onay kuyruğu) ───────────────── */
+.hs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.hs-actions .btn { font-size: .78rem; padding: 5px 10px; }
+
+/* ── Red gerekçesi satırı ───────────────────────────────── */
+.hs-note {
+    font-size: .78rem;
+    color: #991b1b;
+    background: #fef2f2;
+    border-left: 3px solid #fca5a5;
+    padding: 5px 8px;
+    border-radius: 0 4px 4px 0;
+    margin-top: 4px;
+}
+
+/* ── Para birimi ayrımı uyarısı ─────────────────────────── */
+.hs-cur-note { font-size: .7rem; color: var(--muted); }
+
+/* ── Mobil: rozetler satırı taşırmasın ──────────────────── */
+@media (max-width: 767px) {
+    .hs-actions .btn { flex: 1 1 auto; min-height: 38px; }
+}

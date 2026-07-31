@@ -4,7 +4,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_hesap('write');
 
 header('Content-Type: application/json');
 
@@ -26,6 +26,20 @@ $st->execute([$id]);
 $f = $st->fetch();
 if (!$f) {
     echo json_encode(['ok'=>false,'msg'=>'Dosya bulunamadı']);
+    exit;
+}
+
+// Bağlı kayıt görünür mü + kilitli mi? (B5)
+$ts = db()->prepare("SELECT * FROM account_transactions WHERE id=?");
+$ts->execute([(int)$f['transaction_id']]);
+$tx = $ts->fetch();
+if (!$tx || !hesap_row_visible($tx)) {
+    http_response_code(403);
+    echo json_encode(['ok'=>false,'msg'=>'Erişim reddedildi']);
+    exit;
+}
+if (hesap_is_locked($tx)) {
+    echo json_encode(['ok'=>false,'msg'=>'Ödenmiş kayıt kilitlidir.']);
     exit;
 }
 

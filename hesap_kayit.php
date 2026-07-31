@@ -5,7 +5,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.write');
+require_hesap('write');
+hesap_migrate();
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : (isset($_POST['id']) ? (int)$_POST['id'] : 0);
 $hizli = trim($_GET['hizli'] ?? '');
@@ -39,6 +40,10 @@ $record = [
     'is_for_company'       => 1,
     'is_given_to_accountant' => 0,
     'notes'                => '',
+    'status'               => 'submitted',
+    'user_id'              => (int)$auth_user['id'],
+    'depo'                 => active_depot() ?? '',
+    'review_note'          => '',
 ];
 $existing_files = [];
 if ($id > 0) {
@@ -47,6 +52,14 @@ if ($id > 0) {
     $row = $st->fetch();
     if (!$row) {
         set_flash('error', 'Kayıt bulunamadı.');
+        header('Location: hesap_liste.php');
+        exit;
+    }
+    if (!hesap_row_visible($row)) {
+        forbidden('Bu kayıt size görünür değil.');
+    }
+    if (hesap_is_locked($row)) {
+        set_flash('error', 'Ödenmiş kayıt kilitlidir. Değişiklik için sistem yöneticisine başvurun.');
         header('Location: hesap_liste.php');
         exit;
     }
@@ -71,37 +84,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $record['document_no']            = trim($_POST['document_no'] ?? '');
     $record['has_invoice']            = isset($_POST['has_invoice']) ? 1 : 0;
     $record['is_for_company']         = isset($_POST['is_for_company']) ? 1 : 0;
-    $record['is_given_to_accountant'] = isset($_POST['is_given_to_accountant']) ? 1 : 0;
+    // is_given_to_accountant artık formdan gelmez — durum makinesi belirler ($legacy_muh)
     $record['notes']                  = trim($_POST['notes'] ?? '');
 
     if (!in_array($record['type'], ['gelir','gider','havale','nakit'], true)) {
         $errors[] = 'Geçersiz tür.';
     }
-    $amount_float = (float)str_replace(['.', ','], ['', '.'], $record['amount']);
+    // B1: "1234.56" gibi nokta-ondalık girdiler 123456 oluyordu — hesap_parse_amount() düzeltir
+    $amount_float = hesap_parse_amount($record['amount']);
     if ($amount_float <= 0) {
         $errors[] = 'Tutar 0\'dan büyük olmalı.';
+    }
+
+    // Taslak olarak kaydet / muhasebeye gönder
+    $yeni_durum = (($_POST['kaydet_turu'] ?? '') === 'taslak') ? 'draft' : 'submitted';
+    if ($id > 0) {
+        // Mevcut kayıt: onay sürecine girmiş bir kaydın durumu düzenlemeyle sıfırlanmaz;
+        // yalnız taslak/reddedilen kayıtlar yeniden gönderilebilir.
+        $mevcut = (string)($old_for_audit['status'] ?? 'submitted');
+        $yeni_durum = in_array($mevcut, ['draft', 'rejected'], true) ? $yeni_durum : $mevcut;
     }
 
     if (empty($errors)) {
         $pdo = db();
         $is_update = $id > 0;
+        // Durum ↔ legacy bayrak senkron: bakiyeye giren durumlar muhasebeye verilmiş sayılır
+        $legacy_muh = in_array($yeni_durum, hesap_balance_statuses(), true) ? 1 : 0;
+
         if ($is_update) {
-            $pdo->prepare("UPDATE account_transactions SET transaction_date=?,transaction_time=?,type=?,category=?,amount=?,currency=?,payment_method=?,person_company=?,description=?,document_no=?,has_invoice=?,is_for_company=?,is_given_to_accountant=?,notes=? WHERE id=?")
+            $pdo->prepare("UPDATE account_transactions SET transaction_date=?,transaction_time=?,type=?,category=?,amount=?,currency=?,payment_method=?,person_company=?,description=?,document_no=?,has_invoice=?,is_for_company=?,is_given_to_accountant=?,notes=?,status=?,submitted_at=CASE WHEN ? THEN COALESCE(submitted_at,NOW()) ELSE submitted_at END WHERE id=?")
                 ->execute([
                     $record['transaction_date'], $record['transaction_time'], $record['type'],
                     $record['category'], $amount_float, $record['currency'], $record['payment_method'],
                     $record['person_company'], $record['description'], $record['document_no'],
                     (int)$record['has_invoice'], (int)$record['is_for_company'],
-                    (int)$record['is_given_to_accountant'], $record['notes'], $id,
+                    $legacy_muh, $record['notes'], $yeni_durum,
+                    $yeni_durum === 'submitted' ? 1 : 0, $id,
                 ]);
         } else {
-            $pdo->prepare("INSERT INTO account_transactions (transaction_date,transaction_time,type,category,amount,currency,payment_method,person_company,description,document_no,has_invoice,is_for_company,is_given_to_accountant,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            $pdo->prepare("INSERT INTO account_transactions (user_id,created_by,depo,transaction_date,transaction_time,type,category,amount,currency,payment_method,person_company,description,document_no,has_invoice,is_for_company,is_given_to_accountant,notes,status,submitted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([
+                    (int)$auth_user['id'], (int)$auth_user['id'], active_depot() ?? '',
                     $record['transaction_date'], $record['transaction_time'], $record['type'],
                     $record['category'], $amount_float, $record['currency'], $record['payment_method'],
                     $record['person_company'], $record['description'], $record['document_no'],
                     (int)$record['has_invoice'], (int)$record['is_for_company'],
-                    (int)$record['is_given_to_accountant'], $record['notes'],
+                    $legacy_muh, $record['notes'], $yeni_durum,
+                    $yeni_durum === 'submitted' ? date('Y-m-d H:i:s') : null,
                 ]);
             $id = (int)$pdo->lastInsertId();
         }
@@ -115,6 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'currency'         => $record['currency'],
             'payment_method'   => $record['payment_method'],
             'person_company'   => $record['person_company'],
+            'status'           => $yeni_durum,
         ];
         if ($is_update) {
             $old_summary = isset($old_for_audit) ? [
@@ -125,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'currency'         => $old_for_audit['currency'],
                 'payment_method'   => $old_for_audit['payment_method'],
                 'person_company'   => $old_for_audit['person_company'],
+                'status'           => $old_for_audit['status'] ?? null,
             ] : null;
             audit_log_event('update', 'hesap', $id, $old_summary, $new_summary);
         } else {
@@ -161,12 +192,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $kategoriler = hesap_kategoriler();
 $title = $id > 0 ? 'Kayıt Düzenle #' . $id : ($hizli ? ucfirst($hizli) . ' Ekle' : 'Yeni Kayıt');
 render_header($title);
+hesap_assets();
 render_flash();
 ?>
 <div class="page-head">
     <h1><?= h($title) ?></h1>
     <div><a href="hesap_liste.php" class="btn btn-ghost">İptal</a></div>
 </div>
+<?php if ($id > 0): ?>
+<div style="margin-bottom:10px">
+    <?= hesap_status_badge($record['status'] ?? null) ?>
+    <?php if (($record['status'] ?? '') === 'rejected' && trim((string)$record['review_note']) !== ''): ?>
+    <div class="hs-note">Red gerekçesi: <?= h($record['review_note']) ?></div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 <?php if (!empty($errors)): foreach ($errors as $e): ?>
 <div class="flash flash-error"><?= h($e) ?></div>
 <?php endforeach; endif; ?>
@@ -238,10 +278,11 @@ render_flash();
             <label style="display:flex;align-items:center;gap:8px">
                 <input type="checkbox" name="is_for_company" <?= $record['is_for_company'] ? 'checked' : '' ?>> Şirket için masraf
             </label>
-            <label style="display:flex;align-items:center;gap:8px">
-                <input type="checkbox" name="is_given_to_accountant" <?= $record['is_given_to_accountant'] ? 'checked' : '' ?>> Muhasebeye verildi
-            </label>
         </div>
+        <p class="muted" style="font-size:.78rem;margin:8px 0 0">
+            Muhasebe onayı artık durum akışıyla yürür — kayıt gönderildikten sonra
+            onay/red işlemini muhasebe yapar.
+        </p>
         <label style="display:block;margin-top:12px">Muhasebe Notu
             <textarea name="notes" rows="2" placeholder="Muhasebeciye özel not..."><?= h($record['notes']) ?></textarea>
         </label>
@@ -310,9 +351,18 @@ render_flash();
     </div>
 </section>
 
+<?php
+// Onay sürecine girmiş kayıtlarda durum düzenlemeyle değişmez — buton da gösterilmez
+$durum_secilebilir = ($id === 0) || in_array((string)($record['status'] ?? 'submitted'), ['draft','rejected'], true);
+?>
 <div class="form-foot">
     <a href="hesap_liste.php" class="btn btn-ghost">İptal</a>
+    <?php if ($durum_secilebilir): ?>
+    <button type="submit" name="kaydet_turu" value="taslak" class="btn">Taslak Kaydet</button>
+    <button type="submit" name="kaydet_turu" value="gonder" class="btn btn-primary btn-lg">Kaydet ve Muhasebeye Gönder</button>
+    <?php else: ?>
     <button type="submit" class="btn btn-primary btn-lg">Kaydet</button>
+    <?php endif; ?>
 </div>
 </form>
 

@@ -4,7 +4,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('reports.read');
+require_hesap('read');
 
 $fn = trim($_GET['f'] ?? '');
 if (!preg_match('/^[a-f0-9]{32}\.(jpg|jpeg|png|webp|pdf)$/i', $fn)) {
@@ -18,10 +18,11 @@ if (!file_exists($path)) {
     exit('Dosya bulunamadı');
 }
 
-// DB'de varlığını doğrula
-$st = db()->prepare("SELECT id FROM account_files WHERE file_name=? LIMIT 1");
-$st->execute([$fn]);
-if (!$st->fetch()) {
+// B5: dosyanın DB'de olması yetmez — bağlı olduğu kaydın bu kullanıcıya
+// görünür olması da gerekir (sahiplik + depo). Aksi hâlde fiş fotoğrafları
+// dosya adını bilen her oturumdan okunabiliyordu.
+$fx = hesap_file_with_tx($fn);
+if ($fx === null || !hesap_row_visible($fx['tx'])) {
     http_response_code(403);
     exit('Erişim reddedildi');
 }

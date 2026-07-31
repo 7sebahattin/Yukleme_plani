@@ -2,6 +2,8 @@
 // hesap_config.php — Hesap modülü paylaşımlı yapılandırma
 declare(strict_types=1);
 
+require_once __DIR__ . '/config/hesap_calc.php';
+
 define('HESAP_UPLOAD_DIR', __DIR__ . '/uploads/hesap/');
 define('HESAP_MAX_FILE_SIZE', 10 * 1024 * 1024);
 define('HESAP_ALLOWED_EXT', ['jpg','jpeg','png','webp','pdf']);
@@ -31,6 +33,19 @@ function hesap_payment_label(string $p): string {
 function fmt_para(float $v, string $cur='TRY'): string {
     return number_format($v,2,',','.') . ' ' . hesap_currency_sym($cur);
 }
+/** Modüle özel CSS — render_header()'dan sonra çağrılır (maliyet.css emsali). */
+function hesap_assets(): void {
+    $v = @filemtime(__DIR__ . '/assets/hesap.css') ?: time();
+    echo '<link rel="stylesheet" href="assets/hesap.css?v=' . $v . '">' . "\n";
+}
+
+/** Durum rozeti HTML'i. */
+function hesap_status_badge(?string $status, bool $small = false): string {
+    $s = (string)($status ?: 'submitted');
+    return '<span class="hs-badge hs-badge--' . h(hesap_status_class($s)) . ($small ? ' hs-badge-sm' : '') . '">'
+         . h(hesap_status_icon($s)) . ' ' . h(hesap_status_label($s)) . '</span>';
+}
+
 function hesap_get_files(int $tid): array {
     $st = db()->prepare("SELECT * FROM account_files WHERE transaction_id=? ORDER BY id");
     $st->execute([$tid]);
@@ -38,6 +53,26 @@ function hesap_get_files(int $tid): array {
 }
 function hesap_is_image(string $fn): bool {
     return (bool)preg_match('/\.(jpg|jpeg|png|webp)$/i', $fn);
+}
+
+/**
+ * Disk adından dosya + bağlı olduğu işlemi getirir.
+ * hesap_dosya.php / hesap_dosya_sil.php erişim kontrolünü bunun üzerinden yapar:
+ * dosyanın DB'de var olması yetmez, kaydın kullanıcıya görünür olması da gerekir (B5).
+ * @return array{file:array,tx:array}|null
+ */
+function hesap_file_with_tx(string $file_name): ?array {
+    $st = db()->prepare("SELECT * FROM account_files WHERE file_name=? LIMIT 1");
+    $st->execute([$file_name]);
+    $f = $st->fetch();
+    if (!$f) return null;
+
+    $ts = db()->prepare("SELECT * FROM account_transactions WHERE id=?");
+    $ts->execute([(int)$f['transaction_id']]);
+    $tx = $ts->fetch();
+    if (!$tx) return null;
+
+    return ['file' => $f, 'tx' => $tx];
 }
 
 /**

@@ -4,7 +4,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('reports.read');
+require_hesap('read');
+hesap_migrate();
 
 $q       = trim($_GET['q'] ?? '');
 $type_f  = trim($_GET['type'] ?? '');
@@ -12,6 +13,8 @@ $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
 $fis_f   = trim($_GET['fis'] ?? '');   // '' all, '1' var, '0' yok
 $muh_f   = trim($_GET['muh'] ?? '');   // '' all, '1' verildi, '0' bekliyor
+$durum_f = trim($_GET['durum'] ?? ''); // '' all, aksi hâlde durum kodu
+if ($durum_f !== '' && !hesap_status_valid($durum_f)) $durum_f = '';
 $sayfa   = max(1, (int)($_GET['sayfa'] ?? 1));
 $limit   = 50;
 $offset  = ($sayfa - 1) * $limit;
@@ -32,10 +35,18 @@ if ($q !== '') {
 if ($type_f !== '') { $where[] = "type=?";                 $params[] = $type_f; }
 if ($tarih_b !== '') { $where[] = "transaction_date>=?";   $params[] = $tarih_b; }
 if ($tarih_s !== '') { $where[] = "transaction_date<=?";   $params[] = $tarih_s; }
-if ($fis_f === '1') { $where[] = "has_invoice=1"; }
-if ($fis_f === '0') { $where[] = "has_invoice=0"; }
+// B4: fiş filtresi rozetle aynı mantığa bağlandı (fotoğraf VEYA manuel fatura işareti)
+if ($fis_f === '1') { $where[] = "(has_files=1 OR has_invoice=1)"; }
+if ($fis_f === '0') { $where[] = "(has_files=0 AND has_invoice=0)"; }
 if ($muh_f === '1') { $where[] = "is_given_to_accountant=1"; }
 if ($muh_f === '0') { $where[] = "is_given_to_accountant=0"; }
+if ($durum_f !== '') { $where[] = "status=?";              $params[] = $durum_f; }
+
+// Kapsam: kendi kayıtlarım (+ atanmamış) ve aktif depo
+[$osql, $oparams] = hesap_owner_sql();
+if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
+[$dsql, $dparams] = depo_sql_in('depo');
+if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
 
 $wstr = implode(' AND ', $where);
 
@@ -43,12 +54,13 @@ $cnt_st = db()->prepare("SELECT COUNT(*) FROM account_transactions WHERE $wstr")
 $cnt_st->execute($params);
 $total = (int)$cnt_st->fetchColumn();
 
-$sum_st = db()->prepare("SELECT
+// B2: para birimleri ayrı gruplanır, asla toplanmaz
+$sum_st = db()->prepare("SELECT currency,
     COALESCE(SUM(CASE WHEN type='gelir' THEN amount END),0) AS gelir,
     COALESCE(SUM(CASE WHEN type IN ('gider','havale','nakit') THEN amount END),0) AS gider
-    FROM account_transactions WHERE $wstr AND currency='TRY'");
+    FROM account_transactions WHERE $wstr GROUP BY currency ORDER BY (currency='TRY') DESC, currency");
 $sum_st->execute($params);
-$sums = $sum_st->fetch();
+$sums_by_cur = $sum_st->fetchAll();
 
 $st = db()->prepare("SELECT * FROM account_transactions WHERE $wstr ORDER BY transaction_date DESC, id DESC LIMIT $limit OFFSET $offset");
 $st->execute($params);
@@ -56,6 +68,7 @@ $rows = $st->fetchAll();
 $toplam_sayfa = (int)ceil($total / $limit);
 
 render_header('Hesap Kayıtları');
+hesap_assets();
 render_flash();
 ?>
 <div class="page-head">
@@ -86,7 +99,7 @@ render_flash();
 <!-- Tür filtreleri -->
 <div class="filter-pills">
     <?php
-    $base_params = array_filter(['q'=>$q,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f]);
+    $base_params = array_filter(['q'=>$q,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f,'durum'=>$durum_f]);
     ?>
     <a href="hesap_liste.php?<?= http_build_query($base_params) ?>" class="pill<?= $type_f === '' ? ' active' : '' ?>">Tümü</a>
     <?php foreach (['gelir','gider','havale','nakit'] as $t): ?>
@@ -98,6 +111,16 @@ render_flash();
     <?php endforeach; ?>
 </div>
 
+<!-- Durum filtreleri -->
+<div class="filter-pills" style="margin-top:6px">
+    <?php $durum_base = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f]); ?>
+    <a href="hesap_liste.php?<?= http_build_query($durum_base) ?>" class="pill<?= $durum_f === '' ? ' active' : '' ?>">Tüm Durumlar</a>
+    <?php foreach (hesap_statuses() as $kod => $meta): ?>
+    <a href="hesap_liste.php?<?= http_build_query(array_merge($durum_base, ['durum'=>$kod])) ?>"
+       class="pill<?= $durum_f === $kod ? ' active' : '' ?>"><?= h($meta['label']) ?></a>
+    <?php endforeach; ?>
+</div>
+
 <!-- Fiş / Muhasebe filtresi -->
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
     <select onchange="location.href=updateParam('fis',this.value)" class="btn btn-ghost" style="padding:4px 8px">
@@ -105,13 +128,9 @@ render_flash();
         <option value="1" <?= $fis_f === '1' ? 'selected' : '' ?>>Fiş var</option>
         <option value="0" <?= $fis_f === '0' ? 'selected' : '' ?>>Fiş yok ⚠</option>
     </select>
-    <select onchange="location.href=updateParam('muh',this.value)" class="btn btn-ghost" style="padding:4px 8px">
-        <option value="" <?= $muh_f === '' ? 'selected' : '' ?>>Muhasebe: Hepsi</option>
-        <option value="0" <?= $muh_f === '0' ? 'selected' : '' ?>>Bekliyor</option>
-        <option value="1" <?= $muh_f === '1' ? 'selected' : '' ?>>Verildi</option>
-    </select>
-    <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f])) ?>" class="btn btn-ghost">📊 Excel</a>
-    <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
+    <?php // Muhasebe durumu artık yukarıdaki durum filtresinden seçilir (is_given_to_accountant ile senkron) ?>
+    <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f])) ?>" class="btn btn-ghost">📊 Excel</a>
+    <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
 </div>
 
 <!-- Tarih aralığı seçici -->
@@ -158,16 +177,19 @@ render_flash();
     <?php endif; ?>
 </form>
 
-<!-- Özet -->
-<?php if ($total > 0): ?>
+<!-- Özet — her para birimi kendi satırında (B2) -->
+<?php if ($total > 0): foreach ($sums_by_cur as $sc):
+    $g = (float)$sc['gelir']; $gd = (float)$sc['gider']; $cur = $sc['currency']; ?>
 <div class="hesap-stat-grid" style="grid-template-columns:repeat(3,1fr);margin:12px 0">
-    <div class="hesap-stat green"><span>Toplam Gelir</span><strong><?= fmt_para((float)$sums['gelir']) ?></strong></div>
-    <div class="hesap-stat red"><span>Toplam Gider</span><strong><?= fmt_para((float)$sums['gider']) ?></strong></div>
-    <div class="hesap-stat <?= ((float)$sums['gelir'] - (float)$sums['gider']) >= 0 ? 'green' : 'red' ?>">
-        <span>Net</span><strong><?= fmt_para((float)$sums['gelir'] - (float)$sums['gider']) ?></strong>
+    <div class="hesap-stat green"><span>Toplam Gelir<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($g, $cur) ?></strong></div>
+    <div class="hesap-stat red"><span>Toplam Gider<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($gd, $cur) ?></strong></div>
+    <div class="hesap-stat <?= ($g - $gd) >= 0 ? 'green' : 'red' ?>">
+        <span>Net<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($g - $gd, $cur) ?></strong>
     </div>
 </div>
-<?php endif; ?>
+<?php endforeach; if (count($sums_by_cur) > 1): ?>
+<p class="hs-cur-note">Para birimleri ayrı toplanır — farklı kurlar birbirine eklenmez.</p>
+<?php endif; endif; ?>
 
 <?php if (empty($rows)): ?>
 <div class="empty">
@@ -187,7 +209,7 @@ render_flash();
     <th class="num">Tutar</th>
     <th>Ödeme</th>
     <th>Fiş</th>
-    <th>Muh.</th>
+    <th>Durum</th>
     <th class="actions-col">İşlem</th>
 </tr></thead>
 <tbody>
@@ -201,10 +223,24 @@ render_flash();
     <td class="muted"><?= hesap_payment_label($r['payment_method']) ?></td>
     <?php $fd = hesap_fis_durumu($r); ?>
     <td title="<?= h($fd['label']) ?>"><?= $fd['var'] ? '✓' : '<span style="color:var(--danger)">⚠</span>' ?></td>
-    <td><?= $r['is_given_to_accountant'] ? '✓' : '<span style="color:var(--warn)">•</span>' ?></td>
+    <td><?= hesap_status_badge($r['status'] ?? null, true) ?>
+        <?php if (($r['status'] ?? '') === 'rejected' && trim((string)$r['review_note']) !== ''): ?>
+        <div class="hs-note"><?= h($r['review_note']) ?></div>
+        <?php endif; ?>
+    </td>
     <td class="actions-col">
+        <?php if (!hesap_is_locked($r)): ?>
         <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
+        <?php endif; ?>
+        <?php if (hesap_can('delete')): ?>
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
+        <?php endif; ?>
+        <?php foreach (hesap_available_transitions($r) as $hedef => $kural): ?>
+        <button type="button" class="btn btn-sm"
+                onclick="hesapDurum(<?= (int)$r['id'] ?>,'<?= h($hedef) ?>',<?= $kural['note'] ? 'true' : 'false' ?>)">
+            <?= h($kural['label']) ?>
+        </button>
+        <?php endforeach; ?>
     </td>
 </tr>
 <?php endforeach; ?>
@@ -225,8 +261,8 @@ render_flash();
             <?php $fd = hesap_fis_durumu($r); ?>
             <div class="muted"><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?>
                 <?php if (!$fd['var']): ?> · <span style="color:var(--danger)"><?= h($fd['kisa']) ?></span><?php endif; ?>
-                <?php if (!$r['is_given_to_accountant']): ?> · <span style="color:var(--warn)">Bekliyor</span><?php endif; ?>
             </div>
+            <div style="margin-top:4px"><?= hesap_status_badge($r['status'] ?? null, true) ?></div>
         </div>
         <span class="hesap-amount <?= in_array($r['type'], ['gelir']) ? 'positive' : 'negative' ?>" style="font-size:1.1rem;font-weight:700">
             <?= (in_array($r['type'], ['gelir']) ? '+' : '-') . fmt_para((float)$r['amount'], $r['currency']) ?>
@@ -235,26 +271,72 @@ render_flash();
     <?php if ($r['description']): ?>
     <div class="record-card-body"><div class="muted"><?= h($r['description']) ?></div></div>
     <?php endif; ?>
-    <div class="record-card-actions">
+    <?php if (($r['status'] ?? '') === 'rejected' && trim((string)$r['review_note']) !== ''): ?>
+    <div class="hs-note">Red gerekçesi: <?= h($r['review_note']) ?></div>
+    <?php endif; ?>
+    <div class="record-card-actions hs-actions">
+        <?php if (!hesap_is_locked($r)): ?>
         <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
+        <?php endif; ?>
+        <?php if (hesap_can('delete')): ?>
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
+        <?php endif; ?>
+        <?php foreach (hesap_available_transitions($r) as $hedef => $kural): ?>
+        <button type="button" class="btn btn-sm"
+                onclick="hesapDurum(<?= (int)$r['id'] ?>,'<?= h($hedef) ?>',<?= $kural['note'] ? 'true' : 'false' ?>)">
+            <?= h($kural['label']) ?>
+        </button>
+        <?php endforeach; ?>
     </div>
 </div>
 <?php endforeach; ?>
 </div>
 
-<!-- Sayfalama -->
-<?php if ($toplam_sayfa > 1): ?>
-<div style="display:flex;justify-content:center;gap:8px;margin:16px 0;flex-wrap:wrap">
-    <?php for ($p = 1; $p <= $toplam_sayfa; $p++): ?>
-    <a href="hesap_liste.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f,'sayfa'=>$p])) ?>"
-       class="btn btn-sm <?= $p === $sayfa ? 'btn-primary' : '' ?>"><?= $p ?></a>
-    <?php endfor; ?>
+<!-- Sayfalama — pencereli (B6): ilk / son / geçerli ±2 -->
+<?php if ($toplam_sayfa > 1):
+    $pg_base = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f,'durum'=>$durum_f]);
+    $pg_url  = fn(int $p) => 'hesap_liste.php?' . http_build_query(array_merge($pg_base, ['sayfa'=>$p]));
+    $pencere = [];
+    foreach ([1, $toplam_sayfa] as $p) { $pencere[$p] = true; }
+    for ($p = $sayfa - 2; $p <= $sayfa + 2; $p++) { if ($p >= 1 && $p <= $toplam_sayfa) $pencere[$p] = true; }
+    $sayfalar = array_keys($pencere); sort($sayfalar);
+?>
+<div style="display:flex;justify-content:center;gap:8px;margin:16px 0;flex-wrap:wrap;align-items:center">
+    <?php if ($sayfa > 1): ?><a href="<?= h($pg_url($sayfa - 1)) ?>" class="btn btn-sm">‹</a><?php endif; ?>
+    <?php $onceki = 0; foreach ($sayfalar as $p): ?>
+        <?php if ($onceki && $p > $onceki + 1): ?><span class="muted">…</span><?php endif; ?>
+        <a href="<?= h($pg_url($p)) ?>" class="btn btn-sm <?= $p === $sayfa ? 'btn-primary' : '' ?>"><?= $p ?></a>
+        <?php $onceki = $p; ?>
+    <?php endforeach; ?>
+    <?php if ($sayfa < $toplam_sayfa): ?><a href="<?= h($pg_url($sayfa + 1)) ?>" class="btn btn-sm">›</a><?php endif; ?>
 </div>
 <?php endif; ?>
 <?php endif; ?>
 
 <script>
+var hesapCsrf = <?= json_encode(csrf_token()) ?>;
+
+// Durum geçişi — hesap_durum.php doğrular, yetkiyi ve geçiş kuralını sunucu uygular
+function hesapDurum(id, hedef, gerekceZorunlu) {
+    var not = '';
+    if (gerekceZorunlu) {
+        not = prompt('Gerekçe (zorunlu):') || '';
+        if (!not.trim()) { alert('Gerekçe girilmeden işlem yapılamaz.'); return; }
+    }
+    var body = new URLSearchParams({ id: id, durum: hedef, not: not, csrf: hesapCsrf });
+    fetch('hesap_durum.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+        if (d.ok) location.reload();
+        else alert(d.msg || 'İşlem başarısız.');
+    })
+    .catch(function () { alert('Bağlantı hatası.'); });
+}
+
 function updateParam(key, val) {
     var params = new URLSearchParams(location.search);
     if (val) params.set(key, val); else params.delete(key);

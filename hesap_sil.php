@@ -4,7 +4,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.delete');
+require_hesap('delete');
+hesap_migrate();
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { header('Location: hesap_liste.php'); exit; }
@@ -14,6 +15,13 @@ $st->execute([$id]);
 $row = $st->fetch();
 if (!$row) {
     set_flash('error', 'Kayıt bulunamadı.');
+    header('Location: hesap_liste.php'); exit;
+}
+if (!hesap_row_visible($row)) {
+    forbidden('Bu kayıt size görünür değil.');
+}
+if (hesap_is_locked($row)) {
+    set_flash('error', 'Ödenmiş kayıt silinemez. Önce ödemeyi geri alın.');
     header('Location: hesap_liste.php'); exit;
 }
 
@@ -38,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'amount'           => (float)$row['amount'],
         'currency'         => $row['currency'],
         'person_company'   => $row['person_company'],
+        'status'           => $row['status'] ?? null,
     ]);
 
     set_flash('success', 'Kayıt silindi.');

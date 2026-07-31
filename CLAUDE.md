@@ -70,6 +70,10 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 | stok.read/write | ✓ | ✓ | — | ✓ read |
 | reports.read/export | ✓ | ✓ | — | ✓ |
 | defs.read/write | ✓ | read | — | — |
+| hesap.read | ✓ | ✓ | ✓ | ✓ |
+| hesap.write | ✓ | ✓ | — | ✓ |
+| hesap.approve/pay | ✓ | — | — | ✓ |
+| hesap.delete/admin | ✓ | — | — | — |
 | users.admin | ✓ | — | — | — |
 | is_admin() | ✓ | — | — | — |
 
@@ -239,6 +243,53 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 
 ---
 
+## Hesap Modülü — Durum Makinesi (Sprint Hesap-01)
+
+Personel masraf takibi. **Çekirdek: `config/hesap_calc.php`** — şema migrasyonu, tutar
+ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı. Modül CSS'i `assets/hesap.css`
+(yalnız `hesap_*` sayfalarında, `style.css`'e dokunmaz — maliyet emsali).
+
+**Sayfalar:** `hesap.php` (pano) · `hesap_liste.php` · `hesap_kayit.php` ·
+`hesap_muhasebe.php` (onay kuyruğu) · `hesap_durum.php` (geçiş JSON uç noktası) ·
+`hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php`.
+
+**Şema eklentileri** (`account_transactions`): `user_id` (masrafın sahibi) · `created_by` ·
+`status` · `submitted_at` · `reviewed_by/at` · `review_note` · `paid_at` · `depo`.
+
+**Durum akışı** — `hesap_transitions()` tek otoritedir, geçişi elle UPDATE ile yazma:
+
+```
+draft ⇄ submitted → approved → pending_payment → paid
+          ↓            ↓             ↓
+       rejected ────────┴─────────────┘  → draft (düzeltmeye al)
+```
+
+| Durum | Bakiyeye girer | Geçiren |
+|---|:---:|---|
+| `draft` / `submitted` | — | sahibi (`hesap.write`) |
+| `approved` / `pending_payment` | ✓ | `hesap.approve` |
+| `paid` | ✓ | `hesap.pay` — **kayıt kilitlenir**, açmak `hesap.admin` |
+| `rejected` | — | `hesap.approve`, **gerekçe zorunlu** |
+
+**Kurallar:**
+- **Bakiye yalnız `approved`/`pending_payment`/`paid`'den** hesaplanır — `hesap_balance()`.
+  Bekleyen tutar ayrı gösterilir, bakiyeye karışmaz.
+- **Para birimleri ASLA toplanmaz.** `hesap_balance()` currency bazında döner; TRY dışı
+  kurlar ekranda ayrı kart/satırdır. (Eski `array_sum` hatası — USD+TRY toplanıyordu.)
+- **İşaret:** net < 0 → şirket personele borçlu (yeşil) · net > 0 → personel şirkete
+  borçlu (kırmızı). `hesap_balance_label()` bunu etiketler.
+- **Tutar girdisi `hesap_parse_amount()` ile ayrıştırılır** — `str_replace` KULLANMA;
+  eski kod "1234.56"yı 123456 yapıyordu (100× hata).
+- `is_given_to_accountant` **legacy bayrak olarak korunur**, `hesap_transition()` senkron
+  tutar (bakiyeye giren durumlar = 1). Eski sorgular bozulmasın diye silinmedi.
+- **Görünürlük:** `hesap_row_visible()` / `hesap_owner_sql()` — normal kullanıcı yalnız
+  kendi + sahipsiz kayıtları görür; `hesap.approve`/`hesap.admin` tümünü görür.
+  Depo filtresi `depo_sql_in('depo')`.
+- **Atanmamış veri:** `user_id IS NULL` ve `depo=''` eski kayıtlar herkese görünür kalır.
+- Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz).
+
+---
+
 ## Önemli Desenler
 
 ```php
@@ -292,5 +343,7 @@ Yeni özellik eklerken:
 | Dara toplamı 1 eksik | Per-palet yuvarlama | Sadece toplamda yuvarla |
 | `type` kolonu bulunamadı | Auto-migration çalışmadı | `migrate.php?run=1` veya phpMyAdmin ALTER TABLE |
 | SQLSTATE[HY093] | PDO named param tekrar kullanıldı | Pozisyonel `?` kullan |
+| Tutar 100× büyük kaydedildi | `str_replace(['.',','],['','.'])` | `hesap_parse_amount()` kullan |
+| Rapor toplamı tutmuyor | Para birimleri toplanmış | `GROUP BY currency` — kurları ayır |
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |

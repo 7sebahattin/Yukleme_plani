@@ -1,6 +1,6 @@
 # Hesap Modülü Modernizasyon Planı
 
-**Durum:** Analiz tamamlandı — uygulama onayı bekliyor
+**Durum:** Faz 0 ve Faz 4 **tamamlandı** (bkz. §4 Uygulama Kaydı) — Faz 1-3 (UI/UX) ve Faz 5 (PDF) bekliyor
 **Branch:** `claude/modernize-expense-tracking-vtdg73`
 **Kapsam:** `hesap.php` · `hesap_liste.php` · `hesap_kayit.php` · `hesap_yazdir.php` ·
 `hesap_muhasebe.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_export.php` · `hesap_config.php` ·
@@ -359,3 +359,67 @@ PDF ayrı bir butondur. Her PDF üretimi `audit_log_event('export','hesap',…)`
 
 Adım 1 bugün başlatılabilir ve tek başına ölçülebilir fayda verir (100× tutar hatası + yanlış
 rapor toplamı). Adım 2 açık onay bekler.
+
+---
+
+## 4. Uygulama Kaydı — Faz 0 + Faz 4 (tamamlandı)
+
+### Yeni dosyalar
+
+| Dosya | İçerik |
+|---|---|
+| `config/hesap_calc.php` | Modül çekirdeği: `hesap_migrate()`, `hesap_parse_amount()`, durum makinesi, `hesap_balance()`, yetki kapısı |
+| `hesap_durum.php` | Durum geçişi JSON uç noktası (tekil + toplu) |
+| `assets/hesap.css` | Modüle özel stiller — şimdilik yalnız durum rozeti/eylem bileşenleri (Faz 1'de genişleyecek) |
+| `scripts/hesap_smoke.php` | 43 assertion; bellek içi SQLite, canlı DB'ye dokunmaz |
+
+### Şema
+
+`account_transactions` + `user_id`, `created_by`, `status`, `submitted_at`, `reviewed_by`,
+`reviewed_at`, `review_note`, `paid_at`, `depo` (+3 indeks).
+
+Migrasyon üç yoldan da idempotent çalışır: `hesap_migrate()` (sayfa açılışında),
+`migrate.php` paneli, ve yeni kurulumlar için `CREATE TABLE` tanımları (db.php + helpers.php).
+
+**Geri dolum marker gerektirmez:**
+`UPDATE … SET status='approved' WHERE status='submitted' AND is_given_to_accountant=1`
+Koşul yalnız geri doldurulmamış eski satırlarla eşleşir — `hesap_transition()` iki alanı her
+zaman senkron tuttuğu için gerçek bir `submitted` kaydında bayrak daima 0'dır. Bu sayede
+kolonu `migrate.php` önce eklese bile (DEFAULT 'submitted') düzeltme yine de uygulanır.
+
+### Yetkiler
+
+`hesap.read` / `.write` / `.delete` / `.approve` / `.pay` / `.admin` eklendi ve rollere
+işlendi. **Muhasebe rolü artık kendi sayfasına girebiliyor** (§0.4'teki kırık giderildi).
+`hesap_can()` geçiş dönemi için eski yetkilere (`reports.read` / `records.write`) düşer,
+böylece `role_permissions` seed'i çalışmadan önce de modül erişilebilir kalır.
+
+### Hata düzeltmeleri
+
+| # | Durum | Not |
+|---|---|---|
+| B1 | ✅ | `hesap_parse_amount()` — 13 vaka test edildi, "1234.56" artık 1234.56 |
+| B2 | ✅ | `hesap_yazdir.php`, `hesap_export.php`, `hesap_liste.php`, `hesap_balance()` — hepsi `GROUP BY currency` |
+| B3 | ✅ | Sayaçlar kullanıcı + depo kapsamında, tarih filtresi doğru bind ediliyor |
+| B4 | ✅ | Fiş filtresi rozetle aynı mantıkta (`has_files=1 OR has_invoice=1`) |
+| B5 | ✅ | `hesap_dosya.php` / `hesap_dosya_sil.php` — `hesap_row_visible()` ile kayıt sahipliği doğrulanıyor |
+| B6 | ✅ | Sayfalama pencereli (ilk/son + geçerli ±2) |
+| B7 | ✅ | `hesap.php` tarih parametreleri bind ediliyor, string interpolasyon kalmadı |
+| B8 | ✅ | Toplu onay `hesap_transition()` üzerinden — kayıt başına audit |
+
+### Test
+
+```
+php scripts/hesap_smoke.php     → 43/43 OK
+php -l   (tüm dokunulan dosyalar) → temiz
+```
+
+Kapsam: bakiye kapsamı (personel/muhasebe), para birimi ayrımı, red/onay yetkileri,
+gerekçe zorunluluğu, ödeme kilidi, legacy bayrak senkronu, geri dolum idempotanlığı,
+tutar ayrıştırma regresyonu.
+
+### Faz 1-3'e devredilen
+
+Bu turda **UI'ya bilinçli olarak dokunulmadı** — mevcut düzen korunarak yalnız durum
+rozetleri, bakiye etiketi ve eylem butonları eklendi. Renk kakofonisi, 6 istatistik kutusu,
+15 alanlı form ve receipt-first akış Faz 1-3'ün konusu.
