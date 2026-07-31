@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config/hesap_calc.php';
 
-define('HESAP_UPLOAD_DIR', __DIR__ . '/uploads/hesap/');
-define('HESAP_MAX_FILE_SIZE', 10 * 1024 * 1024);
-define('HESAP_ALLOWED_EXT', ['jpg','jpeg','png','webp','pdf']);
-define('HESAP_ALLOWED_MIME', ['image/jpeg','image/png','image/webp','application/pdf']);
+// defined() koruması: testler yükleme dizinini kendi geçici klasörüne yönlendirebilsin
+// (canlı uploads/hesap/ dizinine dokunmadan rapor/PDF testi koşturmak için).
+defined('HESAP_UPLOAD_DIR')   || define('HESAP_UPLOAD_DIR', __DIR__ . '/uploads/hesap/');
+defined('HESAP_MAX_FILE_SIZE')|| define('HESAP_MAX_FILE_SIZE', 10 * 1024 * 1024);
+defined('HESAP_ALLOWED_EXT')  || define('HESAP_ALLOWED_EXT', ['jpg','jpeg','png','webp','pdf']);
+defined('HESAP_ALLOWED_MIME') || define('HESAP_ALLOWED_MIME', ['image/jpeg','image/png','image/webp','application/pdf']);
 
 function hesap_kategoriler(): array {
     return [

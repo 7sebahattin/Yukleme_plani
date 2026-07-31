@@ -1,6 +1,6 @@
 # Hesap Modülü Modernizasyon Planı
 
-**Durum:** Faz 0, 1, 2, 3, 4 **tamamlandı** (bkz. §4 ve §5) — yalnız Faz 5 (PDF) bekliyor
+**Durum:** TÜM FAZLAR TAMAMLANDI (Faz 0-5) — bkz. §4, §5, §6
 **Branch:** `claude/modernize-expense-tracking-vtdg73`
 **Kapsam:** `hesap.php` · `hesap_liste.php` · `hesap_kayit.php` · `hesap_yazdir.php` ·
 `hesap_muhasebe.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_export.php` · `hesap_config.php` ·
@@ -496,3 +496,76 @@ UI testi sayfaları **gerçekten render eder** (bellek içi SQLite + stub auth) 
 PHP uyarı sızıntısı yok, HTML etiket dengesi doğru, tek bakiye kartı, tek CTA, form adım
 sırası, çift form alanı yok, rol bazlı görünürlük (düz personel / muhasebe / salt-okunur),
 ödenmiş kaydın kilitli olması, para birimi ayrımı.
+
+---
+
+## 6. Uygulama Kaydı — Faz 5 (tamamlandı)
+
+### Kütüphane
+
+`dompdf/dompdf ^3.0` (kurulan: 3.1.6) — `vendor/` içinde commit'li, depo pratiğine uygun.
+Bağımlılıklarıyla birlikte vendor **~22 MB**; bunun 7.6 MB'ı DejaVu font ailesi.
+Kurulum sırasında dist indirilemediği için source clone yapıldı; `.git` klasörleri ve
+`tests/` dizinleri temizlendi, autoloader yeniden üretildi.
+
+**mPDF yerine dompdf seçildi** (§Faz 5 gerekçesi): DejaVu Sans gömülü fontuyla Türkçe
+karakterleri ve ₺ (U+20BA) sorunsuz basıyor — font glif kapsamı doğrulandı.
+
+### Dosyalar
+
+| Dosya | İçerik |
+|---|---|
+| `config/hesap_pdf.php` | `hesap_report_data()` · `hesap_report_html()` · `hesap_report_pdf()` · `hesap_pdf_image_uri()` |
+| `hesap_yazdir.php` | Uç nokta — varsayılan PDF, `?goruntule=html`, `?indir=1` |
+| `scripts/hesap_pdf_smoke.php` | 59 assertion |
+
+### Rapor içeriği
+
+Logo + kapsam başlığı (tarih/depo/tür/durum/hazırlayan) → dönem özeti (para birimi başına
+gelir/gider/net + yön etiketi) → personel özeti (TRY, onaylı+ödenen) → kategori kırılımı
+(yüzde çubuklu) → işlem listesi (durum rozetli, 10 kolon) → imza alanları →
+**3×3 fiş görselleri** (her kutuda tarih/tutar/kategori/kişi/belge künyesi).
+
+### Güvenlik duruşu
+
+- `isRemoteEnabled = false` → dompdf uzak kaynak çekmez (SSRF yüzeyi yok).
+- `isPhpEnabled = false` → HTML içinde PHP çalışmaz. Sayfa numarası bu yüzden
+  `$canvas->page_text()` ile basılır, `<script type="text/php">` kullanılmaz.
+- `chroot` proje köküne sabitlenir.
+- Tüm kullanıcı verisi `h()` ile kaçırılır — testte XSS yükü (`<script>`, `"><img src=x>`)
+  ile doğrulandı.
+- Görünürlük (sahiplik + depo) rapor sorgusunda uygulanır: düz personel başkasının
+  kaydını raporlayamaz.
+
+### Yol boyunca bulunan ve düzeltilen iki sorun
+
+1. **`text-transform: uppercase` Türkçe'yi bozuyordu.** PDF metni çıkarıldığında etiketler
+   "TOPLAM GELIR" ve "ŞIRKETE BORÇLUSUNUZ" olarak görüldü — CSS büyük harf dönüşümü
+   Türkçe i/İ eşlemesini bilmiyor. Kural kaldırıldı, etiketler doğrudan istenen yazımda
+   yazılıyor. Regresyon testi eklendi.
+2. **`counter(pages)` dompdf'te 0 dönüyor.** CSS ile "Sayfa 1 / 0" basılıyordu.
+   Render sonrası `$canvas->page_text('{PAGE_NUM} / {PAGE_COUNT}')` ile çözüldü;
+   "toplam sayfa sıfır değil" assertion'ı eklendi.
+
+### Test
+
+```
+php scripts/hesap_smoke.php       →  42 assertion
+php scripts/hesap_ui_smoke.php    →  64 assertion
+php scripts/hesap_pdf_smoke.php   →  59 assertion
+                                    ─────────────
+                                     165 assertion
+```
+
+PDF testi gerçek PDF üretir ve doğrular: geçerli başlık/sonlandırıcı, gömülü JPEG sayısı,
+gömülü font, çıkarılan metinde Türkçe karakterler + ₺ + sayfa numarası, XSS kaçışı,
+para birimi ayrımı, görünürlük kapsamı, bozuk görselde çökmeme, boş dönem, ve
+`hesap_yazdir.php` uç noktasının hem PDF hem HTML çıktısı (ayrı süreçte).
+Canlı veritabanına ve canlı `uploads/` dizinine dokunmaz.
+
+### Not — mevcut güvenlik uyarıları
+
+`composer audit` üç yüksek önemli uyarı gösteriyor; **üçü de `phpoffice/phpspreadsheet`**
+kaynaklı ve bu çalışmadan önce de vardı (CVE-2026-59931/59932/59933). dompdf temiz.
+Yükseltme bu sprintin kapsamı dışında bırakıldı — Excel export yolunu etkilediği için
+ayrı ele alınmalı.

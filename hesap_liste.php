@@ -130,7 +130,7 @@ render_flash();
     </select>
     <?php // Muhasebe durumu artık yukarıdaki durum filtresinden seçilir (is_given_to_accountant ile senkron) ?>
     <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f])) ?>" class="btn btn-ghost">📊 Excel</a>
-    <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
+    <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
 </div>
 
 <!-- Tarih aralığı seçici -->

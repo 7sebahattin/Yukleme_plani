@@ -304,9 +304,10 @@ render_flash();
                 <span>Excel'e Aktar<span class="hs-sheet-sub">Filtreli tablo</span></span>
             </a>
             <?php endif; ?>
-            <a class="hs-sheet-item" href="hesap_yazdir.php" target="_blank" rel="noopener">
-                <span class="hs-sheet-icon" aria-hidden="true">🖨️</span>
-                <span>Yazdır<span class="hs-sheet-sub">Dönem raporu</span></span>
+            <a class="hs-sheet-item" href="hesap_yazdir.php?<?= http_build_query(['tarih_bas'=>$ay_bas,'tarih_son'=>date('Y-m-d', strtotime($ay_son . ' -1 day'))]) ?>"
+               target="_blank" rel="noopener">
+                <span class="hs-sheet-icon" aria-hidden="true">📄</span>
+                <span>PDF Dönem Raporu<span class="hs-sheet-sub"><?= h($ay_label) ?> · logo, özet, fiş görselleri</span></span>
             </a>
         </div>
         <button type="button" class="btn btn-block" data-hs-sheet-close>Kapat</button>

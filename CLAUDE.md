@@ -308,8 +308,32 @@ draft ⇄ submitted → approved → pending_payment → paid
 - **Atanmamış veri:** `user_id IS NULL` ve `depo=''` eski kayıtlar herkese görünür kalır.
 - Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz).
 
-**Kalan iş:** Faz 5 — `hesap_yazdir.php` yerine dompdf ile profesyonel PDF
-(logo, personel özeti, kategori kırılımı, sona eklenen fiş fotoğrafları).
+### PDF Dönem Raporu (Faz 5)
+
+**`config/hesap_pdf.php`** — veri toplama (`hesap_report_data`), HTML üretimi
+(`hesap_report_html`), PDF üretimi (`hesap_report_pdf`). Uç nokta: **`hesap_yazdir.php`**
+(varsayılan PDF · `?goruntule=html` hızlı yazdırma · `?indir=1` dosya indirme).
+
+Bölümler: logo + kapsam başlığı → dönem özeti (para birimi başına) → personel özeti →
+kategori kırılımı (yüzde çubuklu) → işlem listesi (durum rozetli) → imza alanları →
+**3×3 fiş görselleri** (sonda, her kutuda kayıt künyesi).
+
+**dompdf kuralları — değiştirme:**
+- `isRemoteEnabled = false` · `isPhpEnabled = false`. Görseller `data:` URI olarak gömülür;
+  uzak kaynak çekilmez, HTML içinde PHP çalışmaz. Bu ayarları açma.
+- **`text-transform: uppercase` KULLANMA** — CSS Türkçe i/İ eşlemesini bilmez:
+  "Gelir" → "GELIR", "Şirkete" → "ŞIRKETE" olur. Etiketi doğrudan istenen yazımda yaz.
+- **Sayfa numarası `counter(pages)` ile çalışmaz** (dompdf 0 döner). Render sonrası
+  `$canvas->page_text(... '{PAGE_NUM} / {PAGE_COUNT}' ...)` kullanılır.
+- Yazı tipi **DejaVu Sans** — Türkçe glifleri ve ₺ (U+20BA) içerir. Değiştirirken glif
+  kapsamını doğrula.
+- Görseller `hesap_pdf_image_uri()` ile GD üzerinden küçültülür (uzun kenar 900 px, JPEG 72).
+  Okunamayan dosya `null` döner ve rapor "[görsel okunamadı]" ile devam eder — çökmez.
+- Rapora en çok `HESAP_PDF_MAX_FIS` (90) görsel eklenir; aşan sayı rapora not düşülür.
+- Test: `php scripts/hesap_pdf_smoke.php` (geçici yükleme klasörü, canlı uploads/'a dokunmaz).
+
+**Bağımlılık:** `dompdf/dompdf ^3.0`, `vendor/` içinde commit'li (depo pratiği).
+`vendor/` ~22 MB; 7.6 MB'ı DejaVu font ailesi — Türkçe için gerekli, silme.
 
 ---
 

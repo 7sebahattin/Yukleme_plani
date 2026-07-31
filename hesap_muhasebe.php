@@ -95,7 +95,7 @@ render_flash();
     </div>
     <div>
         <a href="hesap_export.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost">📊 Excel</a>
-        <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">🖨️ Yazdır</a>
+        <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
         <a href="hesap_muhasebe_fis_pdf.php?<?= http_build_query(array_filter(['tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
     </div>
 </div>
