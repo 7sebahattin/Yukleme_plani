@@ -12,16 +12,22 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('reports.read');
+require_hesap('read');
+hesap_migrate();
 
 $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
 $kat_f   = trim($_GET['kategori'] ?? '');
 $kisi_f  = trim($_GET['kisi'] ?? '');
 
-// Sadece muhasebeleşmemiş kayıtlar
-$where  = ['is_given_to_accountant=0'];
-$params = [];
+// Onay bekleyen kayıtlar (durum makinesi: draft + submitted)
+$pend_ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
+$where   = ["status IN ($pend_ph)"];
+$params  = hesap_pending_statuses();
+[$osql, $oparams] = hesap_owner_sql();
+if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
+[$dsql, $dparams] = depo_sql_in('depo');
+if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
 if ($tarih_b !== '') { $where[] = "transaction_date>=?"; $params[] = $tarih_b; }
 if ($tarih_s !== '') { $where[] = "transaction_date<=?"; $params[] = $tarih_s; }
 if ($kat_f  !== '') { $where[] = "category=?";          $params[] = $kat_f; }

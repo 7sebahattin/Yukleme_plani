@@ -4,7 +4,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('records.delete');
+require_hesap('delete');
+hesap_migrate();
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { header('Location: hesap_liste.php'); exit; }
@@ -14,6 +15,13 @@ $st->execute([$id]);
 $row = $st->fetch();
 if (!$row) {
     set_flash('error', 'Kayıt bulunamadı.');
+    header('Location: hesap_liste.php'); exit;
+}
+if (!hesap_row_visible($row)) {
+    forbidden('Bu kayıt size görünür değil.');
+}
+if (hesap_is_locked($row)) {
+    set_flash('error', 'Ödenmiş kayıt silinemez. Önce ödemeyi geri alın.');
     header('Location: hesap_liste.php'); exit;
 }
 
@@ -38,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'amount'           => (float)$row['amount'],
         'currency'         => $row['currency'],
         'person_company'   => $row['person_company'],
+        'status'           => $row['status'] ?? null,
     ]);
 
     set_flash('success', 'Kayıt silindi.');
@@ -45,31 +54,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 render_header('Kayıt Sil');
+hesap_assets();
 render_flash();
 ?>
+<div class="hs">
 <div class="page-head">
     <h1>Kaydı Sil</h1>
     <a href="hesap_liste.php" class="btn btn-ghost">İptal</a>
 </div>
 
-<div class="card">
-    <div class="card-body">
-        <p>Bu kaydı kalıcı olarak silmek istediğinizden emin misiniz?</p>
-        <div class="hesap-stat-grid" style="grid-template-columns:repeat(2,1fr);margin:12px 0">
-            <div class="hesap-stat"><span>Tarih</span><strong><?= h(date('d.m.Y', strtotime($row['transaction_date']))) ?></strong></div>
-            <div class="hesap-stat"><span>Tür</span><strong><?= h(hesap_type_label($row['type'])) ?></strong></div>
-            <div class="hesap-stat"><span>Kategori</span><strong><?= h($row['category']) ?></strong></div>
-            <div class="hesap-stat <?= in_array($row['type'],['gelir']) ? 'green' : 'red' ?>">
-                <span>Tutar</span><strong><?= fmt_para((float)$row['amount'], $row['currency']) ?></strong>
-            </div>
-        </div>
-        <form method="post">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <div style="display:flex;gap:12px;margin-top:8px">
-                <a href="hesap_liste.php" class="btn btn-ghost">İptal</a>
-                <button type="submit" class="btn btn-danger">Evet, Sil</button>
-            </div>
-        </form>
-    </div>
+<div class="hs-alert" role="alert">
+    <strong>Bu kayıt kalıcı olarak silinecek</strong>
+    Fiş fotoğrafları da birlikte silinir. Bu işlem geri alınamaz.
 </div>
+
+<section class="hs-step">
+    <p class="hs-step-label">Silinecek kayıt</p>
+    <dl class="hs-kv">
+        <dt>Tarih</dt>    <dd><?= h(date('d.m.Y', strtotime($row['transaction_date']))) ?></dd>
+        <dt>Tür</dt>      <dd><?= h(hesap_type_label($row['type'])) ?></dd>
+        <dt>Kategori</dt> <dd><?= h($row['category'] ?: '—') ?></dd>
+        <?php if ($row['person_company']): ?>
+        <dt>Kişi / Firma</dt><dd><?= h($row['person_company']) ?></dd>
+        <?php endif; ?>
+        <dt>Durum</dt>    <dd><?= hesap_status_badge($row['status'] ?? null, true) ?></dd>
+        <dt>Tutar</dt>
+        <dd class="<?= $row['type'] === 'gelir' ? 'pos' : 'neg' ?>"><?= fmt_para((float)$row['amount'], $row['currency']) ?></dd>
+    </dl>
+
+    <form method="post" style="margin-top:16px">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <div class="hs-actions">
+            <a href="hesap_liste.php" class="btn">İptal</a>
+            <button type="submit" class="btn btn-danger">Evet, Sil</button>
+        </div>
+    </form>
+</section>
+</div><!-- /.hs -->
 <?php render_footer(); ?>

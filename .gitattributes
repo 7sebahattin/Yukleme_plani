@@ -1,0 +1,9 @@
+# Depoya commit'lenen vendor/ dosyaları GitHub dil istatistiklerine girmesin.
+vendor/** linguist-vendored
+
+# NOT: vendor/ altındaki satır sonlarına burada karışılmaz. dompdf kendi
+# .gitattributes'ında "* text=auto eol=lf" tanımlıyor ve iç içe .gitattributes
+# dosyaları kök dosyaya göre önceliklidir — yani "vendor/** -text" yazmak
+# etkisizdir. `git add` sırasında görülen CRLF→LF uyarıları, git'in dompdf'in
+# kendi isteğini uygulamasıdır; .afm font metrik dosyaları düz metindir,
+# normalize edilmeleri güvenlidir.

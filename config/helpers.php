@@ -251,6 +251,8 @@ function render_desktop_sidebar(string $base): void {
     $p_adm   = function_exists('is_admin') && is_admin();
     $p_beyan = !$_fn || can('beyan.read') || $p_adm;
     $p_mal   = ($_fn && can('maliyet.read')) || $p_adm;
+    // Hesap: kendi yetkisi; hesap.* henüz seed edilmemiş kurulumlarda reports.read'e düşer
+    $p_hes   = !$_fn || can('hesap.read') || can('reports.read') || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -264,7 +266,8 @@ function render_desktop_sidebar(string $base): void {
     $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
                                'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
     $a_rep   = $cur === 'reports.php';
-    $a_hes   = $cur === 'hesap.php';
+    $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
+                               'hesap_sil.php','hesap_muhasebe_fis_pdf.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     $a_def   = $cur === 'definitions.php';
@@ -310,7 +313,7 @@ function render_desktop_sidebar(string $base): void {
 
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
-        <?php if ($p_rep)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
+        <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
         <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
@@ -797,6 +800,8 @@ endif;
         // 7) Hesap modülü tabloları
         $pdo->exec("CREATE TABLE IF NOT EXISTS `account_transactions` (
             `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+            `user_id`                INT NULL,
+            `created_by`             INT NULL,
             `transaction_date`       DATE NOT NULL,
             `transaction_time`       TIME NOT NULL DEFAULT '00:00:00',
             `type`                   ENUM('gelir','gider','havale','nakit') NOT NULL,
@@ -810,13 +815,23 @@ endif;
             `has_invoice`            TINYINT(1) NOT NULL DEFAULT 0,
             `is_for_company`         TINYINT(1) NOT NULL DEFAULT 1,
             `is_given_to_accountant` TINYINT(1) NOT NULL DEFAULT 0,
+            `status`                 VARCHAR(20) NOT NULL DEFAULT 'submitted',
+            `submitted_at`           DATETIME NULL,
+            `reviewed_by`            INT NULL,
+            `reviewed_at`            DATETIME NULL,
+            `review_note`            VARCHAR(500) NOT NULL DEFAULT '',
+            `paid_at`                DATETIME NULL,
+            `depo`                   VARCHAR(150) NOT NULL DEFAULT '',
             `notes`                  TEXT NOT NULL DEFAULT '',
             `has_files`              TINYINT(1) NOT NULL DEFAULT 0,
             `created_at`             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             `updated_at`             TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
             INDEX `idx_date` (`transaction_date`),
             INDEX `idx_type` (`type`),
-            INDEX `idx_accountant` (`is_given_to_accountant`)
+            INDEX `idx_accountant` (`is_given_to_accountant`),
+            INDEX `idx_at_user` (`user_id`),
+            INDEX `idx_at_status` (`status`),
+            INDEX `idx_at_depo` (`depo`(80))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         $pdo->exec("CREATE TABLE IF NOT EXISTS `account_files` (
             `id`             INT AUTO_INCREMENT PRIMARY KEY,
@@ -947,12 +962,14 @@ endif;
             $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // Yetki tanımları
-            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin'];
+            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'];
             $rp_map = [
                 'admin'    => $all_p,
-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write'],
-                'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read'],
-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write'],
+                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],
+                'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read','hesap.read'],
+                // Muhasebe rolü Hesap modülünün asıl kullanıcısı: kendi sayfasına
+                // girebilmesi için hesap.write + onay/ödeme yetkileri şart.
+                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {

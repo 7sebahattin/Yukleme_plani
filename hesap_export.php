@@ -4,13 +4,16 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
+require_hesap('read');
 require_perm('reports.export');
+hesap_migrate();
 
 $q       = trim($_GET['q'] ?? '');
 $type_f  = trim($_GET['type'] ?? '');
 $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
 $muh_f   = trim($_GET['muh'] ?? '');
+$durum_f = trim($_GET['durum'] ?? '');
 
 $where = ['1=1'];
 $params = [];
@@ -23,6 +26,18 @@ if ($tarih_b) { $where[] = "transaction_date>=?"; $params[] = $tarih_b; }
 if ($tarih_s) { $where[] = "transaction_date<=?"; $params[] = $tarih_s; }
 if ($muh_f === '1') { $where[] = "is_given_to_accountant=1"; }
 if ($muh_f === '0') { $where[] = "is_given_to_accountant=0"; }
+if ($durum_f === 'bekleyen') {
+    $ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
+    $where[] = "status IN ($ph)";
+    $params  = array_merge($params, hesap_pending_statuses());
+} elseif ($durum_f !== '' && hesap_status_valid($durum_f)) {
+    $where[]  = "status=?";
+    $params[] = $durum_f;
+}
+[$osql, $oparams] = hesap_owner_sql();
+if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
+[$dsql, $dparams] = depo_sql_in('depo');
+if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
 $wstr = implode(' AND ', $where);
 
 $st = db()->prepare("SELECT * FROM account_transactions WHERE $wstr ORDER BY transaction_date ASC, id ASC");
@@ -85,13 +100,17 @@ h2      { margin: 16px 0 4px; font-size: 12pt; color: #1a56db; }
     <th>Ödeme</th>
     <th>Fatura</th>
     <th>Şirket İçin</th>
-    <th>Muh. Verildi</th>
+    <th>Durum</th>
     <th>Not</th>
 </tr>
 <?php
-$totals = ['gelir' => 0, 'gider' => 0, 'havale' => 0, 'nakit' => 0];
+// B2: toplamlar para birimi bazında — farklı kurlar birbirine eklenmez
+$totals = [];
 foreach ($rows as $i => $r):
-    $totals[$r['type']] += (float)$r['amount'];
+    $cur = $r['currency'] ?: 'TRY';
+    if (!isset($totals[$cur])) $totals[$cur] = ['gelir' => 0.0, 'gider' => 0.0];
+    if ($r['type'] === 'gelir') $totals[$cur]['gelir'] += (float)$r['amount'];
+    else                        $totals[$cur]['gider'] += (float)$r['amount'];
 ?>
 <tr>
     <td><?= $i + 1 ?></td>
@@ -106,24 +125,29 @@ foreach ($rows as $i => $r):
     <td><?= hesap_payment_label($r['payment_method']) ?></td>
     <td><?= $r['has_invoice'] ? 'Evet' : 'Hayır' ?></td>
     <td><?= $r['is_for_company'] ? 'Evet' : 'Hayır' ?></td>
-    <td><?= $r['is_given_to_accountant'] ? 'Evet' : 'Bekliyor' ?></td>
+    <td><?= h(hesap_status_label((string)($r['status'] ?? ''))) ?></td>
     <td><?= h($r['notes']) ?></td>
 </tr>
 <?php endforeach; ?>
+<?php foreach ($totals as $cur => $t): ?>
 <tr class="total">
     <td colspan="7">TOPLAM GELİR</td>
-    <td class="num gelir"><?= number_format($totals['gelir'], 2, ',', '.') ?></td>
-    <td colspan="6"></td>
+    <td class="num gelir"><?= number_format($t['gelir'], 2, ',', '.') ?></td>
+    <td><?= h($cur) ?></td>
+    <td colspan="5"></td>
 </tr>
 <tr class="total">
     <td colspan="7">TOPLAM GİDER</td>
-    <td class="num gider"><?= number_format($totals['gider'] + $totals['havale'] + $totals['nakit'], 2, ',', '.') ?></td>
-    <td colspan="6"></td>
+    <td class="num gider"><?= number_format($t['gider'], 2, ',', '.') ?></td>
+    <td><?= h($cur) ?></td>
+    <td colspan="5"></td>
 </tr>
 <tr class="total">
     <td colspan="7">NET BAKİYE</td>
-    <td class="num"><?= number_format($totals['gelir'] - $totals['gider'] - $totals['havale'] - $totals['nakit'], 2, ',', '.') ?></td>
-    <td colspan="6"></td>
+    <td class="num"><?= number_format($t['gelir'] - $t['gider'], 2, ',', '.') ?></td>
+    <td><?= h($cur) ?></td>
+    <td colspan="5"></td>
 </tr>
+<?php endforeach; ?>
 </table>
 </body></html>

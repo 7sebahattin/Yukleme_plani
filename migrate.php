@@ -25,6 +25,16 @@ $migrations = [
     ['loading_records', 'reported_at',    "ALTER TABLE `loading_records` ADD COLUMN `reported_at` DATETIME NULL"],
     ['loading_records', 'reported_by',    "ALTER TABLE `loading_records` ADD COLUMN `reported_by` INT NULL"],
     ['material_definitions', 'color',     "ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL"],
+    // Hesap modülü — personel kimliği, durum makinesi, depo damgası
+    ['account_transactions', 'user_id',      "ALTER TABLE `account_transactions` ADD COLUMN `user_id` INT NULL"],
+    ['account_transactions', 'created_by',   "ALTER TABLE `account_transactions` ADD COLUMN `created_by` INT NULL"],
+    ['account_transactions', 'status',       "ALTER TABLE `account_transactions` ADD COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'submitted'"],
+    ['account_transactions', 'submitted_at', "ALTER TABLE `account_transactions` ADD COLUMN `submitted_at` DATETIME NULL"],
+    ['account_transactions', 'reviewed_by',  "ALTER TABLE `account_transactions` ADD COLUMN `reviewed_by` INT NULL"],
+    ['account_transactions', 'reviewed_at',  "ALTER TABLE `account_transactions` ADD COLUMN `reviewed_at` DATETIME NULL"],
+    ['account_transactions', 'review_note',  "ALTER TABLE `account_transactions` ADD COLUMN `review_note` VARCHAR(500) NOT NULL DEFAULT ''"],
+    ['account_transactions', 'paid_at',      "ALTER TABLE `account_transactions` ADD COLUMN `paid_at` DATETIME NULL"],
+    ['account_transactions', 'depo',         "ALTER TABLE `account_transactions` ADD COLUMN `depo` VARCHAR(150) NOT NULL DEFAULT ''"],
 ];
 
 function mig_table_exists(PDO $pdo, string $t): bool {

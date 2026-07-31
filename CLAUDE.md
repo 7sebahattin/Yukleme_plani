@@ -70,6 +70,10 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 | stok.read/write | ✓ | ✓ | — | ✓ read |
 | reports.read/export | ✓ | ✓ | — | ✓ |
 | defs.read/write | ✓ | read | — | — |
+| hesap.read | ✓ | ✓ | ✓ | ✓ |
+| hesap.write | ✓ | ✓ | — | ✓ |
+| hesap.approve/pay | ✓ | — | — | ✓ |
+| hesap.delete/admin | ✓ | — | — | — |
 | users.admin | ✓ | — | — | — |
 | is_admin() | ✓ | — | — | — |
 
@@ -239,6 +243,100 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 
 ---
 
+## Hesap Modülü — Durum Makinesi (Sprint Hesap-01)
+
+Personel masraf takibi. **Çekirdek: `config/hesap_calc.php`** — şema migrasyonu, tutar
+ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı.
+
+**Sayfalar:** `hesap.php` (pano) · `hesap_liste.php` · `hesap_kayit.php` ·
+`hesap_muhasebe.php` (onay kuyruğu) · `hesap_durum.php` (geçiş JSON uç noktası) ·
+`hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php`.
+
+### Arayüz (Faz 1-3)
+
+Modül kendi CSS/JS'ini kullanır: **`assets/hesap.css` + `assets/hesap.js`** — yalnız
+`hesap_*` sayfalarında yüklenir, `style.css`/`app.js`'e HİÇ dokunmaz (maliyet emsali).
+`hesap_assets()` (header'dan sonra) ve `hesap_scripts()` (footer'dan önce) ile bağlanır.
+
+- **Tüm sayfa gövdesi `<div class="hs">` içinde olmalı** — mobil 16px input kuralı buna bağlı.
+  (Token'lar `:root`'ta tanımlı, o yüzden `.hs-badge`/`.hs-note` sarmalayıcısız da çalışır.)
+- **Tek birincil eylem kuralı:** sayfada yalnız bir `.hs-cta`. Diğer her şey `.btn`.
+  Renk yalnız iki yerde anlam taşır: tutar işareti ve durum rozeti. Gökkuşağı buton YOK.
+- **Bakiye kartı** `.hs-balance--{alacak|borc|denk}` — `hesap_balance_label()` sınıfı belirler.
+- **Alt sayfa (bottom sheet):** `data-hs-sheet="<id>"` ile açılır, `.hs-sheet-ovl` z-index 600.
+- **Form sırası değişmez:** fiş fotoğrafı → tutar → kategori → Detaylar. İkincil alanların
+  hepsi `<details id="hsDetails">` içinde, yeni kayıtta kapalı.
+- **Tür/kategori için tek yetkili alan Detaylar içindeki `<select>`'lerdir**
+  (`#hsTypeSelect` / `#hsCategorySelect`). Chip'ler ve tür butonları yalnız onları yazar —
+  aynı `name` ile iki alan OLUŞTURMA, POST'ta çakışır ve JS kapalıyken form çalışmaz.
+- **Durum geçiş butonu:** `data-hs-durum` + `data-hs-id` + `data-hs-not` (inline onclick yok).
+- Test: `php scripts/hesap_ui_smoke.php` — sayfaları gerçekten render eder, PHP uyarısı ve
+  HTML etiket dengesi dahil doğrular.
+
+**Şema eklentileri** (`account_transactions`): `user_id` (masrafın sahibi) · `created_by` ·
+`status` · `submitted_at` · `reviewed_by/at` · `review_note` · `paid_at` · `depo`.
+
+**Durum akışı** — `hesap_transitions()` tek otoritedir, geçişi elle UPDATE ile yazma:
+
+```
+draft ⇄ submitted → approved → pending_payment → paid
+          ↓            ↓             ↓
+       rejected ────────┴─────────────┘  → draft (düzeltmeye al)
+```
+
+| Durum | Bakiyeye girer | Geçiren |
+|---|:---:|---|
+| `draft` / `submitted` | — | sahibi (`hesap.write`) |
+| `approved` / `pending_payment` | ✓ | `hesap.approve` |
+| `paid` | ✓ | `hesap.pay` — **kayıt kilitlenir**, açmak `hesap.admin` |
+| `rejected` | — | `hesap.approve`, **gerekçe zorunlu** |
+
+**Kurallar:**
+- **Bakiye yalnız `approved`/`pending_payment`/`paid`'den** hesaplanır — `hesap_balance()`.
+  Bekleyen tutar ayrı gösterilir, bakiyeye karışmaz.
+- **Para birimleri ASLA toplanmaz.** `hesap_balance()` currency bazında döner; TRY dışı
+  kurlar ekranda ayrı kart/satırdır. (Eski `array_sum` hatası — USD+TRY toplanıyordu.)
+- **İşaret:** net < 0 → şirket personele borçlu (yeşil) · net > 0 → personel şirkete
+  borçlu (kırmızı). `hesap_balance_label()` bunu etiketler.
+- **Tutar girdisi `hesap_parse_amount()` ile ayrıştırılır** — `str_replace` KULLANMA;
+  eski kod "1234.56"yı 123456 yapıyordu (100× hata).
+- `is_given_to_accountant` **legacy bayrak olarak korunur**, `hesap_transition()` senkron
+  tutar (bakiyeye giren durumlar = 1). Eski sorgular bozulmasın diye silinmedi.
+- **Görünürlük:** `hesap_row_visible()` / `hesap_owner_sql()` — normal kullanıcı yalnız
+  kendi + sahipsiz kayıtları görür; `hesap.approve`/`hesap.admin` tümünü görür.
+  Depo filtresi `depo_sql_in('depo')`.
+- **Atanmamış veri:** `user_id IS NULL` ve `depo=''` eski kayıtlar herkese görünür kalır.
+- Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz).
+
+### PDF Dönem Raporu (Faz 5)
+
+**`config/hesap_pdf.php`** — veri toplama (`hesap_report_data`), HTML üretimi
+(`hesap_report_html`), PDF üretimi (`hesap_report_pdf`). Uç nokta: **`hesap_yazdir.php`**
+(varsayılan PDF · `?goruntule=html` hızlı yazdırma · `?indir=1` dosya indirme).
+
+Bölümler: logo + kapsam başlığı → dönem özeti (para birimi başına) → personel özeti →
+kategori kırılımı (yüzde çubuklu) → işlem listesi (durum rozetli) → imza alanları →
+**3×3 fiş görselleri** (sonda, her kutuda kayıt künyesi).
+
+**dompdf kuralları — değiştirme:**
+- `isRemoteEnabled = false` · `isPhpEnabled = false`. Görseller `data:` URI olarak gömülür;
+  uzak kaynak çekilmez, HTML içinde PHP çalışmaz. Bu ayarları açma.
+- **`text-transform: uppercase` KULLANMA** — CSS Türkçe i/İ eşlemesini bilmez:
+  "Gelir" → "GELIR", "Şirkete" → "ŞIRKETE" olur. Etiketi doğrudan istenen yazımda yaz.
+- **Sayfa numarası `counter(pages)` ile çalışmaz** (dompdf 0 döner). Render sonrası
+  `$canvas->page_text(... '{PAGE_NUM} / {PAGE_COUNT}' ...)` kullanılır.
+- Yazı tipi **DejaVu Sans** — Türkçe glifleri ve ₺ (U+20BA) içerir. Değiştirirken glif
+  kapsamını doğrula.
+- Görseller `hesap_pdf_image_uri()` ile GD üzerinden küçültülür (uzun kenar 900 px, JPEG 72).
+  Okunamayan dosya `null` döner ve rapor "[görsel okunamadı]" ile devam eder — çökmez.
+- Rapora en çok `HESAP_PDF_MAX_FIS` (90) görsel eklenir; aşan sayı rapora not düşülür.
+- Test: `php scripts/hesap_pdf_smoke.php` (geçici yükleme klasörü, canlı uploads/'a dokunmaz).
+
+**Bağımlılık:** `dompdf/dompdf ^3.0`, `vendor/` içinde commit'li (depo pratiği).
+`vendor/` ~22 MB; 7.6 MB'ı DejaVu font ailesi — Türkçe için gerekli, silme.
+
+---
+
 ## Önemli Desenler
 
 ```php
@@ -292,5 +390,7 @@ Yeni özellik eklerken:
 | Dara toplamı 1 eksik | Per-palet yuvarlama | Sadece toplamda yuvarla |
 | `type` kolonu bulunamadı | Auto-migration çalışmadı | `migrate.php?run=1` veya phpMyAdmin ALTER TABLE |
 | SQLSTATE[HY093] | PDO named param tekrar kullanıldı | Pozisyonel `?` kullan |
+| Tutar 100× büyük kaydedildi | `str_replace(['.',','],['','.'])` | `hesap_parse_amount()` kullan |
+| Rapor toplamı tutmuyor | Para birimleri toplanmış | `GROUP BY currency` — kurları ayır |
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |

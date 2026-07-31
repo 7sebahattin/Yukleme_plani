@@ -99,6 +99,8 @@ function db(): PDO {
         catch (PDOException $_e) {
             $pdo->exec("CREATE TABLE `account_transactions` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `user_id` INT NULL,
+                `created_by` INT NULL,
                 `transaction_date` DATE NOT NULL,
                 `transaction_time` TIME NOT NULL DEFAULT '00:00:00',
                 `type` ENUM('gelir','gider','havale','nakit') NOT NULL,
@@ -112,13 +114,23 @@ function db(): PDO {
                 `has_invoice` TINYINT(1) NOT NULL DEFAULT 0,
                 `is_for_company` TINYINT(1) NOT NULL DEFAULT 1,
                 `is_given_to_accountant` TINYINT(1) NOT NULL DEFAULT 0,
+                `status` VARCHAR(20) NOT NULL DEFAULT 'submitted',
+                `submitted_at` DATETIME NULL,
+                `reviewed_by` INT NULL,
+                `reviewed_at` DATETIME NULL,
+                `review_note` VARCHAR(500) NOT NULL DEFAULT '',
+                `paid_at` DATETIME NULL,
+                `depo` VARCHAR(150) NOT NULL DEFAULT '',
                 `notes` TEXT NOT NULL DEFAULT '',
                 `has_files` TINYINT(1) NOT NULL DEFAULT 0,
                 `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
                 INDEX `idx_date` (`transaction_date`),
                 INDEX `idx_type` (`type`),
-                INDEX `idx_accountant` (`is_given_to_accountant`)
+                INDEX `idx_accountant` (`is_given_to_accountant`),
+                INDEX `idx_at_user` (`user_id`),
+                INDEX `idx_at_status` (`status`),
+                INDEX `idx_at_depo` (`depo`(80))
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             $pdo->exec("CREATE TABLE `account_files` (
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
