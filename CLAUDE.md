@@ -246,12 +246,32 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 ## Hesap Modülü — Durum Makinesi (Sprint Hesap-01)
 
 Personel masraf takibi. **Çekirdek: `config/hesap_calc.php`** — şema migrasyonu, tutar
-ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı. Modül CSS'i `assets/hesap.css`
-(yalnız `hesap_*` sayfalarında, `style.css`'e dokunmaz — maliyet emsali).
+ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı.
 
 **Sayfalar:** `hesap.php` (pano) · `hesap_liste.php` · `hesap_kayit.php` ·
 `hesap_muhasebe.php` (onay kuyruğu) · `hesap_durum.php` (geçiş JSON uç noktası) ·
 `hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php`.
+
+### Arayüz (Faz 1-3)
+
+Modül kendi CSS/JS'ini kullanır: **`assets/hesap.css` + `assets/hesap.js`** — yalnız
+`hesap_*` sayfalarında yüklenir, `style.css`/`app.js`'e HİÇ dokunmaz (maliyet emsali).
+`hesap_assets()` (header'dan sonra) ve `hesap_scripts()` (footer'dan önce) ile bağlanır.
+
+- **Tüm sayfa gövdesi `<div class="hs">` içinde olmalı** — mobil 16px input kuralı buna bağlı.
+  (Token'lar `:root`'ta tanımlı, o yüzden `.hs-badge`/`.hs-note` sarmalayıcısız da çalışır.)
+- **Tek birincil eylem kuralı:** sayfada yalnız bir `.hs-cta`. Diğer her şey `.btn`.
+  Renk yalnız iki yerde anlam taşır: tutar işareti ve durum rozeti. Gökkuşağı buton YOK.
+- **Bakiye kartı** `.hs-balance--{alacak|borc|denk}` — `hesap_balance_label()` sınıfı belirler.
+- **Alt sayfa (bottom sheet):** `data-hs-sheet="<id>"` ile açılır, `.hs-sheet-ovl` z-index 600.
+- **Form sırası değişmez:** fiş fotoğrafı → tutar → kategori → Detaylar. İkincil alanların
+  hepsi `<details id="hsDetails">` içinde, yeni kayıtta kapalı.
+- **Tür/kategori için tek yetkili alan Detaylar içindeki `<select>`'lerdir**
+  (`#hsTypeSelect` / `#hsCategorySelect`). Chip'ler ve tür butonları yalnız onları yazar —
+  aynı `name` ile iki alan OLUŞTURMA, POST'ta çakışır ve JS kapalıyken form çalışmaz.
+- **Durum geçiş butonu:** `data-hs-durum` + `data-hs-id` + `data-hs-not` (inline onclick yok).
+- Test: `php scripts/hesap_ui_smoke.php` — sayfaları gerçekten render eder, PHP uyarısı ve
+  HTML etiket dengesi dahil doğrular.
 
 **Şema eklentileri** (`account_transactions`): `user_id` (masrafın sahibi) · `created_by` ·
 `status` · `submitted_at` · `reviewed_by/at` · `review_note` · `paid_at` · `depo`.
@@ -287,6 +307,9 @@ draft ⇄ submitted → approved → pending_payment → paid
   Depo filtresi `depo_sql_in('depo')`.
 - **Atanmamış veri:** `user_id IS NULL` ve `depo=''` eski kayıtlar herkese görünür kalır.
 - Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz).
+
+**Kalan iş:** Faz 5 — `hesap_yazdir.php` yerine dompdf ile profesyonel PDF
+(logo, personel özeti, kategori kırılımı, sona eklenen fiş fotoğrafları).
 
 ---
 

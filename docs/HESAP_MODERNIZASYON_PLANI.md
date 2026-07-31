@@ -1,6 +1,6 @@
 # Hesap Modülü Modernizasyon Planı
 
-**Durum:** Faz 0 ve Faz 4 **tamamlandı** (bkz. §4 Uygulama Kaydı) — Faz 1-3 (UI/UX) ve Faz 5 (PDF) bekliyor
+**Durum:** Faz 0, 1, 2, 3, 4 **tamamlandı** (bkz. §4 ve §5) — yalnız Faz 5 (PDF) bekliyor
 **Branch:** `claude/modernize-expense-tracking-vtdg73`
 **Kapsam:** `hesap.php` · `hesap_liste.php` · `hesap_kayit.php` · `hesap_yazdir.php` ·
 `hesap_muhasebe.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_export.php` · `hesap_config.php` ·
@@ -423,3 +423,76 @@ tutar ayrıştırma regresyonu.
 Bu turda **UI'ya bilinçli olarak dokunulmadı** — mevcut düzen korunarak yalnız durum
 rozetleri, bakiye etiketi ve eylem butonları eklendi. Renk kakofonisi, 6 istatistik kutusu,
 15 alanlı form ve receipt-first akış Faz 1-3'ün konusu.
+
+---
+
+## 5. Uygulama Kaydı — Faz 1-3 (tamamlandı)
+
+### Faz 1 — Tasarım sistemi
+
+**Bootstrap/Tailwind eklenmedi** (gerekçe §0.1). Bunun yerine modüle özel iki dosya:
+
+| Dosya | İçerik |
+|---|---|
+| `assets/hesap.css` | 14 bölümlü tasarım sistemi — bakiye kartı, CTA, alt sayfa, ay gezgini, işlem kartı, durum rozeti, form adımları, kırpma modalı, filtre şeridi, özet şeridi, boş durum |
+| `assets/hesap.js` | `HesapUI` altında kapsüllenmiş: alt sayfa, zoom, durum geçişi, tutar alanı, tür/kategori senkronu, fotoğraf seçimi + kırpma, form koruması |
+
+Bağlanma: `hesap_assets()` (header'dan sonra) ve `hesap_scripts()` (footer'dan önce).
+`style.css` ve `app.js` **hiç değişmedi** — diğer 90 sayfa etkilenmedi.
+
+Token'lar `style.css`'ten miras (`--primary`, `--card`, `--border`, `--depot-accent`),
+üzerine modül token'ları: `--hs-pos` (alacak), `--hs-neg` (borç), `--hs-pend` (bekleyen).
+Token'lar `:root`'ta tanımlı, böylece `.hs-badge` / `.hs-note` sarmalayıcısız sayfalarda da doğru renklenir.
+
+**Tek birincil eylem kuralı:** sayfada yalnız bir dolu buton (`.hs-cta`). Renk yalnız tutar
+işareti ve durum rozetinde anlam taşır. 6 renkli hızlı buton ve 6 renkli istatistik kutusu kaldırıldı.
+
+### Faz 2 — Pano (`hesap.php`)
+
+- **Tek bakiye kartı**: "Şirket size borçlu" (yeşil) / "Şirkete borçlusunuz" (kırmızı),
+  2.3rem tutar, sol renk şeridi. Yön `hesap_balance_label()`'dan gelir.
+- **Çoklu para birimi** aynı kartın içinde chip olarak — TRY toplamına asla eklenmez.
+- **Bekleyen tutar** ayrı rozet, bakiyeye dahil değil; tıklayınca filtreli listeye gider.
+- 6 gökkuşağı buton → tek `📷 Harcama Ekle` CTA + `⚡ Diğer Kayıt Türü` alt sayfası (6 tür, nötr liste).
+- 5 modül linki → `⋯ Daha Fazla` alt sayfası.
+- 6 istatistik kutusu → katlanabilir "Ay özeti" (`<details>`).
+- Son 6 işlem kart listesi: durum rozeti + fiş küçük resmi (tek ek sorguyla, N+1 yok).
+- Reddedilen fişler en üstte uyarı bloğu — gerekçesiyle birlikte.
+
+### Faz 3 — Form (`hesap_kayit.php`)
+
+Sıra: **1) Fiş Fotoğrafı → 2) Tutar → 3) Kategori → Kaydet**. Numaralı adım rozetleri var.
+
+- Fotoğraf bloğu en üstte, büyük dokunma hedefi, `capture="environment"` ile doğrudan kamera.
+- Tutar: 1.9rem, `inputmode="decimal"`, sağa hizalı, para birimi simgesi solda.
+- Kategori: tür'e göre filtrelenen chip ızgarası (tür başına ilk 5) + "Diğer…".
+- Diğer **10 alan + 2 onay kutusu** `<details id="hsDetails">` içinde, yeni kayıtta **kapalı**
+  (düzenlemede ve hata durumunda açık).
+- Tarih/saat otomatik dolar.
+- **Tür ve kategori için tek yetkili alan Detaylar içindeki `<select>`'ler**; chip'ler ve tür
+  butonları onları yazar. Böylece aynı `name` ile iki alan oluşmaz ve JS kapalıyken form
+  Detaylar üzerinden hâlâ doldurulabilir (progressive enhancement).
+- Kaydet çubuğu mobilde yapışkan (bottomnav üstünde), masaüstünde normal akışta.
+
+### Duyarlı davranış
+
+| Genişlik | Davranış |
+|---|---|
+| `< 768px` | Tek kolon, yapışkan kaydet çubuğu, input 16px (iOS zoom yok), alt sayfa aşağıdan açılır |
+| `≥ 600px` | Detaylar 2 kolon |
+| `≥ 900px` | Bakiye + eylemler yan yana (grid), CTA satır içi, alt sayfa ortada modal, kaydet çubuğu sabit değil |
+| `≥ 1024px` | Liste sayfasında masaüstü tablo (`.pc-only`), mobil kartlar gizli |
+
+Ayrıca `prefers-reduced-motion` ve `@media print` kuralları eklendi.
+
+### Test
+
+```
+php scripts/hesap_ui_smoke.php    → 64 assertion
+php scripts/hesap_smoke.php       → 42 assertion
+```
+
+UI testi sayfaları **gerçekten render eder** (bellek içi SQLite + stub auth) ve doğrular:
+PHP uyarı sızıntısı yok, HTML etiket dengesi doğru, tek bakiye kartı, tek CTA, form adım
+sırası, çift form alanı yok, rol bazlı görünürlük (düz personel / muhasebe / salt-okunur),
+ödenmiş kaydın kilitli olması, para birimi ayrımı.

@@ -37,6 +37,14 @@ function fmt_para(float $v, string $cur='TRY'): string {
 function hesap_assets(): void {
     $v = @filemtime(__DIR__ . '/assets/hesap.css') ?: time();
     echo '<link rel="stylesheet" href="assets/hesap.css?v=' . $v . '">' . "\n";
+    // CSRF'yi JS'e taşı — hesap.js durum geçişi ve dosya silme için kullanır
+    echo '<meta name="csrf-token" content="' . h(csrf_token()) . '">' . "\n";
+}
+
+/** Modüle özel JS — render_footer()'dan ÖNCE çağrılır. */
+function hesap_scripts(): void {
+    $v = @filemtime(__DIR__ . '/assets/hesap.js') ?: time();
+    echo '<script src="assets/hesap.js?v=' . $v . '" defer></script>' . "\n";
 }
 
 /** Durum rozeti HTML'i. */

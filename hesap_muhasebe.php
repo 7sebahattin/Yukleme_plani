@@ -87,6 +87,7 @@ render_header('Muhasebe Onay Kuyruğu');
 hesap_assets();
 render_flash();
 ?>
+<div class="hs">
 <div class="page-head">
     <div>
         <h1>🗂️ Muhasebe Onay Kuyruğu</h1>
@@ -242,4 +243,6 @@ function topluRed() {
 }
 </script>
 <?php endif; ?>
+</div><!-- /.hs -->
+<?php hesap_scripts(); ?>
 <?php render_footer(); ?>

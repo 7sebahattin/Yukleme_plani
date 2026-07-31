@@ -71,9 +71,12 @@ render_header('Hesap Kayıtları');
 hesap_assets();
 render_flash();
 ?>
+<div class="hs">
 <div class="page-head">
     <div><h1>Hesap Kayıtları</h1><p class="muted">Toplam <?= $total ?> kayıt</p></div>
-    <a href="hesap_kayit.php" class="btn btn-primary">+ Yeni</a>
+    <?php if (hesap_can('write')): ?>
+    <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
+    <?php endif; ?>
 </div>
 
 <!-- Arama -->
@@ -89,35 +92,32 @@ render_flash();
 </form>
 
 <!-- Hızlı tarih -->
-<div class="filter-pills" style="margin-bottom:6px">
-    <a href="hesap_liste.php" class="pill<?= !$hizli_tarih && !$tarih_b ? ' active' : '' ?>">Tümü</a>
-    <a href="hesap_liste.php?ht=bugun" class="pill">Bugün</a>
-    <a href="hesap_liste.php?ht=bu_ay" class="pill">Bu Ay</a>
-    <a href="hesap_liste.php?ht=gecen" class="pill">Geçen Ay</a>
+<div class="hs-filters">
+    <a href="hesap_liste.php" class="hs-filter<?= !$hizli_tarih && !$tarih_b ? ' active' : '' ?>">Tümü</a>
+    <a href="hesap_liste.php?ht=bugun" class="hs-filter<?= $hizli_tarih === 'bugun' ? ' active' : '' ?>">Bugün</a>
+    <a href="hesap_liste.php?ht=bu_ay" class="hs-filter<?= $hizli_tarih === 'bu_ay' ? ' active' : '' ?>">Bu Ay</a>
+    <a href="hesap_liste.php?ht=gecen" class="hs-filter<?= $hizli_tarih === 'gecen' ? ' active' : '' ?>">Geçen Ay</a>
 </div>
 
 <!-- Tür filtreleri -->
-<div class="filter-pills">
+<div class="hs-filters">
     <?php
     $base_params = array_filter(['q'=>$q,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f,'durum'=>$durum_f]);
     ?>
-    <a href="hesap_liste.php?<?= http_build_query($base_params) ?>" class="pill<?= $type_f === '' ? ' active' : '' ?>">Tümü</a>
+    <a href="hesap_liste.php?<?= http_build_query($base_params) ?>" class="hs-filter<?= $type_f === '' ? ' active' : '' ?>">Tüm Türler</a>
     <?php foreach (['gelir','gider','havale','nakit'] as $t): ?>
     <a href="hesap_liste.php?<?= http_build_query(array_merge($base_params, ['type'=>$t])) ?>"
-       class="pill<?= $type_f === $t ? ' active' : '' ?>"
-       style="<?= $type_f === $t ? 'background:' . hesap_type_color($t) . ';color:#fff;border-color:' . hesap_type_color($t) : '' ?>">
-        <?= hesap_type_label($t) ?>
-    </a>
+       class="hs-filter<?= $type_f === $t ? ' active' : '' ?>"><?= hesap_type_label($t) ?></a>
     <?php endforeach; ?>
 </div>
 
 <!-- Durum filtreleri -->
-<div class="filter-pills" style="margin-top:6px">
+<div class="hs-filters">
     <?php $durum_base = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f]); ?>
-    <a href="hesap_liste.php?<?= http_build_query($durum_base) ?>" class="pill<?= $durum_f === '' ? ' active' : '' ?>">Tüm Durumlar</a>
+    <a href="hesap_liste.php?<?= http_build_query($durum_base) ?>" class="hs-filter<?= $durum_f === '' ? ' active' : '' ?>">Tüm Durumlar</a>
     <?php foreach (hesap_statuses() as $kod => $meta): ?>
     <a href="hesap_liste.php?<?= http_build_query(array_merge($durum_base, ['durum'=>$kod])) ?>"
-       class="pill<?= $durum_f === $kod ? ' active' : '' ?>"><?= h($meta['label']) ?></a>
+       class="hs-filter<?= $durum_f === $kod ? ' active' : '' ?>"><?= h($meta['label']) ?></a>
     <?php endforeach; ?>
 </div>
 
@@ -178,23 +178,28 @@ render_flash();
 </form>
 
 <!-- Özet — her para birimi kendi satırında (B2) -->
-<?php if ($total > 0): foreach ($sums_by_cur as $sc):
-    $g = (float)$sc['gelir']; $gd = (float)$sc['gider']; $cur = $sc['currency']; ?>
-<div class="hesap-stat-grid" style="grid-template-columns:repeat(3,1fr);margin:12px 0">
-    <div class="hesap-stat green"><span>Toplam Gelir<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($g, $cur) ?></strong></div>
-    <div class="hesap-stat red"><span>Toplam Gider<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($gd, $cur) ?></strong></div>
-    <div class="hesap-stat <?= ($g - $gd) >= 0 ? 'green' : 'red' ?>">
-        <span>Net<?= $cur !== 'TRY' ? ' (' . h($cur) . ')' : '' ?></span><strong><?= fmt_para($g - $gd, $cur) ?></strong>
+<?php if ($total > 0): ?>
+<div class="hs-sum">
+    <?php foreach ($sums_by_cur as $sc):
+        $g = (float)$sc['gelir']; $gd = (float)$sc['gider']; $cur = $sc['currency']; ?>
+    <div class="hs-sum-row">
+        <?php if (count($sums_by_cur) > 1): ?><span class="hs-sum-cur"><?= h($cur) ?></span><?php endif; ?>
+        <span class="hs-sum-item"><span>Gelir</span><b class="pos"><?= fmt_para($g, $cur) ?></b></span>
+        <span class="hs-sum-item"><span>Gider</span><b class="neg"><?= fmt_para($gd, $cur) ?></b></span>
+        <span class="hs-sum-item"><span>Net</span><b><?= fmt_para($g - $gd, $cur) ?></b></span>
     </div>
+    <?php endforeach; ?>
+    <?php if (count($sums_by_cur) > 1): ?>
+    <p class="hs-cur-note">Para birimleri ayrı toplanır — farklı kurlar birbirine eklenmez.</p>
+    <?php endif; ?>
 </div>
-<?php endforeach; if (count($sums_by_cur) > 1): ?>
-<p class="hs-cur-note">Para birimleri ayrı toplanır — farklı kurlar birbirine eklenmez.</p>
-<?php endif; endif; ?>
+<?php endif; ?>
 
 <?php if (empty($rows)): ?>
-<div class="empty">
-    <p>Kayıt bulunamadı.</p>
-    <a href="hesap_kayit.php" class="btn btn-primary">Yeni Kayıt Ekle</a>
+<div class="hs-empty">
+    <span class="hs-empty-icon" aria-hidden="true">🔍</span>
+    <p>Bu filtrelerle kayıt bulunamadı.</p>
+    <a href="hesap_liste.php" class="btn">Filtreleri Temizle</a>
 </div>
 <?php else: ?>
 
@@ -236,8 +241,8 @@ render_flash();
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
         <?php endif; ?>
         <?php foreach (hesap_available_transitions($r) as $hedef => $kural): ?>
-        <button type="button" class="btn btn-sm"
-                onclick="hesapDurum(<?= (int)$r['id'] ?>,'<?= h($hedef) ?>',<?= $kural['note'] ? 'true' : 'false' ?>)">
+        <button type="button" class="btn btn-sm" data-hs-durum="<?= h($hedef) ?>"
+                data-hs-id="<?= (int)$r['id'] ?>" data-hs-not="<?= $kural['note'] ? '1' : '0' ?>">
             <?= h($kural['label']) ?>
         </button>
         <?php endforeach; ?>
@@ -249,45 +254,55 @@ render_flash();
 </div>
 
 <!-- Mobil: Kartlar -->
-<div class="card-list mobile-only">
-<?php foreach ($rows as $r): ?>
-<div class="record-card">
-    <div class="record-card-head">
-        <div>
-            <strong><?= h($r['category'] ?: hesap_type_label($r['type'])) ?></strong>
-            <?php if ($r['person_company']): ?>
-            <div class="record-card-firma"><?= h($r['person_company']) ?></div>
-            <?php endif; ?>
-            <?php $fd = hesap_fis_durumu($r); ?>
-            <div class="muted"><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?>
-                <?php if (!$fd['var']): ?> · <span style="color:var(--danger)"><?= h($fd['kisa']) ?></span><?php endif; ?>
-            </div>
-            <div style="margin-top:4px"><?= hesap_status_badge($r['status'] ?? null, true) ?></div>
-        </div>
-        <span class="hesap-amount <?= in_array($r['type'], ['gelir']) ? 'positive' : 'negative' ?>" style="font-size:1.1rem;font-weight:700">
-            <?= (in_array($r['type'], ['gelir']) ? '+' : '-') . fmt_para((float)$r['amount'], $r['currency']) ?>
+<div class="hs-tx-list mobile-only">
+<?php foreach ($rows as $r):
+    $gelir_mi = $r['type'] === 'gelir';
+    $fd = hesap_fis_durumu($r);
+    $kilitli = hesap_is_locked($r);
+    $gecisler = hesap_available_transitions($r);
+?>
+<div class="hs-tx" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+        <span class="hs-tx-dot" style="background:<?= hesap_type_color($r['type']) ?>" aria-hidden="true"></span>
+        <span class="hs-tx-main">
+            <span class="hs-tx-title"><?= h($r['category'] ?: hesap_type_label($r['type'])) ?></span>
+            <span class="hs-tx-meta">
+                <?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?>
+                <?php if ($r['person_company']): ?>· <?= h($r['person_company']) ?><?php endif; ?>
+                <?php if (!$fd['var']): ?>· <span class="hs-tx-warn">⚠ <?= h($fd['kisa']) ?></span><?php endif; ?>
+            </span>
+            <span class="hs-tx-meta"><?= hesap_status_badge($r['status'] ?? null, true) ?></span>
+        </span>
+        <span class="hs-tx-side">
+            <span class="hs-tx-amount <?= $gelir_mi ? 'pos' : 'neg' ?>">
+                <?= ($gelir_mi ? '+' : '−') . fmt_para((float)$r['amount'], $r['currency']) ?>
+            </span>
         </span>
     </div>
+
     <?php if ($r['description']): ?>
-    <div class="record-card-body"><div class="muted"><?= h($r['description']) ?></div></div>
+    <div class="muted" style="font-size:.82rem"><?= h($r['description']) ?></div>
     <?php endif; ?>
     <?php if (($r['status'] ?? '') === 'rejected' && trim((string)$r['review_note']) !== ''): ?>
     <div class="hs-note">Red gerekçesi: <?= h($r['review_note']) ?></div>
     <?php endif; ?>
-    <div class="record-card-actions hs-actions">
-        <?php if (!hesap_is_locked($r)): ?>
+
+    <?php if (!$kilitli || hesap_can('delete') || !empty($gecisler)): ?>
+    <div class="hs-actions">
+        <?php if (!$kilitli): ?>
         <a href="hesap_kayit.php?id=<?= $r['id'] ?>" class="btn btn-sm">Düzenle</a>
         <?php endif; ?>
         <?php if (hesap_can('delete')): ?>
         <a href="hesap_sil.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Bu kayıt silinsin mi?')">Sil</a>
         <?php endif; ?>
-        <?php foreach (hesap_available_transitions($r) as $hedef => $kural): ?>
-        <button type="button" class="btn btn-sm"
-                onclick="hesapDurum(<?= (int)$r['id'] ?>,'<?= h($hedef) ?>',<?= $kural['note'] ? 'true' : 'false' ?>)">
+        <?php foreach ($gecisler as $hedef => $kural): ?>
+        <button type="button" class="btn btn-sm" data-hs-durum="<?= h($hedef) ?>"
+                data-hs-id="<?= (int)$r['id'] ?>" data-hs-not="<?= $kural['note'] ? '1' : '0' ?>">
             <?= h($kural['label']) ?>
         </button>
         <?php endforeach; ?>
     </div>
+    <?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
@@ -313,30 +328,10 @@ render_flash();
 <?php endif; ?>
 <?php endif; ?>
 
+</div><!-- /.hs -->
+<?php hesap_scripts(); ?>
 <script>
-var hesapCsrf = <?= json_encode(csrf_token()) ?>;
-
-// Durum geçişi — hesap_durum.php doğrular, yetkiyi ve geçiş kuralını sunucu uygular
-function hesapDurum(id, hedef, gerekceZorunlu) {
-    var not = '';
-    if (gerekceZorunlu) {
-        not = prompt('Gerekçe (zorunlu):') || '';
-        if (!not.trim()) { alert('Gerekçe girilmeden işlem yapılamaz.'); return; }
-    }
-    var body = new URLSearchParams({ id: id, durum: hedef, not: not, csrf: hesapCsrf });
-    fetch('hesap_durum.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
-    })
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-        if (d.ok) location.reload();
-        else alert(d.msg || 'İşlem başarısız.');
-    })
-    .catch(function () { alert('Bağlantı hatası.'); });
-}
-
+// Durum geçişi hesap.js'te (HesapUI.durum) — burada yalnız filtre yardımcısı kaldı
 function updateParam(key, val) {
     var params = new URLSearchParams(location.search);
     if (val) params.set(key, val); else params.delete(key);
