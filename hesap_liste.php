@@ -74,108 +74,99 @@ render_flash();
 <div class="hs">
 <div class="page-head">
     <div><h1>Hesap Kayıtları</h1><p class="muted">Toplam <?= $total ?> kayıt</p></div>
-    <?php if (hesap_can('write')): ?>
-    <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
-    <?php endif; ?>
+    <div class="hs-actions">
+        <?php if (hesap_can('write')): ?>
+        <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
+        <?php endif; ?>
+        <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f])) ?>" class="btn btn-ghost">📊 Excel</a>
+        <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
+    </div>
 </div>
 
-<!-- Arama -->
-<form method="get" class="search-row">
-    <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kategori, kişi, açıklama...">
-    <?php if ($type_f): ?><input type="hidden" name="type" value="<?= h($type_f) ?>"><?php endif; ?>
-    <?php if ($tarih_b): ?><input type="hidden" name="tarih_bas" value="<?= h($tarih_b) ?>"><?php endif; ?>
-    <?php if ($tarih_s): ?><input type="hidden" name="tarih_son" value="<?= h($tarih_s) ?>"><?php endif; ?>
-    <?php if ($fis_f !== ''): ?><input type="hidden" name="fis" value="<?= h($fis_f) ?>"><?php endif; ?>
-    <?php if ($muh_f !== ''): ?><input type="hidden" name="muh" value="<?= h($muh_f) ?>"><?php endif; ?>
-    <button class="btn">Ara</button>
-    <a href="hesap_liste.php" class="btn btn-ghost">Temizle</a>
-</form>
+<!-- ── Filtre paneli: arama, tarih, tür, durum, fiş — tek kart ── -->
+<div class="hs-filter-panel">
 
-<!-- Hızlı tarih -->
-<div class="hs-filters">
-    <a href="hesap_liste.php" class="hs-filter<?= !$hizli_tarih && !$tarih_b ? ' active' : '' ?>">Tümü</a>
-    <a href="hesap_liste.php?ht=bugun" class="hs-filter<?= $hizli_tarih === 'bugun' ? ' active' : '' ?>">Bugün</a>
-    <a href="hesap_liste.php?ht=bu_ay" class="hs-filter<?= $hizli_tarih === 'bu_ay' ? ' active' : '' ?>">Bu Ay</a>
-    <a href="hesap_liste.php?ht=gecen" class="hs-filter<?= $hizli_tarih === 'gecen' ? ' active' : '' ?>">Geçen Ay</a>
+    <!-- Arama -->
+    <form method="get" class="hs-filter-row">
+        <span class="hs-filter-label">Ara</span>
+        <div class="hs-search">
+            <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kategori, kişi, açıklama...">
+            <button class="btn btn-sm">Ara</button>
+            <?php if ($q !== ''): ?><a href="hesap_liste.php" class="btn btn-ghost btn-sm">✕</a><?php endif; ?>
+        </div>
+        <?php if ($type_f): ?><input type="hidden" name="type" value="<?= h($type_f) ?>"><?php endif; ?>
+        <?php if ($tarih_b): ?><input type="hidden" name="tarih_bas" value="<?= h($tarih_b) ?>"><?php endif; ?>
+        <?php if ($tarih_s): ?><input type="hidden" name="tarih_son" value="<?= h($tarih_s) ?>"><?php endif; ?>
+        <?php if ($fis_f !== ''): ?><input type="hidden" name="fis" value="<?= h($fis_f) ?>"><?php endif; ?>
+        <?php if ($durum_f !== ''): ?><input type="hidden" name="durum" value="<?= h($durum_f) ?>"><?php endif; ?>
+    </form>
+
+    <!-- Hızlı tarih -->
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Tarih</span>
+        <div class="hs-filters">
+            <a href="hesap_liste.php" class="hs-filter<?= !$hizli_tarih && !$tarih_b ? ' active' : '' ?>">Tümü</a>
+            <a href="hesap_liste.php?ht=bugun" class="hs-filter<?= $hizli_tarih === 'bugun' ? ' active' : '' ?>">Bugün</a>
+            <a href="hesap_liste.php?ht=bu_ay" class="hs-filter<?= $hizli_tarih === 'bu_ay' ? ' active' : '' ?>">Bu Ay</a>
+            <a href="hesap_liste.php?ht=gecen" class="hs-filter<?= $hizli_tarih === 'gecen' ? ' active' : '' ?>">Geçen Ay</a>
+        </div>
+    </div>
+
+    <!-- Özel tarih aralığı -->
+    <form method="get" class="hs-filter-row">
+        <span class="hs-filter-label">Aralık</span>
+        <div class="hs-daterange">
+            <?php foreach (['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'durum'=>$durum_f] as $k => $v): if ($v !== ''): ?>
+            <input type="hidden" name="<?= $k ?>" value="<?= h($v) ?>">
+            <?php endif; endforeach; ?>
+            <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>" aria-label="Başlangıç tarihi">
+            <span class="sep">—</span>
+            <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>" aria-label="Bitiş tarihi">
+            <button class="btn btn-sm btn-primary">Uygula</button>
+            <?php if ($tarih_b !== '' || $tarih_s !== ''): ?>
+            <a href="hesap_liste.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'durum'=>$durum_f])) ?>"
+               class="btn btn-ghost btn-sm">✕</a>
+            <?php endif; ?>
+        </div>
+    </form>
+
+    <!-- Tür filtreleri -->
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Tür</span>
+        <?php $base_params = array_filter(['q'=>$q,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f]); ?>
+        <div class="hs-filters">
+            <a href="hesap_liste.php?<?= http_build_query($base_params) ?>" class="hs-filter<?= $type_f === '' ? ' active' : '' ?>">Tüm Türler</a>
+            <?php foreach (['gelir','gider','havale','nakit'] as $t): ?>
+            <a href="hesap_liste.php?<?= http_build_query(array_merge($base_params, ['type'=>$t])) ?>"
+               class="hs-filter<?= $type_f === $t ? ' active' : '' ?>"><?= hesap_type_label($t) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <!-- Durum filtreleri -->
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Durum</span>
+        <?php $durum_base = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f]); ?>
+        <div class="hs-filters">
+            <a href="hesap_liste.php?<?= http_build_query($durum_base) ?>" class="hs-filter<?= $durum_f === '' ? ' active' : '' ?>">Tüm Durumlar</a>
+            <?php foreach (hesap_statuses() as $kod => $meta): ?>
+            <a href="hesap_liste.php?<?= http_build_query(array_merge($durum_base, ['durum'=>$kod])) ?>"
+               class="hs-filter<?= $durum_f === $kod ? ' active' : '' ?>"><?= h($meta['label']) ?></a>
+            <?php endforeach; ?>
+        </div>
+    </div>
+
+    <!-- Fiş filtresi -->
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Fiş</span>
+        <select onchange="location.href=updateParam('fis',this.value)" class="hs-select">
+            <option value="" <?= $fis_f === '' ? 'selected' : '' ?>>Hepsi</option>
+            <option value="1" <?= $fis_f === '1' ? 'selected' : '' ?>>Fiş var</option>
+            <option value="0" <?= $fis_f === '0' ? 'selected' : '' ?>>Fiş yok ⚠</option>
+        </select>
+    </div>
+
 </div>
-
-<!-- Tür filtreleri -->
-<div class="hs-filters">
-    <?php
-    $base_params = array_filter(['q'=>$q,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f,'durum'=>$durum_f]);
-    ?>
-    <a href="hesap_liste.php?<?= http_build_query($base_params) ?>" class="hs-filter<?= $type_f === '' ? ' active' : '' ?>">Tüm Türler</a>
-    <?php foreach (['gelir','gider','havale','nakit'] as $t): ?>
-    <a href="hesap_liste.php?<?= http_build_query(array_merge($base_params, ['type'=>$t])) ?>"
-       class="hs-filter<?= $type_f === $t ? ' active' : '' ?>"><?= hesap_type_label($t) ?></a>
-    <?php endforeach; ?>
-</div>
-
-<!-- Durum filtreleri -->
-<div class="hs-filters">
-    <?php $durum_base = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'muh'=>$muh_f]); ?>
-    <a href="hesap_liste.php?<?= http_build_query($durum_base) ?>" class="hs-filter<?= $durum_f === '' ? ' active' : '' ?>">Tüm Durumlar</a>
-    <?php foreach (hesap_statuses() as $kod => $meta): ?>
-    <a href="hesap_liste.php?<?= http_build_query(array_merge($durum_base, ['durum'=>$kod])) ?>"
-       class="hs-filter<?= $durum_f === $kod ? ' active' : '' ?>"><?= h($meta['label']) ?></a>
-    <?php endforeach; ?>
-</div>
-
-<!-- Fiş / Muhasebe filtresi -->
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-    <select onchange="location.href=updateParam('fis',this.value)" class="btn btn-ghost" style="padding:4px 8px">
-        <option value="" <?= $fis_f === '' ? 'selected' : '' ?>>Fiş: Hepsi</option>
-        <option value="1" <?= $fis_f === '1' ? 'selected' : '' ?>>Fiş var</option>
-        <option value="0" <?= $fis_f === '0' ? 'selected' : '' ?>>Fiş yok ⚠</option>
-    </select>
-    <?php // Muhasebe durumu artık yukarıdaki durum filtresinden seçilir (is_given_to_accountant ile senkron) ?>
-    <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f])) ?>" class="btn btn-ghost">📊 Excel</a>
-    <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
-</div>
-
-<!-- Tarih aralığı seçici -->
-<style>
-.hesap-date-range {
-    display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px;
-}
-.hesap-date-field { display: flex; flex-direction: column; gap: 3px; }
-.hesap-date-field > span {
-    font-size: .7rem; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .03em;
-}
-.hesap-date-field input[type=date] {
-    border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 7px 10px; font-size: .9rem; background: #fff; color: var(--text);
-    min-width: 150px;
-}
-.hesap-date-field input[type=date]:focus { border-color: var(--primary); outline: none; }
-.hesap-date-sep { padding-bottom: 9px; color: var(--muted); }
-@media (max-width: 520px) {
-    .hesap-date-field, .hesap-date-field input[type=date] { width: 100%; }
-    .hesap-date-range { gap: 8px; }
-}
-</style>
-<form method="get" class="hesap-date-range">
-    <?php foreach (['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'muh'=>$muh_f] as $k => $v): if ($v !== ''): ?>
-    <input type="hidden" name="<?= $k ?>" value="<?= h($v) ?>">
-    <?php endif; endforeach; ?>
-    <label class="hesap-date-field">
-        <span>Başlangıç</span>
-        <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>">
-    </label>
-    <span class="hesap-date-sep">—</span>
-    <label class="hesap-date-field">
-        <span>Bitiş</span>
-        <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>">
-    </label>
-    <button class="btn btn-primary btn-sm">Uygula</button>
-    <?php if ($tarih_b !== '' || $tarih_s !== ''): ?>
-    <a href="hesap_liste.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'fis'=>$fis_f,'muh'=>$muh_f])) ?>"
-       class="btn btn-ghost btn-sm">✕ Tarihi Temizle</a>
-    <?php endif; ?>
-</form>
 
 <!-- Özet — her para birimi kendi satırında (B2) -->
 <?php if ($total > 0): ?>

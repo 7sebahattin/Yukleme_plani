@@ -689,6 +689,96 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
     background: var(--text); color: #fff; border-color: var(--text); font-weight: 600;
 }
 
+/* ═════════ 13a. Filtre paneli ═════════
+   Arama / tarih / tür / durum / fiş filtrelerinin hepsi TEK kart içinde,
+   satır başına küçük başlıkla gruplanır. Önceden 6 ayrı, tutarsız görünümlü
+   blok (search-row + 3× pill satırı + select-as-button + ayrı stilli tarih
+   formu) art arda diziliydi — karmaşık görünüyordu. Artık hepsi burada. */
+
+.hs-filter-panel {
+    display: flex; flex-direction: column; gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--hs-r);
+    padding: 12px 14px;
+    margin-bottom: var(--hs-gap);
+}
+.hs-filter-row {
+    display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap;
+}
+.hs-filter-row + .hs-filter-row {
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+.hs-filter-label {
+    flex-shrink: 0;
+    width: 54px;
+    font-size: .68rem; font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+}
+/* Panel içindeki pill şeridi kendi margin/padding'ini bırakır — satıra hizalanır */
+.hs-filter-row .hs-filters { flex: 1 1 auto; margin: 0; padding: 0; min-width: 0; }
+
+.hs-search { display: flex; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.hs-search input[type="search"] {
+    flex: 1; min-width: 100px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card); color: var(--text);
+    font-size: 16px;                 /* iOS zoom önleme */
+    min-height: 38px;
+}
+.hs-search input[type="search"]:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(29,108,240,.12);
+}
+
+.hs-daterange { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hs-daterange input[type="date"] {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card); color: var(--text);
+    font-size: 16px;
+    min-height: 38px;
+    min-width: 128px;
+}
+.hs-daterange input[type="date"]:focus { outline: none; border-color: var(--primary); }
+.hs-daterange .sep { color: var(--muted); font-size: .85rem; }
+
+/* Select'ler artık .btn.btn-ghost'a giydirilmiyor — kendi görünür kimliği var
+   (kenarlık + ok), önceki hâlde bazı temalarda düz metin gibi görünüyordu.
+   width/flex BİLEREK belirtilir: style.css'teki genel
+   "input[...],select,textarea{width:100%}" kuralı (tek kolon mobil formlar
+   için) burada da miras alınır ve tek satırlık filtre select'ini arama
+   kutusu genişliğine geriyordu. */
+.hs-select {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 160px;
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card); color: var(--text);
+    font-size: .85rem;
+    min-height: 38px;
+}
+.hs-select:focus { outline: none; border-color: var(--primary); }
+
+@media (max-width: 480px) { .hs-select { min-width: 0; flex: 1 1 auto; } }
+
+.hs-filter-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+
+@media (max-width: 480px) {
+    .hs-filter-label { width: auto; margin-right: -2px; }
+    .hs-filter-actions { margin-left: 0; width: 100%; }
+}
+
 /* ═════════ 13b. Özet şeridi (liste sayfası) ═════════ */
 
 .hs-sum {
