@@ -93,29 +93,36 @@ render_flash();
         <h1>🗂️ Muhasebe Onay Kuyruğu</h1>
         <p class="muted"><?= count($rows) ?> kayıt</p>
     </div>
-    <div>
+    <div class="hs-actions">
+        <a href="hesap_liste.php" class="btn btn-ghost">← Tüm Kayıtlar</a>
         <a href="hesap_export.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost">📊 Excel</a>
         <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
         <a href="hesap_muhasebe_fis_pdf.php?<?= http_build_query(array_filter(['tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
     </div>
 </div>
 
-<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-    <form method="get" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>" class="btn btn-ghost" style="padding:4px 8px">
-        <span>—</span>
-        <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>" class="btn btn-ghost" style="padding:4px 8px">
-        <select name="durum" class="btn btn-ghost" style="padding:4px 8px">
+<!-- ── Filtre paneli: tarih + durum — tek kart, hesap_liste.php ile aynı desen ── -->
+<form method="get" class="hs-filter-panel">
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Tarih</span>
+        <div class="hs-daterange">
+            <input type="date" name="tarih_bas" value="<?= h($tarih_b) ?>" aria-label="Başlangıç tarihi">
+            <span class="sep">—</span>
+            <input type="date" name="tarih_son" value="<?= h($tarih_s) ?>" aria-label="Bitiş tarihi">
+        </div>
+    </div>
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Durum</span>
+        <select name="durum" class="hs-select">
             <option value="bekleyen" <?= $durum_f === 'bekleyen' ? 'selected' : '' ?>>Onay bekleyenler</option>
             <option value="" <?= $durum_f === '' ? 'selected' : '' ?>>Tümü</option>
             <?php foreach (hesap_statuses() as $kod => $meta): ?>
             <option value="<?= h($kod) ?>" <?= $durum_f === $kod ? 'selected' : '' ?>><?= h($meta['label']) ?></option>
             <?php endforeach; ?>
         </select>
-        <button class="btn btn-sm">Filtrele</button>
-    </form>
-    <a href="hesap_liste.php" class="btn btn-ghost">← Tüm Kayıtlar</a>
-</div>
+        <button class="btn btn-sm btn-primary" style="margin-left:auto">Filtrele</button>
+    </div>
+</form>
 
 <!-- Personel bakiye özeti -->
 <?php if (!empty($personel_bakiye)): ?>

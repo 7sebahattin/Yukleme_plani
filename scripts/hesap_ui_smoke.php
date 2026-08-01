@@ -160,6 +160,15 @@ ok('tutar dolu geldi (221,00)',            str_contains($e,'value="221,00"'));
 echo "\n── Liste ──\n";
 $l = renderPage('hesap_liste.php', []);
 ok('durum filtreleri var',                 cnt($l,'hs-filter') >= 10);
+// Filtre paneli — arama/tarih/tür/durum/fiş tek karta toplandı (önceden 6 ayrı,
+// tutarsız görünümlü blok art arda diziliydi — dağınık görünüyordu).
+ok('tek filtre paneli var',                cnt($l,'class="hs-filter-panel"') === 1, 'birden fazla veya sıfır panel');
+ok('eski dağınık search-row gitti',        !str_contains($l,'class="search-row"'));
+ok('eski özel tarih formu class\'ı gitti', !str_contains($l,'hesap-date-range'));
+ok('select artık .hs-select ile stilli',   str_contains($l,'class="hs-select"'), 'select btn-ghost hack\'ine geri dönmüş olabilir');
+ok('select btn-ghost hack\'i yok',         !str_contains($l,'<select onchange="location.href=updateParam(\'fis\',this.value)" class="btn btn-ghost"'));
+ok('filtre satırları etiketli',            cnt($l,'hs-filter-label') >= 5, 'Ara/Tarih/Aralık/Tür/Durum/Fiş etiketleri eksik');
+ok('dışa aktarma butonları başlıkta',      (bool)preg_match('#page-head.*?Excel.*?</div>#s', $l), 'Excel/PDF filtre panelinden başlığa taşınmalıydı');
 ok('mobil kart listesi hs-tx',             str_contains($l,'hs-tx-list mobile-only'));
 ok('masaüstü tablo korundu',               str_contains($l,'table-wrap pc-only'));
 ok('geçiş butonları data-* ile',           str_contains($l,'data-hs-durum='));
@@ -180,6 +189,10 @@ ok('personel bakiye tablosu',              str_contains($m,'Personel Bakiyeleri'
 ok('her iki personel listeleniyor',        str_contains($m,'Test Personel') && str_contains($m,'Ali'));
 ok('onay/red toplu butonları',             str_contains($m,'Seçilenleri Onayla') && str_contains($m,'Reddet'));
 ok('.hs sarmalayıcısı var (token için)',   str_contains($m,'<div class="hs">'));
+ok('muhasebe filtre paneli var',           str_contains($m,'class="hs-filter-panel"'));
+ok('durum select\'i .hs-select ile stilli', (bool)preg_match('#<select name="durum" class="hs-select"#', $m));
+ok('eski inline btn-ghost select gitti',   !str_contains($m,'<select name="durum" class="btn btn-ghost"'));
+ok('"Tüm Kayıtlar" başlıkta, filtreden ayrı', (bool)preg_match('#page-head.*?Tüm Kayıtlar.*?</div>\s*</div>#s', $m));
 
 
 
