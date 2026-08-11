@@ -79,6 +79,17 @@ function hks_uret_sevk_mi($o) {
   return $ad !== '' && mb_stripos($ad, 'üretici', 0, 'UTF-8') !== false;
 }
 
+// P3: `gonderilenler` kaydı için yapısal bildirim türü kodu — metne (turAd/
+// ulkeAd serbest metnine gömülü önek) değil, gönderim akışının ZATEN kullandığı
+// güvenilir bayraklara (uret, referanssiz, yurtIci, fiyatGonder) dayanır.
+// Legacy satırlarda bu bilgi YOKTUR ve tahmine dayalı backfill yapılmaz.
+function hks_bildirim_turu_kodu($ortak) {
+  if (hks_uret_sevk_mi($ortak)) return 'URETICIDEN_SEVK_ALIM';
+  if (!empty($ortak['referanssiz'])) return 'SATIN_ALIM';
+  if (!empty($ortak['yurtIci'])) return empty($ortak['fiyatGonder']) ? 'SEVK_ETME' : 'SATIS';
+  return 'SATIS';   // yurt dışı (mevcut ihracat akışı)
+}
+
 // Cep telefonu: yalnız rakamlar. Kullanıcı "0532 123 45 67" / "+90 532..." gibi
 // yazabilir; CANLI servise ham metin gitmesin.
 function hks_cep_rakam($s) {
@@ -92,6 +103,28 @@ function hks_sifat_adi($sifatId) {
   if (!$cache || empty($cache['sifatlar'])) return null;
   foreach ($cache['sifatlar'] as $s) {
     if ((string)($s['id'] ?? '') === (string)$sifatId) return (string)($s['ad'] ?? '');
+  }
+  return null;
+}
+
+// Türkçe büyük/küçük harf normalizasyonu — PHP'nin mb_strtolower'ı Türkçe İ/I
+// ayrımını (İ→i, I→ı) yapmaz. app.html'deki trNorm() ile AYNI dönüşüm.
+function hks_tr_normalize($s) {
+  $s = str_replace(['İ', 'I'], ['i', 'ı'], (string)$s);
+  return mb_strtolower($s, 'UTF-8');
+}
+
+// HKS sıfat kataloğunda (listeler_cache) TAM olarak "Üretici" adına sahip
+// sıfatın ID'sini bulur — ID HARD-CODE EDİLMEZ, kataloğun kendisinden aranır
+// (sıfat ID'leri ortamdan ortama sabit olduğu varsayılamaz). Liste henüz
+// indirilmemişse veya kataloğun tam "Üretici" adında bir sıfatı yoksa null
+// döner (P1: "Üretici Birliği"/"Üretici Örgütü" gibi FARKLI sıfatlar kabul
+// EDİLMEZ — önceki sürüm alt-dize eşleşmesi kullanıyordu).
+function hks_uretici_sifat_id() {
+  $cache = hks_kv_oku('listeler_cache', null);
+  if (!$cache || empty($cache['sifatlar'])) return null;
+  foreach ($cache['sifatlar'] as $s) {
+    if (hks_tr_normalize((string)($s['ad'] ?? '')) === 'üretici') return (int)($s['id'] ?? 0);
   }
   return null;
 }
@@ -172,20 +205,31 @@ function hks_bildirim_dogrula($g) {
       if (!empty($o['kayitZorunlu'])) {
         return '"Üreticiden Sevk Alım" yalnızca GTB\'de KAYITSIZ üretici içindir.';
       }
-      $sifatAd = hks_sifat_adi($o['ikinciSifatId']);
-      if ($sifatAd !== null && mb_stripos($sifatAd, 'üretici', 0, 'UTF-8') === false) {
-        return '"Üreticiden Sevk Alım"da karşı taraf sıfatı "Üretici" olmalıdır (gönderilen: ' .
-               $sifatAd . ').';
+      // P1: substring ("üretici" alt-dize) kontrolü KALDIRILDI — "Üretici Birliği"/
+      // "Üretici Örgütü" FARKLI sıfatlardır. Katalogdan TAM "Üretici" adına sahip
+      // sıfatın ID'si bulunur; gönderilen ikinciSifatId bununla KESİN eşleşmelidir.
+      // Katalog henüz indirilmemişse (ID bulunamazsa) de REDDEDİLİR — eski davranış
+      // bu durumda denetimi sessizce ATLIYORDU, bu artık fail-closed'dır.
+      $ureticiId = hks_uretici_sifat_id();
+      if ($ureticiId === null) {
+        return '"Üreticiden Sevk Alım" için HKS sıfat kataloğunda tam "Üretici" adlı bir sıfat ' .
+               'bulunamadı — listeleri güncelleyin.';
+      }
+      if ((int)($o['ikinciSifatId'] ?? 0) !== $ureticiId) {
+        $sifatAd = hks_sifat_adi($o['ikinciSifatId']);
+        return '"Üreticiden Sevk Alım"da karşı taraf sıfatı tam olarak "Üretici" olmalıdır ' .
+               '(gönderilen: ' . ($sifatAd ?? ('id ' . $o['ikinciSifatId'])) . ').';
       }
     }
 
-    // ── KAYITSIZ İKİNCİ KİŞİ (docx) ────────────────────────────────────────
+    // ── KAYITSIZ İKİNCİ KİŞİ (kılavuz 0.1.14) ───────────────────────────────
     // "İkinci kişi 'TcKimlikVergiNo' alanı GTB sisteminde kayıtlı değilse
     //  'Eposta' bilgisi hariç diğer bilgilerinde gönderilmesi gerekir."
-    // → AdSoyad + CepTel zorunlu. İki durumda karşı taraf kayıtsızdır:
-    //   yurt içi Satış'ta adres hedefi (hedefAdres) ve Üreticiden Sevk Alım.
-    // Üretici sevkte hedef işyeri seçimiyle bildirildiği için bu denetim
-    // eskiden yalnız `hedefAdres` dalındaydı ve üretici sevkte hiç çalışmıyordu.
+    // → AdSoyad + CepTel zorunlu. Üreticiden Sevk Alım'da ikinci kişi HER ZAMAN
+    // kayıtsızdır ve artık `hedefAdres` de HER ZAMAN true gönderilir (P1
+    // düzeltmesi — bkz. app.html), bu yüzden `$uret ||` koşulu teknik olarak
+    // gereksiz hâle geldi ama açıklık için (ve eski/tampered taslaklara karşı
+    // savunma amacıyla) korunur.
     if ($uret || !empty($o['hedefAdres'])) {
       $kim = $uret ? 'üretici' : 'alıcı';
       if (empty($o['ikinciAd'])) return 'Kayıtsız ' . $kim . ' için Ad/Ünvan gerekli.';
@@ -197,10 +241,12 @@ function hks_bildirim_dogrula($g) {
     }
 
     if (!empty($o['hedefAdres'])) {
-      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde.
+      // Kayıtsız ikinci kişi (yurt içi Satış'ta kayıtsız alıcı VEYA Üreticiden
+      // Sevk Alım'da kayıtsız üretici — P1 düzeltmesi): il/ilçe/belde.
       if (empty($o['ilId']) || empty($o['ilceId']) || empty($o['beldeId'])) return 'İl / İlçe / Belde seçilmeli.';
     } else {
-      // Kayıtlı alıcı / Sevk Etme / Satın Alım / Üreticiden Sevk Alım: gidecek işyeri.
+      // Kayıtlı ikinci kişi (yurt içi Satış / Sevk Etme) veya Satın Alım
+      // (kendi işyerimiz): gidecek işyeri.
       if (empty($o['gidecekIsyeriId'])) return 'Gidecek işyeri (depo/şube/hal içi) seçilmeli.';
     }
     // Fiyat yalnızca Sevk Etme dışında (fiyatGonder=true) zorunlu.
@@ -420,28 +466,44 @@ try {
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
 
-      // GÖNDERİM ÖNCESİ SON GÜVENLİK — karşı tarafın GTB kayıt durumu, taslak
-      // kaydedildikten sonra değişmiş olabilir. Geri alınamaz bildirimden önce
-      // GTB'ye tekrar sorulur. İki AYNA kural (docx):
+      // GÖNDERİM ÖNCESİ KURAL BÜTÜNLÜĞÜ (P1) — taslak kaydedildiğinde geçerliydi;
+      // gönderim ANINDA da geçerli olduğu TEKRAR doğrulanır (referans künye,
+      // zorunlu alanlar, vb. — hks_bildirim_dogrula() taslak_kaydet ile AYNI
+      // fonksiyon). Eskiden bu adım yalnız taslak_kaydet'te çalışıyordu; DB'de
+      // duran eski/bozuk bir taslak doğrudan hks_bildirim_kaydet()'e (CANLI,
+      // geri alınamaz) gidebiliyordu.
+      $__revalHata = hks_bildirim_dogrula(['satirlar' => $satirlar, 'ortak' => $ortak]);
+      if ($__revalHata) {
+        hks_json_cikti(['hata' => 'Taslak artık geçerli kurallara uymuyor: ' . $__revalHata .
+          ' Taslak silinmedi — "Düzenle" ile güncelleyip tekrar deneyin.'], 400);
+      }
+
+      // GÖNDERİM ÖNCESİ SON GÜVENLİK (AYNA) — karşı tarafın GTB kayıt durumu,
+      // taslak kaydedildikten sonra değişmiş olabilir. Geri alınamaz bildirimden
+      // önce GTB'ye TEKRAR sorulur; hem gate kararı hem (varsa) teşhis kaydı AYNI
+      // sorgu sonucuna dayanır (P2 TOCTOU: tek istek, tek doğrulama sonucu).
+      // İki AYNA kural (kılavuz 0.1.14):
       //   • Sevk Etme / Satın Alım  → karşı taraf KAYITLI olmalı.
       //   • Üreticiden Sevk Alım    → üretici KAYITSIZ olmalı ("sadece kayıtsız
       //     üreticiden yapılan sevkiyat işlemlerinde kullanılacak bildirim türü").
-      // Üretici sevk `kayitZorunlu=false` gönderdiği için eskiden bu türde hiçbir
-      // ön denetim çalışmıyordu; arada GTB'ye kaydolan bir üretici fark edilmeden
-      // geçiyordu.
+      // P0: durum sorgusu artık tri-state (REGISTERED/NOT_REGISTERED/UNKNOWN).
+      // UNKNOWN durumunda — kayıt durumu HANGİ yönde olursa olsun — gönderim
+      // DURUR ve BildirimKaydet ÇAĞRILMAZ (eskiden "sorgu sonuçsuz → kayıtsız"
+      // sayılıp Üreticiden Sevk Alım'da denetim sessizce atlanıyordu).
       $__uretSevk = hks_uret_sevk_mi($ortak);
       if (!empty($ortak['ikinciTc']) && ($__uretSevk || !empty($ortak['kayitZorunlu']))) {
-        $__kkHam = null;
-        $__kk = hks_kayitli_kisi_sorgu($cfg, [$ortak['ikinciTc']], $__kkHam);
-        $__k0 = $__kk[0] ?? null;
-        $__kayitli = $__k0 && !empty($__k0['kayitliMi']);
-        if ($__uretSevk && $__kayitli) {
-          hks_json_cikti(['hata' => 'Gönderim DURDURULDU: üretici (' . $ortak['ikinciTc'] .
-            ') GTB sisteminde KAYITLI görünüyor. "Üreticiden Sevk Alım" yalnızca kayıtsız ' .
-            'üretici içindir; kayıtlı kişiden alım için bildirim türünü "Satın Alım" yapın. ' .
+        $__aynaHam = null; $__aynaDetay = null;
+        $__durum = hks_kayit_durumu($cfg, $ortak['ikinciTc'], $__aynaHam, $__aynaDetay);
+        if ($__durum === HKS_DURUM_UNKNOWN) {
+          hks_json_cikti(['hata' => 'HKS kişi kayıt durumu doğrulanamadı. Bildirim gönderilmedi. ' .
+            'Taslak silinmedi — birkaç dakika sonra tekrar deneyin.'], 400);
+        }
+        if ($__uretSevk && $__durum === HKS_DURUM_REGISTERED) {
+          hks_json_cikti(['hata' => 'Bu kişi HKS sisteminde kayıtlıdır. Üreticiden Sevk Alım ' .
+            'bildirimi yapılamaz. Kayıtlı kişiden alım için bildirim türünü "Satın Alım" yapın. ' .
             'Taslak silinmedi.'], 400);
         }
-        if (!$__uretSevk && !$__kayitli) {
+        if (!$__uretSevk && $__durum === HKS_DURUM_NOT_REGISTERED) {
           hks_json_cikti(['hata' => 'Gönderim DURDURULDU: karşı taraf (' . $ortak['ikinciTc'] .
             ') GTB sisteminde kayıtlı değil. Sevk Etme / Satın Alım için karşı tarafın ' .
             'kayıtlı olması zorunludur. Kayıtsız müstahsilden alım için "Üreticiden Sevk Alım" ' .
@@ -470,12 +532,12 @@ try {
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
       $yeniKunyeler = array_values(array_map(fn($s) => $s['yeniKunyeNo'], $basarili));
       $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
-        (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, veri)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+        (id, zaman, firma_id, firma_ad, plaka, belge_no, ulke_ad, urun_ad, adet, toplam_kg, fiyat, rusum, hata_sayisi, genel_hata, bildirim_turu, veri)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
       $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
         count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
-        count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'],
+        count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
         json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar']], JSON_UNESCAPED_UNICODE)]);
 
       // Kısmi başarısızlık varsa (bazı satırlar hata verdi) taslak yine silinir
@@ -507,6 +569,7 @@ try {
           'ulkeAd' => $r['ulke_ad'], 'urunAd' => $r['urun_ad'], 'adet' => (int)$r['adet'],
           'toplamKg' => (float)$r['toplam_kg'], 'fiyat' => (float)$r['fiyat'], 'rusum' => (float)$r['rusum'],
           'hataSayisi' => (int)$r['hata_sayisi'], 'genelHata' => $r['genel_hata'],
+          'bildirimTuru' => $r['bildirim_turu'] ?? null,   // P3 — NULL: legacy kayıt (backfill yapılmadı)
           'yeniKunyeler' => $veri['yeniKunyeler'] ?? [],
         ];
       }, $rows);
@@ -618,16 +681,30 @@ try {
       hks_json_cikti($out);
     }
     case 'kayitli_kisi': {
+      // P0 (kılavuz 0.1.14 uyum düzeltmesi): dönüş artık HER ZAMAN tri-state
+      // "durum" alanı taşır — REGISTERED | NOT_REGISTERED | UNKNOWN. Eskiden
+      // "liste boş → kayitliMi=false" çıkarımı yapılıyordu; bu KALDIRILDI.
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
       if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
       $tc = trim($g['tcVkn'] ?? '');
       if ($tc === '') hks_json_cikti(['hata' => 'TC/Vergi No gerekli.'], 400);
       @set_time_limit(60);
-      $ham = null;
-      $liste = hks_kayitli_kisi_sorgu($cfg, [$tc], $ham);
-      $kisi = $liste[0] ?? null;
-      $out = ['kisi' => $kisi] + ($kisi ? [] : ['ham' => $ham]);
-      if (!empty($g['debug'])) { $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur(); }
+      $ham = null; $detay = null;
+      $durum = hks_kayit_durumu($cfg, $tc, $ham, $detay);
+      $out = [
+        'kisi' => [
+          'tcVkn'     => $tc,
+          'durum'     => $durum,
+          'kayitliMi' => $durum === HKS_DURUM_REGISTERED,   // geriye dönük kolaylık alanı
+          'sifatlar'  => $detay['sifatIds'] ?? [],
+        ],
+      ];
+      if ($durum === HKS_DURUM_UNKNOWN) $out['ham'] = $ham;
+      if (!empty($g['debug'])) {
+        $out['ns'] = hks_ns_listesi(); $out['hamXml'] = hks_son_ham_gorunur();
+        // Teşhis metadata — parola/ServicePassword/tam credential/ham SOAP body İÇERMEZ.
+        $out['detay'] = $detay;
+      }
       hks_json_cikti($out);
     }
 

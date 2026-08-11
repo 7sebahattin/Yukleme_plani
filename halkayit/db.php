@@ -70,6 +70,14 @@ function hks_tablolari_hazirla() {
   try { $db->exec("ALTER TABLE {$t}gonderilenler ADD COLUMN firma_id VARCHAR(40) AFTER zaman"); }
   catch (PDOException $e) { /* zaten var */ }
 
+  // P3: Bildirim türü — önceden yalnız `ulke_ad` serbest metnine gömülü bir
+  // önek ile ayırt edilebiliyordu (raporlama/denetim için kırılgan). Yeni
+  // gönderimler bu kolonu YAPISAL olarak doldurur (bkz. api.php taslak_gonder).
+  // Legacy satırlar NULL kalır — güvenilir biçimde belirlenemediği için TAHMİNE
+  // DAYALI backfill YAPILMAZ.
+  try { $db->exec("ALTER TABLE {$t}gonderilenler ADD COLUMN bildirim_turu VARCHAR(30) DEFAULT NULL AFTER genel_hata"); }
+  catch (PDOException $e) { /* zaten var */ }
+
   // Son kullanılanlar ve liste önbelleği: basit anahtar-değer
   $db->exec("CREATE TABLE IF NOT EXISTS {$t}kv (
     anahtar VARCHAR(60) PRIMARY KEY,

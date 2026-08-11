@@ -103,7 +103,7 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
   doğurur. Bu yüzden arayüzde "önce taslağa kaydet → sonra onayla → gönder"
   akışı var. Bu iki aşamalı güvenlik akışını kaldırmayın.
 
-### 5.1 Bildirim türleri ve karşı taraf kuralı (kılavuz 0.1.14)
+### 5.1 Bildirim türleri ve karşı taraf kuralı (kılavuz 0.1.14 — GTB HKS Geliştirici Kılavuzu, "Bildirim kayıt servisinin çalışma prensipleri")
 
 | Tür | Karşı taraf | Referans | Hedef | Fiyat |
 |---|---|---|---|---|
@@ -111,7 +111,7 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 | Satış (yurt içi) | kayıtlı **veya** kayıtsız | referanslı | kayıtlıda işyeri, kayıtsızda adres | var |
 | Sevk Etme | **kayıtlı ZORUNLU** | referanslı | işyeri | yok |
 | Satın Alım | **kayıtlı ZORUNLU** | referanssız | işyeri (kendi) | var |
-| Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | işyeri (kendi) | var |
+| Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | **adres (İl/İlçe/Belde)** | var |
 
 Kılavuzun birebir ifadeleri:
 - *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde kayıtlı
@@ -119,19 +119,25 @@ Kılavuzun birebir ifadeleri:
 - *"Üreticiden Sevk Alım: Sadece kayıtsız üreticiden yapılan sevkiyat işlemlerinde
   kullanılacak bildirim türüdür."* → kayıtsız müstahsilin TEK geçerli yolu budur.
 - *"Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi 'Üretici' olmalıdır."*
+  → **tam** ad eşleşmesi; "Üretici Birliği"/"Üretici Örgütü" FARKLI sıfatlardır ve kabul
+  edilmez.
 - *"İkinci kişi ... GTB sisteminde kayıtlı değilse 'Eposta' bilgisi hariç diğer
-  bilgilerinde gönderilmesi gerekir."* → `AdSoyad` + `CepTel` zorunlu olur.
+  bilgilerinde gönderilmesi gerekir."* → `AdSoyad` + `CepTel` zorunlu olur, `Eposta`
+  hiçbir durumda gönderilmez.
 - *"İkinci kisi GTB sisteminde kayıtlı kişi değil ise ... GidecekYerIl/Ilce/BeldeId
   '0' olamaz"* → kayıtsız karşı tarafta hedef, işyeri kaydıyla değil **adresle** bildirilir.
+  **Üreticiden Sevk Alım'ın ikinci kişisi tanım gereği her zaman kayıtsızdır, dolayısıyla
+  bu kural bu türde HER ZAMAN geçerlidir.**
 
-**Üreticiden Sevk Alım'da hedef — kılavuzdan bilinçli sapma.** Kılavuz kayıtsız
-ikinci kişide `GidecekYerIl/Ilce/BeldeId` ister; ancak HKS sitesinde bu tür,
-diğer türlerdeki gibi **İşletme Türü → sorgu → işyeri seçimi** ile ilerliyor.
-Bu yüzden `GidecekIsyeriId` gönderiyoruz (mal bize geldiği için işyeri sorgusu
-Satın Alım'daki gibi **kendi vergi numaramızla** yapılır — üreticinin zaten
-HKS'te kaydı yoktur, onun TC'siyle sorgu boş döner). İlk canlı testte HKS
-adres alanlarını isterse `hedefAdres` moduna dönmek yeterlidir; `hks_soap.php`
-her iki biçimi de üretebiliyor.
+**Üreticiden Sevk Alım'da hedef — kılavuza tam uyum (versiyon geçmişi).** Önceki
+sürümlerde bu tür, kılavuzdan bilinçli olarak sapılarak "HKS sitesindeki akış böyle
+görünüyor" varsayımıyla kendi firmanın `GidecekIsyeriId`'sini gönderiyordu; bu varsayım
+canlıda hiç doğrulanmamıştı. Kılavuz 0.1.14 uyum düzeltmesiyle bu kaldırıldı: ikinci
+kişi kayıtlı DEĞİLSE (Üreticiden Sevk Alım'da her zaman) hedef `GidecekYerIlId` /
+`GidecekYerIlceId` / `GidecekYerBeldeId` ile bildirilir — Kart 2'deki İl/İlçe/Belde
+seçimi zaten yurt içi Satış'ın kayıtsız-alıcı dalında vardı, aynı alanlar bu türde de
+kullanılır (`app.html`: `turDegisti()` — `adresMod`; `hks_soap.php`: `hks_bildirim_xml()`
+— `$ortak['hedefAdres']` dalı, TÜR-BAĞIMSIZ tek payload üretici).
 
 **Üreticiden Sevk Alım — kuralların nerede uygulandığı.** Bu türün tüm kılavuz
 kuralları hem tarayıcıda hem **sunucuda** denetlenir. `app.html` statik bir dosyadır
@@ -141,9 +147,10 @@ sisteme giden alanların doğruluğu yalnız arayüze bırakılamaz.
 | Kural (kılavuz) | Arayüz | Sunucu |
 |---|---|---|
 | `AdSoyad` + `CepTel` zorunlu (kayıtsız ikinci kişi) | `btnMalTaslak` | `hks_bildirim_dogrula()` |
-| İkinci kişi sıfatı = **Üretici** | `ureticiSifati()` + kilitli alan | `hks_bildirim_dogrula()` (ad, `listeler_cache`'ten) |
-| Referanslı bildirim **YASAK** | künye kartı gizli | `hks_bildirim_dogrula()` (`referanssiz` + künye no "0") |
-| Üretici GTB'de **KAYITSIZ** olmalı | `btnIkDogrula` sonrası engel | `taslak_gonder` — gönderim öncesi GTB sorgusu |
+| İkinci kişi sıfatı **tam olarak** Üretici (ID bazlı) | `ureticiSifati()` — tam eşleşme, kilitli alan | `hks_uretici_sifat_id()` + `hks_bildirim_dogrula()` (katalogdan ID, substring YOK) |
+| Referanslı bildirim **YASAK** | künye kartı gizli | `hks_bildirim_dogrula()` (`referanssiz` + künye no "0") — **hem taslak_kaydet HEM taslak_gonder'da** |
+| Hedef **adres** (İl/İlçe/Belde), işyeri DEĞİL | `turDegisti()` — `adresMod`, Kart 2 İl/İlçe/Belde | `hks_bildirim_xml()` — `hedefAdres` dalı (TÜR-BAĞIMSIZ) |
+| Üretici GTB'de **KAYITSIZ** olmalı | `btnIkDogrula` sonrası engel (tri-state: REGISTERED/NOT_REGISTERED/UNKNOWN) | `taslak_gonder` — gönderim öncesi `hks_kayit_durumu()` |
 
 Sunucudaki tür tespiti `ortak.uretSevk` bayrağı **veya** `ortak.turAd` içinde
 "üretici" geçmesiyle yapılır (`hks_uret_sevk_mi()`) — eski taslaklarda yalnız
@@ -154,12 +161,29 @@ gibi girişler `hks_bildirim_xml()` içinde temizlenir (tek otorite), arayüz de
 çıkışta aynı temizliği gösterir. `Eposta` hiçbir durumda gönderilmez (kılavuz: kayıtsız
 ikinci kişide zorunlu alan olmaktan çıkarıldı).
 
-**Gönderim öncesi AYNA denetimi.** `taslak_gonder`, geri alınamaz bildirimden hemen
-önce karşı tarafın GTB kayıt durumunu **tekrar** sorar; taslak kaydedildikten sonra
-durum değişmiş olabilir. İki yön de kapalıdır: Sevk Etme / Satın Alım'da karşı taraf
-kayıtlı **değilse**, Üreticiden Sevk Alım'da üretici kayıtlı **ise** gönderim durur ve
-taslak silinmez. (Üretici sevk `kayitZorunlu=false` gönderdiği için bu türde eskiden
-hiçbir ön denetim çalışmıyordu — arada GTB'ye kaydolan üretici fark edilmiyordu.)
+**Kayıt durumu sorgusu — tri-state (REGISTERED / NOT_REGISTERED / UNKNOWN).**
+Kılavuz 0.1.14: `KayitliKisiSorguDTO.KayitliKisiMi` yalnız "True"/"False" döner; "False"
+ise `Sifatlari` null gelir. **Önceki sürümde** sorgu sonucu boş/eksik geldiğinde bu
+"kayıtsız" (`kayitliMi=false`) sayılıyordu — bu YANLIŞTI ve kılavuz uyum düzeltmesiyle
+kaldırıldı. `hks_kayit_durumu()` artık üç kesin durum döner:
+- **REGISTERED** — `KayitliKisiMi=true`.
+- **NOT_REGISTERED** — `KayitliKisiMi=false`.
+- **UNKNOWN** — SOAP/ağ hatası, `IslemKodu` başarısız, sorgulanan TC'ye eşleşen DTO yok,
+  veya `KayitliKisiMi` boolean'a çevrilemiyor. **Bu durumda `BildirimServisBildirimKaydet`
+  ÇAĞRILMAZ** — ne "Doğrula" adımında ilerlemeye izin verilir, ne de gönderim yapılır.
+
+**Gönderim öncesi bütünlük + AYNA denetimi.** `taslak_gonder`, geri alınamaz bildirimden
+hemen önce iki şeyi TEKRAR doğrular (P1/P2 uyum düzeltmesi — eskiden yalnız AYNA
+denetimi vardı, taslak kaydından sonra kural değişmiş/bozulmuş bir taslak doğrudan
+`hks_bildirim_kaydet()`e gidebiliyordu):
+1. **Kural bütünlüğü** — `hks_bildirim_dogrula()` taslak üzerinde tekrar çalıştırılır
+   (referans künye, zorunlu alanlar, vb. — `taslak_kaydet` ile AYNI fonksiyon).
+2. **AYNA (kayıt durumu)** — karşı tarafın GTB kayıt durumu `hks_kayit_durumu()` ile
+   TEKRAR sorulur; taslak kaydedildikten sonra değişmiş olabilir. Tek sorgu sonucu hem
+   gate kararı hem (varsa) teşhis kaydı için kullanılır (aynı istekte tek doğrulama
+   kaynağı). Üç yön kapalıdır: Sevk Etme/Satın Alım'da karşı taraf kayıtlı **değilse**,
+   Üreticiden Sevk Alım'da üretici kayıtlı **ise**, veya durum **UNKNOWN** ise — gönderim
+   durur ve taslak silinmez.
 
 **Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
 `TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi
@@ -167,11 +191,33 @@ alanı **yoktur**. HKS web portalı kayıtsız üretici tanımlarken doğum tari
 servis şemasında karşılığı bulunmadığı için gönderilmez. Canlı şema değişmişse
 `BildirimService.svc?xsd=xsd2` çıktısıyla doğrulayıp buraya not düşün.
 
+**TC/VKN eşleşmesi.** Kayıt durumu sorgusunda dönen `TcKimlikVergiNo`, sorgulanan
+TC/VKN ile `hks_tc_esit()` üzerinden karşılaştırılır — yalnızca format normalizasyonu
+(rakam olmayan karakterler atılır), fuzzy eşleşme YAPILMAZ. Eşleşen satır yoksa durum
+UNKNOWN'dır (bkz. yukarısı).
+
+**`gonderilenler.bildirim_turu` (P3).** Gönderilen bildirimlerin türü artık ayrı bir
+sütunda yapısal olarak tutulur (`URETICIDEN_SEVK_ALIM` / `SATIN_ALIM` / `SEVK_ETME` /
+`SATIS`) — önceden yalnız `ulke_ad` alanına gömülü bir metin öneki ile ayırt
+edilebiliyordu. `hks_bildirim_turu_kodu()` (api.php) yeni gönderimlerde bu alanı
+doldurur; **legacy kayıtlar `NULL` kalır** (güvenilir biçimde belirlenemediği için
+tahmine dayalı backfill yapılmamıştır).
+
 ---
 
 ## 6. İlk test önerisi
 
+0. Otomatik testler (ağsız/DB'siz, saf fonksiyonlar): `php scripts/hks_kunye_detay_test.php`
+   ve `php scripts/hks_uretici_sevk_test.php`. İkincisi "Üreticiden Sevk Alım" kılavuz
+   0.1.14 uyum düzeltmesinin (kayıt durumu tri-state, sıfat tam eşleşmesi, gidecek yer
+   payload'ı, referans künye kuralı) regresyon testleridir.
 1. Firma ekle (HKS kullanıcı adı, şifre, web servis şifresi, vergi no).
 2. "🔄 Listeler" ile referans listelerini indir (bu adım kimlik bilgilerini de doğrular).
 3. Ürün seç → künyeleri getir (bu adımlar HKS'te KAYIT OLUŞTURMAZ, sadece okur).
 4. İlk gerçek bildirimi **tek künye, küçük miktarla** yapıp HKS sitesinden doğrula.
+5. **"Üreticiden Sevk Alım" ilk canlı testi özellikle önemli:** bu tür artık kayıtsız
+   üretici için İl/İlçe/Belde adresiyle bildiriliyor (P1 düzeltmesi — eskiden kendi
+   firmanın işyeri kaydı gönderiliyordu, bu hiç canlıda doğrulanmamıştı). HKS servisi
+   bu alanları REDDEDERSE (`GTBGLB...` hata kodu), `hks_soap.php`'deki
+   `hks_bildirim_xml()` içinde `hedefAdres` dalını incele; kılavuz metni bu dalın doğru
+   olduğunu söylüyor, ama canlı doğrulama YAPILMADAN kesin değildir.
