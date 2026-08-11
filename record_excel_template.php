@@ -128,7 +128,7 @@ $setS('J2', fmt_date($record['tarih']));
 $setS('J3', $record['parti_no'] ?? '');
 $setS('J4', $record['bolge'] ?? '');
 $setS('J5', $record['gumruk'] ?? '');
-$setS('J6', '');                                   // ULAŞIM — sistemde yok
+$setS('J6', $record['ulasim'] ?? '');
 $setS('J7', $record['alici'] ?? '');
 $setS('O2', mb_strtoupper(trim((string)($record['urun'] ?? '')), 'UTF-8'));
 
@@ -198,6 +198,21 @@ $setF('O10', "=ROUND(SUM(D$ROW0:D$ROWE),0)"); // TOPLAM BRÜT KG
 $setF('O11', "=ROUND(SUM(E$ROW0:E$ROWE),0)"); // TOPLAM DARA KG
 $setF('O12', "=ROUND(SUM(H$ROW0:H$ROWE),0)"); // TOPLAM NET KG
 $setF('O13', "=SUM(B$ROW0:B$ROWE)");          // TOPLAM KASA ADETİ
+
+// ── Kategori özet blokları (L14, L18, ... — TOPLAM/L10 hariç) ──
+// Şablonda her blok 4 satır: BRÜT KG/DARA KG/NET KG/KASA ADETİ (M sütunu etiket, O sütunu değer).
+// L sütunundaki dikey yazı (ör. "H-10", "KAYISI") = ürün cinsi (G sütunu) kriteri.
+// Canlı SUMIF: L etiketi dolu olan her blok otomatik doldurulur — yeni kategori eklemek
+// için kod değişikliği gerekmez, sadece şablonda L hücresine adı yazılır.
+for ($r0 = 14; $r0 <= $ROWE + 3; $r0 += 4) {
+    $label = trim((string)($sh->getCell("L$r0")->getValue() ?? ''));
+    if ($label === '') continue;
+    $r1 = $r0 + 1; $r2 = $r0 + 2; $r3 = $r0 + 3;
+    $setF("O$r0", "=ROUND(SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$D\$$ROW0:\$D\$$ROWE),0)"); // BRÜT KG
+    $setF("O$r1", "=ROUND(SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$E\$$ROW0:\$E\$$ROWE),0)"); // DARA KG
+    $setF("O$r2", "=O$r0-O$r1");                                                        // NET KG
+    $setF("O$r3", "=SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$B\$$ROW0:\$B\$$ROWE)");           // KASA ADETİ
+}
 
 // ── Size özeti (H38..K41) — sablon sabit size satirlari: H38=8,H39=9,H40=12,H41=14 ──
 // Canlı SUMIF formülleri: kriter = H sütunundaki size etiketi, aralık = palet satırları (10..35).
