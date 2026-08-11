@@ -223,9 +223,11 @@
   .kunye .bilgi { flex:1; min-width:0; }
   .kunye .no { font-weight:800; font-size:12.5px; word-break:break-all; }
   .kunye .detay { font-size:11.5px; color:var(--soluk); margin-top:2px; }
-  /* Fiyat/rüsum zenginleştirmesi — "💰 Fiyat/Rüsum Getir" sonrası dolar, öncesinde yok */
-  .kunye .detay2 { font-size:11.5px; color:var(--tamam-tx); font-weight:600; margin-top:3px; }
+  /* Kalan kilo + birim fiyat sağda dikey öbek — fiyat kilonun HEMEN ALTINDA/yanında */
+  .kunye .kalan-blok { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; }
   .kunye .kalan { font-weight:800; color:var(--navy); font-size:13px; white-space:nowrap; }
+  /* Fiyat — künye listesiyle birlikte otomatik gelir (bkz. kunyeFiyatlariEnjekte) */
+  .kunye .kalan-fiyat { font-size:11px; color:var(--tamam-tx); font-weight:700; white-space:nowrap; margin-top:1px; }
   .kunye input.miktar { width:88px; padding:9px; font-size:14px; flex-shrink:0; border-radius:10px; }
 
   .rozet { display:inline-block; padding:3px 9px; border-radius:12px; font-size:11px; font-weight:800; }
@@ -696,15 +698,11 @@
         <div><button class="btn btn-soluk" id="btnSecimKaldir" style="margin-top:0">✖️ Seçimi Kaldır</button></div>
       </div>
       <div class="mesaj" id="dagitMesaj"></div>
-
       <!-- Künyenin HKS'e KAYITLI (bize yapılan bildirimdeki) birim fiyatı —
-           yukarıdaki "Birim Fiyat" (YENİ satışın fiyatı) ile KARIŞTIRILMASIN,
-           bu geçmişe dönük bir sorgu. Opsiyonel: künye listesi bu olmadan da
-           geçerli, yalnız ek bilgi ekler. Uzun "Kapsam" aralıklarında (üstteki
-           3 · Ürün ve Künye kartı) yavaş olabilir — aynı sayıda ek SOAP çağrısı
-           gerektirir, bu yüzden otomatik değil, isteğe bağlı buton. -->
-      <button class="btn btn-teal" id="btnDetayGetir" style="margin-top:10px">💰 Fiyat Getir</button>
-      <div class="mesaj" id="detayMesaj"></div>
+           yukarıdaki "Birim Fiyat" (YENİ satışın fiyatı) ile KARIŞTIRILMASIN.
+           Künye listesiyle birlikte OTOMATİK gelir (bkz. kunyeFiyatlariEnjekte),
+           ayrı bir buton/tıklama gerektirmez. Opsiyonel/hataya dayanıklı: fiyat
+           alınamazsa künye seçimi (kalan miktar, checkbox) etkilenmez. -->
       <div id="kunyeListe" style="margin-top:12px"></div>
     </div>
   </main>
@@ -1570,7 +1568,7 @@ function formuTemizle() {
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
-  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'detayMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('ikCokluSifatUyari').classList.add('gizli');
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   ozetGuncelle();
@@ -2158,11 +2156,37 @@ $('btnKunyeler').onclick = async () => {
         ($('sKunyeIsyeriTuru').value ? ' İşyeri türü filtresini "— Tümü —" yapıp tekrar deneyin.' : ''), 'hata');
     } else {
       $('kartKunyeler').scrollIntoView({ behavior: 'smooth' });
+      kunyeFiyatlariEnjekte();  // arka planda, ayrı bir tıklama gerektirmeden
     }
   } catch (e) { mesajGoster('kunyeMesaj', e.message, 'hata'); }
   $('btnKunyeler').disabled = false;
   $('btnKunyeler').textContent = '🔍 Künyeleri Getir';
 };
+
+// Künye listesi yüklenir yüklenmez, ayrı bir tıklama gerektirmeden fiyatları
+// arka planda getirir ve satırlara işler. Opsiyonel/hataya dayanıklı: başarısız
+// olursa künye seçimi (kalan miktar, checkbox, miktar girişi) etkilenmez —
+// yalnız fiyat satırı boş kalır. Uzun "Kapsam" aralıklarında (üstteki 3 · Ürün
+// ve Künye kartı) birkaç saniye sürebilir; bu yüzden künye listesini BEKLETMEZ,
+// liste hemen görünür, fiyatlar geldikçe kunyeCiz() ile üzerine yazılır.
+async function kunyeFiyatlariEnjekte() {
+  if (!kunyeler.length) return;
+  const eskiMetin = $('kunyeSayi').textContent;
+  $('kunyeSayi').textContent = eskiMetin + ' · fiyatlar yükleniyor…';
+  try {
+    const j = await api('/api/kunye_detay', 'POST', {
+      firmaId: aktifFirma.id,
+      aySayisi: parseInt($('sGun').value, 10),
+    });
+    const harita = j.detaylar || {};
+    kunyeler.forEach(k => {
+      const d = harita[String(k.kunyeNo)];
+      if (d) Object.assign(k, d);
+    });
+    kunyeCiz();
+  } catch (e) { /* opsiyonel zenginleştirme — künye seçimi zaten çalışıyor, sessizce geç */ }
+  $('kunyeSayi').textContent = eskiMetin;
+}
 
 function kunyeCiz() {
   const kap = $('kunyeListe');
@@ -2170,23 +2194,19 @@ function kunyeCiz() {
   kunyeler.forEach((k, i) => {
     const div = document.createElement('div');
     div.className = 'kunye';
-    // Malın Miktarı — hks_kunye_penceresi'nden zaten gelir (ek SOAP çağrısı gerekmez),
-    // yalnızca kalan'dan farklıysa gösterilir (aynıysa tekrar bilgi vermek gürültü olur).
-    const miktarSatiri = (k.miktar !== undefined && Math.abs(k.miktar - k.kalan) > 0.001)
-      ? `<div class="detay">Miktar: ${fmt(k.miktar)} ${k.birim || 'KG'}</div>` : '';
-    // Birim fiyat — yalnızca "💰 Fiyat Getir" ile zenginleştirildiyse dolu
-    // (k.fiyat undefined ise hiç sorgulanmamıştır, satır hiç basılmaz). Yalnız
-    // fiyat gösterilir — rüsum/plaka/bildirim türü kullanıcı isteğiyle kaldırıldı,
-    // veri yine de nesnede durur (k.rusum vb.), gerekirse geri eklenebilir.
-    const detay2 = (k.fiyat !== undefined)
-      ? `<div class="detay2">${k.fiyat > 0 ? `💰 ${fmt(k.fiyat)} TL/${k.birim || 'KG'}` : 'Fiyat bilgisi bulunamadı'}</div>`
+    // Birim fiyat — künye listesiyle birlikte arka planda otomatik gelir
+    // (bkz. kunyeFiyatlariEnjekte). k.fiyat undefined ise henüz gelmemiştir,
+    // satır hiç basılmaz. Kalan kilonun HEMEN ALTINDA gösterilir — kullanıcı
+    // isteğiyle "Miktar: X Kg" (orijinal/bildirilen miktar) satırı kaldırıldı,
+    // yalnızca bildirilebilecek (kalan) kilo gösterilir.
+    const fiyatSatiri = (k.fiyat !== undefined)
+      ? `<div class="kalan-fiyat">${k.fiyat > 0 ? `${fmt(k.fiyat)} TL/${k.birim || 'KG'}` : 'fiyat yok'}</div>`
       : '';
     div.innerHTML =
       `<input type="checkbox" data-i="${i}">` +
       `<div class="bilgi"><div class="no">${k.kunyeNo}</div>` +
-      `<div class="detay">${k.tarih} · ${k.urun || ''} ${k.cins ? '· ' + k.cins : ''}</div>` +
-      miktarSatiri + detay2 + `</div>` +
-      `<div class="kalan">${fmt(k.kalan)} ${k.birim || 'KG'}</div>` +
+      `<div class="detay">${k.tarih} · ${k.urun || ''} ${k.cins ? '· ' + k.cins : ''}</div></div>` +
+      `<div class="kalan-blok"><div class="kalan">${fmt(k.kalan)} ${k.birim || 'KG'}</div>${fiyatSatiri}</div>` +
       `<input class="miktar" data-i="${i}" inputmode="decimal" placeholder="miktar" disabled>`;
     kap.appendChild(div);
   });
@@ -2241,42 +2261,6 @@ $('btnSecimKaldir').onclick = () => {
   kap.querySelectorAll('.kunye').forEach(k => k.classList.remove('secili'));
   $('dagitMesaj').className = 'mesaj';
   ozetGuncelle();
-};
-
-// Künyelerin HKS'e KAYITLI fiyat/rüsum/plaka-belge/bildirim türü bilgisini getirir.
-// OPSİYONEL zenginleştirme — künye seçimi bu olmadan da tam çalışır (bkz. kartta
-// künyeler.js'deki not). "Kapsam" ile AYNI ay sayısını kullanır ki künye listesiyle
-// aynı döneme baksın; büyük aralıklarda (2+ yıl) yavaş olabilir, bu yüzden isteğe
-// bağlı bir buton, otomatik değil.
-$('btnDetayGetir').onclick = async () => {
-  if (!kunyeler.length) {
-    mesajGoster('detayMesaj', 'Önce künyeleri getirin.', 'hata');
-    return;
-  }
-  $('btnDetayGetir').disabled = true;
-  $('btnDetayGetir').textContent = '⏳ Getiriliyor...';
-  $('detayMesaj').className = 'mesaj';
-  try {
-    const j = await api('/api/kunye_detay', 'POST', {
-      firmaId: aktifFirma.id,
-      aySayisi: parseInt($('sGun').value, 10),
-    });
-    const harita = j.detaylar || {};
-    let eslesen = 0;
-    kunyeler.forEach(k => {
-      const d = harita[String(k.kunyeNo)];
-      if (d) { Object.assign(k, d); eslesen++; }
-    });
-    kunyeCiz();
-    let msg = `✓ ${eslesen} / ${kunyeler.length} künye için fiyat bilgisi eklendi.`;
-    if (eslesen < kunyeler.length) {
-      msg += ' Eşleşmeyenler HKS\'in bu servisteki farklı bir sorgu kapsamında olabilir.';
-    }
-    if (j.kismiHata) msg += ' ⚠️ Bazı aylık pencerelerde bilgi alınamadı — kısmi sonuç.';
-    mesajGoster('detayMesaj', msg, j.kismiHata || eslesen < kunyeler.length ? 'hata' : 'tamam');
-  } catch (e) { mesajGoster('detayMesaj', e.message, 'hata'); }
-  $('btnDetayGetir').disabled = false;
-  $('btnDetayGetir').textContent = '💰 Fiyat Getir';
 };
 
 function seciliSatirlar() {
