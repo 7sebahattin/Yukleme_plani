@@ -394,14 +394,24 @@ function hks_bildirim_xml($satirlar, $ortak) {
     if (!empty($ortak['belgeNo']))    $gidecek[] = '<b:BelgeNo>' . hks_esc($ortak['belgeNo']) . '</b:BelgeNo>';
     if (!empty($ortak['belgeTipiId'])) $gidecek[] = '<b:BelgeTipi>' . (int)$ortak['belgeTipiId'] . '</b:BelgeTipi>';
     if ($yurtIci && !empty($ortak['hedefAdres'])) {
-      // Kayıtsız alıcı (yurt içi Satış): il/ilçe/belde adresi.
+      // Kılavuz 0.1.14: "İkinci kişi kayıtlı değilse GidecekYerIlId/IlceId/
+      // BeldeId '0' olamaz." KAYITSIZ ikinci kişinin HER yurt içi türünde
+      // (yurt içi Satış'ta kayıtsız alıcı VE Üreticiden Sevk Alım'da kayıtsız
+      // üretici — bu tür zaten yalnız kayıtsız üretici içindir) geçerlidir.
+      // Bu dal `$ortak['hedefAdres']` bayrağına göre GENEL çalışır; hangi
+      // bildirim türünün bu bayrağı ne zaman set ettiği app.html'de belirlenir
+      // (P1 düzeltmesi — bkz. app.html turDegisti/btnMalTaslak).
       // Alfabetik: GidecekYerBeldeId, GidecekYerIlId, GidecekYerIlceId, GidecekYerIsletmeTuruId
       $gidecek[] = '<b:GidecekYerBeldeId>' . (int)$ortak['beldeId'] . '</b:GidecekYerBeldeId>';
       $gidecek[] = '<b:GidecekYerIlId>' . (int)$ortak['ilId'] . '</b:GidecekYerIlId>';
       $gidecek[] = '<b:GidecekYerIlceId>' . (int)$ortak['ilceId'] . '</b:GidecekYerIlceId>';
       $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
     } elseif ($yurtIci) {
-      // Kayıtlı alıcı / Sevk Etme: GidecekIsyeriId (‹ GidecekYerIsletmeTuruId)
+      // Kılavuz 0.1.14: "İkinci kişi kayıtlı ise GidecekIsyeriId..." — kayıtlı
+      // alıcı (yurt içi Satış) / Sevk Etme / Satın Alım (mal bize geldiği için
+      // kendi işyerimiz). Üreticiden Sevk Alım BU DALA GİRMEZ — o tür yalnız
+      // kayıtsız üretici içindir, dolayısıyla her zaman yukarıdaki adres dalını
+      // kullanır (hedefAdres=true, app.html tarafından set edilir).
       $gidecek[] = '<b:GidecekIsyeriId>' . (int)$ortak['gidecekIsyeriId'] . '</b:GidecekIsyeriId>';
       $gidecek[] = '<b:GidecekYerIsletmeTuruId>' . (int)$ortak['isletmeTuruId'] . '</b:GidecekYerIsletmeTuruId>';
     } else {
@@ -879,9 +889,46 @@ function hks_isyerleri($cfg, $tur, $tcVkn, &$ham = null) {
   return $sonuc;
 }
 
-// Kayıtlı Kişi Sorgu: karşı tarafın (firma/şahıs) HKS'te kayıtlı olup olmadığını
-// ve sahip olduğu sıfatları döndürür. Ad/soyad DÖNMEZ (elle girilir).
+// ── Kayıt durumu tri-state modeli (GTB HKS Geliştirici Kılavuzu 0.1.14) ────────
+// Kılavuz: "KayitliKisiSorguDTO" içinde "KayitliKisiMi" alanı yalnız "True" veya
+// "False" döner; "False" ise "Sifatlari" null gelir. Bu iki değerin İKİSİ de
+// KESİN bilgidir. Bunların DIŞINDAKİ her durum (satır yok, alan yok, boolean'a
+// çevrilemiyor, servis hatası, ağ hatası) BELİRSİZDİR — "kayıtsız" ile KARIŞTIRILMAZ.
+// P0 düzeltmesi: önceki sürüm "liste boş → kayıtsız" çıkarımı yapıyordu; bu YANLIŞTI
+// ve kaldırıldı. Şimdi üç durum var: REGISTERED, NOT_REGISTERED, UNKNOWN.
+const HKS_DURUM_REGISTERED = 'REGISTERED';
+const HKS_DURUM_NOT_REGISTERED = 'NOT_REGISTERED';
+const HKS_DURUM_UNKNOWN = 'UNKNOWN';
+
+// "KayitliKisiMi" alanının ham metnini KESİN olarak yorumlar. Yalnız "true"/"false"
+// (harf büyüklüğünden bağımsız) kabul edilir; eksik/boş/başka HERŞEY UNKNOWN'dır —
+// "muhtemelen false" gibi bir TAHMİN yapılmaz.
+function hks_kayitlimi_durumu($ham) {
+  if ($ham === null) return HKS_DURUM_UNKNOWN;
+  $v = trim((string)$ham);
+  if (strcasecmp($v, 'true') === 0)  return HKS_DURUM_REGISTERED;
+  if (strcasecmp($v, 'false') === 0) return HKS_DURUM_NOT_REGISTERED;
+  return HKS_DURUM_UNKNOWN;
+}
+
+// TC/VKN karşılaştırması — YALNIZ format normalizasyonu (boşluk/tire gibi rakam
+// olmayan karakterler atılır), fuzzy eşleşme YAPILMAZ (P2: başka bir kişinin
+// kaydı yanlışlıkla kullanılmasın).
+function hks_tc_normalize($tc) {
+  return preg_replace('/\D+/', '', (string)$tc);
+}
+function hks_tc_esit($a, $b) {
+  $na = hks_tc_normalize($a);
+  $nb = hks_tc_normalize($b);
+  return $na !== '' && $na === $nb;
+}
+
+// Kayıtlı Kişi Sorgu (HAM): karşı tarafın (firma/şahıs) HKS'te kayıtlı olup
+// olmadığını ve sahip olduğu sıfatları döndürür. Ad/soyad DÖNMEZ (elle girilir).
 // İstek: TcKimlikVergiNolar = List<string> (Microsoft Arrays serileştirmesi).
+// Servis hatası veya ağ hatasında İSTİSNA FIRLATIR (susturulmaz) — "hata" ile
+// "kayıtsız" birbirine KARIŞMAMALI; çağıran taraf bunu UNKNOWN'a çevirmelidir
+// (bkz. hks_kayit_durumu()).
 function hks_kayitli_kisi_sorgu($cfg, $tcVknList, &$ham = null) {
   $arr = '';
   foreach ((array)$tcVknList as $tc) {
@@ -900,17 +947,58 @@ function hks_kayitli_kisi_sorgu($cfg, $tcVknList, &$ham = null) {
   if ($hata) throw new Exception('KayitliKisiSorgu: ' . $hata . ' || HAM: ' . $ham);
   $sonuc = [];
   foreach (hks_bloklar($duz, 'KayitliKisiSorguDTO') as $b) {
-    $sifatlar = [];
-    foreach (hks_bloklar($b, 'int') as $iv) {
-      $n = (int)trim((string)$iv);
-      if ($n > 0) $sifatlar[] = $n;
-    }
-    $km = (string)hks_deger($b, 'KayitliKisiMi');
-    $sonuc[] = [
-      'tcVkn'     => trim((string)hks_deger($b, 'TcKimlikVergiNo')),
-      'kayitliMi' => (stripos($km, 'true') !== false),
-      'sifatlar'  => $sifatlar,
-    ];
+    $sonuc[] = hks_kayitlikisi_dto_ayikla($b);
   }
   return $sonuc;
+}
+
+// SAF (ağsız) DTO ayrıştırıcı — hks_bildirimsorgu_dto_ayikla() ile AYNI desen.
+// Önceksiz (namespace soyulmuş), sarmalayıcısız TEK "KayitliKisiSorguDTO" bloğu
+// bekler. hks_kayitli_kisi_sorgu() ÜRETİMDE bunu kullanır; testler de doğrudan
+// bunu çağırarak gerçek ayrıştırma kod yolunu (SOAP çağrısı OLMADAN) doğrular.
+function hks_kayitlikisi_dto_ayikla($b) {
+  $sifatlar = [];
+  foreach (hks_bloklar($b, 'int') as $iv) {
+    $n = (int)trim((string)$iv);
+    if ($n > 0) $sifatlar[] = $n;
+  }
+  $kmRaw = hks_deger($b, 'KayitliKisiMi');
+  $durum = hks_kayitlimi_durumu($kmRaw);
+  return [
+    'tcVkn'             => trim((string)hks_deger($b, 'TcKimlikVergiNo')),
+    'durum'             => $durum,
+    'kayitliMi'         => $durum === HKS_DURUM_REGISTERED,   // geriye dönük kolaylık alanı
+    'sifatlar'          => $sifatlar,
+    'rawKayitliKisiMi'  => $kmRaw,                            // teşhis (credential İÇERMEZ)
+  ];
+}
+
+// Tek bir TC/VKN için kayıt durumunu KESİN tri-state olarak döndürür:
+// REGISTERED | NOT_REGISTERED | UNKNOWN. UNKNOWN'a düşen TÜM durumlar (P0,
+// kılavuz 0.1.14 uyum düzeltmesi): SOAP/ağ hatası veya IslemKodu başarısız
+// (hks_kayitli_kisi_sorgu istisna fırlatır), dönen listede sorgulanan TC'ye
+// eşleşen DTO YOK, veya DTO var ama "KayitliKisiMi" boolean'a çevrilemiyor.
+// "Liste boş → kayıtsız" ÇIKARIMI ASLA YAPILMAZ.
+// $detay: teşhis amaçlı güvenli metadata (tcVknMatched, rawKayitliKisiMi,
+// sifatIds, sebep) — parola/ServicePassword/tam credential/ham SOAP body
+// İÇERMEZ.
+function hks_kayit_durumu($cfg, $tc, &$ham = null, &$detay = null) {
+  $tc = trim((string)$tc);
+  try {
+    $liste = hks_kayitli_kisi_sorgu($cfg, [$tc], $ham);
+  } catch (Throwable $e) {
+    $detay = ['durum' => HKS_DURUM_UNKNOWN, 'sebep' => 'soap_hata', 'mesaj' => $e->getMessage()];
+    return HKS_DURUM_UNKNOWN;
+  }
+  foreach ($liste as $row) {
+    if ($row['tcVkn'] !== '' && hks_tc_esit($row['tcVkn'], $tc)) {
+      $detay = [
+        'durum' => $row['durum'], 'tcVknMatched' => $row['tcVkn'],
+        'rawKayitliKisiMi' => $row['rawKayitliKisiMi'], 'sifatIds' => $row['sifatlar'],
+      ];
+      return $row['durum'];
+    }
+  }
+  $detay = ['durum' => HKS_DURUM_UNKNOWN, 'sebep' => 'dto_bulunamadi', 'tcVknIstenen' => $tc];
+  return HKS_DURUM_UNKNOWN;
 }

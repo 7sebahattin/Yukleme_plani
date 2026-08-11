@@ -1685,20 +1685,19 @@ function kayitliMi() { return !!(ikDogrulandi && ikDogrulandi.kayitliMi); }
 // Üreticiden Sevk Alım BUNUN DIŞINDA — orada kayıtsız olması gerekir.
 function kayitZorunluMu() { return sevkModuMu() || satinAlimModuMu(); }
 
-// Üreticiden Sevk Alım'da ikinci kişi sıfatı "Üretici" OLMALIDIR (docx).
-// Listede Üretici sıfatı varsa seçilip kilitlenir; yoksa null döner (kayıt engellenir).
-// ÖNCELİK SIRASI ÖNEMLİ: HKS sıfat listesinde "Üretici" yanında "Üretici Örgütü" /
-// "Üretici Birliği" gibi BAŞKA sıfatlar da bulunabilir. Düz `includes` + `find`
-// listede önce hangisi geliyorsa onu seçerdi — yanlış KisiSifat ile CANLI bildirim
-// gitmesi demek. Bu yüzden önce TAM eşleşme, sonra "üretici" ile BAŞLAYAN,
-// en son alt dize aranır.
+// Üreticiden Sevk Alım'da ikinci kişi sıfatı tam olarak "Üretici" OLMALIDIR
+// (kılavuz 0.1.14). Listede TAM "Üretici" adında bir sıfat varsa seçilip
+// kilitlenir; yoksa null döner (kayıt engellenir).
+// P1 düzeltmesi: HKS sıfat listesinde "Üretici" yanında "Üretici Örgütü" /
+// "Üretici Birliği" gibi BAŞKA (ve FARKLI) sıfatlar da bulunabilir. Önceki
+// sürüm bunları alt-dize eşleşmesiyle (startsWith/includes) KABUL ediyordu —
+// yanlış KisiSifat ile CANLI bildirim gitmesi anlamına gelirdi. Artık YALNIZ
+// tam eşleşme kabul edilir; backend (hks_uretici_sifat_id, api.php) nihai
+// otoritedir ve AYNI kuralı uygular.
 function ureticiSifati() {
   const liste = (listeler && listeler.sifatlar) || [];
-  const ur = (s) => trNorm(s.ad).replace(/uretici/g, 'üretici').trim();
-  return liste.find(s => ur(s) === 'üretici')
-      || liste.find(s => ur(s).startsWith('üretici'))
-      || liste.find(s => ur(s).includes('üretici'))
-      || null;
+  const tam = (s) => trNorm(s.ad).replace(/uretici/g, 'üretici').trim();
+  return liste.find(s => tam(s) === 'üretici') || null;
 }
 function ikSifatUreticiSabitle() {
   const u = ureticiSifati();
@@ -1714,19 +1713,24 @@ function turDegisti() {
   const uret = uretSevkModuMu();
   const yurtIci = yurtIciMi();
   const kayitli = kayitliMi();
-  // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (her yurt içi türde).
-  // Doğrulanmadan hedef alanları açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle
-  // işlem zaten yapılamaz; kullanıcı boşuna doldurup sonda engellenmesin.
-  // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olduğu hâlde hedef yine işyeri
-  // seçimiyle belirlenir (mal bize gelir → kendi işyerimiz sorgulanır).
-  // Üreticide KAYITLI çıkan kişide hedef AÇILMAZ: docx bu türü yalnız kayıtsız
-  // üreticiye izinli kılıyor, kullanıcı boşuna doldurup sonda engellenmesin.
-  const isyeriMod = yurtIci && !!ikDogrulandi && (uret ? !kayitli : kayitli);
-  // Adres hedefi: yalnız yurt içi Satış + doğrulanmış AMA kayıtsız alıcı.
-  const adresMod  = yurtIci && !sevk && !satin && !uret && !!ikDogrulandi && !kayitli;
-  // Ad/Ünvan + Cep: kayıtsız alıcıda ve Üreticiden Sevk Alım'da zorunlu
-  // (docx: ikinci kişi kayıtlı değilse Eposta hariç tüm bilgileri gönderilmeli).
-  const adCepMod  = adresMod || (uret && !!ikDogrulandi && !kayitli);
+  // İşyeri hedefi: karşı taraf GTB'de KAYITLI doğrulandıysa (kılavuz 0.1.14:
+  // "İkinci kişi kayıtlı ise GidecekIsyeriId..."). Doğrulanmadan hedef alanları
+  // açılmaz — Sevk/Satın Alım'da kayıtsız kişiyle işlem zaten yapılamaz;
+  // kullanıcı boşuna doldurup sonda engellenmesin.
+  // P1 düzeltmesi: Üreticiden Sevk Alım'da karşı taraf HER ZAMAN kayıtsızdır,
+  // dolayısıyla işyeri modu bu türde ASLA açılmaz (uret'te kayıtlı çıkarsa da
+  // zaten hedef hiç açılmaz — bkz. hedefBekle altındaki özel uyarı).
+  const isyeriMod = yurtIci && !!ikDogrulandi && !uret && kayitli;
+  // Adres hedefi (İl/İlçe/Belde): kılavuz 0.1.14 — "İkinci kişi kayıtlı değilse
+  // GidecekYerIlId/IlceId/BeldeId '0' olamaz". Bu, KAYITSIZ ikinci kişinin HER
+  // yurt içi türünde geçerlidir: yurt içi Satış'ta kayıtsız alıcı VE Üreticiden
+  // Sevk Alım'da kayıtsız üretici (bu tür zaten yalnız kayıtsız üretici içindir).
+  // Önceki sürüm Üreticiden Sevk Alım'ı burada BİLEREK dışlayıp kendi firmanın
+  // GidecekIsyeriId'sini gönderiyordu — kılavuzun kayıtsız-kişi kuralına aykırıydı.
+  const adresMod  = yurtIci && !!ikDogrulandi && !kayitli && (uret || (!sevk && !satin));
+  // Ad/Ünvan + Cep: kayıtsız karşı tarafta zorunlu — artık adresMod'un ALT KÜMESİ
+  // (uret+kayıtsız da adresMod'a dahil), ayrı bir uret dalı gerekmiyor.
+  const adCepMod  = adresMod;
   // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
   const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
@@ -1767,9 +1771,10 @@ function turDegisti() {
       'hedef seçenekleri ona göre açılacak.';
   $('hedefBekle').classList.toggle('tamam', !(uret && kayitli));
   $('hedefBekle').classList.toggle('hata', uret && kayitli);
-  // Satın Alım ve Üreticiden Sevk Alım'da mal SANA gelir: işyeri kendi firmanın
-  // kaydından seçilir (HKS sitesindeki davranışla aynı).
-  $('isyeriBaslik').textContent = (satin || uret)
+  // Satın Alım'da mal SANA gelir: işyeri kendi firmanın kaydından seçilir
+  // (HKS sitesindeki davranışla aynı). Üreticiden Sevk Alım artık işyeri modunu
+  // hiç kullanmıyor (adresMod — bkz. yukarısı), bu etiket o türde gösterilmez.
+  $('isyeriBaslik').textContent = satin
     ? 'İşyeri / Depo (kendi firmanızın)' : 'Gidecek İşyeri (karşı tarafın)';
   if (adresMod) illeriYukleGerekiyorsa();
 
@@ -1968,35 +1973,46 @@ $('btnIkDogrula').onclick = async () => {
   $('btnIkDogrula').disabled = true; $('btnIkDogrula').textContent = '⏳';
   try {
     const j = await api('/api/kayitli_kisi', 'POST', { firmaId: aktifFirma.id, tcVkn: tc });
-    ikDogrulandi = j.kisi || { tcVkn: tc, kayitliMi: false, sifatlar: [] };
-    if (ikDogrulandi.kayitliMi) {
-      // Sıfat listesini kişinin gerçek sıfatlarıyla sınırla (tek sıfatsa otomatik seç).
-      ikSifatlariDoldur(ikDogrulandi.sifatlar);
-      if (uretSevkModuMu()) {
-        // docx: bu tür "sadece kayıtsız üreticiden" yapılan işlemler içindir.
-        mesajGoster('ikDurum', '⚠️ Bu kişi GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca ' +
-          'KAYITSIZ üretici içindir — kayıtlı kişiden alım için bildirim türünü ' +
-          '"Satın Alım" yapın.', 'hata');
-      } else {
-        mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı — ad/ünvan HKS kaydından alınacak, girmenize gerek yok.', 'tamam');
-      }
-    } else if (uretSevkModuMu()) {
-      // Kayıtsız üretici → bu türün tam hedef kitlesi.
+    const kisi = j.kisi || { tcVkn: tc, durum: 'UNKNOWN', kayitliMi: false, sifatlar: [] };
+    // P0 (kılavuz 0.1.14): backend artık HER ZAMAN tri-state "durum" döner —
+    // REGISTERED | NOT_REGISTERED | UNKNOWN. UNKNOWN'da ASLA "kayıtsız"
+    // varsayılmaz; doğrulama SIFIRLANIR ve form ilerleyemez (ikDogrulandi=null).
+    if (kisi.durum === 'UNKNOWN') {
+      ikDogrulandi = null;
       ikSifatlariDoldur([]);
-      const u = ureticiSifati();
-      mesajGoster('ikDurum', u
-        ? '✔️ Kayıtsız üretici — bu tür için doğru. Sıfat "Üretici" olarak sabitlendi. ' +
-          'Ad/Soyad ve Cep Telefonu zorunludur; malın geleceği işyeri/depoyu Kart 2\'den seçin.'
-        : '⚠️ Kayıtsız üretici, ancak HKS sıfat listesinde "Üretici" bulunamadı — ' +
-          'listeleri güncelleyin, bu tür sıfat olmadan gönderilemez.', u ? 'tamam' : 'hata');
-    } else if (kayitZorunluMu()) {
-      mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — ' +
-        (satinAlimModuMu() ? 'Satın Alım' : 'Sevk Etme') +
-        ' için karşı taraf GTB\'de kayıtlı olmalıdır. Kayıtsız müstahsilden alım için ' +
-        'bildirim türünü "Üreticiden Sevk Alım" seçin.', 'hata');
+      mesajGoster('ikDurum', '⚠️ HKS kişi kayıt durumu doğrulanamadı. Lütfen tekrar deneyin ' +
+        '— durum netleşmeden bu bildirim gönderilemez.', 'hata');
     } else {
-      ikSifatlariDoldur([]);  // kayıtsız: tüm sıfatlar seçilebilir
-      mesajGoster('ikDurum', 'ℹ️ Kayıtsız alıcı. Ad/Ünvan, Cep Telefonu ve İl/İlçe/Belde zorunludur.', 'tamam');
+      ikDogrulandi = kisi;
+      if (kisi.durum === 'REGISTERED') {
+        // Sıfat listesini kişinin gerçek sıfatlarıyla sınırla (tek sıfatsa otomatik seç).
+        ikSifatlariDoldur(kisi.sifatlar);
+        if (uretSevkModuMu()) {
+          // Kılavuz: bu tür "sadece kayıtsız üreticiden" yapılan işlemler içindir.
+          mesajGoster('ikDurum', '⚠️ Bu kişi GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca ' +
+            'KAYITSIZ üretici içindir — kayıtlı kişiden alım için bildirim türünü ' +
+            '"Satın Alım" yapın.', 'hata');
+        } else {
+          mesajGoster('ikDurum', '✔️ GTB\'de kayıtlı — ad/ünvan HKS kaydından alınacak, girmenize gerek yok.', 'tamam');
+        }
+      } else if (uretSevkModuMu()) {
+        // NOT_REGISTERED + Üreticiden Sevk Alım → bu türün tam hedef kitlesi.
+        ikSifatlariDoldur([]);
+        const u = ureticiSifati();
+        mesajGoster('ikDurum', u
+          ? '✔️ Kayıtsız üretici — bu tür için doğru. Sıfat "Üretici" olarak sabitlendi. ' +
+            'Ad/Soyad ve Cep Telefonu zorunludur; malın gideceği İl/İlçe/Beldeyi Kart 2\'den seçin.'
+          : '⚠️ Kayıtsız üretici, ancak HKS sıfat listesinde "Üretici" bulunamadı — ' +
+            'listeleri güncelleyin, bu tür sıfat olmadan gönderilemez.', u ? 'tamam' : 'hata');
+      } else if (kayitZorunluMu()) {
+        mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — ' +
+          (satinAlimModuMu() ? 'Satın Alım' : 'Sevk Etme') +
+          ' için karşı taraf GTB\'de kayıtlı olmalıdır. Kayıtsız müstahsilden alım için ' +
+          'bildirim türünü "Üreticiden Sevk Alım" seçin.', 'hata');
+      } else {
+        ikSifatlariDoldur([]);  // kayıtsız: tüm sıfatlar seçilebilir
+        mesajGoster('ikDurum', 'ℹ️ Kayıtsız alıcı. Ad/Ünvan, Cep Telefonu ve İl/İlçe/Belde zorunludur.', 'tamam');
+      }
     }
   } catch (e) { ikDogrulandi = null; mesajGoster('ikDurum', e.message, 'hata'); }
   $('btnIkDogrula').disabled = false; $('btnIkDogrula').textContent = '✔️ Doğrula';
@@ -2310,9 +2326,12 @@ $('btnMalTaslak').onclick = async () => {
   if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) { alert('Karşı tarafı "Doğrula" ile kontrol edin.'); return; }
 
   if (uret) {
-    // ÜRETİCİDEN SEVK ALIM — docx: yalnız KAYITSIZ üretici; ikinci kişi sıfatı
-    // "Üretici"; kayıtsız ikinci kişide Eposta hariç tüm bilgiler zorunlu.
-    // Hedef, diğer türlerdeki gibi işletme türü → işyeri sorgusuyla seçilir.
+    // ÜRETİCİDEN SEVK ALIM — kılavuz 0.1.14: yalnız KAYITSIZ üretici; ikinci
+    // kişi sıfatı tam "Üretici"; kayıtsız ikinci kişide Eposta hariç tüm
+    // bilgiler zorunlu. Hedef: kayıtsız ikinci kişi kuralı gereği İl/İlçe/Belde
+    // adresiyle bildirilir (P1 düzeltmesi — önceden kendi firmanın işyeri kaydı
+    // gönderiliyordu, bu kılavuzun "İkinci kişi kayıtlı değilse GidecekYerIlId/
+    // IlceId/BeldeId '0' olamaz" kuralına aykırıydı).
     if (kayitliMi()) {
       alert('Bu TC GTB\'de KAYITLI. "Üreticiden Sevk Alım" yalnızca kayıtsız üretici içindir — ' +
             'kayıtlı kişiden alım için bildirim türünü "Satın Alım" seçin.'); return;
@@ -2320,7 +2339,7 @@ $('btnMalTaslak').onclick = async () => {
     const uSifat = ureticiSifati();
     if (!uSifat)                   { alert('HKS sıfat listesinde "Üretici" bulunamadı. Listeleri güncelleyin.'); return; }
     if (!$('sIkSifat').value)      { alert('Karşı taraf sıfatı belirlenemedi ("Üretici" olmalı).'); return; }
-    // docx: "Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi
+    // Kılavuz: "Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi
     // 'Üretici' olmalıdır." Alan kilitli olsa da gönderilen değer denetlenir.
     if (String($('sIkSifat').value) !== String(uSifat.id)) {
       alert('Karşı taraf sıfatı "Üretici" olmalıdır (kılavuz kuralı).'); return;
@@ -2331,7 +2350,7 @@ $('btnMalTaslak').onclick = async () => {
       $('oIkCep').focus(); return;
     }
     if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
-    if (!$('sIsyeri').value)       { alert('İşyeri / depo seçiniz.'); return; }
+    if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
   } else {
     if (!kayitliMi()) {
       alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı). ' +
@@ -2347,15 +2366,22 @@ $('btnMalTaslak').onclick = async () => {
 
   const ad = (id) => ($(id).selectedOptions[0] ? $(id).selectedOptions[0].textContent : '');
 
-  // Hedef her iki türde de işyeri kaydıyla bildirilir (mal bize gelir → kendi işyerimiz).
-  // Fark: Üreticiden Sevk Alım'da karşı taraf kayıtsız olduğu için ayrıca cep telefonu gider.
-  const hedef = {
+  // Hedef: Satın Alım'da işyeri kaydıyla (mal bize gelir → kendi işyerimiz).
+  // Üreticiden Sevk Alım'da kayıtsız ikinci kişi kuralı gereği İl/İlçe/Belde
+  // adresiyle (kılavuz 0.1.14) — bkz. yukarıdaki not.
+  const hedef = uret ? {
+    isletmeTuruId: $('sIsletmeTuru').value,
+    hedefAdres: true,
+    ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
+    ikinciCep: cepRakam($('oIkCep').value),
+    ulkeAd: 'Üreticiden Sevk Alım ← ' + ($('oIkAd').value.trim() || tc) + ' (' +
+            $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
+  } : {
     isletmeTuruId: $('sIsletmeTuru').value,
     gidecekIsyeriId: $('sIsyeri').value,
     gidecekIsyeriAd: ad('sIsyeri'),
-    ulkeAd: (uret ? 'Üreticiden Sevk Alım ← ' : 'Satın Alım ← ') + ($('oIkAd').value.trim() || tc),
+    ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
   };
-  if (uret) hedef.ikinciCep = cepRakam($('oIkCep').value);
 
   try {
     await api('/api/taslaklar', 'POST', {

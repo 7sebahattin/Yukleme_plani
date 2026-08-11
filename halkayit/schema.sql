@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS hks_taslaklar (
 CREATE TABLE IF NOT EXISTS hks_gonderilenler (
   id VARCHAR(40) PRIMARY KEY,
   zaman DATETIME NOT NULL,
+  firma_id VARCHAR(40),
   firma_ad VARCHAR(200),
   plaka VARCHAR(30),
   belge_no VARCHAR(60),
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS hks_gonderilenler (
   rusum DOUBLE,
   hata_sayisi INT,
   genel_hata TEXT,
+  bildirim_turu VARCHAR(30),                -- URETICIDEN_SEVK_ALIM | SATIN_ALIM | SEVK_ETME | SATIS | NULL (legacy)
   veri MEDIUMTEXT                          -- JSON: {yeniKunyeler, sonuclar}
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
