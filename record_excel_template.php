@@ -199,20 +199,37 @@ $setF('O11', "=ROUND(SUM(E$ROW0:E$ROWE),0)"); // TOPLAM DARA KG
 $setF('O12', "=ROUND(SUM(H$ROW0:H$ROWE),0)"); // TOPLAM NET KG
 $setF('O13', "=SUM(B$ROW0:B$ROWE)");          // TOPLAM KASA ADETİ
 
-// ── Kategori özet blokları (L14, L18, ... — TOPLAM/L10 hariç) ──
-// Şablonda her blok 4 satır: BRÜT KG/DARA KG/NET KG/KASA ADETİ (M sütunu etiket, O sütunu değer).
-// L sütunundaki dikey yazı (ör. "H-10", "KAYISI") = ürün cinsi (G sütunu) kriteri.
-// Canlı SUMIF: L etiketi dolu olan her blok otomatik doldurulur — yeni kategori eklemek
-// için kod değişikliği gerekmez, sadece şablonda L hücresine adı yazılır.
-for ($r0 = 14; $r0 <= $ROWE + 3; $r0 += 4) {
-    $label = trim((string)($sh->getCell("L$r0")->getValue() ?? ''));
-    if ($label === '') continue;
+// ── Kategori özet blokları (L14, L18, L22, L26, L30 — TOPLAM/L10 hariç) ──
+// Şablonda 5 kategori yuvası var, her biri 4 satır: BRÜT KG/DARA KG/NET KG/KASA ADETİ.
+// Etiketler şablonda sabit DEĞİL — kayıttaki palet satırlarının CİNSİ (G) sütununda kaç
+// farklı ürün varsa (ilk görülme sırasına göre) otomatik yazılır ve SUMIF ile hesaplanır.
+// Yeni bir ürün cinsi geldiğinde kod değişikliği gerekmez.
+$cat_slots = [14, 18, 22, 26, 30];
+$cats = [];
+foreach ($pallets as $p) {
+    $c = mb_strtoupper(trim((string)($p['urun_cinsi'] ?? '')), 'UTF-8');
+    if ($c !== '' && !in_array($c, $cats, true)) { $cats[] = $c; }
+}
+if (count($cats) > count($cat_slots)) {
+    http_response_code(400);
+    die('Şablonda en fazla ' . count($cat_slots) . ' farklı ürün cinsi özeti için yer var; '
+        . 'bu kayıtta ' . count($cats) . ' farklı cinsi var (' . implode(', ', $cats) . ').');
+}
+foreach ($cat_slots as $i => $r0) {
     $r1 = $r0 + 1; $r2 = $r0 + 2; $r3 = $r0 + 3;
+    $label = $cats[$i] ?? '';
+    $cellL = $sh->getCell("L$r0");
+    $cellL->setValueExplicit($label, DataType::TYPE_STRING);
+    $cellL->getStyle()->getAlignment()->setShrinkToFit(true); // uzun cinsi adları hücreye sığsın
+    $log[] = "L$r0=" . ($label !== '' ? $label : '(boş)');
+    if ($label === '') continue; // kullanılmayan yuva — O sütunu şablonda zaten boş
     $setF("O$r0", "=ROUND(SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$D\$$ROW0:\$D\$$ROWE),0)"); // BRÜT KG
     $setF("O$r1", "=ROUND(SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$E\$$ROW0:\$E\$$ROWE),0)"); // DARA KG
     $setF("O$r2", "=O$r0-O$r1");                                                        // NET KG
     $setF("O$r3", "=SUMIF(\$G\$$ROW0:\$G\$$ROWE,L$r0,\$B\$$ROW0:\$B\$$ROWE)");           // KASA ADETİ
 }
+// TOPLAM etiketi (L10) sabit metin — dar dikey hücreye sığması için shrink-to-fit
+$sh->getCell('L10')->getStyle()->getAlignment()->setShrinkToFit(true);
 
 // ── Size özeti (H38..K41) — sablon sabit size satirlari: H38=8,H39=9,H40=12,H41=14 ──
 // Canlı SUMIF formülleri: kriter = H sütunundaki size etiketi, aralık = palet satırları (10..35).
