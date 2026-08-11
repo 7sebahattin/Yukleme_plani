@@ -530,6 +530,99 @@ function hks_stok_ozet($cfg, $aySayisi = 60) {
   return $liste;
 }
 
+// ── Künye Detayları (fiyat / rüsum / plaka-belge — künye seçimi zenginleştirmesi) ──
+// BildirimServisReferansKunyeler (künye seçimi listesinin KAYNAĞI, hks_kunye_penceresi)
+// fiyat/rüsum DÖNDÜRMEZ — docx'te ReferansKunyeDTO'da bu alanlar hiç yok
+// (kılavuz 0.1.14, "ReferansKunyeDTO" tablosu). Bu alanlar yalnız BildirimSorguDTO'da
+// var: MalinSatisFiyati, RusumMiktari, AracPlakaNo (docx "BildirimSorguDTO" tablosu +
+// değişiklik notu: "...(I) ve (II) metotları için Sifat ve AracPlakaNo eklendi").
+// Generic "BildirimServisBildirimSorgu" üretimde ActionNotSupported veriyor
+// (bkz. hks_stok_penceresi yorumu, satır ~465); bu yüzden AYNI kanıtlanmış yönlü
+// metod (BildirimServisBildirimciyeYapilanBildirimListesi = docx'teki "(II)") kullanılır
+// — firmaya YAPILAN (gelen/referans) bildirimler, künye seçimindekiyle aynı küme.
+//
+// Künye seçimi bu fonksiyona BAĞIMLI DEĞİLDİR: UrunId filtresi bu serviste YOK,
+// bu yüzden künye LİSTESİ hâlâ hks_kunye_penceresi'nden gelir; burası yalnız
+// KunyeNo ile EŞLEŞEN satırları ZENGİNLEŞTİRİR. Opsiyonel ve hataya dayanıklı —
+// bir pencere başarısız olursa o pencere atlanır, diğerleri fiyatlanır (bkz.
+// hks_kunye_detaylari_getir → 'kismiHata').
+//
+// KALAMAYAN alanlar (docx'te hiçbir DTO'da yok, servis dışı — arayüzde açıkça
+// "alınamıyor" olarak işaretlenmeli, sessizce atlanmamalı):
+//   · Bildirim Yöntemi          — hiçbir DTO'da böyle bir alan tanımlı değil.
+//   · Malın Sahibi / Bildirimci (İSİM) — yalnız TcKimlikVergiNo var, ad yok
+//     (docx notu: "MalinSahibi ve Bildirimci alanları çıkartılmıştır").
+//   · Gidecek Yer İl / İlçe (yer adı) — yalnız GidecekYerTuruId + GidecekIsyeriId
+//     (int kodlar) var; il/ilçe adını çözmek ayrı bir işyeri sorgu servisi ister.
+
+// Ham (namespace soyulmuş) BildirimSorguDTO bloğundan alan çıkarımı — SAF fonksiyon,
+// ağ çağrısı yapmaz; testte hks_bloklar() çıktısıyla doğrudan çağrılabilir.
+function hks_bildirimsorgu_dto_ayikla($b) {
+  return [
+    'kunyeNo'        => (string)hks_deger($b, 'KunyeNo'),
+    'fiyat'          => (float)hks_deger($b, 'MalinSatisFiyati'),
+    'rusum'          => (float)hks_deger($b, 'RusumMiktari'),
+    'aracPlaka'      => trim((string)hks_deger($b, 'AracPlakaNo')),
+    'belgeNo'        => trim((string)hks_deger($b, 'BelgeNo')),
+    'belgeTipiId'    => (int)hks_deger($b, 'BelgeTipi'),
+    'bildirimTuruId' => (int)hks_deger($b, 'BildirimTuru'),
+    'malinSahibiTc'  => trim((string)hks_deger($b, 'MalinSahibiTcKimlikVergiNo')),
+    'bildirimciTc'   => trim((string)hks_deger($b, 'BildirimciTcKimlikVergiNo')),
+    'ureticiTc'      => trim((string)hks_deger($b, 'UreticiTcKimlikVergiNo')),
+    // Kalan/miktar zaten hks_kunye_penceresi'nden gelir (KalanMiktar/MalinMiktari
+    // burada da var ama çapraz doğrulama dışında kullanılmaz — tek kaynak karışıklığı
+    // olmasın diye eşlemede taşınmaz).
+    'tarihSaat' => (string)hks_deger($b, 'BildirimTarihi'),   // ham, kırpılmamış (saat dahil)
+    'analiz'    => (stripos((string)hks_deger($b, 'AnalizStatus'), 'true') !== false),
+  ];
+}
+
+// Tek aylık pencere için künye DETAY sorgusu. hks_stok_penceresi ile BİREBİR aynı
+// istek şekli (aynı kanıtlanmış metod + "en fazla 1 ay" kuralı) — yalnız DTO'dan
+// çıkarılan alanlar farklı (stok özeti toplamlar, burası ham satır döner).
+function hks_kunye_detay_penceresi($cfg, DateTime $baslangic, DateTime $bitis) {
+  $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
+  $p[] = '<a:BaslangicTarihi>' . $baslangic->format('Y-m-d\TH:i:s') . '</a:BaslangicTarihi>';
+  $p[] = '<a:BitisTarihi>' . $bitis->format('Y-m-d\TH:i:s') . '</a:BitisTarihi>';
+  $p[] = '<a:KalanMiktariSifirdanBuyukOlanlar>true</a:KalanMiktariSifirdanBuyukOlanlar>';
+  $p[] = '<a:KunyeNo>0</a:KunyeNo>';        // 0 → tüm bildirimler
+  $p[] = '<a:KunyeTuru>1</a:KunyeTuru>';    // ZORUNLU: 1 = referans (stok), 2 = nihai tüketim
+  $p[] = '</Istek>';
+
+  $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimciyeYapilanBildirimListesi',
+    hks_taban_istek('BaseRequestMessageOf_BildirimSorguIstek', implode('', $p), $cfg));
+  $duz  = hks_sadelestir($xml);
+  $hata = hks_islem_kontrol($duz);
+  if ($hata) throw new Exception($hata);
+
+  $sonuc = [];
+  foreach (hks_bloklar($duz, 'BildirimSorguDTO') as $b) {
+    $d = hks_bildirimsorgu_dto_ayikla($b);
+    if ($d['kunyeNo'] !== '') $sonuc[] = $d;
+  }
+  return $sonuc;
+}
+
+// Güvenli pencerelerle tara, KunyeNo → detay haritası döndür. Künye seçiminin
+// KENDİSİ bu fonksiyona bağımlı değildir (bkz. üstteki not) — bu yüzden BEST-EFFORT:
+// tek bir pencere hata verirse tüm işlem durmaz, o pencere atlanır ve 'kismiHata'
+// true döner. Kısmi fiyat bilgisi, künye seçimini tamamen bloke etmekten iyidir.
+function hks_kunye_detaylari_getir($cfg, $aySayisi) {
+  $ay = max(1, min(60, (int)$aySayisi));
+  $harita = [];
+  $kismiHata = false;
+  foreach (hks_guvenli_pencereler($ay) as [$baslangic, $bitis]) {
+    try {
+      foreach (hks_kunye_detay_penceresi($cfg, $baslangic, $bitis) as $d) {
+        $harita[$d['kunyeNo']] = $d;   // aynı künye tek kez sayılır (son pencere kazanır)
+      }
+    } catch (Throwable $e) {
+      $kismiHata = true;   // bu pencere atlandı, tarama devam eder
+    }
+  }
+  return ['harita' => $harita, 'kismiHata' => $kismiHata];
+}
+
 // ── Toplu Künye (Bildirim Çoklu Künye Basım) ──────────────────────────────
 // BildirimServisTopluKunye — bir plakaya/belgeye ait künyeleri tarih ile listeler.
 // Kural: BildirimTarihi zorunlu; AracPlakaNo veya BelgeNo'dan en az biri dolu olmalı.

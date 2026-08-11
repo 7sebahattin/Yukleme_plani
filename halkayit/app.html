@@ -223,6 +223,8 @@
   .kunye .bilgi { flex:1; min-width:0; }
   .kunye .no { font-weight:800; font-size:12.5px; word-break:break-all; }
   .kunye .detay { font-size:11.5px; color:var(--soluk); margin-top:2px; }
+  /* Fiyat/rüsum zenginleştirmesi — "💰 Fiyat/Rüsum Getir" sonrası dolar, öncesinde yok */
+  .kunye .detay2 { font-size:11.5px; color:var(--tamam-tx); font-weight:600; margin-top:3px; }
   .kunye .kalan { font-weight:800; color:var(--navy); font-size:13px; white-space:nowrap; }
   .kunye input.miktar { width:88px; padding:9px; font-size:14px; flex-shrink:0; border-radius:10px; }
 
@@ -531,8 +533,6 @@
 
     <div class="kart">
       <h2 id="kart2Baslik">2 · Sevkiyat Bilgileri</h2>
-      <label>Son Kullanılan Plakalar</label>
-      <div class="cipler" id="plakaCipler"><span class="cip-bos">Henüz plaka geçmişi yok</span></div>
       <label class="label-vurgu">Araç Plaka</label>
       <input id="oPlaka" class="input-turuncu" placeholder="Plaka giriniz.." style="text-transform:uppercase" autocomplete="off">
 
@@ -680,15 +680,15 @@
 
     <div class="kart gizli" id="kartKunyeler">
       <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
-      <!-- Birim fiyat + toplam kilo yan yana; altlarında iki işlem butonu yan yana -->
+      <!-- Toplam kilo + birim fiyat yan yana; altlarında iki işlem butonu yan yana -->
       <div class="satir2">
-        <div id="fiyatBlok">
-          <label>💰 Birim Fiyat *</label>
-          <input id="oFiyat" class="input-yesil" inputmode="decimal" autocomplete="off">
-        </div>
         <div>
           <label>🎯 Toplam kilo</label>
           <input id="hedefKilo" class="input-turuncu" inputmode="decimal">
+        </div>
+        <div id="fiyatBlok">
+          <label>💰 Birim Fiyat *</label>
+          <input id="oFiyat" class="input-yesil" inputmode="decimal" autocomplete="off">
         </div>
       </div>
       <div class="satir2" style="margin-top:8px">
@@ -696,6 +696,20 @@
         <div><button class="btn btn-soluk" id="btnSecimKaldir" style="margin-top:0">✖️ Seçimi Kaldır</button></div>
       </div>
       <div class="mesaj" id="dagitMesaj"></div>
+
+      <!-- Künyelerin HKS'e KAYITLI fiyat/rüsum bilgisi — yukarıdaki "Birim Fiyat"
+           (yeni satışın fiyatı) ile KARIŞTIRILMASIN, bu geçmişe dönük bir sorgu.
+           Opsiyonel/isteğe bağlı: künye listesi zaten geçerli, bu yalnız ek bilgi
+           ekler. Uzun "Kapsam" aralıklarında (üstteki 3 · Ürün ve Künye kartındaki
+           Kapsam seçimi) yavaş olabilir — aynı sayıda ek SOAP çağrısı gerektirir. -->
+      <button class="btn btn-teal" id="btnDetayGetir" style="margin-top:10px">💰 Fiyat / Rüsum Getir</button>
+      <div class="mesaj" id="detayMesaj"></div>
+      <div style="font-size:11px;color:var(--soluk);margin-top:4px;line-height:1.5">
+        ℹ️ HKS servisinden gelen ek bilgiler. <b>Bildirim Yöntemi</b> ve
+        <b>Gidecek Yer İl/İlçe</b> hiçbir HKS servisinde yer almadığından
+        gösterilemiyor; <b>Malın Sahibi</b>/<b>Bildirimci</b> yalnızca TC/Vergi No
+        olarak gelir (isim HKS'ten dönmüyor).
+      </div>
       <div id="kunyeListe" style="margin-top:12px"></div>
     </div>
   </main>
@@ -1560,7 +1574,7 @@ function formuTemizle() {
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
-  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'detayMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('ikCokluSifatUyari').classList.add('gizli');
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   ozetGuncelle();
@@ -2102,7 +2116,6 @@ $('btnListeler').onclick = async () => {
 async function sonlariYukle() {
   try {
     const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
-    cipCiz('plakaCipler', j.plakalar || [], p => p, p => { $('oPlaka').value = p; }, 'Henüz plaka geçmişi yok');
     cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => { $('sUlke').value = u.id; }, 'Henüz ülke geçmişi yok');
     cipCiz('urunCipler', j.urunler || [], u => u.ad, u => { $('sUrun').value = u.id; }, 'Henüz ürün geçmişi yok');
   } catch (e) { /* önemsiz */ }
@@ -2161,10 +2174,28 @@ function kunyeCiz() {
   kunyeler.forEach((k, i) => {
     const div = document.createElement('div');
     div.className = 'kunye';
+    // Malın Miktarı — hks_kunye_penceresi'nden zaten gelir (ek SOAP çağrısı gerekmez),
+    // yalnızca kalan'dan farklıysa gösterilir (aynıysa tekrar bilgi vermek gürültü olur).
+    const miktarSatiri = (k.miktar !== undefined && Math.abs(k.miktar - k.kalan) > 0.001)
+      ? `<div class="detay">Miktar: ${fmt(k.miktar)} ${k.birim || 'KG'}</div>` : '';
+    // Fiyat/rüsum — yalnızca "💰 Fiyat / Rüsum Getir" ile zenginleştirildiyse dolu
+    // (k.fiyat undefined ise hiç sorgulanmamıştır, satır hiç basılmaz).
+    let detay2 = '';
+    if (k.fiyat !== undefined) {
+      const p = [];
+      if (k.fiyat > 0) p.push(`💰 ${fmt(k.fiyat)} TL/${k.birim || 'KG'}`);
+      if (k.rusum > 0) p.push(`Rüsum ${fmt(k.rusum)} TL`);
+      const plakaBelge = k.aracPlaka || k.belgeNo;
+      if (plakaBelge) p.push(`🚚 ${plakaBelge}`);
+      if (k.bildirimTuru) p.push(k.bildirimTuru);
+      else if (k.bildirimTuruId) p.push(`Tür #${k.bildirimTuruId}`);
+      detay2 = `<div class="detay2">${p.length ? p.join(' · ') : 'Fiyat/rüsum bilgisi bulunamadı'}</div>`;
+    }
     div.innerHTML =
       `<input type="checkbox" data-i="${i}">` +
       `<div class="bilgi"><div class="no">${k.kunyeNo}</div>` +
-      `<div class="detay">${k.tarih} · ${k.urun || ''} ${k.cins ? '· ' + k.cins : ''}</div></div>` +
+      `<div class="detay">${k.tarih} · ${k.urun || ''} ${k.cins ? '· ' + k.cins : ''}</div>` +
+      miktarSatiri + detay2 + `</div>` +
       `<div class="kalan">${fmt(k.kalan)} ${k.birim || 'KG'}</div>` +
       `<input class="miktar" data-i="${i}" inputmode="decimal" placeholder="miktar" disabled>`;
     kap.appendChild(div);
@@ -2220,6 +2251,42 @@ $('btnSecimKaldir').onclick = () => {
   kap.querySelectorAll('.kunye').forEach(k => k.classList.remove('secili'));
   $('dagitMesaj').className = 'mesaj';
   ozetGuncelle();
+};
+
+// Künyelerin HKS'e KAYITLI fiyat/rüsum/plaka-belge/bildirim türü bilgisini getirir.
+// OPSİYONEL zenginleştirme — künye seçimi bu olmadan da tam çalışır (bkz. kartta
+// künyeler.js'deki not). "Kapsam" ile AYNI ay sayısını kullanır ki künye listesiyle
+// aynı döneme baksın; büyük aralıklarda (2+ yıl) yavaş olabilir, bu yüzden isteğe
+// bağlı bir buton, otomatik değil.
+$('btnDetayGetir').onclick = async () => {
+  if (!kunyeler.length) {
+    mesajGoster('detayMesaj', 'Önce künyeleri getirin.', 'hata');
+    return;
+  }
+  $('btnDetayGetir').disabled = true;
+  $('btnDetayGetir').textContent = '⏳ Getiriliyor...';
+  $('detayMesaj').className = 'mesaj';
+  try {
+    const j = await api('/api/kunye_detay', 'POST', {
+      firmaId: aktifFirma.id,
+      aySayisi: parseInt($('sGun').value, 10),
+    });
+    const harita = j.detaylar || {};
+    let eslesen = 0;
+    kunyeler.forEach(k => {
+      const d = harita[String(k.kunyeNo)];
+      if (d) { Object.assign(k, d); eslesen++; }
+    });
+    kunyeCiz();
+    let msg = `✓ ${eslesen} / ${kunyeler.length} künye için fiyat/rüsum bilgisi eklendi.`;
+    if (eslesen < kunyeler.length) {
+      msg += ' Eşleşmeyenler HKS\'in bu servisteki farklı bir sorgu kapsamında olabilir.';
+    }
+    if (j.kismiHata) msg += ' ⚠️ Bazı aylık pencerelerde bilgi alınamadı — kısmi sonuç.';
+    mesajGoster('detayMesaj', msg, j.kismiHata || eslesen < kunyeler.length ? 'hata' : 'tamam');
+  } catch (e) { mesajGoster('detayMesaj', e.message, 'hata'); }
+  $('btnDetayGetir').disabled = false;
+  $('btnDetayGetir').textContent = '💰 Fiyat / Rüsum Getir';
 };
 
 function seciliSatirlar() {
