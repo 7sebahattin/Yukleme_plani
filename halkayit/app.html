@@ -697,19 +697,14 @@
       </div>
       <div class="mesaj" id="dagitMesaj"></div>
 
-      <!-- Künyelerin HKS'e KAYITLI fiyat/rüsum bilgisi — yukarıdaki "Birim Fiyat"
-           (yeni satışın fiyatı) ile KARIŞTIRILMASIN, bu geçmişe dönük bir sorgu.
-           Opsiyonel/isteğe bağlı: künye listesi zaten geçerli, bu yalnız ek bilgi
-           ekler. Uzun "Kapsam" aralıklarında (üstteki 3 · Ürün ve Künye kartındaki
-           Kapsam seçimi) yavaş olabilir — aynı sayıda ek SOAP çağrısı gerektirir. -->
-      <button class="btn btn-teal" id="btnDetayGetir" style="margin-top:10px">💰 Fiyat / Rüsum Getir</button>
+      <!-- Künyenin HKS'e KAYITLI (bize yapılan bildirimdeki) birim fiyatı —
+           yukarıdaki "Birim Fiyat" (YENİ satışın fiyatı) ile KARIŞTIRILMASIN,
+           bu geçmişe dönük bir sorgu. Opsiyonel: künye listesi bu olmadan da
+           geçerli, yalnız ek bilgi ekler. Uzun "Kapsam" aralıklarında (üstteki
+           3 · Ürün ve Künye kartı) yavaş olabilir — aynı sayıda ek SOAP çağrısı
+           gerektirir, bu yüzden otomatik değil, isteğe bağlı buton. -->
+      <button class="btn btn-teal" id="btnDetayGetir" style="margin-top:10px">💰 Fiyat Getir</button>
       <div class="mesaj" id="detayMesaj"></div>
-      <div style="font-size:11px;color:var(--soluk);margin-top:4px;line-height:1.5">
-        ℹ️ HKS servisinden gelen ek bilgiler. <b>Bildirim Yöntemi</b> ve
-        <b>Gidecek Yer İl/İlçe</b> hiçbir HKS servisinde yer almadığından
-        gösterilemiyor; <b>Malın Sahibi</b>/<b>Bildirimci</b> yalnızca TC/Vergi No
-        olarak gelir (isim HKS'ten dönmüyor).
-      </div>
       <div id="kunyeListe" style="margin-top:12px"></div>
     </div>
   </main>
@@ -932,6 +927,7 @@ const API_ROTA = {
   'GET /api/listeler': 'listeler',
   'POST /api/listeler': 'listeler_yenile',
   'POST /api/kunyeler': 'kunyeler',
+  'POST /api/kunye_detay': 'kunye_detay',
   'POST /api/stok': 'stok',
   'POST /api/toplu_kunye': 'toplu_kunye',
   'GET /api/taslaklar': 'taslaklar',
@@ -2178,19 +2174,13 @@ function kunyeCiz() {
     // yalnızca kalan'dan farklıysa gösterilir (aynıysa tekrar bilgi vermek gürültü olur).
     const miktarSatiri = (k.miktar !== undefined && Math.abs(k.miktar - k.kalan) > 0.001)
       ? `<div class="detay">Miktar: ${fmt(k.miktar)} ${k.birim || 'KG'}</div>` : '';
-    // Fiyat/rüsum — yalnızca "💰 Fiyat / Rüsum Getir" ile zenginleştirildiyse dolu
-    // (k.fiyat undefined ise hiç sorgulanmamıştır, satır hiç basılmaz).
-    let detay2 = '';
-    if (k.fiyat !== undefined) {
-      const p = [];
-      if (k.fiyat > 0) p.push(`💰 ${fmt(k.fiyat)} TL/${k.birim || 'KG'}`);
-      if (k.rusum > 0) p.push(`Rüsum ${fmt(k.rusum)} TL`);
-      const plakaBelge = k.aracPlaka || k.belgeNo;
-      if (plakaBelge) p.push(`🚚 ${plakaBelge}`);
-      if (k.bildirimTuru) p.push(k.bildirimTuru);
-      else if (k.bildirimTuruId) p.push(`Tür #${k.bildirimTuruId}`);
-      detay2 = `<div class="detay2">${p.length ? p.join(' · ') : 'Fiyat/rüsum bilgisi bulunamadı'}</div>`;
-    }
+    // Birim fiyat — yalnızca "💰 Fiyat Getir" ile zenginleştirildiyse dolu
+    // (k.fiyat undefined ise hiç sorgulanmamıştır, satır hiç basılmaz). Yalnız
+    // fiyat gösterilir — rüsum/plaka/bildirim türü kullanıcı isteğiyle kaldırıldı,
+    // veri yine de nesnede durur (k.rusum vb.), gerekirse geri eklenebilir.
+    const detay2 = (k.fiyat !== undefined)
+      ? `<div class="detay2">${k.fiyat > 0 ? `💰 ${fmt(k.fiyat)} TL/${k.birim || 'KG'}` : 'Fiyat bilgisi bulunamadı'}</div>`
+      : '';
     div.innerHTML =
       `<input type="checkbox" data-i="${i}">` +
       `<div class="bilgi"><div class="no">${k.kunyeNo}</div>` +
@@ -2278,7 +2268,7 @@ $('btnDetayGetir').onclick = async () => {
       if (d) { Object.assign(k, d); eslesen++; }
     });
     kunyeCiz();
-    let msg = `✓ ${eslesen} / ${kunyeler.length} künye için fiyat/rüsum bilgisi eklendi.`;
+    let msg = `✓ ${eslesen} / ${kunyeler.length} künye için fiyat bilgisi eklendi.`;
     if (eslesen < kunyeler.length) {
       msg += ' Eşleşmeyenler HKS\'in bu servisteki farklı bir sorgu kapsamında olabilir.';
     }
@@ -2286,7 +2276,7 @@ $('btnDetayGetir').onclick = async () => {
     mesajGoster('detayMesaj', msg, j.kismiHata || eslesen < kunyeler.length ? 'hata' : 'tamam');
   } catch (e) { mesajGoster('detayMesaj', e.message, 'hata'); }
   $('btnDetayGetir').disabled = false;
-  $('btnDetayGetir').textContent = '💰 Fiyat / Rüsum Getir';
+  $('btnDetayGetir').textContent = '💰 Fiyat Getir';
 };
 
 function seciliSatirlar() {
