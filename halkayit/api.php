@@ -96,6 +96,18 @@ function hks_sifat_adi($sifatId) {
   return null;
 }
 
+// Künye detay zenginleştirmesinde id → ad çözümü (bildirim türü / belge tipi).
+// hks_sifat_adi ile AYNI desen: liste yoksa/eşleşmezse null döner, arayüz id'yi
+// ham gösterir — asla hata fırlatmaz (zenginleştirme opsiyonel).
+function hks_liste_ad($cache, $listeAnahtari, $id) {
+  if ($id === null || $id === '' || (int)$id <= 0) return null;
+  if (!$cache || empty($cache[$listeAnahtari])) return null;
+  foreach ($cache[$listeAnahtari] as $s) {
+    if ((string)($s['id'] ?? '') === (string)$id) return (string)($s['ad'] ?? '');
+  }
+  return null;
+}
+
 // Doğrulama (taslak/bildirim ortak) — yurt dışı (mevcut export) ve yurt içi (Sevk
 // Etme / yurt içi Satış / Satın Alım / Üreticiden Sevk Alım) için ayrı kurallar.
 // Yurt dışı yolu birebir korunur.
@@ -316,6 +328,37 @@ try {
       $liste  = hks_stok_ozet($cfg, $ay);
       $toplam = array_sum(array_map(fn($s) => (float)$s['kalan'], $liste));
       hks_json_cikti(['stok' => $liste, 'toplam' => $toplam, 'zaman' => date('c')]);
+    }
+
+    // ---- KÜNYE DETAYLARI (fiyat / rüsum / plaka-belge — künye seçimi zenginleştirmesi) ----
+    // Ayrı, OPSİYONEL uç nokta: 'kunyeler' eylemi çalışır durumda kalır, bu eylem
+    // yalnız aynı KunyeNo'lar için ek alan getirir (bkz. hks_soap.php üstteki not —
+    // ReferansKunyeDTO'da fiyat/rüsum hiç yok, yalnız BildirimSorguDTO'da var).
+    case 'kunye_detay': {
+      $cfg = hks_firma_bul($g['firmaId'] ?? '');
+      if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı. Önce firma seçin.'], 400);
+      @set_time_limit(300);   // künyeler eylemiyle aynı üst sınır (bkz. o eylemdeki yorum)
+      $ay = isset($g['aySayisi']) ? max(1, min(60, (int)$g['aySayisi'])) : 12;
+      $sonuc = hks_kunye_detaylari_getir($cfg, $ay);
+
+      // id'leri isimlere çöz (önbellekten — liste indirilmemişse id ham kalır, hata değil)
+      $cache = hks_kv_oku('listeler_cache', null);
+      foreach ($sonuc['harita'] as &$d) {
+        $d['bildirimTuru'] = hks_liste_ad($cache, 'bildirimTurleri', $d['bildirimTuruId'] ?? null);
+        $d['belgeTipi']    = hks_liste_ad($cache, 'belgeTipleri', $d['belgeTipiId'] ?? null);
+        // Malın sahibi TC'si sorgulayan firmanın kendisiyle eşleşiyorsa (künye
+        // seçiminde çoğu zaman böyledir — bu bizim referans künyemiz) ad ekstra
+        // sorgu gerektirmeden bilinir.
+        if ($d['malinSahibiTc'] !== '' && $d['malinSahibiTc'] === (string)$cfg['vergiNo']) {
+          $d['malinSahibiAd'] = $cfg['ad'];
+        }
+      }
+      unset($d);
+
+      hks_json_cikti([
+        'detaylar'  => $sonuc['harita'],
+        'kismiHata' => $sonuc['kismiHata'],
+      ]);
     }
 
     // ---- TOPLU KÜNYE (Bildirim Çoklu Künye Basım) ----
