@@ -1714,6 +1714,21 @@ function ureticiSifati() {
   const tam = (s) => trNorm(s.ad).replace(/uretici/g, 'üretici').trim();
   return liste.find(s => tam(s) === 'üretici') || null;
 }
+// Bildirimcinin (KENDİ firmamızın) seçili sıfat adı.
+function bildirimciSifatAdi() {
+  const o = $('sSifat').selectedOptions[0];
+  return o ? o.textContent : '';
+}
+// CANLI SİSTEMDE GÖZLENEN KISIT: HKS, bildirimci sıfatı "İhracat" iken
+// "Üreticiden Sevk Alım" bildirimini reddediyor —
+//   GTBWSRV0000002 · "İhracat Üreticiden Sevk Alım bildirimi yapamaz"
+// Bu kural kılavuz 0.1.14 metninde YAZMIYOR; yalnız canlı hatadan bilinmektedir.
+// Bu yüzden BAŞKA sıfatlar için varsayımda bulunulmaz, sadece bilinen ve
+// kanıtlanmış kombinasyon engellenir (aksi hâlde geçerli işlemler bloklanabilir).
+// Kayıtsız üreticiden alım bu sıfatta "Satın Alım" ile yapılır.
+function ihracatUretSevkCakismasi() {
+  return uretSevkModuMu() && trNorm(bildirimciSifatAdi()).includes('ihracat');
+}
 function ikSifatUreticiSabitle() {
   const u = ureticiSifati();
   const sel = $('sIkSifat');
@@ -1774,6 +1789,26 @@ function turDegisti() {
     ? '(kayıtsız üreticide zorunlu — yalnız rakam)'
     : (satin ? '(kayıtsız satıcıda zorunlu — yalnız rakam)'
              : '(kayıtsız alıcıda zorunlu — yalnız rakam)');
+
+  // Sıfat × tür çakışması — CANLI HKS bu kombinasyonu reddediyor (bkz.
+  // ihracatUretSevkCakismasi). Kullanıcı formu doldurup geri alınamaz gönderimde
+  // reddedilmesin diye Kart 1'de ERKEN uyarılır.
+  // (mesajGoster kullanılmaz: o 'tamam' tipini 4 sn sonra temizler; buradaki
+  //  uyarı kombinasyon değişene kadar EKRANDA KALMALI.)
+  const cakisma = ihracatUretSevkCakismasi();
+  const uyariEl = $('bildirimMesaj');
+  if (cakisma) {
+    uyariEl.innerHTML = '⛔ HKS, <b>"İhracat"</b> sıfatıyla <b>"Üreticiden Sevk Alım"</b> ' +
+      'bildirimine izin VERMİYOR ("İhracat Üreticiden Sevk Alım bildirimi yapamaz"). ' +
+      'Kayıtsız üreticiden alım için bildirim türünü <b>"Satın Alım"</b> seçin — ' +
+      'kayıtsız kişi TC + Doğum Tarihi ile doğrulanır.';
+    uyariEl.className = 'mesaj hata';
+    uyariEl.style.display = 'block';
+  } else {
+    uyariEl.textContent = '';
+    uyariEl.className = 'mesaj';
+    uyariEl.style.display = '';
+  }
 
   // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
   $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
@@ -2351,6 +2386,16 @@ $('btnMalTaslak').onclick = async () => {
   const tc = $('oIkTc').value.trim();
   if (!tc) { alert('Karşı taraf (satıcı) TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
   if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) { alert('Karşı tarafı "Doğrula" ile kontrol edin.'); return; }
+
+  // CANLI HKS kısıtı: "İhracat" sıfatı bu türü kullanamıyor. Taslak kaydı
+  // aşamasında durdurulur ki geri alınamaz gönderimde reddedilip taslak
+  // gönderilemez hâle gelmesin.
+  if (ihracatUretSevkCakismasi()) {
+    alert('HKS, "İhracat" sıfatıyla "Üreticiden Sevk Alım" bildirimine izin vermiyor ' +
+          '("İhracat Üreticiden Sevk Alım bildirimi yapamaz").\n\n' +
+          'Kayıtsız üreticiden alım için bildirim türünü "Satın Alım" seçin.');
+    return;
+  }
 
   if (uret) {
     // ÜRETİCİDEN SEVK ALIM — kılavuz 0.1.14: yalnız KAYITSIZ üretici; ikinci

@@ -322,6 +322,24 @@ ok('kayıtsız satıcının DogumTarihi bilgisi gidiyor',
 ok('referanssız (ReferansBildirimKunyeNo=0)',
     str_contains($xmlSatinKayitsiz, '<a:ReferansBildirimKunyeNo>0</a:ReferansBildirimKunyeNo>'));
 
+echo "\n── CANLI KISIT: İhracat sıfatı + Üreticiden Sevk Alım (api.php ile SENKRON KOPYA) ──\n";
+// HKS canlı yanıtı: GTBWSRV0000002 · "İhracat Üreticiden Sevk Alım bildirimi yapamaz".
+// SENKRON KOPYA — api.php: hks_bildirim_dogrula() içindeki bildirimci sıfat kontrolü.
+// DİKKAT: mb_stripos() Türkçe "İ" ile "i"yi eşleştiremez ("İhracat" kaçar) —
+// karşılaştırma hks_tr_normalize() ile aynı normalizasyon üzerinden yapılmalıdır.
+// (Bu testin ilk hâli mb_stripos kullanıyordu ve gerçek bir kaçağı ortaya çıkardı.)
+function ihracatUretSevkCakismasiTest($sifatAd) {
+    if ($sifatAd === null) return false;
+    $n = mb_strtolower(str_replace(['İ', 'I'], ['i', 'ı'], $sifatAd), 'UTF-8');
+    return strpos($n, 'ihracat') !== false;
+}
+ok('"İhracat" → çakışma (RET)',          ihracatUretSevkCakismasiTest('İhracat'));
+ok('"İhracatçı" → çakışma (RET)',        ihracatUretSevkCakismasiTest('İhracatçı'));
+ok('"Sanayici" → çakışma YOK (kabul)',   !ihracatUretSevkCakismasiTest('Sanayici'));
+ok('"Hal İçi Tüccar" → çakışma YOK',     !ihracatUretSevkCakismasiTest('Hal İçi Tüccar'));
+ok('sıfat adı bilinmiyorsa engellenmez (katalog yoksa varsayım yapılmaz)',
+    !ihracatUretSevkCakismasiTest(null));
+
 echo "\n── GTB 12.03.2025: endpoint yapılandırması (hks_endpoint, GERÇEK fonksiyon) ──\n";
 // Bu betik config.php'yi YÜKLEMEZ (DB bağlantısı ister), dolayısıyla
 // HKS_YENI_ENDPOINT/HKS_ENDPOINT_* sabitleri tanımsızdır → hks_endpoint()
