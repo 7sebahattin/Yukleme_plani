@@ -220,6 +220,17 @@ bilgilerinin girilmesi gerekmektedir."*
   ile birlikte görünür ve zorunludur; backend `hks_bildirim_dogrula()` aynı kuralı
   bağımsız uygular.
 
+**Sıfat ve bildirim türü listeleri artık FİLTRELENMEZ.** Arayüz eskiden HKS'ten gelen
+listeleri kırpıyordu: sıfatlarda yalnız "İhracat" ve "hal dışı tüccar", türlerde yalnız
+"Satış" ve "Sevk Etme" gösteriliyordu. Tür filtresinin gerekçesi *"Satın Alım /
+Üreticiden Sevk Alım GTB'de doğum tarihi istediği için ... listeden kaldırıldı"* idi —
+`DogumTarihi` eklendiği için bu gerekçe ortadan kalktı. Ayrıca filtrede bir **hata**
+vardı: "Üreticiden Sevk Alım" elenmesi gerekirken listede kalıyordu, çünkü
+`trNorm('Üreticiden')` → `"üreticiden"` iken aranan dize `"uretici"`ydi (`ü` ≠ `u`).
+Sonuç olarak kullanıcı **çalışmayan türü görüyor, ihtiyaç duyduğu "Satın Alım"ı hiç
+göremiyordu.** Artık her iki liste de HKS'ten geldiği gibi gösterilir; varsayılan
+seçimler (sıfat = İhracat, tür = Satış) korunduğu için mevcut ihracat akışı aynen çalışır.
+
 **`Eposta` hakkında düzeltme.** Bu README daha önce "Eposta hiçbir durumda gönderilmez"
 diyordu; doğrusu **zorunlu değildir** (kılavuz 0.1.8 notu bunu zorunluluktan çıkardı) ama
 **yasak da değildir** — GTB'nin resmi örnek request'i `Eposta` gönderiyor. Panel bu alanı
