@@ -220,7 +220,16 @@ bilgilerinin girilmesi gerekmektedir."*
   ile birlikte görünür ve zorunludur; backend `hks_bildirim_dogrula()` aynı kuralı
   bağımsız uygular.
 
-**Sıfat ve bildirim türü listeleri artık FİLTRELENMEZ.** Arayüz eskiden HKS'ten gelen
+**"Üreticiden Sevk Alım" arayüzde GİZLİ.** `app.html` başındaki
+`const URETICI_SEVK_GIZLE = true;` bu türü dropdown'dan çıkarır. Gerekçe: firmanın
+sıfatı "İhracat" ve HKS bu sıfatla o türü reddediyor (aşağıdaki canlı kısıt notu);
+kayıtsız üreticiden alım pratikte **"Satın Alım"** ile yapılıyor (TC + doğum tarihi ile
+KPS doğrulaması). Türün tüm iş kuralları ve denetimleri kodda **duruyor** — yalnız
+listede görünmüyor. Geri açmak için sabiti `false` yapmak yeterlidir; başka değişiklik
+gerekmez. (Not: bu türle kaydedilmiş ESKİ taslaklar düzenlemeye alınırsa tür seçili
+gelmez — o taslakları silmek gerekir.)
+
+**Sıfat ve bildirim türü listeleri artık FİLTRELENMEZ** (yukarıdaki tek istisna dışında)**.** Arayüz eskiden HKS'ten gelen
 listeleri kırpıyordu: sıfatlarda yalnız "İhracat" ve "hal dışı tüccar", türlerde yalnız
 "Satış" ve "Sevk Etme" gösteriliyordu. Tür filtresinin gerekçesi *"Satın Alım /
 Üreticiden Sevk Alım GTB'de doğum tarihi istediği için ... listeden kaldırıldı"* idi —
