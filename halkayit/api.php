@@ -193,6 +193,22 @@ function hks_bildirim_dogrula($g) {
     // • "Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi
     //    'Üretici' olmalıdır."
     if ($uret) {
+      // CANLI SİSTEMDE GÖZLENEN KISIT (kılavuz 0.1.14'te YAZMIYOR): HKS,
+      // bildirimci sıfatı "İhracat" iken bu türü reddediyor —
+      //   GTBWSRV0000002 · "İhracat Üreticiden Sevk Alım bildirimi yapamaz"
+      // Yalnız bu KANITLANMIŞ kombinasyon engellenir; başka sıfatlar hakkında
+      // varsayımda bulunulmaz (aksi hâlde geçerli işlemler bloklanabilirdi).
+      // Bu tür eski taslaklarda da saklı olabileceğinden denetim sunucudadır.
+      // DİKKAT: mb_stripos() Türkçe "İ" ile "i"yi EŞLEŞTİREMEZ (İ'nin Unicode
+      // küçük hâli noktalı bir bileşimdir) — "İhracat" sessizce kaçardı.
+      // Bu yüzden karşılaştırma hks_tr_normalize() üzerinden yapılır.
+      $bildirimciSifatAd = hks_sifat_adi($o['sifatId'] ?? 0);
+      if ($bildirimciSifatAd !== null &&
+          strpos(hks_tr_normalize($bildirimciSifatAd), 'ihracat') !== false) {
+        return 'HKS, "İhracat" sıfatıyla "Üreticiden Sevk Alım" bildirimine izin vermiyor ' .
+               '("İhracat Üreticiden Sevk Alım bildirimi yapamaz"). Kayıtsız üreticiden alım ' .
+               'için bildirim türünü "Satın Alım" seçin.';
+      }
       if (empty($o['referanssiz'])) {
         return '"Üreticiden Sevk Alım" referanslı yapılamaz (kılavuz kuralı) — künye seçilemez.';
       }
