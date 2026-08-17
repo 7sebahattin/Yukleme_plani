@@ -290,6 +290,38 @@ ok('GidecekYerIlId gönderilmiyor (kayıtlı dalı)', !str_contains($xmlSatin, '
 ok('AdSoyad/CepTel gönderilmiyor (kayıtlıda opsiyonel, girilmedi)',
     !str_contains($xmlSatin, 'AdSoyad') && !str_contains($xmlSatin, 'CepTel'));
 
+echo "\n── GTB 12.03.2025: Satın Alım + KAYITSIZ satıcı (kayıt engeli kaldırıldı) ──\n";
+// Canlı doğrulama: HKS sitesinde Satın Alım + HKS'te kayıtlı OLMAYAN üretici,
+// TC + doğum tarihiyle KPS'ten doğrulanıp künye üretiyor. Bu senaryoda hedef
+// KENDİ işyerimizdir (mal bize gelir) — adres dalı DEĞİL — ama kişi kayıtsız
+// olduğu için kimlik bilgileri (AdSoyad/CepTel/DogumTarihi) gönderilir.
+$ortakSatinKayitsiz = [
+    'yurtIci' => true, 'referanssiz' => true,
+    'kayitZorunlu' => false, 'ikinciKayitsiz' => true,
+    'gidecekIsyeriId' => 42, 'isletmeTuruId' => 5,
+    'sifatId' => 1, 'bildirimTuruId' => 3,
+    'ikinciSifatId' => 4, 'ikinciTc' => '21352723454',
+    'ikinciAd' => 'Test Satıcı', 'ikinciCep' => '05551112233',
+    'ikinciDogumTarihi' => '1975-06-15',
+    'fiyatGonder' => true, 'fiyat' => 9, 'plaka' => '06XYZ06',
+    'malinNiteligi' => 1, 'malinKodNo' => 5, 'malinCinsiId' => 2,
+    'uretimSekli' => 1, 'miktarBirimId' => 1,
+    'uretimIlId' => 6, 'uretimIlceId' => 60, 'uretimBeldeId' => 600,
+];
+$xmlSatinKayitsiz = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]], $ortakSatinKayitsiz);
+ok('hedef KENDİ işyerimiz (GidecekIsyeriId=42)',
+    str_contains($xmlSatinKayitsiz, '<b:GidecekIsyeriId>42</b:GidecekIsyeriId>'));
+ok('adres dalı KULLANILMIYOR (mal bize geliyor)',
+    !str_contains($xmlSatinKayitsiz, 'GidecekYerIlId'));
+ok('kayıtsız satıcının AdSoyad bilgisi gidiyor',
+    str_contains($xmlSatinKayitsiz, '<b:AdSoyad>Test Satıcı</b:AdSoyad>'));
+ok('kayıtsız satıcının CepTel bilgisi gidiyor',
+    str_contains($xmlSatinKayitsiz, '<b:CepTel>05551112233</b:CepTel>'));
+ok('kayıtsız satıcının DogumTarihi bilgisi gidiyor',
+    str_contains($xmlSatinKayitsiz, '<b:DogumTarihi>1975-06-15T00:00:00</b:DogumTarihi>'));
+ok('referanssız (ReferansBildirimKunyeNo=0)',
+    str_contains($xmlSatinKayitsiz, '<a:ReferansBildirimKunyeNo>0</a:ReferansBildirimKunyeNo>'));
+
 echo "\n── GTB 12.03.2025: endpoint yapılandırması (hks_endpoint, GERÇEK fonksiyon) ──\n";
 // Bu betik config.php'yi YÜKLEMEZ (DB bağlantısı ister), dolayısıyla
 // HKS_YENI_ENDPOINT/HKS_ENDPOINT_* sabitleri tanımsızdır → hks_endpoint()
