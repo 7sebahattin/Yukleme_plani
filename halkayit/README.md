@@ -112,12 +112,22 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 | Satış (yurt dışı) | gerekmez (`YurtDisiMi=true`) | referanslı | ülke | var |
 | Satış (yurt içi) | kayıtlı **veya** kayıtsız | referanslı | kayıtlıda işyeri, kayıtsızda adres | var |
 | Sevk Etme | **kayıtlı ZORUNLU** | referanslı | işyeri | yok |
-| Satın Alım | **kayıtlı ZORUNLU** | referanssız | işyeri (kendi) | var |
+| Satın Alım | kayıtlı **veya** kayıtsız¹ | referanssız | işyeri (kendi) | var |
 | Üreticiden Sevk Alım | **kayıtsız üretici** | referanssız (referanslı YASAK) | **adres (İl/İlçe/Belde)** | var |
+
+¹ **Satın Alım'da kayıtlı zorunluluğu KALDIRILDI (GTB 12.03.2025 sonrası).** Kılavuz
+0.1.14 *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde
+kayıtlı bir kişi olmalıdır"* diyordu; ancak 12.03.2025 duyurusundan sonra HKS, kayıtlı
+olmayan kişiyi **TC + doğum tarihiyle KPS'ten (MERNİS) doğruluyor** ve Satın Alım künyesi
+üretiyor — HKS sitesinde canlı olarak doğrulandı (sorgu sonrası ad/soyad otomatik geldi,
+bildirim künye numarası aldı). Kayıtsız satıcıda `AdSoyad` + `CepTel` + `DogumTarihi`
+zorunludur; hedef yine **kendi işyerimizdir** (mal bize gelir), adres dalı kullanılmaz.
+**Sevk Etme'nin kayıtlı zorunluluğu DEĞİŞMEDİ.**
 
 Kılavuzun birebir ifadeleri:
 - *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde kayıtlı
-  bir kişi olmalıdır."* → kayıtsız müstahsilden **Satın Alım yapılamaz**, servis reddeder.
+  bir kişi olmalıdır."* → **Sevk Etme için hâlâ geçerli. Satın Alım için ARTIK GEÇERSİZ**
+  (yukarıdaki ¹ dipnotu — GTB 12.03.2025 sonrası kayıtsız kişiden Satın Alım yapılabiliyor).
 - *"Üreticiden Sevk Alım: Sadece kayıtsız üreticiden yapılan sevkiyat işlemlerinde
   kullanılacak bildirim türüdür."* → kayıtsız müstahsilin TEK geçerli yolu budur.
 - *"Bildirim türü 'Üreticiden Sevk Alım'sa, İkinci kişi sıfat bilgisi 'Üretici' olmalıdır."*

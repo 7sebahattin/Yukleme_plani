@@ -230,7 +230,10 @@ function hks_bildirim_dogrula($g) {
     // düzeltmesi — bkz. app.html), bu yüzden `$uret ||` koşulu teknik olarak
     // gereksiz hâle geldi ama açıklık için (ve eski/tampered taslaklara karşı
     // savunma amacıyla) korunur.
-    if ($uret || !empty($o['hedefAdres'])) {
+    // `ikinciKayitsiz`: Satın Alım'da karşı taraf kayıtlı DA olabilir kayıtsız DA
+    // (GTB 12.03.2025). Kayıtsız olduğunda hedef işyeridir (hedefAdres=false),
+    // dolayısıyla kimlik zorunluluğu bu ayrı bayrakla yakalanır.
+    if ($uret || !empty($o['hedefAdres']) || !empty($o['ikinciKayitsiz'])) {
       $kim = $uret ? 'üretici' : 'alıcı';
       if (empty($o['ikinciAd'])) return 'Kayıtsız ' . $kim . ' için Ad/Ünvan gerekli.';
       $cep = hks_cep_rakam($o['ikinciCep'] ?? '');
@@ -491,11 +494,15 @@ try {
       // taslak kaydedildikten sonra değişmiş olabilir. Geri alınamaz bildirimden
       // önce GTB'ye TEKRAR sorulur; hem gate kararı hem (varsa) teşhis kaydı AYNI
       // sorgu sonucuna dayanır (P2 TOCTOU: tek istek, tek doğrulama sonucu).
-      // İki AYNA kural (kılavuz 0.1.14):
-      //   • Sevk Etme / Satın Alım  → karşı taraf KAYITLI olmalı.
-      //   • Üreticiden Sevk Alım    → üretici KAYITSIZ olmalı ("sadece kayıtsız
+      // İki AYNA kural:
+      //   • Sevk Etme            → karşı taraf KAYITLI olmalı (kılavuz 0.1.14).
+      //   • Üreticiden Sevk Alım → üretici KAYITSIZ olmalı ("sadece kayıtsız
       //     üreticiden yapılan sevkiyat işlemlerinde kullanılacak bildirim türü").
-      // P0: durum sorgusu artık tri-state (REGISTERED/NOT_REGISTERED/UNKNOWN).
+      // SATIN ALIM ARTIK BU DENETİMİN DIŞINDA: GTB 12.03.2025 duyurusundan sonra
+      // kayıtsız kişiden Satın Alım yapılabiliyor (kişi TC+doğum tarihiyle KPS'ten
+      // doğrulanıyor; canlı sistemde künye üretildiği doğrulandı). Frontend bu
+      // türde `kayitZorunlu=false` gönderir, dolayısıyla sorgu hiç çalışmaz.
+      // P0: durum sorgusu tri-state (REGISTERED/NOT_REGISTERED/UNKNOWN).
       // UNKNOWN durumunda — kayıt durumu HANGİ yönde olursa olsun — gönderim
       // DURUR ve BildirimKaydet ÇAĞRILMAZ (eskiden "sorgu sonuçsuz → kayıtsız"
       // sayılıp Üreticiden Sevk Alım'da denetim sessizce atlanıyordu).
@@ -514,9 +521,9 @@ try {
         }
         if (!$__uretSevk && $__durum === HKS_DURUM_NOT_REGISTERED) {
           hks_json_cikti(['hata' => 'Gönderim DURDURULDU: karşı taraf (' . $ortak['ikinciTc'] .
-            ') GTB sisteminde kayıtlı değil. Sevk Etme / Satın Alım için karşı tarafın ' .
-            'kayıtlı olması zorunludur. Kayıtsız müstahsilden alım için "Üreticiden Sevk Alım" ' .
-            'türünü kullanın. Taslak silinmedi.'], 400);
+            ') GTB sisteminde kayıtlı değil. Sevk Etme için karşı tarafın kayıtlı olması ' .
+            'zorunludur. Kayıtsız müstahsilden alım için "Satın Alım" veya "Üreticiden Sevk ' .
+            'Alım" türünü kullanın. Taslak silinmedi.'], 400);
         }
       }
 

@@ -1688,9 +1688,17 @@ function yurtIciMi() {
 }
 // Doğrulanmış karşı taraf GTB'de kayıtlı mı?
 function kayitliMi() { return !!(ikDogrulandi && ikDogrulandi.kayitliMi); }
-// Karşı tarafın kayıtlı olması ZORUNLU mu? (docx: Sevk Etme + Satın Alım)
-// Üreticiden Sevk Alım BUNUN DIŞINDA — orada kayıtsız olması gerekir.
-function kayitZorunluMu() { return sevkModuMu() || satinAlimModuMu(); }
+// Karşı tarafın kayıtlı olması ZORUNLU mu?
+// Kılavuz 0.1.14 hem "Satın Alım" hem "Sevk Etme" için kayıtlı zorunluluğu
+// yazıyordu. Ancak GTB 12.03.2025 duyurusu ("Sistemde kayıtlı olmayan kişi
+// bildirimleri için T.C. kimlik numarası ve doğum tarihi bilgilerinin girilmesi
+// gerekmektedir") bu kuralı SATIN ALIM için fiilen gevşetti: HKS sitesinde
+// Satın Alım + HKS'te kayıtlı OLMAYAN üretici, TC+doğum tarihiyle KPS'ten
+// doğrulanarak künye üretiyor (canlı sistemde doğrulandı). Bu yüzden Satın Alım
+// buradan ÇIKARILDI — kayıtsız kişide AdSoyad+CepTel+DogumTarihi zorunlu olur.
+// Sevk Etme kuralı DEĞİŞMEDİ.
+// Üreticiden Sevk Alım zaten bunun dışında — orada kayıtsız olması gerekir.
+function kayitZorunluMu() { return sevkModuMu(); }
 
 // Üreticiden Sevk Alım'da ikinci kişi sıfatı tam olarak "Üretici" OLMALIDIR
 // (kılavuz 0.1.14). Listede TAM "Üretici" adında bir sıfat varsa seçilip
@@ -1727,7 +1735,9 @@ function turDegisti() {
   // P1 düzeltmesi: Üreticiden Sevk Alım'da karşı taraf HER ZAMAN kayıtsızdır,
   // dolayısıyla işyeri modu bu türde ASLA açılmaz (uret'te kayıtlı çıkarsa da
   // zaten hedef hiç açılmaz — bkz. hedefBekle altındaki özel uyarı).
-  const isyeriMod = yurtIci && !!ikDogrulandi && !uret && kayitli;
+  // Satın Alım'da mal BİZE gelir → hedef her hâlükârda KENDİ işyerimizdir; karşı
+  // tarafın kayıt durumundan bağımsızdır (HKS sitesindeki akış da böyle).
+  const isyeriMod = yurtIci && !!ikDogrulandi && !uret && (satin || kayitli);
   // Adres hedefi (İl/İlçe/Belde): kılavuz 0.1.14 — "İkinci kişi kayıtlı değilse
   // GidecekYerIlId/IlceId/BeldeId '0' olamaz". Bu, KAYITSIZ ikinci kişinin HER
   // yurt içi türünde geçerlidir: yurt içi Satış'ta kayıtsız alıcı VE Üreticiden
@@ -1735,9 +1745,10 @@ function turDegisti() {
   // Önceki sürüm Üreticiden Sevk Alım'ı burada BİLEREK dışlayıp kendi firmanın
   // GidecekIsyeriId'sini gönderiyordu — kılavuzun kayıtsız-kişi kuralına aykırıydı.
   const adresMod  = yurtIci && !!ikDogrulandi && !kayitli && (uret || (!sevk && !satin));
-  // Ad/Ünvan + Cep: kayıtsız karşı tarafta zorunlu — artık adresMod'un ALT KÜMESİ
-  // (uret+kayıtsız da adresMod'a dahil), ayrı bir uret dalı gerekmiyor.
-  const adCepMod  = adresMod;
+  // Ad/Ünvan + Cep + Doğum Tarihi: KAYITSIZ karşı tarafın olduğu HER durumda
+  // zorunlu (GTB 12.03.2025). Bu, adresMod'un üstüne Satın Alım + kayıtsız
+  // durumunu da ekler — orada hedef işyeridir ama kişi yine kayıtsızdır.
+  const adCepMod  = adresMod || (satin && !!ikDogrulandi && !kayitli);
   // Henüz doğrulama yapılmadıysa yönlendirici ipucu göster.
   const bekliyor  = yurtIci && !isyeriMod && !adresMod;
 
@@ -1748,7 +1759,7 @@ function turDegisti() {
   $('karsiBaslik').textContent = uret
     ? 'Karşı Taraf (Üretici / Müstahsil) — GTB\'de KAYITSIZ olmalı'
     : (satin
-      ? 'Karşı Taraf (Satıcı) — GTB\'de kayıtlı olmalı'
+      ? 'Karşı Taraf (Satıcı) — kayıtlı veya kayıtsız olabilir'
       : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)'));
   // Üreticiden Sevk Alım: ikinci kişi sıfatı "Üretici" olmak ZORUNDA (docx) → kilitli.
   if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
@@ -1760,7 +1771,9 @@ function turDegisti() {
   $('cepTelBlok').classList.toggle('gizli', !adCepMod);
   $('dogumTarihiBlok').classList.toggle('gizli', !adCepMod);
   $('cepTelNot').textContent = uret
-    ? '(kayıtsız üreticide zorunlu — yalnız rakam)' : '(kayıtsız alıcıda zorunlu — yalnız rakam)';
+    ? '(kayıtsız üreticide zorunlu — yalnız rakam)'
+    : (satin ? '(kayıtsız satıcıda zorunlu — yalnız rakam)'
+             : '(kayıtsız alıcıda zorunlu — yalnız rakam)');
 
   // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
   $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
@@ -2014,10 +2027,15 @@ $('btnIkDogrula').onclick = async () => {
           : '⚠️ Kayıtsız üretici, ancak HKS sıfat listesinde "Üretici" bulunamadı — ' +
             'listeleri güncelleyin, bu tür sıfat olmadan gönderilemez.', u ? 'tamam' : 'hata');
       } else if (kayitZorunluMu()) {
-        mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — ' +
-          (satinAlimModuMu() ? 'Satın Alım' : 'Sevk Etme') +
-          ' için karşı taraf GTB\'de kayıtlı olmalıdır. Kayıtsız müstahsilden alım için ' +
-          'bildirim türünü "Üreticiden Sevk Alım" seçin.', 'hata');
+        mesajGoster('ikDurum', '⚠️ KAYITLI DEĞİL — Sevk Etme için karşı taraf GTB\'de ' +
+          'kayıtlı olmalıdır. Kayıtsız müstahsilden alım için bildirim türünü ' +
+          '"Satın Alım" veya "Üreticiden Sevk Alım" seçin.', 'hata');
+      } else if (satinAlimModuMu()) {
+        // GTB 12.03.2025: kayıtsız kişiden Satın Alım yapılabiliyor; kişi TC +
+        // doğum tarihiyle KPS'ten doğrulanır (canlı sistemde doğrulandı).
+        ikSifatlariDoldur([]);
+        mesajGoster('ikDurum', 'ℹ️ Kayıtsız satıcı. Ad/Ünvan, Cep Telefonu ve Doğum Tarihi ' +
+          'zorunludur; malın geleceği işyeri/depoyu Kart 2\'den seçin.', 'tamam');
       } else {
         ikSifatlariDoldur([]);  // kayıtsız: tüm sıfatlar seçilebilir
         mesajGoster('ikDurum', 'ℹ️ Kayıtsız alıcı. Ad/Ünvan, Cep Telefonu ve İl/İlçe/Belde zorunludur.', 'tamam');
@@ -2366,11 +2384,21 @@ $('btnMalTaslak').onclick = async () => {
     if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
   } else {
-    if (!kayitliMi()) {
-      alert('Satın Alım için karşı taraf GTB\'de KAYITLI olmalıdır (kılavuz kuralı). ' +
-            'Kayıtsız müstahsilden alım için "Üreticiden Sevk Alım" türünü seçin.'); return;
-    }
+    // SATIN ALIM — karşı taraf kayıtlı VEYA kayıtsız olabilir (GTB 12.03.2025;
+    // canlı sistemde doğrulandı: kayıtsız üretici TC+doğum tarihiyle KPS'ten
+    // doğrulanıp künye üretiyor). Kayıtsızsa kimlik bilgileri zorunludur.
     if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
+    if (!kayitliMi()) {
+      if (!$('oIkAd').value.trim()) { alert('Kayıtsız satıcı için Ad / Ünvan zorunludur.'); $('oIkAd').focus(); return; }
+      if (!cepGecerli($('oIkCep').value)) {
+        alert('Kayıtsız satıcı için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
+        $('oIkCep').focus(); return;
+      }
+      if (!$('oIkDogum').value) {
+        alert('Kayıtsız satıcı için Doğum Tarihi zorunludur (GTB 12.03.2025 duyurusu).');
+        $('oIkDogum').focus(); return;
+      }
+    }
     if (!$('sIsletmeTuru').value) { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIsyeri').value)      { alert('İşyeri / depo seçiniz.'); return; }
   }
@@ -2391,12 +2419,16 @@ $('btnMalTaslak').onclick = async () => {
     ikinciDogumTarihi: $('oIkDogum').value,   // GTB 12.03.2025 — kayıtsız kişide zorunlu
     ulkeAd: 'Üreticiden Sevk Alım ← ' + ($('oIkAd').value.trim() || tc) + ' (' +
             $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
-  } : {
+  } : Object.assign({
     isletmeTuruId: $('sIsletmeTuru').value,
     gidecekIsyeriId: $('sIsyeri').value,
     gidecekIsyeriAd: ad('sIsyeri'),
     ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
-  };
+  }, kayitliMi() ? {} : {
+    // Kayıtsız satıcı: kimlik bilgileri gönderilir (GTB 12.03.2025).
+    ikinciCep: cepRakam($('oIkCep').value),
+    ikinciDogumTarihi: $('oIkDogum').value,
+  });
 
   try {
     await api('/api/taslaklar', 'POST', {
@@ -2407,8 +2439,12 @@ $('btnMalTaslak').onclick = async () => {
         yurtIci: true, referanssiz: true,
         // Üreticiden Sevk Alım'da karşı taraf KAYITSIZ olmalı → sunucu, gönderim
         // öncesi son denetimde AYNA kuralı uygular (kayıtlıysa gönderimi durdurur).
-        kayitZorunlu: !uret,
+        // Satın Alım artık kayıtlı ZORUNLU DEĞİL (GTB 12.03.2025) → kayitZorunlu=false.
+        kayitZorunlu: false,
         uretSevk: uret,
+        // Karşı taraf doğrulamada KAYITSIZ çıktı mı? Sunucu buna bakarak
+        // AdSoyad/CepTel/DogumTarihi zorunluluğunu bağımsız uygular.
+        ikinciKayitsiz: !kayitliMi(),
         fiyatGonder: true, fiyat,
         sifatId: $('sSifat').value,
         bildirimTuruId: $('sTur').value,
