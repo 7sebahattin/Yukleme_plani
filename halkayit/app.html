@@ -525,6 +525,13 @@
             <span id="cepTelNot" style="color:var(--soluk);font-weight:400;font-size:12px">(kayıtsız alıcıda zorunlu)</span></label>
           <input id="oIkCep" inputmode="numeric" autocomplete="off" placeholder="05xxxxxxxxx">
         </div>
+        <!-- Doğum Tarihi — GTB 12.03.2025 duyurusu: kayıtsız kişi bildirimlerinde
+             TC ile birlikte ZORUNLU (KPS sorgulaması artık ikisini birden istiyor). -->
+        <div id="dogumTarihiBlok" class="gizli">
+          <label>Doğum Tarihi <span style="color:var(--hata-tx)">*</span>
+            <span style="color:var(--soluk);font-weight:400;font-size:12px">(kayıtsız kişide zorunlu — GTB 12.03.2025)</span></label>
+          <input id="oIkDogum" type="date">
+        </div>
         <label id="ikSifatEtiket">Karşı Taraf Sıfatı</label>
         <select id="sIkSifat"><option value="">— Seçiniz —</option></select>
         <div class="mesaj tamam gizli" id="ikCokluSifatUyari"></div>
@@ -1539,7 +1546,7 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep'].forEach(id => { $(id).value = ''; });
+  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
@@ -1747,9 +1754,11 @@ function turDegisti() {
   if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
   $('ikSifatEtiket').textContent = uret
     ? 'Karşı Taraf Sıfatı — "Üretici" (kılavuz gereği sabit)' : 'Karşı Taraf Sıfatı';
-  // Ad/Ünvan + Cep yalnız KAYITSIZ karşı tarafta (kayıtlıda HKS kendi kaydından doldurur).
+  // Ad/Ünvan + Cep + Doğum Tarihi yalnız KAYITSIZ karşı tarafta (kayıtlıda HKS
+  // kendi kaydından doldurur). Doğum tarihi: GTB 12.03.2025 duyurusu.
   $('adBlok').classList.toggle('gizli', !adCepMod);
   $('cepTelBlok').classList.toggle('gizli', !adCepMod);
+  $('dogumTarihiBlok').classList.toggle('gizli', !adCepMod);
   $('cepTelNot').textContent = uret
     ? '(kayıtsız üreticide zorunlu — yalnız rakam)' : '(kayıtsız alıcıda zorunlu — yalnız rakam)';
 
@@ -2349,6 +2358,11 @@ $('btnMalTaslak').onclick = async () => {
       alert('Kayıtsız üretici için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
       $('oIkCep').focus(); return;
     }
+    // GTB 12.03.2025: kayıtsız kişi bildiriminde TC + doğum tarihi zorunlu.
+    if (!$('oIkDogum').value) {
+      alert('Kayıtsız üretici için Doğum Tarihi zorunludur (GTB 12.03.2025 duyurusu).');
+      $('oIkDogum').focus(); return;
+    }
     if (!$('sIsletmeTuru').value)  { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
   } else {
@@ -2374,6 +2388,7 @@ $('btnMalTaslak').onclick = async () => {
     hedefAdres: true,
     ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
     ikinciCep: cepRakam($('oIkCep').value),
+    ikinciDogumTarihi: $('oIkDogum').value,   // GTB 12.03.2025 — kayıtsız kişide zorunlu
     ulkeAd: 'Üreticiden Sevk Alım ← ' + ($('oIkAd').value.trim() || tc) + ' (' +
             $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
   } : {
@@ -2493,10 +2508,16 @@ $('btnTaslakKaydet').onclick = async () => {
         alert('Kayıtsız alıcı için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
         $('oIkCep').focus(); return;
       }
+      // GTB 12.03.2025: kayıtsız kişi bildiriminde TC + doğum tarihi zorunlu.
+      if (!$('oIkDogum').value) {
+        alert('Kayıtsız alıcı için Doğum Tarihi zorunludur (GTB 12.03.2025 duyurusu).');
+        $('oIkDogum').focus(); return;
+      }
       if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
       Object.assign(ortak, {
         hedefAdres: true,
         ikinciCep: cepRakam($('oIkCep').value),
+        ikinciDogumTarihi: $('oIkDogum').value,   // GTB 12.03.2025 — kayıtsız kişide zorunlu
         ilId: $('sIl').value, ilceId: $('sIlce').value, beldeId: $('sBelde').value,
         ulkeAd: 'Yurt içi → ' + ($('oIkAd').value.trim() || tc) + ' (' +
                 $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
@@ -2620,6 +2641,7 @@ async function taslakDuzenle(t) {
     $('oIkTc').value = o.ikinciTc || '';
     $('oIkAd').value = o.ikinciAd || '';
     if (o.ikinciCep) $('oIkCep').value = cepRakam(o.ikinciCep);
+    if (o.ikinciDogumTarihi) $('oIkDogum').value = o.ikinciDogumTarihi;
     if (o.ikinciTc) await $('btnIkDogrula').onclick();     // GTB doğrulaması yeniden
     if (o.ikinciSifatId) $('sIkSifat').value = String(o.ikinciSifatId);
     // Üreticiden Sevk Alım'da sıfat "Üretici" olmak ZORUNDA (docx). Taslak eski bir
@@ -2713,6 +2735,7 @@ function taslakOnayAc(t) {
     if (t.ortak.uretSevk || t.ortak.hedefAdres) {
       html += `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(t.ortak.ikinciTc || '—')}</b></div>`;
       html += `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(t.ortak.ikinciCep || '—')}</b></div>`;
+      html += `<div class="onay-satir"><span>Doğum Tarihi</span><b>${eHtml(t.ortak.ikinciDogumTarihi || '—')}</b></div>`;
     }
     if (t.ortak.uretSevk) {
       html += `<div class="onay-satir"><span>Karşı Taraf Sıfatı</span><b>Üretici</b></div>`;

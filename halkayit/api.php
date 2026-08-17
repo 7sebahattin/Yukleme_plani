@@ -238,6 +238,15 @@ function hks_bildirim_dogrula($g) {
       if (strlen($cep) < 10 || strlen($cep) > 13) {
         return 'Cep telefonu geçersiz — en az 10 rakam olmalıdır (örn. 05001112233).';
       }
+      // GTB 12.03.2025 duyurusu: "Sistemde kayıtlı olmayan kişi bildirimleri için
+      // T.C. kimlik numarası ve doğum tarihi bilgilerinin girilmesi gerekmektedir."
+      // (KPS sorgulaması artık TC + doğum tarihi ile yapılıyor.)
+      if (empty($o['ikinciDogumTarihi'])) {
+        return 'Kayıtsız ' . $kim . ' için Doğum Tarihi gerekli (GTB 12.03.2025 duyurusu).';
+      }
+      if (hks_dogum_tarihi_xml($o['ikinciDogumTarihi']) === '') {
+        return 'Doğum tarihi geçersiz — GG.AA.YYYY biçiminde geçerli bir tarih girin.';
+      }
     }
 
     if (!empty($o['hedefAdres'])) {

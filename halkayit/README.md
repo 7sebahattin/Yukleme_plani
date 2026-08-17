@@ -16,8 +16,10 @@ panelin PHP + MySQL sürümüdür. Mevcut bir PHP paneline gömülmek üzere tas
 | `api.php` | Tüm istekleri karşılayan yönlendirici (`api.php?action=XXX`). JSON döner. |
 | `hks_soap.php` | HKS web servisine cURL ile SOAP çağrıları. **Dokunmayın**, çekirdek mantık burada. |
 | `db.php` | PDO bağlantısı, tablo oto-kurulumu, şifre AES-256 şifreleme. |
-| `config.php` | DB bilgileri, şifreleme anahtarı, giriş ayarı. **Doldurulacak tek dosya.** |
+| `config.php` | DB bilgileri, şifreleme anahtarı, giriş ayarı, **endpoint seçimi** (`HKS_YENI_ENDPOINT`). **Doldurulacak tek dosya.** |
 | `schema.sql` | Tablo şeması (bilgi amaçlı; tablolar zaten otomatik kurulur). |
+| `../scripts/hks_endpoint_test.php` | Eski/yeni endpoint'i salt-okunur karşılaştırır (kayıt oluşturmaz). |
+| `../scripts/hks_uretici_sevk_test.php` | Üreticiden Sevk Alım + kayıt durumu + DogumTarihi regresyon testleri (ağsız). |
 
 ---
 
@@ -185,11 +187,65 @@ denetimi vardı, taslak kaydından sonra kural değişmiş/bozulmuş bir taslak 
    Üreticiden Sevk Alım'da üretici kayıtlı **ise**, veya durum **UNKNOWN** ise — gönderim
    durur ve taslak silinmez.
 
-**Doğum tarihi:** kılavuz 0.1.14'te `IkinciKisiBilgileriDTO` yalnızca `KisiSifat`,
-`TcKimlikVergiNo`, `AdSoyad`, `Eposta`, `CepTel`, `YurtDisiMi` içerir — doğum tarihi
-alanı **yoktur**. HKS web portalı kayıtsız üretici tanımlarken doğum tarihi isteyebilir;
-servis şemasında karşılığı bulunmadığı için gönderilmez. Canlı şema değişmişse
-`BildirimService.svc?xsd=xsd2` çıktısıyla doğrulayıp buraya not düşün.
+**Doğum tarihi — GTB 12.03.2025 duyurusu (kılavuz 0.1.14'ü GÜNCELLER).**
+Kılavuz 0.1.14 (2016) `IkinciKisiBilgileriDTO` içinde doğum tarihi alanı içermiyordu ve
+bu README daha önce "gönderilmez" diyordu — **bu bilgi artık geçersiz.** GTB'nin
+12.03.2025 tarihli duyurusu: *"Kimlik Paylaşım Sistemi (KPS) sorgulamalarında ... T.C.
+kimlik numarası ile birlikte Doğum Tarihi bilgisi zorunlu hale getirilmiştir. ...
+Sistemde kayıtlı olmayan kişi bildirimleri için T.C. kimlik numarası ve doğum tarihi
+bilgilerinin girilmesi gerekmektedir."*
+
+- `DogumTarihi`, `IkinciKisiBilgileriDTO` içinde **alfabetik sırada** gönderilir:
+  `AdSoyad` → `CepTel` → **`DogumTarihi`** → `Eposta` → `KisiSifat` → `TcKimlikVergiNo`
+  → `YurtDisiMi`. (DataContract sıralaması; sıra bozulursa alan sessizce yoksayılabilir.)
+- **Yalnız dolu olduğunda gönderilir** (`hks_dogum_tarihi_xml()` boş dize dönerse alan
+  hiç eklenmez) — böylece kayıtlı ikinci kişili ve yurt dışı akışlar birebir eskisi gibi
+  kalır, mevcut çalışan davranış hiç etkilenmez.
+- **Biçim:** ISO 8601 (`1980-01-01T00:00:00`), bu dosyadaki diğer tarih alanlarıyla
+  (`BaslangicTarihi`/`BitisTarihi` — canlıda çalışıyor) aynı. GTB'nin duyuru ekindeki
+  `Ornek_Request.txt` tarihi `01.01.1980 00:00:00` biçiminde yazmış (elle hazırlanmış
+  SoapUI örneği); ilk canlı denemede ISO reddedilirse `hks_dogum_tarihi_xml()` içinde
+  `d.m.Y H:i:s` denenmelidir.
+- Arayüzde `#oIkDogum` (`<input type="date">`), kayıtsız karşı tarafta Ad/Ünvan ve Cep
+  ile birlikte görünür ve zorunludur; backend `hks_bildirim_dogrula()` aynı kuralı
+  bağımsız uygular.
+
+**`Eposta` hakkında düzeltme.** Bu README daha önce "Eposta hiçbir durumda gönderilmez"
+diyordu; doğrusu **zorunlu değildir** (kılavuz 0.1.8 notu bunu zorunluluktan çıkardı) ama
+**yasak da değildir** — GTB'nin resmi örnek request'i `Eposta` gönderiyor. Panel bu alanı
+kullanıcıdan hiç toplamadığı için pratikte gönderilmez; forma eklenirse serbestçe
+gönderilebilir.
+
+**Endpoint — GTB 12.03.2025 duyurusu.** Yeni adresler yayımlandı ve *"27 Mart 2025
+tarihine kadar mevcut endpointler ve yeni endpointler birlikte kullanılabilecektir"*
+denildi:
+
+| Servis | Yeni adres |
+|---|---|
+| Bildirim | `https://ws.gtb.gov.tr:8443/HKSBildirimService` |
+| Genel | `https://ws.gtb.gov.tr:8443/HKSGenelService` |
+| Ürün | `https://ws.gtb.gov.tr:8443/HKSUrunService` |
+
+Adres artık `config.php`'den seçilir: **`HKS_YENI_ENDPOINT`** (varsayılan `false` — mevcut
+çalışan davranış korunur). `DogumTarihi` alanının yalnız yeni şemada bulunması muhtemel
+olduğundan geçiş büyük olasılıkla gereklidir; ancak **önce doğrulayın**:
+
+```
+php scripts/hks_endpoint_test.php <firmaId>
+```
+
+Bu betik eski ve yeni endpoint'i aynı **salt-okunur** çağrıyla (Ülkeler listesi)
+karşılaştırır — HKS'te kayıt oluşturmaz, rüsum doğurmaz. Yeni endpoint `ÇALIŞIYOR`
+dönerse `HKS_YENI_ENDPOINT`'i `true` yapın; sorun çıkarsa `false`'a geri alın.
+
+**e-Fatura senaryosu "HAL" — GTB 04.03.2026 duyurusu (kod dışı, ama kritik).**
+Komisyoncu/tüccarların sebze-meyve satış ve sevklerinde düzenledikleri e-Fatura,
+e-Arşiv Fatura ve e-İrsaliye belgelerinde **senaryonun "HAL" olması zorunludur**; aksi
+tespit edilirse *"bildirimcinin ve/veya web servis yazılımının Hal Kayıt Sistemi web
+servis yetkilendirilmesi iptal edilebilecektir"*. Son tarih **01.04.2026**. Bu, panelin
+gönderdiği `BelgeNo`/`BelgeTipi` alanlarıyla ilgili **değildir** — belgeyi düzenleyen
+e-fatura entegratörü tarafında ayarlanır. Kod tarafında yapılabilecek bir şey yoktur,
+ancak yetkilendirme iptali doğrudan bu paneli de durduracağı için burada not edilmiştir.
 
 **TC/VKN eşleşmesi.** Kayıt durumu sorgusunda dönen `TcKimlikVergiNo`, sorgulanan
 TC/VKN ile `hks_tc_esit()` üzerinden karşılaştırılır — yalnızca format normalizasyonu
