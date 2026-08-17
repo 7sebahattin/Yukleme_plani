@@ -468,6 +468,10 @@
       <div class="stok-ozet" id="stokOzet"></div>
       <div class="stok-sarma" id="stokListe"></div>
     </div>
+    <!-- Sürüm damgası — sunucudaki dosyanın güncel olup olmadığını gözle
+         doğrulamak için. Değeri app.html içindeki PANEL_SURUM sabitinden gelir;
+         panelde değişiklik yapıldığında o sabit güncellenmelidir. -->
+    <div id="panelSurum" style="text-align:center;margin-top:18px;font-size:11px;color:var(--soluk)"></div>
   </main>
 </div>
 
@@ -895,6 +899,12 @@
 // görünmüyor. Geri açmak için: false yapın, başka değişiklik gerekmez.
 const URETICI_SEVK_GIZLE = true;
 
+// Panel sürümü — ana menünün altında gösterilir. Sunucudaki dosyanın güncel
+// olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
+// aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
+// app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
+const PANEL_SURUM = '2026-08-17 · 4';
+
 let firmalar = [];
 let aktifFirma = null;
 let listeler = null;
@@ -997,6 +1007,9 @@ function ekranGoster(ad) {
   ['ekranFirma', 'ekranMenu', 'ekranBildirim', 'ekranTaslaklar', 'ekranGonderilen', 'ekranToplu', 'ekranSorgu', 'ekranEtiket']
     .forEach(e => $(e).classList.add('gizli'));
   $(ad).classList.remove('gizli');
+  // Sürüm damgası (ana menü) — sunucudaki dosyanın güncelliğini gözle doğrulamak için.
+  const surumEl = $('panelSurum');
+  if (surumEl) surumEl.textContent = 'panel sürümü: ' + PANEL_SURUM;
   if (ad !== 'ekranBildirim') $('ozet').classList.add('gizli');
   window.scrollTo(0, 0);
 }
