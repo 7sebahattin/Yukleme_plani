@@ -16,8 +16,17 @@ const HKS_NS_MODEL = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Bildirim.M
 const HKS_NS_GENEL_SC = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Genel.ServiceContract';
 const HKS_NS_GENEL_MODEL = 'http://schemas.datacontract.org/2004/07/GTB.HKS.Genel.Model';
 
+// Servis endpoint'i — adres kalıbı config.php'den gelir (HKS_YENI_ENDPOINT
+// bayrağı eski/yeni arasında seçim yapar; bkz. config.php'deki geçiş notu).
+// Sabitler tanımlı değilse (bu dosya config.php olmadan, örn. CLI testinden
+// require edilmişse) eski adrese düşülür — testler ağ çağrısı yapmaz, yalnız
+// fonksiyonun tanımlı olması yeterlidir.
 function hks_endpoint($servis) {
-  return 'https://hks.hal.gov.tr/WebServices/' . $servis . 'Service.svc';
+  $yeni  = defined('HKS_YENI_ENDPOINT') && HKS_YENI_ENDPOINT;
+  $kalip = $yeni
+    ? (defined('HKS_ENDPOINT_YENI') ? HKS_ENDPOINT_YENI : 'https://ws.gtb.gov.tr:8443/HKS%sService')
+    : (defined('HKS_ENDPOINT_ESKI') ? HKS_ENDPOINT_ESKI : 'https://hks.hal.gov.tr/WebServices/%sService.svc');
+  return sprintf($kalip, $servis);
 }
 
 $GLOBALS['HKS_HATA_ACIKLAMA'] = [
@@ -31,6 +40,30 @@ $GLOBALS['HKS_HATA_ACIKLAMA'] = [
 
 function hks_esc($s) {
   return htmlspecialchars((string)$s, ENT_QUOTES | ENT_XML1, 'UTF-8');
+}
+
+// ── Doğum tarihi (GTB 12.03.2025 duyurusu) ────────────────────────────────────
+// Kayıtsız ikinci kişide TC ile birlikte doğum tarihi zorunlu hâle geldi.
+// Girdi olarak HTML <input type="date"> çıktısı (YYYY-MM-DD) ya da kullanıcının
+// elle yazdığı GG.AA.YYYY kabul edilir; boş/geçersiz girdide BOŞ DİZE döner ve
+// çağıran taraf alanı hiç göndermez (zorunluluk denetimi ayrı yerde yapılır).
+//
+// FORMAT NOTU: DataContract DateTime serileştirmesi ISO 8601 bekler ve bu
+// dosyadaki DİĞER tarih alanları (BaslangicTarihi/BitisTarihi) zaten
+// 'Y-m-d\TH:i:s' ile CANLIDA ÇALIŞIYOR — bu yüzden burada da ISO kullanılır.
+// GTB'nin duyuru ekindeki Ornek_Request.txt dosyasında tarih "01.01.1980
+// 00:00:00" biçiminde yazılmış (elle hazırlanmış SoapUI örneği); ilk canlı
+// denemede ISO reddedilirse alternatif olarak 'd.m.Y H:i:s' denenebilir.
+function hks_dogum_tarihi_xml($deger) {
+    $s = trim((string)$deger);
+    if ($s === '') return '';
+    // GG.AA.YYYY veya GG/AA/YYYY → YYYY-MM-DD
+    if (preg_match('/^(\d{2})[.\/](\d{2})[.\/](\d{4})$/', $s, $m)) {
+        $s = $m[3] . '-' . $m[2] . '-' . $m[1];
+    }
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) return '';
+    if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])) return '';
+    return $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00';
 }
 
 // SOAP zarfını gönder, cevap gövdesini döndür
@@ -371,15 +404,23 @@ function hks_bildirim_xml($satirlar, $ortak) {
       if ($fiyatGonder) $mal .= '<b:MalinSatisFiyat>' . (float)($ortak['fiyat'] ?? 0) . '</b:MalinSatisFiyat>';
     }
 
-    // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
-    // docx: karşı taraf GTB'de KAYITLI değilse "Eposta" hariç tüm bilgileri
-    // gönderilmelidir (AdSoyad + CepTel). Eposta hiçbir durumda gönderilmez.
+    // — İkinci kişi (b: alfabetik: AdSoyad, CepTel, DogumTarihi, Eposta,
+    //   KisiSifat, TcKimlikVergiNo, YurtDisiMi) —
+    // Kılavuz 0.1.14: karşı taraf GTB'de KAYITLI değilse "Eposta" hariç tüm
+    // bilgileri gönderilmelidir (AdSoyad + CepTel).
+    // GTB 12.03.2025 duyurusu: KPS sorgulamalarında TC ile birlikte DOĞUM TARİHİ
+    // zorunlu hâle geldi — "Sistemde kayıtlı olmayan kişi bildirimleri için T.C.
+    // kimlik numarası ve doğum tarihi bilgilerinin girilmesi gerekmektedir."
+    // `DogumTarihi` YALNIZ DOLUYSA gönderilir: böylece kayıtlı ikinci kişili ve
+    // yurt dışı akışlar (alan hiç doldurulmaz) BİREBİR eskisi gibi kalır.
     // CepTel yalnız RAKAM olarak gider — kullanıcı "0532 123 45 67" yazmış olabilir.
     if ($yurtIci) {
       $cep = preg_replace('/\D+/', '', (string)($ortak['ikinciCep'] ?? ''));
       $ik = [];
       if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc(trim($ortak['ikinciAd'])) . '</b:AdSoyad>';
       if ($cep !== '')                 $ik[] = '<b:CepTel>' . $cep . '</b:CepTel>';
+      $dt = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '');
+      if ($dt !== '')                  $ik[] = '<b:DogumTarihi>' . $dt . '</b:DogumTarihi>';
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
       $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';

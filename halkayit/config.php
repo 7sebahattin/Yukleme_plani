@@ -27,6 +27,26 @@ define('HKS_SIFRELEME_ANAHTARI', defined('HKS_CRED_KEY')
     ? HKS_CRED_KEY
     : 'AsyaFresh-HKS-2026-vAq7kTz3RmNe9XuB4pWcJdH6yLgS8fKo');
 
+// --- HKS web servis endpoint'i ---
+// GTB, 12.03.2025 duyurusuyla yeni endpoint adresleri yayımladı ve "27 Mart 2025
+// tarihine kadar mevcut endpointler ve yeni endpointler birlikte kullanılabilecektir"
+// dedi. Kayıtsız ikinci kişide zorunlu olan "DogumTarihi" alanı büyük olasılıkla
+// YALNIZ yeni endpoint şemasında bulunuyor.
+//
+// GEÇİŞ NASIL YAPILIR:
+//   1) Önce salt-okunur teşhis: php scripts/hks_endpoint_test.php <firmaId>
+//      (yalnız Ülkeler listesi çeker — HKS'te KAYIT OLUŞTURMAZ, rüsum doğurmaz.)
+//   2) Yeni endpoint OK dönerse aşağıdaki sabiti true yapın.
+//   3) Sorun çıkarsa false'a geri alın — kod değişikliği gerekmez.
+//
+// Varsayılan false: mevcut/çalışan davranış korunur, geçiş bilinçli bir karar olur.
+define('HKS_YENI_ENDPOINT', false);
+
+// Eski (klasik WCF .svc) ve yeni (gateway) adres kalıpları. %s = servis adı
+// (Bildirim / Genel / Urun).
+define('HKS_ENDPOINT_ESKI', 'https://hks.hal.gov.tr/WebServices/%sService.svc');
+define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
+
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;
 // bu yüzden HTTP Basic Auth kapalı kalır.

@@ -206,6 +206,7 @@ $ortakUretici = [
     'ikinciSifatId' => 7, 'ikinciTc' => '11111111110',
     'ikinciAd' => 'Test Üretici', 'ikinciCep' => '05551112233',
     'fiyatGonder' => true, 'fiyat' => 12.5, 'plaka' => '34ABC34',
+    'ikinciDogumTarihi' => '1980-01-01',   // GTB 12.03.2025 — kayıtsız kişide zorunlu
     // Referanssız mal tanımı (docx "Referanssız Bildirimlerde") — bu testin
     // odağı değil, yalnız hks_bildirim_xml()'in o dalını hatasız çalıştırmak için.
     'malinNiteligi' => 1, 'malinKodNo' => 5, 'malinCinsiId' => 2,
@@ -221,12 +222,56 @@ ok('GidecekIsyeriId ASLA gönderilmiyor (P1 kritik düzeltme)',
     !str_contains($xmlUretici, 'GidecekIsyeriId'));
 ok('ReferansBildirimKunyeNo=0 (referanssız)', str_contains($xmlUretici, '<a:ReferansBildirimKunyeNo>0</a:ReferansBildirimKunyeNo>'));
 
-echo "\n── P1/10: Kayıtsız ikinci kişi iletişim bilgileri — Eposta ASLA, diğerleri VAR ──\n";
+echo "\n── P1/10: Kayıtsız ikinci kişi iletişim bilgileri ──\n";
 ok('AdSoyad gönderiliyor',    str_contains($xmlUretici, '<b:AdSoyad>Test Üretici</b:AdSoyad>'));
 ok('CepTel yalnız rakam gönderiliyor', str_contains($xmlUretici, '<b:CepTel>05551112233</b:CepTel>'));
 ok('YurtDisiMi=false gönderiliyor',    str_contains($xmlUretici, '<b:YurtDisiMi>false</b:YurtDisiMi>'));
-ok('Eposta HİÇBİR ZAMAN gönderilmiyor (kılavuz: zorunlu değil)',
+// Eposta: kılavuz 0.1.14 bunu ZORUNLU OLMAKTAN çıkardı (sürüm 0.1.8 notu) — yani
+// yasak DEĞİL, opsiyonel. GTB'nin 12.03.2025 duyuru ekindeki resmi örnek request
+// Eposta'yı GÖNDERİYOR. Panel bu alanı kullanıcıdan hiç toplamadığı için pratikte
+// gönderilmez; test bunu "yasak" olarak DEĞİL, "toplanmadığı için yok" olarak
+// doğrular. Alan ileride forma eklenirse bu bekleyiş güncellenmelidir.
+ok('Eposta gönderilmiyor (panel bu alanı toplamıyor — yasak olduğu için değil)',
     !str_contains($xmlUretici, 'Eposta'));
+
+echo "\n── GTB 12.03.2025: DogumTarihi (kayıtsız ikinci kişide zorunlu) ──\n";
+ok('DogumTarihi ISO biçiminde gönderiliyor',
+    str_contains($xmlUretici, '<b:DogumTarihi>1980-01-01T00:00:00</b:DogumTarihi>'),
+    'beklenen ISO 8601 — diğer tarih alanlarıyla (BaslangicTarihi) aynı biçim');
+// DataContract alan sırası ALFABETİK olmalı: AdSoyad < CepTel < DogumTarihi <
+// Eposta < KisiSifat < TcKimlikVergiNo < YurtDisiMi. Sıra bozulursa canlı
+// servis alanı sessizce yoksayabilir — bu yüzden konum da doğrulanır.
+// DİKKAT: <b:KisiSifat> BELGEDE İKİ KEZ geçer (BildirimciBilgileri ve
+// IkinciKisiBilgileri). Bu yüzden sıra yalnız IkinciKisiBilgileri bloğunun
+// İÇİNDE ölçülür — tüm belgede strpos kullanmak bildirimcinin sıfatını bulup
+// yanlış negatif üretir.
+preg_match('#<a:IkinciKisiBilgileri>(.*?)</a:IkinciKisiBilgileri>#s', $xmlUretici, $mIk);
+$ikBlok = $mIk[1] ?? '';
+$pAd  = strpos($ikBlok, '<b:AdSoyad>');
+$pCep = strpos($ikBlok, '<b:CepTel>');
+$pDog = strpos($ikBlok, '<b:DogumTarihi>');
+$pSif = strpos($ikBlok, '<b:KisiSifat>');
+$pTc  = strpos($ikBlok, '<b:TcKimlikVergiNo>');
+ok('ikinci kişi bloğu ayrıştırıldı', $ikBlok !== '');
+ok('alfabetik sıra: AdSoyad < CepTel < DogumTarihi < KisiSifat < TcKimlikVergiNo',
+    $pAd !== false && $pCep !== false && $pDog !== false && $pSif !== false && $pTc !== false
+    && $pAd < $pCep && $pCep < $pDog && $pDog < $pSif && $pSif < $pTc,
+    'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
+
+// hks_dogum_tarihi_xml() — GERÇEK fonksiyon, biçim normalizasyonu
+ok('YYYY-MM-DD kabul (HTML date input)', hks_dogum_tarihi_xml('1980-01-01') === '1980-01-01T00:00:00');
+ok('GG.AA.YYYY kabul (elle giriş)',      hks_dogum_tarihi_xml('01.01.1980') === '1980-01-01T00:00:00');
+ok('GG/AA/YYYY kabul',                   hks_dogum_tarihi_xml('01/01/1980') === '1980-01-01T00:00:00');
+ok('boş girdi → boş dize (alan hiç gönderilmez)', hks_dogum_tarihi_xml('') === '');
+ok('geçersiz tarih (31.02.1980) → boş',  hks_dogum_tarihi_xml('31.02.1980') === '');
+ok('anlamsız metin → boş',               hks_dogum_tarihi_xml('abc') === '');
+
+echo "\n── Regresyon: DogumTarihi YOKSA alan hiç gönderilmiyor (mevcut akışlar korunur) ──\n";
+$ortakDogumsuz = $ortakUretici;
+unset($ortakDogumsuz['ikinciDogumTarihi']);
+$xmlDogumsuz = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 100]], $ortakDogumsuz);
+ok('DogumTarihi etiketi hiç yok',       !str_contains($xmlDogumsuz, 'DogumTarihi'));
+ok('diğer alanlar etkilenmedi (AdSoyad)', str_contains($xmlDogumsuz, '<b:AdSoyad>Test Üretici</b:AdSoyad>'));
 
 echo "\n── Regresyon: kayıtlı ikinci kişi (Satın Alım) hâlâ GidecekIsyeriId kullanıyor ──\n";
 $ortakSatin = [
@@ -244,6 +289,21 @@ ok('GidecekIsyeriId=42 gönderiliyor (DEĞİŞMEDİ)', str_contains($xmlSatin, '
 ok('GidecekYerIlId gönderilmiyor (kayıtlı dalı)', !str_contains($xmlSatin, 'GidecekYerIlId'));
 ok('AdSoyad/CepTel gönderilmiyor (kayıtlıda opsiyonel, girilmedi)',
     !str_contains($xmlSatin, 'AdSoyad') && !str_contains($xmlSatin, 'CepTel'));
+
+echo "\n── GTB 12.03.2025: endpoint yapılandırması (hks_endpoint, GERÇEK fonksiyon) ──\n";
+// Bu betik config.php'yi YÜKLEMEZ (DB bağlantısı ister), dolayısıyla
+// HKS_YENI_ENDPOINT/HKS_ENDPOINT_* sabitleri tanımsızdır → hks_endpoint()
+// gömülü yedek kalıba (ESKİ adres) düşmelidir. Testin doğrulaması tam da bu:
+// sabitler yokken fonksiyon ÇÖKMEZ ve davranış değişmez.
+ok('sabitler tanımsızken eski adrese düşüyor (çökmüyor)',
+    hks_endpoint('Genel') === 'https://hks.hal.gov.tr/WebServices/GenelService.svc',
+    hks_endpoint('Genel'));
+ok('servis adı kalıba doğru yerleştiriliyor',
+    hks_endpoint('Bildirim') === 'https://hks.hal.gov.tr/WebServices/BildirimService.svc');
+// Yeni kalıbın ürettiği adres, duyurudaki adresle birebir aynı olmalı.
+ok('yeni kalıp duyurudaki adresi üretiyor',
+    sprintf('https://ws.gtb.gov.tr:8443/HKS%sService', 'Bildirim')
+        === 'https://ws.gtb.gov.tr:8443/HKSBildirimService');
 
 echo "\n── Regresyon: yurt dışı Satış (mevcut export) davranışı DEĞİŞMEDİ ──\n";
 $ortakIhracat = [
