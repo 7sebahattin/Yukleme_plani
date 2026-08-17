@@ -885,6 +885,16 @@
 <script src="qrcode.js"></script>
 <script>
 'use strict';
+
+// ── Görünürlük ayarı ─────────────────────────────────────────────────────────
+// "Üreticiden Sevk Alım" bildirim türünü dropdown'da GİZLE.
+// Gerekçe: bu firmanın sıfatı "İhracat" ve HKS bu sıfatla o türü reddediyor
+// ("İhracat Üreticiden Sevk Alım bildirimi yapamaz"); iş akışında da ihtiyaç yok.
+// Kayıtsız üreticiden alım "Satın Alım" ile yapılıyor (TC + doğum tarihi ile).
+// Türün TÜM iş kuralları ve denetimleri kodda DURUYOR — yalnız listede
+// görünmüyor. Geri açmak için: false yapın, başka değişiklik gerekmez.
+const URETICI_SEVK_GIZLE = true;
+
 let firmalar = [];
 let aktifFirma = null;
 let listeler = null;
@@ -1637,17 +1647,25 @@ function listeleriDoldur() {
   // hiç göremiyordu.
   //
   // Varsayılan seçim "Satış" olarak KALIR — mevcut ihracat akışı korunur.
+  //
+  // TEK İSTİSNA — "Üreticiden Sevk Alım" (bkz. URETICI_SEVK_GIZLE): bu firmanın
+  // sıfatı (İhracat) bu türü HKS'te kullanamıyor ve iş akışında ihtiyaç yok, bu
+  // yüzden listeden gizlenir. Türün TÜM kuralları (kılavuz denetimleri, sıfat
+  // çakışma kontrolü, backend doğrulamaları) YERİNDE DURUYOR — yalnız dropdown'da
+  // görünmüyor. Geri açmak için aşağıdaki sabiti false yapmak yeterlidir.
   const satisMi = (ad) => {
     const n = trNorm(ad);
     return (n.includes('satış') || n.includes('satis')) && !n.includes('alım') && !n.includes('alim');
   };
   const turSel = $('sTur');
   turSel.innerHTML = '';
-  (listeler.bildirimTurleri || []).forEach(x => {
-    const o = document.createElement('option');
-    o.value = x.id; o.textContent = x.ad;
-    turSel.appendChild(o);
-  });
+  (listeler.bildirimTurleri || [])
+    .filter(x => !(URETICI_SEVK_GIZLE && uretSevkTuruMu(x.ad)))
+    .forEach(x => {
+      const o = document.createElement('option');
+      o.value = x.id; o.textContent = x.ad;
+      turSel.appendChild(o);
+    });
   const satis = (listeler.bildirimTurleri || []).find(x => satisMi(x.ad));
   if (satis) turSel.value = satis.id;
 
@@ -1678,9 +1696,16 @@ function turAdiById(id) {
 // TEK geçerli yolu budur; Satın Alım'da karşı taraf kayıtlı OLMAK ZORUNDA.
 // DİKKAT: türün adı "Sevk" içerdiği için sevkModuMu() bunu DIŞLAR — yoksa
 // Sevk Etme kurallarına (kayıtlı zorunlu + referanslı) düşer.
-function uretSevkModuMu() {
-  const n = trNorm(turAdiById($('sTur').value));
+// Tür ADINDAN "Üreticiden Sevk Alım" tespiti — TEK KAYNAK.
+// DİKKAT: trNorm() 'Ü' harfini 'u'ya ÇEVİRMEZ ("Üreticiden" → "üreticiden"),
+// bu yüzden HER İKİ yazım da aranır. (Eski tür filtresi yalnız "uretici"
+// arıyordu ve bu türü eleyemiyordu — aynı hataya düşülmesin.)
+function uretSevkTuruMu(ad) {
+  const n = trNorm(ad);
   return n.includes('üretici') || n.includes('uretici');
+}
+function uretSevkModuMu() {
+  return uretSevkTuruMu(turAdiById($('sTur').value));
 }
 function sevkModuMu() {
   return !uretSevkModuMu() && trNorm(turAdiById($('sTur').value)).includes('sevk');
