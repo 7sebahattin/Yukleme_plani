@@ -1615,27 +1615,35 @@ function listeleriDoldur() {
   doldur('sKunyeIsyeriTuru', listeler.isletmeTurleri, '— Tümü —');
 
   // Sıfat: sistemde kullanılan yalnızca 2 sıfat gösterilir (İhracat + Tüccar Hal Dışı)
-  const sifatFiltre = (listeler.sifatlar || []).filter(x => {
-    const n = trNorm(x.ad);
-    return n.includes('ihracat') ||
-      (n.includes('tüccar') && (n.includes('dışı') || n.includes('disi') || n.includes('dısı')));
-  });
-  doldur('sSifat', sifatFiltre.length ? sifatFiltre : listeler.sifatlar);
+  // SIFAT: HKS'ten gelen TÜM sıfatlar gösterilir. (Eskiden yalnız "İhracat" ve
+  // "hal dışı tüccar" gösteriliyordu; firmanın sahip olduğu diğer sıfatlar —
+  // örn. Sanayici, Hal İçi Tüccar — dropdown'da hiç görünmediği için o
+  // sıfatlarla işlem YAPILAMIYORDU.) Varsayılan seçim İhracat olarak KALIR,
+  // böylece mevcut ihracat akışı birebir aynı davranır.
+  doldur('sSifat', listeler.sifatlar || []);
   const ihracat = (listeler.sifatlar || []).find(x => trNorm(x.ad).includes('ihracat'));
   if (ihracat) $('sSifat').value = ihracat.id;
 
-  // Bildirim türü: yalnızca Satış (yurt içi/dışı — tik ile) ve Sevk Etme gösterilir.
-  // Satın Alım / Üreticiden Sevk Alım GTB'de doğum tarihi istediği için (bkz. doğrulayıcı
-  // kılavuzu — servis şemasında karşılığı yok) listeden tamamen kaldırıldı.
+  // BİLDİRİM TÜRÜ: HKS'ten gelen TÜM türler gösterilir.
+  // Eskiden bir filtre vardı ve gerekçesi şuydu: "Satın Alım / Üreticiden Sevk
+  // Alım GTB'de doğum tarihi istediği için (servis şemasında karşılığı yok)
+  // listeden kaldırıldı." Bu gerekçe ORTADAN KALKTI — GTB 12.03.2025 duyurusuyla
+  // `DogumTarihi` alanı şemaya eklendi ve panel artık onu gönderiyor.
+  //
+  // Ayrıca o filtrede bir HATA vardı: "Üreticiden Sevk Alım" elenmesi
+  // gerekirken listede KALIYORDU (`trNorm('Üreticiden')` → "üreticiden";
+  // aranan dize "uretici" olduğu için 'ü' ≠ 'u' eşleşmiyordu). Sonuç: kullanıcı
+  // yalnızca çalışmayan türü görüyor, gerçekten ihtiyaç duyduğu "Satın Alım"ı
+  // hiç göremiyordu.
+  //
+  // Varsayılan seçim "Satış" olarak KALIR — mevcut ihracat akışı korunur.
   const satisMi = (ad) => {
     const n = trNorm(ad);
     return (n.includes('satış') || n.includes('satis')) && !n.includes('alım') && !n.includes('alim');
   };
-  const sevkMi = (ad) => { const n = trNorm(ad); return n.includes('sevk') && !n.includes('uretici'); };
-  const turFiltre = (listeler.bildirimTurleri || []).filter(x => satisMi(x.ad) || sevkMi(x.ad));
   const turSel = $('sTur');
   turSel.innerHTML = '';
-  (turFiltre.length ? turFiltre : listeler.bildirimTurleri || []).forEach(x => {
+  (listeler.bildirimTurleri || []).forEach(x => {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
     turSel.appendChild(o);
