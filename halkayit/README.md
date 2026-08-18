@@ -62,7 +62,7 @@ Tüm istekler **POST**, gövde JSON, cevap JSON. Hata olursa `{ "hata": "..." }`
 | `firmalar` | — | `{firmalar:[{id,ad,vergiNo,renk,userName}]}` (şifre DÖNMEZ) |
 | `firma_kaydet` | `{id?,ad,userName,password,servicePassword,vergiNo,renk}` | `{tamam:true}` |
 | `firma_sil` | `{id}` | `{tamam:true}` |
-| `sonlar` | — | `{plakalar,ulkeler,urunler}` (son kullanılanlar) |
+| `sonlar` | — | `{plakalar,ulkeler,urunler,karsiTaraflar}` (son kullanılanlar) |
 | `listeler` | — | önbellekten referans listeleri veya `{bos:true}` |
 | `listeler_yenile` | `{firmaId}` | HKS'ten çekip önbelleğe yazar |
 | `kunyeler` | `{firmaId,urunId,aySayisi}` | `{kunyeler:[...]}` |
@@ -239,6 +239,32 @@ vardı: "Üreticiden Sevk Alım" elenmesi gerekirken listede kalıyordu, çünk�
 Sonuç olarak kullanıcı **çalışmayan türü görüyor, ihtiyaç duyduğu "Satın Alım"ı hiç
 göremiyordu.** Artık her iki liste de HKS'ten geldiği gibi gösterilir; varsayılan
 seçimler (sıfat = İhracat, tür = Satış) korunduğu için mevcut ihracat akışı aynen çalışır.
+
+**Karşı taraf girişini hızlandıran iki yardımcı.** Kart 1'de TC/VKN girişi iki şekilde
+kolaylaştırılmıştır — ikisi de yalnızca **form doldurma** kolaylığıdır, kayıt durumuna
+karar vermezler:
+
+1. **Otomatik sorgu** — girilen rakam sayısı 10 (VKN) veya 11 (TC) olduğunda
+   `KayitliKisiSorgu` kendiliğinden çalışır (500 ms gecikmeli; alan bu sürede
+   değişirse iptal olur). "Doğrula" butonu yerinde kalır, elle tetikleme için.
+2. **"Son Kullanılanlar" çipleri** — ülke/ürün çipleriyle **aynı desen**: veri
+   `hks_kv` içindeki firma bazlı `sonlar_<firmaId>` anahtarında `karsiTaraflar`
+   dizisi olarak tutulur, **yalnız başarılı gönderimden sonra** yazılır
+   (`hks_son_guncelle` → `hks_karsi_taraf_ekle`), en son kullanılan başa gelir,
+   liste 10 kayıtla sınırlıdır. Ayrı bir tablo, ekran veya migration YOKTUR.
+
+**Kritik kural:** çipe tıklamak yalnızca TC'yi doldurur ve **canlı** HKS sorgusunu
+tetikler — kişinin kayıt durumu zaman içinde değişebileceği için saklı bilgiye asla
+güvenilmez. `AdSoyad`/`CepTel`/`DogumTarihi` yalnız sorgu **KAYITSIZ** döndüğünde ve
+ilgili alan boşsa doldurulur. `hks_karsi_taraf_ekle` boş gelen alanları eskisiyle korur:
+kayıtlı kişiye yapılan bir gönderim (bu alanları göndermez) daha önce öğrenilmiş
+bilgileri silmez.
+
+**Kişisel veri notu:** `karsiTaraflar` TC/VKN, ad, telefon ve doğum tarihi tutar. Erişim
+panel oturumu + `records.write` yetkisiyle korunur ve kayıtlar firma bazında ayrılır.
+Çip etiketinde TC'nin yalnız **son 4 hanesi** gösterilir. Bu veriyi saklamak istemezseniz
+`hks_son_guncelle` içindeki `karsiTaraflar` bloğunu kaldırmak yeterlidir — başka hiçbir
+yer bu listeye bağımlı değildir.
 
 **`Eposta` hakkında düzeltme.** Bu README daha önce "Eposta hiçbir durumda gönderilmez"
 diyordu; doğrusu **zorunlu değildir** (kılavuz 0.1.8 notu bunu zorunluluktan çıkardı) ama

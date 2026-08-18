@@ -507,6 +507,11 @@
       <!-- Karşı Taraf — yurt içi (Sevk Etme / yurt içi Satış / Satın Alım) modunda görünür -->
       <div id="karsiTarafBlok" class="gizli" style="margin-top:14px;padding-top:12px;border-top:1px dashed #d7e2ea">
         <label class="label-vurgu" id="karsiBaslik">Karşı Taraf (Alıcı)</label>
+        <!-- Son kullanılan karşı taraflar — ülke/ürün çipleriyle AYNI desen.
+             Tıklanınca TC dolar ve HKS'e CANLI sorgu gider (saklı bilgi yalnız
+             formu hızlı doldurmak içindir, kayıt durumuna karar vermez). -->
+        <label>Son Kullanılanlar</label>
+        <div class="cipler" id="ikCipler"><span class="cip-bos">Henüz kayıt yok</span></div>
         <div class="satir2">
           <div>
             <label>TC / Vergi No</label>
@@ -903,7 +908,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-17 · 4';
+const PANEL_SURUM = '2026-08-17 · 5';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -2127,6 +2132,9 @@ $('btnIkDogrula').onclick = async () => {
   turDegisti();  // doğrulama sonucuna göre hedef alt-modunu ayarla
 };
 
+// TC/VKN tam uzunluğa ulaşınca sorguyu KENDİLİĞİNDEN çalıştırmak için zamanlayıcı.
+// Gecikme, hızlı yazarken/yapıştırırken her ara değer için sorgu atılmasını önler.
+let ikOtoSorguZaman = null;
 $('oIkTc').oninput = () => {
   // TC değişince doğrulama + hedef seçimleri sıfırlanır (eski TC'ye ait hedef gitmesin).
   ikDogrulandi = null;
@@ -2137,6 +2145,19 @@ $('oIkTc').oninput = () => {
   $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
   ['isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   turDegisti();
+
+  // OTOMATİK SORGU: VKN 10, TC 11 hanedir. Uzunluk tamamlandığında "Doğrula"ya
+  // basmaya gerek kalmaz. Buton yerinde durur (tekrar denemek/elle tetiklemek
+  // için). Sorgu SALT-OKUNURDUR — bildirim oluşturmaz, rüsum doğurmaz.
+  clearTimeout(ikOtoSorguZaman);
+  const haneler = $('oIkTc').value.replace(/\D/g, '');
+  if (haneler.length === 10 || haneler.length === 11) {
+    ikOtoSorguZaman = setTimeout(() => {
+      // Aradan geçen sürede alan değişmiş olabilir — son hâlini yeniden doğrula.
+      const simdi = $('oIkTc').value.replace(/\D/g, '');
+      if (simdi === haneler && !ikDogrulandi) $('btnIkDogrula').onclick();
+    }, 500);
+  }
 };
 // Cep telefonu alandan çıkınca rakamlara indirgenir — operatör, CANLI servise
 // tam olarak neyin gideceğini onay ekranından önce görsün.
@@ -2236,7 +2257,29 @@ async function sonlariYukle() {
     const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
     cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => { $('sUlke').value = u.id; }, 'Henüz ülke geçmişi yok');
     cipCiz('urunCipler', j.urunler || [], u => u.ad, u => { $('sUrun').value = u.id; }, 'Henüz ürün geçmişi yok');
+    // Karşı taraf çipleri — etiket: "AD · son 4 hane". TC'nin TAMAMI ekranda
+    // gösterilmez (gereksiz kişisel veri teşhiri); ayırt etmeye son 4 hane yeter.
+    cipCiz('ikCipler', j.karsiTaraflar || [],
+      k => (k.ad ? k.ad + ' · ' : '') + '…' + String(k.tc || '').slice(-4),
+      k => karsiTarafSec(k), 'Henüz kayıt yok');
   } catch (e) { /* önemsiz */ }
+}
+
+// Çipten karşı taraf seçimi. SAKLI BİLGİYE GÜVENİLMEZ: TC doldurulup HKS'e
+// CANLI sorgu gider (kişinin kayıt durumu zaman içinde değişmiş olabilir).
+// Ad/cep/doğum yalnızca sorgu KAYITSIZ döndüğünde ve alan boşsa doldurulur —
+// kayıtlı kişide bu alanlar zaten gizlidir, HKS kendi kaydından doldurur.
+async function karsiTarafSec(k) {
+  if (!aktifFirma) return;
+  $('oIkTc').value = String(k.tc || '');
+  ikDogrulandi = null;
+  await $('btnIkDogrula').onclick();
+  if (ikDogrulandi && !ikDogrulandi.kayitliMi) {
+    if (k.ad && !$('oIkAd').value.trim())  $('oIkAd').value = k.ad;
+    if (k.cep && !$('oIkCep').value.trim()) $('oIkCep').value = cepRakam(k.cep);
+    if (k.dogum && !$('oIkDogum').value)    $('oIkDogum').value = k.dogum;
+  }
+  turDegisti();
 }
 
 function cipCiz(kapId, dizi, etiketFn, tikla, bosMetin) {
@@ -2934,6 +2977,10 @@ $('btnOnay').onclick = async () => {
       else taslakEkraniAc();
     };
     taslakSayiGuncelle();
+    // "Son kullanılanlar" (karşı taraf / plaka / ülke / ürün) yalnızca BAŞARILI
+    // gönderimde sunucuda güncellenir — listeyi tazele ki çipler bir sonraki
+    // bildirimde güncel olsun.
+    if (herhangiBasarili) sonlariYukle();
   } catch (e) {
     alert('HATA: ' + e.message);
     $('modal').classList.remove('acik');

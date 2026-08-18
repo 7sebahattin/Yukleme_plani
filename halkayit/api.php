@@ -293,10 +293,49 @@ function hks_sonlar_key($firmaId) {
   return $firmaId !== '' ? ('sonlar_' . $firmaId) : 'sonlar';
 }
 
-// Son kullanılan plaka/ülke/ürün güncelle (yalnızca ilgili firma için)
+// Son kullanılan KARŞI TARAF listesini güncelle — SAF fonksiyon (DB'ye dokunmaz).
+// Aynı TC/VKN varsa çıkarılıp EN BAŞA alınır (böylece en son kullanılan üstte
+// kalır ve bilgileri güncellenir), liste $limit ile sınırlanır.
+//
+// Saklanan alanlar: tc, ad, cep, dogum. Bunlar KİŞİSEL VERİDİR ve yalnızca
+// formu hızlı doldurmak içindir — KARAR MERCİİ DEĞİLDİR. Kişinin HKS kayıt
+// durumu zaman içinde değişebileceğinden, seçim yapıldığında arayüz HER ZAMAN
+// canlı KayitliKisiSorgu çalıştırır (bkz. app.html karsiTarafSec).
+//
+// Ad/cep/doğum yalnız DOLU geldiğinde güncellenir: kayıtlı kişide bu alanlar
+// gönderilmez (HKS kendi kaydından doldurur), o gönderim eski bilgiyi silmesin.
+function hks_karsi_taraf_ekle($liste, $yeni, $limit = 10) {
+  $tc = trim((string)($yeni['tc'] ?? ''));
+  if ($tc === '') return array_values((array)$liste);
+
+  $eski = null;
+  $kalan = [];
+  foreach ((array)$liste as $k) {
+    if (hks_tc_esit($k['tc'] ?? '', $tc)) { $eski = $k; continue; }
+    $kalan[] = $k;
+  }
+  $kayit = ['tc' => $tc];
+  foreach (['ad', 'cep', 'dogum'] as $alan) {
+    $deger = trim((string)($yeni[$alan] ?? ''));
+    $kayit[$alan] = $deger !== '' ? $deger : trim((string)($eski[$alan] ?? ''));
+  }
+  return array_slice(array_merge([$kayit], $kalan), 0, $limit);
+}
+
+// Son kullanılan plaka/ülke/ürün/karşı taraf güncelle (yalnızca ilgili firma için)
 function hks_son_guncelle($ortak, $firmaId) {
   $key = hks_sonlar_key($firmaId);
   $son = hks_kv_oku($key, ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]);
+  // Eski kayıtlarda bu anahtar yok — varsayılanla tamamla.
+  if (!isset($son['karsiTaraflar'])) $son['karsiTaraflar'] = [];
+  if (!empty($ortak['ikinciTc'])) {
+    $son['karsiTaraflar'] = hks_karsi_taraf_ekle($son['karsiTaraflar'], [
+      'tc'    => $ortak['ikinciTc'],
+      'ad'    => $ortak['ikinciAd'] ?? '',
+      'cep'   => $ortak['ikinciCep'] ?? '',
+      'dogum' => $ortak['ikinciDogumTarihi'] ?? '',
+    ]);
+  }
   if (!empty($ortak['plaka'])) {
     $son['plakalar'] = array_slice(array_merge([$ortak['plaka']],
       array_values(array_filter($son['plakalar'], fn($p) => $p !== $ortak['plaka']))), 0, 10);
@@ -368,7 +407,9 @@ try {
     // ---- SON KULLANILANLAR (firma bazlı) ----
     case 'sonlar': {
       $sonKey = hks_sonlar_key($g['firmaId'] ?? '');
-      hks_json_cikti(hks_kv_oku($sonKey, ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]));
+      $varsayilan = ['plakalar' => [], 'ulkeler' => [], 'urunler' => [], 'karsiTaraflar' => []];
+      // Eski kayıtlarda 'karsiTaraflar' yok — arayüz her zaman dizi görsün.
+      hks_json_cikti(array_merge($varsayilan, (array)hks_kv_oku($sonKey, $varsayilan)));
     }
 
     // ---- REFERANS LİSTELERİ ----
