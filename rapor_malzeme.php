@@ -8,7 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (isset($_GET['csv'])) { require_perm('reports.export'); }
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 else { require_perm('reports.read'); }
 
 $pdo = db();
@@ -74,7 +74,8 @@ $f_urun        = trim($_GET['urun']        ?? '');
 $f_depo        = trim($_GET['depo']        ?? '');
 $f_mtype       = trim($_GET['material_type'] ?? '');
 if (!in_array($f_mtype, ['kasa', 'palet', 'ek'], true)) $f_mtype = '';
-$is_csv = isset($_GET['csv']);
+$is_csv  = isset($_GET['csv']);
+$is_xlsx = isset($_GET['xlsx']);
 
 if ($f_tarih_bas !== '' && $f_tarih_bit !== '' && $f_tarih_bas > $f_tarih_bit) {
     [$f_tarih_bas, $f_tarih_bit] = [$f_tarih_bit, $f_tarih_bas];
@@ -267,6 +268,197 @@ if ($is_csv) {
     exit;
 }
 
+// ── XLSX export — TEK dosya, İKİ sayfa ──────────────────────
+// Sayfa 1: Malzeme Kullanımı (bu raporun pivotu, ekrandakiyle birebir)
+// Sayfa 2: Stok Özeti (malzeme_stok.php'deki "Özet CSV" ile aynı veri)
+//
+// FİLTRE UYUMU — dikkat: iki raporun filtre kümeleri AYNI DEĞİLDİR.
+//   • Kullanım raporu tarih aralıklıdır; stok özeti GÜNCEL durumu gösterir
+//     (tarihi yoktur), bu yüzden tarih filtresi 2. sayfaya UYGULANAMAZ.
+//   • Firma / ürün sahibi / ürün filtreleri stokla ilgisizdir (stok malzeme
+//     bazlıdır, yükleme bazlı değil) → uygulanmaz.
+//   • Malzeme türü kümeleri farklıdır (rapor: kasa/palet/ek grubu — stok:
+//     kasa_cinsi/palet_tipi/... tipi) → eşleme zorlanmaz, uygulanmaz.
+//   • DEPO her ikisinde de aynı anlamdadır → TEK ortak filtre olarak uygulanır.
+// Bu sınır 2. sayfanın başlığında kullanıcıya da yazılır ki rakamlar
+// karşılaştırılırken yanlış varsayım yapılmasın.
+if ($is_xlsx) {
+    $autoload = __DIR__ . '/vendor/autoload.php';
+    if (!is_file($autoload)) { http_response_code(500); die('Excel motoru (PhpSpreadsheet) bulunamadı.'); }
+    require_once $autoload;
+    require_once __DIR__ . '/config/material_stock_helpers.php';
+
+    // Stok sayfası AYRI bir yetki ister; yalnız 'reports.export' olan bir
+    // kullanıcı stok verisini görmemeli (bkz. rol matrisi: stok.read).
+    $xlsx_stok_ekle = can('stok.read');
+
+    audit_log_event('export', 'reports', null, null, [
+        'report'    => 'malzeme_kullanim_xlsx',
+        'sheets'    => $xlsx_stok_ekle ? ['kullanim', 'stok_ozeti'] : ['kullanim'],
+        'row_count' => count($pivot),
+        'filters'   => array_filter([
+            'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit, 'firma' => $f_firma,
+            'urun_sahibi' => $f_urun_sahibi, 'urun' => $f_urun, 'depo' => $f_depo, 'material_type' => $f_mtype,
+        ], fn($v) => $v !== ''),
+    ]);
+
+    $ss = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+    $ss->getProperties()->setTitle('Malzeme Raporu')->setCreator('Asya Fresh');
+
+    // Ortak biçim yardımcıları — iki sayfa da AYNI görünsün.
+    $BASLIK_DOLGU = 'FFE8EEF4';   // açık gri-mavi
+    $KENAR        = 'FFB8C4CF';
+    $baslik_yaz = function ($sh, array $basliklar, int $satir) use ($BASLIK_DOLGU, $KENAR) {
+        $sh->fromArray($basliklar, null, 'A' . $satir);
+        $son = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($basliklar));
+        $st  = $sh->getStyle('A' . $satir . ':' . $son . $satir);
+        $st->getFont()->setBold(true);
+        $st->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+           ->getStartColor()->setARGB($BASLIK_DOLGU);
+        // Uzun başlıklar hücreye sığsın: metin kaydırma + dikey ortalama
+        $st->getAlignment()->setWrapText(true)
+           ->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER)
+           ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+        $st->getBorders()->getAllBorders()
+           ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN)
+           ->getColor()->setARGB($KENAR);
+        $sh->getRowDimension($satir)->setRowHeight(30);
+        return $son;
+    };
+    // Sütun genişliği: auto-size makul aralıkta tutulur (çok uzun malzeme adları
+    // sayfayı taşırmasın, çok kısa başlıklar da okunamayacak kadar daralmasın).
+    $genislik_ayarla = function ($sh, string $sonSutun, float $min = 10, float $max = 42) {
+        $sonIdx = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sonSutun);
+        // ÖNEMLİ: calculateColumnWidths() YALNIZCA autoSize=true olan sütunları
+        // hesaplar. Önce açılır, hesaplatılır, sonra sonuç min/max aralığına
+        // kırpılıp sabitlenir — aksi hâlde tüm sütunlar tabana (min) düşer ve
+        // uzun malzeme adları okunamaz.
+        for ($i = 1; $i <= $sonIdx; $i++) {
+            $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+            $sh->getColumnDimension($harf)->setAutoSize(true);
+        }
+        $sh->calculateColumnWidths();
+        for ($i = 1; $i <= $sonIdx; $i++) {
+            $harf = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i);
+            $dim  = $sh->getColumnDimension($harf);
+            $w    = $dim->getWidth();
+            if ($w < 0) $w = $min;                       // hesaplanamadıysa taban değer
+            $dim->setAutoSize(false)->setWidth(max($min, min($max, $w + 2)));
+        }
+    };
+
+    // ── SAYFA 1: Malzeme Kullanımı ──────────────────────────
+    $sh1 = $ss->getActiveSheet();
+    $sh1->setTitle('Malzeme Kullanımı');
+    $sh1->setCellValue('A1', 'Malzeme Kullanım Raporu');
+    $sh1->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+    $sh1->setCellValue('A2', $filter_summary);
+    $sh1->getStyle('A2')->getFont()->setItalic(true)->getColor()->setARGB('FF666666');
+
+    $basliklar = ['Malzeme', 'Tür', 'Toplam'];
+    foreach ($date_cols as $d) $basliklar[] = date('d.m.Y', strtotime($d));
+    $son1 = $baslik_yaz($sh1, $basliklar, 4);
+
+    // Parti No satırı — ekrandaki/CSV'deki ile aynı yerde (başlığın hemen altı)
+    $parti_line = ['Parti No', '', ''];
+    foreach ($date_cols as $d) $parti_line[] = implode(' / ', $parti_by_date[$d] ?? []);
+    $sh1->fromArray($parti_line, null, 'A5');
+    $sh1->getStyle('A5:' . $son1 . '5')->getFont()->setItalic(true);
+    $sh1->getStyle('A5:' . $son1 . '5')->getAlignment()->setWrapText(true);
+
+    $r = 6;
+    foreach ($pivot as $row) {
+        $sh1->setCellValue('A' . $r, $row['name']);
+        $sh1->setCellValue('B' . $r, RM_GROUP_LABELS[$row['group_type']] ?? $row['group_type']);
+        // SAYI olarak yazılır (CSV'de metindi) — Excel'de toplanabilsin.
+        $sh1->setCellValue('C' . $r, (int)round($row['total']));
+        // NOT: setCellValueByColumnAndRow() PhpSpreadsheet 2.x'te KALDIRILDI —
+        // hücre adresi Coordinate ile üretilir.
+        $c = 4;
+        foreach ($date_cols as $d) {
+            $adr = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c) . $r;
+            $sh1->setCellValue($adr, (int)round($row['dates'][$d] ?? 0));
+            $c++;
+        }
+        $r++;
+    }
+    if ($r > 6) {
+        $sh1->getStyle('C6:' . $son1 . ($r - 1))->getNumberFormat()->setFormatCode('#,##0');
+        $sh1->getStyle('A6:' . $son1 . ($r - 1))->getBorders()->getAllBorders()
+            ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_HAIR)
+            ->getColor()->setARGB($KENAR);
+    }
+    $sh1->freezePane('D6');            // Malzeme/Tür/Toplam + başlıklar sabit kalsın
+    $sh1->setAutoFilter('A4:' . $son1 . '4');
+    $genislik_ayarla($sh1, $son1);
+
+    // ── SAYFA 2: Stok Özeti ─────────────────────────────────
+    if ($xlsx_stok_ekle) {
+        // Depo dışındaki filtreler bilinçli olarak uygulanmaz (bkz. yukarıdaki not).
+        $stok_rows = get_material_stock_summary($pdo, []);
+        $stok_rows = ms_filter_summary_rows($stok_rows, ['depo' => $f_depo]);
+        // malzeme_stok.php varsayılanıyla aynı: hiç hareketi olmayan satırlar gizli.
+        $stok_rows = array_values(array_filter($stok_rows,
+            fn($x) => (float)$x['total_giris'] > 0 || (float)$x['total_cikis'] > 0));
+
+        $ms_types      = ms_material_types();
+        $ms_cat_labels = ms_cat_labels();
+
+        $sh2 = $ss->createSheet();
+        $sh2->setTitle('Stok Özeti');
+        $sh2->setCellValue('A1', 'Malzeme Stok Özeti (güncel durum)');
+        $sh2->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        // Kullanıcı iki sayfayı karşılaştırırken yanlış varsayım yapmasın:
+        $sh2->setCellValue('A2', 'Bu sayfa GÜNCEL stok durumudur; kullanım sayfasındaki tarih aralığından '
+            . 'bağımsızdır. Ortak filtre yalnızca depodur — Depo: '
+            . ($f_depo !== '' ? $f_depo : 'Tümü'));
+        $sh2->getStyle('A2')->getFont()->setItalic(true)->getColor()->setARGB('FF666666');
+
+        $son2 = $baslik_yaz($sh2, ['Kategori', 'Tür', 'Malzeme', 'Depo', 'Giriş', 'Çıkış', 'Kalan', 'Birim'], 4);
+
+        $r2 = 5;
+        foreach ($stok_rows as $x) {
+            $tam = ms_is_integer_unit((string)$x['unit']);
+            $sh2->setCellValue('A' . $r2, $ms_cat_labels[$x['category']] ?? $x['category']);
+            $sh2->setCellValue('B' . $r2, $ms_types[$x['material_type']] ?? $x['material_type']);
+            $sh2->setCellValue('C' . $r2, $x['material_name']);
+            $sh2->setCellValue('D' . $r2, $x['depo'] !== '' ? $x['depo'] : 'Depo Boş');
+            // SAYI olarak yazılır (CSV'de "1.234,567" metniydi) — Excel'de toplanabilsin.
+            $sh2->setCellValue('E' . $r2, (float)$x['total_giris']);
+            $sh2->setCellValue('F' . $r2, (float)$x['total_cikis']);
+            $sh2->setCellValue('G' . $r2, (float)$x['kalan']);
+            $sh2->setCellValue('H' . $r2, $x['unit']);
+            $sh2->getStyle('E' . $r2 . ':G' . $r2)->getNumberFormat()
+                ->setFormatCode($tam ? '#,##0' : '#,##0.000');
+            // Negatif kalan dikkat çeksin (stok sayfasındaki uyarı bandıyla aynı anlam)
+            if ((float)$x['kalan'] < 0) {
+                $sh2->getStyle('G' . $r2)->getFont()->setBold(true)->getColor()->setARGB('FFC0392B');
+            }
+            $r2++;
+        }
+        if ($r2 > 5) {
+            $sh2->getStyle('A5:' . $son2 . ($r2 - 1))->getBorders()->getAllBorders()
+                ->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_HAIR)
+                ->getColor()->setARGB($KENAR);
+        }
+        $sh2->freezePane('A5');
+        $sh2->setAutoFilter('A4:' . $son2 . '4');
+        $genislik_ayarla($sh2, $son2);
+    }
+
+    $ss->setActiveSheetIndex(0);
+
+    // Çıktı — önceki tampon içeriği dosyayı bozmasın.
+    while (ob_get_level() > 0) { ob_end_clean(); }
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="malzeme_raporu_' . date('Ymd_Hi') . '.xlsx"');
+    header('Cache-Control: max-age=0');
+    $writer = \PhpOffice\PhpSpreadsheet\IOFactory::createWriter($ss, 'Xlsx');
+    $writer->save('php://output');
+    $ss->disconnectWorksheets();
+    exit;
+}
+
 // ── Render ──────────────────────────────────────────────────
 render_header('Malzeme Kullanım Raporu');
 render_flash();
@@ -275,7 +467,8 @@ $persist_params = array_filter([
     'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit, 'firma' => $f_firma,
     'urun_sahibi' => $f_urun_sahibi, 'urun' => $f_urun, 'depo' => $f_depo, 'material_type' => $f_mtype,
 ], fn($v) => $v !== '');
-$csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, ['csv' => '1']));
+$csv_url  = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, ['csv' => '1']));
+$xlsx_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, ['xlsx' => '1']));
 ?>
 
 <!-- Baskı başlığı — sadece yazdırmada -->
@@ -302,7 +495,10 @@ $csv_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params, 
         <?php if (!empty($pivot)): ?>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
         <?php endif; ?>
-        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Excel/CSV İndir</a>
+        <?php /* XLSX: tek dosya, iki sayfa (Kullanım + Stok Özeti). CSV linki
+                 tek sayfalık ham veri isteyenler için korunur. */ ?>
+        <a href="<?= h($xlsx_url) ?>" class="btn btn-sm btn-primary">⬇ Excel İndir<?= can('stok.read') ? ' (Kullanım + Stok)' : '' ?></a>
+        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-ghost">CSV</a>
     </div>
 </div>
 
