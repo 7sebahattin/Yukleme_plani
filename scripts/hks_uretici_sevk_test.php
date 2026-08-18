@@ -340,6 +340,48 @@ ok('"Hal İçi Tüccar" → çakışma YOK',     !ihracatUretSevkCakismasiTest('
 ok('sıfat adı bilinmiyorsa engellenmez (katalog yoksa varsayım yapılmaz)',
     !ihracatUretSevkCakismasiTest(null));
 
+echo "\n── Son kullanılan karşı taraflar (api.php: hks_karsi_taraf_ekle — SENKRON KOPYA) ──\n";
+// SENKRON KOPYA — api.php: hks_karsi_taraf_ekle(). Saf fonksiyondur ama api.php
+// DB'ye bağımlı config zincirini çektiği için burada birebir kopyası test edilir.
+function karsiTarafEkleTest($liste, $yeni, $limit = 10) {
+    $tc = trim((string)($yeni['tc'] ?? ''));
+    if ($tc === '') return array_values((array)$liste);
+    $eski = null; $kalan = [];
+    foreach ((array)$liste as $k) {
+        if (hks_tc_esit($k['tc'] ?? '', $tc)) { $eski = $k; continue; }
+        $kalan[] = $k;
+    }
+    $kayit = ['tc' => $tc];
+    foreach (['ad', 'cep', 'dogum'] as $alan) {
+        $deger = trim((string)($yeni[$alan] ?? ''));
+        $kayit[$alan] = $deger !== '' ? $deger : trim((string)($eski[$alan] ?? ''));
+    }
+    return array_slice(array_merge([$kayit], $kalan), 0, $limit);
+}
+
+$l = karsiTarafEkleTest([], ['tc' => '11111111110', 'ad' => 'A', 'cep' => '05551112233', 'dogum' => '1980-01-01']);
+ok('boş listeye ekleniyor', count($l) === 1 && $l[0]['tc'] === '11111111110');
+ok('ad/cep/dogum saklanıyor', $l[0]['ad'] === 'A' && $l[0]['dogum'] === '1980-01-01');
+
+$l = karsiTarafEkleTest($l, ['tc' => '22222222220', 'ad' => 'B']);
+ok('yeni kayıt EN BAŞA geliyor', $l[0]['tc'] === '22222222220' && $l[1]['tc'] === '11111111110');
+
+$l = karsiTarafEkleTest($l, ['tc' => '11111111110', 'ad' => 'A2']);
+ok('var olan TC tekrarlanmıyor (mükerrer yok)', count($l) === 2);
+ok('tekrar kullanılan kayıt başa taşınıyor', $l[0]['tc'] === '11111111110');
+ok('ad güncelleniyor', $l[0]['ad'] === 'A2');
+ok('BOŞ gelen alanlar eski değeri KORUYOR (kayıtlı kişi gönderimi silmesin)',
+    $l[0]['cep'] === '05551112233' && $l[0]['dogum'] === '1980-01-01');
+
+$l2 = [];
+for ($i = 1; $i <= 13; $i++) $l2 = karsiTarafEkleTest($l2, ['tc' => str_pad((string)$i, 11, '0', STR_PAD_LEFT)]);
+ok('liste 10 kayıtla sınırlanıyor', count($l2) === 10);
+ok('en eskiler düşüyor, en yeni başta', $l2[0]['tc'] === '00000000013');
+
+ok('boş TC listeyi değiştirmiyor', count(karsiTarafEkleTest($l, ['tc' => ''])) === count($l));
+$lFmt = karsiTarafEkleTest([['tc' => '111 111 111 10', 'ad' => 'Eski']], ['tc' => '11111111110', 'ad' => 'Yeni']);
+ok('TC format farkı (boşluklu) aynı kişi sayılıyor', count($lFmt) === 1 && $lFmt[0]['ad'] === 'Yeni');
+
 echo "\n── GTB 12.03.2025: endpoint yapılandırması (hks_endpoint, GERÇEK fonksiyon) ──\n";
 // Bu betik config.php'yi YÜKLEMEZ (DB bağlantısı ister), dolayısıyla
 // HKS_YENI_ENDPOINT/HKS_ENDPOINT_* sabitleri tanımsızdır → hks_endpoint()
