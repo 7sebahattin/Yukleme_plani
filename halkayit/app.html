@@ -908,7 +908,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-17 · 5';
+const PANEL_SURUM = '2026-08-20 · 6';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1321,21 +1321,38 @@ $('btnEtiketSorgula').onclick = async () => {
     const kap = $('etSonucSarma'), oz = $('etOzet');
     if (!etiketSonuc.length) {
       oz.textContent = '';
+      // Teşhis metni 400 karakterde kesilince <Sonuc> içeriği hiç görünmüyordu;
+      // sunucu artık ham yanıtı <Sonuc>'tan itibaren kırpıyor, burada da daha
+      // geniş bir pencere gösterilir.
       kap.innerHTML = '<div class="yukleniyor">Bu kritere uygun etiket bulunamadı.' +
-        (j.ham ? '<br><small style="word-break:break-all">' + eHtml(String(j.ham).slice(0, 400)) + '</small>' : '') + '</div>';
+        (j.ham ? '<br><small style="word-break:break-all">' + eHtml(String(j.ham).slice(0, 1200)) + '</small>' : '') + '</div>';
       $('etSonucBar').classList.add('gizli');
     } else {
+      // Kılavuz 0.1.14'teki BildirimEtiketDTO miktar/birim İÇERMEZ (üretim yeri,
+      // üretici ünvanı, cins içerir). Canlı servis miktar döndürürse gösterilir;
+      // döndürmezse o sütun tamamen gizlenir — her satırda "0 Kg" yazmasın.
+      const miktarVar = etiketSonuc.some(s => Number(s.miktar || 0) > 0);
+      const cinsVar   = etiketSonuc.some(s => (s.cins || '').trim() !== '');
+      const yerVar    = etiketSonuc.some(s => (s.uretimYeri || '').trim() !== '');
       const topKg = etiketSonuc.reduce((t, s) => t + Number(s.miktar || 0), 0);
-      oz.innerHTML = `<b>${etiketSonuc.length}</b> etiket · Toplam <b>${fmt(topKg)} KG</b>`;
+      oz.innerHTML = `<b>${etiketSonuc.length}</b> etiket` +
+        (miktarVar ? ` · Toplam <b>${fmt(topKg)} KG</b>` : '');
       let h = '<div class="tk-tablo-sarma"><table class="tk-tablo"><thead><tr>' +
-        '<th>Künye No</th><th>Malın Adı</th><th class="sag">Miktar</th><th>Malın Sahibi</th><th>Tarih</th></tr></thead><tbody>';
+        '<th>Künye No</th><th>Malın Adı</th>' +
+        (cinsVar ? '<th>Cins</th>' : '') +
+        (miktarVar ? '<th class="sag">Miktar</th>' : '') +
+        '<th>Üretici / Sahibi</th>' +
+        (yerVar ? '<th>Üretim Yeri</th>' : '') +
+        '<th>Tarih</th></tr></thead><tbody>';
       etiketSonuc.forEach(s => {
         h += '<tr>' +
           `<td><b>${eHtml(s.kunyeNo)}</b></td>` +
           `<td>${eHtml(s.urun)}</td>` +
-          `<td class="sag">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` +
-          `<td>${eHtml(s.sahibi || s.bildirimci || '—')}</td>` +
-          `<td>${eHtml(s.tarih)}</td>` +
+          (cinsVar ? `<td>${eHtml(s.cins || '—')}</td>` : '') +
+          (miktarVar ? `<td class="sag">${fmt(s.miktar)} ${eHtml(s.birim)}</td>` : '') +
+          `<td>${eHtml(s.uretici || s.sahibi || s.bildirimci || '—')}</td>` +
+          (yerVar ? `<td>${eHtml(s.uretimYeri || '—')}</td>` : '') +
+          `<td>${eHtml(s.tarih || s.uretimTarihi || '—')}</td>` +
           '</tr>';
       });
       h += '</tbody></table></div>';
