@@ -825,34 +825,64 @@ function hks_etiketler($cfg, $tarih, $plaka = '', $belgeNo = '', &$ham = null) {
   $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimEtiket',
     hks_taban_istek('BaseRequestMessageOf_BildirimEtiketIstek', implode('', $p), $cfg));
   $duz  = hks_sadelestir($xml);
-  $ham  = preg_replace('/\s+/', ' ', substr($duz, 0, 1600));
+  // TEŞHİS KIRPMASI — ham yanıtın işe yarayan kısmı <Sonuc> içeriğidir. Zarf +
+  // namespace bildirimleri tek başına ~400 karakter tuttuğu için, baştan kırpınca
+  // asıl veri (Kunyeler) ekrana hiç ulaşmıyordu.
+  $sonucPos  = strpos($duz, '<Sonuc');
+  $hamKaynak = $sonucPos !== false ? substr($duz, $sonucPos) : $duz;
+  $ham  = preg_replace('/\s+/', ' ', substr($hamKaynak, 0, 1600));
   $hata = hks_islem_kontrol($duz);
   if ($hata) throw new Exception('BildirimEtiket: ' . $hata . ' || HAM: ' . $ham);
 
-  // DTO etiketi belirsiz olabilir → önce BildirimEtiketDTO, yoksa EtiketDTO dene.
-  $bloklar = hks_bloklar($duz, 'BildirimEtiketDTO');
-  if (!count($bloklar)) $bloklar = hks_bloklar($duz, 'EtiketDTO');
+  // DTO etiketi belirsiz olabilir → kılavuzdaki ad önce, bilinen alternatifler sonra.
+  $bloklar = [];
+  foreach (['BildirimEtiketDTO', 'EtiketDTO', 'BildirimEtiketListesiDTO'] as $dtoAd) {
+    $bloklar = hks_bloklar($duz, $dtoAd);
+    if (count($bloklar)) break;
+  }
+  // Hiç DTO çözülemediyse: "veri yok" ile "DTO adı tanınmadı" AYRI şeylerdir.
+  // Kunyeler sarmalayıcısı doluyken DTO bulunamıyorsa ad yanlış demektir — bu
+  // ayrımı ham teşhis metnine yazıyoruz ki bir sonraki denemede kök neden belli olsun.
+  if (!count($bloklar)) {
+    $kunyelerBlok = hks_bloklar($duz, 'Kunyeler');
+    $icerik = trim((string)($kunyelerBlok[0] ?? ''));
+    if ($icerik !== '') {
+      $ham = 'TEŞHİS: Kunyeler dolu ama DTO adı tanınmadı. || ' . $ham;
+    } elseif (count($kunyelerBlok)) {
+      $ham = 'TEŞHİS: Servis boş liste döndü (bu kriterde kayıt yok). || ' . $ham;
+    }
+  }
 
   $rows = [];
   foreach ($bloklar as $b) {
-    $kunye = (string)hks_deger($b, 'MalinKunyeNo');
-    if ($kunye === '') $kunye = (string)hks_deger($b, 'KunyeNo');
-    $miktar = hks_deger($b, 'MalinMiktar');
-    if ($miktar === null) $miktar = hks_deger($b, 'MalinMiktari');
-    $birim = trim((string)hks_deger($b, 'MiktarBirimAd'));
-    if ($birim === '') $birim = trim((string)hks_deger($b, 'MiktarBirimiAd'));
-    $sahibi = hks_deger($b, 'MalinSahibAdi');
-    if ($sahibi === null || $sahibi === '') $sahibi = hks_deger($b, 'MalinSahibiAdi');
+    // Alan adları kılavuz 0.1.14 "BildirimEtiketDTO" tablosundan; canlı servis
+    // kılavuzdan farklı/fazla alan döndürebildiği için bilinen alternatifler de
+    // denenir (ilk DOLU olan kazanır).
+    $ilkDolu = function (array $adlar) use ($b) {
+        foreach ($adlar as $ad) {
+            $v = trim((string)hks_deger($b, $ad));
+            if ($v !== '') return $v;
+        }
+        return '';
+    };
+    $miktar = $ilkDolu(['MalinMiktar', 'MalinMiktari']);
     $rows[] = [
-      'kunyeNo'   => $kunye,
-      'urun'      => trim((string)hks_deger($b, 'MalinAdi')),
-      'miktar'    => (float)$miktar,
-      'birim'     => $birim !== '' ? $birim : 'Kg',
-      'sahibi'    => trim((string)$sahibi),
-      'bildirimci'=> trim((string)hks_deger($b, 'Bildirimci')),
-      'plaka'     => trim((string)hks_deger($b, 'AracPlakaNo')),
-      'belgeNo'   => trim((string)hks_deger($b, 'BelgeNo')),
-      'tarih'     => substr((string)hks_deger($b, 'KayitTarihi'), 0, 10),
+      'kunyeNo'    => $ilkDolu(['MalinKunyeNo', 'KunyeNo']),
+      'urun'       => $ilkDolu(['MalinAdi']),
+      'cins'       => $ilkDolu(['MalinCinsAdi', 'MalinCinsi']),
+      // Kılavuzdaki BildirimEtiketDTO'da miktar/birim YOKTUR; canlı servis
+      // döndürürse gösterilir, döndürmezse 0 kalır ve arayüz sütunu gizler.
+      'miktar'     => (float)$miktar,
+      'birim'      => $ilkDolu(['MiktarBirimAd', 'MiktarBirimiAd']) ?: 'Kg',
+      'sahibi'     => $ilkDolu(['MalinSahibAdi', 'MalinSahibiAdi']),
+      'uretici'    => $ilkDolu(['UreticisininAdUnvani']),
+      'uretimYeri' => $ilkDolu(['UretimYeri']),
+      'uretimSekli'=> $ilkDolu(['UretimSekliAdi']),
+      'bildirimci' => $ilkDolu(['Bildirimci']),
+      'plaka'      => $ilkDolu(['AracPlakaNo']),
+      'belgeNo'    => $ilkDolu(['BelgeNo']),
+      'tarih'      => substr($ilkDolu(['KayitTarihi']), 0, 10),
+      'uretimTarihi' => substr($ilkDolu(['UretimTarihi']), 0, 10),
     ];
   }
   return $rows;
