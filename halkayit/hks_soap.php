@@ -795,13 +795,31 @@ function hks_etiketler($cfg, $tarih, $plaka = '', $belgeNo = '', &$ham = null) {
   $td = DateTime::createFromFormat('Y-m-d', substr($tarih, 0, 10)) ?: null;
   $tarihXml = $td ? $td->format('Y-m-d\T00:00:00') : $tarih;
 
+  // Malın sahibi = sorgulayan firmanın kendisi. Boşsa servis zaten reddeder;
+  // anlamsız SOAP hatası yerine burada anlaşılır mesaj verilir.
+  $malinSahibi = trim((string)($cfg['vergiNo'] ?? ''));
+  if ($malinSahibi === '') {
+    throw new Exception('Firma vergi/TC numarası tanımlı değil — firma kartını kontrol edin.');
+  }
+
   $p = ['<Istek xmlns:a="' . HKS_NS_SC . '">'];
-  // Alfabetik: AracPlakaNo, BelgeNo, BildirimTarihi, MalinSahibiTcKimlikVergiNo.
+  // Alfabetik: AracPlakaNo, BelgeNo, BildirimTarihi, MalinSahibi, MalinSahibiTcKimlikNo.
   // String alanlar boş da olsa gönderilir (TopluKunye'deki null-ref dersinden).
   $p[] = '<a:AracPlakaNo>' . hks_esc(strtoupper($plaka)) . '</a:AracPlakaNo>';
   $p[] = '<a:BelgeNo>' . hks_esc($belgeNo) . '</a:BelgeNo>';
   $p[] = '<a:BildirimTarihi>' . $tarihXml . '</a:BildirimTarihi>';
-  $p[] = '<a:MalinSahibiTcKimlikVergiNo>' . hks_esc($cfg['vergiNo']) . '</a:MalinSahibiTcKimlikVergiNo>';
+  // MALIN SAHİBİ ALAN ADI — kılavuz ile canlı servis ÇELİŞİYOR:
+  //   • Kılavuz 0.1.14 (Bildirim Etiket Listesi Servisi): "MalinSahibiTcKimlikNo"
+  //   • Canlı servis hatası: 'Bilgi alanı boş olamaz. Alan adı :
+  //     "BildirimEtiketIstek.MalinSahibi"'
+  // Önceki sürüm üçüncü bir ad ("MalinSahibiTcKimlikVergiNo") gönderiyordu ve
+  // servis onu SESSİZCE YOKSAYIP alanı boş sayıyordu — bu da bize şunu kanıtlar:
+  // tanınmayan eleman hata ÜRETMEZ, yalnız yoksayılır. Bu yüzden her iki aday ad
+  // birlikte gönderilir; servis hangisini tanıyorsa onu kullanır.
+  // WSDL/XSD'ye erişilip doğru ad KESİNLEŞTİĞİNDE fazlalık kaldırılmalıdır
+  // (BildirimService.svc?xsd=xsd1 çıktısındaki BildirimEtiketIstek tipine bakın).
+  $p[] = '<a:MalinSahibi>' . hks_esc($malinSahibi) . '</a:MalinSahibi>';
+  $p[] = '<a:MalinSahibiTcKimlikNo>' . hks_esc($malinSahibi) . '</a:MalinSahibiTcKimlikNo>';
   $p[] = '</Istek>';
 
   $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimEtiket',
