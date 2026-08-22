@@ -212,18 +212,12 @@
   }
   .cip:active { background:var(--teal); color:#fff; }
   .cip-bos { font-size:12px; color:var(--soluk); padding:4px 0; }
-  /* Aranabilir açılır liste: select'in ÜSTÜNDEKİ süzme kutusu.
-     Mobilde 16px altı yazı tipi iOS'ta otomatik yakınlaştırmayı tetiklediği için
-     boyut küçültülmez (bkz. genel input kuralı). */
-  .sec-ara {
-    margin-bottom:4px; padding:8px 10px; border:1.5px dashed var(--cip-kenar);
-    border-radius:8px; background:#fff; color:var(--navy); width:100%;
-  }
-  .sec-ara::placeholder { color:var(--soluk); font-weight:400; }
-  .sec-ara-bos { border-color:var(--hata-tx); }
-  /* Süzülen seçenekler gizlenir. hidden özniteliği çoğu tarayıcıda yeterlidir;
-     bu kural eski/kısmi destekli tarayıcılarda güvence sağlar. */
-  select option[hidden] { display:none; }
+  /* Aranabilir alan: TEK kutu + datalist (tarayıcının kendi öneri listesi).
+     Ana paneldeki "Tedarikçi" alanıyla aynı desen. Asıl <select> gizlenir ama
+     DOM'da KALIR — değeri (id) hâlâ o taşır, mevcut tüm kod onu okur/yazar. */
+  .ara-sec { width:100%; }
+  .ara-sec-bos { border-color:var(--hata-tx); background:#fff6f6; }
+  .ara-sec-gizli { display:none !important; }
 
   /* Künye listesi */
   .kunye {
@@ -920,7 +914,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-22 · 9';
+const PANEL_SURUM = '2026-08-22 · 10';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1739,7 +1733,7 @@ function doldurSel(id, dizi, ilk) {
   });
   // Liste yeniden dolduruldu → aranabilir select'in kaynak yedeği tazelenmeli,
   // yoksa süzme eski listeye göre yapılır (örn. ürün değişince cinsler yenilenir).
-  selectKaynakTazele(sel);
+  selectDatalistTazele(sel);
 }
 
 // ===== ARANABİLİR AÇILIR LİSTE ==============================================
@@ -1752,62 +1746,94 @@ const aramaNorm = (s) => trNorm(s)
   .replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u')
   .replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/ı/g, 'i');
 
-// Süzme, option'ları YENİDEN OLUŞTURMAZ — yalnızca GİZLER. Bu önemli: listeler
-// başka kodlarca sürekli yeniden dolduruluyor (doldurSel, innerHTML atamaları,
-// taslak geri yükleme). DOM'u süzme sırasında yeniden yazsaydık bu iki akış
-// birbirini ezerdi (ör. formuTemizle cinsi boşaltırken süzme eski listeyi geri
-// getirirdi). Gizleme yaklaşımında gerçek option seti her zaman güncel kalır.
-function selectFiltrele(sel, q) {
-  if (!sel) return;
-  const n = aramaNorm(q).trim();
-  let gorunen = 0;
-  Array.from(sel.options).forEach(o => {
-    // Boş değerli seçenek ("— Seçiniz —") hiçbir zaman gizlenmez.
-    const gizle = n !== '' && o.value !== '' && !aramaNorm(o.textContent).includes(n);
-    o.hidden = gizle;
-    if (!gizle && o.value !== '') gorunen++;
-  });
-  // Seçili seçenek süzme dışında kaldıysa seçim bırakılır (gizli bir değer
-  // formda görünmeden gönderilmesin).
-  const secili = sel.options[sel.selectedIndex];
-  if (secili && secili.hidden) sel.value = '';
-  const kutu = sel._araKutu;
-  if (kutu) {
-    const sonucYok = n !== '' && gorunen === 0;
-    kutu.classList.toggle('sec-ara-bos', sonucYok);
-    kutu.title = sonucYok ? 'Eşleşen kayıt yok' : '';
+// Yazılan metni option'larla eşleştirip ASIL select'in değerini (id) ayarlar.
+// Yalnız TAM eşleşmede değer atanır: kullanıcı "şef" yazarken henüz bir seçim
+// yapmamıştır; "ŞEFTALİ" tamamlandığında (listeden seçince veya elle yazınca)
+// değer oluşur. Değer değiştiğinde 'change' yayılır ki bağımlı listeler
+// (ör. ürün→cins, il→ilçe) eskisi gibi yüklensin.
+function selectMetindenSec(sel, metin) {
+  const n = aramaNorm(metin).trim();
+  let bulunan = '';
+  if (n !== '') {
+    for (const o of sel.options) {
+      if (o.value === '') continue;
+      if (aramaNorm(o.textContent).trim() === n) { bulunan = o.value; break; }
+    }
+  }
+  const inp = sel._araInput;
+  if (inp) {
+    // Yazı var ama hiçbir kayda denk gelmiyorsa alan uyarı rengine döner.
+    inp.classList.toggle('ara-sec-bos', n !== '' && bulunan === '');
+    inp.title = (n !== '' && bulunan === '') ? 'Listede böyle bir kayıt yok' : '';
+  }
+  if (sel.value !== bulunan) {
+    sel.value = bulunan;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
   }
 }
 
-// Liste yeniden dolduruldu → kutuda yazı varsa süzmeyi yeni option'lara uygula.
-function selectKaynakTazele(sel) {
+// Öneri listesini (datalist) select'in GÜNCEL option'larından yeniden kurar ve
+// görünen metni select'in değeriyle eşitler. doldurSel her yenilemede çağırır;
+// böylece bağımlı listeler değişince öneriler de tazelenir.
+function selectDatalistTazele(sel) {
   if (!sel || sel.dataset.aramali !== '1') return;
-  const kutu = sel._araKutu;
-  if (kutu && kutu.value) selectFiltrele(sel, kutu.value);
+  const dl = sel._araDl, inp = sel._araInput;
+  if (!dl || !inp) return;
+  dl.innerHTML = '';
+  Array.from(sel.options).forEach(o => {
+    if (o.value === '') return;               // "— Seçiniz —" öneri değildir
+    const opt = document.createElement('option');
+    opt.value = o.textContent;
+    dl.appendChild(opt);
+  });
+  const secili = sel.options[sel.selectedIndex];
+  const yeniMetin = (secili && secili.value !== '') ? secili.textContent : '';
+  if (inp.value !== yeniMetin) {
+    inp.value = yeniMetin;
+    inp.classList.remove('ara-sec-bos');
+  }
 }
 
+// Select'i "yazarak aranan tek kutu"ya çevirir.
+// ASIL select DOM'da kalır (yalnız görsel olarak gizlenir): değeri o taşır,
+// dolayısıyla mevcut okuma/yazma kodu ve taslak geri yükleme aynen çalışır.
 function aramaliSelectYap(selectId, yerTutucu) {
   const sel = $(selectId);
   if (!sel || sel.dataset.aramali === '1') return;
   sel.dataset.aramali = '1';
-  const kutu = document.createElement('input');
-  kutu.type = 'text';
-  kutu.className = 'sec-ara';
-  kutu.placeholder = yerTutucu || '🔍 yazarak ara…';
-  kutu.autocomplete = 'off';
-  kutu.setAttribute('aria-label', (yerTutucu || 'listede ara'));
-  sel.parentNode.insertBefore(kutu, sel);
-  sel._araKutu = kutu;
-  kutu.oninput = () => selectFiltrele(sel, kutu.value);
-  selectKaynakTazele(sel);
+
+  const dl  = document.createElement('datalist');
+  dl.id = selectId + 'Liste';
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.className = 'ara-sec';
+  inp.id = selectId + 'Ara';
+  inp.setAttribute('list', dl.id);
+  inp.autocomplete = 'off';
+  inp.placeholder = yerTutucu || 'yazın veya listeden seçin';
+
+  sel.parentNode.insertBefore(inp, sel);
+  sel.parentNode.insertBefore(dl, sel);
+  sel.classList.add('ara-sec-gizli');
+
+  sel._araInput = inp;
+  sel._araDl    = dl;
+  inp.oninput  = () => selectMetindenSec(sel, inp.value);
+  inp.onchange = () => selectMetindenSec(sel, inp.value);
+  selectDatalistTazele(sel);
 }
 
-// Süzme kutularını temizle (form sıfırlanınca liste tam hâline dönsün).
+// Değer PROGRAMATİK atandıysa (taslak geri yükleme) görünen metni eşitler.
+// select.value = ... ataması olay üretmediği için otomatik senkron olmaz.
+function aramaliSelectleriSenkronla() {
+  document.querySelectorAll('select[data-aramali="1"]').forEach(selectDatalistTazele);
+}
+
+// Form sıfırlanınca arama alanlarını da temizle.
 function aramaKutulariniTemizle() {
   document.querySelectorAll('select[data-aramali="1"]').forEach(sel => {
-    const kutu = sel._araKutu;
-    if (kutu && kutu.value !== '') { kutu.value = ''; kutu.classList.remove('sec-ara-bos'); }
-    selectFiltrele(sel, '');
+    const inp = sel._araInput;
+    if (inp) { inp.value = ''; inp.classList.remove('ara-sec-bos'); inp.title = ''; }
   });
 }
 
@@ -2029,11 +2055,11 @@ async function malListeleriHazirlaIc() {
   if (!aktifFirma) { malHazirIslem = null; return; }
   // Uzun listeler (ürün, cins, il/ilçe/belde) yazarak süzülebilsin.
   // Bir kez kurulur; doldurSel her yenilemede kaynağı tazeler.
-  aramaliSelectYap('sMalUrun',    '🔍 ürün ara (örn. şef…)');
-  aramaliSelectYap('sMalCins',    '🔍 cins ara');
-  aramaliSelectYap('sUretimIl',   '🔍 il ara');
-  aramaliSelectYap('sUretimIlce', '🔍 ilçe ara');
-  aramaliSelectYap('sUretimBelde','🔍 belde ara');
+  aramaliSelectYap('sMalUrun',    'Ürün yazın (örn. şef…) veya listeden seçin');
+  aramaliSelectYap('sMalCins',    'Cins yazın veya listeden seçin');
+  aramaliSelectYap('sUretimIl',   'İl yazın veya listeden seçin');
+  aramaliSelectYap('sUretimIlce', 'İlçe yazın veya listeden seçin');
+  aramaliSelectYap('sUretimBelde','Belde yazın veya listeden seçin');
   // Ürün + ülke listeleri ana referans önbelleğinden gelir
   if (listeler) {
     if (!$('sMalUrun').options.length || $('sMalUrun').options.length < 2) {
@@ -3001,6 +3027,9 @@ async function taslakDuzenle(t) {
     const ms = (t.satirlar || [])[0];
     if (ms && ms.miktar) $('oMalMiktar').value = String(ms.miktar).replace('.', ',');
     if (o.fiyat)         $('oMalFiyat').value = String(o.fiyat).replace('.', ',');
+    // Yukarıdaki atamalar programatiktir (olay üretmez) → arama kutularındaki
+    // görünen metinler asıl select değerleriyle elle eşitlenir.
+    aramaliSelectleriSenkronla();
   }
 
   // Ürün + künyeler: güncel sorgu → taslak satırlarını işaretle
