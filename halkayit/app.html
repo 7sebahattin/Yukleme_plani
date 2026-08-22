@@ -212,6 +212,18 @@
   }
   .cip:active { background:var(--teal); color:#fff; }
   .cip-bos { font-size:12px; color:var(--soluk); padding:4px 0; }
+  /* Aranabilir açılır liste: select'in ÜSTÜNDEKİ süzme kutusu.
+     Mobilde 16px altı yazı tipi iOS'ta otomatik yakınlaştırmayı tetiklediği için
+     boyut küçültülmez (bkz. genel input kuralı). */
+  .sec-ara {
+    margin-bottom:4px; padding:8px 10px; border:1.5px dashed var(--cip-kenar);
+    border-radius:8px; background:#fff; color:var(--navy); width:100%;
+  }
+  .sec-ara::placeholder { color:var(--soluk); font-weight:400; }
+  .sec-ara-bos { border-color:var(--hata-tx); }
+  /* Süzülen seçenekler gizlenir. hidden özniteliği çoğu tarayıcıda yeterlidir;
+     bu kural eski/kısmi destekli tarayıcılarda güvence sağlar. */
+  select option[hidden] { display:none; }
 
   /* Künye listesi */
   .kunye {
@@ -511,7 +523,7 @@
              Tıklanınca TC dolar ve HKS'e CANLI sorgu gider (saklı bilgi yalnız
              formu hızlı doldurmak içindir, kayıt durumuna karar vermez). -->
         <label>Son Kullanılanlar</label>
-        <div class="cipler" id="ikCipler"><span class="cip-bos">Henüz kayıt yok</span></div>
+        <select id="ikSonSecim"><option value="">— kayıtlı kişilerden seç —</option></select>
         <div class="satir2">
           <div>
             <label>TC / Vergi No</label>
@@ -908,7 +920,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-20 · 7';
+const PANEL_SURUM = '2026-08-20 · 8';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1607,6 +1619,10 @@ function formuTemizle() {
   $('sMiktarBirim').value = '';
   $('chkAnaliz').checked = false;
   $('gelenUlkeBlok').classList.add('gizli');
+  // Süzme kutuları da sıfırlanmalı; aksi hâlde yeni formda liste eski aramaya
+  // göre kırpılmış görünür (kullanıcı "liste eksik" sanar).
+  aramaKutulariniTemizle();
+  $('ikSonSecim').value = '';
   ['malMesaj', 'malCinsMesaj', 'uretimYerMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('sIkSifat').value = '';
   $('sIsletmeTuru').value = '';
@@ -1710,6 +1726,7 @@ function listeleriDoldur() {
 
 // ===== YURT İÇİ MODU (Sevk Etme + yurt içi Satış) =====
 let ikDogrulandi = null;  // { tcVkn, kayitliMi, sifatlar } — doğrulanan karşı taraf
+let karsiTarafListesi = [];  // "Son Kullanılanlar" açılır listesinin kaynağı
 let illerYuklendi = false;
 
 function doldurSel(id, dizi, ilk) {
@@ -1719,6 +1736,78 @@ function doldurSel(id, dizi, ilk) {
     const o = document.createElement('option');
     o.value = x.id; o.textContent = x.ad;
     sel.appendChild(o);
+  });
+  // Liste yeniden dolduruldu → aranabilir select'in kaynak yedeği tazelenmeli,
+  // yoksa süzme eski listeye göre yapılır (örn. ürün değişince cinsler yenilenir).
+  selectKaynakTazele(sel);
+}
+
+// ===== ARANABİLİR AÇILIR LİSTE ==============================================
+// select ELEMENTİ KORUNUR (value = id), yalnızca üstüne bir süzme kutusu eklenir.
+// Böylece mevcut tüm kod ($('sMalUrun').value okuma/yazma, taslak geri yükleme)
+// olduğu gibi çalışmaya devam eder; native açılır liste davranışı da bozulmaz.
+//
+// Arama Türkçe'ye duyarsızdır: "ş" da "s" de ŞEFTALİ'yi bulur.
+const aramaNorm = (s) => trNorm(s)
+  .replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u')
+  .replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/ı/g, 'i');
+
+// Süzme, option'ları YENİDEN OLUŞTURMAZ — yalnızca GİZLER. Bu önemli: listeler
+// başka kodlarca sürekli yeniden dolduruluyor (doldurSel, innerHTML atamaları,
+// taslak geri yükleme). DOM'u süzme sırasında yeniden yazsaydık bu iki akış
+// birbirini ezerdi (ör. formuTemizle cinsi boşaltırken süzme eski listeyi geri
+// getirirdi). Gizleme yaklaşımında gerçek option seti her zaman güncel kalır.
+function selectFiltrele(sel, q) {
+  if (!sel) return;
+  const n = aramaNorm(q).trim();
+  let gorunen = 0;
+  Array.from(sel.options).forEach(o => {
+    // Boş değerli seçenek ("— Seçiniz —") hiçbir zaman gizlenmez.
+    const gizle = n !== '' && o.value !== '' && !aramaNorm(o.textContent).includes(n);
+    o.hidden = gizle;
+    if (!gizle && o.value !== '') gorunen++;
+  });
+  // Seçili seçenek süzme dışında kaldıysa seçim bırakılır (gizli bir değer
+  // formda görünmeden gönderilmesin).
+  const secili = sel.options[sel.selectedIndex];
+  if (secili && secili.hidden) sel.value = '';
+  const kutu = sel._araKutu;
+  if (kutu) {
+    const sonucYok = n !== '' && gorunen === 0;
+    kutu.classList.toggle('sec-ara-bos', sonucYok);
+    kutu.title = sonucYok ? 'Eşleşen kayıt yok' : '';
+  }
+}
+
+// Liste yeniden dolduruldu → kutuda yazı varsa süzmeyi yeni option'lara uygula.
+function selectKaynakTazele(sel) {
+  if (!sel || sel.dataset.aramali !== '1') return;
+  const kutu = sel._araKutu;
+  if (kutu && kutu.value) selectFiltrele(sel, kutu.value);
+}
+
+function aramaliSelectYap(selectId, yerTutucu) {
+  const sel = $(selectId);
+  if (!sel || sel.dataset.aramali === '1') return;
+  sel.dataset.aramali = '1';
+  const kutu = document.createElement('input');
+  kutu.type = 'text';
+  kutu.className = 'sec-ara';
+  kutu.placeholder = yerTutucu || '🔍 yazarak ara…';
+  kutu.autocomplete = 'off';
+  kutu.setAttribute('aria-label', (yerTutucu || 'listede ara'));
+  sel.parentNode.insertBefore(kutu, sel);
+  sel._araKutu = kutu;
+  kutu.oninput = () => selectFiltrele(sel, kutu.value);
+  selectKaynakTazele(sel);
+}
+
+// Süzme kutularını temizle (form sıfırlanınca liste tam hâline dönsün).
+function aramaKutulariniTemizle() {
+  document.querySelectorAll('select[data-aramali="1"]').forEach(sel => {
+    const kutu = sel._araKutu;
+    if (kutu && kutu.value !== '') { kutu.value = ''; kutu.classList.remove('sec-ara-bos'); }
+    selectFiltrele(sel, '');
   });
 }
 
@@ -1842,7 +1931,7 @@ function turDegisti() {
   $('karsiBaslik').textContent = uret
     ? 'Karşı Taraf (Üretici / Müstahsil) — GTB\'de KAYITSIZ olmalı'
     : (satin
-      ? 'Karşı Taraf (Satıcı) — kayıtlı veya kayıtsız olabilir'
+      ? 'Karşı Taraf (Satıcı)'
       : (sevk ? 'Karşı Taraf (Alıcı) — GTB\'de kayıtlı olmalı' : 'Karşı Taraf (Alıcı)'));
   // Üreticiden Sevk Alım: ikinci kişi sıfatı "Üretici" olmak ZORUNDA (docx) → kilitli.
   if (uret) ikSifatUreticiSabitle(); else $('sIkSifat').disabled = false;
@@ -1938,6 +2027,13 @@ function malListeleriHazirla() {
 
 async function malListeleriHazirlaIc() {
   if (!aktifFirma) { malHazirIslem = null; return; }
+  // Uzun listeler (ürün, cins, il/ilçe/belde) yazarak süzülebilsin.
+  // Bir kez kurulur; doldurSel her yenilemede kaynağı tazeler.
+  aramaliSelectYap('sMalUrun',    '🔍 ürün ara (örn. şef…)');
+  aramaliSelectYap('sMalCins',    '🔍 cins ara');
+  aramaliSelectYap('sUretimIl',   '🔍 il ara');
+  aramaliSelectYap('sUretimIlce', '🔍 ilçe ara');
+  aramaliSelectYap('sUretimBelde','🔍 belde ara');
   // Ürün + ülke listeleri ana referans önbelleğinden gelir
   if (listeler) {
     if (!$('sMalUrun').options.length || $('sMalUrun').options.length < 2) {
@@ -2182,6 +2278,15 @@ $('oIkCep').onblur = () => { $('oIkCep').value = cepRakam($('oIkCep').value); };
 $('sTur').onchange = turDegisti;
 $('chkYurtDisi').onchange = turDegisti;
 
+// "Son Kullanılanlar" açılır listesinden seçim → TC doldur + CANLI doğrula.
+$('ikSonSecim').onchange = async () => {
+  const sec = $('ikSonSecim');
+  const k = karsiTarafListesi[Number(sec.value)];
+  if (!k) return;
+  await karsiTarafSec(k);
+  sec.value = '';   // liste "seç" konumuna dönsün; asıl değer TC alanındadır
+};
+
 // İşletme türü seçilince işyerlerini getir. Kimin işyeri?
 //  • Satış / Sevk Etme → KARŞI TARAFIN TC'siyle (mal ona gidiyor).
 //  • Satın Alım / Üreticiden Sevk Alım → KENDİ firmanın vergi no'suyla
@@ -2274,15 +2379,23 @@ async function sonlariYukle() {
     const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
     cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => { $('sUlke').value = u.id; }, 'Henüz ülke geçmişi yok');
     cipCiz('urunCipler', j.urunler || [], u => u.ad, u => { $('sUrun').value = u.id; }, 'Henüz ürün geçmişi yok');
-    // Karşı taraf çipleri — etiket: "AD · son 4 hane". TC'nin TAMAMI ekranda
-    // gösterilmez (gereksiz kişisel veri teşhiri); ayırt etmeye son 4 hane yeter.
-    cipCiz('ikCipler', j.karsiTaraflar || [],
-      k => (k.ad ? k.ad + ' · ' : '') + '…' + String(k.tc || '').slice(-4),
-      k => karsiTarafSec(k), 'Henüz kayıt yok');
+    // Karşı taraf: ÇİP yerine AÇILIR LİSTE — uzun ad + TC tek satıra sığmıyor,
+    // çipler taşıyordu. Listede metin tam görünür.
+    karsiTarafListesi = j.karsiTaraflar || [];
+    const ss = $('ikSonSecim');
+    ss.innerHTML = '<option value="">' +
+      (karsiTarafListesi.length ? '— kayıtlı kişilerden seç —' : '— henüz kayıt yok —') + '</option>';
+    karsiTarafListesi.forEach((k, i) => {
+      const o = document.createElement('option');
+      o.value = String(i);      // index: TC'yi option değerinde taşımaya gerek yok
+      o.textContent = (k.ad ? k.ad + ' — ' : '') + String(k.tc || '');
+      ss.appendChild(o);
+    });
+    ss.disabled = karsiTarafListesi.length === 0;
   } catch (e) { /* önemsiz */ }
 }
 
-// Çipten karşı taraf seçimi. SAKLI BİLGİYE GÜVENİLMEZ: TC doldurulup HKS'e
+// Açılır listeden karşı taraf seçimi. SAKLI BİLGİYE GÜVENİLMEZ: TC doldurulup HKS'e
 // CANLI sorgu gider (kişinin kayıt durumu zaman içinde değişmiş olabilir).
 // Ad/cep/doğum yalnızca sorgu KAYITSIZ döndüğünde ve alan boşsa doldurulur —
 // kayıtlı kişide bu alanlar zaten gizlidir, HKS kendi kaydından doldurur.
