@@ -920,7 +920,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-20 · 8';
+const PANEL_SURUM = '2026-08-22 · 9';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -2251,6 +2251,12 @@ let ikOtoSorguZaman = null;
 $('oIkTc').oninput = () => {
   // TC değişince doğrulama + hedef seçimleri sıfırlanır (eski TC'ye ait hedef gitmesin).
   ikDogrulandi = null;
+  // KİMLİK BİLGİLERİ DE SIFIRLANIR: TC değiştiyse artık BAŞKA bir kişidir.
+  // Aksi hâlde önceki kişinin Ad/Cep/DOĞUM TARİHİ yeni TC ile gönderiliyordu ve
+  // HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" hatası veriyordu
+  // (TC + doğum tarihi KPS'te birlikte doğrulanır).
+  ['oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
+  $('ikSonSecim').value = '';   // liste seçimi de artık geçerli değil
   ikSifatlariDoldur([]);   // sıfat listesi tekrar tam listeye döner
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
@@ -2405,9 +2411,14 @@ async function karsiTarafSec(k) {
   ikDogrulandi = null;
   await $('btnIkDogrula').onclick();
   if (ikDogrulandi && !ikDogrulandi.kayitliMi) {
-    if (k.ad && !$('oIkAd').value.trim())  $('oIkAd').value = k.ad;
-    if (k.cep && !$('oIkCep').value.trim()) $('oIkCep').value = cepRakam(k.cep);
-    if (k.dogum && !$('oIkDogum').value)    $('oIkDogum').value = k.dogum;
+    // KOŞULSUZ yazılır — kişi DEĞİŞTİĞİ için eski değer korunamaz.
+    // (Önceki sürüm yalnız alan boşsa dolduruyordu: listeden ikinci bir kişi
+    //  seçilince TC yenisinin, ad/cep/DOĞUM TARİHİ eski kişininki kalıyordu.
+    //  TC + doğum tarihi MERNİS'te eşleşmediği için bildirim reddediliyordu.)
+    // Seçilen kişide bilgi yoksa alan TEMİZLENİR; eski kişinin verisi kalmasın.
+    $('oIkAd').value    = k.ad ? k.ad : '';
+    $('oIkCep').value   = k.cep ? cepRakam(k.cep) : '';
+    $('oIkDogum').value = k.dogum || '';
   }
   turDegisti();
 }
@@ -3083,7 +3094,15 @@ $('btnOnay').onclick = async () => {
         (tamam
           ? `<span class="rozet rozet-yesil">✓ KAYDEDİLDİ</span> Yeni Künye: <b>${s.yeniKunyeNo}</b> · ${fmt(s.miktar)} KG` +
             (s.rusum ? ` · Rüsum: ${fmt(s.rusum)} TL` : '')
-          : `<span class="rozet rozet-kirmizi">✗ HATA</span> ${s.mesaj || 'Bilinmeyen hata'}`) +
+          : `<span class="rozet rozet-kirmizi">✗ HATA</span> ${s.mesaj || 'Bilinmeyen hata'}` +
+            // MERNİS hatası neredeyse her zaman TC ile doğum tarihinin
+            // uyuşmamasından gelir (KPS ikisini BİRLİKTE doğrular) — kullanıcı
+            // ham mesajdan bunu çıkaramıyor, yönlendirme ekleniyor.
+            (/mernis/i.test(String(s.mesaj || ''))
+              ? '<div class="mesaj hata" style="display:block;margin-top:6px">' +
+                '💡 Bu hata genellikle <b>TC ile doğum tarihinin uyuşmamasından</b> gelir. ' +
+                'Kimlik bilgilerini kişinin nüfus kaydıyla karşılaştırın.</div>'
+              : '')) +
         `</div>`;
     });
     if (!html) html = '<div class="yukleniyor">Cevap boş döndü.</div>';
