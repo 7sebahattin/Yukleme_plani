@@ -382,6 +382,36 @@ ok('boş TC listeyi değiştirmiyor', count(karsiTarafEkleTest($l, ['tc' => ''])
 $lFmt = karsiTarafEkleTest([['tc' => '111 111 111 10', 'ad' => 'Eski']], ['tc' => '11111111110', 'ad' => 'Yeni']);
 ok('TC format farkı (boşluklu) aynı kişi sayılıyor', count($lFmt) === 1 && $lFmt[0]['ad'] === 'Yeni');
 
+echo "\n── Etiket yanıtı: BOŞ liste ile TANINMAYAN DTO ayrımı ──\n";
+// Canlı servis boş listeyi KENDİNİ KAPATAN etiketle döndürür:
+//   <Kunyeler xmlns:b="…"/>
+// hks_bloklar() yalnız <X>…</X> biçimini yakaladığı için bu durum ayrı bir
+// desenle aranmalıdır; aksi hâlde "kayıt yok" ile "DTO adı yanlış" ayrımı
+// hiç çalışmaz (hks_etiketler içindeki teşhis bloğu buna dayanır).
+$bosYanit = hks_sadelestir(
+    '<Sonuc xmlns:a="urn:a" xmlns:i="urn:i"><HataKodu>0</HataKodu>'
+  . '<Kunyeler xmlns:b="urn:b"/><Mesaj i:nil="true"/></Sonuc>');
+ok('boş liste: self-closing <Kunyeler/> yakalanıyor',
+    (bool)preg_match('#<Kunyeler(\s[^>]*)?/>#', $bosYanit));
+ok('boş liste: hks_bloklar 0 döndürür (beklenen)',
+    count(hks_bloklar($bosYanit, 'Kunyeler')) === 0);
+ok('boş listede hiç DTO yok', count(hks_bloklar($bosYanit, 'BildirimEtiketDTO')) === 0);
+
+$doluYanit = hks_sadelestir(
+    '<Sonuc><Kunyeler><a:BildirimEtiketDTO><a:MalinKunyeNo>123</a:MalinKunyeNo>'
+  . '<a:MalinAdi>KİRAZ</a:MalinAdi><a:MalinCinsAdi>DİĞER</a:MalinCinsAdi>'
+  . '<a:UretimYeri>Denizli/Çivril</a:UretimYeri>'
+  . '<a:UreticisininAdUnvani>TEST ÜRETİCİ</a:UreticisininAdUnvani>'
+  . '</a:BildirimEtiketDTO></Kunyeler></Sonuc>');
+ok('dolu liste: self-closing YOK', !preg_match('#<Kunyeler(\s[^>]*)?/>#', $doluYanit));
+$dtoB = hks_bloklar($doluYanit, 'BildirimEtiketDTO');
+ok('dolu liste: DTO bulunuyor', count($dtoB) === 1);
+// Kılavuz 0.1.14 BildirimEtiketDTO alanları doğru okunuyor mu?
+ok('MalinKunyeNo okunuyor',        trim((string)hks_deger($dtoB[0], 'MalinKunyeNo')) === '123');
+ok('MalinCinsAdi okunuyor',        trim((string)hks_deger($dtoB[0], 'MalinCinsAdi')) === 'DİĞER');
+ok('UretimYeri okunuyor',          trim((string)hks_deger($dtoB[0], 'UretimYeri')) === 'Denizli/Çivril');
+ok('UreticisininAdUnvani okunuyor', trim((string)hks_deger($dtoB[0], 'UreticisininAdUnvani')) === 'TEST ÜRETİCİ');
+
 echo "\n── GTB 12.03.2025: endpoint yapılandırması (hks_endpoint, GERÇEK fonksiyon) ──\n";
 // Bu betik config.php'yi YÜKLEMEZ (DB bağlantısı ister), dolayısıyla
 // HKS_YENI_ENDPOINT/HKS_ENDPOINT_* sabitleri tanımsızdır → hks_endpoint()

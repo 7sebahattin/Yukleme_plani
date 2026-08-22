@@ -844,12 +844,19 @@ function hks_etiketler($cfg, $tarih, $plaka = '', $belgeNo = '', &$ham = null) {
   // Kunyeler sarmalayıcısı doluyken DTO bulunamıyorsa ad yanlış demektir — bu
   // ayrımı ham teşhis metnine yazıyoruz ki bir sonraki denemede kök neden belli olsun.
   if (!count($bloklar)) {
+    // DİKKAT: hks_bloklar() yalnız <X>…</X> biçimini yakalar. Servis boş listeyi
+    // KENDİNİ KAPATAN etiketle döndürüyor (<Kunyeler xmlns:b="…"/>), bu yüzden
+    // boşluk durumu ayrıca aranmalıdır — aksi hâlde "kayıt yok" ile "ad tanınmadı"
+    // ayrımı hiç çalışmaz (ilk sürümde bu yüzden hiçbir teşhis basılmıyordu).
+    $bosEtiket    = (bool)preg_match('#<Kunyeler(\s[^>]*)?/>#', $duz);
     $kunyelerBlok = hks_bloklar($duz, 'Kunyeler');
-    $icerik = trim((string)($kunyelerBlok[0] ?? ''));
-    if ($icerik !== '') {
-      $ham = 'TEŞHİS: Kunyeler dolu ama DTO adı tanınmadı. || ' . $ham;
-    } elseif (count($kunyelerBlok)) {
-      $ham = 'TEŞHİS: Servis boş liste döndü (bu kriterde kayıt yok). || ' . $ham;
+    $icerik       = trim((string)($kunyelerBlok[0] ?? ''));
+    if ($bosEtiket || ($kunyelerBlok && $icerik === '')) {
+      $ham = 'TEŞHİS: Servis BOŞ liste döndü — bu plaka/belge + tarih için künye '
+           . 'kaydı yok (bağlantı ve alan adları doğru çalışıyor). || ' . $ham;
+    } elseif ($icerik !== '') {
+      $ham = 'TEŞHİS: Kunyeler DOLU ama DTO adı tanınmadı — ayrıştırma eşlemesi '
+           . 'güncellenmeli. || ' . $ham;
     }
   }
 
