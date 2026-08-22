@@ -915,7 +915,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-22 · 11';
+const PANEL_SURUM = '2026-08-22 · 12';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1614,9 +1614,6 @@ function formuTemizle() {
   $('sMiktarBirim').value = '';
   $('chkAnaliz').checked = false;
   $('gelenUlkeBlok').classList.add('gizli');
-  // Süzme kutuları da sıfırlanmalı; aksi hâlde yeni formda liste eski aramaya
-  // göre kırpılmış görünür (kullanıcı "liste eksik" sanar).
-  aramaKutulariniTemizle();
   $('ikSonSecim').value = '';
   ['malMesaj', 'malCinsMesaj', 'uretimYerMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('sIkSifat').value = '';
@@ -1634,6 +1631,10 @@ function formuTemizle() {
   ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('ikCokluSifatUyari').classList.add('gizli');
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
+  // EN SONDA: yukarıdaki tüm select sıfırlamaları ve listeleriDoldur() bittikten
+  // sonra arama kutuları temizlenir. Daha erken çalışsaydı, sonradan sıfırlanan
+  // alanların kutusunda eski metin kalabilirdi.
+  aramaKutulariniTemizle();
   ozetGuncelle();
 }
 
@@ -1861,6 +1862,18 @@ function aramaliAlanlariKur() {
 // select.value = ... ataması olay üretmediği için otomatik senkron olmaz.
 function aramaliSelectleriSenkronla() {
   document.querySelectorAll('select[data-aramali="1"]').forEach(selectDatalistTazele);
+}
+
+// Bir select'e KOD İÇİNDEN değer atamanın tek doğru yolu.
+// Düz `$('sUrun').value = id` ataması, aramalı alanlarda görünen kutuyu
+// güncellemez (kullanıcı seçimi yapılmamış gibi görünür) — çip tıklamaları
+// bu yüzden çalışmıyordu. Buradan atanınca metin de eşitlenir.
+function selectDegerAta(selId, deger, changeYay) {
+  const sel = $(selId);
+  if (!sel) return;
+  sel.value = String(deger ?? '');
+  selectDatalistTazele(sel);
+  if (changeYay) sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // Form sıfırlanınca arama alanlarını da temizle.
@@ -2447,8 +2460,11 @@ $('btnListeler').onclick = async () => {
 async function sonlariYukle() {
   try {
     const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
-    cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => { $('sUlke').value = u.id; }, 'Henüz ülke geçmişi yok');
-    cipCiz('urunCipler', j.urunler || [], u => u.ad, u => { $('sUrun').value = u.id; }, 'Henüz ürün geçmişi yok');
+    // Çipler artık selectDegerAta ile atıyor: alanlar "yazarak aranabilir" hâle
+    // gelince düz .value ataması görünen kutuyu güncellemiyordu (çip tıklaması
+    // hiçbir şey yapmıyormuş gibi duruyordu).
+    cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => selectDegerAta('sUlke', u.id), 'Henüz ülke geçmişi yok');
+    cipCiz('urunCipler', j.urunler || [], u => u.ad, u => selectDegerAta('sUrun', u.id), 'Henüz ürün geçmişi yok');
     // Karşı taraf: ÇİP yerine AÇILIR LİSTE — uzun ad + TC tek satıra sığmıyor,
     // çipler taşıyordu. Listede metin tam görünür.
     karsiTarafListesi = j.karsiTaraflar || [];
@@ -3065,9 +3081,6 @@ async function taslakDuzenle(t) {
     const ms = (t.satirlar || [])[0];
     if (ms && ms.miktar) $('oMalMiktar').value = String(ms.miktar).replace('.', ',');
     if (o.fiyat)         $('oMalFiyat').value = String(o.fiyat).replace('.', ',');
-    // Yukarıdaki atamalar programatiktir (olay üretmez) → arama kutularındaki
-    // görünen metinler asıl select değerleriyle elle eşitlenir.
-    aramaliSelectleriSenkronla();
   }
 
   // Ürün + künyeler: güncel sorgu → taslak satırlarını işaretle
@@ -3093,6 +3106,10 @@ async function taslakDuzenle(t) {
         bulunamayan.join(', '), 'hata');
     }
   }
+  // Bu fonksiyondaki TÜM select atamaları programatiktir (olay üretmez).
+  // Aramalı alanların görünen metni en sonda, tek seferde eşitlenir — aksi
+  // hâlde taslak yüklenince kutular boş görünür ama değer seçili olurdu.
+  aramaliSelectleriSenkronla();
   toast('✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
 }
 
