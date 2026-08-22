@@ -682,18 +682,19 @@
       <select id="sUretimBelde"><option value="">— önce ilçe —</option></select>
       <div class="mesaj" id="uretimYerMesaj"></div>
 
+      <!-- Etiketler kutuların İÇİNDE (placeholder / ilk seçenek) — ayrı başlık
+           satırı yok, form kısalıyor. Ekran okuyucular için aria-label korunur. -->
       <div class="satir2" style="margin-top:10px">
         <div>
-          <label class="label-vurgu">Miktar *</label>
-          <input id="oMalMiktar" class="input-turuncu" inputmode="decimal" autocomplete="off" placeholder="örn. 1000">
+          <input id="oMalMiktar" class="input-turuncu" inputmode="decimal" autocomplete="off"
+                 placeholder="Miktar *" aria-label="Miktar (zorunlu)">
         </div>
         <div>
-          <label class="label-vurgu">Birim *</label>
-          <select id="sMiktarBirim"><option value="">— Seçiniz —</option></select>
+          <select id="sMiktarBirim" aria-label="Birim (zorunlu)"><option value="">Birim *</option></select>
         </div>
       </div>
-      <label class="label-vurgu">💰 Birim Fiyat *</label>
-      <input id="oMalFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off">
+      <input id="oMalFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off"
+             placeholder="💰 Birim Fiyat *" aria-label="Birim fiyat (zorunlu)" style="margin-top:10px">
       <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin-top:12px">
         <input type="checkbox" id="chkAnaliz" style="width:20px;height:20px;accent-color:var(--teal)">
         Analize Gönder
@@ -914,7 +915,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-22 · 10';
+const PANEL_SURUM = '2026-08-22 · 11';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1646,6 +1647,10 @@ function otomatikBul() {
 }
 
 function listeleriDoldur() {
+  // Uzun listeli alanlar TÜM bildirim türlerinde yazarak aranabilir olur
+  // (yalnız Satın Alım'da değil): ürün/ülke seçimi Satış ve Sevk akışlarında,
+  // il/ilçe/belde kayıtsız alıcı adresinde, işyeri ise hedef seçiminde kullanılır.
+  aramaliAlanlariKur();
   const doldur = (selId, dizi, ilkSecenek) => {
     const sel = $(selId);
     sel.innerHTML = ilkSecenek ? `<option value="">${ilkSecenek}</option>` : '';
@@ -1654,6 +1659,7 @@ function listeleriDoldur() {
       o.value = x.id; o.textContent = x.ad;
       sel.appendChild(o);
     });
+    selectDatalistTazele(sel);   // aramalı ise öneri listesi de tazelensin
   };
   doldur('sUrun', listeler.urunler, '— Ürün Seçiniz —');
   doldur('sUlke', listeler.ulkeler, '— Seçiniz —');
@@ -1753,18 +1759,25 @@ const aramaNorm = (s) => trNorm(s)
 // (ör. ürün→cins, il→ilçe) eskisi gibi yüklensin.
 function selectMetindenSec(sel, metin) {
   const n = aramaNorm(metin).trim();
-  let bulunan = '';
+  let bulunan = '', cakisma = false;
   if (n !== '') {
     for (const o of sel.options) {
       if (o.value === '') continue;
-      if (aramaNorm(o.textContent).trim() === n) { bulunan = o.value; break; }
+      if (aramaNorm(o.textContent).trim() !== n) continue;
+      if (bulunan === '') { bulunan = o.value; continue; }
+      // AYNI ada sahip FARKLI kayıt: hangisinin kastedildiği belirsiz. İlki
+      // seçilir ama kullanıcı sessizce yanlış kayda düşmesin diye uyarılır.
+      // (Örn. üretim şekli seçilmeden cins listelenirse aynı ad tekrar eder.)
+      if (o.value !== bulunan) { cakisma = true; break; }
     }
   }
   const inp = sel._araInput;
   if (inp) {
     // Yazı var ama hiçbir kayda denk gelmiyorsa alan uyarı rengine döner.
-    inp.classList.toggle('ara-sec-bos', n !== '' && bulunan === '');
-    inp.title = (n !== '' && bulunan === '') ? 'Listede böyle bir kayıt yok' : '';
+    const yok = n !== '' && bulunan === '';
+    inp.classList.toggle('ara-sec-bos', yok);
+    inp.title = yok ? 'Listede böyle bir kayıt yok'
+              : (cakisma ? 'Aynı adla birden fazla kayıt var — ilki seçildi, kontrol edin' : '');
   }
   if (sel.value !== bulunan) {
     sel.value = bulunan;
@@ -1821,6 +1834,27 @@ function aramaliSelectYap(selectId, yerTutucu) {
   inp.oninput  = () => selectMetindenSec(sel, inp.value);
   inp.onchange = () => selectMetindenSec(sel, inp.value);
   selectDatalistTazele(sel);
+}
+
+// Yazarak aranabilir olacak alanların TEK listesi. Idempotent: aramaliSelectYap
+// zaten kurulmuş alanı atlar, bu yüzden birden çok yerden çağrılabilir.
+// Kısa listeler (sıfat, tür, birim, belge tipi…) bilerek DIŞARIDA — orada arama
+// kutusu fayda yerine fazladan tıklama getirir.
+function aramaliAlanlariKur() {
+  [
+    ['sUrun',       'Ürün yazın veya listeden seçin'],
+    ['sUlke',       'Ülke yazın veya listeden seçin'],
+    ['sGelenUlke',  'Ülke yazın veya listeden seçin'],
+    ['sIsyeri',     'İşyeri/depo yazın veya listeden seçin'],
+    ['sIl',         'İl yazın veya listeden seçin'],
+    ['sIlce',       'İlçe yazın veya listeden seçin'],
+    ['sBelde',      'Belde yazın veya listeden seçin'],
+    ['sMalUrun',    'Ürün yazın (örn. şef…) veya listeden seçin'],
+    ['sMalCins',    'Cins yazın veya listeden seçin'],
+    ['sUretimIl',   'İl yazın veya listeden seçin'],
+    ['sUretimIlce', 'İlçe yazın veya listeden seçin'],
+    ['sUretimBelde','Belde yazın veya listeden seçin'],
+  ].forEach(([id, ipucu]) => aramaliSelectYap(id, ipucu));
 }
 
 // Değer PROGRAMATİK atandıysa (taslak geri yükleme) görünen metni eşitler.
@@ -2055,11 +2089,7 @@ async function malListeleriHazirlaIc() {
   if (!aktifFirma) { malHazirIslem = null; return; }
   // Uzun listeler (ürün, cins, il/ilçe/belde) yazarak süzülebilsin.
   // Bir kez kurulur; doldurSel her yenilemede kaynağı tazeler.
-  aramaliSelectYap('sMalUrun',    'Ürün yazın (örn. şef…) veya listeden seçin');
-  aramaliSelectYap('sMalCins',    'Cins yazın veya listeden seçin');
-  aramaliSelectYap('sUretimIl',   'İl yazın veya listeden seçin');
-  aramaliSelectYap('sUretimIlce', 'İlçe yazın veya listeden seçin');
-  aramaliSelectYap('sUretimBelde','Belde yazın veya listeden seçin');
+  aramaliAlanlariKur();
   // Ürün + ülke listeleri ana referans önbelleğinden gelir
   if (listeler) {
     if (!$('sMalUrun').options.length || $('sMalUrun').options.length < 2) {
@@ -2116,13 +2146,21 @@ async function malCinsleriYukle() {
   const urunId = $('sMalUrun').value;
   const sel = $('sMalCins');
   sel.innerHTML = '<option value="">— önce ürün ve üretim şekli seçin —</option>';
+  selectDatalistTazele(sel);
   if (!urunId) return;
+  // ÜRETİM ŞEKLİ ZORUNLU: HKS aynı cins adını HER üretim şekli için ayrı kayıt
+  // olarak döndürür (Geleneksel / Organik / İyi Tarım). Üretim şekli seçilmeden
+  // liste doldurulursa aynı ad 3 kez görünür ve hangi kaydın seçildiği belirsiz
+  // kalır (yanlış UretimSekli ile bildirim gidebilir). Bu yüzden önce seçilmeli.
+  const usId = $('sUretimSekli').value;
+  if (!usId) {
+    mesajGoster('malCinsMesaj', 'Önce "Üretim Şekli" seçin — cinsler ona göre listelenir.', 'hata');
+    return;
+  }
   mesajGoster('malCinsMesaj', '⏳ Cinsler getiriliyor...', 'tamam');
   try {
     const j = await api('/api/urun_cinsleri', 'POST', { firmaId: aktifFirma.id, urunId });
-    let liste = j.cinsler || [];
-    const usId = $('sUretimSekli').value;
-    if (usId) liste = liste.filter(c => String(c.uretimSekliId) === String(usId));
+    let liste = (j.cinsler || []).filter(c => String(c.uretimSekliId) === String(usId));
     const ith = ithalatMi();
     liste = liste.filter(c => !!c.ithal === ith);
     doldurSel('sMalCins', liste, '— Seçiniz —');
