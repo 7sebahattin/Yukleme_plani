@@ -25,6 +25,7 @@ $migrations = [
     ['loading_records', 'reported_at',    "ALTER TABLE `loading_records` ADD COLUMN `reported_at` DATETIME NULL"],
     ['loading_records', 'reported_by',    "ALTER TABLE `loading_records` ADD COLUMN `reported_by` INT NULL"],
     ['material_definitions', 'color',     "ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL"],
+    ['material_definitions', 'max_pallet_count', "ALTER TABLE `material_definitions` ADD COLUMN `max_pallet_count` INT NULL"],
     // Hesap modülü — personel kimliği, durum makinesi, depo damgası
     ['account_transactions', 'user_id',      "ALTER TABLE `account_transactions` ADD COLUMN `user_id` INT NULL"],
     ['account_transactions', 'created_by',   "ALTER TABLE `account_transactions` ADD COLUMN `created_by` INT NULL"],

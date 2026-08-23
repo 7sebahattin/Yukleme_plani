@@ -2233,6 +2233,7 @@ body.print-mode .asya-sheet {
     border-top: 1px solid var(--border);
     background: var(--card);
 }
+.bm-acc-selall { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .bm-acc-pallets { max-height: 200px; overflow-y: auto; margin-bottom: 10px; -webkit-overflow-scrolling: touch; }
 .bm-acc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .bm-acc-actions .btn { flex: 1 1 auto; }

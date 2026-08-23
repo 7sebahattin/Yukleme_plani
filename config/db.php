@@ -78,21 +78,30 @@ function db(): PDO {
                 $has_maxpc = (bool)$pdo->query("SHOW COLUMNS FROM `material_definitions` LIKE 'max_pallet_count'")->fetchColumn();
                 if (!$has_maxpc) {
                     $pdo->exec("ALTER TABLE `material_definitions` ADD COLUMN `max_pallet_count` INT NULL");
+                    $has_maxpc = true;
+                }
+                if ($has_maxpc) {
                     // Eskiden "casus" ismi geçen malzemeler kod içinde hardcoded olarak
                     // yalnız kaydın ilk paletine eklenirdi (api_bulk_material.php). Bu davranış
-                    // artık max_pallet_count=1 ile birebir aynı şekilde genel sistemden sağlanır;
-                    // kolon YENİ eklendiği anda mevcut casus tanımlarına bir kereliğine seed edilir
-                    // (her istekte tekrar çalışmaz — sonradan admin "sınırsız" yaparsa bozulmasın diye).
-                    $casus_rows = $pdo->query("SELECT id, name FROM material_definitions")->fetchAll(PDO::FETCH_ASSOC);
-                    $upd_maxpc = $pdo->prepare("UPDATE material_definitions SET max_pallet_count=1 WHERE id=?");
-                    foreach ($casus_rows as $cr) {
-                        $n = mb_strtolower(trim((string)$cr['name']), 'UTF-8');
-                        $n = str_replace("\xCC\x87", '', $n);
-                        $n = strtr($n, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
-                        if (str_contains($n, 'casus')) $upd_maxpc->execute([$cr['id']]);
+                    // artık max_pallet_count=1 ile birebir aynı şekilde genel sistemden sağlanır.
+                    // Kolonda HİÇ değer girilmemişse (hiçbir satırda NOT NULL yoksa) bir kereliğine
+                    // seed edilir — böylece kolon ALTER yetkisizlik yüzünden ilk seferde eklenemeyip
+                    // migrate.php'den elle eklense bile seed kaçırılmaz; sonradan admin bir malzemeyi
+                    // bilinçli "sınırsız" (NULL) yaparsa bir daha dokunulmaz (o zaman en az bir satırda
+                    // değer olacağı için koşul artık tetiklenmez).
+                    $any_maxpc_set = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE max_pallet_count IS NOT NULL")->fetchColumn();
+                    if ($any_maxpc_set === 0) {
+                        $casus_rows = $pdo->query("SELECT id, name FROM material_definitions")->fetchAll(PDO::FETCH_ASSOC);
+                        $upd_maxpc = $pdo->prepare("UPDATE material_definitions SET max_pallet_count=1 WHERE id=?");
+                        foreach ($casus_rows as $cr) {
+                            $n = mb_strtolower(trim((string)$cr['name']), 'UTF-8');
+                            $n = str_replace("\xCC\x87", '', $n);
+                            $n = strtr($n, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
+                            if (str_contains($n, 'casus')) $upd_maxpc->execute([$cr['id']]);
+                        }
                     }
                 }
-            } catch (PDOException $mig_e) { /* material_definitions yoksa — sessizce geç */ }
+            } catch (PDOException $mig_e) { /* material_definitions yoksa veya ALTER yetkisi yok — sessizce geç, definitions.php elle tekrar dener */ }
             // Başlangıç marka tanımlarını seed et (yalnızca henüz hiç marka tanımı yoksa)
             try {
                 $brand_count = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE type='marka'")->fetchColumn();
