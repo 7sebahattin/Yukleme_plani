@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v173` (sw.js — değişiklikte artır)
+**SW Cache:** `yukleme-plani-v174` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -378,7 +378,7 @@ Yeni özellik eklerken:
 - [ ] Yeni DB kolonu/tablosu varsa migrasyon eklendi mi?
 - [ ] Permission kontrolü var mı?
 - [ ] Audit logu var mı?
-- [ ] SW cache versiyonu artırıldı mı? (style.css veya kritik dosya değiştiyse)
+- [ ] SW cache versiyonu artırıldı mı? (style.css veya kritik dosya değiştiyse) — `config/helpers.php`'deki `APP_SURUM` sabitini de AYNI sayıya çek (sidebar altında gösterilir).
 
 ---
 

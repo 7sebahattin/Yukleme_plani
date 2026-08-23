@@ -7,6 +7,14 @@
 
 declare(strict_types=1);
 
+// Uygulama sürüm damgası — sidebar altında gösterilir (Hal Bildirimi paneli
+// PANEL_SURUM'u ile aynı amaç: sunucudaki dosyanın güncel olup olmadığını
+// gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
+// değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
+if (!defined('APP_SURUM')) {
+    define('APP_SURUM', 'v174');
+}
+
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
 if (!function_exists('round_half')) {
     function round_half(float $n): float {
@@ -331,11 +339,7 @@ function render_desktop_sidebar(string $base): void {
              aktif-sayfa değişkenleri de bu yüzden burada bilinçli kullanılmıyor. -->
     </nav>
 
-    <div class="tema-secim" role="group" aria-label="Tema seçimi">
-        <button type="button" data-tema="acik"   onclick="asyaTemaSec('acik')"><span>☀️</span>Açık</button>
-        <button type="button" data-tema="koyu"   onclick="asyaTemaSec('koyu')"><span>🌙</span>Koyu</button>
-        <button type="button" data-tema="sistem" onclick="asyaTemaSec('sistem')"><span>🖥️</span>Sistem</button>
-    </div>
+    <div class="sidebar-surum"><?= h(APP_SURUM) ?></div>
 
     <?php if (function_exists('current_user') && ($__su = current_user()) !== null): ?>
     <div class="sidebar-user">
