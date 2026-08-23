@@ -187,6 +187,7 @@ function definition_types(): array {
         'on_plaka'        => 'Ön Plaka',
         'arka_plaka'      => 'Arka Plaka',
         'ulasim'          => 'Ulaşım',
+        'gidecek_ulke'    => 'Gideceği Ülke',
     ];
 }
 
@@ -198,7 +199,7 @@ function definition_types(): array {
 function non_material_definition_types(): array {
     return [
         'firma', 'tedarikci', 'depo', 'bolge', 'urun', 'marka', 'lokasyon', 'cikis_nedeni',
-        'alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim',
+        'alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim', 'gidecek_ulke',
     ];
 }
 
@@ -1327,6 +1328,7 @@ function record_suggest_fields(): array {
         'on_plaka'        => ['type' => 'on_plaka',        'label' => 'ön plaka',        'max' => 30,  'upper' => true],
         'arka_plaka'      => ['type' => 'arka_plaka',      'label' => 'arka plaka',      'max' => 30,  'upper' => true],
         'ulasim'          => ['type' => 'ulasim',          'label' => 'ulaşım',          'max' => 100, 'upper' => true],
+        'gidecek_ulke'    => ['type' => 'gidecek_ulke',    'label' => 'gideceği ülke',    'max' => 100, 'upper' => true],
         // DİKKAT: loading_records.brand VARCHAR(20) — tanım adı 150'ye kadar
         // olabilir ama kayda 20'den fazlası yazılamaz, o yüzden sınır 20.
         'brand'           => ['type' => 'marka',           'label' => 'marka',           'max' => 20,  'upper' => true],
@@ -1359,7 +1361,7 @@ function loading_record_text_limits(): array {
         'firma' => 150, 'bolge' => 150, 'parti_no' => 80, 'gumruk' => 150,
         'sofor_adi' => 150, 'fatura_no' => 80, 'casus_no' => 80,
         'on_plaka' => 30, 'arka_plaka' => 30, 'nakliye_sirketi' => 150,
-        'telefon' => 40, 'ulasim' => 100, 'alici' => 150, 'urun' => 150,
+        'telefon' => 40, 'ulasim' => 100, 'gidecek_ulke' => 100, 'alici' => 150, 'urun' => 150,
         'etiket' => 255, 'cikis_nedeni' => 100, 'brand' => 20,
     ];
 }

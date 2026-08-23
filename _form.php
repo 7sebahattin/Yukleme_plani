@@ -226,6 +226,10 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                 <input type="text" name="ulasim" value="<?= h($record['ulasim'] ?? '') ?>" data-uppercase="tr"
                        <?= suggest_attrs('ulasim') ?>>
             </label>
+            <label>Gideceği Ülke
+                <input type="text" name="gidecek_ulke" value="<?= h($record['gidecek_ulke'] ?? '') ?>" data-uppercase="tr"
+                       <?= suggest_attrs('gidecek_ulke') ?>>
+            </label>
         </div>
     </div>
 </section>
