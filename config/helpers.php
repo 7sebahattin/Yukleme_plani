@@ -587,6 +587,28 @@ function db_has_column(string $table, string $column): bool {
 }
 endif;
 
+// --- Kendi kendini onaran kolon kontrolü (genel amaçlı) ---
+// config/db.php'deki auto-migration paylaşımlı sunucularda (web DB kullanıcısının
+// ALTER yetkisi yoksa) sessizce başarısız olabilir — bu durumda ilgili alan hiç
+// kaydedilmeden işlem "başarılı" görünürdü. Burada bir kez daha denenir; hâlâ
+// yoksa çağıran taraf kullanıcıyı açıkça uyarabilsin diye false döner.
+// (definitions.php'deki ensure_depot_color_column()/ensure_max_pallet_column()
+// ile aynı desen — birden fazla dosyadan çağrılan kolonlar için burada, tek
+// dosyaya özel olanlar kendi dosyasında kalabilir.)
+if (!function_exists('ensure_column')):
+function ensure_column(string $table, string $column, string $alterSql): bool {
+    if (db_has_column($table, $column)) return true;
+    try {
+        db()->exec($alterSql);
+    } catch (Throwable $e) { /* yetki yoksa aşağıda kullanıcıya bildirilir */ }
+    try {
+        $tbl  = str_replace('`', '', $table);
+        $cols = db()->query("SHOW COLUMNS FROM `$tbl`")->fetchAll(PDO::FETCH_COLUMN);
+        return in_array($column, $cols, true);
+    } catch (Throwable $e) { return false; }
+}
+endif;
+
 // --- Tek seferlik otomatik migrasyon ---
 (function () {
     try {

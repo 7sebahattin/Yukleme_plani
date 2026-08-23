@@ -107,7 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $has_brand        = db_has_column('loading_records', 'brand');
             $has_urun_sahibi  = db_has_column('loading_records', 'urun_sahibi_id');
             $has_ulasim       = db_has_column('loading_records', 'ulasim');
-            $has_gidecek_ulke = db_has_column('loading_records', 'gidecek_ulke');
+            $has_gidecek_ulke = ensure_column('loading_records', 'gidecek_ulke',
+                "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''");
             $st = $pdo->prepare(
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
@@ -203,7 +204,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->commit();
             sync_malzeme_kullanim($rec_id);
             audit_log_event('create', 'records', $rec_id, null, ['firma' => $record['firma'], 'tarih' => $record['tarih'], 'urun' => $record['urun'], 'palet_sayisi' => count($computed)]);
-            set_flash('success', 'Kayıt başarıyla oluşturuldu (#' . $rec_id . ').');
+            set_flash('success', 'Kayıt başarıyla oluşturuldu (#' . $rec_id . ').'
+                . (!$has_gidecek_ulke ? ' ⚠️ "Gideceği Ülke" kaydedilemedi — veritabanında "gidecek_ulke" kolonu eksik ve otomatik eklenemedi. migrate.php sayfasından elle ekleyin.' : ''));
             header('Location: record_view.php?id=' . $rec_id);
             exit;
 
