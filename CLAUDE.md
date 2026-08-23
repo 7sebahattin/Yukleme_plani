@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v166` (sw.js — değişiklikte artır)
+**SW Cache:** `yukleme-plani-v173` (sw.js — değişiklikte artır)
 
 ---
 
@@ -40,7 +40,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
     └── .htaccess          # include-only PHP dosyalarına web erişim kapalı
 ```
 
-**docs/ referans:** `@docs/ARCHITECTURE.md` · `@docs/SECURITY_NOTES.md` · `@docs/NEXT_TASKS.md`
+**docs/ referans:** `@docs/ARCHITECTURE.md` · `@docs/SECURITY_NOTES.md` · `@docs/NEXT_TASKS.md` · `@docs/DEPLOY_WORKFLOW.md`
 
 ---
 
@@ -56,6 +56,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 - **`yuklendi` durumu = kilitli** — yalnızca `records.unlock` açabilir, `revision_reason` zorunlu.
 - **KG ekranda tam sayı ve virgülsüz** — CSV decimal koruyabilir.
 - **Kişisel isim/e-posta örneklerde kullanma.**
+- **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Bu, sunucuya OTOMATİK yansımaz; `scripts/deploy.php` SSH'dan elle çalıştırılmalı (Claude'un SSH erişimi yok, her seferinde kullanıcıya hatırlat).
 
 ---
 
