@@ -86,14 +86,6 @@ function ms_recompute_pallet(PDO $pdo, int $pid): void {
         ->execute([$c['dara_kg'], $c['net_kg'], $pid]);
 }
 
-// ── Casus malzeme tespiti (büyük/küçük harf + Türkçe karakter bağımsız) ──
-function is_casus_material(string $name): bool {
-    $n = mb_strtolower(trim($name), 'UTF-8');
-    $n = str_replace("\xCC\x87", '', $n);   // Türkçe İ sonrası combining dot
-    $n = strtr($n, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
-    return str_contains($n, 'casus');
-}
-
 // ── Toplu giydirme/sarf malzeme silme (seçili veya tümü) ─────────
 if (in_array($body['action'] ?? '', ['delete_selected_materials', 'delete_all_extra_materials'], true)) {
     if ($record_id <= 0) { echo json_encode(['ok' => false, 'error' => 'Geçersiz kayıt']); exit; }
@@ -276,9 +268,11 @@ if ($record_id <= 0 || empty($materials_input) || empty($pallet_ids)) {
 }
 
 // Tüm malzemelerin aktif olduğunu doğrula
-$mat_ids = array_values(array_unique(array_column($materials_input, 'material_id')));
-$place   = implode(',', array_fill(0, count($mat_ids), '?'));
-$st      = db()->prepare("SELECT id, name, unit_dara_kg, type FROM material_definitions WHERE id IN ($place) AND is_active=1");
+$mat_ids   = array_values(array_unique(array_column($materials_input, 'material_id')));
+$place     = implode(',', array_fill(0, count($mat_ids), '?'));
+$has_maxpc = db_has_column('material_definitions', 'max_pallet_count');
+$mat_cols  = 'id, name, unit_dara_kg, type' . ($has_maxpc ? ', max_pallet_count' : '');
+$st        = db()->prepare("SELECT $mat_cols FROM material_definitions WHERE id IN ($place) AND is_active=1");
 $st->execute($mat_ids);
 $mats_db = array_column($st->fetchAll(), null, 'id');
 
@@ -315,15 +309,21 @@ if (empty($valid_ids)) {
 
 $pdo = db();
 
-// Casus kuralı: kayıttaki ilk paleti bul (sira_no, id sırasıyla)
-$st_first = $pdo->prepare("SELECT id FROM loading_pallets WHERE loading_record_id=? ORDER BY sira_no, id LIMIT 1");
-$st_first->execute([$record_id]);
-$first_pallet_id = (int)($st_first->fetchColumn() ?: 0);
+// Malzeme başına maks. palet sayısı sınırı (material_definitions.max_pallet_count).
+// Kayıttaki paletler sira_no/id sırasına göre ilk N tanesi seçilir — böylece "Casus"
+// gibi sınırlı malzemeler, kaç palet seçilirse seçilsin her zaman aynı ilk paletlere
+// eklenir. NULL/0 = sınırsız → seçilen tüm paletlere eklenir.
+$st_ord = $pdo->prepare("SELECT id FROM loading_pallets WHERE loading_record_id=? ORDER BY sira_no, id");
+$st_ord->execute([$record_id]);
+$ordered_record_pallets = array_column($st_ord->fetchAll(), 'id');
+$ordered_valid_pallets  = array_values(array_intersect($ordered_record_pallets, $valid_ids));
 
-// Malzeme adlarını önbelleğe al (Casus tespiti için)
-$mat_names_cache = [];
-foreach ($mats_db as $mid_k => $mdef) {
-    $mat_names_cache[$mid_k] = $mdef['name'] ?? '';
+$mat_allowed = []; // material_id => null (sınırsız) | [pallet_id => true]
+foreach ($materials_input as $m) {
+    $mid = $m['material_id'];
+    if (array_key_exists($mid, $mat_allowed)) continue;
+    $limit = (int)($mats_db[$mid]['max_pallet_count'] ?? 0);
+    $mat_allowed[$mid] = $limit > 0 ? array_flip(array_slice($ordered_valid_pallets, 0, $limit)) : null;
 }
 
 $pdo->beginTransaction();
@@ -333,8 +333,8 @@ try {
         foreach ($materials_input as $m) {
             $mid     = $m['material_id'];
 
-            // Casus sadece kayıttaki ilk palete eklenir
-            if ($first_pallet_id > 0 && is_casus_material($mat_names_cache[$mid] ?? '') && $pid !== $first_pallet_id) {
+            // Palet sayısı sınırlı malzeme (ör. Casus) → yalnız izinli paletlere eklenir
+            if ($mat_allowed[$mid] !== null && !isset($mat_allowed[$mid][$pid])) {
                 continue;
             }
 

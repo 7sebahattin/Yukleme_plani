@@ -78,6 +78,18 @@ foreach ($SECTIONS as $sk => $sv) {
 function def_has_dara(string $type): bool {
     return in_array($type, ['kasa_cinsi', 'palet_tipi'], true);
 }
+// Bir tip "maks. palet sayısı" alanı gösterir mi? — yalnızca palete giydirme
+// malzemesi olarak eklenebilen türler (Yükleme Malzemeleri bölümü).
+function def_has_max_pallet(string $type): bool {
+    return is_pallet_material_type($type);
+}
+// POST'tan gelen maks. palet değerini doğrular: boş/0 → NULL (sınırsız).
+function def_max_pallet_value(array $post): ?int {
+    $v = trim((string)($post['max_pallet_count'] ?? ''));
+    if ($v === '') return null;
+    $n = (int)$v;
+    return $n > 0 ? $n : null;
+}
 // Depo renk seçicisinden gelen değeri doğrular. color_reset=1 gönderilmişse
 // (kullanıcı "Otomatik" butonuna bastıysa) her zaman null — isimden türetilen
 // otomatik palet rengi devreye girer.
@@ -134,14 +146,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $color_col = ($type === 'depo') && ensure_depot_color_column();
             $color_warn = ($type === 'depo' && !$color_col);
-            $color_val = $color_col ? def_color_value($_POST) : null;
-            if ($color_col) {
-                db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active, color) VALUES (?,?,?,1,?)")
-                    ->execute([$type, $name, $unit, $color_val]);
-            } else {
-                db()->prepare("INSERT INTO material_definitions (type, name, unit_dara_kg, is_active) VALUES (?,?,?,1)")
-                    ->execute([$type, $name, $unit]);
-            }
+            $maxpc_col = def_has_max_pallet($type) && db_has_column('material_definitions', 'max_pallet_count');
+
+            $cols = ['type', 'name', 'unit_dara_kg', 'is_active'];
+            $vals = [$type, $name, $unit, 1];
+            if ($color_col) { $cols[] = 'color';             $vals[] = def_color_value($_POST); }
+            if ($maxpc_col) { $cols[] = 'max_pallet_count';  $vals[] = def_max_pallet_value($_POST); }
+            $ph = implode(',', array_fill(0, count($vals), '?'));
+            db()->prepare("INSERT INTO material_definitions (" . implode(',', $cols) . ") VALUES ($ph)")
+                ->execute($vals);
             $new_def_id = (int)db()->lastInsertId();
             audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
             set_flash('success', '"' . $name . '" eklendi.'
@@ -171,14 +184,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $color_col  = ($type === 'depo') && ensure_depot_color_column();
             $color_warn = ($type === 'depo' && !$color_col);
-            if ($color_col) {
-                $color_val = def_color_value($_POST);
-                db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=?, color=? WHERE id=?")
-                    ->execute([$name, $unit, $is_active, $color_val, $id]);
-            } else {
-                db()->prepare("UPDATE material_definitions SET name=?, unit_dara_kg=?, is_active=? WHERE id=?")
-                    ->execute([$name, $unit, $is_active, $id]);
-            }
+            $maxpc_col  = def_has_max_pallet($type) && db_has_column('material_definitions', 'max_pallet_count');
+
+            $sets = ['name=?', 'unit_dara_kg=?', 'is_active=?'];
+            $vals = [$name, $unit, $is_active];
+            if ($color_col) { $sets[] = 'color=?';             $vals[] = def_color_value($_POST); }
+            if ($maxpc_col) { $sets[] = 'max_pallet_count=?';  $vals[] = def_max_pallet_value($_POST); }
+            $vals[] = $id;
+            db()->prepare("UPDATE material_definitions SET " . implode(', ', $sets) . " WHERE id=?")
+                ->execute($vals);
             audit_log_event('update', 'definitions', $id, null, ['name' => $name, 'type' => $type]);
             // Depo adı değişti/eşitlenmeli → tüm depo kolonlarını canonical yazıma çek
             $_synced = 0;
@@ -406,6 +420,7 @@ render_flash();
                         <?php foreach ($sv['types'] as $t): ?>
                         <option value="<?= h($t) ?>"
                                 data-dara="<?= def_has_dara($t) ? '1' : '0' ?>"
+                                data-maxpc="<?= def_has_max_pallet($t) ? '1' : '0' ?>"
                                 <?= $g_type === $t ? 'selected' : '' ?>><?= h($type_labels[$t] ?? $t) ?></option>
                         <?php endforeach; ?>
                     </optgroup>
@@ -420,6 +435,11 @@ render_flash();
 
             <label class="def3-field" id="d3DaraWrap" hidden>Birim Dara (kg)
                 <input type="text" name="unit_dara_kg" id="d3Dara" inputmode="decimal" value="0">
+            </label>
+
+            <label class="def3-field" id="d3MaxPcWrap" hidden>Maks. Palet Sayısı
+                <input type="text" name="max_pallet_count" id="d3MaxPc" inputmode="numeric" placeholder="Boş = sınırsız">
+                <small class="muted">Toplu ekleme/şablon uygulanırken bu malzeme en fazla bu kadar palete eklenir (örn. Casus → 1). Boş bırakılırsa seçilen tüm paletlere eklenir.</small>
             </label>
 
             <label class="def3-field def3-color-field" id="d3ColorWrap" hidden>
@@ -501,6 +521,8 @@ render_flash();
                             data-typelabel="<?= h($type_labels[$d['type']] ?? $d['type']) ?>"
                             data-hasdara="<?= $has_dara ? '1' : '0' ?>"
                             data-dara="<?= h($d['unit_dara_kg']) ?>"
+                            data-hasmaxpc="<?= def_has_max_pallet($t) ? '1' : '0' ?>"
+                            data-maxpc="<?= h($d['max_pallet_count'] ?? '') ?>"
                             data-active="<?= $d['is_active'] ? '1' : '0' ?>"
                             data-usage="<?= $ucnt ?>"
                             <?php if ($t === 'depo'): ?>data-color="<?= h(depot_color($d['name'])) ?>" data-colorset="<?= !empty($d['color']) ? '1' : '0' ?>"<?php endif; ?>
@@ -514,6 +536,9 @@ render_flash();
                         <span class="def3-row-meta">
                             <?php if ($has_dara && (float)$d['unit_dara_kg'] > 0): ?>
                             <span class="def3-chip def3-chip-dara"><?= h($d['unit_dara_kg']) ?> kg</span>
+                            <?php endif; ?>
+                            <?php if (!empty($d['max_pallet_count'])): ?>
+                            <span class="def3-chip def3-chip-dara">maks <?= (int)$d['max_pallet_count'] ?> palet</span>
                             <?php endif; ?>
                             <?php if ($ucnt > 0): ?>
                             <span class="def3-chip"><?= $ucnt ?> kayıt</span>
@@ -544,6 +569,8 @@ render_flash();
     var fName   = document.getElementById('d3Name');
     var daraWrap= document.getElementById('d3DaraWrap');
     var fDara   = document.getElementById('d3Dara');
+    var maxPcWrap = document.getElementById('d3MaxPcWrap');
+    var fMaxPc    = document.getElementById('d3MaxPc');
     var colorWrap = document.getElementById('d3ColorWrap');
     var fColor    = document.getElementById('d3Color');
     var fColorReset = document.getElementById('d3ColorReset');
@@ -565,6 +592,9 @@ render_flash();
         var has = opt && opt.getAttribute('data-dara') === '1';
         daraWrap.hidden = !has;
         if (!has) fDara.value = '0';
+        var hasMaxPc = opt && opt.getAttribute('data-maxpc') === '1';
+        maxPcWrap.hidden = !hasMaxPc;
+        if (!hasMaxPc) fMaxPc.value = '';
         var isDepo = fType.value === 'depo';
         colorWrap.hidden = !isDepo;
         if (!isDepo) fColorReset.value = '0';
@@ -591,6 +621,7 @@ render_flash();
         if (presetType) fType.value = presetType;
         fName.value = '';
         fDara.value = '0';
+        fMaxPc.value = '';
         fColor.value = '#2563eb';
         setColorAuto(); // yeni depo varsayılan olarak otomatik renk alır
         fColorLoadedValue = fColor.value;
@@ -617,6 +648,8 @@ render_flash();
         fName.value   = row.dataset.name;
         daraWrap.hidden = row.dataset.hasdara !== '1';
         fDara.value   = row.dataset.dara || '0';
+        maxPcWrap.hidden = row.dataset.hasmaxpc !== '1';
+        fMaxPc.value  = row.dataset.maxpc || '';
         colorWrap.hidden = row.dataset.type !== 'depo';
         if (row.dataset.type === 'depo') {
             fColor.value = row.dataset.color || '#2563eb';
