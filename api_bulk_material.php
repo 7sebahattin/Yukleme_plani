@@ -24,10 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     require_once __DIR__ . '/config/helpers.php';
     $st = db()->prepare("
         SELECT pm.id AS pm_id, pm.loading_pallet_id, pm.material_id, pm.quantity,
-               m.name AS material_name, m.type AS material_type, lp.palet_no, lp.kasa_adeti
+               m.name AS material_name, m.type AS material_type,
+               lp.palet_no, lp.kasa_adeti, lp.size, lp.brut_kg,
+               kc.name AS kasa_cinsi_adi
         FROM pallet_materials pm
         JOIN loading_pallets lp ON lp.id = pm.loading_pallet_id
         JOIN material_definitions m ON m.id = pm.material_id
+        LEFT JOIN material_definitions kc ON kc.id = lp.kasa_cinsi_id
         WHERE lp.loading_record_id = ?
         ORDER BY m.name, CAST(lp.palet_no AS UNSIGNED), lp.id
     ");
@@ -49,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $groups[$mid]['pallets'][] = [
             'pm_id' => (int)$row['pm_id'], 'pallet_id' => (int)$row['loading_pallet_id'],
             'pallet_no' => $row['palet_no'], 'quantity' => $eff,
+            'kasa_cinsi_adi' => $row['kasa_cinsi_adi'], 'size' => $row['size'],
+            'kasa_adeti' => (int)$row['kasa_adeti'], 'brut_kg' => (float)$row['brut_kg'],
         ];
     }
     echo json_encode(['ok' => true, 'groups' => array_values($groups)]);

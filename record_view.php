@@ -1614,10 +1614,29 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
                 var sp1 = document.createElement('span');
                 sp1.textContent = 'Palet ' + pallet.pallet_no;
                 var sp2 = document.createElement('span');
-                sp2.className = 'muted'; sp2.textContent = fmtN(pallet.quantity) + ' adet';
+                sp2.className = 'muted';
+                var infoBits = [];
+                if (pallet.kasa_cinsi_adi) infoBits.push(pallet.kasa_cinsi_adi + (pallet.size ? ' (' + pallet.size + ')' : ''));
+                infoBits.push(fmtN(pallet.kasa_adeti) + ' kasa');
+                infoBits.push(fmtN(pallet.brut_kg) + ' kg');
+                infoBits.push(fmtN(pallet.quantity) + ' adet');
+                sp2.textContent = infoBits.join(' · ');
                 lbl.appendChild(cb); lbl.appendChild(sp1); lbl.appendChild(sp2);
                 palletList.appendChild(lbl);
             });
+
+            var selAllWrap = document.createElement('div');
+            selAllWrap.className = 'bm-acc-selall';
+            var selAllBtn = document.createElement('button');
+            selAllBtn.type = 'button'; selAllBtn.className = 'btn btn-sm btn-ghost';
+            selAllBtn.textContent = 'Tümünü Seç';
+            selAllBtn.addEventListener('click', function() {
+                var boxes = palletList.querySelectorAll('.bm-acc-pallet-cb');
+                var allChecked = Array.from(boxes).every(function(b) { return b.checked; });
+                boxes.forEach(function(b) { b.checked = !allChecked; });
+                selAllBtn.textContent = allChecked ? 'Tümünü Seç' : 'Seçimi Kaldır';
+            });
+            selAllWrap.appendChild(selAllBtn);
 
             var actions = document.createElement('div');
             actions.className = 'bm-acc-actions';
@@ -1645,7 +1664,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
             })(group, allMatBtn);
 
             actions.appendChild(selBtn); actions.appendChild(allMatBtn);
-            body.appendChild(palletList); body.appendChild(actions);
+            body.appendChild(selAllWrap); body.appendChild(palletList); body.appendChild(actions);
 
             header.addEventListener('click', function() {
                 var open = !body.hidden;

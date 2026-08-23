@@ -115,6 +115,21 @@ function ensure_depot_color_column(): bool {
     } catch (Throwable $e) { return false; }
 }
 
+// Kendi kendini onaran kolon kontrolü (color ile aynı sebep): auto-migration
+// ALTER yetkisi yoksa sessizce başarısız olabilir — bu durumda maks. palet
+// değeri hiç kaydedilmeden "Güncellendi" görünürdü. Burada bir kez daha
+// denenir; hâlâ yoksa çağıran taraf kullanıcıyı açıkça uyarır.
+function ensure_max_pallet_column(): bool {
+    if (db_has_column('material_definitions', 'max_pallet_count')) return true;
+    try {
+        db()->exec("ALTER TABLE `material_definitions` ADD COLUMN `max_pallet_count` INT NULL");
+    } catch (Throwable $e) { /* yetki yoksa aşağıda kullanıcıya bildirilir */ }
+    try {
+        $cols = db()->query("SHOW COLUMNS FROM `material_definitions`")->fetchAll(PDO::FETCH_COLUMN);
+        return in_array('max_pallet_count', $cols, true);
+    } catch (Throwable $e) { return false; }
+}
+
 // Ekleme formu açıklaması
 function def_help(string $type): string {
     return match ($type) {
@@ -146,7 +161,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $color_col = ($type === 'depo') && ensure_depot_color_column();
             $color_warn = ($type === 'depo' && !$color_col);
-            $maxpc_col = def_has_max_pallet($type) && db_has_column('material_definitions', 'max_pallet_count');
+            $maxpc_col  = def_has_max_pallet($type) && ensure_max_pallet_column();
+            $maxpc_warn = def_has_max_pallet($type) && !$maxpc_col;
 
             $cols = ['type', 'name', 'unit_dara_kg', 'is_active'];
             $vals = [$type, $name, $unit, 1];
@@ -158,7 +174,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $new_def_id = (int)db()->lastInsertId();
             audit_log_event('create', 'definitions', $new_def_id, null, ['type' => $type, 'name' => $name]);
             set_flash('success', '"' . $name . '" eklendi.'
-                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
+                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : '')
+                . ($maxpc_warn ? ' ⚠️ Maks. palet sayısı kaydedilemedi — veritabanında "max_pallet_count" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
             $back = 'sel=' . $new_def_id; // yeni kayıt listede seçili gelsin
 
         } elseif ($action === 'update') {
@@ -184,7 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $color_col  = ($type === 'depo') && ensure_depot_color_column();
             $color_warn = ($type === 'depo' && !$color_col);
-            $maxpc_col  = def_has_max_pallet($type) && db_has_column('material_definitions', 'max_pallet_count');
+            $maxpc_col  = def_has_max_pallet($type) && ensure_max_pallet_column();
+            $maxpc_warn = def_has_max_pallet($type) && !$maxpc_col;
 
             $sets = ['name=?', 'unit_dara_kg=?', 'is_active=?'];
             $vals = [$name, $unit, $is_active];
@@ -217,7 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } catch (Throwable $e) {}
             }
             set_flash('success', 'Güncellendi.' . ($_synced > 0 ? ' ' . $_synced . ' kayıttaki depo adı eşitlendi.' : '')
-                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
+                . ($color_warn ? ' ⚠️ Renk kaydedilemedi — veritabanında "color" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : '')
+                . ($maxpc_warn ? ' ⚠️ Maks. palet sayısı kaydedilemedi — veritabanında "max_pallet_count" kolonu eksik ve otomatik eklenemedi. Yönetim → Şema Migrasyon sayfasından elle ekleyin.' : ''));
 
         } elseif ($action === 'toggle') {
             $id = (int)($_POST['id'] ?? 0);
