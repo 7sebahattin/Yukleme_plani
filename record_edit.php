@@ -190,7 +190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $has_brand        = !$edit_is_cikma && db_has_column('loading_records', 'brand');
             $has_urun_sahibi  = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
             $has_ulasim       = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
-            $has_gidecek_ulke = !$edit_is_cikma && db_has_column('loading_records', 'gidecek_ulke');
+            $has_gidecek_ulke = !$edit_is_cikma && ensure_column('loading_records', 'gidecek_ulke',
+                "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''");
             if (!$has_brand)       { unset($record['brand']); }
             if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
 
@@ -307,7 +308,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_audit_old ?: null,
                 ['firma' => $record['firma'], 'tarih' => $record['tarih'], 'urun' => $record['urun']]
             );
-            set_flash('success', 'Kayıt güncellendi.');
+            set_flash('success', 'Kayıt güncellendi.'
+                . ((!$edit_is_cikma && !$has_gidecek_ulke) ? ' ⚠️ "Gideceği Ülke" kaydedilemedi — veritabanında "gidecek_ulke" kolonu eksik ve otomatik eklenemedi. migrate.php sayfasından elle ekleyin.' : ''));
             header('Location: record_view.php?id=' . $id);
             exit;
         } catch (Throwable $e) {

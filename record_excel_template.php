@@ -228,6 +228,18 @@ foreach ($pallets as $p) {
         $added_materials[$key]['adet'] += $eff;
     }
 }
+// Sıralama (Sprint Excel-04): bu türler HER ZAMAN bu sırada üstte görünür;
+// listelenmeyen türler bu sabit sıradan SONRA, aralarındaki sıra önemli
+// olmadan (kayıttaki oluşum sırasına göre) gelir. uasort PHP 8'de kararlı
+// (stable) olduğundan "geri kalan" grup kendi arasında yer değiştirmez.
+$MAT_ORDER_PRIORITY = ['sapka', 'kosebent', 'kasa_etiketi', 'casus', 'serit'];
+$_mat_pri = array_flip($MAT_ORDER_PRIORITY);
+uasort($added_materials, function ($a, $b) use ($_mat_pri) {
+    $pa = $_mat_pri[$a['type']] ?? PHP_INT_MAX;
+    $pb = $_mat_pri[$b['type']] ?? PHP_INT_MAX;
+    return $pa <=> $pb;
+});
+
 $MAT_ROW0 = 11; $MAT_CAP = 32 - $MAT_ROW0 + 1; // 22 yuva (I11..I32)
 if (count($added_materials) > $MAT_CAP) {
     http_response_code(400);
