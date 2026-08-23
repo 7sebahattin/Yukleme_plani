@@ -915,7 +915,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-22 · 12';
+const PANEL_SURUM = '2026-08-23 · 13';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1846,7 +1846,11 @@ function aramaliAlanlariKur() {
     ['sUrun',       'Ürün yazın veya listeden seçin'],
     ['sUlke',       'Ülke yazın veya listeden seçin'],
     ['sGelenUlke',  'Ülke yazın veya listeden seçin'],
-    ['sIsyeri',     'İşyeri/depo yazın veya listeden seçin'],
+    // NOT: 'sIsyeri' BİLEREK DIŞARIDA — normal açılır liste olarak kalır.
+    // Bu alan diğerleri gibi doldurSel() ile değil, doğrudan innerHTML ile
+    // dolduruluyor (bkz. sIsletmeTuru.onchange). Dolayısıyla öneri listesi
+    // tazelenmiyor, alan yazılabilir görünüp hiçbir sonuç vermiyordu.
+    // Aramalı yapılacaksa önce o doldurma yolu doldurSel'e taşınmalıdır.
     ['sIl',         'İl yazın veya listeden seçin'],
     ['sIlce',       'İlçe yazın veya listeden seçin'],
     ['sBelde',      'Belde yazın veya listeden seçin'],
