@@ -164,32 +164,47 @@ foreach ($pallets as $i => $p) {
     $setF("H$r", "=ROUND(D$r-E$r,1)");
 }
 
-// ── Malzeme listesi (sabit satır eşleştirme — Mod 1) ──
-// Şablon I-sütunu sabit adları → sistem type'ları (K sütununa adet)
-$mal_map = [
-    11 => ['sapka'],
-    12 => ['kosebent'],
-    13 => ['serit'],
-    14 => ['casus'],
-    20 => ['kasa_etiketi'],
-    21 => ['taban_kagidi'],
-    22 => ['kenar_kartonu'],
-    23 => ['sale'],
-    31 => ['kose_karton'],
-];
-// İHRACAT PALETİ (I10) = palet_tipi toplamı
+// ── Malzeme listesi (Sprint Excel-02: dinamik — yalnız gerçekten eklenen malzemeler) ──
+// İHRACAT PALETİ (I10) satırı sabit kalır — bu bir "eklenen malzeme" değil, paletin
+// kendi palet tipi kullanım toplamıdır (record_view'daki "Kasa Dağılımı" ile aynı köken).
 $setN('K10', $use_by_type['palet_tipi'] ?? 0);
-foreach ($mal_map as $row => $types) {
-    $sum = 0; foreach ($types as $t) $sum += ($use_by_type[$t] ?? 0);
-    if ($sum > 0) $setN("K$row", $sum);
-}
-// Eşleşmeyen tipler (file, kraft_kagit, minti, viyol, kasa_cinsi vb.) → debug notu
-$mapped = ['palet_tipi'];
-foreach ($mal_map as $types) foreach ($types as $t) $mapped[] = $t;
-foreach ($use_by_type as $t => $adet) {
-    if ($adet > 0 && !in_array($t, $mapped, true)) {
-        $log[] = "ESLENMEYEN malzeme tipi: $t = $adet (sablonda sabit satiri yok)";
+
+// Gerçekten eklenmiş malzemeler (pallet_materials satırları) — record_view.php'deki
+// "Ek Malzemeler" panelindeki $em_groups ile BİREBİR aynı gruplama/sıra/hesap mantığı.
+// I11..I32 (22 satır) şablonun "mavi alan"ı — statik örnek isimler artık buraya değil,
+// yalnız bu kayıtta gerçekten kullanılan malzemeler isim+adet olarak yazılır; kalan
+// satırlar (kullanılmayan yuvalar) temizlenir, mavi biçim/hücre yapısı bozulmaz.
+$added_materials = []; // def_id => ['name'=>.., 'adet'=>float]
+foreach ($pallets as $p) {
+    foreach (($p['materials'] ?? []) as $m) {
+        $kid = (int)$m['def_id'];
+        $basis = material_calc_basis((string)$m['material_type'], (string)$m['material_name']);
+        $eff   = ($basis === 'kasa')
+            ? (float)$m['quantity'] * (int)$p['kasa_adeti']
+            : (float)$m['quantity'];
+        if (!isset($added_materials[$kid])) {
+            $added_materials[$kid] = ['name' => $m['material_name'], 'adet' => 0.0];
+        }
+        $added_materials[$kid]['adet'] += $eff;
     }
+}
+$MAT_ROW0 = 11; $MAT_CAP = 32 - $MAT_ROW0 + 1; // 22 yuva (I11..I32)
+if (count($added_materials) > $MAT_CAP) {
+    http_response_code(400);
+    die('Şablonda en fazla ' . $MAT_CAP . ' farklı ek malzeme için satır var; '
+        . 'bu kayıtta ' . count($added_materials) . ' farklı malzeme var.');
+}
+$mi = 0;
+foreach ($added_materials as $am) {
+    $r = $MAT_ROW0 + $mi;
+    $setS("I$r", tr_upper($am['name']));
+    $setN("K$r", round($am['adet'], 3));
+    $mi++;
+}
+for ($r = $MAT_ROW0 + $mi; $r <= 32; $r++) {
+    $sh->setCellValue("I$r", null);
+    $sh->setCellValue("K$r", null);
+    $log[] = "I$r/K$r=(temizlendi — kullanılmayan yuva)";
 }
 
 // ── Genel toplam (O10..O13) — canlı formüller (palet satırları 10..35) ──
@@ -231,11 +246,36 @@ foreach ($cat_slots as $i => $r0) {
 // TOPLAM etiketi (L10) sabit metin — dar dikey hücreye sığması için shrink-to-fit
 $sh->getCell('L10')->getStyle()->getAlignment()->setShrinkToFit(true);
 
-// ── Size özeti (H38..K41) — sablon sabit size satirlari: H38=8,H39=9,H40=12,H41=14 ──
-// Canlı SUMIF formülleri: kriter = H sütunundaki size etiketi, aralık = palet satırları (10..35).
-// Palet brüt/net/kasa hücreleri düzenlenince bu özet de otomatik güncellenir.
-$size_rows = [38, 39, 40, 41];
-foreach ($size_rows as $r) {
+// ── Size özeti (H38..K41) — Sprint Excel-02: dinamik (kategori özet bloklarıyla aynı desen) ──
+// Şablonda sabit H38=8,H39=9,H40=12,H41=14 idi; artık kayıttaki palet satırlarının
+// SİZE (C) sütununda gerçekte hangi değerler varsa (doğal sırayla) o yazılır ve SUMIF
+// ile hesaplanır. Yeni bir size değeri geldiğinde kod değişikliği gerekmez.
+$size_slots = [38, 39, 40, 41];
+$sizes = [];
+foreach ($pallets as $p) {
+    $sv = trim((string)($p['size'] ?? ''));
+    if ($sv !== '' && !in_array($sv, $sizes, true)) { $sizes[] = $sv; }
+}
+natsort($sizes);
+$sizes = array_values($sizes);
+if (count($sizes) > count($size_slots)) {
+    http_response_code(400);
+    die('Şablonda en fazla ' . count($size_slots) . ' farklı size özeti için yer var; '
+        . 'bu kayıtta ' . count($sizes) . ' farklı size var (' . implode(', ', $sizes) . ').');
+}
+foreach ($size_slots as $i => $r) {
+    $label = $sizes[$i] ?? '';
+    if ($label === '') {
+        // Kullanılmayan yuva — şablonun eski sabit değerini de temizle, aksi halde
+        // H sütunu eski (8/9/12/14) etiketi göstermeye devam eder.
+        $sh->setCellValue("H$r", null);
+        $sh->setCellValue("I$r", null);
+        $sh->setCellValue("J$r", null);
+        $sh->setCellValue("K$r", null);
+        $log[] = "H$r=(boş)";
+        continue;
+    }
+    if (is_numeric($label)) { $setN("H$r", $label); } else { $setS("H$r", $label); }
     $setF("I$r", "=SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$B\$$ROW0:\$B\$$ROWE)");          // KASA
     $setF("J$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$D\$$ROW0:\$D\$$ROWE),0)"); // BRÜT
     $setF("K$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$H\$$ROW0:\$H\$$ROWE),0)"); // NET
