@@ -71,6 +71,28 @@ function db(): PDO {
                     $pdo->exec("ALTER TABLE `material_definitions` ADD COLUMN `color` VARCHAR(7) NULL");
                 }
             } catch (PDOException $mig_e) { /* material_definitions yoksa — sessizce geç */ }
+            // Sprint Malzeme-XX: max_pallet_count — bir malzemenin toplu ekleme/şablonda
+            // bir seferde en fazla kaç palete uygulanacağını sınırlar (NULL = sınırsız,
+            // seçilen tüm paletlere eklenir).
+            try {
+                $has_maxpc = (bool)$pdo->query("SHOW COLUMNS FROM `material_definitions` LIKE 'max_pallet_count'")->fetchColumn();
+                if (!$has_maxpc) {
+                    $pdo->exec("ALTER TABLE `material_definitions` ADD COLUMN `max_pallet_count` INT NULL");
+                    // Eskiden "casus" ismi geçen malzemeler kod içinde hardcoded olarak
+                    // yalnız kaydın ilk paletine eklenirdi (api_bulk_material.php). Bu davranış
+                    // artık max_pallet_count=1 ile birebir aynı şekilde genel sistemden sağlanır;
+                    // kolon YENİ eklendiği anda mevcut casus tanımlarına bir kereliğine seed edilir
+                    // (her istekte tekrar çalışmaz — sonradan admin "sınırsız" yaparsa bozulmasın diye).
+                    $casus_rows = $pdo->query("SELECT id, name FROM material_definitions")->fetchAll(PDO::FETCH_ASSOC);
+                    $upd_maxpc = $pdo->prepare("UPDATE material_definitions SET max_pallet_count=1 WHERE id=?");
+                    foreach ($casus_rows as $cr) {
+                        $n = mb_strtolower(trim((string)$cr['name']), 'UTF-8');
+                        $n = str_replace("\xCC\x87", '', $n);
+                        $n = strtr($n, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
+                        if (str_contains($n, 'casus')) $upd_maxpc->execute([$cr['id']]);
+                    }
+                }
+            } catch (PDOException $mig_e) { /* material_definitions yoksa — sessizce geç */ }
             // Başlangıç marka tanımlarını seed et (yalnızca henüz hiç marka tanımı yoksa)
             try {
                 $brand_count = (int)$pdo->query("SELECT COUNT(*) FROM material_definitions WHERE type='marka'")->fetchColumn();

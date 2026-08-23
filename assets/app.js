@@ -853,6 +853,7 @@
                 return {
                     palet_sayisi:  last.querySelector('[data-key=palet_sayisi]').value,
                     kasa_adeti:    last.querySelector('[data-key=kasa_adeti]').value,
+                    size:          last.querySelector('[data-key=size]').value,
                     kasa_cinsi_id: last.querySelector('[data-key=kasa_cinsi_id]').value,
                     palet_tipi_id: last.querySelector('[data-key=palet_tipi_id]').value,
                     depo:          last.querySelector('[data-key=depo]').value,
@@ -930,6 +931,16 @@
             brutInp.value = (from.brut_kg > 0) ? fmtInput(from.brut_kg) : '';
             brutTd.appendChild(brutInp);
             tr.appendChild(brutTd);
+
+            // Size
+            const sizeTd = document.createElement('td');
+            const sizeInp = document.createElement('input');
+            sizeInp.type = 'text';
+            sizeInp.dataset.key = 'size';
+            sizeInp.className = 'tp-cell';
+            sizeInp.value = from.size || '';
+            sizeTd.appendChild(sizeInp);
+            tr.appendChild(sizeTd);
 
             // Kasa Cinsi
             const kcTd = document.createElement('td');
@@ -1082,7 +1093,7 @@
            sıra bozulmadan aşağıya doğru dolar; satır yetmezse yenisi açılır.
            Yeni satırların kasa cinsi / palet tipi / depo / ürün değerleri
            1. satırdan kopyalanır. */
-        const PASTE_KEYS = ['palet_sayisi', 'kasa_adeti', 'brut_kg'];
+        const PASTE_KEYS = ['palet_sayisi', 'kasa_adeti', 'brut_kg', 'size'];
 
         /* 1. satırın seçim alanları — yeni satırlar için şablon */
         function firstRowTemplate() {
@@ -1092,6 +1103,7 @@
                     palet_sayisi:  '1',
                     kasa_adeti:    '',
                     brut_kg:       '',
+                    size:          '',
                     kasa_cinsi_id: first.querySelector('[data-key=kasa_cinsi_id]').value,
                     palet_tipi_id: first.querySelector('[data-key=palet_tipi_id]').value,
                     depo:          first.querySelector('[data-key=depo]').value,
@@ -1103,6 +1115,7 @@
                 palet_sayisi:  '1',
                 kasa_adeti:    '',
                 brut_kg:       '',
+                size:          '',
                 kasa_cinsi_id: p.kasa_cinsi_id || '',
                 palet_tipi_id: p.palet_tipi_id || '',
                 depo:          p.depo || '',
@@ -1117,6 +1130,7 @@
             if (s === '') return;                       // boş hücre → mevcut değeri koru
             if (key === 'brut_kg')      el.value = fmtInput(parseNum(s));
             else if (key === 'palet_sayisi') el.value = String(Math.max(1, parseInt2(s) || 1));
+            else if (key === 'size')    el.value = s;
             else                        el.value = String(parseInt2(s));
         }
 
@@ -1224,6 +1238,7 @@
                 const palet_tipi_id = tr.querySelector('[data-key=palet_tipi_id]').value;
                 const depo          = tr.querySelector('[data-key=depo]').value;
                 const urun_cinsi    = tr.querySelector('[data-key=urun_cinsi]').value.trim() || origBase.urun_cinsi || '';
+                const size          = tr.querySelector('[data-key=size]').value.trim();
 
                 if (ps <= 1) {
                     origBase.palet_no      = String(pallets.length + 1);
@@ -1233,6 +1248,7 @@
                     origBase.palet_tipi_id = palet_tipi_id;
                     origBase.depo          = depo;
                     origBase.urun_cinsi    = urun_cinsi;
+                    origBase.size          = size;
                     pallets.push(origBase);
                 } else {
                     // Palet sayısı > 1: kasa ve brütü N satıra dağıt
@@ -1249,7 +1265,7 @@
                         if (!isLast) brutAccum += brutPerPalet;
                         pallets.push({
                             palet_no:      String(pallets.length + 1),
-                            size:          '',
+                            size:          size,
                             urun_cinsi:    urun_cinsi,
                             materials:     [],
                             kasa_adeti:    thisKasa,

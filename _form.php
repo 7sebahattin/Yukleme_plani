@@ -308,6 +308,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
                         <th>Palet</th>
                         <th>Kasa Adeti</th>
                         <th>Brüt KG</th>
+                        <th>Size</th>
                         <th>Kasa Cinsi</th>
                         <th>Palet Tipi</th>
                         <th>Depo</th>
