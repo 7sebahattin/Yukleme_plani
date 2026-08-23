@@ -915,7 +915,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-23 · 13';
+const PANEL_SURUM = '2026-08-23 · 14';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -2090,6 +2090,8 @@ function turDegisti() {
 // ===== REFERANSSIZ MAL BİLGİLERİ (Satın Alım + Üreticiden Sevk Alım) =====
 let malListeler = null;      // { nitelikler, uretimSekli, birimler }
 let malIllerYuklendi = false;
+let malCinsIstekNo = 0;      // cins sorgusu yarış koruması (son istek kazanır)
+let malCinsListesi = [];     // ekranda gösterilen cinsler — gönderim öncesi denetim için
 let malHazirIslem = null;    // devam eden hazırlık — eşzamanlı çağrılar aynı işi bekler
 
 // turDegisti() bunu await etmeden çağırır; taslak geri yüklemesi ise await eder.
@@ -2175,19 +2177,39 @@ async function malCinsleriYukle() {
     return;
   }
   mesajGoster('malCinsMesaj', '⏳ Cinsler getiriliyor...', 'tamam');
+  // YARIŞ KORUMASI: ürün hızlı değiştirilirse önceki isteğin GEÇ gelen yanıtı
+  // yeni listeyi ezebilir (ve yanlış ürünün cinsleri ekranda kalır).
+  const istekNo = ++malCinsIstekNo;
   try {
     const j = await api('/api/urun_cinsleri', 'POST', { firmaId: aktifFirma.id, urunId });
-    let liste = (j.cinsler || []).filter(c => String(c.uretimSekliId) === String(usId));
+    if (istekNo !== malCinsIstekNo) return;   // daha yeni bir istek başladı → bunu yoksay
+    let liste = j.cinsler || [];
+    // ÜRÜNE GÖRE FİLTRE — KRİTİK: servis, istenen ürün dışındaki cinsleri de
+    // döndürebiliyor. Filtrelenmezse her üründe bir "DİĞER" kaydı listeye girer;
+    // aynı adlı kayıtlardan yanlış olanı seçilince HKS bildirimi
+    // "Ürün cinsi bilgisi yanlış" hatasıyla reddeder.
+    // urunId dönmeyen (0) kayıtlar elenmez — veri eksikse liste boşalmasın.
+    liste = liste.filter(c => !c.urunId || String(c.urunId) === String(urunId));
+    liste = liste.filter(c => String(c.uretimSekliId) === String(usId));
     const ith = ithalatMi();
     liste = liste.filter(c => !!c.ithal === ith);
+    malCinsListesi = liste;                   // gönderim öncesi tutarlılık denetimi için
     doldurSel('sMalCins', liste, '— Seçiniz —');
     if (!liste.length) {
       mesajGoster('malCinsMesaj', 'Bu ürün + üretim şekli' + (ith ? ' + ithal' : '') +
         ' için cins bulunamadı. Üretim şeklini değiştirip deneyin.', 'hata');
     } else {
-      mesajGoster('malCinsMesaj', liste.length + ' cins bulundu.', 'tamam');
+      // Aynı ad birden fazla kez kaldıysa yazarak seçimde hangisinin seçildiği
+      // belirsizleşir; kullanıcı bunu bilsin.
+      const adlar = liste.map(c => trNorm(c.ad));
+      const tekrar = adlar.length !== new Set(adlar).size;
+      mesajGoster('malCinsMesaj', liste.length + ' cins bulundu.' +
+        (tekrar ? ' ⚠️ Aynı adlı birden fazla cins var — listeden seçin.' : ''),
+        tekrar ? 'hata' : 'tamam');
     }
-  } catch (e) { mesajGoster('malCinsMesaj', e.message, 'hata'); }
+  } catch (e) {
+    if (istekNo === malCinsIstekNo) mesajGoster('malCinsMesaj', e.message, 'hata');
+  }
 }
 
 // Üretim yeri zinciri
@@ -2690,6 +2712,16 @@ $('btnMalTaslak').onclick = async () => {
   ];
   for (const [id, ad] of zorunlu) {
     if (!$(id).value) { alert(ad + ' seçiniz.'); $(id).focus(); return; }
+  }
+  // SON KONTROL — cins gerçekten seçili ÜRÜNE mi ait? HKS uyumsuz çifti
+  // "Ürün cinsi bilgisi yanlış" diyerek reddediyor; bunu canlıya gitmeden
+  // burada yakalıyoruz (liste filtresi atlanmış/eskimiş olabilir).
+  {
+    const secCins = malCinsListesi.find(c => String(c.id) === String($('sMalCins').value));
+    if (secCins && secCins.urunId && String(secCins.urunId) !== String($('sMalUrun').value)) {
+      alert('Seçilen cins bu ürüne ait değil. "Malın Cinsi" alanını listeden yeniden seçin.');
+      $('sMalCins').focus(); return;
+    }
   }
   if (miktar <= 0) { alert('Miktar giriniz.'); $('oMalMiktar').focus(); return; }
   if (fiyat  <= 0) { alert('Birim fiyat giriniz.'); $('oMalFiyat').focus(); return; }
