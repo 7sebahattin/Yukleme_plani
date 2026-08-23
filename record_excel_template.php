@@ -295,11 +295,13 @@ foreach ($cat_slots as $i => $r0) {
 // TOPLAM etiketi (L10) sabit metin — dar dikey hücreye sığması için shrink-to-fit
 $sh->getCell('L10')->getStyle()->getAlignment()->setShrinkToFit(true);
 
-// ── Size özeti (H38..K41) — Sprint Excel-02: dinamik (kategori özet bloklarıyla aynı desen) ──
+// ── Size özeti (H38..) — Sprint Excel-05: 4 sabit satır, gerekirse aşağı uzar ──
 // Şablonda sabit H38=8,H39=9,H40=12,H41=14 idi; artık kayıttaki palet satırlarının
-// SİZE (C) sütununda gerçekte hangi değerler varsa (doğal sırayla) o yazılır ve SUMIF
-// ile hesaplanır. Yeni bir size değeri geldiğinde kod değişikliği gerekmez.
-$size_slots = [38, 39, 40, 41];
+// SİZE (C) sütununda gerçekte hangi değerler varsa (doğal sırayla) o yazılır ve SUMIF/
+// COUNTIF ile hesaplanır. 4 veya daha az farklı size'da yapı hiç değişmez (fazla yuvalar
+// temizlenir). 4'ten FAZLA farklı size varsa, son satırın (41) stili/yüksekliği
+// kopyalanarak altına yeni satır(lar) eklenir — tablo aşağı doğru büyür, daralmaz.
+$size_slots_base = [38, 39, 40, 41];
 $sizes = [];
 foreach ($pallets as $p) {
     $sv = trim((string)($p['size'] ?? ''));
@@ -307,10 +309,26 @@ foreach ($pallets as $p) {
 }
 natsort($sizes);
 $sizes = array_values($sizes);
-if (count($sizes) > count($size_slots)) {
-    http_response_code(400);
-    die('Şablonda en fazla ' . count($size_slots) . ' farklı size özeti için yer var; '
-        . 'bu kayıtta ' . count($sizes) . ' farklı size var (' . implode(', ', $sizes) . ').');
+
+$size_slots = $size_slots_base;
+if (count($sizes) > count($size_slots_base)) {
+    // NOT: insertNewRowBefore() BİLEREK kullanılmıyor — PhpSpreadsheet'te tüm
+    // sayfayı yeniden indeksler, bu şablon boyutunda tek istekte dakikalarca
+    // sürüp web isteğini kilitleyebiliyor (test edildi). Şablonda 41. satırın
+    // altında zaten hiçbir içerik yok (kontrol edildi), o yüzden satır
+    // "eklemeye" hiç gerek yok — doğrudan yeni satır numaralarına, 41'in
+    // stilini/yüksekliğini kopyalayarak yazmak yeterli ve çok daha hızlı.
+    $extra    = count($sizes) - count($size_slots_base);
+    $lastRow  = end($size_slots_base);       // 41 — stil/yükseklik kaynağı
+    $rowHeight = $sh->getRowDimension((string)$lastRow)->getRowHeight();
+    for ($i = 0; $i < $extra; $i++) {
+        $newRow = $lastRow + 1 + $i;
+        foreach (range('A', 'P') as $col) {
+            $sh->duplicateStyle($sh->getStyle($col . $lastRow), $col . $newRow);
+        }
+        if ($rowHeight > 0) { $sh->getRowDimension((string)$newRow)->setRowHeight($rowHeight); }
+        $size_slots[] = $newRow;
+    }
 }
 foreach ($size_slots as $i => $r) {
     $label = $sizes[$i] ?? '';
