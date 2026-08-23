@@ -456,7 +456,7 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
 <?php
 $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) ||
                    !empty($record['nakliye_sirketi']) || !empty($record['sofor_adi']) ||
-                   !empty($record['telefon']) || !empty($record['ulasim']);
+                   !empty($record['telefon']) || !empty($record['ulasim']) || !empty($record['gidecek_ulke']);
 ?>
 <?php if ($_rv_is_yukleme && $_rv_has_nakliye): ?>
 <h3 class="section-title">Nakliye Bilgileri</h3>
@@ -478,6 +478,9 @@ $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) 
     <?php endif; ?>
     <?php if (!empty($record['ulasim'])): ?>
     <div><span class="lbl">Ulaşım</span><strong><?= h($record['ulasim']) ?></strong></div>
+    <?php endif; ?>
+    <?php if (!empty($record['gidecek_ulke'])): ?>
+    <div><span class="lbl">Gideceği Ülke</span><strong><?= h($record['gidecek_ulke']) ?></strong></div>
     <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -750,6 +753,7 @@ $brand_label = $_b !== '' ? ($_brand_names[$_b] ?? $_b) : 'ASYA FRESH';
                 <tr><th>ARKA PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['arka_plaka']) ?></td></tr>
                 <tr><th>NAKLİYE ŞİRKETİ</th><td colspan="3"><?= h($record['nakliye_sirketi']) ?></td></tr>
                 <tr><th>ULAŞIM</th><td colspan="3"><?= h($record['ulasim'] ?? '') ?></td></tr>
+                <tr><th>GİDECEĞİ ÜLKE</th><td colspan="3"><?= h($record['gidecek_ulke'] ?? '') ?></td></tr>
                 <tr><th>TELEFON</th><td colspan="3"><?= h($record['telefon']) ?></td></tr>
                 <tr><th>TARİH</th><td colspan="3" class="ai-emph"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>

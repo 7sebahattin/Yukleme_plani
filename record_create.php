@@ -13,7 +13,7 @@ $record = [
     'firma' => '', 'bolge' => '', 'parti_no' => '', 'gumruk' => '',
     'nakliye_bedeli' => '', 'avans' => '',
     'sofor_adi' => '', 'fatura_no' => '', 'casus_no' => '',
-    'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '', 'ulasim' => '',
+    'on_plaka' => '', 'arka_plaka' => '', 'nakliye_sirketi' => '', 'telefon' => '', 'ulasim' => '', 'gidecek_ulke' => '',
     'tarih' => date('Y-m-d'), 'alici' => '', 'urun' => '', 'etiket' => '', 'brand' => '',
 ];
 $pallets = [];
@@ -103,25 +103,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo = db();
             $pdo->beginTransaction();
 
-            // brand / urun_sahibi_id / ulasim kolonları yoksa (migration çalışmadıysa) sorguya ekleme — defansif
+            // brand / urun_sahibi_id / ulasim / gidecek_ulke kolonları yoksa (migration çalışmadıysa) sorguya ekleme — defansif
             $has_brand        = db_has_column('loading_records', 'brand');
             $has_urun_sahibi  = db_has_column('loading_records', 'urun_sahibi_id');
             $has_ulasim       = db_has_column('loading_records', 'ulasim');
+            $has_gidecek_ulke = db_has_column('loading_records', 'gidecek_ulke');
             $st = $pdo->prepare(
                 "INSERT INTO loading_records
                  (firma, bolge, parti_no, gumruk, nakliye_bedeli, avans, sofor_adi,
                   fatura_no, casus_no, on_plaka, arka_plaka, nakliye_sirketi, telefon,
                   tarih, alici, urun, etiket"
-                  . ($has_ulasim      ? ", ulasim"          : "")
-                  . ($has_brand       ? ", brand"           : "")
-                  . ($has_urun_sahibi ? ", urun_sahibi_id"  : "") . ")
+                  . ($has_ulasim       ? ", ulasim"          : "")
+                  . ($has_gidecek_ulke ? ", gidecek_ulke"    : "")
+                  . ($has_brand        ? ", brand"           : "")
+                  . ($has_urun_sahibi  ? ", urun_sahibi_id"  : "") . ")
                  VALUES
                  (:firma, :bolge, :parti_no, :gumruk, :nakliye_bedeli, :avans, :sofor_adi,
                   :fatura_no, :casus_no, :on_plaka, :arka_plaka, :nakliye_sirketi, :telefon,
                   :tarih, :alici, :urun, :etiket"
-                  . ($has_ulasim      ? ", :ulasim"          : "")
-                  . ($has_brand       ? ", :brand"           : "")
-                  . ($has_urun_sahibi ? ", :urun_sahibi_id"  : "") . ")"
+                  . ($has_ulasim       ? ", :ulasim"          : "")
+                  . ($has_gidecek_ulke ? ", :gidecek_ulke"    : "")
+                  . ($has_brand        ? ", :brand"           : "")
+                  . ($has_urun_sahibi  ? ", :urun_sahibi_id"  : "") . ")"
             );
             $ins_params = [
                 ':firma' => $record['firma'],
@@ -144,6 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
             if ($has_ulasim) {
                 $ins_params[':ulasim'] = $record['ulasim'] ?? '';
+            }
+            if ($has_gidecek_ulke) {
+                $ins_params[':gidecek_ulke'] = $record['gidecek_ulke'] ?? '';
             }
             if ($has_brand) {
                 $ins_params[':brand'] = $record['brand'] !== '' ? $record['brand'] : null;

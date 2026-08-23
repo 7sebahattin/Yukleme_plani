@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'nakliye_sirketi' => trim((string)($_POST['nakliye_sirketi'] ?? '')),
             'telefon'         => trim((string)($_POST['telefon'] ?? '')),
             'ulasim'          => trim((string)($_POST['ulasim'] ?? '')),
+            'gidecek_ulke'    => trim((string)($_POST['gidecek_ulke'] ?? '')),
             'alici'           => trim((string)($_POST['alici'] ?? '')),
             'etiket'          => trim((string)($_POST['etiket'] ?? '')),
             'brand'           => trim((string)($_POST['brand'] ?? '')),
@@ -185,10 +186,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->beginTransaction();
 
-            // brand / urun_sahibi_id / ulasim kolonları yoksa (migration çalışmadıysa) çıkar — defansif
-            $has_brand       = !$edit_is_cikma && db_has_column('loading_records', 'brand');
-            $has_urun_sahibi = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
-            $has_ulasim      = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
+            // brand / urun_sahibi_id / ulasim / gidecek_ulke kolonları yoksa (migration çalışmadıysa) çıkar — defansif
+            $has_brand        = !$edit_is_cikma && db_has_column('loading_records', 'brand');
+            $has_urun_sahibi  = !$edit_is_cikma && db_has_column('loading_records', 'urun_sahibi_id');
+            $has_ulasim       = !$edit_is_cikma && db_has_column('loading_records', 'ulasim');
+            $has_gidecek_ulke = !$edit_is_cikma && db_has_column('loading_records', 'gidecek_ulke');
             if (!$has_brand)       { unset($record['brand']); }
             if (!$has_urun_sahibi) { unset($record['urun_sahibi_id']); }
 
@@ -215,9 +217,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         on_plaka=:on_plaka, arka_plaka=:arka_plaka,
                         nakliye_sirketi=:nakliye_sirketi, telefon=:telefon,
                         tarih=:tarih, alici=:alici, urun=:urun, etiket=:etiket"
-                        . ($has_ulasim      ? ", ulasim=:ulasim"                 : "")
-                        . ($has_brand       ? ", brand=:brand"                   : "")
-                        . ($has_urun_sahibi ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
+                        . ($has_ulasim       ? ", ulasim=:ulasim"                 : "")
+                        . ($has_gidecek_ulke ? ", gidecek_ulke=:gidecek_ulke"     : "")
+                        . ($has_brand        ? ", brand=:brand"                   : "")
+                        . ($has_urun_sahibi  ? ", urun_sahibi_id=:urun_sahibi_id" : "") . "
                      WHERE id=:id"
                 );
                 $upd_params = [
@@ -242,6 +245,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ];
                 if ($has_ulasim) {
                     $upd_params[':ulasim'] = $record['ulasim'] ?? '';
+                }
+                if ($has_gidecek_ulke) {
+                    $upd_params[':gidecek_ulke'] = $record['gidecek_ulke'] ?? '';
                 }
                 if ($has_brand) {
                     $upd_params[':brand'] = $record['brand'];

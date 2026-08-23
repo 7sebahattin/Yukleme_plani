@@ -369,6 +369,7 @@ render_flash();
                 $_add('Plaka',           trim(($r['on_plaka'] ?? '') . ' / ' . ($r['arka_plaka'] ?? ''), ' /'));
                 $_add('Nakliye Şirketi', $r['nakliye_sirketi'] ?? '');
                 $_add('Ulaşım',          $r['ulasim']          ?? '');
+                $_add('Gideceği Ülke',   $r['gidecek_ulke']    ?? '');
                 $_add('Telefon',         $r['telefon']         ?? '');
                 $_add('Fatura No',       $r['fatura_no']       ?? '');
                 if ((float)($r['nakliye_bedeli'] ?? 0) > 0) $_add('Nakliye Bedeli', fmt_money($r['nakliye_bedeli']));

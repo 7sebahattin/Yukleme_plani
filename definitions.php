@@ -30,6 +30,7 @@ const DEF_SEVKIYAT_COLS = [
     'on_plaka'        => 'on_plaka',
     'arka_plaka'      => 'arka_plaka',
     'ulasim'          => 'ulasim',
+    'gidecek_ulke'    => 'gidecek_ulke',
 ];
 
 // ── Bölüm tanımları ──────────────────────────────────────
@@ -54,7 +55,7 @@ $SECTIONS = [
     'sevkiyat' => [
         'label' => 'Sevkiyat Bilgileri', 'icon' => '🚚',
         'desc'  => 'Kayıt formunda öneri olarak çıkan alıcı, gümrük, nakliye, şoför, plaka bilgileri',
-        'types' => ['alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim'],
+        'types' => ['alici', 'gumruk', 'nakliye_sirketi', 'sofor', 'telefon', 'on_plaka', 'arka_plaka', 'ulasim', 'gidecek_ulke'],
     ],
     'operasyon' => [
         'label' => 'Operasyon', 'icon' => '🚪',
@@ -66,7 +67,7 @@ $SECTIONS = [
 // Dara (birim ağırlık) gerektirmeyen tipler — ticari + sevkiyat lookup'ları
 $cat_types = array_merge($SECTIONS['ticari']['types'], $SECTIONS['sevkiyat']['types']);
 $cat_icons = ['firma' => '🏢', 'tedarikci' => '🚛', 'depo' => '🏭', 'bolge' => '🗺️', 'urun' => '🌿', 'marka' => '🏷️', 'lokasyon' => '📍', 'cikis_nedeni' => '🚪',
-              'alici' => '📥', 'gumruk' => '🛃', 'nakliye_sirketi' => '🚛', 'sofor' => '🧑‍✈️', 'telefon' => '📞', 'on_plaka' => '🔢', 'arka_plaka' => '🔢', 'ulasim' => '🛳️'];
+              'alici' => '📥', 'gumruk' => '🛃', 'nakliye_sirketi' => '🚛', 'sofor' => '🧑‍✈️', 'telefon' => '📞', 'on_plaka' => '🔢', 'arka_plaka' => '🔢', 'ulasim' => '🛳️', 'gidecek_ulke' => '🌍'];
 
 // type → section eşlemesi
 $type_section = [];

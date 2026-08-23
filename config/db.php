@@ -284,6 +284,16 @@ function db(): PDO {
             error_log("[MIGRATION ulasim] " . $_ulm->getMessage());
         }
 
+        // Gideceği Ülke: loading_records'a gidecek_ulke kolonu ekle (idempotent) — Ulaşım'ın yanında, aynı desen
+        try {
+            $pdo->query("SELECT 1 FROM `loading_records` LIMIT 0");
+            if (!(bool)$pdo->query("SHOW COLUMNS FROM `loading_records` LIKE 'gidecek_ulke'")->fetchColumn()) {
+                $pdo->exec("ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''");
+            }
+        } catch (PDOException $_gum) {
+            error_log("[MIGRATION gidecek_ulke] " . $_gum->getMessage());
+        }
+
         // Sprint XZ-01: loading_pallets'e reported_at + reported_by + report_id ekle (idempotent)
         try {
             $pdo->query("SELECT 1 FROM `loading_pallets` LIMIT 0");

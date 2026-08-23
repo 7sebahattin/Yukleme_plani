@@ -313,6 +313,7 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
                 <tr><th>ARKA PLAKA NO</th><td colspan="3" class="ai-emph"><?= h($record['arka_plaka']) ?></td></tr>
                 <tr><th>NAKLİYE ŞİRKETİ</th><td colspan="3"><?= h($record['nakliye_sirketi']) ?></td></tr>
                 <tr><th>ULAŞIM</th><td colspan="3"><?= h($record['ulasim'] ?? '') ?></td></tr>
+                <tr><th>GİDECEĞİ ÜLKE</th><td colspan="3"><?= h($record['gidecek_ulke'] ?? '') ?></td></tr>
                 <tr><th>TELEFON</th><td colspan="3"><?= h($record['telefon']) ?></td></tr>
                 <tr><th>TARİH</th><td colspan="3" class="ai-emph"><?= h(fmt_date($record['tarih'])) ?></td></tr>
             </table>

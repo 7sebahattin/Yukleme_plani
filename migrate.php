@@ -18,6 +18,7 @@ $pdo = db();
 // her biri: [tablo, kolon, "ALTER ... SQL"]
 $migrations = [
     ['loading_records', 'ulasim',         "ALTER TABLE `loading_records` ADD COLUMN `ulasim` VARCHAR(100) NOT NULL DEFAULT ''"],
+    ['loading_records', 'gidecek_ulke',   "ALTER TABLE `loading_records` ADD COLUMN `gidecek_ulke` VARCHAR(100) NOT NULL DEFAULT ''"],
     ['loading_records', 'brand',          "ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL"],
     ['loading_records', 'urun_sahibi_id', "ALTER TABLE `loading_records` ADD COLUMN `urun_sahibi_id` INT NULL DEFAULT NULL"],
     ['loading_records', 'type',           "ALTER TABLE `loading_records` ADD COLUMN `type` VARCHAR(20) NOT NULL DEFAULT 'yukleme'"],
