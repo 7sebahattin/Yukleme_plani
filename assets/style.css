@@ -5520,26 +5520,9 @@ html[data-theme="dark"] body.print-mode {
 }
 
 /* =========================================================
-   TEMA SEÇİCİ — sidebar 3'lü segment + mobil topbar döngü butonu
+   TEMA DÖNGÜ BUTONU — mobil/tablet topbar (sidebar'da artık yok,
+   onun yerine sürüm damgası gösteriliyor — bkz. .sidebar-surum)
    ========================================================= */
-.tema-secim {
-    display: flex; gap: 6px;
-    margin: 10px 12px; padding: 4px;
-    background: rgba(255,255,255,.06);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 10px;
-}
-.tema-secim button {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 7px 2px; border: 0; border-radius: 7px;
-    background: transparent; color: rgba(255,255,255,.75);
-    font-size: .68rem; font-weight: 700; cursor: pointer;
-    transition: background .15s ease, color .15s ease;
-}
-.tema-secim button span { font-size: .95rem; line-height: 1; }
-.tema-secim button:hover { background: rgba(255,255,255,.1); color: #fff; }
-.tema-secim button.aktif { background: rgba(255,255,255,.16); color: #fff; }
-
 .tema-dongu {
     flex-shrink: 0;
     width: 34px; height: 34px; padding: 0;
@@ -5550,7 +5533,17 @@ html[data-theme="dark"] body.print-mode {
     transition: background .15s ease;
 }
 .tema-dongu:hover { background: rgba(255,255,255,.2); }
-@media print { .tema-secim, .tema-dongu { display: none !important; } }
+@media print { .tema-dongu, .sidebar-surum { display: none !important; } }
+
+/* Sidebar sürüm damgası — sunucudaki dosyanın güncel olup olmadığını
+   gözle doğrulamak için (Hal Bildirimi panelSurum ile aynı amaç). */
+.sidebar-surum {
+    margin: 10px 12px 4px;
+    text-align: center;
+    font-size: .68rem;
+    color: rgba(255,255,255,.4);
+    letter-spacing: .02em;
+}
 
 /* =========================================================
    KOYU TEMA v2 — okunabilirlik düzeltmeleri (kullanıcı geri bildirimi)
