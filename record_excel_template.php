@@ -108,6 +108,16 @@ $setF = function (string $cell, string $formula) use ($sh, &$log) {
     $log[] = "$cell=$formula [F]";
 };
 
+// ── Ürün cinsi listesi (kategori özet bloklarıyla ve yeşil kutuyla paylaşılır) ──
+// Kayıttaki palet satırlarının CİNSİ (G) sütununda kaç farklı ürün varsa
+// (ilk görülme sırasına göre) — hem O2:P6 yeşil kutuda hem L14/L18/L22/L26/L30
+// kategori özet bloklarında aynı liste kullanılır.
+$cats = [];
+foreach ($pallets as $p) {
+    $c = tr_upper($p['urun_cinsi'] ?? '');
+    if ($c !== '' && !in_array($c, $cats, true)) { $cats[] = $c; }
+}
+
 // ── Marka başlığı (A1) ──
 $brand = strtoupper(trim((string)($record['brand'] ?? '')));
 $brand_title = ($brand === 'URAL') ? 'URAL FRESH'
@@ -130,7 +140,17 @@ $setS('J4', $record['bolge'] ?? '');
 $setS('J5', $record['gumruk'] ?? '');
 $setS('J6', $record['ulasim'] ?? '');
 $setS('J7', $record['alici'] ?? '');
-$setS('O2', mb_strtoupper(trim((string)($record['urun'] ?? '')), 'UTF-8'));
+$setS('N7', $record['gidecek_ulke'] ?? '');
+// Yeşil kutu (O2:P6) — Sprint Excel-03: kayıttaki paletlerde kaç farklı CİNSİ
+// varsa hepsi alt alta yazılır (tek ürün olan kayıtlarda eskisi gibi tek satır).
+// $record['urun'] tek başlık alanı olduğundan, hiç palet/cinsi yoksa ona düşülür.
+$_urun_kutu = $cats ?: [tr_upper($record['urun'] ?? '')];
+$setS('O2', implode("\n", array_filter($_urun_kutu)));
+// Şablonda zaten satır kaydırma (wrap text) açık — birden fazla cinsi \n ile
+// alt alta düşer. 3+ farklı cinside kutuya taşmasın diye font küçültülür.
+if (count($_urun_kutu) > 2) {
+    $sh->getStyle('O2')->getFont()->setSize(max(11, 20 - (count($_urun_kutu) - 2) * 3));
+}
 
 // ── Palet satırları (10..35 = 26 satır) ──
 $ROW0 = 10; $CAP = 35 - $ROW0 + 1;  // 26
@@ -159,33 +179,53 @@ foreach ($pallets as $i => $p) {
     // DARA = KASA ADETİ × kasa birim dara + palet birim dara (canlı formül; kasa adeti değişince otomatik güncellenir)
     $setF("E$r", "=ROUND(B$r*R$r+S$r,1)");
     $setS("F$r", $p['kasa_cinsi_adi'] ?? '');
-    $setS("G$r", mb_strtoupper(trim((string)($p['urun_cinsi'] ?? '')), 'UTF-8'));
+    $setS("G$r", tr_upper($p['urun_cinsi'] ?? ''));
     // NET KG = BRÜT − DARA (canlı formül; brüt/dara düzenlenince otomatik güncellenir)
     $setF("H$r", "=ROUND(D$r-E$r,1)");
 }
 
-// ── Malzeme listesi (Sprint Excel-02: dinamik — yalnız gerçekten eklenen malzemeler) ──
+// ── Malzeme listesi (Sprint Excel-02/03: dinamik — yalnız gerçekten eklenen malzemeler) ──
 // İHRACAT PALETİ (I10) satırı sabit kalır — bu bir "eklenen malzeme" değil, paletin
 // kendi palet tipi kullanım toplamıdır (record_view'daki "Kasa Dağılımı" ile aynı köken).
+// Kısa görünen isim (Sprint Excel-03): "İHRACAT PALETİ" yerine artık kısaca "PALET".
+$setS('I10', 'PALET');
 $setN('K10', $use_by_type['palet_tipi'] ?? 0);
 
+// Malzeme türü → Excel'de gösterilecek kısa isim. Burada tanımlanmayan türler
+// kendi sistem adıyla (material_definitions.name) yazılır — "burada tanımlama
+// yapmadıklarım direkt sistem ismiyle yazabilir" talebi.
+$MAT_ALIASES = [
+    'sapka'         => 'ŞAPKA',
+    'kosebent'      => 'KÖŞEBENT',
+    'casus'         => 'CASUS',
+    'serit'         => 'ŞERİT',
+    'file'          => 'FİLE',
+    'taban_kagidi'  => 'TABAN KAĞIDI',
+    'kenar_kartonu' => 'KENAR KARTONU',
+    'viyol'         => 'VİYOL',
+];
+
 // Gerçekten eklenmiş malzemeler (pallet_materials satırları) — record_view.php'deki
-// "Ek Malzemeler" panelindeki $em_groups ile BİREBİR aynı gruplama/sıra/hesap mantığı.
+// "Ek Malzemeler" panelindeki $em_groups ile BİREBİR aynı gruplama/sıra/hesap mantığı;
+// TEK FARK: "viyol" türü kendi içinde TEK satırda toplanır (birden fazla çeşit viyol
+// stoğu eklenmiş olabilir — hepsi tek "VİYOL" toplamı olarak görünür). Diğer türler
+// yine tanım (material_id) bazında ayrı satır olarak kalır.
 // I11..I32 (22 satır) şablonun "mavi alan"ı — statik örnek isimler artık buraya değil,
 // yalnız bu kayıtta gerçekten kullanılan malzemeler isim+adet olarak yazılır; kalan
 // satırlar (kullanılmayan yuvalar) temizlenir, mavi biçim/hücre yapısı bozulmaz.
-$added_materials = []; // def_id => ['name'=>.., 'adet'=>float]
+$added_materials = []; // grup anahtarı => ['name'=>.., 'type'=>.., 'adet'=>float]
 foreach ($pallets as $p) {
     foreach (($p['materials'] ?? []) as $m) {
-        $kid = (int)$m['def_id'];
-        $basis = material_calc_basis((string)$m['material_type'], (string)$m['material_name']);
+        $mtype = (string)$m['material_type'];
+        $key   = ($mtype === 'viyol') ? 'type:viyol' : (int)$m['def_id'];
+        $basis = material_calc_basis($mtype, (string)$m['material_name']);
         $eff   = ($basis === 'kasa')
             ? (float)$m['quantity'] * (int)$p['kasa_adeti']
             : (float)$m['quantity'];
-        if (!isset($added_materials[$kid])) {
-            $added_materials[$kid] = ['name' => $m['material_name'], 'adet' => 0.0];
+        if (!isset($added_materials[$key])) {
+            $added_materials[$key] = ['name' => $m['material_name'], 'type' => $mtype, 'adet' => 0.0];
         }
-        $added_materials[$kid]['adet'] += $eff;
+        $added_materials[$key]['adet'] += $eff;
     }
 }
 $MAT_ROW0 = 11; $MAT_CAP = 32 - $MAT_ROW0 + 1; // 22 yuva (I11..I32)
@@ -197,7 +237,8 @@ if (count($added_materials) > $MAT_CAP) {
 $mi = 0;
 foreach ($added_materials as $am) {
     $r = $MAT_ROW0 + $mi;
-    $setS("I$r", tr_upper($am['name']));
+    $label = $MAT_ALIASES[$am['type']] ?? tr_upper($am['name']);
+    $setS("I$r", $label);
     $setN("K$r", round($am['adet'], 3));
     $mi++;
 }
@@ -220,11 +261,7 @@ $setF('O13', "=SUM(B$ROW0:B$ROWE)");          // TOPLAM KASA ADETİ
 // farklı ürün varsa (ilk görülme sırasına göre) otomatik yazılır ve SUMIF ile hesaplanır.
 // Yeni bir ürün cinsi geldiğinde kod değişikliği gerekmez.
 $cat_slots = [14, 18, 22, 26, 30];
-$cats = [];
-foreach ($pallets as $p) {
-    $c = mb_strtoupper(trim((string)($p['urun_cinsi'] ?? '')), 'UTF-8');
-    if ($c !== '' && !in_array($c, $cats, true)) { $cats[] = $c; }
-}
+// $cats yukarıda (yeşil kutu O2 ile paylaşımlı) zaten hesaplandı.
 if (count($cats) > count($cat_slots)) {
     http_response_code(400);
     die('Şablonda en fazla ' . count($cat_slots) . ' farklı ürün cinsi özeti için yer var; '
@@ -272,6 +309,7 @@ foreach ($size_slots as $i => $r) {
         $sh->setCellValue("I$r", null);
         $sh->setCellValue("J$r", null);
         $sh->setCellValue("K$r", null);
+        $sh->setCellValue("L$r", null);
         $log[] = "H$r=(boş)";
         continue;
     }
@@ -279,6 +317,7 @@ foreach ($size_slots as $i => $r) {
     $setF("I$r", "=SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$B\$$ROW0:\$B\$$ROWE)");          // KASA
     $setF("J$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$D\$$ROW0:\$D\$$ROWE),0)"); // BRÜT
     $setF("K$r", "=ROUND(SUMIF(\$C\$$ROW0:\$C\$$ROWE,H$r,\$H\$$ROW0:\$H\$$ROWE),0)"); // NET
+    $setF("L$r", "=COUNTIF(\$C\$$ROW0:\$C\$$ROWE,H$r)");                             // ADET (kaç palet)
 }
 
 // ── DEBUG modu ──
