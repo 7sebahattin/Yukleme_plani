@@ -22,6 +22,14 @@ if (!$record) { set_flash('error', 'Kayıt bulunamadı.'); header('Location: rec
 
 $list_url = ($record['type'] ?? 'yukleme') === 'cikma' ? 'cikmalar.php' : 'records.php';
 
+// Ürün Sahibi adı (urun_sahibi_id → material_definitions.name) — görüntülemede göstermek için
+$_urun_sahibi_adi = '';
+if (!empty($record['urun_sahibi_id'])) {
+    $_us_st = db()->prepare("SELECT name FROM material_definitions WHERE id = ?");
+    $_us_st->execute([(int)$record['urun_sahibi_id']]);
+    $_urun_sahibi_adi = (string)($_us_st->fetchColumn() ?: '');
+}
+
 $st = db()->prepare("
     SELECT p.*,
            kc.name AS kasa_cinsi_adi,
@@ -437,53 +445,71 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
     </div>
 </div>
 
-<?php $_rv_is_yukleme = ($record['type'] ?? 'yukleme') === 'yukleme'; ?>
-<h3 class="section-title">Genel Bilgiler</h3>
-<div class="info-grid">
-    <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
-    <div><span class="lbl">Ürün</span><strong><?= h($record['urun'] ?: '—') ?></strong></div>
-    <div><span class="lbl">Depo</span><strong><?= h($depo_str ?: '—') ?></strong></div>
-    <div><span class="lbl">Bölge</span><strong><?= h($record['bolge'] ?: '—') ?></strong></div>
-    <?php if ($_rv_is_yukleme): ?>
-    <div><span class="lbl">Alıcı</span><strong><?= h($record['alici'] ?: '—') ?></strong></div>
-    <div><span class="lbl">Casus No</span><strong><?= h($record['casus_no'] ?: '—') ?></strong></div>
-    <?php endif; ?>
-    <?php if (!$_rv_is_yukleme && !empty($record['cikis_nedeni'])): ?>
-    <div><span class="lbl">Çıkış Nedeni</span><strong><span class="cikis-nedeni-badge"><?= h($record['cikis_nedeni']) ?></span></strong></div>
-    <?php endif; ?>
-</div>
-
 <?php
+$_rv_is_yukleme = ($record['type'] ?? 'yukleme') === 'yukleme';
 $_rv_has_nakliye = !empty($record['on_plaka']) || !empty($record['arka_plaka']) ||
                    !empty($record['nakliye_sirketi']) || !empty($record['sofor_adi']) ||
                    !empty($record['telefon']) || !empty($record['ulasim']) || !empty($record['gidecek_ulke']);
+$_rv_show_nakliye = $_rv_is_yukleme && $_rv_has_nakliye;
 ?>
-<?php if ($_rv_is_yukleme && $_rv_has_nakliye): ?>
-<h3 class="section-title">Nakliye Bilgileri</h3>
-<div class="info-grid">
-    <?php if (!empty($record['on_plaka'])): ?>
-    <div><span class="lbl">Ön Plaka</span><strong><?= h($record['on_plaka']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['arka_plaka'])): ?>
-    <div><span class="lbl">Arka Plaka</span><strong><?= h($record['arka_plaka']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['nakliye_sirketi'])): ?>
-    <div><span class="lbl">Nakliye Şirketi</span><strong><?= h($record['nakliye_sirketi']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['sofor_adi'])): ?>
-    <div><span class="lbl">Şoför Adı</span><strong><?= h($record['sofor_adi']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['telefon'])): ?>
-    <div><span class="lbl">Telefon</span><strong><?= h($record['telefon']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['ulasim'])): ?>
-    <div><span class="lbl">Ulaşım</span><strong><?= h($record['ulasim']) ?></strong></div>
-    <?php endif; ?>
-    <?php if (!empty($record['gidecek_ulke'])): ?>
-    <div><span class="lbl">Gideceği Ülke</span><strong><?= h($record['gidecek_ulke']) ?></strong></div>
+<div class="view-info-cols<?= $_rv_show_nakliye ? '' : ' view-info-cols-single' ?>">
+    <div class="view-info-col">
+        <h3 class="section-title">Genel Bilgiler</h3>
+        <div class="info-grid">
+            <div><span class="lbl">Tarih</span><strong><?= h(fmt_date($record['tarih'])) ?></strong></div>
+            <div><span class="lbl">Ürün</span><strong><?= h($record['urun'] ?: '—') ?></strong></div>
+            <div><span class="lbl">Depo</span><strong><?= h($depo_str ?: '—') ?></strong></div>
+            <div><span class="lbl">Bölge</span><strong><?= h($record['bolge'] ?: '—') ?></strong></div>
+            <?php if ($_rv_is_yukleme): ?>
+            <div><span class="lbl">Alıcı</span><strong><?= h($record['alici'] ?: '—') ?></strong></div>
+            <?php if (!empty($record['gumruk'])): ?>
+            <div><span class="lbl">Gümrük</span><strong><?= h($record['gumruk']) ?></strong></div>
+            <?php endif; ?>
+            <?php if ($_urun_sahibi_adi !== ''): ?>
+            <div><span class="lbl">Ürün Sahibi</span><strong><?= h($_urun_sahibi_adi) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['brand'])): ?>
+            <div><span class="lbl">Marka</span><strong><?= h($record['brand']) ?></strong></div>
+            <?php endif; ?>
+            <div><span class="lbl">Casus No</span><strong><?= h($record['casus_no'] ?: '—') ?></strong></div>
+            <?php if (!empty($record['etiket'])): ?>
+            <div class="span-2"><span class="lbl">Not</span><strong><?= h($record['etiket']) ?></strong></div>
+            <?php endif; ?>
+            <?php endif; ?>
+            <?php if (!$_rv_is_yukleme && !empty($record['cikis_nedeni'])): ?>
+            <div><span class="lbl">Çıkış Nedeni</span><strong><span class="cikis-nedeni-badge"><?= h($record['cikis_nedeni']) ?></span></strong></div>
+            <?php endif; ?>
+        </div>
+    </div>
+    <?php if ($_rv_show_nakliye): ?>
+    <div class="view-info-col">
+        <h3 class="section-title">Nakliye Bilgileri</h3>
+        <div class="info-grid">
+            <?php if (!empty($record['on_plaka'])): ?>
+            <div><span class="lbl">Ön Plaka</span><strong><?= h($record['on_plaka']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['arka_plaka'])): ?>
+            <div><span class="lbl">Arka Plaka</span><strong><?= h($record['arka_plaka']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['nakliye_sirketi'])): ?>
+            <div><span class="lbl">Nakliye Şirketi</span><strong><?= h($record['nakliye_sirketi']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['sofor_adi'])): ?>
+            <div><span class="lbl">Şoför Adı</span><strong><?= h($record['sofor_adi']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['telefon'])): ?>
+            <div><span class="lbl">Telefon</span><strong><?= h($record['telefon']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['ulasim'])): ?>
+            <div><span class="lbl">Ulaşım</span><strong><?= h($record['ulasim']) ?></strong></div>
+            <?php endif; ?>
+            <?php if (!empty($record['gidecek_ulke'])): ?>
+            <div><span class="lbl">Gideceği Ülke</span><strong><?= h($record['gidecek_ulke']) ?></strong></div>
+            <?php endif; ?>
+        </div>
+    </div>
     <?php endif; ?>
 </div>
-<?php endif; ?>
 
 <?php if (!$_rv_is_yukleme): ?>
 <h3 class="section-title">Palet Listesi</h3>
