@@ -254,6 +254,15 @@ foreach ($added_materials as $am) {
     $setN("K$r", round($am['adet'], 3));
     $mi++;
 }
+// "Plastik Kasa" gerçek bir malzeme tanımı değil — her zaman TOPLAM KASA ADETİ
+// (O13) ile birebir aynı olan türetilmiş bir satır; malzeme listesinin hemen
+// altına canlı formülle eklenir (kullanıcının kendi elle eklediği örnek: K17="=O13").
+if ($MAT_ROW0 + $mi <= 32) {
+    $r = $MAT_ROW0 + $mi;
+    $setS("I$r", 'PLASTİK KASA');
+    $setF("K$r", '=O13');
+    $mi++;
+}
 for ($r = $MAT_ROW0 + $mi; $r <= 32; $r++) {
     $sh->setCellValue("I$r", null);
     $sh->setCellValue("K$r", null);
