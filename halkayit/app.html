@@ -648,6 +648,30 @@
       </div>
       <button class="btn btn-teal" id="btnKunyeler">🔍 Künyeleri Getir</button>
       <div class="mesaj" id="kunyeMesaj"></div>
+
+      <!-- PLAN TASLAĞI — künye seçmeden, yalnız toplam kilo + birim fiyat ile
+           taslak kaydet. Künyeler GÖNDERİM anında canlı stoktan otomatik
+           seçilir (sunucuda hks_plan_kunye_coz — "Otomatik Dağıt" ile aynı
+           mantık). Böylece künye sorgusu beklemeden taslak hazırlanabilir. -->
+      <button class="btn btn-soluk" id="btnPlanAc" style="margin-top:8px">📝 Taslak Oluştur</button>
+      <div class="gizli" id="planBlok" style="margin-top:10px;padding:12px;border:1px dashed var(--teal);border-radius:10px">
+        <div style="font-size:12.5px;color:var(--soluk);margin-bottom:10px">
+          Künye seçmeden taslak hazırlar. <b>Gönder</b>'e bastığınızda künyeler o
+          anki stoktan otomatik seçilir; stok yetmezse hiçbir bildirim gönderilmez.
+        </div>
+        <div class="satir2">
+          <div>
+            <label class="label-vurgu">🎯 Toplam Kilo *</label>
+            <input id="oPlanKilo" class="input-turuncu" inputmode="decimal" autocomplete="off">
+          </div>
+          <div id="planFiyatBlok">
+            <label class="label-vurgu">💰 Birim Fiyat *</label>
+            <input id="oPlanFiyat" class="input-yesil" inputmode="decimal" autocomplete="off">
+          </div>
+        </div>
+        <button class="btn btn-amber" id="btnPlanKaydet">💾 Taslağı Kaydet</button>
+        <div class="mesaj" id="planMesaj"></div>
+      </div>
     </div>
 
     <!-- REFERANSSIZ (Satın Alım): malın tam tanımı. Künye seçimi YERİNE gelir. -->
@@ -915,7 +939,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-23 · 14';
+const PANEL_SURUM = '2026-08-25 · 15';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1598,7 +1622,12 @@ async function taslakSayiGuncelle() {
 // ================= FORM TEMİZLİĞİ =================
 // Her yeni işlemde sayfa temiz gelir
 function formuTemizle() {
-  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
+  ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum',
+   'oPlanKilo', 'oPlanFiyat'].forEach(id => { $(id).value = ''; });
+  // Plan taslağı bloğu kapalı başlar
+  $('planBlok').classList.add('gizli');
+  $('btnPlanAc').textContent = '📝 Taslak Oluştur';
+  $('planMesaj').className = 'mesaj';
   $('sUlke').value = '';
   $('sBelgeTipi').value = '';
   $('sUrun').value = '';
@@ -2870,17 +2899,15 @@ $('btnMalTaslak').onclick = async () => {
   } catch (e) { alert('HATA: ' + e.message); }
 };
 
-$('btnTaslakKaydet').onclick = async () => {
-  const satirlar = seciliSatirlar();
-  if (satirlar.length === 0) return;
-  const hatali = satirlar.find(s => s.miktar > s.kalan);
-  if (hatali) {
-    alert(`Künye ${hatali.kunyeNo}: girilen miktar (${fmt(hatali.miktar)}) kalandan (${fmt(hatali.kalan)}) fazla!`);
-    return;
-  }
-  if (!$('sSifat').value || !$('sTur').value) { alert('Sıfat ve tür seçiniz (listeleri güncelleyin).'); return; }
+// ORTAK ALAN TOPLAYICI — normal (künye seçilmiş) taslak ile PLAN taslağı AYNI
+// kuralları kullansın diye tek yerde toplanır; ikisi arasında kural farkı
+// oluşamaz. `fiyatId` = birim fiyatın okunacağı input: künye seçimi kartındaki
+// `oFiyat` ya da plan bloğundaki `oPlanFiyat`.
+// Doğrulama başarısızsa kullanıcıyı uyarır ve null döner.
+function ortakTopla(fiyatId) {
+  if (!$('sSifat').value || !$('sTur').value) { alert('Sıfat ve tür seçiniz (listeleri güncelleyin).'); return null; }
   if (!$('oPlaka').value.trim() && !($('oBelgeNo').value.trim() && $('sBelgeTipi').value)) {
-    alert('Araç plakası veya belge no + belge tipi giriniz.'); return;
+    alert('Araç plakası veya belge no + belge tipi giriniz.'); return null;
   }
 
   const urunSecili = $('sUrun').value;
@@ -2901,19 +2928,19 @@ $('btnTaslakKaydet').onclick = async () => {
     const sevk = sevkModuMu();
     const satin = satinAlimModuMu();
     const tc = $('oIkTc').value.trim();
-    if (!tc) { alert('Karşı taraf TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
+    if (!tc) { alert('Karşı taraf TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return null; }
     if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) {
-      alert('Karşı tarafı "Doğrula" ile GTB\'de kontrol edin.'); return;
+      alert('Karşı tarafı "Doğrula" ile GTB\'de kontrol edin.'); return null;
     }
-    if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return; }
-    if (!$('sIsletmeTuru').value) { alert('İşletme türü (gidilen yer) seçiniz.'); return; }
+    if (!$('sIkSifat').value)     { alert('Karşı taraf sıfatı seçiniz.'); return null; }
+    if (!$('sIsletmeTuru').value) { alert('İşletme türü (gidilen yer) seçiniz.'); return null; }
 
     const kayitli = kayitliMi();
     if ((sevk || satin) && !kayitli) {
-      alert((satin ? 'Satın Alım' : 'Sevk Etme') + ' için karşı taraf GTB\'de KAYITLI olmalıdır.'); return;
+      alert((satin ? 'Satın Alım' : 'Sevk Etme') + ' için karşı taraf GTB\'de KAYITLI olmalıdır.'); return null;
     }
     const fiyatGerekli = !sevk;   // Satış ve Satın Alım fiyatlı; Sevk Etme fiyatsız
-    if (fiyatGerekli && !trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
+    if (fiyatGerekli && !trSayi($(fiyatId).value)) { alert('Birim fiyat giriniz (zorunlu).'); $(fiyatId).focus(); return null; }
 
     ortak = Object.assign({}, ortakBase, {
       yurtIci: true,
@@ -2921,7 +2948,7 @@ $('btnTaslakKaydet').onclick = async () => {
       // Sunucu, gönderim anında bunu tekrar doğrular.
       kayitZorunlu: (sevk || satin),
       fiyatGonder: fiyatGerekli,
-      fiyat: fiyatGerekli ? trSayi($('oFiyat').value) : 0,
+      fiyat: fiyatGerekli ? trSayi($(fiyatId).value) : 0,
       isletmeTuruId: $('sIsletmeTuru').value,
       ikinciTc: tc,
       ikinciSifatId: $('sIkSifat').value,
@@ -2930,17 +2957,17 @@ $('btnTaslakKaydet').onclick = async () => {
 
     const adresMod = !sevk && !satin && !kayitli;   // yalnız yurt içi Satış + kayıtsız
     if (adresMod) {
-      if (!$('oIkAd').value.trim())  { alert('Kayıtsız alıcı için Ad/Ünvan zorunludur.'); return; }
+      if (!$('oIkAd').value.trim())  { alert('Kayıtsız alıcı için Ad/Ünvan zorunludur.'); return null; }
       if (!cepGecerli($('oIkCep').value)) {
         alert('Kayıtsız alıcı için Cep Telefonu zorunludur — en az 10 rakam (örn. 05001112233).');
-        $('oIkCep').focus(); return;
+        $('oIkCep').focus(); return null;
       }
       // GTB 12.03.2025: kayıtsız kişi bildiriminde TC + doğum tarihi zorunlu.
       if (!$('oIkDogum').value) {
         alert('Kayıtsız alıcı için Doğum Tarihi zorunludur (GTB 12.03.2025 duyurusu).');
-        $('oIkDogum').focus(); return;
+        $('oIkDogum').focus(); return null;
       }
-      if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return; }
+      if (!$('sIl').value || !$('sIlce').value || !$('sBelde').value) { alert('İl / İlçe / Belde seçiniz.'); return null; }
       Object.assign(ortak, {
         hedefAdres: true,
         ikinciCep: cepRakam($('oIkCep').value),
@@ -2950,7 +2977,7 @@ $('btnTaslakKaydet').onclick = async () => {
                 $('sIl').selectedOptions[0].textContent + '/' + $('sIlce').selectedOptions[0].textContent + ')',
       });
     } else {
-      if (!$('sIsyeri').value) { alert((satin ? 'İşyeri / depo' : 'Gidecek işyeri') + ' seçiniz.'); return; }
+      if (!$('sIsyeri').value) { alert((satin ? 'İşyeri / depo' : 'Gidecek işyeri') + ' seçiniz.'); return null; }
       Object.assign(ortak, {
         gidecekIsyeriId: $('sIsyeri').value,
         gidecekIsyeriAd: $('sIsyeri').selectedOptions[0].textContent,
@@ -2960,37 +2987,104 @@ $('btnTaslakKaydet').onclick = async () => {
     }
   } else {
     // ---- YURT DIŞI: mevcut ihracat ----
-    if (!trSayi($('oFiyat').value)) { alert('Birim fiyat giriniz (zorunlu).'); $('oFiyat').focus(); return; }
-    if (!$('sUlke').value) { alert('Ülke seçiniz.'); return; }
+    if (!trSayi($(fiyatId).value)) { alert('Birim fiyat giriniz (zorunlu).'); $(fiyatId).focus(); return null; }
+    if (!$('sUlke').value) { alert('Ülke seçiniz.'); return null; }
     ortak = Object.assign({}, ortakBase, {
-      fiyat: trSayi($('oFiyat').value),
+      fiyat: trSayi($(fiyatId).value),
       isletmeTuruId: oto.isletmeTuruId,
       ulkeId: $('sUlke').value,
       ulkeAd: $('sUlke').selectedOptions[0].textContent,
     });
   }
+  return ortak;
+}
+
+// Taslağı kaydeder ve ekranı temizler — normal ve plan taslağı ortak son adım.
+async function taslagiGonderKaydet(govde) {
+  await api('/api/taslaklar', 'POST', govde);
+  // Düzenleme modu: yeni taslak başarıyla kaydedildi → eski kopyayı sil.
+  if (duzenlenenTaslakId) {
+    try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); }
+    catch (e) { /* silinemezse kopya kalır — kullanıcı listeden silebilir */ }
+    toast('💾 Taslak güncellendi');
+    duzenlenenTaslakId = null;
+  } else {
+    toast('💾 Taslak kaydedildi');
+  }
+  formuTemizle();
+  taslakEkraniAc();
+}
+
+$('btnTaslakKaydet').onclick = async () => {
+  const satirlar = seciliSatirlar();
+  if (satirlar.length === 0) return;
+  const hatali = satirlar.find(s => s.miktar > s.kalan);
+  if (hatali) {
+    alert(`Künye ${hatali.kunyeNo}: girilen miktar (${fmt(hatali.miktar)}) kalandan (${fmt(hatali.kalan)}) fazla!`);
+    return;
+  }
+  const ortak = ortakTopla('oFiyat');
+  if (!ortak) return;
 
   try {
-    await api('/api/taslaklar', 'POST', {
+    await taslagiGonderKaydet({
       firmaId: aktifFirma.id,
       satirlar: satirlar.map(s => ({ kunyeNo: s.kunyeNo, miktar: s.miktar })),
       ortak,
     });
-    // Düzenleme modu: yeni taslak başarıyla kaydedildi → eski kopyayı sil.
-    if (duzenlenenTaslakId) {
-      try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); }
-      catch (e) { /* silinemezse kopya kalır — kullanıcı listeden silebilir */ }
-      toast('💾 Taslak güncellendi');
-      duzenlenenTaslakId = null;
-    } else {
-      toast('💾 Taslak kaydedildi');
-    }
-    formuTemizle();
-    taslakEkraniAc();
+  } catch (e) { alert('HATA: ' + e.message); }
+};
+
+// ================= PLAN TASLAĞI (künyesiz) =================
+// "📝 Taslak Oluştur" — künye sorgusu yapmadan yalnız toplam kilo + birim fiyat
+// ile taslak hazırlar. Künyeler GÖNDERİM anında sunucuda canlı stoktan seçilir
+// (api.php → hks_plan_kunye_coz), tıpkı "Künyeleri Getir" + "⚡ Otomatik Dağıt"
+// yapılmış gibi. Stok yetmezse hiçbir bildirim gitmez, taslak korunur.
+$('btnPlanAc').onclick = () => {
+  const acik = !$('planBlok').classList.contains('gizli');
+  $('planBlok').classList.toggle('gizli', acik);
+  $('btnPlanAc').textContent = acik ? '📝 Taslak Oluştur' : '✖️ Taslak Oluşturmayı Kapat';
+  if (!acik) {
+    // Sevk Etme fiyatsızdır — kart 4'teki fiyatBlok ile aynı kural.
+    $('planFiyatBlok').classList.toggle('gizli', sevkModuMu());
+    $('planBlok').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+};
+
+$('btnPlanKaydet').onclick = async () => {
+  if (!aktifFirma) return;
+  if (!$('sUrun').value) {
+    mesajGoster('planMesaj', 'Önce ürün seçin — künyeler gönderim anında bu ürüne göre çözülecek.', 'hata');
+    return;
+  }
+  const kilo = trSayi($('oPlanKilo').value);
+  if (kilo <= 0) { alert('Toplam kilo giriniz.'); $('oPlanKilo').focus(); return; }
+
+  const ortak = ortakTopla('oPlanFiyat');
+  if (!ortak) return;
+
+  // Künyeler gönderimde çözülecek — sorgu ölçütleri taslakta saklanır ki
+  // sunucu "Künyeleri Getir"in birebir aynısını çalıştırabilsin.
+  ortak.planKg = kilo;
+  ortak.planSorgu = {
+    urunId: $('sUrun').value,
+    aySayisi: parseInt($('sGun').value, 10),
+    isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
+    sirala: $('sKunyeSirala').value,
+  };
+
+  try {
+    await taslagiGonderKaydet({ firmaId: aktifFirma.id, satirlar: [], ortak });
   } catch (e) { alert('HATA: ' + e.message); }
 };
 
 // ================= TASLAKLAR EKRANI =================
+// Plan taslağı = künye satırı YOK, hedef kilo VAR (künyeler gönderimde çözülür).
+// Sunucudaki (api.php) aynı ayrımla birebir uyumlu tutulmalıdır.
+function planTaslagiMi(t) {
+  return (!t.satirlar || t.satirlar.length === 0) && Number((t.ortak || {}).planKg) > 0;
+}
+
 async function taslakEkraniAc() {
   ekranGoster('ekranTaslaklar');
   const kap = $('taslakListe');
@@ -3004,7 +3098,8 @@ async function taslakEkraniAc() {
     }
     kap.innerHTML = '';
     taslaklar.forEach(t => {
-      const toplam = t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
+      const plan = planTaslagiMi(t);
+      const toplam = plan ? Number(t.ortak.planKg) : t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
       const div = document.createElement('div');
       div.className = 'taslak-kart';
       div.innerHTML =
@@ -3016,7 +3111,9 @@ async function taslakEkraniAc() {
           ? `🏠 ${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || 'yurt içi')}`
           : `🌍 ${eHtml(t.ortak.ulkeAd || '—')}`) +
         (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${eHtml(t.ortak.urunAd)}` : '') + `<br>` +
-        `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b>` +
+        (plan
+          ? `<span class="rozet rozet-yesil">📝 PLAN</span> künyeler gönderimde stoktan seçilir · ⚖️ <b>${fmt(toplam)} KG</b>`
+          : `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b>`) +
         ((t.ortak.yurtIci && !t.ortak.fiyatGonder) ? '' : ` · 💰 ${fmt(t.ortak.fiyat)} TL/KG`) +
         `</div>` +
         `<div class="tk-butonlar">` +
@@ -3119,6 +3216,25 @@ async function taslakDuzenle(t) {
     if (o.fiyat)         $('oMalFiyat').value = String(o.fiyat).replace('.', ',');
   }
 
+  // PLAN TASLAĞI: künye listesi çekilmez (zaten seçim yapılmamıştı) — plan
+  // bloğu açılır, kilo/fiyat ve sorgu ölçütleri geri yüklenir. Kullanıcı
+  // düzenleyip tekrar "Taslağı Kaydet" der; eski kopya kaydetmede silinir.
+  if (planTaslagiMi(t)) {
+    const ps = o.planSorgu || {};
+    if (o.urunId && String(o.urunId) !== '0') $('sUrun').value = String(o.urunId);
+    if (ps.aySayisi)      $('sGun').value = String(ps.aySayisi);
+    if (ps.isletmeTuruId) $('sKunyeIsyeriTuru').value = String(ps.isletmeTuruId);
+    if (ps.sirala)        $('sKunyeSirala').value = ps.sirala;
+    $('oPlanKilo').value = String(o.planKg).replace('.', ',');
+    if (o.fiyat) $('oPlanFiyat').value = String(o.fiyat).replace('.', ',');
+    $('planBlok').classList.remove('gizli');
+    $('btnPlanAc').textContent = '✖️ Taslak Oluşturmayı Kapat';
+    $('planFiyatBlok').classList.toggle('gizli', sevkModuMu());
+    aramaliSelectleriSenkronla();
+    toast('✏️ Plan taslağı forma yüklendi — düzenleyip tekrar Taslağı Kaydet');
+    return;
+  }
+
   // Ürün + künyeler: güncel sorgu → taslak satırlarını işaretle
   if (o.urunId && String(o.urunId) !== '0') {
     $('sUrun').value = String(o.urunId);
@@ -3151,10 +3267,16 @@ async function taslakDuzenle(t) {
 
 function taslakOnayAc(t) {
   gonderilecekTaslakId = t.id;
-  const toplam = t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
+  const plan = planTaslagiMi(t);
+  const toplam = plan ? Number(t.ortak.planKg) : t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
   let html = `<div class="onay-satir"><span>Firma</span><b>${t.firmaAd}</b></div>`;
-  html += t.satirlar.map(s =>
-    `<div class="onay-satir"><span>${s.kunyeNo}</span><b>${fmt(Number(s.miktar))} KG</b></div>`).join('');
+  if (plan) {
+    html += `<div class="onay-satir"><span>Künyeler</span><b>gönderim anında stoktan seçilecek</b></div>`;
+    html += `<div class="onay-satir"><span>Ürün</span><b>${eHtml(t.ortak.urunAd || '—')}</b></div>`;
+  } else {
+    html += t.satirlar.map(s =>
+      `<div class="onay-satir"><span>${s.kunyeNo}</span><b>${fmt(Number(s.miktar))} KG</b></div>`).join('');
+  }
   html += `<div class="onay-satir"><span>TOPLAM</span><b>${fmt(toplam)} KG</b></div>`;
   if (t.ortak.yurtIci) {
     const turEtiket = t.ortak.turAd || (t.ortak.fiyatGonder ? 'Satış (yurt içi)' : 'Sevk Etme');

@@ -149,10 +149,27 @@ function hks_liste_ad($cache, $listeAnahtari, $id) {
 // `app.html` statik dosyadır ve tarayıcı/SW önbelleğinden eski sürümü sunulabilir;
 // CANLI ve geri alınamaz bir sisteme giden alanların doğruluğu sunucuda da
 // güvence altına alınmalıdır.
-function hks_bildirim_dogrula($g) {
-  if (empty($g['satirlar']) || !is_array($g['satirlar'])) return 'En az bir künye satırı gerekli.';
-  if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
+//
+// $planMi = PLAN TASLAĞI modu (künyeler gönderim anında stoktan çözülecek).
+// Bu modda YALNIZCA "künye satırı var mı" kontrolü atlanır; onun yerine hedef
+// kilo (planKg) zorunlu olur. Diğer TÜM kurallar (sıfat/tür, plaka-belge,
+// fiyat, karşı taraf, yurt içi/dışı, hedef) DEĞİŞMEDEN çalışır. Gönderim
+// anında künyeler çözüldükten sonra bu fonksiyon $planMi=false ile TEKRAR
+// çağrılır — yani canlıya giden bildirim her zaman tam denetimden geçer.
+function hks_bildirim_dogrula($g, $planMi = false) {
   $o = $g['ortak'] ?? [];
+  if ($planMi) {
+    // Plan taslağı referanssız türlerde (Satın Alım / Üreticiden Sevk Alım)
+    // anlamsızdır: o türlerde künye zaten kullanılmaz, malın tanımı girilir.
+    if (!empty($o['referanssiz'])) {
+      return 'Plan taslağı yalnızca künyeli (referanslı) bildirimlerde kullanılabilir.';
+    }
+    if ((float)($o['planKg'] ?? 0) <= 0) return 'Plan taslağı için toplam kilo gerekli.';
+    if (empty($o['planSorgu']['urunId'])) return 'Plan taslağı için ürün seçilmelidir.';
+  } else {
+    if (empty($g['satirlar']) || !is_array($g['satirlar'])) return 'En az bir künye satırı gerekli.';
+    if (count($g['satirlar']) > 100) return 'Tek seferde en fazla 100 bildirim.';
+  }
   // Her iki modda zorunlu ortak alanlar
   foreach (['sifatId', 'bildirimTuruId', 'isletmeTuruId'] as $alan) {
     if (empty($o[$alan])) return 'Eksik alan: ' . $alan;
@@ -285,6 +302,71 @@ function hks_bildirim_dogrula($g) {
     if (empty($o['fiyat']))  return 'Eksik alan: fiyat';
   }
   return null;
+}
+
+// =============================================================================
+// PLAN TASLAĞI — künyeleri GÖNDERİM ANINDA canlı stoktan çöz
+// =============================================================================
+// Kullanıcı taslağı künye seçmeden, yalnız "toplam kilo + birim fiyat" ile
+// kaydeder. Gönder'e basıldığında künyeler HKS'ten TAZE çekilir ve hedef kiloya
+// ulaşana kadar sırayla dağıtılır — tarayıcıdaki "⚡ Otomatik Dağıt" (app.html
+// btnDagit) ile BİREBİR aynı greedy mantık: liste sırasına göre her künyeden
+// min(kalan, kalanHedef) alınır.
+//
+// Künyeler kaydetme anında DEĞİL gönderim anında çözülür; böylece aradaki
+// sürede stok değişse bile bildirim her zaman O ANKİ gerçek kalanlarla gider.
+//
+// Dönüş: ['satirlar' => [...]] veya ['hata' => '...'] (taslak KORUNUR).
+function hks_plan_kunye_coz($cfg, $ortak) {
+  $hedef = round((float)($ortak['planKg'] ?? 0), 3);
+  if ($hedef <= 0) return ['hata' => 'Plan taslağında toplam kilo yok.'];
+
+  $sorgu = (array)($ortak['planSorgu'] ?? []);
+  if (empty($sorgu['urunId'])) return ['hata' => 'Plan taslağında ürün bilgisi yok.'];
+
+  $kunyeler = hks_kunyeleri_getir($cfg, [
+    'urunId'        => $sorgu['urunId'],
+    'aySayisi'      => (int)($sorgu['aySayisi'] ?? 12),
+    'isletmeTuruId' => (int)($sorgu['isletmeTuruId'] ?? 0),
+    'sirala'        => (string)($sorgu['sirala'] ?? 'azalan'),
+  ]);
+
+  $toplamKalan = 0.0;
+  foreach ($kunyeler as $k) $toplamKalan += max(0.0, (float)$k['kalan']);
+  $toplamKalan = round($toplamKalan, 3);
+
+  // "Eğer stok varsa" kuralı: yetmiyorsa HİÇBİR ŞEY gönderilmez. Kısmi gönderim
+  // yapılmaz — geri alınamaz olduğu için kullanıcıya karar bırakılır.
+  if ($toplamKalan < $hedef) {
+    return ['hata' => 'Stok yetersiz: plan ' . rtrim(rtrim(number_format($hedef, 3, ',', '.'), '0'), ',') .
+      ' KG istiyor, künyelerde toplam ' . rtrim(rtrim(number_format($toplamKalan, 3, ',', '.'), '0'), ',') .
+      ' KG kalan var. Hiçbir bildirim gönderilmedi, taslak silinmedi — stok girişi ' .
+      'yapıldıktan sonra tekrar deneyin veya taslağı düzenleyip kiloyu düşürün.'];
+  }
+
+  $satirlar = [];
+  $kalanHedef = $hedef;
+  foreach ($kunyeler as $k) {
+    if ($kalanHedef <= 0) break;
+    $kalan = (float)$k['kalan'];
+    if ($kalan <= 0) continue;
+    $al = round(min($kalan, $kalanHedef), 3);
+    if ($al <= 0) continue;
+    $satirlar[] = ['kunyeNo' => $k['kunyeNo'], 'miktar' => $al];
+    $kalanHedef = round($kalanHedef - $al, 3);
+  }
+
+  if ($kalanHedef > 0) {
+    return ['hata' => 'Künyeler hedef kiloyu karşılayamadı (' .
+      rtrim(rtrim(number_format($kalanHedef, 3, ',', '.'), '0'), ',') .
+      ' KG açık kaldı). Hiçbir bildirim gönderilmedi, taslak silinmedi.'];
+  }
+  // HKS tek istekte en fazla 100 bildirim kabul eder (bkz. hks_bildirim_dogrula).
+  if (count($satirlar) > 100) {
+    return ['hata' => 'Bu kilo ' . count($satirlar) . ' künyeye dağıldı; HKS tek seferde en fazla ' .
+      '100 bildirime izin veriyor. Taslağı düzenleyip kiloyu bölün. Hiçbir bildirim gönderilmedi.'];
+  }
+  return ['satirlar' => $satirlar];
 }
 
 // "Son kullanılanlar" anahtarı FİRMA BAZLIDIR — firmalar arasında veri karışmaz.
@@ -506,13 +588,16 @@ try {
     case 'taslak_kaydet': {
       $cfg = hks_firma_bul($g['firmaId'] ?? '');
       if (!$cfg) hks_json_cikti(['hata' => 'Firma bulunamadı.'], 400);
-      $hata = hks_bildirim_dogrula($g);
+      // PLAN TASLAĞI: künye seçilmeden, yalnız toplam kilo + fiyat ile kaydedilir.
+      // Künyeler gönderim anında canlı stoktan çözülür (hks_plan_kunye_coz).
+      $planMi = (float)($g['ortak']['planKg'] ?? 0) > 0 && empty($g['satirlar']);
+      $hata = hks_bildirim_dogrula($g, $planMi);
       if ($hata) hks_json_cikti(['hata' => $hata], 400);
       $id = 't' . round(microtime(true) * 1000);
       $st = $db->prepare('INSERT INTO ' . hks_tablo('taslaklar') . '
         (id, zaman, firma_id, firma_ad, veri) VALUES (?,?,?,?,?)');
       $st->execute([$id, date('Y-m-d H:i:s'), $g['firmaId'], $cfg['ad'],
-        json_encode(['satirlar' => $g['satirlar'], 'ortak' => $g['ortak']], JSON_UNESCAPED_UNICODE)]);
+        json_encode(['satirlar' => $planMi ? [] : $g['satirlar'], 'ortak' => $g['ortak']], JSON_UNESCAPED_UNICODE)]);
       hks_json_cikti(['tamam' => true]);
     }
     case 'taslak_sil': {
@@ -534,6 +619,22 @@ try {
       $veri = json_decode($t['veri'], true);
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
+
+      // PLAN TASLAĞI — künyeler burada, GÖNDERİM ANINDA canlı stoktan çözülür.
+      // Kullanıcı taslağı yalnız "toplam kilo + birim fiyat" ile kaydetmişti;
+      // künye seçimi (tıpkı "Künyeleri Getir" + "⚡ Otomatik Dağıt" gibi) şimdi
+      // TAZE veriyle yapılır. Stok yetmiyorsa HİÇBİR bildirim gönderilmez ve
+      // taslak SİLİNMEZ — aşağıdaki tüm denetimler çözülmüş satırlarla normal
+      // (plan olmayan) taslakla AYNI şekilde çalışmaya devam eder.
+      $planMi = empty($satirlar) && (float)($ortak['planKg'] ?? 0) > 0;
+      if ($planMi) {
+        @set_time_limit(300);   // 'kunyeler' eylemiyle aynı üst sınır
+        $__plan = hks_plan_kunye_coz($cfg, $ortak);
+        if (!empty($__plan['hata'])) {
+          hks_json_cikti(['hata' => $__plan['hata'], 'taslakKorundu' => true], 400);
+        }
+        $satirlar = $__plan['satirlar'];
+      }
 
       // GÖNDERİM ÖNCESİ KURAL BÜTÜNLÜĞÜ (P1) — taslak kaydedildiğinde geçerliydi;
       // gönderim ANINDA da geçerli olduğu TEKRAR doğrulanır (referans künye,
