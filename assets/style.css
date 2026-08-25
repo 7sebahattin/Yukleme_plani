@@ -3772,6 +3772,11 @@ body.print-mode .asya-sheet {
     }
 }
 
+/* ── Malzeme Stok ana sayfa: tür grupları arası ayraç ───── */
+.ms-type-sep { height: 1px; margin: 10px 0; background: var(--border); }
+.ms-type-sep-row td { padding: 0 !important; border: none !important; }
+.ms-type-sep-row .ms-type-sep { margin: 6px 0; }
+
 /* ── Malzeme Stok ana sayfa: mobil kart görünümü (Pro-09) ─ */
 .ms-stock-cards { display: none; }   /* ≥768px: gizli, tablo görünür */
 

@@ -83,6 +83,18 @@ if (!$f_tumu) {
         fn($r) => (float)$r['total_giris'] > 0 || (float)$r['total_cikis'] > 0));
 }
 
+// ── Tür sıralaması — Kasa/Palet/Şapka/Köşebent/Casus/Şerit/File/Kenar Kartonu/
+// Taban Kağıdı bu sabit sırada üstte; listelenmeyen türler bu sıradan SONRA,
+// aralarındaki sıra bozulmadan (usort PHP 8'de kararlı) gelir. Görsel ayraç
+// (aşağıda tabloda/kartlarda) bu sıralamayla eşleşir.
+$MS_TYPE_PRIORITY = ['kasa_cinsi', 'palet_tipi', 'sapka', 'kosebent', 'casus', 'serit', 'file', 'kenar_kartonu', 'taban_kagidi'];
+$_ms_type_pri = array_flip($MS_TYPE_PRIORITY);
+usort($ozet_rows, function ($a, $b) use ($_ms_type_pri) {
+    $pa = $_ms_type_pri[$a['material_type']] ?? PHP_INT_MAX;
+    $pb = $_ms_type_pri[$b['material_type']] ?? PHP_INT_MAX;
+    return $pa <=> $pb;
+});
+
 // ── Negatif stok sayısı — tam setten (filtreden bağımsız, alt uyarı için) ──
 $card_negatif = count(array_filter($all_rows, fn($r) => (float)$r['kalan'] < 0));
 
@@ -310,13 +322,15 @@ render_flash();
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($ozet_rows as $oz):
+            <?php $_ms_prev_type = null; foreach ($ozet_rows as $oz):
                 $c         = $ms_row_ctx($oz);
                 $kalan     = $c['kalan'];
                 $is_neg    = $c['is_neg'];
                 $kalan_cls = $is_neg ? 'stok-negatif' : ($kalan > 0 ? '' : 'color:var(--muted)');
                 $cikis     = $c['cikis'];
-            ?>
+                if ($_ms_prev_type !== null && $_ms_prev_type !== $oz['material_type']): ?>
+                <tr class="ms-type-sep-row"><td colspan="8"><div class="ms-type-sep"></div></td></tr>
+                <?php endif; $_ms_prev_type = $oz['material_type']; ?>
                 <tr class="<?= $is_neg ? 'ms-row-negatif' : '' ?>">
                     <td class="stok-hide-sm" style="font-size:.8rem;color:var(--muted)"><?= h($ms_types[$oz['material_type']] ?? $oz['material_type']) ?></td>
                     <td style="font-weight:600">
@@ -346,14 +360,16 @@ render_flash();
 
     <!-- ── Mobil kart listesi (<768px) ──────────────────────── -->
     <div class="ms-stock-cards">
-        <?php foreach ($ozet_rows as $oz):
+        <?php $_ms_prev_type_c = null; foreach ($ozet_rows as $oz):
             $c       = $ms_row_ctx($oz);
             $kalan   = $c['kalan'];
             $is_neg  = $c['is_neg'];
             $cikis   = $c['cikis'];
             $giris   = (float)$oz['total_giris'];
             $kalan_color = $is_neg ? 'var(--danger)' : ($kalan > 0 ? 'var(--success)' : 'var(--muted)');
-        ?>
+            if ($_ms_prev_type_c !== null && $_ms_prev_type_c !== $oz['material_type']): ?>
+        <div class="ms-type-sep"></div>
+        <?php endif; $_ms_prev_type_c = $oz['material_type']; ?>
         <div class="ms-scard ms-scard-<?= $c['durum_key'] ?>">
             <div class="ms-scard-top">
                 <div class="ms-scard-name">
