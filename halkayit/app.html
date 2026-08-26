@@ -939,7 +939,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-25 · 15';
+const PANEL_SURUM = '2026-08-26 · 16';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -2542,15 +2542,23 @@ async function sonlariYukle() {
 // kayıtlı kişide bu alanlar zaten gizlidir, HKS kendi kaydından doldurur.
 async function karsiTarafSec(k) {
   if (!aktifFirma) return;
+  // ÖNCE TEMİZLE, SONRA DOĞRULA — sıra kritiktir.
+  // `.value` ile programatik atama `oninput`'u TETİKLEMEZ, dolayısıyla oradaki
+  // kimlik sıfırlaması burada çalışmaz; temizlik elle yapılmak zorundadır.
+  // Eskiden temizlik doğrulamadan SONRA ve yalnız "kayıtsız + başarılı sorgu"
+  // dalında yapılıyordu; sorgu UNKNOWN dönerse, ağ hatası olursa VEYA kişi
+  // KAYITLI çıkarsa blok atlanıyor ve ÖNCEKİ kişinin Ad/Cep/DOĞUM TARİHİ
+  // formda kalıyordu — TC yeni kişinin, doğum tarihi eskisinin olduğu için
+  // HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" ile reddediyordu
+  // (KPS, TC ile doğum tarihini BİRLİKTE doğrular). Artık hangi dala girilirse
+  // girilsin eski kimlik verisi ASLA hayatta kalamaz.
+  ['oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
   $('oIkTc').value = String(k.tc || '');
   ikDogrulandi = null;
   await $('btnIkDogrula').onclick();
   if (ikDogrulandi && !ikDogrulandi.kayitliMi) {
-    // KOŞULSUZ yazılır — kişi DEĞİŞTİĞİ için eski değer korunamaz.
-    // (Önceki sürüm yalnız alan boşsa dolduruyordu: listeden ikinci bir kişi
-    //  seçilince TC yenisinin, ad/cep/DOĞUM TARİHİ eski kişininki kalıyordu.
-    //  TC + doğum tarihi MERNİS'te eşleşmediği için bildirim reddediliyordu.)
-    // Seçilen kişide bilgi yoksa alan TEMİZLENİR; eski kişinin verisi kalmasın.
+    // Kayıtsız kişi: kimlik bilgileri bizden gider → listedeki kayıttan doldur.
+    // Kayıtlı kişide bu alanlar HKS'in kendi kaydından gelir, boş kalmalıdır.
     $('oIkAd').value    = k.ad ? k.ad : '';
     $('oIkCep').value   = k.cep ? cepRakam(k.cep) : '';
     $('oIkDogum').value = k.dogum || '';
@@ -3283,9 +3291,13 @@ function taslakOnayAc(t) {
     html += `<div class="onay-satir"><span>Tür</span><b>${eHtml(turEtiket)} (yurt içi)</b></div>`;
     if (t.ortak.fiyatGonder) html += `<div class="onay-satir"><span>Birim Fiyat</span><b>${fmt(t.ortak.fiyat)} TL</b></div>`;
     html += `<div class="onay-satir"><span>Karşı Taraf</span><b>${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || '—')}</b></div>`;
-    // Kayıtsız karşı tarafta (üretici sevk / kayıtsız alıcı) docx "Eposta hariç tüm
-    // bilgiler" ister — gönderilecek TC ve cep, geri alınamaz onaydan önce görünsün.
-    if (t.ortak.uretSevk || t.ortak.hedefAdres) {
+    // Kayıtsız karşı tarafta (üretici sevk / kayıtsız alıcı / kayıtsız satıcı)
+    // docx "Eposta hariç tüm bilgiler" ister — gönderilecek TC, cep ve DOĞUM
+    // TARİHİ geri alınamaz onaydan önce görünsün. `ikinciKayitsiz` de dahildir:
+    // Satın Alım + kayıtsız satıcıda kimlik bilgileri gönderiliyor ama bu ekran
+    // onları göstermiyordu; yanlış TC/doğum tarihi ancak HKS reddettikten sonra
+    // ("Mernis sisteminde bulunamadı") fark ediliyordu.
+    if (t.ortak.uretSevk || t.ortak.hedefAdres || t.ortak.ikinciKayitsiz) {
       html += `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(t.ortak.ikinciTc || '—')}</b></div>`;
       html += `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(t.ortak.ikinciCep || '—')}</b></div>`;
       html += `<div class="onay-satir"><span>Doğum Tarihi</span><b>${eHtml(t.ortak.ikinciDogumTarihi || '—')}</b></div>`;
@@ -3342,8 +3354,13 @@ $('btnOnay').onclick = async () => {
             // ham mesajdan bunu çıkaramıyor, yönlendirme ekleniyor.
             (/mernis/i.test(String(s.mesaj || ''))
               ? '<div class="mesaj hata" style="display:block;margin-top:6px">' +
-                '💡 Bu hata genellikle <b>TC ile doğum tarihinin uyuşmamasından</b> gelir. ' +
-                'Kimlik bilgilerini kişinin nüfus kaydıyla karşılaştırın.</div>'
+                '💡 KPS, <b>TC ile doğum tarihini BİRLİKTE</b> doğrular — ikisinden biri ' +
+                'yanlışsa bu hata gelir.<br>' +
+                '1️⃣ Yukarıdaki mesajda yazan TC, gerçekten <b>gönderilen</b> TC\'dir — ' +
+                'kişinin kimliğiyle rakam rakam karşılaştırın.<br>' +
+                '2️⃣ Doğru değilse "Son Kullanılanlar" listesinden seçmek yerine ' +
+                '<b>TC\'yi elle yazın</b> (elle yazınca ad/cep/doğum alanları da sıfırlanır), ' +
+                'sonra doğum tarihini nüfus kaydından girin.</div>'
               : '')) +
         `</div>`;
     });
