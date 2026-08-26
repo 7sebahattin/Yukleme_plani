@@ -939,7 +939,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-26 · 16';
+const PANEL_SURUM = '2026-08-26 · 17';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1624,6 +1624,10 @@ async function taslakSayiGuncelle() {
 function formuTemizle() {
   ['oPlaka', 'oBelgeNo', 'oFiyat', 'hedefKilo', 'oIkTc', 'oIkAd', 'oIkCep', 'oIkDogum',
    'oPlanKilo', 'oPlanFiyat'].forEach(id => { $(id).value = ''; });
+  // "Yurt Dışı" tiki HTML VARSAYILANINA (işaretli) döner. Sıfırlanmadığı için
+  // yurt içi bir bildirimden sonra form yurt içi modunda kalıyor, sonraki
+  // ihracat bildirimi yanlış modda başlıyordu (ülke yerine hedef alanları).
+  $('chkYurtDisi').checked = true;
   // Plan taslağı bloğu kapalı başlar
   $('planBlok').classList.add('gizli');
   $('btnPlanAc').textContent = '📝 Taslak Oluştur';
@@ -3194,6 +3198,11 @@ async function taslakDuzenle(t) {
     }
     if (o.fiyatGonder && o.fiyat) $('oFiyat').value = String(o.fiyat).replace('.', ',');
   } else {
+    // Yurt dışı taslak: tik AÇIKÇA işaretlenir. Eskiden yalnız yurt içi dalda
+    // false yapılıyor, hiç true'ya döndürülmüyordu — yurt içi bir taslağı
+    // düzenledikten sonra bir ihracat taslağı açılınca form YURT İÇİ modunda
+    // yükleniyor, ülke/fiyat alanları gizli kalıyordu.
+    $('chkYurtDisi').checked = true;
     turDegisti();
     if (o.ulkeId) $('sUlke').value = String(o.ulkeId);
     if (o.fiyat)  $('oFiyat').value = String(o.fiyat).replace('.', ',');
