@@ -614,8 +614,43 @@ try {
       $st->execute([$g['id'] ?? '', $fid]);
       $t = $st->fetch();
       if (!$t) hks_json_cikti(['hata' => 'Taslak bulunamadı (veya bu firmaya ait değil).'], 400);
+
+      // ── ATOMİK SAHİPLENME (çift gönderim koruması) ───────────────────────
+      // BildirimKaydet GERİ ALINAMAZ ve rüsum doğurur. Eskiden taslak yalnızca
+      // gönderim BİTTİKTEN sonra siliniyordu; SELECT ile DELETE arasındaki
+      // pencerede (plan taslağında SOAP turları yüzünden 300 sn'ye kadar) aynı
+      // taslak için gelen İKİNCİ bir istek de SELECT'i geçip AYNI bildirimleri
+      // TEKRAR gönderebiliyordu — mükerrer künye + mükerrer rüsum. Gerçekçi
+      // tetikleyiciler: isteğin zaman aşımına uğrayıp kullanıcının tekrar
+      // "Gönder"e basması, ikinci sekme/cihaz, tarayıcının isteği yeniden
+      // denemesi. (Tarayıcıdaki buton kilidi yalnız o sekmeyi korur.)
+      //
+      // Çözüm — şema değişikliği GEREKTİRMEZ: satır ÖNCE silinerek sahiplenilir.
+      // DELETE tek satırda atomiktir; yarışı yalnız BİR istek kazanır (rowCount=1),
+      // diğeri 0 alır ve hiçbir şey göndermeden durur. Gönderim herhangi bir
+      // nedenle durursa satır AYNI id ve AYNI zaman ile geri yazılır, böylece
+      // "taslak silinmedi" güvencesi ve liste sırası korunur.
+      $__claim = $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+      $__claim->execute([$t['id'], $fid]);
+      if ($__claim->rowCount() === 0) {
+        hks_json_cikti(['hata' => 'Bu taslak için başka bir gönderim şu anda sürüyor ' .
+          '(veya az önce tamamlandı). Mükerrer bildirim gönderilmesin diye işlem durduruldu. ' .
+          'Sonucu görmek için "Gönderilenler" listesini kontrol edin.'], 409);
+      }
+      // Gönderim durursa taslağı olduğu gibi geri koyar (id + zaman korunur).
+      $taslagiGeriKoy = function () use ($db, $t) {
+        try {
+          $db->prepare('INSERT INTO ' . hks_tablo('taslaklar') . '
+            (id, zaman, firma_id, firma_ad, veri) VALUES (?,?,?,?,?)')
+             ->execute([$t['id'], $t['zaman'], $t['firma_id'], $t['firma_ad'], $t['veri']]);
+        } catch (Throwable $e) { error_log('[hks] taslak geri yazilamadi: ' . $e->getMessage()); }
+      };
+
       $cfg = hks_firma_bul($t['firma_id']);
-      if (!$cfg) hks_json_cikti(['hata' => 'Taslağın firması artık kayıtlı değil.'], 400);
+      if (!$cfg) {
+        $taslagiGeriKoy();
+        hks_json_cikti(['hata' => 'Taslağın firması artık kayıtlı değil.'], 400);
+      }
       $veri = json_decode($t['veri'], true);
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
@@ -631,6 +666,7 @@ try {
         @set_time_limit(300);   // 'kunyeler' eylemiyle aynı üst sınır
         $__plan = hks_plan_kunye_coz($cfg, $ortak);
         if (!empty($__plan['hata'])) {
+          $taslagiGeriKoy();
           hks_json_cikti(['hata' => $__plan['hata'], 'taslakKorundu' => true], 400);
         }
         $satirlar = $__plan['satirlar'];
@@ -644,6 +680,7 @@ try {
       // geri alınamaz) gidebiliyordu.
       $__revalHata = hks_bildirim_dogrula(['satirlar' => $satirlar, 'ortak' => $ortak]);
       if ($__revalHata) {
+        $taslagiGeriKoy();
         hks_json_cikti(['hata' => 'Taslak artık geçerli kurallara uymuyor: ' . $__revalHata .
           ' Taslak silinmedi — "Düzenle" ile güncelleyip tekrar deneyin.'], 400);
       }
@@ -669,15 +706,18 @@ try {
         $__aynaHam = null; $__aynaDetay = null;
         $__durum = hks_kayit_durumu($cfg, $ortak['ikinciTc'], $__aynaHam, $__aynaDetay);
         if ($__durum === HKS_DURUM_UNKNOWN) {
+          $taslagiGeriKoy();
           hks_json_cikti(['hata' => 'HKS kişi kayıt durumu doğrulanamadı. Bildirim gönderilmedi. ' .
             'Taslak silinmedi — birkaç dakika sonra tekrar deneyin.'], 400);
         }
         if ($__uretSevk && $__durum === HKS_DURUM_REGISTERED) {
+          $taslagiGeriKoy();
           hks_json_cikti(['hata' => 'Bu kişi HKS sisteminde kayıtlıdır. Üreticiden Sevk Alım ' .
             'bildirimi yapılamaz. Kayıtlı kişiden alım için bildirim türünü "Satın Alım" yapın. ' .
             'Taslak silinmedi.'], 400);
         }
         if (!$__uretSevk && $__durum === HKS_DURUM_NOT_REGISTERED) {
+          $taslagiGeriKoy();
           hks_json_cikti(['hata' => 'Gönderim DURDURULDU: karşı taraf (' . $ortak['ikinciTc'] .
             ') GTB sisteminde kayıtlı değil. Sevk Etme için karşı tarafın kayıtlı olması ' .
             'zorunludur. Kayıtsız müstahsilden alım için "Satın Alım" veya "Üreticiden Sevk ' .
@@ -685,7 +725,25 @@ try {
         }
       }
 
-      $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
+      // Bu çağrı GERİ ALINAMAZ. İstisna fırlatırsa (SOAP zaman aşımı, ağ kopması)
+      // HKS'in isteği ALIP ALMADIĞINI BİLEMEYİZ. Taslak sahiplenme sırasında
+      // silindiği için burada geri konmazsa kullanıcının emeği kaybolur ve
+      // gönderilip gönderilmediği de anlaşılamaz. Bu yüzden taslak GERİ KONUR
+      // (istisna öncesi davranışla aynı) ama körlemesine tekrar göndermemesi
+      // için AÇIKÇA uyarılır.
+      try {
+        $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
+      } catch (Throwable $__e) {
+        $taslagiGeriKoy();
+        error_log('[hks] bildirim_kaydet istisna: ' . $__e->getMessage());
+        hks_json_cikti([
+          'hata' => 'Bildirim gönderilirken bağlantı kesildi: ' . $__e->getMessage() .
+            ' — HKS\'in bildirimi ALIP ALMADIĞI BİLİNMİYOR. Taslak silinmedi. ' .
+            'TEKRAR GÖNDERMEDEN ÖNCE hks.hal.gov.tr üzerinden veya "Bildirim Sorgulama" ' .
+            'ekranından künyenin oluşup oluşmadığını KONTROL EDİN; oluştuysa taslağı silin.',
+          'taslakKorundu' => true,
+        ], 502);
+      }
 
       // Gönderilenler kaydı (tek satır özet)
       $basarili = array_filter($sonuc['sonuclar'], fn($s) => $s['yeniKunyeNo'] && $s['yeniKunyeNo'] !== '0' && !$s['hataKodu']);
@@ -696,6 +754,7 @@ try {
       // taslağa geri döner, hatalı alanı (ör. karşı taraf sıfatı) "Düzenle" ile
       // değiştirip AYNI taslağı tekrar gönderebilir — formu baştan doldurmaz.
       if (count($basarili) === 0) {
+        $taslagiGeriKoy();
         hks_json_cikti($sonuc + ['taslakKorundu' => true]);
       }
 
@@ -714,11 +773,11 @@ try {
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
         json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar']], JSON_UNESCAPED_UNICODE)]);
 
-      // Kısmi başarısızlık varsa (bazı satırlar hata verdi) taslak yine silinir
-      // çünkü BAŞARILI satırlar zaten geri alınamaz şekilde gönderildi; aynı
-      // taslağı tekrar göndermek o satırları MÜKERRER göndermeye çalışırdı.
+      // Taslak zaten en başta ATOMİK olarak sahiplenilirken silinmişti (çift
+      // gönderim koruması) ve buraya gelindiyse en az bir künye GERİ ALINAMAZ
+      // şekilde gönderildi → geri konmaz. Kısmi başarısızlıkta da geri konmaz:
+      // aynı taslağı tekrar göndermek BAŞARILI satırları MÜKERRER gönderirdi.
       // Hangi satırların başarısız olduğu $sonuc.sonuclar içinde döner.
-      $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ?')->execute([$t['id']]);
       hks_json_cikti($sonuc);
     }
 
