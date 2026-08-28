@@ -198,15 +198,35 @@ function hks_bildirim_dogrula($g, $planMi = false) {
   }
   if (!empty($o['yurtIci'])) {
     $uret = hks_uret_sevk_mi($o);
+    // KİMLİK BÜTÜNLÜĞÜ: karşı taraf için Ad/Ünvan veya Cep gönderiyorsak KPS'e EKSİK
+    // kimlik gitmemelidir. hks_bildirim_xml doğum tarihi boş/geçersizse onu SESSİZCE
+    // atlar; o zaman KPS yalnız TC ile sorgulanır ve "Tc kimlik numarası Mernis
+    // sisteminde bulunamadı" döner — üstelik sebebi ekranda görünmez. Bu yüzden
+    // kısmi kimlik, geri alınamaz gönderimden ÖNCE burada durdurulur.
+    if ((!empty($o['ikinciAd']) || !empty($o['ikinciCep']))
+        && hks_dogum_tarihi_xml($o['ikinciDogumTarihi'] ?? '') === '') {
+      return 'Karşı taraf için Ad/Ünvan veya Cep gönderiliyor ama Doğum Tarihi yok/geçersiz. ' .
+             'KPS, TC ile doğum tarihini BİRLİKTE doğrular; eksik kimlikle gönderilen ' .
+             'bildirim "Mernis sisteminde bulunamadı" hatası verir.';
+    }
     // Yurt içi: karşı taraf + hedef zorunlu.
     if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
     // Hane denetimi: TC 11, VKN 10 hanedir. Bozuk bir değer eskiden sessizce
     // HKS'e gidip geri alınamaz çağrıda "Mernis sisteminde bulunamadı" ile
     // reddediliyordu — artık taslak kaydında/gönderim öncesi burada durur.
-    $__tcHane = strlen(hks_tc_normalize($o['ikinciTc']));
+    $__tcTemiz = hks_tc_normalize($o['ikinciTc']);
+    $__tcHane  = strlen($__tcTemiz);
     if ($__tcHane !== 10 && $__tcHane !== 11) {
       return 'Karşı taraf TC/Vergi No geçersiz — TC 11, Vergi No 10 rakam olmalıdır ' .
              '(girilen: ' . $__tcHane . ' rakam).';
+    }
+    // TC ALGORİTMA DENETİMİ (yalnız 11 hanede): rakamı yanlış/yer değiştirmiş bir TC
+    // biçimsel olarak doğru görünür ama MERNİS'te BULUNMAZ. Geri alınamaz çağrıdan
+    // önce burada yakalanır. VKN (10 hane) bu algoritmaya tabi değildir.
+    if ($__tcHane === 11 && !hks_tc_algoritma_gecerli($__tcTemiz)) {
+      return 'Karşı taraf TC Kimlik No (' . $__tcTemiz . ') geçersiz — kimlik numarası ' .
+             'doğrulama algoritmasından geçmiyor. Rakamları kişinin kimliğiyle ' .
+             'karşılaştırın (en sık neden: iki rakamın yer değiştirmesi).';
     }
     if (empty($o['ikinciSifatId'])) return 'Karşı taraf sıfatı gerekli.';
 
@@ -744,6 +764,17 @@ try {
       // için AÇIKÇA uyarılır.
       try {
         $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
+        // HKS'e GERÇEKTEN giden ikinci kişi kimliği — hata ekranında gösterilir.
+        // "Mernis'te bulunamadı" hatasında operatörün karşılaştırabilmesi için
+        // TC ile DOĞUM TARİHİ birlikte görünmelidir (KPS ikisini birlikte doğrular);
+        // eskiden yalnız HKS'in mesajındaki TC görünüyor, doğum tarihi görünmüyordu.
+        $sonuc['gonderilenKimlik'] = [
+          'tc'    => hks_tc_normalize($ortak['ikinciTc'] ?? ''),
+          'ad'    => (string)($ortak['ikinciAd'] ?? ''),
+          'cep'   => hks_cep_rakam($ortak['ikinciCep'] ?? ''),
+          'dogum' => (string)($ortak['ikinciDogumTarihi'] ?? ''),
+          'dogumGonderildi' => hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '') !== '',
+        ];
       } catch (Throwable $__e) {
         $taslagiGeriKoy();
         error_log('[hks] bildirim_kaydet istisna: ' . $__e->getMessage());
