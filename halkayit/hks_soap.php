@@ -422,7 +422,10 @@ function hks_bildirim_xml($satirlar, $ortak) {
       $dt = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '');
       if ($dt !== '')                  $ik[] = '<b:DogumTarihi>' . $dt . '</b:DogumTarihi>';
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
-      $ik[] = '<b:TcKimlikVergiNo>' . hks_esc($ortak['ikinciTc']) . '</b:TcKimlikVergiNo>';
+        // TC/VKN yalnız RAKAM gider. Kirli değer (boşluk/nokta/tire) KPS'te kişiyi
+      // buldurmaz; arayüz temizliyor ama SON SÖZ sunucudadır (eski taslaklar,
+      // önbellekten sunulan eski app.html, doğrudan API çağrısı).
+      $ik[] = '<b:TcKimlikVergiNo>' . hks_esc(hks_tc_normalize($ortak['ikinciTc'])) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
       $ikinci = implode('', $ik);
     } else {
@@ -1028,7 +1031,9 @@ function hks_tc_esit($a, $b) {
 function hks_kayitli_kisi_sorgu($cfg, $tcVknList, &$ham = null) {
   $arr = '';
   foreach ((array)$tcVknList as $tc) {
-    $tc = trim((string)$tc);
+    // Sorgu da yalnız rakamla yapılır — aksi hâlde "kayıtlı mı" cevabı ile
+    // bildirimde kullanılan değer FARKLI olur ve kapı yanlış karar verir.
+    $tc = hks_tc_normalize($tc);
     if ($tc === '') continue;
     $arr .= '<c:string>' . hks_esc($tc) . '</c:string>';
   }

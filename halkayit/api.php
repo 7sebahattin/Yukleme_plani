@@ -200,6 +200,14 @@ function hks_bildirim_dogrula($g, $planMi = false) {
     $uret = hks_uret_sevk_mi($o);
     // Yurt içi: karşı taraf + hedef zorunlu.
     if (empty($o['ikinciTc']))      return 'Karşı taraf TC/Vergi No gerekli.';
+    // Hane denetimi: TC 11, VKN 10 hanedir. Bozuk bir değer eskiden sessizce
+    // HKS'e gidip geri alınamaz çağrıda "Mernis sisteminde bulunamadı" ile
+    // reddediliyordu — artık taslak kaydında/gönderim öncesi burada durur.
+    $__tcHane = strlen(hks_tc_normalize($o['ikinciTc']));
+    if ($__tcHane !== 10 && $__tcHane !== 11) {
+      return 'Karşı taraf TC/Vergi No geçersiz — TC 11, Vergi No 10 rakam olmalıdır ' .
+             '(girilen: ' . $__tcHane . ' rakam).';
+    }
     if (empty($o['ikinciSifatId'])) return 'Karşı taraf sıfatı gerekli.';
 
     // ── ÜRETİCİDEN SEVK ALIM (docx kuralları) ──────────────────────────────
@@ -396,7 +404,10 @@ function hks_karsi_taraf_ekle($liste, $yeni, $limit = 10) {
     if (hks_tc_esit($k['tc'] ?? '', $tc)) { $eski = $k; continue; }
     $kalan[] = $k;
   }
-  $kayit = ['tc' => $tc];
+  // TEMİZ (yalnız rakam) hâliyle saklanır: kirli bir TC listeye girerse kişi her
+  // seçildiğinde aynı hata tekrarlanırdı ("Mernis'te bulunamadı"). Eşleştirme zaten
+  // rakam bazlı olduğundan eski kirli kayıtlar bu yazımla kendiliğinden düzelir.
+  $kayit = ['tc' => hks_tc_normalize($tc)];
   foreach (['ad', 'cep', 'dogum'] as $alan) {
     $deger = trim((string)($yeni[$alan] ?? ''));
     $kayit[$alan] = $deger !== '' ? $deger : trim((string)($eski[$alan] ?? ''));

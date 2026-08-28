@@ -939,7 +939,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-26 · 17';
+const PANEL_SURUM = '2026-08-26 · 18';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -960,6 +960,12 @@ const eHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&
 // "+90 532 ..." yazabilir; boşluk/tire/parantez temizlenir. (docx: karşı taraf GTB'de
 // kayıtlı değilse CepTel zorunludur.) Sunucu da aynı temizliği/denetimi uygular.
 const cepRakam   = (s) => String(s || '').replace(/\D+/g, '');
+// TC/VKN yalnız RAKAMDIR. Kullanıcı "213 527 234 54" / "213.527.234.54" gibi
+// biçimlenmiş yazabilir veya kopyalayabilir; bu hâliyle HKS'e giderse KPS kişiyi
+// BULAMAZ ("Tc kimlik numarası Mernis sisteminde bulunamadı"). Üstelik kirli değer
+// "Son Kullanılanlar"a da yazıldığı için kişi her seçildiğinde hata TEKRARLANIR.
+// Cep telefonunda zaten yapılan temizliğin (cepRakam) TC karşılığıdır.
+const tcRakam    = (s) => String(s || '').replace(/\D+/g, '');
 const cepGecerli = (s) => { const d = cepRakam(s); return d.length >= 10 && d.length <= 13; };
 
 // Ürün adına göre ikon — bilinen meyve/sebzeler için özel, diğerleri için genel ikon.
@@ -2325,7 +2331,7 @@ async function illeriYukleGerekiyorsa() {
 // Karşı taraf doğrulama (KayıtlıKişi). Kayıtsız alıcı yalnız yurt içi Satış'ta
 // geçerlidir; Sevk Etme ve Satın Alım'da kayıtlı olması zorunludur.
 $('btnIkDogrula').onclick = async () => {
-  const tc = $('oIkTc').value.trim();
+  const tc = tcRakam($('oIkTc').value);
   if (!tc) { mesajGoster('ikDurum', 'TC/Vergi No girin.', 'hata'); return; }
   $('btnIkDogrula').disabled = true; $('btnIkDogrula').textContent = '⏳';
   try {
@@ -2417,6 +2423,10 @@ $('oIkTc').oninput = () => {
 // Cep telefonu alandan çıkınca rakamlara indirgenir — operatör, CANLI servise
 // tam olarak neyin gideceğini onay ekranından önce görsün.
 $('oIkCep').onblur = () => { $('oIkCep').value = cepRakam($('oIkCep').value); };
+// TC/VKN alandan çıkınca rakamlara indirgenir — operatör CANLI servise tam olarak
+// neyin gideceğini görsün (cep telefonuyla aynı davranış).
+$('oIkTc').onblur = () => { const t = tcRakam($('oIkTc').value);
+  if ($('oIkTc').value !== t) $('oIkTc').value = t; };
 $('sTur').onchange = turDegisti;
 $('chkYurtDisi').onchange = turDegisti;
 
@@ -2442,7 +2452,7 @@ $('sIsletmeTuru').onchange = async () => {
   // Adres modunda işletme türü sadece GidecekYerIsletmeTuruId'yi belirler; işyeri sorgusu yok.
   if (!$('adresAltBlok').classList.contains('gizli')) return;
   const kendi = satinAlimModuMu() || uretSevkModuMu();
-  const tc = kendi ? String(aktifFirma.vergiNo || '').trim() : $('oIkTc').value.trim();
+  const tc = kendi ? tcRakam(aktifFirma.vergiNo) : tcRakam($('oIkTc').value);
   if (!tc) {
     mesajGoster('isyeriMesaj', kendi
       ? 'Firma vergi no bulunamadı — firma kartını kontrol edin.'
@@ -2557,7 +2567,7 @@ async function karsiTarafSec(k) {
   // (KPS, TC ile doğum tarihini BİRLİKTE doğrular). Artık hangi dala girilirse
   // girilsin eski kimlik verisi ASLA hayatta kalamaz.
   ['oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
-  $('oIkTc').value = String(k.tc || '');
+  $('oIkTc').value = tcRakam(k.tc);
   ikDogrulandi = null;
   await $('btnIkDogrula').onclick();
   if (ikDogrulandi && !ikDogrulandi.kayitliMi) {
@@ -2770,7 +2780,7 @@ $('btnMalTaslak').onclick = async () => {
 
   // Karşı taraf + hedef (Kart 1 & 2) doğrulaması
   const uret = uretSevkModuMu();
-  const tc = $('oIkTc').value.trim();
+  const tc = tcRakam($('oIkTc').value);
   if (!tc) { alert('Karşı taraf (satıcı) TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return; }
   if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) { alert('Karşı tarafı "Doğrula" ile kontrol edin.'); return; }
 
@@ -2939,7 +2949,7 @@ function ortakTopla(fiyatId) {
     // ---- YURT İÇİ: Sevk Etme / Satın Alım / yurt içi Satış ----
     const sevk = sevkModuMu();
     const satin = satinAlimModuMu();
-    const tc = $('oIkTc').value.trim();
+    const tc = tcRakam($('oIkTc').value);
     if (!tc) { alert('Karşı taraf TC/Vergi No giriniz ve "Doğrula"ya basınız.'); return null; }
     if (!ikDogrulandi || String(ikDogrulandi.tcVkn) !== tc) {
       alert('Karşı tarafı "Doğrula" ile GTB\'de kontrol edin.'); return null;
@@ -3174,7 +3184,7 @@ async function taslakDuzenle(t) {
     // Yurt içi Satış'ta tik kaldırılmış olmalı (Sevk/Satın Alım türden bellidir)
     if (!sevkModuMu() && !satinAlimModuMu()) $('chkYurtDisi').checked = false;
     turDegisti();
-    $('oIkTc').value = o.ikinciTc || '';
+    $('oIkTc').value = tcRakam(o.ikinciTc);
     $('oIkAd').value = o.ikinciAd || '';
     if (o.ikinciCep) $('oIkCep').value = cepRakam(o.ikinciCep);
     if (o.ikinciDogumTarihi) $('oIkDogum').value = o.ikinciDogumTarihi;
