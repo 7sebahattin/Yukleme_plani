@@ -939,7 +939,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-26 · 18';
+const PANEL_SURUM = '2026-08-28 · 19';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -966,6 +966,18 @@ const cepRakam   = (s) => String(s || '').replace(/\D+/g, '');
 // "Son Kullanılanlar"a da yazıldığı için kişi her seçildiğinde hata TEKRARLANIR.
 // Cep telefonunda zaten yapılan temizliğin (cepRakam) TC karşılığıdır.
 const tcRakam    = (s) => String(s || '').replace(/\D+/g, '');
+// TC Kimlik No algoritma denetimi — api.php'deki hks_tc_algoritma_gecerli()'nin
+// AYNASI. Rakamı yanlış/yer değiştirmiş bir TC biçimsel olarak doğru görünür ama
+// MERNİS'te bulunmaz; operatör formu doldurmadan ÖNCE uyarılır. VKN (10 hane)
+// bu algoritmaya tabi değildir.
+function tcAlgoritmaGecerli(tc) {
+  tc = tcRakam(tc);
+  if (tc.length !== 11 || tc[0] === '0') return false;
+  const d = tc.split('').map(Number);
+  const tek = d[0]+d[2]+d[4]+d[6]+d[8], cift = d[1]+d[3]+d[5]+d[7];
+  if (((tek*7)-cift) % 10 !== d[9]) return false;
+  return d.slice(0,10).reduce((a,b)=>a+b,0) % 10 === d[10];
+}
 const cepGecerli = (s) => { const d = cepRakam(s); return d.length >= 10 && d.length <= 13; };
 
 // Ürün adına göre ikon — bilinen meyve/sebzeler için özel, diğerleri için genel ikon.
@@ -2333,6 +2345,15 @@ async function illeriYukleGerekiyorsa() {
 $('btnIkDogrula').onclick = async () => {
   const tc = tcRakam($('oIkTc').value);
   if (!tc) { mesajGoster('ikDurum', 'TC/Vergi No girin.', 'hata'); return; }
+  // 11 haneli ama algoritmadan geçmeyen TC: HKS'e gitmeden burada uyar. Sorgu
+  // yine de yapılır (VKN olabilir, ya da operatör bilerek devam etmek isteyebilir),
+  // ama gönderim öncesi sunucu denetimi bunu KESİN olarak durdurur.
+  if (tc.length === 11 && !tcAlgoritmaGecerli(tc)) {
+    mesajGoster('ikDurum', '⛔ Bu TC Kimlik No doğrulama algoritmasından geçmiyor — ' +
+      'rakamları kişinin kimliğiyle karşılaştırın (en sık neden: iki rakamın yer ' +
+      'değiştirmesi). Bu hâliyle bildirim MERNİS\'te bulunamaz.', 'hata');
+    return;
+  }
   $('btnIkDogrula').disabled = true; $('btnIkDogrula').textContent = '⏳';
   try {
     const j = await api('/api/kayitli_kisi', 'POST', { firmaId: aktifFirma.id, tcVkn: tc });
@@ -3360,6 +3381,22 @@ $('btnOnay').onclick = async () => {
         'Taslaklar\'dan "✏️ Düzenle" ile aynı formu tekrar gönderebilirsiniz.</div>';
     }
     if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${j.genelHata}</div>`;
+    // HKS'e GERÇEKTEN giden karşı taraf kimliği. "Mernis'te bulunamadı" hatasında
+    // KPS, TC ile doğum tarihini BİRLİKTE doğrular; eskiden ekranda yalnız HKS'in
+    // mesajındaki TC görünüyor, hangi doğum tarihinin gittiği HİÇ görünmüyordu —
+    // operatör neyi düzelteceğini bilemiyordu.
+    const _gk = j.gonderilenKimlik;
+    if (_gk && (j.genelHata || (j.sonuclar || []).some(s => s.hataKodu || !s.yeniKunyeNo || s.yeniKunyeNo === '0'))) {
+      html += '<div class="mesaj hata" style="display:block;margin-top:8px">' +
+        '<b>Bu bildirimde HKS\'e gönderilen karşı taraf bilgisi:</b>' +
+        `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(_gk.tc || '—')}</b></div>` +
+        `<div class="onay-satir"><span>Doğum Tarihi</span><b>${
+          _gk.dogumGonderildi ? eHtml(_gk.dogum) : '⚠️ GÖNDERİLMEDİ'}</b></div>` +
+        `<div class="onay-satir"><span>Ad / Ünvan</span><b>${eHtml(_gk.ad || '—')}</b></div>` +
+        `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(_gk.cep || '—')}</b></div>` +
+        '<div style="margin-top:6px">Bu iki satırı (TC + Doğum Tarihi) kişinin ' +
+        '<b>kimlik kartıyla</b> karşılaştırın — KPS ikisini birlikte doğrular.</div></div>';
+    }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
       if (tamam) herhangiBasarili = true;

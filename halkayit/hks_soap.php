@@ -1016,6 +1016,24 @@ function hks_kayitlimi_durumu($ham) {
 function hks_tc_normalize($tc) {
   return preg_replace('/\D+/', '', (string)$tc);
 }
+// TC Kimlik No algoritma denetimi (resmî kural):
+//   • 11 hane, ilk hane 0 olamaz
+//   • 10. hane = ((1,3,5,7,9. hanelerin toplamı × 7) − (2,4,6,8. hanelerin toplamı)) mod 10
+//   • 11. hane = ilk 10 hanenin toplamı mod 10
+// Amaç: rakamı yanlış girilmiş / yer değiştirmiş bir TC, biçimsel olarak doğru
+// görünüp MERNİS'te bulunamadığı için geri alınamaz bildirimde reddediliyordu.
+// VERGİ NO (10 hane) bu algoritmaya TABİ DEĞİLDİR — çağıran taraf hane sayısına
+// bakarak karar vermelidir.
+function hks_tc_algoritma_gecerli($tc) {
+  $tc = hks_tc_normalize($tc);
+  if (strlen($tc) !== 11 || $tc[0] === '0') return false;
+  $d = array_map('intval', str_split($tc));
+  $tek  = $d[0] + $d[2] + $d[4] + $d[6] + $d[8];
+  $cift = $d[1] + $d[3] + $d[5] + $d[7];
+  if ((($tek * 7) - $cift) % 10 !== $d[9]) return false;
+  if (array_sum(array_slice($d, 0, 10)) % 10 !== $d[10]) return false;
+  return true;
+}
 function hks_tc_esit($a, $b) {
   $na = hks_tc_normalize($a);
   $nb = hks_tc_normalize($b);
