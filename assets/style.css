@@ -5708,12 +5708,6 @@ html[data-theme="dark"] body:not(.print-mode) .print-table th { background: #1a2
 html[data-theme="dark"] body:not(.print-mode) .print-table .totals-row td { background: #2b2410; }
 html[data-theme="dark"] body:not(.print-mode) .data-table .totals-row td { background: #2b2410; }
 
-/* — Malzeme Kullanım Raporu (rapor_malzeme.php) — */
-html[data-theme="dark"] .mr-table th { background: #1a2331; color: var(--muted); }
-html[data-theme="dark"] .mr-parti-row th { background: #161d27; color: var(--muted); }
-html[data-theme="dark"] .mr-table th.mr-total-col { background: #1f2a44; color: #a5b4fc; }
-html[data-theme="dark"] .mr-table td.mr-total-col { background: #1a2740; color: #a5b4fc; }
-
 /* — Kantar Raporu — */
 html[data-theme="dark"] .kr-stat-item { background: var(--card); }
 html[data-theme="dark"] .kr-row-tek { background: #16233a; }

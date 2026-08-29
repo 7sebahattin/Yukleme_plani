@@ -643,6 +643,23 @@ $xlsx_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params,
     border-left: 2px solid #6366f1;
 }
 
+/* Koyu tema — yukarıdaki !important'lı sabit açık renkler dark modda da
+   basılı kalıyordu (Parti No satırı beyaz kutu olarak görünüyordu). Aynı
+   özgüllükte + !important gerekli, aksi hâlde ışık kuralı kazanır. */
+html[data-theme="dark"] .mr-parti-row th { background: #161d27 !important; }
+html[data-theme="dark"] .mr-parti-label { color: var(--muted) !important; }
+html[data-theme="dark"] .mr-parti-cell { color: var(--text) !important; }
+html[data-theme="dark"] .mr-table th.mr-total-col {
+    background: #1f2a44 !important;
+    color: #a5b4fc !important;
+    border-left-color: #4d5fb8;
+}
+html[data-theme="dark"] .mr-table td.mr-total-col {
+    background: #1a2740 !important;
+    color: #a5b4fc !important;
+    border-left-color: #4d5fb8;
+}
+
 @media (max-width: 767px) {
     .mr-table { font-size: .8rem; }
 }
