@@ -850,7 +850,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .islendi-ozet-toggle:hover { background: rgba(0,0,0,.06); }
 .islendi-ozet-panel {
     margin-top: 4px; padding: 8px;
-    background: var(--card-bg); border-radius: 8px;
+    background: var(--card); border-radius: 8px;
     border: 1px solid var(--border);
 }
 .islendi-ozet-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -3735,7 +3735,7 @@ body.print-mode .asya-sheet {
 
     .mh-card {
         border: 1px solid var(--border); border-radius: 9px;
-        padding: 11px 13px; margin-bottom: 10px; background: var(--card-bg, #fff);
+        padding: 11px 13px; margin-bottom: 10px; background: var(--card);
     }
     .mh-card:last-child { margin-bottom: 0; }
     .mh-card-top {
@@ -3787,7 +3787,7 @@ body.print-mode .asya-sheet {
     .ms-scard {
         border: 1px solid var(--border); border-left-width: 4px;
         border-radius: 9px; padding: 11px 13px; margin-bottom: 10px;
-        background: var(--card-bg, #fff);
+        background: var(--card);
     }
     .ms-scard:last-child { margin-bottom: 0; }
     /* Durum renk şeridi (sol kenar) */
@@ -4070,7 +4070,7 @@ body.print-mode .asya-sheet {
 
 /* ── Sprint 33D: Veri Kalite Kontrolü paneli ── */
 .ms-kalite-summary {
-    cursor: pointer; padding: 11px 16px; background: var(--card-bg, #fff);
+    cursor: pointer; padding: 11px 16px; background: var(--card);
     display: flex; align-items: center; gap: 10px; list-style: none;
     user-select: none; font-weight: 600;
 }
@@ -4422,7 +4422,7 @@ body.print-mode .asya-sheet {
     }
     .date-filter-panel input[type="date"] {
         font-size: 16px; width: 100%; padding: 9px 10px;
-        background: var(--card-bg);
+        background: var(--card);
     }
 }
 
