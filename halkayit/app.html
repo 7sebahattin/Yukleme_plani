@@ -34,6 +34,9 @@
     --tamam-bg:#e7f6ee; --tamam-tx:#1f7d4d; --hata-bg:#fdecec; --hata-tx:#b3362c;
     --ozet-bg:var(--ozet-bg); --ekle-bg:rgba(255,255,255,.5);
     --golge:0 1px 3px rgba(20,30,60,.06), 0 4px 14px rgba(20,30,60,.05);
+    /* Taslak kartındaki plaka: koyu kırmızı. Hata kırmızısından (--hata-tx)
+       AYRI bir token — plaka bir hata değildir, karışmasın. */
+    --plaka:#9b1c1c;
     --radius:16px;
   }
   html[data-theme="dark"] {
@@ -46,6 +49,7 @@
     --tamam-bg:#14302a; --tamam-tx:#4fd6a0; --hata-bg:#34201f; --hata-tx:#f0938d;
     --ozet-bg:rgba(18,25,36,.97); --ekle-bg:rgba(255,255,255,.05);
     --golge:0 1px 3px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.35);
+    --plaka:#ff8f8f;   /* koyu temada okunabilir kırmızı */
     color-scheme:dark;
   }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
@@ -242,12 +246,37 @@
   .sonuc-satir { border-bottom:1px solid var(--cizgi); padding:9px 0; font-size:13px; }
 
   /* Taslak kartı */
-  .taslak-kart { background:var(--kart); border-radius:var(--radius); box-shadow:var(--golge); padding:16px; margin-bottom:12px; }
-  .taslak-kart .tk-baslik { display:flex; justify-content:space-between; font-weight:800; font-size:14px; color:var(--navy); }
-  .taslak-kart .tk-zaman { font-size:11px; color:var(--soluk); font-weight:400; }
-  .taslak-kart .tk-detay { font-size:13px; color:var(--metin); margin-top:8px; line-height:1.8; }
-  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-  .taslak-kart .tk-butonlar .btn { padding:12px 6px; font-size:13.5px; }
+  /* ── Taslak kartı: her bilgi kendi satırında, satırlar iki renkte ──
+     Eskiden bilgiler "·" ile yan yana diziliyor ve uzun ürün/ülke adlarında
+     satır kayıyordu; artık etiket solda, değer sağda tek satır. */
+  .taslak-kart { background:var(--kart); border-radius:var(--radius); box-shadow:var(--golge);
+    overflow:hidden; margin-bottom:14px; }
+  .taslak-kart .tk-ust { display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; background:var(--cip-bg); border-bottom:1px solid var(--cizgi); }
+  .taslak-kart .tk-etiket { font-size:12px; font-weight:800; color:var(--teal); letter-spacing:.4px; }
+  .taslak-kart .tk-zaman { font-size:11.5px; color:var(--soluk); font-weight:400; }
+  .taslak-kart .tk-satir { display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:11px 16px; font-size:14px; border-bottom:1px solid var(--cizgi); }
+  .taslak-kart .tk-satir:nth-child(even) { background:var(--satir-cift); }   /* 2. renk */
+  .taslak-kart .tk-satir .e { color:var(--soluk); font-size:13px; display:flex;
+    align-items:center; gap:7px; flex-shrink:0; }
+  .taslak-kart .tk-satir .d { font-weight:700; text-align:right; word-break:break-word; }
+  .taslak-kart .tk-satir.tk-kilo .d { color:var(--teal); font-size:15px; }
+  /* Plaka: gövde satırından 2 punto büyük + koyu kırmızı */
+  .taslak-kart .tk-satir.tk-plaka .d { color:var(--plaka); font-size:16px; letter-spacing:.3px; }
+  .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
+    padding:12px 16px 14px; }
+  .taslak-kart .tk-butonlar .btn { padding:12px 6px; font-size:13.5px; margin-top:0; }
+
+  /* Masaüstünde (≥900px) kartlar 2 kolon — geniş ekranda satırlar aşırı uzamasın.
+     Mobil düzen (tek kolon) DEĞİŞMEZ. */
+  @media (min-width:900px) {
+    #taslakListe { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:16px; align-items:start; }
+    #taslakListe .taslak-kart { margin-bottom:0; }
+    .taslak-kart .tk-satir { padding:12px 18px; }
+    .taslak-kart .tk-butonlar { padding:14px 18px 16px; }
+  }
 
   /* Gönderilenler — tıklanabilir, genişleyen kart (Yüklemeler kart tasarımına benzer) */
   .gonderilen-liste { display:flex; flex-direction:column; gap:10px; }
@@ -939,7 +968,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-28 · 19';
+const PANEL_SURUM = '2026-08-29 · 20';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -3145,24 +3174,35 @@ async function taslakEkraniAc() {
       const toplam = plan ? Number(t.ortak.planKg) : t.satirlar.reduce((x, s) => x + Number(s.miktar), 0);
       const div = document.createElement('div');
       div.className = 'taslak-kart';
+      // Her bilgi kendi satırında (Firma · Plaka · Ülke · Ürün · Kilo · Künye · Fiyat);
+      // satırlar dönüşümlü iki renkte (CSS :nth-child(even)). Satır SAYISI sabit
+      // tutulur ki renk dönüşümü kaymasın — boş değerler "—" ile gösterilir.
+      const _satir = (sinif, etiket, deger) =>
+        `<div class="tk-satir${sinif ? ' ' + sinif : ''}"><span class="e">${etiket}</span>` +
+        `<span class="d">${deger}</span></div>`;
+      // Ülke satırı: yurt dışında ülke adı, yurt içinde karşı taraf (mal kime/kimden).
+      const _ulke = t.ortak.yurtIci
+        ? eHtml(t.ortak.ulkeAd || t.ortak.ikinciAd || t.ortak.ikinciTc || 'Yurt içi')
+        : eHtml(t.ortak.ulkeAd || '—');
+      const _urunAd = t.ortak.urunAd || '';
       div.innerHTML =
-        `<div class="tk-baslik"><span>${t.firmaAd}</span>` +
+        `<div class="tk-ust">` +
+        `<span class="tk-etiket">${plan ? '📝 PLAN TASLAĞI' : 'TASLAK'}</span>` +
         `<span class="tk-zaman">${new Date(t.zaman).toLocaleString('tr-TR')}</span></div>` +
-        `<div class="tk-detay">` +
-        `🚛 ${eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')} · ` +
-        (t.ortak.yurtIci
-          ? `🏠 ${eHtml(t.ortak.ikinciAd || t.ortak.ikinciTc || 'yurt içi')}`
-          : `🌍 ${eHtml(t.ortak.ulkeAd || '—')}`) +
-        (t.ortak.urunAd ? ` · ${urunIkonu(t.ortak.urunAd)} ${eHtml(t.ortak.urunAd)}` : '') + `<br>` +
-        (plan
-          ? `<span class="rozet rozet-yesil">📝 PLAN</span> künyeler gönderimde stoktan seçilir · ⚖️ <b>${fmt(toplam)} KG</b>`
-          : `📦 ${t.satirlar.length} künye · ⚖️ <b>${fmt(toplam)} KG</b>`) +
-        ((t.ortak.yurtIci && !t.ortak.fiyatGonder) ? '' : ` · 💰 ${fmt(t.ortak.fiyat)} TL/KG`) +
-        `</div>` +
+        _satir('', '🏢 Firma', eHtml(t.firmaAd)) +
+        _satir('tk-plaka', '🚛 Plaka', eHtml(t.ortak.plaka || t.ortak.belgeNo || '—')) +
+        _satir('', (t.ortak.yurtIci ? '🏠' : '🌍') + ' Ülke', _ulke) +
+        _satir('', (_urunAd ? urunIkonu(_urunAd) : '🍎') + ' Ürün', eHtml(_urunAd || '—')) +
+        _satir('tk-kilo', '⚖️ Kilo', `${fmt(toplam)} KG`) +
+        _satir('', '📦 Künye', plan
+          ? 'gönderimde stoktan seçilir'
+          : `${t.satirlar.length} adet`) +
+        _satir('', '💰 Fiyat', (t.ortak.yurtIci && !t.ortak.fiyatGonder)
+          ? '—' : `${fmt(t.ortak.fiyat)} TL/KG`) +
         `<div class="tk-butonlar">` +
-        `<button class="btn btn-amber" data-gonder="${t.id}" style="margin-top:10px">📤 Gönder</button>` +
-        `<button class="btn btn-soluk" data-duzenle="${t.id}" style="margin-top:10px">✏️ Düzenle</button>` +
-        `<button class="btn btn-soluk" data-sil="${t.id}" style="margin-top:10px;color:var(--hata-tx)">🗑️ Sil</button>` +
+        `<button class="btn btn-amber" data-gonder="${t.id}">📤 Gönder</button>` +
+        `<button class="btn btn-soluk" data-duzenle="${t.id}">✏️ Düzenle</button>` +
+        `<button class="btn btn-soluk" data-sil="${t.id}" style="color:var(--hata-tx)">🗑️ Sil</button>` +
         `</div>`;
       kap.appendChild(div);
     });
