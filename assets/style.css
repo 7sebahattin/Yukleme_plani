@@ -28,6 +28,20 @@ body { overflow-x: clip; position: relative; }
     --shadow: 0 1px 3px rgba(20,30,60,0.06), 0 4px 12px rgba(20,30,60,0.04);
     --radius: 10px;
     --radius-sm: 6px;
+    /* "Gömülü yüzey" — kart içinde biraz daha koyu bir alt-kutu (pasif tab,
+       son hareket kutusu, mini filtre çubuğu). Koyu karşılığı dark bloğunda. */
+    --surface-2: #f8fafc;
+    /* Aşağıdaki 5 tanesi GERÇEK renk değil, var olan tokenların takma adı —
+       önceden hiç tanımlanmamışlardı; var(--x, #fallback) hep fallback'e
+       düşüyordu (data-theme farketmeksizin HER ZAMAN #fallback). Alias
+       oldukları için dark bloğunda ayrıca tanımlanmalarına gerek yok, işaret
+       ettikleri token zaten temayla değişiyor. */
+    --text-muted: var(--muted);
+    --primary-light: var(--primary-soft);
+    --bg-alt: var(--surface-2);
+    --success-dark: var(--success);
+    --bg-subtle: var(--surface-2);
+    --bg-soft: var(--surface-2);
 }
 
 * { box-sizing: border-box; }
@@ -4042,7 +4056,7 @@ body.print-mode .asya-sheet {
 /* ── Pro-08B: Hızlı tekrar kartı detay satırı ─────────── */
 .ms-quick-detail {
     display: flex; gap: 14px; flex-wrap: wrap;
-    font-size: .82rem; color: #374151; margin-bottom: 10px;
+    font-size: .82rem; color: var(--text); margin-bottom: 10px;
 }
 .ms-quick-detail span { display: inline-flex; gap: 4px; align-items: center; }
 
@@ -5483,6 +5497,8 @@ html[data-theme="dark"] {
     --shadow-md: 0 4px 10px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.3);
     --shadow-lg: 0 10px 28px rgba(0,0,0,.55), 0 4px 10px rgba(0,0,0,.35);
     --ring: 0 0 0 3px rgba(77,141,255,.28);
+    /* .data-table th ile aynı "gömülü yüzey" tonu — tutarlılık için */
+    --surface-2: #1a2331;
     color-scheme: dark;
 }
 
