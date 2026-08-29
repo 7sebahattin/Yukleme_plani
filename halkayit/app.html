@@ -255,15 +255,23 @@
     padding:12px 16px; background:var(--cip-bg); border-bottom:1px solid var(--cizgi); }
   .taslak-kart .tk-etiket { font-size:12px; font-weight:800; color:var(--teal); letter-spacing:.4px; }
   .taslak-kart .tk-zaman { font-size:11.5px; color:var(--soluk); font-weight:400; }
-  .taslak-kart .tk-satir { display:flex; align-items:center; justify-content:space-between;
+  /* Bilgi satırı — Taslaklar ve Gönderilenler kartlarının ORTAK yapısı.
+     Kapsamsız tanımlanır ki iki ekran zamanla ayrışmasın; ölçü farkları
+     aşağıda kart bazında override edilir. Renk dönüşümü :nth-child(even)
+     ile yapıldığından her iki kartta da satırlardan ÖNCE tam 1 başlık
+     elemanı bulunmalıdır (tk-ust / g-kart-head). */
+  .tk-satir { display:flex; align-items:center; justify-content:space-between;
     gap:12px; padding:11px 16px; font-size:14px; border-bottom:1px solid var(--cizgi); }
-  .taslak-kart .tk-satir:nth-child(even) { background:var(--satir-cift); }   /* 2. renk */
-  .taslak-kart .tk-satir .e { color:var(--soluk); font-size:13px; display:flex;
+  .tk-satir:nth-child(even) { background:var(--satir-cift); }   /* 2. renk */
+  .tk-satir .e { color:var(--soluk); font-size:13px; display:flex;
     align-items:center; gap:7px; flex-shrink:0; }
-  .taslak-kart .tk-satir .d { font-weight:700; text-align:right; word-break:break-word; }
-  .taslak-kart .tk-satir.tk-kilo .d { color:var(--teal); font-size:15px; }
-  /* Plaka: gövde satırından 2 punto büyük + koyu kırmızı */
-  .taslak-kart .tk-satir.tk-plaka .d { color:var(--plaka); font-size:16px; letter-spacing:.3px; }
+  .tk-satir .d { font-weight:700; text-align:right; word-break:break-word; }
+  .tk-satir.tk-kilo .d { color:var(--teal); }
+  .tk-satir.tk-plaka .d { color:var(--plaka); letter-spacing:.3px; }
+  /* Taslak kartında plaka 2 punto büyük, kilo 1 punto büyük (istenen vurgu).
+     Gönderilenler kartında ölçüler NORMAL kalır — yalnız renkler ortaktır. */
+  .taslak-kart .tk-satir.tk-plaka .d { font-size:16px; }
+  .taslak-kart .tk-satir.tk-kilo .d  { font-size:15px; }
   .taslak-kart .tk-butonlar { display:grid; grid-template-columns:repeat(3,1fr); gap:8px;
     padding:12px 16px 14px; }
   .taslak-kart .tk-butonlar .btn { padding:12px 6px; font-size:13.5px; margin-top:0; }
@@ -271,20 +279,31 @@
   /* Masaüstünde (≥900px) kartlar 2 kolon — geniş ekranda satırlar aşırı uzamasın.
      Mobil düzen (tek kolon) DEĞİŞMEZ. */
   @media (min-width:900px) {
-    #taslakListe { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:16px; align-items:start; }
+    /* Taslaklar ve Gönderilenler AYNI ızgarayı kullanır: tek geniş kolonda
+       etiket ile değer arası aşırı açılıyor, göz satırı takip edemiyordu. */
+    /* NOT: `.gonderilen-liste { display:flex }` temel kuralı bu blokTAN SONRA
+       tanımlı olduğu için sınıf seçici burada kaybediyordu (aynı özgüllük,
+       sonraki kural kazanır) — id seçici kullanılır. */
+    #taslakListe, #gonderilenListe {
+      display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:16px; align-items:start;
+    }
     #taslakListe .taslak-kart { margin-bottom:0; }
-    .taslak-kart .tk-satir { padding:12px 18px; }
+    .tk-satir { padding:12px 18px; }
     .taslak-kart .tk-butonlar { padding:14px 18px 16px; }
+    .g-kart-head, .g-kart-detay { padding-left:18px; padding-right:18px; }
   }
 
   /* Gönderilenler — tıklanabilir, genişleyen kart (Yüklemeler kart tasarımına benzer) */
   .gonderilen-liste { display:flex; flex-direction:column; gap:10px; }
   .g-kart {
     background:var(--kart); border-radius:var(--radius); box-shadow:var(--golge);
-    padding:14px 16px; font-variant-numeric:tabular-nums; overflow:hidden;
+    font-variant-numeric:tabular-nums; overflow:hidden;
   }
-  .g-kart-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  /* Başlık şeridi — taslak kartındaki .tk-ust ile aynı görünüm. Satırların
+     renk dönüşümü buna göre hizalanır (bu eleman child 1'dir). */
+  .g-kart-head { display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 16px; background:var(--cip-bg); border-bottom:1px solid var(--cizgi); }
   .g-kart-head-sol { cursor:pointer; flex:1; min-width:0; }
   .g-kart-head-sag { display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .g-kart-baslik { font-weight:800; color:var(--navy); font-size:14.5px; }
@@ -298,12 +317,8 @@
     white-space:nowrap; font-family:inherit;
   }
   .g-yazdir-btn-ust:active { background:var(--cizgi); }
-  .g-kart-body {
-    font-size:12.5px; color:var(--metin); margin-top:8px; line-height:1.7;
-  }
-  .g-kart-body b { color:var(--navy); }
   .g-kart-detay {
-    display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--cizgi);
+    display:none; padding:12px 16px 14px; border-top:1px solid var(--cizgi);
   }
   .g-kart.acik .g-kart-detay { display:block; }
   .g-detay-baslik { font-size:11px; font-weight:700; color:var(--soluk); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
@@ -968,7 +983,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-29 · 20';
+const PANEL_SURUM = '2026-08-29 · 21';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -3521,10 +3536,17 @@ async function gonderilenEkraniAc() {
       const kunyeChips = (g.yeniKunyeler || []).length
         ? g.yeniKunyeler.map(k => `<span class="g-kunye-cip">${eHtml(k)}</span>`).join('')
         : '<span class="cip-bos">Bu gönderide yeni künye oluşmadı.</span>';
+      // Taslak kartıyla AYNI satır düzeni (ortak .tk-satir stilleri). Fark:
+      // burada ölçüler normal — plaka/kilo büyütülmez, yalnız renkleri ortaktır.
+      // Firma artık başlıkta değil, ilk satırda; başlık şeridinde durum rozeti
+      // ve tarih durur (rozet eskiden bilgi satırının EN SONUNDA kayboluyordu).
+      const _gs = (sinif, etiket, deger) =>
+        `<div class="tk-satir${sinif ? ' ' + sinif : ''}"><span class="e">${etiket}</span>` +
+        `<span class="d">${deger}</span></div>`;
       div.innerHTML =
         `<div class="g-kart-head">` +
         `<div class="g-kart-head-sol">` +
-        `<div class="g-kart-baslik">${eHtml(g.firmaAd)}</div>` +
+        `<div class="g-kart-baslik">${durumRozet}</div>` +
         `<div class="g-kart-tarih">${tarih}</div>` +
         `</div>` +
         `<div class="g-kart-head-sag">` +
@@ -3532,14 +3554,14 @@ async function gonderilenEkraniAc() {
         `<span class="g-kart-ok">▾</span>` +
         `</div>` +
         `</div>` +
-        `<div class="g-kart-body">` +
-        `🚛 <b>${eHtml(g.plaka || g.belgeNo || '—')}</b>` +
-        (g.ulkeAd ? ` · 🌍 ${eHtml(g.ulkeAd)}` : '') +
-        (g.urunAd ? ` · ${urunIkonu(g.urunAd)} ${eHtml(g.urunAd)}` : '') +
-        ` · 📦 ${g.adet} künye · ⚖️ <b>${fmt(g.toplamKg)} KG</b> · 💰 ${fmt(g.fiyat)} TL` +
-        (g.rusum ? ` · Rüsum: ${fmt(g.rusum)} TL` : '') +
-        ` · ${durumRozet}` +
-        `</div>` +
+        _gs('', '🏢 Firma', eHtml(g.firmaAd || '—')) +
+        _gs('tk-plaka', '🚛 Plaka', eHtml(g.plaka || g.belgeNo || '—')) +
+        _gs('', '🌍 Ülke', eHtml(g.ulkeAd || '—')) +
+        _gs('', (g.urunAd ? urunIkonu(g.urunAd) : '🍎') + ' Ürün', eHtml(g.urunAd || '—')) +
+        _gs('tk-kilo', '⚖️ Kilo', `${fmt(g.toplamKg)} KG`) +
+        _gs('', '📦 Künye', `${g.adet} adet`) +
+        _gs('', '💰 Fiyat', `${fmt(g.fiyat)} TL`) +
+        _gs('', '🧾 Rüsum', g.rusum ? `${fmt(g.rusum)} TL` : '—') +
         `<div class="g-kart-detay">` +
         `<div class="g-detay-baslik">Künye Numaraları</div>` +
         `<div class="cipler">${kunyeChips}</div>` +
