@@ -5612,6 +5612,26 @@ html[data-theme="dark"] .dkk-row-kritik { background: #2e1a1a; }
 html[data-theme="dark"] #beyanBulkPreview { background: var(--card); }
 html[data-theme="dark"] .beyan-bulk-head { background: #1a2740; }
 
+/* — Malzeme Stok: kategori/durum rozetleri + uyarı-bilgi kutuları —
+   Bunlar hiç dark override taşımıyordu; pastel açık renkler koyu arka
+   plana karşı beyaza yakın kutular gibi parlıyordu (rapor_malzeme.php'deki
+   "Parti No" bugu ile aynı aile — orada !important'la ezilmişti, burada
+   hiç yazılmamıştı). Diğer rozetlerle (.rpt-badge) aynı desen: pastel → koyu
+   doygun ton + aynı tondan açık yazı rengi. */
+html[data-theme="dark"] .ms-cat-kasa  { background: #1f2a44; color: #93c5fd; }
+html[data-theme="dark"] .ms-cat-palet { background: #2c2150; color: #c4b5fd; }
+html[data-theme="dark"] .ms-cat-sarf  { background: #0d3327; color: #34d399; }
+html[data-theme="dark"] .ms-cat-diger { background: #232d3c; color: var(--muted); }
+html[data-theme="dark"] .badge-gelen    { background: #0d3327; color: #34d399; }
+html[data-theme="dark"] .badge-cikan    { background: #3a1616; color: #f87171; }
+html[data-theme="dark"] .badge-fire     { background: #3d2410; color: #fb923c; }
+html[data-theme="dark"] .badge-duzeltme { background: #332a0a; color: #fbbf24; border-color: #5c4a12; }
+html[data-theme="dark"] .stok-uyari-box { background: #332a0a; border-color: #5c4a12; }
+html[data-theme="dark"] .stok-uyari-row { color: #fbbf24; }
+html[data-theme="dark"] .stok-info-box  { background: #1a2740; border-color: #31456b; color: #93c5fd; }
+html[data-theme="dark"] .ms-edit-btn         { background: #1a2740; border-color: #31456b; }
+html[data-theme="dark"] .ms-edit-btn:hover   { background: #22345a; }
+
 /* =========================================================
    KOYU TEMA v3 — sistematik tarama: token-metinli açık yüzeyler
    (arka plan hardcoded açık + metin var(--text)/var(--muted) olan
