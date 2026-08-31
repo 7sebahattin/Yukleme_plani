@@ -329,13 +329,16 @@ if (count($sizes) > count($size_slots_base)) {
     // stilini/yüksekliğini kopyalayarak yazmak yeterli ve çok daha hızlı.
     $extra    = count($sizes) - count($size_slots_base);
     $lastRow  = end($size_slots_base);       // 41 — stil/yükseklik kaynağı
-    $rowHeight = $sh->getRowDimension((string)$lastRow)->getRowHeight();
+    // getRowDimension() int İSTER (PhpSpreadsheet ^2.3 strict types) — buraya
+    // (string) cast konulursa TypeError ile 500 döner. $lastRow/$newRow zaten
+    // int; cast gereksizdi ve canlıda "excel indir"i kırıyordu.
+    $rowHeight = $sh->getRowDimension($lastRow)->getRowHeight();
     for ($i = 0; $i < $extra; $i++) {
         $newRow = $lastRow + 1 + $i;
         foreach (range('A', 'P') as $col) {
             $sh->duplicateStyle($sh->getStyle($col . $lastRow), $col . $newRow);
         }
-        if ($rowHeight > 0) { $sh->getRowDimension((string)$newRow)->setRowHeight($rowHeight); }
+        if ($rowHeight > 0) { $sh->getRowDimension($newRow)->setRowHeight($rowHeight); }
         $size_slots[] = $newRow;
     }
 }

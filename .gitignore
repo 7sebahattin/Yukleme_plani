@@ -13,3 +13,6 @@ deploy.log
 *.sqlite
 *.sqlite3
 config/local.php
+
+# Smoke testin geçici kopyası (çökerse kalabilir)
+.smoke_record_excel_*.php
