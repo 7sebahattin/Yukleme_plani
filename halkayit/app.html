@@ -366,6 +366,9 @@
   input.input-turuncu:focus {
     background:var(--kart); border-color:#ea580c; box-shadow:0 0 0 3px rgba(234,88,12,.18);
   }
+  /* Plaka kutuları: turuncu zemin kalır ama yazılan plaka daha belirgin olsun
+     diye yazı rengi mavi (--teal) — hem açık hem koyu temada tanımlı. */
+  #oPlaka, #tkPlaka, #etPlaka { color:var(--teal); }
   /* Yeşil (para) giriş kutusu — Birim Fiyat */
   input.input-yesil {
     background:rgba(22,163,74,.12); border:2px solid #16a34a; color:#14532d; font-weight:700;
@@ -3590,6 +3593,23 @@ async function gonderilenEkraniAc() {
 
 // ================= AÇILIŞ =================
 firmalariYukle();
+
+// Plaka kutuları: boşluk yazılsa bile HKS'ye boşluksuz gitsin — kullanıcı hep
+// "31 AJE 915" gibi boşluklu yazıyor, HKS boşluksuz plaka bekliyor.
+['oPlaka', 'tkPlaka', 'etPlaka'].forEach(id => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    if (/\s/.test(el.value)) {
+      const imlec = el.selectionStart;
+      const oncekiUzunluk = el.value.length;
+      el.value = el.value.replace(/\s+/g, '');
+      if (imlec !== null) {
+        el.selectionStart = el.selectionEnd = Math.max(0, imlec - (oncekiUzunluk - el.value.length));
+      }
+    }
+  });
+});
 </script>
 </body>
 </html>
