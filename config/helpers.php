@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v190');
+    define('APP_SURUM', 'v191');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)

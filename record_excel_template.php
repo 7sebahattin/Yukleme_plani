@@ -163,6 +163,9 @@ if (count($pallets) > $CAP) {
 // ile aynı mantık: dara = kasa_adeti × kasa_birim_dara + palet_birim_dara.
 $sh->getColumnDimension('R')->setVisible(false);
 $sh->getColumnDimension('S')->setVisible(false);
+// SIZE sütunu genişliği — istenen 70 piksel (Excel'in kendi "Genişlik: 7,00 (70
+// piksel)" gösterimiyle aynı birim, karakter genişliği).
+$sh->getColumnDimension('C')->setWidth(7);
 $setS('R9', 'Kasa Br.Dara');
 $setS('S9', 'Palet Br.Dara');
 foreach ($pallets as $i => $p) {
@@ -178,7 +181,9 @@ foreach ($pallets as $i => $p) {
     $setN("S$r", (float)($p['palet_unit_dara'] ?? 0));
     // DARA = KASA ADETİ × kasa birim dara + palet birim dara (canlı formül; kasa adeti değişince otomatik güncellenir)
     $setF("E$r", "=ROUND(B$r*R$r+S$r,1)");
-    $setS("F$r", $p['kasa_cinsi_adi'] ?? '');
+    // KASA CİNSİ sütunu her zaman sabit "P.K." yazar — gerçek kasa cinsi adı
+    // (kasa_cinsi_adi) burada kullanılmaz, talep üzerine sabitlendi.
+    $setS("F$r", 'P.K.');
     $setS("G$r", tr_upper($p['urun_cinsi'] ?? ''));
     // NET KG = BRÜT − DARA (canlı formül; brüt/dara düzenlenince otomatik güncellenir)
     $setF("H$r", "=ROUND(D$r-E$r,1)");

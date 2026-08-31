@@ -107,6 +107,13 @@ foreach ($senaryolar as $ad => $sizes) {
     try {
         $sh = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpOut)->getActiveSheet();
 
+        // KASA CİNSİ sütunu (F) her palet satırında sabit "P.K." olmalı.
+        ok("[$ad] F sütunu 'P.K.' sabit",
+            trim((string)$sh->getCell('F10')->getValue()) === 'P.K.');
+        // SIZE sütunu (C) genişliği 7 (≈70 piksel) olmalı.
+        ok("[$ad] C sütunu genişliği 7",
+            abs($sh->getColumnDimension('C')->getWidth() - 7.0) < 0.01);
+
         // 4 sabit yuva + gerekirse uzayan satırlar; fazladan bir satır da okuyup
         // "kullanılmayan yuva temizlendi mi" kontrol ediyoruz.
         $tara = max(4, count($beklenen)) + 1;
