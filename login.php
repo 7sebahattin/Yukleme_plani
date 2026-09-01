@@ -69,6 +69,24 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
         } catch (e) {}
     })();
     </script>
+    <script>
+    /* Gerçek görünür yükseklik — CSS 100dvh bazı Android tarayıcılarında
+       (özellikle veri tasarrufu/adres çubuğu davranışı farklı olanlarda)
+       gerçekte görünenden daha uzun ölçülüyor; "Giriş Yap" butonu ekranın
+       altına, sistem jest çubuğunun arkasına kayıyordu. window.innerHeight
+       her zaman GERÇEKTEN görünen yüksekliği verir — --app-h buradan gelir,
+       .lc bunu dvh yerine kullanır (dvh yalnız JS çalışmadan önceki ilk
+       çizimde yedek). */
+    (function () {
+        function ayarla() {
+            document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
+        }
+        ayarla();
+        window.addEventListener('resize', ayarla);
+        window.addEventListener('orientationchange', ayarla);
+        try { window.visualViewport && window.visualViewport.addEventListener('resize', ayarla); } catch (e) {}
+    })();
+    </script>
     <link rel="stylesheet" href="assets/style.css?v=<?= $css_v ?>">
     <style>
         html, body {
@@ -212,14 +230,15 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
 
         @media (max-width: 480px) {
             body { padding: 0; }
-            /* min-height değil height: min-height + flex çocukları, gerçek
-               cihazda yazı tipi/emniyet alanı farkıyla 100dvh'yi aşıp
-               "Giriş Yap" butonunu ekran dışına itebiliyordu. Sabit height +
-               overflow-y:auto ile içerik hiçbir zaman erişilemez olmuyor —
-               sığmazsa kart kendi içinde kayar, buton her zaman ulaşılabilir. */
+            /* height: var(--app-h) — window.innerHeight'tan gelen GERÇEK görünür
+               yükseklik (yukarıdaki script). dvh bazı Android tarayıcılarında
+               gerçekte görüneni aşıyor, kart taştığı için "Giriş Yap" ekran
+               dışına/sistem jest çubuğunun arkasına kayıyordu. overflow-y:auto
+               ek güvenlik ağı — script çalışmadan önceki ilk çizimde bile
+               içerik hiçbir zaman tamamen erişilemez olmuyor. */
             .lc {
-                height: 100dvh;
-                min-height: 100dvh;
+                height: var(--app-h, 100dvh);
+                min-height: var(--app-h, 100dvh);
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
                 border-radius: 0;
@@ -231,7 +250,13 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
             .lc-logo svg { width: 24px; height: 24px; }
             .lc-body { padding-top: 20px; gap: 12px; }
             .lc-pill { height: 46px; }
-            .lc-sheet { border-radius: 0; padding-top: 22px; }
+            /* Alt boşluk büyütüldü: Android'in jest gezinme çubuğu env(safe-area)
+               ile her zaman raporlanmıyor, içeriğin üstüne şeffaf biniyor —
+               sabit 40px taban payı butonun altını her durumda temiz tutar. */
+            .lc-sheet {
+                border-radius: 0;
+                padding: 22px 28px calc(40px + env(safe-area-inset-bottom, 0px));
+            }
             .lc-cta { margin-top: -46px; }
         }
     </style>
