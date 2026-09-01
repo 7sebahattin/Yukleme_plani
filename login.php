@@ -73,111 +73,184 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
     <style>
         html, body {
             margin: 0; padding: 0;
-            min-height: 100vh;
-            background: #f0f4f8;
+            min-height: 100dvh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        body {
+            background: #eef1f6;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-        .lc {
-            background: #fff;
-            border-radius: 14px;
-            box-shadow: 0 4px 24px rgba(0,0,0,.10);
-            padding: 40px 36px 36px;
-            width: 100%;
-            max-width: 360px;
+            padding: 24px;
             box-sizing: border-box;
         }
-        .lc-brand {
-            text-align: center;
-            margin-bottom: 4px;
+        html[data-theme="dark"] body { background: #0b1220; }
+
+        /* Kart — gradient "telefon ekranı" görünümü: üstte logo/marka,
+           ortada hap (pill) girdiler, altta beyaz oturma kağıdı üstünde
+           yüzen hap buton. Renkler projenin mevcut mavisi (#1d6cf0). */
+        .lc {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            max-width: 400px;
+            min-height: 640px;
+            border-radius: 32px;
+            box-shadow: 0 20px 50px rgba(15,23,42,.22);
+            background: linear-gradient(160deg, #123a9c 0%, #1d6cf0 55%, #4a92ff 100%);
+            display: flex;
+            flex-direction: column;
         }
-        .lc-brand span {
+        .lc-decor {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,.10);
+            filter: blur(2px);
+            pointer-events: none;
+        }
+        .lc-decor-a { width: 220px; height: 220px; top: -90px; right: -70px; }
+        .lc-decor-b { width: 160px; height: 160px; bottom: 170px; left: -60px; background: rgba(255,255,255,.08); }
+
+        .lc-brand {
+            position: relative;
+            text-align: center;
+            padding: 52px 24px 6px;
+        }
+        .lc-logo {
+            width: 60px; height: 60px;
+            margin: 0 auto 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,.16);
+            border: 1px solid rgba(255,255,255,.35);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .lc-logo svg { width: 28px; height: 28px; stroke: #fff; }
+        .lc-brand-title {
             font-size: 1.4rem;
             font-weight: 800;
-            color: #1d6cf0;
-            letter-spacing: -0.5px;
+            color: #fff;
+            letter-spacing: -0.3px;
         }
-        .lc-subtitle {
-            text-align: center;
-            color: #64748b;
+        .lc-brand-sub {
+            margin-top: 2px;
+            color: rgba(255,255,255,.75);
             font-size: .85rem;
-            margin-bottom: 28px;
         }
-        .lc-field { margin-bottom: 16px; }
-        .lc-field label {
-            display: block;
-            font-size: .82rem;
-            font-weight: 600;
-            color: #475569;
-            margin-bottom: 6px;
+
+        .lc-body {
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 28px 28px 0;
         }
-        .lc-field input {
+        .lc-error {
+            background: rgba(255,255,255,.16);
+            border: 1px solid rgba(255,255,255,.4);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 14px;
+            font-size: .85rem;
+            text-align: center;
+        }
+        .lc-pill {
+            border-radius: 999px;
+            border: 1.5px solid rgba(255,255,255,.45);
+            background: rgba(255,255,255,.12);
+            padding: 0 20px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+        }
+        .lc-pill:focus-within {
+            border-color: rgba(255,255,255,.85);
+            background: rgba(255,255,255,.18);
+        }
+        .lc-pill input {
             width: 100%;
-            box-sizing: border-box;
-            padding: 11px 14px;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            color: #1e293b;
+            border: none;
             outline: none;
-            transition: border-color .15s;
-            background: #f8fafc;
+            background: transparent;
+            color: #fff;
+            font-size: 16px;
         }
-        .lc-field input:focus {
-            border-color: #1d6cf0;
+        .lc-pill input::placeholder { color: rgba(255,255,255,.75); }
+        .lc-sr-only {
+            position: absolute; width: 1px; height: 1px;
+            padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+        }
+
+        .lc-sheet {
+            position: relative;
+            margin-top: auto;
             background: #fff;
+            border-radius: 32px 32px 0 0;
+            padding: 34px 28px calc(26px + env(safe-area-inset-bottom, 0px));
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 -6px 20px rgba(15,23,42,.10);
         }
-        .lc-btn {
+        .lc-cta {
             width: 100%;
-            padding: 12px;
+            max-width: 260px;
+            margin-top: -56px;
+            padding: 15px;
             background: #1d6cf0;
             color: #fff;
             font-size: 1rem;
-            font-weight: 600;
+            font-weight: 700;
             border: none;
-            border-radius: 8px;
+            border-radius: 999px;
             cursor: pointer;
-            margin-top: 6px;
+            box-shadow: 0 12px 24px rgba(29,108,240,.35);
             transition: background .15s;
         }
-        .lc-btn:hover { background: #1558c7; }
-        .lc-btn:active { background: #1047aa; }
-        .lc-error {
-            background: #fef2f2;
-            border: 1px solid #fca5a5;
-            color: #b91c1c;
-            padding: 10px 14px;
-            border-radius: 8px;
-            font-size: .88rem;
-            margin-bottom: 18px;
-        }
-        @media (max-width: 400px) {
-            .lc { padding: 32px 20px 28px; }
+        .lc-cta:hover { background: #1558c7; }
+        .lc-cta:active { background: #1047aa; }
+
+        @media (max-width: 480px) {
+            body { padding: 0; }
+            .lc { min-height: 100dvh; border-radius: 0; box-shadow: none; }
+            .lc-sheet { border-radius: 0; }
         }
     </style>
 </head>
 <body>
-<div class="lc">
-    <div class="lc-brand"><span>Asya Fresh</span></div>
-    <div class="lc-subtitle">Sisteme Giriş</div>
+<form class="lc" method="post" action="login.php" autocomplete="on">
+    <div class="lc-decor lc-decor-a"></div>
+    <div class="lc-decor lc-decor-b"></div>
 
-    <?php if ($error !== ''): ?>
-    <div class="lc-error"><?= h($error) ?></div>
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <?php if ($next !== ''): ?>
+    <input type="hidden" name="next" value="<?= h($next) ?>">
     <?php endif; ?>
 
-    <form method="post" action="login.php" autocomplete="on">
-        <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-        <?php if ($next !== ''): ?>
-        <input type="hidden" name="next" value="<?= h($next) ?>">
+    <div class="lc-brand">
+        <div class="lc-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="1" y="3" width="15" height="13"></rect>
+                <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
+                <circle cx="5.5" cy="18.5" r="2.5"></circle>
+                <circle cx="18.5" cy="18.5" r="2.5"></circle>
+            </svg>
+        </div>
+        <div class="lc-brand-title">Asya Fresh</div>
+        <div class="lc-brand-sub">Yükleme Planı</div>
+    </div>
+
+    <div class="lc-body">
+        <?php if ($error !== ''): ?>
+        <div class="lc-error"><?= h($error) ?></div>
         <?php endif; ?>
 
-        <div class="lc-field">
-            <label for="username">Kullanıcı Adı veya E-posta</label>
+        <div class="lc-pill">
+            <label class="lc-sr-only" for="username">Kullanıcı Adı veya E-posta</label>
             <input type="text"
                    id="username"
                    name="username"
+                   placeholder="Kullanıcı Adı"
                    value="<?= h($_POST['username'] ?? '') ?>"
                    autocomplete="username"
                    autofocus
@@ -185,16 +258,20 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
                    spellcheck="false"
                    autocapitalize="none">
         </div>
-        <div class="lc-field">
-            <label for="password">Şifre</label>
+        <div class="lc-pill">
+            <label class="lc-sr-only" for="password">Şifre</label>
             <input type="password"
                    id="password"
                    name="password"
+                   placeholder="Şifre"
                    autocomplete="current-password"
                    required>
         </div>
-        <button type="submit" class="lc-btn">Giriş Yap</button>
-    </form>
-</div>
+    </div>
+
+    <div class="lc-sheet">
+        <button type="submit" class="lc-cta">Giriş Yap</button>
+    </div>
+</form>
 </body>
 </html>
