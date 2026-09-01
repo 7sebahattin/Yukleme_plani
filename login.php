@@ -212,8 +212,27 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
 
         @media (max-width: 480px) {
             body { padding: 0; }
-            .lc { min-height: 100dvh; border-radius: 0; box-shadow: none; }
-            .lc-sheet { border-radius: 0; }
+            /* min-height değil height: min-height + flex çocukları, gerçek
+               cihazda yazı tipi/emniyet alanı farkıyla 100dvh'yi aşıp
+               "Giriş Yap" butonunu ekran dışına itebiliyordu. Sabit height +
+               overflow-y:auto ile içerik hiçbir zaman erişilemez olmuyor —
+               sığmazsa kart kendi içinde kayar, buton her zaman ulaşılabilir. */
+            .lc {
+                height: 100dvh;
+                min-height: 100dvh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            /* Daha az dikey boşluk — kısa ekranlarda butonun kırpılma riskini azaltır */
+            .lc-brand { padding: 28px 24px 4px; }
+            .lc-logo { width: 50px; height: 50px; margin-bottom: 10px; }
+            .lc-logo svg { width: 24px; height: 24px; }
+            .lc-body { padding-top: 20px; gap: 12px; }
+            .lc-pill { height: 46px; }
+            .lc-sheet { border-radius: 0; padding-top: 22px; }
+            .lc-cta { margin-top: -46px; }
         }
     </style>
 </head>
