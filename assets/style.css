@@ -289,6 +289,20 @@ input:focus, select:focus, textarea:focus {
         font-size: 16px;
     }
     .topnav { display: none; }
+    /* Tablet'te olduğu gibi ad/rol metni gizlenir, sadece çıkış ikonu kalır —
+       aksi halde brand + tema + depo rozeti + ad/rol dar ekranda sığmayıp
+       birbirine biniyordu (bkz. .topbar-inner altındaki 400px bloğu). */
+    .topnav-user-info { display: none; }
+}
+/* Dar telefon ekranları (≤430px — yaygın telefonların tümü bu aralıkta):
+   marka yazısı ve depo adı gizlenir, yalnız ikonlar kalır — topbar'daki
+   5 öğe (marka, tema, depo, kullanıcı, çıkış) aksi halde tek satıra
+   sığmayıp üst üste biniyor ya da marka yazısı 2 satıra bölünüyordu. */
+@media (max-width: 430px) {
+    .brand-text { display: none; }
+    .depo-badge-name { display: none; }
+    .depo-badge { gap: 2px; padding: 6px 8px; }
+    .topbar-inner { gap: 6px; padding: 8px 10px; }
 }
 input.error, select.error {
     border-color: var(--danger) !important;
