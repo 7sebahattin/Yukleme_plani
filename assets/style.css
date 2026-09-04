@@ -5304,6 +5304,7 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 }
 .beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
 .beyan-hks-rozet-ok { color: #16a34a; }
+.beyan-hks-rozet-uyari { color: #b45309; }
 .beyan-hks-warn {
     margin: 14px 0 0; padding: 10px 12px; border-radius: 8px;
     background: #fef3c7; color: #92400e; font-size: .82rem; line-height: 1.5;
@@ -5800,6 +5801,7 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed td,
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed th { background: #2b2410; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-dialog { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-warn { background: #2b2410; color: #fcd34d; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-hks-rozet-uyari { color: #fbbf24; }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,

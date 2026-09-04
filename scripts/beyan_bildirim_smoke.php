@@ -128,5 +128,99 @@ ok('api_beyan_bildirim cift yetki kapisi (beyan.write + records.write)',
    strpos($uc, "can_beyan('write')") !== false && strpos($uc, "can('records.write')") !== false,
    'tek yetkiyle bildirim uretilebilir');
 
+// ── 8) Ön-seçim kuralları (Adım 1) ────────────────────────────────────────
+// bb_katalog / bb_varsayilanlar SAF fonksiyonlardır ama api_beyan_bildirim.php
+// tepesinde oturum + yetim kontrolu calistirir; dosya require EDILEMEZ.
+// Bu yuzden fonksiyon govdesi kaynaktan cikarilip izole degerlendirilir —
+// hks_uretici_sevk_test.php'deki "saf fonksiyonu izole calistir" deseni.
+$src = oku("$KOK/api_beyan_bildirim.php");
+$gov = '';
+foreach (['bb_alim_turu_mu', 'bb_varsayilanlar'] as $fn) {
+    if (preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $m)) $gov .= $m[0] . "\n";
+}
+ok('bb_alim_turu_mu + bb_varsayilanlar kaynakta bulundu', substr_count($gov, 'function ') >= 2,
+   'fonksiyon adlari degismis — test guncellenmeli');
+
+if (substr_count($gov, 'function ') >= 2) {
+    // hks_eslesme_norm bagimliligi: TR-duyarsiz normalize (config/helpers.php ile ayni)
+    if (!function_exists('hks_eslesme_norm')) {
+        eval('function hks_eslesme_norm(string $s): string {
+                  $s = str_replace(["İ","I"], ["i","ı"], trim($s));
+                  return mb_strtolower($s, "UTF-8"); }');
+    }
+    eval($gov);
+
+    ok('"Satın Alım" alim turu sayiliyor',            bb_alim_turu_mu('Satın Alım'));
+    ok('"Üreticiden Sevk Alım" alim turu sayiliyor',  bb_alim_turu_mu('Üreticiden Sevk Alım'));
+    ok('"Satış" alim turu SAYILMIYOR',               !bb_alim_turu_mu('Satış'));
+    ok('"Sevk Etme" alim turu SAYILMIYOR',           !bb_alim_turu_mu('Sevk Etme'));
+
+    // Gercek katalog sekli: "İhracat" bas harfi İ — mb_strtolower tek basina
+    // bunu 'i'ye cevirmez, bu yuzden esleme KACIRILIRDI. Regresyon testi.
+    $kat = [
+        'sifatlar' => [['id' => '1', 'ad' => 'Üretici'], ['id' => '7', 'ad' => 'İhracat'],
+                       ['id' => '9', 'ad' => 'Hal İçi Tüccar']],
+        'bildirimTurleri' => [['id' => '3', 'ad' => 'Sevk Etme'], ['id' => '5', 'ad' => 'Satış']],
+    ];
+    $v = bb_varsayilanlar($kat);
+    ok('varsayilan sifat = İhracat (id 7)',    $v['sifatId'] === '7',        'gelen: ' . var_export($v['sifatId'], true));
+    ok('varsayilan tur = Satış (id 5)',        $v['bildirimTuruId'] === '5', 'gelen: ' . var_export($v['bildirimTuruId'], true));
+
+    // Katalogda karsiligi yoksa bos donmeli — YANLIS bir id UYDURULMAMALI.
+    $bos = bb_varsayilanlar(['sifatlar' => [['id' => '1', 'ad' => 'Üretici']], 'bildirimTurleri' => []]);
+    ok('karsiligi yoksa varsayilan bos doner',
+       $bos['sifatId'] === '' && $bos['bildirimTuruId'] === '',
+       'eslesmeyen katalogda id uydurulmus');
+}
+
+// ── 9) Ulke ipucu zinciri (Adim 2) ────────────────────────────────────────
+// bb_ulke_tahmin saf bir siralayicidir (DB'ye dokunmaz); bagimliligi olan
+// bb_tahmin sahte bir surumle degistirilerek SIRALAMA mantigi izole test edilir.
+$src2 = $src;
+if (preg_match('/^function\s+bb_ulke_tahmin\s*\(.*?^\}/ms', $src2, $m)) {
+    // Sahte bb_tahmin: yalniz "rusya" metnini cozer.
+    eval('function bb_tahmin(string $tip, string $metin, array $liste): array {
+              return hks_eslesme_norm($metin) === "rusya"
+                  ? ["id" => "RU", "ad" => "Rusya", "kaynak" => "katalog"]
+                  : ["id" => "", "ad" => "", "kaynak" => "yok"]; }');
+    eval($m[0]);
+
+    // Ilk cozulen aday kazanmali — plan, alici'dan ONCE denenir.
+    $r = bb_ulke_tahmin([
+        ['metin' => 'RUSYA',           'kaynak' => 'plan'],
+        ['metin' => 'TOLGA KRASNODAR', 'kaynak' => 'alici'],
+    ], []);
+    ok('ulke: plan adayi oncelikli', $r['id'] === 'RU' && $r['ipucu'] === 'plan',
+       'gelen: ' . json_encode($r, JSON_UNESCAPED_UNICODE));
+
+    // Cozulmeyen aday ATLANIR, sonraki denenir.
+    $r2 = bb_ulke_tahmin([
+        ['metin' => 'BILINMEYEN', 'kaynak' => 'plan'],
+        ['metin' => 'Rusya',      'kaynak' => 'gecmis'],
+    ], []);
+    ok('ulke: cozulmeyen aday atlanip sonrakine gecilir',
+       $r2['id'] === 'RU' && $r2['ipucu'] === 'gecmis',
+       'gelen: ' . json_encode($r2, JSON_UNESCAPED_UNICODE));
+
+    // Hicbiri cozulmezse BOS doner — ulke ASLA tahmin edilmez.
+    $r3 = bb_ulke_tahmin([['metin' => 'ABC', 'kaynak' => 'alici']], []);
+    ok('ulke: hicbir ipucu cozulmezse bos doner', $r3['id'] === '',
+       'ulke uydurulmus — geri alinamaz bildirimde kabul edilemez');
+} else {
+    ok('bb_ulke_tahmin kaynakta bulundu', false, 'fonksiyon adi degismis');
+}
+
+// Ogrenme her iki anahtari da yaziyor mu? ('gecmis' adayi haric)
+ok('ulke esleme hem plan hem alici anahtarindan ogreniliyor',
+   strpos($src, 'foreach (bb_ulke_adaylari($beyan, $plan) as $aday)') !== false
+   && strpos($src, "\$aday['kaynak'] === 'gecmis'") !== false,
+   'ogrenme tek kaynaga bagli kalmis');
+
+// Modal ön-seçimi gercekten kullaniyor mu?
+$view = oku("$KOK/beyan_view.php");
+ok('modal varsayilan sifat/tur on-secimini uyguluyor',
+   strpos($view, 'vs.sifatId') !== false && strpos($view, 'vs.bildirimTuruId') !== false,
+   'hazirla yanitindaki varsayilan kullanilmiyor');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
