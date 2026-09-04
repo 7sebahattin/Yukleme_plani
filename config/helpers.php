@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v196');
+    define('APP_SURUM', 'v198');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -1134,6 +1134,23 @@ endif;
                             ADD COLUMN `hks_durum` VARCHAR(20) NULL DEFAULT NULL");
             }
 
+            // KALICI EŞLEŞTİRME ALANLARI (beyan formunda doldurulur).
+            // Bunlar beyanın DEĞİŞMEYEN kimlik bilgileridir: hangi HKS firması,
+            // HKS kataloğundaki hangi ürün, hangi ülke. Her bildirimde yeniden
+            // seçtirmek yerine beyanla birlikte bir kez girilir; bildirim
+            // ekranında yalnız işlem anına ait veri (birim fiyat) kalır.
+            foreach ([
+                'hks_firma_id' => "VARCHAR(40) NULL DEFAULT NULL",
+                'hks_urun_id'  => "VARCHAR(40) NULL DEFAULT NULL",
+                'hks_urun_ad'  => "VARCHAR(150) NULL DEFAULT NULL",
+                'hks_ulke_id'  => "VARCHAR(40) NULL DEFAULT NULL",
+                'hks_ulke_ad'  => "VARCHAR(150) NULL DEFAULT NULL",
+            ] as $kol => $tip) {
+                if (!in_array($kol, $cd_cols, true)) {
+                    $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `$kol` $tip");
+                }
+            }
+
             // Bağ tablosu — bir beyanın HKS bildirim geçmişi.
             // Neden tablo (kolon değil): başarısız denemeler (stok yetersiz,
             // Mernis hatası) kaydedilmeli ve iptal sonrası yeni deneme
@@ -2094,4 +2111,315 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
     } catch (PDOException $e) {
         error_log('[beyan-hks] bag guncellenemedi: ' . $e->getMessage());
     }
+}
+
+// =============================================================================
+// HKS KATALOĞU VE EŞLEŞTİRME YARDIMCILARI (bb_*) — Sprint Beyan-Bildirim-01
+// =============================================================================
+// Bunlar İKİ yerden kullanılır: beyan formları (kalıcı eşleştirme alanları) ve
+// api_beyan_bildirim.php (taslak oluşturma). Bu yüzden helpers.php'de dururlar;
+// halkayit modülünü yüklemeden, salt-okunur çalışırlar.
+// ── Katalog listeleri (ÖNBELLEKTEN — canlı servise gidilmez) ──────────────
+// "ALIM" bildirim türleri (Satın Alım / Üreticiden Sevk Alım) bu listeden
+// KASITLI olarak ÇIKARILIR. Gerekçe — kozmetik değil, doğruluk:
+//   • İkisi de REFERANSSIZ bildirimdir: künye kullanılmaz, malın tam tanımı
+//     (nitelik, cins, üretim şekli/ili/ilçesi/beldesi...) girilir. Beyan
+//     ekranından PLAN TASLAĞI yazılır — bu alanların hiçbirini taşımaz.
+//   • "Üreticiden Sevk Alım"ı HKS zaten "İhracat" sıfatıyla reddediyor
+//     ("İhracat Üreticiden Sevk Alım bildirimi yapamaz") — app.html de aynı
+//     gerekçeyle gizliyor (URETICI_SEVK_GIZLE).
+//   • Beyan akışı bir İHRACAT akışıdır (yurt dışı + ülke + fiyat); alım türü
+//     seçilebilse kullanıcı ancak gönderim anında, anlaşılmaz bir hatayla
+//     karşılaşırdı.
+// Türlerin TÜM iş kuralları halkayit tarafında YERİNDE DURUYOR; burada yalnız
+// bu ekranda seçilemiyorlar. Alım bildirimi Hal Kayıt panelinden yapılır.
+function bb_alim_turu_mu(string $ad): bool {
+    $n = hks_eslesme_norm($ad);
+    return strpos($n, 'alım') !== false || strpos($n, 'alim') !== false;
+}
+
+// HKS katalog önbelleğini okur. `hks_kv` halkayit modülünün tablosudur ama
+// AYNI veritabanındadır (halkayit/config.php DB_* sabitlerini devralır), bu
+// yüzden panelin kendi db()'si ile SALT-OKUNUR okunur — beyan formları için
+// halkayit/hks_soap.php'yi (1100+ satır) yüklemeye gerek kalmaz.
+// Tablo öneki halkayit/config.php'deki HKS_TABLO_ON ile aynı olmalıdır; o
+// dosya yüklüyse sabit kullanılır, değilse varsayılan 'hks_' geçerlidir.
+function bb_listeler_cache(): ?array {
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    try {
+        $st = db()->prepare("SELECT deger FROM `{$on}kv` WHERE anahtar = 'listeler_cache'");
+        $st->execute();
+        $ham = $st->fetchColumn();
+        if ($ham === false) return null;
+        $j = json_decode((string)$ham, true);
+        return is_array($j) ? $j : null;
+    } catch (PDOException $e) { return null; }   // tablo yoksa özellik pasif
+}
+
+function bb_katalog(): array {
+    $cache = bb_listeler_cache();
+    if (!is_array($cache) || empty($cache['urunler'])) return [];
+    $sade = fn($l) => array_map(
+        fn($x) => ['id' => (string)($x['id'] ?? ''), 'ad' => (string)($x['ad'] ?? '')],
+        array_values((array)$l)
+    );
+    $turler = array_values(array_filter($sade($cache['bildirimTurleri'] ?? []),
+        fn($x) => !bb_alim_turu_mu($x['ad'])));
+
+    return [
+        'urunler'         => $sade($cache['urunler']         ?? []),
+        'ulkeler'         => $sade($cache['ulkeler']         ?? []),
+        'sifatlar'        => $sade($cache['sifatlar']        ?? []),
+        'bildirimTurleri' => $turler,
+        'isletmeTurleri'  => $sade($cache['isletmeTurleri']  ?? []),
+        'zaman'           => (string)($cache['zaman'] ?? ''),
+    ];
+}
+
+// Varsayılan sıfat / bildirim türü — app.html'deki kuralın AYNASI
+// (bkz. listeleriUygula: sıfat "İhracat", tür "Satış").
+// "Son kullanılan"dan okunmaz: hks_kv'deki `sonlar_<firmaId>` kaydı yalnız
+// plaka/ülke/ürün/karşı taraf tutar, sıfat ve tür orada YOKTUR. Kural tabanlı
+// varsayılan hem deterministiktir hem de kullanıcının Hal Kayıt ekranında
+// gördüğü seçimle birebir aynıdır.
+function bb_varsayilanlar(array $katalog): array {
+    $ihracat = '';
+    foreach ($katalog['sifatlar'] as $x) {
+        if (strpos(hks_eslesme_norm($x['ad']), 'ihracat') !== false) { $ihracat = $x['id']; break; }
+    }
+    // "Satış" — içinde satış/satis geçen ama alım/alim GEÇMEYEN tür.
+    // (Alım türleri zaten listeden çıkarıldı; koşul yine de app.html ile
+    // birebir tutuluyor ki iki taraf ayrışmasın.)
+    $satis = '';
+    foreach ($katalog['bildirimTurleri'] as $x) {
+        $n = hks_eslesme_norm($x['ad']);
+        $satisMi = (strpos($n, 'satış') !== false || strpos($n, 'satis') !== false)
+                   && strpos($n, 'alım') === false && strpos($n, 'alim') === false;
+        if ($satisMi) { $satis = $x['id']; break; }
+    }
+    return ['sifatId' => $ihracat, 'bildirimTuruId' => $satis];
+}
+
+// Son kullanılan HKS firması — birden fazla firma varsa her seferinde
+// seçtirmemek için. Yalnızca bir KOLAYLIKTIR: kullanıcı modalde değiştirebilir
+// ve seçim her zaman açıkça görünür.
+const BB_SON_FIRMA_KEY = 'beyan_bildirim_son_firma';
+function bb_son_firma(): string {
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    try {
+        $st = db()->prepare("SELECT deger FROM `{$on}kv` WHERE anahtar = ?");
+        $st->execute([BB_SON_FIRMA_KEY]);
+        $ham = $st->fetchColumn();
+        $v = $ham === false ? '' : json_decode((string)$ham, true);
+        return is_string($v) ? $v : '';
+    } catch (PDOException $e) { return ''; }
+}
+function bb_son_firma_yaz(string $firmaId): void {
+    if ($firmaId === '') return;
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    try {
+        $st = db()->prepare("REPLACE INTO `{$on}kv` (anahtar, deger) VALUES (?, ?)");
+        $st->execute([BB_SON_FIRMA_KEY, json_encode($firmaId, JSON_UNESCAPED_UNICODE)]);
+    } catch (PDOException $e) {}
+}
+
+// Serbest metni katalogda arar: önce öğrenilmiş eşleme, sonra TAM ad eşleşmesi.
+// KISMİ (substring) eşleşme KASITLI OLARAK YAPILMAZ — "Üretici" ile "Üretici
+// Birliği" farklı kayıtlardır ve yanlış tahmin geri alınamaz bir bildirime
+// dönüşür. Bulunamazsa kullanıcı modalde kendisi seçer.
+function bb_tahmin(string $tip, string $metin, array $liste): array {
+    $metin = trim($metin);
+    if ($metin === '') return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
+
+    $ogrenilen = hks_eslesme_bul($tip, $metin);
+    if ($ogrenilen) {
+        return ['id' => (string)$ogrenilen['hks_id'], 'ad' => (string)$ogrenilen['hks_ad'], 'kaynak' => 'ogrenilen'];
+    }
+    $norm = hks_eslesme_norm($metin);
+    foreach ($liste as $x) {
+        if (hks_eslesme_norm((string)$x['ad']) === $norm) {
+            return ['id' => (string)$x['id'], 'ad' => (string)$x['ad'], 'kaynak' => 'katalog'];
+        }
+    }
+    return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
+}
+
+
+// Beyana bağlı yükleme planı — ülke ve (plaka boşsa) plaka için ikincil kaynak.
+function bb_bagli_plan(array $beyan): ?array {
+    if (empty($beyan['loading_record_id'])) return null;
+    $st = db()->prepare("SELECT id, parti_no, on_plaka, arka_plaka, gidecek_ulke, alici, urun
+                         FROM loading_records WHERE id = ?");
+    $st->execute([(int)$beyan['loading_record_id']]);
+    return $st->fetch() ?: null;
+}
+
+// ── ÜLKE ADAYLARI ─────────────────────────────────────────────────────────
+// Beyanda ülke alanı YOKTUR. Üç ipucu vardır, güvenilirlik sırasıyla:
+//   1. plan   — bağlı yükleme planının "gidecek ülke"si. Operasyonun kendi
+//               alanı; en güvenilir olan budur.
+//   2. alici  — beyandaki alıcı adı ("... KRASNODAR"). Ülke DEĞİLDİR; yalnız
+//               öğrenilmiş eşleme ya da tam ad denkliğiyle çözülür, tahmin
+//               yürütülmez.
+//   3. gecmis — aynı alıcıya yapılmış EN SON yükleme planının gidecek ülkesi.
+//               Henüz hiçbir eşleme öğrenilmemişken (ilk kurulum) tek çalışan
+//               kaynak budur; öğrenme birikince 1 ve 2 zaten devreye girer.
+// DİKKAT: hiçbiri "ülkeyi tahmin etmez" — hepsi bb_tahmin()'e verilen bir
+// ARAMA METNİDİR, eşleşme yine tam ad ya da öğrenilmiş kayıt üzerinden olur.
+// Bulunamazsa alan boş kalır ve kullanıcı seçer; yanlış ülke geri alınamaz bir
+// bildirime dönüşeceği için burada asla varsayım yapılmaz.
+function bb_ulke_adaylari(array $beyan, ?array $plan): array {
+    $adaylar = [];
+    $ekle = function (string $metin, string $kaynak) use (&$adaylar) {
+        $metin = trim($metin);
+        if ($metin === '') return;
+        foreach ($adaylar as $a) if (hks_eslesme_norm($a['metin']) === hks_eslesme_norm($metin)) return;
+        $adaylar[] = ['metin' => $metin, 'kaynak' => $kaynak];
+    };
+
+    if ($plan) $ekle((string)($plan['gidecek_ulke'] ?? ''), 'plan');
+
+    $alici = trim((string)($beyan['buyer_name'] ?? ''));
+    $ekle($alici, 'alici');
+
+    // Aynı alıcıya yapılmış en son yükleme planı — yalnız ülkesi dolu olanlar.
+    if ($alici !== '') {
+        try {
+            $st = db()->prepare("SELECT gidecek_ulke FROM loading_records
+                                 WHERE alici = ? AND COALESCE(gidecek_ulke, '') <> ''
+                                 ORDER BY id DESC LIMIT 1");
+            $st->execute([$alici]);
+            $g = (string)($st->fetchColumn() ?: '');
+            $ekle($g, 'gecmis');
+        } catch (PDOException $e) {}
+    }
+    return $adaylar;
+}
+
+// Adayları sırayla dener; İLK çözülen kazanır. Hangi ipucunun işe yaradığı
+// `kaynak`/`kaynakMetin` ile döner — kullanıcı ekranda neden o ülkenin seçili
+// geldiğini görebilmelidir.
+function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
+    foreach ($adaylar as $a) {
+        $t = bb_tahmin('ulke', $a['metin'], $ulkeler);
+        if ($t['id'] !== '') {
+            return $t + ['ipucu' => $a['kaynak'], 'kaynakMetin' => $a['metin']];
+        }
+    }
+    return ['id' => '', 'ad' => '', 'kaynak' => 'yok', 'ipucu' => '', 'kaynakMetin' => ''];
+}
+
+
+// ── BEYAN FORMU: "Hal Bildirim Bilgileri" bölümü ─────────────────────────
+// beyan_create.php ve beyan_edit.php'nin ORTAK parçası — iki formun ayrışmaması
+// için tek yerde durur. Katalog boşsa (Hal Kayıt'ta "Listeleri Güncelle"
+// yapılmamışsa) alanlar çizilmez, yerine yönlendirme yazılır: uydurma id
+// gönderilmesindense özellik pasif kalır (fail-closed).
+//
+// $f: form değerleri (hks_firma_id / hks_urun_id / hks_ulke_id)
+// $beyan: mevcut beyan satırı (yeni kayıtta null) — ön-doldurma ipuçları için
+function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
+    $katalog = bb_katalog();
+
+    echo '<div class="beyan-section">'
+       . '<div class="beyan-section-title">🏛 Hal Bildirim Bilgileri</div>';
+
+    if (!$katalog) {
+        echo '<p class="muted" style="font-size:.88rem">HKS katalog listeleri henüz indirilmemiş. '
+           . '<a href="halkayit/index.php">Hal Kayıt panelini</a> açıp bir firma seçin ve '
+           . '"Listeleri Güncelle"ye basın; sonra bu alanlar doldurulabilir.</p></div>';
+        return;
+    }
+
+    // Firma listesi — aynı veritabanındaki hks_firmalar, salt-okunur.
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    $firmalar = [];
+    try {
+        foreach (db()->query("SELECT id, ad FROM `{$on}firmalar` ORDER BY ad") as $r) {
+            $firmalar[] = ['id' => (string)$r['id'], 'ad' => (string)$r['ad']];
+        }
+    } catch (PDOException $e) {}
+
+    // ── Ön-doldurma: yalnız alan BOŞSA öneri yapılır; kullanıcının kaydettiği
+    //    değer ASLA ezilmez (öneri bir kolaylıktır, karar mercii değildir).
+    $urun_sec = (string)($f['hks_urun_id'] ?? '');
+    $ulke_sec = (string)($f['hks_ulke_id'] ?? '');
+    $firma_sec = (string)($f['hks_firma_id'] ?? '');
+    $urun_not = $ulke_not = '';
+
+    if ($urun_sec === '' && $beyan) {
+        $t = bb_tahmin('urun', (string)($beyan['product_name'] ?? ''), $katalog['urunler']);
+        if ($t['id'] !== '') {
+            $urun_sec = $t['id'];
+            $urun_not = $t['kaynak'] === 'ogrenilen' ? 'önceki seçiminizden önerildi' : 'katalogdan eşleşti';
+        }
+    }
+    if ($ulke_sec === '' && $beyan) {
+        $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
+        if ($t['id'] !== '') {
+            $ulke_sec = $t['id'];
+            $ipucu = ['plan' => 'yükleme planından', 'alici' => 'alıcıdan',
+                      'gecmis' => 'aynı alıcıya son yüklemeden'][$t['ipucu']] ?? 'katalogdan';
+            $urun_not_ek = $t['kaynakMetin'] !== '' ? ' (' . $t['kaynakMetin'] . ')' : '';
+            $ulke_not = $ipucu . $urun_not_ek . ' önerildi';
+        }
+    }
+    if ($firma_sec === '') $firma_sec = bb_son_firma();
+
+    $sec = function (string $ad, string $etiket, array $liste, string $secili, string $not) {
+        echo '<div class="form-group"><label class="form-label">' . h($etiket);
+        if ($not !== '') echo ' <span class="beyan-hks-rozet beyan-hks-rozet-ok">' . h($not) . '</span>';
+        echo '</label><select name="' . h($ad) . '" class="form-control">';
+        echo '<option value="">— seçilmedi —</option>';
+        foreach ($liste as $x) {
+            echo '<option value="' . h((string)$x['id']) . '"'
+               . ((string)$x['id'] === $secili ? ' selected' : '') . '>'
+               . h((string)$x['ad']) . '</option>';
+        }
+        echo '</select></div>';
+    };
+
+    echo '<p class="muted" style="font-size:.85rem;margin-top:0">'
+       . 'Bu alanlar doldurulmadan <strong>"Bildirim Yap"</strong> açılmaz — '
+       . 'araç plakası girilmiş olsa bile. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
+    echo '<div class="beyan-form-grid">';
+    $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '');
+    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not);
+    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not);
+    echo '</div></div>';
+}
+
+// Form POST'undan eşleştirme alanlarını okur; id'leri KATALOĞA karşı doğrular
+// ve adlarını çözer. Katalogda olmayan bir id sessizce boşa düşer — uydurma
+// değer beyana yazılmaz.
+// Dönüş: ['firma_id','urun_id','urun_ad','ulke_id','ulke_ad']
+function beyan_hks_form_oku(array $post): array {
+    $bos = ['firma_id' => null, 'urun_id' => null, 'urun_ad' => null,
+            'ulke_id'  => null, 'ulke_ad'  => null];
+    $katalog = bb_katalog();
+    if (!$katalog) return $bos;
+
+    $ad = function (array $liste, string $id): string {
+        foreach ($liste as $x) if ((string)$x['id'] === $id) return (string)$x['ad'];
+        return '';
+    };
+    $urunId = trim((string)($post['hks_urun_id'] ?? ''));
+    $ulkeId = trim((string)($post['hks_ulke_id'] ?? ''));
+    $urunAd = $urunId !== '' ? $ad($katalog['urunler'], $urunId) : '';
+    $ulkeAd = $ulkeId !== '' ? $ad($katalog['ulkeler'], $ulkeId) : '';
+
+    return [
+        'firma_id' => trim((string)($post['hks_firma_id'] ?? '')) ?: null,
+        'urun_id'  => $urunAd !== '' ? $urunId : null,
+        'urun_ad'  => $urunAd ?: null,
+        'ulke_id'  => $ulkeAd !== '' ? $ulkeId : null,
+        'ulke_ad'  => $ulkeAd ?: null,
+    ];
+}
+
+// Eşleştirme tamam mı? Bildirim butonunun kapılarından biri.
+function beyan_hks_eslesme_tam(array $beyan): bool {
+    return trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
+        && trim((string)($beyan['hks_urun_id']  ?? '')) !== ''
+        && trim((string)($beyan['hks_ulke_id']  ?? '')) !== '';
 }

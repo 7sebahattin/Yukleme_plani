@@ -5305,6 +5305,18 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
 .beyan-hks-rozet-ok { color: #16a34a; }
 .beyan-hks-rozet-uyari { color: #b45309; }
+/* Birim fiyat önerileri — tıklanabilir şeritler (otomatik doldurmaz) */
+.beyan-hks-oneri { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.beyan-hks-oneri:empty { display: none; }
+.beyan-hks-oneri-baslik { font-size: .74rem; color: var(--muted, #64748b); }
+.beyan-hks-oneri-btn {
+    font: inherit; font-size: .76rem; cursor: pointer;
+    padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--border, #cbd5e1);
+    background: var(--bg, #f8fafc); color: inherit;
+}
+.beyan-hks-oneri-btn:hover { border-color: #7c3aed; color: #7c3aed; }
+
 .beyan-hks-warn {
     margin: 14px 0 0; padding: 10px 12px; border-radius: 8px;
     background: #fef3c7; color: #92400e; font-size: .82rem; line-height: 1.5;
@@ -5802,6 +5814,8 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed th { backgrou
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-dialog { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-warn { background: #2b2410; color: #fcd34d; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-rozet-uyari { color: #fbbf24; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn { background: #1a2331; border-color: #2b3648; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,
