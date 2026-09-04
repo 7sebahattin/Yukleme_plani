@@ -124,18 +124,8 @@ render_flash();
             <span class="muted" style="font-size:.82rem">#<?= $id ?></span>
         </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
-        <?php if ($can_match): ?>
-        <button type="button" class="btn" id="beyanMatchOpenBtn">🔗 Yükleme Planı</button>
-        <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi'): ?>
-        <span class="muted" style="font-size:.82rem;align-self:center">Bu beyan zaten yüklendi.</span>
-        <?php endif; ?>
-        <?php if ($hks_acik): ?>
-        <button type="button" class="btn" id="hksOpenBtn">🏛 Bildirim Yap</button>
-        <?php elseif ($hks_yetki && !$is_deleted): ?>
-        <button type="button" class="btn" disabled title="<?= h((string)$hks_engel) ?>">🏛 Bildirim Yap</button>
-        <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('write')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
@@ -176,7 +166,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 <?php };
 ?>
 <div class="beyan-section bk-kart">
-    <div class="beyan-section-title">🏛 Bildirim Bilgileri</div>
+    <div class="beyan-section-title">🏛 Hal Kayıt Bildirimi</div>
     <div class="bk-grid">
         <?php
         $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '');
@@ -186,6 +176,49 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '');
         ?>
     </div>
+
+    <?php if ($hks_yetki && !$is_deleted): ?>
+    <div class="bk-alt">
+        <?php if ($hks_acik): ?>
+        <button type="button" class="btn btn-primary" id="hksOpenBtn">🏛 Bildirim Yap</button>
+        <?php else: ?>
+        <button type="button" class="btn" disabled>🏛 Bildirim Yap</button>
+        <span class="bk-engel"><?= h((string)$hks_engel) ?></span>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($hks_gecmis)): ?>
+    <div class="table-wrap" style="margin-top:12px">
+        <table class="beyan-match-table">
+            <thead>
+                <tr><th>Durum</th><th>Firma</th><th>Ürün</th><th>Ülke</th>
+                    <th>Plaka</th><th class="num">KG</th><th class="num">Fiyat</th><th>Tarih</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($hks_gecmis as $hg): ?>
+                <tr>
+                    <td><span class="beyan-badge"><?= h(beyan_hks_durum_etiket($hg['durum'])) ?></span></td>
+                    <td><?= h((string)($hg['hks_firma_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['urun_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['ulke_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['plaka'] ?? '')) ?: '—' ?></td>
+                    <td class="num"><?= h(fmt_kg($hg['kg'] ?? 0)) ?></td>
+                    <td class="num"><?= h(number_format((float)($hg['fiyat'] ?? 0), 2, ',', '.')) ?></td>
+                    <td><?= h(fmt_datetime($hg['created_at'])) ?></td>
+                </tr>
+                <?php if (!empty($hg['hata_metni'])): ?>
+                <tr><td colspan="8" class="muted" style="font-size:.8rem"><?= h((string)$hg['hata_metni']) ?></td></tr>
+                <?php endif; ?>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <p class="muted" style="font-size:.82rem;margin-top:8px">
+        Taslaklar <a href="halkayit/index.php?ekran=taslaklar">Hal Kayıt panelinden</a> gönderilir —
+        bu ekran HKS'e bildirim <strong>göndermez</strong>.
+    </p>
+    <?php endif; ?>
 </div>
 
 <!-- 1. Temel Bilgiler -->
@@ -379,59 +412,6 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 <?php endif; ?>
 
-<!-- 6b. Hal Kayıt (HKS) Bildirimi -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🏛 Hal Kayıt Bildirimi</div>
-    <div class="beyan-view-grid" style="margin-bottom:10px">
-        <div class="beyan-view-row">
-            <span class="lbl">HKS Ürünü</span>
-            <span class="val"><?= h((string)($beyan['hks_urun_ad'] ?? '')) ?: '—' ?></span>
-        </div>
-        <div class="beyan-view-row">
-            <span class="lbl">Ülke</span>
-            <span class="val"><?= h((string)($beyan['hks_ulke_ad'] ?? '')) ?: '—' ?></span>
-        </div>
-    </div>
-    <?php if (empty($hks_gecmis)): ?>
-    <p class="muted" style="font-size:.88rem">
-        Bu beyan için henüz bildirim oluşturulmadı.
-        <?php if (!$hks_acik && $hks_engel): ?>
-        <br><span style="color:var(--danger)"><?= h((string)$hks_engel) ?></span>
-        <?php endif; ?>
-    </p>
-    <?php else: ?>
-    <div class="table-wrap">
-        <table class="beyan-match-table">
-            <thead>
-                <tr><th>Durum</th><th>Firma</th><th>Ürün</th><th>Ülke</th>
-                    <th>Plaka</th><th>KG</th><th>Fiyat</th><th>Tarih</th></tr>
-            </thead>
-            <tbody>
-            <?php foreach ($hks_gecmis as $hg): ?>
-                <tr>
-                    <td><span class="beyan-badge"><?= h(beyan_hks_durum_etiket($hg['durum'])) ?></span></td>
-                    <td><?= h((string)($hg['hks_firma_ad'] ?? '')) ?: '—' ?></td>
-                    <td><?= h((string)($hg['urun_ad'] ?? '')) ?: '—' ?></td>
-                    <td><?= h((string)($hg['ulke_ad'] ?? '')) ?: '—' ?></td>
-                    <td><?= h((string)($hg['plaka'] ?? '')) ?: '—' ?></td>
-                    <td><?= h(fmt_kg($hg['kg'] ?? 0)) ?></td>
-                    <td><?= h(number_format((float)($hg['fiyat'] ?? 0), 2, ',', '.')) ?></td>
-                    <td><?= h(fmt_datetime($hg['created_at'])) ?></td>
-                </tr>
-                <?php if (!empty($hg['hata_metni'])): ?>
-                <tr><td colspan="8" class="muted" style="font-size:.8rem"><?= h((string)$hg['hata_metni']) ?></td></tr>
-                <?php endif; ?>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <p class="muted" style="font-size:.82rem;margin-top:8px">
-        Taslaklar <a href="halkayit/index.php?ekran=taslaklar">Hal Kayıt panelinden</a> gönderilir —
-        bu ekran HKS'e bildirim <strong>göndermez</strong>.
-    </p>
-    <?php endif; ?>
-</div>
-
 <!-- 7. Yükleme Planı Bağlantısı -->
 <div class="beyan-section">
     <div class="beyan-section-title">🔗 Yükleme Planı Bağlantısı</div>
@@ -441,15 +421,13 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
             → Yükleme Planını Aç: <?= h($linked_record['parti_no'] ?: '#' . $linked_record['id']) ?>
         </a>
     </p>
-    <?php elseif (!$is_deleted && $cur_status === 'temiz'): ?>
-    <p class="muted" style="font-size:.88rem">
-        Yükleme planı bağlanmadı.
-        <button type="button" class="btn btn-sm" disabled title="Sonraki sprintte aktif olacak">
-            Yükleme Planı Oluştur (yakında)
-        </button>
-    </p>
     <?php else: ?>
-    <p class="muted" style="font-size:.88rem">Henüz yükleme planına bağlanmadı.</p>
+    <p class="muted" style="font-size:.88rem;margin-top:0">Henüz yükleme planına bağlanmadı.</p>
+    <?php endif; ?>
+    <?php if ($can_match): ?>
+    <button type="button" class="btn" id="beyanMatchOpenBtn">🔗 Yükleme Planı ile Eşleştir</button>
+    <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi' && !$linked_record): ?>
+    <p class="muted" style="font-size:.82rem">Bu beyan zaten yüklendi.</p>
     <?php endif; ?>
 </div>
 

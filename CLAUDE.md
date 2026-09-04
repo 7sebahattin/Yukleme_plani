@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v201` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v202` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -261,7 +261,10 @@ açar. Gönderim yapmaz.
 `halkayit/taslak_lib.php` (ortak kütüphane) · `beyan_view.php` (buton + modal + geçmiş).
 **Tablolar:** `beyan_hks_bildirim` (bağ + geçmiş) · `hks_eslesme` (öğrenilen eşlemeler) ·
 `customs_declarations.vehicle_plate` + `.hks_durum` (yeni kolonlar).
-**Test:** `php scripts/beyan_bildirim_smoke.php` (ağsız, DB'ye yazmaz).
+**Test:** `php scripts/beyan_bildirim_smoke.php` (statik: kaynak kodda kural arar) +
+`php scripts/beyan_ui_smoke.php` (**render**: bellek içi SQLite ile beyan_view.php'yi
+gerçekten çalıştırır — buton pasif mi, engel sebebi yazıyor mu, HTML dengeli mi).
+İkisi de ağsız, canlı DB'ye dokunmaz.
 **Ön kontrol:** `beyan_bildirim_tani.php` (admin, salt-okunur) — migration, katalog
 (kodun ADA göre aradığı "İhracat" sıfatı / "Satış" türü / "Yurt Dışı" işletme türü),
 ürün eşleşme oranı ve beyan hazırlık özeti. **Canlıya alınca İLK burayı aç.**
@@ -338,11 +341,20 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **"Yurt Dışı" işletme türü** (`bb_yurtdisi_isletme_turu` — helpers.php) taslağın
   zorunlu alanıdır ve katalogdan ADA göre bulunur. Bulunamazsa taslak
   OLUŞTURULAMAZ (409) — id uydurulmaz. Kural TEK yerdedir; kopyalama.
-- **Bildirim kartı** (`beyan_view.php` üst özeti, `.bk-*`): sırası **Ülke · Ürün ·
-  Net KG · Plaka** — HKS bildiriminin dört zorunlu bilgisi, tek bakışta
-  "hazır mı" cevabı. Eksik alan sessiz `—` değil, **işaretli** gösterilir.
-  Net KG bilerek iki yerde (kart + Ürün Bilgileri). Eylem çubuğunda **tek**
-  birincil buton (Düzenle); diğerleri nötr `.btn` — satır içi renk verme.
+- **Bildirim kartı** (`beyan_view.php`, `.bk-*`): sırası **Ülke · Ürün · Net KG ·
+  Plaka** — HKS bildiriminin dört zorunlu bilgisi, tek bakışta "hazır mı"
+  cevabı. Eksik alan sessiz `—` değil, **işaretli**. Net KG bilerek iki yerde
+  (kart + Ürün Bilgileri). **Bildirim Yap butonu ve engel sebebi bu kartın
+  İÇİNDE** (`.bk-alt` / `.bk-engel`) — buton etkilediği verinin yanında durur
+  ve pasifse sebebi ekranda yazar (`title` ipucu mobilde görünmez). Bildirim
+  bölümü sayfada **TEK**; alt bölümde tekrar etme.
+- **Üst eylem çubuğu yalnız sayfa düzeyi eylemleri taşır** (Beyanlar / Düzenle /
+  Sil). Bağlama ait butonlar kendi kartlarının içine konur — beş buton iki
+  satıra sarıyordu ve hangisinin neyi yaptığı belli olmuyordu. Tek birincil
+  buton (Düzenle); satır içi renk verme.
+- **`.btn:disabled` GLOBAL kuralı** (`style.css`) — bu kural yokken pasif buton
+  aktifle birebir aynı görünüyordu (uygulama genelinde: `_form.php` palet
+  uygula, `beyanlar.php` toplu kaydet, `audit.php` onay butonları). Silme.
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
