@@ -398,5 +398,29 @@ ok('yurt disi kurali tek yerde',
    && strpos($uc, "strpos(\$n, 'yurt dışı')") === false,
    'kural hem helpers.php hem uc noktada — ayrisir');
 
+// ── 16) Bildirim karti (ust ozet) ─────────────────────────────────────────
+ok('bildirim karti var', strpos($view, 'class="beyan-section bk-kart"') !== false);
+
+// Kart sirasi kullanicinin istedigi gibi: Ulke → Urun → Net KG → Plaka.
+preg_match_all("/\\\$bk_hucre\('([^']+)'/u", $view, $mc);
+ok('kart alan sirasi: Ulke, Urun, Net KG, Plaka',
+   ($mc[1] ?? []) === ['Ülke', 'Ürün', 'Net KG', 'Plaka'],
+   'gelen sira: ' . implode(' > ', $mc[1] ?? []));
+
+// Net KG bilerek IKI yerde: kartta ve Urun Bilgileri bolumunde.
+ok('net kg hem kartta hem urun bilgilerinde',
+   substr_count($view, 'fmt_kg($beyan[\'net_kg\'])') >= 2,
+   'kopya kaldirilmis — kullanici iki yerde gormek istemisti');
+
+// Sadelestirme: eylem cubugunda tek birincil buton kalmali (gokkusagi yok).
+preg_match('/<div style="display:flex;gap:8px;flex-wrap:wrap">(.*?)<\/div>\s*<\/div>/s', $view, $mb);
+ok('eylem cubugunda tek birincil buton',
+   isset($mb[1]) && substr_count($mb[1], 'btn-primary') === 1,
+   'birden fazla birincil eylem — renk enflasyonu');
+ok('eylem butonlarinda satir ici renk yok',
+   isset($mb[1]) && strpos($mb[1], 'background:#0ea5e9') === false
+   && strpos($mb[1], 'background:#7c3aed') === false,
+   'butonlar hala satir ici renk tasiyor');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
