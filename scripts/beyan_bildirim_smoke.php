@@ -412,15 +412,45 @@ ok('net kg hem kartta hem urun bilgilerinde',
    substr_count($view, 'fmt_kg($beyan[\'net_kg\'])') >= 2,
    'kopya kaldirilmis — kullanici iki yerde gormek istemisti');
 
-// Sadelestirme: eylem cubugunda tek birincil buton kalmali (gokkusagi yok).
-preg_match('/<div style="display:flex;gap:8px;flex-wrap:wrap">(.*?)<\/div>\s*<\/div>/s', $view, $mb);
-ok('eylem cubugunda tek birincil buton',
-   isset($mb[1]) && substr_count($mb[1], 'btn-primary') === 1,
-   'birden fazla birincil eylem — renk enflasyonu');
-ok('eylem butonlarinda satir ici renk yok',
-   isset($mb[1]) && strpos($mb[1], 'background:#0ea5e9') === false
-   && strpos($mb[1], 'background:#7c3aed') === false,
-   'butonlar hala satir ici renk tasiyor');
+// Ust eylem cubugu SADECE sayfa duzeyi eylemleri tasimali (Beyanlar/Duzenle/Sil).
+// Baglama ait butonlar (Bildirim Yap, Yukleme Plani) kendi kartlarinin icinde.
+preg_match('/<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">(.*?)\n    <\/div>/s', $view, $mb);
+ok('ust eylem cubugu bulundu', isset($mb[1]), 'yapisi degismis — test guncellenmeli');
+if (isset($mb[1])) {
+    ok('ust cubukta tek birincil buton', substr_count($mb[1], 'btn-primary') === 1,
+       'birden fazla birincil eylem — renk enflasyonu');
+    ok('ust cubukta baglama ait buton YOK',
+       strpos($mb[1], 'hksOpenBtn') === false && strpos($mb[1], 'beyanMatchOpenBtn') === false,
+       'buton etkiledigi karttan uzakta — kullanici hangi butonun ne yaptigini bilemez');
+    ok('ust cubukta satir ici renk yok',
+       strpos($mb[1], 'background:#0ea5e9') === false && strpos($mb[1], 'background:#7c3aed') === false,
+       'butonlar hala satir ici renk tasiyor');
+}
+
+// Butonlar etkiledikleri bolumun ICINDE olmali.
+ok('Bildirim Yap butonu bildirim kartinin icinde',
+   preg_match('/class="beyan-section bk-kart".*?id="hksOpenBtn"/s', $view) === 1,
+   'buton karttan koptu');
+ok('Eslestir butonu yukleme plani bolumunun icinde',
+   preg_match('/Yükleme Planı Bağlantısı.*?id="beyanMatchOpenBtn"/s', $view) === 1,
+   'buton ilgisiz bir yerde');
+
+// TEK bildirim bolumu olmali — ust kart ile alt bolum ayni veriyi gosteriyordu.
+ok('bildirim bolumu sayfada TEK',
+   substr_count($view, 'beyan-section-title">🏛 Hal Kayıt Bildirimi') === 1,
+   'ayni bilgi iki yerde — kullanici hangisinin gecerli oldugunu bilemez');
+ok('HKS urun/ulke alt bolumde TEKRARLANMIYOR',
+   strpos($view, '<span class="lbl">HKS Ürünü</span>') === false,
+   'ust karttaki alanlar altta tekrar ediyor');
+
+// Pasif buton GORSEL olarak da pasif olmali (global kural).
+$css = oku("$KOK/assets/style.css");
+ok('.btn:disabled global kurali var',
+   strpos($css, '.btn:disabled') !== false && strpos($css, '.btn[disabled]') !== false,
+   'pasif buton aktifle ayni gorunur — kullanici tiklar, hicbir sey olmaz');
+ok('pasif butonun sebebi ekranda yaziyor',
+   strpos($view, 'class="bk-engel"') !== false,
+   'sebep yalnizca title ipucunda — mobilde hic gorunmez');
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

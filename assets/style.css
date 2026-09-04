@@ -145,6 +145,20 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 }
 .btn:hover { background: #f7f8fb; text-decoration: none; }
 .btn:active { transform: translateY(1px); }
+/* Pasif buton — GLOBAL. Bu kural yokken `disabled` bir buton aktif olanla
+   BİREBİR aynı görünüyordu: kullanıcı tıklıyor, hiçbir şey olmuyor, sebebini
+   anlamıyordu (yalnız title ipucu vardı, mobilde o da görünmez). Etkilenen
+   yerler: _form.php palet uygula, beyan_view bildirim/eşleşme, beyanlar toplu
+   kaydet, audit onay butonları. */
+.btn:disabled,
+.btn[disabled] {
+    opacity: .45;
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: grayscale(35%);
+}
+.btn:disabled:hover, .btn[disabled]:hover { background: #fff; }
+.btn:disabled:active, .btn[disabled]:active { transform: none; }
 .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
@@ -5325,6 +5339,11 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .bk-kart .bk-grid { border-radius: 8px; overflow: hidden; }
 @media (min-width: 600px) { .bk-grid { grid-template-columns: repeat(4, 1fr); } }
 
+/* Kartın eylem satırı — buton etkilediği verinin YANINDA durur. Buton pasifse
+   sebebi hemen yanında yazar; `title` ipucu mobilde hiç görünmüyordu. */
+.bk-alt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.bk-engel { font-size: .82rem; color: #b45309; flex: 1 1 220px; line-height: 1.4; }
+
 /* Toplu bildirim: seçim sütunu + alt şerit (beyanlar.php) */
 .bb-sec-col { width: 34px; text-align: center; }
 .bb-bar[hidden] { display: none !important; }
@@ -5862,7 +5881,10 @@ html[data-theme="dark"] body:not(.print-mode) .bb-engel td { background: #2b2410
 html[data-theme="dark"] body:not(.print-mode) .bk-hucre { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .bk-grid { background: #2b3648; }
 html[data-theme="dark"] body:not(.print-mode) .bk-not,
+html[data-theme="dark"] body:not(.print-mode) .bk-engel,
 html[data-theme="dark"] body:not(.print-mode) .bk-eksik .bk-deger { color: #fbbf24; }
+html[data-theme="dark"] body:not(.print-mode) .btn:disabled:hover,
+html[data-theme="dark"] body:not(.print-mode) .btn[disabled]:hover { background: var(--card); }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,
