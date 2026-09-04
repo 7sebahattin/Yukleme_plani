@@ -27,6 +27,11 @@ require_once __DIR__ . '/halkayit/taslak_lib.php';   // TEK yazma yolu + doğrul
 
 header('Content-Type: application/json; charset=utf-8');
 
+// Toplu işlemde tek istekte işlenecek üst sınır. HKS'in kendi 100 bildirim
+// sınırıyla ilgisi yoktur (her satır AYRI taslak olur); buradaki sınır isteğin
+// makul sürede bitmesi içindir.
+const BB_TOPLU_LIMIT = 50;
+
 function bb_cikti(array $veri, int $kod = 200): void {
     http_response_code($kod);
     echo json_encode($veri, JSON_UNESCAPED_UNICODE);
@@ -50,14 +55,24 @@ if (!is_array($govde)) $govde = [];
 $action = (string)($_GET['action'] ?? ($govde['action'] ?? ''));
 
 // ── Beyanı yükle ──────────────────────────────────────────────────────────
-$beyan_id = (int)($govde['beyan_id'] ?? $_GET['beyan_id'] ?? 0);
-if ($beyan_id <= 0) bb_cikti(['hata' => 'Geçersiz beyan.'], 400);
+// Tekil eylemler tek beyanla çalışır; toplu eylemler kendi id listesini okur.
+function bb_beyan_yukle(int $id): array {
+    $st = db()->prepare("SELECT * FROM customs_declarations WHERE id = ?");
+    $st->execute([$id]);
+    $b = $st->fetch();
+    if (!$b) bb_cikti(['hata' => 'Beyan bulunamadı.'], 404);
+    if (!empty($b['deleted_at'])) bb_cikti(['hata' => 'Arşivlenmiş beyan için bildirim yapılamaz.'], 400);
+    return $b;
+}
 
-$st = db()->prepare("SELECT * FROM customs_declarations WHERE id = ?");
-$st->execute([$beyan_id]);
-$beyan = $st->fetch();
-if (!$beyan)                    bb_cikti(['hata' => 'Beyan bulunamadı.'], 404);
-if (!empty($beyan['deleted_at'])) bb_cikti(['hata' => 'Arşivlenmiş beyan için bildirim yapılamaz.'], 400);
+$topluMu  = in_array($action, ['toplu_hazirla', 'toplu_olustur'], true);
+$beyan_id = 0;
+$beyan    = [];
+if (!$topluMu) {
+    $beyan_id = (int)($govde['beyan_id'] ?? $_GET['beyan_id'] ?? 0);
+    if ($beyan_id <= 0) bb_cikti(['hata' => 'Geçersiz beyan.'], 400);
+    $beyan = bb_beyan_yukle($beyan_id);
+}
 
 // ── Ortak ön koşullar ─────────────────────────────────────────────────────
 // Sırayla kontrol edilir; ilk eksik olan kullanıcıya söylenir.
@@ -159,6 +174,146 @@ function bb_fiyat_onerileri(array $beyan): array {
     return $oneriler;
 }
 
+// ── TASLAK KURULUMU — tekil ve toplu akışın ORTAK gövdesi ────────────────
+// Tek beyan için: ön koşul → mükerrer kontrolü → doğrulama → taslak → bağ →
+// audit. Toplu akış bunu satır satır çağırır; İKİNCİ BİR KOPYA ÇIKARMAYIN.
+// Dönüş: ['tamam' => true, 'taslakId' => ...] veya ['hata' => ..., 'kod' => ...]
+function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiyat, int $userId): array {
+    $bid = (int)$beyan['id'];
+    $hata = bb_on_kosul($beyan);
+    if ($hata) return ['kod' => 400, 'hata' => $hata];
+
+    // "Her ürün için 1 kez bildirim" — 1 beyan = 1 ürün olduğundan, aktif
+    // (taslak|gonderildi) bir bağ varsa ikincisi açılmaz. İptal/hata satırları
+    // aktif sayılmaz; kullanıcı düzeltip yeniden deneyebilir.
+    $aktif = beyan_hks_aktif($bid);
+    if ($aktif) {
+        return [
+            'kod'   => 409,
+            'hata'  => $aktif['durum'] === 'gonderildi'
+                ? 'Bu beyan için bildirim ZATEN GÖNDERİLDİ (' . fmt_datetime($aktif['created_at']) .
+                  '). Mükerrer bildirim rüsum doğurur — tekrar gönderilmedi.'
+                : 'Bu beyan için bekleyen bir HKS taslağı var. Hal Kayıt ekranından gönderin ' .
+                  'ya da silin, sonra tekrar deneyin.',
+            'aktif' => $aktif,
+        ];
+    }
+
+    // ── EŞLEŞTİRME: BEYANDAN okunur, istemciden DEĞİL ────────────────────
+    // Kalıcı alanlar beyan formunda girilir. İstemcinin gönderdiği bir firma/
+    // ürün/ülke kabul edilseydi, beyanda görünenden BAŞKA bir bildirim
+    // oluşturulabilirdi — geri alınamaz bir çağrıda bu kabul edilemez.
+    // (bb_on_kosul üçünün de dolu olduğunu yukarıda doğruladı.)
+    $firmaId = trim((string)$beyan['hks_firma_id']);
+    $urunId  = trim((string)$beyan['hks_urun_id']);
+    $ulkeId  = trim((string)$beyan['hks_ulke_id']);
+
+    $plaka = mb_strtoupper(trim((string)($beyan['vehicle_plate'] ?? '')), 'UTF-8');
+    $kg    = round((float)$beyan['net_kg'], 3);
+
+    if ($sifatId === '') return ['kod' => 400, 'hata' => 'Bildirimci sıfatı seçilmedi.'];
+    if ($turId   === '') return ['kod' => 400, 'hata' => 'Bildirim türü seçilmedi.'];
+    if ($fiyat <= 0)     return ['kod' => 400, 'hata' => 'Birim fiyat girilmedi.'];
+
+    $katalog = bb_katalog();
+    if (!$katalog) return ['kod' => 409, 'hata' => 'HKS katalog listeleri yok — Hal Kayıt panelinden güncelleyin.'];
+
+    // "Alım" türü bu ekranda seçilemez (bb_katalog listeden çıkarır); gövdeden
+    // elle gönderilmiş bir id de kabul edilmemeli — liste dışı id reddedilir.
+    $katalogda = function (array $liste, string $id): bool {
+        foreach ($liste as $x) if ((string)$x['id'] === $id) return true;
+        return false;
+    };
+    if (!$katalogda($katalog['sifatlar'], $sifatId)) {
+        return ['kod' => 400, 'hata' => 'Geçersiz bildirimci sıfatı — listeleri güncelleyin.'];
+    }
+    if (!$katalogda($katalog['bildirimTurleri'], $turId)) {
+        return ['kod' => 400, 'hata' => 'Bu bildirim türü beyan ekranından kullanılamaz ' .
+                            '(alım türleri referanssızdır — Hal Kayıt panelinden yapılır).'];
+    }
+
+    // Ürün/ülke ADI beyanda saklı; katalog güncellendiyse tazelenir.
+    $ad = function (array $liste, string $id, string $yedek): string {
+        foreach ($liste as $x) if ((string)$x['id'] === $id) return (string)$x['ad'];
+        return $yedek;
+    };
+    $urunAd = $ad($katalog['urunler'], $urunId, (string)$beyan['hks_urun_ad']);
+    $ulkeAd = $ad($katalog['ulkeler'], $ulkeId, (string)$beyan['hks_ulke_ad']);
+    if ($urunAd === '') return ['kod' => 400, 'hata' => 'Beyandaki HKS ürünü katalogda bulunamadı — beyanı düzenleyip yeniden seçin.'];
+    if ($ulkeAd === '') return ['kod' => 400, 'hata' => 'Beyandaki ülke katalogda bulunamadı — beyanı düzenleyip yeniden seçin.'];
+
+    // İşletme türü: yurt dışı ihracat akışında app.html'in `oto.isletmeTuruId`
+    // ile yaptığının aynısı — katalogdan "yurt dışı" adlı kayıt bulunur.
+    $isletmeTuruId = '';
+    foreach ($katalog['isletmeTurleri'] as $x) {
+        $n = hks_eslesme_norm((string)$x['ad']);
+        if (strpos($n, 'yurt dışı') !== false || strpos($n, 'yurt disi') !== false || strpos($n, 'yurtdışı') !== false) {
+            $isletmeTuruId = (string)$x['id']; break;
+        }
+    }
+    if ($isletmeTuruId === '') {
+        return ['kod' => 409, 'hata' => 'Katalogda "Yurt Dışı" işletme türü bulunamadı — Hal Kayıt panelinden listeleri güncelleyin.'];
+    }
+
+    // PLAN TASLAĞI gövdesi — halkayit SPA'sındaki btnPlanKaydet ile AYNI şekil.
+    $g = [
+        'firmaId'  => $firmaId,
+        'satirlar' => [],                     // künyeler gönderim anında çözülür
+        'ortak'    => [
+            'sifatId'        => $sifatId,
+            'bildirimTuruId' => $turId,
+            'urunId'         => $urunId,
+            'urunAd'         => $urunAd,
+            'plaka'          => $plaka,
+            'belgeNo'        => '',
+            'belgeTipiId'    => 0,
+            'fiyat'          => $fiyat,
+            'isletmeTuruId'  => $isletmeTuruId,
+            'ulkeId'         => $ulkeId,
+            'ulkeAd'         => $ulkeAd,
+            'planKg'         => $kg,
+            'planSorgu'      => [
+                'urunId'        => $urunId,
+                'aySayisi'      => 12,
+                'isletmeTuruId' => 0,
+                'sirala'        => 'azalan',
+            ],
+            // KÖPRÜ İZİ: taslak gönderilince satır silinip yeni id ile
+            // `gonderilenler`e doğar. Beyan bağı bu yüzden taslağın İÇİNDE
+            // taşınır; halkayit/api.php gönderim sonunda bunu okur.
+            'kaynak' => ['tip' => 'beyan', 'beyanId' => $bid,
+                         'partiNo' => (string)($beyan['party_no'] ?? '')],
+        ],
+    ];
+
+    // TEK yazma yolu — doğrulama dahil (halkayit/taslak_lib.php)
+    $sonuc = hks_taslak_olustur($g);
+    if (!empty($sonuc['hata'])) return ['kod' => $sonuc['kod'] ?? 400, 'hata' => $sonuc['hata']];
+
+    // Bağ kaydı
+    $ins = db()->prepare("INSERT INTO beyan_hks_bildirim
+        (beyan_id, hks_firma_id, hks_firma_ad, taslak_id, durum,
+         urun_id, urun_ad, ulke_id, ulke_ad, plaka, kg, fiyat, created_by, created_at)
+        VALUES (?,?,?,?,'taslak',?,?,?,?,?,?,?,?,NOW())");
+    $ins->execute([$bid, $firmaId, $sonuc['firmaAd'], $sonuc['id'],
+        $urunId, $urunAd, $ulkeId, $ulkeAd, $plaka, $kg, $fiyat,
+        $userId]);
+    beyan_hks_durum_tazele($bid);
+
+    // NOT: Eşleme öğrenmesi (hks_eslesme) artık BEYAN KAYDEDİLİRKEN yapılıyor
+    // (beyan_create.php / beyan_edit.php) — seçim orada yapıldığı için. Burada
+    // tekrarlanmaz; iki yazıcı olsa aynı anahtar farklı anlarda ezilirdi.
+
+    // Rüsum doğuran zincirin ilk halkası — audit ŞART.
+    audit_log_event('hks_taslak_olustur', 'beyan', $bid, null, [
+        'taslak_id' => $sonuc['id'], 'firma_id' => $firmaId,
+        'urun' => $urunAd, 'ulke' => $ulkeAd, 'plaka' => $plaka,
+        'kg' => $kg, 'fiyat' => $fiyat,
+    ]);
+
+    return ['tamam' => true, 'taslakId' => $sonuc['id']];
+}
+
 // =============================================================================
 switch ($action) {
 
@@ -226,145 +381,105 @@ case 'hazirla': {
 case 'taslak_olustur': {
     csrf_check($govde['csrf'] ?? null);   // JSON-aware: 403 + JSON döner
 
-    $hata = bb_on_kosul($beyan);
-    if ($hata) bb_cikti(['hata' => $hata], 400);
-
-    // "Her ürün için 1 kez bildirim" — 1 beyan = 1 ürün olduğundan, aktif
-    // (taslak|gonderildi) bir bağ varsa ikincisi açılmaz. İptal/hata satırları
-    // aktif sayılmaz; kullanıcı düzeltip yeniden deneyebilir.
-    $aktif = beyan_hks_aktif($beyan_id);
-    if ($aktif) {
-        bb_cikti([
-            'hata'  => $aktif['durum'] === 'gonderildi'
-                ? 'Bu beyan için bildirim ZATEN GÖNDERİLDİ (' . fmt_datetime($aktif['created_at']) .
-                  '). Mükerrer bildirim rüsum doğurur — tekrar gönderilmedi.'
-                : 'Bu beyan için bekleyen bir HKS taslağı var. Hal Kayıt ekranından gönderin ' .
-                  'ya da silin, sonra tekrar deneyin.',
-            'aktif' => $aktif,
-        ], 409);
-    }
-
-    // ── EŞLEŞTİRME: BEYANDAN okunur, istemciden DEĞİL ────────────────────
-    // Kalıcı alanlar beyan formunda girilir. İstemcinin gönderdiği bir firma/
-    // ürün/ülke kabul edilseydi, beyanda görünenden BAŞKA bir bildirim
-    // oluşturulabilirdi — geri alınamaz bir çağrıda bu kabul edilemez.
-    // (bb_on_kosul üçünün de dolu olduğunu yukarıda doğruladı.)
-    $firmaId = trim((string)$beyan['hks_firma_id']);
-    $urunId  = trim((string)$beyan['hks_urun_id']);
-    $ulkeId  = trim((string)$beyan['hks_ulke_id']);
-
-    // Bu ekranda girilenler — işlem anına ait.
-    $sifatId = trim((string)($govde['sifatId'] ?? ''));
-    $turId   = trim((string)($govde['bildirimTuruId'] ?? ''));
-    $fiyat   = num((string)($govde['fiyat'] ?? ''));      // Türkçe ondalık (1.234,56)
-    $plaka   = mb_strtoupper(trim((string)($beyan['vehicle_plate'] ?? '')), 'UTF-8');
-    $kg      = round((float)$beyan['net_kg'], 3);
-
-    if ($sifatId === '') bb_cikti(['hata' => 'Bildirimci sıfatı seçilmedi.'], 400);
-    if ($turId   === '') bb_cikti(['hata' => 'Bildirim türü seçilmedi.'], 400);
-    if ($fiyat <= 0)     bb_cikti(['hata' => 'Birim fiyat girilmedi.'], 400);
-
-    $katalog = bb_katalog();
-    if (!$katalog) bb_cikti(['hata' => 'HKS katalog listeleri yok — Hal Kayıt panelinden güncelleyin.'], 409);
-
-    // "Alım" türü bu ekranda seçilemez (bb_katalog listeden çıkarır); gövdeden
-    // elle gönderilmiş bir id de kabul edilmemeli — liste dışı id reddedilir.
-    $katalogda = function (array $liste, string $id): bool {
-        foreach ($liste as $x) if ((string)$x['id'] === $id) return true;
-        return false;
-    };
-    if (!$katalogda($katalog['sifatlar'], $sifatId)) {
-        bb_cikti(['hata' => 'Geçersiz bildirimci sıfatı — listeleri güncelleyin.'], 400);
-    }
-    if (!$katalogda($katalog['bildirimTurleri'], $turId)) {
-        bb_cikti(['hata' => 'Bu bildirim türü beyan ekranından kullanılamaz ' .
-                            '(alım türleri referanssızdır — Hal Kayıt panelinden yapılır).'], 400);
-    }
-
-    // Ürün/ülke ADI beyanda saklı; katalog güncellendiyse tazelenir.
-    $ad = function (array $liste, string $id, string $yedek): string {
-        foreach ($liste as $x) if ((string)$x['id'] === $id) return (string)$x['ad'];
-        return $yedek;
-    };
-    $urunAd = $ad($katalog['urunler'], $urunId, (string)$beyan['hks_urun_ad']);
-    $ulkeAd = $ad($katalog['ulkeler'], $ulkeId, (string)$beyan['hks_ulke_ad']);
-    if ($urunAd === '') bb_cikti(['hata' => 'Beyandaki HKS ürünü katalogda bulunamadı — beyanı düzenleyip yeniden seçin.'], 400);
-    if ($ulkeAd === '') bb_cikti(['hata' => 'Beyandaki ülke katalogda bulunamadı — beyanı düzenleyip yeniden seçin.'], 400);
-
-    // İşletme türü: yurt dışı ihracat akışında app.html'in `oto.isletmeTuruId`
-    // ile yaptığının aynısı — katalogdan "yurt dışı" adlı kayıt bulunur.
-    $isletmeTuruId = '';
-    foreach ($katalog['isletmeTurleri'] as $x) {
-        $n = hks_eslesme_norm((string)$x['ad']);
-        if (strpos($n, 'yurt dışı') !== false || strpos($n, 'yurt disi') !== false || strpos($n, 'yurtdışı') !== false) {
-            $isletmeTuruId = (string)$x['id']; break;
-        }
-    }
-    if ($isletmeTuruId === '') {
-        bb_cikti(['hata' => 'Katalogda "Yurt Dışı" işletme türü bulunamadı — Hal Kayıt panelinden listeleri güncelleyin.'], 409);
-    }
-
-    // PLAN TASLAĞI gövdesi — halkayit SPA'sındaki btnPlanKaydet ile AYNI şekil.
-    $g = [
-        'firmaId'  => $firmaId,
-        'satirlar' => [],                     // künyeler gönderim anında çözülür
-        'ortak'    => [
-            'sifatId'        => $sifatId,
-            'bildirimTuruId' => $turId,
-            'urunId'         => $urunId,
-            'urunAd'         => $urunAd,
-            'plaka'          => $plaka,
-            'belgeNo'        => '',
-            'belgeTipiId'    => 0,
-            'fiyat'          => $fiyat,
-            'isletmeTuruId'  => $isletmeTuruId,
-            'ulkeId'         => $ulkeId,
-            'ulkeAd'         => $ulkeAd,
-            'planKg'         => $kg,
-            'planSorgu'      => [
-                'urunId'        => $urunId,
-                'aySayisi'      => 12,
-                'isletmeTuruId' => 0,
-                'sirala'        => 'azalan',
-            ],
-            // KÖPRÜ İZİ: taslak gönderilince satır silinip yeni id ile
-            // `gonderilenler`e doğar. Beyan bağı bu yüzden taslağın İÇİNDE
-            // taşınır; halkayit/api.php gönderim sonunda bunu okur.
-            'kaynak' => ['tip' => 'beyan', 'beyanId' => $beyan_id,
-                         'partiNo' => (string)($beyan['party_no'] ?? '')],
-        ],
-    ];
-
-    // TEK yazma yolu — doğrulama dahil (halkayit/taslak_lib.php)
-    $sonuc = hks_taslak_olustur($g);
-    if (!empty($sonuc['hata'])) bb_cikti(['hata' => $sonuc['hata']], $sonuc['kod'] ?? 400);
-
-    // Bağ kaydı
-    $ins = db()->prepare("INSERT INTO beyan_hks_bildirim
-        (beyan_id, hks_firma_id, hks_firma_ad, taslak_id, durum,
-         urun_id, urun_ad, ulke_id, ulke_ad, plaka, kg, fiyat, created_by, created_at)
-        VALUES (?,?,?,?,'taslak',?,?,?,?,?,?,?,?,NOW())");
-    $ins->execute([$beyan_id, $firmaId, $sonuc['firmaAd'], $sonuc['id'],
-        $urunId, $urunAd, $ulkeId, $ulkeAd, $plaka, $kg, $fiyat,
-        (int)($auth_user['id'] ?? 0)]);
-    beyan_hks_durum_tazele($beyan_id);
-
-    // NOT: Eşleme öğrenmesi (hks_eslesme) artık BEYAN KAYDEDİLİRKEN yapılıyor
-    // (beyan_create.php / beyan_edit.php) — seçim orada yapıldığı için. Burada
-    // tekrarlanmaz; iki yazıcı olsa aynı anahtar farklı anlarda ezilirdi.
-
-    // Rüsum doğuran zincirin ilk halkası — audit ŞART.
-    audit_log_event('hks_taslak_olustur', 'beyan', $beyan_id, null, [
-        'taslak_id' => $sonuc['id'], 'firma_id' => $firmaId,
-        'urun' => $urunAd, 'ulke' => $ulkeAd, 'plaka' => $plaka,
-        'kg' => $kg, 'fiyat' => $fiyat,
-    ]);
-
+    $sonuc = bb_taslak_kur(
+        $beyan,
+        trim((string)($govde['sifatId'] ?? '')),
+        trim((string)($govde['bildirimTuruId'] ?? '')),
+        num((string)($govde['fiyat'] ?? '')),          // Türkçe ondalık (1.234,56)
+        (int)($auth_user['id'] ?? 0)
+    );
+    if (!empty($sonuc['hata'])) bb_cikti($sonuc, $sonuc['kod'] ?? 400);
     bb_cikti([
         'tamam'    => true,
-        'taslakId' => $sonuc['id'],
+        'taslakId' => $sonuc['taslakId'],
         'mesaj'    => 'HKS taslağı oluşturuldu. Gönderim Hal Kayıt ekranından yapılır — ' .
                       'bildirim GÖNDERİLMEDİ.',
+    ]);
+}
+
+// ── TOPLU HAZIRLA: seçilen beyanların önizlemesi ─────────────────────────
+// Her satır kendi uygunluğunu ve fiyat önerisini taşır; uygun OLMAYANLAR da
+// döner (sebebiyle birlikte) — sessizce listeden düşürmek, kullanıcının neyi
+// kaçırdığını göremediği için daha kötüdür.
+case 'toplu_hazirla': {
+    $idler = array_values(array_unique(array_filter(
+        array_map('intval', (array)($govde['beyan_ids'] ?? [])), fn($i) => $i > 0)));
+    if (!$idler) bb_cikti(['hata' => 'Beyan seçilmedi.'], 400);
+    if (count($idler) > BB_TOPLU_LIMIT) {
+        bb_cikti(['hata' => 'Tek seferde en fazla ' . BB_TOPLU_LIMIT . ' beyan seçilebilir.'], 400);
+    }
+
+    $katalog = bb_katalog();
+    if (!$katalog) {
+        bb_cikti(['hata' => 'HKS katalog listeleri henüz indirilmemiş. Hal Kayıt panelini açıp ' .
+                            'bir firma seçin ve "Listeleri Güncelle"ye basın.', 'katalogYok' => true], 409);
+    }
+
+    $satirlar = [];
+    foreach ($idler as $bid) {
+        $b = bb_beyan_yukle($bid);
+        $engel = bb_on_kosul($b);
+        if (!$engel && beyan_hks_aktif($bid)) $engel = 'Bu beyan için zaten bir bildirim var.';
+        $oneriler = $engel ? [] : bb_fiyat_onerileri($b);
+        $satirlar[] = [
+            'id'       => $bid,
+            'partiNo'  => (string)($b['party_no'] ?? ''),
+            'urunAd'   => (string)($b['hks_urun_ad'] ?? ''),
+            'ulkeAd'   => (string)($b['hks_ulke_ad'] ?? ''),
+            'plaka'    => (string)($b['vehicle_plate'] ?? ''),
+            'netKg'    => (float)($b['net_kg'] ?? 0),
+            'engel'    => $engel,
+            'oneriler' => $oneriler,
+            'fiyat'    => $oneriler ? $oneriler[0]['deger'] : null,
+        ];
+    }
+    bb_cikti([
+        'satirlar'   => $satirlar,
+        'katalog'    => ['sifatlar' => $katalog['sifatlar'], 'bildirimTurleri' => $katalog['bildirimTurleri']],
+        'varsayilan' => bb_varsayilanlar($katalog),
+    ]);
+}
+
+// ── TOPLU OLUŞTUR ────────────────────────────────────────────────────────
+// Her satır BAĞIMSIZ değerlendirilir: biri başarısız olursa diğerleri devam
+// eder ve sonuç satır satır döner. "Hep ya da hiç" DEĞİLDİR — her taslak ayrı
+// bir HKS bildirimine karşılık gelir; birini kurmamak diğerini geçersiz kılmaz
+// ve zaten hiçbiri GÖNDERİLMEZ (gönderim Hal Kayıt ekranında).
+case 'toplu_olustur': {
+    csrf_check($govde['csrf'] ?? null);
+
+    $sifatId = trim((string)($govde['sifatId'] ?? ''));
+    $turId   = trim((string)($govde['bildirimTuruId'] ?? ''));
+    $girdi   = (array)($govde['satirlar'] ?? []);
+    if (!$girdi) bb_cikti(['hata' => 'Beyan seçilmedi.'], 400);
+    if (count($girdi) > BB_TOPLU_LIMIT) {
+        bb_cikti(['hata' => 'Tek seferde en fazla ' . BB_TOPLU_LIMIT . ' beyan işlenebilir.'], 400);
+    }
+
+    $userId  = (int)($auth_user['id'] ?? 0);
+    $sonuclar = [];
+    $basarili = 0;
+    foreach ($girdi as $satir) {
+        $bid = (int)($satir['beyan_id'] ?? 0);
+        if ($bid <= 0) continue;
+        $b = bb_beyan_yukle($bid);
+        $r = bb_taslak_kur($b, $sifatId, $turId, num((string)($satir['fiyat'] ?? '')), $userId);
+        if (!empty($r['tamam'])) $basarili++;
+        $sonuclar[] = [
+            'id'       => $bid,
+            'partiNo'  => (string)($b['party_no'] ?? ''),
+            'tamam'    => !empty($r['tamam']),
+            'taslakId' => $r['taslakId'] ?? null,
+            'hata'     => $r['hata'] ?? null,
+        ];
+    }
+    bb_cikti([
+        'tamam'    => true,
+        'basarili' => $basarili,
+        'toplam'   => count($sonuclar),
+        'sonuclar' => $sonuclar,
+        'mesaj'    => $basarili . ' / ' . count($sonuclar) . ' beyan için HKS taslağı oluşturuldu. ' .
+                      'Gönderim Hal Kayıt ekranından yapılır — bildirim GÖNDERİLMEDİ.',
     ]);
 }
 

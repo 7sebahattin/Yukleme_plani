@@ -1145,6 +1145,19 @@ function firmaIzgaraCiz() {
   kap.appendChild(ekle);
 }
 
+// DERİN BAĞLANTI (Beyan ekranından "Taslakları aç"): app.php#taslaklar.
+// Taslaklar firma bazlı izole olduğu için ÖNCE firma seçilmiş olmalıdır; bu
+// yüzden istek burada BEKLETİLİR ve firma seçilince bir kez tüketilir.
+// Firma seçim ekranı ATLANMAZ — otomatik firma seçmek, yanlış firmanın
+// taslaklarını açma riski taşırdı.
+let bekleyenEkran = (location.hash || '').replace('#', '');
+
+function bekleyenEkraniAc() {
+  if (bekleyenEkran !== 'taslaklar') return;
+  bekleyenEkran = '';            // yalnız bir kez
+  taslakEkraniAc();
+}
+
 function firmaSec(f) {
   aktifFirma = f;
   document.body.dataset.tema = f.renk || 'teal';
@@ -1155,6 +1168,7 @@ function firmaSec(f) {
   // Otomatik açılış HIZLI olsun diye 6 ay ile sınırlı; tam (5 yıllık) geçmiş
   // için "Raporlama İşlemleri → Stok Sorgulama" kullanılır.
   stokListele(6);
+  bekleyenEkraniAc();
 }
 
 $('btnFirmaDegis').onclick = () => {

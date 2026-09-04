@@ -95,6 +95,31 @@ $st->bindValue(':off', $offset,        PDO::PARAM_INT);
 $st->execute();
 $rows = $st->fetchAll();
 
+// ── Toplu bildirim: hangi satırlar uygun? ─────────────────────────────────
+// beyan_view'daki buton kapısının aynısı. Aktif bağlar TEK sorguda çekilir
+// (satır başına sorgu, 50 satırlık sayfada 50 sorgu demekti).
+$toplu_yetki = can_beyan('write') && (can('records.write') || is_admin());
+$aktif_bagli = [];
+if ($toplu_yetki && $rows) {
+    try {
+        $ids = array_map(fn($r) => (int)$r['id'], $rows);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $bs  = db()->prepare("SELECT DISTINCT beyan_id FROM beyan_hks_bildirim
+                              WHERE beyan_id IN ($ph) AND durum IN ('taslak','gonderildi')");
+        $bs->execute($ids);
+        $aktif_bagli = array_flip(array_map('intval', $bs->fetchAll(PDO::FETCH_COLUMN)));
+    } catch (PDOException $e) { $aktif_bagli = []; }
+}
+$bildirim_uygun = function (array $r) use ($toplu_yetki, $aktif_bagli): bool {
+    return $toplu_yetki
+        && trim((string)($r['vehicle_plate'] ?? '')) !== ''
+        && beyan_hks_eslesme_tam($r)
+        && (float)($r['net_kg'] ?? 0) > 0
+        && in_array((string)$r['status'], beyan_hks_uygun_durumlar(), true)
+        && !isset($aktif_bagli[(int)$r['id']]);
+};
+$uygun_sayisi = count(array_filter($rows, $bildirim_uygun));
+
 $statuses  = beyan_statuses();
 $today     = date('Y-m-d');
 $has_filter = $q !== '' || $f_status !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '' || $tarih_bas !== '' || $tarih_bit !== '';
@@ -190,6 +215,9 @@ render_flash();
     <table class="data-table">
         <thead>
         <tr>
+            <?php if ($uygun_sayisi): ?>
+            <th class="bb-sec-col"><input type="checkbox" id="bbTumu" title="Uygun olanların tümünü seç"></th>
+            <?php endif; ?>
             <th>Tarih</th>
             <th>Parti No</th>
             <th>Ürün / Çeşit</th>
@@ -207,6 +235,13 @@ render_flash();
         <tbody>
         <?php foreach ($rows as $r): ?>
         <tr>
+            <?php if ($uygun_sayisi): ?>
+            <td class="bb-sec-col">
+                <?php if ($bildirim_uygun($r)): ?>
+                <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>">
+                <?php endif; ?>
+            </td>
+            <?php endif; ?>
             <td class="muted" style="font-size:.82rem"><?= h(fmt_datetime($r['created_at'])) ?></td>
             <td><strong><?= h($r['party_no'] ?: '—') ?></strong></td>
             <td>
@@ -253,7 +288,13 @@ render_flash();
     <div class="beyan-card" style="cursor:default">
         <div class="beyan-card-head">
             <div>
-                <div class="beyan-card-parti"><?= h($r['party_no'] ?: '(parti no yok)') ?></div>
+                <div class="beyan-card-parti">
+                    <?php if ($bildirim_uygun($r)): ?>
+                    <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>"
+                           title="Toplu bildirim için seç" style="margin-right:6px;vertical-align:middle">
+                    <?php endif; ?>
+                    <?= h($r['party_no'] ?: '(parti no yok)') ?>
+                </div>
                 <div class="beyan-card-urun">
                     <?= h($r['product_name'] ?: '—') ?>
                     <?php if ($r['product_variety']): ?>
@@ -343,5 +384,238 @@ render_flash();
     }
 })();
 </script>
+
+<?php if (!empty($uygun_sayisi)): ?>
+<!-- ══ TOPLU BİLDİRİM ══════════════════════════════════════════════════════ -->
+<!-- Seçim yapılınca beliren alt şerit + onay penceresi.
+     Pencere yalnız TASLAK oluşturur; HKS'e hiçbir şey gönderilmez. -->
+<div id="bbBar" class="bb-bar" hidden>
+    <span id="bbBarSayi"></span>
+    <button type="button" class="btn btn-sm btn-ghost" id="bbTemizle">Seçimi bırak</button>
+    <button type="button" class="btn btn-sm btn-primary" id="bbAc">🏛 Toplu Bildirim</button>
+</div>
+
+<div id="bbOverlay" class="beyan-hks-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="bbTitle">
+  <div class="beyan-hks-dialog" style="max-width:820px">
+    <div class="beyan-hks-head">
+      <strong id="bbTitle">🏛 Toplu Hal Kayıt Bildirimi</strong>
+      <button type="button" class="beyan-hks-x" id="bbKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="beyan-hks-body">
+      <div id="bbYukleniyor" class="muted" style="padding:20px;text-align:center">Hazırlanıyor…</div>
+      <div id="bbHata" class="flash flash-error" hidden></div>
+      <div id="bbIcerik" hidden>
+        <div class="beyan-hks-sub">Bildirim ayarları <span class="beyan-hks-rozet">tüm satırlar için ortak</span></div>
+        <div class="beyan-hks-fields">
+          <label>Bildirimci Sıfatı<select id="bbSifat" class="form-control"></select></label>
+          <label>Bildirim Türü<select id="bbTur" class="form-control"></select></label>
+        </div>
+        <div class="beyan-hks-sub">Seçilen beyanlar — birim fiyatları ayrı ayrı girilir</div>
+        <div class="table-wrap">
+          <table class="beyan-match-table" id="bbTablo">
+            <thead><tr><th>Parti</th><th>Ürün</th><th>Ülke</th><th>Plaka</th>
+                       <th class="num">Net KG</th><th>Birim Fiyat</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="beyan-hks-warn">
+          Her satır için ayrı bir <strong>TASLAK</strong> oluşturulur. HKS'e bildirim
+          <strong>GÖNDERİLMEZ</strong> — gönderim Hal Kayıt ekranında yapılır.
+          Bir satır başarısız olursa diğerleri devam eder; sonuç satır satır bildirilir.
+        </p>
+      </div>
+    </div>
+    <div class="beyan-hks-foot">
+      <button type="button" class="btn btn-ghost" id="bbVazgec">Vazgeç</button>
+      <button type="button" class="btn btn-primary" id="bbKaydet" disabled>Taslakları Oluştur</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+    var CSRF = <?= json_encode(csrf_token()) ?>;
+    var el = function (i) { return document.getElementById(i); };
+    var veri = null;
+
+    function secili() {
+        return Array.prototype.filter.call(
+            document.querySelectorAll('.bb-sec'), function (c) { return c.checked; });
+    }
+    // Aynı beyan hem tabloda hem mobil kartta listelenir; id'ler TEKİLLEŞTİRİLİR
+    // yoksa aynı beyan için iki taslak denenirdi.
+    function seciliIdler() {
+        var g = {}, out = [];
+        secili().forEach(function (c) { if (!g[c.value]) { g[c.value] = 1; out.push(Number(c.value)); } });
+        return out;
+    }
+
+    function barGuncelle() {
+        var n = seciliIdler().length;
+        el('bbBar').hidden = n === 0;
+        el('bbBarSayi').textContent = n + ' beyan seçildi';
+        var t = el('bbTumu');
+        if (t) t.checked = n > 0 && n === new Set(
+            Array.prototype.map.call(document.querySelectorAll('.bb-sec'), function (c) { return c.value; })).size;
+    }
+
+    document.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('bb-sec')) {
+            // Masaüstü satırı ve mobil kartı aynı beyanı gösterir — biri
+            // işaretlenince diğeri de eşitlenir, sayım şaşmasın.
+            Array.prototype.forEach.call(document.querySelectorAll('.bb-sec'), function (c) {
+                if (c.value === e.target.value) c.checked = e.target.checked;
+            });
+            barGuncelle();
+        }
+    });
+
+    var tumu = el('bbTumu');
+    if (tumu) tumu.addEventListener('change', function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.bb-sec'), function (c) {
+            c.checked = tumu.checked;
+        });
+        barGuncelle();
+    });
+
+    el('bbTemizle').addEventListener('click', function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.bb-sec'), function (c) { c.checked = false; });
+        barGuncelle();
+    });
+
+    function kapat() { el('bbOverlay').hidden = true; document.body.style.overflow = ''; }
+    el('bbKapat').addEventListener('click', kapat);
+    el('bbVazgec').addEventListener('click', kapat);
+    el('bbOverlay').addEventListener('click', function (e) { if (e.target === el('bbOverlay')) kapat(); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !el('bbOverlay').hidden) kapat();
+    });
+
+    function doldur(sel, liste, secili) {
+        sel.innerHTML = '<option value="">— seçiniz —</option>' + liste.map(function (x) {
+            return '<option value="' + x.id + '"' +
+                   (String(x.id) === String(secili || '') ? ' selected' : '') + '>' + x.ad + '</option>';
+        }).join('');
+    }
+    function eHtml(v) {
+        return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+    }
+
+    function kontrol() {
+        var uygun = (veri ? veri.satirlar : []).filter(function (r) { return !r.engel; });
+        var hepsiFiyatli = uygun.length > 0 && uygun.every(function (r) {
+            var i = el('bbFiyat_' + r.id);
+            return i && i.value.trim() !== '';
+        });
+        el('bbKaydet').disabled = !(el('bbSifat').value && el('bbTur').value && hepsiFiyatli);
+    }
+
+    el('bbAc').addEventListener('click', function () {
+        var idler = seciliIdler();
+        if (!idler.length) return;
+        el('bbOverlay').hidden = false;
+        document.body.style.overflow = 'hidden';
+        el('bbYukleniyor').hidden = false;
+        el('bbIcerik').hidden = true;
+        el('bbHata').hidden = true;
+        veri = null;
+
+        fetch('api_beyan_bildirim.php?action=toplu_hazirla', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beyan_ids: idler })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                el('bbYukleniyor').hidden = true;
+                el('bbHata').textContent = res.j.hata || 'Hazırlanamadı.';
+                el('bbHata').hidden = false;
+                return;
+            }
+            veri = res.j;
+            var vs = veri.varsayilan || {};
+            doldur(el('bbSifat'), veri.katalog.sifatlar,        vs.sifatId || '');
+            doldur(el('bbTur'),   veri.katalog.bildirimTurleri, vs.bildirimTuruId || '');
+
+            el('bbTablo').querySelector('tbody').innerHTML = veri.satirlar.map(function (r) {
+                if (r.engel) {
+                    return '<tr class="bb-engel"><td>' + eHtml(r.partiNo || '#' + r.id) + '</td>' +
+                           '<td colspan="5" class="muted">⚠️ ' + eHtml(r.engel) + '</td></tr>';
+                }
+                var f = r.fiyat === null ? '' : r.fiyat.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+                return '<tr><td><strong>' + eHtml(r.partiNo || '#' + r.id) + '</strong></td>' +
+                       '<td>' + eHtml(r.urunAd) + '</td><td>' + eHtml(r.ulkeAd) + '</td>' +
+                       '<td>' + eHtml(r.plaka) + '</td>' +
+                       '<td class="num">' + r.netKg.toLocaleString('tr-TR') + '</td>' +
+                       '<td><input type="text" class="form-control bb-fiyat" id="bbFiyat_' + r.id +
+                       '" inputmode="decimal" value="' + eHtml(f) + '" placeholder="örn. 12,50"></td></tr>';
+            }).join('');
+
+            Array.prototype.forEach.call(document.querySelectorAll('.bb-fiyat'), function (i) {
+                i.addEventListener('input', kontrol);
+            });
+            el('bbSifat').addEventListener('change', kontrol);
+            el('bbTur').addEventListener('change', kontrol);
+
+            el('bbYukleniyor').hidden = true;
+            el('bbIcerik').hidden = false;
+            kontrol();
+        })
+        .catch(function (e) {
+            el('bbYukleniyor').hidden = true;
+            el('bbHata').textContent = 'Bağlantı hatası: ' + e.message;
+            el('bbHata').hidden = false;
+        });
+    });
+
+    el('bbKaydet').addEventListener('click', function () {
+        var satirlar = veri.satirlar.filter(function (r) { return !r.engel; }).map(function (r) {
+            return { beyan_id: r.id, fiyat: el('bbFiyat_' + r.id).value };
+        });
+        if (!satirlar.length) return;
+        if (!confirm(satirlar.length + ' beyan için HKS TASLAĞI oluşturulacak.\n\n' +
+                     'Bildirim GÖNDERİLMEZ; gönderim Hal Kayıt ekranında yapılır.')) return;
+
+        el('bbKaydet').disabled = true;
+        el('bbKaydet').textContent = 'Oluşturuluyor…';
+        fetch('api_beyan_bildirim.php?action=toplu_olustur', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                csrf: CSRF, sifatId: el('bbSifat').value,
+                bildirimTuruId: el('bbTur').value, satirlar: satirlar
+            })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                alert('HATA: ' + (res.j.hata || 'Taslaklar oluşturulamadı.'));
+                el('bbKaydet').disabled = false;
+                el('bbKaydet').textContent = 'Taslakları Oluştur';
+                return;
+            }
+            // Başarısız satırlar SESSİZCE geçilmez — hangisi neden olmadı, yazılır.
+            var hatalilar = res.j.sonuclar.filter(function (x) { return !x.tamam; });
+            var mesaj = '✅ ' + res.j.mesaj;
+            if (hatalilar.length) {
+                mesaj += '\n\nOluşturulamayanlar:\n' + hatalilar.map(function (x) {
+                    return '• ' + (x.partiNo || '#' + x.id) + ': ' + x.hata;
+                }).join('\n');
+            }
+            alert(mesaj);
+            location.reload();
+        })
+        .catch(function (e) {
+            alert('Bağlantı hatası: ' + e.message);
+            el('bbKaydet').disabled = false;
+            el('bbKaydet').textContent = 'Taslakları Oluştur';
+        });
+    });
+
+    barGuncelle();
+})();
+</script>
+<?php endif; ?>
 
 <?php render_footer(); ?>

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v198` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v199` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -316,6 +316,20 @@ açar. Gönderim yapmaz.
   birlikte değiştir**. "Son kullanılan"dan OKUNMAZ — `hks_kv.sonlar_<firmaId>`
   yalnız plaka/ülke/ürün/karşı taraf tutar, sıfat ve tür orada yoktur.
   Karşılığı bulunamazsa boş döner; **asla id uydurulmaz**.
+- **Toplu bildirim** (`beyanlar.php` → `toplu_hazirla` / `toplu_olustur`): seçilen
+  her beyan için AYRI taslak. Tekil akışla **aynı** `bb_taslak_kur()`'dan geçer —
+  ikinci bir kurulum yolu açma. O fonksiyon `bb_cikti()` ÇAĞIRMAZ, `return`
+  eder: bir satırın hatası isteği sonlandırırsa diğer satırlar hiç denenmez.
+  Sonuç satır satır döner ve başarısızlar kullanıcıya **yazılır**. Üst sınır
+  `BB_TOPLU_LIMIT`. Aynı beyan hem tabloda hem mobil kartta seçilebildiği için
+  id'ler istemcide tekilleştirilir.
+- **Uygunluk kapısı ÜÇ yerde yaşıyor** — `beyan_view.php` (buton), `beyanlar.php`
+  (toplu seçim), `index.php` (sayaç). Kuralı değiştirirken **üçünü birden**
+  güncelle, yoksa listede uygun görünen satır uç noktada reddedilir.
+- **Derin bağlantı:** `halkayit/index.php?ekran=taslaklar` → iframe'e `#taslaklar`
+  olarak geçer (beyaz liste, serbest metin yazılmaz). Taslaklar firma bazlı izole
+  olduğu için SPA istegi BEKLETİR ve firma seçilince bir kez tüketir — otomatik
+  firma seçmez (yanlış firmanın taslaklarını açma riski).
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
