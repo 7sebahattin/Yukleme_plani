@@ -299,5 +299,104 @@ ok('modal firma/urun/ulke SECTIRMIYOR (beyandan gelir)',
    && strpos($view, "id=\"hksUlke\"") === false,
    'eslestirme iki yerden girilebilir — beyandaki degerle ayrisir');
 
+// ── 12) Toplu bildirim (Adim 4) ───────────────────────────────────────────
+$liste = oku("$KOK/beyanlar.php");
+
+// Toplu akis tekil akisi KOPYALAMAMALI — ikisi de bb_taslak_kur'dan gecmeli.
+ok('toplu ve tekil akis ayni kurulum fonksiyonunu kullaniyor',
+   substr_count($uc, 'bb_taslak_kur(') === 3,   // tanim + tekil + toplu
+   'bulunan cagri sayisi: ' . substr_count($uc, 'bb_taslak_kur('));
+
+// bb_taslak_kur icinde bb_cikti OLMAMALI: toplu akista tek satirin hatasi
+// istegin TAMAMINI sonlandirirdi (digerleri hic denenmezdi).
+if (preg_match('/^function bb_taslak_kur.*?\n\}/ms', $uc, $mk)) {
+    ok('bb_taslak_kur istegi sonlandirmiyor (return kullaniyor)',
+       strpos($mk[0], 'bb_cikti(') === false,
+       'bir satirin hatasi diger satirlari da durdurur');
+} else {
+    ok('bb_taslak_kur bulundu', false, 'fonksiyon adi degismis');
+}
+
+ok('toplu uc noktalar tanimli',
+   strpos($uc, "case 'toplu_hazirla'") !== false && strpos($uc, "case 'toplu_olustur'") !== false);
+ok('toplu olusturmada CSRF var',
+   preg_match("/case 'toplu_olustur'.*?csrf_check\(/s", $uc) === 1,
+   'toplu yazma ucunda csrf_check yok');
+ok('toplu istekte ust sinir var', strpos($uc, 'BB_TOPLU_LIMIT') !== false);
+
+// Toplu sonuc satir satir donmeli — sessiz basarisizlik olmamali.
+ok('toplu sonuc satir satir donuyor',
+   strpos($uc, "'sonuclar' => \$sonuclar") !== false,
+   'hangi beyanin neden olmadigi gorunmez');
+ok('arayuz basarisiz satirlari gosteriyor',
+   strpos($liste, 'Oluşturulamayanlar') !== false,
+   'kullanici hangi satirin atlandigini goremez');
+
+// Ayni beyan hem tabloda hem mobil kartta secilebilir — id'ler tekillesmeli.
+ok('secili id\'ler tekillestiriliyor',
+   strpos($liste, 'function seciliIdler') !== false,
+   'ayni beyan icin iki taslak denenebilir');
+
+// Uygunluk kapisi listede de ayni kurallari aramali.
+ok('liste uygunluk kapisi buton kapisiyla ayni kurallari kullaniyor',
+   strpos($liste, 'beyan_hks_eslesme_tam($r)') !== false
+   && strpos($liste, 'beyan_hks_uygun_durumlar()') !== false
+   && strpos($liste, "\$r['vehicle_plate']") !== false,
+   'listede uygun gorunen bir satir uc noktada reddedilebilir');
+
+// N+1 sorgu tuzagi: aktif baglar TEK sorguda cekilmeli.
+ok('aktif baglar tek sorguda cekiliyor',
+   strpos($liste, 'WHERE beyan_id IN (' . '$ph)') !== false,
+   '50 satirlik sayfada 50 ayri sorgu calisir');
+
+// ── 13) Derin baglanti (Adim 6) ───────────────────────────────────────────
+$hkIndex = oku("$KOK/halkayit/index.php");
+ok('halkayit/index.php ekran parametresini BEYAZ LISTE ile geciriyor',
+   strpos($hkIndex, "in_array((string)(\$_GET['ekran'] ?? ''), ['taslaklar'], true)") !== false,
+   'serbest metin hash e yaziliyor olabilir');
+
+$appHtml = oku("$KOK/halkayit/app.html");
+ok('SPA bekleyen ekrani firma secildikten SONRA aciyor',
+   strpos($appHtml, 'bekleyenEkraniAc()') !== false
+   && strpos($appHtml, 'let bekleyenEkran') !== false,
+   'taslaklar firma bazli izole — firma secilmeden acilamaz');
+ok('bekleyen ekran yalnizca BIR KEZ tuketiliyor',
+   preg_match("/function bekleyenEkraniAc.*?bekleyenEkran = '';.*?taslakEkraniAc\(\);/s", $appHtml) === 1,
+   'bayrak sifirlanmiyor — her firma degisiminde taslak ekrani acilir');
+
+// ── 14) Ana sayfa sayaci (Adim 5) ─────────────────────────────────────────
+$idx = oku("$KOK/index.php");
+ok('ana sayfa sayaci buton kapisinin ayni kurallarini kullaniyor',
+   strpos($idx, 'beyan_hks_uygun_durumlar()') !== false
+   && strpos($idx, "COALESCE(d.hks_urun_id,  '') <> ''") !== false
+   && strpos($idx, "b.durum IN ('taslak','gonderildi')") !== false,
+   'sayac ile buton kapisi ayrisirsa sayi yaniltir');
+
+// ── 15) On kontrol sayfasi ────────────────────────────────────────────────
+$tani = oku("$KOK/beyan_bildirim_tani.php");
+ok('on kontrol sayfasi sozdizimsel olarak gecerli', (function () use ($KOK) {
+    exec('php -l ' . escapeshellarg("$KOK/beyan_bildirim_tani.php") . ' 2>&1', $o, $rc);
+    return $rc === 0;
+})());
+ok('on kontrol admin ile sinirli',
+   strpos($tani, 'is_admin()') !== false && strpos($tani, 'forbidden(') !== false,
+   'teshis sayfasi is verisi gosteriyor — admin disina acilmamali');
+ok('on kontrol SALT-OKUNUR',
+   !preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP)\b/i', $tani),
+   'teshis sayfasi yazma ifadesi iceriyor');
+
+// Kural tekrari olmamali: sayfa uygulamanin KENDI fonksiyonlarini cagirmali.
+foreach (['bb_katalog(', 'bb_varsayilanlar(', 'bb_yurtdisi_isletme_turu(',
+          'bb_tahmin(', 'beyan_hks_eslesme_tam(', 'beyan_hks_uygun_durumlar('] as $fn) {
+    ok("on kontrol $fn kullaniyor", strpos($tani, $fn) !== false,
+       'kural kopyalanmis — teshis ile uygulama ayrisir');
+}
+
+// "Yurt Disi" kurali TEK yerde olmali (helpers.php); uc noktada kopyasi kalmamali.
+ok('yurt disi kurali tek yerde',
+   strpos($src, 'function bb_yurtdisi_isletme_turu') !== false
+   && strpos($uc, "strpos(\$n, 'yurt dışı')") === false,
+   'kural hem helpers.php hem uc noktada — ayrisir');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

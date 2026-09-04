@@ -17,7 +17,14 @@ render_header('Hal Kayıt');
 ?>
 <script>document.body.classList.add('hk-page');</script>
 
-<iframe src="app.php?v=<?= @filemtime(__DIR__ . '/app.html') ?: time() ?>" class="hk-frame" title="Hal Kayıt Paneli" loading="eager"></iframe>
+<?php
+// Derin bağlantı: ?ekran=taslaklar → iframe'e #taslaklar olarak geçirilir
+// (app.html firma seçildikten sonra o ekranı açar). Beyaz listeyle sınırlıdır;
+// serbest metin hash'e yazılmaz.
+$hk_ekran = in_array((string)($_GET['ekran'] ?? ''), ['taslaklar'], true)
+    ? '#' . (string)$_GET['ekran'] : '';
+?>
+<iframe src="app.php?v=<?= @filemtime(__DIR__ . '/app.html') ?: time() ?><?= $hk_ekran ?>" class="hk-frame" title="Hal Kayıt Paneli" loading="eager"></iframe>
 
 <style>
 /* Bu sayfaya özel: içerik alanını tam-ekran iframe'e çevir.

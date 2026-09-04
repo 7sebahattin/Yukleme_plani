@@ -423,7 +423,7 @@ render_flash();
         </table>
     </div>
     <p class="muted" style="font-size:.82rem;margin-top:8px">
-        Taslaklar <a href="halkayit/index.php">Hal Kayıt panelinden</a> gönderilir —
+        Taslaklar <a href="halkayit/index.php?ekran=taslaklar">Hal Kayıt panelinden</a> gönderilir —
         bu ekran HKS'e bildirim <strong>göndermez</strong>.
     </p>
     <?php endif; ?>

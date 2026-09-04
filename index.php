@@ -36,6 +36,30 @@ try {
     $hks_taslak = (int)db()->query("SELECT COUNT(*) FROM hks_taslaklar")->fetchColumn();
 } catch (PDOException $e) { $hks_taslak = 0; }
 
+// Bildirim bekleyen beyan sayısı — beyan_view'daki buton kapısının SQL karşılığı:
+// plaka dolu + eşleştirme tam + net KG > 0 + durum uygun + aktif bağ yok.
+// Kapı mantığı iki yerde; birini değiştirirken diğerini de güncelle.
+$beyan_bildirim_bekleyen = 0;
+if (can('beyan.read') && (can('records.write') || is_admin())) {
+    try {
+        $__bd = implode(',', array_fill(0, count(beyan_hks_uygun_durumlar()), '?'));
+        $__st = db()->prepare(
+            "SELECT COUNT(*) FROM customs_declarations d
+             WHERE d.deleted_at IS NULL
+               AND COALESCE(d.vehicle_plate, '') <> ''
+               AND COALESCE(d.hks_firma_id, '') <> ''
+               AND COALESCE(d.hks_urun_id,  '') <> ''
+               AND COALESCE(d.hks_ulke_id,  '') <> ''
+               AND COALESCE(d.net_kg, 0) > 0
+               AND d.status IN ($__bd)
+               AND NOT EXISTS (SELECT 1 FROM beyan_hks_bildirim b
+                               WHERE b.beyan_id = d.id AND b.durum IN ('taslak','gonderildi'))"
+        );
+        $__st->execute(beyan_hks_uygun_durumlar());
+        $beyan_bildirim_bekleyen = (int)$__st->fetchColumn();
+    } catch (PDOException $e) { $beyan_bildirim_bekleyen = 0; }   // tablo/kolon yoksa pasif
+}
+
 // Hesap modülü özet
 try {
     $hesap_bugun    = (float)db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
@@ -123,6 +147,10 @@ if ($db_backup_result !== null): ?>
     <a href="beyanlar.php" class="home-card">
         <div class="home-card-icon" style="background:#ede9fe">🧾</div>
         <div class="home-card-title">Beyanlar</div>
+        <?php if ($beyan_bildirim_bekleyen > 0): ?>
+        <div class="home-card-badge" style="background:#7c3aed"
+             title="Hal Kayıt bildirimi bekleyen beyan"><?= (int)$beyan_bildirim_bekleyen ?></div>
+        <?php endif; ?>
     </a>
     <?php endif; ?>
 

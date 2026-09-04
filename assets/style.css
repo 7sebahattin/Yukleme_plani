@@ -5305,6 +5305,27 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
 .beyan-hks-rozet-ok { color: #16a34a; }
 .beyan-hks-rozet-uyari { color: #b45309; }
+/* Toplu bildirim: seçim sütunu + alt şerit (beyanlar.php) */
+.bb-sec-col { width: 34px; text-align: center; }
+.bb-bar[hidden] { display: none !important; }
+.bb-bar {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 550;                     /* bottomnav (500) üstünde, modal (700) altında */
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 999px;
+    background: var(--card, #fff); border: 1px solid var(--border, #e2e8f0);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+    font-size: .85rem; max-width: calc(100vw - 24px);
+}
+.bb-engel td { background: #fffbeb; }
+@media (max-width: 767px) {
+    /* Bottomnav ile çakışmasın — onun üstüne otur */
+    .bb-bar { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+    .bb-bar .btn { white-space: nowrap; }
+}
+@media print { .bb-bar { display: none !important; } }
+
 /* Birim fiyat önerileri — tıklanabilir şeritler (otomatik doldurmaz) */
 .beyan-hks-oneri { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .beyan-hks-oneri:empty { display: none; }
@@ -5816,6 +5837,8 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-hks-warn { background: #2b2
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-rozet-uyari { color: #fbbf24; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn { background: #1a2331; border-color: #2b3648; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn:hover { border-color: #a78bfa; color: #a78bfa; }
+html[data-theme="dark"] body:not(.print-mode) .bb-bar { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .bb-engel td { background: #2b2410; }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,
