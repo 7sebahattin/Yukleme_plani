@@ -215,10 +215,31 @@ if (preg_match('/^function\s+bb_ulke_tahmin\s*\(.*?^\}/ms', $src2, $m)) {
 // Ogrenme BEYAN KAYDEDILIRKEN yapilmali (secim orada) — ve TEK yerde.
 foreach (['beyan_create.php', 'beyan_edit.php'] as $ff) {
     $fs = oku("$KOK/$ff");
+    // Urun dogrudan, ulke beyan_hks_ulke_ogren() uzerinden (uc yapisal
+    // kaynaktan birden: alici + sirket adi + adresin ulke parcasi).
     ok("$ff esleme secimlerini ogreniyor",
-       strpos($fs, "hks_eslesme_yaz('urun'") !== false && strpos($fs, "hks_eslesme_yaz('ulke'") !== false,
+       strpos($fs, "hks_eslesme_yaz('urun'") !== false
+       && strpos($fs, 'beyan_hks_ulke_ogren(') !== false,
        'form kaydinda ogrenme yok — alanlar bir daha otomatik gelmez');
 }
+// Ulke ogrenmesi TEK fonksiyonda olmali; formlar kendi anahtar listesini
+// tutmamali (aday uretimi ile ogrenme ayni kaynaklari kullansin).
+ok('ulke ogrenmesi tek fonksiyonda toplandi',
+   strpos($src, 'function beyan_hks_ulke_ogren') !== false
+   && strpos($src, 'function bb_adres_ulke_parcasi') !== false,
+   'cikarim mantigi kopyalanmis olabilir');
+// Serbest metin (raw_text / unmatched_text) ne ADAY uretiminde ne de
+// OGRENMEDE kullanilmali — "Yeni Beyan" gibi her beyanda gecen bir satir
+// ulke anahtari olsaydi TUM beyanlara yanlis ulke on-dolardi.
+$__ulke_govde = '';
+foreach (['bb_ulke_adaylari', 'beyan_hks_ulke_ogren', 'bb_adres_ulke_parcasi'] as $fn) {
+    if (preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $mg)) $__ulke_govde .= $mg[0];
+}
+ok('ulke aday/ogrenme yolu serbest metin taramiyor',
+   $__ulke_govde !== ''
+   && strpos($__ulke_govde, 'raw_text') === false
+   && strpos($__ulke_govde, 'unmatched_text') === false,
+   'her beyanda gecen bir satir ulke anahtari olabilir');
 ok('ogrenme uc noktada TEKRARLANMIYOR',
    strpos($uc, 'hks_eslesme_yaz(') === false,
    'iki yazici ayni anahtari farkli anlarda ezer');
