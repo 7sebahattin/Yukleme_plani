@@ -767,6 +767,10 @@ function prompt_note(btn) {
           <label style="grid-column:1/-1">Birim Fiyat <strong style="color:var(--danger)">*</strong>
             <input type="text" id="hksFiyat" class="form-control" inputmode="decimal"
                    placeholder="örn. 12,50" autocomplete="off">
+            <!-- Öneriler tıklanınca alana yazılır; HİÇBİRİ otomatik dolmaz.
+                 HKS'in fiyat alanında para birimi yok ve rüsum bu sayı
+                 üzerinden hesaplanıyor — rakamın nereden geldiği görünmeli. -->
+            <span id="hksFiyatOneri" class="beyan-hks-oneri"></span>
           </label>
         </div>
 
@@ -823,6 +827,28 @@ function prompt_note(btn) {
         span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
     }
 
+    // Birim fiyat önerileri. TIKLANINCA yazar — asla kendiliğinden doldurmaz:
+    // HKS'in fiyat alanında para birimi yok, rüsum bu sayıdan hesaplanıyor ve
+    // gönderim geri alınamaz; rakamın nereden geldiği kullanıcıya görünmeli.
+    function fiyatOnerileriCiz(liste) {
+        var kap = el('hksFiyatOneri');
+        if (!liste.length) { kap.innerHTML = ''; return; }
+        kap.innerHTML = '<span class="beyan-hks-oneri-baslik">Öneriler:</span>' +
+            liste.map(function (o, i) {
+                var g = o.deger.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+                return '<button type="button" class="beyan-hks-oneri-btn" data-i="' + i + '" title="' +
+                       o.aciklama.replace(/"/g, '&quot;') + '">' +
+                       o.etiket + ': <strong>' + g + '</strong></button>';
+            }).join('');
+        Array.prototype.forEach.call(kap.querySelectorAll('button'), function (b) {
+            b.addEventListener('click', function () {
+                var o = liste[Number(b.dataset.i)];
+                el('hksFiyat').value = o.deger.toLocaleString('tr-TR', { maximumFractionDigits: 4 });
+                kontrol();
+            });
+        });
+    }
+
     function kontrol() {
         // Firma/ürün/ülke beyandan gelir ve buton kapısında zaten doğrulandı;
         // burada yalnız bu ekranda girilen alanlar denetlenir.
@@ -866,6 +892,7 @@ function prompt_note(btn) {
             doldur(el('hksTur'),   veri.katalog.bildirimTurleri, vs.bildirimTuruId || '');
             onSecimRozet(el('hksSifatRozet'), el('hksSifat'), 'varsayılan');
             onSecimRozet(el('hksTurRozet'),   el('hksTur'),   'varsayılan');
+            fiyatOnerileriCiz(veri.fiyatOnerileri || []);
 
             el('hksLoading').hidden = true;
             el('hksContent').hidden = false;

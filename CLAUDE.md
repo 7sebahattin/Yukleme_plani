@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v197` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v198` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -293,6 +293,13 @@ açar. Gönderim yapmaz.
 - **1 beyan = 1 ürün = 1 bildirim.** Aktif (`taslak`/`gonderildi`) bağ varsa ikincisi
   açılmaz. İki ürünlü gümrük beyanı sisteme **iki ayrı beyan** olarak girilir.
 - **Net KG zorunlu, brüte düşülmez** — rüsum net üzerinden hesaplanır.
+- **Birim fiyat ÖNERİLİR, otomatik DOLDURULMAZ** (`bb_fiyat_onerileri`). HKS'in
+  `MalinSatisFiyat` alanında **para birimi yoktur** (hks_soap.php) ve rüsum bu
+  sayıdan hesaplanır. Kaynaklar: ① aynı firma+ürüne yapılmış son bildirimin
+  fiyatı (`hks_gonderilenler` — HKS'in kendi biriminde, belirsizlik yok)
+  ② bağlı planın maliyet hesabı (`cost_sheets.sale_unit_price`, KENDİ para
+  biriminde — ham hâli ve kurla çevrilmiş hâli AYRI öneri olarak sunulur;
+  **sessizce çevrilmez**). Maliyet önerisi `maliyet.read` yetkisine bağlıdır.
 - **Modalde "alım" türleri YOK** (`bb_alim_turu_mu`). Satın Alım / Üreticiden Sevk
   Alım REFERANSSIZ bildirimdir — malın tam tanımını ister, plan taslağı bunu
   taşıyamaz; ayrıca HKS "İhracat" sıfatıyla Üreticiden Sevk Alım'ı reddediyor.

@@ -266,6 +266,29 @@ if (preg_match('/^(.*?)WHERE id = \?"\);\s*\n\s*\$st->execute\(\[(.*?)\n        
     ok('beyan_edit UPDATE bulundu', false, 'regex eslesmedi — dosya yapisi degismis');
 }
 
+// ── 11) Birim fiyat onerileri (Adim 3) ────────────────────────────────────
+ok('fiyat onerileri iki kaynaktan uretiliyor',
+   strpos($uc, "'kaynak'   => 'gonderilen'") !== false
+   && strpos($uc, "'kaynak'   => 'maliyet'") !== false,
+   'bb_fiyat_onerileri kaynaklari eksik');
+
+// Maliyet hesabi is-hassas veridir — yetkisiz kullaniciya sizmamali.
+ok('maliyet onerisi maliyet.read yetkisiyle kapili',
+   strpos($uc, "can('maliyet.read')") !== false,
+   'beyan yetkisi olan herkes maliyet satis fiyatini gorebilir');
+
+// EUR fiyati SESSIZCE TL'ye cevrilmemeli: HKS fiyat alaninda para birimi yok
+// ve rusum bu sayidan hesaplanir. Cevrim AYRI bir oneri olarak sunulmali.
+ok('kur cevrimi ayri oneri olarak sunuluyor',
+   strpos($uc, "'kaynak'   => 'maliyet_kur'") !== false,
+   'cevrim tek degere gomulmus — hangi birimin dogru oldugu varsayilmis');
+
+// Hicbir oneri alani KENDILIGINDEN doldurmamali.
+ok('oneriler yalnizca tiklaninca yaziyor',
+   strpos($view, "b.addEventListener('click'") !== false
+   && strpos($view, "el('hksFiyat').value = o.deger") !== false,
+   'oneri otomatik dolduruluyorsa kullanici rakamin kaynagini gormez');
+
 // Modal ön-seçimi gercekten kullaniyor mu?
 ok('modal varsayilan sifat/tur on-secimini uyguluyor',
    strpos($view, 'vs.sifatId') !== false && strpos($view, 'vs.bildirimTuruId') !== false,

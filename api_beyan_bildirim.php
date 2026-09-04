@@ -90,6 +90,75 @@ function bb_on_kosul(array $beyan): ?string {
 // NOT: bb_bagli_plan / bb_ulke_adaylari / bb_ulke_tahmin de helpers.php'de —
 // beyan formu ülke alanını aynı ipucu zinciriyle ön-dolduruyor.
 
+// ── BİRİM FİYAT ÖNERİLERİ ─────────────────────────────────────────────────
+// HKS'in `MalinSatisFiyat` alanında PARA BİRİMİ YOKTUR (bkz. hks_soap.php:395)
+// — gönderilen sayı HKS'in kendi birimindedir ve rüsum bunun üzerinden
+// hesaplanır. Bu yüzden hiçbir öneri alana KENDİLİĞİNDEN YAZILMAZ: kullanıcı
+// hangi rakamı, nereden ve hangi para biriminden aldığını görerek seçer.
+//
+// İki kaynak, güvenilirlik sırasıyla:
+//   1. gonderilen — bu firmaya + bu ürüne yapılmış EN SON HKS bildiriminin
+//      fiyatı. HKS'e daha önce GİTMİŞ bir değerdir; birim belirsizliği yoktur.
+//   2. maliyet    — aynı yükleme planına bağlı maliyet hesabının satış birim
+//      fiyatı. KENDİ para biriminde tutulur (varsayılan EUR), bu yüzden hem
+//      ham hâli hem de kur varsa çevrilmiş hâli AYRI AYRI sunulur; hangisinin
+//      doğru olduğuna kullanıcı karar verir.
+function bb_fiyat_onerileri(array $beyan): array {
+    $oneriler = [];
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+
+    // 1) Aynı firma + aynı ürün için en son gönderilen bildirim
+    try {
+        $st = db()->prepare("SELECT fiyat, zaman FROM `{$on}gonderilenler`
+                             WHERE firma_id = ? AND urun_ad = ? AND fiyat > 0
+                             ORDER BY zaman DESC LIMIT 1");
+        $st->execute([(string)$beyan['hks_firma_id'], (string)$beyan['hks_urun_ad']]);
+        if ($r = $st->fetch()) {
+            $oneriler[] = [
+                'kaynak'   => 'gonderilen',
+                'deger'    => (float)$r['fiyat'],
+                'etiket'   => 'Son HKS bildirimi',
+                'aciklama' => (string)($beyan['hks_urun_ad'] ?? '') . ' · ' . fmt_datetime($r['zaman']),
+            ];
+        }
+    } catch (PDOException $e) {}
+
+    // 2) Bağlı yükleme planının maliyet hesabı — yalnız maliyet.read yetkisiyle.
+    if (!empty($beyan['loading_record_id']) && (can('maliyet.read') || is_admin())) {
+        try {
+            $st = db()->prepare("SELECT sheet_no, sale_unit_price, currency_code, currency_rate
+                                 FROM cost_sheets
+                                 WHERE record_id = ? AND deleted_at IS NULL AND sale_unit_price > 0
+                                 ORDER BY id DESC LIMIT 1");
+            $st->execute([(int)$beyan['loading_record_id']]);
+            if ($c = $st->fetch()) {
+                $ham  = (float)$c['sale_unit_price'];
+                $kur  = (float)$c['currency_rate'];
+                $bir  = (string)($c['currency_code'] ?: 'EUR');
+                $no   = (string)($c['sheet_no'] ?: '');
+                $oneriler[] = [
+                    'kaynak'   => 'maliyet',
+                    'deger'    => $ham,
+                    'etiket'   => 'Maliyet hesabı (' . $bir . ')',
+                    'aciklama' => ($no !== '' ? $no . ' · ' : '') . 'satış birim fiyatı, ' . $bir . ' cinsinden',
+                ];
+                // Kur girilmişse çevrilmiş hâli AYRI bir öneri olarak sunulur —
+                // otomatik çevirmek, hangi birimin doğru olduğu varsayımı olurdu.
+                if ($kur > 0) {
+                    $oneriler[] = [
+                        'kaynak'   => 'maliyet_kur',
+                        'deger'    => round($ham * $kur, 4),
+                        'etiket'   => 'Maliyet hesabı × kur',
+                        'aciklama' => rtrim(rtrim(number_format($ham, 4, ',', '.'), '0'), ',') . ' ' . $bir
+                                    . ' × ' . rtrim(rtrim(number_format($kur, 4, ',', '.'), '0'), ','),
+                    ];
+                }
+            }
+        } catch (PDOException $e) {}
+    }
+    return $oneriler;
+}
+
 // =============================================================================
 switch ($action) {
 
@@ -146,8 +215,10 @@ case 'hazirla': {
             'ulkeId'  => (string)$beyan['hks_ulke_id'],
             'ulkeAd'  => (string)$beyan['hks_ulke_ad'],
         ],
-        // Ön-seçimler: sıfat/tür kural tabanlı, firma son kullanılandan.
-        'varsayilan' => bb_varsayilanlar($katalog) + ['firmaId' => bb_son_firma()],
+        // Ön-seçimler: sıfat/tür kural tabanlı.
+        'varsayilan'    => bb_varsayilanlar($katalog),
+        // Birim fiyat ÖNERİLERİ — hiçbiri kendiliğinden yazılmaz.
+        'fiyatOnerileri' => bb_fiyat_onerileri($beyan),
     ]);
 }
 
