@@ -77,6 +77,24 @@ function bb_on_kosul(array $beyan): ?string {
 }
 
 // ── Katalog listeleri (ÖNBELLEKTEN — canlı servise gidilmez) ──────────────
+// "ALIM" bildirim türleri (Satın Alım / Üreticiden Sevk Alım) bu listeden
+// KASITLI olarak ÇIKARILIR. Gerekçe — kozmetik değil, doğruluk:
+//   • İkisi de REFERANSSIZ bildirimdir: künye kullanılmaz, malın tam tanımı
+//     (nitelik, cins, üretim şekli/ili/ilçesi/beldesi...) girilir. Beyan
+//     ekranından PLAN TASLAĞI yazılır — bu alanların hiçbirini taşımaz.
+//   • "Üreticiden Sevk Alım"ı HKS zaten "İhracat" sıfatıyla reddediyor
+//     ("İhracat Üreticiden Sevk Alım bildirimi yapamaz") — app.html de aynı
+//     gerekçeyle gizliyor (URETICI_SEVK_GIZLE).
+//   • Beyan akışı bir İHRACAT akışıdır (yurt dışı + ülke + fiyat); alım türü
+//     seçilebilse kullanıcı ancak gönderim anında, anlaşılmaz bir hatayla
+//     karşılaşırdı.
+// Türlerin TÜM iş kuralları halkayit tarafında YERİNDE DURUYOR; burada yalnız
+// bu ekranda seçilemiyorlar. Alım bildirimi Hal Kayıt panelinden yapılır.
+function bb_alim_turu_mu(string $ad): bool {
+    $n = hks_eslesme_norm($ad);
+    return strpos($n, 'alım') !== false || strpos($n, 'alim') !== false;
+}
+
 function bb_katalog(): array {
     $cache = hks_kv_oku('listeler_cache', null);
     if (!is_array($cache) || empty($cache['urunler'])) return [];
@@ -84,14 +102,50 @@ function bb_katalog(): array {
         fn($x) => ['id' => (string)($x['id'] ?? ''), 'ad' => (string)($x['ad'] ?? '')],
         array_values((array)$l)
     );
+    $turler = array_values(array_filter($sade($cache['bildirimTurleri'] ?? []),
+        fn($x) => !bb_alim_turu_mu($x['ad'])));
+
     return [
         'urunler'         => $sade($cache['urunler']         ?? []),
         'ulkeler'         => $sade($cache['ulkeler']         ?? []),
         'sifatlar'        => $sade($cache['sifatlar']        ?? []),
-        'bildirimTurleri' => $sade($cache['bildirimTurleri'] ?? []),
+        'bildirimTurleri' => $turler,
         'isletmeTurleri'  => $sade($cache['isletmeTurleri']  ?? []),
         'zaman'           => (string)($cache['zaman'] ?? ''),
     ];
+}
+
+// Varsayılan sıfat / bildirim türü — app.html'deki kuralın AYNASI
+// (bkz. listeleriUygula: sıfat "İhracat", tür "Satış").
+// "Son kullanılan"dan okunmaz: hks_kv'deki `sonlar_<firmaId>` kaydı yalnız
+// plaka/ülke/ürün/karşı taraf tutar, sıfat ve tür orada YOKTUR. Kural tabanlı
+// varsayılan hem deterministiktir hem de kullanıcının Hal Kayıt ekranında
+// gördüğü seçimle birebir aynıdır.
+function bb_varsayilanlar(array $katalog): array {
+    $ihracat = '';
+    foreach ($katalog['sifatlar'] as $x) {
+        if (strpos(hks_eslesme_norm($x['ad']), 'ihracat') !== false) { $ihracat = $x['id']; break; }
+    }
+    // "Satış" — içinde satış/satis geçen ama alım/alim GEÇMEYEN tür.
+    // (Alım türleri zaten listeden çıkarıldı; koşul yine de app.html ile
+    // birebir tutuluyor ki iki taraf ayrışmasın.)
+    $satis = '';
+    foreach ($katalog['bildirimTurleri'] as $x) {
+        $n = hks_eslesme_norm($x['ad']);
+        $satisMi = (strpos($n, 'satış') !== false || strpos($n, 'satis') !== false)
+                   && strpos($n, 'alım') === false && strpos($n, 'alim') === false;
+        if ($satisMi) { $satis = $x['id']; break; }
+    }
+    return ['sifatId' => $ihracat, 'bildirimTuruId' => $satis];
+}
+
+// Son kullanılan HKS firması — birden fazla firma varsa her seferinde
+// seçtirmemek için. Yalnızca bir KOLAYLIKTIR: kullanıcı modalde değiştirebilir
+// ve seçim her zaman açıkça görünür.
+const BB_SON_FIRMA_KEY = 'beyan_bildirim_son_firma';
+function bb_son_firma(): string {
+    $v = hks_kv_oku(BB_SON_FIRMA_KEY, '');
+    return is_string($v) ? $v : '';
 }
 
 // Serbest metni katalogda arar: önce öğrenilmiş eşleme, sonra TAM ad eşleşmesi.
@@ -176,6 +230,8 @@ case 'hazirla': {
             'urun' => bb_tahmin('urun', (string)($beyan['product_name'] ?? ''), $katalog['urunler']),
             'ulke' => bb_tahmin('ulke', $ulkeMetni, $katalog['ulkeler']),
         ],
+        // Ön-seçimler: sıfat/tür kural tabanlı, firma son kullanılandan.
+        'varsayilan' => bb_varsayilanlar($katalog) + ['firmaId' => bb_son_firma()],
     ]);
 }
 
@@ -285,6 +341,9 @@ case 'taslak_olustur': {
         $urunId, $urunAd, $ulkeId, $ulkeAd, $plaka, $kg, $fiyat,
         (int)($auth_user['id'] ?? 0)]);
     beyan_hks_durum_tazele($beyan_id);
+
+    // Son kullanılan firmayı hatırla — bir sonraki modalde ön-seçili gelir.
+    try { hks_kv_yaz(BB_SON_FIRMA_KEY, $firmaId); } catch (PDOException $e) {}
 
     // Eşlemeleri öğren — bir sonraki beyanda otomatik gelsin.
     hks_eslesme_yaz('urun', (string)($beyan['product_name'] ?? ''), $urunId, $urunAd);

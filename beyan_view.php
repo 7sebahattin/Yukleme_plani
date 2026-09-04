@@ -743,10 +743,10 @@ function prompt_note(btn) {
           <label>Ülke <span id="hksUlkeRozet" class="beyan-hks-rozet"></span>
             <select id="hksUlke" class="form-control"></select>
           </label>
-          <label>Bildirimci Sıfatı
+          <label>Bildirimci Sıfatı <span id="hksSifatRozet" class="beyan-hks-rozet"></span>
             <select id="hksSifat" class="form-control"></select>
           </label>
-          <label>Bildirim Türü
+          <label>Bildirim Türü <span id="hksTurRozet" class="beyan-hks-rozet"></span>
             <select id="hksTur" class="form-control"></select>
           </label>
           <label>Birim Fiyat <strong style="color:var(--danger)">*</strong>
@@ -806,6 +806,14 @@ function prompt_note(btn) {
         span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
     }
 
+    // Ön-seçim rozeti: seçim GERÇEKTEN yapıldıysa etiketlenir (varsayılan
+    // katalogda bulunamadıysa select boş kalır ve rozet de yazılmaz).
+    function onSecimRozet(span, sel, metin) {
+        if (!sel.value) { span.textContent = ''; return; }
+        span.textContent = metin;
+        span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
+    }
+
     function kontrol() {
         var tam = el('hksFirma').value && el('hksUrun').value && el('hksUlke').value &&
                   el('hksSifat').value && el('hksTur').value &&
@@ -838,13 +846,17 @@ function prompt_note(btn) {
                 satir('Çıkış Deposu', b.depo) +
                 satir('Palet / Kasa', (b.palet === null ? '—' : b.palet) + ' / ' + (b.kasa === null ? '—' : b.kasa));
 
-            doldur(el('hksFirma'), veri.firmalar, veri.firmalar.length === 1 ? veri.firmalar[0].id : '');
+            var vs = veri.varsayilan || {};
+            doldur(el('hksFirma'), veri.firmalar,
+                   veri.firmalar.length === 1 ? veri.firmalar[0].id : (vs.firmaId || ''));
             doldur(el('hksUrun'),  veri.katalog.urunler,         veri.tahmin.urun.id);
             doldur(el('hksUlke'),  veri.katalog.ulkeler,         veri.tahmin.ulke.id);
-            doldur(el('hksSifat'), veri.katalog.sifatlar,        '');
-            doldur(el('hksTur'),   veri.katalog.bildirimTurleri, '');
+            doldur(el('hksSifat'), veri.katalog.sifatlar,        vs.sifatId || '');
+            doldur(el('hksTur'),   veri.katalog.bildirimTurleri, vs.bildirimTuruId || '');
             rozet(el('hksUrunRozet'), veri.tahmin.urun);
             rozet(el('hksUlkeRozet'), veri.tahmin.ulke);
+            onSecimRozet(el('hksSifatRozet'), el('hksSifat'), 'varsayılan');
+            onSecimRozet(el('hksTurRozet'),   el('hksTur'),   'varsayılan');
 
             el('hksLoading').hidden = true;
             el('hksContent').hidden = false;

@@ -284,6 +284,15 @@ açar. Gönderim yapmaz.
 - **1 beyan = 1 ürün = 1 bildirim.** Aktif (`taslak`/`gonderildi`) bağ varsa ikincisi
   açılmaz. İki ürünlü gümrük beyanı sisteme **iki ayrı beyan** olarak girilir.
 - **Net KG zorunlu, brüte düşülmez** — rüsum net üzerinden hesaplanır.
+- **Modalde "alım" türleri YOK** (`bb_alim_turu_mu`). Satın Alım / Üreticiden Sevk
+  Alım REFERANSSIZ bildirimdir — malın tam tanımını ister, plan taslağı bunu
+  taşıyamaz; ayrıca HKS "İhracat" sıfatıyla Üreticiden Sevk Alım'ı reddediyor.
+  Alım bildirimi Hal Kayıt panelinden yapılır; kuralların hepsi orada duruyor.
+- **Sıfat/tür varsayılanı KURAL TABANLI** (`bb_varsayilanlar` — sıfat "İhracat",
+  tür "Satış"): `app.html`'deki `listeleriUygula` kuralının aynasıdır, **ikisini
+  birlikte değiştir**. "Son kullanılan"dan OKUNMAZ — `hks_kv.sonlar_<firmaId>`
+  yalnız plaka/ülke/ürün/karşı taraf tutar, sıfat ve tür orada yoktur.
+  Karşılığı bulunamazsa boş döner; **asla id uydurulmaz**.
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 

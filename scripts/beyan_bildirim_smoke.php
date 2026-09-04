@@ -128,5 +128,56 @@ ok('api_beyan_bildirim cift yetki kapisi (beyan.write + records.write)',
    strpos($uc, "can_beyan('write')") !== false && strpos($uc, "can('records.write')") !== false,
    'tek yetkiyle bildirim uretilebilir');
 
+// ── 8) Ön-seçim kuralları (Adım 1) ────────────────────────────────────────
+// bb_katalog / bb_varsayilanlar SAF fonksiyonlardır ama api_beyan_bildirim.php
+// tepesinde oturum + yetim kontrolu calistirir; dosya require EDILEMEZ.
+// Bu yuzden fonksiyon govdesi kaynaktan cikarilip izole degerlendirilir —
+// hks_uretici_sevk_test.php'deki "saf fonksiyonu izole calistir" deseni.
+$src = oku("$KOK/api_beyan_bildirim.php");
+$gov = '';
+foreach (['bb_alim_turu_mu', 'bb_varsayilanlar'] as $fn) {
+    if (preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $m)) $gov .= $m[0] . "\n";
+}
+ok('bb_alim_turu_mu + bb_varsayilanlar kaynakta bulundu', substr_count($gov, 'function ') >= 2,
+   'fonksiyon adlari degismis — test guncellenmeli');
+
+if (substr_count($gov, 'function ') >= 2) {
+    // hks_eslesme_norm bagimliligi: TR-duyarsiz normalize (config/helpers.php ile ayni)
+    if (!function_exists('hks_eslesme_norm')) {
+        eval('function hks_eslesme_norm(string $s): string {
+                  $s = str_replace(["İ","I"], ["i","ı"], trim($s));
+                  return mb_strtolower($s, "UTF-8"); }');
+    }
+    eval($gov);
+
+    ok('"Satın Alım" alim turu sayiliyor',            bb_alim_turu_mu('Satın Alım'));
+    ok('"Üreticiden Sevk Alım" alim turu sayiliyor',  bb_alim_turu_mu('Üreticiden Sevk Alım'));
+    ok('"Satış" alim turu SAYILMIYOR',               !bb_alim_turu_mu('Satış'));
+    ok('"Sevk Etme" alim turu SAYILMIYOR',           !bb_alim_turu_mu('Sevk Etme'));
+
+    // Gercek katalog sekli: "İhracat" bas harfi İ — mb_strtolower tek basina
+    // bunu 'i'ye cevirmez, bu yuzden esleme KACIRILIRDI. Regresyon testi.
+    $kat = [
+        'sifatlar' => [['id' => '1', 'ad' => 'Üretici'], ['id' => '7', 'ad' => 'İhracat'],
+                       ['id' => '9', 'ad' => 'Hal İçi Tüccar']],
+        'bildirimTurleri' => [['id' => '3', 'ad' => 'Sevk Etme'], ['id' => '5', 'ad' => 'Satış']],
+    ];
+    $v = bb_varsayilanlar($kat);
+    ok('varsayilan sifat = İhracat (id 7)',    $v['sifatId'] === '7',        'gelen: ' . var_export($v['sifatId'], true));
+    ok('varsayilan tur = Satış (id 5)',        $v['bildirimTuruId'] === '5', 'gelen: ' . var_export($v['bildirimTuruId'], true));
+
+    // Katalogda karsiligi yoksa bos donmeli — YANLIS bir id UYDURULMAMALI.
+    $bos = bb_varsayilanlar(['sifatlar' => [['id' => '1', 'ad' => 'Üretici']], 'bildirimTurleri' => []]);
+    ok('karsiligi yoksa varsayilan bos doner',
+       $bos['sifatId'] === '' && $bos['bildirimTuruId'] === '',
+       'eslesmeyen katalogda id uydurulmus');
+}
+
+// Modal ön-seçimi gercekten kullaniyor mu?
+$view = oku("$KOK/beyan_view.php");
+ok('modal varsayilan sifat/tur on-secimini uyguluyor',
+   strpos($view, 'vs.sifatId') !== false && strpos($view, 'vs.bildirimTuruId') !== false,
+   'hazirla yanitindaki varsayilan kullanilmiyor');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
