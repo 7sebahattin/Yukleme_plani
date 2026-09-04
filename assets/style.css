@@ -5253,6 +5253,75 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 }
 @media print { .beyan-match-overlay { display: none !important; } }
 
+
+/* =========================================================
+   HAL KAYIT BİLDİRİM MODALİ (Sprint Beyan-Bildirim-01)
+   beyan_view.php — "🏛 Bildirim Yap" penceresi.
+   z-index 700: .beyan-match-overlay ile aynı katman (CLAUDE.md ≥600 kuralı).
+   ========================================================= */
+.beyan-hks-overlay[hidden] { display: none !important; }
+.beyan-hks-overlay {
+    position: fixed; inset: 0; z-index: 700;
+    background: rgba(15, 23, 42, .55);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 24px 12px; overflow-y: auto;
+}
+.beyan-hks-dialog {
+    background: #fff; border-radius: var(--radius, 12px);
+    width: 100%; max-width: 620px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .35);
+    display: flex; flex-direction: column;
+    max-height: calc(100vh - 48px);
+}
+.beyan-hks-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border, #e2e8f0);
+}
+.beyan-hks-x {
+    background: none; border: none; font-size: 1.3rem; cursor: pointer;
+    color: var(--muted, #64748b); line-height: 1; padding: 4px 8px;
+}
+.beyan-hks-body { padding: 16px 18px; overflow-y: auto; }
+.beyan-hks-sub {
+    font-size: .78rem; font-weight: 700; letter-spacing: .03em;
+    color: var(--muted, #64748b); margin: 14px 0 8px;
+}
+.beyan-hks-sub:first-child { margin-top: 0; }
+
+/* Beyandan gelen salt-okunur bilgiler */
+.beyan-hks-list {
+    margin: 0; display: grid; grid-template-columns: auto 1fr;
+    gap: 6px 14px; font-size: .88rem;
+}
+.beyan-hks-list dt { color: var(--muted, #64748b); }
+.beyan-hks-list dd { margin: 0; font-weight: 600; }
+
+/* Doldurulacak alanlar */
+.beyan-hks-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.beyan-hks-fields label {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: .82rem; color: var(--muted, #64748b);
+}
+.beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
+.beyan-hks-rozet-ok { color: #16a34a; }
+.beyan-hks-warn {
+    margin: 14px 0 0; padding: 10px 12px; border-radius: 8px;
+    background: #fef3c7; color: #92400e; font-size: .82rem; line-height: 1.5;
+}
+.beyan-hks-foot {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 12px 18px; border-top: 1px solid var(--border, #e2e8f0);
+}
+
+/* Mobil: tam ekran + iOS zoom önleme (16px kuralı) */
+@media (max-width: 767px) {
+    .beyan-hks-overlay { padding: 0; }
+    .beyan-hks-dialog { max-width: 100%; min-height: 100vh; max-height: 100vh; border-radius: 0; }
+    .beyan-hks-fields { grid-template-columns: 1fr; }
+    .beyan-hks-fields select, .beyan-hks-fields input { font-size: 16px; }
+}
+@media print { .beyan-hks-overlay { display: none !important; } }
+
 /* =========================================================
    TASARIM REVİZYONU — Global kabuk cilası + yerleşim kayması fix
    ---------------------------------------------------------
@@ -5729,6 +5798,8 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-match-table thead th { back
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-row:hover { background: #1b2430; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed td,
 html[data-theme="dark"] body:not(.print-mode) .beyan-match-changed th { background: #2b2410; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-hks-dialog { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .beyan-hks-warn { background: #2b2410; color: #fcd34d; }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,

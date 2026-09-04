@@ -26,6 +26,7 @@ $f = [
     'company_name'       => (string)($beyan['company_name']       ?? ''),
     'company_address'    => (string)($beyan['company_address']    ?? ''),
     'transport_type'     => (string)($beyan['transport_type']     ?? ''),
+    'vehicle_plate'      => (string)($beyan['vehicle_plate']      ?? ''),
     'line_type'          => (string)($beyan['line_type']          ?? ''),
     'party_no'           => (string)($beyan['party_no']           ?? ''),
     'pallet_count'       => $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '',
@@ -76,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Büyük harf — seçili metin alanları
-    foreach (['declaration_title', 'company_name', 'company_address', 'transport_type',
+    foreach (['declaration_title', 'company_name', 'company_address', 'transport_type', 'vehicle_plate',
               'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
               'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
@@ -118,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st = db()->prepare("UPDATE customs_declarations SET
             raw_text = ?, unmatched_text = ?, declaration_title = ?,
             company_name = ?, company_address = ?,
-            transport_type = ?, line_type = ?, party_no = ?,
+            transport_type = ?, vehicle_plate = ?, line_type = ?, party_no = ?,
             pallet_count = ?, product_name = ?, product_variety = ?,
             gross_kg = ?, net_kg = ?, crate_count = ?, crate_type = ?,
             exit_depot = ?, contact_person = ?, buyer_name = ?, brand = ?,
@@ -133,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $f['company_name']      ?: null,
             $f['company_address']   ?: null,
             $f['transport_type']    ?: null,
+            $f['vehicle_plate']     ?: null,
             $f['line_type']         ?: null,
             $f['party_no']          ?: null,
             $pallet_ct,
@@ -252,6 +254,13 @@ render_flash();
             <label class="form-label">Nakliye Türü</label>
             <input type="text" name="transport_type" class="form-control"
                    value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Araç Plakası</label>
+            <input type="text" name="vehicle_plate" class="form-control"
+                   value="<?= h($f['vehicle_plate']) ?>" data-uppercase="tr"
+                   placeholder="34 ABC 123">
+            <small class="muted">Hal Kayıt bildirimi için zorunlu — girilmeden "Bildirim Yap" açılmaz.</small>
         </div>
         <div class="form-group">
             <label class="form-label">Hat / Güzergah</label>

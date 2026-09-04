@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v195` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v196` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -34,9 +34,14 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 ├── assets/
 │   ├── style.css          # TEK CSS — tüm stiller + sidebar + breakpoints
 │   └── app.js             # TEK JS
-└── hks/                   # Hal Bildirimi modülü
-    ├── index.php / api_send.php
-    ├── HksClient.php / HksRepository.php / helpers.php
+├── beyanlar.php / beyan_view.php / beyan_create.php / beyan_edit.php
+├── api_beyan_bildirim.php # Beyan → Hal Kayıt köprüsü (JSON)
+└── halkayit/              # Hal Kayıt (HKS) modülü
+    ├── index.php          # panel çerçevesi + app.php'yi iframe'e gömer
+    ├── app.php / app.html # SPA kabuğu + SPA (tek dosya)
+    ├── api.php            # JSON yönlendirici (action=...)
+    ├── taslak_lib.php     # TASLAK YAZMANIN TEK YOLU + bildirim doğrulama
+    ├── hks_soap.php / config.php / db.php
     └── .htaccess          # include-only PHP dosyalarına web erişim kapalı
 ```
 
@@ -146,7 +151,10 @@ account_transactions / account_files  -- Hesap modülü
 audit_log           -- İşlem geçmişi
 users / roles / role_permissions
 kantar_gruplar / kantar_kayitlar
-hks_notifications   -- Hal Bildirimi taslakları
+customs_declarations -- Beyanlar (+ vehicle_plate, hks_durum)
+hks_firmalar / hks_taslaklar / hks_gonderilenler / hks_kv   -- Hal Kayıt modülü
+beyan_hks_bildirim  -- Beyan ↔ HKS bildirim bağı ve geçmişi
+hks_eslesme         -- Serbest metin ↔ HKS katalog id eşlemeleri (öğrenilen)
 ```
 
 **Auto-migration:** `config/db.php` açılışta `type` kolonu ve index'leri ekler.
@@ -241,6 +249,43 @@ yuvarla(x;n) min maks mutlak tavan taban topla ort eger(kosul;a;b)
 - Kaydetme bölüm/kalemleri silip yeniden yazar (sıralama sadeliği için); id'ler değişir, dışarıdan referans verme.
 - `status='kesin'` kilitler; açmak `maliyet.unlock` + revizyon nedeni ister.
 - Depo damgası `cost_sheets.depo`; liste `depo_sql_column('depo')`, tekil erişim `depot_visible_to_user()`.
+
+---
+
+## Beyan → Hal Kayıt Bildirimi (Sprint Beyan-Bildirim-01)
+
+Beyan ekranındaki **"🏛 Bildirim Yap"** butonu, beyandaki veriden bir **HKS taslağı**
+açar. Gönderim yapmaz.
+
+**Dosyalar:** `api_beyan_bildirim.php` (JSON uç: `hazirla` / `taslak_olustur`) ·
+`halkayit/taslak_lib.php` (ortak kütüphane) · `beyan_view.php` (buton + modal + geçmiş).
+**Tablolar:** `beyan_hks_bildirim` (bağ + geçmiş) · `hks_eslesme` (öğrenilen eşlemeler) ·
+`customs_declarations.vehicle_plate` + `.hks_durum` (yeni kolonlar).
+**Test:** `php scripts/beyan_bildirim_smoke.php` (ağsız, DB'ye yazmaz).
+
+**Değiştirmeden önce oku:**
+- **Taslak yazmanın TEK yolu `hks_taslak_olustur()`** (`halkayit/taslak_lib.php`).
+  `hks_bildirim_dogrula()` canlı sistemde öğrenilmiş kuralları (TC algoritması,
+  KPS kimlik bütünlüğü, Üreticiden Sevk Alım kısıtları) taşır. **İKİNCİ BİR YAZMA
+  YOLU AÇMA** — iki yol ayrışır, ayrışan taraf sessizce hatalı bildirim gönderir.
+- **Beyan ekranı HKS'e HİÇBİR ŞEY GÖNDERMEZ.** `BildirimKaydet` geri alınamaz ve
+  rüsum doğurur; gönderim yalnız `taslak_gonder` yolunda, oradaki atomik
+  mükerrer-gönderim koruması ile yapılır.
+- **Canlı SOAP çağrısı yok** — katalog listeleri `hks_kv.listeler_cache`'ten okunur.
+  Önbellek boşsa özellik **fail-closed** davranır (409 + "Listeleri Güncelle" yönlendirmesi).
+- **Plan taslağı olarak yazılır** (`planKg` var, künye yok): künyeler gönderim anında
+  canlı stoktan çözülür. Stok yetmezse hiçbir bildirim gitmez, taslak korunur.
+- **Bağ, taslağın İÇİNDE taşınır** (`ortak.kaynak = {tip:'beyan', beyanId}`). Taslak
+  gönderilince satır silinip yeni id ile doğduğu için dış anahtar işe yaramaz;
+  `taslak_gonder` ve `taslak_sil` bu izi okuyup bağ kaydını sonuçlandırır
+  (`beyan_hks_taslak_isaretle()` — hata yutar, HKS akışını asla kesmez).
+- **Buton kapısı:** plaka dolu + durum uygun + net KG > 0 + aktif bildirim yok +
+  **çift yetki** (`beyan.write` **ve** `records.write`). Kapalıysa sebebi yazılır.
+- **1 beyan = 1 ürün = 1 bildirim.** Aktif (`taslak`/`gonderildi`) bağ varsa ikincisi
+  açılmaz. İki ürünlü gümrük beyanı sisteme **iki ayrı beyan** olarak girilir.
+- **Net KG zorunlu, brüte düşülmez** — rüsum net üzerinden hesaplanır.
+- `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
+  **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
 ---
 

@@ -1,7 +1,8 @@
 # Hal Kayıt paneli — yalnızca index.php ve api.php doğrudan erişilebilir.
+# (taslak_lib.php include-only ortak kütüphanedir — Beyan modülü de kullanır.)
 # include-only PHP dosyaları, SPA kabuğu, şema ve kılavuz doğrudan çağrıya kapalı.
 
-<FilesMatch "^(config|db|hks_soap)\.php$">
+<FilesMatch "^(config|db|hks_soap|taslak_lib)\.php$">
     Require all denied
 </FilesMatch>
 
@@ -11,7 +12,7 @@
 
 # Apache 2.2 geriye dönük uyumluluk
 <IfModule !mod_authz_core.c>
-    <FilesMatch "^(config|db|hks_soap)\.php$">
+    <FilesMatch "^(config|db|hks_soap|taslak_lib)\.php$">
         Order allow,deny
         Deny from all
     </FilesMatch>

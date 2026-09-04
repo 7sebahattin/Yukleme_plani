@@ -222,7 +222,10 @@ render_flash();
             <td><?= h($r['buyer_name'] ?: '—') ?></td>
             <td><?= h($r['brand'] ?: '—') ?></td>
             <td><?= h($r['exit_depot'] ?: '—') ?></td>
-            <td><?= beyan_badge_html($r['status']) ?></td>
+            <td><?= beyan_badge_html($r['status']) ?><?php
+                $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
+                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+            ?></td>
             <td class="actions-col">
                 <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
                 <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
@@ -258,7 +261,10 @@ render_flash();
                     <?php endif; ?>
                 </div>
             </div>
-            <?= beyan_badge_html($r['status']) ?>
+            <?= beyan_badge_html($r['status']) ?><?php
+                $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
+                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+            ?>
         </div>
 
         <div class="beyan-card-meta">
