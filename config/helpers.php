@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v195');
+    define('APP_SURUM', 'v196');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -1113,6 +1113,75 @@ endif;
             error_log('[Beyan-01 MIGRATION] customs_declarations: ' . $e->getMessage());
         }
 
+        // Sprint Beyan-Bildirim-01: Beyan ↔ Hal Kayıt (HKS) köprüsü (idempotent)
+        // Mevcut tabloya TEK dokunuş: iki nullable kolon. hks_* tablolarına
+        // (halkayit modülünün kendi şeması) HİÇ dokunulmaz.
+        try {
+            $cd_cols = [];
+            foreach ($pdo->query("SHOW COLUMNS FROM `customs_declarations`") as $c) $cd_cols[] = $c['Field'];
+
+            // Araç plakası: HKS bildiriminin zorunlu alanı (plaka VEYA belge no).
+            // Beyan bunu hiç taşımıyordu; "Bildirim Yap" butonunun kapısı budur.
+            if (!in_array('vehicle_plate', $cd_cols, true)) {
+                $pdo->exec("ALTER TABLE `customs_declarations`
+                            ADD COLUMN `vehicle_plate` VARCHAR(30) NULL DEFAULT NULL AFTER `transport_type`");
+            }
+            // Liste ekranındaki rozet için DENORMALİZE durum. Tek doğruluk
+            // kaynağı `beyan_hks_bildirim` tablosudur; bu kolon yalnız kopyadır
+            // (beyan_hks_durum_tazele() yazar).
+            if (!in_array('hks_durum', $cd_cols, true)) {
+                $pdo->exec("ALTER TABLE `customs_declarations`
+                            ADD COLUMN `hks_durum` VARCHAR(20) NULL DEFAULT NULL");
+            }
+
+            // Bağ tablosu — bir beyanın HKS bildirim geçmişi.
+            // Neden tablo (kolon değil): başarısız denemeler (stok yetersiz,
+            // Mernis hatası) kaydedilmeli ve iptal sonrası yeni deneme
+            // yapılabilmeli. "Her ürün için 1 kez bildirim" kuralı, aktif
+            // (taslak|gonderildi) satır varlığı ile kod tarafında uygulanır —
+            // UNIQUE index kullanılamaz, çünkü iptal/hata satırları tekrarlanır.
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `beyan_hks_bildirim` (
+                `id`            INT AUTO_INCREMENT PRIMARY KEY,
+                `beyan_id`      INT NOT NULL,
+                `hks_firma_id`  VARCHAR(40) NULL,
+                `hks_firma_ad`  VARCHAR(200) NULL,
+                `taslak_id`     VARCHAR(40) NULL,
+                `gonderim_id`   VARCHAR(40) NULL,
+                `durum`         VARCHAR(20) NOT NULL DEFAULT 'taslak',
+                `urun_id`       VARCHAR(40) NULL,
+                `urun_ad`       VARCHAR(150) NULL,
+                `ulke_id`       VARCHAR(40) NULL,
+                `ulke_ad`       VARCHAR(150) NULL,
+                `plaka`         VARCHAR(30) NULL,
+                `kg`            DECIMAL(12,3) NULL,
+                `fiyat`         DECIMAL(12,4) NULL,
+                `hata_metni`    TEXT NULL,
+                `created_by`    INT NULL,
+                `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `updated_at`    DATETIME NULL,
+                INDEX `idx_bhb_beyan`  (`beyan_id`),
+                INDEX `idx_bhb_taslak` (`taslak_id`),
+                INDEX `idx_bhb_durum`  (`durum`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Öğrenme tablosu — serbest metin ("KAYISI") ile HKS katalog id'si
+            // arasındaki eşleme. Kullanıcı bir kez seçer, sonraki beyanlarda
+            // otomatik gelir. KARAR MERCİİ DEĞİLDİR: modal her zaman seçili
+            // değeri gösterir ve kullanıcı değiştirebilir.
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `hks_eslesme` (
+                `id`          INT AUTO_INCREMENT PRIMARY KEY,
+                `tip`         VARCHAR(20)  NOT NULL,
+                `kaynak_norm` VARCHAR(190) NOT NULL,
+                `hks_id`      VARCHAR(40)  NOT NULL,
+                `hks_ad`      VARCHAR(200) NULL,
+                `kullanim`    INT NOT NULL DEFAULT 1,
+                `updated_at`  DATETIME NULL,
+                UNIQUE KEY `uq_hks_eslesme` (`tip`, `kaynak_norm`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (PDOException $e) {
+            error_log('[Beyan-Bildirim-01 MIGRATION] ' . $e->getMessage());
+        }
+
     } catch (PDOException $e) {}
 })();
 
@@ -1916,4 +1985,113 @@ function beyan_insert(array $data, int $user_id): int {
     ]);
 
     return (int)db()->lastInsertId();
+}
+
+// =============================================================================
+// BEYAN ↔ HAL KAYIT (HKS) KÖPRÜSÜ — Sprint Beyan-Bildirim-01
+// =============================================================================
+// Bu yardımcılar YALNIZCA panel tarafındaki bağ/eşleme tablolarına dokunur.
+// hks_taslaklar / hks_gonderilenler tablolarına buradan HİÇ yazılmaz — orası
+// halkayit modülünün alanıdır ve tek yazma yolu halkayit/taslak_lib.php'dir.
+
+// Beyanın bildirim yapılabilir sayıldığı durumlar. `red`/`iptal`/`taslak`
+// dışlanır: reddedilmiş ya da iptal edilmiş bir parti için geri alınamaz,
+// rüsum doğuran bildirim gönderilmemelidir.
+function beyan_hks_uygun_durumlar(): array {
+    return ['beyan_acildi', 'numune_bekliyor', 'analiz_bekliyor', 'temiz', 'yukleme_olustu', 'yuklendi'];
+}
+
+// Aktif bildirim = taslak bekliyor ya da gönderilmiş. "Her ürün için 1 kez
+// bildirim" kuralının kapısı budur (1 beyan = 1 ürün olduğundan 1 beyan = 1
+// aktif bildirim). İptal/hata satırları aktif SAYILMAZ, yeniden denenebilir.
+function beyan_hks_aktif(int $beyan_id): ?array {
+    try {
+        $st = db()->prepare("SELECT * FROM beyan_hks_bildirim
+                             WHERE beyan_id = ? AND durum IN ('taslak','gonderildi')
+                             ORDER BY id DESC LIMIT 1");
+        $st->execute([$beyan_id]);
+        return $st->fetch() ?: null;
+    } catch (PDOException $e) { return null; }   // tablo yoksa özellik pasif
+}
+
+function beyan_hks_gecmis(int $beyan_id): array {
+    try {
+        $st = db()->prepare("SELECT * FROM beyan_hks_bildirim WHERE beyan_id = ? ORDER BY id DESC");
+        $st->execute([$beyan_id]);
+        return $st->fetchAll();
+    } catch (PDOException $e) { return []; }
+}
+
+// Liste ekranındaki rozet için denormalize kolonu tazeler. Bağ tablosu tek
+// doğruluk kaynağıdır; bu yalnız kopyadır, hata verirse akış durmaz.
+function beyan_hks_durum_tazele(int $beyan_id): void {
+    try {
+        $aktif = beyan_hks_aktif($beyan_id);
+        $st = db()->prepare("UPDATE customs_declarations SET hks_durum = ? WHERE id = ?");
+        $st->execute([$aktif['durum'] ?? null, $beyan_id]);
+    } catch (PDOException $e) {}
+}
+
+function beyan_hks_durum_etiket(?string $durum): string {
+    return [
+        'taslak'     => 'HKS TASLAK',
+        'gonderildi' => 'HKS GÖNDERİLDİ',
+        'hata'       => 'HKS HATA',
+        'iptal'      => 'HKS İPTAL',
+    ][$durum ?? ''] ?? '';
+}
+
+// Türkçe büyük/küçük harf duyarsız normalize — halkayit/taslak_lib.php'deki
+// hks_tr_normalize() ve app.html'deki trNorm() ile AYNI dönüşüm olmalıdır
+// (PHP'nin mb_strtolower'ı İ→i, I→ı ayrımını yapmaz).
+function hks_eslesme_norm(string $s): string {
+    $s = str_replace(['İ', 'I'], ['i', 'ı'], trim($s));
+    return mb_strtolower($s, 'UTF-8');
+}
+
+// Öğrenilmiş eşlemeyi okur. Bulunamazsa null — modal o zaman boş seçim gösterir.
+function hks_eslesme_bul(string $tip, string $kaynak): ?array {
+    $norm = hks_eslesme_norm($kaynak);
+    if ($norm === '') return null;
+    try {
+        $st = db()->prepare("SELECT hks_id, hks_ad FROM hks_eslesme WHERE tip = ? AND kaynak_norm = ?");
+        $st->execute([$tip, $norm]);
+        return $st->fetch() ?: null;
+    } catch (PDOException $e) { return null; }
+}
+
+// Kullanıcının modalde yaptığı seçimi öğrenir. Yazamazsa sessizce geçer —
+// eşleme bir KOLAYLIKTIR, bildirimin doğruluğuna etki etmez.
+function hks_eslesme_yaz(string $tip, string $kaynak, string $hks_id, string $hks_ad): void {
+    $norm = hks_eslesme_norm($kaynak);
+    if ($norm === '' || $hks_id === '') return;
+    try {
+        $st = db()->prepare("INSERT INTO hks_eslesme (tip, kaynak_norm, hks_id, hks_ad, updated_at)
+                             VALUES (?,?,?,?,NOW())
+                             ON DUPLICATE KEY UPDATE hks_id = VALUES(hks_id), hks_ad = VALUES(hks_ad),
+                                                     kullanim = kullanim + 1, updated_at = NOW()");
+        $st->execute([$tip, $norm, $hks_id, $hks_ad]);
+    } catch (PDOException $e) {}
+}
+
+// Bir HKS taslağının akıbetini bağ tablosuna işler. halkayit/api.php içinden
+// çağrılır (gönderim başarılı → 'gonderildi', taslak silindi → 'iptal').
+// SESSİZ ve HATA YUTAR: köprü tablosundaki bir sorun, geri alınamaz HKS
+// gönderim akışını ASLA kesmemelidir.
+function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek = []): void {
+    if ($taslak_id === '') return;
+    try {
+        $st = db()->prepare("SELECT id, beyan_id FROM beyan_hks_bildirim
+                             WHERE taslak_id = ? AND durum = 'taslak' ORDER BY id DESC LIMIT 1");
+        $st->execute([$taslak_id]);
+        $row = $st->fetch();
+        if (!$row) return;
+        $up = db()->prepare("UPDATE beyan_hks_bildirim
+                             SET durum = ?, gonderim_id = ?, hata_metni = ?, updated_at = NOW()
+                             WHERE id = ?");
+        $up->execute([$durum, $ek['gonderim_id'] ?? null, $ek['hata_metni'] ?? null, (int)$row['id']]);
+        beyan_hks_durum_tazele((int)$row['beyan_id']);
+    } catch (PDOException $e) {
+        error_log('[beyan-hks] bag guncellenemedi: ' . $e->getMessage());
+    }
 }

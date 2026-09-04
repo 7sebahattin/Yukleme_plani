@@ -69,6 +69,30 @@ if ($can_match) {
     }
 }
 
+// ── Hal Kayıt (HKS) bildirimi — buton kapısı (Sprint Beyan-Bildirim-01) ──
+// Buton yalnızca PLAKA girilmişse açılır (kullanıcı kuralı). Ayrıca durum
+// uygun olmalı, beyan silinmemiş olmalı ve yetki çift kapıdan geçmeli:
+// beyan.write TEK BAŞINA yetmez — HKS'te rüsum doğuran zincirin ilk halkası
+// olduğu için Hal Kayıt panelinin kapısı olan records.write de aranır.
+$hks_plaka     = trim((string)($beyan['vehicle_plate'] ?? ''));
+$hks_yetki     = can_beyan('write') && (can('records.write') || is_admin());
+$hks_durum_ok  = in_array($cur_status, beyan_hks_uygun_durumlar(), true);
+$hks_net_kg    = (float)($beyan['net_kg'] ?? 0);
+$hks_aktif     = beyan_hks_aktif($id);
+$hks_gecmis    = beyan_hks_gecmis($id);
+
+// Buton neden kapalı? Tek tek söylenir — "pasif buton" sessiz kalmaz.
+$hks_engel = null;
+if (!$hks_yetki)                 $hks_engel = 'Bildirim için beyan.write + records.write yetkisi gerekir.';
+elseif ($is_deleted)             $hks_engel = 'Arşivlenmiş beyan için bildirim yapılamaz.';
+elseif (!$hks_durum_ok)          $hks_engel = 'Bu beyan durumunda bildirim yapılamaz.';
+elseif ($hks_plaka === '')       $hks_engel = 'Araç plakası girilmeden bildirim yapılamaz — beyanı düzenleyip plakayı girin.';
+elseif ($hks_net_kg <= 0)        $hks_engel = 'Net KG girilmeden bildirim yapılamaz.';
+elseif ($hks_aktif)              $hks_engel = $hks_aktif['durum'] === 'gonderildi'
+                                    ? 'Bu beyan için bildirim zaten gönderildi.'
+                                    : 'Bu beyan için bekleyen bir HKS taslağı var.';
+$hks_acik = ($hks_engel === null);
+
 // Beyan tarafındaki (aktarılacak) değerler — önizleme + JS için
 // Not: Beyandaki "Şirket Adı" (company_name) → yükleme planı "Gümrük" (gumruk)
 $beyan_match = [
@@ -102,6 +126,15 @@ render_flash();
         </button>
         <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi'): ?>
         <span class="muted" style="font-size:.82rem;align-self:center">Bu beyan zaten yüklendi.</span>
+        <?php endif; ?>
+        <?php if ($hks_acik): ?>
+        <button type="button" class="btn" id="hksOpenBtn"
+                style="background:#7c3aed;color:#fff;border-color:#7c3aed">
+            🏛 Bildirim Yap
+        </button>
+        <?php elseif ($hks_yetki && !$is_deleted): ?>
+        <button type="button" class="btn" disabled title="<?= h((string)$hks_engel) ?>"
+                style="opacity:.55;cursor:not-allowed">🏛 Bildirim Yap</button>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('write')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
@@ -160,6 +193,10 @@ render_flash();
         <div class="beyan-view-row">
             <span class="lbl">Nakliye Türü</span>
             <span class="val"><?= h($beyan['transport_type'] ?: '—') ?></span>
+        </div>
+        <div class="beyan-view-row">
+            <span class="lbl">Araç Plakası</span>
+            <span class="val"><?= h(($beyan['vehicle_plate'] ?? '') ?: '—') ?></span>
         </div>
         <div class="beyan-view-row">
             <span class="lbl">Hat / Güzergah</span>
@@ -278,7 +315,7 @@ render_flash();
                 <?php
                 // Durum değiştirilirken tüm mevcut alanları hidden olarak gönder
                 foreach (['raw_text','unmatched_text','declaration_title','company_name','company_address',
-                          'transport_type','line_type','party_no','pallet_count','product_name','product_variety',
+                          'transport_type','vehicle_plate','line_type','party_no','pallet_count','product_name','product_variety',
                           'gross_kg','net_kg','crate_count','crate_type','exit_depot','contact_person',
                           'buyer_name','brand','analysis_note','sample_taken_at','analysis_result_at'] as $hf):
                     $hval = '';
@@ -330,6 +367,49 @@ render_flash();
     </div>
 </div>
 <?php endif; ?>
+
+<!-- 6b. Hal Kayıt (HKS) Bildirimi -->
+<div class="beyan-section">
+    <div class="beyan-section-title">🏛 Hal Kayıt Bildirimi</div>
+    <?php if (empty($hks_gecmis)): ?>
+    <p class="muted" style="font-size:.88rem">
+        Bu beyan için henüz bildirim oluşturulmadı.
+        <?php if (!$hks_acik && $hks_engel): ?>
+        <br><span style="color:var(--danger)"><?= h((string)$hks_engel) ?></span>
+        <?php endif; ?>
+    </p>
+    <?php else: ?>
+    <div class="table-wrap">
+        <table class="beyan-match-table">
+            <thead>
+                <tr><th>Durum</th><th>Firma</th><th>Ürün</th><th>Ülke</th>
+                    <th>Plaka</th><th>KG</th><th>Fiyat</th><th>Tarih</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($hks_gecmis as $hg): ?>
+                <tr>
+                    <td><span class="beyan-badge"><?= h(beyan_hks_durum_etiket($hg['durum'])) ?></span></td>
+                    <td><?= h((string)($hg['hks_firma_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['urun_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['ulke_ad'] ?? '')) ?: '—' ?></td>
+                    <td><?= h((string)($hg['plaka'] ?? '')) ?: '—' ?></td>
+                    <td><?= h(fmt_kg($hg['kg'] ?? 0)) ?></td>
+                    <td><?= h(number_format((float)($hg['fiyat'] ?? 0), 2, ',', '.')) ?></td>
+                    <td><?= h(fmt_datetime($hg['created_at'])) ?></td>
+                </tr>
+                <?php if (!empty($hg['hata_metni'])): ?>
+                <tr><td colspan="8" class="muted" style="font-size:.8rem"><?= h((string)$hg['hata_metni']) ?></td></tr>
+                <?php endif; ?>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <p class="muted" style="font-size:.82rem;margin-top:8px">
+        Taslaklar <a href="halkayit/index.php">Hal Kayıt panelinden</a> gönderilir —
+        bu ekran HKS'e bildirim <strong>göndermez</strong>.
+    </p>
+    <?php endif; ?>
+</div>
 
 <!-- 7. Yükleme Planı Bağlantısı -->
 <div class="beyan-section">
@@ -627,6 +707,207 @@ function prompt_note(btn) {
     window.beyanMatchConfirm = function () {
         return confirm('Seçilen yükleme planı beyan bilgileriyle güncellenecek ve Yüklendi yapılacak. Onaylıyor musunuz?');
     };
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($hks_acik): ?>
+<!-- ══ HAL KAYIT BİLDİRİM MODALİ (Sprint Beyan-Bildirim-01) ══════════════ -->
+<!-- z-index 600 (.beyan-hks-overlay) — CLAUDE.md modal katman kuralı.      -->
+<div id="hksOverlay" class="beyan-hks-overlay" hidden role="dialog" aria-modal="true"
+     aria-labelledby="hksTitle">
+  <div class="beyan-hks-dialog">
+    <div class="beyan-hks-head">
+      <strong id="hksTitle">🏛 Hal Kayıt Bildirimi</strong>
+      <button type="button" class="beyan-hks-x" id="hksClose" aria-label="Kapat">✕</button>
+    </div>
+
+    <div class="beyan-hks-body">
+      <div id="hksLoading" class="muted" style="padding:20px;text-align:center">Bilgiler hazırlanıyor…</div>
+      <div id="hksError" class="flash flash-error" hidden></div>
+
+      <div id="hksContent" hidden>
+        <!-- Beyandan gelen — salt okunur -->
+        <div class="beyan-hks-sub">Beyandan gelen bilgiler</div>
+        <dl class="beyan-hks-list" id="hksInfo"></dl>
+
+        <!-- HKS eşleşmeleri — eksikler burada doldurulur -->
+        <div class="beyan-hks-sub">HKS karşılıkları</div>
+        <div class="beyan-hks-fields">
+          <label>HKS Firması
+            <select id="hksFirma" class="form-control"></select>
+          </label>
+          <label>Ürün <span id="hksUrunRozet" class="beyan-hks-rozet"></span>
+            <select id="hksUrun" class="form-control"></select>
+          </label>
+          <label>Ülke <span id="hksUlkeRozet" class="beyan-hks-rozet"></span>
+            <select id="hksUlke" class="form-control"></select>
+          </label>
+          <label>Bildirimci Sıfatı
+            <select id="hksSifat" class="form-control"></select>
+          </label>
+          <label>Bildirim Türü
+            <select id="hksTur" class="form-control"></select>
+          </label>
+          <label>Birim Fiyat <strong style="color:var(--danger)">*</strong>
+            <input type="text" id="hksFiyat" class="form-control" inputmode="decimal"
+                   placeholder="örn. 12,50" autocomplete="off">
+          </label>
+        </div>
+
+        <p class="beyan-hks-warn">
+          Bu işlem yalnızca <strong>TASLAK</strong> oluşturur. HKS'e bildirim
+          <strong>GÖNDERİLMEZ</strong> — gönderim geri alınamaz ve rüsum doğurur,
+          o adım Hal Kayıt ekranında yapılır. Künyeler gönderim anında canlı
+          stoktan çözülür.
+        </p>
+      </div>
+    </div>
+
+    <div class="beyan-hks-foot">
+      <button type="button" class="btn btn-ghost" id="hksCancel">Vazgeç</button>
+      <button type="button" class="btn btn-primary" id="hksSave" disabled>Taslağa Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+    var BEYAN_ID = <?= (int)$id ?>;
+    var CSRF     = <?= json_encode(csrf_token()) ?>;
+
+    var ov   = document.getElementById('hksOverlay');
+    var el   = function (i) { return document.getElementById(i); };
+    var veri = null;
+
+    function hata(msg) {
+        el('hksLoading').hidden = true;
+        el('hksError').textContent = msg;
+        el('hksError').hidden = false;
+    }
+
+    function satir(k, v) {
+        return '<dt>' + k + '</dt><dd>' + (v === '' || v === null || v === undefined ? '—' : v) + '</dd>';
+    }
+
+    // Seçenekleri doldurur; seciliId varsa onu işaretler.
+    function doldur(sel, liste, seciliId) {
+        sel.innerHTML = '<option value="">— seçiniz —</option>' +
+            liste.map(function (x) {
+                return '<option value="' + x.id + '"' +
+                       (String(x.id) === String(seciliId || '') ? ' selected' : '') + '>' +
+                       x.ad + '</option>';
+            }).join('');
+    }
+
+    function rozet(span, tahmin) {
+        if (!tahmin || !tahmin.id) { span.textContent = ''; return; }
+        span.textContent = tahmin.kaynak === 'ogrenilen' ? 'önceki seçiminizden' : 'katalogdan eşleşti';
+        span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
+    }
+
+    function kontrol() {
+        var tam = el('hksFirma').value && el('hksUrun').value && el('hksUlke').value &&
+                  el('hksSifat').value && el('hksTur').value &&
+                  el('hksFiyat').value.trim() !== '';
+        el('hksSave').disabled = !tam;
+    }
+
+    function ac() {
+        ov.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (veri) return;                       // bir kez yüklenir
+        fetch('api_beyan_bildirim.php?action=hazirla&beyan_id=' + BEYAN_ID, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beyan_id: BEYAN_ID })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok) { hata(res.j.hata || 'Bilgiler alınamadı.'); return; }
+            veri = res.j;
+            if (veri.onKosul) { hata(veri.onKosul); return; }
+
+            var b = veri.beyan;
+            el('hksInfo').innerHTML =
+                satir('Parti No', b.partiNo) +
+                satir('Ürün', b.urunAdi + (b.cesit ? ' / ' + b.cesit : '')) +
+                satir('Net KG', b.netKg.toLocaleString('tr-TR')) +
+                satir('Araç Plakası', b.plaka) +
+                satir('Alıcı', b.alici) +
+                satir('Çıkış Deposu', b.depo) +
+                satir('Palet / Kasa', (b.palet === null ? '—' : b.palet) + ' / ' + (b.kasa === null ? '—' : b.kasa));
+
+            doldur(el('hksFirma'), veri.firmalar, veri.firmalar.length === 1 ? veri.firmalar[0].id : '');
+            doldur(el('hksUrun'),  veri.katalog.urunler,         veri.tahmin.urun.id);
+            doldur(el('hksUlke'),  veri.katalog.ulkeler,         veri.tahmin.ulke.id);
+            doldur(el('hksSifat'), veri.katalog.sifatlar,        '');
+            doldur(el('hksTur'),   veri.katalog.bildirimTurleri, '');
+            rozet(el('hksUrunRozet'), veri.tahmin.urun);
+            rozet(el('hksUlkeRozet'), veri.tahmin.ulke);
+
+            el('hksLoading').hidden = true;
+            el('hksContent').hidden = false;
+            kontrol();
+        })
+        .catch(function (e) { hata('Bağlantı hatası: ' + e.message); });
+    }
+
+    function kapat() { ov.hidden = true; document.body.style.overflow = ''; }
+
+    el('hksOpenBtn').addEventListener('click', ac);
+    el('hksClose').addEventListener('click', kapat);
+    el('hksCancel').addEventListener('click', kapat);
+    ov.addEventListener('click', function (e) { if (e.target === ov) kapat(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !ov.hidden) kapat(); });
+
+    ['hksFirma','hksUrun','hksUlke','hksSifat','hksTur','hksFiyat'].forEach(function (i) {
+        el(i).addEventListener('change', kontrol);
+        el(i).addEventListener('input',  kontrol);
+    });
+
+    el('hksSave').addEventListener('click', function () {
+        var b = veri.beyan;
+        if (!confirm('"' + b.partiNo + '" için HKS TASLAĞI oluşturulacak.\n\n' +
+                     'Ürün: ' + el('hksUrun').selectedOptions[0].textContent + '\n' +
+                     'Ülke: ' + el('hksUlke').selectedOptions[0].textContent + '\n' +
+                     'Plaka: ' + b.plaka + '\n' +
+                     'Net KG: ' + b.netKg.toLocaleString('tr-TR') + '\n' +
+                     'Birim fiyat: ' + el('hksFiyat').value + '\n\n' +
+                     'Bildirim GÖNDERİLMEZ; gönderim Hal Kayıt ekranında yapılır.')) return;
+
+        el('hksSave').disabled = true;
+        el('hksSave').textContent = 'Kaydediliyor…';
+        fetch('api_beyan_bildirim.php?action=taslak_olustur', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                beyan_id: BEYAN_ID, csrf: CSRF,
+                firmaId: el('hksFirma').value,
+                urunId:  el('hksUrun').value,
+                ulkeId:  el('hksUlke').value,
+                sifatId: el('hksSifat').value,
+                bildirimTuruId: el('hksTur').value,
+                fiyat: el('hksFiyat').value
+            })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                alert('HATA: ' + (res.j.hata || 'Taslak oluşturulamadı.'));
+                el('hksSave').disabled = false;
+                el('hksSave').textContent = 'Taslağa Kaydet';
+                return;
+            }
+            alert('✅ ' + res.j.mesaj);
+            location.reload();
+        })
+        .catch(function (e) {
+            alert('Bağlantı hatası: ' + e.message);
+            el('hksSave').disabled = false;
+            el('hksSave').textContent = 'Taslağa Kaydet';
+        });
+    });
 })();
 </script>
 <?php endif; ?>
