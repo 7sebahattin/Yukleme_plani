@@ -288,6 +288,13 @@ açar. Gönderim yapmaz.
   Alım REFERANSSIZ bildirimdir — malın tam tanımını ister, plan taslağı bunu
   taşıyamaz; ayrıca HKS "İhracat" sıfatıyla Üreticiden Sevk Alım'ı reddediyor.
   Alım bildirimi Hal Kayıt panelinden yapılır; kuralların hepsi orada duruyor.
+- **Ülke ipucu zinciri** (`bb_ulke_adaylari` → `bb_ulke_tahmin`): beyanda ülke
+  alanı YOK. Sırayla denenir — ① bağlı planın `gidecek_ulke`si ② beyandaki
+  **alıcı adı** ③ aynı alıcıya yapılmış en son yüklemenin ülkesi. İlk çözülen
+  kazanır; hiçbiri çözülmezse alan **boş kalır** (ülke asla tahmin edilmez).
+  Kaydederken ① ve ② `hks_eslesme`'ye ULKE olarak öğrenilir — böylece beyan bir
+  yükleme planına bağlı olmasa da ülke gelir. ③ öğrenilmez (zaten başka bir
+  kaydın türevi). Modal ülkenin **hangi ipucundan** geldiğini rozetle yazar.
 - **Sıfat/tür varsayılanı KURAL TABANLI** (`bb_varsayilanlar` — sıfat "İhracat",
   tür "Satış"): `app.html`'deki `listeleriUygula` kuralının aynasıdır, **ikisini
   birlikte değiştir**. "Son kullanılan"dan OKUNMAZ — `hks_kv.sonlar_<firmaId>`

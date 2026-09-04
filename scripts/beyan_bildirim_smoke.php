@@ -173,6 +173,49 @@ if (substr_count($gov, 'function ') >= 2) {
        'eslesmeyen katalogda id uydurulmus');
 }
 
+// ── 9) Ulke ipucu zinciri (Adim 2) ────────────────────────────────────────
+// bb_ulke_tahmin saf bir siralayicidir (DB'ye dokunmaz); bagimliligi olan
+// bb_tahmin sahte bir surumle degistirilerek SIRALAMA mantigi izole test edilir.
+$src2 = $src;
+if (preg_match('/^function\s+bb_ulke_tahmin\s*\(.*?^\}/ms', $src2, $m)) {
+    // Sahte bb_tahmin: yalniz "rusya" metnini cozer.
+    eval('function bb_tahmin(string $tip, string $metin, array $liste): array {
+              return hks_eslesme_norm($metin) === "rusya"
+                  ? ["id" => "RU", "ad" => "Rusya", "kaynak" => "katalog"]
+                  : ["id" => "", "ad" => "", "kaynak" => "yok"]; }');
+    eval($m[0]);
+
+    // Ilk cozulen aday kazanmali — plan, alici'dan ONCE denenir.
+    $r = bb_ulke_tahmin([
+        ['metin' => 'RUSYA',           'kaynak' => 'plan'],
+        ['metin' => 'TOLGA KRASNODAR', 'kaynak' => 'alici'],
+    ], []);
+    ok('ulke: plan adayi oncelikli', $r['id'] === 'RU' && $r['ipucu'] === 'plan',
+       'gelen: ' . json_encode($r, JSON_UNESCAPED_UNICODE));
+
+    // Cozulmeyen aday ATLANIR, sonraki denenir.
+    $r2 = bb_ulke_tahmin([
+        ['metin' => 'BILINMEYEN', 'kaynak' => 'plan'],
+        ['metin' => 'Rusya',      'kaynak' => 'gecmis'],
+    ], []);
+    ok('ulke: cozulmeyen aday atlanip sonrakine gecilir',
+       $r2['id'] === 'RU' && $r2['ipucu'] === 'gecmis',
+       'gelen: ' . json_encode($r2, JSON_UNESCAPED_UNICODE));
+
+    // Hicbiri cozulmezse BOS doner — ulke ASLA tahmin edilmez.
+    $r3 = bb_ulke_tahmin([['metin' => 'ABC', 'kaynak' => 'alici']], []);
+    ok('ulke: hicbir ipucu cozulmezse bos doner', $r3['id'] === '',
+       'ulke uydurulmus — geri alinamaz bildirimde kabul edilemez');
+} else {
+    ok('bb_ulke_tahmin kaynakta bulundu', false, 'fonksiyon adi degismis');
+}
+
+// Ogrenme her iki anahtari da yaziyor mu? ('gecmis' adayi haric)
+ok('ulke esleme hem plan hem alici anahtarindan ogreniliyor',
+   strpos($src, 'foreach (bb_ulke_adaylari($beyan, $plan) as $aday)') !== false
+   && strpos($src, "\$aday['kaynak'] === 'gecmis'") !== false,
+   'ogrenme tek kaynaga bagli kalmis');
+
 // Modal ön-seçimi gercekten kullaniyor mu?
 $view = oku("$KOK/beyan_view.php");
 ok('modal varsayilan sifat/tur on-secimini uyguluyor',

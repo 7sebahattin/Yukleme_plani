@@ -178,6 +178,61 @@ function bb_bagli_plan(array $beyan): ?array {
     return $st->fetch() ?: null;
 }
 
+// ── ÜLKE ADAYLARI ─────────────────────────────────────────────────────────
+// Beyanda ülke alanı YOKTUR. Üç ipucu vardır, güvenilirlik sırasıyla:
+//   1. plan   — bağlı yükleme planının "gidecek ülke"si. Operasyonun kendi
+//               alanı; en güvenilir olan budur.
+//   2. alici  — beyandaki alıcı adı ("... KRASNODAR"). Ülke DEĞİLDİR; yalnız
+//               öğrenilmiş eşleme ya da tam ad denkliğiyle çözülür, tahmin
+//               yürütülmez.
+//   3. gecmis — aynı alıcıya yapılmış EN SON yükleme planının gidecek ülkesi.
+//               Henüz hiçbir eşleme öğrenilmemişken (ilk kurulum) tek çalışan
+//               kaynak budur; öğrenme birikince 1 ve 2 zaten devreye girer.
+// DİKKAT: hiçbiri "ülkeyi tahmin etmez" — hepsi bb_tahmin()'e verilen bir
+// ARAMA METNİDİR, eşleşme yine tam ad ya da öğrenilmiş kayıt üzerinden olur.
+// Bulunamazsa alan boş kalır ve kullanıcı seçer; yanlış ülke geri alınamaz bir
+// bildirime dönüşeceği için burada asla varsayım yapılmaz.
+function bb_ulke_adaylari(array $beyan, ?array $plan): array {
+    $adaylar = [];
+    $ekle = function (string $metin, string $kaynak) use (&$adaylar) {
+        $metin = trim($metin);
+        if ($metin === '') return;
+        foreach ($adaylar as $a) if (hks_eslesme_norm($a['metin']) === hks_eslesme_norm($metin)) return;
+        $adaylar[] = ['metin' => $metin, 'kaynak' => $kaynak];
+    };
+
+    if ($plan) $ekle((string)($plan['gidecek_ulke'] ?? ''), 'plan');
+
+    $alici = trim((string)($beyan['buyer_name'] ?? ''));
+    $ekle($alici, 'alici');
+
+    // Aynı alıcıya yapılmış en son yükleme planı — yalnız ülkesi dolu olanlar.
+    if ($alici !== '') {
+        try {
+            $st = db()->prepare("SELECT gidecek_ulke FROM loading_records
+                                 WHERE alici = ? AND COALESCE(gidecek_ulke, '') <> ''
+                                 ORDER BY id DESC LIMIT 1");
+            $st->execute([$alici]);
+            $g = (string)($st->fetchColumn() ?: '');
+            $ekle($g, 'gecmis');
+        } catch (PDOException $e) {}
+    }
+    return $adaylar;
+}
+
+// Adayları sırayla dener; İLK çözülen kazanır. Hangi ipucunun işe yaradığı
+// `kaynak`/`kaynakMetin` ile döner — kullanıcı ekranda neden o ülkenin seçili
+// geldiğini görebilmelidir.
+function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
+    foreach ($adaylar as $a) {
+        $t = bb_tahmin('ulke', $a['metin'], $ulkeler);
+        if ($t['id'] !== '') {
+            return $t + ['ipucu' => $a['kaynak'], 'kaynakMetin' => $a['metin']];
+        }
+    }
+    return ['id' => '', 'ad' => '', 'kaynak' => 'yok', 'ipucu' => '', 'kaynakMetin' => ''];
+}
+
 // =============================================================================
 switch ($action) {
 
@@ -200,8 +255,9 @@ case 'hazirla': {
         }
     } catch (PDOException $e) { $firma = []; }
 
-    // Ülke: beyanda yok — bağlı yükleme planındaki "gidecek ülke" tek ipucudur.
-    $ulkeMetni = trim((string)($plan['gidecek_ulke'] ?? ''));
+    // Ülke: beyanda alan yok — ipucu zinciriyle çözülür (bkz. bb_ulke_adaylari).
+    $ulkeAdaylari = bb_ulke_adaylari($beyan, $plan);
+    $ulkeMetni    = trim((string)($plan['gidecek_ulke'] ?? ''));
 
     bb_cikti([
         'beyan' => [
@@ -228,7 +284,7 @@ case 'hazirla': {
         'katalog' => $katalog,
         'tahmin'  => [
             'urun' => bb_tahmin('urun', (string)($beyan['product_name'] ?? ''), $katalog['urunler']),
-            'ulke' => bb_tahmin('ulke', $ulkeMetni, $katalog['ulkeler']),
+            'ulke' => bb_ulke_tahmin($ulkeAdaylari, $katalog['ulkeler']),
         ],
         // Ön-seçimler: sıfat/tür kural tabanlı, firma son kullanılandan.
         'varsayilan' => bb_varsayilanlar($katalog) + ['firmaId' => bb_son_firma()],
@@ -345,11 +401,21 @@ case 'taslak_olustur': {
     // Son kullanılan firmayı hatırla — bir sonraki modalde ön-seçili gelir.
     try { hks_kv_yaz(BB_SON_FIRMA_KEY, $firmaId); } catch (PDOException $e) {}
 
-    // Eşlemeleri öğren — bir sonraki beyanda otomatik gelsin.
+    // ── Eşlemeleri öğren — bir sonraki beyanda otomatik gelsin ────────────
     hks_eslesme_yaz('urun', (string)($beyan['product_name'] ?? ''), $urunId, $urunAd);
+
+    // Ülke İKİ anahtar altında öğrenilir: yükleme planının "gidecek ülke"si ve
+    // beyandaki ALICI ADI. Böylece bir sonraki sefer beyan bir yükleme planına
+    // bağlı OLMASA da ülke kendiliğinden gelir — Adım 2'nin asıl kazancı budur.
+    // Aynı alıcı sonradan başka ülkeye çalışırsa ON DUPLICATE KEY UPDATE ile
+    // eşleme YENİLENİR; kayıt bir tercih hatırlatıcısıdır, karar mercii değildir
+    // (seçim modalde her zaman açıkça görünür ve değiştirilebilir).
     $plan = bb_bagli_plan($beyan);
-    if ($plan && trim((string)$plan['gidecek_ulke']) !== '') {
-        hks_eslesme_yaz('ulke', (string)$plan['gidecek_ulke'], $ulkeId, $ulkeAd);
+    foreach (bb_ulke_adaylari($beyan, $plan) as $aday) {
+        // 'gecmis' adayı sorgu anında türetilir; kendisi bir anahtar değildir
+        // (zaten başka bir kaydın gidecek_ulke'sidir) — öğrenilmez.
+        if ($aday['kaynak'] === 'gecmis') continue;
+        hks_eslesme_yaz('ulke', $aday['metin'], $ulkeId, $ulkeAd);
     }
 
     // Rüsum doğuran zincirin ilk halkası — audit ŞART.

@@ -806,6 +806,28 @@ function prompt_note(btn) {
         span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
     }
 
+    // Ülkenin NEDEN seçili geldiğini yazar. Beyanda ülke alanı yok; değer bir
+    // ipucundan türetiliyor ve yanlış ülke geri alınamaz bir bildirime
+    // dönüşeceği için kaynağı kullanıcıya AÇIKÇA söylenir.
+    var ULKE_IPUCU = {
+        plan:   'yükleme planından',
+        alici:  'alıcıdan',
+        gecmis: 'aynı alıcıya son yüklemeden'
+    };
+    function ulkeRozet(span, t) {
+        if (!t || !t.id) {
+            span.textContent = 'ipucu yok — seçiniz';
+            span.className = 'beyan-hks-rozet beyan-hks-rozet-uyari';
+            return;
+        }
+        var nereden = ULKE_IPUCU[t.ipucu] || 'katalogdan';
+        span.textContent = nereden + (t.kaynakMetin ? ' (' + t.kaynakMetin + ')' : '');
+        span.className = 'beyan-hks-rozet beyan-hks-rozet-ok';
+        span.title = t.kaynak === 'ogrenilen'
+            ? 'Bu eşlemeyi daha önce siz seçmiştiniz.'
+            : 'HKS ülke kataloğunda tam ad eşleşmesi bulundu.';
+    }
+
     // Ön-seçim rozeti: seçim GERÇEKTEN yapıldıysa etiketlenir (varsayılan
     // katalogda bulunamadıysa select boş kalır ve rozet de yazılmaz).
     function onSecimRozet(span, sel, metin) {
@@ -854,7 +876,7 @@ function prompt_note(btn) {
             doldur(el('hksSifat'), veri.katalog.sifatlar,        vs.sifatId || '');
             doldur(el('hksTur'),   veri.katalog.bildirimTurleri, vs.bildirimTuruId || '');
             rozet(el('hksUrunRozet'), veri.tahmin.urun);
-            rozet(el('hksUlkeRozet'), veri.tahmin.ulke);
+            ulkeRozet(el('hksUlkeRozet'), veri.tahmin.ulke);
             onSecimRozet(el('hksSifatRozet'), el('hksSifat'), 'varsayılan');
             onSecimRozet(el('hksTurRozet'),   el('hksTur'),   'varsayılan');
 
