@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v202` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v203` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -313,12 +313,25 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   taşıyamaz; ayrıca HKS "İhracat" sıfatıyla Üreticiden Sevk Alım'ı reddediyor.
   Alım bildirimi Hal Kayıt panelinden yapılır; kuralların hepsi orada duruyor.
 - **Ülke ipucu zinciri** (`bb_ulke_adaylari` → `bb_ulke_tahmin`): beyanda ülke
-  alanı YOK. Sırayla denenir — ① bağlı planın `gidecek_ulke`si ② beyandaki
-  **alıcı adı** ③ aynı alıcıya yapılmış en son yüklemenin ülkesi. İlk çözülen
-  kazanır; hiçbiri çözülmezse alan **boş kalır** (ülke asla tahmin edilmez).
-  Kaydederken ① ve ② `hks_eslesme`'ye ULKE olarak öğrenilir — böylece beyan bir
-  yükleme planına bağlı olmasa da ülke gelir. ③ öğrenilmez (zaten başka bir
-  kaydın türevi). Modal ülkenin **hangi ipucundan** geldiğini rozetle yazar.
+  alanı YOK. Sırayla denenir — ① bağlı planın `gidecek_ulke`si ② **şirket adı**
+  (`company_name`) ③ **adresin ülke parçası** (`bb_adres_ulke_parcasi` —
+  WhatsApp metnindeki `RUSSIA, 108811, G.MOSKVA...` satırının ilk virgülden
+  önceki kısmı) ④ alıcı adı ⑤ aynı alıcıya yapılmış en son yüklemenin ülkesi.
+  İlk çözülen kazanır; hiçbiri çözülmezse alan **boş kalır** — ülke ASLA tahmin
+  edilmez (katalog Türkçe, metin İngilizce; "RUSSIA"→"Rusya" eşlemesi ancak
+  kullanıcı bir kez seçince ÖĞRENİLİR).
+  Kaydederken ①–④ `beyan_hks_ulke_ogren()` ile öğrenilir — ⑤ öğrenilmez (başka
+  bir kaydın türevi) ve **serbest metin (`raw_text`/`unmatched_text`) hiç
+  taranmaz**: "Yeni Beyan" gibi her beyanda geçen bir satır anahtar olsaydı tüm
+  beyanlara yanlış ülke ön-dolardı. Adres anahtarı en değerlisidir — kısa ve
+  tekrar eder, öğrenilince o ülkeye giden **tüm** müşterilerde çalışır.
+- **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
+  Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
+  olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
+  alanı açma** — aynı `name` ile iki alan POST'ta çakışır.
+- `hks_eslesme_yaz()` **taşınabilir upsert** kullanır (UPDATE→INSERT→UPDATE);
+  `ON DUPLICATE KEY UPDATE` MySQL'e özgüydü ve testlerde sessizce başarısız
+  oluyordu — öğrenme hiç doğrulanamıyordu.
 - **Sıfat/tür varsayılanı KURAL TABANLI** (`bb_varsayilanlar` — sıfat "İhracat",
   tür "Satış"): `app.html`'deki `listeleriUygula` kuralının aynasıdır, **ikisini
   birlikte değiştir**. "Son kullanılan"dan OKUNMAZ — `hks_kv.sonlar_<firmaId>`

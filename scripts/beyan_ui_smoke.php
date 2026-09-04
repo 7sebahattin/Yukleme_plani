@@ -231,5 +231,117 @@ ok('yetkisiz kullanıcıda Bildirim Yap butonu hiç yok', buton_pasif($h3) === n
    'records.write olmadan buton goruluyor');
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
 
+// ── FORM RENDER: beyan_edit.php ───────────────────────────────────────────
+function render_form(int $id): string {
+    global $ROOT;
+    static $tmp = null;
+    if ($tmp === null) {
+        $src = (string)file_get_contents($ROOT . '/beyan_edit.php');
+        $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
+        $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+        $tmp = sys_get_temp_dir() . '/beyan_edit_smoke.php';
+        file_put_contents($tmp, $src);
+    }
+    $_GET = ['id' => (string)$id];
+    $_SERVER['REQUEST_METHOD'] = 'GET';
+    ob_start();
+    try { include $tmp; }
+    catch (Throwable $e) { ob_end_clean(); return '__HATA__' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(); }
+    return (string)ob_get_clean();
+}
+
+$form = render_form($ID_BOS);
+ok('[form] render edildi', strncmp($form, '__HATA__', 8) !== 0, substr($form, 8, 200));
+if (strncmp($form, '__HATA__', 8) !== 0) {
+    ok('[form] PHP uyarısı yok',
+       stripos($form, 'Warning:') === false && stripos($form, 'Notice:') === false
+       && stripos($form, 'Fatal error') === false);
+    $bozuk = etiket_dengesi($form);
+    ok('[form] HTML etiket dengesi', empty($bozuk), implode(' | ', $bozuk));
+
+    // KRİTİK: plaka alanı TEK olmalı. İki tane olsaydı POST'ta çakışır ve
+    // hangisinin kaydedildiği JS'e/tarayıcıya kalırdı (CLAUDE.md kuralı).
+    ok('[form] vehicle_plate alanı TEK',
+       substr_count($form, 'name="vehicle_plate"') === 1,
+       'bulunan: ' . substr_count($form, 'name="vehicle_plate"') . ' adet');
+
+    // Plaka "Hal Bildirim Bilgileri" bölümünün İÇİNDE olmalı.
+    ok('[form] plaka Hal Bildirim bölümünde',
+       preg_match('/Hal Bildirim Bilgileri.*?name="vehicle_plate"/s', $form) === 1,
+       'plaka hala Temel Bilgiler bolumunde');
+
+    // Dört alan da orada mı?
+    foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id', 'vehicle_plate'] as $alan) {
+        ok("[form] $alan alanı var", strpos($form, 'name="' . $alan . '"') !== false);
+    }
+}
+
+// Katalog boşken bile plaka girilebilmeli (katalogdan bağımsız alan).
+db()->exec("DELETE FROM hks_kv");
+$form2 = render_form($ID_BOS);
+ok('[form] katalog boşken plaka yine girilebiliyor',
+   substr_count($form2, 'name="vehicle_plate"') === 1,
+   'katalog yokken plaka alani da kayboluyor — beyan bildirime asla hazirlanamaz');
+ok('[form] katalog boşken yönlendirme yazıyor',
+   mb_strpos($form2, 'Listeleri Güncelle') !== false);
+// Önbelleği geri yükle
+db()->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)")
+   ->execute([json_encode([
+        'zaman' => '2026-07-01T10:00:00+03:00',
+        'urunler' => [['id' => '10', 'ad' => 'Kayısı']], 'ulkeler' => [['id' => '20', 'ad' => 'Rusya']],
+        'sifatlar' => [['id' => '7', 'ad' => 'İhracat']],
+        'bildirimTurleri' => [['id' => '5', 'ad' => 'Satış']],
+        'isletmeTurleri' => [['id' => '3', 'ad' => 'Yurt Dışı']],
+   ], JSON_UNESCAPED_UNICODE)]);
+
+// ── ÜLKE İPUCU ZİNCİRİ — gerçek WhatsApp beyan metniyle ──────────────────
+// Kullanıcının paylaştığı örnek: şirket bloğu ülkeyi taşıyor.
+$ORNEK = [
+    'company_name'    => 'LLC "ZAPADNYE VOROTA"',
+    'company_address' => "RUSSIA, 108811, G.MOSKVA, VN. TER. G. MUNICIPAL DISTRICT SOLNTSEVO, "
+                       . "KIEVSKOE SHOSSE 23KM, D.8, STR.1 INN/KPP: 5004025693 / 775101001",
+    'buyer_name'      => 'TOLGA KRASNODAR',
+];
+ok('adres ilk parçası ülke olarak çıkarılıyor',
+   bb_adres_ulke_parcasi($ORNEK['company_address']) === 'RUSSIA',
+   'gelen: [' . bb_adres_ulke_parcasi($ORNEK['company_address']) . ']');
+ok('sokak satırı ülke sanılmıyor',
+   bb_adres_ulke_parcasi('KIEVSKOE SHOSSE 23KM, D.8') === '',
+   'rakam iceren satir anahtar olmamali');
+ok('çok uzun ilk parça reddediliyor',
+   bb_adres_ulke_parcasi(str_repeat('A', 40) . ', X') === '');
+
+$adaylar = bb_ulke_adaylari($ORNEK, null);
+$kaynaklar = array_column($adaylar, 'kaynak');
+ok('adaylar arasında şirket ve adres var',
+   in_array('sirket', $kaynaklar, true) && in_array('adres', $kaynaklar, true),
+   'gelen kaynaklar: ' . implode(',', $kaynaklar));
+
+// Öğrenilmemişken ülke ÇÖZÜLMEMELİ — "RUSSIA" katalogda "Rusya" olarak duruyor,
+// TAHMİN YAPILMAZ. Kullanıcı bir kez seçer.
+$ULKELER = [['id' => '20', 'ad' => 'Rusya']];
+db()->exec("DELETE FROM hks_eslesme");
+$t0 = bb_ulke_tahmin($adaylar, $ULKELER);
+ok('öğrenilmeden ülke tahmin EDİLMİYOR', $t0['id'] === '',
+   'ingilizce ad turkce katalogla eslestirilmis — tahmin yapiliyor');
+
+// Kullanıcı bir kez seçer → öğrenilir → aynı adresli HER müşteride çalışır.
+beyan_hks_ulke_ogren($ORNEK, '20', 'Rusya');
+$t1 = bb_ulke_tahmin(bb_ulke_adaylari($ORNEK, null), $ULKELER);
+ok('öğrendikten sonra ülke otomatik geliyor', $t1['id'] === '20',
+   'ogrenme calismadi: ' . json_encode($t1, JSON_UNESCAPED_UNICODE));
+
+// ASIL KAZANÇ: aynı ülkeye giden BAŞKA bir müşteri de çözülmeli (anahtar adres).
+$BASKA = ['company_name' => 'OOO "DRUGAYA"', 'buyer_name' => 'BASKA ALICI',
+          'company_address' => "RUSSIA, 190000, SANKT-PETERBURG, NEVSKIY PR. 1"];
+$t2 = bb_ulke_tahmin(bb_ulke_adaylari($BASKA, null), $ULKELER);
+ok('aynı ülkeye giden BAŞKA müşteri de çözülüyor', $t2['id'] === '20' && $t2['ipucu'] === 'adres',
+   'adres anahtari musteriler arasi calismiyor: ' . json_encode($t2, JSON_UNESCAPED_UNICODE));
+
+// Serbest metin ÖĞRENİLMEMELİ — "Yeni Beyan" her beyanda geçer, öğrenilseydi
+// tüm beyanlara yanlış ülke ön-dolardı.
+ok('serbest metin satırı öğrenilmiyor', hks_eslesme_bul('ulke', 'Yeni Beyan') === null,
+   'her beyanda gecen bir satir ulke anahtari olmus');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

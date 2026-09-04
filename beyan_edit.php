@@ -177,9 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
             // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
             if ($hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
-            if ($hks['ulke_id'] && trim($f['buyer_name']) !== '') {
-                hks_eslesme_yaz('ulke', $f['buyer_name'], (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
-            }
+            beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
             if ($hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
 
             audit_log_event('beyan_update', 'declarations', $id, null, [
@@ -273,13 +271,6 @@ render_flash();
             <label class="form-label">Nakliye Türü</label>
             <input type="text" name="transport_type" class="form-control"
                    value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Araç Plakası</label>
-            <input type="text" name="vehicle_plate" class="form-control"
-                   value="<?= h($f['vehicle_plate']) ?>" data-uppercase="tr"
-                   placeholder="34 ABC 123">
-            <small class="muted">Hal Kayıt bildirimi için zorunlu — girilmeden "Bildirim Yap" açılmaz.</small>
         </div>
         <div class="form-group">
             <label class="form-label">Hat / Güzergah</label>

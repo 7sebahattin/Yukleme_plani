@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v202');
+    define('APP_SURUM', 'v203');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2082,12 +2082,25 @@ function hks_eslesme_bul(string $tip, string $kaynak): ?array {
 function hks_eslesme_yaz(string $tip, string $kaynak, string $hks_id, string $hks_ad): void {
     $norm = hks_eslesme_norm($kaynak);
     if ($norm === '' || $hks_id === '') return;
+    // TAŞINABİLİR upsert — `ON DUPLICATE KEY UPDATE` MySQL'e özgüdür ve
+    // testlerdeki SQLite'ta sessizce başarısız oluyordu (öğrenme hiç
+    // doğrulanamıyordu). Önce UPDATE, tutmazsa INSERT; yarışta INSERT
+    // benzersiz anahtardan patlarsa tekrar UPDATE denenir.
     try {
-        $st = db()->prepare("INSERT INTO hks_eslesme (tip, kaynak_norm, hks_id, hks_ad, updated_at)
-                             VALUES (?,?,?,?,NOW())
-                             ON DUPLICATE KEY UPDATE hks_id = VALUES(hks_id), hks_ad = VALUES(hks_ad),
-                                                     kullanim = kullanim + 1, updated_at = NOW()");
-        $st->execute([$tip, $norm, $hks_id, $hks_ad]);
+        $up = db()->prepare("UPDATE hks_eslesme
+                             SET hks_id = ?, hks_ad = ?, kullanim = kullanim + 1, updated_at = NOW()
+                             WHERE tip = ? AND kaynak_norm = ?");
+        $up->execute([$hks_id, $hks_ad, $tip, $norm]);
+        if ($up->rowCount() > 0) return;
+
+        try {
+            db()->prepare("INSERT INTO hks_eslesme (tip, kaynak_norm, hks_id, hks_ad, kullanim, updated_at)
+                           VALUES (?,?,?,?,1,NOW())")
+               ->execute([$tip, $norm, $hks_id, $hks_ad]);
+        } catch (PDOException $e) {
+            if ($e->getCode() !== '23000') throw $e;   // yalnız çakışmada
+            $up->execute([$hks_id, $hks_ad, $tip, $norm]);
+        }
     } catch (PDOException $e) {}
 }
 
@@ -2254,6 +2267,34 @@ function bb_bagli_plan(array $beyan): ?array {
     return $st->fetch() ?: null;
 }
 
+// Şirket adresinin ilk virgülden önceki parçası. Bu formatta (WhatsApp beyan
+// metni) orası ÜLKEDİR: "RUSSIA, 108811, G.MOSKVA, ...". Kısa ve tekrar eden
+// bir anahtar olduğu için öğrenmeye çok uygundur — bir kez seçilince o ülkeye
+// giden tüm müşterilerde çalışır.
+// Yalnız harf/boşluk/nokta/tire ve <=30 karakter kabul edilir; "Kievskoe
+// Shosse 23km" gibi bir sokak satırı anahtar olmasın. Uymazsa BOŞ döner.
+function bb_adres_ulke_parcasi(string $adres): string {
+    $adres = trim($adres);
+    if ($adres === '') return '';
+    $ilk = trim(explode(',', str_replace(["\r", "\n"], ',', $adres))[0]);
+    if ($ilk === '' || mb_strlen($ilk, 'UTF-8') > 30) return '';
+    return preg_match('/^[\p{L}\s\.\-]+$/u', $ilk) ? $ilk : '';
+}
+
+// Ülke eşlemesini ÖĞREN — beyan kaydedilirken çağrılır (beyan_create/edit).
+// bb_ulke_adaylari ile AYNI yapısal kaynakları kullanır; 'gecmis' adayı
+// öğrenilmez (o zaten başka bir kaydın türevidir). Serbest metin TARANMAZ.
+function beyan_hks_ulke_ogren(array $f, string $ulkeId, string $ulkeAd): void {
+    if ($ulkeId === '') return;
+    foreach ([
+        (string)($f['buyer_name']      ?? ''),
+        (string)($f['company_name']    ?? ''),
+        bb_adres_ulke_parcasi((string)($f['company_address'] ?? '')),
+    ] as $anahtar) {
+        if (trim($anahtar) !== '') hks_eslesme_yaz('ulke', $anahtar, $ulkeId, $ulkeAd);
+    }
+}
+
 // ── ÜLKE ADAYLARI ─────────────────────────────────────────────────────────
 // Beyanda ülke alanı YOKTUR. Üç ipucu vardır, güvenilirlik sırasıyla:
 //   1. plan   — bağlı yükleme planının "gidecek ülke"si. Operasyonun kendi
@@ -2278,6 +2319,19 @@ function bb_ulke_adaylari(array $beyan, ?array $plan): array {
     };
 
     if ($plan) $ekle((string)($plan['gidecek_ulke'] ?? ''), 'plan');
+
+    // WhatsApp beyan metninin şirket bloğu ülkeyi TAŞIR. Örnek:
+    //   LLC "ZAPADNYE VOROTA"                        → company_name
+    //   RUSSIA, 108811, G.MOSKVA, ...                → company_address
+    // Adresin İLK virgülden önceki parçası bu formatta ülkedir ve KISA,
+    // TEKRAR EDEN bir anahtardır ("RUSSIA") — bir kez öğrenilince o ülkeye
+    // giden TÜM müşterilerde çalışır. Şirket adı ise müşteri bazında sabittir.
+    // İkisi de YAPISAL alandır; serbest metin satırları TARANMAZ — "Yeni Beyan"
+    // gibi her beyanda geçen bir satır öğrenilseydi tüm beyanlara yanlış ülke
+    // ön-dolardı.
+    $ekle((string)($beyan['company_name'] ?? ''), 'sirket');
+
+    $ekle(bb_adres_ulke_parcasi((string)($beyan['company_address'] ?? '')), 'adres');
 
     $alici = trim((string)($beyan['buyer_name'] ?? ''));
     $ekle($alici, 'alici');
@@ -2324,10 +2378,26 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     echo '<div class="beyan-section">'
        . '<div class="beyan-section-title">🏛 Hal Bildirim Bilgileri</div>';
 
+    // Araç plakası — KATALOGDAN BAĞIMSIZ. Katalog indirilmemiş olsa bile
+    // girilebilmeli, bu yüzden aşağıdaki fail-closed dönüşünden ÖNCE çizilir.
+    // (Beyanın tek plaka alanı budur; "Temel Bilgiler"de ikinci bir kopya
+    //  OLUŞTURMAYIN — aynı `name` ile iki alan POST'ta çakışır.)
+    $plaka_alani = function (array $f): void { ?>
+        <div class="form-group">
+            <label class="form-label">Araç Plakası</label>
+            <input type="text" name="vehicle_plate" class="form-control"
+                   value="<?= h((string)($f['vehicle_plate'] ?? '')) ?>"
+                   data-uppercase="tr" placeholder="34 ABC 123">
+        </div>
+    <?php };
+
     if (!$katalog) {
         echo '<p class="muted" style="font-size:.88rem">HKS katalog listeleri henüz indirilmemiş. '
            . '<a href="halkayit/index.php">Hal Kayıt panelini</a> açıp bir firma seçin ve '
-           . '"Listeleri Güncelle"ye basın; sonra bu alanlar doldurulabilir.</p></div>';
+           . '"Listeleri Güncelle"ye basın; sonra ürün ve ülke seçilebilir.</p>';
+        echo '<div class="beyan-form-grid">';
+        $plaka_alani($f);
+        echo '</div></div>';
         return;
     }
 
@@ -2386,6 +2456,7 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '');
     $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not);
     $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not);
+    $plaka_alani($f);
     echo '</div></div>';
 }
 
