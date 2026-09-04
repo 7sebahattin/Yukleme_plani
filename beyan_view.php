@@ -127,21 +127,14 @@ render_flash();
     <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
         <?php if ($can_match): ?>
-        <button type="button" class="btn" id="beyanMatchOpenBtn"
-                style="background:#0ea5e9;color:#fff;border-color:#0ea5e9">
-            🔗 Yükleme Planı ile Eşleştir
-        </button>
+        <button type="button" class="btn" id="beyanMatchOpenBtn">🔗 Yükleme Planı</button>
         <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi'): ?>
         <span class="muted" style="font-size:.82rem;align-self:center">Bu beyan zaten yüklendi.</span>
         <?php endif; ?>
         <?php if ($hks_acik): ?>
-        <button type="button" class="btn" id="hksOpenBtn"
-                style="background:#7c3aed;color:#fff;border-color:#7c3aed">
-            🏛 Bildirim Yap
-        </button>
+        <button type="button" class="btn" id="hksOpenBtn">🏛 Bildirim Yap</button>
         <?php elseif ($hks_yetki && !$is_deleted): ?>
-        <button type="button" class="btn" disabled title="<?= h((string)$hks_engel) ?>"
-                style="opacity:.55;cursor:not-allowed">🏛 Bildirim Yap</button>
+        <button type="button" class="btn" disabled title="<?= h((string)$hks_engel) ?>">🏛 Bildirim Yap</button>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('write')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
@@ -163,26 +156,36 @@ render_flash();
 </div>
 <?php endif; ?>
 
-<!-- ── Özet üst satır ── -->
-<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-    <?php if ($beyan['product_name']): ?>
-    <div class="beyan-section" style="flex:1;min-width:200px;margin-bottom:0">
-        <div class="beyan-section-title">Ürün</div>
-        <div style="font-size:1.1rem;font-weight:700"><?= h($beyan['product_name']) ?><?= $beyan['product_variety'] ? ' · ' . h($beyan['product_variety']) : '' ?></div>
+<!-- ── BİLDİRİM KARTI ──────────────────────────────────────────────────────
+     HKS bildirimi için gereken DÖRT bilgi tek bakışta: Ülke · Ürün · Net KG ·
+     Plaka. Eksik olan alan sessiz bir "—" ile geçiştirilmez, işaretlenir —
+     kartın amacı "bu beyan bildirime hazır mı" sorusunu tek bakışta
+     cevaplamaktır. (Net KG bilerek burada da, Ürün Bilgileri bölümünde de
+     görünür; palet/kasa gibi ayrıntılar aşağıdaki bölümlerde kalır.) -->
+<?php
+$bk_ulke  = trim((string)($beyan['hks_ulke_ad'] ?? ''));
+$bk_urun  = trim((string)($beyan['hks_urun_ad'] ?? '')) ?: trim((string)($beyan['product_name'] ?? ''));
+$bk_hks   = trim((string)($beyan['hks_urun_ad'] ?? '')) !== '';   // HKS karşılığı seçilmiş mi
+$bk_kg    = $beyan['net_kg'] !== null && (float)$beyan['net_kg'] > 0;
+$bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''): void { ?>
+    <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>">
+        <div class="bk-etiket"><?= h($etiket) ?></div>
+        <div class="bk-deger"><?= $deger !== '' ? h($deger) : 'eksik' ?></div>
+        <?php if ($not !== ''): ?><div class="bk-not"><?= h($not) ?></div><?php endif; ?>
     </div>
-    <?php endif; ?>
-    <?php if ($beyan['net_kg'] !== null): ?>
-    <div class="beyan-section" style="flex:1;min-width:120px;margin-bottom:0;text-align:center">
-        <div class="beyan-section-title">Net KG</div>
-        <div style="font-size:1.3rem;font-weight:700;color:var(--primary)"><?= fmt_kg($beyan['net_kg']) ?></div>
+<?php };
+?>
+<div class="beyan-section bk-kart">
+    <div class="beyan-section-title">🏛 Bildirim Bilgileri</div>
+    <div class="bk-grid">
+        <?php
+        $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '');
+        $bk_hucre('Ürün',   $bk_urun, $bk_urun !== '' && $bk_hks,
+                  $bk_urun !== '' && !$bk_hks ? 'HKS karşılığı seçilmedi' : '');
+        $bk_hucre('Net KG', $bk_kg ? fmt_kg($beyan['net_kg']) : '', $bk_kg);
+        $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '');
+        ?>
     </div>
-    <?php endif; ?>
-    <?php if ($beyan['pallet_count'] !== null): ?>
-    <div class="beyan-section" style="flex:1;min-width:100px;margin-bottom:0;text-align:center">
-        <div class="beyan-section-title">Palet</div>
-        <div style="font-size:1.3rem;font-weight:700"><?= (int)$beyan['pallet_count'] ?></div>
-    </div>
-    <?php endif; ?>
 </div>
 
 <!-- 1. Temel Bilgiler -->

@@ -5305,6 +5305,26 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
 .beyan-hks-rozet-ok { color: #16a34a; }
 .beyan-hks-rozet-uyari { color: #b45309; }
+/* ─────────────────────────────────────────────────────────────────────────
+   BİLDİRİM KARTI (beyan_view.php üst özeti)
+   Ülke · Ürün · Net KG · Plaka — HKS bildiriminin dört zorunlu bilgisi.
+   Mobilde 2 sütun, ≥600px'te 4 sütun. Eksik alan soluk "—" değil, işaretli.
+   ───────────────────────────────────────────────────────────────────────── */
+.bk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border, #e2e8f0); }
+.bk-hucre { background: var(--card, #fff); padding: 10px 12px; min-width: 0; }
+.bk-etiket {
+    font-size: .68rem; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted, #64748b); margin-bottom: 3px;
+}
+.bk-deger {
+    font-size: 1.05rem; font-weight: 700; line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.bk-not { font-size: .7rem; color: #b45309; margin-top: 2px; }
+.bk-eksik .bk-deger { color: #b45309; font-weight: 600; font-style: italic; }
+.bk-kart .bk-grid { border-radius: 8px; overflow: hidden; }
+@media (min-width: 600px) { .bk-grid { grid-template-columns: repeat(4, 1fr); } }
+
 /* Toplu bildirim: seçim sütunu + alt şerit (beyanlar.php) */
 .bb-sec-col { width: 34px; text-align: center; }
 .bb-bar[hidden] { display: none !important; }
@@ -5839,6 +5859,10 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn { background:
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn:hover { border-color: #a78bfa; color: #a78bfa; }
 html[data-theme="dark"] body:not(.print-mode) .bb-bar { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .bb-engel td { background: #2b2410; }
+html[data-theme="dark"] body:not(.print-mode) .bk-hucre { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .bk-grid { background: #2b3648; }
+html[data-theme="dark"] body:not(.print-mode) .bk-not,
+html[data-theme="dark"] body:not(.print-mode) .bk-eksik .bk-deger { color: #fbbf24; }
 
 /* =========================================================
    KOYU TEMA v4 — inline <style> taşıyan sayfalar (records genişleyen satır,

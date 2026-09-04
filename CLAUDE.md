@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v200` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v201` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -338,6 +338,11 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **"Yurt Dışı" işletme türü** (`bb_yurtdisi_isletme_turu` — helpers.php) taslağın
   zorunlu alanıdır ve katalogdan ADA göre bulunur. Bulunamazsa taslak
   OLUŞTURULAMAZ (409) — id uydurulmaz. Kural TEK yerdedir; kopyalama.
+- **Bildirim kartı** (`beyan_view.php` üst özeti, `.bk-*`): sırası **Ülke · Ürün ·
+  Net KG · Plaka** — HKS bildiriminin dört zorunlu bilgisi, tek bakışta
+  "hazır mı" cevabı. Eksik alan sessiz `—` değil, **işaretli** gösterilir.
+  Net KG bilerek iki yerde (kart + Ürün Bilgileri). Eylem çubuğunda **tek**
+  birincil buton (Düzenle); diğerleri nötr `.btn` — satır içi renk verme.
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
