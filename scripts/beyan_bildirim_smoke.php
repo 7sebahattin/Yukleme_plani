@@ -117,8 +117,11 @@ if (preg_match('/INSERT INTO customs_declarations\s*\((.*?)\)\s*VALUES\s*\((.*?)
     ok('beyan_create INSERT bulundu', false, 'regex eslesmedi — dosya yapisi degismis');
 }
 
+// bb_* yardimcilari config/helpers.php'ye tasindi (beyan FORMLARI da kullaniyor).
+$src = oku("$KOK/config/helpers.php");
+$uc  = oku("$KOK/api_beyan_bildirim.php");
+
 // ── 7) Köprü: bildirim gönderme yolu YOK ──────────────────────────────────
-$uc = oku("$KOK/api_beyan_bildirim.php");
 ok('api_beyan_bildirim HKS\'e gonderim yapmiyor',
    strpos($uc, 'hks_bildirim_kaydet') === false && strpos($uc, 'taslak_gonder') === false,
    'Bu uc yalnizca TASLAK yazmalidir — gonderim geri alinamaz ve rusum dogurur');
@@ -133,7 +136,6 @@ ok('api_beyan_bildirim cift yetki kapisi (beyan.write + records.write)',
 // tepesinde oturum + yetim kontrolu calistirir; dosya require EDILEMEZ.
 // Bu yuzden fonksiyon govdesi kaynaktan cikarilip izole degerlendirilir —
 // hks_uretici_sevk_test.php'deki "saf fonksiyonu izole calistir" deseni.
-$src = oku("$KOK/api_beyan_bildirim.php");
 $gov = '';
 foreach (['bb_alim_turu_mu', 'bb_varsayilanlar'] as $fn) {
     if (preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $m)) $gov .= $m[0] . "\n";
@@ -210,17 +212,69 @@ if (preg_match('/^function\s+bb_ulke_tahmin\s*\(.*?^\}/ms', $src2, $m)) {
     ok('bb_ulke_tahmin kaynakta bulundu', false, 'fonksiyon adi degismis');
 }
 
-// Ogrenme her iki anahtari da yaziyor mu? ('gecmis' adayi haric)
-ok('ulke esleme hem plan hem alici anahtarindan ogreniliyor',
-   strpos($src, 'foreach (bb_ulke_adaylari($beyan, $plan) as $aday)') !== false
-   && strpos($src, "\$aday['kaynak'] === 'gecmis'") !== false,
-   'ogrenme tek kaynaga bagli kalmis');
+// Ogrenme BEYAN KAYDEDILIRKEN yapilmali (secim orada) — ve TEK yerde.
+foreach (['beyan_create.php', 'beyan_edit.php'] as $ff) {
+    $fs = oku("$KOK/$ff");
+    ok("$ff esleme secimlerini ogreniyor",
+       strpos($fs, "hks_eslesme_yaz('urun'") !== false && strpos($fs, "hks_eslesme_yaz('ulke'") !== false,
+       'form kaydinda ogrenme yok — alanlar bir daha otomatik gelmez');
+}
+ok('ogrenme uc noktada TEKRARLANMIYOR',
+   strpos($uc, 'hks_eslesme_yaz(') === false,
+   'iki yazici ayni anahtari farkli anlarda ezer');
+
+// ── 10) Kalici eslestirme alanlari (Adim 2b) ─────────────────────────────
+ok('uc nokta eslestirmeyi BEYANDAN okuyor, istemciden degil',
+   strpos($uc, "\$firmaId = trim((string)\$beyan['hks_firma_id']);") !== false
+   && strpos($uc, "\$govde['firmaId']") === false
+   && strpos($uc, "\$govde['urunId']") === false
+   && strpos($uc, "\$govde['ulkeId']") === false,
+   'istemci beyanda gorunenden BASKA bir bildirim olusturabilir');
+
+ok('uc nokta esleme tamligini on kosulda dogruluyor',
+   strpos($uc, 'beyan_hks_eslesme_tam($beyan)') !== false,
+   'plaka dolu ama eslestirme bossa bildirim kurulabilir');
+
+ok('buton kapisi esleme tamligini ariyor',
+   strpos($view, 'beyan_hks_eslesme_tam($beyan)') !== false,
+   'beyan_view kapisinda eslestirme kontrolu yok');
+
+// Sifat/tur gövdeden geliyor — katalog disi id REDDEDILMELI.
+ok('gövdeden gelen sifat/tur katalogda dogrulaniyor',
+   strpos($uc, "\$katalogda(\$katalog['sifatlar'], \$sifatId)") !== false
+   && strpos($uc, "\$katalogda(\$katalog['bildirimTurleri'], \$turId)") !== false,
+   'liste disi bir tur id elle gonderilebilir (alim turu filtresi atlanir)');
+
+// Yeni kolonlar da hizli durum gecisinde silinmemeli (vehicle_plate ile ayni tuzak).
+preg_match("/foreach \(\['raw_text'.*?\] as \\\$hf\)/s", $view, $mh);
+foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id'] as $kol) {
+    ok("hizli durum gecisi $kol gonderiyor",
+       isset($mh[0]) && strpos($mh[0], "'$kol'") !== false,
+       'hidden listesinde yok — her durum degisikligi bu alani NULL yapar');
+}
+
+// beyan_edit UPDATE tutarliligi (kolon eklendi — sayilar kaymamali)
+$ed = oku("$KOK/beyan_edit.php");
+// beyan_edit.php'de BIRDEN FAZLA UPDATE var (durum degisikligi yolu ayri);
+// tam kaydetme bloğu SON olandir — oradan itibaren bakilir.
+$ed_son = substr($ed, (int)strrpos($ed, 'UPDATE customs_declarations SET'));
+if (preg_match('/^(.*?)WHERE id = \?"\);\s*\n\s*\$st->execute\(\[(.*?)\n        \]\);/s', $ed_son, $me)) {
+    $q   = substr_count($me[1], '?') + 1;   // SET + WHERE
+    $par = count(array_filter(array_map('trim', explode("\n", $me[2])), fn($l) => $l !== '' && $l[0] === '$'));
+    ok('beyan_edit: ? sayisi = execute parametre sayisi', $q === $par, "? $q vs parametre $par");
+} else {
+    ok('beyan_edit UPDATE bulundu', false, 'regex eslesmedi — dosya yapisi degismis');
+}
 
 // Modal ön-seçimi gercekten kullaniyor mu?
-$view = oku("$KOK/beyan_view.php");
 ok('modal varsayilan sifat/tur on-secimini uyguluyor',
    strpos($view, 'vs.sifatId') !== false && strpos($view, 'vs.bildirimTuruId') !== false,
    'hazirla yanitindaki varsayilan kullanilmiyor');
+
+ok('modal firma/urun/ulke SECTIRMIYOR (beyandan gelir)',
+   strpos($view, "id=\"hksFirma\"") === false && strpos($view, "id=\"hksUrun\"") === false
+   && strpos($view, "id=\"hksUlke\"") === false,
+   'eslestirme iki yerden girilebilir — beyandaki degerle ayrisir');
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

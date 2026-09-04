@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v196` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v197` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -279,8 +279,17 @@ açar. Gönderim yapmaz.
   gönderilince satır silinip yeni id ile doğduğu için dış anahtar işe yaramaz;
   `taslak_gonder` ve `taslak_sil` bu izi okuyup bağ kaydını sonuçlandırır
   (`beyan_hks_taslak_isaretle()` — hata yutar, HKS akışını asla kesmez).
-- **Buton kapısı:** plaka dolu + durum uygun + net KG > 0 + aktif bildirim yok +
-  **çift yetki** (`beyan.write` **ve** `records.write`). Kapalıysa sebebi yazılır.
+- **Eşleştirme BEYANIN kalıcı alanıdır** (`hks_firma_id` / `hks_urun_id` +`_ad` /
+  `hks_ulke_id` +`_ad`), beyan formundaki **"🏛 Hal Bildirim Bilgileri"**
+  bölümünde girilir (`beyan_hks_form_bolumu()` — iki formun ORTAK parçası).
+  Bildirim ekranı bunları **salt okunur** gösterir ve `taslak_olustur` değerleri
+  **beyandan** okur, istemciden ASLA — aksi hâlde beyanda görünenden başka bir
+  bildirim kurulabilirdi. Öğrenme (`hks_eslesme`) beyan kaydında yapılır,
+  uç noktada TEKRARLANMAZ (iki yazıcı aynı anahtarı ezerdi).
+- **Buton kapısı:** plaka dolu + **eşleştirme tam** (`beyan_hks_eslesme_tam()`) +
+  durum uygun + net KG > 0 + aktif bildirim yok + **çift yetki** (`beyan.write`
+  **ve** `records.write`). Plaka dolu olsa bile eşleştirme boşsa geçilmez.
+  Kapalıysa sebebi yazılır.
 - **1 beyan = 1 ürün = 1 bildirim.** Aktif (`taslak`/`gonderildi`) bağ varsa ikincisi
   açılmaz. İki ürünlü gümrük beyanı sisteme **iki ayrı beyan** olarak girilir.
 - **Net KG zorunlu, brüte düşülmez** — rüsum net üzerinden hesaplanır.

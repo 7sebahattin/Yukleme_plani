@@ -18,6 +18,9 @@ $f = [
     'company_address'   => '',
     'transport_type'    => '',
     'vehicle_plate'     => '',
+    'hks_firma_id'      => '',
+    'hks_urun_id'       => '',
+    'hks_ulke_id'       => '',
     'line_type'         => '',
     'party_no'          => '',
     'pallet_count'      => '',
@@ -78,18 +81,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $user_id = (int)($auth_user['id'] ?? 0);
+        $hks     = beyan_hks_form_oku($_POST);
 
         $st = db()->prepare("INSERT INTO customs_declarations
             (raw_text, unmatched_text, declaration_title, company_name, company_address,
              transport_type, vehicle_plate, line_type, party_no, pallet_count, product_name, product_variety,
              gross_kg, net_kg, crate_count, crate_type, exit_depot, contact_person,
              buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
+             hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad,
              created_by, updated_by, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?,
              ?, ?, NOW(), NOW())");
 
         $st->execute([
@@ -117,11 +123,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $f['analysis_note']     ?: null,
             $sample_at,
             $result_at,
+            $hks['firma_id'],
+            $hks['urun_id'],
+            $hks['urun_ad'],
+            $hks['ulke_id'],
+            $hks['ulke_ad'],
             $user_id,
             $user_id,
         ]);
 
         $new_id = (int)db()->lastInsertId();
+
+
+        // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
+        // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
+        if ($hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
+        if ($hks['ulke_id'] && trim($f['buyer_name']) !== '') {
+            hks_eslesme_yaz('ulke', $f['buyer_name'], (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
+        }
+        if ($hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
 
         audit_log_event('beyan_create', 'declarations', $new_id, null, [
             'party_no'     => $f['party_no'],
@@ -296,6 +316,9 @@ render_flash();
 </div>
 
 <!-- 5. Durum / Analiz -->
+
+<?php beyan_hks_form_bolumu($f, null); ?>
+
 <div class="beyan-section">
     <div class="beyan-section-title">📊 Durum / Analiz</div>
     <div class="beyan-form-grid">

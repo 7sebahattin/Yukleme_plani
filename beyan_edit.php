@@ -27,6 +27,9 @@ $f = [
     'company_address'    => (string)($beyan['company_address']    ?? ''),
     'transport_type'     => (string)($beyan['transport_type']     ?? ''),
     'vehicle_plate'      => (string)($beyan['vehicle_plate']      ?? ''),
+    'hks_firma_id'       => (string)($beyan['hks_firma_id']       ?? ''),
+    'hks_urun_id'        => (string)($beyan['hks_urun_id']        ?? ''),
+    'hks_ulke_id'        => (string)($beyan['hks_ulke_id']        ?? ''),
     'line_type'          => (string)($beyan['line_type']          ?? ''),
     'party_no'           => (string)($beyan['party_no']           ?? ''),
     'pallet_count'       => $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '',
@@ -115,6 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         $user_id = (int)($auth_user['id'] ?? 0);
+        $hks     = beyan_hks_form_oku($_POST);
 
         $st = db()->prepare("UPDATE customs_declarations SET
             raw_text = ?, unmatched_text = ?, declaration_title = ?,
@@ -124,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gross_kg = ?, net_kg = ?, crate_count = ?, crate_type = ?,
             exit_depot = ?, contact_person = ?, buyer_name = ?, brand = ?,
             status = ?, analysis_note = ?, sample_taken_at = ?, analysis_result_at = ?,
+            hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
             updated_by = ?, updated_at = NOW()
             WHERE id = ?");
 
@@ -152,6 +157,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $f['analysis_note']     ?: null,
             $sample_at,
             $result_at,
+            $hks['firma_id'],
+            $hks['urun_id'],
+            $hks['urun_ad'],
+            $hks['ulke_id'],
+            $hks['ulke_ad'],
             $user_id,
             $id,
         ]);
@@ -163,6 +173,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ['status' => $f['status'], 'analysis_note' => $f['analysis_note']]
             );
         } else {
+
+            // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
+            // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
+            if ($hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
+            if ($hks['ulke_id'] && trim($f['buyer_name']) !== '') {
+                hks_eslesme_yaz('ulke', $f['buyer_name'], (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
+            }
+            if ($hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
+
             audit_log_event('beyan_update', 'declarations', $id, null, [
                 'party_no'     => $f['party_no'],
                 'product_name' => $f['product_name'],
@@ -341,6 +360,9 @@ render_flash();
 </div>
 
 <!-- 5. Durum / Analiz -->
+
+<?php beyan_hks_form_bolumu($f, $beyan); ?>
+
 <div class="beyan-section">
     <div class="beyan-section-title">📊 Durum / Analiz</div>
 
