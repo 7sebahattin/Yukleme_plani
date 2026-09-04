@@ -372,5 +372,31 @@ ok('ana sayfa sayaci buton kapisinin ayni kurallarini kullaniyor',
    && strpos($idx, "b.durum IN ('taslak','gonderildi')") !== false,
    'sayac ile buton kapisi ayrisirsa sayi yaniltir');
 
+// ── 15) On kontrol sayfasi ────────────────────────────────────────────────
+$tani = oku("$KOK/beyan_bildirim_tani.php");
+ok('on kontrol sayfasi sozdizimsel olarak gecerli', (function () use ($KOK) {
+    exec('php -l ' . escapeshellarg("$KOK/beyan_bildirim_tani.php") . ' 2>&1', $o, $rc);
+    return $rc === 0;
+})());
+ok('on kontrol admin ile sinirli',
+   strpos($tani, 'is_admin()') !== false && strpos($tani, 'forbidden(') !== false,
+   'teshis sayfasi is verisi gosteriyor — admin disina acilmamali');
+ok('on kontrol SALT-OKUNUR',
+   !preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP)\b/i', $tani),
+   'teshis sayfasi yazma ifadesi iceriyor');
+
+// Kural tekrari olmamali: sayfa uygulamanin KENDI fonksiyonlarini cagirmali.
+foreach (['bb_katalog(', 'bb_varsayilanlar(', 'bb_yurtdisi_isletme_turu(',
+          'bb_tahmin(', 'beyan_hks_eslesme_tam(', 'beyan_hks_uygun_durumlar('] as $fn) {
+    ok("on kontrol $fn kullaniyor", strpos($tani, $fn) !== false,
+       'kural kopyalanmis — teshis ile uygulama ayrisir');
+}
+
+// "Yurt Disi" kurali TEK yerde olmali (helpers.php); uc noktada kopyasi kalmamali.
+ok('yurt disi kurali tek yerde',
+   strpos($src, 'function bb_yurtdisi_isletme_turu') !== false
+   && strpos($uc, "strpos(\$n, 'yurt dışı')") === false,
+   'kural hem helpers.php hem uc noktada — ayrisir');
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

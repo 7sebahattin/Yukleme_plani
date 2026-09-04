@@ -136,9 +136,15 @@ render_flash();
             <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
         </p>
     </div>
-    <?php if (can_beyan('write')): ?>
-    <a href="beyan_create.php" class="btn btn-primary btn-lg">+ Yeni Beyan</a>
-    <?php endif; ?>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <?php if (is_admin()): ?>
+        <a href="beyan_bildirim_tani.php" class="btn btn-ghost btn-sm"
+           title="Bildirim köprüsü ön kontrolü (salt-okunur)">🩺 Bildirim Ön Kontrol</a>
+        <?php endif; ?>
+        <?php if (can_beyan('write')): ?>
+        <a href="beyan_create.php" class="btn btn-primary btn-lg">+ Yeni Beyan</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- ── Filtre formu ── -->

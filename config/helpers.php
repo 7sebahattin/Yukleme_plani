@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v199');
+    define('APP_SURUM', 'v200');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2422,4 +2422,19 @@ function beyan_hks_eslesme_tam(array $beyan): bool {
     return trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
         && trim((string)($beyan['hks_urun_id']  ?? '')) !== ''
         && trim((string)($beyan['hks_ulke_id']  ?? '')) !== '';
+}
+
+// Yurt dışı (ihracat) işletme türünün katalog id'si. app.html'deki
+// `oto.isletmeTuruId` atamasının aynası — beyan akışı bir İHRACAT akışıdır ve
+// bu değer taslağa zorunlu alan olarak gider. Katalogda karşılığı yoksa BOŞ
+// döner; id UYDURULMAZ, çağıran fail-closed davranır.
+function bb_yurtdisi_isletme_turu(array $katalog): string {
+    foreach (($katalog['isletmeTurleri'] ?? []) as $x) {
+        $n = hks_eslesme_norm((string)$x['ad']);
+        if (strpos($n, 'yurt dışı') !== false || strpos($n, 'yurt disi') !== false
+            || strpos($n, 'yurtdışı') !== false) {
+            return (string)$x['id'];
+        }
+    }
+    return '';
 }

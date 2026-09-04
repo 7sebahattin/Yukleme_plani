@@ -243,14 +243,9 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
     if ($ulkeAd === '') return ['kod' => 400, 'hata' => 'Beyandaki ülke katalogda bulunamadı — beyanı düzenleyip yeniden seçin.'];
 
     // İşletme türü: yurt dışı ihracat akışında app.html'in `oto.isletmeTuruId`
-    // ile yaptığının aynısı — katalogdan "yurt dışı" adlı kayıt bulunur.
-    $isletmeTuruId = '';
-    foreach ($katalog['isletmeTurleri'] as $x) {
-        $n = hks_eslesme_norm((string)$x['ad']);
-        if (strpos($n, 'yurt dışı') !== false || strpos($n, 'yurt disi') !== false || strpos($n, 'yurtdışı') !== false) {
-            $isletmeTuruId = (string)$x['id']; break;
-        }
-    }
+    // ile yaptığının aynısı (kural helpers.php'de — teşhis sayfası da AYNI
+    // fonksiyonu kullanır, iki taraf ayrışmasın).
+    $isletmeTuruId = bb_yurtdisi_isletme_turu($katalog);
     if ($isletmeTuruId === '') {
         return ['kod' => 409, 'hata' => 'Katalogda "Yurt Dışı" işletme türü bulunamadı — Hal Kayıt panelinden listeleri güncelleyin.'];
     }
