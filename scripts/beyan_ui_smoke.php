@@ -322,8 +322,30 @@ ok('adaylar arasında şirket ve adres var',
 $ULKELER = [['id' => '20', 'ad' => 'Rusya']];
 db()->exec("DELETE FROM hks_eslesme");
 $t0 = bb_ulke_tahmin($adaylar, $ULKELER);
-ok('öğrenilmeden ülke tahmin EDİLMİYOR', $t0['id'] === '',
-   'ingilizce ad turkce katalogla eslestirilmis — tahmin yapiliyor');
+// ARTIK ÖĞRENMEDEN DE ÇÖZÜLMELİ: katalog Türkçe, metin İngilizce; aradaki
+// köprü kanonik AD KARŞILIĞI tablosudur (tahmin değil, olgusal karşılık).
+ok('öğrenilmeden RUSSIA → Rusya çözülüyor',
+   $t0['id'] === '20' && $t0['kaynak'] === 'ad_karsiligi',
+   'gelen: ' . json_encode($t0, JSON_UNESCAPED_UNICODE));
+
+// Ad karşılığı tablosu doğrudan
+ok('RUSSIAN FEDERATION karşılığı var',
+   in_array('Rusya', bb_ulke_karsiligi('RUSSIAN FEDERATION'), true));
+ok('nokta/boşluk temizleniyor',
+   in_array('Rusya', bb_ulke_karsiligi('  RUSSIA.  '), true));
+ok('ülke OLMAYAN metnin karşılığı YOK',
+   bb_ulke_karsiligi('Yeni Beyan') === [] && bb_ulke_karsiligi('ASYA') === []
+   && bb_ulke_karsiligi('TOLGA KRASNODAR') === [],
+   'ulke olmayan metin ulkeye cozuluyor — yanlis pozitif');
+// Parçalı eşleşme YOK — "Niger" ile "Nigeria" karışmamalı.
+ok('parçalı eşleşme yapılmıyor',
+   bb_ulke_karsiligi('RUSS') === [] && bb_ulke_karsiligi('RUSSIA FEDERATION X') === [],
+   'alt-dize eslesmesi var — sessizce yanlis ulke secilebilir');
+
+// Katalogda Türkçe karşılık YOKSA eşleşme de olmamalı (id uydurulmaz).
+$t0b = bb_ulke_tahmin($adaylar, [['id' => '99', 'ad' => 'Almanya']]);
+ok('katalogda karşılığı yoksa eşleşme yok', $t0b['id'] === '',
+   'katalogda olmayan ulke icin id uretilmis');
 
 // Kullanıcı bir kez seçer → öğrenilir → aynı adresli HER müşteride çalışır.
 beyan_hks_ulke_ogren($ORNEK, '20', 'Rusya');
@@ -337,6 +359,32 @@ $BASKA = ['company_name' => 'OOO "DRUGAYA"', 'buyer_name' => 'BASKA ALICI',
 $t2 = bb_ulke_tahmin(bb_ulke_adaylari($BASKA, null), $ULKELER);
 ok('aynı ülkeye giden BAŞKA müşteri de çözülüyor', $t2['id'] === '20' && $t2['ipucu'] === 'adres',
    'adres anahtari musteriler arasi calismiyor: ' . json_encode($t2, JSON_UNESCAPED_UNICODE));
+
+// HAM METİN TARAMASI: "RUSSIAN FEDERATION" hiçbir yapısal alana düşmüyor
+// (parser eşleşmeyen satırlara atıyor) ama ülkeyi açıkça söylüyor.
+$SADECE_METIN = ['unmatched_text' => "BRÜT. 21.800\nRUSSIAN FEDERATION\nASYA\nYeni Beyan"];
+$tm = bb_ulke_tahmin(bb_ulke_adaylari($SADECE_METIN, null), $ULKELER);
+ok('ham metindeki ülke satırı çözülüyor',
+   $tm['id'] === '20' && $tm['ipucu'] === 'metin',
+   'gelen: ' . json_encode($tm, JSON_UNESCAPED_UNICODE));
+
+// Ülke içermeyen metin ASLA ülke üretmemeli.
+$YOK = ['unmatched_text' => "BRÜT. 21.800\nASYA\nYeni Beyan\nMEHMET BEY\nDENİZYOLU"];
+$ty = bb_ulke_tahmin(bb_ulke_adaylari($YOK, null), $ULKELER);
+ok('ülkesiz metinden ülke UYDURULMUYOR', $ty['id'] === '',
+   'yanlis pozitif: ' . json_encode($ty, JSON_UNESCAPED_UNICODE));
+
+// Ham metin taraması DB'ye yük bindirmemeli: 'metin' adaylari icin ogrenme
+// sorgusu ACILMAMALI (zaten hicbiri ogrenilmiyor).
+$GENIS = ['unmatched_text' => implode("\n", array_map(fn($i) => "SATIR $i", range(1, 60)))];
+$sorgu_once = 0;
+$adaylar_g = bb_ulke_adaylari($GENIS, null);
+ok('ham metin adayları sınırlanıyor', count($adaylar_g) <= 61,
+   'aday sayisi: ' . count($adaylar_g));
+ok("'metin' adayları öğrenme sorgusu açmıyor",
+   strpos(file_get_contents(dirname(__DIR__) . '/config/helpers.php'),
+          "\$a['kaynak'] !== 'metin'") !== false,
+   'her metin parcasi icin ayri DB sorgusu aciliyor');
 
 // Serbest metin ÖĞRENİLMEMELİ — "Yeni Beyan" her beyanda geçer, öğrenilseydi
 // tüm beyanlara yanlış ülke ön-dolardı.

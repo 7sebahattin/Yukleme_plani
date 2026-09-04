@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v203` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v204` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -317,14 +317,27 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   (`company_name`) ③ **adresin ülke parçası** (`bb_adres_ulke_parcasi` —
   WhatsApp metnindeki `RUSSIA, 108811, G.MOSKVA...` satırının ilk virgülden
   önceki kısmı) ④ alıcı adı ⑤ aynı alıcıya yapılmış en son yüklemenin ülkesi.
-  İlk çözülen kazanır; hiçbiri çözülmezse alan **boş kalır** — ülke ASLA tahmin
-  edilmez (katalog Türkçe, metin İngilizce; "RUSSIA"→"Rusya" eşlemesi ancak
-  kullanıcı bir kez seçince ÖĞRENİLİR).
-  Kaydederken ①–④ `beyan_hks_ulke_ogren()` ile öğrenilir — ⑤ öğrenilmez (başka
-  bir kaydın türevi) ve **serbest metin (`raw_text`/`unmatched_text`) hiç
-  taranmaz**: "Yeni Beyan" gibi her beyanda geçen bir satır anahtar olsaydı tüm
-  beyanlara yanlış ülke ön-dolardı. Adres anahtarı en değerlisidir — kısa ve
-  tekrar eder, öğrenilince o ülkeye giden **tüm** müşterilerde çalışır.
+  ⑥ ham metin (`raw_text`/`unmatched_text`) satır/virgül parçaları — yalnız
+  ARAMA için. İlk çözülen kazanır; hiçbiri çözülmezse alan **boş kalır**.
+- **Ülke adı köprüsü** (`bb_ulke_adi_karsiliklari` / `bb_ulke_karsiligi`):
+  katalog Türkçe ("Rusya"), beyan metni gümrük evrakından geldiği için
+  İngilizce ("RUSSIA", "RUSSIAN FEDERATION") — tam ad eşleşmesi hiç
+  tutmuyordu. Tablo **olgusal ad karşılığıdır, tahmin değil**; parçalı/bulanık
+  eşleşme YOK (Niger/Nigeria sessizce karışırdı). Tablo **Türkçe AD** döndürür,
+  HKS id'si DEĞİL — id her zaman canlı katalogdan tam ad eşleşmesiyle bulunur;
+  katalogda karşılığı yoksa eşleşme olmaz. Bir karşılık için birden çok Türkçe
+  aday verilebilir (ör. "Rusya" / "Rusya Federasyonu") — katalog yazımı
+  bilinmediği için sırayla denenir.
+- **`bb_ulke_ad_norm()` ayrı bir normalizasyondur** — `hks_eslesme_norm()`
+  Türkçe metin için ASCII **"I" → "ı"** (noktasız) yapar, "RUSSIAN" böylece
+  "russıan" olur ve tabloyla HİÇ eşleşmez. Yabancı adlarda bunu kullanma.
+  Kaydederken YALNIZ ②③④ `beyan_hks_ulke_ogren()` ile öğrenilir. ⑤ ve ⑥
+  **ÖĞRENİLMEZ**: ham metin parçası anahtar olsaydı "Yeni Beyan" gibi her
+  beyanda geçen bir satır tüm beyanlara yanlış ülke ön-doldururdu. Tarama
+  güvenlidir çünkü çözüm kanonik ad karşılığı ya da tam katalog eşleşmesi
+  gerektirir — bir metin parçası kendiliğinden ülkeye dönüşemez. ⑥ adayları
+  için `bb_tahmin(..., $ogrenilenAra=false)` çağrılır: onlarca metin parçası
+  için `hks_eslesme` sorgusu açılmaz.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

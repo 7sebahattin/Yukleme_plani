@@ -228,18 +228,36 @@ ok('ulke ogrenmesi tek fonksiyonda toplandi',
    strpos($src, 'function beyan_hks_ulke_ogren') !== false
    && strpos($src, 'function bb_adres_ulke_parcasi') !== false,
    'cikarim mantigi kopyalanmis olabilir');
-// Serbest metin (raw_text / unmatched_text) ne ADAY uretiminde ne de
-// OGRENMEDE kullanilmali — "Yeni Beyan" gibi her beyanda gecen bir satir
-// ulke anahtari olsaydi TUM beyanlara yanlis ulke on-dolardi.
-$__ulke_govde = '';
-foreach (['bb_ulke_adaylari', 'beyan_hks_ulke_ogren', 'bb_adres_ulke_parcasi'] as $fn) {
-    if (preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $mg)) $__ulke_govde .= $mg[0];
-}
-ok('ulke aday/ogrenme yolu serbest metin taramiyor',
-   $__ulke_govde !== ''
-   && strpos($__ulke_govde, 'raw_text') === false
-   && strpos($__ulke_govde, 'unmatched_text') === false,
-   'her beyanda gecen bir satir ulke anahtari olabilir');
+// AYRIM: ham metin ARAMA icin taranabilir (cozum kanonik ad karsiligi ya da
+// tam katalog eslesmesi gerektirir — yanlis pozitif uretemez), ama ASLA
+// OGRENILMEZ. "Yeni Beyan" gibi her beyanda gecen bir satir anahtar olsaydi
+// TUM beyanlara yanlis ulke on-dolardi.
+$govde = function (string $fn) use ($src): string {
+    return preg_match('/^function\s+' . $fn . '\s*\(.*?^\}/ms', $src, $m) ? $m[0] : '';
+};
+$__ogren = $govde('beyan_hks_ulke_ogren');
+ok('ulke OGRENMESI serbest metne dokunmuyor',
+   $__ogren !== '' && strpos($__ogren, 'raw_text') === false
+   && strpos($__ogren, 'unmatched_text') === false,
+   'serbest metin satiri ogrenilirse tum beyanlara yanlis ulke on-dolar');
+ok('ogrenme yalnizca yapisal alanlari kullaniyor',
+   $__ogren !== '' && substr_count($__ogren, 'hks_eslesme_yaz(') === 1
+   && strpos($__ogren, 'buyer_name') !== false
+   && strpos($__ogren, 'company_name') !== false
+   && strpos($__ogren, 'bb_adres_ulke_parcasi(') !== false,
+   'ogrenme kaynaklari degismis');
+
+// Ad karsiligi tablosu HKS ID'si TASIMAMALI — id her zaman canli katalogdan.
+$__tablo = $govde('bb_ulke_adi_karsiliklari');
+ok('ad karsiligi tablosu HKS id tasimiyor',
+   $__tablo !== '' && !preg_match("/=>\s*\[\s*'?\d+'?\s*[,\]]/", $__tablo),
+   'tabloda sabit id var — katalog degisince sessizce yanlis ulke gonderilir');
+
+// Yabanci ad normalizasyonu Turkce I-katlamasini KULLANMAMALI.
+$__norm = $govde('bb_ulke_ad_norm');
+ok('yabanci ad normalizasyonu ayri',
+   $__norm !== '' && strpos($__norm, 'hks_eslesme_norm') === false,
+   'hks_eslesme_norm ASCII I harfini "i" (noktasiz) yapar — "RUSSIAN" hic eslesmez');
 ok('ogrenme uc noktada TEKRARLANMIYOR',
    strpos($uc, 'hks_eslesme_yaz(') === false,
    'iki yazici ayni anahtari farkli anlarda ezer');

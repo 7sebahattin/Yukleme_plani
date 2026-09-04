@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v203');
+    define('APP_SURUM', 'v204');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2240,18 +2240,37 @@ function bb_son_firma_yaz(string $firmaId): void {
 // KISMİ (substring) eşleşme KASITLI OLARAK YAPILMAZ — "Üretici" ile "Üretici
 // Birliği" farklı kayıtlardır ve yanlış tahmin geri alınamaz bir bildirime
 // dönüşür. Bulunamazsa kullanıcı modalde kendisi seçer.
-function bb_tahmin(string $tip, string $metin, array $liste): array {
+// $ogrenilenAra=false → `hks_eslesme` SORGUSU YAPILMAZ. Ham metin taraması
+// onlarca aday üretir ve o adaylar zaten hiç ÖĞRENİLMEZ; her biri için sorgu
+// açmak sayfa başına düzinelerce gereksiz sorgu demekti.
+function bb_tahmin(string $tip, string $metin, array $liste, bool $ogrenilenAra = true): array {
     $metin = trim($metin);
     if ($metin === '') return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
 
-    $ogrenilen = hks_eslesme_bul($tip, $metin);
-    if ($ogrenilen) {
-        return ['id' => (string)$ogrenilen['hks_id'], 'ad' => (string)$ogrenilen['hks_ad'], 'kaynak' => 'ogrenilen'];
+    if ($ogrenilenAra) {
+        $ogrenilen = hks_eslesme_bul($tip, $metin);
+        if ($ogrenilen) {
+            return ['id' => (string)$ogrenilen['hks_id'], 'ad' => (string)$ogrenilen['hks_ad'], 'kaynak' => 'ogrenilen'];
+        }
     }
     $norm = hks_eslesme_norm($metin);
     foreach ($liste as $x) {
         if (hks_eslesme_norm((string)$x['ad']) === $norm) {
             return ['id' => (string)$x['id'], 'ad' => (string)$x['ad'], 'kaynak' => 'katalog'];
+        }
+    }
+
+    // ÜLKE: katalog Türkçe, beyan metni İngilizce. Olgusal ad karşılığı
+    // tablosundan Türkçe ad(lar)ı bulup KATALOGDA tam ad eşleşmesi aranır —
+    // id yine katalogdan gelir, tablodan DEĞİL.
+    if ($tip === 'ulke') {
+        foreach (bb_ulke_karsiligi($metin) as $trAd) {
+            $trNorm = hks_eslesme_norm($trAd);
+            foreach ($liste as $x) {
+                if (hks_eslesme_norm((string)$x['ad']) === $trNorm) {
+                    return ['id' => (string)$x['id'], 'ad' => (string)$x['ad'], 'kaynak' => 'ad_karsiligi'];
+                }
+            }
         }
     }
     return ['id' => '', 'ad' => '', 'kaynak' => 'yok'];
@@ -2265,6 +2284,88 @@ function bb_bagli_plan(array $beyan): ?array {
                          FROM loading_records WHERE id = ?");
     $st->execute([(int)$beyan['loading_record_id']]);
     return $st->fetch() ?: null;
+}
+
+// ── ÜLKE ADI KÖPRÜSÜ (yabancı ad → Türkçe karşılık) ──────────────────────
+// HKS kataloğu TÜRKÇEDİR ("Rusya"); beyan metni ise gümrük evrakından
+// geldiği için İNGİLİZCEDİR ("RUSSIA", "RUSSIAN FEDERATION"). İkisi tam ad
+// eşleşmesiyle hiç karşılaşmıyordu.
+//
+// Bu bir TAHMİN DEĞİL, olgusal bir ad karşılığı tablosudur: "Russia" ile
+// "Rusya" aynı ülkenin iki dildeki adıdır. Bulanık/parçalı eşleştirme
+// (edit-distance, alt-dize) BİLEREK YOK — "Niger/Nigeria" gibi çiftlerde
+// sessizce yanlış ülke seçtirirdi.
+//
+// Tablo Türkçe ADLARI döndürür, HKS id'si DEĞİL — id her zaman canlı
+// katalogdan, tam ad eşleşmesiyle bulunur. Katalog farklı bir yazım
+// kullanıyorsa (ör. "Rusya Federasyonu") her karşılık için birden çok
+// Türkçe aday verilir ve sırayla denenir. Katalogda hiçbiri yoksa eşleşme
+// OLMAZ — uydurma id üretilmez.
+function bb_ulke_adi_karsiliklari(): array {
+    return [
+        'russia' => ['Rusya', 'Rusya Federasyonu'],
+        'russian federation' => ['Rusya', 'Rusya Federasyonu'],
+        'rossiya' => ['Rusya', 'Rusya Federasyonu'],
+        'ukraine' => ['Ukrayna'], 'ukraina' => ['Ukrayna'],
+        'belarus' => ['Belarus', 'Beyaz Rusya'],
+        'kazakhstan' => ['Kazakistan'], 'kazakstan' => ['Kazakistan'],
+        'georgia' => ['Gürcistan'], 'gruziya' => ['Gürcistan'],
+        'azerbaijan' => ['Azerbaycan'],
+        'moldova' => ['Moldova'], 'republic of moldova' => ['Moldova'],
+        'uzbekistan' => ['Özbekistan'], 'turkmenistan' => ['Türkmenistan'],
+        'kyrgyzstan' => ['Kırgızistan'], 'tajikistan' => ['Tacikistan'],
+        'romania' => ['Romanya'], 'bulgaria' => ['Bulgaristan'],
+        'greece' => ['Yunanistan'], 'serbia' => ['Sırbistan'],
+        'croatia' => ['Hırvatistan'], 'slovenia' => ['Slovenya'],
+        'bosnia and herzegovina' => ['Bosna Hersek'], 'kosovo' => ['Kosova'],
+        'albania' => ['Arnavutluk'], 'north macedonia' => ['Kuzey Makedonya', 'Makedonya'],
+        'macedonia' => ['Makedonya', 'Kuzey Makedonya'], 'montenegro' => ['Karadağ'],
+        'hungary' => ['Macaristan'], 'poland' => ['Polonya'],
+        'czechia' => ['Çekya', 'Çek Cumhuriyeti'], 'czech republic' => ['Çek Cumhuriyeti', 'Çekya'],
+        'slovakia' => ['Slovakya'], 'austria' => ['Avusturya'],
+        'germany' => ['Almanya'], 'deutschland' => ['Almanya'],
+        'netherlands' => ['Hollanda'], 'holland' => ['Hollanda'],
+        'belgium' => ['Belçika'], 'france' => ['Fransa'], 'italy' => ['İtalya'],
+        'spain' => ['İspanya'], 'portugal' => ['Portekiz'],
+        'united kingdom' => ['Birleşik Krallık', 'İngiltere'],
+        'great britain' => ['Birleşik Krallık', 'İngiltere'], 'england' => ['İngiltere', 'Birleşik Krallık'],
+        'ireland' => ['İrlanda'], 'switzerland' => ['İsviçre'],
+        'sweden' => ['İsveç'], 'norway' => ['Norveç'], 'denmark' => ['Danimarka'],
+        'finland' => ['Finlandiya'], 'lithuania' => ['Litvanya'],
+        'latvia' => ['Letonya'], 'estonia' => ['Estonya'],
+        'saudi arabia' => ['Suudi Arabistan'],
+        'united arab emirates' => ['Birleşik Arap Emirlikleri'], 'uae' => ['Birleşik Arap Emirlikleri'],
+        'qatar' => ['Katar'], 'kuwait' => ['Kuveyt'], 'bahrain' => ['Bahreyn'],
+        'oman' => ['Umman'], 'iraq' => ['Irak'], 'jordan' => ['Ürdün'],
+        'lebanon' => ['Lübnan'], 'israel' => ['İsrail'], 'egypt' => ['Mısır'],
+        'libya' => ['Libya'], 'morocco' => ['Fas'], 'tunisia' => ['Tunus'],
+        'algeria' => ['Cezayir'], 'iran' => ['İran'],
+        'united states' => ['Amerika Birleşik Devletleri', 'ABD'],
+        'united states of america' => ['Amerika Birleşik Devletleri', 'ABD'],
+        'usa' => ['Amerika Birleşik Devletleri', 'ABD'],
+        'canada' => ['Kanada'], 'china' => ['Çin'], 'india' => ['Hindistan'],
+        'mongolia' => ['Moğolistan'], 'turkiye' => ['Türkiye'], 'turkey' => ['Türkiye'],
+    ];
+}
+
+// YABANCI ad normalizasyonu — hks_eslesme_norm() BURADA KULLANILAMAZ:
+// o, Türkçe metin için ASCII "I" harfini "ı" (noktasız) yapar. İngilizce
+// "RUSSIAN" böylece "russıan" olur ve tablodaki "russian" ile HİÇ eşleşmez.
+// (Aynı tuzak projede daha önce de yaşandı — bkz. api.php'deki "İhracat" notu.)
+// Burada hem "İ" hem "I" NOKTALI "i"ye katlanır.
+function bb_ulke_ad_norm(string $s): string {
+    $s = str_replace(['İ', 'I'], ['i', 'i'], trim($s));
+    $s = mb_strtolower($s, 'UTF-8');
+    $s = str_replace(['.', ',', '"', "'"], ' ', $s);
+    return trim(preg_replace('/\s+/u', ' ', $s));
+}
+
+// Metnin Türkçe ülke adı karşılıkları (0..n). Eşleşme TAM addır; parçalı
+// arama yapılmaz.
+function bb_ulke_karsiligi(string $metin): array {
+    $norm = bb_ulke_ad_norm($metin);
+    if ($norm === '') return [];
+    return bb_ulke_adi_karsiliklari()[$norm] ?? [];
 }
 
 // Şirket adresinin ilk virgülden önceki parçası. Bu formatta (WhatsApp beyan
@@ -2336,6 +2437,28 @@ function bb_ulke_adaylari(array $beyan, ?array $plan): array {
     $alici = trim((string)($beyan['buyer_name'] ?? ''));
     $ekle($alici, 'alici');
 
+    // HAM METİN TARAMASI — yalnız ARAMA için, öğrenme için DEĞİL.
+    // Örnekteki "RUSSIAN FEDERATION" satırı hiçbir yapısal alana düşmüyor
+    // (parser onu eşleşmeyen satırlara atıyor), ama ülkeyi açıkça söylüyor.
+    // Tarama artık güvenli: bir parçanın ülkeye dönüşmesi için ya katalogda
+    // TAM ad eşleşmesi ya da kanonik ad karşılığı tablosunda karşılığı olması
+    // gerekir. "Yeni Beyan" / "ASYA" gibi satırlar ikisinde de yoktur, yanlış
+    // pozitif üretemezler. Bu parçalar ÖĞRENİLMEZ (bkz. beyan_hks_ulke_ogren):
+    // uzun bir adres satırı anahtar olarak işe yaramaz.
+    $metin = trim((string)($beyan['unmatched_text'] ?? '')) . "\n"
+           . trim((string)($beyan['raw_text'] ?? ''));
+    if (trim($metin) !== '') {
+        $sayac = 0;
+        foreach (preg_split('/[\r\n,]+/u', $metin) as $parca) {
+            if ($sayac >= 60) break;                     // işi sınırla
+            $parca = trim($parca);
+            if ($parca === '' || mb_strlen($parca, 'UTF-8') > 30) continue;
+            if (!preg_match('/^[\p{L}\s\.\-]+$/u', $parca)) continue;   // rakam içerenler elenir
+            $sayac++;
+            $ekle($parca, 'metin');
+        }
+    }
+
     // Aynı alıcıya yapılmış en son yükleme planı — yalnız ülkesi dolu olanlar.
     if ($alici !== '') {
         try {
@@ -2355,7 +2478,8 @@ function bb_ulke_adaylari(array $beyan, ?array $plan): array {
 // geldiğini görebilmelidir.
 function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
     foreach ($adaylar as $a) {
-        $t = bb_tahmin('ulke', $a['metin'], $ulkeler);
+        // 'metin' adayları öğrenilmez → onlar için öğrenme sorgusu da açılmaz.
+        $t = bb_tahmin('ulke', $a['metin'], $ulkeler, $a['kaynak'] !== 'metin');
         if ($t['id'] !== '') {
             return $t + ['ipucu' => $a['kaynak'], 'kaynakMetin' => $a['metin']];
         }
@@ -2428,8 +2552,12 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
         $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
         if ($t['id'] !== '') {
             $ulke_sec = $t['id'];
-            $ipucu = ['plan' => 'yükleme planından', 'alici' => 'alıcıdan',
-                      'gecmis' => 'aynı alıcıya son yüklemeden'][$t['ipucu']] ?? 'katalogdan';
+            $ipucu = ['plan'   => 'yükleme planından',
+                      'sirket' => 'şirket adından',
+                      'adres'  => 'adresten',
+                      'alici'  => 'alıcıdan',
+                      'gecmis' => 'aynı alıcıya son yüklemeden',
+                      'metin'  => 'beyan metninden'][$t['ipucu']] ?? 'katalogdan';
             $urun_not_ek = $t['kaynakMetin'] !== '' ? ' (' . $t['kaynakMetin'] . ')' : '';
             $ulke_not = $ipucu . $urun_not_ek . ' önerildi';
         }
@@ -2450,8 +2578,8 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     };
 
     echo '<p class="muted" style="font-size:.85rem;margin-top:0">'
-       . 'Bu alanlar doldurulmadan <strong>"Bildirim Yap"</strong> açılmaz — '
-       . 'araç plakası girilmiş olsa bile. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
+       . 'Bildirim için gereken <strong>tüm</strong> alanlar burada. Biri bile boşsa '
+       . '<strong>"Bildirim Yap"</strong> açılmaz. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
     echo '<div class="beyan-form-grid">';
     $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '');
     $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not);
