@@ -47,6 +47,32 @@ define('HKS_YENI_ENDPOINT', false);
 define('HKS_ENDPOINT_ESKI', 'https://hks.hal.gov.tr/WebServices/%sService.svc');
 define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 
+// --- Kayıtsız ikinci kişide DogumTarihi biçimi ---
+// CANLI GÖZLEM (05.09.2026): kayıtsız kişiye yapılan Satın Alım bildirimleri
+// HER SEFERİNDE "Tc kimlik numarası Mernis sisteminde bulunamadı" ile
+// reddedildi — TC, ad ve doğum tarihi doğru olmasına rağmen. Aynı kişi HKS'in
+// KENDİ sitesinden bildirilince (kişi böylece sisteme kaydolur) bizim
+// panelden sonraki gönderim SORUNSUZ geçti. Bu, doğum tarihinin karşı tarafa
+// ULAŞMADIĞINI gösteriyor: alan okunmayınca KPS yalnız TC ile sorgulanıyor ve
+// kayıtsız kişide tam olarak bu hata dönüyor.
+//
+// İki olası sebep vardı: (a) alan yalnız YENİ endpoint şemasında var,
+// (b) biçim yanlış. (a) şu an DENENEMİYOR — endpoint_test.php yeni adrese
+// TCP bağlantısı bile kuramıyor (ws.gtb.gov.tr:8443 kapalı). Geriye (b) kalıyor:
+// GTB'nin 12.03.2025 duyurusunun ekindeki Ornek_Request.txt doğum tarihini
+// "01.01.1980 00:00:00" biçiminde yazıyor — yani alan büyük olasılıkla DateTime
+// değil METİN ve Türkçe biçim bekliyor. ISO 8601 ("1980-01-01T00:00:00")
+// gönderdiğimizde ayrıştırılamayıp sessizce boş kabul ediliyor olabilir.
+//
+//   'gtb' → 01.01.1980 00:00:00   (GTB'nin kendi örneği — VARSAYILAN)
+//   'iso' → 1980-01-01T00:00:00   (önceki davranış)
+//
+// RİSK DAR: bu alan YALNIZCA kayıtsız ikinci kişide gönderilir. Kayıtlı kişi,
+// yurt dışı Satış ve Sevk Etme akışlarında alan hiç eklenmez — onlar bu
+// ayardan HİÇ etkilenmez. Yani değişiklik yalnız hâlihazırda ÇALIŞMAYAN akışı
+// etkiler. Sonuç alınamazsa 'iso' yapıp geri dönün, kod değişikliği gerekmez.
+define('HKS_DOGUM_BICIMI', 'gtb');
+
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;
 // bu yüzden HTTP Basic Auth kapalı kalır.
