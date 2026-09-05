@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v206` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v207` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -265,6 +265,9 @@ açar. Gönderim yapmaz.
 `php scripts/beyan_ui_smoke.php` (**render**: bellek içi SQLite ile beyan_view.php'yi
 gerçekten çalıştırır — buton pasif mi, engel sebebi yazıyor mu, HTML dengeli mi).
 İkisi de ağsız, canlı DB'ye dokunmaz.
+**Sürüm görünürlüğü:** `APP_SURUM` masaüstü sidebar'ının altında, ayrıca
+`index.php` sayfa sonunda ve `beyan_bildirim_tani.php` başlığında yazar —
+mobilde sidebar görünmediği için "deploy yansıdı mı?" sorusu oradan cevaplanır.
 **Ön kontrol:** `beyan_bildirim_tani.php` (admin, salt-okunur) — migration, katalog
 (kodun ADA göre aradığı "İhracat" sıfatı / "Satış" türü / "Yurt Dışı" işletme türü),
 ürün eşleşme oranı ve beyan hazırlık özeti. **Canlıya alınca İLK burayı aç.**
