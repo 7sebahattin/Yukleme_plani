@@ -124,6 +124,18 @@ $statuses  = beyan_statuses();
 $today     = date('Y-m-d');
 $has_filter = $q !== '' || $f_status !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '' || $tarih_bas !== '' || $tarih_bit !== '';
 
+// Detay filtresi etkin mi? Panel bu koşulla açık gelir, toggle bu koşulla
+// işaretlenir ve panel kapalıyken listenin neye göre süzüldüğünü yazar.
+$detay_ozet = [];
+if ($f_status !== '') $detay_ozet[] = $statuses[$f_status]['label'] ?? $f_status;
+if ($tarih_bas !== '' || $tarih_bit !== '') $detay_ozet[] = 'Tarih';
+if ($f_urun  !== '')  $detay_ozet[] = $f_urun;
+if ($f_marka !== '')  $detay_ozet[] = $f_marka;
+if ($f_depo  !== '')  $detay_ozet[] = $f_depo;
+$detay_aktif = !empty($detay_ozet);
+$detay_sayi  = count($detay_ozet);
+$detay_ilk   = $detay_ozet[0] ?? '';
+
 render_header('Beyanlar');
 render_flash();
 ?>
@@ -153,31 +165,33 @@ render_flash();
         <input type="search" name="q" value="<?= h($q) ?>"
                placeholder="Parti no, ürün, alıcı, marka, depo..." autocomplete="off">
         <button class="btn">Ara</button>
+        <!-- Aç/kapa düğmesi arama satırının İÇİNDE — kendine satır açmaz.
+             Etkin bir detay filtresi varsa ne olduğunu da yazar, böylece panel
+             kapalıyken de listenin neye göre süzüldüğü görünür. -->
+        <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle"
+                aria-controls="beyanFilterPanel" aria-expanded="<?= $detay_aktif ? 'true' : 'false' ?>">
+            <span class="bft-ok" aria-hidden="true">▾</span> Filtre<?php if ($detay_ilk !== ''): ?><span class="bft-rozet"><?= h($detay_ilk) ?><?= $detay_sayi > 1 ? ' +' . ($detay_sayi - 1) : '' ?></span><?php endif; ?>
+        </button>
         <?php if ($has_filter): ?>
         <a href="beyanlar.php" class="btn btn-ghost">Temizle</a>
         <?php endif; ?>
     </div>
 
-    <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle">
-        ▾ Detaylı Filtre<?php if ($f_status !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== ''): ?> <span style="color:var(--primary)">●</span><?php endif; ?>
-    </button>
-
-    <div class="bff-filters<?= ($f_status !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '') ? ' bff-open' : '' ?>"
-         id="beyanFilterPanel">
-        <!-- Durum pilleri — eskiden liste üstünde ayrı bir satırdaydı ve on
-             düğmeyle ekranın yarısını kaplıyordu. Artık detaylı filtrenin
-             içinde. Bağlantı (link) olarak kalmaları bilinçli: tek tıkla
-             filtrelerler, forma bağlı değiller ve JS kapalıyken de çalışırlar. -->
-        <div style="grid-column:1/-1">
-            <label>Durum</label>
-            <div class="filter-pills" style="margin:0">
-                <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
-                   class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
-                <?php foreach ($statuses as $sk => $sv): ?>
-                <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
-                   class="pill<?= $f_status === $sk ? ' active' : '' ?>"><?= h($sv['label']) ?></a>
-                <?php endforeach; ?>
-            </div>
+    <!-- Detay paneli HER genişlikte katlanır. Eskiden ≥768px'de toggle
+         gizliydi, panel kalıcı açık geliyordu ve on durum pili üç satıra
+         sarıp beş girdiyle birlikte liste üstünde ~200px yer kaplıyordu. -->
+    <div class="bff-filters<?= $detay_aktif ? ' bff-open' : '' ?>" id="beyanFilterPanel">
+        <!-- Durum pilleri tek satırda, taşarsa yatay kayar (sarmaz).
+             Bağlantı (link) olarak kalmaları bilinçli: tek tıkla filtrelerler,
+             forma bağlı değiller ve JS kapalıyken de çalışırlar. -->
+        <div class="bff-durum">
+            <span class="bff-durum-lbl">Durum</span>
+            <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
+               class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
+            <?php foreach ($statuses as $sk => $sv): ?>
+            <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
+               class="pill<?= $f_status === $sk ? ' active' : '' ?>"><?= h($sv['label']) ?></a>
+            <?php endforeach; ?>
         </div>
         <div>
             <label>Tarih (başlangıç)</label>
@@ -199,7 +213,7 @@ render_flash();
             <label>Çıkış Depo</label>
             <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="KARAMAN...">
         </div>
-        <div style="align-self:flex-end;flex:0 0 auto;min-width:auto">
+        <div class="bff-uygula">
             <button class="btn btn-sm" style="white-space:nowrap">Filtrele</button>
         </div>
     </div>
@@ -388,7 +402,8 @@ render_flash();
     var panel  = document.getElementById('beyanFilterPanel');
     if (toggle && panel) {
         toggle.addEventListener('click', function () {
-            panel.classList.toggle('bff-open');
+            var acik = panel.classList.toggle('bff-open');
+            toggle.setAttribute('aria-expanded', acik ? 'true' : 'false');
         });
     }
 })();

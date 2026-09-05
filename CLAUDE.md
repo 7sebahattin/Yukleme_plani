@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v213` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v214` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -419,10 +419,22 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   korunur). Enter tuşu formun İLK submit butonunu tetikler; Sil önce olsaydı
   metin kutusunda Enter silme başlatırdı.
 - **Listede silme YOK** — bilinçli; silme detay ve düzenle ekranlarından yapılır.
-- **Durum pilleri "Detaylı Filtre" panelinin İÇİNDE** — on düğme liste üstünde
-  ekranın yarısını kaplıyordu. Bağlantı (link) olarak kalmaları bilinçli: tek
-  tıkla filtreler, forma bağlı değiller, JS kapalıyken de çalışırlar. Durum
-  filtresi etkinken panel **açık** gelir ve toggle'da nokta görünür.
+- **Filtre şeridi tek satır** (`beyanlar.php`): `[arama] [Ara] [▾ Filtre] [Temizle]`.
+  Detay paneli **her genişlikte katlanır** — eskiden `.beyan-filter-toggle`
+  yalnız `<768px`'de görünürdü, masaüstünde panel kalıcı açık kalıyor ve on
+  durum pili üç satıra sarıp beş girdiyle birlikte liste üstünde ~200px
+  kaplıyordu (şimdi kapalıyken 42px). **`@media (min-width:768px)` içine
+  `.beyan-filter-toggle{display:none}` geri koyma** — test bunu engelliyor.
+- **Durum pilleri panelin İÇİNDE, tek satır** (`.bff-durum`): `flex-wrap:nowrap`
+  + `overflow-x:auto` — sarmaz, taşarsa yatay kayar. Bağlantı (link) olarak
+  kalmaları bilinçli: tek tıkla filtreler, forma bağlı değiller, JS kapalıyken
+  de çalışırlar. Detay filtresi etkinken panel **açık** gelir ve toggle'da
+  etkin filtrenin adı rozet olarak yazar (`$detay_ozet` → `.bft-rozet`), böylece
+  panel kapalıyken de listenin neye göre süzüldüğü görünür.
+- **`scripts/beyan_ui_smoke.php` artık `beyanlar.php`'yi de render eder**
+  (`render_liste()` — sayfa iki kez include edildiği için üst seviye
+  `function`/`const` bildirimleri koşullu sarılır). Liste düzenini değiştirince
+  çalıştır.
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
