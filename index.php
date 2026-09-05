@@ -248,4 +248,10 @@ if ($db_backup_result !== null): ?>
 
 </div>
 
+<!-- Sürüm damgası — mobilde sidebar görünmediği için buraya da konur.
+     "Deploy yansıdı mı?" sorusunun telefondan cevabı. -->
+<div class="muted" style="text-align:center;font-size:.75rem;margin:18px 0 6px;opacity:.7">
+    <?= h(APP_SURUM) ?>
+</div>
+
 <?php render_footer(); ?>

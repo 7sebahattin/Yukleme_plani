@@ -173,6 +173,13 @@ render_header('Bildirim Ön Kontrol');
             Kontroller özelliğin kendi fonksiyonlarını çağırır — burada "TAMAM" görünen
             bir şey uygulamada da aynı sonucu verir.
         </p>
+        <!-- Sunucudaki sürüm. "Kodu attım ama ekranda görmüyorum" sorusunun ilk
+             cevabı burasıdır: deploy edilmemişse bu sayı eski kalır. Masaüstü
+             sidebar'ında da yazar ama mobilde sidebar görünmez. -->
+        <p class="muted" style="font-size:.82rem">
+            Sunucudaki sürüm: <strong><?= h(APP_SURUM) ?></strong>
+            · CSS/JS tazeliği: <?= h(date('d.m.Y H:i', (int)@filemtime(__DIR__ . '/assets/app.js'))) ?>
+        </p>
     </div>
     <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
 </div>
