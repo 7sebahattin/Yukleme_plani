@@ -219,6 +219,20 @@ foreach ($senaryolar as $ad => [$id, $pasifBekleniyor, $engelMetni]) {
 }
 
 // Geçmiş tablosu yalnız bildirim varken
+// SİL: form gerçekten render ediliyor mu, iç içe form var mı?
+$hs = render_beyan($ID_BOS);
+file_put_contents(sys_get_temp_dir() . '/beyan_view_ciktisi.html', $hs);
+ok('[sil] silme formu var',
+   preg_match('/<form[^>]*action="beyan_delete\.php"/', $hs) === 1,
+   'Sil formu hic render edilmemis');
+ok('[sil] silme butonu var', mb_strpos($hs, '>Sil<') !== false);
+// İÇ İÇE FORM: tarayıcı iç formu DÜŞÜRÜR, buton hiçbir şey göndermez.
+preg_match_all('/<form\b|<\/form>/', $hs, $mf, PREG_OFFSET_CAPTURE);
+$derinlik = 0; $icice = false;
+foreach ($mf[0] as $t) { if ($t[0] === '</form>') $derinlik--; else { $derinlik++; if ($derinlik > 1) $icice = true; } }
+ok('[sil] iç içe <form> YOK', !$icice,
+   'ic ice form: tarayici ic formu dusurur, Sil butonu hicbir sey gondermez');
+
 $h1 = render_beyan($ID_TAM); $h2 = render_beyan($ID_BILDIRIM);
 ok('geçmiş tablosu yalnız bildirim varken görünür',
    strpos($h1, 'beyan-badge">HKS TASLAK') === false && strpos($h2, 'HKS TASLAK') !== false,
@@ -450,6 +464,30 @@ ok("'metin' adayları öğrenme sorgusu açmıyor",
 // tüm beyanlara yanlış ülke ön-dolardı.
 ok('serbest metin satırı öğrenilmiyor', hks_eslesme_bul('ulke', 'Yeni Beyan') === null,
    'her beyanda gecen bir satir ulke anahtari olmus');
+
+// ── LİSTE: silme + durum pilleri (beyanlar.php) ──────────────────────────
+// Liste sayfasi render edilemiyor (kendi sorgu/depo baglami var); kaynak
+// uzerinden yapisal kontrol yapilir.
+$liste_src = file_get_contents(dirname(__DIR__) . '/beyanlar.php');
+ok('[liste] silme TABLO satirinda var',
+   preg_match('/actions-col.*?action="beyan_delete\.php"/s', $liste_src) === 1,
+   'listeden silinemez — her beyan tek tek acilmali');
+ok('[liste] silme MOBIL kartta var',
+   preg_match('/beyan-card-actions.*?action="beyan_delete\.php"/s', $liste_src) === 1,
+   'mobilde silme yok');
+ok('[liste] silme can_beyan(delete) ile kapili',
+   substr_count($liste_src, "can_beyan('delete')") === 2,
+   'yetkisiz kullaniciya silme butonu gorunur');
+ok('[liste] silme CSRF tasiyor',
+   substr_count($liste_src, 'name="csrf"') >= 4, 'csrf alani eksik');
+
+// Durum pilleri artik detayli filtrenin ICINDE olmali (liste ustunde degil).
+ok('[liste] durum pilleri detayli filtre icinde',
+   preg_match('/id="beyanFilterPanel".*?class="filter-pills"/s', $liste_src) === 1,
+   'piller hala liste ustunde — ekranin yarisini kapliyordu');
+ok('[liste] durum secilince panel acik geliyor',
+   strpos($liste_src, "\$f_status !== '' || \$tarih_bas !== ''") !== false,
+   'durum filtresi etkinken panel kapali kalir, kullanici hangi filtrede oldugunu goremez');
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
