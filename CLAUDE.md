@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v207` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v208` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -261,10 +261,16 @@ açar. Gönderim yapmaz.
 `halkayit/taslak_lib.php` (ortak kütüphane) · `beyan_view.php` (buton + modal + geçmiş).
 **Tablolar:** `beyan_hks_bildirim` (bağ + geçmiş) · `hks_eslesme` (öğrenilen eşlemeler) ·
 `customs_declarations.vehicle_plate` + `.hks_durum` (yeni kolonlar).
-**Test:** `php scripts/beyan_bildirim_smoke.php` (statik: kaynak kodda kural arar) +
-`php scripts/beyan_ui_smoke.php` (**render**: bellek içi SQLite ile beyan_view.php'yi
-gerçekten çalıştırır — buton pasif mi, engel sebebi yazıyor mu, HTML dengeli mi).
-İkisi de ağsız, canlı DB'ye dokunmaz.
+**Test — üç katman, üçü de ağsız ve canlı DB'ye dokunmaz:**
+1. `php scripts/beyan_bildirim_smoke.php` — statik: kaynak kodda kural arar.
+2. `php scripts/beyan_ui_smoke.php` — **render**: bellek içi SQLite ile
+   `beyan_view.php` + `beyan_edit.php`'yi gerçekten çalıştırır.
+3. `node scripts/beyan_js_smoke.js` — **tarayıcı**: Playwright + Chromium ile
+   `assets/app.js` davranışını doğrular (yazarak arama, boşluksuz plaka, pasif
+   buton görünümü). Playwright yoksa kendini ATLAR, hata vermez — PHP-only
+   depoda zorunlu bağımlılık olmasın diye. **Arayüz davranışı değiştirdiysen
+   bunu çalıştır:** ilk iki katman JS'i hiç çalıştırmaz, üst üste gözden kaçan
+   sorunların hepsi bu katmandaydı.
 **Sürüm görünürlüğü:** `APP_SURUM` masaüstü sidebar'ının altında, ayrıca
 `index.php` sayfa sonunda ve `beyan_bildirim_tani.php` başlığında yazar —
 mobilde sidebar görünmediği için "deploy yansıdı mı?" sorusu oradan cevaplanır.
@@ -402,6 +408,13 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **`.btn:disabled` GLOBAL kuralı** (`style.css`) — bu kural yokken pasif buton
   aktifle birebir aynı görünüyordu (uygulama genelinde: `_form.php` palet
   uygula, `beyanlar.php` toplu kaydet, `audit.php` onay butonları). Silme.
+- **Silme listede de var** (`beyanlar.php` tablo satırı + mobil kart) — eskiden
+  yalnız detay ekranındaydı, birkaç beyanı temizlemek için her birini tek tek
+  açmak gerekiyordu. `can_beyan('delete')` ile kapalı, CSRF taşır, soft delete.
+- **Durum pilleri "Detaylı Filtre" panelinin İÇİNDE** — on düğme liste üstünde
+  ekranın yarısını kaplıyordu. Bağlantı (link) olarak kalmaları bilinçli: tek
+  tıkla filtreler, forma bağlı değiller, JS kapalıyken de çalışırlar. Durum
+  filtresi etkinken panel **açık** gelir ve toggle'da nokta görünür.
 - `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
   **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 

@@ -159,11 +159,26 @@ render_flash();
     </div>
 
     <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle">
-        ▾ Detaylı Filtre<?php if ($tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== ''): ?> <span style="color:var(--primary)">●</span><?php endif; ?>
+        ▾ Detaylı Filtre<?php if ($f_status !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== ''): ?> <span style="color:var(--primary)">●</span><?php endif; ?>
     </button>
 
-    <div class="bff-filters<?= ($tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '') ? ' bff-open' : '' ?>"
+    <div class="bff-filters<?= ($f_status !== '' || $tarih_bas !== '' || $tarih_bit !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '') ? ' bff-open' : '' ?>"
          id="beyanFilterPanel">
+        <!-- Durum pilleri — eskiden liste üstünde ayrı bir satırdaydı ve on
+             düğmeyle ekranın yarısını kaplıyordu. Artık detaylı filtrenin
+             içinde. Bağlantı (link) olarak kalmaları bilinçli: tek tıkla
+             filtrelerler, forma bağlı değiller ve JS kapalıyken de çalışırlar. -->
+        <div style="grid-column:1/-1">
+            <label>Durum</label>
+            <div class="filter-pills" style="margin:0">
+                <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
+                   class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
+                <?php foreach ($statuses as $sk => $sv): ?>
+                <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
+                   class="pill<?= $f_status === $sk ? ' active' : '' ?>"><?= h($sv['label']) ?></a>
+                <?php endforeach; ?>
+            </div>
+        </div>
         <div>
             <label>Tarih (başlangıç)</label>
             <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
@@ -189,18 +204,6 @@ render_flash();
         </div>
     </div>
 </form>
-
-<!-- ── Durum pilleri ── -->
-<div class="filter-pills">
-    <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
-       class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
-    <?php foreach ($statuses as $sk => $sv): ?>
-    <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
-       class="pill<?= $f_status === $sk ? ' active' : '' ?>">
-        <?= h($sv['label']) ?>
-    </a>
-    <?php endforeach; ?>
-</div>
 
 <?php if (empty($rows)): ?>
 <div class="empty">
@@ -281,6 +284,18 @@ render_flash();
                 <?php if (can_beyan('write')): ?>
                 <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
                 <?php endif; ?>
+                <?php if (can_beyan('delete')): ?>
+                <!-- Silme LİSTEDEN de yapılabilmeli: eskiden yalnız detay
+                     ekranında vardı, birkaç beyanı temizlemek için her birini
+                     tek tek açmak gerekiyordu. Soft delete (arşivleme). -->
+                <form method="post" action="beyan_delete.php" style="display:inline"
+                      onsubmit="return confirm('<?= h($r['party_no'] ?: '#' . $r['id']) ?> arşivden gizlenecek. Devam edilsin mi?')">
+                    <input type="hidden" name="id"   value="<?= (int)$r['id'] ?>">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <button type="submit" class="btn btn-sm btn-ghost"
+                            style="color:var(--danger)">Sil</button>
+                </form>
+                <?php endif; ?>
             </td>
         </tr>
         <?php endforeach; ?>
@@ -356,6 +371,14 @@ render_flash();
             <?php endif; ?>
             <?php if (can_beyan('write')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+            <?php endif; ?>
+            <?php if (can_beyan('delete')): ?>
+            <form method="post" action="beyan_delete.php" style="display:inline"
+                  onsubmit="return confirm('<?= h($r['party_no'] ?: '#' . $r['id']) ?> arşivden gizlenecek. Devam edilsin mi?')">
+                <input type="hidden" name="id"   value="<?= (int)$r['id'] ?>">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger)">Sil</button>
+            </form>
             <?php endif; ?>
         </div>
     </div>
