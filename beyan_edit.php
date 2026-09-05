@@ -234,6 +234,10 @@ render_flash();
 
 <form method="post" action="beyan_edit.php?id=<?= $id ?>" data-beyan-form>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+<!-- beyan_delete.php id'yi POST gövdesinden okur; düzenleme formu id'yi
+     yalnızca adres çubuğunda taşıyordu. beyan_edit.php bu alanı kullanmaz
+     ($id her zaman $_GET'ten gelir), yalnız silme yolu için vardır. -->
+<input type="hidden" name="id" value="<?= $id ?>">
 
 <!-- 1. WhatsApp Ham Metni -->
 <div class="beyan-section">
@@ -418,14 +422,26 @@ render_flash();
     </div>
 </div>
 
+<!-- DOM SIRASI ÖNEMLİ: bir metin kutusunda Enter'a basınca tarayıcı formun
+     İLK submit butonunu tetikler. Sil önce gelseydi Enter SİLMEYİ başlatırdı.
+     Bu yüzden Güncelle DOM'da önce durur, görsel sıra `order` ile korunur:
+     İptal (1) · Sil (2) · Güncelle (3). -->
 <div style="display:flex;gap:10px;justify-content:flex-end;padding:8px 0 24px">
-    <a href="beyan_view.php?id=<?= $id ?>" class="btn btn-ghost">İptal</a>
+    <a href="beyan_view.php?id=<?= $id ?>" class="btn btn-ghost" style="order:1">İptal</a>
+    <button type="submit" class="btn btn-primary" style="order:3">Güncelle</button>
     <?php if (can_beyan('delete')): ?>
-    <a href="beyan_delete.php?id=<?= $id ?>"
-       class="btn btn-ghost" style="color:var(--danger)"
-       onclick="return confirm('Bu beyanı arşivden gizlemek istediğinizden emin misiniz?')">Sil</a>
+    <!-- Silme POST olmalı: beyan_delete.php GET'i bilerek reddeder (GET veri
+         DEĞİŞTİRMEZ — tarayıcı ön-getirmesi ya da bir link taraması beyanı
+         silebilirdi). Eskiden burası <a href> idi; tıklayınca GET gidiyor,
+         beyan_delete sessizce listeye geri atıyor ve HİÇBİR ŞEY OLMUYORDU.
+         `formaction`/`formmethod` ile bu buton, içinde bulunduğu formu
+         beyan_delete.php'ye POST eder — ayrı bir form açmak gerekmez (iç içe
+         form geçersizdir, tarayıcı içtekini düşürür).
+         `formnovalidate`: silme, formun doğrulamasına takılmamalı. -->
+    <button type="submit" class="btn btn-ghost" style="color:var(--danger);order:2"
+            formaction="beyan_delete.php" formmethod="post" formnovalidate
+            onclick="return confirm('Bu beyan arşivden gizlenecek. Devam edilsin mi?')">Sil</button>
     <?php endif; ?>
-    <button type="submit" class="btn btn-primary">Güncelle</button>
 </div>
 
 </form>

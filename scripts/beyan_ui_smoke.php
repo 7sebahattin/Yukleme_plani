@@ -465,21 +465,39 @@ ok("'metin' adayları öğrenme sorgusu açmıyor",
 ok('serbest metin satırı öğrenilmiyor', hks_eslesme_bul('ulke', 'Yeni Beyan') === null,
    'her beyanda gecen bir satir ulke anahtari olmus');
 
-// ── LİSTE: silme + durum pilleri (beyanlar.php) ──────────────────────────
-// Liste sayfasi render edilemiyor (kendi sorgu/depo baglami var); kaynak
-// uzerinden yapisal kontrol yapilir.
+// ── SİLME: beyan_delete.php YALNIZ POST kabul eder ───────────────────────
+// GET ile cagirirsa sessizce listeye geri atar — kullanici tiklar, onaylar,
+// HICBIR SEY OLMAZ ve hata da gormez. Duzenle ekranindaki Sil tam olarak bu
+// yuzden calismiyordu (<a href="beyan_delete.php?id=...">).
+foreach (['beyan_edit.php', 'beyan_view.php', 'beyanlar.php'] as $ff) {
+    $fs = file_get_contents(dirname(__DIR__) . '/' . $ff);
+    ok("[$ff] beyan_delete'e GET baglantisi YOK",
+       preg_match('/<a[^>]+href="beyan_delete\.php/', $fs) !== 1,
+       'GET ile silme sessizce basarisiz olur — POST kullan');
+}
+$ed = file_get_contents(dirname(__DIR__) . '/beyan_edit.php');
+ok('[duzenle] Sil butonu POST ediyor',
+   preg_match('/formaction="beyan_delete\.php"[^>]*formmethod="post"/s', $ed) === 1,
+   'Sil hala POST etmiyor');
+ok('[duzenle] form id alanini POST govdesinde tasiyor',
+   preg_match('/<input type="hidden" name="id" value/', $ed) === 1,
+   'beyan_delete $_POST[id] okur; id yalniz adres cubugundaysa "Gecersiz beyan ID" doner');
+ok('[duzenle] silme yetki ile kapili',
+   strpos($ed, "can_beyan('delete')") !== false);
+
+// ENTER TUZAGI: bir metin kutusunda Enter'a basinca tarayici formun ILK submit
+// butonunu tetikler. Sil once gelseydi Enter SILME baslatirdi.
+preg_match_all('/<button[^>]*type="submit"[^>]*>/', $ed, $mb);
+$ilk = $mb[0][0] ?? '';
+ok('[duzenle] formun ILK submit butonu Sil DEGIL',
+   $ilk !== '' && strpos($ilk, 'beyan_delete.php') === false,
+   'Enter tusu silmeyi tetikler — ilk buton: ' . substr($ilk, 0, 80));
+
+// Liste sayfasi: silme BILEREK yok (detay/duzenle ekranindan yapilir).
 $liste_src = file_get_contents(dirname(__DIR__) . '/beyanlar.php');
-ok('[liste] silme TABLO satirinda var',
-   preg_match('/actions-col.*?action="beyan_delete\.php"/s', $liste_src) === 1,
-   'listeden silinemez — her beyan tek tek acilmali');
-ok('[liste] silme MOBIL kartta var',
-   preg_match('/beyan-card-actions.*?action="beyan_delete\.php"/s', $liste_src) === 1,
-   'mobilde silme yok');
-ok('[liste] silme can_beyan(delete) ile kapili',
-   substr_count($liste_src, "can_beyan('delete')") === 2,
-   'yetkisiz kullaniciya silme butonu gorunur');
-ok('[liste] silme CSRF tasiyor',
-   substr_count($liste_src, 'name="csrf"') >= 4, 'csrf alani eksik');
+ok('[liste] silme butonu yok (istenmedi)',
+   strpos($liste_src, 'beyan_delete.php') === false,
+   'listeye silme geri gelmis');
 
 // Durum pilleri artik detayli filtrenin ICINDE olmali (liste ustunde degil).
 ok('[liste] durum pilleri detayli filtre icinde',
