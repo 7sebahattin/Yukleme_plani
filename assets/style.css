@@ -5319,6 +5319,16 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-hks-rozet { font-size: .72rem; font-weight: 600; }
 .beyan-hks-rozet-ok { color: #16a34a; }
 .beyan-hks-rozet-uyari { color: #b45309; }
+/* Yazarak aranabilir select (data-aramali) — Hal Kayıt panelindeki
+   "İhracat Yapılan Ülke" kutusuyla aynı davranış. Asıl <select> DOM'da kalır
+   ve değeri taşır; yalnız gizlenir. */
+.ara-sec-gizli { display: none !important; }
+.ara-sec-bos {
+    border-color: var(--danger, #dc2626) !important;
+    background: #fff6f6;
+}
+html[data-theme="dark"] body:not(.print-mode) .ara-sec-bos { background: #2a1616; }
+
 /* ─────────────────────────────────────────────────────────────────────────
    BİLDİRİM KARTI (beyan_view.php üst özeti)
    Ülke · Ürün · Net KG · Plaka — HKS bildiriminin dört zorunlu bilgisi.
