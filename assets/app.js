@@ -22,6 +22,29 @@
         try { el.setSelectionRange(start, end); } catch (_) {}
     });
 
+    /* ── Boşluksuz alan — data-nospace ──
+       Plaka gibi alanlarda kullanıcı "34 ABC 123" diye yazar ama hedef sistem
+       (HKS) boşluksuz bekler. Boşluk anında silinir ve imleç silinen karakter
+       sayısı kadar geri çekilir — yoksa imleç metnin sonuna sıçrar.
+       (halkayit/app.html'deki oPlaka/tkPlaka/etPlaka davranışının aynısı.) */
+    function bosluksuzUygula(el) {
+        if (!/\s/.test(el.value)) return;
+        const imlec = el.selectionStart;
+        const onceki = el.value.length;
+        el.value = el.value.replace(/\s+/g, '');
+        if (imlec !== null) {
+            const yeni = Math.max(0, imlec - (onceki - el.value.length));
+            try { el.setSelectionRange(yeni, yeni); } catch (_) {}
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('[data-nospace]').forEach(bosluksuzUygula);
+    });
+    document.addEventListener('input', function(e) {
+        const el = e.target;
+        if (el && el.matches && el.matches('[data-nospace]')) bosluksuzUygula(el);
+    });
+
     /* ── Açılır/kapanır kart bölümleri ── */
     document.querySelectorAll('.collapsible-card').forEach(card => {
         const head = card.querySelector('.card-head-toggle');

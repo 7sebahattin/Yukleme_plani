@@ -82,6 +82,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         $user_id = (int)($auth_user['id'] ?? 0);
         $hks     = beyan_hks_form_oku($_POST);
+        // Plaka boşluksuz + büyük harf — HKS böyle bekler (tek doğruluk kaynağı
+        // sunucu; istemcideki data-nospace yalnız kolaylıktır).
+        $f['vehicle_plate'] = beyan_plaka_normalize($f['vehicle_plate']);
 
         $st = db()->prepare("INSERT INTO customs_declarations
             (raw_text, unmatched_text, declaration_title, company_name, company_address,
@@ -201,6 +204,8 @@ render_flash();
     </div>
 </div>
 
+<?php beyan_hks_form_bolumu($f, null); ?>
+
 <!-- 2. Temel Bilgiler -->
 <div class="beyan-section">
     <div class="beyan-section-title">📋 Temel Bilgiler</div>
@@ -308,7 +313,6 @@ render_flash();
 
 <!-- 5. Durum / Analiz -->
 
-<?php beyan_hks_form_bolumu($f, null); ?>
 
 <div class="beyan-section">
     <div class="beyan-section-title">📊 Durum / Analiz</div>

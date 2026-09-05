@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v204` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v205` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -342,6 +342,13 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
   alanı açma** — aynı `name` ile iki alan POST'ta çakışır.
+  Bölüm **WhatsApp Metni'nin hemen altındadır** (iki formda da aynı sıra).
+- **Plaka BOŞLUKSUZ + büyük harf** — HKS böyle bekler.
+  `beyan_plaka_normalize()` TEK doğruluk kaynağıdır ve ÜÇ kaydetme yolunda da
+  çağrılır (`beyan_create` / `beyan_edit` / `bb_taslak_kur`). İstemcideki
+  `data-nospace` (app.js, imleç korumalı) yalnız kolaylıktır — JS kapalıysa,
+  otomatik doldurmada veya yapıştırmada sunucu yine boşluksuz kaydeder.
+  Plaka alanında **örnek (placeholder) metin yok**.
 - `hks_eslesme_yaz()` **taşınabilir upsert** kullanır (UPDATE→INSERT→UPDATE);
   `ON DUPLICATE KEY UPDATE` MySQL'e özgüydü ve testlerde sessizce başarısız
   oluyordu — öğrenme hiç doğrulanamıyordu.
