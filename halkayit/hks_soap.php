@@ -438,14 +438,26 @@ function hks_bildirim_xml($satirlar, $ortak) {
       $ik = [];
       if (!empty($ortak['ikinciAd']))  $ik[] = '<b:AdSoyad>' . hks_esc(trim($ortak['ikinciAd'])) . '</b:AdSoyad>';
       if ($cep !== '')                 $ik[] = '<b:CepTel>' . $cep . '</b:CepTel>';
+      // DogumTarihi'nin KONUMU — bkz. config.php HKS_DOGUM_KONUM.
+      // CANLI KANIT (05.09.2026): alfabetik konumda hem ISO hem GTB biçimi
+      // denendi, İKİSİ DE aynı "Mernis'te bulunamadı" hatasını verdi. İki farklı
+      // biçimin aynı sonucu vermesi, sorunun biçim DEĞİL, alanın hiç OKUNMAMASI
+      // olduğunu gösterir. DataContractSerializer sırayla okur ve beklediği
+      // konumda olmayan elemanı SESSİZCE ATLAR; sonradan [DataMember(Order=N)]
+      // ile eklenen alanlar alfabetik değil, EN SONA gelir. GTB bu alanı 2025'te
+      // ~2016 tarihli bir sözleşmeye ekledi — bu yüzden varsayılan artık 'son'.
       $dt = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '');
-      if ($dt !== '')                  $ik[] = '<b:DogumTarihi>' . $dt . '</b:DogumTarihi>';
+      $dtXml = $dt !== '' ? '<b:DogumTarihi>' . $dt . '</b:DogumTarihi>' : '';
+      $dtKonum = defined('HKS_DOGUM_KONUM') ? HKS_DOGUM_KONUM : 'son';
+      if ($dtXml !== '' && $dtKonum === 'alfabetik') $ik[] = $dtXml;
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
         // TC/VKN yalnız RAKAM gider. Kirli değer (boşluk/nokta/tire) KPS'te kişiyi
       // buldurmaz; arayüz temizliyor ama SON SÖZ sunucudadır (eski taslaklar,
       // önbellekten sunulan eski app.html, doğrudan API çağrısı).
       $ik[] = '<b:TcKimlikVergiNo>' . hks_esc(hks_tc_normalize($ortak['ikinciTc'])) . '</b:TcKimlikVergiNo>';
       $ik[] = '<b:YurtDisiMi>false</b:YurtDisiMi>';
+      // Sonradan eklenen alan varsayılan olarak EN SONDA gider (yukarıdaki not).
+      if ($dtXml !== '' && $dtKonum !== 'alfabetik') $ik[] = $dtXml;
       $ikinci = implode('', $ik);
     } else {
       $ikinci = '<b:YurtDisiMi>true</b:YurtDisiMi>';

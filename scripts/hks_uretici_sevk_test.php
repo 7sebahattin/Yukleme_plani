@@ -253,9 +253,15 @@ $pDog = strpos($ikBlok, '<b:DogumTarihi>');
 $pSif = strpos($ikBlok, '<b:KisiSifat>');
 $pTc  = strpos($ikBlok, '<b:TcKimlikVergiNo>');
 ok('ikinci kişi bloğu ayrıştırıldı', $ikBlok !== '');
-ok('alfabetik sıra: AdSoyad < CepTel < DogumTarihi < KisiSifat < TcKimlikVergiNo',
-    $pAd !== false && $pCep !== false && $pDog !== false && $pSif !== false && $pTc !== false
-    && $pAd < $pCep && $pCep < $pDog && $pDog < $pSif && $pSif < $pTc,
+ok('alfabetik sıra korunuyor: AdSoyad < CepTel < KisiSifat < TcKimlikVergiNo',
+    $pAd !== false && $pCep !== false && $pSif !== false && $pTc !== false
+    && $pAd < $pCep && $pCep < $pSif && $pSif < $pTc,
+    'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
+// VARSAYILAN KONUM 'son': DogumTarihi sonradan eklenen alan olduğu için
+// [DataMember(Order=N)] ile EN SONA gelir. Alfabetik konumda hem ISO hem GTB
+// biçimi canlıda denendi, ikisi de "Mernis'te bulunamadı" verdi (alan okunmadı).
+ok('DogumTarihi EN SONDA (YurtDisiMi\'den sonra)',
+    $pDog !== false && $pDog > $pTc && $pDog > strpos($ikBlok, '<b:YurtDisiMi>'),
     'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
 
 // hks_dogum_tarihi_xml() — GERÇEK fonksiyon, biçim normalizasyonu
