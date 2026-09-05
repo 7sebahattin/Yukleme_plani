@@ -119,8 +119,15 @@ Bu kurallar denenerek bulundu; `hks_soap.php` bunlara göre yazıldı:
 0.1.14 *"Bildirim türü 'Satın Alım' veya 'Sevk Etme' ise İkinci kişi GTB sisteminde
 kayıtlı bir kişi olmalıdır"* diyordu; ancak 12.03.2025 duyurusundan sonra HKS, kayıtlı
 olmayan kişiyi **TC + doğum tarihiyle KPS'ten (MERNİS) doğruluyor** ve Satın Alım künyesi
-üretiyor — HKS sitesinde canlı olarak doğrulandı (sorgu sonrası ad/soyad otomatik geldi,
-bildirim künye numarası aldı). Kayıtsız satıcıda `AdSoyad` + `CepTel` + `DogumTarihi`
+üretiyor — **05.09.2026'da BU PANELİN WEB SERVİSİYLE doğrulandı** (künye üretildi).
+
+> **Bu satır neden özellikle vurgulanıyor:** burada daha önce *"HKS sitesinde canlı
+> olarak doğrulandı"* yazıyordu. O test **web servisini değil, GTB'nin kendi
+> sitesini** doğruluyordu — yani bu kod yolu aslında hiç kanıtlanmamıştı ve alan
+> aylarca sessizce düşerken "çalıştığı" sanıldı. **Bir yolun çalıştığını ancak O
+> YOLU çalıştırarak kanıtlayabilirsiniz;** başka bir arayüzde alınan sonuç kanıt
+> değildir. (Aynı hata `record_excel_template.php`'de de yaşandı: taklit test kodu
+> gerçek dosyayı test etmiyordu.) Kayıtsız satıcıda `AdSoyad` + `CepTel` + `DogumTarihi`
 zorunludur; hedef yine **kendi işyerimizdir** (mal bize gelir), adres dalı kullanılmaz.
 **Sevk Etme'nin kayıtlı zorunluluğu DEĞİŞMEDİ.**
 
@@ -205,17 +212,45 @@ kimlik numarası ile birlikte Doğum Tarihi bilgisi zorunlu hale getirilmiştir.
 Sistemde kayıtlı olmayan kişi bildirimleri için T.C. kimlik numarası ve doğum tarihi
 bilgilerinin girilmesi gerekmektedir."*
 
-- `DogumTarihi`, `IkinciKisiBilgileriDTO` içinde **alfabetik sırada** gönderilir:
-  `AdSoyad` → `CepTel` → **`DogumTarihi`** → `Eposta` → `KisiSifat` → `TcKimlikVergiNo`
-  → `YurtDisiMi`. (DataContract sıralaması; sıra bozulursa alan sessizce yoksayılabilir.)
+> ### ⚠️ KONUM VE BİÇİM — CANLIDA (WEB SERVİSTE) KANITLANDI, DEĞİŞTİRMEYİN
+>
+> Bu iki kural **tahmin değil**; 05.09.2026'da canlı sistemde, üç ayrı gönderimle
+> teker teker elenerek bulundu. Yanlış hâlleri **sessizce** başarısız olur:
+> HKS hiçbir uyarı vermez, yalnızca *"Tc kimlik numarası Mernis sisteminde
+> bulunamadı"* der ve kayıtsız kişiye **hiçbir bildirim yapılamaz.**
+>
+> **1. Konum: `DogumTarihi` EN SONDA gönderilir** — alfabetik sırada DEĞİL:
+> `AdSoyad` → `CepTel` → `KisiSifat` → `TcKimlikVergiNo` → `YurtDisiMi` →
+> **`DogumTarihi`**
+>
+> Sebebi: `DataContractSerializer` elemanları sırayla okur ve beklediği konumda
+> olmayanı **hata vermeden atlar**. Sıralama önce `[DataMember(Order=N)]`, sonra
+> alfabetiktir — sonradan `Order` ile eklenen alan alfabetik yerine değil,
+> diğer TÜM alanlardan sonra gelir. GTB bu alanı 2025'te ~2016 tarihli bir
+> sözleşmeye ekledi.
+>
+> **2. Biçim: `23.12.1963 00:00:00`** (GTB'nin `Ornek_Request.txt` biçimi),
+> ISO 8601 değil.
+>
+> **Eleme kaydı** (her satır ayrı bir canlı gönderim):
+>
+> | # | Konum | Biçim | Sonuç |
+> |---|---|---|---|
+> | 1 | alfabetik | ISO `1969-01-27T00:00:00` | ❌ Mernis'te bulunamadı |
+> | 2 | alfabetik | GTB `23.12.1963 00:00:00` | ❌ Mernis'te bulunamadı |
+> | 3 | **son** | **GTB** | ✅ **künye üretildi** |
+>
+> 1 ve 2'nin AYNI hatayı vermesi biçimi eledi (alan hiç okunmuyordu); 3 konumun
+> asıl sebep olduğunu kanıtladı. İkisi de `config.php`'den ayarlanabilir
+> (`HKS_DOGUM_KONUM` / `HKS_DOGUM_BICIMI`) ama **çalışan değerler bunlardır** —
+> "alfabetik daha doğru görünüyor" diye geri çevirmeyin.
+>
+> Bu ayrıca şunu kanıtlar: **alan ESKİ endpoint şemasında VARDIR.** Bu README
+> daha önce "yalnız yeni şemada bulunması muhtemel" diyordu — yanlıştı.
+
 - **Yalnız dolu olduğunda gönderilir** (`hks_dogum_tarihi_xml()` boş dize dönerse alan
   hiç eklenmez) — böylece kayıtlı ikinci kişili ve yurt dışı akışlar birebir eskisi gibi
   kalır, mevcut çalışan davranış hiç etkilenmez.
-- **Biçim:** ISO 8601 (`1980-01-01T00:00:00`), bu dosyadaki diğer tarih alanlarıyla
-  (`BaslangicTarihi`/`BitisTarihi` — canlıda çalışıyor) aynı. GTB'nin duyuru ekindeki
-  `Ornek_Request.txt` tarihi `01.01.1980 00:00:00` biçiminde yazmış (elle hazırlanmış
-  SoapUI örneği); ilk canlı denemede ISO reddedilirse `hks_dogum_tarihi_xml()` içinde
-  `d.m.Y H:i:s` denenmelidir.
 - Arayüzde `#oIkDogum` (`<input type="date">`), kayıtsız karşı tarafta Ad/Ünvan ve Cep
   ile birlikte görünür ve zorunludur; backend `hks_bildirim_dogrula()` aynı kuralı
   bağımsız uygular.
@@ -283,8 +318,21 @@ denildi:
 | Ürün | `https://ws.gtb.gov.tr:8443/HKSUrunService` |
 
 Adres artık `config.php`'den seçilir: **`HKS_YENI_ENDPOINT`** (varsayılan `false` — mevcut
-çalışan davranış korunur). `DogumTarihi` alanının yalnız yeni şemada bulunması muhtemel
-olduğundan geçiş büyük olasılıkla gereklidir; ancak **önce doğrulayın**:
+çalışan davranış korunur).
+
+> **DÜZELTME (05.09.2026).** Bu bölüm daha önce *"`DogumTarihi` alanının yalnız yeni
+> şemada bulunması muhtemel, geçiş büyük olasılıkla gereklidir"* diyordu — **yanlıştı.**
+> Alan ESKİ endpoint'te de vardır; yalnızca XML'de **yanlış konumda** gönderiliyordu
+> (bkz. yukarıdaki "KONUM VE BİÇİM" kutusu). Konum düzeltilince kayıtsız kişiye
+> Satın Alım bildirimi eski adresten sorunsuz geçti. Geçiş yine de er ya da geç
+> gereklidir (GTB'nin verdiği birlikte kullanım süresi 27.03.2025'te doldu), ama
+> **kayıtsız kişi sorunu için gerekli değildi.**
+>
+> Ayrıca: 05.09.2026 itibarıyla sunucudan `ws.gtb.gov.tr:8443` adresine **TCP
+> bağlantısı kurulamıyor** ("Could not connect to server") — geçiş yapılacaksa önce
+> hosting tarafında bu portun dışa açılması gerekir.
+
+Geçişten önce **doğrulayın**:
 
 ```
 php scripts/hks_endpoint_test.php <firmaId>

@@ -64,8 +64,8 @@ define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 // değil METİN ve Türkçe biçim bekliyor. ISO 8601 ("1980-01-01T00:00:00")
 // gönderdiğimizde ayrıştırılamayıp sessizce boş kabul ediliyor olabilir.
 //
-//   'gtb' → 01.01.1980 00:00:00   (GTB'nin kendi örneği — VARSAYILAN)
-//   'iso' → 1980-01-01T00:00:00   (önceki davranış)
+//   'gtb' → 01.01.1980 00:00:00   ✅ CANLIDA KANITLANDI (GTB'nin kendi örneği)
+//   'iso' → 1980-01-01T00:00:00   ❌ eski davranış — künye ÜRETMEDİ
 //
 // RİSK DAR: bu alan YALNIZCA kayıtsız ikinci kişide gönderilir. Kayıtlı kişi,
 // yurt dışı Satış ve Sevk Etme akışlarında alan hiç eklenmez — onlar bu
@@ -85,12 +85,14 @@ define('HKS_DOGUM_BICIMI', 'gtb');
 // DEĞİL, diğer tüm alanlardan SONRA gelir. GTB bu alanı 2025'te ~2016 tarihli
 // bir sözleşmeye ekledi — bu yüzden varsayılan 'son'.
 //
-//   'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi (VARSAYILAN)
-//   'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...  (DENENDİ, OLMADI)
+//   'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi
+//                 ✅ CANLIDA KANITLANDI — künye üretildi. DEĞİŞTİRMEYİN.
+//   'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...
+//                 ❌ DENENDİ, OLMADI (iki farklı biçimle de "Mernis'te bulunamadı").
 //
-// Bu da sonuç vermezse kod tarafında denenecek makul ihtimal KALMAZ: alan büyük
-// olasılıkla eski endpoint sözleşmesinde hiç yoktur ve çözüm ws.gtb.gov.tr:8443
-// erişiminin açılmasıdır (bkz. HKS_YENI_ENDPOINT).
+// Bu ayrıca alanın ESKİ endpoint şemasında VAR olduğunu kanıtlar — sorun hiçbir
+// zaman endpoint değil, konumdu. "Alfabetik daha doğru görünüyor" diye geri
+// çevirmeyin: yanlış konum SESSİZCE başarısız olur, HKS uyarı vermez.
 define('HKS_DOGUM_KONUM', 'son');
 
 // --- Panel giriş koruması ---
