@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v204');
+    define('APP_SURUM', 'v205');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2511,7 +2511,8 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
             <label class="form-label">Araç Plakası</label>
             <input type="text" name="vehicle_plate" class="form-control"
                    value="<?= h((string)($f['vehicle_plate'] ?? '')) ?>"
-                   data-uppercase="tr" placeholder="34 ABC 123">
+                   data-uppercase="tr" data-nospace inputmode="latin"
+                   autocomplete="off" autocapitalize="characters">
         </div>
     <?php };
 
@@ -2617,6 +2618,16 @@ function beyan_hks_form_oku(array $post): array {
 }
 
 // Eşleştirme tamam mı? Bildirim butonunun kapılarından biri.
+// Araç plakası — BOŞLUKSUZ ve büyük harf. HKS plakayı boşluksuz bekler
+// (halkayit/app.html oPlaka davranışı). İstemcideki `data-nospace` bir
+// kolaylıktır; TEK doğruluk kaynağı burasıdır — JS kapalıysa, otomatik
+// doldurmada veya yapıştırmada da aynı sonucu verir.
+function beyan_plaka_normalize(?string $p): string {
+    $p = preg_replace('/\s+/u', '', (string)$p);
+    return mb_strtoupper(trim($p), 'UTF-8');
+}
+
+
 function beyan_hks_eslesme_tam(array $beyan): bool {
     return trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
         && trim((string)($beyan['hks_urun_id']  ?? '')) !== ''

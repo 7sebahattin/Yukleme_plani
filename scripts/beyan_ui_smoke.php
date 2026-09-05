@@ -270,6 +270,22 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        preg_match('/Hal Bildirim Bilgileri.*?name="vehicle_plate"/s', $form) === 1,
        'plaka hala Temel Bilgiler bolumunde');
 
+    // Plaka: örnek metin YOK, boşluksuz giriş açık.
+    ok('[form] plaka alanında örnek metin yok',
+       preg_match('/name="vehicle_plate"[^>]*placeholder=/s', $form) !== 1,
+       'placeholder hala duruyor');
+    ok('[form] plaka boşluksuz yazılıyor',
+       preg_match('/name="vehicle_plate"[^>]*data-nospace/s', $form) === 1,
+       'data-nospace yok — "34 ABC 123" boslukla kaydedilir');
+
+    // Bölüm sırası: WhatsApp Metni → Hal Bildirim Bilgileri → Temel Bilgiler
+    $iw = mb_strpos($form, 'WhatsApp Metni');
+    $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
+    $it = mb_strpos($form, 'Temel Bilgiler');
+    ok('[form] Hal Bildirim bölümü WhatsApp metninin ALTINDA',
+       $iw !== false && $ih !== false && $it !== false && $iw < $ih && $ih < $it,
+       "konumlar: whatsapp=$iw hks=$ih temel=$it");
+
     // Dört alan da orada mı?
     foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id', 'vehicle_plate'] as $alan) {
         ok("[form] $alan alanı var", strpos($form, 'name="' . $alan . '"') !== false);
@@ -293,6 +309,20 @@ db()->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)"
         'bildirimTurleri' => [['id' => '5', 'ad' => 'Satış']],
         'isletmeTurleri' => [['id' => '3', 'ad' => 'Yurt Dışı']],
    ], JSON_UNESCAPED_UNICODE)]);
+
+// Plaka normalizasyonu — SUNUCU tarafı tek doğruluk kaynağı.
+ok('plaka boşlukları siliniyor', beyan_plaka_normalize(' 34 abc 123 ') === '34ABC123',
+   'gelen: [' . beyan_plaka_normalize(' 34 abc 123 ') . ']');
+ok('plaka büyük harfe çevriliyor', beyan_plaka_normalize('34 tır 05') === '34TIR05',
+   'gelen: [' . beyan_plaka_normalize('34 tır 05') . ']');
+ok('boş plaka boş kalıyor', beyan_plaka_normalize(null) === '' && beyan_plaka_normalize('   ') === '');
+
+// Kaydetme yollarının HEPSİ normalize etmeli (JS kapaliysa da bosluksuz gitsin).
+foreach (['beyan_create.php', 'beyan_edit.php', 'api_beyan_bildirim.php'] as $ff) {
+    ok("$ff plakayı normalize ediyor",
+       strpos(file_get_contents(dirname(__DIR__) . '/' . $ff), 'beyan_plaka_normalize(') !== false,
+       'bu yoldan bosluklu plaka kaydedilebilir');
+}
 
 // ── ÜLKE İPUCU ZİNCİRİ — gerçek WhatsApp beyan metniyle ──────────────────
 // Kullanıcının paylaştığı örnek: şirket bloğu ülkeyi taşıyor.

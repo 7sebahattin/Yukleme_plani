@@ -208,7 +208,7 @@ function bb_taslak_kur(array $beyan, string $sifatId, string $turId, float $fiya
     $urunId  = trim((string)$beyan['hks_urun_id']);
     $ulkeId  = trim((string)$beyan['hks_ulke_id']);
 
-    $plaka = mb_strtoupper(trim((string)($beyan['vehicle_plate'] ?? '')), 'UTF-8');
+    $plaka = beyan_plaka_normalize((string)($beyan['vehicle_plate'] ?? ''));
     $kg    = round((float)$beyan['net_kg'], 3);
 
     if ($sifatId === '') return ['kod' => 400, 'hata' => 'Bildirimci sıfatı seçilmedi.'];
