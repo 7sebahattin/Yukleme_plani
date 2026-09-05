@@ -3394,8 +3394,14 @@ function taslakOnayAc(t) {
     html += `<div class="onay-satir"><span>Künyeler</span><b>gönderim anında stoktan seçilecek</b></div>`;
     html += `<div class="onay-satir"><span>Ürün</span><b>${eHtml(t.ortak.urunAd || '—')}</b></div>`;
   } else {
-    html += t.satirlar.map(s =>
-      `<div class="onay-satir"><span>${s.kunyeNo}</span><b>${fmt(Number(s.miktar))} KG</b></div>`).join('');
+    // Referanssız bildirimde (Satın Alım / Üreticiden Sevk Alım) künye no "0"dır —
+    // etiket olarak çıplak "0" yazmak onay ekranında anlamsız görünüyordu.
+    // Bu geri alınamaz bir onay ekranı: her satır ne olduğunu söylemelidir.
+    html += t.satirlar.map(s => {
+      const ref = String(s.kunyeNo || '').replace(/\D/g, '').replace(/^0+/, '');
+      const etiket = ref !== '' ? ('Künye ' + s.kunyeNo) : (t.ortak.urunAd || 'Referanssız (künye yok)');
+      return `<div class="onay-satir"><span>${eHtml(etiket)}</span><b>${fmt(Number(s.miktar))} KG</b></div>`;
+    }).join('');
   }
   html += `<div class="onay-satir"><span>TOPLAM</span><b>${fmt(toplam)} KG</b></div>`;
   if (t.ortak.yurtIci) {
@@ -3494,11 +3500,23 @@ $('btnOnay').onclick = async () => {
     });
     if (!html) html = '<div class="yukleniyor">Cevap boş döndü.</div>';
     // TEŞHİS: hata varsa ham SOAP yanıtını daraltılabilir teknik detayda göster.
-    if (j.ham) {
+    if (j.ham || j.hamIstek) {
       html += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--hata-tx)">' +
-        'Teknik Detay (ham yanıt)</summary>' +
-        '<div style="font-size:11px;color:var(--soluk);word-break:break-all;background:var(--soluk-bg);padding:8px;border-radius:8px;margin-top:6px">' +
-        eHtml(j.ham) + '</div></details>';
+        'Teknik Detay (gönderilen istek + ham yanıt)</summary>';
+      // GÖNDERİLEN İSTEK — "Mernis'te bulunamadı" hatasında asıl kanıt burada:
+      // <DogumTarihi> satırı VAR MI, hangi biçimde? Yoksa KPS yalnız TC ile
+      // sorgulanmış demektir. (Şifreler sunucuda maskelenir, buraya gelmez.)
+      if (j.hamIstek) {
+        html += '<div style="font-size:11px;color:var(--soluk);margin-top:6px">▶ HKS\'e GÖNDERİLEN istek:</div>' +
+          '<div style="font-size:11px;color:var(--soluk);word-break:break-all;background:var(--soluk-bg);padding:8px;border-radius:8px;margin-top:4px">' +
+          eHtml(j.hamIstek) + '</div>';
+      }
+      if (j.ham) {
+        html += '<div style="font-size:11px;color:var(--soluk);margin-top:8px">◀ HKS\'ten GELEN yanıt:</div>' +
+          '<div style="font-size:11px;color:var(--soluk);word-break:break-all;background:var(--soluk-bg);padding:8px;border-radius:8px;margin-top:4px">' +
+          eHtml(j.ham) + '</div>';
+      }
+      html += '</details>';
     }
     $('modalBaslik').textContent = '📬 Gönderim Sonucu';
     $('modalIcerik').innerHTML = html;

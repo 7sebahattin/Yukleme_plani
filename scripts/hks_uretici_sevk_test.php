@@ -438,5 +438,21 @@ ok('GidecekUlkeId=9 gönderiliyor',   str_contains($xmlIhracat, '<b:GidecekUlkeI
 ok('ReferansBildirimKunyeNo=123456 (referanslı, DEĞİŞMEDİ)',
     str_contains($xmlIhracat, '<a:ReferansBildirimKunyeNo>123456</a:ReferansBildirimKunyeNo>'));
 
+// ── Teşhis: gönderilen istek gösterilirken ŞİFRE SIZMAMALI ──────────────────
+// "Mernis'te bulunamadı" hatası, gönderilen isteği göremediğimiz için aylarca
+// teşhis edilemedi. Artık hata durumunda istek de ekranda gösteriliyor; bu
+// ekranın kimlik bilgisi sızdırmadığı BURADA kilitlenir.
+echo "\n── Teşhis çıktısı: kimlik bilgisi maskeleme ──\n";
+$zarf = hks_taban_istek('BaseRequestMessageOf_ListOf_BildirimKayitIstek',
+    '<Istek><b:DogumTarihi>1980-01-01T00:00:00</b:DogumTarihi></Istek>',
+    ['password' => 'P4ROLA_GIZLI', 'servicePassword' => 'SVC_GIZLI', 'userName' => 'kullanici_adi']);
+$maskeli = hks_istek_maskele($zarf);
+ok('Password maskeleniyor',        !str_contains($maskeli, 'P4ROLA_GIZLI'));
+ok('ServicePassword maskeleniyor', !str_contains($maskeli, 'SVC_GIZLI'));
+ok('UserName maskeleniyor',        !str_contains($maskeli, 'kullanici_adi'));
+ok('teşhis için DogumTarihi görünür kalıyor',
+    str_contains($maskeli, '<b:DogumTarihi>1980-01-01T00:00:00</b:DogumTarihi>'),
+    'istek teşhisinin TEK amacı bu alanın tele çıkıp çıkmadığını görebilmek');
+
 echo $fail === 0 ? "\n>>> TÜM TESTLER GEÇTİ\n" : "\n>>> $fail TEST BAŞARISIZ\n";
 exit($fail === 0 ? 0 : 1);

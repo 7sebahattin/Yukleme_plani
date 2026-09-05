@@ -66,6 +66,18 @@ function hks_dogum_tarihi_xml($deger) {
     return $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00';
 }
 
+// Teşhis çıktısındaki kimlik bilgilerini maskeler. İstek zarfında Password /
+// ServicePassword / UserName bulunur; teşhis ekranı veya günlük bunları ASLA
+// göstermemelidir. (Bildirim akışı zaten yalnız <Istek> bloğunu geçirir; bu
+// fonksiyon zarfın tamamının geçtiği durumlar için ikinci settir.)
+function hks_istek_maskele($xml) {
+  $s = (string)$xml;
+  foreach (['Password', 'ServicePassword', 'UserName'] as $alan) {
+    $s = preg_replace('#<' . $alan . '>.*?</' . $alan . '>#s', '<' . $alan . '>***</' . $alan . '>', $s);
+  }
+  return preg_replace('/\s+/', ' ', substr($s, 0, 4000));
+}
+
 // SOAP zarfını gönder, cevap gövdesini döndür
 function hks_soap_cagir($servis, $metod, $icerikXml) {
   $zarf =
@@ -504,7 +516,18 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
   $hataVar = $genelHata !== null || count(array_filter($sonuclar, fn($s) => (int)$s['hataKodu'] !== 0)) > 0;
   $ham = $hataVar ? preg_replace('/\s+/', ' ', substr($duz, 0, 1500)) : '';
 
-  return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar, 'ham' => $ham];
+  // TEŞHİS — İSTEK TARAFI. Şimdiye kadar YALNIZ yanıt görülebiliyordu; bir alanın
+  // (ör. DogumTarihi) tele gerçekten çıkıp çıkmadığı GÖRÜLEMİYORDU. "Mernis'te
+  // bulunamadı" hatasında asıl soru budur: doğum tarihi gönderildi mi, hangi
+  // biçimde, sunucu onu okudu mu? Alan yoksa/atlandıysa KPS yalnız TC ile
+  // sorgulanır ve tam olarak bu hata döner.
+  // GÜVENLİK: $istekXml YALNIZCA <Istek> bloğudur; Password/ServicePassword/
+  // UserName bu bloğun DIŞINDA, hks_taban_istek() tarafından eklenir — yani
+  // buradan şifre sızmaz. hks_istek_maskele() ileride zarfın tamamı geçilirse
+  // diye savunma amaçlı ikinci bir settir.
+  $hamIstek = $hataVar ? hks_istek_maskele($istekXml) : '';
+
+  return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar, 'ham' => $ham, 'hamIstek' => $hamIstek];
 }
 
 // ── Stok Özeti ────────────────────────────────────────────────────────────
