@@ -48,12 +48,15 @@ function hks_esc($s) {
 // elle yazdığı GG.AA.YYYY kabul edilir; boş/geçersiz girdide BOŞ DİZE döner ve
 // çağıran taraf alanı hiç göndermez (zorunluluk denetimi ayrı yerde yapılır).
 //
-// FORMAT NOTU: DataContract DateTime serileştirmesi ISO 8601 bekler ve bu
-// dosyadaki DİĞER tarih alanları (BaslangicTarihi/BitisTarihi) zaten
-// 'Y-m-d\TH:i:s' ile CANLIDA ÇALIŞIYOR — bu yüzden burada da ISO kullanılır.
-// GTB'nin duyuru ekindeki Ornek_Request.txt dosyasında tarih "01.01.1980
-// 00:00:00" biçiminde yazılmış (elle hazırlanmış SoapUI örneği); ilk canlı
-// denemede ISO reddedilirse alternatif olarak 'd.m.Y H:i:s' denenebilir.
+// FORMAT NOTU — CANLIDA ÖĞRENİLDİ (bkz. config.php HKS_DOGUM_BICIMI):
+// ISO 8601 ('1980-01-01T00:00:00') ile yapılan kayıtsız kişi bildirimleri canlıda
+// HER SEFERİNDE "Tc kimlik numarası Mernis sisteminde bulunamadı" ile reddedildi;
+// aynı kişi HKS'in kendi sitesinden bildirilip sisteme kaydolunca bizim gönderim
+// sorunsuz geçti — yani alan okunmuyor, KPS yalnız TC ile sorgulanıyor.
+// GTB'nin duyuru ekindeki Ornek_Request.txt "01.01.1980 00:00:00" yazıyor, bu
+// yüzden varsayılan artık o biçim. Ayar config.php'den geri alınabilir.
+// Diğer tarih alanları (BaslangicTarihi/BitisTarihi) ISO ile çalışmaya devam
+// ediyor — bu fonksiyon YALNIZ DogumTarihi içindir, onlara dokunmaz.
 function hks_dogum_tarihi_xml($deger) {
     $s = trim((string)$deger);
     if ($s === '') return '';
@@ -63,7 +66,11 @@ function hks_dogum_tarihi_xml($deger) {
     }
     if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) return '';
     if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])) return '';
-    return $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00';
+    // Sabit tanımsızsa (CLI testleri config.php'siz require edebilir) GTB biçimi.
+    $bicim = defined('HKS_DOGUM_BICIMI') ? HKS_DOGUM_BICIMI : 'gtb';
+    return $bicim === 'iso'
+        ? $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00'
+        : $m[3] . '.' . $m[2] . '.' . $m[1] . ' 00:00:00';
 }
 
 // Teşhis çıktısındaki kimlik bilgilerini maskeler. İstek zarfında Password /

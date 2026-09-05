@@ -235,9 +235,9 @@ ok('Eposta gönderilmiyor (panel bu alanı toplamıyor — yasak olduğu için d
     !str_contains($xmlUretici, 'Eposta'));
 
 echo "\n── GTB 12.03.2025: DogumTarihi (kayıtsız ikinci kişide zorunlu) ──\n";
-ok('DogumTarihi ISO biçiminde gönderiliyor',
-    str_contains($xmlUretici, '<b:DogumTarihi>1980-01-01T00:00:00</b:DogumTarihi>'),
-    'beklenen ISO 8601 — diğer tarih alanlarıyla (BaslangicTarihi) aynı biçim');
+ok('DogumTarihi GTB biçiminde gönderiliyor (varsayılan)',
+    str_contains($xmlUretici, '<b:DogumTarihi>01.01.1980 00:00:00</b:DogumTarihi>'),
+    'GTB Ornek_Request.txt biçimi; ISO canlıda MERNİS hatası veriyordu');
 // DataContract alan sırası ALFABETİK olmalı: AdSoyad < CepTel < DogumTarihi <
 // Eposta < KisiSifat < TcKimlikVergiNo < YurtDisiMi. Sıra bozulursa canlı
 // servis alanı sessizce yoksayabilir — bu yüzden konum da doğrulanır.
@@ -259,12 +259,25 @@ ok('alfabetik sıra: AdSoyad < CepTel < DogumTarihi < KisiSifat < TcKimlikVergiN
     'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
 
 // hks_dogum_tarihi_xml() — GERÇEK fonksiyon, biçim normalizasyonu
-ok('YYYY-MM-DD kabul (HTML date input)', hks_dogum_tarihi_xml('1980-01-01') === '1980-01-01T00:00:00');
-ok('GG.AA.YYYY kabul (elle giriş)',      hks_dogum_tarihi_xml('01.01.1980') === '1980-01-01T00:00:00');
-ok('GG/AA/YYYY kabul',                   hks_dogum_tarihi_xml('01/01/1980') === '1980-01-01T00:00:00');
+ok('YYYY-MM-DD kabul (HTML date input)', hks_dogum_tarihi_xml('1980-01-01') === '01.01.1980 00:00:00');
+ok('GG.AA.YYYY kabul (elle giriş)',      hks_dogum_tarihi_xml('01.01.1980') === '01.01.1980 00:00:00');
+ok('GG/AA/YYYY kabul',                   hks_dogum_tarihi_xml('01/01/1980') === '01.01.1980 00:00:00');
 ok('boş girdi → boş dize (alan hiç gönderilmez)', hks_dogum_tarihi_xml('') === '');
 ok('geçersiz tarih (31.02.1980) → boş',  hks_dogum_tarihi_xml('31.02.1980') === '');
 ok('anlamsız metin → boş',               hks_dogum_tarihi_xml('abc') === '');
+
+// HKS_DOGUM_BICIMI='iso' geri dönüş yolu — sabit tek süreçte yeniden
+// tanımlanamadığı için AYRI SÜREÇTE, gerçek fonksiyonla doğrulanır. Bu yol
+// canlıda GTB biçimi de sonuç vermezse kullanılacak; sessizce bozulmamalı.
+$__isoKod = '<?php define("HKS_DOGUM_BICIMI","iso");'
+    . 'require ' . var_export(__DIR__ . '/../halkayit/hks_soap.php', true) . ';'
+    . 'echo hks_dogum_tarihi_xml("1980-01-01");';
+$__isoDosya = sys_get_temp_dir() . '/hks_dogum_iso_' . getmypid() . '.php';
+file_put_contents($__isoDosya, $__isoKod);
+$__isoCikti = trim((string)shell_exec('php ' . escapeshellarg($__isoDosya) . ' 2>&1'));
+@unlink($__isoDosya);
+ok("HKS_DOGUM_BICIMI='iso' → ISO 8601 üretir (geri dönüş yolu)",
+    $__isoCikti === '1980-01-01T00:00:00', 'gelen: ' . $__isoCikti);
 
 echo "\n── Regresyon: DogumTarihi YOKSA alan hiç gönderilmiyor (mevcut akışlar korunur) ──\n";
 $ortakDogumsuz = $ortakUretici;
@@ -318,7 +331,7 @@ ok('kayıtsız satıcının AdSoyad bilgisi gidiyor',
 ok('kayıtsız satıcının CepTel bilgisi gidiyor',
     str_contains($xmlSatinKayitsiz, '<b:CepTel>05551112233</b:CepTel>'));
 ok('kayıtsız satıcının DogumTarihi bilgisi gidiyor',
-    str_contains($xmlSatinKayitsiz, '<b:DogumTarihi>1975-06-15T00:00:00</b:DogumTarihi>'));
+    str_contains($xmlSatinKayitsiz, '<b:DogumTarihi>15.06.1975 00:00:00</b:DogumTarihi>'));
 ok('referanssız (ReferansBildirimKunyeNo=0)',
     str_contains($xmlSatinKayitsiz, '<a:ReferansBildirimKunyeNo>0</a:ReferansBildirimKunyeNo>'));
 
