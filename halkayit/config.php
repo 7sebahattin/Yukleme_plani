@@ -73,6 +73,26 @@ define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 // etkiler. Sonuç alınamazsa 'iso' yapıp geri dönün, kod değişikliği gerekmez.
 define('HKS_DOGUM_BICIMI', 'gtb');
 
+// --- DogumTarihi'nin XML İÇİNDEKİ KONUMU ---
+// CANLI KANIT (05.09.2026): alan alfabetik konumdayken hem ISO hem GTB biçimi
+// denendi; İKİSİ DE birebir aynı "Mernis'te bulunamadı" hatasını verdi. İki
+// farklı biçimin aynı sonucu vermesi, sorunun biçim DEĞİL — alanın hiç
+// OKUNMAMASI olduğunu gösterir.
+//
+// DataContractSerializer elemanları SIRAYLA okur ve beklediği konumda olmayan
+// elemanı hata vermeden ATLAR. Sıra kuralı: önce [DataMember(Order=N)] değeri,
+// sonra alfabetik. Yani sonradan Order ile eklenen bir alan alfabetik yerine
+// DEĞİL, diğer tüm alanlardan SONRA gelir. GTB bu alanı 2025'te ~2016 tarihli
+// bir sözleşmeye ekledi — bu yüzden varsayılan 'son'.
+//
+//   'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi (VARSAYILAN)
+//   'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...  (DENENDİ, OLMADI)
+//
+// Bu da sonuç vermezse kod tarafında denenecek makul ihtimal KALMAZ: alan büyük
+// olasılıkla eski endpoint sözleşmesinde hiç yoktur ve çözüm ws.gtb.gov.tr:8443
+// erişiminin açılmasıdır (bkz. HKS_YENI_ENDPOINT).
+define('HKS_DOGUM_KONUM', 'son');
+
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;
 // bu yüzden HTTP Basic Auth kapalı kalır.
