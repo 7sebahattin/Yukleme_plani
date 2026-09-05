@@ -284,18 +284,6 @@ render_flash();
                 <?php if (can_beyan('write')): ?>
                 <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
                 <?php endif; ?>
-                <?php if (can_beyan('delete')): ?>
-                <!-- Silme LİSTEDEN de yapılabilmeli: eskiden yalnız detay
-                     ekranında vardı, birkaç beyanı temizlemek için her birini
-                     tek tek açmak gerekiyordu. Soft delete (arşivleme). -->
-                <form method="post" action="beyan_delete.php" style="display:inline"
-                      onsubmit="return confirm('<?= h($r['party_no'] ?: '#' . $r['id']) ?> arşivden gizlenecek. Devam edilsin mi?')">
-                    <input type="hidden" name="id"   value="<?= (int)$r['id'] ?>">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <button type="submit" class="btn btn-sm btn-ghost"
-                            style="color:var(--danger)">Sil</button>
-                </form>
-                <?php endif; ?>
             </td>
         </tr>
         <?php endforeach; ?>
@@ -371,14 +359,6 @@ render_flash();
             <?php endif; ?>
             <?php if (can_beyan('write')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-            <?php endif; ?>
-            <?php if (can_beyan('delete')): ?>
-            <form method="post" action="beyan_delete.php" style="display:inline"
-                  onsubmit="return confirm('<?= h($r['party_no'] ?: '#' . $r['id']) ?> arşivden gizlenecek. Devam edilsin mi?')">
-                <input type="hidden" name="id"   value="<?= (int)$r['id'] ?>">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <button type="submit" class="btn btn-sm btn-ghost" style="color:var(--danger)">Sil</button>
-            </form>
             <?php endif; ?>
         </div>
     </div>

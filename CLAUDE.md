@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v208` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v209` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -408,9 +408,17 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **`.btn:disabled` GLOBAL kuralı** (`style.css`) — bu kural yokken pasif buton
   aktifle birebir aynı görünüyordu (uygulama genelinde: `_form.php` palet
   uygula, `beyanlar.php` toplu kaydet, `audit.php` onay butonları). Silme.
-- **Silme listede de var** (`beyanlar.php` tablo satırı + mobil kart) — eskiden
-  yalnız detay ekranındaydı, birkaç beyanı temizlemek için her birini tek tek
-  açmak gerekiyordu. `can_beyan('delete')` ile kapalı, CSRF taşır, soft delete.
+- **Silme POST'tur** — `beyan_delete.php` GET'i bilerek reddeder (GET veri
+  değiştirmez). `beyan_edit.php`'deki Sil uzun süre `<a href="beyan_delete.php?id=">`
+  idi: tıklanınca GET gidiyor, uç nokta sessizce listeye geri atıyor ve
+  **hiçbir şey olmuyordu**. Artık `formaction`/`formmethod="post"` ile
+  çevreleyen formu POST eder (iç içe `<form>` geçersizdir) ve form `id`'yi
+  gizli alanda taşır — `beyan_delete` onu `$_POST`'tan okur.
+  **`beyan_delete.php`'ye `<a href>` ile bağlanma**; test bunu engelliyor.
+- **Düzenle formunda Güncelle DOM'da Sil'den ÖNCE** (`order` ile görsel sıra
+  korunur). Enter tuşu formun İLK submit butonunu tetikler; Sil önce olsaydı
+  metin kutusunda Enter silme başlatırdı.
+- **Listede silme YOK** — bilinçli; silme detay ve düzenle ekranlarından yapılır.
 - **Durum pilleri "Detaylı Filtre" panelinin İÇİNDE** — on düğme liste üstünde
   ekranın yarısını kaplıyordu. Bağlantı (link) olarak kalmaları bilinçli: tek
   tıkla filtreler, forma bağlı değiller, JS kapalıyken de çalışırlar. Durum
