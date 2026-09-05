@@ -286,11 +286,41 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        $iw !== false && $ih !== false && $it !== false && $iw < $ih && $ih < $it,
        "konumlar: whatsapp=$iw hks=$ih temel=$it");
 
+    // Uzun katalog listesi YAZARAK ARANABİLİR olmalı; kısa liste olmamalı.
+    // (Test kataloğunda 2 ürün / 1 ülke var → eşiğin altında, aramasız.)
+    ok('[form] kısa listede arama kutusu YOK',
+       preg_match('/name="hks_ulke_id"[^>]*data-aramali/s', $form) !== 1,
+       'kisa listede arama kutusu fazladan tiklama getirir');
+
+    // Asıl <select> DOM'da KALMALI — değeri o taşır, POST ona bağlı.
+    foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id'] as $alan) {
+        ok("[form] $alan hâlâ <select>", preg_match('/<select[^>]*name="' . $alan . '"/', $form) === 1,
+           'select input ile DEGISTIRILMIS — POST degeri kaybolur');
+    }
+
     // Dört alan da orada mı?
     foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id', 'vehicle_plate'] as $alan) {
         ok("[form] $alan alanı var", strpos($form, 'name="' . $alan . '"') !== false);
     }
 }
+
+// UZUN katalogda arama kutusu AÇILMALI — eşik davranışını doğrula.
+$__uzun = ['zaman' => '2026-07-01T10:00:00+03:00',
+           'urunler' => array_map(fn($i) => ['id' => (string)$i, 'ad' => "URUN $i"], range(1, 25)),
+           'ulkeler' => array_map(fn($i) => ['id' => (string)(100 + $i), 'ad' => "ULKE $i"], range(1, 25)),
+           'sifatlar' => [['id' => '7', 'ad' => 'İhracat']],
+           'bildirimTurleri' => [['id' => '5', 'ad' => 'Satış']],
+           'isletmeTurleri' => [['id' => '3', 'ad' => 'Yurt Dışı']]];
+db()->exec("DELETE FROM hks_kv");
+db()->prepare("INSERT INTO hks_kv (anahtar, deger) VALUES ('listeler_cache', ?)")
+   ->execute([json_encode($__uzun, JSON_UNESCAPED_UNICODE)]);
+$formU = render_form($ID_BOS);
+ok('[form] uzun listede yazarak arama açık',
+   preg_match('/name="hks_urun_id"[^>]*data-aramali="Ürün yazın/u', $formU) === 1,
+   '25 kayitlik listede hala duz acilir liste');
+ok('[form] uzun listede de asıl select duruyor',
+   preg_match('/<select[^>]*name="hks_urun_id"[^>]*>.*?URUN 25/s', $formU) === 1,
+   'option listesi kaybolmus — datalist onerileri select den uretiliyor');
 
 // Katalog boşken bile plaka girilebilmeli (katalogdan bağımsız alan).
 db()->exec("DELETE FROM hks_kv");

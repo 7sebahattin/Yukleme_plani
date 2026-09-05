@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v205');
+    define('APP_SURUM', 'v206');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2565,10 +2565,17 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     }
     if ($firma_sec === '') $firma_sec = bb_son_firma();
 
-    $sec = function (string $ad, string $etiket, array $liste, string $secili, string $not) {
+    // Uzun listeler YAZARAK ARANABİLİR olur (Hal Kayıt'taki "İhracat Yapılan
+    // Ülke" kutusunun aynısı — app.js `data-aramali`). Kısa listelerde arama
+    // kutusu fayda yerine fazladan tıklama getirir; eşik halkayit/app.html'in
+    // kendi gerekçesiyle aynıdır ("kısa listeler bilerek dışarıda").
+    $sec = function (string $ad, string $etiket, array $liste, string $secili, string $not,
+                     string $aramaIpucu = '') {
+        $aramali = $aramaIpucu !== '' && count($liste) > 10;
         echo '<div class="form-group"><label class="form-label">' . h($etiket);
         if ($not !== '') echo ' <span class="beyan-hks-rozet beyan-hks-rozet-ok">' . h($not) . '</span>';
-        echo '</label><select name="' . h($ad) . '" class="form-control">';
+        echo '</label><select name="' . h($ad) . '" class="form-control"'
+           . ($aramali ? ' data-aramali="' . h($aramaIpucu) . '"' : '') . '>';
         echo '<option value="">— seçilmedi —</option>';
         foreach ($liste as $x) {
             echo '<option value="' . h((string)$x['id']) . '"'
@@ -2582,9 +2589,12 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
        . 'Bildirim için gereken <strong>tüm</strong> alanlar burada. Biri bile boşsa '
        . '<strong>"Bildirim Yap"</strong> açılmaz. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
     echo '<div class="beyan-form-grid">';
-    $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '');
-    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not);
-    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not);
+    $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '',
+         'Firma yazın veya listeden seçin');
+    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not,
+         'Ürün yazın veya listeden seçin');
+    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not,
+         'Ülke yazın veya listeden seçin');
     $plaka_alani($f);
     echo '</div></div>';
 }

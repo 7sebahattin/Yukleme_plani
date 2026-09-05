@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v205` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v206` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -343,6 +343,17 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
   alanı açma** — aynı `name` ile iki alan POST'ta çakışır.
   Bölüm **WhatsApp Metni'nin hemen altındadır** (iki formda da aynı sıra).
+- **Yazarak aranabilir select** (`data-aramali="ipucu"` — app.js): Hal Kayıt
+  panelindeki "İhracat Yapılan Ülke" kutusunun aynısı. **Asıl `<select>` DOM'da
+  KALIR**, yalnız görsel olarak gizlenir — değeri o taşır, dolayısıyla POST,
+  sunucu doğrulaması ve mevcut okuma/yazma kodu değişmeden çalışır. Önüne
+  `datalist` bağlı bir metin kutusu eklenir; yazılan metin option adlarıyla
+  **TAM** eşleşince değer atanır ve `change` yayılır. Eşleşme yoksa kutu uyarı
+  rengine döner (`.ara-sec-bos`), sessizce boş kalmaz. Select'i `<input>` ile
+  DEĞİŞTİRME — öneri listesi option'lardan üretilir ve değer kaybolur.
+  `beyan_hks_form_bolumu()` bunu **yalnız 10'dan uzun listelerde** açar; kısa
+  listede arama kutusu fazladan tıklama demektir (halkayit/app.html'in kendi
+  gerekçesiyle aynı).
 - **Plaka BOŞLUKSUZ + büyük harf** — HKS böyle bekler.
   `beyan_plaka_normalize()` TEK doğruluk kaynağıdır ve ÜÇ kaydetme yolunda da
   çağrılır (`beyan_create` / `beyan_edit` / `bb_taslak_kur`). İstemcideki

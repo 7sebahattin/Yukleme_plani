@@ -45,6 +45,95 @@
         if (el && el.matches && el.matches('[data-nospace]')) bosluksuzUygula(el);
     });
 
+    /* ── Yazarak aranabilir select — data-aramali ──────────────────────────
+       Hal Kayıt panelindeki "İhracat Yapılan Ülke" kutusunun aynısı
+       (halkayit/app.html: aramaliSelectYap / selectMetindenSec).
+
+       ASIL <select> DOM'da KALIR, yalnız görsel olarak gizlenir. Değeri o
+       taşır — yani form POST'u, sunucu doğrulaması ve mevcut okuma/yazma
+       kodu hiç değişmeden çalışır. Önüne bir metin kutusu + <datalist>
+       eklenir; yazılan metin option adlarıyla TAM eşleşince select'in değeri
+       atanır ve 'change' yayılır.
+
+       Eşleşme TAM addır — kullanıcı "şef" yazarken henüz seçim yapmamıştır;
+       "ŞEFTALİ" tamamlanınca değer oluşur. Yazı hiçbir kayda denk gelmiyorsa
+       kutu uyarı rengine döner, sessizce boş kalmaz. */
+    const araNorm = (s) => String(s == null ? '' : s)
+        .replace(/İ/g, 'i').replace(/I/g, 'ı')
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u')
+        .replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/ı/g, 'i')
+        .trim();
+
+    function araSelectEslestir(sel, metin) {
+        const n = araNorm(metin);
+        let bulunan = '', cakisma = false;
+        if (n !== '') {
+            for (const o of sel.options) {
+                if (o.value === '') continue;
+                if (araNorm(o.textContent) !== n) continue;
+                if (bulunan === '') { bulunan = o.value; continue; }
+                if (o.value !== bulunan) { cakisma = true; break; }
+            }
+        }
+        const inp = sel._araInput;
+        if (inp) {
+            const yok = n !== '' && bulunan === '';
+            inp.classList.toggle('ara-sec-bos', yok);
+            inp.title = yok ? 'Listede böyle bir kayıt yok'
+                      : (cakisma ? 'Aynı adla birden fazla kayıt var — ilki seçildi, kontrol edin' : '');
+        }
+        if (sel.value !== bulunan) {
+            sel.value = bulunan;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+
+    // Önerileri select'in GÜNCEL option'larından kurar ve görünen metni
+    // select'in değeriyle eşitler (değer koddan atanmışsa da doğru görünür).
+    function araSelectTazele(sel) {
+        const dl = sel._araDl, inp = sel._araInput;
+        if (!dl || !inp) return;
+        dl.innerHTML = '';
+        Array.from(sel.options).forEach(function (o) {
+            if (o.value === '') return;          // "— seçilmedi —" öneri değildir
+            const opt = document.createElement('option');
+            opt.value = o.textContent;
+            dl.appendChild(opt);
+        });
+        const secili = sel.options[sel.selectedIndex];
+        const yeni = (secili && secili.value !== '') ? secili.textContent : '';
+        if (inp.value !== yeni) { inp.value = yeni; inp.classList.remove('ara-sec-bos'); }
+    }
+
+    function araSelectKur(sel) {
+        if (!sel || sel.dataset.aramaliKuruldu === '1') return;
+        sel.dataset.aramaliKuruldu = '1';
+
+        const dl = document.createElement('datalist');
+        dl.id = (sel.id || sel.name || 'ara') + 'Liste';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.className = (sel.className || '') + ' ara-sec';
+        inp.setAttribute('list', dl.id);
+        inp.autocomplete = 'off';
+        inp.placeholder = sel.dataset.aramali || 'yazın veya listeden seçin';
+
+        sel.parentNode.insertBefore(inp, sel);
+        sel.parentNode.insertBefore(dl, sel);
+        sel.classList.add('ara-sec-gizli');
+
+        sel._araInput = inp;
+        sel._araDl    = dl;
+        inp.addEventListener('input',  function () { araSelectEslestir(sel, inp.value); });
+        inp.addEventListener('change', function () { araSelectEslestir(sel, inp.value); });
+        araSelectTazele(sel);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('select[data-aramali]').forEach(araSelectKur);
+    });
+
     /* ── Açılır/kapanır kart bölümleri ── */
     document.querySelectorAll('.collapsible-card').forEach(card => {
         const head = card.querySelector('.card-head-toggle');
