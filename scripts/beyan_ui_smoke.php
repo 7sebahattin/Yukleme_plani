@@ -155,6 +155,34 @@ function render_beyan(int $id): string {
     return (string)ob_get_clean();
 }
 
+// beyanlar.php'yi de GERCEKTEN render et. Kaynak taramasi filtre serigi
+// gibi bir duzenin PHP uyarisi uretip uretmedigini goremez; ust uste kacan
+// sorunlarin hepsi bu katmandaydi.
+// Sayfa iki kez include edildigi icin ust seviye bildirimler korunur.
+function render_liste(array $get): string {
+    global $ROOT;
+    static $tmp = null;
+    if ($tmp === null) {
+        $src = (string)file_get_contents($ROOT . '/beyanlar.php');
+        $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
+        $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+        // const + fonksiyonlar tek blokta: ikinci include'da yeniden tanimlanmasin.
+        $src = str_replace('const BEYAN_PER_PAGE = 50;',
+                           "defined('BEYAN_PER_PAGE') || define('BEYAN_PER_PAGE', 50);", $src);
+        $a = strpos($src, 'function valid_date_beyan');
+        $b = strpos($src, "defined('BEYAN_PER_PAGE')");
+        $src = substr($src, 0, $a) . "if (!function_exists('beyan_url')) {\n"
+             . substr($src, $a, $b - $a) . "\n}\n" . substr($src, $b);
+        $tmp = sys_get_temp_dir() . '/beyanlar_smoke.php';
+        file_put_contents($tmp, $src);
+    }
+    $_GET = $get;
+    ob_start();
+    try { include $tmp; }
+    catch (Throwable $e) { ob_end_clean(); return '__HATA__' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(); }
+    return (string)ob_get_clean();
+}
+
 $fail = 0;
 function ok(string $ad, bool $c, string $ipucu = ''): void {
     global $fail;
@@ -495,17 +523,68 @@ ok('[duzenle] formun ILK submit butonu Sil DEGIL',
 
 // Liste sayfasi: silme BILEREK yok (detay/duzenle ekranindan yapilir).
 $liste_src = file_get_contents(dirname(__DIR__) . '/beyanlar.php');
+$css_src   = file_get_contents(dirname(__DIR__) . '/assets/style.css');
 ok('[liste] silme butonu yok (istenmedi)',
    strpos($liste_src, 'beyan_delete.php') === false,
    'listeye silme geri gelmis');
 
 // Durum pilleri artik detayli filtrenin ICINDE olmali (liste ustunde degil).
 ok('[liste] durum pilleri detayli filtre icinde',
-   preg_match('/id="beyanFilterPanel".*?class="filter-pills"/s', $liste_src) === 1,
+   preg_match('/id="beyanFilterPanel".*?class="bff-durum"/s', $liste_src) === 1,
    'piller hala liste ustunde — ekranin yarisini kapliyordu');
 ok('[liste] durum secilince panel acik geliyor',
-   strpos($liste_src, "\$f_status !== '' || \$tarih_bas !== ''") !== false,
+   strpos($liste_src, '$detay_aktif ? \' bff-open\'') !== false,
    'durum filtresi etkinken panel kapali kalir, kullanici hangi filtrede oldugunu goremez');
+
+// Kompakt filtre serigi: ac/kapa dugmesi arama satirinin ICINDE olmali ki
+// kendine satir acmasin (masaustunde ~200px'lik blok bu yuzden kucuydu).
+ok('[liste] filtre dugmesi arama satirinin icinde',
+   preg_match('/class="bff-main".*?id="beyanFilterToggle".*?<\/div>/s', $liste_src) === 1,
+   'toggle bff-main disinda — yeniden kendi satirini kapliyor');
+// Detay paneli HER genislikte katlanmali: >=768px'de toggle'i gizleyen kural
+// geri gelirse panel masaustunde kalici acik olur.
+ok('[liste] toggle masaustunde gizlenmiyor',
+   preg_match('/min-width:\s*768px\s*\)\s*\{[^}]*\.beyan-filter-toggle[^}]*display:\s*none/s', $css_src) !== 1,
+   'toggle >=768px gizlenmis — panel masaustunde kalici acik kalir');
+ok('[liste] detay paneli varsayilan kapali',
+   preg_match('/\.beyan-filter-form \.bff-filters \{[^}]*display:\s*none/s', $css_src) === 1,
+   'panel varsayilan acik — liste ustu yine dolar');
+// On durum pili sarmamali; tasinca yatay kaymali.
+ok('[liste] durum serigi sarmiyor (yatay kayar)',
+   preg_match('/> \.bff-durum \{[^}]*flex-wrap:\s*nowrap[^}]*overflow-x:\s*auto/s', $css_src) === 1,
+   'piller sariyor — uc satira yayilir');
+// Panel kapaliyken hangi filtrenin etkin oldugu dugmede yazmali.
+ok('[liste] etkin filtre dugmede yaziyor',
+   strpos($liste_src, 'bft-rozet') !== false && strpos($liste_src, '$detay_ilk') !== false,
+   'panel kapaliyken kullanici hangi filtrede oldugunu goremez');
+
+// ── Liste sayfasi RENDER testleri ─────────────────────────────────────────
+$liste_kapali = render_liste([]);
+$liste_acik   = render_liste(['status' => 'taslak']);
+foreach (['filtresiz' => $liste_kapali, 'durum filtreli' => $liste_acik] as $ad => $html) {
+    if (strncmp($html, '__HATA__', 8) === 0) { ok("[liste:$ad] render edildi", false, substr($html, 8)); continue; }
+    ok("[liste:$ad] render edildi", strlen($html) > 500);
+    ok("[liste:$ad] PHP uyarisi yok",
+       stripos($html, 'Warning:') === false && stripos($html, 'Notice:') === false
+       && stripos($html, 'Deprecated:') === false && stripos($html, 'Fatal error') === false,
+       'HTML icinde PHP hatasi var');
+    $bozuk = etiket_dengesi($html);
+    ok("[liste:$ad] HTML etiket dengesi", empty($bozuk), implode(' | ', $bozuk));
+}
+// Filtre yokken panel KAPALI gelmeli — liste ustu bos kalir.
+ok('[liste:filtresiz] detay paneli kapali',
+   strpos($liste_kapali, 'bff-filters bff-open') === false
+   && strpos($liste_kapali, 'bft-rozet') === false,
+   'panel filtre yokken acik geliyor — eski kalabalik geri gelmis');
+// Durum secilince panel acik gelmeli ve dugmede etkin filtre yazmali.
+ok('[liste:durum filtreli] panel acik + rozet var',
+   strpos($liste_acik, 'bff-filters bff-open') !== false
+   && strpos($liste_acik, 'bft-rozet') !== false,
+   'durum etkinken panel kapali ya da rozet yok');
+// Durum pilleri toggle DEGIL, bagimsiz baglanti olarak kalmali (JS'siz calisir).
+ok('[liste] durum pilleri bagimsiz baglanti',
+   preg_match('/class="bff-durum".*?<a href="beyanlar\.php\?status=taslak"/s', $liste_kapali) === 1,
+   'piller <a> olmaktan cikmis — JS kapaliyken filtre calismaz');
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

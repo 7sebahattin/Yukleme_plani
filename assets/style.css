@@ -1093,7 +1093,7 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 @media print {
     body { background: #fff; }
     .topbar, .page-head, .page-head-actions, .no-print, .filter-pills,
-    .form-foot, .topnav { display: none !important; }
+    .form-foot, .topnav, .beyan-filter-form { display: none !important; }
     .container { padding: 0; max-width: none; }
     .print-sheet { border: none; box-shadow: none; padding: 0; }
     .print-table { font-size: 9.5pt; }
@@ -5007,13 +5007,35 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 .beyan-badge-yukleme_olustu  { background: #ede9fe; color: #5b21b6; }
 .beyan-badge-yuklendi        { background: #d1fae5; color: #065f46; font-weight: 700; }
 
-/* Beyan filtre formu */
-.beyan-filter-form { margin-bottom: 14px; }
-.beyan-filter-form .bff-main { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+/* Beyan filtre formu
+   Detay paneli HER genişlikte katlanır. Eskiden toggle yalnız <768px'de
+   görünürdü; masaüstünde panel kalıcı açık kalıyor ve on durum pili üç
+   satıra sarıp beş girdiyle birlikte liste üstünde ~200px yer kaplıyordu. */
+.beyan-filter-form { margin-bottom: 12px; }
+.beyan-filter-form .bff-main { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .beyan-filter-form .bff-main input[type="search"] { flex: 1; min-width: 180px; }
-.beyan-filter-form .bff-filters {
-    display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end;
+
+.beyan-filter-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: .85rem; padding: 8px 12px; line-height: 1.2;
+    background: var(--card); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); cursor: pointer; color: var(--text);
+    white-space: nowrap;
 }
+.beyan-filter-toggle .bft-ok { transition: transform .15s ease; display: inline-block; }
+.beyan-filter-toggle[aria-expanded="true"] .bft-ok { transform: rotate(180deg); }
+.beyan-filter-toggle .bft-rozet {
+    background: var(--primary); color: #fff; border-radius: 999px;
+    padding: 1px 8px; font-size: .74rem; font-weight: 600;
+    max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.beyan-filter-form .bff-filters {
+    display: none; gap: 8px 10px; flex-wrap: wrap; align-items: flex-end;
+    margin-top: 8px; padding: 10px 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.beyan-filter-form .bff-filters.bff-open { display: flex; }
 .beyan-filter-form .bff-filters > div {
     display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 120px;
 }
@@ -5021,18 +5043,21 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
     font-size: .75rem; color: var(--text-muted); font-weight: 500; white-space: nowrap;
 }
 .beyan-filter-form .bff-filters input { width: 100%; }
-@media (max-width: 767px) {
-    .beyan-filter-form .bff-filters { display: none; }
-    .beyan-filter-form .bff-filters.bff-open { display: flex; }
-    .beyan-filter-toggle {
-        display: inline-flex; align-items: center; gap: 6px;
-        font-size: .85rem; padding: 6px 10px; margin-bottom: 8px;
-        background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-        cursor: pointer; color: var(--text);
-    }
+.beyan-filter-form .bff-filters > .bff-uygula { flex: 0 0 auto; min-width: auto; align-self: flex-end; }
+
+/* Durum pilleri tek satır — sarmaz, taşarsa yatay kayar. */
+.beyan-filter-form .bff-filters > .bff-durum {
+    flex: 1 0 100%; min-width: 0;
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: thin;
 }
-@media (min-width: 768px) {
-    .beyan-filter-toggle { display: none; }
+.beyan-filter-form .bff-durum > .bff-durum-lbl {
+    font-size: .75rem; color: var(--text-muted); font-weight: 500;
+    white-space: nowrap; flex: 0 0 auto; padding-right: 2px;
+}
+.beyan-filter-form .bff-durum > .pill {
+    flex: 0 0 auto; padding: 4px 11px; font-size: .78rem; white-space: nowrap;
 }
 
 /* Beyan kart listesi */
