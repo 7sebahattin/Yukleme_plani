@@ -47,53 +47,41 @@ define('HKS_YENI_ENDPOINT', false);
 define('HKS_ENDPOINT_ESKI', 'https://hks.hal.gov.tr/WebServices/%sService.svc');
 define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 
-// --- Kayıtsız ikinci kişide DogumTarihi biçimi ---
-// CANLI GÖZLEM (05.09.2026): kayıtsız kişiye yapılan Satın Alım bildirimleri
-// HER SEFERİNDE "Tc kimlik numarası Mernis sisteminde bulunamadı" ile
-// reddedildi — TC, ad ve doğum tarihi doğru olmasına rağmen. Aynı kişi HKS'in
-// KENDİ sitesinden bildirilince (kişi böylece sisteme kaydolur) bizim
-// panelden sonraki gönderim SORUNSUZ geçti. Bu, doğum tarihinin karşı tarafa
-// ULAŞMADIĞINI gösteriyor: alan okunmayınca KPS yalnız TC ile sorgulanıyor ve
-// kayıtsız kişide tam olarak bu hata dönüyor.
+// --- Kayıtsız ikinci kişide DogumTarihi: KONUM + BİÇİM ---
 //
-// İki olası sebep vardı: (a) alan yalnız YENİ endpoint şemasında var,
-// (b) biçim yanlış. (a) şu an DENENEMİYOR — endpoint_test.php yeni adrese
-// TCP bağlantısı bile kuramıyor (ws.gtb.gov.tr:8443 kapalı). Geriye (b) kalıyor:
-// GTB'nin 12.03.2025 duyurusunun ekindeki Ornek_Request.txt doğum tarihini
-// "01.01.1980 00:00:00" biçiminde yazıyor — yani alan büyük olasılıkla DateTime
-// değil METİN ve Türkçe biçim bekliyor. ISO 8601 ("1980-01-01T00:00:00")
-// gönderdiğimizde ayrıştırılamayıp sessizce boş kabul ediliyor olabilir.
+// GTB, 12.03.2025 duyurusuyla kayıtsız kişi bildirimlerinde TC ile birlikte
+// `DogumTarihi` göndermeyi zorunlu kıldı ve alanı ~2016 tarihli bir WCF
+// sözleşmesine ekledi. Alanın XML'deki KONUMU ya da BİÇİMİ tutmazsa istek
+// SESSİZCE başarısız olur: `DataContractSerializer` beklediği konumda olmayan
+// elemanı hata vermeden ATLAR, sunucu alanı boş görür.
 //
-//   'gtb' → 01.01.1980 00:00:00   ✅ CANLIDA KANITLANDI (GTB'nin kendi örneği)
-//   'iso' → 1980-01-01T00:00:00   ❌ eski davranış — künye ÜRETMEDİ
+// BU DEĞERLER ARTIK "KANIT" DEĞİL, YALNIZCA BAŞLANGIÇ TAHMİNİDİR.
+// 05.09.2026'da 'son' + 'gtb' canlıda künye üretti; 07.09.2026'da AYNI kod,
+// AYNI kişi için "... doğum tarihi girilmelidir" aldı. Yani doğru kombinasyon
+// bizim kontrolümüz dışında değişebiliyor ve tek bir sabite yazmak kırılgan.
+// Bu yüzden çalışan kombinasyon ÖĞRENİLİR (hks_kv.dogum_varyant) ve teslim
+// edilemediğinde merdiven diğerlerini dener — bkz. hks_soap.php
+// hks_bildirim_kaydet(). Buradaki sabitler yalnız HENÜZ BİR ŞEY ÖĞRENİLMEDİYSE
+// kullanılır.
 //
-// RİSK DAR: bu alan YALNIZCA kayıtsız ikinci kişide gönderilir. Kayıtlı kişi,
-// yurt dışı Satış ve Sevk Etme akışlarında alan hiç eklenmez — onlar bu
-// ayardan HİÇ etkilenmez. Yani değişiklik yalnız hâlihazırda ÇALIŞMAYAN akışı
-// etkiler. Sonuç alınamazsa 'iso' yapıp geri dönün, kod değişikliği gerekmez.
+//   HKS_DOGUM_KONUM:  'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi
+//                     'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...
+//   HKS_DOGUM_BICIMI: 'gtb'       → 01.01.1980 00:00:00   (GTB Ornek_Request.txt)
+//                     'iso'       → 1980-01-01T00:00:00
+define('HKS_DOGUM_KONUM', 'son');
 define('HKS_DOGUM_BICIMI', 'gtb');
 
-// --- DogumTarihi'nin XML İÇİNDEKİ KONUMU ---
-// CANLI KANIT (05.09.2026): alan alfabetik konumdayken hem ISO hem GTB biçimi
-// denendi; İKİSİ DE birebir aynı "Mernis'te bulunamadı" hatasını verdi. İki
-// farklı biçimin aynı sonucu vermesi, sorunun biçim DEĞİL — alanın hiç
-// OKUNMAMASI olduğunu gösterir.
+// --- Doğum tarihi teslim merdiveni ---
+// true  → doğum tarihi gönderildiği hâlde HKS "girilmelidir" derse (istek TÜMDEN
+//         reddedilmiş, HİÇ künye oluşmamış, rüsum doğmamıştır) diğer konum/biçim
+//         kombinasyonları sırayla denenir ve teslim edileni ÖĞRENİLİR.
+// false → tek deneme; eski davranış.
 //
-// DataContractSerializer elemanları SIRAYLA okur ve beklediği konumda olmayan
-// elemanı hata vermeden ATLAR. Sıra kuralı: önce [DataMember(Order=N)] değeri,
-// sonra alfabetik. Yani sonradan Order ile eklenen bir alan alfabetik yerine
-// DEĞİL, diğer tüm alanlardan SONRA gelir. GTB bu alanı 2025'te ~2016 tarihli
-// bir sözleşmeye ekledi — bu yüzden varsayılan 'son'.
-//
-//   'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi
-//                 ✅ CANLIDA KANITLANDI — künye üretildi. DEĞİŞTİRMEYİN.
-//   'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...
-//                 ❌ DENENDİ, OLMADI (iki farklı biçimle de "Mernis'te bulunamadı").
-//
-// Bu ayrıca alanın ESKİ endpoint şemasında VAR olduğunu kanıtlar — sorun hiçbir
-// zaman endpoint değil, konumdu. "Alfabetik daha doğru görünüyor" diye geri
-// çevirmeyin: yanlış konum SESSİZCE başarısız olur, HKS uyarı vermez.
-define('HKS_DOGUM_KONUM', 'son');
+// MÜKERRER GÖNDERİM RİSKİ YOK: merdiven yalnızca HKS'ten TEK BİR satır cevabı
+// bile dönmediğinde ilerler (hks_dogum_okunmadi_mi). Satır cevabı varsa künye
+// oluşmuş olabilir ve merdiven ORADA DURUR. Ayrıca "Mernis'te bulunamadı"
+// hatasında da durur — o hata alanın ULAŞTIĞINI, DEĞERİN yanlış olduğunu söyler.
+define('HKS_DOGUM_DENEME', true);
 
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;

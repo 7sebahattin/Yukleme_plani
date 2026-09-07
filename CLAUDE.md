@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v214` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v215` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -591,4 +591,5 @@ Yeni özellik eklerken:
 | Rapor toplamı tutmuyor | Para birimleri toplanmış | `GROUP BY currency` — kurları ayır |
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |
-| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" | SOAP alanı **yanlış konumda** → DataContract onu sessizce atlar, KPS yalnız TC ile sorgulanır | `DogumTarihi` **EN SONDA** + `dd.MM.yyyy HH:mm:ss` biçiminde (`HKS_DOGUM_KONUM`/`HKS_DOGUM_BICIMI`) — bkz. `halkayit/README.md` "KONUM VE BİÇİM" kutusu. Alfabetik sıraya geri çevirmeyin |
+| HKS "... doğum tarihi girilmelidir" | `DogumTarihi` XML'de var ama **beklenen konumda değil** → DataContract onu sessizce atlar | Otomatiktir: `hks_bildirim_kaydet()` merdiveni diğer konum/biçimleri dener ve çalışanı `hks_kv.dogum_varyant`'a **öğrenir**. Dördü de reddedilirse → yeni endpoint gerekir |
+| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" | Alan **ULAŞTI**, KPS eşleşmedi — sorun **değerde** | TC + doğum tarihini kimlik kartıyla karşılaştır. Bu hatada merdiven bilerek DURUR; başka konum denemek değeri düzeltmez |

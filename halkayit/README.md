@@ -212,41 +212,59 @@ kimlik numarası ile birlikte Doğum Tarihi bilgisi zorunlu hale getirilmiştir.
 Sistemde kayıtlı olmayan kişi bildirimleri için T.C. kimlik numarası ve doğum tarihi
 bilgilerinin girilmesi gerekmektedir."*
 
-> ### ⚠️ KONUM VE BİÇİM — CANLIDA (WEB SERVİSTE) KANITLANDI, DEĞİŞTİRMEYİN
+> ### ⚠️ KONUM VE BİÇİM SABİT DEĞİL — ÖĞRENİLİR
 >
-> Bu iki kural **tahmin değil**; 05.09.2026'da canlı sistemde, üç ayrı gönderimle
-> teker teker elenerek bulundu. Yanlış hâlleri **sessizce** başarısız olur:
-> HKS hiçbir uyarı vermez, yalnızca *"Tc kimlik numarası Mernis sisteminde
-> bulunamadı"* der ve kayıtsız kişiye **hiçbir bildirim yapılamaz.**
+> `DogumTarihi` alanının XML'deki **konumu** ve **biçimi** tutmazsa istek
+> **sessizce** başarısız olur: `DataContractSerializer` beklediği konumda
+> olmayan elemanı hata vermeden **atlar**, sunucu alanı boş görür.
 >
-> **1. Konum: `DogumTarihi` EN SONDA gönderilir** — alfabetik sırada DEĞİL:
-> `AdSoyad` → `CepTel` → `KisiSifat` → `TcKimlikVergiNo` → `YurtDisiMi` →
-> **`DogumTarihi`**
+> Bu README daha önce *"konum = son, biçim = GTB — canlıda kanıtlandı,
+> DEĞİŞTİRMEYİN"* diyordu. **Bu iddia 07.09.2026'da çürüdü:**
 >
-> Sebebi: `DataContractSerializer` elemanları sırayla okur ve beklediği konumda
-> olmayanı **hata vermeden atlar**. Sıralama önce `[DataMember(Order=N)]`, sonra
-> alfabetiktir — sonradan `Order` ile eklenen alan alfabetik yerine değil,
-> diğer TÜM alanlardan sonra gelir. GTB bu alanı 2025'te ~2016 tarihli bir
-> sözleşmeye ekledi.
+> | Tarih | Konum/Biçim | Sonuç |
+> |---|---|---|
+> | 05.09.2026 | son + gtb | ✅ künye üretildi |
+> | 05.09.2026 | alfabetik + iso / alfabetik + gtb | ❌ "Mernis'te bulunamadı" |
+> | **07.09.2026** | **son + gtb (AYNI KOD)** | ❌ **"... doğum tarihi girilmelidir"** |
 >
-> **2. Biçim: `23.12.1963 00:00:00`** (GTB'nin `Ornek_Request.txt` biçimi),
-> ISO 8601 değil.
+> Aynı kod, aynı kişi, iki gün arayla farklı sonuç → doğru kombinasyon **bizim
+> kontrolümüz dışında değişebiliyor.** Tek bir sabite yazmak bu yüzden kırılgan.
 >
-> **Eleme kaydı** (her satır ayrı bir canlı gönderim):
+> **İKİ HATA MESAJI İKİ AYRI ŞEYDİR — karıştırmayın:**
 >
-> | # | Konum | Biçim | Sonuç |
-> |---|---|---|---|
-> | 1 | alfabetik | ISO `1969-01-27T00:00:00` | ❌ Mernis'te bulunamadı |
-> | 2 | alfabetik | GTB `23.12.1963 00:00:00` | ❌ Mernis'te bulunamadı |
-> | 3 | **son** | **GTB** | ✅ **künye üretildi** |
+> | HKS mesajı | Anlamı | Yapılacak |
+> |---|---|---|
+> | `... doğum tarihi girilmelidir` | Alan sunucuya **ULAŞMADI** (konum/biçim yanlış) | Başka varyant dene |
+> | `Tc kimlik ... Mernis sisteminde bulunamadı` | Alan **ULAŞTI**, KPS eşleşmedi (**değer** yanlış) | TC + doğum tarihini kimlikle karşılaştır |
 >
-> 1 ve 2'nin AYNI hatayı vermesi biçimi eledi (alan hiç okunmuyordu); 3 konumun
-> asıl sebep olduğunu kanıtladı. İkisi de `config.php`'den ayarlanabilir
-> (`HKS_DOGUM_KONUM` / `HKS_DOGUM_BICIMI`) ama **çalışan değerler bunlardır** —
-> "alfabetik daha doğru görünüyor" diye geri çevirmeyin.
+> Bu ayrım, önceki eleme kaydının neden yanlış yorumlandığını da açıklar:
+> "alfabetik + ISO" ve "alfabetik + GTB" *Mernis* hatası vermişti — yani o
+> konumda alan **okunuyordu**, sorun biçim değil değerdi. "Konum tek suçlu"
+> sonucu bu yüzden fazla kesindi.
 >
-> Bu ayrıca şunu kanıtlar: **alan ESKİ endpoint şemasında VARDIR.** Bu README
-> daha önce "yalnız yeni şemada bulunması muhtemel" diyordu — yanlıştı.
+> **ÇÖZÜM — teslim merdiveni** (`hks_soap.php` → `hks_bildirim_kaydet`):
+> doğum tarihi gönderildiği hâlde HKS "girilmelidir" derse diğer
+> konum/biçim kombinasyonları sırayla denenir; **teslim edilen kombinasyon
+> `hks_kv.dogum_varyant` içine ÖĞRENİLİR** ve sonraki bildirimler doğrudan
+> onunla gider. GTB yine değiştirirse merdiven kendini yeniden ayarlar.
+>
+> **MÜKERRER GÖNDERİM RİSKİ YOK.** `hks_dogum_okunmadi_mi()` merdiveni
+> yalnızca HKS'ten **tek bir `BildirimKayitCevap` bile dönmediğinde**
+> ilerletir — yani istek zarf düzeyinde tümden reddedilmiş, hiçbir künye
+> oluşmamış ve rüsum doğmamıştır. Tek satır cevabı varsa merdiven **durur**
+> (künye oluşmuş olabilir). "Mernis'te bulunamadı" hatasında da **durur**.
+> Yaptığı şey, panelin bugün kullanıcıya elle yaptırdığının aynısıdır
+> ("taslağınız SİLİNMEDİ — düzeltip tekrar gönderin"), yalnız otomatik.
+>
+> `config.php`'deki `HKS_DOGUM_KONUM` / `HKS_DOGUM_BICIMI` artık **yalnız
+> başlangıç tahminidir** (henüz bir şey öğrenilmediyse kullanılır).
+> `HKS_DOGUM_DENEME = false` merdiveni kapatır, eski tek-deneme davranışına döner.
+>
+> **Dört varyantın hepsi reddedilirse** sorun bizim gönderimimizde değildir:
+> alan bu endpoint'in sözleşmesinde yok demektir. Çözüm **yeni endpoint**'e
+> geçmektir (`ws.gtb.gov.tr:8443`) — bunun için önce hosting tarafında o porta
+> çıkış açılmalıdır (05.09.2026 itibarıyla TCP bağlantısı kurulamıyor).
+> Gönderim sonucu ekranı bu durumda tam olarak bunu yazar.
 
 - **Yalnız dolu olduğunda gönderilir** (`hks_dogum_tarihi_xml()` boş dize dönerse alan
   hiç eklenmez) — böylece kayıtlı ikinci kişili ve yurt dışı akışlar birebir eskisi gibi
@@ -320,13 +338,13 @@ denildi:
 Adres artık `config.php`'den seçilir: **`HKS_YENI_ENDPOINT`** (varsayılan `false` — mevcut
 çalışan davranış korunur).
 
-> **DÜZELTME (05.09.2026).** Bu bölüm daha önce *"`DogumTarihi` alanının yalnız yeni
-> şemada bulunması muhtemel, geçiş büyük olasılıkla gereklidir"* diyordu — **yanlıştı.**
-> Alan ESKİ endpoint'te de vardır; yalnızca XML'de **yanlış konumda** gönderiliyordu
-> (bkz. yukarıdaki "KONUM VE BİÇİM" kutusu). Konum düzeltilince kayıtsız kişiye
-> Satın Alım bildirimi eski adresten sorunsuz geçti. Geçiş yine de er ya da geç
-> gereklidir (GTB'nin verdiği birlikte kullanım süresi 27.03.2025'te doldu), ama
-> **kayıtsız kişi sorunu için gerekli değildi.**
+> **DURUM (07.09.2026).** Eski endpoint bu alanı **tanıyor** — "... doğum tarihi
+> girilmelidir" diyen doğrulama oradan geliyor, yani alan sözleşmede var. Ama
+> hangi konum/biçimle okuduğu **oynak** (bkz. yukarıdaki kutu). Merdiven dört
+> kombinasyonu da denedikten sonra hâlâ "girilmelidir" geliyorsa geriye tek
+> açıklama kalır: bu endpoint'in sözleşmesi alanı artık kabul etmiyor →
+> **yeni endpoint'e geçilmelidir.** Geçiş zaten er ya da geç gereklidir
+> (GTB'nin verdiği birlikte kullanım süresi 27.03.2025'te doldu).
 >
 > Ayrıca: 05.09.2026 itibarıyla sunucudan `ws.gtb.gov.tr:8443` adresine **TCP
 > bağlantısı kurulamıyor** ("Could not connect to server") — geçiş yapılacaksa önce
