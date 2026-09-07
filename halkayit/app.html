@@ -3475,6 +3475,35 @@ $('btnOnay').onclick = async () => {
         '<div style="margin-top:6px">Bu iki satırı (TC + Doğum Tarihi) kişinin ' +
         '<b>kimlik kartıyla</b> karşılaştırın — KPS ikisini birlikte doğrular.</div></div>';
     }
+    // DOĞUM TARİHİ TESLİM MERDİVENİ — sunucu "doğum tarihi girilmelidir" derse
+    // alan XML'de olduğu hâlde OKUNMAMIŞ demektir (DataContractSerializer
+    // beklemediği konumdaki elemanı sessizce atlar). Backend bu durumda diğer
+    // konum/biçim kombinasyonlarını dener; ne denendiği burada görünür, yoksa
+    // kullanıcı aynı hatayı tekrar tekrar alır ve neden olduğunu bilemez.
+    const _dd = j.dogumDenemeleri || [];
+    if (_dd.length) {
+      const _son = _dd[_dd.length - 1];
+      const _satirlar = _dd.map(d =>
+        `<div class="onay-satir"><span>konum: <b>${eHtml(d.konum)}</b> · biçim: <b>${eHtml(d.bicim)}</b></span>` +
+        `<b>${d.dogumOkundu ? '✓ okundu' : '✗ okunmadı'}</b></div>`).join('');
+      if (!_son.dogumOkundu) {
+        html += '<div class="mesaj hata" style="display:block;margin-top:8px">' +
+          '<b>⚠️ Doğum tarihi gönderildi ama HKS OKUMADI.</b>' +
+          '<div style="margin-top:6px">Alan istekte var (Teknik Detay\'da görebilirsiniz) ' +
+          'ama sunucu "girilmelidir" diyor — yani alanı beklediği yerde bulamıyor. ' +
+          'Denenen kombinasyonlar:</div>' + _satirlar +
+          '<div style="margin-top:6px">Hepsi reddedildi. <b>Hiçbir künye oluşmadı, rüsum doğmadı.</b> ' +
+          'Bu noktada sorun bizim gönderimimizde değil, sözleşmededir: HKS büyük olasılıkla ' +
+          'bu alanı YENİ endpoint\'te bekliyor (<code>ws.gtb.gov.tr:8443</code>). ' +
+          'Hosting tarafında o porta çıkış açıldıktan sonra ' +
+          '<code>config.php → HKS_YENI_ENDPOINT = true</code> yapılmalı.</div></div>';
+      } else if (_dd.length > 1) {
+        html += '<div class="mesaj tamam" style="display:block;margin-top:8px">' +
+          '✅ Doğum tarihi <b>konum: ' + eHtml(_son.konum) + ' · biçim: ' + eHtml(_son.bicim) +
+          '</b> ile teslim edildi. Bu kombinasyon <b>öğrenildi</b>; sonraki bildirimler ' +
+          'doğrudan bununla gider.</div>';
+      }
+    }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
       if (tamam) herhangiBasarili = true;

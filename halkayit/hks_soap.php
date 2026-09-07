@@ -57,7 +57,7 @@ function hks_esc($s) {
 // yüzden varsayılan artık o biçim. Ayar config.php'den geri alınabilir.
 // Diğer tarih alanları (BaslangicTarihi/BitisTarihi) ISO ile çalışmaya devam
 // ediyor — bu fonksiyon YALNIZ DogumTarihi içindir, onlara dokunmaz.
-function hks_dogum_tarihi_xml($deger) {
+function hks_dogum_tarihi_xml($deger, $bicimZorla = null) {
     $s = trim((string)$deger);
     if ($s === '') return '';
     // GG.AA.YYYY veya GG/AA/YYYY → YYYY-MM-DD
@@ -66,11 +66,98 @@ function hks_dogum_tarihi_xml($deger) {
     }
     if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) return '';
     if (!checkdate((int)$m[2], (int)$m[3], (int)$m[1])) return '';
-    // Sabit tanımsızsa (CLI testleri config.php'siz require edebilir) GTB biçimi.
-    $bicim = defined('HKS_DOGUM_BICIMI') ? HKS_DOGUM_BICIMI : 'gtb';
+    // Biçim: çağrıdan zorlanmadıysa sabitten, sabit de yoksa (CLI testleri
+    // config.php'siz require edebilir) GTB biçimi.
+    $bicim = $bicimZorla !== null
+        ? $bicimZorla
+        : (defined('HKS_DOGUM_BICIMI') ? HKS_DOGUM_BICIMI : 'gtb');
     return $bicim === 'iso'
         ? $m[1] . '-' . $m[2] . '-' . $m[3] . 'T00:00:00'
         : $m[3] . '.' . $m[2] . '.' . $m[1] . ' 00:00:00';
+}
+
+// ── DogumTarihi teslim varyantı: konum + biçim ───────────────────────────────
+// NEDEN VAR: GTB, `DogumTarihi` alanını 2025'te ~2016 tarihli bir sözleşmeye
+// ekledi ve alanın XML'deki YERİ ile BİÇİMİ tutmadığında istek SESSİZCE
+// başarısız olur — `DataContractSerializer` beklediği konumda olmayan elemanı
+// hata vermeden ATLAR, sunucu alanı boş görür. Doğru kombinasyonu tek bir
+// sabite yazmak KIRILGAN çıktı: 05.09.2026'da 'son' konumu canlıda künye
+// üretti, 07.09.2026'da AYNI kod aynı kişi için "doğum tarihi girilmelidir"
+// aldı — yani sözleşme bizim kontrolümüz dışında değişebiliyor. Bu yüzden
+// kombinasyon artık SABİT DEĞİL, ÖĞRENİLEN bir değerdir (hks_kv.dogum_varyant)
+// ve teslim edilemediğinde merdiven (hks_bildirim_kaydet) diğerlerini dener.
+function hks_dogum_varyant_coz($varyant = null) {
+  if (is_array($varyant) && isset($varyant['konum'], $varyant['bicim'])) {
+    return [
+      'konum' => $varyant['konum'] === 'alfabetik' ? 'alfabetik' : 'son',
+      'bicim' => $varyant['bicim'] === 'iso' ? 'iso' : 'gtb',
+    ];
+  }
+  $ogrenilen = hks_dogum_varyant_ogrenilen();
+  if ($ogrenilen) return $ogrenilen;
+  return [
+    'konum' => (defined('HKS_DOGUM_KONUM') && HKS_DOGUM_KONUM === 'alfabetik') ? 'alfabetik' : 'son',
+    'bicim' => (defined('HKS_DOGUM_BICIMI') && HKS_DOGUM_BICIMI === 'iso') ? 'iso' : 'gtb',
+  ];
+}
+
+// Öğrenilen varyant. hks_kv YOKSA (CLI testleri hks_soap.php'yi db.php'siz
+// require eder) sessizce null döner — bu dosya DB'ye bağımlı hâle GELMEZ.
+function hks_dogum_varyant_ogrenilen() {
+  if (!function_exists('hks_kv_oku')) return null;
+  try { $v = hks_kv_oku('dogum_varyant', null); }
+  catch (Throwable $e) { return null; }
+  if (!is_array($v) || !isset($v['konum'], $v['bicim'])) return null;
+  return [
+    'konum' => $v['konum'] === 'alfabetik' ? 'alfabetik' : 'son',
+    'bicim' => $v['bicim'] === 'iso' ? 'iso' : 'gtb',
+  ];
+}
+
+function hks_dogum_varyant_ogren($varyant, $kanit = '') {
+  if (!function_exists('hks_kv_yaz')) return;
+  $v = hks_dogum_varyant_coz($varyant);
+  try {
+    hks_kv_yaz('dogum_varyant', [
+      'konum' => $v['konum'], 'bicim' => $v['bicim'],
+      'zaman' => date('c'), 'kanit' => (string)$kanit,
+    ]);
+  } catch (Throwable $e) { error_log('[hks] dogum varyanti yazilamadi: ' . $e->getMessage()); }
+}
+
+// Denenecek kombinasyonlar — yürürlükteki varyant HER ZAMAN ilk sıradadır,
+// yani hâlihazırda çalışan kurulum fazladan tek bir istek bile atmaz.
+function hks_dogum_merdiveni() {
+  $ilk = hks_dogum_varyant_coz(null);
+  $liste = [$ilk];
+  foreach ([['son','gtb'], ['alfabetik','gtb'], ['alfabetik','iso'], ['son','iso']] as $c) {
+    if ($c[0] === $ilk['konum'] && $c[1] === $ilk['bicim']) continue;
+    $liste[] = ['konum' => $c[0], 'bicim' => $c[1]];
+  }
+  return $liste;
+}
+
+// "Doğum tarihini gönderdik ama sunucu OKUMADI" durumu.
+//
+// İKİ HATA İKİ AYRI ŞEYDİR, karıştırmayın:
+//   • "... doğum tarihi girilmelidir"      → alan sunucuya ULAŞMADI (konum/biçim).
+//   • "Tc kimlik ... Mernis'te bulunamadı" → alan ULAŞTI, KPS eşleşmedi (DEĞER yanlış).
+// Merdiven YALNIZ birincisinde ilerler; ikincisinde durur, çünkü başka bir
+// konum denemek kimliği doğru yapmaz — kullanıcının veriyi düzeltmesi gerekir.
+function hks_dogum_okunmadi_mi($sonuc) {
+  // GÜVENLİK KİLİDİ: tek bir satır cevabı bile dönmüşse HKS isteği İŞLEMİŞTİR
+  // ve künye oluşmuş OLABİLİR — tekrar göndermek MÜKERRER bildirim ve rüsum
+  // demektir. Yalnız zarf düzeyinde tümden reddedilmiş (hiç BildirimKayitCevap
+  // dönmemiş, yani hiçbir şey oluşmamış) istek tekrar denenebilir.
+  if (!empty($sonuc['sonuclar'])) return false;
+  $m = (string)($sonuc['genelHata'] ?? '');
+  if ($m === '') return false;
+  $n = mb_strtolower(str_replace(['İ', 'I'], ['i', 'ı'], $m), 'UTF-8');
+  if (strpos($n, 'doğum tarihi') === false && strpos($n, 'dogum tarihi') === false) return false;
+  foreach (['girilmelidir', 'giriniz', 'zorunlu', 'boş olamaz', 'gönderilmelidir'] as $ip) {
+    if (strpos($n, $ip) !== false) return true;
+  }
+  return false;
 }
 
 // Teşhis çıktısındaki kimlik bilgilerini maskeler. İstek zarfında Password /
@@ -386,8 +473,12 @@ function hks_kunyeleri_getir($cfg, $secenek) {
 //  • YURT İÇİ ($ortak['yurtIci']): IkinciKisi (KisiSifat+TcKimlikVergiNo+YurtDisiMi=false),
 //    GidecekIsyeriId (işletme türüne göre depo/şube/hal içi), Sevk Etme'de fiyat YOK.
 // DataContract alan sırası her karmaşık tipte ALFABETİK (case-sensitive).
-function hks_bildirim_xml($satirlar, $ortak) {
+function hks_bildirim_xml($satirlar, $ortak, $varyant = null) {
   $yurtIci = !empty($ortak['yurtIci']);
+  // $varyant: DogumTarihi'nin konumu + biçimi. null → yürürlükteki varsayılan
+  // (öğrenilen ya da config). Merdiven (hks_bildirim_kaydet) bunu adım adım
+  // değiştirerek dener; başka hiçbir çağıran bu parametreyi vermez.
+  $vy = hks_dogum_varyant_coz($varyant);
   // Fiyat gönderilsin mi? Yurt dışı (mevcut) → her zaman. Yurt içi → frontend'in
   // 'fiyatGonder' bayrağı (Sevk Etme=false, yurt içi Satış=true). Geriye dönük:
   // bayrak yoksa (mevcut export) fiyat gönderilir.
@@ -446,9 +537,9 @@ function hks_bildirim_xml($satirlar, $ortak) {
       // konumda olmayan elemanı SESSİZCE ATLAR; sonradan [DataMember(Order=N)]
       // ile eklenen alanlar alfabetik değil, EN SONA gelir. GTB bu alanı 2025'te
       // ~2016 tarihli bir sözleşmeye ekledi — bu yüzden varsayılan artık 'son'.
-      $dt = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '');
+      $dt = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '', $vy['bicim']);
       $dtXml = $dt !== '' ? '<b:DogumTarihi>' . $dt . '</b:DogumTarihi>' : '';
-      $dtKonum = defined('HKS_DOGUM_KONUM') ? HKS_DOGUM_KONUM : 'son';
+      $dtKonum = $vy['konum'];
       if ($dtXml !== '' && $dtKonum === 'alfabetik') $ik[] = $dtXml;
       $ik[] = '<b:KisiSifat>' . (int)$ortak['ikinciSifatId'] . '</b:KisiSifat>';
         // TC/VKN yalnız RAKAM gider. Kirli değer (boşluk/nokta/tire) KPS'te kişiyi
@@ -510,8 +601,12 @@ function hks_bildirim_xml($satirlar, $ortak) {
   return '<Istek xmlns:a="' . HKS_NS_SC . '" xmlns:b="' . HKS_NS_MODEL . '">' . implode('', $kayitlar) . '</Istek>';
 }
 
-function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
-  $istekXml = hks_bildirim_xml($satirlar, $ortak);
+// TEK GÖNDERİM — bir varyantla bir kez BildirimKaydet çağırır.
+// Doğrudan ÇAĞIRMAYIN: dışarıya açık yol hks_bildirim_kaydet()'tir (merdiven
+// ve öğrenme orada). İkinci bir gönderim yolu açmak, iki yolun ayrışması ve
+// ayrışan tarafın sessizce hatalı bildirim göndermesi demektir.
+function hks_bildirim_kaydet_tek($cfg, $satirlar, $ortak, $varyant = null) {
+  $istekXml = hks_bildirim_xml($satirlar, $ortak, $varyant);
   $xml = hks_soap_cagir('Bildirim', 'BildirimServisBildirimKaydet',
     hks_taban_istek('BaseRequestMessageOf_ListOf_BildirimKayitIstek', $istekXml, $cfg));
   $duz = hks_sadelestir($xml);
@@ -547,6 +642,52 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
   $hamIstek = $hataVar ? hks_istek_maskele($istekXml) : '';
 
   return ['genelHata' => $genelHata, 'sonuclar' => $sonuclar, 'ham' => $ham, 'hamIstek' => $hamIstek];
+}
+
+// GÖNDERİM (dışarıya açık tek yol).
+//
+// Kayıtsız ikinci kişide `DogumTarihi` teslim edilemezse HKS isteği TÜMDEN
+// reddeder — hiç künye oluşmaz, rüsum doğmaz — ve "doğum tarihi girilmelidir"
+// der. Bu durumda ve YALNIZ bu durumda sonraki varyant denenir; ilk teslim
+// edilen kombinasyon öğrenilir ve bir daha aranmaz.
+//
+// MÜKERRER GÖNDERİM RİSKİ YOK: hks_dogum_okunmadi_mi() tek bir satır cevabı
+// dönmüşse false döner, yani merdiven yalnızca HKS'in hiçbir şey oluşturmadığı
+// kanıtlı durumda ilerler. Bu, kullanıcının bugün elle yaptığı şeyin aynısıdır
+// ("taslağınız SİLİNMEDİ — düzeltip tekrar gönderin"), yalnız otomatik.
+function hks_bildirim_kaydet($cfg, $satirlar, $ortak) {
+  $dogumluMu = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '') !== '';
+  $merdivenAcik = !defined('HKS_DOGUM_DENEME') || HKS_DOGUM_DENEME;
+  $merdiven = ($dogumluMu && $merdivenAcik) ? hks_dogum_merdiveni() : [hks_dogum_varyant_coz(null)];
+
+  $denemeler = [];
+  $sonuc = null;
+  $kullanilan = null;
+  foreach ($merdiven as $v) {
+    // Her adım ayrı bir SOAP çağrısıdır (60 sn timeout). Sayaç adım başına
+    // sıfırlanmazsa dört denemelik merdiven PHP zaman aşımına takılabilir.
+    @set_time_limit(120);
+    $sonuc = hks_bildirim_kaydet_tek($cfg, $satirlar, $ortak, $v);
+    $kullanilan = $v;
+    $okunmadi = hks_dogum_okunmadi_mi($sonuc);
+    $denemeler[] = [
+      'konum' => $v['konum'], 'bicim' => $v['bicim'],
+      'dogumOkundu' => !$okunmadi,
+      'hata' => (string)($sonuc['genelHata'] ?? ''),
+    ];
+    if (!$okunmadi) break;   // ya başarı ya BAŞKA bir hata → merdiven durur
+  }
+
+  // ÖĞREN: doğum tarihi gönderildiyse ve sunucu onu artık "eksik" demiyorsa
+  // teslim BAŞARILIDIR — konum/biçim doğrudur. (Künye oluşmamış olabilir;
+  // "Mernis'te bulunamadı" DEĞERİN yanlış olduğunu söyler, teslimin değil.)
+  if ($dogumluMu && $sonuc !== null && !hks_dogum_okunmadi_mi($sonuc) && count($denemeler) > 1) {
+    hks_dogum_varyant_ogren($kullanilan, (string)($sonuc['genelHata'] ?? 'kunye'));
+  }
+
+  $sonuc['dogumVaryant'] = $kullanilan;
+  $sonuc['dogumDenemeleri'] = $denemeler;
+  return $sonuc;
 }
 
 // ── Stok Özeti ────────────────────────────────────────────────────────────
