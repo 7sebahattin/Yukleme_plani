@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v215');
+    define('APP_SURUM', 'v216');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -1894,6 +1894,14 @@ function beyan_statuses(): array {
         'yukleme_olustu'  => ['label' => 'YÜKLEME OLUŞTU', 'css' => 'yukleme_olustu'],
         'yuklendi'        => ['label' => 'YÜKLENDİ',       'css' => 'yuklendi'],
     ];
+}
+
+// Beyan "kapandı" sayılan durumlar: yüklendi (iş tamamlandı) ya da iptal/red
+// (artık işlem gerekmez). Geriye kalan HER durum "yüklenmeyen" bölümünde işlem
+// bekler — beyanlar.php sayfayı bu listeyle iki bölüme ayırır. Yeni bir durum
+// eklerken burayı da gözden geçir: listede olmayan durum ÜST bölüme düşer.
+function beyan_kapali_durumlar(): array {
+    return ['yuklendi', 'iptal', 'red'];
 }
 
 function beyan_badge_html(string $status): string {

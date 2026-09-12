@@ -30,6 +30,8 @@ function beyan_url(array $override = []): string {
 }
 
 const BEYAN_PER_PAGE = 50;
+// Üst (bekleyen) bölüm sayfalanmaz; filtre kazasına karşı üst sınır.
+const BEYAN_BEKLEYEN_LIMIT = 200;
 
 $q         = trim((string)($_GET['q']         ?? ''));
 $f_status  = trim((string)($_GET['status']    ?? ''));
@@ -40,7 +42,10 @@ $tarih_bas = trim((string)($_GET['tarih_bas'] ?? ''));
 $tarih_bit = trim((string)($_GET['tarih_bit'] ?? ''));
 $page      = max(1, (int)($_GET['page'] ?? 1));
 
-$valid_statuses = array_keys(beyan_statuses());
+// Durum filtresi ALT (arşiv) bölümünün özelliğidir; o bölümde yalnız kapalı
+// durumlar bulunur. Bekleyen bir durum gelirse (eski yer imi) filtre olarak
+// UYGULANMAZ — yoksa arşiv sebepsiz boş görünürdü; üst bölüm onu zaten gösterir.
+$valid_statuses = beyan_kapali_durumlar();
 if (!in_array($f_status, $valid_statuses, true)) $f_status = '';
 if ($tarih_bas !== '' && !valid_date_beyan($tarih_bas)) $tarih_bas = '';
 if ($tarih_bit !== '' && !valid_date_beyan($tarih_bit)) $tarih_bit = '';
@@ -81,19 +86,56 @@ if ($tarih_bit !== '') {
     $params[':tarih_bit'] = $tarih_bit;
 }
 
-$st_count = db()->prepare("SELECT COUNT(*) FROM customs_declarations $where");
-$st_count->execute($params);
-$total       = (int)$st_count->fetchColumn();
-$total_pages = max(1, (int)ceil($total / BEYAN_PER_PAGE));
-$page        = min($page, $total_pages);
-$offset      = ($page - 1) * BEYAN_PER_PAGE;
+// ── İki bölüm: yüklenmeyenler (üstte) / yüklenenler (altta) ───────────────
+// Durum bölümü belirler: kapalı durumlar (yüklendi/iptal/red) ALT bölüme,
+// geri kalan HER durum ÜST bölüme düşer.
+//
+// ÜST bölüm filtre şeridinden BAĞIMSIZ ve SAYFALANMAZ: burası "işlem bekleyen"
+// tam listedir, bir arama ya da sayfa geçişi onu eksiltmemeli. Filtre şeridi
+// ALT (arşiv) bölümünün süzgecidir ve orada, o bölümün içinde durur.
+$kapali_durumlar = beyan_kapali_durumlar();
+$kapali_ph       = implode(',', array_map(fn($i) => ':kd' . $i, array_keys($kapali_durumlar)));
+$kapali_params   = [];
+foreach ($kapali_durumlar as $i => $kd) $kapali_params[':kd' . $i] = $kd;
 
-$st = db()->prepare("SELECT * FROM customs_declarations $where ORDER BY id DESC LIMIT :lim OFFSET :off");
-foreach ($params as $k => $v) $st->bindValue($k, $v);
+// ÜST bölüm — yalnız silinmemiş + kapanmamış. Filtre uygulanmaz.
+$st_bek_c = db()->prepare("SELECT COUNT(*) FROM customs_declarations
+                           WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)");
+$st_bek_c->execute($kapali_params);
+$bekleyen_total = (int)$st_bek_c->fetchColumn();
+
+// Üst sınır yalnız bir emniyet supabı: normalde bekleyen sayısı bunun altında.
+$st_bek = db()->prepare("SELECT * FROM customs_declarations
+                         WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)
+                         ORDER BY id DESC LIMIT :lim");
+foreach ($kapali_params as $k => $v) $st_bek->bindValue($k, $v);
+$st_bek->bindValue(':lim', BEYAN_BEKLEYEN_LIMIT, PDO::PARAM_INT);
+$st_bek->execute();
+$bekleyen_rows   = $st_bek->fetchAll();
+$bekleyen_kirpik = $bekleyen_total > count($bekleyen_rows);
+
+// ALT bölüm — yüklenen/kapanan arşiv. Filtre ve sayfalama BURADA yaşar.
+$w_kapali = $where . " AND status IN ($kapali_ph)";
+$p_kapali = $params + $kapali_params;
+
+$st_count = db()->prepare("SELECT COUNT(*) FROM customs_declarations $w_kapali");
+$st_count->execute($p_kapali);
+$kapali_total = (int)$st_count->fetchColumn();
+$total_pages  = max(1, (int)ceil($kapali_total / BEYAN_PER_PAGE));
+$page         = min($page, $total_pages);
+$offset       = ($page - 1) * BEYAN_PER_PAGE;
+
+$st = db()->prepare("SELECT * FROM customs_declarations $w_kapali ORDER BY id DESC LIMIT :lim OFFSET :off");
+foreach ($p_kapali as $k => $v) $st->bindValue($k, $v);
 $st->bindValue(':lim', BEYAN_PER_PAGE, PDO::PARAM_INT);
 $st->bindValue(':off', $offset,        PDO::PARAM_INT);
 $st->execute();
-$rows = $st->fetchAll();
+$kapali_rows = $st->fetchAll();
+
+$total = $bekleyen_total + $kapali_total;
+// Toplu bildirim uygunluk sorgusu ve seçim JS'i İKİ bölümün satırlarını
+// birlikte görür — uygunluk kapısı bölümden bağımsızdır.
+$rows = array_merge($bekleyen_rows, $kapali_rows);
 
 // ── Toplu bildirim: hangi satırlar uygun? ─────────────────────────────────
 // beyan_view'daki buton kapısının aynısı. Aktif bağlar TEK sorguda çekilir
@@ -143,10 +185,7 @@ render_flash();
 <div class="page-head">
     <div>
         <h1>🧾 Beyanlar</h1>
-        <p class="muted">
-            Toplam <?= $total ?> beyan
-            <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
-        </p>
+        <p class="muted">Toplam <?= $total ?> beyan<?php if ($bekleyen_total): ?> · <strong><?= $bekleyen_total ?></strong> işlem bekliyor<?php endif; ?></p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <?php if (is_admin()): ?>
@@ -159,242 +198,146 @@ render_flash();
     </div>
 </div>
 
-<!-- ── Filtre formu ── -->
-<form method="get" class="beyan-filter-form" id="beyanFilterForm">
-    <div class="bff-main">
-        <input type="search" name="q" value="<?= h($q) ?>"
-               placeholder="Parti no, ürün, alıcı, marka, depo..." autocomplete="off">
-        <button class="btn">Ara</button>
-        <!-- Aç/kapa düğmesi arama satırının İÇİNDE — kendine satır açmaz.
-             Etkin bir detay filtresi varsa ne olduğunu da yazar, böylece panel
-             kapalıyken de listenin neye göre süzüldüğü görünür. -->
-        <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle"
-                aria-controls="beyanFilterPanel" aria-expanded="<?= $detay_aktif ? 'true' : 'false' ?>">
-            <span class="bft-ok" aria-hidden="true">▾</span> Filtre<?php if ($detay_ilk !== ''): ?><span class="bft-rozet"><?= h($detay_ilk) ?><?= $detay_sayi > 1 ? ' +' . ($detay_sayi - 1) : '' ?></span><?php endif; ?>
-        </button>
-        <?php if ($has_filter): ?>
-        <a href="beyanlar.php" class="btn btn-ghost">Temizle</a>
-        <?php endif; ?>
+<!-- ══ ÜST BÖLÜM — YÜKLENMEYENLER ═══════════════════════════════════════════
+     İşlem bekleyen beyanlar. Filtreden ve sayfalamadan BAĞIMSIZ: burası tam
+     bir iş listesidir, arama ya da sayfa geçişi onu eksiltmez. -->
+<section class="beyan-blok beyan-blok-acik">
+    <div class="beyan-blok-head">
+        <h2 class="beyan-blok-baslik">⏳ Yüklenmeyen Beyanlar
+            <span class="beyan-blok-sayi"><?= $bekleyen_total ?></span>
+        </h2>
+        <span class="muted beyan-blok-not">İşlem bekliyor — yüklendi olarak işaretlenene kadar burada kalır</span>
     </div>
 
-    <!-- Detay paneli HER genişlikte katlanır. Eskiden ≥768px'de toggle
-         gizliydi, panel kalıcı açık geliyordu ve on durum pili üç satıra
-         sarıp beş girdiyle birlikte liste üstünde ~200px yer kaplıyordu. -->
-    <div class="bff-filters<?= $detay_aktif ? ' bff-open' : '' ?>" id="beyanFilterPanel">
-        <!-- Durum pilleri tek satırda, taşarsa yatay kayar (sarmaz).
-             Bağlantı (link) olarak kalmaları bilinçli: tek tıkla filtrelerler,
-             forma bağlı değiller ve JS kapalıyken de çalışırlar. -->
-        <div class="bff-durum">
-            <span class="bff-durum-lbl">Durum</span>
-            <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
-               class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
-            <?php foreach ($statuses as $sk => $sv): ?>
-            <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
-               class="pill<?= $f_status === $sk ? ' active' : '' ?>"><?= h($sv['label']) ?></a>
-            <?php endforeach; ?>
-        </div>
-        <div>
-            <label>Tarih (başlangıç)</label>
-            <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
-        </div>
-        <div>
-            <label>Tarih (bitiş)</label>
-            <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
-        </div>
-        <div>
-            <label>Ürün</label>
-            <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="KAYISI...">
-        </div>
-        <div>
-            <label>Marka</label>
-            <input type="text" name="marka" value="<?= h($f_marka) ?>" placeholder="URAS...">
-        </div>
-        <div>
-            <label>Çıkış Depo</label>
-            <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="KARAMAN...">
-        </div>
-        <div class="bff-uygula">
-            <button class="btn btn-sm" style="white-space:nowrap">Filtrele</button>
-        </div>
-    </div>
-</form>
-
-<?php if (empty($rows)): ?>
-<div class="empty">
-    <?php if ($has_filter): ?>
-        <p>Filtre kriterlerine uyan beyan bulunamadı.</p>
-        <a href="beyanlar.php" class="btn btn-ghost">Filtreleri temizle</a>
-    <?php else: ?>
-        <p>Henüz beyan kaydı yok.</p>
+    <?php if (empty($bekleyen_rows)): ?>
+    <div class="beyan-blok-bos">
+        ✅ İşlem bekleyen beyan yok — hepsi yüklendi ya da kapandı.
         <?php if (can_beyan('write')): ?>
-        <a href="beyan_create.php" class="btn btn-primary">İlk beyanı oluştur</a>
+        <a href="beyan_create.php" class="btn btn-sm">+ Yeni Beyan</a>
         <?php endif; ?>
-    <?php endif; ?>
-</div>
-<?php else: ?>
-
-<!-- PC: tablo -->
-<div class="table-wrap pc-only">
-    <table class="data-table">
-        <thead>
-        <tr>
-            <?php if ($uygun_sayisi): ?>
-            <th class="bb-sec-col"><input type="checkbox" id="bbTumu" title="Uygun olanların tümünü seç"></th>
-            <?php endif; ?>
-            <th>Tarih</th>
-            <th>Parti No</th>
-            <th>Ürün / Çeşit</th>
-            <th class="num">Palet</th>
-            <th class="num">Kasa</th>
-            <th class="num">Brüt KG</th>
-            <th class="num">Net KG</th>
-            <th>Alıcı</th>
-            <th>Marka</th>
-            <th>Çıkış Depo</th>
-            <th>Durum</th>
-            <th class="actions-col">İşlem</th>
-        </tr>
-        </thead>
-        <tbody>
-        <?php foreach ($rows as $r): ?>
-        <tr>
-            <?php if ($uygun_sayisi): ?>
-            <td class="bb-sec-col">
-                <?php if ($bildirim_uygun($r)): ?>
-                <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>">
-                <?php endif; ?>
-            </td>
-            <?php endif; ?>
-            <td class="muted" style="font-size:.82rem"><?= h(fmt_datetime($r['created_at'])) ?></td>
-            <td><strong><?= h($r['party_no'] ?: '—') ?></strong></td>
-            <td>
-                <?= h($r['product_name'] ?: '—') ?>
-                <?php if ($r['product_variety']): ?>
-                <span class="muted"><?= h($r['product_variety']) ?></span>
-                <?php endif; ?>
-            </td>
-            <td class="num"><?= $r['pallet_count'] !== null ? (int)$r['pallet_count'] : '—' ?></td>
-            <td class="num"><?= $r['crate_count'] !== null ? number_format((int)$r['crate_count'], 0, ',', '.') : '—' ?></td>
-            <td class="num"><?= $r['gross_kg'] !== null ? fmt_kg($r['gross_kg']) : '—' ?></td>
-            <td class="num strong"><?= $r['net_kg'] !== null ? fmt_kg($r['net_kg']) : '—' ?></td>
-            <td><?= h($r['buyer_name'] ?: '—') ?></td>
-            <td><?= h($r['brand'] ?: '—') ?></td>
-            <td><?= h($r['exit_depot'] ?: '—') ?></td>
-            <td><?= beyan_badge_html($r['status']) ?><?php
-                $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
-            ?></td>
-            <td class="actions-col">
-                <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
-                <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="status" value="yuklendi">
-                    <input type="hidden" name="status_only" value="1">
-                    <button type="submit" class="btn btn-sm btn-success"
-                            onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
-                </form>
-                <?php endif; ?>
-                <?php if (can_beyan('write')): ?>
-                <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-                <?php endif; ?>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-
-<!-- Mobil: kart listesi -->
-<div class="card-list mobile-only">
-    <?php foreach ($rows as $r): ?>
-    <div class="beyan-card" style="cursor:default">
-        <div class="beyan-card-head">
-            <div>
-                <div class="beyan-card-parti">
-                    <?php if ($bildirim_uygun($r)): ?>
-                    <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>"
-                           title="Toplu bildirim için seç" style="margin-right:6px;vertical-align:middle">
-                    <?php endif; ?>
-                    <?= h($r['party_no'] ?: '(parti no yok)') ?>
-                </div>
-                <div class="beyan-card-urun">
-                    <?= h($r['product_name'] ?: '—') ?>
-                    <?php if ($r['product_variety']): ?>
-                    <span class="muted"><?= h($r['product_variety']) ?></span>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <?= beyan_badge_html($r['status']) ?><?php
-                $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
-            ?>
-        </div>
-
-        <div class="beyan-card-meta">
-            <?php if ($r['pallet_count'] !== null): ?>
-            <span><?= (int)$r['pallet_count'] ?> palet</span>
-            <?php endif; ?>
-            <?php if ($r['crate_count'] !== null): ?>
-            <span><?= number_format((int)$r['crate_count'], 0, ',', '.') ?> kasa</span>
-            <?php endif; ?>
-            <?php if ($r['gross_kg'] !== null): ?>
-            <span><?= fmt_kg($r['gross_kg']) ?> kg brüt</span>
-            <?php endif; ?>
-            <?php if ($r['net_kg'] !== null): ?>
-            <span><?= fmt_kg($r['net_kg']) ?> kg net</span>
-            <?php endif; ?>
-            <?php if ($r['brand']): ?>
-            <span><?= h($r['brand']) ?></span>
-            <?php endif; ?>
-            <?php if ($r['exit_depot']): ?>
-            <span><?= h($r['exit_depot']) ?></span>
-            <?php endif; ?>
-        </div>
-
-        <?php if ($r['buyer_name']): ?>
-        <div class="beyan-card-alici muted">Alıcı: <?= h($r['buyer_name']) ?></div>
-        <?php endif; ?>
-
-        <div class="muted" style="font-size:.75rem;margin-top:4px">
-            <?= h(fmt_datetime($r['created_at'])) ?>
-        </div>
-
-        <div class="beyan-card-actions">
-            <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-            <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
-            <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
-                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <input type="hidden" name="status" value="yuklendi">
-                <input type="hidden" name="status_only" value="1">
-                <button type="submit" class="btn btn-sm btn-success"
-                        onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
-            </form>
-            <?php endif; ?>
-            <?php if (can_beyan('write')): ?>
-            <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-            <?php endif; ?>
-        </div>
     </div>
-    <?php endforeach; ?>
-</div>
-
-<!-- Sayfalama -->
-<?php if ($total_pages > 1): ?>
-<div class="pagination" style="margin-top:16px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
-    <?php if ($page > 1): ?>
-    <a href="<?= beyan_url(['page' => (string)($page - 1)]) ?>" class="btn btn-sm btn-ghost">← Önceki</a>
+    <?php else: ?>
+    <?php
+        $sec_rows  = $bekleyen_rows;
+        $sec_secim = (bool)$uygun_sayisi;
+        include __DIR__ . '/_beyan_liste.php';
+    ?>
+    <?php if ($bekleyen_kirpik): ?>
+    <p class="muted" style="margin-top:8px;font-size:.82rem">
+        ⚠️ <?= $bekleyen_total ?> bekleyen beyanın ilk <?= count($bekleyen_rows) ?> tanesi gösteriliyor.
+    </p>
     <?php endif; ?>
-    <span class="muted" style="line-height:32px;padding:0 8px">
-        <?= $page ?> / <?= $total_pages ?>
-    </span>
-    <?php if ($page < $total_pages): ?>
-    <a href="<?= beyan_url(['page' => (string)($page + 1)]) ?>" class="btn btn-sm btn-ghost">Sonraki →</a>
     <?php endif; ?>
-</div>
-<?php endif; ?>
+</section>
 
-<?php endif; ?>
+<!-- ══ ALT BÖLÜM — YÜKLENENLER + FİLTRE ═════════════════════════════════════
+     Yüklenen/kapanan beyanların aranabilir arşivi. Filtre şeridi ve sayfalama
+     bu bölüme aittir; üst bölümü etkilemez. -->
+<section class="beyan-blok beyan-blok-kapanmis">
+    <div class="beyan-blok-head">
+        <h2 class="beyan-blok-baslik">✅ Yüklenen Beyanlar
+            <span class="beyan-blok-sayi"><?= $kapali_total ?></span>
+        </h2>
+        <span class="muted beyan-blok-not">
+            Tamamlanan kayıtlar (yüklendi · iptal · red)
+            <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
+        </span>
+    </div>
+
+    <!-- ── Filtre formu — yalnız bu bölümü süzer ── -->
+    <form method="get" class="beyan-filter-form" id="beyanFilterForm">
+        <div class="bff-main">
+            <input type="search" name="q" value="<?= h($q) ?>"
+                   placeholder="Parti no, ürün, alıcı, marka, depo..." autocomplete="off">
+            <button class="btn">Ara</button>
+            <!-- Aç/kapa düğmesi arama satırının İÇİNDE — kendine satır açmaz.
+                 Etkin bir detay filtresi varsa ne olduğunu da yazar, böylece panel
+                 kapalıyken de listenin neye göre süzüldüğü görünür. -->
+            <button type="button" class="beyan-filter-toggle" id="beyanFilterToggle"
+                    aria-controls="beyanFilterPanel" aria-expanded="<?= $detay_aktif ? 'true' : 'false' ?>">
+                <span class="bft-ok" aria-hidden="true">▾</span> Filtre<?php if ($detay_ilk !== ''): ?><span class="bft-rozet"><?= h($detay_ilk) ?><?= $detay_sayi > 1 ? ' +' . ($detay_sayi - 1) : '' ?></span><?php endif; ?>
+            </button>
+            <?php if ($has_filter): ?>
+            <a href="beyanlar.php" class="btn btn-ghost">Temizle</a>
+            <?php endif; ?>
+        </div>
+
+        <!-- Detay paneli HER genişlikte katlanır. Eskiden ≥768px'de toggle
+             gizliydi, panel kalıcı açık geliyordu ve on durum pili üç satıra
+             sarıp beş girdiyle birlikte liste üstünde ~200px yer kaplıyordu. -->
+        <div class="bff-filters<?= $detay_aktif ? ' bff-open' : '' ?>" id="beyanFilterPanel">
+            <!-- Durum pilleri tek satırda, taşarsa yatay kayar (sarmaz).
+                 Bağlantı (link) olarak kalmaları bilinçli: tek tıkla filtrelerler,
+                 forma bağlı değiller ve JS kapalıyken de çalışırlar.
+                 Yalnız KAPALI durumlar listelenir — bu bölümde yalnız onlar var;
+                 bekleyen durumlar üst bölümün işi. -->
+            <div class="bff-durum">
+                <span class="bff-durum-lbl">Durum</span>
+                <a href="<?= beyan_url(['status' => '', 'page' => '']) ?>"
+                   class="pill<?= $f_status === '' ? ' active' : '' ?>">Tümü</a>
+                <?php foreach ($kapali_durumlar as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
+                <a href="<?= beyan_url(['status' => $sk, 'page' => '']) ?>"
+                   class="pill<?= $f_status === $sk ? ' active' : '' ?>"><?= h($sv['label']) ?></a>
+                <?php endforeach; ?>
+            </div>
+            <div>
+                <label>Tarih (başlangıç)</label>
+                <input type="date" name="tarih_bas" value="<?= h($tarih_bas) ?>" max="<?= $today ?>">
+            </div>
+            <div>
+                <label>Tarih (bitiş)</label>
+                <input type="date" name="tarih_bit" value="<?= h($tarih_bit) ?>" max="<?= $today ?>">
+            </div>
+            <div>
+                <label>Ürün</label>
+                <input type="text" name="urun" value="<?= h($f_urun) ?>" placeholder="KAYISI...">
+            </div>
+            <div>
+                <label>Marka</label>
+                <input type="text" name="marka" value="<?= h($f_marka) ?>" placeholder="URAS...">
+            </div>
+            <div>
+                <label>Çıkış Depo</label>
+                <input type="text" name="depo" value="<?= h($f_depo) ?>" placeholder="KARAMAN...">
+            </div>
+            <div class="bff-uygula">
+                <button class="btn btn-sm" style="white-space:nowrap">Filtrele</button>
+            </div>
+        </div>
+    </form>
+
+    <?php if (empty($kapali_rows)): ?>
+    <div class="beyan-blok-bos">
+        <?php if ($has_filter): ?>
+            Filtre kriterlerine uyan yüklenmiş beyan bulunamadı.
+            <a href="beyanlar.php" class="btn btn-sm btn-ghost">Filtreleri temizle</a>
+        <?php else: ?>
+            Henüz yüklenmiş beyan yok.
+        <?php endif; ?>
+    </div>
+    <?php else: ?>
+    <?php
+        $sec_rows  = $kapali_rows;
+        $sec_secim = (bool)$uygun_sayisi;
+        include __DIR__ . '/_beyan_liste.php';
+    ?>
+
+    <!-- Sayfalama — yalnız arşiv bölümüne ait -->
+    <?php if ($total_pages > 1): ?>
+    <div class="pagination" style="margin-top:16px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+        <?php if ($page > 1): ?>
+        <a href="<?= beyan_url(['page' => (string)($page - 1)]) ?>" class="btn btn-sm btn-ghost">← Önceki</a>
+        <?php endif; ?>
+        <span class="muted" style="line-height:32px;padding:0 8px">
+            <?= $page ?> / <?= $total_pages ?>
+        </span>
+        <?php if ($page < $total_pages): ?>
+        <a href="<?= beyan_url(['page' => (string)($page + 1)]) ?>" class="btn btn-sm btn-ghost">Sonraki →</a>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+</section>
 
 <script>
 (function () {
@@ -474,13 +417,21 @@ render_flash();
         return out;
     }
 
+    // Her bölümün (yüklenmeyen / yüklenen) kendi tablosu ve kendi "tümü"
+    // kutusu var — id yerine sınıf, çünkü sayfada iki tane olabilir.
+    function kapsamKutulari(t) {
+        var kapsam = t.closest('table') || document;
+        return Array.prototype.slice.call(kapsam.querySelectorAll('.bb-sec'));
+    }
+
     function barGuncelle() {
         var n = seciliIdler().length;
         el('bbBar').hidden = n === 0;
         el('bbBarSayi').textContent = n + ' beyan seçildi';
-        var t = el('bbTumu');
-        if (t) t.checked = n > 0 && n === new Set(
-            Array.prototype.map.call(document.querySelectorAll('.bb-sec'), function (c) { return c.value; })).size;
+        Array.prototype.forEach.call(document.querySelectorAll('.bb-tumu'), function (t) {
+            var kutular = kapsamKutulari(t);
+            t.checked = kutular.length > 0 && kutular.every(function (c) { return c.checked; });
+        });
     }
 
     document.addEventListener('change', function (e) {
@@ -494,12 +445,20 @@ render_flash();
         }
     });
 
-    var tumu = el('bbTumu');
-    if (tumu) tumu.addEventListener('change', function () {
-        Array.prototype.forEach.call(document.querySelectorAll('.bb-sec'), function (c) {
-            c.checked = tumu.checked;
+    // "Tümü" yalnız KENDİ bölümünü seçer: yüklenmeyenleri seçmek isteyen
+    // kullanıcı, arşiv satırlarını istemeden işaretlemesin.
+    Array.prototype.forEach.call(document.querySelectorAll('.bb-tumu'), function (tumu) {
+        tumu.addEventListener('change', function () {
+            kapsamKutulari(tumu).forEach(function (c) {
+                if (c.checked === tumu.checked) return;
+                c.checked = tumu.checked;
+                // Masaüstü satırının mobil kart eşini de eşitle.
+                Array.prototype.forEach.call(document.querySelectorAll('.bb-sec'), function (o) {
+                    if (o.value === c.value) o.checked = tumu.checked;
+                });
+            });
+            barGuncelle();
         });
-        barGuncelle();
     });
 
     el('bbTemizle').addEventListener('click', function () {

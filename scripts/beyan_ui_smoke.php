@@ -169,6 +169,12 @@ function render_liste(array $get): string {
         // const + fonksiyonlar tek blokta: ikinci include'da yeniden tanimlanmasin.
         $src = str_replace('const BEYAN_PER_PAGE = 50;',
                            "defined('BEYAN_PER_PAGE') || define('BEYAN_PER_PAGE', 50);", $src);
+        $src = str_replace('const BEYAN_BEKLEYEN_LIMIT = 200;',
+                           "defined('BEYAN_BEKLEYEN_LIMIT') || define('BEYAN_BEKLEYEN_LIMIT', 200);", $src);
+        // Gecici kopya /tmp'te durdugu icin __DIR__ proje kokunu gostermez;
+        // partial include'lari gercek koke sabitle.
+        $src = str_replace("__DIR__ . '/_beyan_liste.php'",
+                           var_export($ROOT . '/_beyan_liste.php', true), $src);
         $a = strpos($src, 'function valid_date_beyan');
         $b = strpos($src, "defined('BEYAN_PER_PAGE')");
         $src = substr($src, 0, $a) . "if (!function_exists('beyan_url')) {\n"
@@ -560,7 +566,8 @@ ok('[liste] etkin filtre dugmede yaziyor',
 
 // ── Liste sayfasi RENDER testleri ─────────────────────────────────────────
 $liste_kapali = render_liste([]);
-$liste_acik   = render_liste(['status' => 'taslak']);
+// Durum filtresi arsiv bolumunun sifatidir — gecerli deger KAPALI bir durum.
+$liste_acik   = render_liste(['status' => 'yuklendi']);
 foreach (['filtresiz' => $liste_kapali, 'durum filtreli' => $liste_acik] as $ad => $html) {
     if (strncmp($html, '__HATA__', 8) === 0) { ok("[liste:$ad] render edildi", false, substr($html, 8)); continue; }
     ok("[liste:$ad] render edildi", strlen($html) > 500);
@@ -583,8 +590,70 @@ ok('[liste:durum filtreli] panel acik + rozet var',
    'durum etkinken panel kapali ya da rozet yok');
 // Durum pilleri toggle DEGIL, bagimsiz baglanti olarak kalmali (JS'siz calisir).
 ok('[liste] durum pilleri bagimsiz baglanti',
-   preg_match('/class="bff-durum".*?<a href="beyanlar\.php\?status=taslak"/s', $liste_kapali) === 1,
+   preg_match('/class="bff-durum".*?<a href="beyanlar\.php\?status=yuklendi"/s', $liste_kapali) === 1,
    'piller <a> olmaktan cikmis — JS kapaliyken filtre calismaz');
+// Durum pilleri ALT bolumun (arsiv) sifatidir: yalnız kapali durumlar. Bekleyen
+// bir durum pili secilse arsiv sebepsiz bos gorunurdu.
+// Eski bir yer imi (?status=taslak) filtre olarak UYGULANMAZ: arsiv sebepsiz
+// bos gorunmesin. Ust bolum o beyani zaten gosteriyor.
+$liste_eski = render_liste(['status' => 'taslak']);
+ok('[liste] bekleyen durum yer imi filtre olarak uygulanmiyor',
+   strncmp($liste_eski, '__HATA__', 8) !== 0
+   && strpos($liste_eski, 'bff-filters bff-open') === false
+   && strpos($liste_eski, 'bft-rozet') === false,
+   'gecersiz durum filtresi uygulanmis — arsiv sebepsiz bos kalir');
+
+ok('[liste] durum pilleri yalniz kapali durumlar',
+   strpos($liste_kapali, 'status=taslak') === false
+   && strpos($liste_kapali, 'status=temiz') === false,
+   'bekleyen durum pili arsiv filtresinde — secilince liste sebepsiz bosalir');
+
+// ── IKI BOLUMLU LISTE: yuklenmeyenler ustte, yuklenenler + filtre altta ────
+// Bolum sirasi ve filtrenin hangi bolume ait oldugu bu ozelligin TAMAMI;
+// ters donerse kullanici islem bekleyenleri arsivin altinda arar.
+$bek_poz = strpos($liste_kapali, 'beyan-blok-acik');
+$kap_poz = strpos($liste_kapali, 'beyan-blok-kapanmis');
+$flt_poz = strpos($liste_kapali, 'beyan-filter-form');
+ok('[liste] iki bolum de cizildi', $bek_poz !== false && $kap_poz !== false,
+   'bolumler yok — sayfa tek listeye donmus');
+ok('[liste] yuklenmeyenler bolumu USTTE',
+   $bek_poz !== false && $kap_poz !== false && $bek_poz < $kap_poz,
+   'arsiv bolumu one gecmis — islem bekleyenler asagida kalir');
+ok('[liste] filtre serigi ALT bolumun icinde',
+   $flt_poz !== false && $kap_poz !== false && $flt_poz > $kap_poz,
+   'filtre ust bolume tasinmis — bekleyen is listesi filtreyle eksilir gorunur');
+
+// Ust bolum filtreden BAGIMSIZ: bir arama ust bolumu eksiltmemeli.
+$liste_ara = render_liste(['q' => 'ZZZ_HICBIRSEY_' . mt_rand()]);
+if (strncmp($liste_ara, '__HATA__', 8) === 0) {
+    ok('[liste:arama] render edildi', false, substr($liste_ara, 8));
+} else {
+    ok('[liste:arama] PHP uyarisi yok',
+       stripos($liste_ara, 'Warning:') === false && stripos($liste_ara, 'Notice:') === false
+       && stripos($liste_ara, 'Deprecated:') === false && stripos($liste_ara, 'Fatal error') === false);
+    $bozuk = etiket_dengesi($liste_ara);
+    ok('[liste:arama] HTML etiket dengesi', empty($bozuk), implode(' | ', $bozuk));
+    // Test verisinde bekleyen (taslak) beyanlar var; eslesmeyen arama onlari
+    // GIZLEMEMELI, yalnız arsiv bolumunu bosaltmali.
+    ok('[liste:arama] ust bolum aramadan etkilenmiyor',
+       strpos($liste_ara, 'beyan-blok-acik') !== false
+       && preg_match('/beyan-blok-acik.*?class="bb-sec-col"/s', $liste_ara) === 1,
+       'eslesmeyen arama islem bekleyen listesini de bosaltti');
+    ok('[liste:arama] arsiv bolumu bos mesaji veriyor',
+       preg_match('/beyan-blok-kapanmis.*?beyan-blok-bos/s', $liste_ara) === 1,
+       'eslesme yokken arsiv bos durumu gostermiyor');
+}
+
+// Iki bolumde de "tumu" kutusu olabilir — id DEGIL sinif kullanilmali,
+// yoksa ayni id iki kez cizilir ve JS yalnız birini gorur.
+ok('[liste] "tumu" kutusu sinifla (id tekrarı yok)',
+   strpos($liste_src, 'id="bbTumu"') === false
+   && strpos(file_get_contents(dirname(__DIR__) . '/_beyan_liste.php'), 'class="bb-tumu"') !== false,
+   'bbTumu id olarak kalmis — iki bolumde tekrarlanir, HTML gecersiz olur');
+ok('[liste] satir bicimi tek yerde (partial)',
+   is_file(dirname(__DIR__) . '/_beyan_liste.php')
+   && substr_count($liste_src, "_beyan_liste.php") === 2,
+   'satir/kart biçimi kopyalanmis — dort kopya ayrisir');
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);
