@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v216` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v217` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -459,8 +459,34 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   (`render_liste()` — sayfa iki kez include edildiği için üst seviye
   `function`/`const` bildirimleri koşullu sarılır). Liste düzenini değiştirince
   çalıştır.
-- `beyan_view.php`'deki hızlı durum geçişi formu tüm alanları hidden gönderir;
-  **yeni kolon eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
+- **Durum şeridi — TÜM durumlar tıklanabilir** (`beyan_view.php`, Sprint
+  Beyan-Durum-01): dokuz durumun hepsi pil olarak durur, **seçili olan çerçeve
+  + halka + ✓ ile işaretli** (`.beyan-durum-secili`), akıştaki sıradaki
+  durum(lar) **kesik çerçeve** (`.beyan-durum-onerilen` — ipucu, KAPI DEĞİL).
+  Ara durumlara tek tek tıklamak gerekmez; **doğrudan sonuca gidilebilir** ve
+  terminal durumdan geri dönülebilir (şerit artık terminal durumda da çizilir).
+  - **Şerit TEK formdur**, her durum bir `<button type="submit" name="status"
+    value="...">`. Eskiden her buton kendi formunu ve ~26 gizli alanını
+    taşıyordu; dokuz durumla bu 230+ gizli alan demekti. **`status` için AYRI
+    bir hidden alan AÇMA** — aynı `name` iki yerden gelirse hangisinin
+    kazandığı belirsizdir; değeri butonun kendi `value`'su taşır.
+  - **`status_only` KULLANMA.** Şerit `beyan_edit.php`'nin **tam güncelleme**
+    dalına POST eder; oradaki doğrulama yalnız `beyan_statuses()` anahtarlarına
+    bakar, dolayısıyla doğrudan geçiş kabul edilir. `status_only` dalında
+    `beyan_next_statuses()` kapısı var (liste ekranının "Yüklendi" butonu onu
+    kullanır) ve doğrudan geçişleri reddeder. O dala kapı EKLEME.
+  - Görsel sıra `beyan_durum_akis_sirasi()` (helpers.php): ana akış soldan sağa,
+    **red/iptal en sonda** (`beyan_statuses()` sırası değil — orada `iptal`
+    akışın ortasında). Listede olmayan durum SONA eklenir, kaybolmaz.
+  - **`beyan_edit.php`'deki durum `<select>`'i AYNI kurala tabi** — tüm durumlar,
+    aynı akış sırası. Eskiden sonraki durumlarla sınırlıydı ve terminal durumda
+    "değiştirilemez" yazıyordu; sunucu hiçbir zaman kısıtlamadığı için bu iddia
+    **yanlıştı**. Kuralı değiştirirken **iki ekranı birden** güncelle; test
+    ikisini de sabitliyor.
+  - **RED hâlâ not ister** (`prompt_note` → `analysis_note`); sunucu notsuz
+    red'i reddeder. `temiz`/`red` seçilince `analysis_result_at` otomatik dolar.
+  - Şerit tüm alanları hidden gönderir (tam güncelleme dalı): **yeni kolon
+    eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
 
 ---
 

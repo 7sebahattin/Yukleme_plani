@@ -198,9 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $statuses    = beyan_statuses();
 $cur_status  = $beyan['status'];
+// Yalnız "akıştaki sıradaki durum" ipucu için — kapı DEĞİL. Durum listesi
+// beyan_view.php'deki şeritle aynı: tüm durumlar seçilebilir.
 $next_states = beyan_next_statuses($cur_status);
-$is_terminal = in_array($cur_status, ['red', 'iptal', 'yukleme_olustu', 'yuklendi'], true);
-$is_admin_   = is_admin();
 
 render_header('Beyan Düzenle');
 render_flash();
@@ -222,13 +222,6 @@ render_flash();
     <?php foreach ($errors as $e): ?>
     <div><?= h($e) ?></div>
     <?php endforeach; ?>
-</div>
-<?php endif; ?>
-
-<?php if ($is_terminal && !$is_admin_): ?>
-<div class="flash flash-error">
-    Bu beyan terminal durumda (<strong><?= h($statuses[$cur_status]['label'] ?? $cur_status) ?></strong>).
-    Yalnızca yönetici geri alabilir.
 </div>
 <?php endif; ?>
 
@@ -365,25 +358,24 @@ render_flash();
 <div class="beyan-section">
     <div class="beyan-section-title">📊 Durum / Analiz</div>
 
-    <?php if (!empty($next_states) || $is_admin_): ?>
+    <!-- Durum listesi TÜM durumları taşır — beyan_view.php'deki durum şeridiyle
+         AYNI kural. Eskiden liste sonraki durumlarla sınırlıydı ve terminal
+         durumda "değiştirilemez" yazıyordu; oysa sunucu (tam güncelleme dalı)
+         durumu yalnız beyan_statuses() anahtarlarına karşı doğruluyor, yani
+         kısıt görseldi ve şeritten zaten aşılıyordu. İki ekran ayrışmasın:
+         kuralı değiştirecekseniz İKİSİNİ BİRDEN güncelleyin. -->
     <div class="form-group">
         <label class="form-label">Durum</label>
         <select name="status" class="form-control">
-            <?php
-            // Admin → tüm durumlar; diğerleri → mevcut + izin verilenler
-            $allowed = $is_admin_ ? array_keys($statuses) : array_merge([$cur_status], $next_states);
-            foreach ($statuses as $sk => $sv):
-                if (!in_array($sk, $allowed, true)) continue;
-            ?>
+            <?php foreach (beyan_durum_akis_sirasi() as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
             <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>>
                 <?= h($sv['label']) ?>
             </option>
             <?php endforeach; ?>
         </select>
-        <?php if ($is_terminal && !$is_admin_): ?>
-        <div class="form-hint" style="color:var(--danger)">Terminal durum — geri alınamaz.</div>
-        <?php elseif (!empty($next_states)): ?>
-        <div class="form-hint">İzin verilen geçişler:
+        <?php if (!empty($next_states)): ?>
+        <!-- Öneri, kapı değil: her durum seçilebilir. -->
+        <div class="form-hint">Akıştaki sıradaki durum:
             <?php foreach ($next_states as $ns): ?>
             <strong><?= h($statuses[$ns]['label'] ?? $ns) ?></strong>
             <?php if ($ns !== end($next_states)): ?>, <?php endif; ?>
@@ -391,13 +383,6 @@ render_flash();
         </div>
         <?php endif; ?>
     </div>
-    <?php else: ?>
-    <input type="hidden" name="status" value="<?= h($cur_status) ?>">
-    <div class="form-group">
-        <label class="form-label">Durum</label>
-        <div><?= beyan_badge_html($cur_status) ?> <span class="muted">(terminal — değiştirilemez)</span></div>
-    </div>
-    <?php endif; ?>
 
     <div class="beyan-form-grid" style="margin-top:10px">
         <div class="form-group">

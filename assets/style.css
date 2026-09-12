@@ -5167,9 +5167,54 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
 /* Durum geçiş butonları */
 .beyan-next-status-wrap {
     display: flex;
-    gap: 6px;
+    gap: 8px;              /* seçili pilin dış halkası komşuya değmesin */
     flex-wrap: wrap;
     margin-top: 6px;
+}
+
+/* ── Durum şeridi (beyan_view.php) ────────────────────────────────────────
+   TÜM durumlar tıklanabilir duruyor ve seçili olan ÇERÇEVE ile işaretli:
+   sonuca varmak için ara durumlara tek tek tıklamak gerekmiyor. Pil ve buton
+   AYNI kutu ölçüsünü paylaşır (1px şeffaf kenar ↔ 2px halka farkı kutuyu
+   kaydırmasın), yoksa seçili durum değişince şerit yerinden oynuyordu. */
+.beyan-durum-btn,
+.beyan-durum-secili {
+    font: inherit;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 5px 12px;
+    min-height: 30px;                /* dokunma hedefi — 9 pil yan yana */
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+}
+.beyan-durum-btn {
+    border: 2px solid transparent;
+    cursor: pointer;
+    opacity: .9;
+}
+.beyan-durum-btn:hover,
+.beyan-durum-btn:focus-visible {
+    opacity: 1;
+    border-color: currentColor;
+}
+/* Önerilen sonraki durum(lar) — kesik çerçeve. Kapı değil, yalnız ipucu:
+   diğer butonların hepsi aynı şekilde tıklanabilir. */
+.beyan-durum-onerilen { border-style: dashed; border-color: currentColor; opacity: 1; }
+.beyan-durum-onerilen:hover { border-style: solid; }
+/* Seçili (şu anki) durum: dolu çerçeve + halka. ✓ işareti de taşır —
+   TEMİZ ile YÜKLENDİ aynı yeşil, renge tek başına güvenilmez. */
+.beyan-durum-secili {
+    border: 2px solid currentColor;
+    /* Çift halka pilin KENDİ renginde (currentColor): iç boşluk zeminden,
+       dış halka renkten. Her durum rengiyle tutarlı çalışır ve koyu temada
+       `--card` kendiliğinden değişir — ayrı bir tema kuralı gerekmez. */
+    box-shadow: 0 0 0 2px var(--card, #fff), 0 0 0 4px currentColor;
+    cursor: default;
 }
 
 @media print {

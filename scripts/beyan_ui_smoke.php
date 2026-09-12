@@ -272,6 +272,89 @@ ok('geçmiş tablosu yalnız bildirim varken görünür',
    strpos($h1, 'beyan-badge">HKS TASLAK') === false && strpos($h2, 'HKS TASLAK') !== false,
    'gecmis tablosu yanlis kosulda ciziliyor');
 
+// ── DURUM ŞERİDİ: tum durumlar tiklanabilir, secili olan cerceveli ───────
+// Eskiden yalniz beyan_next_statuses() ciziliyordu; sonuca varmak icin ara
+// durumlara tek tek tiklamak gerekiyordu ve terminal durumda serit hic
+// cikmadigi icin geri donus yolu yoktu.
+$TUM_DURUM = array_keys(beyan_statuses());
+foreach (['beyan_acildi' => $ID_TAM, 'yuklendi' => $ID_TAM, 'iptal' => $ID_TAM] as $dur => $did) {
+    db()->exec("UPDATE customs_declarations SET status='$dur' WHERE id=$did");
+    $hd = render_beyan($did);
+    if (strncmp($hd, '__HATA__', 8) === 0) { ok("[durum:$dur] render edildi", false, substr($hd, 8)); continue; }
+
+    // Her durum ya buton ya da secili pil olarak ciziliyor mu?
+    $eksik = [];
+    foreach ($TUM_DURUM as $d) {
+        $btn = strpos($hd, 'name="status" value="' . $d . '"') !== false;
+        $sec = $d === $dur && strpos($hd, 'beyan-durum-secili') !== false;
+        if (!$btn && !$sec) $eksik[] = $d;
+    }
+    ok("[durum:$dur] dokuz durumun hepsi serit uzerinde", empty($eksik),
+       'seritte olmayan durum(lar): ' . implode(', ', $eksik));
+
+    // Secili durum BUTON DEGIL: kendine gecis anlamsiz, cerceve ile isaretli.
+    ok("[durum:$dur] secili durum buton degil, cerceveli",
+       strpos($hd, 'name="status" value="' . $dur . '"') === false
+       && preg_match('/beyan-durum-secili[^>]*>\s*✓/u', $hd) === 1,
+       'secili durum ya buton olarak cizilmis ya da cerceve/tik isareti yok');
+
+    // Serit TEK form olmali — eskiden her buton kendi formunu ve ~26 gizli
+    // alanini tasiyordu; dokuz durumla bu 230+ gizli alan demekti.
+    ok("[durum:$dur] serit tek form", substr_count($hd, 'class="beyan-durum-form"') === 1,
+       'durum formu sayisi: ' . substr_count($hd, 'class="beyan-durum-form"'));
+
+    // `status` icin AYRI hidden alan OLMAMALI: ayni name iki yerden gelirse
+    // hangisinin kazandigi belirsiz olurdu (butonun kendi value'su tasir).
+    ok("[durum:$dur] status icin hidden alan yok",
+       preg_match('/<input type="hidden" name="status"/', $hd) !== 1,
+       'hidden status alani butonun value\'su ile cakisir');
+
+    // Hizli serit TAM guncelleme dalina gider (status_only DEGIL): oradaki
+    // beyan_next_statuses kapisi dogrudan gecisleri reddederdi.
+    ok("[durum:$dur] serit status_only kullanmiyor",
+       preg_match('/class="beyan-durum-form".*?name="status_only"/s', $hd) !== 1,
+       'status_only ile gonderim beyan_next_statuses kapisina takilir');
+}
+// Terminal durumda da serit cizilmeli: geri donus yolu olsun.
+db()->exec("UPDATE customs_declarations SET status='yuklendi' WHERE id=$ID_TAM");
+$h_term = render_beyan($ID_TAM);
+ok('[durum] terminal durumda serit gizlenmiyor',
+   strpos($h_term, 'class="beyan-durum-form"') !== false
+   && strpos($h_term, 'name="status" value="taslak"') !== false,
+   'terminal durumda serit yok — kullanici durumu geri alamaz');
+// Uzak bir duruma DOGRUDAN gecis butonu var mi? ("direkt sonuca gidebilelim")
+db()->exec("UPDATE customs_declarations SET status='taslak' WHERE id=$ID_TAM");
+$h_jump = render_beyan($ID_TAM);
+ok('[durum] taslaktan dogrudan YUKLENDI butonu var',
+   strpos($h_jump, 'name="status" value="yuklendi"') !== false,
+   'ara durumlar atlanamiyor — tek tek tiklamak gerekiyor');
+// Akis sirasi: olumsuz cikislar (red/iptal) SONDA olmali.
+$sira = beyan_durum_akis_sirasi();
+ok('[durum] akis sirasi red/iptal ile bitiyor',
+   array_slice($sira, -2) === ['red', 'iptal'] && count($sira) === count($TUM_DURUM),
+   'sira: ' . implode(',', $sira));
+// Listede olmayan bir durum SONA eklenmeli (yeni durum sessizce kaybolmasin).
+ok('[durum] akis sirasi tum durumlari kapsiyor',
+   array_diff($TUM_DURUM, $sira) === [] && array_diff($sira, $TUM_DURUM) === [],
+   'akis sirasi ile beyan_statuses ayrismis');
+// Red hala not istiyor (analysis_note zorunlu — sunucu reddediyor).
+ok('[durum] RED butonu not soruyor',
+   preg_match('/name="status" value="red"[^>]*prompt_note/s', $h_jump) === 1
+   || preg_match('/prompt_note[^>]*name="status" value="red"/s', $h_jump) === 1,
+   'red butonu not sormuyor — sunucu "analiz notu zorunlu" ile reddeder');
+db()->exec("UPDATE customs_declarations SET status='beyan_acildi' WHERE id=$ID_TAM");
+
+// beyan_edit.php'nin TAM guncelleme dali dogrudan gecisi kabul etmeli:
+// serit oraya POST eder, next_statuses kapisi YALNIZ status_only dalinda olmali.
+$edit_src = (string)file_get_contents($ROOT . '/beyan_edit.php');
+$so_dal   = strpos($edit_src, "if (!empty(\$_POST['status_only']))");
+$tam_dal  = strpos($edit_src, '$valid_statuses = array_keys(beyan_statuses());', $so_dal ?: 0);
+$tam_dal2 = strpos($edit_src, '$valid_statuses = array_keys(beyan_statuses());', $tam_dal + 10);
+ok('[durum] tam guncelleme dalinda next_statuses kapisi yok',
+   $tam_dal2 !== false
+   && strpos(substr($edit_src, $tam_dal2, 400), 'beyan_next_statuses') === false,
+   'tam dala next_statuses kapisi eklenmis — dogrudan gecisler sessizce reddedilir');
+
 // Yetkisiz kullanıcı: buton HİÇ olmamalı
 $PERMS = ['beyan.read'];
 $h3 = render_beyan($ID_TAM);
@@ -300,6 +383,34 @@ function render_form(int $id): string {
 
 $form = render_form($ID_BOS);
 ok('[form] render edildi', strncmp($form, '__HATA__', 8) !== 0, substr($form, 8, 200));
+
+// Duzenle formundaki durum listesi, beyan_view.php'deki serit ile AYNI kurali
+// izlemeli: tum durumlar secilebilir. Eskiden liste sonraki durumlarla
+// siniliydi ve terminal durumda "degistirilemez" yaziyordu — sunucu ise
+// (tam guncelleme dali) hicbir zaman kisitlamiyordu, yani iddia yanlisti.
+db()->exec("UPDATE customs_declarations SET status='yuklendi' WHERE id=$ID_BOS");
+$form_t = render_form($ID_BOS);
+if (strncmp($form_t, '__HATA__', 8) === 0) {
+    ok('[form:terminal] render edildi', false, substr($form_t, 8));
+} else {
+    $sel = '';
+    if (preg_match('/<select name="status".*?<\/select>/s', $form_t, $ms)) $sel = $ms[0];
+    $eksik = [];
+    foreach (array_keys(beyan_statuses()) as $d)
+        if (strpos($sel, 'value="' . $d . '"') === false) $eksik[] = $d;
+    ok('[form:terminal] durum listesi tum durumlari tasiyor', $sel !== '' && empty($eksik),
+       $sel === '' ? 'status select hic cizilmemis' : 'eksik: ' . implode(',', $eksik));
+    // HTML yorumlari SAYILMAZ: onlar gecmisi anlatir, kullaniciya gorunmez.
+    $gorunur = preg_replace('/<!--.*?-->/s', '', $form_t);
+    ok('[form:terminal] "degistirilemez" iddiasi yok',
+       strpos($gorunur, 'değiştirilemez') === false && strpos($gorunur, 'geri alınamaz') === false,
+       'form durumun degistirilemedigini soyluyor — oysa serit de sunucu da degistiriyor');
+    ok('[form:terminal] status icin salt hidden alan yok',
+       preg_match('/<input type="hidden" name="status"/', $form_t) !== 1,
+       'terminal durumda select yerine hidden alan cizilmis');
+}
+db()->exec("UPDATE customs_declarations SET status='beyan_acildi' WHERE id=$ID_BOS");
+$form = render_form($ID_BOS);
 if (strncmp($form, '__HATA__', 8) !== 0) {
     ok('[form] PHP uyarısı yok',
        stripos($form, 'Warning:') === false && stripos($form, 'Notice:') === false
