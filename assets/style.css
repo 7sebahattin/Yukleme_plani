@@ -5379,6 +5379,58 @@ html[data-theme="dark"] body:not(.print-mode) .ara-sec-bos { background: #2a1616
 .bk-alt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 .bk-engel { font-size: .82rem; color: #b45309; flex: 1 1 220px; line-height: 1.4; }
 
+/* ── Beyan listesi bölümleri (beyanlar.php) ───────────────────────────────
+   Sayfa iki bloğa ayrılır: ÜSTTE işlem bekleyen (yüklenmeyen) beyanlar,
+   ALTTA yüklenen/kapanan arşiv + filtre şeridi. Üst blok sol şeridi ve
+   dolgun sayacıyla bilerek daha belirgin — gün içinde bakılacak yer o. */
+.beyan-blok {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 16px;
+}
+.beyan-blok-acik     { border-left: 4px solid var(--warn); }
+.beyan-blok-kapanmis { border-left: 4px solid var(--success); }
+.beyan-blok-head {
+    display: flex; align-items: baseline; gap: 4px 12px;
+    flex-wrap: wrap; margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.beyan-blok-baslik {
+    margin: 0; font-size: 1.02rem; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+}
+.beyan-blok-sayi {
+    display: inline-block; min-width: 24px; text-align: center;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: .8rem; font-weight: 700; line-height: 1.5;
+    background: var(--surface-2); color: var(--muted);
+}
+.beyan-blok-acik .beyan-blok-sayi     { background: var(--warn);    color: #fff; }
+.beyan-blok-kapanmis .beyan-blok-sayi { background: var(--success); color: #fff; }
+.beyan-blok-not { font-size: .78rem; }
+.beyan-blok-bos {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 14px 4px; font-size: .88rem; color: var(--muted);
+}
+/* Filtre şeridi bloğun içinde — bloğun kendi dolgusu zaten boşluk veriyor. */
+.beyan-blok .beyan-filter-form { margin-bottom: 10px; }
+/* Tablo bloğun dolgusunu yemez: 13 kolonlu liste zaten dar, bloğun içinde
+   28px daha kaybedince işlem butonları sıkışıyordu. .table-wrap kendi
+   overflow-x'ini koruduğu için taşma yatay kaymaya döner, sayfayı bozmaz. */
+.beyan-blok > .table-wrap { margin-left: -14px; margin-right: -14px; }
+@media (max-width: 767px) {
+    .beyan-blok { padding: 10px 12px; border-radius: 8px; }
+    .beyan-blok-baslik { font-size: .95rem; }
+    .beyan-blok > .table-wrap { margin-left: -12px; margin-right: -12px; }
+}
+/* Yazdırmada blok çerçevesi gereksiz — başlık kalsın, kutu gitsin. */
+@media print {
+    .beyan-blok { border: 0; padding: 0; margin-bottom: 10px; background: none; }
+    .beyan-blok-not { display: none; }
+}
+
 /* Toplu bildirim: seçim sütunu + alt şerit (beyanlar.php) */
 .bb-sec-col { width: 34px; text-align: center; }
 .bb-bar[hidden] { display: none !important; }
@@ -5911,6 +5963,10 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-hks-warn { background: #2b2
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-rozet-uyari { color: #fbbf24; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn { background: #1a2331; border-color: #2b3648; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn:hover { border-color: #a78bfa; color: #a78bfa; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-blok { background: var(--card); }
+html[data-theme="dark"] body:not(.print-mode) .beyan-blok-sayi { background: #1a2331; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-blok-acik .beyan-blok-sayi { background: var(--warn); color: #1c2230; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-blok-kapanmis .beyan-blok-sayi { background: var(--success); color: #fff; }
 html[data-theme="dark"] body:not(.print-mode) .bb-bar { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .bb-engel td { background: #2b2410; }
 html[data-theme="dark"] body:not(.print-mode) .bk-hucre { background: var(--card); }

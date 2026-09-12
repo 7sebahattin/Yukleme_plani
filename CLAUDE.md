@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v215` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v216` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -419,6 +419,30 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   korunur). Enter tuşu formun İLK submit butonunu tetikler; Sil önce olsaydı
   metin kutusunda Enter silme başlatırdı.
 - **Listede silme YOK** — bilinçli; silme detay ve düzenle ekranlarından yapılır.
+- **Beyan listesi İKİ BÖLÜM** (`beyanlar.php`, Sprint Beyan-Liste-02): **ÜSTTE
+  "⏳ Yüklenmeyen Beyanlar"** (`.beyan-blok-acik`), **ALTTA "✅ Yüklenen
+  Beyanlar" + filtre şeridi** (`.beyan-blok-kapanmis`). Bölümü DURUM belirler:
+  `beyan_kapali_durumlar()` (`yuklendi`/`iptal`/`red`) alta, geri kalan HER
+  durum üste. Yeni bir durum eklersen o listeyi gözden geçir — listede
+  olmayan durum ÜST bölüme düşer (güvenli varsayılan: gözden kaçmaz).
+  - **Üst bölüm filtreden ve sayfalamadan BAĞIMSIZ.** Orası işlem bekleyenlerin
+    TAM listesi; bir arama ya da sayfa geçişi onu eksiltirse kullanıcı yapılacak
+    işi göremez. Filtreye bağlama.
+  - **Filtre + sayfalama ALT bölümün içinde yaşar** (`$w_kapali` / `$p_kapali`).
+    Durum pilleri yalnız **kapalı** durumları listeler; bekleyen bir durum pili
+    seçilse arşiv sebepsiz boş görünürdü. Eski yer imi (`?status=taslak`)
+    **filtre olarak uygulanmaz** — `$valid_statuses = beyan_kapali_durumlar()`.
+  - **Satır/kart biçimi `_beyan_liste.php` partial'ında** — iki bölüm × masaüstü/
+    mobil = dört kopya olurdu, ayrışırdı. Partial **fonksiyon TANIMLAMAZ**
+    (sayfa testte iki kez include edilir) ve `$sec_rows` / `$sec_secim` /
+    `$bildirim_uygun` bekler. Satır düzenini orada değiştir, beyanlar.php'de değil.
+  - **"Tümü" seçim kutusu `class="bb-tumu"`, id DEĞİL** — sayfada iki tane var.
+    Her biri **yalnız kendi tablosunu** seçer (arşiv satırları istemeden
+    işaretlenmesin); mobil kart eşleri değere göre eşitlenir.
+  - Uygunluk kapısı (`$bildirim_uygun`) ve toplu bildirim **bölümden bağımsız** —
+    `$rows` iki bölümün birleşimidir, aktif bağ sorgusu tek sorguda kalır.
+  - Üst bölümün emniyet supabı `BEYAN_BEKLEYEN_LIMIT` (200); aşılırsa ekrana not
+    düşer. Alt bölüm `BEYAN_PER_PAGE` ile sayfalanır.
 - **Filtre şeridi tek satır** (`beyanlar.php`): `[arama] [Ara] [▾ Filtre] [Temizle]`.
   Detay paneli **her genişlikte katlanır** — eskiden `.beyan-filter-toggle`
   yalnız `<768px`'de görünürdü, masaüstünde panel kalıcı açık kalıyor ve on
