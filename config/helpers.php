@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v216');
+    define('APP_SURUM', 'v217');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -1910,6 +1910,21 @@ function beyan_badge_html(string $status): string {
     return '<span class="beyan-badge beyan-badge-' . h($s['css']) . '">' . h($s['label']) . '</span>';
 }
 
+// Hızlı durum şeridinin GÖRSEL sırası (beyan_view.php). Ana akış soldan sağa,
+// "olumsuz" çıkışlar (red/iptal) en sonda: hem doğal okunur hem de yanlışlıkla
+// dokunma riski azalır. beyan_statuses() sırası DEĞİL — orada `iptal` akışın
+// ortasında duruyor. Listede olmayan bir durum SONA eklenir: yeni bir durum
+// bu listeye yazılmayı unutunca şeritten sessizce kaybolmaz.
+function beyan_durum_akis_sirasi(): array {
+    $akis = ['taslak', 'beyan_acildi', 'numune_bekliyor', 'analiz_bekliyor',
+             'temiz', 'yukleme_olustu', 'yuklendi', 'red', 'iptal'];
+    $tum  = array_keys(beyan_statuses());
+    return array_merge(array_values(array_intersect($akis, $tum)),
+                       array_values(array_diff($tum, $akis)));
+}
+
+// Akıştaki BİR SONRAKİ durum(lar). Hızlı şerit artık tüm durumları gösterdiği
+// için bu yalnız "önerilen ilerleme"yi işaretler; kapı DEĞİLDİR.
 function beyan_next_statuses(string $current): array {
     $map = [
         'taslak'          => ['beyan_acildi', 'iptal'],

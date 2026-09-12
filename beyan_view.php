@@ -343,45 +343,66 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
 
     <?php
-    $next_states = beyan_next_statuses($cur_status);
-    if (!empty($next_states) && !$is_deleted && can_beyan('write')):
+    // ── Durum şeridi: TÜM durumlar tıklanabilir ───────────────────────────
+    // Eskiden yalnız beyan_next_statuses() gösteriliyordu; sonuca varmak için
+    // ara durumlara tek tek tıklamak gerekiyordu (ve terminal durumda şerit
+    // hiç çıkmadığı için geri dönüş yolu yoktu). Artık dokuz durumun hepsi
+    // duruyor, seçili olan ÇERÇEVE ile işaretli ve doğrudan sonuca gidilebilir.
+    // Sunucu tarafı bunu zaten kabul ediyor: beyan_edit.php'nin tam güncelleme
+    // dalı durumu yalnız beyan_statuses() anahtarlarına karşı doğrular.
+    $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
+    if (!$is_deleted && can_beyan('write')):
     ?>
     <div style="margin-top:10px">
-        <div class="muted" style="font-size:.82rem;margin-bottom:6px">Hızlı Durum Geçişi:</div>
-        <div class="beyan-next-status-wrap">
-            <?php foreach ($next_states as $ns):
-                $sv = $statuses[$ns] ?? ['label' => $ns, 'css' => 'taslak'];
-            ?>
-            <form method="post" action="beyan_edit.php?id=<?= $id ?>" style="display:inline">
-                <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
-                <input type="hidden" name="status" value="<?= h($ns) ?>">
-                <?php
-                // Durum değiştirilirken tüm mevcut alanları hidden olarak gönder
-                foreach (['raw_text','unmatched_text','declaration_title','company_name','company_address',
-                          'transport_type','vehicle_plate','line_type','party_no','pallet_count','product_name','product_variety',
-                          'gross_kg','net_kg','crate_count','crate_type','exit_depot','contact_person',
-                          'buyer_name','brand','analysis_note','sample_taken_at','analysis_result_at',
-                          'hks_firma_id','hks_urun_id','hks_ulke_id'] as $hf):
-                    $hval = '';
-                    if ($hf === 'pallet_count') $hval = $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '';
-                    elseif ($hf === 'crate_count') $hval = $beyan['crate_count'] !== null ? (string)(int)$beyan['crate_count'] : '';
-                    elseif ($hf === 'gross_kg') $hval = fmt_edit_num($beyan['gross_kg'], 0);
-                    elseif ($hf === 'net_kg')   $hval = fmt_edit_num($beyan['net_kg'],   0);
-                    elseif ($hf === 'sample_taken_at')    $hval = $beyan['sample_taken_at']    ? date('Y-m-d\TH:i', strtotime($beyan['sample_taken_at']))    : '';
-                    elseif ($hf === 'analysis_result_at') $hval = $beyan['analysis_result_at'] ? date('Y-m-d\TH:i', strtotime($beyan['analysis_result_at'])) : '';
-                    else   $hval = (string)($beyan[$hf] ?? '');
-                ?>
-                <input type="hidden" name="<?= h($hf) ?>" value="<?= h($hval) ?>">
-                <?php endforeach; ?>
-                <button type="submit"
-                        class="btn btn-sm beyan-badge beyan-badge-<?= h($sv['css']) ?>"
-                        style="border:none;cursor:pointer;padding:4px 12px;font-size:.75rem"
-                        <?= ($ns === 'red') ? 'onclick="return prompt_note(this)"' : '' ?>>
-                    → <?= h($sv['label']) ?>
-                </button>
-            </form>
-            <?php endforeach; ?>
+        <div class="muted" style="font-size:.82rem;margin-bottom:6px">
+            Durum Değiştir: <span style="font-size:.92em">herhangi bir duruma doğrudan geçebilirsiniz</span>
         </div>
+        <!-- TEK form. Her durum bir submit butonu (`name="status"`) — buton
+             kendi değerini POST eder. Eskiden her buton kendi formunu ve ~26
+             gizli alanını taşıyordu; dokuz durumla bu 230+ gizli alan demekti.
+             `status` için AYRI bir hidden alan YOK: aynı `name` iki yerden
+             gelirse hangisinin kazandığı belirsiz olurdu. -->
+        <form method="post" action="beyan_edit.php?id=<?= $id ?>" class="beyan-durum-form">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <?php
+            // Tam güncelleme dalına gidiyoruz: mevcut alanların HEPSİ gizli
+            // olarak gönderilmeli, yoksa durum değişiminde silinirler.
+            // YENİ KOLON EKLERSEN BU LİSTEYE DE EKLE.
+            foreach (['raw_text','unmatched_text','declaration_title','company_name','company_address',
+                      'transport_type','vehicle_plate','line_type','party_no','pallet_count','product_name','product_variety',
+                      'gross_kg','net_kg','crate_count','crate_type','exit_depot','contact_person',
+                      'buyer_name','brand','analysis_note','sample_taken_at','analysis_result_at',
+                      'hks_firma_id','hks_urun_id','hks_ulke_id'] as $hf):
+                $hval = '';
+                if ($hf === 'pallet_count') $hval = $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '';
+                elseif ($hf === 'crate_count') $hval = $beyan['crate_count'] !== null ? (string)(int)$beyan['crate_count'] : '';
+                elseif ($hf === 'gross_kg') $hval = fmt_edit_num($beyan['gross_kg'], 0);
+                elseif ($hf === 'net_kg')   $hval = fmt_edit_num($beyan['net_kg'],   0);
+                elseif ($hf === 'sample_taken_at')    $hval = $beyan['sample_taken_at']    ? date('Y-m-d\TH:i', strtotime($beyan['sample_taken_at']))    : '';
+                elseif ($hf === 'analysis_result_at') $hval = $beyan['analysis_result_at'] ? date('Y-m-d\TH:i', strtotime($beyan['analysis_result_at'])) : '';
+                else   $hval = (string)($beyan[$hf] ?? '');
+            ?>
+            <input type="hidden" name="<?= h($hf) ?>" value="<?= h($hval) ?>">
+            <?php endforeach; ?>
+
+            <div class="beyan-next-status-wrap">
+                <?php foreach (beyan_durum_akis_sirasi() as $ns):
+                    $sv = $statuses[$ns] ?? ['label' => $ns, 'css' => 'taslak'];
+                ?>
+                <?php if ($ns === $cur_status): ?>
+                <!-- Seçili durum: buton DEĞİL. Çerçeve + ✓ ile işaretli —
+                     renge tek başına güvenilmez (TEMİZ ile YÜKLENDİ aynı yeşil). -->
+                <span class="beyan-badge beyan-badge-<?= h($sv['css']) ?> beyan-durum-secili"
+                      aria-current="true" title="Şu anki durum">✓ <?= h($sv['label']) ?></span>
+                <?php else: ?>
+                <button type="submit" name="status" value="<?= h($ns) ?>"
+                        class="beyan-badge beyan-badge-<?= h($sv['css']) ?> beyan-durum-btn<?= in_array($ns, $next_states, true) ? ' beyan-durum-onerilen' : '' ?>"
+                        title="Durumu &quot;<?= h($sv['label']) ?>&quot; olarak ayarla"
+                        <?= ($ns === 'red') ? 'onclick="return prompt_note(this)"' : '' ?>><?= h($sv['label']) ?></button>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            </div>
+        </form>
     </div>
     <?php endif; ?>
 </div>
