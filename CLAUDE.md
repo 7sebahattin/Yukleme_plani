@@ -61,7 +61,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 - **`yuklendi` durumu = kilitli** — yalnızca `records.unlock` açabilir, `revision_reason` zorunlu.
 - **KG ekranda tam sayı ve virgülsüz** — CSV decimal koruyabilir.
 - **Kişisel isim/e-posta örneklerde kullanma.**
-- **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Bu, sunucuya OTOMATİK yansımaz; `scripts/deploy.php` SSH'dan elle çalıştırılmalı (Claude'un SSH erişimi yok, her seferinde kullanıcıya hatırlat).
+- **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Merge sunucuya **OTOMATİK yansır**: GitHub push webhook'u `https://nuverna.derspros.com.tr/deploy.php`'yi tetikler, dosyalar ~dakikalar içinde iner (doğrulandı 2026-09-13). **Kullanıcıdan SSH'dan bir şey çalıştırmasını İSTEME** — doküman uzun süre yanlışlıkla bunu söylüyordu. Doğrulama: hard refresh → sidebar'daki `APP_SURUM`. Webhook'un **Secret'ı boş**; kökteki `deploy.php` repoda değil ve deploy onu bilerek atlar (koruma listesi).
 
 ---
 

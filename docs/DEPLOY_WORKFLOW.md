@@ -8,7 +8,10 @@
 
 ## Özet (tek cümle)
 
-Claude'un GitHub dışında hiçbir erişimi yok — yapabildiği tek şey **feature branch'i `main`'e PR ile merge etmek**. Sunucuya asıl deploy (dosyaların canlıya yansıması) **ayrı ve manuel bir adım**, Claude bunu tetikleyemez.
+**`main`'e merge = canlıya çıktı.** Repoda bir GitHub **webhook**'u var; `main`'e her push'ta
+sunucudaki `https://nuverna.derspros.com.tr/deploy.php` tetikleniyor ve dosyalar dakikalar
+içinde canlıya iniyor. Claude'un yapması gereken tek şey PR açıp merge etmek; **kullanıcıdan
+elle bir şey çalıştırmasını İSTEME.**
 
 ---
 
@@ -40,25 +43,89 @@ Bu adımlar kod kalitesi kontrolleri (php -l, ilgiliyse node --check, mantıksal
 
 ---
 
-## 2. Claude'un YAPAMADIĞI kısım — gerçek deploy
+## 2. Otomatik kısım — webhook deploy
 
-`main` branch'e merge olmak sunucudaki dosyaları **otomatik güncellemiyor**. Repo içinde `scripts/deploy.php` diye bir script var ama:
+Merge'den sonra **kimsenin bir şey yapmasına gerek yok.** (Doğrulandı: 2026-09-13,
+repo Settings → Webhooks ekranından.)
 
-- **Yalnızca CLI'dan (SSH ile) elle çalıştırılabiliyor** — `PHP_SAPI !== 'cli'` kontrolü web erişimini 403'lüyor.
-- Web üzerinden de `scripts/.htaccess` ile ekstra kapalı.
-- Repo içinde hiçbir GitHub Action / webhook / cron bulunmuyor (kontrol edildi — `git grep -i webhook/hmac/cron` sonuç vermedi, `.github/workflows` yok).
-
-Yani main'e her merge sonrası, sunucuya SSH erişimi olan biri şunu çalıştırmalı:
-
-```bash
-php scripts/deploy.php 7sebahattin/Yukleme_plani main
+```
+main'e merge  →  GitHub push webhook  →  https://nuverna.derspros.com.tr/deploy.php
+              →  main.zip indirilir    →  dosyaların üzerine yazılır  →  canlı
 ```
 
-Bu script GitHub'daki `main` branch'inin ZIP'ini indirip sunucudaki dosyaların üzerine yazar (`config/db.php` içindeki DB_HOST/NAME/USER/PASS bilgilerini koruyarak — `smart_merge_db()`).
+**Webhook ayarları (GitHub → Settings → Webhooks):**
 
-**Claude'un bu adımı tetiklemesi için hiçbir yolu yok** (SSH tool'u, hosting paneli erişimi, webhook endpoint'i — hiçbiri mevcut değil bu oturumda). Bu yüzden her "canlıya al" işleminden sonra kullanıcıya açıkça hatırlat:
+| Alan | Değer |
+|---|---|
+| Payload URL | `https://nuverna.derspros.com.tr/deploy.php` |
+| Content type | `application/json` |
+| Olay | Just the **push** event |
+| SSL verification | Açık |
+| Aktif | ✔ |
+| **Secret** | **BOŞ** — bkz. aşağıdaki güvenlik notu |
 
-> main'e merge edildi ✓ — ama sunucuya yansıması için SSH'dan `php scripts/deploy.php 7sebahattin/Yukleme_plani main` çalıştırılması lazım, bunu ben yapamıyorum.
+**Ölçülen gecikme:** v216 13:20'de merge edildi, 13:24'te canlıda görüldü → ~4 dakika.
+
+### Sunucudaki `deploy.php` repoda YOK
+
+Webhook'un çağırdığı dosya sitenin kökünde duruyor ama **git'te değil**. Sebebi
+`scripts/deploy.php` içindeki koruma listesi:
+
+```php
+$protected = ['deploy.php', 'deploy.log', '.htaccess', 'scripts/.htaccess'];
+```
+
+Bu yollar depo köküne göre; yani her deploy kökteki `deploy.php`'yi **bilerek atlıyor**
+(kendini ezmesin diye). Dolayısıyla o dosyayı Claude ne görebilir ne de
+güncelleyebilir — depoya kök `deploy.php` eklemek de işe yaramaz, deploy onu atlar.
+Değiştirilmesi gerekirse **hosting dosya yöneticisinden elle** yüklenmeli.
+
+`scripts/deploy.php` (repodaki, CLI-only olan) bundan AYRI bir dosyadır: yedek/elle
+çalıştırma yolu. Webhook onu kullanmıyor.
+
+### Doğrulama
+
+- **GitHub tarafı:** Settings → Webhooks → hook → **Recent Deliveries**. Her merge'de bir
+  teslimat olmalı; Response gövdesinde `Deploy tamamlandı: N güncellendi, M atlandı`.
+- **Sunucu tarafı:** site kökündeki **`deploy.log`** — her çalışma tarih/saatle yazılıyor.
+- **Kullanıcı tarafı:** hard refresh (Ctrl+Shift+R) → sidebar altındaki `APP_SURUM`.
+
+### ⚠️ Güvenlik notu — Secret boş
+
+Webhook'ta **Secret tanımlı değil**, yani istek GitHub'dan mı geliyor doğrulanmıyor.
+Adresi bilen herkes `deploy.php`'ye POST atıp deploy tetikleyebilir. En hafif sonucu
+kaynak tüketimi ve yarım yazılmış dosyalarla siteyi tutarsız bırakmak; **kökteki
+`deploy.php` repo/branch bilgisini webhook payload'ından okuyup doğrulamıyorsa
+uzaktan kod çalıştırmaya kadar gider** (o dosya görülemediği için hangisi olduğu
+bilinmiyor — kullanıcıdan iste).
+
+**Hazır çözüm: `scripts/deploy_webhook.php`** — imza doğrulamalı, kuruluma hazır
+şablon. Orada durduğu yerde çalışmaz (scripts/ web'e kapalı); site köküne
+`deploy.php` olarak **elle** kopyalanmalı, çünkü deploy kökteki `deploy.php`'yi atlar.
+
+Kurulum sırası (deploy'u hiç kesmez):
+1. GitHub → webhook → **Secret** alanına uzun rastgele bir değer yaz. *(Eski
+   `deploy.php` imzayı kontrol etmediği için bu adım tek başına hiçbir şeyi bozmaz.)*
+2. Sunucudaki mevcut `deploy.php`'yi `deploy.php.yedek` olarak yeniden adlandır.
+3. `scripts/deploy_webhook.php` içeriğini köke `deploy.php` olarak kaydet.
+4. İçindeki `DEPLOY_SECRET` sabitine 1. adımdaki değerin aynısını yaz.
+5. GitHub → Recent Deliveries → son teslimat → **Redeliver**. Yanıt `200` +
+   `Deploy tamamlandı: N güncellendi` olmalı. Olmazsa 2. adımdaki yedeği geri al.
+
+Şablonun getirdikleri (yerel PHP sunucusunda gerçek isteklerle doğrulandı):
+
+| Durum | Yanıt |
+|---|---|
+| GET | `405` |
+| İmzasız / yanlış imzalı POST | `401` |
+| `DEPLOY_SECRET` boş | `500` — **fail-closed**, kimliksiz deploy yapmaz |
+| Doğru imza + `ping` | `200 pong` |
+| Doğru imza + push, başka branch | `200` yoksayıldı |
+| Doğru imza + push `main` | `200 Deploy tamamlandı: …` |
+
+Ayrıca: repo/branch **sabit** (payload'dan okunmaz), eşzamanlı iki teslimat için
+`flock` kilidi (ikincisi `409`, dosyalar iç içe yazılmaz), ZIP yolları için
+zip-slip koruması (`..` içeren girdi atlanır).
 
 ---
 
@@ -68,10 +135,13 @@ Bu script GitHub'daki `main` branch'inin ZIP'ini indirip sunucudaki dosyaların 
 
 ---
 
-## 4. Gelecekte otomatik deploy kurulursa
+## 4. Deploy yansımadıysa sırayla bak
 
-Eğer bir gün gerçek bir webhook/Action kurulursa (push → main → otomatik `deploy.php` tetikleme), bu dosyayı güncelle:
-- "main'e merge = canlıya çıktı" hâline gelir, adım 2'deki uyarı kalkar.
-- Webhook endpoint'i ve HMAC doğrulaması nasıl kurulduysa buraya not düş.
+1. **SW cache** — hard refresh yapıldı mı? Sidebar'daki `APP_SURUM` hâlâ eski mi?
+2. **Recent Deliveries** — teslimat kırmızı ✖ mi? Response ne diyor?
+3. **`deploy.log`** — son satırın saati merge saatine yakın mı, hata satırı var mı?
+4. Hiçbiri değilse yedek yol: SSH'dan `php scripts/deploy.php 7sebahattin/Yukleme_plani main`.
 
-Şu an (bu dosyanın yazıldığı tarih itibarıyla) böyle bir mekanizma **yok**.
+**Tarihçe:** Bu dosya bir dönem "otomatik deploy YOK, kullanıcı SSH'dan elle çalıştırmalı"
+diyordu ve Claude her merge'den sonra kullanıcıya bunu boş yere hatırlatıyordu. Webhook
+o notun yazılmasından sonra kurulmuş, doküman güncellenmemişti. 2026-09-13'te düzeltildi.
