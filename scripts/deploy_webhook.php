@@ -34,7 +34,7 @@ declare(strict_types=1);
 
 // ── AYARLAR ──────────────────────────────────────────────────────────
 // GitHub webhook'undaki Secret ile BİREBİR aynı olmalı.
-const DEPLOY_SECRET = '';
+const DEPLOY_SECRET = '35dfa34f-b914-4d37-b036-f3617c0736ae';
 
 // Repo ve branch BİLEREK sabit. Webhook payload'ından OKUNMAZ: saldırgan
 // sahte bir payload'la kendi deposunu kurdurabilirdi.
