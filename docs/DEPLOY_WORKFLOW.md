@@ -99,11 +99,33 @@ kaynak tüketimi ve yarım yazılmış dosyalarla siteyi tutarsız bırakmak; **
 uzaktan kod çalıştırmaya kadar gider** (o dosya görülemediği için hangisi olduğu
 bilinmiyor — kullanıcıdan iste).
 
-Düzeltme iki adımlı ve **ikisi de kullanıcı tarafında**:
-1. GitHub → webhook → **Secret** alanına uzun rastgele bir değer yaz.
-2. Kökteki `deploy.php`'ye HMAC doğrulaması ekle (`X-Hub-Signature-256` başlığını
-   `hash_hmac('sha256', $body, $secret)` ile karşılaştır, eşleşmezse 401) ve repo/branch'i
-   payload'dan okumak yerine **sabit yaz**.
+**Hazır çözüm: `scripts/deploy_webhook.php`** — imza doğrulamalı, kuruluma hazır
+şablon. Orada durduğu yerde çalışmaz (scripts/ web'e kapalı); site köküne
+`deploy.php` olarak **elle** kopyalanmalı, çünkü deploy kökteki `deploy.php`'yi atlar.
+
+Kurulum sırası (deploy'u hiç kesmez):
+1. GitHub → webhook → **Secret** alanına uzun rastgele bir değer yaz. *(Eski
+   `deploy.php` imzayı kontrol etmediği için bu adım tek başına hiçbir şeyi bozmaz.)*
+2. Sunucudaki mevcut `deploy.php`'yi `deploy.php.yedek` olarak yeniden adlandır.
+3. `scripts/deploy_webhook.php` içeriğini köke `deploy.php` olarak kaydet.
+4. İçindeki `DEPLOY_SECRET` sabitine 1. adımdaki değerin aynısını yaz.
+5. GitHub → Recent Deliveries → son teslimat → **Redeliver**. Yanıt `200` +
+   `Deploy tamamlandı: N güncellendi` olmalı. Olmazsa 2. adımdaki yedeği geri al.
+
+Şablonun getirdikleri (yerel PHP sunucusunda gerçek isteklerle doğrulandı):
+
+| Durum | Yanıt |
+|---|---|
+| GET | `405` |
+| İmzasız / yanlış imzalı POST | `401` |
+| `DEPLOY_SECRET` boş | `500` — **fail-closed**, kimliksiz deploy yapmaz |
+| Doğru imza + `ping` | `200 pong` |
+| Doğru imza + push, başka branch | `200` yoksayıldı |
+| Doğru imza + push `main` | `200 Deploy tamamlandı: …` |
+
+Ayrıca: repo/branch **sabit** (payload'dan okunmaz), eşzamanlı iki teslimat için
+`flock` kilidi (ikincisi `409`, dosyalar iç içe yazılmaz), ZIP yolları için
+zip-slip koruması (`..` içeren girdi atlanır).
 
 ---
 
