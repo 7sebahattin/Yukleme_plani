@@ -4,17 +4,26 @@
  *  deploy_webhook.php — GitHub push webhook alıcısı (İMZA DOĞRULAMALI)
  * =====================================================================
  *
- *  ⚠️ BU DOSYA BİR ŞABLONDUR. Burada durduğu yerde ÇALIŞMAZ:
- *     scripts/ klasörü .htaccess ile web'e kapalıdır.
+ *  ⚠️⚠️ BU DOSYA BİR ŞABLONDUR — DEPLOY_SECRET'İ BURADA, GİT'TE DOLDURMA. ⚠️⚠️
+ *     Burada durduğu yerde de çalışmaz: scripts/ klasörü .htaccess ile web'e
+ *     kapalıdır. Aşağıdaki DEPLOY_SECRET sabiti BOŞ KALMALI ve bu dosya
+ *     GİT'E hep boş secret'la commit edilmeli. Gerçek secret, dosyanın
+ *     SUNUCUYA YÜKLENEN KOPYASINA yazılır — o kopya asla git'e geri
+ *     commit edilmez. (Bu satırlar, secret'ın yanlışlıkla bir kere GitHub
+ *     web arayüzünden doğrudan bu dosyaya yazılıp commit edilmesi üzerine
+ *     eklendi — o değer o an itibariyle sızmış sayılır, yeniden ÜRETİLMELİ.)
  *
- *  KURULUM (hosting dosya yöneticisinden, elle):
+ *  KURULUM (5 adım, hiçbiri git'e dokunmaz — hepsi tarayıcı + hosting paneli):
  *    1. GitHub → repo → Settings → Webhooks → hook → "Secret" alanına uzun
  *       rastgele bir değer yaz, Update webhook. (Eski deploy.php imzayı
  *       kontrol etmediği için bu adım deploy'u BOZMAZ.)
- *    2. Sitedeki mevcut  deploy.php  dosyasını  deploy.php.yedek  olarak
- *       yeniden adlandır — geri dönmek gerekirse diye.
- *    3. Bu dosyanın içeriğini site köküne  deploy.php  olarak kaydet.
- *    4. Aşağıdaki DEPLOY_SECRET'e 1. adımdaki değerin AYNISINI yaz.
+ *    2. Bu dosyanın içeriğini GitHub'da "Raw" görünümünden kopyala VEYA
+ *       indir — kendi bilgisayarına, YEREL bir metin dosyasına.
+ *    3. O YEREL kopyada DEPLOY_SECRET'e 1. adımdaki değerin AYNISINI yaz.
+ *       (Git'teki kopyaya DEĞİL — kendi bilgisayarındaki dosyaya.)
+ *    4. Hosting dosya yöneticisinden: sitedeki mevcut deploy.php'yi
+ *       deploy.php.yedek olarak yeniden adlandır, sonra o YEREL (secret
+ *       dolu) dosyayı deploy.php adıyla site köküne yükle.
  *    5. GitHub → webhook → Recent Deliveries → son teslimat → "Redeliver".
  *       Yanıt 200 ve "Deploy tamamlandı: N güncellendi" olmalı.
  *
@@ -34,7 +43,7 @@ declare(strict_types=1);
 
 // ── AYARLAR ──────────────────────────────────────────────────────────
 // GitHub webhook'undaki Secret ile BİREBİR aynı olmalı.
-const DEPLOY_SECRET = '35dfa34f-b914-4d37-b036-f3617c0736ae';
+const DEPLOY_SECRET = '';
 
 // Repo ve branch BİLEREK sabit. Webhook payload'ından OKUNMAZ: saldırgan
 // sahte bir payload'la kendi deposunu kurdurabilirdi.
