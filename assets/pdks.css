@@ -102,3 +102,69 @@
 /* ── Geçmiş tablosu (kart geçmişi) ────────────────────────── */
 .pdks-history-table td, .pdks-history-table th { font-size: .86rem; }
 .pdks-history-reason { color: var(--muted); font-size: .82rem; }
+
+/* ── Giriş / Çıkış kiosk ekranı ────────────────────────────
+   Yalnız var(--*) token'ları — koyu/açık/sistem temasında otomatik doğru
+   çalışır. Mevcut topbar/sidebar/bottomnav'a DOKUNMAZ (Kritik Kural:
+   mobil görünümü bozma) — yalnız kendi içeriğini büyük gösterir. */
+.pdks-kiosk { max-width: 480px; margin: 0 auto; }
+
+.pdks-kiosk-modesec {
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    padding: 32px 12px;
+}
+.pdks-kiosk-modebtn {
+    width: 100%; max-width: 380px; padding: 30px 20px;
+    font-size: 1.3rem; font-weight: 800; letter-spacing: .01em;
+    border: none; border-radius: var(--radius); cursor: pointer;
+    color: #fff;
+}
+.pdks-kiosk-modebtn-giris { background: var(--success); }
+.pdks-kiosk-modebtn-cikis { background: var(--danger); }
+
+.pdks-kiosk-scan {
+    min-height: 60vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; gap: 14px; padding: 24px 16px; position: relative;
+}
+.pdks-kiosk-mode-badge {
+    display: inline-block; padding: 6px 16px; border-radius: 999px;
+    font-weight: 800; font-size: .95rem; letter-spacing: .02em;
+}
+.pdks-kiosk-mode-badge-giris { background: var(--success-soft); color: var(--success); }
+.pdks-kiosk-mode-badge-cikis { background: var(--danger-soft);  color: var(--danger); }
+.pdks-kiosk-scan-icon { font-size: 4.2rem; line-height: 1; }
+.pdks-kiosk-scan-text {
+    font-size: 1.8rem; font-weight: 800; letter-spacing: .02em; color: var(--text);
+}
+.pdks-kiosk-scan-hint { font-size: .9rem; }
+
+/* USB HID kutusu — görsel olarak gizli ama HER ZAMAN odaklanabilir kalmalı
+   (display:none odak alamaz) — standart "erişilebilir gizleme" kalıbı. */
+.pdks-kiosk-hidden-input {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; opacity: 0;
+}
+
+.pdks-kiosk-result {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; text-align: center; padding: 20px; border-radius: var(--radius);
+}
+.pdks-kiosk-result-ok  { background: var(--success-soft); }
+.pdks-kiosk-result-err { background: var(--danger-soft); }
+.pdks-kiosk-result-icon { font-size: 3.4rem; line-height: 1; }
+.pdks-kiosk-result-ok  .pdks-kiosk-result-icon { color: var(--success); }
+.pdks-kiosk-result-err .pdks-kiosk-result-icon { color: var(--danger); }
+.pdks-kiosk-result-name { font-size: 1.4rem; font-weight: 800; color: var(--text); }
+.pdks-kiosk-result-sub  { font-size: .95rem; color: var(--muted); }
+.pdks-kiosk-result-msg  { font-size: 1.15rem; font-weight: 700; }
+.pdks-kiosk-result-ok  .pdks-kiosk-result-msg { color: var(--success); }
+.pdks-kiosk-result-err .pdks-kiosk-result-msg { color: var(--danger); }
+.pdks-kiosk-result .pdks-avatar-xl { margin: 4px 0; }
+
+@media (max-width: 639px) {
+    .pdks-kiosk-scan { min-height: 56vh; }
+    .pdks-kiosk-scan-icon { font-size: 3.4rem; }
+    .pdks-kiosk-scan-text { font-size: 1.4rem; }
+}

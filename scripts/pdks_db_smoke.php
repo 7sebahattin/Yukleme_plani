@@ -337,6 +337,132 @@ dogrula('FK hatası migrasyonu DURDURMADI', pdks_sema_hazir(db()), true);
 dogrula('FK hatası veriyi bozmadı',
     (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn() > 0, true);
 
+echo "\n=== 15. GİRİŞ / ÇIKIŞ — pdks_devam_kaydet() ===\n";
+
+// ── Web NFC kart ataması + USB'yle AYNI fiziksel karta çözülme ──
+// Ham web_nfc girdisi 'AA:11:22:33' → ayraçsız 'AA112233' → bayt-tersi
+// (kanonik) '332211AA'. Aynı fiziksel kartı USB'den okutmuş gibi davranmak
+// için o kanoniğin ONDALIK karşılığını usb_decimal olarak da çözüyoruz —
+// iki kaynak, TEK kanonik kimlik.
+$insF = db()->prepare("INSERT INTO employees (personnel_no, full_name, department, status) VALUES (?,?,?,?)");
+$insF->execute(['101', 'Personel F', 'Sevkiyat', 'aktif']);   $empF = (int)db()->lastInsertId();
+
+$rNfc = pdks_kart_ata($empF, 'AA:11:22:33', 'web_nfc', ['label' => 'Kart-NFC'], db());
+dogrula('Web NFC ile kart ataması başarılı', $rNfc['ok'], true);
+dogrula('Web NFC kanoniği (bayt-tersi) doğru', $rNfc['uid_hex'] ?? null, '332211AA');
+
+$cWebNfc = pdks_kart_cozumle('AA:11:22:33', 'web_nfc', db());
+dogrula('Aynı ham web_nfc girdisi tutarlı biçimde çözülüyor', (int)($cWebNfc['card']['id'] ?? 0), (int)$rNfc['card_id']);
+
+$decEsdeger = pdks_uid_to_decimal('332211AA');
+$cUsbEsdeger = pdks_kart_cozumle($decEsdeger, 'usb_decimal', db());
+dogrula('AYNI fiziksel kart USB (ondalık eşdeğeri) ile de çözülüyor',
+    (int)($cUsbEsdeger['card']['id'] ?? 0), (int)$rNfc['card_id']);
+dogrula('İki kaynak da AYNI personele çözülüyor',
+    (int)($cUsbEsdeger['employee']['id'] ?? 0), $empF);
+
+echo "\n--- GİRİŞ yazar, sonra ÇIKIŞ yazar ---\n";
+$gF1 = pdks_devam_kaydet('AA:11:22:33', 'web_nfc', 'GIRIS', 1, db());
+dogrula('GİRİŞ kaydedildi', $gF1['ok'], true);
+$satirF1 = db()->query("SELECT * FROM attendance_events WHERE id = " . (int)$gF1['event_id'])->fetch();
+dogrula('event_type = GIRIS',            $satirF1['event_type'], 'GIRIS');
+dogrula('kaynak = web_nfc',              $satirF1['source'], 'web_nfc');
+dogrula('canonical_uid_snapshot doğru',  $satirF1['canonical_uid_snapshot'], '332211AA');
+dogrula('recorded_by_user_id kaydedildi', (int)$satirF1['recorded_by_user_id'], 1);
+dogrula('audit: attendance_giris', in_array('attendance_giris', array_column($GLOBALS['AUDIT'], 'action'), true), true);
+
+echo "\n--- 20 saniyelik MÜKERRER OKUMA reddi (aynı yön) ---\n";
+$gF2 = pdks_devam_kaydet('AA:11:22:33', 'web_nfc', 'GIRIS', 1, db());
+dogrula('Aynı yönde HEMEN tekrar okutma reddedildi (mükerrer)', $gF2['ok'], false);
+dogrula('  red kodu', $gF2['kod'], 'mukerrer');
+dogrula('  Türkçe mesaj', $gF2['hata'], 'BU KART ZATEN AZ ÖNCE OKUTULDU');
+dogrula('ikinci deneme YENİ satır YAZMADI (çift tıklama koruması da budur)',
+    (int)db()->query("SELECT COUNT(*) FROM attendance_events WHERE employee_id = $empF")->fetchColumn(), 1);
+
+echo "\n--- FARKLI yön (ÇIKIŞ) mükerrer sayılmaz ---\n";
+$gF3 = pdks_devam_kaydet('AA:11:22:33', 'web_nfc', 'CIKIS', 1, db());
+dogrula('Aynı an içinde FARKLI yön (ÇIKIŞ) kabul edildi', $gF3['ok'], true);
+$satirF3 = db()->query("SELECT * FROM attendance_events WHERE id = " . (int)$gF3['event_id'])->fetch();
+dogrula('event_type = CIKIS', $satirF3['event_type'], 'CIKIS');
+
+echo "\n--- Cooldown SÜRESİ GEÇTİKTEN SONRA aynı yön yeniden kabul edilir ---\n";
+// server_event_time'ı geçmişe çekip PDKS_COOLDOWN_SN'i simüle ediyoruz —
+// gerçek testte 20 saniye BEKLEMEK yerine, fonksiyonun PHP tarafında
+// hesapladığı eşiği (date() ile) doğru KARŞILAŞTIRDIĞINI kanıtlıyoruz.
+db()->prepare("UPDATE attendance_events SET server_event_time = ? WHERE id = ?")
+    ->execute([date('Y-m-d H:i:s', time() - PDKS_COOLDOWN_SN - 5), $gF1['event_id']]);
+$gF4 = pdks_devam_kaydet('AA:11:22:33', 'web_nfc', 'GIRIS', 1, db());
+dogrula('Cooldown süresi geçince aynı yön TEKRAR kabul edildi (yasal ikinci giriş)', $gF4['ok'], true);
+
+echo "\n--- Tanımsız kart ---\n";
+$gBil = pdks_devam_kaydet('999888777', 'usb_decimal', 'GIRIS', 1, db());
+dogrula('Tanımsız kart reddedildi', $gBil['ok'], false);
+dogrula('  red kodu', $gBil['kod'], 'kart_tanimsiz');
+dogrula('  Türkçe mesaj', $gBil['hata'], 'KART TANIMLI DEĞİL');
+
+echo "\n--- Kart durumları — yalnız 'aktif' geçer ---\n";
+$insG = db()->prepare("INSERT INTO employees (personnel_no, full_name, status) VALUES (?,?,?)");
+$insG->execute(['102', 'Personel G', 'aktif']);   $empG = (int)db()->lastInsertId();
+$rG = pdks_kart_ata($empG, '555666777', 'usb_decimal', [], db());
+dogrula('Personel G kart ataması başarılı', $rG['ok'], true);
+$kartG = (int)$rG['card_id'];
+
+$durumBeklenen = [
+    'iptal'        => 'KART İPTAL EDİLMİŞ',
+    'kayip'        => 'KART KAYIP',
+    'suresi_doldu' => 'KARTIN SÜRESİ DOLMUŞ',
+    'pasif'        => 'KART PASİF',
+];
+foreach ($durumBeklenen as $durum => $beklenenMesaj) {
+    db()->prepare("UPDATE employee_cards SET status = ? WHERE id = ?")->execute([$durum, $kartG]);
+    $gD = pdks_devam_kaydet('555666777', 'usb_decimal', 'GIRIS', 1, db());
+    dogrula("Kart durumu '$durum' reddedildi", $gD['ok'], false);
+    dogrula("  red kodu 'kart_$durum'",        $gD['kod'], 'kart_' . $durum);
+    dogrula("  Türkçe mesaj",                  $gD['hata'], $beklenenMesaj);
+}
+// 'degistirildi' — pdks_kart_degistir() akışıyla gerçekçi biçimde üret.
+$rDeg = pdks_kart_degistir($kartG, '555666778', 'usb_decimal', 'Kart yenilendi', 1, db());
+dogrula('Kart değiştirme başarılı', $rDeg['ok'], true);
+$gDeg = pdks_devam_kaydet('555666777', 'usb_decimal', 'GIRIS', 1, db());   // ESKİ (artık 'degistirildi') kart
+dogrula("Değiştirilmiş (eski) kart reddedildi",   $gDeg['ok'], false);
+dogrula("  red kodu 'kart_degistirildi'",         $gDeg['kod'], 'kart_degistirildi');
+dogrula("  Türkçe mesaj",                         $gDeg['hata'], 'KART DEĞİŞTİRİLMİŞ');
+// Yeni kart aktif — geçmeli.
+$gYeni = pdks_devam_kaydet('555666778', 'usb_decimal', 'GIRIS', 1, db());
+dogrula('Değiştirilen (yeni) kart kabul edildi', $gYeni['ok'], true);
+
+echo "\n--- Personel pasif ---\n";
+$insH = db()->prepare("INSERT INTO employees (personnel_no, full_name, status) VALUES (?,?,?)");
+$insH->execute(['103', 'Personel H', 'pasif']);   $empH = (int)db()->lastInsertId();
+$rH = pdks_kart_ata($empH, '444555666', 'usb_decimal', [], db());
+dogrula('Pasif personele de kart atanabilir (idari işlem)', $rH['ok'], true);
+$gH = pdks_devam_kaydet('444555666', 'usb_decimal', 'GIRIS', 1, db());
+dogrula('Pasif personelin okutması reddedildi', $gH['ok'], false);
+dogrula('  red kodu', $gH['kod'], 'personel_pasif');
+dogrula('  Türkçe mesaj', $gH['hata'], 'PERSONEL PASİF');
+
+echo "\n--- Geçersiz yön ---\n";
+$gYon = pdks_devam_kaydet('444555666', 'usb_decimal', 'YANLIŞ', 1, db());
+dogrula('Geçersiz yön reddedildi', $gYon['ok'], false);
+dogrula('  red kodu', $gYon['kod'], 'gecersiz_yon');
+
+echo "\n--- Sunucu saati otoritedir ---\n";
+dogrula('pdks_devam_kaydet() istemciden zaman damgası PARAMETRESİ ALMAZ',
+    (function () {
+        $r = new ReflectionFunction('pdks_devam_kaydet');
+        foreach ($r->getParameters() as $p) {
+            if (stripos($p->getName(), 'time') !== false || stripos($p->getName(), 'zaman') !== false) return false;
+        }
+        return true;
+    })(), true);
+$oncekiSaniye = time();
+$gZ = pdks_devam_kaydet('444555778', 'usb_decimal', 'GIRIS', 1, db());   // tanımsız kart — yine de zaman kontrolü ilgisiz
+// server_event_time HER ZAMAN PHP'nin kendi saatinden yazılır — az önce
+// başarıyla yazılan bir satırda bunu somut olarak doğrula:
+$sonSatir = db()->query("SELECT server_event_time FROM attendance_events ORDER BY id DESC LIMIT 1")->fetch();
+dogrula('En son yazılan satırın server_event_time\'ı ŞİMDİKİ zamana yakın',
+    abs(strtotime($sonSatir['server_event_time']) - $oncekiSaniye) <= 5, true);
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $hata);
 exit($hata === 0 ? 0 : 1);

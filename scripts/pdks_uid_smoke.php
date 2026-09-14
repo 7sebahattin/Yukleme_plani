@@ -137,8 +137,29 @@ dogrula("ondalık ama hex kaynağı",      pdks_uid_adaylari('631799511', 'nfc_h
 
 echo "\n=== 11. SABİTLER ===\n";
 dogrula('desteklenen bayt uzunlukları', PDKS_UID_BAYT, [4, 7, 10]);
-dogrula('geçerli kaynaklar',            PDKS_UID_KAYNAKLARI, ['usb_decimal', 'nfc_hex']);
+dogrula('geçerli kaynaklar',            PDKS_UID_KAYNAKLARI, ['usb_decimal', 'nfc_hex', 'web_nfc']);
 dogrula('cooldown varsayılanı 20 sn',   PDKS_COOLDOWN_SN, 20);
+
+echo "\n=== 12. web_nfc KAYNAK ADAPTÖRÜ — ÖLÇÜLMÜŞ BAYT-TERSİ DÖNÜŞÜMÜ ===\n";
+echo "    Gerçek cihaz ölçümü (docs/PDKS_WEBNFC_DIAGNOSTIC.md): aynı fiziksel\n";
+echo "    kart için Chrome/Android event.serialNumber = 'd7:7e:a8:25' döner —\n";
+echo "    bu, USB'nin kanoniği 25A87ED7'nin BAYT-TERSİDİR. Bu dönüşüm YALNIZ\n";
+echo "    web_nfc kaynağı içindir; nfc_hex (teşhis ekranının ham HEX girişi)\n";
+echo "    ETKİLENMEZ.\n\n";
+dogrula("web_nfc 'd7:7e:a8:25' → 25A87ED7 (ölçülen değer)", pdks_uid_from_web_nfc('d7:7e:a8:25'), '25A87ED7');
+dogrula("web_nfc 'D7:7E:A8:25' (büyük harf) → aynı kanon",  pdks_uid_from_web_nfc('D7:7E:A8:25'), '25A87ED7');
+dogrula("web_nfc 'D77EA825' (ayraçsız) → aynı kanon",       pdks_uid_from_web_nfc('D77EA825'), '25A87ED7');
+dogrula('web_nfc geçersiz girdi → null',                    pdks_uid_from_web_nfc('ZZZZ'), null);
+dogrula('web_nfc null girdi → null',                        pdks_uid_from_web_nfc(null), null);
+dogrula("USB '631799511' → aynı kanon (25A87ED7)",          pdks_uid_from_decimal('631799511'), '25A87ED7');
+dogrula('USB ve Web NFC AYNI fiziksel karta çözülüyor',
+    pdks_uid_from_decimal('631799511') === pdks_uid_from_web_nfc('d7:7e:a8:25'), true);
+dogrula("nfc_hex 'D77EA825' ETKİLENMEDİ (kendi kanoniği kendisi)",
+    pdks_uid_hex_normalize('D77EA825'), 'D77EA825');
+dogrula("pdks_uid_adaylari(..., 'web_nfc') tek kanoniğe çözülür",
+    pdks_uid_adaylari('d7:7e:a8:25', 'web_nfc'), ['25A87ED7']);
+dogrula("pdks_uid_adaylari(..., 'nfc_hex') aynı ham metni FARKLI çözer (dönüşüm YOK)",
+    pdks_uid_adaylari('d7:7e:a8:25', 'nfc_hex'), ['D77EA825']);
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $hata);

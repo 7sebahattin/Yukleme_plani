@@ -129,7 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'kart_ata') {
             $hamUid = trim($_POST['ham_uid'] ?? '');
             $etiket = trim($_POST['label'] ?? '');
-            $sonuc = pdks_kart_ata($id, $hamUid, 'usb_decimal', ['label' => $etiket, 'created_by' => (int)$auth_user['id']], $pdo);
+            $kaynak = trim($_POST['kaynak'] ?? '');
+            if (!in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) $kaynak = 'usb_decimal';
+            $sonuc = pdks_kart_ata($id, $hamUid, $kaynak, ['label' => $etiket, 'created_by' => (int)$auth_user['id']], $pdo);
             $sonuc['ok'] ? $kartMesaj = 'Kart tanımlandı: ' . $sonuc['uid_hex'] : $kartHata = $sonuc['hata'] ?? 'Kart tanımlanamadı.';
         } elseif ($action === 'kart_durum') {
             $cardId  = (int)($_POST['card_id'] ?? 0);
@@ -145,7 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $eskiCardId = (int)($_POST['eski_card_id'] ?? 0);
             $hamUid     = trim($_POST['ham_uid'] ?? '');
             $gerekce    = trim($_POST['gerekce'] ?? '');
-            $sonuc = pdks_kart_degistir($eskiCardId, $hamUid, 'usb_decimal', $gerekce, (int)$auth_user['id'], $pdo);
+            $kaynak     = trim($_POST['kaynak'] ?? '');
+            if (!in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) $kaynak = 'usb_decimal';
+            $sonuc = pdks_kart_degistir($eskiCardId, $hamUid, $kaynak, $gerekce, (int)$auth_user['id'], $pdo);
             $sonuc['ok'] ? $kartMesaj = 'Kart değiştirildi: ' . $sonuc['uid_hex'] : $kartHata = $sonuc['hata'] ?? 'Kart değiştirilemedi.';
         }
         if ($kartMesaj !== '') {
@@ -361,13 +365,17 @@ render_flash();
                 Mevcut kart: <span class="pdks-uid" id="pdksKartMevcutUid"></span>
             </p>
             <div id="pdksKartScanBlok" hidden>
+                <input type="hidden" name="kaynak" id="pdksKartKaynak" value="usb_decimal">
                 <div class="pdks-scan-box">
                     <label class="pdks-scan-label" for="pdksKartUidInput">KARTI USB OKUYUCUYA OKUTUN</label>
                     <input type="text" inputmode="numeric" id="pdksKartUidInput" name="ham_uid" class="pdks-scan-input"
                            data-pdks-scan data-pdks-preview="#pdksKartOnizle" data-pdks-status="#pdksKartDurumMsj"
+                           data-pdks-kaynak-field="#pdksKartKaynak"
                            placeholder="631799511" autocomplete="off">
                     <div class="pdks-uid-lg" id="pdksKartOnizle" style="margin-top:12px;min-height:1.4em"></div>
                     <div class="pdks-scan-status" id="pdksKartDurumMsj"></div>
+                    <button type="button" id="pdksKartNfcBtn" class="btn btn-ghost" style="margin-top:10px"
+                            data-pdks-nfc-target="#pdksKartUidInput" hidden>📡 NFC İLE OKU</button>
                 </div>
                 <label style="display:block;margin-top:10px">
                     <span class="form-label">Etiket (opsiyonel)</span>
