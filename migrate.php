@@ -14,6 +14,11 @@ if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıkt�
 
 $pdo = db();
 
+// Sprint PDKS-01: PDKS tablo migrasyonu buradan ELLE tetiklenir.
+// config/pdks.php uygulamanın normal akışında YÜKLENMEZ (bkz. dosya başlığı);
+// bu admin paneli, hiçbir PDKS sayfası yokken bile şemayı kurabilmek içindir.
+require_once __DIR__ . '/config/pdks.php';
+
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
 $migrations = [
@@ -53,7 +58,20 @@ function mig_col_exists(PDO $pdo, string $t, string $c): bool {
 $results = [];   // her migrasyon için sonuç
 $ran     = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+$pdks_results = [];   // PDKS tablo migrasyonu sonucu
+$pdks_ran     = false;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_ran     = true;
+    $pdks_results = pdks_migrate($pdo);
+    foreach ($pdks_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $ran = true;
     foreach ($migrations as [$tbl, $col, $sql]) {
@@ -133,6 +151,66 @@ render_header('Şema Migrasyon');
       <?php endif; ?>
     </div>
   <?php endif; ?>
+
+  <?php if ($pdks_ran): ?>
+    <div class="card" style="margin:16px 0;padding:16px;">
+      <h2 style="margin-top:0;">PDKS Migrasyon Sonucu</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Tablo</th><th>Durum</th><th>Mesaj</th></tr></thead>
+          <tbody>
+          <?php foreach ($pdks_results as $r):
+            $c2 = ['olusturuldu'=>'#1f9d55','var'=>'#555','hata'=>'#c0392b'][$r['durum']] ?? '#333';
+            $l2 = ['olusturuldu'=>'✓ Oluşturuldu','var'=>'• Zaten var','hata'=>'✗ HATA'][$r['durum']] ?? $r['durum'];
+          ?>
+            <tr>
+              <td><?= h($r['tablo']) ?></td>
+              <td style="color:<?= $c2 ?>;font-weight:600;"><?= h($l2) ?></td>
+              <td style="color:<?= $r['durum']==='hata' ? '#c0392b' : '#444' ?>;"><?= h($r['mesaj']) ?></td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <?php endif; ?>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">PDKS (Personel) Tabloları</h2>
+    <p style="color:#555;max-width:760px;margin-top:0;">
+      Personel giriş/çıkış modülünün Faz 1 tabloları. <b>Yalnız yeni tablo oluşturur;
+      mevcut hiçbir tabloyu değiştirmez, hiçbir veriyi silmez.</b> Tekrar
+      çalıştırmak güvenlidir (idempotent).
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_tablolar()) as $pt):
+          $pe = pdks_tablo_var($pdo, $pt); ?>
+          <tr>
+            <td><?= h($pt) ?></td>
+            <td style="color:<?= $pe ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pe ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks">
+      <button type="submit" class="btn btn-primary">PDKS Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_tablolar() as $psql) { echo h($psql) . ";\n\n"; }
+        echo h(pdks_users_fk_sql()) . ";\n";
+      ?></pre>
+    </details>
+  </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">
     <h2 style="margin-top:0;">Mevcut Durum</h2>

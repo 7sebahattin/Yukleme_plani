@@ -262,6 +262,11 @@ function render_desktop_sidebar(string $base): void {
     $p_mal   = ($_fn && can('maliyet.read')) || $p_adm;
     // Hesap: kendi yetkisi; hesap.* henüz seed edilmemiş kurulumlarda reports.read'e düşer
     $p_hes   = !$_fn || can('hesap.read') || can('reports.read') || $p_adm;
+    // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
+    // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
+    // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
+    // basılır — pdks_can() burada tanımsız olurdu.
+    $p_pdks  = ($_fn && (can('attendance.employees') || can('attendance.cards'))) || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -279,6 +284,8 @@ function render_desktop_sidebar(string $base): void {
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
+    $a_pdksp = in_array($cur, ['personel.php', 'personel_form.php'], true);
+    $a_pdksk = $cur === 'personel_kartlar.php';
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -324,6 +331,12 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
         <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
+
+        <?php if ($p_pdks): ?>
+        <div class="sidebar-section">Personel</div>
+        <?php if ($_fn && (can('attendance.employees') || $p_adm)) $lnk('personel.php', '👤', 'Personeller', $a_pdksp); ?>
+        <?php if ($_fn && (can('attendance.cards')     || $p_adm)) $lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', $a_pdksk); ?>
+        <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
         <div class="sidebar-section">Yönetim</div>
@@ -983,13 +996,24 @@ endif;
                 ['operator', 'Operatör'],
                 ['viewer',   'Görüntüleyici'],
                 ['muhasebe', 'Muhasebe'],
+                // Sprint PDKS-01: personel/puantaj sorumlusu. Yalnız attendance.*
+                // yetkileri alır; operasyon (records/kantar/stok) yetkisi YOKTUR.
+                ['ik',       'İnsan Kaynakları'],
             ] as [$rs, $rl]) { $ins_r->execute([$rs, $rl]); }
 
             // Rol ID haritası
             $rids = $pdo->query("SELECT slug, id FROM `roles`")->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // Yetki tanımları
-            $all_p = ['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'];
+            // PDKS (Personel Devam Kontrol) yetkileri — Sprint PDKS-01, Faz 1.
+            // Katalog ŞİMDİ seed edilir; modül arayüzü Faz 1B/2'de gelir. Yetkiler
+            // yalnız admin + yeni 'ik' rolüne verilir (en az yetki). 'attendance.scan'
+            // Faz 2'nin API ucu içindir ve 'guvenlik' rolü Faz 2'de açılacaktır —
+            // şimdiden rol açmak, kullanılmayan bir giriş hesabı yaratmak olurdu.
+            $pdks_p = ['attendance.read','attendance.scan','attendance.manual','attendance.correct',
+                       'attendance.report','attendance.employees','attendance.cards',
+                       'attendance.devices','attendance.admin'];
+            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
                 'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],
@@ -997,6 +1021,11 @@ endif;
                 // Muhasebe rolü Hesap modülünün asıl kullanıcısı: kendi sayfasına
                 // girebilmesi için hesap.write + onay/ödeme yetkileri şart.
                 'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],
+                // PDKS: personel kartoteksi ve kart zimmetini yöneten rol.
+                // attendance.scan BİLEREK YOK — o yalnız kapı cihazının yetkisidir
+                // ve Faz 2'de 'guvenlik' rolüne verilecektir.
+                'ik'       => ['dashboard.read','attendance.read','attendance.manual','attendance.correct',
+                               'attendance.report','attendance.employees','attendance.cards'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {
