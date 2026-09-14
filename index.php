@@ -199,6 +199,14 @@ if ($db_backup_result !== null): ?>
     </a>
 <?php endif; ?>
 
+<?php if (can('attendance.employees') || can('attendance.cards') || is_admin()): ?>
+    <a href="personel.php" class="home-card">
+        <div class="home-card-icon" style="background:#eef2ff">👤</div>
+        <div class="home-card-title">Personel</div>
+        <div class="home-card-sub">Personel ve kart yönetimi</div>
+    </a>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <?php if ($_ynt_show): ?>

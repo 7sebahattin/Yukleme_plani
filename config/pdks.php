@@ -700,3 +700,398 @@ function pdks_kart_iptal(int $cardId, string $durum, string $gerekce, ?int $user
     }
     return ['ok' => true];
 }
+
+// =========================================================
+// FAZ 1B — PERSONEL CRUD + KART YAŞAM DÖNGÜSÜ SARMALAYICILARI
+//
+// Faz 1'in ham fonksiyonlarını (pdks_kart_olustur, pdks_kart_iptal) DEĞİŞTİRMEZ,
+// yalnız üzerine iş kuralı ekler:
+//   - pdks_kart_ata()      → pdks_kart_olustur() + "personelde zaten aktif kart
+//                             var mı" kuralı + 'card_assigned' audit
+//   - pdks_kart_durum_degistir() → pdks_kart_iptal() + adlandırılmış audit
+//                             ('card_revoked' / 'card_lost')
+//   - pdks_kart_degistir() → pdks_kart_olustur() (yeni kart) + eski kartı
+//                             'degistirildi' işaretleme, TEK işlemde
+// Bu üçü Faz 1'in "kart yazmanın tek yolu" kuralını bozmaz — hepsi sonunda
+// pdks_kart_olustur()'a çıkar, UID mantığını asla tekrar YAZMAZ.
+// =========================================================
+
+/** Personel alanlarını kolon uzunluklarına kırpar (repo konvansiyonu: reddetmez, kırpar). */
+function pdks_personel_alan_temizle(array $veri): array
+{
+    $bos_veya = function ($v) { $v = trim((string)($v ?? '')); return $v === '' ? null : $v; };
+    $uid_raw = $veri['user_id'] ?? null;
+    return [
+        'personnel_no' => $bos_veya(mb_substr(trim((string)($veri['personnel_no'] ?? '')), 0, 30, 'UTF-8')),
+        'full_name'    => mb_substr(trim((string)($veri['full_name'] ?? '')), 0, 150, 'UTF-8'),
+        'department'   => mb_substr(trim((string)($veri['department'] ?? '')), 0, 100, 'UTF-8'),
+        'job_title'    => mb_substr(trim((string)($veri['job_title']  ?? '')), 0, 100, 'UTF-8'),
+        'depo'         => mb_substr(trim((string)($veri['depo']       ?? '')), 0, 150, 'UTF-8'),
+        'status'       => (string)($veri['status'] ?? 'aktif'),
+        'user_id'      => ($uid_raw === '' || $uid_raw === null) ? null : (int)$uid_raw,
+        'phone'        => $bos_veya(mb_substr(trim((string)($veri['phone'] ?? '')), 0, 30, 'UTF-8')),
+        'hire_date'    => $bos_veya($veri['hire_date']  ?? ''),
+        'leave_date'   => $bos_veya($veri['leave_date'] ?? ''),
+        'notes'        => $bos_veya($veri['notes'] ?? ''),
+    ];
+}
+
+/**
+ * Personel alanlarını doğrular. TC kimlik numarası ALANI YOK (onaylanan karar #2) —
+ * eklenmesi istenmiyor, bu fonksiyon böyle bir alanı ne okur ne bekler.
+ * @return string[] Hata mesajları — boşsa geçerli.
+ */
+function pdks_personel_dogrula(array $temiz, ?int $haricId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $hatalar = [];
+
+    if ($temiz['full_name'] === '') $hatalar[] = 'Ad soyad zorunludur.';
+    if (!array_key_exists($temiz['status'], pdks_personel_durumlari())) $hatalar[] = 'Geçersiz personel durumu.';
+
+    if ($temiz['personnel_no'] !== null) {
+        $sql = "SELECT id FROM employees WHERE personnel_no = ?";
+        $par = [$temiz['personnel_no']];
+        if ($haricId !== null) { $sql .= " AND id <> ?"; $par[] = $haricId; }
+        $st = $pdo->prepare($sql); $st->execute($par);
+        if ($st->fetchColumn()) $hatalar[] = 'Bu sicil numarası başka bir personelde kayıtlı.';
+    }
+
+    if ($temiz['user_id'] !== null) {
+        $st = $pdo->prepare("SELECT id FROM users WHERE id = ?");
+        $st->execute([$temiz['user_id']]);
+        if (!$st->fetchColumn()) {
+            $hatalar[] = 'Seçilen kullanıcı hesabı bulunamadı.';
+        } else {
+            $sql = "SELECT id FROM employees WHERE user_id = ?";
+            $par = [$temiz['user_id']];
+            if ($haricId !== null) { $sql .= " AND id <> ?"; $par[] = $haricId; }
+            $st = $pdo->prepare($sql); $st->execute($par);
+            if ($st->fetchColumn()) $hatalar[] = 'Bu kullanıcı hesabı zaten başka bir personele bağlı.';
+        }
+    }
+
+    return $hatalar;
+}
+
+/** @return array{ok:bool, id?:int, kod?:string, hata?:string} */
+function pdks_personel_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo = null): array
+{
+    $pdo   = $pdo ?? db();
+    $temiz = pdks_personel_alan_temizle($veri);
+    $hatalar = pdks_personel_dogrula($temiz, null, $pdo);
+    if (!empty($hatalar)) return ['ok' => false, 'kod' => 'dogrulama', 'hata' => implode(' ', $hatalar)];
+
+    try {
+        $st = $pdo->prepare(
+            "INSERT INTO employees
+                (personnel_no, full_name, department, job_title, depo, status, user_id, phone, hire_date, leave_date, notes, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        $st->execute([
+            $temiz['personnel_no'], $temiz['full_name'], $temiz['department'], $temiz['job_title'],
+            $temiz['depo'], $temiz['status'], $temiz['user_id'], $temiz['phone'],
+            $temiz['hire_date'], $temiz['leave_date'], $temiz['notes'], $createdBy,
+        ]);
+        $id = (int)$pdo->lastInsertId();
+    } catch (PDOException $e) {
+        // Yarış durumu: iki eşzamanlı istek aynı sicil/user_id'yi aynı anda doğrulamış olabilir.
+        // UNIQUE kısıtı son sözü söyler — sessizce yutulmaz, kullanıcıya döner.
+        return ['ok' => false, 'kod' => 'cakisma', 'hata' => 'Kayıt eklenemedi (sicil no veya kullanıcı bağı çakışıyor olabilir).'];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('employee_created', 'pdks', $id, null, $temiz);
+    }
+    return ['ok' => true, 'id' => $id];
+}
+
+/** @return array{ok:bool, kod?:string, hata?:string} */
+function pdks_personel_guncelle(int $id, array $veri, ?int $updatedBy = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st  = $pdo->prepare("SELECT * FROM employees WHERE id = ?");
+    $st->execute([$id]);
+    $eski = $st->fetch();
+    if (!$eski) return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'Personel bulunamadı.'];
+
+    $temiz = pdks_personel_alan_temizle($veri);
+    $hatalar = pdks_personel_dogrula($temiz, $id, $pdo);
+    if (!empty($hatalar)) return ['ok' => false, 'kod' => 'dogrulama', 'hata' => implode(' ', $hatalar)];
+
+    try {
+        $pdo->prepare(
+            "UPDATE employees SET
+                personnel_no=?, full_name=?, department=?, job_title=?, depo=?, status=?,
+                user_id=?, phone=?, hire_date=?, leave_date=?, notes=?, updated_by=?
+             WHERE id=?"
+        )->execute([
+            $temiz['personnel_no'], $temiz['full_name'], $temiz['department'], $temiz['job_title'],
+            $temiz['depo'], $temiz['status'], $temiz['user_id'], $temiz['phone'],
+            $temiz['hire_date'], $temiz['leave_date'], $temiz['notes'], $updatedBy, $id,
+        ]);
+    } catch (PDOException $e) {
+        return ['ok' => false, 'kod' => 'cakisma', 'hata' => 'Kayıt güncellenemedi (sicil no veya kullanıcı bağı çakışıyor olabilir).'];
+    }
+
+    if (function_exists('audit_log_event')) {
+        $eskiOzet = [
+            'personnel_no' => $eski['personnel_no'], 'full_name' => $eski['full_name'],
+            'department'   => $eski['department'],   'job_title' => $eski['job_title'],
+            'status'       => $eski['status'],        'user_id'   => $eski['user_id'],
+        ];
+        audit_log_event('employee_updated', 'pdks', $id, $eskiOzet, $temiz);
+        // Durum değişikliği ayrıca kendi adıyla loglanır — puantaj/erişim
+        // açısından anlamlı bir olaydır, genel güncellemenin içinde kaybolmasın.
+        if ((string)$eski['status'] !== $temiz['status']) {
+            audit_log_event('employee_status_changed', 'pdks', $id,
+                ['status' => $eski['status']], ['status' => $temiz['status']]);
+        }
+    }
+    return ['ok' => true];
+}
+
+/** Bir personelin şu anki AKTİF kartı (varsa). */
+function pdks_personel_aktif_kart(int $employeeId, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare("SELECT * FROM employee_cards WHERE employee_id = ? AND status = 'aktif' ORDER BY id DESC LIMIT 1");
+    $st->execute([$employeeId]);
+    return $st->fetch() ?: null;
+}
+
+/** Bir personelin TÜM kart geçmişi (aktif + iptal + kayıp + değiştirilmiş…), en yeni önce. Hiçbiri silinmez. */
+function pdks_personel_kart_gecmisi(int $employeeId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare("SELECT * FROM employee_cards WHERE employee_id = ? ORDER BY created_at DESC, id DESC");
+    $st->execute([$employeeId]);
+    return $st->fetchAll();
+}
+
+/**
+ * Personele YENİ kart atar — yalnız personelin hâlihazırda AKTİF kartı yoksa.
+ *
+ * Şema bunu bir UNIQUE kısıtla zorlamaz (bir personelin iki satırı olabilir,
+ * biri aktif diğeri iptal); "aynı anda yalnız bir aktif kart" kuralı burada,
+ * uygulama katmanında uygulanır (Faz 1B §5 gereği).
+ *
+ * @return array{ok:bool, card_id?:int, uid_hex?:string, kod?:string, hata?:string}
+ */
+function pdks_kart_ata(int $employeeId, string $hamUid, string $kaynak, array $ek = [], ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (pdks_personel_aktif_kart($employeeId, $pdo) !== null) {
+        return ['ok' => false, 'kod' => 'zaten_aktif_kart_var',
+                'hata' => 'Bu personelin zaten aktif bir kartı var. Önce iptal edin veya "Değiştir" kullanın.'];
+    }
+    $sonuc = pdks_kart_olustur($employeeId, $hamUid, $kaynak, $ek, $pdo);
+    if ($sonuc['ok'] && function_exists('audit_log_event')) {
+        audit_log_event('card_assigned', 'pdks', (int)$sonuc['card_id'], null,
+            ['employee_id' => $employeeId, 'uid_hex' => $sonuc['uid_hex']]);
+    }
+    return $sonuc;
+}
+
+/**
+ * Kartı iptal eder / kayıp bildirir — pdks_kart_iptal()'i sarar, yalnız
+ * adlandırılmış audit olayı ekler (`card_revoked` / `card_lost`) ve
+ * gerekçenin boş olmadığını sunucu tarafında da zorunlu kılar.
+ */
+function pdks_kart_durum_degistir(int $cardId, string $durum, string $gerekce, ?int $userId = null, ?PDO $pdo = null): array
+{
+    $gerekce = trim($gerekce);
+    if ($gerekce === '') {
+        return ['ok' => false, 'kod' => 'gerekce_zorunlu', 'hata' => 'Gerekçe zorunludur.'];
+    }
+    $sonuc = pdks_kart_iptal($cardId, $durum, $gerekce, $userId, $pdo);
+    if ($sonuc['ok'] && function_exists('audit_log_event')) {
+        $eylem = match ($durum) {
+            'iptal' => 'card_revoked',
+            'kayip' => 'card_lost',
+            default => 'card_status_changed',
+        };
+        audit_log_event($eylem, 'pdks', $cardId, null, ['status' => $durum, 'reason' => $gerekce]);
+    }
+    return $sonuc;
+}
+
+/**
+ * Eski kartı YENİ bir fiziksel kartla değiştirir — TEK işlemde:
+ *   1) yeni kart pdks_kart_olustur() ile yazılır (UID mantığı burada TEKRARLANMAZ)
+ *   2) yeni kart başarılıysa eski kart 'degistirildi' işaretlenir,
+ *      replacement_card_id yeni karta bağlanır
+ * Yeni kart oluşturma başarısız olursa (ör. UID zaten kullanımda) eski kart
+ * HİÇ değişmez — kısmi/tutarsız durum oluşmaz.
+ *
+ * ⚠ Eski kart SİLİNMEZ (yol haritası §D.2, Faz 1B §5 "geçmiş kaybolmaz" kuralı).
+ */
+function pdks_kart_degistir(int $eskiCardId, string $hamUid, string $kaynak, string $gerekce, ?int $userId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $gerekce = trim($gerekce);
+    if ($gerekce === '') {
+        return ['ok' => false, 'kod' => 'gerekce_zorunlu', 'hata' => 'Gerekçe zorunludur.'];
+    }
+
+    $st = $pdo->prepare("SELECT * FROM employee_cards WHERE id = ?");
+    $st->execute([$eskiCardId]);
+    $eski = $st->fetch();
+    if (!$eski) return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Değiştirilecek kart bulunamadı.'];
+
+    $disTx = $pdo->inTransaction();
+    if (!$disTx) $pdo->beginTransaction();
+    try {
+        $yeni = pdks_kart_olustur((int)$eski['employee_id'], $hamUid, $kaynak,
+            ['created_by' => $userId], $pdo);
+        if (!$yeni['ok']) {
+            if (!$disTx) $pdo->rollBack();
+            return $yeni;   // hata kodu/mesajı zaten uygun (ör. uid_kullanimda) — eski kart dokunulmadı
+        }
+        $pdo->prepare(
+            "UPDATE employee_cards
+                SET status='degistirildi', revoke_reason=?, revoked_at=NOW(), revoked_by=?, replacement_card_id=?
+              WHERE id=?"
+        )->execute([$gerekce, $userId, $yeni['card_id'], $eskiCardId]);
+        if (!$disTx) $pdo->commit();
+    } catch (PDOException $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('card_replaced', 'pdks', (int)$yeni['card_id'],
+            ['eski_card_id' => $eskiCardId, 'eski_uid' => $eski['uid_hex']],
+            ['yeni_card_id' => $yeni['card_id'], 'yeni_uid' => $yeni['uid_hex'], 'gerekce' => $gerekce]);
+    }
+    return ['ok' => true, 'card_id' => $yeni['card_id'], 'uid_hex' => $yeni['uid_hex'], 'eski_card_id' => $eskiCardId];
+}
+
+// =========================================================
+// FAZ 1B — PERSONEL FOTOĞRAFI
+//
+// hesap_upload_file() (hesap_config.php) ile AYNI güvenlik desenini izler:
+// finfo MIME doğrulaması, rastgele ad, .htaccess ile PHP çalıştırma kapalı.
+// FARKI: personel fotoğrafı GD ile YENİDEN KODLANIR (piksel verisi yeniden
+// çizilir, orijinal bayt akışı asla diske yazılmaz) — bir görsel dosyasının
+// içine gömülmüş herhangi bir şey (kötü amaçlı EXIF, polyglot dosya) bu
+// adımda düşer. GD yoksa yükleme reddedilir; ham baytlar ASLA saklanmaz.
+// =========================================================
+
+defined('PDKS_FOTO_MAX_BOYUT') || define('PDKS_FOTO_MAX_BOYUT', 5 * 1024 * 1024); // 5 MB
+defined('PDKS_FOTO_MIME')      || define('PDKS_FOTO_MIME', ['image/jpeg', 'image/png', 'image/webp']);
+defined('PDKS_FOTO_MAX_KENAR') || define('PDKS_FOTO_MAX_KENAR', 640); // uzun kenar, px
+
+/**
+ * Saf doğrulama — diskteki bir dosyanın gerçekten güvenli bir görsel olup
+ * olmadığını kontrol eder. HTTP upload'tan BAĞIMSIZDIR — testte gerçek bir
+ * geçici dosya yazıp doğrudan çağırabilirsiniz.
+ */
+function pdks_foto_gecerli_mi(string $tmpPath, int $boyut): array
+{
+    if (!is_file($tmpPath) || !is_readable($tmpPath)) {
+        return ['ok' => false, 'hata' => 'Dosya okunamadı.'];
+    }
+    if ($boyut <= 0 || $boyut > PDKS_FOTO_MAX_BOYUT) {
+        return ['ok' => false, 'hata' => 'Fotoğraf ' . (int)(PDKS_FOTO_MAX_BOYUT / 1024 / 1024) . " MB'ı aşamaz."];
+    }
+    $info = @getimagesize($tmpPath);
+    if ($info === false || (int)$info[0] < 1 || (int)$info[1] < 1) {
+        return ['ok' => false, 'hata' => 'Geçersiz görsel dosyası.'];
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($tmpPath);
+    if (!in_array($mime, PDKS_FOTO_MIME, true)) {
+        return ['ok' => false, 'hata' => 'Desteklenmeyen görsel türü (yalnız JPG, PNG, WEBP kabul edilir).'];
+    }
+    return ['ok' => true, 'mime' => $mime, 'genislik' => (int)$info[0], 'yukseklik' => (int)$info[1]];
+}
+
+/**
+ * Yüklenen $_FILES['...'] girdisini doğrular, yeniden kodlar (her zaman JPEG)
+ * ve PDKS_FOTO_DIR'a kaydeder. Dosya adı ASLA kullanıcıdan gelmez — bin2hex
+ * ile rastgele üretilir (path traversal yapısal olarak imkânsız).
+ * @return array{ok:bool, file_name?:string, kod?:string, hata?:string}
+ */
+function pdks_foto_kaydet(array $dosya): array
+{
+    if (($dosya['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        return ['ok' => false, 'kod' => 'yok', 'hata' => 'Dosya seçilmedi.'];
+    }
+    if (($dosya['error'] ?? -1) !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'kod' => 'yukleme_hatasi', 'hata' => 'Yükleme sırasında hata oluştu.'];
+    }
+
+    $gecerli = pdks_foto_gecerli_mi((string)$dosya['tmp_name'], (int)($dosya['size'] ?? 0));
+    if (!$gecerli['ok']) return ['ok' => false, 'kod' => 'gecersiz', 'hata' => $gecerli['hata']];
+
+    if (!function_exists('imagecreatetruecolor')) {
+        return ['ok' => false, 'kod' => 'gd_yok', 'hata' => 'Sunucuda görsel işleme kütüphanesi (GD) yok.'];
+    }
+
+    if (!is_dir(PDKS_FOTO_DIR)) @mkdir(PDKS_FOTO_DIR, 0755, true);
+    $htaccess = PDKS_FOTO_DIR . '.htaccess';
+    if (!file_exists($htaccess)) {
+        @file_put_contents($htaccess, "Options -Indexes\n<FilesMatch \"\\.php$\">\n  Require all denied\n</FilesMatch>\n");
+    }
+
+    $src = match ($gecerli['mime']) {
+        'image/jpeg' => @imagecreatefromjpeg($dosya['tmp_name']),
+        'image/png'  => @imagecreatefrompng($dosya['tmp_name']),
+        'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($dosya['tmp_name']) : false,
+        default      => false,
+    };
+    if (!$src) return ['ok' => false, 'kod' => 'islenemedi', 'hata' => 'Fotoğraf işlenemedi.'];
+
+    $w = $gecerli['genislik']; $h = $gecerli['yukseklik'];
+    $olcek = min(1.0, PDKS_FOTO_MAX_KENAR / max($w, $h));
+    $nw = max(1, (int)round($w * $olcek));
+    $nh = max(1, (int)round($h * $olcek));
+
+    $dst = imagecreatetruecolor($nw, $nh);
+    $beyaz = imagecolorallocate($dst, 255, 255, 255);   // şeffaflığı beyaza düzleştir (JPEG'e çevrilecek)
+    imagefilledrectangle($dst, 0, 0, $nw, $nh, $beyaz);
+    imagecopyresampled($dst, $src, 0, 0, 0, 0, $nw, $nh, $w, $h);
+    imagedestroy($src);
+
+    $adSafe = bin2hex(random_bytes(16)) . '.jpg';
+    $basarili = imagejpeg($dst, PDKS_FOTO_DIR . $adSafe, 85);
+    imagedestroy($dst);
+
+    if (!$basarili) return ['ok' => false, 'kod' => 'yazilamadi', 'hata' => 'Fotoğraf kaydedilemedi.'];
+    return ['ok' => true, 'file_name' => $adSafe];
+}
+
+/**
+ * Bir personel fotoğrafını diskten siler — YALNIZ PDKS'in kendi ürettiği
+ * güvenli ada (32 hex + .jpg) uyan dosyalar silinir; başka hiçbir girdi
+ * kabul edilmez (path traversal'a yapısal olarak kapalı).
+ */
+function pdks_foto_sil(?string $fileName): void
+{
+    if ($fileName === null || $fileName === '') return;
+    if (!preg_match('/^[a-f0-9]{32}\.jpg$/', $fileName)) return;
+    $yol = PDKS_FOTO_DIR . $fileName;
+    if (is_file($yol)) @unlink($yol);
+}
+
+/**
+ * Personel fotoğrafı <img> veya, foto yoksa, ad-soyaddan baş harflerle
+ * oluşan yuvarlak bir "fallback avatar" döndürür — hiçbir zaman kırık
+ * resim ikonu göstermez.
+ */
+function pdks_avatar_html(string $adSoyad, ?string $fotoFile, ?string $fotoGuncelleme, string $base = '', string $sinif = 'pdks-avatar'): string
+{
+    if ($fotoFile) {
+        $v = $fotoGuncelleme !== null ? (string)strtotime($fotoGuncelleme) : '0';
+        return '<img src="' . h($base) . 'personel_foto.php?f=' . h($fotoFile) . '&v=' . h($v) . '"'
+             . ' class="' . h($sinif) . '" alt="" loading="lazy">';
+    }
+    $parcalar = preg_split('/\s+/', trim($adSoyad)) ?: [];
+    $harfler = '';
+    foreach (array_slice($parcalar, 0, 2) as $p) {
+        if ($p !== '') $harfler .= mb_strtoupper(mb_substr($p, 0, 1, 'UTF-8'), 'UTF-8');
+    }
+    if ($harfler === '') $harfler = '?';
+    return '<span class="' . h($sinif) . ' ' . h($sinif) . '-bos" aria-hidden="true">' . h($harfler) . '</span>';
+}

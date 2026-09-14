@@ -1,0 +1,104 @@
+/* =========================================================
+   assets/pdks.css — PDKS (Personel / Kart Yönetimi) modül CSS'i
+   Yalnız personel_*.php sayfalarında yüklenir. style.css'e HİÇ dokunmaz
+   (maliyet.css / hesap.css emsali — CLAUDE.md tek-CSS kuralının bilinçli
+   istisnası). Yalnız var(--*) token'ları kullanır — koyu temada otomatik
+   doğru çalışır, burada tek bir sabit renk yoktur.
+   ========================================================= */
+
+/* ── Avatar / fallback ─────────────────────────────────── */
+.pdks-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover; flex-shrink: 0;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.pdks-avatar-bos {
+    background: var(--primary-soft); color: var(--primary);
+    font-weight: 700; font-size: .95rem; letter-spacing: .02em;
+}
+.pdks-avatar-lg { width: 88px; height: 88px; font-size: 1.6rem; }
+.pdks-avatar-xl { width: 120px; height: 120px; font-size: 2.1rem; }
+
+/* ── Liste satırı (masaüstü tablo hücresi + mobil kart) ─── */
+.pdks-row-person { display: flex; align-items: center; gap: 10px; }
+.pdks-row-name { font-weight: 600; color: var(--text); }
+.pdks-row-sub { font-size: .82rem; color: var(--muted); }
+
+.pdks-cards { display: flex; flex-direction: column; gap: 10px; }
+.pdks-card-item {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.pdks-card-top { display: flex; gap: 12px; align-items: center; }
+.pdks-card-meta { flex: 1; min-width: 0; }
+.pdks-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ── Durum rozetleri — personel + kart ortak ──────────────
+   Global .badge-* renkleri bu modülün anlamıyla örtüşmüyor;
+   kendi (küçük) paletimiz var(--success)/var(--danger)/var(--warn)'a bağlı. */
+.pdks-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px;
+    font-size: .78rem; font-weight: 600; line-height: 1.4; white-space: nowrap;
+}
+.pdks-badge-aktif        { background: var(--success-soft); color: var(--success); }
+.pdks-badge-pasif        { background: var(--surface-2);    color: var(--muted); }
+.pdks-badge-ayrildi      { background: var(--danger-soft);  color: var(--danger); }
+.pdks-badge-iptal        { background: var(--danger-soft);  color: var(--danger); }
+.pdks-badge-kayip        { background: var(--danger-soft);  color: var(--danger); }
+.pdks-badge-degistirildi { background: var(--warn-soft);    color: var(--warn); }
+.pdks-badge-suresi_doldu { background: var(--warn-soft);    color: var(--warn); }
+.pdks-badge-yok          { background: var(--surface-2);    color: var(--muted); }
+
+/* ── Kart UID gösterimi ────────────────────────────────── */
+.pdks-uid {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700; letter-spacing: .04em; font-size: 1rem; color: var(--text);
+}
+.pdks-uid-lg {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 800; letter-spacing: .06em; font-size: 1.7rem; color: var(--primary);
+    text-align: center; padding: 14px 10px; background: var(--primary-soft);
+    border-radius: var(--radius); word-break: break-all;
+}
+.pdks-uid-hint { text-align: center; font-size: .8rem; color: var(--muted); margin-top: 4px; }
+
+/* ── USB tarama girişi ─────────────────────────────────── */
+.pdks-scan-box {
+    border: 2px dashed var(--border-strong); border-radius: var(--radius);
+    padding: 18px; text-align: center; background: var(--surface-2);
+}
+.pdks-scan-label { font-weight: 700; color: var(--text); margin-bottom: 10px; display: block; }
+.pdks-scan-input {
+    text-align: center; font-size: 1.3rem !important; letter-spacing: .05em;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.pdks-scan-status { margin-top: 10px; font-size: .88rem; min-height: 1.2em; }
+.pdks-scan-status.ok   { color: var(--success); font-weight: 600; }
+.pdks-scan-status.warn { color: var(--warn);    font-weight: 600; }
+.pdks-scan-status.err  { color: var(--danger);  font-weight: 600; }
+
+/* ── Form ───────────────────────────────────────────────── */
+.pdks-form-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;
+}
+.pdks-form-grid .span-2 { grid-column: 1 / -1; }
+@media (max-width: 639px) {
+    .pdks-form-grid { grid-template-columns: 1fr; }
+}
+.pdks-photo-row { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+
+/* ── Boş durum ──────────────────────────────────────────── */
+.pdks-empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+.pdks-empty-icon { font-size: 2.2rem; display: block; margin-bottom: 8px; }
+
+/* ── Filtre şeridi (kısa) ──────────────────────────────── */
+.pdks-filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; align-items: center; }
+.pdks-filter-bar input[type="search"],
+.pdks-filter-bar input[type="text"] { max-width: 260px; }
+.pdks-filter-bar select { max-width: 200px; width: auto; }
+
+/* ── Geçmiş tablosu (kart geçmişi) ────────────────────────── */
+.pdks-history-table td, .pdks-history-table th { font-size: .86rem; }
+.pdks-history-reason { color: var(--muted); font-size: .82rem; }
