@@ -195,6 +195,81 @@ ok('.pdks-kiosk-nfc-armed sınıfı CSS\'te tanımlı', str_contains($pdksCss, '
 ok('JS, dinlemeye geçince .pdks-kiosk-nfc-armed EKLİYOR, sıfırlayınca KALDIRIYOR',
     str_contains($srcKod, "classList.add('pdks-kiosk-nfc-armed')") && str_contains($srcKod, "classList.remove('pdks-kiosk-nfc-armed')"));
 
+echo "\n=== 12. CANLI HATA: [hidden] TUZAĞI — şeffaf katman NFC dokunuşunu yutuyordu ===\n";
+// KÖK NEDEN: `[hidden]` tarayıcının UA kuralıdır ve önceliği EN DÜŞÜKTÜR.
+// .pdks-kiosk-result (position:absolute; inset:0; z-index:10; display:flex)
+// kendi `display` değeriyle onu EZİYOR → #gcResult `hidden` olmasına rağmen
+// çiziliyor, şeffaf ama tüm tarama alanını kaplayan bir katman olarak
+// "NFC İLE KART OKU" butonunun dokunuşlarını YUTUYORDU. USB etkilenmedi
+// (klavye girdisi işaretçi olayı gerektirmez) — bu yüzden masaüstü çalışıp
+// mobil NFC ölüydü. hesap.css ve maliyet.css bu korumayı zaten taşıyordu;
+// pdks.css'te YOKTU.
+ok('assets/pdks.css [hidden] korumasını TAŞIYOR (hesap.css/maliyet.css ile aynı)',
+    (bool)preg_match('/\[hidden\]\s*\{\s*display:\s*none\s*!important/', $pdksCss));
+ok('hesap.css bu korumayı zaten taşıyor (emsal doğrulaması)',
+    (bool)preg_match('/\[hidden\]\s*\{\s*display:\s*none\s*!important/', oku2('assets/hesap.css')));
+ok('maliyet.css bu korumayı zaten taşıyor (emsal doğrulaması)',
+    (bool)preg_match('/\[hidden\]\s*\{\s*display:\s*none\s*!important/', oku2('assets/maliyet.css')));
+ok('Sonuç katmanı hâlâ position:absolute + z-index (koruma olmadan üstü kaplardı)',
+    (bool)preg_match('/\.pdks-kiosk-result\s*\{[^}]*position:\s*absolute[^}]*z-index/s', $pdksCss));
+
+echo "\n=== 13. NFC BUTON DEĞİŞMEZ KURALI — destek varsa MUTLAKA tıklanabilir ===\n";
+ok('Destekleniyorsa buton AÇIKÇA etkinleştiriliyor (nfcBtn.disabled = false)',
+    (bool)preg_match('/if\s*\(nfcDestekli\)\s*\{[\s\S]{0,600}nfcBtn\.disabled\s*=\s*false/', $srcKod));
+ok('Desteklenmiyorsa buton AÇIKÇA pasifleştiriliyor (tek geçerli pasiflik sebebi)',
+    (bool)preg_match('/\}\s*else\s*\{[\s\S]{0,300}nfcBtn\.disabled\s*=\s*true/', $srcKod));
+ok('Başlangıç HTML\'inde `disabled` özniteliği YOK (JS karar versin)',
+    !preg_match('/id="gcNfcBtn"[^>]*\sdisabled/', $src));
+// Yalnız İKİ meşru pasifleştirme vardır: (a) tıklama işleyicisinde geçici,
+// (b) desteklenmeyen ortam dalında kalıcı. Üçüncü bir yer çıkarsa bu test düşer.
+ok('Butonu pasifleştiren YALNIZ 2 meşru yer var (tıklama anı + desteksiz ortam)',
+    substr_count($srcKod, 'nfcBtn.disabled = true') === 2);
+ok('GEÇERSİZ DURUM YOK: "support: evet" yazılıp buton pasif bırakılan bir kod yolu yok — '
+ . 'etkinleştirme ve debug satırı AYNI blokta',
+    (bool)preg_match('/nfcBtn\.disabled\s*=\s*false;\s*nfcDebugYaz\(\s*[\'"]button: enabled/', $srcKod));
+ok('Mod seçimi (girModuSec) NFC butonuna DOKUNMUYOR (mod seçmek NFC\'yi pasifleştirmez)',
+    !preg_match('/function girModuSec[\s\S]{0,600}nfcBtn/', $srcKod));
+// Yalnız işleyicinin KENDİ gövdesine bak (ilk `});`e kadar) — sabit karakter
+// penceresi sonraki dinleyiciye taşıp yanlış pozitif veriyordu.
+$modeChangeGovde = '';
+if (preg_match("/gcModeChange'\)\.addEventListener\('click',\s*function\s*\(\)\s*\{(.*?)\n\s*\}\);/s", $srcKod, $mcM)) {
+    $modeChangeGovde = $mcM[1];
+}
+ok('Modu Değiştir işleyicisinin GÖVDESİ NFC butonuna DOKUNMUYOR',
+    $modeChangeGovde !== '' && !str_contains($modeChangeGovde, 'nfcBtn'), 'gövde bulunamadı veya nfcBtn geçiyor');
+
+echo "\n=== 14. MOBİL KLAVYE — USB kutusu artık yazılım klavyesini çağırmıyor ===\n";
+ok('USB kutusu inputmode="none" (USB HID fiziksel klavyedir, yazmaya devam eder)',
+    (bool)preg_match('/id="gcScanInput"[\s\S]{0,200}inputmode="none"/', $src));
+ok('inputmode="numeric" KALDIRILDI (yazılım klavyesini davet ediyordu)',
+    !preg_match('/id="gcScanInput"[\s\S]{0,200}inputmode="numeric"/', $src));
+ok('İşaretçi-farkında odak: dokunmatik-yalnız cihazda OTOMATİK odak yok',
+    str_contains($srcKod, "matchMedia('(any-pointer: fine)')")
+    && (bool)preg_match('/function focusInput\(\)\s*\{\s*if\s*\(!inceIsaretci\)\s*return;/', $srcKod));
+ok('Masaüstünde (ince işaretçi) odak DAVRANIŞI KORUNDU — scanInput.focus() hâlâ çağrılıyor',
+    str_contains($srcKod, 'scanInput.focus('));
+ok('USB kutusu SİLİNMEDİ — type="text" + input/keydown dinleyicileri duruyor',
+    str_contains($src, 'id="gcScanInput"')
+    && str_contains($srcKod, "scanInput.addEventListener('input'")
+    && str_contains($srcKod, "scanInput.addEventListener('keydown'"));
+ok('USB okuması hâlâ kaynak=usb_decimal ile gönderiliyor (masaüstü akışı değişmedi)',
+    substr_count($srcKod, "kaydet(v, 'usb_decimal')") >= 2);
+ok('NFC tıklamasında odak BIRAKILIYOR (blur) — klavye NFC akışının üstüne çıkmasın',
+    (bool)preg_match('/nfcBtn\.addEventListener\(.click.[\s\S]{0,400}document\.activeElement\.blur\(\)/', $srcKod));
+// Sabit karakter penceresi yerine SIRA karşılaştırması — araya kod eklendikçe
+// kırılmayan, niyeti ("blur önce gelir") doğrudan ifade eden kontrol.
+$blurPos = strpos($srcKod, 'document.activeElement.blur()');
+$scanPos = strpos($srcKod, '.scan({');
+ok('blur, scan() BAŞLAMADAN ÖNCE yapılıyor',
+    $blurPos !== false && $scanPos !== false && $blurPos < $scanPos);
+
+echo "\n=== 15. TEŞHİS SAYFASI DEĞİŞMEDİ (referans uygulama korunuyor) ===\n";
+$nfcTestGit = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- pdks_nfc_test.php 2>&1');
+ok('pdks_nfc_test.php bu değişiklikte HİÇ DEĞİŞTİRİLMEDİ', trim((string)$nfcTestGit) === '', (string)$nfcTestGit);
+ok('Teşhis sayfası hâlâ kendi kanıtlanmış dizisini taşıyor (click → NDEFReader → scan)',
+    (bool)preg_match('/addEventListener\(.click.[\s\S]{0,400}new NDEFReader\(\)/', $nfcTestSrc)
+    && (bool)preg_match('/addEventListener\(.reading.[\s\S]{0,600}\.scan\(\)/', $nfcTestSrc));
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);

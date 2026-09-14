@@ -128,9 +128,13 @@ render_flash();
             <pre id="gcNfcDebug" class="pdks-kiosk-nfc-debug"></pre>
         </div>
 
-        <!-- USB HID girişi — görsel olarak gizli ama HER ZAMAN odaklı -->
+        <!-- USB HID girişi — görsel olarak gizli ama masaüstünde HER ZAMAN odaklı.
+             ⚠ inputmode="none": USB HID okuyucu FİZİKSEL bir klavyedir, bu alana
+             yazmaya devam eder; ama Android'de alan odaklanınca YAZILIM KLAVYESİ
+             AÇILMAZ (canlı hata: Giriş/Çıkış ekranında sayısal klavye açılıyordu).
+             inputmode="numeric" idi — yazılım klavyesini bilerek DAVET ediyordu. -->
         <input type="text" id="gcScanInput" class="pdks-kiosk-hidden-input"
-               inputmode="numeric" autocomplete="off" aria-hidden="true" tabindex="-1">
+               inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
         <button type="button" class="btn btn-ghost" id="gcModeChange" style="margin-top:24px">↩ Modu Değiştir</button>
 
@@ -165,7 +169,16 @@ render_flash();
     var busy = false;
     var resultTimer = null;
 
+    // ⚠ Masaüstü (fare/ince işaretçi) ile dokunmatik ayrımı: USB HID kutusuna
+    // OTOMATİK odaklanmak masaüstünde ŞART (okuyucu oraya yazar), ama telefonda
+    // yazılım klavyesini açtırır. Dokunmatik-yalnız cihazlarda otomatik odak
+    // YAPILMAZ; USB HID takılı bir dokunmatik cihazda ekrana bir kez dokunmak
+    // yine odaklar (aşağıdaki genel click dinleyicisi) ve inputmode="none"
+    // sayesinde o durumda da klavye açılmaz.
+    var inceIsaretci = !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches);
+
     function focusInput() {
+        if (!inceIsaretci) return;   // dokunmatik: klavyeyi davet etme
         try { scanInput.focus({ preventScroll: true }); } catch (e) { try { scanInput.focus(); } catch (e2) {} }
     }
 
@@ -351,11 +364,23 @@ render_flash();
     if (nfcDestekli) {
         nfcBtnWrap.hidden = false;
         nfcHint.textContent = ' veya NFC ile telefonun arkasına yaklaştırın';
+        // ⚠ DEĞİŞMEZ KURAL: destek VE güvenli bağlam varsa buton MUTLAKA
+        // tıklanabilir olmalıdır. "NFC support: evet" yazıp butonu pasif
+        // bırakmak mantıksal olarak GEÇERSİZ bir durumdur (bkz. regresyon
+        // testi). Başka HİÇBİR sebeple pasifleştirilmez.
+        nfcBtn.disabled = false;
+        nfcDebugYaz('button: enabled');
 
         nfcBtn.addEventListener('click', function () {
             // ⚠ pdks_nfc_test.php İLE AYNI, KANITLANMIŞ dizi: tıklamanın
             // İÇİNDE yepyeni bir NDEFReader oluşturulur — önceki oturumdan
             // HİÇBİR ŞEY yeniden kullanılmaz.
+            //
+            // Önce USB kutusundan odağı KALDIR: Android'de odaklı bir metin
+            // kutusu varken yazılım klavyesi NFC akışının üstüne çıkabiliyor.
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
+            }
             nfcBtn.disabled = true;
             nfcBtn.textContent = NFC_ETIKET_ISLENIYOR;
             nfcDebugYaz('Buton tıklandı — NDEFReader oluşturuluyor');
@@ -397,7 +422,10 @@ render_flash();
             });
         });
     } else {
-        nfcDebugYaz('NFC butonu gösterilmiyor (desteklenmiyor veya güvenli bağlam yok)');
+        // Desteklenmeyen ortam: buton hem gizli hem pasif kalır (tek geçerli
+        // pasiflik sebebi budur).
+        nfcBtn.disabled = true;
+        nfcDebugYaz('button: disabled (desteklenmiyor veya güvenli bağlam yok)');
     }
 })();
 </script>
