@@ -206,6 +206,15 @@ $beklenenEskiSatirlar = [
     // attendance.daily_scan eklendi (çavuş/kart/muhasebe/admin izni YOK) —
     // git diff bu TEK satırı da "silinip yeniden yazılmış" gösterir.
     "-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],",
+    // Sprint Günlük-İşçi-02 → Günlük-İşçi-04 (Faz 3, günlük puantaj raporları):
+    // AYNI üç çok satırlı literal + 'muhasebe' rolü TEK yeni izinle
+    // (attendance.daily_reports) genişletildi — 'operator' BİLEREK BUNA
+    // DOKUNULMADI (görev talimatı: "Do NOT automatically give full
+    // historical reporting" — bkz. yukarıdaki operator satırı, hâlâ AYNI).
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan'))) || \$p_adm;",
+    "-                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan'];",
+    "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],",
+    "-                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

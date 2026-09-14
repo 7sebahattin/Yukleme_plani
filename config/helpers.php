@@ -271,7 +271,7 @@ function render_desktop_sidebar(string $base): void {
     // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden
     // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de
     // yalnız kendi sayfalarında yüklenir).
-    $p_gunluk = ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan'))) || $p_adm;
+    $p_gunluk = ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports'))) || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -295,6 +295,7 @@ function render_desktop_sidebar(string $base): void {
     $a_cavus = in_array($cur, ['cavuslar.php', 'cavus_form.php'], true);
     $a_isk   = in_array($cur, ['isci_kartlari.php', 'isci_tipleri.php'], true);
     $a_gunlukgc = $cur === 'gunluk_isci_giris_cikis.php';
+    $a_puantaj  = in_array($cur, ['gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php'], true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -353,6 +354,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($_fn && (can('attendance.foremen')      || $p_adm)) $lnk('cavuslar.php',      '👷', 'Çavuşlar',      $a_cavus); ?>
         <?php if ($_fn && (can('attendance.worker_cards') || $p_adm)) $lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', $a_isk); ?>
         <?php if ($_fn && (can('attendance.daily_scan')   || $p_adm)) $lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', $a_gunlukgc); ?>
+        <?php if ($_fn && (can('attendance.daily_reports') || $p_adm)) $lnk('gunluk_isci_puantaj.php', '📅', 'Günlük Puantaj', $a_puantaj); ?>
         <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
@@ -1034,10 +1036,16 @@ endif;
             // Sprint Günlük-İşçi-02, Faz 2: seri Giriş/Çıkış taraması — TEK yeni
             // yetki (attendance.daily_scan). Hakediş/ödeme yetkisi YOK — o
             // kapsam dışı (kullanıcının açık talimatı).
+            // Sprint Günlük-İşçi-04, Faz 3: günlük puantaj RAPORLARI — TEK yeni
+            // yetki (attendance.daily_reports). Taramayı yapan operator/güvenlik
+            // BUNU almaz (görev talimatı: "Do NOT automatically give full
+            // historical reporting" — bkz. 'operator' rol listesi, bilerek
+            // dokunulmadı) — yalnız admin + ik + muhasebe.
             $pdks_p = ['attendance.read','attendance.scan','attendance.manual','attendance.correct',
                        'attendance.report','attendance.employees','attendance.cards',
                        'attendance.devices','attendance.admin',
-                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan'];
+                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan',
+                       'attendance.daily_reports'];
             $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
@@ -1057,13 +1065,14 @@ endif;
                 'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read','hesap.read'],
                 // Muhasebe rolü Hesap modülünün asıl kullanıcısı: kendi sayfasına
                 // girebilmesi için hesap.write + onay/ödeme yetkileri şart.
-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],
+                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports'],
                 // PDKS: personel kartoteksi ve kart zimmetini yöneten rol.
                 // attendance.scan BİLEREK YOK — o yalnız kapı cihazının yetkisidir
                 // ve Faz 2'de 'guvenlik' rolüne verilecektir.
                 'ik'       => ['dashboard.read','attendance.read','attendance.manual','attendance.correct',
                                'attendance.report','attendance.employees','attendance.cards',
-                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan'],
+                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan',
+                               'attendance.daily_reports'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {

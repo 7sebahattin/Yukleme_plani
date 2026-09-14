@@ -182,19 +182,36 @@ function pdks_gunluk_tablolar(): array
     // depoda ikinci bir INSERT UNIQUE kısıtına çarpar, uygulama katmanı
     // (pdks_gunluk_oturum_ac_veya_getir) zaten INSERT'ten ÖNCE arar ve
     // varsa onu döndürür; kısıt yalnız yarış koşulu için son çare.
+    //
+    // ⚠ foreman_name_snapshot / foreman_code_snapshot (Faz 3, Sprint
+    // Günlük-İşçi-04 — görev talimatı madde 14, "inspect whether foreman
+    // display also needs a snapshot"): İNCELENDİ — foremen.name/code CANLI
+    // ve değiştirilebilir (bkz. pdks_gunluk_cavus_guncelle()), oysa
+    // daily_work_sessions.foreman_id yalnız bir LIVE FK'dir, snapshot YOK.
+    // Faz 3 günlük puantaj RAPORLARI bu satırdan foreman adını JOIN ile
+    // okusaydı, bir çavuş ADI SONRADAN değiştirildiğinde GEÇMİŞ raporlar
+    // SESSİZCE değişirdi (worker_type_name_snapshot ile AYNI sorun, bkz.
+    // daily_worker_card_events). En küçük, Faz 3'e güvenli çözüm: worker
+    // type snapshot'ıyla AYNI desen — oturum AÇILIRKEN (tek yazma anı)
+    // çavuşun o ANKİ ad/kodu buraya KOPYALANIR, foremen tablosunun SONRAKİ
+    // değişikliklerinden ETKİLENMEZ. Şema henüz hiçbir ortama migrate/
+    // deploy EDİLMEDİ (Faz 2 dalı hâlâ birleştirilmedi) — bu yüzden ALTER
+    // değil, doğrudan CREATE TABLE içinde eklenmesi güvenlidir.
     $t['daily_work_sessions'] = "CREATE TABLE IF NOT EXISTS `daily_work_sessions` (
-        `id`                INT AUTO_INCREMENT PRIMARY KEY,
-        `foreman_id`        INT          NOT NULL,
-        `work_date`         DATE         NOT NULL,
-        `depo`              VARCHAR(150) NOT NULL DEFAULT '',
-        `status`            VARCHAR(20)  NOT NULL DEFAULT 'open',
-        `opened_at`         DATETIME     NOT NULL,
-        `opened_by_user_id` INT          NULL DEFAULT NULL,
-        `closed_at`         DATETIME     NULL DEFAULT NULL,
-        `closed_by_user_id` INT          NULL DEFAULT NULL,
-        `notes`             TEXT         NULL DEFAULT NULL,
-        `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        `updated_at`        DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+        `foreman_id`             INT          NOT NULL,
+        `foreman_name_snapshot`  VARCHAR(150) NOT NULL DEFAULT '',
+        `foreman_code_snapshot`  VARCHAR(20)  NOT NULL DEFAULT '',
+        `work_date`              DATE         NOT NULL,
+        `depo`                   VARCHAR(150) NOT NULL DEFAULT '',
+        `status`                 VARCHAR(20)  NOT NULL DEFAULT 'open',
+        `opened_at`              DATETIME     NOT NULL,
+        `opened_by_user_id`      INT          NULL DEFAULT NULL,
+        `closed_at`              DATETIME     NULL DEFAULT NULL,
+        `closed_by_user_id`      INT          NULL DEFAULT NULL,
+        `notes`                  TEXT         NULL DEFAULT NULL,
+        `created_at`             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at`             DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY `uq_dws_foreman_date_depo` (`foreman_id`, `work_date`, `depo`),
         INDEX `idx_dws_status` (`status`),
         INDEX `idx_dws_date`   (`work_date`),
@@ -230,6 +247,16 @@ function pdks_gunluk_tablolar(): array
     // ⚠ Şema HENÜZ hiçbir ortama migrate/deploy EDİLMEDİ (Faz 2 dalı hâlâ
     // birleştirilmedi) — bu yüzden ALTER değil, doğrudan CREATE TABLE
     // içinde eklenmesi güvenlidir, canlı veriye dokunmaz.
+    //
+    // ⚠ idx_dwce_workdate_depo_type (Faz 3, görev talimatı madde 13 —
+    // "review indexes for work_date_snapshot/depo_snapshot"): Faz 2'nin
+    // UNIQUE kısıtında (worker_card_id, work_date_snapshot, depo_snapshot,
+    // event_type) bu iki sütun İKİNCİ/ÜÇÜNCÜ sıradadır — MySQL onu
+    // "worker_card_id verilmeden" bir soldan-önek (leftmost prefix) olarak
+    // KULLANAMAZ. Faz 3'ün günlük özet/eksik-çıkış sorguları ise TAM TERSİ
+    // yönde sorgular: "BUGÜN, BU DEPODA hangi kartlar" (worker_card_id
+    // henüz bilinmiyor). Bu YÜZDEN ayrı, gerçek bir soldan-önek indeksi
+    // eklendi — Faz 2'nin UNIQUE kısıtına DOKUNMADAN, yalnız EKLEME.
     $t['daily_worker_card_events'] = "CREATE TABLE IF NOT EXISTS `daily_worker_card_events` (
         `id`                         INT AUTO_INCREMENT PRIMARY KEY,
         `session_id`                 INT          NOT NULL,
@@ -247,6 +274,7 @@ function pdks_gunluk_tablolar(): array
         INDEX `idx_dwce_session_card_type` (`session_id`, `worker_card_id`, `event_type`),
         INDEX `idx_dwce_card`    (`worker_card_id`),
         INDEX `idx_dwce_session` (`session_id`),
+        INDEX `idx_dwce_workdate_depo_type` (`work_date_snapshot`, `depo_snapshot`, `event_type`),
         UNIQUE KEY `uq_dwce_card_day_depo_type` (`worker_card_id`, `work_date_snapshot`, `depo_snapshot`, `event_type`),
         CONSTRAINT `fk_dwce_session` FOREIGN KEY (`session_id`)
             REFERENCES `daily_work_sessions`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
@@ -379,10 +407,11 @@ function pdks_gunluk_can(string $eylem): bool
     if (function_exists('is_admin') && is_admin()) return true;
 
     return match ($eylem) {
-        'foremen'      => can('attendance.foremen'),
-        'worker_cards' => can('attendance.worker_cards'),
-        'daily_scan'   => can('attendance.daily_scan'),
-        default        => false,
+        'foremen'       => can('attendance.foremen'),
+        'worker_cards'  => can('attendance.worker_cards'),
+        'daily_scan'    => can('attendance.daily_scan'),
+        'daily_reports' => can('attendance.daily_reports'),
+        default         => false,
     };
 }
 
@@ -911,7 +940,7 @@ function pdks_gunluk_kart_gun_kullanimi(int $workerCardId, string $workDate, str
 function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $st = $pdo->prepare("SELECT id, is_active, name FROM foremen WHERE id = ?");
+    $st = $pdo->prepare("SELECT id, is_active, name, code FROM foremen WHERE id = ?");
     $st->execute([$foremanId]);
     $cavus = $st->fetch();
     if (!$cavus) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
@@ -933,12 +962,17 @@ function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo
     }
 
     $simdi = date('Y-m-d H:i:s');
+    // ⚠ foreman_name_snapshot/foreman_code_snapshot (Faz 3, bkz. tablo
+    // DDL'indeki gerekçe): oturum AÇILIRKEN çavuşun O ANKİ ad/kodu donar —
+    // foremen.name/code SONRADAN değişse bile bu oturuma bağlı raporlar
+    // GEÇMİŞTE görüneni göstermeye devam eder.
     $ins = $pdo->prepare(
-        "INSERT INTO daily_work_sessions (foreman_id, work_date, depo, status, opened_at, opened_by_user_id)
-         VALUES (?,?,?,?,?,?)"
+        "INSERT INTO daily_work_sessions
+            (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id)
+         VALUES (?,?,?,?,?,?,?,?)"
     );
     try {
-        $ins->execute([$foremanId, $tarih, $depo, 'open', $simdi, $userId]);
+        $ins->execute([$foremanId, (string)$cavus['name'], (string)$cavus['code'], $tarih, $depo, 'open', $simdi, $userId]);
     } catch (PDOException $e) {
         // Yarış koşulu son çaresi: UNIQUE(foreman_id,work_date,depo) — iki
         // eşzamanlı istek aynı oturumu açmaya çalıştıysa burada yakalanır,
@@ -1202,13 +1236,50 @@ function pdks_gunluk_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
         $eksikTip[$ek['tip']] = ($eksikTip[$ek['tip']] ?? 0) + 1;
     }
 
+    // ⚠ Faz 3 (görev talimatı madde 7): "first GIRIS = MIN valid GIRIS
+    // server_event_time", "last CIKIS = MAX valid CIKIS server_event_time"
+    // — SUNUCU-yetkili server_event_time'dan, istemciden hiçbir zaman
+    // alınmaz. Faz 2'nin TEK sayaç kaynağına (bu fonksiyon) EKLENDİ, ayrı
+    // bir sorgu/fonksiyon olarak sayfa tarafında TEKRARLANMADI.
+    $stZ = $pdo->prepare(
+        "SELECT MIN(CASE WHEN event_type = 'GIRIS' THEN server_event_time END) AS ilk_giris,
+                MAX(CASE WHEN event_type = 'CIKIS' THEN server_event_time END) AS son_cikis
+           FROM daily_worker_card_events WHERE session_id = ?"
+    );
+    $stZ->execute([$sessionId]);
+    $zamanlar = $stZ->fetch() ?: ['ilk_giris' => null, 'son_cikis' => null];
+
     return [
         'giris' => $giris, 'giris_toplam' => $girisToplam,
         'cikis' => $cikis, 'cikis_toplam' => $cikisToplam,
         'icerde_toplam' => $girisToplam - $cikisToplam,
         'eksik_tip' => $eksikTip, 'eksik_toplam' => count($eksikKartlar),
         'eksik_kartlar' => $eksikKartlar,
+        'ilk_giris' => $zamanlar['ilk_giris'], 'son_cikis' => $zamanlar['son_cikis'],
     ];
+}
+
+/**
+ * Oturum DURUMU — session.status + eksik-çıkış sayısından TÜRETİLİR (Faz 3,
+ * görev talimatı madde 6). AYRI/kalıcı bir "durum" kolonu EKLENMEZ —
+ * kullanıcının açık talimatı: "Do not persist a second redundant status
+ * field if it can be derived from session + event data."
+ *
+ *   open                     → "Açık Mesai" (eksik çıkış olsa BİLE — açık
+ *                               mesaide içeride kart olması NORMALDİR,
+ *                               henüz mutabakat zamanı gelmemiştir)
+ *   closed, eksik_toplam = 0 → "Tamamlandı"
+ *   closed, eksik_toplam > 0 → "Eksik Çıkış" (yalnız KAPANDIKTAN sonra,
+ *                               gerekçeyle mutabakat yapılmış anlamına gelir)
+ */
+function pdks_gunluk_oturum_durumu(string $sessionStatus, int $eksikToplam): array
+{
+    if ($sessionStatus !== 'closed') {
+        return ['kod' => 'acik', 'etiket' => 'Açık Mesai'];
+    }
+    return $eksikToplam > 0
+        ? ['kod' => 'eksik_cikis', 'etiket' => 'Eksik Çıkış']
+        : ['kod' => 'tamamlandi', 'etiket' => 'Tamamlandı'];
 }
 
 /**
@@ -1244,4 +1315,274 @@ function pdks_gunluk_oturum_kapat(int $sessionId, ?string $kapatmaNedeni, int $u
         ]);
     }
     return ['ok' => true, 'ozet' => $ozet];
+}
+
+// =========================================================
+// FAZ 3 — GÜNLÜK PUANTAJ RAPORLARI (salt okunur)
+//
+// Hakediş/fiyat/ödeme/cari/fatura YOK — kullanıcının açık talimatı, bir
+// SONRAKİ faza bırakıldı. Bu bölüm YALNIZ Faz 1/2'nin ürettiği
+// foremen/daily_work_sessions/daily_worker_card_events verisini OKUR;
+// hiçbir INSERT/UPDATE/DELETE içermez. Sayfalar (gunluk_isci_puantaj.php,
+// gunluk_isci_puantaj_detay.php) kendi SQL'ini YAZMAZ — hepsi BURADAKİ
+// fonksiyonlardan geçer (görev talimatı: "Do not build parallel business
+// logic in the UI.").
+// =========================================================
+
+/**
+ * TEPE ÖZET KARTLARI — bir work_date (+ opsiyonel depo) için SUNUCU
+ * TARAFINDA toplu sayaçlar. Görev talimatı madde 3'ün kritik kuralı:
+ * bu sayılar BENZERSİZ işçi kartıdır, ham olay satırı sayısı DEĞİLDİR —
+ * pdks_gunluk_oturum_ozet()'teki AYNI COUNT(DISTINCT worker_card_id)
+ * ilkesi burada da uygulanır. work_date_snapshot/depo_snapshot sayesinde
+ * (Faz 2) session'lara JOIN olmadan TEK sorguda hesaplanır — N+1 yok.
+ */
+function pdks_gunluk_gun_ozeti(string $workDate, ?string $depo = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    $whereEv = "work_date_snapshot = ?"; $parEv = [$workDate];
+    if ($depo !== null) { $whereEv .= " AND depo_snapshot = ?"; $parEv[] = $depo; }
+
+    // GİRİŞ/ÇIKIŞ toplamları — tip kırılımı GİRİŞ için, toplam ikisi için.
+    $stTip = $pdo->prepare(
+        "SELECT worker_type_name_snapshot AS tip, COUNT(DISTINCT worker_card_id) AS n
+           FROM daily_worker_card_events WHERE $whereEv AND event_type = 'GIRIS'
+          GROUP BY worker_type_name_snapshot"
+    );
+    $stTip->execute($parEv);
+    $girisTip = [];
+    foreach ($stTip->fetchAll() as $r) $girisTip[$r['tip']] = (int)$r['n'];
+    $girisToplam = array_sum($girisTip);
+
+    $stEt = $pdo->prepare(
+        "SELECT event_type, COUNT(DISTINCT worker_card_id) AS n
+           FROM daily_worker_card_events WHERE $whereEv GROUP BY event_type"
+    );
+    $stEt->execute($parEv);
+    $etToplam = ['GIRIS' => 0, 'CIKIS' => 0];
+    foreach ($stEt->fetchAll() as $r) $etToplam[$r['event_type']] = (int)$r['n'];
+    $cikisToplam = $etToplam['CIKIS'];
+
+    // Aktif çavuş — o gün/depoda AÇILMIŞ (durumu ne olursa olsun) oturum
+    // sayısı, benzersiz foreman_id.
+    $whereS = "work_date = ?"; $parS = [$workDate];
+    if ($depo !== null) { $whereS .= " AND depo = ?"; $parS[] = $depo; }
+    $stCavus = $pdo->prepare("SELECT COUNT(DISTINCT foreman_id) FROM daily_work_sessions WHERE $whereS");
+    $stCavus->execute($parS);
+
+    return [
+        'work_date'    => $workDate,
+        'depo'         => $depo,
+        'aktif_cavus'  => (int)$stCavus->fetchColumn(),
+        'giris'        => $girisTip,
+        'giris_toplam' => $girisToplam,
+        'tam_cikis'    => $cikisToplam,
+        // İçeride kalıp da ÇIKIŞ satırı olmayan kartlar — Faz 2'nin
+        // session+card başına EN FAZLA 1 GİRİŞ/1 ÇIKIŞ garantisi sayesinde
+        // basit bir fark, ayrı bir NOT EXISTS sorgusu gerekmez.
+        'eksik_cikis'  => $girisToplam - $cikisToplam,
+    ];
+}
+
+/**
+ * GÜNLÜK ÇAVUŞ/OTURUM LİSTESİ — ana puantaj sayfasının tablo/kart satırları.
+ * Filtre: work_date (zorunlu), depo/foreman/durum (opsiyonel).
+ *
+ * ⚠ N+1 YOK (görev talimatı madde 13): sessions BİR sorguda çekilir, her
+ * session için ayrı ayrı pdks_gunluk_oturum_ozet() ÇAĞRILMAZ — GİRİŞ/ÇIKIŞ
+ * kırılımı ve ilk-giriş/son-çıkış zamanları TÜM eşleşen session_id'ler için
+ * TEK birer GROUP BY sorgusuyla toplanır, sonra PHP tarafında birleştirilir.
+ *
+ * ⚠ $durumFiltresi, görev talimatı madde 1'in DÖRT filtre seçeneğidir —
+ * 'acik'|'kapali'|'eksik_cikis' (veya '' = Tümü). BUNLAR, sonuçtaki her
+ * satırın 'durum' alanındaki ÜÇLÜ GÖSTERİM etiketiyle (acik/tamamlandi/
+ * eksik_cikis — bkz. pdks_gunluk_oturum_durumu()) AYNI ŞEY DEĞİLDİR: filtre
+ * "Kapalı" ham session.status='closed' anlamına gelir (Tamamlandı VE Eksik
+ * Çıkış durumundaki kapalı oturumların HER İKİSİNİ de kapsar), "Eksik
+ * Çıkışlı" ise açık/kapalı FARK ETMEKSİZİN en az bir eksik kartı olan HER
+ * oturumu kapsar (çapraz-kesen bir istisna filtresidir, görev talimatı
+ * madde 5). 'acik'/'kapali' SQL'de (ucuz, sütun eşitliği), 'eksik_cikis'
+ * TÜRETİLMİŞ eksik_toplam'a bağlı olduğu için birleştirme SONRASI PHP'de
+ * uygulanır.
+ */
+function pdks_gunluk_gun_listesi(string $workDate, ?string $depo = null, ?int $foremanId = null, ?string $durumFiltresi = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    $where = ['work_date = ?']; $params = [$workDate];
+    if ($depo !== null && $depo !== '') { $where[] = 'depo = ?'; $params[] = $depo; }
+    if ($foremanId !== null) { $where[] = 'foreman_id = ?'; $params[] = $foremanId; }
+    if ($durumFiltresi === 'acik')   { $where[] = "status = 'open'"; }
+    if ($durumFiltresi === 'kapali') { $where[] = "status = 'closed'"; }
+    $st = $pdo->prepare(
+        "SELECT * FROM daily_work_sessions WHERE " . implode(' AND ', $where) . "
+          ORDER BY foreman_name_snapshot ASC, id ASC"
+    );
+    $st->execute($params);
+    $oturumlar = $st->fetchAll();
+    if (!$oturumlar) return [];
+
+    $ids = array_map(fn($o) => (int)$o['id'], $oturumlar);
+    $ph  = implode(',', array_fill(0, count($ids), '?'));
+
+    // GİRİŞ/ÇIKIŞ × tip kırılımı, TÜM session_id'ler için tek seferde.
+    $stEv = $pdo->prepare(
+        "SELECT session_id, event_type, worker_type_name_snapshot AS tip, COUNT(DISTINCT worker_card_id) AS n
+           FROM daily_worker_card_events WHERE session_id IN ($ph)
+          GROUP BY session_id, event_type, worker_type_name_snapshot"
+    );
+    $stEv->execute($ids);
+    $evBySession = [];
+    foreach ($stEv->fetchAll() as $r) {
+        $sid = (int)$r['session_id'];
+        $evBySession[$sid][$r['event_type']][$r['tip']] = (int)$r['n'];
+    }
+
+    // İlk GİRİŞ / son ÇIKIŞ zamanı, TÜM session_id'ler için tek seferde.
+    $stZ = $pdo->prepare(
+        "SELECT session_id,
+                MIN(CASE WHEN event_type = 'GIRIS' THEN server_event_time END) AS ilk_giris,
+                MAX(CASE WHEN event_type = 'CIKIS' THEN server_event_time END) AS son_cikis
+           FROM daily_worker_card_events WHERE session_id IN ($ph)
+          GROUP BY session_id"
+    );
+    $stZ->execute($ids);
+    $zBySession = [];
+    foreach ($stZ->fetchAll() as $r) $zBySession[(int)$r['session_id']] = $r;
+
+    // Eksik çıkış (GİRİŞ var, ÇIKIŞ yok) — TÜM session_id'ler için tek seferde.
+    $stEk = $pdo->prepare(
+        "SELECT g.session_id, COUNT(DISTINCT g.worker_card_id) AS n
+           FROM daily_worker_card_events g
+          WHERE g.session_id IN ($ph) AND g.event_type = 'GIRIS'
+            AND NOT EXISTS (
+                 SELECT 1 FROM daily_worker_card_events c
+                  WHERE c.session_id = g.session_id AND c.worker_card_id = g.worker_card_id AND c.event_type = 'CIKIS'
+            )
+          GROUP BY g.session_id"
+    );
+    $stEk->execute($ids);
+    $ekBySession = [];
+    foreach ($stEk->fetchAll() as $r) $ekBySession[(int)$r['session_id']] = (int)$r['n'];
+
+    $sonuc = [];
+    foreach ($oturumlar as $o) {
+        $sid = (int)$o['id'];
+        $girisTip = $evBySession[$sid]['GIRIS'] ?? [];
+        $cikisTip = $evBySession[$sid]['CIKIS'] ?? [];
+        $girisToplam = array_sum($girisTip);
+        $cikisToplam = array_sum($cikisTip);
+        $eksikToplam = $ekBySession[$sid] ?? 0;
+        $durum = pdks_gunluk_oturum_durumu((string)$o['status'], $eksikToplam);
+
+        if ($durumFiltresi === 'eksik_cikis' && $eksikToplam <= 0) {
+            continue;
+        }
+
+        $sonuc[] = [
+            'session' => $o,
+            'giris' => $girisTip, 'giris_toplam' => $girisToplam,
+            'cikis' => $cikisTip, 'cikis_toplam' => $cikisToplam,
+            'icerde_toplam' => $girisToplam - $cikisToplam,
+            'eksik_toplam' => $eksikToplam,
+            'ilk_giris' => $zBySession[$sid]['ilk_giris'] ?? null,
+            'son_cikis' => $zBySession[$sid]['son_cikis'] ?? null,
+            'durum' => $durum,
+        ];
+    }
+    return $sonuc;
+}
+
+/**
+ * TEK OTURUMUN kart hareket dökümü (detay sayfası). worker_type_name
+ * CANLI worker_types join'inden DEĞİL, worker_type_name_snapshot'tan
+ * okunur (görev talimatı madde 4: "Do NOT show current master worker
+ * type if historical snapshot exists.").
+ */
+function pdks_gunluk_oturum_kartlari(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare(
+        "SELECT g.worker_card_id, w.card_no, g.worker_type_name_snapshot AS tip,
+                g.server_event_time AS giris_saat,
+                (SELECT c.server_event_time FROM daily_worker_card_events c
+                  WHERE c.session_id = g.session_id AND c.worker_card_id = g.worker_card_id
+                    AND c.event_type = 'CIKIS' LIMIT 1) AS cikis_saat
+           FROM daily_worker_card_events g
+           JOIN worker_cards w ON w.id = g.worker_card_id
+          WHERE g.session_id = ? AND g.event_type = 'GIRIS'
+          ORDER BY g.server_event_time ASC"
+    );
+    $st->execute([$sessionId]);
+    $satirlar = $st->fetchAll();
+    foreach ($satirlar as &$s) {
+        $s['durum'] = $s['cikis_saat'] !== null
+            ? ['kod' => 'tam', 'etiket' => '✅ Tam']
+            : ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'];
+    }
+    unset($s);
+    return $satirlar;
+}
+
+/**
+ * İSTİSNA/EKSİK ÇIKIŞ RAPORU — bir work_date (+ opsiyonel depo/çavuş) için
+ * TÜM oturumlar genelinde "GİRİŞ var, ÇIKIŞ yok" kartlar. Kapanmış bir
+ * oturumun eksik kartı için close_note/session.status BİRLİKTE döner —
+ * sayfa "Mesai eksik çıkışla kapatıldı." mesajını BURADAN kurar (görev
+ * talimatı madde 5). UYDURMA bir çıkış zamanı ASLA üretilmez.
+ */
+function pdks_gunluk_eksik_cikislar(string $workDate, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    $where = ['g.event_type = \'GIRIS\'', 'g.work_date_snapshot = ?'];
+    $params = [$workDate];
+    if ($depo !== null && $depo !== '') { $where[] = 'g.depo_snapshot = ?'; $params[] = $depo; }
+    if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
+
+    $st = $pdo->prepare(
+        "SELECT g.session_id, g.worker_card_id, w.card_no, g.worker_type_name_snapshot AS tip,
+                g.server_event_time AS giris_saat, g.work_date_snapshot AS tarih, g.depo_snapshot AS depo,
+                s.status AS oturum_durumu, s.notes AS kapanis_notu,
+                s.foreman_name_snapshot AS cavus_adi
+           FROM daily_worker_card_events g
+           JOIN daily_work_sessions s ON s.id = g.session_id
+           JOIN worker_cards w ON w.id = g.worker_card_id
+          WHERE " . implode(' AND ', $where) . "
+            AND NOT EXISTS (
+                 SELECT 1 FROM daily_worker_card_events c
+                  WHERE c.session_id = g.session_id AND c.worker_card_id = g.worker_card_id AND c.event_type = 'CIKIS'
+            )
+          ORDER BY g.server_event_time ASC"
+    );
+    $st->execute($params);
+    $satirlar = $st->fetchAll();
+    foreach ($satirlar as &$r) {
+        $r['oturum_kapali_mesaji'] = ($r['oturum_durumu'] === 'closed')
+            ? 'Mesai eksik çıkışla kapatıldı.' : null;
+    }
+    unset($r);
+    return $satirlar;
+}
+
+/**
+ * Bir user_id'nin görüntülenecek adı — mesai detay sayfasının
+ * açan/kapatan kullanıcı satırları için. Sayfa dosyasında BARE bir üst
+ * seviye fonksiyon olarak TANIMLANMADI (paylaşılan modüle taşındı): birden
+ * çok GET parametresiyle AYNI sayfanın render testte art arda include
+ * edilmesi (bkz. scripts/pdks_gunluk_faz3_ui_smoke.php) bare bir sayfa-içi
+ * fonksiyonu "Cannot redeclare" fatal'ına düşürüyordu — paylaşılan modül
+ * fonksiyonları zaten `require_once` ile TEK sefer yüklenir, bu sorunu
+ * yaşamaz.
+ */
+function pdks_gunluk_kullanici_adi(?int $userId, ?PDO $pdo = null): string
+{
+    if (!$userId) return '—';
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare("SELECT display_name, username FROM users WHERE id = ?");
+    $st->execute([$userId]);
+    $u = $st->fetch();
+    if (!$u) return '—';
+    return (string)($u['display_name'] ?: $u['username']);
 }

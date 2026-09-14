@@ -64,6 +64,12 @@
 .pdks-badge-degistirildi { background: var(--warn-soft);    color: var(--warn); }
 .pdks-badge-suresi_doldu { background: var(--warn-soft);    color: var(--warn); }
 .pdks-badge-yok          { background: var(--surface-2);    color: var(--muted); }
+/* Faz 3 — günlük puantaj oturum durumu (pdks_gunluk_oturum_durumu()) */
+.pdks-badge-acik         { background: var(--primary-soft); color: var(--primary); }
+.pdks-badge-tamamlandi   { background: var(--success-soft); color: var(--success); }
+.pdks-badge-eksik_cikis  { background: var(--warn-soft);    color: var(--warn); }
+.pdks-badge-tam          { background: var(--success-soft); color: var(--success); }
+.pdks-badge-cikis_yok    { background: var(--warn-soft);    color: var(--warn); }
 
 /* ── Kart UID gösterimi ────────────────────────────────── */
 .pdks-uid {
