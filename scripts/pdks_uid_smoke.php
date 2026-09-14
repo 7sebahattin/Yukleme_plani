@@ -9,6 +9,13 @@
 // algoritmanın bir KOPYASINI taşıyordu (kanıt amaçlıydı); Faz 1'de algoritma
 // config/pdks.php'ye taşındığı için burada yalnız ONA karşı test yazılır.
 // İki kopya bırakılsaydı ayrışır ve ayrışan taraf sessizce yanlış kart eşlerdi.
+//
+// ⚠ FAZ 1 DÜZELTMESİ (§8b): §2'deki testler eskiden bir kartın bayt-tersini
+// de "aynı fiziksel kart" sayardı (ör. D7:7E:A8:25'in 631799511 ile aynı
+// karta çözüldüğünü doğruluyordu). Bu YANLIŞTI — iki farklı fiziksel kartın
+// kanonik UID'leri birbirinin bayt-tersi olabilir ve otomatik eşleme ikinci,
+// gerçek kartın kaydını reddederdi. Bkz. config/pdks.php "UID NORMALİZASYONU"
+// ve docs/PDKS_FAZ1_SEMA.md §6a.
 // =========================================================
 declare(strict_types=1);
 
@@ -34,15 +41,18 @@ dogrula('0x25A87ED7 ondalığı',                pdks_uid_to_decimal('25A87ED7')
 dogrula('631799511 → kanonik HEX',            pdks_uid_from_decimal('631799511'), '25A87ED7');
 dogrula('25A87ED7 → 25A87ED7 (değişmez)',     pdks_uid_hex_normalize('25A87ED7'), '25A87ED7');
 dogrula('0xD77EA825 ondalığı (ters)',         pdks_uid_to_decimal('D77EA825'), '3615402021');
-dogrula('bayt-ters çevrimi',                  pdks_uid_reverse('25A87ED7'), 'D77EA825');
-dogrula('tersin tersi = kendisi',             pdks_uid_reverse(pdks_uid_reverse('25A87ED7')), '25A87ED7');
+// pdks_uid_reverse() yalnız TEŞHİS/GÖSTERİM amaçlıdır — kimlik eşleştirmede
+// KULLANILMAZ (bkz. §8b). Burada yalnız kendi matematiğini doğruluyoruz.
+dogrula('bayt-ters çevrimi (yalnız teşhis amaçlı)', pdks_uid_reverse('25A87ED7'), 'D77EA825');
+dogrula('tersin tersi = kendisi',                   pdks_uid_reverse(pdks_uid_reverse('25A87ED7')), '25A87ED7');
 
-echo "\n=== 2. ÜÇ GÖSTERİM AYNI KANONA ÇÖZÜLÜYOR (yol haritası §5) ===\n";
-$hedef = '25A87ED7';
-dogrula("USB '631799511'",     in_array($hedef, pdks_uid_adaylari('631799511',  'usb_decimal'), true), true);
-dogrula("NFC '25 A8 7E D7'",   in_array($hedef, pdks_uid_adaylari('25 A8 7E D7','nfc_hex'),     true), true);
-dogrula("NFC 'D7:7E:A8:25'",   in_array($hedef, pdks_uid_adaylari('D7:7E:A8:25','nfc_hex'),     true), true);
-dogrula("USB ters '3615402021'", in_array($hedef, pdks_uid_adaylari('3615402021','usb_decimal'), true), true);
+echo "\n=== 2. HER KAYNAK KENDİ KANONİĞİNE DETERMİNİSTİK ÇÖZÜLÜR ===\n";
+echo "    (YAZIM farkları — ayraç, büyük/küçük harf — normalize edilir;\n";
+echo "     bu, bayt SIRASI eşitlemesi ile KARIŞTIRILMAMALI, bkz. §8b.)\n\n";
+dogrula("USB '631799511' → kanon",              pdks_uid_adaylari('631799511',  'usb_decimal'), ['25A87ED7']);
+dogrula("NFC '25 A8 7E D7' → aynı kanon (boşluk)", pdks_uid_adaylari('25 A8 7E D7','nfc_hex'),  ['25A87ED7']);
+dogrula("NFC '25:A8:7E:D7' → aynı kanon (ayraç)",  pdks_uid_adaylari('25:A8:7E:D7','nfc_hex'),  ['25A87ED7']);
+dogrula("NFC '25a87ed7' → aynı kanon (küçük harf)",pdks_uid_adaylari('25a87ed7','nfc_hex'),     ['25A87ED7']);
 
 echo "\n=== 3. KABUL EDİLEN HEX BİÇİMLERİ ===\n";
 foreach (['25A87ED7','25a87ed7','25:A8:7E:D7','25-A8-7E-D7','25 A8 7E D7','0x25A87ED7','  25A87ED7  '] as $b) {
@@ -97,9 +107,25 @@ dogrula('ondalık okuma',                        $dc, '00BC614E');
 dogrula('bilinmeyen kaynak → boş (fail-closed)', pdks_uid_adaylari($ik, 'bilinmiyor'), []);
 dogrula('boş kaynak → boş',                      pdks_uid_adaylari($ik, ''), []);
 
-echo "\n=== 9. PALİNDROM UID ===\n";
-dogrula('A5A5A5A5 tersi kendisi',    pdks_uid_reverse('A5A5A5A5'), 'A5A5A5A5');
-dogrula('adaylar tekilleşiyor',      count(pdks_uid_adaylari('A5A5A5A5', 'nfc_hex')), 1);
+echo "\n=== 8b. İKİ FARKLI FİZİKSEL KART — bayt-tersi ARTIK OTOMATİK AYNI KART SAYILMIYOR ===\n";
+echo "    (Faz 1 düzeltmesi: 25A87ED7 ve D77EA825 birbirinin bayt-tersidir, ama\n";
+echo "     bu tek başına aynı fiziksel kart oldukları anlamına GELMEZ — bir üçüncü\n";
+echo "     parti uygulamanın baytları ters göstermesi de bunu KANITLAMAZ. İkisi de\n";
+echo "     GERÇEK, birbirinden BAĞIMSIZ kartlar olarak sisteme girebilmelidir.)\n\n";
+$kartA = pdks_uid_adaylari('631799511',  'usb_decimal');   // Kart A — USB'den okundu
+$kartB = pdks_uid_adaylari('D7:7E:A8:25','nfc_hex');       // Kart B — Kart A'nın TAM TERSİ, farklı fiziksel kart
+dogrula('Kart A kanoniği',                        $kartA, ['25A87ED7']);
+dogrula("Kart B kanoniği (Kart A'nın bayt-tersi)", $kartB, ['D77EA825']);
+dogrula('İkisinin aday kümesi KESİŞMİYOR',        array_intersect($kartA, $kartB), []);
+dogrula('D77EA825, Kart A adayları arasında DEĞİL', in_array('D77EA825', $kartA, true), false);
+dogrula('25A87ED7, Kart B adayları arasında DEĞİL', in_array('25A87ED7', $kartB, true), false);
+// Asıl "iki ayrı kart aynı anda var olabiliyor mu" kanıtı bir VERİTABANI testidir
+// (iki INSERT'in de başarılı olması gerekir) — bkz. scripts/pdks_db_smoke.php §4.
+
+echo "\n=== 9. pdks_uid_reverse() — YALNIZ TEŞHİS ARACI, KİMLİK EŞLEŞTİRMESİ DEĞİL ===\n";
+dogrula('A5A5A5A5 tersi kendisi (palindrom)', pdks_uid_reverse('A5A5A5A5'), 'A5A5A5A5');
+dogrula('adaylar HER ZAMAN tek eleman (palindromda da)', count(pdks_uid_adaylari('A5A5A5A5', 'nfc_hex')), 1);
+dogrula('pdks_uid_adaylari ARTIK asla 2 eleman döndürmez', count(pdks_uid_adaylari('25A87ED7', 'nfc_hex')), 1);
 
 echo "\n=== 10. GÜRÜLTÜ TOLERANSI ===\n";
 dogrula("binlik ayraçlı '631.799.511'", pdks_uid_from_decimal('631.799.511'), '25A87ED7');

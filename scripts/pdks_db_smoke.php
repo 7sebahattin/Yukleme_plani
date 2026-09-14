@@ -146,7 +146,7 @@ dogrula('personnel_no NULL çoklu kabul',
     reddedildi_mi(fn() => db()->prepare("INSERT INTO employees (personnel_no, full_name) VALUES (?,?)")
         ->execute([null, 'Sicilsiz 2'])), false);
 
-echo "\n=== 3. KART OLUŞTURMA — USB ondalık (631799511) ===\n";
+echo "\n=== 3. KART OLUŞTURMA — USB ondalık (631799511) → Kart A ===\n";
 $r = pdks_kart_olustur($empA, '631799511', 'usb_decimal', ['label' => 'Kart-01'], db());
 dogrula('kart oluşturuldu',        $r['ok'], true);
 dogrula('kanonik UID',             $r['uid_hex'], '25A87ED7');
@@ -154,51 +154,92 @@ dogrula('ondalık kaydedildi',      $r['uid_decimal'], '631799511');
 dogrula('bayt sayısı',             $r['uid_bytes'], 4);
 $kartA = (int)$r['card_id'];
 
-$aliaslar = db()->query("SELECT uid_hex, kind FROM employee_card_uids WHERE card_id = $kartA ORDER BY kind")->fetchAll();
-dogrula('2 takma ad yazıldı',      count($aliaslar), 2);
-dogrula('canonical alias',         $aliaslar[0]['uid_hex'], '25A87ED7');
-dogrula('reversed alias',          $aliaslar[1]['uid_hex'], 'D77EA825');
-dogrula('audit yazıldı',           in_array('card_create', array_column($GLOBALS['AUDIT'], 'action'), true), true);
+// ⚠ FAZ 1 DÜZELTMESİ: Artık yalnız 1 alias yazılır (kanonik). Bayt-tersi
+// ARTIK otomatik ikinci bir alias olarak YAZILMIYOR — bkz. §5 (bunun neden
+// gerekli olduğunun kanıtı orada).
+$aliaslar = db()->query("SELECT uid_hex, kind FROM employee_card_uids WHERE card_id = $kartA")->fetchAll();
+dogrula('YALNIZ 1 alias yazıldı (bayt-tersi artık otomatik yazılmıyor)', count($aliaslar), 1);
+dogrula('yazılan tek alias kanonik',   $aliaslar[0]['uid_hex'], '25A87ED7');
+dogrula('kind = canonical',            $aliaslar[0]['kind'], 'canonical');
+dogrula('D77EA825 (bayt-tersi) YAZILMADI',
+    (int)db()->query("SELECT COUNT(*) FROM employee_card_uids WHERE uid_hex = 'D77EA825'")->fetchColumn(), 0);
+dogrula('audit yazıldı', in_array('card_create', array_column($GLOBALS['AUDIT'], 'action'), true), true);
 
-echo "\n=== 4. ÜÇ GÖSTERİM — AYNI FİZİKSEL KARTA ÇÖZÜLÜYOR ===\n";
+echo "\n=== 4. AYNI KAYNAK İÇİNDE YAZIM FARKLARI AYNI KARTA ÇÖZÜLÜR ===\n";
+echo "    (ayraç/büyük-küçük harf farkı — bayt SIRASI farkı DEĞİL)\n\n";
 $c1 = pdks_kart_cozumle('631799511',  'usb_decimal', db());
 $c2 = pdks_kart_cozumle('25 A8 7E D7','nfc_hex',     db());
-$c3 = pdks_kart_cozumle('D7:7E:A8:25','nfc_hex',     db());
-dogrula("USB '631799511' → kart",     (int)$c1['card']['id'], $kartA);
-dogrula("NFC '25 A8 7E D7' → kart",   (int)$c2['card']['id'], $kartA);
-dogrula("NFC 'D7:7E:A8:25' → kart",   (int)$c3['card']['id'], $kartA);
-dogrula('üçü de AYNI kart',           $c1['card']['id'] === $c2['card']['id'] && $c2['card']['id'] === $c3['card']['id'], true);
-dogrula('personel doğru çözüldü',     (int)$c1['employee']['id'], $empA);
-dogrula('personel adı',               $c1['employee']['full_name'], 'Personel A');
-dogrula('tanımsız UID → null',        pdks_kart_cozumle('999999999', 'usb_decimal', db()), null);
-dogrula('kaynak bildirilmezse → null',pdks_kart_cozumle('631799511', 'bilinmiyor', db()), null);
+$c3 = pdks_kart_cozumle('25:A8:7E:D7','nfc_hex',     db());
+dogrula("USB '631799511' → Kart A",         (int)$c1['card']['id'], $kartA);
+dogrula("NFC '25 A8 7E D7' → Kart A",       (int)$c2['card']['id'], $kartA);
+dogrula("NFC '25:A8:7E:D7' → Kart A",       (int)$c3['card']['id'], $kartA);
+dogrula('personel doğru çözüldü',           (int)$c1['employee']['id'], $empA);
+dogrula('personel adı',                     $c1['employee']['full_name'], 'Personel A');
+dogrula('tanımsız UID → null',              pdks_kart_cozumle('999999999', 'usb_decimal', db()), null);
+dogrula('kaynak bildirilmezse → null',      pdks_kart_cozumle('631799511', 'bilinmiyor', db()), null);
 
-echo "\n=== 5. AYNI KART İKİ KEZ / İKİ PERSONELE VERİLEMEZ ===\n";
+// ⚠ BURASI DÜZELTMENİN KALBİ: bayt-tersi (D7:7E:A8:25) HENÜZ hiçbir karta
+// tanımlanmadı — bu yüzden Kart A'ya OTOMATİK olarak çözülmemeli. Eski
+// davranış (Faz 1'in ilk sürümü) burada Kart A'yı döndürürdü; bu YANLIŞTI.
+dogrula("NFC 'D7:7E:A8:25' (Kart A'nın bayt-tersi) HENÜZ TANIMLI DEĞİL → null",
+    pdks_kart_cozumle('D7:7E:A8:25', 'nfc_hex', db()), null);
+
+echo "\n=== 5. İKİ FARKLI FİZİKSEL KART AYNI ANDA VAR OLABİLİR (Faz 1 düzeltmesi) ===\n";
+echo "    Kart A: 25A87ED7   ·   Kart B: D77EA825 (Kart A'nın bayt-tersi, AMA GERÇEKTEN\n";
+echo "    FARKLI bir fiziksel kart). Kart B'nin kaydı ARTIK REDDEDİLMİYOR.\n\n";
+$rB = pdks_kart_olustur($empB, 'D7:7E:A8:25', 'nfc_hex', ['label' => 'Kart-02'], db());
+dogrula('Kart B (bayt-tersi UID) BAŞARIYLA oluşturuldu', $rB['ok'], true);
+dogrula('Kart B kanoniği doğru',                         $rB['uid_hex'], 'D77EA825');
+$kartB = (int)($rB['card_id'] ?? 0);
+dogrula('Kart B, Kart A\'dan FARKLI bir satır',          $kartB !== $kartA, true);
+dogrula('toplam kart sayısı ŞİMDİ 2',
+    (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn(), 2);
+dogrula('toplam alias sayısı ŞİMDİ 2 (kart başına 1)',
+    (int)db()->query("SELECT COUNT(*) FROM employee_card_uids")->fetchColumn(), 2);
+
+// İkisi de BAĞIMSIZ ve DOĞRU çözülüyor — biri diğerini gölgelemiyor.
+$ca = pdks_kart_cozumle('631799511', 'usb_decimal', db());   // USB — hâlâ Kart A'yı bulmalı
+$cb = pdks_kart_cozumle('D77EA825',  'nfc_hex',     db());   // Kart B'nin kendi kanonik hâli
+$cb2 = pdks_kart_cozumle('D7:7E:A8:25', 'nfc_hex',  db());   // Kart B'yi tanımlarken kullanılan ham girdi
+dogrula("USB '631799511' HÂLÂ Kart A'yı buluyor (Kart B onu bozmadı)", (int)$ca['card']['id'], $kartA);
+dogrula('Kart A\'nın çalışanı doğru',                                  (int)$ca['employee']['id'], $empA);
+dogrula("NFC 'D77EA825' → Kart B",                                     (int)$cb['card']['id'], $kartB);
+dogrula('Kart B\'nin çalışanı doğru',                                  (int)$cb['employee']['id'], $empB);
+dogrula('Kart B\'nin çalışan adı',                                     $cb['employee']['full_name'], 'Personel B');
+dogrula("Aynı ham girdi ('D7:7E:A8:25') tutarlı biçimde Kart B'yi buluyor", (int)$cb2['card']['id'], $kartB);
+dogrula('Kart A ile Kart B FARKLI kartlar olarak kalıyor', $ca['card']['id'] !== $cb['card']['id'], true);
+
+echo "\n=== 6. GERÇEK ÇAKIŞMA HÂLÂ REDDEDİLİYOR (kanonik benzersizlik ZAYIFLATILMADI) ===\n";
 $r2 = pdks_kart_olustur($empA, '631799511', 'usb_decimal', [], db());
-dogrula('AYNI personele aynı kart 2. kez reddedildi', $r2['ok'], false);
-dogrula('  red kodu',                                 $r2['kod'], 'uid_kullanimda');
+dogrula('AYNI personele aynı kart (USB) 2. kez reddedildi', $r2['ok'], false);
+dogrula('  red kodu',                                       $r2['kod'], 'uid_kullanimda');
 
-$r3 = pdks_kart_olustur($empB, '631799511', 'usb_decimal', [], db());
-dogrula('BAŞKA personele aynı kart reddedildi',       $r3['ok'], false);
-dogrula('  red kodu',                                 $r3['kod'], 'uid_kullanimda');
+$r3 = pdks_kart_olustur($empC, '631799511', 'usb_decimal', [], db());
+dogrula('BAŞKA personele Kart A\'nın UID\'si (USB) reddedildi', $r3['ok'], false);
+dogrula('  red kodu',                                            $r3['kod'], 'uid_kullanimda');
 
-$r4 = pdks_kart_olustur($empB, '25A87ED7', 'nfc_hex', [], db());
-dogrula('aynı kart HEX ile de reddedildi',            $r4['ok'], false);
+$r4 = pdks_kart_olustur($empC, '25A87ED7', 'nfc_hex', [], db());
+dogrula('Kart A\'nın UID\'si HEX kaynağıyla da reddedildi',      $r4['ok'], false);
 
-$r5 = pdks_kart_olustur($empB, 'D7:7E:A8:25', 'nfc_hex', [], db());
-dogrula('TERS gösterimle de reddedildi (alias)',      $r5['ok'], false);
-dogrula('  red kodu',                                 $r5['kod'], 'uid_kullanimda');
+$r5 = pdks_kart_olustur($empC, 'D77EA825', 'nfc_hex', [], db());
+dogrula('Kart B\'nin UID\'si (kanonik) de reddedildi',           $r5['ok'], false);
+dogrula('  red kodu',                                             $r5['kod'], 'uid_kullanimda');
 
-dogrula('toplam kart sayısı hâlâ 1', (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn(), 1);
-dogrula('toplam alias sayısı hâlâ 2', (int)db()->query("SELECT COUNT(*) FROM employee_card_uids")->fetchColumn(), 2);
+$r6 = pdks_kart_olustur($empC, 'D7:7E:A8:25', 'nfc_hex', [], db());
+dogrula('Kart B\'nin UID\'si (ham/ayraçlı) de reddedildi',       $r6['ok'], false);
 
-echo "\n=== 6. VERİTABANI KISITLARI DOĞRUDAN ===\n";
+dogrula('toplam kart sayısı HÂLÂ 2 (yanlış denemeler yeni kart açmadı)',
+    (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn(), 2);
+dogrula('toplam alias sayısı HÂLÂ 2',
+    (int)db()->query("SELECT COUNT(*) FROM employee_card_uids")->fetchColumn(), 2);
+
+echo "\n=== 7. VERİTABANI KISITLARI DOĞRUDAN ===\n";
 dogrula('employee_cards.uid_hex UNIQUE',
     reddedildi_mi(fn() => db()->prepare("INSERT INTO employee_cards (employee_id, uid_hex) VALUES (?,?)")
-        ->execute([$empB, '25A87ED7'])), true);
+        ->execute([$empC, '25A87ED7'])), true);
 dogrula('employee_card_uids.uid_hex UNIQUE',
     reddedildi_mi(fn() => db()->prepare("INSERT INTO employee_card_uids (card_id, uid_hex, kind) VALUES (?,?,?)")
-        ->execute([$kartA, 'D77EA825', 'canonical'])), true);
+        ->execute([$kartB, '25A87ED7', 'canonical'])), true);
 dogrula('kart FK: olmayan personel reddedilir',
     reddedildi_mi(fn() => db()->prepare("INSERT INTO employee_cards (employee_id, uid_hex) VALUES (?,?)")
         ->execute([999999, 'AABBCCDD'])), true);
@@ -206,15 +247,15 @@ dogrula('alias FK: olmayan kart reddedilir',
     reddedildi_mi(fn() => db()->prepare("INSERT INTO employee_card_uids (card_id, uid_hex) VALUES (?,?)")
         ->execute([999999, 'AABBCCDD'])), true);
 
-echo "\n=== 7. GEÇERSİZ GİRDİ — FAIL CLOSED ===\n";
+echo "\n=== 8. GEÇERSİZ GİRDİ — FAIL CLOSED ===\n";
 dogrula('kaynak bildirilmemiş',      pdks_kart_olustur($empB, '631799511', 'tahmin', [], db())['kod'], 'gecersiz_kaynak');
 dogrula('geçersiz UID',              pdks_kart_olustur($empB, 'ZZZZ', 'nfc_hex', [], db())['kod'], 'gecersiz_uid');
 dogrula('3 baytlık UID reddedildi',  pdks_kart_olustur($empB, '25A87E', 'nfc_hex', [], db())['kod'], 'gecersiz_uid');
 dogrula('olmayan personel',          pdks_kart_olustur(999999, 'AABBCCDD', 'nfc_hex', [], db())['kod'], 'personel_yok');
-dogrula('başarısız denemeler kart yaratmadı',
-    (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn(), 1);
+dogrula('başarısız denemeler yeni kart yaratmadı (Kart A + Kart B = 2, fazlası yok)',
+    (int)db()->query("SELECT COUNT(*) FROM employee_cards")->fetchColumn(), 2);
 
-echo "\n=== 8. 7 ve 10 BAYTLIK KARTLAR ===\n";
+echo "\n=== 9. 7 ve 10 BAYTLIK KARTLAR ===\n";
 $r7 = pdks_kart_olustur($empB, '04A2B3C4D5E6F0', 'nfc_hex', [], db());
 dogrula('7 baytlık kart oluştu', $r7['ok'], true);
 dogrula('  uid_bytes = 7',       $r7['uid_bytes'], 7);
@@ -226,13 +267,13 @@ dogrula('10 baytlık kart çözülüyor', (int)$c10['card']['id'], (int)$r10['ca
 $dec10 = db()->query("SELECT uid_decimal FROM employee_cards WHERE id = " . (int)$r10['card_id'])->fetchColumn();
 dogrula('10 bayt ondalığı 25 haneye sığdı', strlen((string)$dec10) <= 25, true);
 
-echo "\n=== 9. PALİNDROM UID — tek alias ===\n";
+echo "\n=== 10. PALİNDROM UID — tek alias ===\n";
 $rp = pdks_kart_olustur($empB, 'A5A5A5A5', 'nfc_hex', [], db());
 dogrula('palindrom kart oluştu', $rp['ok'], true);
 $pa = (int)db()->query("SELECT COUNT(*) FROM employee_card_uids WHERE card_id = " . (int)$rp['card_id'])->fetchColumn();
 dogrula('yalnız 1 alias yazıldı (çift kayıt yok)', $pa, 1);
 
-echo "\n=== 10. KART İPTALİ — geçmiş korunur ===\n";
+echo "\n=== 11. KART İPTALİ — geçmiş korunur ===\n";
 $ri = pdks_kart_iptal($kartA, 'kayip', 'Personel kartı kaybetti', 1, db());
 dogrula('iptal başarılı', $ri['ok'], true);
 $kart = db()->query("SELECT * FROM employee_cards WHERE id = $kartA")->fetch();
@@ -245,7 +286,7 @@ dogrula('iptal kart HÂLÂ çözülüyor (sessiz "tanımsız" değil)', (int)$ci
 dogrula('audit: card_revoke', in_array('card_revoke', array_column($GLOBALS['AUDIT'], 'action'), true), true);
 dogrula('aktif olmayan duruma iptal reddi', pdks_kart_iptal($kartA, 'aktif', 'x', 1, db())['ok'], false);
 
-echo "\n=== 11. PERSONEL SİLİNİRSE KART DA GİDER (FK CASCADE) ===\n";
+echo "\n=== 12. PERSONEL SİLİNİRSE KART DA GİDER (FK CASCADE) ===\n";
 $oncekiKart = (int)db()->query("SELECT COUNT(*) FROM employee_cards WHERE employee_id = $empC")->fetchColumn();
 dogrula('C personelinin kartı var', $oncekiKart, 1);
 db()->exec("DELETE FROM employees WHERE id = $empC");
@@ -255,7 +296,7 @@ dogrula('kartın aliasları da silindi',
     (int)db()->query("SELECT COUNT(*) FROM employee_card_uids u
                       LEFT JOIN employee_cards c ON c.id = u.card_id WHERE c.id IS NULL")->fetchColumn(), 0);
 
-echo "\n=== 12. YETKİ KAPISI ===\n";
+echo "\n=== 13. YETKİ KAPISI ===\n";
 $GLOBALS['PERMS'] = []; $GLOBALS['IS_ADMIN'] = false;
 dogrula('yetkisiz: read',      pdks_can('read'), false);
 dogrula('yetkisiz: cards',     pdks_can('cards'), false);
@@ -276,7 +317,7 @@ dogrula('bilinmeyen eylem (admin dışı)', (function () {
     $GLOBALS['IS_ADMIN'] = false; $r = pdks_can('uydurma'); $GLOBALS['IS_ADMIN'] = true; return $r;
 })(), false);
 
-echo "\n=== 13. MİGRASYON IDEMPOTENT ve HATAYA DAYANIKLI ===\n";
+echo "\n=== 14. MİGRASYON IDEMPOTENT ve HATAYA DAYANIKLI ===\n";
 $rap = pdks_migrate(db());
 $tabloAdlari = array_keys(pdks_tablolar());
 $tabloSat = array_values(array_filter($rap, fn($r) => in_array($r['tablo'], $tabloAdlari, true)));

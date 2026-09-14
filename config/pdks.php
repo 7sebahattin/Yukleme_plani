@@ -63,7 +63,31 @@ function pdks_kart_aktif_mi(?string $durum): bool { return $durum === 'aktif'; }
 // =========================================================
 // UID NORMALİZASYONU
 //
-// Faz 0'da (scripts/pdks_faz0_uid_kanit.php) 45/45 doğrulama ile kanıtlandı.
+// ⚠ FAZ 1 DÜZELTMESİ (bkz. docs/PDKS_FAZ1_SEMA.md §6a): İlk sürüm, bir kartın
+// kanonik UID'sinin BAYT-TERSİNİ otomatik olarak "aynı fiziksel kartın başka
+// bir gösterimi" sayıp ikinci bir alias olarak yazıyordu. BU YANLIŞTI: iki
+// FARKLI fiziksel kartın kanonik UID'leri birbirinin bayt-tersi OLABİLİR
+// (25A87ED7 ve D77EA825 gibi) ve otomatik ters-alias bu durumda ikinci,
+// gerçek kartın kaydını KÖRÜKÖRÜNE REDDEDERDİ. Üçüncü parti bir NFC
+// uygulamasının baytları ters sırada GÖSTERMESİ, o ters değerin aynı kartın
+// başka bir kimliği olduğunu KANITLAMAZ.
+//
+// DÜZELTİLMİŞ MODEL — dört kavram net ayrılır:
+//   • KANONİK UID           : kartın TEK gerçek kimliği (bu bölümün ürettiği değer)
+//   • KAYNAK GÖSTERİMİ       : bir okuma kaynağının (usb_decimal | nfc_hex) HAM çıktısı
+//   • GÖSTERİM (display)     : üçüncü parti bir uygulamanın ekranda seçtiği biçim
+//                              (büyük/küçük harf, ayraç, bayt sırası) — KİMLİK DEĞİL
+//   • BAYT SIRASI DÖNÜŞÜMÜ   : yalnız KAYNAK ADAPTÖRÜ içinde, Faz 0'ın GERÇEK Android
+//                              ölçümüne dayanarak, HER ZAMAN uygulanan tek yönlü ve
+//                              deterministik bir dönüşüm (aşağıda pdks_uid_hex_normalize
+//                              docblock'unda) — kart bazında SPEKÜLATİF ikinci bir
+//                              aday ÜRETMEZ.
+//
+// Her kaynak, her ham girdiyi TEK bir kanonik değere deterministik olarak
+// eşler. Bu eşleme sonradan Android ölçümü "aslında ters" derse KAYNAK
+// ADAPTÖRÜNÜN İÇİNDE değişir (tüm kartlar için tutarlı biçimde) — asla kart
+// bazında "belki tersi de odur" varsayımıyla değil.
+//
 // BURASI TEK OTORİTEDİR — Android istemci ve USB tanımlama ekranı yalnız
 // GÖSTERİM yapar, kanonik kararı her zaman sunucu verir.
 //
@@ -77,8 +101,17 @@ function pdks_kart_aktif_mi(?string $durum): bool { return $durum === 'aktif'; }
 // =========================================================
 
 /**
- * Ham HEX gösterimini kanona çevirir.
+ * NFC KAYNAK ADAPTÖRÜ — ham HEX gösterimini kanona çevirir.
  * Kabul: "25A87ED7" · "25a87ed7" · "25:A8:7E:D7" · "25-A8-7E-D7" · "25 A8 7E D7" · "0x25A87ED7"
+ * (Bunlar yalnız YAZIM farklarıdır — ayraç/büyük-küçük harf — bayt sırası DEĞİL.)
+ *
+ * ⚠ BAYT SIRASI VARSAYIMI: Şu an Android `Tag.getId()`'nin USB okuyucuyla AYNI
+ * bayt sırasında olduğunu varsayar (Faz 0 §5.4 "Durum A" beklentisi — HENÜZ
+ * gerçek cihazda doğrulanmadı, bkz. tools/nfc_uid_tani/). Gerçek ölçüm "Durum B"
+ * (ters sıra) çıkarsa, dönüşüm BURAYA (bu fonksiyona, tüm kartlar için tutarlı
+ * biçimde) eklenir — bir kartın kaydında "belki tersi de odur" diye ikinci bir
+ * aday ÜRETİLMEZ. Ölçüm sonucu docs/PDKS_NFC_FAZ0_DOGRULAMA.md §5'e işlenecek.
+ *
  * @return string|null Kanonik HEX veya geçersizse null.
  */
 function pdks_uid_hex_normalize(?string $ham): ?string
@@ -167,7 +200,16 @@ function pdks_uid_from_decimal(?string $ham, ?int $bayt = null): ?string
     return str_pad($hex, $bayt * 2, '0', STR_PAD_LEFT);
 }
 
-/** Kanonik HEX'i BAYT bazında ters çevirir (nibble değil). */
+/**
+ * Kanonik HEX'i BAYT bazında ters çevirir (nibble değil).
+ *
+ * ⚠ YALNIZ TEŞHİS/GÖSTERİM AMAÇLIDIR — kimlik eşleştirmede KULLANILMAZ
+ * (Faz 1 düzeltmesi, bkz. dosya başındaki "UID NORMALİZASYONU" bölümü).
+ * "Bu kartın tersi böyle görünür" diye Android teşhis ekranında veya bir
+ * çakışma uyarısında göstermek için kullanılabilir; ama pdks_kart_olustur()
+ * ve pdks_kart_cozumle() artık BUNU kimlik eşitliği saymaz — iki farklı
+ * fiziksel kartın kanonik UID'leri birbirinin bayt-tersi olabilir.
+ */
 function pdks_uid_reverse(string $kanonik): string
 {
     $out = '';
@@ -176,7 +218,17 @@ function pdks_uid_reverse(string $kanonik): string
 }
 
 /**
- * Bir okumadan üretilebilecek TÜM kanonik adaylar (alias aramasında kullanılır).
+ * Bir okumanın KANONİK karşılığını (varsa) tek elemanlı bir dizi olarak döner.
+ *
+ * Her kaynak, her ham girdiyi TEK bir kanonik değere deterministik olarak
+ * eşler — dizi biçimi `pdks_kart_cozumle()`'nin SQL `IN (...)` sorgusuyla
+ * uyumlu kalması içindir, "birden çok olası kimlik" ANLAMINA GELMEZ.
+ *
+ * ⚠ FAZ 1 DÜZELTMESİ: Önceki sürüm burada [kanon, ters(kanon)] döndürüyordu
+ * — yani bir kartın BAYT-TERSİNİ de "aynı kart" sayıyordu. Bu KALDIRILDI:
+ * D77EA825, 25A87ED7'nin bir başka gösterimi DEĞİL, potansiyel olarak
+ * TAMAMEN FARKLI bir fiziksel kartın kendi kanonik kimliğidir. Bkz.
+ * scripts/pdks_db_smoke.php "İKİ FARKLI FİZİKSEL KART" testi.
  *
  * ⚠ $kaynak ZORUNLUDUR ve ASLA TAHMİN EDİLMEZ (onaylanan karar #10).
  * Gerekçe (Faz 0 §4.4): "12345678" hem geçerli 4 baytlık HEX (0x12345678)
@@ -192,7 +244,7 @@ function pdks_uid_adaylari(string $ham, string $kaynak): array
         ? pdks_uid_from_decimal($ham)
         : pdks_uid_hex_normalize($ham);
     if ($k === null) return [];
-    return array_values(array_unique([$k, pdks_uid_reverse($k)]));         // palindrom → 1 eleman
+    return [$k];                                                          // TEK aday — bkz. yukarıdaki not
 }
 
 /** Kanoniğin bayt uzunluğu. */
@@ -279,8 +331,21 @@ function pdks_tablolar(): array
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
     // ── employee_card_uids — UID takma adları ────────────
-    // §5'in "631799511 / 25A87ED7 / D7:7E:A8:25 üçü de AYNI kart" şartını
-    // bir `if` bloğuna değil, VERİTABANI KISITINA dönüştürür.
+    // ⚠ FAZ 1 DÜZELTMESİ: Bu tablo ARTIK bir kartın kanonik UID'sinin
+    // bayt-tersini OTOMATİK olarak ikinci bir alias yazmaz (önceki sürüm
+    // yazıyordu — bkz. dosya başındaki "UID NORMALİZASYONU" bölümü). Şu an
+    // her kart için TEK satır yazılır: kind='canonical', uid_hex = kartın
+    // kendi kanonik değeri; bu, employee_cards.uid_hex ile 1:1 örtüşür.
+    //
+    // Tablo YİNE DE tutulur (silinmedi) — Faz 2+'da GERÇEKTEN meşru,
+    // KAYNAĞA dayalı ek gösterimler için: ör. bir personel aynı fiziksel
+    // kartı hem USB'den (usb_decimal) hem NFC'den (nfc_hex) tanımlarsa VE
+    // iki kaynak farklı ama DOĞRULANMIŞ bir dönüşümle aynı fiziksel karta
+    // işaret ediyorsa. Böyle bir satır YALNIZ açıkça öğrenilmiş/doğrulanmış
+    // bir eşleme olarak eklenir — asla "tersi de olabilir" varsayımıyla
+    // otomatik ÜRETİLMEZ. `kind` bu yüzden serbest bir metin alanıdır
+    // ('canonical' dışında bir değer, o satırın nasıl doğrulandığını
+    // açıklayan bir not taşımalıdır).
     $t['employee_card_uids'] = "CREATE TABLE IF NOT EXISTS `employee_card_uids` (
         `id`         INT AUTO_INCREMENT PRIMARY KEY,
         `card_id`    INT         NOT NULL,
@@ -458,7 +523,7 @@ function require_pdks(string $eylem): void
 // =========================================================
 
 /**
- * Bir okumayı fiziksel karta çözer (alias tablosu üzerinden).
+ * Bir okumayı fiziksel karta çözer (alias tablosu üzerinden, kanonik eşleşme).
  *
  * @param string $kaynak 'usb_decimal' | 'nfc_hex' — ZORUNLU, tahmin edilmez.
  * @return array|null ['card'=>..., 'employee'=>..., 'eslesen_uid'=>...] veya null
@@ -489,19 +554,25 @@ function pdks_kart_cozumle(string $ham, string $kaynak, ?PDO $pdo = null): ?arra
 }
 
 /**
- * Bir kanonik UID (veya tersi) başka bir karta ait mi?
+ * Bu KANONİK UID başka bir karta ait mi?
+ *
+ * ⚠ FAZ 1 DÜZELTMESİ: Yalnız TAM EŞLEŞME kontrol edilir. Önceki sürüm
+ * `pdks_uid_reverse($kanonik)`'i de çakışma sayıyordu — yani 25A87ED7'yi
+ * kaydederken D77EA825'in de "aynı kart" olduğunu varsayıp reddediyordu.
+ * Bu YANLIŞTI: D77EA825 tamamen farklı, gerçek bir fiziksel kart olabilir
+ * ve bu iki değerin AYNI ANDA, İKİ AYRI kart olarak var olabilmesi gerekir
+ * (bkz. scripts/pdks_db_smoke.php "İKİ FARKLI FİZİKSEL KART" testi).
+ *
  * @return array|null Çakışan kart satırı.
  */
 function pdks_uid_cakismasi(string $kanonik, ?int $haricCardId = null, ?PDO $pdo = null): ?array
 {
-    $pdo     = $pdo ?? db();
-    $adaylar = array_values(array_unique([$kanonik, pdks_uid_reverse($kanonik)]));
-    $ph      = implode(',', array_fill(0, count($adaylar), '?'));
-    $sql     = "SELECT c.*, u.uid_hex AS cakisan_uid
-                  FROM employee_card_uids u
-                  JOIN employee_cards c ON c.id = u.card_id
-                 WHERE u.uid_hex IN ($ph)";
-    $par = $adaylar;
+    $pdo = $pdo ?? db();
+    $sql = "SELECT c.*, u.uid_hex AS cakisan_uid
+              FROM employee_card_uids u
+              JOIN employee_cards c ON c.id = u.card_id
+             WHERE u.uid_hex = ?";
+    $par = [$kanonik];
     if ($haricCardId !== null) { $sql .= " AND c.id <> ?"; $par[] = $haricCardId; }
     $st = $pdo->prepare($sql . " LIMIT 1");
     $st->execute($par);
@@ -509,11 +580,17 @@ function pdks_uid_cakismasi(string $kanonik, ?int $haricCardId = null, ?PDO $pdo
 }
 
 /**
- * Kart oluşturur — kanonik kaydı + takma adları TEK İŞLEMDE yazar.
+ * Kart oluşturur — kanonik kaydı + kanonik alias'ı TEK İŞLEMDE yazar.
  *
  * ⚠ KART YAZMANIN TEK YOLU BUDUR. İkinci bir yazma yolu açmayın:
- *    alias'sız yazılan bir kart, ters gösterimle okutulduğunda BULUNAMAZ.
+ *    alias'sız yazılan bir kart, kendi kanonik değeriyle bile BULUNAMAZ.
  *    (halkayit/taslak_lib.php'deki "tek yazma yolu" kuralının aynısı.)
+ *
+ * ⚠ FAZ 1 DÜZELTMESİ: Artık kanoniğin bayt-tersini SPEKÜLATİF bir alias
+ * olarak YAZMAZ. Sebep: D77EA825, 25A87ED7'nin "başka bir gösterimi" değil,
+ * tamamen farklı bir fiziksel kartın olası kanonik kimliğidir — otomatik
+ * ters-alias, o GERÇEK ikinci kartın kaydını reddederdi. Bkz. dosya başındaki
+ * "UID NORMALİZASYONU" bölümü ve docs/PDKS_FAZ1_SEMA.md §6a.
  *
  * @param string $kaynak 'usb_decimal' | 'nfc_hex'
  * @return array{ok:bool, card_id?:int, uid_hex?:string, hata?:string, kod?:string}
@@ -540,7 +617,8 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
         return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'Personel bulunamadı.'];
     }
 
-    // Çakışma: kanonik VEYA tersi başka bir kartta olamaz (Faz 0 §4.7).
+    // Çakışma: yalnız TAM AYNI kanonik değer başka bir kartta olamaz.
+    // (Bayt-tersi ARTIK çakışma SAYILMAZ — o başka bir fiziksel kart olabilir.)
     $cakisma = pdks_uid_cakismasi($kanonik, null, $pdo);
     if ($cakisma !== null) {
         return ['ok' => false, 'kod' => 'uid_kullanimda',
@@ -549,7 +627,6 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
 
     $bayt    = pdks_uid_bayt_sayisi($kanonik);
     $ondalik = pdks_uid_to_decimal($kanonik);
-    $ters    = pdks_uid_reverse($kanonik);
 
     $disTx = $pdo->inTransaction();
     if (!$disTx) $pdo->beginTransaction();
@@ -574,9 +651,9 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
         ]);
         $cardId = (int)$pdo->lastInsertId();
 
+        // Yalnız KANONİK alias yazılır — bayt-tersi ARTIK otomatik yazılmaz (§ yukarısı).
         $ia = $pdo->prepare("INSERT INTO employee_card_uids (card_id, uid_hex, kind) VALUES (?,?,?)");
         $ia->execute([$cardId, $kanonik, 'canonical']);
-        if ($ters !== $kanonik) $ia->execute([$cardId, $ters, 'reversed']);   // palindrom değilse
 
         if (!$disTx) $pdo->commit();
     } catch (PDOException $e) {

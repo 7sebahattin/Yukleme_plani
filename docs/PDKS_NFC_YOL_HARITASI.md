@@ -17,17 +17,44 @@ Faz 0'ın bu belgeyi değiştiren bulguları:
 
 | Bulgu | Bu belgedeki etkisi |
 |---|---|
-| UID algoritması **kanıtlandı** (45/45; Faz 1'de `scripts/pdks_uid_smoke.php`, 57 test) | §C'deki iddiaların tamamı doğrulandı — değişiklik yok |
+| UID algoritması **kanıtlandı** (45/45; Faz 1'de `scripts/pdks_uid_smoke.php`) | §C'deki matematiksel iddialar doğrulandı. **Alias/eşleştirme mimarisi Faz 1'de sonradan düzeltildi — aşağıdaki ikinci banner'a ve §C.4'e bakın** |
 | 🔴 **YENİ KURAL:** UID kaynağı (hex/ondalık) otomatik tespit **edilemez** | §C.3'e ek: `pdks_uid_adaylari()` `$kaynak` parametresi ZORUNLU. `12345678` hem geçerli hex hem geçerli ondalık — tahmin iki kartı karıştırır |
 | ⚠ `bcmath`/`gmp` **yok** sayılmalı | Ondalık↔hex dönüşümünde `hexdec()`/`dechex()` **tam UID üzerinde kullanılamaz** (10 bayt = 80 bit, float'a düşer). Saf string aritmetiği zorunlu |
 | `uid_decimal` boyu | VARCHAR(24) → **VARCHAR(25)** (§D.2'de düzeltildi) |
 | Personel ↔ kullanıcı ilişkisi karara bağlandı | **`employees.user_id` NULL + UNIQUE** — bağlantı tablosu değil (Faz 0 §3.3) |
 | 🔴 **YENİ BLOKER:** `api_pdks.php auth/login` hız sınırı | §F.2 #12'ye ek: bu **yeni açtığımız** yüzeydir, "sonra yapılır" değildir. Önlem yeni tablo gerektirmez — `audit_log` üzerinden COUNT (Faz 0 §7.3) |
 | Zaman otoritesi | ⏳ MySQL ölçümü bekliyor. **Faz 1'i engellemiyor** (Faz 1'de puantaj zaman damgası yok), **Faz 2'yi bağlıyor** (Faz 0 §1.6) |
-| Android `getId()` sırası | ⏳ Teşhis APK'sı hazır (`tools/nfc_uid_tani/`). **Şemayı etkilemiyor** — alias tablosu iki durumu da karşılıyor (Faz 0 §5.5) |
+| Android `getId()` sırası | ⏳ Teşhis APK'sı hazır (`tools/nfc_uid_tani/`). **Şemayı etkilemiyor** — ölçüm sonucu tek bir kaynak adaptörüne (deterministik, tüm kartlar için aynı) işlenecek, bkz. aşağıdaki düzeltme banner'ı |
 
 **Faz 1 durumu: KOŞULLU HAZIR** — üç karar onayı bekliyor (Faz 0 §10.2):
 #2 tam TC saklansın mı · #1 kart devri 2 tablo mu · #11 `employees.user_id` yaklaşımı.
+
+---
+
+## ⛳ FAZ 1 UID MODELİ DÜZELTMESİ — 2026-09-14
+
+**Kayıt: [`docs/PDKS_FAZ1_SEMA.md`](PDKS_FAZ1_SEMA.md) §6a ("⚠ DÜZELTME — Otomatik bayt-tersi alias'ı KALDIRILDI")**
+
+Faz 1'in ilk teslimatı, §C.4'te aşağıda anlatılan iki-katmanlı alias modelini
+**fazla genelleştirmişti**: bir kartın kanonik UID'sinin **bayt-tersini** de
+otomatik olarak "aynı fiziksel kartın başka bir gösterimi" sayıp ikinci bir
+alias satırı yazıyordu. **Bu yanlıştı** — iki FARKLI fiziksel kartın kanonik
+UID'leri birbirinin bayt-tersi olabilir (bir tesadüf, kanıt değil) ve otomatik
+ters-alias, o gerçek ikinci kartın kaydını körü körüne reddederdi.
+
+**§C.4'ü okurken şunu unutmayın:** aşağıdaki "kanonik + ters çevrilmiş
+gösterim" örneği yalnız **tek bir kartın** `631799511` / `25A87ED7` gibi
+**yazım farklarını** (aynı baytlar, farklı gösterim) anlatır — `D7:7E:A8:25`
+gibi gerçekten **ters bayt sıralı** bir girdinin otomatik olarak aynı karta
+bağlanacağı iddiası artık **geçerli değildir**. Düzeltilmiş model,
+`docs/PDKS_FAZ1_SEMA.md` §6a'da tam olarak belgelenmiştir; kısaca:
+
+- `employee_card_uids` artık yalnız kartın **kendi kanoniğini** yazar (1 satır/kart).
+- Bayt sırası belirsizliği (Android `getId()` ölçümü), kart bazında değil,
+  **kaynak adaptörünün içinde**, tüm kartlar için tutarlı tek bir dönüşüm
+  olarak çözülecek.
+- Kanıt: `scripts/pdks_db_smoke.php` — `25A87ED7` ve `D77EA825` iki ayrı,
+  bağımsız kart olarak aynı anda kaydedilip doğru çözülüyor.
 
 ---
 
