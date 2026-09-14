@@ -179,6 +179,18 @@
     font-weight: 700;
 }
 
+/* ⚠ GEÇİCİ TEŞHİS PANELİ (giris_cikis.php) — canlı Web NFC sorunu
+   doğrulanana kadar. Kalıcı bir tasarım öğesi DEĞİLDİR. */
+.pdks-kiosk-nfc-debug {
+    margin: 8px auto 0; max-width: 100%; max-height: 110px; overflow-y: auto;
+    padding: 8px 10px; border-radius: var(--radius);
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .72rem; line-height: 1.4; text-align: left; color: var(--muted);
+    white-space: pre-wrap; word-break: break-word;
+}
+.pdks-kiosk-nfc-debug:empty { display: none; }
+
 @media (max-width: 639px) {
     .pdks-kiosk-scan {
         min-height: 56vh;
