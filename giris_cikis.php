@@ -89,7 +89,7 @@ echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime
 render_flash();
 ?>
 
-<div class="page-head">
+<div class="page-head" id="gcPageHead">
     <h1>🚪 Giriş / Çıkış</h1>
     <div class="page-head-actions">
         <a href="personel.php" class="btn btn-ghost">👤 Personeller</a>
@@ -122,7 +122,7 @@ render_flash();
         <div class="pdks-kiosk-scan-hint muted">USB okuyucuya okutun<span id="gcNfcHint"></span></div>
 
         <div id="gcNfcBtnWrap" hidden>
-            <button type="button" id="gcNfcBtn" class="btn btn-lg">📡 NFC İLE OKUT</button>
+            <button type="button" id="gcNfcBtn" class="btn btn-lg">📡 NFC İLE OKU</button>
         </div>
 
         <!-- USB HID girişi — görsel olarak gizli ama HER ZAMAN odaklı -->
@@ -144,6 +144,7 @@ render_flash();
 
     var csrf = document.getElementById('gcCsrf').value;
 
+    var pageHead  = document.getElementById('gcPageHead');
     var modeSec   = document.getElementById('gcModeSec');
     var scanSec   = document.getElementById('gcScanSec');
     var modeBadge = document.getElementById('gcModeBadge');
@@ -171,6 +172,14 @@ render_flash();
         modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF[mod];
         modeSec.hidden = true;
         scanSec.hidden = false;
+        // Mobilde üst başlık/eylem şeridi tarama ekranında yer kaplamasın diye
+        // gizlenir (mod seçim ekranına dönünce geri gelir) — "KARTINIZI
+        // OKUTUN" kaydırmadan tam görünsün diye (yalnız BU sayfaya özel,
+        // paylaşılan .page-head CSS'i değişmedi).
+        // ⚠ .page-head sınıfı `display:flex` TAŞIR — `hidden` özniteliği TEK
+        // BAŞINA onu gizleyemez (maliyet.css'teki aynı [hidden] tuzağı, bkz.
+        // CLAUDE.md). style.display'i doğrudan değiştiriyoruz.
+        if (pageHead) pageHead.style.display = 'none';
         scanInput.value = '';
         resultBox.hidden = true;
         focusInput();
@@ -183,6 +192,7 @@ render_flash();
         currentMode = null;
         scanSec.hidden = true;
         modeSec.hidden = false;
+        if (pageHead) pageHead.style.display = '';
     });
 
     // Sayfa herhangi bir yere tıklanınca da odak USB kutusuna dönsün
@@ -234,7 +244,7 @@ render_flash();
         return d.innerHTML;
     }
 
-    function kaydet(hamUid, kaynak) {
+    function kaydet(hamUid, kaynak, nfcOkumasiMi) {
         if (busy || !currentMode) return;
         var deger = String(hamUid || '').trim();
         if (deger === '') return;
@@ -249,11 +259,15 @@ render_flash();
                 busy = false;
                 if (d && d.ok) basariGoster(d); else hataGoster(d && d.hata);
                 focusInput();
+                // Bu okuma NFC'den geldiyse, bir sonraki personel için oturumu
+                // SESSİZCE yeniden silahlandırmayı dener (bkz. nfcBaslat).
+                if (nfcOkumasiMi) nfcBaslat(true);
             })
             .catch(function () {
                 busy = false;
                 hataGoster('Bağlantı hatası. Tekrar deneyin.');
                 focusInput();
+                if (nfcOkumasiMi) nfcBaslat(true);
             });
     }
 
@@ -288,28 +302,75 @@ render_flash();
     // sunucuya (kaynak=web_nfc ile) gönderilir; kanonikleştirme HER ZAMAN
     // sunucuda pdks_uid_from_web_nfc() ile yapılır (TEK OTORİTE — bkz.
     // config/pdks.php "UID NORMALİZASYONU" bölümü).
-    var nfcDestekli = ('NDEFReader' in window) && !!window.isSecureContext;
+    //
+    // ⚠ OTURUM YAŞAM DÖNGÜSÜ: Chrome/Android'in Web NFC oturumu, sekme kısa
+    // süreliğine arka plana alınırsa (ör. Android'in kendi NFC/izin
+    // diyaloğu) SESSİZCE sonlanabilir — bu durumu JS'e bildiren bir olay
+    // YOKTUR. Bu yüzden: (1) her BAŞARILI okumadan sonra oturum SESSİZCE
+    // yeniden silahlandırılmaya çalışılır (bkz. kaydet()'teki nfcBaslat(true)
+    // çağrısı), (2) sekme yeniden görünür olduğunda da aynısı denenir,
+    // (3) sessiz deneme BAŞARISIZ olursa (Chrome yeni bir kullanıcı
+    // dokunuşu istiyorsa) buton AÇIKÇA "📡 NFC İLE OKU" durumuna döner —
+    // asla sessizce başarısız kalmaz, kullanıcı her zaman ne yapması
+    // gerektiğini ekrandan görür.
+    var nfcDestekli  = ('NDEFReader' in window) && !!window.isSecureContext;
+    var ndefOkuyucu  = null;
     var nfcListening = false;
+    var NFC_ETIKET_HAZIR   = '📡 NFC İLE OKU';
+    var NFC_ETIKET_DINLEME = '🟢 NFC HAZIR — KARTI YAKLAŞTIRIN';
+
+    function nfcDurumGuncelle(dinliyorMu) {
+        nfcListening = dinliyorMu;
+        nfcBtn.textContent = dinliyorMu ? NFC_ETIKET_DINLEME : NFC_ETIKET_HAZIR;
+        nfcBtn.disabled = false;   // dinlerken de görünür/anlaşılır kalsın — kilitlenmiş gibi görünmesin
+        nfcBtn.classList.toggle('pdks-kiosk-nfc-armed', dinliyorMu);
+    }
+
+    // @param sessiz true ise (otomatik yeniden silahlanma denemesi) başarısızlık
+    //   durumunda HATA EKRANI GÖSTERMEZ — yalnız butonu "tekrar dokunun"
+    //   durumuna sessizce döndürür (az önceki başarı/hata sonucunun üstüne
+    //   gereksiz bir ikinci mesaj bindirmemek için). Kullanıcının doğrudan
+    //   BUTONA dokunmasıyla tetiklenen denemede (sessiz=false) başarısızlık
+    //   açıkça Türkçe hata olarak gösterilir.
+    function nfcBaslat(sessiz) {
+        if (!ndefOkuyucu) {
+            ndefOkuyucu = new NDEFReader();
+            ndefOkuyucu.addEventListener('reading', function (ev) {
+                var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
+                if (ham !== '') kaydet(ham, 'web_nfc', true);
+            });
+            ndefOkuyucu.addEventListener('readingerror', function () {
+                hataGoster('NFC okuma hatası — kartı tekrar yaklaştırın.');
+            });
+        }
+        return ndefOkuyucu.scan().then(function () {
+            nfcDurumGuncelle(true);
+            return true;
+        }).catch(function (err) {
+            nfcDurumGuncelle(false);
+            if (!sessiz) {
+                hataGoster('NFC başlatılamadı. NFC İLE OKU butonuna tekrar dokunun.');
+            }
+            return false;
+        });
+    }
+
     if (nfcDestekli) {
         nfcBtnWrap.hidden = false;
         nfcHint.textContent = ' veya NFC ile telefonun arkasına yaklaştırın';
+        nfcDurumGuncelle(false);
+
         nfcBtn.addEventListener('click', function () {
-            if (nfcListening) return;
-            var ndef = new NDEFReader();
-            ndef.addEventListener('reading', function (ev) {
-                var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
-                if (ham !== '') kaydet(ham, 'web_nfc');
-            });
-            ndef.addEventListener('readingerror', function () {
-                hataGoster('NFC okuma hatası — kartı tekrar yaklaştırın.');
-            });
-            ndef.scan().then(function () {
-                nfcListening = true;
-                nfcBtn.textContent = '📡 NFC DİNLENİYOR…';
-                nfcBtn.disabled = true;
-            }).catch(function (err) {
-                hataGoster('NFC başlatılamadı: ' + (err && err.message ? err.message : String(err)));
-            });
+            if (nfcListening) return;   // zaten dinlemede — tekrar dokunmaya gerek yok
+            nfcBaslat(false);
+        });
+
+        // Sekme arka plandan geri geldiğinde, oturumun hâlâ ayakta olduğundan
+        // emin olunamaz (bkz. yukarıdaki not) — sessizce yeniden dener.
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && nfcListening) {
+                nfcBaslat(true);
+            }
         });
     }
 })();
