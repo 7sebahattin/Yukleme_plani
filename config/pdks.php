@@ -1263,3 +1263,82 @@ function pdks_avatar_html(string $adSoyad, ?string $fotoFile, ?string $fotoGunce
     if ($harfler === '') $harfler = '?';
     return '<span class="' . h($sinif) . ' ' . h($sinif) . '-bos" aria-hidden="true">' . h($harfler) . '</span>';
 }
+
+/**
+ * ORTAK WEB NFC OKUMA YOLU — `window.PdksNfcOku` global'ini basar.
+ *
+ * ⚠ BU, GERÇEK CİHAZDA KANITLANMIŞ DİZİNİN TEK KOPYASIDIR. Kaynağı
+ * pdks_nfc_test.php'nin (teşhis sayfası) çalışan okuma bloğudur; o sayfa
+ * gerçek bir Android telefonda gerçek bir personel kartını okuyup
+ * `serialNumber = d7:7e:a8:25` döndürdüğü GÖZLENEREK doğrulanmıştır.
+ * giris_cikis.php kendi Web NFC varyantını taşıyordu ve AYNI telefonda
+ * HİÇ ÇALIŞMIYORDU (canlı hata). Artık İKİ SAYFA DA buradan geçer —
+ * ikinci bir okuma yolu AÇMAYIN, iki yol ayrışır ve ayrışan taraf
+ * sessizce ölür (aynı gerekçe: halkayit/taslak_lib.php'nin "taslak
+ * yazmanın TEK yolu" kuralı).
+ *
+ * Dizi AYNEN korunmalıdır — sırası ölçülmüş davranışın parçasıdır:
+ *   kullanıcı tıklaması → new NDEFReader() → 'reading' dinleyicisi
+ *   → 'readingerror' dinleyicisi → scan() → then/catch
+ *
+ * ÖZELLİKLE YOK, BİLEREK:
+ *  • AbortController / `scan({signal})` — okuma sonrası abort() edilen
+ *    sürüm canlıda Chrome'un NFC dispatch kaydını düşürüyor, Android'in
+ *    kendi "Etiket algılandı" arayüzü devreye giriyordu. Teşhis sayfası
+ *    scan()'ı ARGÜMANSIZ çağırır ve oturumu HİÇ kapatmaz.
+ *  • Otomatik yeniden-scan() — scan() yalnız gerçek bir kullanıcı
+ *    dokunuşunun İÇİNDE çağrılır ("transient activation").
+ *  • scan() ÇÖZÜLMEDEN buton pasifleştirme — reddedilirse kullanıcı
+ *    tekrar dokunabilmelidir.
+ * Bunları geri eklemek, düzeltilen canlı hatayı geri getirir.
+ *
+ * Neden harici bir .js dosyası DEĞİL: satır içi basıldığında helper,
+ * onu kullanan script'ten AYRI bir istekle gelmez — yani "dosya gelmedi /
+ * geç geldi" diye PdksNfcOku tanımsız olamaz, iki sayfada da BİREBİR aynı
+ * baytlar bulunur ve sürüm/önbellek eşitlemesi gereken yeni bir varlık
+ * doğmaz. (pdks_avatar_html() emsali: bu dosya zaten istemci tarafı çıktı
+ * üretir.) Not: sw.js ağ-öncelikli (network-first) çalışır, dolayısıyla
+ * bayat önbellek tek başına gerekçe DEĞİLDİR — gerekçe tek kopya olmasıdır.
+ *
+ * Kullanım — çağıran sayfa YALNIZ kendi arayüzünü yönetir:
+ *   PdksNfcOku.destekli()                  → bool
+ *   PdksNfcOku.baslat({ onOkuma, onOkumaHatasi, onBasladi, onHata })
+ */
+function pdks_nfc_oku_js(): void
+{
+    static $yazildi = false;
+    if ($yazildi) return;   // sayfada birden çok kez çağrılsa da tek kopya
+    $yazildi = true;
+    echo <<<'JS'
+<script>
+/* Ortak Web NFC okuma yolu — TEK KOPYA (config/pdks.php: pdks_nfc_oku_js).
+   Diziyi değiştirmeyin; bkz. oradaki not. */
+window.PdksNfcOku = (function () {
+    'use strict';
+
+    function destekli() {
+        return ('NDEFReader' in window) && !!window.isSecureContext;
+    }
+
+    // Yalnız bir kullanıcı hareketinin (tıklama/dokunuş) İÇİNDEN çağrılmalıdır.
+    function baslat(cb) {
+        if (!('NDEFReader' in window)) {
+            cb.onHata('NotSupportedError', 'Bu tarayıcı NDEFReader desteklemiyor.');
+            return;
+        }
+        var ndef = new NDEFReader();
+        ndef.addEventListener('reading', function (ev) { cb.onOkuma(ev); });
+        ndef.addEventListener('readingerror', function () { cb.onOkumaHatasi(); });
+        ndef.scan().then(function () {
+            cb.onBasladi();
+        }).catch(function (err) {
+            cb.onHata(err && err.name ? err.name : 'Hata',
+                      err && err.message ? err.message : String(err));
+        });
+    }
+
+    return { destekli: destekli, baslat: baslat };
+})();
+</script>
+JS;
+}
