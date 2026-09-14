@@ -60,6 +60,24 @@ ok('helpers.php: sidebar bağlantısı attendance.daily_scan iznine bağlı',
 ok('Yalnız TEK yeni izin eklendi (attendance.daily_scan) — hakediş/ödeme izni YOK',
     !preg_match('/attendance\.(pay|payment|hakedis|price|rate)/i', $helpersSrc));
 
+echo "\n=== 2b. GÜVENLİK/OPERASYON ROLÜ DÜZELTMESİ (kullanıcının açık talimatı #2, Faz 2 düzeltme turu) ===\n";
+// Repoda ayrı bir 'guvenlik'/'security' rolü YOK — kullanıcı "yoksa sessizce
+// icat etme" dediği için YENİ bir rol AÇILMADI; taramayı sahada asıl yapacak
+// GÜVENLİK personeli en yakın MEVCUT operasyonel role ('operator') tek bir
+// izinle eklendi.
+ok("helpers.php: 'operator' rolüne attendance.daily_scan verildi (sahadaki güvenlik/operasyon taramayı yapabilsin)",
+    (bool)preg_match("/'operator'\s*=>\s*\[[^\]]*attendance\.daily_scan/s", $helpersSrc));
+preg_match("/'operator'\s*=>\s*\[([^\]]*)\]/s", $helpersSrc, $opM);
+$operatorIzinleri = $opM[1] ?? '';
+ok("'operator' izin listesi çıkarılabildi", $operatorIzinleri !== '');
+ok("'operator' rolüne çavuş YÖNETİMİ verilMEDİ (attendance.foremen YOK)", !str_contains($operatorIzinleri, 'attendance.foremen'));
+ok("'operator' rolüne işçi kartı YÖNETİMİ verilMEDİ (attendance.worker_cards YOK)", !str_contains($operatorIzinleri, 'attendance.worker_cards'));
+ok("'operator' rolüne muhasebe/admin izni verilMEDİ (users.admin YOK)", !str_contains($operatorIzinleri, 'users.admin'));
+ok("'operator' rolüne hesap.approve/pay/delete/admin verilMEDİ (yalnız minimum tarama izni eklendi)",
+    !preg_match('/hesap\.(approve|pay|delete|admin)/', $operatorIzinleri));
+ok('bu düzeltmenin gerekçesi ("guvenlik"/"security" rolü yokluğu ve neden operator seçildiği) yorumla belgelendi',
+    (bool)preg_match('/g[uü]venlik/iu', $helpersSrc) && str_contains($helpersSrc, "'operator'"));
+
 echo "\n=== 3. NORMAL SAYFA ZİYARETİNDE DDL YOK (görev madde 19 — Faz 1 kuralıyla AYNI) ===\n";
 ok('gunluk_isci_giris_cikis.php: pdks_gunluk_migrate() ÇAĞRILMIYOR', !str_contains($src, 'pdks_gunluk_migrate('));
 ok('gunluk_isci_giris_cikis.php: pdks_gunluk_sayfa_kapisi() ÇAĞRILIYOR (Faz 1\'in güvenli-başarısızlık kapısı REUSE edildi)',
@@ -144,6 +162,41 @@ preg_match('/\$t\[\'daily_work_sessions\'\]\s*=\s*"(.*?)";/s', $gunlukSrc, $sess
 $sessDdl = $sessDdlM[1] ?? '';
 ok('daily_work_sessions DDL gövdesi çıkarılabildi', $sessDdl !== '');
 ok('UNIQUE(foreman_id, work_date, depo) kısıtı var', (bool)preg_match('/UNIQUE KEY `uq_dws_foreman_date_depo` \(`foreman_id`, `work_date`, `depo`\)/', $sessDdl));
+
+echo "\n=== 11. GÜNLÜK KART TEKİLLİĞİ — BİR İŞÇİ KARTI = BİR İŞÇİ / İŞ GÜNÜ (kullanıcının açık düzeltmesi #1) ===\n";
+// worker_cards.status HÂLÂ yalnız available/lost/disabled olmalı — "kullanımda"
+// bilgisi (ne SEANS içi ne GÜNLÜK) asla kalıcı bir kart durumu olarak
+// eklenmedi; bugünkü kullanım daima olay satırlarından TÜRETİLİR.
+preg_match('/function pdks_gunluk_kart_durumlari\(\): array\s*\{(.*?)\n\}/s', $gunlukSrc, $durumM);
+$kartDurumGovde = $durumM[1] ?? '';
+ok('pdks_gunluk_kart_durumlari() gövdesi çıkarılabildi', $kartDurumGovde !== '');
+ok("pdks_gunluk_kart_durumlari() DÖNÜŞ DEĞERİNDE 'in_use' anahtarı YOK (Faz 1 kararının Faz 2'de de korunduğu — yalnız açıklayıcı yorumlarda geçebilir)",
+    !preg_match("/'in_use'/", $kartDurumGovde));
+ok("pdks_gunluk_kart_durumlari() DÖNÜŞ DEĞERİNDE used_today/gun_kullanildi gibi KALICI bir \"bugün kullanıldı\" bayrağı YOK (türetilir, saklanmaz)",
+    !preg_match('/used_today|gun_kullanildi|kullanildi_bugun/i', $kartDurumGovde));
+ok('daily_worker_card_events DDL gövdesi çıkarılabildi (bkz. bölüm 6)', $eventDdl !== '');
+ok('work_date_snapshot sütunu eklendi (gün bazlı kısıt için kart olayına DAMGALANIR)', str_contains($eventDdl, '`work_date_snapshot`'));
+ok('depo_snapshot sütunu eklendi (gün+depo bazlı kısıt için)', str_contains($eventDdl, '`depo_snapshot`'));
+ok('UNIQUE(worker_card_id, work_date_snapshot, depo_snapshot, event_type) kısıtı VAR — "1 kart = 1 işçi/iş günü" kuralının DB SEVİYESİNDE garantisi',
+    (bool)preg_match('/UNIQUE KEY `uq_dwce_card_day_depo_type` \(`worker_card_id`, `work_date_snapshot`, `depo_snapshot`, `event_type`\)/', $eventDdl));
+ok('pdks_gunluk_oturum_kaydet() GİRİŞ dalında pdks_gunluk_kart_gun_kullanimi() ile ÖN-KONTROL yapıyor (dostça hata mesajı için, DB kısıtından ÖNCE)',
+    (bool)preg_match('/function pdks_gunluk_oturum_kaydet.*?pdks_gunluk_kart_gun_kullanimi\(/s', $gunlukSrc));
+ok("hata kodu 'bugun_kullanilmis' tanımlı (aynı gün/aynı veya başka çavuş fark etmeksizin reddin ortak kodu)",
+    str_contains($gunlukSrc, "'bugun_kullanilmis'"));
+ok('INSERT try/catch İLE sarılı — eşzamanlı taramada UNIQUE kısıt ihlali de aynı dostça koda ÇEVRİLİYOR (yarış koşulu son çaresi)',
+    (bool)preg_match('/try\s*\{\s*\$ins->execute\(\[[\s\S]{0,400}?\}\s*catch\s*\(PDOException/', $gunlukSrc));
+
+echo "\n=== 12. SAYAÇ/RAPOR KURALI: BENZERSİZ KART, HAM SATIR SAYISI DEĞİL (kullanıcının açık talimatı) ===\n";
+preg_match('/function pdks_gunluk_oturum_ozet.*?\n\}/s', $gunlukSrc, $ozetM);
+$ozetGovde = kodSadece($ozetM[0] ?? '');
+ok('pdks_gunluk_oturum_ozet() gövdesi çıkarılabildi', $ozetGovde !== '');
+ok('GİRİŞ sorgusu COUNT(DISTINCT worker_card_id) + event_type=GIRIS birlikte geçiyor',
+    (bool)preg_match("/COUNT\(DISTINCT worker_card_id\)[\s\S]{0,120}event_type = 'GIRIS'/", $ozetGovde));
+ok('ÇIKIŞ sorgusu COUNT(DISTINCT worker_card_id) + event_type=CIKIS birlikte geçiyor',
+    (bool)preg_match("/COUNT\(DISTINCT worker_card_id\)[\s\S]{0,120}event_type = 'CIKIS'/", $ozetGovde));
+ok('COUNT(DISTINCT worker_card_id) toplamda EN AZ 2 kez kullanılıyor (GİRİŞ+ÇIKIŞ)',
+    substr_count($ozetGovde, 'COUNT(DISTINCT worker_card_id)') >= 2);
+ok('sayaç mantığında ham COUNT(*) YOK (yalnız benzersiz kart sayımı)', !preg_match('/COUNT\(\*\)/', $ozetGovde));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

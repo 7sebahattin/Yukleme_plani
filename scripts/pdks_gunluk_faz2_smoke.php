@@ -231,19 +231,72 @@ ok('Mehmet\'in oturumunda K002 GİRİŞİ REDDEDİLDİ (Ayşe\'de aktif)', $bask
 ok('hata kodu baska_cavusta_aktif', $baska['kod'] === 'baska_cavusta_aktif');
 ok('hata mesajı ÇAVUŞ ADINI içeriyor (Ayşe Çavuş)', str_contains($baska['hata'], 'Ayşe Çavuş'));
 
-echo "\n=== 9. ÇIKIŞ SONRASI KART OPERASYONEL SERBEST (AYNI oturumda bile) ===\n";
-// K001 bölüm 7'de ÇIKMIŞTI — AYNI oturumda (Ayşe) TEKRAR GİREBİLMELİ
-// (kullanıcının açık talimatı: "After valid CIKIS: the card becomes
-// operationally free again" — bu, YALNIZ başka oturumlar için değil, AYNI
-// oturumda yeniden giriş için de geçerlidir; çıkış-giriş DÖNGÜSÜ serbesttir).
-$yenidenGiris = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $ayseSessionId, 'GIRIS', 1, db());
-ok('ÇIKMIŞ kart AYNI oturumda TEKRAR GİREBİLİYOR', $yenidenGiris['ok'] === true, json_encode($yenidenGiris));
-// Temizlik — sonraki bölümler için tekrar çıkar.
-pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $ayseSessionId, 'CIKIS', 1, db());
-// Ve şimdi Mehmet'in oturumunda GERÇEKTEN serbest mi (başka çavuşta da)?
-$digerCavusSerbest = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $mehmetSessionId, 'GIRIS', 1, db());
-ok('ÇIKMIŞ kart BAŞKA çavuşun oturumunda da serbestçe GİREBİLİYOR', $digerCavusSerbest['ok'] === true, json_encode($digerCavusSerbest));
-pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $mehmetSessionId, 'CIKIS', 1, db());   // temizlik
+echo "\n=== 9. DÜZELTME: BİR İŞÇİ KARTI = BİR İŞÇİ / İŞ GÜNÜ ===\n";
+// ⚠ DÜZELTME (kullanıcının açık talimatı #1, Faz 2 düzeltme turu): eski bu
+// bölüm "ÇIKIŞ sonrası kart AYNI GÜN serbestçe tekrar girebilir" iddiasını
+// test ediyordu — kullanıcı bunun YANLIŞ olduğunu, fazla kafa sayısı/ileride
+// hakediş şişmesine yol açacağını açıkça belirtti. K001 bölüm 7'de
+// GİRİŞ+ÇIKIŞ yaptı — bugün (bu iş günü + bu depo) için TÜKENDİ; ne AYNI
+// çavuşta ne BAŞKA çavuşta yeniden GİREBİLİR. Serbestlik YALNIZ bir SONRAKİ
+// work_date'te (bkz. 9b).
+$tekrarAyniCavus = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $ayseSessionId, 'GIRIS', 1, db());
+ok('K001 AYNI gün / AYNI çavuşta (Ayşe) tekrar GİRİŞ REDDEDİLDİ', $tekrarAyniCavus['ok'] === false, json_encode($tekrarAyniCavus));
+ok('hata kodu bugun_kullanilmis', $tekrarAyniCavus['kod'] === 'bugun_kullanilmis');
+ok('hata mesajı ÖNCEKİ çavuş adını içeriyor (Ayşe Çavuş)', str_contains($tekrarAyniCavus['hata'], 'Ayşe Çavuş'));
+ok('hata mesajı Giriş saatini içeriyor', str_contains($tekrarAyniCavus['hata'], 'Giriş:'));
+ok('hata mesajı Çıkış saatini içeriyor', str_contains($tekrarAyniCavus['hata'], 'Çıkış:'));
+ok('dönen "onceki" bloğu çavuş adını taşıyor (arayüz için)', $tekrarAyniCavus['onceki']['foreman_name'] === 'Ayşe Çavuş');
+
+echo "\n--- 9a. AYNI kart / AYNI gün / BAŞKA çavuşta da REDDEDİLİR ---\n";
+$tekrarBaskaCavus = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $mehmetSessionId, 'GIRIS', 1, db());
+ok('K001 AYNI gün / BAŞKA çavuşta (Mehmet) tekrar GİRİŞ de REDDEDİLDİ', $tekrarBaskaCavus['ok'] === false, json_encode($tekrarBaskaCavus));
+ok('hata kodu yine bugun_kullanilmis (hangi çavuş olduğu fark etmiyor)', $tekrarBaskaCavus['kod'] === 'bugun_kullanilmis');
+
+echo "\n--- 9b. AYNI kart BİR SONRAKİ iş gününde (yarın) yeniden kullanılabiliyor ---\n";
+// pdks_gunluk_oturum_ac_veya_getir() SUNUCU tarihini (date('Y-m-d')) kullanır
+// ve istemciden/testten bir tarih ALMAZ (kasıtlı — bkz. bölüm 15). "Yarın"ı
+// test etmek için oturum satırı BURADA doğrudan eklenir (fonksiyon
+// ATLANARAK) — bu YALNIZCA test kurgusu içindir, üretim kodunda böyle bir
+// yol yoktur ve normal akış her zaman pdks_gunluk_oturum_ac_veya_getir()'den geçer.
+$yarin = date('Y-m-d', strtotime('+1 day'));
+$insYarin = db()->prepare(
+    "INSERT INTO daily_work_sessions (foreman_id, work_date, depo, status, opened_at, opened_by_user_id)
+     VALUES (?,?,?,?,?,?)"
+);
+$insYarin->execute([$ayseId, $yarin, 'Depo A', 'open', $yarin . ' 08:00:00', 1]);
+$yarinkiSessionId = (int)db()->lastInsertId();
+$yarinGiris = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $yarinkiSessionId, 'GIRIS', 1, db());
+ok('K001 BİR SONRAKİ iş gününde (yarın) tekrar GİRİŞ YAPABİLİYOR', $yarinGiris['ok'] === true, json_encode($yarinGiris));
+$yarinCikis = pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $yarinkiSessionId, 'CIKIS', 1, db());
+ok('K001 yarınki oturumda ÇIKIŞ da yapabiliyor', $yarinCikis['ok'] === true, json_encode($yarinCikis));
+
+echo "\n--- 9c. SAYAÇ/RAPOR KURALI: benzersiz kart, ham satır sayısı DEĞİL ===\n";
+// Kullanıcının açık talimatı: "Make this invariant explicit in backend
+// logic and tests." — pdks_gunluk_oturum_ozet() zaten COUNT(DISTINCT
+// worker_card_id) kullanıyor (bölüm 4'te 3 farklı kart → toplam 3
+// doğrulandı). Burada ayrıca AYNI kart/gün/depo/yön için İKİNCİ bir olay
+// satırının DB SEVİYESİNDE de (session'dan bağımsız) İMKANSIZ olduğu
+// kanıtlanır — yani sayaç mantığının COUNT(*) ile COUNT(DISTINCT) arasında
+// pratikte hiç ayrışamayacağı, kaza eseri değil YAPISAL bir garanti.
+$stDupGiris = db()->prepare(
+    "INSERT INTO daily_worker_card_events
+        (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,
+         worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot,
+         recorded_by_user_id, server_event_time)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+);
+$mukerrerSatirEngellendi = false;
+try {
+    // K002 bölüm 4'te Ayşe'nin oturumunda GİRİŞ yaptı (hâlâ içeride) — AYNI
+    // kart/gün/depo/yön için BAŞKA bir session_id'den (Mehmet'in oturumu)
+    // ikinci bir GİRİŞ satırı eklemeyi dener.
+    $stDupGiris->execute([$mehmetSessionId, (int)$k2['card_id'], 'GIRIS', 'usb_decimal', 'ZZZZZZZZ',
+        $kadinId, 'Kadın', date('Y-m-d'), 'Depo A', 1, date('Y-m-d H:i:s')]);
+} catch (PDOException $e) {
+    $mukerrerSatirEngellendi = true;
+}
+ok('AYNI kart/gün/depo/yön için İKİNCİ olay satırı DB SEVİYESİNDE (uq_dwce_card_day_depo_type) İMKANSIZ',
+    $mukerrerSatirEngellendi === true);
 
 echo "\n=== 10. KAYIP/DEVRE DIŞI KART REDDİ (yalnız GİRİŞ) ===\n";
 $k4 = kartEkle('K004', $kadinId, '222333444');
@@ -324,6 +377,22 @@ ok('K009\'un GİRİŞ satırı SİLİNMEDİ (hâlâ 1 giriş kaydı)', (int)$stK
 echo "\n--- 14a. Kapalı oturuma yeni tarama denemesi net biçimde reddedilir ---\n";
 $kapaliTarama = pdks_gunluk_oturum_kaydet('999000111', 'usb_decimal', $ayseSessionId, 'CIKIS', 1, db());
 ok('kapalı oturuma tarama REDDEDİLİR', $kapaliTarama['ok'] === false && $kapaliTarama['kod'] === 'oturum_kapali');
+
+echo "\n--- 14b. Eksik-çıkışla kapatılan oturumdaki kart AYNI GÜN yeni bir işçi olarak KULLANILAMAZ ---\n";
+// ⚠ Kullanıcının açık talimatı: "closing with a missing exit must NOT make
+// the card reusable as a new worker later that same day; it becomes
+// reusable automatically on the next work_date." K009 bölüm 13/14'te
+// GİRİŞ yaptı, HİÇ ÇIKMADI ve oturumu gerekçeyle KAPATILDI (Ayşe/Mehmet
+// bugün için artık kapalı — bu yüzden TAZE bir üçüncü çavuşla, AYNI iş
+// gününde deneriz).
+$zeynepId = cavusEkle('C004', 'Zeynep Çavuş');
+$oZeynep = pdks_gunluk_oturum_ac_veya_getir($zeynepId, 1, db());
+ok('Zeynep için (üçüncü, taze) oturum açıldı', $oZeynep['ok'] === true, json_encode($oZeynep));
+$k009YenidenGiris = pdks_gunluk_oturum_kaydet('999000111', 'usb_decimal', (int)$oZeynep['session']['id'], 'GIRIS', 1, db());
+ok('K009 (eksik-çıkışla kapanmış oturumdan) AYNI gün YENİ ÇAVUŞTA GİRİŞ YAPAMIYOR — kart kapatmayla SERBEST KALMADI',
+    $k009YenidenGiris['ok'] === false, json_encode($k009YenidenGiris));
+ok('reddin sebebi hâlâ o günkü kullanım/aktiflik (bugun_kullanilmis veya baska_cavusta_aktif) — asla "ok"=true DEĞİL',
+    in_array($k009YenidenGiris['kod'], ['bugun_kullanilmis', 'baska_cavusta_aktif'], true));
 
 echo "\n=== 15. SUNUCU-YETKİLİ ZAMAN DAMGALARI ===\n";
 $rf = new ReflectionFunction('pdks_gunluk_oturum_kaydet');

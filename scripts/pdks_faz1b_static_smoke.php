@@ -201,6 +201,11 @@ $beklenenEskiSatirlar = [
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards'))) || \$p_adm;",
     "-                       'attendance.foremen','attendance.worker_cards'];",
     "-                               'attendance.foremen','attendance.worker_cards'],",
+    // Faz 2 düzeltme turu (kullanıcının açık talimatı #2 — güvenlik/operasyon
+    // rolü): 'operator' rolünün tek satırlık literal dizisine YALNIZ
+    // attendance.daily_scan eklendi (çavuş/kart/muhasebe/admin izni YOK) —
+    // git diff bu TEK satırı da "silinip yeniden yazılmış" gösterir.
+    "-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

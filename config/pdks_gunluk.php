@@ -215,6 +215,21 @@ function pdks_gunluk_tablolar(): array
     // GERİYE DOĞRU hesaplanmaz. worker_type_id_snapshot'a BİLEREK FK
     // KONULMADI: bu sütun tarihi bir referanstır, worker_types tablosunun
     // O ANKİ bütünlüğüne bağımlı olmamalı (ad zaten ayrıca snapshot'landı).
+    //
+    // ⚠ work_date_snapshot / depo_snapshot (Sprint Günlük-İşçi-03 düzeltmesi
+    // #1 — kullanıcının açık düzeltmesi): "BİR İŞÇİ KARTI = BİR İŞÇİ / İŞ
+    // GÜNÜ" kuralının VERİTABANI SEVİYESİNDE GARANTİSİ. session_id üzerinden
+    // daily_work_sessions'a JOIN ederek de work_date/depo bulunabilirdi, ama
+    // bu değerler her satıra SNAPSHOT olarak KOPYALANIR — sebep: bu, aşağıdaki
+    // `uq_dwce_card_day_depo_type` UNIQUE kısıtının KENDİSİ için ZORUNLUDUR
+    // (MySQL bir UNIQUE kısıtı başka bir tablonun sütununa göre KURAMAZ). Bu
+    // sayede "aynı kart, aynı iş günü/depoda İKİNCİ bir GİRİŞ satırı"
+    // FARKLI oturumlar arasında bile veritabanının KENDİSİ tarafından
+    // reddedilir — uygulama katmanındaki ön-kontrol (aşağıya bkz.) bunun
+    // dostça mesajlı ÖN halidir, bu kısıt SON ÇAREDİR (yarış koşulu).
+    // ⚠ Şema HENÜZ hiçbir ortama migrate/deploy EDİLMEDİ (Faz 2 dalı hâlâ
+    // birleştirilmedi) — bu yüzden ALTER değil, doğrudan CREATE TABLE
+    // içinde eklenmesi güvenlidir, canlı veriye dokunmaz.
     $t['daily_worker_card_events'] = "CREATE TABLE IF NOT EXISTS `daily_worker_card_events` (
         `id`                         INT AUTO_INCREMENT PRIMARY KEY,
         `session_id`                 INT          NOT NULL,
@@ -224,12 +239,15 @@ function pdks_gunluk_tablolar(): array
         `canonical_uid_snapshot`     VARCHAR(32)  NOT NULL,
         `worker_type_id_snapshot`    INT          NULL DEFAULT NULL,
         `worker_type_name_snapshot`  VARCHAR(80)  NOT NULL DEFAULT '',
+        `work_date_snapshot`         DATE         NOT NULL,
+        `depo_snapshot`              VARCHAR(150) NOT NULL DEFAULT '',
         `recorded_by_user_id`        INT          NULL DEFAULT NULL,
         `server_event_time`          DATETIME     NOT NULL,
         `created_at`                 DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX `idx_dwce_session_card_type` (`session_id`, `worker_card_id`, `event_type`),
         INDEX `idx_dwce_card`    (`worker_card_id`),
         INDEX `idx_dwce_session` (`session_id`),
+        UNIQUE KEY `uq_dwce_card_day_depo_type` (`worker_card_id`, `work_date_snapshot`, `depo_snapshot`, `event_type`),
         CONSTRAINT `fk_dwce_session` FOREIGN KEY (`session_id`)
             REFERENCES `daily_work_sessions`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
         CONSTRAINT `fk_dwce_card` FOREIGN KEY (`worker_card_id`)
@@ -800,16 +818,26 @@ function pdks_gunluk_kart_coz(string $kanonik, ?PDO $pdo = null): ?array
 
 /**
  * Bu kartın AÇIK (eşleşmemiş) bir GİRİŞ'i var mı — varsa hangi AÇIK
- * oturumda. Yalnız status='open' oturumlara BAKAR: bir oturum (eksik
- * çıkışlarla bile) KAPANDIĞINDA kart tekrar serbest kalır — kalıcı bir
- * "kullanımda" kilidi bilerek YOK (bkz. dosya başlığı, Faz 1 düzeltmesi #1
- * ile AYNI ilke: "the card becomes operationally free again").
+ * oturumda. Yalnız status='open' oturumlara BAKAR.
  *
- * ⚠ NOT EXISTS zaman karşılaştırması YAPMAZ: yazma anındaki kurallar
- * (mükerrer GİRİŞ reddi + CIKIS yalnız AYNI oturumdaki eşleşmemiş GİRİŞ'e
- * karşı kabul edilir) bir session+card çifti için EN FAZLA bir GİRİŞ ve
- * EN FAZLA bir ÇIKIŞ olabileceğini GARANTİ eder — bu yüzden "eşleşme var
- * mı" sorgusu yalnız "aynı session+card için bir ÇIKIŞ satırı var mı"
+ * ⚠ DÜZELTME (Sprint Günlük-İşçi-03, kullanıcının açık düzeltmesi #1):
+ * BU FONKSİYON ARTIK TEK BAŞINA "kart şu an serbest mi" SORUSUNUN CEVABI
+ * DEĞİL — yalnız "ÇIKIŞ için eşleşecek AÇIK GİRİŞ hangi oturumda" sorusuna
+ * (CIKIS doğrulaması) ve "hâlâ İÇERİDE mi" görüntüsüne (özet/mutabakat)
+ * hizmet eder. GİRİŞ TARAFINDAKİ asıl karar artık
+ * pdks_gunluk_kart_gun_kullanimi()'nda: "BİR İŞÇİ KARTI = BİR İŞÇİ / İŞ
+ * GÜNÜ" kuralı gereği, bir kart AYNI iş günü + depoda ÇIKMIŞ olsa bile
+ * YENİDEN GİREMEZ — yalnız BİR SONRAKİ iş gününde serbest kalır. (Eski
+ * "the card becomes operationally free again" ifadesi ÇIKIŞ SONRASI HEMEN
+ * serbestlik anlamına geliyordu — kullanıcı bunu YANLIŞ buldu: aynı gün
+ * ikinci bir "işçi" gibi sayılıp fazla kafa sayısına/ileride hakedişe yol
+ * açardı. Serbestlik artık YALNIZ bir sonraki work_date'te gerçekleşir.)
+ *
+ * ⚠ NOT EXISTS zaman karşılaştırması YAPMAZ: yazma anındaki kurallar bir
+ * session+card çifti için EN FAZLA bir GİRİŞ ve EN FAZLA bir ÇIKIŞ
+ * olabileceğini GARANTİ eder (hem uygulama kontrolü hem
+ * `uq_dwce_card_day_depo_type` UNIQUE kısıtı) — bu yüzden "eşleşme var mı"
+ * sorgusu yalnız "aynı session+card için bir ÇIKIŞ satırı var mı"
  * sorusuna indirgenir.
  */
 function pdks_gunluk_kart_acik_girisi(int $workerCardId, ?PDO $pdo = null): ?array
@@ -833,6 +861,42 @@ function pdks_gunluk_kart_acik_girisi(int $workerCardId, ?PDO $pdo = null): ?arr
              LIMIT 1";
     $st = $pdo->prepare($sql);
     $st->execute([$workerCardId]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * "BİR İŞÇİ KARTI = BİR İŞÇİ / İŞ GÜNÜ" kuralının SORGUSU (Sprint
+ * Günlük-İşçi-03, kullanıcının açık düzeltmesi #1). Bu kartın, verilen
+ * work_date + depo'da, HANGİ OTURUMDA OLURSA OLSUN (açık/kapalı fark
+ * etmez) BUGÜNKÜ tek geçerli GİRİŞ'ini (varsa) döner — eşleşen bir ÇIKIŞ'ı
+ * varsa onu da (cikis_zamani). GİRİŞ kararı BUNUN üzerine kurulur:
+ *   • sonuç NULL                         → kart bugün hiç kullanılmamış, GİRİŞ serbest
+ *   • sonuç var, cikis_zamani NULL       → kart HÂLÂ İÇERİDE (bir yerde) — mükerrer/başka-çavuş
+ *   • sonuç var, cikis_zamani DOLU       → kart bugün TAMAMLANMIŞ bir kullanım yaşadı — REDDEDİLİR
+ *
+ * `uq_dwce_card_day_depo_type` UNIQUE kısıtı sayesinde work_date+depo
+ * başına EN FAZLA bir GİRİŞ satırı olabileceği GARANTİDİR — bu yüzden
+ * LIMIT 1 keyfi bir seçim değil, matematiksel bir sonuçtur.
+ */
+function pdks_gunluk_kart_gun_kullanimi(int $workerCardId, string $workDate, string $depo, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    $sql = "SELECT g.session_id, g.server_event_time AS giris_zamani,
+                   s.foreman_id, f.name AS foreman_name,
+                   (SELECT c.server_event_time FROM daily_worker_card_events c
+                     WHERE c.session_id = g.session_id AND c.worker_card_id = g.worker_card_id
+                       AND c.event_type = 'CIKIS' LIMIT 1) AS cikis_zamani
+              FROM daily_worker_card_events g
+              JOIN daily_work_sessions s ON s.id = g.session_id
+              JOIN foremen f ON f.id = s.foreman_id
+             WHERE g.worker_card_id = ?
+               AND g.event_type = 'GIRIS'
+               AND g.work_date_snapshot = ?
+               AND g.depo_snapshot = ?
+             ORDER BY g.server_event_time DESC
+             LIMIT 1";
+    $st = $pdo->prepare($sql);
+    $st->execute([$workerCardId, $workDate, $depo]);
     return $st->fetch() ?: null;
 }
 
@@ -997,13 +1061,32 @@ function pdks_gunluk_oturum_kaydet(string $hamUid, string $kaynak, int $sessionI
             return ['ok' => false, 'kod' => 'kart_devre_disi', 'hata' => 'Bu kart DEVRE DIŞI.'];
         }
 
-        $acik = pdks_gunluk_kart_acik_girisi((int)$kart['id'], $pdo);
-        if ($acik !== null) {
-            if ((int)$acik['session_id'] === $sessionId) {
-                return ['ok' => false, 'kod' => 'mukerrer_giris', 'hata' => 'Bu kart zaten bu mesaide giriş yapmış.'];
+        // ⚠ DÜZELTME (kullanıcının açık düzeltmesi #1): "BİR İŞÇİ KARTI = BİR
+        // İŞÇİ / İŞ GÜNÜ" — bu iş günü + depoda kart daha önce (HANGİ
+        // OTURUMDA OLURSA OLSUN, açık/kapalı fark etmez) kullanılmışsa YENİ
+        // bir GİRİŞ REDDEDİLİR. Eskiden ÇIKIŞ sonrası kart AYNI GÜN yeniden
+        // girebiliyordu — bu YANLIŞTI (fazla kafa sayısı/ileride hakediş
+        // şişmesi). Serbestlik artık YALNIZ bir sonraki work_date'te.
+        $gunKullanim = pdks_gunluk_kart_gun_kullanimi((int)$kart['id'], (string)$session['work_date'], (string)$session['depo'], $pdo);
+        if ($gunKullanim !== null) {
+            if ($gunKullanim['cikis_zamani'] === null) {
+                // Hâlâ İÇERİDE (herhangi bir yerde, bugün) — eşleşen ÇIKIŞ yok.
+                if ((int)$gunKullanim['session_id'] === $sessionId) {
+                    return ['ok' => false, 'kod' => 'mukerrer_giris', 'hata' => 'Bu kart zaten bu mesaide giriş yapmış.'];
+                }
+                return ['ok' => false, 'kod' => 'baska_cavusta_aktif',
+                         'hata' => 'Bu kart ' . $gunKullanim['foreman_name'] . ' mesaisinde aktif.'];
             }
-            return ['ok' => false, 'kod' => 'baska_cavusta_aktif',
-                     'hata' => 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde aktif.'];
+            // Tamamlanmış bir GİRİŞ+ÇIKIŞ çifti VAR — bugün için kart TÜKENDİ.
+            return ['ok' => false, 'kod' => 'bugun_kullanilmis',
+                     'hata' => 'Bu kart bugün daha önce kullanılmıştır. (Çavuş: ' . $gunKullanim['foreman_name']
+                             . ', Giriş: ' . substr((string)$gunKullanim['giris_zamani'], 11, 5)
+                             . ', Çıkış: ' . substr((string)$gunKullanim['cikis_zamani'], 11, 5) . ')',
+                     'onceki' => [
+                         'foreman_name' => $gunKullanim['foreman_name'],
+                         'giris_zamani' => $gunKullanim['giris_zamani'],
+                         'cikis_zamani' => $gunKullanim['cikis_zamani'],
+                     ]];
         }
     } else {   // CIKIS
         $acik = pdks_gunluk_kart_acik_girisi((int)$kart['id'], $pdo);
@@ -1017,13 +1100,29 @@ function pdks_gunluk_oturum_kaydet(string $hamUid, string $kaynak, int $sessionI
     $ins = $pdo->prepare(
         "INSERT INTO daily_worker_card_events
             (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,
-             worker_type_id_snapshot, worker_type_name_snapshot, recorded_by_user_id, server_event_time)
-         VALUES (?,?,?,?,?,?,?,?,?)"
+             worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot,
+             recorded_by_user_id, server_event_time)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
     );
-    $ins->execute([
-        $sessionId, $kart['id'], $eventType, $kaynak, $kanonik,
-        $kart['worker_type_id'], $kart['tip_adi'], $recordedByUserId, $simdi,
-    ]);
+    try {
+        $ins->execute([
+            $sessionId, $kart['id'], $eventType, $kaynak, $kanonik,
+            $kart['worker_type_id'], $kart['tip_adi'], $session['work_date'], $session['depo'],
+            $recordedByUserId, $simdi,
+        ]);
+    } catch (PDOException $e) {
+        // ⚠ Son çare — `uq_dwce_card_day_depo_type` UNIQUE kısıtı. Yukarıdaki
+        // pdks_gunluk_kart_gun_kullanimi() ön-kontrolü ile bu INSERT arasında
+        // eşzamanlı bir başka yazma AYNI kart/gün/depo/yöne girdiyse burada
+        // yakalanır — düşük eşzamanlılıklı, idari bir tarama işlemi için
+        // KABUL EDİLEN, belgelenen bir yarış-koşulu penceresi (Faz 1'in
+        // çapraz-sistem UID kısıtıyla AYNI ilke).
+        if ($eventType === 'GIRIS') {
+            return ['ok' => false, 'kod' => 'bugun_kullanilmis',
+                     'hata' => 'Bu kart bugün için zaten kullanılmış (eşzamanlı tarama).'];
+        }
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kayıt yapılamadı: ' . $e->getMessage()];
+    }
     $eventId = (int)$pdo->lastInsertId();
 
     if (function_exists('audit_log_event')) {
@@ -1052,9 +1151,19 @@ function pdks_gunluk_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
 
+    // ⚠ DÜZELTME (kullanıcının açık talimatı — sayaç/rapor kuralı): sayaçlar
+    // HAM olay satırı SAYISI DEĞİL, BENZERSİZ (DISTINCT) işçi kartı sayısını
+    // yansıtmalıdır. `uq_dwce_card_day_depo_type` UNIQUE kısıtı + yukarıdaki
+    // uygulama kontrolleri sayesinde bir session+card için zaten EN FAZLA
+    // 1 GİRİŞ satırı olabilir — yani COUNT(*) ve COUNT(DISTINCT
+    // worker_card_id) matematiksel olarak AYNI SONUCU vermelidir. DISTINCT
+    // yine de BİLEREK KULLANILIR: niyeti kodda AÇIKÇA ifade eder ve
+    // (örn. şema henüz bu kısıtı taşımayan eski bir ortamda) sessizce
+    // kafa sayısı şişirmeye karşı savunma katmanıdır — bkz. görev talimatı
+    // "Make this invariant explicit in backend logic and tests."
     $giris = []; $cikis = [];
     $stG = $pdo->prepare(
-        "SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n
+        "SELECT worker_type_name_snapshot AS tip, COUNT(DISTINCT worker_card_id) AS n
            FROM daily_worker_card_events WHERE session_id = ? AND event_type = 'GIRIS'
           GROUP BY worker_type_name_snapshot"
     );
@@ -1062,7 +1171,7 @@ function pdks_gunluk_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     foreach ($stG->fetchAll() as $r) $giris[$r['tip']] = (int)$r['n'];
 
     $stC = $pdo->prepare(
-        "SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n
+        "SELECT worker_type_name_snapshot AS tip, COUNT(DISTINCT worker_card_id) AS n
            FROM daily_worker_card_events WHERE session_id = ? AND event_type = 'CIKIS'
           GROUP BY worker_type_name_snapshot"
     );

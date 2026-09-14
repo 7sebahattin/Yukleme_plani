@@ -1041,7 +1041,19 @@ endif;
             $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],
+                // Sprint Günlük-İşçi-03 düzeltmesi #2 (kullanıcının açık
+                // talimatı): attendance.daily_scan admin+ik'te KALMAMALI —
+                // depoda taramayı asıl yapacak GÜVENLİK/operasyon personeli
+                // 'operator' rolündedir. Repoda AYRI bir 'guvenlik' rolü
+                // YOK (yalnız config/pdks.php'nin eski bir yorumunda Faz 2
+                // TODO'su olarak anılıyordu, HİÇ oluşturulmadı) — kullanıcı
+                // "yoksa sessizce icat etme" dedi, bu yüzden YENİ bir rol
+                // AÇILMADI; en yakın MEVCUT operasyonel rol olan 'operator'a
+                // YALNIZ bu tek izin eklendi. Çavuş/kart YÖNETİMİ
+                // (attendance.foremen/worker_cards) veya muhasebe/admin
+                // izinleri BİLEREK verilmedi — güvenlik yalnız taramayı
+                // yapabilmeli.
+                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write','attendance.daily_scan'],
                 'viewer'   => ['dashboard.read','records.read','kantar.read','stok.read','defs.read','reports.read','beyan.read','hesap.read'],
                 // Muhasebe rolü Hesap modülünün asıl kullanıcısı: kendi sayfasına
                 // girebilmesi için hesap.write + onay/ödeme yetkileri şart.
