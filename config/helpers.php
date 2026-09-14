@@ -271,7 +271,7 @@ function render_desktop_sidebar(string $base): void {
     // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden
     // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de
     // yalnız kendi sayfalarında yüklenir).
-    $p_gunluk = ($_fn && (can('attendance.foremen') || can('attendance.worker_cards'))) || $p_adm;
+    $p_gunluk = ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan'))) || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -294,6 +294,7 @@ function render_desktop_sidebar(string $base): void {
     $a_pdksg = $cur === 'giris_cikis.php';
     $a_cavus = in_array($cur, ['cavuslar.php', 'cavus_form.php'], true);
     $a_isk   = in_array($cur, ['isci_kartlari.php', 'isci_tipleri.php'], true);
+    $a_gunlukgc = $cur === 'gunluk_isci_giris_cikis.php';
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -351,6 +352,7 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Günlük İşçi</div>
         <?php if ($_fn && (can('attendance.foremen')      || $p_adm)) $lnk('cavuslar.php',      '👷', 'Çavuşlar',      $a_cavus); ?>
         <?php if ($_fn && (can('attendance.worker_cards') || $p_adm)) $lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', $a_isk); ?>
+        <?php if ($_fn && (can('attendance.daily_scan')   || $p_adm)) $lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', $a_gunlukgc); ?>
         <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
@@ -1029,10 +1031,13 @@ endif;
             // Kasıtlı olarak yalnız İKİ yetki (kullanıcının açık talimatı:
             // "do not over-fragment permissions") — daha ince kırılım Faz 2'nin
             // gerçek ihtiyacı ortaya çıkınca eklenir.
+            // Sprint Günlük-İşçi-02, Faz 2: seri Giriş/Çıkış taraması — TEK yeni
+            // yetki (attendance.daily_scan). Hakediş/ödeme yetkisi YOK — o
+            // kapsam dışı (kullanıcının açık talimatı).
             $pdks_p = ['attendance.read','attendance.scan','attendance.manual','attendance.correct',
                        'attendance.report','attendance.employees','attendance.cards',
                        'attendance.devices','attendance.admin',
-                       'attendance.foremen','attendance.worker_cards'];
+                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan'];
             $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
@@ -1046,7 +1051,7 @@ endif;
                 // ve Faz 2'de 'guvenlik' rolüne verilecektir.
                 'ik'       => ['dashboard.read','attendance.read','attendance.manual','attendance.correct',
                                'attendance.report','attendance.employees','attendance.cards',
-                               'attendance.foremen','attendance.worker_cards'],
+                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan'],
             ];
             $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
             foreach ($rp_map as $slug => $perms) {

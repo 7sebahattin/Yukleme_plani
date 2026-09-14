@@ -216,3 +216,48 @@
     .pdks-kiosk-modesec { padding: 20px 12px; gap: 14px; }
     .pdks-kiosk-modebtn { padding: 24px 18px; font-size: 1.15rem; }
 }
+
+/* ── Günlük İşçi — çavuş seçim ekranı (gunluk_isci_giris_cikis.php) ──────
+   Kalıcı personel kiosk'unun (.pdks-kiosk-*) üzerine, yalnız EKLEME —
+   yukarıdaki hiçbir kural değiştirilmedi. */
+.pdks-kiosk-cavus-filter {
+    width: 100%; max-width: 420px; margin: 0 auto 12px; display: block;
+}
+.pdks-kiosk-cavus-list {
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 480px; margin: 0 auto; max-height: 60vh; overflow-y: auto;
+}
+.pdks-kiosk-cavus-btn {
+    width: 100%; padding: 18px 20px; text-align: left;
+    font-size: 1.1rem; font-weight: 700; color: var(--text);
+    background: var(--card); border: 2px solid var(--border); border-radius: var(--radius);
+    cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.pdks-kiosk-cavus-btn:hover, .pdks-kiosk-cavus-btn:focus-visible { border-color: var(--primary); }
+.pdks-kiosk-cavus-btn .pdks-kiosk-cavus-kod { font-size: .82rem; font-weight: 600; color: var(--muted); }
+
+.pdks-kiosk-selected {
+    text-align: center; max-width: 480px; margin: 0 auto 6px; padding: 10px 16px;
+    background: var(--primary-soft); border-radius: var(--radius);
+}
+.pdks-kiosk-selected-label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.pdks-kiosk-selected-name { font-size: 1.3rem; font-weight: 800; color: var(--primary); }
+
+/* ── Canlı sayaçlar — TEK bakışta giriş/çıkış/içeride/eksik ── */
+.pdks-kiosk-counters {
+    max-width: 480px; margin: 0 auto 14px; padding: 14px 16px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.pdks-kiosk-counters h3 { margin: 0 0 8px; font-size: .82rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.pdks-kiosk-counter-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: .95rem; }
+.pdks-kiosk-counter-row .n { font-weight: 800; font-variant-numeric: tabular-nums; }
+.pdks-kiosk-counter-totals { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.pdks-kiosk-counter-box { flex: 1; min-width: 84px; text-align: center; padding: 8px 6px; border-radius: var(--radius); background: var(--card); }
+.pdks-kiosk-counter-box .lbl { font-size: .72rem; color: var(--muted); }
+.pdks-kiosk-counter-box .val { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pdks-kiosk-counter-box.eksik .val { color: var(--warn); }
+
+/* ── Mutabakat / eksik çıkışla kapatma ekranı ── */
+.pdks-kiosk-recon { max-width: 520px; margin: 0 auto; text-align: left; }
+.pdks-kiosk-recon-missing-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
+.pdks-kiosk-recon-missing-row:last-child { border-bottom: none; }

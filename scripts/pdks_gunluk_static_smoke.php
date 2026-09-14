@@ -191,16 +191,20 @@ ok('migrate.php "Günlük İşçi Tablolarını Oluştur" butonu var', str_conta
 ok("migrate.php ne=pdks_gunluk dalı ayrı if/elseif ile ele alınıyor (ne=pdks ile ÇAKIŞMIYOR)",
     (bool)preg_match("/\\\$_POST\['ne'\]\s*\?\?\s*''\)\s*===\s*'pdks_gunluk'/", $migSrc));
 
-echo "\n=== 12. FAZ 2 ÖNERİSİ YALNIZ BELGE — burada migrate EDİLMEDİ ===\n";
-ok('daily_work_sessions İÇİN CREATE TABLE YOK (yalnız yorum satırında geçer)',
-    !preg_match('/CREATE TABLE[^;]*daily_work_sessions/i', $gunlukSrc));
-ok('daily_worker_card_events İÇİN CREATE TABLE YOK', !preg_match('/CREATE TABLE[^;]*daily_worker_card_events/i', $gunlukSrc));
-ok('pdks_gunluk_tablolar() dizisi YALNIZ 3 tablo döndürüyor (worker_types/foremen/worker_cards)',
+echo "\n=== 12. FAZ 2 — ARTIK GERÇEKTEN UYGULANDI (bu dosyanın Faz 1 döneminde\n";
+echo "     buradaki eski iddia 'Faz 2 yalnız belge, migrate edilmedi' idi —\n";
+echo "     Sprint Günlük-İşçi-02 ile bu ARTIK YANLIŞ; test GÜNCEL duruma göre\n";
+echo "     düzeltildi. Kapsamlı Faz 2 doğrulaması scripts/pdks_gunluk_faz2_static_smoke.php'de.) ===\n";
+ok('daily_work_sessions ARTIK GERÇEKTEN CREATE TABLE ile tanımlı (additive — IF NOT EXISTS)',
+    (bool)preg_match('/CREATE TABLE IF NOT EXISTS\s+`daily_work_sessions`/i', $gunlukSrc));
+ok('daily_worker_card_events ARTIK GERÇEKTEN CREATE TABLE ile tanımlı (additive — IF NOT EXISTS)',
+    (bool)preg_match('/CREATE TABLE IF NOT EXISTS\s+`daily_worker_card_events`/i', $gunlukSrc));
+ok('pdks_gunluk_tablolar() dizisi ARTIK 5 tablo döndürüyor (worker_types/foremen/worker_cards + Faz 2\'nin ikisi)',
     (bool)preg_match('/function pdks_gunluk_tablolar.*?return \$t;\s*\}/s', $gunlukSrc)
     && substr_count(
         preg_replace('/.*function pdks_gunluk_tablolar\(\).*?\{/s', '', $gunlukSrc, 1),
         "\$t['"
-    ) >= 3);
+    ) >= 5);
 
 echo "\n=== 13. DÜZELTME (kullanıcının açık talimatı): 'in_use' KALICI KART DURUMU DEĞİL ===\n";
 // "Kullanımda / Ayşe Çavuş" SESSION durumudur (Faz 2'de daily_work_sessions/

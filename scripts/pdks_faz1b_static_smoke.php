@@ -194,6 +194,13 @@ $beklenenEskiSatirlar = [
     "-    \$p_pdks  = (\$_fn && (can('attendance.employees') || can('attendance.cards'))) || \$p_adm;",
     "-                       'attendance.devices','attendance.admin'];",
     "-                               'attendance.report','attendance.employees','attendance.cards'],",
+    // Sprint Günlük-İşçi-01 → Günlük-İşçi-02 (Faz 2, seri Giriş/Çıkış):
+    // AYNI üç çok satırlı literal BİR KEZ DAHA genişletildi
+    // (attendance.daily_scan eklendi) — git diff bu satırları da "silinip
+    // yeniden yazılmış" gösterir, İÇERİK KAYBI değil.
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards'))) || \$p_adm;",
+    "-                       'attendance.foremen','attendance.worker_cards'];",
+    "-                               'attendance.foremen','attendance.worker_cards'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
