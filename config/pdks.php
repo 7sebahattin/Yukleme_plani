@@ -1,0 +1,625 @@
+<?php
+// =========================================================
+// config/pdks.php — PDKS (Personel Devam Kontrol Sistemi) ÇEKİRDEĞİ
+//
+// FAZ 1 KAPSAMI: şema + UID normalizasyonu + kart/personel alan mantığı + yetki kapısı.
+// Giriş/çıkış hareketleri, API, Android istemci ve arayüz ekranları FAZ 2'dedir.
+//
+// Referans belgeler:
+//   docs/PDKS_NFC_YOL_HARITASI.md        (mimari karar kaydı)
+//   docs/PDKS_NFC_FAZ0_DOGRULAMA.md      (ölçüm ve kanıtlar)
+//   docs/PDKS_FAZ1_SEMA.md               (bu dosyadaki şemanın belgesi)
+//
+// ⚠ BU DOSYA config/db.php VEYA config/helpers.php TARAFINDAN YÜKLENMEZ.
+//    Yalnız PDKS kodu require eder. Sebep: buradaki bir hata uygulamanın
+//    geri kalanını (yükleme, kantar, hesap, beyan) ASLA etkilememelidir.
+//    pdks_migrate() de kendiliğinden çalışmaz — açıkça çağrılır.
+// =========================================================
+
+declare(strict_types=1);
+
+// ── Yapılandırma ──────────────────────────────────────────
+// defined() koruması: config/local.php (config/db.php'nin EN BAŞINDA yüklenir)
+// bu sabitleri sunucuya özel değerlerle ezebilir — kod değişikliği gerekmez.
+// Aynı desen hesap_config.php'de kullanılıyor.
+
+/** Modül ana şalteri. false iken PDKS sayfaları/uçları kapalıdır. */
+defined('PDKS_AKTIF')        || define('PDKS_AKTIF', true);
+
+/** Mükerrer okuma bekleme süresi (saniye) — Faz 2'de kullanılır. Karar #5. */
+defined('PDKS_COOLDOWN_SN')  || define('PDKS_COOLDOWN_SN', 20);
+
+/** Personel fotoğraflarının dizini (Faz 1B/2). */
+defined('PDKS_FOTO_DIR')     || define('PDKS_FOTO_DIR', __DIR__ . '/../uploads/personel/');
+
+/** Desteklenen UID uzunlukları, bayt (ISO/IEC 14443-3: tek/çift/üçlü kaskad). */
+const PDKS_UID_BAYT = [4, 7, 10];
+
+/** Geçerli UID kaynakları — otomatik tespit YASAK (karar #10). */
+const PDKS_UID_KAYNAKLARI = ['usb_decimal', 'nfc_hex'];
+
+/** Kart yaşam döngüsü durumları. */
+function pdks_kart_durumlari(): array
+{
+    return [
+        'aktif'         => 'Aktif',
+        'iptal'         => 'İptal Edildi',
+        'kayip'         => 'Kayıp',
+        'degistirildi'  => 'Değiştirildi',
+        'suresi_doldu'  => 'Süresi Doldu',
+        'pasif'         => 'Pasif',
+    ];
+}
+
+/** Personel durumları. */
+function pdks_personel_durumlari(): array
+{
+    return ['aktif' => 'Aktif', 'pasif' => 'Pasif', 'ayrildi' => 'Ayrıldı'];
+}
+
+/** Yalnız bu durumdaki kart bir hareketi tetikleyebilir (Faz 2). */
+function pdks_kart_aktif_mi(?string $durum): bool { return $durum === 'aktif'; }
+
+// =========================================================
+// UID NORMALİZASYONU
+//
+// Faz 0'da (scripts/pdks_faz0_uid_kanit.php) 45/45 doğrulama ile kanıtlandı.
+// BURASI TEK OTORİTEDİR — Android istemci ve USB tanımlama ekranı yalnız
+// GÖSTERİM yapar, kanonik kararı her zaman sunucu verir.
+//
+// KANON: BÜYÜK HARF HEX · ayraçsız · baştaki sıfır baytları korunmuş ·
+//        uzunluk bayt sayısıyla sabit (8 / 14 / 20 hane).
+//
+// ⚠ hexdec() / dechex() / (int) cast TAM UID ÜZERİNDE KULLANILMAZ.
+//    10 baytlık UID 80 bittir; PHP tamsayısına sığmaz ve bu fonksiyonlar
+//    sessizce float'a düşüp YANLIŞ UID üretir (hata vermeden). Faz 0'da
+//    bu ortamda bcmath/gmp da bulunamadı → saf string aritmetiği zorunlu.
+// =========================================================
+
+/**
+ * Ham HEX gösterimini kanona çevirir.
+ * Kabul: "25A87ED7" · "25a87ed7" · "25:A8:7E:D7" · "25-A8-7E-D7" · "25 A8 7E D7" · "0x25A87ED7"
+ * @return string|null Kanonik HEX veya geçersizse null.
+ */
+function pdks_uid_hex_normalize(?string $ham): ?string
+{
+    if ($ham === null) return null;
+    $s = strtoupper(trim($ham));
+    $s = str_replace([':', '-', '.', ' ', "\t", "\xc2\xa0"], '', $s);
+    if (str_starts_with($s, '0X')) $s = substr($s, 2);
+    if ($s === '' || !preg_match('/^[0-9A-F]+$/', $s)) return null;
+    if (strlen($s) % 2 !== 0) return null;                                  // tam bayt olmalı
+    if (!in_array(intdiv(strlen($s), 2), PDKS_UID_BAYT, true)) return null; // 4/7/10 bayt
+    return $s;
+}
+
+/** Ondalık STRING → 16'lık taban. bcmath/gmp GEREKTİRMEZ. */
+function pdks_dec_to_hex_string(string $dec): string
+{
+    $dec = ltrim($dec, '0');
+    if ($dec === '') return '0';
+    $hex = '';
+    while ($dec !== '') {
+        $kalan = 0;
+        $bolum = '';
+        $n = strlen($dec);
+        for ($i = 0; $i < $n; $i++) {
+            $cur     = $kalan * 10 + (int)$dec[$i];
+            $basamak = intdiv($cur, 16);
+            $kalan   = $cur % 16;
+            if ($bolum !== '' || $basamak !== 0) $bolum .= (string)$basamak;
+        }
+        $hex = strtoupper(dechex($kalan)) . $hex;   // yalnız TEK BASAMAK (0-15) çevrilir — güvenli
+        $dec = $bolum;
+    }
+    return $hex;
+}
+
+/** Kanonik HEX → işaretsiz ondalık string (yalnız gösterim/teşhis). */
+function pdks_uid_to_decimal(string $kanonik): string
+{
+    $dec = '0';
+    $n   = strlen($kanonik);
+    for ($i = 0; $i < $n; $i++) {
+        $dec = pdks_dec_carpi_ekle($dec, 16, (int)hexdec($kanonik[$i]));  // tek hane — güvenli
+    }
+    return $dec;
+}
+
+/** Ondalık string × çarpan + ekle (string aritmetiği). */
+function pdks_dec_carpi_ekle(string $dec, int $carpan, int $ekle): string
+{
+    $out  = '';
+    $tasi = $ekle;
+    for ($i = strlen($dec) - 1; $i >= 0; $i--) {
+        $v    = (int)$dec[$i] * $carpan + $tasi;
+        $out  = (string)($v % 10) . $out;
+        $tasi = intdiv($v, 10);
+    }
+    while ($tasi > 0) { $out = (string)($tasi % 10) . $out; $tasi = intdiv($tasi, 10); }
+    $out = ltrim($out, '0');
+    return $out === '' ? '0' : $out;
+}
+
+/**
+ * USB HID okuyucunun yazdığı ONDALIK değeri kanonik HEX'e çevirir.
+ * $bayt verilmezse değere sığan en küçük desteklenen uzunluk seçilir.
+ * Baştaki sıfır baytları ondalıkta KAYBOLDUĞU için sola sıfır doldurulur:
+ *   2467966 → "0025A87E"   ("25A87E" DEĞİL)
+ */
+function pdks_uid_from_decimal(?string $ham, ?int $bayt = null): ?string
+{
+    if ($ham === null) return null;
+    $s = str_replace([' ', '.', ',', "\t", "\xc2\xa0"], '', trim($ham));   // binlik ayracı tolere
+    if ($s === '' || !preg_match('/^[0-9]+$/', $s)) return null;
+
+    $hex = pdks_dec_to_hex_string($s);
+    if ($hex === '0') $hex = '';
+
+    if ($bayt === null) {
+        $gereken = (int)ceil(max(1, strlen($hex)) / 2);
+        foreach (PDKS_UID_BAYT as $b) { if ($gereken <= $b) { $bayt = $b; break; } }
+        if ($bayt === null) return null;                                   // 10 bayttan uzun
+    }
+    if (!in_array($bayt, PDKS_UID_BAYT, true)) return null;
+    if (strlen($hex) > $bayt * 2) return null;
+
+    return str_pad($hex, $bayt * 2, '0', STR_PAD_LEFT);
+}
+
+/** Kanonik HEX'i BAYT bazında ters çevirir (nibble değil). */
+function pdks_uid_reverse(string $kanonik): string
+{
+    $out = '';
+    for ($i = strlen($kanonik) - 2; $i >= 0; $i -= 2) $out .= substr($kanonik, $i, 2);
+    return $out;
+}
+
+/**
+ * Bir okumadan üretilebilecek TÜM kanonik adaylar (alias aramasında kullanılır).
+ *
+ * ⚠ $kaynak ZORUNLUDUR ve ASLA TAHMİN EDİLMEZ (onaylanan karar #10).
+ * Gerekçe (Faz 0 §4.4): "12345678" hem geçerli 4 baytlık HEX (0x12345678)
+ * hem geçerli ondalıktır (0x00BC614E) — otomatik tespit iki FARKLI kartı
+ * sessizce birbirine karıştırırdı. Bilinmeyen kaynak → boş liste (fail-closed).
+ *
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex'
+ */
+function pdks_uid_adaylari(string $ham, string $kaynak): array
+{
+    if (!in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) return [];          // fail-closed
+    $k = ($kaynak === 'usb_decimal')
+        ? pdks_uid_from_decimal($ham)
+        : pdks_uid_hex_normalize($ham);
+    if ($k === null) return [];
+    return array_values(array_unique([$k, pdks_uid_reverse($k)]));         // palindrom → 1 eleman
+}
+
+/** Kanoniğin bayt uzunluğu. */
+function pdks_uid_bayt_sayisi(string $kanonik): int { return intdiv(strlen($kanonik), 2); }
+
+// =========================================================
+// ŞEMA
+//
+// Tamamı YENİ tablodur. MEVCUT HİÇBİR TABLOYA ALTER YOKTUR.
+// Geri alma = kodu geri al; tablolar boş/kullanılmaz kalır.
+// =========================================================
+
+/**
+ * Faz 1 tabloları — oluşturulma SIRASI önemlidir (FK bağımlılığı).
+ * @return array<string,string> tablo adı => CREATE TABLE IF NOT EXISTS SQL
+ */
+function pdks_tablolar(): array
+{
+    $t = [];
+
+    // ── employees — personel kartoteksi ──────────────────
+    // Sistemde personel ana tablosu YOKTU (Faz 0 §3.1). `users` uygulamaya
+    // GİREN kişilerdir; personelin çoğunun hesabı olmayacaktır.
+    // KVKK (onaylanan karar #2): TC kimlik numarası HİÇ saklanmaz.
+    $t['employees'] = "CREATE TABLE IF NOT EXISTS `employees` (
+        `id`               INT AUTO_INCREMENT PRIMARY KEY,
+        `personnel_no`     VARCHAR(30)  NULL DEFAULT NULL,
+        `full_name`        VARCHAR(150) NOT NULL,
+        `department`       VARCHAR(100) NOT NULL DEFAULT '',
+        `job_title`        VARCHAR(100) NOT NULL DEFAULT '',
+        `depo`             VARCHAR(150) NOT NULL DEFAULT '',
+        `status`           VARCHAR(20)  NOT NULL DEFAULT 'aktif',
+        `user_id`          INT          NULL DEFAULT NULL,
+        `photo_file`       VARCHAR(64)  NULL DEFAULT NULL,
+        `photo_updated_at` DATETIME     NULL DEFAULT NULL,
+        `phone`            VARCHAR(30)  NULL DEFAULT NULL,
+        `hire_date`        DATE         NULL DEFAULT NULL,
+        `leave_date`       DATE         NULL DEFAULT NULL,
+        `notes`            TEXT         NULL DEFAULT NULL,
+        `created_by`       INT          NULL DEFAULT NULL,
+        `updated_by`       INT          NULL DEFAULT NULL,
+        `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at`       DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_emp_pno`  (`personnel_no`),
+        UNIQUE KEY `uq_emp_user` (`user_id`),
+        INDEX `idx_emp_status` (`status`),
+        INDEX `idx_emp_depo`   (`depo`(80)),
+        INDEX `idx_emp_dept`   (`department`(80)),
+        INDEX `idx_emp_name`   (`full_name`(80))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    // ── employee_cards — fiziksel kart kaydı ─────────────
+    // Onaylanan karar #1: iki katmanlı model. Bu tablo FİZİKSEL kartı temsil
+    // eder; uid_hex UNIQUE olduğu için aynı kart iki satır olamaz ve bu
+    // yüzden aynı anda iki personele atanamaz.
+    $t['employee_cards'] = "CREATE TABLE IF NOT EXISTS `employee_cards` (
+        `id`                  INT AUTO_INCREMENT PRIMARY KEY,
+        `employee_id`         INT          NOT NULL,
+        `uid_hex`             VARCHAR(32)  NOT NULL,
+        `uid_bytes`           TINYINT      NOT NULL DEFAULT 4,
+        `uid_decimal`         VARCHAR(25)  NULL DEFAULT NULL,
+        `card_type`           VARCHAR(30)  NOT NULL DEFAULT 'mifare_classic_1k',
+        `atqa`                VARCHAR(8)   NULL DEFAULT NULL,
+        `sak`                 VARCHAR(8)   NULL DEFAULT NULL,
+        `label`               VARCHAR(60)  NOT NULL DEFAULT '',
+        `status`              VARCHAR(20)  NOT NULL DEFAULT 'aktif',
+        `issued_at`           DATE         NULL DEFAULT NULL,
+        `expires_at`          DATE         NULL DEFAULT NULL,
+        `replacement_card_id` INT          NULL DEFAULT NULL,
+        `revoked_at`          DATETIME     NULL DEFAULT NULL,
+        `revoked_by`          INT          NULL DEFAULT NULL,
+        `revoke_reason`       VARCHAR(200) NOT NULL DEFAULT '',
+        `enrolled_source`     VARCHAR(20)  NOT NULL DEFAULT 'usb_decimal',
+        `notes`               TEXT         NULL DEFAULT NULL,
+        `created_by`          INT          NULL DEFAULT NULL,
+        `created_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at`          DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_ec_uid` (`uid_hex`),
+        INDEX `idx_ec_emp`    (`employee_id`),
+        INDEX `idx_ec_status` (`status`),
+        INDEX `idx_ec_dec`    (`uid_decimal`),
+        CONSTRAINT `fk_ec_emp` FOREIGN KEY (`employee_id`)
+            REFERENCES `employees`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    // ── employee_card_uids — UID takma adları ────────────
+    // §5'in "631799511 / 25A87ED7 / D7:7E:A8:25 üçü de AYNI kart" şartını
+    // bir `if` bloğuna değil, VERİTABANI KISITINA dönüştürür.
+    $t['employee_card_uids'] = "CREATE TABLE IF NOT EXISTS `employee_card_uids` (
+        `id`         INT AUTO_INCREMENT PRIMARY KEY,
+        `card_id`    INT         NOT NULL,
+        `uid_hex`    VARCHAR(32) NOT NULL,
+        `kind`       VARCHAR(20) NOT NULL DEFAULT 'canonical',
+        `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_ecu_uid` (`uid_hex`),
+        INDEX `idx_ecu_card` (`card_id`),
+        CONSTRAINT `fk_ecu_card` FOREIGN KEY (`card_id`)
+            REFERENCES `employee_cards`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    // ── attendance_gates — kapı / lokasyon ───────────────
+    // Faz 2'de cihaz→kapı→depo zinciri API'nin depo bağlamını buradan alır
+    // (yol haritası §B.4). Faz 1'de yalnız temel atılır; arayüzü Faz 2'dedir.
+    $t['attendance_gates'] = "CREATE TABLE IF NOT EXISTS `attendance_gates` (
+        `id`         INT AUTO_INCREMENT PRIMARY KEY,
+        `name`       VARCHAR(80)  NOT NULL,
+        `depo`       VARCHAR(150) NOT NULL DEFAULT '',
+        `is_active`  TINYINT(1)   NOT NULL DEFAULT 1,
+        `sort_order` INT          NOT NULL DEFAULT 0,
+        `notes`      TEXT         NULL DEFAULT NULL,
+        `created_by` INT          NULL DEFAULT NULL,
+        `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_gate_name` (`name`),
+        INDEX `idx_gate_depo`   (`depo`(80)),
+        INDEX `idx_gate_active` (`is_active`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    return $t;
+}
+
+/**
+ * employees.user_id → users.id yabancı anahtarı.
+ * AYRI tutulur çünkü `users` MEVCUT bir tablodur: FK, o tabloya dokunmaz ama
+ * ona bağımlıdır. Ayrı ALTER olarak denenir ve BAŞARISIZ OLURSA MİGRASYON
+ * DURMAZ — UNIQUE kısıtı ve uygulama mantığı FK olmadan da doğru çalışır.
+ * ON DELETE SET NULL: users hiçbir zaman silinmiyor (pasifleştiriliyor), ama
+ * biri phpMyAdmin'den silerse personel kaydı KAYBOLMAZ, yalnız bağı kopar.
+ */
+function pdks_users_fk_sql(): string
+{
+    return "ALTER TABLE `employees`
+            ADD CONSTRAINT `fk_emp_user` FOREIGN KEY (`user_id`)
+            REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE";
+}
+
+/** Bir tablo var mı? */
+function pdks_tablo_var(PDO $pdo, string $tablo): bool
+{
+    try { $pdo->query("SELECT 1 FROM `{$tablo}` LIMIT 0"); return true; }
+    catch (PDOException $e) { return false; }
+}
+
+/** Bir kısıt (constraint) zaten tanımlı mı? */
+function pdks_kisit_var(PDO $pdo, string $tablo, string $kisit): bool
+{
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+                             WHERE TABLE_SCHEMA = DATABASE()
+                               AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?");
+        $st->execute([$tablo, $kisit]);
+        return (int)$st->fetchColumn() > 0;
+    } catch (PDOException $e) { return false; }
+}
+
+/**
+ * Şema migrasyonu — IDEMPOTENT, tekrar çalıştırılabilir, yıkıcı değildir.
+ *
+ * ⚠ KENDİLİĞİNDEN ÇALIŞMAZ. config/db.php veya helpers.php'ye BİLEREK
+ *    eklenmemiştir: oradaki bir hata TÜM uygulamayı etkilerdi. Çağıranlar:
+ *    migrate.php (admin paneli) ve ileride PDKS sayfaları.
+ *
+ * @return array<int,array{tablo:string,durum:string,mesaj:string}>
+ *         durum: 'var' | 'olusturuldu' | 'hata'
+ */
+function pdks_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+
+    foreach (pdks_tablolar() as $ad => $sql) {
+        if (pdks_tablo_var($pdo, $ad)) {
+            $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Tablo zaten mevcut.'];
+            continue;
+        }
+        try {
+            $pdo->exec($sql);
+            $rapor[] = pdks_tablo_var($pdo, $ad)
+                ? ['tablo' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.']
+                : ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
+        } catch (PDOException $e) {
+            // Sessizce yutulmaz: rapora yazılır VE error_log'a düşer.
+            error_log('[pdks_migrate] ' . $ad . ': ' . $e->getMessage());
+            $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+
+    // users FK'sı — opsiyonel, başarısızlığı migrasyonu bozmaz.
+    if (pdks_tablo_var($pdo, 'employees') && pdks_tablo_var($pdo, 'users')) {
+        if (pdks_kisit_var($pdo, 'employees', 'fk_emp_user')) {
+            $rapor[] = ['tablo' => 'employees.fk_emp_user', 'durum' => 'var', 'mesaj' => 'Yabancı anahtar zaten mevcut.'];
+        } else {
+            try {
+                $pdo->exec(pdks_users_fk_sql());
+                $rapor[] = ['tablo' => 'employees.fk_emp_user', 'durum' => 'olusturuldu', 'mesaj' => 'users FK eklendi.'];
+            } catch (PDOException $e) {
+                error_log('[pdks_migrate] fk_emp_user: ' . $e->getMessage());
+                $rapor[] = ['tablo' => 'employees.fk_emp_user', 'durum' => 'hata',
+                            'mesaj' => 'FK eklenemedi (kritik değil, UNIQUE kısıtı yeterli): ' . $e->getMessage()];
+            }
+        }
+    }
+
+    return $rapor;
+}
+
+/** Şema hazır mı? (arayüz "önce migration çalıştırın" diyebilsin diye) */
+function pdks_sema_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    foreach (array_keys(pdks_tablolar()) as $ad) {
+        if (!pdks_tablo_var($pdo, $ad)) return false;
+    }
+    return true;
+}
+
+// =========================================================
+// YETKİ KAPISI
+// Mevcut can() / is_admin() üzerine kurulur; yetki sistemi DEĞİŞTİRİLMEZ.
+// =========================================================
+
+/** @param string $eylem read|scan|manual|correct|report|employees|cards|devices|admin */
+function pdks_can(string $eylem): bool
+{
+    if (!function_exists('can')) return false;
+    if (function_exists('is_admin') && is_admin()) return true;
+
+    return match ($eylem) {
+        'read'      => can('attendance.read') || can('attendance.admin'),
+        'scan'      => can('attendance.scan'),
+        'manual'    => can('attendance.manual'),
+        'correct'   => can('attendance.correct'),
+        'report'    => can('attendance.report'),
+        'employees' => can('attendance.employees'),
+        'cards'     => can('attendance.cards'),
+        'devices'   => can('attendance.devices') || can('attendance.admin'),
+        'admin'     => can('attendance.admin'),
+        default     => false,
+    };
+}
+
+/** Sayfa kapısı — require_perm() emsali; require_hesap() ile aynı desen. */
+function require_pdks(string $eylem): void
+{
+    if (!PDKS_AKTIF) {
+        if (function_exists('forbidden')) forbidden('Personel modülü şu anda kapalıdır.');
+        http_response_code(503);
+        exit('Personel modülü kapalı.');
+    }
+    if (function_exists('current_user') && current_user() === null) {
+        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
+        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
+        exit;
+    }
+    if (function_exists('enforce_active_depot')) enforce_active_depot();
+    if (!pdks_can($eylem)) {
+        forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: attendance.{$eylem})");
+    }
+}
+
+// =========================================================
+// KART / PERSONEL ALAN MANTIĞI
+// =========================================================
+
+/**
+ * Bir okumayı fiziksel karta çözer (alias tablosu üzerinden).
+ *
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex' — ZORUNLU, tahmin edilmez.
+ * @return array|null ['card'=>..., 'employee'=>..., 'eslesen_uid'=>...] veya null
+ */
+function pdks_kart_cozumle(string $ham, string $kaynak, ?PDO $pdo = null): ?array
+{
+    $adaylar = pdks_uid_adaylari($ham, $kaynak);
+    if (count($adaylar) === 0) return null;
+
+    $pdo = $pdo ?? db();
+    $ph  = implode(',', array_fill(0, count($adaylar), '?'));
+    $st  = $pdo->prepare(
+        "SELECT c.*, u.uid_hex AS eslesen_uid
+           FROM employee_card_uids u
+           JOIN employee_cards c ON c.id = u.card_id
+          WHERE u.uid_hex IN ($ph)
+          LIMIT 1"
+    );
+    $st->execute($adaylar);
+    $kart = $st->fetch();
+    if (!$kart) return null;
+
+    $es = $pdo->prepare("SELECT * FROM employees WHERE id = ?");
+    $es->execute([(int)$kart['employee_id']]);
+    $personel = $es->fetch() ?: null;
+
+    return ['card' => $kart, 'employee' => $personel, 'eslesen_uid' => $kart['eslesen_uid']];
+}
+
+/**
+ * Bir kanonik UID (veya tersi) başka bir karta ait mi?
+ * @return array|null Çakışan kart satırı.
+ */
+function pdks_uid_cakismasi(string $kanonik, ?int $haricCardId = null, ?PDO $pdo = null): ?array
+{
+    $pdo     = $pdo ?? db();
+    $adaylar = array_values(array_unique([$kanonik, pdks_uid_reverse($kanonik)]));
+    $ph      = implode(',', array_fill(0, count($adaylar), '?'));
+    $sql     = "SELECT c.*, u.uid_hex AS cakisan_uid
+                  FROM employee_card_uids u
+                  JOIN employee_cards c ON c.id = u.card_id
+                 WHERE u.uid_hex IN ($ph)";
+    $par = $adaylar;
+    if ($haricCardId !== null) { $sql .= " AND c.id <> ?"; $par[] = $haricCardId; }
+    $st = $pdo->prepare($sql . " LIMIT 1");
+    $st->execute($par);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Kart oluşturur — kanonik kaydı + takma adları TEK İŞLEMDE yazar.
+ *
+ * ⚠ KART YAZMANIN TEK YOLU BUDUR. İkinci bir yazma yolu açmayın:
+ *    alias'sız yazılan bir kart, ters gösterimle okutulduğunda BULUNAMAZ.
+ *    (halkayit/taslak_lib.php'deki "tek yazma yolu" kuralının aynısı.)
+ *
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex'
+ * @return array{ok:bool, card_id?:int, uid_hex?:string, hata?:string, kod?:string}
+ */
+function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, array $ek = [], ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_kaynak',
+                'hata' => 'UID kaynağı bildirilmeli (usb_decimal veya nfc_hex).'];
+    }
+
+    $kanonik = ($kaynak === 'usb_decimal')
+        ? pdks_uid_from_decimal($hamUid)
+        : pdks_uid_hex_normalize($hamUid);
+    if ($kanonik === null) {
+        return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
+    }
+
+    $st = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
+    $st->execute([$employeeId]);
+    if (!$st->fetchColumn()) {
+        return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'Personel bulunamadı.'];
+    }
+
+    // Çakışma: kanonik VEYA tersi başka bir kartta olamaz (Faz 0 §4.7).
+    $cakisma = pdks_uid_cakismasi($kanonik, null, $pdo);
+    if ($cakisma !== null) {
+        return ['ok' => false, 'kod' => 'uid_kullanimda',
+                'hata' => 'Bu UID zaten tanımlı (kart #' . (int)$cakisma['id'] . ').'];
+    }
+
+    $bayt    = pdks_uid_bayt_sayisi($kanonik);
+    $ondalik = pdks_uid_to_decimal($kanonik);
+    $ters    = pdks_uid_reverse($kanonik);
+
+    $disTx = $pdo->inTransaction();
+    if (!$disTx) $pdo->beginTransaction();
+    try {
+        $ins = $pdo->prepare(
+            "INSERT INTO employee_cards
+                (employee_id, uid_hex, uid_bytes, uid_decimal, card_type, atqa, sak,
+                 label, status, issued_at, expires_at, enrolled_source, notes, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        $ins->execute([
+            $employeeId, $kanonik, $bayt, $ondalik,
+            (string)($ek['card_type']  ?? 'mifare_classic_1k'),
+            $ek['atqa'] ?? null, $ek['sak'] ?? null,
+            (string)($ek['label'] ?? ''),
+            (string)($ek['status'] ?? 'aktif'),
+            $ek['issued_at']  ?? null,
+            $ek['expires_at'] ?? null,
+            $kaynak,
+            $ek['notes'] ?? null,
+            $ek['created_by'] ?? null,
+        ]);
+        $cardId = (int)$pdo->lastInsertId();
+
+        $ia = $pdo->prepare("INSERT INTO employee_card_uids (card_id, uid_hex, kind) VALUES (?,?,?)");
+        $ia->execute([$cardId, $kanonik, 'canonical']);
+        if ($ters !== $kanonik) $ia->execute([$cardId, $ters, 'reversed']);   // palindrom değilse
+
+        if (!$disTx) $pdo->commit();
+    } catch (PDOException $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('card_create', 'pdks', $cardId, null, [
+            'employee_id' => $employeeId, 'uid_hex' => $kanonik,
+            'uid_bytes' => $bayt, 'kaynak' => $kaynak,
+        ]);
+    }
+
+    return ['ok' => true, 'card_id' => $cardId, 'uid_hex' => $kanonik,
+            'uid_decimal' => $ondalik, 'uid_bytes' => $bayt];
+}
+
+/**
+ * Kartı iptal eder. Kart satırı SİLİNMEZ — geçmiş korunur (yol haritası §D.2).
+ * Alias'lar da korunur: iptal kart yine tanınır, ama pdks_kart_aktif_mi() false döner
+ * (Faz 2'de "KART İPTAL EDİLMİŞ" ekranı bunu gösterecek — sessiz "tanımsız kart" değil).
+ */
+function pdks_kart_iptal(int $cardId, string $durum, string $gerekce, ?int $userId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!array_key_exists($durum, pdks_kart_durumlari()) || $durum === 'aktif') {
+        return ['ok' => false, 'hata' => 'Geçersiz kart durumu.'];
+    }
+    $st = $pdo->prepare("SELECT * FROM employee_cards WHERE id = ?");
+    $st->execute([$cardId]);
+    $eski = $st->fetch();
+    if (!$eski) return ['ok' => false, 'hata' => 'Kart bulunamadı.'];
+
+    $pdo->prepare("UPDATE employee_cards
+                      SET status = ?, revoke_reason = ?, revoked_at = NOW(), revoked_by = ?
+                    WHERE id = ?")
+        ->execute([$durum, $gerekce, $userId, $cardId]);
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('card_revoke', 'pdks', $cardId,
+            ['status' => $eski['status']],
+            ['status' => $durum, 'revoke_reason' => $gerekce]);
+    }
+    return ['ok' => true];
+}

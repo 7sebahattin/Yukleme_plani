@@ -17,7 +17,7 @@ Faz 0'ın bu belgeyi değiştiren bulguları:
 
 | Bulgu | Bu belgedeki etkisi |
 |---|---|
-| UID algoritması **kanıtlandı** (`scripts/pdks_faz0_uid_kanit.php`, 45/45) | §C'deki iddiaların tamamı doğrulandı — değişiklik yok |
+| UID algoritması **kanıtlandı** (45/45; Faz 1'de `scripts/pdks_uid_smoke.php`, 57 test) | §C'deki iddiaların tamamı doğrulandı — değişiklik yok |
 | 🔴 **YENİ KURAL:** UID kaynağı (hex/ondalık) otomatik tespit **edilemez** | §C.3'e ek: `pdks_uid_adaylari()` `$kaynak` parametresi ZORUNLU. `12345678` hem geçerli hex hem geçerli ondalık — tahmin iki kartı karıştırır |
 | ⚠ `bcmath`/`gmp` **yok** sayılmalı | Ondalık↔hex dönüşümünde `hexdec()`/`dechex()` **tam UID üzerinde kullanılamaz** (10 bayt = 80 bit, float'a düşer). Saf string aritmetiği zorunlu |
 | `uid_decimal` boyu | VARCHAR(24) → **VARCHAR(25)** (§D.2'de düzeltildi) |

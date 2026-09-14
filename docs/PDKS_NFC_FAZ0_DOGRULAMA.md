@@ -15,9 +15,9 @@
 
 | # | Test | Yöntem | Sonuç |
 |---|---|---|---|
-| 1 | UID normalizasyon algoritması | `scripts/pdks_faz0_uid_kanit.php` — **bu ortamda çalıştırıldı** | ✅ **45/45 doğrulama geçti** |
+| 1 | UID normalizasyon algoritması | UID kanıt betiği — **bu ortamda çalıştırıldı** | ✅ **45/45 doğrulama geçti** *(Faz 1'de 57'ye çıkarıldı)* |
 | 2 | PHP saat dilimi | `scripts/pdks_faz0_zaman.php` — çalıştırıldı | ✅ `Europe/Istanbul`, `+03:00`, DST **yok** |
-| 3 | MySQL saat dilimi | Canlı DB bu ortamdan erişilemez | ⏳ **SİZİN ÇALIŞTIRMANIZ GEREK** (§1.3) |
+| 3 | MySQL saat dilimi | phpMyAdmin, canlı sunucu, 2026-09-14 15:18 | ✅ **SAPMA YOK** — `+03`, fark 10800 sn → Seçenek A (§1.3) |
 | 4 | `halkayit/api.php` auth deseni | Kaynak kod incelemesi | ✅ Analiz edildi — **kısmen** yeniden kullanılabilir (§2) |
 | 5 | Personel tablosu var mı | Tüm `CREATE TABLE` taraması | ✅ **YOK** — kesin (§3) |
 | 6 | Android `getId()` bayt sırası | Android SDK bu ortamda yok | ⏳ **Teşhis APK'sı hazır** (§5) — Faz 1 engelleyicisi **değil** |
@@ -69,7 +69,69 @@ hangi saat diliminde olduğu **hiç doğrulanmamış**.
 Yükleme kayıtlarında 3 saatlik kayma fark edilmez. Puantajda doğrudan maaş
 anlaşmazlığıdır: 08:00 giriş 05:00 görünür, gece vardiyası yanlış güne düşer.
 
-### 1.3 ⏳ SİZİN ÇALIŞTIRMANIZ GEREKEN ÖLÇÜM (salt okunur)
+### 1.3 ✅ ÖLÇÜM YAPILDI — 2026-09-14 15:18 (canlı sunucu, phpMyAdmin)
+
+```
+NOW()                 2026-09-14 15:17:54
+UTC_TIMESTAMP()       2026-09-14 12:17:54
+@@session.time_zone   SYSTEM
+@@global.time_zone    SYSTEM
+@@system_time_zone    +03
+now_eksi_utc_saniye   10800
+VERSION()             10.6.27-MariaDB-cll-lve-log
+Veritabanı            derspros_yukleme_plani
+Kullanıcının saati    15:18
+```
+
+**SONUÇ: SAPMA YOK.** `now_eksi_utc_saniye = 10800` (tam +3 saat) ve `NOW()` =
+15:17:54, kullanıcının 15:18 olan gerçek saatiyle örtüşüyor.
+
+| Kontrol | Beklenen | Ölçülen | Durum |
+|---|---|---|---|
+| `now_eksi_utc_saniye` | `10800` | `10800` | ✅ |
+| `NOW()` gerçek saate eşit mi | evet | evet (15:17:54 ≈ 15:18) | ✅ |
+| Sistem saat dilimi | UTC+3 | `+03` | ✅ |
+| PHP `Europe/Istanbul` ile aynı an mı | evet | **evet** | ✅ |
+
+> **KARAR: Seçenek A — Faz 1 ve Faz 2 MySQL `NOW()` kullanmaya DEVAM eder.**
+> Uygulamanın geri kalanıyla (kantar, yükleme, hesap, audit, oturum süreleri)
+> tam tutarlı olur; yeni bir istisna kuralı doğmaz. `SET time_zone` (Seçenek B)
+> **gerekmiyor** ve yapılmamalıdır. Türkiye kalıcı UTC+3 olduğu için gece
+> vardiyalarında DST sorunu da yoktur.
+
+> ⚠ Kullanıcı bu kararı henüz resmen dondurmadı (#13). Ölçüm Seçenek A'yı
+> **destekliyor**; Faz 2 başlamadan önce "A olarak dondurdum" onayı alınmalıdır.
+
+#### 1.3b ⚠ Ölçüm sırasında fark edilen İKİNCİ bulgu — canlı `config/db.php` repodakinden FARKLI
+
+Ekran görüntüsündeki iki gözlem:
+
+1. **Veritabanı adı `derspros_yukleme_plani`.** Repodaki `config/db.php` ise
+   `DB_NAME = 'yukleme_plani'`, `DB_USER = 'root'`, `DB_PASS = ''` diyor.
+   Bu kimlik bilgileriyle paylaşımlı hostinge bağlanmak mümkün değildir.
+2. **`config/db.php`'nin DROP etmesi gereken eski HKS tabloları hâlâ duruyor:**
+   `hks_notifications`, `hks_settings`, `hks_reference_cache`, `hks_stock`,
+   `hks_queries`, `hks_service_logs`, `hks_mobile_contacts` — yedisi de
+   `config/db.php` içindeki "Eski HKS modülü temizliği" listesinde.
+
+**En olası açıklama:** Sunucudaki `config/db.php`, depodakinden farklı bir
+dosyadır (kimlik bilgileri için elle düzenlenmiş ve muhtemelen sunucudaki
+`deploy.php`'nin koruma listesinde) — dolayısıyla o dosyadaki temizlik/migration
+bloğu canlıya hiç ulaşmamıştır. Alternatif açıklama: DB kullanıcısının `DROP`
+yetkisi yok ve hatalar sessizce yutuluyor.
+
+**Faz 1'e etkisi: YOK.** PDKS migrasyonu bilerek `config/db.php`'ye
+KONULMADI; `config/pdks.php` içinde durur ve `migrate.php`'den **elle**
+tetiklenir (bkz. `docs/PDKS_FAZ1_SEMA.md` §5). Yani bu belirsizlikten etkilenmez.
+
+**Sizden istenen 1 dakikalık kontrol:** Hosting dosya yöneticisinden
+`config/db.php`'yi açıp ilk 25 satırına bakın — `DB_NAME` gerçekten
+`derspros_yukleme_plani` mı? Öyleyse o dosyanın deploy tarafından korunduğunu
+doğrulamış oluruz ve **depodaki `config/db.php`'ye yazılan hiçbir migration'ın
+canlıya ulaşmadığını** kalıcı bir kural olarak not ederiz. Bu, gelecekteki her
+sprint için önemlidir.
+
+### 1.3-ek ÖLÇÜM KOMUTU (tekrar gerekirse — salt okunur)
 
 **phpMyAdmin → SQL sekmesi →** aşağıdakini yapıştırıp çalıştırın.
 Tek bir `SELECT`'tir; **hiçbir şey yazmaz, hiçbir ayarı değiştirmez.**
@@ -258,8 +320,8 @@ veritabanı düzeyinde engellenir.
 ### 4.1 Çalıştırılan kanıt
 
 ```
-$ php scripts/pdks_faz0_uid_kanit.php
-SONUÇ: 45 doğrulama geçti, 0 hata.
+$ php scripts/pdks_uid_smoke.php     # Faz 0'da pdks_faz0_uid_kanit.php idi
+SONUÇ: 57 test geçti, 0 hata.
 ✓ docs/PDKS_NFC_YOL_HARITASI.md §C'deki UID iddialarının TAMAMI kanıtlandı.
 ```
 
@@ -294,7 +356,7 @@ Ve §5'in asıl şartı — **üç gösterim de aynı karta çözülüyor**:
 
 ### 4.3 Algoritma (Faz 1'de `config/pdks.php`'ye taşınacak)
 
-`scripts/pdks_faz0_uid_kanit.php` içinde **çalışır hâlde** duruyor:
+Faz 1'de `config/pdks.php` içine taşındı (tek otorite); testi `scripts/pdks_uid_smoke.php`:
 
 | Fonksiyon | İş |
 |---|---|
@@ -451,7 +513,7 @@ Sebep: `employee_card_uids` alias tablosu her iki gösterimi de aynı karta bağ
 |---|---|---|
 | Klavye (HID) gibi davranıyor, sürücü gerekmiyor | Sizin ölçümünüz | ✅ Doğrulandı |
 | Boş Excel hücresine `631799511` yazdı | Sizin ölçümünüz | ✅ Doğrulandı |
-| Bu değer `0x25A87ED7`'nin big-endian ondalığı | `pdks_faz0_uid_kanit.php` | ✅ Kanıtlandı |
+| Bu değer `0x25A87ED7`'nin big-endian ondalığı | UID kanıt betiği (bugün: `pdks_uid_smoke.php`) | ✅ Kanıtlandı |
 
 ### 6.2 ⏳ Hâlâ ölçülmemiş üç davranış (2 dakikalık test)
 
@@ -678,7 +740,7 @@ Talebiniz gereği **burada duruyorum**. Faz 1 başlatılmadı; migration, tablo,
 | Dosya | Tür | Web erişimi |
 |---|---|---|
 | `docs/PDKS_NFC_FAZ0_DOGRULAMA.md` | Bu rapor | — |
-| `scripts/pdks_faz0_uid_kanit.php` | CLI test — **çalıştırıldı, 45/45 geçti** | ❌ `scripts/.htaccess` kapalı |
+| ~~`scripts/pdks_faz0_uid_kanit.php`~~ | CLI test — **çalıştırıldı, 45/45 geçti**. *Faz 1'de `scripts/pdks_uid_smoke.php` ile DEĞİŞTİRİLDİ*: algoritmanın kopyasını taşıyordu, Faz 1'de `config/pdks.php`'ye taşındı ve iki kopya bırakılmadı | ❌ kapalı |
 | `scripts/pdks_faz0_zaman.php` | CLI ölçüm — salt okunur, `config/db.php` include **etmez** | ❌ kapalı |
 | `tools/nfc_uid_tani/**` | Android teşhis kaynağı (derlenmedi) | ❌ `tools/.htaccess` eklendi |
 
