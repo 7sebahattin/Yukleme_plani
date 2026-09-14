@@ -688,6 +688,26 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
                 'hata' => 'Bu UID zaten tanımlı (kart #' . (int)$cakisma['id'] . ').'];
     }
 
+    // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ (Sprint Günlük-İşçi-01) — YUMUŞAK bağımlılık:
+    // config/pdks_gunluk.php (günlük işçi/çavuş modülü) YÜKLÜYSE, aynı
+    // fiziksel kartın GÜNLÜK İŞÇİ kart havuzunda (worker_cards) zaten tanımlı
+    // olup olmadığına bakılır — aynı UID iki sistemde birden olursa tarama
+    // hangi sisteme ait olduğunu bilemez. function_exists guard: bu dosya
+    // (config/pdks.php) o modülü HİÇ require ETMEZ ve onsuz da tam
+    // çalışmaya devam eder (bağımlılık yönü TERS olmaz — bkz.
+    // config/pdks_gunluk.php başlığı). Bu YÜZDEN personel_kartlar.php ve
+    // personel_form.php artık config/pdks_gunluk.php'yi de require eder;
+    // KART YAZMA MANTIĞININ KENDİSİ (bu fonksiyon) DEĞİŞMEDİ.
+    if (function_exists('pdks_gunluk_uid_gecici_kartta_mi')) {
+        $gunlukCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
+        if ($gunlukCakisma !== null) {
+            return ['ok' => false, 'kod' => 'uid_gunluk_havuzda',
+                    'hata' => 'Bu kart zaten GÜNLÜK İŞÇİ kart havuzunda tanımlı (kart no: '
+                            . (string)$gunlukCakisma['card_no'] . '). Aynı fiziksel kart hem kalıcı '
+                            . 'personelde hem işçi havuzunda olamaz.'];
+        }
+    }
+
     $bayt    = pdks_uid_bayt_sayisi($kanonik);
     $ondalik = pdks_uid_to_decimal($kanonik);
 

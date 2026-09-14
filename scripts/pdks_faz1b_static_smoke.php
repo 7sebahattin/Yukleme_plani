@@ -184,13 +184,23 @@ ok('index.php: nav bağlama yalnız EKLEME (silinen satır yok)', count($silinen
 // YÜZDEN o TEK satırın değiştirilmesi (silinip yeniden yazılması) burada
 // BEKLENEN ve İNCELENMİŞ bir değişikliktir — "hiç silinmesin" kuralı
 // YALNIZ bu bilinen satır için gevşetilir, başka hiçbir satır için değil.
-$beklenenEskiSatir = "-    \$p_pdks  = (\$_fn && (can('attendance.employees') || can('attendance.cards'))) || \$p_adm;";
+// Sprint Günlük-İşçi-01: çavuş/işçi-kart-havuzu izinleri (attendance.foremen,
+// attendance.worker_cards) İKİ mevcut izin dizisine (admin'in $pdks_p'si,
+// 'ik' rolünün listesi) EKLENDİ — çok satırlı literal olduğu için git diff
+// bu satırları "silinip yeniden yazılmış" gösterir, İÇERİK KAYBI değil.
+// Aynı AZ-İSTİSNA yaklaşımı: yalnız BİLİNEN, İNCELENMİŞ satırlar allowlist'e
+// eklenir, başka hiçbir satır için gevşetilmez.
+$beklenenEskiSatirlar = [
+    "-    \$p_pdks  = (\$_fn && (can('attendance.employees') || can('attendance.cards'))) || \$p_adm;",
+    "-                       'attendance.devices','attendance.admin'];",
+    "-                               'attendance.report','attendance.employees','attendance.cards'],",
+];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
     return preg_match('/^-(?!--)/', $l) === 1;
 });
-$beklenmeyenSilinen = array_filter($silinenHelpers, fn($l) => trim($l) !== trim($beklenenEskiSatir));
-ok('config/helpers.php: YALNIZ $p_pdks satırı (attendance.scan için genişletildi) değişti, başka hiçbir satır silinmedi',
+$beklenmeyenSilinen = array_filter($silinenHelpers, fn($l) => !in_array(trim($l), array_map('trim', $beklenenEskiSatirlar), true));
+ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.scan genişlemesi + Günlük İşçi izin ekleri), başka hiçbir satır silinmedi',
     count($beklenmeyenSilinen) === 0,
     count($beklenmeyenSilinen) . " beklenmeyen silinen satır:\n" . implode("\n", $beklenmeyenSilinen));
 

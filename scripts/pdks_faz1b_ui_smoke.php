@@ -99,7 +99,11 @@ function renderPage(string $file, array $get = []): string {
     global $ROOT;
     $_GET = $get; $_POST = []; $_FILES = []; $_SERVER['REQUEST_METHOD'] = 'GET';
     $src = file_get_contents($ROOT . '/' . $file);
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/auth)\.php\';\s*$/m', '', $src);
+    // ⚠ Sprint Günlük-İşçi-01: personel_kartlar.php/personel_form.php artık
+    // config/pdks_gunluk.php'yi de require ediyor (çapraz-sistem UID kontrolü
+    // için — bkz. o dosyanın başlığı). Test ortamında BU DOSYA yok, o yüzden
+    // diğerleriyle AYNI şekilde satır bazında ÇIKARILIR.
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^\s*pdks_migrate\(\);(?:\s*\/\/.*)?\s*$/m', '', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
