@@ -24,19 +24,22 @@ pdks_migrate();
 $pdo = db();
 
 // ── Salt-okunur önizleme ucu — JS bu uca fetch eder, hiçbir yazma yapmaz ──
-// "usb_decimal" dışında kaynak kabul etmez (bu sayfa yalnız USB akışını sunar;
-// otomatik tespit YASAK — Faz 0/1 kararı).
+// Bu sayfa iki giriş kanalı sunar: USB HID (usb_decimal) ve Web NFC
+// (web_nfc, telefonun kendi tarayıcısı) — otomatik kaynak TESPİTİ hâlâ
+// YASAK (Faz 0/1 kararı): kaynak istemcinin AÇIKÇA gönderdiği değerdir.
 if (($_GET['ajax'] ?? '') === 'onizle') {
     header('Content-Type: application/json; charset=utf-8');
     $ham = trim($_GET['uid'] ?? '');
     $kaynak = trim($_GET['kaynak'] ?? '');
-    if ($ham === '' || $kaynak !== 'usb_decimal') {
+    if ($ham === '' || !in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) {
         echo json_encode(['ok' => false, 'hata' => 'Geçersiz istek.']);
         exit;
     }
-    $kanonik = pdks_uid_from_decimal($ham);
+    $kanonik = ($kaynak === 'usb_decimal') ? pdks_uid_from_decimal($ham) : pdks_uid_from_web_nfc($ham);
     if ($kanonik === null) {
-        echo json_encode(['ok' => false, 'hata' => 'Geçersiz UID — yalnız rakam kabul edilir.']);
+        echo json_encode(['ok' => false, 'hata' => $kaynak === 'usb_decimal'
+            ? 'Geçersiz UID — yalnız rakam kabul edilir.'
+            : 'Geçersiz NFC okuması.']);
         exit;
     }
     $cozum = pdks_kart_cozumle($ham, $kaynak, $pdo);
@@ -62,12 +65,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $employeeId = (int)($_POST['employee_id'] ?? 0);
         $hamUid     = trim($_POST['ham_uid'] ?? '');
         $etiket     = trim($_POST['label'] ?? '');
+        $kaynak     = trim($_POST['kaynak'] ?? '');
+        if (!in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) $kaynak = 'usb_decimal';
         if ($employeeId <= 0) {
             $hata = 'Personel seçmelisiniz.';
         } elseif ($hamUid === '') {
             $hata = 'Kartı okutun.';
         } else {
-            $sonuc = pdks_kart_ata($employeeId, $hamUid, 'usb_decimal',
+            $sonuc = pdks_kart_ata($employeeId, $hamUid, $kaynak,
                 ['label' => $etiket, 'created_by' => (int)$auth_user['id']], $pdo);
             if ($sonuc['ok']) {
                 header('Location: personel_kartlar.php?ok=' . urlencode('Kart tanımlandı: ' . $sonuc['uid_hex']));
@@ -93,7 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $eskiCardId = (int)($_POST['eski_card_id'] ?? 0);
         $hamUid     = trim($_POST['ham_uid'] ?? '');
         $gerekce    = trim($_POST['gerekce'] ?? '');
-        $sonuc = pdks_kart_degistir($eskiCardId, $hamUid, 'usb_decimal', $gerekce, (int)$auth_user['id'], $pdo);
+        $kaynak     = trim($_POST['kaynak'] ?? '');
+        if (!in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) $kaynak = 'usb_decimal';
+        $sonuc = pdks_kart_degistir($eskiCardId, $hamUid, $kaynak, $gerekce, (int)$auth_user['id'], $pdo);
         if ($sonuc['ok']) {
             header('Location: personel_kartlar.php?ok=' . urlencode('Kart değiştirildi: ' . $sonuc['uid_hex']));
             exit;
@@ -172,13 +179,17 @@ if ($basari !== ''): ?>
     <form method="post">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="action" value="kart_ata">
+        <input type="hidden" name="kaynak" id="anaScanKaynak" value="usb_decimal">
         <div class="pdks-scan-box">
             <label class="pdks-scan-label" for="anaScanInput">KARTI USB OKUYUCUYA OKUTUN</label>
             <input type="text" inputmode="numeric" id="anaScanInput" name="ham_uid" class="pdks-scan-input"
                    data-pdks-scan data-pdks-preview="#anaScanOnizle" data-pdks-status="#anaScanDurum"
+                   data-pdks-kaynak-field="#anaScanKaynak"
                    placeholder="631799511" autocomplete="off" required autofocus>
             <div class="pdks-uid-lg" id="anaScanOnizle" style="margin-top:12px;min-height:1.4em"></div>
             <div class="pdks-scan-status" id="anaScanDurum"></div>
+            <button type="button" id="anaScanNfcBtn" class="btn btn-ghost" style="margin-top:10px"
+                    data-pdks-nfc-target="#anaScanInput" hidden>📡 NFC İLE OKU</button>
         </div>
         <div class="pdks-form-grid" style="margin-top:14px">
             <label>

@@ -7,11 +7,14 @@
 //
 //  1) Her POST işleyen dosya csrf_check() çağırıyor.
 //  2) Her sayfa require_pdks() ile yetki kapısından geçiyor.
-//  3) FAZ 1B KAPSAM DIŞI olan şeyler kod tabanına SIZMADI:
-//     - attendance_events / ENTRY-EXIT hareket motoru yok
+//  3) FAZ 1B sayfaları (personel*.php) kendi giriş/çıkış yazma mantığını
+//     TEKRARLAMIYOR — attendance_events artık GERÇEKTEN VAR (Giriş-Çıkış
+//     fazı), ama TEK yazma yolu config/pdks.php → pdks_devam_kaydet()'tir;
+//     bu sayfalar ona dokunmaz. Ayrıca:
 //     - Android/NFC ÜRETİM kodu yok (yalnız Faz 0'ın teşhis APK'si tools/ altında,
 //       o da üretim değil)
-//     - api_pdks.php (Faz 2'nin API'si) yok
+//     - ayrı bir api_pdks.php dosyası yok (uç nokta giris_cikis.php içinde)
+//     - cihaz/token tabanlı model (attendance_devices/attendance_api_sessions) yok
 //  4) UID mantığı sayfa dosyalarında TEKRARLANMADI — yalnız config/pdks.php'nin
 //     fonksiyonları çağrılıyor (pdks_uid_hex_normalize/from_decimal doğrudan
 //     kart yazma yolunun DIŞINDA kullanılmıyor).
@@ -86,18 +89,26 @@ ok('personel_form.php: kart eylemlerinde pdks_can(\'cards\') tekrar kontrolü va
 ok('personel_form.php: silme işleminde pdks_can(\'employees\') tekrar kontrolü var',
     str_contains($pf, "pdks_can('employees')"));
 
-echo "\n=== 5. FAZ 1B KAPSAM DIŞI OLAN ŞEYLER SIZMADI ===\n";
+echo "\n=== 5. PERSONEL/KART SAYFALARI GİRİŞ-ÇIKIŞ MANTIĞINI TEKRARLAMIYOR ===\n";
+// Not: attendance_events / pdks_devam_kaydet() artık config/pdks.php'de
+// GERÇEKTEN VAR (Giriş-Çıkış fazı, bkz. scripts/pdks_db_smoke.php §15 ve
+// scripts/pdks_giris_cikis_static_smoke.php) — bu ARTIK "kapsam dışı" değil.
+// Burada doğrulanan, bu Faz 1B sayfalarının (personel*.php) KENDİ İÇLERİNDE
+// giriş/çıkış yazma mantığını TEKRARLAMADIĞI, TEK OTORİTENİN (config/pdks.php)
+// dışına taşmadığıdır.
 $tumIcerik = '';
 foreach ($sayfalar as $s) $tumIcerik .= "\n" . oku($s);
 $tumIcerik .= "\n" . oku('config/pdks.php');
+$sayfaIcerik = '';
+foreach ($sayfalar as $s) $sayfaIcerik .= "\n" . oku($s);
 
-ok('attendance_events tablosuna SQL yazımı KULLANILMIYOR (Faz 2 kapsamı)',
-    !preg_match('/\bINSERT\s+INTO\s+attendance_events\b/i', $tumIcerik));
-ok('ENTRY/EXIT (giriş/çıkış hareket) mantığı YOK',
-    !preg_match('/\b(event_type|entry_gate|proposed_type)\b/i', $tumIcerik));
-ok('api_pdks.php (Faz 2 API\'si) OLUŞTURULMADI',
+ok('Faz 1B sayfaları (personel*.php) attendance_events\'e SQL YAZMIYOR (yalnız config/pdks.php yazar)',
+    !preg_match('/\bINSERT\s+INTO\s+attendance_events\b/i', $sayfaIcerik));
+ok('Faz 1B sayfaları kendi giriş/çıkış yön mantığını TAŞIMIYOR (event_type/entry_gate/proposed_type)',
+    !preg_match('/\b(event_type|entry_gate|proposed_type)\b/i', $sayfaIcerik));
+ok('api_pdks.php (ayrı bir API dosyası) OLUŞTURULMADI — uç nokta giris_cikis.php İÇİNDE',
     !file_exists($KOK . '/api_pdks.php'));
-ok('attendance_devices/attendance_api_sessions (Faz 2 cihaz kaydı) KULLANILMIYOR',
+ok('attendance_devices/attendance_api_sessions (cihaz/token tabanlı model) KULLANILMIYOR',
     !preg_match('/\battendance_(devices|api_sessions)\b/i', $tumIcerik));
 ok('Android ÜRETİM Kotlin/Gradle dosyası REPO KÖKÜNDE yok (yalnız tools/ altındaki Faz 0 teşhis APK\'si — üretim değil)',
     !file_exists($KOK . '/app') && !file_exists($KOK . '/MainActivity.kt'));
@@ -157,16 +168,31 @@ $gitDurum = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelai
 ok('style.css / app.js / sw.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
     trim((string)$gitDurum) === '', (string)$gitDurum);
 
-// index.php ve config/helpers.php İÇİN: değiştiler (nav bağlama), ama
-// yalnız EKLEME olarak — mevcut hiçbir satır silinmedi/değiştirilmedi.
-foreach (['index.php', 'config/helpers.php'] as $navDosya) {
-    $diffOut = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- ' . escapeshellarg($navDosya) . ' 2>&1');
-    $silinenSatirlar = array_filter(explode("\n", (string)$diffOut), function ($l) {
-        return preg_match('/^-(?!--)/', $l) === 1;   // '-' ile başlayan ama '---' başlığı olmayan satır
-    });
-    ok("$navDosya: nav bağlama yalnız EKLEME (silinen satır yok)", count($silinenSatirlar) === 0,
-        count($silinenSatirlar) . ' satır silinmiş görünüyor');
-}
+// index.php İÇİN: değişti (nav bağlama), ama yalnız EKLEME olarak — mevcut
+// hiçbir satır silinmedi/değiştirilmedi. Bu fazda index.php'ye dokunulmadı.
+$diffIndex = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- index.php 2>&1');
+$silinenIndex = array_filter(explode("\n", (string)$diffIndex), function ($l) {
+    return preg_match('/^-(?!--)/', $l) === 1;   // '-' ile başlayan ama '---' başlığı olmayan satır
+});
+ok('index.php: nav bağlama yalnız EKLEME (silinen satır yok)', count($silinenIndex) === 0,
+    count($silinenIndex) . ' satır silinmiş görünüyor');
+
+// config/helpers.php İÇİN: Giriş-Çıkış fazı, Personel bölümünün görünürlük
+// koşulunu (§11) KASITLI olarak GENİŞLETTİ — yalnız attendance.scan yetkisi
+// olan (employees/cards YOK) bir kullanıcı da artık "Personel" bölüm
+// başlığını görmeli, aksi hâlde Giriş/Çıkış linki kimseye görünmezdi. Bu
+// YÜZDEN o TEK satırın değiştirilmesi (silinip yeniden yazılması) burada
+// BEKLENEN ve İNCELENMİŞ bir değişikliktir — "hiç silinmesin" kuralı
+// YALNIZ bu bilinen satır için gevşetilir, başka hiçbir satır için değil.
+$beklenenEskiSatir = "-    \$p_pdks  = (\$_fn && (can('attendance.employees') || can('attendance.cards'))) || \$p_adm;";
+$diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
+$silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
+    return preg_match('/^-(?!--)/', $l) === 1;
+});
+$beklenmeyenSilinen = array_filter($silinenHelpers, fn($l) => trim($l) !== trim($beklenenEskiSatir));
+ok('config/helpers.php: YALNIZ $p_pdks satırı (attendance.scan için genişletildi) değişti, başka hiçbir satır silinmedi',
+    count($beklenmeyenSilinen) === 0,
+    count($beklenmeyenSilinen) . " beklenmeyen silinen satır:\n" . implode("\n", $beklenmeyenSilinen));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

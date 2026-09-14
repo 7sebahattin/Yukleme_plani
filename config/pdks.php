@@ -36,7 +36,7 @@ defined('PDKS_FOTO_DIR')     || define('PDKS_FOTO_DIR', __DIR__ . '/../uploads/p
 const PDKS_UID_BAYT = [4, 7, 10];
 
 /** Geçerli UID kaynakları — otomatik tespit YASAK (karar #10). */
-const PDKS_UID_KAYNAKLARI = ['usb_decimal', 'nfc_hex'];
+const PDKS_UID_KAYNAKLARI = ['usb_decimal', 'nfc_hex', 'web_nfc'];
 
 /** Kart yaşam döngüsü durumları. */
 function pdks_kart_durumlari(): array
@@ -203,18 +203,54 @@ function pdks_uid_from_decimal(?string $ham, ?int $bayt = null): ?string
 /**
  * Kanonik HEX'i BAYT bazında ters çevirir (nibble değil).
  *
- * ⚠ YALNIZ TEŞHİS/GÖSTERİM AMAÇLIDIR — kimlik eşleştirmede KULLANILMAZ
- * (Faz 1 düzeltmesi, bkz. dosya başındaki "UID NORMALİZASYONU" bölümü).
- * "Bu kartın tersi böyle görünür" diye Android teşhis ekranında veya bir
- * çakışma uyarısında göstermek için kullanılabilir; ama pdks_kart_olustur()
- * ve pdks_kart_cozumle() artık BUNU kimlik eşitliği saymaz — iki farklı
- * fiziksel kartın kanonik UID'leri birbirinin bayt-tersi olabilir.
+ * ⚠ GENEL bir kimlik-eşleştirme aracı DEĞİLDİR (Faz 1 düzeltmesi, bkz. dosya
+ * başındaki "UID NORMALİZASYONU" bölümü) — pdks_kart_olustur() ve
+ * pdks_kart_cozumle() bunu KENDİLİĞİNDEN, kart bazında bir çakışma/eşleşme
+ * kuralı olarak kullanmaz; iki farklı fiziksel kartın kanonik UID'leri
+ * birbirinin bayt-tersi olabilir ve ikisi de ayrı ayrı var olabilmelidir.
+ *
+ * Android/USB teşhis ekranında "bu kartın tersi böyle görünür" notu için,
+ * VE ölçülmüş, TEK bir kaynağın (aşağıdaki pdks_uid_from_web_nfc()) kendi
+ * adaptöründe HER okuma için deterministik olarak kullanılır — o kullanım
+ * kart bazında değil, kaynak bazındadır ve bu fonksiyonun kendisi hâlâ genel
+ * bir eşleştirme kuralı haline GELMEZ.
  */
 function pdks_uid_reverse(string $kanonik): string
 {
     $out = '';
     for ($i = strlen($kanonik) - 2; $i >= 0; $i -= 2) $out .= substr($kanonik, $i, 2);
     return $out;
+}
+
+/**
+ * WEB NFC KAYNAK ADAPTÖRÜ — tarayıcının `NDEFReader.serialNumber` çıktısını kanona çevirir.
+ *
+ * ⚠ SPEKÜLATİF DEĞİL, ÖLÇÜLMÜŞ: docs/PDKS_WEBNFC_DIAGNOSTIC.md'deki gerçek
+ * cihaz testi, bilinen test kartı için Chrome Android'in `d7:7e:a8:25`
+ * döndürdüğünü, USB okuyucunun AYNI fiziksel kart için `631799511`
+ * (kanonik `25A87ED7`) verdiğini kanıtladı. `d7:7e:a8:25` ayraçsız/büyük
+ * harfle `D77EA825` olur — bu, `25A87ED7`'nin BAYT SIRASI TERS ÇEVRİLMİŞ
+ * hâlidir. Yani bu kaynak İÇİN doğru dönüşüm, HER okumada, deterministik
+ * biçimde bayt-tersini almaktır.
+ *
+ * Bu, dosya başındaki "UID NORMALİZASYONU" ve Faz 1 §6a'nın yasakladığı
+ * genel "otomatik ters-alias" kuralını İHLAL ETMEZ: orada yasaklanan, TEK
+ * bir kartın kanonik UID'sinin yanına, "belki tersi de odur" varsayımıyla
+ * SPEKÜLATİF bir ikinci alias satırı yazmaktı. Burada ise: (a) dönüşüm
+ * kart bazında değil, `web_nfc` KAYNAĞI için TÜM okumalarda aynı biçimde
+ * uygulanan bir adaptör kuralıdır, (b) varsayım değil GERÇEK ölçüme
+ * dayanır, (c) ikinci bir alias satırı YAZMAZ — yalnız TEK bir kanonik
+ * değer üretir (tıpkı pdks_uid_from_decimal()'in usb_decimal için yaptığı
+ * gibi). `nfc_hex` kaynağı (Android teşhis ekranının ham HEX girişi)
+ * ETKİLENMEZ — bu dönüşüm YALNIZ `web_nfc` içindir.
+ *
+ * @return string|null Kanonik HEX veya geçersizse null.
+ */
+function pdks_uid_from_web_nfc(?string $ham): ?string
+{
+    $temiz = pdks_uid_hex_normalize($ham);
+    if ($temiz === null) return null;
+    return pdks_uid_reverse($temiz);
 }
 
 /**
@@ -235,14 +271,16 @@ function pdks_uid_reverse(string $kanonik): string
  * hem geçerli ondalıktır (0x00BC614E) — otomatik tespit iki FARKLI kartı
  * sessizce birbirine karıştırırdı. Bilinmeyen kaynak → boş liste (fail-closed).
  *
- * @param string $kaynak 'usb_decimal' | 'nfc_hex'
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex' | 'web_nfc'
  */
 function pdks_uid_adaylari(string $ham, string $kaynak): array
 {
     if (!in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) return [];          // fail-closed
-    $k = ($kaynak === 'usb_decimal')
-        ? pdks_uid_from_decimal($ham)
-        : pdks_uid_hex_normalize($ham);
+    $k = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($ham),
+        'web_nfc'     => pdks_uid_from_web_nfc($ham),
+        default       => pdks_uid_hex_normalize($ham),                    // nfc_hex
+    };
     if ($k === null) return [];
     return [$k];                                                          // TEK aday — bkz. yukarıdaki not
 }
@@ -374,6 +412,29 @@ function pdks_tablolar(): array
         UNIQUE KEY `uq_gate_name` (`name`),
         INDEX `idx_gate_depo`   (`depo`(80)),
         INDEX `idx_gate_active` (`is_active`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    // ── attendance_events — Giriş/Çıkış kayıtları ────────
+    // Kullanıcının "basit son PDKS akışı" isteği: yalnız GERÇEKTEN gerekli
+    // alanlar. Cihaz/Android/token/heartbeat/offline-kuyruk tabloları YOK —
+    // bilerek. `source` (usb_decimal|nfc_hex|web_nfc) hangi kanaldan okunduğunu
+    // audit/teşhis için taşır; `canonical_uid_snapshot` o anki kartın kanonik
+    // UID'sinin ANLIK görüntüsüdür (kart ileride değiştirilse/iptal edilse de
+    // geçmiş kayıt hangi fiziksel UID ile okunduğunu kaybetmez). Sunucu saati
+    // otoritedir (`server_event_time`) — istemci zamanı hiç alınmaz/güvenilmez.
+    $t['attendance_events'] = "CREATE TABLE IF NOT EXISTS `attendance_events` (
+        `id`                     INT AUTO_INCREMENT PRIMARY KEY,
+        `employee_id`            INT          NOT NULL,
+        `card_id`                INT          NOT NULL,
+        `event_type`             VARCHAR(10)  NOT NULL,
+        `source`                 VARCHAR(20)  NOT NULL,
+        `canonical_uid_snapshot` VARCHAR(32)  NOT NULL,
+        `recorded_by_user_id`    INT          NULL DEFAULT NULL,
+        `server_event_time`      DATETIME     NOT NULL,
+        `created_at`             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_ae_emp_time`  (`employee_id`, `server_event_time`),
+        INDEX `idx_ae_card`      (`card_id`),
+        INDEX `idx_ae_type`      (`event_type`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
     return $t;
@@ -525,7 +586,7 @@ function require_pdks(string $eylem): void
 /**
  * Bir okumayı fiziksel karta çözer (alias tablosu üzerinden, kanonik eşleşme).
  *
- * @param string $kaynak 'usb_decimal' | 'nfc_hex' — ZORUNLU, tahmin edilmez.
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex' | 'web_nfc' — ZORUNLU, tahmin edilmez.
  * @return array|null ['card'=>..., 'employee'=>..., 'eslesen_uid'=>...] veya null
  */
 function pdks_kart_cozumle(string $ham, string $kaynak, ?PDO $pdo = null): ?array
@@ -592,7 +653,7 @@ function pdks_uid_cakismasi(string $kanonik, ?int $haricCardId = null, ?PDO $pdo
  * ters-alias, o GERÇEK ikinci kartın kaydını reddederdi. Bkz. dosya başındaki
  * "UID NORMALİZASYONU" bölümü ve docs/PDKS_FAZ1_SEMA.md §6a.
  *
- * @param string $kaynak 'usb_decimal' | 'nfc_hex'
+ * @param string $kaynak 'usb_decimal' | 'nfc_hex' | 'web_nfc'
  * @return array{ok:bool, card_id?:int, uid_hex?:string, hata?:string, kod?:string}
  */
 function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, array $ek = [], ?PDO $pdo = null): array
@@ -601,12 +662,14 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
 
     if (!in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
         return ['ok' => false, 'kod' => 'gecersiz_kaynak',
-                'hata' => 'UID kaynağı bildirilmeli (usb_decimal veya nfc_hex).'];
+                'hata' => 'UID kaynağı bildirilmeli (usb_decimal, nfc_hex veya web_nfc).'];
     }
 
-    $kanonik = ($kaynak === 'usb_decimal')
-        ? pdks_uid_from_decimal($hamUid)
-        : pdks_uid_hex_normalize($hamUid);
+    $kanonik = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($hamUid),
+        'web_nfc'     => pdks_uid_from_web_nfc($hamUid),
+        default       => pdks_uid_hex_normalize($hamUid),                 // nfc_hex
+    };
     if ($kanonik === null) {
         return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
     }
@@ -965,6 +1028,111 @@ function pdks_kart_degistir(int $eskiCardId, string $hamUid, string $kaynak, str
             ['yeni_card_id' => $yeni['card_id'], 'yeni_uid' => $yeni['uid_hex'], 'gerekce' => $gerekce]);
     }
     return ['ok' => true, 'card_id' => $yeni['card_id'], 'uid_hex' => $yeni['uid_hex'], 'eski_card_id' => $eskiCardId];
+}
+
+// =========================================================
+// GİRİŞ / ÇIKIŞ — DEVAM KAYDI MOTORU
+//
+// Kullanıcının "basit son PDKS akışı" isteği: yön (GİRİŞ/ÇIKIŞ) İSTEMCİDE
+// ASLA TAHMİN EDİLMEZ — ekranda kullanıcı açıkça GİRİŞ ya da ÇIKIŞ modunu
+// seçer, bu motor yalnız o seçili $eventType'ı yazar. Kart/personel kimliği
+// HER ZAMAN burada, sunucuda, mevcut pdks_kart_cozumle() ile çözülür;
+// istemci yalnız ham okuma + kaynak + seçili mod gönderir, hiçbir kimlik
+// iddiasında bulunmaz (§14). Cihaz/Android/token/heartbeat/offline-kuyruk/
+// vardiya/bordro YOK — bilerek (§16).
+// =========================================================
+
+/** Giriş/Çıkış olay türleri. */
+function pdks_event_turleri(): array
+{
+    return ['GIRIS' => 'Giriş', 'CIKIS' => 'Çıkış'];
+}
+
+/**
+ * Bir kart okumasını GİRİŞ/ÇIKIŞ olayı olarak kaydeder.
+ *
+ * Sıra: yön doğrula → kart çöz (bilinmeyen kart → fail-closed) → kart
+ * durumu doğrula (yalnız 'aktif' geçer, diğer 5 durum kendi Türkçe mesajını
+ * döner) → personel durumu doğrula → PDKS_COOLDOWN_SN saniyelik mükerrer
+ * okuma penceresi (aynı personel + aynı yön) → yaz → audit.
+ *
+ * ⚠ Mükerrer okuma penceresi PHP'de hesaplanan bir zaman damgasıyla
+ * karşılaştırılır (`NOW() - INTERVAL` gibi MySQL'e özgü SQL KULLANILMAZ) —
+ * böylece testte bellek içi SQLite üzerinde de aynen çalışır (repo
+ * pratiği: hks_eslesme_yaz()'daki taşınabilir upsert ile aynı gerekçe).
+ *
+ * @param string $kaynak    'usb_decimal' | 'nfc_hex' | 'web_nfc'
+ * @param string $eventType 'GIRIS' | 'CIKIS'
+ * @return array{ok:bool, kod?:string, hata?:string, event_id?:int, employee?:array, card?:array}
+ */
+function pdks_devam_kaydet(string $hamUid, string $kaynak, string $eventType, int $recordedByUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!array_key_exists($eventType, pdks_event_turleri())) {
+        return ['ok' => false, 'kod' => 'gecersiz_yon', 'hata' => 'Geçersiz giriş/çıkış yönü.'];
+    }
+
+    $cozum = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
+    if ($cozum === null) {
+        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'KART TANIMLI DEĞİL'];
+    }
+    $kart     = $cozum['card'];
+    $personel = $cozum['employee'];
+
+    $kartDurum = (string)$kart['status'];
+    if ($kartDurum !== 'aktif') {
+        $mesaj = match ($kartDurum) {
+            'iptal'        => 'KART İPTAL EDİLMİŞ',
+            'kayip'        => 'KART KAYIP',
+            'degistirildi' => 'KART DEĞİŞTİRİLMİŞ',
+            'suresi_doldu' => 'KARTIN SÜRESİ DOLMUŞ',
+            'pasif'        => 'KART PASİF',
+            default        => 'KART KULLANILAMAZ',
+        };
+        return ['ok' => false, 'kod' => 'kart_' . $kartDurum, 'hata' => $mesaj];
+    }
+
+    if ($personel === null) {
+        // Şema tutarlılığı bozulmadıkça (FK CASCADE) oluşmaz — yine de fail-closed.
+        return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'PERSONEL BULUNAMADI'];
+    }
+    if ((string)$personel['status'] !== 'aktif') {
+        return ['ok' => false, 'kod' => 'personel_pasif', 'hata' => 'PERSONEL PASİF'];
+    }
+
+    $esik = date('Y-m-d H:i:s', time() - PDKS_COOLDOWN_SN);
+    $st = $pdo->prepare(
+        "SELECT id FROM attendance_events
+          WHERE employee_id = ? AND event_type = ? AND server_event_time >= ?
+          ORDER BY id DESC LIMIT 1"
+    );
+    $st->execute([(int)$personel['id'], $eventType, $esik]);
+    if ($st->fetchColumn()) {
+        return ['ok' => false, 'kod' => 'mukerrer', 'hata' => 'BU KART ZATEN AZ ÖNCE OKUTULDU'];
+    }
+
+    $simdi = date('Y-m-d H:i:s');
+    $ins = $pdo->prepare(
+        "INSERT INTO attendance_events
+            (employee_id, card_id, event_type, source, canonical_uid_snapshot, recorded_by_user_id, server_event_time)
+         VALUES (?,?,?,?,?,?,?)"
+    );
+    $ins->execute([
+        (int)$personel['id'], (int)$kart['id'], $eventType, $kaynak,
+        (string)$kart['uid_hex'], $recordedByUserId, $simdi,
+    ]);
+    $eventId = (int)$pdo->lastInsertId();
+
+    if (function_exists('audit_log_event')) {
+        $eylem = $eventType === 'GIRIS' ? 'attendance_giris' : 'attendance_cikis';
+        audit_log_event($eylem, 'pdks', $eventId, null, [
+            'employee_id' => (int)$personel['id'], 'card_id' => (int)$kart['id'],
+            'source' => $kaynak, 'uid' => (string)$kart['uid_hex'],
+        ]);
+    }
+
+    return ['ok' => true, 'event_id' => $eventId, 'employee' => $personel, 'card' => $kart];
 }
 
 // =========================================================

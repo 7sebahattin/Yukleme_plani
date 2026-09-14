@@ -266,7 +266,7 @@ function render_desktop_sidebar(string $base): void {
     // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
     // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
     // basılır — pdks_can() burada tanımsız olurdu.
-    $p_pdks  = ($_fn && (can('attendance.employees') || can('attendance.cards'))) || $p_adm;
+    $p_pdks  = ($_fn && (can('attendance.employees') || can('attendance.cards') || can('attendance.scan'))) || $p_adm;
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -286,6 +286,7 @@ function render_desktop_sidebar(string $base): void {
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     $a_pdksp = in_array($cur, ['personel.php', 'personel_form.php'], true);
     $a_pdksk = $cur === 'personel_kartlar.php';
+    $a_pdksg = $cur === 'giris_cikis.php';
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -336,6 +337,7 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Personel</div>
         <?php if ($_fn && (can('attendance.employees') || $p_adm)) $lnk('personel.php', '👤', 'Personeller', $a_pdksp); ?>
         <?php if ($_fn && (can('attendance.cards')     || $p_adm)) $lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', $a_pdksk); ?>
+        <?php if ($_fn && (can('attendance.scan')      || $p_adm)) $lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', $a_pdksg); ?>
         <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
