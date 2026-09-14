@@ -124,6 +124,13 @@
 
 .pdks-kiosk-scan {
     min-height: 60vh;
+    /* dvh (dinamik viewport yüksekliği) desteklenen tarayıcılarda vh'nin
+       ÜZERİNE yazar — mobil Chrome'da `vh` adres çubuğu GİZLİYKEN'ki en
+       büyük yüksekliği kullanır, adres çubuğu görünürken içerik bu yüzden
+       gerçek görünür alandan TAŞAR (alt navigasyonun/tarayıcı arayüzünün
+       altında kalır). `dvh` bunu düzeltir — Android Chrome'da (Web NFC'nin
+       zaten zorunlu kıldığı tarayıcı) uzun süredir destekleniyor. */
+    min-height: 60dvh;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; gap: 14px; padding: 24px 16px; position: relative;
 }
@@ -163,8 +170,23 @@
 .pdks-kiosk-result-err .pdks-kiosk-result-msg { color: var(--danger); }
 .pdks-kiosk-result .pdks-avatar-xl { margin: 4px 0; }
 
+/* NFC butonu "dinlemede" durumu — yeşilimsi, belirgin, karıştırılmasın diye
+   tarama ekranının ana ikon/metniyle AYNI yeşili KULLANMAZ (o "başarı"
+   anlamına gelir); burada nötr bir vurgu yeterli. */
+.pdks-kiosk-nfc-armed {
+    border-color: var(--success) !important;
+    color: var(--success) !important;
+    font-weight: 700;
+}
+
 @media (max-width: 639px) {
-    .pdks-kiosk-scan { min-height: 56vh; }
-    .pdks-kiosk-scan-icon { font-size: 3.4rem; }
-    .pdks-kiosk-scan-text { font-size: 1.4rem; }
+    .pdks-kiosk-scan {
+        min-height: 56vh;
+        min-height: calc(100dvh - 130px);   /* bottomnav + üst boşluk payı düşülmüş, kaydırmasız sığsın diye */
+        gap: 10px; padding: 16px 14px;
+    }
+    .pdks-kiosk-scan-icon { font-size: 3rem; }
+    .pdks-kiosk-scan-text { font-size: 1.3rem; }
+    .pdks-kiosk-modesec { padding: 20px 12px; gap: 14px; }
+    .pdks-kiosk-modebtn { padding: 24px 18px; font-size: 1.15rem; }
 }

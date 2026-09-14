@@ -130,6 +130,43 @@ ok("attendance.scan yetkisiyle gösteriliyor", (bool)preg_match(
 ok('pdks_nfc_test.php sidebar/ana navigasyona EKLENMEDİ (yalnız kart yönetimi sayfasında ikincil link kalır)',
     !preg_match('/pdks_nfc_test\.php/', $helpersSrc));
 
+echo "\n=== 10. MOBİL NFC YAŞAM DÖNGÜSÜ — canlı düzeltme (re-arm, görünürlük) ===\n";
+ok("Başlangıç NFC buton etiketi 'NFC İLE OKU'", str_contains($src, 'NFC İLE OKU'));
+ok("Dinleme etiketi 'NFC HAZIR — KARTI YAKLAŞTIRIN'", str_contains($src, 'NFC HAZIR — KARTI YAKLAŞTIRIN'));
+ok('nfcBaslat() fonksiyonu tanımlı (yeniden kullanılabilir başlatma/yeniden-silahlanma)',
+    (bool)preg_match('/function\s+nfcBaslat\s*\(/', $srcKod));
+ok('Başarılı NFC okuması sonrası kaydet() nfcBaslat(true) ile SESSİZCE yeniden silahlanmayı dener',
+    (bool)preg_match('/if\s*\(nfcOkumasiMi\)\s*nfcBaslat\(true\)/', $srcKod));
+ok('kaydet() İKİ dalda da (başarı VE ağ hatası) yeniden silahlanma dener',
+    substr_count($srcKod, 'nfcBaslat(true)') >= 2);
+ok('Buton tıklaması GERÇEK kullanıcı dokunuşuyla nfcBaslat(false) çağırır (başarısızlıkta açık hata gösterir)',
+    (bool)preg_match('/nfcBtn\.addEventListener\(.click.[\s\S]{0,200}nfcBaslat\(false\)/', $srcKod));
+ok("Otomatik yeniden silahlanma başarısız olursa AÇIKÇA 'tekrar dokunun' hatası gösterilir",
+    str_contains($src, 'NFC başlatılamadı. NFC İLE OKU butonuna tekrar dokunun.'));
+ok('visibilitychange dinleyicisi var (sekme arka plandan dönünce oturum sessizce doğrulanır)',
+    str_contains($srcKod, "visibilitychange"));
+ok('reading/readingerror dinleyicileri TEK NDEFReader örneğine BİR KEZ eklenir (tekrar tekrar değil)',
+    (bool)preg_match('/if\s*\(\s*!ndefOkuyucu\s*\)\s*\{[\s\S]{0,400}addEventListener\(.reading.[\s\S]{0,400}addEventListener\(.readingerror./', $srcKod));
+ok('Mod değişimi (girModuSec/gcModeChange) NFC oturum durumuna (ndefOkuyucu/nfcListening) DOKUNMUYOR',
+    !preg_match('/function girModuSec[\s\S]{0,500}(ndefOkuyucu|nfcListening)/', $srcKod)
+    && !preg_match("/gcModeChange'\)\.addEventListener\('click'[\s\S]{0,500}(ndefOkuyucu|nfcListening)/", $srcKod));
+
+echo "\n=== 11. MOBİL DÜZEN — üst başlık gizleme, hidden-attribute tuzağına DÜŞMEDİ ===\n";
+ok('.page-head gizlemek için style.display kullanılıyor (hidden ÖZNİTELİĞİ DEĞİL — .page-head display:flex taşır ve onu ezer)',
+    str_contains($src, "pageHead.style.display = 'none'") && str_contains($src, "pageHead.style.display = ''"));
+ok('.page-head İÇİN "hidden = true/false" YAZILMADI (bilinen [hidden] tuzağı — bkz. CLAUDE.md maliyet.css notu)',
+    !preg_match('/pageHead\.hidden\s*=/', $srcKod));
+ok('#gcPageHead işaretlemesi sayfada var', str_contains($src, 'id="gcPageHead"'));
+
+$pdksCss = oku2('assets/pdks.css');
+ok('.pdks-kiosk-scan dvh (dinamik viewport) kullanıyor — mobil tarayıcı adres çubuğu taşmasına karşı',
+    str_contains($pdksCss, 'min-height: 60dvh'));
+ok('Mobil media query bottomnav/üst boşluk payı düşülmüş calc(100dvh - ...) kullanıyor',
+    (bool)preg_match('/calc\(100dvh\s*-\s*\d+px\)/', $pdksCss));
+ok('.pdks-kiosk-nfc-armed sınıfı CSS\'te tanımlı', str_contains($pdksCss, '.pdks-kiosk-nfc-armed'));
+ok('JS, dinleme durumunda .pdks-kiosk-nfc-armed sınıfını ekliyor/kaldırıyor',
+    str_contains($srcKod, "classList.toggle('pdks-kiosk-nfc-armed'"));
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);

@@ -60,6 +60,19 @@ try {
     set_flash('error', 'Personel tabloları henüz hazır değil. Bir yöneticinin migrate.php sayfasından "PDKS Tablolarını Oluştur" demesi gerekiyor.');
 }
 
+// ── Teşhis: filtresiz sonuç 0 ise, bunun GERÇEKTEN boş bir tablo mu yoksa
+// depo filtresinin mi (depo_sql_in) sonucu olduğunu ayırt et — "Henüz
+// personel kaydı yok" mesajı aksi hâlde YANILTICI olur: kayıt VAR ama aktif
+// depoda görünmüyor olabilir (ör. masaüstünde bir depo seçiliyken oluşturulan
+// personel, farklı bir depo seçili mobil oturumda depo_sql_in tarafından
+// elenir — bkz. "Atanmamış veri kuralı" CLAUDE.md). Bu yalnız TEŞHİS
+// amaçlıdır, filtreyi ASLA zayıflatmaz/atlamaz.
+$genelToplam = null;
+if ($toplam === 0 && $q === '' && $durum_f === '' && $dept_f === '' && $dsql !== '') {
+    try { $genelToplam = (int)$pdo->query("SELECT COUNT(*) FROM employees")->fetchColumn(); }
+    catch (PDOException $e) { $genelToplam = null; }
+}
+
 $toplamSayfa = max(1, (int)ceil($toplam / $limit));
 
 // Filtre şeridindeki departman listesi — mevcut kayıtlardan, tanım tablosuna dokunmadan
@@ -82,6 +95,9 @@ render_flash();
         <?php endif; ?>
         <?php if (pdks_can('cards')): ?>
         <a href="personel_kartlar.php" class="btn">🪪 Kart Yönetimi</a>
+        <?php endif; ?>
+        <?php if (pdks_can('scan')): ?>
+        <a href="giris_cikis.php" class="btn btn-primary">🚪 Giriş / Çıkış</a>
         <?php endif; ?>
     </div>
 </div>
@@ -111,7 +127,15 @@ render_flash();
 <?php if (empty($rows)): ?>
 <div class="pdks-empty">
     <span class="pdks-empty-icon" aria-hidden="true">👤</span>
+    <?php if ($genelToplam !== null && $genelToplam > 0): ?>
+    <p>Sistemde <?= (int)$genelToplam ?> personel kaydı var, ama hiçbiri <strong>aktif depo</strong>nuzda görünmüyor.</p>
+    <p class="muted" style="margin-top:-8px">
+        Aktif depo: <strong><?= h(active_depot() ?? '—') ?></strong> —
+        <a href="<?= h($base) ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '') ?>">depo değiştir</a>
+    </p>
+    <?php else: ?>
     <p><?= $toplam === 0 && $q === '' && $durum_f === '' ? 'Henüz personel kaydı yok.' : 'Bu filtrelerle personel bulunamadı.' ?></p>
+    <?php endif; ?>
     <?php if (pdks_can('employees')): ?>
     <a href="personel_form.php" class="btn btn-primary">+ İlk Personeli Ekle</a>
     <?php endif; ?>
