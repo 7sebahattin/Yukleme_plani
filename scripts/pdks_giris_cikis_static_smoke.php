@@ -130,26 +130,54 @@ ok("attendance.scan yetkisiyle gösteriliyor", (bool)preg_match(
 ok('pdks_nfc_test.php sidebar/ana navigasyona EKLENMEDİ (yalnız kart yönetimi sayfasında ikincil link kalır)',
     !preg_match('/pdks_nfc_test\.php/', $helpersSrc));
 
-echo "\n=== 10. MOBİL NFC YAŞAM DÖNGÜSÜ — canlı düzeltme (re-arm, görünürlük) ===\n";
-ok("Başlangıç NFC buton etiketi 'NFC İLE OKU'", str_contains($src, 'NFC İLE OKU'));
-ok("Dinleme etiketi 'NFC HAZIR — KARTI YAKLAŞTIRIN'", str_contains($src, 'NFC HAZIR — KARTI YAKLAŞTIRIN'));
-ok('nfcBaslat() fonksiyonu tanımlı (yeniden kullanılabilir başlatma/yeniden-silahlanma)',
-    (bool)preg_match('/function\s+nfcBaslat\s*\(/', $srcKod));
-ok('Başarılı NFC okuması sonrası kaydet() nfcBaslat(true) ile SESSİZCE yeniden silahlanmayı dener',
-    (bool)preg_match('/if\s*\(nfcOkumasiMi\)\s*nfcBaslat\(true\)/', $srcKod));
-ok('kaydet() İKİ dalda da (başarı VE ağ hatası) yeniden silahlanma dener',
-    substr_count($srcKod, 'nfcBaslat(true)') >= 2);
-ok('Buton tıklaması GERÇEK kullanıcı dokunuşuyla nfcBaslat(false) çağırır (başarısızlıkta açık hata gösterir)',
-    (bool)preg_match('/nfcBtn\.addEventListener\(.click.[\s\S]{0,200}nfcBaslat\(false\)/', $srcKod));
-ok("Otomatik yeniden silahlanma başarısız olursa AÇIKÇA 'tekrar dokunun' hatası gösterilir",
-    str_contains($src, 'NFC başlatılamadı. NFC İLE OKU butonuna tekrar dokunun.'));
-ok('visibilitychange dinleyicisi var (sekme arka plandan dönünce oturum sessizce doğrulanır)',
-    str_contains($srcKod, "visibilitychange"));
-ok('reading/readingerror dinleyicileri TEK NDEFReader örneğine BİR KEZ eklenir (tekrar tekrar değil)',
-    (bool)preg_match('/if\s*\(\s*!ndefOkuyucu\s*\)\s*\{[\s\S]{0,400}addEventListener\(.reading.[\s\S]{0,400}addEventListener\(.readingerror./', $srcKod));
-ok('Mod değişimi (girModuSec/gcModeChange) NFC oturum durumuna (ndefOkuyucu/nfcListening) DOKUNMUYOR',
-    !preg_match('/function girModuSec[\s\S]{0,500}(ndefOkuyucu|nfcListening)/', $srcKod)
-    && !preg_match("/gcModeChange'\)\.addEventListener\('click'[\s\S]{0,500}(ndefOkuyucu|nfcListening)/", $srcKod));
+echo "\n=== 10. WEB NFC — pdks_nfc_test.php İLE AYNI, KANITLANMIŞ TEK-DOKUNUŞ DİZİSİ ===\n";
+// ⚠ Canlı hata: önceki sürüm her okumadan SONRA ve sekme görünürlüğü
+// değiştiğinde OTOMATİK scan() çağırıyordu (kullanıcı dokunuşu OLMADAN) —
+// bu, Chrome'un Web NFC oturumunu sessizce bozup Android'in kendi "Etiket
+// algılandı" arayüzünün devreye girmesine yol açıyordu (gerçek cihaz ekran
+// görüntüsüyle doğrulandı). Düzeltme: OTOMATİK yeniden silahlanma TAMAMEN
+// KALDIRILDI — teşhis sayfasıyla BİREBİR AYNI dizi kullanılır.
+$nfcTestSrc = oku2('pdks_nfc_test.php');
+
+ok("Başlangıç NFC buton etiketi 'NFC İLE KART OKU'", str_contains($src, 'NFC İLE KART OKU'));
+ok("Dinleme etiketi 'NFC HAZIR — KARTI TELEFONA YAKLAŞTIRIN'", str_contains($src, 'NFC HAZIR — KARTI TELEFONA YAKLAŞTIRIN'));
+ok('OTOMATİK yeniden silahlanma fonksiyonu (nfcBaslat/sessiz parametreli) KALDIRILDI',
+    !preg_match('/function\s+nfcBaslat\s*\(/', $srcKod));
+ok('visibilitychange tabanlı sessiz yeniden-scan() KALDIRILDI (transient activation ihlali riskiydi)',
+    !str_contains($srcKod, 'visibilitychange'));
+ok('kaydet() artık NFC okumasından sonra yalnız BUTONU SIFIRLAR — scan() TEKRAR ÇAĞRILMIYOR',
+    (bool)preg_match('/if\s*\(nfcOkumasiMi\)\s*nfcButonuSifirla\(\)/', $srcKod)
+    && substr_count($srcKod, 'nfcButonuSifirla()') >= 2
+    && !preg_match('/if\s*\(nfcOkumasiMi\)\s*nfcBaslat/', $srcKod));
+
+ok('YENİ NDEFReader() BUTON TIKLAMA İŞLEYİCİSİNİN İÇİNDE oluşturuluyor (teşhis sayfasıyla AYNI desen)',
+    (bool)preg_match("/nfcBtn\\.addEventListener\\(.click.[\\s\\S]{0,400}new NDEFReader\\(\\)/", $srcKod));
+ok('reading dinleyicisi scan()\'DAN ÖNCE ekleniyor (teşhis sayfasıyla AYNI sıra)',
+    (bool)preg_match('/addEventListener\(.reading.[\s\S]{0,400}\.scan\(/', $srcKod));
+ok('readingerror dinleyicisi de eklenmiş', str_contains($srcKod, "addEventListener('readingerror'"));
+ok('scan() bir AbortController sinyaliyle çağrılıyor ("stop/abort" gereksinimini karşılamak için)',
+    str_contains($srcKod, 'new AbortController()') && (bool)preg_match('/\.scan\(\s*\{\s*signal:\s*ac\.signal\s*\}\s*\)/', $srcKod));
+ok('Kart okunduğunda oturum AÇIKÇA abort() ile kapatılıyor (sıradaki kart YENİ dokunuş gerektirir)',
+    (bool)preg_match("/addEventListener\\(.reading.[\\s\\S]{0,400}ac\\.abort\\(\\)/", $srcKod));
+ok('scan() reddi (.catch) HER ZAMAN açık Türkçe hata gösterir (sessiz mod YOK)',
+    str_contains($src, 'NFC başlatılamadı. NFC İLE KART OKU butonuna tekrar dokunun.'));
+
+echo "\n--- 10b. Teşhis panosu (geçici) ---\n";
+ok('#gcNfcDebug paneli sayfada var', str_contains($src, 'id="gcNfcDebug"'));
+ok('NFC support / secure context durumu panoya yazılıyor', str_contains($srcKod, 'secure context'));
+ok('scan() reddi err.name / err.message panoya yazılıyor (hangi hatayla reddedildiğini görmek için)',
+    (bool)preg_match('/err\s*&&\s*err\.name/', $srcKod) && (bool)preg_match('/err\s*&&\s*err\.message/', $srcKod));
+// Not: serialNumber/UID panoya YAZILIR (kullanıcının açık isteği — "serialNumber
+// received" teşhis panosunda görünmeli); yasaklanan yalnız kimlik doğrulama/
+// oturum bilgisidir (csrf token, personel adı).
+ok('Panoya CSRF token veya personel adı YAZILMIYOR', !preg_match('/nfcDebugYaz\([^)]*(csrf|full_name)/i', $srcKod));
+
+echo "\n--- 10c. Mod değişimi NFC oturumuna karışmıyor (yalnız buton kapsamlı yerel değişkenler) ---\n";
+ok('NFC oturum durumu (ac/ndef) fonksiyon-yerel — modül seviyesinde paylaşılan bir durum YOK',
+    !preg_match('/var\s+ndefOkuyucu\b/', $srcKod) && !preg_match('/var\s+nfcListening\b/', $srcKod));
+ok('Mod değişimi (girModuSec/gcModeChange) NFC koduna hiç DOKUNMUYOR',
+    !preg_match('/function girModuSec[\s\S]{0,500}(NDEFReader|AbortController)/', $srcKod)
+    && !preg_match("/gcModeChange'\)\.addEventListener\('click'[\s\S]{0,500}(NDEFReader|AbortController)/", $srcKod));
 
 echo "\n=== 11. MOBİL DÜZEN — üst başlık gizleme, hidden-attribute tuzağına DÜŞMEDİ ===\n";
 ok('.page-head gizlemek için style.display kullanılıyor (hidden ÖZNİTELİĞİ DEĞİL — .page-head display:flex taşır ve onu ezer)',
@@ -164,8 +192,8 @@ ok('.pdks-kiosk-scan dvh (dinamik viewport) kullanıyor — mobil tarayıcı adr
 ok('Mobil media query bottomnav/üst boşluk payı düşülmüş calc(100dvh - ...) kullanıyor',
     (bool)preg_match('/calc\(100dvh\s*-\s*\d+px\)/', $pdksCss));
 ok('.pdks-kiosk-nfc-armed sınıfı CSS\'te tanımlı', str_contains($pdksCss, '.pdks-kiosk-nfc-armed'));
-ok('JS, dinleme durumunda .pdks-kiosk-nfc-armed sınıfını ekliyor/kaldırıyor',
-    str_contains($srcKod, "classList.toggle('pdks-kiosk-nfc-armed'"));
+ok('JS, dinlemeye geçince .pdks-kiosk-nfc-armed EKLİYOR, sıfırlayınca KALDIRIYOR',
+    str_contains($srcKod, "classList.add('pdks-kiosk-nfc-armed')") && str_contains($srcKod, "classList.remove('pdks-kiosk-nfc-armed')"));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
