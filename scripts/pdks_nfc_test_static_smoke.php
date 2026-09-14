@@ -55,10 +55,27 @@ ok('pdks_kart_olustur/pdks_kart_ata ÇAĞRILMIYOR (kart ataması yapmıyor)',
 ok('"hiçbir kayıt yazmaz" uyarısı EKRANDA açıkça yazıyor', str_contains($src, 'hiçbir kayıt yazmaz'));
 
 echo "\n=== 3. İZİN YALNIZ KULLANICI ETKİLEŞİMİYLE İSTENİYOR ===\n";
-ok('new NDEFReader() sayfa açılışında DEĞİL, tıklama işleyicisinin İÇİNDE',
-    (bool)preg_match('/addEventListener\(.click.[\s\S]{0,400}new NDEFReader\(\)/', $src));
-ok('ndef.scan() otomatik çalışmıyor (yalnız buton tıklamasından sonra çağrılıyor)',
-    (bool)preg_match('/startBtn\.addEventListener\(.click.[\s\S]*?\.scan\(\)/', $src));
+// ⚠ Okuma dizisi artık bu dosyada DEĞİL: config/pdks.php → pdks_nfc_oku_js()
+// içindeki PAYLAŞILAN yolda (giris_cikis.php de AYNI koddan geçer — bu sayfa
+// gerçek cihazda çalışıyordu, o sayfa kendi varyantıyla çalışmıyordu).
+// DAVRANIŞ değişmedi; burada hem paylaşılan yol hem de bu sayfanın onu
+// YALNIZ tıklama içinden çağırdığı doğrulanır.
+$pdksSrc = (string)@file_get_contents($KOK . '/config/pdks.php');
+$helperJs = '';
+if (preg_match("/echo <<<'JS'\n(.*?)\nJS;/s", $pdksSrc, $hm)) $helperJs = $hm[1];
+ok('paylaşılan okuma yolu (pdks_nfc_oku_js) bulundu', $helperJs !== '');
+ok('bu sayfa paylaşılan yolu basıyor', str_contains($src, 'pdks_nfc_oku_js()'));
+ok('sayfa KENDİ new NDEFReader()ını taşımıyor (tek kopya paylaşılan yolda)',
+    !preg_match('/^(?!\s*\/\/).*new NDEFReader\(\)/m', $src));
+ok('new NDEFReader() paylaşılan yolda, scan() ile aynı fonksiyonda',
+    str_contains($helperJs, 'new NDEFReader()') && str_contains($helperJs, '.scan()'));
+ok('okuma sayfa açılışında DEĞİL, tıklama işleyicisinin İÇİNDE başlatılıyor',
+    (bool)preg_match('/startBtn\.addEventListener\(.click.[\s\S]{0,900}PdksNfcOku\.baslat\(/', $src));
+ok('scan() otomatik çalışmıyor — paylaşılan yolda zamanlayıcı/otomatik tetik YOK',
+    !preg_match('/setTimeout|setInterval|visibilitychange/', $helperJs));
+ok('scan() ARGÜMANSIZ (AbortController/signal YOK — canlı hatanın kaynağıydı)',
+    str_contains($helperJs, '.scan().then(') && !preg_match('/\.scan\(\s*\{/', $helperJs)
+    && !str_contains($helperJs, 'AbortController'));
 
 echo "\n=== 4. FAZ 1 §6a KURALI BU SAYFADA DA KORUNUYOR ===\n";
 ok('"otomatik alias DEĞİL" notu ekranda açık',
@@ -73,7 +90,7 @@ $beklenen = [
     'Ayraçsız gösterim'          => 'rStripped',
     'Normalize edilmiş aday'     => 'rSame',
     'User-Agent'                 => 'navigator.userAgent',
-    'NDEFReader destek göstergesi' => "'NDEFReader' in window",
+    'NDEFReader destek göstergesi' => "'NDEFReader' in window",   // ortam tablosu — okuma yolu DEĞİL
     'Güvenli bağlam göstergesi'  => 'isSecureContext',
     'Başlat butonu (Türkçe metin)' => 'NFC OKUMAYI BAŞLAT',
     'Hata adı/mesajı alanı'      => 'rErrName',

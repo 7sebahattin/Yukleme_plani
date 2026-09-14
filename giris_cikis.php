@@ -128,9 +128,13 @@ render_flash();
             <pre id="gcNfcDebug" class="pdks-kiosk-nfc-debug"></pre>
         </div>
 
-        <!-- USB HID girişi — görsel olarak gizli ama HER ZAMAN odaklı -->
+        <!-- USB HID girişi — görsel olarak gizli ama masaüstünde HER ZAMAN odaklı.
+             ⚠ inputmode="none": USB HID okuyucu FİZİKSEL bir klavyedir, bu alana
+             yazmaya devam eder; ama Android'de alan odaklanınca YAZILIM KLAVYESİ
+             AÇILMAZ (canlı hata: Giriş/Çıkış ekranında sayısal klavye açılıyordu).
+             inputmode="numeric" idi — yazılım klavyesini bilerek DAVET ediyordu. -->
         <input type="text" id="gcScanInput" class="pdks-kiosk-hidden-input"
-               inputmode="numeric" autocomplete="off" aria-hidden="true" tabindex="-1">
+               inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
         <button type="button" class="btn btn-ghost" id="gcModeChange" style="margin-top:24px">↩ Modu Değiştir</button>
 
@@ -140,6 +144,8 @@ render_flash();
         </div>
     </div>
 </div>
+
+<?php pdks_nfc_oku_js();   /* ortak Web NFC okuma yolu — pdks_nfc_test.php ile AYNI kod */ ?>
 
 <script>
 (function () {
@@ -157,6 +163,15 @@ render_flash();
     var nfcBtnWrap = document.getElementById('gcNfcBtnWrap');
     var nfcBtn     = document.getElementById('gcNfcBtn');
     var nfcHint    = document.getElementById('gcNfcHint');
+    var nfcDebugEl = document.getElementById('gcNfcDebug');
+
+    // ⚠ GEÇİCİ TEŞHİS GÜNLÜĞÜ — canlı NFC testi geçene kadar. Hassas hiçbir
+    // veri (CSRF token / personel adı) YAZILMAZ; yalnız akış adımları.
+    function nfcDebugYaz(satir) {
+        if (!nfcDebugEl) return;
+        var zaman = new Date().toLocaleTimeString('tr-TR');
+        nfcDebugEl.textContent = '[' + zaman + '] ' + satir + '\n' + nfcDebugEl.textContent;
+    }
 
     var MOD_ETIKET = { GIRIS: '✅ GİRİŞ MODU', CIKIS: '🚪 ÇIKIŞ MODU' };
     var MOD_SINIF  = { GIRIS: 'pdks-kiosk-mode-badge-giris', CIKIS: 'pdks-kiosk-mode-badge-cikis' };
@@ -165,7 +180,16 @@ render_flash();
     var busy = false;
     var resultTimer = null;
 
+    // ⚠ Masaüstü (fare/ince işaretçi) ile dokunmatik ayrımı: USB HID kutusuna
+    // OTOMATİK odaklanmak masaüstünde ŞART (okuyucu oraya yazar), ama telefonda
+    // yazılım klavyesini açtırır. Dokunmatik-yalnız cihazlarda otomatik odak
+    // YAPILMAZ; USB HID takılı bir dokunmatik cihazda ekrana bir kez dokunmak
+    // yine odaklar (aşağıdaki genel click dinleyicisi) ve inputmode="none"
+    // sayesinde o durumda da klavye açılmaz.
+    var inceIsaretci = !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches);
+
     function focusInput() {
+        if (!inceIsaretci) return;   // dokunmatik: klavyeyi davet etme
         try { scanInput.focus({ preventScroll: true }); } catch (e) { try { scanInput.focus(); } catch (e2) {} }
     }
 
@@ -247,7 +271,11 @@ render_flash();
         return d.innerHTML;
     }
 
-    function kaydet(hamUid, kaynak, nfcOkumasiMi) {
+    // ⚠ NFC oturumuna HİÇ DOKUNMAZ. Önceki sürüm buradan nfcButonuSifirla()
+    // çağırıyor ve okuma sonrası oturumu abort() ediyordu; teşhis sayfası
+    // (gerçek cihazda çalışan sürüm) oturumu AÇIK BIRAKIR ve sıradaki kartı
+    // aynı oturumdan okur. Kayıt yolu artık yalnız kaydeder.
+    function kaydet(hamUid, kaynak) {
         if (busy || !currentMode) return;
         var deger = String(hamUid || '').trim();
         if (deger === '') return;
@@ -260,20 +288,15 @@ render_flash();
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 busy = false;
+                nfcDebugYaz('backend response: ' + ((d && d.ok) ? 'ok' : 'hata (' + ((d && d.kod) || '?') + ')'));
                 if (d && d.ok) basariGoster(d); else hataGoster(d && d.hata);
                 focusInput();
-                // Bu okuma NFC'den geldiyse: OTOMATİK yeniden scan() ÇAĞRILMAZ
-                // (bkz. aşağıdaki NFC bölümünün başındaki not — kullanıcı
-                // dokunuşu OLMADAN scan() çağırmak Chrome'un Web NFC oturumunu
-                // güvenilmez kılabiliyordu). Yalnız butonu "tekrar dokunun"
-                // durumuna sıfırlıyoruz — sıradaki kart için AÇIK bir dokunuş gerekir.
-                if (nfcOkumasiMi) nfcButonuSifirla();
             })
             .catch(function () {
                 busy = false;
+                nfcDebugYaz('backend response: ağ hatası');
                 hataGoster('Bağlantı hatası. Tekrar deneyin.');
                 focusInput();
-                if (nfcOkumasiMi) nfcButonuSifirla();
             });
     }
 
@@ -304,100 +327,79 @@ render_flash();
     });
 
     // ── Web NFC girişi ─────────────────────────────────────
+    // ⚠ OKUMA DİZİSİ BU SAYFAYA AİT DEĞİLDİR: PdksNfcOku.baslat()
+    // (config/pdks.php) çağrılır ve pdks_nfc_test.php TEŞHİS SAYFASI DA
+    // AYNI KODDAN geçer — tek kopya, ayrışma imkânsız.
+    //
+    // ⚠ NEDEN: bu sayfa kendi Web NFC varyantını taşıyordu (AbortController
+    // + scan({signal}) + her okumadan sonra ac.abort() + scan() çözülmeden
+    // butonu pasifleştirme) ve GERÇEK TELEFONDA HİÇ ÇALIŞMIYORDU; teşhis
+    // sayfası AYNI telefonda kartı okuyup serialNumber döndürüyordu.
+    // Varyantın tamamı kaldırıldı. Burada İKİNCİ BİR `new NDEFReader()`
+    // AÇMAYIN — ayrışan taraf sessizce ölür.
+    //
     // ⚠ Bayt-tersi dönüşümü BURADA YAPILMAZ — ham serialNumber olduğu gibi
     // sunucuya (kaynak=web_nfc ile) gönderilir; kanonikleştirme HER ZAMAN
     // sunucuda pdks_uid_from_web_nfc() ile yapılır (TEK OTORİTE — bkz.
     // config/pdks.php "UID NORMALİZASYONU" bölümü).
     //
-    // ⚠ CANLI HATA + DÜZELTME (bkz. docs/PDKS_GIRIS_CIKIS.md): Önceki
-    // sürüm her başarılı okumadan SONRA ve sekme görünürlüğü değiştiğinde
-    // OTOMATİK olarak scan()'ı yeniden çağırıyordu — GERÇEK bir kullanıcı
-    // dokunuşu OLMADAN. Web NFC'nin "transient activation" kuralı scan()'ın
-    // yalnız bir kullanıcı hareketinin İÇİNDE güvenilir olduğunu söyler;
-    // otomatik çağrı Chrome'un aktif NFC dispatch kaydını sessizce
-    // düşürüyor, bu da Android'in kendi "Etiket algılandı" sistem arayüzünün
-    // devreye girmesine yol açıyordu (canlı ekran görüntüsüyle doğrulandı —
-    // telefon etiketi algılıyor ama SAYFA reading olayını hiç almıyordu).
-    //
-    // DÜZELTME: pdks_nfc_test.php (teşhis sayfası, GERÇEK cihazda kanıtlanmış)
-    // İLE BİREBİR AYNI, BASİT dizi kullanılır — buton tıklaması → YENİ
-    // NDEFReader() → dinleyiciler → scan(). OTOMATİK yeniden silahlanma
-    // YOK. Her kart için AYRI, gerçek bir dokunuş şart — süreklilik yerine
-    // güvenilirlik tercih edildi (kullanıcının açık isteği).
-    var nfcDestekli = ('NDEFReader' in window) && !!window.isSecureContext;
-    var nfcDebugEl  = document.getElementById('gcNfcDebug');
-
-    var NFC_ETIKET_HAZIR     = '📡 NFC İLE KART OKU';
-    var NFC_ETIKET_ISLENIYOR = '📡 İzin isteniyor…';
-    var NFC_ETIKET_DINLEME   = '🟢 NFC HAZIR — KARTI TELEFONA YAKLAŞTIRIN';
-
-    // ⚠ GEÇİCİ TEŞHİS GÜNLÜĞÜ — canlı NFC sorunu doğrulanana kadar. Hassas
-    // hiçbir veri (UID/isim/CSRF) yazılmaz, yalnız Web NFC durum geçişleri.
-    function nfcDebugYaz(satir) {
-        if (!nfcDebugEl) return;
-        var zaman = new Date().toLocaleTimeString('tr-TR');
-        nfcDebugEl.textContent = '[' + zaman + '] ' + satir + '\n' + nfcDebugEl.textContent;
-    }
-
-    function nfcButonuSifirla() {
-        nfcBtn.disabled = false;
-        nfcBtn.textContent = NFC_ETIKET_HAZIR;
-        nfcBtn.classList.remove('pdks-kiosk-nfc-armed');
-    }
+    // Yaşam döngüsü teşhis sayfasıyla AYNI: bir dokunuş oturumu başlatır,
+    // oturum AÇIK KALIR, sıradaki kartlar aynı oturumdan okunur. Okuma
+    // sonrası abort() YOK, otomatik yeniden scan() YOK, visibilitychange YOK.
+    var nfcDinlemede = false;
+    var NFC_ETIKET_DINLEME = '🟢 NFC HAZIR — KARTI TELEFONA YAKLAŞTIRIN';
 
     nfcDebugYaz('NFC support: ' + (('NDEFReader' in window) ? 'evet' : 'hayır') +
         ' · secure context: ' + (window.isSecureContext ? 'evet' : 'hayır'));
 
-    if (nfcDestekli) {
+    if (PdksNfcOku.destekli()) {
         nfcBtnWrap.hidden = false;
         nfcHint.textContent = ' veya NFC ile telefonun arkasına yaklaştırın';
+        // ⚠ DEĞİŞMEZ KURAL: destek VE güvenli bağlam varsa buton MUTLAKA
+        // tıklanabilir olmalıdır. "NFC support: evet" yazıp butonu pasif
+        // bırakmak mantıksal olarak GEÇERSİZ bir durumdur (bkz. regresyon
+        // testi). Başka HİÇBİR sebeple pasifleştirilmez.
+        nfcBtn.disabled = false;
+        nfcDebugYaz('button: enabled');
 
         nfcBtn.addEventListener('click', function () {
-            // ⚠ pdks_nfc_test.php İLE AYNI, KANITLANMIŞ dizi: tıklamanın
-            // İÇİNDE yepyeni bir NDEFReader oluşturulur — önceki oturumdan
-            // HİÇBİR ŞEY yeniden kullanılmaz.
-            nfcBtn.disabled = true;
-            nfcBtn.textContent = NFC_ETIKET_ISLENIYOR;
-            nfcDebugYaz('Buton tıklandı — NDEFReader oluşturuluyor');
+            // Teşhis sayfasıyla AYNI koruma ve AYNI sıra. Buton scan()
+            // ÇÖZÜLENE KADAR pasifleştirilmez — scan() reddedilirse kullanıcı
+            // tekrar dokunabilmelidir (teşhis sayfasının kanıtlanmış davranışı).
+            // USB kutusuna odak BURADA VERİLMEZ: genel click dinleyicisi
+            // nfcBtn'i hariç tutar, focusInput() da dokunmatikte zaten çıkar —
+            // yazılım klavyesi NFC akışının üstüne çıkamaz.
+            if (nfcDinlemede) return;
+            nfcDebugYaz('button clicked');
 
-            var ac   = new AbortController();
-            var ndef = new NDEFReader();
-
-            ndef.addEventListener('reading', function (ev) {
-                var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
-                nfcDebugYaz('reading olayı alındı — serialNumber=' + (ham || '(boş)'));
-                // Bu kartı aldık — oturumu TEMİZ kapat (stop/abort); sıradaki
-                // kart için YENİ bir dokunuş/oturum gerekecek.
-                ac.abort();
-                if (ham !== '') {
-                    kaydet(ham, 'web_nfc', true);
-                } else {
-                    nfcButonuSifirla();
+            PdksNfcOku.baslat({
+                onOkuma: function (ev) {
+                    var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
+                    nfcDebugYaz('reading received — serialNumber=' + (ham || '(boş)'));
+                    if (ham !== '') kaydet(ham, 'web_nfc');
+                },
+                onOkumaHatasi: function () {
+                    nfcDebugYaz('readingerror');
+                    hataGoster('NFC okuma hatası — kartı tekrar yaklaştırın.');
+                },
+                onBasladi: function () {
+                    nfcDinlemede = true;
+                    nfcDebugYaz('scan started');
+                    nfcBtn.textContent = NFC_ETIKET_DINLEME;
+                    nfcBtn.disabled = true;
+                    nfcBtn.classList.add('pdks-kiosk-nfc-armed');
+                },
+                onHata: function (ad, msj) {
+                    nfcDebugYaz('scan() rejected: ' + ad + ' — ' + msj);
+                    hataGoster('NFC başlatılamadı. NFC İLE KART OKU butonuna tekrar dokunun.');
                 }
-            });
-            ndef.addEventListener('readingerror', function () {
-                nfcDebugYaz('readingerror olayı alındı');
-                ac.abort();
-                hataGoster('NFC okuma hatası — kartı tekrar yaklaştırın.');
-                nfcButonuSifirla();
-            });
-
-            ndef.scan({ signal: ac.signal }).then(function () {
-                nfcDebugYaz('scan() başladı — dinlemede');
-                nfcBtn.textContent = NFC_ETIKET_DINLEME;
-                nfcBtn.classList.add('pdks-kiosk-nfc-armed');
-                // disabled KALIR: aynı oturum için ikinci bir tıklama açılmasın —
-                // sıradaki kart için buton yalnız nfcButonuSifirla() ile geri döner.
-            }).catch(function (err) {
-                var ad  = (err && err.name)    ? err.name    : 'Hata';
-                var msj = (err && err.message) ? err.message : String(err);
-                nfcDebugYaz('scan() reddedildi: ' + ad + ' — ' + msj);
-                hataGoster('NFC başlatılamadı. NFC İLE KART OKU butonuna tekrar dokunun.');
-                nfcButonuSifirla();
             });
         });
     } else {
-        nfcDebugYaz('NFC butonu gösterilmiyor (desteklenmiyor veya güvenli bağlam yok)');
+        // Desteklenmeyen ortam: buton hem gizli hem pasif kalır (tek geçerli
+        // pasiflik sebebi budur).
+        nfcBtn.disabled = true;
+        nfcDebugYaz('button: disabled (desteklenmiyor veya güvenli bağlam yok)');
     }
 })();
 </script>

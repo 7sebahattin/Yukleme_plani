@@ -128,6 +128,8 @@ echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime
     </div>
 </div>
 
+<?php pdks_nfc_oku_js();   /* ortak Web NFC okuma yolu — giris_cikis.php ile AYNI kod */ ?>
+
 <script>
 (function () {
     'use strict';
@@ -243,27 +245,29 @@ echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime
     startBtn.addEventListener('click', function () {
         // ⚠ NFC izni YALNIZ kullanıcı etkileşimi (bu tıklama) İÇİNDE istenir —
         // sayfa açılışında veya arka planda OTOMATİK istenmez.
+        //
+        // ⚠ Okuma dizisinin kendisi artık PdksNfcOku.baslat() içindedir
+        // (config/pdks.php) — giris_cikis.php de AYNI koddan geçer, böylece
+        // iki sayfa ayrışamaz. BU SAYFANIN DAVRANIŞI DEĞİŞMEDİ: aynı sıra
+        // (new NDEFReader → reading → readingerror → scan()), aynı çağrılar,
+        // aynı arayüz güncellemeleri. Bu sayfa kanıt sayfasıdır — davranış
+        // değiştirmeyin.
         if (tarayiciAktif) return;
-        if (!('NDEFReader' in window)) {
-            hataGoster('NotSupportedError', 'Bu tarayıcı NDEFReader desteklemiyor.');
-            return;
-        }
-        var ndef = new NDEFReader();
         liveStatus.textContent = 'İzin isteniyor / dinleme başlatılıyor…';
         liveStatus.className = 'pdks-scan-status';
 
-        ndef.addEventListener('reading', okumaGoster);
-        ndef.addEventListener('readingerror', function () {
-            hataGoster('NDEFReadingError', 'Etiket okunamadı (readingerror olayı). Kartı tekrar, telefonun NFC antenine (genelde arka kamera yakını) daha yakın tutarak deneyin.');
-        });
-
-        ndef.scan().then(function () {
-            tarayiciAktif = true;
-            startBtn.textContent = '📡 DİNLENİYOR — kartı yaklaştırın';
-            startBtn.disabled = true;
-            liveStatus.textContent = 'Dinleniyor… kartı telefonun arkasına yaklaştırın.';
-        }).catch(function (err) {
-            hataGoster(err && err.name ? err.name : 'Hata', err && err.message ? err.message : String(err));
+        PdksNfcOku.baslat({
+            onOkuma: okumaGoster,
+            onOkumaHatasi: function () {
+                hataGoster('NDEFReadingError', 'Etiket okunamadı (readingerror olayı). Kartı tekrar, telefonun NFC antenine (genelde arka kamera yakını) daha yakın tutarak deneyin.');
+            },
+            onBasladi: function () {
+                tarayiciAktif = true;
+                startBtn.textContent = '📡 DİNLENİYOR — kartı yaklaştırın';
+                startBtn.disabled = true;
+                liveStatus.textContent = 'Dinleniyor… kartı telefonun arkasına yaklaştırın.';
+            },
+            onHata: hataGoster
         });
     });
 })();

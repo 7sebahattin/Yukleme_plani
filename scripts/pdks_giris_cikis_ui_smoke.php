@@ -134,6 +134,27 @@ ok('USB girişi (erişilebilir gizli input) var', str_contains($sayfa, 'id="gcSc
 ok('csrf token gömülü',            str_contains($sayfa, 'id="gcCsrf"') && str_contains($sayfa, 'testcsrf'));
 ok('pdks.css yüklendi',            str_contains($sayfa, 'assets/pdks.css'));
 ok('NFC butonu DOM\'da var (JS ile gösterilir/gizlenir)', str_contains($sayfa, 'id="gcNfcBtn"'));
+
+// ── Paylaşılan Web NFC okuma yolu GERÇEKTEN basılıyor mu (render düzeyi) ──
+// Statik test kaynakta arar; burada ÇIKTIDA doğrulanır: helper sayfada VAR,
+// TEK KOPYA ve kendisini KULLANAN script'ten ÖNCE geliyor (aksi hâlde
+// PdksNfcOku tanımsız olurdu ve NFC butonu canlıda sessizce ölürdü).
+$helperPoz  = strpos($sayfa, 'window.PdksNfcOku');
+$kullanPoz  = strpos($sayfa, 'PdksNfcOku.destekli()');
+ok('paylaşılan okuma yolu (PdksNfcOku) render edilen sayfada VAR', $helperPoz !== false);
+ok('sayfa onu KULLANIYOR (PdksNfcOku.destekli)', $kullanPoz !== false);
+ok('helper, kullanıldığı script\'ten ÖNCE basılıyor (tanımsız olamaz)',
+    $helperPoz !== false && $kullanPoz !== false && $helperPoz < $kullanPoz);
+ok('helper TEK KOPYA basılıyor (pdks_nfc_oku_js static guard)',
+    substr_count($sayfa, 'window.PdksNfcOku = ') === 1);
+// Açıklayıcı JS yorumları da tarayıcıya gider ve "AbortController" /
+// "new NDEFReader()" kelimelerini METİN olarak taşır — GERÇEK KODA bakmak
+// için yorum satırları çıkarılır (statik testteki $srcKod ile aynı desen).
+$sayfaKod = preg_replace('/^\s*\/\/.*$/m', '', $sayfa);
+ok('sayfa KENDİ new NDEFReader()ını basmıyor — yalnız paylaşılan yolda',
+    substr_count($sayfaKod, 'new NDEFReader()') === 1);
+ok('render edilen GERÇEK KODDA AbortController/signal YOK (canlı hatanın kaynağı)',
+    !str_contains($sayfaKod, 'new AbortController()') && !preg_match('/\.scan\(\s*\{/', $sayfaKod));
 ok('"KARTINIZI OKUTUN" metni var', str_contains($sayfa, 'KARTINIZI OKUTUN'));
 
 echo "\n=== YETKİ KAPISI — sayfa render anında GERÇEKTEN çalışıyor ===\n";

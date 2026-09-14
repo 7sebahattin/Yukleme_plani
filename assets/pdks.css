@@ -6,6 +6,20 @@
    doğru çalışır, burada tek bir sabit renk yoktur.
    ========================================================= */
 
+/* ⚠ BU KURALI SİLME — maliyet.css:12 ve hesap.css:15 ile AYNI gerekçe.
+   `[hidden]` tarayıcının UA kuralıdır ve ÖNCELİĞİ EN DÜŞÜKTÜR; aşağıdaki
+   .pdks-kiosk-* sınıflarının kendi `display:` değerleri onu EZER. Bu kural
+   yokken giris_cikis.php'de CANLI HATA oluştu:
+     • #gcResult (.pdks-kiosk-result: position:absolute; inset:0; z-index:10)
+       `hidden` OLMASINA RAĞMEN çizilmeye devam ediyor, şeffaf ama tüm tarama
+       alanını kaplayan bir katman olarak NFC butonunun dokunuşlarını
+       YUTUYORDU → "NFC İLE KART OKU tıklanamıyor" hatası. (USB etkilenmedi,
+       çünkü klavye girdisi işaretçi olaylarına ihtiyaç duymaz.)
+     • #gcScanSec (.pdks-kiosk-scan) ve #gcModeSec (.pdks-kiosk-modesec) de
+       hiç gizlenmiyor, iki bölüm üst üste çiziliyordu → "mobil ekran çok
+       uzun, tarama alanı alt navigasyonun altında kalıyor" hatası. */
+[hidden] { display: none !important; }
+
 /* ── Avatar / fallback ─────────────────────────────────── */
 .pdks-avatar {
     width: 40px; height: 40px; border-radius: 50%;
