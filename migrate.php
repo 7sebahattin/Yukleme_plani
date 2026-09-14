@@ -18,6 +18,9 @@ $pdo = db();
 // config/pdks.php uygulamanın normal akışında YÜKLENMEZ (bkz. dosya başlığı);
 // bu admin paneli, hiçbir PDKS sayfası yokken bile şemayı kurabilmek içindir.
 require_once __DIR__ . '/config/pdks.php';
+// Sprint Günlük-İşçi-01: çavuş/işçi-kart-havuzu tabloları da aynı sebeple
+// (kendiliğinden yüklenmez) BURADAN elle tetiklenir.
+require_once __DIR__ . '/config/pdks_gunluk.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -61,6 +64,9 @@ $ran     = false;
 $pdks_results = [];   // PDKS tablo migrasyonu sonucu
 $pdks_ran     = false;
 
+$pdks_gunluk_results = [];   // Günlük İşçi (çavuş/işçi kartı) tablo migrasyonu sonucu
+$pdks_gunluk_ran     = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_ran     = true;
@@ -68,6 +74,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_gunluk_ran     = true;
+    $pdks_gunluk_results = pdks_gunluk_migrate($pdo);
+    foreach ($pdks_gunluk_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_gunluk', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -208,6 +224,47 @@ render_header('Şema Migrasyon');
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_tablolar() as $psql) { echo h($psql) . ";\n\n"; }
         echo h(pdks_users_fk_sql()) . ";\n";
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Günlük İşçi Tabloları (Çavuş / İşçi Kart Havuzu — Faz 1)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Kalıcı personel PDKS'inden AYRI: <code>foremen</code>, <code>worker_types</code>, <code>worker_cards</code>.
+      Additive-only — mevcut hiçbir tabloya ALTER/DROP uygulamaz.
+      <?php if ($pdks_gunluk_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_gunluk_results as $pgr): ?>
+        <br>&nbsp;&nbsp;<?= h($pgr['tablo']) ?>: <?= h($pgr['durum']) ?> — <?= h($pgr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_gunluk_tablolar()) as $pgt):
+          $pge = pdks_gunluk_tablo_var($pdo, $pgt); ?>
+          <tr>
+            <td><?= h($pgt) ?></td>
+            <td style="color:<?= $pge ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pge ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_gunluk">
+      <button type="submit" class="btn btn-primary">Günlük İşçi Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_gunluk_tablolar() as $pgsql) { echo h($pgsql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>

@@ -16,6 +16,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks.php';
+// ⚠ Sprint Günlük-İşçi-01: YALNIZ çapraz-sistem UID çakışma kontrolünü
+// (pdks_kart_olustur() içindeki function_exists guard'lı yumuşak çağrı —
+// bkz. config/pdks_gunluk.php başlığı) etkinleştirmek için eklendi. Kart
+// yazma mantığının KENDİSİ değişmedi.
+require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks('cards');
