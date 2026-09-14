@@ -16,9 +16,9 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('worker_cards');
-pdks_gunluk_migrate();
 
 $pdo = db();
+pdks_gunluk_sayfa_kapisi($pdo);
 $hata = ''; $basari = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

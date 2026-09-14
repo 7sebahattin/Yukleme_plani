@@ -16,9 +16,9 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('foremen');
-pdks_gunluk_migrate();
 
 $pdo = db();
+pdks_gunluk_sayfa_kapisi($pdo);
 $id  = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 
 $record = ['code' => '', 'name' => '', 'phone' => '', 'notes' => '', 'is_active' => 1];

@@ -202,6 +202,91 @@ ok('pdks_gunluk_tablolar() dizisi YALNIZ 3 tablo döndürüyor (worker_types/for
         "\$t['"
     ) >= 3);
 
+echo "\n=== 13. DÜZELTME (kullanıcının açık talimatı): 'in_use' KALICI KART DURUMU DEĞİL ===\n";
+// "Kullanımda / Ayşe Çavuş" SESSION durumudur (Faz 2'de daily_work_sessions/
+// daily_worker_card_events'ten TÜRETİLECEK), worker_cards.status'a HİÇ
+// YAZILMAZ — kalıcı bir 'in_use' yarım kalmış/başarısız kapanan bir
+// oturumdan sonra kartı SONSUZA KADAR "kullanımda" bırakırdı.
+preg_match("/function pdks_gunluk_kart_durumlari\(\).*?return \[(.*?)\];/s", $gunlukSrc, $durumM);
+$durumGovde = $durumM[1] ?? '';
+ok('pdks_gunluk_kart_durumlari() gövdesi çıkarılabildi', $durumGovde !== '');
+ok("pdks_gunluk_kart_durumlari() TAM ÜÇ durum döndürüyor (available/lost/disabled)",
+    substr_count($durumGovde, '=>') === 3);
+ok("'in_use' ARTIK sözlükte YOK", !preg_match("/'in_use'\s*=>/", $durumGovde));
+ok("'available' sözlükte VAR", (bool)preg_match("/'available'\s*=>/", $durumGovde));
+ok("'lost' sözlükte VAR", (bool)preg_match("/'lost'\s*=>/", $durumGovde));
+ok("'disabled' sözlükte VAR", (bool)preg_match("/'disabled'\s*=>/", $durumGovde));
+ok("config/pdks_gunluk.php'nin GERÇEK KODUNDA 'in_use' HİÇ GEÇMİYOR (yalnız düzeltme notlarında AÇIKLAYICI METİN olarak geçebilir)",
+    !preg_match("/(?<!DEĞİL — bkz\\. dosya sonu\\. |'in_use' alanı )'in_use'/", $gunlukKod)
+    || !preg_match("/status\s*=\s*'in_use'|=>\s*'in_use'|===\s*'in_use'/", $gunlukKod));
+ok('isci_kartlari.php GERÇEK KODUNDA in_use dallanması KALDIRILDI (badge rengi artık 3 durumlu)',
+    !preg_match("/status'\\]\\s*===\\s*'in_use'/", kodSadece($iskSrc)));
+
+echo "\n=== 14. DÜZELTME (kullanıcının açık talimatı): NORMAL SAYFA ZİYARETİNDE DDL YOK ===\n";
+// Üretim sayfaları artık tablo oluşturmuyor — yalnız migrate.php'nin
+// kontrollü admin aksiyonu (POST + ne=pdks_gunluk) DDL çalıştırabilir.
+$normalSayfalar = ['cavuslar.php', 'cavus_form.php', 'isci_kartlari.php', 'isci_tipleri.php'];
+foreach ($normalSayfalar as $f) {
+    $src = oku($f);
+    ok("$f: pdks_gunluk_migrate() ÇAĞRILMIYOR (DDL yok)", !str_contains($src, 'pdks_gunluk_migrate('));
+    ok("$f: pdks_gunluk_sayfa_kapisi() ÇAĞRILIYOR (şema hazır değilse güvenli sonlanma)",
+        str_contains($src, 'pdks_gunluk_sayfa_kapisi('));
+    ok("$f: sayfa kapısı \$pdo tanımlandıktan HEMEN SONRA, POST işlenmeden ÖNCE çağrılıyor",
+        (bool)preg_match('/\$pdo\s*=\s*db\(\);\s*\n\s*pdks_gunluk_sayfa_kapisi\(\$pdo\);/', $src));
+}
+ok('pdks_gunluk_sayfa_kapisi() fonksiyonu tanımlı', str_contains($gunlukSrc, 'function pdks_gunluk_sayfa_kapisi('));
+preg_match('/function pdks_gunluk_sayfa_kapisi\(.*?\n\}/s', $gunlukSrc, $kapisiM);
+$kapisiGovde = $kapisiM[0] ?? '';
+ok('pdks_gunluk_sayfa_kapisi() gövdesi çıkarılabildi', $kapisiGovde !== '');
+ok('pdks_gunluk_sayfa_kapisi() İÇİNDE CREATE TABLE / migrate() ÇAĞRISI YOK (yalnız KONTROL EDER, OLUŞTURMAZ)',
+    !preg_match('/CREATE TABLE|pdks_gunluk_migrate\(/', $kapisiGovde));
+ok('pdks_gunluk_sayfa_kapisi() şema eksikse exit() ile GÜVENLE SONLANIYOR', str_contains($kapisiGovde, 'exit;'));
+ok('pdks_gunluk_sayfa_kapisi() açık Türkçe admin mesajı içeriyor ("...henüz oluşturulmamış...")',
+    str_contains($kapisiGovde, 'henüz oluşturulmamış'));
+// migrate.php: pdks_gunluk_migrate() ÇAĞRISI YALNIZ o dosyada kalmalı, ve
+// yalnız POST + ne=pdks_gunluk dalının İÇİNDE (zaten §11'de doğrulandı) —
+// burada TÜM repoda başka hiçbir üretim sayfasının bunu çağırmadığı sabitlenir.
+$migCagrisiOlan = [];
+foreach (array_merge($normalSayfalar, ['migrate.php']) as $f) {
+    if (str_contains(oku($f), 'pdks_gunluk_migrate(')) $migCagrisiOlan[] = $f;
+}
+ok('repodaki TEK pdks_gunluk_migrate() çağrı yeri migrate.php (kontrollü admin aksiyonu)',
+    $migCagrisiOlan === ['migrate.php'], implode(', ', $migCagrisiOlan));
+
+echo "\n=== 15. DÜZELTME (kullanıcının açık uyarısı): ÇAPRAZ-TABLO YARIŞ KOŞULU İDDİASI DOĞRU İFADE EDİLDİ ===\n";
+// Kullanıcının düzeltmesi: employee_card_uids ve worker_cards'ın KENDİ
+// UNIQUE kısıtları BİRBİRİNDEN BAĞIMSIZDIR — biri diğerine yazılan
+// eşzamanlı bir INSERT'i YAKALAYAMAZ. Belge artık bunu AÇIKÇA söylemeli ve
+// YANLIŞ "iki tablonun UNIQUE kısıtları çakışmayı yakalar" iddiasını
+// TAŞIMAMALI.
+ok("YANLIŞ iddia ('UNIQUE kısıtları ... çakışmayı YAKALAR', çapraz-tablo bağlamında) KALDIRILDI",
+    !preg_match('/UNIQUE kısıtları \+ bu ön-kontrol,.*?çakışmayı YAKALAR/s', $gunlukSrc));
+ok("DÜZELTME AÇIKÇA YAZILI: iki tablonun UNIQUE kısıtları BİRBİRİNDEN BAĞIMSIZ",
+    str_contains($gunlukSrc, 'BİRBİRİNDEN BAĞIMSIZDIR'));
+ok('DÜZELTME AÇIKÇA YAZILI: ikisi de başarıyla commit olabilir (çapraz-tablo senaryosu)',
+    (bool)preg_match('/İKİSİ DE BAŞARIYLA COMMIT OLABİLİR/', $gunlukSrc));
+ok('BİLİNEN/KABUL EDİLMİŞ V1 KISITI olarak AÇIKÇA belgelenmiş',
+    str_contains($gunlukSrc, 'BİLİNEN, KABUL EDİLMİŞ V1 KISITI'));
+ok("Merkezi bir UID registry BU FAZDA TANITILMADI (kullanıcının açık talimatı: 'do not introduce a central UID registry')",
+    !preg_match('/CREATE TABLE[^;]*card_uid_registry/i', $gunlukSrc));
+ok("card_uid_registry yalnız GELECEK SEÇENEK olarak (kurulmamış) anılıyor, ŞİMDİ EKLENMEDİ diye AÇIK",
+    !pdks_gunluk_tablo_listesinde_var('card_uid_registry', $gunlukSrc));
+ok("Aşırı kilitleme YOK — SELECT ... FOR UPDATE / LOCK TABLES GERÇEK KODDA KULLANILMADI (kullanıcının açık talimatı: "
+ . "'do not overengineer locking' — yalnız YORUMDA, yapılMAYAN bir gelecek seçenek olarak anılması SERBEST)",
+    !preg_match('/FOR UPDATE|LOCK TABLES/i', $gunlukKod));
+// pdks_gunluk_kart_olustur()'un catch bloğu da artık YALNIZ kendi-tablo
+// korumasını iddia ediyor, çapraz-tablo korumasını İDDİA ETMİYOR.
+preg_match('/function pdks_gunluk_kart_olustur.*?\n\}/s', $gunlukSrc, $koM);
+$koGovde = $koM[0] ?? '';
+ok('pdks_gunluk_kart_olustur() catch yorumunda ÇAPRAZ-TABLO korumasını İDDİA EDEN cümle YOK',
+    !preg_match('/UNIQUE kısıtı bir yarış koşulunda burada yakalanır\.(?!.*YAKALAMAZ)/', $koGovde));
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);
+
+/** worker_cards DDL gövdesinde verilen tablo adı bir CREATE TABLE hedefi olarak geçiyor mu. */
+function pdks_gunluk_tablo_listesinde_var(string $tablo, string $src): bool
+{
+    return (bool)preg_match('/CREATE TABLE[^;]*`' . preg_quote($tablo, '/') . '`/i', $src);
+}

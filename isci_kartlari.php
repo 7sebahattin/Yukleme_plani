@@ -26,9 +26,9 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('worker_cards');
-pdks_gunluk_migrate();
 
 $pdo = db();
+pdks_gunluk_sayfa_kapisi($pdo);
 
 // ── Salt-okunur önizleme ucu — personel_kartlar.php'deki ajax=onizle İLE
 // AYNI JS'İ (assets/pdks.js) besler; burada AYRICA çapraz-sistem uyarısı da
@@ -252,7 +252,7 @@ if ($basari !== ''): ?>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
     <td><?= h($k['tip_adi']) ?></td>
     <td class="muted pdks-uid"><?= h($k['canonical_uid']) ?></td>
-    <td><span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'in_use' ? 'degistirildi' : ($k['status'] === 'lost' ? 'kayip' : 'iptal')) ?>">
+    <td><span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
         <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span></td>
     <td class="muted"><?= h(fmt_datetime($k['created_at'])) ?></td>
     <td class="actions-col">
@@ -272,7 +272,7 @@ if ($basari !== ''): ?>
             <div class="pdks-uid"><?= h($k['card_no']) ?></div>
             <div class="pdks-row-sub"><?= h($k['tip_adi']) ?> · <?= h($k['canonical_uid']) ?></div>
         </div>
-        <span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'in_use' ? 'degistirildi' : ($k['status'] === 'lost' ? 'kayip' : 'iptal')) ?>">
+        <span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
             <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span>
     </div>
     <div class="pdks-card-actions">

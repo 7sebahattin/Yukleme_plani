@@ -42,12 +42,22 @@ declare(strict_types=1);
 // ── Yapılandırma ──────────────────────────────────────────
 defined('PDKS_GUNLUK_AKTIF') || define('PDKS_GUNLUK_AKTIF', true);
 
-/** Kart havuzu yaşam döngüsü durumları. Basit ve genişletilebilir tutulur. */
+/**
+ * Kart havuzu KALICI yaşam döngüsü durumları. Basit ve genişletilebilir
+ * tutulur — BİLEREK yalnız ÜÇ değer.
+ *
+ * ⚠ "Kullanımda / Ayşe Çavuş" BURADA YOK ve worker_cards.status'a HİÇ
+ * YAZILMAZ — bu SESSION DURUMUdur (hangi çavuşun açık oturumunda), KART
+ * DURUMU değildir (kullanıcının açık düzeltmesi). Kalıcı bir 'in_use' alanı
+ * yarım kalmış/başarısız kapanan bir oturumdan sonra kart SONSUZA KADAR
+ * "kullanımda" görünüp havuzdan düşerdi. Faz 2'de bu bilgi
+ * daily_work_sessions/daily_worker_card_events'ten TÜRETİLİR (bkz. dosya
+ * sonu) — kartın kendisi yalnız available/lost/disabled arasında gezinir.
+ */
 function pdks_gunluk_kart_durumlari(): array
 {
     return [
         'available' => 'Boşta (kullanılabilir)',
-        'in_use'    => 'Kullanımda',
         'lost'      => 'Kayıp',
         'disabled'  => 'Devre Dışı',
     ];
@@ -109,9 +119,10 @@ function pdks_gunluk_tablolar(): array
     // ⚠ UID ÇAKIŞMA STRATEJİSİ (kullanıcının açık talimatı — "investigate the
     // cleanest way"): MySQL, iki AYRI tablo üzerinde tek bir UNIQUE kısıtı
     // KURAMAZ; employee_cards/employee_card_uids şemasına dokunmadan (kullanıcı:
-    // "do not silently alter existing employee-card data") gerçek çapraz-
-    // sistem benzersizliği yalnız İKİ katmanla sağlanır:
-    //   1) Bu tablonun KENDİ UNIQUE kısıtı (`canonical_uid`) — havuz-içi çakışma.
+    // "do not silently alter existing employee-card data") çapraz-sistem
+    // benzersizliği İKİ katmanla sağlanır:
+    //   1) Bu tablonun KENDİ UNIQUE kısıtı (`canonical_uid`) — YALNIZ havuz-içi
+    //      çakışmayı (iki eşzamanlı worker_cards INSERT'i) korur.
     //   2) UYGULAMA KATMANINDA, YAZMADAN ÖNCE, HER İKİ YÖNDE çapraz kontrol:
     //      a) Yeni işçi kartı yazılırken → mevcut employee_card_uids'te var mı?
     //         (pdks_gunluk_uid_kalici_kartta_mi() — salt okunur SELECT, mevcut
@@ -119,13 +130,27 @@ function pdks_gunluk_tablolar(): array
     //      b) Yeni KALICI personel kartı yazılırken → bu tabloda var mı?
     //         (pdks_gunluk_uid_gecici_kartta_mi(), pdks_kart_olustur() içinden
     //         function_exists guard'lı YUMUŞAK çağrı — bkz. dosya başlığı.)
-    //   Bu, iki yazma anı arasında teorik bir yarış koşulunu (iki INSERT'in
-    //   aynı anda geçmesi) tam ORTADAN KALDIRMAZ — ama iki tablonun kendi
-    //   UNIQUE kısıtları + bu ön-kontrol, pratikte (tek yönetici arayüzü,
-    //   düşük yazma sıklığı) çakışmayı YAKALAR ve HER İKİ tarafa da AÇIK,
-    //   Türkçe bir hata mesajıyla REDDEDER. Gerçek atomik çapraz-tablo
-    //   benzersizliği isteniyorsa ileride PAYLAŞILAN bir `card_uid_registry`
-    //   tablosu gerekir — Faz 1 kapsamı dışında (aşağıdaki Faz 2 notuna bkz.).
+    //
+    //   ⚠ DÜZELTME (kullanıcının açık uyarısı): İKİ tablonun KENDİ UNIQUE
+    //   kısıtları BİRBİRİNDEN BAĞIMSIZDIR ve ÇAPRAZ-TABLO yarış koşuluna KARŞI
+    //   HİÇBİR KORUMA SAĞLAMAZ. İki eşzamanlı işlem AYNI UID'yi FARKLI
+    //   tablolara (biri employee_cards'a, biri worker_cards'a) yazmaya
+    //   çalışırsa, HER İKİ UNIQUE kısıt da KENDİ tablosunda İHLAL EDİLMEDİĞİ
+    //   İÇİN İKİSİ DE BAŞARIYLA COMMIT OLABİLİR — UNIQUE kısıtlar bunu
+    //   YAKALAMAZ, yalnız YUKARIDAKİ (2) numaralı ön-kontrol (SELECT) YAKALAR
+    //   ve o da atomik DEĞİLDİR (SELECT ile INSERT arasında pencere vardır).
+    //
+    //   BİLİNEN, KABUL EDİLMİŞ V1 KISITI: bu, kart kaydının DÜŞÜK EŞZAMANLILIKLA
+    //   çalışan, yönetici tarafından yürütülen İDARİ bir işlem olması nedeniyle
+    //   Faz 1 için KABUL EDİLEBİLİR bir risktir — iki farklı yöneticinin AYNI
+    //   fiziksel kartı AYNI ANDA, İKİ AYRI sisteme kaydetmeye çalışması aşırı
+    //   ölçüde ENDER bir senaryodur. GERÇEK atomik çapraz-tablo benzersizliği
+    //   isteniyorsa PAYLAŞILAN bir `card_uid_registry` tablosu (veya
+    //   SELECT...FOR UPDATE ile sıralı erişim) gerekir — bu, Faz 1 kapsamı
+    //   DIŞINDA BİLEREK BIRAKILDI (aşırı mühendislik — kullanıcının açık
+    //   talimatı: "Do not overengineer locking for this phase"). Faz 2/3'te
+    //   gerçek çok kullanıcılı tarama trafiği ölçülünce YENİDEN
+    //   DEĞERLENDİRİLMELİDİR.
     $t['worker_cards'] = "CREATE TABLE IF NOT EXISTS `worker_cards` (
         `id`              INT AUTO_INCREMENT PRIMARY KEY,
         `card_no`         VARCHAR(30)  NOT NULL,
@@ -224,6 +249,40 @@ function pdks_gunluk_sema_hazir(?PDO $pdo = null): bool
         if (!pdks_gunluk_tablo_var($pdo, $ad)) return false;
     }
     return true;
+}
+
+/**
+ * Sayfa girişi kapısı — TEK yerde, sayfa bazında TEKRARLANMAYAN kontrol.
+ *
+ * ⚠ ÜRETİM SAYFALARI (cavuslar.php, cavus_form.php, isci_kartlari.php,
+ * isci_tipleri.php) ARTIK sayfa ziyaretinde pdks_gunluk_migrate() ÇAĞIRMAZ
+ * (kullanıcının açık düzeltmesi: normal bir GET isteği DDL çalıştırmamalı —
+ * şema oluşturma YALNIZ migrate.php'nin kontrollü admin aksiyonundan geçer,
+ * pdks_migrate() ile AYNI ilke zaten config/pdks.php'de de böyleydi, burada
+ * yalnız sayfa girişindeki YANLIŞLIKLA eklenmiş migrate() çağrıları
+ * KALDIRILDI). Bu fonksiyon şema HAZIR DEĞİLSE sayfayı GÜVENLE, açık
+ * Türkçe bir admin mesajıyla SONLANDIRIR (exit) — hiçbir sorgu tabloya
+ * dokunmadan önce.
+ *
+ * Her sayfanın ($pdo = db();)'den HEMEN SONRA, herhangi bir POST/ajax
+ * dalından ÖNCE çağırması yeterlidir.
+ */
+function pdks_gunluk_sayfa_kapisi(?PDO $pdo = null): void
+{
+    $pdo = $pdo ?? db();
+    if (pdks_gunluk_sema_hazir($pdo)) return;
+
+    $mesaj = 'Günlük İşçi modülü tabloları henüz oluşturulmamış. Bir yöneticinin '
+           . 'migrate.php sayfasından "Günlük İşçi Tablolarını Oluştur" demesi gerekiyor.';
+    if (function_exists('set_flash')) set_flash('error', $mesaj);
+    if (function_exists('render_header')) render_header('Günlük İşçi');
+    if (function_exists('render_flash')) {
+        render_flash();
+    } elseif (function_exists('h')) {
+        echo '<div class="flash flash-error">' . h($mesaj) . '</div>';
+    }
+    if (function_exists('render_footer')) render_footer();
+    exit;
 }
 
 // =========================================================
@@ -583,7 +642,13 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
         ]);
         $cardId = (int)$pdo->lastInsertId();
     } catch (PDOException $e) {
-        // Son çare — UNIQUE kısıtı bir yarış koşulunda burada yakalanır.
+        // Son çare — bu tablonun KENDİ UNIQUE kısıtı (card_no/canonical_uid),
+        // yukarıdaki SELECT ön-kontrolüyle bu INSERT arasında AYNI worker_cards
+        // tablosuna yazan eşzamanlı bir çağrı olduysa burada yakalanır. ⚠ Bu,
+        // employee_cards'a eşzamanlı yazan bir çağrıyı YAKALAMAZ — o çapraz-
+        // tablo senaryosu KENDİ UNIQUE kısıtımızın kapsamı DIŞINDADIR (bkz.
+        // pdks_gunluk_tablolar()'daki "UID ÇAKIŞMA STRATEJİSİ" notu — bilinen,
+        // kabul edilmiş V1 kısıtı).
         return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kart kaydedilemedi: ' . $e->getMessage()];
     }
 
@@ -673,9 +738,13 @@ function pdks_gunluk_kart_durum_degistir(int $cardId, string $durum, ?int $updat
 //   • worker_cards employee_id TAŞIMAZ — Faz 2'de bir event doğrudan
 //     worker_card_id + session_id'ye bağlanır, kart kişiye değil oturuma bağlıdır.
 //   • foremen.id, daily_work_sessions.foreman_id için hazır FK hedefi.
-//   • worker_cards.status ('in_use') Faz 2'nin GIRIS anında set edip CIKIS
-//     anında 'available'a döndüreceği alan — Faz 1 bunu YAZMAZ, yalnız
-//     sütunu barındırır.
+//   • "Kullanımda / hangi çavuş" Faz 2'de worker_cards.status'A YAZILMAZ —
+//     daily_worker_card_events'te o kart için en son GIRIS var ama eşleşen
+//     bir CIKIS yoksa TÜRETİLİR (kullanıcının açık düzeltmesi: bu SESSION
+//     durumudur, KART durumu değildir — kalıcı bir 'in_use' yarım kalmış/
+//     başarısız kapanan oturumdan sonra kartı sonsuza kadar "kullanımda"
+//     bırakırdı). worker_cards.status Faz 2'de de yalnız
+//     available/lost/disabled arasında gezinir.
 //   • worker_types.id, Faz 2 hakediş/fiyatlama tablosunun (ör.
 //     worker_type_rates: worker_type_id, foreman_id?, unit_price, valid_from)
 //     doğal FK hedefi.

@@ -282,13 +282,29 @@ ok('kart no değişti', $row['card_no'] === 'K001-B');
 ok('tip değişti', (int)$row['worker_type_id'] === $erkekId);
 ok('canonical_uid DEĞİŞMEDİ (bu fonksiyon UID değiştirmez)', $row['canonical_uid'] === '25A87ED7');
 
-echo "\n=== 11. KART DURUM GEÇİŞLERİ (available/lost/disabled) ===\n";
+echo "\n=== 11. KART DURUM GEÇİŞLERİ (available/lost/disabled — in_use KALICI DEĞİL) ===\n";
 foreach (['lost', 'disabled', 'available'] as $durum) {
     $r = pdks_gunluk_kart_durum_degistir($k1id, $durum, 1, db());
     ok("durum '$durum'a geçirildi", $r['ok'] === true);
 }
 ok('geçersiz durum reddedilir', pdks_gunluk_kart_durum_degistir($k1id, 'boyle_bir_sey_yok', 1, db())['ok'] === false);
 ok('var olmayan kart id reddedilir', pdks_gunluk_kart_durum_degistir(999999, 'lost', 1, db())['ok'] === false);
+
+echo "\n--- 11a. DÜZELTME (kullanıcının açık talimatı): 'in_use' KALICI kart durumu DEĞİL ---\n";
+// "Kullanımda / Ayşe Çavuş" SESSION durumudur (Faz 2'de daily_work_sessions'tan
+// TÜRETİLECEK), worker_cards.status'a HİÇ YAZILMAZ — yarım kalmış/başarısız
+// kapanan bir oturumdan sonra kart SONSUZA KADAR "kullanımda" kalmasın diye.
+$durumlar = pdks_gunluk_kart_durumlari();
+ok('pdks_gunluk_kart_durumlari() TAM ÜÇ durum döndürüyor', count($durumlar) === 3);
+ok('"available" var', array_key_exists('available', $durumlar));
+ok('"lost" var', array_key_exists('lost', $durumlar));
+ok('"disabled" var', array_key_exists('disabled', $durumlar));
+ok('"in_use" ARTIK SÖZLÜKTE YOK', !array_key_exists('in_use', $durumlar));
+$rInUse = pdks_gunluk_kart_durum_degistir($k1id, 'in_use', 1, db());
+ok("'in_use'a durum GEÇİŞİ REDDEDİLİYOR (sözlükte olmadığı için geçersiz durum sayılıyor)", $rInUse['ok'] === false);
+$stChkStatus = db()->prepare("SELECT status FROM worker_cards WHERE id = ?"); $stChkStatus->execute([$k1id]);
+ok('reddedilen geçiş SONRASI kartın durumu DEĞİŞMEDİ (hâlâ önceki geçerli durum)',
+    in_array($stChkStatus->fetchColumn(), ['available', 'lost', 'disabled'], true));
 
 echo "\n=== 12. KART ARAMA/FİLTRE — fonksiyon seviyesinde WHERE mantığı ===\n";
 // isci_kartlari.php'nin ürettiği WHERE'in AYNISI — burada doğrudan sorgulanır,
@@ -316,6 +332,47 @@ ok('employees tablosu satır sayısı beklenen (3 personel + testler)', (int)$st
 pdks_gunluk_migrate(db());   // yeniden çalıştır — hiçbir şey DEĞİŞMEMELİ
 $stE2 = db()->query("SELECT COUNT(*) FROM employees");
 ok('tekrar migrate() sonrası employees YİNE 3 (dokunulmadı)', (int)$stE2->fetchColumn() === 3);
+
+echo "\n=== 15. DÜZELTME (kullanıcının açık talimatı): NORMAL SAYFA ZİYARETİ DDL ÇALIŞTIRMAZ ===\n";
+// ⚠ pdks_gunluk_sayfa_kapisi() GERÇEK CİHAZDA/uçtan uca davranışı doğrular:
+// tablolar YOKKEN çağrıldığında (a) HİÇBİR CREATE TABLE ÇALIŞTIRMAZ, (b) ne
+// bir PHP Fatal/Warning sızdırır ne de tabloyu sessizce oluşturur, (c) açık
+// Türkçe admin mesajıyla sayfayı GÜVENLE sonlandırır. Bu fonksiyon exit()
+// çağırdığı için AYRI bir alt-süreçte (subprocess) çalıştırılır — exit()
+// PHP'de include içinden bile yakalanamaz, bu test sürecinin KENDİSİNİ
+// sonlandırırdı (pdks_faz1b_ui_smoke.php'nin POST-redirect notundaki AYNI
+// kısıt — bkz. scripts/pdks_gunluk_ui_smoke.php başlığı).
+$altSurecKodu = <<<'PHPKOD'
+<?php
+declare(strict_types=1);
+$PDO_TEST = new PDO('sqlite::memory:');
+function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
+function set_flash($a, $b): void { echo "FLASH[$a]: $b\n"; }
+function render_header($t, $p = false): void { echo "HEADER\n"; }
+function render_flash(): void {}
+function render_footer($p = false): void { echo "FOOTER\n"; }
+function h($v): string { return (string)$v; }
+require_once __DIR__ . '/config/pdks_gunluk.php';
+// ⚠ worker_types/foremen/worker_cards KASITLI OLARAK OLUŞTURULMADI — bu,
+// "tablolar henüz migrate edilmemiş taze kurulum" senaryosunun KENDİSİDİR.
+pdks_gunluk_sayfa_kapisi(db());
+echo "BURAYA HİÇ ULAŞILMAMALI\n";
+PHPKOD;
+$tmpAltSurec = sys_get_temp_dir() . '/pdks_gunluk_kapisi_altsurec.php';
+file_put_contents($tmpAltSurec, str_replace("require_once __DIR__ . '/config/pdks_gunluk.php';", "require_once " . var_export($KOK . '/config/pdks_gunluk.php', true) . ';', $altSurecKodu));
+$cikti = []; $rc = 0;
+exec('php ' . escapeshellarg($tmpAltSurec) . ' 2>&1', $cikti, $rc);
+$ciktiTam = implode("\n", $cikti);
+@unlink($tmpAltSurec);
+
+ok('alt-süreç PHP Fatal/Warning SIZDIRMADI (sessiz/güvenli başarısızlık)',
+    !str_contains($ciktiTam, 'Fatal error') && !str_contains($ciktiTam, 'Warning:'), $ciktiTam);
+ok('açık Türkçe admin mesajı basıldı ("...henüz oluşturulmamış...")',
+    str_contains($ciktiTam, 'henüz oluşturulmamış'), $ciktiTam);
+ok('migrate.php\'ye yönlendiren yönerge mesajda var', str_contains($ciktiTam, 'migrate.php'), $ciktiTam);
+ok('sayfa GÜVENLE SONLANDI — "BURAYA HİÇ ULAŞILMAMALI" satırı ÇIKTIDA YOK (exit() çalıştı)',
+    !str_contains($ciktiTam, 'BURAYA HİÇ ULAŞILMAMALI'), $ciktiTam);
+ok('alt-süreç çıkış kodu 0 (PHP fatal ile ÇÖKMEDİ)', $rc === 0, "rc=$rc\n$ciktiTam");
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

@@ -143,6 +143,11 @@ db()->prepare("INSERT INTO foremen (code, name, is_active, created_at) VALUES (?
 
 db()->prepare("INSERT INTO worker_cards (card_no, worker_type_id, canonical_uid, status, enrolled_source, created_at) VALUES (?,?,?,?,?,?)")
     ->execute(['K001', $kadinId, '25A87ED7', 'available', 'usb_decimal', '2026-01-02 09:00:00']);
+// Düzeltme testi için: 'lost' durumunda bir kart da eklenir — "in_use" ARTIK
+// hiçbir durumda üretilmiyor (kullanıcının açık düzeltmesi), o yüzden
+// available/lost/disabled'ın HEPSİNİN doğru rozetle render edildiği görülsün.
+db()->prepare("INSERT INTO worker_cards (card_no, worker_type_id, canonical_uid, status, enrolled_source, created_at) VALUES (?,?,?,?,?,?)")
+    ->execute(['K002', $kadinId, 'D77EA825', 'lost', 'usb_decimal', '2026-01-02 09:05:00']);
 
 function renderPage(string $file, array $get = []): string {
     global $ROOT;
@@ -212,9 +217,20 @@ ok('USB tarama kutusu var (data-pdks-scan REUSE)', str_contains($sIk, 'data-pdks
 ok('NFC buton hedefi var (data-pdks-nfc-target REUSE)', str_contains($sIk, 'data-pdks-nfc-target'));
 ok('assets/pdks.js yükleniyor', str_contains($sIk, 'assets/pdks.js'));
 ok('Kadın işçi tipi seçeneği var', str_contains($sIk, 'Kadın'));
-ok('sonraki kart no önerisi K002', (bool)preg_match('/value="K002"/', $sIk));
+ok('sonraki kart no önerisi K003 (K001+K002 sonrası)', (bool)preg_match('/value="K003"/', $sIk));
 ok('Düzenle modalı DOM\'da var', str_contains($sIk, 'iskKartModal'));
 ok('kart_no alanı TEK enroll formunda', substr_count($sIk, 'name="card_no"') >= 1);
+
+echo "\n--- 6a. DÜZELTME (kullanıcının açık talimatı): 'in_use' HİÇBİR YERDE render edilmiyor ---\n";
+ok('K002 (lost) kartı listede', str_contains($sIk, 'K002'));
+ok('"Kullanımda" etiketi SAYFADA HİÇ YOK (in_use kaldırıldı)', !str_contains($sIk, 'Kullanımda'));
+ok('durum filtre açılır listesi TAM ÜÇ seçenek sunuyor (Tümü + available + lost + disabled)',
+    substr_count($sIk, '<option value="') >= 1
+    && (bool)preg_match('/<select name="durum">.*?<\/select>/s', $sIk, $durumSelM)
+    && substr_count($durumSelM[0], '<option') === 4);   // "Tüm durumlar" + 3 durum
+ok('pdks-badge-degistirildi (eski in_use rengi) ARTIK render edilmiyor', !str_contains($sIk, 'pdks-badge-degistirildi'));
+ok('lost kart doğru rozetle render ediliyor (pdks-badge-kayip)', str_contains($sIk, 'pdks-badge-kayip'));
+ok('available kart doğru rozetle render ediliyor (pdks-badge-aktif)', str_contains($sIk, 'pdks-badge-aktif'));
 
 echo "\n=== 7. isci_tipleri.php — liste + ekleme formu ===\n";
 $sIt = renderPage('isci_tipleri.php');
