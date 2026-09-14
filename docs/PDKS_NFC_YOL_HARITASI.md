@@ -58,6 +58,36 @@ bağlanacağı iddiası artık **geçerli değildir**. Düzeltilmiş model,
 
 ---
 
+## ⛳ MİMARİ KAPSAM DÜZELTMESİ — 2026-09-14: Android APK İPTAL, tek web uygulaması
+
+**Bu belgenin §8'i (aşağıda) artık GEÇERLİ DEĞİLDİR.** Orada "minimal native
+Android istemci" seçeneği (B) önerilmiş ve seçilmişti. **Kullanıcı bu kararı
+açıkça iptal etti:** ayrı bir Android APK, cihaz kaydı/token'ı, heartbeat,
+offline kuyruk — bunların HİÇBİRİ yapılmayacak. Tek gereksinim:
+
+> **Tek web uygulaması.** Nuverna'nın kendisi (PHP), hem masaüstünde USB
+> HID okuyucudan hem Android telefonda **tarayıcının kendi Web NFC API'si**
+> (`NDEFReader`) üzerinden kart okusun — ikisi de **aynı** sunucu ucuna,
+> **aynı** UID normalizasyonuna, **aynı** veritabanına çıksın. APK yok, ayrı
+   kurulum yok, ayrı kimlik doğrulama yok.
+
+**Sebep — orijinal §8 gerekçesi artık geçerli değil:** §8'de Web NFC
+"kartlar NDEF değil, güvenilir olmayabilir" diye **elenmişti**. Bu bir
+varsayımdı, ölçüm değildi. Kullanıcı bunu tersine çevirdi: önce **gerçek**
+bir teşhis sayfasıyla (`pdks_nfc_test.php`, Faz 0'daki Android `getId()`
+teşhis APK'sinin web karşılığı) ölçülecek, sonuç olumluysa mimari buna göre
+kurulacak. `tools/nfc_uid_tani/` (Faz 0'ın Kotlin teşhis APK'si) bu yüzden
+**üretime hiç girmeyecek** — yalnız bir ölçüm aracı olarak kod tabanında
+kalıyor, referans değeri hâlâ geçerli (USB↔Android bayt sırası sorusu farklı
+bir sorudur, ayrıca ölçülmüş olabilir).
+
+**Sonuç:** §8, §16, §D.5, §D.6 (cihaz kaydı/token/heartbeat/oturum
+tabloları) ve §24'teki (offline kuyruk) tüm Android-özel tasarım artık
+**tarihsel kayıttır**, uygulanmayacaktır. Yerine geçen tasarım
+`docs/PDKS_WEBNFC_DIAGNOSTIC.md`'de belgelidir.
+
+---
+
 ## 0. Yönetici Özeti
 
 | Soru | Cevap |

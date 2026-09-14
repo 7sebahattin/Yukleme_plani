@@ -159,6 +159,7 @@ if ($basari !== ''): ?>
     <h1>Kart Yönetimi</h1>
     <div class="page-head-actions">
         <a href="personel.php" class="btn">👤 Personeller</a>
+        <a href="pdks_nfc_test.php" class="btn btn-ghost" title="Telefon NFC ile kart okuma teşhis testi — hiçbir kayıt yazmaz">🔬 Web NFC Testi</a>
     </div>
 </div>
 
