@@ -9,6 +9,28 @@
 
 ---
 
+## ⛳ FAZ 0 TAMAMLANDI — 2026-09-14
+
+**Doğrulama raporu: [`docs/PDKS_NFC_FAZ0_DOGRULAMA.md`](PDKS_NFC_FAZ0_DOGRULAMA.md)**
+
+Faz 0'ın bu belgeyi değiştiren bulguları:
+
+| Bulgu | Bu belgedeki etkisi |
+|---|---|
+| UID algoritması **kanıtlandı** (`scripts/pdks_faz0_uid_kanit.php`, 45/45) | §C'deki iddiaların tamamı doğrulandı — değişiklik yok |
+| 🔴 **YENİ KURAL:** UID kaynağı (hex/ondalık) otomatik tespit **edilemez** | §C.3'e ek: `pdks_uid_adaylari()` `$kaynak` parametresi ZORUNLU. `12345678` hem geçerli hex hem geçerli ondalık — tahmin iki kartı karıştırır |
+| ⚠ `bcmath`/`gmp` **yok** sayılmalı | Ondalık↔hex dönüşümünde `hexdec()`/`dechex()` **tam UID üzerinde kullanılamaz** (10 bayt = 80 bit, float'a düşer). Saf string aritmetiği zorunlu |
+| `uid_decimal` boyu | VARCHAR(24) → **VARCHAR(25)** (§D.2'de düzeltildi) |
+| Personel ↔ kullanıcı ilişkisi karara bağlandı | **`employees.user_id` NULL + UNIQUE** — bağlantı tablosu değil (Faz 0 §3.3) |
+| 🔴 **YENİ BLOKER:** `api_pdks.php auth/login` hız sınırı | §F.2 #12'ye ek: bu **yeni açtığımız** yüzeydir, "sonra yapılır" değildir. Önlem yeni tablo gerektirmez — `audit_log` üzerinden COUNT (Faz 0 §7.3) |
+| Zaman otoritesi | ⏳ MySQL ölçümü bekliyor. **Faz 1'i engellemiyor** (Faz 1'de puantaj zaman damgası yok), **Faz 2'yi bağlıyor** (Faz 0 §1.6) |
+| Android `getId()` sırası | ⏳ Teşhis APK'sı hazır (`tools/nfc_uid_tani/`). **Şemayı etkilemiyor** — alias tablosu iki durumu da karşılıyor (Faz 0 §5.5) |
+
+**Faz 1 durumu: KOŞULLU HAZIR** — üç karar onayı bekliyor (Faz 0 §10.2):
+#2 tam TC saklansın mı · #1 kart devri 2 tablo mu · #11 `employees.user_id` yaklaşımı.
+
+---
+
 ## 0. Yönetici Özeti
 
 | Soru | Cevap |
@@ -437,7 +459,7 @@ Bordro entegrasyonu için ileride gerekirse ayrı, erişimi kısıtlı bir alan 
 | `employee_id` | INT | H | — | `idx_ec_emp` | Kartı taşıyan personel |
 | `uid_hex` | VARCHAR(32) | H | — | **UNIQUE** `uq_ec_uid` | **Kanonik UID** (§C.3) — talebinizdeki UNIQUE şartı |
 | `uid_bytes` | TINYINT | H | 4 | — | 4 / 7 / 10 — ondalık→hex dönüşümünde dolgu uzunluğu |
-| `uid_decimal` | VARCHAR(24) | E | NULL | `idx_ec_dec` | Teşhis/arama kolaylığı. **Kimlik değil**, kanon `uid_hex`'tir |
+| `uid_decimal` | VARCHAR(25) | E | NULL | `idx_ec_dec` | Teşhis/arama kolaylığı. **Kimlik değil**, kanon `uid_hex`'tir. *(Faz 0: 24 → 25; 10 baytlık UID ondalığı 25 haneye çıkabiliyor)* |
 | `card_type` | VARCHAR(30) | H | `'mifare_classic_1k'` | — | ATQA/SAK'tan çıkarılan tip |
 | `atqa` / `sak` | VARCHAR(8) | E | NULL | — | Teşhis (`0004` / `08`) |
 | `label` | VARCHAR(60) | H | `''` | — | Kart üstündeki yazı/numara |

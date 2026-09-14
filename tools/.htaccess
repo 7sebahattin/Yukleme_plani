@@ -1,0 +1,5 @@
+# tools/ — Tüm web erişimi kapalı.
+# Buradakiler geliştirme/teşhis araçlarıdır (Android kaynak kodu vb.),
+# web üzerinden servis edilmeleri gerekmez. scripts/ ile aynı politika.
+Order deny,allow
+Deny from all
