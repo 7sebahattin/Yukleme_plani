@@ -55,8 +55,10 @@ if (isset($_GET['csv'])) {
     header('Content-Disposition: attachment; filename="gunluk_puantaj_' . $tarih . '.csv"');
     $out = fopen('php://output', 'w');
     fprintf($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['Date', 'Depot', 'Foreman', 'Female Count', 'Male Count', 'Total Entry',
-                   'Total Exit', 'Missing Exit', 'Session Status', 'First Entry', 'Last Exit'], ';', '"', '\\');
+    // ⚠ Faz 7 (kullanıcının açık talimatı: "ALL downloaded report column
+    // headings must be Turkish"): başlıklar Türkçe iş terminolojisiyle.
+    fputcsv($out, ['Tarih', 'Depo', 'Çavuş', 'Kadın Sayısı', 'Erkek Sayısı', 'Toplam Giriş',
+                   'Toplam Çıkış', 'Eksik Çıkış', 'Mesai Durumu', 'İlk Giriş', 'Son Çıkış'], ';', '"', '\\');
     foreach ($gunListesi as $row) {
         $s = $row['session'];
         fputcsv($out, [

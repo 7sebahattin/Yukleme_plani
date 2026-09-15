@@ -104,6 +104,9 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
     <div class="page-head-actions">
         <a href="cavus_cari.php" class="btn">📒 Çavuş Cari</a>
         <a href="cavus_hakedis.php" class="btn">🧾 Hakediş</a>
+        <?php if ($seciliCavus): ?>
+        <a href="cavus_odeme_yazdir.php?cavus=<?= (int)$seciliCavus['id'] ?>" class="btn btn-ghost">🖨️ Yazdır</a>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -231,7 +234,7 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
 <tr>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?></td>
     <td><strong><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong></td>
-    <td><?= h($o['payment_method']) ?></td>
+    <td><?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?></td>
     <td><?= h($o['reference_no'] ?: '—') ?></td>
     <td><?= h($o['description'] ?: '—') ?></td>
     <td>
@@ -269,7 +272,7 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?> <?= h($o['currency']) ?></div>
-            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?> · <?= h($o['payment_method']) ?><?= $o['reference_no'] ? ' · ' . h($o['reference_no']) : '' ?></div>
+            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?> · <?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?><?= $o['reference_no'] ? ' · ' . h($o['reference_no']) : '' ?></div>
         </div>
         <?php if ($o['status'] === 'cancelled'): ?>
         <span class="pdks-badge pdks-badge-pasif">İPTAL</span>

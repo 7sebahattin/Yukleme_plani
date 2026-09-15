@@ -81,9 +81,11 @@ if ($csvTuru === 'gunluk' || $csvTuru === 'cavus') {
     $out = fopen('php://output', 'w');
     fprintf($out, "\xEF\xBB\xBF");
 
+    // ⚠ Faz 7 (kullanıcının açık talimatı: "ALL downloaded report column
+    // headings must be Turkish"): başlıklar Türkçe iş terminolojisiyle.
     if ($csvTuru === 'gunluk') {
-        $baslik = ['Date', 'Worker Count', 'Foreman Count', 'Missing Exit Count'];
-        if ($finansalGosterilebilir) $baslik = array_merge($baslik, ['Entitlement (currency: amount)', 'Payments (currency: amount)', 'Net Movement (currency: amount)']);
+        $baslik = ['Tarih', 'İşçi Sayısı', 'Çavuş Sayısı', 'Eksik Çıkış Sayısı'];
+        if ($finansalGosterilebilir) $baslik = array_merge($baslik, ['Hakediş (para birimi: tutar)', 'Ödeme (para birimi: tutar)', 'Net Hareket (para birimi: tutar)']);
         fputcsv($out, $baslik, ';', '"', '\\');
         foreach ($trend as $g) {
             $satir = [$g['tarih'], $g['toplam_calisan'], $g['aktif_cavus'], $g['eksik_cikis']];
@@ -94,8 +96,8 @@ if ($csvTuru === 'gunluk' || $csvTuru === 'cavus') {
             fputcsv($out, $satir, ';', '"', '\\');
         }
     } else {
-        $baslik = ['Foreman', 'Days Worked', 'Total Workers', 'Missing Exit'];
-        if ($finansalGosterilebilir) $baslik = array_merge($baslik, ['Period Entitlement (currency: amount)', 'Period Payments (currency: amount)', 'Current Balance (currency: amount)']);
+        $baslik = ['Çavuş', 'Çalışılan Gün', 'Toplam İşçi', 'Eksik Çıkış'];
+        if ($finansalGosterilebilir) $baslik = array_merge($baslik, ['Dönem Hakedişi (para birimi: tutar)', 'Dönem Ödemesi (para birimi: tutar)', 'Güncel Bakiye (para birimi: tutar)']);
         fputcsv($out, $baslik, ';', '"', '\\');
         foreach ($cavusOzeti as $c) {
             $satir = [$c['foreman']['name'], $c['calisilan_gun'], $c['toplam_isci'], $c['eksik_cikis']];
@@ -121,6 +123,7 @@ render_flash();
     <h1>📊 Yönetim Raporları</h1>
     <div class="page-head-actions">
         <a href="gunluk_isci_puantaj.php" class="btn">📅 Günlük Puantaj</a>
+        <a href="<?= h('rapor_yazdir.php?' . http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>
 </div>
 

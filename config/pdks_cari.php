@@ -473,3 +473,34 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
     }
     return $sonuc;
 }
+
+// =========================================================
+// FAZ 7 — GÖRÜNTÜLEME/EXPORT ETİKETLERİ (SUNUM KATMANI)
+//
+// ⚠ Yalnız EKRANDA/CSV'de/yazdırmada gösterilecek Türkçe metni üretir —
+// veritabanı enum DEĞERLERİ (foreman_payments.payment_method/.status)
+// KESİNLİKLE değişmiyor, buradaki eşleme SADECE dönüş metnini etkiler
+// (kullanıcının açık talimatı: "Do NOT change database enum values.
+// Translation is presentation/export only."). cavus_odeme.php'nin KENDİ
+// formundaki seçenek metinleriyle (Banka/Havale, Nakit, Diğer) AYNI
+// sözlük — iki ayrı çeviri kaynağı AÇILMADI.
+// =========================================================
+
+function pdks_cari_odeme_yontem_etiketi(string $yontem): string
+{
+    return match (strtoupper($yontem)) {
+        'BANK'  => 'Banka / Havale',
+        'CASH'  => 'Nakit',
+        'OTHER' => 'Diğer',
+        default => $yontem,
+    };
+}
+
+function pdks_cari_odeme_durum_etiketi(string $durum): string
+{
+    return match ($durum) {
+        'valid'     => 'Geçerli',
+        'cancelled' => 'İptal',
+        default     => $durum,
+    };
+}

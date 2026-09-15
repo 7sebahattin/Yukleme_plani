@@ -157,6 +157,16 @@
         print-color-adjust: exact;
     }
 
+    /* Çok sayfalı yazdırmada tablo başlığını her sayfada TEKRARLAR (Faz 7). */
+    table.print-table thead {
+        display: table-header-group;
+    }
+
+    table.print-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
     table.print-table tfoot td {
         background: #fff5cc !important;
         font-weight: bold;

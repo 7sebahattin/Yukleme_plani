@@ -41,7 +41,9 @@ if (isset($_GET['csv'])) {
     header('Content-Disposition: attachment; filename="cavus_ekstre_' . $foremanId . '.csv"');
     $out = fopen('php://output', 'w');
     fprintf($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['Date', 'Type', 'Reference', 'Description', 'Increase', 'Decrease', 'Running Balance', 'Currency'], ';', '"', '\\');
+    // ⚠ Faz 7 (kullanıcının açık talimatı: "ALL downloaded report column
+    // headings must be Turkish"): başlıklar Türkçe iş terminolojisiyle.
+    fputcsv($out, ['Tarih', 'İşlem Türü', 'Belge / Referans No', 'Açıklama', 'Hakediş / Borç Artışı', 'Ödeme / Azalış', 'Bakiye', 'Para Birimi'], ';', '"', '\\');
     foreach ($ekstre as $cur => $satirlar) {
         foreach ($satirlar as $s) {
             fputcsv($out, [
@@ -64,6 +66,7 @@ render_flash();
     <h1>📒 <?= h($cavus['name']) ?> — Ekstre</h1>
     <div class="page-head-actions">
         <a href="cavus_cari.php" class="btn">← Çavuş Cari</a>
+        <a href="<?= h('cavus_ekstre_yazdir.php?' . http_build_query(array_filter(['foreman_id' => $foremanId, 'baslangic' => $baslangic, 'bitis' => $bitis], fn($v) => $v !== ''))) ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>
 </div>
 

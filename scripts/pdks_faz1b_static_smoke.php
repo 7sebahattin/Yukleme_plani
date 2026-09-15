@@ -163,19 +163,46 @@ echo "\n=== 10. MEVCUT SİSTEM DAVRANIŞI DEĞİŞMEDİ ===\n";
 // yapar. Burada "hiç değişmedi" değil "yalnız BEKLENEN şekilde değişti"
 // doğrulanır — tek CSS/JS ve çekirdek auth/db katmanı asıl korunması
 // gereken yerlerdir.
-$dokunulmamali = ['assets/style.css', 'assets/app.js', 'sw.js', 'config/db.php', 'config/auth.php'];
+// Faz 7: sw.js bu listeden ÇIKARILDI — assets/print_base.css'e yazdırma
+// sayfaları için ek kural eklendiği için CLAUDE.md kuralı gereği SW
+// CACHE_NAME (ve config/helpers.php'deki eşlenik APP_SURUM) v217'den
+// v218'e çekildi. Bu TEK SATIRLIK, RUTİN sürüm damgası güncellemesi —
+// içerik/mantık kaybı DEĞİL; sw.js'in kendi önbellekleme mantığı
+// (network-first fetch stratejisi, SHELL listesi) hiç değişmedi, yalnız
+// sabit sürüm dizesi arttı. tek-CSS/JS kuralı (style.css/app.js) ve
+// çekirdek auth/db katmanı (db.php/auth.php) hâlâ TAM korunuyor.
+$dokunulmamali = ['assets/style.css', 'assets/app.js', 'config/db.php', 'config/auth.php'];
 $gitDurum = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- ' . implode(' ', array_map('escapeshellarg', $dokunulmamali)) . ' 2>&1');
-ok('style.css / app.js / sw.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
+ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
     trim((string)$gitDurum) === '', (string)$gitDurum);
+$swDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- sw.js 2>&1'));
+ok('sw.js: TEK değişiklik CACHE_NAME sürüm artışı (SHELL listesi/fetch stratejisi AYNI)',
+    (bool)preg_match('/^-const CACHE_NAME = \'yukleme-plani-v217\';\n\+const CACHE_NAME = \'yukleme-plani-v218\';$/m', $swDiff)
+    && substr_count($swDiff, "\n-") <= 2 && substr_count($swDiff, "\n+") <= 2, $swDiff);
 
-// index.php İÇİN: değişti (nav bağlama), ama yalnız EKLEME olarak — mevcut
-// hiçbir satır silinmedi/değiştirilmedi. Bu fazda index.php'ye dokunulmadı.
+// index.php İÇİN: bu turdan (Faz 7, Sprint Navigasyon-01) ÖNCE değişti
+// (nav bağlama), ama yalnız EKLEME olarak — mevcut hiçbir satır
+// silinmedi/değiştirilmedi. Faz 7 kullanıcının AÇIK talimatıyla ("Connect/
+// add the existing mobile 'Personel' button... to personel_takip.php")
+// TEK bir mevcut kartı (Personel → personel.php) KASITLI olarak
+// personel_takip.php'ye yeniden yönlendirdi + görünürlüğünü genişletti —
+// bu BEŞ satır bu YÜZDEN allowlist'e alındı; bunun DIŞINDA index.php'de
+// hiçbir satır silinmemiş olmalı.
 $diffIndex = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- index.php 2>&1');
 $silinenIndex = array_filter(explode("\n", (string)$diffIndex), function ($l) {
     return preg_match('/^-(?!--)/', $l) === 1;   // '-' ile başlayan ama '---' başlığı olmayan satır
 });
-ok('index.php: nav bağlama yalnız EKLEME (silinen satır yok)', count($silinenIndex) === 0,
-    count($silinenIndex) . ' satır silinmiş görünüyor');
+$indexBeklenenEskiSatirlar = [
+    "-<?php if (can('attendance.employees') || can('attendance.cards') || is_admin()): ?>",
+    '-    <a href="personel.php" class="home-card">',
+    '-        <div class="home-card-icon" style="background:#eef2ff">👤</div>',
+    '-        <div class="home-card-title">Personel</div>',
+    '-        <div class="home-card-sub">Personel ve kart yönetimi</div>',
+];
+$indexBeklenmeyenSilinen = array_filter($silinenIndex, fn($l) => !in_array(trim($l), array_map('trim', $indexBeklenenEskiSatirlar), true));
+ok('index.php: YALNIZ Faz 7\'nin bilinen "Personel" kart değişikliği silindi, başka hiçbir satır silinmedi',
+    count($indexBeklenmeyenSilinen) === 0,
+    count($indexBeklenmeyenSilinen) . ' beklenmeyen satır silinmiş görünüyor: ' . implode(' | ', $indexBeklenmeyenSilinen));
 
 // config/helpers.php İÇİN: Giriş-Çıkış fazı, Personel bölümünün görünürlük
 // koşulunu (§11) KASITLI olarak GENİŞLETTİ — yalnız attendance.scan yetkisi
@@ -247,6 +274,50 @@ $beklenenEskiSatirlar = [
     "-                       'attendance.foreman_accounts','attendance.foreman_payments'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments'],",
     "-                               'attendance.daily_reports','attendance.entitlements'],",
+    // Sprint Navigasyon-01 (Faz 7, kullanıcının açık talimatı: "Replace
+    // these scattered sidebar entries with ONE primary entry"): ÖNCEKİ
+    // turlardan FARKLI olarak bu SATIR YENİDEN YAZMA DEĞİL, BİLEREK,
+    // KAPSAMLI bir SİLMEDİR — Personel + Günlük İşçi bölümlerindeki 12 ayrı
+    // link (ve onların $a_* aktif-sayfa değişkenleri) TEK bir
+    // "Personel Takibi" (personel_takip.php) linkine indirildi. Hiçbir
+    // SAYFA silinmedi (görev talimatı: "This is a navigation consolidation
+    // layer... Existing URLs/pages remain authoritative and accessible.") —
+    // yalnız SIDEBAR görünürlüğü değişti; her hedef sayfa KENDİ yetki
+    // kontrolünü hâlâ taşır (bkz. pdks_takip_static_smoke.php §10).
+    "-    \$a_pdksp = in_array(\$cur, ['personel.php', 'personel_form.php'], true);",
+    "-    \$a_pdksk = \$cur === 'personel_kartlar.php';",
+    "-    \$a_pdksg = \$cur === 'giris_cikis.php';",
+    "-    \$a_cavus = in_array(\$cur, ['cavuslar.php', 'cavus_form.php'], true);",
+    "-    \$a_isk   = in_array(\$cur, ['isci_kartlari.php', 'isci_tipleri.php'], true);",
+    "-    \$a_gunlukgc = \$cur === 'gunluk_isci_giris_cikis.php';",
+    "-    \$a_puantaj  = in_array(\$cur, ['gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php'], true);",
+    "-    \$a_fiyat    = \$cur === 'cavus_fiyatlari.php';",
+    "-    \$a_hakedis  = in_array(\$cur, ['cavus_hakedis.php', 'cavus_hakedis_detay.php'], true);",
+    "-    \$a_odeme    = \$cur === 'cavus_odeme.php';",
+    "-    \$a_cari     = in_array(\$cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);",
+    "-    \$a_yrapor   = \$cur === 'raporlar.php';",
+    "-        <?php if (\$p_pdks): ?>",
+    "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', '👤', 'Personeller', \$a_pdksp); ?>",
+    "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', \$a_pdksk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_pdksg); ?>",
+    "-        <?php endif; ?>",
+    "-",
+    "-        <?php if (\$p_gunluk): ?>",
+    "-        <div class=\"sidebar-section\">Günlük İşçi</div>",
+    "-        <?php if (\$_fn && (can('attendance.foremen')      || \$p_adm)) \$lnk('cavuslar.php',      '👷', 'Çavuşlar',      \$a_cavus); ?>",
+    "-        <?php if (\$_fn && (can('attendance.worker_cards') || \$p_adm)) \$lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', \$a_isk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_scan')   || \$p_adm)) \$lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_gunlukgc); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_reports') || \$p_adm)) \$lnk('gunluk_isci_puantaj.php', '📅', 'Günlük Puantaj', \$a_puantaj); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_rates')  || \$p_adm)) \$lnk('cavus_fiyatlari.php', '💰', 'Çavuş Fiyatları', \$a_fiyat); ?>",
+    "-        <?php if (\$_fn && (can('attendance.entitlements')   || \$p_adm)) \$lnk('cavus_hakedis.php',   '🧾', 'Hakediş',         \$a_hakedis); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_payments') || \$p_adm)) \$lnk('cavus_odeme.php', '💸', 'Çavuş Ödeme', \$a_odeme); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_accounts') || \$p_adm)) \$lnk('cavus_cari.php',  '📒', 'Çavuş Cari',  \$a_cari); ?>",
+    "-        <?php if (\$_fn && (can('attendance.management_reports') || \$p_adm)) \$lnk('raporlar.php', '📊', 'Yönetim Raporları', \$a_yrapor); ?>",
+    // Faz 7: assets/print_base.css'e yeni yazdırma sayfaları için ek kural
+    // eklendi (thead tekrarı) → SW cache sürümü + APP_SURUM birlikte v217'den
+    // v218'e çekildi (CLAUDE.md kuralı: "SW cache versiyonu artırıldı mı?").
+    // Tek satırlık sürüm sabiti güncellemesi, içerik kaybı DEĞİL.
+    "-    define('APP_SURUM', 'v217');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

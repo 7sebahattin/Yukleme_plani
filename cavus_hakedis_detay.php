@@ -86,6 +86,7 @@ render_flash();
     <h1>🧾 <?= h($hakedis['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
         <a href="cavus_hakedis.php" class="btn">← Hakediş Listesi</a>
+        <a href="cavus_hakedis_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>
 </div>
 

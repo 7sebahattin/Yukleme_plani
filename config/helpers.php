@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v217');
+    define('APP_SURUM', 'v218');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -289,18 +289,21 @@ function render_desktop_sidebar(string $base): void {
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
-    $a_pdksp = in_array($cur, ['personel.php', 'personel_form.php'], true);
-    $a_pdksk = $cur === 'personel_kartlar.php';
-    $a_pdksg = $cur === 'giris_cikis.php';
-    $a_cavus = in_array($cur, ['cavuslar.php', 'cavus_form.php'], true);
-    $a_isk   = in_array($cur, ['isci_kartlari.php', 'isci_tipleri.php'], true);
-    $a_gunlukgc = $cur === 'gunluk_isci_giris_cikis.php';
-    $a_puantaj  = in_array($cur, ['gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php'], true);
-    $a_fiyat    = $cur === 'cavus_fiyatlari.php';
-    $a_hakedis  = in_array($cur, ['cavus_hakedis.php', 'cavus_hakedis_detay.php'], true);
-    $a_odeme    = $cur === 'cavus_odeme.php';
-    $a_cari     = in_array($cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);
-    $a_yrapor   = $cur === 'raporlar.php';
+    // Faz 7 (Sprint Navigasyon-01, kullanıcının açık talimatı: "Replace
+    // these scattered sidebar entries with ONE primary entry"): Personel +
+    // Günlük İşçi + Hakediş/Cari + Raporlama'nın TÜM alt sayfaları artık
+    // TEK bir "Personel Takibi" linkine (personel_takip.php) toplanıyor —
+    // aktif-sayfa vurgusu bu yüzden TEK bir $a_ptak değişkeniyle, o alt
+    // sayfa kümesinin TAMAMINA karşı kontrol edilir (kullanıcı hangi alt
+    // sayfada olursa olsun sidebar'da "Personel Takibi" vurgulu kalır).
+    $a_ptak = in_array($cur, [
+        'personel_takip.php',
+        'personel.php', 'personel_form.php', 'personel_kartlar.php', 'giris_cikis.php',
+        'cavuslar.php', 'cavus_form.php', 'isci_kartlari.php', 'isci_tipleri.php',
+        'gunluk_isci_giris_cikis.php', 'gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php',
+        'cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php',
+        'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
+    ], true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_aud   = $cur === 'audit.php';
@@ -347,24 +350,9 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
         <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
 
-        <?php if ($p_pdks): ?>
+        <?php if ($p_pdks || $p_gunluk): ?>
         <div class="sidebar-section">Personel</div>
-        <?php if ($_fn && (can('attendance.employees') || $p_adm)) $lnk('personel.php', '👤', 'Personeller', $a_pdksp); ?>
-        <?php if ($_fn && (can('attendance.cards')     || $p_adm)) $lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', $a_pdksk); ?>
-        <?php if ($_fn && (can('attendance.scan')      || $p_adm)) $lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', $a_pdksg); ?>
-        <?php endif; ?>
-
-        <?php if ($p_gunluk): ?>
-        <div class="sidebar-section">Günlük İşçi</div>
-        <?php if ($_fn && (can('attendance.foremen')      || $p_adm)) $lnk('cavuslar.php',      '👷', 'Çavuşlar',      $a_cavus); ?>
-        <?php if ($_fn && (can('attendance.worker_cards') || $p_adm)) $lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', $a_isk); ?>
-        <?php if ($_fn && (can('attendance.daily_scan')   || $p_adm)) $lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', $a_gunlukgc); ?>
-        <?php if ($_fn && (can('attendance.daily_reports') || $p_adm)) $lnk('gunluk_isci_puantaj.php', '📅', 'Günlük Puantaj', $a_puantaj); ?>
-        <?php if ($_fn && (can('attendance.foreman_rates')  || $p_adm)) $lnk('cavus_fiyatlari.php', '💰', 'Çavuş Fiyatları', $a_fiyat); ?>
-        <?php if ($_fn && (can('attendance.entitlements')   || $p_adm)) $lnk('cavus_hakedis.php',   '🧾', 'Hakediş',         $a_hakedis); ?>
-        <?php if ($_fn && (can('attendance.foreman_payments') || $p_adm)) $lnk('cavus_odeme.php', '💸', 'Çavuş Ödeme', $a_odeme); ?>
-        <?php if ($_fn && (can('attendance.foreman_accounts') || $p_adm)) $lnk('cavus_cari.php',  '📒', 'Çavuş Cari',  $a_cari); ?>
-        <?php if ($_fn && (can('attendance.management_reports') || $p_adm)) $lnk('raporlar.php', '📊', 'Yönetim Raporları', $a_yrapor); ?>
+        <?php $lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', $a_ptak); ?>
         <?php endif; ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
