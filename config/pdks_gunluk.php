@@ -151,10 +151,21 @@ function pdks_gunluk_tablolar(): array
     //   talimatı: "Do not overengineer locking for this phase"). Faz 2/3'te
     //   gerçek çok kullanıcılı tarama trafiği ölçülünce YENİDEN
     //   DEĞERLENDİRİLMELİDİR.
+    // ⚠ FAZ 8A (kullanıcının açık talimatı — "NEUTRAL REUSABLE WORKER CARDS"):
+    // `worker_type_id` artık NULL KABUL EDER. Kart kalıcı olarak bir işçi
+    // tipine bağlı DEĞİLDİR — tip artık her MESAİ DÖNEMİNE (bkz.
+    // daily_worker_work_periods) aittir, taramada AÇIKÇA seçilir. Bu sütun
+    // yalnız ESKİ (Faz 1-7) veri için GERİYE DÖNÜK okunabilirlik amacıyla
+    // KORUNUR — silinmez, YENİ Faz 8A trafiği bunu asla YAZMAZ/OKUMAZ.
+    // Mevcut ÜRETİM tablosunda bu sütun hâlâ NOT NULL olabilir (bu CREATE
+    // TABLE IF NOT EXISTS zaten var olan tabloyu DEĞİŞTİRMEZ) — bu durumda
+    // pdks_gunluk_faz8a_migrate() KENDİ ALTER'ıyla NULL kabul eder hâle
+    // getirir (bkz. o fonksiyon). Burada NULL yapılması yalnız SIFIRDAN
+    // kurulumları (ve testleri) baştan doğru şemayla başlatır.
     $t['worker_cards'] = "CREATE TABLE IF NOT EXISTS `worker_cards` (
         `id`              INT AUTO_INCREMENT PRIMARY KEY,
         `card_no`         VARCHAR(30)  NOT NULL,
-        `worker_type_id`  INT          NOT NULL,
+        `worker_type_id`  INT          NULL DEFAULT NULL,
         `canonical_uid`   VARCHAR(32)  NOT NULL,
         `uid_bytes`       TINYINT      NOT NULL DEFAULT 4,
         `uid_decimal`     VARCHAR(25)  NULL DEFAULT NULL,
@@ -257,6 +268,18 @@ function pdks_gunluk_tablolar(): array
     // yönde sorgular: "BUGÜN, BU DEPODA hangi kartlar" (worker_card_id
     // henüz bilinmiyor). Bu YÜZDEN ayrı, gerçek bir soldan-önek indeksi
     // eklendi — Faz 2'nin UNIQUE kısıtına DOKUNMADAN, yalnız EKLEME.
+    //
+    // ⚠ FAZ 8A (kullanıcının açık talimatı — "REMOVE OLD SAME-DAY
+    // CONSTRAINT"): `uq_dwce_card_day_depo_type` (worker_card_id,
+    // work_date_snapshot, depo_snapshot, event_type) buradan KALDIRILDI —
+    // "bir işçi kartı = bir işçi/iş günü" kuralı Faz 8A'da GEÇERSİZDİR, aynı
+    // kart aynı gün defalarca (farklı/aynı çavuşta) yeniden kullanılabilir.
+    // Bu, yalnız SIFIRDAN kurulumları etkiler (CREATE TABLE IF NOT EXISTS
+    // var olan tabloyu değiştirmez) — mevcut ÜRETİM tablosunda kısıt hâlâ
+    // DURUYOR olabilir, `pdks_gunluk_faz8a_migrate()` onu KENDİ ALTER'ıyla
+    // kontrollü biçimde kaldırır (bkz. o fonksiyon + dosya sonundaki FAZ 8A
+    // bölümü). Kalan üç index (idx_dwce_*) DEĞİŞMEDİ — hâlâ geçerli sorgu
+    // yolları.
     $t['daily_worker_card_events'] = "CREATE TABLE IF NOT EXISTS `daily_worker_card_events` (
         `id`                         INT AUTO_INCREMENT PRIMARY KEY,
         `session_id`                 INT          NOT NULL,
@@ -275,7 +298,6 @@ function pdks_gunluk_tablolar(): array
         INDEX `idx_dwce_card`    (`worker_card_id`),
         INDEX `idx_dwce_session` (`session_id`),
         INDEX `idx_dwce_workdate_depo_type` (`work_date_snapshot`, `depo_snapshot`, `event_type`),
-        UNIQUE KEY `uq_dwce_card_day_depo_type` (`worker_card_id`, `work_date_snapshot`, `depo_snapshot`, `event_type`),
         CONSTRAINT `fk_dwce_session` FOREIGN KEY (`session_id`)
             REFERENCES `daily_work_sessions`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
         CONSTRAINT `fk_dwce_card` FOREIGN KEY (`worker_card_id`)
@@ -708,14 +730,22 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
     if ($cardNo === '') {
         return ['ok' => false, 'kod' => 'bos_kart_no', 'hata' => 'Kart numarası zorunludur.'];
     }
-    $workerTypeId = (int)($veri['worker_type_id'] ?? 0);
-    if ($workerTypeId <= 0) {
-        return ['ok' => false, 'kod' => 'tip_yok', 'hata' => 'İşçi tipi seçmelisiniz.'];
-    }
-    $st = $pdo->prepare("SELECT id FROM worker_types WHERE id = ? AND is_active = 1");
-    $st->execute([$workerTypeId]);
-    if (!$st->fetchColumn()) {
-        return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+    // ⚠ FAZ 8A (kullanıcının açık talimatı — "NEUTRALIZE worker_cards"):
+    // işçi tipi artık kartın DEĞİL, her mesai döneminin özelliğidir (bkz.
+    // config/pdks_gunluk.php dosya sonundaki FAZ 8A bölümü). Bu alan
+    // BİLEREK OPSİYONELDİR — boş/0 bırakılırsa kart NÖTR (worker_type_id
+    // NULL) oluşturulur. Geriye dönük UYUMLULUK için hâlâ bir tip
+    // GÖNDERİLİRSE (eski istemci/otomasyon) aktifliği doğrulanır ve
+    // kaydedilir — YENİ Faz 8A taraması bu alanı ASLA OKUMAZ.
+    $workerTypeIdHam = trim((string)($veri['worker_type_id'] ?? ''));
+    $workerTypeId = null;
+    if ($workerTypeIdHam !== '' && $workerTypeIdHam !== '0') {
+        $workerTypeId = (int)$workerTypeIdHam;
+        $st = $pdo->prepare("SELECT id FROM worker_types WHERE id = ? AND is_active = 1");
+        $st->execute([$workerTypeId]);
+        if (!$st->fetchColumn()) {
+            return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+        }
     }
 
     $stC = $pdo->prepare("SELECT id FROM worker_cards WHERE card_no = ?");
@@ -784,8 +814,16 @@ function pdks_gunluk_kart_duzenle(int $cardId, array $veri, ?int $updatedBy = nu
 
     $cardNo = trim((string)($veri['card_no'] ?? ''));
     if ($cardNo === '') return ['ok' => false, 'hata' => 'Kart numarası zorunludur.'];
-    $workerTypeId = (int)($veri['worker_type_id'] ?? 0);
-    if ($workerTypeId <= 0) return ['ok' => false, 'hata' => 'İşçi tipi seçmelisiniz.'];
+    // ⚠ FAZ 8A — bkz. pdks_gunluk_kart_olustur() üzerindeki AYNI gerekçe:
+    // opsiyonel, boş bırakılırsa kart NÖTR (NULL) kalır/olur.
+    $workerTypeIdHam = trim((string)($veri['worker_type_id'] ?? ''));
+    $workerTypeId = null;
+    if ($workerTypeIdHam !== '' && $workerTypeIdHam !== '0') {
+        $workerTypeId = (int)$workerTypeIdHam;
+        $stT = $pdo->prepare("SELECT id FROM worker_types WHERE id = ? AND is_active = 1");
+        $stT->execute([$workerTypeId]);
+        if (!$stT->fetchColumn()) return ['ok' => false, 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+    }
 
     $stC = $pdo->prepare("SELECT id FROM worker_cards WHERE card_no = ? AND id <> ?");
     $stC->execute([$cardNo, $cardId]);
@@ -1188,6 +1226,7 @@ function pdks_gunluk_oturum_kaydet(string $hamUid, string $kaynak, int $sessionI
 function pdks_gunluk_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_oturum_kart_sayimi($sessionId, $pdo);
     $st = $pdo->prepare(
         "SELECT worker_type_id_snapshot AS tip_id, worker_type_name_snapshot AS tip_ad,
                 COUNT(DISTINCT worker_card_id) AS n
@@ -1208,6 +1247,7 @@ function pdks_gunluk_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null): array
 function pdks_gunluk_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_oturum_ozet($sessionId, $pdo);
 
     // ⚠ DÜZELTME (kullanıcının açık talimatı — sayaç/rapor kuralı): sayaçlar
     // HAM olay satırı SAYISI DEĞİL, BENZERSİZ (DISTINCT) işçi kartı sayısını
@@ -1364,6 +1404,7 @@ function pdks_gunluk_oturum_kapat(int $sessionId, ?string $kapatmaNedeni, int $u
 function pdks_gunluk_gun_ozeti(string $workDate, ?string $depo = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_gun_ozeti($workDate, $depo, $pdo);
 
     $whereEv = "work_date_snapshot = ?"; $parEv = [$workDate];
     if ($depo !== null) { $whereEv .= " AND depo_snapshot = ?"; $parEv[] = $depo; }
@@ -1433,6 +1474,7 @@ function pdks_gunluk_gun_ozeti(string $workDate, ?string $depo = null, ?PDO $pdo
 function pdks_gunluk_gun_listesi(string $workDate, ?string $depo = null, ?int $foremanId = null, ?string $durumFiltresi = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_gun_listesi($workDate, $depo, $foremanId, $durumFiltresi, $pdo);
 
     $where = ['work_date = ?']; $params = [$workDate];
     if ($depo !== null && $depo !== '') { $where[] = 'depo = ?'; $params[] = $depo; }
@@ -1527,6 +1569,7 @@ function pdks_gunluk_gun_listesi(string $workDate, ?string $depo = null, ?int $f
 function pdks_gunluk_oturum_kartlari(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_oturum_donemleri($sessionId, $pdo);
     $st = $pdo->prepare(
         "SELECT g.worker_card_id, w.card_no, g.worker_type_name_snapshot AS tip,
                 g.server_event_time AS giris_saat,
@@ -1559,6 +1602,7 @@ function pdks_gunluk_oturum_kartlari(int $sessionId, ?PDO $pdo = null): array
 function pdks_gunluk_eksik_cikislar(string $workDate, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) return pdks_gunluk_faz8a_eksik_cikislar($workDate, $depo, $foremanId, $pdo);
 
     $where = ['g.event_type = \'GIRIS\'', 'g.work_date_snapshot = ?'];
     $params = [$workDate];
@@ -1609,4 +1653,845 @@ function pdks_gunluk_kullanici_adi(?int $userId, ?PDO $pdo = null): string
     $u = $st->fetch();
     if (!$u) return '—';
     return (string)($u['display_name'] ?: $u['username']);
+}
+
+/** Giriş/çıkış saatleri arasındaki süreyi "Xs Ydk" biçiminde döner —
+ *  puantaj detay/yazdırma sayfaları için (görev talimatı §20 örneği:
+ *  "4s 02dk"). $cikis NULL/boşsa çağrılmamalıdır (çağıran taraf zaten
+ *  yalnız TAMAMLANMIŞ (çıkışlı) dönemler için çağırır). */
+function pdks_gunluk_sure_etiketi(string $giris, string $cikis): string
+{
+    $g = strtotime($giris);
+    $c = strtotime($cikis);
+    if ($g === false || $c === false || $c < $g) return '—';
+    $dk = intdiv($c - $g, 60);
+    return sprintf('%ds %02ddk', intdiv($dk, 60), $dk % 60);
+}
+
+// =========================================================
+// FAZ 8A — NEUTRAL REUSABLE WORKER CARDS + WORK PERIOD MODEL
+//
+// Faz 1-7'nin merkezi varsayımı ("bir fiziksel kart = bir işçi tipi,
+// bir gün içinde en fazla bir kez kullanılır") burada TERS ÇEVRİLİR:
+//
+//   • Kart artık NÖTR bir jetondur — işçi tipi karta değil, o taramanın
+//     yapıldığı MESAİ DÖNEMİNE (daily_worker_work_periods) aittir ve
+//     GİRİŞ anında AÇIKÇA seçilir (worker_cards.worker_type_id yalnız
+//     ESKİ veri için okunur, YENİ trafik onu hiç yazmaz).
+//   • Yeni değişmez kural: bir fiziksel kartın aynı anda EN FAZLA BİR
+//     AÇIK mesai dönemi olabilir — GLOBAL olarak (tarih/depo/çavuştan
+//     BAĞIMSIZ). Geçerli bir ÇIKIŞ'tan hemen sonra kart YENİDEN
+//     kullanılabilir — aynı gün, aynı ya da farklı çavuşta, sınırsız kez.
+//
+// `daily_worker_card_events` (Faz 2) DEĞİŞMEDEN kalır — HÂLÂ ham/
+// değişmez tarama denetim kaydıdır, hiçbir satırı silinmez/güncellenmez.
+// `daily_worker_work_periods` bunun ÜZERİNE kurulan, YETKİLİ operasyonel
+// kayıttır: her satır TAM OLARAK bir GİRİŞ olayına (entry_event_id,
+// UNIQUE) ve en fazla bir ÇIKIŞ olayına (exit_event_id, UNIQUE) bağlanır.
+//
+// ⚠ ŞEMA/DAĞITIM SIRALAMASI (görev talimatı §26-28 — "deployment
+// compatibility"): bu dosyadaki İŞ MANTIĞI fonksiyonları (aşağıdaki
+// pdks_gunluk_oturum_ozet/oturum_kartlari/oturum_kart_sayimi/gun_ozeti/
+// gun_listesi/eksik_cikislar) HER ÇAĞRIDA pdks_gunluk_faz8a_sema_hazir()
+// İLE ŞEMA DURUMUNU KONTROL EDER: şema (tablo + nullable kolon + eski
+// kısıtın kaldırılmışlığı) HAZIR DEĞİLSE Faz 1-7'nin ESKİ davranışı
+// AYNEN çalışmaya devam eder — kod DEPLOY edildiği anda (migrasyon
+// ÇALIŞTIRILMADAN ÖNCE) canlı tarama ASLA bozulmaz. Bir yönetici
+// migrate.php'den "Faz 8A" adımını çalıştırdığı AN yeni mantık devreye
+// girer — ayrı bir dağıtım adımı/bekleme SÜRESİ gerekmez.
+// =========================================================
+
+defined('PDKS_GUNLUK_FAZ8A_AKTIF') || define('PDKS_GUNLUK_FAZ8A_AKTIF', true);
+
+/** Faz 8A'da desteklenen beyan edilen mesai sınıfları. approved_attendance_class
+ *  (Faz 8B onay mimarisi) BİLEREK burada YOK — 8A yalnız BEYAN EDER, ONAYLAMAZ. */
+function pdks_gunluk_faz8a_mesai_siniflari(): array
+{
+    return ['tam' => 'Tam Mesai', 'yarim' => 'Yarım Mesai'];
+}
+
+// =========================================================
+// ŞEMA
+// =========================================================
+
+function pdks_gunluk_faz8a_tablolar(): array
+{
+    $t = [];
+
+    // ── daily_worker_work_periods — YETKİLİ operasyonel katılım kaydı ──
+    // `source`: 'scan' (Faz 8A canlı Giriş/Çıkış akışından) |
+    // 'legacy_backfill' (bkz. pdks_gunluk_faz8a_backfill() — Faz 1-7'den
+    // AKTARILAN eski dönemler). Bu ayrım TEK bir amaca hizmet eder:
+    // "açık dönem var mı" kontrolü (yeni taramayı engelleyen/çözen tek
+    // sorgu — bkz. pdks_gunluk_faz8a_kart_acik_donemi()) YALNIZ
+    // source='scan' satırlara bakar — aksi hâlde yıllar önce kapatılmamış
+    // eski bir "eksik çıkış" kaydı, geri aktarıldıktan sonra o fiziksel
+    // kartı SONSUZA KADAR yeni taramaya KAPATIRDI (kullanıcının "a physical
+    // card with an open period remains blocked" kuralı YENİ trafik
+    // içindir, yıllar önceki çözülmemiş bir eksik-çıkışı canlı operasyonu
+    // durdurma sebebi yapmak İSTENMEYEN bir yan etkidir). Puantaj/rapor
+    // GÖRÜNÜMLERİ source AYRIMI YAPMAZ — ikisi de aynı şekilde gösterilir
+    // (geçmiş kaybolmaz).
+    $t['daily_worker_work_periods'] = "CREATE TABLE IF NOT EXISTS `daily_worker_work_periods` (
+        `id`                         INT AUTO_INCREMENT PRIMARY KEY,
+        `session_id`                 INT          NOT NULL,
+        `worker_card_id`             INT          NOT NULL,
+        `worker_type_id_snapshot`    INT          NULL DEFAULT NULL,
+        `worker_type_name_snapshot`  VARCHAR(80)  NOT NULL DEFAULT '',
+        `entry_event_id`             INT          NOT NULL,
+        `exit_event_id`              INT          NULL DEFAULT NULL,
+        `entry_time`                 DATETIME     NOT NULL,
+        `exit_time`                  DATETIME     NULL DEFAULT NULL,
+        `declared_attendance_class`  VARCHAR(10)  NOT NULL DEFAULT 'tam',
+        `approved_attendance_class`  VARCHAR(10)  NULL DEFAULT NULL,
+        `work_date_snapshot`         DATE         NOT NULL,
+        `depo_snapshot`              VARCHAR(150) NOT NULL DEFAULT '',
+        `status`                     VARCHAR(20)  NOT NULL DEFAULT 'open',
+        `source`                     VARCHAR(20)  NOT NULL DEFAULT 'scan',
+        `created_at`                 DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at`                 DATETIME     NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_dwwp_entry_event` (`entry_event_id`),
+        UNIQUE KEY `uq_dwwp_exit_event`  (`exit_event_id`),
+        INDEX `idx_dwwp_card_status`     (`worker_card_id`, `status`),
+        INDEX `idx_dwwp_session`         (`session_id`),
+        INDEX `idx_dwwp_workdate_depo`   (`work_date_snapshot`, `depo_snapshot`),
+        CONSTRAINT `fk_dwwp_session` FOREIGN KEY (`session_id`)
+            REFERENCES `daily_work_sessions`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT `fk_dwwp_card` FOREIGN KEY (`worker_card_id`)
+            REFERENCES `worker_cards`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT `fk_dwwp_entry_event` FOREIGN KEY (`entry_event_id`)
+            REFERENCES `daily_worker_card_events`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT `fk_dwwp_exit_event` FOREIGN KEY (`exit_event_id`)
+            REFERENCES `daily_worker_card_events`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    return $t;
+}
+
+/** MySQL/SQLite taşınabilir: bir kolon NULL kabul ediyor mu? (testler
+ *  SQLite kullanır — SHOW COLUMNS MySQL'e özgüdür.) */
+function pdks_gunluk_faz8a_kolon_nullable(PDO $pdo, string $tablo, string $kolon): bool
+{
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        foreach ($pdo->query("PRAGMA table_info(`{$tablo}`)")->fetchAll() as $c) {
+            if ($c['name'] === $kolon) return ((int)$c['notnull']) === 0;
+        }
+        return false;
+    }
+    $st = $pdo->prepare("SHOW COLUMNS FROM `{$tablo}` LIKE ?");
+    $st->execute([$kolon]);
+    $c = $st->fetch();
+    return $c !== false && stripos((string)$c['Null'], 'YES') !== false;
+}
+
+/** MySQL/SQLite taşınabilir: bir index/kısıt adı var mı? */
+function pdks_gunluk_faz8a_index_var(PDO $pdo, string $tablo, string $indeks): bool
+{
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        foreach ($pdo->query("PRAGMA index_list(`{$tablo}`)")->fetchAll() as $ix) {
+            if ($ix['name'] === $indeks) return true;
+        }
+        return false;
+    }
+    $st = $pdo->prepare("SHOW INDEX FROM `{$tablo}` WHERE Key_name = ?");
+    $st->execute([$indeks]);
+    return (bool)$st->fetch();
+}
+
+/**
+ * TEK doğruluk kaynağı — Faz 8A iş mantığı devrede mi? ÜÇ koşulun HEPSİ
+ * gerekir: (1) daily_worker_work_periods tablosu var, (2)
+ * worker_cards.worker_type_id NULL kabul ediyor, (3) eski
+ * uq_dwce_card_day_depo_type kısıtı KALDIRILMIŞ. Üçü de
+ * pdks_gunluk_faz8a_migrate()'in TEK çalıştırmasında birlikte
+ * tamamlanır — bu yüzden "kısmen tamamlanmış migrasyon" durumunda bile
+ * bu fonksiyon GÜVENLE false döner (eski mantık çalışmaya devam eder,
+ * hiçbir ara durum yeni VE eski kuralların İKİSİNİ BİRDEN atlamasına
+ * yol açmaz — bkz. dosya başlığındaki dağıtım sıralaması notu).
+ */
+function pdks_gunluk_faz8a_sema_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods')) return false;
+    if (!pdks_gunluk_tablo_var($pdo, 'worker_cards')) return false;
+    if (!pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events')) return false;
+    try {
+        if (!pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')) return false;
+    } catch (PDOException $e) { return false; }
+    try {
+        if (pdks_gunluk_faz8a_index_var($pdo, 'daily_worker_card_events', 'uq_dwce_card_day_depo_type')) return false;
+    } catch (PDOException $e) { return false; }
+    return true;
+}
+
+/**
+ * Faz 8A migrasyonu — dört ADDITIVE/kontrollü adım, tek çağrıda, bu SIRAYLA:
+ *   1) daily_worker_work_periods tablosunu oluştur
+ *   2) worker_cards.worker_type_id → NULL kabul eder hâle getir
+ *   3) eski uq_dwce_card_day_depo_type UNIQUE kısıtını kaldır
+ *   4) Faz 1-7 geçmişini geriye dönük aktar (backfill — bkz. o fonksiyon)
+ * İDEMPOTENT — tekrar çalıştırmak güvenlidir, her adım kendi durumunu
+ * kontrol eder. Yalnız migrate.php'nin admin aksiyonundan çağrılır.
+ */
+function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+
+    foreach (pdks_gunluk_faz8a_tablolar() as $ad => $sql) {
+        if (pdks_gunluk_tablo_var($pdo, $ad)) {
+            $rapor[] = ['adim' => $ad, 'durum' => 'var', 'mesaj' => 'Tablo zaten mevcut.'];
+            continue;
+        }
+        try {
+            $pdo->exec($sql);
+            $rapor[] = pdks_gunluk_tablo_var($pdo, $ad)
+                ? ['adim' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.']
+                : ['adim' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
+        } catch (PDOException $e) {
+            error_log('[pdks_gunluk_faz8a_migrate] ' . $ad . ': ' . $e->getMessage());
+            $rapor[] = ['adim' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+
+    try {
+        if (!pdks_gunluk_tablo_var($pdo, 'worker_cards')) {
+            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'atlandi', 'mesaj' => 'worker_cards tablosu yok.'];
+        } elseif (pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')) {
+            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'var', 'mesaj' => 'Zaten NULL kabul ediyor.'];
+        } else {
+            $pdo->exec("ALTER TABLE `worker_cards` MODIFY COLUMN `worker_type_id` INT NULL DEFAULT NULL");
+            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'guncellendi', 'mesaj' => 'Kolon NULL kabul edecek şekilde güncellendi.'];
+        }
+    } catch (PDOException $e) {
+        error_log('[pdks_gunluk_faz8a_migrate] worker_cards.worker_type_id: ' . $e->getMessage());
+        $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+    }
+
+    try {
+        if (!pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events')) {
+            $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'atlandi', 'mesaj' => 'daily_worker_card_events tablosu yok.'];
+        } elseif (!pdks_gunluk_faz8a_index_var($pdo, 'daily_worker_card_events', 'uq_dwce_card_day_depo_type')) {
+            $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'var', 'mesaj' => 'Zaten kaldırılmış.'];
+        } else {
+            $pdo->exec("ALTER TABLE `daily_worker_card_events` DROP INDEX `uq_dwce_card_day_depo_type`");
+            $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'kaldirildi', 'mesaj' => 'Eski aynı-gün kısıtı kaldırıldı.'];
+        }
+    } catch (PDOException $e) {
+        error_log('[pdks_gunluk_faz8a_migrate] uq_dwce_card_day_depo_type: ' . $e->getMessage());
+        $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+    }
+
+    if (pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods') && pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events')) {
+        try {
+            $rapor[] = ['adim' => 'daily_worker_work_periods.backfill', 'durum' => 'calisti', 'mesaj' => pdks_gunluk_faz8a_backfill($pdo)];
+        } catch (PDOException $e) {
+            error_log('[pdks_gunluk_faz8a_migrate] backfill: ' . $e->getMessage());
+            $rapor[] = ['adim' => 'daily_worker_work_periods.backfill', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+
+    return $rapor;
+}
+
+/**
+ * Faz 1-7 (Faz 8A ÖNCESİ) `daily_worker_card_events` GİRİŞ olaylarını
+ * `daily_worker_work_periods`'a AKTARIR — yalnız EKLER, hiçbir eski satırı
+ * SİLMEZ/DEĞİŞTİRMEZ. İDEMPOTENT (entry_event_id zaten aktarılmışsa atlanır).
+ *
+ * ⚠ NEDEN GEREKLİ ("backfill is unnecessary → do not do it" talimatına
+ * rağmen BİLİNÇLİ karar, bkz. final rapor): Faz 8A'nın puantaj/rapor
+ * fonksiyonları migrasyon TAMAMLANDIĞI AN bu tabloyu TEK kaynak olarak
+ * okumaya başlar (aşağıya bkz.). Backfill YAPILMAZSA tüm ESKİ günlerin
+ * puantajı migrasyon ANINDA SIFIRA düşerdi — "geçmiş okunabilir kalmalı"
+ * kuralını ihlal ederdi. Backfill bunu TEK additive adımla önler.
+ *
+ * ⚠ NEDEN DETERMİNİSTİK/GÜVENLİ: eski `uq_dwce_card_day_depo_type` kısıtı
+ * + uygulama katmanı bir (session_id, worker_card_id) çifti için EN FAZLA
+ * bir GİRİŞ ve EN FAZLA bir ÇIKIŞ satırı GARANTİ ediyordu (bkz.
+ * pdks_gunluk_kart_acik_girisi() docblock'u) — eşleştirme bu yüzden
+ * BELİRSİZ değil, KESİN.
+ *
+ * ⚠ `source='legacy_backfill'`: bu satırlar YENİ taramayı ASLA
+ * engellemez (bkz. tablo DDL'indeki not) — yalnız görünürlük içindir.
+ * Eksik-çıkış (GİRİŞ var, ÇIKIŞ yok) eski kayıtlar da AKTARILIR
+ * (status='open') — geçmiş kaybolmaz, ama fiziksel kartı KİLİTLEMEZ.
+ *
+ * ⚠ declared_attendance_class='tam': eski model Tam/Yarım AYRIMINI
+ * bilmiyordu — tek seçenek tam gündü, bu UYDURMA değil gerçek karşılıktır.
+ */
+function pdks_gunluk_faz8a_backfill(PDO $pdo): string
+{
+    $girisSatirlari = $pdo->query(
+        "SELECT g.id AS entry_event_id, g.session_id, g.worker_card_id,
+                g.worker_type_id_snapshot, g.worker_type_name_snapshot,
+                g.work_date_snapshot, g.depo_snapshot, g.server_event_time AS entry_time
+           FROM daily_worker_card_events g
+          WHERE g.event_type = 'GIRIS'
+            AND NOT EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.entry_event_id = g.id)
+          ORDER BY g.id ASC"
+    )->fetchAll();
+    if (!$girisSatirlari) return 'Aktarılacak eski GİRİŞ kaydı yok (zaten aktarılmış veya hiç yok).';
+
+    $stCikis = $pdo->prepare(
+        "SELECT id, server_event_time FROM daily_worker_card_events
+          WHERE session_id = ? AND worker_card_id = ? AND event_type = 'CIKIS'
+          ORDER BY id ASC LIMIT 1"
+    );
+    $insP = $pdo->prepare(
+        "INSERT INTO daily_worker_work_periods
+            (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot,
+             entry_event_id, exit_event_id, entry_time, exit_time, declared_attendance_class,
+             work_date_snapshot, depo_snapshot, status, source)
+         VALUES (?,?,?,?,?,?,?,?, 'tam', ?,?,?, 'legacy_backfill')"
+    );
+
+    $aktarilan = 0;
+    foreach ($girisSatirlari as $g) {
+        $stCikis->execute([$g['session_id'], $g['worker_card_id']]);
+        $cikis = $stCikis->fetch();
+        $exitEventId = $cikis['id'] ?? null;
+        $exitTime    = $cikis['server_event_time'] ?? null;
+        try {
+            $insP->execute([
+                $g['session_id'], $g['worker_card_id'], $g['worker_type_id_snapshot'], $g['worker_type_name_snapshot'],
+                $g['entry_event_id'], $exitEventId, $g['entry_time'], $exitTime,
+                $g['work_date_snapshot'], $g['depo_snapshot'], $exitEventId !== null ? 'closed' : 'open',
+            ]);
+            $aktarilan++;
+        } catch (PDOException $e) {
+            // uq_dwwp_entry_event/uq_dwwp_exit_event — eşzamanlı/tekrar
+            // çalıştırma: bu satır zaten aktarılmış say, devam et.
+        }
+    }
+    return $aktarilan . ' eski mesai dönemi aktarıldı.';
+}
+
+// =========================================================
+// KART ÇÖZÜMLEME — worker_types JOIN'i YOK (tip artık KARTA değil,
+// DÖNEME aittir; bkz. dosya başlığı).
+// =========================================================
+
+function pdks_gunluk_faz8a_kart_coz(string $kanonik, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_gunluk_tablo_var($pdo, 'worker_cards')) return null;
+    $st = $pdo->prepare("SELECT * FROM worker_cards WHERE canonical_uid = ?");
+    $st->execute([$kanonik]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * EŞZAMANLILIK STRATEJİSİ (görev talimatı §4 — "Analyze MySQL-compatible
+ * enforcement"): bu fiziksel kartın worker_cards SATIRINI kilitler
+ * (`SELECT ... FOR UPDATE`, yalnız MySQL — SQLite testleri zaten tek
+ * bağlantılı/tek iş parçacığıdır ve FOR UPDATE söz dizimini TANIMAZ).
+ *
+ * Neden yeterli: iki eşzamanlı GİRİŞ (veya GİRİŞ+ÇIKIŞ) isteği AYNI
+ * fiziksel karta değiyorsa, ikisi de önce BU satırı kilitlemeye çalışır —
+ * MySQL/InnoDB ikinciyi birincinin COMMIT/ROLLBACK'ine kadar BEKLETİR.
+ * İkinci istek kilit devraldığında "açık dönem var mı" sorgusu artık
+ * BİRİNCİNİN yazdığı (commit edilmiş) veriyi görür — bu yüzden SELECT-only
+ * bir ön-kontrol TEK BAŞINA yetersizken (iki istek AYNI ANDA "açık dönem
+ * yok" görüp ikisi de INSERT edebilirdi), satır kilidi + AYNI işlem
+ * içinde kontrol+INSERT bunu YAPISAL OLARAK imkânsız kılar.
+ *
+ * FARKLI fiziksel kartlar HİÇ serileşmez (her kart kendi satırını kilitler)
+ * — performans etkisi yalnız AYNI kartın gerçekten eşzamanlı okunduğu
+ * (pratikte son derece nadir) senaryoyla sınırlıdır.
+ *
+ * ⚠ Kasıtlı olarak KULLANILMAYAN alternatif: MySQL 5.7+ "generated column +
+ * UNIQUE index" numarası (`status='open' THEN worker_card_id ELSE NULL`
+ * üzerine UNIQUE) GERÇEK bir DB-seviyesi ikinci savunma katmanı olurdu,
+ * ama bu depo bilinmeyen/paylaşımlı barındırma ortamlarında test edilmemiş
+ * MySQL sürüm-özel özellikler eklemekten KAÇINIYOR (bkz. CLAUDE.md →
+ * REGEXP/ON DUPLICATE KEY notları, AYNI ihtiyat ilkesi) — satır kilidi tek
+ * başına yeterli ve taşınabilir olduğu için eklenmedi.
+ */
+function pdks_gunluk_faz8a_kart_kilitle(PDO $pdo, int $cardId): void
+{
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    $sql = "SELECT id FROM worker_cards WHERE id = ?" . ($driver === 'mysql' ? ' FOR UPDATE' : '');
+    $pdo->prepare($sql)->execute([$cardId]);
+}
+
+/** Bu kartın hâlâ AÇIK, CANLI (source='scan') bir dönemi var mı — varsa
+ *  hangi çavuş/mesai altında. Legacy backfill satırlarına BAKMAZ (bkz.
+ *  tablo DDL'indeki gerekçe). ÇAĞIRAN, pdks_gunluk_faz8a_kart_kilitle()
+ *  İLE AYNI İŞLEM İÇİNDE çağırmalıdır (bkz. o fonksiyonun docblock'u). */
+function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
+{
+    $st = $pdo->prepare(
+        "SELECT p.id, p.session_id, p.entry_time, p.worker_type_name_snapshot AS tip,
+                s.foreman_id, f.name AS foreman_name
+           FROM daily_worker_work_periods p
+           JOIN daily_work_sessions s ON s.id = p.session_id
+           JOIN foremen f ON f.id = s.foreman_id
+          WHERE p.worker_card_id = ? AND p.status = 'open' AND p.source = 'scan'
+          LIMIT 1"
+    );
+    $st->execute([$workerCardId]);
+    return $st->fetch() ?: null;
+}
+
+// =========================================================
+// GİRİŞ / ÇIKIŞ — TEK yazma yolları (USB VE Web NFC AYNI fonksiyonlardan
+// geçer — görev talimatı §14: "USB and Web NFC must call the SAME
+// server-side work-period business logic.")
+// =========================================================
+
+/**
+ * GİRİŞ — ATOMİK (görev talimatı §5): kilit → doğrulama → GİRİŞ olayı
+ * INSERT → dönem INSERT, TEK transaction içinde. Herhangi bir adım
+ * BAŞARISIZ olursa hiçbir şey yazılmaz (ROLLBACK).
+ *
+ * @param int    $workerTypeId  taramayı yapan ekranda O AN seçili işçi tipi (kart DEĞİL — bkz. dosya başlığı)
+ * @param string $declaredClass 'tam' | 'yarim' — pdks_gunluk_faz8a_mesai_siniflari()
+ */
+function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $sessionId, int $workerTypeId, string $declaredClass, int $recordedByUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!defined('PDKS_UID_KAYNAKLARI') || !in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_kaynak', 'hata' => 'UID kaynağı bildirilmeli.'];
+    }
+    if (!array_key_exists($declaredClass, pdks_gunluk_faz8a_mesai_siniflari())) {
+        return ['ok' => false, 'kod' => 'gecersiz_mesai_sinifi', 'hata' => 'Tam Mesai / Yarım Mesai seçmelisiniz.'];
+    }
+    $hamUid = trim($hamUid);
+    if ($hamUid === '') return ['ok' => false, 'kod' => 'bos_uid', 'hata' => 'Kart okutulmadı.'];
+    if (!function_exists('pdks_uid_from_decimal')) {
+        return ['ok' => false, 'kod' => 'pdks_yuklu_degil', 'hata' => 'UID normalizasyon fonksiyonları yüklü değil.'];
+    }
+
+    $st = $pdo->prepare("SELECT s.*, f.name AS foreman_name FROM daily_work_sessions s JOIN foremen f ON f.id = s.foreman_id WHERE s.id = ?");
+    $st->execute([$sessionId]);
+    $session = $st->fetch();
+    if (!$session) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+    if ($session['status'] !== 'open') return ['ok' => false, 'kod' => 'oturum_kapali', 'hata' => 'Bu mesai kapalı.'];
+
+    $stTip = $pdo->prepare("SELECT id, name FROM worker_types WHERE id = ? AND is_active = 1");
+    $stTip->execute([$workerTypeId]);
+    $tip = $stTip->fetch();
+    if (!$tip) return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+
+    $kanonik = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($hamUid),
+        'web_nfc'     => pdks_uid_from_web_nfc($hamUid),
+        default       => pdks_uid_hex_normalize($hamUid),
+    };
+    if ($kanonik === null) return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
+
+    $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+    if ($kart === null) {
+        if (function_exists('pdks_kart_cozumle')) {
+            $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
+            if ($kalici !== null) {
+                $isim = (string)($kalici['employee']['full_name'] ?? '');
+                return ['ok' => false, 'kod' => 'kalici_kart',
+                        'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
+            }
+        }
+        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
+    }
+    if ($kart['status'] === 'lost')     return ['ok' => false, 'kod' => 'kart_kayip', 'hata' => 'Bu kart KAYIP olarak işaretli.'];
+    if ($kart['status'] === 'disabled') return ['ok' => false, 'kod' => 'kart_devre_disi', 'hata' => 'Bu kart DEVRE DIŞI.'];
+
+    $disTx = $pdo->inTransaction();
+    if (!$disTx) $pdo->beginTransaction();
+    try {
+        pdks_gunluk_faz8a_kart_kilitle($pdo, (int)$kart['id']);
+
+        $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$kart['id']);
+        if ($acik !== null) {
+            if (!$disTx) $pdo->rollBack();
+            if ((int)$acik['session_id'] === $sessionId) {
+                return ['ok' => false, 'kod' => 'mukerrer_giris', 'hata' => 'Bu kart zaten bu mesaide giriş yapmış.'];
+            }
+            return ['ok' => false, 'kod' => 'baska_cavusta_acik',
+                     'hata' => 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde açık görünüyor.'];
+        }
+
+        $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden ASLA alınmaz.
+        $insE = $pdo->prepare(
+            "INSERT INTO daily_worker_card_events
+                (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,
+                 worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot,
+                 recorded_by_user_id, server_event_time)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        $insE->execute([
+            $sessionId, $kart['id'], 'GIRIS', $kaynak, $kanonik,
+            (int)$tip['id'], (string)$tip['name'], $session['work_date'], $session['depo'],
+            $recordedByUserId, $simdi,
+        ]);
+        $eventId = (int)$pdo->lastInsertId();
+
+        $insP = $pdo->prepare(
+            "INSERT INTO daily_worker_work_periods
+                (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot,
+                 entry_event_id, entry_time, declared_attendance_class, work_date_snapshot, depo_snapshot,
+                 status, source)
+             VALUES (?,?,?,?,?,?,?,?,?, 'open', 'scan')"
+        );
+        $insP->execute([
+            $sessionId, $kart['id'], (int)$tip['id'], (string)$tip['name'],
+            $eventId, $simdi, $declaredClass, $session['work_date'], $session['depo'],
+        ]);
+        $periodId = (int)$pdo->lastInsertId();
+
+        if (!$disTx) $pdo->commit();
+    } catch (PDOException $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kayıt yapılamadı: ' . $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('gunluk_giris', 'daily_worker_work_periods', $periodId, null, [
+            'session_id' => $sessionId, 'worker_card_id' => $kart['id'], 'card_no' => $kart['card_no'],
+            'worker_type_id' => $tip['id'], 'declared_attendance_class' => $declaredClass,
+        ]);
+    }
+
+    return [
+        'ok' => true, 'event_id' => $eventId, 'period_id' => $periodId, 'event_type' => 'GIRIS',
+        'card' => ['card_no' => $kart['card_no'], 'worker_type_name' => (string)$tip['name'], 'declared_class' => $declaredClass,
+                   'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()[$declaredClass]],
+        'server_time' => $simdi,
+        'ozet' => pdks_gunluk_faz8a_oturum_ozet($sessionId, $pdo),
+    ];
+}
+
+/**
+ * ÇIKIŞ — ATOMİK: kilit → TAM OLARAK bir açık dönem bul → çavuş/oturum
+ * eşleşmesini doğrula (YANLIŞ ÇAVUŞ'sa REDDET, KAPATMA) → ÇIKIŞ olayı
+ * INSERT → dönemi kapat, TEK transaction içinde.
+ */
+function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $sessionId, int $recordedByUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!defined('PDKS_UID_KAYNAKLARI') || !in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_kaynak', 'hata' => 'UID kaynağı bildirilmeli.'];
+    }
+    $hamUid = trim($hamUid);
+    if ($hamUid === '') return ['ok' => false, 'kod' => 'bos_uid', 'hata' => 'Kart okutulmadı.'];
+    if (!function_exists('pdks_uid_from_decimal')) {
+        return ['ok' => false, 'kod' => 'pdks_yuklu_degil', 'hata' => 'UID normalizasyon fonksiyonları yüklü değil.'];
+    }
+
+    $st = $pdo->prepare("SELECT s.*, f.name AS foreman_name FROM daily_work_sessions s JOIN foremen f ON f.id = s.foreman_id WHERE s.id = ?");
+    $st->execute([$sessionId]);
+    $session = $st->fetch();
+    if (!$session) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+    if ($session['status'] !== 'open') return ['ok' => false, 'kod' => 'oturum_kapali', 'hata' => 'Bu mesai kapalı.'];
+
+    $kanonik = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($hamUid),
+        'web_nfc'     => pdks_uid_from_web_nfc($hamUid),
+        default       => pdks_uid_hex_normalize($hamUid),
+    };
+    if ($kanonik === null) return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
+
+    $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+    if ($kart === null) {
+        if (function_exists('pdks_kart_cozumle')) {
+            $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
+            if ($kalici !== null) {
+                $isim = (string)($kalici['employee']['full_name'] ?? '');
+                return ['ok' => false, 'kod' => 'kalici_kart',
+                        'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
+            }
+        }
+        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
+    }
+    // ⚠ Legacy Kural 1 İLE AYNI: ÇIKIŞ, kartın kayıp/devre dışı durumu ne
+    // olursa olsun MEVCUT açık dönemi kapatabilmelidir.
+
+    $disTx = $pdo->inTransaction();
+    if (!$disTx) $pdo->beginTransaction();
+    try {
+        pdks_gunluk_faz8a_kart_kilitle($pdo, (int)$kart['id']);
+
+        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' AND source = 'scan' LIMIT 1");
+        $st2->execute([$kart['id']]);
+        $acik = $st2->fetch() ?: null;   // ⚠ PDO::fetch() satır yoksa false döner, null DEĞİL.
+        if ($acik === null) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'acik_donem_yok', 'hata' => 'Bu kart için açık bir mesai bulunamadı.'];
+        }
+        if ((int)$acik['session_id'] !== $sessionId) {
+            if (!$disTx) $pdo->rollBack();
+            $stS = $pdo->prepare("SELECT foreman_name_snapshot FROM daily_work_sessions WHERE id = ?");
+            $stS->execute([(int)$acik['session_id']]);
+            $foremanAdi = (string)($stS->fetchColumn() ?: 'başka bir çavuş');
+            return ['ok' => false, 'kod' => 'yanlis_cavus',
+                     'hata' => 'Bu kart ' . $foremanAdi . ' mesaisinde açık görünüyor.',
+                     'acik_bilgi' => [
+                         'foreman_name' => $foremanAdi,
+                         'entry_time'   => $acik['entry_time'],
+                         'worker_type'  => $acik['worker_type_name_snapshot'],
+                     ]];
+        }
+
+        $simdi = date('Y-m-d H:i:s');
+        $insE = $pdo->prepare(
+            "INSERT INTO daily_worker_card_events
+                (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,
+                 worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot,
+                 recorded_by_user_id, server_event_time)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        );
+        $insE->execute([
+            $sessionId, $kart['id'], 'CIKIS', $kaynak, $kanonik,
+            $acik['worker_type_id_snapshot'], $acik['worker_type_name_snapshot'], $session['work_date'], $session['depo'],
+            $recordedByUserId, $simdi,
+        ]);
+        $eventId = (int)$pdo->lastInsertId();
+
+        $pdo->prepare("UPDATE daily_worker_work_periods SET status='closed', exit_event_id=?, exit_time=? WHERE id=?")
+            ->execute([$eventId, $simdi, (int)$acik['id']]);
+
+        if (!$disTx) $pdo->commit();
+    } catch (PDOException $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kayıt yapılamadı: ' . $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('gunluk_cikis', 'daily_worker_work_periods', (int)$acik['id'], null, [
+            'session_id' => $sessionId, 'worker_card_id' => $kart['id'], 'card_no' => $kart['card_no'],
+        ]);
+    }
+
+    return [
+        'ok' => true, 'event_id' => $eventId, 'event_type' => 'CIKIS',
+        'card' => [
+            'card_no' => $kart['card_no'], 'worker_type_name' => (string)$acik['worker_type_name_snapshot'],
+            'declared_class' => (string)$acik['declared_attendance_class'],
+            'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()[$acik['declared_attendance_class']] ?? $acik['declared_attendance_class'],
+            'entry_time' => (string)$acik['entry_time'],
+        ],
+        'server_time' => $simdi,
+        'ozet' => pdks_gunluk_faz8a_oturum_ozet($sessionId, $pdo),
+    ];
+}
+
+// =========================================================
+// PERİYOT-TABANLI OKUMA — bu bölümün fonksiyonları aşağıdaki Faz 1-7
+// fonksiyonlarının İÇİNDEN, YALNIZ pdks_gunluk_faz8a_sema_hazir() true
+// döndüğünde çağrılır (dosyanın geri kalanındaki çağrı noktalarına bkz.):
+// pdks_gunluk_oturum_ozet / oturum_kartlari / oturum_kart_sayimi /
+// gun_ozeti / gun_listesi / eksik_cikislar. Çağıran fonksiyon İSMİ TEKTİR
+// — iki paralel "doğruluk kaynağı" YOKTUR, yalnız dahili uygulama dalı.
+// =========================================================
+
+/** pdks_gunluk_oturum_ozet() İLE AYNI dönüş şekli — canlı sayaç/mutabakat
+ *  kaynağı. Yalnız source='scan' dönemleri sayar (legacy_backfill hiçbir
+ *  canlı ekranı ETKİLEMEZ — bkz. tablo DDL'indeki gerekçe). */
+function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    $giris = []; $cikis = [];
+    $stG = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND source='scan' GROUP BY worker_type_name_snapshot");
+    $stG->execute([$sessionId]);
+    foreach ($stG->fetchAll() as $r) $giris[$r['tip']] = (int)$r['n'];
+
+    $stC = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND source='scan' AND exit_event_id IS NOT NULL GROUP BY worker_type_name_snapshot");
+    $stC->execute([$sessionId]);
+    foreach ($stC->fetchAll() as $r) $cikis[$r['tip']] = (int)$r['n'];
+
+    $girisToplam = array_sum($giris);
+    $cikisToplam = array_sum($cikis);
+
+    $stE = $pdo->prepare(
+        "SELECT p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip, p.entry_time AS giris_zamani
+           FROM daily_worker_work_periods p JOIN worker_cards w ON w.id = p.worker_card_id
+          WHERE p.session_id = ? AND p.source = 'scan' AND p.status = 'open'
+          ORDER BY p.entry_time ASC"
+    );
+    $stE->execute([$sessionId]);
+    $eksikKartlar = $stE->fetchAll();
+    $eksikTip = [];
+    foreach ($eksikKartlar as $ek) $eksikTip[$ek['tip']] = ($eksikTip[$ek['tip']] ?? 0) + 1;
+
+    $stZ = $pdo->prepare("SELECT MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id = ? AND source='scan'");
+    $stZ->execute([$sessionId]);
+    $zamanlar = $stZ->fetch() ?: ['ilk_giris' => null, 'son_cikis' => null];
+
+    return [
+        'giris' => $giris, 'giris_toplam' => $girisToplam,
+        'cikis' => $cikis, 'cikis_toplam' => $cikisToplam,
+        'icerde_toplam' => $girisToplam - $cikisToplam,
+        'eksik_tip' => $eksikTip, 'eksik_toplam' => count($eksikKartlar),
+        'eksik_kartlar' => $eksikKartlar,
+        'ilk_giris' => $zamanlar['ilk_giris'], 'son_cikis' => $zamanlar['son_cikis'],
+    ];
+}
+
+/** pdks_gunluk_oturum_kartlari() İLE AYNI amaç — TEK FARK: aynı kart AYNI
+ *  oturumda birden çok kez görünebilir (bkz. görev talimatı §20 örneği) ve
+ *  her satır KENDİ Tam/Yarım sınıfını taşır. source AYRIMI YAPMAZ — hem
+ *  canlı hem geriye aktarılan dönemler burada görünür (geçmiş kaybolmaz). */
+function pdks_gunluk_faz8a_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare(
+        "SELECT p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip,
+                p.entry_time AS giris_saat, p.exit_time AS cikis_saat,
+                p.declared_attendance_class AS mesai_sinifi, p.status AS durum_kod, p.source AS kaynak
+           FROM daily_worker_work_periods p JOIN worker_cards w ON w.id = p.worker_card_id
+          WHERE p.session_id = ?
+          ORDER BY p.entry_time ASC"
+    );
+    $st->execute([$sessionId]);
+    $satirlar = $st->fetchAll();
+    $siniflar = pdks_gunluk_faz8a_mesai_siniflari();
+    foreach ($satirlar as &$s) {
+        $s['durum'] = $s['cikis_saat'] !== null
+            ? ['kod' => 'tam', 'etiket' => '✅ Tam']
+            : ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'];
+        $s['mesai_sinifi_etiket'] = $siniflar[$s['mesai_sinifi']] ?? $s['mesai_sinifi'];
+    }
+    unset($s);
+    return $satirlar;
+}
+
+/** pdks_gunluk_oturum_kart_sayimi() İLE AYNI amaç/dönüş şekli — Faz 4'ün
+ *  (config/pdks_hakedis.php) TEK sayım kaynağı olarak BUNU tüketir. Kartın
+ *  DEĞİL, KATILIMIN (dönemin) sayıldığına dikkat: aynı kart aynı gün iki
+ *  kez kullanıldıysa İKİ ayrı katılım olarak sayılır (görev talimatı §21:
+ *  "İşçi Katılımı" ≠ "benzersiz çalışan"). source AYRIMI YAPMAZ — GERİYE
+ *  AKTARILAN eski (tam günlük) dönemler de Faz 4'ün sayımına katılır,
+ *  tıpkı ESKİ COUNT(DISTINCT worker_card_id) mantığının onları saydığı gibi. */
+function pdks_gunluk_faz8a_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare(
+        "SELECT worker_type_id_snapshot AS tip_id, worker_type_name_snapshot AS tip_ad, COUNT(*) AS n
+           FROM daily_worker_work_periods WHERE session_id = ?
+          GROUP BY worker_type_id_snapshot, worker_type_name_snapshot"
+    );
+    $st->execute([$sessionId]);
+    return $st->fetchAll();
+}
+
+/** pdks_gunluk_gun_ozeti() İLE AYNI dönüş şekli. */
+function pdks_gunluk_faz8a_gun_ozeti(string $workDate, ?string $depo = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $whereEv = 'work_date_snapshot = ?'; $parEv = [$workDate];
+    if ($depo !== null) { $whereEv .= ' AND depo_snapshot = ?'; $parEv[] = $depo; }
+
+    $stTip = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE $whereEv GROUP BY worker_type_name_snapshot");
+    $stTip->execute($parEv);
+    $girisTip = []; foreach ($stTip->fetchAll() as $r) $girisTip[$r['tip']] = (int)$r['n'];
+    $girisToplam = array_sum($girisTip);
+
+    $stCk = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE $whereEv AND exit_event_id IS NOT NULL");
+    $stCk->execute($parEv);
+    $cikisToplam = (int)$stCk->fetchColumn();
+
+    $whereS = 'work_date = ?'; $parS = [$workDate];
+    if ($depo !== null) { $whereS .= ' AND depo = ?'; $parS[] = $depo; }
+    $stCavus = $pdo->prepare("SELECT COUNT(DISTINCT foreman_id) FROM daily_work_sessions WHERE $whereS");
+    $stCavus->execute($parS);
+
+    return [
+        'work_date' => $workDate, 'depo' => $depo,
+        'aktif_cavus' => (int)$stCavus->fetchColumn(),
+        'giris' => $girisTip, 'giris_toplam' => $girisToplam,
+        'tam_cikis' => $cikisToplam,
+        'eksik_cikis' => $girisToplam - $cikisToplam,
+    ];
+}
+
+/** pdks_gunluk_gun_listesi() İLE AYNI dönüş şekli/N+1-siz desen. */
+function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?int $foremanId = null, ?string $durumFiltresi = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $where = ['work_date = ?']; $params = [$workDate];
+    if ($depo !== null && $depo !== '') { $where[] = 'depo = ?'; $params[] = $depo; }
+    if ($foremanId !== null) { $where[] = 'foreman_id = ?'; $params[] = $foremanId; }
+    if ($durumFiltresi === 'acik')   { $where[] = "status = 'open'"; }
+    if ($durumFiltresi === 'kapali') { $where[] = "status = 'closed'"; }
+    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE " . implode(' AND ', $where) . " ORDER BY foreman_name_snapshot ASC, id ASC");
+    $st->execute($params);
+    $oturumlar = $st->fetchAll();
+    if (!$oturumlar) return [];
+
+    $ids = array_map(fn($o) => (int)$o['id'], $oturumlar);
+    $ph  = implode(',', array_fill(0, count($ids), '?'));
+
+    $stEv = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) GROUP BY session_id, worker_type_name_snapshot");
+    $stEv->execute($ids);
+    $girisBySession = [];
+    foreach ($stEv->fetchAll() as $r) $girisBySession[(int)$r['session_id']][$r['tip']] = (int)$r['n'];
+
+    $stCk = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND exit_event_id IS NOT NULL GROUP BY session_id, worker_type_name_snapshot");
+    $stCk->execute($ids);
+    $cikisBySession = [];
+    foreach ($stCk->fetchAll() as $r) $cikisBySession[(int)$r['session_id']][$r['tip']] = (int)$r['n'];
+
+    $stZ = $pdo->prepare("SELECT session_id, MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id IN ($ph) GROUP BY session_id");
+    $stZ->execute($ids);
+    $zBySession = [];
+    foreach ($stZ->fetchAll() as $r) $zBySession[(int)$r['session_id']] = $r;
+
+    $stEk = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status='open' GROUP BY session_id");
+    $stEk->execute($ids);
+    $ekBySession = [];
+    foreach ($stEk->fetchAll() as $r) $ekBySession[(int)$r['session_id']] = (int)$r['n'];
+
+    $sonuc = [];
+    foreach ($oturumlar as $o) {
+        $sid = (int)$o['id'];
+        $girisTip = $girisBySession[$sid] ?? [];
+        $cikisTip = $cikisBySession[$sid] ?? [];
+        $girisToplam = array_sum($girisTip);
+        $cikisToplam = array_sum($cikisTip);
+        $eksikToplam = $ekBySession[$sid] ?? 0;
+        $durum = pdks_gunluk_oturum_durumu((string)$o['status'], $eksikToplam);
+        if ($durumFiltresi === 'eksik_cikis' && $eksikToplam <= 0) continue;
+        $sonuc[] = [
+            'session' => $o,
+            'giris' => $girisTip, 'giris_toplam' => $girisToplam,
+            'cikis' => $cikisTip, 'cikis_toplam' => $cikisToplam,
+            'icerde_toplam' => $girisToplam - $cikisToplam,
+            'eksik_toplam' => $eksikToplam,
+            'ilk_giris' => $zBySession[$sid]['ilk_giris'] ?? null,
+            'son_cikis' => $zBySession[$sid]['son_cikis'] ?? null,
+            'durum' => $durum,
+        ];
+    }
+    return $sonuc;
+}
+
+/** pdks_gunluk_eksik_cikislar() İLE AYNI dönüş şekli. */
+function pdks_gunluk_faz8a_eksik_cikislar(string $workDate, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $where = ['p.work_date_snapshot = ?', "p.status = 'open'"]; $params = [$workDate];
+    if ($depo !== null && $depo !== '') { $where[] = 'p.depo_snapshot = ?'; $params[] = $depo; }
+    if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
+    $st = $pdo->prepare(
+        "SELECT p.session_id, p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip,
+                p.entry_time AS giris_saat, p.work_date_snapshot AS tarih, p.depo_snapshot AS depo,
+                s.status AS oturum_durumu, s.notes AS kapanis_notu, s.foreman_name_snapshot AS cavus_adi
+           FROM daily_worker_work_periods p
+           JOIN daily_work_sessions s ON s.id = p.session_id
+           JOIN worker_cards w ON w.id = p.worker_card_id
+          WHERE " . implode(' AND ', $where) . "
+          ORDER BY p.entry_time ASC"
+    );
+    $st->execute($params);
+    $satirlar = $st->fetchAll();
+    foreach ($satirlar as &$r) {
+        $r['oturum_kapali_mesaji'] = ($r['oturum_durumu'] === 'closed') ? 'Mesai eksik çıkışla kapatıldı.' : null;
+    }
+    unset($r);
+    return $satirlar;
 }
