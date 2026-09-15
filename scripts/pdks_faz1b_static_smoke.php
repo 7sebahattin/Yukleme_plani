@@ -235,6 +235,18 @@ $beklenenEskiSatirlar = [
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements'))) || \$p_adm;",
     "-                       'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'],",
+    // Sprint Günlük-İşçi-06 → Günlük-İşçi-07 (Faz 6, yönetim raporlama
+    // merkezi): AYNI üç çok satırlı literal + 'muhasebe' VE 'ik' rolleri
+    // TEK yeni izinle (attendance.management_reports) genişletildi — 'ik'
+    // BU SEFER BİLEREK DAHİL EDİLDİ (görev talimatı: "ik = YES if
+    // operational reporting is appropriate"), ama attendance.foreman_accounts
+    // HÂLÂ ALMADI (Faz 5'in kararı korunuyor — raporlar.php'nin finansal
+    // bölümleri 'ik'e yine KAPALI, bkz. pdks_rapor_static_smoke.php §4).
+    // 'operator' yine DOKUNULMADI.
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments'))) || \$p_adm;",
+    "-                       'attendance.foreman_accounts','attendance.foreman_payments'];",
+    "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments'],",
+    "-                               'attendance.daily_reports','attendance.entitlements'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
