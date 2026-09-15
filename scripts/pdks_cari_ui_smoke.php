@@ -337,8 +337,11 @@ $ciktiCsvTam = implode("\n", $ciktiCsv);
 @unlink($tmpCsv);
 ok('CSV alt-süreci PHP Fatal/Warning SIZDIRMADI (header() sorunsuz çalıştı)',
     !str_contains($ciktiCsvTam, 'Fatal error') && !str_contains($ciktiCsvTam, 'Warning:'), $ciktiCsvTam);
-ok('CSV başlık satırı İngilizce sütun adlarını taşıyor (Faz 3 kalıbıyla AYNI)',
-    str_contains($ciktiCsvTam, 'Running Balance') && str_contains($ciktiCsvTam, 'Reference'), $ciktiCsvTam);
+// ⚠ Faz 7 (kullanıcının açık talimatı: "ALL downloaded report column
+// headings must be Turkish") — başlıklar artık Türkçe. Bu beklenti Faz 5'in
+// ORİJİNAL İngilizce başlık varsayımından Faz 7'de BİLEREK güncellendi.
+ok('CSV başlık satırı Türkçe sütun adlarını taşıyor (Faz 7\'nin Türkçeleştirmesiyle AYNI)',
+    str_contains($ciktiCsvTam, 'Bakiye') && str_contains($ciktiCsvTam, 'Belge / Referans No'), $ciktiCsvTam);
 ok('CSV içinde HAKEDİŞ satırı var', str_contains($ciktiCsvTam, 'HAKEDİŞ'), $ciktiCsvTam);
 ok('CSV içinde ÖDEME/HAVALE-001 satırı var', str_contains($ciktiCsvTam, 'HAVALE-001'), $ciktiCsvTam);
 ok('CSV koşan bakiye 800.00 ile bitiyor (CSV ham DECIMAL biçiminde, HTML\'in virgüllü görünümünde DEĞİL)', (bool)preg_match('/800\.00/', $ciktiCsvTam), $ciktiCsvTam);

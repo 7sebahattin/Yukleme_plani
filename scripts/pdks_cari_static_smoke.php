@@ -111,7 +111,14 @@ ok('config/pdks_cari.php: bu tablolar için CREATE TABLE YOK (yalnız KENDİ tek
     !preg_match('/CREATE TABLE IF NOT EXISTS\s+`(foremen|foreman_daily_entitlements|foreman_daily_entitlement_lines|foreman_worker_rates)`/i', $cariSrc));
 ok('config/pdks_cari.php: yalnız TEK yeni tablo tanımlıyor (foreman_payments)',
     preg_match_all('/CREATE TABLE IF NOT EXISTS/i', $cariSrc) === 1);
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php gunluk_isci_giris_cikis.php giris_cikis.php pdks_nfc_test.php assets/pdks.js gunluk_isci_puantaj.php gunluk_isci_puantaj_detay.php cavus_fiyatlari.php cavus_hakedis.php cavus_hakedis_detay.php 2>&1'));
+// ⚠ Faz 7 (kullanıcının açık talimatı: nav/export/print katmanı) gunluk_isci_puantaj.php
+// (CSV başlığı Türkçeleştirildi), gunluk_isci_puantaj_detay.php/cavus_hakedis_detay.php/
+// cavus_odeme.php (yalnız "🖨️ Yazdır" bağlantısı EKLENDİ) dosyalarına BİLEREK,
+// KAPSAMI BELİRLİ (yalnız gezinme/dışa aktarım/yazdırma, iş mantığı DEĞİL)
+// dokundu — bu YÜZDEN o beş dosya bu listeden ÇIKARILDI; Faz 7'nin KENDİ
+// static testi (pdks_takip_static_smoke.php) o dosyaların İŞ MANTIĞININ
+// (yalnız UI/export/print DIŞINDA) değişmediğini AYRICA doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php gunluk_isci_giris_cikis.php giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php cavus_hakedis.php 2>&1'));
 ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI',
     $gcDiff === '', $gcDiff);
 // ⚠ DÜZELTME TURU: kullanıcının açık talimatıyla pdks_hakedis_hesapla()'nın

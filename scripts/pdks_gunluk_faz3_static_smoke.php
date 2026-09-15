@@ -61,9 +61,16 @@ ok("helpers.php: 'ik' rolüne attendance.daily_reports verildi",
     (bool)preg_match("/'ik'\s*=>\s*\[[^\]]*attendance\.daily_reports/s", $helpersSrc));
 ok("helpers.php: 'muhasebe' rolüne attendance.daily_reports verildi",
     (bool)preg_match("/'muhasebe'\s*=>\s*\[[^\]]*attendance\.daily_reports/s", $helpersSrc));
-ok('helpers.php: sidebar\'da gunluk_isci_puantaj.php bağlantısı var', str_contains($helpersSrc, 'gunluk_isci_puantaj.php'));
-ok('helpers.php: sidebar bağlantısı attendance.daily_reports iznine bağlı',
-    (bool)preg_match("/can\('attendance\.daily_reports'\)[\s\S]{0,60}gunluk_isci_puantaj\.php/", $helpersSrc));
+// Faz 7: sidebar artık gunluk_isci_puantaj.php'ye DOĞRUDAN bağlanmıyor —
+// tüm personel/PDKS alt sayfaları tek "Personel Takibi" girişi altında
+// (personel_takip.php) toplandı (bkz. pdks_takip_static_smoke.php). Bağlantı
+// ve izin kapısı artık personel_takip.php'de; helpers.php yalnız konsolide
+// $a_ptak listesinde dosya adını taşır.
+ok('helpers.php: sidebar\'da (konsolide $a_ptak listesi üzerinden) gunluk_isci_puantaj.php geçiyor', str_contains($helpersSrc, 'gunluk_isci_puantaj.php'));
+$ptakSrc3 = oku('personel_takip.php');
+ok('personel_takip.php: gunluk_isci_puantaj.php kartı var', str_contains($ptakSrc3, 'gunluk_isci_puantaj.php'));
+ok('personel_takip.php: bu kart attendance.daily_reports iznine bağlı',
+    (bool)preg_match("/can\('attendance\.daily_reports'\)[\s\S]{0,60}gunluk_isci_puantaj\.php/", $ptakSrc3));
 
 echo "\n=== 3. OPERATOR'A GENİŞ RAPOR İZNİ VERİLMEDİ (görev madde 17, kullanıcının açık talimatı) ===\n";
 preg_match("/'operator'\s*=>\s*\[([^\]]*)\]/s", $helpersSrc, $opM);
@@ -185,7 +192,14 @@ $gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -
 ok('bu dört dosyanın diff\'i BOŞ (görev talimatı: "Do NOT touch the proven NFC implementation")', $gcDiff === '', $gcDiff);
 
 echo "\n=== 12. SIDEBAR AKTİF-SAYFA TESPİTİ GÜNCELLENDİ ===\n";
-ok("helpers.php: \$a_puantaj değişkeni tanımlı", str_contains($helpersSrc, '$a_puantaj'));
+// Faz 7: $a_puantaj (ve diğer 11 tekil aktif-sayfa değişkeni) sidebar
+// konsolidasyonuyla KASITLI olarak silindi — hepsi tek $a_ptak dizisinde
+// birleşti (bkz. pdks_takip_static_smoke.php / pdks_faz1b_static_smoke.php'nin
+// izin verilen silinen satır listesi). gunluk_isci_puantaj.php dosya adı hâlâ
+// $a_ptak içinde aktif-sayfa tespiti için kullanılıyor.
+ok('helpers.php: $a_puantaj yerine konsolide $a_ptak değişkeni tanımlı', str_contains($helpersSrc, '$a_ptak'));
+ok('helpers.php: $a_ptak dizisi gunluk_isci_puantaj.php\'yi içeriyor (aktif-sayfa tespiti korunuyor)',
+    (bool)preg_match("/\\\$a_ptak\s*=\s*in_array\([^;]*gunluk_isci_puantaj\.php[^;]*;/s", $helpersSrc));
 ok("helpers.php: \$p_gunluk artık attendance.daily_reports'u da kapsıyor (aksi hâlde yalnız-rapor rolü — muhasebe — sidebar bölümünü hiç GÖRMEZ)",
     (bool)preg_match('/\$p_gunluk\s*=.*attendance\.daily_reports/', $helpersSrc));
 

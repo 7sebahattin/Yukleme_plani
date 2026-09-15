@@ -273,8 +273,14 @@ $ciktiCsvTam = implode("\n", $ciktiCsv);
 @unlink($tmpCsv);
 ok('CSV alt-süreci PHP Fatal/Warning SIZDIRMADI (header() sorunsuz çalıştı)',
     !str_contains($ciktiCsvTam, 'Fatal error') && !str_contains($ciktiCsvTam, 'Warning:'), $ciktiCsvTam);
-ok('CSV başlık satırı İngilizce sütun adlarını taşıyor (görev talimatı madde 12)',
-    str_contains($ciktiCsvTam, 'Foreman') && str_contains($ciktiCsvTam, 'Missing Exit'), $ciktiCsvTam);
+// Faz 7 (kullanıcının açık talimatı — Türkçe CSV/Excel dışa aktarım
+// başlıkları): bu satır eskiden İngilizce başlık BEKLİYORDU ('Foreman',
+// 'Missing Exit'); artık tam tersi doğrulanıyor — İngilizce başlık YOK,
+// Türkçe karşılıkları VAR (bkz. pdks_takip_static_smoke.php'nin geniş
+// yasaklı-İngilizce-başlık taraması).
+ok('CSV başlık satırı Türkçe sütun adlarını taşıyor (Faz 7 — İngilizce başlık YOK)',
+    !str_contains($ciktiCsvTam, 'Foreman') && !str_contains($ciktiCsvTam, 'Missing Exit')
+    && str_contains($ciktiCsvTam, 'Çavuş') && str_contains($ciktiCsvTam, 'Eksik Çıkış'), $ciktiCsvTam);
 ok('CSV içinde Ayşe Çavuş satırı var', str_contains($ciktiCsvTam, 'Ayşe Çavuş'), $ciktiCsvTam);
 
 echo "\n=== 5. gunluk_isci_puantaj.php — geçersiz tarih GÜVENLE bugüne düşer ===\n";

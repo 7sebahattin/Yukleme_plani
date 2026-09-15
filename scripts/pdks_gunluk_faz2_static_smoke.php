@@ -54,9 +54,16 @@ $helpersSrc = oku('config/helpers.php');
 ok("helpers.php: attendance.daily_scan izni seed'e eklendi", str_contains($helpersSrc, "'attendance.daily_scan'"));
 ok("helpers.php: 'ik' rolüne attendance.daily_scan verildi",
     (bool)preg_match("/'ik'\s*=>\s*\[[^\]]*attendance\.daily_scan/s", $helpersSrc));
-ok('helpers.php: sidebar\'da gunluk_isci_giris_cikis.php bağlantısı var', str_contains($helpersSrc, 'gunluk_isci_giris_cikis.php'));
-ok('helpers.php: sidebar bağlantısı attendance.daily_scan iznine bağlı',
-    (bool)preg_match("/can\('attendance\.daily_scan'\)[\s\S]{0,60}gunluk_isci_giris_cikis\.php/", $helpersSrc));
+// Faz 7: sidebar artık gunluk_isci_giris_cikis.php'ye DOĞRUDAN bağlanmıyor —
+// tüm personel/PDKS alt sayfaları tek "Personel Takibi" girişi altında
+// (personel_takip.php) toplandı (bkz. pdks_takip_static_smoke.php). Bağlantı
+// ve izin kapısı artık personel_takip.php'de; helpers.php yalnız konsolide
+// $a_ptak listesinde dosya adını taşır.
+ok('helpers.php: sidebar\'da (konsolide $a_ptak listesi üzerinden) gunluk_isci_giris_cikis.php geçiyor', str_contains($helpersSrc, 'gunluk_isci_giris_cikis.php'));
+$ptakSrc = oku('personel_takip.php');
+ok('personel_takip.php: gunluk_isci_giris_cikis.php kartı var', str_contains($ptakSrc, 'gunluk_isci_giris_cikis.php'));
+ok('personel_takip.php: bu kart attendance.daily_scan iznine bağlı',
+    (bool)preg_match("/can\('attendance\.daily_scan'\)[\s\S]{0,60}gunluk_isci_giris_cikis\.php/", $ptakSrc));
 ok('Yalnız TEK yeni izin eklendi (attendance.daily_scan) — hakediş/ödeme izni YOK',
     !preg_match('/attendance\.(pay|payment|hakedis|price|rate)/i', $helpersSrc));
 

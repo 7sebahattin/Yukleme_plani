@@ -294,8 +294,10 @@ $ciktiCsvTam = implode("\n", $ciktiCsv);
 @unlink($tmpCsv);
 ok('Günlük CSV alt-süreci PHP Fatal/Warning SIZDIRMADI (header() sorunsuz çalıştı)',
     !str_contains($ciktiCsvTam, 'Fatal error') && !str_contains($ciktiCsvTam, 'Warning:'), $ciktiCsvTam);
-ok('CSV başlık satırı İngilizce sütun adlarını taşıyor + finansal sütunlar dahil (foreman_accounts izniyle)',
-    str_contains($ciktiCsvTam, 'Worker Count') && str_contains($ciktiCsvTam, 'Entitlement'), $ciktiCsvTam);
+// ⚠ Faz 7 (kullanıcının açık talimatı: "ALL downloaded report column
+// headings must be Turkish") — başlıklar artık Türkçe.
+ok('CSV başlık satırı Türkçe sütun adlarını taşıyor + finansal sütunlar dahil (foreman_accounts izniyle)',
+    str_contains($ciktiCsvTam, 'İşçi Sayısı') && str_contains($ciktiCsvTam, 'Hakediş'), $ciktiCsvTam);
 ok('CSV\'de UI ile AYNI filtreyle (bugün, Ayşe) 1200.00 hakediş satırı var', str_contains($ciktiCsvTam, '1200.00'), $ciktiCsvTam);
 ok('CSV\'de 500.00 ödeme satırı var', str_contains($ciktiCsvTam, '500.00'), $ciktiCsvTam);
 

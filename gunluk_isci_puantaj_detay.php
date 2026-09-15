@@ -38,6 +38,7 @@ render_flash();
     <h1>📅 <?= h($oturum['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
         <a href="gunluk_isci_puantaj.php" class="btn">← Günlük Puantaj</a>
+        <a href="gunluk_puantaj_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır — Çavuş Gün Sonu Fişi</a>
     </div>
 </div>
 

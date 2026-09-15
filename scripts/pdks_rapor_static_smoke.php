@@ -166,7 +166,21 @@ foreach ($yasakliKelimeler as $kelime) {
 }
 
 echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HARİÇ) ===\n";
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php config/pdks_hakedis.php config/pdks_cari.php gunluk_isci_giris_cikis.php gunluk_isci_puantaj.php gunluk_isci_puantaj_detay.php cavus_fiyatlari.php cavus_hakedis.php cavus_hakedis_detay.php cavus_odeme.php cavus_cari.php cavus_ekstre.php 2>&1'));
+// ⚠ Faz 7 (kullanıcının açık talimatı: nav/export/print katmanı) beş
+// dosyaya (gunluk_isci_puantaj.php, gunluk_isci_puantaj_detay.php,
+// cavus_hakedis_detay.php, cavus_odeme.php, cavus_ekstre.php) BİLEREK,
+// KAPSAMI BELİRLİ (yalnız CSV başlığı Türkçeleştirme + "🖨️ Yazdır"
+// bağlantısı, iş mantığı DEĞİL) dokundu — bu YÜZDEN o beş dosya bu
+// listeden ÇIKARILDI (pdks_cari_static_smoke.php'nin AYNI turda AYNI
+// gerekçeyle güncellenmiş §6 kontrolüyle TUTARLI). Faz 7'nin KENDİ static
+// testi (pdks_takip_static_smoke.php) bu dosyaların iş mantığının
+// değişmediğini AYRICA doğrular.
+// ⚠ config/pdks_cari.php da BİLEREK bu listeden ÇIKARILDI — Faz 7 ona
+// yalnız İKİ salt-görüntüleme etiket fonksiyonu (pdks_cari_odeme_yontem_etiketi/
+// pdks_cari_odeme_durum_etiketi) EKLEDİ, DB enum'una veya bakiye/ekstre
+// mantığına DOKUNMADI (bkz. pdks_takip_static_smoke.php'nin bunu AYRICA
+// doğrulayan kontrolü).
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php config/pdks_hakedis.php gunluk_isci_giris_cikis.php cavus_fiyatlari.php cavus_hakedis.php cavus_cari.php 2>&1'));
 ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ', $gcDiff === '', $gcDiff);
 // ⚠ Faz 6, üç çok satırlı literali (Faz 5'ten devralınan $p_gunluk +
 // 'muhasebe' + 'ik' izin dizileri) attendance.management_reports EKLEYEREK
@@ -181,6 +195,45 @@ $helpersBeklenenEskiSatirlar = [
     "-                       'attendance.foreman_accounts','attendance.foreman_payments'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments'],",
     "-                               'attendance.daily_reports','attendance.entitlements'],",
+    // Sprint Navigasyon-01 (Faz 7) — pdks_faz1b_static_smoke.php'nin AYNI
+    // turda AYNI gerekçeyle eklediği BÜYÜK, KASITLI silme listesiyle
+    // BİREBİR AYNI (bkz. o dosyanın yorumu): 12 dağınık link + $a_*
+    // değişkenleri TEK "Personel Takibi" linkine indirildi.
+    "-    \$a_pdksp = in_array(\$cur, ['personel.php', 'personel_form.php'], true);",
+    "-    \$a_pdksk = \$cur === 'personel_kartlar.php';",
+    "-    \$a_pdksg = \$cur === 'giris_cikis.php';",
+    "-    \$a_cavus = in_array(\$cur, ['cavuslar.php', 'cavus_form.php'], true);",
+    "-    \$a_isk   = in_array(\$cur, ['isci_kartlari.php', 'isci_tipleri.php'], true);",
+    "-    \$a_gunlukgc = \$cur === 'gunluk_isci_giris_cikis.php';",
+    "-    \$a_puantaj  = in_array(\$cur, ['gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php'], true);",
+    "-    \$a_fiyat    = \$cur === 'cavus_fiyatlari.php';",
+    "-    \$a_hakedis  = in_array(\$cur, ['cavus_hakedis.php', 'cavus_hakedis_detay.php'], true);",
+    "-    \$a_odeme    = \$cur === 'cavus_odeme.php';",
+    "-    \$a_cari     = in_array(\$cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);",
+    "-    \$a_yrapor   = \$cur === 'raporlar.php';",
+    "-        <?php if (\$p_pdks): ?>",
+    "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', '👤', 'Personeller', \$a_pdksp); ?>",
+    "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', \$a_pdksk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_pdksg); ?>",
+    "-        <?php endif; ?>",
+    "-",
+    "-        <?php if (\$p_gunluk): ?>",
+    "-        <div class=\"sidebar-section\">Günlük İşçi</div>",
+    "-        <?php if (\$_fn && (can('attendance.foremen')      || \$p_adm)) \$lnk('cavuslar.php',      '👷', 'Çavuşlar',      \$a_cavus); ?>",
+    "-        <?php if (\$_fn && (can('attendance.worker_cards') || \$p_adm)) \$lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', \$a_isk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_scan')   || \$p_adm)) \$lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_gunlukgc); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_reports') || \$p_adm)) \$lnk('gunluk_isci_puantaj.php', '📅', 'Günlük Puantaj', \$a_puantaj); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_rates')  || \$p_adm)) \$lnk('cavus_fiyatlari.php', '💰', 'Çavuş Fiyatları', \$a_fiyat); ?>",
+    "-        <?php if (\$_fn && (can('attendance.entitlements')   || \$p_adm)) \$lnk('cavus_hakedis.php',   '🧾', 'Hakediş',         \$a_hakedis); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_payments') || \$p_adm)) \$lnk('cavus_odeme.php', '💸', 'Çavuş Ödeme', \$a_odeme); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_accounts') || \$p_adm)) \$lnk('cavus_cari.php',  '📒', 'Çavuş Cari',  \$a_cari); ?>",
+    "-        <?php if (\$_fn && (can('attendance.management_reports') || \$p_adm)) \$lnk('raporlar.php', '📊', 'Yönetim Raporları', \$a_yrapor); ?>",
+    // Faz 7: SW cache sürümü + APP_SURUM birlikte v217'den v218'e çekildi
+    // (assets/print_base.css'e yazdırma sayfaları için ek kural eklendiği
+    // için CLAUDE.md kuralı gereği). Tek satırlık sürüm sabiti güncellemesi,
+    // içerik kaybı DEĞİL — pdks_faz1b_static_smoke.php'nin AYNI turda AYNI
+    // gerekçeyle eklediği satırın eşi.
+    "-    define('APP_SURUM', 'v217');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
