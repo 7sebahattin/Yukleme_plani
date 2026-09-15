@@ -164,8 +164,8 @@ echo "\n=== 1. raporlar.php — varsayılan (Bugün), admin/muhasebe izinleri ==
 $s0 = renderPage('raporlar.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
-ok('Toplam Çalışan kartı var', str_contains($s0, 'Toplam Çalışan'));
-ok('Ayşe Çavuş katılımı 1 olarak görünüyor', (bool)preg_match('/Toplam Çalışan.*?<div class="val">1<\/div>/s', $s0), $s0);
+ok('İşçi Katılımı kartı var', str_contains($s0, 'İşçi Katılımı'));
+ok('Ayşe Çavuş katılımı 1 olarak görünüyor', (bool)preg_match('/İşçi Katılımı.*?<div class="val">1<\/div>/s', $s0), $s0);
 ok('finansal bölüm (Kesinleşmiş Hakediş) görünüyor — attendance.foreman_accounts VAR', str_contains($s0, 'Kesinleşmiş Hakediş'));
 ok('Güncel bakiye 700,00 TRY görünüyor (1200 hakediş - 500 ödeme)', str_contains($s0, '700,00'));
 ok('Çavuş Cari Durumu bölümü görünüyor (finansal yetki var)', str_contains($s0, 'Çavuş Cari Durumu'));
@@ -176,7 +176,7 @@ $PERMS = ['attendance.management_reports'];
 $s1 = renderPage('raporlar.php');
 ok('hata sızmadı (sayfa AÇILIYOR — yalnız finansal bölümler gizli)', !str_starts_with($s1, '__ERROR__'), $s1);
 ok('PHP Warning/Notice yok', !str_contains($s1, 'Warning:') && !str_contains($s1, 'Notice:'));
-ok('operasyonel KPI (Toplam Çalışan) HÂLÂ görünüyor', str_contains($s1, 'Toplam Çalışan'));
+ok('operasyonel KPI (İşçi Katılımı) HÂLÂ görünüyor', str_contains($s1, 'İşçi Katılımı'));
 ok('"Kesinleşmiş Hakediş" GÖRÜNMÜYOR (attendance.foreman_accounts YOK)', !str_contains($s1, 'Kesinleşmiş Hakediş'));
 ok('"700,00" (bakiye rakamı) SIZMADI', !str_contains($s1, '700,00'));
 ok('"Çavuş Cari Durumu" bölüm başlığı GÖRÜNMÜYOR', !str_contains($s1, 'Çavuş Cari Durumu'));
@@ -198,7 +198,7 @@ echo "\n=== 5. raporlar.php — veri OLMAYAN bir tarih (boş durum, hata GİBİ 
 $s3 = renderPage('raporlar.php', ['donem' => 'ozel', 'baslangic' => '2019-01-01', 'bitis' => '2019-01-01']);
 ok('hata sızmadı', !str_starts_with($s3, '__ERROR__'), $s3);
 ok('PHP Warning/Notice yok (boş gün ÇÖKMEDİ)', !str_contains($s3, 'Warning:') && !str_contains($s3, 'Notice:'));
-ok('Toplam Çalışan 0 gösteriliyor', (bool)preg_match('/Toplam Çalışan.*?<div class="val">0<\/div>/s', $s3), $s3);
+ok('İşçi Katılımı 0 gösteriliyor', (bool)preg_match('/İşçi Katılımı.*?<div class="val">0<\/div>/s', $s3), $s3);
 ok('boş-durum mesajları görünüyor (İşçi Tipi Dağılımı / Çavuş Bazlı Özet)', str_contains($s3, 'bulunamadı') || str_contains($s3, 'yok'));
 
 echo "\n=== 6. CSV DIŞA AKTARIM (görev madde 31, ALT SÜREÇ) — filtreler UI ile TUTARLI ===\n";

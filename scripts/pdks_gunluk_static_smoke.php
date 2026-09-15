@@ -275,9 +275,24 @@ ok("Merkezi bir UID registry BU FAZDA TANITILMADI (kullanıcının açık talima
     !preg_match('/CREATE TABLE[^;]*card_uid_registry/i', $gunlukSrc));
 ok("card_uid_registry yalnız GELECEK SEÇENEK olarak (kurulmamış) anılıyor, ŞİMDİ EKLENMEDİ diye AÇIK",
     !pdks_gunluk_tablo_listesinde_var('card_uid_registry', $gunlukSrc));
-ok("Aşırı kilitleme YOK — SELECT ... FOR UPDATE / LOCK TABLES GERÇEK KODDA KULLANILMADI (kullanıcının açık talimatı: "
- . "'do not overengineer locking' — yalnız YORUMDA, yapılMAYAN bir gelecek seçenek olarak anılması SERBEST)",
-    !preg_match('/FOR UPDATE|LOCK TABLES/i', $gunlukKod));
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) bu kararı
+// BİLİNÇLİ OLARAK GENİŞLETTİ — "do not overengineer locking" kararı Faz 1'in
+// DÜŞÜK eşzamanlılıklı, YÖNETİCİ tarafından yürütülen kart KAYIT senaryosu
+// İÇİNDİ (worker_cards INSERT çakışması). Faz 8A'nın kart TARAMA senaryosu
+// (aynı fiziksel kartın gerçek zamanlı, çok kullanıcılı GİRİŞ/ÇIKIŞ'ı) FARKLI
+// bir risk profilidir — görev talimatı §4 AÇIKÇA "SELECT...FOR UPDATE"
+// stratejisini İSTER. Bu YÜZDEN LOCK TABLES (hâlâ kullanılMAYAN, gerçekten
+// aşırı bir araç) hâlâ YASAKTIR, ama FOR UPDATE artık pdks_gunluk_faz8a_kart_kilitle()
+// İÇİNDE, TEK, dar kapsamlı, belgelenmiş bir yerde kullanılır.
+ok("LOCK TABLES hâlâ GERÇEK KODDA KULLANILMADI (kullanıcının açık talimatı: 'do not overengineer locking' — Faz 1'in kart KAYIT senaryosu için hâlâ geçerli)",
+    !preg_match('/LOCK TABLES/i', $gunlukKod));
+ok("SELECT ... FOR UPDATE'in GERÇEK SQL KULLANIMI YALNIZ Faz 8A'nın pdks_gunluk_faz8a_kart_kilitle() fonksiyonu İÇİNDE (belgeleyen yorumlar HARİÇ, başka hiçbir sorguda tekrarlanmadı)",
+    (function () use ($gunlukKod) {
+        if (!preg_match('/function pdks_gunluk_faz8a_kart_kilitle\([^)]*\)[^{]*\{(.*?)\n\}/s', $gunlukKod, $m)) return false;
+        if (!str_contains($m[1], 'FOR UPDATE')) return false;
+        // Yorumlar dışındaki GERÇEK "' FOR UPDATE'" dize sabiti dosyada TEK yerde (bu fonksiyonda) geçmeli.
+        return substr_count($gunlukKod, "' FOR UPDATE'") === 1;
+    })());
 // pdks_gunluk_kart_olustur()'un catch bloğu da artık YALNIZ kendi-tablo
 // korumasını iddia ediyor, çapraz-tablo korumasını İDDİA ETMİYOR.
 preg_match('/function pdks_gunluk_kart_olustur.*?\n\}/s', $gunlukSrc, $koM);
