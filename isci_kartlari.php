@@ -91,6 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hata = (($sonuc['kod'] ?? '') === 'yazma_hatasi')
             ? 'Kart kaydedilemedi. Lütfen bilgileri kontrol edip yeniden deneyin; sorun sürerse yöneticinize başvurun.'
             : ($sonuc['hata'] ?? 'Kart tanımlanamadı.');
+    } elseif ($action === 'kart_duzenle' && !$faz8aHazir && (int)($_POST['worker_type_id'] ?? 0) <= 0) {
+        // Pre-migration üretim şemasında worker_type_id hâlâ NOT NULL olabilir.
+        // Nötrleştirme yalnız Faz 8A şeması tamamen hazır olduğunda güvenlidir.
+        $hata = 'Kartı nötr hale getirmek için önce yönetici Faz 8A migrasyonunu tamamlamalıdır. Mevcut işçi tipi korunarak diğer bilgiler düzenlenebilir.';
     } elseif ($action === 'kart_duzenle') {
         $cardId = (int)($_POST['card_id'] ?? 0);
         $veri = [
@@ -314,11 +318,14 @@ if ($basari !== ''): ?>
             <label>
                 <span class="form-label">Tip (eski/kalıcı — Faz 8A'da kullanılmaz)</span>
                 <select name="worker_type_id" id="iskWorkerTypeId">
-                    <option value="0">— (nötr, tip yok) —</option>
+                    <option value="0" <?= !$faz8aHazir ? 'disabled' : '' ?>>— (nötr, tip yok) —</option>
                     <?php foreach ($tipler as $t): ?>
                     <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <?php if (!$faz8aHazir): ?>
+                <small class="muted">Nötr seçenek, Faz 8A migrasyonu tamamlandıktan sonra kullanılabilir.</small>
+                <?php endif; ?>
             </label>
             <label class="span-2">
                 <span class="form-label">Not</span>
