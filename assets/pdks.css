@@ -263,6 +263,13 @@
 .pdks-kiosk-counter-box .val { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pdks-kiosk-counter-box.eksik .val { color: var(--warn); }
 
+/* ── Faz 6: Raporlama merkezi — geniş KPI paneli (kiosk'un 480px sınırı YOK,
+   masaüstünde çok sayıda kart tek satıra sığmalı, mobilde sarar) ── */
+.pdks-kiosk-counters.rapor-genis { max-width: 100%; }
+.pdks-kiosk-counter-box.borc  .val { color: var(--warn); }
+.pdks-kiosk-counter-box.avans .val { color: var(--primary); }
+.pdks-kiosk-counter-box.kapali .val { color: var(--success); }
+
 /* ── Mutabakat / eksik çıkışla kapatma ekranı ── */
 .pdks-kiosk-recon { max-width: 520px; margin: 0 auto; text-align: left; }
 .pdks-kiosk-recon-missing-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
