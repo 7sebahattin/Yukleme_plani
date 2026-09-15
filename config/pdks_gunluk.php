@@ -1867,16 +1867,65 @@ function pdks_gunluk_faz8a_index_var(PDO $pdo, string $tablo, string $indeks): b
     return (bool)$st->fetch();
 }
 
+/** worker_cards.worker_type_id foreign key'inin gerçek adını bulur. */
+function pdks_gunluk_faz8a_fk_adi(
+    PDO $pdo,
+    string $tablo,
+    string $kolon,
+    string $refTablo,
+    string $refKolon
+): ?string {
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+        return null;
+    }
+
+    $st = $pdo->prepare(
+        "SELECT CONSTRAINT_NAME
+           FROM information_schema.KEY_COLUMN_USAGE
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+            AND REFERENCED_TABLE_NAME = ?
+            AND REFERENCED_COLUMN_NAME = ?
+          LIMIT 1"
+    );
+    $st->execute([$tablo, $kolon, $refTablo, $refKolon]);
+    $ad = $st->fetchColumn();
+
+    return $ad !== false ? (string)$ad : null;
+}
+
+/** MySQL/SQLite taşınabilir: beklenen foreign key ilişkisi gerçekten var mı? */
+function pdks_gunluk_faz8a_fk_var(
+    PDO $pdo,
+    string $tablo,
+    string $kolon,
+    string $refTablo,
+    string $refKolon
+): bool {
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+        // Smoke test DDL çeviricisi MySQL FOREIGN KEY constraint'lerini
+        // bilinçli olarak kaldırır. Faz 8A FK drop/restore hotfix'i MySQL'e
+        // özgüdür; SQLite burada production FK bütünlüğünü simüle etmez.
+        return true;
+    }
+
+    return pdks_gunluk_faz8a_fk_adi(
+        $pdo,
+        $tablo,
+        $kolon,
+        $refTablo,
+        $refKolon
+    ) !== null;
+}
+
 /**
- * TEK doğruluk kaynağı — Faz 8A iş mantığı devrede mi? ÜÇ koşulun HEPSİ
- * gerekir: (1) daily_worker_work_periods tablosu var, (2)
- * worker_cards.worker_type_id NULL kabul ediyor, (3) eski
- * uq_dwce_card_day_depo_type kısıtı KALDIRILMIŞ. Üçü de
- * pdks_gunluk_faz8a_migrate()'in TEK çalıştırmasında birlikte
- * tamamlanır — bu yüzden "kısmen tamamlanmış migrasyon" durumunda bile
- * bu fonksiyon GÜVENLE false döner (eski mantık çalışmaya devam eder,
- * hiçbir ara durum yeni VE eski kuralların İKİSİNİ BİRDEN atlamasına
- * yol açmaz — bkz. dosya başlığındaki dağıtım sıralaması notu).
+ * TEK doğruluk kaynağı — Faz 8A iş mantığı devrede mi?
+ * Gerekli koşullar birlikte sağlanmalıdır:
+ * (1) daily_worker_work_periods tablosu var,
+ * (2) worker_cards.worker_type_id NULL kabul ediyor,
+ * (3) eski uq_dwce_card_day_depo_type kısıtı kaldırılmış,
+ * (4) worker_type_id -> worker_types.id foreign key bütünlüğü korunmuş.
  */
 function pdks_gunluk_faz8a_sema_hazir(?PDO $pdo = null): bool
 {
@@ -1884,12 +1933,35 @@ function pdks_gunluk_faz8a_sema_hazir(?PDO $pdo = null): bool
     if (!pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods')) return false;
     if (!pdks_gunluk_tablo_var($pdo, 'worker_cards')) return false;
     if (!pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events')) return false;
+
     try {
         if (!pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')) return false;
-    } catch (PDOException $e) { return false; }
+    } catch (PDOException $e) {
+        return false;
+    }
+
     try {
-        if (pdks_gunluk_faz8a_index_var($pdo, 'daily_worker_card_events', 'uq_dwce_card_day_depo_type')) return false;
-    } catch (PDOException $e) { return false; }
+        if (!pdks_gunluk_faz8a_fk_var(
+            $pdo,
+            'worker_cards',
+            'worker_type_id',
+            'worker_types',
+            'id'
+        )) return false;
+    } catch (PDOException $e) {
+        return false;
+    }
+
+    try {
+        if (pdks_gunluk_faz8a_index_var(
+            $pdo,
+            'daily_worker_card_events',
+            'uq_dwce_card_day_depo_type'
+        )) return false;
+    } catch (PDOException $e) {
+        return false;
+    }
+
     return true;
 }
 
@@ -1926,11 +1998,93 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
     try {
         if (!pdks_gunluk_tablo_var($pdo, 'worker_cards')) {
             $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'atlandi', 'mesaj' => 'worker_cards tablosu yok.'];
-        } elseif (pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')) {
-            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'var', 'mesaj' => 'Zaten NULL kabul ediyor.'];
+        } elseif (
+            pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')
+            && pdks_gunluk_faz8a_fk_var($pdo, 'worker_cards', 'worker_type_id', 'worker_types', 'id')
+        ) {
+            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'var', 'mesaj' => 'Zaten NULL kabul ediyor ve foreign key sağlam.'];
         } else {
-            $pdo->exec("ALTER TABLE `worker_cards` MODIFY COLUMN `worker_type_id` INT NULL DEFAULT NULL");
-            $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'guncellendi', 'mesaj' => 'Kolon NULL kabul edecek şekilde güncellendi.'];
+            $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+            if ($driver === 'sqlite') {
+                throw new PDOException('SQLite üzerinde eski NOT NULL şema yerinde ALTER edilemez.');
+            }
+
+            $fkBaslangicta = pdks_gunluk_faz8a_fk_var(
+                $pdo,
+                'worker_cards',
+                'worker_type_id',
+                'worker_types',
+                'id'
+            );
+
+            $fkAdi = pdks_gunluk_faz8a_fk_adi(
+                $pdo,
+                'worker_cards',
+                'worker_type_id',
+                'worker_types',
+                'id'
+            ) ?? 'fk_wc_type';
+
+            $fkSqlAdi = str_replace('`', '``', $fkAdi);
+            $fkKaldirildi = false;
+            $kolonDegisti = false;
+
+            if ($fkBaslangicta) {
+                $pdo->exec(
+                    "ALTER TABLE `worker_cards` DROP FOREIGN KEY `{$fkSqlAdi}`"
+                );
+                $fkKaldirildi = true;
+            }
+
+            try {
+                $pdo->exec(
+                    "ALTER TABLE `worker_cards`
+                     MODIFY COLUMN `worker_type_id` INT NULL DEFAULT NULL"
+                );
+                $kolonDegisti = true;
+            } finally {
+                // MySQL DDL autocommit'tir. MODIFY başarısız olsa bile daha önce
+                // kaldırılan FK'yi mümkün olduğunca geri kur; MODIFY başarılıysa
+                // da Faz 8A'nın veri bütünlüğünü koruyarak yeniden ekle.
+                if (
+                    ($fkKaldirildi || $kolonDegisti)
+                    && !pdks_gunluk_faz8a_fk_var(
+                        $pdo,
+                        'worker_cards',
+                        'worker_type_id',
+                        'worker_types',
+                        'id'
+                    )
+                ) {
+                    $pdo->exec(
+                        "ALTER TABLE `worker_cards`
+                         ADD CONSTRAINT `{$fkSqlAdi}`
+                         FOREIGN KEY (`worker_type_id`)
+                         REFERENCES `worker_types`(`id`)
+                         ON DELETE RESTRICT ON UPDATE CASCADE"
+                    );
+                }
+            }
+
+            if (
+                !pdks_gunluk_faz8a_kolon_nullable($pdo, 'worker_cards', 'worker_type_id')
+                || !pdks_gunluk_faz8a_fk_var(
+                    $pdo,
+                    'worker_cards',
+                    'worker_type_id',
+                    'worker_types',
+                    'id'
+                )
+            ) {
+                throw new PDOException('worker_type_id Faz 8A şema doğrulaması başarısız.');
+            }
+
+            $rapor[] = [
+                'adim' => 'worker_cards.worker_type_id',
+                'durum' => 'guncellendi',
+                'mesaj' => 'Kolon NULL kabul edecek şekilde güncellendi; foreign key korundu.',
+            ];
         }
     } catch (PDOException $e) {
         error_log('[pdks_gunluk_faz8a_migrate] worker_cards.worker_type_id: ' . $e->getMessage());
