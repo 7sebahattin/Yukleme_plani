@@ -204,6 +204,18 @@ ok('review 7: core kart oluşturma PDO ayrıntısını operatöre sızdırmıyor
     && str_contains($kartOlusturReviewGovde, "error_log('[pdks_gunluk_kart_olustur] ")
     && !preg_match("/'hata'\s*=>\s*[^,\n]*getMessage\(\)/", $kartOlusturReviewGovde));
 
+ok('review 8: Faz 8A nullable migrasyonu foreign key ilişkisini tespit ediyor',
+    str_contains($gunlukSrc, 'information_schema.KEY_COLUMN_USAGE')
+    && str_contains($gunlukSrc, 'function pdks_gunluk_faz8a_fk_var')
+    && str_contains($gunlukSrc, "'worker_type_id',")
+    && str_contains($gunlukSrc, "'worker_types',"));
+
+ok('review 9: Faz 8A nullable migrasyonu FK drop -> MODIFY -> restore yapıyor ve readiness FK bütünlüğünü doğruluyor',
+    str_contains($migReviewGovde, 'DROP FOREIGN KEY')
+    && str_contains($migReviewGovde, 'ADD CONSTRAINT')
+    && str_contains($migReviewGovde, 'finally')
+    && str_contains($gunlukSrc, 'pdks_gunluk_faz8a_fk_var('));
+
 echo "\n=== 9. AŞIRI MÜHENDİSLİK YASAKLARI — Faz 8B/8C kapsam dışı ===\n";
 $yasakli8b8c = ['overtime_rate', 'fazla_mesai_ucreti', 'approved_by_accounting', 'offline_queue',
                 'indexeddb', 'service_worker_mutation', 'fx_rate', 'exchange_rate'];
