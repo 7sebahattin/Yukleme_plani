@@ -21,6 +21,21 @@
 //    9  aşım uyarısı/onayı                      18 TAM SAYI kuruş aritmetiği
 //   22 normal sayfa ziyaretinde DDL yok (bkz. static test)  23 migrasyon İDEMPOTENT
 //
+// DÜZELTME TURU (Faz 4'ün 'TRY' hardcode sınırlaması giderildikten sonra —
+// bkz. config/pdks_hakedis.php'deki $paraBirimleri kontrolü): "DÜZELTME N"
+// etiketli testler kullanıcının düzeltme talimatının 16 test maddesini
+// karşılar; 13/14 numaralı testler artık HAM SQL YERİNE gerçek EUR akışını
+// (finalHakedisUret($currency='EUR')) kullanır.
+//    DÜZELTME 1  TRY-only oranlar → TRY hakediş      DÜZELTME 7  FINAL para birimi donuk kalır
+//    DÜZELTME 2  EUR-only oranlar → EUR hakediş      DÜZELTME 8  Faz 5 EUR bakiyesi GERÇEK Faz 4 akışından
+//    DÜZELTME 3  EUR hakediş toplamı doğru           DÜZELTME 9  EUR ödemesi YALNIZ EUR bakiyesini azaltır
+//    DÜZELTME 4  karışık TRY/EUR oranlar REDDEDİLİR  DÜZELTME 10 TRY bakiyesi EUR ödemesinden ETKİLENMEZ
+//    DÜZELTME 5  karışık para birimleri ASLA toplanmaz/İCAT edilmez
+//    DÜZELTME 6  karışık-para-birimi HATASI mevcut taslağı KISMEN yeniden yazmaz
+//    DÜZELTME 11 (FX çevrimi hiç YOK — bkz. pdks_cari_static_smoke.php §16 forbidden-word taraması)
+//    DÜZELTME 12 (istemci currency sağlayamaz — bkz. pdks_hakedis_static_smoke.php §10)
+//    DÜZELTME 13 (tam sayı kuruş aritmetiği — zaten mevcut 18 numaralı testle kanıtlı)
+//
 //   php scripts/pdks_cari_smoke.php   → çıkış kodu 0 = geçti
 // =========================================================
 declare(strict_types=1);
@@ -157,7 +172,7 @@ $mehmetId = cavusEkle('C002', 'Mehmet Çavuş');
 
 /** Belirli bir tarihte/depoda, tek bir kadın kartla TAMAMLANMIŞ ve
  *  KESİNLEŞTİRİLMİŞ bir hakediş üretir — testin tekrarlayan kurulumu. */
-function finalHakedisUret(int $foremanId, string $tarih, string $uid, int $kadinId, string $oranTl): array {
+function finalHakedisUret(int $foremanId, string $tarih, string $uid, int $kadinId, string $oranTl, string $currency = 'TRY'): array {
     $ins = db()->prepare("INSERT INTO daily_work_sessions (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id) VALUES (?,?,?,?,?,?,?,?)");
     $stF = db()->prepare("SELECT name, code FROM foremen WHERE id=?"); $stF->execute([$foremanId]); $f = $stF->fetch();
     $ins->execute([$foremanId, $f['name'], $f['code'], $tarih, 'Depo A', 'open', $tarih . ' 08:00:00', 1]);
@@ -170,7 +185,7 @@ function finalHakedisUret(int $foremanId, string $tarih, string $uid, int $kadin
     pdks_gunluk_oturum_kapat($sid, null, 1, db());
     $oranSonuc = pdks_hakedis_oran_gecerli($foremanId, $kadinId, $tarih, db());
     if ($oranSonuc === null) {
-        pdks_hakedis_oran_ekle($foremanId, $kadinId, $oranTl, $tarih, 'TRY', 1, db());
+        pdks_hakedis_oran_ekle($foremanId, $kadinId, $oranTl, $tarih, $currency, 1, db());
     }
     $final = pdks_hakedis_finalize($sid, 1, false, db());
     if (!$final['ok']) { fwrite(STDERR, 'finalize basarisiz: ' . json_encode($final) . "\n"); exit(1); }
@@ -184,6 +199,10 @@ $h1 = finalHakedisUret($ayseId, '2026-09-15', '111001', $kadinId, '1200');
 ok('1. KESİN hakediş sonrası bakiye ARTTI (66000→1200, tek kart)', true);   // aşağıda sayısal doğrulanacak
 $bakiye1 = pdks_cari_bakiye($ayseId, db());
 ok('1. Ayşe/TRY bakiyesi 1200.00 (tek KESİN hakediş)', parasalEsit('1200.00', $bakiye1['TRY']['bakiye']), json_encode($bakiye1));
+$stAyseCurrency = db()->prepare("SELECT currency FROM foreman_daily_entitlements WHERE id = ?");
+$stAyseCurrency->execute([$h1['entitlement_id']]);
+ok('DÜZELTME 1. TRY oranla hesaplanan hakedişin currency kolonu GERÇEKTEN \'TRY\' (İCAT/hardcode DEĞİL, orandan TÜRETİLDİ)',
+    $stAyseCurrency->fetchColumn() === 'TRY');
 
 // Aynı gün ikinci bir kart daha — ama bu oturumu TASLAK bırakalım (finalize ETMEYELİM).
 $ins2 = db()->prepare("INSERT INTO daily_work_sessions (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id) VALUES (?,?,?,?,?,?,?,?)");
@@ -276,29 +295,33 @@ ok('11. ekstredeki artis/azalis DOĞRU işaretli (hakediş=artış, ödeme=azal�
     && $satirlarM[1]['artis'] === null && $satirlarM[1]['azalis'] !== null);
 
 // ═══════════════════════════════════════════════════════════
-echo "\n=== 13/14. TRY VE EUR ASLA TOPLANMAZ ===\n";
-// ⚠ NOT (Faz 4'ün BİLİNEN, BURADA BİLEREK DOKUNULMAYAN bir sınırlaması —
-// "Phase 4 is the financial source of entitlement. Do NOT create another
-// entitlement calculation."): pdks_hakedis_hesapla() bugün itibarıyla
-// foreman_daily_entitlements.currency alanına HER ZAMAN sabit 'TRY' yazıyor
-// (kullanılan oranın KENDİ para biriminden BAĞIMSIZ olarak) — bu rapora da
-// AÇIKÇA yazıldı, Faz 5 kapsamında DÜZELTİLMEDİ (Faz 4 hesap mantığına
-// dokunma yetkisi bu görevde YOK). Faz 5'in KENDİ para birimi AYRIŞTIRMA
-// mantığını (asıl test edilen budur) bu sınırlamadan BAĞIMSIZ kanıtlamak
-// için, EUR hakediş satırı BURADA doğrudan (gerçek şemaya uygun) eklenir —
-// Faz 4'ün hesap fonksiyonu YENİDEN YAZILMADAN/ÇAĞRILMADAN.
-$ins3 = db()->prepare("INSERT INTO daily_work_sessions (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id) VALUES (?,?,?,?,?,?,?,?)");
-$ins3->execute([$mehmetId, 'Mehmet Çavuş', 'C002', '2026-09-22', 'Depo A', 'closed', '2026-09-22 08:00:00', 1]);
-$sidEur = (int)db()->lastInsertId();
-$simdiEur = date('Y-m-d H:i:s');
-$insEur = db()->prepare(
-    "INSERT INTO foreman_daily_entitlements
-        (session_id, foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo,
-         status, currency, total_amount, calculated_at, calculated_by_user_id, finalized_at, finalized_by_user_id)
-     VALUES (?,?,?,?,?,?, 'final', 'EUR', '80.00', ?, 1, ?, 1)"
-);
-$insEur->execute([$sidEur, $mehmetId, 'Mehmet Çavuş', 'C002', '2026-09-22', 'Depo A', $simdiEur, $simdiEur]);
-ok('EUR hakediş satırı test amaçlı eklendi', true);
+echo "\n=== 13/14. TRY VE EUR ASLA TOPLANMAZ (+ DÜZELTME: EUR hakediş artık GERÇEK Faz 4 akışından) ===\n";
+// ⚠ DÜZELTME (kullanıcının açık talimatı, "Remove that workaround. The EUR
+// scenario must now pass through the REAL Phase 4 public flow: rate →
+// attendance → hakediş calculation → FINAL → cari → payment → resulting
+// EUR balance"): önceki turda BURADA foreman_daily_entitlements'a HAM SQL
+// ile 'EUR' etiketli bir satır ELLE yazılıyordu — pdks_hakedis_hesapla()'nın
+// o zamanki 'TRY' hardcode sınırlaması yüzünden. O sınırlama artık
+// DÜZELTİLDİ (hakediş para birimi UYGULANAN orandan türetiliyor) — bu
+// yüzden HAM SQL YOLU TAMAMEN KALDIRILDI; Mehmet'in EUR hakedişi diğer
+// TÜM senaryolarla AYNI finalHakedisUret() → pdks_hakedis_oran_ekle()
+// (currency='EUR') → pdks_hakedis_finalize() zincirinden geçer.
+// ⚠ Mehmet'in kadınId için AÇIK UÇLU (valid_to=NULL) bir TRY oranı zaten var
+// (2026-09-21'den beri) — finalHakedisUret() bir oran zaten VARSA (test
+// yardımcısının KENDİ, dosya başında belgelenen davranışı) YENİSİNİ EKLEMEZ,
+// MEVCUDU kullanır. Bu yüzden EUR dönemi burada AÇIKÇA, finalHakedisUret()
+// ÇAĞRILMADAN ÖNCE eklenir — pdks_hakedis_oran_ekle() yeni valid_from ESKİ
+// dönemin valid_to'sunu OTOMATİK kapatır (kendi, zaten var olan overlap
+// koruması), böylece 2026-09-22 itibarıyla YALNIZ EUR oranı geçerli olur.
+$eurOranSonuc = pdks_hakedis_oran_ekle($mehmetId, $kadinId, '80', '2026-09-22', 'EUR', 1, db());
+ok('EUR oran dönemi eklendi (önceki açık uçlu TRY dönemi otomatik kapatıldı)', $eurOranSonuc['ok'] === true, json_encode($eurOranSonuc));
+$hEur = finalHakedisUret($mehmetId, '2026-09-22', '222002', $kadinId, '80', 'EUR');
+$stMehmetEurCurrency = db()->prepare("SELECT currency, total_amount FROM foreman_daily_entitlements WHERE id = ?");
+$stMehmetEurCurrency->execute([$hEur['entitlement_id']]);
+$mehmetEurRow = $stMehmetEurCurrency->fetch();
+ok('DÜZELTME 2. YALNIZ EUR oranla hesaplanan hakedişin currency kolonu GERÇEKTEN \'EUR\' (GERÇEK Faz 4 akışından, HAM SQL YOK)',
+    $mehmetEurRow['currency'] === 'EUR', json_encode($mehmetEurRow));
+ok('DÜZELTME 3. EUR hakediş toplamı doğru (1 × 80,00 = 80.00)', parasalEsit('80.00', $mehmetEurRow['total_amount']), json_encode($mehmetEurRow));
 
 $bakiyeMehmet = pdks_cari_bakiye($mehmetId, db());
 ok('13. Mehmet\'in TRY VE EUR bakiyeleri AYRI anahtarlarda (İKİSİ de var)', isset($bakiyeMehmet['TRY']) && isset($bakiyeMehmet['EUR']), json_encode($bakiyeMehmet));
@@ -306,10 +329,82 @@ ok('13. TRY bakiyesi 750.00 (EUR\'un 80\'i KARIŞMADI)', parasalEsit('750.00', $
 ok('13. EUR bakiyesi 80.00 (TRY\'nin 750\'si KARIŞMADI)', parasalEsit('80.00', $bakiyeMehmet['EUR']['bakiye']));
 
 $odemeEur = pdks_cari_odeme_ekle($mehmetId, '2026-09-23', '30', 'EUR', 'BANK', null, 'EUR ödeme', 1, db());
-ok('EUR ödemesi kaydedildi', $odemeEur['ok'] === true, json_encode($odemeEur));
+ok('DÜZELTME 9. EUR ödemesi kaydedildi (GERÇEK EUR hakedişe karşı)', $odemeEur['ok'] === true, json_encode($odemeEur));
 $bakiyeSonEur = pdks_cari_bakiye($mehmetId, db());
-ok('14. EUR ödemesi SADECE EUR bakiyesini etkiledi (80-30=50.00)', parasalEsit('50.00', $bakiyeSonEur['EUR']['bakiye']));
-ok('14. TRY bakiyesi HÂLÂ 750.00 (EUR ödemesi TRY\'yi ETKİLEMEDİ)', parasalEsit('750.00', $bakiyeSonEur['TRY']['bakiye']));
+ok('DÜZELTME 9. EUR ödemesi SADECE EUR bakiyesini etkiledi (80-30=50.00)', parasalEsit('50.00', $bakiyeSonEur['EUR']['bakiye']));
+ok('DÜZELTME 10. TRY bakiyesi HÂLÂ 750.00 (EUR ödemesi TRY\'yi ETKİLEMEDİ)', parasalEsit('750.00', $bakiyeSonEur['TRY']['bakiye']));
+
+echo "\n=== DÜZELTME 7. KESİN HAKEDİŞ PARA BİRİMİ DONUK KALIR ===\n";
+$eurYenidenHesap = pdks_hakedis_hesapla($hEur['session_id'], 1, db());
+ok('DÜZELTME 7. KESİN (final) EUR hakedişi otomatik yeniden hesaplanamıyor (zaten_kesinlesmis — currency DONUK kalır)',
+    $eurYenidenHesap['ok'] === false && $eurYenidenHesap['kod'] === 'zaten_kesinlesmis', json_encode($eurYenidenHesap));
+$stMehmetEurSonra = db()->prepare("SELECT currency, total_amount FROM foreman_daily_entitlements WHERE id = ?");
+$stMehmetEurSonra->execute([$hEur['entitlement_id']]);
+$mehmetEurSonra = $stMehmetEurSonra->fetch();
+ok('DÜZELTME 7. currency/total_amount reddedilen yeniden-hesaplama denemesinden SONRA da AYNI (EUR/80.00)',
+    $mehmetEurSonra['currency'] === 'EUR' && parasalEsit('80.00', $mehmetEurSonra['total_amount']), json_encode($mehmetEurSonra));
+
+echo "\n=== DÜZELTME 4/5/6. KARIŞIK PARA BİRİMİ (TRY+EUR aynı mesaide) GÜVENLE REDDEDİLİR ===\n";
+$denizId = cavusEkle('C004', 'Deniz Çavuş');
+pdks_hakedis_oran_ekle($denizId, $kadinId, '1000', '2026-09-01', 'TRY', 1, db());
+pdks_hakedis_oran_ekle($denizId, $erkekId, '25', '2026-09-01', 'EUR', 1, db());
+$insKarisik = db()->prepare("INSERT INTO daily_work_sessions (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id) VALUES (?,?,?,?,?,?,?,?)");
+$insKarisik->execute([$denizId, 'Deniz Çavuş', 'C004', '2026-09-25', 'Depo A', 'open', '2026-09-25 08:00:00', 1]);
+$sidKarisik = (int)db()->lastInsertId();
+pdks_gunluk_kart_olustur(['card_no' => 'K444001', 'worker_type_id' => $kadinId, 'ham_uid' => '444001', 'kaynak' => 'usb_decimal'], 1, db());
+pdks_gunluk_kart_olustur(['card_no' => 'K444002', 'worker_type_id' => $erkekId, 'ham_uid' => '444002', 'kaynak' => 'usb_decimal'], 1, db());
+pdks_gunluk_oturum_kaydet('444001', 'usb_decimal', $sidKarisik, 'GIRIS', 1, db());
+pdks_gunluk_oturum_kaydet('444001', 'usb_decimal', $sidKarisik, 'CIKIS', 1, db());
+pdks_gunluk_oturum_kaydet('444002', 'usb_decimal', $sidKarisik, 'GIRIS', 1, db());
+pdks_gunluk_oturum_kaydet('444002', 'usb_decimal', $sidKarisik, 'CIKIS', 1, db());
+pdks_gunluk_oturum_kapat($sidKarisik, null, 1, db());
+$karisikHesap = pdks_hakedis_hesapla($sidKarisik, 1, db());
+ok('DÜZELTME 4. Kadın=TRY + Erkek=EUR karışık mesai REDDEDİLİYOR (kod=karisik_para_birimi)',
+    $karisikHesap['ok'] === false && $karisikHesap['kod'] === 'karisik_para_birimi', json_encode($karisikHesap));
+ok('DÜZELTME 5. hata mesajı kullanıcıya doğru açıklanıyor', str_contains((string)($karisikHesap['hata'] ?? ''), 'farklı para birimlerinde'));
+$stKarisikYok = db()->prepare("SELECT COUNT(*) FROM foreman_daily_entitlements WHERE session_id = ?");
+$stKarisikYok->execute([$sidKarisik]);
+ok('DÜZELTME 5. reddedilen karışık hesaplama HİÇBİR entitlement satırı ÜRETMEDİ (toplama/çevirme/seçme YOK)', (int)$stKarisikYok->fetchColumn() === 0);
+
+echo "\n=== DÜZELTME 6. BAŞARISIZ YENİDEN HESAPLAMA MEVCUT TASLAĞI KISMEN BOZMAZ ===\n";
+// Önce Deniz için TEMİZ, TEK-para-birimli (TRY) bir TASLAK oluştur.
+$insTemiz = db()->prepare("INSERT INTO daily_work_sessions (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id) VALUES (?,?,?,?,?,?,?,?)");
+$insTemiz->execute([$denizId, 'Deniz Çavuş', 'C004', '2026-09-26', 'Depo A', 'open', '2026-09-26 08:00:00', 1]);
+$sidTemiz = (int)db()->lastInsertId();
+pdks_gunluk_kart_olustur(['card_no' => 'K444003', 'worker_type_id' => $kadinId, 'ham_uid' => '444003', 'kaynak' => 'usb_decimal'], 1, db());
+pdks_gunluk_oturum_kaydet('444003', 'usb_decimal', $sidTemiz, 'GIRIS', 1, db());
+pdks_gunluk_oturum_kaydet('444003', 'usb_decimal', $sidTemiz, 'CIKIS', 1, db());
+// ⚠ Mesai BİLEREK kapatılmıyor — DRAFT hesaplama açık mesaide de serbesttir
+// (yalnız pdks_hakedis_finalize() KAPALI mesai ister); bu senaryo hiç
+// finalize ETMEZ, yalnız DRAFT yeniden-hesaplama güvenliğini test eder ve
+// mesainin AÇIK kalması aşağıda ikinci kartı (Erkek/EUR) EKLEYEBİLMEK için
+// gereklidir — pdks_gunluk_oturum_kaydet() KAPALI mesaide her zaman
+// 'oturum_kapali' ile REDDEDER (Faz 2/3 kuralı, burada BOZULMADI).
+$temizHesap = pdks_hakedis_hesapla($sidTemiz, 1, db());
+ok('temiz TRY taslağı başarıyla oluşturuldu (yeniden-hesaplama denemesi için ön koşul)', $temizHesap['ok'] === true, json_encode($temizHesap));
+$stOncekiSatir = db()->prepare("SELECT COUNT(*) FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?");
+$stOncekiSatir->execute([$temizHesap['entitlement_id']]);
+$oncekiSatirSayisi = (int)$stOncekiSatir->fetchColumn();
+
+// Şimdi AYNI mesaiye, farklı para biriminde ikinci bir işçi tipi ekle — bu
+// SESSİZCE ARTIK BU TASLAĞI karışık hale getirir. Yeniden hesaplama
+// (pdks_hakedis_hesapla() TEKRAR çağrılınca) 'karisik_para_birimi' ile
+// REDDEDİLMELİ VE mevcut taslağın SATIRLARI/TOPLAMI/PARA BİRİMİ ASLA
+// yarım/kısmen değişmemeli.
+pdks_gunluk_oturum_kaydet('444002', 'usb_decimal', $sidTemiz, 'GIRIS', 1, db());
+pdks_gunluk_oturum_kaydet('444002', 'usb_decimal', $sidTemiz, 'CIKIS', 1, db());
+$karisikYenidenHesap = pdks_hakedis_hesapla($sidTemiz, 1, db());
+ok('DÜZELTME 6. mevcut TASLAĞA sonradan farklı para birimi eklenince yeniden hesaplama REDDEDİLİYOR',
+    $karisikYenidenHesap['ok'] === false && $karisikYenidenHesap['kod'] === 'karisik_para_birimi', json_encode($karisikYenidenHesap));
+$stTemizSonra = db()->prepare("SELECT status, currency, total_amount FROM foreman_daily_entitlements WHERE id = ?");
+$stTemizSonra->execute([$temizHesap['entitlement_id']]);
+$temizSonra = $stTemizSonra->fetch();
+ok('DÜZELTME 6. TASLAĞIN status/currency/total_amount\'ı REDDEDİLEN denemeden ÖNCEKİYLE BİREBİR AYNI (kısmi yazım YOK)',
+    $temizSonra['status'] === 'draft' && $temizSonra['currency'] === 'TRY' && parasalEsit('1000.00', $temizSonra['total_amount']), json_encode($temizSonra));
+$stTemizSatirSonra = db()->prepare("SELECT COUNT(*) FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?");
+$stTemizSatirSonra->execute([$temizHesap['entitlement_id']]);
+ok('DÜZELTME 6. TASLAĞIN satır sayısı da DEĞİŞMEDİ (hâlâ tek satır — DELETE+INSERT hiç ÇALIŞMADI)',
+    (int)$stTemizSatirSonra->fetchColumn() === $oncekiSatirSayisi && $oncekiSatirSayisi === 1);
 
 // ═══════════════════════════════════════════════════════════
 echo "\n=== 15/16. TARİHSEL SNAPSHOT — çavuş adı/hakediş anlık görüntüsü DEĞİŞMEZ ===\n";

@@ -422,6 +422,19 @@ function pdks_hakedis_oran_gecmisi(int $foremanId, ?PDO $pdo = null): array
  * ⚠ Zaten KESİNLEŞMİŞ bir kayıt varsa REDDEDİLİR — "Do NOT allow automatic
  * recalculation of FINAL hakediş." Yeniden açmak İÇİN bkz.
  * pdks_hakedis_yeniden_ac().
+ *
+ * ⚠ FAZ 5 PARA BİRİMİ DÜZELTMESİ (kullanıcının açık talimatı — "A EUR rate
+ * must never produce a TRY-labeled entitlement"): hakediş para birimi
+ * İSTEMCİDEN asla alınmaz ve rakamlar varken SESSİZCE 'TRY'ye
+ * DÜŞÜRÜLMEZ — YALNIZ o mesaide fiilen UYGULANAN (eşleşen) oranlardan
+ * türetilir (bkz. $paraBirimleri). Faz 4/5 V1 kuralı: bir hakediş TEK bir
+ * para birimi taşıyabilir — Kadın=TRY, Erkek=EUR gibi KARIŞIK bir mesai
+ * TOPLANMAZ/ÇEVRİLMEZ/tek biri SEÇİLMEZ, hesaplama GÜVENLE REDDEDİLİR
+ * ('karisik_para_birimi'). Bu kontrol döngü bittikten sonra ama HERHANGİ
+ * bir DB yazımından (DELETE/UPDATE/INSERT) ÖNCE çalışır — "validate first"
+ * deseni: başarısız bir yeniden hesaplama mevcut TASLAĞIN başlığını/
+ * satırlarını/toplamını/para birimini asla KISMEN değiştirmez, fonksiyon
+ * hiçbir şeye dokunmadan erken döner.
  */
 function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): array
 {
@@ -444,7 +457,7 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
     }
 
     $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden bir zaman ASLA alınmaz.
-    $satirlar = []; $toplamKurus = 0; $eksikTipler = [];
+    $satirlar = []; $toplamKurus = 0; $eksikTipler = []; $paraBirimleri = [];
     $stKod = $pdo->prepare("SELECT code FROM worker_types WHERE id = ?");
     foreach ($sayim as $s) {
         $tipId = $s['tip_id'] !== null ? (int)$s['tip_id'] : null;
@@ -462,6 +475,12 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
         $stKod->execute([$tipId]);
         $kod = (string)($stKod->fetchColumn() ?: '');
 
+        // ⚠ Para birimi İSTEMCİDEN değil, UYGULANAN oranın KENDİSİNDEN okunur
+        // (bkz. fonksiyon docblock'u) — $paraBirimleri anahtar kümesi aşağıda
+        // "birden fazla para birimi karıştı mı" kontrolü için kullanılır.
+        $oranParaBirimi = (string)($oran['currency'] !== '' ? $oran['currency'] : 'TRY');
+        $paraBirimleri[$oranParaBirimi] = true;
+
         $birimKurus  = pdks_hakedis_tl_kurus((string)$oran['daily_rate']);
         $satirKurus  = $birimKurus * $adet;   // ⚠ int × int — TAM sonuç, ondalık hata YOK.
         $toplamKurus += $satirKurus;
@@ -475,14 +494,28 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
         ];
     }
 
+    // ⚠ "VALIDATE FIRST" — bu satırdan ÖNCE hiçbir DELETE/UPDATE/INSERT
+    // ÇALIŞMADI. Karışık para birimi burada tespit edilip erken dönülürse
+    // mevcut TASLAK (varsa) DOKUNULMADAN kalır — kısmi/yarım bir yazım
+    // (fix talimatı madde 4: "must NOT partially modify") OLUŞMAZ.
+    if (count($paraBirimleri) > 1) {
+        return ['ok' => false, 'kod' => 'karisik_para_birimi',
+                 'hata' => 'Bu mesai için farklı para birimlerinde fiyatlar tanımlanmış. Hakediş oluşturulamaz.'];
+    }
+    // Hiç eşleşen oran yoksa (tüm tipler eksik) türetilecek bir para birimi
+    // de yoktur — toplam zaten 0'dır ve pdks_hakedis_finalize() birazdan
+    // 'oran_eksik' ile REDDEDECEKTİR; bu geçici/finansal-anlamsız durumda
+    // 'TRY' yalnız bir YER TUTUCUDUR, hiçbir gerçek tutara ETİKET OLMAZ.
+    $paraBirimi = $paraBirimleri !== [] ? (string)array_key_first($paraBirimleri) : 'TRY';
+
     if ($mevcut) {
         $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?")->execute([(int)$mevcut['id']]);
         $upd = $pdo->prepare(
             "UPDATE foreman_daily_entitlements
-                SET status='draft', total_amount=?, calculated_at=?, calculated_by_user_id=?, updated_at=?
+                SET status='draft', currency=?, total_amount=?, calculated_at=?, calculated_by_user_id=?, updated_at=?
               WHERE id=?"
         );
-        $upd->execute([pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId, $simdi, (int)$mevcut['id']]);
+        $upd->execute([$paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId, $simdi, (int)$mevcut['id']]);
         $entId = (int)$mevcut['id'];
     } else {
         $ins = $pdo->prepare(
@@ -493,7 +526,7 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
         );
         $ins->execute([
             $sessionId, $oturum['foreman_id'], $oturum['foreman_name_snapshot'] ?? '', $oturum['foreman_code_snapshot'] ?? '',
-            $oturum['work_date'], $oturum['depo'], 'draft', 'TRY', pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId,
+            $oturum['work_date'], $oturum['depo'], 'draft', $paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId,
         ]);
         $entId = (int)$pdo->lastInsertId();
     }

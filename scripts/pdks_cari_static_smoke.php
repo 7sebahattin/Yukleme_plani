@@ -114,10 +114,24 @@ ok('config/pdks_cari.php: yalnız TEK yeni tablo tanımlıyor (foreman_payments)
 $gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php gunluk_isci_giris_cikis.php giris_cikis.php pdks_nfc_test.php assets/pdks.js gunluk_isci_puantaj.php gunluk_isci_puantaj_detay.php cavus_fiyatlari.php cavus_hakedis.php cavus_hakedis_detay.php 2>&1'));
 ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI',
     $gcDiff === '', $gcDiff);
+// ⚠ DÜZELTME TURU: kullanıcının açık talimatıyla pdks_hakedis_hesapla()'nın
+// 'TRY' hardcode HATASI (financial-integrity düzeltmesi, bu turun ASIL
+// konusu) giderildi — bu, Faz 5'in ilk turunda "yalnız EKLEME" olan reopen
+// korumasından FARKLI olarak GERÇEK satır değişiklikleri içerir (sabit
+// 'TRY' değerinin ve currency'siz UPDATE'in kaldırılması). Bu YETKİLİ,
+// BEKLENEN 4 satır aşağıda AÇIKÇA allowlist'e alınır; bunların DIŞINDA
+// hiçbir satır silinmemiş olmalı.
 $hakedisDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/pdks_hakedis.php 2>&1'));
 $hakedisSilinen = array_filter(explode("\n", $hakedisDiff), fn($l) => preg_match('/^-(?!--)/', $l) === 1);
-ok('config/pdks_hakedis.php\'deki TEK değişiklik YENİ bir güvenlik kontrolü EKLEMEK (reopen koruması) — mevcut hiçbir satır SİLİNMEDİ',
-    count($hakedisSilinen) === 0, implode("\n", $hakedisSilinen));
+$hakedisParaBirimiDuzeltmesiEskiSatirlar = [
+    "-    \$satirlar = []; \$toplamKurus = 0; \$eksikTipler = [];",
+    "-                SET status='draft', total_amount=?, calculated_at=?, calculated_by_user_id=?, updated_at=?",
+    "-        \$upd->execute([pdks_hakedis_kurus_tl(\$toplamKurus), \$simdi, \$userId, \$simdi, (int)\$mevcut['id']]);",
+    "-            \$oturum['work_date'], \$oturum['depo'], 'draft', 'TRY', pdks_hakedis_kurus_tl(\$toplamKurus), \$simdi, \$userId,",
+];
+$hakedisBeklenmeyenSilinen = array_filter($hakedisSilinen, fn($l) => !in_array(trim($l), array_map('trim', $hakedisParaBirimiDuzeltmesiEskiSatirlar), true));
+ok('config/pdks_hakedis.php\'deki satır silmeleri YALNIZ Faz 5\'in reopen koruması (0 silme) + DÜZELTME turunun para birimi düzeltmesi (4 belgelenmiş, yetkili satır) — başka HİÇBİR SİLME YOK',
+    count($hakedisBeklenmeyenSilinen) === 0, count($hakedisBeklenmeyenSilinen) . " beklenmeyen silinen satır:\n" . implode("\n", $hakedisBeklenmeyenSilinen));
 
 echo "\n=== 7. FAZ 4 KESİN-HAKEDİŞ YENİDEN AÇMA KORUMASI DOĞRU BAĞLANDI (kullanıcının açık talimatı: V1 = BLOKLA) ===\n";
 ok("pdks_hakedis_yeniden_ac(): pdks_cari_odeme_var_mi() YUMUŞAK (function_exists) çapraz kontrol çağırıyor",
