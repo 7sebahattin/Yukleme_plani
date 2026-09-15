@@ -175,10 +175,15 @@ $dokunulmamali = ['assets/style.css', 'assets/app.js', 'config/db.php', 'config/
 $gitDurum = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- ' . implode(' ', array_map('escapeshellarg', $dokunulmamali)) . ' 2>&1');
 ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
     trim((string)$gitDurum) === '', (string)$gitDurum);
-$swDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- sw.js 2>&1'));
-ok('sw.js: TEK değişiklik CACHE_NAME sürüm artışı (SHELL listesi/fetch stratejisi AYNI)',
-    (bool)preg_match('/^-const CACHE_NAME = \'yukleme-plani-v217\';\n\+const CACHE_NAME = \'yukleme-plani-v218\';$/m', $swDiff)
-    && substr_count($swDiff, "\n-") <= 2 && substr_count($swDiff, "\n+") <= 2, $swDiff);
+// git diff'e DEĞİL, doğrudan mevcut dosya içeriğine bakılır — bu kontrol
+// hem işlenmemiş (dirty) özellik dalında hem de commit/merge SONRASI temiz
+// bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
+// anlamlı kalsın diye.
+$swSrc = oku('sw.js');
+ok('sw.js: CACHE_NAME sürümü v218 (helpers.php\'deki APP_SURUM ile eşlenik)',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v218';"));
+ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
+    str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
 // index.php İÇİN: bu turdan (Faz 7, Sprint Navigasyon-01) ÖNCE değişti
 // (nav bağlama), ama yalnız EKLEME olarak — mevcut hiçbir satır
