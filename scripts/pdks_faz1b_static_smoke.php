@@ -215,6 +215,17 @@ $beklenenEskiSatirlar = [
     "-                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],",
     "-                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan'],",
+    // Sprint Günlük-İşçi-04 → Günlük-İşçi-05 (Faz 4, hakediş): AYNI üç çok
+    // satırlı literal + 'muhasebe' rolü İKİ yeni izinle (attendance.
+    // foreman_rates, attendance.entitlements) genişletildi; 'ik' rolü
+    // YALNIZ attendance.entitlements aldı (foreman_rates ALMADI — ticari
+    // fiyat yönetimi kapsam dışı). 'operator' BİLEREK BUNA DA DOKUNULMADI
+    // (görev talimatı: "Do not expose prices or hakediş amounts on the
+    // security scanning screen." — bkz. yukarıdaki operator satırı, hâlâ AYNI).
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports'))) || \$p_adm;",
+    "-                       'attendance.daily_reports'];",
+    "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports'],",
+    "-                               'attendance.daily_reports'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

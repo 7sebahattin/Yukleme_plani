@@ -1176,6 +1176,30 @@ function pdks_gunluk_oturum_kaydet(string $hamUid, string $kaynak, int $sessionI
 }
 
 /**
+ * Bir OTURUMUN GİRİŞ yapan BENZERSİZ kartlarını worker_type_id_snapshot'a
+ * göre gruplar (bir SONRAKİ modülün — görev talimatı: "must not create a
+ * parallel attendance truth" — KENDİ tarama SQL'i yazmadan tüketebileceği
+ * TEK sayım kaynağı). pdks_gunluk_oturum_ozet() İLE AYNI COUNT(DISTINCT
+ * worker_card_id) ilkesi — TEK FARK gruplama anahtarıdır: o fonksiyon
+ * GÖSTERİM için isme (worker_type_name_snapshot) gruplar, bu fonksiyon
+ * dış modüllerin id EŞLEŞTİRMESİ (ör. tipe göre farklı iş kuralı) için
+ * id'ye (worker_type_id_snapshot) gruplar.
+ */
+function pdks_gunluk_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare(
+        "SELECT worker_type_id_snapshot AS tip_id, worker_type_name_snapshot AS tip_ad,
+                COUNT(DISTINCT worker_card_id) AS n
+           FROM daily_worker_card_events
+          WHERE session_id = ? AND event_type = 'GIRIS'
+          GROUP BY worker_type_id_snapshot, worker_type_name_snapshot"
+    );
+    $st->execute([$sessionId]);
+    return $st->fetchAll();
+}
+
+/**
  * Canlı sayaçlar + mutabakat verisi — TEK yerden okunur (sayfa ilk render,
  * her tarama sonrası, kapatma ekranı hepsi BURADAN besleniyor). İşçi tipi
  * adları SABİT (Kadın/Erkek) DEĞİL — snapshot sütunundaki GERÇEK metin

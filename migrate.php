@@ -21,6 +21,10 @@ require_once __DIR__ . '/config/pdks.php';
 // Sprint Günlük-İşçi-01: çavuş/işçi-kart-havuzu tabloları da aynı sebeple
 // (kendiliğinden yüklenmez) BURADAN elle tetiklenir.
 require_once __DIR__ . '/config/pdks_gunluk.php';
+// Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
+// da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
+// yalnız KENDİ üç yeni tablosunu additive olarak ekler.
+require_once __DIR__ . '/config/pdks_hakedis.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -67,6 +71,9 @@ $pdks_ran     = false;
 $pdks_gunluk_results = [];   // Günlük İşçi (çavuş/işçi kartı) tablo migrasyonu sonucu
 $pdks_gunluk_ran     = false;
 
+$pdks_hakedis_results = [];   // Hakediş (çavuş fiyat + hakediş) tablo migrasyonu sonucu
+$pdks_hakedis_ran     = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_ran     = true;
@@ -84,6 +91,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_gunluk_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_gunluk', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_hakedis') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_hakedis_ran     = true;
+    $pdks_hakedis_results = pdks_hakedis_migrate($pdo);
+    foreach ($pdks_hakedis_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_hakedis', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -265,6 +282,49 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_gunluk_tablolar() as $pgsql) { echo h($pgsql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Hakediş Tabloları (Çavuş Fiyatları / Hakediş — Faz 4)</h2>
+    <p style="color:#555;font-size:.9em;">
+      <code>foreman_worker_rates</code>, <code>foreman_daily_entitlements</code>,
+      <code>foreman_daily_entitlement_lines</code>. Additive-only — Faz 1-3
+      tablolarına (foremen/worker_types/daily_work_sessions/daily_worker_card_events)
+      HİÇ DOKUNMAZ, yalnız KENDİ üç yeni tablosunu ekler.
+      <?php if ($pdks_hakedis_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_hakedis_results as $phr): ?>
+        <br>&nbsp;&nbsp;<?= h($phr['tablo']) ?>: <?= h($phr['durum']) ?> — <?= h($phr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_hakedis_tablolar()) as $pht):
+          $phe = pdks_hakedis_tablo_var($pdo, $pht); ?>
+          <tr>
+            <td><?= h($pht) ?></td>
+            <td style="color:<?= $phe ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $phe ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_hakedis">
+      <button type="submit" class="btn btn-primary">Hakediş Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_hakedis_tablolar() as $phsql) { echo h($phsql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>
