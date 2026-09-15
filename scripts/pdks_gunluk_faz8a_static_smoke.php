@@ -30,6 +30,7 @@ $gunlukSrc = oku('config/pdks_gunluk.php');
 $hakedisSrc = oku('config/pdks_hakedis.php');
 $giSrc = oku('gunluk_isci_giris_cikis.php');
 $migrateSrc = oku('migrate.php');
+$raporSrc = oku('config/pdks_rapor.php');
 
 echo "\n=== 1. SÖZ DİZİMİ ===\n";
 foreach (['config/pdks_gunluk.php', 'config/pdks_hakedis.php', 'gunluk_isci_giris_cikis.php',
@@ -154,6 +155,41 @@ ok("pdks_gunluk_faz8a_donem_durumu() ÜÇ durumu (open/closed/legacy_unresolved)
     (bool)preg_match("/function pdks_gunluk_faz8a_donem_durumu.*?'open'.*?'closed'.*?'legacy_unresolved'.*?\n\}/s", $gunlukSrc));
 ok("oturum_donemleri(): satır etiketi ARTIK gerçek durum_kod'dan (pdks_gunluk_faz8a_donem_durumu) okunuyor — yalnız cikis_saat NULL/DOLU İKİLİĞİNDEN DEĞİL",
     str_contains($gunlukSrc, "pdks_gunluk_faz8a_donem_durumu((string)\$s['durum_kod'])"));
+
+echo "\n=== 8C. PHASE 8A REVIEW REGRESSION ===\n";
+
+ok('review 1: exception list Phase 8A work-period semantics kullanıyor',
+    str_contains($raporSrc, 'function pdks_rapor_istisna_satirlari')
+    && str_contains($raporSrc, 'FROM daily_worker_work_periods p')
+    && str_contains($raporSrc, "p.status IN ('open','legacy_unresolved')"));
+
+ok('review 2: backfill yalnız duplicate-key hatasını tolere ediyor, diğerlerini yeniden fırlatıyor',
+    str_contains($bfGovde, '$duplicateKey')
+    && str_contains($bfGovde, '$driverCode === 1062')
+    && str_contains($bfGovde, 'throw $e;'));
+
+ok('review 3: Faz 8A rapor eksik-cikis sorguları legacy_unresolved durumunu da sayıyor',
+    substr_count($raporSrc, "status IN ('open','legacy_unresolved')") >= 4);
+
+preg_match('/function pdks_gunluk_faz8a_giris_kaydet.*?\n\}/s', $gunlukSrc, $girisReviewM);
+preg_match('/function pdks_gunluk_faz8a_cikis_kaydet.*?\n\}/s', $gunlukSrc, $cikisReviewM);
+$girisReviewGovde = $girisReviewM[0] ?? '';
+$cikisReviewGovde = $cikisReviewM[0] ?? '';
+
+ok('review 4: GİRİŞ/ÇIKIŞ PDO detayını operatora döndürmüyor ve teknik hatayı logluyor',
+    $girisReviewGovde !== ''
+    && $cikisReviewGovde !== ''
+    && str_contains($girisReviewGovde, "error_log('[pdks_gunluk_faz8a_kaydet] ")
+    && str_contains($cikisReviewGovde, "error_log('[pdks_gunluk_faz8a_kaydet] ")
+    && !preg_match("/'hata'\s*=>\s*[^,\n]*getMessage\(\)/", $girisReviewGovde)
+    && !preg_match("/'hata'\s*=>\s*[^,\n]*getMessage\(\)/", $cikisReviewGovde));
+
+preg_match('/function pdks_gunluk_faz8a_migrate.*?return \$rapor;\s*\n\}/s', $gunlukSrc, $migReviewM);
+$migReviewGovde = $migReviewM[0] ?? '';
+ok('review 5: migrasyon PDO detayını operator mesajına koymuyor, ayrıntıyı server loguna yazıyor',
+    $migReviewGovde !== ''
+    && substr_count($migReviewGovde, "error_log('[pdks_gunluk_faz8a_migrate]") >= 4
+    && !preg_match("/'mesaj'\s*=>\s*\$e->getMessage\(\)/", $migReviewGovde));
 
 echo "\n=== 9. AŞIRI MÜHENDİSLİK YASAKLARI — Faz 8B/8C kapsam dışı ===\n";
 $yasakli8b8c = ['overtime_rate', 'fazla_mesai_ucreti', 'approved_by_accounting', 'offline_queue',

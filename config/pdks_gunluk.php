@@ -1907,7 +1907,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
                 : ['adim' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
         } catch (PDOException $e) {
             error_log('[pdks_gunluk_faz8a_migrate] ' . $ad . ': ' . $e->getMessage());
-            $rapor[] = ['adim' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            $rapor[] = ['adim' => $ad, 'durum' => 'hata', 'mesaj' => 'İşlem tamamlanamadı. Teknik ayrıntılar sunucu günlüğüne kaydedildi.'];
         }
     }
 
@@ -1922,7 +1922,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
         }
     } catch (PDOException $e) {
         error_log('[pdks_gunluk_faz8a_migrate] worker_cards.worker_type_id: ' . $e->getMessage());
-        $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        $rapor[] = ['adim' => 'worker_cards.worker_type_id', 'durum' => 'hata', 'mesaj' => 'İşlem tamamlanamadı. Teknik ayrıntılar sunucu günlüğüne kaydedildi.'];
     }
 
     try {
@@ -1936,7 +1936,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
         }
     } catch (PDOException $e) {
         error_log('[pdks_gunluk_faz8a_migrate] uq_dwce_card_day_depo_type: ' . $e->getMessage());
-        $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        $rapor[] = ['adim' => 'daily_worker_card_events.uq_dwce_card_day_depo_type', 'durum' => 'hata', 'mesaj' => 'İşlem tamamlanamadı. Teknik ayrıntılar sunucu günlüğüne kaydedildi.'];
     }
 
     if (pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods') && pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events')) {
@@ -1944,7 +1944,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
             $rapor[] = ['adim' => 'daily_worker_work_periods.backfill', 'durum' => 'calisti', 'mesaj' => pdks_gunluk_faz8a_backfill($pdo)];
         } catch (PDOException $e) {
             error_log('[pdks_gunluk_faz8a_migrate] backfill: ' . $e->getMessage());
-            $rapor[] = ['adim' => 'daily_worker_work_periods.backfill', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+            $rapor[] = ['adim' => 'daily_worker_work_periods.backfill', 'durum' => 'hata', 'mesaj' => 'İşlem tamamlanamadı. Teknik ayrıntılar sunucu günlüğüne kaydedildi.'];
         }
     }
 
@@ -2024,8 +2024,17 @@ function pdks_gunluk_faz8a_backfill(PDO $pdo): string
             ]);
             $aktarilan++;
         } catch (PDOException $e) {
-            // uq_dwwp_entry_event/uq_dwwp_exit_event — eşzamanlı/tekrar
-            // çalıştırma: bu satır zaten aktarılmış say, devam et.
+            $driverCode = (int)($e->errorInfo[1] ?? 0);
+            $mesaj = strtolower($e->getMessage());
+            $duplicateKey = $driverCode === 1062
+                || ($driverCode === 19 && str_contains($mesaj, 'unique constraint failed'));
+
+            if (!$duplicateKey) {
+                throw $e;
+            }
+
+            // Yalnız doğrulanmış duplicate-key yarışı:
+            // aynı entry/exit başka süreçte zaten aktarılmıştır.
         }
     }
     return $aktarilan . ' eski mesai dönemi aktarıldı.';
@@ -2215,7 +2224,9 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
         if (!$disTx) $pdo->commit();
     } catch (PDOException $e) {
         if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
-        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kayıt yapılamadı: ' . $e->getMessage()];
+        error_log('[pdks_gunluk_faz8a_kaydet] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi',
+                'hata' => 'Kayıt sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
     }
 
     if (function_exists('audit_log_event')) {
@@ -2330,7 +2341,9 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         if (!$disTx) $pdo->commit();
     } catch (PDOException $e) {
         if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
-        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kayıt yapılamadı: ' . $e->getMessage()];
+        error_log('[pdks_gunluk_faz8a_kaydet] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi',
+                'hata' => 'Kayıt sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
     }
 
     if (function_exists('audit_log_event')) {

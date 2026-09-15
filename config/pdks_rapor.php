@@ -391,7 +391,7 @@ function pdks_rapor_faz8a_operasyonel_kpi(string $start, string $end, ?string $d
           WHERE s.status = 'closed' AND s.work_date BETWEEN ? AND ?" .
             ($depo !== null && $depo !== '' ? ' AND s.depo = ?' : '') .
             ($foremanId !== null ? ' AND s.foreman_id = ?' : '') . "
-            AND EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.session_id = s.id AND p.status = 'open')"
+            AND EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.session_id = s.id AND p.status IN ('open','legacy_unresolved'))"
     );
     $parEksikMesai = [$start, $end];
     if ($depo !== null && $depo !== '') $parEksikMesai[] = $depo;
@@ -639,7 +639,7 @@ function pdks_rapor_gunluk_trend(string $start, string $end, ?string $depo, ?int
         foreach ($stGunP->fetchAll() as $r) {
             if (isset($gunler[$r['gun']])) $gunler[$r['gun']]['toplam_calisan'] = (int)$r['n'];
         }
-        $whereEk = $whereP; $whereEk[] = "p.status = 'open'";
+        $whereEk = $whereP; $whereEk[] = "p.status IN ('open','legacy_unresolved')";
         $stEkP = $pdo->prepare("SELECT p.work_date_snapshot AS gun, COUNT(*) AS n FROM daily_worker_work_periods p" . $joinP . " WHERE " . implode(' AND ', $whereEk) . " GROUP BY p.work_date_snapshot");
         $stEkP->execute($parP);
         foreach ($stEkP->fetchAll() as $r) {
@@ -779,7 +779,7 @@ function pdks_rapor_cavus_ozeti(string $start, string $end, ?string $depo, ?int 
             $toplamIsci[$fid] = ($toplamIsci[$fid] ?? 0) + (int)$r['n'];
             $tipKirilimi[$fid][$r['tip']] = ($tipKirilimi[$fid][$r['tip']] ?? 0) + (int)$r['n'];
         }
-        $stEksikP = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status = 'open' GROUP BY session_id");
+        $stEksikP = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status IN ('open','legacy_unresolved') GROUP BY session_id");
         $stEksikP->execute($sessionIds);
         $eksikCikis = [];
         foreach ($stEksikP->fetchAll() as $r) {
@@ -963,10 +963,68 @@ function pdks_rapor_acik_mesailer_araligi(string $start, string $end, ?string $d
 function pdks_rapor_istisna_satirlari(string $start, string $end, ?string $depo, ?int $foremanId, string $oturumDurumu, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+
+    // Faz 8A: eksik çıkışın doğruluk kaynağı tek tek mesai dönemleridir.
+    // Aynı kart aynı oturumda kapanıp yeniden açılmış olabilir; event bazlı
+    // "herhangi bir ÇIKIŞ var mı" kontrolü bu ikinci açık dönemi gizleyemez.
+    if (pdks_gunluk_faz8a_sema_hazir($pdo)) {
+        $where = [
+            'p.work_date_snapshot BETWEEN ? AND ?',
+            's.status = ?',
+            "p.status IN ('open','legacy_unresolved')",
+        ];
+        $params = [$start, $end, $oturumDurumu];
+
+        if ($depo !== null && $depo !== '') {
+            $where[] = 'p.depo_snapshot = ?';
+            $params[] = $depo;
+        }
+        if ($foremanId !== null) {
+            $where[] = 's.foreman_id = ?';
+            $params[] = $foremanId;
+        }
+
+        $st = $pdo->prepare(
+            "SELECT p.session_id, p.worker_card_id, w.card_no,
+                    p.worker_type_name_snapshot AS tip,
+                    p.entry_time AS giris_saat,
+                    p.work_date_snapshot AS tarih,
+                    p.depo_snapshot AS depo,
+                    s.status AS oturum_durumu,
+                    s.notes AS kapanis_notu,
+                    s.foreman_name_snapshot AS cavus_adi
+               FROM daily_worker_work_periods p
+               JOIN daily_work_sessions s ON s.id = p.session_id
+               JOIN worker_cards w ON w.id = p.worker_card_id
+              WHERE " . implode(' AND ', $where) . "
+              ORDER BY p.work_date_snapshot DESC, p.entry_time ASC"
+        );
+        $st->execute($params);
+        $satirlar = $st->fetchAll();
+
+        foreach ($satirlar as &$r) {
+            $r['oturum_kapali_mesaji'] =
+                ($r['oturum_durumu'] === 'closed')
+                    ? 'Mesai eksik çıkışla kapatıldı.'
+                    : null;
+        }
+        unset($r);
+
+        return $satirlar;
+    }
+
+    // Faz 8A migrasyonu öncesindeki legacy davranış.
     $where = ['g.event_type = \'GIRIS\'', 'g.work_date_snapshot BETWEEN ? AND ?', 's.status = ?'];
     $params = [$start, $end, $oturumDurumu];
-    if ($depo !== null && $depo !== '') { $where[] = 'g.depo_snapshot = ?'; $params[] = $depo; }
-    if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
+
+    if ($depo !== null && $depo !== '') {
+        $where[] = 'g.depo_snapshot = ?';
+        $params[] = $depo;
+    }
+    if ($foremanId !== null) {
+        $where[] = 's.foreman_id = ?';
+        $params[] = $foremanId;
+    }
 
     $st = $pdo->prepare(
         "SELECT g.session_id, g.worker_card_id, w.card_no, g.worker_type_name_snapshot AS tip,
@@ -978,16 +1036,23 @@ function pdks_rapor_istisna_satirlari(string $start, string $end, ?string $depo,
           WHERE " . implode(' AND ', $where) . "
             AND NOT EXISTS (
                  SELECT 1 FROM daily_worker_card_events c
-                  WHERE c.session_id = g.session_id AND c.worker_card_id = g.worker_card_id AND c.event_type = 'CIKIS'
+                  WHERE c.session_id = g.session_id
+                    AND c.worker_card_id = g.worker_card_id
+                    AND c.event_type = 'CIKIS'
             )
           ORDER BY g.work_date_snapshot DESC, g.server_event_time ASC"
     );
     $st->execute($params);
     $satirlar = $st->fetchAll();
+
     foreach ($satirlar as &$r) {
-        $r['oturum_kapali_mesaji'] = ($r['oturum_durumu'] === 'closed') ? 'Mesai eksik çıkışla kapatıldı.' : null;
+        $r['oturum_kapali_mesaji'] =
+            ($r['oturum_durumu'] === 'closed')
+                ? 'Mesai eksik çıkışla kapatıldı.'
+                : null;
     }
     unset($r);
+
     return $satirlar;
 }
 
