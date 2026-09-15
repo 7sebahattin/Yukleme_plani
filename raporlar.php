@@ -173,7 +173,14 @@ render_flash();
 <div class="pdks-kiosk-counters rapor-genis">
     <h3>Operasyonel Özet</h3>
     <div class="pdks-kiosk-counter-totals">
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Çalışan</div><div class="val"><?= (int)$kpi['toplam_calisan'] ?></div></div>
+        <!-- ⚠ FAZ 8A (görev talimatı §21): "İşçi Katılımı" = mesai dönemi
+             (katılım) sayısı — "benzersiz çalışan" DEĞİL, çünkü nötr kartlar
+             insan kimliğini KANITLAYAMAZ. Ayrıca, karıştırılmasın diye AYRI
+             bir "Fiziksel Kart Kullanımı" (distinct kart) metriği gösterilir. -->
+        <div class="pdks-kiosk-counter-box"><div class="lbl">İşçi Katılımı</div><div class="val"><?= (int)$kpi['toplam_calisan'] ?></div></div>
+        <?php if (isset($kpi['fiziksel_kart_kullanimi'])): ?>
+        <div class="pdks-kiosk-counter-box"><div class="lbl">Fiziksel Kart Kullanımı</div><div class="val"><?= (int)$kpi['fiziksel_kart_kullanimi'] ?></div></div>
+        <?php endif; ?>
         <?php foreach ($tipDagilim as $t): if ($t['adet'] === 0 && $t['ad'] !== 'Kadın' && $t['ad'] !== 'Erkek') continue; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl"><?= h($t['ad']) ?></div><div class="val"><?= (int)$t['adet'] ?></div></div>
         <?php endforeach; ?>
