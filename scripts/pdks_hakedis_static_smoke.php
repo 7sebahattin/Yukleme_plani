@@ -140,11 +140,20 @@ ok('pdks_hakedis_girdi_kurus(): kullanıcı girdisi doğrulanmadan (regex geçme
     (bool)preg_match('/function pdks_hakedis_girdi_kurus.*?return null.*?return pdks_hakedis_tl_kurus/s', $hakedisKod));
 
 echo "\n=== 7. HİÇBİR ÖDEME/CARİ/FATURA/GENEL MUHASEBE YOK (kullanıcının açık talimatı) ===\n";
+// ⚠ Faz 5 (kullanıcının açık talimatı: "block unsafe reopen") pdks_hakedis_yeniden_ac()'a
+// TEK, belgelenmiş bir çapraz-modül güvenlik kontrolü ekledi — o kontrolün hata
+// mesajı KAÇINILMAZ olarak "ödeme"/"bakiye" kelimelerini içerir (kullanıcıya NEDEN
+// engellendiğini açıklamak için). Bu YENİ bir ödeme/cari YAZMA yolu AÇMAZ (bkz.
+// pdks_cari_static_smoke.php §7 — o kontrolün YALNIZ pdks_cari_odeme_var_mi()'yi
+// YUMUŞAK çağırdığını, sert bağımlılık KURMADIĞINI doğrular). Bu yüzden bu fonksiyonun
+// gövdesi taramadan ÇIKARILIR — dosyanın GERİ KALANI hâlâ tam kapsamda taranır.
+$hakedisKodTaramaHaric = preg_replace('/(\/\*\*.*?\*\/\s*)?function pdks_hakedis_yeniden_ac.*?\n\}\n/s', '', $hakedisKod);
+ok('pdks_hakedis_yeniden_ac() gövdesi + kendi docblock\'u tarama-dışı bırakılabildi (fonksiyon bulunabildi)', $hakedisKodTaramaHaric !== $hakedisKod);
 $yasakliKelimeler = ['payment', 'ödeme', 'odeme', 'invoice', 'fatura', 'cari_hesap', 'current_account',
                       'bank', 'banka', 'cash', 'kasa', 'pdf', 'balance', 'bakiye'];
 foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
-    ok("config/pdks_hakedis.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $hakedisKod));
+    ok("config/pdks_hakedis.php GERÇEK KODUNDA (Faz 5 reopen-koruma fonksiyonu HARİÇ) '$kelime' YOK", !preg_match($desen, $hakedisKodTaramaHaric));
 }
 foreach ($sayfalar as $f) {
     $kod = kodSadece(oku($f));
