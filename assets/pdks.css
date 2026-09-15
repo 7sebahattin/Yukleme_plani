@@ -70,6 +70,9 @@
 .pdks-badge-eksik_cikis  { background: var(--warn-soft);    color: var(--warn); }
 .pdks-badge-tam          { background: var(--success-soft); color: var(--success); }
 .pdks-badge-cikis_yok    { background: var(--warn-soft);    color: var(--warn); }
+/* Faz 8A pre-merge düzeltmesi — legacy_unresolved: tarihsel/geçmiş kayıt,
+   canlı 'cikis_yok' (turuncu, kilit) uyarısıyla KARIŞMASIN diye nötr renk. */
+.pdks-badge-legacy_unresolved { background: var(--surface-2); color: var(--muted); }
 
 /* ── Kart UID gösterimi ────────────────────────────────── */
 .pdks-uid {

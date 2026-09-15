@@ -33,17 +33,41 @@ daily_worker_work_periods (
     declared_attendance_class ('tam'|'yarim'),
     approved_attendance_class NULL,   -- Faz 8B'ye hazır, 8A'da HİÇ okunmaz/yazılmaz
     work_date_snapshot, depo_snapshot,
-    status ('open'|'closed'),
+    status ('open'|'closed'|'legacy_unresolved'),
     source ('scan'|'legacy_backfill')
 )
 ```
 
-`source` ayrımı tek bir amaca hizmet eder: "açık dönem var mı" kontrolü
-(yeni taramayı engelleyen/çözen tek sorgu) **yalnız `source='scan'`**
-satırlara bakar. Aksi hâlde yıllar önce kapanmamış bir eski "eksik çıkış"
-kaydı, geri aktarıldıktan sonra o fiziksel kartı sonsuza kadar yeni
-taramaya kapatırdı. Puantaj/rapor görünümleri source ayrımı yapmaz — hem
-canlı hem geriye aktarılan dönemler aynı şekilde gösterilir.
+> **PRE-MERGE GÜVENLİK DÜZELTMESİ (merge öncesi):** ilk sürümde eksik
+> çıkışlı eski (legacy) kayıtlar da `status='open'` yazılıyor, "açık dönem
+> var mı" kontrolü bunları yalnız **dolaylı** bir `source='scan'` filtresiyle
+> dışlıyordu. Bu, `status='open'` sütununun TEK BAŞINA "kart şu an meşgul"
+> anlamına gelmesi gereken temel değişmezi bozuyordu — bir sorgu bu source
+> filtresini unutursa (ör. yeni bir rapor/denetim ekranı), yıllar önceki
+> çözülmemiş bir kayıt yanlışlıkla "şu an açık" görünebilirdi. **Düzeltme:**
+> `status` artık ÜÇ AÇIKÇA AYRI değer taşır, ayrım `source` sütununda DEĞİL
+> `status` sütununun KENDİSİNDE:
+>
+> - **`open`** — OTORİTER, CANLI açık dönem. Bu fiziksel kart ŞU AN meşgul
+>   sayılır, YENİ bir GİRİŞ'i ENGELLER. Yalnız Faz 8A'nın kendi GİRİŞ/ÇIKIŞ
+>   yazma yolu bu durumu yazar/değiştirir.
+> - **`closed`** — tamamlanmış (GİRİŞ+ÇIKIŞ eşleşmiş) dönem.
+> - **`legacy_unresolved`** — Faz 8A ÖNCESİ (Faz 1-7) veriden geriye
+>   aktarılmış, eşleşen ÇIKIŞ'ı hiç olmamış TARİHSEL kayıt (bkz. §5). Bu
+>   kartın BUGÜN elde tutulduğu anlamına GELMEZ — yalnız geçmişte
+>   çözülmemiş bir katılım kaydıdır. Puantaj/raporda "📜 Geçmiş — Eksik
+>   Çıkış" olarak görünmeye devam eder, ama HİÇBİR açık-dönem/kilit
+>   sorgusunda `open` ile karıştırılmaz — kartı ASLA kilitlemez.
+>
+> `source` (`scan`|`legacy_backfill`) artık **yalnız köken/denetim
+> bilgisidir** — hiçbir iş kuralı sorgusunda kullanılmaz. "Açık dönem var
+> mı" kontrolü (`pdks_gunluk_faz8a_kart_acik_donemi()`) ve ÇIKIŞ'ın hangi
+> dönemi kapatacağını bulan sorgu (`pdks_gunluk_faz8a_cikis_kaydet()`)
+> yalnız `status = 'open'` arar — `source` filtresi YOKTUR. Puantaj/rapor
+> görünümleri (`pdks_gunluk_faz8a_oturum_donemleri()`,
+> `pdks_gunluk_faz8a_eksik_cikislar()`, günlük liste "eksik" sayaçları) hem
+> `closed` hem `legacy_unresolved` dönemleri gösterir — geçmiş kaybolmaz;
+> yalnız kilit/blokaj sorguları `legacy_unresolved`'i hiç görmez.
 
 ## 3. EŞZAMANLILIK STRATEJİSİ
 
@@ -77,20 +101,56 @@ ilkesiyle aynı gerekçe) — satır kilidi tek başına yeterli ve taşınabili
    aktarır (bkz. §5).
 
 İdempotent — her adım kendi durumunu kontrol eder, tekrar çalıştırmak
-güvenlidir.
+güvenlidir; kısmen tamamlanmış bir durumdan devam ettirilebilir (bkz.
+aşağıdaki "gerçek başarısızlık davranışı").
+
+> **PRE-MERGE GÜVENLİK DÜZELTMESİ — atomiklik iddiası düzeltildi:** önceki
+> rapor "migrasyon tamamlanınca yeni kurallar ANINDA, ATOMİK olarak devreye
+> girer" diye özetlemişti. Bu **yanıltıcıydı**: `pdks_gunluk_faz8a_migrate()`
+> DÖRT adımı **TEK bir veritabanı transaction'ı İÇİNDE ÇALIŞTIRMAZ** — ve
+> çalıştıramaz da, çünkü MySQL'de DDL (`CREATE TABLE`, `ALTER TABLE ...
+> MODIFY COLUMN`, `DROP INDEX`) **implicit commit** yapar: her DDL
+> ifadesinden önce (InnoDB'de bazı sürümlerde sonra da) o ana kadarki
+> transaction otomatik commit edilir. Yani bu dört adım arka arkaya çalışan
+> **DÖRT AYRI, GERİ ALINAMAZ commit** noktasıdır — `ROLLBACK` bunlardan
+> hiçbirini geri alamaz. "Atomik" kelimesi bu davranışı yanlış tarif
+> ediyordu; doğru tarif **"sıralı, idempotent, kendi kendini denetleyen dört
+> adım"**dır — atomiklik DEĞİL, aşağıdaki AND-gate güvenliği sağlar.
+>
+> **Gerçek kısmi-başarısızlık davranışı:** her adım BAĞIMSIZ try/catch
+> içindedir ve KENDİ mevcut durumunu (tablo var mı / kolon zaten nullable mı
+> / index zaten yok mu) kontrol ederek karar verir — bir adım `hata`
+> raporlasa bile döngü **DURMAZ**, sıradaki adımı yine dener (backfill hariç,
+> o da yalnız gerekli iki tablo mevcutsa çalışır — kendi başına ek bir risk
+> taşımaz, çünkü additive-only'dir). N. adım başarısız olduktan SONRA
+> migrasyonu tekrar çalıştırmak GÜVENLİDİR: başarılı adımlar "zaten var/zaten
+> uygulanmış" olarak atlanır, yalnız başarısız adım yeniden denenir — hiçbir
+> adım iki kez zarar verecek şekilde tekrarlanmaz (CREATE TABLE IF NOT
+> EXISTS + varlık kontrolleri).
+>
+> **Kısmi tamamlanmış durumda normal trafik ne görür:** `pdks_gunluk_faz8a_sema_hazir()`
+> aşağıdaki üç koşulu **VE** (AND) ile birleştirir — DÖRDÜ arasında yalnız
+> İLK ÜÇÜ şema koşuludur (4. adım — backfill — bir VERİ adımıdır, şema
+> hazırlığına dahil DEĞİLDİR, additive olduğu için erken/geç çalışması
+> güvenlidir):
 
 ### Dağıtım sıralaması — güvenli, sıfır bekleme penceresi
 
 `pdks_gunluk_faz8a_sema_hazir()` üç koşulun HEPSİNİ kontrol eder (tablo +
-nullable kolon + kısıtın kaldırılmışlığı). Bu üçü migrate()'in TEK
-çalıştırmasında birlikte tamamlanır. Tüm okuma/yazma fonksiyonları bu
-bayrağa göre dallanır:
+nullable kolon + kısıtın kaldırılmışlığı). Üç koşuldan HERHANGİ BİRİ eksikse
+(migrasyon hiç çalışmamış YA DA yarıda kalmış olsun fark etmez) fonksiyon
+**false** döner ve Faz 1-7'nin eski davranışı aynen çalışmaya devam eder —
+"kısmen Faz 8A, kısmen eski mantık" karışık bir ara durum **yapısal olarak
+imkânsızdır**, çünkü kontrol her istekte YENİDEN yapılır (bayrak DB'de
+saklanmaz, önbelleğe alınmaz):
 
-- **Kod deploy edildi, migrasyon HENÜZ çalıştırılmadı:** bayrak false —
-  Faz 1-7'nin eski davranışı (aynı kart/gün/depo başına bir kez) aynen
-  çalışmaya devam eder. Tarama BOZULMAZ.
-- **Migrasyon çalıştırıldı:** bayrak anında true — yeni "tek açık dönem"
-  kuralı devreye girer.
+- **Kod deploy edildi, migrasyon HENÜZ çalıştırılmadı (ya da yarıda
+  kaldı):** bayrak false — Faz 1-7'nin eski davranışı (aynı kart/gün/depo
+  başına bir kez) aynen çalışmaya devam eder. Tarama BOZULMAZ.
+- **Üç koşulun HEPSİ sağlandı:** bayrak true — yeni "tek açık dönem" kuralı
+  devreye girer. Bu, "tek transaction'ın commit'i" anlamında atomik
+  DEĞİLDİR — sıradaki isteğin bu üç koşulu ayrı ayrı sorgulayıp HEPSİNİ true
+  bulmasıdır (DDL'lerin hepsi zaten kalıcı commit edilmiş durumdadır).
 
 Ayrı bir dağıtım adımı/bekleme süresi gerekmez — webhook zaten dosyaları
 dakikalar içinde indiriyor (CLAUDE.md → Deploy Workflow), migrasyon ise
@@ -110,9 +170,14 @@ yapıldı**, çünkü gerekliliği doğrulandı:
   en fazla bir GİRİŞ ve en fazla bir ÇIKIŞ satırı garanti ediyordu —
   eşleştirme belirsiz değil, kesindir.
 - **Ne aktarılır:** her eski GİRİŞ olayı → bir dönem satırı.
-  Eşleşen ÇIKIŞ'ı varsa `status='closed'`; yoksa (eksik çıkış) `status='open'`
-  — geçmiş kaybolmaz, ama **`source='legacy_backfill'` olduğu için yeni
-  taramayı asla engellemez** (bkz. §2).
+  Eşleşen ÇIKIŞ'ı varsa `status='closed'`; yoksa (eksik çıkış)
+  `status='legacy_unresolved'` (PRE-MERGE DÜZELTMESİ — önceden `status='open'`
+  yazılıp yalnız `source` filtresiyle dışlanıyordu, bkz. §2 kutusu) — geçmiş
+  kaybolmaz (puantaj/raporda "📜 Geçmiş — Eksik Çıkış" görünür), ama
+  **`status` sütununun kendisi `open` OLMADIĞI için** yeni taramayı asla
+  engellemez; ayrıca ne midnight/gün değişiminde ne de oturum kapatılınca
+  bu satırlar geriye dönük değiştirilir — backfill TEK SEFERLİK, statik bir
+  aktarımdır.
 - **`declared_attendance_class='tam'`:** eski model Tam/Yarım ayrımını
   bilmiyordu — tek seçenek tam gündü, bu uydurma değil gerçek karşılıktır.
 - Yalnız **ekler**, `daily_worker_card_events`'e tek satır dokunmaz. İki

@@ -123,6 +123,37 @@ ok('backfill: daily_worker_card_events\'e HİÇBİR UPDATE/DELETE YOK (yalnız S
 ok('backfill: yalnız daily_worker_work_periods\'a INSERT yapıyor',
     str_contains($bfGovde, 'INSERT INTO daily_worker_work_periods'));
 ok('backfill: source=\'legacy_backfill\' olarak işaretliyor', str_contains($bfGovde, "'legacy_backfill'"));
+ok("PRE-MERGE GÜVENLİK DÜZELTMESİ: backfill eksik çıkışlı satırlara 'legacy_unresolved' yazıyor, 'open' DEĞİL",
+    (bool)preg_match("/\\?\\s*'closed'\\s*:\\s*'legacy_unresolved'/", $bfGovde));
+ok("PRE-MERGE GÜVENLİK DÜZELTMESİ: backfill gövdesinde ARTIK status='open' YAZDIRAN bir dal YOK",
+    !preg_match("/:\\s*'open'/", $bfGovde));
+
+echo "\n=== 8B. AÇIK-DÖNEM KİLİDİ — TEK DOĞRULUK KAYNAĞI status='open', SOURCE FİLTRESİ YOK ===\n";
+// PRE-MERGE GÜVENLİK DÜZELTMESİ (kullanıcının açık talimatı): "open-period
+// query must not contain a broad source-based exclusion that could
+// accidentally allow a real Phase 8A open period through." Kilit/blokaj
+// sorguları (kart_acik_donemi + cikis_kaydet'in eşleştirme sorgusu) ARTIK
+// yalnız status='open' arar — source='scan' filtresi TAMAMEN KALDIRILDI,
+// çünkü backfill hiçbir zaman 'open' YAZMIYOR (bkz. §8) — filtreye GEREK YOK.
+preg_match('/function pdks_gunluk_faz8a_kart_acik_donemi.*?\n\}/s', $gunlukSrc, $adM);
+$adGovde = $adM[0] ?? '';
+ok('pdks_gunluk_faz8a_kart_acik_donemi() gövdesi çıkarılabildi', $adGovde !== '');
+ok("kart_acik_donemi(): status = 'open' filtresi VAR", str_contains($adGovde, "status = 'open'"));
+ok("kart_acik_donemi(): source BAZLI bir dışlama YOK (source='scan' / source != 'legacy_backfill' vb. HİÇBİRİ)",
+    !preg_match('/\bsource\b/i', $adGovde));
+
+preg_match('/function pdks_gunluk_faz8a_cikis_kaydet.*?\n\}/s', $gunlukSrc, $ckM);
+$ckGovde = $ckM[0] ?? '';
+ok('pdks_gunluk_faz8a_cikis_kaydet() gövdesi çıkarılabildi', $ckGovde !== '');
+ok("cikis_kaydet(): açık dönemi bulan sorguda status = 'open' filtresi VAR",
+    (bool)preg_match("/SELECT \\* FROM daily_worker_work_periods WHERE worker_card_id = \\? AND status = 'open' LIMIT 1/", $ckGovde));
+ok("cikis_kaydet(): AYNI sorguda source BAZLI bir dışlama YOK",
+    !preg_match('/status = \'open\' AND source/', $ckGovde));
+
+ok("pdks_gunluk_faz8a_donem_durumu() ÜÇ durumu (open/closed/legacy_unresolved) AÇIKÇA AYRIŞTIRIYOR",
+    (bool)preg_match("/function pdks_gunluk_faz8a_donem_durumu.*?'open'.*?'closed'.*?'legacy_unresolved'.*?\n\}/s", $gunlukSrc));
+ok("oturum_donemleri(): satır etiketi ARTIK gerçek durum_kod'dan (pdks_gunluk_faz8a_donem_durumu) okunuyor — yalnız cikis_saat NULL/DOLU İKİLİĞİNDEN DEĞİL",
+    str_contains($gunlukSrc, "pdks_gunluk_faz8a_donem_durumu((string)\$s['durum_kod'])"));
 
 echo "\n=== 9. AŞIRI MÜHENDİSLİK YASAKLARI — Faz 8B/8C kapsam dışı ===\n";
 $yasakli8b8c = ['overtime_rate', 'fazla_mesai_ucreti', 'approved_by_accounting', 'offline_queue',

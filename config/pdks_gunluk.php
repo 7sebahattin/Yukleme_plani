@@ -1655,6 +1655,47 @@ function pdks_gunluk_kullanici_adi(?int $userId, ?PDO $pdo = null): string
     return (string)($u['display_name'] ?: $u['username']);
 }
 
+/**
+ * daily_worker_work_periods.status → kullanıcı etiketleri (görev talimatı
+ * "PRE-MERGE SAFETY REVIEW" §1/§3 düzeltmesi — ÜÇ AÇIKÇA AYRI durum):
+ *
+ *   'open'              → OTORİTER, CANLI açık dönem. Bu fiziksel kart
+ *                          ŞU AN meşgul sayılır — YENİ bir GİRİŞ bunu
+ *                          ENGELLER (bkz. pdks_gunluk_faz8a_kart_acik_donemi()).
+ *                          Yalnız Faz 8A'nın KENDİ GİRİŞ/ÇIKIŞ yazma yolu
+ *                          (pdks_gunluk_faz8a_giris_kaydet/cikis_kaydet)
+ *                          bu durumu YAZAR/DEĞİŞTİRİR.
+ *   'closed'            → tamamlanmış (GİRİŞ+ÇIKIŞ eşleşmiş) dönem.
+ *   'legacy_unresolved' → Faz 8A ÖNCESİ (Faz 1-7) veriden geriye aktarılmış,
+ *                          eşleşen ÇIKIŞ'ı hiç olmamış TARİHSEL kayıt (bkz.
+ *                          pdks_gunluk_faz8a_backfill()). Bu kartın BUGÜN
+ *                          elde tutulduğu ANLAMINA GELMEZ — yalnız geçmişte
+ *                          çözülmemiş bir katılım kaydıdır. Puantaj/raporda
+ *                          "Eksik Çıkış" olarak GÖRÜNMEYE DEVAM EDER, ama
+ *                          HİÇBİR açık-dönem/kilit sorgusunda 'open' ile
+ *                          KARIŞTIRILMAZ — kartı ASLA KİLİTLEMEZ.
+ *
+ * ⚠ Bu ayrım BİLEREK `status` sütununun KENDİSİNDEDİR — `source` sütunu
+ * (scan|legacy_backfill) yalnız KÖKEN/denetim bilgisidir, hiçbir açık-dönem
+ * sorgusunda ARTIK kullanılmaz (önceki turun "source != legacy_backfill"
+ * dolaylı istisnası KALDIRILDI — bkz. pdks_gunluk_faz8a_kart_acik_donemi()
+ * ve pdks_gunluk_faz8a_cikis_kaydet()'in AYNI düzeltmesi).
+ */
+function pdks_gunluk_faz8a_donem_durumu(string $status): array
+{
+    // ⚠ 'kod' alanı `pdks-badge-<kod>` CSS sınıfı olarak kullanılır
+    // (bkz. gunluk_isci_puantaj_detay.php, assets/pdks.css). 'cikis_yok' ve
+    // 'tam' ESKİDEN BERİ var olan sınıflardır (görsel davranış korunur);
+    // 'legacy_unresolved' için assets/pdks.css'e AYRI (nötr/tarihsel) bir
+    // rozet rengi eklendi — canlı 'cikis_yok' (uyarı/turuncu) ile karışmasın.
+    return match ($status) {
+        'open'              => ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'],
+        'closed'            => ['kod' => 'tam', 'etiket' => '✅ Tam'],
+        'legacy_unresolved' => ['kod' => 'legacy_unresolved', 'etiket' => '📜 Geçmiş — Eksik Çıkış'],
+        default             => ['kod' => 'bilinmiyor', 'etiket' => $status],
+    };
+}
+
 /** Giriş/çıkış saatleri arasındaki süreyi "Xs Ydk" biçiminde döner —
  *  puantaj detay/yazdırma sayfaları için (görev talimatı §20 örneği:
  *  "4s 02dk"). $cikis NULL/boşsa çağrılmamalıdır (çağıran taraf zaten
@@ -1719,19 +1760,33 @@ function pdks_gunluk_faz8a_tablolar(): array
     $t = [];
 
     // ── daily_worker_work_periods — YETKİLİ operasyonel katılım kaydı ──
-    // `source`: 'scan' (Faz 8A canlı Giriş/Çıkış akışından) |
-    // 'legacy_backfill' (bkz. pdks_gunluk_faz8a_backfill() — Faz 1-7'den
-    // AKTARILAN eski dönemler). Bu ayrım TEK bir amaca hizmet eder:
-    // "açık dönem var mı" kontrolü (yeni taramayı engelleyen/çözen tek
-    // sorgu — bkz. pdks_gunluk_faz8a_kart_acik_donemi()) YALNIZ
-    // source='scan' satırlara bakar — aksi hâlde yıllar önce kapatılmamış
-    // eski bir "eksik çıkış" kaydı, geri aktarıldıktan sonra o fiziksel
-    // kartı SONSUZA KADAR yeni taramaya KAPATIRDI (kullanıcının "a physical
-    // card with an open period remains blocked" kuralı YENİ trafik
-    // içindir, yıllar önceki çözülmemiş bir eksik-çıkışı canlı operasyonu
-    // durdurma sebebi yapmak İSTENMEYEN bir yan etkidir). Puantaj/rapor
-    // GÖRÜNÜMLERİ source AYRIMI YAPMAZ — ikisi de aynı şekilde gösterilir
-    // (geçmiş kaybolmaz).
+    // `status`: 'open' | 'closed' | 'legacy_unresolved' — bkz.
+    // pdks_gunluk_faz8a_donem_durumu() için TAM anlam haritası. ÜÇ değer
+    // AÇIKÇA AYRIDIR (PRE-MERGE GÜVENLİK DÜZELTMESİ):
+    //   'open'              → OTORİTER, CANLI açık dönem — bu fiziksel kart
+    //                         ŞU AN meşgul, YENİ GİRİŞ'i ENGELLER.
+    //   'closed'            → tamamlanmış dönem.
+    //   'legacy_unresolved' → Faz 8A ÖNCESİ (Faz 1-7) veriden geriye
+    //                         aktarılmış, hiç ÇIKIŞ'ı olmayan TARİHSEL kayıt
+    //                         (bkz. pdks_gunluk_faz8a_backfill()). Puantajda
+    //                         "Eksik Çıkış" olarak GÖRÜNMEYE DEVAM EDER ama
+    //                         kartı ASLA KİLİTLEMEZ — "açık dönem var mı"
+    //                         kontrolü (bkz. pdks_gunluk_faz8a_kart_acik_donemi())
+    //                         yalnız `status='open'` arar, 'legacy_unresolved'
+    //                         hiç GÖRMEZ. Aksi hâlde yıllar önce kapatılmamış
+    //                         eski bir "eksik çıkış" kaydı, geri aktarıldıktan
+    //                         sonra o fiziksel kartı SONSUZA KADAR yeni
+    //                         taramaya KAPATIRDI (kullanıcının "a physical
+    //                         card with an open period remains blocked"
+    //                         kuralı YENİ trafik içindir).
+    // `source`: 'scan' | 'legacy_backfill' — yalnız KÖKEN/denetim bilgisidir,
+    // hiçbir iş kuralı sorgusunda KULLANILMAZ (önceki turda "açık dönem"
+    // sorguları `source != legacy_backfill` dolaylı istisnasına dayanıyordu
+    // — bu, `status` sütununun kendi başına doğruyu söylemesini engelliyordu
+    // ve bir sorgu source filtresini unutursa yanlış pozitif üretebilirdi;
+    // KALDIRILDI, artık yalnız `status` tek doğruluk kaynağıdır).
+    // Puantaj/rapor GÖRÜNÜMLERİ hem 'closed' hem 'legacy_unresolved'
+    // dönemleri gösterir — geçmiş kaybolmaz.
     $t['daily_worker_work_periods'] = "CREATE TABLE IF NOT EXISTS `daily_worker_work_periods` (
         `id`                         INT AUTO_INCREMENT PRIMARY KEY,
         `session_id`                 INT          NOT NULL,
@@ -1914,10 +1969,17 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
  * pdks_gunluk_kart_acik_girisi() docblock'u) — eşleştirme bu yüzden
  * BELİRSİZ değil, KESİN.
  *
- * ⚠ `source='legacy_backfill'`: bu satırlar YENİ taramayı ASLA
- * engellemez (bkz. tablo DDL'indeki not) — yalnız görünürlük içindir.
- * Eksik-çıkış (GİRİŞ var, ÇIKIŞ yok) eski kayıtlar da AKTARILIR
- * (status='open') — geçmiş kaybolmaz, ama fiziksel kartı KİLİTLEMEZ.
+ * ⚠ PRE-MERGE DÜZELTMESİ: eşleşen ÇIKIŞ'ı OLAN eski satırlar `status='closed'`
+ * yazılır (normal). Eşleşen ÇIKIŞ'ı OLMAYAN (eksik çıkış) eski satırlar ARTIK
+ * `status='open'` DEĞİL — `status='legacy_unresolved'` yazılır (bkz.
+ * pdks_gunluk_faz8a_donem_durumu()). Önceki turda bu satırlar 'open' yazılıp
+ * yalnız `source='legacy_backfill'` filtresiyle açık-dönem sorgularından
+ * DIŞLANIYORDU — bu, "status='open' → kart meşgul" değişmezini BOZuyordu
+ * (bir raporlama/denetim sorgusu source filtresini UNUTURSA, yıllar önceki
+ * bir eksik-çıkış kaydı yanlışlıkla "şu an açık" görünürdü). Artık `status`
+ * SÜTUNUNUN KENDİSİ doğruyu söylüyor — hiçbir sorgunun `source` bilmesine
+ * GEREK YOK. `source='legacy_backfill'` yalnız KÖKEN/denetim bilgisi olarak
+ * KALIR, iş mantığında KULLANILMAZ.
  *
  * ⚠ declared_attendance_class='tam': eski model Tam/Yarım AYRIMINI
  * bilmiyordu — tek seçenek tam gündü, bu UYDURMA değil gerçek karşılıktır.
@@ -1958,7 +2020,7 @@ function pdks_gunluk_faz8a_backfill(PDO $pdo): string
             $insP->execute([
                 $g['session_id'], $g['worker_card_id'], $g['worker_type_id_snapshot'], $g['worker_type_name_snapshot'],
                 $g['entry_event_id'], $exitEventId, $g['entry_time'], $exitTime,
-                $g['work_date_snapshot'], $g['depo_snapshot'], $exitEventId !== null ? 'closed' : 'open',
+                $g['work_date_snapshot'], $g['depo_snapshot'], $exitEventId !== null ? 'closed' : 'legacy_unresolved',
             ]);
             $aktarilan++;
         } catch (PDOException $e) {
@@ -2017,10 +2079,18 @@ function pdks_gunluk_faz8a_kart_kilitle(PDO $pdo, int $cardId): void
     $pdo->prepare($sql)->execute([$cardId]);
 }
 
-/** Bu kartın hâlâ AÇIK, CANLI (source='scan') bir dönemi var mı — varsa
- *  hangi çavuş/mesai altında. Legacy backfill satırlarına BAKMAZ (bkz.
- *  tablo DDL'indeki gerekçe). ÇAĞIRAN, pdks_gunluk_faz8a_kart_kilitle()
- *  İLE AYNI İŞLEM İÇİNDE çağırmalıdır (bkz. o fonksiyonun docblock'u). */
+/**
+ * Bu kartın hâlâ OTORİTER olarak açık (status='open') bir dönemi var mı —
+ * varsa hangi çavuş/mesai altında. TEK ve YETERLİ filtre `status='open'`dur
+ * (PRE-MERGE GÜVENLİK DÜZELTMESİ) — `legacy_unresolved` (tarihsel, Faz 8A
+ * ÖNCESİ eksik çıkış) burada ASLA görünmez, çünkü backfill artık o
+ * satırlara 'open' DEĞİL 'legacy_unresolved' yazar (bkz.
+ * pdks_gunluk_faz8a_backfill() + pdks_gunluk_faz8a_donem_durumu()). Ayrıca
+ * bir `source` filtresine GEREK YOK — `status` sütununun kendisi zaten
+ * doğruyu söylüyor, iki katmanlı (status+source) dolaylı bir kural DEĞİL.
+ * ÇAĞIRAN, pdks_gunluk_faz8a_kart_kilitle() İLE AYNI İŞLEM İÇİNDE
+ * çağırmalıdır (bkz. o fonksiyonun docblock'u).
+ */
 function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
 {
     $st = $pdo->prepare(
@@ -2029,7 +2099,7 @@ function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
            FROM daily_worker_work_periods p
            JOIN daily_work_sessions s ON s.id = p.session_id
            JOIN foremen f ON f.id = s.foreman_id
-          WHERE p.worker_card_id = ? AND p.status = 'open' AND p.source = 'scan'
+          WHERE p.worker_card_id = ? AND p.status = 'open'
           LIMIT 1"
     );
     $st->execute([$workerCardId]);
@@ -2215,7 +2285,10 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
     try {
         pdks_gunluk_faz8a_kart_kilitle($pdo, (int)$kart['id']);
 
-        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' AND source = 'scan' LIMIT 1");
+        // ⚠ PRE-MERGE DÜZELTMESİ: 'source' filtresi KALDIRILDI. status='open' artık
+        // TEK BAŞINA otoriter sinyaldir (legacy backfill 'legacy_unresolved' yazar,
+        // asla 'open' yazmaz) — bkz. pdks_gunluk_faz8a_kart_acik_donemi().
+        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' LIMIT 1");
         $st2->execute([$kart['id']]);
         $acik = $st2->fetch() ?: null;   // ⚠ PDO::fetch() satır yoksa false döner, null DEĞİL.
         if ($acik === null) {
@@ -2289,8 +2362,15 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
 // =========================================================
 
 /** pdks_gunluk_oturum_ozet() İLE AYNI dönüş şekli — canlı sayaç/mutabakat
- *  kaynağı. Yalnız source='scan' dönemleri sayar (legacy_backfill hiçbir
- *  canlı ekranı ETKİLEMEZ — bkz. tablo DDL'indeki gerekçe). */
+ *  kaynağı (sayfa ilk render + her tarama sonrası + kapatma ekranı).
+ *  giris/cikis/ilk_giris/son_cikis sayaçları BİLEREK source='scan' filtreler
+ *  — bu YALNIZCA canlı/aktif oturum trafiğinin gösterim metriğidir, pratikte
+ *  aktif bir oturumda legacy_backfill satırı ZATEN OLAMAZ (backfill yalnız
+ *  Faz 8A ÖNCESİ kapanmış oturumlara yazar). ⚠ Bu, açık-dönem/KİLİT
+ *  anlamıyla KARIŞTIRILMAMALI: aşağıdaki "eksik" (hâlâ açık kart) listesi
+ *  KİLİT ailesindendir ve TEK filtresi status='open'dur (source filtresi
+ *  YOK) — PRE-MERGE SAFETY REVIEW §1/§6 ile pdks_gunluk_faz8a_kart_acik_donemi()
+ *  İLE AYNI KURAL. */
 function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
@@ -2307,10 +2387,14 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     $girisToplam = array_sum($giris);
     $cikisToplam = array_sum($cikis);
 
+    // ⚠ PRE-MERGE DÜZELTMESİ: burası "eksik çıkış" MUTABAKAT/KİLİT listesidir
+    // (kapatma ekranında hangi kart hâlâ açık gösterir) — açık-dönem kontrolüyle
+    // AYNI ailede, o yüzden AYNI kural: TEK ve YETERLİ filtre status='open'dur,
+    // 'source' filtresi KALDIRILDI (legacy zaten hiçbir zaman 'open' yazmaz).
     $stE = $pdo->prepare(
         "SELECT p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip, p.entry_time AS giris_zamani
            FROM daily_worker_work_periods p JOIN worker_cards w ON w.id = p.worker_card_id
-          WHERE p.session_id = ? AND p.source = 'scan' AND p.status = 'open'
+          WHERE p.session_id = ? AND p.status = 'open'
           ORDER BY p.entry_time ASC"
     );
     $stE->execute([$sessionId]);
@@ -2351,9 +2435,11 @@ function pdks_gunluk_faz8a_oturum_donemleri(int $sessionId, ?PDO $pdo = null): a
     $satirlar = $st->fetchAll();
     $siniflar = pdks_gunluk_faz8a_mesai_siniflari();
     foreach ($satirlar as &$s) {
-        $s['durum'] = $s['cikis_saat'] !== null
-            ? ['kod' => 'tam', 'etiket' => '✅ Tam']
-            : ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'];
+        // ⚠ PRE-MERGE DÜZELTMESİ (§1/§3): eskiden yalnız cikis_saat'e bakılıyordu
+        // — bu, canlı 'open' ile tarihsel 'legacy_unresolved'i puantajda AYNI
+        // ETİKETLE gösteriyordu. Artık gerçek durum_kod'dan (status) okunur,
+        // ÜÇ durum da AÇIKÇA AYRIŞIR (bkz. pdks_gunluk_faz8a_donem_durumu()).
+        $s['durum'] = pdks_gunluk_faz8a_donem_durumu((string)$s['durum_kod']);
         $s['mesai_sinifi_etiket'] = $siniflar[$s['mesai_sinifi']] ?? $s['mesai_sinifi'];
     }
     unset($s);
@@ -2441,7 +2527,12 @@ function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?
     $zBySession = [];
     foreach ($stZ->fetchAll() as $r) $zBySession[(int)$r['session_id']] = $r;
 
-    $stEk = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status='open' GROUP BY session_id");
+    // ⚠ PRE-MERGE DÜZELTMESİ (§3 — raporlama satırlarını KAYBETME): burası bir
+    // RAPOR/LİSTE sayacıdır (KİLİT kontrolü DEĞİL) — 'legacy_unresolved' dahil
+    // edilir ki geçmiş bir günün listesi "Eksik Çıkış" durumunu göstermeye
+    // devam etsin. Kilit/blokaj kontrolleri (kart_acik_donemi vb.) bunun
+    // AKSİNE yalnız status='open' kullanır — iki sorgu KASITLI FARKLI.
+    $stEk = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status IN ('open','legacy_unresolved') GROUP BY session_id");
     $stEk->execute($ids);
     $ekBySession = [];
     foreach ($stEk->fetchAll() as $r) $ekBySession[(int)$r['session_id']] = (int)$r['n'];
@@ -2470,11 +2561,16 @@ function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?
     return $sonuc;
 }
 
-/** pdks_gunluk_eksik_cikislar() İLE AYNI dönüş şekli. */
+/** pdks_gunluk_eksik_cikislar() İLE AYNI dönüş şekli. ⚠ PRE-MERGE DÜZELTMESİ
+ *  (§3 — "Eksik Çıkış" raporu geçmiş çözülmemiş kayıtları KAYBETMEMELİ):
+ *  hem CANLI açık ('open') hem TARİHSEL çözülmemiş ('legacy_unresolved')
+ *  dönemler bu listede görünür — ikisi de gerçekten "çıkışı olmayan" bir
+ *  katılım kaydıdır, yalnız 'open' kart KİLİTLER. Bu fonksiyon kilit
+ *  kontrolü DEĞİL rapor listesidir. */
 function pdks_gunluk_faz8a_eksik_cikislar(string $workDate, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $where = ['p.work_date_snapshot = ?', "p.status = 'open'"]; $params = [$workDate];
+    $where = ['p.work_date_snapshot = ?', "p.status IN ('open','legacy_unresolved')"]; $params = [$workDate];
     if ($depo !== null && $depo !== '') { $where[] = 'p.depo_snapshot = ?'; $params[] = $depo; }
     if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
     $st = $pdo->prepare(

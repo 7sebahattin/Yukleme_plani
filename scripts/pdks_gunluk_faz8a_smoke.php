@@ -326,6 +326,36 @@ $veliSid = (int)$veliOturum['session']['id'];
 $k6TekrarGiris = pdks_gunluk_faz8a_giris_kaydet('111000006', 'usb_decimal', $veliSid, $erkekId, 'tam', 1, $db);
 ok('K006 (Mehmet\'in KAPALI oturumunda hâlâ açık) YENİ bir çavuşun oturumunda GİRİŞ yapamıyor', $k6TekrarGiris['ok'] === false && $k6TekrarGiris['kod'] === 'baska_cavusta_acik');
 
+echo "\n=== 14B. AÇIK DÖNEM GÜN SINIRINI (GECE YARISINI) DA AŞAR — KİLİT KENDİLİĞİNDEN SIFIRLANMAZ ===\n";
+// Görev talimatı §2/§6-E: YENİ (Faz 8A) bir açık dönem yalnızca GEÇERLİ bir
+// ÇIKIŞ'la kapanır — takvim günü değişse/oturum kapansa BİLE OTOMATİK
+// serbest KALMAZ. Simülasyon: K008 "dün" GİRİŞ yapar, o günün oturumu ve
+// dönemi geriye tarihlenir (backdate); "BUGÜN" YENİ bir çavuşun YENİ
+// (gerçek bugünkü tarihli) oturumunda aynı fiziksel kart yeniden denenir.
+$k8 = kartOlustur('K008', '111000008', $db);
+$dunkuGiris = pdks_gunluk_faz8a_giris_kaydet('111000008', 'usb_decimal', $veliSid, $kadinId, 'tam', 1, $db);
+ok('K008 "dün" (backdate edilecek oturumda) GİRİŞ yaptı', $dunkuGiris['ok'] === true, json_encode($dunkuGiris));
+
+$dun = date('Y-m-d', strtotime('-1 day'));
+$db->exec("UPDATE daily_work_sessions SET work_date = '$dun' WHERE id = $veliSid");
+$db->exec("UPDATE daily_worker_work_periods SET work_date_snapshot = '$dun' WHERE worker_card_id = (SELECT id FROM worker_cards WHERE card_no='K008')");
+$dunkuDonem = $db->query("SELECT status FROM daily_worker_work_periods WHERE worker_card_id = (SELECT id FROM worker_cards WHERE card_no='K008')")->fetch();
+ok('Backdate SONRASI dönem HÂLÂ status=open (yalnız tarih alanı değişti, DURUM DEĞİŞMEDİ)', $dunkuDonem['status'] === 'open');
+
+$yeniGunCavus = pdks_gunluk_cavus_olustur(['code' => 'C004', 'name' => 'Zeynep Çavuş'], 1, $db);
+$yeniGunOturum = pdks_gunluk_oturum_ac_veya_getir((int)$yeniGunCavus['id'], 1, $db);
+$yeniGunSid = (int)$yeniGunOturum['session']['id'];
+ok('Zeynep\'in oturumu GERÇEK bugünün tarihiyle açıldı (dünkü ile KARIŞMADI)', $yeniGunOturum['session']['work_date'] === date('Y-m-d'));
+
+$k8BugunGiris = pdks_gunluk_faz8a_giris_kaydet('111000008', 'usb_decimal', $yeniGunSid, $erkekId, 'tam', 1, $db);
+ok('K008 (dünden KALMIŞ açık dönem) BUGÜN Zeynep\'in oturumunda GİRİŞ yapamıyor — gece yarısı/gün değişimi kilidi SERBEST BIRAKMADI',
+    $k8BugunGiris['ok'] === false && $k8BugunGiris['kod'] === 'baska_cavusta_acik');
+
+$gecerliCikisDun = pdks_gunluk_faz8a_cikis_kaydet('111000008', 'usb_decimal', $veliSid, 1, $db);
+ok('K008 "dünkü" (backdate edilmiş) oturumundan GEÇERLİ bir ÇIKIŞ yapılınca kilit KALKAR', $gecerliCikisDun['ok'] === true, json_encode($gecerliCikisDun));
+$k8BugunGirisIkinci = pdks_gunluk_faz8a_giris_kaydet('111000008', 'usb_decimal', $yeniGunSid, $erkekId, 'tam', 1, $db);
+ok("YALNIZ geçerli ÇIKIŞ'tan SONRA K008 bugün normal şekilde YENİDEN GİREBİLİYOR", $k8BugunGirisIkinci['ok'] === true, json_encode($k8BugunGirisIkinci));
+
 echo "\n=== 15. GERİYE DÖNÜK UYUMLULUK — ESKİ FONKSİYON İSİMLERİ ARTIK PERİYOT VERİSİNİ OKUYOR ===\n";
 $ozet = pdks_gunluk_oturum_ozet($veliSid, $db);
 ok('pdks_gunluk_oturum_ozet() Faz 8A dalını kullanıyor (dönüş şekli AYNI kaldı)', is_array($ozet) && array_key_exists('giris_toplam', $ozet));
@@ -414,14 +444,46 @@ ok('E001 backfill: declared_attendance_class=tam (eski model yarım BİLMİYORDU
 ok('E001 backfill: source=legacy_backfill', $e001['source'] === 'legacy_backfill');
 
 $e002 = $eskiDb->query("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = (SELECT id FROM worker_cards WHERE card_no='E002')")->fetch();
-ok('E002 backfill: status=open (eksik çıkış GERÇEĞİ KORUNDU, UYDURMA çıkış YOK)', $e002['status'] === 'open' && $e002['exit_event_id'] === null);
+// ⚠ PRE-MERGE GÜVENLİK DÜZELTMESİ: eskiden 'open' yazılıp yalnız 'source'
+// filtresiyle dışlanıyordu — bu, status='open'ın HER YERDE "kart meşgul"
+// anlamına gelmesi gereken değişmezini bozuyordu. Artık AÇIKÇA AYRI bir
+// durum: 'legacy_unresolved'. Bkz. pdks_gunluk_faz8a_donem_durumu().
+ok("E002 backfill: status=legacy_unresolved (eksik çıkış GERÇEĞİ KORUNDU, UYDURMA çıkış YOK, 'open' İLE KARIŞTIRILMADI)",
+    $e002['status'] === 'legacy_unresolved' && $e002['exit_event_id'] === null);
+
+// ⚠ §3 — "operasyonel sayımlar bu satırları SESSİZCE KAYBETMEMELİ": kilit
+// sorgularının AKSİNE (yalnız status='open'), RAPOR/LİSTE fonksiyonları
+// hem 'open' HEM 'legacy_unresolved'i sayar/gösterir.
+$eskiEksikler = pdks_gunluk_faz8a_eksik_cikislar(date('Y-m-d'), null, null, $eskiDb);
+ok('§3 — pdks_gunluk_faz8a_eksik_cikislar() legacy_unresolved (E002) raporda KAYBOLMADI',
+    !empty(array_filter($eskiEksikler, fn($e) => $e['card_no'] === 'E002')));
+
+$eskiGunListesi = pdks_gunluk_faz8a_gun_listesi(date('Y-m-d'), null, null, null, $eskiDb);
+$eskiOturumSatiri = null;
+foreach ($eskiGunListesi as $satir) { if ((int)$satir['session']['id'] === $eskiSid) { $eskiOturumSatiri = $satir; break; } }
+ok('§3 — günlük liste "eksik" sayacı legacy_unresolved dönemi de SAYIYOR (operasyonel sayım kaybolmuyor)',
+    $eskiOturumSatiri !== null && (int)$eskiOturumSatiri['eksik_toplam'] >= 1);
+
+// ⚠ §1/§3 — puantaj detay etiketleri ÜÇ durumu AÇIKÇA AYIRIYOR mu?
+// (pdks_gunluk_faz8a_oturum_donemleri() → pdks_gunluk_faz8a_donem_durumu())
+$eskiDonemler = pdks_gunluk_faz8a_oturum_donemleri($eskiSid, $eskiDb);
+$e001Satir = null; $e002Satir = null;
+foreach ($eskiDonemler as $d) {
+    if ($d['card_no'] === 'E001') $e001Satir = $d;
+    if ($d['card_no'] === 'E002') $e002Satir = $d;
+}
+ok('Puantaj: E001 (closed) "tam" kod/"✅ Tam" etiketiyle görünüyor',
+    $e001Satir !== null && $e001Satir['durum']['kod'] === 'tam' && $e001Satir['durum']['etiket'] === '✅ Tam');
+ok('Puantaj: E002 (legacy_unresolved) AYRI kod/etiketle görünüyor — canlı "açık" ile KARIŞMIYOR',
+    $e002Satir !== null && $e002Satir['durum']['kod'] === 'legacy_unresolved'
+    && $e002Satir['durum']['etiket'] === '📜 Geçmiş — Eksik Çıkış');
 
 echo "\n=== 20. LEGACY BACKFILL AÇIK DÖNEMİ YENİ TARAMAYI ENGELLEMİYOR ===\n";
 $eskiCavus2 = pdks_gunluk_cavus_olustur(['code' => 'C002', 'name' => 'Yeni Çavuş (Faz 8A)'], 1, $eskiDb);
 $eskiOturum2 = pdks_gunluk_oturum_ac_veya_getir((int)$eskiCavus2['id'], 1, $eskiDb);
 $e002YeniTipId = (int)$eskiDb->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
 $e002YeniGiris = pdks_gunluk_faz8a_giris_kaydet('800000002', 'usb_decimal', (int)$eskiOturum2['session']['id'], $e002YeniTipId, 'tam', 1, $eskiDb);
-ok('E002 (aylar önce backfill ile "open" işaretlenmiş eski kayıt) YENİ Faz 8A taramasında GİRİŞ yapabiliyor — geçmiş, canlı operasyonu KİLİTLEMİYOR',
+ok('E002 (aylar önce backfill ile "legacy_unresolved" işaretlenmiş eski kayıt) YENİ Faz 8A taramasında GİRİŞ yapabiliyor — geçmiş, canlı operasyonu KİLİTLEMİYOR (status hiçbir zaman open OLMADI)',
     $e002YeniGiris['ok'] === true, json_encode($e002YeniGiris));
 
 echo "\n=== 21. BACKFILL İDEMPOTENT (İKİNCİ ÇALIŞTIRMA MÜKERRER SATIR ÜRETMEZ) ===\n";
