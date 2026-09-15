@@ -191,6 +191,19 @@ ok('review 5: migrasyon PDO detayını operator mesajına koymuyor, ayrıntıyı
     && substr_count($migReviewGovde, "error_log('[pdks_gunluk_faz8a_migrate]") >= 4
     && !preg_match("/'mesaj'\s*=>\s*\$e->getMessage\(\)/", $migReviewGovde));
 
+preg_match('/function pdks_gunluk_kart_olustur.*?\n\}/s', $gunlukSrc, $kartOlusturReviewM);
+$kartOlusturReviewGovde = $kartOlusturReviewM[0] ?? '';
+
+ok('review 6: core kart oluşturma migrasyon öncesi nötr kartı DB yazımından önce güvenli reddediyor',
+    $kartOlusturReviewGovde !== ''
+    && str_contains($kartOlusturReviewGovde, '$workerTypeId === null && !pdks_gunluk_faz8a_sema_hazir($pdo)')
+    && str_contains($kartOlusturReviewGovde, "'faz8a_migrasyon_gerekli'"));
+
+ok('review 7: core kart oluşturma PDO ayrıntısını operatöre sızdırmıyor, server loguna yazıyor',
+    $kartOlusturReviewGovde !== ''
+    && str_contains($kartOlusturReviewGovde, "error_log('[pdks_gunluk_kart_olustur] ")
+    && !preg_match("/'hata'\s*=>\s*[^,\n]*getMessage\(\)/", $kartOlusturReviewGovde));
+
 echo "\n=== 9. AŞIRI MÜHENDİSLİK YASAKLARI — Faz 8B/8C kapsam dışı ===\n";
 $yasakli8b8c = ['overtime_rate', 'fazla_mesai_ucreti', 'approved_by_accounting', 'offline_queue',
                 'indexeddb', 'service_worker_mutation', 'fx_rate', 'exchange_rate'];

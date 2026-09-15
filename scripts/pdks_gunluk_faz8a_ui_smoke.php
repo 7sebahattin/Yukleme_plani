@@ -111,7 +111,6 @@ pdks_gunluk_migrate(db());
 
 $kadinId = (int)db()->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 pdks_gunluk_cavus_olustur(['code' => 'C001', 'name' => 'Ayşe Çavuş'], 1, db());
-pdks_gunluk_kart_olustur(['card_no' => 'K001', 'ham_uid' => '631799511', 'kaynak' => 'usb_decimal'], 1, db());
 
 function renderPage(string $file, array $get = []): string {
     global $ROOT;
@@ -159,6 +158,17 @@ $migRapor = pdks_gunluk_faz8a_migrate(db());
 ok('migrasyon hatasız çalıştı (hiçbir adım "hata" durumunda değil)',
     !in_array('hata', array_column($migRapor, 'durum'), true), json_encode($migRapor));
 ok('pdks_gunluk_faz8a_sema_hazir() artık true', pdks_gunluk_faz8a_sema_hazir(db()) === true);
+
+// Nötr kart yalnız Faz 8A şeması hazır olduktan sonra oluşturulur.
+// Çekirdek güvenlik kapısı migrasyon öncesinde bunu bilerek reddeder.
+$k001Sonuc = pdks_gunluk_kart_olustur(
+    ['card_no' => 'K001', 'ham_uid' => '631799511', 'kaynak' => 'usb_decimal'],
+    1,
+    db()
+);
+if (!($k001Sonuc['ok'] ?? false)) {
+    throw new RuntimeException('K001 nötr test kartı oluşturulamadı: ' . ($k001Sonuc['hata'] ?? 'bilinmeyen hata'));
+}
 
 echo "\n=== 3. FAZ 8A ŞEMASI HAZIRKEN — İŞÇİ TİPİ + MESAİ SEÇİMİ GÖRÜNÜR ===\n";
 $s1 = renderPage('gunluk_isci_giris_cikis.php');

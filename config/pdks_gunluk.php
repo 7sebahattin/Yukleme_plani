@@ -748,6 +748,17 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
         }
     }
 
+    // Savunma derinliği: normal UI bu durumu zaten engeller, fakat çekirdek
+    // fonksiyon da migrasyon öncesi NOT NULL şemaya nötr kart yazmayı denemez.
+    // Eski istemci geçerli bir worker_type_id gönderiyorsa çalışmaya devam eder.
+    if ($workerTypeId === null && !pdks_gunluk_faz8a_sema_hazir($pdo)) {
+        return [
+            'ok' => false,
+            'kod' => 'faz8a_migrasyon_gerekli',
+            'hata' => 'Yeni nötr kart tanımlamak için önce Faz 8A migrasyonu tamamlanmalıdır.',
+        ];
+    }
+
     $stC = $pdo->prepare("SELECT id FROM worker_cards WHERE card_no = ?");
     $stC->execute([$cardNo]);
     if ($stC->fetchColumn()) {
@@ -785,12 +796,13 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
     } catch (PDOException $e) {
         // Son çare — bu tablonun KENDİ UNIQUE kısıtı (card_no/canonical_uid),
         // yukarıdaki SELECT ön-kontrolüyle bu INSERT arasında AYNI worker_cards
-        // tablosuna yazan eşzamanlı bir çağrı olduysa burada yakalanır. ⚠ Bu,
-        // employee_cards'a eşzamanlı yazan bir çağrıyı YAKALAMAZ — o çapraz-
-        // tablo senaryosu KENDİ UNIQUE kısıtımızın kapsamı DIŞINDADIR (bkz.
-        // pdks_gunluk_tablolar()'daki "UID ÇAKIŞMA STRATEJİSİ" notu — bilinen,
-        // kabul edilmiş V1 kısıtı).
-        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kart kaydedilemedi: ' . $e->getMessage()];
+        // tablosuna yazan eşzamanlı bir çağrı olduysa burada yakalanır.
+        error_log('[pdks_gunluk_kart_olustur] ' . $e->getMessage());
+        return [
+            'ok' => false,
+            'kod' => 'yazma_hatasi',
+            'hata' => 'Kart kaydedilemedi. Lütfen tekrar deneyin.',
+        ];
     }
 
     if (function_exists('audit_log_event')) {
