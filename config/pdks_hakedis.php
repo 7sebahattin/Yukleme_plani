@@ -451,6 +451,27 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
         return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
     }
 
+    // ⚠ FAZ 8A MALİ GÜVENLİK KAPISI (görev talimatı §23 — "Do NOT allow the
+    // old Phase 4 entitlement engine to silently produce financially
+    // incorrect results from NEW Phase 8A Tam/Yarım periods"): bu oturumun
+    // EN AZ bir mesai dönemi declared_attendance_class != 'tam' ise (yani
+    // Yarım Mesai olarak beyan edilmişse), hakediş TAMAMEN REDDEDİLİR —
+    // yarım günü tam gün fiyatıyla FİYATLAMAK yerine güvenle DURULUR. Faz
+    // 8B'nin Tam/Yarım oran mimarisi gelene kadar bu oturum finansal olarak
+    // KESİNLEŞTİRİLEMEZ/hesaplanamaz. Tümü 'tam' (veya Faz 8A henüz aktif
+    // değilse/geriye aktarılmış eski dönemlerse — bunlar hep 'tam' yazılır,
+    // bkz. pdks_gunluk_faz8a_backfill()) oturumlar bu kapıdan ETKİLENMEZ,
+    // COUNT tabanlı fiyatlama AYNEN çalışmaya devam eder.
+    if (function_exists('pdks_gunluk_faz8a_sema_hazir') && pdks_gunluk_faz8a_sema_hazir($pdo)) {
+        $stYarim = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND declared_attendance_class <> 'tam'");
+        $stYarim->execute([$sessionId]);
+        if ((int)$stYarim->fetchColumn() > 0) {
+            return ['ok' => false, 'kod' => 'faz8a_degerlendirme_gerekli',
+                     'hata' => 'Bu mesai kaydı yeni Tam/Yarım mesai modelini kullanıyor. '
+                             . 'Hakediş Faz 8B mesai değerlendirmesi tamamlanmadan kesinleştirilemez.'];
+        }
+    }
+
     $sayim = function_exists('pdks_gunluk_oturum_kart_sayimi') ? pdks_gunluk_oturum_kart_sayimi($sessionId, $pdo) : [];
     if (!$sayim) {
         return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Bu mesaide hiç GİRİŞ kaydı yok — hesaplanacak işçi yok.'];

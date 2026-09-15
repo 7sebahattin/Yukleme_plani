@@ -111,8 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 
 $tipler = pdks_gunluk_tip_listele(true, $pdo);
-$ilkTipId = $tipler[0]['id'] ?? 0;
-$onerilenKartNo = $ilkTipId ? pdks_gunluk_sonraki_kart_no((int)$ilkTipId, $pdo) : '';
+// ⚠ FAZ 8A: kart artık NÖTR oluşturulur (tip taramada seçilir, bkz.
+// gunluk_isci_giris_cikis.php) — öneri numarası tipten BAĞIMSIZ 'K' önekiyle üretilir.
+$onerilenKartNo = pdks_gunluk_sonraki_kart_no(0, $pdo);
 
 // ── Kart listesi (filtre) ──────────────────────────────────
 $q = trim($_GET['q'] ?? '');
@@ -131,10 +132,13 @@ $whereSql = implode(' AND ', $where);
 
 $kartlar = [];
 try {
+    // ⚠ FAZ 8A: LEFT JOIN — worker_type_id artık NULL olabilir (nötr kart).
+    // Eski INNER JOIN, worker_type_id'si NULL olan (Faz 8A'da yeni oluşturulan
+    // NORMAL) kartları listeden SESSİZCE DÜŞÜRÜRDÜ.
     $st = $pdo->prepare(
         "SELECT w.*, t.name AS tip_adi, t.code AS tip_kodu
            FROM worker_cards w
-           JOIN worker_types t ON t.id = w.worker_type_id
+           LEFT JOIN worker_types t ON t.id = w.worker_type_id
           WHERE $whereSql
           ORDER BY w.created_at DESC, w.id DESC
           LIMIT 300"
@@ -168,9 +172,11 @@ if ($basari !== ''): ?>
      personel_kartlar.php İLE BİREBİR AYNI — burada TEKRARLANMADI. -->
 <div class="card" style="padding:16px 18px;margin-bottom:20px">
     <h2 style="margin-top:0">Yeni Kart Tanımla</h2>
-    <?php if (empty($tipler)): ?>
-    <p class="muted">Önce en az bir <a href="isci_tipleri.php">işçi tipi</a> tanımlamalısınız.</p>
-    <?php else: ?>
+    <p class="muted" style="margin-top:-6px;font-size:.85rem">
+        Kart artık NÖTR bir jetondur — işçi tipi ve mesai (Tam/Yarım) burada DEĞİL,
+        her taramada <a href="gunluk_isci_giris_cikis.php">Giriş / Çıkış</a> ekranında seçilir.
+        Aynı fiziksel kart farklı günlerde/çavuşlarda farklı işçi tipleri için kullanılabilir.
+    </p>
     <form method="post">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="action" value="kart_ekle">
@@ -188,14 +194,6 @@ if ($basari !== ''): ?>
         </div>
         <div class="pdks-form-grid" style="margin-top:14px">
             <label>
-                <span class="form-label">İşçi Tipi *</span>
-                <select name="worker_type_id" required>
-                    <?php foreach ($tipler as $t): ?>
-                    <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label>
                 <span class="form-label">Kart No *</span>
                 <input type="text" name="card_no" maxlength="30" required value="<?= h($onerilenKartNo) ?>">
             </label>
@@ -206,7 +204,6 @@ if ($basari !== ''): ?>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top:14px">KARTI HAVUZA EKLE</button>
     </form>
-    <?php endif; ?>
 </div>
 
 <!-- ── Kart listesi ───────────────────────────────────────── -->
@@ -240,7 +237,7 @@ if ($basari !== ''): ?>
 <table class="data-table">
 <thead><tr>
     <th>Kart No</th>
-    <th>Tip</th>
+    <th>Tip (eski/kalıcı)</th>
     <th>UID (kanonik)</th>
     <th>Durum</th>
     <th>Tanımlandı</th>
@@ -250,13 +247,13 @@ if ($basari !== ''): ?>
 <?php foreach ($kartlar as $k): ?>
 <tr>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
-    <td><?= h($k['tip_adi']) ?></td>
+    <td class="muted"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) : '— (nötr)' ?></td>
     <td class="muted pdks-uid"><?= h($k['canonical_uid']) ?></td>
     <td><span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
         <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span></td>
     <td class="muted"><?= h(fmt_datetime($k['created_at'])) ?></td>
     <td class="actions-col">
-        <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= (int)$k['worker_type_id'] ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
+        <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
     </td>
 </tr>
 <?php endforeach; ?>
@@ -270,13 +267,13 @@ if ($basari !== ''): ?>
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-uid"><?= h($k['card_no']) ?></div>
-            <div class="pdks-row-sub"><?= h($k['tip_adi']) ?> · <?= h($k['canonical_uid']) ?></div>
+            <div class="pdks-row-sub"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) . ' · ' : '' ?><?= h($k['canonical_uid']) ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
             <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span>
     </div>
     <div class="pdks-card-actions">
-        <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= (int)$k['worker_type_id'] ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
+        <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
     </div>
 </div>
 <?php endforeach; ?>
@@ -301,8 +298,9 @@ if ($basari !== ''): ?>
                 <input type="text" name="card_no" id="iskCardNo" maxlength="30" required>
             </label>
             <label>
-                <span class="form-label">İşçi Tipi *</span>
-                <select name="worker_type_id" id="iskWorkerTypeId" required>
+                <span class="form-label">Tip (eski/kalıcı — Faz 8A'da kullanılmaz)</span>
+                <select name="worker_type_id" id="iskWorkerTypeId">
+                    <option value="0">— (nötr, tip yok) —</option>
                     <?php foreach ($tipler as $t): ?>
                     <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
                     <?php endforeach; ?>
