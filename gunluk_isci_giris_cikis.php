@@ -354,8 +354,8 @@ render_flash();
             osc.stop(basla + sureMs / 1000);
         } catch (e) { /* ses arızası kaydı ASLA engellemez */ }
     }
-    function sesBasarili() { biples(1046, 0.11, 0); }
-    function sesHata()     { biples(220, 0.12, 0); biples(180, 0.16, 0.14); }
+    function sesBasarili() { biples(1046, 110, 0); }
+    function sesHata()     { biples(220, 120, 0); biples(180, 160, 140); }
     // İlk kullanıcı etkileşiminde bağlamı hazırla (tarayıcı autoplay kısıtı).
     document.addEventListener('click', function initAudioOnce() {
         sesBaglami();
