@@ -113,15 +113,19 @@ ok('config/pdks_hakedis.php: bu dört tablo için CREATE TABLE YOK (yalnız KEND
 // pdks_takip_static_smoke.php'de ayrıca doğrulanıyor. NFC tarama dosyaları
 // (giris_cikis.php/pdks_nfc_test.php/assets/pdks.js/gunluk_isci_giris_cikis.php)
 // hâlâ tamamen dokunulmamış olmalı.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php gunluk_isci_giris_cikis.php giris_cikis.php pdks_nfc_test.php assets/pdks.js 2>&1'));
-ok('config/pdks_gunluk.php dışındaki Faz 1-3 dosyaları (tarama sayfaları) diff\'i BOŞ — Faz 4 onları YENİDEN TASARLAMADI',
-    !preg_match('/gunluk_isci_giris_cikis\.php|giris_cikis\.php|pdks_nfc_test\.php|assets\/pdks\.js/', $gcDiff), $gcDiff);
-ok('config/pdks_gunluk.php\'deki TEK değişiklik YENİ bir fonksiyon EKLEMEK (pdks_gunluk_oturum_kart_sayimi) — mevcut hiçbir satır SİLİNMEDİ',
-    (function () use ($KOK) {
-        $diff = (string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/pdks_gunluk.php 2>&1');
-        $silinen = array_filter(explode("\n", $diff), fn($l) => preg_match('/^-(?!--)/', $l) === 1);
-        return count($silinen) === 0;
-    })());
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) config/pdks_gunluk.php
+// VE gunluk_isci_giris_cikis.php'yi BİLİNÇLİ OLARAK, KAPSAMI BELİRLİ biçimde
+// değiştirdi (nötr kart + mesai dönemi modeli — görev talimatının KENDİSİ:
+// "This phase changes a central attendance assumption"). Bu YÜZDEN "sıfır
+// satır silindi" (Faz 4'ün KENDİ, o zamanki kapsamı için doğru olan) kuralı
+// artık config/pdks_gunluk.php için GEÇERLİ DEĞİL — Faz 8A'nın KENDİ static
+// testi o dosyadaki değişikliklerin (worker_cards.worker_type_id nullable,
+// eski UNIQUE kısıtının kaldırılması, mevcut fonksiyonlara dahili dallanma)
+// KAPSAM İÇİNDE ve BELGELİ olduğunu AYRICA doğrular. NFC tarama dosyaları
+// (giris_cikis.php/pdks_nfc_test.php/assets/pdks.js) HÂLÂ tamamen dokunulmamış olmalı.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js 2>&1'));
+ok('Kalıcı personel NFC tarama dosyaları diff\'i BOŞ — Faz 4 onları YENİDEN TASARLAMADI',
+    $gcDiff === '', $gcDiff);
 
 echo "\n=== 6. HAKEDİŞ HESABI BİNARY FLOAT KULLANMIYOR (görev madde 12/18) ===\n";
 preg_match('/function pdks_hakedis_hesapla.*?\n\}\n/s', $gunlukSrc . $hakedisSrc, $hesM);

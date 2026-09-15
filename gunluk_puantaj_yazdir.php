@@ -89,6 +89,8 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
             <th>İşçi Tipi</th>
             <th>Giriş Saati</th>
             <th>Çıkış Saati</th>
+            <th>Süre</th>
+            <th>Mesai</th>
             <th>Durum</th>
         </tr></thead>
         <tbody>
@@ -98,11 +100,13 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
             <td><?= h($k['tip']) ?></td>
             <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
             <td><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '' ?></td>
+            <td><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></td>
+            <td><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
             <td><?= $k['cikis_saat'] ? 'Tam' : '⚠️ Eksik Çıkış' ?></td>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($kartlar)): ?>
-        <tr><td colspan="5" style="text-align:center;color:#666">Bu mesaide kart hareketi yok.</td></tr>
+        <tr><td colspan="7" style="text-align:center;color:#666">Bu mesaide kart hareketi yok.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

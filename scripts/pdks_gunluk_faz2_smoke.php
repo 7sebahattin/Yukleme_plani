@@ -285,18 +285,30 @@ $stDupGiris = db()->prepare(
          recorded_by_user_id, server_event_time)
      VALUES (?,?,?,?,?,?,?,?,?,?,?)"
 );
-$mukerrerSatirEngellendi = false;
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) bu kısıtı
+// BİLEREK KALDIRDI — "aynı kart aynı gün en fazla bir kez" kuralı Faz 8A'da
+// GEÇERSİZDİR, aynı kart aynı gün defalarca (farklı/aynı çavuşta) yeniden
+// kullanılabilir. Bu YÜZDEN ikinci bir GİRİŞ satırı artık DB seviyesinde
+// İMKANSIZ DEĞİL — Faz 2/3'ün KENDİ sayaç/kilit mantığı (yukarıdaki 9b/9a)
+// hâlâ AYNEN çalışır, yalnız bu ESKİ DB-seviyesi son-çare kısıtı Faz 8A'nın
+// yeni "tek açık dönem" kuralı LEHİNE BİLİNÇLİ OLARAK kaldırıldı.
+$ikinciSatirYazildiMi = false;
 try {
-    // K002 bölüm 4'te Ayşe'nin oturumunda GİRİŞ yaptı (hâlâ içeride) — AYNI
-    // kart/gün/depo/yön için BAŞKA bir session_id'den (Mehmet'in oturumu)
-    // ikinci bir GİRİŞ satırı eklemeyi dener.
     $stDupGiris->execute([$mehmetSessionId, (int)$k2['card_id'], 'GIRIS', 'usb_decimal', 'ZZZZZZZZ',
         $kadinId, 'Kadın', date('Y-m-d'), 'Depo A', 1, date('Y-m-d H:i:s')]);
+    $ikinciSatirYazildiMi = true;
 } catch (PDOException $e) {
-    $mukerrerSatirEngellendi = true;
+    $ikinciSatirYazildiMi = false;
 }
-ok('AYNI kart/gün/depo/yön için İKİNCİ olay satırı DB SEVİYESİNDE (uq_dwce_card_day_depo_type) İMKANSIZ',
-    $mukerrerSatirEngellendi === true);
+ok('Faz 8A: eski uq_dwce_card_day_depo_type kısıtı kaldırıldığı için ham olay satırı artık DB\'de İZİN VERİLİYOR (uygulama katmanı kuralı Faz 2/3\'te hâlâ ayrı korunuyor, bkz. 9a/9b)',
+    $ikinciSatirYazildiMi === true);
+// ⚠ Bu satır BİLEREK, DOĞRUDAN (uygulama fonksiyonlarını ATLAYARAK) yazıldı
+// — yalnız DB kısıtının kaldırıldığını KANITLAMAK içindi. Testin geri kalanı
+// (bölüm 10+) K002'nin normal, fonksiyonlar üzerinden akan durumunu
+// varsayıyor; bu YAPAY/eşleşmemiş satır TEMİZLENMEZSE sonraki eksik-çıkış
+// sayaçlarını BOZAR — bu yüzden geri alınır (asıl uygulama akışının
+// YAZMADIĞI bir satır, testin geri kalanında KALMAMALI).
+db()->prepare("DELETE FROM daily_worker_card_events WHERE canonical_uid_snapshot = 'ZZZZZZZZ'")->execute();
 
 echo "\n=== 10. KAYIP/DEVRE DIŞI KART REDDİ (yalnız GİRİŞ) ===\n";
 $k4 = kartEkle('K004', $kadinId, '222333444');

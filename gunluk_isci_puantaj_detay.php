@@ -96,8 +96,10 @@ render_flash();
 <thead><tr>
     <th>Kart No</th>
     <th>Tip</th>
+    <th>Mesai</th>
     <th>Giriş Saati</th>
     <th>Çıkış Saati</th>
+    <th>Süre</th>
     <th>Durum</th>
 </tr></thead>
 <tbody>
@@ -105,8 +107,10 @@ render_flash();
 <tr>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
     <td><?= h($k['tip']) ?></td>
+    <td class="muted"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
     <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
+    <td class="muted"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
 </tr>
 <?php endforeach; ?>
@@ -119,8 +123,8 @@ render_flash();
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($k['card_no']) ?> · <?= h($k['tip']) ?></div>
-            <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></div>
+            <div class="pdks-row-name"><?= h($k['card_no']) ?> · <?= h($k['tip']) ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?></div>
+            <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
     </div>

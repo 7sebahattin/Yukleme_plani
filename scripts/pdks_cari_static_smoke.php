@@ -118,8 +118,17 @@ ok('config/pdks_cari.php: yalnız TEK yeni tablo tanımlıyor (foreman_payments)
 // dokundu — bu YÜZDEN o beş dosya bu listeden ÇIKARILDI; Faz 7'nin KENDİ
 // static testi (pdks_takip_static_smoke.php) o dosyaların İŞ MANTIĞININ
 // (yalnız UI/export/print DIŞINDA) değişmediğini AYRICA doğrular.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php gunluk_isci_giris_cikis.php giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php cavus_hakedis.php 2>&1'));
-ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI',
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php): görev
+// talimatının KENDİSİ "bu faz merkezi bir devam varsayımını değiştiriyor"
+// diyor — config/pdks_gunluk.php + gunluk_isci_giris_cikis.php Faz 8A'nın
+// TAM OLARAK kapsamıdır (nötr kart + mesai dönemi modeli), bu YÜZDEN
+// listeden BİLİNÇLİ OLARAK çıkarıldı; Faz 8A'nın KENDİ static testi o
+// dosyalardaki değişikliğin kapsam İÇİNDE kaldığını AYRICA doğrular. Faz
+// 5'in ASIL kontrol ettiği "kalıcı personel NFC akışına DOKUNULMADI" iddiası
+// (giris_cikis.php/pdks_nfc_test.php/assets/pdks.js) ve hakediş sayfaları
+// (cavus_fiyatlari.php/cavus_hakedis.php) burada AYNEN kalır.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php cavus_hakedis.php 2>&1'));
+ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI (Faz 8A\'nın KENDİ kapsamı olan config/pdks_gunluk.php + gunluk_isci_giris_cikis.php AYRICA test edilir)',
     $gcDiff === '', $gcDiff);
 // ⚠ DÜZELTME TURU: kullanıcının açık talimatıyla pdks_hakedis_hesapla()'nın
 // 'TRY' hardcode HATASI (financial-integrity düzeltmesi, bu turun ASIL

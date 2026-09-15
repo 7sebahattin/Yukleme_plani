@@ -222,10 +222,15 @@ foreach ($yeniDosyalar as $f) {
 ok('migrate.php: Faz 7 için YENİ bir migrasyon aksiyonu YOK (gerek yok)', !str_contains(oku('migrate.php'), 'personel_takip'));
 
 echo "\n=== FAZ 1-6 DOSYALARINA İŞ MANTIĞI DEĞİŞİKLİĞİ YOK (yalnız nav/export/print eklendi) ===\n";
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) config/pdks_gunluk.php,
+// config/pdks_hakedis.php, config/pdks_rapor.php, isci_kartlari.php VE
+// gunluk_isci_giris_cikis.php'yi BİLİNÇLİ, KAPSAMI BELİRLİ biçimde değiştirdi
+// (nötr kart + mesai dönemi modeli — görev talimatının KENDİSİ: "This phase
+// changes a central attendance assumption"). Bu beş dosya BU YÜZDEN listeden
+// çıkarıldı; Faz 8A'nın KENDİ static testi kapsamı doğrular.
 foreach ([
-    'config/pdks_gunluk.php', 'config/pdks_hakedis.php', 'config/pdks_rapor.php',
-    'personel.php', 'personel_kartlar.php', 'giris_cikis.php', 'cavuslar.php', 'isci_kartlari.php',
-    'isci_tipleri.php', 'gunluk_isci_giris_cikis.php', 'cavus_fiyatlari.php', 'cavus_cari.php',
+    'personel.php', 'personel_kartlar.php', 'giris_cikis.php', 'cavuslar.php',
+    'isci_tipleri.php', 'cavus_fiyatlari.php', 'cavus_cari.php',
 ] as $f) {
     $diff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- ' . escapeshellarg($f) . ' 2>&1'));
     ok("$f: diff'i BOŞ — Faz 7 dokunmadı", $diff === '', $diff);

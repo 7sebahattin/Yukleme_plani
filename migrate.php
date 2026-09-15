@@ -81,6 +81,9 @@ $pdks_hakedis_ran     = false;
 $pdks_cari_results = [];   // Cari hesap/ödeme tablo migrasyonu sonucu
 $pdks_cari_ran     = false;
 
+$pdks_faz8a_results = [];   // Faz 8A (nötr kart / mesai dönemi) migrasyonu sonucu
+$pdks_faz8a_ran     = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_ran     = true;
@@ -119,6 +122,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cari', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk_faz8a') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_faz8a_ran     = true;
+    $pdks_faz8a_results = pdks_gunluk_faz8a_migrate($pdo);
+    foreach ($pdks_faz8a_results as $pr) {
+        if (in_array($pr['durum'], ['olusturuldu', 'guncellendi', 'kaldirildi', 'calisti'], true)) {
+            audit_log_event('migrate', 'pdks_gunluk_faz8a', null, null,
+                ['operation' => $pr['adim'], 'durum' => $pr['durum'], 'mesaj' => $pr['mesaj']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -387,6 +400,53 @@ render_header('Şema Migrasyon');
         foreach (pdks_cari_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
     </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Faz 8A — Nötr İşçi Kartı / Mesai Dönemi</h2>
+    <p style="color:#555;font-size:.9em;">
+      Dört adım tek çağrıda: ① <code>daily_worker_work_periods</code> tablosunu oluşturur
+      (yeni YETKİLİ katılım kaydı) ② <code>worker_cards.worker_type_id</code>'yi NULL kabul
+      eder hâle getirir (kart artık nötr) ③ eski <code>uq_dwce_card_day_depo_type</code>
+      "aynı kart aynı gün bir kez" kısıtını kaldırır (Faz 8A'nın "aynı gün defalarca
+      kullanılabilir" kuralıyla çakışıyordu) ④ Faz 1-7'nin geçmiş GİRİŞ/ÇIKIŞ çiftlerini
+      yeni tabloya AKTARIR (backfill — yalnız EKLER, eski satırlara DOKUNMAZ; eski puantaj
+      geçmişinin migrasyon SONRASI da okunabilir kalması için gerekli).
+      <br><strong>Çalıştırılmadan önce:</strong> mevcut Giriş/Çıkış tarama sayfası ESKİ
+      kurallarla (aynı kart/gün/depoda bir kez) çalışmaya devam eder — kod ile migrasyon
+      arasında tarama BOZULMAZ. Çalıştırıldıktan HEMEN SONRA yeni "tek açık dönem" kuralı
+      devreye girer.
+      <?php if ($pdks_faz8a_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_faz8a_results as $p8r): ?>
+        <br>&nbsp;&nbsp;<?= h($p8r['adim']) ?>: <?= h($p8r['durum']) ?> — <?= h($p8r['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Kontrol</th><th>Durum</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>daily_worker_work_periods tablosu</td>
+            <td style="color:<?= pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods') ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods') ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+          <tr>
+            <td>Faz 8A şeması TAM HAZIR (yeni tarama mantığı aktif mi)</td>
+            <td style="color:<?= pdks_gunluk_faz8a_sema_hazir($pdo) ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= pdks_gunluk_faz8a_sema_hazir($pdo) ? '✓ Aktif — yeni tek-açık-dönem kuralı çalışıyor' : '✗ Henüz değil — eski kurallar çalışıyor' ?>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_gunluk_faz8a">
+      <button type="submit" class="btn btn-primary">Faz 8A Migrasyonunu Çalıştır</button>
+    </form>
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">

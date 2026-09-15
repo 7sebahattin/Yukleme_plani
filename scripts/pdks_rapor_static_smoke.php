@@ -180,7 +180,12 @@ echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HA
 // pdks_cari_odeme_durum_etiketi) EKLEDİ, DB enum'una veya bakiye/ekstre
 // mantığına DOKUNMADI (bkz. pdks_takip_static_smoke.php'nin bunu AYRICA
 // doğrulayan kontrolü).
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- config/pdks_gunluk.php config/pdks_hakedis.php gunluk_isci_giris_cikis.php cavus_fiyatlari.php cavus_hakedis.php cavus_cari.php 2>&1'));
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) config/pdks_gunluk.php,
+// config/pdks_hakedis.php (mali güvenlik kapısı) ve gunluk_isci_giris_cikis.php'yi
+// BİLİNÇLİ OLARAK değiştirdi — görev talimatının KENDİSİ merkezi devam
+// modelinin değiştiğini söylüyor. Bu üç dosya BU YÜZDEN listeden çıkarıldı;
+// Faz 8A'nın KENDİ static testi kapsamlarının BELİRLİ kaldığını doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_fiyatlari.php cavus_hakedis.php cavus_cari.php 2>&1'));
 ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ', $gcDiff === '', $gcDiff);
 // ⚠ Faz 6, üç çok satırlı literali (Faz 5'ten devralınan $p_gunluk +
 // 'muhasebe' + 'ik' izin dizileri) attendance.management_reports EKLEYEREK
@@ -234,6 +239,10 @@ $helpersBeklenenEskiSatirlar = [
     // içerik kaybı DEĞİL — pdks_faz1b_static_smoke.php'nin AYNI turda AYNI
     // gerekçeyle eklediği satırın eşi.
     "-    define('APP_SURUM', 'v217');",
+    // Faz 8A PRE-MERGE GÜVENLİK DÜZELTMESİ: v218'den v219'a — AYNI rutin
+    // tek satırlık sürüm damgası güncellemesi (bkz. yukarıdaki v217→v218
+    // emsali, pdks_faz1b_static_smoke.php'nin AYNI turda eklediği satırın eşi).
+    "-    define('APP_SURUM', 'v218');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

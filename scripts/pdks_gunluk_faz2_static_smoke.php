@@ -184,11 +184,16 @@ ok("pdks_gunluk_kart_durumlari() DÖNÜŞ DEĞERİNDE used_today/gun_kullanildi 
 ok('daily_worker_card_events DDL gövdesi çıkarılabildi (bkz. bölüm 6)', $eventDdl !== '');
 ok('work_date_snapshot sütunu eklendi (gün bazlı kısıt için kart olayına DAMGALANIR)', str_contains($eventDdl, '`work_date_snapshot`'));
 ok('depo_snapshot sütunu eklendi (gün+depo bazlı kısıt için)', str_contains($eventDdl, '`depo_snapshot`'));
-ok('UNIQUE(worker_card_id, work_date_snapshot, depo_snapshot, event_type) kısıtı VAR — "1 kart = 1 işçi/iş günü" kuralının DB SEVİYESİNDE garantisi',
-    (bool)preg_match('/UNIQUE KEY `uq_dwce_card_day_depo_type` \(`worker_card_id`, `work_date_snapshot`, `depo_snapshot`, `event_type`\)/', $eventDdl));
-ok('pdks_gunluk_oturum_kaydet() GİRİŞ dalında pdks_gunluk_kart_gun_kullanimi() ile ÖN-KONTROL yapıyor (dostça hata mesajı için, DB kısıtından ÖNCE)',
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) bu kısıtı
+// BİLEREK KALDIRDI — "1 kart = 1 işçi/iş günü" kuralı ARTIK GEÇERLİ DEĞİL.
+// Faz 2'nin KENDİ pdks_gunluk_oturum_kaydet()/pdks_gunluk_kart_gun_kullanimi()
+// LEGACY yolu (Faz 8A şeması hazır olmadığı ortamlarda hâlâ AYNEN çalışır)
+// aşağıda AYRICA doğrulanır — yalnız DB'nin KENDİ kısıtı artık YOK.
+ok('uq_dwce_card_day_depo_type Faz 8A tarafından base DDL\'den kaldırıldı (bkz. pdks_gunluk_faz8a_migrate)',
+    !str_contains($eventDdl, 'uq_dwce_card_day_depo_type'));
+ok('pdks_gunluk_oturum_kaydet() (LEGACY yol) GİRİŞ dalında pdks_gunluk_kart_gun_kullanimi() ile ÖN-KONTROL yapmaya DEVAM EDİYOR (dostça hata mesajı için)',
     (bool)preg_match('/function pdks_gunluk_oturum_kaydet.*?pdks_gunluk_kart_gun_kullanimi\(/s', $gunlukSrc));
-ok("hata kodu 'bugun_kullanilmis' tanımlı (aynı gün/aynı veya başka çavuş fark etmeksizin reddin ortak kodu)",
+ok("hata kodu 'bugun_kullanilmis' hâlâ tanımlı (LEGACY yol için — aynı gün/aynı veya başka çavuş fark etmeksizin reddin ortak kodu)",
     str_contains($gunlukSrc, "'bugun_kullanilmis'"));
 ok('INSERT try/catch İLE sarılı — eşzamanlı taramada UNIQUE kısıt ihlali de aynı dostça koda ÇEVRİLİYOR (yarış koşulu son çaresi)',
     (bool)preg_match('/try\s*\{\s*\$ins->execute\(\[[\s\S]{0,400}?\}\s*catch\s*\(PDOException/', $gunlukSrc));

@@ -184,12 +184,21 @@ $eventDdl = $eventDdlM[1] ?? '';
 ok('daily_worker_card_events DDL gövdesi çıkarılabildi', $eventDdl !== '');
 ok('idx_dwce_workdate_depo_type (work_date_snapshot, depo_snapshot, event_type) EKLENDİ',
     (bool)preg_match('/INDEX `idx_dwce_workdate_depo_type` \(`work_date_snapshot`, `depo_snapshot`, `event_type`\)/', $eventDdl));
-ok('Faz 2\'nin uq_dwce_card_day_depo_type kısıtına DOKUNULMADI (hâlâ mevcut)',
-    str_contains($eventDdl, 'uq_dwce_card_day_depo_type'));
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) bu kısıtı
+// BİLEREK KALDIRDI — "bir işçi kartı = bir işçi/iş günü" kuralı Faz 8A'da
+// GEÇERSİZDİR. Bu satır artık "kısıt hâlâ BURADA" yerine "kaldırma
+// pdks_gunluk_faz8a_migrate()'in KENDİ kontrollü ALTER'ından geçiyor, base
+// DDL'de artık YOK" doğrular — Faz 3'ün kendi testi bu supersede'i
+// GÖRMEZDEN GELMEZ.
+ok('uq_dwce_card_day_depo_type Faz 8A tarafından base DDL\'den kaldırıldı (bkz. pdks_gunluk_faz8a_migrate)',
+    !str_contains($eventDdl, 'uq_dwce_card_day_depo_type'));
 
-echo "\n=== 11. giris_cikis.php / pdks_nfc_test.php / assets/pdks.js / gunluk_isci_giris_cikis.php Faz 3'TE HİÇ DEĞİŞMEDİ ===\n";
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js gunluk_isci_giris_cikis.php 2>&1'));
-ok('bu dört dosyanın diff\'i BOŞ (görev talimatı: "Do NOT touch the proven NFC implementation")', $gcDiff === '', $gcDiff);
+echo "\n=== 11. giris_cikis.php / pdks_nfc_test.php / assets/pdks.js Faz 3'TE HİÇ DEĞİŞMEDİ ===\n";
+// ⚠ Faz 8A (bkz. scripts/pdks_gunluk_faz8a_static_smoke.php) gunluk_isci_giris_cikis.php'yi
+// BİLİNÇLİ OLARAK değiştirdi (İşçi Tipi/Tam-Yarım seçimi + Faz 8A kaydı) —
+// bu dosya listeden ÇIKARILDI, kalıcı personel NFC dosyaları AYNEN kalır.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js 2>&1'));
+ok('bu üç dosyanın diff\'i BOŞ (görev talimatı: "Do NOT touch the proven NFC implementation")', $gcDiff === '', $gcDiff);
 
 echo "\n=== 12. SIDEBAR AKTİF-SAYFA TESPİTİ GÜNCELLENDİ ===\n";
 // Faz 7: $a_puantaj (ve diğer 11 tekil aktif-sayfa değişkeni) sidebar
