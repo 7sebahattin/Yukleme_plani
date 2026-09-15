@@ -226,6 +226,15 @@ $beklenenEskiSatirlar = [
     "-                       'attendance.daily_reports'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports'],",
     "-                               'attendance.daily_reports'],",
+    // Sprint Günlük-İşçi-05 → Günlük-İşçi-06 (Faz 5, cari hesap/ödeme): AYNI üç
+    // çok satırlı literal + 'muhasebe' rolü İKİ yeni izinle (attendance.
+    // foreman_accounts, attendance.foreman_payments) genişletildi; 'ik' rolü
+    // BİLEREK BUNA DA DOKUNULMADI (görev talimatı: "ik: NO payment management
+    // by default" — belirsizlikte hesap görüntüleme de verilmedi). 'operator'
+    // yine DOKUNULMADI (aynı gerekçe: finansal ekranlar operatöre kapalı).
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements'))) || \$p_adm;",
+    "-                       'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'];",
+    "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'],",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

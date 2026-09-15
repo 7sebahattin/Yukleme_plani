@@ -140,11 +140,21 @@ ok('pdks_hakedis_girdi_kurus(): kullanıcı girdisi doğrulanmadan (regex geçme
     (bool)preg_match('/function pdks_hakedis_girdi_kurus.*?return null.*?return pdks_hakedis_tl_kurus/s', $hakedisKod));
 
 echo "\n=== 7. HİÇBİR ÖDEME/CARİ/FATURA/GENEL MUHASEBE YOK (kullanıcının açık talimatı) ===\n";
+// ⚠ Faz 5 (kullanıcının açık talimatı: "block unsafe reopen") pdks_hakedis_yeniden_ac()'a
+// TEK, belgelenmiş bir çapraz-modül güvenlik kontrolü ekledi — o kontrolün hata
+// mesajı KAÇINILMAZ olarak "ödeme"/"bakiye" kelimelerini içerir (kullanıcıya NEDEN
+// engellendiğini açıklamak için). Bu YENİ bir ödeme/cari YAZMA yolu AÇMAZ (bkz.
+// pdks_cari_static_smoke.php §7 — o kontrolün YALNIZ pdks_cari_odeme_var_mi()'yi
+// YUMUŞAK çağırdığını, sert bağımlılık KURMADIĞINI doğrular). Bu yüzden bu fonksiyonun
+// gövdesi taramadan ÇIKARILIR — dosyanın GERİ KALANI hâlâ tam kapsamda taranır.
+$hakedisKodTaramaHaric = preg_replace('/(\/\*\*.*?\*\/\s*)?function pdks_hakedis_yeniden_ac.*?\n\}\n/s', '', $hakedisKod);
+ok('pdks_hakedis_yeniden_ac() gövdesi + kendi docblock\'u tarama-dışı bırakılabildi (fonksiyon bulunabildi)', $hakedisKodTaramaHaric !== $hakedisKod);
 $yasakliKelimeler = ['payment', 'ödeme', 'odeme', 'invoice', 'fatura', 'cari_hesap', 'current_account',
-                      'bank', 'banka', 'cash', 'kasa', 'pdf', 'balance', 'bakiye'];
+                      'bank', 'banka', 'cash', 'kasa', 'pdf', 'balance', 'bakiye',
+                      'exchange rate', 'exchange_rate', 'kur_cevrim', 'fx_rate', 'doviz_kuru'];
 foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
-    ok("config/pdks_hakedis.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $hakedisKod));
+    ok("config/pdks_hakedis.php GERÇEK KODUNDA (Faz 5 reopen-koruma fonksiyonu HARİÇ) '$kelime' YOK", !preg_match($desen, $hakedisKodTaramaHaric));
 }
 foreach ($sayfalar as $f) {
     $kod = kodSadece(oku($f));
@@ -171,6 +181,28 @@ foreach (['pdks_hakedis_hesapla', 'pdks_hakedis_finalize', 'pdks_hakedis_yeniden
     ok("$fn() imzasında İSTEMCİDEN zaman parametresi YOK", !preg_match('/zaman|time/i', $imza), $imza);
 }
 ok("pdks_hakedis_hesapla() server-side date('Y-m-d H:i:s') kullanıyor", (bool)preg_match("/function pdks_hakedis_hesapla.*?date\('Y-m-d H:i:s'\)/s", $hakedisSrc));
+
+echo "\n=== 10. PARA BİRİMİ DÜZELTMESİ — İSTEMCİDEN GELMEZ, KARIŞIK PARA BİRİMİ REDDEDİLİR ===\n";
+preg_match('/function pdks_hakedis_hesapla\(([^)]*)\)/', $hakedisSrc, $hesSigM);
+ok("pdks_hakedis_hesapla() imzasında currency/para_birimi parametresi YOK (istemciden asla alınmaz)",
+    !preg_match('/currency|para_?birimi/i', $hesSigM[1] ?? ''), $hesSigM[1] ?? '');
+ok("pdks_hakedis_hesapla() gövdesinde sabit 'TRY' literal YAZMA/INSERT değeri olarak KULLANILMIYOR (yalnız boş-oran yer tutucusu yorumda geçebilir)",
+    !preg_match("/,\s*'TRY'\s*,/", $hM[0] ?? ''));
+ok("pdks_hakedis_hesapla(): para birimi UYGULANAN orandan (\$oran['currency']) OKUNUYOR",
+    (bool)preg_match('/\$oran\[.currency.\]/', $hM[0] ?? ''));
+ok("pdks_hakedis_hesapla(): birden fazla para birimi tespit edilince 'karisik_para_birimi' ile REDDEDİYOR",
+    (bool)preg_match('/karisik_para_birimi/', $hM[0] ?? ''));
+ok("pdks_hakedis_hesapla(): karışık para birimi kontrolü HERHANGİ bir DELETE/UPDATE/INSERT'TEN ÖNCE çalışıyor (validate-first — kısmi yazım yok)",
+    (function () use ($hM) {
+        $govde = $hM[0] ?? '';
+        $posKontrol = strpos($govde, 'karisik_para_birimi');
+        $posYazim = strpos($govde, 'DELETE FROM foreman_daily_entitlement_lines');
+        return $posKontrol !== false && $posYazim !== false && $posKontrol < $posYazim;
+    })());
+ok("pdks_hakedis_hesapla(): TASLAK yeniden-hesaplamasında (UPDATE dalı) da currency=? YAZILIYOR (donuk kalan eski 'TRY' YOK)",
+    (bool)preg_match("/UPDATE foreman_daily_entitlements\s+SET status='draft', currency=\?/", $hM[0] ?? ''));
+ok("cavus_fiyatlari.php'nin \$_POST['currency']'si YALNIZ pdks_hakedis_oran_ekle() (bir RATE tanımlamak) için kullanılıyor, pdks_hakedis_hesapla()/finalize()'a HİÇ GEÇİRİLMİYOR",
+    !preg_match('/pdks_hakedis_hesapla\([^)]*currency|pdks_hakedis_finalize\([^)]*currency/i', oku('cavus_fiyatlari.php')));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

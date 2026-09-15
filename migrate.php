@@ -25,6 +25,10 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
 require_once __DIR__ . '/config/pdks_hakedis.php';
+// Sprint Günlük-İşçi-06, Faz 5: cari hesap/ödeme tablosu da AYNI sebeple
+// BURADAN elle tetiklenir. Faz 1-4 tablolarına DOKUNMAZ — yalnız KENDİ
+// tek yeni tablosunu (foreman_payments) additive olarak ekler.
+require_once __DIR__ . '/config/pdks_cari.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -74,6 +78,9 @@ $pdks_gunluk_ran     = false;
 $pdks_hakedis_results = [];   // Hakediş (çavuş fiyat + hakediş) tablo migrasyonu sonucu
 $pdks_hakedis_ran     = false;
 
+$pdks_cari_results = [];   // Cari hesap/ödeme tablo migrasyonu sonucu
+$pdks_cari_ran     = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
     $pdks_ran     = true;
@@ -101,6 +108,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_hakedis_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_hakedis', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cari') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_cari_ran     = true;
+    $pdks_cari_results = pdks_cari_migrate($pdo);
+    foreach ($pdks_cari_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_cari', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -325,6 +342,49 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_hakedis_tablolar() as $phsql) { echo h($phsql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Cari Hesap Tabloları (Çavuş Ödeme / Cari — Faz 5)</h2>
+    <p style="color:#555;font-size:.9em;">
+      <code>foreman_payments</code>. Additive-only — Faz 1-4 tablolarına
+      (foremen/.../foreman_daily_entitlements) HİÇ DOKUNMAZ, yalnız KENDİ
+      tek yeni tablosunu ekler. Bakiye/ekstre bu tablodan ve KESİN
+      hakedişten CANLI türetilir — ikinci bir mutasyona açık defter YOK.
+      <?php if ($pdks_cari_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_cari_results as $pcr): ?>
+        <br>&nbsp;&nbsp;<?= h($pcr['tablo']) ?>: <?= h($pcr['durum']) ?> — <?= h($pcr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_cari_tablolar()) as $pct):
+          $pce = pdks_cari_tablo_var($pdo, $pct); ?>
+          <tr>
+            <td><?= h($pct) ?></td>
+            <td style="color:<?= $pce ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pce ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_cari">
+      <button type="submit" class="btn btn-primary">Cari Hesap Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_cari_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>
