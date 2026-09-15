@@ -29,6 +29,7 @@ require_pdks_gunluk('worker_cards');
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
+$faz8aHazir = pdks_gunluk_faz8a_sema_hazir($pdo);
 
 // ── Salt-okunur önizleme ucu — personel_kartlar.php'deki ajax=onizle İLE
 // AYNI JS'İ (assets/pdks.js) besler; burada AYRICA çapraz-sistem uyarısı da
@@ -68,7 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_pdks_gunluk('worker_cards');   // savunma derinliği
     $action = trim($_POST['action'] ?? '');
 
-    if ($action === 'kart_ekle') {
+    if ($action === 'kart_ekle' && !$faz8aHazir) {
+        // Kod deploy edilmiş fakat Faz 8A migrasyonu henüz tamamlanmamış olabilir.
+        // Bu pencerede worker_cards.worker_type_id üretimde hâlâ NOT NULL olabilir;
+        // nötr kartı NULL ile yazmayı denemek yerine kayıt güvenli biçimde durdurulur.
+        $hata = 'Yeni nötr kart tanımlamak için önce yönetici Faz 8A migrasyonunu tamamlamalıdır. Mevcut kartlarla giriş/çıkış çalışmaya devam eder.';
+    } elseif ($action === 'kart_ekle') {
         $veri = [
             'card_no'        => trim($_POST['card_no'] ?? ''),
             'worker_type_id' => (int)($_POST['worker_type_id'] ?? 0),
@@ -81,7 +87,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: isci_kartlari.php?ok=' . urlencode('Kart tanımlandı: ' . $sonuc['card_no']));
             exit;
         }
-        $hata = $sonuc['hata'] ?? 'Kart tanımlanamadı.';
+        // PDO/SQL ayrıntıları operatöre gösterilmez; teknik detay sunucu logunda kalır.
+        $hata = (($sonuc['kod'] ?? '') === 'yazma_hatasi')
+            ? 'Kart kaydedilemedi. Lütfen bilgileri kontrol edip yeniden deneyin; sorun sürerse yöneticinize başvurun.'
+            : ($sonuc['hata'] ?? 'Kart tanımlanamadı.');
     } elseif ($action === 'kart_duzenle') {
         $cardId = (int)($_POST['card_id'] ?? 0);
         $veri = [
@@ -177,6 +186,11 @@ if ($basari !== ''): ?>
         her taramada <a href="gunluk_isci_giris_cikis.php">Giriş / Çıkış</a> ekranında seçilir.
         Aynı fiziksel kart farklı günlerde/çavuşlarda farklı işçi tipleri için kullanılabilir.
     </p>
+    <?php if (!$faz8aHazir): ?>
+    <div class="flash flash-warning" style="margin-bottom:12px">
+        Yeni nötr kart tanımlama, Faz 8A migrasyonu tamamlanana kadar güvenlik nedeniyle kapalıdır. Mevcut kartlarla tarama çalışmaya devam eder.
+    </div>
+    <?php endif; ?>
     <form method="post">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="action" value="kart_ekle">
@@ -202,7 +216,7 @@ if ($basari !== ''): ?>
                 <input type="text" name="notes" maxlength="200">
             </label>
         </div>
-        <button type="submit" class="btn btn-primary" style="margin-top:14px">KARTI HAVUZA EKLE</button>
+        <button type="submit" class="btn btn-primary" style="margin-top:14px" <?= !$faz8aHazir ? 'disabled' : '' ?>>KARTI HAVUZA EKLE</button>
     </form>
 </div>
 
