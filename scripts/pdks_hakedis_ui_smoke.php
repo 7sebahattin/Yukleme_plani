@@ -144,10 +144,10 @@ $mehmetSessionId = (int)$oMehmet['session']['id'];
 pdks_gunluk_kart_olustur(['card_no' => 'K002', 'worker_type_id' => $kadinId, 'ham_uid' => '111222333', 'kaynak' => 'usb_decimal'], 1, db());
 pdks_gunluk_oturum_kaydet('111222333', 'usb_decimal', $mehmetSessionId, 'GIRIS', 1, db());
 
-// Faz 4 fixture'ı oluşturulduktan SONRA Faz 8A/8B migrasyonlarını çalıştır:
-// geçmiş final hakediş aynen kalmalı; sayfalar yeni şema hazırken de eski
-// finansal snapshot'ları okuyabilmelidir.
-$faz8aMig = pdks_gunluk_faz8a_migrate(db());
+// Faz 4 fixture'ı oluşturulduktan SONRA yalnız Faz 8B additive migrasyonunu
+// çalıştır. Faz 8A tablosu pdks_gunluk_tablolar() üzerinden SQLite'a zaten
+// kurulmuştur; MySQL'e özgü Faz 8A production migrasyonunu burada tekrar
+// çağırmak test ortamında gereksiz ve SQLite uyumsuz DDL'e yol açar.
 $faz8bMig = pdks_faz8b_migrate(db());
 
 function renderPage(string $file, array $get = [], array $post = []): string {
