@@ -1,17 +1,12 @@
 <?php
 // =========================================================
-// cavus_fiyatlari.php — Çavuş Fiyat Yönetimi (Günlük İşçi, Faz 4)
-//
-// Çavuş + işçi tipi + ETKİN TARİHLİ günlük ücret. Ücret DEĞİŞTİRİLMEZ
-// (UPDATE yok) — yalnız YENİ bir etkin dönem eklenir; eski dönem otomatik
-// kapanır (bkz. pdks_hakedis_oran_ekle() docblock'u). Geçmiş dönemler
-// SİLİNMEZ, listede kalır (kullanıcının açık talimatı: "Do not delete
-// financially referenced historical rates.").
+// cavus_fiyatlari.php — Çavuş Fiyat Yönetimi (Faz 8B)
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_hakedis('rates');
@@ -19,23 +14,38 @@ require_pdks_hakedis('rates');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
+pdks_faz8b_sayfa_kapisi($pdo);
 
 $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
-    require_pdks_hakedis('rates');   // savunma derinliği
+    require_pdks_hakedis('rates');
     $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     $workerTypeId = filter_var($_POST['worker_type_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
-    $ucret = trim((string)($_POST['daily_rate'] ?? ''));
+    $tamUcret = trim((string)($_POST['daily_rate'] ?? ''));
+    $yarimUcret = trim((string)($_POST['half_day_rate'] ?? ''));
+    $fmMode = trim((string)($_POST['overtime_mode'] ?? ''));
+    $fmUcret = trim((string)($_POST['overtime_rate'] ?? ''));
     $validFrom = trim((string)($_POST['valid_from'] ?? ''));
     $currency = trim((string)($_POST['currency'] ?? 'TRY')) ?: 'TRY';
 
     if (!$cavusId || !$workerTypeId) {
         $errors[] = 'Çavuş ve işçi tipi zorunludur.';
     } else {
-        $sonuc = pdks_hakedis_oran_ekle($cavusId, $workerTypeId, $ucret, $validFrom, $currency, (int)$auth_user['id'], $pdo);
+        $sonuc = pdks_faz8b_oran_ekle(
+            $cavusId,
+            $workerTypeId,
+            $tamUcret,
+            $yarimUcret,
+            $fmMode,
+            $fmUcret,
+            $validFrom,
+            $currency,
+            (int)$auth_user['id'],
+            $pdo
+        );
         if ($sonuc['ok']) {
             header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Yeni fiyat dönemi eklendi.'));
             exit;
@@ -45,14 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $basari = '';
-if (empty($errors) && isset($_GET['ok'])) $basari = trim($_GET['ok']);
+if (empty($errors) && isset($_GET['ok'])) $basari = trim((string)$_GET['ok']);
 
 $cavuslar = $pdo->query("SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name ASC")->fetchAll();
-$tipler   = pdks_gunluk_tip_listele(true, $pdo);   // yalnız AKTİF tipler — yeni oran YALNIZ bunlara eklenebilir
+$tipler = pdks_gunluk_tip_listele(true, $pdo);
 $seciliCavus = null;
 $oranlar = [];
 if ($cavusId !== null) {
-    foreach ($cavuslar as $c) { if ((int)$c['id'] === $cavusId) { $seciliCavus = $c; break; } }
+    foreach ($cavuslar as $c) {
+        if ((int)$c['id'] === $cavusId) { $seciliCavus = $c; break; }
+    }
     if ($seciliCavus) $oranlar = pdks_hakedis_oran_gecmisi($cavusId, $pdo);
 }
 
@@ -108,8 +120,24 @@ render_flash();
                 </select>
             </label>
             <label>
-                <span class="form-label">Günlük Ücret *</span>
-                <input type="text" name="daily_rate" required inputmode="decimal" placeholder="ör. 1200 veya 1200,50">
+                <span class="form-label">Tam Mesai Ücreti *</span>
+                <input type="text" name="daily_rate" required inputmode="decimal" placeholder="ör. 1500">
+            </label>
+            <label>
+                <span class="form-label">Yarım Mesai Ücreti *</span>
+                <input type="text" name="half_day_rate" required inputmode="decimal" placeholder="ör. 900">
+            </label>
+            <label>
+                <span class="form-label">Fazla Mesai Tipi *</span>
+                <select name="overtime_mode" required>
+                    <option value="hourly">Saatlik</option>
+                    <option value="fixed">Sabit Toplam</option>
+                </select>
+            </label>
+            <label>
+                <span class="form-label">Fazla Mesai Ücreti *</span>
+                <input type="text" name="overtime_rate" required inputmode="decimal" placeholder="ör. 200">
+                <small class="muted">Saatlik seçilirse her başlayan saat 15 dk toleransla yukarı yuvarlanır. Sabit seçilirse onaylanan FM için bir kez uygulanır.</small>
             </label>
             <label>
                 <span class="form-label">Para Birimi</span>
@@ -121,8 +149,7 @@ render_flash();
             </label>
         </div>
         <p class="muted" style="font-size:.85rem;margin:10px 0 0">
-            Bu tarihten önceki AÇIK UÇLU/binişen dönem otomatik olarak bir gün öncesine
-            kadar kapatılır — eski ücret DEĞİŞMEZ, yalnızca geçerlilik penceresi kapanır.
+            Yeni dönem eklenince önceki açık fiyat dönemi bir gün öncesinde kapanır. Eski fiyatlar silinmez ve geçmiş finansal kayıt korunur.
         </p>
         <button type="submit" class="btn btn-primary" style="margin-top:14px">+ Fiyat Dönemi Ekle</button>
     </form>
@@ -130,29 +157,26 @@ render_flash();
 
 <h2 style="font-size:1.05rem">Fiyat Geçmişi</h2>
 <?php if (empty($oranlar)): ?>
-<div class="pdks-empty">
-    <span class="pdks-empty-icon" aria-hidden="true">💰</span>
-    <p>Bu çavuş için henüz bir fiyat tanımlanmadı.</p>
-</div>
+<div class="pdks-empty"><p>Bu çavuş için henüz bir fiyat tanımlanmadı.</p></div>
 <?php else: ?>
-
 <div class="table-wrap pc-only">
 <table class="data-table">
 <thead><tr>
-    <th>İşçi Tipi</th>
-    <th>Günlük Ücret</th>
-    <th>Geçerlilik</th>
-    <th>Durum</th>
+    <th>İşçi Tipi</th><th>Tam</th><th>Yarım</th><th>Fazla Mesai</th><th>Geçerlilik</th><th>Durum</th>
 </tr></thead>
 <tbody>
 <?php foreach ($oranlar as $o): ?>
 <tr>
     <td class="pdks-row-name"><?= h($o['worker_type_name']) ?></td>
     <td><strong><?= h(number_format((float)$o['daily_rate'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong></td>
-    <td class="muted">
-        <?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> →
-        <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?>
+    <td><?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'], 2, ',', '.') . ' ' . $o['currency']) : '—' ?></td>
+    <td>
+        <?php if (($o['overtime_rate'] ?? null) !== null): ?>
+            <?= h(number_format((float)$o['overtime_rate'], 2, ',', '.') . ' ' . $o['currency']) ?>
+            · <?= h(($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik') ?>
+        <?php else: ?>—<?php endif; ?>
     </td>
+    <td class="muted"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></td>
     <td><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
 </tr>
 <?php endforeach; ?>
@@ -166,18 +190,16 @@ render_flash();
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($o['worker_type_name']) ?></div>
-            <div class="pdks-row-sub">
-                <?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> →
-                <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?>
-            </div>
+            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></div>
         </div>
         <span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span>
     </div>
-    <div class="pdks-row-sub"><strong><?= h(number_format((float)$o['daily_rate'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong> / kişi-gün</div>
+    <div class="pdks-row-sub">Tam: <strong><?= h(number_format((float)$o['daily_rate'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong></div>
+    <div class="pdks-row-sub">Yarım: <?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'], 2, ',', '.') . ' ' . $o['currency']) : '—' ?></div>
+    <div class="pdks-row-sub">FM: <?= ($o['overtime_rate'] ?? null) !== null ? h(number_format((float)$o['overtime_rate'], 2, ',', '.') . ' ' . $o['currency'] . ' · ' . (($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik')) : '—' ?></div>
 </div>
 <?php endforeach; ?>
 </div>
-
 <?php endif; ?>
 <?php endif; ?>
 
