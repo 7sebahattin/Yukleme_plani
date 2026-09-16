@@ -31,7 +31,11 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
     $c ? $gecen++ : $fail++;
     printf("%-90s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
-function oku(string $p): string { global $KOK; return (string)@file_get_contents($KOK . '/' . $p); }
+function oku(string $p): string {
+    global $KOK;
+    $s = (string)@file_get_contents($KOK . '/' . $p);
+    return str_replace(["\r\n", "\r"], "\n", $s);
+}
 function kodSadece(string $s): string { return preg_replace('/^\s*\/\/.*$/m', '', $s); }
 
 $sayfalar = ['cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php'];
