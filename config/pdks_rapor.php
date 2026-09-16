@@ -1287,6 +1287,10 @@ function pdks_rapor_cavus_kart_dokumu(
         return ['session' => null, 'cards' => []];
     }
 
+    $hasExitEvents = function_exists('pdks_gunluk_tablo_var')
+        && pdks_gunluk_tablo_var($pdo, 'daily_worker_card_events');
+    $exitSourceSelect = $hasExitEvents ? 'e.source AS exit_source' : 'NULL AS exit_source';
+    $exitJoin = $hasExitEvents ? 'LEFT JOIN daily_worker_card_events e ON e.id = p.exit_event_id' : '';
     $st = $pdo->prepare(
         "SELECT
             p.id AS period_id,
@@ -1297,9 +1301,11 @@ function pdks_rapor_cavus_kart_dokumu(
             p.entry_time,
             p.exit_time,
             p.status AS period_status,
-            p.source
+            p.source,
+            $exitSourceSelect
          FROM daily_worker_work_periods p
          JOIN worker_cards w ON w.id = p.worker_card_id
+         $exitJoin
         WHERE p.session_id = ?
         ORDER BY p.entry_time ASC, p.id ASC"
     );
