@@ -1,6 +1,21 @@
 <?php
 // =========================================================
 // config/pdks_faz8b.php — Faz 8B Mesai Değerlendirme + Ücretlendirme
+//
+// İş kuralı:
+//   - Standart vardiya: 08:00–17:00 (9 saat).
+//   - Giriş/çıkışta 15 dk tolerans: 08:15 giriş / 16:45 çıkış hâlâ
+//     otomatik Tam kabul edilebilir; ayrıca fiili süre 9 saat ve üzeriyse
+//     vardiya saati kaymış olsa bile otomatik Tam'dır.
+//   - 9 saatten kısa ve tolerans penceresini karşılamayan dönemlerde
+//     muhasebe Tam/Yarım kararı verir. ÇIKIŞ asla engellenmez.
+//   - Fazla mesai planlı 17:00 bitişinden sonra ölçülür. İlk 15 dk tolerans:
+//       17:15'e kadar FM yok,
+//       17:16–18:15 = 1 saat,
+//       18:16–19:15 = 2 saat, ...
+//     Her FM adayı muhasebe onayına düşer.
+//   - Çavuş ücretinde Tam, Yarım ve FM ücreti ayrı tanımlanır. FM tipi
+//     hourly (saatlik) veya fixed (sabit toplam) olabilir.
 // =========================================================
 declare(strict_types=1);
 
@@ -8,8 +23,24 @@ require_once __DIR__ . '/pdks_gunluk.php';
 require_once __DIR__ . '/pdks_hakedis.php';
 
 defined('PDKS_FAZ8B_AKTIF') || define('PDKS_FAZ8B_AKTIF', true);
-defined('PDKS_FAZ8B_NORMAL_DK') || define('PDKS_FAZ8B_NORMAL_DK', 540);      // 9 saat
-defined('PDKS_FAZ8B_TOLERANS_DK') || define('PDKS_FAZ8B_TOLERANS_DK', 15);   // giriş/çıkış + FM yuvarlama toleransı
+defined('PDKS_FAZ8B_NORMAL_DK') || define('PDKS_FAZ8B_NORMAL_DK', 540);
+defined('PDKS_FAZ8B_TOLERANS_DK') || define('PDKS_FAZ8B_TOLERANS_DK', 15);
+defined('PDKS_FAZ8B_VARDIYA_BASLANGIC') || define('PDKS_FAZ8B_VARDIYA_BASLANGIC', '08:00');
+defined('PDKS_FAZ8B_VARDIYA_BITIS') || define('PDKS_FAZ8B_VARDIYA_BITIS', '17:00');
+
+// =========================================================
+// ŞEMA / MİGRASYON
+// =========================================================
+
+function pdks_faz8b_tablo_var(PDO $pdo, string $tablo): bool
+{
+    try {
+        $pdo->query("SELECT 1 FROM `{$tablo}` LIMIT 0");
+        return true;
+    } catch (PDOException $e) {
+        return false;
+    }
+}
 
 function pdks_faz8b_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
 {
@@ -20,70 +51,74 @@ function pdks_faz8b_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
         }
         return false;
     }
+
     $st = $pdo->prepare(
-        "SELECT 1 FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1"
+        "SELECT 1
+           FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+          LIMIT 1"
     );
     $st->execute([$tablo, $kolon]);
     return $st->fetchColumn() !== false;
 }
 
+function pdks_faz8b_kolon_ekle(
+    PDO $pdo,
+    string $tablo,
+    string $kolon,
+    string $tanim,
+    ?string $after = null
+): array {
+    if (!pdks_faz8b_tablo_var($pdo, $tablo)) {
+        return ['adim' => "$tablo.$kolon", 'durum' => 'hata', 'mesaj' => 'Tablo bulunamadı.'];
+    }
+    if (pdks_faz8b_kolon_var($pdo, $tablo, $kolon)) {
+        return ['adim' => "$tablo.$kolon", 'durum' => 'var', 'mesaj' => 'Kolon zaten mevcut.'];
+    }
+
+    $sql = "ALTER TABLE `{$tablo}` ADD COLUMN `{$kolon}` {$tanim}";
+    if ($after !== null && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'sqlite') {
+        $sql .= " AFTER `{$after}`";
+    }
+
+    try {
+        $pdo->exec($sql);
+        return ['adim' => "$tablo.$kolon", 'durum' => 'eklendi', 'mesaj' => 'Kolon eklendi.'];
+    } catch (PDOException $e) {
+        error_log('[pdks_faz8b_migrate] ' . $tablo . '.' . $kolon . ': ' . $e->getMessage());
+        return ['adim' => "$tablo.$kolon", 'durum' => 'hata', 'mesaj' => $e->getMessage(), 'sql' => $sql];
+    }
+}
+
 function pdks_faz8b_migrate(?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $adimlar = [
-        ['foreman_worker_rates', 'half_day_rate',
-            "ALTER TABLE `foreman_worker_rates` ADD COLUMN `half_day_rate` DECIMAL(12,2) NULL DEFAULT NULL AFTER `daily_rate`"],
-        ['foreman_worker_rates', 'overtime_mode',
-            "ALTER TABLE `foreman_worker_rates` ADD COLUMN `overtime_mode` VARCHAR(10) NULL DEFAULT NULL AFTER `half_day_rate`"],
-        ['foreman_worker_rates', 'overtime_rate',
-            "ALTER TABLE `foreman_worker_rates` ADD COLUMN `overtime_rate` DECIMAL(12,2) NULL DEFAULT NULL AFTER `overtime_mode`"],
+    $spec = [
+        ['foreman_worker_rates', 'half_day_rate', 'DECIMAL(12,2) NULL DEFAULT NULL', 'daily_rate'],
+        ['foreman_worker_rates', 'overtime_mode', 'VARCHAR(10) NULL DEFAULT NULL', 'half_day_rate'],
+        ['foreman_worker_rates', 'overtime_rate', 'DECIMAL(12,2) NULL DEFAULT NULL', 'overtime_mode'],
 
-        ['daily_worker_work_periods', 'approved_by_user_id',
-            "ALTER TABLE `daily_worker_work_periods` ADD COLUMN `approved_by_user_id` INT NULL DEFAULT NULL AFTER `approved_attendance_class`"],
-        ['daily_worker_work_periods', 'approved_at',
-            "ALTER TABLE `daily_worker_work_periods` ADD COLUMN `approved_at` DATETIME NULL DEFAULT NULL AFTER `approved_by_user_id`"],
-        ['daily_worker_work_periods', 'overtime_approved',
-            "ALTER TABLE `daily_worker_work_periods` ADD COLUMN `overtime_approved` TINYINT(1) NULL DEFAULT NULL AFTER `approved_at`"],
-        ['daily_worker_work_periods', 'overtime_approved_by_user_id',
-            "ALTER TABLE `daily_worker_work_periods` ADD COLUMN `overtime_approved_by_user_id` INT NULL DEFAULT NULL AFTER `overtime_approved`"],
-        ['daily_worker_work_periods', 'overtime_approved_at',
-            "ALTER TABLE `daily_worker_work_periods` ADD COLUMN `overtime_approved_at` DATETIME NULL DEFAULT NULL AFTER `overtime_approved_by_user_id`"],
+        ['daily_worker_work_periods', 'approved_by_user_id', 'INT NULL DEFAULT NULL', 'approved_attendance_class'],
+        ['daily_worker_work_periods', 'approved_at', 'DATETIME NULL DEFAULT NULL', 'approved_by_user_id'],
+        ['daily_worker_work_periods', 'overtime_approved', 'TINYINT(1) NULL DEFAULT NULL', 'approved_at'],
+        ['daily_worker_work_periods', 'overtime_approved_by_user_id', 'INT NULL DEFAULT NULL', 'overtime_approved'],
+        ['daily_worker_work_periods', 'overtime_approved_at', 'DATETIME NULL DEFAULT NULL', 'overtime_approved_by_user_id'],
 
-        ['foreman_daily_entitlements', 'needs_recalculation',
-            "ALTER TABLE `foreman_daily_entitlements` ADD COLUMN `needs_recalculation` TINYINT(1) NOT NULL DEFAULT 0 AFTER `total_amount`"],
+        ['foreman_daily_entitlements', 'needs_recalculation', 'TINYINT(1) NOT NULL DEFAULT 0', 'total_amount'],
 
-        ['foreman_daily_entitlement_lines', 'work_period_id',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `work_period_id` INT NULL DEFAULT NULL AFTER `entitlement_id`"],
-        ['foreman_daily_entitlement_lines', 'attendance_class_snapshot',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `attendance_class_snapshot` VARCHAR(10) NOT NULL DEFAULT 'tam' AFTER `worker_type_name_snapshot`"],
-        ['foreman_daily_entitlement_lines', 'overtime_hours',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `overtime_hours` INT NOT NULL DEFAULT 0 AFTER `unit_rate`"],
-        ['foreman_daily_entitlement_lines', 'overtime_mode_snapshot',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `overtime_mode_snapshot` VARCHAR(10) NULL DEFAULT NULL AFTER `overtime_hours`"],
-        ['foreman_daily_entitlement_lines', 'overtime_unit_rate',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `overtime_unit_rate` DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER `overtime_mode_snapshot`"],
-        ['foreman_daily_entitlement_lines', 'overtime_total',
-            "ALTER TABLE `foreman_daily_entitlement_lines` ADD COLUMN `overtime_total` DECIMAL(14,2) NOT NULL DEFAULT 0 AFTER `overtime_unit_rate`"],
+        ['foreman_daily_entitlement_lines', 'work_period_id', 'INT NULL DEFAULT NULL', 'entitlement_id'],
+        ['foreman_daily_entitlement_lines', 'attendance_class_snapshot', "VARCHAR(10) NOT NULL DEFAULT 'tam'", 'worker_type_name_snapshot'],
+        ['foreman_daily_entitlement_lines', 'overtime_hours', 'INT NOT NULL DEFAULT 0', 'unit_rate'],
+        ['foreman_daily_entitlement_lines', 'overtime_mode_snapshot', 'VARCHAR(10) NULL DEFAULT NULL', 'overtime_hours'],
+        ['foreman_daily_entitlement_lines', 'overtime_unit_rate', 'DECIMAL(12,2) NOT NULL DEFAULT 0', 'overtime_mode_snapshot'],
+        ['foreman_daily_entitlement_lines', 'overtime_total', 'DECIMAL(14,2) NOT NULL DEFAULT 0', 'overtime_unit_rate'],
     ];
 
     $rapor = [];
-    foreach ($adimlar as [$tablo, $kolon, $sql]) {
-        if (!pdks_hakedis_tablo_var($pdo, $tablo) && !pdks_gunluk_tablo_var($pdo, $tablo)) {
-            $rapor[] = ['adim' => "$tablo.$kolon", 'durum' => 'hata', 'mesaj' => 'Tablo bulunamadı.'];
-            continue;
-        }
-        if (pdks_faz8b_kolon_var($pdo, $tablo, $kolon)) {
-            $rapor[] = ['adim' => "$tablo.$kolon", 'durum' => 'var', 'mesaj' => 'Kolon zaten mevcut.'];
-            continue;
-        }
-        try {
-            $pdo->exec($sql);
-            $rapor[] = ['adim' => "$tablo.$kolon", 'durum' => 'eklendi', 'mesaj' => 'Kolon eklendi.'];
-        } catch (PDOException $e) {
-            error_log('[pdks_faz8b_migrate] ' . $tablo . '.' . $kolon . ': ' . $e->getMessage());
-            $rapor[] = ['adim' => "$tablo.$kolon", 'durum' => 'hata', 'mesaj' => $e->getMessage(), 'sql' => $sql];
-        }
+    foreach ($spec as [$tablo, $kolon, $tanim, $after]) {
+        $rapor[] = pdks_faz8b_kolon_ekle($pdo, $tablo, $kolon, $tanim, $after);
     }
     return $rapor;
 }
@@ -93,11 +128,19 @@ function pdks_faz8b_sema_hazir(?PDO $pdo = null): bool
     $pdo = $pdo ?? db();
     $gerekli = [
         'foreman_worker_rates' => ['half_day_rate', 'overtime_mode', 'overtime_rate'],
-        'daily_worker_work_periods' => ['approved_attendance_class', 'approved_by_user_id', 'approved_at', 'overtime_approved', 'overtime_approved_by_user_id', 'overtime_approved_at'],
+        'daily_worker_work_periods' => [
+            'approved_attendance_class', 'approved_by_user_id', 'approved_at',
+            'overtime_approved', 'overtime_approved_by_user_id', 'overtime_approved_at',
+        ],
         'foreman_daily_entitlements' => ['needs_recalculation'],
-        'foreman_daily_entitlement_lines' => ['work_period_id', 'attendance_class_snapshot', 'overtime_hours', 'overtime_mode_snapshot', 'overtime_unit_rate', 'overtime_total'],
+        'foreman_daily_entitlement_lines' => [
+            'work_period_id', 'attendance_class_snapshot', 'overtime_hours',
+            'overtime_mode_snapshot', 'overtime_unit_rate', 'overtime_total',
+        ],
     ];
+
     foreach ($gerekli as $tablo => $kolonlar) {
+        if (!pdks_faz8b_tablo_var($pdo, $tablo)) return false;
         foreach ($kolonlar as $kolon) {
             if (!pdks_faz8b_kolon_var($pdo, $tablo, $kolon)) return false;
         }
@@ -109,94 +152,115 @@ function pdks_faz8b_sayfa_kapisi(?PDO $pdo = null): void
 {
     $pdo = $pdo ?? db();
     if (pdks_faz8b_sema_hazir($pdo)) return;
+
     $mesaj = 'Faz 8B şeması henüz hazır değil. Yönetici faz8b_migrate.php sayfasından migrasyonu çalıştırmalıdır.';
     if (function_exists('set_flash')) set_flash('error', $mesaj);
     if (function_exists('render_header')) render_header('Faz 8B');
     if (function_exists('render_flash')) render_flash();
-    else echo function_exists('h') ? '<div class="flash flash-error">' . h($mesaj) . '</div>' : $mesaj;
+    elseif (function_exists('h')) echo '<div class="flash flash-error">' . h($mesaj) . '</div>';
+    else echo $mesaj;
     if (function_exists('render_footer')) render_footer();
     exit;
 }
 
+// =========================================================
+// SÜRE / TOLERANS POLİTİKASI
+// =========================================================
+
 /**
- * Süre kuralı:
- * - normal mesai 9 saat;
- * - 15 dk tolerans nedeniyle 8s45dk ve üzeri otomatik Tam;
- * - 9 saatin üzerindeki ilk 15 dk FM sayılmaz;
- * - 16..75 dk = 1 saat, 76..135 dk = 2 saat ...
+ * Standart gün 08:00–17:00'dır.
+ *
+ * Otomatik Tam için iki güvenli yol vardır:
+ *  1) fiili süre >= 9 saat, veya
+ *  2) vardiya sınırları tolerans içinde karşılanmıştır:
+ *     giriş en geç 08:15 ve çıkış en erken 16:45.
+ *
+ * Bu ikinci kural 08:15–16:45 gibi, iki uçta da 15'er dakikalık toleransı
+ * açıkça karşılar. 9 saatten kısa ama bu pencereyi karşılamayan dönemler
+ * muhasebe kararına düşer.
+ *
+ * Fazla mesai yalnız PLANLI bitiş 17:00 sonrasından hesaplanır. İlk 15 dk
+ * toleranstır. Sonrasında başlayan her saat yukarı yuvarlanır:
+ *   17:16–18:15 => 1 saat
+ *   18:16–19:15 => 2 saat
  */
 function pdks_faz8b_sure_karari(?string $giris, ?string $cikis): array
 {
-    if (!$giris || !$cikis) {
-        return [
-            'toplam_dk' => null,
-            'otomatik_sinif' => null,
-            'sinif_onayi_gerekli' => true,
-            'fazla_dk' => 0,
-            'fazla_mesai_saat' => 0,
-            'fazla_mesai_onayi_gerekli' => false,
-        ];
-    }
+    $bos = [
+        'toplam_dk' => null,
+        'otomatik_sinif' => null,
+        'sinif_onayi_gerekli' => true,
+        'plan_sonrasi_dk' => 0,
+        'fazla_mesai_saat' => 0,
+        'fazla_mesai_onayi_gerekli' => false,
+        'giris_toleransinda' => false,
+        'cikis_toleransinda' => false,
+    ];
+    if (!$giris || !$cikis) return $bos;
+
     $g = strtotime($giris);
     $c = strtotime($cikis);
-    if ($g === false || $c === false || $c < $g) {
-        return [
-            'toplam_dk' => null,
-            'otomatik_sinif' => null,
-            'sinif_onayi_gerekli' => true,
-            'fazla_dk' => 0,
-            'fazla_mesai_saat' => 0,
-            'fazla_mesai_onayi_gerekli' => false,
-        ];
-    }
+    if ($g === false || $c === false || $c < $g) return $bos;
 
     $toplamDk = intdiv($c - $g, 60);
-    $tamAltSinir = PDKS_FAZ8B_NORMAL_DK - PDKS_FAZ8B_TOLERANS_DK;
-    $otomatikSinif = $toplamDk >= $tamAltSinir ? 'tam' : null;
-    $fazlaDk = max(0, $toplamDk - PDKS_FAZ8B_NORMAL_DK);
-    $fazlaSaat = 0;
-    if ($fazlaDk > PDKS_FAZ8B_TOLERANS_DK) {
-        $ucretDk = $fazlaDk - PDKS_FAZ8B_TOLERANS_DK;
-        $fazlaSaat = intdiv($ucretDk + 59, 60);
+    $gun = date('Y-m-d', $g);
+    $planBas = strtotime($gun . ' ' . PDKS_FAZ8B_VARDIYA_BASLANGIC . ':00');
+    $planBit = strtotime($gun . ' ' . PDKS_FAZ8B_VARDIYA_BITIS . ':00');
+    if ($planBas === false || $planBit === false) return $bos;
+
+    $tolSn = PDKS_FAZ8B_TOLERANS_DK * 60;
+    $girisToleransinda = $g <= ($planBas + $tolSn);
+    $cikisToleransinda = $c >= ($planBit - $tolSn);
+    $vardiyaPenceresiTam = $girisToleransinda && $cikisToleransinda;
+    $otomatikTam = $toplamDk >= PDKS_FAZ8B_NORMAL_DK || $vardiyaPenceresiTam;
+
+    $planSonrasiDk = $c > $planBit ? intdiv($c - $planBit, 60) : 0;
+    $fmSaat = 0;
+    if ($planSonrasiDk > PDKS_FAZ8B_TOLERANS_DK) {
+        // 15 dk toleransı çıkar; kalan her başlayan saat yukarı yuvarlanır.
+        $ucretDk = $planSonrasiDk - PDKS_FAZ8B_TOLERANS_DK;
+        $fmSaat = intdiv($ucretDk + 59, 60);
     }
 
     return [
         'toplam_dk' => $toplamDk,
-        'otomatik_sinif' => $otomatikSinif,
-        'sinif_onayi_gerekli' => $otomatikSinif === null,
-        'fazla_dk' => $fazlaDk,
-        'fazla_mesai_saat' => $fazlaSaat,
-        'fazla_mesai_onayi_gerekli' => $fazlaSaat > 0,
+        'otomatik_sinif' => $otomatikTam ? 'tam' : null,
+        'sinif_onayi_gerekli' => !$otomatikTam,
+        'plan_sonrasi_dk' => $planSonrasiDk,
+        'fazla_mesai_saat' => $fmSaat,
+        'fazla_mesai_onayi_gerekli' => $fmSaat > 0,
+        'giris_toleransinda' => $girisToleransinda,
+        'cikis_toleransinda' => $cikisToleransinda,
     ];
 }
 
 function pdks_faz8b_donem_finans_durumu(array $donem): array
 {
     $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null);
+
     $onayliSinif = trim((string)($donem['approved_attendance_class'] ?? ''));
     $sinif = $sure['otomatik_sinif'];
     $sinifKaynak = 'otomatik';
     if ($sinif === null) {
         $sinif = in_array($onayliSinif, ['tam', 'yarim'], true) ? $onayliSinif : null;
-        $sinifKaynak = $sinif ? 'muhasebe' : 'bekliyor';
+        $sinifKaynak = $sinif !== null ? 'muhasebe' : 'bekliyor';
     }
 
     $fmSaat = (int)$sure['fazla_mesai_saat'];
     $fmOnay = $donem['overtime_approved'] ?? null;
-    if ($fmOnay !== null && $fmOnay !== '') $fmOnay = (int)$fmOnay;
-    else $fmOnay = null;
+    if ($fmOnay === '' || $fmOnay === null) $fmOnay = null;
+    else $fmOnay = (int)$fmOnay;
 
     $fmDurum = 'yok';
     if ($fmSaat > 0) {
         $fmDurum = $fmOnay === null ? 'bekliyor' : ($fmOnay === 1 ? 'onayli' : 'reddedildi');
     }
 
-    $hazir = $sinif !== null && ($fmSaat === 0 || $fmOnay !== null);
     return $sure + [
         'etkin_sinif' => $sinif,
         'sinif_kaynak' => $sinifKaynak,
         'fazla_mesai_durum' => $fmDurum,
-        'finans_hazir' => $hazir,
+        'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnay !== null),
     ];
 }
 
@@ -220,12 +284,16 @@ function pdks_faz8b_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
 function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
 {
     $rows = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
-    $bekleyenSinif = 0; $bekleyenFm = 0; $hazir = 0;
+    $bekleyenSinif = 0;
+    $bekleyenFm = 0;
+    $hazir = 0;
+
     foreach ($rows as $r) {
         if ($r['faz8b']['etkin_sinif'] === null) $bekleyenSinif++;
         if ($r['faz8b']['fazla_mesai_durum'] === 'bekliyor') $bekleyenFm++;
         if ($r['faz8b']['finans_hazir']) $hazir++;
     }
+
     return [
         'toplam' => count($rows),
         'hazir' => $hazir,
@@ -235,6 +303,10 @@ function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
     ];
 }
 
+// =========================================================
+// MUHASEBE DEĞERLENDİRMESİ
+// =========================================================
+
 function pdks_faz8b_degerlendirme_kaydet(
     int $periodId,
     ?string $attendanceDecision,
@@ -243,14 +315,19 @@ function pdks_faz8b_degerlendirme_kaydet(
     ?PDO $pdo = null
 ): array {
     $pdo = $pdo ?? db();
-    if (!pdks_faz8b_sema_hazir($pdo)) return ['ok' => false, 'hata' => 'Faz 8B şeması hazır değil.'];
+    if (!pdks_faz8b_sema_hazir($pdo)) {
+        return ['ok' => false, 'hata' => 'Faz 8B şeması hazır değil.'];
+    }
 
     $st = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE id = ?");
     $st->execute([$periodId]);
     $p = $st->fetch();
     if (!$p) return ['ok' => false, 'hata' => 'Mesai dönemi bulunamadı.'];
 
-    $stFinal = $pdo->prepare("SELECT id FROM foreman_daily_entitlements WHERE session_id = ? AND status = 'final' LIMIT 1");
+    $stFinal = $pdo->prepare(
+        "SELECT id FROM foreman_daily_entitlements
+          WHERE session_id = ? AND status = 'final' LIMIT 1"
+    );
     $stFinal->execute([(int)$p['session_id']]);
     if ($stFinal->fetchColumn()) {
         return ['ok' => false, 'hata' => 'Bu oturumun hakedişi KESİN. Önce yönetici kontrollü olarak hakedişi yeniden açmalıdır.'];
@@ -263,13 +340,14 @@ function pdks_faz8b_degerlendirme_kaydet(
 
     if ($sure['sinif_onayi_gerekli']) {
         if (!in_array($attendanceDecision, ['tam', 'yarim'], true)) {
-            return ['ok' => false, 'hata' => '9 saat altı / çıkışı belirsiz mesai için muhasebe Tam veya Yarım kararı vermelidir.'];
+            return ['ok' => false, 'hata' => 'Kısa / çıkışı belirsiz mesai için muhasebe Tam veya Yarım kararı vermelidir.'];
         }
         $sinif = $attendanceDecision;
         $sinifUser = $userId;
         $sinifAt = $simdi;
     } else {
-        $sinif = null;      // otomatik Tam; insan onayıyla karıştırma
+        // Otomatik Tam. İnsan onayı ile karıştırmamak için approved_* boş kalır.
+        $sinif = null;
         $sinifUser = null;
         $sinifAt = null;
     }
@@ -295,15 +373,17 @@ function pdks_faz8b_degerlendirme_kaydet(
 
     $upd = $pdo->prepare(
         "UPDATE daily_worker_work_periods
-            SET approved_attendance_class=?, approved_by_user_id=?, approved_at=?,
-                overtime_approved=?, overtime_approved_by_user_id=?, overtime_approved_at=?
-          WHERE id=?"
+            SET approved_attendance_class = ?, approved_by_user_id = ?, approved_at = ?,
+                overtime_approved = ?, overtime_approved_by_user_id = ?, overtime_approved_at = ?
+          WHERE id = ?"
     );
     $upd->execute([$sinif, $sinifUser, $sinifAt, $fmOnay, $fmUser, $fmAt, $periodId]);
 
+    // Daha önce hesaplanmış taslak artık finansal olarak bayattır.
     $pdo->prepare(
-        "UPDATE foreman_daily_entitlements SET needs_recalculation=1
-          WHERE session_id=? AND status='draft'"
+        "UPDATE foreman_daily_entitlements
+            SET needs_recalculation = 1
+          WHERE session_id = ? AND status = 'draft'"
     )->execute([(int)$p['session_id']]);
 
     if (function_exists('audit_log_event')) {
@@ -316,6 +396,10 @@ function pdks_faz8b_degerlendirme_kaydet(
 
     return ['ok' => true];
 }
+
+// =========================================================
+// ÇAVUŞ FİYATLARI — TAM / YARIM / FAZLA MESAİ
+// =========================================================
 
 function pdks_faz8b_oran_ekle(
     int $foremanId,
@@ -332,6 +416,7 @@ function pdks_faz8b_oran_ekle(
     $pdo = $pdo ?? db();
     $currency = trim((string)$currency) ?: 'TRY';
     $fazlaMesaiModu = trim($fazlaMesaiModu);
+
     if (!in_array($fazlaMesaiModu, ['hourly', 'fixed'], true)) {
         return ['ok' => false, 'hata' => 'Fazla mesai tipi Saatlik veya Sabit Toplam olmalıdır.'];
     }
@@ -346,20 +431,22 @@ function pdks_faz8b_oran_ekle(
     if ($yarimKurus === null || $yarimKurus <= 0) return ['ok' => false, 'hata' => 'Yarım Mesai ücreti geçersiz.'];
     if ($fmKurus === null || $fmKurus <= 0) return ['ok' => false, 'hata' => 'Fazla Mesai ücreti geçersiz.'];
 
-    $stC = $pdo->prepare("SELECT id FROM foremen WHERE id=?");
+    $stC = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
     $stC->execute([$foremanId]);
     if (!$stC->fetchColumn()) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
-    $stT = $pdo->prepare("SELECT id FROM worker_types WHERE id=?");
+
+    $stT = $pdo->prepare("SELECT id FROM worker_types WHERE id = ?");
     $stT->execute([$workerTypeId]);
     if (!$stT->fetchColumn()) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];
 
     $stMevcut = $pdo->prepare(
         "SELECT * FROM foreman_worker_rates
-          WHERE foreman_id=? AND worker_type_id=? AND is_active=1
+          WHERE foreman_id = ? AND worker_type_id = ? AND is_active = 1
           ORDER BY valid_from DESC, id DESC LIMIT 1"
     );
     $stMevcut->execute([$foremanId, $workerTypeId]);
     $mevcut = $stMevcut->fetch();
+
     if ($mevcut && strtotime((string)$mevcut['valid_from']) >= strtotime($validFrom)) {
         return ['ok' => false, 'hata' => 'Yeni başlangıç tarihi mevcut en son fiyat döneminden sonra olmalıdır.'];
     }
@@ -368,19 +455,27 @@ function pdks_faz8b_oran_ekle(
     try {
         if ($mevcut && (($mevcut['valid_to'] ?? null) === null || strtotime((string)$mevcut['valid_to']) >= strtotime($validFrom))) {
             $bitis = date('Y-m-d', strtotime($validFrom . ' -1 day'));
-            $pdo->prepare("UPDATE foreman_worker_rates SET valid_to=? WHERE id=?")->execute([$bitis, (int)$mevcut['id']]);
+            $pdo->prepare("UPDATE foreman_worker_rates SET valid_to = ? WHERE id = ?")
+                ->execute([$bitis, (int)$mevcut['id']]);
         }
+
         $ins = $pdo->prepare(
             "INSERT INTO foreman_worker_rates
-                (foreman_id, worker_type_id, daily_rate, half_day_rate, overtime_mode, overtime_rate,
-                 currency, valid_from, valid_to, is_active, created_by_user_id)
-             VALUES (?,?,?,?,?,?,?, ?,NULL,1,?)"
+                (foreman_id, worker_type_id, daily_rate, half_day_rate,
+                 overtime_mode, overtime_rate, currency, valid_from, valid_to,
+                 is_active, created_by_user_id)
+             VALUES (?,?,?,?,?,?,?,?,NULL,1,?)"
         );
         $ins->execute([
-            $foremanId, $workerTypeId,
-            pdks_hakedis_kurus_tl($tamKurus), pdks_hakedis_kurus_tl($yarimKurus),
-            $fazlaMesaiModu, pdks_hakedis_kurus_tl($fmKurus),
-            $currency, $validFrom, $userId,
+            $foremanId,
+            $workerTypeId,
+            pdks_hakedis_kurus_tl($tamKurus),
+            pdks_hakedis_kurus_tl($yarimKurus),
+            $fazlaMesaiModu,
+            pdks_hakedis_kurus_tl($fmKurus),
+            $currency,
+            $validFrom,
+            $userId,
         ]);
         $id = (int)$pdo->lastInsertId();
         $pdo->commit();
@@ -401,20 +496,27 @@ function pdks_faz8b_oran_ekle(
             'valid_from' => $validFrom,
         ]);
     }
+
     return ['ok' => true, 'id' => $id];
 }
+
+// =========================================================
+// HAKEDİŞ — FAZ 8B OTORİTER HESAP
+// =========================================================
 
 function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (!pdks_faz8b_sema_hazir($pdo)) return ['ok' => false, 'kod' => 'faz8b_sema_yok', 'hata' => 'Faz 8B şeması hazır değil.'];
+    if (!pdks_faz8b_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'faz8b_sema_yok', 'hata' => 'Faz 8B şeması hazır değil.'];
+    }
 
-    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id=?");
+    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?");
     $st->execute([$sessionId]);
     $oturum = $st->fetch();
     if (!$oturum) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
 
-    $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id=?");
+    $stE = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE session_id = ?");
     $stE->execute([$sessionId]);
     $mevcut = $stE->fetch();
     if ($mevcut && ($mevcut['status'] ?? '') === 'final') {
@@ -422,13 +524,15 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     }
 
     $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
-    if (!$donemler) return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Bu mesaide hesaplanacak işçi dönemi yok.'];
+    if (!$donemler) {
+        return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Bu mesaide hesaplanacak işçi dönemi yok.'];
+    }
 
     $satirlar = [];
     $eksikler = [];
     $paraBirimleri = [];
     $toplamKurus = 0;
-    $stKod = $pdo->prepare("SELECT code FROM worker_types WHERE id=?");
+    $stKod = $pdo->prepare("SELECT code FROM worker_types WHERE id = ?");
 
     foreach ($donemler as $d) {
         $f = $d['faz8b'];
@@ -442,7 +546,13 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             $eksikler[] = ($d['card_no'] ?? ('#' . $d['id'])) . ' — işçi tipi eksik';
             continue;
         }
-        $oran = pdks_hakedis_oran_gecerli((int)$oturum['foreman_id'], $tipId, (string)$oturum['work_date'], $pdo);
+
+        $oran = pdks_hakedis_oran_gecerli(
+            (int)$oturum['foreman_id'],
+            $tipId,
+            (string)$oturum['work_date'],
+            $pdo
+        );
         if (!$oran) {
             $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — geçerli fiyat yok';
             continue;
@@ -454,28 +564,44 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — ' . ($sinif === 'yarim' ? 'Yarım' : 'Tam') . ' Mesai fiyatı yok';
             continue;
         }
-        try { $baseKurus = pdks_hakedis_tl_kurus((string)$baseRaw); }
-        catch (Throwable $e) { $eksikler[] = 'Geçersiz fiyat'; continue; }
+        try {
+            $baseKurus = pdks_hakedis_tl_kurus((string)$baseRaw);
+        } catch (Throwable $e) {
+            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — geçersiz temel fiyat';
+            continue;
+        }
 
         $fmSaat = (int)$f['fazla_mesai_saat'];
-        $fmOnayli = $fmSaat > 0 && ($d['overtime_approved'] ?? null) !== null && (int)$d['overtime_approved'] === 1;
-        $fmMode = null; $fmBirimKurus = 0; $fmToplamKurus = 0;
+        $fmOnayli = $fmSaat > 0
+            && ($d['overtime_approved'] ?? null) !== null
+            && (int)$d['overtime_approved'] === 1;
+        $fmMode = null;
+        $fmBirimKurus = 0;
+        $fmToplamKurus = 0;
+
         if ($fmOnayli) {
-            $fmMode = (string)($oran['overtime_mode'] ?? '');
+            $fmMode = trim((string)($oran['overtime_mode'] ?? ''));
             $fmRaw = $oran['overtime_rate'] ?? null;
             if (!in_array($fmMode, ['hourly', 'fixed'], true) || $fmRaw === null || $fmRaw === '') {
                 $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — Fazla Mesai fiyatı/tipi yok';
                 continue;
             }
-            try { $fmBirimKurus = pdks_hakedis_tl_kurus((string)$fmRaw); }
-            catch (Throwable $e) { $eksikler[] = 'Geçersiz fazla mesai fiyatı'; continue; }
-            $fmToplamKurus = $fmMode === 'fixed' ? $fmBirimKurus : ($fmBirimKurus * $fmSaat);
+            try {
+                $fmBirimKurus = pdks_hakedis_tl_kurus((string)$fmRaw);
+            } catch (Throwable $e) {
+                $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — geçersiz Fazla Mesai fiyatı';
+                continue;
+            }
+            $fmToplamKurus = $fmMode === 'fixed'
+                ? $fmBirimKurus
+                : ($fmBirimKurus * $fmSaat);
         }
 
         $para = trim((string)($oran['currency'] ?? 'TRY')) ?: 'TRY';
         $paraBirimleri[$para] = true;
         $stKod->execute([$tipId]);
         $kod = (string)($stKod->fetchColumn() ?: '');
+
         $lineKurus = $baseKurus + $fmToplamKurus;
         $toplamKurus += $lineKurus;
         $satirlar[] = [
@@ -494,12 +620,23 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         ];
     }
 
+    // Validate-first: hiçbir finansal satır değiştirilmeden önce tüm kararlar
+    // ve fiyatlar tamam olmalıdır.
     if ($eksikler) {
-        return ['ok' => false, 'kod' => 'faz8b_degerlendirme_gerekli', 'hata' => 'Hakediş hesaplanamadı: ' . implode('; ', array_slice($eksikler, 0, 4)), 'eksikler' => $eksikler];
+        return [
+            'ok' => false,
+            'kod' => 'faz8b_degerlendirme_gerekli',
+            'hata' => 'Hakediş hesaplanamadı: ' . implode('; ', array_slice($eksikler, 0, 4)),
+            'eksikler' => $eksikler,
+        ];
     }
     if (count($paraBirimleri) > 1) {
         return ['ok' => false, 'kod' => 'karisik_para_birimi', 'hata' => 'Bu mesai için farklı para birimleri karışıyor.'];
     }
+    if (!$satirlar) {
+        return ['ok' => false, 'kod' => 'satir_yok', 'hata' => 'Hakediş için finansal satır oluşmadı.'];
+    }
+
     $paraBirimi = (string)array_key_first($paraBirimleri);
     $simdi = date('Y-m-d H:i:s');
 
@@ -507,40 +644,68 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     try {
         if ($mevcut) {
             $entId = (int)$mevcut['id'];
-            $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id=?")->execute([$entId]);
+            $pdo->prepare("DELETE FROM foreman_daily_entitlement_lines WHERE entitlement_id = ?")
+                ->execute([$entId]);
             $pdo->prepare(
                 "UPDATE foreman_daily_entitlements
-                    SET status='draft', currency=?, total_amount=?, needs_recalculation=0,
-                        calculated_at=?, calculated_by_user_id=?, updated_at=?
-                  WHERE id=?"
-            )->execute([$paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId, $simdi, $entId]);
+                    SET status = 'draft', currency = ?, total_amount = ?, needs_recalculation = 0,
+                        calculated_at = ?, calculated_by_user_id = ?, updated_at = ?
+                  WHERE id = ?"
+            )->execute([
+                $paraBirimi,
+                pdks_hakedis_kurus_tl($toplamKurus),
+                $simdi,
+                $userId,
+                $simdi,
+                $entId,
+            ]);
         } else {
             $insE = $pdo->prepare(
                 "INSERT INTO foreman_daily_entitlements
-                    (session_id, foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo,
-                     status, currency, total_amount, needs_recalculation, calculated_at, calculated_by_user_id)
+                    (session_id, foreman_id, foreman_name_snapshot, foreman_code_snapshot,
+                     work_date, depo, status, currency, total_amount, needs_recalculation,
+                     calculated_at, calculated_by_user_id)
                  VALUES (?,?,?,?,?,?,'draft',?,?,0,?,?)"
             );
             $insE->execute([
-                $sessionId, (int)$oturum['foreman_id'], (string)($oturum['foreman_name_snapshot'] ?? ''),
-                (string)($oturum['foreman_code_snapshot'] ?? ''), (string)$oturum['work_date'],
-                (string)($oturum['depo'] ?? ''), $paraBirimi, pdks_hakedis_kurus_tl($toplamKurus), $simdi, $userId,
+                $sessionId,
+                (int)$oturum['foreman_id'],
+                (string)($oturum['foreman_name_snapshot'] ?? ''),
+                (string)($oturum['foreman_code_snapshot'] ?? ''),
+                (string)$oturum['work_date'],
+                (string)($oturum['depo'] ?? ''),
+                $paraBirimi,
+                pdks_hakedis_kurus_tl($toplamKurus),
+                $simdi,
+                $userId,
             ]);
             $entId = (int)$pdo->lastInsertId();
         }
 
         $insL = $pdo->prepare(
             "INSERT INTO foreman_daily_entitlement_lines
-                (entitlement_id, work_period_id, worker_type_id, worker_type_code_snapshot, worker_type_name_snapshot,
-                 attendance_class_snapshot, worker_count, unit_rate, overtime_hours, overtime_mode_snapshot,
-                 overtime_unit_rate, overtime_total, line_total)
+                (entitlement_id, work_period_id, worker_type_id,
+                 worker_type_code_snapshot, worker_type_name_snapshot,
+                 attendance_class_snapshot, worker_count, unit_rate,
+                 overtime_hours, overtime_mode_snapshot, overtime_unit_rate,
+                 overtime_total, line_total)
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
         );
         foreach ($satirlar as $sl) {
             $insL->execute([
-                $entId, $sl['work_period_id'], $sl['worker_type_id'], $sl['worker_type_code_snapshot'], $sl['worker_type_name_snapshot'],
-                $sl['attendance_class_snapshot'], $sl['worker_count'], $sl['unit_rate'], $sl['overtime_hours'], $sl['overtime_mode_snapshot'],
-                $sl['overtime_unit_rate'], $sl['overtime_total'], $sl['line_total'],
+                $entId,
+                $sl['work_period_id'],
+                $sl['worker_type_id'],
+                $sl['worker_type_code_snapshot'],
+                $sl['worker_type_name_snapshot'],
+                $sl['attendance_class_snapshot'],
+                $sl['worker_count'],
+                $sl['unit_rate'],
+                $sl['overtime_hours'],
+                $sl['overtime_mode_snapshot'],
+                $sl['overtime_unit_rate'],
+                $sl['overtime_total'],
+                $sl['line_total'],
             ]);
         }
         $pdo->commit();
@@ -557,16 +722,28 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         ]);
     }
 
-    return ['ok' => true, 'entitlement_id' => $entId, 'status' => 'draft', 'total_amount' => pdks_hakedis_kurus_tl($toplamKurus), 'lines' => $satirlar];
+    return [
+        'ok' => true,
+        'entitlement_id' => $entId,
+        'status' => 'draft',
+        'total_amount' => pdks_hakedis_kurus_tl($toplamKurus),
+        'lines' => $satirlar,
+    ];
 }
 
-function pdks_faz8b_hakedis_finalize(int $sessionId, int $userId, bool $eksikCikisOnayi, ?PDO $pdo = null): array
-{
+function pdks_faz8b_hakedis_finalize(
+    int $sessionId,
+    int $userId,
+    bool $eksikCikisOnayi,
+    ?PDO $pdo = null
+): array {
     $pdo = $pdo ?? db();
-    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id=?");
+
+    $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?");
     $st->execute([$sessionId]);
     $oturum = $st->fetch();
     if (!$oturum) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+
     if ((string)$oturum['status'] !== 'closed') {
         return ['ok' => false, 'kod' => 'oturum_acik', 'hata' => 'Mesai AÇIK — hakediş yalnız KAPALI mesai için kesinleştirilebilir.'];
     }
@@ -583,9 +760,16 @@ function pdks_faz8b_hakedis_finalize(int $sessionId, int $userId, bool $eksikCik
     $simdi = date('Y-m-d H:i:s');
     $pdo->prepare(
         "UPDATE foreman_daily_entitlements
-            SET status='final', finalized_at=?, finalized_by_user_id=?, missing_exit_ack=?, needs_recalculation=0, updated_at=?
-          WHERE id=?"
-    )->execute([$simdi, $userId, $eksikToplam > 0 ? 1 : 0, $simdi, (int)$hesap['entitlement_id']]);
+            SET status = 'final', finalized_at = ?, finalized_by_user_id = ?,
+                missing_exit_ack = ?, needs_recalculation = 0, updated_at = ?
+          WHERE id = ?"
+    )->execute([
+        $simdi,
+        $userId,
+        $eksikToplam > 0 ? 1 : 0,
+        $simdi,
+        (int)$hesap['entitlement_id'],
+    ]);
 
     if (function_exists('audit_log_event')) {
         audit_log_event('finalize', 'foreman_daily_entitlements', (int)$hesap['entitlement_id'], null, [
@@ -594,5 +778,11 @@ function pdks_faz8b_hakedis_finalize(int $sessionId, int $userId, bool $eksikCik
             'total_amount' => $hesap['total_amount'],
         ]);
     }
-    return ['ok' => true, 'entitlement_id' => (int)$hesap['entitlement_id'], 'status' => 'final', 'total_amount' => $hesap['total_amount']];
+
+    return [
+        'ok' => true,
+        'entitlement_id' => (int)$hesap['entitlement_id'],
+        'status' => 'final',
+        'total_amount' => $hesap['total_amount'],
+    ];
 }
