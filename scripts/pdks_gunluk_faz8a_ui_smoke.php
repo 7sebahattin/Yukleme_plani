@@ -11,7 +11,7 @@
 // ⚠ ajax=oturum/kaydet uçları POST + exit() içerir — GET render testi
 // bunları TETİKLEMEZ. İş kuralları scripts/pdks_gunluk_faz8a_smoke.php'de
 // KAPSAMLI test ediliyor; burada YALNIZ sayfaların ŞEMA DURUMUNA göre
-// DOĞRU render ettiği doğrulanır (Faz 8A hazır → Tip/Mesai butonları VAR;
+// DOĞRU render ettiği doğrulanır (Faz 8A hazır → GİRİŞ öncesi tip seçimi;
 // hazır değil → Faz 2'nin eski ekranı AYNEN görünür).
 //
 //   php scripts/pdks_gunluk_faz8a_ui_smoke.php   → çıkış kodu 0 = geçti
@@ -140,7 +140,7 @@ echo "\n=== 1. FAZ 8A ŞEMASI HENÜZ HAZIR DEĞİLKEN — ESKİ EKRAN AYNEN GÖR
 $s0 = renderPage('gunluk_isci_giris_cikis.php');
 ok('sayfa hata sızdırmadan render edildi', !str_contains($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !preg_match('/Warning:|Notice:|Deprecated:/', $s0));
-ok('İşçi Tipi/Mesai seçim bloğu (giTipMesaiSec) RENDER EDİLMEDİ (şema hazır değil)', !str_contains($s0, 'id="giTipMesaiSec"'));
+ok('İşçi tipi seçim penceresi RENDER EDİLMEDİ (şema hazır değil)', !str_contains($s0, 'id="giTipSec"'));
 ok('Mod seçim ekranı (GİRİŞ/ÇIKIŞ butonları) hâlâ render ediliyor', str_contains($s0, 'GİRİŞ MODU') && str_contains($s0, 'ÇIKIŞ MODU'));
 
 echo "\n=== 2. FAZ 8A MİGRASYONUNU ÇALIŞTIR ===\n";
@@ -170,15 +170,27 @@ if (!($k001Sonuc['ok'] ?? false)) {
     throw new RuntimeException('K001 nötr test kartı oluşturulamadı: ' . ($k001Sonuc['hata'] ?? 'bilinmeyen hata'));
 }
 
-echo "\n=== 3. FAZ 8A ŞEMASI HAZIRKEN — İŞÇİ TİPİ + MESAİ SEÇİMİ GÖRÜNÜR ===\n";
+echo "\n=== 3. FAZ 8A ŞEMASI HAZIRKEN — GİRİŞ ÖNCESİ İŞÇİ TİPİ SEÇİMİ ===\n";
 $s1 = renderPage('gunluk_isci_giris_cikis.php');
 ok('sayfa hata sızdırmadan render edildi', !str_contains($s1, '__ERROR__'), $s1);
 ok('PHP Warning/Notice yok', !preg_match('/Warning:|Notice:|Deprecated:/', $s1));
-ok('İşçi Tipi/Mesai seçim bloğu (giTipMesaiSec) RENDER EDİLDİ', str_contains($s1, 'id="giTipMesaiSec"'));
-ok('KADIN işçi tipi butonu dinamik olarak worker_types\'tan geldi (hardcode DEĞİL)', str_contains($s1, 'data-gi-tip-id'));
-ok('Giriş ekranında Tam / Yarım Mesai butonları ARTIK YOK', !str_contains($s1, 'data-gi-mesai-kod='));
-ok('İşçi Tipi/Mesai bloğu başlangıçta GİZLİ (hidden — yalnız GİRİŞ modunda JS ile açılır)',
-    (bool)preg_match('/id="giTipMesaiSec"[^>]*hidden/', $s1));
+ok('İşçi tipi seçim penceresi başlangıçta gizli render edildi', (bool)preg_match('/id="giTipSec"[^>]*role="dialog"[^>]*hidden/', $s1));
+$modeHtml = substr($s1, strpos($s1, 'id="giModeSec"'), strpos($s1, 'id="giTipSec"') - strpos($s1, 'id="giModeSec"'));
+$tipHtml = substr($s1, strpos($s1, 'id="giTipSec"'), strpos($s1, 'id="giScanSec"') - strpos($s1, 'id="giTipSec"'));
+$scanHtml = substr($s1, strpos($s1, 'id="giScanSec"'), strpos($s1, 'id="giReconSec"') - strpos($s1, 'id="giScanSec"'));
+ok('Ana mod ekranında yalnız iki büyük mod butonu, işçi tipi/mesai seçimi yok', substr_count($modeHtml, 'data-gi-mode=') === 2 && !str_contains($modeHtml, 'data-gi-tip-id=') && !str_contains($modeHtml, 'data-gi-mesai-kod='));
+ok('İşçi tipi penceresinde Kadın ve Erkek seçenekleri dinamik tip kimlikleriyle var', substr_count($tipHtml, 'data-gi-tip-id=') === 2 && str_contains($tipHtml, 'KADIN') && str_contains($tipHtml, 'ERKEK'));
+ok('Tarama ekranında seçim butonları yerine kompakt mod ve tip rozetleri var', str_contains($scanHtml, 'id="giModeBadge"') && str_contains($scanHtml, 'id="giTipBadge"') && !str_contains($scanHtml, 'data-gi-tip-id='));
+ok('Tarama sırası: çavuş/mod → okutma/NFC → Bugün → yardımcı işlemler',
+    strpos($scanHtml, 'id="giScanCavusAd"') < strpos($scanHtml, 'id="giModeBadge"')
+    && strpos($scanHtml, 'id="giModeBadge"') < strpos($scanHtml, 'pdks-kiosk-scan-icon')
+    && strpos($scanHtml, 'pdks-kiosk-scan-icon') < strpos($scanHtml, 'id="giNfcBtnWrap"')
+    && strpos($scanHtml, 'id="giNfcBtnWrap"') < strpos($scanHtml, 'id="giSayaclar"')
+    && strpos($scanHtml, 'id="giSayaclar"') < strpos($scanHtml, 'id="giCavusDegistir2"'));
+ok('GİRİŞ tip seçimine gider; tip seçildikten sonra taramaya geçer; ÇIKIŞ tipi sormadan ilerler',
+    (bool)preg_match('/if \(mod === \'GIRIS\' && tipSec\) \{\s*ekranGoster\(tipSec\);/s', $s1)
+    && str_contains($s1, "modSec('GIRIS');") && str_contains($s1, 'modSec(mod);'));
+ok('Tam/Yarım/Fazla Mesai seçim arayüzü yok', !str_contains($s1, 'data-gi-mesai-kod=') && !str_contains($s1, 'giTipMesaiSec'));
 ok('Web Audio beep fonksiyonları (sesBasarili/sesHata) sayfada tanımlı', str_contains($s1, 'sesBasarili') && str_contains($s1, 'sesHata'));
 ok('PdksNfcOku.baslat() ÇAĞRISI hâlâ AYNEN duruyor (NFC yaşam döngüsü BOZULMADI)', str_contains($s1, 'PdksNfcOku.baslat('));
 

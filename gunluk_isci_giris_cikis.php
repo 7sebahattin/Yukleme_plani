@@ -27,8 +27,8 @@ $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);   // Faz 1 kuralı: normal ziyarette DDL YOK — bkz. o fonksiyon
 $base = base_url();
 
-// ⚠ FAZ 8A: şema hazırsa GİRİŞ ekranında İşçi Tipi + Tam/Yarım seçimi
-// gösterilir ve kayıt yeni work-period fonksiyonlarına gider; şema HENÜZ
+// ⚠ FAZ 8A: şema hazırsa GİRİŞ modu öncesinde İşçi Tipi seçilir
+// ve kayıt yeni work-period fonksiyonlarına gider; şema HENÜZ
 // hazır değilse (migrasyon çalıştırılmadan önce) sayfa AYNEN Faz 2'nin eski
 // davranışını sergiler — kod deploy'u ile migrasyon arasında tarama BOZULMAZ.
 $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
@@ -186,41 +186,34 @@ render_flash();
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis" data-gi-mode="CIKIS">
             🚪 ÇIKIŞ MODU
         </button>
-        <button type="button" class="btn btn-ghost" id="giCavusDegistir1">↩ Çavuşu Değiştir</button>
+        <a href="#" id="giCavusDegistir1">↩ Çavuşu Değiştir</a>
     </div>
 
-    <!-- ── 2) Tarama + canlı sayaçlar ───────────────────────── -->
-    <div id="giScanSec" class="pdks-kiosk-scan" hidden>
+    <?php if ($faz8aHazir): ?>
+    <!-- ── 2) Giriş öncesi işçi tipi seçimi ─────────────────── -->
+    <div id="giTipSec" class="pdks-kiosk-modesec pdks-kiosk-type-popup" role="dialog" aria-modal="false" aria-labelledby="giTipBaslik" hidden>
+        <div class="pdks-kiosk-selected">
+            <div class="pdks-kiosk-selected-label">SEÇİLİ ÇAVUŞ · GİRİŞ MODU</div>
+            <div class="pdks-kiosk-selected-name" id="giTipCavusAd"></div>
+        </div>
+        <h2 id="giTipBaslik">İşçi Tipi Seçin</h2>
+        <?php foreach ($isciTipleri as $t): ?>
+        <?php if (in_array($t['code'], ['KADIN', 'ERKEK'], true)): ?>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
+        <?php endif; ?>
+        <?php endforeach; ?>
+        <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── 3) Tarama + canlı sayaçlar ───────────────────────── -->
+    <div id="giScanSec" class="pdks-kiosk-scan pdks-kiosk-scan-gunluk" hidden>
         <div class="pdks-kiosk-selected" style="margin-bottom:4px">
             <div class="pdks-kiosk-selected-name" id="giScanCavusAd" style="font-size:1.05rem"></div>
         </div>
-        <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
-
-        <?php if ($faz8aHazir): ?>
-        <!-- ── FAZ 8A: GİRİŞ modunda İşçi Tipi + Tam/Yarım Mesai — büyük,
-             dokunmatik dostu butonlar. Seçim değiştirmek TARAMAYI KESMEZ;
-             başarılı her taramadan sonra AYNEN kalır (görev talimatı §11). ── -->
-        <div id="giTipMesaiSec" class="pdks-kiosk-counters" hidden>
-            <h3>İŞÇİ TİPİ</h3>
-            <div class="pdks-kiosk-tipbtn-row" id="giTipBtnRow">
-                <?php foreach ($isciTipleri as $t): ?>
-                <button type="button" class="btn btn-lg pdks-kiosk-secbtn" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
-                <?php endforeach; ?>
-            </div>
-
-            <p class="muted pdks-kiosk-secuyari" id="giSecUyari" style="margin:8px 0 0" hidden>Taramaya başlamadan önce İşçi Tipi seçin.</p>
-        </div>
-        <?php endif; ?>
-
-        <div class="pdks-kiosk-counters" id="giSayaclar">
-            <h3>Bugün — <span id="giSayacDepo"></span></h3>
-            <div id="giSayacSatirlar"></div>
-            <div class="pdks-kiosk-counter-totals">
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
-            </div>
+        <div class="pdks-kiosk-scan-status">
+            <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
+            <span id="giTipBadge" class="pdks-kiosk-mode-badge pdks-kiosk-type-badge" hidden></span>
         </div>
 
         <div class="pdks-kiosk-scan-icon" aria-hidden="true">📇</div>
@@ -236,6 +229,17 @@ render_flash();
         <input type="text" id="giScanInput" class="pdks-kiosk-hidden-input"
                inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
+        <div class="pdks-kiosk-counters" id="giSayaclar">
+            <h3>Bugün — <span id="giSayacDepo"></span></h3>
+            <div id="giSayacSatirlar"></div>
+            <div class="pdks-kiosk-counter-totals">
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
+            </div>
+        </div>
+
         <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:24px">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
             <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
@@ -248,7 +252,7 @@ render_flash();
         </div>
     </div>
 
-    <!-- ── 3) Mutabakat / kapatma ekranı ────────────────────── -->
+    <!-- ── 4) Mutabakat / kapatma ekranı ────────────────────── -->
     <div id="giReconSec" class="pdks-kiosk-modesec" hidden>
         <div class="pdks-kiosk-recon">
             <h2 style="margin-top:0">Eksik Çıkışlar Var</h2>
@@ -291,9 +295,11 @@ render_flash();
     var pageHead   = document.getElementById('giPageHead');
     var cavusSec   = document.getElementById('giCavusSec');
     var modeSec    = document.getElementById('giModeSec');
+    var tipSec     = document.getElementById('giTipSec');
     var scanSec    = document.getElementById('giScanSec');
     var reconSec   = document.getElementById('giReconSec');
     var modeBadge  = document.getElementById('giModeBadge');
+    var tipBadge   = document.getElementById('giTipBadge');
     var scanInput  = document.getElementById('giScanInput');
     var resultBox  = document.getElementById('giResult');
     var resultInner = document.getElementById('giResultInner');
@@ -302,23 +308,9 @@ render_flash();
     var nfcHint    = document.getElementById('giNfcHint');
     var nfcDebugEl = document.getElementById('giNfcDebug');
 
-    // ── FAZ 8A: İşçi Tipi + Tam/Yarım seçim durumu (yalnız şema hazırsa DOM'da var) ──
-    var tipMesaiSec = document.getElementById('giTipMesaiSec');
-    var secUyari    = document.getElementById('giSecUyari');
+    // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
     var seciliTipAd = null;
-
-    if (tipMesaiSec) {
-        document.querySelectorAll('[data-gi-tip-id]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                seciliTipId = parseInt(btn.getAttribute('data-gi-tip-id'), 10);
-                seciliTipAd = btn.getAttribute('data-gi-tip-ad');
-                document.querySelectorAll('[data-gi-tip-id]').forEach(function (b) { b.classList.toggle('pdks-kiosk-secbtn-aktif', b === btn); });
-                if (secUyari) secUyari.hidden = true;
-            });
-        });
-
-    }
 
     // ── Basit ses geri bildirimi — Web Audio API, harici dosya/kütüphane
     // YOK (görev talimatı §15). Ses BAŞARISIZ olursa kayda ASLA engel olmaz
@@ -366,6 +358,7 @@ render_flash();
     var seciliCavusAd  = null;
     var currentMode    = null;   // 'GIRIS' | 'CIKIS' — İSTEMCİDE ASLA otomatik seçilmez
     var currentSession = null;   // { id, ... } — sunucudan gelir, İCAT EDİLMEZ
+    var modeRequest = 0;
     var busy = false;
     var resultTimer = null;
 
@@ -385,7 +378,7 @@ render_flash();
     }
 
     function ekranGoster(ekran) {
-        [cavusSec, modeSec, scanSec, reconSec].forEach(function (el) { el.hidden = (el !== ekran); });
+        [cavusSec, modeSec, tipSec, scanSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
         // ⚠ .page-head display:flex TAŞIR — hidden TEK BAŞINA gizleyemez
         // (bkz. CLAUDE.md maliyet.css notu, giris_cikis.php İLE AYNI düzeltme).
         if (pageHead) pageHead.style.display = (ekran === scanSec) ? 'none' : '';
@@ -406,7 +399,10 @@ render_flash();
             seciliCavusId = parseInt(btn.getAttribute('data-gi-cavus-id'), 10);
             seciliCavusAd = btn.getAttribute('data-gi-cavus-ad');
             document.getElementById('giSeciliCavusAd').textContent = seciliCavusAd;
+            if (tipSec) document.getElementById('giTipCavusAd').textContent = seciliCavusAd;
+            modeRequest++;
             currentMode = null; currentSession = null;
+            seciliTipId = null; seciliTipAd = null;
             ekranGoster(modeSec);
         });
     });
@@ -415,11 +411,13 @@ render_flash();
         // ⚠ Sunucudaki oturum KAPATILMAZ — yalnız istemci ekranı sıfırlanır
         // (kullanıcının açık talimatı: "changing screen/foreman must NOT
         // close the session. Sessions stay server-side until explicitly closed.")
+        modeRequest++;
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
+        seciliTipId = null; seciliTipAd = null;
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
     }
-    document.getElementById('giCavusDegistir1').addEventListener('click', cavusDegistir);
+    document.getElementById('giCavusDegistir1').addEventListener('click', function (e) { e.preventDefault(); cavusDegistir(); });
     document.getElementById('giCavusDegistir2').addEventListener('click', cavusDegistir);
 
     // ── 1) Mod seçimi → sunucudan oturum aç/getir ────────────
@@ -444,6 +442,8 @@ render_flash();
 
     function modSec(mod) {
         if (!seciliCavusId) return;
+        if (mod === 'GIRIS' && tipSec && !seciliTipId) return;
+        var request = ++modeRequest;
         currentMode = mod;
         fetch('gunluk_isci_giris_cikis.php?ajax=oturum', {
             method: 'POST',
@@ -452,45 +452,63 @@ render_flash();
         })
             .then(function (r) { return r.json(); })
             .then(function (d) {
+                if (request !== modeRequest) return;
                 if (!d || !d.ok) {
                     alert((d && d.hata) || 'Mesai açılamadı/bulunamadı.');
-                    currentMode = null;
+                    currentMode = null; currentSession = null;
+                    ekranGoster(modeSec);
                     return;
                 }
                 currentSession = d.session;
                 modeBadge.textContent = MOD_ETIKET[mod];
                 modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF[mod];
-                document.getElementById('giScanCavusAd').textContent = seciliCavusAd + ' — ' + MOD_ETIKET[mod];
+                tipBadge.hidden = (mod !== 'GIRIS' || !seciliTipAd);
+                tipBadge.textContent = tipBadge.hidden ? '' : seciliTipAd;
+                document.getElementById('giScanCavusAd').textContent = seciliCavusAd;
                 document.getElementById('giSayacDepo').textContent = currentSession.depo || '(depo yok)';
                 sayaclariGoster(d.ozet || {});
                 scanInput.value = '';
                 resultBox.hidden = true;
-                // ⚠ FAZ 8A: İşçi Tipi/Mesai seçimi YALNIZ GİRİŞ modunda görünür —
-                // ÇIKIŞ bunları AÇIK dönemden türetir, yeniden SORMAZ (görev talimatı §18).
-                if (tipMesaiSec) {
-                    tipMesaiSec.hidden = (mod !== 'GIRIS');
-                    if (mod === 'GIRIS') {
-                        // Yeni bir GİRİŞ akışına her girişte seçim SIFIRLANIR — operatör
-                        // her çavuş/mod değişiminde BİLİNÇLİ olarak Tip/Mesai seçsin
-                        // (önceki çavuşun seçimi sessizce taşınmasın).
-                        seciliTipId = null; seciliTipAd = null;
-                        document.querySelectorAll('[data-gi-tip-id]').forEach(function (b) { b.classList.remove('pdks-kiosk-secbtn-aktif'); });
-                        if (secUyari) secUyari.hidden = true;
-                    }
-                }
                 ekranGoster(scanSec);
                 focusInput();
             })
             .catch(function () {
+                if (request !== modeRequest) return;
                 alert('Bağlantı hatası. Tekrar deneyin.');
-                currentMode = null;
+                currentMode = null; currentSession = null;
+                ekranGoster(modeSec);
             });
     }
     document.querySelectorAll('[data-gi-mode]').forEach(function (btn) {
-        btn.addEventListener('click', function () { modSec(btn.getAttribute('data-gi-mode')); });
+        btn.addEventListener('click', function () {
+            var mod = btn.getAttribute('data-gi-mode');
+            seciliTipId = null; seciliTipAd = null;
+            if (mod === 'GIRIS' && tipSec) {
+                ekranGoster(tipSec);
+                var ilkTip = tipSec.querySelector('[data-gi-tip-id]');
+                if (ilkTip) ilkTip.focus();
+                return;
+            }
+            modSec(mod);
+        });
+    });
+    document.querySelectorAll('[data-gi-tip-id]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            seciliTipId = parseInt(btn.getAttribute('data-gi-tip-id'), 10);
+            seciliTipAd = btn.getAttribute('data-gi-tip-ad');
+            modSec('GIRIS');
+        });
+    });
+    if (tipSec) document.getElementById('giTipVazgec').addEventListener('click', function () {
+        modeRequest++;
+        seciliTipId = null; seciliTipAd = null;
+        ekranGoster(modeSec);
+        modeSec.querySelector('[data-gi-mode="GIRIS"]').focus();
     });
     document.getElementById('giModDegistir').addEventListener('click', function () {
+        modeRequest++;
         currentMode = null; currentSession = null;
+        seciliTipId = null; seciliTipAd = null;
         ekranGoster(modeSec);
     });
 
@@ -546,18 +564,14 @@ render_flash();
         if (busy || !currentMode || !currentSession) return;
         var deger = String(hamUid || '').trim();
         if (deger === '') return;
-        // ⚠ FAZ 8A: GİRİŞ modunda İşçi Tipi + Mesai seçilmeden TARAMA KABUL
-        // EDİLMEZ (görev talimatı §10 akışı: "3. İşçi Tipi seç 4. Tam/Yarım
-        // seç 5. tara") — istemcide erken reddedilir, sunucu da AYNI kuralı
-        // ayrıca doğrular (secim_eksik, bkz. PHP tarafı).
-        if (tipMesaiSec && currentMode === 'GIRIS' && !seciliTipId) {
-            if (secUyari) secUyari.hidden = false;
+        // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
+        if (tipSec && currentMode === 'GIRIS' && !seciliTipId) {
             sesHata();
             return;
         }
         busy = true;
         var govde = { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
-        if (tipMesaiSec && currentMode === 'GIRIS') {
+        if (tipSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
         }
         fetch('gunluk_isci_giris_cikis.php?ajax=kaydet', {
@@ -650,7 +664,7 @@ render_flash();
         nfcDebugYaz('button: disabled (desteklenmiyor veya güvenli bağlam yok)');
     }
 
-    // ── 3) Mesaiyi kapat / mutabakat ──────────────────────────
+    // ── 4) Mesaiyi kapat / mutabakat ──────────────────────────
     function reconGoster(ozet) {
         var satirlar = '';
         var tipler = {};

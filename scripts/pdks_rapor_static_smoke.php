@@ -244,6 +244,7 @@ $helpersBeklenenEskiSatirlar = [
     // emsali, pdks_faz1b_static_smoke.php'nin AYNI turda eklediği satırın eşi).
     "-    define('APP_SURUM', 'v218');",
     "-    define('APP_SURUM', 'v220');",
+    "-    define('APP_SURUM', 'v221');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
