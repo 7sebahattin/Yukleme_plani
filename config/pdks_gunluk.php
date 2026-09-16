@@ -1760,7 +1760,7 @@ defined('PDKS_GUNLUK_FAZ8A_AKTIF') || define('PDKS_GUNLUK_FAZ8A_AKTIF', true);
  *  (Faz 8B onay mimarisi) BİLEREK burada YOK — 8A yalnız BEYAN EDER, ONAYLAMAZ. */
 function pdks_gunluk_faz8a_mesai_siniflari(): array
 {
-    return ['tam' => 'Tam Mesai', 'yarim' => 'Yarım Mesai'];
+    return ['auto' => 'Otomatik', 'tam' => 'Tam Mesai', 'yarim' => 'Yarım Mesai'];
 }
 
 // =========================================================

@@ -33,7 +33,6 @@ $base = base_url();
 // davranışını sergiler — kod deploy'u ile migrasyon arasında tarama BOZULMAZ.
 $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 $isciTipleri = $faz8aHazir ? pdks_gunluk_tip_listele(true, $pdo) : [];
-$mesaiSiniflari = pdks_gunluk_faz8a_mesai_siniflari();
 
 // ── AJAX uçları — SAYFANIN İÇİNDE, JSON. Yön istemciden ASLA otomatik
 // tahmin edilmez, kart/oturum çözümü TAMAMEN sunucudadır. ──────────────
@@ -78,13 +77,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kaydet')
     // mantığı YOKTUR (görev talimatı §14).
     if (pdks_gunluk_faz8a_sema_hazir($pdo)) {
         if ($eventType === 'GIRIS') {
-            $workerTypeId  = (int)($govde['worker_type_id'] ?? 0);
-            $declaredClass = trim((string)($govde['mesai_sinifi'] ?? ''));
-            if ($workerTypeId <= 0 || !array_key_exists($declaredClass, pdks_gunluk_faz8a_mesai_siniflari())) {
-                echo json_encode(['ok' => false, 'kod' => 'secim_eksik', 'hata' => 'Önce İşçi Tipi ve Tam/Yarım Mesai seçin.'], JSON_UNESCAPED_UNICODE);
+            $workerTypeId = (int)($govde['worker_type_id'] ?? 0);
+            if ($workerTypeId <= 0) {
+                echo json_encode(['ok' => false, 'kod' => 'secim_eksik', 'hata' => 'Önce İşçi Tipi seçin.'], JSON_UNESCAPED_UNICODE);
                 exit;
             }
-            $sonuc = pdks_gunluk_faz8a_giris_kaydet($hamUid, $kaynak, $sessionId, $workerTypeId, $declaredClass, (int)$auth_user['id'], $pdo);
+
+            // Faz 8D: operatör Tam/Yarım seçmez.
+            // Gerçek mesai sonucu giriş/çıkış saatlerinden Faz 8B motorunda belirlenir.
+            $sonuc = pdks_gunluk_faz8a_giris_kaydet(
+                $hamUid,
+                $kaynak,
+                $sessionId,
+                $workerTypeId,
+                'auto',
+                (int)$auth_user['id'],
+                $pdo
+            );
         } elseif ($eventType === 'CIKIS') {
             $sonuc = pdks_gunluk_faz8a_cikis_kaydet($hamUid, $kaynak, $sessionId, (int)$auth_user['id'], $pdo);
         } else {
@@ -198,13 +207,8 @@ render_flash();
                 <button type="button" class="btn btn-lg pdks-kiosk-secbtn" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
                 <?php endforeach; ?>
             </div>
-            <h3 style="margin-top:14px">MESAİ</h3>
-            <div class="pdks-kiosk-tipbtn-row" id="giMesaiBtnRow">
-                <?php foreach ($mesaiSiniflari as $kod => $etiket): ?>
-                <button type="button" class="btn btn-lg pdks-kiosk-secbtn" data-gi-mesai-kod="<?= h($kod) ?>"><?= h(mb_strtoupper($etiket, 'UTF-8')) ?></button>
-                <?php endforeach; ?>
-            </div>
-            <p class="muted pdks-kiosk-secuyari" id="giSecUyari" style="margin:8px 0 0" hidden>Taramaya başlamadan önce İşçi Tipi ve Mesai seçin.</p>
+
+            <p class="muted pdks-kiosk-secuyari" id="giSecUyari" style="margin:8px 0 0" hidden>Taramaya başlamadan önce İşçi Tipi seçin.</p>
         </div>
         <?php endif; ?>
 
@@ -303,7 +307,6 @@ render_flash();
     var secUyari    = document.getElementById('giSecUyari');
     var seciliTipId = null;
     var seciliTipAd = null;
-    var seciliMesaiKod = null;
 
     if (tipMesaiSec) {
         document.querySelectorAll('[data-gi-tip-id]').forEach(function (btn) {
@@ -314,13 +317,7 @@ render_flash();
                 if (secUyari) secUyari.hidden = true;
             });
         });
-        document.querySelectorAll('[data-gi-mesai-kod]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                seciliMesaiKod = btn.getAttribute('data-gi-mesai-kod');
-                document.querySelectorAll('[data-gi-mesai-kod]').forEach(function (b) { b.classList.toggle('pdks-kiosk-secbtn-aktif', b === btn); });
-                if (secUyari) secUyari.hidden = true;
-            });
-        });
+
     }
 
     // ── Basit ses geri bildirimi — Web Audio API, harici dosya/kütüphane
@@ -476,8 +473,8 @@ render_flash();
                         // Yeni bir GİRİŞ akışına her girişte seçim SIFIRLANIR — operatör
                         // her çavuş/mod değişiminde BİLİNÇLİ olarak Tip/Mesai seçsin
                         // (önceki çavuşun seçimi sessizce taşınmasın).
-                        seciliTipId = null; seciliTipAd = null; seciliMesaiKod = null;
-                        document.querySelectorAll('[data-gi-tip-id],[data-gi-mesai-kod]').forEach(function (b) { b.classList.remove('pdks-kiosk-secbtn-aktif'); });
+                        seciliTipId = null; seciliTipAd = null;
+                        document.querySelectorAll('[data-gi-tip-id]').forEach(function (b) { b.classList.remove('pdks-kiosk-secbtn-aktif'); });
                         if (secUyari) secUyari.hidden = true;
                     }
                 }
@@ -553,7 +550,7 @@ render_flash();
         // EDİLMEZ (görev talimatı §10 akışı: "3. İşçi Tipi seç 4. Tam/Yarım
         // seç 5. tara") — istemcide erken reddedilir, sunucu da AYNI kuralı
         // ayrıca doğrular (secim_eksik, bkz. PHP tarafı).
-        if (tipMesaiSec && currentMode === 'GIRIS' && (!seciliTipId || !seciliMesaiKod)) {
+        if (tipMesaiSec && currentMode === 'GIRIS' && !seciliTipId) {
             if (secUyari) secUyari.hidden = false;
             sesHata();
             return;
@@ -562,7 +559,6 @@ render_flash();
         var govde = { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
         if (tipMesaiSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
-            govde.mesai_sinifi = seciliMesaiKod;
         }
         fetch('gunluk_isci_giris_cikis.php?ajax=kaydet', {
             method: 'POST',

@@ -582,7 +582,7 @@ $autoEntry = pdks_gunluk_faz8a_giris_kaydet(
     'usb_decimal',
     $autoSid,
     $autoTypeId,
-    'tam',
+    'auto',
     1,
     $autoDb
 );
@@ -631,6 +631,13 @@ ok(
     'Worker type belongs to work period, not card master',
     $period !== false
         && (int)$period['worker_type_id_snapshot'] === $autoTypeId,
+    json_encode($period, JSON_UNESCAPED_UNICODE)
+);
+
+ok(
+    'New scan flow stores AUTO attendance declaration',
+    $period !== false
+        && $period['declared_attendance_class'] === 'auto',
     json_encode($period, JSON_UNESCAPED_UNICODE)
 );
 

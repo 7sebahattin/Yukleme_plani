@@ -98,7 +98,7 @@ render_flash();
     <td><?= h(date('H:i', strtotime($d['entry_time']))) ?></td>
     <td><?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></td>
     <td><?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></td>
-    <td><?= h($d['declared_attendance_class'] === 'yarim' ? 'Yarım' : 'Tam') ?></td>
+    <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
     <td>
         <?php if ($f['sinif_kaynak'] === 'otomatik'): ?>
             <span class="pdks-badge pdks-badge-tamamlandi">Otomatik Tam</span>
@@ -151,7 +151,7 @@ render_flash();
     <div class="pdks-row-name"><?= h($d['card_no']) ?> · <?= h($d['worker_type_name_snapshot']) ?></div>
     <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($d['entry_time']))) ?> · Çıkış <?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></div>
     <div class="pdks-row-sub">Süre: <?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></div>
-    <div class="pdks-row-sub">Beyan: <?= h($d['declared_attendance_class'] === 'yarim' ? 'Yarım' : 'Tam') ?></div>
+    <div class="pdks-row-sub">Beyan: <?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></div>
     <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM ' . (int)$f['fazla_mesai_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : '' ?></div>
     <form method="post" style="margin-top:8px">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
