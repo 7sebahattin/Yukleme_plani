@@ -1,27 +1,27 @@
 <?php
 // =========================================================
-// scripts/pdks_faz1b_static_smoke.php â€” PDKS Faz 1B statik kural testi
+// scripts/pdks_faz1b_static_smoke.php — PDKS Faz 1B statik kural testi
 //
-// SADECE CLI. AÄŸ yok, DB yok â€” kaynak kodda regex ile kural arar
-// (beyan_bildirim_smoke.php ile aynÄ± desen). ÅunlarÄ± KANITLAR:
+// SADECE CLI. Ağ yok, DB yok — kaynak kodda regex ile kural arar
+// (beyan_bildirim_smoke.php ile aynı desen). Şunları KANITLAR:
 //
-//  1) Her POST iÅŸleyen dosya csrf_check() Ã§aÄŸÄ±rÄ±yor.
-//  2) Her sayfa require_pdks() ile yetki kapÄ±sÄ±ndan geÃ§iyor.
-//  3) FAZ 1B sayfalarÄ± (personel*.php) kendi giriÅŸ/Ã§Ä±kÄ±ÅŸ yazma mantÄ±ÄŸÄ±nÄ±
-//     TEKRARLAMIYOR â€” attendance_events artÄ±k GERÃ‡EKTEN VAR (GiriÅŸ-Ã‡Ä±kÄ±ÅŸ
-//     fazÄ±), ama TEK yazma yolu config/pdks.php â†’ pdks_devam_kaydet()'tir;
-//     bu sayfalar ona dokunmaz. AyrÄ±ca:
-//     - Android/NFC ÃœRETÄ°M kodu yok (yalnÄ±z Faz 0'Ä±n teÅŸhis APK'si tools/ altÄ±nda,
-//       o da Ã¼retim deÄŸil)
-//     - ayrÄ± bir api_pdks.php dosyasÄ± yok (uÃ§ nokta giris_cikis.php iÃ§inde)
-//     - cihaz/token tabanlÄ± model (attendance_devices/attendance_api_sessions) yok
-//  4) UID mantÄ±ÄŸÄ± sayfa dosyalarÄ±nda TEKRARLANMADI â€” yalnÄ±z config/pdks.php'nin
-//     fonksiyonlarÄ± Ã§aÄŸrÄ±lÄ±yor (pdks_uid_hex_normalize/from_decimal doÄŸrudan
-//     kart yazma yolunun DIÅINDA kullanÄ±lmÄ±yor).
-//  5) Faz 1'in dÃ¼zeltilen "otomatik ters-alias" hatasÄ± YENÄ°DEN AÃ‡ILMADI.
-//  6) FotoÄŸraf endpoint'i path traversal'a kapalÄ± (regex ile dosya adÄ± doÄŸrulamasÄ±).
+//  1) Her POST işleyen dosya csrf_check() çağırıyor.
+//  2) Her sayfa require_pdks() ile yetki kapısından geçiyor.
+//  3) FAZ 1B sayfaları (personel*.php) kendi giriş/çıkış yazma mantığını
+//     TEKRARLAMIYOR — attendance_events artık GERÇEKTEN VAR (Giriş-Çıkış
+//     fazı), ama TEK yazma yolu config/pdks.php → pdks_devam_kaydet()'tir;
+//     bu sayfalar ona dokunmaz. Ayrıca:
+//     - Android/NFC ÜRETİM kodu yok (yalnız Faz 0'ın teşhis APK'si tools/ altında,
+//       o da üretim değil)
+//     - ayrı bir api_pdks.php dosyası yok (uç nokta giris_cikis.php içinde)
+//     - cihaz/token tabanlı model (attendance_devices/attendance_api_sessions) yok
+//  4) UID mantığı sayfa dosyalarında TEKRARLANMADI — yalnız config/pdks.php'nin
+//     fonksiyonları çağrılıyor (pdks_uid_hex_normalize/from_decimal doğrudan
+//     kart yazma yolunun DIŞINDA kullanılmıyor).
+//  5) Faz 1'in düzeltilen "otomatik ters-alias" hatası YENİDEN AÇILMADI.
+//  6) Fotoğraf endpoint'i path traversal'a kapalı (regex ile dosya adı doğrulaması).
 //
-//   php scripts/pdks_faz1b_static_smoke.php   â†’ Ã§Ä±kÄ±ÅŸ kodu 0 = tÃ¼m testler geÃ§ti
+//   php scripts/pdks_faz1b_static_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -29,7 +29,7 @@ ini_set('display_errors', '1');
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
-    die('Bu script yalnÄ±zca CLI Ã¼zerinden Ã§alÄ±ÅŸtÄ±rÄ±labilir.');
+    die('Bu script yalnızca CLI üzerinden çalıştırılabilir.');
 }
 
 $KOK = dirname(__DIR__);
@@ -37,14 +37,14 @@ $fail = 0; $gecen = 0;
 function ok(string $ad, bool $c, string $ipucu = ''): void {
     global $fail, $gecen;
     $c ? $gecen++ : $fail++;
-    printf("%-70s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    â†’ " . $ipucu);
+    printf("%-70s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
 function oku(string $p): string { global $KOK; return (string)@file_get_contents($KOK . '/' . $p); }
 
 $sayfalar = ['personel.php', 'personel_form.php', 'personel_kartlar.php', 'personel_foto.php'];
 $hepsi = ['config/pdks.php', ...$sayfalar, 'assets/pdks.js', 'assets/pdks.css'];
 
-echo "\n=== 1. SÃ–Z DÄ°ZÄ°MÄ° ===\n";
+echo "\n=== 1. SÖZ DİZİMİ ===\n";
 foreach ($hepsi as $d) {
     if (str_ends_with($d, '.php')) {
         $cikti = []; $rc = 0;
@@ -55,240 +55,240 @@ foreach ($hepsi as $d) {
     }
 }
 
-echo "\n=== 2. HER SAYFA YETKÄ° KAPISINDAN GEÃ‡Ä°YOR (require_pdks) ===\n";
+echo "\n=== 2. HER SAYFA YETKİ KAPISINDAN GEÇİYOR (require_pdks) ===\n";
 foreach ($sayfalar as $s) {
     $src = oku($s);
-    ok("$s â†’ require_pdks(...) Ã§aÄŸÄ±rÄ±yor", (bool)preg_match('/require_pdks\(\s*[\'"]/', $src));
+    ok("$s → require_pdks(...) çağırıyor", (bool)preg_match('/require_pdks\(\s*[\'"]/', $src));
 }
 
-echo "\n=== 3. HER POST Ä°ÅLEYÄ°CÄ° csrf_check() Ã‡AÄIRIYOR ===\n";
+echo "\n=== 3. HER POST İŞLEYİCİ csrf_check() ÇAĞIRIYOR ===\n";
 foreach (['personel.php', 'personel_form.php', 'personel_kartlar.php'] as $s) {
     $src = oku($s);
     if (preg_match("/REQUEST_METHOD'\\]\\s*===\\s*'POST'/", $src)) {
-        ok("$s â†’ POST dalÄ±nda csrf_check() var", str_contains($src, 'csrf_check($_POST'));
+        ok("$s → POST dalında csrf_check() var", str_contains($src, 'csrf_check($_POST'));
     } else {
-        ok("$s â†’ POST iÅŸlemi yok (kontrol gereksiz)", true);
+        ok("$s → POST işlemi yok (kontrol gereksiz)", true);
     }
 }
-// personel_form.php'nin BÄ°RDEN Ã‡OK action dalÄ± var (save_employee/delete_employee/
-// kart_ata/kart_durum/kart_degistir) â€” csrf_check() dallarÄ±n TEPESÄ°NDE, action
-// belirlenmeden Ã–NCE Ã§aÄŸrÄ±lmalÄ± (aksi hÃ¢lde bir dal korumasÄ±z kalabilir).
+// personel_form.php'nin BİRDEN ÇOK action dalı var (save_employee/delete_employee/
+// kart_ata/kart_durum/kart_degistir) — csrf_check() dalların TEPESİNDE, action
+// belirlenmeden ÖNCE çağrılmalı (aksi hâlde bir dal korumasız kalabilir).
 $pf = oku('personel_form.php');
-ok('personel_form.php: csrf_check() action switch\'inden Ã–NCE (tÃ¼m dallar korunuyor)',
+ok('personel_form.php: csrf_check() action switch\'inden ÖNCE (tüm dallar korunuyor)',
     (function () use ($pf) {
         $posCsrf = strpos($pf, 'csrf_check(');
         $posAction = strpos($pf, "\$action = trim(\$_POST['action']");
         return $posCsrf !== false && $posAction !== false && $posCsrf < $posAction;
     })());
 
-echo "\n=== 4. SERVER-SIDE YETKÄ° â€” POST DALLARINDA DA TEKRAR KONTROL (savunma derinliÄŸi) ===\n";
-ok('personel_kartlar.php: POST dalÄ±nda require_pdks TEKRARI var',
+echo "\n=== 4. SERVER-SIDE YETKİ — POST DALLARINDA DA TEKRAR KONTROL (savunma derinliği) ===\n";
+ok('personel_kartlar.php: POST dalında require_pdks TEKRARI var',
     (bool)preg_match("/REQUEST_METHOD'\\]\\s*===\\s*'POST'.*?require_pdks\\(/s", oku('personel_kartlar.php')));
-ok('personel_form.php: kart eylemlerinde pdks_can(\'cards\') tekrar kontrolÃ¼ var',
+ok('personel_form.php: kart eylemlerinde pdks_can(\'cards\') tekrar kontrolü var',
     str_contains($pf, "pdks_can('cards')"));
-ok('personel_form.php: silme iÅŸleminde pdks_can(\'employees\') tekrar kontrolÃ¼ var',
+ok('personel_form.php: silme işleminde pdks_can(\'employees\') tekrar kontrolü var',
     str_contains($pf, "pdks_can('employees')"));
 
-echo "\n=== 5. PERSONEL/KART SAYFALARI GÄ°RÄ°Å-Ã‡IKIÅ MANTIÄINI TEKRARLAMIYOR ===\n";
-// Not: attendance_events / pdks_devam_kaydet() artÄ±k config/pdks.php'de
-// GERÃ‡EKTEN VAR (GiriÅŸ-Ã‡Ä±kÄ±ÅŸ fazÄ±, bkz. scripts/pdks_db_smoke.php Â§15 ve
-// scripts/pdks_giris_cikis_static_smoke.php) â€” bu ARTIK "kapsam dÄ±ÅŸÄ±" deÄŸil.
-// Burada doÄŸrulanan, bu Faz 1B sayfalarÄ±nÄ±n (personel*.php) KENDÄ° Ä°Ã‡LERÄ°NDE
-// giriÅŸ/Ã§Ä±kÄ±ÅŸ yazma mantÄ±ÄŸÄ±nÄ± TEKRARLAMADIÄI, TEK OTORÄ°TENÄ°N (config/pdks.php)
-// dÄ±ÅŸÄ±na taÅŸmadÄ±ÄŸÄ±dÄ±r.
+echo "\n=== 5. PERSONEL/KART SAYFALARI GİRİŞ-ÇIKIŞ MANTIĞINI TEKRARLAMIYOR ===\n";
+// Not: attendance_events / pdks_devam_kaydet() artık config/pdks.php'de
+// GERÇEKTEN VAR (Giriş-Çıkış fazı, bkz. scripts/pdks_db_smoke.php §15 ve
+// scripts/pdks_giris_cikis_static_smoke.php) — bu ARTIK "kapsam dışı" değil.
+// Burada doğrulanan, bu Faz 1B sayfalarının (personel*.php) KENDİ İÇLERİNDE
+// giriş/çıkış yazma mantığını TEKRARLAMADIĞI, TEK OTORİTENİN (config/pdks.php)
+// dışına taşmadığıdır.
 $tumIcerik = '';
 foreach ($sayfalar as $s) $tumIcerik .= "\n" . oku($s);
 $tumIcerik .= "\n" . oku('config/pdks.php');
 $sayfaIcerik = '';
 foreach ($sayfalar as $s) $sayfaIcerik .= "\n" . oku($s);
 
-ok('Faz 1B sayfalarÄ± (personel*.php) attendance_events\'e SQL YAZMIYOR (yalnÄ±z config/pdks.php yazar)',
+ok('Faz 1B sayfaları (personel*.php) attendance_events\'e SQL YAZMIYOR (yalnız config/pdks.php yazar)',
     !preg_match('/\bINSERT\s+INTO\s+attendance_events\b/i', $sayfaIcerik));
-ok('Faz 1B sayfalarÄ± kendi giriÅŸ/Ã§Ä±kÄ±ÅŸ yÃ¶n mantÄ±ÄŸÄ±nÄ± TAÅIMIYOR (event_type/entry_gate/proposed_type)',
+ok('Faz 1B sayfaları kendi giriş/çıkış yön mantığını TAŞIMIYOR (event_type/entry_gate/proposed_type)',
     !preg_match('/\b(event_type|entry_gate|proposed_type)\b/i', $sayfaIcerik));
-ok('api_pdks.php (ayrÄ± bir API dosyasÄ±) OLUÅTURULMADI â€” uÃ§ nokta giris_cikis.php Ä°Ã‡Ä°NDE',
+ok('api_pdks.php (ayrı bir API dosyası) OLUŞTURULMADI — uç nokta giris_cikis.php İÇİNDE',
     !file_exists($KOK . '/api_pdks.php'));
-ok('attendance_devices/attendance_api_sessions (cihaz/token tabanlÄ± model) KULLANILMIYOR',
+ok('attendance_devices/attendance_api_sessions (cihaz/token tabanlı model) KULLANILMIYOR',
     !preg_match('/\battendance_(devices|api_sessions)\b/i', $tumIcerik));
-ok('Android ÃœRETÄ°M Kotlin/Gradle dosyasÄ± REPO KÃ–KÃœNDE yok (yalnÄ±z tools/ altÄ±ndaki Faz 0 teÅŸhis APK\'si â€” Ã¼retim deÄŸil)',
+ok('Android ÜRETİM Kotlin/Gradle dosyası REPO KÖKÜNDE yok (yalnız tools/ altındaki Faz 0 teşhis APK\'si — üretim değil)',
     !file_exists($KOK . '/app') && !file_exists($KOK . '/MainActivity.kt'));
 
-echo "\n=== 6. UID MANTIÄI TEKRARLANMADI â€” sayfalar yalnÄ±z config/pdks.php'yi Ã§aÄŸÄ±rÄ±yor ===\n";
+echo "\n=== 6. UID MANTIĞI TEKRARLANMADI — sayfalar yalnız config/pdks.php'yi çağırıyor ===\n";
 foreach ($sayfalar as $s) {
     if ($s === 'personel_foto.php') continue;   // UID ile ilgisi yok
     $src = oku($s);
-    ok("$s: kendi hexdec()/dechex() dÃ¶nÃ¼ÅŸÃ¼mÃ¼ YOK (UID mantÄ±ÄŸÄ± tekrarlanmamalÄ±)",
+    ok("$s: kendi hexdec()/dechex() dönüşümü YOK (UID mantığı tekrarlanmamalı)",
         !preg_match('/\b(hexdec|dechex)\s*\(/', $src));
-    ok("$s: doÄŸrudan employee_card_uids'e INSERT YOK (kart yazmanÄ±n tek yolu pdks_kart_olustur)",
+    ok("$s: doğrudan employee_card_uids'e INSERT YOK (kart yazmanın tek yolu pdks_kart_olustur)",
         !preg_match('/INSERT\s+INTO\s+employee_card_uids/i', $src));
 }
-ok('config/pdks.php DIÅINDA employee_card_uids\'e yazan Ä°KÄ°NCÄ° bir yer yok',
+ok('config/pdks.php DIŞINDA employee_card_uids\'e yazan İKİNCİ bir yer yok',
     substr_count($tumIcerik, 'INSERT INTO employee_card_uids') === 1);
 
-echo "\n=== 7. FAZ 1 DÃœZELTMESÄ° (Â§6a) YENÄ°DEN AÃ‡ILMADI â€” otomatik ters-alias yok ===\n";
+echo "\n=== 7. FAZ 1 DÜZELTMESİ (§6a) YENİDEN AÇILMADI — otomatik ters-alias yok ===\n";
 $pdksSrc = oku('config/pdks.php');
-ok("pdks_kart_ata() kendi UID mantÄ±ÄŸÄ±nÄ± YAZMIYOR, pdks_kart_olustur()'u Ã‡AÄIRIYOR",
+ok("pdks_kart_ata() kendi UID mantığını YAZMIYOR, pdks_kart_olustur()'u ÇAĞIRIYOR",
     (bool)preg_match('/function pdks_kart_ata.*?pdks_kart_olustur\(/s', $pdksSrc));
-ok("pdks_kart_degistir() kendi UID mantÄ±ÄŸÄ±nÄ± YAZMIYOR, pdks_kart_olustur()'u Ã‡AÄIRIYOR",
+ok("pdks_kart_degistir() kendi UID mantığını YAZMIYOR, pdks_kart_olustur()'u ÇAĞIRIYOR",
     (bool)preg_match('/function pdks_kart_degistir.*?pdks_kart_olustur\(/s', $pdksSrc));
-ok("Faz 1B'de Ä°KÄ°NCÄ° bir 'kind'=>'reversed' otomatik yazÄ±mÄ± YOK",
+ok("Faz 1B'de İKİNCİ bir 'kind'=>'reversed' otomatik yazımı YOK",
     !preg_match("/'reversed'/", oku('personel.php') . oku('personel_form.php') . oku('personel_kartlar.php')));
 
-echo "\n=== 8. FOTOÄRAF ENDPOINT'Ä° â€” PATH TRAVERSAL'A KAPALI ===\n";
-// Not: aranan desenin kendisi bir regex olduÄŸu iÃ§in (a-f0-9{32}.jpg), burada
-// regex-iÃ§inde-regex yazmak yerine kaynakta AYNEN geÃ§en sabit alt-diziyi arÄ±yoruz
-// â€” daha az kÄ±rÄ±lgan, niyeti daha aÃ§Ä±k.
+echo "\n=== 8. FOTOĞRAF ENDPOINT'İ — PATH TRAVERSAL'A KAPALI ===\n";
+// Not: aranan desenin kendisi bir regex olduğu için (a-f0-9{32}.jpg), burada
+// regex-içinde-regex yazmak yerine kaynakta AYNEN geçen sabit alt-diziyi arıyoruz
+// — daha az kırılgan, niyeti daha açık.
 $guvenliAdDeseni = '^[a-f0-9]{32}\.jpg$';
 $fotoSrc = oku('personel_foto.php');
-ok('dosya adÄ± doÄŸrulamasÄ± var (32 hex + .jpg)',
+ok('dosya adı doğrulaması var (32 hex + .jpg)',
     str_contains($fotoSrc, $guvenliAdDeseni));
-ok('doÄŸrulamadan SONRA $_GET doÄŸrudan dosya yoluna eklenmiyor (PDKS_FOTO_DIR . $fn kalÄ±bÄ±)',
+ok('doğrulamadan SONRA $_GET doğrudan dosya yoluna eklenmiyor (PDKS_FOTO_DIR . $fn kalıbı)',
     str_contains($fotoSrc, 'PDKS_FOTO_DIR . $fn'));
-ok('dosyanÄ±n GERÃ‡EKTEN bir employees satÄ±rÄ±na ait olduÄŸu DB\'den doÄŸrulanÄ±yor (yalnÄ±z disk varlÄ±ÄŸÄ± yetmiyor)',
+ok('dosyanın GERÇEKTEN bir employees satırına ait olduğu DB\'den doğrulanıyor (yalnız disk varlığı yetmiyor)',
     str_contains($fotoSrc, 'SELECT id FROM employees WHERE photo_file'));
 $fotoSilBlok = '';
 if (preg_match('/function pdks_foto_sil\b.*?\n}/s', $pdksSrc, $mm)) $fotoSilBlok = $mm[0];
-ok('pdks_foto_sil() de AYNI gÃ¼venli-ad deseniyle korunuyor',
+ok('pdks_foto_sil() de AYNI güvenli-ad deseniyle korunuyor',
     $fotoSilBlok !== '' && str_contains($fotoSilBlok, $guvenliAdDeseni));
 
-echo "\n=== 9. TC KÄ°MLÄ°K NUMARASI HÄ°Ã‡BÄ°R YERDE Ä°STENMÄ°YOR (onaylanan karar #2) ===\n";
+echo "\n=== 9. TC KİMLİK NUMARASI HİÇBİR YERDE İSTENMİYOR (onaylanan karar #2) ===\n";
 $aranan = ['tc_kimlik', 'national_id', 'tckn', 'kimlik_no'];
 foreach ($aranan as $a) {
-    ok("'$a' alanÄ± YOK", stripos($tumIcerik, $a) === false);
+    ok("'$a' alanı YOK", stripos($tumIcerik, $a) === false);
 }
 
-echo "\n=== 10. MEVCUT SÄ°STEM DAVRANIÅI DEÄÄ°ÅMEDÄ° ===\n";
-// index.php ve config/helpers.php BÄ°LEREK bu listenin DIÅINDA: navigasyon
-// baÄŸlama (Â§7 gereÄŸi) ikisine de birer kÃ¼Ã§Ã¼k, katkÄ±lÄ± (additive) ekleme
-// yapar. Burada "hiÃ§ deÄŸiÅŸmedi" deÄŸil "yalnÄ±z BEKLENEN ÅŸekilde deÄŸiÅŸti"
-// doÄŸrulanÄ±r â€” tek CSS/JS ve Ã§ekirdek auth/db katmanÄ± asÄ±l korunmasÄ±
+echo "\n=== 10. MEVCUT SİSTEM DAVRANIŞI DEĞİŞMEDİ ===\n";
+// index.php ve config/helpers.php BİLEREK bu listenin DIŞINDA: navigasyon
+// bağlama (§7 gereği) ikisine de birer küçük, katkılı (additive) ekleme
+// yapar. Burada "hiç değişmedi" değil "yalnız BEKLENEN şekilde değişti"
+// doğrulanır — tek CSS/JS ve çekirdek auth/db katmanı asıl korunması
 // gereken yerlerdir.
-// Faz 7: sw.js bu listeden Ã‡IKARILDI â€” assets/print_base.css'e yazdÄ±rma
-// sayfalarÄ± iÃ§in ek kural eklendiÄŸi iÃ§in CLAUDE.md kuralÄ± gereÄŸi SW
-// CACHE_NAME (ve config/helpers.php'deki eÅŸlenik APP_SURUM) v217'den
-// v218'e Ã§ekildi. Bu TEK SATIRLIK, RUTÄ°N sÃ¼rÃ¼m damgasÄ± gÃ¼ncellemesi â€”
-// iÃ§erik/mantÄ±k kaybÄ± DEÄÄ°L; sw.js'in kendi Ã¶nbellekleme mantÄ±ÄŸÄ±
-// (network-first fetch stratejisi, SHELL listesi) hiÃ§ deÄŸiÅŸmedi, yalnÄ±z
-// sabit sÃ¼rÃ¼m dizesi arttÄ±. tek-CSS/JS kuralÄ± (style.css/app.js) ve
-// Ã§ekirdek auth/db katmanÄ± (db.php/auth.php) hÃ¢lÃ¢ TAM korunuyor.
+// Faz 7: sw.js bu listeden ÇIKARILDI — assets/print_base.css'e yazdırma
+// sayfaları için ek kural eklendiği için CLAUDE.md kuralı gereği SW
+// CACHE_NAME (ve config/helpers.php'deki eşlenik APP_SURUM) v217'den
+// v218'e çekildi. Bu TEK SATIRLIK, RUTİN sürüm damgası güncellemesi —
+// içerik/mantık kaybı DEĞİL; sw.js'in kendi önbellekleme mantığı
+// (network-first fetch stratejisi, SHELL listesi) hiç değişmedi, yalnız
+// sabit sürüm dizesi arttı. tek-CSS/JS kuralı (style.css/app.js) ve
+// çekirdek auth/db katmanı (db.php/auth.php) hâlâ TAM korunuyor.
 $dokunulmamali = ['assets/style.css', 'assets/app.js', 'config/db.php', 'config/auth.php'];
 $gitDurum = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- ' . implode(' ', array_map('escapeshellarg', $dokunulmamali)) . ' 2>&1');
-ok('style.css / app.js / db.php / auth.php DEÄÄ°ÅMEDÄ° (tek-CSS/JS ve Ã§ekirdek auth korunuyor)',
+ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
     trim((string)$gitDurum) === '', (string)$gitDurum);
-// git diff'e DEÄÄ°L, doÄŸrudan mevcut dosya iÃ§eriÄŸine bakÄ±lÄ±r â€” bu kontrol
-// hem iÅŸlenmemiÅŸ (dirty) Ã¶zellik dalÄ±nda hem de commit/merge SONRASI temiz
-// bir checkout'ta (git diff boÅŸ dÃ¶ner, hiÃ§bir ÅŸey KANITLAMAZ) aynÄ± ÅŸekilde
-// anlamlÄ± kalsÄ±n diye.
+// git diff'e DEĞİL, doğrudan mevcut dosya içeriğine bakılır — bu kontrol
+// hem işlenmemiş (dirty) özellik dalında hem de commit/merge SONRASI temiz
+// bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
+// anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME sÃ¼rÃ¼mÃ¼ v220 (helpers.php\'deki APP_SURUM ile eÅŸlenik)',
+ok('sw.js: CACHE_NAME sürümü v220 (helpers.php\'deki APP_SURUM ile eşlenik)',
     str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v220';"));
-ok('sw.js: SHELL Ã¶nbellek listesi / network-first fetch stratejisi AYNI (yalnÄ±z sÃ¼rÃ¼m sabiti deÄŸiÅŸti)',
+ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
-// index.php Ä°Ã‡Ä°N: bu turdan (Faz 7, Sprint Navigasyon-01) Ã–NCE deÄŸiÅŸti
-// (nav baÄŸlama), ama yalnÄ±z EKLEME olarak â€” mevcut hiÃ§bir satÄ±r
-// silinmedi/deÄŸiÅŸtirilmedi. Faz 7 kullanÄ±cÄ±nÄ±n AÃ‡IK talimatÄ±yla ("Connect/
+// index.php İÇİN: bu turdan (Faz 7, Sprint Navigasyon-01) ÖNCE değişti
+// (nav bağlama), ama yalnız EKLEME olarak — mevcut hiçbir satır
+// silinmedi/değiştirilmedi. Faz 7 kullanıcının AÇIK talimatıyla ("Connect/
 // add the existing mobile 'Personel' button... to personel_takip.php")
-// TEK bir mevcut kartÄ± (Personel â†’ personel.php) KASITLI olarak
-// personel_takip.php'ye yeniden yÃ¶nlendirdi + gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼nÃ¼ geniÅŸletti â€”
-// bu BEÅ satÄ±r bu YÃœZDEN allowlist'e alÄ±ndÄ±; bunun DIÅINDA index.php'de
-// hiÃ§bir satÄ±r silinmemiÅŸ olmalÄ±.
+// TEK bir mevcut kartı (Personel → personel.php) KASITLI olarak
+// personel_takip.php'ye yeniden yönlendirdi + görünürlüğünü genişletti —
+// bu BEŞ satır bu YÜZDEN allowlist'e alındı; bunun DIŞINDA index.php'de
+// hiçbir satır silinmemiş olmalı.
 $diffIndex = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- index.php 2>&1');
 $silinenIndex = array_filter(explode("\n", (string)$diffIndex), function ($l) {
-    return preg_match('/^-(?!--)/', $l) === 1;   // '-' ile baÅŸlayan ama '---' baÅŸlÄ±ÄŸÄ± olmayan satÄ±r
+    return preg_match('/^-(?!--)/', $l) === 1;   // '-' ile başlayan ama '---' başlığı olmayan satır
 });
 $indexBeklenenEskiSatirlar = [
     "-<?php if (can('attendance.employees') || can('attendance.cards') || is_admin()): ?>",
     '-    <a href="personel.php" class="home-card">',
-    '-        <div class="home-card-icon" style="background:#eef2ff">ğŸ‘¤</div>',
+    '-        <div class="home-card-icon" style="background:#eef2ff">👤</div>',
     '-        <div class="home-card-title">Personel</div>',
-    '-        <div class="home-card-sub">Personel ve kart yÃ¶netimi</div>',
+    '-        <div class="home-card-sub">Personel ve kart yönetimi</div>',
 ];
 $indexBeklenmeyenSilinen = array_filter($silinenIndex, fn($l) => !in_array(trim($l), array_map('trim', $indexBeklenenEskiSatirlar), true));
-ok('index.php: YALNIZ Faz 7\'nin bilinen "Personel" kart deÄŸiÅŸikliÄŸi silindi, baÅŸka hiÃ§bir satÄ±r silinmedi',
+ok('index.php: YALNIZ Faz 7\'nin bilinen "Personel" kart değişikliği silindi, başka hiçbir satır silinmedi',
     count($indexBeklenmeyenSilinen) === 0,
-    count($indexBeklenmeyenSilinen) . ' beklenmeyen satÄ±r silinmiÅŸ gÃ¶rÃ¼nÃ¼yor: ' . implode(' | ', $indexBeklenmeyenSilinen));
+    count($indexBeklenmeyenSilinen) . ' beklenmeyen satır silinmiş görünüyor: ' . implode(' | ', $indexBeklenmeyenSilinen));
 
-// config/helpers.php Ä°Ã‡Ä°N: GiriÅŸ-Ã‡Ä±kÄ±ÅŸ fazÄ±, Personel bÃ¶lÃ¼mÃ¼nÃ¼n gÃ¶rÃ¼nÃ¼rlÃ¼k
-// koÅŸulunu (Â§11) KASITLI olarak GENÄ°ÅLETTÄ° â€” yalnÄ±z attendance.scan yetkisi
-// olan (employees/cards YOK) bir kullanÄ±cÄ± da artÄ±k "Personel" bÃ¶lÃ¼m
-// baÅŸlÄ±ÄŸÄ±nÄ± gÃ¶rmeli, aksi hÃ¢lde GiriÅŸ/Ã‡Ä±kÄ±ÅŸ linki kimseye gÃ¶rÃ¼nmezdi. Bu
-// YÃœZDEN o TEK satÄ±rÄ±n deÄŸiÅŸtirilmesi (silinip yeniden yazÄ±lmasÄ±) burada
-// BEKLENEN ve Ä°NCELENMÄ°Å bir deÄŸiÅŸikliktir â€” "hiÃ§ silinmesin" kuralÄ±
-// YALNIZ bu bilinen satÄ±r iÃ§in gevÅŸetilir, baÅŸka hiÃ§bir satÄ±r iÃ§in deÄŸil.
-// Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-01: Ã§avuÅŸ/iÅŸÃ§i-kart-havuzu izinleri (attendance.foremen,
-// attendance.worker_cards) Ä°KÄ° mevcut izin dizisine (admin'in $pdks_p'si,
-// 'ik' rolÃ¼nÃ¼n listesi) EKLENDÄ° â€” Ã§ok satÄ±rlÄ± literal olduÄŸu iÃ§in git diff
-// bu satÄ±rlarÄ± "silinip yeniden yazÄ±lmÄ±ÅŸ" gÃ¶sterir, Ä°Ã‡ERÄ°K KAYBI deÄŸil.
-// AynÄ± AZ-Ä°STÄ°SNA yaklaÅŸÄ±mÄ±: yalnÄ±z BÄ°LÄ°NEN, Ä°NCELENMÄ°Å satÄ±rlar allowlist'e
-// eklenir, baÅŸka hiÃ§bir satÄ±r iÃ§in gevÅŸetilmez.
+// config/helpers.php İÇİN: Giriş-Çıkış fazı, Personel bölümünün görünürlük
+// koşulunu (§11) KASITLI olarak GENİŞLETTİ — yalnız attendance.scan yetkisi
+// olan (employees/cards YOK) bir kullanıcı da artık "Personel" bölüm
+// başlığını görmeli, aksi hâlde Giriş/Çıkış linki kimseye görünmezdi. Bu
+// YÜZDEN o TEK satırın değiştirilmesi (silinip yeniden yazılması) burada
+// BEKLENEN ve İNCELENMİŞ bir değişikliktir — "hiç silinmesin" kuralı
+// YALNIZ bu bilinen satır için gevşetilir, başka hiçbir satır için değil.
+// Sprint Günlük-İşçi-01: çavuş/işçi-kart-havuzu izinleri (attendance.foremen,
+// attendance.worker_cards) İKİ mevcut izin dizisine (admin'in $pdks_p'si,
+// 'ik' rolünün listesi) EKLENDİ — çok satırlı literal olduğu için git diff
+// bu satırları "silinip yeniden yazılmış" gösterir, İÇERİK KAYBI değil.
+// Aynı AZ-İSTİSNA yaklaşımı: yalnız BİLİNEN, İNCELENMİŞ satırlar allowlist'e
+// eklenir, başka hiçbir satır için gevşetilmez.
 $beklenenEskiSatirlar = [
     "-    \$p_pdks  = (\$_fn && (can('attendance.employees') || can('attendance.cards'))) || \$p_adm;",
     "-                       'attendance.devices','attendance.admin'];",
     "-                               'attendance.report','attendance.employees','attendance.cards'],",
-    // Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-01 â†’ GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-02 (Faz 2, seri GiriÅŸ/Ã‡Ä±kÄ±ÅŸ):
-    // AYNI Ã¼Ã§ Ã§ok satÄ±rlÄ± literal BÄ°R KEZ DAHA geniÅŸletildi
-    // (attendance.daily_scan eklendi) â€” git diff bu satÄ±rlarÄ± da "silinip
-    // yeniden yazÄ±lmÄ±ÅŸ" gÃ¶sterir, Ä°Ã‡ERÄ°K KAYBI deÄŸil.
+    // Sprint Günlük-İşçi-01 → Günlük-İşçi-02 (Faz 2, seri Giriş/Çıkış):
+    // AYNI üç çok satırlı literal BİR KEZ DAHA genişletildi
+    // (attendance.daily_scan eklendi) — git diff bu satırları da "silinip
+    // yeniden yazılmış" gösterir, İÇERİK KAYBI değil.
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards'))) || \$p_adm;",
     "-                       'attendance.foremen','attendance.worker_cards'];",
     "-                               'attendance.foremen','attendance.worker_cards'],",
-    // Faz 2 dÃ¼zeltme turu (kullanÄ±cÄ±nÄ±n aÃ§Ä±k talimatÄ± #2 â€” gÃ¼venlik/operasyon
-    // rolÃ¼): 'operator' rolÃ¼nÃ¼n tek satÄ±rlÄ±k literal dizisine YALNIZ
-    // attendance.daily_scan eklendi (Ã§avuÅŸ/kart/muhasebe/admin izni YOK) â€”
-    // git diff bu TEK satÄ±rÄ± da "silinip yeniden yazÄ±lmÄ±ÅŸ" gÃ¶sterir.
+    // Faz 2 düzeltme turu (kullanıcının açık talimatı #2 — güvenlik/operasyon
+    // rolü): 'operator' rolünün tek satırlık literal dizisine YALNIZ
+    // attendance.daily_scan eklendi (çavuş/kart/muhasebe/admin izni YOK) —
+    // git diff bu TEK satırı da "silinip yeniden yazılmış" gösterir.
     "-                'operator' => ['dashboard.read','records.read','records.write','records.lock','kantar.read','kantar.write','stok.read','stok.write','defs.read','reports.read','reports.export','beyan.read','beyan.write','maliyet.read','maliyet.write','hesap.read','hesap.write'],",
-    // Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-02 â†’ GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-04 (Faz 3, gÃ¼nlÃ¼k puantaj raporlarÄ±):
-    // AYNI Ã¼Ã§ Ã§ok satÄ±rlÄ± literal + 'muhasebe' rolÃ¼ TEK yeni izinle
-    // (attendance.daily_reports) geniÅŸletildi â€” 'operator' BÄ°LEREK BUNA
-    // DOKUNULMADI (gÃ¶rev talimatÄ±: "Do NOT automatically give full
-    // historical reporting" â€” bkz. yukarÄ±daki operator satÄ±rÄ±, hÃ¢lÃ¢ AYNI).
+    // Sprint Günlük-İşçi-02 → Günlük-İşçi-04 (Faz 3, günlük puantaj raporları):
+    // AYNI üç çok satırlı literal + 'muhasebe' rolü TEK yeni izinle
+    // (attendance.daily_reports) genişletildi — 'operator' BİLEREK BUNA
+    // DOKUNULMADI (görev talimatı: "Do NOT automatically give full
+    // historical reporting" — bkz. yukarıdaki operator satırı, hâlâ AYNI).
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan'))) || \$p_adm;",
     "-                       'attendance.foremen','attendance.worker_cards','attendance.daily_scan'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay'],",
     "-                               'attendance.foremen','attendance.worker_cards','attendance.daily_scan'],",
-    // Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-04 â†’ GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-05 (Faz 4, hakediÅŸ): AYNI Ã¼Ã§ Ã§ok
-    // satÄ±rlÄ± literal + 'muhasebe' rolÃ¼ Ä°KÄ° yeni izinle (attendance.
-    // foreman_rates, attendance.entitlements) geniÅŸletildi; 'ik' rolÃ¼
-    // YALNIZ attendance.entitlements aldÄ± (foreman_rates ALMADI â€” ticari
-    // fiyat yÃ¶netimi kapsam dÄ±ÅŸÄ±). 'operator' BÄ°LEREK BUNA DA DOKUNULMADI
-    // (gÃ¶rev talimatÄ±: "Do not expose prices or hakediÅŸ amounts on the
-    // security scanning screen." â€” bkz. yukarÄ±daki operator satÄ±rÄ±, hÃ¢lÃ¢ AYNI).
+    // Sprint Günlük-İşçi-04 → Günlük-İşçi-05 (Faz 4, hakediş): AYNI üç çok
+    // satırlı literal + 'muhasebe' rolü İKİ yeni izinle (attendance.
+    // foreman_rates, attendance.entitlements) genişletildi; 'ik' rolü
+    // YALNIZ attendance.entitlements aldı (foreman_rates ALMADI — ticari
+    // fiyat yönetimi kapsam dışı). 'operator' BİLEREK BUNA DA DOKUNULMADI
+    // (görev talimatı: "Do not expose prices or hakediş amounts on the
+    // security scanning screen." — bkz. yukarıdaki operator satırı, hâlâ AYNI).
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports'))) || \$p_adm;",
     "-                       'attendance.daily_reports'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports'],",
     "-                               'attendance.daily_reports'],",
-    // Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-05 â†’ GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-06 (Faz 5, cari hesap/Ã¶deme): AYNI Ã¼Ã§
-    // Ã§ok satÄ±rlÄ± literal + 'muhasebe' rolÃ¼ Ä°KÄ° yeni izinle (attendance.
-    // foreman_accounts, attendance.foreman_payments) geniÅŸletildi; 'ik' rolÃ¼
-    // BÄ°LEREK BUNA DA DOKUNULMADI (gÃ¶rev talimatÄ±: "ik: NO payment management
-    // by default" â€” belirsizlikte hesap gÃ¶rÃ¼ntÃ¼leme de verilmedi). 'operator'
-    // yine DOKUNULMADI (aynÄ± gerekÃ§e: finansal ekranlar operatÃ¶re kapalÄ±).
+    // Sprint Günlük-İşçi-05 → Günlük-İşçi-06 (Faz 5, cari hesap/ödeme): AYNI üç
+    // çok satırlı literal + 'muhasebe' rolü İKİ yeni izinle (attendance.
+    // foreman_accounts, attendance.foreman_payments) genişletildi; 'ik' rolü
+    // BİLEREK BUNA DA DOKUNULMADI (görev talimatı: "ik: NO payment management
+    // by default" — belirsizlikte hesap görüntüleme de verilmedi). 'operator'
+    // yine DOKUNULMADI (aynı gerekçe: finansal ekranlar operatöre kapalı).
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements'))) || \$p_adm;",
     "-                       'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements'],",
-    // Sprint GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-06 â†’ GÃ¼nlÃ¼k-Ä°ÅŸÃ§i-07 (Faz 6, yÃ¶netim raporlama
-    // merkezi): AYNI Ã¼Ã§ Ã§ok satÄ±rlÄ± literal + 'muhasebe' VE 'ik' rolleri
-    // TEK yeni izinle (attendance.management_reports) geniÅŸletildi â€” 'ik'
-    // BU SEFER BÄ°LEREK DAHÄ°L EDÄ°LDÄ° (gÃ¶rev talimatÄ±: "ik = YES if
+    // Sprint Günlük-İşçi-06 → Günlük-İşçi-07 (Faz 6, yönetim raporlama
+    // merkezi): AYNI üç çok satırlı literal + 'muhasebe' VE 'ik' rolleri
+    // TEK yeni izinle (attendance.management_reports) genişletildi — 'ik'
+    // BU SEFER BİLEREK DAHİL EDİLDİ (görev talimatı: "ik = YES if
     // operational reporting is appropriate"), ama attendance.foreman_accounts
-    // HÃ‚LÃ‚ ALMADI (Faz 5'in kararÄ± korunuyor â€” raporlar.php'nin finansal
-    // bÃ¶lÃ¼mleri 'ik'e yine KAPALI, bkz. pdks_rapor_static_smoke.php Â§4).
+    // HÂLÂ ALMADI (Faz 5'in kararı korunuyor — raporlar.php'nin finansal
+    // bölümleri 'ik'e yine KAPALI, bkz. pdks_rapor_static_smoke.php §4).
     // 'operator' yine DOKUNULMADI.
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments'))) || \$p_adm;",
     "-                       'attendance.foreman_accounts','attendance.foreman_payments'];",
     "-                'muhasebe' => ['dashboard.read','records.read','stok.read','reports.read','reports.export','beyan.read','maliyet.read','maliyet.write','hesap.read','hesap.write','hesap.approve','hesap.pay','attendance.daily_reports','attendance.foreman_rates','attendance.entitlements','attendance.foreman_accounts','attendance.foreman_payments'],",
     "-                               'attendance.daily_reports','attendance.entitlements'],",
-    // Sprint Navigasyon-01 (Faz 7, kullanÄ±cÄ±nÄ±n aÃ§Ä±k talimatÄ±: "Replace
-    // these scattered sidebar entries with ONE primary entry"): Ã–NCEKÄ°
-    // turlardan FARKLI olarak bu SATIR YENÄ°DEN YAZMA DEÄÄ°L, BÄ°LEREK,
-    // KAPSAMLI bir SÄ°LMEDÄ°R â€” Personel + GÃ¼nlÃ¼k Ä°ÅŸÃ§i bÃ¶lÃ¼mlerindeki 12 ayrÄ±
-    // link (ve onlarÄ±n $a_* aktif-sayfa deÄŸiÅŸkenleri) TEK bir
-    // "Personel Takibi" (personel_takip.php) linkine indirildi. HiÃ§bir
-    // SAYFA silinmedi (gÃ¶rev talimatÄ±: "This is a navigation consolidation
-    // layer... Existing URLs/pages remain authoritative and accessible.") â€”
-    // yalnÄ±z SIDEBAR gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼ deÄŸiÅŸti; her hedef sayfa KENDÄ° yetki
-    // kontrolÃ¼nÃ¼ hÃ¢lÃ¢ taÅŸÄ±r (bkz. pdks_takip_static_smoke.php Â§10).
+    // Sprint Navigasyon-01 (Faz 7, kullanıcının açık talimatı: "Replace
+    // these scattered sidebar entries with ONE primary entry"): ÖNCEKİ
+    // turlardan FARKLI olarak bu SATIR YENİDEN YAZMA DEĞİL, BİLEREK,
+    // KAPSAMLI bir SİLMEDİR — Personel + Günlük İşçi bölümlerindeki 12 ayrı
+    // link (ve onların $a_* aktif-sayfa değişkenleri) TEK bir
+    // "Personel Takibi" (personel_takip.php) linkine indirildi. Hiçbir
+    // SAYFA silinmedi (görev talimatı: "This is a navigation consolidation
+    // layer... Existing URLs/pages remain authoritative and accessible.") —
+    // yalnız SIDEBAR görünürlüğü değişti; her hedef sayfa KENDİ yetki
+    // kontrolünü hâlâ taşır (bkz. pdks_takip_static_smoke.php §10).
     "-    \$a_pdksp = in_array(\$cur, ['personel.php', 'personel_form.php'], true);",
     "-    \$a_pdksk = \$cur === 'personel_kartlar.php';",
     "-    \$a_pdksg = \$cur === 'giris_cikis.php';",
@@ -302,32 +302,32 @@ $beklenenEskiSatirlar = [
     "-    \$a_cari     = in_array(\$cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);",
     "-    \$a_yrapor   = \$cur === 'raporlar.php';",
     "-        <?php if (\$p_pdks): ?>",
-    "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', 'ğŸ‘¤', 'Personeller', \$a_pdksp); ?>",
-    "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', 'ğŸªª', 'Kart YÃ¶netimi', \$a_pdksk); ?>",
-    "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', 'ğŸšª', 'GiriÅŸ / Ã‡Ä±kÄ±ÅŸ', \$a_pdksg); ?>",
+    "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', '👤', 'Personeller', \$a_pdksp); ?>",
+    "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', \$a_pdksk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_pdksg); ?>",
     "-        <?php endif; ?>",
     "-",
     "-        <?php if (\$p_gunluk): ?>",
-    "-        <div class=\"sidebar-section\">GÃ¼nlÃ¼k Ä°ÅŸÃ§i</div>",
-    "-        <?php if (\$_fn && (can('attendance.foremen')      || \$p_adm)) \$lnk('cavuslar.php',      'ğŸ‘·', 'Ã‡avuÅŸlar',      \$a_cavus); ?>",
-    "-        <?php if (\$_fn && (can('attendance.worker_cards') || \$p_adm)) \$lnk('isci_kartlari.php', 'ğŸªª', 'Ä°ÅŸÃ§i KartlarÄ±', \$a_isk); ?>",
-    "-        <?php if (\$_fn && (can('attendance.daily_scan')   || \$p_adm)) \$lnk('gunluk_isci_giris_cikis.php', 'ğŸšª', 'GiriÅŸ / Ã‡Ä±kÄ±ÅŸ', \$a_gunlukgc); ?>",
-    "-        <?php if (\$_fn && (can('attendance.daily_reports') || \$p_adm)) \$lnk('gunluk_isci_puantaj.php', 'ğŸ“…', 'GÃ¼nlÃ¼k Puantaj', \$a_puantaj); ?>",
-    "-        <?php if (\$_fn && (can('attendance.foreman_rates')  || \$p_adm)) \$lnk('cavus_fiyatlari.php', 'ğŸ’°', 'Ã‡avuÅŸ FiyatlarÄ±', \$a_fiyat); ?>",
-    "-        <?php if (\$_fn && (can('attendance.entitlements')   || \$p_adm)) \$lnk('cavus_hakedis.php',   'ğŸ§¾', 'HakediÅŸ',         \$a_hakedis); ?>",
-    "-        <?php if (\$_fn && (can('attendance.foreman_payments') || \$p_adm)) \$lnk('cavus_odeme.php', 'ğŸ’¸', 'Ã‡avuÅŸ Ã–deme', \$a_odeme); ?>",
-    "-        <?php if (\$_fn && (can('attendance.foreman_accounts') || \$p_adm)) \$lnk('cavus_cari.php',  'ğŸ“’', 'Ã‡avuÅŸ Cari',  \$a_cari); ?>",
-    "-        <?php if (\$_fn && (can('attendance.management_reports') || \$p_adm)) \$lnk('raporlar.php', 'ğŸ“Š', 'YÃ¶netim RaporlarÄ±', \$a_yrapor); ?>",
-    // Faz 7: assets/print_base.css'e yeni yazdÄ±rma sayfalarÄ± iÃ§in ek kural
-    // eklendi (thead tekrarÄ±) â†’ SW cache sÃ¼rÃ¼mÃ¼ + APP_SURUM birlikte v217'den
-    // v218'e Ã§ekildi (CLAUDE.md kuralÄ±: "SW cache versiyonu artÄ±rÄ±ldÄ± mÄ±?").
-    // Tek satÄ±rlÄ±k sÃ¼rÃ¼m sabiti gÃ¼ncellemesi, iÃ§erik kaybÄ± DEÄÄ°L.
+    "-        <div class=\"sidebar-section\">Günlük İşçi</div>",
+    "-        <?php if (\$_fn && (can('attendance.foremen')      || \$p_adm)) \$lnk('cavuslar.php',      '👷', 'Çavuşlar',      \$a_cavus); ?>",
+    "-        <?php if (\$_fn && (can('attendance.worker_cards') || \$p_adm)) \$lnk('isci_kartlari.php', '🪪', 'İşçi Kartları', \$a_isk); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_scan')   || \$p_adm)) \$lnk('gunluk_isci_giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_gunlukgc); ?>",
+    "-        <?php if (\$_fn && (can('attendance.daily_reports') || \$p_adm)) \$lnk('gunluk_isci_puantaj.php', '📅', 'Günlük Puantaj', \$a_puantaj); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_rates')  || \$p_adm)) \$lnk('cavus_fiyatlari.php', '💰', 'Çavuş Fiyatları', \$a_fiyat); ?>",
+    "-        <?php if (\$_fn && (can('attendance.entitlements')   || \$p_adm)) \$lnk('cavus_hakedis.php',   '🧾', 'Hakediş',         \$a_hakedis); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_payments') || \$p_adm)) \$lnk('cavus_odeme.php', '💸', 'Çavuş Ödeme', \$a_odeme); ?>",
+    "-        <?php if (\$_fn && (can('attendance.foreman_accounts') || \$p_adm)) \$lnk('cavus_cari.php',  '📒', 'Çavuş Cari',  \$a_cari); ?>",
+    "-        <?php if (\$_fn && (can('attendance.management_reports') || \$p_adm)) \$lnk('raporlar.php', '📊', 'Yönetim Raporları', \$a_yrapor); ?>",
+    // Faz 7: assets/print_base.css'e yeni yazdırma sayfaları için ek kural
+    // eklendi (thead tekrarı) → SW cache sürümü + APP_SURUM birlikte v217'den
+    // v218'e çekildi (CLAUDE.md kuralı: "SW cache versiyonu artırıldı mı?").
+    // Tek satırlık sürüm sabiti güncellemesi, içerik kaybı DEĞİL.
     "-    define('APP_SURUM', 'v217');",
-    // Faz 8A PRE-MERGE GÃœVENLÄ°K DÃœZELTMESÄ°: config/pdks_gunluk.php (Ã¼Ã§
-    // durumlu status modeli) + assets/pdks.css (yeni rozet rengi) deÄŸiÅŸti
-    // â†’ SW cache sÃ¼rÃ¼mÃ¼ + APP_SURUM birlikte v218'den v219'a Ã§ekildi (AYNI
-    // rutin, tek satÄ±rlÄ±k sÃ¼rÃ¼m damgasÄ± gÃ¼ncellemesi â€” bkz. yukarÄ±daki
-    // v217â†’v218 emsali).
+    // Faz 8A PRE-MERGE GÜVENLİK DÜZELTMESİ: config/pdks_gunluk.php (üç
+    // durumlu status modeli) + assets/pdks.css (yeni rozet rengi) değişti
+    // → SW cache sürümü + APP_SURUM birlikte v218'den v219'a çekildi (AYNI
+    // rutin, tek satırlık sürüm damgası güncellemesi — bkz. yukarıdaki
+    // v217→v218 emsali).
     "-    define('APP_SURUM', 'v218');",
     "-    define('APP_SURUM', 'v219');",
 ];
@@ -336,10 +336,10 @@ $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l
     return preg_match('/^-(?!--)/', $l) === 1;
 });
 $beklenmeyenSilinen = array_filter($silinenHelpers, fn($l) => !in_array(trim($l), array_map('trim', $beklenenEskiSatirlar), true));
-ok('config/helpers.php: YALNIZ BÄ°LÄ°NEN/Ä°NCELENMÄ°Å satÄ±rlar deÄŸiÅŸti (attendance.scan geniÅŸlemesi + GÃ¼nlÃ¼k Ä°ÅŸÃ§i izin ekleri), baÅŸka hiÃ§bir satÄ±r silinmedi',
+ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.scan genişlemesi + Günlük İşçi izin ekleri), başka hiçbir satır silinmedi',
     count($beklenmeyenSilinen) === 0,
-    count($beklenmeyenSilinen) . " beklenmeyen silinen satÄ±r:\n" . implode("\n", $beklenmeyenSilinen));
+    count($beklenmeyenSilinen) . " beklenmeyen silinen satır:\n" . implode("\n", $beklenmeyenSilinen));
 
 echo "\n";
-printf("SONUÃ‡: %d test geÃ§ti, %d hata.\n\n", $gecen, $fail);
+printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);
