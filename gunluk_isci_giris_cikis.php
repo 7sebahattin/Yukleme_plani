@@ -252,7 +252,30 @@ render_flash();
         </div>
     </div>
 
-    <!-- ── 4) Mutabakat / kapatma ekranı ────────────────────── -->
+    <!-- ── 4) Kapatma onayı ─────────────────────────────────── -->
+    <div id="giCloseConfirmSec" class="pdks-kiosk-modesec" hidden>
+        <div class="pdks-kiosk-recon">
+            <h2>Mesaiyi Kapat?</h2>
+            <p><strong id="giCloseCavus"></strong> · <span id="giCloseTarih"></span></p>
+            <div class="pdks-kiosk-counters">
+                <div class="pdks-kiosk-counter-totals">
+                    <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giCloseGiris"></div></div>
+                    <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCloseCikis"></div></div>
+                    <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giCloseIceride"></div></div>
+                    <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giCloseEksik"></div></div>
+                </div>
+            </div>
+            <p>Bu işlem çavuşun bugünkü mesaisini kapatacaktır.<br>
+               Mesai kapatıldıktan sonra normal giriş/çıkış kart okutma işlemi durur.<br>
+               <strong>Devam etmek istiyor musunuz?</strong></p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button type="button" class="btn btn-ghost" id="giCloseCancelBtn">Vazgeç</button>
+                <button type="button" class="btn btn-primary" id="giCloseConfirmBtn">Mesaiyi Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── 5) Mutabakat / kapatma ekranı ────────────────────── -->
     <div id="giReconSec" class="pdks-kiosk-modesec" hidden>
         <div class="pdks-kiosk-recon">
             <h2 style="margin-top:0">Eksik Çıkışlar Var</h2>
@@ -297,6 +320,7 @@ render_flash();
     var modeSec    = document.getElementById('giModeSec');
     var tipSec     = document.getElementById('giTipSec');
     var scanSec    = document.getElementById('giScanSec');
+    var closeConfirmSec = document.getElementById('giCloseConfirmSec');
     var reconSec   = document.getElementById('giReconSec');
     var modeBadge  = document.getElementById('giModeBadge');
     var tipBadge   = document.getElementById('giTipBadge');
@@ -378,7 +402,7 @@ render_flash();
     }
 
     function ekranGoster(ekran) {
-        [cavusSec, modeSec, tipSec, scanSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
+        [cavusSec, modeSec, tipSec, scanSec, closeConfirmSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
         // ⚠ .page-head display:flex TAŞIR — hidden TEK BAŞINA gizleyemez
         // (bkz. CLAUDE.md maliyet.css notu, giris_cikis.php İLE AYNI düzeltme).
         if (pageHead) pageHead.style.display = (ekran === scanSec) ? 'none' : '';
@@ -664,7 +688,7 @@ render_flash();
         nfcDebugYaz('button: disabled (desteklenmiyor veya güvenli bağlam yok)');
     }
 
-    // ── 4) Mesaiyi kapat / mutabakat ──────────────────────────
+    // ── 4) Kapatma onayı / mutabakat ──────────────────────────
     function reconGoster(ozet) {
         var satirlar = '';
         var tipler = {};
@@ -715,7 +739,22 @@ render_flash();
             })
             .catch(function () { alert('Bağlantı hatası. Tekrar deneyin.'); });
     }
-    document.getElementById('giKapatBtn').addEventListener('click', function () { kapat(''); });
+    document.getElementById('giKapatBtn').addEventListener('click', function () {
+        if (!currentSession) return;
+        document.getElementById('giCloseCavus').textContent = seciliCavusAd || '';
+        var tarih = String(currentSession.work_date || '').split('-');
+        document.getElementById('giCloseTarih').textContent = tarih.length === 3 ? tarih.reverse().join('.') : '';
+        document.getElementById('giCloseGiris').textContent = document.getElementById('giGirisToplam').textContent;
+        document.getElementById('giCloseCikis').textContent = document.getElementById('giCikisToplam').textContent;
+        document.getElementById('giCloseIceride').textContent = document.getElementById('giIcerdeToplam').textContent;
+        document.getElementById('giCloseEksik').textContent = document.getElementById('giEksikToplam').textContent;
+        ekranGoster(closeConfirmSec);
+    });
+    document.getElementById('giCloseCancelBtn').addEventListener('click', function () {
+        ekranGoster(scanSec);
+        focusInput();
+    });
+    document.getElementById('giCloseConfirmBtn').addEventListener('click', function () { kapat(''); });
     document.getElementById('giReconKapatBtn').addEventListener('click', function () {
         var not = document.getElementById('giReconNot').value.trim();
         if (not === '') { alert('Kapatma gerekçesi zorunludur.'); return; }

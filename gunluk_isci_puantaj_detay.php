@@ -2,13 +2,13 @@
 // =========================================================
 // gunluk_isci_puantaj_detay.php — Tek Mesai Detayı (Günlük İşçi, Faz 3)
 //
-// SALT OKUNUR — bkz. gunluk_isci_puantaj.php başlığı. Bu sayfa da KENDİ
-// SQL'ini YAZMAZ: kart dökümü pdks_gunluk_oturum_kartlari(), sayaçlar
-// pdks_gunluk_oturum_ozet()'ten gelir (Faz 2'nin TEK sayaç kaynağı).
+// Kart dökümü ve sayaçlar mevcut ortak fonksiyonlardan gelir. Faz 8H'nin
+// yalnız admin yeniden açma eylemi de paylaşılan backend işlevini kullanır.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
+require_once __DIR__ . '/config/pdks_faz8h.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
@@ -24,6 +24,31 @@ $st->execute([$id]);
 $oturum = $st->fetch();
 if (!$oturum) { set_flash('error', 'Mesai bulunamadı.'); header('Location: gunluk_isci_puantaj.php'); exit; }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yeniden_ac') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sonuc = pdks_gunluk_oturum_yeniden_ac((int)$id, (string)($_POST['sebep'] ?? ''), (int)$auth_user['id'], $pdo);
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? 'Mesai yeniden açıldı. Aynı oturumda taramaya devam edebilirsiniz.' : $sonuc['hata']);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id);
+    exit;
+}
+
+$aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+$yenidenAcGoster = function_exists('is_admin') && is_admin()
+    && $oturum['status'] === 'closed'
+    && $oturum['work_date'] === date('Y-m-d')
+    && $aktifDepo !== '' && $oturum['depo'] === $aktifDepo;
+$kesinHakedis = null;
+$hakedisKontrolHatasi = false;
+if ($yenidenAcGoster) {
+    try {
+        $stEnt = $pdo->prepare("SELECT id FROM foreman_daily_entitlements WHERE session_id = ? AND status = 'final'");
+        $stEnt->execute([(int)$id]);
+        $kesinHakedis = $stEnt->fetchColumn() ?: null;
+    } catch (PDOException $e) {
+        $hakedisKontrolHatasi = true;
+    }
+}
+
 $ozet   = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum  = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);
 $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
@@ -38,9 +63,33 @@ render_flash();
     <h1>📅 <?= h($oturum['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
         <a href="gunluk_isci_puantaj.php" class="btn">← Günlük Puantaj</a>
+        <?php if (is_admin() && $oturum['status'] === 'open' && $oturum['work_date'] === date('Y-m-d') && $oturum['depo'] === $aktifDepo): ?>
+        <a href="gunluk_isci_giris_cikis.php" class="btn btn-primary">Giriş / Çıkışa Dön</a>
+        <?php endif; ?>
         <a href="gunluk_puantaj_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır — Çavuş Gün Sonu Fişi</a>
     </div>
 </div>
+
+<?php if ($yenidenAcGoster): ?>
+<div class="card" style="padding:18px 20px;margin-bottom:18px">
+    <h2 style="margin-top:0;font-size:1rem">Mesaiyi Yeniden Aç · Yalnız Yönetici</h2>
+    <?php if ($hakedisKontrolHatasi): ?>
+    <p>Hakediş durumu doğrulanamadı. Mesaiyi yeniden açmadan önce muhasebe kaydını kontrol edin.</p>
+    <?php elseif ($kesinHakedis): ?>
+    <p>Bu mesai için kesinleşmiş hakediş bulunmaktadır. Önce hakedişi admin tarafından yeniden açın.</p>
+    <a class="btn" href="cavus_hakedis_detay.php?id=<?= (int)$kesinHakedis ?>">Hakediş Detayı</a>
+    <?php else: ?>
+    <form method="post" onsubmit="return confirm('Bu mesaiyi aynı oturum kimliğiyle yeniden açmak istiyor musunuz?');">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="yeniden_ac">
+        <label><span class="form-label">Yeniden açma gerekçesi *</span>
+            <textarea name="sebep" rows="2" maxlength="500" required placeholder="Örn. Yanlışlıkla kapatıldı; operasyon devam ediyor"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px">Mesaiyi Yeniden Aç</button>
+    </form>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="pdks-kiosk-counters" style="margin:0 0 18px">
     <h3><?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?><?= $oturum['depo'] ? ' — ' . h($oturum['depo']) : '' ?>
