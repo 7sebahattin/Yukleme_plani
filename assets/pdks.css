@@ -277,19 +277,14 @@
 .pdks-kiosk-recon { max-width: 520px; margin: 0 auto; text-align: left; }
 .pdks-kiosk-recon-missing-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: .88rem; }
 
-/* ── Faz 8A: GİRİŞ modunda İşçi Tipi / Tam-Yarım Mesai seçimi — büyük,
-   dokunmatik dostu butonlar (görev talimatı §11: "large touch-friendly
-   controls"). Seçim tek tıkla değişir, tarama akışını KESMEZ. ── */
-.pdks-kiosk-tipbtn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.pdks-kiosk-secbtn {
-    flex: 1; min-width: 110px; min-height: 52px; padding: 12px 10px;
-    font-size: 1rem; font-weight: 800; letter-spacing: .01em;
-    border: 2px solid var(--border); border-radius: var(--radius);
-    background: var(--card); color: var(--text); cursor: pointer;
+/* ── Günlük işçi: giriş öncesi tip seçimi ve tarama sırası ── */
+.pdks-kiosk-type-popup {
+    max-width: 420px; margin: 20px auto; padding: 24px 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
 }
-.pdks-kiosk-secbtn-aktif { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
-.pdks-kiosk-secuyari { color: var(--warn); font-weight: 600; }
-@media (max-width: 480px) {
-    .pdks-kiosk-secbtn { min-width: 45%; font-size: .92rem; }
-}
+.pdks-kiosk-typebtn { background: var(--primary); }
+.pdks-kiosk-scan-gunluk { justify-content: flex-start; }
+.pdks-kiosk-scan-status { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.pdks-kiosk-type-badge { background: var(--primary-soft); color: var(--primary); }
+.pdks-kiosk-scan-gunluk .pdks-kiosk-counters { width: 100%; margin: 8px auto 0; text-align: left; }
 .pdks-kiosk-recon-missing-row:last-child { border-bottom: none; }
