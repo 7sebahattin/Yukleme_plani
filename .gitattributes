@@ -1,6 +1,11 @@
 # Depoya commit'lenen vendor/ dosyaları GitHub dil istatistiklerine girmesin.
 vendor/** linguist-vendored
 
+# PHP kaynakları platformdan bağımsız LF ile checkout edilir. Windows'ta
+# çalışan kaynak-kodu smoke testlerindeki satır-sonu regex'lerinin CRLF yüzünden
+# yalancı negatif üretmesini engeller; PHP çalışma davranışını değiştirmez.
+*.php text eol=lf
+
 # NOT: vendor/ altındaki satır sonlarına burada karışılmaz. dompdf kendi
 # .gitattributes'ında "* text=auto eol=lf" tanımlıyor ve iç içe .gitattributes
 # dosyaları kök dosyaya göre önceliklidir — yani "vendor/** -text" yazmak
