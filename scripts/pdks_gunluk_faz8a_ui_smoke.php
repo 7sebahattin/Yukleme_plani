@@ -176,7 +176,7 @@ ok('sayfa hata sızdırmadan render edildi', !str_contains($s1, '__ERROR__'), $s
 ok('PHP Warning/Notice yok', !preg_match('/Warning:|Notice:|Deprecated:/', $s1));
 ok('İşçi Tipi/Mesai seçim bloğu (giTipMesaiSec) RENDER EDİLDİ', str_contains($s1, 'id="giTipMesaiSec"'));
 ok('KADIN işçi tipi butonu dinamik olarak worker_types\'tan geldi (hardcode DEĞİL)', str_contains($s1, 'data-gi-tip-id'));
-ok('Tam Mesai / Yarım Mesai butonları render edildi', str_contains($s1, 'data-gi-mesai-kod="tam"') && str_contains($s1, 'data-gi-mesai-kod="yarim"'));
+ok('Giriş ekranında Tam / Yarım Mesai butonları ARTIK YOK', !str_contains($s1, 'data-gi-mesai-kod='));
 ok('İşçi Tipi/Mesai bloğu başlangıçta GİZLİ (hidden — yalnız GİRİŞ modunda JS ile açılır)',
     (bool)preg_match('/id="giTipMesaiSec"[^>]*hidden/', $s1));
 ok('Web Audio beep fonksiyonları (sesBasarili/sesHata) sayfada tanımlı', str_contains($s1, 'sesBasarili') && str_contains($s1, 'sesHata'));

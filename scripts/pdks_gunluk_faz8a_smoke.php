@@ -554,5 +554,122 @@ ok('H004 oturumu kesinleştirildi', $finalize3['ok'] === true);
 $hesapTekrar = pdks_hakedis_hesapla($hSid3, 1, $hakedisDb);
 ok('KESİNLEŞMİŞ kayıt otomatik yeniden hesaplama isteğini REDDEDİYOR (zaten_kesinlesmis)', $hesapTekrar['ok'] === false && $hesapTekrar['kod'] === 'zaten_kesinlesmis');
 
+echo "\n=== 26. FAZ 8D STEP 1 AUTO CARD ===\n";
+
+$autoDb = yeniDb();
+
+$autoTypeId = (int)$autoDb
+    ->query("SELECT id FROM worker_types WHERE code='KADIN'")
+    ->fetchColumn();
+
+$autoForeman = pdks_gunluk_cavus_olustur(
+    ['code' => 'AUTO1', 'name' => 'Auto Card Foreman'],
+    1,
+    $autoDb
+);
+
+$autoSession = pdks_gunluk_oturum_ac_veya_getir(
+    (int)$autoForeman['id'],
+    1,
+    $autoDb
+);
+
+$autoSid = (int)$autoSession['session']['id'];
+$autoUid = '880000001';
+
+$autoEntry = pdks_gunluk_faz8a_giris_kaydet(
+    $autoUid,
+    'usb_decimal',
+    $autoSid,
+    $autoTypeId,
+    'auto',
+    1,
+    $autoDb
+);
+
+ok(
+    'Unknown card is auto-enrolled on first GIRIS',
+    ($autoEntry['ok'] ?? false) === true,
+    json_encode($autoEntry, JSON_UNESCAPED_UNICODE)
+);
+
+$autoCanonical = pdks_uid_from_decimal($autoUid);
+
+$autoSt = $autoDb->prepare(
+    "SELECT * FROM worker_cards WHERE canonical_uid = ?"
+);
+$autoSt->execute([$autoCanonical]);
+$autoCard = $autoSt->fetch();
+
+ok(
+    'Auto card exists in worker_cards and stays neutral',
+    $autoCard !== false
+        && $autoCard['worker_type_id'] === null,
+    json_encode($autoCard, JSON_UNESCAPED_UNICODE)
+);
+
+ok(
+    'Auto card gets deterministic AUTO number',
+    $autoCard !== false
+        && str_starts_with((string)$autoCard['card_no'], 'AUTO-'),
+    json_encode($autoCard, JSON_UNESCAPED_UNICODE)
+);
+
+$periodSt = $autoDb->prepare(
+    "SELECT *
+       FROM daily_worker_work_periods
+      WHERE session_id = ?
+        AND worker_card_id = ?"
+);
+$periodSt->execute([
+    $autoSid,
+    (int)$autoCard['id']
+]);
+$period = $periodSt->fetch();
+
+ok(
+    'Worker type belongs to work period, not card master',
+    $period !== false
+        && (int)$period['worker_type_id_snapshot'] === $autoTypeId,
+    json_encode($period, JSON_UNESCAPED_UNICODE)
+);
+
+ok(
+    'New scan flow stores AUTO attendance declaration',
+    $period !== false
+        && $period['declared_attendance_class'] === 'auto',
+    json_encode($period, JSON_UNESCAPED_UNICODE)
+);
+
+$autoExit = pdks_gunluk_faz8a_cikis_kaydet(
+    $autoUid,
+    'usb_decimal',
+    $autoSid,
+    1,
+    $autoDb
+);
+
+ok(
+    'Auto-enrolled card can make normal CIKIS',
+    ($autoExit['ok'] ?? false) === true,
+    json_encode($autoExit, JSON_UNESCAPED_UNICODE)
+);
+
+$unknownExit = pdks_gunluk_faz8a_cikis_kaydet(
+    '880000002',
+    'usb_decimal',
+    $autoSid,
+    1,
+    $autoDb
+);
+
+ok(
+    'Unknown card is NOT auto-created in CIKIS mode',
+    ($unknownExit['ok'] ?? true) === false
+        && ($unknownExit['kod'] ?? '') === 'kart_tanimsiz',
+    json_encode($unknownExit, JSON_UNESCAPED_UNICODE)
+);
+
+
 printf("\n=== SONUÇ: %d geçti, %d hata ===\n", $gecen, $fail);
 exit($fail > 0 ? 1 : 0);
