@@ -1101,6 +1101,235 @@ function pdks_rapor_para_formatla($tl): string
     return number_format((float)$tl, 2, ',', '.');
 }
 
+
+// =========================================================
+// FAZ 8D — ÇAVUŞ TOPLU DÖKÜM
+// Salt-okunur raporlama. Yeni muhasebe/yoklama doğruluk kaynağı üretmez.
+// =========================================================
+
+/**
+ * Bir ay içindeki çavuş/gün oturumlarını tek toplu sorguda döndürür.
+ * İşçi sayısı Faz 8A work-period katılımlarından gelir.
+ *
+ * $finansal=false olduğunda hakediş tablosuna dahi sorgu yapılmaz.
+ */
+function pdks_rapor_cavus_toplu_dokum(
+    string $ay,
+    ?string $depo = null,
+    ?int $foremanId = null,
+    bool $finansal = false,
+    ?PDO $pdo = null
+): array {
+    $pdo = $pdo ?? db();
+
+    if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $ay)) {
+        return [];
+    }
+
+    $start = $ay . '-01';
+    $ts = strtotime($start);
+    if ($ts === false) return [];
+    $end = date('Y-m-t', $ts);
+
+    // Kadın / Erkek master ID'lerini mevcut master tablodan al.
+    // Toplam sayı yalnız bu iki tipe bağlı DEĞİLDİR; bütün katılımları sayar.
+    $tipIds = ['KADIN' => 0, 'ERKEK' => 0];
+    $stTip = $pdo->query(
+        "SELECT id, code
+           FROM worker_types
+          WHERE code IN ('KADIN','ERKEK')"
+    );
+    foreach ($stTip->fetchAll() as $t) {
+        if (isset($tipIds[$t['code']])) {
+            $tipIds[$t['code']] = (int)$t['id'];
+        }
+    }
+
+    $kadinId = (int)$tipIds['KADIN'];
+    $erkekId = (int)$tipIds['ERKEK'];
+
+    $where = ['s.work_date BETWEEN ? AND ?'];
+    $params = [$start, $end];
+
+    if ($depo !== null && $depo !== '') {
+        $where[] = 's.depo = ?';
+        $params[] = $depo;
+    }
+
+    if ($foremanId !== null) {
+        $where[] = 's.foreman_id = ?';
+        $params[] = $foremanId;
+    }
+
+    $sql =
+        "SELECT
+            s.id AS session_id,
+            s.foreman_id,
+            s.foreman_name_snapshot AS cavus_adi,
+            s.foreman_code_snapshot AS cavus_kodu,
+            s.work_date AS tarih,
+            s.depo,
+            s.status AS oturum_durumu,
+            COUNT(p.id) AS toplam_isci,
+            SUM(CASE WHEN p.worker_type_id_snapshot = {$kadinId} THEN 1 ELSE 0 END) AS kadin,
+            SUM(CASE WHEN p.worker_type_id_snapshot = {$erkekId} THEN 1 ELSE 0 END) AS erkek,
+            MIN(p.entry_time) AS ilk_giris,
+            MAX(p.exit_time) AS son_cikis,
+            SUM(
+                CASE
+                    WHEN p.status IN ('open','legacy_unresolved') THEN 1
+                    ELSE 0
+                END
+            ) AS eksik_cikis
+         FROM daily_work_sessions s
+         LEFT JOIN daily_worker_work_periods p
+                ON p.session_id = s.id
+        WHERE " . implode(' AND ', $where) . "
+        GROUP BY
+            s.id,
+            s.foreman_id,
+            s.foreman_name_snapshot,
+            s.foreman_code_snapshot,
+            s.work_date,
+            s.depo,
+            s.status
+        ORDER BY s.work_date DESC, s.foreman_name_snapshot ASC, s.id ASC";
+
+    $st = $pdo->prepare($sql);
+    $st->execute($params);
+    $satirlar = $st->fetchAll();
+
+    foreach ($satirlar as &$r) {
+        $r['session_id']   = (int)$r['session_id'];
+        $r['foreman_id']   = (int)$r['foreman_id'];
+        $r['toplam_isci']  = (int)$r['toplam_isci'];
+        $r['kadin']        = (int)$r['kadin'];
+        $r['erkek']        = (int)$r['erkek'];
+        $r['eksik_cikis']  = (int)$r['eksik_cikis'];
+        $r['hakedis']      = null;
+    }
+    unset($r);
+
+    if (!$finansal || !$satirlar) {
+        return $satirlar;
+    }
+
+    // Hakedişi yeniden HESAPLAMIYORUZ.
+    // Faz 4/8B'nin otoriter entitlement snapshot'ını salt-okunur okuyoruz.
+    $sessionIds = array_column($satirlar, 'session_id');
+    $ph = implode(',', array_fill(0, count($sessionIds), '?'));
+
+    $stH = $pdo->prepare(
+        "SELECT session_id, status, total_amount, currency
+           FROM foreman_daily_entitlements
+          WHERE session_id IN ($ph)"
+    );
+    $stH->execute($sessionIds);
+
+    $hakedisMap = [];
+    foreach ($stH->fetchAll() as $h) {
+        $hakedisMap[(int)$h['session_id']] = [
+            'status'       => (string)$h['status'],
+            'total_amount' => (string)$h['total_amount'],
+            'currency'     => (string)$h['currency'],
+        ];
+    }
+
+    foreach ($satirlar as &$r) {
+        $r['hakedis'] = $hakedisMap[$r['session_id']] ?? null;
+    }
+    unset($r);
+
+    return $satirlar;
+}
+
+/**
+ * Tek günlük oturumun kart/work-period dökümü.
+ * Kart No + okutulan UID + giriş/çıkış gerçek zamanları gösterilir.
+ */
+function pdks_rapor_cavus_kart_dokumu(
+    int $sessionId,
+    ?string $depo = null,
+    ?PDO $pdo = null
+): array {
+    $pdo = $pdo ?? db();
+
+    if ($sessionId <= 0) {
+        return ['session' => null, 'cards' => []];
+    }
+
+    $where = ['s.id = ?'];
+    $params = [$sessionId];
+
+    if ($depo !== null && $depo !== '') {
+        $where[] = 's.depo = ?';
+        $params[] = $depo;
+    }
+
+    $stS = $pdo->prepare(
+        "SELECT
+            s.id,
+            s.foreman_id,
+            s.foreman_name_snapshot AS cavus_adi,
+            s.foreman_code_snapshot AS cavus_kodu,
+            s.work_date AS tarih,
+            s.depo,
+            s.status AS oturum_durumu,
+            s.notes
+         FROM daily_work_sessions s
+        WHERE " . implode(' AND ', $where) . "
+        LIMIT 1"
+    );
+    $stS->execute($params);
+    $session = $stS->fetch();
+
+    if (!$session) {
+        return ['session' => null, 'cards' => []];
+    }
+
+    $st = $pdo->prepare(
+        "SELECT
+            p.id AS period_id,
+            w.card_no,
+            w.uid_decimal,
+            w.canonical_uid,
+            p.worker_type_name_snapshot AS isci_tipi,
+            p.entry_time,
+            p.exit_time,
+            p.status AS period_status,
+            p.source
+         FROM daily_worker_work_periods p
+         JOIN worker_cards w ON w.id = p.worker_card_id
+        WHERE p.session_id = ?
+        ORDER BY p.entry_time ASC, p.id ASC"
+    );
+    $st->execute([$sessionId]);
+
+    $cards = $st->fetchAll();
+
+    foreach ($cards as &$c) {
+        $c['period_id'] = (int)$c['period_id'];
+        $c['eksik_cikis'] = in_array(
+            $c['period_status'],
+            ['open', 'legacy_unresolved'],
+            true
+        );
+        $c['okunan_uid'] =
+            trim((string)($c['uid_decimal'] ?? '')) !== ''
+                ? (string)$c['uid_decimal']
+                : (string)$c['canonical_uid'];
+    }
+    unset($c);
+
+    $session['id'] = (int)$session['id'];
+    $session['foreman_id'] = (int)$session['foreman_id'];
+
+    return [
+        'session' => $session,
+        'cards'   => $cards,
+    ];
+}
+
 // =========================================================
 // MİGRASYON GEREKMİYOR (görev madde 22 talimatının açık kaçış yolu):
 // Bu dosya HİÇBİR CREATE TABLE / ALTER TABLE / CREATE INDEX İÇERMEZ.
