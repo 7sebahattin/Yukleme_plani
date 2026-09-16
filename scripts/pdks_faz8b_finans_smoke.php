@@ -168,11 +168,10 @@ $d2b = pdks_faz8b_degerlendirme_kaydet($p2, 'tam', null, 1, $db);
 ok8bf('muhasebe kısa günü Yarım→Tam değiştirebilir (final değilken)', $d2b['ok'] === true);
 ok8bf('karar değişince taslak tekrar bayat işaretlenir', (int)$db->query("SELECT needs_recalculation FROM foreman_daily_entitlements WHERE session_id=1")->fetchColumn() === 1);
 $h7 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
-ok8bf('yeniden hesaplama yeni Tam kararını finansal toplama yansıtır', $h7['ok'] === true && $h7['total_amount'] === '9770.00', json_encode($h7, JSON_UNESCAPED_UNICODE));
+ok8bf('yeniden hesaplama yeni Tam kararını finansal toplama yansıtır', $h7['ok'] === true && $h7['total_amount'] === '9750.00', json_encode($h7, JSON_UNESCAPED_UNICODE));
 
 // Toplam kontrolü:
 // p1 1500 + p2 1500 + p3 1700 + p4 1900 + p5 1650 + p6 1500 = 9750.
-// Not: yukarıdaki beklenen toplam bu aritmetiğe eşit olmalıdır.
 $beklenen = '9750.00';
 ok8bf('nihai toplam aritmetiği 9750 TL', $h7['ok'] === true && $h7['total_amount'] === $beklenen, json_encode($h7, JSON_UNESCAPED_UNICODE));
 
