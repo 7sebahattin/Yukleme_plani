@@ -1846,10 +1846,22 @@ function pdks_gunluk_faz8a_kolon_nullable(PDO $pdo, string $tablo, string $kolon
         }
         return false;
     }
-    $st = $pdo->prepare("SHOW COLUMNS FROM `{$tablo}` LIKE ?");
-    $st->execute([$kolon]);
-    $c = $st->fetch();
-    return $c !== false && stripos((string)$c['Null'], 'YES') !== false;
+
+    // MariaDB/MySQL: SHOW ... içinde PDO placeholder kullanmak bazı
+    // sürümlerde syntax error (1064, near '?') üretir. Metadata'yı
+    // information_schema üzerinden normal SELECT ile sorgula.
+    $st = $pdo->prepare(
+        "SELECT IS_NULLABLE
+           FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND COLUMN_NAME = ?
+          LIMIT 1"
+    );
+    $st->execute([$tablo, $kolon]);
+    $nullable = $st->fetchColumn();
+
+    return $nullable !== false && strtoupper((string)$nullable) === 'YES';
 }
 
 /** MySQL/SQLite taşınabilir: bir index/kısıt adı var mı? */
@@ -1862,9 +1874,19 @@ function pdks_gunluk_faz8a_index_var(PDO $pdo, string $tablo, string $indeks): b
         }
         return false;
     }
-    $st = $pdo->prepare("SHOW INDEX FROM `{$tablo}` WHERE Key_name = ?");
-    $st->execute([$indeks]);
-    return (bool)$st->fetch();
+
+    // SHOW INDEX + placeholder yerine MariaDB/MySQL uyumlu metadata SELECT.
+    $st = $pdo->prepare(
+        "SELECT 1
+           FROM information_schema.STATISTICS
+          WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = ?
+            AND INDEX_NAME = ?
+          LIMIT 1"
+    );
+    $st->execute([$tablo, $indeks]);
+
+    return $st->fetchColumn() !== false;
 }
 
 /** worker_cards.worker_type_id foreign key'inin gerçek adını bulur. */
