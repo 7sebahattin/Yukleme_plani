@@ -217,6 +217,7 @@ $helpersBeklenenEskiSatirlar = [
     "-    \$a_cari     = in_array(\$cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);",
     "-    \$a_yrapor   = \$cur === 'raporlar.php';",
     "-        <?php if (\$p_pdks): ?>",
+    "-        <?php if (\$p_pdks || \$p_gunluk): ?>",
     "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', '👤', 'Personeller', \$a_pdksp); ?>",
     "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', \$a_pdksk); ?>",
     "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_pdksg); ?>",
@@ -246,6 +247,7 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v220');",
     "-    define('APP_SURUM', 'v221');",
     "-    define('APP_SURUM', 'v222');",
+    "-    define('APP_SURUM', 'v223');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

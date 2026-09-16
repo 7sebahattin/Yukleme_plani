@@ -57,7 +57,7 @@ render_flash();
 <div class="page-head">
     <h1>🏷 İşçi Tipleri</h1>
     <div class="page-head-actions">
-        <a href="isci_kartlari.php" class="btn btn-ghost">← İşçi Kartları</a>
+        <a href="isci_kartlari.php" class="btn btn-ghost">← Kart Havuzu</a>
     </div>
 </div>
 
