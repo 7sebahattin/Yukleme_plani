@@ -49,10 +49,10 @@ if ($cavusId !== null) {
 }
 
 $kpi        = pdks_rapor_operasyonel_kpi($start, $end, $depo, $cavusId, $tipId, $pdo);
-$tipDagilim = pdks_rapor_isci_tipi_dagilimi($start, $end, $depo, $cavusId, $pdo);
+$tipDagilim = pdks_rapor_isci_tipi_dagilimi($start, $end, $depo, $cavusId, $pdo, $tipId);
 $cavusOzeti = pdks_rapor_cavus_ozeti($start, $end, $depo, $cavusId, $tipId, $pdo);
-$eksikler   = pdks_rapor_eksik_cikislar_araligi($start, $end, $depo, $cavusId, $pdo);
-$acikMesai  = pdks_rapor_acik_mesailer_araligi($start, $end, $depo, $cavusId, $pdo);
+$eksikler   = pdks_rapor_eksik_cikislar_araligi($start, $end, $depo, $cavusId, $pdo, $tipId);
+$acikMesai  = pdks_rapor_acik_mesailer_araligi($start, $end, $depo, $cavusId, $pdo, $tipId);
 $finansalKpi = []; $guncelBakiye = [];
 if ($finansalGosterilebilir) {
     $finansalKpi  = pdks_rapor_finansal_kpi($start, $end, $depo, $cavusId, $pdo);
