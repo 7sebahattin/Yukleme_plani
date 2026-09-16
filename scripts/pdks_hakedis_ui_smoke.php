@@ -1,12 +1,11 @@
 <?php
 // =========================================================
-// scripts/pdks_hakedis_ui_smoke.php — Çavuş Hakediş (Faz 4) sayfaları
-// arayüz (render) testi
+// scripts/pdks_hakedis_ui_smoke.php — Çavuş Hakediş sayfaları
+// arayüz (render) testi — Faz 4 geriye uyumluluk + Faz 8B entegrasyonu.
 //
 // SADECE CLI. Canlı veritabanına HİÇ dokunmaz: bellek içi SQLite ve
 // stub'lanmış auth/render fonksiyonlarıyla cavus_fiyatlari.php /
-// cavus_hakedis.php / cavus_hakedis_detay.php'yi GERÇEKTEN render eder
-// (pdks_gunluk_faz3_ui_smoke.php İLE AYNI desen).
+// cavus_hakedis.php / cavus_hakedis_detay.php'yi GERÇEKTEN render eder.
 //
 //   php scripts/pdks_hakedis_ui_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
@@ -50,6 +49,7 @@ function render_footer(bool $p = false): void { echo "</main></body></html>"; }
 require_once $ROOT . '/config/pdks.php';
 require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
+require_once $ROOT . '/config/pdks_faz8b.php';
 
 // ─────────────────────────────────────────────────────────
 // MySQL DDL → SQLite çevirici — diğer *_ui_smoke.php dosyalarıyla BİREBİR AYNI.
@@ -115,7 +115,7 @@ foreach (pdks_hakedis_tablolar() as $ad => $sql) {
 }
 pdks_gunluk_migrate(db());
 
-// ── Test verisi: Ayşe (fiyatlı, kesinleşmiş hakediş) + Mehmet (fiyatsız) ──
+// ── Test verisi: Ayşe (Faz 4 fiyatlı, kesinleşmiş hakediş) + Mehmet (fiyatsız) ──
 $kadinId = (int)db()->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 $erkekId = (int)db()->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
 $ayseId = (int)pdks_gunluk_cavus_olustur(['code' => 'C001', 'name' => 'Ayşe Çavuş'], 1, db())['id'];
@@ -129,7 +129,6 @@ pdks_gunluk_kart_olustur(['card_no' => 'E001', 'worker_type_id' => $erkekId, 'ha
 
 $oAyse = pdks_gunluk_oturum_ac_veya_getir($ayseId, 1, db());
 $ayseSessionId = (int)$oAyse['session']['id'];
-$bugun = date('Y-m-d');
 pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $ayseSessionId, 'GIRIS', 1, db());
 pdks_gunluk_oturum_kaydet('631799511', 'usb_decimal', $ayseSessionId, 'CIKIS', 1, db());
 pdks_gunluk_oturum_kaydet('444555666', 'usb_decimal', $ayseSessionId, 'GIRIS', 1, db());
@@ -142,8 +141,25 @@ $ayseEntId = (int)$finalAyse['entitlement_id'];
 // Mehmet — oturum var ama HİÇ fiyat girilmedi (eksik oran senaryosu).
 $oMehmet = pdks_gunluk_oturum_ac_veya_getir($mehmetId, 1, db());
 $mehmetSessionId = (int)$oMehmet['session']['id'];
-$km = pdks_gunluk_kart_olustur(['card_no' => 'K002', 'worker_type_id' => $kadinId, 'ham_uid' => '111222333', 'kaynak' => 'usb_decimal'], 1, db());
+pdks_gunluk_kart_olustur(['card_no' => 'K002', 'worker_type_id' => $kadinId, 'ham_uid' => '111222333', 'kaynak' => 'usb_decimal'], 1, db());
 pdks_gunluk_oturum_kaydet('111222333', 'usb_decimal', $mehmetSessionId, 'GIRIS', 1, db());
+
+// Faz 4 fixture'ı oluşturulduktan SONRA Faz 8A/8B şemasını kur.
+// daily_worker_work_periods Faz 8A'ya aittir ve raw MySQL CREATE TABLE DDL'i
+// SQLite'ta doğrudan çalışmaz; Faz 8A'nın kendi UI smoke testindeki aynı
+// yöntemle önce DDL'i SQLite'a çevirip tabloyu kuruyoruz. Sonra gerçek,
+// idempotent Faz 8A ve Faz 8B migrasyonlarını çalıştırıyoruz.
+[$dwwpCreate, $dwwpIdx] = pdks_ddl_sqlite(pdks_gunluk_faz8a_tablolar()['daily_worker_work_periods']);
+db()->exec($dwwpCreate);
+foreach ($dwwpIdx as $ix) db()->exec($ix);
+$faz8aMig = pdks_gunluk_faz8a_migrate(db());
+if (in_array('hata', array_column($faz8aMig, 'durum'), true) || !pdks_gunluk_faz8a_sema_hazir(db())) {
+    throw new RuntimeException('Faz 8A test şeması hazırlanamadı: ' . json_encode($faz8aMig, JSON_UNESCAPED_UNICODE));
+}
+$faz8bMig = pdks_faz8b_migrate(db());
+if (in_array('hata', array_column($faz8bMig, 'durum'), true) || !pdks_faz8b_sema_hazir(db())) {
+    throw new RuntimeException('Faz 8B test şeması hazırlanamadı: ' . json_encode($faz8bMig, JSON_UNESCAPED_UNICODE));
+}
 
 function renderPage(string $file, array $get = [], array $post = []): string {
     global $ROOT;
@@ -151,7 +167,10 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $_SERVER['REQUEST_URI'] = '/' . $file;
     $src = file_get_contents($ROOT . '/' . $file);
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/auth)\.php\';.*$/m', '', $src);
+    // Test dosyası /tmp altına kopyalandığı için uygulamanın require_once
+    // satırlarını kaldırırız; tüm modüller yukarıda gerçek repo yolundan
+    // zaten yüklendi. Faz 8B de bu listeye dahildir.
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_faz8b|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
@@ -182,22 +201,24 @@ ok('Kadın satırı listede', str_contains($s1, 'Kadın'));
 ok('1.200,00 TRY görünüyor', str_contains($s1, '1.200,00'));
 ok('"devam ediyor" (açık uçlu dönem) görünüyor', str_contains($s1, 'devam ediyor'));
 ok('yeni fiyat dönemi formu var (daily_rate alanı)', str_contains($s1, 'name="daily_rate"'));
+ok('Faz 8B formunda Yarım/FM alanları da var', str_contains($s1, 'name="half_day_rate"') && str_contains($s1, 'name="overtime_mode"') && str_contains($s1, 'name="overtime_rate"'));
 
 echo "\n=== 3. cavus_fiyatlari.php — yeni fiyat dönemi ekleme (POST) ===\n";
-// ⚠ BAŞARILI bir POST burada header('Location:...')+exit() ÇAĞIRIR — exit()
-// PHP'de include içinden bile YAKALANAMAZ ve bu TEST SÜRECİNİN KENDİSİNİ
-// sonlandırır (Faz 1/3 UI testlerinin AYNI, belgelenmiş kısıtı — bkz.
-// pdks_gunluk_ui_smoke.php'nin "olmayan id" notu). Bu yüzden BAŞARILI ekleme
-// yolu BURADA renderPage() ile ÇAĞRILMAZ; pdks_hakedis_oran_ekle()'nin
-// KENDİSİ zaten pdks_hakedis_smoke.php'de (1/2/3/4/5 numaralı senaryolar)
-// kapsamlıca kanıtlanıyor. Burada yalnız BAŞARISIZ bir POST'un (geçersiz
-// tutar) sayfayı GÜVENLE, header() ÇAĞIRMADAN yeniden render ettiği doğrulanır.
+// Başarılı POST header()+exit() çağıracağı için yalnız güvenli başarısız
+// doğrulama yolu render edilir.
 $s2 = renderPage('cavus_fiyatlari.php', [], [
-    'csrf' => 'x', 'foreman_id' => (string)$ayseId, 'worker_type_id' => (string)$erkekId,
-    'daily_rate' => 'gecersiz-tutar', 'currency' => 'TRY', 'valid_from' => '2026-11-01',
+    'csrf' => 'x',
+    'foreman_id' => (string)$ayseId,
+    'worker_type_id' => (string)$erkekId,
+    'daily_rate' => 'gecersiz-tutar',
+    'half_day_rate' => '900',
+    'overtime_mode' => 'hourly',
+    'overtime_rate' => '200',
+    'currency' => 'TRY',
+    'valid_from' => '2026-11-01',
 ]);
 ok('hata sızmadı (header()+exit() TETİKLENMEDİ — doğrulama hatası sayfayı normal render etti)', !str_starts_with($s2, '__ERROR__'), $s2);
-ok('geçersiz tutar hata mesajı gösteriliyor', str_contains($s2, 'Günlük ücret geçersiz'));
+ok('geçersiz Tam Mesai tutarı hata mesajı gösteriliyor', str_contains($s2, 'Tam Mesai ücreti geçersiz'));
 $stKontrolYok = db()->prepare("SELECT COUNT(*) FROM foreman_worker_rates WHERE foreman_id=? AND worker_type_id=? AND valid_from='2026-11-01'");
 $stKontrolYok->execute([$ayseId, $erkekId]);
 ok('geçersiz tutarla HİÇBİR satır eklenmedi (0 ÜRETİLMEDİ)', (int)$stKontrolYok->fetchColumn() === 0);
@@ -212,7 +233,7 @@ ok('Mehmet Çavuş listede (Hesaplanmadı)', str_contains($s3, 'Mehmet Çavuş')
 ok('Ayşe için Detay bağlantısı var', str_contains($s3, 'cavus_hakedis_detay.php?id=' . $ayseEntId));
 ok('Mehmet için "Hesapla" butonu var (henüz entitlement yok)', str_contains($s3, 'Hesapla'));
 ok('depo alanı disabled (zorunlu tek depo mimarisi)', (bool)preg_match('/name="depo"[^>]*disabled/', $s3));
-ok('39.000,00 TRY toplamı görünüyor (30×1200 + ... değil, burada 1×1200+1×1500=2700)', str_contains($s3, '2.700,00'));
+ok('Faz 4 kesin snapshot toplamı 2.700,00 TRY kaybolmadı', str_contains($s3, '2.700,00'));
 
 echo "\n=== 5. cavus_hakedis_detay.php — Ayşe'nin KESİN hakedişi ===\n";
 $s4 = renderPage('cavus_hakedis_detay.php', ['id' => (string)$ayseEntId]);
@@ -225,8 +246,8 @@ ok('KESİN rozeti görünüyor', str_contains($s4, 'KESİN'));
 ok('Hesaplayan/Kesinleştiren kullanıcı adı görünüyor (Test Kullanıcı)', substr_count($s4, 'Test Kullanıcı') >= 2);
 ok('KESİN kayıtta "Yeniden Hesapla"/"Kesinleştir" formu YOK (yalnız admin\'e Yeniden Aç gösterilir, admin değiliz)', !str_contains($s4, 'Yeniden Hesapla'));
 
-echo "\n=== 6. cavus_hakedis_detay.php — Mehmet için henüz entitlement yok → geçersiz ID davranışı ===\n";
-ok('cavus_hakedis.php Mehmet için "Hesapla" POST formunu render ediyor (yukarıda zaten kanıtlandı)', str_contains($s3, 'session_id" value="' . $mehmetSessionId . '"'));
+echo "\n=== 6. cavus_hakedis_detay.php — Mehmet için henüz entitlement yok ===\n";
+ok('cavus_hakedis.php Mehmet için "Hesapla" POST formunu render ediyor', str_contains($s3, 'session_id" value="' . $mehmetSessionId . '"'));
 
 echo "\n=== 7. YETKİ KAPISI — operator (yalnız attendance.daily_scan) FİNANSAL SAYFALARI GÖREMİYOR ===\n";
 $PERMS = ['attendance.daily_scan'];
@@ -244,7 +265,7 @@ ok("YALNIZ attendance.entitlements ile cavus_hakedis.php AÇILIYOR (görüntüle
 $rIkFiyat = renderPage('cavus_fiyatlari.php');
 ok("YALNIZ attendance.entitlements ile cavus_fiyatlari.php REDDEDİLİYOR (ticari fiyat yönetimi YOK)", str_starts_with($rIkFiyat, '__ERROR__: forbidden'), $rIkFiyat);
 
-$PERMS = ['attendance.foreman_rates', 'attendance.entitlements'];   // sıfırla
+$PERMS = ['attendance.foreman_rates', 'attendance.entitlements'];
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
