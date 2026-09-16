@@ -2361,7 +2361,24 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
                         'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
             }
         }
-        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
+        $otomatikKayit = pdks_gunluk_kart_olustur([
+            'card_no' => 'AUTO-' . substr(hash('sha256', $kanonik), 0, 20),
+            'ham_uid' => $hamUid,
+            'kaynak' => $kaynak,
+            'notes' => 'Auto-enrolled on first daily worker entry',
+        ], $recordedByUserId, $pdo);
+
+        // If another terminal enrolled the same UID at the same time,
+        // re-read the card created by that request.
+        $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+
+        if ($kart === null) {
+            return [
+                'ok' => false,
+                'kod' => 'kart_otomatik_kayit_hatasi',
+                'hata' => 'Kart otomatik kaydedilemedi.',
+            ];
+        }
     }
     if ($kart['status'] === 'lost')     return ['ok' => false, 'kod' => 'kart_kayip', 'hata' => 'Bu kart KAYIP olarak işaretli.'];
     if ($kart['status'] === 'disabled') return ['ok' => false, 'kod' => 'kart_devre_disi', 'hata' => 'Bu kart DEVRE DIŞI.'];
