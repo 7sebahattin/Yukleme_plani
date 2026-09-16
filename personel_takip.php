@@ -127,7 +127,7 @@ render_flash();
 <a href="cavus_fiyatlari.php" class="home-card">
     <div class="home-card-icon" style="background:#e0f2f1">💰</div>
     <div class="home-card-title">Çavuş Fiyatları</div>
-    <div class="home-card-sub">Günlük ücret tanımları</div>
+    <div class="home-card-sub">Tam / Yarım / Fazla mesai ücretleri</div>
 </a>
 <?php endif; ?>
 
@@ -135,7 +135,7 @@ render_flash();
 <a href="cavus_hakedis.php" class="home-card">
     <div class="home-card-icon" style="background:#e0f2f1">🧾</div>
     <div class="home-card-title">Hakedişler</div>
-    <div class="home-card-sub">Taslak / kesin hakediş</div>
+    <div class="home-card-sub">Mesai değerlendirme + taslak / kesin hakediş</div>
 </a>
 <?php endif; ?>
 
