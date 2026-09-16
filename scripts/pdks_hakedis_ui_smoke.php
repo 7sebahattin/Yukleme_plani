@@ -144,11 +144,22 @@ $mehmetSessionId = (int)$oMehmet['session']['id'];
 pdks_gunluk_kart_olustur(['card_no' => 'K002', 'worker_type_id' => $kadinId, 'ham_uid' => '111222333', 'kaynak' => 'usb_decimal'], 1, db());
 pdks_gunluk_oturum_kaydet('111222333', 'usb_decimal', $mehmetSessionId, 'GIRIS', 1, db());
 
-// Faz 4 fixture'ı oluşturulduktan SONRA yalnız Faz 8B additive migrasyonunu
-// çalıştır. Faz 8A tablosu pdks_gunluk_tablolar() üzerinden SQLite'a zaten
-// kurulmuştur; MySQL'e özgü Faz 8A production migrasyonunu burada tekrar
-// çağırmak test ortamında gereksiz ve SQLite uyumsuz DDL'e yol açar.
+// Faz 4 fixture'ı oluşturulduktan SONRA Faz 8A/8B şemasını kur.
+// daily_worker_work_periods Faz 8A'ya aittir ve raw MySQL CREATE TABLE DDL'i
+// SQLite'ta doğrudan çalışmaz; Faz 8A'nın kendi UI smoke testindeki aynı
+// yöntemle önce DDL'i SQLite'a çevirip tabloyu kuruyoruz. Sonra gerçek,
+// idempotent Faz 8A ve Faz 8B migrasyonlarını çalıştırıyoruz.
+[$dwwpCreate, $dwwpIdx] = pdks_ddl_sqlite(pdks_gunluk_faz8a_tablolar()['daily_worker_work_periods']);
+db()->exec($dwwpCreate);
+foreach ($dwwpIdx as $ix) db()->exec($ix);
+$faz8aMig = pdks_gunluk_faz8a_migrate(db());
+if (in_array('hata', array_column($faz8aMig, 'durum'), true) || !pdks_gunluk_faz8a_sema_hazir(db())) {
+    throw new RuntimeException('Faz 8A test şeması hazırlanamadı: ' . json_encode($faz8aMig, JSON_UNESCAPED_UNICODE));
+}
 $faz8bMig = pdks_faz8b_migrate(db());
+if (in_array('hata', array_column($faz8bMig, 'durum'), true) || !pdks_faz8b_sema_hazir(db())) {
+    throw new RuntimeException('Faz 8B test şeması hazırlanamadı: ' . json_encode($faz8bMig, JSON_UNESCAPED_UNICODE));
+}
 
 function renderPage(string $file, array $get = [], array $post = []): string {
     global $ROOT;
