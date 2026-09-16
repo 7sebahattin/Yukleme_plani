@@ -18,6 +18,13 @@ pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
 $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
+$paraBirimleri = [
+    'TRY' => 'Türk Lirası (TRY)',
+    'EUR' => 'Euro (EUR)',
+    'USD' => 'ABD Doları (USD)',
+    'GBP' => 'İngiliz Sterlini (GBP)',
+];
+
 $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $errors = [];
 
@@ -28,10 +35,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $workerTypeId = filter_var($_POST['worker_type_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     $tamUcret = trim((string)($_POST['daily_rate'] ?? ''));
     $validFrom = trim((string)($_POST['valid_from'] ?? ''));
-    $currency = trim((string)($_POST['currency'] ?? 'TRY')) ?: 'TRY';
+    $currency = strtoupper(trim((string)($_POST['currency'] ?? 'TRY'))) ?: 'TRY';
 
     if (!$cavusId || !$workerTypeId) {
         $errors[] = 'Çavuş ve işçi tipi zorunludur.';
+    } elseif (!array_key_exists($currency, $paraBirimleri)) {
+        $errors[] = 'Geçersiz para birimi seçildi.';
     } else {
         if ($faz8bHazir) {
             $yarimUcret = trim((string)($_POST['half_day_rate'] ?? ''));
@@ -71,6 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $basari = '';
 if (empty($errors) && isset($_GET['ok'])) $basari = trim((string)$_GET['ok']);
+$seciliParaBirimi = strtoupper(trim((string)($_POST['currency'] ?? 'TRY')));
+if (!array_key_exists($seciliParaBirimi, $paraBirimleri)) $seciliParaBirimi = 'TRY';
 
 $cavuslar = $pdo->query("SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name ASC")->fetchAll();
 $tipler = pdks_gunluk_tip_listele(true, $pdo);
@@ -150,7 +161,14 @@ render_flash();
                 <small class="muted">Saatlik: 15 dk tolerans sonrası başlayan her saat yukarı yuvarlanır. Sabit: onaylanan FM için bir kez uygulanır.</small>
             </label>
             <?php endif; ?>
-            <label><span class="form-label">Para Birimi</span><input type="text" name="currency" maxlength="10" value="TRY"></label>
+            <label>
+                <span class="form-label">Para Birimi *</span>
+                <select name="currency" required>
+                    <?php foreach ($paraBirimleri as $kod => $etiket): ?>
+                    <option value="<?= h($kod) ?>" <?= $seciliParaBirimi === $kod ? 'selected' : '' ?>><?= h($etiket) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
             <label><span class="form-label">Geçerlilik Başlangıcı *</span><input type="date" name="valid_from" required value="<?= h(date('Y-m-d')) ?>"></label>
         </div>
         <p class="muted" style="font-size:.85rem;margin:10px 0 0">Yeni dönem eklenince önceki açık fiyat dönemi bir gün öncesinde kapanır. Eski fiyatlar silinmez.</p>
