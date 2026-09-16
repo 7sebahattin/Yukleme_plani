@@ -6,6 +6,7 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_rapor.php';
+require_once __DIR__ . '/config/pdks_faz8e.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
@@ -33,6 +34,29 @@ $data = pdks_rapor_cavus_kart_dokumu(
 
 $session = $data['session'];
 $cards = $data['cards'];
+$manuelCikisYetkili = pdks_hakedis_can('entitlements_finalize') && $depo !== '';
+$manuelGecmis = [];
+$manuelIds = array_column(array_filter($cards, fn($c) => ($c['exit_source'] ?? '') === 'manual'), 'period_id');
+if ($manuelIds) {
+    $ph = implode(',', array_fill(0, count($manuelIds), '?'));
+    $stAudit = $pdo->prepare(
+        "SELECT al.record_id, al.new_values, al.created_at,
+                COALESCE(u.display_name, u.username, '—') AS actor
+           FROM audit_log al
+           LEFT JOIN users u ON u.id = al.user_id
+          WHERE al.module = 'daily_worker_work_periods' AND al.action = 'manuel_cikis'
+            AND al.record_id IN ($ph)
+          ORDER BY al.id DESC"
+    );
+    $stAudit->execute($manuelIds);
+    foreach ($stAudit->fetchAll() as $row) {
+        $id = (int)$row['record_id'];
+        if (!isset($manuelGecmis[$id])) {
+            $manuelGecmis[$id] = ['data' => json_decode((string)$row['new_values'], true) ?: [],
+                'actor' => $row['actor'], 'created_at' => $row['created_at']];
+        }
+    }
+}
 
 $ay = trim((string)($_GET['ay'] ?? ''));
 if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $ay)) {
@@ -129,6 +153,7 @@ foreach ($cards as $c) {
         <th>Giriş Tarih / Saat</th>
         <th>Çıkış Tarih / Saat</th>
         <th>Durum</th>
+        <?php if ($manuelCikisYetkili): ?><th>İşlem</th><?php endif; ?>
     </tr>
     </thead>
     <tbody>
@@ -152,10 +177,29 @@ foreach ($cards as $c) {
                 </span>
             <?php else: ?>
                 <span class="pdks-badge pdks-badge-tamamlandi">
-                    Tamamlandı
+                    <?= $c['exit_source'] === 'manual' ? 'Tamamlandı · Manuel' : 'Tamamlandı' ?>
                 </span>
+                <?php if ($c['exit_source'] === 'manual' && isset($manuelGecmis[$c['period_id']])):
+                    $gecmis = $manuelGecmis[$c['period_id']]; ?>
+                    <div class="muted" style="font-size:.78rem;margin-top:4px">
+                        <?= h($gecmis['data']['reason'] ?? '') ?>
+                        <?php if (($gecmis['data']['note'] ?? '') !== ''): ?> · <?= h($gecmis['data']['note']) ?><?php endif; ?>
+                        · <?= h($gecmis['actor']) ?>
+                        · <?= h(date('d.m.Y H:i', strtotime($gecmis['created_at']))) ?>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </td>
+        <?php if ($manuelCikisYetkili): ?>
+        <td>
+            <?php if ($c['eksik_cikis'] && $c['exit_time'] === null): ?>
+                <a class="btn btn-sm btn-primary" href="manuel_cikis.php?<?= h(http_build_query([
+                    'period_id' => $c['period_id'], 'session_id' => $sessionId,
+                    'ay' => $ay, 'cavus' => $cavusId,
+                ])) ?>">Manuel Çıkış Yap</a>
+            <?php else: ?>—<?php endif; ?>
+        </td>
+        <?php endif; ?>
     </tr>
     <?php endforeach; ?>
     </tbody>
