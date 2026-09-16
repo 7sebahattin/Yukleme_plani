@@ -216,6 +216,14 @@ ok('review 9: Faz 8A nullable migrasyonu FK drop -> MODIFY -> restore yapıyor v
     && str_contains($migReviewGovde, 'finally')
     && str_contains($gunlukSrc, 'pdks_gunluk_faz8a_fk_var('));
 
+ok('review 10: MariaDB kolon metadata kontrolü SHOW placeholder kullanmıyor',
+    str_contains($gunlukSrc, 'information_schema.COLUMNS')
+    && !str_contains($gunlukSrc, 'SHOW COLUMNS FROM `{$tablo}` LIKE ?'));
+
+ok('review 11: MariaDB index metadata kontrolü SHOW placeholder kullanmıyor',
+    str_contains($gunlukSrc, 'information_schema.STATISTICS')
+    && !str_contains($gunlukSrc, 'SHOW INDEX FROM `{$tablo}` WHERE Key_name = ?'));
+
 echo "\n=== 9. AŞIRI MÜHENDİSLİK YASAKLARI — Faz 8B/8C kapsam dışı ===\n";
 $yasakli8b8c = ['overtime_rate', 'fazla_mesai_ucreti', 'approved_by_accounting', 'offline_queue',
                 'indexeddb', 'service_worker_mutation', 'fx_rate', 'exchange_rate'];
