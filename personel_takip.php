@@ -169,6 +169,11 @@ render_flash();
     <div class="home-card-title">Personel / Günlük İşçi Raporları</div>
     <div class="home-card-sub">Yönetim raporlama merkezi</div>
 </a>
+<a href="cavus_toplu_dokum.php" class="home-card">
+    <div class="home-card-icon" style="background:#faf0ff">📋</div>
+    <div class="home-card-title">Çavuş Toplu Döküm</div>
+    <div class="home-card-sub">Aylık çavuş ve kart bazlı işçi dökümü</div>
+</a>
 <?php endif; ?>
 
 </div>

@@ -169,7 +169,7 @@ ok('review 2: backfill yalnız duplicate-key hatasını tolere ediyor, diğerler
     && str_contains($bfGovde, 'throw $e;'));
 
 ok('review 3: Faz 8A rapor eksik-cikis sorguları legacy_unresolved durumunu da sayıyor',
-    substr_count($raporSrc, "status IN ('open','legacy_unresolved')") >= 4);
+    substr_count($raporSrc, "p.status = 'legacy_unresolved' OR (s.status = 'closed' AND p.status = 'open')") >= 4);
 
 preg_match('/function pdks_gunluk_faz8a_giris_kaydet.*?\n\}/s', $gunlukSrc, $girisReviewM);
 preg_match('/function pdks_gunluk_faz8a_cikis_kaydet.*?\n\}/s', $gunlukSrc, $cikisReviewM);

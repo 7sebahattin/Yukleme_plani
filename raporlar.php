@@ -57,11 +57,11 @@ try {
 
 // ── Veri (görev talimatı: N+1 yok, her biri TEK GEÇİŞTE toplu) ──
 $kpi        = pdks_rapor_operasyonel_kpi($start, $end, $depo, $cavusId, $tipId, $pdo);
-$tipDagilim = pdks_rapor_isci_tipi_dagilimi($start, $end, $depo, $cavusId, $pdo);
+$tipDagilim = pdks_rapor_isci_tipi_dagilimi($start, $end, $depo, $cavusId, $pdo, $tipId);
 $trend      = pdks_rapor_gunluk_trend($start, $end, $depo, $cavusId, $tipId, $pdo);
 $cavusOzeti = pdks_rapor_cavus_ozeti($start, $end, $depo, $cavusId, $tipId, $pdo);
-$eksikler   = pdks_rapor_eksik_cikislar_araligi($start, $end, $depo, $cavusId, $pdo);
-$acikMesai  = pdks_rapor_acik_mesailer_araligi($start, $end, $depo, $cavusId, $pdo);
+$eksikler   = pdks_rapor_eksik_cikislar_araligi($start, $end, $depo, $cavusId, $pdo, $tipId);
+$acikMesai  = pdks_rapor_acik_mesailer_araligi($start, $end, $depo, $cavusId, $pdo, $tipId);
 
 $finansalKpi = []; $guncelBakiye = []; $bakiyeSiralama = []; $karsilastirma = null;
 if ($finansalGosterilebilir) {

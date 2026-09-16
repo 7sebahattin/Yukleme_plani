@@ -157,6 +157,8 @@ $IS_ADMIN = true;
 $s0 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
+ok('admin: iki rapor kartı aynı bölümde yan yana',
+    (bool)preg_match('/Personel \/ Günlük İşçi Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
 foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'Çavuşlar', 'İşçi Kartları', 'İşçi Tipleri',
           'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları',
           'Ekstre', 'Çavuş Ödemeleri', 'Personel / Günlük İşçi Raporları'] as $kartAdi) {
@@ -168,6 +170,7 @@ echo "\n=== 5. personel_takip.php — operator (yalnız attendance.daily_scan): 
 $PERMS = ['attendance.daily_scan'];
 $s1 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s1, '__ERROR__'), $s1);
+ok('operator: Çavuş Toplu Döküm kısayolu yok', !str_contains($s1, 'cavus_toplu_dokum.php'));
 ok('operator: "Günlük İşçi Giriş / Çıkış" kartı GÖRÜNÜYOR', str_contains($s1, 'Günlük İşçi Giriş / Çıkış'));
 foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Ekstre', 'Çavuş Ödemeleri',
           'Personel / Günlük İşçi Raporları', 'Çavuşlar', 'İşçi Kartları'] as $kartAdi) {
@@ -178,6 +181,7 @@ echo "\n=== 6. personel_takip.php — muhasebe (rates+entitlements+accounts+paym
 $PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports'];
 $s2 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s2, '__ERROR__'), $s2);
+ok('management_reports yetkisi: Çavuş Toplu Döküm kısayolu var', str_contains($s2, 'cavus_toplu_dokum.php'));
 foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Ekstre', 'Çavuş Ödemeleri', 'Personel / Günlük İşçi Raporları'] as $kartAdi) {
     ok("muhasebe: '$kartAdi' kartı görünüyor", str_contains($s2, $kartAdi));
 }
