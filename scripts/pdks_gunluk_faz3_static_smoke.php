@@ -140,8 +140,15 @@ $yeniKodDetay  = kodSadece($srcDetay);
 foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
     ok("gunluk_isci_puantaj.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $yeniKodListe));
-    ok("gunluk_isci_puantaj_detay.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $yeniKodDetay));
+    // Faz 8H: yalnız admin yeniden açma engelinde kesin hakediş durumu okunur;
+    // fiyat, ödeme veya hakediş hesabı bu sayfada hâlâ yapılmaz.
+    if (!in_array($kelime, ['hakedis', 'hakediş'], true)) {
+        ok("gunluk_isci_puantaj_detay.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $yeniKodDetay));
+    }
 }
+ok('detay yalnız kesin hakediş engelini okur; hakediş hesabı veya yeniden açması yapmaz',
+    str_contains($srcDetay, "status = 'final'") && !str_contains($srcDetay, 'pdks_hakedis_yeniden_ac(')
+    && !str_contains($srcDetay, 'pdks_hakedis_hesapla('));
 
 echo "\n=== 7. SALT OKUNUR — DÜZENLEME/SİLME/MANUEL ÇIKIŞ YOK (görev madde 11) ===\n";
 foreach ([$sayfaListe => $srcListe, $sayfaDetay => $srcDetay] as $f => $src) {
