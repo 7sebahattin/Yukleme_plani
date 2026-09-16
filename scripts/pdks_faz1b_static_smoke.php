@@ -180,8 +180,8 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME sürümü v220 (helpers.php\'deki APP_SURUM ile eşlenik)',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v220';"));
+ok('sw.js: CACHE_NAME sürümü v221 (helpers.php\'deki APP_SURUM ile eşlenik)',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v221';"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -330,6 +330,7 @@ $beklenenEskiSatirlar = [
     // v217→v218 emsali).
     "-    define('APP_SURUM', 'v218');",
     "-    define('APP_SURUM', 'v219');",
+    "-    define('APP_SURUM', 'v220');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
