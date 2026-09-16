@@ -1,17 +1,13 @@
 <?php
 // =========================================================
-// cavus_hakedis.php — Çavuş Hakediş Listesi (Günlük İşçi, Faz 4)
-//
-// Faz 3'ün puantaj (Kadın/Erkek/Toplam/durum) verisiyle Faz 4'ün hakediş
-// (tutar/taslak-kesin) verisini BİRLEŞTİRİR — kendi tarama/sayım SQL'ini
-// YAZMAZ (pdks_gunluk_gun_listesi() + pdks_hakedis_gun_listesi() REUSE).
-// Arayüz Kadın/Erkek'i ÖNE ÇIKARABİLİR ama hesap motoru (config/
-// pdks_hakedis.php) İŞÇİ TİPİNDEN BAĞIMSIZ/GENEL kalır (görev talimatı).
+// cavus_hakedis.php — Çavuş Hakediş Listesi
+// Faz 8B hazırsa muhasebe mesai değerlendirmesi + yeni ücret motorunu kullanır.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_hakedis('entitlements_view');
@@ -19,17 +15,17 @@ require_pdks_hakedis('entitlements_view');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
+$faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
-// ── "Hesapla" aksiyonu — taslak hesap, entitlements_view YETER (görev
-//    talimatı: taslak/önizleme herkesin görebileceği bir şey; KESİNLEŞTİRME
-//    ayrı, daha sıkı bir yetki gerektirir — bkz. cavus_hakedis_detay.php). ──
 $flashHata = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hesapla') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('entitlements_view');
     $sid = filter_var($_POST['session_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     if ($sid) {
-        $sonuc = pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo);
+        $sonuc = $faz8bHazir
+            ? pdks_faz8b_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo)
+            : pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo);
         if ($sonuc['ok']) {
             header('Location: cavus_hakedis_detay.php?id=' . (int)$sonuc['entitlement_id']);
             exit;
@@ -38,22 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hesap
     }
 }
 
-// ── Filtreler — Faz 3'ün AYNI deseni ─────────────────────
 $tarih = trim($_GET['tarih'] ?? '');
-if ($tarih === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih) || !strtotime($tarih)) {
-    $tarih = date('Y-m-d');
-}
+if ($tarih === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih) || !strtotime($tarih)) $tarih = date('Y-m-d');
 $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $durum_f = trim($_GET['durum'] ?? '');
 if (!in_array($durum_f, ['hesaplanmadi', 'draft', 'final'], true)) $durum_f = '';
 $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
 
 $cavuslar = [];
-try {
-    $cavuslar = $pdo->query("SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name ASC")->fetchAll();
-} catch (PDOException $e) { /* boş bırak */ }
+try { $cavuslar = $pdo->query("SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name ASC")->fetchAll(); }
+catch (PDOException $e) { $cavuslar = []; }
 
-// ── Veri: puantaj (Faz 3) + hakediş (Faz 4) BİRLEŞTİRME ──
 $gunListesi = pdks_gunluk_gun_listesi($tarih, $depo, $cavusId, null, $pdo);
 $hakedisler = pdks_hakedis_gun_listesi($tarih, $depo, $cavusId, null, $pdo);
 $hakedisBySession = [];
@@ -65,7 +56,8 @@ foreach ($gunListesi as $row) {
     $hk = $hakedisBySession[$sid] ?? null;
     $hkDurum = $hk ? $hk['status'] : 'hesaplanmadi';
     if ($durum_f !== '' && $hkDurum !== $durum_f) continue;
-    $satirlar[] = ['puantaj' => $row, 'hakedis' => $hk, 'hakedis_durum' => $hkDurum];
+    $faz8bOzet = $faz8bHazir ? pdks_faz8b_oturum_ozeti($sid, $pdo) : null;
+    $satirlar[] = ['puantaj' => $row, 'hakedis' => $hk, 'hakedis_durum' => $hkDurum, 'faz8b' => $faz8bOzet];
 }
 
 render_header('Çavuş Hakediş');
@@ -73,7 +65,6 @@ $base = base_url();
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
 if ($flashHata) echo '<div class="flash flash-error">' . h($flashHata) . '</div>';
-
 $durum_secenekleri = ['' => 'Tümü', 'hesaplanmadi' => 'Hesaplanmadı', 'draft' => 'Taslak', 'final' => 'Kesin'];
 $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Taslak', 'acik'], 'final' => ['Kesin', 'tamamlandi']];
 ?>
@@ -86,108 +77,78 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     </div>
 </div>
 
+<?php if (!$faz8bHazir): ?>
+<div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Hakediş ekranı eski güvenli davranışla devam ediyor. Yönetici <a href="faz8b_migrate.php">Faz 8B migrasyonunu</a> çalıştırabilir.</div>
+<?php endif; ?>
+
 <form method="get" class="pdks-filter-bar">
     <input type="date" name="tarih" value="<?= h($tarih) ?>">
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
         <?php foreach ($cavuslar as $c): ?>
-        <option value="<?= (int)$c['id'] ?>" <?= $cavusId === (int)$c['id'] ? 'selected' : '' ?>>
-            <?= h($c['name']) ?><?= $c['is_active'] ? '' : ' (pasif)' ?>
-        </option>
+        <option value="<?= (int)$c['id'] ?>" <?= $cavusId === (int)$c['id'] ? 'selected' : '' ?>><?= h($c['name']) ?><?= $c['is_active'] ? '' : ' (pasif)' ?></option>
         <?php endforeach; ?>
     </select>
-    <select name="depo" disabled title="Depo değiştirmek için üstteki/soldaki depo rozetini kullanın">
-        <option><?= h($depo !== '' ? $depo : 'Depo seçilmemiş') ?></option>
-    </select>
+    <select name="depo" disabled><option><?= h($depo !== '' ? $depo : 'Depo seçilmemiş') ?></option></select>
     <select name="durum">
-        <?php foreach ($durum_secenekleri as $val => $etiket): ?>
-        <option value="<?= h($val) ?>" <?= $durum_f === $val ? 'selected' : '' ?>><?= h($etiket) ?></option>
-        <?php endforeach; ?>
+        <?php foreach ($durum_secenekleri as $val => $etiket): ?><option value="<?= h($val) ?>" <?= $durum_f === $val ? 'selected' : '' ?>><?= h($etiket) ?></option><?php endforeach; ?>
     </select>
     <button type="submit" class="btn">Filtrele</button>
-    <?php if ($cavusId !== null || $durum_f !== '' || $tarih !== date('Y-m-d')): ?>
-    <a href="cavus_hakedis.php" class="btn btn-ghost">Temizle</a>
-    <?php endif; ?>
+    <?php if ($cavusId !== null || $durum_f !== '' || $tarih !== date('Y-m-d')): ?><a href="cavus_hakedis.php" class="btn btn-ghost">Temizle</a><?php endif; ?>
 </form>
 
 <?php if (empty($satirlar)): ?>
-<div class="pdks-empty">
-    <span class="pdks-empty-icon" aria-hidden="true">🧾</span>
-    <p>Bu tarih/filtrelerde mesai kaydı bulunamadı.</p>
-</div>
+<div class="pdks-empty"><span class="pdks-empty-icon">🧾</span><p>Bu tarih/filtrelerde mesai kaydı bulunamadı.</p></div>
 <?php else: ?>
-
 <div class="table-wrap pc-only">
 <table class="data-table">
 <thead><tr>
-    <th>Çavuş</th>
-    <th>Kadın</th>
-    <th>Erkek</th>
-    <th>Toplam İşçi</th>
-    <th>Hakediş</th>
-    <th>Durum</th>
-    <th>Uyarı</th>
-    <th class="actions-col">İşlem</th>
+    <th>Çavuş</th><th>Kadın</th><th>Erkek</th><th>Toplam</th><th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th><th>İşlem</th>
 </tr></thead>
 <tbody>
-<?php foreach ($satirlar as $s): $p = $s['puantaj']; $sess = $p['session']; $hk = $s['hakedis']; [$etkt, $ekod] = $durumEtiket[$s['hakedis_durum']]; ?>
+<?php foreach ($satirlar as $s): $p=$s['puantaj']; $sess=$p['session']; $hk=$s['hakedis']; [$etkt,$ekod]=$durumEtiket[$s['hakedis_durum']]; $f8=$s['faz8b']; ?>
 <tr>
     <td class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></td>
     <td><?= (int)($p['giris']['Kadın'] ?? 0) ?></td>
     <td><?= (int)($p['giris']['Erkek'] ?? 0) ?></td>
     <td><strong><?= (int)$p['giris_toplam'] ?></strong></td>
-    <td><?= $hk ? h(number_format((float)$hk['total_amount'], 2, ',', '.') . ' ' . $hk['currency']) : '—' ?></td>
+    <td>
+        <?php if (!$faz8bHazir): ?>—
+        <?php elseif ($f8['tam_hazir']): ?><span class="pdks-badge pdks-badge-tamamlandi">Hazır</span>
+        <?php else: ?><span class="pdks-badge pdks-badge-eksik_cikis">Bekliyor <?= (int)$f8['hazir'] ?>/<?= (int)$f8['toplam'] ?></span><?php endif; ?>
+    </td>
+    <td><?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?><?= $hk && !empty($hk['needs_recalculation']) ? ' ⚠️' : '' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></td>
     <td><?php if ((int)$p['eksik_toplam'] > 0): ?><span class="pdks-badge pdks-badge-eksik_cikis">⚠️ Eksik Çıkış</span><?php endif; ?></td>
-    <td class="actions-col">
-        <?php if ($hk): ?>
-        <a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
+    <td>
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
+        <?php if ($hk): ?><a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
         <?php else: ?>
         <form method="post" style="display:inline">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="hesapla">
-            <input type="hidden" name="session_id" value="<?= (int)$sess['id'] ?>">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="hesapla"><input type="hidden" name="session_id" value="<?= (int)$sess['id'] ?>">
             <button type="submit" class="btn btn-sm btn-primary">Hesapla</button>
         </form>
         <?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>
-</tbody>
-</table>
-</div>
+</tbody></table></div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($satirlar as $s): $p = $s['puantaj']; $sess = $p['session']; $hk = $s['hakedis']; [$etkt, $ekod] = $durumEtiket[$s['hakedis_durum']]; ?>
+<?php foreach ($satirlar as $s): $p=$s['puantaj']; $sess=$p['session']; $hk=$s['hakedis']; [$etkt,$ekod]=$durumEtiket[$s['hakedis_durum']]; $f8=$s['faz8b']; ?>
 <div class="pdks-card-item">
-    <div class="pdks-card-top">
-        <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></div>
-            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($sess['work_date']))) ?><?= $sess['depo'] ? ' / ' . h($sess['depo']) : '' ?></div>
-        </div>
-        <span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span>
-    </div>
-    <div class="pdks-kiosk-counter-row"><span>Kadın</span><span class="n"><?= (int)($p['giris']['Kadın'] ?? 0) ?></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Erkek</span><span class="n"><?= (int)($p['giris']['Erkek'] ?? 0) ?></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Toplam</span><span class="n"><strong><?= (int)$p['giris_toplam'] ?></strong></span></div>
-    <div class="pdks-kiosk-counter-row"><span>Hakediş</span><span class="n"><?= $hk ? h(number_format((float)$hk['total_amount'], 2, ',', '.') . ' ' . $hk['currency']) : '—' ?></span></div>
-    <?php if ((int)$p['eksik_toplam'] > 0): ?><div class="pdks-row-sub" style="color:var(--warn)">⚠️ Eksik Çıkış</div><?php endif; ?>
+    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y',strtotime($sess['work_date']))) ?><?= $sess['depo'] ? ' / '.h($sess['depo']) : '' ?></div></div><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Toplam İşçi</span><span class="n"><strong><?= (int)$p['giris_toplam'] ?></strong></span></div>
+    <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Mesai değerlendirme: <?= $f8['tam_hazir'] ? 'Hazır' : 'Bekliyor ' . (int)$f8['hazir'] . '/' . (int)$f8['toplam'] ?></div><?php endif; ?>
+    <div class="pdks-row-sub">Hakediş: <?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?><?= $hk && !empty($hk['needs_recalculation']) ? ' · yeniden hesap gerekli' : '' ?></div>
     <div style="margin-top:8px">
-        <?php if ($hk): ?>
-        <a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
-        <?php else: ?>
-        <form method="post">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="hesapla">
-            <input type="hidden" name="session_id" value="<?= (int)$sess['id'] ?>">
-            <button type="submit" class="btn btn-sm btn-primary">Hesapla</button>
-        </form>
-        <?php endif; ?>
+        <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
+        <?php if ($hk): ?><a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>
+        <?php else: ?><form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="hesapla"><input type="hidden" name="session_id" value="<?= (int)$sess['id'] ?>"><button class="btn btn-sm btn-primary">Hesapla</button></form><?php endif; ?>
     </div>
 </div>
 <?php endforeach; ?>
 </div>
-
 <?php endif; ?>
 
 <?php render_footer(); ?>
