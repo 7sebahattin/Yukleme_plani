@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v223');
+    define('APP_SURUM', 'v224');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -350,7 +350,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
         <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
 
-        <?php if ($p_pdks || $p_gunluk): ?>
+        <?php if ($p_gunluk): ?>
         <div class="sidebar-section">Personel</div>
         <?php $lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', $a_ptak); ?>
         <?php endif; ?>

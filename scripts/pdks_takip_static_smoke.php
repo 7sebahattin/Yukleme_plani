@@ -75,8 +75,8 @@ foreach ($eskiSidebarLinkleri as $eski) {
     ok("helpers.php: eski dağınık link KALDIRILDI — $eski YOK", !str_contains($helpersSrc, $eski), $eski);
 }
 ok("helpers.php: 'Günlük İşçi' section başlığı ARTIK YOK (tek bölüme indirildi)", !str_contains($helpersSrc, '>Günlük İşçi<'));
-ok("helpers.php: Personel Takibi görünürlüğü ('en az BİR alt-fonksiyon', görev talimatı) — TEK bir süper-izin İSTEMİYOR (p_pdks VEYA p_gunluk, VE değil)",
-    (bool)preg_match('/if \(\$p_pdks \|\| \$p_gunluk\):/', $helpersSrc));
+ok("helpers.php: Personel Takibi görünürlüğü aktif günlük işçi/hakediş/rapor izinlerine bağlı; legacy PDKS izni tek başına yeterli değil",
+    (bool)preg_match('/if \(\$p_gunluk\):/', $helpersSrc));
 ok("helpers.php: aktif-sayfa vurgusu (\$a_ptak) TÜM konsolide alt sayfaları kapsıyor", (bool)preg_match('/\$a_ptak = in_array\(\$cur, \[/', $helpersSrc));
 
 echo "\n=== 9. MOBİL 'Personel' GİRİŞİ personel_takip.php'YE BAĞLI (görev madde 2) ===\n";
@@ -91,12 +91,22 @@ echo "\n=== 3. PERSONEL TAKİP SAYFASI — YAPI VE İZİN FARKINDALIĞI ===\n";
 ok('personel_takip.php: require_login() çağırıyor', str_contains($takipSrc, 'require_login()'));
 ok('personel_takip.php: .home-grid/.home-card kullanıyor (ana dashboard İLE AYNI tasarım dili — görev talimatı)',
     str_contains($takipSrc, 'home-grid') && str_contains($takipSrc, 'home-card'));
-ok('personel_takip.php: en az bir alt-fonksiyona erişimi olmayan kullanıcı forbidden() ile REDDEDİLİYOR',
-    (bool)preg_match('/if \(!\$p_personel && !\$p_gunluk && !\$p_hakcari && !\$p_rapor\)\s*\{\s*\n\s*forbidden\(/', $takipSrc));
-ok('personel_takip.php: HER kart kendi can(\'attendance.*\') koşuluyla SARILI (12 ayrı kontrol)',
-    substr_count($takipSrc, "can('attendance.") >= 12);
-ok('personel_takip.php: Ekstre kartı KIRIK bir genel URL\'e (foreman_id EKSİK cavus_ekstre.php) DEĞİL, cavus_cari.php\'ye yönlendiriyor (görev talimatı)',
-    !preg_match('/href="cavus_ekstre\.php"/', $takipSrc) && substr_count($takipSrc, 'href="cavus_cari.php"') >= 2);
+ok('personel_takip.php: yalnız aktif modüllere erişimi olmayan kullanıcı forbidden() ile REDDEDİLİYOR',
+    (bool)preg_match('/if \(!\$p_gunluk && !\$p_hakcari && !\$p_rapor\)\s*\{\s*\n\s*forbidden\(/', $takipSrc));
+ok('personel_takip.php: legacy PDKS izinleri landing erişim koşulunda kullanılmıyor',
+    !str_contains($takipSrc, 'attendance.employees') && !str_contains($takipSrc, 'attendance.cards') && !str_contains($takipSrc, 'attendance.scan'));
+ok('personel_takip.php: tam 10 ana kartın her biri kendi aktif hedef izniyle sarılı',
+    substr_count($takipSrc, 'class="home-card"') === 10 && substr_count($takipSrc, "can('attendance.") >= 10);
+ok('personel_takip.php: legacy kartlar ve Ekstre landing kartı yok',
+    !str_contains($takipSrc, 'href="personel.php"') && !str_contains($takipSrc, 'href="personel_kartlar.php"')
+    && !str_contains($takipSrc, 'href="giris_cikis.php"') && !str_contains($takipSrc, 'href="isci_tipleri.php"')
+    && !str_contains($takipSrc, 'href="cavus_ekstre.php"'));
+ok('personel_takip.php: Kart Havuzu, Yönetim Raporları ve Çavuş Toplu Döküm doğru hedeflerde',
+    (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu/s', $takipSrc)
+    && (bool)preg_match('/href="raporlar\.php" class="home-card">.*?Yönetim Raporları/s', $takipSrc)
+    && str_contains($takipSrc, 'cavus_toplu_dokum.php'));
+ok('Kart Havuzu: İşçi Tipleri ikincil ana veri bağlantısı olarak korunuyor',
+    str_contains(oku('isci_kartlari.php'), 'href="isci_tipleri.php"'));
 
 echo "\n=== 10. HEDEF SAYFALAR KENDİ YETKİ KONTROLÜNÜ KORUYOR (görev madde 10 — bypass YOK) ===\n";
 foreach ([
@@ -229,13 +239,23 @@ echo "\n=== FAZ 1-6 DOSYALARINA İŞ MANTIĞI DEĞİŞİKLİĞİ YOK (yalnız na
 // changes a central attendance assumption"). Bu beş dosya BU YÜZDEN listeden
 // çıkarıldı; Faz 8A'nın KENDİ static testi kapsamı doğrular.
 foreach ([
-    'personel.php', 'personel_kartlar.php', 'giris_cikis.php', 'cavuslar.php',
-    'isci_tipleri.php', 'cavus_fiyatlari.php', 'cavus_cari.php',
+    'personel.php', 'personel_kartlar.php', 'giris_cikis.php',
+    'cavus_fiyatlari.php', 'cavus_cari.php',
 ] as $f) {
     $diff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- ' . escapeshellarg($f) . ' 2>&1'));
     ok("$f: diff'i BOŞ — Faz 7 dokunmadı", $diff === '', $diff);
 }
 
+
+$cavuslarSrc = oku('cavuslar.php');
+ok('cavuslar.php: intentional Kart Havuzu nav rename',
+    str_contains($cavuslarSrc, 'href="isci_kartlari.php"')
+    && str_contains($cavuslarSrc, 'Kart Havuzu'));
+
+$tiplerSrc = oku('isci_tipleri.php');
+ok('isci_tipleri.php: intentional Kart Havuzu back-link rename',
+    str_contains($tiplerSrc, 'href="isci_kartlari.php"')
+    && str_contains($tiplerSrc, 'Kart Havuzu'));
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);

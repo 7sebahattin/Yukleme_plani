@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v223',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v223';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v223');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v224',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v224';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v224');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -303,6 +303,7 @@ $beklenenEskiSatirlar = [
     "-    \$a_cari     = in_array(\$cur, ['cavus_cari.php', 'cavus_ekstre.php'], true);",
     "-    \$a_yrapor   = \$cur === 'raporlar.php';",
     "-        <?php if (\$p_pdks): ?>",
+    "-        <?php if (\$p_pdks || \$p_gunluk): ?>",
     "-        <?php if (\$_fn && (can('attendance.employees') || \$p_adm)) \$lnk('personel.php', '👤', 'Personeller', \$a_pdksp); ?>",
     "-        <?php if (\$_fn && (can('attendance.cards')     || \$p_adm)) \$lnk('personel_kartlar.php', '🪪', 'Kart Yönetimi', \$a_pdksk); ?>",
     "-        <?php if (\$_fn && (can('attendance.scan')      || \$p_adm)) \$lnk('giris_cikis.php', '🚪', 'Giriş / Çıkış', \$a_pdksg); ?>",
@@ -334,6 +335,7 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v220');",
     "-    define('APP_SURUM', 'v221');",
     "-    define('APP_SURUM', 'v222');",
+    "-    define('APP_SURUM', 'v223');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

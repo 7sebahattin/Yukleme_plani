@@ -2,8 +2,7 @@
 // =========================================================
 // personel_takip.php — Personel Takip Merkezi (Faz 7, Sprint Navigasyon-01)
 //
-// Faz 1-6'nın dağınık sidebar girdilerini (Personel/Kalıcı PDKS + Günlük
-// İşçi + Hakediş/Cari + Raporlama, toplam 12 ayrı link) TEK bir merkezi
+// Aktif Günlük İşçi + Hakediş/Cari + Raporlama girdilerini TEK bir merkezi
 // modül LANDİNG sayfası altında toplayan bir GEZİNME KATMANI. Kullanıcının
 // açık talimatı: "This is a navigation consolidation layer." — hiçbir
 // mevcut sayfa SİLİNMEDİ, hiçbir yetki kontrolü GEVŞETİLMEDİ. Bu sayfa
@@ -29,15 +28,15 @@ $auth_user = require_login();
 $_fn = function_exists('can');
 $p_adm = function_exists('is_admin') && is_admin();
 
-// ── Bölüm görünürlüğü — "en az BİR alt-fonksiyona erişim" (görev talimatı:
-//    "Do not require one broad super-permission just to see the landing page.") ──
-$p_personel = $p_adm || ($_fn && (can('attendance.employees') || can('attendance.cards') || can('attendance.scan')));
+// ── Bölüm görünürlüğü — "en az BİR aktif alt-fonksiyona erişim" ──────────
+// Kalıcı PDKS izinleri bu landing için yeterli değildir; ilgili eski sayfalar
+// kendi izin kapılarıyla yerinde kalır.
 $p_gunluk   = $p_adm || ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports')));
 $p_hakcari  = $p_adm || ($_fn && (can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments')));
 $p_rapor    = $p_adm || ($_fn && can('attendance.management_reports'));
 
-if (!$p_personel && !$p_gunluk && !$p_hakcari && !$p_rapor) {
-    forbidden('Bu sayfaya erişim yetkiniz yok. (Personel/Günlük İşçi modüllerinden en az birine yetkiniz olmalı.)');
+if (!$p_gunluk && !$p_hakcari && !$p_rapor) {
+    forbidden('Bu sayfaya erişim yetkiniz yok. (Günlük İşçi, Hakediş/Cari veya Yönetim Raporları modüllerinden en az birine yetkiniz olmalı.)');
 }
 
 render_header('Personel Takibi');
@@ -47,37 +46,9 @@ render_flash();
 <div class="page-head">
     <h1>🧑‍🌾 Personel Takip Merkezi</h1>
 </div>
-<p class="muted" style="margin:-8px 0 18px">Kalıcı personel, günlük işçi, hakediş/cari ve raporlama — tek merkezden.</p>
+<p class="muted" style="margin:-8px 0 18px">Günlük işçi, hakediş/cari ve raporlama — tek merkezden.</p>
 
 <div class="home-grid">
-
-<?php if ($p_personel): ?>
-<div class="home-section-title">Personel</div>
-
-<?php if ($p_adm || can('attendance.employees')): ?>
-<a href="personel.php" class="home-card">
-    <div class="home-card-icon" style="background:#eef2ff">👤</div>
-    <div class="home-card-title">Personeller</div>
-    <div class="home-card-sub">Kalıcı personel listesi</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.cards')): ?>
-<a href="personel_kartlar.php" class="home-card">
-    <div class="home-card-icon" style="background:#eef2ff">🪪</div>
-    <div class="home-card-title">Personel Kartları</div>
-    <div class="home-card-sub">Kart zimmet yönetimi</div>
-</a>
-<?php endif; ?>
-
-<?php if ($p_adm || can('attendance.scan')): ?>
-<a href="giris_cikis.php" class="home-card">
-    <div class="home-card-icon" style="background:#eef2ff">🚪</div>
-    <div class="home-card-title">Personel Giriş / Çıkış</div>
-    <div class="home-card-sub">Kalıcı personel PDKS taraması</div>
-</a>
-<?php endif; ?>
-<?php endif; ?>
 
 <?php if ($p_gunluk): ?>
 <div class="home-section-title">Günlük İşçi</div>
@@ -93,13 +64,8 @@ render_flash();
 <?php if ($p_adm || can('attendance.worker_cards')): ?>
 <a href="isci_kartlari.php" class="home-card">
     <div class="home-card-icon" style="background:#fff3e0">🪪</div>
-    <div class="home-card-title">İşçi Kartları</div>
-    <div class="home-card-sub">Günlük işçi kart havuzu</div>
-</a>
-<a href="isci_tipleri.php" class="home-card">
-    <div class="home-card-icon" style="background:#fff3e0">🏷</div>
-    <div class="home-card-title">İşçi Tipleri</div>
-    <div class="home-card-sub">Kadın / Erkek / diğer kategoriler</div>
+    <div class="home-card-title">Kart Havuzu</div>
+    <div class="home-card-sub">Nötr günlük işçi kartları ve kart yönetimi</div>
 </a>
 <?php endif; ?>
 
@@ -145,11 +111,6 @@ render_flash();
     <div class="home-card-title">Çavuş Cari Hesapları</div>
     <div class="home-card-sub">Güncel bakiye listesi</div>
 </a>
-<a href="cavus_cari.php" class="home-card">
-    <div class="home-card-icon" style="background:#e0f2f1">📄</div>
-    <div class="home-card-title">Ekstre</div>
-    <div class="home-card-sub">Bir çavuş seçip hesap ekstresini görüntüleyin</div>
-</a>
 <?php endif; ?>
 
 <?php if ($p_adm || can('attendance.foreman_payments')): ?>
@@ -166,8 +127,8 @@ render_flash();
 
 <a href="raporlar.php" class="home-card">
     <div class="home-card-icon" style="background:#faf0ff">📊</div>
-    <div class="home-card-title">Personel / Günlük İşçi Raporları</div>
-    <div class="home-card-sub">Yönetim raporlama merkezi</div>
+    <div class="home-card-title">Yönetim Raporları</div>
+    <div class="home-card-sub">Operasyonel ve finansal yönetim raporları</div>
 </a>
 <a href="cavus_toplu_dokum.php" class="home-card">
     <div class="home-card-icon" style="background:#faf0ff">📋</div>

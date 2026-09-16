@@ -51,7 +51,7 @@ render_flash();
         <a href="cavus_form.php" class="btn btn-primary">+ Yeni Çavuş</a>
         <?php endif; ?>
         <?php if (pdks_gunluk_can('worker_cards')): ?>
-        <a href="isci_kartlari.php" class="btn">🪪 İşçi Kartları</a>
+        <a href="isci_kartlari.php" class="btn">🪪 Kart Havuzu</a>
         <?php endif; ?>
     </div>
 </div>

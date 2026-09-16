@@ -152,18 +152,25 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
     printf("%-84s %s%s\n", $ad, $c ? 'OK' : '*** HATA', $c ? '' : "\n    → " . $ipucu);
 }
 
-echo "\n=== 3/4/8. personel_takip.php — admin: TÜM kartlar görünür ===\n";
+echo "\n=== Faz 8I. personel_takip.php — admin: tam 10 aktif kart görünür ===\n";
 $IS_ADMIN = true;
 $s0 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s0, '__ERROR__'), $s0);
 ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0, 'Notice:'));
+ok('admin: tam 10 ana home-card var', substr_count($s0, 'class="home-card"') === 10);
 ok('admin: iki rapor kartı aynı bölümde yan yana',
-    (bool)preg_match('/Personel \/ Günlük İşçi Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
-foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'Çavuşlar', 'İşçi Kartları', 'İşçi Tipleri',
-          'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları',
-          'Ekstre', 'Çavuş Ödemeleri', 'Personel / Günlük İşçi Raporları'] as $kartAdi) {
+    (bool)preg_match('/Yönetim Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
+foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Fiyatları', 'Hakedişler',
+          'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları', 'Çavuş Toplu Döküm'] as $kartAdi) {
     ok("admin: '$kartAdi' kartı görünüyor", str_contains($s0, $kartAdi));
 }
+foreach (['Personeller', 'Personel Kartları', 'Personel Giriş / Çıkış', 'İşçi Tipleri', 'Ekstre'] as $kartAdi) {
+    ok("admin: eski '$kartAdi' landing kartı görünmüyor", !str_contains($s0, $kartAdi));
+}
+ok('admin: Kart Havuzu doğru hedefe ve istenen alt başlığa sahip',
+    (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu.*?Nötr günlük işçi kartları ve kart yönetimi/s', $s0));
+ok('admin: Yönetim Raporları doğru hedefe ve istenen alt başlığa sahip',
+    (bool)preg_match('/href="raporlar\.php" class="home-card">.*?Yönetim Raporları.*?Operasyonel ve finansal yönetim raporları/s', $s0));
 $IS_ADMIN = false;
 
 echo "\n=== 5. personel_takip.php — operator (yalnız attendance.daily_scan): tarama VAR, finansal YOK ===\n";
@@ -172,8 +179,8 @@ $s1 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s1, '__ERROR__'), $s1);
 ok('operator: Çavuş Toplu Döküm kısayolu yok', !str_contains($s1, 'cavus_toplu_dokum.php'));
 ok('operator: "Günlük İşçi Giriş / Çıkış" kartı GÖRÜNÜYOR', str_contains($s1, 'Günlük İşçi Giriş / Çıkış'));
-foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Ekstre', 'Çavuş Ödemeleri',
-          'Personel / Günlük İşçi Raporları', 'Çavuşlar', 'İşçi Kartları'] as $kartAdi) {
+foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri',
+          'Yönetim Raporları', 'Çavuşlar', 'Kart Havuzu'] as $kartAdi) {
     ok("operator: '$kartAdi' kartı GÖRÜNMÜYOR (finansal/yönetim yetkisi yok)", !str_contains($s1, $kartAdi));
 }
 
@@ -182,7 +189,7 @@ $PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.for
 $s2 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s2, '__ERROR__'), $s2);
 ok('management_reports yetkisi: Çavuş Toplu Döküm kısayolu var', str_contains($s2, 'cavus_toplu_dokum.php'));
-foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Ekstre', 'Çavuş Ödemeleri', 'Personel / Günlük İşçi Raporları'] as $kartAdi) {
+foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları'] as $kartAdi) {
     ok("muhasebe: '$kartAdi' kartı görünüyor", str_contains($s2, $kartAdi));
 }
 ok('muhasebe: kalıcı personel kartları (attendance.employees yok) GÖRÜNMÜYOR', !str_contains($s2, 'Personeller'));
@@ -191,10 +198,10 @@ echo "\n=== 7. personel_takip.php — 'ik' (foremen+worker_cards+daily_scan+dail
 $PERMS = ['attendance.foremen', 'attendance.worker_cards', 'attendance.daily_scan', 'attendance.daily_reports', 'attendance.entitlements', 'attendance.management_reports'];
 $s3 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s3, '__ERROR__'), $s3);
-foreach (['Çavuşlar', 'İşçi Kartları', 'İşçi Tipleri', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Hakedişler', 'Personel / Günlük İşçi Raporları'] as $kartAdi) {
+foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Hakedişler', 'Yönetim Raporları'] as $kartAdi) {
     ok("ik: '$kartAdi' kartı görünüyor", str_contains($s3, $kartAdi));
 }
-foreach (['Çavuş Fiyatları', 'Çavuş Cari Hesapları', 'Ekstre', 'Çavuş Ödemeleri'] as $kartAdi) {
+foreach (['Çavuş Fiyatları', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri'] as $kartAdi) {
     ok("ik: '$kartAdi' kartı GÖRÜNMÜYOR (foreman_rates/accounts/payments yok — mevcut izin matrisiyle TUTARLI)", !str_contains($s3, $kartAdi));
 }
 

@@ -1,6 +1,6 @@
 <?php
 // =========================================================
-// isci_kartlari.php — İşçi Kartı Havuzu Yönetimi (Günlük İşçi, Faz 1)
+// isci_kartlari.php — Kart Havuzu Yönetimi (Günlük İşçi, Faz 1)
 //
 // personel_kartlar.php ile AYNI "liste + kart-önce tanımlama" deseni —
 // ama kart bir PERSONELE değil bir İŞÇİ TİPİNE bağlanır (bkz. config/
@@ -162,7 +162,7 @@ try {
     set_flash('error', 'Günlük İşçi tabloları henüz hazır değil. Bir yöneticinin migrate.php sayfasından "Günlük İşçi Tablolarını Oluştur" demesi gerekiyor.');
 }
 
-render_header('İşçi Kartları');
+render_header('Kart Havuzu');
 $base = base_url();
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
@@ -173,7 +173,7 @@ if ($basari !== ''): ?>
 <?php endif; ?>
 
 <div class="page-head">
-    <h1>🪪 İşçi Kartları</h1>
+    <h1>🪪 Kart Havuzu</h1>
     <div class="page-head-actions">
         <a href="cavuslar.php" class="btn">👷 Çavuşlar</a>
         <a href="isci_tipleri.php" class="btn btn-ghost">🏷 İşçi Tipleri</a>
