@@ -7,6 +7,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_faz8b.php';
+require_once __DIR__ . '/config/pdks_faz9d.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_hakedis('entitlements_view');
@@ -15,6 +16,7 @@ $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
 $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
+$faz9dHazir = pdks_faz9d_sema_hazir($pdo);
 
 $id = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
 if (!$id) { set_flash('error', 'Geçersiz hakediş.'); header('Location: cavus_hakedis.php'); exit; }
@@ -66,6 +68,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $errors[] = $sonuc['hata'] ?? 'Yeniden açılamadı.';
+    } elseif ($action === 'duzeltme_ekle') {
+        // Faz 9D / H-03: KESİN hakedişi DEĞİŞTİRMEZ — AYRI, imzalı bir
+        // finansal katman ekler (bkz. config/pdks_faz9d.php).
+        require_pdks_hakedis('entitlements_finalize');
+        $yon = trim((string)($_POST['yon'] ?? ''));
+        $tutarHam = trim((string)($_POST['tutar'] ?? ''));
+        $sebep = trim((string)($_POST['sebep'] ?? ''));
+        $sonuc = pdks_faz9d_duzeltme_ekle($id, $yon, $tutarHam, $sebep, (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            header('Location: cavus_hakedis_detay.php?id=' . $id . '&ok=' . urlencode('Düzeltme kaydedildi.'));
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Düzeltme kaydedilemedi.';
+    } elseif ($action === 'duzeltme_ters_kayit') {
+        require_pdks_hakedis('entitlements_finalize');
+        $adjustmentId = filter_var($_POST['adjustment_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+        $sebep = trim((string)($_POST['sebep'] ?? ''));
+        $sonuc = $adjustmentId
+            ? pdks_faz9d_duzeltme_ters_kayit($adjustmentId, $sebep, (int)$auth_user['id'], $pdo)
+            : ['ok' => false, 'hata' => 'Düzeltme bulunamadı.'];
+        if ($sonuc['ok']) {
+            header('Location: cavus_hakedis_detay.php?id=' . $id . '&ok=' . urlencode('Düzeltme ters kayıtla nötrlendi.'));
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Ters kayıt yapılamadı.';
     }
 }
 
@@ -76,6 +103,12 @@ $stS->execute([(int)$hakedis['session_id']]);
 $oturumDurumRaw = (string)$stS->fetchColumn();
 $puantajDurum = pdks_gunluk_oturum_durumu($oturumDurumRaw, (int)($ozetPuantaj['eksik_toplam'] ?? 0));
 $faz8bOzet = $faz8bHazir ? pdks_faz8b_oturum_ozeti((int)$hakedis['session_id'], $pdo) : null;
+
+// Faz 9D / H-03: yalnız KESİN (final) hakedişlerde anlamlıdır (bkz.
+// pdks_faz9d_duzeltme_ekle()'nin kendi kapısı) — taslakta liste boş kalır.
+$duzeltmeler = ($faz9dHazir && $hakedis['status'] === 'final') ? pdks_faz9d_duzeltmeler($id, $pdo) : [];
+$duzeltmeNetKurus = ($faz9dHazir && $hakedis['status'] === 'final') ? pdks_faz9d_entitlement_net_kurus($id, $pdo) : 0;
+$netHakedisKurus = pdks_hakedis_tl_kurus((string)$hakedis['total_amount']) + $duzeltmeNetKurus;
 
 $basari = '';
 if (empty($errors) && isset($_GET['ok'])) $basari = trim((string)$_GET['ok']);
@@ -183,6 +216,107 @@ render_flash();
     <?php endif; ?>
     <?php else: ?><p class="muted" style="margin-top:10px">Kesinleştirme için ticari fiyat yönetim yetkisi de gerekir.</p><?php endif; ?>
 </div>
+<?php elseif ($faz9dHazir): ?>
+<div class="card" style="padding:18px 20px;margin-top:20px">
+    <h2 style="margin-top:0;font-size:1rem">🧮 Hakediş Düzeltme / Mahsup</h2>
+    <p class="muted" style="font-size:.85rem;margin-top:0">
+        KESİN hakediş (<?= h(number_format((float)$hakedis['total_amount'], 2, ',', '.')) ?> <?= h($hakedis['currency']) ?>)
+        BİR DAHA DEĞİŞMEZ — yanlış/eksik tespit edilen bir tutar bunun yerine AYRI, imzalı bir
+        düzeltme olarak eklenir. Bu çavuşa yapılmış ödemeler HÂLÂ AYRI kayıtlardır (Çavuş Ödeme
+        ekranından), buradan ETKİLENMEZ.
+    </p>
+    <div class="table-wrap pc-only" style="margin-bottom:14px">
+    <table class="data-table"><tbody>
+        <tr><th style="width:220px">Orijinal Kesin Hakediş</th><td><?= h(number_format((float)$hakedis['total_amount'], 2, ',', '.')) ?> <?= h($hakedis['currency']) ?></td></tr>
+        <tr><th>Geçerli Düzeltmeler (net)</th><td><?= h(pdks_hakedis_kurus_tl($duzeltmeNetKurus)) ?> <?= h($hakedis['currency']) ?></td></tr>
+        <tr><th>Net Düzeltilmiş Hakediş</th><td><strong><?= h(pdks_hakedis_kurus_tl($netHakedisKurus)) ?> <?= h($hakedis['currency']) ?></strong></td></tr>
+    </tbody></table>
+    </div>
+
+    <?php if (empty($duzeltmeler)): ?>
+    <p class="muted">Bu hakedişe henüz düzeltme eklenmemiş.</p>
+    <?php else: ?>
+    <div class="table-wrap pc-only" style="margin-bottom:14px">
+    <table class="data-table">
+    <thead><tr><th>Tarih</th><th>Tutar</th><th>Gerekçe</th><th>Kaydeden</th><th>Durum</th><th class="actions-col">İşlem</th></tr></thead>
+    <tbody>
+    <?php foreach ($duzeltmeler as $dz):
+        $dzKurus = pdks_hakedis_tl_kurus((string)$dz['signed_amount']);
+        $tersKayitMi = $dz['reversal_of_adjustment_id'] !== null;
+    ?>
+    <tr>
+        <td class="muted"><?= h(date('d.m.Y H:i', strtotime($dz['created_at']))) ?></td>
+        <td><strong style="color:<?= $dzKurus >= 0 ? 'var(--ok, #1f9d55)' : 'var(--danger)' ?>"><?= $dzKurus >= 0 ? '+' : '' ?><?= h(number_format((float)$dz['signed_amount'], 2, ',', '.')) ?> <?= h($dz['currency']) ?></strong><?= $tersKayitMi ? ' <span class="pdks-badge pdks-badge-pasif">Ters Kayıt</span>' : '' ?></td>
+        <td><?= h($dz['reason']) ?></td>
+        <td><?= h(pdks_gunluk_kullanici_adi($dz['created_by_user_id'] !== null ? (int)$dz['created_by_user_id'] : null, $pdo)) ?></td>
+        <td>
+            <?php if ($dz['reversed_at'] !== null): ?>
+            <span class="pdks-badge pdks-badge-pasif">Ters Kayıtlı</span>
+            <div class="pdks-row-sub">Gerekçe: <?= h($dz['reversal_reason']) ?></div>
+            <?php else: ?>
+            <span class="pdks-badge pdks-badge-aktif">Geçerli</span>
+            <?php endif; ?>
+        </td>
+        <td class="actions-col">
+            <?php if (!$tersKayitMi && $dz['reversed_at'] === null): ?>
+            <details>
+                <summary class="btn btn-sm">Ters Kayıt</summary>
+                <form method="post" style="margin-top:8px">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="duzeltme_ters_kayit">
+                    <input type="hidden" name="adjustment_id" value="<?= (int)$dz['id'] ?>">
+                    <textarea name="sebep" rows="2" required placeholder="Ters kayıt gerekçesi *" style="width:220px"></textarea><br>
+                    <button type="submit" class="btn btn-sm" onclick="return confirm('Bu düzeltmeyi ters kayıtla nötrlemek istediğinize emin misiniz?');">Onayla</button>
+                </form>
+            </details>
+            <?php endif; ?>
+        </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+    </table>
+    </div>
+    <?php endif; ?>
+
+    <?php if (pdks_hakedis_can('entitlements_finalize')): ?>
+    <h3 style="font-size:.95rem">Yeni Düzeltme Ekle</h3>
+    <form method="post">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="duzeltme_ekle">
+        <div class="pdks-form-grid">
+            <label>
+                <span class="form-label">Yön *</span>
+                <select name="yon" required>
+                    <option value="+">➕ Artır</option>
+                    <option value="-">➖ Azalt / Mahsup</option>
+                </select>
+            </label>
+            <label>
+                <span class="form-label">Tutar (<?= h($hakedis['currency']) ?>) *</span>
+                <input type="text" name="tutar" required inputmode="decimal" placeholder="ör. 2500 veya 2500,50">
+            </label>
+            <label class="span-2">
+                <span class="form-label">Gerekçe *</span>
+                <textarea name="sebep" rows="2" required maxlength="1000"></textarea>
+            </label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:12px">Düzeltmeyi Kaydet</button>
+    </form>
+    <?php else: ?>
+    <p class="muted" style="margin-top:10px">Düzeltme eklemek için ticari fiyat yönetim yetkisi de gerekir.</p>
+    <?php endif; ?>
+</div>
+
+<?php if (function_exists('is_admin') && is_admin()): ?>
+<div class="card" style="padding:18px 20px;margin-top:20px">
+    <h2 style="margin-top:0;font-size:1rem">Yeniden Aç (yalnız sistem yöneticisi)</h2>
+    <form method="post" onsubmit="return confirm('Bu KESİN hakedişi taslağa geri açmak istediğinize emin misiniz?');">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="action" value="yeniden_ac">
+        <label><span class="form-label">Gerekçe *</span><textarea name="sebep" rows="2" required maxlength="500"></textarea></label>
+        <button type="submit" class="btn" style="margin-top:10px">🔓 Yeniden Aç</button>
+    </form>
+</div>
+<?php endif; ?>
 <?php else: ?>
 <?php if (function_exists('is_admin') && is_admin()): ?>
 <div class="card" style="padding:18px 20px;margin-top:20px">
