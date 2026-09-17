@@ -107,6 +107,40 @@
     display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;
 }
 .pdks-form-grid .span-2 { grid-column: 1 / -1; }
+/* Kart Havuzu düzenleme modalı — masaüstünde taşmayı önler;
+   mobilde durum işlemlerini tek sütuna indirir. */
+.isk-card-modal {
+    width: min(520px, calc(100vw - 32px));
+    max-width: 520px;
+}
+
+.isk-card-status-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.isk-card-status-actions form {
+    min-width: 0;
+}
+
+.isk-card-status-actions .btn {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.25;
+}
+
+@media (max-width: 639px) {
+    .isk-card-modal {
+        width: calc(100vw - 24px);
+        max-width: none;
+    }
+
+    .isk-card-status-actions {
+        grid-template-columns: 1fr;
+    }
+}
 @media (max-width: 639px) {
     .pdks-form-grid { grid-template-columns: 1fr; }
 }

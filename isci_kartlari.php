@@ -301,7 +301,7 @@ if ($basari !== ''): ?>
 <!-- ── Düzenleme modalı — window.pdksOpenModal/pdksCloseModal (assets/pdks.js)
      REUSE edilir, yeni bir modal aç/kapa mekanizması İCAT EDİLMEDİ. ── -->
 <div class="pm-overlay" id="iskKartModal" hidden>
-<div class="pm-dialog" style="max-width:420px">
+<div class="pm-dialog isk-card-modal">
     <div class="pm-header">
         <h2 class="pm-title">Kartı Düzenle</h2>
         <button type="button" class="pm-close" onclick="pdksCloseModal('iskKartModal')">✕</button>
@@ -338,7 +338,7 @@ if ($basari !== ''): ?>
         </div>
     </form>
     <hr style="margin:16px 0">
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="isk-card-status-actions">
         <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdA">
             <input type="hidden" name="durum" value="available">

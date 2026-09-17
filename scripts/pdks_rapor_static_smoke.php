@@ -248,6 +248,7 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v221');",
     "-    define('APP_SURUM', 'v222');",
     "-    define('APP_SURUM', 'v223');",
+    "-    define('APP_SURUM', 'v224');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
