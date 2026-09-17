@@ -203,6 +203,10 @@ ok('Yeni kart formu İşçi Tipi seçici İÇERMİYOR (nötr oluşturma — düz
     !str_contains($s2OncekiModal, '<select name="worker_type_id"'));
 ok('Mevcut nötr kart (K001, tip yok) listede "— (nötr)" olarak görünüyor', str_contains($s2, '— (nötr)'));
 ok('Kart no K001 listede görünüyor (LEFT JOIN kartı düşürmedi)', str_contains($s2, 'K001'));
+ok('Kart düzenleme modalı responsive sınıf kullanıyor',
+    str_contains($s2, 'class="pm-dialog isk-card-modal"'));
+ok('Kart durum işlemleri responsive action grid kullanıyor',
+    str_contains($s2, 'class="isk-card-status-actions"'));
 
 printf("\n=== SONUÇ: %d geçti, %d hata ===\n", $gecen, $fail);
 exit($fail > 0 ? 1 : 0);
