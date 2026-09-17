@@ -2,20 +2,35 @@
 // =========================================================
 // config/pdks_faz8b.php — Faz 8B Mesai Değerlendirme + Ücretlendirme
 //
-// İş kuralı:
-//   - Standart vardiya: 08:00–17:00 (9 saat).
-//   - Giriş/çıkışta 15 dk tolerans: 08:15 giriş / 16:45 çıkış hâlâ
-//     otomatik Tam kabul edilebilir; ayrıca fiili süre 9 saat ve üzeriyse
-//     vardiya saati kaymış olsa bile otomatik Tam'dır.
-//   - 9 saatten kısa ve tolerans penceresini karşılamayan dönemlerde
-//     muhasebe Tam/Yarım kararı verir. ÇIKIŞ asla engellenmez.
-//   - Fazla mesai planlı 17:00 bitişinden sonra ölçülür. İlk 15 dk tolerans:
-//       17:15'e kadar FM yok,
-//       17:16–18:15 = 1 saat,
-//       18:16–19:15 = 2 saat, ...
-//     Her FM adayı muhasebe onayına düşer.
+// ⚠ Faz 9C / H-02 KAPANIŞI (iş kuralı KÖKTEN değişti — kullanıcının açık
+// talimatı): SABİT 08:00 başlangıç / 17:00 planlı bitiş YOKTUR, hiçbir
+// saat-kilidi (clock-of-day boundary) YOKTUR. İşçi 08:00'de de 10:00'da da
+// başlayabilir — önemli olan GEÇEN SÜRENİN çavuşun ANLAŞMALI NORMAL GÜNLÜK
+// ÇALIŞMA SÜRESİYLE (foremen.normal_work_minutes → oturum açılırken
+// daily_work_sessions.normal_work_minutes_snapshot'a DONAR, bkz. config/
+// pdks_gunluk.php) karşılaştırılmasıdır. Bu süre ÇAVUŞ bazlıdır, işçi
+// tipinden (KADIN/ERKEK) BAĞIMSIZDIR.
+//
+// İş kuralı (YENİ):
+//   - Otomatik Tam: geçen süre (dk) >= oturumun normal_work_minutes_snapshot
+//     değeri. 08:00–17:00, 09:00–18:00, 10:00–19:00 (9h anlaşma) HEPSİ Tam —
+//     hiçbiri saat DEĞİL, SÜRE eşleşiyor diye.
+//   - Bunun altındaki süreler muhasebe Tam/Yarım kararına düşer. ÇIKIŞ asla
+//     engellenmez. Geç giriş cezası YOKTUR — anlaşmalı süre tamamlanınca FM
+//     hesabı aynı kalır.
+//   - Fazla mesai yalnız normal süre TAMAMLANDIKTAN sonra ölçülür (PLANLI
+//     bir saatten DEĞİL). İlk 15 dk tolerans: normali aşan 15. dakikaya
+//     kadar FM yok; sonrasında başlayan her 60 dk'lık dilim 1 saat sayılır
+//     (16–75 dk = 1 saat, 76–135 dk = 2 saat, ...).
+//     Her FM ADAYI muhasebe onayına düşer; muhasebe HESAPLANAN adayın
+//     ALTINDA bir "Onaylanan FM Saati" belirleyebilir (Faz 9C / UX-03),
+//     üstüne ÇIKAMAZ.
+//   - Bir kart aynı gün BİRDEN FAZLA ardışık döneme sahip olabilir — HER
+//     dönem KENDİ geçen süresinden değerlendirilir; ikinci (geç saatli) kısa
+//     bir dönem salt SAATİ GEÇ diye FM SAYILMAZ.
 //   - Çavuş ücretinde Tam, Yarım ve FM ücreti ayrı tanımlanır. FM tipi
-//     hourly (saatlik) veya fixed (sabit toplam) olabilir.
+//     hourly (saatlik) veya fixed (sabit toplam) olabilir — bu fiyat mimarisi
+//     Faz 9C'de DEĞİŞMEDİ, yalnız FM SÜRESİNİN nasıl hesaplandığı değişti.
 // =========================================================
 declare(strict_types=1);
 
@@ -23,10 +38,14 @@ require_once __DIR__ . '/pdks_gunluk.php';
 require_once __DIR__ . '/pdks_hakedis.php';
 
 defined('PDKS_FAZ8B_AKTIF') || define('PDKS_FAZ8B_AKTIF', true);
+// ⚠ Faz 9C: bu artık yalnız "şema/foreman ayarı hiç yoksa" düşülecek SON
+// ÇARE varsayılandır (bkz. pdks_faz8b_donem_finans_durumu) — OTORİTER kaynak
+// oturumun normal_work_minutes_snapshot'ıdır, bu sabit DEĞİL.
 defined('PDKS_FAZ8B_NORMAL_DK') || define('PDKS_FAZ8B_NORMAL_DK', 540);
 defined('PDKS_FAZ8B_TOLERANS_DK') || define('PDKS_FAZ8B_TOLERANS_DK', 15);
-defined('PDKS_FAZ8B_VARDIYA_BASLANGIC') || define('PDKS_FAZ8B_VARDIYA_BASLANGIC', '08:00');
-defined('PDKS_FAZ8B_VARDIYA_BITIS') || define('PDKS_FAZ8B_VARDIYA_BITIS', '17:00');
+// Normal süre için makul işletme aralığı (Faz 9C madde 4): 1-24 saat.
+defined('PDKS_FAZ8B_SURE_MIN_DK') || define('PDKS_FAZ8B_SURE_MIN_DK', 60);
+defined('PDKS_FAZ8B_SURE_MAX_DK') || define('PDKS_FAZ8B_SURE_MAX_DK', 1440);
 
 // =========================================================
 // ŞEMA / MİGRASYON
@@ -105,6 +124,10 @@ function pdks_faz8b_migrate(?PDO $pdo = null): array
         ['daily_worker_work_periods', 'overtime_approved', 'TINYINT(1) NULL DEFAULT NULL', 'approved_at'],
         ['daily_worker_work_periods', 'overtime_approved_by_user_id', 'INT NULL DEFAULT NULL', 'overtime_approved'],
         ['daily_worker_work_periods', 'overtime_approved_at', 'DATETIME NULL DEFAULT NULL', 'overtime_approved_by_user_id'],
+        // Faz 9C / UX-03: muhasebe artık HESAPLANAN FM adayının altında bir
+        // "Onaylanan FM Saati" belirleyebilir (yalnız hepsini onayla/reddet
+        // DEĞİL) — bkz. pdks_faz8b_degerlendirme_kaydet().
+        ['daily_worker_work_periods', 'overtime_approved_hours', 'INT NULL DEFAULT NULL', 'overtime_approved_at'],
 
         ['foreman_daily_entitlements', 'needs_recalculation', 'TINYINT(1) NOT NULL DEFAULT 0', 'total_amount'],
 
@@ -114,6 +137,17 @@ function pdks_faz8b_migrate(?PDO $pdo = null): array
         ['foreman_daily_entitlement_lines', 'overtime_mode_snapshot', 'VARCHAR(10) NULL DEFAULT NULL', 'overtime_hours'],
         ['foreman_daily_entitlement_lines', 'overtime_unit_rate', 'DECIMAL(12,2) NOT NULL DEFAULT 0', 'overtime_mode_snapshot'],
         ['foreman_daily_entitlement_lines', 'overtime_total', 'DECIMAL(14,2) NOT NULL DEFAULT 0', 'overtime_unit_rate'],
+
+        // ⚠ Faz 9C / H-02: foremen.normal_work_minutes + daily_work_sessions.
+        // normal_work_minutes_snapshot config/pdks_gunluk.php'nin KENDİ CREATE
+        // TABLE'ında da tanımlıdır (SIFIRDAN kurulum için) — burada AYNI
+        // kolonlar ÜRETİMDEKİ mevcut (Faz 9C öncesi) tablolara ALTER ile
+        // eklenir, aynı desen worker_type_id/worker_type_id_snapshot'ın
+        // Faz 8A'da izlediği yol (bkz. pdks_gunluk_faz8a_migrate). DEFAULT
+        // 540 (9 saat) — eski sabit vardiya varsayımıyla AYNI, hiçbir çavuş/
+        // oturum sessizce farklı bir normal süreye geçmez.
+        ['foremen', 'normal_work_minutes', 'INT NOT NULL DEFAULT 540', 'notes'],
+        ['daily_work_sessions', 'normal_work_minutes_snapshot', 'INT NOT NULL DEFAULT 540', 'foreman_code_snapshot'],
     ];
 
     $rapor = [];
@@ -131,12 +165,18 @@ function pdks_faz8b_sema_hazir(?PDO $pdo = null): bool
         'daily_worker_work_periods' => [
             'approved_attendance_class', 'approved_by_user_id', 'approved_at',
             'overtime_approved', 'overtime_approved_by_user_id', 'overtime_approved_at',
+            'overtime_approved_hours',
         ],
         'foreman_daily_entitlements' => ['needs_recalculation'],
         'foreman_daily_entitlement_lines' => [
             'work_period_id', 'attendance_class_snapshot', 'overtime_hours',
             'overtime_mode_snapshot', 'overtime_unit_rate', 'overtime_total',
         ],
+        // Faz 9C / H-02: süre-tabanlı Tam/FM modeli bu iki kolon olmadan
+        // OTORİTER hesaplanamaz — şema hazır sayılmaz, sayfa kapısı eski
+        // (sabit vardiya) davranışa SESSİZCE geri DÜŞMEZ.
+        'foremen' => ['normal_work_minutes'],
+        'daily_work_sessions' => ['normal_work_minutes_snapshot'],
     ];
 
     foreach ($gerekli as $tablo => $kolonlar) {
@@ -168,33 +208,35 @@ function pdks_faz8b_sayfa_kapisi(?PDO $pdo = null): void
 // =========================================================
 
 /**
- * Standart gün 08:00–17:00'dır.
+ * Faz 9C / H-02: SÜRE-TABANLI karar — saat-kilidi (clock-of-day boundary)
+ * YOKTUR. Yalnız GEÇEN SÜRE (dk), çağıranın verdiği $normalDk (oturumun
+ * normal_work_minutes_snapshot'ı) ile karşılaştırılır.
  *
- * Otomatik Tam için iki güvenli yol vardır:
- *  1) fiili süre >= 9 saat, veya
- *  2) vardiya sınırları tolerans içinde karşılanmıştır:
- *     giriş en geç 08:15 ve çıkış en erken 16:45.
+ * Otomatik Tam: geçen süre (dk) >= $normalDk. 08:00–17:00, 09:00–18:00,
+ * 10:00–19:00 (9 saatlik anlaşma) HEPSİ Tam — SAAT değil SÜRE eşleşiyor
+ * diye. $normalDk'nın altında kalan dönemler muhasebe Tam/Yarım kararına
+ * düşer.
  *
- * Bu ikinci kural 08:15–16:45 gibi, iki uçta da 15'er dakikalık toleransı
- * açıkça karşılar. 9 saatten kısa ama bu pencereyi karşılamayan dönemler
- * muhasebe kararına düşer.
+ * Fazla mesai yalnız $normalDk TAMAMLANDIKTAN SONRAKİ süreden hesaplanır
+ * (planlı bir SAATTEN değil). İlk 15 dk toleranstır. Sonrasında başlayan
+ * her saat yukarı yuvarlanır:
+ *   normali 16–75 dk aşan => 1 saat
+ *   normali 76–135 dk aşan => 2 saat
  *
- * Fazla mesai yalnız PLANLI bitiş 17:00 sonrasından hesaplanır. İlk 15 dk
- * toleranstır. Sonrasında başlayan her saat yukarı yuvarlanır:
- *   17:16–18:15 => 1 saat
- *   18:16–19:15 => 2 saat
+ * Gün ötesi (23:00–08:00 ertesi gün gibi) veya ikinci/kısa dönemler için
+ * ÖZEL bir durum YOKTUR — giriş/çıkış DATETIME'ları zaten doğru günü taşır,
+ * hesap yalnız ikisi arasındaki farka bakar.
  */
-function pdks_faz8b_sure_karari(?string $giris, ?string $cikis): array
+function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = PDKS_FAZ8B_NORMAL_DK): array
 {
     $bos = [
         'toplam_dk' => null,
+        'normal_dk' => $normalDk,
         'otomatik_sinif' => null,
         'sinif_onayi_gerekli' => true,
-        'plan_sonrasi_dk' => 0,
+        'fazla_dk' => 0,
         'fazla_mesai_saat' => 0,
         'fazla_mesai_onayi_gerekli' => false,
-        'giris_toleransinda' => false,
-        'cikis_toleransinda' => false,
     ];
     if (!$giris || !$cikis) return $bos;
 
@@ -203,40 +245,39 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis): array
     if ($g === false || $c === false || $c < $g) return $bos;
 
     $toplamDk = intdiv($c - $g, 60);
-    $gun = date('Y-m-d', $g);
-    $planBas = strtotime($gun . ' ' . PDKS_FAZ8B_VARDIYA_BASLANGIC . ':00');
-    $planBit = strtotime($gun . ' ' . PDKS_FAZ8B_VARDIYA_BITIS . ':00');
-    if ($planBas === false || $planBit === false) return $bos;
+    $otomatikTam = $toplamDk >= $normalDk;
 
-    $tolSn = PDKS_FAZ8B_TOLERANS_DK * 60;
-    $girisToleransinda = $g <= ($planBas + $tolSn);
-    $cikisToleransinda = $c >= ($planBit - $tolSn);
-    $vardiyaPenceresiTam = $girisToleransinda && $cikisToleransinda;
-    $otomatikTam = $toplamDk >= PDKS_FAZ8B_NORMAL_DK || $vardiyaPenceresiTam;
-
-    $planSonrasiDk = $c > $planBit ? intdiv($c - $planBit, 60) : 0;
+    $fazlaDk = $toplamDk > $normalDk ? ($toplamDk - $normalDk) : 0;
     $fmSaat = 0;
-    if ($planSonrasiDk > PDKS_FAZ8B_TOLERANS_DK) {
+    if ($fazlaDk > PDKS_FAZ8B_TOLERANS_DK) {
         // 15 dk toleransı çıkar; kalan her başlayan saat yukarı yuvarlanır.
-        $ucretDk = $planSonrasiDk - PDKS_FAZ8B_TOLERANS_DK;
+        $ucretDk = $fazlaDk - PDKS_FAZ8B_TOLERANS_DK;
         $fmSaat = intdiv($ucretDk + 59, 60);
     }
 
     return [
         'toplam_dk' => $toplamDk,
+        'normal_dk' => $normalDk,
         'otomatik_sinif' => $otomatikTam ? 'tam' : null,
         'sinif_onayi_gerekli' => !$otomatikTam,
-        'plan_sonrasi_dk' => $planSonrasiDk,
+        'fazla_dk' => $fazlaDk,
         'fazla_mesai_saat' => $fmSaat,
         'fazla_mesai_onayi_gerekli' => $fmSaat > 0,
-        'giris_toleransinda' => $girisToleransinda,
-        'cikis_toleransinda' => $cikisToleransinda,
     ];
 }
 
+/**
+ * $donem — daily_worker_work_periods satırı, TERCİHEN oturumun
+ * normal_work_minutes_snapshot'ını da taşımalıdır (bkz.
+ * pdks_faz8b_oturum_donemleri()'nin JOIN'i). Anahtar yoksa/boşsa (ör.
+ * çağıran ham bir satır geçiyorsa) PDKS_FAZ8B_NORMAL_DK'ya (540 dk) düşülür
+ * — eski davranışla AYNI son çare, hiçbir yerde HATA vermez.
+ */
 function pdks_faz8b_donem_finans_durumu(array $donem): array
 {
-    $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null);
+    $normalDk = (int)($donem['normal_work_minutes_snapshot'] ?? PDKS_FAZ8B_NORMAL_DK);
+    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
+    $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $normalDk);
 
     $onayliSinif = trim((string)($donem['approved_attendance_class'] ?? ''));
     $sinif = $sure['otomatik_sinif'];
@@ -247,30 +288,41 @@ function pdks_faz8b_donem_finans_durumu(array $donem): array
     }
 
     $fmSaat = (int)$sure['fazla_mesai_saat'];
-    $fmOnay = $donem['overtime_approved'] ?? null;
-    if ($fmOnay === '' || $fmOnay === null) $fmOnay = null;
-    else $fmOnay = (int)$fmOnay;
+    // Faz 9C / UX-03: OTORİTER FM onayı artık SAAT SAYISIdır (yalnız
+    // onayla/reddet ikili bayrağı DEĞİL) — 0..$fmSaat aralığında, muhasebe
+    // hesaplanan adayın altına inebilir. Eski `overtime_approved` bayrağı
+    // yalnız GERİYE DÖNÜK/rozet amaçlı türetilir (0 saat => reddedildi,
+    // >0 saat => onaylı), OTORİTE bu satırda DEĞİL, overtime_approved_hours'ta.
+    $fmOnaySaatHam = $donem['overtime_approved_hours'] ?? null;
+    $fmOnaySaat = ($fmOnaySaatHam === '' || $fmOnaySaatHam === null) ? null : (int)$fmOnaySaatHam;
 
     $fmDurum = 'yok';
     if ($fmSaat > 0) {
-        $fmDurum = $fmOnay === null ? 'bekliyor' : ($fmOnay === 1 ? 'onayli' : 'reddedildi');
+        $fmDurum = $fmOnaySaat === null ? 'bekliyor' : ($fmOnaySaat > 0 ? 'onayli' : 'reddedildi');
     }
 
     return $sure + [
         'etkin_sinif' => $sinif,
         'sinif_kaynak' => $sinifKaynak,
         'fazla_mesai_durum' => $fmDurum,
-        'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnay !== null),
+        'fazla_mesai_onay_saat' => $fmOnaySaat,
+        'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnaySaat !== null),
     ];
 }
 
 function pdks_faz8b_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    // ⚠ Faz 9C / H-02: s.normal_work_minutes_snapshot EKLENDİ — her dönem
+    // KENDİ oturumunun DONMUŞ normal süresiyle değerlendirilir (bkz.
+    // pdks_faz8b_donem_finans_durumu). p.* önce geldiği için s.'nin
+    // normal_work_minutes_snapshot'ı p tarafında aynı adlı bir kolon YOKSA
+    // (ki yok) çakışmaz.
     $st = $pdo->prepare(
-        "SELECT p.*, w.card_no
+        "SELECT p.*, w.card_no, s.normal_work_minutes_snapshot
            FROM daily_worker_work_periods p
            JOIN worker_cards w ON w.id = p.worker_card_id
+           JOIN daily_work_sessions s ON s.id = p.session_id
           WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
           ORDER BY p.entry_time ASC, p.id ASC"
     );
@@ -304,13 +356,87 @@ function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
 }
 
 // =========================================================
+// ÇAVUŞ — NORMAL GÜNLÜK ÇALIŞMA SÜRESİ (Faz 9C / H-02)
+// =========================================================
+
+/** Bir dakika değerini "X saat" / "Xs Ydk" biçiminde okunur etikete çevirir. */
+function pdks_faz8b_dakika_etiket(int $dk): string
+{
+    if ($dk <= 0) return '0 dk';
+    $saat = intdiv($dk, 60);
+    $kalanDk = $dk % 60;
+    if ($kalanDk === 0) return $saat . ' saat';
+    return $saat . 's ' . $kalanDk . 'dk';
+}
+
+/**
+ * Bir çavuşun O ANKİ (canlı) normal günlük çalışma süresi. Şema henüz
+ * migrate edilmemişse veya kayıt yoksa PDKS_FAZ8B_NORMAL_DK'ya (540 dk)
+ * düşülür — hiçbir yerde HATA vermez.
+ *
+ * ⚠ Bu CANLI değerdir — GEÇMİŞ oturumların hesabı İÇİN KULLANILMAZ (onlar
+ * kendi normal_work_minutes_snapshot'larını kullanır). Yalnız YENİ oturum
+ * açılırken (config/pdks_gunluk.php) ve bu ekranda GÜNCEL değeri göstermek
+ * için kullanılır.
+ */
+function pdks_faz8b_cavus_normal_sure_dk(int $foremanId, ?PDO $pdo = null): int
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
+        return PDKS_FAZ8B_NORMAL_DK;
+    }
+    $st = $pdo->prepare("SELECT normal_work_minutes FROM foremen WHERE id = ?");
+    $st->execute([$foremanId]);
+    $v = $st->fetchColumn();
+    return ($v !== false && $v !== null) ? (int)$v : PDKS_FAZ8B_NORMAL_DK;
+}
+
+/**
+ * Çavuşun normal günlük çalışma süresini GÜNCELLER. Yalnız CANLI ayarı
+ * değiştirir — zaten AÇILMIŞ oturumların normal_work_minutes_snapshot'ı
+ * (ve onlara bağlı kesinleşmiş hakedişler) BU ÇAĞRIDAN ASLA etkilenmez
+ * (Faz 9C madde 5 — KRİTİK tarihsel güvenlik).
+ */
+function pdks_faz8b_cavus_normal_sure_guncelle(int $foremanId, int $dakika, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
+        return ['ok' => false, 'hata' => 'Faz 8B şeması henüz hazır değil.'];
+    }
+    if ($dakika < PDKS_FAZ8B_SURE_MIN_DK || $dakika > PDKS_FAZ8B_SURE_MAX_DK) {
+        return ['ok' => false, 'hata' => 'Normal günlük çalışma süresi 1-24 saat aralığında olmalıdır.'];
+    }
+
+    $st = $pdo->prepare("SELECT id, normal_work_minutes FROM foremen WHERE id = ?");
+    $st->execute([$foremanId]);
+    $eski = $st->fetch();
+    if (!$eski) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
+
+    $pdo->prepare("UPDATE foremen SET normal_work_minutes = ? WHERE id = ?")->execute([$dakika, $foremanId]);
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('update', 'foremen', $foremanId,
+            ['normal_work_minutes' => $eski['normal_work_minutes'] ?? null],
+            ['normal_work_minutes' => $dakika]);
+    }
+    return ['ok' => true];
+}
+
+// =========================================================
 // MUHASEBE DEĞERLENDİRMESİ
 // =========================================================
 
+/**
+ * @param int|null $overtimeApprovedHours Faz 9C / UX-03: HESAPLANAN FM
+ *        adayının (fazla_mesai_saat) 0..adayı arasında muhasebenin
+ *        ONAYLADIĞI saat sayısı. Adayın ÜSTÜNE ÇIKAMAZ (reddedilir).
+ *        0 = tamamen reddet, aday değeri = tamamen onayla, arası = KISMİ
+ *        onay. FM adayı yoksa (fazla_mesai_saat === 0) YOK SAYILIR.
+ */
 function pdks_faz8b_degerlendirme_kaydet(
     int $periodId,
     ?string $attendanceDecision,
-    ?string $overtimeDecision,
+    ?int $overtimeApprovedHours,
     int $userId,
     ?PDO $pdo = null
 ): array {
@@ -333,9 +459,15 @@ function pdks_faz8b_degerlendirme_kaydet(
         return ['ok' => false, 'hata' => 'Bu oturumun hakedişi KESİN. Önce yönetici kontrollü olarak hakedişi yeniden açmalıdır.'];
     }
 
-    $sure = pdks_faz8b_sure_karari($p['entry_time'] ?? null, $p['exit_time'] ?? null);
+    // Faz 9C / H-02: bu dönemin OTORİTER normal süresi kendi oturumunun
+    // donmuş anlık görüntüsüdür — canlı çavuş ayarından DEĞİL.
+    $stSess = $pdo->prepare("SELECT normal_work_minutes_snapshot FROM daily_work_sessions WHERE id = ?");
+    $stSess->execute([(int)$p['session_id']]);
+    $normalDk = (int)($stSess->fetchColumn() ?: PDKS_FAZ8B_NORMAL_DK);
+    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
+
+    $sure = pdks_faz8b_sure_karari($p['entry_time'] ?? null, $p['exit_time'] ?? null, $normalDk);
     $attendanceDecision = $attendanceDecision !== null ? trim($attendanceDecision) : null;
-    $overtimeDecision = $overtimeDecision !== null ? trim($overtimeDecision) : null;
     $simdi = date('Y-m-d H:i:s');
 
     if ($sure['sinif_onayi_gerekli']) {
@@ -354,13 +486,17 @@ function pdks_faz8b_degerlendirme_kaydet(
 
     $fmSaat = (int)$sure['fazla_mesai_saat'];
     if ($fmSaat > 0) {
-        if (!in_array($overtimeDecision, ['onayla', 'reddet'], true)) {
-            return ['ok' => false, 'hata' => 'Fazla mesai adayı için muhasebe Onayla veya Reddet kararı vermelidir.'];
+        if ($overtimeApprovedHours === null || $overtimeApprovedHours < 0 || $overtimeApprovedHours > $fmSaat) {
+            return ['ok' => false, 'hata' => "Fazla mesai adayı için 0 ile {$fmSaat} saat arasında onaylanan saat girilmelidir."];
         }
-        $fmOnay = $overtimeDecision === 'onayla' ? 1 : 0;
+        $fmOnaySaat = $overtimeApprovedHours;
+        // Eski ikili bayrak (rozet/geriye dönük uyumluluk) — OTORİTE DEĞİL,
+        // yalnız 'overtime_approved_hours' saati TÜRETİLİR.
+        $fmOnay = $fmOnaySaat > 0 ? 1 : 0;
         $fmUser = $userId;
         $fmAt = $simdi;
     } else {
+        $fmOnaySaat = null;
         $fmOnay = null;
         $fmUser = null;
         $fmAt = null;
@@ -369,15 +505,16 @@ function pdks_faz8b_degerlendirme_kaydet(
     $before = [
         'approved_attendance_class' => $p['approved_attendance_class'] ?? null,
         'overtime_approved' => $p['overtime_approved'] ?? null,
+        'overtime_approved_hours' => $p['overtime_approved_hours'] ?? null,
     ];
 
     $upd = $pdo->prepare(
         "UPDATE daily_worker_work_periods
             SET approved_attendance_class = ?, approved_by_user_id = ?, approved_at = ?,
-                overtime_approved = ?, overtime_approved_by_user_id = ?, overtime_approved_at = ?
+                overtime_approved = ?, overtime_approved_hours = ?, overtime_approved_by_user_id = ?, overtime_approved_at = ?
           WHERE id = ?"
     );
-    $upd->execute([$sinif, $sinifUser, $sinifAt, $fmOnay, $fmUser, $fmAt, $periodId]);
+    $upd->execute([$sinif, $sinifUser, $sinifAt, $fmOnay, $fmOnaySaat, $fmUser, $fmAt, $periodId]);
 
     // Daha önce hesaplanmış taslak artık finansal olarak bayattır.
     $pdo->prepare(
@@ -390,6 +527,7 @@ function pdks_faz8b_degerlendirme_kaydet(
         audit_log_event('update', 'daily_worker_work_periods', $periodId, $before, [
             'approved_attendance_class' => $sinif,
             'overtime_approved' => $fmOnay,
+            'overtime_approved_hours' => $fmOnaySaat,
             'fazla_mesai_saat_adayi' => $fmSaat,
         ]);
     }
@@ -582,10 +720,13 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             continue;
         }
 
+        // Faz 9C / UX-03: hakediş OTORİTER olarak ONAYLANAN saati kullanır
+        // (fazla_mesai_onay_saat), HESAPLANAN adayı (fazla_mesai_saat)
+        // DEĞİL — muhasebe adayın altında kısmi onay vermiş olabilir.
         $fmSaat = (int)$f['fazla_mesai_saat'];
-        $fmOnayli = $fmSaat > 0
-            && ($d['overtime_approved'] ?? null) !== null
-            && (int)$d['overtime_approved'] === 1;
+        $fmOnaySaat = $f['fazla_mesai_onay_saat'] ?? null;
+        $fmOnayli = $fmSaat > 0 && $fmOnaySaat !== null && (int)$fmOnaySaat > 0;
+        $fmOnaySaat = $fmOnayli ? (int)$fmOnaySaat : 0;
         $fmMode = null;
         $fmBirimKurus = 0;
         $fmToplamKurus = 0;
@@ -605,7 +746,7 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             }
             $fmToplamKurus = $fmMode === 'fixed'
                 ? $fmBirimKurus
-                : ($fmBirimKurus * $fmSaat);
+                : ($fmBirimKurus * $fmOnaySaat);
         }
 
         $para = trim((string)($oran['currency'] ?? 'TRY')) ?: 'TRY';
@@ -623,7 +764,7 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             'attendance_class_snapshot' => $sinif,
             'worker_count' => 1,
             'unit_rate' => pdks_hakedis_kurus_tl($baseKurus),
-            'overtime_hours' => $fmOnayli ? $fmSaat : 0,
+            'overtime_hours' => $fmOnaySaat,
             'overtime_mode_snapshot' => $fmOnayli ? $fmMode : null,
             'overtime_unit_rate' => pdks_hakedis_kurus_tl($fmBirimKurus),
             'overtime_total' => pdks_hakedis_kurus_tl($fmToplamKurus),

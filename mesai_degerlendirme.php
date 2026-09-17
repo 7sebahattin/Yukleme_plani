@@ -40,7 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_pdks_hakedis('entitlements_finalize');
     $periodId = filter_var($_POST['period_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     $attendanceDecision = trim((string)($_POST['attendance_decision'] ?? '')) ?: null;
-    $overtimeDecision = trim((string)($_POST['overtime_decision'] ?? '')) ?: null;
+    // Faz 9C / UX-03: "onayla"/"reddet" YERİNE muhasebenin belirlediği
+    // onaylanan FM SAATİ — geçersiz/boş girdi null'a düşer, backend hesaplanan
+    // adayın gerekip gerekmediğine göre 0..aday aralığını doğrular.
+    $overtimeApprovedHoursRaw = trim((string)($_POST['overtime_approved_hours'] ?? ''));
+    $overtimeApprovedHours = $overtimeApprovedHoursRaw === '' ? null : filter_var($overtimeApprovedHoursRaw, FILTER_VALIDATE_INT);
+    if ($overtimeApprovedHours === false) $overtimeApprovedHours = null;
     if (!$periodId) {
         $errors[] = 'Mesai dönemi seçilemedi.';
     } else {
@@ -49,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$stOwn->fetchColumn()) {
             $errors[] = 'Mesai dönemi bu oturuma ait değil.';
         } else {
-            $sonuc = pdks_faz8b_degerlendirme_kaydet($periodId, $attendanceDecision, $overtimeDecision, (int)$auth_user['id'], $pdo);
+            $sonuc = pdks_faz8b_degerlendirme_kaydet($periodId, $attendanceDecision, $overtimeApprovedHours, (int)$auth_user['id'], $pdo);
             if ($sonuc['ok']) {
                 header('Location: mesai_degerlendirme.php?session_id=' . $sessionId . '&ok=' . urlencode('Değerlendirme kaydedildi.'));
                 exit;
@@ -62,6 +67,8 @@ if (!$errors && isset($_GET['ok'])) $success = trim((string)$_GET['ok']);
 
 $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
 $ozet = pdks_faz8b_oturum_ozeti($sessionId, $pdo);
+$normalDkGosterim = (int)($oturum['normal_work_minutes_snapshot'] ?? 540);
+if ($normalDkGosterim <= 0) $normalDkGosterim = 540;
 
 render_header('Mesai Değerlendirme');
 $base = base_url();
@@ -82,7 +89,9 @@ render_flash();
 <div class="card" style="padding:16px 18px;margin-bottom:18px">
     <strong><?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?><?= $oturum['depo'] ? ' — ' . h($oturum['depo']) : '' ?></strong>
     <div class="pdks-row-sub" style="margin-top:6px">
-        9 saat normal mesai · 15 dk tolerans · 8s45dk ve üzeri otomatik Tam · 9 saati aşan ilk 15 dk FM sayılmaz · 16–75 dk = 1 saat, 76–135 dk = 2 saat.
+        Bu mesai için normal günlük çalışma süresi: <strong><?= h(pdks_faz8b_dakika_etiket($normalDkGosterim)) ?></strong>
+        (bu oturum açılırken çavuşun ayarından donduruldu) · sabit bir başlangıç/bitiş SAATİ YOKTUR, yalnız GEÇEN SÜRE
+        sayılır · süre tamamlanınca otomatik Tam · 15 dk tolerans sonrası her başlayan saat FM.
     </div>
     <div class="pdks-row-sub" style="margin-top:6px">
         Hazır: <strong><?= (int)$ozet['hazir'] ?>/<?= (int)$ozet['toplam'] ?></strong>
@@ -120,10 +129,14 @@ render_flash();
     <td>
         <?php if ((int)$f['fazla_mesai_saat'] <= 0): ?>—
         <?php else: ?>
-            <?= (int)$f['fazla_mesai_saat'] ?> saat aday ·
-            <?php if ($f['fazla_mesai_durum'] === 'onayli'): ?><strong>Onaylı</strong>
-            <?php elseif ($f['fazla_mesai_durum'] === 'reddedildi'): ?><strong>Reddedildi</strong>
-            <?php else: ?><strong>Onay bekliyor</strong><?php endif; ?>
+            Hesaplanan: <?= (int)$f['fazla_mesai_saat'] ?> saat
+            <?php if ($f['fazla_mesai_onay_saat'] !== null): ?>
+                · Onaylanan: <?= (int)$f['fazla_mesai_onay_saat'] ?> saat ·
+                <?php if ($f['fazla_mesai_durum'] === 'onayli'): ?><strong>Onaylı</strong>
+                <?php else: ?><strong>Reddedildi</strong><?php endif; ?>
+            <?php else: ?>
+                · <strong>Onay bekliyor</strong>
+            <?php endif; ?>
         <?php endif; ?>
     </td>
     <td>
@@ -138,12 +151,15 @@ render_flash();
                 <option value="yarim" <?= ($d['approved_attendance_class'] ?? '') === 'yarim' ? 'selected' : '' ?>>Yarım Mesai</option>
             </select>
             <?php endif; ?>
-            <?php if ((int)$f['fazla_mesai_saat'] > 0): ?>
-            <select name="overtime_decision" required style="margin-bottom:6px">
-                <option value="">Fazla mesai kararı</option>
-                <option value="onayla" <?= ($d['overtime_approved'] ?? null) !== null && (int)$d['overtime_approved'] === 1 ? 'selected' : '' ?>>Onayla</option>
-                <option value="reddet" <?= ($d['overtime_approved'] ?? null) !== null && (int)$d['overtime_approved'] === 0 ? 'selected' : '' ?>>Reddet</option>
-            </select>
+            <?php if ((int)$f['fazla_mesai_saat'] > 0):
+                $fmAday = (int)$f['fazla_mesai_saat'];
+                $fmVarsayilan = $f['fazla_mesai_onay_saat'] !== null ? (int)$f['fazla_mesai_onay_saat'] : $fmAday;
+            ?>
+            <label style="display:block;font-size:.8rem;margin-bottom:6px">
+                Onaylanan FM Saati (Hesaplanan: <?= $fmAday ?>)
+                <input type="number" name="overtime_approved_hours" min="0" max="<?= $fmAday ?>" step="1"
+                       value="<?= $fmVarsayilan ?>" required style="max-width:100px">
+            </label>
             <?php endif; ?>
             <button class="btn btn-sm btn-primary" type="submit">Kaydet</button>
         </form>
@@ -161,7 +177,7 @@ render_flash();
     <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($d['entry_time']))) ?> · Çıkış <?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></div>
     <div class="pdks-row-sub">Süre: <?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></div>
     <div class="pdks-row-sub">Beyan: <?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></div>
-    <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM ' . (int)$f['fazla_mesai_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : '' ?></div>
+    <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
     <form method="post" style="margin-top:8px">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="session_id" value="<?= (int)$sessionId ?>">
@@ -173,12 +189,15 @@ render_flash();
             <option value="yarim" <?= ($d['approved_attendance_class'] ?? '') === 'yarim' ? 'selected' : '' ?>>Yarım Mesai</option>
         </select>
         <?php endif; ?>
-        <?php if ((int)$f['fazla_mesai_saat'] > 0): ?>
-        <select name="overtime_decision" required style="margin-top:6px">
-            <option value="">Fazla mesai kararı</option>
-            <option value="onayla" <?= ($d['overtime_approved'] ?? null) !== null && (int)$d['overtime_approved'] === 1 ? 'selected' : '' ?>>Onayla</option>
-            <option value="reddet" <?= ($d['overtime_approved'] ?? null) !== null && (int)$d['overtime_approved'] === 0 ? 'selected' : '' ?>>Reddet</option>
-        </select>
+        <?php if ((int)$f['fazla_mesai_saat'] > 0):
+            $fmAdayM = (int)$f['fazla_mesai_saat'];
+            $fmVarsayilanM = $f['fazla_mesai_onay_saat'] !== null ? (int)$f['fazla_mesai_onay_saat'] : $fmAdayM;
+        ?>
+        <label style="display:block;font-size:.8rem;margin-top:6px">
+            Onaylanan FM Saati (Hesaplanan: <?= $fmAdayM ?>)
+            <input type="number" name="overtime_approved_hours" min="0" max="<?= $fmAdayM ?>" step="1"
+                   value="<?= $fmVarsayilanM ?>" required style="max-width:100px">
+        </label>
         <?php endif; ?>
         <button class="btn btn-sm btn-primary" type="submit" style="margin-top:8px">Kaydet</button>
     </form>

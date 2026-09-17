@@ -10,12 +10,15 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('foremen');
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
+// Faz 9C / H-02: listede "Süre" sütunu yalnız Faz 8B şeması hazırsa gösterilir.
+$faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
 $q       = trim($_GET['q'] ?? '');
 $durum_f = trim($_GET['durum'] ?? '');   // '' | 'aktif' | 'pasif'
@@ -85,6 +88,7 @@ render_flash();
     <th>Kod</th>
     <th>Ad Soyad</th>
     <th>Telefon</th>
+    <?php if ($faz8bHazir): ?><th>Normal Süre</th><?php endif; ?>
     <th>Durum</th>
     <th class="actions-col">İşlem</th>
 </tr></thead>
@@ -94,6 +98,7 @@ render_flash();
     <td class="pdks-uid"><?= h($c['code']) ?></td>
     <td class="pdks-row-name"><?= h($c['name']) ?></td>
     <td class="muted"><?= h($c['phone'] ?: '—') ?></td>
+    <?php if ($faz8bHazir): ?><td class="muted"><?= h(pdks_faz8b_dakika_etiket((int)($c['normal_work_minutes'] ?? 540))) ?></td><?php endif; ?>
     <td><span class="pdks-badge <?= $c['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $c['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
     <td class="actions-col">
         <a href="cavus_form.php?id=<?= (int)$c['id'] ?>" class="btn btn-sm">Görüntüle / Düzenle</a>

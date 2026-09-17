@@ -95,12 +95,23 @@ function pdks_gunluk_tablolar(): array
     // Bilerek `users` hesabı DEĞİLDİR (kullanıcının açık talimatı): çavuşlar
     // Nuverna'ya giriş yapmaz, ticari/muhasebe tarafıdır. Faz 2+'da cari
     // hesap/hakediş kayıtları bu tabloya (foreman_id) bağlanacak.
+    //
+    // ⚠ `normal_work_minutes` (Faz 9C / H-02 kapanışı): çavuşun ANLAŞMALI
+    // normal günlük çalışma süresi, TAM DAKİKA olarak (float saat DEĞİL —
+    // 8.5 gibi belirsizlikten kaçınmak için). Sabit 08:00-17:00 vardiya
+    // modeli TAMAMEN kaldırıldı — artık yalnız GEÇEN SÜRE bu değerle
+    // karşılaştırılır (bkz. config/pdks_faz8b.php). Varsayılan 540 dk (9
+    // saat) — mevcut sistemin ESKİ sabit vardiyasıyla AYNI, hiçbir çavuş
+    // sessizce farklı bir normal süreye geçmez. Bu YENİ kurulumlar İÇİNDİR;
+    // ÜRETİMDEKİ mevcut foremen tablosuna aynı kolon pdks_faz8b_migrate()
+    // KENDİ ALTER'ıyla (AYNI DEFAULT 540 ile) ekler — bkz. o dosya.
     $t['foremen'] = "CREATE TABLE IF NOT EXISTS `foremen` (
         `id`         INT AUTO_INCREMENT PRIMARY KEY,
         `code`       VARCHAR(20)  NOT NULL,
         `name`       VARCHAR(150) NOT NULL,
         `phone`      VARCHAR(30)  NULL DEFAULT NULL,
         `notes`      TEXT         NULL DEFAULT NULL,
+        `normal_work_minutes` INT NOT NULL DEFAULT 540,
         `is_active`  TINYINT(1)   NOT NULL DEFAULT 1,
         `created_by` INT          NULL DEFAULT NULL,
         `updated_by` INT          NULL DEFAULT NULL,
@@ -208,11 +219,20 @@ function pdks_gunluk_tablolar(): array
     // değişikliklerinden ETKİLENMEZ. Şema henüz hiçbir ortama migrate/
     // deploy EDİLMEDİ (Faz 2 dalı hâlâ birleştirilmedi) — bu yüzden ALTER
     // değil, doğrudan CREATE TABLE içinde eklenmesi güvenlidir.
+    // ⚠ `normal_work_minutes_snapshot` (Faz 9C / H-02 kapanışı, madde 5 —
+    // KRİTİK tarihsel güvenlik): foreman_name_snapshot/foreman_code_snapshot
+    // İLE AYNI DESEN — oturum AÇILIRKEN çavuşun O ANKİ normal_work_minutes'ı
+    // buraya KOPYALANIR. foremen.normal_work_minutes SONRADAN değişse bile bu
+    // oturumun Tam/FM hesabı (config/pdks_faz8b.php) HER ZAMAN bu donmuş
+    // değeri kullanır — canlı çavuş ayarından ASLA yeniden hesaplanmaz.
+    // Varsayılan/backfill 540 dk — eski (Faz 9C öncesi) oturumlar için de
+    // güvenli, eski sabit 9 saatlik vardiya varsayımıyla AYNI.
     $t['daily_work_sessions'] = "CREATE TABLE IF NOT EXISTS `daily_work_sessions` (
         `id`                     INT AUTO_INCREMENT PRIMARY KEY,
         `foreman_id`             INT          NOT NULL,
         `foreman_name_snapshot`  VARCHAR(150) NOT NULL DEFAULT '',
         `foreman_code_snapshot`  VARCHAR(20)  NOT NULL DEFAULT '',
+        `normal_work_minutes_snapshot` INT    NOT NULL DEFAULT 540,
         `work_date`              DATE         NOT NULL,
         `depo`                   VARCHAR(150) NOT NULL DEFAULT '',
         `status`                 VARCHAR(20)  NOT NULL DEFAULT 'open',
@@ -313,6 +333,27 @@ function pdks_gunluk_tablo_var(PDO $pdo, string $tablo): bool
 {
     try { $pdo->query("SELECT 1 FROM `{$tablo}` LIMIT 0"); return true; }
     catch (PDOException $e) { return false; }
+}
+
+/** Bir kolon var mı? (pdks_faz8b_kolon_var() ile AYNI desen, bilerek
+ *  KOPYALANDI — Faz 9C: gunluk_isci_giris_cikis.php config/pdks_faz8b.php'yi
+ *  YÜKLEMEZ, oturum açma bu yüzden ESKİ/YENİ şema ile de güvenle çalışmalı,
+ *  ters bir bağımlılık AÇILMAZ, bkz. dosya başlığı.) */
+function pdks_gunluk_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
+{
+    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        foreach ($pdo->query("PRAGMA table_info(`{$tablo}`)")->fetchAll() as $c) {
+            if (($c['name'] ?? null) === $kolon) return true;
+        }
+        return false;
+    }
+    $st = $pdo->prepare(
+        "SELECT 1 FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1"
+    );
+    $st->execute([$tablo, $kolon]);
+    return $st->fetchColumn() !== false;
 }
 
 /**
@@ -1158,6 +1199,18 @@ function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo
     if (!$cavus) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
     if (!$cavus['is_active']) return ['ok' => false, 'kod' => 'cavus_pasif', 'hata' => 'Bu çavuş pasif — önce aktifleştirin.'];
 
+    // ⚠ Faz 9C / H-02: oturum SNAPSHOT'ı için çavuşun O ANKİ normal günlük
+    // çalışma süresini (dakika) oku — kolon henüz migrate edilmemişse
+    // (Faz 8B ALTER'ı çalışmadıysa) eski sabit varsayılana (540 dk / 9 saat)
+    // düş, hiçbir yerde HATA VERMEZ.
+    $normalDk = 540;
+    if (pdks_gunluk_kolon_var($pdo, 'foremen', 'normal_work_minutes')) {
+        $stN = $pdo->prepare("SELECT normal_work_minutes FROM foremen WHERE id = ?");
+        $stN->execute([$foremanId]);
+        $v = $stN->fetchColumn();
+        if ($v !== false && $v !== null) $normalDk = (int)$v;
+    }
+
     $tarih = date('Y-m-d');
     $depo  = function_exists('active_depot') ? (active_depot() ?? '') : '';
 
@@ -1178,13 +1231,25 @@ function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo
     // DDL'indeki gerekçe): oturum AÇILIRKEN çavuşun O ANKİ ad/kodu donar —
     // foremen.name/code SONRADAN değişse bile bu oturuma bağlı raporlar
     // GEÇMİŞTE görüneni göstermeye devam eder.
-    $ins = $pdo->prepare(
-        "INSERT INTO daily_work_sessions
-            (foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id)
-         VALUES (?,?,?,?,?,?,?,?)"
-    );
+    // ⚠ normal_work_minutes_snapshot (Faz 9C / H-02, madde 5 — KRİTİK
+    // tarihsel güvenlik): AYNI desen — oturum AÇILIRKEN donar, foremen.
+    // normal_work_minutes SONRADAN değişse bile bu oturumun Tam/FM hesabı
+    // hep bu donmuş değeri kullanır (bkz. config/pdks_faz8b.php). Kolon
+    // henüz migrate edilmemiş üretim tablolarında INSERT listesinden
+    // BİLEREK çıkarılır — DB'nin kendi DEFAULT 540'ı (kolon eklendiğinde)
+    // geçerli olur, eksik kolon için SQL HATASI verilmez.
+    $snapshotKolonVar = pdks_gunluk_kolon_var($pdo, 'daily_work_sessions', 'normal_work_minutes_snapshot');
+    $kolonlar = "foreman_id, foreman_name_snapshot, foreman_code_snapshot, work_date, depo, status, opened_at, opened_by_user_id";
+    $degerler = "?,?,?,?,?,?,?,?";
+    $parametreler = [$foremanId, (string)$cavus['name'], (string)$cavus['code'], $tarih, $depo, 'open', $simdi, $userId];
+    if ($snapshotKolonVar) {
+        $kolonlar = "foreman_id, foreman_name_snapshot, foreman_code_snapshot, normal_work_minutes_snapshot, work_date, depo, status, opened_at, opened_by_user_id";
+        $degerler = "?,?,?,?,?,?,?,?,?";
+        $parametreler = [$foremanId, (string)$cavus['name'], (string)$cavus['code'], $normalDk, $tarih, $depo, 'open', $simdi, $userId];
+    }
+    $ins = $pdo->prepare("INSERT INTO daily_work_sessions ($kolonlar) VALUES ($degerler)");
     try {
-        $ins->execute([$foremanId, (string)$cavus['name'], (string)$cavus['code'], $tarih, $depo, 'open', $simdi, $userId]);
+        $ins->execute($parametreler);
     } catch (PDOException $e) {
         // Yarış koşulu son çaresi: UNIQUE(foreman_id,work_date,depo) — iki
         // eşzamanlı istek aynı oturumu açmaya çalıştıysa burada yakalanır,

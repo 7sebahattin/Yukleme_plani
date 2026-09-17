@@ -34,19 +34,27 @@ render_header('Faz 8B Migrasyon');
 
     <div class="card" style="padding:18px 20px;margin:16px 0">
         <p>Bu migrasyon yalnız additive kolonlar ekler. Faz 8A tarama kayıtlarını değiştirmez; mevcut Tam Mesai fiyatı <code>daily_rate</code> olarak korunur.</p>
-        <!-- ⚠ Faz 9A / L-05 düzeltmesi: bu metin eskiden GERÇEK DAVRANIŞLA
-             UYUŞMUYORDU — "8s45dk ve üzeri otomatik Tam" YANLIŞTI (asıl eşik
-             tolerans penceresiyle 8s30dk'da tetiklenir, bkz. 08:15-16:45) ve
-             "9 saati aşan ilk 15 dakika" YANLIŞTI (fazla mesai fiili süreden
-             DEĞİL, SABİT 17:00 planlı bitişten ölçülür — pdks_faz8b_sure_karari()
-             DEĞİŞTİRİLMEDİ, yalnız BURADAKİ metin gerçek davranışa çekildi). -->
-        <p><strong>Kurallar:</strong> 9 saat (540 dk) normal mesai; giriş/çıkışta 15 dakika tolerans.
-            Otomatik Tam: fiili süre 540 dk ve üzeriyse, VEYA giriş 08:15 veya öncesi VE çıkış
-            16:45 veya sonrasıysa. Bu ikisinin dışındaki kısa/erken-biten dönemler muhasebe
-            Tam/Yarım kararı ister.
-            Fazla mesai HER ZAMAN planlı 17:00 bitişinden ölçülür (fiili süreden değil):
-            17:15'e kadar FM yok; 17:16–18:15 = 1 saat; 18:16–19:15 = 2 saat; sonrası aynı
-            desende artar. Her fazla mesai adayı muhasebe onayına tabidir.</p>
+        <!-- ⚠ Faz 9C / H-02 kapanışı: sabit 08:00-17:00 vardiya modeli VE
+             saat-kilidi (clock-of-day) toleransı TAMAMEN kaldırıldı —
+             pdks_faz8b_sure_karari() artık yalnız GEÇEN SÜREYİ çavuşun
+             (foremen.normal_work_minutes → oturum açılırken
+             daily_work_sessions.normal_work_minutes_snapshot'a donan)
+             ANLAŞMALI normal süresiyle karşılaştırır. Metin BURADA da gerçek
+             davranışa çekildi — Faz 9A/L-05'in "metin gerçeği yansıtmalı"
+             ilkesinin devamı. -->
+        <p><strong>Kurallar (Faz 9C):</strong> Sabit bir başlangıç/bitiş SAATİ YOKTUR — işçi
+            08:00'de de 10:00'da da başlayabilir. Her çavuşun kendi ANLAŞMALI normal günlük
+            çalışma süresi vardır (dakika olarak <code>foremen.normal_work_minutes</code>,
+            varsayılan 540 dk / 9 saat — Çavuşlar ekranından düzenlenir); bu süre KADIN/ERKEK
+            için AYNIDIR. Otomatik Tam: geçen süre bu normal süreye ULAŞTIYSA/geçtiyse. Altında
+            kalan dönemler muhasebe Tam/Yarım kararı ister.
+            Fazla mesai normal süre TAMAMLANDIKTAN SONRAKİ süreden ölçülür (planlı bir SAATTEN
+            değil): ilk 15 dk tolerans FM sayılmaz; sonrasında başlayan her saat yukarı
+            yuvarlanır (16–75 dk = 1 saat, 76–135 dk = 2 saat, ...). Her fazla mesai adayı
+            muhasebe onayına tabidir — muhasebe HESAPLANAN adayın altında bir "Onaylanan FM
+            Saati" seçebilir, üstüne çıkamaz.
+            Her mesai oturumu KENDİ açıldığı andaki normal süreyi donmuş olarak taşır — çavuşun
+            süresi sonradan değişse bile GEÇMİŞ oturumlar/kesinleşmiş hakedişler ETKİLENMEZ.</p>
         <form method="post">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <button class="btn btn-primary" type="submit">Faz 8B Migrasyonunu Çalıştır</button>

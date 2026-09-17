@@ -483,9 +483,13 @@ render_header('Şema Migrasyon');
     <h2 style="margin-top:0;">Faz 8B — Mesai Değerlendirme / Ücretlendirme</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_worker_rates</code>'a Yarım/Fazla Mesai
-      oranı kolonları, <code>daily_worker_work_periods</code>'a muhasebe onay kolonları,
+      oranı kolonları, <code>daily_worker_work_periods</code>'a muhasebe onay kolonları
+      (Faz 9C: <code>overtime_approved_hours</code> dahil),
       <code>foreman_daily_entitlements</code>'a <code>needs_recalculation</code>,
-      <code>foreman_daily_entitlement_lines</code>'a dönem/fazla-mesai kolonları ekler.
+      <code>foreman_daily_entitlement_lines</code>'a dönem/fazla-mesai kolonları,
+      Faz 9C'de ayrıca <code>foremen.normal_work_minutes</code> ve
+      <code>daily_work_sessions.normal_work_minutes_snapshot</code> (süre-tabanlı Tam/FM
+      modeli — sabit 08:00-17:00 vardiyası kaldırıldı) ekler.
       Faz 8A tarama kayıtlarını DEĞİŞTİRMEZ. <strong>Bu migrasyon çalıştırılana kadar
       hakediş, eski (toplu-fiyat) motorla güvenle hesaplanmaya devam eder</strong> —
       Çavuş Fiyatları ve Hakedişler ekranlarındaki uyarı bandı da bunu söyler.

@@ -112,7 +112,8 @@ function pdks_faz8e_manuel_cikis_kaydet(
             "UPDATE daily_worker_work_periods
                 SET status = 'closed', exit_event_id = ?, exit_time = ?,
                     approved_attendance_class = NULL, approved_by_user_id = NULL, approved_at = NULL,
-                    overtime_approved = NULL, overtime_approved_by_user_id = NULL, overtime_approved_at = NULL
+                    overtime_approved = NULL, overtime_approved_hours = NULL,
+                    overtime_approved_by_user_id = NULL, overtime_approved_at = NULL
               WHERE id = ? AND exit_time IS NULL AND exit_event_id IS NULL
                 AND status IN ('open','legacy_unresolved')"
         );

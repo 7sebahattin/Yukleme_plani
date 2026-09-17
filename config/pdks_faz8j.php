@@ -87,7 +87,10 @@ function pdks_faz8j_void(int $periodId, int $sessionId, string $depo, string $re
         if(!$p) throw new RuntimeException('Mesai dönemi seçili oturumda veya depoda bulunamadı.'); if((int)$p['is_voided']) throw new RuntimeException('Kayıt zaten iptal edilmiş.');
         if(pdks_faz8j_entitlement($pdo,$sessionId)==='final') throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
         $now=date('Y-m-d H:i:s');
-        $pdo->prepare('UPDATE daily_worker_work_periods SET is_voided=1,voided_at=?,voided_by_user_id=?,void_reason=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL,overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$now,$user,$reason,$periodId]);
+        // Faz 9C / H-02: overtime_approved_hours (OTORİTER onaylanan FM saati)
+        // AYNI satırda, eski overtime_approved bayrağıyla BİRLİKTE sıfırlanır —
+        // iptal edilen bir dönemde ESKİ bir onaylı saat değeri ASLA asılı kalmaz.
+        $pdo->prepare('UPDATE daily_worker_work_periods SET is_voided=1,voided_at=?,voided_by_user_id=?,void_reason=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL,overtime_approved_hours=NULL,overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$now,$user,$reason,$periodId]);
         $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation=1 WHERE session_id=? AND status='draft'")->execute([$sessionId]);
         pdks_faz8j_audit($pdo,$user,'puantaj_iptal',$periodId,$p,['session_id'=>$sessionId,'period_id'=>$periodId,'reason'=>$reason,'voided_at'=>$now]);
         $pdo->commit(); return ['ok'=>true];
@@ -122,7 +125,11 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
         if($exit===null) $eventId=null;
         $status=$exit!==null?'closed':((string)$p['status']==='open'&&$p['work_date']===date('Y-m-d')?'open':'legacy_unresolved');
         $old=['worker_card_id'=>$p['worker_card_id'],'card_no'=>$p['card_no'],'worker_type_id_snapshot'=>$p['worker_type_id_snapshot'],'worker_type_name_snapshot'=>$p['worker_type_name_snapshot'],'entry_time'=>$p['entry_time'],'exit_time'=>$p['exit_time'],'status'=>$p['status']];
-        $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL,overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
+        // Faz 9C / H-02: entry/exit veya işçi tipi DEĞİŞTİĞİNDE geçen süre
+        // (ve dolayısıyla Tam/FM adayı) DEĞİŞMİŞ olabilir — overtime_approved_hours
+        // eski overtime_approved bayrağıyla BİRLİKTE sıfırlanır, eski bir
+        // onaylı FM saati YENİ süreye SESSİZCE taşınmaz.
+        $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL,overtime_approved_hours=NULL,overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
         $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation=1 WHERE session_id=? AND status='draft'")->execute([$sid]);
         pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user]);
         $pdo->commit(); return ['ok'=>true];

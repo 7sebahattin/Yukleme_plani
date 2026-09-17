@@ -13,6 +13,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('foremen');
@@ -20,6 +21,10 @@ require_pdks_gunluk('foremen');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $id  = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+// Faz 9C / H-02: "Normal Günlük Çalışma Süresi" alanı yalnız Faz 8B şeması
+// migrate edildiyse gösterilir/kaydedilir — migrate edilmemiş bir üretimde
+// eksik kolona YAZMAYA ÇALIŞMAZ (bkz. config/pdks_faz8b.php).
+$faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
 $record = ['code' => '', 'name' => '', 'phone' => '', 'notes' => '', 'is_active' => 1];
 if ($id > 0) {
@@ -56,7 +61,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : pdks_gunluk_cavus_olustur($veri, (int)$auth_user['id'], $pdo);
 
         if ($sonuc['ok']) {
-            header('Location: cavus_form.php?id=' . (int)$sonuc['id'] . '&ok=' . urlencode('Çavuş kaydedildi.'));
+            $kayitId = ($id > 0) ? $id : (int)$sonuc['id'];
+            // Faz 9C / H-02: normal çalışma süresi OLUŞTURMA ve DÜZENLEME'de
+            // AYNI formdadır — yeni bir çavuş 8h/9h/10h olarak DOĞRUDAN
+            // kurulabilir, her seferinde ikinci bir düzenleme adımına
+            // ZORLANMAZ. Şema henüz migrate edilmediyse (fail-safe) alan hiç
+            // GÖSTERİLMEZ/POST edilmez — DB'nin kendi DEFAULT'u (540) geçerli
+            // olur, hiçbir yerde HATA verilmez.
+            $sureHata = null;
+            if ($faz8bHazir) {
+                $saatHam = str_replace(',', '.', trim((string)($_POST['saat'] ?? '')));
+                $saat = is_numeric($saatHam) ? (float)$saatHam : null;
+                if ($saat !== null && $saat > 0) {
+                    $dakika = (int)round($saat * 60);
+                    $sureSonuc = pdks_faz8b_cavus_normal_sure_guncelle($kayitId, $dakika, (int)$auth_user['id'], $pdo);
+                    if (!$sureSonuc['ok']) $sureHata = $sureSonuc['hata'] ?? 'Normal çalışma süresi kaydedilemedi.';
+                }
+            }
+            if ($sureHata === null) {
+                header('Location: cavus_form.php?id=' . $kayitId . '&ok=' . urlencode('Çavuş kaydedildi.'));
+                exit;
+            }
+            // Çavuş kaydı BAŞARILI oldu, yalnız süre aralık dışıydı (1-24
+            // saat) — kullanıcı artık DÜZENLEME modundaki forma dönüp
+            // yalnız süreyi düzeltebilir, kayıt kaybolmaz.
+            header('Location: cavus_form.php?id=' . $kayitId . '&sure_hata=' . urlencode($sureHata));
             exit;
         }
         $errors = $sonuc['hatalar'] ?? [$sonuc['hata'] ?? 'Kaydedilemedi.'];
@@ -71,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = $sonuc['hata'] ?? 'İşlem yapılamadı.';
     }
 }
+if (isset($_GET['sure_hata'])) $errors[] = trim((string)$_GET['sure_hata']);
 
 $basari = '';
 if (empty($errors) && isset($_GET['ok'])) $basari = trim($_GET['ok']);
@@ -120,7 +150,29 @@ render_flash();
             <span class="form-label">Notlar</span>
             <textarea name="notes" rows="3" maxlength="2000"><?= h((string)($record['notes'] ?? '')) ?></textarea>
         </label>
+        <?php if ($faz8bHazir):
+            // Faz 9C / H-02: OLUŞTURMA'da da DÜZENLEME'de de AYNI alan —
+            // yeni çavuş 8h/9h/10h olarak TEK adımda kurulabilir. DB
+            // DEFAULT'u (540/9 saat) yalnız GÜVENLİK AĞIDIR, zorunlu ilk
+            // değer değil (mevcut kayıtta GERÇEK canlı değer gösterilir).
+            $normalDkGosterim = $id > 0 ? pdks_faz8b_cavus_normal_sure_dk($id, $pdo) : 540;
+        ?>
+        <label>
+            <span class="form-label">Normal Günlük Çalışma Süresi (saat)</span>
+            <input type="number" name="saat" min="1" max="24" step="0.25"
+                   value="<?= h((string)round($normalDkGosterim / 60, 2)) ?>">
+        </label>
+        <?php endif; ?>
     </div>
+    <?php if ($faz8bHazir): ?>
+    <p class="muted" style="font-size:.8rem;margin-top:8px">
+        Sabit bir 08:00–17:00 vardiyası YOKTUR — işçi istediği saatte başlayabilir. Önemli olan,
+        geçen sürenin bu ÇAVUŞA ait anlaşmalı normal süreyi tamamlamasıdır; tamamlanınca otomatik
+        Tam Mesai sayılır, sonrası (15 dk tolerans sonrası) fazla mesaidir. KADIN/ERKEK aynı
+        çavuşta AYNI süreyi kullanır. Bu değeri değiştirmek YALNIZ BUNDAN SONRA açılacak
+        oturumları etkiler — geçmiş mesailer ve kesinleşmiş hakedişler donmuş kendi süreleriyle kalır.
+    </p>
+    <?php endif; ?>
 
     <button type="submit" class="btn btn-primary" style="margin-top:14px"><?= $id > 0 ? 'Kaydet' : 'Çavuşu Oluştur' ?></button>
 </form>
