@@ -264,6 +264,10 @@ $helpersBeklenenEskiSatirlar = [
     // güncellemesi (pdks_faz1b_static_smoke.php'nin AYNI turda eklediği
     // satırın eşi).
     "-    define('APP_SURUM', 'v227');",
+    // Faz 9B (v229): v228'den v229'a — AYNI rutin tek satırlık sürüm damgası
+    // güncellemesi (pdks_faz1b_static_smoke.php'nin AYNI turda eklediği
+    // satırın eşi).
+    "-    define('APP_SURUM', 'v228');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
