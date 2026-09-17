@@ -9,6 +9,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_faz8h.php';
+require_once __DIR__ . '/config/pdks_faz8j.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
@@ -33,6 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yenid
 }
 
 $aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal'], true)) {
+    csrf_check($_POST['csrf'] ?? null);
+    if (($_POST['action'] ?? '') === 'puantaj_iptal') {
+        $sonuc = pdks_faz8j_void((int)($_POST['period_id'] ?? 0), (int)$id, $aktifDepo, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
+    } else {
+        $sonuc = pdks_faz8j_duzelt($_POST + ['session_id' => $id, 'depo' => $aktifDepo], (int)$auth_user['id'], $pdo);
+    }
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? 'Puantaj kaydı güncellendi.' : $sonuc['hata']);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id); exit;
+}
+
 $yenidenAcGoster = function_exists('is_admin') && is_admin()
     && $oturum['status'] === 'closed'
     && $oturum['work_date'] === date('Y-m-d')
@@ -52,6 +64,14 @@ if ($yenidenAcGoster) {
 $ozet   = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum  = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);
 $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
+$faz8jHazir = function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo);
+$iptaller = [];
+if ($faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo) {
+    $stVoid = $pdo->prepare("SELECT p.*, w.card_no, u.display_name FROM daily_worker_work_periods p JOIN worker_cards w ON w.id=p.worker_card_id LEFT JOIN users u ON u.id=p.voided_by_user_id WHERE p.session_id=? AND p.is_voided=1 ORDER BY p.voided_at DESC");
+    $stVoid->execute([$id]); $iptaller = $stVoid->fetchAll();
+}
+$duzeltmeKartlar = $faz8jHazir && is_admin() ? $pdo->query("SELECT id, card_no FROM worker_cards WHERE status <> 'disabled' ORDER BY card_no")->fetchAll() : [];
+$duzeltmeTipler = $faz8jHazir && is_admin() ? pdks_gunluk_tip_listele(true, $pdo) : [];
 
 render_header('Mesai Detayı');
 $base = base_url();
@@ -133,6 +153,8 @@ render_flash();
 
 <h2 style="font-size:1.05rem">Kart Hareketleri</h2>
 
+<?php if (is_admin() && !$faz8jHazir): ?><div class="flash flash-error">Puantaj düzeltme merkezi için Faz 8J migrasyonu henüz çalıştırılmadı.</div><?php endif; ?>
+
 <?php if (empty($kartlar)): ?>
 <div class="pdks-empty">
     <span class="pdks-empty-icon" aria-hidden="true">🪪</span>
@@ -150,6 +172,7 @@ render_flash();
     <th>Çıkış Saati</th>
     <th>Süre</th>
     <th>Durum</th>
+    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><th>İşlem</th><?php endif; ?>
 </tr></thead>
 <tbody>
 <?php foreach ($kartlar as $k): ?>
@@ -161,6 +184,7 @@ render_flash();
     <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
     <td class="muted"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
+    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><td><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></td><?php endif; ?>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -177,10 +201,18 @@ render_flash();
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
     </div>
+    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
 
 <?php endif; ?>
+
+<?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): foreach ($kartlar as $k): ?>
+<dialog id="edit<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Çalışma Dönemini Düzenle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_duzeltme"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><div class="pdks-form-grid"><label><span class="form-label">Kart</span><select name="worker_card_id"><?php foreach($duzeltmeKartlar as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===(int)$k['worker_card_id']?'selected':'' ?>><?=h($c['card_no'])?></option><?php endforeach;?></select></label><label><span class="form-label">İşçi tipi</span><select name="worker_type_id"><?php foreach($duzeltmeTipler as $t):?><option value="<?= (int)$t['id'] ?>" <?= (int)$t['id']===(int)$k['worker_type_id_snapshot']?'selected':'' ?>><?=h($t['name'])?></option><?php endforeach;?></select></label><label><span class="form-label">Giriş</span><input name="entry_date" type="date" value="<?=h(substr($k['giris_saat'],0,10))?>"><input name="entry_clock" type="time" value="<?=h(substr($k['giris_saat'],11,5))?>"></label><label><span class="form-label">Çıkış</span><input name="exit_date" type="date" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],0,10):'')?>"><input name="exit_clock" type="time" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],11,5):'')?>"></label><label class="span-2"><span class="form-label">Düzeltme nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label></div><div class="isk-card-form-actions"><button class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
+<dialog id="void<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Kaydı İptal Et</h2></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_iptal"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><p><?=h($k['card_no'])?> kartının <?=h($k['giris_saat'])?>–<?=h($k['cikis_saat']?:'çıkış yok')?> çalışma kaydı puantajdan çıkarılacaktır. Ham kart okutma geçmişi silinmeyecektir.</p><label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><div class="isk-card-form-actions"><button class="btn btn-danger">Kaydı İptal Et</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
+<?php endforeach; endif; ?>
+
+<?php if ($iptaller): ?><h2>İptal Edilen Kayıtlar</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Kart No</th><th>Tip</th><th>Giriş</th><th>Çıkış</th><th>İptal nedeni</th><th>İptal eden</th><th>İptal zamanı</th></tr></thead><tbody><?php foreach($iptaller as $v): ?><tr><td><?=h($v['card_no'])?></td><td><?=h($v['worker_type_name_snapshot'])?></td><td><?=h($v['entry_time'])?></td><td><?=h($v['exit_time']?:'—')?></td><td><?=h($v['void_reason'])?></td><td><?=h($v['display_name']?:'—')?></td><td><?=h($v['voided_at'])?></td></tr><?php endforeach;?></tbody></table></div><?php endif; ?>
 
 <?php render_footer(); ?>

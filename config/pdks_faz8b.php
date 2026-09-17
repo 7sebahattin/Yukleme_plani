@@ -271,7 +271,7 @@ function pdks_faz8b_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
         "SELECT p.*, w.card_no
            FROM daily_worker_work_periods p
            JOIN worker_cards w ON w.id = p.worker_card_id
-          WHERE p.session_id = ?
+          WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
           ORDER BY p.entry_time ASC, p.id ASC"
     );
     $st->execute([$sessionId]);
@@ -319,7 +319,7 @@ function pdks_faz8b_degerlendirme_kaydet(
         return ['ok' => false, 'hata' => 'Faz 8B şeması hazır değil.'];
     }
 
-    $st = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE id = ?");
+    $st = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo));
     $st->execute([$periodId]);
     $p = $st->fetch();
     if (!$p) return ['ok' => false, 'hata' => 'Mesai dönemi bulunamadı.'];

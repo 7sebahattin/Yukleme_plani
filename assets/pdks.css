@@ -107,6 +107,8 @@
     display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;
 }
 .pdks-form-grid .span-2 { grid-column: 1 / -1; }
+.pdks-kiosk-typebtn-kadin { background:#ec4899; border-color:#ec4899; color:#fff; }
+.pdks-kiosk-typebtn-kadin:hover, .pdks-kiosk-typebtn-kadin:focus { background:#db2777; border-color:#db2777; color:#fff; }
 /* Kart Havuzu düzenleme modalı — içerik, uzun yerel metinler dahil,
    diyalogun güvenli iç genişliğini büyütemez. */
 .isk-card-modal {

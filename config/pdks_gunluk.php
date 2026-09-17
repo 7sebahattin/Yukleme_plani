@@ -1987,6 +1987,24 @@ function pdks_gunluk_faz8a_sema_hazir(?PDO $pdo = null): bool
     return true;
 }
 
+/** Faz 8J kolonu henüz migrate edilmemiş üretimde eski okuyucular çalışmaya devam eder. */
+function pdks_gunluk_faz8j_etkin_kosul(PDO $pdo, string $alias = ''): string
+{
+    if (!pdks_gunluk_faz8j_kolon_var($pdo, 'daily_worker_work_periods', 'is_voided')) return '1=1';
+    return ($alias !== '' ? $alias . '.' : '') . 'is_voided = 0';
+}
+function pdks_gunluk_faz8j_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
+{
+    try {
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+            foreach ($pdo->query('PRAGMA table_info(' . $tablo . ')')->fetchAll() as $c) if (($c['name'] ?? '') === $kolon) return true;
+            return false;
+        }
+        $s = $pdo->prepare('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
+        $s->execute([$tablo, $kolon]); return (bool)$s->fetchColumn();
+    } catch (Throwable $e) { return false; }
+}
+
 /**
  * Faz 8A migrasyonu — dört ADDITIVE/kontrollü adım, tek çağrıda, bu SIRAYLA:
  *   1) daily_worker_work_periods tablosunu oluştur
@@ -2296,7 +2314,7 @@ function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
            FROM daily_worker_work_periods p
            JOIN daily_work_sessions s ON s.id = p.session_id
            JOIN foremen f ON f.id = s.foreman_id
-          WHERE p.worker_card_id = ? AND p.status = 'open'
+          WHERE p.worker_card_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . " AND p.status = 'open'
           LIMIT 1"
     );
     $st->execute([$workerCardId]);
@@ -2504,7 +2522,7 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         // ⚠ PRE-MERGE DÜZELTMESİ: 'source' filtresi KALDIRILDI. status='open' artık
         // TEK BAŞINA otoriter sinyaldir (legacy backfill 'legacy_unresolved' yazar,
         // asla 'open' yazmaz) — bkz. pdks_gunluk_faz8a_kart_acik_donemi().
-        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' LIMIT 1");
+        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " LIMIT 1");
         $st2->execute([$kart['id']]);
         $acik = $st2->fetch() ?: null;   // ⚠ PDO::fetch() satır yoksa false döner, null DEĞİL.
         if ($acik === null) {
@@ -2592,13 +2610,14 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
 function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo);
 
     $giris = []; $cikis = [];
-    $stG = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND source='scan' GROUP BY worker_type_name_snapshot");
+    $stG = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan' GROUP BY worker_type_name_snapshot");
     $stG->execute([$sessionId]);
     foreach ($stG->fetchAll() as $r) $giris[$r['tip']] = (int)$r['n'];
 
-    $stC = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND source='scan' AND exit_event_id IS NOT NULL GROUP BY worker_type_name_snapshot");
+    $stC = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan' AND exit_event_id IS NOT NULL GROUP BY worker_type_name_snapshot");
     $stC->execute([$sessionId]);
     foreach ($stC->fetchAll() as $r) $cikis[$r['tip']] = (int)$r['n'];
 
@@ -2612,7 +2631,7 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     $stE = $pdo->prepare(
         "SELECT p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip, p.entry_time AS giris_zamani
            FROM daily_worker_work_periods p JOIN worker_cards w ON w.id = p.worker_card_id
-          WHERE p.session_id = ? AND p.status = 'open'
+          WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . " AND p.status = 'open'
           ORDER BY p.entry_time ASC"
     );
     $stE->execute([$sessionId]);
@@ -2620,7 +2639,7 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     $eksikTip = [];
     foreach ($eksikKartlar as $ek) $eksikTip[$ek['tip']] = ($eksikTip[$ek['tip']] ?? 0) + 1;
 
-    $stZ = $pdo->prepare("SELECT MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id = ? AND source='scan'");
+    $stZ = $pdo->prepare("SELECT MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan'");
     $stZ->execute([$sessionId]);
     $zamanlar = $stZ->fetch() ?: ['ilk_giris' => null, 'son_cikis' => null];
 
@@ -2641,12 +2660,15 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
 function pdks_gunluk_faz8a_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    $faz8bAlanlar = pdks_gunluk_faz8j_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved')
+        ? 'p.approved_attendance_class, p.overtime_approved,' : 'NULL AS approved_attendance_class, NULL AS overtime_approved,';
     $st = $pdo->prepare(
-        "SELECT p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip,
+        "SELECT p.id AS period_id, p.worker_card_id, p.worker_type_id_snapshot, w.card_no, p.worker_type_name_snapshot AS tip,
                 p.entry_time AS giris_saat, p.exit_time AS cikis_saat,
-                p.declared_attendance_class AS mesai_sinifi, p.status AS durum_kod, p.source AS kaynak
+                p.declared_attendance_class AS mesai_sinifi, $faz8bAlanlar
+                p.status AS durum_kod, p.source AS kaynak
            FROM daily_worker_work_periods p JOIN worker_cards w ON w.id = p.worker_card_id
-          WHERE p.session_id = ?
+          WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
           ORDER BY p.entry_time ASC"
     );
     $st->execute([$sessionId]);
@@ -2676,7 +2698,7 @@ function pdks_gunluk_faz8a_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null):
     $pdo = $pdo ?? db();
     $st = $pdo->prepare(
         "SELECT worker_type_id_snapshot AS tip_id, worker_type_name_snapshot AS tip_ad, COUNT(*) AS n
-           FROM daily_worker_work_periods WHERE session_id = ?
+           FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . "
           GROUP BY worker_type_id_snapshot, worker_type_name_snapshot"
     );
     $st->execute([$sessionId]);
@@ -2687,7 +2709,7 @@ function pdks_gunluk_faz8a_oturum_kart_sayimi(int $sessionId, ?PDO $pdo = null):
 function pdks_gunluk_faz8a_gun_ozeti(string $workDate, ?string $depo = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $whereEv = 'work_date_snapshot = ?'; $parEv = [$workDate];
+    $whereEv = 'work_date_snapshot = ? AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo); $parEv = [$workDate];
     if ($depo !== null) { $whereEv .= ' AND depo_snapshot = ?'; $parEv[] = $depo; }
 
     $stTip = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE $whereEv GROUP BY worker_type_name_snapshot");
@@ -2730,17 +2752,18 @@ function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?
     $ids = array_map(fn($o) => (int)$o['id'], $oturumlar);
     $ph  = implode(',', array_fill(0, count($ids), '?'));
 
-    $stEv = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) GROUP BY session_id, worker_type_name_snapshot");
+    $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo);
+    $stEv = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND $etkin GROUP BY session_id, worker_type_name_snapshot");
     $stEv->execute($ids);
     $girisBySession = [];
     foreach ($stEv->fetchAll() as $r) $girisBySession[(int)$r['session_id']][$r['tip']] = (int)$r['n'];
 
-    $stCk = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND exit_event_id IS NOT NULL GROUP BY session_id, worker_type_name_snapshot");
+    $stCk = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND $etkin AND exit_event_id IS NOT NULL GROUP BY session_id, worker_type_name_snapshot");
     $stCk->execute($ids);
     $cikisBySession = [];
     foreach ($stCk->fetchAll() as $r) $cikisBySession[(int)$r['session_id']][$r['tip']] = (int)$r['n'];
 
-    $stZ = $pdo->prepare("SELECT session_id, MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id IN ($ph) GROUP BY session_id");
+    $stZ = $pdo->prepare("SELECT session_id, MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id IN ($ph) AND $etkin GROUP BY session_id");
     $stZ->execute($ids);
     $zBySession = [];
     foreach ($stZ->fetchAll() as $r) $zBySession[(int)$r['session_id']] = $r;
@@ -2750,7 +2773,7 @@ function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?
     // edilir ki geçmiş bir günün listesi "Eksik Çıkış" durumunu göstermeye
     // devam etsin. Kilit/blokaj kontrolleri (kart_acik_donemi vb.) bunun
     // AKSİNE yalnız status='open' kullanır — iki sorgu KASITLI FARKLI.
-    $stEk = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND status IN ('open','legacy_unresolved') GROUP BY session_id");
+    $stEk = $pdo->prepare("SELECT session_id, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id IN ($ph) AND $etkin AND status IN ('open','legacy_unresolved') GROUP BY session_id");
     $stEk->execute($ids);
     $ekBySession = [];
     foreach ($stEk->fetchAll() as $r) $ekBySession[(int)$r['session_id']] = (int)$r['n'];
@@ -2788,7 +2811,7 @@ function pdks_gunluk_faz8a_gun_listesi(string $workDate, ?string $depo = null, ?
 function pdks_gunluk_faz8a_eksik_cikislar(string $workDate, ?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $where = ['p.work_date_snapshot = ?', "p.status IN ('open','legacy_unresolved')"]; $params = [$workDate];
+    $where = ['p.work_date_snapshot = ?', pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'), "p.status IN ('open','legacy_unresolved')"]; $params = [$workDate];
     if ($depo !== null && $depo !== '') { $where[] = 'p.depo_snapshot = ?'; $params[] = $depo; }
     if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
     $st = $pdo->prepare(

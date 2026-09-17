@@ -463,7 +463,7 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
     // bkz. pdks_gunluk_faz8a_backfill()) oturumlar bu kapıdan ETKİLENMEZ,
     // COUNT tabanlı fiyatlama AYNEN çalışmaya devam eder.
     if (function_exists('pdks_gunluk_faz8a_sema_hazir') && pdks_gunluk_faz8a_sema_hazir($pdo)) {
-        $stYarim = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND declared_attendance_class <> 'tam'");
+        $stYarim = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND declared_attendance_class <> 'tam'");
         $stYarim->execute([$sessionId]);
         if ((int)$stYarim->fetchColumn() > 0) {
             return ['ok' => false, 'kod' => 'faz8a_degerlendirme_gerekli',

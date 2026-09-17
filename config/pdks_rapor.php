@@ -330,7 +330,7 @@ function pdks_rapor_operasyonel_kpi(string $start, string $end, ?string $depo, ?
 function pdks_rapor_faz8a_operasyonel_kpi(string $start, string $end, ?string $depo, ?int $foremanId, ?int $workerTypeId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $where = ['p.work_date_snapshot BETWEEN ? AND ?']; $params = [$start, $end];
+    $where = ['p.work_date_snapshot BETWEEN ? AND ?', pdks_gunluk_faz8j_etkin_kosul($pdo, 'p')]; $params = [$start, $end];
     $join = ' JOIN daily_work_sessions s ON s.id = p.session_id';
     if ($depo !== null && $depo !== '') { $where[] = 'p.depo_snapshot = ?'; $params[] = $depo; }
     if ($workerTypeId !== null) { $where[] = 'p.worker_type_id_snapshot = ?'; $params[] = $workerTypeId; }
@@ -370,7 +370,7 @@ function pdks_rapor_faz8a_operasyonel_kpi(string $start, string $end, ?string $d
     $whereTam = $where;
     $whereTam[] = "s.status = 'closed'";
     $whereTam[] = "NOT EXISTS (SELECT 1 FROM daily_worker_work_periods q
-        WHERE q.session_id = s.id AND q.exit_time IS NULL
+        WHERE q.session_id = s.id AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'q') . " AND q.exit_time IS NULL
           AND q.status IN ('open','legacy_unresolved')" .
           ($workerTypeId !== null ? ' AND q.worker_type_id_snapshot = ?' : '') . ')';
     $parTam = $params;
@@ -613,7 +613,7 @@ function pdks_rapor_gunluk_trend(string $start, string $end, ?string $depo, ?int
     // bu YANLIŞTI. Eksik çıkış kapalı oturumdaki çıkışsız açık dönem veya
     // tarihsel legacy_unresolved dönemdir.
     if (pdks_gunluk_faz8a_sema_hazir($pdo)) {
-        $whereP = ['p.work_date_snapshot BETWEEN ? AND ?']; $parP = [$start, $end];
+        $whereP = ['p.work_date_snapshot BETWEEN ? AND ?', pdks_gunluk_faz8j_etkin_kosul($pdo, 'p')]; $parP = [$start, $end];
         $joinP = ' JOIN daily_work_sessions s ON s.id = p.session_id';
         if ($depo !== null && $depo !== '') { $whereP[] = 'p.depo_snapshot = ?'; $parP[] = $depo; }
         if ($workerTypeId !== null) { $whereP[] = 'p.worker_type_id_snapshot = ?'; $parP[] = $workerTypeId; }
@@ -745,7 +745,7 @@ function pdks_rapor_cavus_ozeti(string $start, string $end, ?string $depo, ?int 
     if ($foremanId !== null) { $whereS[] = 'foreman_id = ?'; $parS[] = $foremanId; }
     if ($workerTypeId !== null) {
         $whereS[] = $faz8a
-            ? 'EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.session_id = daily_work_sessions.id AND p.worker_type_id_snapshot = ?)'
+            ? 'EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.session_id = daily_work_sessions.id AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . ' AND p.worker_type_id_snapshot = ?)'
             : "EXISTS (SELECT 1 FROM daily_worker_card_events g WHERE g.session_id = daily_work_sessions.id AND g.event_type = 'GIRIS' AND g.worker_type_id_snapshot = ?)";
         $parS[] = $workerTypeId;
     }
@@ -770,7 +770,7 @@ function pdks_rapor_cavus_ozeti(string $start, string $end, ?string $depo, ?int 
     // çavuşta kullanıldıysa İKİ katılım. Eski DISTINCT kart×gün deseni bunu
     // BİR sayardı (Faz 8A'nın same-day reuse'uyla artık YANLIŞ).
     if ($faz8a) {
-        $whereP = ["session_id IN ($ph)"]; $parP = $sessionIds;
+        $whereP = ["session_id IN ($ph)", pdks_gunluk_faz8j_etkin_kosul($pdo)]; $parP = $sessionIds;
         if ($workerTypeId !== null) { $whereP[] = 'worker_type_id_snapshot = ?'; $parP[] = $workerTypeId; }
         $stP = $pdo->prepare("SELECT session_id, worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE " . implode(' AND ', $whereP) . " GROUP BY session_id, worker_type_name_snapshot");
         $stP->execute($parP);
@@ -781,7 +781,7 @@ function pdks_rapor_cavus_ozeti(string $start, string $end, ?string $depo, ?int 
             $toplamIsci[$fid] = ($toplamIsci[$fid] ?? 0) + (int)$r['n'];
             $tipKirilimi[$fid][$r['tip']] = ($tipKirilimi[$fid][$r['tip']] ?? 0) + (int)$r['n'];
         }
-        $whereEkP = ["p.session_id IN ($ph)", "(p.status = 'legacy_unresolved' OR (s.status = 'closed' AND p.status = 'open'))", 'p.exit_time IS NULL'];
+        $whereEkP = ["p.session_id IN ($ph)", pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'), "(p.status = 'legacy_unresolved' OR (s.status = 'closed' AND p.status = 'open'))", 'p.exit_time IS NULL'];
         $parEkP = $sessionIds;
         if ($workerTypeId !== null) { $whereEkP[] = 'p.worker_type_id_snapshot = ?'; $parEkP[] = $workerTypeId; }
         $stEksikP = $pdo->prepare("SELECT p.session_id, COUNT(*) AS n FROM daily_worker_work_periods p JOIN daily_work_sessions s ON s.id = p.session_id WHERE " . implode(' AND ', $whereEkP) . " GROUP BY p.session_id");
@@ -976,6 +976,7 @@ function pdks_rapor_istisna_satirlari(string $start, string $end, ?string $depo,
     if (pdks_gunluk_faz8a_sema_hazir($pdo)) {
         $where = [
             'p.work_date_snapshot BETWEEN ? AND ?',
+            pdks_gunluk_faz8j_etkin_kosul($pdo, 'p'),
             $oturumDurumu === 'open'
                 ? "s.status = 'open' AND p.status = 'open'"
                 : "(p.status = 'legacy_unresolved' OR (s.status = 'closed' AND p.status = 'open'))",
@@ -1199,7 +1200,7 @@ function pdks_rapor_cavus_toplu_dokum(
             ) AS eksik_cikis
          FROM daily_work_sessions s
          LEFT JOIN daily_worker_work_periods p
-                ON p.session_id = s.id
+                ON p.session_id = s.id AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
         WHERE " . implode(' AND ', $where) . "
         GROUP BY
             s.id,
@@ -1322,7 +1323,7 @@ function pdks_rapor_cavus_kart_dokumu(
          FROM daily_worker_work_periods p
          JOIN worker_cards w ON w.id = p.worker_card_id
          $exitJoin
-        WHERE p.session_id = ?
+        WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
         ORDER BY p.entry_time ASC, p.id ASC"
     );
     $st->execute([$sessionId]);

@@ -29,6 +29,7 @@ require_once __DIR__ . '/config/pdks_hakedis.php';
 // BURADAN elle tetiklenir. Faz 1-4 tablolarına DOKUNMAZ — yalnız KENDİ
 // tek yeni tablosunu (foreman_payments) additive olarak ekler.
 require_once __DIR__ . '/config/pdks_cari.php';
+require_once __DIR__ . '/config/pdks_faz8j.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -83,6 +84,7 @@ $pdks_cari_ran     = false;
 
 $pdks_faz8a_results = [];   // Faz 8A (nötr kart / mesai dönemi) migrasyonu sonucu
 $pdks_faz8a_ran     = false;
+$pdks_faz8j_results = []; $pdks_faz8j_ran = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -134,6 +136,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
                 ['operation' => $pr['adim'], 'durum' => $pr['durum'], 'mesaj' => $pr['mesaj']]);
         }
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk_faz8j') {
+    csrf_check($_POST['csrf'] ?? null); $pdks_faz8j_ran = true; $pdks_faz8j_results = pdks_faz8j_migrate($pdo);
+    foreach ($pdks_faz8j_results as $pr) audit_log_event('migrate','pdks_gunluk_faz8j',null,null,['operation'=>$pr['adim'],'durum'=>$pr['durum']]);
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $ran = true;
@@ -273,6 +278,13 @@ render_header('Şema Migrasyon');
         echo h(pdks_users_fk_sql()) . ";\n";
       ?></pre>
     </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Faz 8J — Puantaj Düzeltme / İptal</h2>
+    <p>Yalnız ekleyici migrasyon: çalışma dönemlerine iptal metadatası ekler; ham NFC/USB olaylarını değiştirmez veya silmez.</p>
+    <p><strong><?= pdks_faz8j_sema_hazir($pdo) ? '✓ Hazır' : '✗ Henüz çalıştırılmadı' ?></strong><?php if ($pdks_faz8j_ran): foreach($pdks_faz8j_results as $r): ?><br><?=h($r['adim'])?>: <?=h($r['durum'])?><?php endforeach; endif; ?></p>
+    <form method="post"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="ne" value="pdks_gunluk_faz8j"><button class="btn btn-primary">Faz 8J Migrasyonunu Çalıştır</button></form>
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">
