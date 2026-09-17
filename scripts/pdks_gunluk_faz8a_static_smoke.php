@@ -31,6 +31,8 @@ $hakedisSrc = oku('config/pdks_hakedis.php');
 $giSrc = oku('gunluk_isci_giris_cikis.php');
 $migrateSrc = oku('migrate.php');
 $raporSrc = oku('config/pdks_rapor.php');
+$kartSrc = oku('isci_kartlari.php');
+$pdksCss = oku('assets/pdks.css');
 
 echo "\n=== 1. SÖZ DİZİMİ ===\n";
 foreach (['config/pdks_gunluk.php', 'config/pdks_hakedis.php', 'gunluk_isci_giris_cikis.php',
@@ -40,6 +42,33 @@ foreach (['config/pdks_gunluk.php', 'config/pdks_hakedis.php', 'gunluk_isci_giri
     exec('php -l ' . escapeshellarg($KOK . '/' . $f) . ' 2>&1', $cikti, $rc);
     ok("$f: php -l geçiyor", $rc === 0, implode("\n", $cikti));
 }
+
+echo "\n=== 1B. KART HAVUZU DÜZENLEME MODALI — TAŞMA GÜVENLİĞİ ===\n";
+ok('Modal viewport güvenli genişlik ve min-width:0 kullanıyor',
+    str_contains($pdksCss, 'width: min(520px, calc(100vw - 32px));')
+    && str_contains($pdksCss, 'max-width: calc(100vw - 32px);')
+    && str_contains($pdksCss, '.isk-card-modal {'));
+ok('Modal gövdesi güvenli iç boşluk, min-width:0 ve dikey kaydırma kullanıyor',
+    str_contains($pdksCss, '.isk-card-modal-body {')
+    && str_contains($pdksCss, 'min-width: 0;')
+    && str_contains($pdksCss, 'overflow-y: auto;')
+    && str_contains($pdksCss, 'padding: 16px 20px;'));
+ok('Form grid sütunları minmax(0, 1fr), grid çocukları min-width:0 ve kontroller width-safe',
+    str_contains($pdksCss, 'grid-template-columns: repeat(2, minmax(0, 1fr));')
+    && str_contains($pdksCss, '.isk-card-modal .pdks-form-grid > label {')
+    && str_contains($pdksCss, '.isk-card-modal .pdks-form-grid input,')
+    && str_contains($pdksCss, 'max-width: 100%;'));
+ok('Durum aksiyonları sabit üç sütun yerine auto-fit ile yeniden akar; formlar ve butonlar taşma-korumalıdır',
+    str_contains($pdksCss, 'repeat(auto-fit, minmax(min(100%, 152px), 1fr))')
+    && str_contains($pdksCss, '.isk-card-status-actions form {')
+    && str_contains($pdksCss, '.isk-card-status-actions .btn {'));
+ok('Mobilde form ve durum aksiyonları güvenli tek sütuna iner',
+    str_contains($pdksCss, 'grid-template-columns: minmax(0, 1fr);')
+    && str_contains($pdksCss, '.isk-card-modal .pdks-form-grid .span-2 { grid-column: 1; }'));
+ok('Kart modalı içeriği güvenli gövde ve aksiyon sınıflarıyla render edilir',
+    str_contains($kartSrc, 'class="isk-card-modal-body"')
+    && str_contains($kartSrc, 'class="isk-card-form-actions"')
+    && str_contains($kartSrc, 'class="isk-card-status-actions"'));
 
 echo "\n=== 2. WEB NFC / USB YAŞAM DÖNGÜSÜ — MUTLAK REGRESYON KURALI (görev talimatı §13) ===\n";
 ok('config/pdks.php: pdks_nfc_oku_js() / PdksNfcOku hiç değişmedi (diff BOŞ)',

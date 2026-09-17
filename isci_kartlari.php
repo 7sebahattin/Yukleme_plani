@@ -306,51 +306,53 @@ if ($basari !== ''): ?>
         <h2 class="pm-title">Kartı Düzenle</h2>
         <button type="button" class="pm-close" onclick="pdksCloseModal('iskKartModal')">✕</button>
     </div>
-    <form method="post">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="action" value="kart_duzenle">
-        <input type="hidden" name="card_id" id="iskCardId">
-        <div class="pdks-form-grid">
-            <label>
-                <span class="form-label">Kart No *</span>
-                <input type="text" name="card_no" id="iskCardNo" maxlength="30" required>
-            </label>
-            <label>
-                <span class="form-label">Tip (eski/kalıcı — Faz 8A'da kullanılmaz)</span>
-                <select name="worker_type_id" id="iskWorkerTypeId">
-                    <option value="0" <?= !$faz8aHazir ? 'disabled' : '' ?>>— (nötr, tip yok) —</option>
-                    <?php foreach ($tipler as $t): ?>
-                    <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <?php if (!$faz8aHazir): ?>
-                <small class="muted">Nötr seçenek, Faz 8A migrasyonu tamamlandıktan sonra kullanılabilir.</small>
-                <?php endif; ?>
-            </label>
-            <label class="span-2">
-                <span class="form-label">Not</span>
-                <input type="text" name="notes" id="iskNotes" maxlength="200">
-            </label>
+    <div class="isk-card-modal-body">
+        <form method="post">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="kart_duzenle">
+            <input type="hidden" name="card_id" id="iskCardId">
+            <div class="pdks-form-grid">
+                <label>
+                    <span class="form-label">Kart No *</span>
+                    <input type="text" name="card_no" id="iskCardNo" maxlength="30" required>
+                </label>
+                <label>
+                    <span class="form-label">Tip (eski/kalıcı — Faz 8A'da kullanılmaz)</span>
+                    <select name="worker_type_id" id="iskWorkerTypeId">
+                        <option value="0" <?= !$faz8aHazir ? 'disabled' : '' ?>>— (nötr, tip yok) —</option>
+                        <?php foreach ($tipler as $t): ?>
+                        <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php if (!$faz8aHazir): ?>
+                    <small class="muted">Nötr seçenek, Faz 8A migrasyonu tamamlandıktan sonra kullanılabilir.</small>
+                    <?php endif; ?>
+                </label>
+                <label class="span-2">
+                    <span class="form-label">Not</span>
+                    <input type="text" name="notes" id="iskNotes" maxlength="200">
+                </label>
+            </div>
+            <div class="isk-card-form-actions">
+                <button type="submit" class="btn btn-primary">Kaydet</button>
+                <button type="button" class="btn btn-ghost" onclick="pdksCloseModal('iskKartModal')">Vazgeç</button>
+            </div>
+        </form>
+        <hr>
+        <div class="isk-card-status-actions">
+            <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdA">
+                <input type="hidden" name="durum" value="available">
+                <button type="submit" class="btn btn-sm" id="iskBtnAvailable">▶ Kullanılabilir Yap</button></form>
+            <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdB">
+                <input type="hidden" name="durum" value="lost">
+                <button type="submit" class="btn btn-sm" id="iskBtnLost">⚠ Kayıp Bildir</button></form>
+            <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdC">
+                <input type="hidden" name="durum" value="disabled">
+                <button type="submit" class="btn btn-sm" id="iskBtnDisabled">⛔ Devre Dışı Bırak</button></form>
         </div>
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-            <button type="submit" class="btn btn-primary">Kaydet</button>
-            <button type="button" class="btn btn-ghost" onclick="pdksCloseModal('iskKartModal')">Vazgeç</button>
-        </div>
-    </form>
-    <hr style="margin:16px 0">
-    <div class="isk-card-status-actions">
-        <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdA">
-            <input type="hidden" name="durum" value="available">
-            <button type="submit" class="btn btn-sm" id="iskBtnAvailable">▶ Kullanılabilir Yap</button></form>
-        <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdB">
-            <input type="hidden" name="durum" value="lost">
-            <button type="submit" class="btn btn-sm" id="iskBtnLost">⚠ Kayıp Bildir</button></form>
-        <form method="post"><input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <input type="hidden" name="action" value="kart_durum"><input type="hidden" name="card_id" id="iskCardIdC">
-            <input type="hidden" name="durum" value="disabled">
-            <button type="submit" class="btn btn-sm" id="iskBtnDisabled">⛔ Devre Dışı Bırak</button></form>
     </div>
 </div>
 </div>
