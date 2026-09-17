@@ -1,5 +1,12 @@
 <?php
 // Faz 8B finans smoke: Tam/Yarım + saatlik/sabit FM + muhasebe kararları.
+// ⚠ Faz 9C / H-02: pdks_faz8b_degerlendirme_kaydet()'in 3. parametresi
+// eskiden 'onayla'/'reddet' STRING'iydi, artık HESAPLANAN adayın 0..aday
+// aralığında ONAYLANAN SAAT SAYISI (?int). Bu dosyanın periotları HEP
+// 08:00'de başladığı için (planlı eski vardiyayla AYNI), aşağıdaki
+// FM hesap sonuçları (1/2/3 saat) DEĞİŞMEDİ — yalnız onay çağrılarının
+// ARGÜMANI adayın TAMAMINI (eski 'onayla') veya 0'ı (eski 'reddet') temsil
+// eden bir int'e çevrildi.
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/pdks_faz8b.php';
@@ -147,7 +154,7 @@ ok8bf('yeniden hesaplama sonrası needs_recalculation sıfırlandı', (int)$db->
 $p3 = periodEkle($db, 3, 1, 'Kadın', '08:00', '18:15');
 $h3Bekle = pdks_faz8b_hakedis_hesapla(1, 1, $db);
 ok8bf('18:15 FM onayı olmadan hesaplanmaz', $h3Bekle['ok'] === false && ($h3Bekle['kod'] ?? '') === 'faz8b_degerlendirme_gerekli');
-$d3 = pdks_faz8b_degerlendirme_kaydet($p3, null, 'onayla', 1, $db);
+$d3 = pdks_faz8b_degerlendirme_kaydet($p3, null, 1, 1, $db);
 ok8bf('18:15 için 1 saat FM onaylandı', $d3['ok'] === true);
 $h3 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
 $line3 = array_values(array_filter($h3['lines'] ?? [], fn($x) => (int)$x['work_period_id'] === $p3))[0] ?? null;
@@ -155,14 +162,14 @@ ok8bf('saatlik FM satırı 1500 + 1×200 = 1700', $h3['ok'] === true && ($line3[
 
 // 4) 18:16 => tolerans kuralına göre 2 saat FM.
 $p4 = periodEkle($db, 4, 1, 'Kadın', '08:00', '18:16');
-pdks_faz8b_degerlendirme_kaydet($p4, null, 'onayla', 1, $db);
+pdks_faz8b_degerlendirme_kaydet($p4, null, 2, 1, $db);
 $h4 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
 $line4 = array_values(array_filter($h4['lines'] ?? [], fn($x) => (int)$x['work_period_id'] === $p4))[0] ?? null;
 ok8bf('18:16 = 2 saat FM ve satır 1900 TL', $h4['ok'] === true && (int)($line4['overtime_hours'] ?? 0) === 2 && ($line4['line_total'] ?? '') === '1900.00', json_encode($line4, JSON_UNESCAPED_UNICODE));
 
 // 5) Sabit FM: süre 3 saatlik dilime taşsa da ücret BİR KEZ 350 TL.
 $p5 = periodEkle($db, 5, 2, 'Erkek', '08:00', '19:30');
-pdks_faz8b_degerlendirme_kaydet($p5, null, 'onayla', 1, $db);
+pdks_faz8b_degerlendirme_kaydet($p5, null, 3, 1, $db);
 $h5 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
 $line5 = array_values(array_filter($h5['lines'] ?? [], fn($x) => (int)$x['work_period_id'] === $p5))[0] ?? null;
 ok8bf('sabit FM aday saati 3 olarak saklanır', (int)($line5['overtime_hours'] ?? 0) === 3, json_encode($line5, JSON_UNESCAPED_UNICODE));
@@ -170,7 +177,7 @@ ok8bf('sabit FM 1300 + tek sefer 350 = 1650 TL', $h5['ok'] === true && ($line5['
 
 // 6) FM reddedilirse yalnız Tam Mesai ücreti uygulanır.
 $p6 = periodEkle($db, 6, 1, 'Kadın', '08:00', '17:30');
-pdks_faz8b_degerlendirme_kaydet($p6, null, 'reddet', 1, $db);
+pdks_faz8b_degerlendirme_kaydet($p6, null, 0, 1, $db);
 $h6 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
 $line6 = array_values(array_filter($h6['lines'] ?? [], fn($x) => (int)$x['work_period_id'] === $p6))[0] ?? null;
 ok8bf('FM reddedilince satır yalnız Tam 1500 TL', $h6['ok'] === true && (int)($line6['overtime_hours'] ?? -1) === 0 && ($line6['overtime_total'] ?? '') === '0.00' && ($line6['line_total'] ?? '') === '1500.00', json_encode($line6, JSON_UNESCAPED_UNICODE));

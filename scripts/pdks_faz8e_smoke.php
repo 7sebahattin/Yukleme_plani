@@ -25,7 +25,11 @@ $db8e->exec("CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOI
 // düşüyordu; pdks_faz8e_manuel_cikis_kaydet()'in KENDİ dönem sorgusu bu
 // predicate'i KULLANIYOR (bkz. config/pdks_faz8e.php) ama testte hiç
 // egzersiz edilmiyordu.
-$db8e->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
+// Faz 9C / H-02: overtime_approved_hours EKLENDİ — eksikken
+// pdks_faz8e_manuel_cikis_kaydet()'in UPDATE'i (bu kolonu da eski
+// overtime_approved bayrağıyla BİRLİKTE NULL'a sıfırlar, bkz. config/
+// pdks_faz8e.php) "no such column" ile fatal veriyordu.
+$db8e->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_hours INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
 $db8e->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, status TEXT, needs_recalculation INTEGER DEFAULT 0, total_amount TEXT, currency TEXT)");
 $db8e->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
 $db8e->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, display_name TEXT)");
