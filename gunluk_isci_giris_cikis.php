@@ -119,6 +119,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kapat') 
         echo json_encode(['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+    // ⚠ Faz 9A / M-01 düzeltmesi: session_id istemciden geliyor ve
+    // pdks_gunluk_oturum_kapat() KENDİSİ bir depo kontrolü YAPMAZ — kapatma
+    // ÖNCESİ oturumun aktif depoya ait olduğu burada doğrulanır. Aksi halde
+    // Depo A'da aktif bir kullanıcı, id'yi değiştirerek Depo B'nin hâlâ
+    // taramaya açık bir mesaisini kapatabilirdi.
+    $stKapatDepo = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id=?');
+    $stKapatDepo->execute([$sessionId]);
+    $kapatDepo = $stKapatDepo->fetchColumn();
+    if ($kapatDepo === false) {
+        echo json_encode(['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($depoHata = pdks_gunluk_depo_kontrol((string)$kapatDepo)) {
+        echo json_encode(['ok' => false, 'kod' => 'yanlis_depo', 'hata' => $depoHata], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     $sonuc = pdks_gunluk_oturum_kapat($sessionId, $not !== '' ? $not : null, (int)$auth_user['id'], $pdo);
     echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
     exit;

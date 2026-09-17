@@ -76,7 +76,11 @@ CREATE TABLE daily_worker_work_periods (
     entry_time DATETIME NOT NULL,
     exit_time DATETIME NULL,
     status VARCHAR(30) NOT NULL,
-    source VARCHAR(30) NOT NULL
+    source VARCHAR(30) NOT NULL,
+    is_voided INTEGER NOT NULL DEFAULT 0,
+    voided_at DATETIME NULL,
+    voided_by_user_id INTEGER NULL,
+    void_reason VARCHAR(500) NULL
 )");
 
 $db->exec("
@@ -117,13 +121,19 @@ VALUES
 
 $db->exec("
 INSERT INTO daily_worker_work_periods
-(id,session_id,worker_card_id,worker_type_id_snapshot,worker_type_name_snapshot,entry_time,exit_time,status,source)
+(id,session_id,worker_card_id,worker_type_id_snapshot,worker_type_name_snapshot,entry_time,exit_time,status,source,is_voided)
 VALUES
-(1,101,1,1,'Kadın','2026-09-15 08:00:00','2026-09-15 17:00:00','closed','scan'),
-(2,101,2,1,'Kadın','2026-09-15 08:05:00',NULL,'open','scan'),
-(3,101,3,2,'Erkek','2026-09-15 08:10:00','2026-09-15 17:30:00','closed','scan'),
-(4,102,4,2,'Erkek','2026-09-16 08:02:00','2026-09-16 16:50:00','closed','scan'),
-(5,103,5,1,'Kadın','2026-09-15 08:03:00','2026-09-15 17:01:00','closed','scan')
+(1,101,1,1,'Kadın','2026-09-15 08:00:00','2026-09-15 17:00:00','closed','scan',0),
+(2,101,2,1,'Kadın','2026-09-15 08:05:00',NULL,'open','scan',0),
+(3,101,3,2,'Erkek','2026-09-15 08:10:00','2026-09-15 17:30:00','closed','scan',0),
+(4,102,4,2,'Erkek','2026-09-16 08:02:00','2026-09-16 16:50:00','closed','scan',0),
+(5,103,5,1,'Kadın','2026-09-15 08:03:00','2026-09-15 17:01:00','closed','scan',0),
+-- Faz 9A / B1: İPTAL EDİLMİŞ bir dönem — 15 Eylül/Ayşe/Depo A'ya AYNI
+-- kartla (AUTO-A1) eklenir, GİRİŞİ en erken (07:00) ve ÇIKIŞI en geç
+-- (17:45) olacak şekilde BİLEREK kurgulanır: void hariç tutma bozuksa
+-- 'ilk_giris'/'son_cikis' bu satırı SIZDIRIR ve aşağıdaki 15 Eylül
+-- toplamları/zaman damgaları/kart dökümü assertion'ları YAKALAR.
+(6,101,1,1,'Kadın','2026-09-15 07:00:00','2026-09-15 17:45:00','closed','scan',1)
 ");
 
 $db->exec("
@@ -194,6 +204,21 @@ ok8d(
     json_encode($gun15, JSON_UNESCAPED_UNICODE)
 );
 
+// Faz 9A / B1: dönem #6 İPTAL edilmiş — 07:00 girişi/17:45 çıkışıyla, void
+// hariç tutma çalışmasaydı bir önceki assertion'ı SESSİZCE bozardı (07:00/
+// 17:45 sızardı). Buradaki AÇIK isimli tekrar, void'in Çavuş Toplu Döküm'ün
+// hem işçi sayımına HEM ilk-giriş/son-çıkış zaman damgalarına
+// KARIŞMADIĞINI kanıtlar.
+ok8d(
+    'İPTAL edilen dönem Toplu Döküm işçi sayısına/ilk-giriş-son-çıkışa KARIŞMIYOR',
+    $gun15 !== null
+        && $gun15['kadin'] === 2
+        && $gun15['toplam_isci'] === 3
+        && $gun15['ilk_giris'] !== '2026-09-15 07:00:00'
+        && $gun15['son_cikis'] !== '2026-09-15 17:45:00',
+    json_encode($gun15, JSON_UNESCAPED_UNICODE)
+);
+
 ok8d(
     '15 Eylül eksik çıkış sayısı 1',
     $gun15 !== null && $gun15['eksik_cikis'] === 1,
@@ -252,6 +277,15 @@ ok8d(
         && $detay['session']['cavus_adi'] === 'Ayşe Çavuş'
         && count($detay['cards']) === 3,
     json_encode($detay, JSON_UNESCAPED_UNICODE)
+);
+
+// Faz 9A / B1: iptal edilen dönem #6 kart dökümü DETAYINDA da görünmez —
+// yukarıdaki count()===3 zaten dolaylı kanıt, burada period_id ile AÇIKÇA
+// doğrulanır.
+ok8d(
+    'İPTAL edilen dönem kart dökümü detayında YOK',
+    !in_array(6, array_column($detay['cards'], 'period_id'), true),
+    json_encode(array_column($detay['cards'], 'period_id'))
 );
 
 ok8d(

@@ -20,7 +20,12 @@ $db8e->exec("INSERT INTO worker_types VALUES (1,'KADIN','Kadın'),(2,'ERKEK','Er
 $db8e->exec("CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, notes TEXT)");
 $db8e->exec("CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, canonical_uid TEXT, uid_decimal TEXT)");
 $db8e->exec("CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)");
-$db8e->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT)");
+// Faz 9A / B1: is_voided/voided_at/voided_by_user_id/void_reason EKLENDİ —
+// eskiden bu kolonlar YOKTU ve pdks_gunluk_faz8j_etkin_kosul() '1=1'e
+// düşüyordu; pdks_faz8e_manuel_cikis_kaydet()'in KENDİ dönem sorgusu bu
+// predicate'i KULLANIYOR (bkz. config/pdks_faz8e.php) ama testte hiç
+// egzersiz edilmiyordu.
+$db8e->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
 $db8e->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, status TEXT, needs_recalculation INTEGER DEFAULT 0, total_amount TEXT, currency TEXT)");
 $db8e->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
 $db8e->exec("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, display_name TEXT)");
@@ -94,6 +99,21 @@ $legacyEvent = $db8e->query('SELECT source FROM daily_worker_card_events WHERE i
 $legacyAudit = json_decode((string)$db8e->query("SELECT new_values FROM audit_log WHERE record_id=5 AND action='manuel_cikis'")->fetchColumn(), true);
 ok8e('Tarihsel çözülmemiş dönem tek satırda kapanır', $legacy['ok'] && $legacyRow['status'] === 'closed' && $legacyRow['source'] === 'legacy_backfill');
 ok8e('Diğer açıklaması ve manuel olay kalıcıdır', $legacyEvent === 'manual' && $legacyAudit['note'] === 'Okuyucu arızası');
+
+// Faz 9A / B1: İPTAL EDİLMİŞ bir açık dönem — manuel çıkış onu (ve ham
+// olay geçmişini) HİÇ görmemeli. pdks_faz8e_manuel_cikis_kaydet() kendi
+// dönem sorgusunda pdks_gunluk_faz8j_etkin_kosul() KULLANIYOR (bkz.
+// config/pdks_faz8e.php) — bu, kolon eklenmeden önce testte HİÇ egzersiz
+// edilmiyordu.
+$db8e->exec("INSERT INTO worker_cards VALUES (7,'K007','AABBCCEE','78901234')");
+$st->execute([7,1,7,1,'Kadın',17,"$day 08:00:00",null,null,$day,'Depo A','open']);
+$db8e->prepare('UPDATE daily_worker_work_periods SET is_voided=1, voided_at=?, voided_by_user_id=9, void_reason=? WHERE id=7')
+    ->execute(["$day 09:00:00", 'test iptal']);
+$voidedClose = close8e(7, $day);
+ok8e('İPTAL edilmiş açık dönem için manuel çıkış REDDEDİLİR', $voidedClose['ok'] === false);
+ok8e('İPTAL edilmiş dönem manuel çıkış SONRASI hâlâ açık/çıkışsız kalır (hiçbir olay yazılmadı)',
+    $db8e->query('SELECT exit_time, exit_event_id FROM daily_worker_work_periods WHERE id=7')->fetch() === ['exit_time' => null, 'exit_event_id' => null]
+    && (int)$db8e->query('SELECT COUNT(*) FROM daily_worker_card_events WHERE worker_card_id=7')->fetchColumn() === 0);
 
 // Gerçek detay sayfasının HTML çıktısı: PHP dosyasındaki bağlam kurulur,
 // yalnız uygulama bootstrap/şema kapısı bu bellek içi testte atlanır.

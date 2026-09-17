@@ -29,6 +29,14 @@ require_once __DIR__ . '/config/pdks_hakedis.php';
 // BURADAN elle tetiklenir. Faz 1-4 tablolarına DOKUNMAZ — yalnız KENDİ
 // tek yeni tablosunu (foreman_payments) additive olarak ekler.
 require_once __DIR__ . '/config/pdks_cari.php';
+// Faz 9A / M-07: Faz 8B (mesai değerlendirme / ücretlendirme) migrasyonu
+// eskiden yalnız ayrı bir sayfada (faz8b_migrate.php) çalıştırılabiliyordu —
+// bu merkezi panelde HİÇ görünmüyordu, halbuki hangi hakediş motorunun
+// (yeni Tam/Yarım/FM mi, eski toplu-fiyat mi) çalıştığını BELİRLEYEN tam da
+// bu migrasyon. Mevcut pdks_faz8b_migrate() fonksiyonu REUSE edilir —
+// ikinci bir migrasyon mantığı YAZILMAZ, faz8b_migrate.php DA KALIR (geriye
+// dönük bağlantılar bozulmasın diye).
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
@@ -84,6 +92,7 @@ $pdks_cari_ran     = false;
 
 $pdks_faz8a_results = [];   // Faz 8A (nötr kart / mesai dönemi) migrasyonu sonucu
 $pdks_faz8a_ran     = false;
+$pdks_faz8b_results = []; $pdks_faz8b_ran = false;   // Faz 8B (mesai değerlendirme/ücretlendirme)
 $pdks_faz8j_results = []; $pdks_faz8j_ran = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
@@ -134,6 +143,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if (in_array($pr['durum'], ['olusturuldu', 'guncellendi', 'kaldirildi', 'calisti'], true)) {
             audit_log_event('migrate', 'pdks_gunluk_faz8a', null, null,
                 ['operation' => $pr['adim'], 'durum' => $pr['durum'], 'mesaj' => $pr['mesaj']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_faz8b') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_faz8b_ran     = true;
+    $pdks_faz8b_results = pdks_faz8b_migrate($pdo);
+    foreach ($pdks_faz8b_results as $pr) {
+        if (($pr['durum'] ?? '') === 'eklendi') {
+            audit_log_event('migrate', 'pdks_faz8b', null, null, $pr);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk_faz8j') {
@@ -458,6 +476,35 @@ render_header('Şema Migrasyon');
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="pdks_gunluk_faz8a">
       <button type="submit" class="btn btn-primary">Faz 8A Migrasyonunu Çalıştır</button>
+    </form>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Faz 8B — Mesai Değerlendirme / Ücretlendirme</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>foreman_worker_rates</code>'a Yarım/Fazla Mesai
+      oranı kolonları, <code>daily_worker_work_periods</code>'a muhasebe onay kolonları,
+      <code>foreman_daily_entitlements</code>'a <code>needs_recalculation</code>,
+      <code>foreman_daily_entitlement_lines</code>'a dönem/fazla-mesai kolonları ekler.
+      Faz 8A tarama kayıtlarını DEĞİŞTİRMEZ. <strong>Bu migrasyon çalıştırılana kadar
+      hakediş, eski (toplu-fiyat) motorla güvenle hesaplanmaya devam eder</strong> —
+      Çavuş Fiyatları ve Hakedişler ekranlarındaki uyarı bandı da bunu söyler.
+      <?php if ($pdks_faz8b_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_faz8b_results as $p8br): ?>
+        <br>&nbsp;&nbsp;<?= h($p8br['adim'] ?? '') ?>: <?= h($p8br['durum'] ?? '') ?> — <?= h($p8br['mesaj'] ?? '') ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <p><strong>Faz 8B şema durumu:</strong>
+      <span style="color:<?= pdks_faz8b_sema_hazir($pdo) ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+        <?= pdks_faz8b_sema_hazir($pdo) ? '✓ Hazır — yeni Tam/Yarım/FM hakediş motoru aktif' : '✗ Henüz hazır değil — eski hakediş motoru çalışıyor' ?>
+      </span>
+    </p>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_faz8b">
+      <button type="submit" class="btn btn-primary">Faz 8B Migrasyonunu Çalıştır</button>
     </form>
   </div>
 

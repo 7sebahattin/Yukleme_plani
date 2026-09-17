@@ -34,7 +34,19 @@ render_header('Faz 8B Migrasyon');
 
     <div class="card" style="padding:18px 20px;margin:16px 0">
         <p>Bu migrasyon yalnız additive kolonlar ekler. Faz 8A tarama kayıtlarını değiştirmez; mevcut Tam Mesai fiyatı <code>daily_rate</code> olarak korunur.</p>
-        <p><strong>Kurallar:</strong> 9 saat normal mesai; 15 dakika tolerans. 8s45dk ve üzeri otomatik Tam. 9 saati aşan ilk 15 dakika fazla mesai sayılmaz; 16–75 dk = 1 saat, 76–135 dk = 2 saat. Fazla mesai muhasebe onayına tabidir.</p>
+        <!-- ⚠ Faz 9A / L-05 düzeltmesi: bu metin eskiden GERÇEK DAVRANIŞLA
+             UYUŞMUYORDU — "8s45dk ve üzeri otomatik Tam" YANLIŞTI (asıl eşik
+             tolerans penceresiyle 8s30dk'da tetiklenir, bkz. 08:15-16:45) ve
+             "9 saati aşan ilk 15 dakika" YANLIŞTI (fazla mesai fiili süreden
+             DEĞİL, SABİT 17:00 planlı bitişten ölçülür — pdks_faz8b_sure_karari()
+             DEĞİŞTİRİLMEDİ, yalnız BURADAKİ metin gerçek davranışa çekildi). -->
+        <p><strong>Kurallar:</strong> 9 saat (540 dk) normal mesai; giriş/çıkışta 15 dakika tolerans.
+            Otomatik Tam: fiili süre 540 dk ve üzeriyse, VEYA giriş 08:15 veya öncesi VE çıkış
+            16:45 veya sonrasıysa. Bu ikisinin dışındaki kısa/erken-biten dönemler muhasebe
+            Tam/Yarım kararı ister.
+            Fazla mesai HER ZAMAN planlı 17:00 bitişinden ölçülür (fiili süreden değil):
+            17:15'e kadar FM yok; 17:16–18:15 = 1 saat; 18:16–19:15 = 2 saat; sonrası aynı
+            desende artar. Her fazla mesai adayı muhasebe onayına tabidir.</p>
         <form method="post">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
             <button class="btn btn-primary" type="submit">Faz 8B Migrasyonunu Çalıştır</button>

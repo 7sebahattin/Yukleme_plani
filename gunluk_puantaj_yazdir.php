@@ -14,8 +14,11 @@
 // pdks_gunluk_oturum_kartlari) — ikinci bir yoklama hesabı YOK.
 //
 // ⚠ Güvenlik (görev talimatı madde 21): yetki kontrolü require_pdks_gunluk()
-// İLE, kaynak sayfayla AYNI ('daily_reports') — ?id= elle değiştirilerek
-// yetkisiz erişim SAĞLANAMAZ.
+// İLE, kaynak sayfayla AYNI ('daily_reports'). Faz 9A / M-01: yetki tek
+// başına YETERLİ DEĞİLDİ — ?id= elle BAŞKA BİR DEPONUN mesaisine
+// değiştirilebiliyordu (aynı yetkiye sahip her kullanıcı okuyabiliyordu).
+// Artık pdks_gunluk_depo_kontrol() ile oturumun aktif depoya ait olduğu da
+// ayrıca doğrulanıyor (bkz. aşağı).
 //
 // ⚠ Kart No basılır, KANONİK NFC UID BASILMAZ (görev talimatı: "Do NOT
 // print canonical NFC UID unless there is a genuine operational need") —
@@ -42,6 +45,14 @@ $st = $pdo->prepare("SELECT * FROM daily_work_sessions WHERE id = ?");
 $st->execute([$id]);
 $oturum = $st->fetch();
 if (!$oturum) { set_flash('error', 'Mesai bulunamadı.'); header('Location: gunluk_isci_puantaj.php'); exit; }
+
+// ⚠ Faz 9A / M-01 düzeltmesi: yukarıdaki eski yorum yalnız YETKİYE
+// ('daily_reports') değiniyordu — DEPOYA değil. ?id= elle başka bir
+// depoya ait bir mesaiye değiştirilerek onun puantaj fişi
+// yazdırılabiliyordu. SUNUCU tarafında doğrulanır.
+if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
+    forbidden($depoHata);
+}
 
 $ozet = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);

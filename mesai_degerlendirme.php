@@ -24,6 +24,15 @@ $stS->execute([$sessionId]);
 $oturum = $stS->fetch();
 if (!$oturum) { set_flash('error', 'Mesai bulunamadı.'); header('Location: cavus_hakedis.php'); exit; }
 
+// ⚠ Faz 9A / M-01 düzeltmesi: liste ekranı aktif depoya göre filtreler ama
+// bu sayfa ?session_id= ile DOĞRUDAN açılabiliyordu — depo A'da aktif bir
+// kullanıcı, id'yi elle depo B'nin oturumuna değiştirerek onun mesai
+// değerlendirmesini görebilir/değiştirebilirdi (IDOR). GÖRÜNTÜLEME dahil,
+// hem GET hem POST için — sayfanın tamamı bu oturuma ait.
+if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
+    forbidden($depoHata);
+}
+
 $errors = [];
 $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -29,7 +29,13 @@ foreach ([
     'CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, canonical_uid TEXT, worker_type_id INTEGER NULL REFERENCES worker_types(id), status TEXT)',
     'CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, opened_at TEXT, opened_by_user_id INTEGER, closed_at TEXT, closed_by_user_id INTEGER, notes TEXT, updated_at TEXT, UNIQUE(foreman_id, work_date, depo))',
     'CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)',
-    'CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT)',
+    // Faz 9A / B1: is_voided/voided_at/voided_by_user_id/void_reason
+    // EKLENDİ — bu dosyanın report8h() yardımcısı pdks_rapor_operasyonel_kpi()/
+    // pdks_rapor_acik_mesailer_araligi()/pdks_rapor_eksik_cikislar_araligi()
+    // ÇAĞIRIYOR, üçü de pdks_gunluk_faz8j_etkin_kosul() kullanıyor; kolon
+    // yokken bu predicate her zaman '1=1'e düşüyor ve void hariç tutma HİÇ
+    // egzersiz edilmiyordu.
+    'CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)',
     'CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, foreman_id INTEGER, status TEXT, needs_recalculation INTEGER DEFAULT 0, notes TEXT, updated_at TEXT, finalized_at TEXT, finalized_by_user_id INTEGER, total_amount TEXT)',
     'CREATE TABLE foreman_payments (id INTEGER PRIMARY KEY, foreman_id INTEGER, status TEXT)',
     'CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
@@ -107,6 +113,14 @@ $exit=pdks_gunluk_faz8a_cikis_kaydet('631799511','usb_decimal',1,7,$db8h);
 ok8h('Yeniden açınca normal çıkış taraması çalışır', $exit['ok'] && $db8h->query('SELECT status FROM daily_worker_work_periods WHERE id=1')->fetchColumn()==='closed');
 ok8h('Çıkıştan sonra açık/eksik raporu doğal olarak sıfırlanır', report8h($today)===[0,0,0,0]);
 ok8h('İşçi dönemi silinmez veya kopyalanmaz', (int)$db8h->query('SELECT COUNT(*) FROM daily_worker_work_periods')->fetchColumn()===1);
+
+// Faz 9A / B1: aynı oturuma İPTAL edilmiş, açık/çıkışsız görünen HAYALET bir
+// dönem eklenir — void hariç tutma bozuksa report8h() bunu tekrar "açık
+// mesai"/"eksik çıkış" olarak sayardı (audit'in listelediği tüm yüzeylerden
+// biri: eksik-çıkış raporlaması).
+$db8h->prepare("INSERT INTO daily_worker_work_periods (id,session_id,worker_card_id,worker_type_id_snapshot,worker_type_name_snapshot,entry_event_id,entry_time,declared_attendance_class,work_date_snapshot,depo_snapshot,status,source,is_voided,voided_at,voided_by_user_id,void_reason) VALUES (2,1,1,1,'Kadın',1,?,'auto',?,'FINIKE','open','scan',1,?,9,'test iptal')")
+    ->execute(["$today 10:00:00",$today,"$today 10:05:00"]);
+ok8h('İPTAL edilmiş hayalet dönem açık/eksik-çıkış raporuna KARIŞMAZ', report8h($today)===[0,0,0,0]);
 $secondClose=pdks_gunluk_oturum_kapat(1,null,7,$db8h);
 ok8h('Aynı oturum ikinci kez normal kapanır', $secondClose['ok'] && $db8h->query('SELECT status FROM daily_work_sessions WHERE id=1')->fetchColumn()==='closed');
 ok8h('İki kapanış ve yeniden açma ayrı audit eylemleri', (int)$db8h->query("SELECT COUNT(*) FROM audit_log WHERE action='close' AND record_id=1")->fetchColumn()===2 && (int)$db8h->query("SELECT COUNT(*) FROM audit_log WHERE action='daily_session_reopen' AND record_id=1")->fetchColumn()===1);

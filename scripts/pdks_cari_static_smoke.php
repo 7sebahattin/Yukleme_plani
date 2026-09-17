@@ -125,10 +125,17 @@ ok('config/pdks_cari.php: yalnız TEK yeni tablo tanımlıyor (foreman_payments)
 // listeden BİLİNÇLİ OLARAK çıkarıldı; Faz 8A'nın KENDİ static testi o
 // dosyalardaki değişikliğin kapsam İÇİNDE kaldığını AYRICA doğrular. Faz
 // 5'in ASIL kontrol ettiği "kalıcı personel NFC akışına DOKUNULMADI" iddiası
-// (giris_cikis.php/pdks_nfc_test.php/assets/pdks.js) ve hakediş sayfaları
-// (cavus_fiyatlari.php/cavus_hakedis.php) burada AYNEN kalır.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php cavus_hakedis.php 2>&1'));
-ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI (Faz 8A\'nın KENDİ kapsamı olan config/pdks_gunluk.php + gunluk_isci_giris_cikis.php AYRICA test edilir)',
+// (giris_cikis.php/pdks_nfc_test.php/assets/pdks.js) burada AYNEN kalır.
+// ⚠ Faz 9A (v227 audit'in M-01/M-04 bulguları, v228): cavus_hakedis.php
+// BİLİNÇLİ OLARAK bu listeden ÇIKARILDI — hakedis hesapla/yeniden hesapla
+// artık (a) session_id'nin AKTİF DEPOYA ait olduğunu sunucu tarafında
+// doğruluyor (audit M-01: çapraz-depo IDOR) ve (b) 'entitlements_view'
+// yerine 'entitlements_finalize' istiyor (audit M-04: salt-okunur izin
+// finansal YAZMA yapabiliyordu). Kapsamı BELİRLİDİR — cari bakiye/ekstre/
+// ödeme mantığına DOKUNMAZ; scripts/pdks_faz9a_smoke.php bunu AYRICA
+// doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php 2>&1'));
+ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI (Faz 8A\'nın KENDİ kapsamı olan config/pdks_gunluk.php + gunluk_isci_giris_cikis.php, Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php AYRICA test edilir)',
     $gcDiff === '', $gcDiff);
 // ⚠ DÜZELTME TURU: kullanıcının açık talimatıyla pdks_hakedis_hesapla()'nın
 // 'TRY' hardcode HATASI (financial-integrity düzeltmesi, bu turun ASIL

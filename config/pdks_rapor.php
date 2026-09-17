@@ -55,6 +55,19 @@
 
 declare(strict_types=1);
 
+// ⚠ Faz 9A / T-01 düzeltmesi: dosya başlığı bu üç modülü "hard-require eder"
+// diye belgeliyordu ama gerçek kodda hiç require_once YOKTU — yalnız
+// çağıranların (raporlar.php, cavus_toplu_dokum*.php, rapor_yazdir.php)
+// doğru sırada yüklemesine güveniyordu. scripts/pdks_faz8d_toplu_dokum_smoke.php
+// bu dosyayı TEK BAŞINA require ettiğinde pdks_gunluk_faz8j_etkin_kosul()
+// (pdks_gunluk.php'de tanımlı) bulunamıyor ve fatal veriyordu. Üretim
+// sayfaları zaten doğru sırayla yüklüyordu, bu yüzden üretimde belirti
+// yoktu — ama belgelenen sözleşme gerçek DEĞİLDİ. require_once İDEMPOTENT
+// olduğu için üretim sayfalarındaki kendi require'larını YİNELEMEK ZARARSIZ.
+require_once __DIR__ . '/pdks_gunluk.php';
+require_once __DIR__ . '/pdks_hakedis.php';
+require_once __DIR__ . '/pdks_cari.php';
+
 defined('PDKS_RAPOR_AKTIF') || define('PDKS_RAPOR_AKTIF', true);
 
 // =========================================================

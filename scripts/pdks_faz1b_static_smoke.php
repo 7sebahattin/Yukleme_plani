@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v227',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v227';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v227');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v228',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v228';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v228');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -339,6 +339,11 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v224');",
     "-    define('APP_SURUM', 'v225');",
     "-    define('APP_SURUM', 'v226');",
+    // Faz 9A (v228): M-01/M-02/H-04 config/pdks_gunluk.php + T-01
+    // config/pdks_rapor.php düzeltmeleri → SW cache sürümü + APP_SURUM
+    // birlikte v227'den v228'e çekildi (AYNI rutin tek satırlık sürüm
+    // damgası güncellemesi).
+    "-    define('APP_SURUM', 'v227');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
