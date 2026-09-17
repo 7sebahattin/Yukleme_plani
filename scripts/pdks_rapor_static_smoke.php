@@ -190,8 +190,12 @@ echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HA
 // yapılan AYNI güncelleme) bu listeden ÇIKARILDI — hakedis hesapla artık
 // aktif depoyu doğruluyor ve 'entitlements_finalize' istiyor; kapsamı
 // scripts/pdks_faz9a_smoke.php AYRICA doğrular.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_fiyatlari.php cavus_cari.php 2>&1'));
-ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ (Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php AYRICA test edilir)', $gcDiff === '', $gcDiff);
+// ⚠ Faz 9B (v227 audit H-01 kapanışı, v229): cavus_fiyatlari.php AYNI
+// gerekçeyle bu listeden ÇIKARILDI — YENİ oran tanımlama açılır listesi
+// artık TEK paylaşılan günlük-işçi tip politikasını (yalnız KADIN/ERKEK)
+// kullanıyor; kapsamı scripts/pdks_faz9b_smoke.php AYRICA doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_cari.php 2>&1'));
+ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ (Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php, Faz 9B\'nin KENDİ kapsamı olan cavus_fiyatlari.php AYRICA test edilir)', $gcDiff === '', $gcDiff);
 // ⚠ Faz 6, üç çok satırlı literali (Faz 5'ten devralınan $p_gunluk +
 // 'muhasebe' + 'ik' izin dizileri) attendance.management_reports EKLEYEREK
 // genişletti — git diff bu TEK satırlık literalleri "silinip yeniden

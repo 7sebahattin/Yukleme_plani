@@ -32,7 +32,10 @@ $base = base_url();
 // hazır değilse (migrasyon çalıştırılmadan önce) sayfa AYNEN Faz 2'nin eski
 // davranışını sergiler — kod deploy'u ile migrasyon arasında tarama BOZULMAZ.
 $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
-$isciTipleri = $faz8aHazir ? pdks_gunluk_tip_listele(true, $pdo) : [];
+// ⚠ Faz 9B / H-01 kapanışı: tek paylaşılan politikadan (config/pdks_gunluk.php)
+// gelir — bu artık zaten YALNIZ KADIN/ERKEK döner, aşağıdaki düğme döngüsünde
+// ayrıca bir "code IN (...)" filtresi TEKRARLANMAZ.
+$isciTipleri = $faz8aHazir ? pdks_gunluk_desteklenen_tip_listele($pdo) : [];
 
 // ── AJAX uçları — SAYFANIN İÇİNDE, JSON. Yön istemciden ASLA otomatik
 // tahmin edilmez, kart/oturum çözümü TAMAMEN sunucudadır. ──────────────
@@ -213,10 +216,11 @@ render_flash();
             <div class="pdks-kiosk-selected-name" id="giTipCavusAd"></div>
         </div>
         <h2 id="giTipBaslik">İşçi Tipi Seçin</h2>
+        <?php // ⚠ Faz 9B: $isciTipleri zaten pdks_gunluk_desteklenen_tip_listele()'den
+              // (yalnız KADIN/ERKEK) geliyor — burada İKİNCİ bir "code IN (...)"
+              // filtresi TEKRARLANMAZ; politika TEK yerde yaşar. ?>
         <?php foreach ($isciTipleri as $t): ?>
-        <?php if (in_array($t['code'], ['KADIN', 'ERKEK'], true)): ?>
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
-        <?php endif; ?>
         <?php endforeach; ?>
         <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>
     </div>

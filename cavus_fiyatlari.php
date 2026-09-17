@@ -84,7 +84,11 @@ $seciliParaBirimi = strtoupper(trim((string)($_POST['currency'] ?? 'TRY')));
 if (!array_key_exists($seciliParaBirimi, $paraBirimleri)) $seciliParaBirimi = 'TRY';
 
 $cavuslar = $pdo->query("SELECT id, code, name, is_active FROM foremen ORDER BY is_active DESC, name ASC")->fetchAll();
-$tipler = pdks_gunluk_tip_listele(true, $pdo);
+// ⚠ Faz 9B / H-01 kapanışı: YENİ oran tanımlama açılır listesi TEK
+// paylaşılan politikadan (config/pdks_gunluk.php) gelir — yalnız KADIN/ERKEK.
+// Mevcut/tarihsel oranlar (aşağıdaki liste, pdks_hakedis_oran_gecmisi())
+// durum/tip fark etmeksizin AYNEN görüntülenmeye devam eder.
+$tipler = pdks_gunluk_desteklenen_tip_listele($pdo);
 $seciliCavus = null;
 $oranlar = [];
 if ($cavusId !== null) {

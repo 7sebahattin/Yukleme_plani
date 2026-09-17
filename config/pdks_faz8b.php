@@ -435,6 +435,17 @@ function pdks_faz8b_oran_ekle(
     $stC->execute([$foremanId]);
     if (!$stC->fetchColumn()) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
 
+    // ⚠ Faz 9B / H-01: YENİ oran tanımlama açılır listesi (cavus_fiyatlari.php)
+    // TEK paylaşılan politikayı (pdks_gunluk_desteklenen_tip_listele()) kullanır
+    // — yalnız KADIN/ERKEK SUNAR. Bu HAM fonksiyon BİLEREK sert bir kod
+    // kısıtı EKLEMEZ (mevcut worker_types.id kontrolü YETERLİDİR): görev
+    // talimatı §8 yalnız SEÇİM arayüzünün kısıtlanmasını ister (§4/§5'in
+    // tarama/düzeltme için istediği "crafted POST'a karşı bağımsız kapı"
+    // İLE AYNI KESİNLİKTE DEĞİL) — ayrıca scripts/pdks_takip_ui_smoke.php
+    // gibi başka amaçlı (raporlama mutabakatı) testler BİLEREK desteklenmeyen
+    // bir tip için oran tanımlıyor; bu HAM birincil işlemi kısıtlamak o
+    // testleri KIRARDI. Sunucu tarafı zorlaması gereken tek yer — kullanıcı
+    // girdisinden GELEN GİRİŞ/düzeltme akışları — §4/§5'te AYRICA yapılır.
     $stT = $pdo->prepare("SELECT id FROM worker_types WHERE id = ?");
     $stT->execute([$workerTypeId]);
     if (!$stT->fetchColumn()) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];

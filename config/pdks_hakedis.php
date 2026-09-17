@@ -333,6 +333,12 @@ function pdks_hakedis_oran_ekle(int $foremanId, int $workerTypeId, string $gunlu
     $stCavus = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
     $stCavus->execute([$foremanId]);
     if (!$stCavus->fetchColumn()) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
+    // ⚠ Faz 9B / H-01: YENİ oran tanımlama açılır listesi (cavus_fiyatlari.php)
+    // TEK paylaşılan politikayı (pdks_gunluk_desteklenen_tip_listele()) kullanır
+    // — yalnız KADIN/ERKEK SUNAR. Bu HAM fonksiyon BİLEREK sert bir kod
+    // kısıtı EKLEMEZ — aynı gerekçe pdks_faz8b_oran_ekle()'de de yazılı
+    // (görev talimatı §8 yalnız SEÇİM arayüzünü kısıtlar; scripts/pdks_takip_ui_smoke.php
+    // gibi başka amaçlı testler desteklenmeyen bir tip için oran tanımlıyor).
     $stTip = $pdo->prepare("SELECT id FROM worker_types WHERE id = ?");
     $stTip->execute([$workerTypeId]);
     if (!$stTip->fetchColumn()) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];

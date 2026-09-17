@@ -134,8 +134,12 @@ ok('config/pdks_cari.php: yalnız TEK yeni tablo tanımlıyor (foreman_payments)
 // finansal YAZMA yapabiliyordu). Kapsamı BELİRLİDİR — cari bakiye/ekstre/
 // ödeme mantığına DOKUNMAZ; scripts/pdks_faz9a_smoke.php bunu AYRICA
 // doğrular.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js cavus_fiyatlari.php 2>&1'));
-ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI (Faz 8A\'nın KENDİ kapsamı olan config/pdks_gunluk.php + gunluk_isci_giris_cikis.php, Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php AYRICA test edilir)',
+// ⚠ Faz 9B (v227 audit H-01 kapanışı, v229): cavus_fiyatlari.php AYNI
+// gerekçeyle bu listeden ÇIKARILDI — YENİ oran tanımlama açılır listesi
+// artık TEK paylaşılan günlük-işçi tip politikasını (yalnız KADIN/ERKEK)
+// kullanıyor; kapsamı scripts/pdks_faz9b_smoke.php AYRICA doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- giris_cikis.php pdks_nfc_test.php assets/pdks.js 2>&1'));
+ok('Faz 1-4 sayfaları/dosyaları diff\'i BOŞ — Faz 5 onları YENİDEN TASARLAMADI (Faz 8A\'nın KENDİ kapsamı olan config/pdks_gunluk.php + gunluk_isci_giris_cikis.php, Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php, Faz 9B\'nin KENDİ kapsamı olan cavus_fiyatlari.php AYRICA test edilir)',
     $gcDiff === '', $gcDiff);
 // ⚠ DÜZELTME TURU: kullanıcının açık talimatıyla pdks_hakedis_hesapla()'nın
 // 'TRY' hardcode HATASI (financial-integrity düzeltmesi, bu turun ASIL

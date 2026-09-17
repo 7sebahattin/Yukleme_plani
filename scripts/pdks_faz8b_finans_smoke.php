@@ -20,8 +20,13 @@ $db->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 $db->exec("CREATE TABLE foremen (
     id INTEGER PRIMARY KEY AUTOINCREMENT, code VARCHAR(20) NOT NULL, name VARCHAR(150) NOT NULL
 )");
+// Faz 9B: is_active EKLENDİ — eksikken pdks_gunluk_desteklenen_tip_coz()
+// (Faz 9B'nin merkezi işçi tipi politikası, artık pdks_faz8b_oran_ekle()
+// içinde çağrılıyor) "no such column" ile fatal veriyordu; production
+// şemasında bu kolon her zaman VAR (diğer tüm test fikstürleriyle tutarlı).
 $db->exec("CREATE TABLE worker_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, code VARCHAR(30) NOT NULL, name VARCHAR(80) NOT NULL
+    id INTEGER PRIMARY KEY AUTOINCREMENT, code VARCHAR(30) NOT NULL, name VARCHAR(80) NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1
 )");
 $db->exec("CREATE TABLE worker_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT, card_no VARCHAR(30) NOT NULL

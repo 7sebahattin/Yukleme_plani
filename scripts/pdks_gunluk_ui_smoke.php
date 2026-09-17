@@ -232,13 +232,15 @@ ok('pdks-badge-degistirildi (eski in_use rengi) ARTIK render edilmiyor', !str_co
 ok('lost kart doğru rozetle render ediliyor (pdks-badge-kayip)', str_contains($sIk, 'pdks-badge-kayip'));
 ok('available kart doğru rozetle render ediliyor (pdks-badge-aktif)', str_contains($sIk, 'pdks-badge-aktif'));
 
-echo "\n=== 7. isci_tipleri.php — liste + ekleme formu ===\n";
+echo "\n=== 7. isci_tipleri.php — sabit KADIN/ERKEK listesi (Faz 9B — H-01 kapanışı, ekleme formu KALDIRILDI) ===\n";
 $sIt = renderPage('isci_tipleri.php');
 ok('hata sızmadı', !str_starts_with($sIt, '__ERROR__'), $sIt);
 ok('Kadın tipi listede', str_contains($sIt, 'Kadın'));
 ok('Erkek tipi listede', str_contains($sIt, 'Erkek'));
-ok('gender ENUM DEĞİL notu (serbest kategori) sayfada açıklanıyor', str_contains($sIt, 'Forklift') || str_contains($sIt, 'kategori'));
-ok('kod alanı büyük harfe zorlanıyor (CSS text-transform)', str_contains($sIt, 'text-transform:uppercase'));
+ok('sabit sistem tipi modeli AÇIKÇA anlatılıyor', str_contains($sIt, 'Sabit Sistem Tipleri') && str_contains($sIt, 'sabit'));
+ok('rastgele yeni tip oluşturma FORMU artık YOK', !str_contains($sIt, 'name="action" value="ekle"') && !str_contains($sIt, 'ör. FORKLIFT'));
+ok('pdks_gunluk_tip_olustur() sayfadan HİÇ ÇAĞRILMIYOR (rastgele tip oluşturma yolu YOK — yorumdaki isim-anma boş parantezle "()" ayrılır, GERÇEK çağrı DEĞİLDİR)',
+    !preg_match('/pdks_gunluk_tip_olustur\s*\(\s*[^)\s]/', (string)file_get_contents(dirname(__DIR__) . '/isci_tipleri.php')));
 
 echo "\n=== 8. YETKİ KAPISI — her sayfada GERÇEKTEN çalışıyor ===\n";
 $PERMS = [];   // hiçbir attendance.* yetkisi yok

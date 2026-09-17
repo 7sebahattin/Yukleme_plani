@@ -1,14 +1,36 @@
 <?php
 // =========================================================
-// isci_tipleri.php — İşçi Tipi/Kategori Master (Günlük İşçi, Faz 1)
+// isci_tipleri.php — İşçi Tipleri (Günlük İşçi)
 //
-// Kasıtlı olarak KÜÇÜK: gender ENUM değil, serbest kod/ad çifti (kullanıcının
-// açık talimatı) — ileride Paketleme/Yükleme/Forklift/Usta/Gece Vardiyası gibi
-// tipler KOD DEĞİŞİKLİĞİ gerektirmeden buradan eklenebilsin diye. Sidebar'a
-// AYRI bir madde olarak eklenmedi (permission fragmentasyonunu artırmamak
-// için attendance.worker_cards'a bağlı) — isci_kartlari.php'nin baş
-// kısmındaki ikincil bağlantıdan açılır (pdks_nfc_test.php'nin
-// personel_kartlar.php'den açılma deseniyle aynı).
+// ⚠ Faz 9B / H-01 kapanışı: iş kararı KESİNLEŞTİ — günlük işçi devam
+// sistemi TAM OLARAK iki sabit sistem tipi destekler: KADIN, ERKEK.
+// Eskiden bu sayfa "cinsiyet ENUM DEĞİL, serbest kod/ad" diyerek
+// FORKLIFT/USTA/PAKETLEME gibi rastgele kod EKLENMESİNE izin veriyordu —
+// bu, tarama/düzeltme/oran katmanlarının HER BİRİNİN kendi (ve BİRBİRİYLE
+// ÇELİŞEN) desteklenen-tip kararı vermesine yol açan audit bulgusu H-01'in
+// KÖKÜYDÜ. Artık BURASI, config/pdks_gunluk.php'deki TEK paylaşılan
+// politikayla (pdks_gunluk_desteklenen_tip_kodlari()) AYNI gerçeği anlatır
+// ve YENİ rastgele tip oluşturma İŞ AKIŞI KALDIRILDI — bkz. o dosyanın
+// başlığı.
+//
+// ⚠ pdks_gunluk_tip_olustur() (ham CRUD fonksiyonu) BİLEREK SİLİNMEDİ —
+// başka bir kurulumun/test altyapısının genel bir birincil işlem olarak
+// ona ihtiyacı olabilir; YALNIZ bu SAYFANIN "ekle" iş akışı kaldırıldı.
+//
+// ⚠ Mevcut satırlar (ör. üretimde şu an yalnız KADIN/ERKEK var, ama başka
+// bir kurulumda tarihsel bir üçüncü tip olabilir) ASLA silinmez/otomatik
+// dönüştürülmez — görev talimatı §7. Bu sayfa TÜM satırları (destekli/
+// desteksiz) listeler, yalnız DESTEKLENMEYEN satırlar için aktifleştirme
+// engellenmez (tarihsel bir satırı aktif TUTMAK istemek admin'in kararı
+// olabilir) ama YENİ operasyonel akışlar (tarama/düzeltme/oran) onu HİÇBİR
+// ZAMAN seçilebilir kılmaz (bkz. pdks_gunluk_desteklenen_tip_listele()).
+//
+// Sidebar'a AYRI bir madde olarak eklenmedi (permission fragmentasyonunu
+// artırmamak için attendance.worker_cards'a bağlı) — isci_kartlari.php'nin
+// baş kısmındaki ikincil bağlantıdan açılır (pdks_nfc_test.php'nin
+// personel_kartlar.php'den açılma deseniyle aynı). Faz 9B, Personel
+// Takibi'nin 10 kartlık inişini DEĞİŞTİRMEZ — bu sayfa BİLEREK ikincil bir
+// yapılandırma ekranı olarak kalır (görev talimatı §10).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -26,14 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_pdks_gunluk('worker_cards');
     $action = trim($_POST['action'] ?? '');
 
-    if ($action === 'ekle') {
-        $sonuc = pdks_gunluk_tip_olustur($_POST['code'] ?? '', $_POST['name'] ?? '', $pdo);
-        if ($sonuc['ok']) {
-            header('Location: isci_tipleri.php?ok=' . urlencode('İşçi tipi eklendi.'));
-            exit;
-        }
-        $hata = $sonuc['hata'] ?? 'Eklenemedi.';
-    } elseif ($action === 'aktiflik') {
+    // ⚠ 'ekle' (rastgele yeni tip oluşturma) BİLEREK YOK — sistem artık
+    // yalnız KADIN/ERKEK'i tanır, üçüncü bir kod bu sayfadan ASLA
+    // OLUŞTURULAMAZ (crafted bir POST dahi — action eşleşmediği için hiçbir
+    // dal çalışmaz).
+    if ($action === 'aktiflik') {
         $id = (int)($_POST['id'] ?? 0);
         $aktif = ($_POST['aktif'] ?? '') === '1';
         $sonuc = pdks_gunluk_tip_aktiflik($id, $aktif, $pdo);
@@ -47,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 
 $tipler = pdks_gunluk_tip_listele(false, $pdo);
+$desteklenenKodlar = pdks_gunluk_desteklenen_tip_kodlari();
 
 render_header('İşçi Tipleri');
 $base = base_url();
@@ -65,34 +85,31 @@ render_flash();
 <?php if ($hata !== ''): ?><div class="flash flash-error"><?= h($hata) ?></div><?php endif; ?>
 
 <div class="card" style="padding:16px 18px;margin-bottom:20px">
-    <h2 style="margin-top:0;font-size:1rem">Yeni Tip Ekle</h2>
+    <h2 style="margin-top:0;font-size:1rem">Sabit Sistem Tipleri</h2>
     <p class="muted" style="margin-top:-6px;font-size:.85rem">
-        Cinsiyet sabit değildir — ileride "Paketleme", "Forklift", "Usta", "Gece Vardiyası" gibi
-        serbest kategoriler de eklenebilir.
+        Günlük işçi devam sistemi (giriş/çıkış tarama, puantaj düzeltme, çavuş fiyatlandırma)
+        şu an <b>tam olarak iki sabit tip</b> kullanır: <b>KADIN</b> ve <b>ERKEK</b>. Bu bir
+        eksiklik değil, bilinçli bir tasarım kararıdır — yeni, rastgele bir işçi tipi
+        (ör. "Forklift", "Usta") buradan <b>oluşturulamaz</b>. İleride görev/pozisyon/kategori
+        gibi bir ihtiyaç doğarsa, bu <b>işçi tipinden AYRI</b> bir kavram olarak tasarlanacaktır.
     </p>
-    <form method="post" class="pdks-form-grid" style="margin-top:10px">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="action" value="ekle">
-        <label>
-            <span class="form-label">Kod *</span>
-            <input type="text" name="code" required maxlength="30" placeholder="ör. FORKLIFT" style="text-transform:uppercase">
-        </label>
-        <label>
-            <span class="form-label">Ad *</span>
-            <input type="text" name="name" required maxlength="80" placeholder="ör. Forklift Operatörü">
-        </label>
-        <div class="span-2"><button type="submit" class="btn btn-primary">+ Ekle</button></div>
-    </form>
 </div>
 
 <div class="table-wrap pc-only">
 <table class="data-table">
-<thead><tr><th>Kod</th><th>Ad</th><th>Durum</th><th class="actions-col">İşlem</th></tr></thead>
+<thead><tr><th>Kod</th><th>Ad</th><th>Kapsam</th><th>Durum</th><th class="actions-col">İşlem</th></tr></thead>
 <tbody>
-<?php foreach ($tipler as $t): ?>
+<?php foreach ($tipler as $t): $destekli = in_array($t['code'], $desteklenenKodlar, true); ?>
 <tr>
     <td class="pdks-uid"><?= h($t['code']) ?></td>
     <td class="pdks-row-name"><?= h($t['name']) ?></td>
+    <td>
+        <?php if ($destekli): ?>
+        <span class="pdks-badge pdks-badge-aktif">Sistem Tipi (sabit)</span>
+        <?php else: ?>
+        <span class="pdks-badge pdks-badge-pasif">Desteklenmiyor — yalnız geçmiş/görüntüleme</span>
+        <?php endif; ?>
+    </td>
     <td><span class="pdks-badge <?= $t['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $t['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
     <td class="actions-col">
         <form method="post" style="display:inline">
@@ -102,6 +119,9 @@ render_flash();
             <input type="hidden" name="aktif" value="<?= $t['is_active'] ? '0' : '1' ?>">
             <button type="submit" class="btn btn-sm"><?= $t['is_active'] ? 'Pasifleştir' : 'Aktifleştir' ?></button>
         </form>
+        <?php if ($destekli): ?>
+        <div class="muted" style="font-size:.75rem;margin-top:4px">Son aktif sistem tipi pasifleştirilemez.</div>
+        <?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>
@@ -110,12 +130,12 @@ render_flash();
 </div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($tipler as $t): ?>
+<?php foreach ($tipler as $t): $destekli = in_array($t['code'], $desteklenenKodlar, true); ?>
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($t['name']) ?></div>
-            <div class="pdks-row-sub"><?= h($t['code']) ?></div>
+            <div class="pdks-row-sub"><?= h($t['code']) ?> · <?= $destekli ? 'Sistem Tipi (sabit)' : 'Desteklenmiyor' ?></div>
         </div>
         <span class="pdks-badge <?= $t['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $t['is_active'] ? 'Aktif' : 'Pasif' ?></span>
     </div>
