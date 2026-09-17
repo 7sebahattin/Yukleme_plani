@@ -456,30 +456,106 @@ function require_pdks_gunluk(string $eylem): void
 }
 
 // =========================================================
+// AKTİF DEPO KAYIT KAPISI (Faz 9A / M-01 düzeltmesi)
+//
+// ⚠ enforce_active_depot() (config/auth.php) yalnız "BİR depo seçili mi"
+// sorusuna bakar — sayfa seviyesi bir kapıdır. Bir KAYDIN (oturum/dönem/
+// hakediş) GERÇEKTEN aktif depoya ait olup OLMADIĞINI kontrol ETMEZ. O
+// ikinci kontrol olmadan, ?id= elle başka bir depoya ait bir kayda
+// değiştirilince (IDOR) o kayıt okunabilir/değiştirilebilir — audit
+// bulgusu M-01.
+//
+// Bu fonksiyon TEK ve PAYLAŞILAN kapıdır — pdks_gunluk.php TÜM pdks_*.php
+// modüllerinin (hakedis/cari/rapor/faz8b/faz8e/faz8h/faz8j) hard-require
+// ettiği TEK YÖNLÜ zincirin köküdür (bkz. dosya başı), bu yüzden burada
+// yaşaması onu HERKESE isim bağımlılığı olmadan erişilebilir kılar —
+// Faz 8J'nin kendi pdks_faz8j_aktif_depo_kontrol()'ü artık BUNU sarar
+// (aşağı bkz.), ikinci bir paralel uygulama YOK.
+//
+// Kayıt deposu boşsa ("atanmamış veri") — CLAUDE.md'nin depo mimarisi
+// ilkesiyle AYNI: boş depolu eski veri TÜM depolarda erişilebilir kalır —
+// bu fonksiyon YALNIZ record deposu DOLU ve aktif depodan FARKLIYSA
+// reddeder.
+// =========================================================
+function pdks_gunluk_depo_kontrol(string $recordDepo, ?string $aktifDepo = null): ?string
+{
+    $aktifDepo = $aktifDepo ?? (function_exists('active_depot') ? active_depot() : null);
+    $aktif = trim((string)($aktifDepo ?? ''));
+    $recordDepo = trim($recordDepo);
+    if ($aktif === '') return 'Önce bir depo seçmelisiniz.';
+    if ($recordDepo === '') return null;   // atanmamış veri — tüm depolarda erişilebilir
+    return $aktif !== $recordDepo ? 'Bu kayıt aktif depoya ait değil.' : null;
+}
+
+// =========================================================
 // ÇAPRAZ-SİSTEM UID ÇAKIŞMA KONTROLÜ
 // =========================================================
 
 /**
  * Bu kanonik UID, KALICI personel kart sisteminde (employee_card_uids —
- * config/pdks.php) zaten tanımlı mı? Salt okunur — o tabloyu hiç DEĞİŞTİRMEZ.
- * Yeni bir işçi-havuzu kartı yazılmadan ÖNCE çağrılır.
+ * config/pdks.php) hâlâ AKTİF bir karta mı ait? Salt okunur — o tabloyu hiç
+ * DEĞİŞTİRMEZ. Yeni bir işçi-havuzu kartı yazılmadan ÖNCE çağrılır.
+ *
+ * ⚠ Faz 9A / H-04 düzeltmesi: eskiden `c.status` HİÇ FİLTRELENMİYORDU —
+ * yıllar önce iptal/kayıp/pasif işaretlenmiş bir kalıcı personel kartı,
+ * fiziksel UID'i SONSUZA KADAR işçi havuzuna kaydedilmekten alıkoyuyordu
+ * (`pdks_kart_iptal()` durumu değiştirir, `employee_card_uids` alias
+ * satırını SİLMEZ — kasıtlı, denetim geçmişi için). Artık YALNIZ
+ * `pdks_kart_aktif_mi()`'nin "aktif" saydığı kart bloke eder — iptal/kayıp/
+ * değiştirildi/süresi doldu/pasif durumundaki eski kartlar artık UID'i
+ * SERBEST BIRAKIR. `employee_card_uids`/`employee_cards` satırları
+ * DOKUNULMADAN kalır — pdks_kart_cozumle() (tarihsel arama/denetim) hâlâ
+ * durumdan BAĞIMSIZ tüm kartları bulur, bu fonksiyon SADECE bir engelleme
+ * kararıdır.
  */
 function pdks_gunluk_uid_kalici_kartta_mi(string $kanonik, ?PDO $pdo = null): ?array
 {
     $pdo = $pdo ?? db();
     try {
         $st = $pdo->prepare(
-            "SELECT c.id AS card_id, c.employee_id, e.full_name
+            "SELECT c.id AS card_id, c.employee_id, c.status, e.full_name
                FROM employee_card_uids u
                JOIN employee_cards c ON c.id = u.card_id
                JOIN employees e ON e.id = c.employee_id
               WHERE u.uid_hex = ? LIMIT 1"
         );
         $st->execute([$kanonik]);
-        return $st->fetch() ?: null;
+        $kart = $st->fetch() ?: null;
+        if ($kart === null) return null;
+        $aktifMi = function_exists('pdks_kart_aktif_mi') ? pdks_kart_aktif_mi($kart['status'] ?? null) : true;
+        return $aktifMi ? $kart : null;
     } catch (PDOException $e) {
         return null;   // employee_cards/employee_card_uids yoksa çakışma da yok
     }
+}
+
+/**
+ * Faz 9A / H-04: `pdks_kart_cozumle()`'nin (config/pdks.php) SALT
+ * ÇÖZÜMLEME sonucunu (durumdan bağımsız) bir ENGELLEME kararına çevirir.
+ * `pdks_kart_cozumle()` KENDİSİ DEĞİŞTİRİLMEZ — o fonksiyon
+ * `personel_kartlar.php` ve config/pdks.php'nin kendi (kalıcı personel)
+ * yoklama akışı tarafından da kullanılır ve ORADA durum FARK ETMEKSİZİN
+ * (tarihsel arama/denetim için) çözümleme yapması GEREKİR. Yalnız günlük
+ * işçi GİRİŞ/kart-oluşturma akışının "bu bir kalıcı personel kartı mı,
+ * REDDET" kararı BURADA, TEK yerde, `pdks_kart_aktif_mi()` ile filtrelenir
+ * — üç ayrı çağrı sahasında (Faz 2 pdks_gunluk_oturum_kaydet, Faz 8A GİRİŞ,
+ * Faz 8A ÇIKIŞ) AYNI mantık TEKRAR YAZILMASIN diye.
+ *
+ * @return array{kod:string,hata:string}|null Engelleniyorsa hata dizisi, değilse null.
+ */
+function pdks_gunluk_kalici_kart_engeli(string $hamUid, string $kaynak, ?PDO $pdo = null): ?array
+{
+    if (!function_exists('pdks_kart_cozumle')) return null;
+    $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo ?? db());
+    if ($kalici === null) return null;
+
+    $durum = $kalici['card']['status'] ?? null;
+    $aktifMi = function_exists('pdks_kart_aktif_mi') ? pdks_kart_aktif_mi($durum) : true;
+    if (!$aktifMi) return null;   // iptal/kayıp/pasif/vb. — UID artık serbest
+
+    $isim = (string)($kalici['employee']['full_name'] ?? '');
+    return ['kod' => 'kalici_kart',
+            'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
 }
 
 /**
@@ -1120,16 +1196,10 @@ function pdks_gunluk_oturum_kaydet(string $hamUid, string $kaynak, int $sessionI
     if ($kart === null) {
         // ⚠ Kalıcı personel kartı yanlışlıkla mı okutuldu? config/pdks.php'nin
         // KENDİ çözümleyicisi (alias/aday mantığı DAHİL) ile kontrol edilir —
-        // BURADA yeniden yazılmaz.
-        if (function_exists('pdks_kart_cozumle')) {
-            $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
-            if ($kalici !== null) {
-                $isim = (string)($kalici['employee']['full_name'] ?? '');
-                return ['ok' => false, 'kod' => 'kalici_kart',
-                        'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '')
-                                . ' — günlük işçi kartı değil.'];
-            }
-        }
+        // BURADA yeniden yazılmaz. Faz 9A / H-04: engel kararı yalnız AKTİF
+        // kalıcı kartlar için verilir (bkz. pdks_gunluk_kalici_kart_engeli()).
+        $engel = pdks_gunluk_kalici_kart_engeli($hamUid, $kaynak, $pdo);
+        if ($engel !== null) return ['ok' => false] + $engel;
         return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
     }
 
@@ -2371,14 +2441,9 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
 
     $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
     if ($kart === null) {
-        if (function_exists('pdks_kart_cozumle')) {
-            $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
-            if ($kalici !== null) {
-                $isim = (string)($kalici['employee']['full_name'] ?? '');
-                return ['ok' => false, 'kod' => 'kalici_kart',
-                        'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
-            }
-        }
+        // Faz 9A / H-04: yalnız AKTİF kalıcı kartlar engeller (bkz. yukarı).
+        $engel = pdks_gunluk_kalici_kart_engeli($hamUid, $kaynak, $pdo);
+        if ($engel !== null) return ['ok' => false] + $engel;
         $otomatikKayit = pdks_gunluk_kart_olustur([
             'card_no' => 'AUTO-' . substr(hash('sha256', $kanonik), 0, 20),
             'ham_uid' => $hamUid,
@@ -2501,14 +2566,9 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
 
     $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
     if ($kart === null) {
-        if (function_exists('pdks_kart_cozumle')) {
-            $kalici = pdks_kart_cozumle($hamUid, $kaynak, $pdo);
-            if ($kalici !== null) {
-                $isim = (string)($kalici['employee']['full_name'] ?? '');
-                return ['ok' => false, 'kod' => 'kalici_kart',
-                        'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
-            }
-        }
+        // Faz 9A / H-04: yalnız AKTİF kalıcı kartlar engeller (bkz. yukarı).
+        $engel = pdks_gunluk_kalici_kart_engeli($hamUid, $kaynak, $pdo);
+        if ($engel !== null) return ['ok' => false] + $engel;
         return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
     }
     // ⚠ Legacy Kural 1 İLE AYNI: ÇIKIŞ, kartın kayıp/devre dışı durumu ne
@@ -2612,12 +2672,23 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     $pdo = $pdo ?? db();
     $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo);
 
+    // ⚠ Faz 9A / M-02 düzeltmesi: bu üç sorgu eskiden `source='scan'` ile
+    // sınırlıydı — bu, GERİYE AKTARILMIŞ (`legacy_backfill`) dönemleri
+    // hesaba KATMIYORDU ve session özet kartını (bu fonksiyon) aynı
+    // oturumun kart listesiyle (pdks_gunluk_faz8a_oturum_donemleri —
+    // hiçbir source filtresi YOK), gün özetiyle (pdks_gunluk_faz8a_gun_ozeti
+    // — filtresiz), kart sayımıyla (pdks_gunluk_faz8a_oturum_kart_sayimi —
+    // filtresiz, Faz 4'ün TEK sayım kaynağı) ÇELİŞTİRİYORDU: aynı oturum
+    // için başlıkta 2, detay listesinde 3 işçi görünüyordu (audit M-02).
+    // "Eksik çıkış" sorgusu zaten `source` filtrelemiyordu (aşağıdaki
+    // PRE-MERGE yorumu) — artık DÖRDÜ de AYNI kural: yalnız `is_voided`
+    // hariç tutulur, `source` HİÇBİR YERDE ayırt edici DEĞİLDİR.
     $giris = []; $cikis = [];
-    $stG = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan' GROUP BY worker_type_name_snapshot");
+    $stG = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin GROUP BY worker_type_name_snapshot");
     $stG->execute([$sessionId]);
     foreach ($stG->fetchAll() as $r) $giris[$r['tip']] = (int)$r['n'];
 
-    $stC = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan' AND exit_event_id IS NOT NULL GROUP BY worker_type_name_snapshot");
+    $stC = $pdo->prepare("SELECT worker_type_name_snapshot AS tip, COUNT(*) AS n FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND exit_event_id IS NOT NULL GROUP BY worker_type_name_snapshot");
     $stC->execute([$sessionId]);
     foreach ($stC->fetchAll() as $r) $cikis[$r['tip']] = (int)$r['n'];
 
@@ -2639,7 +2710,7 @@ function pdks_gunluk_faz8a_oturum_ozet(int $sessionId, ?PDO $pdo = null): array
     $eksikTip = [];
     foreach ($eksikKartlar as $ek) $eksikTip[$ek['tip']] = ($eksikTip[$ek['tip']] ?? 0) + 1;
 
-    $stZ = $pdo->prepare("SELECT MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id = ? AND $etkin AND source='scan'");
+    $stZ = $pdo->prepare("SELECT MIN(entry_time) AS ilk_giris, MAX(exit_time) AS son_cikis FROM daily_worker_work_periods WHERE session_id = ? AND $etkin");
     $stZ->execute([$sessionId]);
     $zamanlar = $stZ->fetch() ?: ['ilk_giris' => null, 'son_cikis' => null];
 

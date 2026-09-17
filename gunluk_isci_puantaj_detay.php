@@ -25,6 +25,16 @@ $st->execute([$id]);
 $oturum = $st->fetch();
 if (!$oturum) { set_flash('error', 'Mesai bulunamadı.'); header('Location: gunluk_isci_puantaj.php'); exit; }
 
+// ⚠ Faz 9A / M-01 düzeltmesi: bu sayfa ?id= ile DOĞRUDAN açılıyor —
+// GÖRÜNTÜLEME dahil, oturumun aktif depoya ait olduğu SUNUCU tarafında
+// doğrulanır. Aşağıdaki puantaj_duzeltme/puantaj_iptal/yeniden_ac zaten
+// KENDİ depo kontrollerini de yapıyor (bkz. pdks_faz8j_aktif_depo_kontrol,
+// pdks_gunluk_oturum_yeniden_ac) — bu, sayfanın TAMAMI (özet/kart listesi/
+// iptal geçmişi) için erken ve tek bir kapıdır.
+if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
+    forbidden($depoHata);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yeniden_ac') {
     csrf_check($_POST['csrf'] ?? null);
     $sonuc = pdks_gunluk_oturum_yeniden_ac((int)$id, (string)($_POST['sebep'] ?? ''), (int)$auth_user['id'], $pdo);

@@ -25,11 +25,22 @@ function pdks_faz8j_migrate(?PDO $pdo = null): array {
     return $r;
 }
 function pdks_faz8j_yetki(): ?string { return (!function_exists('is_admin') || !is_admin()) ? 'Bu işlem yalnızca sistem yöneticileri içindir.' : null; }
-/** Shared endpoints never trust a depot supplied only by a page. */
+/**
+ * Shared endpoints never trust a depot supplied only by a page.
+ *
+ * ⚠ Faz 9A: pdks_gunluk_depo_kontrol() (config/pdks_gunluk.php) TEK ve
+ * PAYLAŞILAN kapıya taşındı (bkz. o fonksiyonun docblock'u — M-01 düzeltmesi,
+ * diğer modüllerin de kullanabilmesi için). Bu sarmalayıcı YALNIZ Faz 8J'nin
+ * KENDİ mesajını ve KENDİ (istisnai) boş-depo-de-reddet davranışını korur —
+ * Faz 8J bir düzeltme/iptal işlemidir ve boş `$depo` HER ZAMAN reddedilir
+ * (çağıranlar `active_depot()`'u ZATEN dolduruyor olmalı), genel yardımcının
+ * "atanmamış veri her depoda erişilebilir" kuralı burada UYGULANMAZ.
+ */
 function pdks_faz8j_aktif_depo_kontrol(string $depo): ?string {
     if (!function_exists('active_depot')) return null;
     $aktif = trim((string)(active_depot() ?? ''));
-    return ($aktif === '' || trim($depo) === '' || $aktif !== $depo) ? 'Mesai dönemi aktif depoya ait değil.' : null;
+    if ($aktif === '' || trim($depo) === '') return 'Mesai dönemi aktif depoya ait değil.';
+    return pdks_gunluk_depo_kontrol($depo, $aktif) !== null ? 'Mesai dönemi aktif depoya ait değil.' : null;
 }
 function pdks_faz8j_entitlement(PDO $pdo, int $sid): ?string { $s=$pdo->prepare('SELECT status FROM foreman_daily_entitlements WHERE session_id=?'); $s->execute([$sid]); return $s->fetchColumn() ?: null; }
 function pdks_faz8j_donem(PDO $pdo, int $periodId, int $sessionId, string $depo): ?array {

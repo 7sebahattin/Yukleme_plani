@@ -25,7 +25,12 @@ $testDb->exec("CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, 
 for ($i = 1; $i <= 8; $i++) $testDb->prepare('INSERT INTO worker_cards VALUES (?,?,?,?,NULL)')->execute([$i,'K'.$i,'AABB'.sprintf('%04X',$i),(string)(1000+$i)]);
 $testDb->exec("CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, notes TEXT)");
 $testDb->exec("CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)");
-$testDb->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT)");
+// Faz 9A / B1: is_voided/voided_at/voided_by_user_id/void_reason EKLENDİ —
+// bu dosya YÖNETİM RAPORLAMA (KPI/trend/çavuş özeti/eksik çıkış) mutabakat
+// testidir; kolon eksikken pdks_gunluk_faz8j_etkin_kosul() '1=1'e düşüyor
+// ve void'in TAM DA bu yüzeyler üzerindeki etkisi (audit'in en büyük
+// bulgusu) HİÇ sınanmıyordu.
+$testDb->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
 $testDb->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, foreman_id INTEGER, work_date TEXT, depo TEXT, status TEXT, needs_recalculation INTEGER, currency TEXT, total_amount TEXT)");
 $testDb->exec("CREATE TABLE foreman_payments (id INTEGER PRIMARY KEY, foreman_id INTEGER, payment_date TEXT, status TEXT, currency TEXT, amount TEXT)");
 $testDb->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
@@ -117,5 +122,42 @@ ok8f('Faz 8D çıkış zamanı dolu kaydı eksik saymaz', $odd!==null && (int)$o
 $web=file_get_contents($root.'/raporlar.php'); $print=file_get_contents($root.'/rapor_yazdir.php');
 ok8f('Web ve yazdırma aynı filtreli KPI/açık/eksik kaynaklarını çağırır', str_contains($web,'$pdo, $tipId)') && str_contains($print,'$pdo, $tipId)') && str_contains($print,"(int)\$kpi['acik_mesai']") && str_contains($print,'count($acikMesai)'));
 ok8f('Günlük ve Çavuş CSV aynı trend/özet dizilerinden yazılır', str_contains($web,"foreach (\$trend as \$g)") && str_contains($web,"foreach (\$cavusOzeti as \$c)"));
+
+// ⚠ Faz 9A / B1: buradan itibaren TEK bir yeni HAYALET/İPTAL dönem eklenir
+// (session 1 — Ayşe/FİNİKE/$day'e, status='open', çıkışsız, Kadın) ve
+// YÖNETİM RAPORLAMANIN her yüzeyinin (KPI, açık liste, eksik-çıkış listesi,
+// günlük trend, çavuş özeti, aylık Toplu Döküm) onu TAMAMEN görmezden
+// geldiği doğrudan, gerçek-DB assertion'larla kanıtlanır. Karşılaştırma
+// dosyanın BAŞINDAKİ ($k/$open/...) DEĞİL, tam BU NOKTADA (session 1/2/9
+// üzerindeki önceki manuel-çıkış/UPDATE mutasyonları DAHİL) alınan TAZE bir
+// "önce" anlık görüntüsüyle yapılır — aksi halde dosyanın ORTASINDA
+// yapılan mutasyonlarla (Faz 8E manuel çıkış, id=9 UPDATE) karşılaştırma
+// elma/armut olurdu ve void'in KENDİSİNDEN bağımsız sahte HATA verirdi.
+$oncekiHal = report8f($day,$day);
+[$kOnce,$openOnce,$missingOnce,$trendOnce,$summaryOnce] = $oncekiHal;
+$monthlyOnce = pdks_rapor_cavus_toplu_dokum(substr($day,0,7),'FİNİKE',1,false,$testDb);
+$session1Once = array_values(array_filter($monthlyOnce,fn($r)=>(int)$r['session_id']===1))[0]??null;
+
+$testDb->prepare("INSERT INTO daily_worker_work_periods (id,session_id,worker_card_id,worker_type_id_snapshot,worker_type_name_snapshot,entry_event_id,entry_time,exit_time,work_date_snapshot,depo_snapshot,status,source,is_voided,voided_at,voided_by_user_id,void_reason) VALUES (12,1,1,1,'Kadın',12,?,NULL,?,'FİNİKE','open','scan',1,?,9,'test iptal')")
+    ->execute(["$day 09:30:00",$day,"$day 09:35:00"]);
+[$kVoid,$openVoid,$missingVoid,$trendVoid,$summaryVoid] = report8f($day,$day);
+ok8f('İPTAL edilmiş dönem KPI toplam işçi/açık mesai sayısına KARIŞMAZ',
+    $kVoid['toplam_calisan']===$kOnce['toplam_calisan'] && $kVoid['acik_mesai']===$kOnce['acik_mesai']);
+ok8f('İPTAL edilmiş dönem açık mesai LİSTESİNE eklenmez',
+    count($openVoid)===count($openOnce));
+ok8f('İPTAL edilmiş dönem eksik-çıkış LİSTESİNE eklenmez',
+    count($missingVoid)===count($missingOnce));
+ok8f('İPTAL edilmiş dönem günlük TRENDE karışmaz',
+    $trendVoid[0]['toplam_calisan']===$trendOnce[0]['toplam_calisan'] && $trendVoid[0]['eksik_cikis']===$trendOnce[0]['eksik_cikis']);
+ok8f('İPTAL edilmiş dönem ÇAVUŞ ÖZETİNE karışmaz',
+    array_sum(array_column($summaryVoid,'toplam_isci'))===array_sum(array_column($summaryOnce,'toplam_isci')));
+$monthlyVoid=pdks_rapor_cavus_toplu_dokum(substr($day,0,7),'FİNİKE',1,false,$testDb);
+$session1Void=array_values(array_filter($monthlyVoid,fn($r)=>(int)$r['session_id']===1))[0]??null;
+ok8f('İPTAL edilmiş dönem AYLIK ÇAVUŞ TOPLU DÖKÜM satırına karışmaz',
+    $session1Void!==null && $session1Once!==null && (int)$session1Void['toplam_isci']===(int)$session1Once['toplam_isci']);
+$faz8bVoidRows=pdks_faz8b_oturum_donemleri(1,$testDb);
+ok8f('İPTAL edilmiş dönem Faz 8B mesai değerlendirme girdisine (oturum_donemleri) HİÇ girmez',
+    !in_array(12,array_column($faz8bVoidRows,'id')));
+
 echo "SONUÇ: $pass geçti, $fail hata\n";
 exit($fail===0?0:1);

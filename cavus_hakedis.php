@@ -20,17 +20,32 @@ $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 $flashHata = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'hesapla') {
     csrf_check($_POST['csrf'] ?? null);
-    require_pdks_hakedis('entitlements_view');
+    // ⚠ Faz 9A / M-04 düzeltmesi: hesapla/yeniden hesapla bir FİNANSAL
+    // YAZMADIR (taslak satırları siler ve yeniden yazar) — salt-okunur
+    // 'entitlements_view' bunun için yeterli değildi. Değerlendirme
+    // (mesai_degerlendirme.php) ve kesinleştirme İLE AYNI izne hizalandı.
+    require_pdks_hakedis('entitlements_finalize');
     $sid = filter_var($_POST['session_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
     if ($sid) {
-        $sonuc = $faz8bHazir
-            ? pdks_faz8b_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo)
-            : pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo);
-        if ($sonuc['ok']) {
-            header('Location: cavus_hakedis_detay.php?id=' . (int)$sonuc['entitlement_id']);
-            exit;
+        // ⚠ Faz 9A / M-01 düzeltmesi: session_id istemciden geliyor — hesaplama
+        // ÖNCESİ oturumun aktif depoya ait olduğu SUNUCU tarafında doğrulanır.
+        $stSid = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id=?');
+        $stSid->execute([$sid]);
+        $sidDepo = $stSid->fetchColumn();
+        if ($sidDepo === false) {
+            $flashHata = 'Mesai bulunamadı.';
+        } elseif ($depoHata = pdks_gunluk_depo_kontrol((string)$sidDepo)) {
+            $flashHata = $depoHata;
+        } else {
+            $sonuc = $faz8bHazir
+                ? pdks_faz8b_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo)
+                : pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo);
+            if ($sonuc['ok']) {
+                header('Location: cavus_hakedis_detay.php?id=' . (int)$sonuc['entitlement_id']);
+                exit;
+            }
+            $flashHata = $sonuc['hata'] ?? 'Hesaplanamadı.';
         }
-        $flashHata = $sonuc['hata'] ?? 'Hesaplanamadı.';
     }
 }
 

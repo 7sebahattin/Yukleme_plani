@@ -19,19 +19,30 @@ $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 $id = filter_var($_GET['id'] ?? '', FILTER_VALIDATE_INT);
 if (!$id) { set_flash('error', 'Geçersiz hakediş.'); header('Location: cavus_hakedis.php'); exit; }
 
+$st = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE id=?");
+$st->execute([$id]);
+$hakedis = $st->fetch();
+if (!$hakedis) { set_flash('error', 'Hakediş bulunamadı.'); header('Location: cavus_hakedis.php'); exit; }
+
+// ⚠ Faz 9A / M-01 düzeltmesi: ?id= elle başka bir depoya ait bir hakedişe
+// değiştirilebiliyordu — GÖRÜNTÜLEME dahil hesapla/finalize/yeniden_ac'tan
+// ÖNCE, sayfanın tamamı için TEK kontrol noktası.
+if ($depoHata = pdks_gunluk_depo_kontrol((string)($hakedis['depo'] ?? ''))) {
+    forbidden($depoHata);
+}
+$sid = (int)$hakedis['session_id'];
+
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $action = trim((string)($_POST['action'] ?? ''));
 
     if ($action === 'hesapla') {
-        require_pdks_hakedis('entitlements_view');
-        $st = $pdo->prepare("SELECT session_id FROM foreman_daily_entitlements WHERE id=?");
-        $st->execute([$id]);
-        $sid = (int)$st->fetchColumn();
-        $sonuc = $sid
-            ? ($faz8bHazir ? pdks_faz8b_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo) : pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo))
-            : ['ok' => false, 'hata' => 'Hakediş bulunamadı.'];
+        // ⚠ Faz 9A / M-04 düzeltmesi: taslak hesapla/yeniden hesapla bir
+        // FİNANSAL YAZMADIR — değerlendirme/kesinleştirme İLE AYNI izne
+        // hizalandı (bkz. cavus_hakedis.php'deki aynı düzeltme).
+        require_pdks_hakedis('entitlements_finalize');
+        $sonuc = $faz8bHazir ? pdks_faz8b_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo) : pdks_hakedis_hesapla($sid, (int)$auth_user['id'], $pdo);
         if ($sonuc['ok']) {
             header('Location: cavus_hakedis_detay.php?id=' . (int)$sonuc['entitlement_id'] . '&ok=' . urlencode('Yeniden hesaplandı.'));
             exit;
@@ -39,13 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = $sonuc['hata'] ?? 'Hesaplanamadı.';
     } elseif ($action === 'finalize') {
         require_pdks_hakedis('entitlements_finalize');
-        $stS = $pdo->prepare("SELECT session_id FROM foreman_daily_entitlements WHERE id=?");
-        $stS->execute([$id]);
-        $sid = (int)$stS->fetchColumn();
         $eksikOnay = isset($_POST['eksik_cikis_onay']);
-        $sonuc = $sid
-            ? ($faz8bHazir ? pdks_faz8b_hakedis_finalize($sid, (int)$auth_user['id'], $eksikOnay, $pdo) : pdks_hakedis_finalize($sid, (int)$auth_user['id'], $eksikOnay, $pdo))
-            : ['ok' => false, 'hata' => 'Hakediş bulunamadı.'];
+        $sonuc = $faz8bHazir ? pdks_faz8b_hakedis_finalize($sid, (int)$auth_user['id'], $eksikOnay, $pdo) : pdks_hakedis_finalize($sid, (int)$auth_user['id'], $eksikOnay, $pdo);
         if ($sonuc['ok']) {
             header('Location: cavus_hakedis_detay.php?id=' . (int)$sonuc['entitlement_id'] . '&ok=' . urlencode('Hakediş KESİNLEŞTİRİLDİ.'));
             exit;
@@ -62,11 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = $sonuc['hata'] ?? 'Yeniden açılamadı.';
     }
 }
-
-$st = $pdo->prepare("SELECT * FROM foreman_daily_entitlements WHERE id=?");
-$st->execute([$id]);
-$hakedis = $st->fetch();
-if (!$hakedis) { set_flash('error', 'Hakediş bulunamadı.'); header('Location: cavus_hakedis.php'); exit; }
 
 $satirlar = pdks_hakedis_satirlar($id, $pdo);
 $ozetPuantaj = pdks_gunluk_oturum_ozet((int)$hakedis['session_id'], $pdo);

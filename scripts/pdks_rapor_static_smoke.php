@@ -185,8 +185,13 @@ echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HA
 // BİLİNÇLİ OLARAK değiştirdi — görev talimatının KENDİSİ merkezi devam
 // modelinin değiştiğini söylüyor. Bu üç dosya BU YÜZDEN listeden çıkarıldı;
 // Faz 8A'nın KENDİ static testi kapsamlarının BELİRLİ kaldığını doğrular.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_fiyatlari.php cavus_hakedis.php cavus_cari.php 2>&1'));
-ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ', $gcDiff === '', $gcDiff);
+// ⚠ Faz 9A (v227 audit'in M-01/M-04 bulguları, v228): cavus_hakedis.php
+// AYNI gerekçeyle (bkz. pdks_cari_static_smoke.php §6'daki AYNI turda
+// yapılan AYNI güncelleme) bu listeden ÇIKARILDI — hakedis hesapla artık
+// aktif depoyu doğruluyor ve 'entitlements_finalize' istiyor; kapsamı
+// scripts/pdks_faz9a_smoke.php AYRICA doğrular.
+$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_fiyatlari.php cavus_cari.php 2>&1'));
+ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ (Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php AYRICA test edilir)', $gcDiff === '', $gcDiff);
 // ⚠ Faz 6, üç çok satırlı literali (Faz 5'ten devralınan $p_gunluk +
 // 'muhasebe' + 'ik' izin dizileri) attendance.management_reports EKLEYEREK
 // genişletti — git diff bu TEK satırlık literalleri "silinip yeniden
@@ -251,6 +256,10 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v224');",
     "-    define('APP_SURUM', 'v225');",
     "-    define('APP_SURUM', 'v226');",
+    // Faz 9A (v228): v227'den v228'e — AYNI rutin tek satırlık sürüm damgası
+    // güncellemesi (pdks_faz1b_static_smoke.php'nin AYNI turda eklediği
+    // satırın eşi).
+    "-    define('APP_SURUM', 'v227');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

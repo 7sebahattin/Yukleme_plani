@@ -55,7 +55,14 @@ $db->exec("CREATE TABLE daily_worker_work_periods (
     entry_time DATETIME NOT NULL,
     exit_time DATETIME NULL,
     declared_attendance_class VARCHAR(10) NOT NULL DEFAULT 'tam',
-    approved_attendance_class VARCHAR(10) NULL
+    approved_attendance_class VARCHAR(10) NULL,
+    -- Faz 9A / B1: is_voided EKSİKSE pdks_gunluk_faz8j_etkin_kosul() '1=1'e
+    -- düşer ve bu dosyanın finansal sorguları void'i HİÇ görmez (audit
+    -- bulgusu: void semantiği testte sessizce devre dışı kalıyordu).
+    is_voided INT NOT NULL DEFAULT 0,
+    voided_at DATETIME NULL,
+    voided_by_user_id INT NULL,
+    void_reason VARCHAR(500) NULL
 )");
 $db->exec("CREATE TABLE foreman_daily_entitlements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,6 +181,33 @@ ok8bf('yeniden hesaplama yeni Tam kararını finansal toplama yansıtır', $h7['
 // p1 1500 + p2 1500 + p3 1700 + p4 1900 + p5 1650 + p6 1500 = 9750.
 $beklenen = '9750.00';
 ok8bf('nihai toplam aritmetiği 9750 TL', $h7['ok'] === true && $h7['total_amount'] === $beklenen, json_encode($h7, JSON_UNESCAPED_UNICODE));
+
+// 8) Faz 9A / B1: İPTAL EDİLMİŞ bir dönem — BİLEREK 12:00-18:16 (6s16dk,
+// KISA — Tam/Yarım kararı GEREKTİRİR — VE planlı bitişten (17:00) 18:16
+// FM'nin 2 saatlik dilimine girer — İKİ kuyruğa BİRDEN düşecek şekilde
+// kurgulanır): void hariç tutma bozuksa hem Tam/Yarım kuyruğuna HEM FM
+// kuyruğuna düşer, HİÇ değerlendirilmediği için hesaplama
+// 'faz8b_degerlendirme_gerekli' ile BLOKE OLUR — dolayısıyla aşağıdaki
+// "yeniden hesaplama hâlâ başarılı" tek başına GÜÇLÜ bir kanıttır.
+// worker_card_id=8 kullanılmamış tek karttır (1-8 arası tanımlı, 1-6
+// önceki periyotlarda kullanıldı).
+$p8 = periodEkle($db, 8, 1, 'Kadın', '12:00', '18:16');
+$db->prepare("UPDATE daily_worker_work_periods SET is_voided=1, voided_at='2026-09-16 20:00:00', voided_by_user_id=9, void_reason='test iptal' WHERE id=?")
+    ->execute([$p8]);
+$ozetVoid = pdks_faz8b_oturum_ozeti(1, $db);
+ok8bf('İPTAL edilmiş dönem Tam/Yarım (bekleyen_sinif) kuyruğuna GİRMEZ', $ozetVoid['bekleyen_sinif'] === 0, json_encode($ozetVoid, JSON_UNESCAPED_UNICODE));
+ok8bf('İPTAL edilmiş dönem Fazla Mesai (bekleyen_fazla_mesai) kuyruğuna GİRMEZ', $ozetVoid['bekleyen_fazla_mesai'] === 0, json_encode($ozetVoid, JSON_UNESCAPED_UNICODE));
+$donemlerVoid = pdks_faz8b_oturum_donemleri(1, $db);
+ok8bf('İPTAL edilmiş dönem Faz 8B değerlendirme girdisine (oturum_donemleri) HİÇ girmez', !in_array($p8, array_column($donemlerVoid, 'id'), true));
+$h8 = pdks_faz8b_hakedis_hesapla(1, 1, $db);
+ok8bf('İPTAL edilmiş, HİÇ değerlendirilmemiş dönem hesaplamayı BLOKE ETMEZ (değerlendirme gerekmiyor)', $h8['ok'] === true, json_encode($h8, JSON_UNESCAPED_UNICODE));
+$line8 = array_values(array_filter($h8['lines'] ?? [], fn($x) => (int)$x['work_period_id'] === $p8))[0] ?? null;
+ok8bf('İPTAL edilmiş dönem hakediş SATIRLARINA (entitlement lines) girmez', $line8 === null, json_encode($h8['lines'] ?? [], JSON_UNESCAPED_UNICODE));
+ok8bf('İPTAL edilmiş dönem TOPLAMA (entitlement total) hiç KATKI yapmaz — 9750 TL AYNI kalır', $h8['ok'] === true && $h8['total_amount'] === $beklenen, json_encode($h8, JSON_UNESCAPED_UNICODE));
+// ⚠ SQLite NUMERIC affinity ondalık sıfırları kırpar (CLAUDE.md'nin
+// bilinen farklılığı) — DB'den okunan ham DECIMAL '9750.00' DEĞİL '9750'
+// dönebilir, bu yüzden burada sayısal karşılaştırma yapılır.
+ok8bf('Yeniden hesaplanan hakedişin veritabanındaki toplamı da 9750 TL', (float)$db->query("SELECT total_amount FROM foreman_daily_entitlements WHERE session_id=1")->fetchColumn() === (float)$beklenen);
 
 echo "\nSONUÇ: {$gecen} geçti, {$hata} hata\n";
 exit($hata === 0 ? 0 : 1);
