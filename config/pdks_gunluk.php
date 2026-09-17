@@ -594,9 +594,14 @@ function pdks_gunluk_kalici_kart_engeli(string $hamUid, string $kaynak, ?PDO $pd
     $aktifMi = function_exists('pdks_kart_aktif_mi') ? pdks_kart_aktif_mi($durum) : true;
     if (!$aktifMi) return null;   // iptal/kayıp/pasif/vb. — UID artık serbest
 
+    // ⚠ Faz 9E / C: kiosk'ta operatörün gördüğü ASIL mesaj burasıdır (günlük
+    // işçi GİRİŞ'inde kalıcı personel kartı okutulduğunda) — bkz. yukarıdaki
+    // pdks_gunluk_kart_olustur() içindeki KARDEŞ mesaj (kart oluşturma anı).
+    // İkisi de AYNI durumu anlatır, o yüzden AYNI eylemi söyler.
     $isim = (string)($kalici['employee']['full_name'] ?? '');
     return ['kod' => 'kalici_kart',
-            'hata' => 'Bu bir KALICI PERSONEL kartı' . ($isim !== '' ? ' (' . $isim . ')' : '') . ' — günlük işçi kartı değil.'];
+            'hata' => 'Bu kart aktif bir kalıcı personel kartına bağlıdır' . ($isim !== '' ? ' (' . $isim . ')' : '')
+                    . '. Günlük işçi kartı olarak kullanmak için önce kalıcı personel kartını pasife alın/iptal edin.'];
 }
 
 /**
@@ -971,9 +976,14 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
     // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ — yön 1: kalıcı personel kartlarıyla çakışma.
     $kaliciCakisma = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
     if ($kaliciCakisma !== null) {
+        // ⚠ Faz 9E / C: eskiden mesaj yalnız DURUM bildiriyordu ("...tanımlı"),
+        // operatöre ne YAPACAĞINI söylemiyordu. FAZ9A çakışmayı zaten yalnız
+        // AKTİF kalıcı kartla sınırladığı için (bkz. pdks_gunluk_uid_kalici_kartta_mi
+        // yorumu) çözüm HER ZAMAN aynıdır: o kalıcı kartı pasife al/iptal et.
+        // Bu fonksiyon hiçbir kartı OTOMATİK pasife almaz/silmez — yalnız METİN.
         return ['ok' => false, 'kod' => 'uid_kalici_kartta',
-                'hata' => 'Bu kart zaten KALICI PERSONEL kartı olarak tanımlı (' . (string)$kaliciCakisma['full_name'] . '). '
-                        . 'Aynı fiziksel kart hem kalıcı personelde hem işçi havuzunda olamaz.'];
+                'hata' => 'Bu kart aktif bir kalıcı personel kartına bağlıdır (' . (string)$kaliciCakisma['full_name'] . '). '
+                        . 'Günlük işçi kartı olarak kullanmak için önce kalıcı personel kartını pasife alın/iptal edin.'];
     }
     // Havuz-içi çakışma (kendi UNIQUE kısıtının önden, dostça hâli).
     $havuzCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
@@ -1886,6 +1896,56 @@ function pdks_gunluk_kullanici_adi(?int $userId, ?PDO $pdo = null): string
     $u = $st->fetch();
     if (!$u) return '—';
     return (string)($u['display_name'] ?: $u['username']);
+}
+
+/**
+ * Puantaj detay sayfası için BAĞLAMSAL denetim geçmişi (Faz 9E / E).
+ * `audit.php`'nin GENEL (admin, tüm sistem) kayıt defteriyle KARIŞTIRILMASIN
+ * — bu YALNIZ verilen dönem id'lerine `record_id` eşleşmesiyle DETERMİNİSTİK
+ * bağlı satırları döner; tahmin/eşleştirme YAPILMAZ (görev talimatı: "do not
+ * fabricate"). Yalnız FİİLEN yazılan üç eylem süzülür: puantaj_iptal/
+ * puantaj_duzeltme (bkz. pdks_faz8j_audit()) ve Faz 8B'nin mesai
+ * değerlendirme onayı ('update', bkz. config/pdks_faz8b.php'deki
+ * audit_log_event('update','daily_worker_work_periods',...) çağrısı) — ham
+ * GİRİŞ/ÇIKIŞ tarama olayları (gunluk_giris/gunluk_cikis) ZATEN kart
+ * listesinde görünür, burada TEKRAR edilmez. Manuel çıkış (Faz 8E) HENÜZ
+ * audit_log'a yazmıyor — o yüzden burada da GÖRÜNMEZ (uydurma yok).
+ */
+function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null, int $limit = 20): array
+{
+    $pdo = $pdo ?? db();
+    $ids = array_values(array_unique(array_filter(array_map('intval', $periodIds), fn($v) => $v > 0)));
+    if (empty($ids) || !pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
+    $limit = max(1, min(50, $limit));
+    $ph = implode(',', array_fill(0, count($ids), '?'));
+    try {
+        $st = $pdo->prepare(
+            "SELECT al.id, al.action, al.record_id, al.new_values, al.created_at, al.user_id,
+                    COALESCE(u.display_name, u.username) AS actor_name
+               FROM audit_log al LEFT JOIN users u ON u.id = al.user_id
+              WHERE al.module = 'daily_worker_work_periods' AND al.record_id IN ($ph)
+                AND al.action IN ('puantaj_iptal', 'puantaj_duzeltme', 'update')
+              ORDER BY al.created_at DESC LIMIT $limit"
+        );
+        $st->execute($ids);
+    } catch (PDOException $e) {
+        return [];
+    }
+    $satirlar = $st->fetchAll();
+    $etiketler = [
+        'puantaj_iptal'    => '🗑️ Puantaj kaydı iptal edildi',
+        'puantaj_duzeltme' => '✏️ Puantaj kaydı düzeltildi',
+        'update'           => '🧮 Mesai değerlendirmesi kaydedildi',
+    ];
+    foreach ($satirlar as &$r) {
+        $yeni = json_decode((string)$r['new_values'], true) ?: [];
+        $r['islem_etiket'] = $etiketler[$r['action']] ?? $r['action'];
+        $parcalar = array_filter([trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
+        $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
+        $r['aktor'] = $r['actor_name'] ?: pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo);
+    }
+    unset($r);
+    return $satirlar;
 }
 
 /**
@@ -3039,8 +3099,13 @@ function pdks_gunluk_faz8a_eksik_cikislar(string $workDate, ?string $depo = null
     if ($depo !== null && $depo !== '') { $where[] = 'p.depo_snapshot = ?'; $params[] = $depo; }
     if ($foremanId !== null) { $where[] = 's.foreman_id = ?'; $params[] = $foremanId; }
     $st = $pdo->prepare(
-        "SELECT p.session_id, p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip,
+        // ⚠ Faz 9E / F: p.id (period_id) + p.status EKLENDİ — sayfa (gunluk_isci_puantaj.php)
+        // artık her satır için "Manuel Çıkış Gir" derin bağlantısını ve gerçek
+        // durumu (canlı 'open' mü, geriye aktarılmış 'legacy_unresolved' mı)
+        // KENDİSİ türetmeden buradan okur; ikinci bir sorgu YAZILMAZ.
+        "SELECT p.id AS period_id, p.session_id, p.worker_card_id, w.card_no, p.worker_type_name_snapshot AS tip,
                 p.entry_time AS giris_saat, p.work_date_snapshot AS tarih, p.depo_snapshot AS depo,
+                p.status AS donem_durumu,
                 s.status AS oturum_durumu, s.notes AS kapanis_notu, s.foreman_name_snapshot AS cavus_adi
            FROM daily_worker_work_periods p
            JOIN daily_work_sessions s ON s.id = p.session_id

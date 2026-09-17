@@ -132,7 +132,11 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
         <?php elseif ($f8['tam_hazir']): ?><span class="pdks-badge pdks-badge-tamamlandi">Hazır</span>
         <?php else: ?><span class="pdks-badge pdks-badge-eksik_cikis">Bekliyor <?= (int)$f8['hazir'] ?>/<?= (int)$f8['toplam'] ?></span><?php endif; ?>
     </td>
-    <td><?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?><?= $hk && !empty($hk['needs_recalculation']) ? ' ⚠️' : '' ?></td>
+    <td><?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?>
+        <?php if ($hk && !empty($hk['needs_recalculation'])): ?>
+        <br><span class="pdks-badge pdks-badge-eksik_cikis" title="Puantaj / mesai değerlendirmesi hakediş taslağından sonra değişti.">Yeniden hesaplama gerekli</span>
+        <?php endif; ?>
+    </td>
     <td><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></td>
     <td><?php if ((int)$p['eksik_toplam'] > 0): ?><span class="pdks-badge pdks-badge-eksik_cikis">⚠️ Eksik Çıkış</span><?php endif; ?></td>
     <td>
@@ -155,7 +159,10 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y',strtotime($sess['work_date']))) ?><?= $sess['depo'] ? ' / '.h($sess['depo']) : '' ?></div></div><span class="pdks-badge pdks-badge-<?= h($ekod) ?>"><?= h($etkt) ?></span></div>
     <div class="pdks-kiosk-counter-row"><span>Toplam İşçi</span><span class="n"><strong><?= (int)$p['giris_toplam'] ?></strong></span></div>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Mesai değerlendirme: <?= $f8['tam_hazir'] ? 'Hazır' : 'Bekliyor ' . (int)$f8['hazir'] . '/' . (int)$f8['toplam'] ?></div><?php endif; ?>
-    <div class="pdks-row-sub">Hakediş: <?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?><?= $hk && !empty($hk['needs_recalculation']) ? ' · yeniden hesap gerekli' : '' ?></div>
+    <div class="pdks-row-sub">Hakediş: <?= $hk ? h(number_format((float)$hk['total_amount'],2,',','.') . ' ' . $hk['currency']) : '—' ?></div>
+    <?php if ($hk && !empty($hk['needs_recalculation'])): ?>
+    <div class="pdks-row-sub" style="color:var(--warn);font-weight:600">⚠️ Yeniden hesaplama gerekli — puantaj/mesai değerlendirmesi taslaktan sonra değişti.</div>
+    <?php endif; ?>
     <div style="margin-top:8px">
         <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$sess['id'] ?>" class="btn btn-sm">Mesai Değerlendir</a><?php endif; ?>
         <?php if ($hk): ?><a href="cavus_hakedis_detay.php?id=<?= (int)$hk['id'] ?>" class="btn btn-sm">Detay</a>

@@ -110,6 +110,12 @@ $duzeltmeler = ($faz9dHazir && $hakedis['status'] === 'final') ? pdks_faz9d_duze
 $duzeltmeNetKurus = ($faz9dHazir && $hakedis['status'] === 'final') ? pdks_faz9d_entitlement_net_kurus($id, $pdo) : 0;
 $netHakedisKurus = pdks_hakedis_tl_kurus((string)$hakedis['total_amount']) + $duzeltmeNetKurus;
 
+// ⚠ Faz 9E / E: bu hakedişin YAŞAM DÖNGÜSÜ (hesapla/kesinleştir/yeniden aç +
+// Faz 9D mahsup create/reverse) — bkz. pdks_hakedis_denetim_gecmisi() docblock.
+// Yukarıdaki $duzeltmeler zaten mahsupların TAM/işlemli tablosu; bu, hepsini
+// TEK bir zaman çizelgesinde birleştiren KISA bir özet.
+$denetimGecmisi = pdks_hakedis_denetim_gecmisi($id, $pdo);
+
 $basari = '';
 if (empty($errors) && isset($_GET['ok'])) $basari = trim((string)$_GET['ok']);
 
@@ -130,7 +136,13 @@ render_flash();
 
 <?php if ($basari !== ''): ?><div class="flash flash-success"><?= h($basari) ?></div><?php endif; ?>
 <?php foreach ($errors as $e): ?><div class="flash flash-error"><?= h($e) ?></div><?php endforeach; ?>
-<?php if ($faz8bHazir && !empty($hakedis['needs_recalculation']) && $hakedis['status'] === 'draft'): ?><div class="flash flash-warning">Mesai değerlendirmesi değişti. Bu taslak yeniden hesaplanmalıdır.</div><?php endif; ?>
+<?php if ($faz8bHazir && !empty($hakedis['needs_recalculation']) && $hakedis['status'] === 'draft'): ?>
+<div class="flash flash-warning">
+    <strong>⚠️ Yeniden hesaplama gerekli</strong><br>
+    Puantaj / mesai değerlendirmesi hakediş taslağından sonra değişti.
+    <?php if (pdks_hakedis_can('entitlements_finalize')): ?> Aşağıdaki "🔄 Yeniden Hesapla" ile güncelleyebilirsiniz.<?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="table-wrap pc-only" style="margin:0 0 18px">
 <table class="data-table"><tbody>
@@ -328,6 +340,24 @@ render_flash();
     </form>
 </div>
 <?php endif; ?>
+<?php endif; ?>
+
+<?php if ($denetimGecmisi): ?>
+<!-- ⚠ Faz 9E / E: BAĞLAMSAL geçmiş — audit.php'nin genel/admin kayıt
+     defteri DEĞİL, yalnız bu hakedişe deterministik bağlı hesapla/
+     kesinleştir/yeniden aç + Faz 9D mahsup satırları. Ham JSON YOK. -->
+<div class="card" style="padding:18px 20px;margin-top:20px">
+<h2 style="margin-top:0;font-size:1rem">İşlem Geçmişi</h2>
+<div class="pdks-cards">
+<?php foreach ($denetimGecmisi as $d): ?>
+<div class="pdks-card-item">
+    <div class="pdks-row-sub"><?= h(date('d.m.Y H:i', strtotime($d['created_at']))) ?> · <?= h($d['aktor']) ?></div>
+    <div class="pdks-row-name" style="font-size:.95rem"><?= h($d['islem_etiket']) ?></div>
+    <?php if ($d['detay']): ?><div class="pdks-row-sub"><?= h($d['detay']) ?></div><?php endif; ?>
+</div>
+<?php endforeach; ?>
+</div>
+</div>
 <?php endif; ?>
 
 <?php render_footer(); ?>
