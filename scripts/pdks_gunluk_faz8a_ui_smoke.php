@@ -205,6 +205,10 @@ ok('Mevcut nötr kart (K001, tip yok) listede "— (nötr)" olarak görünüyor'
 ok('Kart no K001 listede görünüyor (LEFT JOIN kartı düşürmedi)', str_contains($s2, 'K001'));
 ok('Kart düzenleme modalı responsive sınıf kullanıyor',
     str_contains($s2, 'class="pm-dialog isk-card-modal"'));
+ok('Kart düzenleme modalı, güvenli iç boşluk ve dikey kaydırma için ayrı gövde kullanıyor',
+    str_contains($s2, 'class="isk-card-modal-body"'));
+ok('Kart düzenleme form aksiyonları taşma-korumalı sınıf kullanıyor',
+    str_contains($s2, 'class="isk-card-form-actions"'));
 ok('Kart durum işlemleri responsive action grid kullanıyor',
     str_contains($s2, 'class="isk-card-status-actions"'));
 
