@@ -615,6 +615,24 @@ function pdks_gunluk_tip_olustur(string $kod, string $ad, ?PDO $pdo = null): arr
 function pdks_gunluk_tip_aktiflik(int $id, bool $aktif, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
+    // ⚠ Faz 9B / H-01 kapanışı: SON aktif+desteklenen tipi pasifleştirmek
+    // GİRİŞ akışını seçilecek hiçbir tip bırakmadan kullanılamaz hale
+    // getirir. YALNIZ bu durumda engellenir — KADIN/ERKEK'ten biri aktif
+    // kalırken diğerini pasifleştirmek (ör. tek cinsiyetli bir şube) veya
+    // desteklenmeyen/tarihsel bir tipi pasifleştirmek SERBESTTİR; bu yüzden
+    // testler (ör. scripts/pdks_gunluk_smoke.php'nin KADIN/ERKEK'i TEK TEK,
+    // diğeri aktifken pasifleştirip geri açan senaryosu) ETKİLENMEZ.
+    if (!$aktif) {
+        $stKod = $pdo->prepare('SELECT code FROM worker_types WHERE id = ?');
+        $stKod->execute([$id]);
+        $kod = $stKod->fetchColumn();
+        if ($kod !== false && pdks_gunluk_tip_kodu_destekleniyor((string)$kod)) {
+            $kalanlar = pdks_gunluk_desteklenen_tip_listele($pdo);
+            if (count($kalanlar) === 1 && (int)$kalanlar[0]['id'] === $id) {
+                return ['ok' => false, 'hata' => 'Son aktif desteklenen işçi tipi (' . $kod . ') pasifleştirilemez — günlük işçi giriş akışı seçilecek hiçbir tip bulamaz.'];
+            }
+        }
+    }
     $st = $pdo->prepare("UPDATE worker_types SET is_active = ? WHERE id = ?");
     $st->execute([$aktif ? 1 : 0, $id]);
     if ($st->rowCount() === 0) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];
@@ -622,6 +640,74 @@ function pdks_gunluk_tip_aktiflik(int $id, bool $aktif, ?PDO $pdo = null): array
         audit_log_event('update', 'worker_types', $id, null, ['is_active' => $aktif ? 1 : 0]);
     }
     return ['ok' => true];
+}
+
+// =========================================================
+// Faz 9B — GÜNLÜK İŞÇİ TİPİ TEK VE YETKİLİ POLİTİKA KAPISI (H-01 kapanışı)
+//
+// ⚠ v227 audit bulgusu H-01: worker-type admin ekranı serbest kod kabul
+// ediyordu ("ör. FORKLIFT"), tarama mantığı herhangi bir AKTİF worker_types
+// satırını kabul ediyordu, düzeltme (Faz 8J) mantığı yalnız KADIN/ERKEK
+// kabul ediyordu VE düzeltme AÇILIR LİSTESİ backend'in reddettiği tipleri
+// sunuyordu — dört ayrı katman DÖRT FARKLI kararı BAĞIMSIZ veriyordu.
+//
+// İş kararı KESİNLEŞTİ (görev talimatı): günlük işçi devam sistemi TAM
+// OLARAK iki tip destekler — KADIN, ERKEK. Bu dosya artık TEK doğruluk
+// kaynağıdır; tarama (pdks_gunluk_faz8a_giris_kaydet), düzeltme
+// (config/pdks_faz8j.php → pdks_faz8j_desteklenen_tip, artık SARMALAR),
+// oran tanımlama (cavus_fiyatlari.php / config/pdks_faz8b.php /
+// config/pdks_hakedis.php) BURAYA delege eder — `code IN ('KADIN','ERKEK')`
+// ARTIK HİÇBİR YERDE TEKRARLANMAZ.
+//
+// ⚠ Bu politika YALNIZ YENİ OPERASYONEL SEÇİM içindir (GİRİŞ tip seçimi,
+// düzeltme hedefi, yeni oran tanımlama) — TARİHSEL görüntüleme/arama
+// ETKİLENMEZ: pdks_gunluk_tip_listele() (TÜM satırlar, destekli/desteksiz,
+// aktif/pasif) ve mevcut dönem/oran/hakediş satırları AYNEN okunabilir
+// kalır. Kod, uygulanmayan bir tipi asla SESSİZCE yeniden sınıflandırmaz
+// veya silmez (görev talimatı §7).
+// =========================================================
+
+/** @return string[] Günlük işçi operasyonel akışlarında desteklenen KOD listesi. */
+function pdks_gunluk_desteklenen_tip_kodlari(): array
+{
+    return ['KADIN', 'ERKEK'];
+}
+
+/** Bu KOD (worker_types.code), günlük işçi operasyonel akışlarında desteklenir mi? */
+function pdks_gunluk_tip_kodu_destekleniyor(?string $kod): bool
+{
+    return $kod !== null && in_array($kod, pdks_gunluk_desteklenen_tip_kodlari(), true);
+}
+
+/**
+ * YENİ operasyonel seçim (GİRİŞ tip düğmeleri, düzeltme hedef listesi, yeni
+ * oran tanımlama açılır listesi) İÇİN kullanılabilecek AKTİF + DESTEKLENEN
+ * worker_types satırları — istisnasız aynı liste, tek kaynak.
+ */
+function pdks_gunluk_desteklenen_tip_listele(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $kodlar = pdks_gunluk_desteklenen_tip_kodlari();
+    $ph = implode(',', array_fill(0, count($kodlar), '?'));
+    $st = $pdo->prepare("SELECT * FROM worker_types WHERE is_active = 1 AND code IN ($ph) ORDER BY sort_order ASC, name ASC");
+    $st->execute($kodlar);
+    return $st->fetchAll();
+}
+
+/**
+ * Bir worker_type_id'nin YENİ operasyonel seçim için geçerli (aktif +
+ * desteklenen kod) olup olmadığını SUNUCU tarafında bağımsızca doğrular —
+ * crafted POST'a (istemcinin göndermediği/UI'da hiç sunulmayan bir id dahi
+ * olsa) karşı TEK doğruluk kaynağı. Geçerliyse satırı (code dahil) döner.
+ */
+function pdks_gunluk_desteklenen_tip_coz(int $workerTypeId, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    $kodlar = pdks_gunluk_desteklenen_tip_kodlari();
+    $ph = implode(',', array_fill(0, count($kodlar), '?'));
+    $st = $pdo->prepare("SELECT * FROM worker_types WHERE id = ? AND is_active = 1 AND code IN ($ph)");
+    $st->execute(array_merge([$workerTypeId], $kodlar));
+    return $st->fetch() ?: null;
 }
 
 // =========================================================
@@ -2427,10 +2513,12 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
     if (!$session) return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
     if ($session['status'] !== 'open') return ['ok' => false, 'kod' => 'oturum_kapali', 'hata' => 'Bu mesai kapalı.'];
 
-    $stTip = $pdo->prepare("SELECT id, name FROM worker_types WHERE id = ? AND is_active = 1");
-    $stTip->execute([$workerTypeId]);
-    $tip = $stTip->fetch();
-    if (!$tip) return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+    // ⚠ Faz 9B / H-01 kapanışı: eskiden HERHANGİ bir aktif worker_types
+    // satırı kabul edilirdi — UI yalnız KADIN/ERKEK sunsa bile crafted bir
+    // POST başka bir aktif tipi (varsa) GİRİŞ'e sokabilirdi. Artık tek
+    // paylaşılan politika kapısından geçer (bkz. o fonksiyonun docblock'u).
+    $tip = pdks_gunluk_desteklenen_tip_coz($workerTypeId, $pdo);
+    if (!$tip) return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı, pasif veya günlük işçi girişinde desteklenmiyor.'];
 
     $kanonik = match ($kaynak) {
         'usb_decimal' => pdks_uid_from_decimal($hamUid),

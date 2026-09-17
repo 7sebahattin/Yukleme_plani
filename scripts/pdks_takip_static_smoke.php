@@ -238,9 +238,13 @@ echo "\n=== FAZ 1-6 DOSYALARINA İŞ MANTIĞI DEĞİŞİKLİĞİ YOK (yalnız na
 // (nötr kart + mesai dönemi modeli — görev talimatının KENDİSİ: "This phase
 // changes a central attendance assumption"). Bu beş dosya BU YÜZDEN listeden
 // çıkarıldı; Faz 8A'nın KENDİ static testi kapsamı doğrular.
+// ⚠ Faz 9B (v227 audit H-01 kapanışı, v229): cavus_fiyatlari.php BİLİNÇLİ
+// OLARAK bu listeden ÇIKARILDI — YENİ oran tanımlama açılır listesi artık
+// pdks_gunluk_desteklenen_tip_listele() (yalnız KADIN/ERKEK) kullanıyor;
+// kapsamı scripts/pdks_faz9b_smoke.php AYRICA doğrular.
 foreach ([
     'personel.php', 'personel_kartlar.php', 'giris_cikis.php',
-    'cavus_fiyatlari.php', 'cavus_cari.php',
+    'cavus_cari.php',
 ] as $f) {
     $diff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- ' . escapeshellarg($f) . ' 2>&1'));
     ok("$f: diff'i BOŞ — Faz 7 dokunmadı", $diff === '', $diff);

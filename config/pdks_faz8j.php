@@ -63,9 +63,20 @@ function pdks_faz8j_cikis_zamani(array $veri): array {
     $cikis=pdks_faz8j_zaman($tarih,$saat);
     return $cikis===null ? ['ok'=>false,'exit'=>null,'hata'=>'Geçerli bir çıkış tarihi ve saati girin.'] : ['ok'=>true,'exit'=>$cikis];
 }
-/** Only the active KADIN/ERKEK scan types may be stored as a correction snapshot. */
+/**
+ * Only the actively-supported daily-worker scan types may be stored as a
+ * correction snapshot.
+ *
+ * ⚠ Faz 9B / H-01 kapanışı: `code IN ('KADIN','ERKEK')` BURADA artık
+ * TEKRARLANMAZ — config/pdks_gunluk.php'deki TEK paylaşılan politikayı
+ * (pdks_gunluk_desteklenen_tip_coz()) SARAR, tıpkı pdks_faz8j_aktif_depo_kontrol()'ün
+ * Faz 9A'da pdks_gunluk_depo_kontrol()'ü SARDIĞI desenin aynısı. Düzeltme
+ * açılır listesi (gunluk_isci_puantaj_detay.php → pdks_gunluk_desteklenen_tip_listele())
+ * ile BU fonksiyonun kabul ettiği küme HER ZAMAN AYNIDIR — UI'nin sunduğu
+ * bir tip backend'de asla reddedilmez.
+ */
 function pdks_faz8j_desteklenen_tip(PDO $pdo, int $typeId): ?array {
-    $s=$pdo->prepare("SELECT id,name,code FROM worker_types WHERE id=? AND is_active=1 AND code IN ('KADIN','ERKEK')"); $s->execute([$typeId]); return $s->fetch() ?: null;
+    return function_exists('pdks_gunluk_desteklenen_tip_coz') ? pdks_gunluk_desteklenen_tip_coz($typeId, $pdo) : null;
 }
 function pdks_faz8j_void(int $periodId, int $sessionId, string $depo, string $reason, int $user, ?PDO $pdo=null): array {
     $pdo=$pdo??db(); if($e=pdks_faz8j_yetki()) return ['ok'=>false,'hata'=>$e]; if($e=pdks_faz8j_aktif_depo_kontrol($depo)) return ['ok'=>false,'hata'=>$e];
@@ -95,7 +106,12 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
         if(pdks_faz8j_entitlement($pdo,$sid)==='final') throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
         if(substr($entry,0,10)!==(string)$p['work_date']||$entry>date('Y-m-d H:i:s')||($exit!==null&&($exit<$entry||strtotime($exit)>strtotime($entry)+86400||$exit>date('Y-m-d H:i:s')))) throw new RuntimeException('Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.');
         $c=$pdo->prepare('SELECT card_no FROM worker_cards WHERE id=?'); $c->execute([$card]); $cardNo=$c->fetchColumn(); $tip=pdks_faz8j_desteklenen_tip($pdo,$type); $typeName=$tip['name']??null;
-        if(!$cardNo||!$typeName) throw new RuntimeException('Kart veya desteklenen aktif işçi tipi bulunamadı.');
+        // Faz 9B / görev talimatı §7: ayrı, AÇIK mesajlar — "kart yok" ile
+        // "tip artık desteklenmiyor" (ör. tarihsel/başka kurulumdan gelen bir
+        // satır) FARKLI durumlardır ve SESSİZCE aynı jenerik hataya
+        // düşürülmemeli; hiçbiri SESSİZCE farklı bir tipe DÖNÜŞTÜRÜLMEZ.
+        if(!$cardNo) throw new RuntimeException('Seçilen kart bulunamadı.');
+        if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK\'e yeniden atanarak düzeltilebilir.');
         $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
         $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
         $eventId=$p['exit_event_id'];
