@@ -254,6 +254,66 @@ function pdks_hakedis_sayfa_kapisi(?PDO $pdo = null): void
     exit;
 }
 
+/**
+ * Hakediş detay sayfası için BAĞLAMSAL denetim geçmişi (Faz 9E / E).
+ * `audit.php`'nin GENEL (admin, tüm sistem) kayıt defteriyle KARIŞTIRILMASIN
+ * — bu YALNIZ record_id ile DETERMİNİSTİK bağlı iki kaynağı birleştirir:
+ * ① module='foreman_daily_entitlements' record_id=$entitlementId (calculate/
+ *    finalize/reopen — bkz. pdks_hakedis_hesapla/kesinlestir/yeniden_ac ve
+ *    Faz 8B eşleniği) ② module='foreman_entitlement_adjustments' (Faz 9D
+ *    mahsup create/reverse), o tablonun BU hakedişe ait id'leriyle. Tahmin/
+ *    eşleştirme YAPILMAZ — yalnız gerçek yabancı anahtar eşleşmesi.
+ */
+function pdks_hakedis_denetim_gecmisi(int $entitlementId, ?PDO $pdo = null, int $limit = 20): array
+{
+    $pdo = $pdo ?? db();
+    if ($entitlementId < 1 || !pdks_hakedis_tablo_var($pdo, 'audit_log')) return [];
+    $limit = max(1, min(50, $limit));
+    $mahsupVar = pdks_hakedis_tablo_var($pdo, 'foreman_entitlement_adjustments');
+    $sql = "SELECT al.id, al.action, al.module, al.record_id, al.new_values, al.created_at, al.user_id,
+                   COALESCE(u.display_name, u.username) AS actor_name
+              FROM audit_log al LEFT JOIN users u ON u.id = al.user_id
+             WHERE (al.module = 'foreman_daily_entitlements' AND al.record_id = ?)";
+    $params = [$entitlementId];
+    if ($mahsupVar) {
+        $sql .= " OR (al.module = 'foreman_entitlement_adjustments' AND al.record_id IN
+                       (SELECT id FROM foreman_entitlement_adjustments WHERE entitlement_id = ?))";
+        $params[] = $entitlementId;
+    }
+    $sql .= " ORDER BY al.created_at DESC LIMIT $limit";
+    try {
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+    } catch (PDOException $e) {
+        return [];
+    }
+    $satirlar = $st->fetchAll();
+    $etiketler = [
+        'calculate' => '🧮 Hesaplandı',
+        'finalize'  => '🔒 Kesinleştirildi',
+        'reopen'    => '🔓 Yeniden açıldı',
+        'create'    => '➕ Mahsup eklendi',
+        'reverse'   => '↩️ Mahsup geri alındı',
+    ];
+    foreach ($satirlar as &$r) {
+        $yeni = json_decode((string)$r['new_values'], true) ?: [];
+        $r['islem_etiket'] = $etiketler[$r['action']] ?? $r['action'];
+        $parcalar = array_filter([
+            trim((string)($yeni['sebep'] ?? '')),
+            trim((string)($yeni['reason'] ?? '')),
+        ]);
+        if (isset($yeni['signed_amount']) || isset($yeni['tutar'])) {
+            $tutar = $yeni['signed_amount'] ?? $yeni['tutar'];
+            array_unshift($parcalar, (is_numeric($tutar) ? number_format((float)$tutar, 2, ',', '.') : (string)$tutar));
+        }
+        $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
+        $r['aktor'] = $r['actor_name'] ?: (function_exists('pdks_gunluk_kullanici_adi')
+            ? pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo) : '—');
+    }
+    unset($r);
+    return $satirlar;
+}
+
 // =========================================================
 // YETKİ KAPISI
 //

@@ -19,6 +19,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks.php';           // UID normalizasyon + PdksNfcOku (REUSE)
 require_once __DIR__ . '/config/pdks_gunluk.php';
+// ⚠ Faz 9E / B: kapanış kontrol listesi (bkz. ?ajax=kapanis_kontrol) Faz 8B'nin
+// bekleyen-sınıf/FM-onayı sayaçlarını ve Faz 4'ün hakediş durumunu SALT
+// OKUR — bu iki dosya bunun İÇİN eklendi, günlük tarama akışının kendisi
+// hiç DEĞİŞMEDİ.
+require_once __DIR__ . '/config/pdks_faz8b.php';
+require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_scan');
@@ -140,6 +146,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kapat') 
     }
     $sonuc = pdks_gunluk_oturum_kapat($sessionId, $not !== '' ? $not : null, (int)$auth_user['id'], $pdo);
     echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ⚠ Faz 9E / B — GÜN KAPANIŞI KONTROL LİSTESİ: "Mesaiyi Kapat" tıklanınca,
+// onay ekranı AÇILMADAN ÖNCE çağrılır. TAMAMEN BİLGİLENDİRİCİDİR — hiçbir
+// yeni ENGEL kuralı YOK, yalnız MEVCUT yetkili kaynaklardan (Faz 8B özeti,
+// Faz 4 hakediş kaydı, aynı depodaki diğer açık mesailer) okur ve gösterir.
+// Kapatma YETKİSİ/akışı burada HİÇ değişmez — gerçek kapatma hâlâ ?ajax=kapat
+// üzerinden, kendi eksik-çıkış mutabakat kuralıyla yürür.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kapanis_kontrol') {
+    header('Content-Type: application/json; charset=utf-8');
+    $govde = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($govde)) $govde = [];
+    csrf_check($govde['csrf'] ?? null);
+    require_pdks_gunluk('daily_scan');
+
+    $sessionId = (int)($govde['session_id'] ?? 0);
+    if ($sessionId <= 0) {
+        echo json_encode(['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $stKk = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id=?');
+    $stKk->execute([$sessionId]);
+    $kkDepo = $stKk->fetchColumn();
+    if ($kkDepo === false) {
+        echo json_encode(['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($depoHata = pdks_gunluk_depo_kontrol((string)$kkDepo)) {
+        echo json_encode(['ok' => false, 'kod' => 'yanlis_depo', 'hata' => $depoHata], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $kontrol = ['ok' => true, 'bekleyen_sinif' => null, 'bekleyen_fazla_mesai' => null];
+    if (pdks_gunluk_faz8a_sema_hazir($pdo) && pdks_faz8b_sema_hazir($pdo)) {
+        $f8 = pdks_faz8b_oturum_ozeti($sessionId, $pdo);
+        $kontrol['bekleyen_sinif'] = (int)$f8['bekleyen_sinif'];
+        $kontrol['bekleyen_fazla_mesai'] = (int)$f8['bekleyen_fazla_mesai'];
+    }
+
+    // Aynı depoda, bu oturum HARİÇ, hâlâ açık başka mesai var mı —
+    // yalnız farkındalık amaçlı, kapatmayı ENGELLEMEZ.
+    $stAcik = $pdo->prepare("SELECT COUNT(*) FROM daily_work_sessions WHERE status='open' AND depo=? AND id<>?");
+    $stAcik->execute([(string)$kkDepo, $sessionId]);
+    $kontrol['acik_donem_sayisi'] = (int)$stAcik->fetchColumn();
+
+    // Hakediş durumu — yok / taslak / yeniden hesaplama gerekli / kesin.
+    $kontrol['hakedis_durum'] = 'yok';
+    if (pdks_hakedis_sema_hazir($pdo)) {
+        $stHk = $pdo->prepare("SELECT status, needs_recalculation FROM foreman_daily_entitlements WHERE session_id=?");
+        $stHk->execute([$sessionId]);
+        $hk = $stHk->fetch();
+        if ($hk) {
+            if ($hk['status'] === 'final') $kontrol['hakedis_durum'] = 'kesin';
+            elseif (!empty($hk['needs_recalculation'])) $kontrol['hakedis_durum'] = 'yeniden_hesaplama_gerekli';
+            else $kontrol['hakedis_durum'] = 'taslak';
+        }
+    }
+
+    echo json_encode($kontrol, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -284,6 +350,14 @@ render_flash();
                     <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giCloseIceride"></div></div>
                     <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giCloseEksik"></div></div>
                 </div>
+            </div>
+            <!-- ⚠ Faz 9E / B: SALT BİLGİLENDİRME — hiçbiri kapatmayı engellemez,
+                 gerçek kural hâlâ ?ajax=kapat'ın eksik-çıkış mutabakatıdır. -->
+            <div id="giKapanisKontrol" class="pdks-kiosk-counter-row" style="flex-direction:column;align-items:stretch;gap:6px;margin:10px 0">
+                <div class="pdks-kiosk-counter-row"><span>Bu depoda başka açık mesai</span><span class="n" id="gikkAcikDonem">—</span></div>
+                <div class="pdks-kiosk-counter-row"><span>Muhasebe kararı bekleyen (Tam/Yarım)</span><span class="n" id="gikkBekleyenSinif">—</span></div>
+                <div class="pdks-kiosk-counter-row"><span>FM onayı bekleyen</span><span class="n" id="gikkBekleyenFm">—</span></div>
+                <div class="pdks-kiosk-counter-row"><span>Hakediş durumu</span><span class="n" id="gikkHakedis">—</span></div>
             </div>
             <p>Bu işlem çavuşun bugünkü mesaisini kapatacaktır.<br>
                Mesai kapatıldıktan sonra normal giriş/çıkış kart okutma işlemi durur.<br>
@@ -759,6 +833,33 @@ render_flash();
             })
             .catch(function () { alert('Bağlantı hatası. Tekrar deneyin.'); });
     }
+    // ⚠ Faz 9E / B: hakediş durumu etiketleri — cavus_hakedis.php/detay'daki
+    // AYNI durum sözlüğünün (draft/final/needs_recalculation) burada TEK
+    // satırlık bir aynasıdır, ayrı bir iş kuralı İCAT ETMEZ.
+    var gikkHakedisEtiket = {
+        yok: 'Yok', taslak: 'Taslak',
+        yeniden_hesaplama_gerekli: '⚠️ Yeniden hesaplama gerekli', kesin: 'Kesin'
+    };
+    function kapanisKontroluGoster(sessionId) {
+        document.getElementById('gikkAcikDonem').textContent = '—';
+        document.getElementById('gikkBekleyenSinif').textContent = '—';
+        document.getElementById('gikkBekleyenFm').textContent = '—';
+        document.getElementById('gikkHakedis').textContent = '—';
+        fetch('gunluk_isci_giris_cikis.php?ajax=kapanis_kontrol', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ csrf: csrf, session_id: sessionId })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.ok) return;   // salt bilgilendirme — sessizce vazgeç
+                document.getElementById('gikkAcikDonem').textContent = d.acik_donem_sayisi;
+                document.getElementById('gikkBekleyenSinif').textContent = d.bekleyen_sinif === null ? '—' : d.bekleyen_sinif;
+                document.getElementById('gikkBekleyenFm').textContent = d.bekleyen_fazla_mesai === null ? '—' : d.bekleyen_fazla_mesai;
+                document.getElementById('gikkHakedis').textContent = gikkHakedisEtiket[d.hakedis_durum] || d.hakedis_durum || '—';
+            })
+            .catch(function () { /* salt bilgilendirme — sessizce vazgeç */ });
+    }
     document.getElementById('giKapatBtn').addEventListener('click', function () {
         if (!currentSession) return;
         document.getElementById('giCloseCavus').textContent = seciliCavusAd || '';
@@ -768,6 +869,7 @@ render_flash();
         document.getElementById('giCloseCikis').textContent = document.getElementById('giCikisToplam').textContent;
         document.getElementById('giCloseIceride').textContent = document.getElementById('giIcerdeToplam').textContent;
         document.getElementById('giCloseEksik').textContent = document.getElementById('giEksikToplam').textContent;
+        kapanisKontroluGoster(currentSession.id);
         ekranGoster(closeConfirmSec);
     });
     document.getElementById('giCloseCancelBtn').addEventListener('click', function () {

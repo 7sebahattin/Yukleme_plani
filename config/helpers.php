@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v231');
+    define('APP_SURUM', 'v232');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -296,6 +296,16 @@ function render_desktop_sidebar(string $base): void {
     // aktif-sayfa vurgusu bu yüzden TEK bir $a_ptak değişkeniyle, o alt
     // sayfa kümesinin TAMAMINA karşı kontrol edilir (kullanıcı hangi alt
     // sayfada olursa olsun sidebar'da "Personel Takibi" vurgulu kalır).
+    // ⚠ Faz 9E / UX kapanışı: mesai_degerlendirme.php (Faz 8B mesai
+    // değerlendirme, cavus_hakedis_detay.php'nin "Mesai Değerlendir"
+    // düğmesinden açılır) ve manuel_cikis.php (Faz 8E manuel çıkış formu,
+    // puantaj detayından açılır) render_header()/render_footer() ÇAĞIRIR
+    // (chrome'suz bir yazdırma sayfası DEĞİLDİR) ama bu listede EKSİKTİ —
+    // ziyaret edildiğinde sidebar'da HİÇBİR öğe vurgulanmıyordu (yönelim
+    // kaybı). Bu iki sayfa AYNI Personel Takibi ailesinin parçasıdır,
+    // EKLENDİ. Yazdırma sayfaları (*_yazdir.php) BİLEREK bu listede YOK —
+    // onlar render_header()'ı hiç çağırmaz, kendi minimal HTML iskeletini
+    // kullanır (sidebar zaten hiç basılmaz, "aktif" kavramı geçersizdir).
     $a_ptak = in_array($cur, [
         'personel_takip.php',
         'personel.php', 'personel_form.php', 'personel_kartlar.php', 'giris_cikis.php',
@@ -303,6 +313,7 @@ function render_desktop_sidebar(string $base): void {
         'gunluk_isci_giris_cikis.php', 'gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php',
         'cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php',
         'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
+        'mesai_degerlendirme.php', 'manuel_cikis.php',
     ], true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';

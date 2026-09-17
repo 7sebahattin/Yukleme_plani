@@ -20,12 +20,19 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
+// ⚠ Faz 9E / F: "Manuel Çıkış Gir" derin bağlantısının İZİN kontrolü İÇİN
+// (manuel_cikis.php'nin KENDİ kapısıyla AYNI yetki) — bu sayfanın SALT
+// OKUNUR doğası (görev talimatı: "Do not build parallel business logic in
+// the UI") DEĞİŞMEDİ, yalnız bağlantıyı göstermeden ÖNCE 403'e gideceğini
+// bilmek için pdks_hakedis_can() OKUNUR.
+require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
+$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
 
 // ── Filtreler ─────────────────────────────────────────────
 $tarih = trim($_GET['tarih'] ?? '');
@@ -215,10 +222,20 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <th>Tip</th>
     <th>Giriş Saati</th>
     <th>Mesai Durumu</th>
+    <th>Kayıt Türü</th>
     <th>Kapanış Notu</th>
+    <th class="actions-col">İşlem</th>
 </tr></thead>
 <tbody>
-<?php foreach ($eksikler as $e): ?>
+<?php foreach ($eksikler as $e):
+    // ⚠ Faz 9E / F: "Açık Mesai" (oturum hâlâ açık) ile "Eksik Çıkış"
+    // (oturum kapandı ama çıkış hiç okutulmadı) — MEVCUT anlam AYNEN
+    // korunur, yalnız dönemin GERÇEK kaydı (canlı 'open' mı, geriye
+    // aktarılmış 'legacy_unresolved' mı) EK bir rozetle netleştirilir.
+    $donemDurum = $e['donem_durumu'] ?? null;
+    $donemRozet = $donemDurum ? pdks_gunluk_faz8a_donem_durumu((string)$donemDurum) : null;
+    $manuelUygun = !empty($e['period_id']) && in_array($donemDurum, ['open', 'legacy_unresolved'], true);
+?>
 <tr>
     <td class="pdks-row-name"><?= h($e['cavus_adi']) ?></td>
     <td class="pdks-uid"><?= h($e['card_no']) ?></td>
@@ -232,7 +249,15 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <div class="pdks-row-sub" style="color:var(--warn)"><?= h($e['oturum_kapali_mesaji']) ?></div>
         <?php endif; ?>
     </td>
+    <td><?php if ($donemRozet): ?><span class="pdks-badge pdks-badge-<?= h($donemRozet['kod']) ?>"><?= h($donemRozet['etiket']) ?></span><?php else: ?>—<?php endif; ?></td>
     <td class="muted"><?= h($e['kapanis_notu'] ?: '—') ?></td>
+    <td class="actions-col">
+        <?php if ($manuelUygun && $manuelCikisYetkisi): ?>
+        <a href="manuel_cikis.php?period_id=<?= (int)$e['period_id'] ?>&session_id=<?= (int)$e['session_id'] ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a>
+        <?php elseif ($manuelUygun): ?>
+        <span class="muted" style="font-size:.85em">Manuel düzeltme yetkisi gerekir</span>
+        <?php else: ?>—<?php endif; ?>
+    </td>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -240,7 +265,11 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
 </div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($eksikler as $e): ?>
+<?php foreach ($eksikler as $e):
+    $donemDurum = $e['donem_durumu'] ?? null;
+    $donemRozet = $donemDurum ? pdks_gunluk_faz8a_donem_durumu((string)$donemDurum) : null;
+    $manuelUygun = !empty($e['period_id']) && in_array($donemDurum, ['open', 'legacy_unresolved'], true);
+?>
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
@@ -251,8 +280,14 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
             <?= $e['oturum_durumu'] === 'closed' ? 'Kapalı' : 'Açık' ?>
         </span>
     </div>
+    <?php if ($donemRozet): ?><div class="pdks-row-sub"><span class="pdks-badge pdks-badge-<?= h($donemRozet['kod']) ?>"><?= h($donemRozet['etiket']) ?></span></div><?php endif; ?>
     <?php if ($e['oturum_kapali_mesaji']): ?>
     <div class="pdks-row-sub" style="color:var(--warn)"><?= h($e['oturum_kapali_mesaji']) ?><?= $e['kapanis_notu'] ? ' — ' . h($e['kapanis_notu']) : '' ?></div>
+    <?php endif; ?>
+    <?php if ($manuelUygun && $manuelCikisYetkisi): ?>
+    <div style="margin-top:8px"><a href="manuel_cikis.php?period_id=<?= (int)$e['period_id'] ?>&session_id=<?= (int)$e['session_id'] ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a></div>
+    <?php elseif ($manuelUygun): ?>
+    <div class="pdks-row-sub muted">Manuel düzeltme yetkisi gerekir</div>
     <?php endif; ?>
 </div>
 <?php endforeach; ?>

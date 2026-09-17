@@ -10,6 +10,10 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_faz8h.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
+// ⚠ Faz 9E / F: "Manuel Çıkış Gir" derin bağlantısı — manuel_cikis.php'nin
+// KENDİ yetkisiyle (entitlements_finalize) AYNI kapıyı burada da OKUR,
+// böylece yetkisi olmayan bir kullanıcı tıklayıp 403'e gitmez.
+require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
@@ -75,6 +79,11 @@ $ozet   = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum  = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);
 $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
 $faz8jHazir = function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo);
+$manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
+$manuelCikisDepoUygun = $oturum['depo'] === $aktifDepo;
+// ⚠ Faz 9E / E: bu oturumun dönemlerine (period_id) DETERMİNİSTİK bağlı
+// iptal/düzeltme geçmişi — bkz. pdks_gunluk_puantaj_denetim_gecmisi() docblock.
+$denetimGecmisi = pdks_gunluk_puantaj_denetim_gecmisi(array_column($kartlar, 'period_id'), $pdo);
 $iptaller = [];
 if ($faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo) {
     $stVoid = $pdo->prepare("SELECT p.*, w.card_no, u.display_name FROM daily_worker_work_periods p JOIN worker_cards w ON w.id=p.worker_card_id LEFT JOIN users u ON u.id=p.voided_by_user_id WHERE p.session_id=? AND p.is_voided=1 ORDER BY p.voided_at DESC");
@@ -186,10 +195,18 @@ render_flash();
     <th>Çıkış Saati</th>
     <th>Süre</th>
     <th>Durum</th>
+    <th>Manuel Çıkış</th>
     <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><th>İşlem</th><?php endif; ?>
 </tr></thead>
 <tbody>
-<?php foreach ($kartlar as $k): ?>
+<?php foreach ($kartlar as $k):
+    // ⚠ Faz 9E / F: 'cikis_yok' (canlı açık dönem) VE 'legacy_unresolved'
+    // (geriye aktarılmış tarihsel kayıt) İKİSİ de pdks_faz8e_manuel_cikis_kaydet()
+    // tarafından KABUL EDİLİR (bkz. o fonksiyonun status IN ('open','legacy_unresolved')
+    // kontrolü) — burada YENİ bir kısıtlama İCAT EDİLMEZ, yalnız YETKİSİZ bir
+    // kullanıcının 403'e giden bir bağlantı GÖRMESİ engellenir.
+    $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
+?>
 <tr>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
     <td><?= h($k['tip']) ?></td>
@@ -198,6 +215,13 @@ render_flash();
     <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
     <td class="muted"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
+    <td>
+        <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
+        <a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a>
+        <?php elseif ($manuelUygun): ?>
+        <span class="muted" style="font-size:.85em">Yetki gerekir</span>
+        <?php else: ?>—<?php endif; ?>
+    </td>
     <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><td><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></td><?php endif; ?>
 </tr>
 <?php endforeach; ?>
@@ -206,7 +230,9 @@ render_flash();
 </div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($kartlar as $k): ?>
+<?php foreach ($kartlar as $k):
+    $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
+?>
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
@@ -215,6 +241,11 @@ render_flash();
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
     </div>
+    <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
+    <div style="margin-top:6px"><a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a></div>
+    <?php elseif ($manuelUygun): ?>
+    <div class="pdks-row-sub muted">Manuel düzeltme için yetki gerekir</div>
+    <?php endif; ?>
     <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
@@ -238,5 +269,21 @@ render_flash();
 <?php endforeach; endif; ?>
 
 <?php if ($iptaller): ?><h2>İptal Edilen Kayıtlar</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Kart No</th><th>Tip</th><th>Giriş</th><th>Çıkış</th><th>İptal nedeni</th><th>İptal eden</th><th>İptal zamanı</th></tr></thead><tbody><?php foreach($iptaller as $v): ?><tr><td><?=h($v['card_no'])?></td><td><?=h($v['worker_type_name_snapshot'])?></td><td><?=h($v['entry_time'])?></td><td><?=h($v['exit_time']?:'—')?></td><td><?=h($v['void_reason'])?></td><td><?=h($v['display_name']?:'—')?></td><td><?=h($v['voided_at'])?></td></tr><?php endforeach;?></tbody></table></div><?php endif; ?>
+
+<?php if ($denetimGecmisi): ?>
+<!-- ⚠ Faz 9E / E: BAĞLAMSAL geçmiş — audit.php'nin genel/admin kayıt
+     defteri DEĞİL, yalnız bu oturumun dönemlerine deterministik bağlı
+     iptal/düzeltme satırları. Ham JSON YOK, yalnız okunur etiket/detay. -->
+<h2 style="font-size:1.05rem">İşlem Geçmişi</h2>
+<div class="pdks-cards">
+<?php foreach ($denetimGecmisi as $d): ?>
+<div class="pdks-card-item">
+    <div class="pdks-row-sub"><?= h(date('d.m.Y H:i', strtotime($d['created_at']))) ?> · <?= h($d['aktor']) ?></div>
+    <div class="pdks-row-name" style="font-size:.95rem"><?= h($d['islem_etiket']) ?></div>
+    <?php if ($d['detay']): ?><div class="pdks-row-sub"><?= h($d['detay']) ?></div><?php endif; ?>
+</div>
+<?php endforeach; ?>
+</div>
+<?php endif; ?>
 
 <?php render_footer(); ?>
