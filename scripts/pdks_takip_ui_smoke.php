@@ -53,6 +53,7 @@ require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
 require_once $ROOT . '/config/pdks_cari.php';
 require_once $ROOT . '/config/pdks_rapor.php';
+require_once $ROOT . '/config/pdks_faz8b.php';
 require_once $ROOT . '/config/print_helpers.php';
 
 function pdks_ddl_sqlite(string $mysql): array
@@ -134,7 +135,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $_SERVER['REQUEST_URI'] = '/' . $file;
     $src = file_get_contents($ROOT . '/' . $file);
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/print_helpers|config\/auth)\.php\';.*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/pdks_faz8b|config\/print_helpers|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);

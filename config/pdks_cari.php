@@ -299,7 +299,8 @@ function pdks_cari_odeme_listesi(int $foremanId, ?PDO $pdo = null): array
 /**
  * Bir çavuşun PARA BİRİMİ bazlı bakiyesi. TEK doğru işaret sözleşmesi
  * (kullanıcının açık talimatı, dosya başlığına da yazıldı):
- *   bakiye = Σ KESİN hakediş  -  Σ GEÇERLİ ödeme     (para birimi başına)
+ *   bakiye = Σ KESİN hakediş + Σ GEÇERLİ düzeltme (imzalı) - Σ GEÇERLİ ödeme
+ *   (para birimi başına)
  *   pozitif → "Çavuşa Borcumuz", sıfır → "Hesap Kapalı",
  *   negatif → "Çavuş Avansı / Fazla Ödeme"
  * TAMAMEN TAM SAYI KURUŞ aritmetiği (Faz 4'ün AYNI stratejisi REUSE
@@ -307,11 +308,19 @@ function pdks_cari_odeme_listesi(int $foremanId, ?PDO $pdo = null): array
  * kullanıcının açık talimatı ("Running balances and totals must use
  * exact minor-unit arithmetic") gereği burada da PHP tarafında BİLEREK
  * kuruş üzerinden toplanır — iki katmanlı, açıkça ifade edilen garanti.
+ *
+ * ⚠ Faz 9D / H-03 kapanışı: "düzeltme" terimi (config/pdks_faz9d.php,
+ * foreman_entitlement_adjustments) BURADA EKLENDİ — cari HÂLÂ TÜRETİLMİŞ,
+ * mutasyona açık bir "balance" kolonu YOK, formül yalnız ÜÇÜNCÜ bir
+ * SUM('luk terimle genişledi. Düzeltme tablosu henüz migrate edilmemişse
+ * (pdks_faz9d_tablo_var false) o terim SESSİZCE 0'dır — ESKİ iki terimli
+ * formül (hakediş-ödeme) AYNEN çalışmaya devam eder, hiçbir yerde HATA
+ * verilmez.
  */
 function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $sonuc = [];   // currency => ['hakedis_kurus'=>, 'odeme_kurus'=>, 'bakiye_kurus'=>, 'son_hakedis_tarihi'=>, 'son_odeme_tarihi'=>]
+    $sonuc = [];   // currency => ['hakedis_kurus'=>, 'duzeltme_kurus'=>, 'odeme_kurus'=>, 'bakiye_kurus'=>, 'son_hakedis_tarihi'=>, 'son_odeme_tarihi'=>]
 
     $stH = $pdo->prepare(
         "SELECT currency, total_amount, work_date FROM foreman_daily_entitlements
@@ -320,10 +329,23 @@ function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
     $stH->execute([$foremanId]);
     foreach ($stH->fetchAll() as $h) {
         $cur = (string)$h['currency'];
-        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
+        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
         $sonuc[$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$h['total_amount']);
         if ($sonuc[$cur]['son_hakedis_tarihi'] === null || $h['work_date'] > $sonuc[$cur]['son_hakedis_tarihi']) {
             $sonuc[$cur]['son_hakedis_tarihi'] = $h['work_date'];
+        }
+    }
+
+    if (pdks_cari_tablo_var($pdo, 'foreman_entitlement_adjustments')) {
+        $stD = $pdo->prepare(
+            "SELECT currency, signed_amount FROM foreman_entitlement_adjustments
+              WHERE foreman_id = ? AND status = 'valid'"
+        );
+        $stD->execute([$foremanId]);
+        foreach ($stD->fetchAll() as $d) {
+            $cur = (string)$d['currency'];
+            if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
+            $sonuc[$cur]['duzeltme_kurus'] += pdks_hakedis_tl_kurus((string)$d['signed_amount']);
         }
     }
 
@@ -334,7 +356,7 @@ function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
     $stP->execute([$foremanId]);
     foreach ($stP->fetchAll() as $p) {
         $cur = (string)$p['currency'];
-        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
+        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
         $sonuc[$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$p['amount']);
         if ($sonuc[$cur]['son_odeme_tarihi'] === null || $p['payment_date'] > $sonuc[$cur]['son_odeme_tarihi']) {
             $sonuc[$cur]['son_odeme_tarihi'] = $p['payment_date'];
@@ -342,10 +364,11 @@ function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
     }
 
     foreach ($sonuc as $cur => &$s) {
-        $s['bakiye_kurus'] = $s['hakedis_kurus'] - $s['odeme_kurus'];
-        $s['hakedis_toplam'] = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
-        $s['odeme_toplam']   = pdks_hakedis_kurus_tl($s['odeme_kurus']);
-        $s['bakiye']         = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
+        $s['bakiye_kurus'] = $s['hakedis_kurus'] + $s['duzeltme_kurus'] - $s['odeme_kurus'];
+        $s['hakedis_toplam']  = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
+        $s['duzeltme_toplam'] = pdks_hakedis_kurus_tl($s['duzeltme_kurus']);
+        $s['odeme_toplam']    = pdks_hakedis_kurus_tl($s['odeme_kurus']);
+        $s['bakiye']          = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
         $s['durum'] = $s['bakiye_kurus'] > 0 ? 'borc' : ($s['bakiye_kurus'] < 0 ? 'avans' : 'kapali');
         $s['durum_etiket'] = match ($s['durum']) {
             'borc'  => 'Çavuşa Borcumuz',
@@ -433,6 +456,36 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
             'siralama_zaman' => $h['finalized_at'] ?? $h['calculated_at'], 'siralama_id' => (int)$h['id'],
             'kaynak_id' => (int)$h['id'],
         ];
+    }
+
+    // ⚠ Faz 9D / H-03 kapanışı: düzeltme/mahsup KENDİ AYRI finansal olay
+    // satırı olarak görünür (görev talimatı madde 9: "Ekstre should
+    // clearly show adjustments as their OWN financial events") — hakediş
+    // satırının İÇİNE GİZLENMEZ/BİRLEŞTİRİLMEZ. İşaret pozitifse "Düzeltme
+    // (+)", negatifse "Mahsup (-)" — aynı tabloda tek bir sabit etiket
+    // yerine işarete göre ETİKET DEĞİŞİR (kullanıcı ekstrede artış/azalışı
+    // rakamdan değil, ADINDAN da anlar). Tablo henüz migrate edilmemişse
+    // (pdks_cari_tablo_var false) BU BLOK sessizce atlanır — eski iki
+    // olaylı ekstre (hakediş+ödeme) AYNEN çalışır.
+    if (pdks_cari_tablo_var($pdo, 'foreman_entitlement_adjustments')) {
+        $whereD = ['foreman_id = ?', "status = 'valid'"]; $parD = [$foremanId];
+        if ($baslangic !== null && $baslangic !== '') { $whereD[] = 'work_date >= ?'; $parD[] = $baslangic; }
+        if ($bitis !== null && $bitis !== '')       { $whereD[] = 'work_date <= ?'; $parD[] = $bitis; }
+        $stD = $pdo->prepare("SELECT * FROM foreman_entitlement_adjustments WHERE " . implode(' AND ', $whereD));
+        $stD->execute($parD);
+        foreach ($stD->fetchAll() as $d) {
+            $dKurus = pdks_hakedis_tl_kurus((string)$d['signed_amount']);
+            $pozitif = $dKurus >= 0;
+            $satirlar[(string)$d['currency']][] = [
+                'tarih' => $d['work_date'], 'tip' => $pozitif ? 'DUZELTME' : 'MAHSUP',
+                'tip_etiket' => $pozitif ? 'DÜZELTME (+)' : 'MAHSUP (-)',
+                'belge' => ($d['reversal_of_adjustment_id'] !== null ? 'DZLT-' : 'DZL-') . str_pad((string)$d['id'], 6, '0', STR_PAD_LEFT),
+                'aciklama' => (string)$d['reason'] . ' (Hakediş #' . (int)$d['entitlement_id'] . ')',
+                'artis_kurus' => $pozitif ? abs($dKurus) : 0, 'azalis_kurus' => $pozitif ? 0 : abs($dKurus),
+                'siralama_zaman' => $d['created_at'], 'siralama_id' => (int)$d['id'],
+                'kaynak_id' => (int)$d['id'],
+            ];
+        }
     }
 
     $whereP = ['foreman_id = ?', "status = 'valid'"]; $parP = [$foremanId];

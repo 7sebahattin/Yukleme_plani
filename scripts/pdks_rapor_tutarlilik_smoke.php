@@ -23,14 +23,19 @@ $testDb->exec("CREATE TABLE foremen (id INTEGER PRIMARY KEY, code TEXT, name TEX
 $testDb->exec("INSERT INTO foremen VALUES (1,'F1','Ayşe',1),(2,'F2','Mehmet',1)");
 $testDb->exec("CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, canonical_uid TEXT, uid_decimal TEXT, worker_type_id INTEGER NULL REFERENCES worker_types(id))");
 for ($i = 1; $i <= 8; $i++) $testDb->prepare('INSERT INTO worker_cards VALUES (?,?,?,?,NULL)')->execute([$i,'K'.$i,'AABB'.sprintf('%04X',$i),(string)(1000+$i)]);
-$testDb->exec("CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, notes TEXT)");
+// Faz 9C / H-02: normal_work_minutes_snapshot EKLENDİ — eksikken
+// pdks_faz8b_oturum_donemleri()'nin JOIN'i "no such column" ile fatal
+// veriyordu.
+$testDb->exec("CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, normal_work_minutes_snapshot INTEGER NOT NULL DEFAULT 540, work_date TEXT, depo TEXT, status TEXT, notes TEXT)");
 $testDb->exec("CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)");
 // Faz 9A / B1: is_voided/voided_at/voided_by_user_id/void_reason EKLENDİ —
 // bu dosya YÖNETİM RAPORLAMA (KPI/trend/çavuş özeti/eksik çıkış) mutabakat
 // testidir; kolon eksikken pdks_gunluk_faz8j_etkin_kosul() '1=1'e düşüyor
 // ve void'in TAM DA bu yüzeyler üzerindeki etkisi (audit'in en büyük
 // bulgusu) HİÇ sınanmıyordu.
-$testDb->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
+// Faz 9C / H-02: overtime_approved_hours EKLENDİ — pdks_faz8b_donem_finans_durumu()
+// bu kolonu okur (eksikken PHP uyarısı/yanlış davranış üretirdi).
+$testDb->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, approved_attendance_class TEXT, approved_by_user_id INTEGER, approved_at TEXT, overtime_approved INTEGER, overtime_approved_hours INTEGER, overtime_approved_by_user_id INTEGER, overtime_approved_at TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)");
 $testDb->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, foreman_id INTEGER, work_date TEXT, depo TEXT, status TEXT, needs_recalculation INTEGER, currency TEXT, total_amount TEXT)");
 $testDb->exec("CREATE TABLE foreman_payments (id INTEGER PRIMARY KEY, foreman_id INTEGER, payment_date TEXT, status TEXT, currency TEXT, amount TEXT)");
 $testDb->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
@@ -39,7 +44,7 @@ $day = date('Y-m-d', strtotime('yesterday'));
 $prev = date('Y-m-d', strtotime('2 days ago'));
 $phantomDay = date('Y-m-d', strtotime('3 days ago'));
 $legacyDay = date('Y-m-d', strtotime('4 days ago'));
-$insS = $testDb->prepare('INSERT INTO daily_work_sessions VALUES (?,?,?,?,?,?,?,NULL)');
+$insS = $testDb->prepare('INSERT INTO daily_work_sessions (id,foreman_id,foreman_name_snapshot,foreman_code_snapshot,work_date,depo,status,notes) VALUES (?,?,?,?,?,?,?,NULL)');
 foreach ([[1,1,$day,'FİNİKE','open'],[2,1,$day,'FİNİKE','open'],[3,2,$day,'FİNİKE','closed'],[4,1,$day,'MERKEZ','closed'],[5,2,$prev,'FİNİKE','open'],[6,1,$day,'FİNİKE','closed'],[7,1,$phantomDay,'FİNİKE','open'],[8,1,$legacyDay,'FİNİKE','open']] as [$id,$fid,$date,$depot,$status]) {
     $insS->execute([$id,$fid,$fid===1?'Ayşe':'Mehmet','F'.$fid,$date,$depot,$status]);
 }

@@ -498,10 +498,16 @@ function pdks_rapor_finansal_kpi(string $start, string $end, ?string $depo, ?int
 /**
  * GÜNCEL (ŞU AN itibarıyla, TÜM ZAMANLARIN) cari bakiyesi — dönem
  * FİLTRESİNDEN BAĞIMSIZ. pdks_cari_bakiye()'NİN AYNI FORMÜLÜ (Σ KESİN
- * hakediş - Σ GEÇERLİ ödeme, para birimi başına) — yalnız TEK bir çavuş
- * yerine, seçili foreman/depo kapsamındaki TÜM hakediş/ödeme satırları
- * ÜZERİNDEN, TEK SORGUYLA (dashboard için N+1 pdks_cari_bakiye() çağrısı
- * YOK — görev talimatı madde 33).
+ * hakediş + Σ GEÇERLİ düzeltme - Σ GEÇERLİ ödeme, para birimi başına) —
+ * yalnız TEK bir çavuş yerine, seçili foreman/depo kapsamındaki TÜM
+ * hakediş/düzeltme/ödeme satırları ÜZERİNDEN, TEK SORGUYLA (dashboard
+ * için N+1 pdks_cari_bakiye() çağrısı YOK — görev talimatı madde 33).
+ *
+ * ⚠ Faz 9D / H-03 kapanışı: "GÜNCEL bakiye" iddia eden HER fonksiyon AYNI
+ * üç terimli formülü kullanmalı (görev talimatı madde 7/10) — bu
+ * fonksiyon TAM OLARAK budur, bkz. pdks_cari_bakiye()'deki AYNI yorum.
+ * Düzeltme tablosu henüz migrate edilmemişse (pdks_gunluk_tablo_var
+ * false) o terim SESSİZCE 0'dır.
  */
 function pdks_rapor_bakiye_toplu(?string $depo, ?int $foremanId, ?PDO $pdo = null): array
 {
@@ -516,8 +522,21 @@ function pdks_rapor_bakiye_toplu(?string $depo, ?int $foremanId, ?PDO $pdo = nul
     $stH->execute($parH);
     foreach ($stH->fetchAll() as $r) {
         $cur = (string)$r['currency'];
-        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0];
+        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
         $sonuc[$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$r['total_amount']);
+    }
+
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_entitlement_adjustments')) {
+        $whereD = ["status = 'valid'"]; $parD = [];
+        if ($foremanId !== null) { $whereD[] = 'foreman_id = ?'; $parD[] = $foremanId; }
+        $sqlD = "SELECT currency, signed_amount FROM foreman_entitlement_adjustments" . ($whereD ? ' WHERE ' . implode(' AND ', $whereD) : '');
+        $stD = $pdo->prepare($sqlD);
+        $stD->execute($parD);
+        foreach ($stD->fetchAll() as $r) {
+            $cur = (string)$r['currency'];
+            if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
+            $sonuc[$cur]['duzeltme_kurus'] += pdks_hakedis_tl_kurus((string)$r['signed_amount']);
+        }
     }
 
     $whereP = ["status = 'valid'"]; $parP = [];
@@ -527,15 +546,16 @@ function pdks_rapor_bakiye_toplu(?string $depo, ?int $foremanId, ?PDO $pdo = nul
     $stP->execute($parP);
     foreach ($stP->fetchAll() as $r) {
         $cur = (string)$r['currency'];
-        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0];
+        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
         $sonuc[$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
     }
 
     foreach ($sonuc as $cur => &$s) {
-        $s['bakiye_kurus'] = $s['hakedis_kurus'] - $s['odeme_kurus'];
-        $s['hakedis'] = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
-        $s['odeme']   = pdks_hakedis_kurus_tl($s['odeme_kurus']);
-        $s['bakiye']  = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
+        $s['bakiye_kurus'] = $s['hakedis_kurus'] + $s['duzeltme_kurus'] - $s['odeme_kurus'];
+        $s['hakedis']  = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
+        $s['duzeltme'] = pdks_hakedis_kurus_tl($s['duzeltme_kurus']);
+        $s['odeme']    = pdks_hakedis_kurus_tl($s['odeme_kurus']);
+        $s['bakiye']   = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
         $s['durum'] = $s['bakiye_kurus'] > 0 ? 'borc' : ($s['bakiye_kurus'] < 0 ? 'avans' : 'kapali');
         $s['durum_etiket'] = match ($s['durum']) {
             'borc'  => 'Çavuşa Borcumuz',
@@ -557,7 +577,7 @@ function pdks_rapor_bakiye_toplu(?string $depo, ?int $foremanId, ?PDO $pdo = nul
 function pdks_rapor_cavus_bakiye_toplu(?array $foremanIds = null, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    $sonuc = [];   // foreman_id => currency => ['hakedis_kurus'=>,'odeme_kurus'=>]
+    $sonuc = [];   // foreman_id => currency => ['hakedis_kurus'=>,'duzeltme_kurus'=>,'odeme_kurus'=>]
 
     $ph = '';
     if ($foremanIds !== null) {
@@ -569,24 +589,38 @@ function pdks_rapor_cavus_bakiye_toplu(?array $foremanIds = null, ?PDO $pdo = nu
     $stH->execute($foremanIds ?? []);
     foreach ($stH->fetchAll() as $r) {
         $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
-        if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0];
+        if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
         $sonuc[$fid][$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$r['total_amount']);
+    }
+
+    // ⚠ Faz 9D / H-03 kapanışı: AYNI üç terimli formül (bkz. pdks_cari_bakiye()
+    // ve pdks_rapor_bakiye_toplu()'nun AYNI yorumu) — düzeltme tablosu henüz
+    // migrate edilmemişse SESSİZCE atlanır.
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_entitlement_adjustments')) {
+        $stD = $pdo->prepare("SELECT foreman_id, currency, signed_amount FROM foreman_entitlement_adjustments WHERE status = 'valid'" . $ph);
+        $stD->execute($foremanIds ?? []);
+        foreach ($stD->fetchAll() as $r) {
+            $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
+            if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
+            $sonuc[$fid][$cur]['duzeltme_kurus'] += pdks_hakedis_tl_kurus((string)$r['signed_amount']);
+        }
     }
 
     $stP = $pdo->prepare("SELECT foreman_id, currency, amount FROM foreman_payments WHERE status = 'valid'" . $ph);
     $stP->execute($foremanIds ?? []);
     foreach ($stP->fetchAll() as $r) {
         $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
-        if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0];
+        if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
         $sonuc[$fid][$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
     }
 
     foreach ($sonuc as $fid => &$curMap) {
         foreach ($curMap as $cur => &$s) {
-            $s['bakiye_kurus'] = $s['hakedis_kurus'] - $s['odeme_kurus'];
-            $s['hakedis'] = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
-            $s['odeme']   = pdks_hakedis_kurus_tl($s['odeme_kurus']);
-            $s['bakiye']  = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
+            $s['bakiye_kurus'] = $s['hakedis_kurus'] + $s['duzeltme_kurus'] - $s['odeme_kurus'];
+            $s['hakedis']  = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
+            $s['duzeltme'] = pdks_hakedis_kurus_tl($s['duzeltme_kurus']);
+            $s['odeme']    = pdks_hakedis_kurus_tl($s['odeme_kurus']);
+            $s['bakiye']   = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
             $s['durum'] = $s['bakiye_kurus'] > 0 ? 'borc' : ($s['bakiye_kurus'] < 0 ? 'avans' : 'kapali');
             $s['durum_etiket'] = match ($s['durum']) {
                 'borc'  => 'Çavuşa Borcumuz',

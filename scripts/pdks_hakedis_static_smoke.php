@@ -171,12 +171,24 @@ foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
     ok("config/pdks_hakedis.php GERÇEK KODUNDA (Faz 5 reopen-koruma fonksiyonu HARİÇ) '$kelime' YOK", !preg_match($desen, $hakedisKodTaramaHaric));
 }
-foreach ($sayfalar as $f) {
+// ⚠ Faz 9D / H-03 kapanışı: cavus_hakedis_detay.php artık BİLEREK bu KELİME
+// taramasının DIŞINDA — KESİN hakedişe bağlı düzeltme/mahsup kartı, o
+// düzeltmenin bu çavuşa yapılmış ÖDEMELERİ HİÇ DEĞİŞTİRMEDİĞİNİ AÇIKÇA
+// belirtmek için "ödeme" kelimesini kullanır (bkz. config/pdks_faz9d.php —
+// YENİ bir ödeme/cari YAZMA yolu AÇILMADI, yalnız var olan AYRIMI sayfada
+// yazılı olarak da netleştirdi). cavus_fiyatlari.php/cavus_hakedis.php İÇİN
+// tarama DEĞİŞMEDİ — kapsamı scripts/pdks_faz9d_smoke.php AYRICA doğrular.
+foreach (array_diff($sayfalar, ['cavus_hakedis_detay.php']) as $f) {
     $kod = kodSadece(oku($f));
     foreach (['payment', 'ödeme', 'odeme', 'invoice', 'fatura', 'cari_hesap', 'current_account', 'bank', 'banka', 'balance', 'bakiye'] as $kelime) {
         $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
         ok("$f GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $kod));
     }
+}
+$hakedisDetayKod = kodSadece(oku('cavus_hakedis_detay.php'));
+foreach (['invoice', 'fatura', 'cari_hesap', 'current_account', 'bank', 'banka', 'balance', 'bakiye'] as $kelime) {
+    $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
+    ok("cavus_hakedis_detay.php GERÇEK KODUNDA '$kelime' YOK (yalnız payment/ödeme/odeme Faz 9D istisnası)", !preg_match($desen, $hakedisDetayKod));
 }
 
 echo "\n=== 8. TASLAK/KESİN YAŞAM DÖNGÜSÜ — otomatik yeniden hesaplama KİLİDİ ===\n";

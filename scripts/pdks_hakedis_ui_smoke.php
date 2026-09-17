@@ -50,6 +50,7 @@ require_once $ROOT . '/config/pdks.php';
 require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
 require_once $ROOT . '/config/pdks_faz8b.php';
+require_once $ROOT . '/config/pdks_faz9d.php';
 
 // ─────────────────────────────────────────────────────────
 // MySQL DDL → SQLite çevirici — diğer *_ui_smoke.php dosyalarıyla BİREBİR AYNI.
@@ -160,6 +161,14 @@ $faz8bMig = pdks_faz8b_migrate(db());
 if (in_array('hata', array_column($faz8bMig, 'durum'), true) || !pdks_faz8b_sema_hazir(db())) {
     throw new RuntimeException('Faz 8B test şeması hazırlanamadı: ' . json_encode($faz8bMig, JSON_UNESCAPED_UNICODE));
 }
+// Faz 9D: foreman_entitlement_adjustments'ın GERÇEK DDL'i de (diğerleri
+// gibi) INDEX/CONSTRAINT FOREIGN KEY içerir — AYNI çevirici yöntemi.
+[$feaCreate, $feaIdx] = pdks_ddl_sqlite(pdks_faz9d_tablolar()['foreman_entitlement_adjustments']);
+db()->exec($feaCreate);
+foreach ($feaIdx as $ix) db()->exec($ix);
+if (!pdks_faz9d_sema_hazir(db())) {
+    throw new RuntimeException('Faz 9D test şeması hazırlanamadı.');
+}
 
 function renderPage(string $file, array $get = [], array $post = []): string {
     global $ROOT;
@@ -170,7 +179,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     // Test dosyası /tmp altına kopyalandığı için uygulamanın require_once
     // satırlarını kaldırırız; tüm modüller yukarıda gerçek repo yolundan
     // zaten yüklendi. Faz 8B de bu listeye dahildir.
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_faz8b|config\/auth)\.php\';.*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_faz8b|config\/pdks_faz9d|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);

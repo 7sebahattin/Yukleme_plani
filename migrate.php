@@ -38,6 +38,10 @@ require_once __DIR__ . '/config/pdks_cari.php';
 // dönük bağlantılar bozulmasın diye).
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
+// Faz 9D / H-03: hakediş düzeltme/mahsup (foreman_entitlement_adjustments)
+// tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
+// DOKUNMAZ — yalnız KENDİ tek yeni tablosunu additive olarak ekler.
+require_once __DIR__ . '/config/pdks_faz9d.php';
 
 // Çalıştırılacak migrasyon tanımları: kolon eklemeleri (idempotent)
 // her biri: [tablo, kolon, "ALTER ... SQL"]
@@ -94,6 +98,7 @@ $pdks_faz8a_results = [];   // Faz 8A (nötr kart / mesai dönemi) migrasyonu so
 $pdks_faz8a_ran     = false;
 $pdks_faz8b_results = []; $pdks_faz8b_ran = false;   // Faz 8B (mesai değerlendirme/ücretlendirme)
 $pdks_faz8j_results = []; $pdks_faz8j_ran = false;
+$pdks_faz9d_results = []; $pdks_faz9d_ran = false;   // Faz 9D (hakediş düzeltme/mahsup)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -157,6 +162,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk_faz8j') {
     csrf_check($_POST['csrf'] ?? null); $pdks_faz8j_ran = true; $pdks_faz8j_results = pdks_faz8j_migrate($pdo);
     foreach ($pdks_faz8j_results as $pr) audit_log_event('migrate','pdks_gunluk_faz8j',null,null,['operation'=>$pr['adim'],'durum'=>$pr['durum']]);
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_faz9d') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_faz9d_ran     = true;
+    $pdks_faz9d_results = pdks_faz9d_migrate($pdo);
+    foreach ($pdks_faz9d_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_faz9d', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $ran = true;
@@ -303,6 +318,49 @@ render_header('Şema Migrasyon');
     <p>Yalnız ekleyici migrasyon: çalışma dönemlerine iptal metadatası ekler; ham NFC/USB olaylarını değiştirmez veya silmez.</p>
     <p><strong><?= pdks_faz8j_sema_hazir($pdo) ? '✓ Hazır' : '✗ Henüz çalıştırılmadı' ?></strong><?php if ($pdks_faz8j_ran): foreach($pdks_faz8j_results as $r): ?><br><?=h($r['adim'])?>: <?=h($r['durum'])?><?php endforeach; endif; ?></p>
     <form method="post"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="ne" value="pdks_gunluk_faz8j"><button class="btn btn-primary">Faz 8J Migrasyonunu Çalıştır</button></form>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Faz 9D — Hakediş Düzeltme / Mahsup</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>foreman_entitlement_adjustments</code> tablosunu ekler.
+      Faz 1-9C tablolarına (foreman_daily_entitlements dahil) HİÇ DOKUNMAZ — KESİN hakedişler
+      bu migrasyondan SONRA da AYNEN değişmeden kalır. Cari bakiye/ekstre bu tablodan ve
+      KESİN hakediş + GEÇERLİ ödemeden CANLI türetilir; ikinci bir mutasyona açık defter YOK.
+      <?php if ($pdks_faz9d_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_faz9d_results as $p9r): ?>
+        <br>&nbsp;&nbsp;<?= h($p9r['tablo']) ?>: <?= h($p9r['durum']) ?> — <?= h($p9r['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_faz9d_tablolar()) as $p9t):
+          $p9e = pdks_faz9d_tablo_var($pdo, $p9t); ?>
+          <tr>
+            <td><?= h($p9t) ?></td>
+            <td style="color:<?= $p9e ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $p9e ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_faz9d">
+      <button type="submit" class="btn btn-primary">Faz 9D Düzeltme Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_faz9d_tablolar() as $p9sql) { echo h($p9sql) . ";\n\n"; }
+      ?></pre>
+    </details>
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">
