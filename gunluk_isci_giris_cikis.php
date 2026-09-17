@@ -199,7 +199,7 @@ render_flash();
         <h2 id="giTipBaslik">İşçi Tipi Seçin</h2>
         <?php foreach ($isciTipleri as $t): ?>
         <?php if (in_array($t['code'], ['KADIN', 'ERKEK'], true)): ?>
-        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
         <?php endif; ?>
         <?php endforeach; ?>
         <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>

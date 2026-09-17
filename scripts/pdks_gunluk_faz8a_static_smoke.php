@@ -175,8 +175,8 @@ ok("kart_acik_donemi(): source BAZLI bir dışlama YOK (source='scan' / source !
 preg_match('/function pdks_gunluk_faz8a_cikis_kaydet.*?\n\}/s', $gunlukSrc, $ckM);
 $ckGovde = $ckM[0] ?? '';
 ok('pdks_gunluk_faz8a_cikis_kaydet() gövdesi çıkarılabildi', $ckGovde !== '');
-ok("cikis_kaydet(): açık dönemi bulan sorguda status = 'open' filtresi VAR",
-    (bool)preg_match("/SELECT \\* FROM daily_worker_work_periods WHERE worker_card_id = \\? AND status = 'open' LIMIT 1/", $ckGovde));
+ok("cikis_kaydet(): açık dönemi bulan sorguda status = 'open' filtresi ve Faz 8J etkin-kayıt koruması VAR",
+    (bool)preg_match("/SELECT \\* FROM daily_worker_work_periods WHERE worker_card_id = \\? AND status = 'open' AND.*LIMIT 1/", $ckGovde));
 ok("cikis_kaydet(): AYNI sorguda source BAZLI bir dışlama YOK",
     !preg_match('/status = \'open\' AND source/', $ckGovde));
 

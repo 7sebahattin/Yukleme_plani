@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$periodId) {
         $errors[] = 'Mesai dönemi seçilemedi.';
     } else {
-        $stOwn = $pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE id=? AND session_id=?");
+        $stOwn = $pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE id=? AND session_id=? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo));
         $stOwn->execute([$periodId, $sessionId]);
         if (!$stOwn->fetchColumn()) {
             $errors[] = 'Mesai dönemi bu oturuma ait değil.';

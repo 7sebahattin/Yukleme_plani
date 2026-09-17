@@ -10,6 +10,15 @@ function pdks_faz8e_nedenler(): array
     return ['Kart kayıp', 'Kart bozuk', 'Kart okunamadı', 'Çıkış okutmayı unuttu', 'Diğer'];
 }
 
+/** Faz 8E/Faz 8J ortak ham-olay yazma parçası; çağıran zaten transaction içindedir. */
+function pdks_faz8e_manuel_cikis_olayi_ekle(PDO $pdo, array $period, int $cardId, string $depo, string $exitTime, int $userId): int
+{
+    $st = $pdo->prepare('SELECT canonical_uid FROM worker_cards WHERE id=?'); $st->execute([$cardId]); $uid = $st->fetchColumn();
+    $pdo->prepare("INSERT INTO daily_worker_card_events (session_id,worker_card_id,event_type,source,canonical_uid_snapshot,worker_type_id_snapshot,worker_type_name_snapshot,work_date_snapshot,depo_snapshot,recorded_by_user_id,server_event_time) VALUES (?,?,'CIKIS','manual',?,?,?,?,?,?,?)")
+        ->execute([$period['session_id'],$cardId,$uid,$period['worker_type_id_snapshot'],$period['worker_type_name_snapshot'],$period['work_date_snapshot'],$depo,$userId,$exitTime]);
+    return (int)$pdo->lastInsertId();
+}
+
 function pdks_faz8e_manuel_cikis_kaydet(
     int $periodId,
     string $depo,
@@ -70,7 +79,7 @@ function pdks_faz8e_manuel_cikis_kaydet(
                FROM daily_worker_work_periods p
                JOIN daily_work_sessions s ON s.id = p.session_id
                JOIN worker_cards w ON w.id = p.worker_card_id
-              WHERE p.id = ?" . $lock
+              WHERE p.id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . $lock
         );
         $st->execute([$periodId]);
         $p = $st->fetch();
@@ -98,17 +107,7 @@ function pdks_faz8e_manuel_cikis_kaydet(
         }
 
         $simdi = date('Y-m-d H:i:s');
-        $pdo->prepare(
-            "INSERT INTO daily_worker_card_events
-                (session_id, worker_card_id, event_type, source, canonical_uid_snapshot,
-                 worker_type_id_snapshot, worker_type_name_snapshot, work_date_snapshot, depo_snapshot,
-                 recorded_by_user_id, server_event_time)
-             VALUES (?, ?, 'CIKIS', 'manual', ?, ?, ?, ?, ?, ?, ?)"
-        )->execute([
-            $p['session_id'], $cardId, $p['canonical_uid'], $p['worker_type_id_snapshot'],
-            $p['worker_type_name_snapshot'], $p['work_date'], $depo, $userId, $tam,
-        ]);
-        $eventId = (int)$pdo->lastInsertId();
+        $eventId = pdks_faz8e_manuel_cikis_olayi_ekle($pdo, $p, $cardId, $depo, $tam, $userId);
         $upd = $pdo->prepare(
             "UPDATE daily_worker_work_periods
                 SET status = 'closed', exit_event_id = ?, exit_time = ?,

@@ -28,7 +28,7 @@ $st = $pdo->prepare(
        FROM daily_worker_work_periods p
        JOIN daily_work_sessions s ON s.id = p.session_id
        JOIN worker_cards w ON w.id = p.worker_card_id
-      WHERE p.id = ? AND p.session_id = ? AND s.depo = ? AND p.depo_snapshot = ?"
+      WHERE p.id = ? AND p.session_id = ? AND s.depo = ? AND p.depo_snapshot = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p')
 );
 $st->execute([(int)$periodId, (int)$sessionId, $depo, $depo]);
 $period = $st->fetch();
