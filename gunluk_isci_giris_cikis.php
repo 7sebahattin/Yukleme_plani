@@ -470,29 +470,42 @@ render_flash();
             return audioCtx;
         } catch (e) { return null; }
     }
-    function biples(frekans, sureMs, baslangicMs) {
+    function biples(frekans, sureMs, baslangicMs, seviye, dalga) {
         try {
             var ctx = sesBaglami();
             if (!ctx) return;
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = frekans;
-            gain.gain.value = 0.18;
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            var basla = ctx.currentTime + (baslangicMs || 0) / 1000;
-            osc.start(basla);
-            osc.stop(basla + sureMs / 1000);
+            var cal = function () {
+                try {
+                    var osc = ctx.createOscillator();
+                    var gain = ctx.createGain();
+                    osc.type = dalga || 'sine';
+                    osc.frequency.value = frekans;
+                    gain.gain.value = seviye == null ? 0.22 : seviye;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    var basla = ctx.currentTime + (baslangicMs || 0) / 1000;
+                    osc.start(basla);
+                    osc.stop(basla + sureMs / 1000);
+                } catch (e) {}
+            };
+            // Android Chrome'da resume() asenkrondur. Oscillator'ı context gerçekten
+            // running olduktan sonra kurmak, NFC sonucunda sessiz kalmasını önler.
+            if (ctx.state === 'running') cal();
+            else ctx.resume().then(cal).catch(function () {});
         } catch (e) { /* ses arızası kaydı ASLA engellemez */ }
     }
-    function sesBasarili() { biples(1046, 110, 0); }
-    function sesHata()     { biples(220, 120, 0); biples(180, 160, 140); }
-    // İlk kullanıcı etkileşiminde bağlamı hazırla (tarayıcı autoplay kısıtı).
-    document.addEventListener('click', function initAudioOnce() {
-        sesBaglami();
-        document.removeEventListener('click', initAudioOnce);
-    }, { once: true });
+    function sesBasarili() { biples(1046, 120, 0, 0.22, 'sine'); }
+    function sesHata() {
+        biples(260, 180, 0,   0.42, 'square');
+        biples(190, 220, 210, 0.46, 'square');
+        biples(145, 280, 470, 0.50, 'sawtooth');
+    }
+    // Web Audio kilidini gerçek kullanıcı jestinde aç. NFC okumaları daha sonra
+    // kullanıcı jesti olmadan geldiği için context'in önceden running olması gerekir.
+    function sesiHazirla() { sesBaglami(); }
+    document.addEventListener('pointerdown', sesiHazirla, { once: true, passive: true });
+    document.addEventListener('touchstart', sesiHazirla, { once: true, passive: true });
+    document.addEventListener('click', sesiHazirla, { once: true });
 
     var MOD_ETIKET = { GIRIS: '✅ GİRİŞ MODU', CIKIS: '🚪 ÇIKIŞ MODU' };
     var MOD_SINIF  = { GIRIS: 'pdks-kiosk-mode-badge-giris', CIKIS: 'pdks-kiosk-mode-badge-cikis' };
@@ -818,6 +831,8 @@ render_flash();
         });
 
         nfcBtn.addEventListener('click', function () {
+            // NFC aktivasyonu kullanıcı jestidir; aynı anda ses context'ini de kesin aç.
+            sesiHazirla();
             if (nfcDinlemede) return;
             nfcDebugYaz('button clicked');
             PdksNfcOku.baslat({
