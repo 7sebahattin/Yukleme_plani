@@ -90,6 +90,17 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 }
 .brand:hover { text-decoration: none; }
 .brand-logo { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.brand-depot {
+    min-width: 0;
+    max-width: 280px;
+}
+.brand-depot-icon { font-size: 1.05rem; flex-shrink: 0; }
+.brand-depot .brand-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.brand-depot-caret { font-size: .7rem; opacity: .72; flex-shrink: 0; }
 .topnav { display: flex; gap: 4px; }
 .topnav a {
     color: #fff; padding: 8px 14px;
@@ -308,12 +319,12 @@ input:focus, select:focus, textarea:focus {
        birbirine biniyordu (bkz. .topbar-inner altındaki 400px bloğu). */
     .topnav-user-info { display: none; }
 }
-/* Dar telefon ekranları (≤430px — yaygın telefonların tümü bu aralıkta):
-   marka yazısı ve depo adı gizlenir, yalnız ikonlar kalır — topbar'daki
-   5 öğe (marka, tema, depo, kullanıcı, çıkış) aksi halde tek satıra
-   sığmayıp üst üste biniyor ya da marka yazısı 2 satıra bölünüyordu. */
+/* Dar telefon ekranları (≤430px): genel marka metni gizlenir; ancak aktif
+   depo artık topbar'ın ana başlığı olduğu için depo adı görünür kalır. */
 @media (max-width: 430px) {
     .brand-text { display: none; }
+    .brand-depot { flex: 1; max-width: none; }
+    .brand-depot .brand-text { display: block; }
     .depo-badge-name { display: none; }
     .depo-badge { gap: 2px; padding: 6px 8px; }
     .topbar-inner { gap: 6px; padding: 8px 10px; }
