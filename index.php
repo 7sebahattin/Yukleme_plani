@@ -113,6 +113,61 @@ if ($db_backup_result !== null): ?>
 </div>
 <?php endif; ?>
 
+<style>
+/* Dashboard Personel Takibi — örnek görseldeki yeşil giriş / kırmızı çıkış 3D ikonu.
+   Yalnız bu kartı etkiler; yetki, PDKS ve diğer iş mantığına dokunmaz. */
+.home-card-icon-personel {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(145deg, #12633f 0%, #073d2c 58%, #052c22 100%) !important;
+}
+.home-card-icon-personel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 2px 5px rgba(255,255,255,.18), inset 0 -4px 8px rgba(0,0,0,.28);
+    pointer-events: none;
+}
+.personel-arrow {
+    position: absolute;
+    left: 22%;
+    width: 48%;
+    height: 18%;
+    border-radius: 999px 3px 3px 999px;
+    filter: drop-shadow(0 3px 2px rgba(0,0,0,.34));
+}
+.personel-arrow::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 0;
+    height: 0;
+    transform: translateY(-50%);
+    border-top: 13px solid transparent;
+    border-bottom: 13px solid transparent;
+}
+.personel-arrow-in {
+    top: 27%;
+    background: linear-gradient(#39ef50, #08c92d);
+    box-shadow: inset 0 2px 2px rgba(255,255,255,.38);
+}
+.personel-arrow-in::after {
+    right: -20px;
+    border-left: 23px solid #0bd333;
+}
+.personel-arrow-out {
+    bottom: 27%;
+    left: 30%;
+    background: linear-gradient(#ff5458, #f02028);
+    box-shadow: inset 0 2px 2px rgba(255,255,255,.34);
+}
+.personel-arrow-out::after {
+    left: -20px;
+    border-right: 23px solid #f4262d;
+}
+</style>
+
 <div class="home-grid">
 
 <?php if ($_ops_show): ?>
@@ -212,7 +267,10 @@ if (is_admin() || can('attendance.employees') || can('attendance.cards') || can(
     || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')):
 ?>
     <a href="personel_takip.php" class="home-card">
-        <div class="home-card-icon" style="background:#eef2ff">🧑‍🌾</div>
+        <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
+            <span class="personel-arrow personel-arrow-in"></span>
+            <span class="personel-arrow personel-arrow-out"></span>
+        </div>
         <div class="home-card-title">Personel Takibi</div>
         <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
     </a>
