@@ -330,6 +330,8 @@ render_flash();
             </div>
         </div>
 
+        <div id="giServerClock" class="pdks-server-clock" aria-label="Sunucu saati">--:--:--</div>
+
         <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
             <button type="button" class="btn btn-primary" id="giKapatBtn">🔒 MESAİYİ KAPAT</button>
@@ -432,6 +434,22 @@ render_flash();
     var scanVisual = document.getElementById('giScanVisual');
     var readStatus  = document.getElementById('giReadStatus');
     var scanText    = document.getElementById('giScanText');
+    var serverClock = document.getElementById('giServerClock');
+
+    // Sunucu zamanı PHP tarafından başlangıçta milisaniye olarak verilir;
+    // sayaç istemcide yalnız geçen süreyi ekler, cihazın yerel saatini kullanmaz.
+    var serverEpochMs = <?= (int)round(microtime(true) * 1000) ?>;
+    var serverClockStartedAt = Date.now();
+    function serverClockGuncelle() {
+        if (!serverClock) return;
+        var d = new Date(serverEpochMs + (Date.now() - serverClockStartedAt));
+        serverClock.textContent =
+            String(d.getHours()).padStart(2, '0') + ':' +
+            String(d.getMinutes()).padStart(2, '0') + ':' +
+            String(d.getSeconds()).padStart(2, '0');
+    }
+    serverClockGuncelle();
+    window.setInterval(serverClockGuncelle, 1000);
 
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
@@ -610,6 +628,8 @@ render_flash();
                 modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF[mod];
                 tipBadge.hidden = (mod !== 'GIRIS' || !seciliTipAd);
                 tipBadge.textContent = tipBadge.hidden ? '' : seciliTipAd;
+                tipBadge.classList.toggle('pdks-kiosk-type-badge-kadin', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'KADIN');
+                tipBadge.classList.toggle('pdks-kiosk-type-badge-erkek', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'ERKEK');
                 document.getElementById('giScanCavusAd').textContent = seciliCavusAd;
                 document.getElementById('giSayacDepo').textContent = currentSession.depo || '(depo yok)';
                 sayaclariGoster(d.ozet || {});
