@@ -412,31 +412,6 @@
     background-repeat: no-repeat; border: 0; border-radius: 22px;
     box-shadow: none;
 }
-/* style.css'teki paylaşılan .home-card-icon::before/::after (sheen + koyu
-   tema karartma katmanı) burada İSTENMİYOR — sprite PNG kendi 3D gölgesini
-   zaten taşıyor, üstüne binerse ikon donuklaşır/karışır. */
-.pdks-dashboard-grid .home-card-icon::before,
-.pdks-dashboard-grid .home-card-icon::after {
-    content: none;
-}
-/* Bu sayfa (Personel Takibi) KULLANICI TARAFINDAN AYRI/ELLE tasarlandı —
-   style.css'teki Sprint Dashboard-3D-01 kabartma/hover-kaldırma eklentisi
-   buraya SIZMASIN. .home-card:hover'daki transform (translateY+scale) ve
-   .home-card:hover .home-card-icon'daki emboss box-shadow, sırf seçici
-   sayısı fazla olduğu için (üç/dört sınıf) bu sayfanın kendi kurallarından
-   daha ÖNCELİKLİ hale geliyordu — burada AÇIKÇA sıfırlanır, sayfa öncesiyle
-   BİREBİR aynı davranır. */
-.pdks-dashboard-grid .home-card,
-.pdks-dashboard-grid .home-card:hover,
-.pdks-dashboard-grid .home-card:active,
-.pdks-dashboard-grid .home-card:focus-visible {
-    transform: none;
-    outline: revert;
-}
-.pdks-dashboard-grid .home-card:hover .home-card-icon,
-.pdks-dashboard-grid .home-card-icon {
-    box-shadow: none;
-}
 .pdks-icon-foreman { --icon-x: 0%; --icon-y: 0%; }
 .pdks-icon-card { --icon-x: 25%; --icon-y: 0%; }
 .pdks-icon-scan { --icon-x: 50%; --icon-y: 0%; }

@@ -375,44 +375,24 @@ input.num, select.num { text-align: right; }
     padding: 28px 16px 22px;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg, var(--radius));
-    box-shadow: var(--tile-shadow);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
     text-decoration: none; color: var(--text);
-    transition: box-shadow .22s ease, transform .22s ease, border-color .22s ease;
+    transition: box-shadow .15s ease, transform .12s ease;
     position: relative;
 }
 .home-card:hover {
-    box-shadow: var(--tile-shadow-hover);
-    transform: translateY(-4px) scale(1.012);
-    border-color: var(--border-strong);
+    box-shadow: 0 6px 24px rgba(20,30,60,.10);
+    transform: translateY(-3px);
 }
-.home-card:active { transform: translateY(-1px) scale(1.004); transition-duration: .1s; }
-.home-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.home-card:active { transform: translateY(-1px); }
 
-/* Kart yüzeyi + ikon "karo"su ayrı görsel katmanlar: kart hafif kabartma,
-   ikon kendi içinde raised bir yüzey (sheen ::before + emboss box-shadow).
-   Inline style="background:#hex" (modül rengi) box-shadow'u ETKİLEMEZ —
-   ayrı CSS özelliği olduğu için üzerine güvenle katman eklenebiliyor. */
 .home-card-icon {
     font-size: 2.4rem; line-height: 1;
     width: 72px; height: 72px;
     display: flex; align-items: center; justify-content: center;
     border-radius: 20px;
-    position: relative;
-    isolation: isolate;
-    overflow: hidden;
-    box-shadow: var(--icon-tile-shadow);
-    transition: box-shadow .22s ease;
 }
-.home-card-icon::before {
-    content: '';
-    position: absolute; inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: var(--icon-sheen);
-    pointer-events: none;
-}
-.home-card:hover .home-card-icon { box-shadow: var(--icon-tile-shadow-hover); }
 .home-card-title {
     font-size: .96rem; font-weight: 700;
     text-align: center; color: var(--text);
@@ -427,6 +407,60 @@ input.num, select.num { text-align: right; }
     font-size: .72rem; font-weight: 700;
     padding: 2px 9px; border-radius: 999px;
     min-width: 22px; text-align: center;
+}
+
+/* ── Ana sayfa karoları: kabartma / derinlik katmanı (Sprint Dashboard-3D-01) ──
+   KAPSAM, .home-grid ile SINIRLI ve .pdks-dashboard-grid HARİÇ tutulur:
+   Personel Takibi (personel_takip.php) kendi sprite ikonlu tasarımını
+   assets/pdks.css'te taşır ve bu katmanın DIŞINDADIR.
+
+   Neden :not() — "üstünü ezme" değil "hiç eşleşmeme": daha önce bu kurallar
+   çıplak .home-card / .home-card-icon üzerine yazılıp pdks.css'ten ezilmeye
+   çalışıldı ve iki kez SIZDI (hover'daki transform'u pdks.css hiç set etmiyor;
+   koyu tema ::after katmanı ise html[data-theme] ön ekiyle pdks.css'in
+   nötrleyicisinden DAHA ÖZGÜL kalıyordu). Eşleşmeyi baştan kurmamak bu
+   yarışı tamamen bitirir — pdks tarafında nötrleyici kural GEREKMEZ.
+
+   Kart yüzeyi + ikon "karo"su ayrı görsel katmanlardır: kart hafif kabartma,
+   ikon kendi içinde raised bir yüzey (sheen ::before + emboss box-shadow).
+   Inline style="background:#hex" (modül rengi) box-shadow'u ETKİLEMEZ —
+   ayrı CSS özelliği olduğu için üzerine güvenle katman eklenebiliyor. */
+.home-grid:not(.pdks-dashboard-grid) .home-card {
+    border-radius: var(--radius-lg, var(--radius));
+    box-shadow: var(--tile-shadow);
+    transition: box-shadow .22s ease, transform .22s ease, border-color .22s ease;
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card:hover {
+    box-shadow: var(--tile-shadow-hover);
+    transform: translateY(-4px) scale(1.012);
+    border-color: var(--border-strong);
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card:active {
+    transform: translateY(-1px) scale(1.004);
+    transition-duration: .1s;
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card:focus-visible {
+    outline: 2px solid var(--primary); outline-offset: 2px;
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card-icon {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    box-shadow: var(--icon-tile-shadow);
+    transition: box-shadow .22s ease;
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card-icon::before {
+    content: '';
+    position: absolute; inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--icon-sheen);
+    pointer-events: none;
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card:hover .home-card-icon {
+    box-shadow: var(--icon-tile-shadow-hover);
+}
+.home-grid:not(.pdks-dashboard-grid) .home-card-badge {
     box-shadow: 0 1px 3px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.25);
 }
 
@@ -4644,8 +4678,11 @@ body.print-mode .asya-sheet {
     .home-card-icon {
         width: 68px; height: 68px;
         font-size: 2.2rem;
+        box-shadow: inset 0 0 0 1px rgba(20,30,60,.04);
     }
-    .home-card:hover {
+    /* Masaüstünde biraz daha belirgin kalkış — kapsam yukarıdaki
+       Dashboard-3D bloğuyla AYNI (.pdks-dashboard-grid hariç). */
+    .home-grid:not(.pdks-dashboard-grid) .home-card:hover {
         box-shadow: var(--tile-shadow-hover);
         transform: translateY(-5px) scale(1.015);
         border-color: var(--border-strong);
@@ -5870,8 +5907,11 @@ html[data-theme="dark"] {
    style="background:#hex") açık tema pasteli — koyu temada olduğu gibi
    parlarsa göz yorar. box-shadow'u (kabartma) ETKİLEMEMESİ için filter
    değil, ayrı bir karartma katmanı (::after, sheen'in ÜSTÜNDE) kullanılır —
-   ikon ana rengi görünür kalır, sadece tonu kısılır. */
-html[data-theme="dark"] .home-card-icon::after {
+   ikon ana rengi görünür kalır, sadece tonu kısılır.
+   Kapsam Dashboard-3D bloğuyla AYNI (.pdks-dashboard-grid HARİÇ): bu katman
+   pdks sprite ikonlarının üstüne binince ikonlar sönükleşiyor ve "ikinci bir
+   kutu" gibi görünüyordu — canlı hata, 2026-09-18. */
+html[data-theme="dark"] .home-grid:not(.pdks-dashboard-grid) .home-card-icon::after {
     content: '';
     position: absolute; inset: 0;
     z-index: -1;
