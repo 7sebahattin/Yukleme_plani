@@ -304,7 +304,7 @@ render_flash();
         </div>
 
         <div class="pdks-kiosk-scan-hint muted">Mesai kaydı için kartınızı okuyucuya yaklaştırın.</div>
-        <div class="pdks-scan-visual pdks-kiosk-scan-icon">
+        <div id="giScanVisual" class="pdks-scan-visual pdks-kiosk-scan-icon">
             <span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span>
             <span class="pdks-scan-card"><span class="pdks-kiosk-scan-text">Kartınızı<br>Okutun</span></span>
         </div>
@@ -429,6 +429,7 @@ render_flash();
     var nfcBtn     = document.getElementById('giNfcBtn');
     var nfcHint    = document.getElementById('giNfcHint');
     var nfcDebugEl = document.getElementById('giNfcDebug');
+    var scanVisual = document.getElementById('giScanVisual');
     var readStatus  = document.getElementById('giReadStatus');
 
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
@@ -771,6 +772,21 @@ render_flash();
         nfcHint.textContent = ' veya NFC ile telefonun arkasına yaklaştırın';
         nfcBtn.disabled = false;
         nfcDebugYaz('button: enabled');
+
+        // ⚠ Kullanıcı isteği (2026-09-18): ayrı "NFC İLE KART OKU" butonu +
+        // teşhis paneli görsel olarak KALDIRILDI (bkz. pdks.css #giNfcBtnWrap),
+        // dokunma hedefi kart grafiğine (#giScanVisual) taşındı. YENİ bir
+        // tarama akışı AÇILMAZ — kart tıklanınca nfcBtn'e programatik
+        // .click() atılır, böylece guard (nfcDinlemede), teşhis logu ve
+        // PdksNfcOku.baslat() TEK yerde (aşağıdaki listener) kalır.
+        scanVisual.setAttribute('role', 'button');
+        scanVisual.setAttribute('tabindex', '0');
+        scanVisual.setAttribute('aria-label', 'NFC ile kart oku');
+        scanVisual.classList.add('pdks-scan-visual-tappable');
+        scanVisual.addEventListener('click', function () { nfcBtn.click(); });
+        scanVisual.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nfcBtn.click(); }
+        });
 
         nfcBtn.addEventListener('click', function () {
             if (nfcDinlemede) return;
