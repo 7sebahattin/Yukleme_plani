@@ -970,3 +970,53 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
     .pdks-result-3d-icon::after { inset: -23px; }
     .pdks-result-gender { width: min(72%, 290px); padding: 8px 18px; }
 }
+
+
+/* v244 — overlay içeriğinin tek koordinat sistemi.
+   Önceki kaymanın nedeni giResult merkezlenirken giResultInner'ın kendi
+   çocuklarını normal blok akışında sola hizalamasıydı. */
+.pdks-daily-kiosk #giResult {
+    position: absolute !important;
+    inset: 0 !important;
+    display: grid !important;
+    place-items: center !important;
+    padding: 0 !important;
+}
+.pdks-daily-kiosk #giResult[hidden] {
+    display: none !important;
+}
+.pdks-daily-kiosk #giResultInner {
+    position: relative;
+    z-index: 2;
+    width: min(88%, 430px);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+}
+.pdks-daily-kiosk #giResult .pdks-result-3d-icon {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    align-self: center !important;
+}
+.pdks-daily-kiosk #giResult .pdks-kiosk-result-msg,
+.pdks-daily-kiosk #giResult .pdks-result-time,
+.pdks-daily-kiosk #giResult .pdks-result-cardno,
+.pdks-daily-kiosk #giResult .pdks-result-gender {
+    align-self: center;
+}
+@media (max-width: 639px) {
+    .pdks-daily-kiosk #giResultInner {
+        width: min(90%, 390px);
+        gap: clamp(9px, 1.55dvh, 14px);
+    }
+}
+@media (max-width: 639px) and (max-height: 760px) {
+    .pdks-daily-kiosk #giResultInner {
+        gap: 8px;
+        transform: none;
+    }
+}
