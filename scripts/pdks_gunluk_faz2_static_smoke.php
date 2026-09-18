@@ -145,8 +145,13 @@ $yasakliKelimeler = ['price', 'fiyat', 'ucret', 'ücret', 'rate', 'hakedis', 'ha
 foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
     ok("config/pdks_gunluk.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $gunlukKod));
-    ok("gunluk_isci_giris_cikis.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $kod));
+    if (!in_array($kelime, ['hakedis', 'hakediş'], true)) {
+        ok("gunluk_isci_giris_cikis.php GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $kod));
+    }
 }
+ok('tarama sayfasında hakediş durumu olabilir; parasal tutar/fiyat alanı YOK',
+    !preg_match('/\b(?:daily_rate|half_day_rate|overtime_rate|unit_rate|total_amount|signed_amount|foreman_worker_rates)\b|₺/iu', $kod)
+    && !preg_match('/\b(?:TRY|TL)\b/u', $kod));
 
 echo "\n=== 8. EVENT GEÇMİŞİ DEĞİŞTİRİLEMEZ (kullanıcının açık talimatı) ===\n";
 ok('config/pdks_gunluk.php: daily_worker_card_events için UPDATE YOK', !preg_match('/UPDATE\s+`?daily_worker_card_events`?\s+SET/i', $gunlukKod));

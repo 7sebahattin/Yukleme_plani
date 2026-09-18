@@ -122,6 +122,7 @@ function renderPage(string $file, array $get = []): string {
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
+    $src = str_replace('__DIR__', var_export($ROOT, true), $src);
     $tmp = sys_get_temp_dir() . '/pdksfaz8aui_' . md5($file . serialize($get)) . '.php';
     file_put_contents($tmp, "<?php\n" . $src);
     ob_start();

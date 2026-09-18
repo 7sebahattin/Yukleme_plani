@@ -2897,10 +2897,8 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
 
 /** pdks_gunluk_oturum_ozet() İLE AYNI dönüş şekli — canlı sayaç/mutabakat
  *  kaynağı (sayfa ilk render + her tarama sonrası + kapatma ekranı).
- *  giris/cikis/ilk_giris/son_cikis sayaçları BİLEREK source='scan' filtreler
- *  — bu YALNIZCA canlı/aktif oturum trafiğinin gösterim metriğidir, pratikte
- *  aktif bir oturumda legacy_backfill satırı ZATEN OLAMAZ (backfill yalnız
- *  Faz 8A ÖNCESİ kapanmış oturumlara yazar). ⚠ Bu, açık-dönem/KİLİT
+ *  giris/cikis/ilk_giris/son_cikis sayaçları source filtresi uygulamaz;
+ *  legacy_backfill dönemleri de oturum özetinde görünür. ⚠ Bu, açık-dönem/KİLİT
  *  anlamıyla KARIŞTIRILMAMALI: aşağıdaki "eksik" (hâlâ açık kart) listesi
  *  KİLİT ailesindendir ve TEK filtresi status='open'dur (source filtresi
  *  YOK) — PRE-MERGE SAFETY REVIEW §1/§6 ile pdks_gunluk_faz8a_kart_acik_donemi()

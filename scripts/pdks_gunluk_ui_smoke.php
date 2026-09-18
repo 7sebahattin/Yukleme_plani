@@ -158,6 +158,7 @@ function renderPage(string $file, array $get = []): string {
     $src = preg_replace('/^\s*pdks_gunluk_migrate\(\);(?:\s*\/\/.*)?\s*$/m', '', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
+    $src = str_replace('__DIR__', var_export($ROOT, true), $src);
     $tmp = sys_get_temp_dir() . '/pdksgunlukui_' . md5($file . serialize($get)) . '.php';
     file_put_contents($tmp, "<?php\n" . $src);
     ob_start();
