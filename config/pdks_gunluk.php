@@ -335,25 +335,52 @@ function pdks_gunluk_tablo_var(PDO $pdo, string $tablo): bool
     catch (PDOException $e) { return false; }
 }
 
-/** Bir kolon var mı? (pdks_faz8b_kolon_var() ile AYNI desen, bilerek
- *  KOPYALANDI — Faz 9C: gunluk_isci_giris_cikis.php config/pdks_faz8b.php'yi
- *  YÜKLEMEZ, oturum açma bu yüzden ESKİ/YENİ şema ile de güvenle çalışmalı,
- *  ters bir bağımlılık AÇILMAZ, bkz. dosya başlığı.) */
+/** Request-local column metadata. Migration helpers explicitly clear this after DDL. */
+function pdks_gunluk_kolon_onbellek(PDO $pdo, ?string $tablo = null, ?string $kolon = null, ?bool $var = null): array
+{
+    static $cache;
+    $cache ??= new WeakMap();
+    if ($tablo !== null && $kolon === null) {
+        $rows = $cache[$pdo] ?? [];
+        unset($rows[$tablo]);
+        $cache[$pdo] = $rows;
+    } elseif ($tablo !== null && $kolon !== null && $var !== null) {
+        $rows = $cache[$pdo] ?? [];
+        $rows[$tablo][$kolon] = $var;
+        $cache[$pdo] = $rows;
+    }
+    return $cache[$pdo] ?? [];
+}
+
+function pdks_gunluk_kolon_onbellek_temizle(PDO $pdo, string $tablo): void
+{
+    pdks_gunluk_kolon_onbellek($pdo, $tablo);
+}
+
+/** Shared by the daily, Faz 8B, and Faz 8J readers. */
 function pdks_gunluk_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
 {
+    $cache = pdks_gunluk_kolon_onbellek($pdo);
+    if (array_key_exists($kolon, $cache[$tablo] ?? [])) return $cache[$tablo][$kolon];
     $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     if ($driver === 'sqlite') {
         foreach ($pdo->query("PRAGMA table_info(`{$tablo}`)")->fetchAll() as $c) {
-            if (($c['name'] ?? null) === $kolon) return true;
+            if (($c['name'] ?? null) === $kolon) return pdks_gunluk_kolon_onbellek_yaz($pdo, $tablo, $kolon, true);
         }
-        return false;
+        return pdks_gunluk_kolon_onbellek_yaz($pdo, $tablo, $kolon, false);
     }
     $st = $pdo->prepare(
         "SELECT 1 FROM information_schema.COLUMNS
           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1"
     );
     $st->execute([$tablo, $kolon]);
-    return $st->fetchColumn() !== false;
+    return pdks_gunluk_kolon_onbellek_yaz($pdo, $tablo, $kolon, $st->fetchColumn() !== false);
+}
+
+function pdks_gunluk_kolon_onbellek_yaz(PDO $pdo, string $tablo, string $kolon, bool $var): bool
+{
+    pdks_gunluk_kolon_onbellek($pdo, $tablo, $kolon, $var);
+    return $var;
 }
 
 /**
@@ -376,6 +403,7 @@ function pdks_gunluk_migrate(?PDO $pdo = null): array
         }
         try {
             $pdo->exec($sql);
+            pdks_gunluk_kolon_onbellek_temizle($pdo, $ad);
             $rapor[] = pdks_gunluk_tablo_var($pdo, $ad)
                 ? ['tablo' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.']
                 : ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
@@ -2277,12 +2305,7 @@ function pdks_gunluk_faz8j_etkin_kosul(PDO $pdo, string $alias = ''): string
 function pdks_gunluk_faz8j_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
 {
     try {
-        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
-            foreach ($pdo->query('PRAGMA table_info(' . $tablo . ')')->fetchAll() as $c) if (($c['name'] ?? '') === $kolon) return true;
-            return false;
-        }
-        $s = $pdo->prepare('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?');
-        $s->execute([$tablo, $kolon]); return (bool)$s->fetchColumn();
+        return pdks_gunluk_kolon_var($pdo, $tablo, $kolon);
     } catch (Throwable $e) { return false; }
 }
 
@@ -2307,6 +2330,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
         }
         try {
             $pdo->exec($sql);
+            pdks_gunluk_kolon_onbellek_temizle($pdo, $ad);
             $rapor[] = pdks_gunluk_tablo_var($pdo, $ad)
                 ? ['adim' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.']
                 : ['adim' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
@@ -2363,6 +2387,7 @@ function pdks_gunluk_faz8a_migrate(?PDO $pdo = null): array
                     "ALTER TABLE `worker_cards`
                      MODIFY COLUMN `worker_type_id` INT NULL DEFAULT NULL"
                 );
+                pdks_gunluk_kolon_onbellek_temizle($pdo, 'worker_cards');
                 $kolonDegisti = true;
             } finally {
                 // MySQL DDL autocommit'tir. MODIFY başarısız olsa bile daha önce

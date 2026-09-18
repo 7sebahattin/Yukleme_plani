@@ -63,24 +63,7 @@ function pdks_faz8b_tablo_var(PDO $pdo, string $tablo): bool
 
 function pdks_faz8b_kolon_var(PDO $pdo, string $tablo, string $kolon): bool
 {
-    $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-    if ($driver === 'sqlite') {
-        foreach ($pdo->query("PRAGMA table_info(`{$tablo}`)")->fetchAll() as $c) {
-            if (($c['name'] ?? null) === $kolon) return true;
-        }
-        return false;
-    }
-
-    $st = $pdo->prepare(
-        "SELECT 1
-           FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = DATABASE()
-            AND TABLE_NAME = ?
-            AND COLUMN_NAME = ?
-          LIMIT 1"
-    );
-    $st->execute([$tablo, $kolon]);
-    return $st->fetchColumn() !== false;
+    return pdks_gunluk_kolon_var($pdo, $tablo, $kolon);
 }
 
 function pdks_faz8b_kolon_ekle(
@@ -104,6 +87,7 @@ function pdks_faz8b_kolon_ekle(
 
     try {
         $pdo->exec($sql);
+        pdks_gunluk_kolon_onbellek_temizle($pdo, $tablo);
         return ['adim' => "$tablo.$kolon", 'durum' => 'eklendi', 'mesaj' => 'Kolon eklendi.'];
     } catch (PDOException $e) {
         error_log('[pdks_faz8b_migrate] ' . $tablo . '.' . $kolon . ': ' . $e->getMessage());
