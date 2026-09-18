@@ -695,3 +695,26 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
     .pdks-dashboard-grid .home-card-title { font-size: .91rem; }
     .pdks-dashboard-grid .home-card-icon { width: 100px; height: 100px; flex-basis: 100px; }
 }
+
+
+/* Günlük tarama: cinsiyet rozeti ve sade dijital sunucu saati. */
+.pdks-kiosk-type-badge.pdks-kiosk-type-badge-kadin {
+    color: #e83e8c;
+    background: color-mix(in srgb, #e83e8c 12%, transparent);
+}
+.pdks-kiosk-type-badge.pdks-kiosk-type-badge-erkek {
+    color: #2878e8;
+    background: color-mix(in srgb, #2878e8 12%, transparent);
+}
+.pdks-server-clock {
+    margin: 8px auto 18px;
+    text-align: center;
+    color: var(--text);
+    font-family: "Courier New", "Lucida Console", monospace;
+    font-size: clamp(2rem, 7vw, 3rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: .12em;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 12px color-mix(in srgb, var(--text) 12%, transparent);
+}
