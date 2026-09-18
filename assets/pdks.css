@@ -1020,3 +1020,35 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
         transform: none;
     }
 }
+
+
+/* v245 — sadece durum yazısında giriş/çıkış renk ayrımı.
+   Panel zemini başarı durumunda yeşil kalır; çıkışta kırmızı arka plan uygulanmaz. */
+.pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-giris,
+.pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-cikis {
+    font-size: clamp(2rem, 8vw, 2.8rem);
+    line-height: 1.08;
+    font-weight: 900;
+}
+.pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-giris {
+    color: #f8fff9;
+    text-shadow:
+        0 0 5px #36ff72,
+        0 0 12px #20e85c,
+        0 0 24px #0dba43,
+        0 0 38px #078b32;
+}
+.pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-cikis {
+    color: #fff7f7;
+    text-shadow:
+        0 0 5px #ff3d4a,
+        0 0 12px #ff2637,
+        0 0 24px #e50920,
+        0 0 40px #b40016;
+}
+@media (max-width: 639px) {
+    .pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-giris,
+    .pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-cikis {
+        font-size: clamp(2rem, 8.4vw, 2.65rem);
+    }
+}

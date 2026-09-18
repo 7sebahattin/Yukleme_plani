@@ -705,7 +705,9 @@ render_flash();
     }
     function basariGoster(d) {
         var kart = d.card || {};
-        var baslik = d.event_type === 'GIRIS' ? 'GİRİŞ KAYDEDİLDİ' : 'ÇIKIŞ KAYDEDİLDİ';
+        var girisMi = d.event_type === 'GIRIS';
+        var baslik = girisMi ? 'GİRİŞ KAYDEDİLDİ' : 'ÇIKIŞ KAYDEDİLDİ';
+        var sonucSinif = girisMi ? ' is-giris' : ' is-cikis';
         var saat = ((d.server_time || '').split(' ')[1] || '').slice(0, 5);
         var tip = kart.worker_type_name || kart.declared_class_label || '';
         var tipSinif = tip.toLocaleUpperCase('tr-TR') === 'KADIN' ? ' is-kadin' :
@@ -720,7 +722,7 @@ render_flash();
             '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>' +
             (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + escHtml(tip) + '</div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
-            '<div class="pdks-kiosk-result-msg">' + baslik + '</div>' +
+            '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
             '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
             'pdks-kiosk-result-ok', 5000
         );
