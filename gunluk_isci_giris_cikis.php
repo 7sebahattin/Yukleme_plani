@@ -693,30 +693,31 @@ render_flash();
     function basariGoster(d) {
         var kart = d.card || {};
         var baslik = d.event_type === 'GIRIS' ? 'GİRİŞ KAYDEDİLDİ' : 'ÇIKIŞ KAYDEDİLDİ';
-        var saat = (d.server_time || '').split(' ')[1] || '';
-        var altBilgi = escHtml(kart.worker_type_name || '');
-        if (kart.declared_class_label) altBilgi += ' · ' + escHtml(kart.declared_class_label);
-        // ÇIKIŞ'ta giriş→çıkış aralığını da göster (görev talimatı §18 örneği: "08:03 → 12:05").
+        var saat = ((d.server_time || '').split(' ')[1] || '').slice(0, 5);
+        var tip = kart.worker_type_name || kart.declared_class_label || '';
+        var tipSinif = tip.toLocaleUpperCase('tr-TR') === 'KADIN' ? ' is-kadin' :
+                       (tip.toLocaleUpperCase('tr-TR') === 'ERKEK' ? ' is-erkek' : '');
+        var saatBilgi = saat;
         if (d.event_type === 'CIKIS' && kart.entry_time) {
             var girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
-            var cikisSaat = saat.slice(0, 5);
-            altBilgi += '<br>' + escHtml(girisSaat) + ' → ' + escHtml(cikisSaat);
+            saatBilgi = girisSaat + ' → ' + saat;
         }
         sesBasarili();
         gosterSonuc(
-            '<div class="pdks-kiosk-result-icon">✓</div>' +
-            '<div class="pdks-kiosk-result-name">' + escHtml(kart.card_no || '') + '</div>' +
-            '<div class="pdks-kiosk-result-sub">' + altBilgi + '</div>' +
-            '<div class="pdks-kiosk-result-msg">' + baslik + '</div>',
-            'pdks-kiosk-result-ok', 1400
+            '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>' +
+            (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + escHtml(tip) + '</div>' : '') +
+            '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
+            '<div class="pdks-kiosk-result-msg">' + baslik + '</div>' +
+            '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
+            'pdks-kiosk-result-ok', 5000
         );
     }
     function hataGoster(mesaj) {
         sesHata();
         gosterSonuc(
-            '<div class="pdks-kiosk-result-icon">✕</div>' +
+            '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✕</span></div>' +
             '<div class="pdks-kiosk-result-msg">' + escHtml(mesaj || 'Kayıt yapılamadı.') + '</div>',
-            'pdks-kiosk-result-err', 2200
+            'pdks-kiosk-result-err', 5000
         );
     }
     function escHtml(s) {
