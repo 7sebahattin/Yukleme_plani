@@ -229,7 +229,7 @@ render_flash();
 
 <input type="hidden" id="giCsrf" value="<?= h(csrf_token()) ?>">
 
-<div class="pdks-kiosk">
+<div class="pdks-kiosk pdks-mobile-shell pdks-daily-kiosk">
 
     <!-- ── 0) Çavuş seç ─────────────────────────────────────── -->
     <div id="giCavusSec" class="pdks-kiosk-modesec">
@@ -294,17 +294,22 @@ render_flash();
 
     <!-- ── 3) Tarama + canlı sayaçlar ───────────────────────── -->
     <div id="giScanSec" class="pdks-kiosk-scan pdks-kiosk-scan-gunluk" hidden>
-        <div class="pdks-kiosk-selected" style="margin-bottom:4px">
+        <div class="pdks-scan-topline"><img src="<?= h($base) ?>assets/icon.svg" alt="" width="38" height="38"><span>GÜNLÜK İŞÇİ<br><strong>Giriş / Çıkış</strong></span></div>
+        <div class="pdks-kiosk-selected pdks-scan-identity" style="margin-bottom:4px">
             <div class="pdks-kiosk-selected-name" id="giScanCavusAd" style="font-size:1.05rem"></div>
+            <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
         </div>
         <div class="pdks-kiosk-scan-status">
-            <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
+            <span class="pdks-scan-active"><span aria-hidden="true"></span> OKUMA MODU AKTİF</span>
             <span id="giTipBadge" class="pdks-kiosk-mode-badge pdks-kiosk-type-badge" hidden></span>
         </div>
 
-        <div class="pdks-kiosk-scan-icon" aria-hidden="true">📇</div>
-        <div class="pdks-kiosk-scan-text">KARTINIZI OKUTUN</div>
-        <div class="pdks-kiosk-scan-hint muted">USB okuyucuya okutun<span id="giNfcHint"></span></div>
+        <div class="pdks-kiosk-scan-hint muted">Mesai kaydı için kartınızı okuyucuya yaklaştırın.</div>
+        <div class="pdks-scan-visual pdks-kiosk-scan-icon">
+            <span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span>
+            <span class="pdks-scan-card"><span class="pdks-kiosk-scan-text">Kartınızı<br>Okutun</span></span>
+        </div>
+        <div class="pdks-scan-info">ⓘ &nbsp;Kartı birkaç saniye sabit tutun. USB okuyucuya okutun<span id="giNfcHint"></span></div>
 
         <div id="giNfcBtnWrap" hidden>
             <button type="button" id="giNfcBtn" class="btn btn-lg">📡 NFC İLE KART OKU</button>
@@ -326,10 +331,10 @@ render_flash();
             </div>
         </div>
 
-        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:24px">
+        <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
-            <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
             <button type="button" class="btn btn-primary" id="giKapatBtn">🔒 MESAİYİ KAPAT</button>
+            <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
         </div>
 
         <!-- ── Sonuç overlay'i (başarı/hata) ────────────────── -->

@@ -40,22 +40,25 @@ if (!$p_gunluk && !$p_hakcari && !$p_rapor) {
 }
 
 render_header('Personel Takibi');
+echo '<link rel="stylesheet" href="' . base_url() . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
 ?>
 
-<div class="page-head">
-    <h1>🧑‍🌾 Personel Takip Merkezi</h1>
+<div class="pdks-mobile-shell pdks-dashboard">
+<div class="pdks-mobile-hero">
+    <span class="pdks-mobile-eyebrow">PERSONEL OPERASYONLARI</span>
+    <h1>Personel Takibi</h1>
+    <p>Günlük işçi, hakediş ve raporlar tek yerde.</p>
 </div>
-<p class="muted" style="margin:-8px 0 18px">Günlük işçi, hakediş/cari ve raporlama — tek merkezden.</p>
 
-<div class="home-grid">
+<div class="home-grid pdks-dashboard-grid">
 
 <?php if ($p_gunluk): ?>
-<div class="home-section-title">Günlük İşçi</div>
+<div class="home-section-title">GÜNLÜK İŞÇİ</div>
 
 <?php if ($p_adm || can('attendance.foremen')): ?>
 <a href="cavuslar.php" class="home-card">
-    <div class="home-card-icon" style="background:#fff3e0">👷</div>
+    <div class="home-card-icon pdks-icon-foreman" aria-hidden="true"></div>
     <div class="home-card-title">Çavuşlar</div>
     <div class="home-card-sub">Çavuş tanımları</div>
 </a>
@@ -63,7 +66,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.worker_cards')): ?>
 <a href="isci_kartlari.php" class="home-card">
-    <div class="home-card-icon" style="background:#fff3e0">🪪</div>
+    <div class="home-card-icon pdks-icon-card" aria-hidden="true"></div>
     <div class="home-card-title">Kart Havuzu</div>
     <div class="home-card-sub">Nötr günlük işçi kartları ve kart yönetimi</div>
 </a>
@@ -71,7 +74,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.daily_scan')): ?>
 <a href="gunluk_isci_giris_cikis.php" class="home-card">
-    <div class="home-card-icon" style="background:#fff3e0">🚪</div>
+    <div class="home-card-icon pdks-icon-scan" aria-hidden="true"></div>
     <div class="home-card-title">Günlük İşçi Giriş / Çıkış</div>
     <div class="home-card-sub">Mesai kart taraması</div>
 </a>
@@ -79,7 +82,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.daily_reports')): ?>
 <a href="gunluk_isci_puantaj.php" class="home-card">
-    <div class="home-card-icon" style="background:#fff3e0">📅</div>
+    <div class="home-card-icon pdks-icon-calendar" aria-hidden="true"></div>
     <div class="home-card-title">Günlük Puantaj</div>
     <div class="home-card-sub">Mesai özeti ve eksik çıkışlar</div>
 </a>
@@ -87,11 +90,11 @@ render_flash();
 <?php endif; ?>
 
 <?php if ($p_hakcari): ?>
-<div class="home-section-title">Hakediş &amp; Cari</div>
+<div class="home-section-title">HAKEDİŞ &amp; CARİ</div>
 
 <?php if ($p_adm || can('attendance.foreman_rates')): ?>
 <a href="cavus_fiyatlari.php" class="home-card">
-    <div class="home-card-icon" style="background:#e0f2f1">💰</div>
+    <div class="home-card-icon pdks-icon-rates" aria-hidden="true"></div>
     <div class="home-card-title">Çavuş Fiyatları</div>
     <div class="home-card-sub">Tam / Yarım / Fazla mesai ücretleri</div>
 </a>
@@ -99,7 +102,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.entitlements')): ?>
 <a href="cavus_hakedis.php" class="home-card">
-    <div class="home-card-icon" style="background:#e0f2f1">🧾</div>
+    <div class="home-card-icon pdks-icon-entitlements" aria-hidden="true"></div>
     <div class="home-card-title">Hakedişler</div>
     <div class="home-card-sub">Mesai değerlendirme + taslak / kesin hakediş</div>
 </a>
@@ -107,7 +110,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.foreman_accounts')): ?>
 <a href="cavus_cari.php" class="home-card">
-    <div class="home-card-icon" style="background:#e0f2f1">📒</div>
+    <div class="home-card-icon pdks-icon-accounts" aria-hidden="true"></div>
     <div class="home-card-title">Çavuş Cari Hesapları</div>
     <div class="home-card-sub">Güncel bakiye listesi</div>
 </a>
@@ -115,7 +118,7 @@ render_flash();
 
 <?php if ($p_adm || can('attendance.foreman_payments')): ?>
 <a href="cavus_odeme.php" class="home-card">
-    <div class="home-card-icon" style="background:#e0f2f1">💸</div>
+    <div class="home-card-icon pdks-icon-payments" aria-hidden="true"></div>
     <div class="home-card-title">Çavuş Ödemeleri</div>
     <div class="home-card-sub">Ödeme kaydı ve geçmişi</div>
 </a>
@@ -123,20 +126,21 @@ render_flash();
 <?php endif; ?>
 
 <?php if ($p_rapor): ?>
-<div class="home-section-title">Raporlar</div>
+<div class="home-section-title">RAPORLAR</div>
 
 <a href="raporlar.php" class="home-card">
-    <div class="home-card-icon" style="background:#faf0ff">📊</div>
+    <div class="home-card-icon pdks-icon-analytics" aria-hidden="true"></div>
     <div class="home-card-title">Yönetim Raporları</div>
     <div class="home-card-sub">Operasyonel ve finansal yönetim raporları</div>
 </a>
 <a href="cavus_toplu_dokum.php" class="home-card">
-    <div class="home-card-icon" style="background:#faf0ff">📋</div>
+    <div class="home-card-icon pdks-icon-report" aria-hidden="true"></div>
     <div class="home-card-title">Çavuş Toplu Döküm</div>
     <div class="home-card-sub">Aylık çavuş ve kart bazlı işçi dökümü</div>
 </a>
 <?php endif; ?>
 
+</div>
 </div>
 
 <?php render_footer(); ?>
