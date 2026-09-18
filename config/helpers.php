@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v237');
+    define('APP_SURUM', 'v238');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -469,10 +469,19 @@ function render_header(string $title, bool $print_mode = false): void {
 <?php if (!$print_mode): ?>
 <header class="topbar">
     <div class="topbar-inner">
+        <?php if (function_exists('active_depot') && ($__adp = active_depot()) !== null): ?>
+        <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
+           class="brand brand-depot" title="Depo değiştir" aria-label="Aktif depo: <?= h($__adp) ?>. Depo değiştirmek için dokunun.">
+            <span class="brand-depot-icon" aria-hidden="true">🏭</span>
+            <span class="brand-text"><?= h($__adp) ?></span>
+            <span class="brand-depot-caret" aria-hidden="true">▾</span>
+        </a>
+        <?php else: ?>
         <a href="<?= $base ?>index.php" class="brand">
             <img src="<?= $base ?>assets/logo.jpg" class="brand-logo" alt="">
             <span class="brand-text">Asya Fresh</span>
         </a>
+        <?php endif; ?>
         <?php
         $_nav_rec   = !function_exists('can') || can('records.read');
         $_nav_rep   = !function_exists('can') || can('reports.read');
@@ -502,14 +511,6 @@ function render_header(string $title, bool $print_mode = false): void {
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
             <?php endif; ?>
         </nav>
-        <button type="button" class="tema-dongu" id="temaDongu" onclick="asyaTemaDondur()"
-                title="Tema değiştir (Açık / Koyu / Sistem)" aria-label="Tema değiştir">🖥️</button>
-        <?php if (function_exists('active_depot') && ($__adp = active_depot()) !== null): ?>
-        <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
-           class="depo-badge" title="Depo değiştir">
-            <span class="depo-badge-icon" aria-hidden="true">🏭</span><span class="depo-badge-name"><?= h($__adp) ?></span><span class="depo-badge-caret" aria-hidden="true">▾</span>
-        </a>
-        <?php unset($__adp); endif; ?>
         <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>
         <div class="topnav-user-wrap">
             <div class="topnav-user-info">
@@ -518,9 +519,12 @@ function render_header(string $title, bool $print_mode = false): void {
                 <span class="topnav-user-role"><?= h($__pr['label']) ?></span>
                 <?php unset($__pr); endif; ?>
             </div>
+            <button type="button" class="tema-dongu" id="temaDongu" onclick="asyaTemaDondur()"
+                    title="Tema değiştir (Açık / Koyu / Sistem)" aria-label="Tema değiştir">🖥️</button>
             <a href="<?= $base ?>logout.php" class="topnav-logout" title="Çıkış Yap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
         </div>
         <?php unset($__ctu); endif; ?>
+        <?php unset($__adp); ?>
     </div>
 </header>
 <?php render_desktop_sidebar($base); ?>
