@@ -309,6 +309,14 @@
 }
 .pdks-kiosk-nfc-debug:empty { display: none; }
 
+/* Kullanıcı isteği (2026-09-18, gunluk_isci_giris_cikis.php ekranı): ayrı
+   "NFC İLE KART OKU" butonu + üstündeki teşhis paneli görsel olarak
+   kaldırıldı, dokunma hedefi kart grafiğine (#giScanVisual) taşındı —
+   bkz. sayfanın kendi <script>'i. İŞLEV KAYBOLMAZ: nfcBtn hâlâ DOM'da ve
+   kart tıklanınca ona programatik .click() atılır. id seçici KASITLI —
+   giris_cikis.php'nin kendi #gcNfcDebug/#gcNfcBtn'ine DOKUNMAZ. */
+#giNfcBtnWrap { display: none; }
+
 @media (max-width: 639px) {
     .pdks-kiosk-scan {
         min-height: 56vh;
@@ -444,12 +452,22 @@
 .pdks-daily-kiosk .pdks-kiosk-scan-text { color: #fff; font-size: clamp(1.8rem, 6vw, 2.3rem); letter-spacing: -.035em; }
 .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #a8bed2; }
 .pdks-scan-visual { display: grid; place-items: center; position: relative; width: 100%; height: 280px; border-radius: 50%; background: radial-gradient(circle, #24b96d55 0, #15744433 38%, transparent 73%); overflow: hidden; }
+/* Kullanıcı isteği (2026-09-18): NFC dinleme desteklendiğinde bu alan (kart
+   grafiği) tıklanabilir hâle geliyor — bkz. gunluk_isci_giris_cikis.php'nin
+   <script>'i (role/tabindex/sınıf JS'te eklenir, desteklenmeyen cihazda hiç
+   eklenmez). Yalnız görsel ipucu: gerçek buton hâlâ nfcBtn.click() ile
+   tetiklenir. */
+.pdks-scan-visual-tappable { cursor: pointer; }
+.pdks-scan-visual-tappable:focus-visible { outline: 3px solid var(--primary); outline-offset: 4px; }
 .pdks-scan-ripple { position: absolute; width: 255px; height: 255px; border: 2px solid #59f4a255; border-radius: 50%; box-shadow: 0 0 22px #4af59344, inset 0 0 22px #4af59322; animation: pdks-scan-pulse 3.6s ease-out infinite; }
 .pdks-scan-ripple:nth-child(2) { width: 205px; height: 205px; border-color: #5dffab88; box-shadow: 0 0 28px #49f59166; animation-delay: -1.2s; }
 .pdks-scan-ripple:nth-child(3) { width: 155px; height: 155px; border-color: #79ffbcaa; box-shadow: 0 0 32px #49f59188; animation-delay: -2.4s; }
 .pdks-scan-card { position: relative; display: grid; place-items: center; width: 158px; height: 106px; border: 3px solid #7affb9; border-radius: 18px; transform: rotate(-12deg); background: linear-gradient(145deg, #fff, #dcece7); box-shadow: 0 0 10px #67ffac, 0 0 34px #42ed8b99, inset 0 2px #fff, 14px 20px 25px #031b16aa; }
 .pdks-daily-kiosk .pdks-scan-card .pdks-kiosk-scan-text { display: inline-grid; place-items: center; width: 128px; color: #d3293b; font-size: 1.45rem; line-height: 1.05; letter-spacing: -.025em; text-align: center; text-transform: uppercase; animation: pdks-scan-text-glow 1.2s ease-in-out infinite alternate; }
-.pdks-scan-info { width: 100%; text-align: left; background: #142941; border: 1px solid #36516a; color: #bdd4e4; border-radius: 16px; padding: 13px 15px; font-size: .86rem; }
+/* Kullanıcı isteği (2026-09-18): bu ipucu kutusu görsel olarak kaldırıldı
+   (kart grafiği + dokunma affordance'ı yeterli açıklayıcı). display:none
+   dışındaki özellikler bilerek KORUNDU — geri açmak tek satır. */
+.pdks-scan-info { width: 100%; text-align: left; background: #142941; border: 1px solid #36516a; color: #bdd4e4; border-radius: 16px; padding: 13px 15px; font-size: .86rem; display: none; }
 .pdks-scan-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pdks-scan-actions .btn { min-height: 50px; border-radius: 14px; white-space: normal; }
 .pdks-scan-actions .btn-ghost { color: #d8e9f4; background: #1b344f; border-color: #42627b; }

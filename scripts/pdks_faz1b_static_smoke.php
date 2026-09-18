@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v236',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v236';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v236');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v237',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v237';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v237');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -369,6 +369,11 @@ $beklenenEskiSatirlar = [
     // .pdks-dashboard-grid) ile kapsandı, assets/pdks.css dokunulmamış hâline
     // döndü → AYNI rutin, tek satırlık sürüm damgası güncellemesi.
     "-    define('APP_SURUM', 'v235');",
+    // Sprint Günlük-İşçi-NFC-UX-01 (v237): gunluk_isci_giris_cikis.php'de
+    // ayrı "NFC İLE KART OKU" butonu + teşhis paneli/ipucu kutusu görsel
+    // olarak kaldırıldı, dokunma hedefi kart grafiğine taşındı (kullanıcı
+    // isteği, 2026-09-18) → SW cache + APP_SURUM v236'dan v237'ye çekildi.
+    "-    define('APP_SURUM', 'v236');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
