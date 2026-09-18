@@ -294,13 +294,12 @@ render_flash();
 
     <!-- ── 3) Tarama + canlı sayaçlar ───────────────────────── -->
     <div id="giScanSec" class="pdks-kiosk-scan pdks-kiosk-scan-gunluk" hidden>
-        <div class="pdks-scan-topline"><img src="<?= h($base) ?>assets/icon.svg" alt="" width="38" height="38"><span>GÜNLÜK İŞÇİ<br><strong>Giriş / Çıkış</strong></span></div>
         <div class="pdks-kiosk-selected pdks-scan-identity" style="margin-bottom:4px">
             <div class="pdks-kiosk-selected-name" id="giScanCavusAd" style="font-size:1.05rem"></div>
             <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
         </div>
         <div class="pdks-kiosk-scan-status">
-            <span class="pdks-scan-active"><span aria-hidden="true"></span> OKUMA MODU AKTİF</span>
+            <span id="giReadStatus" class="pdks-scan-active is-idle"><span aria-hidden="true"></span> OKUMA MODU PASİF</span>
             <span id="giTipBadge" class="pdks-kiosk-mode-badge pdks-kiosk-type-badge" hidden></span>
         </div>
 
@@ -430,6 +429,7 @@ render_flash();
     var nfcBtn     = document.getElementById('giNfcBtn');
     var nfcHint    = document.getElementById('giNfcHint');
     var nfcDebugEl = document.getElementById('giNfcDebug');
+    var readStatus  = document.getElementById('giReadStatus');
 
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
@@ -500,11 +500,25 @@ render_flash();
         try { scanInput.focus({ preventScroll: true }); } catch (e) { try { scanInput.focus(); } catch (e2) {} }
     }
 
+    // USB klavye tipi okuyucular tarayıcıya bağlantı bilgisi vermez. Bu nedenle
+    // aktif durum, USB giriş alanı odaklı olduğunda veya mevcut ortak NFC yolu
+    // gerçekten dinlemeye başladığında gösterilir.
+    function okumaDurumuGuncelle() {
+        if (!readStatus) return;
+        var nfcAktif = !!nfcDinlemede;
+        var usbAktif = !scanSec.hidden && inceIsaretci && document.activeElement === scanInput;
+        var aktif = !scanSec.hidden && (nfcAktif || usbAktif);
+        readStatus.classList.toggle('is-active', aktif);
+        readStatus.classList.toggle('is-idle', !aktif);
+        readStatus.textContent = nfcAktif ? 'NFC OKUMA MODU AKTİF' : (aktif ? 'USB OKUMA MODU AKTİF' : 'OKUMA MODU PASİF');
+    }
+
     function ekranGoster(ekran) {
         [cavusSec, modeSec, tipSec, scanSec, closeConfirmSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
         // ⚠ .page-head display:flex TAŞIR — hidden TEK BAŞINA gizleyemez
         // (bkz. CLAUDE.md maliyet.css notu, giris_cikis.php İLE AYNI düzeltme).
         if (pageHead) pageHead.style.display = (ekran === scanSec) ? 'none' : '';
+        okumaDurumuGuncelle();
     }
 
     // ── 0) Çavuş seçimi ──────────────────────────────────────
@@ -738,6 +752,8 @@ render_flash();
             if (v.trim() !== '') kaydet(v, 'usb_decimal');
         }
     });
+    scanInput.addEventListener('focus', okumaDurumuGuncelle);
+    scanInput.addEventListener('blur', okumaDurumuGuncelle);
 
     // ── Web NFC girişi — PAYLAŞILAN PdksNfcOku (config/pdks.php) ─────────
     // ⚠ giris_cikis.php / pdks_nfc_test.php İLE BİREBİR AYNI KOD — burada
@@ -771,6 +787,7 @@ render_flash();
                 },
                 onBasladi: function () {
                     nfcDinlemede = true;
+                    okumaDurumuGuncelle();
                     nfcDebugYaz('scan started');
                     nfcBtn.textContent = NFC_ETIKET_DINLEME;
                     nfcBtn.disabled = true;

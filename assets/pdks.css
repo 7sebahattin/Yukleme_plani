@@ -384,7 +384,7 @@
 .pdks-kiosk-scan-gunluk .pdks-kiosk-counters { width: 100%; margin: 8px auto 0; text-align: left; }
 .pdks-kiosk-recon-missing-row:last-child { border-bottom: none; }
 
-/* Faz 9F sonrası mobil sunum katmanı: yalnız personel merkezi ve günlük kiosk. */
+/* Faz 9F sonrası personel merkezi ve günlük kiosk sunum katmanı. */
 .pdks-mobile-shell {
     color: #eaf2ff;
     background: radial-gradient(circle at 80% 0%, #163b55 0, transparent 36%),
@@ -392,16 +392,15 @@
     border: 1px solid #263b53; border-radius: 28px;
     box-shadow: 0 20px 48px #07111f33; padding: clamp(18px, 4vw, 32px);
 }
-.pdks-mobile-hero { padding: 10px 4px 26px; }
-.pdks-mobile-eyebrow { color: #6ee7c0; font-size: .72rem; font-weight: 800; letter-spacing: .18em; }
-.pdks-mobile-hero h1 { color: #fff; font-size: clamp(1.9rem, 5vw, 2.8rem); letter-spacing: -.04em; margin: 10px 0 6px; }
-.pdks-mobile-hero p { color: #9db0c7; margin: 0; }
+.pdks-dashboard { max-width: 1360px; margin: 0 auto; }
+.pdks-mobile-hero { padding: 10px 4px 26px; text-align: center; }
+.pdks-mobile-hero h1 { color: #fff; font-size: clamp(1.9rem, 5vw, 2.8rem); letter-spacing: -.04em; margin: 0; }
 .pdks-dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .pdks-dashboard-grid .home-section-title { grid-column: 1 / -1; color: #88a5bb; font-size: .76rem; font-weight: 800; letter-spacing: .14em; margin: 20px 0 0; padding-top: 18px; border-top: 1px solid #2a4056; }
 .pdks-dashboard-grid .home-section-title:first-child { margin-top: 0; padding-top: 0; border: 0; }
 .pdks-dashboard-grid .home-card {
     min-width: 0; min-height: 196px; padding: 15px 18px; position: relative;
-    align-items: flex-start; justify-content: flex-start; gap: 4px;
+    align-items: center; justify-content: flex-start; gap: 4px;
     background: linear-gradient(145deg, #1a3049, #101e33); border: 1px solid #30465d;
     border-radius: 22px; color: #f5f9ff; box-shadow: inset 0 1px #ffffff18, 0 10px 24px #02081155;
 }
@@ -423,9 +422,11 @@
 .pdks-icon-payments { --icon-x: 50%; --icon-y: 100%; }
 .pdks-icon-analytics { --icon-x: 75%; --icon-y: 100%; }
 .pdks-icon-report { --icon-x: 100%; --icon-y: 100%; }
-.pdks-dashboard-grid .home-card-title { color: #f5f9ff; font-size: 1rem; line-height: 1.2; margin-top: 6px; padding-right: 14px; text-align: left; }
-.pdks-dashboard-grid .home-card-sub { color: #aab8c8; font-size: .78rem; line-height: 1.35; padding-right: 28px; text-align: left; }
-.pdks-dashboard-grid .home-card::after { content: '›'; display: grid; place-items: center; width: 35px; height: 35px; position: absolute; right: 13px; bottom: 13px; border-radius: 50%; color: #7fe3ae; background: #205341; font-size: 1.8rem; line-height: 1; }
+.pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"] { overflow: hidden; background: linear-gradient(145deg, #1b493c, #102c2b); }
+.pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { content: ''; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(145deg, #542a38, #2e1824); opacity: 0; animation: pdks-dashboard-scan-red 7s ease-in-out infinite alternate; }
+.pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"] > * { position: relative; z-index: 1; }
+.pdks-dashboard-grid .home-card-title { color: #f5f9ff; font-size: 1rem; line-height: 1.2; margin-top: 6px; text-align: center; }
+.pdks-dashboard-grid .home-card-sub { color: #aab8c8; font-size: .78rem; line-height: 1.35; text-align: center; }
 .pdks-daily-kiosk { max-width: 580px; }
 .pdks-daily-kiosk .pdks-kiosk-modesec { color: #eaf2ff; }
 .pdks-daily-kiosk .pdks-kiosk-selected, .pdks-daily-kiosk .pdks-kiosk-counters { background: #132740; border: 1px solid #2b4a63; color: #eaf2ff; border-radius: 18px; }
@@ -433,30 +434,100 @@
 .pdks-daily-kiosk .pdks-kiosk-cavus-btn { background: #152a43; border-color: #31516a; color: #fff; border-radius: 18px; min-height: 64px; }
 .pdks-daily-kiosk .pdks-kiosk-modebtn { border-radius: 18px; min-height: 70px; box-shadow: inset 0 1px #ffffff44, 0 10px 24px #02081166; }
 .pdks-daily-kiosk .pdks-kiosk-scan { min-height: 0; gap: 14px; padding: 8px 0 20px; color: #eaf2ff; }
-.pdks-daily-kiosk .pdks-scan-identity { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; width: 100%; }
+.pdks-daily-kiosk .pdks-scan-identity { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; }
 .pdks-daily-kiosk .pdks-scan-identity .pdks-kiosk-mode-badge { font-size: .73rem; padding: 7px 10px; }
-.pdks-scan-topline { display: flex; align-items: center; gap: 10px; align-self: stretch; text-align: left; color: #a8c0d4; font-size: .7rem; font-weight: 700; letter-spacing: .1em; }
-.pdks-scan-topline img { border-radius: 12px; }
-.pdks-scan-topline strong { color: #fff; font-size: 1rem; letter-spacing: 0; }
-.pdks-scan-active { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 999px; color: #8ff0c5; background: #0f433d; border: 1px solid #3d967e; font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
-.pdks-scan-active span { width: 8px; height: 8px; border-radius: 50%; background: #67e8a7; box-shadow: 0 0 12px #67e8a7; }
+.pdks-scan-active { display: inline-flex; align-items: center; gap: 8px; padding: 9px 13px; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
+.pdks-scan-active.is-active { color: #8ff0c5; background: #0f433d; border: 1px solid #3d967e; }
+.pdks-scan-active.is-active span { width: 8px; height: 8px; border-radius: 50%; background: #67e8a7; box-shadow: 0 0 12px #67e8a7; }
+.pdks-scan-active.is-idle { color: #d8c4ca; background: #382c38; border: 1px solid #725563; }
+.pdks-scan-active.is-idle span { width: 8px; height: 8px; border-radius: 50%; background: #fb7185; box-shadow: 0 0 8px #fb718599; }
 .pdks-daily-kiosk .pdks-kiosk-scan-text { color: #fff; font-size: clamp(1.8rem, 6vw, 2.3rem); letter-spacing: -.035em; }
 .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #a8bed2; }
 .pdks-scan-visual { display: grid; place-items: center; position: relative; width: 100%; height: 280px; border-radius: 50%; background: radial-gradient(circle, #24b96d55 0, #15744433 38%, transparent 73%); overflow: hidden; }
-.pdks-scan-ripple { position: absolute; width: 255px; height: 255px; border: 2px solid #59f4a255; border-radius: 50%; box-shadow: 0 0 22px #4af59344, inset 0 0 22px #4af59322; }
-.pdks-scan-ripple:nth-child(2) { width: 205px; height: 205px; border-color: #5dffab88; box-shadow: 0 0 28px #49f59166; }
-.pdks-scan-ripple:nth-child(3) { width: 155px; height: 155px; border-color: #79ffbcaa; box-shadow: 0 0 32px #49f59188; }
+.pdks-scan-ripple { position: absolute; width: 255px; height: 255px; border: 2px solid #59f4a255; border-radius: 50%; box-shadow: 0 0 22px #4af59344, inset 0 0 22px #4af59322; animation: pdks-scan-pulse 3.6s ease-out infinite; }
+.pdks-scan-ripple:nth-child(2) { width: 205px; height: 205px; border-color: #5dffab88; box-shadow: 0 0 28px #49f59166; animation-delay: -1.2s; }
+.pdks-scan-ripple:nth-child(3) { width: 155px; height: 155px; border-color: #79ffbcaa; box-shadow: 0 0 32px #49f59188; animation-delay: -2.4s; }
 .pdks-scan-card { position: relative; display: grid; place-items: center; width: 158px; height: 106px; border: 3px solid #7affb9; border-radius: 18px; transform: rotate(-12deg); background: linear-gradient(145deg, #fff, #dcece7); box-shadow: 0 0 10px #67ffac, 0 0 34px #42ed8b99, inset 0 2px #fff, 14px 20px 25px #031b16aa; }
-.pdks-daily-kiosk .pdks-scan-card .pdks-kiosk-scan-text { color: #d3293b; font-size: 1.45rem; line-height: 1.05; letter-spacing: -.025em; text-align: center; width: 130px; text-shadow: none; }
+.pdks-daily-kiosk .pdks-scan-card .pdks-kiosk-scan-text { display: inline-grid; place-items: center; width: 128px; color: #d3293b; font-size: 1.45rem; line-height: 1.05; letter-spacing: -.025em; text-align: center; text-transform: uppercase; animation: pdks-scan-text-glow 1.2s ease-in-out infinite alternate; }
 .pdks-scan-info { width: 100%; text-align: left; background: #142941; border: 1px solid #36516a; color: #bdd4e4; border-radius: 16px; padding: 13px 15px; font-size: .86rem; }
 .pdks-scan-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .pdks-scan-actions .btn { min-height: 50px; border-radius: 14px; white-space: normal; }
 .pdks-scan-actions .btn-ghost { color: #d8e9f4; background: #1b344f; border-color: #42627b; }
 .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost) { color: #d8e9f4; background: #1b344f; border-color: #42627b; }
-.pdks-scan-actions #giKapatBtn { min-height: 50px; font-weight: 800; font-size: .78rem; }
-.pdks-scan-actions #giModDegistir { grid-column: 1 / -1; min-height: 58px; }
+.pdks-scan-actions #giKapatBtn { min-height: 50px; color: #d8e9f4; background: #1b344f; border-color: #42627b; font-weight: 800; font-size: .78rem; }
+.pdks-scan-actions #giModDegistir { grid-column: 1 / -1; min-height: 50px; color: #fff; background: var(--primary); border-color: var(--primary); font-weight: 800; font-size: .78rem; }
 .pdks-daily-kiosk .pdks-kiosk-counter-box { background: #1b3650; color: #eaf2ff; }
 .pdks-daily-kiosk #giScanSec #giSayaclar { display: none; }
+@keyframes pdks-scan-pulse {
+    0%, 100% { opacity: .3; transform: scale(.86); }
+    55% { opacity: 1; transform: scale(1.08); }
+}
+@keyframes pdks-scan-text-glow {
+    from { color: #d3293b; text-shadow: 0 0 3px #ff9daa66; opacity: .75; }
+    to { color: #ff3f53; text-shadow: 0 0 8px #ff5c6d, 0 0 18px #ff5c6dcc; opacity: 1; }
+}
+@keyframes pdks-dashboard-scan-red { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+    .pdks-scan-ripple, .pdks-scan-card .pdks-kiosk-scan-text, .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { animation: none; }
+}
+/* Açık tema: aynı hiyerarşi, koyu zemin yerine açık yüzey ve okunaklı metin. */
+html[data-theme="light"] .pdks-mobile-shell {
+    color: #18283a;
+    background: radial-gradient(circle at 82% 0%, #d7f1ff 0, transparent 35%), linear-gradient(160deg, #ffffff, #edf4fa 72%);
+    border-color: #d3e0eb;
+    box-shadow: 0 20px 48px #2e5d7a1f;
+}
+html[data-theme="light"] .pdks-mobile-hero h1 { color: #142840; }
+html[data-theme="light"] .pdks-dashboard-grid .home-section-title { color: #42627b; border-top-color: #d6e2ec; }
+html[data-theme="light"] .pdks-dashboard-grid .home-card { color: #172b41; background: linear-gradient(145deg, #ffffff, #edf4fa); border-color: #cfdeea; box-shadow: inset 0 1px #ffffff, 0 10px 24px #31516a18; }
+html[data-theme="light"] .pdks-dashboard-grid .home-card:hover,
+html[data-theme="light"] .pdks-dashboard-grid .home-card:focus-visible { border-color: #4297b9; background: linear-gradient(145deg, #ffffff, #e1f3fb); }
+html[data-theme="light"] .pdks-dashboard-grid .home-card-title { color: #142840; }
+html[data-theme="light"] .pdks-dashboard-grid .home-card-sub { color: #557087; }
+html[data-theme="light"] .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"] { background: linear-gradient(145deg, #edfdf5, #d8f5e7); }
+html[data-theme="light"] .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { background: linear-gradient(145deg, #fff0f2, #f8d9df); }
+/* Açık tema: günlük kart tarama ekranı. */
+html[data-theme="light"] .pdks-daily-kiosk {
+    color: #18283a;
+    background: radial-gradient(circle at 80% 10%, #d9f5e9 0, transparent 28%), linear-gradient(160deg, #ffffff, #eef5fa 72%);
+    border-color: #d3e0eb;
+    box-shadow: 0 20px 48px #2e5d7a1f;
+}
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-selected,
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-counters { color: #18283a; background: #ffffff; border-color: #d3e0eb; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-selected-name { color: #142840; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan { color: #18283a; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #49647a; }
+html[data-theme="light"] .pdks-scan-visual { background: radial-gradient(circle, #20b969a6 0, #10884d66 38%, transparent 73%); }
+html[data-theme="light"] .pdks-scan-ripple { border-color: #087e4eaa; box-shadow: 0 0 22px #0f9a5f77, inset 0 0 22px #0f9a5f44; }
+html[data-theme="light"] .pdks-scan-ripple:nth-child(2) { border-color: #069c5b; box-shadow: 0 0 28px #0b9d5f99; }
+html[data-theme="light"] .pdks-scan-ripple:nth-child(3) { border-color: #00a962; box-shadow: 0 0 32px #0baa65bb; }
+html[data-theme="light"] .pdks-scan-info { color: #38556d; background: #ffffff; border-color: #cbdce8; }
+html[data-theme="light"] .pdks-scan-active.is-idle { color: #8f3040; background: #fff1f3; border-color: #f3b5c0; }
+html[data-theme="light"] .pdks-scan-actions .btn-ghost,
+html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost),
+html[data-theme="light"] .pdks-scan-actions #giKapatBtn { color: #27455d; background: #ffffff; border-color: #bcd1df; }
+@media (min-width: 760px) {
+    .pdks-daily-kiosk { max-width: 920px; }
+    .pdks-daily-kiosk .pdks-kiosk-scan { align-items: center; padding: 18px 42px 34px; }
+    .pdks-daily-kiosk .pdks-scan-identity,
+    .pdks-daily-kiosk .pdks-kiosk-scan-status,
+    .pdks-daily-kiosk .pdks-kiosk-scan-hint,
+    .pdks-daily-kiosk .pdks-scan-info,
+    .pdks-daily-kiosk .pdks-scan-actions { max-width: 640px; }
+    .pdks-daily-kiosk .pdks-scan-visual { max-width: 640px; height: 330px; }
+}
+@media (min-width: 760px) {
+    .pdks-mobile-shell { padding: clamp(28px, 4vw, 48px); }
+    .pdks-mobile-hero { padding: 4px 4px 34px; }
+    .pdks-mobile-hero h1 { font-size: clamp(2.5rem, 4.5vw, 3.5rem); }
+    .pdks-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .pdks-dashboard-grid .home-card { min-height: 238px; padding: 24px; }
+    .pdks-dashboard-grid .home-card-icon { width: 128px; height: 128px; flex-basis: 128px; }
+}
+@media (min-width: 1120px) {
+    .pdks-dashboard-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 @media (max-width: 420px) {
     .pdks-mobile-shell { padding: 16px; border-radius: 20px; }
     .pdks-dashboard-grid { gap: 9px; }

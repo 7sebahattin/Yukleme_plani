@@ -46,9 +46,7 @@ render_flash();
 
 <div class="pdks-mobile-shell pdks-dashboard">
 <div class="pdks-mobile-hero">
-    <span class="pdks-mobile-eyebrow">PERSONEL OPERASYONLARI</span>
     <h1>Personel Takibi</h1>
-    <p>Günlük işçi, hakediş ve raporlar tek yerde.</p>
 </div>
 
 <div class="home-grid pdks-dashboard-grid">
