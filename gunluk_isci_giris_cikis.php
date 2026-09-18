@@ -306,7 +306,7 @@ render_flash();
         <div class="pdks-kiosk-scan-hint muted">Mesai kaydı için kartınızı okuyucuya yaklaştırın.</div>
         <div id="giScanVisual" class="pdks-scan-visual pdks-kiosk-scan-icon">
             <span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span><span class="pdks-scan-ripple"></span>
-            <span class="pdks-scan-card"><span class="pdks-kiosk-scan-text">Kartınızı<br>Okutun</span></span>
+            <span class="pdks-scan-card"><span id="giScanText" class="pdks-kiosk-scan-text">Kartınızı<br>Okutun</span></span>
         </div>
         <div class="pdks-scan-info">ⓘ &nbsp;Kartı birkaç saniye sabit tutun. USB okuyucuya okutun<span id="giNfcHint"></span></div>
 
@@ -431,6 +431,7 @@ render_flash();
     var nfcDebugEl = document.getElementById('giNfcDebug');
     var scanVisual = document.getElementById('giScanVisual');
     var readStatus  = document.getElementById('giReadStatus');
+    var scanText    = document.getElementById('giScanText');
 
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
@@ -512,6 +513,13 @@ render_flash();
         readStatus.classList.toggle('is-active', aktif);
         readStatus.classList.toggle('is-idle', !aktif);
         readStatus.textContent = nfcAktif ? 'NFC OKUMA MODU AKTİF' : (aktif ? 'USB OKUMA MODU AKTİF' : 'OKUMA MODU PASİF');
+        // Mobil Web NFC: dinleme henüz başlamadıysa kartın ana çağrısı NFC'yi
+        // açmayı söyler; NFC dinlemeye başlayınca normal okutma metnine döner.
+        // Masaüstü/USB akışı aynen korunur.
+        if (scanText) {
+            var mobilNfc = !inceIsaretci && window.PdksNfcOku && PdksNfcOku.destekli();
+            scanText.innerHTML = (mobilNfc && !nfcAktif) ? 'NFC<br>Aç' : 'Kartınızı<br>Okutun';
+        }
     }
 
     function ekranGoster(ekran) {
