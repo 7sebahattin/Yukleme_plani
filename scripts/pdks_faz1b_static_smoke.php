@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v234',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v234';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v234');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v235',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v235';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v235');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -357,6 +357,12 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v230');",
     "-    define('APP_SURUM', 'v232');",
     "-    define('APP_SURUM', 'v233');",
+    // Sprint Dashboard-3D-01 (v235): ana sayfa .home-card/.home-card-icon
+    // kabartma/derinlik CSS'i (assets/style.css) + pdks-dashboard-grid ile
+    // çakışmasın diye assets/pdks.css'e nötrleyici kural eklendi → SW cache
+    // sürümü + APP_SURUM birlikte v234'ten v235'e çekildi (AYNI rutin,
+    // tek satırlık sürüm damgası güncellemesi).
+    "-    define('APP_SURUM', 'v234');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
