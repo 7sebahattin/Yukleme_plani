@@ -19,7 +19,7 @@ function pdks_faz8j_migrate(?PDO $pdo = null): array {
         ['voided_by_user_id', 'INT NULL DEFAULT NULL'], ['void_reason', 'VARCHAR(500) NULL DEFAULT NULL'],
     ] as [$c, $sql]) {
         if (pdks_gunluk_faz8j_kolon_var($pdo, 'daily_worker_work_periods', $c)) { $r[] = ['adim'=>$c,'durum'=>'var','mesaj'=>'Kolon zaten var.']; continue; }
-        try { $pdo->exec("ALTER TABLE `daily_worker_work_periods` ADD COLUMN `$c` $sql"); $r[] = ['adim'=>$c,'durum'=>'eklendi','mesaj'=>'Kolon eklendi.']; }
+        try { $pdo->exec("ALTER TABLE `daily_worker_work_periods` ADD COLUMN `$c` $sql"); pdks_gunluk_kolon_onbellek_temizle($pdo, 'daily_worker_work_periods'); $r[] = ['adim'=>$c,'durum'=>'eklendi','mesaj'=>'Kolon eklendi.']; }
         catch (Throwable $e) { error_log('[pdks_faz8j_migrate] '.$c.': '.$e->getMessage()); $r[] = ['adim'=>$c,'durum'=>'hata','mesaj'=>'Kolon eklenemedi.']; }
     }
     return $r;
