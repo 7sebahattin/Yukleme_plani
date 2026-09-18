@@ -507,6 +507,148 @@ html[data-theme="light"] .pdks-scan-active.is-idle { color: #8f3040; background:
 html[data-theme="light"] .pdks-scan-actions .btn-ghost,
 html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost),
 html[data-theme="light"] .pdks-scan-actions #giKapatBtn { color: #27455d; background: #ffffff; border-color: #bcd1df; }
+
+/* İşçi tipi seçimi: hem açık hem koyu yüzeyde ayrı, yüksek kontrastlı 3D seçimler. */
+.pdks-daily-kiosk .pdks-kiosk-type-popup {
+    width: min(100%, 440px);
+    padding: 28px 20px 24px;
+    gap: 16px;
+    color: #edf6ff;
+    background: linear-gradient(145deg, #18324e, #0d1d31);
+    border: 1px solid #365977;
+    border-radius: 24px;
+    box-shadow: inset 0 1px #ffffff24, 0 20px 42px #02081166;
+}
+.pdks-daily-kiosk .pdks-kiosk-type-popup #giTipBaslik {
+    margin: 2px 0 0;
+    color: #f7fbff;
+    font-size: clamp(1.15rem, 3vw, 1.4rem);
+    font-weight: 850;
+    letter-spacing: -.02em;
+}
+.pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected {
+    width: 100%;
+    background: #102842;
+    border: 1px solid #345573;
+    box-shadow: inset 0 1px #ffffff12;
+}
+.pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-label { color: #a9c2d7; }
+.pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-name { color: #ffffff; }
+.pdks-daily-kiosk .pdks-kiosk-typebtn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: 84px;
+    padding: 22px 24px;
+    border: 1px solid #71c4ff;
+    color: #ffffff;
+    background: linear-gradient(160deg, #3c9dff 0%, #1d70e8 48%, #1049b5 100%);
+    box-shadow: inset 0 2px #ffffff66, inset 0 -4px #08398788, 0 11px 0 #0b3d93, 0 18px 26px #031d4e88;
+    text-shadow: 0 2px 2px #062c70;
+    transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 2px 12px auto;
+    height: 34%;
+    border-radius: inherit;
+    background: linear-gradient(180deg, #ffffff55, transparent);
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn-kadin {
+    border-color: #ffb1d0;
+    background: linear-gradient(160deg, #ff86be 0%, #e84d93 48%, #a71e62 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #7d134b99, 0 11px 0 #8c1b52, 0 18px 26px #4c0d2f77;
+    text-shadow: 0 2px 2px #74113e;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn:hover,
+.pdks-daily-kiosk .pdks-kiosk-typebtn:focus-visible {
+    color: #ffffff;
+    filter: brightness(1.08) saturate(1.05);
+    transform: translateY(-3px);
+    box-shadow: inset 0 2px #ffffff88, inset 0 -4px #08398788, 0 14px 0 #0b3d93, 0 24px 30px #031d4e88;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn-kadin:hover,
+.pdks-daily-kiosk .pdks-kiosk-typebtn-kadin:focus-visible {
+    background: linear-gradient(160deg, #ff96c8 0%, #ed559b 48%, #b22569 100%);
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #7d134b99, 0 14px 0 #8c1b52, 0 24px 30px #4c0d2f77;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn:active {
+    transform: translateY(7px);
+    box-shadow: inset 0 2px #ffffff55, inset 0 -2px #08398788, 0 4px 0 #0b3d93, 0 8px 16px #031d4e77;
+}
+.pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec { color: #bdd4e4; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup {
+    color: #172b41;
+    background: linear-gradient(145deg, #ffffff, #e9f4fb);
+    border-color: #c6d9e8;
+    box-shadow: inset 0 1px #ffffff, 0 20px 42px #31516a22;
+}
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipBaslik { color: #16324d; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected {
+    background: #ffffff;
+    border-color: #c6d9e8;
+    box-shadow: inset 0 1px #ffffff, 0 6px 14px #31516a10;
+}
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-label { color: #52708a; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-name { color: #16324d; }
+html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec { color: #365675; }
+
+/* Giriş / çıkış seçimleri de işçi tipi kartlarıyla aynı basılabilir 3D yüzeyi kullanır. */
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: 84px;
+    padding: 22px 24px;
+    border: 1px solid transparent;
+    color: #ffffff;
+    text-shadow: 0 2px 2px #062c70;
+    transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris::before,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 2px 12px auto;
+    height: 34%;
+    border-radius: inherit;
+    background: linear-gradient(180deg, #ffffff55, transparent);
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris {
+    border-color: #75f2b1;
+    background: linear-gradient(160deg, #43d98a 0%, #16a969 48%, #08714d 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #07523899, 0 11px 0 #075d40, 0 18px 26px #04352477;
+    text-shadow: 0 2px 2px #06432f;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis {
+    border-color: #ff9a9a;
+    background: linear-gradient(160deg, #ff756f 0%, #e64145 48%, #a8172c 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #7a112299, 0 11px 0 #871526, 0 18px 26px #4c0b1877;
+    text-shadow: 0 2px 2px #6c101e;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris:hover,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris:focus-visible {
+    color: #ffffff;
+    filter: brightness(1.08) saturate(1.05);
+    transform: translateY(-3px);
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #07523899, 0 14px 0 #075d40, 0 24px 30px #04352477;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis:hover,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis:focus-visible {
+    color: #ffffff;
+    filter: brightness(1.08) saturate(1.05);
+    transform: translateY(-3px);
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #7a112299, 0 14px 0 #871526, 0 24px 30px #4c0b1877;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris:active,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-cikis:active {
+    transform: translateY(7px);
+    box-shadow: inset 0 2px #ffffff55, inset 0 -2px #063b2999, 0 4px 0 #075d40, 0 8px 16px #04352466;
+}
 @media (min-width: 760px) {
     .pdks-daily-kiosk { max-width: 920px; }
     .pdks-daily-kiosk .pdks-kiosk-scan { align-items: center; padding: 18px 42px 34px; }
