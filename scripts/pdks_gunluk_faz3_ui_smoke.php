@@ -138,6 +138,7 @@ function renderPage(string $file, array $get = []): string {
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
+    $src = str_replace('__DIR__', var_export($ROOT, true), $src);
     $tmp = sys_get_temp_dir() . '/pdksgunlukfaz3ui_' . md5($file . serialize($get)) . '.php';
     file_put_contents($tmp, "<?php\n" . $src);
     ob_start();
@@ -258,6 +259,7 @@ $pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pd
 $pageSrc = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $pageSrc);
 $pageSrc = preg_replace('/^<\?php\s*$/m', '', $pageSrc, 1);
 $pageSrc = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $pageSrc);
+$pageSrc = str_replace('__DIR__', var_export(__ROOT__, true), $pageSrc);
 eval($pageSrc);
 PHPKOD;
 $csvAltSurec = str_replace('__ROOT__', var_export($ROOT, true), $csvAltSurec);

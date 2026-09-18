@@ -83,8 +83,10 @@ $operatorIzinleri = $opM[1] ?? '';
 ok("'operator' izin listesi çıkarılabildi", $operatorIzinleri !== '');
 ok("'operator' rolüne attendance.foreman_rates VERİLMEDİ", !str_contains($operatorIzinleri, 'attendance.foreman_rates'));
 ok("'operator' rolüne attendance.entitlements VERİLMEDİ", !str_contains($operatorIzinleri, 'attendance.entitlements'));
-ok("tarama sayfası (gunluk_isci_giris_cikis.php) fiyat/hakediş/TL GÖSTERMİYOR (görev talimatı: 'Do not expose prices or hakediş amounts on the security scanning screen.')",
-    !preg_match('/\bhakedis|entitlement|daily_rate|foreman_worker_rates\b/i', oku('gunluk_isci_giris_cikis.php')));
+$taramaKod = kodSadece(oku('gunluk_isci_giris_cikis.php'));
+ok('tarama sayfası hakediş durumunu gösterebilir fakat fiyat/tutar/para birimi GÖSTERMEZ',
+    !preg_match('/\b(?:daily_rate|half_day_rate|overtime_rate|unit_rate|total_amount|signed_amount|foreman_worker_rates|fiyat|ucret|ücret|tutar)\b|₺/iu', $taramaKod)
+    && !preg_match('/\b(?:TRY|TL)\b/u', $taramaKod));
 
 echo "\n=== 4. NORMAL SAYFA ZİYARETİNDE DDL YOK (görev madde 21 — Faz 1-3 kuralıyla AYNI) ===\n";
 foreach ($sayfalar as $f) {

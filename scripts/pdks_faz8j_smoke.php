@@ -132,6 +132,26 @@ $db->exec("CREATE TRIGGER fail_void_audit BEFORE INSERT ON audit_log WHEN NEW.ac
 check8j('audit failure rolls void back',!pdks_faz8j_void(8,1,'Depo A','Neden',7,$db)['ok'] && (int)$db->query('SELECT is_voided FROM daily_worker_work_periods WHERE id=8')->fetchColumn()===0);
 $db->exec('DROP TRIGGER fail_void_audit');
 
+// Faz 9C geçişi: yeni kolon varken onay sıfırlanır, migrasyon öncesinde
+// aynı düzeltme/iptal yolları eski sütunlarla çalışmayı sürdürür.
+$db->exec("INSERT INTO worker_cards (id,card_no,canonical_uid) VALUES (4,'K004','UID-4'),(5,'K005','UID-5'),(6,'K006','UID-6'),(7,'K007','UID-7')");
+foreach ([9 => 4, 10 => 5] as $id => $card) putPeriod8j($db,$id,1,$card,1,"$day 08:00:00","$day 17:00:00",'closed');
+$db->exec('UPDATE daily_worker_work_periods SET overtime_approved_hours=2 WHERE id IN (9,10)');
+check8j('migrated correction succeeds', pdks_faz8j_duzelt(payload8j(9,1,4,2,$day),7,$db)['ok']);
+check8j('migrated correction clears approved overtime hours', $db->query('SELECT overtime_approved_hours FROM daily_worker_work_periods WHERE id=9')->fetchColumn()===null);
+check8j('migrated void succeeds', pdks_faz8j_void(10,1,'Depo A','Geçersiz kayıt',7,$db)['ok']);
+check8j('migrated void clears approved overtime hours', $db->query('SELECT overtime_approved_hours FROM daily_worker_work_periods WHERE id=10')->fetchColumn()===null);
+
+$db->exec('ALTER TABLE daily_worker_work_periods DROP COLUMN overtime_approved_hours');
+pdks_gunluk_kolon_onbellek_temizle($db, 'daily_worker_work_periods');
+foreach ([11 => 6, 12 => 7] as $id => $card) putPeriod8j($db,$id,1,$card,1,"$day 08:00:00","$day 17:00:00",'closed');
+$legacyEdit = pdks_faz8j_duzelt(payload8j(11,1,6,2,$day),7,$db);
+check8j('pre-9C correction succeeds without missing-column error', $legacyEdit['ok'] === true);
+check8j('pre-9C correction still clears old overtime approval', $db->query('SELECT overtime_approved FROM daily_worker_work_periods WHERE id=11')->fetchColumn()===null);
+$legacyVoid = pdks_faz8j_void(12,1,'Depo A','Geçersiz kayıt',7,$db);
+check8j('pre-9C void succeeds without missing-column error', $legacyVoid['ok'] === true);
+check8j('pre-9C void still marks row and clears old approval', (int)$db->query('SELECT is_voided FROM daily_worker_work_periods WHERE id=12')->fetchColumn()===1 && $db->query('SELECT overtime_approved FROM daily_worker_work_periods WHERE id=12')->fetchColumn()===null);
+
 $source=file_get_contents($root.'/config/pdks_faz8j.php');
 check8j('static raw event safety guard',!preg_match('/(?:UPDATE|DELETE)\s+daily_worker_card_events/i',$source),false);
 check8j('static central void predicate remains used',str_contains(file_get_contents($root.'/config/pdks_gunluk.php'),'pdks_gunluk_faz8j_etkin_kosul'),false);
