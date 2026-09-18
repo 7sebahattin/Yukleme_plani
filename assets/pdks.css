@@ -412,6 +412,13 @@
     background-repeat: no-repeat; border: 0; border-radius: 22px;
     box-shadow: none;
 }
+/* style.css'teki paylaşılan .home-card-icon::before/::after (sheen + koyu
+   tema karartma katmanı) burada İSTENMİYOR — sprite PNG kendi 3D gölgesini
+   zaten taşıyor, üstüne binerse ikon donuklaşır/karışır. */
+.pdks-dashboard-grid .home-card-icon::before,
+.pdks-dashboard-grid .home-card-icon::after {
+    content: none;
+}
 .pdks-icon-foreman { --icon-x: 0%; --icon-y: 0%; }
 .pdks-icon-card { --icon-x: 25%; --icon-y: 0%; }
 .pdks-icon-scan { --icon-x: 50%; --icon-y: 0%; }
