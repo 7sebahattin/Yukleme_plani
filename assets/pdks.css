@@ -879,3 +879,94 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
     .pdks-daily-kiosk .pdks-kiosk-result .pdks-kiosk-result-msg { font-size: 1.65rem; }
     .pdks-daily-kiosk .pdks-kiosk-result-err .pdks-kiosk-result-msg { font-size: 1.25rem; }
 }
+
+
+/* v243 — sonuç içeriğini viewport'tan bağımsız merkezle; 3D cinsiyet kapsülleri. */
+.pdks-daily-kiosk .pdks-kiosk-result {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.pdks-daily-kiosk .pdks-kiosk-result::before,
+.pdks-daily-kiosk .pdks-kiosk-result::after {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+.pdks-result-3d-icon {
+    flex: 0 0 auto;
+    margin: 0 0 10px;
+    transform: none;
+}
+.pdks-result-gender {
+    width: min(72%, 330px);
+    min-width: 0;
+    padding: 12px 28px;
+    border: 1px solid #ffffff80;
+    box-shadow:
+        inset 0 3px 4px #ffffffa8,
+        inset 0 -7px 10px #00000035,
+        0 7px 0 #00000038,
+        0 13px 24px #00000055,
+        0 0 26px color-mix(in srgb, currentColor 30%, transparent);
+    text-shadow: 0 2px 2px #00000055;
+}
+.pdks-result-gender::before {
+    content: "";
+    position: absolute;
+    inset: 3px 9px auto;
+    height: 42%;
+    border-radius: inherit;
+    background: linear-gradient(to bottom, #ffffff65, transparent);
+    pointer-events: none;
+}
+.pdks-result-gender.is-erkek {
+    color: #ffd91a;
+    background: linear-gradient(160deg, #1768cf 0%, #073b91 48%, #031f5d 100%);
+    border-color: #56b8ff;
+    box-shadow:
+        inset 0 3px 4px #a7d9ffb5,
+        inset 0 -8px 12px #00163e99,
+        0 7px 0 #021b4d,
+        0 13px 25px #001a4770,
+        0 0 28px #1788ff70;
+}
+.pdks-result-gender.is-kadin {
+    color: #fff;
+    background: linear-gradient(160deg, #ffd7e8 0%, #f3a7c8 48%, #df79aa 100%);
+    border-color: #ffe9f3;
+    box-shadow:
+        inset 0 3px 4px #ffffffd6,
+        inset 0 -8px 12px #b24c7c55,
+        0 7px 0 #b85b86,
+        0 13px 25px #8e365f55,
+        0 0 28px #ff9bc970;
+    text-shadow: 0 2px 3px #9b426d80;
+}
+@media (max-width: 639px) {
+    .pdks-daily-kiosk .pdks-kiosk-result {
+        inset: 0;
+        padding: clamp(18px, 3dvh, 28px) 14px;
+        justify-content: center;
+    }
+    .pdks-result-3d-icon {
+        width: clamp(100px, 29vw, 124px);
+        height: clamp(100px, 29vw, 124px);
+        margin-bottom: clamp(10px, 1.8dvh, 16px);
+    }
+    .pdks-result-gender {
+        width: min(76%, 320px);
+        padding: clamp(9px, 1.5dvh, 12px) 22px;
+    }
+}
+@media (max-width: 639px) and (max-height: 760px) {
+    .pdks-daily-kiosk .pdks-kiosk-result { gap: 8px; }
+    .pdks-result-3d-icon { width: 88px; height: 88px; margin-bottom: 8px; }
+    .pdks-result-3d-icon::before { inset: -13px; }
+    .pdks-result-3d-icon::after { inset: -23px; }
+    .pdks-result-gender { width: min(72%, 290px); padding: 8px 18px; }
+}
