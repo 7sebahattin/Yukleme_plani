@@ -546,6 +546,14 @@ function require_pdks_gunluk(string $eylem): void
 // bu fonksiyon YALNIZ record deposu DOLU ve aktif depodan FARKLIYSA
 // reddeder.
 // =========================================================
+// config/auth.php'nin depo_fold()'una GEREKSİZ SIKI BAĞIMLILIK yaratmamak için
+// (bu dosyanın kendi smoke script'leri auth.php'yi hiç yüklemez) TR-duyarsız
+// karşılaştırma burada da mevcutsa ona devredilir, yoksa basit ASCII katlamaya düşer.
+function pdks_gunluk_depo_fold(string $s): string
+{
+    return function_exists('depo_fold') ? depo_fold($s) : mb_strtolower(trim($s), 'UTF-8');
+}
+
 function pdks_gunluk_depo_kontrol(string $recordDepo, ?string $aktifDepo = null): ?string
 {
     $aktifDepo = $aktifDepo ?? (function_exists('active_depot') ? active_depot() : null);
@@ -2616,7 +2624,7 @@ function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
 {
     $st = $pdo->prepare(
         "SELECT p.id, p.session_id, p.entry_time, p.worker_type_name_snapshot AS tip,
-                s.foreman_id, f.name AS foreman_name
+                s.foreman_id, f.name AS foreman_name, s.depo
            FROM daily_worker_work_periods p
            JOIN daily_work_sessions s ON s.id = p.session_id
            JOIN foremen f ON f.id = s.foreman_id
@@ -2715,8 +2723,15 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
             if ((int)$acik['session_id'] === $sessionId) {
                 return ['ok' => false, 'kod' => 'mukerrer_giris', 'hata' => 'Bu kart zaten bu mesaide giriş yapmış.'];
             }
-            return ['ok' => false, 'kod' => 'baska_cavusta_acik',
-                     'hata' => 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde açık görünüyor.'];
+            // ⚠ Depo farkı asıl karışıklık nedenidir — bkz. cikis_kaydet() aynı
+            // mantığın aynası: kart başka depoda açık kalmışsa yalnız çavuş adı
+            // vermek yanlış yere yönlendirir, mesaj depoyu da adıyla söyler.
+            $acikDepo = trim((string)($acik['depo'] ?? ''));
+            $buDepo   = trim((string)($session['depo'] ?? ''));
+            $hata = ($acikDepo !== '' && $buDepo !== '' && pdks_gunluk_depo_fold($acikDepo) !== pdks_gunluk_depo_fold($buDepo))
+                ? 'Bu kart ' . $acikDepo . ' deposunda ' . $acik['foreman_name'] . ' için açık görünüyor. Lütfen depo değişimi yapın.'
+                : 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde açık görünüyor.';
+            return ['ok' => false, 'kod' => 'baska_cavusta_acik', 'hata' => $hata];
         }
 
         $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden ASLA alınmaz.
@@ -2829,13 +2844,25 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         }
         if ((int)$acik['session_id'] !== $sessionId) {
             if (!$disTx) $pdo->rollBack();
-            $stS = $pdo->prepare("SELECT foreman_name_snapshot FROM daily_work_sessions WHERE id = ?");
+            $stS = $pdo->prepare("SELECT foreman_name_snapshot, depo FROM daily_work_sessions WHERE id = ?");
             $stS->execute([(int)$acik['session_id']]);
-            $foremanAdi = (string)($stS->fetchColumn() ?: 'başka bir çavuş');
+            $acikOturum = $stS->fetch() ?: [];
+            $foremanAdi = (string)($acikOturum['foreman_name_snapshot'] ?? '') ?: 'başka bir çavuş';
+            $acikDepo   = trim((string)($acikOturum['depo'] ?? ''));
+            $buDepo     = trim((string)($session['depo'] ?? ''));
+            // ⚠ Asıl karışıklık genelde ÇAVUŞ değil DEPO farkıdır: kart başka bir
+            // depoda açık bırakılmış, kullanıcı depo değiştirmeden aynı çavuş adını
+            // aramaya çalışıyor. Depolar farklıysa (ikisi de boş değilse) mesaj
+            // depoyu adıyla söyler ve depo değişimine yönlendirir — yalnız çavuş
+            // adı vermek, aynı isimli/depodan habersiz kullanıcıyı yanlış yere yollar.
+            $hata = ($acikDepo !== '' && $buDepo !== '' && pdks_gunluk_depo_fold($acikDepo) !== pdks_gunluk_depo_fold($buDepo))
+                ? 'Bu kart ' . $acikDepo . ' deposunda ' . $foremanAdi . ' için açık görünüyor. Lütfen depo değişimi yapın.'
+                : 'Bu kart ' . $foremanAdi . ' mesaisinde açık görünüyor.';
             return ['ok' => false, 'kod' => 'yanlis_cavus',
-                     'hata' => 'Bu kart ' . $foremanAdi . ' mesaisinde açık görünüyor.',
+                     'hata' => $hata,
                      'acik_bilgi' => [
                          'foreman_name' => $foremanAdi,
+                         'depo'         => $acikDepo,
                          'entry_time'   => $acik['entry_time'],
                          'worker_type'  => $acik['worker_type_name_snapshot'],
                      ]];

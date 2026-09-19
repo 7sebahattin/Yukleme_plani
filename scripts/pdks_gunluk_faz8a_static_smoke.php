@@ -97,8 +97,9 @@ ok('GİRİŞ dalı hata kodları tanımlı: mukerrer_giris / baska_cavusta_acik'
     str_contains($gunlukSrc, "'mukerrer_giris'") && str_contains($gunlukSrc, "'baska_cavusta_acik'"));
 ok('ÇIKIŞ dalı hata kodları tanımlı: acik_donem_yok / yanlis_cavus',
     str_contains($gunlukSrc, "'acik_donem_yok'") && str_contains($gunlukSrc, "'yanlis_cavus'"));
-ok('YANLIŞ ÇAVUŞ ret mesajı iç ID (session_id/worker_card_id sayısal) SIZDIRMIYOR — yalnız çavuş adı metni',
-    (bool)preg_match("/'hata' => 'Bu kart ' \. \\\$foremanAdi \. ' mesaisinde açık görünüyor\.'/", $gunlukSrc));
+ok('YANLIŞ ÇAVUŞ ret mesajı iç ID (session_id/worker_card_id sayısal) SIZDIRMIYOR — yalnız çavuş adı/depo adı metni',
+    str_contains($gunlukSrc, "'Bu kart ' . \$foremanAdi . ' mesaisinde açık görünüyor.'")
+    && str_contains($gunlukSrc, "'Bu kart ' . \$acikDepo . ' deposunda ' . \$foremanAdi . ' için açık görünüyor. Lütfen depo değişimi yapın.'"));
 
 echo "\n=== 4. NÖTR KART (görev talimatı §7) ===\n";
 ok('worker_cards.worker_type_id base DDL\'de NULL DEFAULT NULL', (bool)preg_match('/`worker_type_id`\s+INT\s+NULL DEFAULT NULL/', $gunlukSrc));
