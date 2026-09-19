@@ -272,6 +272,26 @@ render_flash();
             🚪 ÇIKIŞ MODU
         </button>
         <a href="#" id="giCavusDegistir1">↩ Çavuşu Değiştir</a>
+
+        <!-- ⚠ v240 (kullanıcı isteği — kesin konum bu ekran, GİRİŞ/ÇIKIŞ MODU
+             butonlarının ALTI): günün özeti (cinsiyet bazlı + genel toplamlar,
+             ilk giriş/son çıkış) ve "Mesaiyi Kapat" burada. Çavuş seçilir
+             seçilmez, herhangi bir mod seçilmeden DOLAR (bkz. modeSecOzetYukle
+             — pdks_gunluk_oturum_bul_acik() salt okunur, session AÇMAZ).
+             Bugün hiç mesai açılmadıysa özet sıfırlanır ve Kapat gizlenir. -->
+        <div class="pdks-kiosk-counters" id="giSayaclar">
+            <h3>Bugün — <span id="giSayacDepo"></span></h3>
+            <div id="giSayacSatirlar"></div>
+            <div class="pdks-kiosk-counter-totals">
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">İlk Giriş</div><div class="val" id="giIlkGiris">—</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Son Çıkış</div><div class="val" id="giSonCikis">—</div></div>
+            </div>
+            <button type="button" class="btn btn-primary pdks-kiosk-kapat-btn" id="giKapatBtn" hidden>🔒 MESAİYİ KAPAT</button>
+        </div>
     </div>
 
     <?php if ($faz8aHazir): ?>
@@ -298,25 +318,6 @@ render_flash();
             <div class="pdks-kiosk-selected-name" id="giScanCavusAd" style="font-size:1.05rem"></div>
             <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
         </div>
-
-        <!-- ⚠ v240: özet + Mesaiyi Kapat artık taramadan ÖNCE, en görünür yerde
-             (kullanıcı isteği: kart okutmadan önce günün durumu görülsün ve
-             kapatma buradan yapılabilsin — önceki konumu tarama görselinin
-             ALTINDAYDI). -->
-        <div class="pdks-kiosk-counters" id="giSayaclar">
-            <h3>Bugün — <span id="giSayacDepo"></span></h3>
-            <div id="giSayacSatirlar"></div>
-            <div class="pdks-kiosk-counter-totals">
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">İlk Giriş</div><div class="val" id="giIlkGiris">—</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Son Çıkış</div><div class="val" id="giSonCikis">—</div></div>
-            </div>
-            <button type="button" class="btn btn-primary pdks-kiosk-kapat-btn" id="giKapatBtn">🔒 MESAİYİ KAPAT</button>
-        </div>
-
         <div class="pdks-kiosk-scan-status">
             <span id="giReadStatus" class="pdks-scan-active is-idle"><span aria-hidden="true"></span> OKUMA MODU PASİF</span>
             <span id="giTipBadge" class="pdks-kiosk-mode-badge pdks-kiosk-type-badge" hidden></span>
@@ -442,6 +443,7 @@ render_flash();
     var readStatus  = document.getElementById('giReadStatus');
     var scanText    = document.getElementById('giScanText');
     var serverClock = document.getElementById('giServerClock');
+    var kapatBtn    = document.getElementById('giKapatBtn');
 
     // Sunucu zamanı PHP tarafından başlangıçta milisaniye olarak verilir;
     // sayaç istemcide yalnız geçen süreyi ekler, cihazın yerel saatini kullanmaz.
@@ -588,8 +590,47 @@ render_flash();
             currentMode = null; currentSession = null;
             seciliTipId = null; seciliTipAd = null;
             ekranGoster(modeSec);
+            modeSecOzetYukle();
         });
     });
+
+    // ⚠ v240: mod seçim ekranındaki (giModeSec) "Bugün" özeti + Mesaiyi Kapat —
+    // hiçbir mod SEÇİLMEDEN, çavuş seçilir seçilmez dolar. ajax=oturum'u
+    // mode=CIKIS ile çağırmak YENİ bir uç nokta İCAT ETMEZ: o dal zaten salt
+    // okunur pdks_gunluk_oturum_bul_acik()'e gider (session AÇMAZ/yazmaz),
+    // GİRİŞ dalının aksine. Bugün hiç mesai açılmadıysa (kod=oturum_yok)
+    // özet sıfırlanır ve Kapat gizlenir — kapatılacak bir şey yoktur.
+    function modeSecOzetYukle() {
+        if (!seciliCavusId) return;
+        var request = ++modeRequest;
+        sayaclariGoster({});
+        document.getElementById('giSayacDepo').textContent = '';
+        kapatBtn.hidden = true;
+        fetch('gunluk_isci_giris_cikis.php?ajax=oturum', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ csrf: csrf, foreman_id: seciliCavusId, mode: 'CIKIS' })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (request !== modeRequest) return;
+                if (d && d.ok) {
+                    currentSession = d.session;
+                    document.getElementById('giSayacDepo').textContent = d.session.depo || '(depo yok)';
+                    sayaclariGoster(d.ozet || {});
+                    kapatBtn.hidden = false;
+                } else {
+                    currentSession = null;
+                    sayaclariGoster({});
+                    kapatBtn.hidden = true;
+                }
+            })
+            .catch(function () {
+                if (request !== modeRequest) return;
+                currentSession = null;
+                kapatBtn.hidden = true;
+            });
+    }
 
     function cavusDegistir() {
         // ⚠ Sunucudaki oturum KAPATILMAZ — yalnız istemci ekranı sıfırlanır
@@ -651,6 +692,7 @@ render_flash();
                     alert((d && d.hata) || 'Mesai açılamadı/bulunamadı.');
                     currentMode = null; currentSession = null;
                     ekranGoster(modeSec);
+                    modeSecOzetYukle();
                     return;
                 }
                 currentSession = d.session;
@@ -673,6 +715,7 @@ render_flash();
                 alert('Bağlantı hatası. Tekrar deneyin.');
                 currentMode = null; currentSession = null;
                 ekranGoster(modeSec);
+                modeSecOzetYukle();
             });
     }
     document.querySelectorAll('[data-gi-mode]').forEach(function (btn) {
@@ -696,16 +739,16 @@ render_flash();
         });
     });
     if (tipSec) document.getElementById('giTipVazgec').addEventListener('click', function () {
-        modeRequest++;
         seciliTipId = null; seciliTipAd = null;
         ekranGoster(modeSec);
+        modeSecOzetYukle();
         modeSec.querySelector('[data-gi-mode="GIRIS"]').focus();
     });
     document.getElementById('giModDegistir').addEventListener('click', function () {
-        modeRequest++;
         currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null;
         ekranGoster(modeSec);
+        modeSecOzetYukle();
     });
 
     // Sayfa herhangi bir yere tıklanınca odak USB kutusuna dönsün.
@@ -982,9 +1025,15 @@ render_flash();
         kapanisKontroluGoster(currentSession.id);
         ekranGoster(closeConfirmSec);
     });
+    // ⚠ v240: Kapat artık YALNIZ giModeSec'ten tetiklenir (hiçbir mod seçilmeden) —
+    // vazgeç/reddedince dönülecek ekran da scanSec DEĞİL, modeSec'tir (eskiden
+    // Kapat scanSec içindeydi ve currentMode zaten set edilmişti; şimdi bu akışta
+    // currentMode her zaman null, dolayısıyla scanSec'e dönmek yarı boş bir ekran
+    // gösterirdi). Eksik çıkış varsa kullanıcı modeSec'ten ÇIKIŞ MODU'na tekrar
+    // girip taramaya devam edebilir.
     document.getElementById('giCloseCancelBtn').addEventListener('click', function () {
-        ekranGoster(scanSec);
-        focusInput();
+        ekranGoster(modeSec);
+        modeSecOzetYukle();
     });
     document.getElementById('giCloseConfirmBtn').addEventListener('click', function () { kapat(''); });
     document.getElementById('giReconKapatBtn').addEventListener('click', function () {
@@ -993,8 +1042,8 @@ render_flash();
         kapat(not);
     });
     document.getElementById('giReconVazgecBtn').addEventListener('click', function () {
-        ekranGoster(scanSec);
-        focusInput();
+        ekranGoster(modeSec);
+        modeSecOzetYukle();
     });
 })();
 </script>
