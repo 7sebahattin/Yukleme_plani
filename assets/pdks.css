@@ -472,10 +472,11 @@
 .pdks-scan-actions .btn { min-height: 50px; border-radius: 14px; white-space: normal; }
 .pdks-scan-actions .btn-ghost { color: #d8e9f4; background: #1b344f; border-color: #42627b; }
 .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost) { color: #d8e9f4; background: #1b344f; border-color: #42627b; }
-.pdks-scan-actions #giKapatBtn { min-height: 50px; color: #d8e9f4; background: #1b344f; border-color: #42627b; font-weight: 800; font-size: .78rem; }
-.pdks-scan-actions #giModDegistir { grid-column: 1 / -1; min-height: 50px; color: #fff; background: var(--primary); border-color: var(--primary); font-weight: 800; font-size: .78rem; }
 .pdks-daily-kiosk .pdks-kiosk-counter-box { background: #1b3650; color: #eaf2ff; }
-.pdks-daily-kiosk #giScanSec #giSayaclar { display: none; }
+/* ⚠ v240 (kullanıcı isteği): günün özeti + Mesaiyi Kapat artık taramadan ÖNCE
+   görünür olmalı — bu satır önceki bir "mobil sadeleştirme" görevinde (Sep 18)
+   #giSayaclar'ı bilerek gizliyordu, YENİ istekle ÇELİŞİYOR, kaldırıldı. */
+.pdks-kiosk-kapat-btn { display: block; width: 100%; margin-top: 12px; min-height: 50px; border-radius: 14px; font-weight: 800; font-size: .85rem; }
 @keyframes pdks-scan-pulse {
     0%, 100% { opacity: .3; transform: scale(.86); }
     55% { opacity: 1; transform: scale(1.08); }
@@ -523,8 +524,7 @@ html[data-theme="light"] .pdks-scan-ripple:nth-child(3) { border-color: #00a962;
 html[data-theme="light"] .pdks-scan-info { color: #38556d; background: #ffffff; border-color: #cbdce8; }
 html[data-theme="light"] .pdks-scan-active.is-idle { color: #8f3040; background: #fff1f3; border-color: #f3b5c0; }
 html[data-theme="light"] .pdks-scan-actions .btn-ghost,
-html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost),
-html[data-theme="light"] .pdks-scan-actions #giKapatBtn { color: #27455d; background: #ffffff; border-color: #bcd1df; }
+html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost) { color: #27455d; background: #ffffff; border-color: #bcd1df; }
 
 /* İşçi tipi seçimi: hem açık hem koyu yüzeyde ayrı, yüksek kontrastlı 3D seçimler. */
 .pdks-daily-kiosk .pdks-kiosk-type-popup {
@@ -764,10 +764,10 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
         gap: 8px;
     }
     .pdks-scan-actions .btn,
-    .pdks-scan-actions #giKapatBtn,
     .pdks-scan-actions #giModDegistir {
         min-height: 46px;
     }
+    .pdks-kiosk-kapat-btn { min-height: 46px; }
 }
 @media (max-width: 639px) and (max-height: 760px) {
     .pdks-daily-kiosk .pdks-scan-visual {
@@ -1051,4 +1051,15 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
     .pdks-daily-kiosk #giResult .pdks-kiosk-result-msg.is-cikis {
         font-size: clamp(2rem, 8.4vw, 2.65rem);
     }
+}
+
+
+/* v240 — tarama sonucu ikonu: yeşil tik yerine o günün cinsiyet bazlı
+   TOPLAM GİRİŞ sayısı (bkz. gunluk_isci_giris_cikis.php basariGoster()).
+   Tek karakterlik ✓/✕ için ayarlanmış .pdks-result-3d-icon span font-size'ı
+   2-3 haneli sayılar için çok büyük — burada küçültülür. Bilerek dosyanın
+   EN SONUNDA: eşit özgüllükteki önceki (medya sorgulu) span font-size
+   kurallarını kaynak sırasıyla ezer, tüm genişliklerde geçerli olur. */
+.pdks-result-3d-icon-count span {
+    font-size: clamp(2.1rem, 9vw, 3.2rem);
 }
