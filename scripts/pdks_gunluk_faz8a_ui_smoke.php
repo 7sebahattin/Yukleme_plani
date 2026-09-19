@@ -182,12 +182,16 @@ $scanHtml = substr($s1, strpos($s1, 'id="giScanSec"'), strpos($s1, 'id="giReconS
 ok('Ana mod ekranında yalnız iki büyük mod butonu, işçi tipi/mesai seçimi yok', substr_count($modeHtml, 'data-gi-mode=') === 2 && !str_contains($modeHtml, 'data-gi-tip-id=') && !str_contains($modeHtml, 'data-gi-mesai-kod='));
 ok('İşçi tipi penceresinde Kadın ve Erkek seçenekleri dinamik tip kimlikleriyle var', substr_count($tipHtml, 'data-gi-tip-id=') === 2 && str_contains($tipHtml, 'KADIN') && str_contains($tipHtml, 'ERKEK'));
 ok('Tarama ekranında seçim butonları yerine kompakt mod ve tip rozetleri var', str_contains($scanHtml, 'id="giModeBadge"') && str_contains($scanHtml, 'id="giTipBadge"') && !str_contains($scanHtml, 'data-gi-tip-id='));
-ok('Tarama sırası: çavuş/mod → okutma/NFC → Bugün → yardımcı işlemler',
+// ⚠ v240 (kullanıcı isteği): günün özeti (giSayaclar) + Mesaiyi Kapat artık
+// kart okutmadan ÖNCE görünür — sıra: çavuş/mod → Bugün özeti+Kapat →
+// okutma/NFC → yardımcı işlemler (eskiden özet en sonda, taramanın ALTINDAYDI).
+ok('Tarama sırası: çavuş/mod → Bugün özeti+Kapat → okutma/NFC → yardımcı işlemler',
     strpos($scanHtml, 'id="giScanCavusAd"') < strpos($scanHtml, 'id="giModeBadge"')
-    && strpos($scanHtml, 'id="giModeBadge"') < strpos($scanHtml, 'pdks-kiosk-scan-icon')
+    && strpos($scanHtml, 'id="giModeBadge"') < strpos($scanHtml, 'id="giSayaclar"')
+    && strpos($scanHtml, 'id="giSayaclar"') < strpos($scanHtml, 'id="giKapatBtn"')
+    && strpos($scanHtml, 'id="giKapatBtn"') < strpos($scanHtml, 'pdks-kiosk-scan-icon')
     && strpos($scanHtml, 'pdks-kiosk-scan-icon') < strpos($scanHtml, 'id="giNfcBtnWrap"')
-    && strpos($scanHtml, 'id="giNfcBtnWrap"') < strpos($scanHtml, 'id="giSayaclar"')
-    && strpos($scanHtml, 'id="giSayaclar"') < strpos($scanHtml, 'id="giCavusDegistir2"'));
+    && strpos($scanHtml, 'id="giNfcBtnWrap"') < strpos($scanHtml, 'id="giCavusDegistir2"'));
 ok('GİRİŞ tip seçimine gider; tip seçildikten sonra taramaya geçer; ÇIKIŞ tipi sormadan ilerler',
     (bool)preg_match('/if \(mod === \'GIRIS\' && tipSec\) \{\s*ekranGoster\(tipSec\);/s', $s1)
     && str_contains($s1, "modSec('GIRIS');") && str_contains($s1, 'modSec(mod);'));

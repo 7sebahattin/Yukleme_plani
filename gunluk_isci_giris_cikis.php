@@ -298,6 +298,25 @@ render_flash();
             <div class="pdks-kiosk-selected-name" id="giScanCavusAd" style="font-size:1.05rem"></div>
             <span id="giModeBadge" class="pdks-kiosk-mode-badge"></span>
         </div>
+
+        <!-- ⚠ v240: özet + Mesaiyi Kapat artık taramadan ÖNCE, en görünür yerde
+             (kullanıcı isteği: kart okutmadan önce günün durumu görülsün ve
+             kapatma buradan yapılabilsin — önceki konumu tarama görselinin
+             ALTINDAYDI). -->
+        <div class="pdks-kiosk-counters" id="giSayaclar">
+            <h3>Bugün — <span id="giSayacDepo"></span></h3>
+            <div id="giSayacSatirlar"></div>
+            <div class="pdks-kiosk-counter-totals">
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">İlk Giriş</div><div class="val" id="giIlkGiris">—</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Son Çıkış</div><div class="val" id="giSonCikis">—</div></div>
+            </div>
+            <button type="button" class="btn btn-primary pdks-kiosk-kapat-btn" id="giKapatBtn">🔒 MESAİYİ KAPAT</button>
+        </div>
+
         <div class="pdks-kiosk-scan-status">
             <span id="giReadStatus" class="pdks-scan-active is-idle"><span aria-hidden="true"></span> OKUMA MODU PASİF</span>
             <span id="giTipBadge" class="pdks-kiosk-mode-badge pdks-kiosk-type-badge" hidden></span>
@@ -319,22 +338,10 @@ render_flash();
         <input type="text" id="giScanInput" class="pdks-kiosk-hidden-input"
                inputmode="none" autocomplete="off" aria-hidden="true" tabindex="-1">
 
-        <div class="pdks-kiosk-counters" id="giSayaclar">
-            <h3>Bugün — <span id="giSayacDepo"></span></h3>
-            <div id="giSayacSatirlar"></div>
-            <div class="pdks-kiosk-counter-totals">
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giGirisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">Çıkış</div><div class="val" id="giCikisToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box"><div class="lbl">İçeride</div><div class="val" id="giIcerdeToplam">0</div></div>
-                <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val" id="giEksikToplam">0</div></div>
-            </div>
-        </div>
-
         <div id="giServerClock" class="pdks-server-clock" aria-label="Sunucu saati">--:--:--</div>
 
         <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
-            <button type="button" class="btn btn-primary" id="giKapatBtn">🔒 MESAİYİ KAPAT</button>
             <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
         </div>
 
@@ -598,6 +605,14 @@ render_flash();
     document.getElementById('giCavusDegistir2').addEventListener('click', cavusDegistir);
 
     // ── 1) Mod seçimi → sunucudan oturum aç/getir ────────────
+    // ⚠ ozet.ilk_giris / ozet.son_cikis "YYYY-MM-DD HH:MM:SS" veya null gelir
+    // (pdks_gunluk_faz8a_oturum_ozet — bkz. config/pdks_gunluk.php). Yalnız
+    // saat:dakika gösterilir, hiç kayıt yoksa "—".
+    function saatKisalt(dt) {
+        if (!dt) return '—';
+        var parca = String(dt).split(' ')[1] || String(dt);
+        return parca.slice(0, 5) || '—';
+    }
     function sayaclariGoster(ozet) {
         var satirlar = '';
         var tipler = {};
@@ -615,6 +630,8 @@ render_flash();
         document.getElementById('giCikisToplam').textContent  = ozet.cikis_toplam || 0;
         document.getElementById('giIcerdeToplam').textContent = ozet.icerde_toplam || 0;
         document.getElementById('giEksikToplam').textContent  = ozet.eksik_toplam || 0;
+        document.getElementById('giIlkGiris').textContent     = saatKisalt(ozet.ilk_giris);
+        document.getElementById('giSonCikis').textContent     = saatKisalt(ozet.son_cikis);
     }
 
     function modSec(mod) {
@@ -717,9 +734,18 @@ render_flash();
             var girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
             saatBilgi = girisSaat + ' → ' + saat;
         }
+        // ⚠ v240 (kullanıcı isteği): yeşil tik yerine o günün o cinsiyetteki
+        // TOPLAM GİRİŞ sayısı gösterilir — hem GİRİŞ hem ÇIKIŞ okutmasında,
+        // sunucudan zaten gelen ozet.giris[tip]'ten (bkz. sayaclariGoster).
+        // Eşleşen bir sayı yoksa (tip bilinmiyor/ozet eksikse) eski tike döner.
+        var ozet = d.ozet || {};
+        var gunlukToplam = (tip && ozet.giris && ozet.giris[tip] != null) ? ozet.giris[tip] : null;
+        var ikonHtml = (gunlukToplam != null)
+            ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
+            : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
         sesBasarili();
         gosterSonuc(
-            '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>' +
+            ikonHtml +
             (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + escHtml(tip) + '</div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
