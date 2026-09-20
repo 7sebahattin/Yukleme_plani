@@ -316,6 +316,18 @@
    kart tıklanınca ona programatik .click() atılır. id seçici KASITLI —
    giris_cikis.php'nin kendi #gcNfcDebug/#gcNfcBtn'ine DOKUNMAZ. */
 #giNfcBtnWrap { display: none; }
+/* ⚠ v241 — NFC TEŞHİS MODU: yalnız `?nfcdebug=1` ile bu sınıf basılır
+   (gunluk_isci_giris_cikis.php → $nfcTeshis). "Kart okumuyor" şikayetinde
+   telefonda bakılacak tek iz bu panel: scan started / reading received —
+   serialNumber=... / backend response satırlarını gösterir. `hidden`
+   özniteliği bu kuralı EZER (bkz. dosya başındaki [hidden] kuralı), bu yüzden
+   NFC desteklenmiyorsa panel yine görünmez — istenen davranış budur. */
+#giNfcBtnWrap.nfc-teshis-acik { display: block; }
+#giNfcBtnWrap.nfc-teshis-acik .pdks-kiosk-nfc-debug {
+    display: block; max-height: 40vh; overflow: auto;
+    white-space: pre-wrap; word-break: break-all;
+    font-size: .72rem; line-height: 1.35;
+}
 
 @media (max-width: 639px) {
     .pdks-kiosk-scan {
