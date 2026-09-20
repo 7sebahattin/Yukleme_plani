@@ -80,6 +80,7 @@ render_flash();
         </p>
     </div>
     <div class="page-head-actions">
+        <a href="<?= h('cavus_toplu_dokum_yazdir.php?' . http_build_query(array_filter(['ay' => $ay, 'cavus' => $cavusId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
         <a href="raporlar.php" class="btn btn-ghost">← Raporlara Dön</a>
     </div>
 </div>
