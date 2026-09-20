@@ -389,7 +389,6 @@
 .pdks-kiosk-scan-gunluk { justify-content: flex-start; }
 .pdks-kiosk-scan-status { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .pdks-kiosk-type-badge { background: var(--primary-soft); color: var(--primary); }
-.pdks-kiosk-scan-gunluk .pdks-kiosk-counters { width: 100%; margin: 8px auto 0; text-align: left; }
 .pdks-kiosk-recon-missing-row:last-child { border-bottom: none; }
 
 /* Faz 9F sonrası personel merkezi ve günlük kiosk sunum katmanı. */
