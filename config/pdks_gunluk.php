@@ -2635,6 +2635,55 @@ function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
     return $st->fetch() ?: null;
 }
 
+/**
+ * Kart Havuzu → "Kart Sorgula" (Sprint Kart-Sorgula-01): bir UID okutulunca
+ * GİRİŞ/ÇIKIŞ YAPMADAN kartın kimliğini, şu anki (açık dönem varsa) durumunu
+ * ve son 5 mesai dönemini gösterir. TAMAMEN SALT OKUNUR — hiçbir INSERT/UPDATE
+ * YAPMAZ, pdks_gunluk_faz8a_kart_kilitle() dahi ÇAĞIRMAZ (satır kilidi yalnız
+ * YAZMA işlemleri için gereklidir, burada yarış koşulu riski yoktur).
+ *
+ * ⚠ "Şu an açık" bilgisi için pdks_gunluk_faz8a_kart_acik_donemi() REUSE
+ * edilir (foremen.name — GÜNCEL çavuş adı). Geçmiş dönemler İÇİN ise
+ * foreman_name_snapshot kullanılır (o dönem AÇILDIĞINDA donmuş ad) — aynı
+ * ayrım daily_work_sessions DDL'indeki foreman_name_snapshot gerekçesiyle
+ * TUTARLI: geçmiş kayıt, çavuş sonradan yeniden adlandırılsa bile o anki
+ * adı göstermeye devam eder.
+ */
+function pdks_gunluk_faz8a_kart_sorgula(string $kanonik, PDO $pdo): array
+{
+    $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+    $kalici = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
+    $cakisma = ['kalici_cakisma' => $kalici !== null, 'kalici_isim' => $kalici['full_name'] ?? null];
+
+    if ($kart === null) {
+        return ['ok' => true, 'bulundu' => false] + $cakisma;
+    }
+
+    $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$kart['id']);
+
+    $st = $pdo->prepare(
+        "SELECT p.entry_time, p.exit_time, p.status, p.worker_type_name_snapshot AS tip,
+                p.work_date_snapshot, p.depo_snapshot, s.foreman_name_snapshot AS cavus
+           FROM daily_worker_work_periods p
+           JOIN daily_work_sessions s ON s.id = p.session_id
+          WHERE p.worker_card_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
+          ORDER BY p.entry_time DESC
+          LIMIT 5"
+    );
+    $st->execute([(int)$kart['id']]);
+    $gecmis = $st->fetchAll();
+
+    return [
+        'ok' => true, 'bulundu' => true,
+        'card_no' => $kart['card_no'], 'status' => $kart['status'], 'notes' => (string)($kart['notes'] ?? ''),
+        'acik' => $acik ? [
+            'foreman_name' => $acik['foreman_name'], 'tip' => $acik['tip'],
+            'entry_time' => $acik['entry_time'], 'depo' => $acik['depo'],
+        ] : null,
+        'gecmis' => $gecmis,
+    ] + $cakisma;
+}
+
 // =========================================================
 // GİRİŞ / ÇIKIŞ — TEK yazma yolları (USB VE Web NFC AYNI fonksiyonlardan
 // geçer — görev talimatı §14: "USB and Web NFC must call the SAME

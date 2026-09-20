@@ -62,6 +62,34 @@ if (($_GET['ajax'] ?? '') === 'onizle') {
     exit;
 }
 
+// ── Salt-okunur SORGU ucu (Sprint Kart-Sorgula-01) — GİRİŞ/ÇIKIŞ YAPMAZ,
+// yalnız kartın şu anki durumunu + son 5 dönemini döner. ajax=onizle'den
+// AYRI: onizle "bu UID boşta mı" der (enroll formu için), bu ise kartın
+// KİMLİĞİNİ ve GEÇMİŞİNİ gösterir. daily_worker_work_periods Faz 8A'ya
+// özgü olduğu için şema hazır değilse fail-closed döner. ──
+if (($_GET['ajax'] ?? '') === 'sorgula') {
+    header('Content-Type: application/json; charset=utf-8');
+    if (!$faz8aHazir) {
+        echo json_encode(['ok' => false, 'hata' => 'Bu özellik için Faz 8A migrasyonunun tamamlanmış olması gerekiyor.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $ham = trim($_GET['uid'] ?? '');
+    $kaynak = trim($_GET['kaynak'] ?? '');
+    if ($ham === '' || !in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) {
+        echo json_encode(['ok' => false, 'hata' => 'Geçersiz istek.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $kanonik = ($kaynak === 'usb_decimal') ? pdks_uid_from_decimal($ham) : pdks_uid_from_web_nfc($ham);
+    if ($kanonik === null) {
+        echo json_encode(['ok' => false, 'hata' => $kaynak === 'usb_decimal'
+            ? 'Geçersiz UID — yalnız rakam kabul edilir.'
+            : 'Geçersiz NFC okuması.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    echo json_encode(pdks_gunluk_faz8a_kart_sorgula($kanonik, $pdo), JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $hata = ''; $basari = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -178,6 +206,35 @@ if ($basari !== ''): ?>
         <a href="cavuslar.php" class="btn">👷 Çavuşlar</a>
         <a href="isci_tipleri.php" class="btn btn-ghost">🏷 İşçi Tipleri</a>
     </div>
+</div>
+
+<!-- ── Kart Sorgula (Sprint Kart-Sorgula-01) — GİRİŞ/ÇIKIŞ YAPMADAN kartın
+     şu anki durumunu + son 5 dönemini gösterir. Enroll kutusundan (aşağıda)
+     BİLEREK AYRI: o "boşta mı" der, bu "kim/ne zaman" der. NFC deseni
+     KASITLI OLARAK farklı — burada PdksNfcOku (giris_cikis.php'nin sürekli
+     dinleme kioskuyla AYNI ortak fonksiyon, config/pdks.php) kullanılır,
+     çünkü sorgulama tek kart değil ARDIŞIK kartlar için yapılır; enroll
+     kutusundaki assets/pdks.js tek-tık deseni burada UYGUN DEĞİLDİR. İKİ
+     AYRI NFC yaşam döngüsü ÇAKIŞMAZ — enroll kutusu kendi NDEFReader'ını
+     yalnız KENDİ butonuna tıklanınca kurar, ikisi aynı anda dinlemez. -->
+<div class="card" style="padding:16px 18px;margin-bottom:20px">
+    <h2 style="margin-top:0">🔍 Kart Sorgula</h2>
+    <p class="muted" style="margin-top:-6px;font-size:.85rem">
+        Kartı okutun — GİRİŞ/ÇIKIŞ yapılmaz, yalnız kartın şu anki durumu ve
+        son 5 mesai dönemi görüntülenir.
+    </p>
+    <?php if (!$faz8aHazir): ?>
+    <div class="flash flash-warning">Bu özellik için Faz 8A migrasyonunun tamamlanmış olması gerekiyor.</div>
+    <?php else: ?>
+    <div class="pdks-scan-box">
+        <label class="pdks-scan-label" for="iskSorguInput">KARTI OKUTUN</label>
+        <input type="text" inputmode="numeric" id="iskSorguInput" class="pdks-scan-input"
+               placeholder="631799511" autocomplete="off">
+        <div class="pdks-scan-status" id="iskSorguDurum"></div>
+        <button type="button" id="iskSorguNfcBtn" class="btn btn-ghost" style="margin-top:10px" hidden>📡 NFC İLE OKU</button>
+    </div>
+    <div id="iskSorguSonuc" class="isk-sorgu-sonuc" hidden></div>
+    <?php endif; ?>
 </div>
 
 <!-- ── Kart-önce tanımlama (enroll) ──────────────────────────
@@ -372,6 +429,155 @@ function iskKartModalAc(id, tipId, kartNo, not, durum) {
     window.pdksOpenModal('iskKartModal');
 }
 </script>
+
+<?php if ($faz8aHazir): ?>
+<?php pdks_nfc_oku_js();   /* ortak Web NFC okuma yolu — giris_cikis.php / pdks_nfc_test.php İLE AYNI kod, bkz. sayfa başındaki not */ ?>
+<script>
+(function () {
+    'use strict';
+    var input   = document.getElementById('iskSorguInput');
+    var durumEl = document.getElementById('iskSorguDurum');
+    var nfcBtn  = document.getElementById('iskSorguNfcBtn');
+    var sonucEl = document.getElementById('iskSorguSonuc');
+    if (!input || !sonucEl) return;
+
+    function esc(s) {
+        var d = document.createElement('div');
+        d.textContent = String(s == null ? '' : s);
+        return d.innerHTML;
+    }
+    function saat(dt) {
+        if (!dt) return '';
+        return (String(dt).split(' ')[1] || String(dt)).slice(0, 5);
+    }
+    function tarih(d) {
+        var p = String(d || '').split('-');
+        return p.length === 3 ? p.reverse().join('.') : (d || '');
+    }
+    var DURUM_ETIKET = { available: 'Kullanılabilir', lost: 'Kayıp', disabled: 'Devre Dışı' };
+    var DURUM_SINIF  = { available: 'aktif', lost: 'kayip', disabled: 'iptal' };
+
+    function sonucGoster(d) {
+        if (!d || !d.ok) {
+            sonucEl.innerHTML = '<div class="flash flash-error" style="margin-top:12px">' + esc((d && d.hata) || 'Sorgu başarısız.') + '</div>';
+            sonucEl.hidden = false;
+            return;
+        }
+        if (!d.bulundu) {
+            var mesaj = 'Bu UID hiçbir karta kayıtlı değil.';
+            if (d.kalici_cakisma) mesaj += ' Kalıcı personel kartı olarak tanımlı' + (d.kalici_isim ? (': ' + esc(d.kalici_isim)) : '') + '.';
+            sonucEl.innerHTML = '<div class="flash flash-warning" style="margin-top:12px">' + mesaj + '</div>';
+            sonucEl.hidden = false;
+            return;
+        }
+        var html = '<div class="isk-sorgu-baslik" style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+            + '<span class="pdks-uid" style="font-size:1.1rem">' + esc(d.card_no) + '</span>'
+            + '<span class="pdks-badge pdks-badge-' + (DURUM_SINIF[d.status] || 'iptal') + '">' + esc(DURUM_ETIKET[d.status] || d.status) + '</span>'
+            + '</div>';
+        if (d.kalici_cakisma) {
+            html += '<div class="flash flash-warning" style="margin-top:8px">⚠ Bu UID kalıcı personel kartıyla da çakışıyor' + (d.kalici_isim ? (': ' + esc(d.kalici_isim)) : '') + '.</div>';
+        }
+        html += '<div class="isk-sorgu-simdi" style="margin-top:10px;padding:10px 12px;border-radius:var(--radius);background:var(--surface-2)">';
+        if (d.acik) {
+            html += '🟢 <strong>AÇIK</strong> — ' + esc(d.acik.foreman_name) + ' · ' + esc(d.acik.tip)
+                + ' · ' + esc(d.acik.depo || '(depo yok)') + ' · Giriş: ' + esc(tarih(d.acik.entry_time.split(' ')[0])) + ' ' + esc(saat(d.acik.entry_time));
+        } else {
+            html += '⚪ Şu an boşta — açık bir mesai dönemi yok';
+        }
+        html += '</div>';
+        html += '<h3 style="margin:16px 0 8px;font-size:.95rem">Son ' + d.gecmis.length + ' Dönem</h3>';
+        if (d.gecmis.length === 0) {
+            html += '<p class="muted">Bu kartla henüz hiç tarama yapılmamış.</p>';
+        } else {
+            // ⚠ min-width BİLEREK: beş kolon 390px'te table-wrap'in overflow-x:auto'su
+            // tetiklenmeden sıkışıp metni saçmaya başlıyordu (Tarih/Giriş→Çıkış çok satıra
+            // bölünüyordu) — genişlik zorlanınca aynı panel yatay kaydırmalı okunur olur.
+            html += '<div class="table-wrap"><table class="data-table" style="min-width:560px"><thead><tr>'
+                + '<th>Tarih</th><th>Çavuş</th><th>Tip</th><th>Depo</th><th>Giriş → Çıkış</th>'
+                + '</tr></thead><tbody>';
+            d.gecmis.forEach(function (p) {
+                var cikis = p.exit_time ? saat(p.exit_time) : (p.status === 'open' ? '(henüz açık)' : '—');
+                html += '<tr><td>' + esc(tarih(p.work_date_snapshot)) + '</td><td>' + esc(p.cavus) + '</td>'
+                    + '<td>' + esc(p.tip) + '</td><td class="muted">' + esc(p.depo_snapshot || '') + '</td>'
+                    + '<td class="muted">' + esc(saat(p.entry_time)) + ' → ' + esc(cikis) + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+        sonucEl.innerHTML = html;
+        sonucEl.hidden = false;
+    }
+
+    var lastRequest = 0;
+    function sorgula(hamUid, kaynak) {
+        var deger = String(hamUid || '').trim();
+        if (deger === '') { sonucEl.hidden = true; return; }
+        var req = ++lastRequest;
+        durumEl.textContent = 'Sorgulanıyor…'; durumEl.className = 'pdks-scan-status';
+        fetch('isci_kartlari.php?ajax=sorgula&kaynak=' + encodeURIComponent(kaynak) + '&uid=' + encodeURIComponent(deger), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (req !== lastRequest) return;
+                durumEl.textContent = ''; durumEl.className = 'pdks-scan-status';
+                sonucGoster(d);
+            })
+            .catch(function () {
+                if (req !== lastRequest) return;
+                durumEl.textContent = 'Sorgu başarısız — bağlantıyı kontrol edin.';
+                durumEl.className = 'pdks-scan-status err';
+            });
+    }
+
+    // ── USB HID okuma — yalnız rakam, Enter formu göndermez ──
+    var timer = null;
+    input.addEventListener('input', function () {
+        var temiz = input.value.replace(/[^0-9]/g, '');
+        if (temiz !== input.value) input.value = temiz;
+        clearTimeout(timer);
+        if (temiz === '') { sonucEl.hidden = true; return; }
+        timer = setTimeout(function () { sorgula(temiz, 'usb_decimal'); }, 250);
+    });
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(timer);
+            if (input.value.trim() !== '') sorgula(input.value.trim(), 'usb_decimal');
+        }
+    });
+
+    // ── Web NFC — PAYLAŞILAN PdksNfcOku (config/pdks.php), giris_cikis.php
+    // İLE AYNI sürekli-dinleme deseni: bir kez başlatılır, arka arkaya
+    // farklı kartlar için tekrar tıklamaya GEREK YOKTUR. ──
+    if (window.PdksNfcOku && PdksNfcOku.destekli()) {
+        nfcBtn.hidden = false;
+        var dinlemede = false;
+        nfcBtn.addEventListener('click', function () {
+            if (dinlemede) return;
+            PdksNfcOku.baslat({
+                onOkuma: function (ev) {
+                    var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
+                    if (ham !== '') sorgula(ham, 'web_nfc');
+                },
+                onOkumaHatasi: function () {
+                    durumEl.textContent = 'NFC okuma hatası — kartı tekrar yaklaştırın.';
+                    durumEl.className = 'pdks-scan-status err';
+                },
+                onBasladi: function () {
+                    dinlemede = true;
+                    nfcBtn.textContent = '🟢 NFC DİNLENİYOR — kartları arka arkaya okutabilirsiniz';
+                    nfcBtn.disabled = true;
+                },
+                onHata: function (ad, msj) {
+                    durumEl.textContent = 'NFC başlatılamadı: ' + msj;
+                    durumEl.className = 'pdks-scan-status err';
+                }
+            });
+        });
+    }
+})();
+</script>
+<?php endif; ?>
 
 <script src="<?= $base ?>assets/pdks.js?v=<?= @filemtime(__DIR__ . '/assets/pdks.js') ?>"></script>
 <?php render_footer(); ?>
