@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v243',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v243';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v243');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v244',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v244';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v244');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -374,6 +374,22 @@ $beklenenEskiSatirlar = [
     // olarak kaldırıldı, dokunma hedefi kart grafiğine taşındı (kullanıcı
     // isteği, 2026-09-18) → SW cache + APP_SURUM v236'dan v237'ye çekildi.
     "-    define('APP_SURUM', 'v236');",
+    // Faz 9F Toplu Değerlendirme (v238-v243): art arda gelen küçük özellik/
+    // düzeltme turları — AYNI rutin, tek satırlık sürüm damgası güncellemesi.
+    "-    define('APP_SURUM', 'v237');",
+    "-    define('APP_SURUM', 'v238');",
+    "-    define('APP_SURUM', 'v239');",
+    "-    define('APP_SURUM', 'v240');",
+    "-    define('APP_SURUM', 'v241');",
+    "-    define('APP_SURUM', 'v242');",
+    // gunluk_isci_puantaj_detay.php: Düzenle/İptal native <dialog>'ları
+    // .pm-overlay sarmalayıcısı olmadan showModal() ile açılıyordu — bir
+    // dialog açıkken diğerine tıklanınca ikisi de açık kalıp üst üste
+    // biniyordu (kullanıcı raporu, ekran görüntüsü). Yeni açmadan önce açık
+    // olan dialog'ları kapatan pdksPuantajDialogAc() eklendi → SW cache +
+    // APP_SURUM v243'ten v244'e çekildi (AYNI rutin, tek satırlık sürüm
+    // damgası güncellemesi).
+    "-    define('APP_SURUM', 'v243');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
