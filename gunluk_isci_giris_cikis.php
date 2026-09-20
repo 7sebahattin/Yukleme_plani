@@ -799,10 +799,17 @@ render_flash();
         var ikonHtml = (gunlukToplam != null)
             ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
             : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
+        // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
+        // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı
+        // render ediliyordu; SVG rengi kapsülün kendi --gender-ikon
+        // değişkeninden gelir (bkz. pdks.css v241 bölümü).
+        var gKisiIkon = '<svg class="pdks-result-gender-ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            + '<circle cx="12" cy="7" r="4.2"></circle>'
+            + '<path d="M2.8 21.6c0-4.7 4.1-7.5 9.2-7.5s9.2 2.8 9.2 7.5z"></path></svg>';
         sesBasarili();
         gosterSonuc(
             ikonHtml +
-            (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + escHtml(tip) + '</div>' : '') +
+            (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + gKisiIkon + '<span>' + escHtml(tip) + '</span></div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
             '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
