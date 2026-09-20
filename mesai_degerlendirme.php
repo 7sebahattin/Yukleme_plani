@@ -35,7 +35,39 @@ if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
 
 $errors = [];
 $success = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '')) === 'toplu_kaydet') {
+    // ⚠ Sprint Toplu-Degerlendirme-01 — kapsam kullanıcıyla netleştirildi:
+    // yalnız "Tam/Yarım seç" bekleyen dönemler işlenir (checkbox'lar zaten
+    // yalnız o satırlarda render edilir, bkz. aşağısı). Fazla mesaiye BURADA
+    // hiç dokunulmaz — pdks_faz8b_sure_karari()'nin YAPISAL kuralı gereği
+    // "karar bekleyen" bir dönemde FM adayı olamaz (bkz. pdks_faz8b.php'deki
+    // pdks_faz8b_toplu_degerlendirme_kaydet() docblock'u). Gerçek yazma
+    // pdks_faz8b_degerlendirme_kaydet() üzerinden (İKİNCİ yol YOK).
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('entitlements_finalize');
+    $topluKarar = trim((string)($_POST['attendance_decision'] ?? ''));
+    $periodIdsRaw = $_POST['period_ids'] ?? [];
+    $periodIds = is_array($periodIdsRaw) ? array_map('intval', $periodIdsRaw) : [];
+    if (!in_array($topluKarar, ['tam', 'yarim'], true)) {
+        $errors[] = 'Toplu işlem için Tam veya Yarım Mesai seçmelisiniz.';
+    } elseif (empty($periodIds)) {
+        $errors[] = 'Toplu işlem için en az bir dönem seçmelisiniz.';
+    } else {
+        $sonuc = pdks_faz8b_toplu_degerlendirme_kaydet($periodIds, $topluKarar, $sessionId, (int)$auth_user['id'], $pdo);
+        if ($sonuc['hatalar']) {
+            $errors = array_merge($errors, $sonuc['hatalar']);
+        }
+        if ($sonuc['basarili'] > 0 && !$sonuc['hatalar']) {
+            $mesaj = $sonuc['basarili'] . ' dönem güncellendi.' . ($sonuc['atlandi'] > 0 ? ' (' . $sonuc['atlandi'] . ' dönem zaten karar gerektirmediği için atlandı.)' : '');
+            header('Location: mesai_degerlendirme.php?session_id=' . $sessionId . '&ok=' . urlencode($mesaj));
+            exit;
+        }
+        if ($sonuc['basarili'] === 0 && !$sonuc['hatalar']) {
+            $errors[] = 'Seçilen dönemlerin hiçbiri güncellenmedi — hepsi zaten karar gerektirmiyor olabilir.';
+        }
+    }
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '')) === 'tekli_kaydet') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('entitlements_finalize');
     $periodId = filter_var($_POST['period_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
@@ -69,6 +101,11 @@ $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
 $ozet = pdks_faz8b_oturum_ozeti($sessionId, $pdo);
 $normalDkGosterim = (int)($oturum['normal_work_minutes_snapshot'] ?? 540);
 if ($normalDkGosterim <= 0) $normalDkGosterim = 540;
+// ⚠ Toplu işlem çubuğu/checkbox sütunu YALNIZ en az bir "karar bekliyor"
+// dönem varsa render edilir — hepsi zaten Otomatik Tam ise sayfada
+// tıklanacak hiçbir şey olmayan bir çubuk göstermenin anlamı yok.
+$topluUygunSayisi = 0;
+foreach ($donemler as $d) { if ($d['faz8b']['sinif_onayi_gerekli']) $topluUygunSayisi++; }
 
 render_header('Mesai Değerlendirme');
 $base = base_url();
@@ -103,14 +140,42 @@ render_flash();
 <?php if (!$donemler): ?>
 <div class="pdks-empty"><p>Bu oturumda mesai dönemi bulunamadı.</p></div>
 <?php else: ?>
+
+<?php if ($topluUygunSayisi > 0): ?>
+<!-- ── Toplu işlem (Sprint Toplu-Degerlendirme-01) ───────────
+     Checkbox'lar tablo/kart satırlarının İÇİNDE ama bu <form>'un
+     DIŞINDA yaşar — HTML'de <form> içinde <form> AÇILAMAZ (her satırın
+     zaten kendi tekli-kaydet formu var). Bunun yerine input'lar
+     form="topluForm" özniteliğiyle BAĞLANIR — DOM'da nerede olurlarsa
+     olsun bu forma dahil olurlar. GERÇEK yazma pdks_faz8b_degerlendirme_kaydet()
+     üzerinden geçer (config/pdks_faz8b.php → pdks_faz8b_toplu_degerlendirme_kaydet),
+     İKİNCİ bir yol AÇILMAZ. -->
+<form id="topluForm" method="post" class="pdks-toplu-bar" hidden>
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="session_id" value="<?= (int)$sessionId ?>">
+    <input type="hidden" name="action" value="toplu_kaydet">
+    <span id="topluSayac">0 satır seçili</span>
+    <select name="attendance_decision" required>
+        <option value="">Tam / Yarım seç</option>
+        <option value="tam">Tam Mesai</option>
+        <option value="yarim">Yarım Mesai</option>
+    </select>
+    <button type="submit" class="btn btn-sm btn-primary">Seçilenleri Kaydet</button>
+</form>
+<?php endif; ?>
+
 <div class="table-wrap pc-only">
 <table class="data-table">
 <thead><tr>
+    <?php if ($topluUygunSayisi > 0): ?><th><input type="checkbox" id="topluTumunuSec" title="Tümünü Seç"></th><?php endif; ?>
     <th>Kart</th><th>Tip</th><th>Giriş</th><th>Çıkış</th><th>Süre</th><th>Giriş Beyanı</th><th>Sistem / Muhasebe</th><th>Fazla Mesai</th><th>İşlem</th>
 </tr></thead>
 <tbody>
 <?php foreach ($donemler as $d): $f = $d['faz8b']; ?>
 <tr>
+    <?php if ($topluUygunSayisi > 0): ?>
+    <td><?php if ($f['sinif_onayi_gerekli']): ?><input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" form="topluForm" class="js-toplu-check"><?php endif; ?></td>
+    <?php endif; ?>
     <td class="pdks-row-name"><?= h($d['card_no']) ?></td>
     <td><?= h($d['worker_type_name_snapshot']) ?></td>
     <td><?= h(date('H:i', strtotime($d['entry_time']))) ?></td>
@@ -142,6 +207,7 @@ render_flash();
     <td>
         <form method="post" style="min-width:230px">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="tekli_kaydet">
             <input type="hidden" name="session_id" value="<?= (int)$sessionId ?>">
             <input type="hidden" name="period_id" value="<?= (int)$d['id'] ?>">
             <?php if ($f['sinif_onayi_gerekli']): ?>
@@ -178,8 +244,14 @@ render_flash();
     <div class="pdks-row-sub">Süre: <?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></div>
     <div class="pdks-row-sub">Beyan: <?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></div>
     <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
+    <?php if ($topluUygunSayisi > 0 && $f['sinif_onayi_gerekli']): ?>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.85rem">
+        <input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" form="topluForm" class="js-toplu-check"> Toplu işlem için seç
+    </label>
+    <?php endif; ?>
     <form method="post" style="margin-top:8px">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="tekli_kaydet">
         <input type="hidden" name="session_id" value="<?= (int)$sessionId ?>">
         <input type="hidden" name="period_id" value="<?= (int)$d['id'] ?>">
         <?php if ($f['sinif_onayi_gerekli']): ?>
@@ -204,6 +276,52 @@ render_flash();
 </div>
 <?php endforeach; ?>
 </div>
+<?php endif; ?>
+
+<?php if ($topluUygunSayisi > 0): ?>
+<script>
+(function () {
+    'use strict';
+    var bar = document.getElementById('topluForm');
+    var sayac = document.getElementById('topluSayac');
+    var tumunuSec = document.getElementById('topluTumunuSec');
+    if (!bar || !sayac) return;
+
+    function guncelle() {
+        var kutular = document.querySelectorAll('.js-toplu-check');
+        var secili = 0;
+        kutular.forEach(function (k) { if (k.checked) secili++; });
+        bar.hidden = secili === 0;
+        sayac.textContent = secili + ' satır seçili';
+    }
+
+    document.querySelectorAll('.js-toplu-check').forEach(function (kutu) {
+        kutu.addEventListener('change', guncelle);
+    });
+    if (tumunuSec) {
+        tumunuSec.addEventListener('change', function () {
+            // ⚠ Yalnız o an GÖRÜNÜR olan katmandaki (masaüstü tablo VEYA mobil
+            // kartlar — CSS pc-only/mobile-only) kutuları toggler. İkisi de
+            // AYNI period_ids[] için ayrı DOM düğümleridir (bkz. sayfanın
+            // üstündeki yorum); görünmeyen katmanı da işaretlemek gereksiz
+            // tekrar submit'e yol açardı (zararsız ama anlamsız).
+            document.querySelectorAll('.js-toplu-check').forEach(function (kutu) {
+                if (kutu.offsetParent !== null) kutu.checked = tumunuSec.checked;
+            });
+            guncelle();
+        });
+    }
+
+    bar.addEventListener('submit', function (e) {
+        var karar = bar.querySelector('[name="attendance_decision"]').value;
+        var seciliVar = document.querySelectorAll('.js-toplu-check:checked').length > 0;
+        if (!karar || !seciliVar) {
+            e.preventDefault();
+            alert('Toplu kaydetmek için önce en az bir satır ve bir Tam/Yarım kararı seçin.');
+        }
+    });
+})();
+</script>
 <?php endif; ?>
 
 <?php render_footer(); ?>

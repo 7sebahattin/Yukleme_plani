@@ -519,6 +519,72 @@ function pdks_faz8b_degerlendirme_kaydet(
     return ['ok' => true];
 }
 
+/**
+ * Mesai Değerlendirme → TOPLU İŞLEM (Sprint Toplu-Degerlendirme-01):
+ * kullanıcı birden çok "Tam/Yarım seç" bekleyen dönemi işaretleyip TEK bir
+ * Tam/Yarım kararını hepsine birden uygular.
+ *
+ * ⚠ Kapsam BİLEREK dar tutulur — kullanıcıyla netleştirildi:
+ * - Yalnız `sinif_onayi_gerekli` (kısa/eksik-çıkışlı, "karar bekliyor")
+ *   dönemler işlenir. Zaten "Otomatik Tam" olan bir dönem GÖNDERİLSE bile
+ *   burada SESSİZCE ATLANIR (aday listesine hiç girmez) — üzerine yazma
+ *   YOK. Aynı ihtiyat: dönem BAŞKA bir oturuma aitse de atlanır (IDOR).
+ * - Fazla mesai (FM) saatine BURADA HİÇ DOKUNULMAZ (her zaman null geçilir) —
+ *   İCAT EDİLMİŞ bir kısıtlama değil, pdks_faz8b_sure_karari()'nin YAPISAL
+ *   kuralı: `fazla_mesai_saat` yalnız toplam süre normali AŞTIĞINDA hesaplanır,
+ *   bu ise otomatik_sinif='tam' (sinif_onayi_gerekli=false) demektir. Yani
+ *   "karar bekleyen" bir dönemde FM adayı MATEMATİKSEL OLARAK asla olamaz —
+ *   yukarıdaki skip zaten bu satırlara hiç ulaşılmamasını garanti eder.
+ * - GERÇEK yazma yolu YİNE pdks_faz8b_degerlendirme_kaydet()'tir — İKİNCİ
+ *   bir UPDATE yolu AÇILMAZ, bu fonksiyon yalnız "hangi dönem" sorusunu
+ *   döngüyle çözüp tek tek ona devreder.
+ *
+ * @param int[] $periodIds
+ * @return array{ok:bool, basarili:int, atlandi:int, hatalar:string[]}
+ */
+function pdks_faz8b_toplu_degerlendirme_kaydet(
+    array $periodIds,
+    string $attendanceDecision,
+    int $sessionId,
+    int $userId,
+    ?PDO $pdo = null
+): array {
+    $pdo = $pdo ?? db();
+    if (!in_array($attendanceDecision, ['tam', 'yarim'], true)) {
+        return ['ok' => false, 'basarili' => 0, 'atlandi' => 0, 'hatalar' => ['Tam veya Yarım seçilmelidir.']];
+    }
+
+    $stSess = $pdo->prepare("SELECT normal_work_minutes_snapshot FROM daily_work_sessions WHERE id = ?");
+    $stSess->execute([$sessionId]);
+    $normalDk = (int)($stSess->fetchColumn() ?: PDKS_FAZ8B_NORMAL_DK);
+    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
+
+    $basarili = 0; $atlandi = 0; $hatalar = [];
+    foreach (array_unique($periodIds) as $periodId) {
+        $periodId = (int)$periodId;
+        if ($periodId <= 0) { $atlandi++; continue; }
+
+        // ⚠ session_id = ? SATIRDA — başka oturumun dönemi id tahmin edilerek
+        // buraya karıştırılamaz (aynı IDOR ihtiyatı sayfanın kendisiyle AYNI).
+        $st = $pdo->prepare(
+            "SELECT entry_time, exit_time FROM daily_worker_work_periods
+              WHERE id = ? AND session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo)
+        );
+        $st->execute([$periodId, $sessionId]);
+        $donem = $st->fetch();
+        if (!$donem) { $atlandi++; continue; }
+
+        $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $normalDk);
+        if (!$sure['sinif_onayi_gerekli']) { $atlandi++; continue; }   // zaten Otomatik Tam — üzerine YAZILMAZ
+
+        $sonuc = pdks_faz8b_degerlendirme_kaydet($periodId, $attendanceDecision, null, $userId, $pdo);
+        if ($sonuc['ok']) { $basarili++; }
+        else { $hatalar[] = "Dönem #{$periodId}: " . ($sonuc['hata'] ?? 'kaydedilemedi'); }
+    }
+
+    return ['ok' => $basarili > 0 && !$hatalar, 'basarili' => $basarili, 'atlandi' => $atlandi, 'hatalar' => $hatalar];
+}
+
 // =========================================================
 // ÇAVUŞ FİYATLARI — TAM / YARIM / FAZLA MESAİ
 // =========================================================

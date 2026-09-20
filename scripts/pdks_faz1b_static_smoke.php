@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v242',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v242';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v242');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v243',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v243';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v243');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
