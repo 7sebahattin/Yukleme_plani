@@ -217,6 +217,17 @@
 .pdks-filter-bar input[type="text"] { max-width: 260px; }
 .pdks-filter-bar select { max-width: 200px; width: auto; }
 
+/* ── Toplu işlem çubuğu (Mesai Değerlendirme) — en az 1 satır seçilince
+   görünür, seçim sıfırlanınca JS ile [hidden] atanır. ── */
+.pdks-toplu-bar {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin: 0 0 14px; padding: 10px 14px;
+    background: var(--primary-soft); border: 1px solid var(--primary);
+    border-radius: var(--radius);
+}
+.pdks-toplu-bar select { max-width: 180px; width: auto; }
+.pdks-toplu-bar #topluSayac { font-weight: 700; color: var(--primary); margin-right: auto; }
+
 /* ── Geçmiş tablosu (kart geçmişi) ────────────────────────── */
 .pdks-history-table td, .pdks-history-table th { font-size: .86rem; }
 .pdks-history-reason { color: var(--muted); font-size: .82rem; }
