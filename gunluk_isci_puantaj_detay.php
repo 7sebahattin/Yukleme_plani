@@ -222,7 +222,7 @@ render_flash();
         <span class="muted" style="font-size:.85em">Yetki gerekir</span>
         <?php else: ?>—<?php endif; ?>
     </td>
-    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><td><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></td><?php endif; ?>
+    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><td><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('edit<?= (int)$k['period_id'] ?>')">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="pdksPuantajDialogAc('void<?= (int)$k['period_id'] ?>')">Kaydı İptal Et</button></td><?php endif; ?>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -246,7 +246,7 @@ render_flash();
     <?php elseif ($manuelUygun): ?>
     <div class="pdks-row-sub muted">Manuel düzeltme için yetki gerekir</div>
     <?php endif; ?>
-    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm" onclick="document.getElementById('edit<?= (int)$k['period_id'] ?>').showModal()">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('void<?= (int)$k['period_id'] ?>').showModal()">Kaydı İptal Et</button></div><?php endif; ?>
+    <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('edit<?= (int)$k['period_id'] ?>')">Düzenle</button><button type="button" class="btn btn-sm btn-danger" onclick="pdksPuantajDialogAc('void<?= (int)$k['period_id'] ?>')">Kaydı İptal Et</button></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
@@ -266,7 +266,18 @@ render_flash();
     if (!$mevcutDestekliMi):
 ?><option value="<?= (int)$k['worker_type_id_snapshot'] ?>" selected disabled><?= h($k['tip'] ?? '') ?> (artık desteklenmiyor)</option><?php endif; ?><?php foreach($duzeltmeTipler as $t):?><option value="<?= (int)$t['id'] ?>" <?= (int)$t['id']===(int)$k['worker_type_id_snapshot']?'selected':'' ?>><?=h($t['name'])?></option><?php endforeach;?></select></label><label><span class="form-label">Giriş</span><input name="entry_date" type="date" value="<?=h(substr($k['giris_saat'],0,10))?>"><input name="entry_clock" type="time" value="<?=h(substr($k['giris_saat'],11,5))?>"></label><label><span class="form-label">Çıkış</span><input name="exit_date" type="date" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],0,10):'')?>"><input name="exit_clock" type="time" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],11,5):'')?>"></label><label class="span-2"><span class="form-label">Düzeltme nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label></div><div class="isk-card-form-actions"><button class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
 <dialog id="void<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Kaydı İptal Et</h2></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_iptal"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><p><?=h($k['card_no'])?> kartının <?=h($k['giris_saat'])?>–<?=h($k['cikis_saat']?:'çıkış yok')?> çalışma kaydı puantajdan çıkarılacaktır. Ham kart okutma geçmişi silinmeyecektir.</p><label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><div class="isk-card-form-actions"><button class="btn btn-danger">Kaydı İptal Et</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
-<?php endforeach; endif; ?>
+<?php endforeach; ?>
+<script>
+// ⚠ Bu sayfadaki Düzenle/İptal dialog'ları native <dialog> — .pm-overlay
+// sarmalayıcısı YOK. Bir dialog açıkken diğerine tıklanırsa ikisi de
+// showModal() ile açık kalıp üst üste biner; yeni açmadan önce açık
+// olanları kapatmak bunu engeller.
+function pdksPuantajDialogAc(id) {
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+    document.getElementById(id).showModal();
+}
+</script>
+<?php endif; ?>
 
 <?php if ($iptaller): ?><h2>İptal Edilen Kayıtlar</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Kart No</th><th>Tip</th><th>Giriş</th><th>Çıkış</th><th>İptal nedeni</th><th>İptal eden</th><th>İptal zamanı</th></tr></thead><tbody><?php foreach($iptaller as $v): ?><tr><td><?=h($v['card_no'])?></td><td><?=h($v['worker_type_name_snapshot'])?></td><td><?=h($v['entry_time'])?></td><td><?=h($v['exit_time']?:'—')?></td><td><?=h($v['void_reason'])?></td><td><?=h($v['display_name']?:'—')?></td><td><?=h($v['voided_at'])?></td></tr><?php endforeach;?></tbody></table></div><?php endif; ?>
 
