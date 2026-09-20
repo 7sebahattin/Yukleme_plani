@@ -43,6 +43,14 @@ $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 // ayrıca bir "code IN (...)" filtresi TEKRARLANMAZ.
 $isciTipleri = $faz8aHazir ? pdks_gunluk_desteklenen_tip_listele($pdo) : [];
 
+// ⚠ v241 — NFC TEŞHİS MODU: `?nfcdebug=1` ile açılır, VARSAYILAN GÖRÜNÜM
+// DEĞİŞMEZ. Teşhis panelinin (#giNfcDebug) kendisi zaten vardı ve her adımı
+// (scan started / reading received / backend response) yazıyordu; yalnız
+// pdks.css'te `#giNfcBtnWrap { display:none }` ile gizliydi, yani telefonda
+// "kart okumuyor" denince bakılacak HİÇBİR iz yoktu. Bu bayrak o paneli
+// yalnız açıkça istendiğinde görünür kılar — okuma akışına HİÇ dokunmaz.
+$nfcTeshis = (($_GET['nfcdebug'] ?? '') === '1');
+
 // ── AJAX uçları — SAYFANIN İÇİNDE, JSON. Yön istemciden ASLA otomatik
 // tahmin edilmez, kart/oturum çözümü TAMAMEN sunucudadır. ──────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'oturum') {
@@ -330,9 +338,13 @@ render_flash();
         </div>
         <div class="pdks-scan-info">ⓘ &nbsp;Kartı birkaç saniye sabit tutun. USB okuyucuya okutun<span id="giNfcHint"></span></div>
 
-        <div id="giNfcBtnWrap" hidden>
+        <?php // ⚠ Teşhis modunda `hidden` HİÇ basılmaz: [hidden]{display:none!important}
+              // kuralı aksi hâlde paneli ezerdi ve NFC'nin DESTEKLENMEDİĞİ durumda
+              // (teşhis edilecek en kritik hâl) hiçbir iz görünmezdi. ?>
+        <div id="giNfcBtnWrap"<?= $nfcTeshis ? ' class="nfc-teshis-acik"' : ' hidden' ?>>
             <button type="button" id="giNfcBtn" class="btn btn-lg">📡 NFC İLE KART OKU</button>
-            <!-- ⚠ GEÇİCİ TEŞHİS PANELİ — kalıcı personel giris_cikis.php İLE AYNI amaç. -->
+            <!-- ⚠ TEŞHİS PANELİ — normalde pdks.css ile gizli; yalnız ?nfcdebug=1
+                 ile görünür (bkz. $nfcTeshis). Kalıcı personel giris_cikis.php İLE AYNI amaç. -->
             <pre id="giNfcDebug" class="pdks-kiosk-nfc-debug"></pre>
         </div>
 
@@ -525,6 +537,7 @@ render_flash();
     var currentSession = null;   // { id, ... } — sunucudan gelir, İCAT EDİLMEZ
     var modeRequest = 0;
     var busy = false;
+    var kayitBekci = null;   // bkz. kaydet() — askıda kalan isteğin kilidi kilitlemesini önler
     var resultTimer = null;
 
     function nfcDebugYaz(satir) {
@@ -786,10 +799,17 @@ render_flash();
         var ikonHtml = (gunlukToplam != null)
             ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
             : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
+        // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
+        // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı
+        // render ediliyordu; SVG rengi kapsülün kendi --gender-ikon
+        // değişkeninden gelir (bkz. pdks.css v241 bölümü).
+        var gKisiIkon = '<svg class="pdks-result-gender-ikon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+            + '<circle cx="12" cy="7" r="4.2"></circle>'
+            + '<path d="M2.8 21.6c0-4.7 4.1-7.5 9.2-7.5s9.2 2.8 9.2 7.5z"></path></svg>';
         sesBasarili();
         gosterSonuc(
             ikonHtml +
-            (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + escHtml(tip) + '</div>' : '') +
+            (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + gKisiIkon + '<span>' + escHtml(tip) + '</span></div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
             '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
@@ -811,16 +831,44 @@ render_flash();
     }
 
     // ── Kayıt ────────────────────────────────────────────────
+    // ⚠ v241: BU FONKSİYONUN ERKEN ÇIKIŞLARI ESKİDEN SESSİZDİ — kart okunur,
+    // hiçbir ses/ekran tepkisi olmaz, kullanıcı "NFC kartı okumuyor" derdi
+    // (USB'de fark edilmez: orada odak/enter akışı zaten geri bildirim verir).
+    // Kural: SESSİZ dönüş YOK. Her erken çıkış ya teşhis paneline yazar ya da
+    // ekranda sebebini söyler. Yeni bir erken çıkış eklersen AYNISINI yap.
     function kaydet(hamUid, kaynak) {
-        if (busy || !currentMode || !currentSession) return;
+        if (busy) { nfcDebugYaz('kaydet atlandı: önceki istek hâlâ sürüyor'); return; }
+        if (!currentMode || !currentSession) {
+            nfcDebugYaz('kaydet atlandı: mod/mesai yok (mod=' + currentMode + ', mesai=' + (currentSession ? currentSession.id : 'yok') + ')');
+            hataGoster('Mesai bağlantısı yok — "Modu Değiştir" ile GİRİŞ/ÇIKIŞ modunu yeniden seçin.');
+            return;
+        }
         var deger = String(hamUid || '').trim();
-        if (deger === '') return;
+        if (deger === '') {
+            nfcDebugYaz('kaydet atlandı: UID boş geldi');
+            hataGoster('Kart numarası okunamadı — kartı tekrar yaklaştırın.');
+            return;
+        }
         // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
         if (tipSec && currentMode === 'GIRIS' && !seciliTipId) {
-            sesHata();
+            nfcDebugYaz('kaydet atlandı: işçi tipi seçili değil');
+            hataGoster('Önce İşçi Tipi (Kadın/Erkek) seçin.');
             return;
         }
         busy = true;
+        // ⚠ v241 — KİLİT BEKÇİSİ: `busy` yalnız yanıt/hata dönünce açılıyordu.
+        // Mobilde istek ASKIDA kalırsa (ağ kopması, uyku, taşıyıcı değişimi)
+        // fetch ne resolve ne reject olur; kilit SONSUZA KADAR kapalı kalır ve
+        // O ANDAN SONRAKİ HER KART OKUMASI SESSİZCE YOK SAYILIRDI — kullanıcıya
+        // "NFC kartı okumuyor" diye görünen tam olarak budur. USB'de nadir,
+        // çünkü masaüstü ağı kopmaz. Bekçi kilidi her hâlükârda açar.
+        clearTimeout(kayitBekci);
+        kayitBekci = setTimeout(function () {
+            if (!busy) return;
+            busy = false;
+            nfcDebugYaz('istek zaman aşımı — kilit açıldı (yanıt gelmedi)');
+            hataGoster('Sunucu yanıt vermedi — kartı tekrar okutun.');
+        }, 15000);
         var govde = { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
         if (tipSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
@@ -832,14 +880,14 @@ render_flash();
         })
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                busy = false;
+                busy = false; clearTimeout(kayitBekci);
                 nfcDebugYaz('backend response: ' + ((d && d.ok) ? 'ok' : 'hata (' + ((d && d.kod) || '?') + ')'));
                 if (d && d.ok) { basariGoster(d); if (d.ozet) sayaclariGoster(d.ozet); }
                 else hataGoster(d && d.hata);
                 focusInput();
             })
             .catch(function () {
-                busy = false;
+                busy = false; clearTimeout(kayitBekci);
                 nfcDebugYaz('backend response: ağ hatası');
                 hataGoster('Bağlantı hatası. Tekrar deneyin.');
                 focusInput();
@@ -904,13 +952,17 @@ render_flash();
         nfcBtn.addEventListener('click', function () {
             // NFC aktivasyonu kullanıcı jestidir; aynı anda ses context'ini de kesin aç.
             sesiHazirla();
-            if (nfcDinlemede) return;
+            if (nfcDinlemede) { nfcDebugYaz('zaten dinlemede — yeni scan() açılmadı'); return; }
             nfcDebugYaz('button clicked');
             PdksNfcOku.baslat({
                 onOkuma: function (ev) {
                     var ham = (ev.serialNumber != null) ? String(ev.serialNumber) : '';
                     nfcDebugYaz('reading received — serialNumber=' + (ham || '(boş)'));
+                    // ⚠ v241: seri no BOŞ gelirse eskiden SESSİZCE hiçbir şey olmuyordu
+                    // (Android'de bazı kart/etiketlerde gerçekten boş gelir) —
+                    // kullanıcı için bu "kart okumuyor" demekti. Artık sebebi söylenir.
                     if (ham !== '') kaydet(ham, 'web_nfc');
+                    else hataGoster('Kart algılandı ama seri numarası boş geldi — kartı tekrar yaklaştırın.');
                 },
                 onOkumaHatasi: function () {
                     nfcDebugYaz('readingerror');
