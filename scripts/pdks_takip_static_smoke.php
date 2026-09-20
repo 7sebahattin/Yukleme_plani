@@ -244,11 +244,19 @@ echo "\n=== FAZ 1-6 DOSYALARINA İŞ MANTIĞI DEĞİŞİKLİĞİ YOK (yalnız na
 // kapsamı scripts/pdks_faz9b_smoke.php AYRICA doğrular.
 foreach ([
     'personel.php', 'personel_kartlar.php', 'giris_cikis.php',
-    'cavus_cari.php',
 ] as $f) {
     $diff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- ' . escapeshellarg($f) . ' 2>&1'));
     ok("$f: diff'i BOŞ — Faz 7 dokunmadı", $diff === '', $diff);
 }
+
+// ⚠ cavus_cari.php bu listeden ÇIKARILDI (Sprint Print-PDKS-01, kullanıcı
+// onayıyla): sayfaya TEK satırlık "🖨️ Yazdır" bağlantısı eklendi. Dosyanın
+// SALT OKUNUR doğası korunuyor — aşağıdaki kural onu ayrıca sabitliyor,
+// dolayısıyla koruma kalkmış olmuyor, yalnız bilinen bir eklemeye açılıyor.
+$cariSrc = oku('cavus_cari.php');
+ok('cavus_cari.php: intentional Yazdır bağlantısı (tek ekleme) — başka bir şey değişmedi',
+    str_contains($cariSrc, 'cavus_cari_yazdir.php')
+    && !preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i', $cariSrc));
 
 
 $cavuslarSrc = oku('cavuslar.php');

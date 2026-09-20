@@ -115,6 +115,7 @@ render_flash();
 <div class="page-head">
     <h1>🧮 Mesai Değerlendirme — <?= h($oturum['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
+        <a href="mesai_degerlendirme_yazdir.php?session_id=<?= (int)$sessionId ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
         <a href="cavus_hakedis.php?tarih=<?= h($oturum['work_date']) ?>" class="btn">← Hakediş</a>
         <a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$sessionId ?>" class="btn btn-ghost">📅 Puantaj</a>
     </div>
