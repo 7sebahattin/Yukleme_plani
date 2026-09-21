@@ -217,9 +217,11 @@ if ($basari !== ''): ?>
      kutusundaki assets/pdks.js tek-tık deseni burada UYGUN DEĞİLDİR. İKİ
      AYRI NFC yaşam döngüsü ÇAKIŞMAZ — enroll kutusu kendi NDEFReader'ını
      yalnız KENDİ butonuna tıklanınca kurar, ikisi aynı anda dinlemez. -->
-<div class="card" style="padding:16px 18px;margin-bottom:20px">
-    <h2 style="margin-top:0">🔍 Kart Sorgula</h2>
-    <p class="muted" style="margin-top:-6px;font-size:.85rem">
+<div class="card" style="padding:0;margin-bottom:20px">
+    <details class="pdks-collapse">
+    <summary>🔍 Kart Sorgula</summary>
+    <div class="pdks-collapse-body">
+    <p class="muted" style="font-size:.85rem">
         Kartı okutun — GİRİŞ/ÇIKIŞ yapılmaz, yalnız kartın şu anki durumu ve
         son 5 mesai dönemi görüntülenir.
     </p>
@@ -235,14 +237,18 @@ if ($basari !== ''): ?>
     </div>
     <div id="iskSorguSonuc" class="isk-sorgu-sonuc" hidden></div>
     <?php endif; ?>
+    </div>
+    </details>
 </div>
 
 <!-- ── Kart-önce tanımlama (enroll) ──────────────────────────
      assets/pdks.js'in data-pdks-scan / data-pdks-nfc-target deseni
      personel_kartlar.php İLE BİREBİR AYNI — burada TEKRARLANMADI. -->
-<div class="card" style="padding:16px 18px;margin-bottom:20px">
-    <h2 style="margin-top:0">Yeni Kart Tanımla</h2>
-    <p class="muted" style="margin-top:-6px;font-size:.85rem">
+<div class="card" style="padding:0;margin-bottom:20px">
+    <details class="pdks-collapse">
+    <summary>Yeni Kart Tanımla</summary>
+    <div class="pdks-collapse-body">
+    <p class="muted" style="font-size:.85rem">
         Kart artık NÖTR bir jetondur — işçi tipi ve mesai (Tam/Yarım) burada DEĞİL,
         her taramada <a href="gunluk_isci_giris_cikis.php">Giriş / Çıkış</a> ekranında seçilir.
         Aynı fiziksel kart farklı günlerde/çavuşlarda farklı işçi tipleri için kullanılabilir.
@@ -261,7 +267,7 @@ if ($basari !== ''): ?>
             <input type="text" inputmode="numeric" id="ikScanInput" name="ham_uid" class="pdks-scan-input"
                    data-pdks-scan data-pdks-preview="#ikScanOnizle" data-pdks-status="#ikScanDurum"
                    data-pdks-kaynak-field="#ikScanKaynak" data-pdks-onizle-url="isci_kartlari.php"
-                   placeholder="631799511" autocomplete="off" required autofocus>
+                   placeholder="631799511" autocomplete="off" required>
             <div class="pdks-uid-lg" id="ikScanOnizle" style="margin-top:12px;min-height:1.4em"></div>
             <div class="pdks-scan-status" id="ikScanDurum"></div>
             <button type="button" id="ikScanNfcBtn" class="btn btn-ghost" style="margin-top:10px"
@@ -279,6 +285,8 @@ if ($basari !== ''): ?>
         </div>
         <button type="submit" class="btn btn-primary" style="margin-top:14px" <?= !$faz8aHazir ? 'disabled' : '' ?>>KARTI HAVUZA EKLE</button>
     </form>
+    </div>
+    </details>
 </div>
 
 <!-- ── Kart listesi ───────────────────────────────────────── -->
