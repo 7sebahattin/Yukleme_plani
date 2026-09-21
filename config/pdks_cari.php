@@ -46,6 +46,14 @@ function pdks_cari_tablolar(): array
     // yapan pdks_cari_odeme_iptal(), bkz. aşağısı). SATIR ASLA SİLİNMEZ.
     // foreman_name/code_snapshot: Faz 3/4'ün AYNI ilkesi — çavuş adı
     // SONRADAN değişse bile eski ödeme kaydı tarihsel kalır.
+    // ⚠ Sprint Cari-Döviz-01: exchange_rate/try_equivalent yalnız DÖVİZ
+    // ödemesinde dolar (currency != 'TRY') — TRY ödemede ikisi de NULL
+    // kalır (zaten TL, kur anlamsız). İKİSİ DE TARİHSEL KAYITTIR: o günkü
+    // kur bir kez girilir, SONRADAN piyasa kuruna göre YENİDEN HESAPLANMAZ
+    // (ödemenin diğer alanlarıyla AYNI değişmezlik ilkesi). Bakiye motoru
+    // (pdks_cari_bakiye/pdks_cari_ekstre) BUNLARI TOPLAMA KATMAZ — para
+    // birimleri hâlâ ASLA karıştırılmaz; try_equivalent yalnız ekstrede
+    // BİLGİ AMAÇLI gösterilir (bkz. pdks_cari_ekstre()).
     $t['foreman_payments'] = "CREATE TABLE IF NOT EXISTS `foreman_payments` (
         `id`                    INT           AUTO_INCREMENT PRIMARY KEY,
         `foreman_id`            INT           NOT NULL,
@@ -54,6 +62,8 @@ function pdks_cari_tablolar(): array
         `payment_date`          DATE          NOT NULL,
         `amount`                DECIMAL(14,2) NOT NULL,
         `currency`              VARCHAR(10)   NOT NULL DEFAULT 'TRY',
+        `exchange_rate`         DECIMAL(14,6) NULL DEFAULT NULL,
+        `try_equivalent`        DECIMAL(14,2) NULL DEFAULT NULL,
         `payment_method`        VARCHAR(20)   NOT NULL DEFAULT 'OTHER',
         `reference_no`          VARCHAR(100)  NULL DEFAULT NULL,
         `description`           TEXT          NULL DEFAULT NULL,
@@ -106,6 +116,28 @@ function pdks_cari_migrate(?PDO $pdo = null): array
             $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
         }
     }
+
+    // Sprint Cari-Döviz-01: exchange_rate/try_equivalent EKLENTİSİ. Tablo bu
+    // sütunlardan ÖNCE oluşturulmuş kurulumlarda additive ALTER gerekir —
+    // ensure_column() (helpers.php) idempotenttir, kolon zaten varsa hiçbir
+    // şey yapmaz. Tabloyu YUKARIDAKİ döngü şimdi oluşturduysa (yeni kurulum)
+    // sütunlar CREATE TABLE'da zaten var, burası no-op olur.
+    if (pdks_cari_tablo_var($pdo, 'foreman_payments') && function_exists('ensure_column')) {
+        $kolonEklendi = false;
+        if (!db_has_column('foreman_payments', 'exchange_rate')) {
+            $kolonEklendi = ensure_column('foreman_payments', 'exchange_rate',
+                "ALTER TABLE `foreman_payments` ADD COLUMN `exchange_rate` DECIMAL(14,6) NULL DEFAULT NULL AFTER `currency`") || $kolonEklendi;
+        }
+        if (!db_has_column('foreman_payments', 'try_equivalent')) {
+            $kolonEklendi = ensure_column('foreman_payments', 'try_equivalent',
+                "ALTER TABLE `foreman_payments` ADD COLUMN `try_equivalent` DECIMAL(14,2) NULL DEFAULT NULL AFTER `exchange_rate`") || $kolonEklendi;
+        }
+        if ($kolonEklendi) {
+            $rapor[] = ['tablo' => 'foreman_payments', 'durum' => 'guncellendi',
+                'mesaj' => 'exchange_rate / try_equivalent kolonları eklendi (döviz ödeme desteği).'];
+        }
+    }
+
     return $rapor;
 }
 
@@ -181,15 +213,60 @@ function require_pdks_cari(string $eylem): void
 // =========================================================
 
 /**
+ * Kur girdisini "mikro-birim" TAM SAYIYA çevirir (kur × 1.000.000) —
+ * Faz 4/5'in kuruş stratejisiyle (pdks_hakedis_tl_kurus) AYNI ilke: bu
+ * dosyanın hiçbir para/oran hesabı binary float KULLANMAZ (bkz. statik
+ * test "HAKEDİŞ HESABI BİNARY FLOAT KULLANMIYOR"). helpers.php'deki genel
+ * amaçlı num() BİLEREK kullanılmaz — num() nokta'yı HER ZAMAN binler
+ * ayıracı sayar ("32.45" → 3245 olurdu); burada nokta VEYA virgül, ikisi
+ * de ondalık ayraç kabul edilir, binler ayıracı YOK (kur değeri küçüktür).
+ */
+function pdks_cari_kur_mikro(string $ham): ?int
+{
+    $ham = trim(str_replace(',', '.', $ham));
+    if ($ham === '' || !preg_match('/^(\d+)(?:\.(\d{1,6}))?$/', $ham, $m)) return null;
+    $mikro = ((int)$m[1]) * 1000000 + (int)str_pad($m[2] ?? '', 6, '0');
+    return $mikro > 0 ? $mikro : null;
+}
+
+/** Mikro-birim tam sayıyı DECIMAL(14,6) sütununa yazılacak ondalık metne çevirir. */
+function pdks_cari_kur_mikro_metin(int $mikro): string
+{
+    return sprintf('%d.%06d', intdiv($mikro, 1000000), $mikro % 1000000);
+}
+
+/**
+ * DB'den DECIMAL sütun olarak gelen ondalık METNİ ("1065.00", "35.500000")
+ * (float)/floatval() KULLANMADAN Türkçe gösterime çevirir — nokta yerine
+ * virgül, gereksiz sondaki sıfırlar (kur için) budanır. Yalnız EKRAN METNİ
+ * ÜRETİR, hiçbir hesaba KATILMAZ (pdks_cari_ekstre()'nin İÇİNDE kullanılır,
+ * bu yüzden statik testin "binary float yok" kuralına tabi).
+ */
+function pdks_cari_ondalik_goster(string $decimal, bool $budaSifir = false): string
+{
+    $s = str_replace('.', ',', $decimal);
+    if ($budaSifir && str_contains($s, ',')) {
+        $s = rtrim(rtrim($s, '0'), ',');
+    }
+    return $s;
+}
+
+/**
  * YENİ bir ödeme kaydeder — DEĞİŞMEZ alanlar (amount/foreman_id/
  * payment_date/currency) bir daha ASLA UPDATE edilmez (bu dosyada böyle
  * bir yol YOK). Faz 4'ün AYNI kuruş stratejisiyle doğrulanır — 0 veya
  * negatif tutar KABUL EDİLMEZ.
+ *
+ * ⚠ Sprint Cari-Döviz-01: $kurHam yalnız $currency != 'TRY' iken zorunludur
+ * — TRY ödemede kur anlamsızdır ve try_equivalent = amount olarak yazılır
+ * (ekstrede tekdüze gösterim için). Döviz ödemesinde try_equivalent =
+ * yuvarla(tutar × kur, 2) — o GÜNÜN kuru bir kez hesaplanır, SONRADAN
+ * güncel kura göre YENİDEN HESAPLANMAZ (diğer alanlarla AYNI değişmezlik).
  */
-function pdks_cari_odeme_ekle(int $foremanId, string $tarih, string $tutarHam, ?string $currency, string $yontem, ?string $referansNo, ?string $aciklama, int $userId, ?PDO $pdo = null): array
+function pdks_cari_odeme_ekle(int $foremanId, string $tarih, string $tutarHam, ?string $currency, string $yontem, ?string $referansNo, ?string $aciklama, int $userId, ?PDO $pdo = null, ?string $kurHam = null): array
 {
     $pdo = $pdo ?? db();
-    $currency = trim((string)$currency) ?: 'TRY';
+    $currency = strtoupper(trim((string)$currency)) ?: 'TRY';
     $yontem = strtoupper(trim($yontem));
     if (!in_array($yontem, ['BANK', 'CASH', 'OTHER'], true)) {
         return ['ok' => false, 'hata' => 'Geçersiz ödeme yöntemi.'];
@@ -201,6 +278,24 @@ function pdks_cari_odeme_ekle(int $foremanId, string $tarih, string $tutarHam, ?
     if ($kurus === null || $kurus <= 0) {
         return ['ok' => false, 'hata' => 'Ödeme tutarı geçersiz. Örnek: 20000 veya 20000,50'];
     }
+    $tutarTl = pdks_hakedis_kurus_tl($kurus);
+
+    $kurMetin = null; $tlKarsiligiKurus = $kurus;
+    if ($currency !== 'TRY') {
+        $kurMikro = pdks_cari_kur_mikro((string)$kurHam);
+        if ($kurMikro === null) {
+            return ['ok' => false, 'hata' => 'Döviz ödemesi için geçerli bir kur girilmelidir. Örnek: 32,45'];
+        }
+        $kurMetin = pdks_cari_kur_mikro_metin($kurMikro);
+        // TAM SAYI yuvarlama (round-half-up) — kurus(kuruş) × kurMikro(kur×1e6)
+        // böleni 1.000.000: sonuç yine KURUŞ. bölme/round() burada TEK SEFERLİK
+        // bir hesap, tekrarlı toplama YOK; asıl korunan şey binary float'ın
+        // BİRİKEN hata payı (0.1+0.2 sorunu) — tek çarpım/bölme onu üretmez.
+        $carpim = $kurus * $kurMikro;
+        $tlKarsiligiKurus = intdiv($carpim, 1000000);
+        if (($carpim % 1000000) * 2 >= 1000000) $tlKarsiligiKurus++;
+    }
+    $tlKarsiligi = pdks_hakedis_kurus_tl($tlKarsiligiKurus);
 
     $stCavus = $pdo->prepare("SELECT id, name, code FROM foremen WHERE id = ?");
     $stCavus->execute([$foremanId]);
@@ -213,12 +308,12 @@ function pdks_cari_odeme_ekle(int $foremanId, string $tarih, string $tutarHam, ?
     $ins = $pdo->prepare(
         "INSERT INTO foreman_payments
             (foreman_id, foreman_name_snapshot, foreman_code_snapshot, payment_date, amount, currency,
-             payment_method, reference_no, description, status, created_by_user_id)
-         VALUES (?,?,?,?,?,?,?,?,?, 'valid', ?)"
+             exchange_rate, try_equivalent, payment_method, reference_no, description, status, created_by_user_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?, 'valid', ?)"
     );
     $ins->execute([
         $foremanId, (string)$cavus['name'], (string)$cavus['code'], $tarih,
-        pdks_hakedis_kurus_tl($kurus), $currency, $yontem,
+        $tutarTl, $currency, $kurMetin, $tlKarsiligi, $yontem,
         $referansNo !== '' ? $referansNo : null, $aciklama !== '' ? $aciklama : null, $userId,
     ]);
     $id = (int)$pdo->lastInsertId();
@@ -226,7 +321,8 @@ function pdks_cari_odeme_ekle(int $foremanId, string $tarih, string $tutarHam, ?
     if (function_exists('audit_log_event')) {
         audit_log_event('create', 'foreman_payments', $id, null, [
             'foreman_id' => $foremanId, 'payment_date' => $tarih,
-            'amount' => pdks_hakedis_kurus_tl($kurus), 'currency' => $currency, 'method' => $yontem,
+            'amount' => $tutarTl, 'currency' => $currency, 'exchange_rate' => $kurMetin,
+            'try_equivalent' => $tlKarsiligi, 'method' => $yontem,
         ]);
     }
     return ['ok' => true, 'id' => $id];
@@ -494,10 +590,23 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
     $stP = $pdo->prepare("SELECT * FROM foreman_payments WHERE " . implode(' AND ', $whereP));
     $stP->execute($parP);
     foreach ($stP->fetchAll() as $p) {
+        $aciklama = $p['description'] ?: ucfirst(strtolower($p['payment_method']));
+        // Sprint Cari-Döviz-01: döviz ödemesinin TL karşılığı ekstrede
+        // ayrı bir sütun AÇMADAN (para birimleri hâlâ ASLA karıştırılmaz —
+        // Artış/Azalış/Koşan Bakiye SÜTUNLARI kendi döviz cinsinden kalır)
+        // açıklamaya BİLGİ AMAÇLI eklenir. ?? null: eski kurulumlarda
+        // kolonlar henüz migrate edilmemişse (bkz. pdks_cari_migrate())
+        // SELECT * bu anahtarları hiç döndürmez, uyarı vermeden atlanır.
+        $tlKarsiligi = $p['try_equivalent'] ?? null;
+        if ((string)$p['currency'] !== 'TRY' && $tlKarsiligi !== null) {
+            $aciklama .= sprintf(' (≈ %s TRY, kur: %s)',
+                pdks_cari_ondalik_goster((string)$tlKarsiligi),
+                $p['exchange_rate'] !== null ? pdks_cari_ondalik_goster((string)$p['exchange_rate'], true) : '—');
+        }
         $satirlar[(string)$p['currency']][] = [
             'tarih' => $p['payment_date'], 'tip' => 'ODEME', 'tip_etiket' => 'ÖDEME',
             'belge' => $p['reference_no'] ?: ('ODM-' . str_pad((string)$p['id'], 6, '0', STR_PAD_LEFT)),
-            'aciklama' => $p['description'] ?: ucfirst(strtolower($p['payment_method'])),
+            'aciklama' => $aciklama,
             'artis_kurus' => 0, 'azalis_kurus' => pdks_hakedis_tl_kurus((string)$p['amount']),
             'siralama_zaman' => $p['created_at'], 'siralama_id' => (int)$p['id'],
             'kaynak_id' => (int)$p['id'],

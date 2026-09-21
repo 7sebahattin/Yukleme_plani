@@ -138,6 +138,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cari', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        } elseif ($pr['durum'] === 'guncellendi') {
+            audit_log_event('migrate', 'pdks_cari', null, null,
+                ['operation' => 'alter_table', 'table' => $pr['tablo'], 'detail' => $pr['mesaj']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_gunluk_faz8a') {
@@ -454,6 +457,9 @@ render_header('Şema Migrasyon');
       (foremen/.../foreman_daily_entitlements) HİÇ DOKUNMAZ, yalnız KENDİ
       tek yeni tablosunu ekler. Bakiye/ekstre bu tablodan ve KESİN
       hakedişten CANLI türetilir — ikinci bir mutasyona açık defter YOK.
+      <br>Sprint Cari-Döviz-01: döviz ödemesi + kur desteği için
+      <code>exchange_rate</code> / <code>try_equivalent</code> kolonları da
+      buradan eklenir (tablo zaten varsa additive ALTER, veri kaybı yok).
       <?php if ($pdks_cari_ran): ?>
       <br><strong>Son çalıştırma sonucu:</strong>
         <?php foreach ($pdks_cari_results as $pcr): ?>
@@ -480,13 +486,18 @@ render_header('Şema Migrasyon');
     <form method="post" style="margin-top:16px;">
       <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
       <input type="hidden" name="ne" value="pdks_cari">
-      <button type="submit" class="btn btn-primary">Cari Hesap Tablolarını Oluştur</button>
+      <button type="submit" class="btn btn-primary">Cari Hesap Tablolarını Oluştur / Güncelle</button>
     </form>
     <details style="margin-top:12px;">
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_cari_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
+    </details>
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;color:#555;">Mevcut kuruluma ALTER SQL'lerini göster (web kullanıcısının ALTER yetkisi yoksa)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;">ALTER TABLE `foreman_payments` ADD COLUMN `exchange_rate` DECIMAL(14,6) NULL DEFAULT NULL AFTER `currency`;
+ALTER TABLE `foreman_payments` ADD COLUMN `try_equivalent` DECIMAL(14,2) NULL DEFAULT NULL AFTER `exchange_rate`;</pre>
     </details>
   </div>
 

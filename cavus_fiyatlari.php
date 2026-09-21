@@ -18,12 +18,7 @@ pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
 $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
-$paraBirimleri = [
-    'TRY' => 'Türk Lirası (TRY)',
-    'EUR' => 'Euro (EUR)',
-    'USD' => 'ABD Doları (USD)',
-    'GBP' => 'İngiliz Sterlini (GBP)',
-];
+$paraBirimleri = pdks_para_birimleri();
 
 $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $errors = [];

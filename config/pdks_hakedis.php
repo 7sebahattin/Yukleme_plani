@@ -81,6 +81,20 @@ function pdks_hakedis_girdi_kurus(string $ham): ?int
     return pdks_hakedis_tl_kurus($ham);
 }
 
+/** Çavuş modülünde para birimi seçilen HER yerin (günlük ücret —
+ *  cavus_fiyatlari.php, ödeme — cavus_odeme.php) TEK ortak listesi.
+ *  İkinci bir kopya AÇMA — ayrışırsa bir ekranda seçilebilen para birimi
+ *  diğerinde "geçersiz" sayılır. */
+function pdks_para_birimleri(): array
+{
+    return [
+        'TRY' => 'Türk Lirası (TRY)',
+        'EUR' => 'Euro (EUR)',
+        'USD' => 'ABD Doları (USD)',
+        'GBP' => 'İngiliz Sterlini (GBP)',
+    ];
+}
+
 // =========================================================
 // ŞEMA
 // =========================================================

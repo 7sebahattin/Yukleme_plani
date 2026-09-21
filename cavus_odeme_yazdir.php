@@ -64,7 +64,12 @@ render_print_page_start('Çavuş Ödeme Dökümü', 'account', 'detail', 'portra
             <td><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?></td>
             <td><?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?></td>
             <td><?= h($o['reference_no'] ?: '—') ?></td>
-            <td><?= h($o['description'] ?: '—') ?></td>
+            <td>
+                <?= h($o['description'] ?: '—') ?>
+                <?php if ((string)$o['currency'] !== 'TRY' && ($o['try_equivalent'] ?? null) !== null): ?>
+                <br><span style="font-size:.85em;color:#555">≈ <?= h(number_format((float)$o['try_equivalent'], 2, ',', '.')) ?> TRY<?= ($o['exchange_rate'] ?? null) !== null ? ' (kur: ' . h(number_format((float)$o['exchange_rate'], 4, ',', '.')) . ')' : '' ?></span>
+                <?php endif; ?>
+            </td>
             <td class="num"><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?></td>
             <td><?= h($o['currency']) ?></td>
             <td>

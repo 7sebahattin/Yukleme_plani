@@ -241,8 +241,14 @@ foreach (['pdks_cari_odeme_ekle', 'pdks_cari_odeme_iptal'] as $fn) {
 }
 ok("pdks_cari_odeme_iptal() server-side date('Y-m-d H:i:s') kullanıyor", (bool)preg_match("/function pdks_cari_odeme_iptal.*?date\('Y-m-d H:i:s'\)/s", $cariSrc));
 
-echo "\n=== 16. HİÇBİR FATURA/GENEL MUHASEBE/BANKA MUTABAKATI/KUR/BORDRO/VERGİ/PDF YOK (görev DELIVERABLE dışlama listesi) ===\n";
-$yasakliKelimeler = ['invoice', 'fatura', 'exchange rate', 'exchange_rate', 'kur_cevrim', 'payroll', 'bordro',
+echo "\n=== 16. HİÇBİR FATURA/GENEL MUHASEBE/BANKA MUTABAKATI/BORDRO/VERGİ/PDF YOK (görev DELIVERABLE dışlama listesi) ===\n";
+// ⚠ Sprint Cari-Döviz-01 (kullanıcının açık talimatı): "exchange rate" /
+// "exchange_rate" dışlaması BİLEREK KALDIRILDI — kullanıcı artık döviz
+// ödemesi + kur girişini AÇIKÇA istedi (bkz. pdks_cari_kur_mikro() /
+// exchange_rate+try_equivalent kolonları). Bu, dışlama listesinin geri
+// kalanını GEÇERSİZ KILMAZ — fatura/bordro/vergi/pdf/banka mutabakatı
+// HÂLÂ bu modülün kapsamı DIŞINDADIR.
+$yasakliKelimeler = ['invoice', 'fatura', 'kur_cevrim', 'payroll', 'bordro',
                       'tax', 'vergi', 'journal entry', 'muhasebe_fisi', 'pdf', 'bank reconciliation', 'banka_mutabakat'];
 foreach ($yasakliKelimeler as $kelime) {
     $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
@@ -250,11 +256,41 @@ foreach ($yasakliKelimeler as $kelime) {
 }
 foreach ($sayfalar as $f) {
     $kod = kodSadece(oku($f));
-    foreach (['invoice', 'fatura', 'exchange rate', 'exchange_rate', 'payroll', 'bordro', 'tax', 'vergi', 'pdf'] as $kelime) {
+    foreach (['invoice', 'fatura', 'payroll', 'bordro', 'tax', 'vergi', 'pdf'] as $kelime) {
         $desen = '/\b' . preg_quote($kelime, '/') . '\b/iu';
         ok("$f GERÇEK KODUNDA '$kelime' YOK", !preg_match($desen, $kod));
     }
 }
+
+echo "\n=== 17. SPRINT CARİ-DÖVİZ-01: DÖVİZ ÖDEMESİ + KUR ===\n";
+ok('pdks_cari_kur_mikro() bulundu (kur ayrıştırma TEK yerde)', str_contains($cariKod, 'function pdks_cari_kur_mikro('));
+preg_match('/function pdks_cari_kur_mikro\(.*?\n\}\n/s', $cariSrc, $kurM);
+ok('pdks_cari_kur_mikro() içinde de (float)/floatval() CAST YOK', !preg_match('/\(float\)|floatval\(/', kodSadece($kurM[0] ?? '')));
+ok('pdks_cari_odeme_ekle(): currency != TRY iken kur zorunlu (kurMikro === null → hata)',
+    (bool)preg_match('/function pdks_cari_odeme_ekle.*?kurMikro === null/s', $cariSrc));
+ok('pdks_cari_odeme_ekle(): TRY ödemede try_equivalent = amount (kur zorunlu DEĞİL)',
+    (bool)preg_match('/function pdks_cari_odeme_ekle.*?\$tlKarsiligiKurus = \$kurus;/s', $cariSrc));
+ok('foreman_payments şemasında exchange_rate/try_equivalent NULL olabilir (TRY ödemede kur anlamsız)',
+    str_contains($cariSrc, '`exchange_rate`         DECIMAL(14,6) NULL DEFAULT NULL')
+    && str_contains($cariSrc, '`try_equivalent`        DECIMAL(14,2) NULL DEFAULT NULL'));
+ok('pdks_cari_migrate(): exchange_rate/try_equivalent kolonları idempotent ensure_column() ile eklenir (mevcut kuruluma additive ALTER)',
+    str_contains($cariSrc, "ensure_column('foreman_payments', 'exchange_rate'")
+    && str_contains($cariSrc, "ensure_column('foreman_payments', 'try_equivalent'"));
+
+$odemeSrc = oku('cavus_odeme.php');
+ok('cavus_odeme.php: Para Birimi artık serbest metin DEĞİL, pdks_para_birimleri() ile <select>',
+    str_contains($odemeSrc, "pdks_para_birimleri() as \$pbKod") && !str_contains($odemeSrc, 'name="currency" id="pdksOdemeParaBirimi" maxlength'));
+ok('cavus_odeme.php: kur alanı VARSAYILAN gizli (TRY seçiliyken anlamsız)', str_contains($odemeSrc, 'id="pdksOdemeKurWrap" hidden'));
+ok('cavus_odeme.php: JS kur alanını döviz seçilince required yapıyor', str_contains($odemeSrc, 'kurEl.required = dovizMi'));
+ok('cavus_odeme.php: sunucu tarafı da AYNI kuralı doğruluyor (istemciye güvenilmiyor)',
+    str_contains($odemeSrc, "currency !== 'TRY' && pdks_cari_kur_mikro(\$kurHam) === null"));
+ok('cavus_odeme.php: pdks_cari_odeme_ekle() çağrısına kurHam iletiliyor', str_contains($odemeSrc, 'pdks_cari_odeme_ekle($cavusId, $tarih, $tutarHam, $currency, $yontem, $referansNo, $aciklama, (int)$auth_user[\'id\'], $pdo, $kurHam)'));
+
+$paraBirimSrc = oku('config/pdks_hakedis.php');
+ok('pdks_para_birimleri() TEK ortak listede (config/pdks_hakedis.php) — cavus_fiyatlari.php ile İKİNCİ bir kopya AÇILMADI',
+    str_contains($paraBirimSrc, 'function pdks_para_birimleri(): array'));
+ok('cavus_fiyatlari.php artık kendi $paraBirimleri dizisini İCAT ETMİYOR, paylaşılan fonksiyonu REUSE ediyor',
+    str_contains(oku('cavus_fiyatlari.php'), '$paraBirimleri = pdks_para_birimleri();'));
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

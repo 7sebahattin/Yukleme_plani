@@ -328,11 +328,33 @@ ok('13. Mehmet\'in TRY VE EUR bakiyeleri AYRI anahtarlarda (İKİSİ de var)', i
 ok('13. TRY bakiyesi 750.00 (EUR\'un 80\'i KARIŞMADI)', parasalEsit('750.00', $bakiyeMehmet['TRY']['bakiye']));
 ok('13. EUR bakiyesi 80.00 (TRY\'nin 750\'si KARIŞMADI)', parasalEsit('80.00', $bakiyeMehmet['EUR']['bakiye']));
 
-$odemeEur = pdks_cari_odeme_ekle($mehmetId, '2026-09-23', '30', 'EUR', 'BANK', null, 'EUR ödeme', 1, db());
+$odemeEurKursuz = pdks_cari_odeme_ekle($mehmetId, '2026-09-23', '30', 'EUR', 'BANK', null, 'EUR ödeme', 1, db());
+ok('Sprint Cari-Döviz-01: kursuz EUR ödemesi REDDEDİLİYOR', $odemeEurKursuz['ok'] === false, json_encode($odemeEurKursuz));
+
+$odemeEur = pdks_cari_odeme_ekle($mehmetId, '2026-09-23', '30', 'EUR', 'BANK', null, 'EUR ödeme', 1, db(), '35,50');
 ok('DÜZELTME 9. EUR ödemesi kaydedildi (GERÇEK EUR hakedişe karşı)', $odemeEur['ok'] === true, json_encode($odemeEur));
 $bakiyeSonEur = pdks_cari_bakiye($mehmetId, db());
 ok('DÜZELTME 9. EUR ödemesi SADECE EUR bakiyesini etkiledi (80-30=50.00)', parasalEsit('50.00', $bakiyeSonEur['EUR']['bakiye']));
 ok('DÜZELTME 10. TRY bakiyesi HÂLÂ 750.00 (EUR ödemesi TRY\'yi ETKİLEMEDİ)', parasalEsit('750.00', $bakiyeSonEur['TRY']['bakiye']));
+
+$stEurOdeme = db()->prepare("SELECT currency, exchange_rate, try_equivalent FROM foreman_payments WHERE id = ?");
+$stEurOdeme->execute([$odemeEur['id']]);
+$eurOdemeRow = $stEurOdeme->fetch();
+ok('Sprint Cari-Döviz-01: exchange_rate DB\'ye 35.50 olarak yazıldı', parasalEsit('35.5', $eurOdemeRow['exchange_rate']), json_encode($eurOdemeRow));
+ok('Sprint Cari-Döviz-01: try_equivalent = 30 × 35,50 = 1065.00', parasalEsit('1065.00', $eurOdemeRow['try_equivalent']), json_encode($eurOdemeRow));
+
+$odemeTryKurlu = pdks_cari_odeme_ekle($mehmetId, '2026-09-24', '100', 'TRY', 'CASH', null, 'TRY ödeme, kur gönderilse de yok sayılır', 1, db(), '99,99');
+ok('TRY ödemede exchange_rate NULL kalır (kur girilse bile TRY\'de anlamsız)', $odemeTryKurlu['ok'] === true);
+$stTryOdeme = db()->prepare("SELECT exchange_rate, try_equivalent, amount FROM foreman_payments WHERE id = ?");
+$stTryOdeme->execute([$odemeTryKurlu['id']]);
+$tryOdemeRow = $stTryOdeme->fetch();
+ok('Sprint Cari-Döviz-01: TRY ödemede exchange_rate NULL', $tryOdemeRow['exchange_rate'] === null, json_encode($tryOdemeRow));
+ok('Sprint Cari-Döviz-01: TRY ödemede try_equivalent = amount (100.00)', parasalEsit('100.00', $tryOdemeRow['try_equivalent']), json_encode($tryOdemeRow));
+
+foreach (['0', '-5', 'abc', ''] as $gecersizKur) {
+    $r = pdks_cari_odeme_ekle($mehmetId, '2026-09-25', '10', 'USD', 'CASH', null, null, 1, db(), $gecersizKur);
+    ok("Sprint Cari-Döviz-01: geçersiz kur '$gecersizKur' reddediliyor", $r['ok'] === false, json_encode($r));
+}
 
 echo "\n=== DÜZELTME 7. KESİN HAKEDİŞ PARA BİRİMİ DONUK KALIR ===\n";
 $eurYenidenHesap = pdks_hakedis_hesapla($hEur['session_id'], 1, db());

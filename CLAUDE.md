@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v252` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v253` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -669,6 +669,58 @@ role_permissions / user_roles) zaten vardı; `roles.php` onun üzerine CRUD koya
   açabiliyordu — **yetki ekranı gerçeği söylemiyordu**. Sidebar `$p_hes` ve
   `index.php`'deki Hesap kartı da aynı anda `hesap.read`'e çekildi. Diğer modül
   yardımcıları (`can_beyan`, `can_maliyet`, `pdks_*_can`) 1:1'dir, köprü yok.
+
+---
+
+## Çavuş Ödemesi — Döviz + Kur (Sprint Cari-Döviz-01)
+
+`cavus_odeme.php`'de Para Birimi artık serbest metin değil, `pdks_para_birimleri()`
+(TRY/EUR/USD/GBP — `config/pdks_hakedis.php`, `cavus_fiyatlari.php` ile **AYNI**
+ortak liste) ile `<select>`. Döviz seçilince Kur alanı görünür + zorunlu olur;
+kaydedilince ödemenin **o günkü** TL karşılığı da yazılır.
+
+**Şema:** `foreman_payments.exchange_rate` DECIMAL(14,6) NULL · `.try_equivalent`
+DECIMAL(14,2) NULL — ikisi de yalnız döviz ödemesinde dolar (TRY'de NULL/anlamsız).
+**Migration KOD YAZILDI ama HENÜZ ÇALIŞTIRILMADI** (bu kritik kurala uyarak —
+"migration yalnızca açık GO ile"): `pdks_cari_migrate()` yeni kurulumda
+CREATE TABLE'a zaten dahil, mevcut kuruluma `ensure_column()` ile idempotent
+ALTER uygular ama KENDİLİĞİNDEN tetiklenmez — admin migrate.php'ye gidip
+"Cari Hesap Tablolarını Oluştur / Güncelle" demeden bu iki kolon canlıda
+YOK, döviz ödemesi kaydedilemez (hata verir). **Canlıya alınca İLK bunu çalıştır.**
+
+- **Bakiye motoru DEĞİŞMEDİ** — hâlâ para birimi başına, **asla toplanmaz**
+  (`pdks_cari_bakiye`). `try_equivalent` yalnız **bilgi amaçlı**; hiçbir
+  toplama/bakiye hesabına KATILMAZ. Döviz ödemesinin TL karşılığı yeni bir
+  sütun AÇMADAN ekstre/liste/yazdırmada **açıklama satırına** eklenir
+  (`pdks_cari_ekstre()` içinde `aciklama` metnine ek, `pdks_odeme_tl_karsiligi_etiket()`
+  — cavus_odeme.php'de `.pdks-row-sub` ikinci satır).
+- **TAMAMEN TAM SAYI ARİTMETİĞİ — `(float)`/`floatval()` YOK.** Bu dosyanın
+  4 para fonksiyonu (`pdks_cari_bakiye/odeme_ekle/odeme_onizleme/ekstre`)
+  `scripts/pdks_cari_static_smoke.php`'nin "binary float yok" testiyle
+  KİLİTLİ. Kur → `pdks_cari_kur_mikro()` ile TAM SAYI mikro-birime (kur ×
+  1.000.000) çevrilir; `try_equivalent_kurus = intdiv(kurus × kurMikro,
+  1_000_000)` + kalan üzerinden round-half-up. Görüntüleme de `number_format`
+  yerine `pdks_cari_ondalik_goster()` (metin üzerinde nokta→virgül) kullanır.
+  **Yeni float tabanlı kod EKLEME** — test hemen kırılır.
+- **`pdks_cari_kur_mikro() ≠ helpers.php'nin `num()`'ı.** `num()` nokta'yı HER
+  ZAMAN binler ayıracı sayar (para tutarı için doğru); kur değeri küçük ve
+  6 ondalığa kadar hassas olabilir, `num()` ile ayrıştırılırsa "32.45" →
+  3245 gibi yanlış sonuç çıkar. Kur girişi kendi ayrıştırıcısını kullanır.
+  Tutar (`amount`) alanı hâlâ Faz 4'ün `pdks_hakedis_girdi_kurus()`'unu kullanır
+  — DEĞİŞMEDİ.
+- **Sunucu istemciye güvenmez:** `cavus_odeme.php` JS'i kur alanını döviz
+  seçilince `required` yapar (kolaylık), ama `pdks_cari_odeme_ekle()` AYNI
+  kuralı sunucuda tekrar doğrular (`kurMikro === null` → ret) — savunma
+  derinliği, tek yetkili kapı hâlâ `pdks_cari_odeme_ekle()`.
+- **Değişmezlik korunuyor:** exchange_rate/try_equivalent de diğer ödeme
+  alanlarıyla AYNI kuralı taşır — kaydedildikten sonra güncel kura göre
+  YENİDEN HESAPLANMAZ, o günün kuru sabit kalır.
+- **"Kur/exchange rate yok" dışlaması BİLİNÇLİ KALDIRILDI**
+  (`scripts/pdks_cari_static_smoke.php` madde 16 — eskiden bu modülün
+  görev talimatı kur/exchange-rate'i AÇIKÇA dışlıyordu). Listenin geri
+  kalanı (fatura/bordro/vergi/pdf/banka mutabakatı) HÂLÂ GEÇERLİ — yalnız
+  kullanıcının açıkça istediği bu tek madde kaldırıldı, başka özellik
+  sızdırma gerekçesi olarak kullanılmaz.
 
 ---
 

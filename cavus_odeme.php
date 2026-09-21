@@ -27,6 +27,25 @@ $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $errors = [];
 $uyari = null;
 
+// Ödeme Geçmişi tablosunda/kartlarında döviz ödemesinin TL karşılığını
+// gösterir — tabloya/karta İKİNCİ BİR SÜTUN AÇMADAN (masaüstü tablo +
+// mobil kart + ekstre ile AYNI desen, bkz. pdks_cari_ekstre()).
+// function_exists() kapısı: scripts/pdks_cari_ui_smoke.php bu sayfayı
+// TEK process içinde birden çok kez render eder (beyanlar.php'nin
+// render_liste() ile AYNI ihtiyaç) — kapısız ikinci render'da
+// "Cannot redeclare function" ile çökerdi.
+if (!function_exists('pdks_odeme_tl_karsiligi_etiket')):
+function pdks_odeme_tl_karsiligi_etiket(array $o): string
+{
+    if ((string)$o['currency'] === 'TRY') return '';
+    $tl = $o['try_equivalent'] ?? null;
+    if ($tl === null) return '';
+    $kur = $o['exchange_rate'] ?? null;
+    return '≈ ' . number_format((float)$tl, 2, ',', '.') . ' TRY'
+         . ($kur !== null ? ' (kur: ' . number_format((float)$kur, 4, ',', '.') . ')' : '');
+}
+endif;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_cari('payments');   // savunma derinliği
@@ -36,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
         $tarih = trim((string)($_POST['payment_date'] ?? ''));
         $tutarHam = trim((string)($_POST['amount'] ?? ''));
-        $currency = trim((string)($_POST['currency'] ?? 'TRY')) ?: 'TRY';
+        $currency = strtoupper(trim((string)($_POST['currency'] ?? 'TRY'))) ?: 'TRY';
+        $kurHam = trim((string)($_POST['exchange_rate'] ?? ''));
         $yontem = trim((string)($_POST['payment_method'] ?? 'OTHER'));
         $referansNo = trim((string)($_POST['reference_no'] ?? ''));
         $aciklama = trim((string)($_POST['description'] ?? ''));
@@ -44,6 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$cavusId) {
             $errors[] = 'Çavuş seçilmedi.';
+        } elseif (!array_key_exists($currency, pdks_para_birimleri())) {
+            $errors[] = 'Geçersiz para birimi seçildi.';
+        } elseif ($currency !== 'TRY' && pdks_cari_kur_mikro($kurHam) === null) {
+            // Savunma derinliği — pdks_cari_odeme_ekle() de AYNI kontrolü
+            // yapar (tek yetkili kapı orasıdır), burası yalnız kullanıcıya
+            // aşım onayı ekranına düşmeden ERKEN ve net bir hata gösterir.
+            $errors[] = 'Döviz ödemesi için geçerli bir kur girilmelidir. Örnek: 32,45';
         } else {
             // Aşım kontrolü — SUNUCU tarafında, istemci hesaplamasına GÜVENİLMEZ.
             // pdks_cari_odeme_onizleme() sayfa VE testler ARASINDA PAYLAŞILAN
@@ -56,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         . '(Sonuç: ' . h(pdks_hakedis_kurus_tl(abs($onizleme['yeni_bakiye_kurus']))) . ' ' . h($currency) . ' avans.) '
                         . 'Devam etmek için aşağıdaki onay kutusunu işaretleyip tekrar kaydedin.';
             } else {
-                $sonuc = pdks_cari_odeme_ekle($cavusId, $tarih, $tutarHam, $currency, $yontem, $referansNo, $aciklama, (int)$auth_user['id'], $pdo);
+                $sonuc = pdks_cari_odeme_ekle($cavusId, $tarih, $tutarHam, $currency, $yontem, $referansNo, $aciklama, (int)$auth_user['id'], $pdo, $kurHam);
                 if ($sonuc['ok']) {
                     header('Location: cavus_odeme.php?cavus=' . $cavusId . '&ok=' . urlencode('Ödeme kaydedildi.'));
                     exit;
@@ -159,7 +186,15 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
             </label>
             <label>
                 <span class="form-label">Para Birimi</span>
-                <input type="text" name="currency" id="pdksOdemeParaBirimi" maxlength="10" value="TRY">
+                <select name="currency" id="pdksOdemeParaBirimi">
+                    <?php foreach (pdks_para_birimleri() as $pbKod => $pbAd): ?>
+                    <option value="<?= h($pbKod) ?>" <?= $pbKod === 'TRY' ? 'selected' : '' ?>><?= h($pbAd) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label id="pdksOdemeKurWrap" hidden>
+                <span class="form-label">Kur (1 birim = ? TRY) *</span>
+                <input type="text" name="exchange_rate" id="pdksOdemeKur" inputmode="decimal" placeholder="ör. 32,45">
             </label>
             <label>
                 <span class="form-label">Ödeme Yöntemi</span>
@@ -178,6 +213,7 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
                 <textarea name="description" rows="2" maxlength="1000"></textarea>
             </label>
         </div>
+        <p class="muted" id="pdksOdemeKurOnizleme" style="font-size:.9rem;margin-top:6px"></p>
         <p class="muted" id="pdksOdemeOnizleme" style="font-size:.9rem;margin-top:10px"></p>
         <?php if ($uyari): ?>
         <label style="display:flex;align-items:center;gap:8px;font-weight:400;margin-top:10px">
@@ -193,7 +229,11 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
 (function () {
     var tutarEl = document.getElementById('pdksOdemeTutar');
     var paraEl = document.getElementById('pdksOdemeParaBirimi');
+    var kurWrapEl = document.getElementById('pdksOdemeKurWrap');
+    var kurEl = document.getElementById('pdksOdemeKur');
     var onizlemeEl = document.getElementById('pdksOdemeOnizleme');
+    var kurOnizlemeEl = document.getElementById('pdksOdemeKurOnizleme');
+
     function guncelle() {
         var para = (paraEl.value || 'TRY').trim();
         var bakiyeEl = document.getElementById('pdksBakiye' + para);
@@ -211,8 +251,34 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
             onizlemeEl.textContent = 'Ödeme sonrası ÇAVUŞ AVANSI oluşacak: ' + kalanTl + ' ' + para;
         }
     }
-    tutarEl.addEventListener('input', guncelle);
-    paraEl.addEventListener('input', guncelle);
+
+    // Kur alanı yalnız döviz seçiliyken görünür + zorunlu — TRY'de kur
+    // anlamsızdır (bkz. config/pdks_cari.php: pdks_cari_odeme_ekle()).
+    // Sunucu AYNI kuralı tekrar doğrular (istemci yalnız kolaylık).
+    function kurAlanGuncelle() {
+        var dovizMi = paraEl.value !== 'TRY';
+        kurWrapEl.hidden = !dovizMi;
+        kurEl.required = dovizMi;
+        if (!dovizMi) { kurEl.value = ''; kurOnizlemeEl.textContent = ''; }
+        kurTlOnizleGuncelle();
+    }
+
+    function kurTlOnizleGuncelle() {
+        if (paraEl.value === 'TRY') { kurOnizlemeEl.textContent = ''; return; }
+        var tutar = parseFloat((tutarEl.value || '').replace(',', '.'));
+        var kur = parseFloat((kurEl.value || '').replace(',', '.'));
+        if (!tutar || isNaN(tutar) || tutar <= 0 || !kur || isNaN(kur) || kur <= 0) {
+            kurOnizlemeEl.textContent = '';
+            return;
+        }
+        var tl = (tutar * kur).toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        kurOnizlemeEl.textContent = 'TL karşılığı ≈ ' + tl + ' TRY';
+    }
+
+    tutarEl.addEventListener('input', function () { guncelle(); kurTlOnizleGuncelle(); });
+    paraEl.addEventListener('change', function () { guncelle(); kurAlanGuncelle(); });
+    kurEl.addEventListener('input', kurTlOnizleGuncelle);
+    kurAlanGuncelle();
 })();
 </script>
 
@@ -233,7 +299,13 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
 <?php foreach ($odemeler as $o): ?>
 <tr>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?></td>
-    <td><strong><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong></td>
+    <td>
+        <strong><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?> <?= h($o['currency']) ?></strong>
+        <?php $tlEtiket = pdks_odeme_tl_karsiligi_etiket($o); ?>
+        <?php if ($tlEtiket !== ''): ?>
+        <div class="pdks-row-sub"><?= h($tlEtiket) ?></div>
+        <?php endif; ?>
+    </td>
     <td><?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?></td>
     <td><?= h($o['reference_no'] ?: '—') ?></td>
     <td><?= h($o['description'] ?: '—') ?></td>
@@ -273,6 +345,10 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?> <?= h($o['currency']) ?></div>
             <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['payment_date']))) ?> · <?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?><?= $o['reference_no'] ? ' · ' . h($o['reference_no']) : '' ?></div>
+            <?php $tlEtiketKart = pdks_odeme_tl_karsiligi_etiket($o); ?>
+            <?php if ($tlEtiketKart !== ''): ?>
+            <div class="pdks-row-sub"><?= h($tlEtiketKart) ?></div>
+            <?php endif; ?>
         </div>
         <?php if ($o['status'] === 'cancelled'): ?>
         <span class="pdks-badge pdks-badge-pasif">İPTAL</span>
