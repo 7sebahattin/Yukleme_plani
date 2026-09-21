@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v248` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v249` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -116,6 +116,36 @@ Permission'lar `can()` / `is_admin()` ile kontrol edilir.
 | Etiket/Crop overlay | 3000 |
 
 **Yeni modal eklerken z-index ≥ 600** kullan.
+
+### Modal içinde `<form>` — KRİTİK
+
+`.pm-dialog` bir **flex kolondur** (`max-height: 90vh` + `overflow: hidden`) ve
+`.pm-body` `flex:1 + overflow-y:auto` ile kaydırılır. Araya `<form>` sarmalayıcı
+girdiğinde (users.php, personel_form.php, roles.php deseni) bu zincir kırılır:
+form normal blok olduğu için gövdeye dayanacak yükseklik kalmaz, içerik kadar
+uzar ve dialog'u aşan kısım **sessizce kesilir** — gövde hiç kaydırılamaz,
+alttaki alanlar ve Kaydet/İptal düğmeleri **erişilemez** olur.
+
+```css
+/* style.css — SİLME */
+.pm-dialog > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+```
+
+`min-height: 0` şart (flex öğesinin varsayılan `min-height:auto` değeri küçülmeyi
+engeller). Kısa modallerde etkisizdir. **Uzun modal eklediğinde tarayıcı testini
+çalıştır** — PHP/statik testler düzen (layout) hatasını GÖREMEZ; bu hata
+`.pm-dialog`/`.pm-body` kuralları kaynakta doğru göründüğü hâlde aylarca fark
+edilmedi:
+
+```
+php scripts/roles_modal_render.php > _test_roles.html
+node scripts/roles_modal_smoke.js     # masaüstü + tablet + mobil ölçer
+```
+
+Test; footer'ın ekran içinde olduğunu, gövdenin gerçekten kaydırıldığını, en
+alttaki kutunun görünüp **tıklanabildiğini** ve yatay taşma olmadığını doğrular.
+Ölçümden önce **400ms bekler** — açılış animasyonu (220ms) bitmeden alınan
+ölçüm yanıltır.
 
 ### Overflow Kuralı — KRİTİK
 
