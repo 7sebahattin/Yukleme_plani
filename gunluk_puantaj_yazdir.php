@@ -63,12 +63,12 @@ $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
 $tumTipler = array_values(array_unique(array_merge(array_keys($ozet['giris']), array_keys($ozet['cikis']))));
 sort($tumTipler);
 
-render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'portrait');
+render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'portrait', ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="rapor-actions no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$id ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Mesai Detayına Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$id ?>" class="pr-btn">← Mesai Detayına Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -88,8 +88,8 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
         </tr></thead>
         <tbody><tr>
             <td><strong><?= (int)$ozet['giris_toplam'] ?></strong></td>
-            <?php foreach ($tumTipler as $tip): ?><td><?= (int)($ozet['giris'][$tip] ?? 0) ?></td><?php endforeach; ?>
-            <td><?= (int)$ozet['cikis_toplam'] ?></td>
+            <?php foreach ($tumTipler as $tip): ?><td class="num"><?= (int)($ozet['giris'][$tip] ?? 0) ?></td><?php endforeach; ?>
+            <td class="num"><?= (int)$ozet['cikis_toplam'] ?></td>
             <td<?= $ozet['eksik_toplam'] > 0 ? ' style="font-weight:800"' : '' ?>><?= (int)$ozet['eksik_toplam'] ?></td>
         </tr></tbody>
     </table>
@@ -117,7 +117,7 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
         </tr>
         <?php endforeach; ?>
         <?php if (empty($kartlar)): ?>
-        <tr><td colspan="7" style="text-align:center;color:#666">Bu mesaide kart hareketi yok.</td></tr>
+        <tr><td colspan="7" class="pr-empty">Bu mesaide kart hareketi yok.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

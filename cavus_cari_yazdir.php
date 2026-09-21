@@ -70,12 +70,12 @@ $geriUrl = 'cavus_cari.php?' . http_build_query(array_filter([
     'q' => $q, 'durum' => $durum_f,
 ], fn($v) => $v !== null && $v !== ''));
 
-render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
+render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation, ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h($geriUrl) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Cariye Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h($geriUrl) ?>" class="pr-btn">← Cariye Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -87,7 +87,7 @@ render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
     ) ?>
 
     <?php if (!empty($ozet)): ?>
-    <h3 style="font-size:1rem;margin:12px 0 6px">Para Birimi Bazlı Toplam</h3>
+    <h3 class="pr-section">Para Birimi Bazlı Toplam</h3>
     <table class="print-table">
         <thead><tr><th>Para Birimi</th><th>Kesinleşmiş Hakediş</th><th>Düzeltme</th><th>Toplam Ödeme</th><th>Net Bakiye</th><th>Durum</th></tr></thead>
         <tbody>
@@ -100,10 +100,10 @@ render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
         ?>
         <tr>
             <td><?= h($cur) ?></td>
-            <td><?= h(number_format((float)pdks_hakedis_kurus_tl($v['hakedis']), 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)pdks_hakedis_kurus_tl($v['duzeltme']), 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)pdks_hakedis_kurus_tl($v['odeme']), 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)pdks_hakedis_kurus_tl(abs($v['bakiye'])), 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)pdks_hakedis_kurus_tl($v['hakedis']), 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)pdks_hakedis_kurus_tl($v['duzeltme']), 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)pdks_hakedis_kurus_tl($v['odeme']), 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)pdks_hakedis_kurus_tl(abs($v['bakiye'])), 2, ',', '.')) ?></td>
             <td><?= h($durumMetni) ?></td>
         </tr>
         <?php endforeach; ?>
@@ -111,7 +111,7 @@ render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
     </table>
     <?php endif; ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Çavuş Bazlı Hesap Dökümü</h3>
+    <h3 class="pr-section">Çavuş Bazlı Hesap Dökümü</h3>
     <table class="print-table">
         <thead>
         <tr>
@@ -125,8 +125,8 @@ render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
             <tr>
                 <td><?= h($f['name']) ?><?= ($f['code'] ?? '') !== '' ? ' (' . h($f['code']) . ')' : '' ?></td>
                 <td><?= h($cur) ?></td>
-                <td><?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?></td>
-                <td><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></td>
+                <td class="num"><?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?></td>
+                <td class="num"><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></td>
                 <td><?= h($b['durum_etiket']) ?><?= $b['durum'] !== 'kapali' ? ': ' . h(number_format(abs((float)$b['bakiye']), 2, ',', '.')) : '' ?></td>
                 <td><?= $b['son_hakedis_tarihi'] ? h(date('d.m.Y', strtotime($b['son_hakedis_tarihi']))) : '—' ?></td>
                 <td><?= $b['son_odeme_tarihi'] ? h(date('d.m.Y', strtotime($b['son_odeme_tarihi']))) : '—' ?></td>
@@ -134,7 +134,7 @@ render_print_page_start('Çavuş Cari Hesap', 'account', $mode, $orientation);
             <?php endforeach; ?>
         <?php endforeach; ?>
         <?php if ($satirSayisi === 0): ?>
-        <tr><td colspan="7" style="text-align:center;color:#666">Bu filtrelerde hesap kaydı bulunamadı. (Yalnız en az bir KESİN hakedişi veya ödemesi olan çavuşlar listelenir.)</td></tr>
+        <tr><td colspan="7" class="pr-empty">Bu filtrelerde hesap kaydı bulunamadı. (Yalnız en az bir KESİN hakedişi veya ödemesi olan çavuşlar listelenir.)</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

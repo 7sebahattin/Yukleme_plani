@@ -69,6 +69,40 @@ foreach (array_keys($ciftler) as $f) {
         !preg_match('/\brender_header\s*\(/', $s) && !preg_match('/\brender_footer\s*\(/', $s));
 }
 
+echo "\n=== 2B. PERSONEL TAKİBİ YAZDIRMA TEMASI (print_pdks.css) ===\n";
+$temaCss = oku('assets/print_pdks.css');
+ok('assets/print_pdks.css var', $temaCss !== '');
+ok('print_pdks.css: görsel kurallar @media print DIŞINDA da tanımlı (ekran önizlemesi çıplak HTML gibi görünmez)',
+    (bool)preg_match('/^table\.print-table\s*\{/m', $temaCss)
+    && (bool)preg_match('/^\.print-summary-row\s*\{/m', $temaCss));
+ok('print_pdks.css: renkli zemin üstüne BEYAZ yazı YOK (tarayıcı "arka plan grafikleri" kapalıyken metin kaybolmaz)',
+    !preg_match('/color:\s*#fff[^;]*;[^}]*background:\s*(?!#fff)/i', str_replace(["\n", ' '], '', $temaCss))
+    || !preg_match('/\.print-header-title[^}]*color:\s*#fff/i', $temaCss));
+ok('print_pdks.css: başlık ve tablo ayrımını ÇERÇEVE taşıyor (zemin basılmasa da yapı durur)',
+    str_contains($temaCss, 'border-bottom: 3px solid var(--pr-accent)')
+    && str_contains($temaCss, 'border: 1px solid var(--pr-line)'));
+ok('print_pdks.css: print_base.css DEĞİŞTİRİLMEDİ — tema onun ÜZERİNE yükleniyor',
+    str_contains($temaCss, 'print_base.css'));
+foreach (array_keys($ciftler) as $f) {
+    ok("$f: print_pdks.css temasını yüklüyor", str_contains(oku($f), "['print_pdks.css']"));
+}
+// Personel Takibi'nin ESKİ yazdırma sayfaları da AYNI temayı kullanır —
+// biri temasız kalırsa çıktılar iki ayrı görünüme ayrışır.
+foreach (['cavus_odeme_yazdir.php', 'cavus_hakedis_yazdir.php', 'cavus_ekstre_yazdir.php',
+          'gunluk_puantaj_yazdir.php', 'rapor_yazdir.php'] as $f) {
+    ok("$f: AYNI temayı yüklüyor (Personel Takibi çıktıları tek görünüm)", str_contains(oku($f), "['print_pdks.css']"));
+}
+// Tema YALNIZ Personel Takibi'ne ait — Yükleme/Çıkma/Stok çıktıları etkilenmez.
+foreach (['print_loading.php', 'print_daily.php', 'malzeme_stok_rapor.php'] as $f) {
+    ok("$f: temayı YÜKLEMİYOR (kapsam Personel Takibi ile sınırlı, bu sayfalar değişmedi)",
+        !str_contains(oku($f), 'print_pdks.css'));
+}
+$helperSrc = oku('config/print_helpers.php');
+ok("config/print_helpers.php: \$extra_css parametresi geriye dönük uyumlu (varsayılan boş dizi)",
+    (bool)preg_match('/array \$extra_css = \[\]/', $helperSrc));
+ok('config/print_helpers.php: ek CSS adı doğrulanıyor (dışarıdan yol/URL enjekte edilemez)',
+    (bool)preg_match("/preg_match\('\/\^\[A-Za-z0-9_-\]\+\\\\\.css\\\$\/'/", $helperSrc));
+
 echo "\n=== 3. 'YAZDIR' BUTONU KÂĞIDA BASILMIYOR ===\n";
 foreach (array_keys($ciftler) as $f) {
     $s = oku($f);

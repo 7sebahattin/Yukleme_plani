@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v245';
+const CACHE_NAME = 'yukleme-plani-v246';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
