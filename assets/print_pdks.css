@@ -1,0 +1,340 @@
+/*
+ * ASYA FRESH — PERSONEL TAKİBİ YAZDIRMA TEMASI
+ * assets/print_pdks.css  ·  Sprint Print-PDKS-02
+ *
+ * assets/print_base.css'in ÜZERİNE yüklenir (onu DEĞİŞTİRMEZ) — yalnız
+ * Personel Takibi yazdırma sayfalarında etkindir, Yükleme/Çıkma/Stok
+ * yazdırma sayfalarına HİÇ dokunmaz. (maliyet.css / hesap.css emsali:
+ * modül kendi stil dosyasını taşıyabilir.)
+ *
+ * ── TASARIMIN İKİ TEMEL KURALI ───────────────────────────────────────
+ *
+ * 1) YAPIYI ÇERÇEVE TAŞIR, RENK YALNIZ GÜÇLENDİRİR.
+ *    Tarayıcının yazdırma penceresindeki "Arka plan grafikleri" seçeneği
+ *    print-color-adjust:exact kuralını EZER (MDN). Yani zemin renkleri
+ *    basılmayabilir. Bu yüzden hiçbir bilgi YALNIZ zemin rengiyle
+ *    anlatılmaz ve HİÇBİR YERDE renkli zemin üstüne BEYAZ yazı yoktur —
+ *    zemin düşerse başlık kâğıtta kaybolurdu. Ayrım çizgi/çerçeve ile
+ *    kurulur (çerçeveler her zaman basılır), renk üstüne eklenir.
+ *
+ * 2) EKRAN VE KÂĞIT AYNI GÖRÜNÜR.
+ *    print_base.css'in görsel kurallarının neredeyse tamamı @media print
+ *    İÇİNDEdir; ekranda uygulanmaz, bu yüzden önizleme çıplak HTML gibi
+ *    görünüyordu. Buradaki kurallar medya sorgusunun DIŞINDA tanımlanır,
+ *    @media print yalnız kâğıda özgü düzeltmeleri (gizleme, sayfa kırma,
+ *    punto) yapar.
+ */
+
+:root {
+    --pr-ink:        #14202e;   /* ana metin */
+    --pr-muted:      #5b6b7f;   /* etiket/ikincil */
+    --pr-accent:     #1a56db;   /* birincil vurgu (başlık bandı, üst şerit) */
+    --pr-accent-dk:  #12398f;   /* bölüm başlığı */
+    --pr-line:       #94a3b8;   /* güçlü çerçeve */
+    --pr-line-soft:  #c8d2df;   /* hücre çerçevesi */
+    --pr-head-bg:    #e7edfa;   /* tablo başlık zemini */
+    --pr-zebra:      #f2f5f9;   /* çift satır zemini */
+    --pr-total-bg:   #fff6da;   /* toplam satırı */
+    --pr-ok:         #0f6b46;
+    --pr-warn:       #9a5b06;
+    --pr-bad:        #b3261e;
+}
+
+/* =========================================================
+   SAYFA ZEMİNİ + KÂĞIT (ekran önizlemesi)
+   ========================================================= */
+body.print-page {
+    background: #eef1f5;
+    color: var(--pr-ink);
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0;
+}
+
+body.print-page .print-sheet {
+    background: #fff;
+    max-width: 1040px;
+    margin: 18px auto 40px;
+    padding: 26px 30px 34px;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(16, 32, 56, .13), 0 10px 28px rgba(16, 32, 56, .10);
+}
+body.print-page.print-portrait .print-sheet { max-width: 820px; }
+
+/* =========================================================
+   AKSİYON ÇUBUĞU — ekranda görünür, kâğıda BASILMAZ
+   ========================================================= */
+.pr-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed #c3ccd8;
+}
+.pr-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 15px;
+    border: 1px solid #c3ccd8;
+    border-radius: 7px;
+    background: #fff;
+    color: #1e293b;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+}
+.pr-btn:hover { background: #f4f6fa; border-color: #94a3b8; }
+.pr-btn-primary {
+    background: var(--pr-accent);
+    border-color: var(--pr-accent);
+    color: #fff;
+}
+.pr-btn-primary:hover { background: #1447b5; border-color: #1447b5; }
+
+/* =========================================================
+   BAŞLIK BANDI
+   Başlık vurgu RENGİNDE YAZIdır — renkli zemin üstünde beyaz yazı
+   DEĞİL; zemin basılmasa da okunur kalır.
+   ========================================================= */
+.print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 18px;
+    border-bottom: 3px solid var(--pr-accent);
+    padding-bottom: 9px;
+    margin-bottom: 4px;
+}
+.print-header-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: .4px;
+    color: var(--pr-accent);
+    line-height: 1.15;
+}
+.print-header-sub {
+    font-size: .82rem;
+    color: var(--pr-muted);
+    margin-top: 3px;
+    font-weight: 600;
+}
+.print-header-meta {
+    text-align: right;
+    font-size: .74rem;
+    color: var(--pr-muted);
+    white-space: nowrap;
+}
+
+/* =========================================================
+   BÖLÜM BAŞLIĞI
+   ========================================================= */
+.print-sheet .pr-section {
+    font-size: .95rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--pr-accent-dk);
+    border-left: 4px solid var(--pr-accent);
+    padding: 0 0 0 9px;
+    margin: 20px 0 8px;
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+/* =========================================================
+   ÖZET KUTULARI — eşit genişlikli ızgara (flex'te son kutu
+   taşıyordu), üstte vurgu şeridi, değer büyük ve koyu
+   ========================================================= */
+.print-summary-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 9px;
+    margin: 10px 0 4px;
+}
+.print-summary-box {
+    border: 1px solid var(--pr-line);
+    border-top: 3px solid var(--pr-accent);
+    border-radius: 5px;
+    background: #fff;
+    padding: 8px 10px 9px;
+    text-align: left;
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.print-summary-box .psb-label {
+    display: block;
+    font-size: .63rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .7px;
+    color: var(--pr-muted);
+    margin-bottom: 2px;
+}
+.print-summary-box .psb-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--pr-ink);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+/* Anlam taşıyan kutular — renk YALNIZ vurgu şeridinde ve değerde */
+.print-summary-box.psb-warn { border-top-color: var(--pr-warn); }
+.print-summary-box.psb-warn .psb-value { color: var(--pr-warn); }
+.print-summary-box.psb-ok   { border-top-color: var(--pr-ok); }
+.print-summary-box.psb-ok .psb-value { color: var(--pr-ok); }
+
+/* =========================================================
+   TABLO
+   ========================================================= */
+table.print-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--pr-line);
+    font-size: .8rem;
+    margin: 0 0 6px;
+}
+table.print-table th,
+table.print-table td {
+    border: 1px solid var(--pr-line-soft);
+    padding: 5px 7px;
+    vertical-align: middle;
+    text-align: left;
+}
+table.print-table thead th {
+    background: var(--pr-head-bg);
+    color: var(--pr-accent-dk);
+    border-bottom: 2px solid var(--pr-accent);
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    white-space: nowrap;
+}
+table.print-table tbody tr:nth-child(even) td { background: var(--pr-zebra); }
+table.print-table tbody tr:first-child td { border-top: none; }
+
+/* Sayısal hücreler — sağa yaslı ve sabit genişlikli rakam, kolonlar
+   birbirini tutsun (para/adet kolonları göz hizasında okunur). */
+table.print-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+table.print-table .num-strong {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+/* Toplam satırı */
+table.print-table tfoot td {
+    background: var(--pr-total-bg);
+    border-top: 2px solid var(--pr-accent);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+table.print-table tfoot td:first-child { text-align: left; }
+
+/* Boş durum satırı */
+table.print-table td.pr-empty {
+    text-align: center;
+    color: var(--pr-muted);
+    font-style: italic;
+    padding: 14px 8px;
+}
+
+/* =========================================================
+   DURUM ETİKETİ — çerçeve + renkli YAZI (zemin şart değil)
+   ========================================================= */
+.pr-tag {
+    display: inline-block;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: .68rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--pr-muted);
+}
+.pr-tag-ok   { color: var(--pr-ok); }
+.pr-tag-warn { color: var(--pr-warn); }
+.pr-tag-bad  { color: var(--pr-bad); }
+
+/* Açıklama/dipnot */
+.print-sheet .pr-note {
+    font-size: .74rem;
+    color: var(--pr-muted);
+    margin: 4px 0 0;
+}
+
+/* =========================================================
+   KÂĞIDA ÖZGÜ DÜZELTMELER
+   ========================================================= */
+@media print {
+    body.print-page {
+        background: #fff;
+        font-size: 9pt;
+    }
+    body.print-page .print-sheet {
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    /* Ekrana ait her şey kâğıttan çıkar */
+    .pr-actions { display: none !important; }
+
+    .print-header { margin-bottom: 2px; padding-bottom: 7px; }
+    .print-header-title { font-size: 14.5pt; }
+    .print-header-sub { font-size: 8pt; }
+    .print-header-meta { font-size: 7.2pt; }
+
+    .print-sheet .pr-section { font-size: 10pt; margin: 13px 0 6px; }
+
+    .print-summary-row {
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+        gap: 6px;
+        margin: 7px 0 2px;
+    }
+    .print-summary-box { padding: 5px 7px 6px; }
+    .print-summary-box .psb-label { font-size: 6.2pt; }
+    .print-summary-box .psb-value { font-size: 12pt; }
+
+    table.print-table { font-size: 7.8pt; }
+    table.print-table th,
+    table.print-table td { padding: 3px 5px; }
+    table.print-table thead th { font-size: 6.6pt; }
+
+    /* Uzun tabloda başlık her sayfada tekrarlar, satır ikiye bölünmez
+       (print_base.css de aynısını söyler — burada tekrarı kasıtlı:
+       bu dosya tek başına da doğru basmalı). */
+    table.print-table thead { display: table-header-group; }
+    table.print-table tfoot { display: table-row-group; }
+    table.print-table tr { break-inside: avoid; page-break-inside: avoid; }
+
+    .pr-tag { font-size: 6.4pt; }
+    .print-sheet .pr-note { font-size: 6.8pt; }
+
+    /* Zemin renkleri yazıcıya taşınsın diye İSTENİR; kullanıcı
+       "Arka plan grafikleri"ni kapatırsa yine de her şey okunur
+       kalır (yapı çerçevelerde). */
+    .print-summary-box,
+    table.print-table thead th,
+    table.print-table tbody tr:nth-child(even) td,
+    table.print-table tfoot td {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

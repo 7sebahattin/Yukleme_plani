@@ -60,12 +60,12 @@ $orientation = print_orientation($mode, 8);
 
 $geriUrl = 'mesai_degerlendirme.php?session_id=' . (int)$sessionId;
 
-render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orientation);
+render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orientation, ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h($geriUrl) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Değerlendirmeye Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h($geriUrl) ?>" class="pr-btn">← Değerlendirmeye Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -76,18 +76,18 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
         'Yazdırma: ' . date('d.m.Y H:i')
     ) ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Mesai Özeti</h3>
+    <h3 class="pr-section">Mesai Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Dönem</div><div class="psb-value"><?= count($donemler) ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Tam Mesai</div><div class="psb-value"><?= $sayimTam ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Yarım Mesai</div><div class="psb-value"><?= $sayimYarim ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Karar Bekleyen</div><div class="psb-value"><?= $sayimBekleyen ?></div></div>
+        <div class="print-summary-box<?= $sayimBekleyen > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Karar Bekleyen</div><div class="psb-value"><?= $sayimBekleyen ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Onaylı Fazla Mesai</div><div class="psb-value"><?= $fmOnayToplam ?> sa</div></div>
         <div class="print-summary-box"><div class="psb-label">Normal Mesai</div><div class="psb-value"><?= h(sprintf('%ds %02ddk', intdiv($normalDk, 60), $normalDk % 60)) ?></div></div>
     </div>
-    <p style="font-size:.78rem;color:#555;margin:0 0 8px">Normal mesai süresi bu oturum açılırken çavuşun ayarından dondurulmuştur; sabit bir başlangıç/bitiş saati yoktur, yalnız geçen süre esas alınır.</p>
+    <p class="pr-note">Normal mesai süresi bu oturum açılırken çavuşun ayarından dondurulmuştur; sabit bir başlangıç/bitiş saati yoktur, yalnız geçen süre esas alınır.</p>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Kart Bazlı Değerlendirme</h3>
+    <h3 class="pr-section">Kart Bazlı Değerlendirme</h3>
     <table class="print-table">
         <thead>
         <tr>
@@ -121,7 +121,7 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
         </tr>
         <?php endforeach; ?>
         <?php if (empty($donemler)): ?>
-        <tr><td colspan="8" style="text-align:center;color:#666">Bu oturumda mesai dönemi bulunamadı.</td></tr>
+        <tr><td colspan="8" class="pr-empty">Bu oturumda mesai dönemi bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>

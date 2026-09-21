@@ -86,12 +86,17 @@ function print_body_class(string $module, string $mode, string $orientation): st
  * @param string $module     Modül adı
  * @param string $mode       'detail' | 'summary'
  * @param string $orientation 'portrait' | 'landscape'
+ * @param string[] $extra_css Ek stil dosyaları (assets/ altında, print_base'DEN
+ *                            SONRA yüklenir). Modül kendi yazdırma temasını
+ *                            taşıyabilsin diye — boş bırakılırsa davranış
+ *                            eskisiyle AYNIdır, mevcut sayfalar etkilenmez.
  */
 function render_print_page_start(
     string $title,
     string $module,
     string $mode,
-    string $orientation
+    string $orientation,
+    array $extra_css = []
 ): void {
     $body_class = print_body_class($module, $mode, $orientation);
     $page_style = print_page_style($orientation);
@@ -103,6 +108,11 @@ function render_print_page_start(
     echo "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n";
     echo "<title>" . htmlspecialchars($title, ENT_QUOTES) . "</title>\n";
     echo "<link rel=\"stylesheet\" href=\"{$asset_path}print_base.css\">\n";
+    foreach ($extra_css as $css) {
+        // Yalnız assets/ altındaki sade dosya adları — dışarıdan yol gelmez.
+        if (!preg_match('/^[A-Za-z0-9_-]+\.css$/', $css)) continue;
+        echo "<link rel=\"stylesheet\" href=\"{$asset_path}" . $css . "\">\n";
+    }
     echo $page_style;
     echo "</head>\n";
     echo "<body class=\"{$body_class}\">\n";

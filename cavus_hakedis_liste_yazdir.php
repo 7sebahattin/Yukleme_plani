@@ -82,12 +82,12 @@ $geriUrl = 'cavus_hakedis.php?' . http_build_query(array_filter([
     'tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f,
 ], fn($v) => $v !== null && $v !== ''));
 
-render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientation);
+render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientation, ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h($geriUrl) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Hakedişe Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h($geriUrl) ?>" class="pr-btn">← Hakedişe Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -99,32 +99,32 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
         'Yazdırma: ' . date('d.m.Y H:i')
     ) ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Gün Özeti</h3>
+    <h3 class="pr-section">Gün Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Mesai</div><div class="psb-value"><?= count($satirlar) ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Kadın</div><div class="psb-value"><?= $topKadin ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Erkek</div><div class="psb-value"><?= $topErkek ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $topIsci ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $topEksik ?></div></div>
+        <div class="print-summary-box<?= $topEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $topEksik ?></div></div>
     </div>
 
     <?php if (!empty($hakedisParaBirimi)): ?>
-    <h3 style="font-size:1rem;margin:12px 0 6px">Hakediş Toplamı</h3>
+    <h3 class="pr-section">Hakediş Toplamı</h3>
     <table class="print-table">
         <thead><tr><th>Para Birimi</th><th>Hesaplanmış Mesai</th><th>Toplam Hakediş</th></tr></thead>
         <tbody>
         <?php foreach ($hakedisParaBirimi as $cur => $v): ?>
         <tr>
             <td><?= h($cur) ?></td>
-            <td><?= (int)$v['adet'] ?></td>
-            <td><?= h(number_format($v['tutar'], 2, ',', '.')) ?></td>
+            <td class="num"><?= (int)$v['adet'] ?></td>
+            <td class="num"><?= h(number_format($v['tutar'], 2, ',', '.')) ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
     <?php endif; ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Çavuş Bazlı Hakediş</h3>
+    <h3 class="pr-section">Çavuş Bazlı Hakediş</h3>
     <table class="print-table">
         <thead>
         <tr>
@@ -138,9 +138,9 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
         ?>
         <tr>
             <td><?= h($sess['foreman_name_snapshot']) ?></td>
-            <td><?= (int)($p['giris']['Kadın'] ?? 0) ?></td>
-            <td><?= (int)($p['giris']['Erkek'] ?? 0) ?></td>
-            <td><?= (int)$p['giris_toplam'] ?></td>
+            <td class="num"><?= (int)($p['giris']['Kadın'] ?? 0) ?></td>
+            <td class="num"><?= (int)($p['giris']['Erkek'] ?? 0) ?></td>
+            <td class="num"><?= (int)$p['giris_toplam'] ?></td>
             <td><?php
                 if (!$faz8bHazir) echo '—';
                 elseif ($f8['tam_hazir']) echo 'Hazır';
@@ -157,18 +157,18 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
-        <tr><td colspan="8" style="text-align:center;color:#666">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
+        <tr><td colspan="8" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
         <?php if (!empty($satirlar)): ?>
         <tfoot>
         <tr>
             <td>TOPLAM (<?= count($satirlar) ?> mesai)</td>
-            <td><?= $topKadin ?></td>
-            <td><?= $topErkek ?></td>
-            <td><?= $topIsci ?></td>
+            <td class="num"><?= $topKadin ?></td>
+            <td class="num"><?= $topErkek ?></td>
+            <td class="num"><?= $topIsci ?></td>
             <td>—</td><td>—</td><td>—</td>
-            <td><?= $topEksik ?></td>
+            <td class="num"><?= $topEksik ?></td>
         </tr>
         </tfoot>
         <?php endif; ?>

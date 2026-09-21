@@ -59,12 +59,12 @@ if ($finansalGosterilebilir) {
     $guncelBakiye = pdks_rapor_bakiye_toplu($depo, $cavusId, $pdo);
 }
 
-render_print_page_start('Yönetim Raporu', 'daily', 'summary', 'portrait');
+render_print_page_start('Yönetim Raporu', 'daily', 'summary', 'portrait', ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="rapor-actions no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h('raporlar.php?' . http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId], fn($v) => $v !== null && $v !== ''))) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Rapora Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h('raporlar.php?' . http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId], fn($v) => $v !== null && $v !== ''))) ?>" class="pr-btn">← Rapora Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -74,7 +74,7 @@ render_print_page_start('Yönetim Raporu', 'daily', 'summary', 'portrait');
         'Yazdırma: ' . date('d.m.Y H:i')
     ) ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Operasyonel Özet</h3>
+    <h3 class="pr-section">Operasyonel Özet</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Toplam Çalışan</div><div class="psb-value"><?= (int)$kpi['toplam_calisan'] ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Aktif Çavuş</div><div class="psb-value"><?= (int)$kpi['aktif_cavus'] ?></div></div>
@@ -83,18 +83,18 @@ render_print_page_start('Yönetim Raporu', 'daily', 'summary', 'portrait');
         <div class="print-summary-box"><div class="psb-label">Açık Mesai</div><div class="psb-value"><?= (int)$kpi['acik_mesai'] ?></div></div>
     </div>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">İşçi Tipi Dağılımı</h3>
+    <h3 class="pr-section">İşçi Tipi Dağılımı</h3>
     <table class="print-table">
         <thead><tr><th>İşçi Tipi</th><th>Katılım</th><th>Yüzde</th></tr></thead>
         <tbody>
         <?php foreach ($tipDagilim as $t): ?>
-        <tr><td><?= h($t['ad']) ?></td><td><?= (int)$t['adet'] ?></td><td><?= h(number_format($t['yuzde'], 1, ',', '.')) ?>%</td></tr>
+        <tr><td><?= h($t['ad']) ?></td><td class="num"><?= (int)$t['adet'] ?></td><td class="num"><?= h(number_format($t['yuzde'], 1, ',', '.')) ?>%</td></tr>
         <?php endforeach; ?>
         </tbody>
     </table>
 
     <?php if ($finansalGosterilebilir && !empty($finansalKpi)): ?>
-    <h3 style="font-size:1rem;margin:12px 0 6px">Finansal Özet</h3>
+    <h3 class="pr-section">Finansal Özet</h3>
     <table class="print-table">
         <thead><tr><th>Para Birimi</th><th>Kesinleşmiş Hakediş</th><th>Yapılan Ödeme</th><th>Dönem Net Hareket</th><th>Güncel Bakiye</th></tr></thead>
         <tbody>
@@ -105,39 +105,39 @@ render_print_page_start('Yönetim Raporu', 'daily', 'summary', 'portrait');
         ?>
         <tr>
             <td><?= h($cur) ?></td>
-            <td><?= h(number_format((float)$f['hakedis'], 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)$f['odeme'], 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)$f['net'], 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)$b['bakiye'], 2, ',', '.')) ?> (<?= h($b['durum_etiket']) ?>)</td>
+            <td class="num"><?= h(number_format((float)$f['hakedis'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$f['odeme'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$f['net'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$b['bakiye'], 2, ',', '.')) ?> (<?= h($b['durum_etiket']) ?>)</td>
         </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
     <?php endif; ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Çavuş Bazlı Özet</h3>
+    <h3 class="pr-section">Çavuş Bazlı Özet</h3>
     <table class="print-table">
         <thead><tr><th>Çavuş</th><th>Çalışılan Gün</th><th>Toplam İşçi</th><th>Eksik Çıkış</th><?php if ($finansalGosterilebilir): ?><th>Güncel Bakiye</th><?php endif; ?></tr></thead>
         <tbody>
         <?php foreach ($cavusOzeti as $c): $f = $c['foreman']; ?>
         <tr>
             <td><?= h($f['name']) ?></td>
-            <td><?= (int)$c['calisilan_gun'] ?></td>
-            <td><?= (int)$c['toplam_isci'] ?></td>
-            <td><?= (int)$c['eksik_cikis'] ?></td>
+            <td class="num"><?= (int)$c['calisilan_gun'] ?></td>
+            <td class="num"><?= (int)$c['toplam_isci'] ?></td>
+            <td class="num"><?= (int)$c['eksik_cikis'] ?></td>
             <?php if ($finansalGosterilebilir): ?>
             <td><?php if (empty($c['guncel_bakiye'])) echo '—'; else foreach ($c['guncel_bakiye'] as $cur => $b) echo h(number_format((float)$b['bakiye'], 2, ',', '.')) . ' ' . h($cur) . ' '; ?></td>
             <?php endif; ?>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($cavusOzeti)): ?>
-        <tr><td colspan="<?= $finansalGosterilebilir ? 5 : 4 ?>" style="text-align:center;color:#666">Bu tarih/filtrelerde çavuş hareketi yok.</td></tr>
+        <tr><td colspan="<?= $finansalGosterilebilir ? 5 : 4 ?>" class="pr-empty">Bu tarih/filtrelerde çavuş hareketi yok.</td></tr>
         <?php endif; ?>
         </tbody>
     </table>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">İstisnalar</h3>
-    <p style="font-size:.85rem;margin:0 0 6px">Eksik Çıkış: <strong><?= count($eksikler) ?></strong> · Açık Mesai (hâlâ içeride): <strong><?= count($acikMesai) ?></strong></p>
+    <h3 class="pr-section">İstisnalar</h3>
+    <p class="pr-note">Eksik Çıkış: <strong><?= count($eksikler) ?></strong> · Açık Mesai (hâlâ içeride): <strong><?= count($acikMesai) ?></strong></p>
     <?php if (!empty($eksikler)): ?>
     <table class="print-table">
         <thead><tr><th>Tarih</th><th>Çavuş</th><th>Kart No</th><th>Tip</th><th>Giriş Saati</th></tr></thead>

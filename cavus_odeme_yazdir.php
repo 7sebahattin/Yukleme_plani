@@ -39,12 +39,12 @@ if (!$cavus) { set_flash('error', 'Çavuş bulunamadı.'); header('Location: cav
 $bakiyeler = pdks_cari_bakiye($foremanId, $pdo);
 $odemeler = pdks_cari_odeme_listesi($foremanId, $pdo);
 
-render_print_page_start('Çavuş Ödeme Dökümü', 'account', 'detail', 'portrait');
+render_print_page_start('Çavuş Ödeme Dökümü', 'account', 'detail', 'portrait', ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="rapor-actions no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="cavus_odeme.php?cavus=<?= (int)$foremanId ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Ödeme Sayfasına Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="cavus_odeme.php?cavus=<?= (int)$foremanId ?>" class="pr-btn">← Ödeme Sayfasına Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -65,7 +65,7 @@ render_print_page_start('Çavuş Ödeme Dökümü', 'account', 'detail', 'portra
             <td><?= h(pdks_cari_odeme_yontem_etiketi($o['payment_method'])) ?></td>
             <td><?= h($o['reference_no'] ?: '—') ?></td>
             <td><?= h($o['description'] ?: '—') ?></td>
-            <td><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$o['amount'], 2, ',', '.')) ?></td>
             <td><?= h($o['currency']) ?></td>
             <td>
                 <?= h(pdks_cari_odeme_durum_etiketi($o['status'])) ?>
@@ -78,14 +78,14 @@ render_print_page_start('Çavuş Ödeme Dökümü', 'account', 'detail', 'portra
         </tbody>
     </table>
 
-    <h3 style="font-size:1rem;margin:14px 0 6px">Geçerli Ödeme Toplamı (İptal Edilenler Hariç)</h3>
+    <h3 class="pr-section">Geçerli Ödeme Toplamı (İptal Edilenler Hariç)</h3>
     <table class="print-table" style="max-width:420px">
         <thead><tr><th>Para Birimi</th><th>Toplam Geçerli Ödeme</th></tr></thead>
         <tbody>
         <?php if (empty($bakiyeler)): ?>
-        <tr><td colspan="2" style="text-align:center;color:#666">Geçerli ödeme yok.</td></tr>
+        <tr><td colspan="2" class="pr-empty">Geçerli ödeme yok.</td></tr>
         <?php else: foreach ($bakiyeler as $cur => $b): ?>
-        <tr><td><?= h($cur) ?></td><td><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></td></tr>
+        <tr><td><?= h($cur) ?></td><td class="num"><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></td></tr>
         <?php endforeach; endif; ?>
         </tbody>
     </table>

@@ -46,12 +46,12 @@ if ($faz8bHazir && !empty($satirlar)) {
         && array_key_exists('overtime_total', $ilkSatir);
 }
 
-render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'portrait');
+render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'portrait', ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="rapor-actions no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="cavus_hakedis_detay.php?id=<?= (int)$id ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Hakediş Detayına Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="cavus_hakedis_detay.php?id=<?= (int)$id ?>" class="pr-btn">← Hakediş Detayına Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -99,15 +99,15 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
                 <?php else: ?>—<?php endif; ?>
             </td>
             <?php endif; ?>
-            <td><?= (int)$sl['worker_count'] ?></td>
-            <td><?= h(number_format((float)$sl['unit_rate'], 2, ',', '.')) ?></td>
-            <td><?= h(number_format((float)$sl['line_total'], 2, ',', '.')) ?></td>
+            <td class="num"><?= (int)$sl['worker_count'] ?></td>
+            <td class="num"><?= h(number_format((float)$sl['unit_rate'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$sl['line_total'], 2, ',', '.')) ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
         <tfoot><tr>
             <td colspan="<?= $faz8bHazir ? '5' : '3' ?>" style="text-align:right">GENEL TOPLAM</td>
-            <td><?= h(number_format((float)$hakedis['total_amount'], 2, ',', '.')) ?> <?= h($hakedis['currency']) ?></td>
+            <td class="num"><?= h(number_format((float)$hakedis['total_amount'], 2, ',', '.')) ?> <?= h($hakedis['currency']) ?></td>
         </tr></tfoot>
     </table>
 

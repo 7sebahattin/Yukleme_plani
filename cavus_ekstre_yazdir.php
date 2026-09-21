@@ -41,12 +41,12 @@ if ($bitis !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $bitis) || !strtotime
 
 $ekstre = pdks_cari_ekstre($foremanId, $baslangic ?: null, $bitis ?: null, $pdo);
 
-render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'portrait');
+render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'portrait', ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="rapor-actions no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="cavus_ekstre.php?foreman_id=<?= (int)$foremanId ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Ekstreye Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="cavus_ekstre.php?foreman_id=<?= (int)$foremanId ?>" class="pr-btn">← Ekstreye Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -61,7 +61,7 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
     <p style="text-align:center;color:#666;padding:20px">Bu tarih aralığında hiçbir para biriminde hareket bulunamadı.</p>
     <?php else: foreach ($ekstre as $cur => $satirlar): if (empty($satirlar)) continue; ?>
 
-    <h3 style="font-size:1rem;margin:14px 0 6px"><?= h($cur) ?> Hareketleri</h3>
+    <h3 class="pr-section"><?= h($cur) ?> Hareketleri</h3>
     <table class="print-table">
         <thead><tr><th>Tarih</th><th>İşlem Türü</th><th>Belge / Referans</th><th>Açıklama</th><th>Hakediş / Borç Artışı</th><th>Ödeme / Azalış</th><th>Bakiye</th></tr></thead>
         <tbody>
@@ -76,7 +76,7 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
             <td><?= h($s['aciklama']) ?></td>
             <td><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '' ?></td>
             <td><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '' ?></td>
-            <td><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></td>
         </tr>
         <?php endforeach; $sonBakiye = (float)end($satirlar)['kosan_bakiye'];
             $durum = $sonBakiye > 0 ? 'borc' : ($sonBakiye < 0 ? 'avans' : 'kapali');
@@ -89,11 +89,11 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
         </tbody>
         <tfoot>
         <tr><td colspan="4" style="text-align:right">TOPLAM</td>
-            <td><?= h(number_format($toplamArtis, 2, ',', '.')) ?></td>
-            <td><?= h(number_format($toplamAzalis, 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format($toplamArtis, 2, ',', '.')) ?></td>
+            <td class="num"><?= h(number_format($toplamAzalis, 2, ',', '.')) ?></td>
             <td>—</td></tr>
         <tr><td colspan="6" style="text-align:right">KALAN BAKİYE — <?= h($durumEtiket) ?></td>
-            <td><?= h(number_format(abs($sonBakiye), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+            <td class="num"><?= h(number_format(abs($sonBakiye), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
         </tfoot>
     </table>
     <?php endforeach; endif; ?>

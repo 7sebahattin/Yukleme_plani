@@ -68,12 +68,12 @@ $geriUrl = 'gunluk_isci_puantaj.php?' . http_build_query(array_filter([
     'tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f,
 ], fn($v) => $v !== null && $v !== ''));
 
-render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation);
+render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation, ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h($geriUrl) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Puantaja Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h($geriUrl) ?>" class="pr-btn">← Puantaja Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -85,20 +85,20 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
         'Yazdırma: ' . date('d.m.Y H:i')
     ) ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Gün Özeti</h3>
+    <h3 class="pr-section">Gün Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Aktif Çavuş</div><div class="psb-value"><?= (int)$gunOzeti['aktif_cavus'] ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Kadın İşçi</div><div class="psb-value"><?= (int)($gunOzeti['giris']['Kadın'] ?? 0) ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Erkek İşçi</div><div class="psb-value"><?= (int)($gunOzeti['giris']['Erkek'] ?? 0) ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= (int)$gunOzeti['giris_toplam'] ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Tam Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['tam_cikis'] ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['eksik_cikis'] ?></div></div>
+        <div class="print-summary-box psb-ok"><div class="psb-label">Tam Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['tam_cikis'] ?></div></div>
+        <div class="print-summary-box<?= (int)$gunOzeti['eksik_cikis'] > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['eksik_cikis'] ?></div></div>
     </div>
     <?php if ($cavusId !== null || $durum_f !== ''): ?>
-    <p style="font-size:.78rem;color:#555;margin:0 0 8px">Gün özeti günün TAMAMINI gösterir; aşağıdaki tablo seçili filtreye göre süzülmüştür.</p>
+    <p class="pr-note">Gün özeti günün TAMAMINI gösterir; aşağıdaki tablo seçili filtreye göre süzülmüştür.</p>
     <?php endif; ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Çavuş Bazlı Mesai</h3>
+    <h3 class="pr-section">Çavuş Bazlı Mesai</h3>
     <table class="print-table">
         <thead>
         <tr>
@@ -112,38 +112,38 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
         <tr>
             <td><?= h($s['foreman_name_snapshot']) ?></td>
             <td><?= h($s['depo'] ?: '—') ?></td>
-            <td><?= (int)($row['giris']['Kadın'] ?? 0) ?></td>
-            <td><?= (int)($row['giris']['Erkek'] ?? 0) ?></td>
-            <td><?= (int)$row['giris_toplam'] ?></td>
-            <td><?= (int)$row['cikis_toplam'] ?></td>
-            <td><?= (int)$row['eksik_toplam'] ?></td>
+            <td class="num"><?= (int)($row['giris']['Kadın'] ?? 0) ?></td>
+            <td class="num"><?= (int)($row['giris']['Erkek'] ?? 0) ?></td>
+            <td class="num"><?= (int)$row['giris_toplam'] ?></td>
+            <td class="num"><?= (int)$row['cikis_toplam'] ?></td>
+            <td class="num"><?= (int)$row['eksik_toplam'] ?></td>
             <td><?= $row['ilk_giris'] ? h(date('H:i', strtotime($row['ilk_giris']))) : '—' ?></td>
             <td><?= $row['son_cikis'] ? h(date('H:i', strtotime($row['son_cikis']))) : '—' ?></td>
             <td><?= h($row['durum']['etiket']) ?></td>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($gunListesi)): ?>
-        <tr><td colspan="10" style="text-align:center;color:#666">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
+        <tr><td colspan="10" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
         <?php if (!empty($gunListesi)): ?>
         <tfoot>
         <tr>
             <td colspan="2">TOPLAM (<?= count($gunListesi) ?> mesai)</td>
-            <td><?= $lKadin ?></td>
-            <td><?= $lErkek ?></td>
-            <td><?= $lGiris ?></td>
-            <td><?= $lCikis ?></td>
-            <td><?= $lEksik ?></td>
+            <td class="num"><?= $lKadin ?></td>
+            <td class="num"><?= $lErkek ?></td>
+            <td class="num"><?= $lGiris ?></td>
+            <td class="num"><?= $lCikis ?></td>
+            <td class="num"><?= $lEksik ?></td>
             <td>—</td><td>—</td><td>—</td>
         </tr>
         </tfoot>
         <?php endif; ?>
     </table>
 
-    <h3 style="font-size:1rem;margin:14px 0 6px">Eksik Çıkışlar (<?= count($eksikler) ?>)</h3>
+    <h3 class="pr-section">Eksik Çıkışlar (<?= count($eksikler) ?>)</h3>
     <?php if (empty($eksikler)): ?>
-    <p style="font-size:.9rem;margin:0">Bu tarihte eksik çıkış yok.</p>
+    <p class="pr-note">Bu tarihte eksik çıkış yok.</p>
     <?php else: ?>
     <table class="print-table">
         <thead>

@@ -74,12 +74,12 @@ $geriUrl = 'cavus_toplu_dokum.php?' . http_build_query(array_filter([
     'cavus' => $cavusId,
 ], fn($v) => $v !== null && $v !== ''));
 
-render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation);
+render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation, ['print_pdks.css']);
 ?>
 <div class="print-sheet">
-    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-        <button type="button" onclick="window.print()" style="padding:7px 13px;border:1px solid #1a73e8;border-radius:6px;background:#1a73e8;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer">🖨️ Yazdır</button>
-        <a href="<?= h($geriUrl) ?>" style="padding:7px 13px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#1e293b;font-size:.85rem;font-weight:600;text-decoration:none">← Döküme Dön</a>
+    <div class="pr-actions no-print">
+        <button type="button" onclick="window.print()" class="pr-btn pr-btn-primary">🖨️ Yazdır</button>
+        <a href="<?= h($geriUrl) ?>" class="pr-btn">← Döküme Dön</a>
     </div>
 
     <?= render_print_header_html(
@@ -94,16 +94,16 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation)
     <p style="font-size:.9rem">Günlük işçi work-period şeması hazır olmadığı için döküm üretilemiyor.</p>
     <?php else: ?>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Ay Özeti</h3>
+    <h3 class="pr-section">Ay Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Kadın</div><div class="psb-value"><?= $toplamKadin ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Erkek</div><div class="psb-value"><?= $toplamErkek ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $toplamIsci ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
+        <div class="print-summary-box<?= $toplamEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Mesai Günü</div><div class="psb-value"><?= count($satirlar) ?></div></div>
     </div>
 
-    <h3 style="font-size:1rem;margin:12px 0 6px">Gün Bazlı Döküm</h3>
+    <h3 class="pr-section">Gün Bazlı Döküm</h3>
     <table class="print-table">
         <thead>
         <tr>
@@ -123,32 +123,32 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation)
         <tr>
             <td><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></td>
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
-            <td><?= (int)$r['kadin'] ?></td>
-            <td><?= (int)$r['erkek'] ?></td>
-            <td><?= (int)$r['toplam_isci'] ?></td>
+            <td class="num"><?= (int)$r['kadin'] ?></td>
+            <td class="num"><?= (int)$r['erkek'] ?></td>
+            <td class="num"><?= (int)$r['toplam_isci'] ?></td>
             <?php if ($finansalGosterilebilir): ?>
             <td><?php if ($hakedis === null): ?>Hesaplanmadı<?php else: ?><?= h(pdks_rapor_para_formatla($hakedis['total_amount'])) ?> <?= h($hakedis['currency']) ?> (<?= $hakedis['status'] === 'final' ? 'Kesin' : 'Taslak' ?>)<?php endif; ?></td>
             <?php endif; ?>
             <td><?= $r['ilk_giris'] ? h(date('H:i', strtotime($r['ilk_giris']))) : '—' ?></td>
             <td><?= $r['son_cikis'] ? h(date('H:i', strtotime($r['son_cikis']))) : '—' ?></td>
-            <td><?= (int)$r['eksik_cikis'] ?></td>
+            <td class="num"><?= (int)$r['eksik_cikis'] ?></td>
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
-        <tr><td colspan="<?= $kolonSayisi ?>" style="text-align:center;color:#666">Seçilen ay için kayıt bulunamadı.</td></tr>
+        <tr><td colspan="<?= $kolonSayisi ?>" class="pr-empty">Seçilen ay için kayıt bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
         <?php if (!empty($satirlar)): ?>
         <tfoot>
         <tr>
             <td colspan="2">TOPLAM (<?= count($satirlar) ?> mesai günü)</td>
-            <td><?= $toplamKadin ?></td>
-            <td><?= $toplamErkek ?></td>
-            <td><?= $toplamIsci ?></td>
+            <td class="num"><?= $toplamKadin ?></td>
+            <td class="num"><?= $toplamErkek ?></td>
+            <td class="num"><?= $toplamIsci ?></td>
             <?php if ($finansalGosterilebilir): ?><td>—</td><?php endif; ?>
             <td>—</td>
             <td>—</td>
-            <td><?= $toplamEksik ?></td>
+            <td class="num"><?= $toplamEksik ?></td>
         </tr>
         </tfoot>
         <?php endif; ?>
