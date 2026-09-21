@@ -4,8 +4,10 @@
 // Roller ekranı: users.php'de sabit 5 rol arasından seçim yapmak yerine,
 // admin kendi rollerini oluşturup her birine modül bazlı yetki paketi
 // atayabilir. roles/role_permissions/user_roles tabloları zaten mevcuttu
-// (config/db.php'nin ilk kurulum seed'i) — bu sayfa yalnız onların
-// üzerine bir CRUD arayüzü koyar, şema değişikliği yapmaz.
+// (kurulum seed'i config/helpers.php'nin en altındaki migrasyon IIFE'sinde)
+// — bu sayfa yalnız onların üzerine bir CRUD arayüzü koyar, şema
+// değişikliği yapmaz. Seed artık YALNIZ yetkisi hiç olmayan rolü doldurur;
+// buradan kaldırılan bir yetkiyi geri yazmaz (bkz. helpers.php'deki not).
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -14,7 +16,6 @@ $auth_user = require_login();
 require_perm('users.admin');
 
 $pdo = db();
-$me  = (int)$auth_user['id'];
 
 $catalog = permission_catalog();
 $flat_permissions = [];
@@ -26,6 +27,18 @@ $protected_slugs = protected_role_slugs();
 // ── Yardımcılar ────────────────────────────────────────────────────────────
 function valid_role_label(string $l): bool {
     return $l !== '' && mb_strlen($l) <= 80;
+}
+
+// POST'tan gelen yetki listesini temizler: yalnız katalogda TANIMLI, metin
+// olan değerler geçer. is_string kapısı şart — `permissions[]` içine iç içe
+// dizi gönderilirse array_map('strval') "Array to string conversion" uyarısı
+// bastırıyordu (sayfaya PHP uyarısı sızıyordu).
+function clean_permissions($raw, array $flat): array {
+    $out = [];
+    foreach ((array)$raw as $p) {
+        if (is_string($p) && isset($flat[$p])) $out[$p] = true;
+    }
+    return array_keys($out);
 }
 
 // Rol adından slug üretir (Türkçe karakterleri sadeleştirir) ve çakışırsa
@@ -86,10 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ─── Yeni rol oluştur ────────────────────────────────────────────────
     if ($action === 'create_role') {
         $label      = trim($_POST['label'] ?? '');
-        $perms_post = array_values(array_intersect(
-            array_map('strval', (array)($_POST['permissions'] ?? [])),
-            array_keys($flat_permissions)
-        ));
+        $perms_post = clean_permissions($_POST['permissions'] ?? [], $flat_permissions);
 
         if (!valid_role_label($label)) {
             $error = 'Rol adı boş olamaz (en fazla 80 karakter).';
@@ -118,10 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'update_role') {
         $rid        = (int)($_POST['id'] ?? 0);
         $label      = trim($_POST['label'] ?? '');
-        $perms_post = array_values(array_intersect(
-            array_map('strval', (array)($_POST['permissions'] ?? [])),
-            array_keys($flat_permissions)
-        ));
+        $perms_post = clean_permissions($_POST['permissions'] ?? [], $flat_permissions);
 
         $st = $pdo->prepare("SELECT id, slug, label FROM roles WHERE id = ?");
         $st->execute([$rid]);
@@ -159,6 +166,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('lockout');
                 }
                 $pdo->commit();
+            } catch (PDOException $e) {
+                // ÖNEMLİ: PDOException, RuntimeException'ın ALT SINIFIDIR —
+                // bu blok aşağıdakinden ÖNCE gelmezse gerçek bir veritabanı
+                // hatası kullanıcıya "kilitlenme" mesajı olarak gösterilirdi.
+                $pdo->rollBack();
+                $error = 'Rol kaydedilemedi (veritabanı hatası). Lütfen tekrar deneyin.';
             } catch (RuntimeException $e) {
                 $pdo->rollBack();
                 $error = 'Bu değişiklik kaydedilemedi: kaydedilirse sistemde "Kullanıcı ve Rol Yönetimi" yetkisine sahip hiçbir aktif kullanıcı kalmaz. En az bir kullanıcıda bu yetki kalmalı.';
@@ -199,8 +212,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([$rid]);
             $old_perms = $st->fetchAll(PDO::FETCH_COLUMN);
 
-            $pdo->prepare("DELETE FROM role_permissions WHERE role_id = ?")->execute([$rid]);
-            $pdo->prepare("DELETE FROM roles WHERE id = ?")->execute([$rid]);
+            // İki silme tek işlemde: ikincisi patlarsa yetim role_permissions
+            // satırları kalır ve o id yeniden kullanılırsa yanlış yetki verir.
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("DELETE FROM role_permissions WHERE role_id = ?")->execute([$rid]);
+                $pdo->prepare("DELETE FROM roles WHERE id = ?")->execute([$rid]);
+                $pdo->commit();
+            } catch (PDOException $e) {
+                $pdo->rollBack();
+                $error = 'Rol silinemedi (veritabanı hatası). Lütfen tekrar deneyin.';
+            }
+        }
+        if ($error === '') {
             audit_log_event('delete', 'roles', $rid,
                 ['label' => $old['label'], 'slug' => $old['slug'], 'permissions' => implode(', ', $old_perms)],
                 null
@@ -229,6 +253,9 @@ foreach ($pdo->query("SELECT role_id, permission FROM role_permissions")->fetchA
 }
 
 $total_perm_count = count($flat_permissions);
+// Sabit 5 yerine GERÇEKTEN var olan sistem rolünü say — eksik kurulumda
+// "Özel Rol" sayısı eksiye düşüyordu.
+$sistem_rol_sayisi = count(array_filter($roles, fn($r) => in_array($r['slug'], $protected_slugs, true)));
 
 render_header('Roller');
 ?>
@@ -272,6 +299,11 @@ render_header('Roller');
     font-size: .75rem; padding: 0; text-decoration: underline;
 }
 .rol-perm-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.rol-ipucu {
+    font-size: .8rem; color: var(--muted); line-height: 1.45;
+    background: var(--primary-soft, #eef2ff); border-radius: var(--radius-sm);
+    padding: 8px 10px; margin: 0 0 10px;
+}
 .rol-perm-grid .usr-role-check { font-size: .82rem; padding: 5px 9px; }
 </style>
 
@@ -300,11 +332,11 @@ render_header('Roller');
     </div>
     <div class="rpt-sum-item">
         <span>Sistem Rolü</span>
-        <strong><?= count($protected_slugs) ?></strong>
+        <strong><?= $sistem_rol_sayisi ?></strong>
     </div>
     <div class="rpt-sum-item rpt-sum-highlight">
         <span>Özel Rol</span>
-        <strong><?= max(0, count($roles) - count($protected_slugs)) ?></strong>
+        <strong><?= count($roles) - $sistem_rol_sayisi ?></strong>
     </div>
     <div class="rpt-sum-item">
         <span>Toplam Yetki</span>
@@ -321,7 +353,7 @@ render_header('Roller');
 <table>
 <thead>
 <tr>
-    <th style="width:36px">ID</th>
+    <th style="width:58px">ID</th>
     <th>Rol Adı</th>
     <th>Yetki Sayısı</th>
     <th>Kullanıcı</th>
@@ -436,8 +468,17 @@ render_header('Roller');
                 value="<?= $action === 'create_role' ? h(trim($_POST['label'] ?? '')) : '' ?>">
         </div>
         <div class="form-label" style="margin-bottom:6px">Yetkiler</div>
+        <p class="rol-ipucu">
+            <strong>Ana sayfayı görüntüle</strong> yetkisi önerilir: kullanıcı girişten sonra
+            ana sayfaya düşer. Bu yetki olmadan da sistem çalışır — kullanıcı doğrudan
+            erişebildiği ilk sayfaya yönlendirilir.
+        </p>
         <?php
-        $c_perms_post = ($action === 'create_role') ? array_map('strval', (array)($_POST['permissions'] ?? [])) : [];
+        // Yeni rol VARSAYILANI: ana sayfa. POST hatasından sonra kullanıcının
+        // kendi seçimi korunur (varsayılana geri dönmez).
+        $c_perms_post = ($action === 'create_role')
+            ? clean_permissions($_POST['permissions'] ?? [], $flat_permissions)
+            : ['dashboard.read'];
         render_permission_grid($catalog, $c_perms_post, 'c');
         ?>
     </div>

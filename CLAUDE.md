@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v217` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v248` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -581,6 +581,64 @@ kategori kırılımı (yüzde çubuklu) → işlem listesi (durum rozetli) → i
 
 **Bağımlılık:** `dompdf/dompdf ^3.0`, `vendor/` içinde commit'li (depo pratiği).
 `vendor/` ~22 MB; 7.6 MB'ı DejaVu font ailesi — Türkçe için gerekli, silme.
+
+---
+
+## Rol Yönetimi (Sprint Rol-01 / Rol-02)
+
+Sabit 5 rol yerine **admin kendi rollerini tanımlar**. Altyapı (roles /
+role_permissions / user_roles) zaten vardı; `roles.php` onun üzerine CRUD koyar.
+
+**Dosyalar:** `roles.php` (liste + oluştur/düzenle/sil) · `config/auth.php`
+(`permission_catalog()`, `protected_role_slugs()`, `any_active_user_has_permission()`) ·
+`config/helpers.php` (`first_allowed_page()` + sidebar/topnav linki).
+**Test:** `php scripts/roles_ui_smoke.php` (ekran + POST akışları) ·
+`php scripts/rol_kapilari_smoke.php` (yetki mimarisi değişmezleri).
+
+- **Yetki kataloğu `permission_catalog()`** — 10 modül grubu, 51 yetki, Türkçe
+  etiketli. `config/helpers.php`'deki kurulum seed'iyle (`$all_p`/`$pdks_p`)
+  AYNI string'ler; `rol_kapilari_smoke` ikisinin ayrışmadığını doğrular.
+  Yeni yetki eklerken **üç yeri birden** güncelle: katalog + ilgili sayfadaki
+  `can()` kapısı + seed listesi.
+- **Seed YALNIZ yetkisi hiç olmayan role uygulanır** (helpers.php migrasyon
+  IIFE'si). Eskiden koşulsuz `INSERT IGNORE` idi ve her istekte çalıştığı için
+  roles.php'den kaldırılan yetkiyi **sessizce geri yazıyordu** — sistem
+  rollerinin yetkisi hiç düzenlenemiyordu. **Koşulu kaldırma.** Bedeli: seed
+  listesine sonradan eklenen yetki mevcut rollere kendiliğinden inmez,
+  roles.php'den elle verilir.
+- **Slug değişmez.** Yalnız oluşturmada üretilir (`role_slug_from_label`,
+  TR karakter sadeleştirmesi + `_2` ile tekilleştirme). `is_admin()` ve rozet
+  renkleri slug'a bakar; `update_role` `slug` kolonuna DOKUNMAZ.
+- **5 sistem rolü silinemez** (`protected_role_slugs()`) — adı/yetkisi
+  düzenlenebilir. Kullanıcı atanmış rol de silinemez (önce kullanıcıları taşı).
+- **Kilitlenme kilidi:** yazma işlemi transaction içinde yapılır, commit'ten
+  önce `any_active_user_has_permission('users.admin')` sorulur; false ise
+  rollback. **`users.php` de aynı kilidi taşır** (update_user + toggle_active) —
+  oradaki eski koruma yalnız `admin` SLUG'ına bakıyordu ve özel bir roldeki
+  `users.admin`'i göremiyordu (üç adımda kalıcı kilitlenme mümkündü).
+- **`PDOException`, `RuntimeException`'ın ALT SINIFIDIR** — `catch (PDOException)`
+  bloğu her zaman `catch (RuntimeException)`'dan ÖNCE gelmeli, yoksa gerçek DB
+  hatası kullanıcıya "kilitlenme" mesajı olarak görünür.
+- **`users.admin` = ana anahtar.** Bu yetkiyi verdiğin rol, users.php'den
+  kendisine admin rolü atayabilir → fiilen tam yönetici. Sınırlı yönetici
+  rolü diye tanıtma.
+- **`is_admin()` (slug) ≠ `users.admin` (yetki).** `audit.php` ve
+  `admin_db_backups.php` `is_admin()` ile kapılıdır; katalogda karşılıkları
+  YOKTUR, yani özel role devredilemez. Bilinçli.
+- **`first_allowed_page()`** — giriş akışı login → depo_sec → `index.php`'dir ve
+  index.php `dashboard.read` ister. Bu yetkisi olmayan rol girişte **403'e
+  düşüp sistemi hiç kullanamıyordu** (403 sayfasının tek bağlantısı yine
+  index.php; mobilde bottomnav'ın tek düğmesi de oraya gider). index.php artık
+  403 basmaz, kullanıcının açabildiği ilk sayfaya yönlendirir. Fonksiyondaki
+  her satır **hedef sayfanın KENDİ kapısıyla** birebir aynı koşulu taşır —
+  sayfa kapısını değiştirirken burayı da güncelle.
+- **Hesap modülünün sessiz köprüleri kaldırıldı** (`hesap_can()`):
+  `reports.read → hesap.read`, `records.write → hesap.write`,
+  `records.delete → hesap.delete` eşlemeleri vardı; Roller ekranında Hesap
+  kutuları boş bırakılan bir rol yalnız rapor/yükleme yetkisiyle masraf kaydı
+  açabiliyordu — **yetki ekranı gerçeği söylemiyordu**. Sidebar `$p_hes` ve
+  `index.php`'deki Hesap kartı da aynı anda `hesap.read`'e çekildi. Diğer modül
+  yardımcıları (`can_beyan`, `can_maliyet`, `pdks_*_can`) 1:1'dir, köprü yok.
 
 ---
 

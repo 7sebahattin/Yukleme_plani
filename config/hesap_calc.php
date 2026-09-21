@@ -359,13 +359,18 @@ function hesap_can(string $action): bool
     if (is_admin()) return true;
     if (can('hesap.' . $action)) return true;
 
-    // Geriye dönük eşleme — hesap.* seed edilmeden önceki kurulumlar için
+    // ⚠ Buradaki eski "geriye dönük eşleme" KALDIRILDI (Sprint Rol-02).
+    // reports.read → hesap.read, records.write → hesap.write ve
+    // records.delete → hesap.delete sessiz köprüleriydi: Roller ekranında
+    // Hesap kutuları BOŞ bırakılan bir rol, yalnızca "Rapor görüntüle" ya da
+    // "Yükleme düzenle" yetkisi yüzünden Hesap modülünü açıp masraf kaydı
+    // yazabiliyordu — yetki ekranı gerçeği söylemiyordu. Köprü artık yok;
+    // hesap.* yetkileri kurulum seed'inde (config/helpers.php) zaten
+    // tanımlı olduğu için mevcut rollerin davranışı DEĞİŞMEZ.
+    // 'approve'/'pay' için hesap.admin hâlâ üst yetki sayılır.
     return match ($action) {
-        'read'            => can('reports.read'),
-        'write'           => can('records.write'),
-        'delete'          => can('records.delete'),
-        'approve', 'pay'  => can('hesap.approve') || can('hesap.admin'),
-        default           => false,
+        'approve', 'pay' => can('hesap.admin'),
+        default          => false,
     };
 }
 
