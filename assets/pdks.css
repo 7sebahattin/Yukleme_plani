@@ -251,6 +251,25 @@
 .pdks-kiosk-modebtn-giris { background: var(--success); }
 .pdks-kiosk-modebtn-cikis { background: var(--danger); }
 
+/* "Çavuşu Değiştir" — eskiden çıplak <a>, GİRİŞ/ÇIKIŞ MODU butonlarının
+   yanında düz metin gibi görünüyordu (kullanıcı isteği: ince bir buton
+   olsun). Mode butonlarıyla AYNI genişlikte ama belirgin şekilde daha
+   ince/soluk — ikincil eylem olduğu görsel olarak anlaşılsın. */
+.pdks-kiosk-degistir-btn {
+    width: 100%; max-width: 380px;
+    padding: 12px 16px;
+    font-size: .92rem; font-weight: 700;
+    border-radius: 14px;
+    cursor: pointer;
+    background: transparent;
+    border: 1.5px solid #2b4a63;
+    color: #cfe0ee;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background .15s ease, border-color .15s ease;
+}
+.pdks-kiosk-degistir-btn:hover,
+.pdks-kiosk-degistir-btn:focus-visible { background: #152a43; border-color: #3d637f; }
+
 .pdks-kiosk-scan {
     min-height: 60vh;
     /* dvh (dinamik viewport yüksekliği) desteklenen tarayıcılarda vh'nin
@@ -539,6 +558,9 @@ html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-counters { color: #18283a
 html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-selected-name { color: #142840; }
 html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan { color: #18283a; }
 html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #49647a; }
+html[data-theme="light"] .pdks-kiosk-degistir-btn { border-color: #d3e0eb; color: #3f5975; }
+html[data-theme="light"] .pdks-kiosk-degistir-btn:hover,
+html[data-theme="light"] .pdks-kiosk-degistir-btn:focus-visible { background: #eef4f9; border-color: #b9cddd; }
 html[data-theme="light"] .pdks-scan-visual { background: radial-gradient(circle, #20b969a6 0, #10884d66 38%, transparent 73%); }
 html[data-theme="light"] .pdks-scan-ripple { border-color: #087e4eaa; box-shadow: 0 0 22px #0f9a5f77, inset 0 0 22px #0f9a5f44; }
 html[data-theme="light"] .pdks-scan-ripple:nth-child(2) { border-color: #069c5b; box-shadow: 0 0 28px #0b9d5f99; }
