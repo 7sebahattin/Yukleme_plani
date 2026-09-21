@@ -98,9 +98,5 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
     </table>
     <?php endforeach; endif; ?>
 
-    <div class="print-signatures">
-        <div class="print-sig-box">Hazırlayan<br><br><br>Ad Soyad / İmza</div>
-        <div class="print-sig-box">Çavuş<br><br><br>Ad Soyad / İmza</div>
-    </div>
 </div>
 <?php render_print_page_end(); ?>
