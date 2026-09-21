@@ -216,14 +216,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ((int)$st->fetchColumn() > 0) $error = 'Bu e-posta adresi başka kullanıcıda kayıtlı.';
         }
         if ($error === '') {
-            $pdo->prepare("UPDATE users SET username=?, email=?, display_name=?, is_active=? WHERE id=?")
-                ->execute([$uname, $email, $dname, $is_active, $uid]);
-            $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$uid]);
-            $ins_r = $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)");
-            foreach ($roles_post as $rid) {
-                if (in_array($rid, $valid_rids, true)) $ins_r->execute([$uid, $rid]);
+            // Kilitlenme kilidi (Sprint Rol-02): yukarıdaki kontroller yalnız
+            // 'admin' SLUG'ına bakar. Roller ekranı geldiğinden beri 'users.admin'
+            // yetkisi özel bir rolde de olabilir; o rolün son sahibini pasife
+            // almak ya da rolünü değiştirmek sistemi yönetilemez bırakırdı.
+            // Yazıp kontrol ediyoruz (roles.php'deki aynı desen).
+            $pdo->beginTransaction();
+            try {
+                $pdo->prepare("UPDATE users SET username=?, email=?, display_name=?, is_active=? WHERE id=?")
+                    ->execute([$uname, $email, $dname, $is_active, $uid]);
+                $pdo->prepare("DELETE FROM user_roles WHERE user_id = ?")->execute([$uid]);
+                $ins_r = $pdo->prepare("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)");
+                foreach ($roles_post as $rid) {
+                    if (in_array($rid, $valid_rids, true)) $ins_r->execute([$uid, $rid]);
+                }
+                $save_user_depots($uid, (array)($_POST['depots'] ?? []));
+                if (function_exists('any_active_user_has_permission')
+                    && !any_active_user_has_permission('users.admin')) {
+                    throw new RuntimeException('lockout');
+                }
+                $pdo->commit();
+            } catch (PDOException $e) {
+                $pdo->rollBack();
+                $error = 'Kullanıcı kaydedilemedi (veritabanı hatası). Lütfen tekrar deneyin.';
+            } catch (RuntimeException $e) {
+                $pdo->rollBack();
+                $error = 'Bu değişiklik kaydedilemedi: sistemde "Kullanıcı ve Rol Yönetimi" yetkisine sahip hiçbir aktif kullanıcı kalmaz.';
             }
-            $save_user_depots($uid, (array)($_POST['depots'] ?? []));
+        }
+        if ($error === '') {
             $role_labels = array_filter(array_map(
                 fn($r) => in_array((int)$r['id'], $roles_post, true) ? $r['label'] : null,
                 $all_roles
@@ -255,6 +276,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$new_active && $admin_rid > 0 && user_has_role($pdo, $uid, $admin_rid)) {
                     if (count_active_admins($pdo) <= 1) {
                         $error = 'Sistemde en az bir aktif yönetici kalmalıdır.';
+                    }
+                }
+                // Slug'dan bağımsız kilitlenme kilidi (Sprint Rol-02): 'users.admin'
+                // yetkisi özel bir rolde de olabilir. Bu kullanıcıyı pasife alınca
+                // yetkiyi taşıyan BAŞKA aktif kullanıcı kalmıyorsa engelle.
+                if ($error === '' && !$new_active) {
+                    $st_lo = $pdo->prepare("
+                        SELECT 1
+                        FROM users u
+                        JOIN user_roles ur ON ur.user_id = u.id
+                        JOIN role_permissions rp ON rp.role_id = ur.role_id
+                        WHERE u.is_active = 1 AND u.id != ? AND rp.permission = 'users.admin'
+                        LIMIT 1
+                    ");
+                    $st_lo->execute([$uid]);
+                    if (!$st_lo->fetchColumn()) {
+                        $error = 'Bu kullanıcı pasife alınamaz: sistemde "Kullanıcı ve Rol Yönetimi" yetkisine sahip başka aktif kullanıcı kalmıyor.';
                     }
                 }
                 if ($error === '') {
