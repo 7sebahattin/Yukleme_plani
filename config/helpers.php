@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v246');
+    define('APP_SURUM', 'v247');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -317,6 +317,7 @@ function render_desktop_sidebar(string $base): void {
     ], true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
+    $a_rol   = $cur === 'roles.php';
     $a_aud   = $cur === 'audit.php';
     $a_bkp   = $cur === 'admin_db_backups.php';
 
@@ -370,6 +371,7 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Yönetim</div>
         <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
+        <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         <?php endif; ?>
@@ -509,6 +511,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php endif; ?>
             <?php if ($_nav_users): ?>
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
+            <a href="<?= $base ?>roles.php" <?= $cur === 'roles.php' ? 'class="active"' : '' ?>>Roller</a>
             <?php endif; ?>
         </nav>
         <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>

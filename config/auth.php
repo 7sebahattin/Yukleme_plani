@@ -216,6 +216,125 @@ function user_primary_role(): ?array {
     return $role_cache[$uid];
 }
 
+// ── Yetki Kataloğu (Roller ekranı) ────────────────────────
+//
+// Modül → [permission => Türkçe etiket]. roles.php buradan checkbox
+// grid'i üretir. Değerler config/db.php'deki seed dizileriyle ($all_p /
+// $pdks_p) AYNI string'lerdir — db.php migration'ı bilerek burayı
+// ÇAĞIRMAZ (o kod yalnızca ilk kurulumda 5 varsayılan role başlangıç
+// yetkisi vermek için bir kere çalışır; migration'a GO olmadan dokunma
+// kuralı gereği ayrıştırılmadı). YENİ BİR YETKİ EKLERSEN üç yeri birden
+// güncelle: ① burası (görünür ad) ② ilgili sayfadaki can('...') çağrısı
+// (asıl kapı) ③ db.php'deki seed dizisi (yalnız varsayılan rollerin
+// başlangıç değeri — burada olmayan bir yetki role_permissions'a elle
+// eklenebilir ve can() yine çalışır, ama roles.php'de GÖRÜNMEZ).
+function permission_catalog(): array {
+    return [
+        'Operasyon' => [
+            'dashboard.read' => 'Ana sayfayı görüntüle',
+            'records.read'   => 'Yüklemeleri / çıkmaları görüntüle',
+            'records.write'  => 'Yükleme / çıkma oluştur ve düzenle',
+            'records.delete' => 'Yükleme / çıkma sil',
+            'records.lock'   => 'Kaydı kilitle (yüklendi durumuna al)',
+            'records.unlock' => 'Kilitli kaydın kilidini aç (revizyon)',
+        ],
+        'Beyanlar' => [
+            'beyan.read'   => 'Beyanları görüntüle',
+            'beyan.write'  => 'Beyan oluştur / düzenle / bildirim yap',
+            'beyan.delete' => 'Beyan sil',
+        ],
+        'Kantar' => [
+            'kantar.read'   => 'Kantar kayıtlarını görüntüle',
+            'kantar.write'  => 'Kantar kaydı oluştur / düzenle',
+            'kantar.delete' => 'Kantar kaydı sil',
+        ],
+        'Malzeme Stok' => [
+            'stok.read'  => 'Malzeme stoğunu görüntüle',
+            'stok.write' => 'Stok hareketi (giriş / çıkış) oluştur',
+        ],
+        'Raporlar' => [
+            'reports.read'   => 'Raporları görüntüle',
+            'reports.export' => 'Raporları dışa aktar (Excel / CSV)',
+        ],
+        'Maliyet' => [
+            'maliyet.read'   => 'Maliyet hesaplarını görüntüle',
+            'maliyet.write'  => 'Maliyet hesabı oluştur / düzenle',
+            'maliyet.delete' => 'Maliyet hesabı sil',
+            'maliyet.unlock' => 'Kesinleşmiş hesabın kilidini aç',
+            'maliyet.admin'  => 'Alan / şablon / ambalaj tanımlarını yönet',
+        ],
+        'Hesap' => [
+            'hesap.read'    => 'Hesap (masraf) kayıtlarını görüntüle',
+            'hesap.write'   => 'Hesap kaydı oluştur / düzenle',
+            'hesap.delete'  => 'Hesap kaydı sil',
+            'hesap.approve' => 'Hesap kaydını onayla / reddet',
+            'hesap.pay'     => 'Hesap kaydını ödendi işaretle',
+            'hesap.admin'   => 'Ödenmiş (kilitli) kaydın kilidini aç',
+        ],
+        'Personel Takibi' => [
+            'attendance.read'               => 'Devam kayıtlarını görüntüle',
+            'attendance.scan'               => 'Kapı / kart okuyucu ile tarama yap',
+            'attendance.manual'             => 'Manuel giriş-çıkış kaydı gir',
+            'attendance.correct'            => 'Giriş-çıkış kaydını düzelt',
+            'attendance.report'             => 'Devam raporlarını görüntüle',
+            'attendance.employees'          => 'Personel kartoteksini yönet',
+            'attendance.cards'              => 'Personel kart zimmetini yönet',
+            'attendance.devices'            => 'Kapı / kart okuyucu cihazlarını yönet',
+            'attendance.admin'              => 'PDKS modülü gelişmiş yönetimi',
+            'attendance.foremen'            => 'Çavuşları yönet',
+            'attendance.worker_cards'       => 'Günlük işçi kart havuzunu yönet',
+            'attendance.daily_scan'         => 'Günlük işçi giriş-çıkış taraması yap',
+            'attendance.daily_reports'      => 'Günlük işçi puantaj raporlarını görüntüle',
+            'attendance.foreman_rates'      => 'Çavuş günlük ücretlerini yönet',
+            'attendance.entitlements'       => 'Hakediş görüntüle / hesapla',
+            'attendance.foreman_accounts'   => 'Çavuş cari hesap / ekstresini görüntüle',
+            'attendance.foreman_payments'   => 'Çavuş ödemesi kaydet / iptal et',
+            'attendance.management_reports' => 'Personel yönetim raporlarını görüntüle',
+        ],
+        'Tanımlar' => [
+            'defs.read'  => 'Tanımları görüntüle',
+            'defs.write' => 'Tanım ekle / düzenle',
+            'defs.admin' => 'Gelişmiş tanım yönetimi (silme, depo eşitleme vb.)',
+        ],
+        'Kullanıcılar ve Roller' => [
+            'users.read'  => 'Kullanıcı listesini görüntüle',
+            'users.write' => 'Kullanıcı bilgisi düzenle',
+            'users.admin' => 'Kullanıcı ve rol yönetimi (oluştur / sil / şifre sıfırla / yetkilendirme)',
+        ],
+    ];
+}
+
+// Kuruluşta seed edilen 5 varsayılan rol. Kodun başka yerleri slug'a göre
+// davranış değiştiriyor (is_admin() 'admin' slug'ını arar, users.php rozet
+// rengini slug'a göre seçer) — bu yüzden roles.php bu beşinin SİLİNMESİNE
+// izin vermez. Etiket ve yetkileri yine de serbestçe düzenlenebilir.
+function protected_role_slugs(): array {
+    return ['admin', 'operator', 'viewer', 'muhasebe', 'ik'];
+}
+
+// Verilen yetkiye sahip en az bir AKTİF kullanıcı var mı? Rol yetkilerini
+// kaydetmeden önce "users.admin sistemden tamamen kaybolmasın" kilidi
+// için kullanılır — aksi halde bir admin kendi rolünden bu yetkiyi
+// kaldırıp sistemi kilitleyebilir (kimse rol/kullanıcı yönetemez).
+function any_active_user_has_permission(string $permission): bool {
+    try {
+        $st = db()->prepare("
+            SELECT 1
+            FROM users u
+            JOIN user_roles ur ON ur.user_id = u.id
+            JOIN role_permissions rp ON rp.role_id = ur.role_id
+            WHERE u.is_active = 1 AND rp.permission = ?
+            LIMIT 1
+        ");
+        $st->execute([$permission]);
+        return (bool)$st->fetchColumn();
+    } catch (PDOException $e) {
+        // fail-open: sorgu hatasında kaydı engelleme (mevcut depo/yetki
+        // yardımcılarındaki fail-open deseniyle aynı ilke)
+        return true;
+    }
+}
+
 function forbidden(string $msg = 'Bu sayfaya erişim yetkiniz yok.'): void {
     http_response_code(403);
 
