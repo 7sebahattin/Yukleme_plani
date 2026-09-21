@@ -2029,6 +2029,20 @@ body.print-mode .asya-sheet {
     box-shadow: 0 -6px 32px rgba(0,0,0,0.13);
     animation: pmSlideUp .22s cubic-bezier(.32,.72,0,1);
 }
+/* KRİTİK — dialog ile .pm-body arasında <form> sarmalayıcı varsa
+   (users.php, personel_form.php, roles.php) flex zinciri kırılır: form
+   normal blok olduğu için .pm-body'nin "flex:1 + overflow:auto" kuralının
+   dayanacağı bir yükseklik kalmaz, gövde içeriği kadar uzar ve dialog'un
+   max-height'ini aşan kısım overflow:hidden ile KESİLİR — gövde hiç
+   kaydırılamaz, alttaki alanlar ve Kaydet/İptal düğmeleri erişilemez olur.
+   (Roller ekranındaki 51 yetki kutusunda bu yaşandı.) Kısa modallerde
+   etkisizdir: dialog zaten içerik boyundadır.
+   min-height:0 ŞART — flex öğesinin varsayılan min-height:auto değeri
+   küçülmeyi engeller. Test: node scripts/roles_modal_smoke.js */
+.pm-dialog > form {
+    display: flex; flex-direction: column;
+    flex: 1 1 auto; min-height: 0;
+}
 @keyframes pmSlideUp {
     from { transform: translateY(56px); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }

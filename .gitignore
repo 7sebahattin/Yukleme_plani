@@ -16,3 +16,6 @@ config/local.php
 
 # Smoke testin geçici kopyası (çökerse kalabilir)
 .smoke_record_excel_*.php
+
+# Tarayıcı testinin geçici çıktısı (scripts/roles_modal_render.php)
+_test_*.html
