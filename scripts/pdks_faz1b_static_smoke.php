@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v247',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v247';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v247');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v248',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v248';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v248');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -387,24 +387,30 @@ $beklenenEskiSatirlar = [
     // dialog açıkken diğerine tıklanınca ikisi de açık kalıp üst üste
     // biniyordu (kullanıcı raporu, ekran görüntüsü). Yeni açmadan önce açık
     // olan dialog'ları kapatan pdksPuantajDialogAc() eklendi → SW cache +
-    // APP_SURUM v243'ten v247'e çekildi (AYNI rutin, tek satırlık sürüm
+    // APP_SURUM v243'ten v248'e çekildi (AYNI rutin, tek satırlık sürüm
     // damgası güncellemesi).
     "-    define('APP_SURUM', 'v243');",
-    // Sprint Print-PDKS-01 (v247): Personel Takibi liste/döküm sayfalarına
+    // Sprint Print-PDKS-01 (v248): Personel Takibi liste/döküm sayfalarına
     // ayrı yazdırma sayfaları eklendi (cavus_toplu_dokum / cavus_hakedis /
     // cavus_cari / gunluk_isci_puantaj / mesai_degerlendirme) → SW cache +
-    // APP_SURUM v244'ten v247'e çekildi (AYNI rutin, tek satırlık sürüm
+    // APP_SURUM v244'ten v248'e çekildi (AYNI rutin, tek satırlık sürüm
     // damgası güncellemesi).
     "-    define('APP_SURUM', 'v244');",
-    // Sprint Print-PDKS-02 (v247): Personel Takibi yazdırma teması
+    // Sprint Print-PDKS-02 (v248): Personel Takibi yazdırma teması
     // (assets/print_pdks.css) — çıktılar ekranda çıplak HTML gibi
     // görünüyordu (print_base.css'in görsel kuralları @media print
-    // İÇİNDEydi) → SW cache + APP_SURUM v245'ten v247'ya çekildi.
+    // İÇİNDEydi) → SW cache + APP_SURUM v245'ten v248'ya çekildi.
     "-    define('APP_SURUM', 'v245');",
-    // Sprint Print-PDKS-02 devamı (v247): cavus_toplu_dokum_detay.php'ye
+    // Sprint Print-PDKS-02 devamı (v248): cavus_toplu_dokum_detay.php'ye
     // (Kart Dökümü) aynı yazdırma temasıyla yazdırma sayfası eklendi →
-    // SW cache + APP_SURUM v246'dan v247'ye çekildi.
+    // SW cache + APP_SURUM v246'dan v248'ye çekildi.
     "-    define('APP_SURUM', 'v246');",
+    // Sprint Print-PDKS-02 düzeltme (v248): cavus_ekstre_yazdir.php'de
+    // "<Para Birimi> Hareketleri" büyük bölüm başlığı kaldırıldı (para
+    // birimi artık tablonun sağ üstünde küçük bir .pr-tag etiketi), imza
+    // alanları (Hazırlayan/Çavuş) kaldırıldı (kullanıcı isteği, ekran
+    // görüntüsü) → SW cache + APP_SURUM v247'den v248'e çekildi.
+    "-    define('APP_SURUM', 'v247');",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
