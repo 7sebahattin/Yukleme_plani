@@ -303,8 +303,8 @@ ok9e('manuel_cikis.php KENDİSİ bu fazda DEĞİŞMEDİ (mevcut Faz 8E akışı 
 // § G — Sürüm
 // =========================================================
 echo "\n=== G. Sürüm (APP_SURUM / CACHE_NAME) ===\n";
-ok9e('config/helpers.php: APP_SURUM v258', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v258['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v258'"));
-ok9e('sw.js: CACHE_NAME yukleme-plani-v258', str_contains(oku9e('sw.js'), 'yukleme-plani-v258'));
+ok9e('config/helpers.php: APP_SURUM v259', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v259['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v259'"));
+ok9e('sw.js: CACHE_NAME yukleme-plani-v259', str_contains(oku9e('sw.js'), 'yukleme-plani-v259'));
 
 // =========================================================
 echo "\n=== SONUÇ ===\n";
