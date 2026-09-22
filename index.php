@@ -71,6 +71,27 @@ if (can('beyan.read') && (can('records.write') || is_admin())) {
     } catch (PDOException $e) { $beyan_bildirim_bekleyen = 0; }   // tablo/kolon yoksa pasif
 }
 
+// Personel Takibi kartı için: BUGÜNÜN eksik çıkışları (Günlük İşçi modülü) —
+// aktif depo kapsamında (uygulamanın "zorunlu tek depo" kuralıyla AYNI).
+// İzin kontrolü aşağıdaki kart görünürlüğüyle (personel_takip.php'nin kendi
+// kapı mantığı) BİREBİR AYNI OLMALIDIR — İKİSİNİ BİRLİKTE değiştir (beyan
+// uygunluk kapısının üç yerde tekrarlandığı ile AYNI, bilinçli desen —
+// bkz. CLAUDE.md). pdks_gunluk_eksik_cikislar() KENDİ SQL'i YAZILMAZ,
+// config/pdks_gunluk.php'nin tek paylaşılan fonksiyonu (gunluk_isci_puantaj.php
+// İLE AYNI kaynak) çağrılır.
+$personel_eksik_cikis = 0;
+if (is_admin() || can('attendance.employees') || can('attendance.cards') || can('attendance.scan')
+    || can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan')
+    || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements')
+    || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')) {
+    try {
+        require_once __DIR__ . '/config/pdks_gunluk.php';
+        if (pdks_gunluk_sema_hazir(db())) {
+            $personel_eksik_cikis = count(pdks_gunluk_eksik_cikislar(date('Y-m-d'), active_depot() ?? '', null, db()));
+        }
+    } catch (Throwable $e) { $personel_eksik_cikis = 0; }
+}
+
 // Hesap modülü özet
 try {
     $hesap_bugun    = (float)db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
@@ -227,6 +248,10 @@ if (is_admin() || can('attendance.employees') || can('attendance.cards') || can(
             <span class="personel-arrow personel-arrow-out"></span>
         </div>
         <div class="home-card-title">Personel Takibi</div>
+        <?php if ($personel_eksik_cikis > 0): ?>
+        <div class="home-card-badge" style="background:var(--danger)"
+             title="Bugün eksik çıkışı olan mesai"><?= (int)$personel_eksik_cikis ?></div>
+        <?php endif; ?>
         <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
     </a>
 <?php endif; ?>
