@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v253');
+    define('APP_SURUM', 'v254');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -342,7 +342,6 @@ function render_desktop_sidebar(string $base): void {
     $p_usr   = $_fn && can('users.admin');
     $p_adm   = function_exists('is_admin') && is_admin();
     $p_beyan = !$_fn || can('beyan.read') || $p_adm;
-    $p_mal   = ($_fn && can('maliyet.read')) || $p_adm;
     // Hesap: yalnız kendi yetkisi. Eski "reports.read'e düş" köprüsü kaldırıldı
     // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
     // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
@@ -369,11 +368,15 @@ function render_desktop_sidebar(string $base): void {
     $a_ustok = $cur === 'stok.php';
     $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
                                'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
-    $a_rep   = $cur === 'reports.php';
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
+    // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
+    // Raporlar sayfasındaki karttan girilir. Bu yüzden maliyet_* sayfalarında
+    // "Raporlar" vurgulu kalır; aksi hâlde sidebar'da HİÇBİR öğe aktif
+    // görünmez ve kullanıcı nerede olduğunu kaybeder (Faz 9E'nin aynı derdi).
+    $a_rep   = $cur === 'reports.php' || $a_mal;
     // Faz 7 (Sprint Navigasyon-01, kullanıcının açık talimatı: "Replace
     // these scattered sidebar entries with ONE primary entry"): Personel +
     // Günlük İşçi + Hakediş/Cari + Raporlama'nın TÜM alt sayfaları artık
@@ -437,7 +440,10 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
-        <?php if ($p_mal)  $lnk('maliyet.php', '🧮', 'Maliyet',  $a_mal); ?>
+<?php   // ⚠ Maliyet girişi BİLEREK burada YOK (Sprint Navigasyon-03, kullanıcı
+        // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
+        // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
+        // maliyet_* sayfalarındayken sidebar'da yönünü kaybetmesin. ?>
 
         <?php if ($p_gunluk): ?>
         <div class="sidebar-section">Personel</div>

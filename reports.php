@@ -1088,6 +1088,20 @@ render_flash();
     </a>
 <?php endif; ?>
 
+<?php
+// Maliyet (Sprint Navigasyon-03, kullanıcı isteği): sidebar girişi ve ana
+// sayfa kartı kaldırıldı, modüle TEK giriş noktası burası. Kapı maliyet.php'nin
+// KENDİ kapısıyla aynı (require_maliyet('read')) — yetkisi olmayan kullanıcıya
+// 403'e giden bir kart gösterilmez.
+if (can('maliyet.read') || is_admin()):
+?>
+    <a href="maliyet.php" class="home-card">
+        <div class="home-card-icon" style="background:#e0f2f1">🧮</div>
+        <div class="home-card-title">Maliyet</div>
+        <div class="home-card-sub">Parti bazlı maliyet hesabı</div>
+    </a>
+<?php endif; ?>
+
 <?php if (can('kantar.read') || can('stok.read')): ?>
 <div class="home-section-title">Stok &amp; Kantar</div>
 

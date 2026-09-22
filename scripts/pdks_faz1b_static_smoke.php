@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v253',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v253';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v253');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v254',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v254';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v254');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -204,6 +204,14 @@ $indexBeklenenEskiSatirlar = [
     '-        <div class="home-card-icon" style="background:#eef2ff">👤</div>',
     '-        <div class="home-card-title">Personel</div>',
     '-        <div class="home-card-sub">Personel ve kart yönetimi</div>',
+    // Sprint Navigasyon-03 (kullanıcı isteği): "Maliyet" kartı ana sayfadan
+    // KALDIRILDI — modüle tek giriş noktası artık Raporlar sayfasındaki
+    // karttır (reports.php). Sayfanın KENDİSİ ve yetkileri değişmedi.
+    "-<?php if (can('maliyet.read') || is_admin()): ?>",
+    '-    <a href="maliyet.php" class="home-card">',
+    '-        <div class="home-card-icon" style="background:#e0f2f1">🧮</div>',
+    '-        <div class="home-card-title">Maliyet</div>',
+    '-        <div class="home-card-sub">Parti bazlı maliyet hesabı</div>',
 ];
 // ⚠ Sprint Navigasyon-02: "Personel Takibi" kartı ana menüde Kantar ile
 // Beyanlar arasına TAŞINDI (kullanıcı isteği). Taşıma, diff'te bloğun
@@ -433,6 +441,7 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v250');",
     "-    define('APP_SURUM', 'v251');",
     "-    define('APP_SURUM', 'v252');",
+    "-    define('APP_SURUM', 'v253');",
     // Sprint Navigasyon-02 (v249, kullanıcı isteği): mobil alt barda
     // "Çıkmalar" yerine "Personel" sekmesi geldi. Bu yüzden Çıkmalar
     // bottomnav bloğu ve YALNIZ onun kullandığı $is_cikmalar bayrağı
@@ -443,6 +452,12 @@ $beklenenEskiSatirlar = [
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports'))) || \$p_adm;",
     "-    \$a_ptak = in_array(\$cur, [",
     "-        \$is_cikmalar = in_array(\$cur, ['cikmalar.php', 'cikma_create.php']) || \$_cikma_hint;",
+    // Sprint Navigasyon-03: Maliyet sidebar girişi kaldırıldı; YALNIZ onun
+    // kullandığı \$p_mal bayrağı da gitti. \$a_rep artık maliyet_* sayfalarını
+    // da kapsıyor (o sayfalarda "Raporlar" vurgulu kalsın diye).
+    "-    \$p_mal   = (\$_fn && can('maliyet.read')) || \$p_adm;",
+    "-    \$a_rep   = \$cur === 'reports.php';",
+    "-        <?php if (\$p_mal)  \$lnk('maliyet.php', '🧮', 'Maliyet',  \$a_mal); ?>",
     "-    <a href=\"<?= \$base ?>cikmalar.php\" class=\"bottomnav-item<?= \$is_cikmalar ? ' active' : '' ?>\">",
     "-        <span class=\"bottomnav-icon\">🚚</span>",
     "-        <span class=\"bottomnav-label\">Çıkmalar</span>",
