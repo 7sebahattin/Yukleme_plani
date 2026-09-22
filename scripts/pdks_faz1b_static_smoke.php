@@ -145,11 +145,22 @@ ok('dosya adı doğrulaması var (32 hex + .jpg)',
 ok('doğrulamadan SONRA $_GET doğrudan dosya yoluna eklenmiyor (PDKS_FOTO_DIR . $fn kalıbı)',
     str_contains($fotoSrc, 'PDKS_FOTO_DIR . $fn'));
 ok('dosyanın GERÇEKTEN bir employees satırına ait olduğu DB\'den doğrulanıyor (yalnız disk varlığı yetmiyor)',
-    str_contains($fotoSrc, 'SELECT id FROM employees WHERE photo_file'));
+    str_contains($fotoSrc, 'SELECT id, depo FROM employees WHERE photo_file'));
+ok('fotoğraf endpoint\'i de başka deponun personeline kapalı (record_view.php/kantar_view.php ile aynı desen)',
+    str_contains($fotoSrc, 'depot_visible_to_user($_pfo_depo)'));
 $fotoSilBlok = '';
 if (preg_match('/function pdks_foto_sil\b.*?\n}/s', $pdksSrc, $mm)) $fotoSilBlok = $mm[0];
 ok('pdks_foto_sil() de AYNI güvenli-ad deseniyle korunuyor',
     $fotoSilBlok !== '' && str_contains($fotoSilBlok, $guvenliAdDeseni));
+
+echo "\n=== 8b. FIX 5 (Personel Takibi denetimi) — Depo alanı serbest metin DEĞİL, tanımlı listeden ===\n";
+$pfSrc = oku('personel_form.php');
+ok('personel_form.php: depot_options() çağrılıyor (definitions.php İLE AYNI kaynak)',
+    str_contains($pfSrc, 'depot_options()'));
+ok('personel_form.php: mevcut kayıttaki eski/silinmiş depo adı listeye SESSİZCE eklenir (kayıt kaymaz)',
+    str_contains($pfSrc, '$depoSecenekleri[] = $_pf_mevcut_depo'));
+ok('personel_form.php: depo <select> render ediliyor (liste varken)',
+    (bool)preg_match('/<select name="depo">/', $pfSrc));
 
 echo "\n=== 9. TC KİMLİK NUMARASI HİÇBİR YERDE İSTENMİYOR (onaylanan karar #2) ===\n";
 $aranan = ['tc_kimlik', 'national_id', 'tckn', 'kimlik_no'];
@@ -191,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v256',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v256';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v256');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v259',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v259';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v259');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -459,6 +470,12 @@ $beklenenEskiSatirlar = [
     // — bkz. yukarıdaki $lnk('personel_takip.php', ...) çağrısı.
     "-        <div class=\"sidebar-section\">Personel</div>",
     "-        <?php \$lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', \$a_ptak); ?>",
+    // Personel Takibi denetimi Fix 1-2-3 kapanışı: APP_SURUM v256'dan v257'ye çekildi.
+    "-    define('APP_SURUM', 'v256');",
+    // Personel Takibi denetimi Fix 5-6-7-8 kapanışı: APP_SURUM v257'den v258'e çekildi.
+    "-    define('APP_SURUM', 'v257');",
+    // Personel Takibi denetimi Fix 9-10-11 kapanışı: APP_SURUM v258'den v259'a çekildi.
+    "-    define('APP_SURUM', 'v258');",
     "-    define('APP_SURUM', 'v254');",
     // Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
     // 10 sayfa arasındaki çapraz gezinme bağlantıları kaldırıldı, HER birine

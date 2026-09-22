@@ -51,6 +51,7 @@ require_once $ROOT . '/config/pdks.php';
 require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
 require_once $ROOT . '/config/pdks_cari.php';
+require_once $ROOT . '/config/pdks_faz9d.php';
 
 // ─────────────────────────────────────────────────────────
 // MySQL DDL → SQLite çevirici — diğer *_ui_smoke.php dosyalarıyla BİREBİR AYNI.
@@ -98,6 +99,7 @@ function pdks_kolon_listesi(string $ham): string
 
 db()->exec("CREATE TABLE `users` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `username` VARCHAR(60) NOT NULL, `display_name` VARCHAR(150) NULL, `is_active` INTEGER NOT NULL DEFAULT 1)");
 db()->exec("INSERT INTO users (id, username, display_name) VALUES (1, 'test', 'Test Kullanıcı')");
+db()->exec("CREATE TABLE `audit_log` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `user_id` INTEGER, `action` VARCHAR(60), `module` VARCHAR(60), `record_id` INTEGER, `old_values` TEXT, `new_values` TEXT, `ip` VARCHAR(64), `user_agent` VARCHAR(255), `created_at` TEXT DEFAULT CURRENT_TIMESTAMP)");
 foreach (pdks_tablolar() as $ad => $sql) {
     if (!in_array($ad, ['employees', 'employee_cards', 'employee_card_uids'], true)) continue;
     [$create, $indeksler] = pdks_ddl_sqlite($sql);
@@ -115,6 +117,11 @@ foreach (pdks_hakedis_tablolar() as $ad => $sql) {
     foreach ($indeksler as $ix) db()->exec($ix);
 }
 foreach (pdks_cari_tablolar() as $ad => $sql) {
+    [$create, $indeksler] = pdks_ddl_sqlite($sql);
+    db()->exec($create);
+    foreach ($indeksler as $ix) db()->exec($ix);
+}
+foreach (pdks_faz9d_tablolar() as $ad => $sql) {
     [$create, $indeksler] = pdks_ddl_sqlite($sql);
     db()->exec($create);
     foreach ($indeksler as $ix) db()->exec($ix);
@@ -243,6 +250,23 @@ ok('iptal edilmiş ödeme (200 TL, referans yok) ekstrede GÖRÜNMÜYOR (yalnız
 ok('GÜNCEL BAKİYE 800,00 TRY ile bitiyor', (bool)preg_match('/GÜNCEL BAKİYE.*?800,00/s', $s6));
 ok('CSV dışa aktar bağlantısı var', str_contains($s6, 'csv=1'));
 
+echo "\n=== 7b. cavus_ekstre.php — Fix 3 (Personel Takibi denetimi): 'baslangic' filtreliyken\n";
+echo "     GÜNCEL BAKİYE ile DÖNEM NET HAREKETİ birbirine KARIŞTIRILMAMALI ===\n";
+// ⚠ pdks_cari_ekstre() filtreliyken koşan bakiyeyi 0'dan başlatır (öncesindeki
+// hareketler dışlanır) — bu yalnız FİLTRELİ DÖNEMİN net hareketidir, gerçek
+// güncel bakiye DEĞİLDİR. Uzak bir başlangıç tarihiyle filtrelenince ekstredeki
+// TEK hareket son 200 TL'lik ödeme kalır (koşan bakiye -200), ama Ayşe'nin
+// TÜM ZAMANLARDAKİ gerçek bakiyesi hâlâ 800 TRY'dir — ikisi asla aynı
+// etiketle (GÜNCEL BAKİYE) gösterilmemeli.
+$s6b = renderPage('cavus_ekstre.php', ['foreman_id' => (string)$ayseId, 'baslangic' => '2026-01-20']);
+ok('hata sızmadı (filtreli)', !str_starts_with($s6b, '__ERROR__'), $s6b);
+ok('PHP Warning/Notice yok (filtreli)', !str_contains($s6b, 'Warning:') && !str_contains($s6b, 'Notice:'));
+ok('filtreliyken satır etiketi "GÜNCEL BAKİYE" DEĞİL, "BU DÖNEMİN NET HAREKETİ"', str_contains($s6b, 'BU DÖNEMİN NET HAREKETİ'));
+ok('filtreliyken GERÇEK güncel bakiye (800,00 TRY, tüm zamanlar) AYRICA gösteriliyor', (bool)preg_match('/GÜNCEL BAKİYE \(tüm zamanlar\).*?800,00/s', $s6b));
+
+echo "\n=== 7c. cavus_ekstre.php — filtresiz iken etiket AYNEN 'GÜNCEL BAKİYE' kalır (regresyon değil) ===\n";
+ok('filtresizken hâlâ sade "GÜNCEL BAKİYE" (dönem etiketi yazılmıyor)', str_contains($s6, 'GÜNCEL BAKİYE') && !str_contains($s6, 'BU DÖNEMİN NET HAREKETİ'));
+
 echo "\n=== 8. cavus_ekstre.php — geçersiz çavuş id ===\n";
 ok('geçersiz foreman_id header()+exit() ile listeye YÖNLENDİRİYOR (in-process yakalanamaz — Faz 4 UI testinin AYNI kısıtı, dolayısıyla burada TEKRAR ÇAĞRILMIYOR)', true);
 
@@ -345,6 +369,30 @@ ok('CSV başlık satırı Türkçe sütun adlarını taşıyor (Faz 7\'nin Türk
 ok('CSV içinde HAKEDİŞ satırı var', str_contains($ciktiCsvTam, 'HAKEDİŞ'), $ciktiCsvTam);
 ok('CSV içinde ÖDEME/HAVALE-001 satırı var', str_contains($ciktiCsvTam, 'HAVALE-001'), $ciktiCsvTam);
 ok('CSV koşan bakiye 800.00 ile bitiyor (CSV ham DECIMAL biçiminde, HTML\'in virgüllü görünümünde DEĞİL)', (bool)preg_match('/800\.00/', $ciktiCsvTam), $ciktiCsvTam);
+
+echo "\n=== 9b. Fix 9 (Personel Takibi denetimi) — Faz 9D düzeltmesi varken Bakiye=Hakediş+Düzeltme-Ödeme görünür ===\n";
+// Ayşe'nin KESİN hakedişine (id=$ayseEntId) 300 TRY'lik bir düzeltme eklenir —
+// böylece Bakiye (900) artık Hakediş(1200)-Ödeme(400)=800'e eşit DEĞİLDİR;
+// sayfa bu farkı "Düzeltme (Net)" satırıyla açıklamalıdır.
+$duzeltme = pdks_faz9d_duzeltme_ekle($ayseEntId, '+', '300', 'Fix 9 UI testi', 1, db());
+ok('Fix 9 fikstürü: düzeltme başarıyla eklendi', $duzeltme['ok'] === true, json_encode($duzeltme, JSON_UNESCAPED_UNICODE));
+
+$sCariDuz = renderPage('cavus_cari.php');
+ok('cavus_cari.php: "Düzeltme (Net)" sütunu tabloda var', str_contains($sCariDuz, 'Düzeltme (Net)'), $sCariDuz);
+ok('cavus_cari.php: Ayşe satırında düzeltme tutarı (300,00) görünüyor', (bool)preg_match('/300,00/', $sCariDuz), $sCariDuz);
+ok('cavus_cari.php: yeni Bakiye (1200 hakediş + 300 düzeltme - 400 ödeme = 1.100,00) görünüyor',
+    (bool)preg_match('/1\.100,00|1100,00/', $sCariDuz), $sCariDuz);
+
+$sOdemeDuz = renderPage('cavus_odeme.php', ['cavus' => (string)$ayseId]);
+ok('cavus_odeme.php: "Düzeltme (Net)" kutusu görünüyor (düzeltme VARKEN)', str_contains($sOdemeDuz, 'Düzeltme (Net)'), $sOdemeDuz);
+ok('cavus_odeme.php: düzeltme tutarı (300,00) görünüyor', (bool)preg_match('/300,00/', $sOdemeDuz), $sOdemeDuz);
+
+echo "\n=== 9c. Fix 9 — düzeltmesi OLMAYAN çavuşta (Mehmet) kutu/sütun değeri '—' kalır, sayfa BOZULMAZ ===\n";
+// Mehmet'in hiçbir hareketi yok (bakiyeler boş dizi döner) — asıl kontrol,
+// düzeltme SÜTUNUNUN varlığının Mehmet'in "hiç kayıt yok" mesajını bozmadığı.
+$sOdemeMehmet = renderPage('cavus_odeme.php', ['cavus' => (string)$mehmetId]);
+ok('cavus_odeme.php: Mehmet için hâlâ "henüz KESİN hakedişi yok" mesajı doğru gösteriliyor (Fix 9 eklemesi bozmadı)',
+    str_contains($sOdemeMehmet, 'henüz KESİN hakedişi veya ödemesi yok'), $sOdemeMehmet);
 
 echo "\n=== 10. YETKİ KAPISI — operator (yalnız attendance.daily_scan) CARİ/ÖDEME SAYFALARINI GÖREMİYOR ===\n";
 $PERMS = ['attendance.daily_scan'];

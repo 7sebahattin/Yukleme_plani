@@ -970,98 +970,112 @@ function pdks_gunluk_kart_olustur(array $veri, ?int $createdBy = null, ?PDO $pdo
         return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
     }
 
-    $cardNo = trim((string)($veri['card_no'] ?? ''));
-    if ($cardNo === '') {
-        return ['ok' => false, 'kod' => 'bos_kart_no', 'hata' => 'Kart numarası zorunludur.'];
+    // ⚠ Fix 8 (Personel Takibi denetimi) — ÇAPRAZ-SİSTEM UID KİLİDİ: bkz.
+    // config/pdks.php'deki pdks_uid_lock_al() docblock'u — pdks_kart_olustur()
+    // İLE AYNI kilit adı/stratejisi (yumuşak bağımlılık: bu dosya config/pdks.php'yi
+    // require ETMEZ, function_exists guard'lıdır). Kilit YOKSA (pdks.php yüklü
+    // değilse) davranış AYNEN eski gibi kalır — tek yönlü çapraz-sistem kontrolü,
+    // kilitsiz.
+    $_kilitliMi = !function_exists('pdks_uid_lock_al') || pdks_uid_lock_al($kanonik, $pdo);
+    if (!$_kilitliMi) {
+        return ['ok' => false, 'kod' => 'uid_kilit_zaman_asimi', 'hata' => 'Sistem şu anda meşgul (başka bir kart işlemi sürüyor), lütfen tekrar deneyin.'];
     }
-    // ⚠ FAZ 8A (kullanıcının açık talimatı — "NEUTRALIZE worker_cards"):
-    // işçi tipi artık kartın DEĞİL, her mesai döneminin özelliğidir (bkz.
-    // config/pdks_gunluk.php dosya sonundaki FAZ 8A bölümü). Bu alan
-    // BİLEREK OPSİYONELDİR — boş/0 bırakılırsa kart NÖTR (worker_type_id
-    // NULL) oluşturulur. Geriye dönük UYUMLULUK için hâlâ bir tip
-    // GÖNDERİLİRSE (eski istemci/otomasyon) aktifliği doğrulanır ve
-    // kaydedilir — YENİ Faz 8A taraması bu alanı ASLA OKUMAZ.
-    $workerTypeIdHam = trim((string)($veri['worker_type_id'] ?? ''));
-    $workerTypeId = null;
-    if ($workerTypeIdHam !== '' && $workerTypeIdHam !== '0') {
-        $workerTypeId = (int)$workerTypeIdHam;
-        $st = $pdo->prepare("SELECT id FROM worker_types WHERE id = ? AND is_active = 1");
-        $st->execute([$workerTypeId]);
-        if (!$st->fetchColumn()) {
-            return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
-        }
-    }
-
-    // Savunma derinliği: normal UI bu durumu zaten engeller, fakat çekirdek
-    // fonksiyon da migrasyon öncesi NOT NULL şemaya nötr kart yazmayı denemez.
-    // Eski istemci geçerli bir worker_type_id gönderiyorsa çalışmaya devam eder.
-    if ($workerTypeId === null && !pdks_gunluk_faz8a_sema_hazir($pdo)) {
-        return [
-            'ok' => false,
-            'kod' => 'faz8a_migrasyon_gerekli',
-            'hata' => 'Yeni nötr kart tanımlamak için önce Faz 8A migrasyonu tamamlanmalıdır.',
-        ];
-    }
-
-    $stC = $pdo->prepare("SELECT id FROM worker_cards WHERE card_no = ?");
-    $stC->execute([$cardNo]);
-    if ($stC->fetchColumn()) {
-        return ['ok' => false, 'kod' => 'kart_no_kullanimda', 'hata' => 'Bu kart numarası zaten kullanımda: ' . $cardNo];
-    }
-
-    // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ — yön 1: kalıcı personel kartlarıyla çakışma.
-    $kaliciCakisma = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
-    if ($kaliciCakisma !== null) {
-        // ⚠ Faz 9E / C: eskiden mesaj yalnız DURUM bildiriyordu ("...tanımlı"),
-        // operatöre ne YAPACAĞINI söylemiyordu. FAZ9A çakışmayı zaten yalnız
-        // AKTİF kalıcı kartla sınırladığı için (bkz. pdks_gunluk_uid_kalici_kartta_mi
-        // yorumu) çözüm HER ZAMAN aynıdır: o kalıcı kartı pasife al/iptal et.
-        // Bu fonksiyon hiçbir kartı OTOMATİK pasife almaz/silmez — yalnız METİN.
-        return ['ok' => false, 'kod' => 'uid_kalici_kartta',
-                'hata' => 'Bu kart aktif bir kalıcı personel kartına bağlıdır (' . (string)$kaliciCakisma['full_name'] . '). '
-                        . 'Günlük işçi kartı olarak kullanmak için önce kalıcı personel kartını pasife alın/iptal edin.'];
-    }
-    // Havuz-içi çakışma (kendi UNIQUE kısıtının önden, dostça hâli).
-    $havuzCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
-    if ($havuzCakisma !== null) {
-        return ['ok' => false, 'kod' => 'uid_havuzda',
-                'hata' => 'Bu UID zaten işçi havuzunda tanımlı (kart no: ' . (string)$havuzCakisma['card_no'] . ').'];
-    }
-
-    $bayt    = function_exists('pdks_uid_bayt_sayisi') ? pdks_uid_bayt_sayisi($kanonik) : (int)(strlen($kanonik) / 2);
-    $ondalik = function_exists('pdks_uid_to_decimal') ? pdks_uid_to_decimal($kanonik) : null;
-
     try {
-        $ins = $pdo->prepare(
-            "INSERT INTO worker_cards
-                (card_no, worker_type_id, canonical_uid, uid_bytes, uid_decimal, enrolled_source, status, notes, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?)"
-        );
-        $ins->execute([
-            $cardNo, $workerTypeId, $kanonik, $bayt, $ondalik, $kaynak,
-            'available', trim((string)($veri['notes'] ?? '')) ?: null, $createdBy,
-        ]);
-        $cardId = (int)$pdo->lastInsertId();
-    } catch (PDOException $e) {
-        // Son çare — bu tablonun KENDİ UNIQUE kısıtı (card_no/canonical_uid),
-        // yukarıdaki SELECT ön-kontrolüyle bu INSERT arasında AYNI worker_cards
-        // tablosuna yazan eşzamanlı bir çağrı olduysa burada yakalanır.
-        error_log('[pdks_gunluk_kart_olustur] ' . $e->getMessage());
-        return [
-            'ok' => false,
-            'kod' => 'yazma_hatasi',
-            'hata' => 'Kart kaydedilemedi. Lütfen tekrar deneyin.',
-        ];
-    }
+        $cardNo = trim((string)($veri['card_no'] ?? ''));
+        if ($cardNo === '') {
+            return ['ok' => false, 'kod' => 'bos_kart_no', 'hata' => 'Kart numarası zorunludur.'];
+        }
+        // ⚠ FAZ 8A (kullanıcının açık talimatı — "NEUTRALIZE worker_cards"):
+        // işçi tipi artık kartın DEĞİL, her mesai döneminin özelliğidir (bkz.
+        // config/pdks_gunluk.php dosya sonundaki FAZ 8A bölümü). Bu alan
+        // BİLEREK OPSİYONELDİR — boş/0 bırakılırsa kart NÖTR (worker_type_id
+        // NULL) oluşturulur. Geriye dönük UYUMLULUK için hâlâ bir tip
+        // GÖNDERİLİRSE (eski istemci/otomasyon) aktifliği doğrulanır ve
+        // kaydedilir — YENİ Faz 8A taraması bu alanı ASLA OKUMAZ.
+        $workerTypeIdHam = trim((string)($veri['worker_type_id'] ?? ''));
+        $workerTypeId = null;
+        if ($workerTypeIdHam !== '' && $workerTypeIdHam !== '0') {
+            $workerTypeId = (int)$workerTypeIdHam;
+            $st = $pdo->prepare("SELECT id FROM worker_types WHERE id = ? AND is_active = 1");
+            $st->execute([$workerTypeId]);
+            if (!$st->fetchColumn()) {
+                return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı veya pasif.'];
+            }
+        }
 
-    if (function_exists('audit_log_event')) {
-        audit_log_event('create', 'worker_cards', $cardId, null, [
-            'card_no' => $cardNo, 'worker_type_id' => $workerTypeId,
-            'canonical_uid' => $kanonik, 'kaynak' => $kaynak,
-        ]);
-    }
+        // Savunma derinliği: normal UI bu durumu zaten engeller, fakat çekirdek
+        // fonksiyon da migrasyon öncesi NOT NULL şemaya nötr kart yazmayı denemez.
+        // Eski istemci geçerli bir worker_type_id gönderiyorsa çalışmaya devam eder.
+        if ($workerTypeId === null && !pdks_gunluk_faz8a_sema_hazir($pdo)) {
+            return [
+                'ok' => false,
+                'kod' => 'faz8a_migrasyon_gerekli',
+                'hata' => 'Yeni nötr kart tanımlamak için önce Faz 8A migrasyonu tamamlanmalıdır.',
+            ];
+        }
 
-    return ['ok' => true, 'card_id' => $cardId, 'card_no' => $cardNo, 'canonical_uid' => $kanonik];
+        $stC = $pdo->prepare("SELECT id FROM worker_cards WHERE card_no = ?");
+        $stC->execute([$cardNo]);
+        if ($stC->fetchColumn()) {
+            return ['ok' => false, 'kod' => 'kart_no_kullanimda', 'hata' => 'Bu kart numarası zaten kullanımda: ' . $cardNo];
+        }
+
+        // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ — yön 1: kalıcı personel kartlarıyla çakışma.
+        $kaliciCakisma = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
+        if ($kaliciCakisma !== null) {
+            // ⚠ Faz 9E / C: eskiden mesaj yalnız DURUM bildiriyordu ("...tanımlı"),
+            // operatöre ne YAPACAĞINI söylemiyordu. FAZ9A çakışmayı zaten yalnız
+            // AKTİF kalıcı kartla sınırladığı için (bkz. pdks_gunluk_uid_kalici_kartta_mi
+            // yorumu) çözüm HER ZAMAN aynıdır: o kalıcı kartı pasife al/iptal et.
+            // Bu fonksiyon hiçbir kartı OTOMATİK pasife almaz/silmez — yalnız METİN.
+            return ['ok' => false, 'kod' => 'uid_kalici_kartta',
+                    'hata' => 'Bu kart aktif bir kalıcı personel kartına bağlıdır (' . (string)$kaliciCakisma['full_name'] . '). '
+                            . 'Günlük işçi kartı olarak kullanmak için önce kalıcı personel kartını pasife alın/iptal edin.'];
+        }
+        // Havuz-içi çakışma (kendi UNIQUE kısıtının önden, dostça hâli).
+        $havuzCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
+        if ($havuzCakisma !== null) {
+            return ['ok' => false, 'kod' => 'uid_havuzda',
+                    'hata' => 'Bu UID zaten işçi havuzunda tanımlı (kart no: ' . (string)$havuzCakisma['card_no'] . ').'];
+        }
+
+        $bayt    = function_exists('pdks_uid_bayt_sayisi') ? pdks_uid_bayt_sayisi($kanonik) : (int)(strlen($kanonik) / 2);
+        $ondalik = function_exists('pdks_uid_to_decimal') ? pdks_uid_to_decimal($kanonik) : null;
+
+        try {
+            $ins = $pdo->prepare(
+                "INSERT INTO worker_cards
+                    (card_no, worker_type_id, canonical_uid, uid_bytes, uid_decimal, enrolled_source, status, notes, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?)"
+            );
+            $ins->execute([
+                $cardNo, $workerTypeId, $kanonik, $bayt, $ondalik, $kaynak,
+                'available', trim((string)($veri['notes'] ?? '')) ?: null, $createdBy,
+            ]);
+            $cardId = (int)$pdo->lastInsertId();
+        } catch (PDOException $e) {
+            // Son çare — bu tablonun KENDİ UNIQUE kısıtı (card_no/canonical_uid),
+            // yukarıdaki SELECT ön-kontrolüyle bu INSERT arasında AYNI worker_cards
+            // tablosuna yazan eşzamanlı bir çağrı olduysa burada yakalanır.
+            error_log('[pdks_gunluk_kart_olustur] ' . $e->getMessage());
+            return [
+                'ok' => false,
+                'kod' => 'yazma_hatasi',
+                'hata' => 'Kart kaydedilemedi. Lütfen tekrar deneyin.',
+            ];
+        }
+
+        if (function_exists('audit_log_event')) {
+            audit_log_event('create', 'worker_cards', $cardId, null, [
+                'card_no' => $cardNo, 'worker_type_id' => $workerTypeId,
+                'canonical_uid' => $kanonik, 'kaynak' => $kaynak,
+            ]);
+        }
+
+        return ['ok' => true, 'card_id' => $cardId, 'card_no' => $cardNo, 'canonical_uid' => $kanonik];
+    } finally {
+        if (function_exists('pdks_uid_lock_birak')) pdks_uid_lock_birak($kanonik, $pdo);
+    }
 }
 
 /** Görünür kart no / tip / not düzenleme — UID DEĞİŞTİRMEZ (bkz. görev kapsamı: "edit visible card number"). */

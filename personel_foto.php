@@ -19,11 +19,19 @@ if (!preg_match('/^[a-f0-9]{32}\.jpg$/', $fn)) {
     exit('Geçersiz dosya adı');
 }
 
-$st = db()->prepare("SELECT id FROM employees WHERE photo_file = ? LIMIT 1");
+$st = db()->prepare("SELECT id, depo FROM employees WHERE photo_file = ? LIMIT 1");
 $st->execute([$fn]);
-if (!$st->fetchColumn()) {
+$calisan = $st->fetch();
+if (!$calisan) {
     http_response_code(404);
     exit('Fotoğraf bulunamadı');
+}
+// Aktif depo kapsamı (record_view.php/kantar_view.php İLE AYNI desen) —
+// başka deponun personelinin fotoğrafı, dosya adı bilinse bile açılamaz.
+$_pfo_depo = trim((string)($calisan['depo'] ?? ''));
+if ($_pfo_depo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($_pfo_depo)) {
+    http_response_code(403);
+    exit('Bu personel başka depoya ait');
 }
 
 $path = PDKS_FOTO_DIR . $fn;

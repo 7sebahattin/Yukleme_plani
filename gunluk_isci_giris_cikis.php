@@ -89,6 +89,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kaydet')
         exit;
     }
 
+    // ⚠ Güvenlik düzeltmesi (?ajax=kapat'takiyle AYNI desen — Faz 9A/M-01):
+    // session_id istemciden geliyor ve yazma fonksiyonları (giriş/çıkış
+    // kaydet) KENDİLERİ bir depo kontrolü YAPMAZ. Bu kontrol EKSİKTİ —
+    // Depo A'da aktif bir kullanıcı, id'yi değiştirerek Depo B'nin açık bir
+    // mesaisine sahte giriş/çıkış olayı yazabiliyordu.
+    $stKaydetDepo = $pdo->prepare('SELECT depo FROM daily_work_sessions WHERE id=?');
+    $stKaydetDepo->execute([$sessionId]);
+    $kaydetDepo = $stKaydetDepo->fetchColumn();
+    if ($kaydetDepo === false) {
+        echo json_encode(['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if ($depoHata = pdks_gunluk_depo_kontrol((string)$kaydetDepo)) {
+        echo json_encode(['ok' => false, 'kod' => 'yanlis_depo', 'hata' => $depoHata], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     // ⚠ FAZ 8A: USB VE Web NFC AYNI sunucu fonksiyonlarından geçer — kaynak
     // (usb_decimal|web_nfc) burada yalnız bir parametredir, iki AYRI iş
     // mantığı YOKTUR (görev talimatı §14).

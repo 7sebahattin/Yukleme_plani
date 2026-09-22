@@ -98,6 +98,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && trim((string)($_POST['action'] ?? '
 if (!$errors && isset($_GET['ok'])) $success = trim((string)$_GET['ok']);
 
 $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
+// ⚠ Fix 11 (Personel Takibi denetimi): "Sabit Toplam" FM modunda girilen SAAT
+// SAYISI ödeme tutarını DEĞİŞTİRMEZ (bkz. config/pdks_faz8b.php'deki
+// $fmToplamKurus = $fmMode === 'fixed' ? $fmBirimKurus : ($fmBirimKurus *
+// $fmOnaySaat) — sabit modda çarpan YOK). Numara giren muhasebeci "3 saat
+// onayladım, 5 değil" sanabiliyordu; tutar HER İKİSİNDE de AYNIYDI. Bu yüzden
+// oran modunu ÖNCEDEN okuyup ekrana taşıyoruz — pdks_hakedis_oran_gecerli()
+// AYNI otorite (config/pdks_faz8b.php'nin kendi hakediş hesabının okuduğu
+// KAYNAK), burada İKİNCİ bir oran sorgusu İCAT edilmedi.
+foreach ($donemler as &$d) {
+    $d['faz8b']['fazla_mesai_oran_modu'] = null;
+    if ((int)$d['faz8b']['fazla_mesai_saat'] > 0) {
+        $oranD = pdks_hakedis_oran_gecerli(
+            (int)$oturum['foreman_id'],
+            (int)($d['worker_type_id_snapshot'] ?? 0),
+            (string)($d['work_date_snapshot'] ?? $oturum['work_date']),
+            $pdo
+        );
+        $d['faz8b']['fazla_mesai_oran_modu'] = $oranD['overtime_mode'] ?? null;
+    }
+}
+unset($d);
 $ozet = pdks_faz8b_oturum_ozeti($sessionId, $pdo);
 $normalDkGosterim = (int)($oturum['normal_work_minutes_snapshot'] ?? 540);
 if ($normalDkGosterim <= 0) $normalDkGosterim = 540;
@@ -220,13 +241,22 @@ render_flash();
             <?php endif; ?>
             <?php if ((int)$f['fazla_mesai_saat'] > 0):
                 $fmAday = (int)$f['fazla_mesai_saat'];
-                $fmVarsayilan = $f['fazla_mesai_onay_saat'] !== null ? (int)$f['fazla_mesai_onay_saat'] : $fmAday;
+                $fmOnaySaatMevcut = $f['fazla_mesai_onay_saat'];
+                $fmVarsayilan = $fmOnaySaatMevcut !== null ? (int)$fmOnaySaatMevcut : $fmAday;
             ?>
+            <?php if (($f['fazla_mesai_oran_modu'] ?? null) === 'fixed'): ?>
+            <div style="font-size:.8rem;margin-bottom:6px">
+                Fazla Mesai (Sabit Tutar — saat sayısı tutarı DEĞİŞTİRMEZ)<br>
+                <label style="margin-right:10px"><input type="radio" name="overtime_approved_hours" value="<?= $fmAday ?>" <?= ($fmOnaySaatMevcut !== null && (int)$fmOnaySaatMevcut > 0) ? 'checked' : '' ?> required> Onayla</label>
+                <label><input type="radio" name="overtime_approved_hours" value="0" <?= ($fmOnaySaatMevcut !== null && (int)$fmOnaySaatMevcut <= 0) ? 'checked' : '' ?> required> Reddet</label>
+            </div>
+            <?php else: ?>
             <label style="display:block;font-size:.8rem;margin-bottom:6px">
                 Onaylanan FM Saati (Hesaplanan: <?= $fmAday ?>)
                 <input type="number" name="overtime_approved_hours" min="0" max="<?= $fmAday ?>" step="1"
                        value="<?= $fmVarsayilan ?>" required style="max-width:100px">
             </label>
+            <?php endif; ?>
             <?php endif; ?>
             <button class="btn btn-sm btn-primary" type="submit">Kaydet</button>
         </form>
@@ -264,13 +294,22 @@ render_flash();
         <?php endif; ?>
         <?php if ((int)$f['fazla_mesai_saat'] > 0):
             $fmAdayM = (int)$f['fazla_mesai_saat'];
-            $fmVarsayilanM = $f['fazla_mesai_onay_saat'] !== null ? (int)$f['fazla_mesai_onay_saat'] : $fmAdayM;
+            $fmOnaySaatMevcutM = $f['fazla_mesai_onay_saat'];
+            $fmVarsayilanM = $fmOnaySaatMevcutM !== null ? (int)$fmOnaySaatMevcutM : $fmAdayM;
         ?>
+        <?php if (($f['fazla_mesai_oran_modu'] ?? null) === 'fixed'): ?>
+        <div style="font-size:.8rem;margin-top:6px">
+            Fazla Mesai (Sabit Tutar — saat sayısı tutarı DEĞİŞTİRMEZ)<br>
+            <label style="margin-right:10px"><input type="radio" name="overtime_approved_hours" value="<?= $fmAdayM ?>" <?= ($fmOnaySaatMevcutM !== null && (int)$fmOnaySaatMevcutM > 0) ? 'checked' : '' ?> required> Onayla</label>
+            <label><input type="radio" name="overtime_approved_hours" value="0" <?= ($fmOnaySaatMevcutM !== null && (int)$fmOnaySaatMevcutM <= 0) ? 'checked' : '' ?> required> Reddet</label>
+        </div>
+        <?php else: ?>
         <label style="display:block;font-size:.8rem;margin-top:6px">
             Onaylanan FM Saati (Hesaplanan: <?= $fmAdayM ?>)
             <input type="number" name="overtime_approved_hours" min="0" max="<?= $fmAdayM ?>" step="1"
                    value="<?= $fmVarsayilanM ?>" required style="max-width:100px">
         </label>
+        <?php endif; ?>
         <?php endif; ?>
         <button class="btn btn-sm btn-primary" type="submit" style="margin-top:8px">Kaydet</button>
     </form>

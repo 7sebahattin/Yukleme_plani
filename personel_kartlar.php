@@ -77,6 +77,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($hamUid === '') {
             $hata = 'Kartı okutun.';
         } else {
+            // Savunma derinliği: dropdown zaten depo filtreli, ama POST'a
+            // elle başka depodan bir employee_id gönderilebilir — yazma
+            // ÖNCESİ burada da doğrulanır.
+            $stKaEmp = $pdo->prepare('SELECT depo FROM employees WHERE id=?');
+            $stKaEmp->execute([$employeeId]);
+            $kaEmpDepo = $stKaEmp->fetchColumn();
+            if ($kaEmpDepo === false) {
+                forbidden('Personel bulunamadı.');
+            }
+            $kaEmpDepo = trim((string)$kaEmpDepo);
+            if ($kaEmpDepo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($kaEmpDepo)) {
+                forbidden('Bu personel başka depoya ait (' . h($kaEmpDepo) . ').');
+            }
             $sonuc = pdks_kart_ata($employeeId, $hamUid, $kaynak,
                 ['label' => $etiket, 'created_by' => (int)$auth_user['id']], $pdo);
             if ($sonuc['ok']) {
@@ -120,12 +133,21 @@ if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 // ── Personel seçim listesi (aktif kartı OLMAYAN personeller, atama için) ──
 $atanabilirPersonel = [];
 try {
-    $atanabilirPersonel = $pdo->query(
+    // Aktif depo kapsamı (personel_form.php/personel_foto.php İLE AYNI
+    // düzeltme): bu liste depo filtresi OLMADAN TÜM depoların personelini
+    // gösteriyordu — Depo A'daki bir operatör Depo B'nin personeline kart
+    // atayabiliyordu. depo_sql_column() ile AYNI kural: boş depo her yerde
+    // görünür kalır.
+    [$depoSartı, $depoParam] = depo_sql_column('e.depo');
+    $stAp = $pdo->prepare(
         "SELECT e.id, e.full_name, e.personnel_no FROM employees e
           WHERE e.status = 'aktif'
             AND NOT EXISTS (SELECT 1 FROM employee_cards c WHERE c.employee_id = e.id AND c.status = 'aktif')
+            $depoSartı
           ORDER BY e.full_name"
-    )->fetchAll();
+    );
+    $stAp->execute($depoParam);
+    $atanabilirPersonel = $stAp->fetchAll();
 } catch (PDOException $e) { /* tablo yoksa boş liste — sayfa altta uyarı gösterir */ }
 
 // ── Kart listesi (filtre) ──────────────────────────────────

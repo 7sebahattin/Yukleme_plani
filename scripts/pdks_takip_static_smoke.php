@@ -116,12 +116,20 @@ ok('personel_takip.php: Kart Havuzu, Yönetim Raporları ve Çavuş Toplu Dökü
 // ⚠ Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
 // sayfalar arasındaki çapraz bağlantılar (Kart Havuzu ↔ Çavuşlar ↔ İşçi
 // Tipleri vb.) kaldırıldı, yerine standart "← Personel Takibi" dönüş
-// butonu geldi. isci_tipleri.php'nin KENDİSİ silinmedi/erişilemez OLMADI —
-// yalnız isci_kartlari.php'den bu çapraz bağlantı gitti.
-ok('isci_kartlari.php: İşçi Tipleri/Çavuşlar çapraz bağlantıları KALDIRILDI, yerine standart dönüş butonu geldi',
-    !str_contains(oku('isci_kartlari.php'), 'href="isci_tipleri.php"')
-    && !str_contains(oku('isci_kartlari.php'), 'href="cavuslar.php"')
+// butonu geldi. Çavuşlar çapraz bağlantısı AYNEN kaldırılmış durumda.
+//
+// ⚠ Fix 6 (Personel Takibi denetimi, kullanıcı onaylı roadmap): isci_tipleri.php
+// personel_takip.php'nin home-grid'inde DE YOK (bkz. §9 satır 110) — bu link
+// gidince sayfa TAMAMEN erişilemez hâle geliyordu (URL'yi ezbere bilen hariç).
+// Çavuşlar'ın (cavuslar.php) kendi home-card'ı personel_takip.php'de HÂLÂ VAR,
+// o yüzden o çapraz bağlantı kaldırılmış kalabilir; isci_tipleri.php'nin
+// hiçbir girişi yoktu, bu yüzden KASITLI OLARAK küçük bir "⚙️ İşçi Tipleri"
+// bağlantısı isci_kartlari.php'ye GERİ EKLENDİ (kullanıcının açık onayı).
+ok('isci_kartlari.php: Çavuşlar çapraz bağlantısı hâlâ KALDIRILMIŞ, standart dönüş butonu duruyor',
+    !str_contains(oku('isci_kartlari.php'), 'href="cavuslar.php"')
     && str_contains(oku('isci_kartlari.php'), 'href="personel_takip.php"'));
+ok('isci_kartlari.php: İşçi Tipleri bağlantısı KASITLI OLARAK GERİ EKLENDİ (isci_tipleri.php\'nin BAŞKA hiçbir girişi yok)',
+    str_contains(oku('isci_kartlari.php'), 'href="isci_tipleri.php"'));
 
 echo "\n=== 10. HEDEF SAYFALAR KENDİ YETKİ KONTROLÜNÜ KORUYOR (görev madde 10 — bypass YOK) ===\n";
 foreach ([

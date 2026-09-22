@@ -40,6 +40,11 @@ $bitis = trim($_GET['bitis'] ?? '');
 if ($bitis !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $bitis) || !strtotime($bitis))) $bitis = '';
 
 $ekstre = pdks_cari_ekstre($foremanId, $baslangic ?: null, $bitis ?: null, $pdo);
+// ⚠ Fix 3 (Personel Takibi denetimi) — cavus_ekstre.php'deki İLE AYNI sebep:
+// $baslangic filtreliyken koşan bakiye 0'dan başlar, bu yüzden "KALAN
+// BAKİYE" GERÇEK güncel bakiye değil, filtreli dönemin net hareketidir.
+$_ekstreBaslangicFiltreli = $baslangic !== '';
+$_ekstreGercekBakiye = $_ekstreBaslangicFiltreli ? pdks_cari_bakiye($foremanId, $pdo) : [];
 
 render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'portrait', ['print_pdks.css']);
 ?>
@@ -92,8 +97,19 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
             <td class="num"><?= h(number_format($toplamArtis, 2, ',', '.')) ?></td>
             <td class="num"><?= h(number_format($toplamAzalis, 2, ',', '.')) ?></td>
             <td>—</td></tr>
-        <tr><td colspan="6" style="text-align:right">KALAN BAKİYE — <?= h($durumEtiket) ?></td>
+        <tr><td colspan="6" style="text-align:right"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : ('KALAN BAKİYE — ' . h($durumEtiket)) ?></td>
             <td class="num"><?= h(number_format(abs($sonBakiye), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+        <?php if ($_ekstreBaslangicFiltreli):
+            $_gercekKurus = (float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0);
+            $_gercekDurumEtiket = match (true) {
+                $_gercekKurus > 0 => 'Çavuşa Borcumuz',
+                $_gercekKurus < 0 => 'Çavuş Avansı / Fazla Ödeme',
+                default => 'Hesap Kapalı',
+            };
+        ?>
+        <tr><td colspan="6" style="text-align:right">GÜNCEL BAKİYE (tüm zamanlar) — <?= h($_gercekDurumEtiket) ?></td>
+            <td class="num"><?= h(number_format(abs($_gercekKurus), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+        <?php endif; ?>
         </tfoot>
     </table>
     <?php endforeach; endif; ?>

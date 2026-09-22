@@ -674,85 +674,130 @@ function pdks_kart_olustur(int $employeeId, string $hamUid, string $kaynak, arra
         return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
     }
 
-    $st = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
-    $st->execute([$employeeId]);
-    if (!$st->fetchColumn()) {
-        return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'Personel bulunamadı.'];
+    // ⚠ Fix 8 (Personel Takibi denetimi) — ÇAPRAZ-SİSTEM UID KİLİDİ: bkz.
+    // pdks_uid_lock_al() docblock'u. Aşağıdaki çapraz-sistem SELECT'i (satır
+    // ~701) ile INSERT arasında, AYNI UID için pdks_gunluk_kart_olustur()'un
+    // KENDİ SELECT'i araya girerse, ikisi de "diğer tabloda yok" görüp aynı
+    // fiziksel kartı İKİ AYRI sistemde birden yazabiliyordu (TOCTOU — iki
+    // tablonun kendi UNIQUE kısıtı BİRBİRİNİ korumaz). Bu isim tabanlı kilit
+    // (yalnız MySQL) bu aralığı serileştirir.
+    if (!pdks_uid_lock_al($kanonik, $pdo)) {
+        return ['ok' => false, 'kod' => 'uid_kilit_zaman_asimi', 'hata' => 'Sistem şu anda meşgul (başka bir kart işlemi sürüyor), lütfen tekrar deneyin.'];
     }
-
-    // Çakışma: yalnız TAM AYNI kanonik değer başka bir kartta olamaz.
-    // (Bayt-tersi ARTIK çakışma SAYILMAZ — o başka bir fiziksel kart olabilir.)
-    $cakisma = pdks_uid_cakismasi($kanonik, null, $pdo);
-    if ($cakisma !== null) {
-        return ['ok' => false, 'kod' => 'uid_kullanimda',
-                'hata' => 'Bu UID zaten tanımlı (kart #' . (int)$cakisma['id'] . ').'];
-    }
-
-    // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ (Sprint Günlük-İşçi-01) — YUMUŞAK bağımlılık:
-    // config/pdks_gunluk.php (günlük işçi/çavuş modülü) YÜKLÜYSE, aynı
-    // fiziksel kartın GÜNLÜK İŞÇİ kart havuzunda (worker_cards) zaten tanımlı
-    // olup olmadığına bakılır — aynı UID iki sistemde birden olursa tarama
-    // hangi sisteme ait olduğunu bilemez. function_exists guard: bu dosya
-    // (config/pdks.php) o modülü HİÇ require ETMEZ ve onsuz da tam
-    // çalışmaya devam eder (bağımlılık yönü TERS olmaz — bkz.
-    // config/pdks_gunluk.php başlığı). Bu YÜZDEN personel_kartlar.php ve
-    // personel_form.php artık config/pdks_gunluk.php'yi de require eder;
-    // KART YAZMA MANTIĞININ KENDİSİ (bu fonksiyon) DEĞİŞMEDİ.
-    if (function_exists('pdks_gunluk_uid_gecici_kartta_mi')) {
-        $gunlukCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
-        if ($gunlukCakisma !== null) {
-            return ['ok' => false, 'kod' => 'uid_gunluk_havuzda',
-                    'hata' => 'Bu kart zaten GÜNLÜK İŞÇİ kart havuzunda tanımlı (kart no: '
-                            . (string)$gunlukCakisma['card_no'] . '). Aynı fiziksel kart hem kalıcı '
-                            . 'personelde hem işçi havuzunda olamaz.'];
-        }
-    }
-
-    $bayt    = pdks_uid_bayt_sayisi($kanonik);
-    $ondalik = pdks_uid_to_decimal($kanonik);
-
-    $disTx = $pdo->inTransaction();
-    if (!$disTx) $pdo->beginTransaction();
     try {
-        $ins = $pdo->prepare(
-            "INSERT INTO employee_cards
-                (employee_id, uid_hex, uid_bytes, uid_decimal, card_type, atqa, sak,
-                 label, status, issued_at, expires_at, enrolled_source, notes, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-        );
-        $ins->execute([
-            $employeeId, $kanonik, $bayt, $ondalik,
-            (string)($ek['card_type']  ?? 'mifare_classic_1k'),
-            $ek['atqa'] ?? null, $ek['sak'] ?? null,
-            (string)($ek['label'] ?? ''),
-            (string)($ek['status'] ?? 'aktif'),
-            $ek['issued_at']  ?? null,
-            $ek['expires_at'] ?? null,
-            $kaynak,
-            $ek['notes'] ?? null,
-            $ek['created_by'] ?? null,
-        ]);
-        $cardId = (int)$pdo->lastInsertId();
+        $st = $pdo->prepare("SELECT id FROM employees WHERE id = ?");
+        $st->execute([$employeeId]);
+        if (!$st->fetchColumn()) {
+            return ['ok' => false, 'kod' => 'personel_yok', 'hata' => 'Personel bulunamadı.'];
+        }
 
-        // Yalnız KANONİK alias yazılır — bayt-tersi ARTIK otomatik yazılmaz (§ yukarısı).
-        $ia = $pdo->prepare("INSERT INTO employee_card_uids (card_id, uid_hex, kind) VALUES (?,?,?)");
-        $ia->execute([$cardId, $kanonik, 'canonical']);
+        // Çakışma: yalnız TAM AYNI kanonik değer başka bir kartta olamaz.
+        // (Bayt-tersi ARTIK çakışma SAYILMAZ — o başka bir fiziksel kart olabilir.)
+        $cakisma = pdks_uid_cakismasi($kanonik, null, $pdo);
+        if ($cakisma !== null) {
+            return ['ok' => false, 'kod' => 'uid_kullanimda',
+                    'hata' => 'Bu UID zaten tanımlı (kart #' . (int)$cakisma['id'] . ').'];
+        }
 
-        if (!$disTx) $pdo->commit();
-    } catch (PDOException $e) {
-        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
-        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => $e->getMessage()];
+        // ⚠ ÇAPRAZ-SİSTEM KONTROLÜ (Sprint Günlük-İşçi-01) — YUMUŞAK bağımlılık:
+        // config/pdks_gunluk.php (günlük işçi/çavuş modülü) YÜKLÜYSE, aynı
+        // fiziksel kartın GÜNLÜK İŞÇİ kart havuzunda (worker_cards) zaten tanımlı
+        // olup olmadığına bakılır — aynı UID iki sistemde birden olursa tarama
+        // hangi sisteme ait olduğunu bilemez. function_exists guard: bu dosya
+        // (config/pdks.php) o modülü HİÇ require ETMEZ ve onsuz da tam
+        // çalışmaya devam eder (bağımlılık yönü TERS olmaz — bkz.
+        // config/pdks_gunluk.php başlığı). Bu YÜZDEN personel_kartlar.php ve
+        // personel_form.php artık config/pdks_gunluk.php'yi de require eder;
+        // KART YAZMA MANTIĞININ KENDİSİ (bu fonksiyon) DEĞİŞMEDİ.
+        if (function_exists('pdks_gunluk_uid_gecici_kartta_mi')) {
+            $gunlukCakisma = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
+            if ($gunlukCakisma !== null) {
+                return ['ok' => false, 'kod' => 'uid_gunluk_havuzda',
+                        'hata' => 'Bu kart zaten GÜNLÜK İŞÇİ kart havuzunda tanımlı (kart no: '
+                                . (string)$gunlukCakisma['card_no'] . '). Aynı fiziksel kart hem kalıcı '
+                                . 'personelde hem işçi havuzunda olamaz.'];
+            }
+        }
+
+        $bayt    = pdks_uid_bayt_sayisi($kanonik);
+        $ondalik = pdks_uid_to_decimal($kanonik);
+
+        $disTx = $pdo->inTransaction();
+        if (!$disTx) $pdo->beginTransaction();
+        try {
+            $ins = $pdo->prepare(
+                "INSERT INTO employee_cards
+                    (employee_id, uid_hex, uid_bytes, uid_decimal, card_type, atqa, sak,
+                     label, status, issued_at, expires_at, enrolled_source, notes, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            );
+            $ins->execute([
+                $employeeId, $kanonik, $bayt, $ondalik,
+                (string)($ek['card_type']  ?? 'mifare_classic_1k'),
+                $ek['atqa'] ?? null, $ek['sak'] ?? null,
+                (string)($ek['label'] ?? ''),
+                (string)($ek['status'] ?? 'aktif'),
+                $ek['issued_at']  ?? null,
+                $ek['expires_at'] ?? null,
+                $kaynak,
+                $ek['notes'] ?? null,
+                $ek['created_by'] ?? null,
+            ]);
+            $cardId = (int)$pdo->lastInsertId();
+
+            // Yalnız KANONİK alias yazılır — bayt-tersi ARTIK otomatik yazılmaz (§ yukarısı).
+            $ia = $pdo->prepare("INSERT INTO employee_card_uids (card_id, uid_hex, kind) VALUES (?,?,?)");
+            $ia->execute([$cardId, $kanonik, 'canonical']);
+
+            if (!$disTx) $pdo->commit();
+        } catch (PDOException $e) {
+            if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => $e->getMessage()];
+        }
+
+        if (function_exists('audit_log_event')) {
+            audit_log_event('card_create', 'pdks', $cardId, null, [
+                'employee_id' => $employeeId, 'uid_hex' => $kanonik,
+                'uid_bytes' => $bayt, 'kaynak' => $kaynak,
+            ]);
+        }
+
+        return ['ok' => true, 'card_id' => $cardId, 'uid_hex' => $kanonik,
+                'uid_decimal' => $ondalik, 'uid_bytes' => $bayt];
+    } finally {
+        pdks_uid_lock_birak($kanonik, $pdo);
     }
+}
 
-    if (function_exists('audit_log_event')) {
-        audit_log_event('card_create', 'pdks', $cardId, null, [
-            'employee_id' => $employeeId, 'uid_hex' => $kanonik,
-            'uid_bytes' => $bayt, 'kaynak' => $kaynak,
-        ]);
-    }
+/**
+ * ÇAPRAZ-SİSTEM UID KİLİDİ (Fix 8, Personel Takibi denetimi): kalıcı personel
+ * kartı (employee_cards) ile günlük işçi kartı (worker_cards) AYRI
+ * tablolardadır — aralarında PAYLAŞILAN bir UNIQUE kısıt YOKTUR. Her yazma
+ * fonksiyonu (pdks_kart_olustur / pdks_gunluk_kart_olustur) KARŞI tabloya
+ * yalnız bir SELECT ile bakıp karar verir; iki eşzamanlı istek (biri kalıcı,
+ * biri günlük işçi) AYNI fiziksel UID için bu SELECT'i AYNI ANDA çalıştırırsa
+ * ikisi de "karşı tabloda yok" görüp ikisi de INSERT edebilirdi — klasik
+ * TOCTOU (kendi tablosunun UNIQUE kısıtı karşı tabloyu KORUMAZ).
+ *
+ * MySQL'in bağlantılar-arası isim tabanlı kilidi (GET_LOCK/RELEASE_LOCK) bunu
+ * satır/tablo kilitlemeden çözer: aynı UID için ikinci istek, birincinin
+ * RELEASE_LOCK'una (veya bağlantı kapanana) kadar BEKLER — böylece SELECT ve
+ * takip eden INSERT AYNI UID için asla iç içe geçmez. SQLite testlerinde
+ * (tek bağlantılı/tek iş parçacığı, GET_LOCK söz dizimini TANIMAZ) sürücü
+ * mysql değilse no-op döner — gerek yoktur, zaten tek iş parçacığı serileşir.
+ */
+function pdks_uid_lock_al(string $kanonik, PDO $pdo, int $timeoutSaniye = 5): bool
+{
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return true;
+    $st = $pdo->prepare('SELECT GET_LOCK(?, ?)');
+    $st->execute(['pdks_uid:' . $kanonik, $timeoutSaniye]);
+    return (string)$st->fetchColumn() === '1';
+}
 
-    return ['ok' => true, 'card_id' => $cardId, 'uid_hex' => $kanonik,
-            'uid_decimal' => $ondalik, 'uid_bytes' => $bayt];
+function pdks_uid_lock_birak(string $kanonik, PDO $pdo): void
+{
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return;
+    $pdo->prepare('SELECT RELEASE_LOCK(?)')->execute(['pdks_uid:' . $kanonik]);
 }
 
 /**
@@ -959,17 +1004,44 @@ function pdks_personel_kart_gecmisi(int $employeeId, ?PDO $pdo = null): array
  * biri aktif diğeri iptal); "aynı anda yalnız bir aktif kart" kuralı burada,
  * uygulama katmanında uygulanır (Faz 1B §5 gereği).
  *
+ * ⚠ EŞZAMANLILIK (Fix 7, Personel Takibi denetimi — pdks_gunluk_faz8a_kart_kilitle()
+ * İLE AYNI strateji): önceki "SELECT ile kontrol, sonra INSERT" ayrık iki adımdı —
+ * aynı personele iki eşzamanlı istek (ör. iki sekme/cihaz) SELECT'i AYNI ANDA
+ * "aktif kart yok" görüp ikisi de INSERT edebiliyordu (iki aktif kart, şema
+ * bunu bir UNIQUE ile önlemiyor). Şimdi `employees` satırı `FOR UPDATE` ile
+ * kilitlenip kontrol+yazma AYNI işlem içinde yapılır (yalnız MySQL — SQLite
+ * testleri tek bağlantılı/tek iş parçacığıdır ve FOR UPDATE söz dizimini
+ * TANIMAZ). pdks_kart_olustur() zaten kendi transaction'ını dışarıdaki
+ * transaction'a katılacak şekilde yazıyordu (`$pdo->inTransaction()` kontrolü).
+ *
  * @return array{ok:bool, card_id?:int, uid_hex?:string, kod?:string, hata?:string}
  */
 function pdks_kart_ata(int $employeeId, string $hamUid, string $kaynak, array $ek = [], ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    if (pdks_personel_aktif_kart($employeeId, $pdo) !== null) {
-        return ['ok' => false, 'kod' => 'zaten_aktif_kart_var',
-                'hata' => 'Bu personelin zaten aktif bir kartı var. Önce iptal edin veya "Değiştir" kullanın.'];
+    $disTx = $pdo->inTransaction();
+    if (!$disTx) $pdo->beginTransaction();
+    try {
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $pdo->prepare("SELECT id FROM employees WHERE id = ?" . ($driver === 'mysql' ? ' FOR UPDATE' : ''))
+            ->execute([$employeeId]);
+
+        if (pdks_personel_aktif_kart($employeeId, $pdo) !== null) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'zaten_aktif_kart_var',
+                    'hata' => 'Bu personelin zaten aktif bir kartı var. Önce iptal edin veya "Değiştir" kullanın.'];
+        }
+        $sonuc = pdks_kart_olustur($employeeId, $hamUid, $kaynak, $ek, $pdo);
+        if (!$sonuc['ok']) {
+            if (!$disTx) $pdo->rollBack();
+            return $sonuc;
+        }
+        if (!$disTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
-    $sonuc = pdks_kart_olustur($employeeId, $hamUid, $kaynak, $ek, $pdo);
-    if ($sonuc['ok'] && function_exists('audit_log_event')) {
+    if (function_exists('audit_log_event')) {
         audit_log_event('card_assigned', 'pdks', (int)$sonuc['card_id'], null,
             ['employee_id' => $employeeId, 'uid_hex' => $sonuc['uid_hex']]);
     }

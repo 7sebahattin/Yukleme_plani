@@ -43,6 +43,16 @@ if ($id > 0) {
         header('Location: personel.php');
         exit;
     }
+    // Aktif depo kapsamı (record_view.php/kantar_view.php İLE AYNI desen):
+    // başka deponun personeline doğrudan URL/POST ile girilemez — ne
+    // görüntüleme ne de kart eylemleri (save_employee/delete_employee/
+    // kart_ata/kart_durum/kart_degistir). Deposu boş (atanmamış) personel
+    // her depoda görünür kalır.
+    $_pf_depo = trim((string)($eski['depo'] ?? ''));
+    if ($_pf_depo !== '' && function_exists('depot_visible_to_user') && !depot_visible_to_user($_pf_depo)) {
+        forbidden('Bu personel başka depoya ait (' . h($_pf_depo)
+            . '). Görüntülemek için üstteki depo rozetinden o depoya geçin.');
+    }
     $record = $eski;
 }
 
@@ -192,6 +202,17 @@ $departmanlar = [];
 try { $departmanlar = $pdo->query("SELECT DISTINCT department FROM employees WHERE department <> '' ORDER BY department")->fetchAll(PDO::FETCH_COLUMN); }
 catch (PDOException $e) {}
 
+// Fix 5 (Personel Takibi denetimi): serbest metin depo alanı yerine
+// tanımlı depo listesi (definitions.php'deki AYNI kaynak, depo_tasima.php/
+// _kantar_form.php emsali). Mevcut kayıttaki depo tanımlı listede yoksa
+// (eski/silinmiş bir depo adı) seçenek listesine EKLENİR — kayıt sessizce
+// başka bir depoya kaymaz, yalnızca ekranda görünür kalır.
+$depoSecenekleri = function_exists('depot_options') ? depot_options() : [];
+$_pf_mevcut_depo = trim((string)($record['depo'] ?? ''));
+if ($_pf_mevcut_depo !== '' && !in_array($_pf_mevcut_depo, $depoSecenekleri, true)) {
+    $depoSecenekleri[] = $_pf_mevcut_depo;
+}
+
 render_header($id > 0 ? (string)$record['full_name'] : 'Yeni Personel');
 $base = base_url();
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
@@ -260,7 +281,16 @@ render_flash();
         </label>
         <label>
             <span class="form-label">Depo</span>
+            <?php if (!empty($depoSecenekleri)): ?>
+            <select name="depo">
+                <option value="">— Seçin —</option>
+                <?php foreach ($depoSecenekleri as $dv): ?>
+                <option value="<?= h($dv) ?>" <?= $_pf_mevcut_depo === $dv ? 'selected' : '' ?>><?= h($dv) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php else: ?>
             <input type="text" name="depo" maxlength="150" value="<?= h((string)$record['depo']) ?>">
+            <?php endif; ?>
         </label>
         <label>
             <span class="form-label">Telefon</span>

@@ -136,6 +136,13 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
     <div class="pdks-kiosk-counter-totals" style="margin-bottom:8px">
         <div class="pdks-kiosk-counter-box"><div class="lbl">Kesinleşmiş Hakediş (<?= h($cur) ?>)</div><div class="val"><?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Ödeme</div><div class="val"><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></div></div>
+        <?php if (($b['duzeltme_kurus'] ?? 0) !== 0): ?>
+        <!-- Fix 9 (Personel Takibi denetimi): Faz 9D düzeltme/mahsup varsa Bakiye
+             artık Hakediş-Ödeme'ye TAM eşit değildir (Bakiye = Hakediş + Düzeltme -
+             Ödeme, bkz. pdks_cari_bakiye()) — bu kutu olmadan fark "tutmuyor"
+             görünüyordu. Düzeltme YOKSA (çoğu çavuş) kutu HİÇ gösterilmez. -->
+        <div class="pdks-kiosk-counter-box"><div class="lbl">Düzeltme (Net)</div><div class="val"><?= h(number_format((float)$b['duzeltme_toplam'], 2, ',', '.')) ?></div></div>
+        <?php endif; ?>
         <div class="pdks-kiosk-counter-box <?= $b['durum'] === 'borc' ? 'eksik' : '' ?>"><div class="lbl"><?= h($b['durum_etiket']) ?></div><div class="val" id="pdksBakiye<?= h($cur) ?>" data-bakiye-kurus="<?= (int)$b['bakiye_kurus'] ?>"><?= h(number_format(abs((float)$b['bakiye']), 2, ',', '.')) ?></div></div>
     </div>
     <?php endforeach; endif; ?>
