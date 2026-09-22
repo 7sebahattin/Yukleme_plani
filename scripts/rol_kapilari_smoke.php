@@ -30,8 +30,13 @@ require_once $ROOT . '/config/hesap_calc.php';   // GERÇEK hesap_can()
 
 // first_allowed_page() gövdesini helpers.php'den çıkarıp yükle — helpers.php'nin
 // tamamı migrasyon IIFE'si yüzünden DB ister, bu yüzden yalnız bu fonksiyon alınır.
+//
+// ⚠ Çıkarma nav_ptak_sayfalari()'ndan BAŞLAR: first_allowed_page() artık
+// 'personel_takip.php' kapısı için nav_ptak_gorunur()'u çağırıyor (izin listesi
+// sidebar/bottomnav ile TEK kaynakta tutuluyor). Yalnız first_allowed_page()
+// alınırsa o çağrı tanımsız fonksiyon hatası verir.
 $hsrc = file_get_contents($ROOT . '/config/helpers.php');
-$a = strpos($hsrc, 'function first_allowed_page(): ?string {');
+$a = strpos($hsrc, 'function nav_ptak_sayfalari(): array {');
 $b = strpos($hsrc, 'function render_desktop_sidebar(');
 if ($a === false || $b === false || $b < $a) { fwrite(STDERR, "first_allowed_page() bulunamadı\n"); exit(1); }
 eval(substr($hsrc, $a, $b - $a));
