@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v254');
+    define('APP_SURUM', 'v255');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -444,11 +444,17 @@ function render_desktop_sidebar(string $base): void {
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
         // maliyet_* sayfalarındayken sidebar'da yönünü kaybetmesin. ?>
-
-        <?php if ($p_gunluk): ?>
-        <div class="sidebar-section">Personel</div>
-        <?php $lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', $a_ptak); ?>
-        <?php endif; ?>
+        <?php
+        // Sprint Navigasyon-04 (kullanıcı isteği): ayrı "Personel" başlığı
+        // kaldırıldı, link Operasyon listesinde Hesap'ın altına taşındı.
+        // İkon emoji (🧑‍🌾) yerine index.php'nin dashboard kartındaki yeşil
+        // giriş / kırmızı çıkış 3D ikonunun (.sbi-personel, assets/style.css)
+        // sidebar ölçeğine küçültülmüş hâli — $lnk() üçüncü parametreyi
+        // ESCAPE ETMEDEN basar, bu yüzden HTML geçirilebilir.
+        if ($p_gunluk) $lnk('personel_takip.php',
+            '<span class="sbi-personel" aria-hidden="true"><span class="sbi-personel-arrow sbi-personel-arrow-in"></span><span class="sbi-personel-arrow sbi-personel-arrow-out"></span></span>',
+            'Personel Takibi', $a_ptak);
+        ?>
 
         <?php if ($p_def || $p_usr || $p_adm): ?>
         <div class="sidebar-section">Yönetim</div>

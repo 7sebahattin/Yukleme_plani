@@ -75,8 +75,12 @@ foreach ($eskiSidebarLinkleri as $eski) {
     ok("helpers.php: eski dağınık link KALDIRILDI — $eski YOK", !str_contains($helpersSrc, $eski), $eski);
 }
 ok("helpers.php: 'Günlük İşçi' section başlığı ARTIK YOK (tek bölüme indirildi)", !str_contains($helpersSrc, '>Günlük İşçi<'));
+// ⚠ Sprint Navigasyon-04: link artık ayrı bir bölüm altında değil (Hesap'ın
+// altına taşındı, "Personel" başlığı kaldırıldı) — gösterim tek satırlık
+// `if ($p_gunluk) $lnk(...)` oldu, eski `if ($p_gunluk): ... endif;`
+// bloğu değil. Kapı AYNI değişkene ($p_gunluk) bağlı kalmalı.
 ok("helpers.php: Personel Takibi görünürlüğü aktif günlük işçi/hakediş/rapor izinlerine bağlı; legacy PDKS izni tek başına yeterli değil",
-    (bool)preg_match('/if \(\$p_gunluk\):/', $helpersSrc));
+    (bool)preg_match('/if \(\$p_gunluk\)\s*\$lnk\(/', $helpersSrc));
 // ⚠ Sprint Navigasyon-02: liste sidebar'ın içinden nav_ptak_sayfalari()
 // fonksiyonuna taşındı — mobil bottomnav da AYNI kaynağı okuyor.
 ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (nav_ptak_sayfalari)",
