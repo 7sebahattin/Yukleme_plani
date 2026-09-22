@@ -49,12 +49,24 @@ foreach ([
 // =========================================================
 echo "\n=== A. Sidebar aktif-durum (madde A) ===\n";
 $helpersSrc = oku9e('config/helpers.php');
-ok9e('helpers.php: \$a_ptak TEK konsolide dizi olarak tanımlı (yeni sidebar bölümü İCAT EDİLMEDİ)',
-    (bool)preg_match('/\$a_ptak = in_array\(\$cur, \[/', $helpersSrc));
+// ⚠ Sprint Navigasyon-02: liste artık nav_ptak_sayfalari() fonksiyonunda
+// TEK kaynak olarak duruyor (sidebar + mobil bottomnav ikisi de onu okur);
+// eskiden sidebar'ın içinde satır içi bir $a_ptak dizisiydi. Kural AYNI —
+// TEK konsolide liste — yalnız yeri değişti.
+ok9e('helpers.php: Personel Takibi sayfa listesi TEK konsolide kaynakta (nav_ptak_sayfalari)',
+    (bool)preg_match('/function nav_ptak_sayfalari\(\): array/', $helpersSrc)
+    && (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc));
+ok9e('helpers.php: mobil bottomnav AYNI listeyi kullanıyor (sidebar ile ayrışmaz)',
+    (bool)preg_match('/\$is_ptak\s*=\s*in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc));
+if (preg_match('/function nav_ptak_sayfalari\(\): array\s*\{(.*?)\}/s', $helpersSrc, $mPtak)) {
+    $ptakGovde = $mPtak[1];
+} else {
+    $ptakGovde = '';
+}
 foreach (['mesai_degerlendirme.php', 'manuel_cikis.php', 'gunluk_isci_puantaj_detay.php',
           'cavus_hakedis_detay.php', 'cavus_ekstre.php', 'isci_kartlari.php'] as $sayfa) {
-    ok9e("helpers.php: \$a_ptak listesi '$sayfa' İÇERİYOR",
-        (bool)preg_match('/\$a_ptak = in_array\(\$cur, \[.*?\'' . preg_quote($sayfa, '/') . '\'.*?\], true\);/s', $helpersSrc));
+    ok9e("helpers.php: nav_ptak_sayfalari() '$sayfa' İÇERİYOR",
+        str_contains($ptakGovde, "'" . $sayfa . "'"));
 }
 // Yazdırma sayfaları BİLİNÇLİ olarak listede YOK — chrome basmıyorlar.
 foreach (['gunluk_puantaj_yazdir.php', 'cavus_hakedis_yazdir.php'] as $yazdirma) {
@@ -291,8 +303,8 @@ ok9e('manuel_cikis.php KENDİSİ bu fazda DEĞİŞMEDİ (mevcut Faz 8E akışı 
 // § G — Sürüm
 // =========================================================
 echo "\n=== G. Sürüm (APP_SURUM / CACHE_NAME) ===\n";
-ok9e('config/helpers.php: APP_SURUM v246', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v246['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v246'"));
-ok9e('sw.js: CACHE_NAME yukleme-plani-v246', str_contains(oku9e('sw.js'), 'yukleme-plani-v246'));
+ok9e('config/helpers.php: APP_SURUM v253', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v253['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v253'"));
+ok9e('sw.js: CACHE_NAME yukleme-plani-v253', str_contains(oku9e('sw.js'), 'yukleme-plani-v253'));
 
 // =========================================================
 echo "\n=== SONUÇ ===\n";

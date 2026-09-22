@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v252');
+    define('APP_SURUM', 'v253');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -242,6 +242,52 @@ function base_url(): string {
  * Yalnızca CSS ile desktop'ta görünür; mobil/tablet'te gizlidir.
  * Permission mantığı topbar ile aynı can()/is_admin() üzerinden çalışır.
  */
+/**
+ * Personel Takibi ailesine ait sayfalar — aktif-sekme vurgusu İÇİN.
+ *
+ * ⚠ TEK kaynak: hem masaüstü sidebar'ı hem mobil bottomnav bu listeyi
+ * okur. İki yere kopyalanırsa ayrışır ve kullanıcı bir alt sayfada
+ * hangi sekmenin aktif olduğunu göremez.
+ *
+ * Yazdırma sayfaları (*_yazdir.php) BİLEREK listede YOK — onlar
+ * render_header()/render_footer() çağırmaz, kendi minimal HTML
+ * iskeletini kullanır (sidebar/bottomnav zaten hiç basılmaz).
+ */
+function nav_ptak_sayfalari(): array {
+    return [
+        'personel_takip.php',
+        'personel.php', 'personel_form.php', 'personel_kartlar.php', 'giris_cikis.php',
+        'cavuslar.php', 'cavus_form.php', 'isci_kartlari.php', 'isci_tipleri.php',
+        'gunluk_isci_giris_cikis.php', 'gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php',
+        'cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php',
+        'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
+        'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
+        'mesai_degerlendirme.php', 'manuel_cikis.php',
+    ];
+}
+
+/**
+ * Personel Takibi girişi bu kullanıcıya gösterilsin mi?
+ *
+ * ⚠ TEK kaynak (sidebar + bottomnav). personel_takip.php'nin KENDİ kapı
+ * mantığıyla aynı genişlikte: attendance.* alt-izinlerinden HERHANGİ
+ * biri yeterlidir. can() DOĞRUDAN kullanılır (pdks_gunluk_can() DEĞİL) —
+ * config/pdks_gunluk.php yalnız kendi sayfalarında yüklenir, sidebar ise
+ * HER sayfada basılır.
+ */
+function nav_ptak_gorunur(): bool {
+    if (function_exists('is_admin') && is_admin()) return true;
+    if (!function_exists('can')) return true;
+    foreach ([
+        'attendance.foremen', 'attendance.worker_cards', 'attendance.daily_scan',
+        'attendance.daily_reports', 'attendance.foreman_rates', 'attendance.entitlements',
+        'attendance.foreman_accounts', 'attendance.foreman_payments', 'attendance.management_reports',
+    ] as $izin) {
+        if (can($izin)) return true;
+    }
+    return false;
+}
+
 // Kullanıcının GERÇEKTEN açabildiği ilk sayfa (yoksa null).
 //
 // Neden var: giriş akışı login → depo_sec → index.php'dir ve index.php
@@ -267,11 +313,9 @@ function first_allowed_page(): ?string {
         'malzeme_stok.php'   => can('stok.read'),                       // require_perm('stok.read')
         'hesap.php'          => can('hesap.read') || $adm,              // hesap_can('read')
         'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
-        'personel_takip.php' => $adm || can('attendance.foremen') || can('attendance.worker_cards')
-                                || can('attendance.daily_scan') || can('attendance.daily_reports')
-                                || can('attendance.foreman_rates') || can('attendance.entitlements')
-                                || can('attendance.foreman_accounts') || can('attendance.foreman_payments')
-                                || can('attendance.management_reports'),
+        // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
+        // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
+        'personel_takip.php' => nav_ptak_gorunur(),
         'definitions.php'    => can('defs.read'),                       // require_perm('defs.read')
         'users.php'          => can('users.admin'),                     // require_perm('users.admin')
     ];
@@ -312,7 +356,7 @@ function render_desktop_sidebar(string $base): void {
     // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden
     // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de
     // yalnız kendi sayfalarında yüklenir).
-    $p_gunluk = ($_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports'))) || $p_adm;
+    $p_gunluk = nav_ptak_gorunur();
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
@@ -347,15 +391,7 @@ function render_desktop_sidebar(string $base): void {
     // EKLENDİ. Yazdırma sayfaları (*_yazdir.php) BİLEREK bu listede YOK —
     // onlar render_header()'ı hiç çağırmaz, kendi minimal HTML iskeletini
     // kullanır (sidebar zaten hiç basılmaz, "aktif" kavramı geçersizdir).
-    $a_ptak = in_array($cur, [
-        'personel_takip.php',
-        'personel.php', 'personel_form.php', 'personel_kartlar.php', 'giris_cikis.php',
-        'cavuslar.php', 'cavus_form.php', 'isci_kartlari.php', 'isci_tipleri.php',
-        'gunluk_isci_giris_cikis.php', 'gunluk_isci_puantaj.php', 'gunluk_isci_puantaj_detay.php',
-        'cavus_fiyatlari.php', 'cavus_hakedis.php', 'cavus_hakedis_detay.php',
-        'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
-        'mesai_degerlendirme.php', 'manuel_cikis.php',
-    ], true);
+    $a_ptak = in_array($cur, nav_ptak_sayfalari(), true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
     $a_rol   = $cur === 'roles.php';
@@ -592,9 +628,12 @@ function render_footer(bool $print_mode = false): void {
         $is_home     = in_array($cur, ['index.php', '']);
         $_cikma_hint = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
         $is_records  = !$_cikma_hint && in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
-        $is_cikmalar = in_array($cur, ['cikmalar.php', 'cikma_create.php']) || $_cikma_hint;
         $is_defs     = $cur === 'definitions.php';
         $is_reports  = $cur === 'reports.php';
+        // Sidebar ile AYNI listeden beslenir (bkz. nav_ptak_sayfalari()) —
+        // kullanıcı hangi Personel Takibi alt sayfasında olursa olsun
+        // alt bardaki sekme vurgulu kalır.
+        $is_ptak     = in_array($cur, nav_ptak_sayfalari(), true);
         $is_hks      = strpos((string)($_SERVER['REQUEST_URI'] ?? ''), '/halkayit/') !== false;
         echo '</main>';
         ?>
@@ -615,10 +654,10 @@ function render_footer(bool $print_mode = false): void {
         <span class="bottomnav-label">Bildirim</span>
     </a>
     <?php endif; ?>
-    <?php if (!function_exists('can') || can('records.read')): ?>
-    <a href="<?= $base ?>cikmalar.php" class="bottomnav-item<?= $is_cikmalar ? ' active' : '' ?>">
-        <span class="bottomnav-icon">🚚</span>
-        <span class="bottomnav-label">Çıkmalar</span>
+    <?php if (nav_ptak_gorunur()): ?>
+    <a href="<?= $base ?>personel_takip.php" class="bottomnav-item<?= $is_ptak ? ' active' : '' ?>">
+        <span class="bottomnav-icon">🧑‍🌾</span>
+        <span class="bottomnav-label">Personel</span>
     </a>
     <?php endif; ?>
     <?php if (!function_exists('can') || can('reports.read')): ?>

@@ -61,7 +61,7 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
     <p style="text-align:center;color:#666;padding:20px">Bu tarih aralığında hiçbir para biriminde hareket bulunamadı.</p>
     <?php else: foreach ($ekstre as $cur => $satirlar): if (empty($satirlar)) continue; ?>
 
-    <h3 class="pr-section"><?= h($cur) ?> Hareketleri</h3>
+    <div style="text-align:right;margin:14px 0 2px"><span class="pr-tag"><?= h($cur) ?></span></div>
     <table class="print-table">
         <thead><tr><th>Tarih</th><th>İşlem Türü</th><th>Belge / Referans</th><th>Açıklama</th><th>Hakediş / Borç Artışı</th><th>Ödeme / Azalış</th><th>Bakiye</th></tr></thead>
         <tbody>
@@ -97,6 +97,5 @@ render_print_page_start('Çavuş Cari Hesap Ekstresi', 'account', 'detail', 'por
         </tfoot>
     </table>
     <?php endforeach; endif; ?>
-
 </div>
 <?php render_print_page_end(); ?>

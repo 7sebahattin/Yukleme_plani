@@ -262,7 +262,7 @@ ok('30. KALAN BAKİYE satırı "Çavuşa Borcumuz" etiketiyle görünüyor', str
 ok('iptal edilen ödeme (200) ekstrede GÖRÜNMÜYOR (yalnız GEÇERLİ hareketler)', !str_contains($sEkstre, '200,00'));
 
 $sEkstreMehmet = renderPage('cavus_ekstre_yazdir.php', ['foreman_id' => (string)$mehmetId]);
-ok('34. Mehmet EUR ekstresinde TRY hiç YOK — para birimleri KARIŞTIRILMADI', str_contains($sEkstreMehmet, 'EUR Hareketleri') && !str_contains($sEkstreMehmet, 'TRY Hareketleri'));
+ok('34. Mehmet EUR ekstresinde TRY hiç YOK — para birimleri KARIŞTIRILMADI', str_contains($sEkstreMehmet, 'class="pr-tag">EUR<') && !str_contains($sEkstreMehmet, 'class="pr-tag">TRY<'));
 
 echo "\n=== 31/32. cavus_odeme_yazdir.php — Ödeme Dökümü (iptal HARİÇ tutuluyor) ===\n";
 $sOdeme = renderPage('cavus_odeme_yazdir.php', ['cavus' => (string)$ayseId]);

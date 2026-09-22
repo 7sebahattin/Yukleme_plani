@@ -98,6 +98,7 @@ render_flash();
         <?php endif; ?>
     </div>
     <div class="page-head-actions">
+        <a href="<?= h('cavus_toplu_dokum_detay_yazdir.php?' . http_build_query(array_filter(['session_id' => $sessionId, 'ay' => $ay, 'cavus' => $cavusId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
         <a href="<?= h($geriUrl) ?>" class="btn btn-ghost">← Aylık Döküme Dön</a>
     </div>
 </div>

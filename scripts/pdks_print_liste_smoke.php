@@ -44,6 +44,7 @@ $ciftler = [
     'cavus_cari_yazdir.php'            => 'cavus_cari.php',
     'gunluk_puantaj_liste_yazdir.php'  => 'gunluk_isci_puantaj.php',
     'mesai_degerlendirme_yazdir.php'   => 'mesai_degerlendirme.php',
+    'cavus_toplu_dokum_detay_yazdir.php' => 'cavus_toplu_dokum_detay.php',
 ];
 
 echo "\n=== 1. SÖZ DİZİMİ ===\n";
@@ -128,6 +129,9 @@ foreach ($beklenenKapilar as $f => $kapi) {
 }
 ok("cavus_toplu_dokum_yazdir.php: hakediş kolonu AYRICA pdks_rapor_can('financial') istiyor (URL ile atlanamaz)",
     str_contains(oku('cavus_toplu_dokum_yazdir.php'), "pdks_rapor_can('financial')"));
+ok("cavus_toplu_dokum_detay_yazdir.php: require_pdks_rapor() kapısı var (kaynak sayfayla AYNI)",
+    str_contains(oku('cavus_toplu_dokum_detay_yazdir.php'), 'require_pdks_rapor()')
+    && str_contains(oku('cavus_toplu_dokum_detay.php'), 'require_pdks_rapor()'));
 
 echo "\n=== 5. SALT OKUNUR — İKİNCİ BİR YAZMA YOLU YOK ===\n";
 foreach (array_keys($ciftler) as $f) {
@@ -155,6 +159,8 @@ foreach ($beklenenFonksiyonlar as $f => $fnler) {
         ok("$f: $fn REUSE ediliyor (kendi sorgusunu yazmıyor)", str_contains($s, $fn));
     }
 }
+ok('cavus_toplu_dokum_detay_yazdir.php: pdks_rapor_cavus_kart_dokumu( REUSE ediliyor (kendi sorgusunu yazmıyor)',
+    str_contains(oku('cavus_toplu_dokum_detay_yazdir.php'), 'pdks_rapor_cavus_kart_dokumu('));
 
 echo "\n=== 7. PARA BİRİMİ KURALI (CLAUDE.md: kurlar ASLA toplanmaz) ===\n";
 $cariSrc = oku('cavus_cari_yazdir.php');
@@ -167,6 +173,13 @@ ok('cavus_cari_yazdir.php: düzeltme kolonu var — bakiye = hakediş + düzeltm
 $hakedisListeSrc = oku('cavus_hakedis_liste_yazdir.php');
 ok('cavus_hakedis_liste_yazdir.php: hakediş toplamı para birimi BAŞINA ayrı ($hakedisParaBirimi[$cur])',
     (bool)preg_match('/\$hakedisParaBirimi\[\$cur\]/', $hakedisListeSrc));
+
+echo "\n=== 7B. KART DÖKÜMÜ — HAM UID BASILMIYOR (gunluk_puantaj_yazdir.php İLE AYNI ilke) ===\n";
+$dokumSrc = oku('cavus_toplu_dokum_detay_yazdir.php');
+ok('cavus_toplu_dokum_detay_yazdir.php: canonical_uid/okunan_uid/uid_decimal HİÇ YOK — yalnız card_no basılıyor',
+    !preg_match('/canonical_uid|okunan_uid|uid_decimal/', $dokumSrc));
+ok("cavus_toplu_dokum_detay_yazdir.php: 'İşlem' kolonu (Manuel Çıkış Yap butonu) kâğıda BASILMIYOR",
+    !str_contains($dokumSrc, 'Manuel Çıkış Yap') && !str_contains($dokumSrc, 'manuel_cikis.php'));
 
 echo "\n=== 8. DEPO / IDOR KAPISI ===\n";
 $mdSrc = oku('mesai_degerlendirme_yazdir.php');
