@@ -180,9 +180,9 @@ ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirde
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v248',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v248';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v248');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v249',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v249';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v249');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -205,7 +205,23 @@ $indexBeklenenEskiSatirlar = [
     '-        <div class="home-card-title">Personel</div>',
     '-        <div class="home-card-sub">Personel ve kart yönetimi</div>',
 ];
-$indexBeklenmeyenSilinen = array_filter($silinenIndex, fn($l) => !in_array(trim($l), array_map('trim', $indexBeklenenEskiSatirlar), true));
+// ⚠ Sprint Navigasyon-02: "Personel Takibi" kartı ana menüde Kantar ile
+// Beyanlar arasına TAŞINDI (kullanıcı isteği). Taşıma, diff'te bloğun
+// tamamını "silinmiş" gösterir — oysa içerik kaybolmadı, yalnız yeri
+// değişti. Korumanın ASIL amacı "hiçbir içerik sessizce KAYBOLMASIN";
+// bu yüzden silinen bir satır dosyanın GÜNCEL hâlinde hâlâ duruyorsa
+// taşınmış sayılır ve kabul edilir. Gerçekten kaybolan satırlar hâlâ
+// yakalanır.
+$indexGuncel = oku('index.php');
+$indexTasindiMi = function (string $satir) use ($indexGuncel): bool {
+    $icerik = trim(substr($satir, 1));        // baştaki '-' atılır
+    if ($icerik === '') return true;          // boş satır farkı anlamsız
+    return str_contains($indexGuncel, $icerik);
+};
+$indexBeklenmeyenSilinen = array_filter(
+    $silinenIndex,
+    fn($l) => !in_array(trim($l), array_map('trim', $indexBeklenenEskiSatirlar), true) && !$indexTasindiMi($l)
+);
 ok('index.php: YALNIZ Faz 7\'nin bilinen "Personel" kart değişikliği silindi, başka hiçbir satır silinmedi',
     count($indexBeklenmeyenSilinen) === 0,
     count($indexBeklenmeyenSilinen) . ' beklenmeyen satır silinmiş görünüyor: ' . implode(' | ', $indexBeklenmeyenSilinen));
@@ -387,36 +403,63 @@ $beklenenEskiSatirlar = [
     // dialog açıkken diğerine tıklanınca ikisi de açık kalıp üst üste
     // biniyordu (kullanıcı raporu, ekran görüntüsü). Yeni açmadan önce açık
     // olan dialog'ları kapatan pdksPuantajDialogAc() eklendi → SW cache +
-    // APP_SURUM v243'ten v248'e çekildi (AYNI rutin, tek satırlık sürüm
+    // APP_SURUM v243'ten v249'e çekildi (AYNI rutin, tek satırlık sürüm
     // damgası güncellemesi).
     "-    define('APP_SURUM', 'v243');",
-    // Sprint Print-PDKS-01 (v248): Personel Takibi liste/döküm sayfalarına
+    // Sprint Print-PDKS-01 (v249): Personel Takibi liste/döküm sayfalarına
     // ayrı yazdırma sayfaları eklendi (cavus_toplu_dokum / cavus_hakedis /
     // cavus_cari / gunluk_isci_puantaj / mesai_degerlendirme) → SW cache +
-    // APP_SURUM v244'ten v248'e çekildi (AYNI rutin, tek satırlık sürüm
+    // APP_SURUM v244'ten v249'e çekildi (AYNI rutin, tek satırlık sürüm
     // damgası güncellemesi).
     "-    define('APP_SURUM', 'v244');",
-    // Sprint Print-PDKS-02 (v248): Personel Takibi yazdırma teması
+    // Sprint Print-PDKS-02 (v249): Personel Takibi yazdırma teması
     // (assets/print_pdks.css) — çıktılar ekranda çıplak HTML gibi
     // görünüyordu (print_base.css'in görsel kuralları @media print
-    // İÇİNDEydi) → SW cache + APP_SURUM v245'ten v248'ya çekildi.
+    // İÇİNDEydi) → SW cache + APP_SURUM v245'ten v249'ya çekildi.
     "-    define('APP_SURUM', 'v245');",
-    // Sprint Print-PDKS-02 devamı (v248): cavus_toplu_dokum_detay.php'ye
+    // Sprint Print-PDKS-02 devamı (v249): cavus_toplu_dokum_detay.php'ye
     // (Kart Dökümü) aynı yazdırma temasıyla yazdırma sayfası eklendi →
-    // SW cache + APP_SURUM v246'dan v248'ye çekildi.
+    // SW cache + APP_SURUM v246'dan v249'ye çekildi.
     "-    define('APP_SURUM', 'v246');",
-    // Sprint Print-PDKS-02 düzeltme (v248): cavus_ekstre_yazdir.php'de
+    // Sprint Print-PDKS-02 düzeltme (v249): cavus_ekstre_yazdir.php'de
     // "<Para Birimi> Hareketleri" büyük bölüm başlığı kaldırıldı (para
     // birimi artık tablonun sağ üstünde küçük bir .pr-tag etiketi), imza
     // alanları (Hazırlayan/Çavuş) kaldırıldı (kullanıcı isteği, ekran
-    // görüntüsü) → SW cache + APP_SURUM v247'den v248'e çekildi.
+    // görüntüsü) → SW cache + APP_SURUM v247'den v249'e çekildi.
     "-    define('APP_SURUM', 'v247');",
+    "-    define('APP_SURUM', 'v248');",
+    // Sprint Navigasyon-02 (v249, kullanıcı isteği): mobil alt barda
+    // "Çıkmalar" yerine "Personel" sekmesi geldi. Bu yüzden Çıkmalar
+    // bottomnav bloğu ve YALNIZ onun kullandığı $is_cikmalar bayrağı
+    // kaldırıldı (Çıkmalar sayfasının KENDİSİ duruyor — ana menü kartı ve
+    // sidebar girişi aynen yerinde). Ayrıca Personel Takibi sayfa listesi
+    // ve izin kapısı, sidebar ile bottomnav AYNI kaynaktan beslensin diye
+    // nav_ptak_sayfalari()/nav_ptak_gorunur() fonksiyonlarına çıkarıldı.
+    "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports'))) || \$p_adm;",
+    "-    \$a_ptak = in_array(\$cur, [",
+    "-        \$is_cikmalar = in_array(\$cur, ['cikmalar.php', 'cikma_create.php']) || \$_cikma_hint;",
+    "-    <a href=\"<?= \$base ?>cikmalar.php\" class=\"bottomnav-item<?= \$is_cikmalar ? ' active' : '' ?>\">",
+    "-        <span class=\"bottomnav-icon\">🚚</span>",
+    "-        <span class=\"bottomnav-label\">Çıkmalar</span>",
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
     return preg_match('/^-(?!--)/', $l) === 1;
 });
-$beklenmeyenSilinen = array_filter($silinenHelpers, fn($l) => !in_array(trim($l), array_map('trim', $beklenenEskiSatirlar), true));
+// ⚠ Sprint Navigasyon-02: Personel Takibi sayfa listesi ve izin kapısı,
+// sidebar'ın İÇİNDEN nav_ptak_sayfalari()/nav_ptak_gorunur() fonksiyonlarına
+// TAŞINDI (mobil bottomnav da AYNI kaynağı okusun diye). index.php ile AYNI
+// mantık: silinen satır dosyanın güncel hâlinde hâlâ duruyorsa taşınmıştır.
+$helpersGuncel = oku('config/helpers.php');
+$helpersTasindiMi = function (string $satir) use ($helpersGuncel): bool {
+    $icerik = trim(substr($satir, 1));
+    if ($icerik === '') return true;
+    return str_contains($helpersGuncel, $icerik);
+};
+$beklenmeyenSilinen = array_filter(
+    $silinenHelpers,
+    fn($l) => !in_array(trim($l), array_map('trim', $beklenenEskiSatirlar), true) && !$helpersTasindiMi($l)
+);
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.scan genişlemesi + Günlük İşçi izin ekleri), başka hiçbir satır silinmedi',
     count($beklenmeyenSilinen) === 0,
     count($beklenmeyenSilinen) . " beklenmeyen silinen satır:\n" . implode("\n", $beklenmeyenSilinen));

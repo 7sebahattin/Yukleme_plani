@@ -77,7 +77,11 @@ foreach ($eskiSidebarLinkleri as $eski) {
 ok("helpers.php: 'Günlük İşçi' section başlığı ARTIK YOK (tek bölüme indirildi)", !str_contains($helpersSrc, '>Günlük İşçi<'));
 ok("helpers.php: Personel Takibi görünürlüğü aktif günlük işçi/hakediş/rapor izinlerine bağlı; legacy PDKS izni tek başına yeterli değil",
     (bool)preg_match('/if \(\$p_gunluk\):/', $helpersSrc));
-ok("helpers.php: aktif-sayfa vurgusu (\$a_ptak) TÜM konsolide alt sayfaları kapsıyor", (bool)preg_match('/\$a_ptak = in_array\(\$cur, \[/', $helpersSrc));
+// ⚠ Sprint Navigasyon-02: liste sidebar'ın içinden nav_ptak_sayfalari()
+// fonksiyonuna taşındı — mobil bottomnav da AYNI kaynağı okuyor.
+ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (nav_ptak_sayfalari)",
+    (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc)
+    && (bool)preg_match('/function nav_ptak_sayfalari\(\): array/', $helpersSrc));
 
 echo "\n=== 9. MOBİL 'Personel' GİRİŞİ personel_takip.php'YE BAĞLI (görev madde 2) ===\n";
 ok("index.php: 'Personel' ana sayfa kartı ARTIK personel_takip.php'ye açılıyor (personel.php DEĞİL)",

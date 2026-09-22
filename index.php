@@ -198,6 +198,28 @@ if ($db_backup_result !== null): ?>
     </a>
 <?php endif; ?>
 
+<?php
+// Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
+// (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
+// GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
+// kontrol edilir — yalnız employees/cards DEĞİL, o merkezdeki HERHANGİ bir
+// attendance.* alt-iznine sahip kullanıcı kartı görür (görev talimatı:
+// "Connect/add the existing mobile 'Personel' button... to personel_takip.php").
+if (is_admin() || can('attendance.employees') || can('attendance.cards') || can('attendance.scan')
+    || can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan')
+    || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements')
+    || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')):
+?>
+    <a href="personel_takip.php" class="home-card">
+        <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
+            <span class="personel-arrow personel-arrow-in"></span>
+            <span class="personel-arrow personel-arrow-out"></span>
+        </div>
+        <div class="home-card-title">Personel Takibi</div>
+        <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
+    </a>
+<?php endif; ?>
+
     <?php if (!function_exists('can') || can('beyan.read') || (function_exists('is_admin') && is_admin())): ?>
     <a href="beyanlar.php" class="home-card">
         <div class="home-card-icon" style="background:#ede9fe">🧾</div>
@@ -251,28 +273,6 @@ if ($db_backup_result !== null): ?>
         <div class="home-card-icon" style="background:#e0f2f1">🧮</div>
         <div class="home-card-title">Maliyet</div>
         <div class="home-card-sub">Parti bazlı maliyet hesabı</div>
-    </a>
-<?php endif; ?>
-
-<?php
-// Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
-// (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
-// GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
-// kontrol edilir — yalnız employees/cards DEĞİL, o merkezdeki HERHANGİ bir
-// attendance.* alt-iznine sahip kullanıcı kartı görür (görev talimatı:
-// "Connect/add the existing mobile 'Personel' button... to personel_takip.php").
-if (is_admin() || can('attendance.employees') || can('attendance.cards') || can('attendance.scan')
-    || can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan')
-    || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements')
-    || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')):
-?>
-    <a href="personel_takip.php" class="home-card">
-        <div class="home-card-icon home-card-icon-personel" aria-hidden="true">
-            <span class="personel-arrow personel-arrow-in"></span>
-            <span class="personel-arrow personel-arrow-out"></span>
-        </div>
-        <div class="home-card-title">Personel Takibi</div>
-        <div class="home-card-sub">Personel, günlük işçi, hakediş ve cari</div>
     </a>
 <?php endif; ?>
 
