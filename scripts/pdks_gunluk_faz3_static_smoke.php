@@ -214,10 +214,23 @@ echo "\n=== 12. SIDEBAR AKTİF-SAYFA TESPİTİ GÜNCELLENDİ ===\n";
 // izin verilen silinen satır listesi). gunluk_isci_puantaj.php dosya adı hâlâ
 // $a_ptak içinde aktif-sayfa tespiti için kullanılıyor.
 ok('helpers.php: $a_puantaj yerine konsolide $a_ptak değişkeni tanımlı', str_contains($helpersSrc, '$a_ptak'));
+// ⚠ Sprint Navigasyon-02: liste sidebar'ın içinden nav_ptak_sayfalari()
+// fonksiyonuna taşındı (mobil bottomnav da AYNI kaynağı okusun diye) —
+// $a_ptak artık satır içi dizi değil, o fonksiyonu çağırıyor.
 ok('helpers.php: $a_ptak dizisi gunluk_isci_puantaj.php\'yi içeriyor (aktif-sayfa tespiti korunuyor)',
-    (bool)preg_match("/\\\$a_ptak\s*=\s*in_array\([^;]*gunluk_isci_puantaj\.php[^;]*;/s", $helpersSrc));
+    (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc)
+    && (function () use ($helpersSrc) {
+        if (!preg_match('/function nav_ptak_sayfalari\(\): array\s*\{(.*?)\}/s', $helpersSrc, $m)) return false;
+        return str_contains($m[1], "'gunluk_isci_puantaj.php'");
+    })());
+// ⚠ Sprint Navigasyon-02: $p_gunluk artık nav_ptak_gorunur()'u çağırıyor —
+// izin listesi (attendance.daily_reports dahil) o fonksiyonun içinde.
 ok("helpers.php: \$p_gunluk artık attendance.daily_reports'u da kapsıyor (aksi hâlde yalnız-rapor rolü — muhasebe — sidebar bölümünü hiç GÖRMEZ)",
-    (bool)preg_match('/\$p_gunluk\s*=.*attendance\.daily_reports/', $helpersSrc));
+    (bool)preg_match('/\$p_gunluk\s*=\s*nav_ptak_gorunur\(\);/', $helpersSrc)
+    && (function () use ($helpersSrc) {
+        if (!preg_match('/function nav_ptak_gorunur\(\): bool\s*\{(.*?)^\}/ms', $helpersSrc, $m)) return false;
+        return str_contains($m[1], 'attendance.daily_reports');
+    })());
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

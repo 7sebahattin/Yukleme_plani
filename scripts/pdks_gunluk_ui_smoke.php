@@ -181,7 +181,12 @@ ok('Ayşe Çavuş listede', str_contains($s, 'Ayşe Çavuş'));
 ok('C001 kodu görünüyor', str_contains($s, 'C001'));
 ok('Pasif Çavuş da listede (varsayılan filtre: tümü)', str_contains($s, 'Pasif Çavuş'));
 ok('"+ Yeni Çavuş" butonu var', str_contains($s, 'Yeni Çavuş'));
-ok('İşçi Kartları\'na bağlantı var', str_contains($s, 'isci_kartlari.php'));
+// ⚠ Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
+// sayfalar arasındaki çapraz bağlantılar kaldırıldı (Kart Havuzu ARTIK
+// buradan değil, personel_takip.php'nin kendi kartından açılıyor); yerine
+// standart "← Personel Takibi" dönüş butonu geldi.
+ok('İşçi Kartları çapraz bağlantısı KALDIRILDI, standart dönüş butonu var',
+    !str_contains($s, 'isci_kartlari.php') && str_contains($s, 'personel_takip.php'));
 
 echo "\n=== 2. cavuslar.php — yalnız aktif filtre ===\n";
 $sAktif = renderPage('cavuslar.php', ['durum' => 'aktif']);
