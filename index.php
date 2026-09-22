@@ -6,7 +6,18 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-require_perm('dashboard.read');
+// 'dashboard.read' yoksa 403 BASMA: giriş akışı buraya düşer (login →
+// depo_sec → index.php) ve kullanıcı sistemi hiç kullanamazdı. Bunun yerine
+// gerçekten açabildiği ilk sayfaya yolla; hiçbiri yoksa anlaşılır bir mesaj
+// ver (yetkisiz rol atanmış demektir).
+if (!can('dashboard.read')) {
+    $ilk_sayfa = first_allowed_page();
+    if ($ilk_sayfa !== null) {
+        header('Location: ' . base_url() . $ilk_sayfa);
+        exit;
+    }
+    forbidden('Hesabınıza henüz hiçbir sayfa için yetki tanımlanmamış. Lütfen sistem yöneticinize başvurun.');
+}
 
 // ── DB-Backup-01: Admin girişinde günlük otomatik yedek ───
 $db_backup_result = null;
@@ -255,7 +266,10 @@ if (is_admin() || can('attendance.employees') || can('attendance.cards') || can(
     </a>
 <?php endif; ?>
 
-<?php if (can('reports.read')): ?>
+<?php /* Kartın kapısı hesap_can('read') ile AYNI olmalı: eskiden reports.read'e
+         bakıyordu — hesap.read'i olan kullanıcı kartı GÖREMİYOR, yalnız raporu
+         olan görüp 403 yiyordu (Sprint Rol-02). */ ?>
+<?php if (can('hesap.read') || is_admin()): ?>
     <a href="hesap.php" class="home-card">
         <div class="home-card-icon" style="background:#fff3e0">🏦</div>
         <div class="home-card-title">Hesap</div>

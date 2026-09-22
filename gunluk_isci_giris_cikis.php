@@ -279,7 +279,7 @@ render_flash();
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis" data-gi-mode="CIKIS">
             🚪 ÇIKIŞ MODU
         </button>
-        <a href="#" id="giCavusDegistir1">↩ Çavuşu Değiştir</a>
+        <button type="button" class="pdks-kiosk-degistir-btn" id="giCavusDegistir1">↩ Çavuşu Değiştir</button>
 
         <!-- ⚠ v240 (kullanıcı isteği — kesin konum bu ekran, GİRİŞ/ÇIKIŞ MODU
              butonlarının ALTI): günün özeti (cinsiyet bazlı + genel toplamlar,
@@ -655,7 +655,7 @@ render_flash();
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
     }
-    document.getElementById('giCavusDegistir1').addEventListener('click', function (e) { e.preventDefault(); cavusDegistir(); });
+    document.getElementById('giCavusDegistir1').addEventListener('click', cavusDegistir);
     document.getElementById('giCavusDegistir2').addEventListener('click', cavusDegistir);
 
     // ── 1) Mod seçimi → sunucudan oturum aç/getir ────────────

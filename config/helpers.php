@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v249');
+    define('APP_SURUM', 'v253');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -288,6 +288,43 @@ function nav_ptak_gorunur(): bool {
     return false;
 }
 
+// Kullanıcının GERÇEKTEN açabildiği ilk sayfa (yoksa null).
+//
+// Neden var: giriş akışı login → depo_sec → index.php'dir ve index.php
+// 'dashboard.read' ister. Bu yetkisi olmayan bir rol (ör. yalnız Personel
+// Takibi) girişte 403'e düşüyordu; 403 sayfasının tek bağlantısı da yine
+// index.php olduğu için kullanıcı sistemi HİÇ kullanamıyordu (mobilde
+// bottomnav'daki tek düğme de oraya gider). index.php artık 403 yerine
+// buradan dönen sayfaya yönlendirir.
+//
+// ⚠ Her satır, HEDEF SAYFANIN KENDİ kapısıyla birebir aynı koşulu taşır
+// (sidebar'ınkiyle değil) — yoksa kullanıcıyı yeni bir 403'e yollarız.
+// Sayfaların kapısını değiştirirken burayı da güncelle.
+function first_allowed_page(): ?string {
+    if (!function_exists('can')) return null;
+    $adm = function_exists('is_admin') && is_admin();
+
+    $adaylar = [
+        'records.php'        => can('records.read'),                    // require_perm('records.read')
+        'beyanlar.php'       => can('beyan.read') || $adm,              // can_beyan('read')
+        'kantar.php'         => can('kantar.read'),                     // require_perm('kantar.read')
+        'halkayit/index.php' => can('records.write'),                   // require_perm('records.write')
+        'reports.php'        => can('reports.read'),                    // require_perm('reports.read')
+        'malzeme_stok.php'   => can('stok.read'),                       // require_perm('stok.read')
+        'hesap.php'          => can('hesap.read') || $adm,              // hesap_can('read')
+        'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
+        // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
+        // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
+        'personel_takip.php' => nav_ptak_gorunur(),
+        'definitions.php'    => can('defs.read'),                       // require_perm('defs.read')
+        'users.php'          => can('users.admin'),                     // require_perm('users.admin')
+    ];
+    foreach ($adaylar as $sayfa => $izinli) {
+        if ($izinli) return $sayfa;
+    }
+    return null;
+}
+
 function render_desktop_sidebar(string $base): void {
     $self   = $_SERVER['PHP_SELF'] ?? '';
     $cur    = basename($self);
@@ -306,8 +343,10 @@ function render_desktop_sidebar(string $base): void {
     $p_adm   = function_exists('is_admin') && is_admin();
     $p_beyan = !$_fn || can('beyan.read') || $p_adm;
     $p_mal   = ($_fn && can('maliyet.read')) || $p_adm;
-    // Hesap: kendi yetkisi; hesap.* henüz seed edilmemiş kurulumlarda reports.read'e düşer
-    $p_hes   = !$_fn || can('hesap.read') || can('reports.read') || $p_adm;
+    // Hesap: yalnız kendi yetkisi. Eski "reports.read'e düş" köprüsü kaldırıldı
+    // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
+    // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
+    $p_hes   = !$_fn || can('hesap.read') || $p_adm;
     // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
     // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
     // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
@@ -355,6 +394,7 @@ function render_desktop_sidebar(string $base): void {
     $a_ptak = in_array($cur, nav_ptak_sayfalari(), true);
     $a_def   = $cur === 'definitions.php';
     $a_usr   = $cur === 'users.php';
+    $a_rol   = $cur === 'roles.php';
     $a_aud   = $cur === 'audit.php';
     $a_bkp   = $cur === 'admin_db_backups.php';
 
@@ -408,6 +448,7 @@ function render_desktop_sidebar(string $base): void {
         <div class="sidebar-section">Yönetim</div>
         <?php if ($p_def) $lnk('definitions.php', '⚙️', 'Tanımlar',       $a_def); ?>
         <?php if ($p_usr) $lnk('users.php',       '👥', 'Kullanıcılar',   $a_usr); ?>
+        <?php if ($p_usr) $lnk('roles.php',       '🛡️', 'Roller',         $a_rol); ?>
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         <?php endif; ?>
@@ -547,6 +588,7 @@ function render_header(string $title, bool $print_mode = false): void {
             <?php endif; ?>
             <?php if ($_nav_users): ?>
             <a href="<?= $base ?>users.php" <?= $cur === 'users.php' ? 'class="active"' : '' ?>>Kullanıcılar</a>
+            <a href="<?= $base ?>roles.php" <?= $cur === 'roles.php' ? 'class="active"' : '' ?>>Roller</a>
             <?php endif; ?>
         </nav>
         <?php if (function_exists('current_user') && ($__ctu = current_user()) !== null): ?>
@@ -1159,10 +1201,21 @@ endif;
                                'attendance.foremen','attendance.worker_cards','attendance.daily_scan',
                                'attendance.daily_reports','attendance.entitlements','attendance.management_reports'],
             ];
-            $ins_p = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
+            // ⚠ Seed YALNIZ yetkisi HİÇ OLMAYAN role uygulanır (ilk kurulum ya da
+            // yarım kalmış migrasyon). Bu blok HER istekte çalışır (dosyanın
+            // başındaki IIFE); koşulsuz INSERT IGNORE, roles.php'den kaldırılan
+            // bir yetkiyi bir sonraki sayfa açılışında SESSİZCE geri yazıyordu —
+            // yani sistem rollerinin yetkisi hiç düzenlenemiyordu. Yetki kaynağı
+            // artık roles.php'dir; burası yalnız boş rolü tohumlar.
+            // SONUÇ: ileride seed listesine YENİ bir yetki eklersen mevcut
+            // kurulumlardaki rollere KENDİLİĞİNDEN inmez — roles.php'den elle ver.
+            $ins_p  = $pdo->prepare("INSERT IGNORE INTO `role_permissions` (role_id, permission) VALUES (?, ?)");
+            $st_rpc = $pdo->prepare("SELECT COUNT(*) FROM `role_permissions` WHERE role_id = ?");
             foreach ($rp_map as $slug => $perms) {
                 $rid = (int)($rids[$slug] ?? 0);
                 if (!$rid) continue;
+                $st_rpc->execute([$rid]);
+                if ((int)$st_rpc->fetchColumn() > 0) continue;   // admin düzenlemesi korunur
                 foreach ($perms as $p) { $ins_p->execute([$rid, $p]); }
             }
 
