@@ -171,18 +171,29 @@ echo "\n=== 10. MEVCUT SİSTEM DAVRANIŞI DEĞİŞMEDİ ===\n";
 // (network-first fetch stratejisi, SHELL listesi) hiç değişmedi, yalnız
 // sabit sürüm dizesi arttı. tek-CSS/JS kuralı (style.css/app.js) ve
 // çekirdek auth/db katmanı (db.php/auth.php) hâlâ TAM korunuyor.
-$dokunulmamali = ['assets/style.css', 'assets/app.js', 'config/db.php', 'config/auth.php'];
+$dokunulmamali = ['assets/app.js', 'config/db.php', 'config/auth.php'];
 $gitDurum = shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- ' . implode(' ', array_map('escapeshellarg', $dokunulmamali)) . ' 2>&1');
-ok('style.css / app.js / db.php / auth.php DEĞİŞMEDİ (tek-CSS/JS ve çekirdek auth korunuyor)',
+ok('app.js / db.php / auth.php DEĞİŞMEDİ (tek-JS ve çekirdek auth korunuyor)',
     trim((string)$gitDurum) === '', (string)$gitDurum);
+// ⚠ assets/style.css BU LİSTEDEN Sprint Navigasyon-04'te ÇIKARILDI (index.php/
+// helpers.php emsali): tek-CSS kuralı "asla değişmez" değil "TEK dosyadır,
+// yeni bir ikinci stil dosyası İCAT EDİLMEZ" demektir — sidebar'a eklenen
+// .sbi-personel ikon kuralları AYNI dosyaya (style.css) katkılı (additive)
+// olarak eklendi. Burada hiçbir satır SİLİNMEDİ mi diye bakılır.
+$diffStyle = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- assets/style.css 2>&1');
+$silinenStyle = array_filter(explode("\n", (string)$diffStyle), function ($l) {
+    return preg_match('/^-(?!--)/', $l) === 1;
+});
+ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) — mevcut hiçbir satır silinmedi',
+    count($silinenStyle) === 0, count($silinenStyle) . " silinen satır:\n" . implode("\n", $silinenStyle));
 // git diff'e DEĞİL, doğrudan mevcut dosya içeriğine bakılır — bu kontrol
 // hem işlenmemiş (dirty) özellik dalında hem de commit/merge SONRASI temiz
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v254',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v254';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v254');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v255',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v255';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v255');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -442,6 +453,13 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v251');",
     "-    define('APP_SURUM', 'v252');",
     "-    define('APP_SURUM', 'v253');",
+    // Sprint Navigasyon-04 (kullanıcı isteği): "Personel" sidebar bölüm
+    // başlığı kaldırıldı, "Personel Takibi" linki Hesap'ın altına taşındı
+    // (Operasyon listesinin içine) ve emoji ikonu .sbi-personel'e çevrildi
+    // — bkz. yukarıdaki $lnk('personel_takip.php', ...) çağrısı.
+    "-        <div class=\"sidebar-section\">Personel</div>",
+    "-        <?php \$lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', \$a_ptak); ?>",
+    "-    define('APP_SURUM', 'v254');",
     // Sprint Navigasyon-02 (v249, kullanıcı isteği): mobil alt barda
     // "Çıkmalar" yerine "Personel" sekmesi geldi. Bu yüzden Çıkmalar
     // bottomnav bloğu ve YALNIZ onun kullandığı $is_cikmalar bayrağı
