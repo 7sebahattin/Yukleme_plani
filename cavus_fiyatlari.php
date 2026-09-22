@@ -107,8 +107,7 @@ render_flash();
 <div class="page-head">
     <h1>💰 Çavuş Fiyatları</h1>
     <div class="page-head-actions">
-        <a href="cavuslar.php" class="btn">👷 Çavuşlar</a>
-        <a href="cavus_hakedis.php" class="btn">🧾 Hakediş</a>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 

@@ -113,8 +113,15 @@ ok('personel_takip.php: Kart Havuzu, Yönetim Raporları ve Çavuş Toplu Dökü
     (bool)preg_match('/href="isci_kartlari\.php" class="home-card">.*?Kart Havuzu/s', $takipSrc)
     && (bool)preg_match('/href="raporlar\.php" class="home-card">.*?Yönetim Raporları/s', $takipSrc)
     && str_contains($takipSrc, 'cavus_toplu_dokum.php'));
-ok('Kart Havuzu: İşçi Tipleri ikincil ana veri bağlantısı olarak korunuyor',
-    str_contains(oku('isci_kartlari.php'), 'href="isci_tipleri.php"'));
+// ⚠ Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
+// sayfalar arasındaki çapraz bağlantılar (Kart Havuzu ↔ Çavuşlar ↔ İşçi
+// Tipleri vb.) kaldırıldı, yerine standart "← Personel Takibi" dönüş
+// butonu geldi. isci_tipleri.php'nin KENDİSİ silinmedi/erişilemez OLMADI —
+// yalnız isci_kartlari.php'den bu çapraz bağlantı gitti.
+ok('isci_kartlari.php: İşçi Tipleri/Çavuşlar çapraz bağlantıları KALDIRILDI, yerine standart dönüş butonu geldi',
+    !str_contains(oku('isci_kartlari.php'), 'href="isci_tipleri.php"')
+    && !str_contains(oku('isci_kartlari.php'), 'href="cavuslar.php"')
+    && str_contains(oku('isci_kartlari.php'), 'href="personel_takip.php"'));
 
 echo "\n=== 10. HEDEF SAYFALAR KENDİ YETKİ KONTROLÜNÜ KORUYOR (görev madde 10 — bypass YOK) ===\n";
 foreach ([
@@ -267,15 +274,54 @@ ok('cavus_cari.php: intentional Yazdır bağlantısı (tek ekleme) — başka bi
     && !preg_match('/\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM)\b/i', $cariSrc));
 
 
+// ⚠ Sprint Navigasyon-05: "Kart Havuzu" çapraz bağlantısı cavuslar.php'den
+// KALDIRILDI (yukarıdaki AYNI gerekçe) — personel_takip.php'nin kendi kartı
+// hâlâ isci_kartlari.php'ye açılıyor, bu sayfadan artık DEĞİL.
 $cavuslarSrc = oku('cavuslar.php');
-ok('cavuslar.php: intentional Kart Havuzu nav rename',
-    str_contains($cavuslarSrc, 'href="isci_kartlari.php"')
-    && str_contains($cavuslarSrc, 'Kart Havuzu'));
+ok('cavuslar.php: Kart Havuzu çapraz bağlantısı KALDIRILDI, standart dönüş butonu var',
+    !str_contains($cavuslarSrc, 'href="isci_kartlari.php"')
+    && str_contains($cavuslarSrc, 'href="personel_takip.php"'));
 
 $tiplerSrc = oku('isci_tipleri.php');
 ok('isci_tipleri.php: intentional Kart Havuzu back-link rename',
     str_contains($tiplerSrc, 'href="isci_kartlari.php"')
     && str_contains($tiplerSrc, 'Kart Havuzu'));
+
+echo "\n=== 11. SPRINT NAVİGASYON-05 — personel_takip.php'DEN AÇILAN 10 SAYFA (kullanıcı isteği) ===\n";
+// personel_takip.php'nin 10 kartından doğrudan açılan sayfalarda birbirine
+// giden "gereksiz" çapraz bağlantılar (Çavuşlar↔Kart Havuzu↔Fiyatlar↔
+// Hakediş↔Puantaj↔Giriş-Çıkış↔Cari↔Ödeme↔Raporlar↔Toplu Döküm) kaldırıldı;
+// yerine HER birine standart "← Personel Takibi" dönüş butonu eklendi.
+// Yazdır butonlarına DOKUNULMADI — kullanıcı açıkça "yazdır butonlarını
+// kaldırma" dedi.
+$ptak10 = [
+    'cavuslar.php', 'isci_kartlari.php', 'gunluk_isci_giris_cikis.php',
+    'gunluk_isci_puantaj.php', 'cavus_fiyatlari.php', 'cavus_hakedis.php',
+    'cavus_cari.php', 'cavus_odeme.php', 'raporlar.php', 'cavus_toplu_dokum.php',
+];
+foreach ($ptak10 as $f) {
+    $src = oku($f);
+    ok("$f: standart \"← Personel Takibi\" dönüş butonu var",
+        str_contains($src, 'href="personel_takip.php"') && str_contains($src, '← Personel Takibi'));
+}
+// Yazdırma bağlantısı olan 6 sayfada Yazdır AYNEN duruyor (kaldırılmadı).
+foreach ([
+    'gunluk_isci_puantaj.php'  => 'gunluk_puantaj_liste_yazdir.php',
+    'cavus_hakedis.php'        => 'cavus_hakedis_liste_yazdir.php',
+    'cavus_cari.php'           => 'cavus_cari_yazdir.php',
+    'cavus_odeme.php'          => 'cavus_odeme_yazdir.php',
+    'raporlar.php'             => 'rapor_yazdir.php',
+    'cavus_toplu_dokum.php'    => 'cavus_toplu_dokum_yazdir.php',
+] as $f => $yazdirHedef) {
+    ok("$f: Yazdır bağlantısı KORUNDU ($yazdirHedef)", str_contains(oku($f), $yazdirHedef));
+}
+// personel_takip.php'nin KENDİ 10 kartı hâlâ hepsine açılıyor — giriş
+// noktası bu sayfa, çapraz linkler değil.
+$ptakSrcTumu = oku('personel_takip.php');
+foreach ($ptak10 as $f) {
+    ok("personel_takip.php: $f kartı hâlâ duruyor (giriş noktası)", str_contains($ptakSrcTumu, "href=\"$f\""));
+}
+
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
 exit($fail === 0 ? 0 : 1);

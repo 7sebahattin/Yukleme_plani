@@ -53,9 +53,7 @@ render_flash();
         <?php if (pdks_gunluk_can('foremen')): ?>
         <a href="cavus_form.php" class="btn btn-primary">+ Yeni Çavuş</a>
         <?php endif; ?>
-        <?php if (pdks_gunluk_can('worker_cards')): ?>
-        <a href="isci_kartlari.php" class="btn">🪪 Kart Havuzu</a>
-        <?php endif; ?>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 
