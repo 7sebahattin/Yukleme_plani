@@ -231,7 +231,7 @@ render_flash();
 <div class="page-head" id="giPageHead">
     <h1>🚪 Günlük İşçi Giriş / Çıkış</h1>
     <div class="page-head-actions">
-        <a href="cavuslar.php" class="btn btn-ghost">👷 Çavuşlar</a>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 

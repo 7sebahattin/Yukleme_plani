@@ -88,8 +88,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <h1>🧾 Çavuş Hakediş</h1>
     <div class="page-head-actions">
         <a href="<?= h('cavus_hakedis_liste_yazdir.php?' . http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
-        <a href="cavus_fiyatlari.php" class="btn">💰 Çavuş Fiyatları</a>
-        <a href="gunluk_isci_puantaj.php" class="btn">📅 Günlük Puantaj</a>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 

@@ -321,9 +321,23 @@ $raporlarSrc = file_get_contents($ROOT . '/raporlar.php');
 $listeSrc = file_get_contents($ROOT . '/cavus_toplu_dokum.php');
 $detaySrc = file_get_contents($ROOT . '/cavus_toplu_dokum_detay.php');
 
+// ⚠ Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
+// TÜM sayfalarda birbirine giden "gereksiz" çapraz bağlantılar kaldırıldı,
+// yerine standart "← Personel Takibi" dönüş butonu geldi. raporlar.php artık
+// cavus_toplu_dokum.php'ye bağlantı VERMİYOR — giriş noktası personel_takip.php
+// (kartın kendisi orada duruyor, bu test AYNI dosyada aşağıda doğrulanıyor).
 ok8d(
-    'Raporlar ana sayfasında Çavuş Toplu Döküm bağlantısı var',
-    str_contains($raporlarSrc, 'cavus_toplu_dokum.php')
+    'Raporlar ana sayfasında ARTIK çapraz Çavuş Toplu Döküm bağlantısı YOK (personel_takip.php tek giriş noktası)',
+    !str_contains($raporlarSrc, 'cavus_toplu_dokum.php')
+);
+$ptakSrc = file_get_contents($ROOT . '/personel_takip.php');
+ok8d(
+    'personel_takip.php Çavuş Toplu Döküm kartını taşıyor (giriş noktası)',
+    str_contains($ptakSrc, 'cavus_toplu_dokum.php')
+);
+ok8d(
+    'cavus_toplu_dokum.php: standart "← Personel Takibi" dönüş butonu var',
+    str_contains($listeSrc, 'personel_takip.php') && str_contains($listeSrc, '← Personel Takibi')
 );
 
 ok8d(

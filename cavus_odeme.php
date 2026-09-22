@@ -102,11 +102,10 @@ if ($uyari) echo '<div class="flash flash-error" style="border-color:var(--warn)
 <div class="page-head">
     <h1>💸 Çavuş Ödeme</h1>
     <div class="page-head-actions">
-        <a href="cavus_cari.php" class="btn">📒 Çavuş Cari</a>
-        <a href="cavus_hakedis.php" class="btn">🧾 Hakediş</a>
         <?php if ($seciliCavus): ?>
         <a href="cavus_odeme_yazdir.php?cavus=<?= (int)$seciliCavus['id'] ?>" class="btn btn-ghost">🖨️ Yazdır</a>
         <?php endif; ?>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 

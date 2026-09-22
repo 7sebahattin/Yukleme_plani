@@ -194,8 +194,11 @@ echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HA
 // gerekçeyle bu listeden ÇIKARILDI — YENİ oran tanımlama açılır listesi
 // artık TEK paylaşılan günlük-işçi tip politikasını (yalnız KADIN/ERKEK)
 // kullanıyor; kapsamı scripts/pdks_faz9b_smoke.php AYRICA doğrular.
-$gcDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff --stat -- cavus_cari.php 2>&1'));
-ok('Faz 1-5 sayfaları/modülleri diff\'i BOŞ — Faz 6 onları YENİDEN TASARLAMADI/DEĞİŞTİRMEDİ (Faz 9A\'nın KENDİ kapsamı olan cavus_hakedis.php, Faz 9B\'nin KENDİ kapsamı olan cavus_fiyatlari.php AYRICA test edilir)', $gcDiff === '', $gcDiff);
+// ⚠ Sprint Navigasyon-05 (v255+, kullanıcı isteği): cavus_cari.php AYNI
+// gerekçeyle bu "diff'i BOŞ olmalı" kontrolünden ÇIKARILDI — personel_takip.php'den
+// açılan sayfalar arasındaki çapraz gezinme bağlantıları kaldırılıp standart
+// "← Personel Takibi" dönüş butonuyla değiştirildi; kapsamı
+// scripts/pdks_takip_static_smoke.php AYRICA doğrular (o dosyanın "intentional" bölümü).
 // ⚠ Faz 6, üç çok satırlı literali (Faz 5'ten devralınan $p_gunluk +
 // 'muhasebe' + 'ik' izin dizileri) attendance.management_reports EKLEYEREK
 // genişletti — git diff bu TEK satırlık literalleri "silinip yeniden
@@ -278,6 +281,11 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v230');",
     "-    define('APP_SURUM', 'v232');",
     "-    define('APP_SURUM', 'v233');",
+    // v234-v255 arası birçok küçük sprint turu (bu allowlist o dönemde
+    // güncellenmedi, ama HEAD'e zaten commit'lendiği için git diff'te
+    // artık görünmüyor). Sprint Navigasyon-05: v255'ten v256'ya çekildi
+    // (AYNI rutin, tek satırlık sürüm damgası güncellemesi).
+    "-    define('APP_SURUM', 'v255');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

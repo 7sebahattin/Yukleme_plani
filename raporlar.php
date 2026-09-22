@@ -122,9 +122,8 @@ render_flash();
 <div class="page-head">
     <h1>📊 Yönetim Raporları</h1>
     <div class="page-head-actions">
-        <a href="gunluk_isci_puantaj.php" class="btn">📅 Günlük Puantaj</a>
-        <a href="cavus_toplu_dokum.php" class="btn">👷 Çavuş Toplu Döküm</a>
         <a href="<?= h('rapor_yazdir.php?' . http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">🖨️ Yazdır</a>
+        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
 
