@@ -35,6 +35,15 @@ $bitis = trim($_GET['bitis'] ?? '');
 if ($bitis !== '' && (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $bitis) || !strtotime($bitis))) $bitis = '';
 
 $ekstre = pdks_cari_ekstre($foremanId, $baslangic ?: null, $bitis ?: null, $pdo);
+// ⚠ Fix 3 (Personel Takibi denetimi): $baslangic filtreliyken koşan bakiye
+// 0'dan başlar (pdks_cari_ekstre() içinde) — bu, o tarihten ÖNCEKİ hareketleri
+// dışladığı için GERÇEK güncel bakiye DEĞİL, yalnız FİLTRELİ DÖNEMİN net
+// hareketidir. Eskiden ikisi de "GÜNCEL BAKİYE" etiketiyle gösteriliyordu —
+// filtre uygulayan kullanıcı yanlış bir bakiyeyi gerçek zannedebiliyordu.
+// Filtre yokken (ya da yalnız bitiş filtreliyken, o zaman 0'dan başlamak
+// zaten doğrudur) etiket AYNEN kalır.
+$_ekstreBaslangicFiltreli = $baslangic !== '';
+$_ekstreGercekBakiye = $_ekstreBaslangicFiltreli ? pdks_cari_bakiye($foremanId, $pdo) : [];
 
 if (isset($_GET['csv'])) {
     header('Content-Type: text/csv; charset=UTF-8');
@@ -109,7 +118,12 @@ render_flash();
 </tr>
 <?php endforeach; ?>
 </tbody>
-<tfoot><tr><td colspan="6" style="text-align:right;font-weight:700">GÜNCEL BAKİYE</td><td style="font-weight:800"><?= h(number_format((float)$sonBakiye, 2, ',', '.')) ?> <?= h($cur) ?></td></tr></tfoot>
+<tfoot>
+<tr><td colspan="6" style="text-align:right;font-weight:700"><?= $_ekstreBaslangicFiltreli ? 'BU DÖNEMİN NET HAREKETİ' : 'GÜNCEL BAKİYE' ?></td><td style="font-weight:800"><?= h(number_format((float)$sonBakiye, 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+<?php if ($_ekstreBaslangicFiltreli): ?>
+<tr><td colspan="6" style="text-align:right;font-weight:700">GÜNCEL BAKİYE (tüm zamanlar)</td><td style="font-weight:800"><?= h(number_format((float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0), 2, ',', '.')) ?> <?= h($cur) ?></td></tr>
+<?php endif; ?>
+</tfoot>
 </table>
 </div>
 
@@ -128,6 +142,12 @@ render_flash();
     <div class="pdks-kiosk-counter-row"><span>Koşan Bakiye</span><span class="n"><strong><?= h(number_format((float)$s['kosan_bakiye'], 2, ',', '.')) ?></strong></span></div>
 </div>
 <?php endforeach; ?>
+<?php if ($_ekstreBaslangicFiltreli): ?>
+<div class="pdks-card-item">
+    <div class="pdks-kiosk-counter-row"><span>Bu Dönemin Net Hareketi</span><span class="n"><strong><?= h(number_format((float)$sonBakiye, 2, ',', '.')) ?> <?= h($cur) ?></strong></span></div>
+    <div class="pdks-kiosk-counter-row"><span>Güncel Bakiye (tüm zamanlar)</span><span class="n"><strong><?= h(number_format((float)($_ekstreGercekBakiye[$cur]['bakiye'] ?? 0), 2, ',', '.')) ?> <?= h($cur) ?></strong></span></div>
+</div>
+<?php endif; ?>
 </div>
 
 <?php endif; ?>

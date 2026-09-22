@@ -41,6 +41,7 @@ function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'disp
 function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
 function is_admin(): bool { global $IS_ADMIN; return $IS_ADMIN; }
 function depo_sql_in(string $c): array { return ['', []]; }
+function depo_sql_column(string $c, string $prefix = ':udc'): array { return ['', []]; }
 function depot_visible_to_user(?string $d): bool { return true; }
 function audit_log_event(...$a): void {}
 function active_depot(): ?string { return null; }

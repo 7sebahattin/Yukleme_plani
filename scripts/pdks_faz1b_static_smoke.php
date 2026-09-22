@@ -145,7 +145,9 @@ ok('dosya adı doğrulaması var (32 hex + .jpg)',
 ok('doğrulamadan SONRA $_GET doğrudan dosya yoluna eklenmiyor (PDKS_FOTO_DIR . $fn kalıbı)',
     str_contains($fotoSrc, 'PDKS_FOTO_DIR . $fn'));
 ok('dosyanın GERÇEKTEN bir employees satırına ait olduğu DB\'den doğrulanıyor (yalnız disk varlığı yetmiyor)',
-    str_contains($fotoSrc, 'SELECT id FROM employees WHERE photo_file'));
+    str_contains($fotoSrc, 'SELECT id, depo FROM employees WHERE photo_file'));
+ok('fotoğraf endpoint\'i de başka deponun personeline kapalı (record_view.php/kantar_view.php ile aynı desen)',
+    str_contains($fotoSrc, 'depot_visible_to_user($_pfo_depo)'));
 $fotoSilBlok = '';
 if (preg_match('/function pdks_foto_sil\b.*?\n}/s', $pdksSrc, $mm)) $fotoSilBlok = $mm[0];
 ok('pdks_foto_sil() de AYNI güvenli-ad deseniyle korunuyor',
@@ -191,9 +193,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v256',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v256';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v256');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v257',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v257';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v257');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -459,6 +461,8 @@ $beklenenEskiSatirlar = [
     // — bkz. yukarıdaki $lnk('personel_takip.php', ...) çağrısı.
     "-        <div class=\"sidebar-section\">Personel</div>",
     "-        <?php \$lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', \$a_ptak); ?>",
+    // Personel Takibi denetimi Fix 1-2-3 kapanışı: APP_SURUM v256'dan v257'ye çekildi.
+    "-    define('APP_SURUM', 'v256');",
     "-    define('APP_SURUM', 'v254');",
     // Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
     // 10 sayfa arasındaki çapraz gezinme bağlantıları kaldırıldı, HER birine

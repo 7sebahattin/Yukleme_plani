@@ -243,6 +243,23 @@ ok('iptal edilmiş ödeme (200 TL, referans yok) ekstrede GÖRÜNMÜYOR (yalnız
 ok('GÜNCEL BAKİYE 800,00 TRY ile bitiyor', (bool)preg_match('/GÜNCEL BAKİYE.*?800,00/s', $s6));
 ok('CSV dışa aktar bağlantısı var', str_contains($s6, 'csv=1'));
 
+echo "\n=== 7b. cavus_ekstre.php — Fix 3 (Personel Takibi denetimi): 'baslangic' filtreliyken\n";
+echo "     GÜNCEL BAKİYE ile DÖNEM NET HAREKETİ birbirine KARIŞTIRILMAMALI ===\n";
+// ⚠ pdks_cari_ekstre() filtreliyken koşan bakiyeyi 0'dan başlatır (öncesindeki
+// hareketler dışlanır) — bu yalnız FİLTRELİ DÖNEMİN net hareketidir, gerçek
+// güncel bakiye DEĞİLDİR. Uzak bir başlangıç tarihiyle filtrelenince ekstredeki
+// TEK hareket son 200 TL'lik ödeme kalır (koşan bakiye -200), ama Ayşe'nin
+// TÜM ZAMANLARDAKİ gerçek bakiyesi hâlâ 800 TRY'dir — ikisi asla aynı
+// etiketle (GÜNCEL BAKİYE) gösterilmemeli.
+$s6b = renderPage('cavus_ekstre.php', ['foreman_id' => (string)$ayseId, 'baslangic' => '2026-01-20']);
+ok('hata sızmadı (filtreli)', !str_starts_with($s6b, '__ERROR__'), $s6b);
+ok('PHP Warning/Notice yok (filtreli)', !str_contains($s6b, 'Warning:') && !str_contains($s6b, 'Notice:'));
+ok('filtreliyken satır etiketi "GÜNCEL BAKİYE" DEĞİL, "BU DÖNEMİN NET HAREKETİ"', str_contains($s6b, 'BU DÖNEMİN NET HAREKETİ'));
+ok('filtreliyken GERÇEK güncel bakiye (800,00 TRY, tüm zamanlar) AYRICA gösteriliyor', (bool)preg_match('/GÜNCEL BAKİYE \(tüm zamanlar\).*?800,00/s', $s6b));
+
+echo "\n=== 7c. cavus_ekstre.php — filtresiz iken etiket AYNEN 'GÜNCEL BAKİYE' kalır (regresyon değil) ===\n";
+ok('filtresizken hâlâ sade "GÜNCEL BAKİYE" (dönem etiketi yazılmıyor)', str_contains($s6, 'GÜNCEL BAKİYE') && !str_contains($s6, 'BU DÖNEMİN NET HAREKETİ'));
+
 echo "\n=== 8. cavus_ekstre.php — geçersiz çavuş id ===\n";
 ok('geçersiz foreman_id header()+exit() ile listeye YÖNLENDİRİYOR (in-process yakalanamaz — Faz 4 UI testinin AYNI kısıtı, dolayısıyla burada TEKRAR ÇAĞRILMIYOR)', true);
 

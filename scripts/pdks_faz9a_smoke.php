@@ -121,6 +121,27 @@ foreach ([
     ok9a("$sayfa: pdks_gunluk_depo_kontrol() çağırıyor", str_contains($src, 'pdks_gunluk_depo_kontrol('));
 }
 
+// ⚠ Denetim düzeltmesi (Personel Takibi derin taraması): yukarıdaki kontrol
+// dosya GENELİNDE "string geçiyor mu" bakıyordu — session_id İSTEMCİDEN
+// gelen HER $_GET['ajax'] dalının AYRI AYRI bu kontrolü çağırdığını KANITLAMIYORDU.
+// gunluk_isci_giris_cikis.php'de tam olarak bu boşluk yüzünden ?ajax=kaydet
+// dalı depo kontrolsüz kalmıştı (?ajax=kapat'ta VARDI, ?ajax=kaydet'te YOKTU) —
+// dosya genelinde string arandığı için test yine de YEŞİLDİ. Şimdi HER
+// session_id kullanan dal AYRI AYRI doğrulanıyor.
+$gicSrc = (string)file_get_contents($root . '/gunluk_isci_giris_cikis.php');
+foreach (['kaydet', 'kapat', 'kapanis_kontrol'] as $dal) {
+    if (!preg_match(
+        "/\\\$_GET\\['ajax'\\] \\?\\? ''\\) === '" . preg_quote($dal, '/') . "'\\) \\{(.*?)\n\\}\n\n/s",
+        $gicSrc,
+        $m
+    )) {
+        ok9a("gunluk_isci_giris_cikis.php: ?ajax=$dal bloğu regex ile bulunabildi", false);
+        continue;
+    }
+    ok9a("gunluk_isci_giris_cikis.php: ?ajax=$dal dalı KENDİSİ pdks_gunluk_depo_kontrol() çağırıyor (session_id kullanan HER dal ayrı ayrı korumalı olmalı)",
+        str_contains($m[1], 'pdks_gunluk_depo_kontrol('));
+}
+
 echo "\n=== D. M-04 — hakediş hesapla artık finansal-yazma izni istiyor ===\n";
 ok9a('pdks_hakedis_can(): salt-görüntüleme izniyle entitlements_finalize REDDEDİLİR',
     (function () {
