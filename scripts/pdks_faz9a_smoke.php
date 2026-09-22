@@ -46,7 +46,7 @@ require_once $root . '/config/pdks_rapor.php';
 
 // ── Şema (Faz 8J-tam + kalıcı personel çapraz-sistem tabloları) ─────────
 $db->exec("CREATE TABLE employees (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT, status TEXT DEFAULT 'aktif')");
-$db->exec("CREATE TABLE employee_cards (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER, uid_hex TEXT, status TEXT DEFAULT 'aktif', revoke_reason TEXT, revoked_at TEXT, revoked_by INTEGER)");
+$db->exec("CREATE TABLE employee_cards (id INTEGER PRIMARY KEY AUTOINCREMENT, employee_id INTEGER, uid_hex TEXT, uid_bytes INTEGER, uid_decimal TEXT, card_type TEXT, atqa TEXT, sak TEXT, label TEXT, status TEXT DEFAULT 'aktif', issued_at TEXT, expires_at TEXT, enrolled_source TEXT, notes TEXT, created_by INTEGER, revoke_reason TEXT, revoked_at TEXT, revoked_by INTEGER)");
 $db->exec("CREATE TABLE employee_card_uids (id INTEGER PRIMARY KEY AUTOINCREMENT, card_id INTEGER, uid_hex TEXT, kind TEXT DEFAULT 'canonical', created_at TEXT)");
 $db->exec("CREATE TABLE worker_types (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT, is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 1)");
 $db->exec("INSERT INTO worker_types (code,name) VALUES ('KADIN','Kadın'),('ERKEK','Erkek')");
@@ -340,6 +340,62 @@ ok9a('pdks_faz8b_migrate() sonrası şema hazır', pdks_faz8b_sema_hazir($db));
 $mig2 = pdks_faz8b_migrate($db);
 $mig2Beklenmedik = array_filter($mig2, fn($r) => ($r['durum'] ?? '') !== 'var');
 ok9a('pdks_faz8b_migrate() İKİNCİ çalıştırma İDEMPOTENT (hepsi "var")', count($mig2Beklenmedik) === 0, json_encode($mig2, JSON_UNESCAPED_UNICODE));
+
+echo "\n=== J. Fix 7 (Personel Takibi denetimi) — pdks_kart_ata() kontrol+yazma AYNI işlem içinde ===\n";
+$db->exec("INSERT INTO employees (full_name, status) VALUES ('Fix7 Test', 'aktif')");
+$fix7Emp = (int)$db->lastInsertId();
+$fix7A = pdks_kart_ata($fix7Emp, '1111111111', 'usb_decimal', [], $db);
+ok9a('§J ilk atama başarılı', $fix7A['ok'] === true, json_encode($fix7A, JSON_UNESCAPED_UNICODE));
+$fix7B = pdks_kart_ata($fix7Emp, '2222222222', 'usb_decimal', [], $db);
+ok9a('§J aynı personele İKİNCİ atama reddedildi (zaten_aktif_kart_var)',
+    $fix7B['ok'] === false && ($fix7B['kod'] ?? '') === 'zaten_aktif_kart_var', json_encode($fix7B, JSON_UNESCAPED_UNICODE));
+$fix7StCount = $db->prepare('SELECT COUNT(*) FROM employee_cards WHERE employee_id = ?');
+$fix7StCount->execute([$fix7Emp]);
+ok9a('§J reddedilen ikinci denemeden İKİNCİ bir kart satırı YAZILMADI (yarım/kısmi durum yok)',
+    (int)$fix7StCount->fetchColumn() === 1);
+ok9a('§J çağrı sonrası açık transaction KALMADI (commit/rollback dengeli)', !$db->inTransaction());
+$pdksSrcJ = (string)file_get_contents($root . '/config/pdks.php');
+if (preg_match('/function pdks_kart_ata\b.*?\n\}\n/s', $pdksSrcJ, $mJ)) {
+    ok9a('§J pdks_kart_ata(): employees satırını FOR UPDATE ile kilitliyor (yalnız mysql sürücüsünde)',
+        str_contains($mJ[0], "FOR UPDATE") && str_contains($mJ[0], "driver === 'mysql'"));
+    ok9a('§J pdks_kart_ata(): kontrol+pdks_kart_olustur() AYNI transaction içinde (beginTransaction/commit/rollBack var)',
+        str_contains($mJ[0], 'beginTransaction()') && str_contains($mJ[0], '->commit()') && str_contains($mJ[0], '->rollBack()'));
+} else {
+    ok9a('§J pdks_kart_ata() fonksiyonu regex ile bulunabildi', false);
+}
+
+echo "\n=== K. Fix 8 (Personel Takibi denetimi) — kalıcı kart ↔ işçi havuzu ÇAPRAZ-SİSTEM UID kilidi ===\n";
+ok9a('§K config/pdks.php: pdks_uid_lock_al()/pdks_uid_lock_birak() tanımlı (GET_LOCK/RELEASE_LOCK, yalnız mysql)',
+    str_contains($pdksSrcJ, 'function pdks_uid_lock_al(') && str_contains($pdksSrcJ, 'function pdks_uid_lock_birak(')
+    && str_contains($pdksSrcJ, 'GET_LOCK') && str_contains($pdksSrcJ, 'RELEASE_LOCK'));
+if (preg_match('/function pdks_kart_olustur\b.*?\n\}\n/s', $pdksSrcJ, $mK1)) {
+    ok9a('§K pdks_kart_olustur(): SELECT/INSERT bloğu pdks_uid_lock_al()/pdks_uid_lock_birak() İLE SARILI',
+        str_contains($mK1[0], 'pdks_uid_lock_al($kanonik') && str_contains($mK1[0], 'pdks_uid_lock_birak($kanonik'));
+} else {
+    ok9a('§K pdks_kart_olustur() fonksiyonu regex ile bulunabildi', false);
+}
+$pdksGunlukSrcK = (string)file_get_contents($root . '/config/pdks_gunluk.php');
+if (preg_match('/function pdks_gunluk_kart_olustur\b.*?\n\}\n/s', $pdksGunlukSrcK, $mK2)) {
+    ok9a('§K pdks_gunluk_kart_olustur(): AYNI kilit mekanizmasını (function_exists guard\'lı) kullanıyor',
+        str_contains($mK2[0], 'pdks_uid_lock_al($kanonik') && str_contains($mK2[0], 'pdks_uid_lock_birak($kanonik')
+        && str_contains($mK2[0], "function_exists('pdks_uid_lock_al')"));
+} else {
+    ok9a('§K pdks_gunluk_kart_olustur() fonksiyonu regex ile bulunabildi', false);
+}
+// Davranışsal: SQLite'ta (mysql DEĞİL) kilit no-op olduğu için çapraz-sistem
+// çakışma kontrolünün KENDİSİ hâlâ doğru çalışıyor mu — kilit eklemesi
+// mevcut davranışı BOZMAMALI.
+$fix8Emp = pdks_kart_ata($fix7Emp, '3333333333', 'usb_decimal', [], $db); // fix7Emp'in ZATEN aktif kartı var
+ok9a('§K kilit eklemesi mevcut "zaten aktif kart var" davranışını BOZMADI', $fix8Emp['ok'] === false);
+$fix8Yeni = ['full_name' => 'Fix8 Test', 'status' => 'aktif'];
+$db->exec("INSERT INTO employees (full_name, status) VALUES ('Fix8 Test', 'aktif')");
+$fix8EmpId = (int)$db->lastInsertId();
+$fix8Kart = pdks_kart_ata($fix8EmpId, '4444444444', 'usb_decimal', [], $db);
+ok9a('§K yeni personele yeni UID ile atama HÂLÂ başarılı (kilit eklemesi normal akışı BOZMADI)',
+    $fix8Kart['ok'] === true, json_encode($fix8Kart, JSON_UNESCAPED_UNICODE));
+$fix8Gunluk = pdks_gunluk_kart_olustur(['card_no' => 'FIX8-K1', 'ham_uid' => '4444444444', 'kaynak' => 'usb_decimal'], null, $db);
+ok9a('§K AYNI UID günlük işçi havuzunda REDDEDİLDİ (çapraz-sistem kontrolü kilit eklemesiyle BOZULMADI)',
+    $fix8Gunluk['ok'] === false && ($fix8Gunluk['kod'] ?? '') === 'uid_kalici_kartta', json_encode($fix8Gunluk, JSON_UNESCAPED_UNICODE));
 
 echo "\nSONUÇ: $pass geçti, $fail hata\n";
 exit($fail === 0 ? 0 : 1);

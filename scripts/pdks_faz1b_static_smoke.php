@@ -153,6 +153,15 @@ if (preg_match('/function pdks_foto_sil\b.*?\n}/s', $pdksSrc, $mm)) $fotoSilBlok
 ok('pdks_foto_sil() de AYNI güvenli-ad deseniyle korunuyor',
     $fotoSilBlok !== '' && str_contains($fotoSilBlok, $guvenliAdDeseni));
 
+echo "\n=== 8b. FIX 5 (Personel Takibi denetimi) — Depo alanı serbest metin DEĞİL, tanımlı listeden ===\n";
+$pfSrc = oku('personel_form.php');
+ok('personel_form.php: depot_options() çağrılıyor (definitions.php İLE AYNI kaynak)',
+    str_contains($pfSrc, 'depot_options()'));
+ok('personel_form.php: mevcut kayıttaki eski/silinmiş depo adı listeye SESSİZCE eklenir (kayıt kaymaz)',
+    str_contains($pfSrc, '$depoSecenekleri[] = $_pf_mevcut_depo'));
+ok('personel_form.php: depo <select> render ediliyor (liste varken)',
+    (bool)preg_match('/<select name="depo">/', $pfSrc));
+
 echo "\n=== 9. TC KİMLİK NUMARASI HİÇBİR YERDE İSTENMİYOR (onaylanan karar #2) ===\n";
 $aranan = ['tc_kimlik', 'national_id', 'tckn', 'kimlik_no'];
 foreach ($aranan as $a) {
@@ -193,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v257',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v257';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v257');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v258',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v258';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v258');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -463,6 +472,8 @@ $beklenenEskiSatirlar = [
     "-        <?php \$lnk('personel_takip.php', '🧑‍🌾', 'Personel Takibi', \$a_ptak); ?>",
     // Personel Takibi denetimi Fix 1-2-3 kapanışı: APP_SURUM v256'dan v257'ye çekildi.
     "-    define('APP_SURUM', 'v256');",
+    // Personel Takibi denetimi Fix 5-6-7-8 kapanışı: APP_SURUM v257'den v258'e çekildi.
+    "-    define('APP_SURUM', 'v257');",
     "-    define('APP_SURUM', 'v254');",
     // Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
     // 10 sayfa arasındaki çapraz gezinme bağlantıları kaldırıldı, HER birine
