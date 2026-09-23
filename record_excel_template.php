@@ -10,6 +10,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_login();
 require_perm('records.read');
+require_perm('reports.export');   // tüm dışa aktarımların ortak kapısı
+require_once __DIR__ . '/config/xlsx_export.php';   // export_audit()
 
 $autoload = __DIR__ . '/vendor/autoload.php';
 if (!is_file($autoload)) { http_response_code(500); die('Excel motoru (PhpSpreadsheet) bulunamadı.'); }
@@ -381,6 +383,7 @@ if ($debug) {
 }
 
 // ── İndir ──
+export_audit('records', 'yukleme_plani_sablon', 'xlsx', count($pallets), ['id' => (string)$id]);
 $_parti  = trim((string)($record['parti_no'] ?? ''));
 $_firma  = trim((string)($record['firma']   ?? ''));
 $_tarih  = trim((string)($record['tarih']   ?? ''));

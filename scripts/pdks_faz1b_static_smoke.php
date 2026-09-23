@@ -202,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v260',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v260';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v260');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v261',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v261';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v261');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -478,6 +478,8 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v258');",
     // Ana sayfa "Personel Takibi" kartına eksik çıkış rozeti: v259'dan v260'a çekildi.
     "-    define('APP_SURUM', 'v259');",
+    // Sprint Excel-01 (CSV + XLSX indirme menüsü): v260'tan v261'e çekildi.
+    "-    define('APP_SURUM', 'v260');",
     "-    define('APP_SURUM', 'v254');",
     // Sprint Navigasyon-05 (kullanıcı isteği): personel_takip.php'den açılan
     // 10 sayfa arasındaki çapraz gezinme bağlantıları kaldırıldı, HER birine

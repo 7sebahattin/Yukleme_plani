@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_hesap('read');
 require_perm('reports.export');
@@ -14,6 +15,11 @@ $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
 $muh_f   = trim($_GET['muh'] ?? '');
 $durum_f = trim($_GET['durum'] ?? '');
+// Biçim: xlsx (varsayılan — eski yer imleri de gerçek Excel alır) · csv
+// NOT: Bu uç nokta eskiden HTML tablosunu .xls uzantısıyla gönderiyordu;
+// Excel her açılışta "biçim ile uzantı eşleşmiyor" uyarısı veriyor, tutarlar
+// metin olarak geliyordu. Artık gerçek XLSX üretilir.
+$bicim   = ($_GET['bicim'] ?? '') === 'csv' ? 'csv' : 'xlsx';
 
 $where = ['1=1'];
 $params = [];
@@ -46,7 +52,7 @@ $rows = $st->fetchAll();
 
 // Audit — dışa aktarma (içerik loglanmaz, sadece filtre ve kayıt sayısı)
 audit_log_event('export', 'hesap', null, null, [
-    'format'    => 'xls',
+    'format'    => $bicim,
     'row_count' => count($rows),
     'filters'   => array_filter([
         'q'         => $q,
@@ -54,100 +60,59 @@ audit_log_event('export', 'hesap', null, null, [
         'tarih_bas' => $tarih_b,
         'tarih_son' => $tarih_s,
         'muh'       => $muh_f,
+        'durum'     => $durum_f,
     ], fn($v) => $v !== ''),
 ]);
 
-$filename = 'hesap_' . date('Y-m-d') . '.xls';
-header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-header('Content-Disposition: attachment; filename="' . $filename . '"');
-header('Cache-Control: no-cache');
-echo "\xEF\xBB\xBF"; // UTF-8 BOM
-?>
-<html><head><meta charset="utf-8">
-<style>
-body { font-family: Arial, sans-serif; font-size: 10pt; }
-table { border-collapse: collapse; width: 100%; }
-th { background: #1a56db; color: #fff; padding: 6px 8px; border: 1px solid #ccc; }
-td { padding: 5px 8px; border: 1px solid #ddd; vertical-align: top; }
-.gelir  { color: #166534; }
-.gider  { color: #991b1b; }
-.havale { color: #1e40af; }
-.nakit  { color: #9a3412; }
-.num    { text-align: right; }
-.total  { background: #f0f4ff; font-weight: bold; }
-h2      { margin: 16px 0 4px; font-size: 12pt; color: #1a56db; }
-</style>
-</head><body>
-<h1 style="font-size:14pt;margin-bottom:4px">Asya Fresh — Hesap Kaydı</h1>
-<p style="color:#666;font-size:9pt">
-    Tarih aralığı: <?= $tarih_b ? h($tarih_b) . ' — ' . h($tarih_s ?: date('Y-m-d')) : 'Tümü' ?> &nbsp;|&nbsp;
-    Hazırlanma: <?= date('d.m.Y H:i') ?> &nbsp;|&nbsp;
-    Toplam <?= count($rows) ?> kayıt
-</p>
-
-<h2>Tüm Kayıtlar</h2>
-<table>
-<tr>
-    <th>#</th>
-    <th>Tarih</th>
-    <th>Tür</th>
-    <th>Kategori</th>
-    <th>Kişi/Firma</th>
-    <th>Açıklama</th>
-    <th>Belge No</th>
-    <th>Tutar</th>
-    <th>Döviz</th>
-    <th>Ödeme</th>
-    <th>Fatura</th>
-    <th>Şirket İçin</th>
-    <th>Durum</th>
-    <th>Not</th>
-</tr>
-<?php
-// B2: toplamlar para birimi bazında — farklı kurlar birbirine eklenmez
-$totals = [];
-foreach ($rows as $i => $r):
+// Satırlar — CSV ve XLSX AYNI diziden
+$satirlar = [];
+$totals   = [];   // B2: toplamlar para birimi bazında — farklı kurlar birbirine EKLENMEZ
+foreach ($rows as $i => $r) {
     $cur = $r['currency'] ?: 'TRY';
-    if (!isset($totals[$cur])) $totals[$cur] = ['gelir' => 0.0, 'gider' => 0.0];
+    if (!isset($totals[$cur])) $totals[$cur] = ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0];
     if ($r['type'] === 'gelir') $totals[$cur]['gelir'] += (float)$r['amount'];
     else                        $totals[$cur]['gider'] += (float)$r['amount'];
-?>
-<tr>
-    <td><?= $i + 1 ?></td>
-    <td><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?></td>
-    <td class="<?= $r['type'] ?>"><?= hesap_type_label($r['type']) ?></td>
-    <td><?= h($r['category']) ?></td>
-    <td><?= h($r['person_company']) ?></td>
-    <td><?= h($r['description']) ?></td>
-    <td><?= h($r['document_no']) ?></td>
-    <td class="num"><?= number_format((float)$r['amount'], 2, ',', '.') ?></td>
-    <td><?= h($r['currency']) ?></td>
-    <td><?= hesap_payment_label($r['payment_method']) ?></td>
-    <td><?= $r['has_invoice'] ? 'Evet' : 'Hayır' ?></td>
-    <td><?= $r['is_for_company'] ? 'Evet' : 'Hayır' ?></td>
-    <td><?= h(hesap_status_label((string)($r['status'] ?? ''))) ?></td>
-    <td><?= h($r['notes']) ?></td>
-</tr>
-<?php endforeach; ?>
-<?php foreach ($totals as $cur => $t): ?>
-<tr class="total">
-    <td colspan="7">TOPLAM GELİR</td>
-    <td class="num gelir"><?= number_format($t['gelir'], 2, ',', '.') ?></td>
-    <td><?= h($cur) ?></td>
-    <td colspan="5"></td>
-</tr>
-<tr class="total">
-    <td colspan="7">TOPLAM GİDER</td>
-    <td class="num gider"><?= number_format($t['gider'], 2, ',', '.') ?></td>
-    <td><?= h($cur) ?></td>
-    <td colspan="5"></td>
-</tr>
-<tr class="total">
-    <td colspan="7">NET BAKİYE</td>
-    <td class="num"><?= number_format($t['gelir'] - $t['gider'], 2, ',', '.') ?></td>
-    <td><?= h($cur) ?></td>
-    <td colspan="5"></td>
-</tr>
-<?php endforeach; ?>
-</table>
-</body></html>
+    $totals[$cur]['adet']++;
+    $satirlar[] = [
+        $i + 1, $r['transaction_date'], hesap_type_label($r['type']), $r['category'], $r['person_company'],
+        $r['description'], $r['document_no'], (float)$r['amount'], $cur, hesap_payment_label((string)$r['payment_method']),
+        $r['has_invoice'] ? 'Evet' : 'Hayır', $r['is_for_company'] ? 'Evet' : 'Hayır',
+        hesap_status_label((string)($r['status'] ?? '')), $r['notes'],
+    ];
+}
+$basliklar = ['#', 'Tarih', 'Tür', 'Kategori', 'Kişi/Firma', 'Açıklama', 'Belge No', 'Tutar', 'Döviz', 'Ödeme', 'Fatura', 'Şirket İçin', 'Durum', 'Not'];
+
+if ($bicim === 'csv') {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="hesap_' . date('Y-m-d') . '.csv"');
+    header('Cache-Control: no-cache');
+    $out = fopen('php://output', 'w');
+    fwrite($out, "\xEF\xBB\xBF");
+    fputcsv($out, $basliklar, ';', '"', '\\');
+    foreach ($satirlar as $s) {
+        $s[1] = $s[1] ? date('d.m.Y', strtotime((string)$s[1])) : '';
+        $s[7] = number_format((float)$s[7], 2, ',', '');   // binlik ayraçsız — aktarımda güvenli
+        fputcsv($out, $s, ';', '"', '\\');
+    }
+    fclose($out);
+    exit;
+}
+
+$aciklama = 'Tarih aralığı: ' . ($tarih_b ? fmt_date($tarih_b) . ' — ' . fmt_date($tarih_s ?: date('Y-m-d')) : 'Tümü')
+          . ' · Toplam ' . count($rows) . ' kayıt';
+$tip = ['#' => 'tamsayi', 'Tarih' => 'tarih', 'Tutar' => 'tutar'];
+$ozet = [];
+foreach ($totals as $cur => $t) {
+    $ozet[] = [$cur, $t['adet'], $t['gelir'], $t['gider'], $t['gelir'] - $t['gider']];
+}
+xlsx_indir('hesap_' . date('Y-m-d') . '.xlsx', [
+    // Tutar sütununda toplam YOK: gelir/gider ve farklı para birimleri aynı sütunda.
+    // Toplamlar para birimi başına "Özet" sayfasında.
+    ['ad' => 'Hesap Kayıtları', 'baslik' => 'Asya Fresh — Hesap Kayıtları', 'aciklama' => $aciklama,
+     'sutunlar' => array_map(fn($b) => ['baslik' => $b, 'tip' => $tip[$b] ?? 'metin'], $basliklar),
+     'satirlar' => $satirlar],
+    ['ad' => 'Para Birimi Özeti', 'baslik' => 'Para Birimi Bazında Özet', 'aciklama' => $aciklama . ' · Kurlar birbirine eklenmez',
+     'sutunlar' => [['baslik' => 'Döviz'], ['baslik' => 'Kayıt', 'tip' => 'tamsayi'], ['baslik' => 'Toplam Gelir', 'tip' => 'tutar'],
+                    ['baslik' => 'Toplam Gider', 'tip' => 'tutar'], ['baslik' => 'Net Bakiye', 'tip' => 'tutar']],
+     'satirlar' => $ozet],
+], 'hesap_export.php?' . http_build_query(array_merge($_GET, ['bicim' => 'csv'])));

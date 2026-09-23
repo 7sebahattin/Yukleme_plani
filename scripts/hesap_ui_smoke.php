@@ -80,6 +80,8 @@ function renderPage(string $file, array $get = []): string {
     $_GET = $get; $_SERVER['REQUEST_METHOD'] = 'GET';
     $src = file_get_contents($ROOT.'/'.$file);
     $src = preg_replace('/^\s*require_once __DIR__ . \'\/(config\/db|hesap_config|config\/auth)\.php\';\s*$/m', '', $src);
+    // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan yüklenir — sayfa /tmp'ye kopyalandığı için mutlak yol
+    $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export($GLOBALS['ROOT'] . '/config/xlsx_export.php', true), $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^\s*require_hesap\([^)]*\);\s*$/m', '', $src);
     $src = preg_replace('/^\s*require_perm\([^)]*\);\s*$/m', '', $src);

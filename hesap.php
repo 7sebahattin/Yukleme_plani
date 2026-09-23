@@ -299,9 +299,13 @@ render_flash();
                 <span>Fiş Fotoğraf Dökümü<span class="hs-sheet-sub">Yazdırılabilir sayfa</span></span>
             </a>
             <?php if (can('reports.export')): ?>
-            <a class="hs-sheet-item" href="hesap_export.php">
+            <a class="hs-sheet-item" href="hesap_export.php?bicim=xlsx">
                 <span class="hs-sheet-icon" aria-hidden="true">📊</span>
-                <span>Excel'e Aktar<span class="hs-sheet-sub">Filtreli tablo</span></span>
+                <span>XLSX İndir<span class="hs-sheet-sub">Biçimli Excel · para birimi özeti ayrı sayfada</span></span>
+            </a>
+            <a class="hs-sheet-item" href="hesap_export.php?bicim=csv">
+                <span class="hs-sheet-icon" aria-hidden="true">📄</span>
+                <span>CSV İndir<span class="hs-sheet-sub">Düz metin · başka programa aktarım</span></span>
             </a>
             <?php endif; ?>
             <a class="hs-sheet-item" href="hesap_yazdir.php?<?= http_build_query(['tarih_bas'=>$ay_bas,'tarih_son'=>date('Y-m-d', strtotime($ay_son . ' -1 day'))]) ?>"

@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/hesap_config.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_hesap('read');
 hesap_migrate();
@@ -78,7 +79,8 @@ render_flash();
         <?php if (hesap_can('write')): ?>
         <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
         <?php endif; ?>
-        <a href="hesap_export.php?<?= http_build_query(array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f])) ?>" class="btn btn-ghost">📊 Excel</a>
+        <?php $_hx_q = array_filter(['q'=>$q,'type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'fis'=>$fis_f,'durum'=>$durum_f]); ?>
+        <?= export_menu('hesap_export.php?' . http_build_query($_hx_q + ['bicim' => 'csv']), 'hesap_export.php?' . http_build_query($_hx_q + ['bicim' => 'xlsx']), 'Excel İndir', 'btn btn-ghost') ?>
         <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['type'=>$type_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s,'durum'=>$durum_f])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
     </div>
 </div>

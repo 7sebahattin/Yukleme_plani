@@ -8,6 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/material_stock_helpers.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_perm('stok.read');
 
@@ -45,6 +46,9 @@ $f_mat_type     = trim($_GET['mat_type']     ?? '');
 $f_mat_name     = trim($_GET['mat_name']     ?? '');
 $f_depo         = trim($_GET['depo']         ?? '');
 $is_csv         = isset($_GET['csv']);
+$is_xlsx        = isset($_GET['xlsx']);
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if ($is_csv || $is_xlsx) { require_perm('reports.export'); }
 $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['giris', 'sevk', 'kullanim', 'duzeltme', ''], true)) $f_hareket_tipi = '';
 $f_firma        = trim($_GET['firma'] ?? '');
@@ -348,8 +352,39 @@ $ms_is_admin  = is_admin();
 
 // ── CSV export — Hareketler (csv=1) ────────────────────────
 // Filtreye uyan TÜM hareketleri verir (sayfalama yok). Kolon/format korunmuştur.
+$mh_filtre = ['tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit, 'mat_id' => $f_mat_id > 0 ? (string)$f_mat_id : '',
+              'mat_type' => $f_mat_type, 'mat_name' => $f_mat_name, 'depo' => $f_depo, 'hareket_tipi' => $f_hareket_tipi, 'firma' => $f_firma];
+
+// ── XLSX export — Hareketler (xlsx=1): CSV ile aynı satırlar. Çok büyük
+//    sonuçta (XLSX_MAX_HUCRE) yardımcı "filtreyi daraltın / CSV" sayfası verir.
+if ($is_xlsx) {
+    $x_rows = get_material_movements($pdo, $mv_filters, 100000, 0);
+    export_audit('stok', 'malzeme_hareket', 'xlsx', count($x_rows), $mh_filtre);
+    $x_ac = [];
+    if ($f_tarih_bas !== '' || $f_tarih_bit !== '') $x_ac[] = 'Tarih: ' . ($f_tarih_bas !== '' ? fmt_date($f_tarih_bas) : '…') . ' – ' . ($f_tarih_bit !== '' ? fmt_date($f_tarih_bit) : '…');
+    foreach (['Tür' => $ms_types[$f_mat_type] ?? $f_mat_type, 'Malzeme' => $f_mat_name, 'Depo' => $f_depo, 'Hareket' => $f_hareket_tipi, 'Firma' => $f_firma] as $k => $v) {
+        if ($v !== '') $x_ac[] = "$k: $v";
+    }
+    $x_sat = array_map(fn($r) => [
+        $r['movement_date'],
+        match ($r['movement_type']) { 'giris' => 'Giriş', 'sevk' => 'Sevk', 'kullanim' => 'Kullanım', 'duzeltme' => 'Düzeltme', default => $r['movement_type'] },
+        $ms_types[$r['material_type']] ?? $r['material_type'], $r['material_name'], $r['depo'], $r['quantity'], $r['unit'],
+        $r['source_type'] !== '' ? $r['source_type'] . ($r['source_id'] ? '#' . $r['source_id'] : '') : '',
+        $r['belge_no'], $r['firma'], $r['note'] ?? '',
+    ], $x_rows);
+    xlsx_indir('malzeme_hareketleri_' . date('Y-m-d') . '.xlsx', [[
+        'ad' => 'Hareketler', 'baslik' => 'Malzeme Stok Hareketleri', 'aciklama' => $x_ac ? implode(' · ', $x_ac) : 'Filtre yok',
+        // Toplam satırı YOK: giriş/çıkış/düzeltme ve farklı birimler aynı sütunda
+        'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'Hareket'], ['baslik' => 'Malzeme Türü'], ['baslik' => 'Malzeme'],
+                       ['baslik' => 'Depo'], ['baslik' => 'Miktar', 'tip' => 'sayi'], ['baslik' => 'Birim'], ['baslik' => 'Kaynak'],
+                       ['baslik' => 'Belge No'], ['baslik' => 'Firma'], ['baslik' => 'Not']],
+        'satirlar' => $x_sat,
+    ]], mh_url(['csv' => '1', 'page' => '']));
+}
+
 if ($is_csv) {
     $csv_rows = get_material_movements($pdo, $mv_filters, 100000, 0);
+    export_audit('stok', 'malzeme_hareket', 'csv', count($csv_rows), $mh_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="malzeme_stok_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
@@ -421,7 +456,7 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <a href="malzeme_stok.php" class="btn btn-sm btn-secondary">← Stok Özeti</a>
-        <a href="<?= h(mh_url(['csv' => '1', 'page' => ''])) ?>" class="btn btn-sm btn-ghost">⬇ Hareket CSV</a>
+        <?= export_menu(mh_url(['csv' => '1', 'page' => '']), mh_url(['xlsx' => '1', 'page' => '']), 'Hareket Excel', 'btn btn-sm btn-ghost') ?>
     </div>
 </div>
 

@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_perm('kantar.read');
 
@@ -41,6 +42,9 @@ $f_depo      = trim($_GET['depo']      ?? '');
 $f_tur       = trim($_GET['tur']       ?? '');
 if (!in_array($f_tur, ['gruplu', 'tek'], true)) $f_tur = '';
 $is_csv      = isset($_GET['csv']);
+$is_xlsx     = isset($_GET['xlsx']);
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if ($is_csv || $is_xlsx) { require_perm('reports.export'); }
 
 // ── SQL ───────────────────────────────────────────────────
 $where = []; $params = [];
@@ -211,8 +215,43 @@ foreach ($fisleri as $fis) {
 
 uasort($firma_ozet, fn($a,$b) => $b['net_kg'] <=> $a['net_kg']);
 
+$kr_filtre = ['tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit, 'firma' => $f_firma, 'malin' => $f_malin, 'depo' => $f_depo, 'tur' => $f_tur];
+
+// ── XLSX export — Sayfa 1: fiş × firma dağılımı (CSV ile aynı satırlar),
+//    Sayfa 2: firma özeti (ekrandaki özet tablo) ─────────────
+if ($is_xlsx) {
+    $x_sat = [];
+    foreach ($entries as $e) {
+        $f = $e['fis'];
+        foreach ($e['dist'] as $d) {
+            $x_sat[] = [$f['fis_no'] ?: $f['id'], $f['giris_tarih'], $f['plaka'], $f['malin_cinsi'], $f['parti_no'], $d['firma'], $f['depo'],
+                        $d['palet'], $d['kasa'], $d['brut_kg'], $d['dara_kg'], $d['net_kg'], $e['has_grup'] ? 'Gruplandırılmış' : 'Tek Firma'];
+        }
+    }
+    export_audit('kantar', 'kantar_raporu', 'xlsx', count($x_sat), $kr_filtre);
+    $x_ac = [];
+    if ($f_tarih_bas !== '' || $f_tarih_bit !== '') $x_ac[] = 'Tarih: ' . ($f_tarih_bas !== '' ? fmt_date($f_tarih_bas) : '…') . ' – ' . ($f_tarih_bit !== '' ? fmt_date($f_tarih_bit) : '…');
+    foreach (['Firma' => $f_firma, 'Malın Cinsi' => $f_malin, 'Depo' => $f_depo, 'Tür' => $f_tur === 'gruplu' ? 'Sadece Gruplu' : ($f_tur === 'tek' ? 'Tek Firma' : '')] as $k => $v) {
+        if ($v !== '') $x_ac[] = "$k: $v";
+    }
+    $x_ac = $x_ac ? implode(' · ', $x_ac) : 'Filtre yok';
+    $kg  = fn(string $b) => ['baslik' => $b, 'tip' => 'kg', 'topla' => true];
+    $ad  = fn(string $b) => ['baslik' => $b, 'tip' => 'tamsayi', 'topla' => true];
+    $mt  = fn(string $b) => ['baslik' => $b];
+    xlsx_indir('kantar_raporu_' . date('Y-m-d') . '.xlsx', [
+        ['ad' => 'Kantar Fişleri', 'baslik' => 'Kantar Raporu — Fiş / Firma Dağılımı', 'aciklama' => $x_ac, 'toplam' => true,
+         'sutunlar' => [$mt('Fiş No'), ['baslik' => 'Tarih', 'tip' => 'tarihsaat'], $mt('Plaka'), $mt('Malın Cinsi'), $mt('Parti No'), $mt('Firma/Grup'), $mt('Depo'),
+                        $ad('Palet'), $ad('Kasa'), $kg('Brüt KG'), $kg('Dara KG'), $kg('Net KG'), $mt('Tür')],
+         'satirlar' => $x_sat],
+        ['ad' => 'Firma Özeti', 'baslik' => 'Kantar Raporu — Firma Özeti', 'aciklama' => $x_ac, 'toplam' => true,
+         'sutunlar' => [$mt('Firma'), $ad('Palet'), $ad('Kasa'), $kg('Brüt KG'), $kg('Dara KG'), $kg('Net KG')],
+         'satirlar' => array_map(fn($fk, $o) => [$fk, $o['palet'], $o['kasa'], $o['brut_kg'], $o['dara_kg'], $o['net_kg']], array_keys($firma_ozet), $firma_ozet)],
+    ], '?' . http_build_query(array_filter($kr_filtre + ['csv' => '1'], fn($v) => $v !== '')));
+}
+
 // ── CSV export ────────────────────────────────────────────
 if ($is_csv) {
+    export_audit('kantar', 'kantar_raporu', 'csv', array_sum(array_map(fn($e) => count($e['dist']), $entries)), $kr_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="kantar_raporu_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
@@ -277,7 +316,8 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="kantar.php" class="btn btn-ghost btn-sm">← Fişler</a>
-        <a href="?<?= h(http_build_query(array_filter(['tarih_bas'=>$f_tarih_bas,'tarih_bit'=>$f_tarih_bit,'firma'=>$f_firma,'malin'=>$f_malin,'depo'=>$f_depo,'tur'=>$f_tur,'csv'=>'1'],fn($v)=>$v!==''))) ?>" class="btn btn-ghost btn-sm">⬇ CSV</a>
+        <?= export_menu('?' . http_build_query(array_filter($kr_filtre + ['csv' => '1'], fn($v) => $v !== '')),
+                        '?' . http_build_query(array_filter($kr_filtre + ['xlsx' => '1'], fn($v) => $v !== '')), 'Excel İndir', 'btn btn-ghost btn-sm') ?>
         <?php if ($entries): ?>
         <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Yazdır</button>
         <?php endif; ?>

@@ -5,6 +5,28 @@
 > çevrilemeyeceğini ve hazır şablonlu Excel butonlarına dokunmadan bunun nasıl yapılacağını
 > belirlemek. **Kod değişikliği yok** — bu belge yol haritası için girdi.
 
+> ## ✅ Uygulama durumu — Sprint Excel-01 (v261)
+>
+> Kullanıcı kararları (§8): **1)** CSV şu an aktarılmıyor ama aktarılabilir → CSV
+> **korundu**, bayt bayt aynı · **2)** Büyük raporlarda satır sınırı kabul →
+> `XLSX_MAX_HUCRE` (150 bin hücre) · **3)** Yetki ve audit tek kurala bağlansın →
+> tüm dışa aktarımlar `reports.export` ister ve audit'e yazar.
+>
+> | Faz | Durum |
+> |---|---|
+> | 1 — Ortak yardımcı | ✅ `config/xlsx_export.php` |
+> | 2 — Raporlar (C1–C4) | ✅ "⬇ Excel İndir ▾" → CSV / XLSX; günlük rapor bölüm başına ayrı sayfa |
+> | 3 — Stok/Kantar (C5–C10) | ✅ Kantar raporuna "Firma Özeti" sayfası eklendi |
+> | 4 — Sahte .xls (H1, H2) | ✅ Hesap → gerçek XLSX + CSV (para birimi özeti ayrı sayfa); örnek palet → gerçek XLSX |
+> | 5 — PDKS (C13–C16) | ✅ Tutarlar sayı hücresi; para birimi başına ayrı sütun/sayfa |
+> | 6 — Audit ekranı (C11–C12) | ✅ Her kontrol ayrı sayfa |
+> | 7 — PhpSpreadsheet yükseltmesi | ⏳ Yapılmadı — ayrı iş (şablonlu Excel'i etkiler) |
+> | Kesişen — yetki/audit | ✅ Şablonlu yükleme Excel'i (X1) dahil |
+>
+> §3.3'teki C16 nokta-ondalık sorunu ve C13/C14'teki birleşik para metni **XLSX'te**
+> çözüldü; CSV'leri bilinçli olarak aynı bırakıldı (aktarım biçimi değişmesin).
+> Uygulama kuralları: `CLAUDE.md` → "Excel İndir — CSV + XLSX".
+
 ---
 
 ## 1. Kısa Özet

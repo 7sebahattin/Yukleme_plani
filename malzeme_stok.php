@@ -6,6 +6,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/material_stock_helpers.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_perm('stok.read');
 
@@ -65,6 +66,9 @@ if (!in_array($f_durum, ['stokta', 'negatif', 'sifir', ''], true)) $f_durum = ''
 // tanımlı, hiç işlem görmemiş) malzeme/depo satırları sayfa açılışında gizlenir.
 $f_tumu     = ($_GET['tumu'] ?? '') === '1';
 $is_csv     = isset($_GET['csv']);
+$is_xlsx    = isset($_GET['xlsx']);
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if ($is_csv || $is_xlsx) { require_perm('reports.export'); }
 
 // ── Stok özeti — config/material_stock_helpers.php ────────
 // Tarih GÖNDERİLMEZ → "Kalan" güncel stoktur. Tam set bir kez hesaplanır;
@@ -108,7 +112,31 @@ $ms_can_write    = can('stok.write');
 
 // ── CSV export — Stok Özeti (csv=ozet) ─────────────────────
 // Tek filtre çubuğuyla aynı filtreli satırları verir (sayfalama yok).
+$ms_filtre = ['q' => $f_q, 'kategori' => $f_kategori, 'tur' => $f_tur, 'depo' => $f_depo, 'durum' => $f_durum, 'tumu' => $f_tumu ? '1' : ''];
+
+// ── XLSX export — Stok Özeti (xlsx=ozet): CSV ile aynı filtreli satırlar ──
+if ($is_xlsx && ($_GET['xlsx'] ?? '') === 'ozet') {
+    export_audit('stok', 'malzeme_stok_ozet', 'xlsx', count($ozet_rows), $ms_filtre);
+    $x_ac = [];
+    foreach (['Arama' => $f_q, 'Kategori' => $ms_cat_labels[$f_kategori] ?? $f_kategori, 'Tür' => $ms_types[$f_tur] ?? $f_tur, 'Depo' => $f_depo, 'Durum' => $f_durum] as $k => $v) {
+        if ($v !== '') $x_ac[] = "$k: $v";
+    }
+    if ($f_tumu) $x_ac[] = 'Hareketsizler dahil';
+    // Birim adet/paket… ise tam sayı, kg/lt… ise 3 ondalık — ekrandaki kuralla aynı
+    $x_sat = array_map(fn($r) => [
+        $ms_cat_labels[$r['category']] ?? $r['category'], $ms_types[$r['material_type']] ?? $r['material_type'], $r['material_name'],
+        $r['depo'] !== '' ? $r['depo'] : 'Depo Boş', $r['total_giris'], $r['total_cikis'], $r['kalan'], $r['unit'],
+    ], $ozet_rows);
+    xlsx_indir('malzeme_stok_ozet_' . date('Y-m-d') . '.xlsx', [[
+        'ad' => 'Stok Özeti', 'baslik' => 'Malzeme Stok Özeti (güncel durum)', 'aciklama' => $x_ac ? implode(' · ', $x_ac) : 'Filtre yok',
+        'sutunlar' => [['baslik' => 'Kategori'], ['baslik' => 'Tür'], ['baslik' => 'Malzeme'], ['baslik' => 'Depo'],
+                       ['baslik' => 'Giriş', 'tip' => 'sayi'], ['baslik' => 'Çıkış', 'tip' => 'sayi'], ['baslik' => 'Kalan', 'tip' => 'sayi'], ['baslik' => 'Birim']],
+        'satirlar' => $x_sat,
+    ]], ms_url(['csv' => 'ozet']));
+}
+
 if ($is_csv && ($_GET['csv'] ?? '') === 'ozet') {
+    export_audit('stok', 'malzeme_stok_ozet', 'csv', count($ozet_rows), $ms_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="malzeme_stok_ozet_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
@@ -206,7 +234,7 @@ render_flash();
         <?php if ($ms_can_write): ?>
         <a href="malzeme_stok_import.php" class="btn btn-sm btn-ghost">📥 Excel Aktar</a>
         <?php endif; ?>
-        <a href="<?= ms_url(['csv' => 'ozet']) ?>" class="btn btn-sm btn-ghost">⬇ Özet CSV</a>
+        <?= export_menu(ms_url(['csv' => 'ozet']), ms_url(['xlsx' => 'ozet']), 'Özet Excel', 'btn btn-sm btn-ghost') ?>
         <a href="<?= h(str_replace('malzeme_stok.php', 'malzeme_stok_rapor.php', ms_url())) ?>" class="btn btn-sm btn-ghost">🖨️ Rapor / Yazdır</a>
         <?php if (is_admin()): ?>
         <a href="malzeme_stok_tehis.php" class="btn btn-sm btn-ghost" title="Veri kalite ve sistem audit kontrolleri (admin)">🔬 Teknik Teşhis</a>
