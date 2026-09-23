@@ -2288,6 +2288,16 @@ body.print-mode .asya-sheet {
 .pc-drop-success:hover { background: rgba(5,150,105,.08) !important; }
 .pc-drop-disabled { display: block; padding: 8px 14px; color: var(--muted); font-size: .85rem; cursor: default; }
 
+/* "⬇ Excel İndir ▾" menüsü — export_menu() (config/xlsx_export.php).
+   Açılır liste .pc-dropdown'ı kullanır; app.js position:fixed ile açar. */
+.dl-menu { align-self: center; }
+.dl-menu-btn { white-space: nowrap; }
+.dl-caret { font-size: .75em; opacity: .7; margin-left: 2px; }
+.dl-menu-list { min-width: 210px; }
+.dl-menu-list a { flex-wrap: wrap; row-gap: 1px; }
+.dl-menu-list small { flex-basis: 100%; padding-left: 26px; color: var(--muted); font-size: .74rem; }
+@media (max-width: 767px) { .dl-menu-list a { min-height: 44px; } }
+
 /* Kilitli kayıt rozeti */
 .badge-locked {
     display: inline-block;

@@ -6,8 +6,11 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 
 // Güvenlik köprüsü: üretim sunucusunda config/helpers.php eski sürümdeyse
 // (Sprint 4 öncesi) normalize_text_v2 tanımsız kalabilir.
@@ -455,6 +458,29 @@ if ($has_md) {
         'title' => 'Tanım Tipleri Dağılımı', 'risk' => '', 'fix' => ''];
 }
 
+// ── XLSX Export — her kontrol bölümü AYRI sayfa (CSV'de alt alta diziliyordu) ──
+$xlsx_key = trim($_GET['xlsx'] ?? '');
+if ($xlsx_key !== '') {
+    $export_keys = ($xlsx_key === 'all') ? array_keys($results) : (isset($results[$xlsx_key]) ? [$xlsx_key] : []);
+    $sayfalar = [];
+    $say = 0;
+    foreach ($export_keys as $k) {
+        $sec = $results[$k];
+        if (empty($sec['rows'])) continue;
+        $say += count($sec['rows']);
+        $sayfalar[] = [
+            'ad' => $sec['title'], 'baslik' => $sec['title'],
+            'aciklama' => trim(preg_replace('/\s+/', ' ', (string)($sec['risk'] ?? ''))) ?: 'Veri denetimi',
+            'sutunlar' => array_map(fn($c) => ['baslik' => $c], $sec['cols']),
+            'satirlar' => array_map(fn($row) => array_map(fn($fk) => $row[$fk] ?? '', $sec['keys']), $sec['rows']),
+        ];
+    }
+    if ($sayfalar) {
+        export_audit('audit', 'veri_denetimi_' . $xlsx_key, 'xlsx', $say);
+        xlsx_indir('audit_' . ($xlsx_key === 'all' ? 'tum' : $xlsx_key) . '_' . date('Ymd_His') . '.xlsx', $sayfalar, '?csv=' . urlencode($xlsx_key));
+    }
+}
+
 // ── CSV Export (tüm header'lardan önce) ─────────────────────
 $csv_key = trim($_GET['csv'] ?? '');
 if ($csv_key !== '') {
@@ -463,6 +489,7 @@ if ($csv_key !== '') {
         : (isset($results[$csv_key]) ? [$csv_key] : []);
 
     if (!empty($export_keys)) {
+        export_audit('audit', 'veri_denetimi_' . $csv_key, 'csv', array_sum(array_map(fn($k) => count($results[$k]['rows']), $export_keys)));
         $fname = 'audit_' . ($csv_key === 'all' ? 'tum' : $csv_key) . '_' . date('Ymd_His') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $fname . '"');
@@ -473,14 +500,14 @@ if ($csv_key !== '') {
             $sec = $results[$k];
             if (empty($sec['rows'])) continue;
             // Bölüm başlığı
-            fputcsv($out, ['=== ' . $sec['title'] . ' ==='], ';');
-            fputcsv($out, $sec['cols'], ';');
+            fputcsv($out, ['=== ' . $sec['title'] . ' ==='], ';', '"', '\\');
+            fputcsv($out, $sec['cols'], ';', '"', '\\');
             foreach ($sec['rows'] as $row) {
                 $line = [];
                 foreach ($sec['keys'] as $fk) $line[] = $row[$fk] ?? '';
-                fputcsv($out, $line, ';');
+                fputcsv($out, $line, ';', '"', '\\');
             }
-            fputcsv($out, [], ';'); // boş satır
+            fputcsv($out, [], ';', '"', '\\'); // boş satır
         }
         fclose($out);
         exit;
@@ -514,7 +541,7 @@ $issue_count = array_sum(array_map(function($s) {
 <?php endif; ?>
 
 <div style="text-align:right;margin-bottom:12px">
-    <a href="?csv=all" class="btn btn-ghost btn-sm">⬇ Tüm Raporu CSV İndir</a>
+    <?= export_menu('?csv=all', '?xlsx=all', 'Tüm Raporu İndir', 'btn btn-ghost btn-sm') ?>
 </div>
 
 <style>
@@ -589,7 +616,7 @@ foreach ($section_order as $key):
                     ? 'İlk 20 kayıt (toplam: <strong>' . $cnt . '</strong>)'
                     : '<strong>' . $cnt . '</strong> kayıt' ?>
             </span>
-            <a href="?csv=<?= urlencode($key) ?>" class="btn btn-sm btn-ghost" style="font-size:.78rem">⬇ CSV</a>
+            <?= export_menu('?csv=' . urlencode($key), '?xlsx=' . urlencode($key), 'Excel', 'btn btn-sm btn-ghost') ?>
         </div>
         <div class="au-tbl-wrap">
             <table class="au-tbl">

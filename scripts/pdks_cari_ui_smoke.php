@@ -26,7 +26,7 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
-$PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments'];
+$PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'];
 $IS_ADMIN = false;
 $AKTIF_DEPO = 'Depo A';
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test Kullanıcı']; }
@@ -162,6 +162,8 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $src = file_get_contents($ROOT . '/' . $file);
     $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+    // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan — sayfa /tmp'ye kopyalandığı için mutlak yol
+    $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(dirname(__DIR__) . '/config/xlsx_export.php', true), $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
     $tmp = sys_get_temp_dir() . '/pdkscariui_' . md5($file . serialize($get) . serialize($post)) . '.php';
@@ -282,7 +284,8 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 function current_user(): ?array { return ['id' => 1, 'username' => 'test']; }
-function can(string $p): bool { return in_array($p, ['attendance.foreman_accounts', 'attendance.foreman_payments'], true); }
+function can(string $p): bool { return in_array($p, ['attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'], true); }
+function require_perm(string $p): void { if (!can($p)) forbidden(); }
 function is_admin(): bool { return false; }
 function active_depot(): ?string { return 'Depo A'; }
 function audit_log_event(...$a): void {}
@@ -348,6 +351,7 @@ $_GET = ['foreman_id' => (string)$ayseId, 'csv' => '1']; $_SERVER['REQUEST_METHO
 $pageSrc = file_get_contents(__ROOT__ . '/cavus_ekstre.php');
 $pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/auth)\.php\';.*$/m', '', $pageSrc);
 $pageSrc = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $pageSrc);
+$pageSrc = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(__ROOT__ . '/config/xlsx_export.php', true), $pageSrc);
 $pageSrc = preg_replace('/^<\?php\s*$/m', '', $pageSrc, 1);
 $pageSrc = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $pageSrc);
 eval($pageSrc);
@@ -369,6 +373,25 @@ ok('CSV başlık satırı Türkçe sütun adlarını taşıyor (Faz 7\'nin Türk
 ok('CSV içinde HAKEDİŞ satırı var', str_contains($ciktiCsvTam, 'HAKEDİŞ'), $ciktiCsvTam);
 ok('CSV içinde ÖDEME/HAVALE-001 satırı var', str_contains($ciktiCsvTam, 'HAVALE-001'), $ciktiCsvTam);
 ok('CSV koşan bakiye 800.00 ile bitiyor (CSV ham DECIMAL biçiminde, HTML\'in virgüllü görünümünde DEĞİL)', (bool)preg_match('/800\.00/', $ciktiCsvTam), $ciktiCsvTam);
+
+echo "\n=== 9x. cavus_ekstre.php — XLSX export (ALT SÜREÇ, CSV ile AYNI fikstür) ===\n";
+require_once __DIR__ . '/_xlsx_altsurec.php';
+$x = xlsx_altsurec_calistir($csvAltSurec, "'csv' => '1'", "'xlsx' => '1'", 'cari');
+ok('XLSX alt-süreci geçerli bir .xlsx üretti (Fatal/Warning yok)', $x['ok'], $x['hata']);
+if ($x['ok']) {
+    $sh = $x['kitap']->getSheetByName('Ekstre TRY');
+    ok('Para birimi başına ayrı sayfa: "Ekstre TRY" var', $sh !== null);
+    if ($sh) {
+        $bs = xlsx_satir_bul($sh, 'Bakiye');
+        $bk = $bs ? xlsx_sutun_bul($sh, $bs, 'Bakiye') : '';
+        ok('Türkçe başlık satırı var (Bakiye / Belge / Referans No)', $bs > 0 && xlsx_sutun_bul($sh, $bs, 'Belge / Referans No') !== '');
+        ok('HAVALE-001 satırı var', xlsx_satir_bul($sh, 'HAVALE-001') > 0);
+        $son = $bs; while ($sh->getCell('B' . ($son + 1))->getValue() !== null && $sh->getCell('B' . ($son + 1))->getValue() !== '') $son++;
+        $c = $sh->getCell($bk . $son);
+        ok('Son koşan bakiye SAYI hücresi ve 800 (CSV\'deki "800.00" metni yerine)', $c->getDataType() === 'n' && abs((float)$c->getValue() - 800) < 0.001,
+            $c->getDataType() . ' ' . var_export($c->getValue(), true));
+    }
+}
 
 echo "\n=== 9b. Fix 9 (Personel Takibi denetimi) — Faz 9D düzeltmesi varken Bakiye=Hakediş+Düzeltme-Ödeme görünür ===\n";
 // Ayşe'nin KESİN hakedişine (id=$ayseEntId) 300 TRY'lik bir düzeltme eklenir —
@@ -417,7 +440,7 @@ ok('muhasebe izinleriyle cavus_odeme.php AÇILIYOR', !str_starts_with($rMuOdeme,
 $rMuCari = renderPage('cavus_cari.php');
 ok('muhasebe izinleriyle cavus_cari.php AÇILIYOR', !str_starts_with($rMuCari, '__ERROR__'), $rMuCari);
 
-$PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments'];   // sıfırla
+$PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'];   // sıfırla
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

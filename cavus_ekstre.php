@@ -13,8 +13,11 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_pdks_cari('accounts');
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
@@ -45,7 +48,38 @@ $ekstre = pdks_cari_ekstre($foremanId, $baslangic ?: null, $bitis ?: null, $pdo)
 $_ekstreBaslangicFiltreli = $baslangic !== '';
 $_ekstreGercekBakiye = $_ekstreBaslangicFiltreli ? pdks_cari_bakiye($foremanId, $pdo) : [];
 
+$ce_filtre = ['foreman_id' => $foremanId, 'baslangic' => $baslangic, 'bitis' => $bitis];
+
+// ── XLSX export — para birimi başına AYRI sayfa (kurlar asla toplanmaz);
+//    tutarlar sayı hücresi (CSV'de "1250.50" nokta ondalıklı metindi). ──
+if (isset($_GET['xlsx'])) {
+    $donem = ($baslangic !== '' ? date('d.m.Y', strtotime($baslangic)) : '…') . ' – ' . ($bitis !== '' ? date('d.m.Y', strtotime($bitis)) : '…');
+    $sayfalar = [];
+    $say = 0;
+    foreach ($ekstre as $cur => $satirlar) {
+        $say += count($satirlar);
+        $son = $satirlar ? end($satirlar)['kosan_bakiye'] : 0;
+        $bilgi = [['Çavuş', $cavus['name']], ['Dönem', ($baslangic === '' && $bitis === '') ? 'Tüm zamanlar' : $donem], ['Para Birimi', $cur],
+                  [$_ekstreBaslangicFiltreli ? 'Bu Dönemin Net Hareketi' : 'Güncel Bakiye', $son, 'tutar']];
+        if ($_ekstreBaslangicFiltreli) $bilgi[] = ['Güncel Bakiye (tüm zamanlar)', $_ekstreGercekBakiye[$cur]['bakiye'] ?? 0, 'tutar'];
+        $sayfalar[] = [
+            'ad' => 'Ekstre ' . $cur, 'baslik' => $cavus['name'] . ' — Ekstre (' . $cur . ')',
+            'aciklama' => 'Dönem: ' . $donem . ($_ekstreBaslangicFiltreli ? ' · Koşan bakiye dönem başında 0\'dan başlar' : ''),
+            'bilgi' => $bilgi, 'toplam' => true,
+            'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'İşlem Türü'], ['baslik' => 'Belge / Referans No'], ['baslik' => 'Açıklama'],
+                           ['baslik' => 'Hakediş / Borç Artışı', 'tip' => 'tutar', 'topla' => true], ['baslik' => 'Ödeme / Azalış', 'tip' => 'tutar', 'topla' => true],
+                           ['baslik' => 'Bakiye', 'tip' => 'tutar']],
+            'satirlar' => array_map(fn($x) => [$x['tarih'], $x['tip_etiket'], $x['belge'], $x['aciklama'], $x['artis'] ?? '', $x['azalis'] ?? '', $x['kosan_bakiye']], $satirlar),
+        ];
+    }
+    if (!$sayfalar) $sayfalar = [['ad' => 'Ekstre', 'baslik' => $cavus['name'] . ' — Ekstre', 'aciklama' => 'Dönem: ' . $donem,
+                                  'sutunlar' => [['baslik' => 'Durum']], 'satirlar' => [['Bu dönemde hareket yok']]]];
+    export_audit('pdks', 'cavus_ekstre', 'xlsx', $say, $ce_filtre);
+    xlsx_indir('cavus_ekstre_' . $foremanId . '.xlsx', $sayfalar, '?' . http_build_query(array_filter($ce_filtre + ['csv' => '1'], fn($v) => $v !== '')));
+}
+
 if (isset($_GET['csv'])) {
+    export_audit('pdks', 'cavus_ekstre', 'csv', array_sum(array_map('count', $ekstre)), $ce_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="cavus_ekstre_' . $foremanId . '.csv"');
     $out = fopen('php://output', 'w');
@@ -84,7 +118,7 @@ render_flash();
     <label class="muted" style="font-size:.82rem">Başlangıç<br><input type="date" name="baslangic" value="<?= h($baslangic) ?>"></label>
     <label class="muted" style="font-size:.82rem">Bitiş<br><input type="date" name="bitis" value="<?= h($bitis) ?>"></label>
     <button type="submit" class="btn" style="align-self:flex-end">Filtrele</button>
-    <a href="?<?= h(http_build_query(array_filter(['foreman_id' => $foremanId, 'baslangic' => $baslangic, 'bitis' => $bitis, 'csv' => '1'], fn($v) => $v !== ''))) ?>" class="btn btn-ghost" style="align-self:flex-end">⬇ CSV</a>
+    <?= export_menu('?' . http_build_query(array_filter($ce_filtre + ['csv' => '1'], fn($v) => $v !== '')), '?' . http_build_query(array_filter($ce_filtre + ['xlsx' => '1'], fn($v) => $v !== '')), 'Excel İndir', 'btn btn-ghost') ?>
     <?php if ($baslangic !== '' || $bitis !== ''): ?>
     <a href="cavus_ekstre.php?foreman_id=<?= (int)$foremanId ?>" class="btn btn-ghost" style="align-self:flex-end">Temizle</a>
     <?php endif; ?>

@@ -7,6 +7,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 else { require_perm('reports.read'); }
@@ -495,10 +496,9 @@ $xlsx_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params,
         <?php if (!empty($pivot)): ?>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
         <?php endif; ?>
-        <?php /* XLSX: tek dosya, iki sayfa (Kullanım + Stok Özeti). CSV linki
+        <?php /* XLSX: tek dosya, iki sayfa (Kullanım + Stok Özeti). CSV
                  tek sayfalık ham veri isteyenler için korunur. */ ?>
-        <a href="<?= h($xlsx_url) ?>" class="btn btn-sm btn-primary">⬇ Excel İndir<?= can('stok.read') ? ' (Kullanım + Stok)' : '' ?></a>
-        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-ghost">CSV</a>
+        <?= export_menu($csv_url, $xlsx_url, 'Excel İndir', 'btn btn-sm btn-primary') ?>
     </div>
 </div>
 

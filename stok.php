@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_perm('stok.read');
 
@@ -249,6 +250,10 @@ $f_parti     = trim($_GET['parti']     ?? '');
 $sayim_kg       = isset($_GET['sayim_kg']) && $_GET['sayim_kg'] !== '' ? (float)$_GET['sayim_kg'] : null;
 $is_csv         = isset($_GET['csv']);
 $is_dkk_csv     = isset($_GET['dkk_csv']);
+$is_xlsx        = isset($_GET['xlsx']);
+$is_dkk_xlsx    = isset($_GET['dkk_xlsx']);
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if ($is_csv || $is_dkk_csv || $is_xlsx || $is_dkk_xlsx) { require_perm('reports.export'); }
 $f_hareket_tipi = trim($_GET['hareket_tipi'] ?? '');
 if (!in_array($f_hareket_tipi, ['gelen', 'yukleme', 'cikma', ''], true)) $f_hareket_tipi = '';
 
@@ -697,6 +702,55 @@ try {
     $parti_list = $pdo->query("SELECT DISTINCT parti_no FROM loading_records WHERE parti_no != '' ORDER BY parti_no DESC LIMIT 200")->fetchAll(PDO::FETCH_COLUMN);
 } catch (PDOException $e) { $parti_list = []; }
 
+$stok_filtre = ['tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit, 'firma' => $f_firma, 'urun' => $f_urun, 'depo' => $f_depo, 'parti' => $f_parti];
+$stok_x_ac   = [];
+if ($f_tarih_bas !== '' || $f_tarih_bit !== '') $stok_x_ac[] = 'Tarih: ' . ($f_tarih_bas !== '' ? fmt_date($f_tarih_bas) : '…') . ' – ' . ($f_tarih_bit !== '' ? fmt_date($f_tarih_bit) : '…');
+foreach (['Firma' => $f_firma, 'Ürün' => $f_urun, 'Depo' => $f_depo, 'Parti' => $f_parti] as $_k => $_v) { if ($_v !== '') $stok_x_ac[] = "$_k: $_v"; }
+$stok_x_ac = $stok_x_ac ? implode(' · ', $stok_x_ac) : 'Filtre yok';
+
+// ── Veri Kalite Raporu XLSX — her sorun grubu ayrı blok ──
+if ($is_dkk_xlsx) {
+    $x_bloklar = [];
+    $x_say = 0;
+    foreach ($quality_detail as $grp) {
+        if ($grp['total'] === 0) continue;
+        $x_say += count($grp['rows']);
+        $x_bloklar[] = [
+            'baslik'   => $grp['label'] . ' — Toplam: ' . $grp['total'],
+            'sutunlar' => [['baslik' => 'ID', 'tip' => 'tamsayi'], ['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'Firma'],
+                           ['baslik' => 'Ürün / Mal Cinsi'], ['baslik' => 'Depo'], ['baslik' => 'Net KG', 'tip' => 'kg'], ['baslik' => 'Düzeltme Linki']],
+            'satirlar' => array_map(fn($r) => [$r['id'], $r['tarih'] ?? '', $r['firma'] ?? '', $r['urun'] ?? '', $r['depo'] ?? '', $r['net_kg'] ?? 0, $r['fix_link'] ?? ''], $grp['rows']),
+        ];
+    }
+    export_audit('stok', 'veri_kalite', 'xlsx', $x_say, $stok_filtre);
+    if (!$x_bloklar) $x_bloklar = [['baslik' => 'Sorunlu kayıt bulunamadı.', 'sutunlar' => [['baslik' => 'Durum']], 'satirlar' => [['Tüm kontroller temiz']]]];
+    xlsx_indir('veri_kalite_raporu_' . date('Y-m-d') . '.xlsx', [[
+        'ad' => 'Veri Kalite', 'baslik' => 'Veri Kalite Raporu', 'aciklama' => $stok_x_ac, 'bloklar' => $x_bloklar,
+    ]], '?' . http_build_query(array_filter($stok_filtre + ['dkk_csv' => '1'], fn($v) => $v !== '')));
+}
+
+// ── Stok Hareketi XLSX — üstte özet, altta hareket tablosu ──
+if ($is_xlsx) {
+    export_audit('stok', 'stok_hareket', 'xlsx', count($hareket_rows), $stok_filtre);
+    $x_kg = fn(string $b) => ['baslik' => $b, 'tip' => 'kg'];
+    xlsx_indir('stok_hareket_' . date('Y-m-d') . '.xlsx', [[
+        'ad' => 'Stok Hareketi', 'baslik' => 'Depo Stok Hareketi', 'aciklama' => $stok_x_ac,
+        'bilgi' => [
+            ['Ham Giriş KG', $gelen_kg, 'kg'], ['Yüklenen İyi Ürün KG', $yukleme_kg, 'kg'],
+            ['Fire/Çıkma KG', $fire_cikma_kg, 'kg'], ['Teorik Kalan KG', $kalan_kg, 'kg'],
+        ],
+        // Toplam satırı YOK: giriş, yükleme ve fire aynı sütunda — toplamı anlamsız; özet üstte.
+        'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'Hareket'], ['baslik' => 'Firma'], ['baslik' => 'Ürün'], ['baslik' => 'Depo'],
+                       ['baslik' => 'Parti No'], ['baslik' => 'Çıkış Nedeni'], $x_kg('Brüt KG'), $x_kg('Dara KG'), $x_kg('Net KG')],
+        'satirlar' => array_map(function ($r) {
+            $yon = match ($r['yon']) { 'gelen' => 'Ham Giriş (Kantar)', 'cikma' => 'Fire/Çıkma', default => 'Yükleme (İyi Ürün)' };
+            return [$r['tarih'], $yon, $r['firma'], $r['urun'], $r['depo'],
+                    $r['yon'] !== 'gelen' ? ($r['parti'] ?? '') : '', $r['yon'] !== 'gelen' ? ($r['cikis_nedeni'] ?? '') : '',
+                    $r['brut_kg'], $r['dara_kg'], $r['net_kg']];
+        }, $hareket_rows),
+    ]], '?' . http_build_query(array_filter($stok_filtre + ['csv' => '1'], fn($v) => $v !== '')));
+}
+
 // ── Veri Kalite Raporu CSV export ────────────────────────
 if ($is_dkk_csv) {
     audit_log_event('export', 'stok', null, null, ['type' => 'dkk_csv']);
@@ -787,13 +841,13 @@ render_flash();
 
 <div class="page-head">
     <h2 class="page-title">📦 Ürün Stok</h2>
-    <a href="stok.php?<?= h(http_build_query(array_filter([
+    <?php $_stok_q = array_filter([
         'tarih_bas' => $f_tarih_bas, 'tarih_bit' => $f_tarih_bit,
         'firma' => $f_firma, 'urun' => $f_urun, 'depo' => $f_depo,
         'parti' => $f_parti,
         'sayim_kg' => $sayim_kg !== null ? (string)$sayim_kg : '',
-        'csv' => '1',
-    ], fn($v) => $v !== ''))) ?>" class="btn btn-sm btn-ghost">⬇ CSV</a>
+    ], fn($v) => $v !== ''); ?>
+    <?= export_menu('stok.php?' . http_build_query($_stok_q + ['csv' => '1']), 'stok.php?' . http_build_query($_stok_q + ['xlsx' => '1']), 'Excel İndir', 'btn btn-sm btn-ghost') ?>
 </div>
 
 <!-- ── Filtre Bilgi Notu ─────────────────────────────────── -->
@@ -975,7 +1029,7 @@ $dkk_detail_url = '?' . http_build_query(array_filter([
                 onclick="dkkToggle()">
             🔍 Detaylı Veri Kalite Raporunu Göster
         </button>
-        <a href="<?= h($dkk_detail_url) ?>" class="btn btn-sm btn-ghost">⬇ Kalite Raporu CSV</a>
+        <?= export_menu($dkk_detail_url, str_replace('dkk_csv=1', 'dkk_xlsx=1', $dkk_detail_url), 'Kalite Raporu', 'btn btn-sm btn-ghost') ?>
     </div>
     <div id="dkkDetail" class="dkk-detail-section" hidden>
         <datalist id="hd-dl-firma"><?php foreach ($firma_list as $fv): ?><option value="<?= h($fv) ?>"><?php endforeach; ?></datalist>

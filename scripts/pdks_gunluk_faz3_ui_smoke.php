@@ -26,7 +26,7 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
-$PERMS = ['attendance.daily_reports'];
+$PERMS = ['attendance.daily_reports', 'reports.export'];
 $IS_ADMIN = false;
 $AKTIF_DEPO = 'Depo A';
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test Kullanıcı']; }
@@ -136,6 +136,8 @@ function renderPage(string $file, array $get = []): string {
     $src = file_get_contents($ROOT . '/' . $file);
     $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_faz8h|config\/pdks_faz8j|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+    // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan — sayfa /tmp'ye kopyalandığı için mutlak yol
+    $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(dirname(__DIR__) . '/config/xlsx_export.php', true), $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
     $src = str_replace('__DIR__', var_export($ROOT, true), $src);
@@ -204,7 +206,8 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 function current_user(): ?array { return ['id' => 1, 'username' => 'test']; }
-function can(string $p): bool { return $p === 'attendance.daily_reports'; }
+function can(string $p): bool { return in_array($p, ['attendance.daily_reports', 'reports.export'], true); }
+function require_perm(string $p): void { if (!can($p)) forbidden(); }
 function is_admin(): bool { return false; }
 function active_depot(): ?string { return 'Depo A'; }
 function audit_log_event(...$a): void {}
@@ -257,6 +260,7 @@ $_GET = ['csv' => '1']; $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['REQUEST_UR
 $pageSrc = file_get_contents(__ROOT__ . '/gunluk_isci_puantaj.php');
 $pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/auth)\.php\';.*$/m', '', $pageSrc);
 $pageSrc = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $pageSrc);
+$pageSrc = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(__ROOT__ . '/config/xlsx_export.php', true), $pageSrc);
 $pageSrc = preg_replace('/^<\?php\s*$/m', '', $pageSrc, 1);
 $pageSrc = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $pageSrc);
 $pageSrc = str_replace('__DIR__', var_export(__ROOT__, true), $pageSrc);
@@ -284,6 +288,23 @@ ok('CSV başlık satırı Türkçe sütun adlarını taşıyor (Faz 7 — İngil
     !str_contains($ciktiCsvTam, 'Foreman') && !str_contains($ciktiCsvTam, 'Missing Exit')
     && str_contains($ciktiCsvTam, 'Çavuş') && str_contains($ciktiCsvTam, 'Eksik Çıkış'), $ciktiCsvTam);
 ok('CSV içinde Ayşe Çavuş satırı var', str_contains($ciktiCsvTam, 'Ayşe Çavuş'), $ciktiCsvTam);
+
+echo "\n=== 4x. gunluk_isci_puantaj.php — XLSX export (ALT SÜREÇ, CSV ile AYNI fikstür) ===\n";
+require_once __DIR__ . '/_xlsx_altsurec.php';
+$x = xlsx_altsurec_calistir($csvAltSurec, "\$_GET = ['csv' => '1'];", "\$_GET = ['xlsx' => '1'];", 'puantaj');
+ok('XLSX alt-süreci geçerli bir .xlsx üretti (Fatal/Warning yok)', $x['ok'], $x['hata']);
+if ($x['ok']) {
+    $sh = $x['kitap']->getSheetByName('Günlük Puantaj');
+    ok('"Günlük Puantaj" sayfası var', $sh !== null);
+    if ($sh) {
+        $bs = xlsx_satir_bul($sh, 'Çavuş');
+        $r  = xlsx_satir_bul($sh, 'Ayşe Çavuş');
+        $kg = $bs ? xlsx_sutun_bul($sh, $bs, 'Toplam Giriş') : '';
+        ok('Türkçe başlık satırı + Ayşe Çavuş satırı var', $bs > 0 && $r > 0 && $kg !== '');
+        if ($r && $kg) ok('Toplam Giriş SAYI hücresi', $sh->getCell($kg . $r)->getDataType() === 'n', $sh->getCell($kg . $r)->getDataType());
+        ok('TOPLAM satırı var (SUBTOTAL)', xlsx_satir_bul($sh, 'TOPLAM') > $r);
+    }
+}
 
 echo "\n=== 5. gunluk_isci_puantaj.php — geçersiz tarih GÜVENLE bugüne düşer ===\n";
 $sBad = renderPage('gunluk_isci_puantaj.php', ['tarih' => 'not-a-date']);
@@ -321,7 +342,7 @@ ok('yetkisiz erişimde gunluk_isci_puantaj_detay.php REDDEDİLİYOR', str_starts
 $PERMS = ['attendance.daily_scan'];   // yalnız tarama yetkisi — rapor DEĞİL
 $rScanOnly = renderPage('gunluk_isci_puantaj.php');
 ok('YALNIZ attendance.daily_scan ile rapor sayfası REDDEDİLİYOR (operator senaryosu)', str_starts_with($rScanOnly, '__ERROR__: forbidden'), $rScanOnly);
-$PERMS = ['attendance.daily_reports'];   // sıfırla
+$PERMS = ['attendance.daily_reports', 'reports.export'];   // sıfırla
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);

@@ -23,8 +23,11 @@ require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_rapor.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_pdks_rapor();
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);   // operasyonel veri Faz 2/3'e SERT bağımlı — hazır değilse burada durur.
@@ -74,8 +77,69 @@ if ($finansalGosterilebilir) {
 // ── CSV DIŞA AKTARIM — MEVCUT filtreyi yansıtır (görev madde 12), HTML
 //    çıktısından ÖNCE. İki AYRI dosya (görev talimatı: "Prefer separate
 //    exports if one giant CSV would be ambiguous"). ──
+$rp_filtre = ['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId];
+
+// ── XLSX — CSV ile AYNI trend/özet dizileri. Fark: CSV'de tek hücrede
+//    "TRY: 1200.00 | USD: 20.00" metni olan finansal alanlar burada PARA
+//    BİRİMİ BAŞINA AYRI SAYI SÜTUNUDUR (kurlar ASLA toplanmaz). ──
+$xlsxTuru = trim($_GET['xlsx'] ?? '');
+if ($xlsxTuru === 'gunluk' || $xlsxTuru === 'cavus') {
+    $rp_kurlar = function (array $satirlar, array $alanlar): array {
+        $k = [];
+        foreach ($satirlar as $s) foreach ($alanlar as $a) foreach (array_keys($s[$a] ?? []) as $c) $k[$c] = true;
+        ksort($k);
+        return array_keys($k);
+    };
+    $rp_ad = function (?int $id, array $liste): string {
+        foreach ($liste as $x) if ((int)$x['id'] === $id) return (string)$x['name'];
+        return '';
+    };
+    $x_ac = ['Dönem: ' . date('d.m.Y', strtotime($start)) . ' – ' . date('d.m.Y', strtotime($end))];
+    if ($depo !== '') $x_ac[] = 'Depo: ' . $depo;
+    if ($cavusId !== null) $x_ac[] = 'Çavuş: ' . $rp_ad($cavusId, $cavuslar);
+    if ($tipId !== null)   $x_ac[] = 'İşçi tipi: ' . $rp_ad($tipId, $tipler);
+    $x_ac = implode(' · ', $x_ac);
+    $ad  = fn(string $b, bool $t = true) => ['baslik' => $b, 'tip' => 'tamsayi', 'topla' => $t];
+    $tut = fn(string $b, bool $t = true) => ['baslik' => $b, 'tip' => 'tutar', 'topla' => $t];
+
+    if ($xlsxTuru === 'gunluk') {
+        $sut = [['baslik' => 'Tarih', 'tip' => 'tarih'], $ad('İşçi Sayısı'), $ad('Çavuş Sayısı', false), $ad('Eksik Çıkış Sayısı')];
+        $kurlar = $finansalGosterilebilir ? $rp_kurlar($trend, ['hakedis', 'odeme', 'net']) : [];
+        foreach ($kurlar as $c) { $sut[] = $tut("Hakediş ($c)"); $sut[] = $tut("Ödeme ($c)"); $sut[] = $tut("Net Hareket ($c)"); }
+        $sat = [];
+        foreach ($trend as $g) {
+            $r = [$g['tarih'], $g['toplam_calisan'], $g['aktif_cavus'], $g['eksik_cikis']];
+            foreach ($kurlar as $c) { $r[] = $g['hakedis'][$c] ?? 0; $r[] = $g['odeme'][$c] ?? 0; $r[] = $g['net'][$c] ?? 0; }
+            $sat[] = $r;
+        }
+        $baslik = 'Günlük Trend';
+    } else {
+        $sut = [['baslik' => 'Çavuş'], $ad('Çalışılan Gün'), $ad('Toplam İşçi'), $ad('Eksik Çıkış')];
+        $kurlar = [];
+        if ($finansalGosterilebilir) {
+            $k = [];
+            foreach ($cavusOzeti as $c) foreach ([$c['donem_hakedis'], $c['donem_odeme'], $c['guncel_bakiye']] as $m) foreach (array_keys($m) as $cur) $k[$cur] = true;
+            ksort($k); $kurlar = array_keys($k);
+        }
+        foreach ($kurlar as $c) { $sut[] = $tut("Dönem Hakedişi ($c)"); $sut[] = $tut("Dönem Ödemesi ($c)"); $sut[] = $tut("Güncel Bakiye ($c)"); }
+        $sat = [];
+        foreach ($cavusOzeti as $c) {
+            $r = [$c['foreman']['name'], $c['calisilan_gun'], $c['toplam_isci'], $c['eksik_cikis']];
+            foreach ($kurlar as $cur) { $r[] = $c['donem_hakedis'][$cur] ?? 0; $r[] = $c['donem_odeme'][$cur] ?? 0; $r[] = $c['guncel_bakiye'][$cur]['bakiye'] ?? 0; }
+            $sat[] = $r;
+        }
+        $baslik = 'Çavuş Özeti';
+    }
+    export_audit('pdks', 'rapor_' . $xlsxTuru, 'xlsx', count($sat), $rp_filtre);
+    xlsx_indir('rapor_' . $xlsxTuru . '_' . $start . '_' . $end . '.xlsx', [[
+        'ad' => $baslik, 'baslik' => 'Personel Yönetim Raporu — ' . $baslik, 'aciklama' => $x_ac,
+        'sutunlar' => $sut, 'satirlar' => $sat, 'toplam' => true,
+    ]], '?' . http_build_query(array_filter($rp_filtre + ['csv' => $xlsxTuru], fn($v) => $v !== null && $v !== '')));
+}
+
 $csvTuru = trim($_GET['csv'] ?? '');
 if ($csvTuru === 'gunluk' || $csvTuru === 'cavus') {
+    export_audit('pdks', 'rapor_' . $csvTuru, 'csv', $csvTuru === 'gunluk' ? count($trend) : count($cavusOzeti), $rp_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="rapor_' . $csvTuru . '_' . $start . '_' . $end . '.csv"');
     $out = fopen('php://output', 'w');
@@ -155,8 +219,8 @@ render_flash();
         <option><?= h($depo !== '' ? $depo : 'Depo seçilmemiş') ?></option>
     </select>
     <button type="submit" class="btn">Filtrele</button>
-    <a href="?<?= h(http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId, 'csv' => 'gunluk'], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">⬇ Günlük CSV</a>
-    <a href="?<?= h(http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId, 'csv' => 'cavus'], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">⬇ Çavuş CSV</a>
+    <?= export_menu('?' . http_build_query(array_filter($rp_filtre + ['csv' => 'gunluk'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($rp_filtre + ['xlsx' => 'gunluk'], fn($v) => $v !== null && $v !== '')), 'Günlük Excel', 'btn btn-ghost') ?>
+    <?= export_menu('?' . http_build_query(array_filter($rp_filtre + ['csv' => 'cavus'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($rp_filtre + ['xlsx' => 'cavus'], fn($v) => $v !== null && $v !== '')), 'Çavuş Excel', 'btn btn-ghost') ?>
     <?php if ($cavusId !== null || $tipId !== null || $preset !== 'bugun'): ?>
     <a href="raporlar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>

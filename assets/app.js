@@ -152,7 +152,8 @@
         });
     }
     document.addEventListener('click', e => {
-        const btn = e.target.closest('.pc-kebab');
+        // .dl-menu-btn: "⬇ Excel İndir ▾" menüsü (export_menu) — aynı altyapı
+        const btn = e.target.closest('.pc-kebab, .dl-menu-btn');
         if (btn) {
             const dd = btn.nextElementSibling;
             const wasOpen = !dd.hidden;
@@ -165,6 +166,12 @@
                 dd.style.right = (window.innerWidth - r.right) + 'px';
                 dd.style.left = 'auto';
                 dd.hidden = false;
+                // Ekran dışına taşmasın: solda sola yasla, altta yukarı aç
+                const d = dd.getBoundingClientRect();
+                if (d.left < 8) { dd.style.left = '8px'; dd.style.right = 'auto'; }
+                if (d.bottom > window.innerHeight - 8 && r.top - d.height - 4 > 8) {
+                    dd.style.top = (r.top - d.height - 4) + 'px';
+                }
             }
         } else {
             closeAllDropdowns();

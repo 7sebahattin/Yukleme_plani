@@ -402,7 +402,9 @@ $_can_unlock  = function_exists('can') && can('records.unlock');
                 <?php if (($record['type'] ?? 'yukleme') === 'yukleme'): ?>
                 <a href="print_loading.php?id=<?= (int)$id ?>&mode=summary" target="_blank">📄 Özet Yazdır</a>
                 <?php endif; ?>
+                <?php if (can('reports.export')): ?>
                 <a href="record_excel_template.php?id=<?= (int)$id ?>">📊 Excel İndir</a>
+                <?php endif; ?>
                 <button type="button" id="bmOpenBtn">📦 Malzeme Çıkışı</button>
                 <button type="button" id="kalanOpenBtn">📊 Kalan Palet Hesapla</button>
             </div>

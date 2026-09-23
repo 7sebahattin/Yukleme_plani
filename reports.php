@@ -5,6 +5,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 if (($_GET['export'] ?? '') !== '') { require_perm('reports.export'); }
 else { require_perm('reports.read'); }
@@ -663,6 +664,226 @@ if ($type === 'yukleme' || $type === 'cikma') {
     $ozet_kasa         = (int)  array_sum(array_column($yk_rows, 'toplam_kasa'));
 }
 
+// ── Dışa aktarım ortak verisi ───────────────────────────
+// Yükleme/Çıkma palet detayı — CSV ("Detay") ve XLSX AYNI sorgudan beslenir.
+$rpt_detay_veri = function () use ($type, $f_firma, $f_durum, $f_urun, $f_bolge, $f_q, $f_from, $f_to): array {
+    $det_sql = "
+        SELECT
+            lr.id            AS kayit_id,
+            lr.tarih,
+            lr.firma,
+            lr.bolge,
+            lr.alici,
+            lr.urun          AS kayit_urun,
+            lr.parti_no,
+            lr.cikis_nedeni,
+            lr.on_plaka,
+            lr.arka_plaka,
+            lr.durum,
+            lr.sofor_adi,
+            lr.nakliye_sirketi,
+            COALESCE(lr.nakliye_bedeli,0) AS nakliye_bedeli,
+            COALESCE(lr.avans,0)          AS avans,
+            COALESCE(lp.sira_no+1,'')     AS sira,
+            COALESCE(lp.palet_no,'')      AS palet_no,
+            COALESCE(lp.kasa_adeti,0)     AS kasa_adeti,
+            COALESCE(mk.name,'')          AS kasa_cinsi,
+            COALESCE(mp.name,'')          AS palet_tipi,
+            COALESCE(lp.urun_cinsi,'')    AS palet_urun,
+            COALESCE(lp.depo,'')          AS depo,
+            COALESCE(lp.brut_kg,0)        AS brut_kg,
+            COALESCE(lp.dara_kg,0)        AS dara_kg,
+            COALESCE(lp.net_kg,0)         AS net_kg,
+            GROUP_CONCAT(
+                CASE WHEN mmat.name IS NOT NULL
+                THEN CONCAT(mmat.name, ' x', CAST(pm.quantity AS CHAR))
+                END
+                ORDER BY pm.id SEPARATOR ' | '
+            ) AS malzemeler,
+            lr.created_at
+        FROM loading_records lr
+        LEFT JOIN loading_pallets lp ON lp.loading_record_id = lr.id
+        LEFT JOIN material_definitions mk   ON mk.id   = lp.kasa_cinsi_id
+        LEFT JOIN material_definitions mp   ON mp.id   = lp.palet_tipi_id
+        LEFT JOIN pallet_materials pm       ON pm.loading_pallet_id = lp.id
+        LEFT JOIN material_definitions mmat ON mmat.id = pm.material_id
+        WHERE lr.type = :rtype";
+    $det_p = [':rtype' => $type];
+    if ($f_firma !== '') { $det_sql .= " AND lr.firma LIKE :firma"; $det_p[':firma'] = '%'.$f_firma.'%'; }
+    if ($f_durum !== '') { $det_sql .= " AND lr.durum = :durum";    $det_p[':durum'] = $f_durum; }
+    if ($f_urun  !== '') { $det_sql .= " AND lr.urun  LIKE :urun";  $det_p[':urun']  = '%'.$f_urun.'%'; }
+    if ($f_bolge !== '') { $det_sql .= " AND lr.bolge LIKE :bolge"; $det_p[':bolge'] = '%'.$f_bolge.'%'; }
+    if ($f_q     !== '') {
+        $det_sql .= " AND (lr.firma LIKE :q OR lr.parti_no LIKE :q OR lr.alici LIKE :q OR lr.urun LIKE :q)";
+        $det_p[':q'] = '%'.$f_q.'%';
+    }
+    rpt_date_filter($det_sql, $det_p, 'lr.tarih', $f_from, $f_to);
+    // Aktif depo kapsamı
+    [$_drs_d, $_drp_d] = depo_sql_records('lr', ':udpd');
+    if ($_drs_d !== '') { $det_sql .= $_drs_d; $det_p = array_merge($det_p, $_drp_d); }
+    $det_sql .= " GROUP BY lr.id, lp.id ORDER BY lr.tarih DESC, lr.id DESC, lp.sira_no ASC";
+
+    $det_st = db()->prepare($det_sql);
+    $det_st->execute($det_p);
+    $det_rows = $det_st->fetchAll();
+
+    $det_cols = [
+        'kayit_id'         => 'Kayıt ID',
+        'tarih'            => 'Tarih',
+        'firma'            => 'Firma',
+        'bolge'            => 'Bölge',
+        'alici'            => 'Alıcı',
+        'kayit_urun'       => 'Ürün (Kayıt)',
+        ($type === 'cikma' ? 'cikis_nedeni' : 'parti_no') => ($type === 'cikma' ? 'Çıkma Nedeni' : 'Parti No'),
+        'on_plaka'         => 'Ön Plaka',
+        'arka_plaka'       => 'Arka Plaka',
+        'durum'            => 'Durum',
+        'sofor_adi'        => 'Şoför',
+        'nakliye_sirketi'  => 'Nakliye Şirketi',
+        'nakliye_bedeli'   => 'Nakliye Bedeli',
+        'avans'            => 'Avans',
+        'sira'             => 'Palet Sıra',
+        'palet_no'         => 'Palet No',
+        'kasa_adeti'       => 'Kasa Adeti',
+        'kasa_cinsi'       => 'Kasa Cinsi',
+        'palet_tipi'       => 'Palet Tipi',
+        'palet_urun'       => 'Ürün Cinsi',
+        'depo'             => 'Depo',
+        'brut_kg'          => 'Brüt KG',
+        'dara_kg'          => 'Dara KG',
+        'net_kg'           => 'Net KG',
+        'malzemeler'       => 'Malzemeler',
+        'created_at'       => 'Oluşturulma',
+    ];
+    $float_cols = ['brut_kg','dara_kg','net_kg','nakliye_bedeli','avans'];
+    return [$det_cols, $det_rows, $float_cols];
+};
+
+// ── XLSX Export ─────────────────────────────────────────
+// CSV ile AYNI veri; sayılar sayı, tarihler tarih hücresi, çok bölümlü
+// günlük rapor bölüm başına ayrı sayfa. CSV kolu aşağıda DEĞİŞMEDEN duruyor.
+if ($type !== '' && ($export === 'xlsx' || $export === 'xlsx_summary')) {
+    require_once __DIR__ . '/config/xlsx_export.php';
+    audit_log_event('export', 'reports', null, null, ['type' => $type, 'export' => $export, 'format' => 'xlsx', 'from' => $f_from ?? '', 'to' => $f_to ?? '']);
+    $_x_csv_url = 'reports.php?' . http_build_query(array_merge($_GET, ['export' => $export === 'xlsx' ? 'csv' : 'csv_summary']));
+
+    // Filtre özeti (A2 satırı)
+    $_x_filtre = [];
+    if ($f_from !== '' || $f_to !== '') $_x_filtre[] = 'Tarih: ' . ($f_from !== '' ? fmt_date($f_from) : '…') . ' – ' . ($f_to !== '' ? fmt_date($f_to) : '…');
+    foreach (['Firma' => $f_firma, 'Ürün' => $f_urun, 'Bölge' => $f_bolge, 'Depo' => $f_depo, 'Durum' => $f_durum, 'Plaka' => $f_plaka, 'Arama' => $f_q] as $_xk => $_xv) {
+        if ($_xv !== '') $_x_filtre[] = $_xk . ': ' . $_xv;
+    }
+    $_x_aciklama = $_x_filtre ? implode(' · ', $_x_filtre) : 'Filtre yok';
+    $_x_etiket   = $report_meta[$type]['label'] ?? $type;
+
+    if ($type === 'gunluk') {
+        $gl_tarih = ($f_from === '' && $f_to === '') ? 'Tüm dönem' : ($f_from === $f_to ? fmt_date($f_from) : fmt_date($f_from) . ' – ' . fmt_date($f_to));
+        // Kantar satırları — CSV'deki grup dağılımı kuralının aynısı
+        $_x_kantar = [];
+        foreach ($gk_rows as $_gkr) {
+            $_kc2   = kantar_calc($_gkr);
+            $_grps2 = $gk_gruplar[(int)$_gkr['id']] ?? [];
+            if ($f_kantar_firma !== '' && !empty($_grps2)) {
+                foreach (kantar_grup_dist($_grps2, $_kc2['brut'], $_kc2['eff_kdu'], $_kc2['eff_pdu']) as $_dr2) {
+                    if (mb_strtolower(trim((string)($_dr2['firma'] ?? '')), 'UTF-8') !== mb_strtolower(trim($f_kantar_firma), 'UTF-8')) continue;
+                    $_x_kantar[] = [$_gkr['giris_tarih'] ?? '', $_gkr['fis_no'] ?? '', $_dr2['firma'], $_gkr['malin_cinsi'] ?? '', $_gkr['plaka'] ?? '',
+                                    $_dr2['brut_kg'], $_dr2['dara_kg'], $_dr2['net_kg'], (int)$_dr2['kasa'], (int)$_dr2['palet']];
+                }
+            } else {
+                $_x_kantar[] = [$_gkr['giris_tarih'] ?? '', $_gkr['fis_no'] ?? '', $_gkr['firma_adi'] ?? '', $_gkr['malin_cinsi'] ?? '', $_gkr['plaka'] ?? '',
+                                $_kc2['brut'], $_kc2['dara'], $_kc2['net'], (int)$_gkr['kasa_sayisi'], (int)$_gkr['palet_sayisi']];
+            }
+        }
+        $_mk_baslik = match($f_palet_islendi) { 'hicbiri' => 'Makineye Dökülen', 'isaretli' => 'Raporlandı', default => 'Yükleme (Tümü)' };
+        $_kg = fn(string $b, bool $t = true) => ['baslik' => $b, 'tip' => 'kg', 'topla' => $t];
+        $_ad = fn(string $b) => ['baslik' => $b, 'tip' => 'tamsayi', 'topla' => true];
+        $_mt = fn(string $b) => ['baslik' => $b];
+        $_x_sayfalar = [
+            ['ad' => 'Özet', 'baslik' => 'Günlük Rapor — Özet', 'aciklama' => $_x_aciklama, 'bilgi' => [
+                ['Tarih', $gl_tarih],
+                ['Kantar Brüt KG', $ozet_kantar_brut, 'kg'], ['Kantar Dara KG', $ozet_kantar_dara, 'kg'], ['Kantar Net KG', $ozet_kantar_net, 'kg'],
+                ['Yükleme Net KG', $ozet_yukleme_net, 'kg'], ['Çıkma Net KG', $ozet_cikma_net, 'kg'],
+                ['Yükleme Palet', $ozet_palet, 'tamsayi'], ['Yükleme Kasa', $ozet_kasa, 'tamsayi'],
+            ], 'bloklar' => []],
+            ['ad' => 'Kantar Girişleri', 'baslik' => 'Kantar Girişleri — ' . $gl_tarih, 'aciklama' => $_x_aciklama, 'toplam' => true,
+             'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarihsaat'], $_mt('Fiş No'), $_mt('Firma'), $_mt('Malın Cinsi'), $_mt('Plaka'),
+                            $_kg('Brüt KG'), $_kg('Dara KG'), $_kg('Net KG'), $_ad('Kasa'), $_ad('Palet')],
+             'satirlar' => $_x_kantar],
+            ['ad' => 'Yükleme Kayıtları', 'baslik' => 'Yükleme Kayıtları — ' . $gl_tarih, 'aciklama' => $_x_aciklama, 'toplam' => true,
+             'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], $_mt('Firma'), $_mt('Ürün'), $_mt('Depo'), $_ad('Palet'), $_ad('Kasa'),
+                            $_kg('Brüt KG'), $_kg('Dara KG'), $_kg('Net KG'), $_mt('Durum')],
+             'satirlar' => array_map(fn($r) => [$r['tarih'], $r['firma'], $r['urun'], $r['depo'] ?? '', (int)$r['palet_sayisi'], (int)$r['toplam_kasa'],
+                                               $r['toplam_brut'], $r['toplam_dara'], $r['toplam_net'], $r['durum']], $yk_rows)],
+            ['ad' => 'Çıkma Kayıtları', 'baslik' => 'Çıkma Kayıtları — ' . $gl_tarih, 'aciklama' => $_x_aciklama, 'toplam' => true,
+             'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], $_mt('Firma'), $_mt('Ürün'), $_mt('Çıkış Nedeni'), $_mt('Depo'), $_ad('Palet'), $_ad('Kasa'),
+                            $_kg('Net KG'), $_mt('Durum')],
+             'satirlar' => array_map(fn($r) => [$r['tarih'], $r['firma'], $r['urun'], $r['cikis_nedeni'] ?? '', $r['depo'] ?? '', (int)$r['palet_sayisi'],
+                                               (int)$r['toplam_kasa'], $r['toplam_net'], $r['durum']], $ck_rows)],
+            ['ad' => $_mk_baslik, 'baslik' => $_mk_baslik . ' — ' . $gl_tarih, 'aciklama' => $_x_aciklama, 'toplam' => true,
+             'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], $_mt('Firma'), $_mt('Bölge'), $_mt('Alıcı'), $_mt('Depo'), $_mt('Ürün'), $_mt('Parti No'),
+                            $_mt('Durum'), $_ad('Palet'), $_ad('Kasa'), $_kg('Brüt KG'), $_kg('Dara KG'), $_kg('Net KG')],
+             'satirlar' => array_map(fn($r) => [$r['tarih'], $r['firma'], $r['bolge'] ?? '', $r['alici'] ?? '', $r['depo'] ?? '', $r['urun'], $r['parti_no'] ?? '',
+                                               $r['durum'] ?? '', (int)$r['palet_sayisi'], (int)$r['toplam_kasa'], $r['toplam_brut'], $r['toplam_dara'], $r['toplam_net']], $mk_rows)],
+        ];
+        $_gl_from = $f_from ?: date('Y-m-d');
+        xlsx_indir('gunluk_rapor_' . $_gl_from . ($f_to !== '' && $f_to !== $f_from ? '_' . $f_to : '') . '.xlsx', $_x_sayfalar, $_x_csv_url);
+    }
+
+    // Yükleme / Çıkma → palet bazında tam detay ("Detay")
+    if (in_array($type, ['yukleme', 'cikma'], true) && $export === 'xlsx') {
+        [$det_cols, $det_rows] = $rpt_detay_veri();
+        $_det_tip = [
+            'kayit_id' => ['tamsayi', false], 'tarih' => ['tarih', false], 'nakliye_bedeli' => ['tutar', false], 'avans' => ['tutar', false],
+            'sira' => ['tamsayi', false], 'kasa_adeti' => ['tamsayi', true],
+            'brut_kg' => ['kg', true], 'dara_kg' => ['kg', true], 'net_kg' => ['kg', true], 'created_at' => ['tarihsaat', false],
+        ];
+        $_x_sut = [];
+        foreach ($det_cols as $_k => $_lbl) {
+            $_x_sut[] = ['baslik' => $_lbl, 'tip' => $_det_tip[$_k][0] ?? 'metin', 'topla' => $_det_tip[$_k][1] ?? false];
+        }
+        $_x_sat = [];
+        foreach ($det_rows as $_r) {
+            $_line = [];
+            foreach (array_keys($det_cols) as $_k) $_line[] = $_r[$_k] ?? '';
+            $_x_sat[] = $_line;
+        }
+        xlsx_indir('rapor_' . $type . '_detay_' . date('Y-m-d') . '.xlsx', [[
+            'ad' => $_x_etiket . ' Detay', 'baslik' => $_x_etiket . ' — Palet Detayı', 'aciklama' => $_x_aciklama,
+            'sutunlar' => $_x_sut, 'satirlar' => $_x_sat, 'toplam' => true,
+        ]], $_x_csv_url);
+    }
+
+    // Diğer rapor türleri + Yükleme/Çıkma "Özet" → ekrandaki tablo
+    $_ozet_tip = [
+        'id' => 'tamsayi', 'tarih' => 'tarih', 'palet_sayisi' => 'tamsayi', 'toplam_kasa' => 'tamsayi',
+        'toplam_brut' => 'kg', 'toplam_dara' => 'kg', 'toplam_net' => 'kg', 'nakliye_bedeli' => 'tutar', 'avans' => 'tutar',
+        'created_at' => 'tarihsaat', 'kayit_sayisi' => 'tamsayi', 'ilk_tarih' => 'tarih', 'son_tarih' => 'tarih',
+        'toplam_kayit' => 'tamsayi', 'yukleme_sayisi' => 'tamsayi', 'cikma_sayisi' => 'tamsayi',
+        'unit_dara_kg' => 'ondalik', 'stok_giris' => 'sayi', 'stok_sevk' => 'sayi', 'stok_mevcut' => 'sayi',
+        'toplam_adet' => 'sayi', 'toplam_dara_kg' => 'kg', 'kullanim_sayisi' => 'tamsayi',
+        'giris_tarih' => 'tarihsaat', 'cikis_tarih' => 'tarihsaat', 'tartim1' => 'kg', 'tartim2' => 'kg', 'net_kg' => 'kg',
+        'kasa_sayisi' => 'tamsayi',
+    ];
+    $_x_sut = [];
+    foreach ($cols as $_c) {
+        $_x_sut[] = ['baslik' => col_label($_c), 'tip' => $_ozet_tip[$_c] ?? 'metin', 'topla' => array_key_exists($_c, $totals)];
+    }
+    $_x_sat = [];
+    foreach ($rows as $_r) {
+        $_line = [];
+        foreach ($cols as $_c) {
+            $_v = $_r[$_c] ?? '';
+            if ($_c === 'is_active') $_v = ((int)$_v === 1) ? 'Evet' : 'Hayır';
+            $_line[] = $_v;
+        }
+        $_x_sat[] = $_line;
+    }
+    xlsx_indir('rapor_' . $type . ($export === 'xlsx_summary' ? '_ozet' : '') . '_' . date('Y-m-d') . '.xlsx', [[
+        'ad' => $_x_etiket, 'baslik' => $_x_etiket . ' Raporu' . ($export === 'xlsx_summary' ? ' — Özet' : ''), 'aciklama' => $_x_aciklama,
+        'sutunlar' => $_x_sut, 'satirlar' => $_x_sat, 'toplam' => !empty($totals),
+    ]], $_x_csv_url);
+}
+
 // ── CSV Export ──────────────────────────────────────────
 if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
     audit_log_event('export', 'reports', null, null, ['type' => $type, 'export' => $export, 'from' => $f_from ?? '', 'to' => $f_to ?? '']);
@@ -676,20 +897,20 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         echo "\xEF\xBB\xBF";
         $gl_fp = fopen('php://output', 'w');
         // ÖZET
-        fputcsv($gl_fp, ['BÖLÜM', 'ÖZET'], ';');
+        fputcsv($gl_fp, ['BÖLÜM', 'ÖZET'], ';', '"', '\\');
         $gl_tarih = ($f_from === '' && $f_to === '') ? 'Tüm dönem' : ($f_from === $f_to ? $f_from : $f_from . ' – ' . $f_to);
-        fputcsv($gl_fp, ['Tarih', $gl_tarih], ';');
-        fputcsv($gl_fp, ['Kantar Brüt KG',   str_replace('.', ',', number_format($ozet_kantar_brut, 3, '.', ''))], ';');
-        fputcsv($gl_fp, ['Kantar Dara KG',   str_replace('.', ',', number_format($ozet_kantar_dara, 3, '.', ''))], ';');
-        fputcsv($gl_fp, ['Kantar Net KG',    str_replace('.', ',', number_format($ozet_kantar_net,  3, '.', ''))], ';');
-        fputcsv($gl_fp, ['Yükleme Net KG',   str_replace('.', ',', number_format($ozet_yukleme_net, 3, '.', ''))], ';');
-        fputcsv($gl_fp, ['Çıkma Net KG',     str_replace('.', ',', number_format($ozet_cikma_net,   3, '.', ''))], ';');
-        fputcsv($gl_fp, ['Yükleme Palet',    (string)$ozet_palet], ';');
-        fputcsv($gl_fp, ['Yükleme Kasa',     (string)$ozet_kasa],  ';');
-        fputcsv($gl_fp, [], ';');
+        fputcsv($gl_fp, ['Tarih', $gl_tarih], ';', '"', '\\');
+        fputcsv($gl_fp, ['Kantar Brüt KG',   str_replace('.', ',', number_format($ozet_kantar_brut, 3, '.', ''))], ';', '"', '\\');
+        fputcsv($gl_fp, ['Kantar Dara KG',   str_replace('.', ',', number_format($ozet_kantar_dara, 3, '.', ''))], ';', '"', '\\');
+        fputcsv($gl_fp, ['Kantar Net KG',    str_replace('.', ',', number_format($ozet_kantar_net,  3, '.', ''))], ';', '"', '\\');
+        fputcsv($gl_fp, ['Yükleme Net KG',   str_replace('.', ',', number_format($ozet_yukleme_net, 3, '.', ''))], ';', '"', '\\');
+        fputcsv($gl_fp, ['Çıkma Net KG',     str_replace('.', ',', number_format($ozet_cikma_net,   3, '.', ''))], ';', '"', '\\');
+        fputcsv($gl_fp, ['Yükleme Palet',    (string)$ozet_palet], ';', '"', '\\');
+        fputcsv($gl_fp, ['Yükleme Kasa',     (string)$ozet_kasa],  ';', '"', '\\');
+        fputcsv($gl_fp, [], ';', '"', '\\');
         // KANTAR
-        fputcsv($gl_fp, ['--- KANTAR GİRİŞLERİ ---'], ';');
-        fputcsv($gl_fp, ['Tarih','Fiş No','Firma','Malın Cinsi','Plaka','Brüt KG','Dara KG','Net KG','Kasa','Palet'], ';');
+        fputcsv($gl_fp, ['--- KANTAR GİRİŞLERİ ---'], ';', '"', '\\');
+        fputcsv($gl_fp, ['Tarih','Fiş No','Firma','Malın Cinsi','Plaka','Brüt KG','Dara KG','Net KG','Kasa','Palet'], ';', '"', '\\');
         foreach ($gk_rows as $_gkr) {
             $_kc2  = kantar_calc($_gkr);
             $_fid2 = (int)$_gkr['id'];
@@ -709,7 +930,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                         str_replace('.', ',', number_format($_dr2['net_kg'],  3, '.', '')),
                         (int)$_dr2['kasa'],
                         (int)$_dr2['palet'],
-                    ], ';');
+                    ], ';', '"', '\\');
                 }
             } else {
                 fputcsv($gl_fp, [
@@ -723,13 +944,13 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                     str_replace('.', ',', number_format($_kc2['net'],  3, '.', '')),
                     (int)$_gkr['kasa_sayisi'],
                     (int)$_gkr['palet_sayisi'],
-                ], ';');
+                ], ';', '"', '\\');
             }
         }
-        fputcsv($gl_fp, [], ';');
+        fputcsv($gl_fp, [], ';', '"', '\\');
         // YÜKLEME
-        fputcsv($gl_fp, ['--- YÜKLEME KAYITLARI ---'], ';');
-        fputcsv($gl_fp, ['Tarih','Firma','Ürün','Depo','Palet','Kasa','Brüt KG','Dara KG','Net KG','Durum'], ';');
+        fputcsv($gl_fp, ['--- YÜKLEME KAYITLARI ---'], ';', '"', '\\');
+        fputcsv($gl_fp, ['Tarih','Firma','Ürün','Depo','Palet','Kasa','Brüt KG','Dara KG','Net KG','Durum'], ';', '"', '\\');
         foreach ($yk_rows as $_ykr) {
             fputcsv($gl_fp, [
                 $_ykr['tarih'],
@@ -742,12 +963,12 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                 str_replace('.', ',', number_format((float)$_ykr['toplam_dara'], 3, '.', '')),
                 str_replace('.', ',', number_format((float)$_ykr['toplam_net'],  3, '.', '')),
                 $_ykr['durum'],
-            ], ';');
+            ], ';', '"', '\\');
         }
-        fputcsv($gl_fp, [], ';');
+        fputcsv($gl_fp, [], ';', '"', '\\');
         // ÇIKMA
-        fputcsv($gl_fp, ['--- ÇIKMA KAYITLARI ---'], ';');
-        fputcsv($gl_fp, ['Tarih','Firma','Ürün','Çıkış Nedeni','Depo','Palet','Kasa','Net KG','Durum'], ';');
+        fputcsv($gl_fp, ['--- ÇIKMA KAYITLARI ---'], ';', '"', '\\');
+        fputcsv($gl_fp, ['Tarih','Firma','Ürün','Çıkış Nedeni','Depo','Palet','Kasa','Net KG','Durum'], ';', '"', '\\');
         foreach ($ck_rows as $_ckr) {
             fputcsv($gl_fp, [
                 $_ckr['tarih'],
@@ -759,7 +980,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                 (int)$_ckr['toplam_kasa'],
                 str_replace('.', ',', number_format((float)$_ckr['toplam_net'], 3, '.', '')),
                 $_ckr['durum'],
-            ], ';');
+            ], ';', '"', '\\');
         }
         // MAKİNEYE DÖKÜLEN
         $_mk_label = match($f_palet_islendi) {
@@ -767,8 +988,8 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
             'isaretli' => '--- RAPORLANDI ---',
             default   => '--- YÜKLEME KAYITLARI (TÜMÜ) ---',
         };
-        fputcsv($gl_fp, [$_mk_label], ';');
-        fputcsv($gl_fp, ['Tarih','Firma','Bölge','Alıcı','Depo','Ürün','Parti No','Durum','Palet','Kasa','Brüt KG','Dara KG','Net KG'], ';');
+        fputcsv($gl_fp, [$_mk_label], ';', '"', '\\');
+        fputcsv($gl_fp, ['Tarih','Firma','Bölge','Alıcı','Depo','Ürün','Parti No','Durum','Palet','Kasa','Brüt KG','Dara KG','Net KG'], ';', '"', '\\');
         foreach ($mk_rows as $_mkr) {
             fputcsv($gl_fp, [
                 $_mkr['tarih'],
@@ -784,7 +1005,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                 str_replace('.', ',', number_format((float)$_mkr['toplam_brut'], 3, '.', '')),
                 str_replace('.', ',', number_format((float)$_mkr['toplam_dara'], 3, '.', '')),
                 str_replace('.', ',', number_format((float)$_mkr['toplam_net'],  3, '.', '')),
-            ], ';');
+            ], ';', '"', '\\');
         }
         fclose($gl_fp);
         exit;
@@ -799,97 +1020,9 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
 
     // Yüklemeler / Çıkmalar → palet bazında tam detay (limit yok)
     if (in_array($type, ['yukleme', 'cikma'], true) && $export === 'csv') {
-        $det_sql = "
-            SELECT
-                lr.id            AS kayit_id,
-                lr.tarih,
-                lr.firma,
-                lr.bolge,
-                lr.alici,
-                lr.urun          AS kayit_urun,
-                lr.parti_no,
-                lr.cikis_nedeni,
-                lr.on_plaka,
-                lr.arka_plaka,
-                lr.durum,
-                lr.sofor_adi,
-                lr.nakliye_sirketi,
-                COALESCE(lr.nakliye_bedeli,0) AS nakliye_bedeli,
-                COALESCE(lr.avans,0)          AS avans,
-                COALESCE(lp.sira_no+1,'')     AS sira,
-                COALESCE(lp.palet_no,'')      AS palet_no,
-                COALESCE(lp.kasa_adeti,0)     AS kasa_adeti,
-                COALESCE(mk.name,'')          AS kasa_cinsi,
-                COALESCE(mp.name,'')          AS palet_tipi,
-                COALESCE(lp.urun_cinsi,'')    AS palet_urun,
-                COALESCE(lp.depo,'')          AS depo,
-                COALESCE(lp.brut_kg,0)        AS brut_kg,
-                COALESCE(lp.dara_kg,0)        AS dara_kg,
-                COALESCE(lp.net_kg,0)         AS net_kg,
-                GROUP_CONCAT(
-                    CASE WHEN mmat.name IS NOT NULL
-                    THEN CONCAT(mmat.name, ' x', CAST(pm.quantity AS CHAR))
-                    END
-                    ORDER BY pm.id SEPARATOR ' | '
-                ) AS malzemeler,
-                lr.created_at
-            FROM loading_records lr
-            LEFT JOIN loading_pallets lp ON lp.loading_record_id = lr.id
-            LEFT JOIN material_definitions mk   ON mk.id   = lp.kasa_cinsi_id
-            LEFT JOIN material_definitions mp   ON mp.id   = lp.palet_tipi_id
-            LEFT JOIN pallet_materials pm       ON pm.loading_pallet_id = lp.id
-            LEFT JOIN material_definitions mmat ON mmat.id = pm.material_id
-            WHERE lr.type = :rtype";
-        $det_p = [':rtype' => $type];
-        if ($f_firma !== '') { $det_sql .= " AND lr.firma LIKE :firma"; $det_p[':firma'] = '%'.$f_firma.'%'; }
-        if ($f_durum !== '') { $det_sql .= " AND lr.durum = :durum";    $det_p[':durum'] = $f_durum; }
-        if ($f_urun  !== '') { $det_sql .= " AND lr.urun  LIKE :urun";  $det_p[':urun']  = '%'.$f_urun.'%'; }
-        if ($f_bolge !== '') { $det_sql .= " AND lr.bolge LIKE :bolge"; $det_p[':bolge'] = '%'.$f_bolge.'%'; }
-        if ($f_q     !== '') {
-            $det_sql .= " AND (lr.firma LIKE :q OR lr.parti_no LIKE :q OR lr.alici LIKE :q OR lr.urun LIKE :q)";
-            $det_p[':q'] = '%'.$f_q.'%';
-        }
-        rpt_date_filter($det_sql, $det_p, 'lr.tarih', $f_from, $f_to);
-        // Aktif depo kapsamı
-        [$_drs_d, $_drp_d] = depo_sql_records('lr', ':udpd');
-        if ($_drs_d !== '') { $det_sql .= $_drs_d; $det_p = array_merge($det_p, $_drp_d); }
-        $det_sql .= " GROUP BY lr.id, lp.id ORDER BY lr.tarih DESC, lr.id DESC, lp.sira_no ASC";
+        [$det_cols, $det_rows, $float_cols] = $rpt_detay_veri();
 
-        $det_st = db()->prepare($det_sql);
-        $det_st->execute($det_p);
-        $det_rows = $det_st->fetchAll();
-
-        $det_cols = [
-            'kayit_id'         => 'Kayıt ID',
-            'tarih'            => 'Tarih',
-            'firma'            => 'Firma',
-            'bolge'            => 'Bölge',
-            'alici'            => 'Alıcı',
-            'kayit_urun'       => 'Ürün (Kayıt)',
-            ($type === 'cikma' ? 'cikis_nedeni' : 'parti_no') => ($type === 'cikma' ? 'Çıkma Nedeni' : 'Parti No'),
-            'on_plaka'         => 'Ön Plaka',
-            'arka_plaka'       => 'Arka Plaka',
-            'durum'            => 'Durum',
-            'sofor_adi'        => 'Şoför',
-            'nakliye_sirketi'  => 'Nakliye Şirketi',
-            'nakliye_bedeli'   => 'Nakliye Bedeli',
-            'avans'            => 'Avans',
-            'sira'             => 'Palet Sıra',
-            'palet_no'         => 'Palet No',
-            'kasa_adeti'       => 'Kasa Adeti',
-            'kasa_cinsi'       => 'Kasa Cinsi',
-            'palet_tipi'       => 'Palet Tipi',
-            'palet_urun'       => 'Ürün Cinsi',
-            'depo'             => 'Depo',
-            'brut_kg'          => 'Brüt KG',
-            'dara_kg'          => 'Dara KG',
-            'net_kg'           => 'Net KG',
-            'malzemeler'       => 'Malzemeler',
-            'created_at'       => 'Oluşturulma',
-        ];
-        $float_cols = ['brut_kg','dara_kg','net_kg','nakliye_bedeli','avans'];
-
-        fputcsv($fp, array_values($det_cols), ';');
+        fputcsv($fp, array_values($det_cols), ';', '"', '\\');
         foreach ($det_rows as $r) {
             $line = [];
             foreach (array_keys($det_cols) as $c) {
@@ -898,7 +1031,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
                     $v = str_replace('.', ',', number_format((float)$v, 3, '.', ''));
                 $line[] = $v;
             }
-            fputcsv($fp, $line, ';');
+            fputcsv($fp, $line, ';', '"', '\\');
         }
         fclose($fp);
         exit;
@@ -906,7 +1039,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
 
     // Diğer rapor türleri → özet CSV (mevcut davranış)
     if (empty($rows)) { fclose($fp); exit; }
-    fputcsv($fp, array_map('col_label', $cols), ';');
+    fputcsv($fp, array_map('col_label', $cols), ';', '"', '\\');
     foreach ($rows as $r) {
         $line = [];
         foreach ($cols as $c) {
@@ -916,7 +1049,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
             }
             $line[] = $v;
         }
-        fputcsv($fp, $line, ';');
+        fputcsv($fp, $line, ';', '"', '\\');
     }
     if (!empty($totals)) {
         $total_line = array_fill(0, count($cols), '');
@@ -924,7 +1057,7 @@ if ($type !== '' && ($export === 'csv' || $export === 'csv_summary')) {
         foreach ($cols as $i => $c) {
             if (isset($totals[$c])) $total_line[$i] = str_replace('.', ',', (string)round((float)$totals[$c], 3));
         }
-        fputcsv($fp, $total_line, ';');
+        fputcsv($fp, $total_line, ';', '"', '\\');
     }
     fclose($fp);
     exit;
@@ -954,6 +1087,8 @@ $csv_url = 'reports.php?' . http_build_query($csv_params);
 $csv_summary_params = $csv_params;
 $csv_summary_params['export'] = 'csv_summary';
 $csv_summary_url = 'reports.php?' . http_build_query($csv_summary_params);
+$xlsx_url         = 'reports.php?' . http_build_query(array_merge($csv_params, ['export' => 'xlsx']));
+$xlsx_summary_url = 'reports.php?' . http_build_query(array_merge($csv_params, ['export' => 'xlsx_summary']));
 
 $page_title = $type !== '' ? (($report_meta[$type]['icon'] ?? '') . ' ' . ($report_meta[$type]['label'] ?? '')) . ($type === 'gunluk' ? '' : ' Raporu') : 'Raporlar';
 $filter_firma_list = db()->query("SELECT DISTINCT firma FROM loading_records WHERE firma!='' ORDER BY firma LIMIT 300")->fetchAll(PDO::FETCH_COLUMN);
@@ -1280,6 +1415,7 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
             'date_from'=>$f_from,'date_to'=>$f_to,'firma'=>$f_firma,'depo'=>$f_depo,'urun'=>$f_urun,
             'palet_islendi'=>$f_palet_islendi,'kantar_firma'=>$f_kantar_firma]);
         $gl_csv_url = 'reports.php?' . http_build_query($gl_csv_params);
+        $gl_xlsx_url = 'reports.php?' . http_build_query(array_merge($gl_csv_params, ['export' => 'xlsx']));
         $_gl_has_filter = ($f_firma !== '' || $f_depo !== '' || $f_urun !== '' || $f_from !== '' || $f_to !== '');
         ?>
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
@@ -1290,7 +1426,10 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
         <div class="pc-kebab-wrap">
             <button type="button" class="pc-kebab" aria-label="Daha fazla işlem" title="Daha fazla işlem">⋮</button>
             <div class="pc-dropdown" hidden>
-                <a href="<?= h($gl_csv_url) ?>">⬇ Excel/CSV</a>
+                <?php if (can('reports.export')): ?>
+                <a href="<?= h($gl_csv_url) ?>">📄 CSV İndir</a>
+                <a href="<?= h($gl_xlsx_url) ?>">📊 XLSX İndir</a>
+                <?php endif; ?>
                 <a href="daily_report_archive.php">📁 Arşiv</a>
                 <button type="submit" form="gl-form-x"
                         onclick="return confirm('Bu rapor X Raporu olarak arşivlenecek. Hiçbir kayıt kapatılmayacak. Devam edilsin mi?')">
@@ -1630,8 +1769,8 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
     <div class="rpt-actions rpt-no-print">
         <button onclick="window.print()" class="btn btn-sm">🖨 Yazdır</button>
         <?php if (in_array($type, ['yukleme','cikma'], true)): ?>
-        <a href="<?= h($csv_summary_url) ?>" class="btn btn-sm">⬇ Özet Excel</a>
-        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Detay Excel</a>
+        <?= export_menu($csv_summary_url, $xlsx_summary_url, 'Özet Excel', 'btn btn-sm') ?>
+        <?= export_menu($csv_url, $xlsx_url, 'Detay Excel', 'btn btn-sm btn-primary') ?>
         <?php if ($type === 'yukleme'): ?>
         <?php
         $_bulk_params = array_filter([
@@ -1653,7 +1792,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
         <a href="<?= h($_bulk_url) ?>" class="btn btn-sm" target="_blank" title="Filtreli tüm yüklemeleri tek PDF'te aç (max 50)">📄 Toplu PDF</a>
         <?php endif; ?>
         <?php else: ?>
-        <a href="<?= h($csv_url) ?>" class="btn btn-sm btn-primary">⬇ Excel/CSV</a>
+        <?= export_menu($csv_url, $xlsx_url, 'Excel İndir', 'btn btn-sm btn-primary') ?>
         <?php endif; ?>
     </div>
 </div>

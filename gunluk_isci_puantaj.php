@@ -27,8 +27,11 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 // bilmek için pdks_hakedis_can() OKUNUR.
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
+// Dışa aktarım — tüm uç noktalarda ortak kapı (reports.export) + audit
+if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'); }
 
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
@@ -57,7 +60,33 @@ $gunListesi = pdks_gunluk_gun_listesi($tarih, $depo, $cavusId, $durum_f !== '' ?
 $eksikler   = pdks_gunluk_eksik_cikislar($tarih, $depo, $cavusId, $pdo);
 
 // ── CSV export — MEVCUT filtreyi yansıtır (görev talimatı madde 12) ──
+$gp_filtre = ['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f];
+
+// ── XLSX export — CSV ile aynı satırlar, sayılar sayı hücresi ──
+if (isset($_GET['xlsx'])) {
+    $ad = fn(string $b) => ['baslik' => $b, 'tip' => 'tamsayi', 'topla' => true];
+    $x_ac = ['Tarih: ' . date('d.m.Y', strtotime($tarih))];
+    if ($depo !== '') $x_ac[] = 'Depo: ' . $depo;
+    foreach ($cavuslar as $c) if ((int)$c['id'] === $cavusId) $x_ac[] = 'Çavuş: ' . $c['name'];
+    if ($durum_f !== '') $x_ac[] = 'Durum: ' . ['acik' => 'Açık', 'kapali' => 'Kapalı', 'eksik_cikis' => 'Eksik Çıkışlı'][$durum_f];
+    $sat = [];
+    foreach ($gunListesi as $row) {
+        $s = $row['session'];
+        $sat[] = [$s['work_date'], $s['depo'], $s['foreman_name_snapshot'], $row['giris']['Kadın'] ?? 0, $row['giris']['Erkek'] ?? 0,
+                  $row['giris_toplam'], $row['cikis_toplam'], $row['eksik_toplam'], $row['durum']['etiket'],
+                  $row['ilk_giris'] ? date('H:i', strtotime($row['ilk_giris'])) : '', $row['son_cikis'] ? date('H:i', strtotime($row['son_cikis'])) : ''];
+    }
+    export_audit('pdks', 'gunluk_puantaj', 'xlsx', count($sat), $gp_filtre);
+    xlsx_indir('gunluk_puantaj_' . $tarih . '.xlsx', [[
+        'ad' => 'Günlük Puantaj', 'baslik' => 'Günlük Puantaj — ' . date('d.m.Y', strtotime($tarih)), 'aciklama' => implode(' · ', $x_ac),
+        'sutunlar' => [['baslik' => 'Tarih', 'tip' => 'tarih'], ['baslik' => 'Depo'], ['baslik' => 'Çavuş'], $ad('Kadın Sayısı'), $ad('Erkek Sayısı'),
+                       $ad('Toplam Giriş'), $ad('Toplam Çıkış'), $ad('Eksik Çıkış'), ['baslik' => 'Mesai Durumu'], ['baslik' => 'İlk Giriş'], ['baslik' => 'Son Çıkış']],
+        'satirlar' => $sat, 'toplam' => true,
+    ]], '?' . http_build_query(array_filter($gp_filtre + ['csv' => '1'], fn($v) => $v !== null && $v !== '')));
+}
+
 if (isset($_GET['csv'])) {
+    export_audit('pdks', 'gunluk_puantaj', 'csv', count($gunListesi), $gp_filtre);
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="gunluk_puantaj_' . $tarih . '.csv"');
     $out = fopen('php://output', 'w');
@@ -121,7 +150,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <?php endforeach; ?>
     </select>
     <button type="submit" class="btn">Filtrele</button>
-    <a href="?<?= h(http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f, 'csv' => '1'], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">⬇ CSV</a>
+    <?= export_menu('?' . http_build_query(array_filter($gp_filtre + ['csv' => '1'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($gp_filtre + ['xlsx' => '1'], fn($v) => $v !== null && $v !== '')), 'Excel İndir', 'btn btn-ghost') ?>
     <?php if ($cavusId !== null || $durum_f !== '' || $tarih !== date('Y-m-d')): ?>
     <a href="gunluk_isci_puantaj.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>

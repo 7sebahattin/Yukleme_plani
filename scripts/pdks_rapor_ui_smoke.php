@@ -26,7 +26,7 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
-$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments'];
+$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'];
 $IS_ADMIN = false;
 $AKTIF_DEPO = 'Depo A';
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test Kullanıcı']; }
@@ -144,6 +144,8 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $src = file_get_contents($ROOT . '/' . $file);
     $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+    // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan — sayfa /tmp'ye kopyalandığı için mutlak yol
+    $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(dirname(__DIR__) . '/config/xlsx_export.php', true), $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);
     $tmp = sys_get_temp_dir() . '/pdksraporui_' . md5($file . serialize($get) . serialize($post)) . '.php';
@@ -181,13 +183,13 @@ ok('"Kesinleşmiş Hakediş" GÖRÜNMÜYOR (attendance.foreman_accounts YOK)', !
 ok('"700,00" (bakiye rakamı) SIZMADI', !str_contains($s1, '700,00'));
 ok('"Çavuş Cari Durumu" bölüm başlığı GÖRÜNMÜYOR', !str_contains($s1, 'Çavuş Cari Durumu'));
 ok('"finansal veriler için gerekli yetkiniz yok" notu gösteriliyor', str_contains($s1, 'Finansal veriler için gerekli yetkiniz yok'));
-$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments'];   // sıfırla
+$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'];   // sıfırla
 
 echo "\n=== 3. YETKİ KAPISI — operator (yalnız attendance.daily_scan) SAYFAYI HİÇ AÇAMIYOR ===\n";
 $PERMS = ['attendance.daily_scan'];
 $rOperator = renderPage('raporlar.php');
 ok('operator izniyle raporlar.php REDDEDİLİYOR', str_starts_with($rOperator, '__ERROR__: forbidden'), $rOperator);
-$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments'];   // sıfırla
+$PERMS = ['attendance.management_reports', 'attendance.foreman_accounts', 'attendance.foreman_payments', 'reports.export'];   // sıfırla
 
 echo "\n=== 4. raporlar.php — özel tarih aralığı filtresi ===\n";
 $s2 = renderPage('raporlar.php', ['donem' => 'ozel', 'baslangic' => $bugun, 'bitis' => $bugun]);
@@ -213,7 +215,8 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 function current_user(): ?array { return ['id' => 1, 'username' => 'test']; }
-function can(string $p): bool { return in_array($p, ['attendance.management_reports', 'attendance.foreman_accounts'], true); }
+function can(string $p): bool { return in_array($p, ['attendance.management_reports', 'attendance.foreman_accounts', 'reports.export'], true); }
+function require_perm(string $p): void { if (!can($p)) forbidden(); }
 function is_admin(): bool { return false; }
 function active_depot(): ?string { return 'Depo A'; }
 function audit_log_event(...$a): void {}
@@ -281,6 +284,7 @@ $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['REQUEST_URI'] = '/raporlar.php';
 $pageSrc = file_get_contents(__ROOT__ . '/raporlar.php');
 $pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_rapor|config\/auth)\.php\';.*$/m', '', $pageSrc);
 $pageSrc = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $pageSrc);
+$pageSrc = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(__ROOT__ . '/config/xlsx_export.php', true), $pageSrc);
 $pageSrc = preg_replace('/^<\?php\s*$/m', '', $pageSrc, 1);
 $pageSrc = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $pageSrc);
 eval($pageSrc);
@@ -300,6 +304,34 @@ ok('CSV başlık satırı Türkçe sütun adlarını taşıyor + finansal sütun
     str_contains($ciktiCsvTam, 'İşçi Sayısı') && str_contains($ciktiCsvTam, 'Hakediş'), $ciktiCsvTam);
 ok('CSV\'de UI ile AYNI filtreyle (bugün, Ayşe) 1200.00 hakediş satırı var', str_contains($ciktiCsvTam, '1200.00'), $ciktiCsvTam);
 ok('CSV\'de 500.00 ödeme satırı var', str_contains($ciktiCsvTam, '500.00'), $ciktiCsvTam);
+
+echo "\n=== 6x. raporlar.php — Günlük XLSX (ALT SÜREÇ, CSV ile AYNI filtre) ===\n";
+require_once __DIR__ . '/_xlsx_altsurec.php';
+$x = xlsx_altsurec_calistir($csvAltSurec, "'csv' => 'gunluk'", "'xlsx' => 'gunluk'", 'rapor');
+ok('XLSX alt-süreci geçerli bir .xlsx üretti (Fatal/Warning yok)', $x['ok'], $x['hata']);
+if ($x['ok']) {
+    $sh = $x['kitap']->getSheetByName('Günlük Trend');
+    ok('"Günlük Trend" sayfası var', $sh !== null);
+    if ($sh) {
+        $bs = xlsx_satir_bul($sh, 'İşçi Sayısı');
+        $hk = $bs ? xlsx_sutun_bul($sh, $bs, 'Hakediş (TRY)') : '';
+        $od = $bs ? xlsx_sutun_bul($sh, $bs, 'Ödeme (TRY)') : '';
+        ok('Finansal alan para birimi başına AYRI sütun (CSV\'deki "TRY: 1200.00" metni yerine)', $hk !== '' && $od !== '');
+        if ($hk && $od) {
+            $c = $sh->getCell($hk . ($bs + 1));
+            ok('Hakediş 1200 SAYI hücresi', $c->getDataType() === 'n' && abs((float)$c->getValue() - 1200) < 0.001, var_export($c->getValue(), true));
+            ok('Ödeme 500 SAYI hücresi', abs((float)$sh->getCell($od . ($bs + 1))->getValue() - 500) < 0.001);
+        }
+    }
+}
+$x = xlsx_altsurec_calistir($csvAltSurec, "'csv' => 'gunluk'", "'xlsx' => 'cavus'", 'rapor_cavus');
+ok('Çavuş XLSX alt-süreci geçerli bir .xlsx üretti', $x['ok'], $x['hata']);
+if ($x['ok']) {
+    $sh = $x['kitap']->getSheetByName('Çavuş Özeti');
+    $r  = $sh ? xlsx_satir_bul($sh, 'Ayşe Çavuş') : 0;
+    $bs = $sh ? xlsx_satir_bul($sh, 'Çavuş') : 0;
+    ok('"Çavuş Özeti" sayfasında Ayşe Çavuş satırı + "Güncel Bakiye (TRY)" sütunu', $r > 0 && $bs > 0 && xlsx_sutun_bul($sh, $bs, 'Güncel Bakiye (TRY)') !== '');
+}
 
 echo "\n";
 printf("SONUÇ: %d test geçti, %d hata.\n\n", $gecen, $fail);
