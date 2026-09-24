@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v262');
+    define('APP_SURUM', 'v263');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -325,47 +325,29 @@ function first_allowed_page(): ?string {
     return null;
 }
 
-function render_desktop_sidebar(string $base): void {
+/**
+ * Şu anki sayfanın gezinme BÖLÜMÜ (anahtar) — masaüstü sidebar'ı ve mobil alt
+ * çubuk (render_footer) AYNI fonksiyonu okur; iki ayrı kopya ayrışıyordu.
+ * Dönen anahtar nav_alt_sayfalar() kaydındaki anahtarlardan biridir ('home'
+ * dahil) ya da null (bölümü olmayan sayfa: stok.php, kantar_raporu.php …).
+ *
+ * ⚠ Hal Kayıt klasöründeki index.php'nin basename'i de 'index.php'dir —
+ * $a_home'daki '&& !$in_hks' bu yüzden ŞART (yoksa Ana Sayfa + Bildirim
+ * birlikte aktif olur; eski alt çubuğun hatasıydı).
+ */
+function nav_aktif_anahtar(): ?string {
     $self   = $_SERVER['PHP_SELF'] ?? '';
     $cur    = basename($self);
     $in_hks = strpos($self, '/halkayit/') !== false;
     $cikma  = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
-
-    $_fn   = function_exists('can');
-    $p_dash  = !$_fn || can('dashboard.read');
-    $p_rec   = !$_fn || can('records.read');
-    $p_recw  = !$_fn || can('records.write');
-    $p_kant  = !$_fn || can('kantar.read');
-    $p_stok  = !$_fn || can('stok.read');
-    $p_rep   = !$_fn || can('reports.read');
-    $p_def   = !$_fn || can('defs.read');
-    $p_usr   = $_fn && can('users.admin');
-    $p_adm   = function_exists('is_admin') && is_admin();
-    $p_beyan = !$_fn || can('beyan.read') || $p_adm;
-    // Hesap: yalnız kendi yetkisi. Eski "reports.read'e düş" köprüsü kaldırıldı
-    // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
-    // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
-    $p_hes   = !$_fn || can('hesap.read') || $p_adm;
-    // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
-    // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
-    // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
-    // basılır — pdks_can() burada tanımsız olurdu.
-    $p_pdks  = ($_fn && (can('attendance.employees') || can('attendance.cards') || can('attendance.scan'))) || $p_adm;
-    // Günlük İşçi (Sprint Günlük-İşçi-01, Faz 1) — kalıcı personel PDKS'inden
-    // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden
-    // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de
-    // yalnız kendi sayfalarında yüklenir).
-    $p_gunluk = nav_ptak_gorunur();
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
     $a_yuk   = !$cikma && !$in_hks && in_array($cur, ['records.php','record_view.php','record_edit.php','record_create.php','record_new.php'], true);
     $a_cik   = $cikma || in_array($cur, ['cikmalar.php','cikma_create.php'], true);
     $a_kant  = in_array($cur, ['kantar.php','kantar_view.php'], true);
-    $a_krap  = $cur === 'kantar_raporu.php';
     $a_hks   = $in_hks;
     $a_beyan = in_array($cur, ['beyanlar.php','beyan_create.php','beyan_edit.php','beyan_view.php','beyan_delete.php'], true);
-    $a_ustok = $cur === 'stok.php';
     $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
                                'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
@@ -400,6 +382,66 @@ function render_desktop_sidebar(string $base): void {
     $a_rol   = $cur === 'roles.php';
     $a_aud   = $cur === 'audit.php';
     $a_bkp   = $cur === 'admin_db_backups.php';
+
+    // Sıra önemli değil: bayraklar birbirini dışlar ($a_yuk '!$cikma' taşır,
+    // $a_home '!$in_hks' taşır).
+    foreach ([
+        'home' => $a_home, 'records' => $a_yuk, 'cikma' => $a_cik, 'beyan' => $a_beyan,
+        'kantar' => $a_kant, 'hks' => $a_hks, 'rapor' => $a_rep, 'mstok' => $a_mstok,
+        'hesap' => $a_hes, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
+        'roles' => $a_rol, 'audit' => $a_aud, 'backup' => $a_bkp,
+    ] as $anahtar => $aktif) {
+        if ($aktif) return $anahtar;
+    }
+    return null;
+}
+
+function render_desktop_sidebar(string $base): void {
+    $_fn   = function_exists('can');
+    $p_dash  = !$_fn || can('dashboard.read');
+    $p_rec   = !$_fn || can('records.read');
+    $p_recw  = !$_fn || can('records.write');
+    $p_kant  = !$_fn || can('kantar.read');
+    $p_stok  = !$_fn || can('stok.read');
+    $p_rep   = !$_fn || can('reports.read');
+    $p_def   = !$_fn || can('defs.read');
+    $p_usr   = $_fn && can('users.admin');
+    $p_adm   = function_exists('is_admin') && is_admin();
+    $p_beyan = !$_fn || can('beyan.read') || $p_adm;
+    // Hesap: yalnız kendi yetkisi. Eski "reports.read'e düş" köprüsü kaldırıldı
+    // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
+    // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
+    $p_hes   = !$_fn || can('hesap.read') || $p_adm;
+    // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
+    // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
+    // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
+    // basılır — pdks_can() burada tanımsız olurdu.
+    $p_pdks  = ($_fn && (can('attendance.employees') || can('attendance.cards') || can('attendance.scan'))) || $p_adm;
+    // Günlük İşçi (Sprint Günlük-İşçi-01, Faz 1) — kalıcı personel PDKS'inden
+    // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden
+    // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de
+    // yalnız kendi sayfalarında yüklenir).
+    $p_gunluk = nav_ptak_gorunur();
+
+    // Aktif bölüm TEK kaynaktan: nav_aktif_anahtar() — mobil alt çubuk da aynı
+    // fonksiyonu okur (eskiden iki ayrı kopya vardı ve ayrışmıştı: Hal Kayıt'ta
+    // alt çubukta Ana Sayfa + Bildirim birlikte aktifti, maliyet_*'te hiçbiri).
+    $ak      = nav_aktif_anahtar();
+    $a_home  = $ak === 'home';
+    $a_yuk   = $ak === 'records';
+    $a_cik   = $ak === 'cikma';
+    $a_kant  = $ak === 'kantar';
+    $a_hks   = $ak === 'hks';
+    $a_beyan = $ak === 'beyan';
+    $a_mstok = $ak === 'mstok';
+    $a_hes   = $ak === 'hesap';
+    $a_rep   = $ak === 'rapor';
+    $a_ptak  = $ak === 'ptak';
+    $a_def   = $ak === 'defs';
+    $a_usr   = $ak === 'users';
+    $a_rol   = $ak === 'roles';
+    $a_aud   = $ak === 'audit';
+    $a_bkp   = $ak === 'backup';
 
     $lnk = function (string $href, string $icon, string $label, bool $active) use ($base) {
         echo '<a href="' . $base . $href . '" class="sidebar-link' . ($active ? ' active' : '') . '">'
@@ -490,6 +532,264 @@ function render_desktop_sidebar(string $base): void {
     <?php
 }
 
+// =========================================================
+// MOBİL ALT ÇUBUK (bottomnav) — Sprint Alt-Menü-01
+// ---------------------------------------------------------
+// Ana Sayfa solda sabit, "Diğer" sağda; arada kullanıma göre dolan 4 slot
+// (390px altında CSS 4.'yü gizler → 3). Kullanım sayımı YALNIZ cihazda
+// (localStorage) tutulur; app.js sıralamayı hesaplayıp 'asya_nav' çerezine
+// yazar, sunucu bir sonraki sayfada o sırayla çizer. Sözleşme ve kurallar:
+// CLAUDE.md "Mobil Alt Çubuk" bölümü.
+// =========================================================
+
+// Alt çubuk sıralama çerezi — biçim: u:<userId>;s:k1,k2,k3,k4;p:k1,k2
+// (app.js encodeURIComponent ile yazar; PHP $_COOKIE'de çözülmüş okur).
+if (!defined('NAV_ALT_CEREZ')) define('NAV_ALT_CEREZ', 'asya_nav');
+// Sunucunun HER ZAMAN çizdiği slot sayısı (390px altında CSS 4.'yü gizler).
+if (!defined('NAV_ALT_SLOT')) define('NAV_ALT_SLOT', 4);
+
+/**
+ * Alt çubuk + "Diğer" sayfasının SAYFA KAYDI. Saf veri — DB/yetki çağrısı
+ * YOK (yetki kapısı nav_alt_izinler()'de). Sıra = sidebar sırası: "Diğer"
+ * gruplaması ve soğuk başlangıcın kuyruğu bu sırayı izler.
+ *
+ *  etiket : tam ad (aria-label, "Diğer" sayfası)   kisa : çubuktaki etiket
+ *  dar    : 9.5px'te bile sığmazsa yazılan hâl ('' = etiketi gizle, null = yok)
+ *  renk   : aktif karo alt çizgisi / gölgesi (--c2)
+ *  ikon   : TEK alan — PNG/WebP'ye geçmek yalnız bu yolu değiştirmektir.
+ */
+function nav_alt_sayfalar(): array {
+    return [
+        'home'    => ['href' => 'index.php',            'etiket' => 'Ana Sayfa',            'kisa' => 'Ana Sayfa',  'dar' => '',        'renk' => '#232d3e', 'grup' => '',          'ikon' => 'assets/nav-icons/home.svg'],
+        'records' => ['href' => 'records.php',          'etiket' => 'Yüklemeler',           'kisa' => 'Yüklemeler', 'dar' => 'Yükleme', 'renk' => '#0b6fc0', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/records.svg'],
+        'cikma'   => ['href' => 'cikmalar.php',         'etiket' => 'Çıkmalar',             'kisa' => 'Çıkmalar',   'dar' => null,      'renk' => '#e0620e', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/cikma.svg'],
+        'beyan'   => ['href' => 'beyanlar.php',         'etiket' => 'Beyanlar',             'kisa' => 'Beyanlar',   'dar' => null,      'renk' => '#5a2fcf', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/beyan.svg'],
+        'kantar'  => ['href' => 'kantar.php',           'etiket' => 'Kantar',               'kisa' => 'Kantar',     'dar' => null,      'renk' => '#12824a', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/kantar.svg'],
+        'hks'     => ['href' => 'halkayit/index.php',   'etiket' => 'Hal Bildirimi',        'kisa' => 'Bildirim',   'dar' => null,      'renk' => '#1d3fa6', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hks.svg'],
+        'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
+        'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
+        'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
+        'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
+        'defs'    => ['href' => 'definitions.php',      'etiket' => 'Tanımlar',             'kisa' => 'Tanımlar',   'dar' => null,      'renk' => '#c77d08', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/defs.svg'],
+        'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/users.svg'],
+        'roles'   => ['href' => 'roles.php',            'etiket' => 'Roller',               'kisa' => 'Roller',     'dar' => null,      'renk' => '#48566f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/roles.svg'],
+        'audit'   => ['href' => 'audit.php',            'etiket' => 'İşlem Geçmişi',        'kisa' => 'Geçmiş',     'dar' => null,      'renk' => '#b3163f', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/audit.svg'],
+        'backup'  => ['href' => 'admin_db_backups.php', 'etiket' => 'Veritabanı Yedekleri', 'kisa' => 'Yedekler',   'dar' => null,      'renk' => '#3f7d0b', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/backup.svg'],
+        'more'    => ['href' => '',                     'etiket' => 'Diğer',                'kisa' => 'Diğer',      'dar' => null,      'renk' => '#6b788d', 'grup' => '',          'ikon' => 'assets/nav-icons/more.svg'],
+    ];
+}
+
+/**
+ * Soğuk başlangıç (çerez yok / geçersiz) ve eşit puanda öncelik sırası:
+ * Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası.
+ */
+function nav_alt_soguk_sira(): array {
+    $sira = ['records', 'hks', 'ptak', 'rapor'];
+    foreach (nav_alt_sayfalar() as $k => $p) {
+        if ($p['grup'] !== '' && !in_array($k, $sira, true)) $sira[] = $k;
+    }
+    return $sira;
+}
+
+/**
+ * Aday sayfaların yetki kapısı — her satır HEDEF SAYFANIN KENDİ kapısıyla
+ * (ve sidebar'ın $p_* bayraklarıyla) birebir aynıdır; burada izinli olmayan
+ * bir anahtar çubukta da "Diğer"de de ÇİZİLMEZ (sahte çerez yalnız izinli
+ * sayfaları yeniden sıralayabilir). Fail-closed: can() yoksa hiçbiri.
+ * is_admin() her çağrıda DB'ye gider — bir kez hesaplanır.
+ */
+function nav_alt_izinler(): array {
+    $fn  = function_exists('can');
+    $c   = fn(string $p): bool => $fn && can($p);
+    $adm = function_exists('is_admin') && is_admin();
+    return [
+        'records' => $c('records.read'),            // records.php: require_perm('records.read')
+        'cikma'   => $c('records.read'),            // cikmalar.php: require_perm('records.read')
+        'beyan'   => $c('beyan.read') || $adm,      // beyanlar.php: can_beyan('read')
+        'kantar'  => $c('kantar.read'),             // kantar.php: require_perm('kantar.read')
+        'hks'     => $c('records.write'),           // halkayit/index.php: require_perm('records.write')
+        'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
+        'mstok'   => $c('stok.read'),               // malzeme_stok.php: require_perm('stok.read')
+        'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
+        'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
+        'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
+        'users'   => $c('users.admin'),             // users.php: require_perm('users.admin')
+        'roles'   => $c('users.admin'),             // roles.php: require_perm('users.admin')
+        'audit'   => $adm,                          // audit.php: is_admin()
+        'backup'  => $adm,                          // admin_db_backups.php: is_admin()
+    ];
+}
+
+/**
+ * 'asya_nav' çerezini çözer. Kullanıcı kimliği tutmazsa (aynı cihazda başka
+ * hesap) YOK SAYILIR. Dönen anahtarlar henüz yetkiden GEÇMEMİŞTİR —
+ * nav_alt_model() her birini beyaz liste + yetki kapısından geçirir.
+ */
+function nav_alt_cerez_oku(int $uid): array {
+    $bos = ['s' => [], 'p' => []];
+    $ham = $_COOKIE[NAV_ALT_CEREZ] ?? '';
+    if (!is_string($ham) || $ham === '' || strlen($ham) > 400) return $bos;
+    $u = null;
+    $out = $bos;
+    foreach (explode(';', $ham) as $parca) {
+        $ikili = explode(':', $parca, 2);
+        if (count($ikili) !== 2) continue;
+        $ad = trim($ikili[0]);
+        if ($ad === 'u') {
+            $u = trim($ikili[1]);
+        } elseif ($ad === 's' || $ad === 'p') {
+            $out[$ad] = array_values(array_unique(array_filter(
+                array_map('trim', explode(',', $ikili[1])),
+                fn($k) => $k !== ''
+            )));
+        }
+    }
+    return $u === (string)$uid ? $out : $bos;
+}
+
+/** İkon adresi — dosya değişince önbellek kırılsın diye ?v=<filemtime>. */
+function nav_alt_ikon_url(array $p, string $base): string {
+    $v = @filemtime(__DIR__ . '/../' . $p['ikon']);
+    return $base . $p['ikon'] . '?v=' . ($v ?: 0);
+}
+
+/**
+ * Bu istek için alt çubuk modeli; çizilecek hiçbir şey yoksa null (çubuk
+ * hiç basılmaz, render_header body'ye 'bn-yok' ekler → alt boşluk kalkar).
+ *
+ * Ana Sayfa hedefi: dashboard.read → index.php, yoksa first_allowed_page()
+ * (o da null ise Ana Sayfa çizilmez) — Ana Sayfa ASLA 403 veren bir bağlantı
+ * olmaz. Slot sırası: sabitlenenler (p) → çerezdeki sıra (s) → soğuk başlangıç;
+ * her anahtar önce kayıtta (beyaz liste) sonra yetki kapısında aranır.
+ */
+function nav_alt_model(): ?array {
+    $u = function_exists('current_user') ? current_user() : null;
+    if (!$u || !isset($u['id'])) return null;
+    $uid = (int)$u['id'];
+
+    $izin    = nav_alt_izinler();
+    $adaylar = array_keys(array_filter($izin));
+    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);
+
+    $home = (function_exists('can') && can('dashboard.read')) ? 'index.php' : first_allowed_page();
+
+    $cerez  = nav_alt_cerez_oku($uid);
+    $sabit  = array_slice(array_values(array_filter($cerez['p'], $izinli)), 0, NAV_ALT_SLOT);
+    $slotlar = [];
+    foreach (array_merge($sabit, $cerez['s'], nav_alt_soguk_sira()) as $k) {
+        if (count($slotlar) >= NAV_ALT_SLOT) break;
+        if ($izinli($k) && !in_array($k, $slotlar, true)) $slotlar[] = $k;
+    }
+    if ($home === null && !$slotlar) return null;
+
+    $soguk = array_values(array_filter(nav_alt_soguk_sira(), $izinli));
+    return [
+        'uid'     => $uid,
+        'home'    => $home,
+        'slotlar' => $slotlar,
+        'sabit'   => $sabit,
+        'adaylar' => $adaylar,
+        'soguk'   => $soguk,
+        'aktif'   => nav_aktif_anahtar(),
+    ];
+}
+
+/** Alt çubuk + "Diğer" sayfası HTML'i (render_footer çağırır). */
+function nav_alt_ciz(array $m, string $base): void {
+    $K       = nav_alt_sayfalar();
+    $aktif   = $m['aktif'];
+    $slotlar = $m['slotlar'];
+    $digerSay = count($m['adaylar']);
+    // "Diğer" yalnız slotlara sığmayan sayfa varsa: >4 her genişlikte, tam 4
+    // ise yalnız dar ekranda (orada 4. slot gizli, o sayfa Diğer'e düşer).
+    $digerVar = $digerSay > NAV_ALT_SLOT - 1;
+    $digerDar = $digerSay === NAV_ALT_SLOT;
+    // Güncel sayfa slotlarda değilse "Diğer" onun ikonunu alır ve aktif olur.
+    // (Dar ekranda 4. slottaki sayfa için aynısını app.js yapar.)
+    $digerAktif = $digerVar && $aktif !== null && $aktif !== 'home'
+        && in_array($aktif, $m['adaylar'], true) && !in_array($aktif, $slotlar, true);
+
+    $etiket = function (array $p): string {
+        return '<span class="bn-label" data-kisa="' . h($p['kisa']) . '"'
+            . ($p['dar'] !== null ? ' data-xs="' . h($p['dar']) . '"' : '') . '>' . h($p['kisa']) . '</span>';
+    };
+    $oge = function (string $k, string $href, string $sinif, bool $akt, bool $gizli) use ($K, $base, $etiket): string {
+        $p = $K[$k];
+        return '<a href="' . h($href) . '" class="bn-item' . $sinif . ($akt ? ' is-active' : '') . '"'
+            . ' data-nav="' . h($k) . '" style="--c2:' . h($p['renk']) . '" aria-label="' . h($p['etiket']) . '"'
+            . ($akt ? ' aria-current="page"' : '') . ($gizli ? ' hidden' : '') . '>'
+            . '<span class="ni-wrap"><img class="ni" src="' . h(nav_alt_ikon_url($p, $base)) . '" width="42" height="42" alt="" decoding="async"'
+            . ($gizli ? ' loading="lazy"' : '') . '></span>'
+            . $etiket($p) . '</a>';
+    };
+
+    echo '<nav class="bottomnav" id="bottomnav" aria-label="Ana gezinme"'
+        . ' data-uid="' . (int)$m['uid'] . '" data-aktif="' . h((string)$aktif) . '"'
+        . ' data-soguk="' . h(implode(',', $m['soguk'])) . '" data-sabit="' . h(implode(',', $m['sabit'])) . '">'
+        . '<div class="bn-dock">';
+    if ($m['home'] !== null) {
+        echo $oge('home', $base . $m['home'], ' bn-home', $aktif === 'home' && $m['home'] === 'index.php', false)
+            . '<span class="bn-sep" aria-hidden="true"></span>';
+    }
+    // Slotlar önce (sırasıyla), kalan izinli sayfalar gizli — app.js yeniden
+    // sıralarken yeni işaretleme üretmez, bu öğeleri yer değiştirir/gösterir.
+    $sira = array_merge($slotlar, array_values(array_diff($m['adaylar'], $slotlar)));
+    foreach ($sira as $i => $k) {
+        $slot = $i < count($slotlar);
+        $sinif = ' bn-slot' . ($slot && $i === NAV_ALT_SLOT - 1 ? ' bn-4' : '');
+        echo $oge($k, $base . $K[$k]['href'], $sinif, $slot && $aktif === $k, !$slot);
+    }
+    if ($digerVar) {
+        $dk = $digerAktif ? $aktif : 'more';
+        $more = nav_alt_ikon_url($K['more'], $base);
+        echo '<button type="button" class="bn-item bn-more' . ($digerDar ? ' bn-more-dar' : '') . ($digerAktif ? ' is-active' : '') . '"'
+            . ' id="bnMore" aria-haspopup="dialog" aria-expanded="false" aria-controls="bnSheet"'
+            . ' aria-label="Diğer sayfalar' . ($digerAktif ? ', şu an: ' . h($K[$dk]['etiket']) : '') . '"'
+            . ($digerAktif ? ' aria-current="page"' : '') . ' style="--c2:' . h($K[$dk]['renk']) . '">'
+            . '<span class="ni-wrap"><img class="ni" src="' . h(nav_alt_ikon_url($K[$dk], $base)) . '" width="42" height="42" alt="" decoding="async">'
+            . '<span class="more-badge" aria-hidden="true"' . ($digerAktif ? '' : ' hidden') . '>'
+            . '<img src="' . h($more) . '" width="18" height="18" alt="" decoding="async"></span></span>'
+            . $etiket($K[$dk]) . '</button>';
+    }
+    echo '</div></nav>';
+
+    if (!$digerVar) return;
+
+    // ── "Diğer" alt sayfası (sidebar gibi gruplu; yalnız izinli sayfalar) ──
+    $gruplar = [];
+    foreach ($m['adaylar'] as $k) $gruplar[$K[$k]['grup']][] = $k;
+    $depo = function_exists('active_depot') ? active_depot() : null;
+    $pin  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l-1 5 3 3H7l3-3z"/><path d="M12 12v8"/></svg>';
+    echo '<div class="bn-sheet-ovl" id="bnSheetOvl" hidden>'
+        . '<section class="bn-sheet" id="bnSheet" role="dialog" aria-modal="true" aria-labelledby="bnSheetTitle">'
+        . '<div class="bn-sheet-handle" aria-hidden="true"></div>'
+        . '<div class="bn-sheet-head"><h2 id="bnSheetTitle">Tüm sayfalar</h2>'
+        . '<button type="button" class="bn-edit-btn" id="bnPinBtn" aria-pressed="false">Sabitle</button>'
+        . '<button type="button" class="bn-x-btn" id="bnSheetClose" aria-label="Kapat">✕</button></div>';
+    if ($depo !== null) {
+        echo '<div><span class="bn-depo-chip"><i aria-hidden="true"></i>' . h($depo) . '</span></div>';
+    }
+    foreach (['Operasyon', 'Yönetim'] as $g) {
+        if (empty($gruplar[$g])) continue;
+        echo '<div class="bn-sheet-sec">' . h($g) . '</div><div class="bn-sheet-grid">';
+        foreach ($gruplar[$g] as $k) {
+            $p = $K[$k];
+            $cls = ($aktif === $k ? ' is-current' : '') . (in_array($k, $slotlar, true) ? ' in-bar' : '')
+                 . (in_array($k, $m['sabit'], true) ? ' pinned' : '');
+            echo '<div class="bn-tile' . $cls . '" data-nav="' . h($k) . '">'
+                . '<a class="go" href="' . h($base . $p['href']) . '"' . ($aktif === $k ? ' aria-current="page"' : '') . '>'
+                . '<img src="' . h(nav_alt_ikon_url($p, $base)) . '" width="50" height="50" alt="" decoding="async" loading="lazy">'
+                . '<span>' . h($p['etiket']) . '</span></a>'
+                . '<span class="bn-pin-badge" aria-hidden="true">' . $pin . '</span></div>';
+        }
+        echo '</div>';
+    }
+    echo '<p class="bn-sheet-msg" id="bnSheetMsg" role="status" aria-live="polite"></p>'
+        . '<p class="bn-sheet-foot" id="bnSheetFoot">Alt menüdeki slotlar en çok açtığınız sayfalarla kendiliğinden dolar. '
+        . '"Sabitle" ile bir sayfayı kalıcı olarak alt menüye alabilirsiniz.</p>'
+        . '</section></div>';
+}
+
 function render_header(string $title, bool $print_mode = false): void {
     $token = csrf_token();
     $cur   = basename($_SERVER['PHP_SELF'] ?? '');
@@ -556,7 +856,14 @@ function render_header(string $title, bool $print_mode = false): void {
             . ';--depot-accent-text:' . h(color_readable_text($__dc)) . ';"';
     }
 ?>
-<body class="<?= $print_mode ? 'print-mode' : '' ?>"<?= $__body_style ?>>
+<?php
+    // Mobil alt çubuk modeli bir kez hesaplanır (render_footer aynısını çizer).
+    // Çizilecek hiçbir şey yoksa (Ana Sayfa hedefi de izinli sayfa da yok)
+    // body 'bn-yok' alır: --bn-h 0 olur, alt boşluk kalkar.
+    $GLOBALS['_nav_alt_model'] = $print_mode ? null : nav_alt_model();
+    $__body_cls = $print_mode ? 'print-mode' : ($GLOBALS['_nav_alt_model'] === null ? 'bn-yok' : '');
+?>
+<body class="<?= $__body_cls ?>"<?= $__body_style ?>>
 <?php if (!$print_mode): ?>
 <header class="topbar">
     <div class="topbar-inner">
@@ -635,52 +942,18 @@ if ('serviceWorker' in navigator) {
 
 function render_footer(bool $print_mode = false): void {
     if (!$print_mode) {
-        $cur         = basename($_SERVER['PHP_SELF'] ?? '');
-        $base        = base_url();
-        $is_home     = in_array($cur, ['index.php', '']);
-        $_cikma_hint = ($GLOBALS['_nav_cikma_hint'] ?? false) === true;
-        $is_records  = !$_cikma_hint && in_array($cur, ['records.php', 'record_view.php', 'record_create.php', 'record_edit.php', 'record_new.php']);
-        $is_defs     = $cur === 'definitions.php';
-        $is_reports  = $cur === 'reports.php';
-        // Sidebar ile AYNI listeden beslenir (bkz. nav_ptak_sayfalari()) —
-        // kullanıcı hangi Personel Takibi alt sayfasında olursa olsun
-        // alt bardaki sekme vurgulu kalır.
-        $is_ptak     = in_array($cur, nav_ptak_sayfalari(), true);
-        $is_hks      = strpos((string)($_SERVER['REQUEST_URI'] ?? ''), '/halkayit/') !== false;
+        $base = base_url();
+        // render_header() modeli hesapladı; çağrılmadıysa burada hesaplanır.
+        $m = array_key_exists('_nav_alt_model', $GLOBALS) ? $GLOBALS['_nav_alt_model'] : nav_alt_model();
+        // Aktif bölüm çizim anında yeniden okunur: sayfa gövdesinde sonradan
+        // kurulan ipucu ($GLOBALS['_nav_cikma_hint']) da yansısın.
+        if ($m !== null) $m['aktif'] = nav_aktif_anahtar();
         echo '</main>';
-        ?>
-<nav class="bottomnav" role="navigation" aria-label="Ana gezinme">
-    <a href="<?= $base ?>index.php" class="bottomnav-item<?= $is_home ? ' active' : '' ?>">
-        <span class="bottomnav-icon">🏠</span>
-        <span class="bottomnav-label">Ana Sayfa</span>
-    </a>
-    <?php if (!function_exists('can') || can('records.read')): ?>
-    <a href="<?= $base ?>records.php" class="bottomnav-item<?= $is_records ? ' active' : '' ?>">
-        <span class="bottomnav-icon">📋</span>
-        <span class="bottomnav-label">Yüklemeler</span>
-    </a>
-    <?php endif; ?>
-    <?php if (!function_exists('can') || can('records.write')): ?>
-    <a href="<?= $base ?>halkayit/index.php" class="bottomnav-item bottomnav-raised<?= $is_hks ? ' active' : '' ?>">
-        <span class="bottomnav-raised-circle">🏛</span>
-        <span class="bottomnav-label">Bildirim</span>
-    </a>
-    <?php endif; ?>
-    <?php if (nav_ptak_gorunur()): ?>
-    <a href="<?= $base ?>personel_takip.php" class="bottomnav-item<?= $is_ptak ? ' active' : '' ?>">
-        <span class="bottomnav-icon">🧑‍🌾</span>
-        <span class="bottomnav-label">Personel</span>
-    </a>
-    <?php endif; ?>
-    <?php if (!function_exists('can') || can('reports.read')): ?>
-    <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? ' active' : '' ?>">
-        <span class="bottomnav-icon">📊</span>
-        <span class="bottomnav-label">Raporlar</span>
-    </a>
-    <?php endif; ?>
-</nav>
+        // Alt çubuk: aktif bölüm sidebar ile AYNI kaynaktan (nav_aktif_anahtar),
+        // Personel Takibi ailesi dahil (nav_ptak_sayfalari). Kayıt/kapı/çerez
+        // sözleşmesi nav_alt_sayfalar() / nav_alt_izinler() / nav_alt_model().
+        if ($m !== null) nav_alt_ciz($m, $base);
 
-<?php
         echo '<script src="' . base_url() . 'assets/app.js?v=' . filemtime(__DIR__ . '/../assets/app.js') . '"></script></body></html>';
     } else {
         echo '</main></body></html>';

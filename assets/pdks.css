@@ -362,7 +362,10 @@
 @media (max-width: 639px) {
     .pdks-kiosk-scan {
         min-height: 56vh;
-        min-height: calc(100dvh - 130px);   /* bottomnav + üst boşluk payı düşülmüş, kaydırmasız sığsın diye */
+        min-height: calc(100dvh - 160px);   /* bottomnav + üst boşluk payı düşülmüş, kaydırmasız sığsın diye */
+        /* Asıl değer: çubuk yüksekliği --bn-h değişkeninden (style.css :root) —
+           üstteki satır değişkeni tanımayan tarayıcı için yedek. 68px = topbar + üst boşluk. */
+        min-height: calc(100dvh - var(--bn-h, 92px) - 68px - env(safe-area-inset-bottom, 0px));
         gap: 10px; padding: 16px 14px;
     }
     .pdks-kiosk-scan-icon { font-size: 3rem; }

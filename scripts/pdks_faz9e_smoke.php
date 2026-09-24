@@ -56,8 +56,20 @@ $helpersSrc = oku9e('config/helpers.php');
 ok9e('helpers.php: Personel Takibi sayfa listesi TEK konsolide kaynakta (nav_ptak_sayfalari)',
     (bool)preg_match('/function nav_ptak_sayfalari\(\): array/', $helpersSrc)
     && (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc));
+// ⚠ Sprint Alt-Menü-01: mobil alt çubuk artık kendi $is_ptak kopyasını
+// TUTMAZ — aktif bölüm sidebar ile AYNI fonksiyondan gelir
+// (nav_aktif_anahtar(), Personel Takibi ailesi onun içindeki $a_ptak ile
+// nav_ptak_sayfalari()'ndan). Eski kontrol ayrı bir kopyanın VARLIĞINA
+// bakıyordu; bu kontrol ikisinin TEK kaynaktan beslendiğini doğrular.
+$fnGovde = function (string $ad) use ($helpersSrc): string {
+    return preg_match('/function ' . $ad . '\([^)]*\)[^{]*\{(.*?)^\}/ms', $helpersSrc, $m) ? $m[1] : '';
+};
 ok9e('helpers.php: mobil bottomnav AYNI listeyi kullanıyor (sidebar ile ayrışmaz)',
-    (bool)preg_match('/\$is_ptak\s*=\s*in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $helpersSrc));
+    (bool)preg_match('/\$a_ptak = in_array\(\$cur, nav_ptak_sayfalari\(\), true\);/', $fnGovde('nav_aktif_anahtar'))
+    && str_contains($fnGovde('render_desktop_sidebar'), 'nav_aktif_anahtar()')
+    && str_contains($fnGovde('nav_alt_model'), 'nav_aktif_anahtar()')
+    && str_contains($fnGovde('render_footer'), 'nav_alt_ciz(')
+    && !preg_match('/\$is_ptak\s*=/', $fnGovde('render_footer')));
 if (preg_match('/function nav_ptak_sayfalari\(\): array\s*\{(.*?)\}/s', $helpersSrc, $mPtak)) {
     $ptakGovde = $mPtak[1];
 } else {
@@ -303,8 +315,8 @@ ok9e('manuel_cikis.php KENDİSİ bu fazda DEĞİŞMEDİ (mevcut Faz 8E akışı 
 // § G — Sürüm
 // =========================================================
 echo "\n=== G. Sürüm (APP_SURUM / CACHE_NAME) ===\n";
-ok9e('config/helpers.php: APP_SURUM v262', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v262['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v262'"));
-ok9e('sw.js: CACHE_NAME yukleme-plani-v262', str_contains(oku9e('sw.js'), 'yukleme-plani-v262'));
+ok9e('config/helpers.php: APP_SURUM v263', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v263['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v263'"));
+ok9e('sw.js: CACHE_NAME yukleme-plani-v263', str_contains(oku9e('sw.js'), 'yukleme-plani-v263'));
 
 // =========================================================
 echo "\n=== SONUÇ ===\n";

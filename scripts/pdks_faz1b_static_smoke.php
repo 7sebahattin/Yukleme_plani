@@ -202,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v262',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v262';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v262');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v263',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v263';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v263');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -507,6 +507,48 @@ $beklenenEskiSatirlar = [
     "-    <a href=\"<?= \$base ?>cikmalar.php\" class=\"bottomnav-item<?= \$is_cikmalar ? ' active' : '' ?>\">",
     "-        <span class=\"bottomnav-icon\">🚚</span>",
     "-        <span class=\"bottomnav-label\">Çıkmalar</span>",
+    // Sprint Alt-Menü-01 (v263): mobil alt çubuk yeniden yazıldı. render_footer'ın
+    // eski satır içi bottomnav'ı (5 sabit sekme + $is_* bayrakları) kaldırıldı;
+    // çubuk artık nav_alt_model()/nav_alt_ciz() ile çizilir ve aktif bölüm sidebar
+    // ile AYNI nav_aktif_anahtar()'dan gelir. Sidebar'ın $a_* bloğu o fonksiyona
+    // TAŞINDI; hiçbir bağlantının kullanmadığı $a_krap/$a_ustok bırakıldı. <body>
+    // sınıfı çubuksuz rol için 'bn-yok' alır. APP_SURUM v262'den v263'e çekildi.
+    '-    define(\'APP_SURUM\', \'v262\');',
+    '-    $a_krap  = $cur === \'kantar_raporu.php\';',
+    '-    $a_ustok = $cur === \'stok.php\';',
+    '-<body class="<?= $print_mode ? \'print-mode\' : \'\' ?>"<?= $__body_style ?>>',
+    '-        $cur         = basename($_SERVER[\'PHP_SELF\'] ?? \'\');',
+    '-        $base        = base_url();',
+    '-        $is_home     = in_array($cur, [\'index.php\', \'\']);',
+    '-        $_cikma_hint = ($GLOBALS[\'_nav_cikma_hint\'] ?? false) === true;',
+    '-        $is_records  = !$_cikma_hint && in_array($cur, [\'records.php\', \'record_view.php\', \'record_create.php\', \'record_edit.php\', \'record_new.php\']);',
+    '-        $is_defs     = $cur === \'definitions.php\';',
+    '-        $is_reports  = $cur === \'reports.php\';',
+    '-        // Sidebar ile AYNI listeden beslenir (bkz. nav_ptak_sayfalari()) —',
+    '-        // kullanıcı hangi Personel Takibi alt sayfasında olursa olsun',
+    '-        // alt bardaki sekme vurgulu kalır.',
+    '-        $is_ptak     = in_array($cur, nav_ptak_sayfalari(), true);',
+    '-        $is_hks      = strpos((string)($_SERVER[\'REQUEST_URI\'] ?? \'\'), \'/halkayit/\') !== false;',
+    '-<nav class="bottomnav" role="navigation" aria-label="Ana gezinme">',
+    '-    <a href="<?= $base ?>index.php" class="bottomnav-item<?= $is_home ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">🏠</span>',
+    '-        <span class="bottomnav-label">Ana Sayfa</span>',
+    '-    <?php if (!function_exists(\'can\') || can(\'records.read\')): ?>',
+    '-    <a href="<?= $base ?>records.php" class="bottomnav-item<?= $is_records ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">📋</span>',
+    '-        <span class="bottomnav-label">Yüklemeler</span>',
+    '-    <?php if (!function_exists(\'can\') || can(\'records.write\')): ?>',
+    '-    <a href="<?= $base ?>halkayit/index.php" class="bottomnav-item bottomnav-raised<?= $is_hks ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-raised-circle">🏛</span>',
+    '-        <span class="bottomnav-label">Bildirim</span>',
+    '-    <?php if (nav_ptak_gorunur()): ?>',
+    '-    <a href="<?= $base ?>personel_takip.php" class="bottomnav-item<?= $is_ptak ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">🧑‍🌾</span>',
+    '-        <span class="bottomnav-label">Personel</span>',
+    '-    <?php if (!function_exists(\'can\') || can(\'reports.read\')): ?>',
+    '-    <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">📊</span>',
+    '-        <span class="bottomnav-label">Raporlar</span>',
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

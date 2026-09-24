@@ -117,6 +117,14 @@ $PROFILLER = [
         'rol' => ['slug' => 'gunluk_sorumlu', 'label' => 'Günlük İşçi Sorumlusu'],
         'perms' => ['attendance.foremen','attendance.worker_cards','attendance.daily_scan','attendance.daily_reports'],
     ],
+    'dort_sayfa' => [
+        // Tam 4 aday sayfa (records+cikma, kantar, reports): 390px ve üstünde
+        // 4 slot → "Diğer" GEREKSİZ; 390 altında 4. slot gizlenir → "Diğer"
+        // (yalnız dar ekranda) o sayfayı taşır.
+        'ad' => 'Özel rol: tam 4 aday sayfa', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'dort', 'label' => 'Dört Sayfa'],
+        'perms' => ['dashboard.read','records.read','kantar.read','reports.read'],
+    ],
     'ozel_pdks' => [
         // Özel rol: YALNIZ kalıcı personel PDKS izinleri (attendance.*) —
         // personel.php'yi açabilir (require_pdks('employees')) ama Personel
@@ -178,6 +186,21 @@ $GATES = [
     'depo_sec.php'          => ['depo_sec.php', 'require_login();', fn() => true, 'yalnız giriş'],
     'logout.php'            => ['logout.php', '<?php', fn() => true, 'kapı yok'],
 ];
+// Alt çubuk aday anahtarı → hedef sayfa (onaylı tasarımın sayfa listesi).
+// Uygulamanın nav_alt_sayfalar() kaydıyla BAĞIMSIZ yazılır ve aşağıda onunla
+// karşılaştırılır: kayıt değişirse bu test fark eder.
+$ANAHTAR_SAYFA = [
+    'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
+    'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php',
+    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'ptak' => 'personel_takip.php',
+    'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
+    'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
+];
+// Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+foreach ($ANAHTAR_SAYFA as $k => $hedef) {
+    if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
+}
 $gate_meta = [];
 $eksik = [];
 foreach ($GATES as $hedef => [$dosya, $igne, $kosul, $aciklama]) {
@@ -200,6 +223,7 @@ $SAYFALAR = [
     'records'     => ['self' => '/records.php',        'kapi' => 'records.php',        'bolum' => 'records.php',        'baslik' => 'Yüklemeler'],
     'record_view' => ['self' => '/record_view.php',    'kapi' => 'record_view.php',    'bolum' => 'records.php',        'baslik' => 'Yükleme Detayı'],
     'cikma_view'  => ['self' => '/record_view.php',    'kapi' => 'record_view.php',    'bolum' => 'cikmalar.php',       'baslik' => 'Çıkma Detayı', 'cikma' => true],
+    'cikma_gec'   => ['self' => '/record_view.php',    'kapi' => 'record_view.php',    'bolum' => 'cikmalar.php',       'baslik' => 'Çıkma Detayı (geç ipucu)', 'cikma_gec' => true],
     'cikmalar'    => ['self' => '/cikmalar.php',       'kapi' => 'cikmalar.php',       'bolum' => 'cikmalar.php',       'baslik' => 'Çıkmalar'],
     'beyanlar'    => ['self' => '/beyanlar.php',       'kapi' => 'beyanlar.php',       'bolum' => 'beyanlar.php',       'baslik' => 'Beyanlar'],
     'kantar'      => ['self' => '/kantar.php',         'kapi' => 'kantar.php',         'bolum' => 'kantar.php',         'baslik' => 'Kantar'],
@@ -231,10 +255,13 @@ function sayfa_render(array $s, string $base_css_inline, string $file_root, stri
     $_SERVER['SCRIPT_NAME'] = $s['self'];
     $_SERVER['REQUEST_URI'] = $s['self'];
     unset($GLOBALS['_nav_cikma_hint']);
-    if (!empty($s['cikma'])) $GLOBALS['_nav_cikma_hint'] = true;   // record_view.php:347 ile aynı
+    if (!empty($s['cikma'])) $GLOBALS['_nav_cikma_hint'] = true;   // record_view.php: render_header()'dan ÖNCE
 
     ob_start();
     render_header($s['baslik']);
+    // İpucu sayfa gövdesinde GEÇ kurulursa da alt çubuk doğru bölümü göstermeli
+    // (render_footer aktif bölümü çizim anında yeniden okur).
+    if (!empty($s['cikma_gec'])) $GLOBALS['_nav_cikma_hint'] = true;
     if (!empty($s['hks'])) {
         echo "<script>document.body.classList.add('hk-page');</script>\n";
         echo '<iframe class="hk-frame" id="son-oge" title="Hal Kayıt Paneli" srcdoc="&lt;p&gt;HKS iframe yer tutucu&lt;/p&gt;"></iframe>' . "\n";
@@ -266,6 +293,7 @@ function sayfa_render(array $s, string $base_css_inline, string $file_root, stri
 // ── Üret ──────────────────────────────────────────────────────────────────
 $manifest = [
     'uretim'   => date('c'),
+    'anahtar_sayfa' => $ANAHTAR_SAYFA,
     'kok'      => $ROOT,
     'app_surum'=> APP_SURUM,
     'gates'    => $gate_meta,
@@ -285,10 +313,23 @@ foreach ($PROFILLER as $pk => $pr) {
     if ($fap !== null && empty($izinli[$fap])) $uyari[] = "$pk: first_allowed_page()=$fap ama kapı tablosu izin vermiyor";
     if (nav_ptak_gorunur() !== $izinli['personel_takip.php']) $uyari[] = "$pk: nav_ptak_gorunur() ≠ personel_takip.php kapısı";
 
+    // Alt çubuk beklentileri — HEDEF SAYFA KAPILARINDAN türetilir (uygulamanın
+    // nav_alt_izinler()'inden DEĞİL), sonra uygulamayla çapraz kontrol edilir.
+    $adaylar = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]]));
+    $uygAday = array_keys(array_filter(nav_alt_izinler()));
+    if ($uygAday !== $adaylar) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylar) . "]";
+    $home = can('dashboard.read') ? 'index.php' : $fap;
+    $soguk = array_slice(array_values(array_filter($SOGUK, fn($k) => in_array($k, $adaylar, true))), 0, 4);
+
     $manifest['profiller'][$pk] = [
         'ad' => $pr['ad'], 'admin' => $pr['admin'], 'depo' => $pr['depo'],
         'perms' => $pr['perms'], 'izinli' => $izinli,
         'first_allowed_page' => $fap,
+        // Ana Sayfa: dashboard.read → index.php, yoksa first_allowed_page(), o da yoksa HİÇ
+        'home_hedef' => $home,
+        'adaylar' => $adaylar,
+        'soguk_slotlar' => $soguk,
+        'cubuk_beklenen' => $home !== null || $adaylar !== [],
     ];
 
     foreach ($SAYFALAR as $sk => $s) {
@@ -301,8 +342,35 @@ foreach ($PROFILLER as $pk => $pr) {
         $manifest['sayfalar'][] = [
             'profil' => $pk, 'sayfa' => $sk, 'dosya' => $dosya,
             'yol' => ltrim($s['self'], '/'), 'bolum' => $s['bolum'],
+            'anahtar' => $s['bolum'] === 'index.php' ? 'home' : (array_search($s['bolum'], $ANAHTAR_SAYFA, true) ?: null),
             'depo_rengi' => $pr['depo'] !== null ? depot_color($pr['depo']) : null,
         ];
+    }
+
+    // ── Çerez senaryoları ('asya_nav' — sunucu tarafı okuma) ──────────────
+    // Yalnız operatör: sahte (yasak/bilinmeyen anahtar), geçerli (sabit +
+    // sıra) ve BAŞKA kullanıcının çerezi. Beklenen slotlar elle yazılır.
+    if ($pk === 'operator') {
+        $senaryolar = [
+            'cerez_sahte'  => ['u:1;s:users,xyz,kantar,audit;p:roles,backup,home,more,../index', ['kantar', 'records', 'hks', 'ptak'], []],
+            'cerez_gecerli'=> ['u:1;s:beyan,kantar,records,mstok;p:hesap', ['hesap', 'beyan', 'kantar', 'records'], ['hesap']],
+            'cerez_baska'  => ['u:2;s:beyan,kantar,records,mstok;p:hesap', $soguk, []],
+            'cerez_bozuk'  => [str_repeat('s:records,', 60), $soguk, []],
+        ];
+        foreach ($senaryolar as $sen => [$cerez, $bekSlot, $bekSabit]) {
+            $s = $SAYFALAR['kantar'];
+            $_COOKIE['asya_nav'] = $cerez;
+            $html = sayfa_render($s, $css_inline, $file_root, $HKS_STYLE);
+            unset($_COOKIE['asya_nav']);
+            $dosya = "{$pk}__kantar__{$sen}.html";
+            file_put_contents($OUT . '/' . $dosya, $html);
+            $manifest['sayfalar'][] = [
+                'profil' => $pk, 'sayfa' => "kantar+$sen", 'dosya' => $dosya,
+                'yol' => 'kantar.php', 'bolum' => 'kantar.php', 'anahtar' => 'kantar',
+                'depo_rengi' => depot_color($pr['depo']),
+                'senaryo' => ['ad' => $sen, 'cerez' => $cerez, 'slotlar' => $bekSlot, 'sabit' => $bekSabit],
+            ];
+        }
     }
 }
 if ($uyari) {

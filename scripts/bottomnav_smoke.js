@@ -59,56 +59,38 @@ const M = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 // (B) GÜNCEL TASARIM — PROGRAM ajanı yeni tasarım onaylanınca BURAYI günceller
 // ═════════════════════════════════════════════════════════════════════════
 const TASARIM = {
-    // (A) grubu da bunu kullanır: çubuğun KAPSAYICISI.
+    // (A) grubu da bunu kullanır: çubuğun KAPSAYICISI (tam genişlik, altta).
     barSel: '.bottomnav',
-    // (B) — öğe seçicisi ve etiket seçicisi
-    itemSel: '.bottomnav-item',
-    labelSel: '.bottomnav-label',
-    // Profil → soldan sağa görünen etiketler (config/helpers.php render_footer)
-    etiketler: {
-        admin:       ['Ana Sayfa', 'Yüklemeler', 'Bildirim', 'Personel', 'Raporlar'],
-        operator:    ['Ana Sayfa', 'Yüklemeler', 'Bildirim', 'Personel', 'Raporlar'],
-        muhasebe:    ['Ana Sayfa', 'Yüklemeler', 'Personel', 'Raporlar'],
-        viewer:      ['Ana Sayfa', 'Yüklemeler', 'Raporlar'],
-        ozel_gunluk: ['Ana Sayfa', 'Personel'],
-        ozel_pdks:   ['Ana Sayfa'],
-    },
-    // Aktif işaret biçimi: <a class="bottomnav-item active">; aria-current KULLANILMIYOR.
-    aktifSinif: 'active',
-    ariaCurrentKullanilir: false,
-    // Sayfa → aktif olması beklenen hedef(ler) (null = hiçbiri). Güncel davranışın
-    // kaydıdır; 'hks' iki aktif öğe içerir (BİLİNEN HATA BN-HKS-IKI-AKTIF).
-    aktifHedef: {
-        home: ['index.php'], records: ['records.php'], record_view: ['records.php'],
-        cikma_view: [], cikmalar: [], beyanlar: [], kantar: [],
-        hks: ['index.php', 'halkayit/index.php'],
-        ptak: ['personel_takip.php'], ptak_alt: ['personel_takip.php'], personel: ['personel_takip.php'],
-        reports: ['reports.php'], maliyet: [], hesap: [], definitions: [],
-    },
-    // Ortadaki yükseltilmiş düğme (records.write olan profillerde)
-    yukseltilmis: { sel: '.bottomnav-raised', hedef: 'halkayit/index.php', etiket: 'Bildirim' },
-    // Çubuk yüksekliği (px, güvenli alan 0 iken) — ölçülen: ~62px
-    yukseklik: [56, 72],
+    // (B) — Varyant A "Kabartma Karo" (Sprint Alt-Menü-01)
+    dockSel: '.bn-dock',
+    itemSel: '.bn-item',            // tüm dokunma öğeleri (Ana Sayfa, slotlar, Diğer)
+    slotSel: '.bn-slot',            // aday sayfalar (gizli olanlar dahil DOM'da)
+    homeSel: '.bn-home',
+    moreSel: '#bnMore',
+    labelSel: '.bn-label',
+    sheetOvlSel: '#bnSheetOvl',
+    sheetSel: '#bnSheet',
+    // Genişlik → görünen slot sayısı (sunucu hep 4 çizer, 390 altında CSS 4.'yü gizler)
+    slotEsik: 390,                  // < 390 → 3 slot, ≥ 390 → 4 slot
+    // Aktif işaret: aria-current="page" (tek öğe) + .is-active
+    aktifSinif: 'is-active',
+    // Kapsayıcı yüksekliği (px, güvenli alan 0): dok ~84 + alt boşluk 8 → --bn-h 92px
+    yukseklik: [86, 100],
+    // En küçük etiket yazı boyu (fitLabels .tight)
+    minEtiketPx: 9.5,
+    // Koyu temada pasif ikon filtresi
+    koyuPasifFiltre: 'saturate(0.55) brightness(0.86)',
 };
 
 // ═════════════════════════════════════════════════════════════════════════
 // BİLİNEN HATALAR — mevcut kodda bulunan, bu görevde düzeltilmeyen
 // ═════════════════════════════════════════════════════════════════════════
-const BILINEN = {
-    // render_footer: $is_home = in_array($cur, ['index.php','']) — halkayit/index.php'nin
-    // basename'i de 'index.php' → Ana Sayfa + Bildirim birlikte aktif. Sidebar
-    // '&& !$in_hks' ile korur, bottomnav korumaz.
-    'BN-HKS-IKI-AKTIF': (c) => c.sayfa === 'hks',
-    // Sidebar maliyet_* sayfalarında Raporlar'ı vurgular ($a_rep = ... || $a_mal);
-    // bottomnav'daki $is_reports yalnız reports.php → maliyet'te hiçbir öğe aktif değil.
-    'BN-MALIYET-AKTIF-YOK': (c) => c.sayfa === 'maliyet',
-    // Yalnız kalıcı PDKS izni olan rol: çubuktaki TEK bağlantı index.php'dir;
-    // dashboard.read yok, first_allowed_page() null → index.php 403 basar.
-    'BN-PDKS-ANASAYFA-403': (c) => c.profil === 'ozel_pdks',
-    // halkayit/index.php kendi <style>'ında iframe için 58px + güvenli alan bırakır;
-    // çubuk kutusu ~63.6px, yükseltilmiş daire ~68.6px → iframe'in altı çubuğun arkasında.
-    'BN-HKS-IFRAME-ORTUSME': (c) => c.sayfa === 'hks',
-};
+// Sprint Alt-Menü-01 ile dördü de düzeldi ve listeden çıkarıldı:
+//   BN-HKS-IKI-AKTIF      → nav_aktif_anahtar() (sidebar + çubuk TEK kaynak)
+//   BN-MALIYET-AKTIF-YOK  → aynı fonksiyon: maliyet_* → 'rapor'
+//   BN-PDKS-ANASAYFA-403  → Ana Sayfa hedefi first_allowed_page(); o da yoksa çubuk basılmaz
+//   BN-HKS-IFRAME-ORTUSME → halkayit/index.php padding'i var(--bn-h)
+const BILINEN = {};
 
 // Ekranlar: < 768 çubuk GÖRÜNÜR; 768–899 tablet (topbar), ≥ 900 sidebar
 const EKRANLAR = [
@@ -139,6 +121,10 @@ function ok(grup, bag, ad, kosul, ipucu, bilinenId) {
 let bag_ctx = {};
 
 const r1 = (n) => Math.round(n * 10) / 10;
+// Anahtar → tam ad (aria-label) — "Diğer" aktifken aria-label'da geçer
+const SAYFA_ADI = { records: 'Yüklemeler', cikma: 'Çıkmalar', beyan: 'Beyanlar', kantar: 'Kantar', hks: 'Hal Bildirimi',
+    rapor: 'Raporlar', mstok: 'Malzeme Stok', hesap: 'Hesap', ptak: 'Personel Takibi', defs: 'Tanımlar',
+    users: 'Kullanıcılar', roles: 'Roller', audit: 'İşlem Geçmişi', backup: 'Veritabanı Yedekleri' };
 
 // Göreli href'i uygulama köküne göre yola çevir (base_url '../' dahil)
 function uygulamaYolu(href, sayfaYolu) {
@@ -177,7 +163,13 @@ function olc(barSel) {
     // Etkileşimli öğeler
     const aktifMi = (el) => el.getAttribute('aria-current') === 'page' || el.getAttribute('aria-current') === 'true'
         || /(^|\s)(active|is-active|aktif)(\s|$)/.test(el.className || '');
-    out.linkler = [...bar.querySelectorAll('a[href]')].map(a => ({ href: a.getAttribute('href'), metin: a.textContent.trim().replace(/\s+/g, ' ') }));
+    // gorunur: gizli (Diğer'e düşmüş) aday bağlantılar da DOM'dadır — izin
+    // değişmezi HEPSİNE uygulanır, "bölüm bağlantısı aktif" yalnız görünenlere.
+    out.linkler = [...bar.querySelectorAll('a[href]')].map(a => {
+        const r = a.getBoundingClientRect();
+        return { href: a.getAttribute('href'), metin: a.textContent.trim().replace(/\s+/g, ' '),
+                 gorunur: getComputedStyle(a).display !== 'none' && r.width > 0 && r.height > 0 };
+    });
     out.hedefler = [...bar.querySelectorAll('a[href], button, [role="button"], [role="tab"], [tabindex]:not([tabindex="-1"])')]
         .filter(el => {
             const s = getComputedStyle(el);
@@ -231,6 +223,9 @@ function olc(barSel) {
     // .container alt boşluğu
     const ct = document.querySelector('.container');
     out.containerPB = ct ? getComputedStyle(ct).paddingBottom : null;
+    out.bnH = getComputedStyle(document.body).getPropertyValue('--bn-h').trim();
+    out.etiketPx = [...bar.querySelectorAll('.bn-label')].filter(l => l.getClientRects().length)
+        .map(l => parseFloat(getComputedStyle(l).fontSize));
     return out;
 }
 
@@ -266,6 +261,8 @@ function guvenliAlanKurallari(barSel) {
         const ctx = await browser.newContext({
             viewport: { width: ekran.w, height: ekran.h },
             deviceScaleFactor: 1, colorScheme: secenek.koyu ? 'dark' : 'light',
+            javaScriptEnabled: secenek.js !== false,
+            reducedMotion: secenek.azHareket ? 'reduce' : 'no-preference',
             // Mobil genişlikte gerçek telefon gibi: meta viewport + kaplama (overlay) kaydırma çubuğu.
             // (Aksi hâlde masaüstü kaydırma çubuğu + html{scrollbar-gutter:stable} 15px yer kaplar.)
             isMobile: ekran.w <= MOBIL_MAX, hasTouch: ekran.w <= MOBIL_MAX,
@@ -278,6 +275,7 @@ function guvenliAlanKurallari(barSel) {
             const cdp = await ctx.newCDPSession(page);
             await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, right: 0, bottom: secenek.guvenliAlan } });
         }
+        if (secenek.tohum) await page.addInitScript(secenek.tohum.fn, secenek.tohum.arg);
         await page.goto('file://' + path.join(OUT, kayit.dosya));
         await page.waitForTimeout(400);   // animasyon/geçişler bitsin — erken ölçüm yanıltır
         return { ctx, page, hatalar };
@@ -295,6 +293,22 @@ function guvenliAlanKurallari(barSel) {
         const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
         const m = await page.evaluate(olc, TASARIM.barSel);
 
+        const P = M.profiller[k.profil];
+        if (!P.cubuk_beklenen) {
+            // Ana Sayfa hedefi (dashboard.read / first_allowed_page()) de izinli aday
+            // sayfa da yok: çubuk HİÇ basılmaz (tek bağlantısı 403 olurdu) ve alt
+            // boşluk kalkar.
+            const yok = await page.evaluate(() => ({
+                bnYok: document.body.classList.contains('bn-yok'),
+                pb: parseFloat(getComputedStyle(document.querySelector('.container')).paddingBottom),
+            }));
+            ok('A', bag, 'gidilecek izinli sayfa yok → çubuk BASILMADI', !m.var, `${TASARIM.barSel} var`);
+            ok('A', bag, 'çubuksuz: body.bn-yok + alt boşluk kalktı (≤ 16px)', yok.bnYok && yok.pb <= 16,
+                `bn-yok=${yok.bnYok}, .container padding-bottom ${yok.pb}px`);
+            ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+            await ctx.close();
+            continue;
+        }
         ok('A', bag, 'çubuk DOM\'da var', m.var, `${TASARIM.barSel} bulunamadı`);
         if (!m.var) { await ctx.close(); continue; }
 
@@ -320,7 +334,7 @@ function guvenliAlanKurallari(barSel) {
         const aktifYollar = aktifler.map(h => h.href ? uygulamaYolu(h.href, k.yol) : `<${h.tag}>`);
         ok('A', bag, 'en fazla BİR öğe aktif', aktifler.length <= 1,
             `${aktifler.length} aktif öğe: ${aktifYollar.join(', ')}`, 'BN-HKS-IKI-AKTIF');
-        const bolumLinki = m.linkler.some(l => uygulamaYolu(l.href, k.yol) === k.bolum);
+        const bolumLinki = m.linkler.some(l => l.gorunur && uygulamaYolu(l.href, k.yol) === k.bolum);
         if (bolumLinki) {
             ok('A', bag, `bölüm bağlantısı (${k.bolum}) aktif`,
                 aktifler.length >= 1 && aktifYollar.includes(k.bolum),
@@ -353,25 +367,50 @@ function guvenliAlanKurallari(barSel) {
                 `değişken #123456 yapıldı, çubuk renkleri: ${m2.renkler}`);
         }
 
-        // B — güncel tasarım
-        const etiketler = await page.$$eval(`${TASARIM.barSel} ${TASARIM.itemSel} ${TASARIM.labelSel}`, els => els.map(e => e.textContent.trim()));
-        const bek = TASARIM.etiketler[k.profil];
-        ok('B', bag, `etiketler/sıra = [${bek.join(', ')}]`, JSON.stringify(etiketler) === JSON.stringify(bek),
-            `ölçülen [${etiketler.join(', ')}]`);
-        const bAktif = await page.$$eval(`${TASARIM.barSel} ${TASARIM.itemSel}.${TASARIM.aktifSinif}`, els => els.map(e => e.getAttribute('href')));
-        const bAktifYol = bAktif.map(h => uygulamaYolu(h, k.yol)).sort();
-        const bekAktif = [...(TASARIM.aktifHedef[k.sayfa] || [])].filter(y => m.linkler.some(l => uygulamaYolu(l.href, k.yol) === y)).sort();
-        ok('B', bag, `.${TASARIM.aktifSinif} öğeleri = [${bekAktif.join(', ')}]`, JSON.stringify(bAktifYol) === JSON.stringify(bekAktif),
-            `ölçülen [${bAktifYol.join(', ')}]`);
-        const ariaSay = m.hedefler.filter(h => h.ariaCurrent).length;
-        ok('B', bag, `aria-current ${TASARIM.ariaCurrentKullanilir ? 'kullanılıyor' : 'kullanılmıyor'}`,
-            TASARIM.ariaCurrentKullanilir ? ariaSay > 0 : ariaSay === 0, `${ariaSay} öğede aria-current`);
-        const yuk = await page.$$eval(`${TASARIM.barSel} ${TASARIM.yukseltilmis.sel}`, els => els.map(e => [e.getAttribute('href'), e.textContent.trim()]));
-        const yukBek = profilIzinli(k.profil)[TASARIM.yukseltilmis.hedef];
-        ok('B', bag, `yükseltilmiş orta düğme ${yukBek ? 'VAR' : 'YOK'}`,
-            yukBek ? (yuk.length === 1 && uygulamaYolu(yuk[0][0], k.yol) === TASARIM.yukseltilmis.hedef && yuk[0][1].includes(TASARIM.yukseltilmis.etiket)) : yuk.length === 0,
-            `ölçülen ${JSON.stringify(yuk)}`);
-
+        // B — güncel tasarım (@390: 4 slot görünür)
+        const d = await page.evaluate((T) => {
+            const bar = document.querySelector(T.barSel);
+            const gor = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+            const home = bar.querySelector(T.homeSel);
+            const more = bar.querySelector(T.moreSel);
+            const cur = [...bar.querySelectorAll('[aria-current="page"]')].filter(gor);
+            return {
+                home: home ? home.getAttribute('href') : null,
+                homeAktif: !!home && (home.getAttribute('aria-current') === 'page' || home.classList.contains(T.aktifSinif)),
+                slotlar: [...bar.querySelectorAll(T.slotSel)].filter(gor).map(a => a.getAttribute('data-nav')),
+                digerGorunur: gor(more),
+                digerLabel: more ? more.getAttribute('aria-label') : null,
+                digerIkon: more ? more.querySelector('img.ni').getAttribute('src') : null,
+                aktifler: cur.map(el => ({ nav: el.getAttribute('data-nav') || (el.id === 'bnMore' ? 'more' : '?'),
+                                          href: el.getAttribute('href'), sinif: el.classList.contains(T.aktifSinif) })),
+                isActiveSay: [...bar.querySelectorAll('.' + T.aktifSinif)].filter(gor).length,
+                imgler: [...bar.querySelectorAll('img')].map(i => [i.getAttribute('width'), i.getAttribute('height'), i.getAttribute('alt'), i.getAttribute('src')]),
+            };
+        }, TASARIM);
+        const homeBek = P.home_hedef;
+        ok('B', bag, `Ana Sayfa hedefi = ${homeBek ?? 'YOK (çizilmez)'}`,
+            homeBek === null ? d.home === null : (d.home !== null && uygulamaYolu(d.home, k.yol) === homeBek),
+            `ölçülen ${d.home} (dashboard.read ? index.php : first_allowed_page())`);
+        ok('B', bag, 'Ana Sayfa YALNIZ index.php\'de aktif', d.homeAktif === (k.sayfa === 'home'), `homeAktif=${d.homeAktif}`);
+        const bekSlot = Math.min(4, P.adaylar.length);
+        ok('B', bag, `@390 görünen slot sayısı ${bekSlot}`, d.slotlar.length === bekSlot, `[${d.slotlar.join(', ')}]`);
+        ok('B', bag, 'slotlar yalnız izinli adaylar, tekrar yok',
+            d.slotlar.every(x => P.adaylar.includes(x)) && new Set(d.slotlar).size === d.slotlar.length, `[${d.slotlar.join(', ')}]`);
+        ok('B', bag, `"Diğer" ${P.adaylar.length > 4 ? 'VAR' : 'YOK'} (@390, ${P.adaylar.length} aday)`, d.digerGorunur === (P.adaylar.length > 4));
+        // Tek aktif öğe: aria-current="page" + .is-active; hangisi olacağı sayfanın bölümünden
+        const bekAktif = k.anahtar === 'home' ? (homeBek === 'index.php' ? 'home' : null)
+            : (k.anahtar && P.adaylar.includes(k.anahtar) ? k.anahtar : null);
+        const olcAktif = d.aktifler.length === 1 ? (d.aktifler[0].nav === 'more' ? 'more' : d.aktifler[0].nav) : null;
+        const aktifDogru = bekAktif === null ? d.aktifler.length === 0
+            : d.aktifler.length === 1 && d.aktifler[0].sinif
+              && (olcAktif === bekAktif || (olcAktif === 'more' && d.digerLabel.includes(SAYFA_ADI[bekAktif])));
+        ok('B', bag, `tek aktif öğe (aria-current="page") = ${bekAktif ?? 'hiçbiri'}`, aktifDogru && d.isActiveSay === d.aktifler.length,
+            `aktif: ${JSON.stringify(d.aktifler)}, .is-active görünen ${d.isActiveSay}, Diğer "${d.digerLabel}"`);
+        if (k.sayfa === 'hks') ok('B', bag, 'Hal Kayıt: YALNIZ Bildirim (hks) aktif — Ana Sayfa değil', olcAktif === 'hks' && !d.homeAktif, JSON.stringify(d.aktifler));
+        if (k.sayfa === 'maliyet') ok('B', bag, 'maliyet_*: Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Raporlar')), JSON.stringify(d.aktifler));
+        ok('B', bag, 'ikonlar <img width=42/18 alt=""> assets/nav-icons/*.svg?v=',
+            d.imgler.every(([w, h, alt, src]) => w === h && ['42', '18'].includes(w) && alt === '' && /assets\/nav-icons\/[a-z]+\.svg\?v=\d+$/.test(src)),
+            JSON.stringify(d.imgler.filter(([w, h, alt, src]) => !(w === h && alt === '' && /nav-icons/.test(src)))));
         await ctx.close();
     }
 
@@ -387,6 +426,9 @@ function guvenliAlanKurallari(barSel) {
         const hks = sayfalar.find(s => s.sayfa === 'hks');
         if (hks) temsilci.push(hks);
     }
+    // Tam 4 adaylı rolde kantar 4. slottadır: dar ekranda "Diğer" onu taşımalı
+    const dortKantar = M.sayfalar.find(s => s.profil === 'dort_sayfa' && s.sayfa === 'kantar');
+    if (dortKantar) temsilci.push(dortKantar);
     const olcumTablosu = [];
     for (const k of temsilci) {
         for (const ekran of EKRANLAR) {
@@ -395,6 +437,14 @@ function guvenliAlanKurallari(barSel) {
             const { ctx, page, hatalar } = await ac(k, ekran);
             let m = await page.evaluate(olc, TASARIM.barSel);
             const mobil = ekran.w <= MOBIL_MAX;
+            const P = M.profiller[k.profil];
+            if (!P.cubuk_beklenen) {
+                ok('A', bag, 'çubuk basılmadı (izinli hedef yok)', !m.var, 'çubuk var');
+                ok('A', bag, 'yatay taşma yok', m.docScrollW <= m.docClientW + 1, `scrollWidth ${m.docScrollW} > clientWidth ${m.docClientW}`);
+                ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+                await ctx.close();
+                continue;
+            }
 
             // A — kırılım noktası görünürlüğü
             if (!mobil) {
@@ -455,9 +505,56 @@ function guvenliAlanKurallari(barSel) {
                 const barPos = await page.evaluate((s) => document.querySelector(s).getBoundingClientRect().bottom, TASARIM.barSel);
                 ok('A', bag, 'kaydırmadan sonra çubuk hâlâ altta', Math.abs(barPos - m.vh) <= 1, `alt ${r1(barPos)} / ${m.vh}`);
 
-                // B — güncel yükseklik
+                // B — güncel yükseklik + --bn-h sözleşmesi
                 ok('B', bag, `çubuk yüksekliği ${TASARIM.yukseklik[0]}–${TASARIM.yukseklik[1]}px`,
                     m.rect.height >= TASARIM.yukseklik[0] && m.rect.height <= TASARIM.yukseklik[1], `ölçülen ${r1(m.rect.height)}px`);
+                ok('B', bag, '--bn-h = ölçülen çubuk kutusu (±1.5px) ve görsel üst kutunun içinde',
+                    Math.abs(parseFloat(m.bnH) - m.rect.height) <= 1.5 && m.gorselUst >= m.rect.top - 1,
+                    `--bn-h "${m.bnH}", kutu ${r1(m.rect.height)}px, görsel üst ${r1(m.vh - m.gorselUst)}px`);
+                // B — slot sayısı / Diğer / tek aktif (genişliğe göre)
+                const g = await page.evaluate((T) => {
+                    const bar = document.querySelector(T.barSel);
+                    const gor = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+                    const more = bar.querySelector(T.moreSel);
+                    return {
+                        slotlar: [...bar.querySelectorAll(T.slotSel)].filter(gor).map(a => a.getAttribute('data-nav')),
+                        diger: gor(more), digerLabel: more ? more.getAttribute('aria-label') : '',
+                        cur: [...bar.querySelectorAll('[aria-current="page"]')].filter(gor).map(el => el.getAttribute('data-nav') || el.id),
+                    };
+                }, TASARIM);
+                const n = ekran.w < TASARIM.slotEsik ? 3 : 4;
+                ok('B', bag, `görünen slot = ${Math.min(n, P.adaylar.length)} (${ekran.w < 390 ? '<390 → 3' : '≥390 → 4'})`,
+                    g.slotlar.length === Math.min(n, P.adaylar.length), `[${g.slotlar.join(', ')}]`);
+                ok('B', bag, `"Diğer" ${P.adaylar.length > n ? 'görünür' : 'yok'} (${P.adaylar.length} aday)`, g.diger === (P.adaylar.length > n));
+                const bek = k.anahtar === 'home' ? (P.home_hedef === 'index.php' ? 'home' : null)
+                    : (k.anahtar && P.adaylar.includes(k.anahtar) ? k.anahtar : null);
+                const tamam = bek === null ? g.cur.length === 0
+                    : g.cur.length === 1 && (g.cur[0] === bek || (g.cur[0] === 'bnMore' && !g.slotlar.includes(bek) && g.digerLabel.includes(SAYFA_ADI[bek])));
+                ok('B', bag, `tek aria-current = ${bek ?? 'hiçbiri'} (slotta değilse "Diğer" onu taşır)`, tamam,
+                    `aria-current: [${g.cur.join(', ')}], Diğer "${g.digerLabel}", slotlar [${g.slotlar.join(', ')}]`);
+                ok('B', bag, `etiket yazısı ≥ ${TASARIM.minEtiketPx}px`, m.etiketPx.length > 0 && Math.min(...m.etiketPx) >= TASARIM.minEtiketPx,
+                    `boyutlar: ${m.etiketPx.join(', ')}`);
+                // B — --bn-h'a bağlı öğeler çubuğun arkasında kalmıyor
+                const bag2 = await page.evaluate((barSel) => {
+                    const bar = document.querySelector(barSel);
+                    let ust = bar.getBoundingClientRect().top;
+                    bar.querySelectorAll('*').forEach(el => { const r = el.getBoundingClientRect(); if (r.width && r.height) ust = Math.min(ust, r.top); });
+                    const bb = document.createElement('div');
+                    bb.className = 'bb-bar'; bb.textContent = 'Toplu bildirim test';
+                    document.body.appendChild(bb);
+                    const bbAlt = bb.getBoundingClientRect().bottom;
+                    bb.remove();
+                    const kayit = document.createElement('div');
+                    kayit.setAttribute('data-record-id', '1');
+                    document.body.appendChild(kayit);
+                    const smb = parseFloat(getComputedStyle(kayit).scrollMarginBottom);
+                    kayit.remove();
+                    return { ust, bbAlt, smb, barH: bar.getBoundingClientRect().height };
+                }, TASARIM.barSel);
+                ok('B', bag, '.bb-bar (toplu bildirim şeridi) çubuğun üstünde', bag2.bbAlt <= bag2.ust + 1,
+                    `.bb-bar alt ${r1(bag2.bbAlt)}px > çubuk görsel üst ${r1(bag2.ust)}px`);
+                ok('B', bag, '[data-record-id] scroll-margin-bottom ≥ çubuk', bag2.smb >= bag2.barH,
+                    `scroll-margin-bottom ${bag2.smb}px < çubuk ${r1(bag2.barH)}px`);
                 olcumTablosu.push({ bag, yukseklik: r1(m.rect.height), gorselUst: r1(m.vh - m.gorselUst),
                     hedefler: m.hedefler.map(h => `${h.metin}:${r1(h.w)}×${r1(h.h)}`).join(' '),
                     icerikPayi: r1(icerik.gorselUst - icerik.sonAlt) });
@@ -481,6 +578,7 @@ function guvenliAlanKurallari(barSel) {
     for (const k of temsilci) {
         bag_ctx = { profil: k.profil, sayfa: k.sayfa, w: 390 };
         const bag = `${k.profil}/${k.sayfa}@390+34`;
+        if (!M.profiller[k.profil].cubuk_beklenen) continue;   // çubuk yok (bkz. 1. bölüm)
         const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 }, { guvenliAlan: 34 });
         const kural = await page.evaluate(guvenliAlanKurallari, TASARIM.barSel);
         ok('A', bag, 'çubuk kuralında env(safe-area-inset-bottom) var', kural.bar.length > 0,
@@ -507,6 +605,304 @@ function guvenliAlanKurallari(barSel) {
             const f = path.join(SHOTS, `390_${k.profil}_${k.sayfa}_guvenli-alan-34.png`);
             await page.screenshot({ path: f }); shots.push(f);
         }
+        await ctx.close();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 4) SUNUCU SIRASI (JS KAPALI) — soğuk başlangıç + 'asya_nav' çerezi
+    // ─────────────────────────────────────────────────────────────────────
+    console.log('\n=== 4) Sunucu sırası (JS kapalı): soğuk başlangıç + asya_nav çerezi ===');
+    const sunucuOlc = (T) => {
+        const bar = document.querySelector(T.barSel);
+        const ovl = document.querySelector(T.sheetOvlSel);
+        return {
+            slotlar: [...bar.querySelectorAll(T.slotSel)].filter(a => !a.hidden).map(a => a.getAttribute('data-nav')),
+            gizli: [...bar.querySelectorAll(T.slotSel)].filter(a => a.hidden).map(a => a.getAttribute('data-nav')),
+            tumLink: [...bar.querySelectorAll('a[href]'), ...(ovl ? ovl.querySelectorAll('a[href]') : [])].map(a => a.getAttribute('href')),
+            karolar: ovl ? [...ovl.querySelectorAll('.bn-tile')].map(t => t.getAttribute('data-nav')) : null,
+            sabit: ovl ? [...ovl.querySelectorAll('.bn-tile.pinned')].map(t => t.getAttribute('data-nav')) : [],
+            dataSabit: bar.getAttribute('data-sabit'),
+            html: bar.outerHTML + (ovl ? ovl.outerHTML : ''),
+        };
+    };
+    const ilkSayfalar = Object.keys(M.profiller).map(p => M.sayfalar.find(s => s.profil === p && !s.senaryo)).filter(Boolean);
+    for (const k of [...ilkSayfalar, ...M.sayfalar.filter(s => s.senaryo)]) {
+        const P = M.profiller[k.profil];
+        if (!P.cubuk_beklenen) continue;
+        bag_ctx = { profil: k.profil, sayfa: k.sayfa, w: 390 };
+        const bag = `${k.profil}/${k.sayfa}`;
+        const { ctx, page } = await ac(k, { w: 390, h: 844 }, { js: false });
+        const d = await page.evaluate(sunucuOlc, TASARIM);
+        const bekSlot = k.senaryo ? k.senaryo.slotlar : P.soguk_slotlar;
+        ok('B', bag, `sunucu slot sırası = [${bekSlot.join(', ')}]${k.senaryo ? ` (çerez "${k.senaryo.cerez.slice(0, 40)}…")` : ' (soğuk başlangıç)'}`,
+            JSON.stringify(d.slotlar) === JSON.stringify(bekSlot), `ölçülen [${d.slotlar.join(', ')}]`);
+        ok('B', bag, 'gizli adaylar + slotlar = izinli adayların TAMAMI',
+            JSON.stringify([...d.slotlar, ...d.gizli].sort()) === JSON.stringify([...P.adaylar].sort()),
+            `slot [${d.slotlar}] gizli [${d.gizli}] beklenen [${P.adaylar}]`);
+        const kotu = d.tumLink.map(h => uygulamaYolu(h, k.yol)).filter(y => !P.izinli[y]);
+        ok('B', bag, 'çubuk + "Diğer" sayfasındaki HER bağlantı izinli', kotu.length === 0, kotu.join(', '));
+        if (d.karolar !== null) {
+            ok('B', bag, '"Diğer" yalnız izinli sayfaları listeler (hepsi, fazlası yok)',
+                JSON.stringify(d.karolar) === JSON.stringify(P.adaylar), `karolar [${d.karolar}] beklenen [${P.adaylar}]`);
+        }
+        if (k.senaryo) {
+            ok('B', bag, `sabitlenen = [${k.senaryo.sabit.join(', ')}] (çerez p: → karo rozeti + data-sabit)`,
+                JSON.stringify(d.sabit) === JSON.stringify(k.senaryo.sabit) && d.dataSabit === k.senaryo.sabit.join(','),
+                `karo [${d.sabit}], data-sabit "${d.dataSabit}"`);
+            if (k.senaryo.ad === 'cerez_sahte') {
+                const yasak = ['users.php', 'roles.php', 'audit.php', 'admin_db_backups.php', 'xyz', '../index'].filter(x => d.html.includes(x));
+                ok('B', bag, 'sahte çerezdeki yasak/bilinmeyen anahtarlar HİÇ çizilmedi', yasak.length === 0, yasak.join(', '));
+            }
+        }
+        await ctx.close();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 5) DAVRANIŞ (JS) — sıralama, histerezis, Diğer sayfası, sabitleme, çerez
+    // ─────────────────────────────────────────────────────────────────────
+    console.log('\n=== 5) Davranış: sıralama / Diğer / Sabitle / çerez / tema / hareket ===');
+    const sayfaBul = (p, s) => M.sayfalar.find(x => x.profil === p && x.sayfa === s);
+    const gorunenSlotlar = (page) => page.evaluate((T) => [...document.querySelectorAll(T.barSel + ' ' + T.slotSel)]
+        .filter(a => getComputedStyle(a).display !== 'none').map(a => a.getAttribute('data-nav')), TASARIM);
+    const depo = (page, anahtar) => page.evaluate((k) => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return 'HATA'; } }, anahtar);
+    const tohum = (kayitlar) => ({
+        fn: (arg) => { try { if (!localStorage.getItem(arg.k)) localStorage.setItem(arg.k, JSON.stringify(arg.v)); } catch (e) {} },
+        arg: { k: 'asya_nav_kullanim_1', v: kayitlar },
+    });
+    const ziyaret = (sayilar) => {
+        const simdi = Date.now(), out = [];
+        for (const [k, n] of Object.entries(sayilar)) for (let i = 0; i < n; i++) out.push([k, simdi - (i + 1) * 60 * 1000]);   // dakikalar önce: sönüm ihmal edilebilir
+        return out.sort((a, b) => a[1] - b[1]);
+    };
+
+    // 5a — soğuk başlangıç: Ana Sayfa ziyareti SAYILMAZ, sıra değişmez
+    {
+        const k = sayfaBul('operator', 'home'); bag_ctx = { profil: 'operator', sayfa: 'home', w: 390 };
+        const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
+        const sl = await gorunenSlotlar(page);
+        ok('B', 'operator/home', 'soğuk başlangıç (çerez + kullanım yok): Yüklemeler, Bildirim, Personel, Raporlar',
+            JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'rapor']), `[${sl}]`);
+        const kul = await depo(page, 'asya_nav_kullanim_1');
+        ok('B', 'operator/home', 'Ana Sayfa ziyareti sayılmadı', Array.isArray(kul) && kul.length === 0, JSON.stringify(kul));
+        ok('A', 'operator/home', 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
+    }
+    // 5b — ziyaret kaydı + yeniden sıralama (en zayıf slotun YERİNE girer)
+    {
+        const k = sayfaBul('operator', 'kantar'); bag_ctx = { profil: 'operator', sayfa: 'kantar', w: 390 };
+        const { ctx, page } = await ac(k, { w: 390, h: 844 });
+        const kul = await depo(page, 'asya_nav_kullanim_1');
+        ok('B', 'operator/kantar', 'ziyaret cihaza yazıldı (asya_nav_kullanim_<uid>)',
+            Array.isArray(kul) && kul.length === 1 && kul[0][0] === 'kantar' && Math.abs(kul[0][1] - Date.now()) < 60000, JSON.stringify(kul));
+        const sl = await gorunenSlotlar(page);
+        ok('B', 'operator/kantar', 'ilk ziyaret (1 > 0×1,25+0,5) en zayıf slotu (Raporlar) yerinde değiştirdi',
+            JSON.stringify(sl) === JSON.stringify(['records', 'hks', 'ptak', 'kantar']), `[${sl}]`);
+        await page.reload(); await page.waitForTimeout(400);
+        const kul2 = await depo(page, 'asya_nav_kullanim_1');
+        ok('B', 'operator/kantar', 'aynı bölümde 30 dk içinde yenileme TEK ziyaret', Array.isArray(kul2) && kul2.length === 1, JSON.stringify(kul2));
+        await ctx.close();
+    }
+    // 5c — histerezis: puan > en zayıf × 1,25 + 0,5 olmadıkça yer değişmez
+    for (const [ad, sayilar, bek] of [
+        ['kantar 2 > rapor 1×1,25+0,5 → girer (rapor\'un yerine)', { records: 3, hks: 3, ptak: 3, rapor: 1, kantar: 2 }, ['records', 'hks', 'ptak', 'kantar']],
+        ['kantar 1 ≤ rapor 1×1,25+0,5 → girmez', { records: 3, hks: 3, ptak: 3, rapor: 1, kantar: 1 }, ['records', 'hks', 'ptak', 'rapor']],
+        // Eşik tam 1,25 çarpanına duyarlı: 3 > 2×1,25+0,5 (=3) DEĞİL; çarpan 1 olsaydı girerdi
+        ['kantar 3 ≤ rapor 2×1,25+0,5 = 3 → girmez (sınır)', { records: 4, hks: 4, ptak: 4, rapor: 2, kantar: 3 }, ['records', 'hks', 'ptak', 'rapor']],
+        // beyan en zayıfın (rapor, eşit puanda en düşük öncelik) yerine, mstok
+        // sonraki en zayıfın (ptak) yerine girer; records/hks YERİNİ korur.
+        ['çok kullanılanlar en zayıfların yerine girer, kalanlar yerini korur', { beyan: 6, mstok: 5, records: 1 }, ['records', 'hks', 'mstok', 'beyan']],
+    ]) {
+        const k = sayfaBul('operator', 'home'); bag_ctx = { profil: 'operator', sayfa: 'home', w: 390 };
+        const { ctx, page } = await ac(k, { w: 390, h: 844 }, { tohum: tohum(ziyaret(sayilar)) });
+        const sl = await gorunenSlotlar(page);
+        ok('B', 'operator/home', `histerezis: ${ad}`, JSON.stringify(sl) === JSON.stringify(bek), `[${sl}] beklenen [${bek}]`);
+        await ctx.close();
+    }
+    // 5d — "Diğer" sayfası: aç/kapat (Esc, ✕, arka plan), odak dönüşü, odak tuzağı, yalnız izinli sayfalar
+    {
+        const k = sayfaBul('admin', 'home'); bag_ctx = { profil: 'admin', sayfa: 'home', w: 390 };
+        const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
+        const bag = 'admin/home Diğer';
+        const durum = () => page.evaluate((T) => {
+            const o = document.querySelector(T.sheetOvlSel), m = document.querySelector(T.moreSel);
+            const bar = document.querySelector(T.barSel).getBoundingClientRect();
+            const ust = document.elementFromPoint(bar.left + bar.width / 2, bar.bottom - 20);
+            return { acik: !o.hidden && getComputedStyle(o).display !== 'none', exp: m.getAttribute('aria-expanded'),
+                     odak: document.activeElement ? (document.activeElement.id || document.activeElement.className) : null,
+                     odakIcinde: o.contains(document.activeElement), z: getComputedStyle(o).zIndex, cubukUstu: o.contains(ust),
+                     karolar: [...o.querySelectorAll('.bn-tile .go')].map(a => a.getAttribute('href')) };
+        }, TASARIM);
+        await page.click(TASARIM.moreSel); await page.waitForTimeout(400);
+        let d = await durum();
+        ok('B', bag, 'Diğer tıklanınca açılır (aria-expanded=true, odak Kapat\'ta)', d.acik && d.exp === 'true' && d.odak === 'bnSheetClose', JSON.stringify(d));
+        ok('B', bag, 'alt sayfa z-index ≥ 600 ve çubuğun ÜSTÜNDE', +d.z >= 600 && d.cubukUstu, `z=${d.z}, üstte=${d.cubukUstu}`);
+        const P = M.profiller.admin;
+        const karoYol = d.karolar.map(h => uygulamaYolu(h, k.yol));
+        ok('B', bag, 'karolar = izinli adayların sayfaları (sidebar sırası)',
+            JSON.stringify(karoYol) === JSON.stringify(P.adaylar.map(x => M.anahtar_sayfa[x])), `[${karoYol}]`);
+        for (let i = 0; i < 25; i++) await page.keyboard.press('Tab');
+        d = await durum();
+        ok('B', bag, 'Tab ile odak alt sayfanın içinde kalır', d.odakIcinde, `odak: ${d.odak}`);
+        await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+        d = await durum();
+        ok('B', bag, 'Esc kapatır, odak Diğer düğmesine döner', !d.acik && d.exp === 'false' && d.odak === 'bnMore', JSON.stringify({ acik: d.acik, exp: d.exp, odak: d.odak }));
+        await page.click(TASARIM.moreSel); await page.waitForTimeout(350);
+        await page.click('#bnSheetClose'); await page.waitForTimeout(100);
+        d = await durum();
+        ok('B', bag, '✕ kapatır, odak Diğer\'e döner', !d.acik && d.odak === 'bnMore', JSON.stringify({ acik: d.acik, odak: d.odak }));
+        await page.click(TASARIM.moreSel); await page.waitForTimeout(350);
+        await page.mouse.click(10, 10); await page.waitForTimeout(100);
+        d = await durum();
+        ok('B', bag, 'arka plana dokunmak kapatır', !d.acik, JSON.stringify({ acik: d.acik }));
+        if (!NO_SHOTS) {
+            await page.click(TASARIM.moreSel); await page.waitForTimeout(450);
+            const f = path.join(SHOTS, '390_admin_home_diger.png'); await page.screenshot({ path: f }); shots.push(f);
+            await page.keyboard.press('Escape');
+        }
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
+    }
+    // 5e — Sabitle: en çok 4, sabitlenen önce gelir ve SIRALANMAZ, anında uygulanır, kalıcı
+    {
+        const k = sayfaBul('admin', 'home'); bag_ctx = { profil: 'admin', sayfa: 'home', w: 390 };
+        const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
+        const bag = 'admin/home Sabitle';
+        await page.click(TASARIM.moreSel); await page.waitForTimeout(350);
+        await page.click('#bnPinBtn');
+        const pb = await page.evaluate(() => { const b = document.getElementById('bnPinBtn'); return [b.getAttribute('aria-pressed'), b.textContent.trim()]; });
+        ok('B', bag, 'Sabitle modu açılır (aria-pressed=true, "Bitti")', pb[0] === 'true' && pb[1] === 'Bitti', JSON.stringify(pb));
+        const url0 = page.url();
+        for (const x of ['backup', 'audit', 'roles', 'users']) {
+            await page.click(`.bn-tile[data-nav="${x}"] .go`); await page.waitForTimeout(60);
+        }
+        ok('B', bag, 'sabitle modunda karoya dokunmak sayfayı AÇMAZ', page.url() === url0, page.url());
+        let sl = await gorunenSlotlar(page);
+        ok('B', bag, '4 sabit anında slotlara girdi (seçilme sırasıyla)', JSON.stringify(sl) === JSON.stringify(['backup', 'audit', 'roles', 'users']), `[${sl}]`);
+        ok('B', bag, 'sabitler cihaza yazıldı (asya_nav_sabit_<uid>)',
+            JSON.stringify(await depo(page, 'asya_nav_sabit_1')) === JSON.stringify(['backup', 'audit', 'roles', 'users']));
+        await page.click('.bn-tile[data-nav="defs"] .go'); await page.waitForTimeout(60);
+        const msg = await page.textContent('#bnSheetMsg');
+        const pinli = await page.$$eval('.bn-tile.pinned', els => els.map(e => e.getAttribute('data-nav')));
+        ok('B', bag, '5. sabit reddedilir ve nedeni yazılır', !pinli.includes('defs') && /En çok 4/.test(msg), `mesaj "${msg}", sabit [${pinli}]`);
+        await page.click('.bn-tile[data-nav="backup"] .go'); await page.waitForTimeout(60);
+        sl = await gorunenSlotlar(page);
+        const sab = await depo(page, 'asya_nav_sabit_1');
+        ok('B', bag, 'sabitleme kaldırılır', JSON.stringify(sab) === JSON.stringify(['audit', 'roles', 'users']) && sl.slice(0, 3).join() === 'audit,roles,users', `sabit ${JSON.stringify(sab)}, slot [${sl}]`);
+        await page.click('#bnPinBtn');
+        await page.keyboard.press('Escape');
+        await page.reload(); await page.waitForTimeout(400);
+        sl = await gorunenSlotlar(page);
+        ok('B', bag, 'yeniden yüklemede sabitler önde (kullanımdan bağımsız)', sl.slice(0, 3).join() === 'audit,roles,users', `[${sl}]`);
+        await page.setViewportSize({ width: 360, height: 740 }); await page.waitForTimeout(200);
+        sl = await gorunenSlotlar(page);
+        ok('B', bag, '360px: yalnız ilk 3 slot görünür', sl.join() === 'audit,roles,users', `[${sl}]`);
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
+    }
+    // 5f — dar ekran: 4. slottaki güncel sayfayı "Diğer" taşır; genişleyince slota döner
+    {
+        const k = sayfaBul('dort_sayfa', 'kantar'); bag_ctx = { profil: 'dort_sayfa', sayfa: 'kantar', w: 360 };
+        const { ctx, page, hatalar } = await ac(k, { w: 360, h: 740 });
+        const bag = 'dort_sayfa/kantar';
+        const oku = () => page.evaluate((T) => {
+            const m = document.querySelector(T.moreSel);
+            const gor = (el) => !!el && getComputedStyle(el).display !== 'none';
+            return { diger: gor(m), digerCur: m.getAttribute('aria-current'), ikon: m.querySelector('img.ni').getAttribute('src'),
+                     rozet: !m.querySelector('.more-badge').hidden, etiket: m.querySelector('.bn-label').textContent,
+                     kantarCur: document.querySelector('[data-nav="kantar"]').getAttribute('aria-current'),
+                     kantarGor: gor(document.querySelector('[data-nav="kantar"]')) };
+        }, TASARIM);
+        let d = await oku();
+        ok('B', bag + '@360', '4. slot gizli, "Diğer" Kantar\'ı taşıyor (ikon + rozet + etiket + aria-current)',
+            d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon) && d.rozet && d.etiket === 'Kantar' && !d.kantarGor, JSON.stringify(d));
+        await page.setViewportSize({ width: 430, height: 932 }); await page.waitForTimeout(250);
+        d = await oku();
+        ok('B', bag + '@430', 'genişleyince "Diğer" gizlenir, Kantar slotu aktif', !d.diger && d.kantarGor && d.kantarCur === 'page' && d.digerCur === null, JSON.stringify(d));
+        await page.setViewportSize({ width: 360, height: 740 }); await page.waitForTimeout(250);
+        d = await oku();
+        ok('B', bag + '@360', 'daralınca yine "Diğer" taşır', d.diger && d.digerCur === 'page' && /kantar\.svg/.test(d.ikon), JSON.stringify(d));
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
+    }
+    // 5g — çerez yazımı (gerçek http kökeni: file:// çerez tutmaz)
+    {
+        const k = sayfaBul('operator', 'kantar'); bag_ctx = { profil: 'operator', sayfa: 'kantar', w: 390 };
+        const bag = 'operator/kantar çerez';
+        const KOK = 'http://uygulama.test/';
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'block' });
+        const tipler = { '.svg': 'image/svg+xml', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png' };
+        await ctx.route(KOK + '**', async (route) => {
+            const u = new URL(route.request().url());
+            const yol = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+            if (yol === k.yol) {
+                const html = fs.readFileSync(path.join(OUT, k.dosya), 'utf8').split('file://' + M.kok + '/').join(KOK);
+                return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html });
+            }
+            const dosya = path.join(M.kok, yol);
+            if (yol && !yol.includes('..') && fs.existsSync(dosya) && fs.statSync(dosya).isFile()) {
+                return route.fulfill({ status: 200, contentType: tipler[path.extname(dosya)] || 'application/octet-stream', body: fs.readFileSync(dosya) });
+            }
+            return route.fulfill({ status: 204, body: '' });
+        });
+        const page = await ctx.newPage();
+        const hatalar = [];
+        page.on('console', m => { if (m.type() === 'error') hatalar.push('console: ' + m.text()); });
+        page.on('pageerror', e => hatalar.push('pageerror: ' + e.message));
+        await page.goto(KOK + k.yol); await page.waitForTimeout(400);
+        let c = (await ctx.cookies(KOK)).find(x => x.name === 'asya_nav');
+        const deger = c ? decodeURIComponent(c.value) : null;
+        ok('B', bag, 'asya_nav = u:<uid>;s:<görünen sıra>;p:<sabitler>', deger === 'u:1;s:records,hks,ptak,kantar;p:', `çerez "${deger}"`);
+        const gun = c ? (c.expires - Date.now() / 1000) / 86400 : 0;
+        ok('B', bag, 'çerez: path=/, SameSite=Lax, ~180 gün', !!c && c.path === '/' && c.sameSite === 'Lax' && gun > 179 && gun < 181,
+            c ? `path ${c.path}, sameSite ${c.sameSite}, ${r1(gun)} gün` : 'çerez yok');
+        await page.click(TASARIM.moreSel); await page.waitForTimeout(350);
+        await page.click('#bnPinBtn');
+        await page.click('.bn-tile[data-nav="hesap"] .go'); await page.waitForTimeout(80);
+        c = (await ctx.cookies(KOK)).find(x => x.name === 'asya_nav');
+        const d2 = c ? decodeURIComponent(c.value) : null;
+        // hesap sabitlenince en zayıf SABİTSİZ slot (ptak — puan 0, öncelik en düşük) çıkar;
+        // ziyaret edilen kantar kalır.
+        ok('B', bag, 'sabitlemek çereze anında yansır (p:hesap, hesap önde)', d2 === 'u:1;s:hesap,records,hks,kantar;p:hesap', `çerez "${d2}"`);
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
+        await ctx.close();
+    }
+    // 5h — koyu tema pasif ikon filtresi; 5i — azaltılmış hareket + basma efekti
+    {
+        const k = sayfaBul('admin', 'home'); bag_ctx = { profil: 'admin', sayfa: 'home', w: 390 };
+        const filtre = (page) => page.evaluate((T) => getComputedStyle(document.querySelector(T.barSel + ' .bn-slot:not(.is-active) .ni')).filter, TASARIM);
+        let r = await ac(k, { w: 390, h: 844 }, { koyu: true });
+        const fk = await filtre(r.page);
+        ok('B', 'admin/home koyu', `koyu temada pasif ikon filter: ${TASARIM.koyuPasifFiltre}`, fk === TASARIM.koyuPasifFiltre, fk);
+        await r.ctx.close();
+        r = await ac(k, { w: 390, h: 844 });
+        const fa = await filtre(r.page);
+        ok('B', 'admin/home açık', 'açık temada pasif ikon filtresi farklı (koyu kuralı sızmıyor)', fa !== TASARIM.koyuPasifFiltre && fa !== 'none', fa);
+        const tr = await r.page.evaluate(() => getComputedStyle(document.querySelector('.bn-home .ni-wrap')).transform);
+        ok('B', 'admin/home', 'aktif karo yükselir + büyür (translateY(-10) scale(1.14))', /matrix\(1\.14, 0, 0, 1\.14, 0, -10\)/.test(tr), tr);
+        const el = await r.page.$('.bn-slot:not(.is-active)');
+        await el.dispatchEvent('pointerdown'); await r.page.waitForTimeout(200);
+        const bas = await r.page.evaluate(() => getComputedStyle(document.querySelector('.bn-slot.is-press .ni-wrap')).transform);
+        ok('B', 'admin/home', 'basınca karo 0,9\'a küçülür', /matrix\(0\.9, 0, 0, 0\.9, 0, 2\)/.test(bas), bas);
+        await r.ctx.close();
+        r = await ac(k, { w: 390, h: 844 }, { azHareket: true });
+        const trR = await r.page.evaluate(() => getComputedStyle(document.querySelector('.bn-home .ni-wrap')).transform);
+        const anim = await r.page.evaluate(() => getComputedStyle(document.querySelector('.bn-home .ni-wrap')).transitionDuration);
+        ok('B', 'admin/home azaltılmış hareket', 'prefers-reduced-motion: yükselme/geçiş yok', trR === 'none' && /^0s/.test(anim), `transform ${trR}, geçiş ${anim}`);
+        await r.ctx.close();
+    }
+
+    // Kanıt ekran görüntüleri: gerçek çubuk 360/390/430 × açık/koyu + Hal Kayıt
+    if (!NO_SHOTS) {
+        const k = sayfaBul('operator', 'kantar');
+        for (const w of [360, 390, 430]) for (const koyu of [false, true]) {
+            const { ctx, page } = await ac(k, { w, h: 800 }, { koyu });
+            const f = path.join(SHOTS, `cubuk_${w}_${koyu ? 'koyu' : 'acik'}.png`);
+            await page.screenshot({ path: f }); shots.push(f);
+            await ctx.close();
+        }
+        const h = sayfaBul('operator', 'hks');
+        const { ctx, page } = await ac(h, { w: 390, h: 844 });
+        const f = path.join(SHOTS, 'cubuk_390_hks.png'); await page.screenshot({ path: f }); shots.push(f);
         await ctx.close();
     }
 
