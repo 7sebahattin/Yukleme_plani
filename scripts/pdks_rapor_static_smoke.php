@@ -296,6 +296,8 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v259');",
     // Sprint Excel-01 (CSV + XLSX indirme menüsü): v260'tan v261'e çekildi.
     "-    define('APP_SURUM', 'v260');",
+    // Personel Takibi test verisi sıfırlama aracı (pdks_sifirla.php): v261'den v262'ye çekildi.
+    "-    define('APP_SURUM', 'v261');",
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
