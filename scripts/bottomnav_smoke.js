@@ -135,6 +135,17 @@ function uygulamaYolu(href, sayfaYolu) {
     } catch (e) { return null; }
 }
 
+// Ana Sayfa'nın hedeflediği sayfa (P.home_hedef) nav_aktif_anahtar()'ın
+// ürettiği anahtarlardan hangisine karşılık gelir — config/helpers.php'deki
+// nav_alt_home_anahtar()'ın AYNASI (Sprint Alt-Menü-01 düzeltme turu).
+function anaSayfaAnahtari(homeBek) {
+    if (homeBek === null) return null;
+    if (homeBek === 'index.php') return 'home';
+    if (homeBek === 'maliyet.php') return 'rapor';   // nav_aktif_anahtar(): maliyet_* → 'rapor'
+    const giris = Object.entries(M.anahtar_sayfa).find(([, v]) => v === homeBek);
+    return giris ? giris[0] : null;
+}
+
 // ── Tarayıcı içi ölçüm (tek evaluate) ─────────────────────────────────────
 function olc(barSel) {
     const bar = document.querySelector(barSel);
@@ -294,6 +305,10 @@ function guvenliAlanKurallari(barSel) {
         const m = await page.evaluate(olc, TASARIM.barSel);
 
         const P = M.profiller[k.profil];
+        const homeBek = P.home_hedef;
+        // Ana Sayfa index.php'ye gitmiyorsa (dashboard.read yok) hedeflediği
+        // sayfada da aktif görünmelidir — yalnız 'home' sayfasında değil.
+        const homeBekAktif = homeBek !== null && anaSayfaAnahtari(homeBek) === k.anahtar;
         if (!P.cubuk_beklenen) {
             // Ana Sayfa hedefi (dashboard.read / first_allowed_page()) de izinli aday
             // sayfa da yok: çubuk HİÇ basılmaz (tek bağlantısı 403 olurdu) ve alt
@@ -341,9 +356,14 @@ function guvenliAlanKurallari(barSel) {
                 `çubukta ${k.bolum} bağlantısı var ama aktif: [${aktifYollar.join(', ') || 'hiçbiri'}] — bölüm eşlemesi ${M.aktif_ref}`,
                 'BN-MALIYET-AKTIF-YOK');
         }
-        const yanlisAktif = aktifYollar.filter(y => !y.startsWith('<') && y !== k.bolum);
+        // Ana Sayfa kendi hedefinde aktifse (dashboard.read yok) o hedef
+        // (homeBek) k.bolum'dan FARKLI olabilir (ör. maliyet.php'nin bölümü
+        // sidebar'da 'reports.php'dir ama Ana Sayfa'nın hedefi maliyet.php'nin
+        // KENDİSİdir) — bu durumda aktif bağlantının homeBek'e işaret etmesi
+        // de doğrudur, yalnız k.bolum'a değil.
+        const yanlisAktif = aktifYollar.filter(y => !y.startsWith('<') && y !== k.bolum && !(homeBekAktif && y === homeBek));
         ok('A', bag, 'aktif bağlantı başka bir bölüme işaret etmiyor', yanlisAktif.length === 0,
-            `aktif: ${yanlisAktif.join(', ')} (beklenen bölüm ${k.bolum})`, 'BN-HKS-IKI-AKTIF');
+            `aktif: ${yanlisAktif.join(', ')} (beklenen bölüm ${k.bolum}${homeBekAktif ? ` veya Ana Sayfa hedefi ${homeBek}` : ''})`, 'BN-HKS-IKI-AKTIF');
 
         // A — konsol
         ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
@@ -387,19 +407,20 @@ function guvenliAlanKurallari(barSel) {
                 imgler: [...bar.querySelectorAll('img')].map(i => [i.getAttribute('width'), i.getAttribute('height'), i.getAttribute('alt'), i.getAttribute('src')]),
             };
         }, TASARIM);
-        const homeBek = P.home_hedef;
         ok('B', bag, `Ana Sayfa hedefi = ${homeBek ?? 'YOK (çizilmez)'}`,
             homeBek === null ? d.home === null : (d.home !== null && uygulamaYolu(d.home, k.yol) === homeBek),
             `ölçülen ${d.home} (dashboard.read ? index.php : first_allowed_page())`);
-        ok('B', bag, 'Ana Sayfa YALNIZ index.php\'de aktif', d.homeAktif === (k.sayfa === 'home'), `homeAktif=${d.homeAktif}`);
+        ok('B', bag, `Ana Sayfa ${homeBekAktif ? '' : 'YALNIZ index.php\'de '}aktif`, d.homeAktif === homeBekAktif,
+            `homeAktif=${d.homeAktif}, beklenen=${homeBekAktif} (hedef ${homeBek} → anahtar ${anaSayfaAnahtari(homeBek)}, sayfa anahtarı ${k.anahtar})`);
         const bekSlot = Math.min(4, P.adaylar.length);
         ok('B', bag, `@390 görünen slot sayısı ${bekSlot}`, d.slotlar.length === bekSlot, `[${d.slotlar.join(', ')}]`);
         ok('B', bag, 'slotlar yalnız izinli adaylar, tekrar yok',
             d.slotlar.every(x => P.adaylar.includes(x)) && new Set(d.slotlar).size === d.slotlar.length, `[${d.slotlar.join(', ')}]`);
         ok('B', bag, `"Diğer" ${P.adaylar.length > 4 ? 'VAR' : 'YOK'} (@390, ${P.adaylar.length} aday)`, d.digerGorunur === (P.adaylar.length > 4));
-        // Tek aktif öğe: aria-current="page" + .is-active; hangisi olacağı sayfanın bölümünden
-        const bekAktif = k.anahtar === 'home' ? (homeBek === 'index.php' ? 'home' : null)
-            : (k.anahtar && P.adaylar.includes(k.anahtar) ? k.anahtar : null);
+        // Tek aktif öğe: aria-current="page" + .is-active; hangisi olacağı sayfanın
+        // bölümünden — Ana Sayfa kendi hedefinde her zaman ÖNCELİKLİDİR (index.php'ye
+        // gitmese bile, bkz. homeBekAktif), yoksa o bölümün kendi slotu (varsa).
+        const bekAktif = homeBekAktif ? 'home' : (k.anahtar && P.adaylar.includes(k.anahtar) ? k.anahtar : null);
         const olcAktif = d.aktifler.length === 1 ? (d.aktifler[0].nav === 'more' ? 'more' : d.aktifler[0].nav) : null;
         const aktifDogru = bekAktif === null ? d.aktifler.length === 0
             : d.aktifler.length === 1 && d.aktifler[0].sinif
@@ -407,10 +428,50 @@ function guvenliAlanKurallari(barSel) {
         ok('B', bag, `tek aktif öğe (aria-current="page") = ${bekAktif ?? 'hiçbiri'}`, aktifDogru && d.isActiveSay === d.aktifler.length,
             `aktif: ${JSON.stringify(d.aktifler)}, .is-active görünen ${d.isActiveSay}, Diğer "${d.digerLabel}"`);
         if (k.sayfa === 'hks') ok('B', bag, 'Hal Kayıt: YALNIZ Bildirim (hks) aktif — Ana Sayfa değil', olcAktif === 'hks' && !d.homeAktif, JSON.stringify(d.aktifler));
-        if (k.sayfa === 'maliyet') ok('B', bag, 'maliyet_*: Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Raporlar')), JSON.stringify(d.aktifler));
+        if (k.sayfa === 'maliyet') {
+            // dashboard.read'i olan profillerde maliyet.php'nin kendi slotu yoktur
+            // (bilerek), Raporlar aktif kalır. dashboard.read'i OLMAYAN bir rolde
+            // (ör. yalnız maliyet.read) Ana Sayfa zaten maliyet.php'ye gider — o
+            // durumda aktif olması gereken Raporlar DEĞİL, Ana Sayfa'dır
+            // (BN-MALIYET-AKTIF-YOK düzeltmesi, bkz. anaSayfaAnahtari).
+            if (homeBekAktif) ok('B', bag, 'maliyet_*: dashboard.read yok → Ana Sayfa aktif', olcAktif === 'home', JSON.stringify(d.aktifler));
+            else ok('B', bag, 'maliyet_*: Raporlar (rapor) aktif', olcAktif === 'rapor' || (olcAktif === 'more' && d.digerLabel.includes('Raporlar')), JSON.stringify(d.aktifler));
+        }
         ok('B', bag, 'ikonlar <img width=42/18 alt=""> assets/nav-icons/*.svg?v=',
             d.imgler.every(([w, h, alt, src]) => w === h && ['42', '18'].includes(w) && alt === '' && /assets\/nav-icons\/[a-z]+\.svg\?v=\d+$/.test(src)),
             JSON.stringify(d.imgler.filter(([w, h, alt, src]) => !(w === h && alt === '' && /nav-icons/.test(src)))));
+        await ctx.close();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 1b) Sprint Alt-Menü-01 düzeltme turu — dashboard.read'i OLMAYAN roller:
+    //     Ana Sayfa kendi hedefinde aktif olmalı VE hedefiyle aynı sayfaya
+    //     giden ikinci bir slot ÇİZİLMEMELİ (BN-MALIYET-AKTIF-YOK).
+    // ─────────────────────────────────────────────────────────────────────
+    for (const [pk, sayfa, aciklama] of [
+        ['maliyet_tek', 'maliyet', 'maliyet.php nav_alt_izinler() adayı DEĞİL — Ana Sayfa TEK öğe olmalı'],
+        ['hesap_tek', 'hesap', "hesap.php HEM Ana Sayfa hedefi HEM 'hesap' adayı — ikincisi ÇİZİLMEMELİ"],
+    ]) {
+        const k = M.sayfalar.find(x => x.profil === pk && x.sayfa === sayfa);
+        if (!k) { ok('B', `${pk}/${sayfa}`, `${aciklama} — sayfa üretilmedi`, false, 'bottomnav_render.php profillerini kontrol et'); continue; }
+        bag_ctx = { profil: pk, sayfa, w: 390 };
+        const bag = `${pk}/${sayfa}`;
+        const { ctx, page, hatalar } = await ac(k, { w: 390, h: 844 });
+        const d = await page.evaluate((T) => {
+            const bar = document.querySelector(T.barSel);
+            const gor = (el) => !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+            return {
+                hedefSay: [...bar.querySelectorAll('a[href], button')].filter(gor).length,
+                slotlar: [...bar.querySelectorAll(T.slotSel)].filter(gor).map(a => a.getAttribute('data-nav')),
+                aktifSay: [...bar.querySelectorAll('[aria-current="page"]')].filter(gor).length,
+                homeAktif: bar.querySelector(T.homeSel)?.getAttribute('aria-current') === 'page',
+                digerVar: gor(bar.querySelector(T.moreSel)),
+            };
+        }, TASARIM);
+        ok('B', bag, `${aciklama}: çubukta TEK öğe (Ana Sayfa), "Diğer" yok, mükerrer slot yok`,
+            d.hedefSay === 1 && d.slotlar.length === 0 && !d.digerVar, JSON.stringify(d));
+        ok('B', bag, 'Ana Sayfa TEK aktif öğe', d.homeAktif && d.aktifSay === 1, JSON.stringify(d));
+        ok('A', bag, 'konsol hatası yok', hatalar.length === 0, hatalar.join(' || '));
         await ctx.close();
     }
 
@@ -526,7 +587,9 @@ function guvenliAlanKurallari(barSel) {
                 ok('B', bag, `görünen slot = ${Math.min(n, P.adaylar.length)} (${ekran.w < 390 ? '<390 → 3' : '≥390 → 4'})`,
                     g.slotlar.length === Math.min(n, P.adaylar.length), `[${g.slotlar.join(', ')}]`);
                 ok('B', bag, `"Diğer" ${P.adaylar.length > n ? 'görünür' : 'yok'} (${P.adaylar.length} aday)`, g.diger === (P.adaylar.length > n));
-                const bek = k.anahtar === 'home' ? (P.home_hedef === 'index.php' ? 'home' : null)
+                // Ana Sayfa kendi hedefinde her zaman öncelikli (bkz. anaSayfaAnahtari) —
+                // index.php'ye gitmese bile.
+                const bek = anaSayfaAnahtari(P.home_hedef) === k.anahtar && P.home_hedef !== null ? 'home'
                     : (k.anahtar && P.adaylar.includes(k.anahtar) ? k.anahtar : null);
                 const tamam = bek === null ? g.cur.length === 0
                     : g.cur.length === 1 && (g.cur[0] === bek || (g.cur[0] === 'bnMore' && !g.slotlar.includes(bek) && g.digerLabel.includes(SAYFA_ADI[bek])));

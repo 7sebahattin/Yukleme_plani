@@ -654,6 +654,25 @@ function nav_alt_ikon_url(array $p, string $base): string {
 }
 
 /**
+ * $home (first_allowed_page()/'index.php' hedefi) nav_aktif_anahtar()'ın
+ * ürettiği anahtarlardan hangisine karşılık gelir. dashboard.read'i olmayan
+ * bir rolde Ana Sayfa index.php'ye değil başka bir sayfaya gider (ör. yalnız
+ * maliyet.read → maliyet.php) — o sayfadayken Ana Sayfa'nın da aktif
+ * görünmesi için nav_aktif_anahtar()'ın o sayfaya verdiği anahtarla eşlenir.
+ * maliyet.php nav_alt_sayfalar()'da YOK (bilerek, bkz. CLAUDE.md) ama
+ * nav_aktif_anahtar() onu 'rapor' sayar — burada da aynı istisna tutulur.
+ */
+function nav_alt_home_anahtar(?string $home): ?string {
+    if ($home === null) return null;
+    if ($home === 'index.php') return 'home';
+    if ($home === 'maliyet.php') return 'rapor';
+    foreach (nav_alt_sayfalar() as $k => $p) {
+        if ($p['href'] === $home) return $k;
+    }
+    return null;
+}
+
+/**
  * Bu istek için alt çubuk modeli; çizilecek hiçbir şey yoksa null (çubuk
  * hiç basılmaz, render_header body'ye 'bn-yok' ekler → alt boşluk kalkar).
  *
@@ -667,11 +686,15 @@ function nav_alt_model(): ?array {
     if (!$u || !isset($u['id'])) return null;
     $uid = (int)$u['id'];
 
-    $izin    = nav_alt_izinler();
-    $adaylar = array_keys(array_filter($izin));
-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);
-
+    $izin = nav_alt_izinler();
     $home = (function_exists('can') && can('dashboard.read')) ? 'index.php' : first_allowed_page();
+    $K    = nav_alt_sayfalar();
+    // Ana Sayfa'nın hedeflediği sayfayla aynı href'e sahip aday İKİNCİ bir
+    // slot olarak çizilmez (ör. yalnız hesap.read'i olan role Ana Sayfa
+    // zaten hesap.php'ye gider) — aynı sayfaya giden iki öğe + iki "aktif"
+    // olurdu.
+    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]) && (!isset($K[$k]) || $home === null || $K[$k]['href'] !== $home);
+    $adaylar = array_values(array_filter(array_keys($izin), $izinli));
 
     $cerez  = nav_alt_cerez_oku($uid);
     $sabit  = array_slice(array_values(array_filter($cerez['p'], $izinli)), 0, NAV_ALT_SLOT);
@@ -683,6 +706,7 @@ function nav_alt_model(): ?array {
     if ($home === null && !$slotlar) return null;
 
     $soguk = array_values(array_filter(nav_alt_soguk_sira(), $izinli));
+    $aktif = nav_aktif_anahtar();
     return [
         'uid'     => $uid,
         'home'    => $home,
@@ -690,7 +714,11 @@ function nav_alt_model(): ?array {
         'sabit'   => $sabit,
         'adaylar' => $adaylar,
         'soguk'   => $soguk,
-        'aktif'   => nav_aktif_anahtar(),
+        'aktif'   => $aktif,
+        // Ana Sayfa dashboard.read olmayan bir rolde index.php'den başka bir
+        // sayfaya gidebilir (bkz. nav_alt_home_anahtar) — o sayfadayken de
+        // Ana Sayfa aktif görünsün.
+        'home_aktif' => $home !== null && nav_alt_home_anahtar($home) === $aktif,
     ];
 }
 
@@ -728,7 +756,7 @@ function nav_alt_ciz(array $m, string $base): void {
         . ' data-soguk="' . h(implode(',', $m['soguk'])) . '" data-sabit="' . h(implode(',', $m['sabit'])) . '">'
         . '<div class="bn-dock">';
     if ($m['home'] !== null) {
-        echo $oge('home', $base . $m['home'], ' bn-home', $aktif === 'home' && $m['home'] === 'index.php', false)
+        echo $oge('home', $base . $m['home'], ' bn-home', !empty($m['home_aktif']), false)
             . '<span class="bn-sep" aria-hidden="true"></span>';
     }
     // Slotlar önce (sırasıyla), kalan izinli sayfalar gizli — app.js yeniden

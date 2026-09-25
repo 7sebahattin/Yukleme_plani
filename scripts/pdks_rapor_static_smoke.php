@@ -372,6 +372,20 @@ $helpersBeklenenEskiSatirlar = [
     '-        <span class="bottomnav-label">Raporlar</span>',
     '-</nav>',
     '-<?php',
+    // Sprint Alt-Menü-01 düzeltme turu (mobil bottomnav — bu dosyanın sözünü
+    // ettiği eski bottomnav-item şablonuyla İLGİSİZ, ayrı bir modül):
+    // dashboard.read'i olmayan bir rolde Ana Sayfa index.php'den başka bir
+    // sayfaya gidiyordu ama o sayfadayken hiçbir öğe aktif görünmüyordu, ve
+    // Ana Sayfa hedefiyle AYNI href'e sahip bir aday (ör. yalnız hesap.read)
+    // ikinci bir slot olarak da çiziliyordu. nav_alt_model()/nav_alt_ciz()
+    // BU İKİ hatayı düzeltmek için yeniden yazıldı — 5 satır bu yüzden
+    // "silinip yeniden yazılmış" görünüyor, İÇERİK KAYBI değil
+    // (pdks_faz1b_static_smoke.php'de AYNI 5 satır, AYNI gerekçeyle).
+    '-    $izin    = nav_alt_izinler();',
+    '-    $adaylar = array_keys(array_filter($izin));',
+    '-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);',
+    '-        \'aktif\'   => nav_aktif_anahtar(),',
+    '-        echo $oge(\'home\', $base . $m[\'home\'], \' bn-home\', $aktif === \'home\' && $m[\'home\'] === \'index.php\', false)',
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

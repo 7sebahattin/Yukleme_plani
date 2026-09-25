@@ -5,6 +5,18 @@
 (function () {
     'use strict';
 
+    /* ── Alt çubuğun (bottomnav) kapladığı alan — sabit dok içeriğin/açılır
+       listelerin arkasında kalmasın diye tüm "ekranın altı" hesaplarında
+       kullanılır. Masaüstünde ve body.bn-yok'ta --bn-h 0'dır. ── */
+    function bnAltPay() {
+        try {
+            return parseFloat(getComputedStyle(document.body).getPropertyValue('--bn-h')) || 0;
+        } catch (_) { return 0; }
+    }
+    function ekranAlti() {
+        return window.innerHeight - bnAltPay();
+    }
+
     /* ── Türkçe büyük harf — data-uppercase="tr" ── */
     // Sayfa yüklenince mevcut değerleri dönüştür (DB'den gelen eski title-case değerler için)
     document.addEventListener('DOMContentLoaded', function() {
@@ -167,10 +179,17 @@
                 dd.style.left = 'auto';
                 dd.hidden = false;
                 // Ekran dışına taşmasın: solda sola yasla, altta yukarı aç
+                // (mobil alt çubuğun --bn-h kadar alanı da "ekran dışı" sayılır)
                 const d = dd.getBoundingClientRect();
                 if (d.left < 8) { dd.style.left = '8px'; dd.style.right = 'auto'; }
-                if (d.bottom > window.innerHeight - 8 && r.top - d.height - 4 > 8) {
+                if (d.bottom > ekranAlti() - 8 && r.top - d.height - 4 > 8) {
                     dd.style.top = (r.top - d.height - 4) + 'px';
+                }
+                // Buton alt çubuğa çok yakınsa yukarı açmak da yetmeyebilir —
+                // son çare üst sınırı alt çubuğun hemen üstüne yasla
+                const d2 = dd.getBoundingClientRect();
+                if (d2.bottom > ekranAlti() - 8 && ekranAlti() - 8 - d2.height > 8) {
+                    dd.style.top = (ekranAlti() - 8 - d2.height) + 'px';
                 }
             }
         } else {
@@ -1938,12 +1957,13 @@
             list.style.left     = r.left + 'px';
             list.style.width    = r.width + 'px';
             list.style.right    = 'auto';
-            var altBosluk = window.innerHeight - r.bottom;
+            // Mobil alt çubuğun --bn-h kadar alanı da "ekran dışı" sayılır
+            var altBosluk = ekranAlti() - r.bottom;
             var h = list.offsetHeight || 0;
             if (altBosluk < h + 8 && r.top > altBosluk) {
                 // Aşağıda yer yok → yukarı aç
                 list.style.top    = 'auto';
-                list.style.bottom = (window.innerHeight - r.top + 3) + 'px';
+                list.style.bottom = (ekranAlti() - r.top + 3) + 'px';
             } else {
                 list.style.bottom = 'auto';
                 list.style.top    = (r.bottom + 3) + 'px';
@@ -2492,7 +2512,29 @@
         if (!acik && mesaj) mesaj.textContent = '';
         durum();
     }
+    // Sayfa arkası kaydırılmasın diye body sabitlenir (iOS'ta rubber-band
+    // dahil en güvenilir yöntem); kapanışın HER yolunda (Esc/✕/arka plan/
+    // karo navigasyonu/bfcache) geri açılır — bkz. pagehide/pageshow altta.
+    var kilitliY = 0;
+    function scrollKilitle() {
+        kilitliY = window.scrollY || document.documentElement.scrollTop || 0;
+        document.body.style.position = 'fixed';
+        document.body.style.top = (-kilitliY) + 'px';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+    }
+    function scrollKilitAc() {
+        if (document.body.style.position !== 'fixed') return;
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        window.scrollTo(0, kilitliY);
+    }
     function ac() {
+        scrollKilitle();
         ovl.hidden = false;
         more.setAttribute('aria-expanded', 'true');
         duzenle(false);
@@ -2504,7 +2546,13 @@
         ovl.hidden = true;
         more.setAttribute('aria-expanded', 'false');
         more.focus();
+        scrollKilitAc();
     }
+    // Karo navigasyonu (gerçek <a href>) kapat()'ı çağırmadan sayfadan
+    // ayrılır — kilidi burada aç, yoksa bfcache'ten geri dönüşte body
+    // hâlâ sabitlenmiş görünür.
+    window.addEventListener('pagehide', scrollKilitAc);
+    window.addEventListener('pageshow', scrollKilitAc);
     more.addEventListener('click', ac);
     kapatBtn.addEventListener('click', kapat);
     ovl.addEventListener('click', function (e) { if (e.target === ovl) kapat(); });
@@ -2537,5 +2585,15 @@
         if (yeni.join(',') !== slotlar.join(',')) uygula(yeni, true); else durum();
         cerezYaz(slotlar);
         go.focus();
+    });
+    // Karolar <a role="button"> — Enter native click tetikler, Space tetiklemez
+    // (yalnız gerçek <button>'da otomatiktir). Sabitle modunda Space'i elle
+    // click'e çevir, yoksa klavyeyle sabitleme yapılamaz.
+    sheet.addEventListener('keydown', function (e) {
+        if (e.key !== ' ' && e.key !== 'Spacebar') return;
+        var go = e.target.closest('.bn-tile .go');
+        if (!go || !sheet.classList.contains('editing')) return;
+        e.preventDefault();
+        go.click();
     });
 })();

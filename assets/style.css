@@ -347,6 +347,9 @@ input.num, select.num { text-align: right; }
 .form-foot {
     flex-direction: row; justify-content: flex-end; gap: 8px; margin-top: 16px;
     flex-wrap: wrap;
+    /* app.js yeni palet eklenince buraya scrollIntoView({block:'end'}) yapar —
+       [data-record-id] ile aynı desen, yoksa Kaydet düğmesi alt çubuğun arkasında kalır */
+    scroll-margin-bottom: calc(var(--bn-h) + 12px + env(safe-area-inset-bottom, 0px));
 }
 .form-foot.inline { margin-top: 8px; }
 
@@ -2965,6 +2968,7 @@ body.bn-yok { --bn-h: 0px; }
     background: rgba(8,12,20,.45);
     display: flex; align-items: flex-end;
     animation: bnFadeIn .2s ease;
+    overscroll-behavior: contain;
 }
 .bn-sheet-ovl[hidden] { display: none !important; }
 @media (min-width: 768px) { .bn-sheet-ovl { display: none !important; } }

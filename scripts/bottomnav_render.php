@@ -133,6 +133,27 @@ $PROFILLER = [
         'rol' => ['slug' => 'pdks_kalici', 'label' => 'PDKS Kartoteks'],
         'perms' => ['attendance.read','attendance.employees','attendance.cards','attendance.scan'],
     ],
+    // Sprint Alt-Menü-01 düzeltme turu (BN-MALIYET-AKTIF-YOK): dashboard.read
+    // YOK ve maliyet.read TEK yetki — Ana Sayfa first_allowed_page()'e
+    // (maliyet.php) gider. maliyet.php nav_alt_izinler()'de HİÇ aday değildir
+    // (bilerek, bkz. CLAUDE.md) → adaylar boş, çubukta yalnız Ana Sayfa
+    // görünür ve maliyet.php'de AKTİF işaretlenmelidir (nav_aktif_anahtar()
+    // orada 'rapor' döner — maliyet'in kendi sidebar girişi yok).
+    'maliyet_tek' => [
+        'ad' => 'Özel rol: yalnız maliyet.read (dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'maliyet_tek', 'label' => 'Maliyet'],
+        'perms' => ['maliyet.read'],
+    ],
+    // Sprint Alt-Menü-01 düzeltme turu (mükerrer slot): dashboard.read YOK
+    // ve hesap.read TEK yetki — Ana Sayfa first_allowed_page()'e (hesap.php)
+    // gider AMA hesap.read AYNI ZAMANDA nav_alt_izinler()'de 'hesap' adayını
+    // da açar (href'i de hesap.php) — Ana Sayfa'yla AYNI sayfaya giden ikinci
+    // bir slot ÇİZİLMEMELİDİR.
+    'hesap_tek' => [
+        'ad' => 'Özel rol: yalnız hesap.read (dashboard.read YOK)', 'admin' => false, 'depo' => 'KARAMAN CİHAT',
+        'rol' => ['slug' => 'hesap_tek', 'label' => 'Hesap'],
+        'perms' => ['hesap.read'],
+    ],
 ];
 foreach ($PROFILLER as $pk => $pr) {
     $bilinmeyen = array_diff($pr['perms'], $KATALOG);
@@ -315,10 +336,16 @@ foreach ($PROFILLER as $pk => $pr) {
 
     // Alt çubuk beklentileri — HEDEF SAYFA KAPILARINDAN türetilir (uygulamanın
     // nav_alt_izinler()'inden DEĞİL), sonra uygulamayla çapraz kontrol edilir.
-    $adaylar = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]]));
+    $adaylarHam = array_values(array_filter(array_keys($ANAHTAR_SAYFA), fn($k) => $izinli[$ANAHTAR_SAYFA[$k]]));
     $uygAday = array_keys(array_filter(nav_alt_izinler()));
-    if ($uygAday !== $adaylar) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylar) . "]";
+    if ($uygAday !== $adaylarHam) $uyari[] = "$pk: nav_alt_izinler() [" . implode(',', $uygAday) . "] ≠ kapı tablosu [" . implode(',', $adaylarHam) . "]";
     $home = can('dashboard.read') ? 'index.php' : $fap;
+    // nav_alt_model()'in AYNI kuralı (Sprint Alt-Menü-01 düzeltme turu): Ana
+    // Sayfa'nın hedeflediği sayfayla aynı href'e sahip aday ikinci bir slot
+    // olarak ÇİZİLMEZ (ör. yalnız hesap.read'i olan role Ana Sayfa zaten
+    // hesap.php'ye gider) — $adaylar (ham değil) bu yüzden aşağıdaki tüm
+    // beklentilerde (slot sayısı, "Diğer", karo listesi) kullanılır.
+    $adaylar = array_values(array_filter($adaylarHam, fn($k) => $home === null || $ANAHTAR_SAYFA[$k] !== $home));
     $soguk = array_slice(array_values(array_filter($SOGUK, fn($k) => in_array($k, $adaylar, true))), 0, 4);
 
     $manifest['profiller'][$pk] = [

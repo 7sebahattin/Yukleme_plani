@@ -549,6 +549,19 @@ $beklenenEskiSatirlar = [
     '-    <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? \' active\' : \'\' ?>">',
     '-        <span class="bottomnav-icon">📊</span>',
     '-        <span class="bottomnav-label">Raporlar</span>',
+    // Sprint Alt-Menü-01 düzeltme turu (mobil bottomnav — bu dosyanın
+    // sözünü ettiği eski bottomnav-item şablonuyla İLGİSİZ, ayrı bir modül):
+    // dashboard.read'i olmayan bir rolde Ana Sayfa index.php'den başka bir
+    // sayfaya gidiyordu ama o sayfadayken hiçbir öğe aktif görünmüyordu, ve
+    // Ana Sayfa hedefiyle AYNI href'e sahip bir aday (ör. yalnız hesap.read)
+    // ikinci bir slot olarak da çiziliyordu. nav_alt_model()/nav_alt_ciz()
+    // BU İKİ hatayı düzeltmek için yeniden yazıldı — 5 satır bu yüzden
+    // "silinip yeniden yazılmış" görünüyor, İÇERİK KAYBI değil.
+    '-    $izin    = nav_alt_izinler();',
+    '-    $adaylar = array_keys(array_filter($izin));',
+    '-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);',
+    '-        \'aktif\'   => nav_aktif_anahtar(),',
+    '-        echo $oge(\'home\', $base . $m[\'home\'], \' bn-home\', $aktif === \'home\' && $m[\'home\'] === \'index.php\', false)',
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {
