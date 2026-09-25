@@ -276,6 +276,12 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   sırası + sahte/başka kullanıcı çerezi, histerezis, Diğer aç/kapat, Sabitle,
   gerçek http kökeninde çerez yazımı, koyu tema, azaltılmış hareket. Çubuğa
   dokunduysan çalıştır.
+- **`bnAltPay()` / `ekranAlti()` app.js'in EN ÜSTÜNDE, IIFE'lerin DIŞINDADIR** —
+  dosya dört ayrı IIFE'dir; ilkinin içine konunca öneri kutusu (ikinci IIFE)
+  her odaklanmada ReferenceError veriyordu. "Aşağıda yer var mı" kararı
+  `ekranAlti()` ile verilir, ama `position:fixed` bir öğenin `bottom`'u
+  viewport'un altından ölçüldüğü için `bottom` değerine `--bn-h` DÜŞÜLMEZ.
+  Test: `node scripts/suggest_list_smoke.js`.
 
 ---
 
