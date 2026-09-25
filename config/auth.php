@@ -173,6 +173,16 @@ function can(string $permission): bool {
 function is_admin(): bool {
     $user = current_user();
     if ($user === null) return false;
+    // user_permissions() ile aynı desen: istek başına, kullanıcı id'sine göre
+    // önbellek. sidebar/bottomnav tek render'da is_admin()'i birden çok kez
+    // çağırıyor (nav_ptak_gorunur, first_allowed_page, render_desktop_sidebar…);
+    // önbellek olmadan her çağrı ayrı bir DB sorgusu demekti.
+    // ⚠ Önbellek TEK istek boyunca geçerlidir: user_roles'a yazan her yol
+    // (bugün yalnız users.php) yazdıktan sonra yönlendirip exit etmeli —
+    // aynı istekte is_admin()'i yeniden okursa ESKİ değeri görür.
+    static $cache = [];
+    $uid = (int)$user['id'];
+    if (isset($cache[$uid])) return $cache[$uid];
     try {
         $st = db()->prepare("
             SELECT 1 FROM user_roles ur
@@ -180,10 +190,10 @@ function is_admin(): bool {
             WHERE ur.user_id = ? AND r.slug = 'admin'
             LIMIT 1
         ");
-        $st->execute([(int)$user['id']]);
-        return (bool)$st->fetchColumn();
+        $st->execute([$uid]);
+        return $cache[$uid] = (bool)$st->fetchColumn();
     } catch (PDOException $e) {
-        return false;
+        return $cache[$uid] = false;
     }
 }
 

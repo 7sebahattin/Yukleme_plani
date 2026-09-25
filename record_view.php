@@ -327,6 +327,11 @@ if ($_is_maliyet_eligible = (($record['type'] ?? 'yukleme') === 'yukleme' && can
     } catch (PDOException $e) { /* cost_sheets yoksa — sessizce geç */ }
 }
 
+// Çıkma kaydı: gezinmede "Çıkmalar" aktif olsun (sidebar + mobil alt çubuk,
+// nav_aktif_anahtar()). render_header()'dan ÖNCE kurulmalı — sidebar orada çizilir.
+if (($record['type'] ?? 'yukleme') === 'cikma') {
+    $GLOBALS['_nav_cikma_hint'] = true;
+}
 render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <?php if ($print): ?>
@@ -342,11 +347,6 @@ render_header(h($record['firma'] ?? 'Kayıt'), $print);
 ?>
 <script>document.title = <?= json_encode($_pdf_title ?: ($record['firma'] ?? 'Kayıt')) ?>;</script>
 <?php endif; ?>
-<?php
-if (($record['type'] ?? 'yukleme') === 'cikma') {
-    $GLOBALS['_nav_cikma_hint'] = true;
-}
-?>
 <?php if (!$print): ?>
 <?php render_flash(); ?>
 <?php

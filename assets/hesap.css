@@ -583,7 +583,8 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
 /* 10e. Kaydet çubuğu — mobilde yapışkan */
 .hs-save {
     position: sticky;
-    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    /* --bn-h: mobil alt çubuk kutusu (style.css :root; ≥768px ve çubuksuz rolde 0) */
+    bottom: calc(var(--bn-h, 0px) + 8px + env(safe-area-inset-bottom, 0px));
     z-index: 20;
     display: flex; gap: 8px;
     padding: 10px;

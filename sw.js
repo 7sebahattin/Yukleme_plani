@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v262';
+const CACHE_NAME = 'yukleme-plani-v263';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -11,7 +11,24 @@ const SHELL = [
   './assets/hesap.css',
   './assets/hesap.js',
   './assets/icon.svg',
-  './manifest.json'
+  './manifest.json',
+  // Mobil alt çubuk ikonları (config/helpers.php nav_alt_sayfalar()) — çevrimdışı
+  './assets/nav-icons/home.svg',
+  './assets/nav-icons/records.svg',
+  './assets/nav-icons/cikma.svg',
+  './assets/nav-icons/beyan.svg',
+  './assets/nav-icons/kantar.svg',
+  './assets/nav-icons/hks.svg',
+  './assets/nav-icons/rapor.svg',
+  './assets/nav-icons/mstok.svg',
+  './assets/nav-icons/hesap.svg',
+  './assets/nav-icons/ptak.svg',
+  './assets/nav-icons/defs.svg',
+  './assets/nav-icons/users.svg',
+  './assets/nav-icons/roles.svg',
+  './assets/nav-icons/audit.svg',
+  './assets/nav-icons/backup.svg',
+  './assets/nav-icons/more.svg'
 ];
 
 self.addEventListener('install', function(e) {
@@ -46,7 +63,13 @@ self.addEventListener('fetch', function(e) {
       });
       return response;
     }).catch(function() {
-      return caches.match(e.request);
+      // Alt çubuk ikonları sayfada ?v=<filemtime> ile istenir; SHELL'deki
+      // sorgusuz kopya çevrimdışında YALNIZ bu klasör için yedek olarak sunulur
+      // (başka sayfalarda sorgu farklı içerik demektir, yok sayılmaz).
+      return caches.match(e.request).then(function(r) {
+        if (r || e.request.url.indexOf('/assets/nav-icons/') === -1) return r;
+        return caches.match(e.request, { ignoreSearch: true });
+      });
     })
   );
 });

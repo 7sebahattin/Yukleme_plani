@@ -2,6 +2,22 @@
    Yükleme Planı - app.js (v3)
    Modal-tabanlı palet ekleme/düzenleme
    ========================================================= */
+/* ── Alt çubuğun (bottomnav) kapladığı alan — sabit dok içeriğin/açılır
+   listelerin arkasında kalmasın diye tüm "ekranın altı" hesaplarında
+   kullanılır. Masaüstünde ve body.bn-yok'ta --bn-h 0'dır.
+   ⚠ Bilerek IIFE'lerin DIŞINDA: dosya dört ayrı IIFE'den oluşur ve hem
+   kebab (1.) hem öneri kutusu positionList() (2.) bunu çağırır. İlk IIFE'nin
+   içinde tanımlıyken öneri kutusu her odaklanmada ReferenceError veriyordu
+   (scripts/suggest_list_smoke.js). ── */
+function bnAltPay() {
+    try {
+        return parseFloat(getComputedStyle(document.body).getPropertyValue('--bn-h')) || 0;
+    } catch (_) { return 0; }
+}
+function ekranAlti() {
+    return window.innerHeight - bnAltPay();
+}
+
 (function () {
     'use strict';
 
@@ -167,10 +183,17 @@
                 dd.style.left = 'auto';
                 dd.hidden = false;
                 // Ekran dışına taşmasın: solda sola yasla, altta yukarı aç
+                // (mobil alt çubuğun --bn-h kadar alanı da "ekran dışı" sayılır)
                 const d = dd.getBoundingClientRect();
                 if (d.left < 8) { dd.style.left = '8px'; dd.style.right = 'auto'; }
-                if (d.bottom > window.innerHeight - 8 && r.top - d.height - 4 > 8) {
+                if (d.bottom > ekranAlti() - 8 && r.top - d.height - 4 > 8) {
                     dd.style.top = (r.top - d.height - 4) + 'px';
+                }
+                // Buton alt çubuğa çok yakınsa yukarı açmak da yetmeyebilir —
+                // son çare üst sınırı alt çubuğun hemen üstüne yasla
+                const d2 = dd.getBoundingClientRect();
+                if (d2.bottom > ekranAlti() - 8 && ekranAlti() - 8 - d2.height > 8) {
+                    dd.style.top = (ekranAlti() - 8 - d2.height) + 'px';
                 }
             }
         } else {
@@ -1938,11 +1961,14 @@
             list.style.left     = r.left + 'px';
             list.style.width    = r.width + 'px';
             list.style.right    = 'auto';
-            var altBosluk = window.innerHeight - r.bottom;
+            // Mobil alt çubuğun --bn-h kadar alanı da "ekran dışı" sayılır
+            var altBosluk = ekranAlti() - r.bottom;
             var h = list.offsetHeight || 0;
             if (altBosluk < h + 8 && r.top > altBosluk) {
                 // Aşağıda yer yok → yukarı aç
                 list.style.top    = 'auto';
+                // position:fixed'in bottom'u VİEWPORT'un altından ölçülür —
+                // burada --bn-h düşülmez (düşülseydi liste girdinin üstüne binerdi)
                 list.style.bottom = (window.innerHeight - r.top + 3) + 'px';
             } else {
                 list.style.bottom = 'auto';
@@ -2250,4 +2276,339 @@
         window.location.href = listUrl;
     });
 
+})();
+
+/* =========================================================
+   Mobil alt çubuk (bottomnav) — Sprint Alt-Menü-01
+   ---------------------------------------------------------
+   Sunucu (config/helpers.php nav_alt_ciz) çubuğu 'asya_nav' çerezindeki
+   sırayla çizer; izinli ama slotta olmayan sayfalar da dokta GİZLİ öğe
+   olarak durur. Bu modül YENİ işaretleme ÜRETMEZ — yalnız öğelerin yerini
+   değiştirir, gösterir/gizler ve sınıf/aria durumunu günceller (tek
+   işaretleme kaynağı PHP'dir, iki kopya ayrışamaz).
+
+   Kullanım YALNIZ bu cihazda: localStorage 'asya_nav_kullanim_<uid>' =
+   [[anahtar, ms], …] (en çok 90 gün / 200 kayıt). Aynı bölümde 30 dk
+   içinde art arda açılan sayfalar TEK ziyaret sayılır (liste → detay →
+   düzenle zinciri bir bölümü şişirip diğerlerini 200 kayıttan atmasın).
+   Puan = Σ 0,5^(gün/14); Ana Sayfa sayılmaz. Dışarıdaki sayfa slottaki en
+   zayıfın yerine ancak puanı > en zayıf × 1,25 + 0,5 ise geçer (histerezis),
+   kalan slot yerini korur. Sabitlenenler ('asya_nav_sabit_<uid>', en çok 4)
+   önce gelir, sıralanmaz. Sonuç çereze yazılır: u:<uid>;s:…;p:… (180 gün).
+   Her depolama erişimi try/catch içinde — gizli sekmede sessizce çalışır.
+   ========================================================= */
+(function () {
+    'use strict';
+    var nav = document.getElementById('bottomnav');
+    if (!nav) return;
+    var dock = nav.querySelector('.bn-dock');
+    if (!dock) return;
+
+    var uid    = nav.getAttribute('data-uid') || '0';
+    var aktif  = nav.getAttribute('data-aktif') || '';
+    var soguk  = (nav.getAttribute('data-soguk') || '').split(',').filter(Boolean);
+    var more   = document.getElementById('bnMore');
+    var ovl    = document.getElementById('bnSheetOvl');
+    var sheet  = document.getElementById('bnSheet');
+    var SLOT   = 4, GUN = 864e5, SIMDI = Date.now();
+    var KUL    = 'asya_nav_kullanim_' + uid, SAB = 'asya_nav_sabit_' + uid;
+    var dar    = window.matchMedia ? window.matchMedia('(max-width: 389px)') : { matches: false };
+
+    function oku(k) { try { var s = localStorage.getItem(k); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+    function yaz(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+    // Aday öğeler (sunucunun izin verdiği sayfalar) — anahtar → öğe
+    var ogeler = {};
+    var izinli = [];
+    dock.querySelectorAll('a.bn-slot[data-nav]').forEach(function (a) {
+        ogeler[a.getAttribute('data-nav')] = a;
+        izinli.push(a.getAttribute('data-nav'));
+    });
+    var mevcut = izinli.filter(function (k) { return !ogeler[k].hidden; });
+    function izinliMi(k) { return izinli.indexOf(k) !== -1; }
+    function oncelik(k) { var i = soguk.indexOf(k); return i === -1 ? 999 : i; }
+
+    // ── Ziyaret kaydı ────────────────────────────────────────────────────
+    var kul = oku(KUL);
+    if (!Array.isArray(kul)) kul = [];
+    kul = kul.filter(function (e) {
+        return Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'number'
+            && SIMDI - e[1] <= 90 * GUN && e[1] <= SIMDI + GUN;
+    });
+    if (aktif && aktif !== 'home' && izinliMi(aktif)) {
+        var son = kul[kul.length - 1];
+        if (!son || son[0] !== aktif || SIMDI - son[1] > 30 * 60 * 1000) kul.push([aktif, SIMDI]);
+    }
+    if (kul.length > 200) kul = kul.slice(-200);
+    yaz(KUL, kul);
+
+    var puanlar = {};
+    kul.forEach(function (e) { puanlar[e[0]] = (puanlar[e[0]] || 0) + Math.pow(0.5, Math.max(0, SIMDI - e[1]) / GUN / 14); });
+    function puan(k) { return puanlar[k] || 0; }
+
+    // Sabitlenenler: localStorage asıl kaynak; okunamazsa çerezin aynası (data-sabit)
+    var sab = oku(SAB);
+    if (!Array.isArray(sab)) sab = (nav.getAttribute('data-sabit') || '').split(',').filter(Boolean);
+    sab = sab.filter(function (k, i) { return typeof k === 'string' && izinliMi(k) && sab.indexOf(k) === i; }).slice(0, SLOT);
+
+    // ── Sıralama (onaylı taslaktaki pickSlots'un aynısı) ────────────────
+    function slotSec(onceki) {
+        var pins = sab.slice(0, SLOT);
+        var bos = SLOT - pins.length;
+        var cur = onceki.filter(function (k) { return izinliMi(k) && pins.indexOf(k) === -1; }).slice(0, bos);
+        var sira = izinli.filter(function (k) { return pins.indexOf(k) === -1; })
+            .sort(function (a, b) { return (puan(b) - puan(a)) || (oncelik(a) - oncelik(b)); });
+        sira.forEach(function (k) { if (cur.length < bos && cur.indexOf(k) === -1) cur.push(k); });
+        for (var g = 0; g < 10; g++) {
+            var disari = sira.filter(function (k) { return cur.indexOf(k) === -1; });
+            if (!disari.length || !cur.length) break;
+            var enIyi = disari[0];
+            var enZayif = cur.slice().sort(function (a, b) { return (puan(a) - puan(b)) || (oncelik(b) - oncelik(a)); })[0];
+            if (puan(enIyi) > puan(enZayif) * 1.25 + 0.5) cur[cur.indexOf(enZayif)] = enIyi;
+            else break;
+        }
+        return pins.concat(cur);
+    }
+
+    function cerezYaz(slotlar) {
+        var v = 'u:' + uid + ';s:' + slotlar.join(',') + ';p:' + sab.join(',');
+        try {
+            document.cookie = 'asya_nav=' + encodeURIComponent(v) + '; path=/; max-age=' + (180 * 86400)
+                + '; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+        } catch (e) {}
+    }
+
+    // ── Uygulama: öğeleri yeni sıraya taşı, göster/gizle ─────────────────
+    var slotlar = mevcut.slice();
+    function uygula(yeni, animasyon) {
+        var ref = more || null;   // öğeler "Diğer"in önüne dizilir (yoksa sona)
+        yeni.forEach(function (k) {
+            var a = ogeler[k];
+            if (animasyon && slotlar.indexOf(k) === -1) {
+                a.classList.remove('slot-new'); void a.offsetWidth; a.classList.add('slot-new');
+            }
+            a.hidden = false;
+            var img = a.querySelector('img.ni');
+            if (img) img.removeAttribute('loading');
+            dock.insertBefore(a, ref);
+        });
+        izinli.forEach(function (k) {
+            if (yeni.indexOf(k) !== -1) return;
+            var a = ogeler[k];
+            a.hidden = true;
+            a.classList.remove('slot-new');
+            dock.insertBefore(a, ref);
+        });
+        slotlar = yeni.slice();
+        durum();
+    }
+
+    // Etiket sığdırma: önce 9.5px, yine taşarsa kısa hâl (data-xs; '' = gizle)
+    function etiketSigdir() {
+        dock.querySelectorAll('.bn-label').forEach(function (l) {
+            var kisa = l.getAttribute('data-kisa');
+            if (kisa !== null && l.textContent !== kisa) l.textContent = kisa;
+            l.classList.remove('tight', 'xs-hide');
+        });
+        dock.querySelectorAll('.bn-label').forEach(function (l) {
+            if (!l.offsetParent || l.scrollWidth <= l.clientWidth) return;
+            l.classList.add('tight');
+            if (l.scrollWidth <= l.clientWidth) return;
+            var xs = l.getAttribute('data-xs');
+            if (xs === '') l.classList.add('xs-hide'); else if (xs) l.textContent = xs;
+        });
+    }
+
+    // Aktif öğe: güncel sayfa GÖRÜNEN bir slottaysa o; değilse (dar ekranda
+    // 4. slot dahil) "Diğer" o sayfanın ikonunu/etiketini alır.
+    function gorunenSlotlar() { return slotlar.slice(0, dar.matches ? SLOT - 1 : SLOT); }
+    function durum() {
+        var gorunen = gorunenSlotlar();
+        izinli.forEach(function (k) {
+            var a = ogeler[k], akt = k === aktif && gorunen.indexOf(k) !== -1;
+            a.classList.toggle('bn-4', slotlar.indexOf(k) === SLOT - 1);   // dar ekranda CSS gizler
+            a.classList.toggle('is-active', akt);
+            if (akt) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+        });
+        if (more) {
+            var hedef = (aktif && aktif !== 'home' && izinliMi(aktif) && gorunen.indexOf(aktif) === -1) ? ogeler[aktif] : null;
+            var img = more.querySelector('img.ni'), rozet = more.querySelector('.more-badge');
+            var lab = more.querySelector('.bn-label');
+            if (hedef) {
+                var hl = hedef.querySelector('.bn-label');
+                img.setAttribute('src', hedef.querySelector('img.ni').getAttribute('src'));
+                rozet.hidden = false;
+                lab.setAttribute('data-kisa', hl.getAttribute('data-kisa'));
+                if (hl.hasAttribute('data-xs')) lab.setAttribute('data-xs', hl.getAttribute('data-xs')); else lab.removeAttribute('data-xs');
+                more.style.setProperty('--c2', hedef.style.getPropertyValue('--c2'));
+                more.classList.add('is-active');
+                more.setAttribute('aria-current', 'page');
+                more.setAttribute('aria-label', 'Diğer sayfalar, şu an: ' + hedef.getAttribute('aria-label'));
+            } else {
+                // Rozet her zaman "Diğer" ikonunu taşır — varsayılan ikon oradan
+                img.setAttribute('src', rozet.querySelector('img').getAttribute('src'));
+                rozet.hidden = true;
+                lab.setAttribute('data-kisa', 'Diğer');
+                lab.removeAttribute('data-xs');
+                more.style.setProperty('--c2', '#6b788d');
+                more.classList.remove('is-active');
+                more.removeAttribute('aria-current');
+                more.setAttribute('aria-label', 'Diğer sayfalar');
+            }
+        }
+        if (sheet) {
+            sheet.querySelectorAll('.bn-tile[data-nav]').forEach(function (t) {
+                var k = t.getAttribute('data-nav');
+                t.classList.toggle('in-bar', gorunen.indexOf(k) !== -1);
+                t.classList.toggle('pinned', sab.indexOf(k) !== -1);
+                var go = t.querySelector('.go');
+                if (go && sheet.classList.contains('editing')) go.setAttribute('aria-pressed', sab.indexOf(k) !== -1 ? 'true' : 'false');
+            });
+            var foot = document.getElementById('bnSheetFoot');
+            var n = gorunenSlotlar().length;
+            if (foot) foot.textContent = sheet.classList.contains('editing')
+                ? 'Alt menüde her zaman görünmesini istediğiniz sayfalara dokunun. En çok 4 sayfa sabitlenir; bu genişlikte ilk ' + (dar.matches ? SLOT - 1 : SLOT) + ' tanesi görünür. Sabitlenmeyen slotlar kullanıma göre dolmaya devam eder.'
+                : 'Alt menüdeki ' + n + ' slot en çok açtığınız sayfalarla kendiliğinden dolar. "Sabitle" ile bir sayfayı kalıcı olarak alt menüye alabilirsiniz.';
+        }
+        etiketSigdir();
+    }
+
+    // İlk yükleme: yeniden sırala, değiştiyse öğeleri taşı; çerezi tazele
+    var ilk = slotSec(mevcut);
+    if (ilk.join(',') !== mevcut.join(',')) uygula(ilk, true); else durum();
+    cerezYaz(slotlar);
+    nav.setAttribute('data-hazir', '1');
+
+    function genislikDegisti() { durum(); }
+    try { dar.addEventListener('change', genislikDegisti); }
+    catch (e) { try { dar.addListener(genislikDegisti); } catch (e2) {} }
+    // Yazı tipi geç yüklenirse etiket ölçüsü değişir
+    try { if (document.fonts && document.fonts.ready) document.fonts.ready.then(etiketSigdir); } catch (e) {}
+
+    // ── Basma efekti ──────────────────────────────────────────────────────
+    dock.addEventListener('pointerdown', function (e) {
+        var a = e.target.closest('.bn-item');
+        if (a) a.classList.add('is-press');
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+        document.addEventListener(ev, function () {
+            dock.querySelectorAll('.bn-item.is-press').forEach(function (x) { x.classList.remove('is-press'); });
+        }, true);
+    });
+
+    // ── "Diğer" alt sayfası ───────────────────────────────────────────────
+    if (!more || !ovl || !sheet) return;
+    var pinBtn = document.getElementById('bnPinBtn');
+    var kapatBtn = document.getElementById('bnSheetClose');
+    var mesaj = document.getElementById('bnSheetMsg');
+
+    function duzenle(acik) {
+        sheet.classList.toggle('editing', acik);
+        pinBtn.setAttribute('aria-pressed', acik ? 'true' : 'false');
+        pinBtn.textContent = acik ? 'Bitti' : 'Sabitle';
+        sheet.querySelectorAll('.bn-tile .go').forEach(function (go) {
+            if (acik) {
+                go.setAttribute('role', 'button');
+                go.setAttribute('aria-pressed', sab.indexOf(go.parentNode.getAttribute('data-nav')) !== -1 ? 'true' : 'false');
+            } else {
+                go.removeAttribute('role');
+                go.removeAttribute('aria-pressed');
+            }
+        });
+        if (!acik && mesaj) mesaj.textContent = '';
+        durum();
+    }
+    // Sayfa arkası kaydırılmasın diye body sabitlenir (iOS'ta rubber-band
+    // dahil en güvenilir yöntem); kapanışın HER yolunda (Esc/✕/arka plan/
+    // karo navigasyonu/bfcache) geri açılır — bkz. pagehide/pageshow altta.
+    var kilitliY = 0;
+    function scrollKilitle() {
+        kilitliY = window.scrollY || document.documentElement.scrollTop || 0;
+        document.body.style.position = 'fixed';
+        document.body.style.top = (-kilitliY) + 'px';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+    }
+    function scrollKilitAc() {
+        if (document.body.style.position !== 'fixed') return;
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        window.scrollTo(0, kilitliY);
+    }
+    function ac() {
+        scrollKilitle();
+        ovl.hidden = false;
+        more.setAttribute('aria-expanded', 'true');
+        duzenle(false);
+        kapatBtn.focus();
+    }
+    function kapat() {
+        if (ovl.hidden) return;
+        duzenle(false);
+        ovl.hidden = true;
+        more.setAttribute('aria-expanded', 'false');
+        more.focus();
+        scrollKilitAc();
+    }
+    // Karo navigasyonu (gerçek <a href>) kapat()'ı çağırmadan sayfadan
+    // ayrılır — sayfayı burada TAMAMEN kapat (yalnız kilidi değil): yoksa
+    // bfcache'ten geri dönüşte body serbest ama "Diğer" hâlâ açık görünür.
+    // Odak taşınmaz (sayfa zaten ayrılıyor / geri dönüşte kullanıcı dokunmadı).
+    function sessizKapat() {
+        if (!ovl.hidden) {
+            duzenle(false);
+            ovl.hidden = true;
+            more.setAttribute('aria-expanded', 'false');
+        }
+        scrollKilitAc();
+    }
+    window.addEventListener('pagehide', sessizKapat);
+    window.addEventListener('pageshow', sessizKapat);
+    more.addEventListener('click', ac);
+    kapatBtn.addEventListener('click', kapat);
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) kapat(); });
+    pinBtn.addEventListener('click', function () { duzenle(!sheet.classList.contains('editing')); pinBtn.focus(); });
+    document.addEventListener('keydown', function (e) {
+        if (ovl.hidden) return;
+        if (e.key === 'Escape') { e.preventDefault(); kapat(); return; }
+        if (e.key !== 'Tab') return;
+        // Odak dialog içinde kalsın
+        var od = [].slice.call(sheet.querySelectorAll('button, a[href]')).filter(function (x) { return x.offsetParent !== null; });
+        if (!od.length) return;
+        var i = od.indexOf(document.activeElement);
+        if (e.shiftKey && (i <= 0)) { e.preventDefault(); od[od.length - 1].focus(); }
+        else if (!e.shiftKey && (i === -1 || i === od.length - 1)) { e.preventDefault(); od[0].focus(); }
+    });
+
+    // Sabitle modu: karoya dokunmak gitmez, sabitlemeyi açar/kapatır
+    sheet.addEventListener('click', function (e) {
+        var go = e.target.closest('.bn-tile .go');
+        if (!go || !sheet.classList.contains('editing')) return;
+        e.preventDefault();
+        var k = go.parentNode.getAttribute('data-nav');
+        var ad = ogeler[k] ? ogeler[k].getAttribute('aria-label') : k;
+        var i = sab.indexOf(k);
+        if (i !== -1) { sab.splice(i, 1); mesaj.textContent = ad + ' sabitlemesi kaldırıldı.'; }
+        else if (sab.length < SLOT) { sab.push(k); mesaj.textContent = ad + ' alt menüye sabitlendi.'; }
+        else { mesaj.textContent = 'En çok 4 sayfa sabitlenebilir. Önce birinin sabitlemesini kaldırın.'; return; }
+        yaz(SAB, sab);
+        var yeni = slotSec(slotlar);
+        if (yeni.join(',') !== slotlar.join(',')) uygula(yeni, true); else durum();
+        cerezYaz(slotlar);
+        go.focus();
+    });
+    // Karolar <a role="button"> — Enter native click tetikler, Space tetiklemez
+    // (yalnız gerçek <button>'da otomatiktir). Sabitle modunda Space'i elle
+    // click'e çevir, yoksa klavyeyle sabitleme yapılamaz.
+    sheet.addEventListener('keydown', function (e) {
+        if (e.key !== ' ' && e.key !== 'Spacebar') return;
+        var go = e.target.closest('.bn-tile .go');
+        if (!go || !sheet.classList.contains('editing')) return;
+        e.preventDefault();
+        go.click();
+    });
 })();

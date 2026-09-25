@@ -298,6 +298,96 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v260');",
     // Personel Takibi test verisi sıfırlama aracı (pdks_sifirla.php): v261'den v262'ye çekildi.
     "-    define('APP_SURUM', 'v261');",
+    // Sprint Alt-Menü-01 (v263): mobil alt çubuk yeniden yazıldı. render_footer'ın
+    // eski satır içi bottomnav'ı (5 sabit sekme + $is_* bayrakları) kaldırıldı;
+    // çubuk artık nav_alt_model()/nav_alt_ciz() ile çizilir ve aktif bölüm sidebar
+    // ile AYNI nav_aktif_anahtar()'dan gelir. Sidebar'ın $a_* bloğu o fonksiyona
+    // TAŞINDI; hiçbir bağlantının kullanmadığı $a_krap/$a_ustok bırakıldı. <body>
+    // sınıfı çubuksuz rol için 'bn-yok' alır. APP_SURUM v262'den v263'e çekildi.
+    '-    define(\'APP_SURUM\', \'v262\');',
+    '-function render_desktop_sidebar(string $base): void {',
+    '-    $_fn   = function_exists(\'can\');',
+    '-    $p_dash  = !$_fn || can(\'dashboard.read\');',
+    '-    $p_rec   = !$_fn || can(\'records.read\');',
+    '-    $p_recw  = !$_fn || can(\'records.write\');',
+    '-    $p_kant  = !$_fn || can(\'kantar.read\');',
+    '-    $p_stok  = !$_fn || can(\'stok.read\');',
+    '-    $p_rep   = !$_fn || can(\'reports.read\');',
+    '-    $p_def   = !$_fn || can(\'defs.read\');',
+    '-    $p_usr   = $_fn && can(\'users.admin\');',
+    '-    $p_adm   = function_exists(\'is_admin\') && is_admin();',
+    '-    $p_beyan = !$_fn || can(\'beyan.read\') || $p_adm;',
+    '-    // Hesap: yalnız kendi yetkisi. Eski "reports.read\'e düş" köprüsü kaldırıldı',
+    '-    // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan',
+    '-    // rol menüde Hesap\'ı görüp tıklayınca 403 yiyordu.',
+    '-    $p_hes   = !$_fn || can(\'hesap.read\') || $p_adm;',
+    '-    // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN',
+    '-    // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi',
+    '-    // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile',
+    '-    // basılır — pdks_can() burada tanımsız olurdu.',
+    '-    $p_pdks  = ($_fn && (can(\'attendance.employees\') || can(\'attendance.cards\') || can(\'attendance.scan\'))) || $p_adm;',
+    '-    // Günlük İşçi (Sprint Günlük-İşçi-01, Faz 1) — kalıcı personel PDKS\'inden',
+    '-    // AYRI bir bölüm: çavuş + işçi kart havuzu. Aynı desen: can() üzerinden',
+    '-    // DOĞRUDAN kontrol (pdks_gunluk_can() DEĞİL — config/pdks_gunluk.php de',
+    '-    // yalnız kendi sayfalarında yüklenir).',
+    '-    $p_gunluk = nav_ptak_gorunur();',
+    '-',
+    '-    $a_krap  = $cur === \'kantar_raporu.php\';',
+    '-    $a_ustok = $cur === \'stok.php\';',
+    '-<body class="<?= $print_mode ? \'print-mode\' : \'\' ?>"<?= $__body_style ?>>',
+    '-        $cur         = basename($_SERVER[\'PHP_SELF\'] ?? \'\');',
+    '-        $base        = base_url();',
+    '-        $is_home     = in_array($cur, [\'index.php\', \'\']);',
+    '-        $_cikma_hint = ($GLOBALS[\'_nav_cikma_hint\'] ?? false) === true;',
+    '-        $is_records  = !$_cikma_hint && in_array($cur, [\'records.php\', \'record_view.php\', \'record_create.php\', \'record_edit.php\', \'record_new.php\']);',
+    '-        $is_defs     = $cur === \'definitions.php\';',
+    '-        $is_reports  = $cur === \'reports.php\';',
+    '-        // Sidebar ile AYNI listeden beslenir (bkz. nav_ptak_sayfalari()) —',
+    '-        // kullanıcı hangi Personel Takibi alt sayfasında olursa olsun',
+    '-        // alt bardaki sekme vurgulu kalır.',
+    '-        $is_ptak     = in_array($cur, nav_ptak_sayfalari(), true);',
+    '-        $is_hks      = strpos((string)($_SERVER[\'REQUEST_URI\'] ?? \'\'), \'/halkayit/\') !== false;',
+    '-        ?>',
+    '-<nav class="bottomnav" role="navigation" aria-label="Ana gezinme">',
+    '-    <a href="<?= $base ?>index.php" class="bottomnav-item<?= $is_home ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">🏠</span>',
+    '-        <span class="bottomnav-label">Ana Sayfa</span>',
+    '-    </a>',
+    '-    <?php if (!function_exists(\'can\') || can(\'records.read\')): ?>',
+    '-    <a href="<?= $base ?>records.php" class="bottomnav-item<?= $is_records ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">📋</span>',
+    '-        <span class="bottomnav-label">Yüklemeler</span>',
+    '-    <?php endif; ?>',
+    '-    <?php if (!function_exists(\'can\') || can(\'records.write\')): ?>',
+    '-    <a href="<?= $base ?>halkayit/index.php" class="bottomnav-item bottomnav-raised<?= $is_hks ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-raised-circle">🏛</span>',
+    '-        <span class="bottomnav-label">Bildirim</span>',
+    '-    <?php if (nav_ptak_gorunur()): ?>',
+    '-    <a href="<?= $base ?>personel_takip.php" class="bottomnav-item<?= $is_ptak ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">🧑‍🌾</span>',
+    '-        <span class="bottomnav-label">Personel</span>',
+    '-    <?php if (!function_exists(\'can\') || can(\'reports.read\')): ?>',
+    '-    <a href="<?= $base ?>reports.php" class="bottomnav-item<?= $is_reports ? \' active\' : \'\' ?>">',
+    '-        <span class="bottomnav-icon">📊</span>',
+    '-        <span class="bottomnav-label">Raporlar</span>',
+    '-</nav>',
+    '-<?php',
+    // Sprint Alt-Menü-01 düzeltme turu (mobil bottomnav — bu dosyanın sözünü
+    // ettiği eski bottomnav-item şablonuyla İLGİSİZ, ayrı bir modül):
+    // dashboard.read'i olmayan bir rolde Ana Sayfa index.php'den başka bir
+    // sayfaya gidiyordu ama o sayfadayken hiçbir öğe aktif görünmüyordu, ve
+    // Ana Sayfa hedefiyle AYNI href'e sahip bir aday (ör. yalnız hesap.read)
+    // ikinci bir slot olarak da çiziliyordu. nav_alt_model()/nav_alt_ciz()
+    // BU İKİ hatayı düzeltmek için yeniden yazıldı — 5 satır bu yüzden
+    // "silinip yeniden yazılmış" görünüyor, İÇERİK KAYBI değil
+    // (pdks_faz1b_static_smoke.php'de AYNI 5 satır, AYNI gerekçeyle).
+    '-    $izin    = nav_alt_izinler();',
+    '-    $adaylar = array_keys(array_filter($izin));',
+    '-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);',
+    '-        \'aktif\'   => nav_aktif_anahtar(),',
+    '-        echo $oge(\'home\', $base . $m[\'home\'], \' bn-home\', $aktif === \'home\' && $m[\'home\'] === \'index.php\', false)',
+    // Doğrulama turu: home_aktif'e null===null koruması eklendi (satır yeniden yazıldı).
+    '-        \'home_aktif\' => $home !== null && nav_alt_home_anahtar($home) === $aktif,',
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',
