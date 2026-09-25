@@ -386,6 +386,8 @@ $helpersBeklenenEskiSatirlar = [
     '-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);',
     '-        \'aktif\'   => nav_aktif_anahtar(),',
     '-        echo $oge(\'home\', $base . $m[\'home\'], \' bn-home\', $aktif === \'home\' && $m[\'home\'] === \'index.php\', false)',
+    // Doğrulama turu: home_aktif'e null===null koruması eklendi (satır yeniden yazıldı).
+    '-        \'home_aktif\' => $home !== null && nav_alt_home_anahtar($home) === $aktif,',
 ];
 $helpersBeklenmeyenSilinen = array_filter($helpersSilinen, fn($l) => !in_array(trim($l), array_map('trim', $helpersBeklenenEskiSatirlar), true));
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.management_reports genişlemesi), başka hiçbir satır silinmedi',

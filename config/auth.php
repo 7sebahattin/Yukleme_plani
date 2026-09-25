@@ -177,6 +177,9 @@ function is_admin(): bool {
     // önbellek. sidebar/bottomnav tek render'da is_admin()'i birden çok kez
     // çağırıyor (nav_ptak_gorunur, first_allowed_page, render_desktop_sidebar…);
     // önbellek olmadan her çağrı ayrı bir DB sorgusu demekti.
+    // ⚠ Önbellek TEK istek boyunca geçerlidir: user_roles'a yazan her yol
+    // (bugün yalnız users.php) yazdıktan sonra yönlendirip exit etmeli —
+    // aynı istekte is_admin()'i yeniden okursa ESKİ değeri görür.
     static $cache = [];
     $uid = (int)$user['id'];
     if (isset($cache[$uid])) return $cache[$uid];

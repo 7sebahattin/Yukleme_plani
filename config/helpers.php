@@ -718,7 +718,10 @@ function nav_alt_model(): ?array {
         // Ana Sayfa dashboard.read olmayan bir rolde index.php'den başka bir
         // sayfaya gidebilir (bkz. nav_alt_home_anahtar) — o sayfadayken de
         // Ana Sayfa aktif görünsün.
-        'home_aktif' => $home !== null && nav_alt_home_anahtar($home) === $aktif,
+        // null === null eşleşmesi Ana Sayfa'yı alakasız bir sayfada aktif
+        // göstermesin (hedef kayıtta yoksa aktiflik hiç olmaz).
+        'home_aktif' => $home !== null && nav_alt_home_anahtar($home) !== null
+                        && nav_alt_home_anahtar($home) === $aktif,
     ];
 }
 

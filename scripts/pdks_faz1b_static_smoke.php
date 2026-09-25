@@ -562,6 +562,8 @@ $beklenenEskiSatirlar = [
     '-    $izinli  = fn($k): bool => is_string($k) && !empty($izin[$k]);',
     '-        \'aktif\'   => nav_aktif_anahtar(),',
     '-        echo $oge(\'home\', $base . $m[\'home\'], \' bn-home\', $aktif === \'home\' && $m[\'home\'] === \'index.php\', false)',
+    // Doğrulama turu: home_aktif'e null===null koruması eklendi (satır yeniden yazıldı).
+    '-        \'home_aktif\' => $home !== null && nav_alt_home_anahtar($home) === $aktif,',
 ];
 $diffHelpers = shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1');
 $silinenHelpers = array_filter(explode("\n", (string)$diffHelpers), function ($l) {

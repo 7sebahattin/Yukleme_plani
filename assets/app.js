@@ -2,20 +2,24 @@
    Yükleme Planı - app.js (v3)
    Modal-tabanlı palet ekleme/düzenleme
    ========================================================= */
+/* ── Alt çubuğun (bottomnav) kapladığı alan — sabit dok içeriğin/açılır
+   listelerin arkasında kalmasın diye tüm "ekranın altı" hesaplarında
+   kullanılır. Masaüstünde ve body.bn-yok'ta --bn-h 0'dır.
+   ⚠ Bilerek IIFE'lerin DIŞINDA: dosya dört ayrı IIFE'den oluşur ve hem
+   kebab (1.) hem öneri kutusu positionList() (2.) bunu çağırır. İlk IIFE'nin
+   içinde tanımlıyken öneri kutusu her odaklanmada ReferenceError veriyordu
+   (scripts/suggest_list_smoke.js). ── */
+function bnAltPay() {
+    try {
+        return parseFloat(getComputedStyle(document.body).getPropertyValue('--bn-h')) || 0;
+    } catch (_) { return 0; }
+}
+function ekranAlti() {
+    return window.innerHeight - bnAltPay();
+}
+
 (function () {
     'use strict';
-
-    /* ── Alt çubuğun (bottomnav) kapladığı alan — sabit dok içeriğin/açılır
-       listelerin arkasında kalmasın diye tüm "ekranın altı" hesaplarında
-       kullanılır. Masaüstünde ve body.bn-yok'ta --bn-h 0'dır. ── */
-    function bnAltPay() {
-        try {
-            return parseFloat(getComputedStyle(document.body).getPropertyValue('--bn-h')) || 0;
-        } catch (_) { return 0; }
-    }
-    function ekranAlti() {
-        return window.innerHeight - bnAltPay();
-    }
 
     /* ── Türkçe büyük harf — data-uppercase="tr" ── */
     // Sayfa yüklenince mevcut değerleri dönüştür (DB'den gelen eski title-case değerler için)
@@ -1963,7 +1967,9 @@
             if (altBosluk < h + 8 && r.top > altBosluk) {
                 // Aşağıda yer yok → yukarı aç
                 list.style.top    = 'auto';
-                list.style.bottom = (ekranAlti() - r.top + 3) + 'px';
+                // position:fixed'in bottom'u VİEWPORT'un altından ölçülür —
+                // burada --bn-h düşülmez (düşülseydi liste girdinin üstüne binerdi)
+                list.style.bottom = (window.innerHeight - r.top + 3) + 'px';
             } else {
                 list.style.bottom = 'auto';
                 list.style.top    = (r.bottom + 3) + 'px';
@@ -2549,10 +2555,19 @@
         scrollKilitAc();
     }
     // Karo navigasyonu (gerçek <a href>) kapat()'ı çağırmadan sayfadan
-    // ayrılır — kilidi burada aç, yoksa bfcache'ten geri dönüşte body
-    // hâlâ sabitlenmiş görünür.
-    window.addEventListener('pagehide', scrollKilitAc);
-    window.addEventListener('pageshow', scrollKilitAc);
+    // ayrılır — sayfayı burada TAMAMEN kapat (yalnız kilidi değil): yoksa
+    // bfcache'ten geri dönüşte body serbest ama "Diğer" hâlâ açık görünür.
+    // Odak taşınmaz (sayfa zaten ayrılıyor / geri dönüşte kullanıcı dokunmadı).
+    function sessizKapat() {
+        if (!ovl.hidden) {
+            duzenle(false);
+            ovl.hidden = true;
+            more.setAttribute('aria-expanded', 'false');
+        }
+        scrollKilitAc();
+    }
+    window.addEventListener('pagehide', sessizKapat);
+    window.addEventListener('pageshow', sessizKapat);
     more.addEventListener('click', ac);
     kapatBtn.addEventListener('click', kapat);
     ovl.addEventListener('click', function (e) { if (e.target === ovl) kapat(); });
