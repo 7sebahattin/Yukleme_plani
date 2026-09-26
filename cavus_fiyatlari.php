@@ -255,7 +255,7 @@ render_flash();
         <input type="hidden" name="form" value="cavus_ucret">
         <div class="pdks-form-grid">
             <label><span class="form-label">Günlük Ücret *</span>
-                <input type="text" name="cavus_daily_rate" required inputmode="decimal" placeholder="ör. 1000"></label>
+                <input type="text" name="cavus_daily_rate" required inputmode="decimal" placeholder="ör. 1500 veya 1500,50"></label>
             <label><span class="form-label">Para Birimi *</span>
                 <select name="cavus_currency" required>
                     <?php foreach ($paraBirimleri as $kod => $etiket): ?>

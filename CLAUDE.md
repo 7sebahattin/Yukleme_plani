@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v263` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v264` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -284,6 +284,32 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   Test: `node scripts/suggest_list_smoke.js`.
 
 ---
+
+## Çavuş Ücreti (Faz 8B eki)
+
+Çavuşun KENDİ günlük ücreti — **zorunlu değil**. Tablo `foreman_daily_rates`
+(`foreman_worker_rates`'in worker_type_id'siz eşdeğeri, tarihli valid_from/valid_to).
+Giriş: `cavus_fiyatlari.php`'de Tam/Yarım/FM kartının ALTINDA ayrı kart
+(`form=cavus_ucret`; mevcut form `form=oran`). Kod: `config/pdks_faz8b.php`
+`pdks_faz8b_cavus_ucret_*`. Test: `php scripts/pdks_cavus_ucret_smoke.php`.
+
+- **Otomatik satır:** `pdks_faz8b_hakedis_hesapla()` o oturumda ≥1 işlenmiş (voided
+  olmayan) dönem varsa ve o tarihte geçerli ücret tanımlıysa 1 satır ekler
+  (`worker_type_id=NULL`, `work_period_id=NULL`, "Çavuş Ücreti"). Çavuş kart basmaz.
+  Ücret yoksa satır da yoktur ve **eksik SAYILMAZ**. Tutar Tam/Yarım'dan bağımsız,
+  günlük sabit. Cari/ekstre/rapor/toplu döküm `total_amount` okuduğu için oralara
+  kendiliğinden yansır — tüketicilere satır bazlı kod EKLEME.
+- **Aynı gün İKİ oturum olabilir** (foreman+work_date+depo UNIQUE): ücret YALNIZ o
+  günün en küçük id'li, dönemi olan oturumuna ("ankor") yazılır; bir oturum ücreti
+  FİNAL olarak içerdiyse başka oturum ASLA almaz (çift ödeme yapısal olarak engelli).
+  Dönem değişince kardeş taslak da `needs_recalculation` alır
+  (`pdks_faz8b_cavus_ucret_kardes_isaretle()` — faz8e/8h/8j çağırır).
+- **Para birimi** işçi satırlarından farklıysa mevcut `karisik_para_birimi` kapısı
+  hesaplamayı durdurur (ayrı mesaj yok).
+- **Kendi migrasyonu var** (`pdks_faz8b_cavus_ucret_migrate()`; `cavus_fiyatlari.php`
+  tablo yoksa açılışta çağırır, `migrate.php`'de de kart var). `pdks_faz8b_sema_hazir()`'e
+  BİLEREK EKLENMEDİ — eklenseydi bu opsiyonel tablo yokken TÜM Faz 8B kilitlenirdi.
+  Tablo yoksa hesap "ücret tanımsız" gibi davranır.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 
