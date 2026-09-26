@@ -202,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v263',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v263';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v263');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v264',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v264';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v264');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -514,6 +514,8 @@ $beklenenEskiSatirlar = [
     // TAŞINDI; hiçbir bağlantının kullanmadığı $a_krap/$a_ustok bırakıldı. <body>
     // sınıfı çubuksuz rol için 'bn-yok' alır. APP_SURUM v262'den v263'e çekildi.
     '-    define(\'APP_SURUM\', \'v262\');',
+    // Çavuş Ücreti sprint'i (Faz 8B eki): APP_SURUM v263'ten v264'e çekildi.
+    "-    define('APP_SURUM', 'v263');",
     '-    $a_krap  = $cur === \'kantar_raporu.php\';',
     '-    $a_ustok = $cur === \'stok.php\';',
     '-<body class="<?= $print_mode ? \'print-mode\' : \'\' ?>"<?= $__body_style ?>>',

@@ -125,6 +125,8 @@ function pdks_faz8e_manuel_cikis_kaydet(
         // Faz 8B'nin mevcut taslak yeniden hesaplama işareti.
         $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1 WHERE session_id = ? AND status = 'draft'")
             ->execute([(int)$p['session_id']]);
+        // Çavuş Ücreti (Faz 8B eki): kardeş oturumun ankor olma ihtimali değişmiş olabilir.
+        pdks_faz8b_cavus_ucret_kardes_isaretle((int)$p['session_id'], $pdo);
         // Mevcut İşlem Geçmişi tablosuna aynı transaction içinde yaz: denetim kaydı
         // başarısızsa manuel çıkış da geri alınır.
         $pdo->prepare(

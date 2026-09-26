@@ -93,6 +93,7 @@ function pdks_faz8j_void(int $periodId, int $sessionId, string $depo, string $re
         $fmSaatSifirla = pdks_gunluk_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved_hours') ? ',overtime_approved_hours=NULL' : '';
         $pdo->prepare('UPDATE daily_worker_work_periods SET is_voided=1,voided_at=?,voided_by_user_id=?,void_reason=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL' . $fmSaatSifirla . ',overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$now,$user,$reason,$periodId]);
         $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation=1 WHERE session_id=? AND status='draft'")->execute([$sessionId]);
+        pdks_faz8b_cavus_ucret_kardes_isaretle($sessionId, $pdo);   // Çavuş Ücreti (Faz 8B eki): kardeş oturum
         pdks_faz8j_audit($pdo,$user,'puantaj_iptal',$periodId,$p,['session_id'=>$sessionId,'period_id'=>$periodId,'reason'=>$reason,'voided_at'=>$now]);
         $pdo->commit(); return ['ok'=>true];
     } catch(Throwable $x) { if($pdo->inTransaction())$pdo->rollBack(); return ['ok'=>false,'hata'=>$x->getMessage()]; }
@@ -133,6 +134,7 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
         $fmSaatSifirla = pdks_gunluk_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved_hours') ? ',overtime_approved_hours=NULL' : '';
         $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL' . $fmSaatSifirla . ',overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
         $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation=1 WHERE session_id=? AND status='draft'")->execute([$sid]);
+        pdks_faz8b_cavus_ucret_kardes_isaretle($sid, $pdo);   // Çavuş Ücreti (Faz 8B eki): kardeş oturum
         pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user]);
         $pdo->commit(); return ['ok'=>true];
     } catch(Throwable $x) { if($pdo->inTransaction())$pdo->rollBack(); return ['ok'=>false,'hata'=>$x->getMessage()]; }
