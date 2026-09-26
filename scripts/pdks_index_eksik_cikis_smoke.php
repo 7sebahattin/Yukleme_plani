@@ -83,6 +83,16 @@ if (!preg_match(
 // SATIRLARI değişmiyor, yalnız bu TEK göreli referans çözülüyor.
 $hesaplaBlok = str_replace('__DIR__', var_export($ROOT, true), $mBlok[0]);
 
+// Blok kapıyı nav_ptak_gorunur()'den alır (sidebar/bottomnav ile TEK kaynak).
+// helpers.php'nin tamamı yüklenmez (migrasyon IIFE'si, render fonksiyonları) —
+// fonksiyonun GERÇEK tanımı oradan çıkarılır, kopya yazılmaz.
+if (!preg_match('/function nav_ptak_gorunur\(\): bool \{.*?\n\}\n/s',
+        (string)file_get_contents($ROOT . '/config/helpers.php'), $mNav)) {
+    fwrite(STDERR, "config/helpers.php'de nav_ptak_gorunur() bulunamadı.\n");
+    exit(1);
+}
+eval($mNav[0]);
+
 function pdks_idx_hesapla(string $blok): int {
     global $personel_eksik_cikis;
     eval($blok);
@@ -127,6 +137,16 @@ ok('yetkisiz kullanıcı için HÂLÂ 0 (izin kapısı veri varlığından BAĞI
 $PERMS = ['attendance.daily_scan'];
 $v = pdks_idx_hesapla($hesaplaBlok);
 ok('izinli kullanıcı için rozet = 2 (iki açık/eksik çıkışlı kart)', $v === 2, (string)$v);
+
+// Kalıcı PDKS izinleri personel_takip.php'yi AÇMAZ (sayfa 403 verir) — kart
+// da rozet de o kullanıcıya gösterilmemeli. Eskiden index.php bu üç izni de
+// sayıyordu: kart + kırmızı rozet görünüyor, tıklanınca 403.
+foreach (['attendance.employees', 'attendance.cards', 'attendance.scan'] as $__kalici) {
+    $PERMS = [$__kalici];
+    $v = pdks_idx_hesapla($hesaplaBlok);
+    ok("yalnız $__kalici → rozet 0 (personel_takip.php bu izinle 403 verir)", $v === 0, (string)$v);
+}
+$PERMS = ['attendance.daily_scan'];   // sonraki bölümler izinli kullanıcıyla devam eder
 
 echo "\n=== D. Başka depodaki eksik çıkış SAYILMAZ (aktif depo kapsamı) ===\n";
 global $AKTIF_DEPO;

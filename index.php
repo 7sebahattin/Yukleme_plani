@@ -73,17 +73,15 @@ if (can('beyan.read') && (can('records.write') || is_admin())) {
 
 // Personel Takibi kartı için: BUGÜNÜN eksik çıkışları (Günlük İşçi modülü) —
 // aktif depo kapsamında (uygulamanın "zorunlu tek depo" kuralıyla AYNI).
-// İzin kontrolü aşağıdaki kart görünürlüğüyle (personel_takip.php'nin kendi
-// kapı mantığı) BİREBİR AYNI OLMALIDIR — İKİSİNİ BİRLİKTE değiştir (beyan
-// uygunluk kapısının üç yerde tekrarlandığı ile AYNI, bilinçli desen —
-// bkz. CLAUDE.md). pdks_gunluk_eksik_cikislar() KENDİ SQL'i YAZILMAZ,
+// İzin kontrolü kart görünürlüğü, sidebar ve bottomnav ile AYNI TEK kaynaktan
+// gelir: nav_ptak_gorunur() (config/helpers.php) — personel_takip.php'nin
+// kendi kapısıyla birebir. Eskiden burada elle yazılmış bir liste vardı ve
+// kalıcı PDKS izinlerini (employees/cards/scan) de sayıyordu: kart görünüyor,
+// tıklanınca 403 veriyordu. Listeyi buraya GERİ KOPYALAMA. pdks_gunluk_eksik_cikislar() KENDİ SQL'i YAZILMAZ,
 // config/pdks_gunluk.php'nin tek paylaşılan fonksiyonu (gunluk_isci_puantaj.php
 // İLE AYNI kaynak) çağrılır.
 $personel_eksik_cikis = 0;
-if (is_admin() || can('attendance.employees') || can('attendance.cards') || can('attendance.scan')
-    || can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan')
-    || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements')
-    || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')) {
+if (nav_ptak_gorunur()) {
     try {
         require_once __DIR__ . '/config/pdks_gunluk.php';
         if (pdks_gunluk_sema_hazir(db())) {
@@ -118,7 +116,10 @@ if (is_admin()) {
 }
 
 // Bölüm görünürlükleri
-$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read');
+// nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
+// izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
+// için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
+$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur();
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -234,13 +235,9 @@ if ($db_backup_result !== null): ?>
 // Faz 7 (Sprint Navigasyon-01): bu kart artık personel_takip.php'ye açılır
 // (kalıcı personel + günlük işçi + hakediş/cari + raporlama merkezi) ve
 // GÖRÜNÜRLÜĞÜ personel_takip.php'nin KENDİ kapı mantığıyla AYNI genişlikte
-// kontrol edilir — yalnız employees/cards DEĞİL, o merkezdeki HERHANGİ bir
-// attendance.* alt-iznine sahip kullanıcı kartı görür (görev talimatı:
-// "Connect/add the existing mobile 'Personel' button... to personel_takip.php").
-if (is_admin() || can('attendance.employees') || can('attendance.cards') || can('attendance.scan')
-    || can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan')
-    || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements')
-    || can('attendance.foreman_accounts') || can('attendance.foreman_payments') || can('attendance.management_reports')):
+// kontrol edilir — TEK kaynak nav_ptak_gorunur() (sidebar + bottomnav ile
+// aynı fonksiyon); kart görünüp sayfa 403 veremez.
+if (nav_ptak_gorunur()):
 ?>
     <a href="personel_takip.php" class="home-card">
         <div class="home-card-icon home-card-icon-personel" aria-hidden="true">

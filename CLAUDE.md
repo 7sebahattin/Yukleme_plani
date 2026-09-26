@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `nuverna.derspros.com.tr`  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v264` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v265` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -235,7 +235,10 @@ dolan slotlar: **390px altında 3, üstünde 4** (sunucu hep 4 çizer, CSS
   burayı da güncelle. Stok (`stok.php`), maliyet, kantar raporu bilerek YOK.
 - **Ana Sayfa hedefi:** `dashboard.read` → `index.php`, yoksa
   `first_allowed_page()`; o da null ise Ana Sayfa çizilmez. Ana Sayfa ASLA 403
-  veren bir bağlantı olmaz; yalnız `index.php`'de aktiftir. Ne Ana Sayfa ne
+  veren bir bağlantı olmaz; `index.php`'de aktiftir — `dashboard.read`'i
+  olmayan kullanıcıda hedefi `first_allowed_page()` olduğu için O sayfa
+  ailesinde (ör. Personel Takibi) de `aria-current` taşır (bottomnav_smoke
+  bunu sabitliyor). Ne Ana Sayfa ne
   izinli sayfa varsa çubuk hiç basılmaz ve body `bn-yok` alır (`--bn-h: 0`).
 - **"Diğer"** yalnız slotlara sığmayan sayfa varsa çıkar (tam 4 aday → yalnız
   dar ekranda, `.bn-more-dar`). Güncel sayfa görünen slotta değilse "Diğer"
@@ -806,6 +809,12 @@ role_permissions / user_roles) zaten vardı; `roles.php` onun üzerine CRUD koya
 - **`is_admin()` (slug) ≠ `users.admin` (yetki).** `audit.php` ve
   `admin_db_backups.php` `is_admin()` ile kapılıdır; katalogda karşılıkları
   YOKTUR, yani özel role devredilemez. Bilinçli.
+- **Personel Takibi görünürlüğü TEK kaynak `nav_ptak_gorunur()`** (helpers.php):
+  sidebar, bottomnav, `first_allowed_page()` ve `index.php`'deki kart + eksik
+  çıkış rozeti onu çağırır; izin listesi `personel_takip.php`'nin kapısıyla
+  birebir (`pdks_takip_static_smoke` karşılaştırır). Kalıcı PDKS izinleri
+  (`attendance.employees/cards/scan`) bu merkezi AÇMAZ — index.php eskiden
+  onları da sayıyordu: kart görünüyor, tıklanınca 403. Listeyi elle kopyalama.
 - **`first_allowed_page()`** — giriş akışı login → depo_sec → `index.php`'dir ve
   index.php `dashboard.read` ister. Bu yetkisi olmayan rol girişte **403'e
   düşüp sistemi hiç kullanamıyordu** (403 sayfasının tek bağlantısı yine

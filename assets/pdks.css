@@ -533,45 +533,48 @@
 @media (prefers-reduced-motion: reduce) {
     .pdks-scan-ripple, .pdks-scan-card .pdks-kiosk-scan-text, .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { animation: none; }
 }
-/* Açık tema: aynı hiyerarşi, koyu zemin yerine açık yüzey ve okunaklı metin. */
-html[data-theme="light"] .pdks-mobile-shell {
+/* Açık tema: aynı hiyerarşi, koyu zemin yerine açık yüzey ve okunaklı metin.
+   :not([data-theme="dark"]) — JS kapalıyken data-theme hiç atanmaz ve sayfanın
+   geri kalanı (style.css) açık kalır; [data-theme="light"] yazılınca panel o
+   durumda açık sayfanın ortasında koyu kalıyordu. Özgüllük aynı (0,1,1). */
+html:not([data-theme="dark"]) .pdks-mobile-shell {
     color: #18283a;
     background: radial-gradient(circle at 82% 0%, #d7f1ff 0, transparent 35%), linear-gradient(160deg, #ffffff, #edf4fa 72%);
     border-color: #d3e0eb;
     box-shadow: 0 20px 48px #2e5d7a1f;
 }
-html[data-theme="light"] .pdks-mobile-hero h1 { color: #142840; }
-html[data-theme="light"] .pdks-dashboard-grid .home-section-title { color: #42627b; border-top-color: #d6e2ec; }
-html[data-theme="light"] .pdks-dashboard-grid .home-card { color: #172b41; background: linear-gradient(145deg, #ffffff, #edf4fa); border-color: #cfdeea; box-shadow: inset 0 1px #ffffff, 0 10px 24px #31516a18; }
-html[data-theme="light"] .pdks-dashboard-grid .home-card:hover,
-html[data-theme="light"] .pdks-dashboard-grid .home-card:focus-visible { border-color: #4297b9; background: linear-gradient(145deg, #ffffff, #e1f3fb); }
-html[data-theme="light"] .pdks-dashboard-grid .home-card-title { color: #142840; }
-html[data-theme="light"] .pdks-dashboard-grid .home-card-sub { color: #557087; }
-html[data-theme="light"] .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"] { background: linear-gradient(145deg, #edfdf5, #d8f5e7); }
-html[data-theme="light"] .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { background: linear-gradient(145deg, #fff0f2, #f8d9df); }
+html:not([data-theme="dark"]) .pdks-mobile-hero h1 { color: #142840; }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-section-title { color: #42627b; border-top-color: #d6e2ec; }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card { color: #172b41; background: linear-gradient(145deg, #ffffff, #edf4fa); border-color: #cfdeea; box-shadow: inset 0 1px #ffffff, 0 10px 24px #31516a18; }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card:hover,
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card:focus-visible { border-color: #4297b9; background: linear-gradient(145deg, #ffffff, #e1f3fb); }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card-title { color: #142840; }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card-sub { color: #557087; }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"] { background: linear-gradient(145deg, #edfdf5, #d8f5e7); }
+html:not([data-theme="dark"]) .pdks-dashboard-grid .home-card[href="gunluk_isci_giris_cikis.php"]::before { background: linear-gradient(145deg, #fff0f2, #f8d9df); }
 /* Açık tema: günlük kart tarama ekranı. */
-html[data-theme="light"] .pdks-daily-kiosk {
+html:not([data-theme="dark"]) .pdks-daily-kiosk {
     color: #18283a;
     background: radial-gradient(circle at 80% 10%, #d9f5e9 0, transparent 28%), linear-gradient(160deg, #ffffff, #eef5fa 72%);
     border-color: #d3e0eb;
     box-shadow: 0 20px 48px #2e5d7a1f;
 }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-selected,
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-counters { color: #18283a; background: #ffffff; border-color: #d3e0eb; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-selected-name { color: #142840; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan { color: #18283a; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #49647a; }
-html[data-theme="light"] .pdks-kiosk-degistir-btn { border-color: #d3e0eb; color: #3f5975; }
-html[data-theme="light"] .pdks-kiosk-degistir-btn:hover,
-html[data-theme="light"] .pdks-kiosk-degistir-btn:focus-visible { background: #eef4f9; border-color: #b9cddd; }
-html[data-theme="light"] .pdks-scan-visual { background: radial-gradient(circle, #20b969a6 0, #10884d66 38%, transparent 73%); }
-html[data-theme="light"] .pdks-scan-ripple { border-color: #087e4eaa; box-shadow: 0 0 22px #0f9a5f77, inset 0 0 22px #0f9a5f44; }
-html[data-theme="light"] .pdks-scan-ripple:nth-child(2) { border-color: #069c5b; box-shadow: 0 0 28px #0b9d5f99; }
-html[data-theme="light"] .pdks-scan-ripple:nth-child(3) { border-color: #00a962; box-shadow: 0 0 32px #0baa65bb; }
-html[data-theme="light"] .pdks-scan-info { color: #38556d; background: #ffffff; border-color: #cbdce8; }
-html[data-theme="light"] .pdks-scan-active.is-idle { color: #8f3040; background: #fff1f3; border-color: #f3b5c0; }
-html[data-theme="light"] .pdks-scan-actions .btn-ghost,
-html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost) { color: #27455d; background: #ffffff; border-color: #bcd1df; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-selected,
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-counters { color: #18283a; background: #ffffff; border-color: #d3e0eb; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-selected-name { color: #142840; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-scan { color: #18283a; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-scan-hint { color: #49647a; }
+html:not([data-theme="dark"]) .pdks-kiosk-degistir-btn { border-color: #d3e0eb; color: #3f5975; }
+html:not([data-theme="dark"]) .pdks-kiosk-degistir-btn:hover,
+html:not([data-theme="dark"]) .pdks-kiosk-degistir-btn:focus-visible { background: #eef4f9; border-color: #b9cddd; }
+html:not([data-theme="dark"]) .pdks-scan-visual { background: radial-gradient(circle, #20b969a6 0, #10884d66 38%, transparent 73%); }
+html:not([data-theme="dark"]) .pdks-scan-ripple { border-color: #087e4eaa; box-shadow: 0 0 22px #0f9a5f77, inset 0 0 22px #0f9a5f44; }
+html:not([data-theme="dark"]) .pdks-scan-ripple:nth-child(2) { border-color: #069c5b; box-shadow: 0 0 28px #0b9d5f99; }
+html:not([data-theme="dark"]) .pdks-scan-ripple:nth-child(3) { border-color: #00a962; box-shadow: 0 0 32px #0baa65bb; }
+html:not([data-theme="dark"]) .pdks-scan-info { color: #38556d; background: #ffffff; border-color: #cbdce8; }
+html:not([data-theme="dark"]) .pdks-scan-active.is-idle { color: #8f3040; background: #fff1f3; border-color: #f3b5c0; }
+html:not([data-theme="dark"]) .pdks-scan-actions .btn-ghost,
+html:not([data-theme="dark"]) .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghost) { color: #27455d; background: #ffffff; border-color: #bcd1df; }
 
 /* İşçi tipi seçimi: hem açık hem koyu yüzeyde ayrı, yüksek kontrastlı 3D seçimler. */
 .pdks-daily-kiosk .pdks-kiosk-type-popup {
@@ -644,21 +647,21 @@ html[data-theme="light"] .pdks-scan-actions .btn:not(.btn-primary):not(.btn-ghos
     box-shadow: inset 0 2px #ffffff55, inset 0 -2px #08398788, 0 4px 0 #0b3d93, 0 8px 16px #031d4e77;
 }
 .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec { color: #bdd4e4; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup {
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup {
     color: #172b41;
     background: linear-gradient(145deg, #ffffff, #e9f4fb);
     border-color: #c6d9e8;
     box-shadow: inset 0 1px #ffffff, 0 20px 42px #31516a22;
 }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipBaslik { color: #16324d; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected {
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipBaslik { color: #16324d; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected {
     background: #ffffff;
     border-color: #c6d9e8;
     box-shadow: inset 0 1px #ffffff, 0 6px 14px #31516a10;
 }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-label { color: #52708a; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-name { color: #16324d; }
-html[data-theme="light"] .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec { color: #365675; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-label { color: #52708a; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup .pdks-kiosk-selected-name { color: #16324d; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec { color: #365675; }
 
 /* Giriş / çıkış seçimleri de işçi tipi kartlarıyla aynı basılabilir 3D yüzeyi kullanır. */
 .pdks-daily-kiosk .pdks-kiosk-modebtn-giris,
