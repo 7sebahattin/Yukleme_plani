@@ -99,6 +99,7 @@ $pdks_faz8a_ran     = false;
 $pdks_faz8b_results = []; $pdks_faz8b_ran = false;   // Faz 8B (mesai değerlendirme/ücretlendirme)
 $pdks_faz8j_results = []; $pdks_faz8j_ran = false;
 $pdks_faz9d_results = []; $pdks_faz9d_ran = false;   // Faz 9D (hakediş düzeltme/mahsup)
+$pdks_cavus_ucret_results = []; $pdks_cavus_ucret_ran = false;   // Çavuş Ücreti (Faz 8B eki)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -169,6 +170,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_faz9d_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_faz9d', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cavus_ucret') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_cavus_ucret_ran     = true;
+    $pdks_cavus_ucret_results = pdks_faz8b_cavus_ucret_migrate($pdo);
+    foreach ($pdks_cavus_ucret_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_cavus_ucret', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -359,6 +370,49 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_faz9d_tablolar() as $p9sql) { echo h($p9sql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Çavuş Ücreti — Günlük Ücret Tablosu (Faz 8B eki)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>foreman_daily_rates</code> tablosunu ekler.
+      Çavuşun kendi günlük çalışma ücreti — ZORUNLU DEĞİL, girilirse o gün otomatik
+      hakedişe/rapora/cariye yansır. Faz 8B'nin genel hazır-mı kontrolüne BİLEREK
+      EKLENMEZ; bu migrasyon çalıştırılmasa da mevcut Faz 8B AYNEN çalışır.
+      <?php if ($pdks_cavus_ucret_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_cavus_ucret_results as $pcr): ?>
+        <br>&nbsp;&nbsp;<?= h($pcr['tablo']) ?>: <?= h($pcr['durum']) ?> — <?= h($pcr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_faz8b_cavus_ucret_tablolar()) as $pct):
+          $pce = pdks_faz8b_cavus_ucret_tablo_var($pdo, $pct); ?>
+          <tr>
+            <td><?= h($pct) ?></td>
+            <td style="color:<?= $pce ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pce ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_cavus_ucret">
+      <button type="submit" class="btn btn-primary">Çavuş Ücreti Tablosunu Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_faz8b_cavus_ucret_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>

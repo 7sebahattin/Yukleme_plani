@@ -305,6 +305,8 @@ $helpersBeklenenEskiSatirlar = [
     // TAŞINDI; hiçbir bağlantının kullanmadığı $a_krap/$a_ustok bırakıldı. <body>
     // sınıfı çubuksuz rol için 'bn-yok' alır. APP_SURUM v262'den v263'e çekildi.
     '-    define(\'APP_SURUM\', \'v262\');',
+    // Çavuş Ücreti sprint'i (Faz 8B eki): APP_SURUM v263'ten v264'e çekildi.
+    "-    define('APP_SURUM', 'v263');",
     '-function render_desktop_sidebar(string $base): void {',
     '-    $_fn   = function_exists(\'can\');',
     '-    $p_dash  = !$_fn || can(\'dashboard.read\');',

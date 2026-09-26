@@ -18,6 +18,13 @@ pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
 $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
 
+// Çavuş Ücreti (Faz 8B eki): tablo yoksa BİR KEZ otomatik oluşturmayı dene
+// (idempotent migrasyon fonksiyonu) — başarısızsa aşağıda uyarı kartı gösterilir.
+if (!pdks_faz8b_cavus_ucret_sema_hazir($pdo)) {
+    pdks_faz8b_cavus_ucret_migrate($pdo);
+}
+$cavusUcretHazir = pdks_faz8b_cavus_ucret_sema_hazir($pdo);
+
 $paraBirimleri = [
     'TRY' => 'Türk Lirası (TRY)',
     'EUR' => 'Euro (EUR)',
@@ -28,7 +35,27 @@ $paraBirimleri = [
 $cavusId = filter_var($_GET['cavus'] ?? '', FILTER_VALIDATE_INT) ?: null;
 $errors = [];
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_ucret') {
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('rates');
+    $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $ucret = trim((string)($_POST['cavus_daily_rate'] ?? ''));
+    $ccy = strtoupper(trim((string)($_POST['cavus_currency'] ?? 'TRY'))) ?: 'TRY';
+    $vf = trim((string)($_POST['cavus_valid_from'] ?? ''));
+
+    if (!$cavusId) {
+        $errors[] = 'Çavuş seçilmedi.';
+    } elseif (!array_key_exists($ccy, $paraBirimleri)) {
+        $errors[] = 'Geçersiz para birimi seçildi.';
+    } else {
+        $sonuc = pdks_faz8b_cavus_ucret_ekle($cavusId, $ucret, $vf, $ccy, (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Çavuş ücreti eklendi.'));
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('rates');
     $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
@@ -97,6 +124,7 @@ if ($cavusId !== null) {
     }
     if ($seciliCavus) $oranlar = pdks_hakedis_oran_gecmisi($cavusId, $pdo);
 }
+$cavusUcretGecmisi = ($seciliCavus && $cavusUcretHazir) ? pdks_faz8b_cavus_ucret_gecmisi($cavusId, $pdo) : [];
 
 render_header('Çavuş Fiyatları');
 $base = base_url();
@@ -134,6 +162,7 @@ render_flash();
     <form method="post">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
         <input type="hidden" name="foreman_id" value="<?= (int)$seciliCavus['id'] ?>">
+        <input type="hidden" name="form" value="oran">
         <div class="pdks-form-grid">
             <label>
                 <span class="form-label">İşçi Tipi *</span>
@@ -211,6 +240,62 @@ render_flash();
 <?php endforeach; ?>
 </div>
 <?php endif; ?>
+
+<?php if (!$cavusUcretHazir): ?>
+<div class="flash flash-warning">Çavuş Ücreti tablosu henüz oluşturulamadı. Yönetici <a href="migrate.php">migrate.php</a>'den oluşturabilir.</div>
+<?php else: ?>
+
+<div class="card" style="padding:18px 20px;margin:18px 0">
+    <h2 style="margin-top:0;font-size:1rem">Çavuş Ücreti — <?= h($seciliCavus['name']) ?></h2>
+    <p class="muted" style="font-size:.85rem">Bu çavuşun kendi günlük çalışma ücreti. Zorunlu
+       değil — boş bırakılırsa hakedişe hiçbir satır eklenmez.</p>
+    <form method="post">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="foreman_id" value="<?= (int)$seciliCavus['id'] ?>">
+        <input type="hidden" name="form" value="cavus_ucret">
+        <div class="pdks-form-grid">
+            <label><span class="form-label">Günlük Ücret *</span>
+                <input type="text" name="cavus_daily_rate" required inputmode="decimal" placeholder="ör. 1500 veya 1500,50"></label>
+            <label><span class="form-label">Para Birimi *</span>
+                <select name="cavus_currency" required>
+                    <?php foreach ($paraBirimleri as $kod => $etiket): ?>
+                    <option value="<?= h($kod) ?>"><?= h($etiket) ?></option>
+                    <?php endforeach; ?>
+                </select></label>
+            <label><span class="form-label">Geçerlilik Başlangıcı *</span>
+                <input type="date" name="cavus_valid_from" required value="<?= h(date('Y-m-d')) ?>"></label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:14px">+ Çavuş Ücreti Dönemi Ekle</button>
+    </form>
+</div>
+
+<h2 style="font-size:1.05rem">Çavuş Ücreti Geçmişi</h2>
+<?php if (empty($cavusUcretGecmisi)): ?>
+<div class="pdks-empty"><p>Bu çavuş için henüz bir günlük ücret tanımlanmadı.</p></div>
+<?php else: ?>
+<div class="table-wrap pc-only">
+<table class="data-table">
+<thead><tr><th>Ücret</th><th>Geçerlilik</th><th>Durum</th></tr></thead>
+<tbody>
+<?php foreach ($cavusUcretGecmisi as $cu): ?>
+<tr>
+    <td><strong><?= h(number_format((float)$cu['daily_rate'], 2, ',', '.')) ?> <?= h($cu['currency']) ?></strong></td>
+    <td class="muted"><?= h(date('d.m.Y', strtotime($cu['valid_from']))) ?> → <?= $cu['valid_to'] ? h(date('d.m.Y', strtotime($cu['valid_to']))) : 'devam ediyor' ?></td>
+    <td><span class="pdks-badge <?= $cu['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $cu['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
+</tr>
+<?php endforeach; ?>
+</tbody></table></div>
+
+<div class="pdks-cards mobile-only">
+<?php foreach ($cavusUcretGecmisi as $cu): ?>
+<div class="pdks-card-item">
+    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h(number_format((float)$cu['daily_rate'],2,',','.')) ?> <?= h($cu['currency']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($cu['valid_from']))) ?> → <?= $cu['valid_to'] ? h(date('d.m.Y', strtotime($cu['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $cu['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $cu['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
+</div>
+<?php endforeach; ?>
+</div>
+<?php endif; ?>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <?php render_footer(); ?>

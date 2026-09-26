@@ -232,6 +232,54 @@ $stKontrolYok = db()->prepare("SELECT COUNT(*) FROM foreman_worker_rates WHERE f
 $stKontrolYok->execute([$ayseId, $erkekId]);
 ok('geçersiz tutarla HİÇBİR satır eklenmedi (0 ÜRETİLMEDİ)', (int)$stKontrolYok->fetchColumn() === 0);
 
+echo "\n=== 3b. cavus_fiyatlari.php — Çavuş Ücreti (Faz 8B eki): tablo yokken otomatik migrasyon denemesi ===\n";
+// foreman_daily_rates HENÜZ yok — sayfa açılışta pdks_faz8b_cavus_ucret_migrate()'i
+// otomatik dener. SQLite gerçek DDL'in (INDEX/FOREIGN KEY) sözdizimini kabul
+// etmez, migrate bunu YAKALAR ve 'hata' raporlar — sayfa PHP uyarısı SIZDIRMADAN
+// uyarı kartına döner (bu ortamda beklenen; gerçek MySQL'de tablo kurulur).
+ok('foreman_daily_rates HENÜZ yok', !pdks_faz8b_cavus_ucret_sema_hazir(db()));
+$s2b = renderPage('cavus_fiyatlari.php', ['cavus' => (string)$ayseId]);
+ok('hata sızmadı (otomatik migrasyon denemesi sayfayı ÇÖKERTMEDİ)', !str_starts_with($s2b, '__ERROR__'), $s2b);
+ok('PHP Warning/Notice yok', !str_contains($s2b, 'Warning:') && !str_contains($s2b, 'Notice:'));
+ok('tablo hâlâ yokken uyarı kartı gösteriliyor', str_contains($s2b, 'Çavuş Ücreti tablosu henüz oluşturulamadı'));
+
+echo "\n=== 3c. cavus_fiyatlari.php — Çavuş Ücreti: gerçek tablo kurulduktan sonra form + geçmiş ===\n";
+// Gerçek DDL'i (INDEX/FOREIGN KEY dahil) SQLite'a çevirip GERÇEKTEN kur —
+// diğer *_ui_smoke.php dosyalarıyla AYNI yöntem (ikinci/paralel şema YOK).
+[$fdrCreate, $fdrIdx] = pdks_ddl_sqlite(pdks_faz8b_cavus_ucret_tablolar()['foreman_daily_rates']);
+db()->exec($fdrCreate);
+foreach ($fdrIdx as $ix) db()->exec($ix);
+ok('foreman_daily_rates gerçek DDL ile kuruldu', pdks_faz8b_cavus_ucret_sema_hazir(db()));
+
+$s2c = renderPage('cavus_fiyatlari.php', ['cavus' => (string)$ayseId]);
+ok('hata sızmadı', !str_starts_with($s2c, '__ERROR__'), $s2c);
+ok('PHP Warning/Notice yok', !str_contains($s2c, 'Warning:') && !str_contains($s2c, 'Notice:'));
+ok('Çavuş Ücreti kartı görünüyor', str_contains($s2c, 'Çavuş Ücreti — Ayşe Çavuş'));
+ok('yeni çavuş ücreti formu var (cavus_daily_rate alanı)', str_contains($s2c, 'name="cavus_daily_rate"') && str_contains($s2c, 'name="cavus_currency"') && str_contains($s2c, 'name="cavus_valid_from"'));
+ok('boş geçmiş mesajı gösteriliyor (henüz ücret tanımlanmadı)', str_contains($s2c, 'henüz bir günlük ücret tanımlanmadı'));
+ok('uyarı kartı ARTIK gösterilmiyor (tablo hazır)', !str_contains($s2c, 'Çavuş Ücreti tablosu henüz oluşturulamadı'));
+
+echo "\n=== 3d. cavus_fiyatlari.php — Çavuş Ücreti POST: geçersiz veri + gerçek kayıt sonrası geçmiş ===\n";
+$s2d = renderPage('cavus_fiyatlari.php', [], [
+    'csrf' => 'x', 'form' => 'cavus_ucret',
+    'foreman_id' => (string)$ayseId, 'cavus_daily_rate' => 'gecersiz',
+    'cavus_currency' => 'TRY', 'cavus_valid_from' => '2026-01-01',
+]);
+ok('hata sızmadı', !str_starts_with($s2d, '__ERROR__'), $s2d);
+ok('geçersiz günlük ücret hata mesajı gösteriliyor', str_contains($s2d, 'Günlük ücret geçersiz'));
+ok('geçersiz POST ile HİÇBİR satır eklenmedi', (int)db()->query("SELECT COUNT(*) FROM foreman_daily_rates")->fetchColumn() === 0);
+
+// Gerçek kayıt — backend fonksiyonu doğrudan çağrılır (header()+exit() akışı
+// diğer bölümlerdeki AYNI kısıt: renderPage başarılı POST'u gözlemleyemez).
+$rCavusUcret = pdks_faz8b_cavus_ucret_ekle($ayseId, '1000', '2026-01-01', 'TRY', 1, db());
+ok('Ayşe için çavuş ücreti KAYDEDİLDİ', $rCavusUcret['ok'] === true, json_encode($rCavusUcret, JSON_UNESCAPED_UNICODE));
+
+$s2e = renderPage('cavus_fiyatlari.php', ['cavus' => (string)$ayseId]);
+ok('hata sızmadı', !str_starts_with($s2e, '__ERROR__'), $s2e);
+ok('PHP Warning/Notice yok', !str_contains($s2e, 'Warning:') && !str_contains($s2e, 'Notice:'));
+ok('Çavuş Ücreti geçmişinde 1.000,00 TRY görünüyor', str_contains($s2e, '1.000,00'));
+ok('"devam ediyor" (açık uçlu dönem) görünüyor', str_contains($s2e, 'devam ediyor'));
+
 echo "\n=== 4. cavus_hakedis.php — varsayılan (bugün) ===\n";
 $s3 = renderPage('cavus_hakedis.php');
 ok('hata sızmadı', !str_starts_with($s3, '__ERROR__'), $s3);

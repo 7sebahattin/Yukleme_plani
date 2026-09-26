@@ -80,11 +80,14 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
             <th>Tutar</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($satirlar as $sl): ?>
+        <?php foreach ($satirlar as $sl):
+            $cavusUcretSatiri = array_key_exists('worker_type_id', $sl) && $sl['worker_type_id'] === null
+        && array_key_exists('work_period_id', $sl) && $sl['work_period_id'] === null;
+        ?>
         <tr>
             <td><?= h($sl['worker_type_name_snapshot']) ?></td>
             <?php if ($faz8bHazir): ?>
-            <td><?= h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : 'Tam Mesai') ?></td>
+            <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : 'Tam Mesai') ?></td>
             <td>
                 <?php
                 $fmSaat = (int)($sl['overtime_hours'] ?? 0);
@@ -92,7 +95,7 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
                 $fmBirim = (float)($sl['overtime_unit_rate'] ?? 0);
                 $fmToplam = (float)($sl['overtime_total'] ?? 0);
                 ?>
-                <?php if ($fmSaat > 0 && $fmToplam > 0): ?>
+                <?php if (!$cavusUcretSatiri && $fmSaat > 0 && $fmToplam > 0): ?>
                     <?= $fmSaat ?> saat · <?= h($fmMod === 'fixed' ? 'Sabit' : 'Saatlik') ?>
                     <?php if ($fmMod === 'hourly'): ?> · <?= h(number_format($fmBirim, 2, ',', '.')) ?>/saat<?php endif; ?>
                     · <?= h(number_format($fmToplam, 2, ',', '.')) ?> <?= h($hakedis['currency']) ?>

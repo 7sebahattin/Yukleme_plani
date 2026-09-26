@@ -700,6 +700,204 @@ function pdks_faz8b_oran_ekle(
 }
 
 // =========================================================
+// ÇAVUŞ ÜCRETİ — çavuşun kendi günlük çalışma ücreti (Faz 8B eki)
+// foreman_worker_rates'in worker_type_id'siz eşdeğeri, ZORUNLU DEĞİL.
+// AYRI tablo/AYRI hazır-mı kontrolü BİLEREK pdks_faz8b_sema_hazir()'e
+// EKLENMEZ — bkz. plan §0: aksi hâlde bu opsiyonel migrasyonu henüz
+// çalıştırmamış her kurulumda TÜM Faz 8B kilitlenirdi.
+// =========================================================
+
+function pdks_faz8b_cavus_ucret_tablolar(): array
+{
+    $t = [];
+    $t['foreman_daily_rates'] = "CREATE TABLE IF NOT EXISTS `foreman_daily_rates` (
+        `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+        `foreman_id`         INT           NOT NULL,
+        `daily_rate`         DECIMAL(12,2) NOT NULL,
+        `currency`           VARCHAR(10)   NOT NULL DEFAULT 'TRY',
+        `valid_from`         DATE          NOT NULL,
+        `valid_to`           DATE          NULL DEFAULT NULL,
+        `is_active`          TINYINT(1)    NOT NULL DEFAULT 1,
+        `created_by_user_id` INT           NULL DEFAULT NULL,
+        `created_at`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at`         DATETIME      NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_fdr_foreman_from` (`foreman_id`, `valid_from`),
+        INDEX `idx_fdr_active` (`is_active`),
+        CONSTRAINT `fk_fdr_foreman` FOREIGN KEY (`foreman_id`)
+            REFERENCES `foremen`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    return $t;
+}
+
+/** pdks_faz9d_tablo_var() ile AYNI desen. */
+function pdks_faz8b_cavus_ucret_tablo_var(PDO $pdo, string $tablo): bool
+{
+    try { $pdo->query("SELECT 1 FROM `{$tablo}` LIMIT 0"); return true; }
+    catch (PDOException $e) { return false; }
+}
+
+function pdks_faz8b_cavus_ucret_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+    foreach (pdks_faz8b_cavus_ucret_tablolar() as $ad => $sql) {
+        if (pdks_faz8b_cavus_ucret_tablo_var($pdo, $ad)) {
+            $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Tablo zaten mevcut.'];
+            continue;
+        }
+        try {
+            $pdo->exec($sql);
+            $rapor[] = ['tablo' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.'];
+        } catch (PDOException $e) {
+            error_log('[pdks_faz8b_cavus_ucret_migrate] ' . $ad . ': ' . $e->getMessage());
+            $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+    return $rapor;
+}
+
+function pdks_faz8b_cavus_ucret_sema_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    return pdks_faz8b_cavus_ucret_tablo_var($pdo, 'foreman_daily_rates');
+}
+
+function pdks_faz8b_cavus_ucret_ekle(
+    int $foremanId, string $ucretHam, string $validFrom, ?string $currency,
+    int $userId, ?PDO $pdo = null
+): array {
+    $pdo = $pdo ?? db();
+    $currency = trim((string)$currency) ?: 'TRY';
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $validFrom) || !strtotime($validFrom)) {
+        return ['ok' => false, 'hata' => 'Geçerlilik başlangıç tarihi geçersiz.'];
+    }
+    $kurus = pdks_hakedis_girdi_kurus($ucretHam);
+    if ($kurus === null || $kurus <= 0) return ['ok' => false, 'hata' => 'Günlük ücret geçersiz.'];
+
+    $stC = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
+    $stC->execute([$foremanId]);
+    if (!$stC->fetchColumn()) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
+
+    $stMevcut = $pdo->prepare(
+        "SELECT * FROM foreman_daily_rates WHERE foreman_id = ? AND is_active = 1
+          ORDER BY valid_from DESC, id DESC LIMIT 1"
+    );
+    $stMevcut->execute([$foremanId]);
+    $mevcut = $stMevcut->fetch();
+    if ($mevcut && strtotime((string)$mevcut['valid_from']) >= strtotime($validFrom)) {
+        return ['ok' => false, 'hata' => 'Yeni başlangıç tarihi mevcut en son ücret döneminden sonra olmalıdır.'];
+    }
+
+    $pdo->beginTransaction();
+    try {
+        if ($mevcut && (($mevcut['valid_to'] ?? null) === null || strtotime((string)$mevcut['valid_to']) >= strtotime($validFrom))) {
+            $bitis = date('Y-m-d', strtotime($validFrom . ' -1 day'));
+            $pdo->prepare("UPDATE foreman_daily_rates SET valid_to = ? WHERE id = ?")
+                ->execute([$bitis, (int)$mevcut['id']]);
+        }
+        $ins = $pdo->prepare(
+            "INSERT INTO foreman_daily_rates
+                (foreman_id, daily_rate, currency, valid_from, valid_to, is_active, created_by_user_id)
+             VALUES (?,?,?,?,NULL,1,?)"
+        );
+        $ins->execute([$foremanId, pdks_hakedis_kurus_tl($kurus), $currency, $validFrom, $userId]);
+        $id = (int)$pdo->lastInsertId();
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hata' => 'Ücret dönemi kaydedilemedi: ' . $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('create', 'foreman_daily_rates', $id, null, [
+            'foreman_id' => $foremanId, 'daily_rate' => pdks_hakedis_kurus_tl($kurus),
+            'currency' => $currency, 'valid_from' => $validFrom,
+        ]);
+    }
+    return ['ok' => true, 'id' => $id];
+}
+
+function pdks_faz8b_cavus_ucret_gecerli(int $foremanId, string $tarih, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_cavus_ucret_sema_hazir($pdo)) return null;
+    $st = $pdo->prepare(
+        "SELECT * FROM foreman_daily_rates
+          WHERE foreman_id = ? AND is_active = 1
+            AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)
+          ORDER BY valid_from DESC LIMIT 1"
+    );
+    $st->execute([$foremanId, $tarih, $tarih]);
+    return $st->fetch() ?: null;
+}
+
+/** cavus_fiyatlari.php için tüm geçmiş — pdks_hakedis_oran_gecmisi() İLE AYNI ilke. */
+function pdks_faz8b_cavus_ucret_gecmisi(int $foremanId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare("SELECT * FROM foreman_daily_rates WHERE foreman_id = ? ORDER BY valid_from DESC");
+    $st->execute([$foremanId]);
+    return $st->fetchAll();
+}
+
+/** Bugüne kadar hiçbir final oturum bu günün ücretini içermiyor mu? */
+function pdks_faz8b_cavus_ucret_baska_final_var_mi(int $foremanId, string $workDate, int $haricSessionId, ?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    $st = $pdo->prepare(
+        "SELECT 1 FROM foreman_daily_entitlements e
+           JOIN foreman_daily_entitlement_lines l ON l.entitlement_id = e.id
+                AND l.worker_type_id IS NULL AND l.work_period_id IS NULL
+          WHERE e.foreman_id = ? AND e.work_date = ? AND e.status = 'final' AND e.session_id <> ?
+          LIMIT 1"
+    );
+    $st->execute([$foremanId, $workDate, $haricSessionId]);
+    return (bool)$st->fetchColumn();
+}
+
+/** O gün, o çavuş için EN KÜÇÜK id'li, İŞLENMİŞ (voided olmayan) dönemi olan oturum. */
+function pdks_faz8b_cavus_ucret_ankor_session_id(int $foremanId, string $workDate, ?PDO $pdo = null): ?int
+{
+    $pdo = $pdo ?? db();
+    $kosul = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p');
+    $st = $pdo->prepare(
+        "SELECT MIN(s.id) FROM daily_work_sessions s
+          WHERE s.foreman_id = ? AND s.work_date = ?
+            AND EXISTS (SELECT 1 FROM daily_worker_work_periods p WHERE p.session_id = s.id AND $kosul)"
+    );
+    $st->execute([$foremanId, $workDate]);
+    $v = $st->fetchColumn();
+    return ($v !== false && $v !== null) ? (int)$v : null;
+}
+
+/**
+ * Bir oturumun dönemi değişince (ekleme/void/düzeltme/manuel çıkış) AYNI
+ * çavuş+gün'deki KARDEŞ oturumun taslağı da "yeniden hesapla" işareti
+ * almalı — B kesinleşince A'nın artık ankor olabileceği fark edilsin.
+ * foreman_daily_entitlements zaten foreman_id + work_date taşır — session
+ * JOIN'e gerek yok.
+ */
+function pdks_faz8b_cavus_ucret_kardes_isaretle(int $sessionId, ?PDO $pdo = null): void
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_cavus_ucret_sema_hazir($pdo)) return;
+    $st = $pdo->prepare("SELECT foreman_id, work_date FROM foreman_daily_entitlements WHERE session_id = ?");
+    $st->execute([$sessionId]);
+    $r = $st->fetch();
+    if (!$r) {
+        // Henüz entitlement yoksa oturumdan oku.
+        $st2 = $pdo->prepare("SELECT foreman_id, work_date FROM daily_work_sessions WHERE id = ?");
+        $st2->execute([$sessionId]);
+        $r = $st2->fetch();
+        if (!$r) return;
+    }
+    $pdo->prepare(
+        "UPDATE foreman_daily_entitlements SET needs_recalculation = 1
+          WHERE status = 'draft' AND foreman_id = ? AND work_date = ? AND session_id <> ?"
+    )->execute([(int)$r['foreman_id'], (string)$r['work_date'], $sessionId]);
+}
+
+// =========================================================
 // HAKEDİŞ — FAZ 8B OTORİTER HESAP
 // =========================================================
 
@@ -820,6 +1018,39 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             'overtime_total' => pdks_hakedis_kurus_tl($fmToplamKurus),
             'line_total' => pdks_hakedis_kurus_tl($lineKurus),
         ];
+    }
+
+    // Çavuş Ücreti (Faz 8B eki): ZORUNLU DEĞİL — ücret tanımlıysa VE bu
+    // oturum o gün+çavuş için ANKOR (en küçük id'li, işlenmiş dönemi olan)
+    // oturumsa VE ücret başka hiçbir FİNAL oturumda zaten YOKSA 1 satır eklenir.
+    if (pdks_faz8b_cavus_ucret_sema_hazir($pdo)) {
+        $workDate = (string)$oturum['work_date'];
+        $foremanId = (int)$oturum['foreman_id'];
+        $zatenBaskaFinaldeVar = pdks_faz8b_cavus_ucret_baska_final_var_mi($foremanId, $workDate, $sessionId, $pdo);
+        $ankor = $zatenBaskaFinaldeVar ? null : pdks_faz8b_cavus_ucret_ankor_session_id($foremanId, $workDate, $pdo);
+        if (!$zatenBaskaFinaldeVar && $ankor === $sessionId) {
+            $ucret = pdks_faz8b_cavus_ucret_gecerli($foremanId, $workDate, $pdo);
+            if ($ucret) {
+                $paraCavus = trim((string)($ucret['currency'] ?? 'TRY')) ?: 'TRY';
+                $paraBirimleri[$paraCavus] = true;   // ⚠ mevcut "karisik_para_birimi" guard'ına KATILIR
+                $ucretKurus = pdks_hakedis_tl_kurus((string)$ucret['daily_rate']);
+                $toplamKurus += $ucretKurus;
+                $satirlar[] = [
+                    'work_period_id' => null,
+                    'worker_type_id' => null,
+                    'worker_type_code_snapshot' => '',
+                    'worker_type_name_snapshot' => 'Çavuş Ücreti',
+                    'attendance_class_snapshot' => 'tam',
+                    'worker_count' => 1,
+                    'unit_rate' => pdks_hakedis_kurus_tl($ucretKurus),
+                    'overtime_hours' => 0,
+                    'overtime_mode_snapshot' => null,
+                    'overtime_unit_rate' => '0.00',
+                    'overtime_total' => '0.00',
+                    'line_total' => pdks_hakedis_kurus_tl($ucretKurus),
+                ];
+            }
+        }
     }
 
     // Validate-first: hiçbir finansal satır değiştirilmeden önce tüm kararlar

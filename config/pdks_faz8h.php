@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/pdks_gunluk.php';
+require_once __DIR__ . '/pdks_faz8b.php';
 
 /** Yalnız aynı gün/aktif depodaki kapalı oturumu, aynı kimlikle yeniden açar. */
 function pdks_gunluk_oturum_yeniden_ac(int $sessionId, string $sebep, int $userId, ?PDO $pdo = null): array
@@ -78,6 +79,8 @@ function pdks_gunluk_oturum_yeniden_ac(int $sessionId, string $sebep, int $userI
             $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1 WHERE id = ? AND status = 'draft'")
                 ->execute([(int)$ent['id']]);
         }
+        // Çavuş Ücreti (Faz 8B eki): kardeş oturumun ankor olma ihtimali değişmiş olabilir.
+        pdks_faz8b_cavus_ucret_kardes_isaretle($sessionId, $pdo);
 
         // Faz 8E ile aynı mevcut audit_log tablosu; kayıt başarısızsa oturum da geri alınır.
         $old = [
