@@ -90,9 +90,26 @@ ok("helpers.php: aktif-sayfa vurgusu TÜM konsolide alt sayfaları kapsıyor (na
 echo "\n=== 9. MOBİL 'Personel' GİRİŞİ personel_takip.php'YE BAĞLI (görev madde 2) ===\n";
 ok("index.php: 'Personel' ana sayfa kartı ARTIK personel_takip.php'ye açılıyor (personel.php DEĞİL)",
     (bool)preg_match('/href="personel_takip\.php"[^>]*class="home-card"/s', $indexSrc));
-ok("index.php: bu kart görünürlüğü YALNIZ employees/cards DEĞİL, tüm attendance.* alt-izinlerinden HERHANGİ birine bakıyor",
-    (bool)preg_match('/can\(.attendance\.foremen.\).*can\(.attendance\.management_reports.\)/s', $indexSrc)
-    || (bool)preg_match('/can\(.attendance\.management_reports.\).*can\(.attendance\.foremen.\)/s', $indexSrc));
+// Bug çalışması (personel_takip): kart + rozet koşulu elle yazılmış bir
+// listeydi ve kalıcı PDKS izinlerini (employees/cards/scan) de sayıyordu —
+// yalnız attendance.employees'i olan kullanıcı kartı görüp 403 alıyordu.
+// Artık sidebar/bottomnav ile AYNI tek kaynak: nav_ptak_gorunur().
+ok("index.php: kart görünürlüğü TEK kaynak nav_ptak_gorunur() ile (sidebar/bottomnav ile aynı)",
+    (bool)preg_match('/if \(nav_ptak_gorunur\(\)\):\s*\?>\s*<a href="personel_takip\.php" class="home-card"/s', $indexSrc));
+ok("index.php: eksik-çıkış rozet sorgusu da AYNI kapıdan (nav_ptak_gorunur)",
+    (bool)preg_match('/\$personel_eksik_cikis = 0;\s*if \(nav_ptak_gorunur\(\)\) \{/', $indexSrc));
+ok("index.php: kalıcı PDKS izinleri (employees/cards/scan) Personel Takibi kartını AÇMIYOR (personel_takip.php onları saymaz → 403 olurdu)",
+    !preg_match('/can\(.attendance\.(employees|cards|scan).\)/', $indexSrc));
+ok("index.php: Operasyon bölümü nav_ptak_gorunur()'ü de sayıyor (yalnız PDKS izinli kullanıcı kartı görebilsin)",
+    (bool)preg_match('/\$_ops_show\s*=[^;]*nav_ptak_gorunur\(\)/', $indexSrc));
+// nav_ptak_gorunur()'ün izin listesi personel_takip.php'nin kapısıyla BİREBİR
+preg_match('/function nav_ptak_gorunur\(\): bool \{(.*?)\n\}/s', $helpersSrc, $__m);
+preg_match_all("/'(attendance\.[a-z_]+)'/", $__m[1] ?? '', $__nav);
+preg_match('/\$p_gunluk.*?\$p_rapor[^\n]*/s', $takipSrc, $__k);
+preg_match_all("/can\('(attendance\.[a-z_]+)'\)/", $__k[0] ?? '', $__tak);
+$__a = array_unique($__nav[1]); sort($__a); $__b = array_unique($__tak[1]); sort($__b);
+ok("nav_ptak_gorunur() izin listesi == personel_takip.php sayfa kapısı (" . count($__a) . " izin)",
+    $__a !== [] && $__a === $__b);
 ok("index.php: personel.php'ye DOĞRUDAN giden eski 'home-card' bağlantısı KALMADI", !preg_match('/href="personel\.php"[^>]*class="home-card"/', $indexSrc));
 
 echo "\n=== 3. PERSONEL TAKİP SAYFASI — YAPI VE İZİN FARKINDALIĞI ===\n";

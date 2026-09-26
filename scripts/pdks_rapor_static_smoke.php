@@ -307,6 +307,8 @@ $helpersBeklenenEskiSatirlar = [
     '-    define(\'APP_SURUM\', \'v262\');',
     // Çavuş Ücreti sprint'i (Faz 8B eki): APP_SURUM v263'ten v264'e çekildi.
     "-    define('APP_SURUM', 'v263');",
+    // personel_takip bug çalışması: APP_SURUM v264'ten v265'e çekildi.
+    "-    define('APP_SURUM', 'v264');",
     '-function render_desktop_sidebar(string $base): void {',
     '-    $_fn   = function_exists(\'can\');',
     '-    $p_dash  = !$_fn || can(\'dashboard.read\');',
