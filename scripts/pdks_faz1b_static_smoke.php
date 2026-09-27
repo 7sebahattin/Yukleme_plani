@@ -202,9 +202,9 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v265',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v265';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v265');"));
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v268',
+    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v268';")
+    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v268');"));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
@@ -518,6 +518,11 @@ $beklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v263');",
     // personel_takip bug çalışması: APP_SURUM v264'ten v265'e çekildi.
     "-    define('APP_SURUM', 'v264');",
+    // scai.tr taşıması sonrası login butonu + PWA ikon düzeltmeleri: APP_SURUM
+    // v265'ten v267'ye, sonra Çavuş Ücretleri etiket değişikliğiyle v268'e çekildi.
+    "-    define('APP_SURUM', 'v265');",
+    "-    define('APP_SURUM', 'v266');",
+    "-    define('APP_SURUM', 'v267');",
     '-    $a_krap  = $cur === \'kantar_raporu.php\';',
     '-    $a_ustok = $cur === \'stok.php\';',
     '-<body class="<?= $print_mode ? \'print-mode\' : \'\' ?>"<?= $__body_style ?>>',

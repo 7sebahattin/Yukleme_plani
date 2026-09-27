@@ -126,14 +126,14 @@ if ($cavusId !== null) {
 }
 $cavusUcretGecmisi = ($seciliCavus && $cavusUcretHazir) ? pdks_faz8b_cavus_ucret_gecmisi($cavusId, $pdo) : [];
 
-render_header('Çavuş Fiyatları');
+render_header('Çavuş Ücretleri');
 $base = base_url();
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
 ?>
 
 <div class="page-head">
-    <h1>💰 Çavuş Fiyatları</h1>
+    <h1>💰 Çavuş Ücretleri</h1>
     <div class="page-head-actions">
         <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
