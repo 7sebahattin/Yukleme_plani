@@ -87,7 +87,7 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
         try { window.visualViewport && window.visualViewport.addEventListener('resize', ayarla); } catch (e) {}
     })();
     </script>
-    <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json?v=<?= (int)@filemtime(__DIR__ . '/manifest.json') ?>">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <link rel="icon" type="image/png" href="assets/icon-192.png">
     <link rel="stylesheet" href="assets/style.css?v=<?= $css_v ?>">
