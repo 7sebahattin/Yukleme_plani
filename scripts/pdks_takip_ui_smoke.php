@@ -161,7 +161,7 @@ ok('PHP Warning/Notice yok', !str_contains($s0, 'Warning:') && !str_contains($s0
 ok('admin: tam 10 ana home-card var', substr_count($s0, 'class="home-card"') === 10);
 ok('admin: iki rapor kartı aynı bölümde yan yana',
     (bool)preg_match('/Yönetim Raporları.*?<\/a>\s*<a href="cavus_toplu_dokum\.php" class="home-card">.*?Çavuş Toplu Döküm/s', $s0));
-foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Fiyatları', 'Hakedişler',
+foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Çavuş Ücretleri', 'Hakedişler',
           'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları', 'Çavuş Toplu Döküm'] as $kartAdi) {
     ok("admin: '$kartAdi' kartı görünüyor", str_contains($s0, $kartAdi));
 }
@@ -180,7 +180,7 @@ $s1 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s1, '__ERROR__'), $s1);
 ok('operator: Çavuş Toplu Döküm kısayolu yok', !str_contains($s1, 'cavus_toplu_dokum.php'));
 ok('operator: "Günlük İşçi Giriş / Çıkış" kartı GÖRÜNÜYOR', str_contains($s1, 'Günlük İşçi Giriş / Çıkış'));
-foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri',
+foreach (['Çavuş Ücretleri', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri',
           'Yönetim Raporları', 'Çavuşlar', 'Kart Havuzu'] as $kartAdi) {
     ok("operator: '$kartAdi' kartı GÖRÜNMÜYOR (finansal/yönetim yetkisi yok)", !str_contains($s1, $kartAdi));
 }
@@ -190,7 +190,7 @@ $PERMS = ['attendance.foreman_rates', 'attendance.entitlements', 'attendance.for
 $s2 = renderPage('personel_takip.php');
 ok('hata sızmadı', !str_starts_with($s2, '__ERROR__'), $s2);
 ok('management_reports yetkisi: Çavuş Toplu Döküm kısayolu var', str_contains($s2, 'cavus_toplu_dokum.php'));
-foreach (['Çavuş Fiyatları', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları'] as $kartAdi) {
+foreach (['Çavuş Ücretleri', 'Hakedişler', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri', 'Yönetim Raporları'] as $kartAdi) {
     ok("muhasebe: '$kartAdi' kartı görünüyor", str_contains($s2, $kartAdi));
 }
 ok('muhasebe: kalıcı personel kartları (attendance.employees yok) GÖRÜNMÜYOR', !str_contains($s2, 'Personeller'));
@@ -202,7 +202,7 @@ ok('hata sızmadı', !str_starts_with($s3, '__ERROR__'), $s3);
 foreach (['Çavuşlar', 'Kart Havuzu', 'Günlük İşçi Giriş / Çıkış', 'Günlük Puantaj', 'Hakedişler', 'Yönetim Raporları'] as $kartAdi) {
     ok("ik: '$kartAdi' kartı görünüyor", str_contains($s3, $kartAdi));
 }
-foreach (['Çavuş Fiyatları', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri'] as $kartAdi) {
+foreach (['Çavuş Ücretleri', 'Çavuş Cari Hesapları', 'Çavuş Ödemeleri'] as $kartAdi) {
     ok("ik: '$kartAdi' kartı GÖRÜNMÜYOR (foreman_rates/accounts/payments yok — mevcut izin matrisiyle TUTARLI)", !str_contains($s3, $kartAdi));
 }
 

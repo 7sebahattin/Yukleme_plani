@@ -93,7 +93,7 @@ render_flash();
 <?php if ($p_adm || can('attendance.foreman_rates')): ?>
 <a href="cavus_fiyatlari.php" class="home-card">
     <div class="home-card-icon pdks-icon-rates" aria-hidden="true"></div>
-    <div class="home-card-title">Çavuş Fiyatları</div>
+    <div class="home-card-title">Çavuş Ücretleri</div>
     <div class="home-card-sub">Tam / Yarım / Fazla mesai ücretleri</div>
 </a>
 <?php endif; ?>
