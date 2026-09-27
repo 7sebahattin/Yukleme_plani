@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v265';
+const CACHE_NAME = 'yukleme-plani-v266';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -11,6 +11,8 @@ const SHELL = [
   './assets/hesap.css',
   './assets/hesap.js',
   './assets/icon.svg',
+  './assets/icon-192.png',
+  './assets/icon-maskable-192.png',
   './manifest.json',
   // Mobil alt çubuk ikonları (config/helpers.php nav_alt_sayfalar()) — çevrimdışı
   './assets/nav-icons/home.svg',

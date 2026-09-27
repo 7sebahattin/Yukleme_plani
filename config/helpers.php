@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v265');
+    define('APP_SURUM', 'v266');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -837,7 +837,8 @@ function render_header(string $title, bool $print_mode = false): void {
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Asya Fresh">
     <link rel="manifest" href="<?= $base ?>manifest.json">
-    <link rel="apple-touch-icon" href="<?= $base ?>assets/logo.jpg">
+    <link rel="apple-touch-icon" href="<?= $base ?>assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="<?= $base ?>assets/icon-192.png">
     <title><?= h($title) ?> · Asya Fresh</title>
     <script>
     /* Tema (Açık/Koyu/Sistem) — CSS yüklenmeden ÖNCE uygulanır (beyaz parlama olmaz).
