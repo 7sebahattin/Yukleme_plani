@@ -87,6 +87,9 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
         try { window.visualViewport && window.visualViewport.addEventListener('resize', ayarla); } catch (e) {}
     })();
     </script>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="icon" type="image/png" href="assets/icon-192.png">
     <link rel="stylesheet" href="assets/style.css?v=<?= $css_v ?>">
     <style>
         html, body {
@@ -105,19 +108,24 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
         html[data-theme="dark"] body { background: #0b1220; }
 
         /* Kart — gradient "telefon ekranı" görünümü: üstte logo/marka,
-           ortada hap (pill) girdiler, altta beyaz oturma kağıdı üstünde
-           yüzen hap buton. Renkler projenin mevcut mavisi (#1d6cf0). */
+           altında hap (pill) girdiler ve HEMEN ALTINDA "Giriş Yap".
+           Buton eskiden kartın EN ALTINDA beyaz bir oturma kağıdı üstündeydi;
+           mobilde klavye açılınca onun arkasında kalıyor, basmak için klavyeyi
+           kapatmak/kaydırmak gerekiyordu. Artık alanlarla aynı akışta, içerik
+           dikeyde ortalı — klavye açıkken de görünür. Kartın altına sabit
+           buton GERİ KOYMA. Renkler projenin mevcut mavisi (#1d6cf0). */
         .lc {
             position: relative;
             overflow: hidden;
             width: 100%;
             max-width: 400px;
-            min-height: 640px;
+            min-height: 560px;
             border-radius: 32px;
             box-shadow: 0 20px 50px rgba(15,23,42,.22);
             background: linear-gradient(160deg, #123a9c 0%, #1d6cf0 55%, #4a92ff 100%);
             display: flex;
             flex-direction: column;
+            justify-content: center;
         }
         .lc-decor {
             position: absolute;
@@ -157,11 +165,10 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
 
         .lc-body {
             position: relative;
-            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 14px;
-            padding: 28px 28px 0;
+            padding: 28px 28px 32px;
         }
         .lc-error {
             background: rgba(255,255,255,.16);
@@ -200,33 +207,24 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
             clip: rect(0,0,0,0); white-space: nowrap; border: 0;
         }
 
-        .lc-sheet {
-            position: relative;
-            margin-top: auto;
-            background: #fff;
-            border-radius: 32px 32px 0 0;
-            padding: 34px 28px calc(26px + env(safe-area-inset-bottom, 0px));
-            display: flex;
-            justify-content: center;
-            box-shadow: 0 -6px 20px rgba(15,23,42,.10);
-        }
         .lc-cta {
             width: 100%;
-            max-width: 260px;
-            margin-top: -56px;
-            padding: 15px;
-            background: #1d6cf0;
-            color: #fff;
+            height: 50px;
+            margin-top: 6px;
+            background: #fff;
+            color: #1d6cf0;
             font-size: 1rem;
             font-weight: 700;
             border: none;
             border-radius: 999px;
             cursor: pointer;
-            box-shadow: 0 12px 24px rgba(29,108,240,.35);
+            box-shadow: 0 10px 22px rgba(15,23,42,.22);
             transition: background .15s;
         }
-        .lc-cta:hover { background: #1558c7; }
-        .lc-cta:active { background: #1047aa; }
+        .lc-cta:hover { background: #eef4ff; }
+        .lc-cta:active { background: #dbe7ff; }
+        html[data-theme="dark"] .lc-cta { background: #1d6cf0; color: #fff; box-shadow: none; }
+        html[data-theme="dark"] .lc-cta:hover { background: #1558c7; }
 
         @media (max-width: 480px) {
             body { padding: 0; }
@@ -250,14 +248,8 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
             .lc-logo svg { width: 24px; height: 24px; }
             .lc-body { padding-top: 20px; gap: 12px; }
             .lc-pill { height: 46px; }
-            /* Alt boşluk büyütüldü: Android'in jest gezinme çubuğu env(safe-area)
-               ile her zaman raporlanmıyor, içeriğin üstüne şeffaf biniyor —
-               sabit 40px taban payı butonun altını her durumda temiz tutar. */
-            .lc-sheet {
-                border-radius: 0;
-                padding: 22px 28px calc(40px + env(safe-area-inset-bottom, 0px));
-            }
-            .lc-cta { margin-top: -46px; }
+            .lc-body { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+            .lc-cta { height: 48px; }
         }
     </style>
 </head>
@@ -297,6 +289,7 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
                    placeholder="Kullanıcı Adı"
                    value="<?= h($_POST['username'] ?? '') ?>"
                    autocomplete="username"
+                   enterkeyhint="next"
                    autofocus
                    required
                    spellcheck="false"
@@ -309,13 +302,25 @@ $css_v = filemtime(__DIR__ . '/assets/style.css');
                    name="password"
                    placeholder="Şifre"
                    autocomplete="current-password"
+                   enterkeyhint="go"
                    required>
         </div>
-    </div>
 
-    <div class="lc-sheet">
         <button type="submit" class="lc-cta">Giriş Yap</button>
     </div>
 </form>
+<script>
+/* Klavye açılınca tarayıcı yalnız odaklanan alanı görünür kılar; butonu da
+   görünür alana getir (klavye animasyonu bitsin diye kısa gecikme). */
+(function () {
+    var btn = document.querySelector('.lc-cta');
+    if (!btn || !btn.scrollIntoView) return;
+    document.querySelectorAll('.lc-pill input').forEach(function (inp) {
+        inp.addEventListener('focus', function () {
+            setTimeout(function () { btn.scrollIntoView({ block: 'nearest' }); }, 350);
+        });
+    });
+})();
+</script>
 </body>
 </html>
