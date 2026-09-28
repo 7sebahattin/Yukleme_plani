@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v274` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v275` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -389,6 +389,32 @@ geçmişi zaman damgalı tutulur, geriye dönük **değildir**.
 - **Test:** `php scripts/pdks_cavus_b_smoke.php` (bellek içi SQLite, gerçek
   DDL çevirici + gerçek fonksiyonlar — canlı DB'ye dokunmaz). Yöntem B'ye
   dokunan HERHANGİ bir değişiklikten sonra çalıştır.
+
+## Gün Sonu Kapanışı — "Mesaiyi Kapat" (v275)
+
+"Mesaiyi Kapat" günlük işçi mesaisinin **Z raporudur**: sayımı kilitler (kart
+okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kılar
+(`pdks_hakedis_finalize()` KAPALI mesai ister). Kapatma yetkisi
+`attendance.daily_scan` (güvenlik/operator) — parayla ilgili hiçbir şey görmez.
+
+- **Önceki günden açık mesai YENİ GÜNÜ ENGELLER** — `pdks_gunluk_oturum_ac_veya_getir()`
+  yalnız YENİ oturum açarken aynı çavuş + aynı depo için
+  `pdks_gunluk_eski_acik_oturumlar()`'a bakar, varsa `kod=onceki_mesai_acik` +
+  `eski_oturumlar` döner. Bugünkü açık mesaiye devam ENGELLENMEZ; başka depo etkilemez.
+- **Tarama ekranı** (`gunluk_isci_giris_cikis.php`) böyle mesai varsa **pencereyle
+  açılır** (`#giEskiSec`, veri `#giEskiVeri` JSON). Kapatma AYNI `?ajax=kapat` yolu
+  ve aynı eksik-çıkış mutabakatıdır — **ikinci bir kapatma yolu AÇMA**. "Sonra"
+  geçişe izin verir; sunucu kuralı yine geçerlidir.
+- **Süre doldu uyarısı** — `pdks_gunluk_kapat_uyarisi()`: açılış +
+  `normal_work_minutes_snapshot` (yoksa 540) + `PDKS_GUNLUK_KAPAT_UYARI_PAY_DK` (60).
+  ENGEL DEĞİL; mod ekranında Kapat'ın üstünde (`#giKapatUyari`, `ajax=oturum`
+  yanıtındaki `kapat_uyarisi`) ve çavuş listesinin üstünde
+  (`pdks_gunluk_suresi_dolan_oturumlar()`) görünür. Hesap SUNUCU saatiyle.
+- `personel_takip.php` Giriş/Çıkış kartında kapatılmamış mesai sayısı rozeti.
+- **Bilinen sınır:** eksik çıkışla kapatılan mesaideki kartın dönemi `open`
+  kalır (çıkış saati UYDURULMAZ) ve `pdks_gunluk_faz8a_kart_acik_donemi()` o kartı
+  ertesi gün girişte engellemeye devam eder — düzeltme puantaj detayından.
+- Test: `php scripts/pdks_gun_sonu_kapanis_smoke.php`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

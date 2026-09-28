@@ -69,11 +69,18 @@ function report8h(string $day): array {
 ok8h('Faz 8A şeması etkin', pdks_gunluk_faz8a_sema_hazir($db8h));
 $page = file_get_contents($root.'/gunluk_isci_giris_cikis.php');
 $mainClick = preg_match("/getElementById\('giKapatBtn'\)\.addEventListener\('click', function \(\) \{(.*?)\n    \}\);/s",$page,$m) ? $m[1] : '';
-ok8h('İlk tık yalnız onay ekranını açar', str_contains($mainClick,'ekranGoster(closeConfirmSec)') && !str_contains($mainClick,'kapat('));
+// ⚠ v275: onay ekranı ortak kapatOnayiGoster()'e taşındı (önceki günden açık
+// mesai penceresi de onu kullanır) — kural aynı: ilk tık yalnız onay açar.
+$onayFn = preg_match("/function kapatOnayiGoster\(sayilar\) \{(.*?)\n    \}/s",$page,$m2) ? $m2[1] : '';
+ok8h('İlk tık yalnız onay ekranını açar', str_contains($mainClick,'kapatOnayiGoster(') && !str_contains($mainClick,'kapat(')
+    && str_contains($onayFn,'ekranGoster(closeConfirmSec)') && !str_contains($onayFn,'kapat('));
 // ⚠ v240: Kapat artık YALNIZ mod seçim ekranından (giModeSec) tetiklenir —
 // Vazgeç de oraya döner (scanSec'e değil, bkz. gunluk_isci_giris_cikis.php'deki
 // aynı isimli yorum). Değişmeyen asıl kural aynı: Vazgeç kapat() ÇAĞIRMAZ.
-ok8h('Vazgeç kapatma istemi göndermez', (bool)preg_match("/getElementById\('giCloseCancelBtn'\).*?ekranGoster\(modeSec\).*?\}\);/s",$page,$m) && !str_contains($m[0],'kapat('));
+// v275: Vazgeç ortak kapatmadanVazgec()'e bağlı (pencereden gelinmişse pencereye döner).
+$vazgecFn = preg_match("/function kapatmadanVazgec\(\) \{(.*?)\n    \}/s",$page,$m3) ? $m3[1] : '';
+ok8h('Vazgeç kapatma istemi göndermez', str_contains($page,"getElementById('giCloseCancelBtn').addEventListener('click', kapatmadanVazgec)")
+    && str_contains($vazgecFn,'ekranGoster(modeSec)') && !str_contains($vazgecFn,'kapat('));
 ok8h('Açık onay mevcut kapatma fonksiyonunu çağırır', str_contains($page,"giCloseConfirmBtn').addEventListener('click', function () { kapat(''); }"));
 ok8h('Onay çavuş, tarih ve dört sayaç gösterir', !array_filter(['giCloseCavus','giCloseTarih','giCloseGiris','giCloseCikis','giCloseIceride','giCloseEksik'],fn($id)=>!str_contains($page,$id)));
 ok8h('Eksik çıkış mutabakatı ve zorunlu neden korunur', str_contains($page,'giReconKapatBtn') && str_contains($page,'giReconNot') && str_contains($page,'eksik_cikis_var'));

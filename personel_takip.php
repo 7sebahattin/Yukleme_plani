@@ -39,6 +39,17 @@ if (!$p_gunluk && !$p_hakcari && !$p_rapor) {
     forbidden('Bu sayfaya erişim yetkiniz yok. (Günlük İşçi, Hakediş/Cari veya Yönetim Raporları modüllerinden en az birine yetkiniz olmalı.)');
 }
 
+// ⚠ v275: kapatılmamış (önceki günden açık) mesai rozeti — Giriş/Çıkış
+// kartında. Yalnız tarama yetkisi olan görür (kapatma o ekrandadır). Hata
+// sayfayı ASLA bozmaz: modül/şema yoksa rozet çizilmez.
+$eskiAcikSayi = 0;
+if ($p_adm || can('attendance.daily_scan')) {
+    try {
+        require_once __DIR__ . '/config/pdks_gunluk.php';
+        if (pdks_gunluk_sema_hazir()) $eskiAcikSayi = count(pdks_gunluk_eski_acik_oturumlar());
+    } catch (Throwable $e) { $eskiAcikSayi = 0; }
+}
+
 render_header('Personel Takibi');
 echo '<link rel="stylesheet" href="' . base_url() . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
@@ -75,6 +86,9 @@ render_flash();
     <div class="home-card-icon pdks-icon-scan" aria-hidden="true"></div>
     <div class="home-card-title">Günlük İşçi Giriş / Çıkış</div>
     <div class="home-card-sub">Mesai kart taraması</div>
+    <?php if ($eskiAcikSayi > 0): ?>
+    <div class="home-card-badge" style="background:var(--warn)" title="Önceki günden kapatılmamış mesai"><?= $eskiAcikSayi ?></div>
+    <?php endif; ?>
 </a>
 <?php endif; ?>
 

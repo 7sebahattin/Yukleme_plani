@@ -1286,6 +1286,18 @@ function pdks_gunluk_oturum_ac_veya_getir(int $foremanId, int $userId, ?PDO $pdo
                  'hata' => 'Bu çavuş için bugün ' . ($depo !== '' ? $depo . ' deposunda ' : '') . 'mesai zaten kapatılmış.'];
     }
 
+    // ⚠ v275 — Z RAPORU KURALI: aynı çavuşun aynı depoda ÖNCEKİ GÜNDEN açık
+    // kalmış mesaisi varsa yeni gün AÇILMAZ; önce o kapatılır (bkz.
+    // pdks_gunluk_eski_acik_oturumlar). Yalnız YENİ oturum açılırken bakılır —
+    // bugünkü açık mesaiye devam etmeyi (yukarıdaki dal) engellemez.
+    $eskiler = pdks_gunluk_eski_acik_oturumlar($depo, $foremanId, $pdo);
+    if (!empty($eskiler)) {
+        return ['ok' => false, 'kod' => 'onceki_mesai_acik',
+                 'hata' => 'Bu çavuşun ' . date('d.m.Y', strtotime((string)$eskiler[0]['work_date']))
+                         . ' tarihli mesaisi kapatılmamış. Yeni gün açılmadan önce o mesaiyi kapatın.',
+                 'eski_oturumlar' => $eskiler];
+    }
+
     $simdi = date('Y-m-d H:i:s');
     // ⚠ foreman_name_snapshot/foreman_code_snapshot (Faz 3, bkz. tablo
     // DDL'indeki gerekçe): oturum AÇILIRKEN çavuşun O ANKİ ad/kodu donar —
@@ -1672,6 +1684,107 @@ function pdks_gunluk_oturum_kapat(int $sessionId, ?string $kapatmaNedeni, int $u
         ]);
     }
     return ['ok' => true, 'ozet' => $ozet];
+}
+
+// =========================================================
+// GÜN SONU KAPANIŞ HATIRLATMASI (v275)
+//
+// "Mesaiyi Kapat" günün Z raporudur. Unutulursa mesai süresiz açık kalır:
+// hakediş kesinleşemez (pdks_hakedis_finalize kapalı mesai ister) ve o güne
+// sonradan kart yazılabilir. İki kural:
+//   1. ÖNCEKİ GÜNDEN açık kalan mesai, AYNI çavuş + AYNI depo için YENİ
+//      mesai açılmasını ENGELLER (pdks_gunluk_oturum_ac_veya_getir) —
+//      tarama ekranı kapatma penceresini açar. Kapatma akışı AYNIDIR
+//      (pdks_gunluk_oturum_kapat — eksik çıkışta gerekçe zorunlu).
+//   2. BUGÜNKÜ mesai, açılışından normal çalışma süresi + PAY kadar sonra
+//      hâlâ açıksa ekranda UYARI çıkar — ENGEL DEĞİL, kapatmayı zorlamaz.
+// =========================================================
+
+/** Uyarı payı (dakika): açılış + normal süre + bu pay geçince "süre doldu". */
+const PDKS_GUNLUK_KAPAT_UYARI_PAY_DK = 60;
+
+/**
+ * Aktif depoda (ya da verilen depoda), work_date'i BUGÜNDEN ÖNCE olan ve hâlâ
+ * açık mesailer. $foremanId verilirse yalnız o çavuşunkiler. Her satırda
+ * mutabakat özeti (eksik çıkış sayısı dahil) döner — kapatma ekranı bunu
+ * doğrudan gösterir. SALT OKUNUR.
+ */
+function pdks_gunluk_eski_acik_oturumlar(?string $depo = null, ?int $foremanId = null, ?PDO $pdo = null): array
+{
+    $pdo  = $pdo ?? db();
+    $depo = $depo ?? (function_exists('active_depot') ? (active_depot() ?? '') : '');
+    $sql = "SELECT s.id, s.foreman_id, s.work_date, s.depo, s.opened_at,
+                   COALESCE(f.name, s.foreman_name_snapshot) AS foreman_name
+              FROM daily_work_sessions s
+              LEFT JOIN foremen f ON f.id = s.foreman_id
+             WHERE s.status = 'open' AND s.work_date < ? AND s.depo = ?";
+    $par = [date('Y-m-d'), $depo];
+    if ($foremanId !== null) { $sql .= " AND s.foreman_id = ?"; $par[] = $foremanId; }
+    $sql .= " ORDER BY s.work_date ASC, s.id ASC";
+    $st = $pdo->prepare($sql);
+    $st->execute($par);
+    $out = [];
+    foreach ($st->fetchAll() as $r) {
+        $r['id'] = (int)$r['id'];
+        $r['foreman_id'] = (int)$r['foreman_id'];
+        $r['ozet'] = pdks_gunluk_oturum_ozet($r['id'], $pdo);
+        $out[] = $r;
+    }
+    return $out;
+}
+
+/**
+ * Açık bir mesainin kapatma hatırlatması gerekip gerekmediği. Kapalı mesai
+ * ya da süresi dolmamış mesai için null. Bitiş = opened_at + normal çalışma
+ * süresi (oturum açılırken donmuş snapshot; yoksa 540 dk) + PAY.
+ * Geçmiş güne ait açık mesai HER ZAMAN uyarı döner (tur = 'eski_gun').
+ *
+ * @return array{tur:string, sinir:string, mesaj:string}|null
+ */
+function pdks_gunluk_kapat_uyarisi(array $oturum, ?int $simdiTs = null): ?array
+{
+    if (($oturum['status'] ?? '') !== 'open') return null;
+    $simdiTs = $simdiTs ?? time();
+    $workDate = (string)($oturum['work_date'] ?? '');
+    if ($workDate !== '' && $workDate < date('Y-m-d', $simdiTs)) {
+        return ['tur' => 'eski_gun', 'sinir' => '',
+                'mesaj' => date('d.m.Y', strtotime($workDate)) . ' tarihli mesai hâlâ açık — kapatılması gerekiyor.'];
+    }
+    $acilis = strtotime((string)($oturum['opened_at'] ?? ''));
+    if ($acilis === false) return null;
+    $normalDk = (int)($oturum['normal_work_minutes_snapshot'] ?? 0);
+    if ($normalDk <= 0) $normalDk = 540;
+    $sinirTs = $acilis + ($normalDk + PDKS_GUNLUK_KAPAT_UYARI_PAY_DK) * 60;
+    if ($simdiTs < $sinirTs) return null;
+    return ['tur' => 'sure_doldu', 'sinir' => date('H:i', $sinirTs),
+            'mesaj' => 'Mesai süresi doldu (' . date('H:i', $sinirTs) . '). Çıkışlar tamamlandıysa mesaiyi kapatın.'];
+}
+
+/**
+ * Aktif depoda BUGÜNKÜ açık mesailerden süresi dolanlar (bkz.
+ * pdks_gunluk_kapat_uyarisi). Her satır: id, foreman_id, foreman_name, uyari.
+ * SALT OKUNUR — yalnız hatırlatma listesi.
+ */
+function pdks_gunluk_suresi_dolan_oturumlar(?string $depo = null, ?PDO $pdo = null, ?int $simdiTs = null): array
+{
+    $pdo  = $pdo ?? db();
+    $depo = $depo ?? (function_exists('active_depot') ? (active_depot() ?? '') : '');
+    $simdiTs = $simdiTs ?? time();
+    $st = $pdo->prepare(
+        "SELECT s.*, COALESCE(f.name, s.foreman_name_snapshot) AS foreman_name
+           FROM daily_work_sessions s LEFT JOIN foremen f ON f.id = s.foreman_id
+          WHERE s.status = 'open' AND s.work_date = ? AND s.depo = ?
+          ORDER BY s.opened_at ASC"
+    );
+    $st->execute([date('Y-m-d', $simdiTs), $depo]);
+    $out = [];
+    foreach ($st->fetchAll() as $r) {
+        $uyari = pdks_gunluk_kapat_uyarisi($r, $simdiTs);
+        if ($uyari === null) continue;
+        $out[] = ['id' => (int)$r['id'], 'foreman_id' => (int)$r['foreman_id'],
+                  'foreman_name' => (string)$r['foreman_name'], 'uyari' => $uyari];
+    }
+    return $out;
 }
 
 // =========================================================
