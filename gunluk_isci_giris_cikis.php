@@ -323,7 +323,7 @@ render_flash();
 
     <!-- ── 1) Mod seç ──────────────────────────────────────── -->
     <div id="giModeSec" class="pdks-kiosk-modesec" hidden>
-        <div class="pdks-kiosk-selected">
+        <div class="pdks-kiosk-selected pdks-kiosk-selected-vurgu">
             <div class="pdks-kiosk-selected-label">SEÇİLİ ÇAVUŞ</div>
             <div class="pdks-kiosk-selected-name" id="giSeciliCavusAd"></div>
         </div>
