@@ -766,5 +766,83 @@ ok('[liste] satir bicimi tek yerde (partial)',
    && substr_count($liste_src, "_beyan_liste.php") === 2,
    'satir/kart biçimi kopyalanmis — dort kopya ayrisir');
 
+// ── HKS BAĞ YAŞAM DÖNGÜSÜ (taslak düzenleme / silme / elle düzeltme) ──────
+// Hata: Hal Kayıt'ta "Düzenle" yeni id'li taslak kaydedip eskisini siliyordu;
+// silme bağı 'iptal'e çekiyor, gönderilen yeni taslak beyana yansımıyordu →
+// HKS'e gönderilmiş beyan yeniden "bildirime uygun" görünüyordu.
+db()->exec("ALTER TABLE hks_gonderilenler ADD COLUMN plaka TEXT");
+$bag = fn(int $b) => beyan_hks_aktif($b);
+$yeni_bag = function (int $b, string $tid): void {
+    db()->prepare("INSERT INTO beyan_hks_bildirim (beyan_id,hks_firma_id,taslak_id,durum,urun_ad,plaka,kg)
+                   VALUES (?,?,?,'taslak','Kayısı','34ABC123',19800)")->execute([$b, 'f1', $tid]);
+};
+
+// 1) Düzenle → bağ yeni taslağa taşınır, eski taslağın silinmesi dokunmaz,
+//    yeni taslağın gönderimi bağı 'gonderildi' yapar.
+$B1 = beyan_ekle($TAM); $yeni_bag($B1, 'eski1');
+beyan_hks_taslak_tasi('eski1', 'yeni1');
+beyan_hks_taslak_isaretle('eski1', 'silindi', ['hata_metni' => 'x']);
+ok('[bag] duzenlemede bag yeni taslaga tasiniyor', ($bag($B1)['taslak_id'] ?? '') === 'yeni1'
+   && ($bag($B1)['durum'] ?? '') === 'taslak', json_encode($bag($B1)));
+beyan_hks_taslak_isaretle('yeni1', 'gonderildi', ['gonderim_id' => 'g1']);
+ok('[bag] duzenlenen taslagin gonderimi beyana yansiyor', ($bag($B1)['durum'] ?? '') === 'gonderildi');
+
+// 2) Silinen taslak beyanı yeniden AÇMAZ ('silindi' aktif sayılır).
+$B2 = beyan_ekle($TAM); $yeni_bag($B2, 'sil2');
+beyan_hks_taslak_isaretle('sil2', 'silindi', ['hata_metni' => 'silindi']);
+ok('[bag] silinen taslak beyani bildirime acmiyor', ($bag($B2)['durum'] ?? '') === 'silindi');
+$h_sil = render_beyan($B2);
+ok('[bag] silinmis taslakta Bildirim Yap pasif ve sebep yaziyor',
+   buton_pasif($h_sil) === true && mb_strpos($h_sil, 'Tekrar Aktif Et') !== false);
+$f_sil = render_form($B2);
+ok('[bag] duzenle ekraninda Tekrar Aktif Et var',
+   strpos($f_sil, 'value="tekrar_aktif"') !== false && strpos($f_sil, 'value="gonderildi_isaretle"') === false);
+ok('[bag] duzenle ekrani HTML dengesi', empty(etiket_dengesi($f_sil)), implode(' | ', etiket_dengesi($f_sil)));
+ok('[bag] tekrar aktif et beyani acıyor',
+   beyan_hks_bag_duzelt($B2, 'tekrar_aktif', 1) === null && $bag($B2) === null);
+ok('[bag] gonderilmis bildirim tekrar aktif edilemiyor',
+   beyan_hks_bag_duzelt($B1, 'tekrar_aktif', 1) !== null && ($bag($B1)['durum'] ?? '') === 'gonderildi');
+
+// 3) Eski kopmuş kayıt (bugünkü 4 beyan): bağ 'iptal', HKS'e gönderilmiş.
+$B3 = beyan_ekle($TAM + ['party_no' => '25-34']);
+db()->prepare("INSERT INTO beyan_hks_bildirim (beyan_id,hks_firma_id,taslak_id,durum,urun_ad,plaka,kg,created_at)
+               VALUES (?,?,?,'iptal','Kayısı','34ABC123',19800,'2026-09-05 12:00')")->execute([$B3, 'f1', 'kopuk3']);
+db()->exec("INSERT INTO hks_gonderilenler (id,zaman,firma_id,urun_ad,plaka) VALUES
+            ('g3','2026-09-05 13:00','f1','Kayısı','34 ABC 123'),
+            ('g3b','2026-09-05 13:30','f1','Kiraz','34ABC123')");
+$f_kop = render_form($B3);
+ok('[bag] kopuk kayitta Gonderildi Olarak Isaretle var', strpos($f_kop, 'value="gonderildi_isaretle"') !== false);
+ok('[bag] elle gonderildi isaretleme',
+   beyan_hks_bag_duzelt($B3, 'gonderildi_isaretle', 1) === null && ($bag($B3)['durum'] ?? '') === 'gonderildi');
+ok('[bag] isaretlemede tek eslesen gonderim baglaniyor', ($bag($B3)['gonderim_id'] ?? '') === 'g3',
+   json_encode($bag($B3)));
+ok('[bag] liste rozeti tazeleniyor',
+   db()->query("SELECT hks_durum FROM customs_declarations WHERE id=$B3")->fetchColumn() === 'gonderildi');
+ok('[bag] aktif bagi olan beyan tekrar isaretlenemiyor', beyan_hks_bag_duzelt($B3, 'gonderildi_isaretle', 1) !== null);
+
+// 4) Hiç bağı olmayan beyan da işaretlenebilir (yeni satır açılır).
+$B4 = beyan_ekle($TAM);
+ok('[bag] bagsiz beyan gonderildi isaretlenebiliyor',
+   beyan_hks_bag_duzelt($B4, 'gonderildi_isaretle', 1) === null && ($bag($B4)['durum'] ?? '') === 'gonderildi');
+
+// 5) Gönderimde yedek yol: taslak id'si tutmasa da kaynak.beyanId ile sonuçlanır.
+$B5 = beyan_ekle($TAM); $yeni_bag($B5, 'x5');
+db()->exec("UPDATE beyan_hks_bildirim SET durum='iptal' WHERE beyan_id=$B5");
+beyan_hks_taslak_isaretle('baska5', 'gonderildi', ['gonderim_id' => 'g5', 'beyanId' => $B5]);
+ok('[bag] kaynak izi ile gonderim beyana baglaniyor', ($bag($B5)['gonderim_id'] ?? '') === 'g5');
+// Silmede yedek yol KULLANILMAZ
+$B6 = beyan_ekle($TAM); $yeni_bag($B6, 'x6');
+beyan_hks_taslak_isaretle('baska6', 'silindi', ['beyanId' => $B6]);
+ok('[bag] silmede yedek yol baska taslagin bagini kapatmiyor', ($bag($B6)['durum'] ?? '') === 'taslak');
+
+// 6) Kaynak kodda köprü uçları
+$api = (string)file_get_contents(dirname(__DIR__) . '/halkayit/api.php');
+$spa = (string)file_get_contents(dirname(__DIR__) . '/halkayit/app.html');
+ok('[bag] api: taslak_kaydet eskiTaslakId ile bagi tasiyor',
+   strpos($api, 'beyan_hks_taslak_tasi($eskiId') !== false && strpos($api, "\$g['ortak']['kaynak'] = \$eskiVeri") !== false);
+ok('[bag] api: taslak silme bagi silindi yapiyor (iptal degil)',
+   preg_match("/taslak_isaretle\(\(string\)\(\\\$g\['id'\] \?\? ''\), 'silindi'/", $api) === 1);
+ok('[bag] SPA: iki kayit yolu da eskiTaslakId gonderiyor', substr_count($spa, 'eskiTaslakId') >= 2);
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

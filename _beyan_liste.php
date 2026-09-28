@@ -35,12 +35,14 @@ if (!isset($sec_rows)) return;
             <th>Marka</th>
             <th>Çıkış Depo</th>
             <th>Durum</th>
-            <th class="actions-col">İşlem</th>
         </tr>
         </thead>
         <tbody>
         <?php foreach ($sec_rows as $r): ?>
-        <tr>
+        <!-- Satır tıklanabilir (app.js: tr[data-href]) — İşlem sütunu kaldırıldı.
+             Klavye/yeni sekme için Parti No gerçek bir bağlantıdır. Durum
+             değişikliği (Yüklendi dahil) beyan_view.php'deki durum şeridinden. -->
+        <tr class="row-link" data-href="beyan_view.php?id=<?= (int)$r['id'] ?>">
             <?php if ($sec_secim): ?>
             <td class="bb-sec-col">
                 <?php if ($bildirim_uygun($r)): ?>
@@ -49,7 +51,7 @@ if (!isset($sec_rows)) return;
             </td>
             <?php endif; ?>
             <td class="muted" style="font-size:.82rem"><?= h(fmt_datetime($r['created_at'])) ?></td>
-            <td><strong><?= h($r['party_no'] ?: '—') ?></strong></td>
+            <td><a class="row-link-a" href="beyan_view.php?id=<?= (int)$r['id'] ?>"><strong><?= h($r['party_no'] ?: '—') ?></strong></a></td>
             <td>
                 <?= h($r['product_name'] ?: '—') ?>
                 <?php if ($r['product_variety']): ?>
@@ -65,23 +67,8 @@ if (!isset($sec_rows)) return;
             <td><?= h($r['exit_depot'] ?: '—') ?></td>
             <td><?= beyan_badge_html($r['status']) ?><?php
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+                if ($hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?></td>
-            <td class="actions-col">
-                <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-                <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
-                <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
-                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <input type="hidden" name="status" value="yuklendi">
-                    <input type="hidden" name="status_only" value="1">
-                    <button type="submit" class="btn btn-sm btn-success"
-                            onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
-                </form>
-                <?php endif; ?>
-                <?php if (can_beyan('write')): ?>
-                <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
-                <?php endif; ?>
-            </td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -110,7 +97,7 @@ if (!isset($sec_rows)) return;
             </div>
             <?= beyan_badge_html($r['status']) ?><?php
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+                if ($hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?>
         </div>
 

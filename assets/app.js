@@ -2614,3 +2614,28 @@ function ekranAlti() {
         go.click();
     });
 })();
+
+// ── Tıklanabilir tablo satırı: <tr class="row-link" data-href="..."> ──────
+// Satırın içindeki bağlantı/buton/form öğesine yapılan tık kendi işini yapar
+// (ör. toplu bildirim seçim kutusu). Ctrl/⌘/orta tık yeni sekmede açar.
+// Seçili metin varsa (kopyalama) yönlendirmez.
+(function () {
+  function hedef(e) {
+    if (e.target.closest('a, button, input, select, textarea, label, .bb-sec-col')) return null;
+    var tr = e.target.closest('tr.row-link[data-href]');
+    if (!tr) return null;
+    var sel = window.getSelection && String(window.getSelection());
+    return sel ? null : tr.getAttribute('data-href');
+  }
+  document.addEventListener('click', function (e) {
+    var url = hedef(e);
+    if (!url) return;
+    if (e.ctrlKey || e.metaKey) window.open(url, '_blank');
+    else window.location.href = url;
+  });
+  document.addEventListener('auxclick', function (e) {
+    if (e.button !== 1) return;
+    var url = hedef(e);
+    if (url) window.open(url, '_blank');
+  });
+})();

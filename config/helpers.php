@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v272');
+    define('APP_SURUM', 'v274');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -2576,10 +2576,28 @@ function beyan_hks_uygun_durumlar(): array {
 // Aktif bildirim = taslak bekliyor ya da gönderilmiş. "Her ürün için 1 kez
 // bildirim" kuralının kapısı budur (1 beyan = 1 ürün olduğundan 1 beyan = 1
 // aktif bildirim). İptal/hata satırları aktif SAYILMAZ, yeniden denenebilir.
+//
+// `silindi`: beyana bağlı taslak Hal Kayıt ekranından SİLİNDİ. Kullanıcı
+// kararıyla "taslağa atılan beyan bildirimi yapılmış sayılır" — silinen
+// taslak beyanı KENDİLİĞİNDEN yeniden bildirime AÇMAZ (eskiden `iptal`e
+// çekiliyordu ve Hal Kayıt'ta düzenlenip gönderilen taslaklar beyanı "uygun"
+// gösteriyordu → mükerrer, rüsum doğuran bildirim riski). Yeniden açmak
+// beyan_edit.php'deki "Tekrar Aktif Et" ile, bilinçli ve audit'li yapılır.
+// Kapı ÜÇ+ yerde SQL ile uygulanır — listeyi değiştirirken
+// beyan_hks_aktif_durumlar_sql()'i kullanan her yer kendiliğinden güncellenir.
+function beyan_hks_aktif_durumlar(): array {
+    return ['taslak', 'gonderildi', 'silindi'];
+}
+
+// SQL `IN (...)` için sabit liste — değerler kod sabitidir, kullanıcı verisi değil.
+function beyan_hks_aktif_durumlar_sql(): string {
+    return "'" . implode("','", beyan_hks_aktif_durumlar()) . "'";
+}
+
 function beyan_hks_aktif(int $beyan_id): ?array {
     try {
         $st = db()->prepare("SELECT * FROM beyan_hks_bildirim
-                             WHERE beyan_id = ? AND durum IN ('taslak','gonderildi')
+                             WHERE beyan_id = ? AND durum IN (" . beyan_hks_aktif_durumlar_sql() . ")
                              ORDER BY id DESC LIMIT 1");
         $st->execute([$beyan_id]);
         return $st->fetch() ?: null;
@@ -2610,6 +2628,7 @@ function beyan_hks_durum_etiket(?string $durum): string {
         'gonderildi' => 'HKS GÖNDERİLDİ',
         'hata'       => 'HKS HATA',
         'iptal'      => 'HKS İPTAL',
+        'silindi'    => 'HKS TASLAK SİLİNDİ',
     ][$durum ?? ''] ?? '';
 }
 
@@ -2663,6 +2682,12 @@ function hks_eslesme_yaz(string $tip, string $kaynak, string $hks_id, string $hk
 // çağrılır (gönderim başarılı → 'gonderildi', taslak silindi → 'iptal').
 // SESSİZ ve HATA YUTAR: köprü tablosundaki bir sorun, geri alınamaz HKS
 // gönderim akışını ASLA kesmemelidir.
+//
+// `$ek['beyanId']` (taslağın `ortak.kaynak.beyanId` izi) YEDEK yoldur: taslak
+// id'si bağla tutmazsa (ör. bağ kurulmadan önce Hal Kayıt'ta düzenlenmiş eski
+// bir taslak) YALNIZ gönderimde, beyanın aktif bağı yoksa en son bağ satırı
+// sonuçlandırılır. Silmede yedek yol KULLANILMAZ — başka bir taslağın bağını
+// yanlışlıkla kapatmasın.
 function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek = []): void {
     if ($taslak_id === '') return;
     try {
@@ -2670,6 +2695,15 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
                              WHERE taslak_id = ? AND durum = 'taslak' ORDER BY id DESC LIMIT 1");
         $st->execute([$taslak_id]);
         $row = $st->fetch();
+        $beyanId = (int)($ek['beyanId'] ?? 0);
+        if (!$row && $durum === 'gonderildi' && $beyanId > 0) {
+            $ak = beyan_hks_aktif($beyanId);
+            if ($ak && $ak['durum'] === 'gonderildi') return;   // zaten sonuçlanmış
+            $st = db()->prepare("SELECT id, beyan_id FROM beyan_hks_bildirim
+                                 WHERE beyan_id = ? ORDER BY id DESC LIMIT 1");
+            $st->execute([$beyanId]);
+            $row = $st->fetch();
+        }
         if (!$row) return;
         $up = db()->prepare("UPDATE beyan_hks_bildirim
                              SET durum = ?, gonderim_id = ?, hata_metni = ?, updated_at = NOW()
@@ -2679,6 +2713,93 @@ function beyan_hks_taslak_isaretle(string $taslak_id, string $durum, array $ek =
     } catch (PDOException $e) {
         error_log('[beyan-hks] bag guncellenemedi: ' . $e->getMessage());
     }
+}
+
+// Hal Kayıt'ta "Düzenle": SPA yeni taslağı kaydedip ESKİSİNİ siler (yeni id).
+// Eskiden silme bağı `iptal`e çekiyor, yeni taslak ise beyana hiç bağlanmıyordu
+// → gönderilse bile beyan "bildirim yapılmadı" görünüyordu. Bağ silmeden ÖNCE
+// yeni taslağa taşınır; ardından gelen silme artık eşleşecek bağ bulamaz.
+// Hata yutar — köprü sorunu HKS akışını kesmez.
+function beyan_hks_taslak_tasi(string $eski_id, string $yeni_id): void {
+    if ($eski_id === '' || $yeni_id === '' || $eski_id === $yeni_id) return;
+    try {
+        db()->prepare("UPDATE beyan_hks_bildirim SET taslak_id = ?, updated_at = NOW()
+                       WHERE taslak_id = ? AND durum = 'taslak'")
+            ->execute([$yeni_id, $eski_id]);
+    } catch (PDOException $e) {
+        error_log('[beyan-hks] bag tasinamadi: ' . $e->getMessage());
+    }
+}
+
+// Beyanın bildirim bağına yapılabilecek ELLE düzeltmeler (beyan_edit.php).
+// 'gonderildi_isaretle' → aktif bağ yokken beyanı "bildirildi" sayar (HKS'e
+//   başka yoldan / bağ kopmuş bir taslakla gönderilmiş beyanlar için).
+// 'tekrar_aktif'        → yalnız `silindi` bağı `iptal`e çeker; beyan yeniden
+//   "Bildirim Yap"a açılır. `gonderildi` ve `taslak` bilerek açılamaz:
+//   gönderilmiş bildirim geri alınamaz, bekleyen taslak Hal Kayıt'tan silinir.
+// Dönüş: hata mesajı ya da null (başarı). Audit çağıran sayfadadır.
+function beyan_hks_bag_duzelt(int $beyan_id, string $islem, int $user_id): ?string {
+    $aktif = beyan_hks_aktif($beyan_id);
+    try {
+        if ($islem === 'tekrar_aktif') {
+            if (!$aktif || $aktif['durum'] !== 'silindi') {
+                return 'Yalnız taslağı silinmiş bildirim tekrar aktif edilebilir.';
+            }
+            db()->prepare("UPDATE beyan_hks_bildirim SET durum = 'iptal', hata_metni = ?, updated_at = NOW()
+                           WHERE id = ?")
+                ->execute(['Tekrar aktif edildi (beyan düzenleme ekranından).', (int)$aktif['id']]);
+        } elseif ($islem === 'gonderildi_isaretle') {
+            if ($aktif) return 'Bu beyanın zaten aktif bir bildirimi var.';
+            $b = db()->prepare("SELECT * FROM customs_declarations WHERE id = ?");
+            $b->execute([$beyan_id]);
+            $beyan = $b->fetch();
+            if (!$beyan) return 'Beyan bulunamadı.';
+            $son = beyan_hks_gecmis($beyan_id)[0] ?? null;
+            $gid = beyan_hks_gonderim_bul($beyan, $son);
+            $not = 'Elle "gönderildi" olarak işaretlendi.' . ($gid ? '' : ' (Eşleşen HKS gönderimi bulunamadı.)');
+            if ($son) {
+                db()->prepare("UPDATE beyan_hks_bildirim SET durum = 'gonderildi', gonderim_id = ?,
+                                      hata_metni = ?, updated_at = NOW() WHERE id = ?")
+                    ->execute([$gid, $not, (int)$son['id']]);
+            } else {
+                db()->prepare("INSERT INTO beyan_hks_bildirim
+                    (beyan_id, hks_firma_id, gonderim_id, durum, urun_id, urun_ad, ulke_id, ulke_ad,
+                     plaka, kg, hata_metni, created_by, created_at)
+                    VALUES (?,?,?,'gonderildi',?,?,?,?,?,?,?,?,NOW())")
+                    ->execute([$beyan_id, $beyan['hks_firma_id'] ?: null, $gid,
+                        $beyan['hks_urun_id'] ?: null, $beyan['hks_urun_ad'] ?: null,
+                        $beyan['hks_ulke_id'] ?: null, $beyan['hks_ulke_ad'] ?: null,
+                        $beyan['vehicle_plate'] ?: null, $beyan['net_kg'], $not, $user_id ?: null]);
+            }
+        } else {
+            return 'Geçersiz işlem.';
+        }
+    } catch (PDOException $e) {
+        return 'Bildirim bağı güncellenemedi.';
+    }
+    beyan_hks_durum_tazele($beyan_id);
+    return null;
+}
+
+// Beyana karşılık gelen HKS gönderimini BİLGİ amaçlı arar: aynı firma + plaka,
+// bağ kaydından (yoksa beyandan) sonra; TEK aday varsa id'si döner. Bulamazsa
+// ya da birden çok aday varsa null — tahmin yazılmaz.
+function beyan_hks_gonderim_bul(array $beyan, ?array $bag): ?string {
+    $firma = (string)($bag['hks_firma_id'] ?? $beyan['hks_firma_id'] ?? '');
+    $plaka = (string)($bag['plaka'] ?? $beyan['vehicle_plate'] ?? '');
+    $urun  = (string)($bag['urun_ad'] ?? $beyan['hks_urun_ad'] ?? '');
+    if ($firma === '' || $plaka === '') return null;
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    try {
+        $st = db()->prepare("SELECT id FROM `{$on}gonderilenler`
+                             WHERE firma_id = ? AND REPLACE(UPPER(plaka), ' ', '') = ?
+                               AND (? = '' OR urun_ad = ?) AND zaman >= ?
+                             ORDER BY zaman ASC LIMIT 2");
+        $st->execute([$firma, beyan_plaka_normalize($plaka), $urun, $urun,
+                      (string)($bag['created_at'] ?? $beyan['created_at'] ?? '2000-01-01')]);
+        $ids = $st->fetchAll(PDO::FETCH_COLUMN);
+        return count($ids) === 1 ? (string)$ids[0] : null;
+    } catch (PDOException $e) { return null; }
 }
 
 // =============================================================================

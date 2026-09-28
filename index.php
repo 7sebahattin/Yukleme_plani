@@ -64,7 +64,7 @@ if (can('beyan.read') && (can('records.write') || is_admin())) {
                AND COALESCE(d.net_kg, 0) > 0
                AND d.status IN ($__bd)
                AND NOT EXISTS (SELECT 1 FROM beyan_hks_bildirim b
-                               WHERE b.beyan_id = d.id AND b.durum IN ('taslak','gonderildi'))"
+                               WHERE b.beyan_id = d.id AND b.durum IN (" . beyan_hks_aktif_durumlar_sql() . "))"
         );
         $__st->execute(beyan_hks_uygun_durumlar());
         $beyan_bildirim_bekleyen = (int)$__st->fetchColumn();

@@ -138,7 +138,7 @@ if ($migration_ok) {
     if ($ids) {
         $ph = implode(',', array_fill(0, count($ids), '?'));
         $bs = $pdo->prepare("SELECT DISTINCT beyan_id FROM beyan_hks_bildirim
-                             WHERE beyan_id IN ($ph) AND durum IN ('taslak','gonderildi')");
+                             WHERE beyan_id IN ($ph) AND durum IN (" . beyan_hks_aktif_durumlar_sql() . ")");
         $bs->execute($ids);
         $bagli = array_flip(array_map('intval', $bs->fetchAll(PDO::FETCH_COLUMN)));
     }

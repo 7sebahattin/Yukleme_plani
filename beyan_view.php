@@ -95,9 +95,11 @@ elseif ($hks_net_kg <= 0)        $hks_engel = 'Net KG girilmeden bildirim yapıl
 elseif (!beyan_hks_eslesme_tam($beyan))
                                  $hks_engel = 'Hal Bildirim bilgileri eksik (HKS firması / ürünü / ülke). '
                                             . 'Beyanı düzenleyip "🏛 Hal Bildirim Bilgileri" bölümünü doldurun.';
-elseif ($hks_aktif)              $hks_engel = $hks_aktif['durum'] === 'gonderildi'
-                                    ? 'Bu beyan için bildirim zaten gönderildi.'
-                                    : 'Bu beyan için bekleyen bir HKS taslağı var.';
+elseif ($hks_aktif)              $hks_engel = [
+                                      'gonderildi' => 'Bu beyan için bildirim zaten gönderildi.',
+                                      'silindi'    => 'Bu beyanın HKS taslağı Hal Kayıt ekranından silindi — bildirim yapılmış sayılır. '
+                                                    . 'Yeniden bildirim için Düzenle → "Hal Bildirim Durumu" → Tekrar Aktif Et.',
+                                    ][$hks_aktif['durum']] ?? 'Bu beyan için bekleyen bir HKS taslağı var.';
 $hks_acik = ($hks_engel === null);
 
 // Beyan tarafındaki (aktarılacak) değerler — önizleme + JS için

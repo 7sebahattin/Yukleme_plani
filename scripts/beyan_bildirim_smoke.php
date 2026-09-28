@@ -408,7 +408,7 @@ $idx = oku("$KOK/index.php");
 ok('ana sayfa sayaci buton kapisinin ayni kurallarini kullaniyor',
    strpos($idx, 'beyan_hks_uygun_durumlar()') !== false
    && strpos($idx, "COALESCE(d.hks_urun_id,  '') <> ''") !== false
-   && strpos($idx, "b.durum IN ('taslak','gonderildi')") !== false,
+   && strpos($idx, "b.durum IN (\" . beyan_hks_aktif_durumlar_sql() . \")") !== false,
    'sayac ile buton kapisi ayrisirsa sayi yaniltir');
 
 // ── 15) On kontrol sayfasi ────────────────────────────────────────────────
