@@ -947,8 +947,11 @@ render_flash();
             (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + gKisiIkon + '<span>' + escHtml(tip) + '</span></div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
-            '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
-            'pdks-kiosk-result-ok', 5000
+            '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>' +
+            // v275: önceki (kapatılmış) mesaide çıkışsız kalan kart — giriş YAPILDI,
+            // eski kayıt raporda eksik çıkış olarak kalır. Okunabilsin diye süre uzar.
+            (d.uyari ? '<div class="pdks-result-uyari" role="alert">⚠️ ' + escHtml(d.uyari) + '</div>' : ''),
+            'pdks-kiosk-result-ok', d.uyari ? 8000 : 5000
         );
     }
     function hataGoster(mesaj) {

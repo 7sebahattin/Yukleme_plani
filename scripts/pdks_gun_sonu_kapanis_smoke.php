@@ -19,8 +19,11 @@ $depoGs = 'FINIKE';
 function db(): PDO { global $dbGs; return $dbGs; }
 function active_depot(): ?string { global $depoGs; return $depoGs; }
 function audit_log_event(string $a, string $m, int $id, ?array $o = null, ?array $n = null): void {}
+function is_admin(): bool { return true; }
+function current_user(): ?array { return ['id' => 7]; }
 require_once $root . '/config/pdks.php';
 require_once $root . '/config/pdks_gunluk.php';
+require_once $root . '/config/pdks_faz8h.php';
 
 foreach ([
     'CREATE TABLE worker_types (id INTEGER PRIMARY KEY, code TEXT, name TEXT, is_active INTEGER, sort_order INTEGER)',
@@ -28,6 +31,8 @@ foreach ([
     'CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, canonical_uid TEXT, worker_type_id INTEGER NULL, status TEXT)',
     'CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, opened_at TEXT, opened_by_user_id INTEGER, closed_at TEXT, closed_by_user_id INTEGER, notes TEXT, updated_at TEXT, UNIQUE(foreman_id, work_date, depo))',
     'CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)',
+    'CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY, session_id INTEGER, foreman_id INTEGER, status TEXT, needs_recalculation INTEGER DEFAULT 0, notes TEXT, updated_at TEXT, finalized_at TEXT, finalized_by_user_id INTEGER, total_amount TEXT)',
+    'CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, action TEXT, module TEXT, record_id INTEGER, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
     'CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, entry_event_id INTEGER, exit_event_id INTEGER, entry_time TEXT, exit_time TEXT, declared_attendance_class TEXT, approved_attendance_class TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, status TEXT, source TEXT, is_voided INTEGER NOT NULL DEFAULT 0, voided_at TEXT, voided_by_user_id INTEGER, void_reason TEXT)',
 ] as $sql) $dbGs->exec($sql);
 
@@ -38,7 +43,8 @@ $today = date('Y-m-d');
 $dun   = date('Y-m-d', strtotime('-1 day'));
 $dbGs->exec("INSERT INTO worker_types VALUES (1,'KADIN','Kadın',1,1)");
 $dbGs->exec("INSERT INTO foremen VALUES (1,'C1','Birinci Çavuş',1),(2,'C2','İkinci Çavuş',1),(3,'C3','Üçüncü Çavuş',1)");
-$dbGs->exec("INSERT INTO worker_cards VALUES (1,'K001','AABBCC01',NULL,'active')");
+$uidK1 = pdks_uid_from_decimal('631799511');
+$dbGs->prepare("INSERT INTO worker_cards VALUES (1,'K001',?,NULL,'active')")->execute([$uidK1]);
 $ins = $dbGs->prepare('INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,work_date,depo,status,opened_at,opened_by_user_id) VALUES (?,?,?,?,?,?,?,7)');
 // 1: çavuş 1 — DÜN FINIKE'de açık kalmış (1 eksik çıkışlı)
 $ins->execute([1, 'Birinci Çavuş', 'C1', $dun, 'FINIKE', 'open', "$dun 07:30:00"]);
@@ -82,6 +88,43 @@ okGs('kapatma sonrası çavuş 1 için bugün mesai açıldı', $r1b['ok'] && $r
 $r1c = pdks_gunluk_oturum_ac_veya_getir(1, 7, $dbGs);
 okGs('bugünkü açık mesaiye devam engellenmiyor', $r1c['ok'] && !$r1c['yeni']);
 
+// ── v275: eksik çıkışla kapanan mesaideki kart yeni girişi ENGELLEMEZ ──
+$bugunC1 = (int)$r1b['session']['id'];
+okGs('K001 kapanmış mesaide çıkışsız: canlı açık dönem YOK', pdks_gunluk_faz8a_kart_acik_donemi($dbGs, 1) === null);
+okGs('K001 için eksik çıkışlı dönem bulunuyor', (pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($dbGs, 1)['session_id'] ?? 0) == $eskiId);
+$g = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC1, 1, 'auto', 7, $dbGs);
+okGs('K001 bugün GİRİŞ yapabildi', $g['ok'] === true);
+okGs('girişte eksik çıkış UYARISI döndü (tarih dahil)', is_string($g['uyari'] ?? null) && str_contains($g['uyari'], date('d.m.Y', strtotime($dun))) && str_contains($g['uyari'], 'eksik çıkış'));
+$eskiDonem = $dbGs->query("SELECT status, exit_time FROM daily_worker_work_periods WHERE session_id=$eskiId")->fetch();
+okGs('eski dönem DEĞİŞMEDİ: status=open, çıkış saati UYDURULMADI', $eskiDonem['status'] === 'open' && $eskiDonem['exit_time'] === null);
+okGs('eski mesai özeti hâlâ 1 eksik çıkış gösteriyor', (int)pdks_gunluk_oturum_ozet($eskiId, $dbGs)['eksik_toplam'] === 1);
+$g2 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC1, 1, 'auto', 7, $dbGs);
+okGs('bugünkü açık dönem yine kilitler (mükerrer giriş reddi)', !$g2['ok'] && $g2['kod'] === 'mukerrer_giris');
+$bugunC3 = (int)$r3['session']['id'];
+$g3 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC3, 1, 'auto', 7, $dbGs);
+okGs('başka çavuşta canlı açık dönem hâlâ engeller', !$g3['ok'] && $g3['kod'] === 'baska_cavusta_acik');
+
+// Çıkış yalnız AÇIK mesaideki dönemi kapatır — kapanmış mesaideki eski dönem dokunulmaz.
+$c = pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $bugunC1, 7, $dbGs);
+okGs('ÇIKIŞ bugünkü dönemi kapattı', $c['ok'] === true);
+$eskiDonem2 = $dbGs->query("SELECT status, exit_time FROM daily_worker_work_periods WHERE session_id=$eskiId")->fetch();
+okGs('ÇIKIŞ eski (kapalı mesaideki) dönemi SEÇMEDİ', $eskiDonem2['status'] === 'open' && $eskiDonem2['exit_time'] === null);
+$c2 = pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $bugunC1, 7, $dbGs);
+okGs('ikinci ÇIKIŞ: açık dönem yok + eksik çıkış açıklaması', !$c2['ok'] && $c2['kod'] === 'acik_donem_yok' && str_contains($c2['hata'], 'çıkış yazılamaz'));
+
+// Yeniden açma koruması: bugün C3'te K001 girip çıkışsız kapansın, sonra C1'de girsin.
+$dbGs->exec("UPDATE daily_work_sessions SET opened_at='$today 07:00:00' WHERE work_date='$today'");
+$g4 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC3, 1, 'auto', 7, $dbGs);
+okGs('K001 C3 mesaisine girdi', $g4['ok'] === true);
+okGs('C3 eksik çıkışla kapatıldı', pdks_gunluk_oturum_kapat($bugunC3, 'Kart kaldı', 7, $dbGs)['ok'] === true);
+$g5 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC1, 1, 'auto', 7, $dbGs);
+okGs('aynı gün K001 C1 mesaisine uyarıyla girdi', $g5['ok'] === true && !empty($g5['uyari']));
+$ya = pdks_gunluk_oturum_yeniden_ac($bugunC3, 'Yanlışlıkla kapatıldı', 7, $dbGs);
+okGs('kart başka açık mesaide içerideyken C3 yeniden AÇILAMAZ', !$ya['ok'] && $ya['kod'] === 'kart_baska_mesaide');
+pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $bugunC1, 7, $dbGs);
+$ya2 = pdks_gunluk_oturum_yeniden_ac($bugunC3, 'Yanlışlıkla kapatıldı', 7, $dbGs);
+okGs('kartın çıkışı alınınca C3 yeniden açılabiliyor', $ya2['ok'] === true);
+
 // ── Süre doldu uyarısı ──
 $ac = strtotime("$today 07:00:00");
 $ot = ['status' => 'open', 'work_date' => $today, 'opened_at' => "$today 07:00:00", 'normal_work_minutes_snapshot' => 540];
@@ -97,13 +140,14 @@ okGs('geçmiş güne ait açık mesai her zaman uyarır (eski_gun)', $ue !== nul
 
 $dbGs->exec("UPDATE daily_work_sessions SET opened_at='$today 00:00:01' WHERE work_date='$today'");
 $sd = pdks_gunluk_suresi_dolan_oturumlar(null, $dbGs, strtotime("$today 23:59:00"));
-okGs('süresi dolan bugünkü mesailer listeleniyor (FINIKE: çavuş 1, 2, 3)', count($sd) === 3 && $sd[0]['uyari']['tur'] === 'sure_doldu');
+okGs('süresi dolan bugünkü mesailer listeleniyor (FINIKE: açık olanlar)', count($sd) === (int)$dbGs->query("SELECT COUNT(*) FROM daily_work_sessions WHERE work_date='$today' AND depo='FINIKE' AND status='open'")->fetchColumn() && count($sd) >= 2 && $sd[0]['uyari']['tur'] === 'sure_doldu');
 okGs('sabah erken saatte liste boş', pdks_gunluk_suresi_dolan_oturumlar(null, $dbGs, strtotime("$today 00:30:00")) === []);
 
 // ── Sayfa kancaları (statik) ──
 $page = (string)file_get_contents($root . '/gunluk_isci_giris_cikis.php');
 okGs('sayfa eski açık mesai penceresini içeriyor (#giEskiSec)', str_contains($page, 'id="giEskiSec"'));
 okGs('GİRİŞ reddinde pencere açılıyor (onceki_mesai_acik → eskiPencereAc)', (bool)preg_match("/onceki_mesai_acik'\\) \\{.*?eskiPencereAc\\(/s", $page));
+okGs('giriş sonucunda uyarı satırı gösteriliyor (d.uyari)', str_contains($page, 'pdks-result-uyari'));
 okGs('mod ekranında süre uyarısı alanı var (#giKapatUyari)', str_contains($page, 'id="giKapatUyari"'));
 okGs('ajax=oturum yanıtına kapat_uyarisi ekleniyor', str_contains($page, "\$sonuc['kapat_uyarisi'] = pdks_gunluk_kapat_uyarisi("));
 okGs('pencere kapatmayı aynı ?ajax=kapat yolundan yapıyor (ikinci yazma yolu yok)', substr_count($page, "daily_work_sessions SET") === 0);

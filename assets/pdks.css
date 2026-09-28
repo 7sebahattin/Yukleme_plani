@@ -1292,3 +1292,9 @@ html[data-theme="dark"] .pdks-kiosk-uyari { color: #ffd88a; }
    düşüyordu. Açık temada metin rengi kiosk kartlarıyla aynı. */
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-recon { color: #18283a; }
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-recon .muted { color: #557087; }
+/* v275: girişte "önceki mesaide eksik çıkış" uyarısı (giriş yine yapılır). */
+.pdks-result-uyari {
+    margin: 12px auto 0; max-width: 420px; padding: 10px 12px; border-radius: 12px;
+    background: #fff4d6; border: 2px solid #d18a13; color: #6b4300;
+    font-size: .92rem; font-weight: 700; line-height: 1.35; text-align: center;
+}

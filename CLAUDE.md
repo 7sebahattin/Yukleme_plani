@@ -411,9 +411,17 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
   yanıtındaki `kapat_uyarisi`) ve çavuş listesinin üstünde
   (`pdks_gunluk_suresi_dolan_oturumlar()`) görünür. Hesap SUNUCU saatiyle.
 - `personel_takip.php` Giriş/Çıkış kartında kapatılmamış mesai sayısı rozeti.
-- **Bilinen sınır:** eksik çıkışla kapatılan mesaideki kartın dönemi `open`
-  kalır (çıkış saati UYDURULMAZ) ve `pdks_gunluk_faz8a_kart_acik_donemi()` o kartı
-  ertesi gün girişte engellemeye devam eder — düzeltme puantaj detayından.
+- **Eksik çıkışlı kart yeni girişi ENGELLEMEZ** (kullanıcı kararı): eksik çıkışla
+  kapatılan mesaideki dönem `open` KALIR (raporda "Eksik Çıkış", çıkış saati
+  UYDURULMAZ), ama kilit yalnız **açık mesaideki** dönemdir —
+  `pdks_gunluk_faz8a_kart_acik_donemi()` `s.status='open'` ister (legacy
+  `pdks_gunluk_kart_acik_girisi()` ile aynı kural). Giriş yapılır ve yanıtta
+  `uyari` döner (`pdks_gunluk_faz8a_kart_eksik_cikisli_donemi()` +
+  `pdks_gunluk_eksik_cikis_uyari_metni()`; sonuç kartında `.pdks-result-uyari`).
+  Bir kartta böylece İKİ `open` dönem olabilir: **çıkış sorgusu yalnız açık
+  mesaidekini seçer** — bu filtreyi kaldırma, yoksa eski dönem kapatılır/yanlış
+  çavuş reddi gelir. Admin yeniden açması (`pdks_faz8h.php`) mesaideki çıkışsız
+  kart başka açık mesaide içerideyse `kart_baska_mesaide` ile reddedilir.
 - Test: `php scripts/pdks_gun_sonu_kapanis_smoke.php`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)

@@ -2749,6 +2749,11 @@ function pdks_gunluk_faz8a_kart_kilitle(PDO $pdo, int $cardId): void
  */
 function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
 {
+    // ⚠ v275 (kullanıcı kararı): yalnız AÇIK MESAİDEKİ dönem kartı kilitler.
+    // Mesai eksik çıkışla KAPATILDIYSA o dönem 'open' KALIR (raporda "Eksik
+    // Çıkış"; çıkış saati UYDURULMAZ) ama kart artık meşgul SAYILMAZ — yeni
+    // giriş yapılır ve uyarı verilir (bkz. pdks_gunluk_faz8a_kart_eksik_cikisli_donemi).
+    // Legacy yol (pdks_gunluk_kart_acik_girisi) zaten s.status='open' arıyordu.
     $st = $pdo->prepare(
         "SELECT p.id, p.session_id, p.entry_time, p.worker_type_name_snapshot AS tip,
                 s.foreman_id, f.name AS foreman_name, s.depo
@@ -2756,10 +2761,42 @@ function pdks_gunluk_faz8a_kart_acik_donemi(PDO $pdo, int $workerCardId): ?array
            JOIN daily_work_sessions s ON s.id = p.session_id
            JOIN foremen f ON f.id = s.foreman_id
           WHERE p.worker_card_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . " AND p.status = 'open'
+            AND s.status = 'open'
           LIMIT 1"
     );
     $st->execute([$workerCardId]);
     return $st->fetch() ?: null;
+}
+
+/**
+ * v275: kartın, mesaisi EKSİK ÇIKIŞLA KAPATILMIŞ bir oturumda hâlâ çıkışsız
+ * ('open') kalan en son dönemi. Kilit DEĞİLDİR — yalnız giriş/çıkış ekranında
+ * uyarı üretmek için okunur. Dönem DEĞİŞTİRİLMEZ: raporda eksik çıkış kalır.
+ */
+function pdks_gunluk_faz8a_kart_eksik_cikisli_donemi(PDO $pdo, int $workerCardId): ?array
+{
+    $st = $pdo->prepare(
+        "SELECT p.id, p.session_id, p.entry_time, p.worker_type_name_snapshot AS tip,
+                s.work_date, s.depo, s.foreman_name_snapshot AS foreman_name
+           FROM daily_worker_work_periods p
+           JOIN daily_work_sessions s ON s.id = p.session_id
+          WHERE p.worker_card_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . " AND p.status = 'open'
+            AND s.status = 'closed'
+          ORDER BY p.entry_time DESC
+          LIMIT 1"
+    );
+    $st->execute([$workerCardId]);
+    return $st->fetch() ?: null;
+}
+
+/** Eksik çıkışlı dönem için ekranda gösterilecek tek satırlık uyarı. */
+function pdks_gunluk_eksik_cikis_uyari_metni(array $d): string
+{
+    $tarih = date('d.m.Y', strtotime((string)$d['work_date']));
+    $saat  = substr((string)$d['entry_time'], 11, 5);
+    $cavus = trim((string)($d['foreman_name'] ?? ''));
+    return 'Bu kartın ' . $tarih . ($cavus !== '' ? ' ' . $cavus : '') . ' mesaisinde ('
+         . ($saat !== '' ? 'giriş ' . $saat . ', ' : '') . 'çıkış yok) eksik çıkış kaydı var.';
 }
 
 /**
@@ -2909,6 +2946,8 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
                 : 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde açık görünüyor.';
             return ['ok' => false, 'kod' => 'baska_cavusta_acik', 'hata' => $hata];
         }
+        // v275: kapanmış mesaide çıkışsız kalan dönem girişi ENGELLEMEZ, uyarır.
+        $eksikDonem = pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($pdo, (int)$kart['id']);
 
         $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden ASLA alınmaz.
         $insE = $pdo->prepare(
@@ -2950,11 +2989,13 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
         audit_log_event('gunluk_giris', 'daily_worker_work_periods', $periodId, null, [
             'session_id' => $sessionId, 'worker_card_id' => $kart['id'], 'card_no' => $kart['card_no'],
             'worker_type_id' => $tip['id'], 'declared_attendance_class' => $declaredClass,
+            'eksik_cikisli_donem_id' => $eksikDonem ? (int)$eksikDonem['id'] : null,
         ]);
     }
 
     return [
         'ok' => true, 'event_id' => $eventId, 'period_id' => $periodId, 'event_type' => 'GIRIS',
+        'uyari' => $eksikDonem ? pdks_gunluk_eksik_cikis_uyari_metni($eksikDonem) : null,
         'card' => ['card_no' => $kart['card_no'], 'worker_type_name' => (string)$tip['name'], 'declared_class' => $declaredClass,
                    'declared_class_label' => pdks_gunluk_faz8a_mesai_siniflari()[$declaredClass]],
         'server_time' => $simdi,
@@ -3011,11 +3052,19 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
         // ⚠ PRE-MERGE DÜZELTMESİ: 'source' filtresi KALDIRILDI. status='open' artık
         // TEK BAŞINA otoriter sinyaldir (legacy backfill 'legacy_unresolved' yazar,
         // asla 'open' yazmaz) — bkz. pdks_gunluk_faz8a_kart_acik_donemi().
-        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " LIMIT 1");
+        // ⚠ v275: yalnız AÇIK MESAİDEKİ dönem — eksik çıkışla kapatılmış mesaide
+        // 'open' kalan dönem (kart ertesi gün yeniden giriş yapabildiği için) bir
+        // kartta İKİ 'open' dönem olabilir; eskisi ASLA seçilmemeli/kapatılmamalı.
+        $st2 = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE worker_card_id = ? AND status = 'open' AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . " AND session_id IN (SELECT id FROM daily_work_sessions WHERE status = 'open') LIMIT 1");
         $st2->execute([$kart['id']]);
         $acik = $st2->fetch() ?: null;   // ⚠ PDO::fetch() satır yoksa false döner, null DEĞİL.
         if ($acik === null) {
             if (!$disTx) $pdo->rollBack();
+            $eksikDonem = pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($pdo, (int)$kart['id']);
+            if ($eksikDonem) {
+                return ['ok' => false, 'kod' => 'acik_donem_yok',
+                        'hata' => pdks_gunluk_eksik_cikis_uyari_metni($eksikDonem) . ' Mesai kapatıldığı için çıkış yazılamaz.'];
+            }
             return ['ok' => false, 'kod' => 'acik_donem_yok', 'hata' => 'Bu kart için açık bir mesai bulunamadı.'];
         }
         if ((int)$acik['session_id'] !== $sessionId) {
