@@ -327,14 +327,17 @@ render_flash();
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="form-group" data-ic="tup">
+        <!-- Yeni beyanda henüz numune/analiz aşaması yok — pasif + gizli
+             (kullanıcı isteği). Alanlar Düzenle formunda aynen aktif kalır;
+             burada `disabled` olduğu için POST'a da girmezler. -->
+        <div class="form-group" data-ic="tup" hidden>
             <label class="form-label">Numune Alındı Tarihi</label>
-            <input type="datetime-local" name="sample_taken_at" class="form-control"
+            <input type="datetime-local" name="sample_taken_at" class="form-control" disabled
                    value="<?= h($f['sample_taken_at']) ?>">
         </div>
-        <div class="form-group" data-ic="takvim">
+        <div class="form-group" data-ic="takvim" hidden>
             <label class="form-label">Analiz Sonuç Tarihi</label>
-            <input type="datetime-local" name="analysis_result_at" class="form-control"
+            <input type="datetime-local" name="analysis_result_at" class="form-control" disabled
                    value="<?= h($f['analysis_result_at']) ?>">
         </div>
     </div>
