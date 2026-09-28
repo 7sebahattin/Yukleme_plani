@@ -212,6 +212,8 @@ function ekranAlti() {
         var statusDiv   = document.getElementById('beyanParseStatus');
         var bulkBox     = document.getElementById('beyanBulkPreview'); // yalnız create sayfasında
         var baseUrl     = parseBtn.dataset.baseUrl || '';
+        // Butonun kendi etiketi geri yazılır (Yeni Beyan'da emojisiz, simge CSS'ten).
+        var parseEtiket = parseBtn.textContent.trim();
 
         var FIELDS = [
             'declaration_title', 'party_no', 'transport_type', 'line_type',
@@ -374,7 +376,7 @@ function ekranAlti() {
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                     parseBtn.disabled = false;
-                    parseBtn.textContent = '🔍 Metni Ayrıştır';
+                    parseBtn.textContent = parseEtiket;
 
                     if (!data.ok) {
                         showParseStatus('error', data.error || 'Ayrıştırma başarısız.');
@@ -395,7 +397,7 @@ function ekranAlti() {
                 })
                 .catch(function (err) {
                     parseBtn.disabled = false;
-                    parseBtn.textContent = '🔍 Metni Ayrıştır';
+                    parseBtn.textContent = parseEtiket;
                     showParseStatus('error', 'Bağlantı hatası: ' + err.message);
                 });
         });

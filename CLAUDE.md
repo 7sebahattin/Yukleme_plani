@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v268` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v269` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -487,6 +487,15 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
   alanı açma** — aynı `name` ile iki alan POST'ta çakışır.
   Bölüm **WhatsApp Metni'nin hemen altındadır** (iki formda da aynı sıra).
+- **Yeni Beyan görsel katmanı** (`form.bf` — style.css "YENİ BEYAN FORMU" bloğu):
+  yalnız `beyan_create.php`'ye uygulanır; Düzenle formu ve `beyan_view` eski
+  görünümde kalır. Kancalar: bölümde `data-bf="wa|hks|temel|urun|lojistik|durum"`
+  (renk), başlıkta ve her `.form-group`'ta `data-ic="<simge>"` (CSS mask — rengi
+  temadan gelir; simge adları blok sonundaki listede). Başlık emojisi
+  `.bf-emoji` içinde durur ve bu formda gizlenir — `beyan_hks_form_bolumu()`
+  ortak olduğu için Düzenle'de emoji aynen görünür. **Yeni alan eklerken
+  `.form-group`'a `data-ic` ver**, yoksa sol karo çizilmez (alan yine çalışır).
+  Metni Ayrıştır etiketi JS'te sabit değildir, butonun kendi metninden geri yazılır.
 - **Yazarak aranabilir select** (`data-aramali="ipucu"` — app.js): Hal Kayıt
   panelindeki "İhracat Yapılan Ülke" kutusunun aynısı. **Asıl `<select>` DOM'da
   KALIR**, yalnız görsel olarak gizlenir — değeri o taşır, dolayısıyla POST,
