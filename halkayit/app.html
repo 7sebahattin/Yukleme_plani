@@ -2956,6 +2956,8 @@ $('btnMalTaslak').onclick = async () => {
 
   try {
     await api('/api/taslaklar', 'POST', {
+      // Düzenlemede eski taslağın id'si: sunucu beyan bağını/izini yeni taslağa taşır.
+      eskiTaslakId: duzenlenenTaslakId || undefined,
       firmaId: aktifFirma.id,
       // Referanssız: tek satır, künye no 0
       satirlar: [{ kunyeNo: '0', miktar }],
@@ -3105,7 +3107,10 @@ function ortakTopla(fiyatId) {
 
 // Taslağı kaydeder ve ekranı temizler — normal ve plan taslağı ortak son adım.
 async function taslagiGonderKaydet(govde) {
-  await api('/api/taslaklar', 'POST', govde);
+  // Düzenlemede eski taslağın id'si: sunucu beyan bağını/izini yeni taslağa
+  // taşır (yoksa eski taslağın silinmesi beyanı "bildirilmedi"ye düşürüyordu).
+  await api('/api/taslaklar', 'POST', Object.assign({}, govde,
+    duzenlenenTaslakId ? { eskiTaslakId: duzenlenenTaslakId } : {}));
   // Düzenleme modu: yeni taslak başarıyla kaydedildi → eski kopyayı sil.
   if (duzenlenenTaslakId) {
     try { await api('/api/taslaklar/sil', 'POST', { id: duzenlenenTaslakId, firmaId: aktifFirma.id }); }

@@ -347,8 +347,24 @@ try {
     case 'taslak_kaydet': {
       // Yazma ve doğrulama taslak_lib.php'de; Beyan ekranındaki "Bildirim Yap"
       // akışı da AYNI fonksiyonu çağırır (kural ayrışmasın diye).
+      //
+      // DÜZENLEME (`eskiTaslakId`): SPA yeni taslağı kaydedip eskisini siler.
+      // Eski taslağın beyan izi (`ortak.kaynak`) formda yoktur → buradan yeni
+      // taslağa aktarılır ve beyan bağı yeni id'ye taşınır. Aksi hâlde silme
+      // bağı kapatıyor, düzenlenip gönderilen taslak beyana hiç yansımıyordu.
+      $eskiId = trim((string)($g['eskiTaslakId'] ?? ''));
+      unset($g['eskiTaslakId']);
+      if ($eskiId !== '' && is_array($g['ortak'] ?? null) && empty($g['ortak']['kaynak'])) {
+        $es = $db->prepare('SELECT veri FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
+        $es->execute([$eskiId, trim((string)($g['firmaId'] ?? ''))]);
+        $eskiVeri = json_decode((string)$es->fetchColumn(), true);
+        if (!empty($eskiVeri['ortak']['kaynak'])) $g['ortak']['kaynak'] = $eskiVeri['ortak']['kaynak'];
+      }
       $sonuc = hks_taslak_olustur($g);
       if (!empty($sonuc['hata'])) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod'] ?? 400);
+      if ($eskiId !== '' && function_exists('beyan_hks_taslak_tasi')) {
+        beyan_hks_taslak_tasi($eskiId, (string)$sonuc['id']);
+      }
       hks_json_cikti(['tamam' => true, 'id' => $sonuc['id']]);
     }
     case 'taslak_sil': {
@@ -356,12 +372,15 @@ try {
       $fid = trim($g['firmaId'] ?? '');
       $st = $db->prepare('DELETE FROM ' . hks_tablo('taslaklar') . ' WHERE id = ? AND firma_id = ?');
       $st->execute([$g['id'] ?? '', $fid]);
-      // BEYAN KÖPRÜSÜ: taslak gerçekten silindiyse bağı 'iptal'e çek — aksi
-      // hâlde beyan ekranı olmayan bir taslağı bekler ve "Bildirim Yap"
-      // butonu kalıcı kapalı kalırdı. Yalnız SİLME GERÇEKLEŞTİYSE yazılır
-      // (rowCount=0 ise taslak başka firmaya ait, dokunulmaz).
+      // BEYAN KÖPRÜSÜ: taslak gerçekten silindiyse bağı 'silindi'ye çek.
+      // 'silindi' AKTİF sayılır (beyan_hks_aktif_durumlar) — taslağa atılan
+      // beyan bildirilmiş kabul edilir, silme beyanı KENDİLİĞİNDEN yeniden
+      // açmaz. Yeniden açmak: beyan_edit.php → "Tekrar Aktif Et".
+      // Düzenlemede bağ önce yeni taslağa taşındığı için (taslak_kaydet →
+      // beyan_hks_taslak_tasi) buradaki arama eşleşme bulmaz, dokunmaz.
+      // Yalnız SİLME GERÇEKLEŞTİYSE yazılır (rowCount=0 → başka firmanın).
       if ($st->rowCount() > 0 && function_exists('beyan_hks_taslak_isaretle')) {
-        beyan_hks_taslak_isaretle((string)($g['id'] ?? ''), 'iptal',
+        beyan_hks_taslak_isaretle((string)($g['id'] ?? ''), 'silindi',
           ['hata_metni' => 'Taslak Hal Kayıt ekranından silindi.']);
       }
       hks_json_cikti(['tamam' => true]);
@@ -546,7 +565,9 @@ try {
       // BEYAN KÖPRÜSÜ: taslak Beyan ekranından açıldıysa bağ kaydını sonuçlandır.
       // Hata yutan yardımcıdır — köprü sorunu bu geri alınamaz akışı kesmez.
       if (function_exists('beyan_hks_taslak_isaretle')) {
-        beyan_hks_taslak_isaretle((string)$t['id'], 'gonderildi', ['gonderim_id' => $gid]);
+        $kaynak = $ortak['kaynak'] ?? null;
+        beyan_hks_taslak_isaretle((string)$t['id'], 'gonderildi', ['gonderim_id' => $gid,
+          'beyanId' => (is_array($kaynak) && ($kaynak['tip'] ?? '') === 'beyan') ? (int)($kaynak['beyanId'] ?? 0) : 0]);
       }
 
       // Taslak zaten en başta ATOMİK olarak sahiplenilirken silinmişti (çift

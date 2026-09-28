@@ -54,6 +54,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $old_status = $beyan['status'];
 
+    // Hal Bildirim bağı düzeltmesi — ayrı form (sayfa altındaki "Hal Bildirim
+    // Durumu" kutusu). Beyan alanlarına DOKUNMAZ. Kapı "Bildirim Yap" ile
+    // aynıdır: beyan.write + records.write.
+    if (isset($_POST['hks_bag_islem'])) {
+        if (!(can('records.write') || is_admin())) forbidden();
+        $islem = (string)$_POST['hks_bag_islem'];
+        $once  = beyan_hks_aktif($id);
+        $hata  = beyan_hks_bag_duzelt($id, $islem, (int)($auth_user['id'] ?? 0));
+        if ($hata !== null) {
+            set_flash('error', $hata);
+        } else {
+            $sonra = beyan_hks_aktif($id);
+            audit_log_event('beyan_hks_bag_duzelt', 'declarations', $id,
+                ['hks_durum' => $once['durum'] ?? null],
+                ['hks_durum' => $sonra['durum'] ?? null, 'islem' => $islem,
+                 'gonderim_id' => $sonra['gonderim_id'] ?? null]);
+            set_flash('success', $islem === 'tekrar_aktif'
+                ? 'Bildirim tekrar aktif edildi — beyan yeniden "Bildirim Yap"a açık.'
+                : 'Beyan HKS\'e gönderildi olarak işaretlendi.');
+        }
+        header('Location: beyan_edit.php?id=' . $id); exit;
+    }
+
     // Yalnızca durum geçişi (liste ekranındaki hızlı butonlar) — diğer alanlara dokunma
     if (!empty($_POST['status_only'])) {
         $new_status     = (string)($_POST['status'] ?? '');
@@ -198,6 +221,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $statuses    = beyan_statuses();
 $cur_status  = $beyan['status'];
+// Hal Bildirim Durumu kutusu — elle bağ düzeltmesi (beyan_hks_bag_duzelt).
+$hks_bag_yetki = can('records.write') || is_admin();
+$hks_bag_aktif = beyan_hks_aktif($id);
+$hks_bag_son   = beyan_hks_gecmis($id)[0] ?? null;
 // Yalnız "akıştaki sıradaki durum" ipucu için — kapı DEĞİL. Durum listesi
 // beyan_view.php'deki şeritle aynı: tüm durumlar seçilebilir.
 $next_states = beyan_next_statuses($cur_status);
@@ -430,6 +457,42 @@ render_flash();
 </div>
 
 </form>
+
+<?php if ($hks_bag_yetki): ?>
+<!-- Hal Bildirim Durumu — ANA FORMUN DIŞINDA kendi formu (iç içe form geçersiz).
+     Taslağı Hal Kayıt'ta düzenlenip gönderilmiş ama bağı kopmuş beyanlar
+     "gönderildi" işaretlenir; taslağı silinmiş beyan tekrar aktif edilir. -->
+<div class="beyan-section">
+    <div class="beyan-section-title">🏛 Hal Bildirim Durumu</div>
+    <p style="margin:0 0 10px">
+        Şu an:
+        <?php if ($hks_bag_aktif): ?>
+        <span class="beyan-badge"><?= h(beyan_hks_durum_etiket($hks_bag_aktif['durum'])) ?></span>
+        <?php elseif ($hks_bag_son): ?>
+        <span class="beyan-badge"><?= h(beyan_hks_durum_etiket($hks_bag_son['durum'])) ?></span>
+        <span class="muted">— bildirime açık</span>
+        <?php else: ?>
+        <span class="muted">Bildirim yapılmadı — bildirime açık</span>
+        <?php endif; ?>
+    </p>
+    <form method="post" action="beyan_edit.php?id=<?= $id ?>" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <?php if (!$hks_bag_aktif): ?>
+        <button type="submit" name="hks_bag_islem" value="gonderildi_isaretle" class="btn"
+                onclick="return confirm('Bu beyan HKS\'e gönderilmiş sayılacak ve yeniden bildirime kapanacak. Devam edilsin mi?')">✅ Gönderildi Olarak İşaretle</button>
+        <span class="form-hint">Bildirim HKS'e yapıldığı hâlde beyan "uygun" görünüyorsa (ör. taslak Hal Kayıt'ta düzenlenip gönderildi).</span>
+        <?php elseif ($hks_bag_aktif['durum'] === 'silindi'): ?>
+        <button type="submit" name="hks_bag_islem" value="tekrar_aktif" class="btn"
+                onclick="return confirm('Beyan yeniden bildirime açılacak. HKS\'e gönderilmediğinden emin misiniz?')">↺ Tekrar Aktif Et</button>
+        <span class="form-hint">Taslak Hal Kayıt'ta silindiği için bildirim yapılmış sayılıyor. HKS'e gönderilmediyse beyanı yeniden bildirime açar.</span>
+        <?php elseif ($hks_bag_aktif['durum'] === 'taslak'): ?>
+        <span class="form-hint">Bekleyen taslak Hal Kayıt panelinden gönderilir ya da silinir.</span>
+        <?php else: ?>
+        <span class="form-hint">Gönderilmiş bildirim geri alınamaz.</span>
+        <?php endif; ?>
+    </form>
+</div>
+<?php endif; ?>
 
 <script>
 (function () {

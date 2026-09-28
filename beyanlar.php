@@ -147,7 +147,7 @@ if ($toplu_yetki && $rows) {
         $ids = array_map(fn($r) => (int)$r['id'], $rows);
         $ph  = implode(',', array_fill(0, count($ids), '?'));
         $bs  = db()->prepare("SELECT DISTINCT beyan_id FROM beyan_hks_bildirim
-                              WHERE beyan_id IN ($ph) AND durum IN ('taslak','gonderildi')");
+                              WHERE beyan_id IN ($ph) AND durum IN (" . beyan_hks_aktif_durumlar_sql() . ")");
         $bs->execute($ids);
         $aktif_bagli = array_flip(array_map('intval', $bs->fetchAll(PDO::FETCH_COLUMN)));
     } catch (PDOException $e) { $aktif_bagli = []; }

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v272` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v273` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -507,6 +507,21 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   gönderilince satır silinip yeni id ile doğduğu için dış anahtar işe yaramaz;
   `taslak_gonder` ve `taslak_sil` bu izi okuyup bağ kaydını sonuçlandırır
   (`beyan_hks_taslak_isaretle()` — hata yutar, HKS akışını asla kesmez).
+- **Bağın yaşam döngüsü — "taslağa atılan beyan bildirilmiş sayılır"** (v273):
+  aktif durumlar TEK listede `beyan_hks_aktif_durumlar()` = `taslak` /
+  `gonderildi` / **`silindi`** — SQL'de `beyan_hks_aktif_durumlar_sql()`;
+  `'taslak','gonderildi'` diye elle YAZMA. Hal Kayıt'ta **Düzenle** yeni id'li
+  taslak kaydedip eskisini siler: SPA `eskiTaslakId` gönderir, `taslak_kaydet`
+  eski taslağın `ortak.kaynak` izini yeni taslağa aktarır ve bağı
+  `beyan_hks_taslak_tasi()` ile yeni id'ye TAŞIR (eskiden silme bağı `iptal`e
+  çekiyordu → gönderilmiş beyan yeniden "uygun" görünüyordu). Taslak silinince
+  bağ `silindi` olur ve beyan KENDİLİĞİNDEN açılmaz. Gönderimde taslak id'si
+  tutmazsa `kaynak.beyanId` yedek yol olarak kullanılır (yalnız gönderimde).
+  Elle düzeltme `beyan_edit.php` → "🏛 Hal Bildirim Durumu" (ana formun
+  DIŞINDA ayrı form): **Gönderildi Olarak İşaretle** (aktif bağ yokken; tek
+  eşleşen `hks_gonderilenler` satırı varsa `gonderim_id` bağlanır) ve
+  **Tekrar Aktif Et** (YALNIZ `silindi` → `iptal`). `beyan_hks_bag_duzelt()`,
+  audit `beyan_hks_bag_duzelt`. Test: `beyan_ui_smoke.php` `[bag]` satırları.
 - **Eşleştirme BEYANIN kalıcı alanıdır** (`hks_firma_id` / `hks_urun_id` +`_ad` /
   `hks_ulke_id` +`_ad`), beyan formundaki **"🏛 Hal Bildirim Bilgileri"**
   bölümünde girilir (`beyan_hks_form_bolumu()` — iki formun ORTAK parçası).
