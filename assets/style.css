@@ -6524,6 +6524,13 @@ form.bf [data-bf="urun"]     { --bf-acc: #f9a8d4; --bf-acc2: #db2777; --bf-acc-r
 form.bf [data-bf="lojistik"] { --bf-acc: #93c5fd; --bf-acc2: #2563eb; --bf-acc-rgb: 37,99,235; }
 form.bf [data-bf="durum"]    { --bf-acc: #7dd3fc; --bf-acc2: #4f46e5; --bf-acc-rgb: 79,70,229; }
 html[data-theme="dark"] form.bf [data-bf] { --bf-glif: var(--bf-acc); }
+/* Hal Bildirim kartı — diğer bölümlerden bilerek AYRI zeminde durur (HKS
+   bildirimi için zorunlu alanlar burada; kart rengi bunu tek bakışta ayırır).
+   Proje genelindeki --success-soft/--success token'ları kullanılır (Sprint
+   Beyan-Form-Tasarim-02) — ayrı ton icat etmek yerine mevcut "olumlu/tamam"
+   rengiyle tutarlı kalır; açık/koyu temada otomatik doğru değere döner. */
+form.bf [data-bf="hks"] { --bf-kart: var(--success-soft); --bf-kart-kenar: rgba(31,157,91,.28); }
+html[data-theme="dark"] form.bf [data-bf="hks"] { --bf-kart-kenar: rgba(46,204,143,.32); }
 
 /* Sayfa zemini — yumuşak mor/mavi ışık (yalnız bu formun sayfasında) */
 @media screen {
@@ -6609,6 +6616,11 @@ body:not(.print-mode) form.bf .beyan-section[data-bf] > .beyan-section-title + p
     font-size: .8rem !important;
     line-height: 1.45;
 }
+
+/* `hidden` alan — CLAUDE.md maliyet.css emsaliyle aynı tuzak: aşağıdaki
+   `.form-group[data-ic] { display:grid }` kuralı `[hidden]`in UA display:none
+   kuralını özgüllükle ezer. `!important` ile geri kazanılır. */
+form.bf .form-group[hidden] { display: none !important; }
 
 /* — Alan: solda simge karosu, sağda etiket + girdi — */
 body:not(.print-mode) form.bf .beyan-section[data-bf] .form-group[data-ic] {
