@@ -176,107 +176,107 @@ render_flash();
 </div>
 <?php endif; ?>
 
-<form method="post" action="beyan_create.php" data-beyan-form>
+<form method="post" action="beyan_create.php" class="bf" data-beyan-form>
 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
 
 <!-- 1. WhatsApp Ham Metni -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📱 WhatsApp Metni</div>
-    <div class="form-group">
-        <label class="form-label">Ham Metin</label>
-        <textarea name="raw_text" rows="8" class="form-control"
-                  placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırıp 'Metni Ayrıştır'a basın. Birden fazla beyan otomatik algılanır."
-                  style="font-size:14px;font-family:monospace"><?= h($f['raw_text']) ?></textarea>
-    </div>
-    <div style="margin-top:8px">
-        <button type="button" class="btn btn-secondary"
-                data-beyan-parse-btn
-                data-base-url="<?= h(base_url()) ?>">🔍 Metni Ayrıştır</button>
+<div class="beyan-section" data-bf="wa">
+    <div class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni<small class="bf-alt">WhatsApp beyan mesaj(lar)ını buraya yapıştırıp "Metni Ayrıştır"a basın. Birden fazla beyan otomatik algılanır.</small></div>
+    <div class="bf-wa-satir">
+        <div class="form-group" data-ic="metin">
+            <label class="form-label">Ham Metin</label>
+            <textarea name="raw_text" rows="8" class="form-control bf-ham"
+                      placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırıp 'Metni Ayrıştır'a basın. Birden fazla beyan otomatik algılanır."><?= h($f['raw_text']) ?></textarea>
+        </div>
+        <div class="bf-wa-btn">
+            <button type="button" class="btn btn-secondary bf-ayristir" data-ic="sihir"
+                    data-beyan-parse-btn
+                    data-base-url="<?= h(base_url()) ?>">Metni Ayrıştır</button>
+        </div>
     </div>
     <div id="beyanParseStatus" hidden></div>
     <!-- Toplu beyan önizleme + "Hepsini Kaydet" (JS doldurur) -->
     <div id="beyanBulkPreview" hidden></div>
-    <div class="form-group" style="margin-top:12px">
+    <div class="form-group" data-ic="uyari">
         <label class="form-label">Eşleşmeyen / Dikkat Edilecek Satırlar</label>
         <textarea name="unmatched_text" rows="3" class="form-control"
-                  placeholder="Eşleşmeyen veya sonradan kontrol edilecek satırlar..."
-                  style="font-size:13px;font-family:monospace"><?= h($f['unmatched_text']) ?></textarea>
+                  placeholder="Eşleşmeyen veya sonradan kontrol edilecek satırlar..."><?= h($f['unmatched_text']) ?></textarea>
     </div>
 </div>
 
 <?php beyan_hks_form_bolumu($f, null); ?>
 
 <!-- 2. Temel Bilgiler -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📋 Temel Bilgiler</div>
+<div class="beyan-section" data-bf="temel">
+    <div class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
     <div class="beyan-form-grid">
-        <div class="form-group">
+        <div class="form-group" data-ic="belge">
             <label class="form-label">Başlık / Beyan Tipi</label>
             <input type="text" name="declaration_title" class="form-control"
                    value="<?= h($f['declaration_title']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="diyez">
             <label class="form-label">Parti No</label>
             <input type="text" name="party_no" class="form-control"
                    value="<?= h($f['party_no']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="tir">
             <label class="form-label">Nakliye Türü</label>
             <input type="text" name="transport_type" class="form-control"
                    value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="rota">
             <label class="form-label">Hat / Güzergah</label>
             <input type="text" name="line_type" class="form-control"
                    value="<?= h($f['line_type']) ?>" data-uppercase="tr">
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-ic="bina">
         <label class="form-label">Şirket Adı</label>
         <input type="text" name="company_name" class="form-control"
                value="<?= h($f['company_name']) ?>" data-uppercase="tr">
     </div>
-    <div class="form-group">
+    <div class="form-group" data-ic="konum">
         <label class="form-label">Şirket Adresi</label>
         <textarea name="company_address" rows="2" class="form-control" data-uppercase="tr"><?= h($f['company_address']) ?></textarea>
     </div>
 </div>
 
 <!-- 3. Ürün Bilgileri -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🍎 Ürün Bilgileri</div>
+<div class="beyan-section" data-bf="urun">
+    <div class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
     <div class="beyan-form-grid">
-        <div class="form-group">
+        <div class="form-group" data-ic="elma">
             <label class="form-label">Ürün Adı</label>
             <input type="text" name="product_name" class="form-control"
                    value="<?= h($f['product_name']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="etiket">
             <label class="form-label">Ürün Çeşidi</label>
             <input type="text" name="product_variety" class="form-control"
                    value="<?= h($f['product_variety']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="katman">
             <label class="form-label">Palet Adedi</label>
             <input type="text" name="pallet_count" class="form-control"
                    inputmode="numeric" value="<?= h($f['pallet_count']) ?>">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="agirlik">
             <label class="form-label">Brüt KG</label>
             <input type="text" name="gross_kg" class="form-control"
                    inputmode="decimal" value="<?= h($f['gross_kg']) ?>">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="terazi">
             <label class="form-label">Net KG</label>
             <input type="text" name="net_kg" class="form-control"
                    inputmode="decimal" value="<?= h($f['net_kg']) ?>">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="kutu">
             <label class="form-label">Kasa Adedi</label>
             <input type="text" name="crate_count" class="form-control"
                    inputmode="numeric" value="<?= h($f['crate_count']) ?>">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="kasa">
             <label class="form-label">Kasa Cinsi</label>
             <input type="text" name="crate_type" class="form-control"
                    value="<?= h($f['crate_type']) ?>" data-uppercase="tr">
@@ -285,25 +285,25 @@ render_flash();
 </div>
 
 <!-- 4. Lojistik / Alıcı -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🚚 Lojistik / Alıcı</div>
+<div class="beyan-section" data-bf="lojistik">
+    <div class="beyan-section-title" data-ic="tir"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
     <div class="beyan-form-grid">
-        <div class="form-group">
+        <div class="form-group" data-ic="depo">
             <label class="form-label">Çıkış Depo</label>
             <input type="text" name="exit_depot" class="form-control"
                    value="<?= h($f['exit_depot']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="kisi">
             <label class="form-label">Alıcı</label>
             <input type="text" name="buyer_name" class="form-control"
                    value="<?= h($f['buyer_name']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="rehber">
             <label class="form-label">İlgili Kişi</label>
             <input type="text" name="contact_person" class="form-control"
                    value="<?= h($f['contact_person']) ?>" data-uppercase="tr">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="rozet">
             <label class="form-label">Marka</label>
             <input type="text" name="brand" class="form-control"
                    value="<?= h($f['brand']) ?>" data-uppercase="tr">
@@ -314,10 +314,10 @@ render_flash();
 <!-- 5. Durum / Analiz -->
 
 
-<div class="beyan-section">
-    <div class="beyan-section-title">📊 Durum / Analiz</div>
+<div class="beyan-section" data-bf="durum">
+    <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Durum / Analiz</div>
     <div class="beyan-form-grid">
-        <div class="form-group">
+        <div class="form-group" data-ic="liste">
             <label class="form-label">Durum</label>
             <select name="status" class="form-control">
                 <?php foreach ($statuses as $sk => $sv): ?>
@@ -327,27 +327,27 @@ render_flash();
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="tup">
             <label class="form-label">Numune Alındı Tarihi</label>
             <input type="datetime-local" name="sample_taken_at" class="form-control"
                    value="<?= h($f['sample_taken_at']) ?>">
         </div>
-        <div class="form-group">
+        <div class="form-group" data-ic="takvim">
             <label class="form-label">Analiz Sonuç Tarihi</label>
             <input type="datetime-local" name="analysis_result_at" class="form-control"
                    value="<?= h($f['analysis_result_at']) ?>">
         </div>
     </div>
-    <div class="form-group">
+    <div class="form-group" data-ic="kalem">
         <label class="form-label">Analiz Notu <span class="muted">(Red durumunda zorunlu)</span></label>
         <textarea name="analysis_note" rows="3" class="form-control"
                   placeholder="Analiz sonucu veya açıklama..."><?= h($f['analysis_note']) ?></textarea>
     </div>
 </div>
 
-<div id="beyanSingleActions" style="display:flex;gap:10px;justify-content:flex-end;padding:8px 0 24px">
-    <a href="beyanlar.php" class="btn btn-ghost">İptal</a>
-    <button type="submit" class="btn btn-primary btn-lg">Kaydet</button>
+<div id="beyanSingleActions" class="bf-eylem">
+    <a href="beyanlar.php" class="btn btn-ghost bf-iptal" data-ic="carpi">İptal</a>
+    <button type="submit" class="btn btn-primary btn-lg bf-kaydet" data-ic="kaydet">Kaydet</button>
 </div>
 
 </form>

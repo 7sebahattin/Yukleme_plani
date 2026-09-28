@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v268');
+    define('APP_SURUM', 'v269');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -3053,15 +3053,17 @@ function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
 function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     $katalog = bb_katalog();
 
-    echo '<div class="beyan-section">'
-       . '<div class="beyan-section-title">🏛 Hal Bildirim Bilgileri</div>';
+    // data-bf / data-ic / .bf-emoji: yalnız Yeni Beyan formunun (form.bf) görsel
+    // kancaları — Düzenle formunda etkisizdir, orada görünüm aynen kalır.
+    echo '<div class="beyan-section" data-bf="hks">'
+       . '<div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Bildirim Bilgileri</div>';
 
     // Araç plakası — KATALOGDAN BAĞIMSIZ. Katalog indirilmemiş olsa bile
     // girilebilmeli, bu yüzden aşağıdaki fail-closed dönüşünden ÖNCE çizilir.
     // (Beyanın tek plaka alanı budur; "Temel Bilgiler"de ikinci bir kopya
     //  OLUŞTURMAYIN — aynı `name` ile iki alan POST'ta çakışır.)
     $plaka_alani = function (array $f): void { ?>
-        <div class="form-group">
+        <div class="form-group" data-ic="arac">
             <label class="form-label">Araç Plakası</label>
             <input type="text" name="vehicle_plate" class="form-control"
                    value="<?= h((string)($f['vehicle_plate'] ?? '')) ?>"
@@ -3124,9 +3126,10 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     // kutusu fayda yerine fazladan tıklama getirir; eşik halkayit/app.html'in
     // kendi gerekçesiyle aynıdır ("kısa listeler bilerek dışarıda").
     $sec = function (string $ad, string $etiket, array $liste, string $secili, string $not,
-                     string $aramaIpucu = '') {
+                     string $aramaIpucu = '', string $ikon = '') {
         $aramali = $aramaIpucu !== '' && count($liste) > 10;
-        echo '<div class="form-group"><label class="form-label">' . h($etiket);
+        echo '<div class="form-group"' . ($ikon !== '' ? ' data-ic="' . h($ikon) . '"' : '') . '>'
+           . '<label class="form-label">' . h($etiket);
         if ($not !== '') echo ' <span class="beyan-hks-rozet beyan-hks-rozet-ok">' . h($not) . '</span>';
         echo '</label><select name="' . h($ad) . '" class="form-control"'
            . ($aramali ? ' data-aramali="' . h($aramaIpucu) . '"' : '') . '>';
@@ -3144,11 +3147,11 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
        . '<strong>"Bildirim Yap"</strong> açılmaz. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
     echo '<div class="beyan-form-grid">';
     $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '',
-         'Firma yazın veya listeden seçin');
+         'Firma yazın veya listeden seçin', 'bina');
     $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not,
-         'Ürün yazın veya listeden seçin');
+         'Ürün yazın veya listeden seçin', 'paket');
     $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not,
-         'Ülke yazın veya listeden seçin');
+         'Ülke yazın veya listeden seçin', 'kure');
     $plaka_alani($f);
     echo '</div></div>';
 }
