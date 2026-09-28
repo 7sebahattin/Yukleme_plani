@@ -69,6 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'oturum')
     $sonuc = ($mod === 'GIRIS')
         ? pdks_gunluk_oturum_ac_veya_getir($foremanId, (int)$auth_user['id'], $pdo)
         : pdks_gunluk_oturum_bul_acik($foremanId, $pdo);
+    // ⚠ v275: süresi dolan açık mesai için hatırlatma (ENGEL DEĞİL) — bkz.
+    // pdks_gunluk_kapat_uyarisi(). Hesap SUNUCU saatiyle yapılır.
+    if (!empty($sonuc['ok']) && !empty($sonuc['session'])) {
+        $sonuc['kapat_uyarisi'] = pdks_gunluk_kapat_uyarisi($sonuc['session']);
+    }
     echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -240,6 +245,16 @@ try {
     $cavuslar = $pdo->query("SELECT id, code, name FROM foremen WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
 } catch (PDOException $e) { /* pdks_gunluk_sayfa_kapisi() zaten şemayı garanti etti — buraya düşmemeli */ }
 
+// ⚠ v275 — gün sonu kapanış hatırlatması: önceki günden açık kalan mesailer
+// (yeni gün açılmadan KAPATILMALI — sunucu da engeller) ve bugün süresi dolan
+// mesailer (yalnız uyarı). İkisi de aktif depo içindir.
+$eskiAcikOturumlar = [];
+$suresiDolanlar = [];
+try {
+    $eskiAcikOturumlar = pdks_gunluk_eski_acik_oturumlar(null, null, $pdo);
+    $suresiDolanlar = pdks_gunluk_suresi_dolan_oturumlar(null, $pdo);
+} catch (PDOException $e) { /* hatırlatma tarama akışını ASLA engellemez */ }
+
 render_header('Günlük İşçi Giriş / Çıkış');
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
@@ -253,11 +268,33 @@ render_flash();
 </div>
 
 <input type="hidden" id="giCsrf" value="<?= h(csrf_token()) ?>">
+<script type="application/json" id="giEskiVeri"><?= json_encode($eskiAcikOturumlar, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 
 <div class="pdks-kiosk pdks-mobile-shell pdks-daily-kiosk">
 
+    <!-- ── v275) Kapatılmamış mesai penceresi ────────────────────
+         Önceki günden açık kalan mesai varsa sayfa BU ekranla açılır (Z raporu
+         kuralı). Liste JS ile ESKI_OTURUMLAR'dan çizilir — GİRİŞ reddinde
+         (kod=onceki_mesai_acik) sunucunun döndürdüğü satırlarla yenilenir.
+         "Sonra" geçişe izin verir; sunucu o çavuş için yeni günü yine AÇMAZ. -->
+    <div id="giEskiSec" class="pdks-kiosk-modesec" role="alertdialog" aria-labelledby="giEskiBaslik"<?= empty($eskiAcikOturumlar) ? ' hidden' : '' ?>>
+        <div class="pdks-kiosk-recon pdks-kiosk-eski">
+            <h2 id="giEskiBaslik" style="margin-top:0">⚠️ Kapatılmamış Mesai Var</h2>
+            <p class="muted">Aşağıdaki mesailer önceki günden açık kaldı. Gün sonu kapanışı yapılmadan
+               bu çavuşlar için yeni gün açılamaz. Eksik çıkış varsa kapatırken gerekçe istenir.</p>
+            <div id="giEskiListe"></div>
+            <button type="button" class="btn btn-ghost" id="giEskiSonra" style="width:100%;margin-top:12px">Sonra — Çavuş Seçimine Geç</button>
+        </div>
+    </div>
+
     <!-- ── 0) Çavuş seç ─────────────────────────────────────── -->
-    <div id="giCavusSec" class="pdks-kiosk-modesec">
+    <div id="giCavusSec" class="pdks-kiosk-modesec"<?= empty($eskiAcikOturumlar) ? '' : ' hidden' ?>>
+        <button type="button" class="pdks-kiosk-uyari pdks-kiosk-uyari-eski" id="giEskiBanner" hidden></button>
+        <?php foreach ($suresiDolanlar as $sd): ?>
+        <button type="button" class="pdks-kiosk-uyari" data-gi-hatirlat-cavus="<?= (int)$sd['foreman_id'] ?>">
+            ⏰ <strong><?= h($sd['foreman_name']) ?></strong> — <?= h($sd['uyari']['mesaj']) ?>
+        </button>
+        <?php endforeach; ?>
         <p class="muted" style="text-align:center;max-width:420px;margin:0 auto">
             <strong>1. ÇAVUŞ SEÇ</strong><br>
             Günlük işçileri getiren çavuşu seçin.
@@ -315,6 +352,7 @@ render_flash();
                 <div class="pdks-kiosk-counter-box"><div class="lbl">İlk Giriş</div><div class="val" id="giIlkGiris">—</div></div>
                 <div class="pdks-kiosk-counter-box"><div class="lbl">Son Çıkış</div><div class="val" id="giSonCikis">—</div></div>
             </div>
+            <div class="pdks-kiosk-uyari" id="giKapatUyari" role="status" hidden></div>
             <button type="button" class="btn btn-primary pdks-kiosk-kapat-btn" id="giKapatBtn" hidden>🔒 MESAİYİ KAPAT</button>
         </div>
     </div>
@@ -402,7 +440,7 @@ render_flash();
                 <div class="pdks-kiosk-counter-row"><span>FM onayı bekleyen</span><span class="n" id="gikkBekleyenFm">—</span></div>
                 <div class="pdks-kiosk-counter-row"><span>Hakediş durumu</span><span class="n" id="gikkHakedis">—</span></div>
             </div>
-            <p>Bu işlem çavuşun bugünkü mesaisini kapatacaktır.<br>
+            <p>Bu işlem çavuşun yukarıdaki tarihli mesaisini kapatacaktır.<br>
                Mesai kapatıldıktan sonra normal giriş/çıkış kart okutma işlemi durur.<br>
                <strong>Devam etmek istiyor musunuz?</strong></p>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -473,6 +511,14 @@ render_flash();
     var scanText    = document.getElementById('giScanText');
     var serverClock = document.getElementById('giServerClock');
     var kapatBtn    = document.getElementById('giKapatBtn');
+    var kapatUyari  = document.getElementById('giKapatUyari');
+    var eskiSec     = document.getElementById('giEskiSec');
+    var eskiBanner  = document.getElementById('giEskiBanner');
+    // v275: önceki günden açık mesailer (id → satır). Kapatma penceresi buradan çizilir.
+    var eskiOturumlar = [];
+    try { eskiOturumlar = JSON.parse(document.getElementById('giEskiVeri').textContent) || []; } catch (e) { eskiOturumlar = []; }
+    // Kapatma akışı nereden başladı: 'mod' (çavuşun bugünkü mesaisi) | 'eski' (pencere).
+    var kapatKaynak = 'mod';
 
     // Sunucu zamanı PHP tarafından başlangıçta milisaniye olarak verilir;
     // sayaç istemcide yalnız geçen süreyi ekler, cihazın yerel saatini kullanmaz.
@@ -593,7 +639,7 @@ render_flash();
     }
 
     function ekranGoster(ekran) {
-        [cavusSec, modeSec, tipSec, scanSec, closeConfirmSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
+        [eskiSec, cavusSec, modeSec, tipSec, scanSec, closeConfirmSec, reconSec].forEach(function (el) { if (el) el.hidden = (el !== ekran); });
         // ⚠ .page-head display:flex TAŞIR — hidden TEK BAŞINA gizleyemez
         // (bkz. CLAUDE.md maliyet.css notu, giris_cikis.php İLE AYNI düzeltme).
         if (pageHead) pageHead.style.display = (ekran === scanSec) ? 'none' : '';
@@ -636,6 +682,7 @@ render_flash();
         sayaclariGoster({});
         document.getElementById('giSayacDepo').textContent = '';
         kapatBtn.hidden = true;
+        kapatUyariGoster(null);
         fetch('gunluk_isci_giris_cikis.php?ajax=oturum', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -649,6 +696,7 @@ render_flash();
                     document.getElementById('giSayacDepo').textContent = d.session.depo || '(depo yok)';
                     sayaclariGoster(d.ozet || {});
                     kapatBtn.hidden = false;
+                    kapatUyariGoster(d.kapat_uyarisi || null);
                 } else {
                     currentSession = null;
                     sayaclariGoster({});
@@ -662,6 +710,67 @@ render_flash();
             });
     }
 
+    // ── v275: gün sonu kapanış hatırlatması ──────────────────
+    function kapatUyariGoster(uyari) {
+        if (!kapatUyari) return;
+        kapatUyari.hidden = !uyari;
+        kapatUyari.textContent = uyari ? ('⏰ ' + uyari.mesaj) : '';
+    }
+    function tarihTr(t) {
+        var p = String(t || '').split('-');
+        return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : String(t || '');
+    }
+    function eskiListeCiz() {
+        var html = '';
+        eskiOturumlar.forEach(function (o) {
+            var oz = o.ozet || {};
+            html += '<div class="pdks-kiosk-eski-row">' +
+                '<div><strong>' + escHtml(o.foreman_name) + '</strong><br>' +
+                '<span class="muted">' + escHtml(tarihTr(o.work_date)) + ' · Giriş ' + (oz.giris_toplam || 0) +
+                ' · Çıkış ' + (oz.cikis_toplam || 0) +
+                ((oz.eksik_toplam || 0) > 0 ? ' · <span class="pdks-kiosk-eski-eksik">Eksik ' + oz.eksik_toplam + '</span>' : '') +
+                '</span></div>' +
+                '<button type="button" class="btn btn-primary" data-gi-eski-id="' + o.id + '">🔒 Kapat</button></div>';
+        });
+        document.getElementById('giEskiListe').innerHTML = html;
+        if (eskiBanner) {
+            eskiBanner.hidden = eskiOturumlar.length === 0;
+            eskiBanner.textContent = '⚠️ Önceki günden kapatılmamış ' + eskiOturumlar.length + ' mesai var — kapatmak için dokunun';
+        }
+    }
+    function eskiPencereAc(liste) {
+        if (liste && liste.length) {
+            var varOlan = {};
+            eskiOturumlar.forEach(function (o) { varOlan[o.id] = true; });
+            liste.forEach(function (o) { if (!varOlan[o.id]) eskiOturumlar.push(o); });
+        }
+        eskiListeCiz();
+        ekranGoster(eskiSec);
+    }
+    document.getElementById('giEskiListe').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-gi-eski-id]');
+        if (!btn) return;
+        var id = parseInt(btn.getAttribute('data-gi-eski-id'), 10);
+        var o = eskiOturumlar.filter(function (x) { return x.id === id; })[0];
+        if (!o) return;
+        var oz = o.ozet || {};
+        seciliCavusId = o.foreman_id; seciliCavusAd = o.foreman_name;
+        currentMode = null;
+        currentSession = { id: o.id, work_date: o.work_date, depo: o.depo };
+        kapatKaynak = 'eski';
+        kapatOnayiGoster({ giris: oz.giris_toplam || 0, cikis: oz.cikis_toplam || 0,
+                           icerde: oz.icerde_toplam || 0, eksik: oz.eksik_toplam || 0 });
+    });
+    document.getElementById('giEskiSonra').addEventListener('click', function () { cavusDegistir(); });
+    if (eskiBanner) eskiBanner.addEventListener('click', function () { eskiPencereAc(null); });
+    document.querySelectorAll('[data-gi-hatirlat-cavus]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var hedef = document.querySelector('[data-gi-cavus-id="' + b.getAttribute('data-gi-hatirlat-cavus') + '"]');
+            if (hedef) hedef.click();
+        });
+    });
+    eskiListeCiz();
+
     function cavusDegistir() {
         // ⚠ Sunucudaki oturum KAPATILMAZ — yalnız istemci ekranı sıfırlanır
         // (kullanıcının açık talimatı: "changing screen/foreman must NOT
@@ -669,6 +778,7 @@ render_flash();
         modeRequest++;
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null;
+        kapatKaynak = 'mod';
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
     }
@@ -718,6 +828,14 @@ render_flash();
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (request !== modeRequest) return;
+                if (d && d.kod === 'onceki_mesai_acik') {
+                    // v275: önceki gün kapatılmadan yeni gün açılmaz — pencereyi aç.
+                    currentMode = null; currentSession = null;
+                    seciliTipId = null; seciliTipAd = null;
+                    alert(d.hata);
+                    eskiPencereAc(d.eski_oturumlar || []);
+                    return;
+                }
                 if (!d || !d.ok) {
                     alert((d && d.hata) || 'Mesai açılamadı/bulunamadı.');
                     currentMode = null; currentSession = null;
@@ -829,8 +947,11 @@ render_flash();
             (tip ? '<div class="pdks-result-gender' + tipSinif + '">' + gKisiIkon + '<span>' + escHtml(tip) + '</span></div>' : '') +
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
-            '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>',
-            'pdks-kiosk-result-ok', 5000
+            '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>' +
+            // v275: önceki (kapatılmış) mesaide çıkışsız kalan kart — giriş YAPILDI,
+            // eski kayıt raporda eksik çıkış olarak kalır. Okunabilsin diye süre uzar.
+            (d.uyari ? '<div class="pdks-result-uyari" role="alert">⚠️ ' + escHtml(d.uyari) + '</div>' : ''),
+            'pdks-kiosk-result-ok', d.uyari ? 8000 : 5000
         );
     }
     function hataGoster(mesaj) {
@@ -1044,6 +1165,16 @@ render_flash();
             .then(function (d) {
                 if (d && d.ok) {
                     alert('Mesai kapatıldı.');
+                    if (kapatKaynak === 'eski') {
+                        var kapanan = currentSession ? currentSession.id : 0;
+                        eskiOturumlar = eskiOturumlar.filter(function (o) { return o.id !== kapanan; });
+                        eskiListeCiz();
+                        if (eskiOturumlar.length) {
+                            kapatKaynak = 'mod'; seciliCavusId = null; seciliCavusAd = null; currentSession = null;
+                            ekranGoster(eskiSec);
+                            return;
+                        }
+                    }
                     cavusDegistir();
                     return;
                 }
@@ -1082,38 +1213,51 @@ render_flash();
             })
             .catch(function () { /* salt bilgilendirme — sessizce vazgeç */ });
     }
-    document.getElementById('giKapatBtn').addEventListener('click', function () {
+    function kapatOnayiGoster(sayilar) {
         if (!currentSession) return;
         document.getElementById('giCloseCavus').textContent = seciliCavusAd || '';
-        var tarih = String(currentSession.work_date || '').split('-');
-        document.getElementById('giCloseTarih').textContent = tarih.length === 3 ? tarih.reverse().join('.') : '';
-        document.getElementById('giCloseGiris').textContent = document.getElementById('giGirisToplam').textContent;
-        document.getElementById('giCloseCikis').textContent = document.getElementById('giCikisToplam').textContent;
-        document.getElementById('giCloseIceride').textContent = document.getElementById('giIcerdeToplam').textContent;
-        document.getElementById('giCloseEksik').textContent = document.getElementById('giEksikToplam').textContent;
+        document.getElementById('giCloseTarih').textContent = tarihTr(currentSession.work_date);
+        document.getElementById('giCloseGiris').textContent = sayilar.giris;
+        document.getElementById('giCloseCikis').textContent = sayilar.cikis;
+        document.getElementById('giCloseIceride').textContent = sayilar.icerde;
+        document.getElementById('giCloseEksik').textContent = sayilar.eksik;
         kapanisKontroluGoster(currentSession.id);
         ekranGoster(closeConfirmSec);
+    }
+    document.getElementById('giKapatBtn').addEventListener('click', function () {
+        if (!currentSession) return;
+        kapatKaynak = 'mod';
+        kapatOnayiGoster({
+            giris: document.getElementById('giGirisToplam').textContent,
+            cikis: document.getElementById('giCikisToplam').textContent,
+            icerde: document.getElementById('giIcerdeToplam').textContent,
+            eksik: document.getElementById('giEksikToplam').textContent
+        });
     });
+    // v275: pencereden başlayan kapatmada vazgeçilince pencereye dönülür.
+    function kapatmadanVazgec() {
+        if (kapatKaynak === 'eski') {
+            kapatKaynak = 'mod'; seciliCavusId = null; seciliCavusAd = null; currentSession = null;
+            ekranGoster(eskiSec);
+            return;
+        }
+        ekranGoster(modeSec);
+        modeSecOzetYukle();
+    }
     // ⚠ v240: Kapat artık YALNIZ giModeSec'ten tetiklenir (hiçbir mod seçilmeden) —
     // vazgeç/reddedince dönülecek ekran da scanSec DEĞİL, modeSec'tir (eskiden
     // Kapat scanSec içindeydi ve currentMode zaten set edilmişti; şimdi bu akışta
     // currentMode her zaman null, dolayısıyla scanSec'e dönmek yarı boş bir ekran
     // gösterirdi). Eksik çıkış varsa kullanıcı modeSec'ten ÇIKIŞ MODU'na tekrar
     // girip taramaya devam edebilir.
-    document.getElementById('giCloseCancelBtn').addEventListener('click', function () {
-        ekranGoster(modeSec);
-        modeSecOzetYukle();
-    });
+    document.getElementById('giCloseCancelBtn').addEventListener('click', kapatmadanVazgec);
     document.getElementById('giCloseConfirmBtn').addEventListener('click', function () { kapat(''); });
     document.getElementById('giReconKapatBtn').addEventListener('click', function () {
         var not = document.getElementById('giReconNot').value.trim();
         if (not === '') { alert('Kapatma gerekçesi zorunludur.'); return; }
         kapat(not);
     });
-    document.getElementById('giReconVazgecBtn').addEventListener('click', function () {
-        ekranGoster(modeSec);
-        modeSecOzetYukle();
-    });
+    document.getElementById('giReconVazgecBtn').addEventListener('click', kapatmadanVazgec);
 })();
 </script>
 

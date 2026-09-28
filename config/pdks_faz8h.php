@@ -63,6 +63,30 @@ function pdks_gunluk_oturum_yeniden_ac(int $sessionId, string $sebep, int $userI
             return ['ok' => false, 'kod' => 'hakedis_durumu', 'hata' => 'Hakediş durumu doğrulanamadı.'];
         }
 
+        // v275: eksik çıkışla kapanan mesaideki kart artık başka mesaide yeniden
+        // giriş yapabiliyor. O kart ŞU AN başka AÇIK mesaide içerideyse bu mesai
+        // yeniden açılamaz — açılsaydı kartın iki canlı dönemi olurdu.
+        $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p');
+        $etkin2 = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p2');
+        $st = $pdo->prepare(
+            "SELECT w.card_no, s2.foreman_name_snapshot AS cavus
+               FROM daily_worker_work_periods p
+               JOIN worker_cards w ON w.id = p.worker_card_id
+               JOIN daily_worker_work_periods p2 ON p2.worker_card_id = p.worker_card_id AND p2.id <> p.id
+               JOIN daily_work_sessions s2 ON s2.id = p2.session_id
+              WHERE p.session_id = ? AND p.status = 'open' AND $etkin
+                AND p2.status = 'open' AND $etkin2 AND s2.status = 'open'
+              LIMIT 1"
+        );
+        $st->execute([$sessionId]);
+        $cakisan = $st->fetch();
+        if ($cakisan) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'kart_baska_mesaide',
+                'hata' => 'Bu mesaide çıkışı olmayan ' . $cakisan['card_no'] . ' kartı şu an '
+                        . $cakisan['cavus'] . ' mesaisinde içeride. Mesai yeniden açılamaz; önce o kartın çıkışını alın.'];
+        }
+
         $simdi = date('Y-m-d H:i:s');
         $upd = $pdo->prepare(
             "UPDATE daily_work_sessions

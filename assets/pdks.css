@@ -1259,3 +1259,42 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVaz
 .pdks-collapse[open] summary { border-bottom: 1px solid var(--border); }
 .pdks-collapse-body { padding: 4px 18px 18px; }
 .pdks-collapse-body > p:first-child { margin-top: 0; }
+
+/* ── v275: gün sonu kapanış hatırlatması (gunluk_isci_giris_cikis.php) ──
+   Uyarı kutusu hem çavuş listesinin üstünde (dokununca ilgili çavuşa/pencereye
+   gider) hem mod ekranında Mesaiyi Kapat'ın üstünde kullanılır. */
+.pdks-kiosk-uyari {
+    display: block; width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 10px 12px;
+    border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-soft); color: #7a4d00;
+    font: inherit; font-size: .88rem; font-weight: 600; line-height: 1.35; text-align: left;
+}
+button.pdks-kiosk-uyari { cursor: pointer; }
+.pdks-kiosk-counters .pdks-kiosk-uyari { margin: 12px 0 0; }
+.pdks-kiosk-uyari-eski { border-width: 2px; }
+.pdks-kiosk-eski {
+    padding: 20px 16px; background: #132740; color: #eaf2ff; border: 2px solid var(--warn); border-radius: 18px;
+}
+.pdks-kiosk-eski h2, .pdks-kiosk-eski strong { color: inherit; }
+.pdks-kiosk-eski .muted { color: #a8bed2; }
+/* Kiosk varsayılanı koyu; açık temada .pdks-kiosk-counters ile AYNI açık kart. */
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-eski { background: #ffffff; color: #18283a; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-eski .muted { color: #557087; }
+.pdks-kiosk-eski-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border); font-size: .9rem;
+}
+.pdks-kiosk-eski-row:last-child { border-bottom: none; }
+.pdks-kiosk-eski-row .btn { flex: 0 0 auto; min-height: 44px; }
+.pdks-kiosk-eski-eksik { color: var(--warn); font-weight: 700; }
+html[data-theme="dark"] .pdks-kiosk-uyari { color: #ffd88a; }
+/* v275: kapatma onayı + eksik çıkış mutabakatı açık temada okunmuyordu —
+   .pdks-kiosk-modesec'in koyu kiosk yazı rengi (#eaf2ff) açık zemine
+   düşüyordu. Açık temada metin rengi kiosk kartlarıyla aynı. */
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-recon { color: #18283a; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-recon .muted { color: #557087; }
+/* v275: girişte "önceki mesaide eksik çıkış" uyarısı (giriş yine yapılır). */
+.pdks-result-uyari {
+    margin: 12px auto 0; max-width: 420px; padding: 10px 12px; border-radius: 12px;
+    background: #fff4d6; border: 2px solid #d18a13; color: #6b4300;
+    font-size: .92rem; font-weight: 700; line-height: 1.35; text-align: center;
+}
