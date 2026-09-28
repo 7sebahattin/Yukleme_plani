@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v275` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v276` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -422,6 +422,12 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
   mesaidekini seçer** — bu filtreyi kaldırma, yoksa eski dönem kapatılır/yanlış
   çavuş reddi gelir. Admin yeniden açması (`pdks_faz8h.php`) mesaideki çıkışsız
   kart başka açık mesaide içerideyse `kart_baska_mesaide` ile reddedilir.
+- **İzin YALNIZ önceki günlere aittir** (v276, kullanıcı kararı — güvenlik): kart
+  AYNI GÜN (`work_date` = yeni oturumun günü) eksik çıkışla kapatılmış bir mesaide
+  kaldıysa o gün başka mesaiye giremez → `kod=bugun_eksik_cikis` (depo/çavuş fark
+  etmez). Yoksa mesaiyi erken kapatıp kartı başka çavuşa geçirerek aynı gün iki
+  katılım yazılabilirdi. **NORMAL çıkış yapmış kartın aynı gün yeniden kullanımı
+  (Faz 8A "nötr kart") DEĞİŞMEDİ** — kullanıcı bunu açıkça korudu.
 - Test: `php scripts/pdks_gun_sonu_kapanis_smoke.php`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)

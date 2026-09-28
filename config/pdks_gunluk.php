@@ -2948,6 +2948,17 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
         }
         // v275: kapanmış mesaide çıkışsız kalan dönem girişi ENGELLEMEZ, uyarır.
         $eksikDonem = pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($pdo, (int)$kart['id']);
+        // v276 (kullanıcı kararı — güvenlik): izin yalnız ÖNCEKİ GÜNLERE aittir.
+        // Kart AYNI GÜN eksik çıkışla kapatılmış bir mesaide kaldıysa o gün başka
+        // mesaiye giremez (depo/çavuş fark etmez) — aksi hâlde mesaiyi erken
+        // kapatıp kartı başka çavuşa geçirerek aynı gün iki katılım yazılabilirdi.
+        // NORMAL çıkış yapmış kartın aynı gün yeniden kullanımı (Faz 8A) DEĞİŞMEZ.
+        if ($eksikDonem && (string)$eksikDonem['work_date'] === (string)$session['work_date']) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'bugun_eksik_cikis',
+                    'hata' => pdks_gunluk_eksik_cikis_uyari_metni($eksikDonem)
+                            . ' Aynı gün başka mesaiye giriş yapılamaz.'];
+        }
 
         $simdi = date('Y-m-d H:i:s');   // ⚠ SUNUCU saati — istemciden ASLA alınmaz.
         $insE = $pdo->prepare(
