@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v270');
+    define('APP_SURUM', 'v271');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -263,6 +263,7 @@ function nav_ptak_sayfalari(): array {
         'cavus_odeme.php', 'cavus_cari.php', 'cavus_ekstre.php', 'raporlar.php',
         'cavus_toplu_dokum.php', 'cavus_toplu_dokum_detay.php',
         'mesai_degerlendirme.php', 'manuel_cikis.php',
+        'cavus_donem_raporu.php',
     ];
 }
 

@@ -484,6 +484,21 @@ function pdks_rapor_finansal_kpi(string $start, string $end, ?string $depo, ?int
         $sonuc[$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
     }
 
+    // Çavuş Ücreti Yöntem B — dönem hakedişine kapanışlar da girer (kullanıcı
+    // cevabı: raporlar.php dönem göstergeleri B'yi İÇERSİN). Tarih filtresi
+    // closure_date; depo filtresi UYGULANMAZ (bkz. pdks_rapor_bakiye_toplu()).
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')) {
+        $whereK = ["status = 'valid'", 'closure_date BETWEEN ? AND ?']; $parK = [$start, $end];
+        if ($foremanId !== null) { $whereK[] = 'foreman_id = ?'; $parK[] = $foremanId; }
+        $stK = $pdo->prepare("SELECT currency, amount FROM foreman_period_closures WHERE " . implode(' AND ', $whereK));
+        $stK->execute($parK);
+        foreach ($stK->fetchAll() as $r) {
+            $cur = (string)$r['currency'];
+            if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'odeme_kurus' => 0];
+            $sonuc[$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
+        }
+    }
+
     foreach ($sonuc as $cur => &$s) {
         $s['net_kurus'] = $s['hakedis_kurus'] - $s['odeme_kurus'];
         $s['hakedis'] = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
@@ -550,6 +565,22 @@ function pdks_rapor_bakiye_toplu(?string $depo, ?int $foremanId, ?PDO $pdo = nul
         $sonuc[$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
     }
 
+    // Çavuş Ücreti Yöntem B — dönem kapanışları cariye AYNI hakediş
+    // formülüne (ALACAK) girer. Depo filtresi UYGULANMAZ: bir kapanış
+    // birden çok gün/depoyu kapsayabilir, tekil depoya damgalanamaz.
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')) {
+        $whereK = ["status = 'valid'"]; $parK = [];
+        if ($foremanId !== null) { $whereK[] = 'foreman_id = ?'; $parK[] = $foremanId; }
+        $sqlK = "SELECT currency, amount FROM foreman_period_closures" . ($whereK ? ' WHERE ' . implode(' AND ', $whereK) : '');
+        $stK = $pdo->prepare($sqlK);
+        $stK->execute($parK);
+        foreach ($stK->fetchAll() as $r) {
+            $cur = (string)$r['currency'];
+            if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
+            $sonuc[$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
+        }
+    }
+
     foreach ($sonuc as $cur => &$s) {
         $s['bakiye_kurus'] = $s['hakedis_kurus'] + $s['duzeltme_kurus'] - $s['odeme_kurus'];
         $s['hakedis']  = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
@@ -612,6 +643,17 @@ function pdks_rapor_cavus_bakiye_toplu(?array $foremanIds = null, ?PDO $pdo = nu
         $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
         if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
         $sonuc[$fid][$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
+    }
+
+    // Çavuş Ücreti Yöntem B — bkz. pdks_rapor_bakiye_toplu()'nun AYNI yorumu.
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')) {
+        $stK = $pdo->prepare("SELECT foreman_id, currency, amount FROM foreman_period_closures WHERE status = 'valid'" . $ph);
+        $stK->execute($foremanIds ?? []);
+        foreach ($stK->fetchAll() as $r) {
+            $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
+            if (!isset($sonuc[$fid][$cur])) $sonuc[$fid][$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0];
+            $sonuc[$fid][$cur]['hakedis_kurus'] += pdks_hakedis_tl_kurus((string)$r['amount']);
+        }
     }
 
     foreach ($sonuc as $fid => &$curMap) {
@@ -751,6 +793,17 @@ function pdks_rapor_gunluk_trend(string $start, string $end, ?string $depo, ?int
     $hakedisKurusGunCur = [];
     foreach ($stH->fetchAll() as $r) {
         $hakedisKurusGunCur[$r['gun']][$r['currency']] = ($hakedisKurusGunCur[$r['gun']][$r['currency']] ?? 0) + pdks_hakedis_tl_kurus((string)$r['total_amount']);
+    }
+
+    // Çavuş Ücreti Yöntem B — gün anahtarı closure_date; depo filtresi YOK.
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')) {
+        $whereK = ["status = 'valid'", 'closure_date BETWEEN ? AND ?']; $parK = [$start, $end];
+        if ($foremanId !== null) { $whereK[] = 'foreman_id = ?'; $parK[] = $foremanId; }
+        $stK = $pdo->prepare("SELECT closure_date AS gun, currency, amount FROM foreman_period_closures WHERE " . implode(' AND ', $whereK));
+        $stK->execute($parK);
+        foreach ($stK->fetchAll() as $r) {
+            $hakedisKurusGunCur[$r['gun']][$r['currency']] = ($hakedisKurusGunCur[$r['gun']][$r['currency']] ?? 0) + pdks_hakedis_tl_kurus((string)$r['amount']);
+        }
     }
 
     // ⚠ Depo filtresi ödeme tarafına uygulanmaz (bkz. pdks_rapor_finansal_kpi() notu — foreman_payments'ta depo kolonu yok).
@@ -904,6 +957,17 @@ function pdks_rapor_cavus_ozeti(string $start, string $end, ?string $depo, ?int 
     foreach ($stP->fetchAll() as $r) {
         $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
         $donemOdeme[$fid][$cur] = ($donemOdeme[$fid][$cur] ?? 0) + pdks_hakedis_tl_kurus((string)$r['amount']);
+    }
+
+    // Çavuş Ücreti Yöntem B — dönem hakedişine kapanışlar da girer; tarih
+    // filtresi closure_date, depo filtresi UYGULANMAZ.
+    if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')) {
+        $stK = $pdo->prepare("SELECT foreman_id, currency, amount FROM foreman_period_closures WHERE status = 'valid' AND closure_date BETWEEN ? AND ? AND foreman_id IN ($fph)");
+        $stK->execute(array_merge([$start, $end], $foremanIds));
+        foreach ($stK->fetchAll() as $r) {
+            $fid = (int)$r['foreman_id']; $cur = (string)$r['currency'];
+            $donemHakedis[$fid][$cur] = ($donemHakedis[$fid][$cur] ?? 0) + pdks_hakedis_tl_kurus((string)$r['amount']);
+        }
     }
 
     $guncelBakiye = pdks_rapor_cavus_bakiye_toplu($foremanIds, $pdo);

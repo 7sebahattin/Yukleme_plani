@@ -51,6 +51,8 @@ require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
 require_once $ROOT . '/config/pdks_faz8b.php';
 require_once $ROOT . '/config/pdks_faz9d.php';
+require_once $ROOT . '/config/pdks_cari.php';
+require_once $ROOT . '/config/pdks_faz8b_cavus_b.php';
 
 // ─────────────────────────────────────────────────────────
 // MySQL DDL → SQLite çevirici — diğer *_ui_smoke.php dosyalarıyla BİREBİR AYNI.
@@ -179,7 +181,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     // Test dosyası /tmp altına kopyalandığı için uygulamanın require_once
     // satırlarını kaldırırız; tüm modüller yukarıda gerçek repo yolundan
     // zaten yüklendi. Faz 8B de bu listeye dahildir.
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_faz8b|config\/pdks_faz9d|config\/auth)\.php\';.*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_faz8b|config\/pdks_faz9d|config\/pdks_cari|config\/pdks_faz8b_cavus_b|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
     $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);

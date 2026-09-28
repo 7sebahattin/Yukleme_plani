@@ -432,7 +432,12 @@ foreach ($karsilastirma['odeme_degisim'] as $cur => $d): ?>
 
 <!-- ═══ ÇAVUŞ CARİ DURUMU (görev madde 9) ═══ -->
 <?php if ($finansalGosterilebilir): ?>
-<div class="page-head" style="margin-top:24px"><h2 style="margin:0;font-size:1.05rem">📒 Çavuş Cari Durumu (Güncel, tüm zamanlar)</h2></div>
+<div class="page-head" style="margin-top:24px">
+    <h2 style="margin:0;font-size:1.05rem">📒 Çavuş Cari Durumu (Güncel, tüm zamanlar)</h2>
+    <?php if (pdks_gunluk_tablo_var($pdo, 'foreman_period_closures')): ?>
+    <div class="page-head-actions"><a href="cavus_donem_raporu.php" class="btn btn-sm">🧮 Çavuş Hakedişi Dönem Raporu</a></div>
+    <?php endif; ?>
+</div>
 <?php if (empty($bakiyeSiralama)): ?>
 <div class="pdks-empty"><span class="pdks-empty-icon" aria-hidden="true">📒</span><p>Kayıtlı hesap hareketi yok.</p></div>
 <?php else: foreach ($bakiyeSiralama as $cur => $liste): ?>

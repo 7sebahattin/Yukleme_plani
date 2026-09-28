@@ -744,6 +744,30 @@ function pdks_hakedis_yeniden_ac(int $entitlementId, string $sebep, int $userId,
     if (!$ent) return ['ok' => false, 'kod' => 'hakedis_yok', 'hata' => 'Hakediş kaydı bulunamadı.'];
     if ($ent['status'] !== 'final') return ['ok' => false, 'kod' => 'zaten_taslak', 'hata' => 'Bu hakediş zaten TASLAK durumda.'];
 
+    // Çavuş Ücreti Yöntem B: bu hakediş GEÇERLİ bir dönem kapanışının kalemiyse
+    // (kişi-günü donmuş bir kapanışa dahil edilmiş) yeniden AÇILAMAZ — snapshot
+    // bozulur (bkz. config/pdks_faz8b_cavus_b.php dosya başlığı). ⚠ function_exists()
+    // İLE DEĞİL, BU DOSYANIN KENDİ pdks_hakedis_tablo_var() yardımcısıyla kontrol
+    // edilir — cavus_hakedis_detay.php gibi config/pdks_faz8b.php'yi HİÇ yüklemeyen
+    // bir ekranda function_exists() sessizce false dönüp korumayı ATLARDI (bilinen
+    // mevcut zayıflık, bkz. pdks_cari_odeme_var_mi() çapraz kontrolü — BU YENİ guard
+    // o zayıflığı TEKRARLAMAZ, tablo varlığını DOĞRUDAN sorgular).
+    if (pdks_hakedis_tablo_var($pdo, 'foreman_period_closures') && pdks_hakedis_tablo_var($pdo, 'foreman_period_closure_items')) {
+        $stKap = $pdo->prepare(
+            "SELECT c.id FROM foreman_period_closure_items i
+               JOIN foreman_period_closures c ON c.id = i.closure_id
+              WHERE i.entitlement_id = ? AND c.status = 'valid' LIMIT 1"
+        );
+        $stKap->execute([$entitlementId]);
+        $kapId = $stKap->fetchColumn();
+        if ($kapId) {
+            return ['ok' => false, 'kod' => 'b_kapanisina_dahil', 'hata' => sprintf(
+                'Bu hakediş, çavuşun Yöntem B dönem kapanışına (CVH-%06d) dahil edildiği için yeniden AÇILAMAZ. '
+                . 'Önce o kapanışı yapan ödemeyi iptal edin.', (int)$kapId
+            )];
+        }
+    }
+
     if (function_exists('pdks_cari_odeme_var_mi') && pdks_cari_odeme_var_mi((int)$ent['foreman_id'], $pdo)) {
         return ['ok' => false, 'kod' => 'cari_hareketli_engel',
                  'hata' => 'Bu çavuşun cari hesabında en az bir GEÇERLİ ödeme kaydı olduğu için bu hakediş yeniden AÇILAMAZ '
