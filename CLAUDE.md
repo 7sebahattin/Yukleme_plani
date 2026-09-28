@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v271` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v272` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -369,6 +369,13 @@ geçmişi zaman damgalı tutulur, geriye dönük **değildir**.
   çok gün/depoyu kapsayabilir). `pdks_hakedis_yeniden_ac()`'a YALNIZ EKLEME:
   geçerli bir B kapanışının kalemi olan hakediş `b_kapanisina_dahil` ile
   yeniden açılamaz.
+- **Yeniden açma korumaları `function_exists()`'e GÜVENMEZ:** tek çağıran
+  `cavus_hakedis_detay.php` `pdks_cari.php`'yi yüklemez; eski "geçerli ödemesi
+  olan çavuş" kontrolü (`function_exists('pdks_cari_odeme_var_mi')`) o ekranda
+  sessizce atlanıyordu. Artık aynı sorgu `pdks_hakedis_tablo_var($pdo,
+  'foreman_payments')` ile doğrudan yapılır (tablo yoksa Faz 4 tek başına
+  çalışır). Test: `php scripts/pdks_hakedis_yeniden_ac_guard_smoke.php`
+  (her senaryo YALNIZ `pdks_hakedis.php` yüklü ayrı alt süreçte).
 - **Ekstre:** `CAVUS_HAKEDIS` satırı `pdks_cari_ekstre()`'ye AYRI bir satır
   türü olarak eklenir, ödemeyle AYNI tarihte ama `siralama_oncelik=0` ile o
   ödeme satırından ÖNCE sıralanır. Açıklama biçimi sabit: "Çavuş Hakedişi —

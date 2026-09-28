@@ -311,6 +311,8 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v264');",
     // Çavuş Ücreti Yöntem B (25 kişi-gün = 1 hakediş): APP_SURUM v270'ten v271'e çekildi.
     "-    define('APP_SURUM', 'v270');",
+    // Hakediş yeniden açma koruması (cavus_hakedis_detay.php): APP_SURUM v271'den v272'ye çekildi.
+    "-    define('APP_SURUM', 'v271');",
     '-function render_desktop_sidebar(string $base): void {',
     '-    $_fn   = function_exists(\'can\');',
     '-    $p_dash  = !$_fn || can(\'dashboard.read\');',

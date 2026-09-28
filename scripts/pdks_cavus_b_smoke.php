@@ -574,8 +574,19 @@ $trendG = pdks_rapor_gunluk_trend('2026-02-01', '2026-02-01', null, $fG, null, $
 $gunTrendG = $trendG[0] ?? null;
 okb('79) gunluk_trend closure_date gününde hakediş içerir', $gunTrendG !== null && ($gunTrendG['hakedis']['TRY'] ?? '0.00') !== '0.00', json_encode($gunTrendG));
 
+// Çavuş özeti OPERASYONEL özet: yalnız dönemde mesaisi olan çavuşları listeler
+// (dönem ödemeleri için de aynı). G'nin Şubat'ta mesaisi yok → önce listede
+// OLMADIĞINI, sonra bir mesai eklenince B kapanışının dönem hakedişine
+// GİRDİĞİNİ doğrula (eskiden bu test koşulsuz `true` idi).
+$ozetGBos = pdks_rapor_cavus_ozeti('2026-02-01', '2026-02-28', null, $fG, null, $db);
+okb('80) cavus_ozeti: dönemde mesaisi olmayan çavuş listelenmez (mevcut operasyonel kural)', $ozetGBos === [], json_encode($ozetGBos));
+$db->exec("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,work_date,depo,status) VALUES ({$fG},'Çavuş G','CG','2026-02-10','Depo A','closed')");
 $ozetG = pdks_rapor_cavus_ozeti('2026-02-01', '2026-02-28', null, $fG, null, $db);
-okb('80) cavus_ozeti dönem hakedişine B kapanışı DAHİL (query boş dönebilir, atlanır)', true);
+okb('80b) cavus_ozeti dönem hakedişine B kapanışı (closure_date) DAHİL: 4000.00 TRY',
+    count($ozetG) === 1 && ($ozetG[0]['donem_hakedis']['TRY'] ?? null) === '4000.00', json_encode($ozetG[0]['donem_hakedis'] ?? $ozetG));
+$ozetGDisi = pdks_rapor_cavus_ozeti('2026-02-02', '2026-02-28', null, $fG, null, $db);
+okb('80c) cavus_ozeti: kapanış tarihi (01.02) aralık DIŞINDAYSA dönem hakedişine GİRMEZ',
+    count($ozetGDisi) === 1 && ($ozetGDisi[0]['donem_hakedis']['TRY'] ?? '0.00') === '0.00', json_encode($ozetGDisi[0]['donem_hakedis'] ?? $ozetGDisi));
 
 // İptal edilen kapanış sayılmaz.
 $kpiMSonra = pdks_rapor_finansal_kpi('2026-01-01', '2026-12-31', null, $fM, $db);

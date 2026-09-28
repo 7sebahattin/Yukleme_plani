@@ -773,6 +773,22 @@ function pdks_hakedis_yeniden_ac(int $entitlementId, string $sebep, int $userId,
                  'hata' => 'Bu çavuşun cari hesabında en az bir GEÇERLİ ödeme kaydı olduğu için bu hakediş yeniden AÇILAMAZ '
                          . '— geçmiş bakiye sessizce değişmez. Düzeltme gerekiyorsa yeni bir muhasebe düzeltme akışı gerekir (Faz 5 kapsamı dışı).'];
     }
+    // Yukarıdaki yumuşak kontrol pdks_cari.php YÜKLÜ DEĞİLSE sessizce atlanıyordu —
+    // bu fonksiyonun TEK çağıranı cavus_hakedis_detay.php o dosyayı yüklemediği için
+    // koruma gerçek ekranda HİÇ çalışmıyordu (ödemesi olan çavuşun kesin hakedişi
+    // yeniden açılabiliyordu). Aynı kontrol burada doğrudan tablodan yapılır; SERT
+    // bağımlılık yine YOK: Faz 5 tablosu (foreman_payments) yoksa kontrol atlanır —
+    // docblock'taki "Faz 4 tek başına" ilkesi korunur. Sorgu pdks_cari_odeme_var_mi()
+    // ile BİREBİR aynıdır (status='valid').
+    if (!function_exists('pdks_cari_odeme_var_mi') && pdks_hakedis_tablo_var($pdo, 'foreman_payments')) {
+        $stOdeme = $pdo->prepare("SELECT 1 FROM foreman_payments WHERE foreman_id = ? AND status = 'valid' LIMIT 1");
+        $stOdeme->execute([(int)$ent['foreman_id']]);
+        if ($stOdeme->fetchColumn()) {
+            return ['ok' => false, 'kod' => 'cari_hareketli_engel',
+                     'hata' => 'Bu çavuşun cari hesabında en az bir GEÇERLİ ödeme kaydı olduğu için bu hakediş yeniden AÇILAMAZ '
+                             . '— geçmiş bakiye sessizce değişmez. Düzeltme gerekiyorsa yeni bir muhasebe düzeltme akışı gerekir (Faz 5 kapsamı dışı).'];
+        }
+    }
 
     $simdi = date('Y-m-d H:i:s');
     $notlar = trim((string)$ent['notes']);
