@@ -112,13 +112,27 @@ okGs('ÇIKIŞ eski (kapalı mesaideki) dönemi SEÇMEDİ', $eskiDonem2['status']
 $c2 = pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $bugunC1, 7, $dbGs);
 okGs('ikinci ÇIKIŞ: açık dönem yok + eksik çıkış açıklaması', !$c2['ok'] && $c2['kod'] === 'acik_donem_yok' && str_contains($c2['hata'], 'çıkış yazılamaz'));
 
-// Yeniden açma koruması: bugün C3'te K001 girip çıkışsız kapansın, sonra C1'de girsin.
+// v276: normal çıkıştan sonra aynı gün başka çavuşa giriş SERBEST (Faz 8A kuralı).
 $dbGs->exec("UPDATE daily_work_sessions SET opened_at='$today 07:00:00' WHERE work_date='$today'");
 $g4 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC3, 1, 'auto', 7, $dbGs);
-okGs('K001 C3 mesaisine girdi', $g4['ok'] === true);
+okGs('normal çıkış sonrası aynı gün başka çavuşa (C3) giriş serbest', $g4['ok'] === true);
+
+// v276: AYNI GÜN eksik çıkışla kapanan mesaideki kart o gün başka mesaiye GİREMEZ.
 okGs('C3 eksik çıkışla kapatıldı', pdks_gunluk_oturum_kapat($bugunC3, 'Kart kaldı', 7, $dbGs)['ok'] === true);
+$donemSayi = (int)$dbGs->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE worker_card_id=1")->fetchColumn();
 $g5 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC1, 1, 'auto', 7, $dbGs);
-okGs('aynı gün K001 C1 mesaisine uyarıyla girdi', $g5['ok'] === true && !empty($g5['uyari']));
+okGs('aynı gün eksik çıkışlı kart C1 mesaisine GİREMEDİ (bugun_eksik_cikis)', !$g5['ok'] && $g5['kod'] === 'bugun_eksik_cikis');
+okGs('ret mesajı sebebi söylüyor', str_contains($g5['hata'] ?? '', 'Aynı gün başka mesaiye giriş yapılamaz'));
+okGs('ret sonrası yeni dönem YAZILMADI', (int)$dbGs->query("SELECT COUNT(*) FROM daily_worker_work_periods WHERE worker_card_id=1")->fetchColumn() === $donemSayi);
+
+// Önceki güne ait eksik çıkış hâlâ YALNIZ uyarır (yukarıdaki dünkü senaryo) — ertesi
+// günü taklit et: C3'ün bugünkü kaydını düne çek, K001 bugün tekrar girebilmeli.
+$dbGs->exec("UPDATE daily_work_sessions SET work_date='" . date('Y-m-d', strtotime('-2 day')) . "' WHERE id=$bugunC3");
+$g6 = pdks_gunluk_faz8a_giris_kaydet('631799511', 'usb_decimal', $bugunC1, 1, 'auto', 7, $dbGs);
+okGs('önceki günün eksik çıkışı girişi engellemiyor, uyarıyla giriş', $g6['ok'] === true && !empty($g6['uyari']));
+$dbGs->exec("UPDATE daily_work_sessions SET work_date='$today' WHERE id=$bugunC3");
+
+// Yeniden açma savunması: kart (C3'te çıkışsız) şu an C1'de içeride → C3 açılamaz.
 $ya = pdks_gunluk_oturum_yeniden_ac($bugunC3, 'Yanlışlıkla kapatıldı', 7, $dbGs);
 okGs('kart başka açık mesaide içerideyken C3 yeniden AÇILAMAZ', !$ya['ok'] && $ya['kod'] === 'kart_baska_mesaide');
 pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $bugunC1, 7, $dbGs);

@@ -63,9 +63,10 @@ function pdks_gunluk_oturum_yeniden_ac(int $sessionId, string $sebep, int $userI
             return ['ok' => false, 'kod' => 'hakedis_durumu', 'hata' => 'Hakediş durumu doğrulanamadı.'];
         }
 
-        // v275: eksik çıkışla kapanan mesaideki kart artık başka mesaide yeniden
-        // giriş yapabiliyor. O kart ŞU AN başka AÇIK mesaide içerideyse bu mesai
-        // yeniden açılamaz — açılsaydı kartın iki canlı dönemi olurdu.
+        // v275: eksik çıkışla kapanan mesaideki kart ÖNCEKİ günden kaldıysa başka
+        // mesaide yeniden giriş yapabiliyor (aynı gün v276'dan beri engelli). O kart
+        // ŞU AN başka AÇIK mesaide içerideyse bu mesai yeniden açılamaz — açılsaydı
+        // kartın iki canlı dönemi olurdu. Savunma katmanı olarak kalır.
         $etkin = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p');
         $etkin2 = pdks_gunluk_faz8j_etkin_kosul($pdo, 'p2');
         $st = $pdo->prepare(
