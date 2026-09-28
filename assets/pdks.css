@@ -1336,3 +1336,20 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-degistir-btn {
 }
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-degistir-btn:hover,
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-degistir-btn:focus-visible { background: #eef4ff; border-color: #1d4ed8; }
+
+/* v278 — İşçi tipi penceresindeki "Mod Seçimine Dön" düz metin gibi görünüyordu.
+   Mod ekranındaki "Çavuşu Değiştir" ile AYNI ikincil düğme görünümü (kullanıcı
+   isteği): tip düğmelerinden ayrı, mavi çerçeveli, aynı genişlikte. */
+.pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
+    width: 100%; max-width: 380px; box-sizing: border-box;
+    margin-top: 14px; min-height: 52px; padding: 12px 16px;
+    font-size: 1rem; font-weight: 700; border-radius: 14px;
+    background: transparent; border: 2px solid #5b9bf0; color: #cfe3ff;
+}
+.pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:hover,
+.pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:focus-visible { background: #16304f; border-color: #8bbcff; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec {
+    background: #ffffff; border-color: #2563eb; color: #1d4ed8; box-shadow: 0 4px 12px #2563eb26;
+}
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:hover,
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:focus-visible { background: #eef4ff; border-color: #1d4ed8; }
