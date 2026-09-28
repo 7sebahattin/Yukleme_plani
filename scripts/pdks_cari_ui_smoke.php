@@ -52,6 +52,8 @@ require_once $ROOT . '/config/pdks_gunluk.php';
 require_once $ROOT . '/config/pdks_hakedis.php';
 require_once $ROOT . '/config/pdks_cari.php';
 require_once $ROOT . '/config/pdks_faz9d.php';
+require_once $ROOT . '/config/pdks_faz8b.php';
+require_once $ROOT . '/config/pdks_faz8b_cavus_b.php';
 
 // ─────────────────────────────────────────────────────────
 // MySQL DDL → SQLite çevirici — diğer *_ui_smoke.php dosyalarıyla BİREBİR AYNI.
@@ -160,7 +162,7 @@ function renderPage(string $file, array $get = [], array $post = []): string {
     $_SERVER['REQUEST_METHOD'] = $post ? 'POST' : 'GET';
     $_SERVER['REQUEST_URI'] = '/' . $file;
     $src = file_get_contents($ROOT . '/' . $file);
-    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/auth)\.php\';.*$/m', '', $src);
+    $src = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_faz8b|config\/pdks_faz8b_cavus_b|config\/auth)\.php\';.*$/m', '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     // Ortak dışa aktarım yardımcısı (export_menu) gerçek dosyadan — sayfa /tmp'ye kopyalandığı için mutlak yol
     $src = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(dirname(__DIR__) . '/config/xlsx_export.php', true), $src);
@@ -349,7 +351,7 @@ pdks_hakedis_finalize($sid, 1, false, db());
 pdks_cari_odeme_ekle($ayseId, '2026-01-05', '400', 'TRY', 'BANK', 'HAVALE-001', 'İlk ödeme', 1, db());
 $_GET = ['foreman_id' => (string)$ayseId, 'csv' => '1']; $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['REQUEST_URI'] = '/cavus_ekstre.php';
 $pageSrc = file_get_contents(__ROOT__ . '/cavus_ekstre.php');
-$pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/auth)\.php\';.*$/m', '', $pageSrc);
+$pageSrc = preg_replace('/^\s*require_once __DIR__ \. \'\/(config\/db|config\/pdks_gunluk|config\/pdks_hakedis|config\/pdks_cari|config\/pdks_faz8b|config\/pdks_faz8b_cavus_b|config\/auth)\.php\';.*$/m', '', $pageSrc);
 $pageSrc = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $pageSrc);
 $pageSrc = str_replace("__DIR__ . '/config/xlsx_export.php'", var_export(__ROOT__ . '/config/xlsx_export.php', true), $pageSrc);
 $pageSrc = preg_replace('/^<\?php\s*$/m', '', $pageSrc, 1);

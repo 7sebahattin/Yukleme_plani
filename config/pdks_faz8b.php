@@ -898,6 +898,240 @@ function pdks_faz8b_cavus_ucret_kardes_isaretle(int $sessionId, ?PDO $pdo = null
 }
 
 // =========================================================
+// ÇAVUŞ ÜCRETİ — YÖNTEM SEÇİMİ (A/B) + YÖNTEM B TABLOLARI
+// pdks_faz8b_sema_hazir()'e BİLEREK EKLENMEZ.
+//
+// Yöntem A (mevcut, varsayılan): günlük sabit ücret — yukarıdaki blok.
+// Yöntem B (YENİ): çavuşun altında çalışan kişi-gün toplamı her 25'te
+// (PDKS_FAZ8B_CAVUS_B_BIRIM) 1 hakediş kazandırır; dönem kapanışı ödeme
+// kaydında OTOMATİK yapılır (bkz. config/pdks_faz8b_cavus_b.php). Yöntem
+// seçimi ÇAVUŞ BAZINDA, zaman damgalı bir GEÇMİŞ olarak tutulur
+// (foreman_rate_method_log) — hangi yöntemin hangi tarihten itibaren
+// geçerli olduğu ASLA kaybolmaz, geriye dönük hesaplar bozulmaz.
+// =========================================================
+
+defined('PDKS_FAZ8B_CAVUS_B_BIRIM') || define('PDKS_FAZ8B_CAVUS_B_BIRIM', 25);
+
+function pdks_faz8b_cavus_ucret_b_tablolar(): array
+{
+    $t = [];
+    $t['foreman_rate_method_log'] = "CREATE TABLE IF NOT EXISTS `foreman_rate_method_log` (
+        `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+        `foreman_id`         INT          NOT NULL,
+        `method`             VARCHAR(1)   NOT NULL,
+        `effective_at`       DATETIME     NOT NULL,
+        `created_by_user_id` INT          NULL DEFAULT NULL,
+        `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_frml_foreman` (`foreman_id`, `effective_at`),
+        CONSTRAINT `fk_frml_foreman` FOREIGN KEY (`foreman_id`)
+            REFERENCES `foremen`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    $t['foreman_period_closures'] = "CREATE TABLE IF NOT EXISTS `foreman_period_closures` (
+        `id`                    INT AUTO_INCREMENT PRIMARY KEY,
+        `foreman_id`            INT           NOT NULL,
+        `foreman_name_snapshot` VARCHAR(150)  NOT NULL DEFAULT '',
+        `payment_id`            INT           NOT NULL,
+        `closure_date`          DATE          NOT NULL,
+        `prev_closure_id`       INT           NULL DEFAULT NULL,
+        `chain_key`             VARCHAR(40)   NULL DEFAULT NULL,
+        `unit_size`             INT           NOT NULL DEFAULT 25,
+        `carry_in`              INT           NOT NULL DEFAULT 0,
+        `period_person_days`    INT           NOT NULL DEFAULT 0,
+        `total_person_days`     INT           NOT NULL DEFAULT 0,
+        `earned_units`          INT           NOT NULL DEFAULT 0,
+        `carry_out`             INT           NOT NULL DEFAULT 0,
+        `rate_id`               INT           NULL DEFAULT NULL,
+        `unit_rate`             DECIMAL(12,2) NOT NULL,
+        `currency`              VARCHAR(10)   NOT NULL DEFAULT 'TRY',
+        `amount`                DECIMAL(14,2) NOT NULL,
+        `status`                VARCHAR(20)   NOT NULL DEFAULT 'valid',
+        `created_by_user_id`    INT           NULL DEFAULT NULL,
+        `created_at`            DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `cancelled_at`          DATETIME      NULL DEFAULT NULL,
+        `cancelled_by_user_id`  INT           NULL DEFAULT NULL,
+        `cancellation_reason`   TEXT          NULL DEFAULT NULL,
+        UNIQUE KEY `uq_fpc_payment` (`payment_id`),
+        UNIQUE KEY `uq_fpc_chain` (`chain_key`),
+        INDEX `idx_fpc_foreman` (`foreman_id`, `status`),
+        INDEX `idx_fpc_date` (`closure_date`),
+        CONSTRAINT `fk_fpc_foreman` FOREIGN KEY (`foreman_id`)
+            REFERENCES `foremen`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT `fk_fpc_payment` FOREIGN KEY (`payment_id`)
+            REFERENCES `foreman_payments`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    $t['foreman_period_closure_items'] = "CREATE TABLE IF NOT EXISTS `foreman_period_closure_items` (
+        `id`             INT AUTO_INCREMENT PRIMARY KEY,
+        `closure_id`     INT          NOT NULL,
+        `entitlement_id` INT          NOT NULL,
+        `work_date`      DATE         NOT NULL,
+        `depo`           VARCHAR(150) NOT NULL DEFAULT '',
+        `person_days`    INT          NOT NULL DEFAULT 0,
+        INDEX `idx_fpci_closure` (`closure_id`),
+        INDEX `idx_fpci_entitlement` (`entitlement_id`),
+        CONSTRAINT `fk_fpci_closure` FOREIGN KEY (`closure_id`)
+            REFERENCES `foreman_period_closures`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        CONSTRAINT `fk_fpci_entitlement` FOREIGN KEY (`entitlement_id`)
+            REFERENCES `foreman_daily_entitlements`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    return $t;
+}
+
+function pdks_faz8b_cavus_ucret_b_tablo_var(PDO $pdo, string $tablo): bool
+{
+    try { $pdo->query("SELECT 1 FROM `{$tablo}` LIMIT 0"); return true; }
+    catch (PDOException $e) { return false; }
+}
+
+/**
+ * Önkoşul: foremen, foreman_daily_entitlements, foreman_payments — bunlardan
+ * biri eksikse HİÇ exec çalıştırılmaz (bu tabloların FK'ları o tablolara bağlı).
+ */
+function pdks_faz8b_cavus_ucret_b_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $onkosullar = ['foremen', 'foreman_daily_entitlements', 'foreman_payments'];
+    $eksik = [];
+    foreach ($onkosullar as $o) {
+        if (!pdks_faz8b_cavus_ucret_b_tablo_var($pdo, $o)) $eksik[] = $o;
+    }
+    $rapor = [];
+    if ($eksik) {
+        foreach (pdks_faz8b_cavus_ucret_b_tablolar() as $ad => $sql) {
+            $rapor[] = ['tablo' => $ad, 'durum' => 'atlandi',
+                'mesaj' => 'Önkoşul tablo eksik: ' . implode(', ', $eksik) . ' (önce Hakediş / Cari Hesap migrasyonunu çalıştırın).'];
+        }
+        return $rapor;
+    }
+    foreach (pdks_faz8b_cavus_ucret_b_tablolar() as $ad => $sql) {
+        if (pdks_faz8b_cavus_ucret_b_tablo_var($pdo, $ad)) {
+            $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Tablo zaten mevcut.'];
+            continue;
+        }
+        try {
+            $pdo->exec($sql);
+            $rapor[] = ['tablo' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.'];
+        } catch (PDOException $e) {
+            error_log('[pdks_faz8b_cavus_ucret_b_migrate] ' . $ad . ': ' . $e->getMessage());
+            $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
+        }
+    }
+    return $rapor;
+}
+
+function pdks_faz8b_cavus_ucret_b_sema_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    foreach (array_keys(pdks_faz8b_cavus_ucret_b_tablolar()) as $ad) {
+        if (!pdks_faz8b_cavus_ucret_b_tablo_var($pdo, $ad)) return false;
+    }
+    return true;
+}
+
+/** cavus_fiyatlari.php için — bir çavuşun TÜM yöntem değişim geçmişi, eskiden yeniye. */
+function pdks_faz8b_cavus_ucret_yontem_gecmisi(int $foremanId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_cavus_ucret_b_tablo_var($pdo, 'foreman_rate_method_log')) return [];
+    $st = $pdo->prepare(
+        "SELECT id, foreman_id, method, effective_at, created_by_user_id, created_at
+           FROM foreman_rate_method_log WHERE foreman_id = ? ORDER BY effective_at ASC, id ASC"
+    );
+    $st->execute([$foremanId]);
+    return $st->fetchAll();
+}
+
+/**
+ * SAF fonksiyon: verilen bir $gecmis (artan effective_at) dizisinde, $zaman
+ * anında geçerli yöntemi döner. Kayıt yoksa/hiçbiri henüz geçerli değilse 'A'.
+ */
+function pdks_faz8b_cavus_ucret_yontem_anda(array $gecmis, string $zaman): string
+{
+    $kopya = $gecmis;
+    usort($kopya, function ($a, $b) {
+        $c = strcmp((string)$a['effective_at'], (string)$b['effective_at']);
+        return $c !== 0 ? $c : ((int)$a['id'] <=> (int)$b['id']);
+    });
+    $sonuc = 'A';
+    foreach ($kopya as $k) {
+        if ((string)$k['effective_at'] <= $zaman) {
+            $sonuc = ((string)$k['method'] === 'B') ? 'B' : 'A';
+        }
+    }
+    return $sonuc;
+}
+
+function pdks_faz8b_cavus_ucret_yontem(int $foremanId, ?PDO $pdo = null): string
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_cavus_ucret_b_sema_hazir($pdo)) return 'A';
+    $st = $pdo->prepare(
+        "SELECT method FROM foreman_rate_method_log WHERE foreman_id = ?
+          ORDER BY effective_at DESC, id DESC LIMIT 1"
+    );
+    $st->execute([$foremanId]);
+    $v = $st->fetchColumn();
+    return ($v === 'B') ? 'B' : 'A';
+}
+
+function pdks_faz8b_cavus_ucret_yontem_degistir(int $foremanId, string $yontem, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $yontem = strtoupper(trim($yontem));
+    if (!in_array($yontem, ['A', 'B'], true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_yontem', 'hata' => 'Geçersiz hesaplama yöntemi.'];
+    }
+    if (!pdks_faz8b_cavus_ucret_b_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'sema_yok', 'hata' => 'Yöntem B tabloları henüz oluşturulmamış.'];
+    }
+    $stC = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
+    $stC->execute([$foremanId]);
+    if (!$stC->fetchColumn()) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
+
+    $eski = pdks_faz8b_cavus_ucret_yontem($foremanId, $pdo);
+    if ($eski === $yontem) {
+        return ['ok' => true, 'degisti' => false, 'yontem' => $yontem];
+    }
+
+    $kendiTx = !$pdo->inTransaction();
+    if ($kendiTx) $pdo->beginTransaction();
+    try {
+        $simdi = date('Y-m-d H:i:s');
+        $ins = $pdo->prepare(
+            "INSERT INTO foreman_rate_method_log (foreman_id, method, effective_at, created_by_user_id, created_at)
+             VALUES (?,?,?,?,?)"
+        );
+        $ins->execute([$foremanId, $yontem, $simdi, $userId, $simdi]);
+        $id = (int)$pdo->lastInsertId();
+
+        if (pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'needs_recalculation')) {
+            $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1 WHERE foreman_id = ? AND status = 'draft'")
+                ->execute([$foremanId]);
+        }
+        if ($kendiTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if ($kendiTx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'kod' => 'yazim_hatasi', 'hata' => 'Yöntem kaydedilemedi: ' . $e->getMessage()];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('update', 'foreman_rate_method_log', $id,
+            ['foreman_id' => $foremanId, 'method' => $eski],
+            ['foreman_id' => $foremanId, 'method' => $yontem, 'effective_at' => $simdi]);
+    }
+    return ['ok' => true, 'degisti' => true, 'id' => $id, 'eski' => $eski, 'yontem' => $yontem];
+}
+
+function pdks_faz8b_cavus_ucret_yontem_etiketi(string $yontem): string
+{
+    return $yontem === 'B'
+        ? 'Yöntem B — 25 kişi-gün = 1 hakediş'
+        : 'Yöntem A — Günlük sabit ücret';
+}
+
+// =========================================================
 // HAKEDİŞ — FAZ 8B OTORİTER HESAP
 // =========================================================
 
@@ -1023,7 +1257,9 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     // Çavuş Ücreti (Faz 8B eki): ZORUNLU DEĞİL — ücret tanımlıysa VE bu
     // oturum o gün+çavuş için ANKOR (en küçük id'li, işlenmiş dönemi olan)
     // oturumsa VE ücret başka hiçbir FİNAL oturumda zaten YOKSA 1 satır eklenir.
-    if (pdks_faz8b_cavus_ucret_sema_hazir($pdo)) {
+    // Yöntem B seçili çavuşa satır EKLENMEZ — B ücreti dönem kapanışında
+    // (pdks_faz8b_cavus_b.php) tahakkuk eder.
+    if (pdks_faz8b_cavus_ucret_sema_hazir($pdo) && pdks_faz8b_cavus_ucret_yontem((int)$oturum['foreman_id'], $pdo) === 'A') {
         $workDate = (string)$oturum['work_date'];
         $foremanId = (int)$oturum['foreman_id'];
         $zatenBaskaFinaldeVar = pdks_faz8b_cavus_ucret_baska_final_var_mi($foremanId, $workDate, $sessionId, $pdo);

@@ -85,7 +85,11 @@ render_flash();
 <tr>
     <td class="pdks-row-name"><?= h($f['name']) ?></td>
     <td><?= h($cur) ?></td>
-    <td><?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?></td>
+    <td><?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?>
+        <?php if ((int)($b['cavus_hakedis_kurus'] ?? 0) !== 0): ?>
+        <div class="pdks-row-sub">içinde Çavuş Hakedişi (B): <?= h(number_format((float)$b['cavus_hakedis_toplam'], 2, ',', '.')) ?></div>
+        <?php endif; ?>
+    </td>
     <td><?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?></td>
     <!-- Fix 9 (Personel Takibi denetimi): bakiye = hakediş + düzeltme - ödeme
          (bkz. pdks_cari_bakiye()) — bu sütun olmadan Faz 9D düzeltmesi olan bir
@@ -115,7 +119,7 @@ render_flash();
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($f['name']) ?></div>
-            <div class="pdks-row-sub"><?= h($cur) ?> · Hakediş <?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?> · Ödeme <?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?><?= ($b['duzeltme_kurus'] ?? 0) !== 0 ? ' · Düzeltme ' . h(number_format((float)$b['duzeltme_toplam'], 2, ',', '.')) : '' ?></div>
+            <div class="pdks-row-sub"><?= h($cur) ?> · Hakediş <?= h(number_format((float)$b['hakedis_toplam'], 2, ',', '.')) ?> · Ödeme <?= h(number_format((float)$b['odeme_toplam'], 2, ',', '.')) ?><?= ($b['duzeltme_kurus'] ?? 0) !== 0 ? ' · Düzeltme ' . h(number_format((float)$b['duzeltme_toplam'], 2, ',', '.')) : '' ?><?= (int)($b['cavus_hakedis_kurus'] ?? 0) !== 0 ? ' · Çavuş Hakedişi (B) ' . h(number_format((float)$b['cavus_hakedis_toplam'], 2, ',', '.')) : '' ?></div>
         </div>
         <span class="pdks-badge <?= $b['durum'] === 'borc' ? 'pdks-badge-eksik_cikis' : ($b['durum'] === 'avans' ? 'pdks-badge-acik' : 'pdks-badge-aktif') ?>">
             <?= h($b['durum_etiket']) ?>

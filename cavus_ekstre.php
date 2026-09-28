@@ -143,7 +143,7 @@ render_flash();
 <?php foreach ($satirlar as $s): ?>
 <tr>
     <td class="muted"><?= h(date('d.m.Y', strtotime($s['tarih']))) ?></td>
-    <td><span class="pdks-badge <?= $s['tip'] === 'HAKEDIS' ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span></td>
+    <td><span class="pdks-badge <?= in_array($s['tip'], ['HAKEDIS','CAVUS_HAKEDIS'], true) ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span></td>
     <td class="pdks-uid"><?= h($s['belge']) ?></td>
     <td><?= h($s['aciklama']) ?></td>
     <td><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></td>
@@ -169,7 +169,7 @@ render_flash();
             <div class="pdks-row-name"><?= h($s['belge']) ?></div>
             <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($s['tarih']))) ?> · <?= h($s['aciklama']) ?></div>
         </div>
-        <span class="pdks-badge <?= $s['tip'] === 'HAKEDIS' ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span>
+        <span class="pdks-badge <?= in_array($s['tip'], ['HAKEDIS','CAVUS_HAKEDIS'], true) ? 'pdks-badge-eksik_cikis' : 'pdks-badge-aktif' ?>"><?= h($s['tip_etiket']) ?></span>
     </div>
     <div class="pdks-kiosk-counter-row"><span>Artış</span><span class="n"><?= $s['artis'] !== null ? h(number_format((float)$s['artis'], 2, ',', '.')) : '—' ?></span></div>
     <div class="pdks-kiosk-counter-row"><span>Azalış</span><span class="n"><?= $s['azalis'] !== null ? h(number_format((float)$s['azalis'], 2, ',', '.')) : '—' ?></span></div>

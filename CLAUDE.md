@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v270` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v271` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -313,6 +313,75 @@ Giriş: `cavus_fiyatlari.php`'de Tam/Yarım/FM kartının ALTINDA ayrı kart
   tablo yoksa açılışta çağırır, `migrate.php`'de de kart var). `pdks_faz8b_sema_hazir()`'e
   BİLEREK EKLENMEDİ — eklenseydi bu opsiyonel tablo yokken TÜM Faz 8B kilitlenirdi.
   Tablo yoksa hesap "ücret tanımsız" gibi davranır.
+
+## Çavuş Ücreti — Yöntem B (25 kişi-gün = 1 hakediş)
+
+Çavuşun kendi ücretini hesaplamanın **ikinci** yolu (varsayılan hâlâ Yöntem A —
+yukarıdaki günlük sabit ücret). Yöntem **çavuş bazında** seçilir
+(`cavus_fiyatlari.php`, "Hesaplama Yöntemi" kutusu), tarihe göre DEĞİL —
+geçmişi zaman damgalı tutulur, geriye dönük **değildir**.
+
+- **Dosyalar:** yöntem seçimi + 3 yeni tablo `config/pdks_faz8b.php`'nin
+  "ÇAVUŞ ÜCRETİ — YÖNTEM SEÇİMİ" bloğunda; kapanış motoru/orkestratörler/
+  listeler YENİ `config/pdks_faz8b_cavus_b.php`'de (`pdks_faz8b.php` +
+  `pdks_cari.php`'yi require eder). `pdks_cari.php`/`pdks_rapor.php`/
+  `pdks_hakedis.php` yeni tabloları yalnız ham SQL + "tablo yoksa atla"
+  deseniyle okur — bu yeni dosyayı require ETMEZ. Sayfalar: `cavus_fiyatlari.php`
+  (yöntem seçimi), `cavus_odeme.php` (kapanış tetiği + önizleme), YENİ
+  `cavus_donem_raporu.php` (dönem raporu, yalnız `raporlar.php`'den link).
+- **3 yeni tablo** (`pdks_faz8b_cavus_ucret_b_tablolar()`; kendi migrate/
+  sema_hazir çifti, `pdks_faz8b_sema_hazir()`'e BİLEREK EKLENMEZ, önkoşulu
+  Hakediş+Cari Hesap tabloları): `foreman_rate_method_log` (yöntem geçmişi,
+  zaman damgalı), `foreman_period_closures` (dönem kapanışı = tahakkuk),
+  `foreman_period_closure_items` (hangi KESİN hakediş hangi kapanışa dahil —
+  kişi-gün DONMUŞ, ASLA yeniden hesaplanmaz).
+- **Sayım kuralı:** `SUM(worker_count) WHERE worker_type_id IS NOT NULL`
+  (Çavuş Ücreti satırını ve gelecekteki "worker olmayan" satırları güvenle
+  dışlar). Bir final hakediş B havuzuna girer ⇔ `status='final'` VE
+  `finalized_at` dolu VE **finalize ANINDA** çavuşun yöntemi B'ydi
+  (`pdks_faz8b_cavus_ucret_yontem_anda()` — iş TARİHİNE değil, KESİNLEŞME
+  ANINA bakar) VE hakedişte "Çavuş Ücreti" satırı YOK VE hiçbir GEÇERLİ
+  kapanışın kalemi değil. A'dayken kesinleşen günler ASLA B'ye girmez (çift
+  ödeme); B→A→B geçişinde ARADA (A iken) kesinleşen günler de asla sayılmaz.
+- **Kapanış = ödeme, TEK transaction:** `pdks_faz8b_cavus_ucret_odeme_kaydet()`
+  tx açar → `pdks_faz8b_cavus_ucret_b_kilit()` (tx'in İLK sorgusu,
+  `SELECT ... FOR UPDATE`, yalnız MySQL) → `pdks_cari_odeme_ekle()` → yöntem
+  B ise `pdks_faz8b_cavus_ucret_b_kapat()` → commit. Biri başarısızsa HİÇBİRİ
+  yazılmaz. Eşzamanlılık AYRICA `chain_key` (`'F{çavuş}:P{önceki kapanış id
+  ya da 0}'`) + `UNIQUE uq_fpc_chain` ile korunur — 23000 → "eşzamanlı işlem"
+  Türkçe mesajı.
+- **Ücret tanımsız:** ödeme YİNE DE kaydedilir, kapanış YAPILMAZ (kişi-gün/
+  devir açıkta bekler, `audit closure_skipped`); sonraki ödemede (o tarihteki
+  ücretle) kapanır. **Adet 0 ama kişi-gün var** (ör. 24): kapanış YAZILIR,
+  tutar 0.00, devir 24. **Yeni kişi-gün YOK**: kapanış hiç YAZILMAZ.
+- **İptal yalnız orkestratörden** (`pdks_faz8b_cavus_ucret_odeme_iptal()`) —
+  `pdks_cari_odeme_iptal()` DOĞRUDAN çağrılırsa (bu ödemeye bağlı geçerli
+  kapanış varsa) `kapanis_bagli` ile REDDEDİLİR. Yalnız EN SON GEÇERLİ
+  kapanış geri alınabilir (`kapanis_en_son_degil` — daha yeni kapanış varsa
+  önce o iptal edilmeli). İptal → kapanış `status='cancelled'` + `chain_key
+  NULL` (satır SİLİNMEZ), kişi-günler sonraki kapanışta yeniden sayılır.
+- **Cari:** `pdks_cari_bakiye()` / `pdks_rapor_bakiye_toplu()` /
+  `pdks_rapor_cavus_bakiye_toplu()` ÜÇÜ de geçerli kapanışları `hakedis_kurus`'a
+  (+ bilgi amaçlı `cavus_hakedis_kurus`) ekler. **Kullanıcı cevabı:**
+  `pdks_rapor_finansal_kpi()` / `pdks_rapor_gunluk_trend()` /
+  `pdks_rapor_cavus_ozeti()` dönem hakedişi DE B kapanışlarını içerir (tarih
+  filtresi `closure_date`, **depo filtresi UYGULANMAZ** — bir kapanış birden
+  çok gün/depoyu kapsayabilir). `pdks_hakedis_yeniden_ac()`'a YALNIZ EKLEME:
+  geçerli bir B kapanışının kalemi olan hakediş `b_kapanisina_dahil` ile
+  yeniden açılamaz.
+- **Ekstre:** `CAVUS_HAKEDIS` satırı `pdks_cari_ekstre()`'ye AYRI bir satır
+  türü olarak eklenir, ödemeyle AYNI tarihte ama `siralama_oncelik=0` ile o
+  ödeme satırından ÖNCE sıralanır. Açıklama biçimi sabit: "Çavuş Hakedişi —
+  N kişi-gün (+D devir) → K hakediş × ücret, devir R".
+- **Toplu döküm** (`cavus_toplu_dokum.php` + `_yazdir.php`): ay içindeki B
+  kapanışları mevcut günlük tablonun ALTINDA ayrı bir bölümdür (kapanış
+  ödeme tarihine göre o aya düşer, depo filtresiz).
+- **Dönem raporu** yalnız `raporlar.php`'den link alır (`personel_takip.php`'ye
+  kart EKLENMEZ — kullanıcı cevabı). Yetki: `require_pdks_rapor()` +
+  `pdks_rapor_can('financial')` + export'ta `reports.export`.
+- **Test:** `php scripts/pdks_cavus_b_smoke.php` (bellek içi SQLite, gerçek
+  DDL çevirici + gerçek fonksiyonlar — canlı DB'ye dokunmaz). Yöntem B'ye
+  dokunan HERHANGİ bir değişiklikten sonra çalıştır.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

@@ -6,6 +6,7 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_rapor.php';
+require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
@@ -18,6 +19,8 @@ $ay = trim((string)($_GET['ay'] ?? date('Y-m')));
 if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $ay)) {
     $ay = date('Y-m');
 }
+$start = $ay . '-01';
+$end = date('Y-m-t', strtotime($start));
 
 $cavusId = filter_var(
     $_GET['cavus'] ?? null,
@@ -51,6 +54,10 @@ $satirlar = $faz8aHazir
         $finansalGosterilebilir,
         $pdo
     )
+    : [];
+
+$bKapanislar = ($finansalGosterilebilir && pdks_faz8b_cavus_ucret_b_sema_hazir($pdo))
+    ? pdks_faz8b_cavus_ucret_b_kapanis_listesi($cavusId, $start, $end, 'valid', $pdo)
     : [];
 
 $toplamIsci = 0;
@@ -262,6 +269,36 @@ render_flash();
 </script>
 
 <?php endif; ?>
+
+<?php if ($bKapanislar): ?>
+<h2 style="font-size:1.05rem;margin-top:24px">🧮 Çavuş Hakedişi (Yöntem B) — <?= h(date('m/Y', strtotime($ay . '-01'))) ?> Kapanışları</h2>
+<p class="muted" style="font-size:.82rem">Kapanış ödeme tarihine göre bu aya düşer; depo filtresi uygulanmaz (dönem birden çok gün/depoyu kapsar).</p>
+<div class="table-wrap">
+<table class="data-table">
+<thead><tr><th>Kapanış Tarihi</th><th>Çavuş</th><th>Devreden</th><th>Dönem Kişi-Gün</th><th>Hakediş Adedi</th><th>Birim Ücret</th><th>Tutar</th><th>Yeni Devir</th></tr></thead>
+<tbody>
+<?php $bToplamlar = []; foreach ($bKapanislar as $k): $bToplamlar[$k['currency']] = ($bToplamlar[$k['currency']] ?? 0) + (float)$k['amount']; ?>
+<tr>
+    <td><?= h(date('d.m.Y', strtotime($k['closure_date']))) ?></td>
+    <td><?= h($k['foreman_name']) ?></td>
+    <td><?= (int)$k['carry_in'] ?></td>
+    <td><?= (int)$k['period_person_days'] ?></td>
+    <td><strong><?= (int)$k['earned_units'] ?></strong></td>
+    <td><?= h(number_format((float)$k['unit_rate'], 2, ',', '.')) ?> <?= h($k['currency']) ?></td>
+    <td><strong><?= h(number_format((float)$k['amount'], 2, ',', '.')) ?> <?= h($k['currency']) ?></strong></td>
+    <td><?= (int)$k['carry_out'] ?></td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+<p style="font-weight:700">
+<?php foreach ($bToplamlar as $cur => $tp): ?>
+Toplam: <?= h(number_format($tp, 2, ',', '.')) ?> <?= h($cur) ?><br>
+<?php endforeach; ?>
+</p>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <?php render_footer(); ?>

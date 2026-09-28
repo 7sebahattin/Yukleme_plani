@@ -309,6 +309,8 @@ $helpersBeklenenEskiSatirlar = [
     "-    define('APP_SURUM', 'v263');",
     // personel_takip bug çalışması: APP_SURUM v264'ten v265'e çekildi.
     "-    define('APP_SURUM', 'v264');",
+    // Çavuş Ücreti Yöntem B (25 kişi-gün = 1 hakediş): APP_SURUM v270'ten v271'e çekildi.
+    "-    define('APP_SURUM', 'v270');",
     '-function render_desktop_sidebar(string $base): void {',
     '-    $_fn   = function_exists(\'can\');',
     '-    $p_dash  = !$_fn || can(\'dashboard.read\');',

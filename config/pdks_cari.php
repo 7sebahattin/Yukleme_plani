@@ -257,6 +257,19 @@ function pdks_cari_odeme_iptal(int $paymentId, string $sebep, int $userId, ?PDO 
     if (!$odeme) return ['ok' => false, 'kod' => 'odeme_yok', 'hata' => 'Ödeme kaydı bulunamadı.'];
     if ($odeme['status'] === 'cancelled') return ['ok' => false, 'kod' => 'zaten_iptal', 'hata' => 'Bu ödeme zaten iptal edilmiş.'];
 
+    // Çavuş Ücreti Yöntem B: bu ödemeye bağlı GEÇERLİ bir dönem kapanışı
+    // varsa, iptal YALNIZ o kapanışı da geri alan orkestratörden
+    // (pdks_faz8b_cavus_ucret_odeme_iptal()) yapılabilir — burası TEK
+    // BAŞINA çağrılırsa kapanış "yetim" kalır (ödeme iptal, kapanış geçerli).
+    if (pdks_cari_tablo_var($pdo, 'foreman_period_closures')) {
+        $stKb = $pdo->prepare("SELECT 1 FROM foreman_period_closures WHERE payment_id = ? AND status = 'valid' LIMIT 1");
+        $stKb->execute([$paymentId]);
+        if ($stKb->fetchColumn()) {
+            return ['ok' => false, 'kod' => 'kapanis_bagli',
+                'hata' => 'Bu ödemeye bağlı geçerli bir Çavuş Hakedişi (Yöntem B) kapanışı var. İptal, kapanışı da geri alan Çavuş Ödeme ekranından yapılmalıdır.'];
+        }
+    }
+
     $simdi = date('Y-m-d H:i:s');
     $upd = $pdo->prepare(
         "UPDATE foreman_payments SET status='cancelled', cancelled_at=?, cancelled_by_user_id=?, cancellation_reason=? WHERE id=?"
@@ -356,18 +369,43 @@ function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
     $stP->execute([$foremanId]);
     foreach ($stP->fetchAll() as $p) {
         $cur = (string)$p['currency'];
-        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
+        if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'cavus_hakedis_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
         $sonuc[$cur]['odeme_kurus'] += pdks_hakedis_tl_kurus((string)$p['amount']);
         if ($sonuc[$cur]['son_odeme_tarihi'] === null || $p['payment_date'] > $sonuc[$cur]['son_odeme_tarihi']) {
             $sonuc[$cur]['son_odeme_tarihi'] = $p['payment_date'];
         }
     }
 
+    // Çavuş Ücreti Yöntem B (25 kişi-gün = 1 hakediş) dönem kapanışları —
+    // TL olarak hakedişle AYNI yönde/kategoride cariye ALACAK yazılır
+    // (bkz. config/pdks_faz8b_cavus_b.php). Tablo henüz migrate edilmemişse
+    // (foreman_period_closures yok) bu blok SESSİZCE atlanır.
+    if (pdks_cari_tablo_var($pdo, 'foreman_period_closures')) {
+        $stK = $pdo->prepare(
+            "SELECT currency, amount, closure_date FROM foreman_period_closures
+              WHERE foreman_id = ? AND status = 'valid'"
+        );
+        $stK->execute([$foremanId]);
+        foreach ($stK->fetchAll() as $k) {
+            $cur = (string)$k['currency'];
+            if (!isset($sonuc[$cur])) $sonuc[$cur] = ['hakedis_kurus' => 0, 'duzeltme_kurus' => 0, 'odeme_kurus' => 0, 'cavus_hakedis_kurus' => 0, 'son_hakedis_tarihi' => null, 'son_odeme_tarihi' => null];
+            if (!isset($sonuc[$cur]['cavus_hakedis_kurus'])) $sonuc[$cur]['cavus_hakedis_kurus'] = 0;
+            $kurus = pdks_hakedis_tl_kurus((string)$k['amount']);
+            $sonuc[$cur]['hakedis_kurus'] += $kurus;
+            $sonuc[$cur]['cavus_hakedis_kurus'] += $kurus;
+            if ($sonuc[$cur]['son_hakedis_tarihi'] === null || $k['closure_date'] > $sonuc[$cur]['son_hakedis_tarihi']) {
+                $sonuc[$cur]['son_hakedis_tarihi'] = $k['closure_date'];
+            }
+        }
+    }
+
     foreach ($sonuc as $cur => &$s) {
+        if (!isset($s['cavus_hakedis_kurus'])) $s['cavus_hakedis_kurus'] = 0;
         $s['bakiye_kurus'] = $s['hakedis_kurus'] + $s['duzeltme_kurus'] - $s['odeme_kurus'];
         $s['hakedis_toplam']  = pdks_hakedis_kurus_tl($s['hakedis_kurus']);
         $s['duzeltme_toplam'] = pdks_hakedis_kurus_tl($s['duzeltme_kurus']);
         $s['odeme_toplam']    = pdks_hakedis_kurus_tl($s['odeme_kurus']);
+        $s['cavus_hakedis_toplam'] = pdks_hakedis_kurus_tl($s['cavus_hakedis_kurus']);
         $s['bakiye']          = pdks_hakedis_kurus_tl($s['bakiye_kurus']);
         $s['durum'] = $s['bakiye_kurus'] > 0 ? 'borc' : ($s['bakiye_kurus'] < 0 ? 'avans' : 'kapali');
         $s['durum_etiket'] = match ($s['durum']) {
@@ -504,12 +542,39 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
         ];
     }
 
+    // Çavuş Ücreti Yöntem B — dönem kapanışı, AYRI bir finansal olay satırı
+    // olarak (bkz. Faz 9D düzeltme deseni, yukarısı). Kapanışı yapan ödemeyle
+    // AYNI tarihte görünür ve o ödeme satırından ÖNCE sıralanır (siralama_oncelik).
+    if (pdks_cari_tablo_var($pdo, 'foreman_period_closures')) {
+        $whereK = ['k.foreman_id = ?', "k.status = 'valid'"]; $parK = [$foremanId];
+        if ($baslangic !== null && $baslangic !== '') { $whereK[] = 'k.closure_date >= ?'; $parK[] = $baslangic; }
+        if ($bitis !== null && $bitis !== '')       { $whereK[] = 'k.closure_date <= ?'; $parK[] = $bitis; }
+        $stK = $pdo->prepare(
+            "SELECT k.*, p.created_at AS odeme_olusturma FROM foreman_period_closures k
+               JOIN foreman_payments p ON p.id = k.payment_id
+              WHERE " . implode(' AND ', $whereK)
+        );
+        $stK->execute($parK);
+        foreach ($stK->fetchAll() as $k) {
+            $satirlar[(string)$k['currency']][] = [
+                'tarih' => $k['closure_date'], 'tip' => 'CAVUS_HAKEDIS', 'tip_etiket' => 'ÇAVUŞ HAKEDİŞİ',
+                'belge' => 'CVH-' . str_pad((string)$k['id'], 6, '0', STR_PAD_LEFT),
+                'aciklama' => pdks_cari_cavus_hakedis_aciklama($k),
+                'artis_kurus' => pdks_hakedis_tl_kurus((string)$k['amount']), 'azalis_kurus' => 0,
+                'siralama_zaman' => $k['odeme_olusturma'], 'siralama_oncelik' => 0, 'siralama_id' => (int)$k['id'],
+                'kaynak_id' => (int)$k['id'],
+            ];
+        }
+    }
+
     $sonuc = [];
     foreach ($satirlar as $cur => $hareketler) {
         usort($hareketler, function ($a, $b) {
             $c = strcmp((string)$a['tarih'], (string)$b['tarih']);
             if ($c !== 0) return $c;
             $c = strcmp((string)$a['siralama_zaman'], (string)$b['siralama_zaman']);
+            if ($c !== 0) return $c;
+            $c = ($a['siralama_oncelik'] ?? 1) <=> ($b['siralama_oncelik'] ?? 1);
             if ($c !== 0) return $c;
             return $a['siralama_id'] <=> $b['siralama_id'];
         });
@@ -538,6 +603,14 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
 // formundaki seçenek metinleriyle (Banka/Havale, Nakit, Diğer) AYNI
 // sözlük — iki ayrı çeviri kaynağı AÇILMADI.
 // =========================================================
+
+/** cavus_ekstre.php'nin ÇAVUŞ HAKEDİŞİ (Yöntem B) satırının açıklaması. */
+function pdks_cari_cavus_hakedis_aciklama(array $k): string
+{
+    return 'Çavuş Hakedişi — ' . (int)$k['period_person_days'] . ' kişi-gün (+' . (int)$k['carry_in'] . ' devir) → '
+        . (int)$k['earned_units'] . ' hakediş × ' . number_format(pdks_hakedis_tl_kurus((string)$k['unit_rate']) / 100, 2, ',', '.')
+        . ' ' . $k['currency'] . ', devir ' . (int)$k['carry_out'];
+}
 
 function pdks_cari_odeme_yontem_etiketi(string $yontem): string
 {
