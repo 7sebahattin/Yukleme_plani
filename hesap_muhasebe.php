@@ -43,28 +43,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toplu_durum'])) {
         'tarih_bas' => $_POST['f_tarih_bas'] ?? '',
         'tarih_son' => $_POST['f_tarih_son'] ?? '',
         'durum'     => $_POST['f_durum'] ?? '',
+        'personel'  => $_POST['f_personel'] ?? '',
     ])));
     exit;
 }
 
+// Kapsam (K-2): yönetici varsayılan olarak TÜM personeli görür; diğerleri (muhasebe
+// dahil) yalnız KENDİ kayıtlarını — hesap.approve görünürlük vermez.
+$yonetici = hesap_sees_all();
+$kapsam   = hesap_kapsam_coz($_GET['personel'] ?? null, $yonetici ? 'tum' : 'kendi');
+$kq       = hesap_kapsam_query($kapsam);
+
 $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
+if ($tarih_b !== '' && !hesap_tarih_gecerli($tarih_b)) $tarih_b = '';
+if ($tarih_s !== '' && !hesap_tarih_gecerli($tarih_s)) $tarih_s = '';
 $durum_f = trim($_GET['durum'] ?? 'bekleyen');   // 'bekleyen' | '' (tümü) | durum kodu
+if ($durum_f !== 'bekleyen' && $durum_f !== '' && !hesap_status_valid($durum_f)) $durum_f = 'bekleyen';
 
 $where  = ['1=1'];
 $params = [];
 if ($durum_f === 'bekleyen') {
-    $ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
-    $where[] = "at.status IN ($ph)";
-    $params  = array_merge($params, hesap_pending_statuses());
-} elseif ($durum_f !== '' && hesap_status_valid($durum_f)) {
+    // Onay kuyruğu: yalnız GÖNDERİLMİŞ kayıtlar — taslaklar onay beklemez
+    $where[]  = "at.status = ?";
+    $params[] = 'submitted';
+} elseif ($durum_f !== '') {
     $where[]  = "at.status=?";
     $params[] = $durum_f;
 }
 if ($tarih_b) { $where[] = "at.transaction_date>=?"; $params[] = $tarih_b; }
 if ($tarih_s) { $where[] = "at.transaction_date<=?"; $params[] = $tarih_s; }
-[$dsql, $dparams] = depo_sql_in('at.depo');
-if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
+// Kişisel kapsam — sahipsiz kayıt kuyruğa girmez (önce hesap_sahipsiz.php'den atanır), depo yok
+[$ksql, $kparams] = hesap_kapsam_sql($kapsam, 'at.user_id');
+$where[] = $ksql;
+$params  = array_merge($params, $kparams);
 $wstr = implode(' AND ', $where);
 
 $st = db()->prepare("SELECT at.*, COALESCE(u.display_name, u.username, '') AS personel
@@ -75,8 +87,19 @@ $st = db()->prepare("SELECT at.*, COALESCE(u.display_name, u.username, '') AS pe
 $st->execute($params);
 $rows = $st->fetchAll();
 
-// Personel bazlı bakiye özeti
-$personel_bakiye = hesap_balance_by_user($tarih_b ?: null, $tarih_s ? date('Y-m-d', strtotime($tarih_s . ' +1 day')) : null);
+// Personel bazlı bakiye özeti — YALNIZ yönetici (hesap_balance_by_user değilse [] döner)
+$personel_bakiye = $yonetici && $kapsam['tip'] === 'tum'
+    ? hesap_balance_by_user($tarih_b ?: null, $tarih_s ? date('Y-m-d', strtotime($tarih_s . ' +1 day')) : null)
+    : [];
+
+// Yönetici kişi süzgeci
+$personel_listesi = [];
+if ($yonetici) {
+    try {
+        $personel_listesi = db()->query("SELECT id, COALESCE(NULLIF(display_name,''), username) AS ad
+                                         FROM users WHERE is_active = 1 ORDER BY ad")->fetchAll();
+    } catch (PDOException $e) { $personel_listesi = []; }
+}
 
 // Kategoriye göre gruplama
 $gruplar = [];
@@ -92,14 +115,17 @@ render_flash();
 <div class="page-head">
     <div>
         <h1>🗂️ Muhasebe Onay Kuyruğu</h1>
-        <p class="muted"><?= count($rows) ?> kayıt</p>
+        <p class="muted"><?= count($rows) ?> kayıt<?php if ($kapsam['tip'] === 'kisi'): ?> · <?= h($kapsam['ad']) ?><?php endif; ?></p>
+        <?php if (!$yonetici): ?>
+        <p class="muted hs-kapsam-not">Yalnız kendi kayıtlarınız listelenir. Diğer personelin kayıtlarını yönetici onaylar.</p>
+        <?php endif; ?>
     </div>
     <div class="hs-actions">
-        <a href="hesap_liste.php" class="btn btn-ghost">← Tüm Kayıtlar</a>
-        <?php $_hx_q = array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s]); ?>
+        <a href="hesap_liste.php?<?= http_build_query($kq) ?>" class="btn btn-ghost">← <?= $kapsam['kendi'] ? 'Kayıtlarım' : 'Tüm Kayıtlar' ?></a>
+        <?php $_hx_q = array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s]) + $kq; ?>
         <?= export_menu('hesap_export.php?' . http_build_query($_hx_q + ['bicim' => 'csv']), 'hesap_export.php?' . http_build_query($_hx_q + ['bicim' => 'xlsx']), 'Excel İndir', 'btn btn-ghost') ?>
-        <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
-        <a href="hesap_muhasebe_fis_pdf.php?<?= http_build_query(array_filter(['tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s])) ?>" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
+        <a href="hesap_yazdir.php?<?= http_build_query(array_filter(['durum'=>$durum_f,'tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s]) + $kq) ?>" class="btn btn-ghost" target="_blank">📄 PDF Rapor</a>
+        <a href="hesap_muhasebe_fis_pdf.php?<?= http_build_query(array_filter(['tarih_bas'=>$tarih_b,'tarih_son'=>$tarih_s]) + $kq) ?>" class="btn btn-ghost" target="_blank">📸 Fiş Foto PDF</a>
     </div>
 </div>
 
@@ -116,14 +142,30 @@ render_flash();
     <div class="hs-filter-row">
         <span class="hs-filter-label">Durum</span>
         <select name="durum" class="hs-select">
-            <option value="bekleyen" <?= $durum_f === 'bekleyen' ? 'selected' : '' ?>>Onay bekleyenler</option>
+            <option value="bekleyen" <?= $durum_f === 'bekleyen' ? 'selected' : '' ?>>Onay bekleyenler (gönderildi)</option>
             <option value="" <?= $durum_f === '' ? 'selected' : '' ?>>Tümü</option>
             <?php foreach (hesap_statuses() as $kod => $meta): ?>
             <option value="<?= h($kod) ?>" <?= $durum_f === $kod ? 'selected' : '' ?>><?= h($meta['label']) ?></option>
             <?php endforeach; ?>
         </select>
+        <?php if (!$yonetici): ?>
+        <button class="btn btn-sm btn-primary" style="margin-left:auto">Filtrele</button>
+        <?php endif; ?>
+    </div>
+    <?php if ($yonetici): ?>
+    <div class="hs-filter-row">
+        <span class="hs-filter-label">Personel</span>
+        <select name="personel" class="hs-select">
+            <option value="tum" <?= $kapsam['tip'] === 'tum' ? 'selected' : '' ?>>Tüm personel</option>
+            <?php $me_id = (int)(current_user()['id'] ?? 0); ?>
+            <?php foreach ($personel_listesi as $pu): $pid = (int)$pu['id'];
+                $sec = ($kapsam['tip'] === 'kisi' && (int)$kapsam['uid'] === $pid) || ($kapsam['kendi'] && $pid === $me_id); ?>
+            <option value="<?= $pid ?>" <?= $sec ? 'selected' : '' ?>><?= h($pu['ad']) ?></option>
+            <?php endforeach; ?>
+        </select>
         <button class="btn btn-sm btn-primary" style="margin-left:auto">Filtrele</button>
     </div>
+    <?php endif; ?>
 </form>
 
 <!-- Personel bakiye özeti -->
@@ -151,7 +193,7 @@ render_flash();
 <?php endif; ?>
 
 <?php if (empty($rows)): ?>
-<div class="empty"><p>Bekleyen muhasebe kaydı yok.</p></div>
+<div class="hs-empty"><span class="hs-empty-icon" aria-hidden="true">✅</span><p>Bekleyen muhasebe kaydı yok.</p></div>
 <?php else: ?>
 
 <form method="post" id="topluForm">
@@ -159,6 +201,7 @@ render_flash();
 <input type="hidden" name="f_tarih_bas" value="<?= h($tarih_b) ?>">
 <input type="hidden" name="f_tarih_son" value="<?= h($tarih_s) ?>">
 <input type="hidden" name="f_durum" value="<?= h($durum_f) ?>">
+<input type="hidden" name="f_personel" value="<?= h((string)($kq['personel'] ?? '')) ?>">
 <input type="hidden" name="toplu_not" id="topluNot" value="">
 
 <div class="hs-actions" style="margin-bottom:12px">
@@ -179,7 +222,10 @@ render_flash();
 <div class="card" style="margin-bottom:16px">
     <div class="card-head">
         <h2><?= h($grup_adi) ?> <span class="muted">(<?= count($grup_rows) ?> kayıt)</span></h2>
-        <strong><?= fmt_para((float)array_sum(array_column($grup_rows, 'amount'))) ?></strong>
+        <?php // Para birimleri ASLA toplanmaz — grup toplamı kur başına ayrı yazılır
+              $g_kur = [];
+              foreach ($grup_rows as $gr) { $gc = $gr['currency'] ?: 'TRY'; $g_kur[$gc] = ($g_kur[$gc] ?? 0.0) + (float)$gr['amount']; } ?>
+        <strong><?= implode(' · ', array_map(fn($c, $t) => fmt_para($t, $c), array_keys($g_kur), $g_kur)) ?></strong>
     </div>
     <div class="table-wrap">
     <table class="data-table">
@@ -206,7 +252,7 @@ render_flash();
         <td class="muted"><?= $sira ?></td>
         <td class="muted"><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?></td>
         <td><span class="hesap-type-badge" style="background:<?= hesap_type_color($r['type']) ?>"><?= hesap_type_label($r['type']) ?></span></td>
-        <td class="muted"><?= h($r['personel'] ?: 'Atanmamış') ?></td>
+        <td class="muted"><?= h($r['personel'] !== '' ? $r['personel'] : 'Kullanıcı #' . (int)$r['user_id']) ?></td>
         <td><?= hesap_status_badge($r['status'] ?? null, true) ?></td>
         <td><?= h($r['person_company']) ?></td>
         <td><?= h($r['description']) ?></td>

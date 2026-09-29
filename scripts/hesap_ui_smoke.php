@@ -10,7 +10,9 @@
 //
 // Kapsam: PHP uyarı sızıntısı, HTML etiket dengesi, tek bakiye kartı,
 // tek birincil CTA, fiş-önce form sırası, çift form alanı olmaması,
-// rol bazlı görünürlük kapsamı.
+// kişisel hesap kapsamı (muhasebe DE yalnız kendi; başkasını yalnız
+// hesap.admin görür), içerik kilidi, yönetici ekranları.
+// Ayrıntılı izolasyon regresyonları: scripts/hesap_izolasyon_smoke.php
 // =========================================================
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -60,8 +62,8 @@ db()->exec("CREATE TABLE account_transactions (
 db()->exec("CREATE TABLE account_files (id INTEGER PRIMARY KEY AUTOINCREMENT,
   transaction_id INT, file_name TEXT, original_name TEXT DEFAULT '',
   file_type TEXT DEFAULT '', file_size INT DEFAULT 0, uploaded_at TEXT)");
-db()->exec("CREATE TABLE users (id INT, username TEXT, display_name TEXT)");
-db()->exec("INSERT INTO users VALUES (1,'test','Test Personel'),(2,'ali','Ali')");
+db()->exec("CREATE TABLE users (id INT, username TEXT, display_name TEXT, is_active INT DEFAULT 1)");
+db()->exec("INSERT INTO users (id,username,display_name) VALUES (1,'test','Test Personel'),(2,'ali','Ali')");
 
 $ins = db()->prepare("INSERT INTO account_transactions
  (user_id,transaction_date,type,category,amount,currency,status,person_company,description,review_note,has_files)
@@ -176,25 +178,32 @@ ok('masaüstü tablo korundu',               str_contains($l,'table-wrap pc-only
 ok('geçiş butonları data-* ile',           str_contains($l,'data-hs-durum='));
 ok('inline onclick hesapDurum gitti',      !str_contains($l,'onclick="hesapDurum'));
 ok('para birimi ayrı özet satırı',         cnt($l,'hs-sum-row') === 2, 'TRY ve USD ayrı satır olmalı');
-ok('USD net TRY ile toplanmadı',           str_contains($l,'-100,00 $') && str_contains($l,'1.424,00 ₺'));
+// O3: özet yalnız bakiyeye giren durumlar (3975 gelir − 480 onaylı gider); bekleyen ayrı
+ok('USD net TRY ile toplanmadı',           str_contains($l,'-100,00 $') && str_contains($l,'3.495,00 ₺'));
+ok('bekleyen net ayrı (−350)',             str_contains($l,'Bekleyen net') && str_contains($l,'-350,00 ₺'));
+ok('reddedilen 221 toplamlara girmedi',    !str_contains($l,'3.274,00') && !str_contains($l,'-571,00'));
 // Her kayıt iki kez basılır (masaüstü tablo + mobil kart)
 ok('ödenmiş kayıt kilitli — düzenle yok',  cnt($l,'hesap_kayit.php?id=3') === 0, 'paid kayıt düzenlenebilir görünüyor');
-ok('ödenmemiş kayıt düzenlenebilir',       cnt($l,'hesap_kayit.php?id=1') === 2);
+ok('ONAYLI kayıt da kilitli (K4)',         cnt($l,'hesap_kayit.php?id=1') === 0, 'approved kayıt düzenlenebilir görünüyor');
+ok('kilit rozeti görünüyor',               str_contains($l,'🔒 Onaylı'));
+ok('gönderilmiş kayıt düzenlenebilir',     cnt($l,'hesap_kayit.php?id=2') === 2);
 
 echo "\n── Boş durum ──\n";
 $b = renderPage('hesap_liste.php', ['q'=>'zzzyokzzz']);
 ok('boş durum kartı',                      str_contains($b,'hs-empty'));
 
-echo "\n── Muhasebe ──\n";
+echo "\n── Muhasebe (hesap.approve, yönetici DEĞİL) ──\n";
 $m = renderPage('hesap_muhasebe.php', []);
-ok('personel bakiye tablosu',              str_contains($m,'Personel Bakiyeleri'));
-ok('her iki personel listeleniyor',        str_contains($m,'Test Personel') && str_contains($m,'Ali'));
+ok('personel bakiye tablosu YOK',          !str_contains($m,'Personel Bakiyeleri'));
+ok('yalnız kendi kaydı (Yakıt 350) var',   str_contains($m,'Test Personel') && str_contains($m,'350,00'));
+ok('başkasının kaydı (Ali 1.500) YOK',     !str_contains($m,'1.500,00') && !str_contains($m,'>Ali<'));
+ok('"yalnız kendi kayıtlarınız" notu',     str_contains($m,'Yalnız kendi kayıtlarınız listelenir'));
 ok('onay/red toplu butonları',             str_contains($m,'Seçilenleri Onayla') && str_contains($m,'Reddet'));
 ok('.hs sarmalayıcısı var (token için)',   str_contains($m,'<div class="hs">'));
 ok('muhasebe filtre paneli var',           str_contains($m,'class="hs-filter-panel"'));
 ok('durum select\'i .hs-select ile stilli', (bool)preg_match('#<select name="durum" class="hs-select"#', $m));
 ok('eski inline btn-ghost select gitti',   !str_contains($m,'<select name="durum" class="btn btn-ghost"'));
-ok('"Tüm Kayıtlar" başlıkta, filtreden ayrı', (bool)preg_match('#page-head.*?Tüm Kayıtlar.*?</div>\s*</div>#s', $m));
+ok('kayıt linki başlıkta, filtreden ayrı', (bool)preg_match('#page-head.*?← (Kayıtlarım|Tüm Kayıtlar).*?</div>\s*</div>#s', $m));
 
 
 
@@ -207,12 +216,41 @@ ok('bakiye hâlâ 3.495,00',                      str_contains($d,'3.495,00'));
 $l = renderPage('hesap_liste.php', []);
 ok('listede de başkasının kaydı yok',          !str_contains($l,'Otel / Konaklama'));
 
-echo "\n── Muhasebe (hesap.approve VAR) ──\n";
+echo "\n── Muhasebe (hesap.approve VAR — görünürlük VERMEZ) ──\n";
 $PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay'];
 $d2 = renderPage('hesap.php', []);
-ok('muhasebe tüm personeli görüyor',            str_contains($d2,'1.500,00'));
+ok('muhasebe başkasının 1.500 kaydını GÖRMÜYOR', !str_contains($d2,'1.500,00'));
+ok('başlık "Hesabım"',                          str_contains($d2,'Hesabım'));
+ok('yönetici kartı yok (sahipsiz linki)',       !str_contains($d2,'hesap_sahipsiz.php') && !str_contains($d2,'hesap_personel.php'));
+ok('onay kuyruğu linki var',                    str_contains($d2,'hesap_muhasebe.php'));
 $l2 = renderPage('hesap_liste.php', []);
-ok('listede başkasının kaydı var',             str_contains($l2,'Otel / Konaklama'));
+ok('listede başkasının kaydı YOK',             !str_contains($l2,'Otel / Konaklama'));
+$l2p = renderPage('hesap_liste.php', ['personel' => 'tum']);
+ok('?personel=tum yönetici değilse yok sayılır', !str_contains($l2p,'Otel / Konaklama') && !str_contains($l2p,'yönetici görünümü'));
+ok('yönetici ekranı yönetici değilse 403',      str_starts_with(renderPage('hesap_personel.php'), '__ERROR__'));
+ok('sahipsiz ekranı yönetici değilse 403',      str_starts_with(renderPage('hesap_sahipsiz.php'), '__ERROR__'));
+
+echo "\n── Yönetici (hesap.admin) ──\n";
+$PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay','hesap.admin','reports.export'];
+$d4 = renderPage('hesap.php', []);
+ok('Hesabım yine KENDİ bakiyesi (3.495,00)',    str_contains($d4,'3.495,00') && !str_contains($d4,'1.500,00'));
+ok('yönetici kartı: Tüm Personel',              str_contains($d4,'hesap_personel.php'));
+ok('yönetici kartı: Sahipsiz Kayıtlar sayacı',  (bool)preg_match('#hesap_sahipsiz\.php.*?Sahipsiz Kayıtlar: <b>0</b>#s', $d4));
+$d5 = renderPage('hesap.php', ['personel' => '2']);
+ok('başkasının hesabı: şerit',                  str_contains($d5,'yönetici görünümü') && str_contains($d5,'Ali'));
+ok('başkasının hesabı: üçüncü şahıs etiketi',   !str_contains($d5,'Şirket size borçlu') && !str_contains($d5,'Şirkete borçlusunuz'));
+ok('başkasının hesabı: Harcama Ekle yok',       !str_contains($d5,'class="hs-cta"'));
+$l4 = renderPage('hesap_liste.php', ['personel' => 'tum']);
+ok('tüm personel listesi: başkasının kaydı var', str_contains($l4,'Otel / Konaklama'));
+ok('tüm personel listesi: Personel sütunu',     str_contains($l4,'<th>Personel</th>'));
+$m4 = renderPage('hesap_muhasebe.php', []);
+ok('yönetici kuyruğu: her iki personel',        str_contains($m4,'Test Personel') && str_contains($m4,'Ali'));
+ok('yönetici kuyruğu: Personel Bakiyeleri',     str_contains($m4,'Personel Bakiyeleri'));
+$p4 = renderPage('hesap_personel.php', []);
+ok('Tüm Personel ekranı render',                !str_starts_with($p4,'__ERROR__') && str_contains($p4,'Tüm Personel'));
+ok('Tüm Personel: iki kişi + USD ayrı',         str_contains($p4,'Ali') && str_contains($p4,'Test Personel') && str_contains($p4,'USD'));
+$s4 = renderPage('hesap_sahipsiz.php', []);
+ok('Sahipsiz ekranı render (boş)',              !str_starts_with($s4,'__ERROR__') && str_contains($s4,'Sahipsiz kayıt: <b>0</b>'));
 
 echo "\n── Yetkisiz: yazma yetkisi olmayan ──\n";
 $PERMS = ['hesap.read'];

@@ -9,6 +9,21 @@ hesap_migrate();
 
 $bugun = date('Y-m-d');
 
+// ── Kapsam: "Hesabım" — varsayılan KENDİ hesabı. Yalnız yönetici ?personel=<uid>
+//    ile başka birinin hesabına bakar (yönetici değilse parametre yok sayılır).
+//    Tüm şirketin tek bakiye kartı anlamsız → ?personel=tum Tüm Personel ekranına gider.
+$kapsam = hesap_kapsam_coz($_GET['personel'] ?? null, 'kendi');
+if ($kapsam['tip'] === 'tum') {
+    header('Location: hesap_personel.php');
+    exit;
+}
+$baskasi = !$kapsam['kendi'];                       // yönetici başkasına bakıyor
+$kq      = hesap_kapsam_query($kapsam);             // linklerin taşıyacağı parametre
+$kurl    = fn(string $sayfa, array $ek = []) => $sayfa . (($q = http_build_query($ek + $kq)) !== '' ? '?' . $q : '');
+if ($baskasi) {
+    audit_log_event('view', 'hesap', null, null, ['personel' => $kapsam['uid'], 'sayfa' => 'hesap.php']);
+}
+
 // Ay filtresi (GET: ay=2026-05)
 $ay_param = $_GET['ay'] ?? date('Y-m');
 if (!preg_match('/^\d{4}-\d{2}$/', $ay_param)) {
@@ -25,30 +40,25 @@ $ay_isimleri = [1=>'Ocak',2=>'Şubat',3=>'Mart',4=>'Nisan',5=>'Mayıs',6=>'Hazir
 $ay_label = $ay_isimleri[(int)date('n', strtotime($ay_bas))] . ' ' . date('Y', strtotime($ay_bas));
 
 // ── Bakiye — yalnız onaylı/ödenen kayıtlardan, para birimi ayrı ayrı ──
-// (B2/B3 düzeltmesi: para birimleri toplanmaz, sayaçlar kullanıcı+depo kapsamında)
-$ay_bal    = hesap_balance(null, $ay_bas, $ay_son);   // seçili ay
-$devir_bal = hesap_balance(null, null, $ay_bas);      // ay başından öncesi
-$tum_bal   = hesap_balance();                          // güncel bakiye (tüm zaman)
+// (B2/B3 düzeltmesi: para birimleri toplanmaz). Kişisel cari: yalnız bu kişinin
+// kayıtları, sahipsiz kayıt YOK, depo filtresi YOK.
+$ay_bal    = hesap_balance($kapsam['uid'], $ay_bas, $ay_son);   // seçili ay
+$devir_bal = hesap_balance($kapsam['uid'], null, $ay_bas);      // ay başından öncesi
+$tum_bal   = hesap_balance($kapsam['uid']);                      // güncel bakiye (tüm zaman)
 
 $ay_try    = $ay_bal['TRY'];
 $devir     = $devir_bal['TRY']['net'];
 $ay_net    = $ay_try['net'];
 $bakiye    = $tum_bal['TRY']['net'];
 $bekleyen_tutar = $tum_bal['TRY']['bekleyen'];
-$bakiye_info    = hesap_balance_label($bakiye);
+$bakiye_info    = hesap_balance_label($bakiye, $baskasi);
 
 // TRY dışı para birimleri ayrı gösterilir — asla TRY'ye eklenmez
 $diger_kurlar = array_filter($tum_bal, fn($k) => $k !== 'TRY', ARRAY_FILTER_USE_KEY);
 $diger_kurlar = array_filter($diger_kurlar, fn($v) => abs($v['net']) > 0.005 || $v['adet'] > 0);
 
-// ── Sayaçlar ve kategori toplamları — kullanıcı + depo kapsamlı ──
-$scope  = ['1=1'];
-$sparams = [];
-[$osql, $oparams] = hesap_owner_sql();
-if ($osql !== '') { $scope[] = $osql; $sparams = array_merge($sparams, $oparams); }
-[$dsql, $dparams] = depo_sql_in('depo');
-if ($dsql !== '') { $scope[] = $dsql; $sparams = array_merge($sparams, $dparams); }
-$scope_sql = implode(' AND ', $scope);
+// ── Sayaçlar ve kategori toplamları — kişi kapsamlı (depo yok) ──
+[$scope_sql, $sparams] = hesap_kapsam_sql($kapsam);
 
 $bal_ph  = implode(',', array_fill(0, count(hesap_balance_statuses()), '?'));
 $pend_ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
@@ -102,9 +112,11 @@ $red_st = db()->prepare("SELECT * FROM account_transactions
                          ORDER BY reviewed_at DESC, id DESC LIMIT 5");
 $red_st->execute($sparams);
 $reddedilenler = $red_st->fetchAll();
+// Yöneticiye özel kart: sahipsiz kayıt sayısı (SQL yazmadan görülsün)
+$yonetici = hesap_sees_all();
+$sahipsiz = $yonetici ? hesap_sahipsiz_sayisi() : 0;
 
-
-render_header('Hesap');
+render_header($baskasi ? $kapsam['ad'] . ' — Hesap' : 'Hesabım');
 hesap_assets();
 render_flash();
 ?>
@@ -112,18 +124,25 @@ render_flash();
 
 <div class="page-head">
     <div>
-        <h1>💰 Hesap</h1>
-        <p class="muted">Masraf ve fiş takibi</p>
+        <h1>💰 <?= $baskasi ? h($kapsam['ad']) . ' — Hesap' : 'Hesabım' ?></h1>
+        <p class="muted"><?= $baskasi ? 'Personelin masraf ve fiş hesabı' : 'Kendi masraf ve fiş hesabınız' ?></p>
     </div>
 </div>
 
+<?php if ($baskasi): ?>
+<div class="hs-kapsam" role="status">
+    <span>👤 <strong><?= h($kapsam['ad']) ?></strong> hesabı — yönetici görünümü</span>
+    <a href="hesap.php">Kendi hesabıma dön</a>
+</div>
+<?php endif; ?>
+
 <!-- ── Ay gezgini ── -->
 <nav class="hs-month" aria-label="Ay seçimi">
-    <a href="hesap.php?ay=<?= h($onceki_ay) ?>" class="hs-month-arrow" aria-label="Önceki ay">‹</a>
+    <a href="<?= h($kurl('hesap.php', ['ay' => $onceki_ay])) ?>" class="hs-month-arrow" aria-label="Önceki ay">‹</a>
     <span class="hs-month-label">
         <?= h($ay_label) ?><?= $bu_ay_mi ? '<span class="hs-month-tag">Bu Ay</span>' : '' ?>
     </span>
-    <a href="hesap.php?ay=<?= h($sonraki_ay) ?>"
+    <a href="<?= h($kurl('hesap.php', ['ay' => $sonraki_ay])) ?>"
        class="hs-month-arrow<?= $bu_ay_mi ? ' disabled' : '' ?>"
        <?= $bu_ay_mi ? 'aria-disabled="true" tabindex="-1"' : '' ?> aria-label="Sonraki ay">›</a>
 </nav>
@@ -140,7 +159,7 @@ render_flash();
             Bu ay net <?= fmt_para($ay_net) ?>
         </p>
         <?php if (abs($bekleyen_tutar) > 0.005 || (int)$sayac['bekleyen'] > 0): ?>
-        <a href="hesap_liste.php?durum=submitted" class="hs-balance-pending">
+        <a href="<?= h($kurl('hesap_liste.php', ['durum' => 'submitted'])) ?>" class="hs-balance-pending">
             ⏳ <?= (int)$sayac['bekleyen'] ?> kayıt onay bekliyor
             <?php if (abs($bekleyen_tutar) > 0.005): ?>· <?= fmt_para(abs($bekleyen_tutar)) ?><?php endif; ?>
         </a>
@@ -148,7 +167,7 @@ render_flash();
 
         <?php if (!empty($diger_kurlar)): ?>
         <div class="hs-balance-cur">
-            <?php foreach ($diger_kurlar as $cur => $b): $bi = hesap_balance_label($b['net']); ?>
+            <?php foreach ($diger_kurlar as $cur => $b): $bi = hesap_balance_label($b['net'], $baskasi); ?>
             <span class="hs-cur-chip">
                 <?= h($cur) ?>
                 <b class="<?= $bi['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($bi['tutar'], $cur) ?></b>
@@ -161,24 +180,36 @@ render_flash();
 
     <!-- ── Birincil eylem + ikincil menü ── -->
     <div class="hs-actions-col">
-        <?php if (hesap_can('write')): ?>
+        <?php /* Başkası adına kayıt YOK — yönetici başkasına bakarken ekleme eylemleri gizli */ ?>
+        <?php if (hesap_can('write') && !$baskasi): ?>
         <a href="hesap_kayit.php?hizli=gider" class="hs-cta">
             <span class="hs-cta-icon" aria-hidden="true">📷</span> Harcama Ekle
         </a>
         <?php endif; ?>
         <div class="hs-secondary">
-            <?php if (hesap_can('write')): ?>
+            <?php if (hesap_can('write') && !$baskasi): ?>
             <button type="button" class="btn" data-hs-sheet="hsQuickSheet">⚡ Diğer Kayıt Türü</button>
             <?php endif; ?>
             <button type="button" class="btn" data-hs-sheet="hsMoreSheet">⋯ Daha Fazla</button>
         </div>
+
+        <?php if ($yonetici): ?>
+        <nav class="hs-yonetici" aria-label="Yönetici">
+            <a class="hs-yonetici-item" href="hesap_personel.php">
+                <span aria-hidden="true">👥</span><span>Tüm Personel</span>
+            </a>
+            <a class="hs-yonetici-item<?= $sahipsiz > 0 ? ' hs-yonetici-uyari' : '' ?>" href="hesap_sahipsiz.php">
+                <span aria-hidden="true">🗂</span><span>Sahipsiz Kayıtlar: <b><?= (int)$sahipsiz ?></b></span>
+            </a>
+        </nav>
+        <?php endif; ?>
     </div>
 </div>
 
 <!-- ── Reddedilenler ── -->
 <?php if (!empty($reddedilenler)): ?>
 <div class="hs-alert" role="alert">
-    <strong><?= count($reddedilenler) ?> fiş reddedildi — düzeltip yeniden gönderin</strong>
+    <strong><?= count($reddedilenler) ?> fiş reddedildi<?= $baskasi ? '' : ' — düzeltip yeniden gönderin' ?></strong>
     <ul>
         <?php foreach ($reddedilenler as $rr): ?>
         <li>
@@ -213,14 +244,14 @@ render_flash();
 <div class="hs-empty">
     <span class="hs-empty-icon" aria-hidden="true">🧾</span>
     <p>Henüz kayıt yok. İlk fişinizi ekleyin.</p>
-    <?php if (hesap_can('write')): ?>
+    <?php if (hesap_can('write') && !$baskasi): ?>
     <a href="hesap_kayit.php?hizli=gider" class="btn btn-primary">📷 Harcama Ekle</a>
     <?php endif; ?>
 </div>
 <?php else: ?>
 <div class="hs-section-head">
     <h2>Son İşlemler</h2>
-    <a href="hesap_liste.php">Tümü →</a>
+    <a href="<?= h($kurl('hesap_liste.php')) ?>">Tümü →</a>
 </div>
 <div class="hs-tx-list">
 <?php foreach ($son_islemler as $t):
@@ -253,7 +284,7 @@ render_flash();
 <?php endif; ?>
 
 <!-- ── Alt sayfa: kayıt türleri ── -->
-<?php if (hesap_can('write')): ?>
+<?php if (hesap_can('write') && !$baskasi): ?>
 <div class="hs-sheet-ovl" id="hsQuickSheet" hidden role="dialog" aria-modal="true" aria-label="Kayıt türü seç">
     <div class="hs-sheet">
         <div class="hs-sheet-grip" aria-hidden="true"></div>
@@ -284,31 +315,31 @@ render_flash();
         <div class="hs-sheet-grip" aria-hidden="true"></div>
         <p class="hs-sheet-title">Daha fazla</p>
         <div class="hs-sheet-list">
-            <a class="hs-sheet-item" href="hesap_liste.php">
+            <a class="hs-sheet-item" href="<?= h($kurl('hesap_liste.php')) ?>">
                 <span class="hs-sheet-icon" aria-hidden="true">📋</span>
-                <span>Tüm Kayıtlar<span class="hs-sheet-sub"><?= (int)$sayac['toplam_kayit'] ?> kayıt</span></span>
+                <span><?= $baskasi ? 'Kayıtları' : 'Kayıtlarım' ?><span class="hs-sheet-sub"><?= (int)$sayac['toplam_kayit'] ?> kayıt</span></span>
             </a>
             <?php if (hesap_can('approve')): ?>
             <a class="hs-sheet-item" href="hesap_muhasebe.php">
                 <span class="hs-sheet-icon" aria-hidden="true">🗂️</span>
-                <span>Muhasebe Onay Kuyruğu<span class="hs-sheet-sub"><?= (int)$sayac['bekleyen'] ?> kayıt bekliyor</span></span>
+                <span>Muhasebe Onay Kuyruğu<span class="hs-sheet-sub"><?= $yonetici ? 'Tüm personelin gönderilen kayıtları' : 'Yalnız kendi kayıtlarınız' ?></span></span>
             </a>
             <?php endif; ?>
-            <a class="hs-sheet-item" href="hesap_muhasebe_fis_pdf.php" target="_blank" rel="noopener">
+            <a class="hs-sheet-item" href="<?= h($kurl('hesap_muhasebe_fis_pdf.php')) ?>" target="_blank" rel="noopener">
                 <span class="hs-sheet-icon" aria-hidden="true">📸</span>
-                <span>Fiş Fotoğraf Dökümü<span class="hs-sheet-sub">Yazdırılabilir sayfa</span></span>
+                <span><?= $baskasi ? 'Bekleyen Fişleri (PDF)' : ($yonetici ? 'Fiş Fotoğraf Dökümü' : 'Bekleyen Fişlerim (PDF)') ?><span class="hs-sheet-sub">Yazdırılabilir sayfa</span></span>
             </a>
             <?php if (can('reports.export')): ?>
-            <a class="hs-sheet-item" href="hesap_export.php?bicim=xlsx">
+            <a class="hs-sheet-item" href="<?= h($kurl('hesap_export.php', ['bicim' => 'xlsx'])) ?>">
                 <span class="hs-sheet-icon" aria-hidden="true">📊</span>
                 <span>XLSX İndir<span class="hs-sheet-sub">Biçimli Excel · para birimi özeti ayrı sayfada</span></span>
             </a>
-            <a class="hs-sheet-item" href="hesap_export.php?bicim=csv">
+            <a class="hs-sheet-item" href="<?= h($kurl('hesap_export.php', ['bicim' => 'csv'])) ?>">
                 <span class="hs-sheet-icon" aria-hidden="true">📄</span>
                 <span>CSV İndir<span class="hs-sheet-sub">Düz metin · başka programa aktarım</span></span>
             </a>
             <?php endif; ?>
-            <a class="hs-sheet-item" href="hesap_yazdir.php?<?= http_build_query(['tarih_bas'=>$ay_bas,'tarih_son'=>date('Y-m-d', strtotime($ay_son . ' -1 day'))]) ?>"
+            <a class="hs-sheet-item" href="<?= h($kurl('hesap_yazdir.php', ['tarih_bas'=>$ay_bas,'tarih_son'=>date('Y-m-d', strtotime($ay_son . ' -1 day'))])) ?>"
                target="_blank" rel="noopener">
                 <span class="hs-sheet-icon" aria-hidden="true">📄</span>
                 <span>PDF Dönem Raporu<span class="hs-sheet-sub"><?= h($ay_label) ?> · logo, özet, fiş görselleri</span></span>

@@ -9,7 +9,8 @@
 //
 // Kapsam: veri toplama (para birimi/personel/kategori kırılımı), HTML rapor
 // bölümleri, gerçek PDF üretimi, gömülü görseller, sayfa numarası,
-// Türkçe karakter kaçışı, XSS kaçırma, görsel sınırı.
+// Türkçe karakter kaçışı, XSS kaçırma, görsel sınırı, KİŞİSEL KAPSAM
+// (K1: yönetici olmayanın raporunda başka personelin adı/devri çıkmaz).
 // =========================================================
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -32,7 +33,9 @@ $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
-$PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay'];
+// Çok personelli beklentiler yönetici (hesap.admin) + kapsam "tum" ile çalışır;
+// approve/pay artık görünürlük VERMEZ (K-2).
+$PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay','hesap.admin'];
 function current_user(): ?array { return ['id'=>1,'username'=>'test','display_name'=>'Test Personel']; }
 function can(string $p): bool { global $PERMS; return in_array($p,$PERMS,true); }
 function is_admin(): bool { return false; }
@@ -62,8 +65,8 @@ db()->exec("CREATE TABLE account_transactions (
 db()->exec("CREATE TABLE account_files (id INTEGER PRIMARY KEY AUTOINCREMENT,
   transaction_id INT, file_name TEXT, original_name TEXT DEFAULT '',
   file_type TEXT DEFAULT '', file_size INT DEFAULT 0, uploaded_at TEXT)");
-db()->exec("CREATE TABLE users (id INT, username TEXT, display_name TEXT)");
-db()->exec("INSERT INTO users VALUES (1,'test','Test Personel'),(2,'ikinci','İkinci Personel')");
+db()->exec("CREATE TABLE users (id INT, username TEXT, display_name TEXT, is_active INT DEFAULT 1)");
+db()->exec("INSERT INTO users (id,username,display_name) VALUES (1,'test','Test Personel'),(2,'ikinci','İkinci Personel')");
 
 $ins = db()->prepare("INSERT INTO account_transactions
  (user_id,transaction_date,type,category,amount,currency,status,person_company,document_no,has_files)
@@ -128,7 +131,9 @@ function pdfText(string $pdf): string {
 
 // ═══════════ Veri toplama ═══════════
 echo "── Rapor verisi ──\n";
-$d = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31']);
+$TUM = hesap_kapsam_coz('tum');
+ok('yönetici "tum" kapsamı çözüldü',       $TUM['tip'] === 'tum');
+$d = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','kapsam'=>$TUM]);
 
 ok('tüm kayıtlar toplandı (7)',            count($d['rows']) === 7);
 ok('TRY ve USD ayrı toplandı',             isset($d['toplamlar']['TRY'], $d['toplamlar']['USD']));
@@ -140,6 +145,9 @@ ok('TRY önce sıralandı',                   array_key_first($d['toplamlar']) =
 ok('personel kırılımı 2 kişi',             count($d['personel']) === 2);
 ok('reddedilen personel özetine girmedi',  abs($d['personel']['Test Personel']['gider'] - 880) < 0.01,
                                            'beklenen 480+350+50, red 221 hariç');
+ok('bakiye toplamı ayrı (onaylı gider 2.380)', abs($d['toplamlar_bakiye']['TRY']['gider'] - 2380) < 0.01,
+                                           'toplamlar_bakiye reddedileni içermemeli');
+ok('"Atanmamış" personel satırı yok',      !isset($d['personel']['Atanmamış']));
 ok('kategori kırılımı yüzdeleri toplam 100', abs(array_sum(array_column($d['kategoriler'],'yuzde')) - 100) < 0.5);
 
 // ── Bakiye durumu: devir + dönem = kapanış ──
@@ -170,7 +178,10 @@ ok('fiş görselleri bölümü',                str_contains($html, 'Fiş Görse
 ok('imza alanları',                        str_contains($html, 'Muhasebe Onayı'));
 ok('durum rozetleri renkli',               str_contains($html, 'Muhasebe Onayladı') && str_contains($html,'Reddedildi'));
 ok('kapsam satırı tarih içeriyor',         str_contains($html, '01.07.2026') && str_contains($html, '31.07.2026'));
-ok('depo kapsamı yazıldı',                 str_contains($html, 'ÇİVRİL'));
+ok('kapsam satırı yazıldı (Tüm personel)', str_contains($html, 'Kapsam: Tüm personel'));
+ok('depo kapsamı YOK (kişisel cari)',      !str_contains($html, 'Depo: '));
+ok('toplam etiketi "tüm durumlar"',        str_contains($html, 'tüm durumlar'));
+ok('bakiye kümesi başlığı',                str_contains($html, 'bakiyeye giren'));
 ok('hazırlayan yazıldı',                   str_contains($html, 'Test Personel'));
 ok('çoklu kur uyarısı',                    str_contains($html, 'Para birimleri ayrı toplanır'));
 ok('3×3 galeri tablosu',                   str_contains($html, 'class="gal"'));
@@ -216,7 +227,7 @@ if (!class_exists(\Dompdf\Dompdf::class)) {
 
 // ═══════════ Uç durumlar ═══════════
 echo "\n── Uç durumlar ──\n";
-$bos = hesap_report_data(['tarih_bas'=>'2020-01-01','tarih_son'=>'2020-01-31']);
+$bos = hesap_report_data(['tarih_bas'=>'2020-01-01','tarih_son'=>'2020-01-31','kapsam'=>$TUM]);
 ok('boş dönem çökmüyor',                   $bos['meta']['adet'] === 0);
 $bos_html = hesap_report_html($bos, true);
 ok('boş dönem HTML üretiyor',              str_contains($bos_html, 'Bu dönemde kayıt bulunmuyor'));
@@ -224,7 +235,7 @@ ok('boş dönem HTML üretiyor',              str_contains($bos_html, 'Bu dönem
 // ── Hareketi olmayan ama devri olan ay (kullanıcının bildirdiği durum) ──
 // Ağustos'ta hiç kayıt yok ama Temmuz'dan devreden bakiye var: rapor sıfır
 // göstermemeli, devri ve kapanış bakiyesini taşımalı.
-$agustos = hesap_report_data(['tarih_bas'=>'2026-08-01','tarih_son'=>'2026-08-31']);
+$agustos = hesap_report_data(['tarih_bas'=>'2026-08-01','tarih_son'=>'2026-08-31','kapsam'=>$TUM]);
 ok('boş ayda kayıt yok',                   $agustos['meta']['adet'] === 0);
 ok('boş ayda DEVİR taşınıyor',             abs($agustos['bakiye']['TRY']['devir'] - 1595) < 0.01,
                                            'devir kayboldu — asıl şikâyet buydu');
@@ -235,8 +246,9 @@ ok('boş ay raporunda bakiye bölümü var',   str_contains($ag_html, 'Bakiye Du
 ok('boş ay raporunda devir tutarı yazılı', str_contains($ag_html, '1.595,00'));
 ok('personel devirleri ayrı ayrı yazılı',  str_contains($ag_html, '3.095,00') && str_contains($ag_html, '1.500,00'),
                                            'kişi bazlı borç okunamıyor');
-ok('boş ay raporu yön etiketi veriyor',    str_contains($ag_html, 'Şirkete borçlusunuz')
-                                           || str_contains($ag_html, 'Şirket size borçlu'));
+// Yönetici "tum" raporunda etiket üçüncü şahıs (size/-sunuz değil)
+ok('boş ay raporu yön etiketi veriyor',    str_contains($ag_html, 'Personel şirkete borçlu')
+                                           || str_contains($ag_html, 'Şirket personele borçlu'));
 ok('devri olan personel raporda görünüyor', str_contains($ag_html, 'Test Personel'),
                                             'dönemde hareketi yok ama devri var');
 if (class_exists(\Dompdf\Dompdf::class)) {
@@ -244,9 +256,9 @@ if (class_exists(\Dompdf\Dompdf::class)) {
     ok('boş dönem PDF üretiyor',           is_string($bos_pdf) && str_starts_with($bos_pdf, '%PDF-'));
 }
 
-$filtreli = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','durum'=>'rejected']);
+$filtreli = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','durum'=>'rejected','kapsam'=>$TUM]);
 ok('durum filtresi çalışıyor',             count($filtreli['rows']) === 1);
-$tur = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','type'=>'gelir']);
+$tur = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','type'=>'gelir','kapsam'=>$TUM]);
 ok('tür filtresi çalışıyor',               count($tur['rows']) === 1);
 
 // Görünürlük: düz personel başkasının kaydını raporlayamaz
@@ -254,6 +266,25 @@ $PERMS = ['hesap.read','hesap.write'];
 $kisitli = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31']);
 ok('düz personel yalnız kendi kayıtları',  count($kisitli['rows']) === 6, 'başka personelin kaydı sızdı');
 ok('başka personel özetten çıktı',         !isset($kisitli['personel']['İkinci Personel']));
+$kisitli_tum = hesap_report_data(['tarih_bas'=>'2026-07-01','tarih_son'=>'2026-07-31','kapsam'=>['tip'=>'tum','uid'=>null,'ad'=>'x','kendi'=>false]]);
+ok('sahte "tum" kapsamı yönetici değilse kendi', count($kisitli_tum['rows']) === 6);
+
+// ── K1 regresyonu: dönemde hareketi OLMAYAN ama devri olan BAŞKA personel ──
+// Eski kod hesap_balance_by_user() ile tüm personelin devrini rapora ekliyordu:
+// düz personelin Ağustos raporunda "İkinci Personel" ve bakiyesi görünüyordu.
+foreach ([['hesap.read','hesap.write'], ['hesap.read','hesap.write','hesap.approve','hesap.pay']] as $prof) {
+    $PERMS = $prof;
+    $etiket = in_array('hesap.approve', $prof, true) ? 'muhasebe' : 'personel';
+    $k1 = hesap_report_data(['tarih_bas'=>'2026-08-01','tarih_son'=>'2026-08-31']);
+    $k1_html = hesap_report_html($k1, true);
+    ok("K1 $etiket: özet yalnız kendi adı",   array_keys($k1['personel']) === ['Test Personel'],
+                                              implode(',', array_keys($k1['personel'])));
+    ok("K1 $etiket: HTML'de başka personel yok", !str_contains($k1_html, 'İkinci Personel') && !str_contains($k1_html, '1.500,00'));
+    ok("K1 $etiket: Atanmamış yok",         !str_contains($k1_html, 'Atanmamış'));
+    ok("K1 $etiket: kendi devri (3.095)",     abs($k1['bakiye']['TRY']['devir'] - 3095) < 0.01);
+    ok("K1 $etiket: devri olan kendisi görünüyor", str_contains($k1_html, 'Test Personel') && str_contains($k1_html, '3.095,00'));
+    ok("K1 $etiket: kendi etiketi (size)",    str_contains($k1_html, 'Şirkete borçlusunuz'));
+}
 
 // Bozuk görsel dosyası raporu düşürmemeli
 $PERMS = ['hesap.read','hesap.write','hesap.approve'];

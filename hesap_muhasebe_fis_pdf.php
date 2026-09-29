@@ -15,8 +15,16 @@ $auth_user = require_login();
 require_hesap('read');
 hesap_migrate();
 
+// Kapsam: varsayılan KENDİ fişlerim; yönetici ?personel=<uid>|tum ile genişletir
+$kapsam = hesap_kapsam_coz($_GET['personel'] ?? null, 'kendi');
+if (!$kapsam['kendi']) {
+    audit_log_event('view', 'hesap', null, null, ['personel' => $kapsam['uid'] ?? 'tum', 'sayfa' => 'hesap_muhasebe_fis_pdf.php']);
+}
+
 $tarih_b = trim($_GET['tarih_bas'] ?? '');
 $tarih_s = trim($_GET['tarih_son'] ?? '');
+if ($tarih_b !== '' && !hesap_tarih_gecerli($tarih_b)) $tarih_b = '';
+if ($tarih_s !== '' && !hesap_tarih_gecerli($tarih_s)) $tarih_s = '';
 $kat_f   = trim($_GET['kategori'] ?? '');
 $kisi_f  = trim($_GET['kisi'] ?? '');
 
@@ -24,10 +32,9 @@ $kisi_f  = trim($_GET['kisi'] ?? '');
 $pend_ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
 $where   = ["status IN ($pend_ph)"];
 $params  = hesap_pending_statuses();
-[$osql, $oparams] = hesap_owner_sql();
-if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
-[$dsql, $dparams] = depo_sql_in('depo');
-if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
+[$ksql, $kparams] = hesap_kapsam_sql($kapsam);        // kişisel kapsam, depo yok
+$where[] = $ksql;
+$params  = array_merge($params, $kparams);
 if ($tarih_b !== '') { $where[] = "transaction_date>=?"; $params[] = $tarih_b; }
 if ($tarih_s !== '') { $where[] = "transaction_date<=?"; $params[] = $tarih_s; }
 if ($kat_f  !== '') { $where[] = "category=?";          $params[] = $kat_f; }
@@ -65,12 +72,18 @@ if ($kat_f  !== '') { $filtre_parcalari[] = 'Kategori: ' . $kat_f; }
 if ($kisi_f !== '') { $filtre_parcalari[] = 'Kişi/Firma: ' . $kisi_f; }
 $filtre_str = $filtre_parcalari ? implode(' · ', $filtre_parcalari) : 'Tüm muhasebeleşmemiş kayıtlar';
 
+$rapor_baslik = match ($kapsam['tip']) {
+    'tum'   => 'Tüm Personel — Bekleyen Fişler',
+    'kisi'  => $kapsam['ad'] . ' — Bekleyen Fişler',
+    default => 'Bekleyen Fişlerim',
+};
+
 // 9'lu sayfalara böl
 $sayfalar = array_chunk($boxes, 9);
 ?><!doctype html>
 <html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Muhasebeleşmemiş Fiş Fotoğrafları</title>
+<title><?= h($rapor_baslik) ?></title>
 <style>
 * { box-sizing: border-box; }
 body { font-family: Arial, sans-serif; margin: 0; padding: 10mm; color: #111; background: #f5f5f5; }
@@ -184,16 +197,16 @@ body { font-family: Arial, sans-serif; margin: 0; padding: 10mm; color: #111; ba
 
 <div class="no-print">
     <button onclick="window.print()">🖨️ Yazdır / PDF Al</button>
-    <a href="hesap_muhasebe.php" class="secondary">← Muhasebeye Dön</a>
+    <a href="<?= hesap_can('approve') ? 'hesap_muhasebe.php' : 'hesap.php' ?>" class="secondary">← Geri Dön</a>
 </div>
 
 <div class="report-head">
-    <h1>MUHASEBELEŞMEMİŞ FİŞ FOTOĞRAFLARI</h1>
+    <h1><?= h($rapor_baslik) ?></h1>
     <div class="meta">
         <strong>Rapor Tarihi:</strong> <?= date('d.m.Y H:i') ?> &nbsp;|&nbsp;
         <strong>Toplam Fiş:</strong> <?= (int)$fisli_kayit ?> kayıt
         <?php if (count($boxes) !== $fisli_kayit): ?>(<?= count($boxes) ?> fotoğraf)<?php endif; ?> &nbsp;|&nbsp;
-        <strong>Toplam Tutar:</strong> <?= fmt_para($toplam_tutar) ?><br>
+        <strong>Toplam Tutar (TRY):</strong> <?= fmt_para($toplam_tutar) ?><br>
         <strong>Filtre:</strong> <?= h($filtre_str) ?>
     </div>
 </div>

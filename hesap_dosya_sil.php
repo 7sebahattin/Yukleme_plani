@@ -29,7 +29,7 @@ if (!$f) {
     exit;
 }
 
-// Bağlı kayıt görünür mü + kilitli mi? (B5)
+// Bağlı kayıt görünür mü + kilitli mi? (B5) — görünürlük yalnız sahiplik (depo yok)
 $ts = db()->prepare("SELECT * FROM account_transactions WHERE id=?");
 $ts->execute([(int)$f['transaction_id']]);
 $tx = $ts->fetch();
@@ -38,8 +38,17 @@ if (!$tx || !hesap_row_visible($tx)) {
     echo json_encode(['ok'=>false,'msg'=>'Erişim reddedildi']);
     exit;
 }
-if (hesap_is_locked($tx)) {
-    echo json_encode(['ok'=>false,'msg'=>'Ödenmiş kayıt kilitlidir.']);
+// K4: bakiyeye girmiş (onaylı / ödeme bekleyen / ödenmiş) kaydın fişi HERKES için
+// kilitli — yönetici dahil. Fiş, onayın dayanağıdır; önce kayıt reddedilip
+// "Düzeltmeye Al" ile taslağa alınmalı.
+if (in_array((string)($tx['status'] ?? ''), hesap_balance_statuses(), true)) {
+    echo json_encode(['ok'=>false,'msg'=>'Onaylanmış kaydın fişi silinemez. Önce kayıt reddedilip "Düzeltmeye Al" ile taslağa alınmalı.']);
+    exit;
+}
+// Yönetici dışında yalnız sahibi fiş siler (savunma derinliği)
+if (!hesap_sees_all() && !hesap_is_owner($tx)) {
+    http_response_code(403);
+    echo json_encode(['ok'=>false,'msg'=>'Erişim reddedildi']);
     exit;
 }
 
