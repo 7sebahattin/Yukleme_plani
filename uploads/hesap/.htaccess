@@ -1,4 +1,7 @@
+# Fiş dosyaları yalnız hesap_dosya.php üzerinden (sahiplik kontrolüyle) sunulur.
 Options -Indexes
-<FilesMatch "\.php$">
-  Require all denied
-</FilesMatch>
+Require all denied
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

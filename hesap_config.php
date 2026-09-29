@@ -10,6 +10,13 @@ defined('HESAP_UPLOAD_DIR')   || define('HESAP_UPLOAD_DIR', __DIR__ . '/uploads/
 defined('HESAP_MAX_FILE_SIZE')|| define('HESAP_MAX_FILE_SIZE', 10 * 1024 * 1024);
 defined('HESAP_ALLOWED_EXT')  || define('HESAP_ALLOWED_EXT', ['jpg','jpeg','png','webp','pdf']);
 defined('HESAP_ALLOWED_MIME') || define('HESAP_ALLOWED_MIME', ['image/jpeg','image/png','image/webp','application/pdf']);
+const HESAP_UPLOAD_HTACCESS = "# Fiş dosyaları yalnız hesap_dosya.php üzerinden (sahiplik kontrolüyle) sunulur.\n"
+    . "Options -Indexes\n"
+    . "Require all denied\n"
+    . "<IfModule !mod_authz_core.c>\n"
+    . "    Order allow,deny\n"
+    . "    Deny from all\n"
+    . "</IfModule>\n";
 
 function hesap_kategoriler(): array {
     return [
@@ -26,11 +33,24 @@ function hesap_type_label(string $t): string {
 function hesap_type_color(string $t): string {
     return match($t) { 'gelir'=>'#22c55e','gider'=>'#ef4444','havale'=>'#3b82f6','nakit'=>'#f97316',default=>'#64748b' };
 }
+/** Kabul edilen para birimleri — TEK kaynak (form seçenekleri + POST beyaz listesi). */
+function hesap_para_birimleri(): array {
+    return ['TRY', 'USD', 'EUR', 'AED'];
+}
+/**
+ * Para birimi simgesi — HTML bağlamında basılır (fmt_para). Bilinmeyen kod
+ * KAÇIRILARAK döner: eski serbest metin kayıtları ("XXX<b>") ~50 `<?= fmt_para() ?>`
+ * noktasının hiçbirinde ham HTML olarak çıkmaz (O2).
+ */
 function hesap_currency_sym(string $c): string {
-    return match($c) { 'TRY'=>'₺','USD'=>'$','EUR'=>'€','AED'=>'AED',default=>$c };
+    return match($c) { 'TRY'=>'₺','USD'=>'$','EUR'=>'€','AED'=>'AED',default=>h($c) };
+}
+/** Ödeme yöntemleri — TEK kaynak (form seçenekleri + POST beyaz listesi + etiket). */
+function hesap_odeme_yontemleri(): array {
+    return ['nakit'=>'Nakit','banka'=>'Banka','kredi_karti'=>'Kredi Kartı','havale'=>'Havale','sirket_karti'=>'Şirket Kartı','sahsi'=>'Şahsi'];
 }
 function hesap_payment_label(string $p): string {
-    return match($p) { 'nakit'=>'Nakit','banka'=>'Banka','kredi_karti'=>'Kredi Kartı','havale'=>'Havale','sirket_karti'=>'Şirket Kartı','sahsi'=>'Şahsi',default=>$p };
+    return hesap_odeme_yontemleri()[$p] ?? $p;
 }
 function fmt_para(float $v, string $cur='TRY'): string {
     return number_format($v,2,',','.') . ' ' . hesap_currency_sym($cur);
@@ -111,7 +131,9 @@ function hesap_get_image_files(int $tid): array {
 function hesap_upload_file(array $file, int $tid): array {
     if (!is_dir(HESAP_UPLOAD_DIR)) mkdir(HESAP_UPLOAD_DIR, 0755, true);
     $htaccess = HESAP_UPLOAD_DIR . '.htaccess';
-    if (!file_exists($htaccess)) file_put_contents($htaccess, "Options -Indexes\n<FilesMatch \"\\.php$\">\n  Require all denied\n</FilesMatch>\n");
+    // Fiş dosyaları web'den DOĞRUDAN açılamaz — yalnız hesap_dosya.php (sahiplik kontrolüyle) sunar.
+    // Depodaki uploads/hesap/.htaccess ile AYNI içerik (sunucuda silinirse kapalı olarak yeniden doğar).
+    if (!file_exists($htaccess)) file_put_contents($htaccess, HESAP_UPLOAD_HTACCESS);
 
     if ($file['error'] !== UPLOAD_ERR_OK) return ['ok'=>false,'msg'=>'Yükleme hatası.'];
     if ($file['size'] > HESAP_MAX_FILE_SIZE) return ['ok'=>false,'msg'=>'Dosya 10 MB\'ı aşıyor.'];
