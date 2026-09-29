@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v279` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v280` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -80,9 +80,15 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 | hesap.read | ✓ | ✓ | ✓ | ✓ |
 | hesap.write | ✓ | ✓ | — | ✓ |
 | hesap.approve/pay | ✓ | — | — | ✓ |
-| hesap.delete/admin | ✓ | — | — | — |
+| hesap.delete | ✓ | — | — | — |
+| hesap.admin (tüm personeli görür) | ✓ | — | — | — |
 | users.admin | ✓ | — | — | — |
 | is_admin() | ✓ | — | — | — |
+
+**Hesap:** her rol yalnız KENDİ hesabını görür. Başkasının hesabı + sahipsiz kayıt =
+`hesap.admin` (seed'de yalnız Admin) ya da `is_admin()`. Muhasebe'nin approve/pay'i
+yalnız kendi görebildiği (= kendi) kayıtlarda çalışır; başka personelin masrafını
+yönetici onaylar. `hesap.admin`'i özel role vermek = o rol HERKESİ görür.
 
 ---
 
@@ -440,6 +446,9 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
 - **Tekil görüntüleme koruması:** record_view (palet depo kontrolü), kantar_view (`depot_visible_to_user`).
 - **Depo değiştirme:** topbar `.depo-badge` + sidebar `.sidebar-depo` → depo_sec.php. Audit: `depot_switch`.
 - **Atanmamış veri kuralı:** Deposu BOŞ kayıt/fiş/hareket TÜM depolarda görünür ve erişilebilir (filtreler `IN(aktif depo) OR depo=''`). Depo özelliği hiçbir eski veriyi kaybetmez/kilitlemez. Tekil görüntüleme guard'ları da boş depoyu geçirir; yalnız GERÇEK başka depoya ait kayıt 403 verir (mesaj hangi depo olduğunu söyler).
+- **Bilinçli istisna — Hesap modülü:** kişisel cari depo filtresi KULLANMAZ
+  (`depo_sql_in` / `depot_visible_to_user` yok); `depo` kolonu yalnız bilgi amaçlı
+  damgadır. Bkz. "Hesap Modülü" bölümü.
 - **Eski depo'suz veri:** `depo_tasima.php` (yalnız admin, onaylı GO butonu) boş depolu satırları hedef depoya taşır — atanınca yalnız o depoda görünür.
 - **Depo listesi kaynağı:** `material_definitions type='depo'` (`depot_options()` = tanımlar ∩ `user_depolar` ataması).
 - **Harf-duyarsızlık:** Depo eşleşmeleri TR-duyarsız (`depo_fold`/`depo_in_allowed`/`depot_visible_to_user`). "KARAMAN CİHAT" == "Karaman Cihat" — liste (MySQL ci) ile tekil guard tutarlı.
@@ -819,9 +828,12 @@ PDKS XLSX kolları `pdks_*_ui_smoke.php` içinde alt süreçte (`scripts/_xlsx_a
 Personel masraf takibi. **Çekirdek: `config/hesap_calc.php`** — şema migrasyonu, tutar
 ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı.
 
-**Sayfalar:** `hesap.php` (pano) · `hesap_liste.php` · `hesap_kayit.php` ·
+**Sayfalar:** `hesap.php` ("Hesabım" — kişisel pano) · `hesap_liste.php` · `hesap_kayit.php` ·
 `hesap_muhasebe.php` (onay kuyruğu) · `hesap_durum.php` (geçiş JSON uç noktası) ·
-`hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php`.
+`hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php` ·
+**yalnız yönetici:** `hesap_personel.php` ("Tüm Personel" — kişi × kur bakiye) ·
+`hesap_sahipsiz.php` ("Sahipsiz Kayıtlar" — sahip atama). Yeni hesap sayfası eklerken
+`nav_aktif_anahtar()` içindeki `$a_hes` listesine ekle.
 
 ### Arayüz (Faz 1-3)
 
@@ -873,11 +885,59 @@ draft ⇄ submitted → approved → pending_payment → paid
   eski kod "1234.56"yı 123456 yapıyordu (100× hata).
 - `is_given_to_accountant` **legacy bayrak olarak korunur**, `hesap_transition()` senkron
   tutar (bakiyeye giren durumlar = 1). Eski sorgular bozulmasın diye silinmedi.
-- **Görünürlük:** `hesap_row_visible()` / `hesap_owner_sql()` — normal kullanıcı yalnız
-  kendi + sahipsiz kayıtları görür; `hesap.approve`/`hesap.admin` tümünü görür.
-  Depo filtresi `depo_sql_in('depo')`.
-- **Atanmamış veri:** `user_id IS NULL` ve `depo=''` eski kayıtlar herkese görünür kalır.
-- Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz).
+- **Kişisel hesap (Sprint Hesap-Kişisel):** her ekran varsayılan olarak YALNIZ oturumdaki
+  kullanıcının kayıtlarını gösterir — `hesap_kapsam_coz($_GET['personel'] ?? null, 'kendi')`
+  + `hesap_kapsam_sql($k, $col)` (pozisyonel `?`; eski `hesap_owner_sql()` yalnız
+  sarmalayıcıdır, yeni kodda kullanma). Başkasını YALNIZ yönetici görür:
+  `hesap_sees_all()` = `is_admin() || can('hesap.admin')`; yönetici `?personel=<uid>|tum`
+  ile kapsamı genişletir (yönetici değilse parametre SESSİZCE yok sayılır, 403 yok).
+  Linkler parametreyi `hesap_kapsam_query()` ile taşır. Yönetici başkasına bakınca
+  audit `view` yazılır (kendi hesabında yazılmaz).
+- **hesap.approve / hesap.pay görünürlük VERMEZ:** onay/ödeme yalnız görülebilen satırda
+  çalışır (`hesap_can_transition()` İLK satırı `hesap_row_visible()`). Görünmeyen kayıtta
+  `hesap_transition()` "Kayıt bulunamadı." der ("yetkiniz yok" varlığı sızdırırdı).
+  Muhasebe bu yüzden yalnız KENDİ kayıtlarını onaylar; başkasınınkini onaylaması
+  gerekiyorsa rolüne `hesap.admin` verilir — o zaman herkesi görür. Onay kuyruğunun
+  "bekleyen" filtresi yalnız `submitted` (taslak onay beklemez).
+- **Kendi kaydını onaylama/ödeme SERBEST** (kullanıcı kararı). Sahip ≠ ben yasağı EKLEME.
+- **Sahipsiz (`user_id IS NULL`):** yalnız yönetici görür, HİÇ KİMSENİN bakiyesine girmez
+  (`hesap_balance_tum` dahil), sahibi yoktur (`hesap_is_owner` false). Sahip ataması
+  YALNIZ `hesap_sahipsiz.php` (tek/toplu, POST+CSRF, tek transaction, MySQL'de
+  `FOR UPDATE`, UPDATE her zaman `AND user_id IS NULL` korumalı, audit `owner_assign` +
+  `bulk_update`) ve `hesap_kayit.php` "Kayıt sahibi" alanı (yönetici, düzenleme modu,
+  audit `owner_change` — yanlış atamanın geri alındığı yol). **Otomatik geri dolum /
+  tahmin YOK** (eski satırlarda `created_by` da boş). Sayaç: `hesap_sahipsiz_sayisi()`.
+- **Depo YOK:** Hesap sorguları `depo_sql_in` / `depot_visible_to_user` kullanmaz — kişisel
+  cari aktif depoya göre değişmemeli (DEPO2'de girilen masraf DEPO1'de kayboluyordu).
+  `depo` kolonu yalnız bilgi amaçlı damgadır; `enforce_active_depot()` kapısı kalır.
+- **Bakiye:** `hesap_balance(null)` = KENDİ bakiye (yönetici için de — global DEĞİL);
+  `hesap_balance($uid)` başkası için yalnız yöneticide dolu, değilse sıfır (fail-closed).
+  Global yalnız `hesap_balance_tum()` / `hesap_balance_by_user($from,$to,$kur)` —
+  ikisi de yönetici değilse boş. Başkasına bakarken etiket üçüncü şahıs:
+  `hesap_balance_label($net, true)`.
+- **İçerik kilidi:** `hesap_icerik_kilitli()` — approved/pending_payment/paid kaydın
+  içeriği ve silinmesi yönetici dışında KAPALI (tek kapı: `hesap_kayit`, `hesap_sil`,
+  liste butonları). Düzeltme yolu durum makinesidir: "Reddet" → "Düzeltmeye Al" →
+  düzenle → gönder (yeni geçiş EKLEME). Yönetici düzeltmesi/silmesi gerekçe ister
+  (audit `update.duzeltme_nedeni` / `delete.gerekce`). Onaylı kaydın **fişi herkese**
+  kilitli (yönetici dahil, `hesap_dosya_sil.php`). `hesap_is_locked()` eski kapıdır.
+- **Biçim:** tutar — çoklu binlik ayırıcı ("1.234.567"), "0,xxx" ondalık, harf içeren
+  girdi 0 (→ hata), en fazla 2 ondalık, < 1e10; para birimi `hesap_para_birimleri()`,
+  ödeme yöntemi `hesap_odeme_yontemleri()` beyaz listesi, tarih `hesap_tarih_gecerli()`.
+  `hesap_currency_sym()` bilinmeyen kodu `h()` ile kaçırır (eski serbest metin kayıtlar).
+- **Toplamlar (O3):** liste / PDF / XLSX özetinde "bakiyeye giren" (onaylı + ödenen) ile
+  "tüm durumlar / bekleyen" AYRI; reddedilen hiçbir bakiye toplamına girmez. CSV değişmedi.
+- **Fiş dosyaları** `uploads/hesap/` altında web'e KAPALI (`Require all denied` —
+  `.htaccess` hem depoda hem `HESAP_UPLOAD_HTACCESS` ile yeniden üretilir); yalnız
+  `hesap_dosya.php` (sahiplik kontrolüyle) sunar. Statik URL VERME.
+- **Ana sayfa kartı** (`index.php`) kişiseldir: bugün (yalnız TRY) + kendi bekleyen sayısı;
+  yönetici ek olarak onay bekleyen ve sahipsiz sayısını görür.
+- Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz) ·
+  `php scripts/hesap_izolasyon_smoke.php` — iki operator (A/B), muhasebe, izleyici,
+  yönetici, süper admin ile gerçek sayfaları çalıştırır; her izolasyon bulgusu
+  (sahipsiz sızıntı, PDF personel özeti, ana sayfa sayacı, onaylı kaydın düzenlenmesi,
+  depo kaybı, muhasebe görünürlüğü, silme, biçim) regresyondur. **Görünürlük/kapsam
+  kuralına dokunduysan çalıştır.**
 
 ### PDF Dönem Raporu (Faz 5)
 
@@ -1107,6 +1167,7 @@ Yeni özellik eklerken:
 | SQLSTATE[HY093] | PDO named param tekrar kullanıldı | Pozisyonel `?` kullan |
 | Tutar 100× büyük kaydedildi | `str_replace(['.',','],['','.'])` | `hesap_parse_amount()` kullan |
 | Rapor toplamı tutmuyor | Para birimleri toplanmış | `GROUP BY currency` — kurları ayır |
+| Personel başkasının masrafını görüyor | `OR user_id IS NULL` ya da `hesap.approve`'u görünürlük sayma | `hesap_kapsam_coz()` + `hesap_kapsam_sql()`; görünürlük yalnız `hesap_sees_all()` |
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |
 | HKS "... doğum tarihi girilmelidir" | `DogumTarihi` XML'de var ama **beklenen konumda değil** → DataContract onu sessizce atlar | Otomatiktir: `hks_bildirim_kaydet()` merdiveni diğer konum/biçimleri dener ve çalışanı `hks_kv.dogum_varyant`'a **öğrenir**. Dördü de reddedilirse → yeni endpoint gerekir |
