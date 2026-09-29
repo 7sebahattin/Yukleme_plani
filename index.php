@@ -21,12 +21,24 @@ if (!can('dashboard.read')) {
 
 // ── DB-Backup-01: Admin girişinde günlük otomatik yedek ───
 $db_backup_result = null;
+$db_backup_eski   = null;   // DB-Backup-02: son başarılı yedek yok/eski ise uyarı metni
 if (is_admin()) {
     require_once __DIR__ . '/config/db_backup_helpers.php';
     try {
         $db_backup_result = create_daily_backup_if_needed(db(), (int)($auth_user['id'] ?? 0));
     } catch (Throwable $_bkp_err) {
         // backup hatası ana sayfayı çökertmemeli
+    }
+    if ($db_backup_result === null) {
+        try {
+            $_bkp_son = last_successful_backup(db());
+            $_bkp_yas = _bh_last_age_hours($_bkp_son);
+            if ($_bkp_son === null) {
+                $db_backup_eski = 'Henüz başarılı bir veritabanı yedeği yok';
+            } elseif ($_bkp_yas !== null && $_bkp_yas > DB_BACKUP_STALE_SAAT) {
+                $db_backup_eski = 'Son başarılı veritabanı yedeği ' . _bh_yas_metni($_bkp_yas) . ' önce';
+            }
+        } catch (Throwable $_bkp_err) {}
     }
 }
 
@@ -125,7 +137,8 @@ $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 render_header('Ana Sayfa');
 render_flash();
 // Backup bildirimi (admin, HTML link içerdiği için render_flash() dışında)
-if ($db_backup_result !== null): ?>
+// busy: başka bir yedek şu anda çalışıyor — kutu gösterilmez.
+if ($db_backup_result !== null && empty($db_backup_result['busy'])): ?>
 <div class="flash flash-<?= $db_backup_result['ok'] ? 'success' : 'error' ?>" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
     <span>
         <?php if ($db_backup_result['ok']): ?>
@@ -133,7 +146,7 @@ if ($db_backup_result !== null): ?>
         <?php elseif (!empty($db_backup_result['file_ok']) && empty($db_backup_result['db_ok'])): ?>
             ⚠️ Yedek dosyası oluşturuldu fakat kayıt tablosuna yazılamadı.
         <?php else: ?>
-            ⚠️ Otomatik veritabanı yedeği oluşturulamadı.
+            ⚠️ Otomatik veritabanı yedeği oluşturulamadı<?= !empty($db_backup_result['error']) ? ': ' . h(mb_substr((string)$db_backup_result['error'], 0, 160)) : '.' ?>
         <?php endif; ?>
     </span>
     <span style="display:flex;gap:8px;flex-wrap:wrap">
@@ -143,6 +156,11 @@ if ($db_backup_result !== null): ?>
         <?php endif; ?>
         <a href="admin_db_backups.php" style="color:inherit;text-decoration:underline">Tüm yedekler</a>
     </span>
+</div>
+<?php elseif ($db_backup_eski !== null): ?>
+<div class="flash flash-error" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span>⚠️ <?= h($db_backup_eski) ?>.</span>
+    <a href="admin_db_backups.php" style="color:inherit;text-decoration:underline">Tüm yedekler</a>
 </div>
 <?php endif; ?>
 
