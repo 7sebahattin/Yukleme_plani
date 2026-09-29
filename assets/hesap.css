@@ -821,6 +821,156 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
 .hs-empty-icon { font-size: 2.4rem; display: block; margin-bottom: 8px; }
 .hs-empty p { margin: 0 0 14px; }
 
+/* ═════════ 15. Kişisel hesap — kapsam şeridi, yönetici kartı, kilit ═════════ */
+
+/* Yönetici başkasının hesabına bakarken başlığın altındaki şerit */
+.hs-kapsam {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 6px 12px;
+    padding: 9px 12px;
+    margin-bottom: var(--hs-gap);
+    border-radius: 12px;
+    background: var(--hs-pend-bg);
+    border: 1px solid #fcd34d;
+    color: #78350f;
+    font-size: .86rem;
+}
+.hs-kapsam a { font-weight: 600; white-space: nowrap; }
+.hs-kapsam-not { font-size: .8rem; margin: 4px 0 0; }
+
+/* Yönetici kısayolları (Hesabım → Tüm Personel / Sahipsiz Kayıtlar) */
+.hs-yonetici {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 10px 0 var(--hs-gap);
+}
+.hs-yonetici-item {
+    flex: 1 1 150px;
+    display: flex; align-items: center; gap: 6px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: .86rem; font-weight: 600;
+    text-decoration: none;
+}
+.hs-yonetici-item:hover { border-color: var(--border-strong); text-decoration: none; color: var(--text); }
+.hs-yonetici-uyari {
+    background: var(--hs-pend-bg);
+    border-color: #fcd34d;
+    color: var(--hs-pend);
+}
+.hs-yonetici-uyari:hover { color: var(--hs-pend); }
+
+/* Onaylı kayıt — içerik kilidi rozeti (liste satırı) */
+.hs-kilit {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: .72rem; font-weight: 600;
+    white-space: nowrap;
+    cursor: help;
+}
+
+/* Liste özet şeridi: "Bakiyeye giren" başlığı + bekleyen sütunu (O3) */
+.hs-sum-title { font-size: .76rem; font-weight: 700; color: var(--muted); margin: 0 0 8px; }
+.hs-sum-title span { font-weight: 400; }
+.hs-sum-pend > b { color: var(--hs-pend); }
+
+/* Net tutar rengi — bakiye yönüne göre (Tüm Personel tablosu) */
+.hs-net--alacak { color: var(--hs-pos); }
+.hs-net--borc   { color: var(--hs-neg); }
+
+/* ═════════ 16. Sahipsiz Kayıtlar / Tüm Personel (yönetici) ═════════ */
+
+.hs .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.hs-ozet {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--hs-r);
+    padding: 12px 14px;
+    margin-bottom: var(--hs-gap);
+}
+.hs-ozet-baslik { margin: 0 0 8px; font-size: 1rem; font-weight: 600; }
+.hs-ozet-baslik b { font-size: 1.25rem; }
+.hs-ozet .table-wrap { margin: 0; }
+.hs-ozet-tablo th, .hs-ozet-tablo td { white-space: nowrap; }
+
+/* Toplu atama çubuğu — tablonun üstünde, sarar */
+.hs-toplu {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 8px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--hs-r);
+    padding: 10px 12px;
+    margin-bottom: var(--hs-gap);
+}
+.hs-toplu-baslik { font-size: .82rem; color: var(--muted); }
+.hs-toplu-ata {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin-left: auto;
+    font-size: .86rem; font-weight: 600;
+}
+
+/* Yönetici tabloları: tutar ve eylemler satır içinde kalsın */
+.hs-yon-tablo td.num, .hs-yon-tablo th.num { white-space: nowrap; }
+.hs-yon-tablo .actions-col .hs-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.hs-sahipsiz-tablo td:nth-child(4) { min-width: 150px; }
+.hs-sahipsiz-tablo .hs-ata-form .hs-select { min-width: 0; width: 130px; }
+
+/* Satır içi tek kayıt atama formu */
+.hs-ata-form { display: flex; align-items: center; gap: 6px; margin: 0; }
+.hs-ata-form .hs-select { min-width: 140px; }
+
+.hs-sahipsiz-kart { flex-direction: column; align-items: stretch; gap: 8px; }
+.hs-sahipsiz-ust { display: flex; align-items: flex-start; gap: 10px; }
+.hs-sahipsiz-ust input[type="checkbox"] { width: 22px; height: 22px; margin-top: 2px; flex-shrink: 0; }
+.hs-sahipsiz-acik { font-size: .82rem; overflow-wrap: anywhere; }
+.hs-sahipsiz-kart .hs-ata-form .hs-select { flex: 1 1 auto; min-width: 0; }
+
+.hs-sayfalama {
+    display: flex; justify-content: center; align-items: center; gap: 10px;
+    margin: 16px 0;
+}
+
+.hs-personel-kart { flex-direction: column; align-items: stretch; gap: 8px; }
+.hs-personel-ust { display: flex; align-items: flex-start; gap: 10px; }
+.hs-personel-kart .hs-tx-title { white-space: normal; }
+
+.hs-sahipsiz-link {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 6px 12px;
+    margin-top: var(--hs-gap);
+    padding: 12px 14px;
+    border-radius: var(--hs-r);
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 600;
+}
+.hs-sahipsiz-link:hover { text-decoration: none; border-color: var(--border-strong); }
+.hs-sahipsiz-link .muted { font-weight: 400; font-size: .84rem; }
+
+@media (max-width: 600px) {
+    .hs-ozet-tablo th { white-space: normal; }
+    .hs-ozet-tablo th, .hs-ozet-tablo td { padding: 8px 6px; font-size: .8rem; }
+    .hs-ozet-tablo td .muted { display: block; }
+}
+@media (max-width: 480px) {
+    .hs-toplu-ata { margin-left: 0; width: 100%; }
+    .hs-toplu-ata .hs-select { flex: 1 1 auto; min-width: 0; }
+}
+
 /* ═════════════════════════════════════════════
    Duyarlı davranış — taban mobil, üstü masaüstü
    ═════════════════════════════════════════════ */
@@ -886,7 +1036,7 @@ a.hs-tx:hover { text-decoration: none; color: var(--text); border-color: var(--b
 
 /* Yazdırma — eylemler gizlenir */
 @media print {
-    .hs-cta, .hs-secondary, .hs-sheet-ovl, .hs-save,
+    .hs-cta, .hs-secondary, .hs-sheet-ovl, .hs-save, .hs-yonetici, .hs-toplu, .hs-ata-form,
     .hs-actions, .hs-filters, .hs-month-arrow { display: none !important; }
     .hs-balance { border: 1px solid #999; box-shadow: none; }
 }

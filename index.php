@@ -102,15 +102,33 @@ if (nav_ptak_gorunur()) {
     } catch (Throwable $e) { $personel_eksik_cikis = 0; }
 }
 
-// Hesap modülü özet
-try {
-    $hesap_bugun    = (float)db()->query("SELECT COALESCE(SUM(amount),0) FROM account_transactions
-        WHERE transaction_date = CURDATE() AND type IN ('gider','nakit')")->fetchColumn();
-    $hesap_bekleyen = (int)db()->query("SELECT COUNT(*) FROM account_transactions
-        WHERE is_given_to_accountant = 0")->fetchColumn();
-} catch (PDOException $e) {
-    $hesap_bugun = 0.0;
-    $hesap_bekleyen = 0;
+// Hesap modülü özet — KİŞİSEL: yalnız oturumdaki kullanıcının kayıtları (K3).
+// Eskiden şirketin tamamının bugünkü harcaması ve tüm bekleyen kayıt sayısı
+// herkese görünüyordu; TRY/USD/EUR da toplanıp "₺" yazılıyordu. Tutar yalnız TRY.
+// Yönetici (is_admin / hesap.admin) ek olarak onay bekleyen ve sahipsiz sayısını görür.
+$hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0; $hesap_sahipsiz = 0;
+$hesap_yonetici = is_admin() || can('hesap.admin');
+if (can('hesap.read') || is_admin()) {
+    try {
+        $_hu = (int)(current_user()['id'] ?? 0);
+        $_hs = db()->prepare("SELECT COALESCE(SUM(amount),0) FROM account_transactions
+            WHERE user_id = ? AND currency = 'TRY' AND transaction_date = CURDATE()
+              AND type IN ('gider','nakit','havale') AND status <> 'rejected'");
+        $_hs->execute([$_hu]);
+        $hesap_bugun = (float)$_hs->fetchColumn();
+        $_hs = db()->prepare("SELECT COUNT(*) FROM account_transactions
+            WHERE user_id = ? AND status IN ('draft','submitted')");
+        $_hs->execute([$_hu]);
+        $hesap_bekleyen = (int)$_hs->fetchColumn();
+        if ($hesap_yonetici) {
+            $hesap_onay_bekleyen = (int)db()->query("SELECT COUNT(*) FROM account_transactions
+                WHERE status = 'submitted' AND user_id IS NOT NULL")->fetchColumn();
+            $hesap_sahipsiz = (int)db()->query("SELECT COUNT(*) FROM account_transactions
+                WHERE user_id IS NULL")->fetchColumn();
+        }
+    } catch (PDOException $e) {
+        $hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0; $hesap_sahipsiz = 0;
+    }
 }
 
 // Stok özet artık index'te kullanılmıyor (kartlar reports.php'ye taşındı)
@@ -312,12 +330,18 @@ if (nav_ptak_gorunur()):
 <?php if (can('hesap.read') || is_admin()): ?>
     <a href="hesap.php" class="home-card">
         <div class="home-card-icon" style="background:#fff3e0">🏦</div>
-        <div class="home-card-title">Hesap</div>
+        <div class="home-card-title">Hesabım</div>
         <?php if ($hesap_bekleyen > 0): ?>
         <div class="home-card-badge" style="background:var(--warn)"><?= $hesap_bekleyen ?></div>
         <?php endif; ?>
         <?php if ($hesap_bugun > 0): ?>
-        <div class="home-card-sub">Bugün: <?= number_format($hesap_bugun, 2, ',', '.') ?>₺</div>
+        <div class="home-card-sub">Bugün: <?= number_format($hesap_bugun, 2, ',', '.') ?> ₺</div>
+        <?php endif; ?>
+        <?php if ($hesap_yonetici && $hesap_onay_bekleyen > 0): ?>
+        <div class="home-card-sub">Onay bekleyen: <?= $hesap_onay_bekleyen ?></div>
+        <?php endif; ?>
+        <?php if ($hesap_yonetici && $hesap_sahipsiz > 0): ?>
+        <div class="home-card-sub">Sahipsiz: <?= $hesap_sahipsiz ?></div>
         <?php endif; ?>
     </a>
 <?php endif; ?>

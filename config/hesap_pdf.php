@@ -67,9 +67,12 @@ function hesap_pdf_image_uri(string $path, int $max = HESAP_PDF_IMG_MAX): ?strin
 }
 
 /**
- * Rapor verisini toplar. Görünürlük (sahiplik + depo) her sorguda uygulanır.
+ * Rapor verisini toplar. Kapsam (kişisel hesap) her sorguda uygulanır; depo filtresi YOK.
  *
- * @param array $f  ['tarih_bas','tarih_son','type','durum','kisi']
+ * K1: personel özeti ve devirleri YALNIZ kapsamdaki kişi(ler)den üretilir —
+ * yönetici olmayan birinin raporunda başka personelin adı/bakiyesi ÇIKAMAZ.
+ *
+ * @param array $f  ['tarih_bas','tarih_son','type','durum','kapsam' => hesap_kapsam_coz() sonucu]
  */
 function hesap_report_data(array $f): array
 {
@@ -93,14 +96,16 @@ function hesap_report_data(array $f): array
         $params[] = $durum_f;
     }
 
-    [$osql, $oparams] = hesap_owner_sql('at.user_id');
-    if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
-    [$dsql, $dparams] = depo_sql_in('at.depo');
-    if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
+    $kps = $f['kapsam'] ?? hesap_kapsam_coz(null);
+    if (($kps['tip'] ?? 'kendi') !== 'kendi' && !hesap_sees_all()) $kps = hesap_kapsam_coz(null);   // savunma
+    $tum = $kps['tip'] === 'tum';
+    [$ksql, $kparams] = hesap_kapsam_sql($kps, 'at.user_id');
+    $where[] = $ksql;
+    $params  = array_merge($params, $kparams);
 
     $wstr = implode(' AND ', $where);
 
-    $st = db()->prepare("SELECT at.*, COALESCE(u.display_name, u.username, '') AS personel
+    $st = db()->prepare("SELECT at.*, COALESCE(NULLIF(u.display_name,''), u.username, '') AS personel
                          FROM account_transactions at
                          LEFT JOIN users u ON u.id = at.user_id
                          WHERE $wstr
@@ -109,17 +114,30 @@ function hesap_report_data(array $f): array
     $rows = $st->fetchAll();
 
     // ── Para birimi bazında toplam (asla karıştırılmaz) ──
+    // O3: iki küme — `toplamlar` listelenen TÜM kayıtlar (her durum), `toplamlar_bakiye`
+    // yalnız bakiyeye giren durumlar (onaylı + ödeme bekleyen + ödenen).
     $toplamlar = [];
+    $toplamlar_bakiye = [];
     foreach ($rows as $r) {
         $cur = $r['currency'] ?: 'TRY';
         $toplamlar[$cur] ??= ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0];
         if ($r['type'] === 'gelir') $toplamlar[$cur]['gelir'] += (float)$r['amount'];
         else                        $toplamlar[$cur]['gider'] += (float)$r['amount'];
         $toplamlar[$cur]['adet']++;
+        if (in_array((string)($r['status'] ?? ''), hesap_balance_statuses(), true)) {
+            $toplamlar_bakiye[$cur] ??= ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0];
+            if ($r['type'] === 'gelir') $toplamlar_bakiye[$cur]['gelir'] += (float)$r['amount'];
+            else                        $toplamlar_bakiye[$cur]['gider'] += (float)$r['amount'];
+            $toplamlar_bakiye[$cur]['adet']++;
+        }
     }
     foreach ($toplamlar as $cur => &$t) { $t['net'] = $t['gelir'] - $t['gider']; }
     unset($t);
-    uksort($toplamlar, fn($a, $b) => ($b === 'TRY' ? 1 : 0) <=> ($a === 'TRY' ? 1 : 0) ?: strcmp($a, $b));
+    foreach ($toplamlar_bakiye as $cur => &$t) { $t['net'] = $t['gelir'] - $t['gider']; }
+    unset($t);
+    $kur_sirala = fn($a, $b) => ($b === 'TRY' ? 1 : 0) <=> ($a === 'TRY' ? 1 : 0) ?: strcmp($a, $b);
+    uksort($toplamlar, $kur_sirala);
+    uksort($toplamlar_bakiye, $kur_sirala);
 
     // ── Bakiye durumu: DEVİR + dönem hareketi + KAPANIŞ ──
     // Panodaki "Geçen Aydan Devir" / "Güncel Bakiye" ile birebir aynı mantık:
@@ -127,8 +145,13 @@ function hesap_report_data(array $f): array
     // Bu bölüm olmadan rapor "kim kime borçlu" sorusunu yanıtlayamaz — dönemde
     // hiç hareket yoksa (boş ay) tüm rakamlar sıfır görünür ama borç durur.
     $tarih_s_ertesi = date('Y-m-d', strtotime($tarih_s . ' +1 day'));
-    $devir_bal = hesap_balance(null, null, $tarih_b);            // dönem başından ÖNCESİ
-    $donem_bal = hesap_balance(null, $tarih_b, $tarih_s_ertesi); // dönem İÇİ (onaylı)
+    if ($tum) {   // yönetici "tüm personel" — sahipli kayıtların toplamı (sahipsiz YOK)
+        $devir_bal = hesap_balance_tum(null, $tarih_b);
+        $donem_bal = hesap_balance_tum($tarih_b, $tarih_s_ertesi);
+    } else {
+        $devir_bal = hesap_balance($kps['uid'], null, $tarih_b);            // dönem başından ÖNCESİ
+        $donem_bal = hesap_balance($kps['uid'], $tarih_b, $tarih_s_ertesi); // dönem İÇİ (onaylı)
+    }
 
     $bakiye = [];
     $kurlar = array_unique(array_merge(
@@ -147,11 +170,12 @@ function hesap_report_data(array $f): array
     uksort($bakiye, fn($a, $b) => ($b === 'TRY' ? 1 : 0) <=> ($a === 'TRY' ? 1 : 0) ?: strcmp($a, $b));
 
     // ── Personel kırılımı (yalnız bakiyeye giren durumlar, TRY) ──
+    // Satırlar zaten kapsamla süzülü: kendi/kisi kapsamında tek kişi, sahipsiz satır YOK.
     $personel = [];
     foreach ($rows as $r) {
         if (($r['currency'] ?: 'TRY') !== 'TRY') continue;
         if (!in_array($r['status'] ?? '', hesap_balance_statuses(), true)) continue;
-        $ad = $r['personel'] !== '' ? $r['personel'] : 'Atanmamış';
+        $ad = $r['personel'] !== '' ? $r['personel'] : 'Kullanıcı #' . (int)$r['user_id'];
         $personel[$ad] ??= ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0];
         if ($r['type'] === 'gelir') $personel[$ad]['gelir'] += (float)$r['amount'];
         else                        $personel[$ad]['gider'] += (float)$r['amount'];
@@ -161,12 +185,21 @@ function hesap_report_data(array $f): array
     unset($p);
 
     // Personel bazında devir ve kapanış — "kim kime ne kadar borçlu" bu satırdan okunur.
+    // K1: tüm personelin devri YALNIZ yönetici "tum" kapsamında okunur. Kendi/kişi
+    // kapsamında tek satır: o kişinin kendi devri (başka isim rapora GİREMEZ).
     $p_devir = [];
-    foreach (hesap_balance_by_user(null, $tarih_b) as $pr) {
-        $p_devir[$pr['personel']] = (float)$pr['net'];
+    if ($tum) {
+        foreach (hesap_balance_by_user(null, $tarih_b) as $pr) {
+            $p_devir[$pr['personel']] = (float)$pr['net'];
+        }
+    } elseif (!empty($kps['uid'])) {
+        // Anahtar, satırlardaki adla aynı olsun (oturumdaki ad DB'dekinden farklı olabilir)
+        $ad_k = array_key_first($personel) ?? (string)$kps['ad'];
+        $p_devir[$ad_k] = (float)(hesap_balance((int)$kps['uid'], null, $tarih_b)['TRY']['net'] ?? 0.0);
     }
     // Dönemde hareketi olmayan ama devri olan personel de raporda görünmeli
     foreach ($p_devir as $ad => $dv) {
+        if (!$tum && abs($dv) < 0.005) continue;   // kendi kapsamında boş satır basma
         $personel[$ad] ??= ['gelir' => 0.0, 'gider' => 0.0, 'adet' => 0, 'net' => 0.0];
     }
     foreach ($personel as $ad => &$p) {
@@ -207,6 +240,7 @@ function hesap_report_data(array $f): array
     return [
         'rows'        => $rows,
         'toplamlar'   => $toplamlar,
+        'toplamlar_bakiye' => $toplamlar_bakiye,
         'bakiye'      => $bakiye,
         'personel'    => $personel,
         'kategoriler' => $kategoriler,
@@ -218,7 +252,8 @@ function hesap_report_data(array $f): array
             'tarih_son' => $tarih_s,
             'type'      => $type_f,
             'durum'     => $durum_f,
-            'depo'      => function_exists('active_depot') ? (active_depot() ?? '') : '',
+            'kapsam_tip'=> $kps['tip'],
+            'kapsam_ad' => $tum ? 'Tüm personel' : (string)$kps['ad'],
             'hazirlayan'=> (function () {
                 $u = function_exists('current_user') ? current_user() : null;
                 return $u ? (string)($u['display_name'] ?: $u['username']) : '';
@@ -254,12 +289,14 @@ function hesap_pdf_badge(?string $status): string
 function hesap_report_html(array $d, bool $for_pdf = true): string
 {
     $m = $d['meta'];
+    // Yönetici başkasının / tüm personelin raporuna bakıyorsa bakiye etiketi üçüncü şahıs
+    $ucuncu = ($m['kapsam_tip'] ?? 'kendi') !== 'kendi';
 
     $logo = hesap_pdf_image_uri(__DIR__ . '/../assets/logo.jpg', 260);
 
     $kapsam = [];
     $kapsam[] = 'Tarih: ' . date('d.m.Y', strtotime($m['tarih_bas'])) . ' — ' . date('d.m.Y', strtotime($m['tarih_son']));
-    if ($m['depo']  !== '') $kapsam[] = 'Depo: ' . $m['depo'];
+    if (($m['kapsam_ad'] ?? '') !== '') $kapsam[] = 'Kapsam: ' . $m['kapsam_ad'];
     if ($m['type']  !== '') $kapsam[] = 'Tür: ' . hesap_type_label($m['type']);
     if ($m['durum'] !== '') {
         $kapsam[] = 'Durum: ' . ($m['durum'] === 'bekleyen' ? 'Onay bekleyenler' : hesap_status_label($m['durum']));
@@ -347,8 +384,10 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
 
 <!-- ═══ Para birimi özeti ═══ -->
 <div class="sec">
-    <h2>Dönem Hareketleri <span class="muted" style="font-weight:normal">(seçilen tarih aralığındaki tüm kayıtlar)</span></h2>
-    <?php foreach ($d['toplamlar'] as $cur => $t): $bi = hesap_balance_label($t['net']); ?>
+    <h2>Dönem Hareketleri <span class="muted" style="font-weight:normal">(onaylanan ve ödenen kayıtlar — bakiyeye giren)</span></h2>
+    <?php foreach ($d['toplamlar'] as $cur => $tl):
+        $t  = $d['toplamlar_bakiye'][$cur] ?? ['gelir' => 0.0, 'gider' => 0.0, 'net' => 0.0, 'adet' => 0];
+        $bi = hesap_balance_label($t['net'], $ucuncu); ?>
     <table class="sum"><tr>
         <td>
             <div class="lbl">Toplam Gelir<?= count($d['toplamlar']) > 1 ? ' (' . h($cur) . ')' : '' ?></div>
@@ -365,6 +404,12 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
             </div>
         </td>
     </tr></table>
+    <p class="muted" style="font-size:6.5pt;margin:-10px 0 10px">
+        Listelenen kayıtlar — tüm durumlar<?= count($d['toplamlar']) > 1 ? ' (' . h($cur) . ')' : '' ?>:
+        <?= (int)$tl['adet'] ?> kayıt · Gelir <?= fmt_para($tl['gelir'], $cur) ?> · Gider <?= fmt_para($tl['gider'], $cur) ?>
+        · Net <?= ($tl['net'] >= 0 ? '+' : '−') . fmt_para(abs($tl['net']), $cur) ?>
+        (taslak, gönderilen ve reddedilenler dahil)
+    </p>
     <?php endforeach; ?>
     <?php if (empty($d['toplamlar'])): ?>
     <p class="muted">Bu dönemde kayıt bulunmuyor.</p>
@@ -389,8 +434,8 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
     </tr></thead>
     <tbody>
     <?php foreach ($d['bakiye'] as $cur => $b):
-        $dv = hesap_balance_label($b['devir']);
-        $kp = hesap_balance_label($b['kapanis']); ?>
+        $dv = hesap_balance_label($b['devir'], $ucuncu);
+        $kp = hesap_balance_label($b['kapanis'], $ucuncu); ?>
     <tr>
         <td class="b"><?= h($cur) ?></td>
         <td class="num <?= $dv['yon'] === 'borc' ? 'neg' : 'pos' ?>"><?= fmt_para($dv['tutar'], $cur) ?></td>
@@ -435,8 +480,8 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
     <tbody>
     <?php $p_g = 0.0; $p_gd = 0.0; $p_a = 0; $p_dv = 0.0; $p_kp = 0.0;
     foreach ($d['personel'] as $ad => $p):
-        $dv = hesap_balance_label($p['devir']);
-        $kp = hesap_balance_label($p['kapanis']);
+        $dv = hesap_balance_label($p['devir'], $ucuncu);
+        $kp = hesap_balance_label($p['kapanis'], $ucuncu);
         $p_g += $p['gelir']; $p_gd += $p['gider']; $p_a += $p['adet'];
         $p_dv += $p['devir']; $p_kp += $p['kapanis']; ?>
     <tr>
@@ -457,7 +502,7 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
         <td class="num"><?= fmt_para($p_gd) ?></td>
         <td class="num"><?= (($p_g - $p_gd) >= 0 ? '+' : '−') . fmt_para(abs($p_g - $p_gd)) ?></td>
         <td class="num"><?= fmt_para(abs($p_kp)) ?></td>
-        <td><?= h(hesap_balance_label($p_kp)['label']) ?></td>
+        <td><?= h(hesap_balance_label($p_kp, $ucuncu)['label']) ?></td>
         <td class="num"><?= $p_a ?></td>
     </tr>
     </tbody>
@@ -520,7 +565,7 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
         <td><?= h(date('d.m.Y', strtotime($r['transaction_date']))) ?></td>
         <td><?= h(hesap_type_label($r['type'])) ?></td>
         <td><?= h($r['category']) ?></td>
-        <td class="muted"><?= h($r['personel'] ?: 'Atanmamış') ?></td>
+        <td class="muted"><?= h($r['personel'] !== '' ? $r['personel'] : 'Kullanıcı #' . (int)$r['user_id']) ?></td>
         <td><?= h($r['person_company']) ?></td>
         <td class="muted"><?= h($r['document_no']) ?></td>
         <td class="num b <?= $r['type'] === 'gelir' ? 'pos' : 'neg' ?>">
@@ -532,7 +577,7 @@ function hesap_report_html(array $d, bool $for_pdf = true): string
     <?php endforeach; ?>
     <?php foreach ($d['toplamlar'] as $cur => $t): ?>
     <tr class="total">
-        <td colspan="7">TOPLAM<?= count($d['toplamlar']) > 1 ? ' (' . h($cur) . ')' : '' ?>
+        <td colspan="7">TOPLAM — tüm durumlar<?= count($d['toplamlar']) > 1 ? ' (' . h($cur) . ')' : '' ?>
             — Gelir <?= fmt_para($t['gelir'], $cur) ?> · Gider <?= fmt_para($t['gider'], $cur) ?></td>
         <td class="num"><?= fmt_para($t['net'], $cur) ?></td>
         <td colspan="2"></td>

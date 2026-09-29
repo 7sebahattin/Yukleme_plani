@@ -22,8 +22,10 @@ declare(strict_types=1);
  * Geri dolum kuralları (yalnız kolon YENİ eklendiğinde çalışır, veri asla ezilmez):
  *   · status  = is_given_to_accountant ? 'approved' : 'submitted'
  *               → hiçbir eski kayıt taslağa düşmez, bakiyeler bugünkü değerinde kalır.
- *   · user_id = NULL bırakılır  → "atanmamış veri herkese görünür" kuralı.
- *   · depo    = ''   bırakılır  → depo_sql_column() boş depoyu tüm depolarda gösterir.
+ *   · user_id = NULL bırakılır  → sahipsiz kayıt: yalnız yönetici görür, kimsenin
+ *                                 bakiyesine girmez; sahibi hesap_sahipsiz.php'den atanır
+ *                                 (otomatik geri dolum YOK).
+ *   · depo    = ''   bırakılır  → yalnız bilgi amaçlı damga; Hesap depo filtresi kullanmaz.
  *
  * is_given_to_accountant SİLİNMEZ; hesap_transition() her durum değişiminde onu
  * senkron tutar, böylece eski sorgular (export, fiş PDF) bozulmadan çalışır.
@@ -116,44 +118,85 @@ function hesap_migrate(): void
  * Kullanıcı girdisini güvenle float'a çevirir.
  * Eski kod `str_replace(['.',','],['','.'])` yapıyordu; "1234.56" → 123456 (100× hata).
  *
- * Kural: son görülen ayırıcı ondalık ayracıdır, öncekiler binlik ayracıdır.
- *   "1.234,56" → 1234.56      "1,234.56" → 1234.56
- *   "1234.56"  → 1234.56      "1234,56"  → 1234.56
- *   "1.234"    → 1234         "1234"     → 1234
- *   "12.500"   → 12500  (binlik — 3 hane kuralı)
+ * Kurallar (O1 — çoklu binlik ayırıcı düzeltmesi):
+ *   · Para simgeleri (₺ $ € TL TRY USD EUR AED) ve boşluklar atılır. Kalan metinde
+ *     rakam, '.' ve ',' dışında karakter varsa 0.0 döner ("1e5" → 0; eskiden 15).
+ *   · İki ayırıcı türü de varsa sonuncusu ondalıktır, diğeri binliktir; binlik
+ *     grupları 3 hane değilse 0.0.          "1.234.567,89" → 1234567.89
+ *   · Tek ayırıcı türü BİRDEN ÇOK geçiyorsa hepsi binliktir, ilk grup hariç her
+ *     grup 3 hane olmalıdır.                "1.234.567" → 1234567 · "1.234.56" → 0
+ *   · Tek ayırıcı BİR KEZ geçiyor, arkasında tam 3 hane ve önünde 1-3 haneli
+ *     (0 ile başlamayan) tam kısım varsa binliktir.   "12.500" → 12500
+ *     Tam kısım '' ya da '0' ise ondalıktır.          "0,005"  → 0.005
+ *   · Diğer her durumda ondalıktır.        "1234,56" → 1234.56 · "1234.567" → 1234.567
+ *
+ * 0.0 dönüşü çağıran tarafından "geçersiz tutar" olarak ele alınır
+ * (hesap_kayit.php "Tutar 0'dan büyük olmalı").
  */
 function hesap_parse_amount($raw): float
 {
     $s = trim((string)$raw);
     if ($s === '') return 0.0;
 
-    $neg = str_starts_with($s, '-');
-    $s = preg_replace('/[^0-9.,]/', '', $s) ?? '';
-    if ($s === '') return 0.0;
+    $s = str_ireplace(['₺', '$', '€', 'TRY', 'TL', 'USD', 'EUR', 'AED'], '', $s);
+    $s = preg_replace('/[\s\x{00A0}\x{202F}]+/u', '', $s) ?? '';
 
-    $last_dot   = strrpos($s, '.');
-    $last_comma = strrpos($s, ',');
+    $neg = false;
+    if (str_starts_with($s, '-')) { $neg = true; $s = substr($s, 1); }
+    if ($s === '' || !preg_match('/^[0-9.,]+$/', $s) || !preg_match('/[0-9]/', $s)) return 0.0;
 
-    if ($last_dot === false && $last_comma === false) {
+    $n_dot   = substr_count($s, '.');
+    $n_comma = substr_count($s, ',');
+
+    // Binlik grupları: ilk grup 1-3 hane, sonrakiler tam 3 hane
+    $gruplar_gecerli = static function (array $g): bool {
+        if (!preg_match('/^[0-9]{1,3}$/', (string)array_shift($g))) return false;
+        foreach ($g as $x) { if (!preg_match('/^[0-9]{3}$/', $x)) return false; }
+        return true;
+    };
+
+    if ($n_dot === 0 && $n_comma === 0) {
         $val = (float)$s;
-        return $neg ? -$val : $val;
+    } elseif ($n_dot > 0 && $n_comma > 0) {
+        $dec_pos  = max((int)strrpos($s, '.'), (int)strrpos($s, ','));
+        $dec_sep  = $s[$dec_pos];
+        $bin_sep  = $dec_sep === '.' ? ',' : '.';
+        $int_str  = substr($s, 0, $dec_pos);
+        $tail     = substr($s, $dec_pos + 1);
+        // Ondalık ayracı yalnız bir kez geçebilir ("1.234,5.6" geçersiz)
+        if (str_contains($int_str, $dec_sep) || !ctype_digit($tail === '' ? '0' : $tail)) return 0.0;
+        if (!$gruplar_gecerli(explode($bin_sep, $int_str))) return 0.0;
+        $val = (float)(str_replace($bin_sep, '', $int_str) . '.' . ($tail === '' ? '0' : $tail));
+    } else {
+        $sep   = $n_dot > 0 ? '.' : ',';
+        $parca = explode($sep, $s);
+        if (count($parca) > 2) {
+            if (!$gruplar_gecerli($parca)) return 0.0;
+            $val = (float)implode('', $parca);
+        } else {
+            [$a, $b] = $parca;
+            if (strlen($b) === 3 && preg_match('/^[1-9][0-9]{0,2}$/', $a)) {
+                $val = (float)($a . $b);                       // binlik: "12.500"
+            } else {
+                $val = (float)(($a === '' ? '0' : $a) . '.' . ($b === '' ? '0' : $b));   // ondalık
+            }
+        }
     }
-
-    // Son ayırıcının konumu → ondalık ayracı adayı
-    $dec_pos = max(($last_dot === false ? -1 : $last_dot), ($last_comma === false ? -1 : $last_comma));
-    $dec_sep = $s[$dec_pos];
-    $tail    = substr($s, $dec_pos + 1);
-
-    // Tek ayırıcı + arkasında tam 3 hane + başka ayırıcı yok → binlik ayracı ("12.500")
-    $sep_count = substr_count($s, '.') + substr_count($s, ',');
-    if ($sep_count === 1 && strlen($tail) === 3 && ctype_digit($tail)) {
-        $val = (float)str_replace([',', '.'], '', $s);
-        return $neg ? -$val : $val;
-    }
-
-    $int_part = str_replace([',', '.'], '', substr($s, 0, $dec_pos));
-    $val = (float)($int_part . '.' . $tail);
     return $neg ? -$val : $val;
+}
+
+/** 'Y-m-d' biçiminde ve takvimde var olan bir tarih mi? ("2026-02-30" → false) */
+function hesap_tarih_gecerli(string $s): bool
+{
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $s, $m)) return false;
+    return checkdate((int)$m[2], (int)$m[3], (int)$m[1]);
+}
+
+/** 'HH:MM' ya da 'HH:MM:SS' saat mi? */
+function hesap_saat_gecerli(string $s): bool
+{
+    if (!preg_match('/^(\d{2}):(\d{2})(?::(\d{2}))?$/', $s, $m)) return false;
+    return (int)$m[1] < 24 && (int)$m[2] < 60 && (int)($m[3] ?? 0) < 60;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -238,19 +281,30 @@ function hesap_transitions(): array
     ];
 }
 
-/** Kayıt sahibi mi? user_id NULL (atanmamış) kayıtlarda hesap.write yeterlidir. */
+/**
+ * Kayıt sahibi mi? Sahipsiz (user_id NULL) kayıt KİMSENİN değildir (K2/O4):
+ * eskiden NULL'da hesap.write yetiyordu ve her personel eski ortak kaydı
+ * gönderip taslağa alabiliyordu.
+ */
 function hesap_is_owner(array $row): bool
 {
     $u = current_user();
     if ($u === null) return false;
     $owner = $row['user_id'] ?? null;
-    if ($owner === null || $owner === '') return hesap_can('write');
+    if ($owner === null || $owner === '') return false;
     return (int)$owner === (int)$u['id'];
 }
 
-/** Bir geçiş bu kullanıcı için mümkün mü? */
+/**
+ * Bir geçiş bu kullanıcı için mümkün mü?
+ * İlk kapı GÖRÜNÜRLÜKTÜR: hesap.approve / hesap.pay yalnız kullanıcının görebildiği
+ * satırda çalışır (K-2). Muhasebe böylece yalnız KENDİ kaydını onaylar/öder;
+ * başkasınınkini yönetici (is_admin / hesap.admin) onaylar.
+ * Kendi kaydını onaylama BİLEREK serbest (kullanıcı kararı K-3) — yasak EKLEME.
+ */
 function hesap_can_transition(array $row, string $to): bool
 {
+    if (!hesap_row_visible($row)) return false;
     $from = (string)($row['status'] ?? 'submitted');
     $rule = hesap_transitions()[$from][$to] ?? null;
     if ($rule === null) return false;
@@ -271,10 +325,31 @@ function hesap_available_transitions(array $row): array
     return $out;
 }
 
-/** Kayıt içeriği düzenlenebilir mi? 'paid' kilitlidir (yükleme modülündeki 'yuklendi' gibi). */
+/** Kayıt içeriği düzenlenebilir mi? 'paid' kilitlidir (yükleme modülündeki 'yuklendi' gibi).
+ *  Eski kapı — yeni kod hesap_icerik_kilitli() kullanır. */
 function hesap_is_locked(array $row): bool
 {
     return (string)($row['status'] ?? '') === 'paid' && !hesap_can('admin');
+}
+
+/**
+ * İçerik kilidi — içerik düzenleme, fiş silme ve kayıt silme için TEK kapı (K4/Y4).
+ * Bakiyeye giren durumlar (approved / pending_payment / paid) yönetici dışında kilitlidir;
+ * yoksa onaylanmış bir tutar sonradan değiştirilip onaysız bakiyeye girerdi.
+ * Düzeltme yolu durum makinesidir: onaycı "Reddet" → sahip "Düzeltmeye Al" → düzenle →
+ * yeniden gönder. Yönetici düzeltmesi gerekçe ister (hesap_kayit.php / hesap_sil.php).
+ */
+function hesap_icerik_kilitli(array $row): bool
+{
+    if (!in_array((string)($row['status'] ?? ''), hesap_balance_statuses(), true)) return false;
+    return !hesap_sees_all();
+}
+
+/** İçerik kilidi mesajı — sayfalar aynı metni gösterir. */
+function hesap_kilit_mesaji(): string
+{
+    return 'Onaylanmış kayıt kilitlidir. Düzeltmek için muhasebeden kaydı reddetmesini isteyin; '
+         . 'sonra "Düzeltmeye Al" ile düzenleyebilirsiniz.';
 }
 
 /**
@@ -289,9 +364,9 @@ function hesap_transition(int $id, string $to, string $note = ''): array
     $row = $st->fetch();
     if (!$row) return ['ok' => false, 'msg' => 'Kayıt bulunamadı.'];
 
-    if (!depot_visible_to_user($row['depo'] ?? '')) {
-        return ['ok' => false, 'msg' => 'Bu kayıt başka bir depoya ait.'];
-    }
+    // Görünmeyen kayıt "bulunamadı" der — "yetkiniz yok" başkasının kaydının
+    // VAR olduğunu sızdırırdı. Hesap depo kapsamlı değildir (bkz. hesap_row_visible).
+    if (!hesap_row_visible($row)) return ['ok' => false, 'msg' => 'Kayıt bulunamadı.'];
 
     $from = (string)($row['status'] ?? 'submitted');
     if (!hesap_status_valid($to)) return ['ok' => false, 'msg' => 'Geçersiz durum.'];
@@ -339,7 +414,8 @@ function hesap_transition(int $id, string $to, string $note = ''): array
 
     audit_log_event('status_change', 'hesap', $id,
         ['status' => $from],
-        ['status' => $to, 'note' => $note, 'amount' => (float)$row['amount'], 'currency' => $row['currency']]
+        ['status' => $to, 'note' => $note, 'amount' => (float)$row['amount'], 'currency' => $row['currency'],
+         'owner' => $row['user_id'] ?? null]
     );
 
     return ['ok' => true, 'msg' => hesap_status_label($to) . ' olarak işaretlendi.'];
@@ -387,32 +463,99 @@ function require_hesap(string $action): void
     }
 }
 
-/** Tüm personelin kayıtlarını görebilir mi? (muhasebe + admin) */
+/**
+ * Yönetici mi? — TÜM personelin hesabını ve sahipsiz kayıtları görür (K-2).
+ * YALNIZ is_admin() ya da hesap.admin. hesap.approve / hesap.pay görünürlük VERMEZ:
+ * muhasebe yalnız kendi hesabını görür; başkasının masrafını yönetici onaylar.
+ */
 function hesap_sees_all(): bool
 {
-    return is_admin() || hesap_can('admin') || hesap_can('approve');
+    return is_admin() || (function_exists('can') && can('hesap.admin'));
 }
 
 /**
- * Kayıt sahipliği WHERE parçası — POZİSYONEL (?).
- * Tümünü görenler için boş döner; aksi halde "kendi kayıtlarım + atanmamış".
+ * Ekran kapsamını çözer. Her Hesap ekranı varsayılan olarak oturumdaki kullanıcının
+ * KENDİ hesabını gösterir; yalnız yönetici ?personel=<uid>|tum ile genişletir.
+ * Yönetici değilse $param SESSİZCE yok sayılır (403 yok — zararsız parametre).
+ *
+ * @return array{tip:string,uid:?int,ad:string,kendi:bool}  tip: kendi | kisi | tum
+ */
+function hesap_kapsam_coz(?string $param, string $varsayilan = 'kendi'): array
+{
+    $u  = current_user();
+    $me = $u !== null ? (int)$u['id'] : null;
+    $kendi = [
+        'tip'   => 'kendi',
+        'uid'   => $me,
+        'ad'    => $u !== null ? (string)(($u['display_name'] ?? '') ?: ($u['username'] ?? '')) : '',
+        'kendi' => true,
+    ];
+    if ($u === null || !hesap_sees_all()) return $kendi;
+
+    $p = trim((string)($param ?? ''));
+    if ($p === '') $p = $varsayilan;
+    if ($p === 'tum') return ['tip' => 'tum', 'uid' => null, 'ad' => 'Tüm personel', 'kendi' => false];
+    if ($p !== '' && ctype_digit($p)) {
+        $uid = (int)$p;
+        if ($uid === $me) return $kendi;
+        try {
+            $st = db()->prepare("SELECT id, COALESCE(NULLIF(display_name,''), username) AS ad FROM users WHERE id = ?");
+            $st->execute([$uid]);
+            $r = $st->fetch();
+        } catch (PDOException $e) { $r = false; }
+        if ($r) return ['tip' => 'kisi', 'uid' => $uid, 'ad' => (string)($r['ad'] ?? ('#' . $uid)), 'kendi' => false];
+    }
+    return $kendi;
+}
+
+/**
+ * Kapsamın WHERE parçası — POZİSYONEL (?). Depo filtresi YOK (bilinçli, bkz. CLAUDE.md).
+ * Savunma: yönetici olmayan için kapsam ne gelirse gelsin "kendi"ye düşer.
+ * @return array{0:string,1:array}
+ */
+function hesap_kapsam_sql(array $k, string $col = 'user_id'): array
+{
+    $tip = (string)($k['tip'] ?? 'kendi');
+    if ($tip !== 'kendi' && !hesap_sees_all()) $tip = 'kendi';
+
+    if ($tip === 'tum') return ["$col IS NOT NULL", []];
+    if ($tip === 'kisi' && !empty($k['uid'])) return ["$col = ?", [(int)$k['uid']]];
+
+    $u = current_user();
+    if ($u === null) return ['0=1', []];
+    return ["$col = ?", [(int)$u['id']]];
+}
+
+/** Sayfa içi linklerin taşıyacağı kapsam parametresi — yalnız yönetici + kendi dışı. */
+function hesap_kapsam_query(array $k): array
+{
+    return match ($k['tip'] ?? 'kendi') {
+        'tum'   => ['personel' => 'tum'],
+        'kisi'  => ['personel' => (int)$k['uid']],
+        default => [],
+    };
+}
+
+/**
+ * Geriye uyum sarmalayıcısı — herkes için "kendi kayıtlarım". Sahipsiz (NULL) YOK.
+ * Yeni kod hesap_kapsam_coz() + hesap_kapsam_sql() kullanır.
  * @return array{0:string,1:array}
  */
 function hesap_owner_sql(string $col = 'user_id'): array
 {
-    if (hesap_sees_all()) return ['', []];
-    $u = current_user();
-    if ($u === null) return ['0=1', []];
-    return ["($col = ? OR $col IS NULL)", [(int)$u['id']]];
+    return hesap_kapsam_sql(hesap_kapsam_coz(null), $col);
 }
 
-/** Tekil kayıt görünürlük kontrolü (depo + sahiplik). */
+/**
+ * Tekil kayıt görünürlüğü — yalnız sahiplik. Depo KONTROL EDİLMEZ: hesap bir kişinin
+ * şirketle carisidir, aktif depoya göre kaybolmamalı (Y1).
+ * Yönetici her kaydı (sahipsizler dahil — atamadan önce incelenebilsin) görür.
+ */
 function hesap_row_visible(array $row): bool
 {
-    if (!depot_visible_to_user($row['depo'] ?? '')) return false;
     if (hesap_sees_all()) return true;
     $owner = $row['user_id'] ?? null;
-    if ($owner === null || $owner === '') return true;   // atanmamış → herkese görünür
+    if ($owner === null || $owner === '') return false;   // sahipsiz → yalnız yönetici
     $u = current_user();
     return $u !== null && (int)$owner === (int)$u['id'];
 }
@@ -421,37 +564,22 @@ function hesap_row_visible(array $row): bool
 // 5) Bakiye hesabı
 // ─────────────────────────────────────────────────────────
 
+/** Boş bakiye satırı. */
+function hesap_balance_bos(): array
+{
+    return ['gelir' => 0.0, 'gider' => 0.0, 'net' => 0.0, 'bekleyen' => 0.0, 'adet' => 0];
+}
+
 /**
- * Para birimi bazında bakiye. Para birimleri ASLA toplanmaz (B2 düzeltmesi).
- *
- *   net      = Σ gelir − Σ (gider + nakit + havale)   [yalnız bakiyeye giren durumlar]
- *   bekleyen = aynı toplam, draft + submitted durumları
- *
- * İşaret: net < 0 → personel cebinden harcamış, ŞİRKET personele borçlu.
- *         net > 0 → personel elinde şirket parası var, personel şirkete borçlu.
- *
- * @param int|null    $user_id  null → görünürlük kuralına göre (kendi kayıtları / tümü)
- * @param string|null $date_from  'Y-m-d' dahil
- * @param string|null $date_to    'Y-m-d' hariç (üst sınır)
+ * Bakiye sorgusunun ORTAK gövdesi — hesap_balance() ve hesap_balance_tum() kullanır.
+ * @param string $where  pozisyonel (?) WHERE parçası (kapsam)
  * @return array<string,array{gelir:float,gider:float,net:float,bekleyen:float,adet:int}>
  */
-function hesap_balance(?int $user_id = null, ?string $date_from = null, ?string $date_to = null): array
+function hesap_balance_sorgu(string $where, array $params, ?string $date_from, ?string $date_to): array
 {
-    $where  = ['1=1'];
-    $params = [];
-
-    if ($user_id !== null) {
-        $where[]  = '(user_id = ? OR user_id IS NULL)';
-        $params[] = $user_id;
-    } else {
-        [$osql, $oparams] = hesap_owner_sql();
-        if ($osql !== '') { $where[] = $osql; $params = array_merge($params, $oparams); }
-    }
-    [$dsql, $dparams] = depo_sql_in('depo');
-    if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
-
-    if ($date_from !== null) { $where[] = 'transaction_date >= ?'; $params[] = $date_from; }
-    if ($date_to   !== null) { $where[] = 'transaction_date <  ?'; $params[] = $date_to; }
+    $w = [$where];
+    if ($date_from !== null) { $w[] = 'transaction_date >= ?'; $params[] = $date_from; }
+    if ($date_to   !== null) { $w[] = 'transaction_date <  ?'; $params[] = $date_to; }
 
     $bal_ph  = implode(',', array_fill(0, count(hesap_balance_statuses()), '?'));
     $pend_ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
@@ -463,7 +591,7 @@ function hesap_balance(?int $user_id = null, ?string $date_from = null, ?string 
                    COALESCE(SUM(CASE WHEN status IN ($pend_ph) AND type IN ('gider','nakit','havale') THEN amount END),0) AS p_gider,
                    COUNT(*) AS adet
             FROM account_transactions
-            WHERE " . implode(' AND ', $where) . "
+            WHERE " . implode(' AND ', $w) . "
             GROUP BY currency";
 
     $args = array_merge(
@@ -487,53 +615,117 @@ function hesap_balance(?int $user_id = null, ?string $date_from = null, ?string 
             'adet'     => (int)$r['adet'],
         ];
     }
-    if (!isset($out['TRY'])) {
-        $out['TRY'] = ['gelir' => 0.0, 'gider' => 0.0, 'net' => 0.0, 'bekleyen' => 0.0, 'adet' => 0];
-    }
+    if (!isset($out['TRY'])) $out['TRY'] = hesap_balance_bos();
     return $out;
 }
 
 /**
+ * KİŞİSEL bakiye — para birimi bazında. Para birimleri ASLA toplanmaz (B2 düzeltmesi).
+ *
+ *   net      = Σ gelir − Σ (gider + nakit + havale)   [yalnız bakiyeye giren durumlar]
+ *   bekleyen = aynı toplam, draft + submitted durumları
+ *
+ * İşaret: net < 0 → personel cebinden harcamış, ŞİRKET personele borçlu.
+ *         net > 0 → personel elinde şirket parası var, personel şirkete borçlu.
+ *
+ * Kapsam YALNIZ o kişinin kayıtlarıdır: sahipsiz (NULL) kayıt hiç kimsenin bakiyesine
+ * girmez, depo filtresi yoktur. Global toplam için hesap_balance_tum().
+ *
+ * @param int|null    $user_id  null → oturumdaki kullanıcının KENDİ bakiyesi (yönetici için de).
+ *                              Başkası istenir ve çağıran yönetici değilse sıfır döner (fail-closed).
+ * @param string|null $date_from  'Y-m-d' dahil
+ * @param string|null $date_to    'Y-m-d' hariç (üst sınır)
+ * @return array<string,array{gelir:float,gider:float,net:float,bekleyen:float,adet:int}>
+ */
+function hesap_balance(?int $user_id = null, ?string $date_from = null, ?string $date_to = null): array
+{
+    $u  = current_user();
+    $me = $u !== null ? (int)$u['id'] : null;
+    $uid = $user_id ?? $me;
+    if ($uid === null || ($uid !== $me && !hesap_sees_all())) {
+        return ['TRY' => hesap_balance_bos()];
+    }
+    return hesap_balance_sorgu('user_id = ?', [$uid], $date_from, $date_to);
+}
+
+/**
+ * Tüm SAHİPLİ kayıtların bakiyesi (yönetici "Tüm personel" kapsamı). Sahipsiz kayıt
+ * burada da YOK — atanana dek kimsenin bakiyesi değildir. Yönetici değilse sıfır.
+ */
+function hesap_balance_tum(?string $date_from = null, ?string $date_to = null): array
+{
+    if (!hesap_sees_all()) return ['TRY' => hesap_balance_bos()];
+    return hesap_balance_sorgu('user_id IS NOT NULL', [], $date_from, $date_to);
+}
+
+/**
  * Bakiye net değerini insan diline çevirir.
+ * $ucuncu_sahis: yönetici BAŞKASININ hesabına bakıyorsa "size/-sunuz" yerine üçüncü şahıs.
  * @return array{yon:string,label:string,tutar:float}
  *         yon: 'alacak' (şirket borçlu) | 'borc' (personel borçlu) | 'denk'
  */
-function hesap_balance_label(float $net): array
+function hesap_balance_label(float $net, bool $ucuncu_sahis = false): array
 {
     if (abs($net) < 0.005) return ['yon' => 'denk', 'label' => 'Bakiye denk', 'tutar' => 0.0];
-    if ($net < 0)  return ['yon' => 'alacak', 'label' => 'Şirket size borçlu',   'tutar' => -$net];
-    return                ['yon' => 'borc',   'label' => 'Şirkete borçlusunuz', 'tutar' => $net];
+    if ($net < 0)  return ['yon' => 'alacak', 'label' => $ucuncu_sahis ? 'Şirket personele borçlu' : 'Şirket size borçlu',   'tutar' => -$net];
+    return                ['yon' => 'borc',   'label' => $ucuncu_sahis ? 'Personel şirkete borçlu' : 'Şirkete borçlusunuz', 'tutar' => $net];
 }
 
-/** Personel kırılımı — rapor ve muhasebe ekranı için. */
-function hesap_balance_by_user(?string $date_from = null, ?string $date_to = null): array
+/**
+ * Personel kırılımı — YALNIZ yönetici (K1 kök düzeltmesi: bu fonksiyonda sahiplik
+ * filtresi yoktu, PDF raporu herkesin bakiyesini sızdırıyordu). Yönetici değilse [].
+ * Sahipsiz kayıt satırı ("Atanmamış") artık oluşmaz. Depo filtresi yok.
+ *
+ * @param string|null $currency 'TRY' (varsayılan — mevcut çağıranlar) · null → kişi × para birimi
+ */
+function hesap_balance_by_user(?string $date_from = null, ?string $date_to = null, ?string $currency = 'TRY'): array
 {
-    $where  = ["at.currency = 'TRY'"];
+    if (!hesap_sees_all()) return [];
+
+    $where  = ['at.user_id IS NOT NULL'];
     $params = [];
-    [$dsql, $dparams] = depo_sql_in('at.depo');
-    if ($dsql !== '') { $where[] = $dsql; $params = array_merge($params, $dparams); }
+    if ($currency !== null)  { $where[] = 'at.currency = ?';          $params[] = $currency; }
     if ($date_from !== null) { $where[] = 'at.transaction_date >= ?'; $params[] = $date_from; }
     if ($date_to   !== null) { $where[] = 'at.transaction_date <  ?'; $params[] = $date_to; }
 
-    $bal_ph = implode(',', array_fill(0, count(hesap_balance_statuses()), '?'));
+    $bal_ph  = implode(',', array_fill(0, count(hesap_balance_statuses()), '?'));
+    $pend_ph = implode(',', array_fill(0, count(hesap_pending_statuses()), '?'));
 
-    $sql = "SELECT at.user_id,
-                   COALESCE(u.display_name, u.username, 'Atanmamış') AS personel,
+    $sql = "SELECT at.user_id, at.currency,
+                   COALESCE(NULLIF(u.display_name,''), u.username, '') AS personel,
                    COALESCE(SUM(CASE WHEN at.status IN ($bal_ph) AND at.type='gelir' THEN at.amount END),0) AS gelir,
                    COALESCE(SUM(CASE WHEN at.status IN ($bal_ph) AND at.type IN ('gider','nakit','havale') THEN at.amount END),0) AS gider,
+                   COALESCE(SUM(CASE WHEN at.status IN ($pend_ph) AND at.type='gelir' THEN at.amount END),0) AS p_gelir,
+                   COALESCE(SUM(CASE WHEN at.status IN ($pend_ph) AND at.type IN ('gider','nakit','havale') THEN at.amount END),0) AS p_gider,
                    COUNT(*) AS adet
             FROM account_transactions at
             LEFT JOIN users u ON u.id = at.user_id
             WHERE " . implode(' AND ', $where) . "
-            GROUP BY at.user_id, personel
-            ORDER BY personel";
+            GROUP BY at.user_id, at.currency, personel
+            ORDER BY personel, at.user_id, (at.currency = 'TRY') DESC, at.currency";
 
     $st = db()->prepare($sql);
-    $st->execute(array_merge(hesap_balance_statuses(), hesap_balance_statuses(), $params));
+    $st->execute(array_merge(
+        hesap_balance_statuses(), hesap_balance_statuses(),
+        hesap_pending_statuses(), hesap_pending_statuses(),
+        $params
+    ));
 
     $rows = $st->fetchAll();
     foreach ($rows as &$r) {
-        $r['net'] = (float)$r['gelir'] - (float)$r['gider'];
+        if ((string)$r['personel'] === '') $r['personel'] = 'Kullanıcı #' . (int)$r['user_id'];
+        $r['net']      = (float)$r['gelir'] - (float)$r['gider'];
+        $r['bekleyen'] = (float)$r['p_gelir'] - (float)$r['p_gider'];
     }
+    unset($r);
     return $rows;
+}
+
+/** Sahipsiz (user_id NULL) kayıt sayısı — yalnız yönetici için anlamlı, değilse 0. */
+function hesap_sahipsiz_sayisi(): int
+{
+    if (!hesap_sees_all()) return 0;
+    try {
+        return (int)db()->query("SELECT COUNT(*) FROM account_transactions WHERE user_id IS NULL")->fetchColumn();
+    } catch (PDOException $e) { return 0; }
 }

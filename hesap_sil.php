@@ -20,13 +20,24 @@ if (!$row) {
 if (!hesap_row_visible($row)) {
     forbidden('Bu kayıt size görünür değil.');
 }
-if (hesap_is_locked($row)) {
-    set_flash('error', 'Ödenmiş kayıt silinemez. Önce ödemeyi geri alın.');
+// Y4: onaylı / ödeme bekleyen / ödenmiş kayıt yönetici dışında silinemez
+if (hesap_icerik_kilitli($row)) {
+    set_flash('error', hesap_kilit_mesaji());
     header('Location: hesap_liste.php'); exit;
 }
+// Yönetici bakiyeye girmiş bir kaydı siliyorsa gerekçe zorunlu (audit'e yazılır)
+$gerekce_gerekli = in_array((string)($row['status'] ?? ''), hesap_balance_statuses(), true);
+$hata = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
+    $gerekce = trim((string)($_POST['gerekce'] ?? ''));
+    if ($gerekce_gerekli && $gerekce === '') {
+        $hata = 'Onaylanmış kaydı silmek için gerekçe yazın.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hata === '') {
 
     // Dosyaları diskten sil
     $files = hesap_get_files($id);
@@ -47,7 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'currency'         => $row['currency'],
         'person_company'   => $row['person_company'],
         'status'           => $row['status'] ?? null,
-    ]);
+        'sahip'            => $row['user_id'] ?? null,
+    ] + ($gerekce_gerekli ? ['gerekce' => $gerekce] : []));
 
     set_flash('success', 'Kayıt silindi.');
     header('Location: hesap_liste.php'); exit;
@@ -62,6 +74,8 @@ render_flash();
     <h1>Kaydı Sil</h1>
     <a href="hesap_liste.php" class="btn btn-ghost">İptal</a>
 </div>
+
+<?php if ($hata !== ''): ?><div class="flash flash-error"><?= h($hata) ?></div><?php endif; ?>
 
 <div class="hs-alert" role="alert">
     <strong>Bu kayıt kalıcı olarak silinecek</strong>
@@ -84,6 +98,12 @@ render_flash();
 
     <form method="post" style="margin-top:16px">
         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <?php if ($gerekce_gerekli): ?>
+        <label class="hs-field" style="margin-bottom:12px">
+            <span>Silme gerekçesi <span class="muted" style="font-weight:400">(zorunlu — kayıt onaylanmış, bakiyeyi değiştirir)</span></span>
+            <textarea name="gerekce" rows="2" required></textarea>
+        </label>
+        <?php endif; ?>
         <div class="hs-actions">
             <a href="hesap_liste.php" class="btn">İptal</a>
             <button type="submit" class="btn btn-danger">Evet, Sil</button>

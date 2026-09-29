@@ -7,7 +7,8 @@
 // veya PDF üretimi hata verirse otomatik olarak bu görünüme düşülür.
 //
 // Filtreler: tarih_bas · tarih_son · type · durum
-// Görünürlük (sahiplik + depo) hesap_report_data() içinde uygulanır.
+// Filtre: personel (yalnız yönetici — <uid> | tum). Görünürlük (kişisel kapsam,
+// depo YOK) hesap_report_data() içinde uygulanır.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -29,10 +30,14 @@ $filters = [
 ];
 // Tarihleri doğrula — geçersizse ay başı/sonu
 foreach (['tarih_bas', 'tarih_son'] as $k) {
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters[$k])) {
+    if (!hesap_tarih_gecerli($filters[$k])) {
         $filters[$k] = $k === 'tarih_bas' ? date('Y-m-01') : date('Y-m-t');
     }
 }
+
+if (!in_array($filters['type'], ['', 'gelir', 'gider', 'havale', 'nakit'], true)) $filters['type'] = '';
+// Kapsam: varsayılan KENDİ hesabım; yönetici ?personel=<uid>|tum ile genişletir
+$filters['kapsam'] = hesap_kapsam_coz($_GET['personel'] ?? null, 'kendi');
 
 $rapor = hesap_report_data($filters);
 
@@ -41,7 +46,8 @@ audit_log_event('export', 'hesap', null, null, [
     'format'    => ($_GET['goruntule'] ?? '') === 'html' ? 'html' : 'pdf',
     'row_count' => $rapor['meta']['adet'],
     'fis_count' => count($rapor['fisler']),
-    'filters'   => array_filter($filters, fn($v) => $v !== ''),
+    'filters'   => array_filter(array_diff_key($filters, ['kapsam' => 1]), fn($v) => $v !== ''),
+    'kapsam'    => ['tip' => $filters['kapsam']['tip'], 'uid' => $filters['kapsam']['uid']],
 ]);
 
 // ── HTML görünümü istendi ──

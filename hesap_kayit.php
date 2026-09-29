@@ -46,6 +46,9 @@ $record = [
     'review_note'          => '',
 ];
 $existing_files = [];
+$yonetici = hesap_sees_all();
+$yonetici_duzeltmesi = false;   // yönetici bakiyeye girmiş kaydı düzeltiyor → gerekçe zorunlu
+$duzeltme_nedeni = '';
 if ($id > 0) {
     $st = db()->prepare("SELECT * FROM account_transactions WHERE id=?");
     $st->execute([$id]);
@@ -55,17 +58,34 @@ if ($id > 0) {
         header('Location: hesap_liste.php');
         exit;
     }
+    // Görünürlük: yalnız kendi kaydı; sahipsiz ve başkasının kaydı yalnız yöneticiye açık
     if (!hesap_row_visible($row)) {
         forbidden('Bu kayıt size görünür değil.');
     }
-    if (hesap_is_locked($row)) {
-        set_flash('error', 'Ödenmiş kayıt kilitlidir. Değişiklik için sistem yöneticisine başvurun.');
+    // Savunma derinliği — yönetici değilse yalnız sahibi düzenler
+    if (!hesap_sees_all() && !hesap_is_owner($row)) {
+        forbidden('Bu kayıt size ait değil.');
+    }
+    // K4: onaylı / ödeme bekleyen / ödenmiş kaydın içeriği yönetici dışında kilitli
+    if (hesap_icerik_kilitli($row)) {
+        set_flash('error', hesap_kilit_mesaji());
         header('Location: hesap_liste.php');
         exit;
     }
     $record = $row;
     $old_for_audit = $row;
     $existing_files = hesap_get_files($id);
+    $yonetici_duzeltmesi = in_array((string)($row['status'] ?? ''), hesap_balance_statuses(), true);
+}
+
+// Yönetici, düzenleme modunda kaydın sahibini değiştirebilir (yanlış atamanın tek tek
+// geri alındığı yol). Liste: aktif kullanıcılar + mevcut sahip (pasif olsa bile).
+$sahip_secenekleri = [];
+if ($yonetici && $id > 0) {
+    try {
+        $sahip_secenekleri = db()->query("SELECT id, COALESCE(NULLIF(display_name,''), username) AS ad
+                                          FROM users WHERE is_active = 1 ORDER BY ad")->fetchAll();
+    } catch (PDOException $e) { $sahip_secenekleri = []; }
 }
 
 // POST işlemi
@@ -74,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $record['transaction_date']       = trim($_POST['transaction_date'] ?? date('Y-m-d')) ?: date('Y-m-d');
     $record['transaction_time']       = trim($_POST['transaction_time'] ?? '00:00') ?: '00:00';
+    if (!hesap_saat_gecerli($record['transaction_time'])) $record['transaction_time'] = '00:00';
     $record['type']                   = trim($_POST['type'] ?? 'gider');
     $record['category']               = trim($_POST['category'] ?? '');
     $record['amount']                 = trim($_POST['amount'] ?? '');
@@ -90,10 +111,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($record['type'], ['gelir','gider','havale','nakit'], true)) {
         $errors[] = 'Geçersiz tür.';
     }
+    // O2: para birimi, tarih ve ödeme yöntemi beyaz listeden
+    if (!in_array($record['currency'], hesap_para_birimleri(), true)) {
+        $errors[] = 'Geçersiz para birimi.';
+    }
+    if (!hesap_tarih_gecerli($record['transaction_date'])) {
+        $errors[] = 'Geçersiz tarih.';
+    }
+    if (!in_array($record['payment_method'], array_keys(hesap_odeme_yontemleri()), true)) {
+        $errors[] = 'Geçersiz ödeme yöntemi.';
+    }
     // B1: "1234.56" gibi nokta-ondalık girdiler 123456 oluyordu — hesap_parse_amount() düzeltir
     $amount_float = hesap_parse_amount($record['amount']);
     if ($amount_float <= 0) {
         $errors[] = 'Tutar 0\'dan büyük olmalı.';
+    } elseif (abs(round($amount_float, 2) - $amount_float) > 1e-9) {
+        $errors[] = 'En fazla 2 ondalık girin.';        // DECIMAL(12,2) sessizce yuvarlamasın
+    } elseif ($amount_float >= 1e10) {
+        $errors[] = 'Tutar çok büyük.';                 // DECIMAL(12,2) sınırı
+    }
+
+    // Yönetici bakiyeye girmiş (onaylı/ödenen) kaydı düzeltiyorsa gerekçe zorunlu (audit'e yazılır)
+    if ($yonetici_duzeltmesi) {
+        $duzeltme_nedeni = trim((string)($_POST['duzeltme_nedeni'] ?? ''));
+        if ($duzeltme_nedeni === '') $errors[] = 'Onaylanmış kaydı düzeltmek için gerekçe yazın.';
+    }
+
+    // Sahip değiştir — YALNIZ yönetici + düzenleme modu. Diğerlerinde POST'taki alan yok sayılır.
+    $yeni_sahip = null; $sahip_degisti = false;
+    if ($yonetici && $id > 0 && array_key_exists('sahip_id', $_POST)) {
+        $ham = trim((string)$_POST['sahip_id']);
+        $eski_sahip = ($old_for_audit['user_id'] ?? null) === null || ($old_for_audit['user_id'] ?? '') === ''
+                    ? null : (int)$old_for_audit['user_id'];
+        if ($ham === '') {
+            $yeni_sahip = null;
+        } elseif (ctype_digit($ham)) {
+            $yeni_sahip = (int)$ham;
+            $ids_ok = array_map(fn($u) => (int)$u['id'], $sahip_secenekleri);
+            if ($yeni_sahip !== $eski_sahip && !in_array($yeni_sahip, $ids_ok, true)) {
+                $errors[] = 'Geçersiz kayıt sahibi.';
+            }
+        } else {
+            $errors[] = 'Geçersiz kayıt sahibi.';
+        }
+        $sahip_degisti = empty($errors) && $yeni_sahip !== $eski_sahip;
     }
 
     // Taslak olarak kaydet / muhasebeye gönder
@@ -112,6 +173,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $legacy_muh = in_array($yeni_durum, hesap_balance_statuses(), true) ? 1 : 0;
 
         if ($is_update) {
+            if ($sahip_degisti) {
+                $pdo->prepare("UPDATE account_transactions SET user_id=? WHERE id=?")->execute([$yeni_sahip, $id]);
+                audit_log_event('owner_change', 'hesap', $id,
+                    ['user_id' => $old_for_audit['user_id'] ?? null],
+                    ['user_id' => $yeni_sahip, 'amount' => (float)$old_for_audit['amount'],
+                     'currency' => $old_for_audit['currency'], 'status' => $old_for_audit['status'] ?? null]);
+            }
             $pdo->prepare("UPDATE account_transactions SET transaction_date=?,transaction_time=?,type=?,category=?,amount=?,currency=?,payment_method=?,person_company=?,description=?,document_no=?,has_invoice=?,is_for_company=?,is_given_to_accountant=?,notes=?,status=?,submitted_at=CASE WHEN ? THEN COALESCE(submitted_at,NOW()) ELSE submitted_at END WHERE id=?")
                 ->execute([
                     $record['transaction_date'], $record['transaction_time'], $record['type'],
@@ -157,6 +225,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'person_company'   => $old_for_audit['person_company'],
                 'status'           => $old_for_audit['status'] ?? null,
             ] : null;
+            if ($yonetici_duzeltmesi) {
+                $new_summary['duzeltme_nedeni']     = $duzeltme_nedeni;
+                $new_summary['yonetici_duzeltmesi'] = true;
+            }
+            $sahip = $old_for_audit['user_id'] ?? null;
+            if ($sahip === null || $sahip === '' || (int)$sahip !== (int)$auth_user['id']) {
+                $new_summary['sahip']            = $sahip;
+                $new_summary['baskasinin_kaydi'] = true;
+            }
             audit_log_event('update', 'hesap', $id, $old_summary, $new_summary);
         } else {
             audit_log_event('create', 'hesap', $id, null, $new_summary);
@@ -268,7 +345,9 @@ render_flash();
             <div class="hs-photo-file" aria-hidden="true">📄</div>
             <div class="hs-photo-name"><?= h($f['original_name']) ?></div>
             <?php endif; ?>
+            <?php if (!$yonetici_duzeltmesi): /* onaylı kaydın fişi herkese kilitli (hesap_dosya_sil.php) */ ?>
             <button type="button" class="hs-photo-del" data-hs-file-del="<?= (int)$f['id'] ?>" aria-label="Sil">✕</button>
+            <?php endif; ?>
         </div>
         <?php endforeach; ?>
     </div>
@@ -373,15 +452,15 @@ render_flash();
             <label class="hs-field">
                 <span>Para Birimi</span>
                 <select name="currency">
-                    <?php foreach (['TRY','USD','EUR','AED'] as $c): ?>
-                    <option value="<?= $c ?>" <?= $record['currency'] === $c ? 'selected' : '' ?>><?= $c ?></option>
+                    <?php foreach (hesap_para_birimleri() as $c): ?>
+                    <option value="<?= h($c) ?>" <?= $record['currency'] === $c ? 'selected' : '' ?>><?= h($c) ?></option>
                     <?php endforeach; ?>
                 </select>
             </label>
             <label class="hs-field">
                 <span>Ödeme Yöntemi</span>
                 <select name="payment_method">
-                    <?php foreach (['nakit'=>'Nakit','banka'=>'Banka','kredi_karti'=>'Kredi Kartı','havale'=>'Havale','sirket_karti'=>'Şirket Kartı','sahsi'=>'Şahsi'] as $v => $l): ?>
+                    <?php foreach (hesap_odeme_yontemleri() as $v => $l): ?>
                     <option value="<?= $v ?>" <?= $record['payment_method'] === $v ? 'selected' : '' ?>><?= $l ?></option>
                     <?php endforeach; ?>
                 </select>
@@ -415,11 +494,37 @@ render_flash();
             </label>
         </div>
 
+        <?php if ($yonetici && $id > 0): ?>
+        <?php $mevcut_sahip = ($record['user_id'] ?? null) === null || ($record['user_id'] ?? '') === '' ? '' : (string)(int)$record['user_id'];
+              $listede = in_array($mevcut_sahip, array_map(fn($u) => (string)(int)$u['id'], $sahip_secenekleri), true); ?>
+        <label class="hs-field" style="margin-top:14px">
+            <span>Kayıt sahibi <span class="muted" style="font-weight:400">(yönetici)</span></span>
+            <select name="sahip_id">
+                <option value="" <?= $mevcut_sahip === '' ? 'selected' : '' ?>>— Sahipsiz —</option>
+                <?php if ($mevcut_sahip !== '' && !$listede): ?>
+                <option value="<?= h($mevcut_sahip) ?>" selected>Kullanıcı #<?= h($mevcut_sahip) ?> (pasif)</option>
+                <?php endif; ?>
+                <?php foreach ($sahip_secenekleri as $su): ?>
+                <option value="<?= (int)$su['id'] ?>" <?= $mevcut_sahip === (string)(int)$su['id'] ? 'selected' : '' ?>><?= h($su['ad']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <?php endif; ?>
+
         <p class="muted" style="font-size:.78rem;margin:10px 0 0">
             Muhasebe onayı durum akışıyla yürür — gönderdikten sonra onay/red işlemini muhasebe yapar.
         </p>
     </div>
 </details>
+
+<?php if ($yonetici_duzeltmesi): ?>
+<section class="hs-step">
+    <label class="hs-field">
+        <span>Düzeltme gerekçesi <span class="muted" style="font-weight:400">(zorunlu — kayıt onaylanmış, işlem geçmişine yazılır)</span></span>
+        <textarea name="duzeltme_nedeni" rows="2" required><?= h($duzeltme_nedeni) ?></textarea>
+    </label>
+</section>
+<?php endif; ?>
 
 <?php
 // Onay sürecine girmiş kayıtlarda durum düzenlemeyle değişmez — buton da gösterilmez

@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v279');
+    define('APP_SURUM', 'v280');
 }
 
 // En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
@@ -352,7 +352,8 @@ function nav_aktif_anahtar(): ?string {
     $a_mstok = in_array($cur, ['malzeme_stok.php', 'malzeme_stok_islem.php', 'malzeme_hareketleri.php',
                                'malzeme_stok_rapor.php', 'malzeme_stok_tehis.php', 'malzeme_stok_import.php'], true);
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
-                               'hesap_sil.php','hesap_muhasebe_fis_pdf.php'], true);
+                               'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
+                               'hesap_sahipsiz.php','hesap_personel.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
