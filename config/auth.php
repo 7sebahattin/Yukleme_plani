@@ -274,12 +274,12 @@ function permission_catalog(): array {
             'maliyet.admin'  => 'Alan / şablon / ambalaj tanımlarını yönet',
         ],
         'Hesap' => [
-            'hesap.read'    => 'Hesap (masraf) kayıtlarını görüntüle',
-            'hesap.write'   => 'Hesap kaydı oluştur / düzenle',
-            'hesap.delete'  => 'Hesap kaydı sil',
-            'hesap.approve' => 'Hesap kaydını onayla / reddet',
-            'hesap.pay'     => 'Hesap kaydını ödendi işaretle',
-            'hesap.admin'   => 'Ödenmiş (kilitli) kaydın kilidini aç',
+            'hesap.read'    => 'Hesabım — yalnız KENDİ hesap kayıtlarını görüntüle',
+            'hesap.write'   => 'Kendi masraf kaydını oluştur / düzenle (onaylanana kadar)',
+            'hesap.delete'  => 'Kendi kaydını sil (onaylanana kadar)',
+            'hesap.approve' => 'Görebildiği kayıtları onayla / reddet (başkasının kaydını GÖSTERMEZ)',
+            'hesap.pay'     => 'Görebildiği kayıtları ödendi işaretle (başkasının kaydını GÖSTERMEZ)',
+            'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, sahipsiz kayıt atar, ödenmiş kaydı açar',
         ],
         'Personel Takibi' => [
             'attendance.read'               => 'Devam kayıtlarını görüntüle',
