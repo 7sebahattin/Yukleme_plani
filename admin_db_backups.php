@@ -1,8 +1,12 @@
 <?php
 // =========================================================
 // admin_db_backups.php — Veritabanı Yedek Yönetimi
-// Sprint DB-Backup-01
+// Sprint DB-Backup-01 · DB-Backup-02
 // Yalnızca admin erişimine açık.
+//
+// İndirme bilerek GET'tir (URL biçimi sabit: ?action=download&id=N):
+// çapraz köken yanıtı OKUYAMAZ; sahte bir istek yalnız downloaded_at/audit
+// yazabilir. Silme ve manuel yedek POST + CSRF.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -37,15 +41,16 @@ if (($_GET['action'] ?? '') === 'download') {
         exit;
     }
 
-    // Path traversal koruması: dosya yolu backup klasörü içinde olmalı
-    $bkp_dir  = realpath(db_backup_dir());
-    $real_path = realpath((string)$bkp['file_path']);
+    // Path traversal koruması: yol yalnız dosya ADINDAN kurulur ve
+    // gerçek yol backup klasörü içinde olmalı
+    $bkp_dir   = realpath(db_backup_dir());
+    $real_path = realpath(_bh_backup_path((string)$bkp['filename']));
     if (!$bkp_dir || !$real_path || !str_starts_with($real_path, $bkp_dir . DIRECTORY_SEPARATOR)) {
-        set_flash('error', 'Güvenlik hatası: geçersiz dosya yolu.');
+        set_flash('error', 'Yedek dosyası sunucuda bulunamadı.');
         header('Location: admin_db_backups.php');
         exit;
     }
-    if (!file_exists($real_path)) {
+    if (!is_file($real_path)) {
         set_flash('error', 'Yedek dosyası sunucuda bulunamadı.');
         header('Location: admin_db_backups.php');
         exit;
@@ -53,8 +58,8 @@ if (($_GET['action'] ?? '') === 'download') {
 
     // İndirme kaydı
     try {
-        $pdo->prepare("UPDATE database_backups SET downloaded_at=NOW(), downloaded_by=? WHERE id=?")
-            ->execute([(int)($auth_user['id'] ?? 0), $bkp_id]);
+        $pdo->prepare("UPDATE database_backups SET downloaded_at=?, downloaded_by=? WHERE id=?")
+            ->execute([date('Y-m-d H:i:s'), (int)($auth_user['id'] ?? 0), $bkp_id]);
     } catch (PDOException $e) {}
 
     // Audit
@@ -62,15 +67,21 @@ if (($_GET['action'] ?? '') === 'download') {
         'filename' => $bkp['filename'],
     ]);
 
+    // Uzun indirme admin'in diğer sekmelerini oturum kilidinde bekletmesin
+    if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
+    @ini_set('zlib.output_compression', '0');
+    @set_time_limit(0);
+
     // Stream
     while (ob_get_level()) { ob_end_clean(); }
     $ct = str_ends_with((string)$bkp['filename'], '.gz') ? 'application/gzip' : 'application/octet-stream';
     header('Content-Type: ' . $ct);
     header('Content-Disposition: attachment; filename="' . basename((string)$bkp['filename']) . '"');
     header('Content-Length: ' . filesize($real_path));
-    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Cache-Control: no-store, private, max-age=0');
     header('Pragma: no-cache');
     header('Expires: 0');
+    header('X-Content-Type-Options: nosniff');
     readfile($real_path);
     exit;
 }
@@ -86,8 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backu
     }
 
     $result = create_database_backup($pdo, (int)($auth_user['id'] ?? 0), 'manual_admin');
-    if ($result['ok']) {
-        set_flash('success', "Yedek oluşturuldu: {$result['filename']} (" . number_format((int)$result['size'] / 1024, 1) . " KB)");
+    if (!empty($result['busy'])) {
+        set_flash('info', 'Yedek zaten alınıyor, birkaç dakika sonra listeyi yenileyin.');
+    } elseif ($result['ok']) {
+        set_flash('success', "Yedek oluşturuldu: {$result['filename']} (" . _bh_fmt_size($result['size']) . ')'
+            . (!empty($result['note']) ? ' — ' . $result['note'] : ''));
     } elseif ($result['file_ok'] && !$result['db_ok']) {
         set_flash('error', 'Dosya oluştu ama kayıt tablosuna yazılamadı: ' . ($result['db_error'] ?? 'Bilinmeyen DB hatası') . ' — Dosya: ' . $result['filename']);
     } else {
@@ -97,32 +111,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'backu
     exit;
 }
 
+// ── POST: Tekil silme ──────────────────────────────────────
+// Son başarılı yedek silinemez; dosya silinemezse satır da silinmez.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    csrf_check($_POST['csrf'] ?? null);
+    $del_id = (int)($_POST['id'] ?? 0);
+
+    $lock = _bh_lock_acquire();
+    if ($lock === null) {
+        set_flash('info', 'Şu anda yedek alınıyor; silme için birkaç dakika sonra tekrar deneyin.');
+        header('Location: admin_db_backups.php');
+        exit;
+    }
+    try {
+        $st = $pdo->prepare("SELECT * FROM database_backups WHERE id=? LIMIT 1");
+        $st->execute([$del_id]);
+        $bkp = $st->fetch();
+        if (!$bkp) {
+            set_flash('error', 'Yedek bulunamadı.');
+        } else {
+            $engel = null;
+            if ($bkp['status'] === 'success') {
+                $ok_sayi = (int)$pdo->query("SELECT COUNT(*) FROM database_backups WHERE status='success'")->fetchColumn();
+                if ($ok_sayi <= 1) $engel = 'Son başarılı yedek silinemez.';
+            }
+            $path = _bh_backup_path((string)$bkp['filename']);
+            if ($engel === null && $bkp['status'] === 'success' && is_file($path) && !@unlink($path)) {
+                $engel = 'Yedek dosyası silinemedi; kayıt korunuyor.';
+            }
+            if ($engel !== null) {
+                set_flash('error', $engel);
+            } else {
+                $pdo->prepare("DELETE FROM database_backups WHERE id=?")->execute([$del_id]);
+                audit_log_event('database_backup_deleted', 'system', $del_id, [
+                    'filename'    => $bkp['filename'],
+                    'size'        => $bkp['file_size'],
+                    'backup_date' => $bkp['backup_date'],
+                    'status'      => $bkp['status'],
+                ], null);
+                set_flash('success', 'Yedek silindi: ' . $bkp['filename']);
+            }
+        }
+    } finally {
+        if ($lock !== false) _bh_lock_release($lock);
+    }
+    header('Location: admin_db_backups.php');
+    exit;
+}
+
 // ── GET: Liste ─────────────────────────────────────────────
-$backups   = list_database_backups($pdo, 30);
+$backups   = list_database_backups($pdo, 30, 'success');
+$failures  = list_database_backups($pdo, 10, 'failed');
+$last_ok   = last_successful_backup($pdo);
+$last_age  = _bh_last_age_hours($last_ok);
+$bkp_state = _bh_state_read();
 $bkp_dir   = db_backup_dir();
 $dir_ok    = is_dir($bkp_dir) && is_writable($bkp_dir);
-$mysqldump = _bh_find_mysqldump();
+$dump_ok   = _bh_can_mysqldump();
+$ok_count  = (int)count($backups);
+
+// Çöküş izi yalnız son başarılı yedekten SONRA olduysa gösterilir
+$crash_goster = !empty($bkp_state['last_crash']) && !empty($bkp_state['crash_at'])
+    && (!$last_ok || strtotime((string)$bkp_state['crash_at']) > strtotime((string)$last_ok['created_at']));
 
 render_header('Veritabanı Yedekleri');
 render_flash();
 ?>
 <style>
-.bkp-page-warn {
-    background: #fef3c7; border: 1.5px solid #f59e0b; border-radius: 6px;
-    padding: 10px 14px; margin-bottom: 14px; font-size: .85rem; color: #92400e;
+.flash-info { background: var(--warn-soft); color: var(--text); border-color: var(--warn); }
+.flash { overflow-wrap: anywhere; }   /* uzun yedek dosya adı mobilde taşmasın */
+.bkp-uyari {
+    background: var(--warn-soft); border: 1.5px solid var(--warn); border-radius: 6px;
+    padding: 10px 14px; margin-bottom: 14px; font-size: .88rem; color: var(--text);
 }
+.bkp-uyari > div + div { margin-top: 4px; }
 .bkp-stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-.bkp-stat { background: #f1f5f9; border-radius: 6px; padding: 8px 14px; font-size: .85rem; }
-.bkp-stat strong { display: block; font-size: 1.05rem; }
-table.bkp-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-table.bkp-table th, table.bkp-table td { border: 1px solid #e2e8f0; padding: 6px 9px; text-align: left; }
-table.bkp-table th { background: #f8fafc; font-weight: 700; }
-.bkp-ok   { color: #16a34a; font-weight: 700; }
-.bkp-fail { color: #dc2626; font-weight: 700; }
-.bkp-table-wrap { overflow-x: auto; }
+.bkp-stat {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 14px; font-size: .85rem; color: var(--muted); min-width: 0;
+}
+.bkp-stat strong { display: block; font-size: 1.02rem; color: var(--text); overflow-wrap: anywhere; }
+.bkp-ok   { color: var(--success); font-weight: 700; white-space: nowrap; }
+.bkp-fail { color: var(--danger);  font-weight: 700; white-space: nowrap; }
+.bkp-note { font-size: .78rem; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; min-width: 20ch; max-width: 42ch; }
+.bkp-fail-box .bkp-note { color: var(--danger); }
+.bkp-dosya { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; min-width: 14ch; }
+.bkp-muted { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
+.bkp-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: nowrap; align-items: center; }
+.bkp-actions form { margin: 0; }
+.bkp-fail-box { margin-top: 16px; }
+.bkp-fail-box > summary { cursor: pointer; font-weight: 600; padding: 6px 0; color: var(--text); }
+.bkp-fail-box[open] > summary { margin-bottom: 8px; }
+.bkp-foot { margin-top: 14px; font-size: .78rem; color: var(--muted); }
+.bkp-tarih { white-space: nowrap; }
 @media (max-width: 767px) {
-    table.bkp-table { font-size: .78rem; }
-    table.bkp-table th, table.bkp-table td { padding: 5px 6px; }
+    .bkp-col-opt { display: none; }
+    .bkp-table th, .bkp-table td { padding: 8px 8px; }
+    .bkp-note { min-width: 0; max-width: none; }
+    .bkp-tarih { white-space: normal; min-width: 5.5em; }
+    .bkp-actions { flex-wrap: wrap; }
 }
 </style>
 
@@ -136,9 +223,22 @@ table.bkp-table th { background: #f8fafc; font-weight: 700; }
     <a href="index.php" class="btn btn-sm btn-secondary">← Ana Sayfa</a>
 </div>
 
+<?php if (!$last_ok || $last_age > DB_BACKUP_STALE_SAAT || $crash_goster): ?>
+<div class="bkp-uyari" role="status">
+    <?php if (!$last_ok): ?>
+    <div>⚠️ Henüz başarılı bir veritabanı yedeği yok.</div>
+    <?php elseif ($last_age > DB_BACKUP_STALE_SAAT): ?>
+    <div>⚠️ Son başarılı yedek: <strong><?= h(_bh_yas_metni((float)$last_age)) ?> önce</strong> (<?= h(fmt_datetime((string)$last_ok['created_at'])) ?>).</div>
+    <?php endif; ?>
+    <?php if ($crash_goster): ?>
+    <div>⚠️ Son otomatik deneme yarıda kesildi (<?= h(fmt_datetime((string)$bkp_state['crash_at'])) ?>): <?= h(mb_substr((string)$bkp_state['last_crash'], 0, 300)) ?></div>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if (!$dir_ok): ?>
-<div class="bkp-page-warn">
-    ⚠️ Yedek klasörü oluşturulamıyor veya yazılamıyor: <code><?= h($bkp_dir) ?></code><br>
+<div class="bkp-uyari">
+    ⚠️ Yedek klasörü oluşturulamıyor veya yazılamıyor: <code><?= h(_bh_display_dir()) ?></code><br>
     Sunucu kullanıcısının bu klasöre yazma yetkisi olmalı.
 </div>
 <?php endif; ?>
@@ -146,15 +246,19 @@ table.bkp-table th { background: #f8fafc; font-weight: 700; }
 <!-- Durum kartları -->
 <div class="bkp-stat-row">
     <div class="bkp-stat">
-        <strong><?= count($backups) ?></strong>
-        Son kayıt (30 adet max)
+        <strong><?= h($last_ok ? fmt_datetime((string)$last_ok['created_at']) : '—') ?></strong>
+        Son başarılı yedek
     </div>
     <div class="bkp-stat">
-        <strong><?= $mysqldump !== '' ? '✅ mysqldump' : '⚠️ PDO fallback' ?></strong>
+        <strong><?= $ok_count ?></strong>
+        Başarılı yedek (son 30)
+    </div>
+    <div class="bkp-stat">
+        <strong><?= $dump_ok ? '✅ mysqldump' : '⚠️ PDO fallback' ?></strong>
         Yedek yöntemi
     </div>
     <div class="bkp-stat">
-        <strong><?= h($bkp_dir) ?></strong>
+        <strong><?= h(_bh_display_dir()) ?></strong>
         Klasör
     </div>
 </div>
@@ -172,53 +276,63 @@ table.bkp-table th { background: #f8fafc; font-weight: 700; }
     </form>
 </div>
 
-<!-- Yedek listesi -->
+<!-- Başarılı yedekler -->
 <?php if (empty($backups)): ?>
-<p style="padding:24px;text-align:center;color:#64748b">Henüz yedek alınmamış.</p>
+<p style="padding:24px;text-align:center;color:var(--muted)">Henüz başarılı yedek yok.</p>
 <?php else: ?>
-<div class="bkp-table-wrap card" style="padding:0">
-<table class="bkp-table">
+<div class="table-wrap">
+<table class="data-table bkp-table">
     <thead>
         <tr>
-            <th>#</th>
+            <th class="bkp-col-opt">#</th>
             <th>Tarih</th>
-            <th>Dosya</th>
+            <th class="bkp-col-opt">Dosya</th>
             <th>Boyut</th>
-            <th>Yöntem</th>
+            <th class="bkp-col-opt">Yöntem</th>
             <th>Durum</th>
-            <th>Oluşturan</th>
-            <th>İndirildi</th>
+            <th class="bkp-col-opt">Oluşturan</th>
+            <th class="bkp-col-opt">İndirildi</th>
             <th></th>
         </tr>
     </thead>
     <tbody>
     <?php foreach ($backups as $b):
-        $file_exists = file_exists((string)$b['file_path']);
-        $kb = $b['file_size'] > 0 ? number_format((int)$b['file_size'] / 1024, 1) . ' KB' : '—';
+        $file_exists = is_file(_bh_backup_path((string)$b['filename']));
     ?>
         <tr>
-            <td style="color:#9ca3af"><?= (int)$b['id'] ?></td>
-            <td><?= h($b['backup_date']) ?></td>
-            <td style="font-size:.8rem;color:#374151"><?= h($b['filename']) ?></td>
-            <td style="white-space:nowrap"><?= h($kb) ?></td>
-            <td style="font-size:.78rem;color:#6b7280"><?= h($b['method'] ?? '—') ?></td>
-            <td class="<?= $b['status'] === 'success' ? 'bkp-ok' : 'bkp-fail' ?>">
-                <?= $b['status'] === 'success' ? 'BAŞARILI' : 'BAŞARISIZ' ?>
-                <?php if ($b['status'] === 'failed' && $b['error_message']): ?>
-                <span title="<?= h($b['error_message']) ?>" style="cursor:help">ⓘ</span>
+            <td class="bkp-col-opt bkp-muted"><?= (int)$b['id'] ?></td>
+            <td class="bkp-tarih"><?= h(fmt_datetime((string)$b['created_at'])) ?></td>
+            <td class="bkp-col-opt bkp-dosya"><?= h($b['filename']) ?></td>
+            <td style="white-space:nowrap"><?= h(_bh_fmt_size($b['file_size'] !== null ? (int)$b['file_size'] : null)) ?></td>
+            <td class="bkp-col-opt bkp-muted"><?= h($b['method'] ?? '—') ?></td>
+            <td>
+                <span class="bkp-ok">BAŞARILI</span>
+                <?php if (!empty($b['error_message'])): ?>
+                <div class="bkp-note"><?= h(mb_substr((string)$b['error_message'], 0, 300)) ?></div>
                 <?php endif; ?>
             </td>
-            <td style="font-size:.8rem"><?= h($b['created_by_name'] ?? '—') ?></td>
-            <td style="font-size:.78rem;color:#6b7280">
-                <?= $b['downloaded_at'] ? date('d.m H:i', strtotime($b['downloaded_at'])) . ' / ' . h($b['downloaded_by_name'] ?? '?') : '—' ?>
+            <td class="bkp-col-opt" style="font-size:.8rem"><?= h($b['created_by_name'] ?? '—') ?></td>
+            <td class="bkp-col-opt bkp-muted">
+                <?= $b['downloaded_at'] ? h(fmt_datetime((string)$b['downloaded_at'])) . ' / ' . h($b['downloaded_by_name'] ?? '?') : '—' ?>
             </td>
             <td>
-                <?php if ($b['status'] === 'success' && $file_exists): ?>
+                <div class="bkp-actions">
+                <?php if ($file_exists): ?>
                 <a href="admin_db_backups.php?action=download&id=<?= (int)$b['id'] ?>"
                    class="btn btn-sm btn-ghost" style="white-space:nowrap">⬇ İndir</a>
-                <?php elseif ($b['status'] === 'success' && !$file_exists): ?>
-                <span style="font-size:.75rem;color:#9ca3af">dosya yok</span>
+                <?php else: ?>
+                <span class="bkp-muted">dosya yok</span>
                 <?php endif; ?>
+                <?php if ($ok_count > 1): ?>
+                <form method="post" action="admin_db_backups.php"
+                      onsubmit="return confirm('Bu yedek kalıcı olarak silinsin mi?');">
+                    <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id"     value="<?= (int)$b['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-ghost" aria-label="Yedeği sil">🗑</button>
+                </form>
+                <?php endif; ?>
+                </div>
             </td>
         </tr>
     <?php endforeach; ?>
@@ -227,8 +341,51 @@ table.bkp-table th { background: #f8fafc; font-weight: 700; }
 </div>
 <?php endif; ?>
 
-<p style="margin-top:14px;font-size:.78rem;color:#9ca3af">
-    14 günden eski yedekler otomatik temizlenir. Yedekler <code><?= h($bkp_dir) ?></code> klasöründe tutulur.
+<!-- Başarısız denemeler (ayrı — başarılıları ekrandan itmesin) -->
+<?php if (!empty($failures)): ?>
+<details class="bkp-fail-box">
+    <summary>Son başarısız denemeler (<?= count($failures) ?>)</summary>
+    <div class="table-wrap">
+    <table class="data-table bkp-table">
+        <thead>
+            <tr>
+                <th>Tarih</th>
+                <th class="bkp-col-opt">Yöntem</th>
+                <th>Hata</th>
+                <th class="bkp-col-opt">Oluşturan</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($failures as $f): ?>
+            <tr>
+                <td class="bkp-tarih"><?= h(fmt_datetime((string)$f['created_at'])) ?></td>
+                <td class="bkp-col-opt bkp-muted"><?= h($f['method'] ?? '—') ?></td>
+                <td>
+                    <span class="bkp-fail">BAŞARISIZ</span>
+                    <div class="bkp-note"><?= h(mb_substr((string)($f['error_message'] ?? 'Sebep kaydedilmemiş'), 0, 300)) ?></div>
+                </td>
+                <td class="bkp-col-opt" style="font-size:.8rem"><?= h($f['created_by_name'] ?? '—') ?></td>
+                <td>
+                    <form method="post" action="admin_db_backups.php" style="margin:0"
+                          onsubmit="return confirm('Bu başarısız deneme kaydı silinsin mi?');">
+                        <input type="hidden" name="csrf"   value="<?= h(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="id"     value="<?= (int)$f['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-ghost" aria-label="Kaydı sil">🗑</button>
+                    </form>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+</details>
+<?php endif; ?>
+
+<p class="bkp-foot">
+    <?= (int)DB_BACKUP_KEEP_DAYS ?> günden eski yedekler otomatik temizlenir; en yeni <?= (int)DB_BACKUP_MIN_KEEP ?> başarılı yedek her zaman korunur.
+    Yedekler <code><?= h(_bh_display_dir()) ?></code> klasöründe tutulur.
 </p>
 
 <?php render_footer(); ?>
