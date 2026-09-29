@@ -90,8 +90,9 @@
 | C15 | `gunluk_isci_puantaj.php` → **⬇ CSV** | `?csv=1` | Günlük puantaj, 11 sütun | tam sayı | PDKS günlük | ❌ |
 | C16 | `cavus_ekstre.php` → **⬇ CSV** | `?csv=1` | Ekstre, para birimi sütunlu | **`1250.50` (nokta!)** | PDKS cari | ❌ |
 
-> Envanter dışı (indirme değil): `hesap_yazdir.php` (PDF), `admin_db_backup_download.php`
-> (SQL yedeği), `hesap_dosya.php` (fiş görseli). İçe aktarma tarafı (`_form.php` Excel Yükle,
+> Envanter dışı (indirme değil): `hesap_yazdir.php` (PDF), `admin_db_backups.php?action=download`
+> (SQL yedeği — eski geçici `admin_db_backup_download.php` Sprint DB-Backup-02'de kaldırıldı, yerinde
+> yalnız 410 döndüren bir tombstone durur), `hesap_dosya.php` (fiş görseli). İçe aktarma tarafı (`_form.php` Excel Yükle,
 > `malzeme_stok_import.php`) yalnız okur, bu incelemenin konusu değil.
 
 ---
