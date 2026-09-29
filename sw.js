@@ -63,11 +63,12 @@ self.addEventListener('fetch', function(e) {
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   e.respondWith(
     fetch(e.request).then(function(response) {
-      // Önbelleğe YALNIZ başarılı, aynı kökenli ve dosya eki OLMAYAN yanıt yazılır.
+      // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.
       // 'no-store' burada ÖLÇÜT DEĞİL: PHP oturumu (session.cache_limiter=nocache)
       // her sayfaya no-store basar; ölçüt olsaydı çevrimdışı sayfa yedeği biterdi.
       var cd = response.headers.get('Content-Disposition') || '';
-      if (!response.ok || response.type !== 'basic' || /attachment/i.test(cd)) {
+      // Opaque (CDN, ör. xlsx betiği) yanıtlar eskisi gibi önbelleğe girer — durumları okunamaz.
+      if (/attachment/i.test(cd) || (response.type === 'basic' && !response.ok)) {
         return response;
       }
       var clone = response.clone();

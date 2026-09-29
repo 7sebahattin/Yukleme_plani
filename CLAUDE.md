@@ -996,7 +996,8 @@ canlı DB'ye ve `storage/backups/`'a dokunmaz). Yedeğe dokunduysan çalıştır
   `--skip-comments` EKLEME** — alt satır kaybolur, her yedek "kesik" sayılır.
   Başlamadan disk kontrolü: en az max(50 MB, 1,5 × son başarılı yedek).
 - **mysqldump:** şifre komut satırında DEĞİL, geçici option dosyasında
-  (`_bh_cnf_value()` — çift tırnak + `\` / `"` kaçışı; `#` artık yorum başlatmaz).
+  (`_bh_cnf_value()` — çift tırnak + yalnız `\` kaçışı; mysys `\"`'yi ÇÖZMEZ, içteki
+  `"` kaçışsız kalır; tırnak içinde `#` yorum başlatmaz).
   `--no-tablespaces --default-character-set=utf8mb4`, stderr ayrı dosyaya alınır ve
   başarısızlıkta `mysqldump exit=N: <stderr>` olarak saklanır; PDO yedeği
   başarılı olsa bile satırın `error_message`'ında "Not: …" diye görünür

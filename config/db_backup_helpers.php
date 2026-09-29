@@ -309,9 +309,11 @@ function _bh_state_update(callable $fn): void {
 
 // ── mysqldump seçenek dosyası değeri ──────────────────────
 // Option dosyasında '#' satır ortasında yorum başlatır, '\' kaçıştır —
-// değer çift tırnağa alınır, '\' ve '"' kaçışlanır.
+// değer çift tırnağa alınır (tırnak içindeki '#' yorum sayılmaz). mysys yalnız
+// \\ \n \r \t \b \s kaçışlarını çözer; '\"' ÇÖZÜLMEZ (ters bölü kalır) —
+// dıştaki tırnaklar sadece baştan/sondan soyulduğu için içteki '"' kaçışsız yazılır.
 function _bh_cnf_value(string $v): string {
-    return '"' . addcslashes($v, "\\\"\n\r") . '"';
+    return '"' . addcslashes($v, "\\\n\r") . '"';
 }
 
 // mysqldump'ı çalıştırıp $part'a gzip olarak yazar. Hata → RuntimeException

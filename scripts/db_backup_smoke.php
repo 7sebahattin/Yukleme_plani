@@ -120,7 +120,7 @@ preg_match("/define\('APP_SURUM', 'v(\d+)'\)/", $hp, $m2);
 ok('CACHE_NAME sayısı == APP_SURUM', isset($m1[1], $m2[1]) && $m1[1] === $m2[1], ($m1[1] ?? '?') . ' / ' . ($m2[1] ?? '?'));
 ok('fetch: admin_db_backup yolu SW dışında (bypass)', str_contains($sw, "indexOf('admin_db_backup') !== -1"));
 ok("fetch: action=download SW dışında", str_contains($sw, "searchParams.get('action') === 'download'"));
-ok('cache.put guard: !ok / basic / attachment', str_contains($sw, '!response.ok') && str_contains($sw, "response.type !== 'basic'") && str_contains($sw, '/attachment/i'));
+ok('cache.put guard: attachment + başarısız aynı-köken', str_contains($sw, '/attachment/i') && str_contains($sw, "response.type === 'basic' && !response.ok"));
 $bypass_pos = strpos($sw, "indexOf('admin_db_backup')");
 ok('bypass respondWith\'den ÖNCE', $bypass_pos !== false && $bypass_pos < strpos($sw, 'e.respondWith('));
 ok('nav-icons ignoreSearch yedeği korunuyor', str_contains($sw, 'ignoreSearch: true'));
@@ -196,7 +196,7 @@ ok('skipIfDoneToday + bugün yedek var → skipped, satır yok', $rs['skipped'] 
 
 // ─────────────────────────────────────────────────────────────────────
 echo "── [E] mysqldump seçenek dosyası\n";
-ok('_bh_cnf_value tırnak + kaçış', _bh_cnf_value('a#b"c\\d ') === '"a#b\\"c\\\\d "', _bh_cnf_value('a#b"c\\d '));
+ok('_bh_cnf_value tırnak + kaçış', _bh_cnf_value('a#b"c\\d ') === '"a#b"c\\\\d "', _bh_cnf_value('a#b"c\\d '));
 $hs = (string)file_get_contents($ROOT . '/config/db_backup_helpers.php');
 ok('bayraklar: --no-tablespaces --default-character-set=utf8mb4', str_contains($hs, '--no-tablespaces --default-character-set=utf8mb4'));
 ok('stderr yakalanıyor (2> dosya)', str_contains($hs, "' 2>' . escapeshellarg(\$err_file)"));
