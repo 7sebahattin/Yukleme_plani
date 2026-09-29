@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v278';
+const CACHE_NAME = 'yukleme-plani-v279';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -57,8 +57,19 @@ self.addEventListener('activate', function(e) {
 // Network-first: önce ağ dene, başarısız olursa önbellekten sun
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
+  // Veritabanı yedeği ve her türlü indirme SW'ye HİÇ uğramaz (respondWith yok):
+  // aksi hâlde tam DB dökümü CacheStorage'a kalıcı yazılıyordu (DB-Backup-02).
+  var u = new URL(e.request.url);
+  if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   e.respondWith(
     fetch(e.request).then(function(response) {
+      // Önbelleğe YALNIZ başarılı, aynı kökenli ve dosya eki OLMAYAN yanıt yazılır.
+      // 'no-store' burada ÖLÇÜT DEĞİL: PHP oturumu (session.cache_limiter=nocache)
+      // her sayfaya no-store basar; ölçüt olsaydı çevrimdışı sayfa yedeği biterdi.
+      var cd = response.headers.get('Content-Disposition') || '';
+      if (!response.ok || response.type !== 'basic' || /attachment/i.test(cd)) {
+        return response;
+      }
       var clone = response.clone();
       caches.open(CACHE_NAME).then(function(cache) {
         cache.put(e.request, clone);
