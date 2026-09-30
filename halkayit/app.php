@@ -13,4 +13,8 @@ $auth_user = require_login();
 require_perm('records.write');
 
 header('Content-Type: text/html; charset=utf-8');
-readfile(__DIR__ . '/app.html');
+// CSRF: yeni yazma uçları (kisi_kaydet / kisi_sil) token ister. app.html statik
+// olduğu için token <meta name="csrf-token" content="__CSRF_TOKEN__"> yer
+// tutucusuna burada basılır; api() her istekte X-CSRF-Token başlığıyla yollar.
+// Yer tutucu yoksa str_replace zararsızdır.
+echo str_replace('__CSRF_TOKEN__', h(csrf_token()), (string)file_get_contents(__DIR__ . '/app.html'));

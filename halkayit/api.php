@@ -132,6 +132,8 @@ function hks_sonlar_key($firmaId) {
 }
 
 // Son kullanılan KARŞI TARAF listesini güncelle — SAF fonksiyon (DB'ye dokunmaz).
+// NOT: Kişi Havuzu'ndan (kisi_havuzu_lib.php) beri üretim akışı bunu ÇAĞIRMAZ;
+// scripts/hks_uretici_sevk_test.php'deki senkron kopya bozulmasın diye duruyor.
 // Aynı TC/VKN varsa çıkarılıp EN BAŞA alınır (böylece en son kullanılan üstte
 // kalır ve bilgileri güncellenir), liste $limit ile sınırlanır.
 //
@@ -163,20 +165,13 @@ function hks_karsi_taraf_ekle($liste, $yeni, $limit = 10) {
   return array_slice(array_merge([$kayit], $kalan), 0, $limit);
 }
 
-// Son kullanılan plaka/ülke/ürün/karşı taraf güncelle (yalnızca ilgili firma için)
+// Son kullanılan plaka/ülke/ürün güncelle (yalnızca ilgili firma için).
+// KARŞI TARAF artık burada TUTULMAZ: global Kişi Havuzu'na (hks_kisiler) yazılır —
+// bkz. hks_kisi_havuzuna_isle(). Eski 'karsiTaraflar' anahtarı kv'de olduğu gibi
+// kalır (tek seferlik içe aktarmanın kaynağı; silinmez, artık güncellenmez).
 function hks_son_guncelle($ortak, $firmaId) {
   $key = hks_sonlar_key($firmaId);
   $son = hks_kv_oku($key, ['plakalar' => [], 'ulkeler' => [], 'urunler' => []]);
-  // Eski kayıtlarda bu anahtar yok — varsayılanla tamamla.
-  if (!isset($son['karsiTaraflar'])) $son['karsiTaraflar'] = [];
-  if (!empty($ortak['ikinciTc'])) {
-    $son['karsiTaraflar'] = hks_karsi_taraf_ekle($son['karsiTaraflar'], [
-      'tc'    => $ortak['ikinciTc'],
-      'ad'    => $ortak['ikinciAd'] ?? '',
-      'cep'   => $ortak['ikinciCep'] ?? '',
-      'dogum' => $ortak['ikinciDogumTarihi'] ?? '',
-    ]);
-  }
   if (!empty($ortak['plaka'])) {
     $son['plakalar'] = array_slice(array_merge([$ortak['plaka']],
       array_values(array_filter($son['plakalar'], fn($p) => $p !== $ortak['plaka']))), 0, 10);
@@ -190,6 +185,25 @@ function hks_son_guncelle($ortak, $firmaId) {
       array_values(array_filter($son['urunler'], fn($u) => (string)$u['id'] !== (string)$ortak['urunId']))), 0, 3);
   }
   hks_kv_yaz($key, $son);
+}
+
+// Gönderim sonrası karşı tarafı Kişi Havuzu'na işle (tc eşleşmesi; boş gelen
+// ad/cep/doğum eskiyi silmez; kullanım sayacı artar). Hata YUTULUR: buraya
+// gelindiyse HKS'te künye GERİ ALINAMAZ şekilde oluştu — havuz sorunu yüzünden
+// kullanıcıya hata dönmek (ve onu tekrar göndermeye itmek) mükerrer bildirim
+// riskidir.
+function hks_kisi_havuzuna_isle(PDO $db, $ortak, $kullaniciId) {
+  if (empty($ortak['ikinciTc'])) return;
+  try {
+    hks_kisi_upsert($db, [
+      'tc'    => $ortak['ikinciTc'],
+      'ad'    => $ortak['ikinciAd'] ?? '',
+      'cep'   => $ortak['ikinciCep'] ?? '',
+      'dogum' => $ortak['ikinciDogumTarihi'] ?? '',
+    ], $kullaniciId);
+  } catch (Throwable $e) {
+    error_log('[hks] kişi havuzu upsert hatası: ' . $e->getMessage());
+  }
 }
 
 // =============================================================================
@@ -251,6 +265,35 @@ try {
       $varsayilan = ['plakalar' => [], 'ulkeler' => [], 'urunler' => [], 'karsiTaraflar' => []];
       // Eski kayıtlarda 'karsiTaraflar' yok — arayüz her zaman dizi görsün.
       hks_json_cikti(array_merge($varsayilan, (array)hks_kv_oku($sonKey, $varsayilan)));
+    }
+
+    // ---- KİŞİ HAVUZU (karşı taraf — GLOBAL, firma bazlı değil) ----
+    // Okuma CSRF istemez (veri değiştirmez — tek seferlik içe aktarma dışında,
+    // o da idempotenttir ve yalnız eski veriyi kopyalar).
+    case 'kisiler': {
+      try { hks_kisi_havuzu_ice_aktar($db); }
+      catch (Throwable $e) { error_log('[hks] kişi havuzu içe aktarma hatası: ' . $e->getMessage()); }
+      hks_json_cikti(['kisiler' => hks_kisi_liste($db)]);
+    }
+
+    case 'kisi_kaydet': {
+      // Yeni yazma uçları CSRF ister (JSON-aware: 403 + JSON). Token app.php'nin
+      // app.html'e bastığı meta'dan X-CSRF-Token başlığıyla gelir.
+      csrf_check($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+      $sonuc = hks_kisi_kaydet($db, $g, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
+      if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
+      audit_log_event($sonuc['islem'], 'hks_kisi', (int)$sonuc['satir']['id'],
+        $sonuc['eski'] ? hks_kisi_audit_degerleri($sonuc['eski']) : null,
+        hks_kisi_audit_degerleri($sonuc['satir'], $sonuc['eski']));
+      hks_json_cikti(['tamam' => true, 'kisi' => $sonuc['kisi']]);
+    }
+
+    case 'kisi_sil': {
+      csrf_check($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+      $sonuc = hks_kisi_sil($db, (int)($g['id'] ?? 0));
+      if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
+      audit_log_event('delete', 'hks_kisi', (int)$sonuc['eski']['id'], hks_kisi_audit_degerleri($sonuc['eski']), null);
+      hks_json_cikti(['tamam' => true]);
     }
 
     // ---- REFERANS LİSTELERİ ----
@@ -549,6 +592,7 @@ try {
 
       // En az bir künye gerçekten oluştu → bu GERİ ALINAMAZ, kayıt tutulmalı.
       hks_son_guncelle($ortak, $t['firma_id']);
+      hks_kisi_havuzuna_isle($db, $ortak, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
       $gid = 'g' . round(microtime(true) * 1000);
       $toplamKg = array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));

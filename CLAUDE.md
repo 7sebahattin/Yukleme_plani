@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v281` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v282` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -23,7 +23,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Kantar | `kantar` · `kantar_create/edit/view/delete/foto` · `_kantar_form` · `kantar_raporu` · `kantar_report_toggle` | — | — | — |
 | Stok / Malzeme | `stok` · `malzeme_stok` · `malzeme_stok_islem/import/rapor` · `malzeme_hareketleri` · `malzeme_stok_tehis` · `api_bulk_material` | `material_stock_helpers` | — | `test_material_stock_helpers` |
 | Beyan + HKS köprüsü | `beyanlar` · `beyan_view/create/edit/delete/parse/eslestir/bulk_save` · `_beyan_liste` · `api_beyan_bildirim` · `beyan_bildirim_tani` | `helpers` (`beyan_*`, `bb_*`) | — | `beyan_bildirim_smoke` · `beyan_ui_smoke` · `beyan_js_smoke.js` |
-| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` |
+| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_kisi_pencere_smoke.js` |
 | Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
 | PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`) | `pdks.css` · `pdks.js` · `print_pdks.css` | `pdks_*_smoke` |
@@ -761,6 +761,38 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
     red'i reddeder. `temiz`/`red` seçilince `analysis_result_at` otomatik dolar.
   - Şerit tüm alanları hidden gönderir (tam güncelleme dalı): **yeni kolon
     eklersen o listeye de ekle**, yoksa her durum değişikliğinde silinir.
+
+---
+
+## Hal Kayıt — Kişi Havuzu (v282)
+
+Karşı taraf (Satın Alım'da satıcı, Satış/Sevk'te alıcı) artık firma bazlı
+"Son Kullanılanlar" açılır listesinden değil, **GLOBAL havuzdan** seçilir: tüm
+firmalar aynı müstahsil/firma listesini görür.
+
+- **Tablo `hks_kisiler`** (tc UNIQUE, yalnız rakam) — `hks_tablolari_hazirla()` →
+  `hks_kisi_tablo_hazirla()` ile otomatik oluşur (halkayit deseni). Çekirdek
+  mantık `halkayit/kisi_havuzu_lib.php` (include-only, `.htaccess`'te kapalı);
+  çıktı basmaz/exit etmez — test onu doğrudan require eder.
+- **Uçlar:** `kisiler` (liste + ilk çağrıda tek seferlik içe aktarma) ·
+  `kisi_kaydet` · `kisi_sil`. Yazma uçları **CSRF** ister: `app.php`
+  `app.html`'deki `__CSRF_TOKEN__` meta yer tutucusunu doldurur, `api()` her
+  istekte `X-CSRF-Token` yollar. `app.html`'i `readfile` ile basmaya DÖNME.
+- **Doğrulama sunucuda** (`hks_kisi_dogrula`): 10 hane VKN / 11 hane TC
+  (algoritma zorunlu), ad zorunlu (pencereden), cep boş ya da 10–13 hane,
+  doğum boş ya da geçmiş tarih. Aynı TC → 409.
+- **Gönderim sonrası** `hks_kisi_havuzuna_isle()` upsert eder (boş gelen
+  ad/cep/doğum eskiyi SİLMEZ; hata yutulur — künye zaten oluştu).
+  `hks_son_guncelle()` artık `karsiTaraflar` YAZMAZ; eski `sonlar_*` kv verisi
+  silinmez, bayrak `kisi_havuzu_aktarildi` ile bir kez havuza aktarılır.
+- **Seçim canlı sorguya gider:** pencerede kişiye tıklamak `karsiTarafSec()`
+  çağırır — saklı bilgi karar vermez, HKS KayitliKisiSorgu yine çalışır.
+- **Audit** `module='hks_kisi'`: yalnız ad + maskeli TC; cep/doğum YAZILMAZ.
+- Pencere `#kisiPencere` (z 600) + `#kisiForm` (z 650); flex kolon, gövde
+  `min-height:0` ile kayar; mobilde alttan sayfa. Kullanıcı verisi yalnız
+  `textContent` ile basılır.
+- **Test:** `php scripts/hks_kisi_havuzu_smoke.php` (SQLite) ·
+  `node scripts/hks_kisi_pencere_smoke.js` (Playwright; yoksa atlar).
 
 ---
 

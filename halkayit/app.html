@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="csrf-token" content="__CSRF_TOKEN__">
 <title>HKS Panel</title>
 <script>
 /* Tema senkronu — ana panel ile AYNI anahtar (asya_tema). CSS'ten önce çalışır
@@ -345,6 +346,50 @@
   #modal h3 { color:var(--navy); font-size:16px; margin-bottom:12px; }
   .onay-satir { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
 
+
+  /* Kişi havuzu penceresi (#kisiPencere) ve Yeni/Düzenle formu (#kisiForm).
+     #modal'dan BAĞIMSIZ iki katman; form listenin üstünde. z-index ≥ 600. */
+  .kisi-secili { font-size:12.5px; color:var(--soluk); margin-top:6px; overflow-wrap:anywhere; }
+  .kisi-ovl { position:fixed; inset:0; background:rgba(10,35,52,.5); z-index:600; display:none;
+    align-items:center; justify-content:center; padding:16px; }
+  .kisi-ovl.acik { display:flex; }
+  #kisiForm { z-index:650; }
+  .kisi-dlg { background:var(--kart); color:var(--metin); border-radius:20px; width:100%; max-width:520px;
+    height:min(640px,88vh); max-height:88vh; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:var(--golge); }
+  #kisiForm .kisi-dlg { height:auto; max-width:440px; }
+  .kisi-bas { display:flex; align-items:center; gap:10px; padding:14px 16px 10px; flex:0 0 auto; }
+  .kisi-bas h3 { flex:1; min-width:0; font-size:17px; color:var(--navy); }
+  .kisi-x { width:40px; height:40px; margin:0; padding:0; border:0; border-radius:12px; flex:0 0 auto;
+    background:var(--soluk-bg); color:var(--metin); font-size:18px; cursor:pointer; }
+  .kisi-ara { padding:0 16px 10px; flex:0 0 auto; }
+  .kisi-ara input, .kisi-form-govde input { font-size:16px; }
+  .kisi-govde { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:4px 16px 12px; }
+  .kisi-alt { flex:0 0 auto; display:flex; gap:10px; padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid var(--cizgi); }
+  .kisi-alt .btn { margin:0; }
+  .kisi-durum { padding:18px 6px; text-align:center; color:var(--soluk); font-size:14px; }
+  .kisi-durum.hata { color:var(--hata-tx); }
+  .kisi-satir { display:flex; align-items:center; gap:8px; padding:10px 8px; border-bottom:1px solid var(--cizgi);
+    border-radius:10px; cursor:pointer; min-width:0; }
+  .kisi-satir:hover, .kisi-satir:focus-visible { background:var(--satir-cift); outline:none; }
+  .kisi-satir.vurgu { background:var(--cip-bg); box-shadow:inset 0 0 0 2px var(--teal); }
+  .kisi-bilgi { flex:1 1 auto; min-width:0; }
+  .kisi-ad { font-weight:700; font-size:14.5px; overflow-wrap:anywhere; }
+  .kisi-alt2 { font-size:12.5px; color:var(--soluk); margin-top:2px; overflow-wrap:anywhere; }
+  .kisi-rozet { display:inline-block; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px;
+    background:var(--cip-bg); color:var(--teal); margin-right:6px; }
+  .kisi-ikon { flex:0 0 auto; width:38px; height:38px; margin:0; padding:0; border:0; border-radius:10px;
+    background:var(--soluk-bg); font-size:15px; cursor:pointer; }
+  .kisi-form-govde { padding:4px 16px 12px; overflow-y:auto; flex:1 1 auto; min-height:0; }
+  .kisi-form-govde label { margin-top:10px; }
+  .kisi-not { color:var(--soluk); font-weight:400; font-size:12px; }
+  @media (max-width:767px) {
+    .kisi-ovl { padding:0; align-items:flex-end; }
+    .kisi-dlg { max-width:none; height:94vh; height:94dvh; max-height:94dvh; border-radius:20px 20px 0 0; }
+    #kisiForm .kisi-dlg { height:auto; max-height:94dvh; }
+  }
+
   .renk-secim { display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
   .renk-top { width:42px; height:42px; border-radius:14px; cursor:pointer; border:3px solid transparent; }
   .renk-top.secili { border-color:var(--metin); }
@@ -560,11 +605,11 @@
       <!-- Karşı Taraf — yurt içi (Sevk Etme / yurt içi Satış / Satın Alım) modunda görünür -->
       <div id="karsiTarafBlok" class="gizli" style="margin-top:14px;padding-top:12px;border-top:1px dashed #d7e2ea">
         <label class="label-vurgu" id="karsiBaslik">Karşı Taraf (Alıcı)</label>
-        <!-- Son kullanılan karşı taraflar — ülke/ürün çipleriyle AYNI desen.
-             Tıklanınca TC dolar ve HKS'e CANLI sorgu gider (saklı bilgi yalnız
-             formu hızlı doldurmak içindir, kayıt durumuna karar vermez). -->
-        <label>Son Kullanılanlar</label>
-        <select id="ikSonSecim"><option value="">— kayıtlı kişilerden seç —</option></select>
+        <!-- Kişi havuzu — "Kişi Seç" pencere açar (kayıtlı kişi listesi, arama,
+             yeni ekle/düzenle/sil). Kişiye tıklanınca TC dolar ve HKS'e CANLI
+             sorgu gider (saklı bilgi yalnız formu hızlı doldurmak içindir). -->
+        <button type="button" class="btn btn-soluk" id="btnKisiSec" aria-haspopup="dialog" style="margin-top:8px">👥 Kişi Seç</button>
+        <div id="kisiSecili" class="kisi-secili gizli"></div>
         <div class="satir2">
           <div>
             <label>TC / Vergi No</label>
@@ -929,6 +974,46 @@
   <button class="btn btn-amber" id="btnTaslakKaydet">💾 Taslağa Kaydet</button>
 </div>
 
+<!-- Kişi havuzu penceresi -->
+<div id="kisiPencere" class="kisi-ovl">
+  <div class="kisi-dlg" role="dialog" aria-modal="true" aria-labelledby="kisiPencereBaslik">
+    <div class="kisi-bas">
+      <h3 id="kisiPencereBaslik">Alıcı Seç</h3>
+      <button type="button" class="kisi-x" id="btnKisiKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="kisi-ara">
+      <input id="kisiAra" type="search" autocomplete="off" placeholder="Ad veya TC/VKN ara" aria-label="Kişi ara" style="margin:0">
+    </div>
+    <div class="kisi-govde" id="kisiListe"></div>
+    <div class="kisi-alt">
+      <button type="button" class="btn btn-teal" id="btnKisiYeni">➕ Yeni Ekle</button>
+    </div>
+  </div>
+</div>
+<div id="kisiForm" class="kisi-ovl">
+  <div class="kisi-dlg" role="dialog" aria-modal="true" aria-labelledby="kisiFormBaslik">
+    <div class="kisi-bas">
+      <h3 id="kisiFormBaslik">Yeni Kişi</h3>
+      <button type="button" class="kisi-x" id="btnKisiFormKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="kisi-form-govde">
+      <label for="kfTc">TC / Vergi No</label>
+      <input id="kfTc" inputmode="numeric" autocomplete="off" placeholder="10 hane VKN / 11 hane TC">
+      <label for="kfAd">Ad / Ünvan <span style="color:var(--hata-tx)">*</span></label>
+      <input id="kfAd" autocomplete="off" maxlength="200" placeholder="ad soyad / ünvan">
+      <label for="kfCep">Cep Telefonu <span class="kisi-not">(opsiyonel)</span></label>
+      <input id="kfCep" inputmode="numeric" autocomplete="off" placeholder="05xxxxxxxxx">
+      <label for="kfDogum">Doğum Tarihi <span class="kisi-not">(opsiyonel — kayıtsız kişide HKS zorunlu tutar)</span></label>
+      <input id="kfDogum" type="date">
+      <div class="mesaj" id="kisiFormMesaj"></div>
+    </div>
+    <div class="kisi-alt">
+      <button type="button" class="btn btn-soluk" id="btnKisiFormIptal">Vazgeç</button>
+      <button type="button" class="btn btn-teal" id="btnKisiFormKaydet">Kaydet</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modallar -->
 <div id="modal">
   <div class="kutu" id="modalOnayKutu">
@@ -1010,7 +1095,7 @@ const cepRakam   = (s) => String(s || '').replace(/\D+/g, '');
 // TC/VKN yalnız RAKAMDIR. Kullanıcı "213 527 234 54" / "213.527.234.54" gibi
 // biçimlenmiş yazabilir veya kopyalayabilir; bu hâliyle HKS'e giderse KPS kişiyi
 // BULAMAZ ("Tc kimlik numarası Mernis sisteminde bulunamadı"). Üstelik kirli değer
-// "Son Kullanılanlar"a da yazıldığı için kişi her seçildiğinde hata TEKRARLANIR.
+// kişi havuzuna da yazıldığı için kişi her seçildiğinde hata TEKRARLANIR.
 // Cep telefonunda zaten yapılan temizliğin (cepRakam) TC karşılığıdır.
 const tcRakam    = (s) => String(s || '').replace(/\D+/g, '');
 // TC Kimlik No algoritma denetimi — api.php'deki hks_tc_algoritma_gecerli()'nin
@@ -1063,6 +1148,10 @@ const API_ROTA = {
   'GET /api/gonderilenler': 'gonderilenler',
   // Yurt içi (Sevk Etme) referans/doğrulama
   'POST /api/kayitli_kisi': 'kayitli_kisi',
+  // Kişi havuzu (tüm firmalar ortak)
+  'GET /api/kisiler': 'kisiler',
+  'POST /api/kisi_kaydet': 'kisi_kaydet',
+  'POST /api/kisi_sil': 'kisi_sil',
   'POST /api/isyerleri': 'isyerleri',
   'POST /api/iller': 'iller',
   'POST /api/ilceler': 'ilceler',
@@ -1074,17 +1163,24 @@ const API_ROTA = {
   'POST /api/urun_listeleri': 'urun_listeleri',
   'POST /api/urun_cinsleri': 'urun_cinsleri',
 };
+function csrfToken() {
+  const m = document.querySelector('meta[name="csrf-token"]');
+  const t = m ? m.getAttribute('content') : '';
+  return t === '__CSRF_TOKEN__' ? '' : (t || '');
+}
 async function api(yol, metod, govde) {
   metod = metod || 'GET';
   const action = API_ROTA[metod + ' ' + yol];
   if (!action) throw new Error('Bilinmeyen istek: ' + metod + ' ' + yol);
   const r = await fetch('api.php?action=' + action, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
     body: JSON.stringify(govde || {}),
   });
   const j = await r.json();
-  if (!r.ok || j.hata) throw new Error(j.hata || ('HTTP ' + r.status));
+  // csrf_check() (config/helpers.php) 403'te 'hata' değil 'error' döner — onu da göster,
+  // yoksa oturum/token sorunu kullanıcıya yalnız "HTTP 403" diye görünürdü.
+  if (!r.ok || j.hata) throw new Error(j.hata || j.error || ('HTTP ' + r.status));
   return j;
 }
 
@@ -1726,7 +1822,7 @@ function formuTemizle() {
   $('sMiktarBirim').value = '';
   $('chkAnaliz').checked = false;
   $('gelenUlkeBlok').classList.add('gizli');
-  $('ikSonSecim').value = '';
+  $('kisiSecili').classList.add('gizli'); $('kisiSecili').textContent = '';
   ['malMesaj', 'malCinsMesaj', 'uretimYerMesaj'].forEach(id => { $(id).className = 'mesaj'; });
   $('sIkSifat').value = '';
   $('sIsletmeTuru').value = '';
@@ -1839,7 +1935,6 @@ function listeleriDoldur() {
 
 // ===== YURT İÇİ MODU (Sevk Etme + yurt içi Satış) =====
 let ikDogrulandi = null;  // { tcVkn, kayitliMi, sifatlar } — doğrulanan karşı taraf
-let karsiTarafListesi = [];  // "Son Kullanılanlar" açılır listesinin kaynağı
 let illerYuklendi = false;
 
 function doldurSel(id, dizi, ilk) {
@@ -2480,7 +2575,7 @@ $('oIkTc').oninput = () => {
   // HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" hatası veriyordu
   // (TC + doğum tarihi KPS'te birlikte doğrulanır).
   ['oIkAd', 'oIkCep', 'oIkDogum'].forEach(id => { $(id).value = ''; });
-  $('ikSonSecim').value = '';   // liste seçimi de artık geçerli değil
+  $('kisiSecili').classList.add('gizli'); $('kisiSecili').textContent = '';   // pencereden seçim artık geçerli değil
   ikSifatlariDoldur([]);   // sıfat listesi tekrar tam listeye döner
   $('sIsletmeTuru').value = '';
   $('sIsyeri').innerHTML = '<option value="">— önce işletme türü seçin —</option>';
@@ -2511,15 +2606,6 @@ $('oIkTc').onblur = () => { const t = tcRakam($('oIkTc').value);
   if ($('oIkTc').value !== t) $('oIkTc').value = t; };
 $('sTur').onchange = turDegisti;
 $('chkYurtDisi').onchange = turDegisti;
-
-// "Son Kullanılanlar" açılır listesinden seçim → TC doldur + CANLI doğrula.
-$('ikSonSecim').onchange = async () => {
-  const sec = $('ikSonSecim');
-  const k = karsiTarafListesi[Number(sec.value)];
-  if (!k) return;
-  await karsiTarafSec(k);
-  sec.value = '';   // liste "seç" konumuna dönsün; asıl değer TC alanındadır
-};
 
 // İşletme türü seçilince işyerlerini getir. Kimin işyeri?
 //  • Satış / Sevk Etme → KARŞI TARAFIN TC'siyle (mal ona gidiyor).
@@ -2607,7 +2693,7 @@ $('btnListeler').onclick = async () => {
   $('btnListeler').textContent = '🔄 Listeler';
 };
 
-// ================= SON KULLANILANLAR =================
+// ================= SON KULLANILANLAR (ülke / ürün çipleri) =================
 async function sonlariYukle() {
   try {
     const j = await api('/api/sonlar', 'GET', { firmaId: aktifFirma ? aktifFirma.id : '' });
@@ -2616,23 +2702,11 @@ async function sonlariYukle() {
     // hiçbir şey yapmıyormuş gibi duruyordu).
     cipCiz('ulkeCipler', j.ulkeler || [], u => u.ad, u => selectDegerAta('sUlke', u.id), 'Henüz ülke geçmişi yok');
     cipCiz('urunCipler', j.urunler || [], u => u.ad, u => selectDegerAta('sUrun', u.id), 'Henüz ürün geçmişi yok');
-    // Karşı taraf: ÇİP yerine AÇILIR LİSTE — uzun ad + TC tek satıra sığmıyor,
-    // çipler taşıyordu. Listede metin tam görünür.
-    karsiTarafListesi = j.karsiTaraflar || [];
-    const ss = $('ikSonSecim');
-    ss.innerHTML = '<option value="">' +
-      (karsiTarafListesi.length ? '— kayıtlı kişilerden seç —' : '— henüz kayıt yok —') + '</option>';
-    karsiTarafListesi.forEach((k, i) => {
-      const o = document.createElement('option');
-      o.value = String(i);      // index: TC'yi option değerinde taşımaya gerek yok
-      o.textContent = (k.ad ? k.ad + ' — ' : '') + String(k.tc || '');
-      ss.appendChild(o);
-    });
-    ss.disabled = karsiTarafListesi.length === 0;
+    // Karşı taraf artık ortak KİŞİ HAVUZU — "Kişi Seç" penceresi kendi listesini çeker.
   } catch (e) { /* önemsiz */ }
 }
 
-// Açılır listeden karşı taraf seçimi. SAKLI BİLGİYE GÜVENİLMEZ: TC doldurulup HKS'e
+// Kişi havuzundan karşı taraf seçimi. SAKLI BİLGİYE GÜVENİLMEZ: TC doldurulup HKS'e
 // CANLI sorgu gider (kişinin kayıt durumu zaman içinde değişmiş olabilir).
 // Ad/cep/doğum yalnızca sorgu KAYITSIZ döndüğünde ve alan boşsa doldurulur —
 // kayıtlı kişide bu alanlar zaten gizlidir, HKS kendi kaydından doldurur.
@@ -2661,6 +2735,155 @@ async function karsiTarafSec(k) {
   }
   turDegisti();
 }
+
+// ================= KİŞİ HAVUZU PENCERESİ =================
+// Tüm firmalar aynı havuzu görür (sunucuda firma bazlı değil). Kişiye tıklayınca
+// karsiTarafSec() çalışır: TC dolar + HKS'e CANLI sorgu gider.
+let kisiHavuz = [];
+let kisiDuzenlenenId = null;
+let kisiVurguId = null;
+
+function kisiEl(tag, sinif, metin) {
+  const e = document.createElement(tag);
+  if (sinif) e.className = sinif;
+  if (metin != null) e.textContent = metin;
+  return e;
+}
+function kisiPencereAcikMi() { return $('kisiPencere').classList.contains('acik'); }
+function kisiFormAcikMi() { return $('kisiForm').classList.contains('acik'); }
+
+function kisiPencereAc() {
+  $('kisiPencereBaslik').textContent = (satinAlimModuMu() || uretSevkModuMu()) ? 'Satıcı Seç' : 'Alıcı Seç';
+  $('kisiAra').value = '';
+  $('kisiPencere').classList.add('acik');
+  kisiListeYukle();
+  setTimeout(() => $('kisiAra').focus(), 60);
+}
+function kisiPencereKapat() {
+  $('kisiPencere').classList.remove('acik');
+  $('kisiForm').classList.remove('acik');
+  $('btnKisiSec').focus();
+}
+async function kisiListeYukle() {
+  const kap = $('kisiListe');
+  kap.replaceChildren(kisiEl('div', 'kisi-durum', '⏳ Yükleniyor…'));
+  try {
+    const j = await api('/api/kisiler');
+    kisiHavuz = j.kisiler || [];
+    kisiListeCiz();
+  } catch (e) {
+    kap.replaceChildren(kisiEl('div', 'kisi-durum hata', e.message || 'Liste alınamadı'));
+  }
+}
+function kisiListeCiz() {
+  const kap = $('kisiListe');
+  const q = trNorm($('kisiAra').value.trim());
+  const qRakam = q.replace(/\D/g, '');
+  const liste = kisiHavuz.filter(k => !q || trNorm(k.ad).includes(q) || (qRakam && String(k.tc || '').includes(qRakam)));
+  if (!liste.length) {
+    kap.replaceChildren(kisiEl('div', 'kisi-durum',
+      kisiHavuz.length ? 'Aramaya uyan kişi yok.' : 'Havuzda henüz kişi yok — ➕ Yeni Ekle'));
+    return;
+  }
+  const parca = document.createDocumentFragment();
+  liste.forEach(k => {
+    const sat = kisiEl('div', 'kisi-satir' + (k.id === kisiVurguId ? ' vurgu' : ''));
+    sat.tabIndex = 0;
+    sat.setAttribute('role', 'button');
+    sat.dataset.kisiId = String(k.id);
+    const bilgi = kisiEl('div', 'kisi-bilgi');
+    bilgi.appendChild(kisiEl('div', 'kisi-ad', k.ad || '(adsız)'));
+    const alt = kisiEl('div', 'kisi-alt2');
+    alt.appendChild(kisiEl('span', 'kisi-rozet', String(k.tc || '').length === 10 ? 'VKN' : 'TC'));
+    alt.appendChild(document.createTextNode(String(k.tc || '') + (k.cep ? ' · ' + k.cep : '')));
+    bilgi.appendChild(alt);
+    const duz = kisiEl('button', 'kisi-ikon', '✏️');
+    duz.type = 'button'; duz.title = 'Düzenle'; duz.setAttribute('aria-label', 'Düzenle');
+    duz.onclick = (e) => { e.stopPropagation(); kisiFormAc(k); };
+    const sil = kisiEl('button', 'kisi-ikon', '🗑');
+    sil.type = 'button'; sil.title = 'Sil'; sil.setAttribute('aria-label', 'Sil');
+    sil.onclick = (e) => { e.stopPropagation(); kisiSil(k); };
+    sat.append(bilgi, duz, sil);
+    sat.onclick = () => kisiSec(k);
+    sat.onkeydown = (e) => { if (e.target === sat && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); kisiSec(k); } };
+    parca.appendChild(sat);
+  });
+  kap.replaceChildren(parca);
+}
+async function kisiSec(k) {
+  kisiPencereKapat();
+  const s = $('kisiSecili');
+  s.textContent = 'Seçili: ' + (k.ad || '') + ' — ' + k.tc;
+  s.classList.remove('gizli');
+  await karsiTarafSec({ tc: k.tc, ad: k.ad, cep: k.cep, dogum: k.dogum });
+}
+async function kisiSil(k) {
+  if (!confirm('"' + (k.ad || k.tc) + '" havuzdan silinsin mi?')) return;
+  try {
+    await api('/api/kisi_sil', 'POST', { id: k.id });
+    await kisiListeYukle();
+  } catch (e) {
+    $('kisiListe').prepend(kisiEl('div', 'kisi-durum hata', e.message));
+  }
+}
+function kisiFormAc(k) {
+  kisiDuzenlenenId = k ? k.id : null;
+  $('kisiFormBaslik').textContent = k ? 'Kişiyi Düzenle' : 'Yeni Kişi';
+  $('kfTc').value = k ? k.tc : '';
+  $('kfAd').value = k ? (k.ad || '') : '';
+  $('kfCep').value = k ? (k.cep || '') : '';
+  $('kfDogum').value = k ? (k.dogum || '') : '';
+  $('kisiFormMesaj').className = 'mesaj';
+  $('kisiForm').classList.add('acik');
+  setTimeout(() => $(k ? 'kfAd' : 'kfTc').focus(), 60);
+}
+function kisiFormKapat() {
+  $('kisiForm').classList.remove('acik');
+  if (kisiPencereAcikMi()) $('kisiAra').focus();
+}
+async function kisiFormKaydet() {
+  const tc = tcRakam($('kfTc').value), ad = $('kfAd').value.trim();
+  const cep = cepRakam($('kfCep').value), dogum = $('kfDogum').value;
+  const hata = (m) => mesajGoster('kisiFormMesaj', m, 'hata');
+  if (tc.length !== 10 && tc.length !== 11) return hata('TC (11 hane) veya Vergi No (10 hane) girin.');
+  if (tc.length === 11 && !tcAlgoritmaGecerli(tc)) return hata('Bu TC Kimlik No doğrulama algoritmasından geçmiyor — rakamları kontrol edin.');
+  if (!ad) return hata('Ad / Ünvan zorunlu.');
+  if (cep && !cepGecerli(cep)) return hata('Cep telefonu 10–13 haneli olmalı.');
+  if (dogum && dogum > new Date().toISOString().slice(0, 10)) return hata('Doğum tarihi ileri bir tarih olamaz.');
+  const btn = $('btnKisiFormKaydet');
+  btn.disabled = true;
+  try {
+    const govde = { tc, ad, cep, dogum };
+    if (kisiDuzenlenenId) govde.id = kisiDuzenlenenId;
+    const j = await api('/api/kisi_kaydet', 'POST', govde);
+    kisiVurguId = j.kisi ? j.kisi.id : kisiDuzenlenenId;
+    $('kisiAra').value = '';
+    kisiFormKapat();
+    await kisiListeYukle();
+    const v = $('kisiListe').querySelector('.kisi-satir.vurgu');
+    if (v) v.scrollIntoView({ block: 'nearest' });
+  } catch (e) { hata(e.message); }
+  btn.disabled = false;
+}
+$('btnKisiSec').onclick = kisiPencereAc;
+$('btnKisiKapat').onclick = kisiPencereKapat;
+$('btnKisiYeni').onclick = () => kisiFormAc(null);
+$('btnKisiFormKapat').onclick = kisiFormKapat;
+$('btnKisiFormIptal').onclick = kisiFormKapat;
+$('btnKisiFormKaydet').onclick = kisiFormKaydet;
+$('kisiAra').oninput = kisiListeCiz;
+$('kfTc').onblur = () => { $('kfTc').value = tcRakam($('kfTc').value); };
+$('kfCep').onblur = () => { $('kfCep').value = cepRakam($('kfCep').value); };
+$('kisiPencere').addEventListener('mousedown', (e) => { if (e.target === $('kisiPencere')) kisiPencereKapat(); });
+$('kisiForm').addEventListener('mousedown', (e) => { if (e.target === $('kisiForm')) kisiFormKapat(); });
+$('kisiForm').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); kisiFormKaydet(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (kisiFormAcikMi()) { e.stopPropagation(); kisiFormKapat(); }
+  else if (kisiPencereAcikMi()) { e.stopPropagation(); kisiPencereKapat(); }
+});
 
 function cipCiz(kapId, dizi, etiketFn, tikla, bosMetin) {
   const kap = $(kapId);
@@ -3526,7 +3749,7 @@ $('btnOnay').onclick = async () => {
                 'yanlışsa bu hata gelir.<br>' +
                 '1️⃣ Yukarıdaki mesajda yazan TC, gerçekten <b>gönderilen</b> TC\'dir — ' +
                 'kişinin kimliğiyle rakam rakam karşılaştırın.<br>' +
-                '2️⃣ Doğru değilse "Son Kullanılanlar" listesinden seçmek yerine ' +
+                '2️⃣ Doğru değilse "Kişi Seç" penceresindeki kayıttan seçmek yerine ' +
                 '<b>TC\'yi elle yazın</b> (elle yazınca ad/cep/doğum alanları da sıfırlanır), ' +
                 'sonra doğum tarihini nüfus kaydından girin.</div>'
               : '')) +
