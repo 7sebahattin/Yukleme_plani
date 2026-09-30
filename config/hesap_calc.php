@@ -23,7 +23,8 @@ declare(strict_types=1);
  *   · status  = is_given_to_accountant ? 'approved' : 'submitted'
  *               → hiçbir eski kayıt taslağa düşmez, bakiyeler bugünkü değerinde kalır.
  *   · user_id = NULL bırakılır  → sahipsiz kayıt: yalnız yönetici görür, kimsenin
- *                                 bakiyesine girmez; sahibi hesap_sahipsiz.php'den atanır
+ *                                 bakiyesine girmez; sahibi yönetici tarafından
+ *                                 hesap_kayit.php 'Kayıt sahibi' alanından atanır
  *                                 (otomatik geri dolum YOK).
  *   · depo    = ''   bırakılır  → yalnız bilgi amaçlı damga; Hesap depo filtresi kullanmaz.
  *
@@ -719,13 +720,4 @@ function hesap_balance_by_user(?string $date_from = null, ?string $date_to = nul
     }
     unset($r);
     return $rows;
-}
-
-/** Sahipsiz (user_id NULL) kayıt sayısı — yalnız yönetici için anlamlı, değilse 0. */
-function hesap_sahipsiz_sayisi(): int
-{
-    if (!hesap_sees_all()) return 0;
-    try {
-        return (int)db()->query("SELECT COUNT(*) FROM account_transactions WHERE user_id IS NULL")->fetchColumn();
-    } catch (PDOException $e) { return 0; }
 }

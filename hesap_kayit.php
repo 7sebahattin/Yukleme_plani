@@ -144,7 +144,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $eski_sahip = ($old_for_audit['user_id'] ?? null) === null || ($old_for_audit['user_id'] ?? '') === ''
                     ? null : (int)$old_for_audit['user_id'];
         if ($ham === '') {
-            $yeni_sahip = null;
+            // Sahipsiz'e ÇEVİRME yok (v281): "Sahipsiz Kayıtlar" ekranı kaldırıldı,
+            // user_id NULL kayıt hiçbir listede/bakiyede görünmez. Zaten sahipsiz
+            // (eski) kayıtta boş değer "değişiklik yok" demektir.
+            $yeni_sahip = $eski_sahip;
+            if ($eski_sahip !== null) {
+                $errors[] = 'Kayıt sahibi boş bırakılamaz — sahipsiz kayıt hiçbir listede görünmez. Bir personel seçin.';
+            }
         } elseif (ctype_digit($ham)) {
             $yeni_sahip = (int)$ham;
             $ids_ok = array_map(fn($u) => (int)$u['id'], $sahip_secenekleri);
@@ -500,7 +506,9 @@ render_flash();
         <label class="hs-field" style="margin-top:14px">
             <span>Kayıt sahibi <span class="muted" style="font-weight:400">(yönetici)</span></span>
             <select name="sahip_id">
-                <option value="" <?= $mevcut_sahip === '' ? 'selected' : '' ?>>— Sahipsiz —</option>
+                <?php if ($mevcut_sahip === ''): ?>
+                <option value="" selected disabled>— Sahip seçin —</option>
+                <?php endif; ?>
                 <?php if ($mevcut_sahip !== '' && !$listede): ?>
                 <option value="<?= h($mevcut_sahip) ?>" selected>Kullanıcı #<?= h($mevcut_sahip) ?> (pasif)</option>
                 <?php endif; ?>

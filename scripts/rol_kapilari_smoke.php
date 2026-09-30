@@ -163,5 +163,27 @@ ok('roles.php silme işlemi atomik',
 ok('yeni rol varsayılanında dashboard.read işaretli',
     str_contains($rol, ": ['dashboard.read'];"));
 
+// ── Kaldırılan web sayfaları = 410 tombstone (v281) ──────────────────────
+// Deploy repodan silinen dosyayı sunucudan SİLMEZ; kaldırılan sayfa içeriği
+// boşaltılmış 410 yanıtıdır. DB/oturum/girdi erişimi YOK, kısa kalır ve
+// uygulamanın hiçbir yerinden bağlantı almaz.
+echo "\n── Tombstone değişmezleri ──\n";
+$TOMBSTONES = ['admin_db_backup_download.php', 'hesap_sahipsiz.php', 'depo_tasima.php', 'firma_eslestirme.php',
+               'fix_brand.php', 'repair_xz_tables.php', 'faz8b_migrate.php', 'record_new.php'];
+$kaynaklar = array_merge(glob($ROOT . '/*.php'), glob($ROOT . '/config/*.php'), glob($ROOT . '/assets/*.js'));
+foreach ($TOMBSTONES as $t) {
+    $src = (string)@file_get_contents($ROOT . '/' . $t);
+    ok("$t: 410 döner", str_contains($src, 'http_response_code(410)'));
+    ok("$t: DB/oturum/girdi erişimi YOK", !preg_match('/require|include|db\(|session_|\$_POST|\$_GET/', $src));
+    ok("$t: ≤15 satır", $src !== '' && substr_count($src, "\n") <= 15);
+    $linkler = [];
+    foreach ($kaynaklar as $k) {
+        if (basename($k) === $t) continue;
+        $ks = (string)file_get_contents($k);
+        if (str_contains($ks, 'href="' . $t) || str_contains($ks, "'" . $t . "'")) $linkler[] = basename($k);
+    }
+    ok("$t: hiçbir sayfadan bağlantı YOK", $linkler === [], implode(', ', $linkler));
+}
+
 echo "\n" . ($fail === 0 ? "TÜMÜ GEÇTİ" : "$fail TEST BAŞARISIZ") . "\n";
 exit($fail === 0 ? 0 : 1);

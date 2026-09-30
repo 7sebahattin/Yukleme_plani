@@ -279,7 +279,7 @@ function permission_catalog(): array {
             'hesap.delete'  => 'Kendi kaydını sil (onaylanana kadar)',
             'hesap.approve' => 'Görebildiği kayıtları onayla / reddet (başkasının kaydını GÖSTERMEZ)',
             'hesap.pay'     => 'Görebildiği kayıtları ödendi işaretle (başkasının kaydını GÖSTERMEZ)',
-            'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, sahipsiz kayıt atar, ödenmiş kaydı açar',
+            'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, kayıt sahibini değiştirir, ödenmiş kaydı açar',
         ],
         'Personel Takibi' => [
             'attendance.read'               => 'Devam kayıtlarını görüntüle',

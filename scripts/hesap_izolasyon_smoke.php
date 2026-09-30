@@ -272,17 +272,17 @@ db()->exec("INSERT INTO account_transactions (user_id,transaction_date,type,amou
 $bugun_ids = db()->query("SELECT id FROM account_transactions WHERE description LIKE '%_BUGUN%'")->fetchAll(PDO::FETCH_COLUMN);
 $index_hesap = function () use ($blok): array {
     eval($blok);   // yalnız index.php'nin Hesap bloğu — stub'lı db()/can()/current_user() ile
-    return [$hesap_bugun, $hesap_bekleyen, $hesap_onay_bekleyen, $hesap_sahipsiz];
+    return [$hesap_bugun, $hesap_bekleyen, $hesap_onay_bekleyen];
 };
 as_user(10, $OPER);
-[$bg, $bk, $ob, $sh] = $index_hesap();
+[$bg, $bk, $ob] = $index_hesap();
 ok('index A: bugün yalnız kendi TRY (25)',           abs($bg - 25) < 0.01, (string)$bg);
 ok('index A: bekleyen yalnız kendi (4, B hariç)',     $bk === 4, (string)$bk);
-ok('index A: yönetici sayaçları 0',                  $ob === 0 && $sh === 0);
+ok('index A: yönetici sayaçları 0',                  $ob === 0);
 as_user(40, $YON);
-[$bg, $bk, $ob, $sh] = $index_hesap();
+[$bg, $bk, $ob] = $index_hesap();
 ok('index Yönetici: onay bekleyen (sahipli submitted)', $ob === 7, (string)$ob);
-ok('index Yönetici: sahipsiz 2',                     $sh === 2, (string)$sh);
+ok('index: sahipsiz sayacı YOK',                     !str_contains($blok, '$hesap_sahipsiz') && !str_contains($blok, 'user_id IS NULL'));
 db()->exec("DELETE FROM account_transactions WHERE id IN (" . implode(',', $bugun_ids) . ")");
 
 // ═══════════ O3 — liste toplamları bakiye/bekleyen ayrı ═══════════
@@ -413,45 +413,39 @@ as_user(10, $OPER);
 run('hesap_liste.php');
 ok('kendi hesabında view audit\'i YAZILMAZ',         !audit_var('view'));
 
-// ═══════════ Sahipsiz Kayıtlar ekranı ═══════════
-echo "\n── Sahipsiz Kayıtlar ──\n";
-as_user(20, $OPER);
-ok('B → 403',                                        run('hesap_sahipsiz.php') === '__FORBIDDEN__');
-as_user(30, $MUH);
-ok('Muhasebe → 403',                                 run('hesap_sahipsiz.php') === '__FORBIDDEN__');
-ok('Muhasebe POST → 403',                            run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '30', 'ids' => ['4']]) === '__FORBIDDEN__' && row(4)['user_id'] === null);
-as_user(50, [], true);   // süper admin (is_admin, yetki listesi boş)
-ok('Süper admin görebilir',                          str_contains(run('hesap_sahipsiz.php'), 'LEGACY_ORTAK'));
+// ═══════════ Sahipsiz Kayıtlar ekranı → 410 tombstone (v281) ═══════════
+// Sahip ataması artık YALNIZ hesap_kayit.php "Kayıt sahibi" alanından (yönetici).
+echo "\n── Sahipsiz kayıt ataması (hesap_kayit.php) ──\n";
+$ts = (string)file_get_contents(dirname(__DIR__) . '/hesap_sahipsiz.php');
+ok('hesap_sahipsiz.php 410 tombstone (DB/oturum yok)', str_contains($ts, 'http_response_code(410)')
+                                                     && !preg_match('/require|include|db\(|session_/', $ts) && str_contains($ts, 'hesap.php'));
 as_user(40, $YON);
-$s = run('hesap_sahipsiz.php');
-temiz('Sahipsiz ekranı', $s);
-ok('Yönetici: "Sahipsiz kayıt: 2"',                  str_contains($s, 'Sahipsiz kayıt: <b>2</b>'));
-ok('Yönetici: LEGACY_ORTAK listede',                 str_contains($s, 'LEGACY_ORTAK'));
-ok('Yönetici: sahipli kayıt listede YOK',            !str_contains($s, 'B_GIZLI') && !str_contains($s, 'A_GIZLI'));
-ok('pasif kullanıcı seçenekte YOK',                  !str_contains($s, 'PasifKisi'));
-ok('satır formu CSRF taşır',                         str_contains($s, 'name="csrf" value="tok"'));
-$sf = run('hesap_sahipsiz.php', ['q' => 'TASLAK']);
-ok('filtre: arama yalnız LEGACY_TASLAK',             str_contains($sf, 'LEGACY_TASLAK') && !str_contains($sf, 'LEGACY_ORTAK'));
 $GLOBALS['AUDIT'] = [];
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'bad', 'islem' => 'ata', 'hedef_uid' => '20', 'ids' => ['4']]);
+$f9 = run('hesap_kayit.php', ['id' => '4']);
+temiz('Sahipsiz kaydın formu', $f9);
+ok('sahipsiz kayıt: "Sahip seçin" yer tutucusu (seçilemez)', str_contains($f9, '<option value="" selected disabled>— Sahip seçin —</option>'));
+ok('"— Sahipsiz —" seçeneği YOK',                    !str_contains($f9, '— Sahipsiz —'));
+$post4 = ['id' => '4', 'amount' => '5.555', 'type' => 'gider', 'currency' => 'TRY',
+          'transaction_date' => '2026-06-13', 'payment_method' => 'nakit', 'category' => 'Kargo',
+          'description' => 'LEGACY_ORTAK', 'sahip_id' => '20', 'duzeltme_nedeni' => 'Sahip atandı'];
+$o = run('hesap_kayit.php', [], ['csrf' => 'bad'] + $post4);
 ok('CSRF yanlış → reddedildi',                       $o === '__FORBIDDEN__' && row(4)['user_id'] === null);
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '20', 'ids' => ['4']]);
-ok('Yönetici id=4 → B\'ye atandı',                   str_starts_with($o, '__REDIRECT__') && (int)row(4)['user_id'] === 20);
-ok('atama flash\'ı kişi adını ve bakiyeyi söyler',   flash_icerir('1 kayıt PersonelB kişisine atandı') && flash_icerir('−5.555,00 TRY'));
-ok('audit owner_assign (satır)',                     audit_var('owner_assign', 4));
-ok('audit bulk_update (özet)',                       audit_var('bulk_update'));
+$o = run('hesap_kayit.php', [], ['csrf' => 'tok'] + $post4);
+ok('Yönetici id=4 → B\'ye atandı',                   str_starts_with($o, '__REDIRECT__') && (int)row(4)['user_id'] === 20, substr($o, 0, 100));
+ok('audit owner_change',                             audit_var('owner_change', 4));
 ok('created_by / status / depo değişmedi',           row(4)['created_by'] === null && row(4)['status'] === 'approved' && row(4)['depo'] === '');
 as_user(20, $OPER);
 ok('B bakiyesi artık −13.332 (atama etkili)',        abs(hesap_balance()['TRY']['net'] + 13332) < 0.01, (string)hesap_balance()['TRY']['net']);
 as_user(40, $YON);
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '10', 'ids' => ['4']]);
-ok('ikinci atama başkasının kaydını EZMEZ (IS NULL)', (int)row(4)['user_id'] === 20 && flash_icerir('zaten atanmıştı'));
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '999', 'ids' => ['9']]);
-ok('olmayan kullanıcı (999) → hata',                 row(9)['user_id'] === null && flash_icerir('aktif'));
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '70', 'ids' => ['9']]);
-ok('pasif kullanıcı (70) → hata',                    row(9)['user_id'] === null && flash_icerir('aktif'));
-$o = run('hesap_sahipsiz.php', [], ['csrf' => 'tok', 'islem' => 'ata', 'hedef_uid' => '20', 'ids' => array_map('strval', range(1000, 1600))]);
-ok('500\'den fazla id → hata',                       flash_icerir('en çok 500'));
+$post9 = ['csrf' => 'tok', 'id' => '9', 'amount' => '60', 'type' => 'gider', 'currency' => 'TRY',
+          'transaction_date' => '2026-06-18', 'payment_method' => 'nakit', 'category' => 'Kargo',
+          'description' => 'LEGACY_TASLAK'];
+run('hesap_kayit.php', [], $post9 + ['sahip_id' => '999']);
+ok('olmayan kullanıcı (999) → reddedildi',           row(9)['user_id'] === null);
+run('hesap_kayit.php', [], $post9 + ['sahip_id' => '70']);
+ok('pasif kullanıcı (70) → reddedildi',              row(9)['user_id'] === null);
+$o = run('hesap_kayit.php', [], $post9 + ['sahip_id' => '']);
+ok('sahipsiz kayıtta boş sahip = değişiklik yok (kayıt kaydedilir)', str_starts_with($o, '__REDIRECT__') && row(9)['user_id'] === null, substr($o, 0, 100));
 
 // ═══════════ Sahip değiştir (hesap_kayit.php) ═══════════
 echo "\n── Sahip değiştir ──\n";
@@ -459,15 +453,26 @@ as_user(40, $YON);
 $GLOBALS['AUDIT'] = [];
 $f4 = run('hesap_kayit.php', ['id' => '4']);
 temiz('Yönetici kayıt formu', $f4);
-ok('Yönetici formunda "Kayıt sahibi" alanı',         str_contains($f4, 'name="sahip_id"') && str_contains($f4, '— Sahipsiz —'));
+ok('Yönetici formunda "Kayıt sahibi" alanı',         str_contains($f4, 'name="sahip_id"'));
+$sahipSel = preg_match('#<select name="sahip_id">(.*?)</select>#s', $f4, $mm) ? $mm[1] : '';
+ok('sahipli kayıtta "— Sahipsiz —" / boş seçenek YOK', $sahipSel !== '' && !str_contains($f4, '— Sahipsiz —') && !str_contains($sahipSel, 'value=""'));
 ok('onaylı kayıtta gerekçe alanı var',               str_contains($f4, 'name="duzeltme_nedeni"'));
 ok('onaylı kayıtta fiş sil düğmesi yok',             !str_contains($f4, 'data-hs-file-del'));
 $o = run('hesap_kayit.php', [], ['csrf' => 'tok', 'id' => '4', 'amount' => '5.555', 'type' => 'gider', 'currency' => 'TRY',
                                   'transaction_date' => '2026-06-13', 'payment_method' => 'nakit', 'category' => 'Kargo',
                                   'description' => 'LEGACY_ORTAK', 'sahip_id' => '', 'duzeltme_nedeni' => 'Yanlış kişiye atandı']);
-ok('sahip_id="" → id=4 tekrar sahipsiz',             str_starts_with($o, '__REDIRECT__') && row(4)['user_id'] === null, substr($o, 0, 100));
+ok('sahip_id="" → REDDEDİLDİ (sahipsiz yapılamaz)',  !str_starts_with($o, '__REDIRECT__') && (int)row(4)['user_id'] === 20
+                                                     && str_contains($o, 'Kayıt sahibi boş bırakılamaz'), substr($o, 0, 100));
+ok('red: audit owner_change YAZILMADI',              !audit_var('owner_change', 4));
+$o = run('hesap_kayit.php', [], ['csrf' => 'tok', 'id' => '4', 'amount' => '5.555', 'type' => 'gider', 'currency' => 'TRY',
+                                  'transaction_date' => '2026-06-13', 'payment_method' => 'nakit', 'category' => 'Kargo',
+                                  'description' => 'LEGACY_ORTAK', 'sahip_id' => '10', 'duzeltme_nedeni' => 'Yanlış kişiye atandı']);
+ok('sahip değişikliği B → A',                        str_starts_with($o, '__REDIRECT__') && (int)row(4)['user_id'] === 10, substr($o, 0, 100));
 ok('audit owner_change',                             audit_var('owner_change', 4));
 ok('tutar değişmedi (5.555 binlik)',                 (float)row(4)['amount'] === 5555.0);
+// Aşağıdaki NULL-güvenlik iddiaları (Tüm Personel / CSV'de LEGACY yok) sahipsiz bir
+// satıra ihtiyaç duyar; arayüz artık sahipsiz yapamadığı için fikstür doğrudan geri alır.
+db()->exec("UPDATE account_transactions SET user_id = NULL WHERE id = 4");
 as_user(20, $OPER);
 ok('B formunda "Kayıt sahibi" alanı YOK',            !str_contains(run('hesap_kayit.php', ['id' => '6']), 'name="sahip_id"'));
 $o = run('hesap_kayit.php', [], ['csrf' => 'tok', 'id' => '6', 'amount' => '111', 'type' => 'gider', 'currency' => 'TRY',
@@ -488,7 +493,7 @@ ok('A ve B satırları var',                           str_contains($p, 'Persone
 ok('sahipsiz satırı yok (Atanmamış yok)',            !str_contains($p, 'Atanmamış'));
 ok('USD ayrı satır (A)',                             str_contains($p, '40,00 $'));
 ok('satır linkleri ?personel=',                      str_contains($p, 'hesap.php?personel=10') && str_contains($p, 'hesap_liste.php?personel=20'));
-ok('sahipsiz sayacı kartı',                          str_contains($p, 'Sahipsiz Kayıtlar: <b>2</b>'));
+ok('Tüm Personel: sahipsiz linki/sayacı YOK',        !str_contains($p, 'hesap_sahipsiz.php') && !str_contains($p, 'Sahipsiz Kayıtlar'));
 
 // ═══════════ Y4 — onaylı kaydı silme ═══════════
 echo "\n── Y4: silme ──\n";
@@ -524,7 +529,7 @@ as_user(60, ['hesap.read']);
 $d = run('hesap.php');
 temiz('İzleyici Hesabım', $d);
 ok('İzleyici: boş kendi hesabı, başkası yok',        !str_contains($d, 'A_GIZLI') && !str_contains($d, 'B_GIZLI') && str_contains($d, 'Henüz kayıt yok'));
-ok('İzleyici: yönetici kartı yok',                   !str_contains($d, 'hesap_sahipsiz.php'));
+ok('İzleyici: yönetici kartı yok',                   !str_contains($d, 'hesap_personel.php'));
 
 echo $fail === 0 ? "\n>>> TÜM İZOLASYON TESTLERİ GEÇTİ ($pass)\n" : "\n>>> $fail TEST BAŞARISIZ ($pass geçti)\n";
 exit($fail === 0 ? 0 : 1);

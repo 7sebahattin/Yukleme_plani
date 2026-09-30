@@ -4,8 +4,8 @@
 //
 // Kişi × para birimi bakiye tablosu. Para birimleri AYRI satırdadır, asla
 // toplanmaz. Her satırdan o kişinin Hesabı / Kayıtları / PDF raporu açılır
-// (?personel=<uid> — yalnız yöneticide etkili). Sahipsiz kayıtlar burada YOK;
-// sayıları alttaki karttan hesap_sahipsiz.php'ye gider.
+// (?personel=<uid> — yalnız yöneticide etkili). Sahipsiz (user_id NULL)
+// kayıtlar burada YOK — kimsenin bakiyesine girmez.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -31,7 +31,6 @@ $satirlar = hesap_balance_by_user(
     $tarih_s !== '' ? date('Y-m-d', strtotime($tarih_s . ' +1 day')) : null,
     null                                   // kişi × para birimi
 );
-$sahipsiz = hesap_sahipsiz_sayisi();
 
 $kullanicilar = [];
 try {
@@ -149,11 +148,6 @@ render_flash();
 </div>
 <p class="hs-cur-note">Para birimleri ayrı satırdadır — farklı kurlar birbirine eklenmez. Bekleyen: taslak + gönderildi (bakiyeye girmez).</p>
 <?php endif; ?>
-
-<a class="hs-sahipsiz-link<?= $sahipsiz > 0 ? ' hs-yonetici-uyari' : '' ?>" href="hesap_sahipsiz.php">
-    <span>🗂 Sahipsiz Kayıtlar: <b><?= (int)$sahipsiz ?></b></span>
-    <span class="muted"><?= $sahipsiz > 0 ? 'Kimsenin bakiyesinde değil — sahip atayın →' : 'Tüm kayıtlar bir personele ait →' ?></span>
-</a>
 
 </div><!-- /.hs -->
 <?php hesap_scripts(); ?>
