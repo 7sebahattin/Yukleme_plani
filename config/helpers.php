@@ -344,7 +344,7 @@ function nav_aktif_anahtar(): ?string {
 
     // Aktif sayfa tespiti
     $a_home  = ($cur === 'index.php' || $cur === '') && !$in_hks;
-    $a_yuk   = !$cikma && !$in_hks && in_array($cur, ['records.php','record_view.php','record_edit.php','record_create.php','record_new.php'], true);
+    $a_yuk   = !$cikma && !$in_hks && in_array($cur, ['records.php','record_view.php','record_edit.php','record_create.php'], true);
     $a_cik   = $cikma || in_array($cur, ['cikmalar.php','cikma_create.php'], true);
     $a_kant  = in_array($cur, ['kantar.php','kantar_view.php'], true);
     $a_hks   = $in_hks;
@@ -508,11 +508,9 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_adm) $lnk('audit.php',       '🧾', 'İşlem Geçmişi',  $a_aud); ?>
         <?php if ($p_adm) $lnk('admin_db_backups.php', '🗄', 'Veritabanı Yedekleri', $a_bkp); ?>
         <?php endif; ?>
-        <!-- Şema Migrasyon / Depo Taşıma / Tedarikçi Eşleştirme: menüden kaldırıldı
-             (tek seferlik kurulum araçları) — dosyalar silinmedi, gerekirse
-             doğrudan URL ile (migrate.php, depo_tasima.php, firma_eslestirme.php)
-             admin erişebilir. render_desktop_sidebar'daki $a_mig/$a_dtas/$a_fes
-             aktif-sayfa değişkenleri de bu yüzden burada bilinçli kullanılmıyor. -->
+        <!-- Şema Migrasyon: menüden kaldırıldı — doğrudan URL (migrate.php) ile
+             admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
+             tombstone. -->
     </nav>
 
     <div class="sidebar-surum"><?= h(APP_SURUM) ?></div>

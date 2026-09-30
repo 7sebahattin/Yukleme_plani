@@ -203,7 +203,7 @@ try { $departmanlar = $pdo->query("SELECT DISTINCT department FROM employees WHE
 catch (PDOException $e) {}
 
 // Fix 5 (Personel Takibi denetimi): serbest metin depo alanı yerine
-// tanımlı depo listesi (definitions.php'deki AYNI kaynak, depo_tasima.php/
+// tanımlı depo listesi (definitions.php'deki AYNI kaynak,
 // _kantar_form.php emsali). Mevcut kayıttaki depo tanımlı listede yoksa
 // (eski/silinmiş bir depo adı) seçenek listesine EKLENİR — kayıt sessizce
 // başka bir depoya kaymaz, yalnızca ekranda görünür kalır.

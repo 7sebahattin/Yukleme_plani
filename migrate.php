@@ -34,8 +34,8 @@ require_once __DIR__ . '/config/pdks_cari.php';
 // bu merkezi panelde HİÇ görünmüyordu, halbuki hangi hakediş motorunun
 // (yeni Tam/Yarım/FM mi, eski toplu-fiyat mi) çalıştığını BELİRLEYEN tam da
 // bu migrasyon. Mevcut pdks_faz8b_migrate() fonksiyonu REUSE edilir —
-// ikinci bir migrasyon mantığı YAZILMAZ, faz8b_migrate.php DA KALIR (geriye
-// dönük bağlantılar bozulmasın diye).
+// ikinci bir migrasyon mantığı YAZILMAZ. faz8b_migrate.php v281'de 410
+// tombstone oldu; tek yol burası.
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';

@@ -23,7 +23,7 @@ try {
 } catch (PDOException $_tbl_e) {
     error_log("[XZ] daily_reports/items tablo erişim hatası: " . $_tbl_e->getMessage());
     $repair_hint = (function_exists('is_admin') && is_admin())
-        ? ' <a href="repair_xz_tables.php">Onarım aracını çalıştırın.</a>'
+        ? ' Tablolar sayfa açılışında otomatik oluşturulur; sayfayı yenileyin. Sorun sürerse sunucu hata günlüğündeki [XZ MIGRATION] kaydına bakın.'
         : ' Sistem yöneticisine bildirin.';
     set_flash('error', 'Rapor arşiv tabloları hazır değil.' . $repair_hint);
     header('Location: reports.php?type=gunluk'); exit;

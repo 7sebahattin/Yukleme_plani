@@ -331,8 +331,9 @@ ok9a('migrate.php: Faz 8B için ayrı, kontrollü bir POST aksiyonu var (ne=pdks
 ok9a('migrate.php: bu dal da csrf_check() çağırıyor', (bool)preg_match("/'pdks_faz8b'\\)\\s*\\{\\s*\\n\\s*csrf_check/", $migrateSrc));
 ok9a('migrate.php: KENDİ migrasyon mantığını YAZMAZ, pdks_faz8b_migrate() ÇAĞIRIR (ikinci bir yol AÇMAZ)',
     str_contains($migrateSrc, 'pdks_faz8b_migrate($pdo)'));
-ok9a('faz8b_migrate.php (bağımsız sayfa) hâlâ KORUNUYOR (geriye dönük bağlantı bozulmaz)',
-    file_exists($root . '/faz8b_migrate.php') && str_contains((string)file_get_contents($root . '/faz8b_migrate.php'), 'pdks_faz8b_migrate('));
+ok9a('faz8b_migrate.php 410 tombstone (tek yol migrate.php)',
+    file_exists($root . '/faz8b_migrate.php') && str_contains((string)file_get_contents($root . '/faz8b_migrate.php'), 'http_response_code(410)')
+    && !str_contains((string)file_get_contents($root . '/faz8b_migrate.php'), 'pdks_faz8b_migrate('));
 $mig1 = pdks_faz8b_migrate($db);
 $mig1Hata = array_filter($mig1, fn($r) => ($r['durum'] ?? '') === 'hata');
 ok9a('pdks_faz8b_migrate() ilk çalıştırma hatasız', count($mig1Hata) === 0, json_encode($mig1, JSON_UNESCAPED_UNICODE));

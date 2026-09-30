@@ -175,7 +175,7 @@ render_flash();
 
 <?php if ($basari !== ''): ?><div class="flash flash-success"><?= h($basari) ?></div><?php endif; ?>
 <?php foreach ($errors as $e): ?><div class="flash flash-error"><?= h($e) ?></div><?php endforeach; ?>
-<?php if (!$faz8bHazir): ?><div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Bu ekran mevcut tek Günlük Ücret modeliyle güvenli biçimde devam ediyor. Yönetici <a href="faz8b_migrate.php">Faz 8B migrasyonunu</a> çalıştırabilir.</div><?php endif; ?>
+<?php if (!$faz8bHazir): ?><div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Bu ekran mevcut tek Günlük Ücret modeliyle güvenli biçimde devam ediyor. Yönetici <a href="migrate.php">Şema Migrasyon</a> ekranından Faz 8B migrasyonunu çalıştırabilir.</div><?php endif; ?>
 
 <form method="get" class="pdks-filter-bar">
     <select name="cavus" onchange="this.form.submit()">

@@ -1,37 +1,11 @@
 <?php
-// =========================================================
-// record_new.php - Yeni kayıt türü seçimi
-// =========================================================
+// record_new.php — KALDIRILDI (v281 temizlik, 2026-09-30)
+// Yetim sayfa, hiçbir yerden link yok. Deploy repodan silinen dosyayı sunucudan SİLMEZ; eski araç canlıda
+// kalmasın diye içerik bilerek boşaltıldı. DB/oturum/kabuk erişimi YOK.
+// Kalıcı yol: records.php
 declare(strict_types=1);
-require_once __DIR__ . '/config/db.php';
-require_once __DIR__ . '/config/auth.php';
-$auth_user = require_login();
-require_perm('records.read');
-
-render_header('Yeni Kayıt');
-?>
-
-<div class="page-head">
-    <h1>Yeni Kayıt</h1>
-    <a href="index.php" class="btn btn-ghost">← Ana Sayfa</a>
-</div>
-
-<p class="muted" style="margin-bottom:24px">Ne tür bir kayıt oluşturmak istiyorsunuz?</p>
-
-<div class="home-grid" style="max-width:520px">
-
-    <a href="record_create.php" class="home-card">
-        <div class="home-card-icon" style="background:#eaf1ff;font-size:2rem">📋</div>
-        <div class="home-card-title">Yeni Yükleme</div>
-        <div class="home-card-sub">Yükleme planı kaydı</div>
-    </a>
-
-    <a href="cikma_create.php" class="home-card">
-        <div class="home-card-icon" style="background:#fdecea;font-size:2rem">🚚</div>
-        <div class="home-card-title">Yeni Çıkma</div>
-        <div class="home-card-sub">Çıkma kaydı</div>
-    </a>
-
-</div>
-
-<?php render_footer(); ?>
+http_response_code(410);
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store');
+echo '<!doctype html><meta charset="utf-8"><title>Kaldırıldı</title>'
+    . '<p>Yeni kayıt Yüklemeler / Çıkmalar listesindeki butondan açılır. <a href="records.php">Yüklemeler</a></p>';

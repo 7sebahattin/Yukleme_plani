@@ -177,7 +177,7 @@ function pdks_faz8b_sayfa_kapisi(?PDO $pdo = null): void
     $pdo = $pdo ?? db();
     if (pdks_faz8b_sema_hazir($pdo)) return;
 
-    $mesaj = 'Faz 8B şeması henüz hazır değil. Yönetici faz8b_migrate.php sayfasından migrasyonu çalıştırmalıdır.';
+    $mesaj = 'Faz 8B şeması henüz hazır değil. Yönetici migrate.php (Şema Migrasyon) ekranından migrasyonu çalıştırmalıdır.';
     if (function_exists('set_flash')) set_flash('error', $mesaj);
     if (function_exists('render_header')) render_header('Faz 8B');
     if (function_exists('render_flash')) render_flash();

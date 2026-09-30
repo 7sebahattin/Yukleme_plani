@@ -385,10 +385,9 @@ if (nav_ptak_gorunur()):
         <div class="home-card-title">Veritabanı Yedekleri</div>
         <div class="home-card-sub">Günlük otomatik</div>
     </a>
-    <!-- Şema Migrasyon / Depo Taşıma / Tedarikçi Eşleştirme: karttan kaldırıldı
-         (tek seferlik kurulum araçları) — dosyalar silinmedi, gerekirse
-         doğrudan URL ile (migrate.php, depo_tasima.php, firma_eslestirme.php)
-         admin erişebilir. -->
+    <!-- Şema Migrasyon: karttan kaldırıldı — doğrudan URL (migrate.php) ile
+         admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
+         tombstone. -->
 <?php endif; ?>
 
 <?php endif; ?>

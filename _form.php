@@ -166,7 +166,7 @@ $_sofor_tel = $form_is_cikma ? [] : record_sofor_phone_map();
             <div class="span-2" style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;color:#991b1b;font-size:.83rem;line-height:1.5">
                 ⚠ <strong>Marka kaydedilemiyor:</strong> veritabanında <code>loading_records.brand</code> kolonu yok.<br>
                 <?php if (function_exists('is_admin') && is_admin()): ?>
-                <a href="fix_brand.php" class="btn btn-sm btn-primary" style="margin-top:6px" target="_blank">🔧 Kolonu Otomatik Ekle</a>
+                <a href="migrate.php" class="btn btn-sm btn-primary" style="margin-top:6px" target="_blank">🔧 Şema Migrasyon</a>
                 <span style="margin-left:6px">veya phpMyAdmin → SQL:
                 <code style="background:#fff;padding:2px 6px;border-radius:4px;user-select:all">ALTER TABLE `loading_records` ADD COLUMN `brand` VARCHAR(20) NULL;</code></span>
                 <?php else: ?>
