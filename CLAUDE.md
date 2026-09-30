@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v285` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v286` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -813,6 +813,13 @@ firmalar aynı müstahsil/firma listesini görür.
   ikon listesine ekle. Başlık `display:block` kalmalı — flex olursa firma adı
   span'i ayrı sütuna kırılır. Geri düğmeleri tüm ekranlarda ok + "Geri"
   (firma menüsünde "Firmalar").
+- **Kilo/fiyat binlik ayırıcı (v286):** `sayiBicimle()` + `binlikGirisBagla()`
+  (app.html, `fmt` altında) — yazarken "1.234.567,89", imleç korunur, tuşla
+  yazılan "." ondalık virgüle çevrilir. Okuma HER ZAMAN `trSayi()` (noktaları
+  siler); `parseFloat(el.value)` YAZMA. Programatik atama `sayiBicimle(n)` ile —
+  `String(x).replace('.', ',')` KULLANMA. Yeni `inputmode="decimal"` kutu
+  eklersen bağla (test hepsinin bağlı olduğunu denetler).
+  Test: `node scripts/hks_binlik_smoke.js`.
 
 ---
 
