@@ -234,7 +234,7 @@ ok('25. eksik çıkışlı kart (K002) "⚠️ Eksik Çıkış" ile İŞARETLİ'
 ok('25. tam çıkışlı kart (K001) "Tam" gösteriyor', (bool)preg_match('/K001.*?Tam(?!am)/s', $sPuantaj), $sPuantaj);
 ok('26. UYDURULMUŞ bir çıkış saati YOK — K002 satırında çıkış hücresi BOŞ (saat basılmadı)', !preg_match('/K002<\/td>\s*<td>Paketleme<\/td>\s*<td>\d{2}:\d{2}<\/td>\s*<td>\d{2}:\d{2}<\/td>/', $sPuantaj));
 ok('27. kanonik NFC UID (631799511/631799512) HİÇBİR YERDE BASILMADI', !str_contains($sPuantaj, '631799511') && !str_contains($sPuantaj, '631799512'));
-ok('35. imza alanları var (Çavuş + Kontrol Eden)', str_contains($sPuantaj, 'Çavuş') && str_contains($sPuantaj, 'Kontrol Eden'));
+ok('35. imza alanları KALDIRILDI (kullanıcı kararı — "Kontrol Eden" / "Ad Soyad / İmza" basılmıyor)', !str_contains($sPuantaj, 'Kontrol Eden') && !str_contains($sPuantaj, 'Ad Soyad / İmza') && !str_contains($sPuantaj, 'print-signatures'));
 ok('36. "Yazdır" butonu no-print İÇİNDE (ekranda görünür ama kağıda BASILMAZ)', (bool)preg_match('/class="[^"]*no-print[^"]*"[^>]*>\s*<button[^>]*onclick="window\.print\(\)"/s', $sPuantaj));
 
 echo "\n=== 28/29. cavus_hakedis_yazdir.php — Hakediş Dökümü ===\n";

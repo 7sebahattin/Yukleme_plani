@@ -125,10 +125,5 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
     <?php if ($oturum['notes']): ?>
     <p style="margin-top:10px;font-size:.85rem"><strong>Not / Açıklama:</strong> <?= h($oturum['notes']) ?></p>
     <?php endif; ?>
-
-    <div class="print-signatures">
-        <div class="print-sig-box">Çavuş<br><br><br>Ad Soyad / İmza</div>
-        <div class="print-sig-box">Kontrol Eden<br><br><br>Ad Soyad / İmza</div>
-    </div>
 </div>
 <?php render_print_page_end(); ?>
