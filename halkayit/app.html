@@ -1220,6 +1220,114 @@ const $ = (id) => document.getElementById(id);
 const trNorm = (s) => (s || '').replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
 const trSayi = (s) => parseFloat(String(s || '0').replace(/\./g, '').replace(',', '.')) || 0;
 const fmt = (n) => (Math.round(n * 100) / 100).toLocaleString('tr-TR');
+
+// ---- Kilo / fiyat girişlerinde BİNLİK AYIRICI ("1.234.567,5") ----
+// Kural: kutudaki NOKTALAR yalnız bu kodun koyduğu binlik ayırıcılardır, ondalık
+// VİRGÜLDÜR — okuma HER ZAMAN trSayi() ile (noktaları siler, virgülü ondalık
+// yapar). Sunucuya biçimli metin gitmez, trSayi()'nin sayısı gider.
+// Ekranda görünen ile sayıya çevrilen HER ZAMAN aynıdır (rüsum bu sayıdan).
+// Tamsayı kısmını 3'erli noktayla gruplar ("1234567" → "1.234.567").
+const binlikGrupla = (t) => t.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+// Sayıyı kutuya yazılacak biçimli metne çevirir: 1234.5 → "1.234,5".
+// Kayan nokta artığı ("0.30000000000000004") 6 ondalıkta temizlenir.
+function sayiBicimle(n) {
+  if (n === null || n === undefined || n === '') return '';
+  let x = typeof n === 'number' ? n : Number(n);
+  if (!isFinite(x)) x = trSayi(n);
+  x = Math.round(x * 1e6) / 1e6;
+  const eksi = x < 0 ? '-' : '';
+  const [tam, ond] = String(Math.abs(x)).split('.');
+  return eksi + binlikGrupla(tam) + (ond ? ',' + ond : '');
+}
+// Yapıştırılan metni "rakamlar[,rakamlar]" kanonik biçimine çevirir. Virgül varsa
+// Türkçe yazımdır (noktalar binlik). Virgül yoksa: birden çok nokta → binlik;
+// tek nokta + ardından TAM 3 rakam → binlik (trSayi ile aynı okuma, "1.234");
+// tek nokta + 1-2 ya da 4+ rakam → ondalık niyeti ("1234.56" → "1234,56").
+// Sonuç hemen biçimlenip kutuda görünür — belirsizlik ekranda çözülmüş olur.
+function binlikYapistirCoz(s) {
+  s = String(s || '').replace(/[\s '’]/g, '');
+  if (s.indexOf(',') === -1) {
+    const n = (s.match(/\./g) || []).length;
+    if (n === 1 && !/\.\d{3}(?!\d)/.test(s)) s = s.replace('.', ',');
+  }
+  return s.replace(/[^\d,]/g, '');
+}
+// Kutunun metnini imleç korumalı yeniden biçimler. İmleç, önündeki "anlamlı"
+// karakter (rakam + virgül) sayısına göre yeniden konumlanır — eklenen/silinen
+// noktalar imleci kaydırmaz.
+function binlikYenidenYaz(el, imlec) {
+  const v = el.value;
+  let kanon = '', kImlec = 0, virgulVar = false;
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i];
+    let al = false;
+    if (c >= '0' && c <= '9') al = true;
+    else if (c === ',' && !virgulVar) { al = true; virgulVar = true; }
+    if (al) { kanon += c; if (i < imlec) kImlec++; }
+  }
+  let [tam, ond] = kanon.split(',');
+  // Baştaki sıfırlar: "007" → "7", "00" → "0"; ",5" → "0,5"
+  const eskiUz = tam.length;
+  tam = tam.replace(/^0+(?=\d)/, '');
+  kImlec = Math.max(0, kImlec - Math.min(kImlec, eskiUz - tam.length));
+  if (tam === '' && ond !== undefined) { tam = '0'; kImlec++; }
+  const yeni = binlikGrupla(tam) + (ond !== undefined ? ',' + ond : '');
+  let poz = 0, say = 0;
+  while (poz < yeni.length && say < kImlec) { if (yeni[poz] !== '.') say++; poz++; }
+  if (el.value !== yeni) el.value = yeni;
+  if (document.activeElement === el) { try { el.setSelectionRange(poz, poz); } catch (e) {} }
+}
+// Bir kutuyu canlı binlik biçimine bağlar (bir kez). Kutu sonradan programatik
+// dolduruluyorsa değeri sayiBicimle() ile yaz.
+function binlikGirisBagla(el) {
+  if (!el || el._binlikBagli) return;
+  el._binlikBagli = true;
+  // Değişiklikten ÖNCEKİ metin — "yalnız nokta mı silindi?" kararı için.
+  const oncekiniTut = () => { el._binlikOnceki = el.value; };
+  el.addEventListener('beforeinput', oncekiniTut);
+  el.addEventListener('keydown', oncekiniTut);
+  el.addEventListener('input', (ev) => {
+    let imlec = el.selectionStart == null ? el.value.length : el.selectionStart;
+    const tip = ev.inputType || '';
+    // Tuşla yazılan "." ONDALIK niyetidir: binlik ayırıcıyı zaten kod koyuyor,
+    // kullanıcının nokta yazmasına gerek yok. Mobil sayısal klavyede çoğu zaman
+    // yalnız "." vardır — virgüle çevrilir (virgül zaten varsa yok sayılır).
+    if (tip === 'insertText' && ev.data === '.' && imlec > 0 && el.value[imlec - 1] === '.') {
+      const onceVirgul = el.value.slice(0, imlec - 1).indexOf(',') !== -1 ||
+                         el.value.slice(imlec).indexOf(',') !== -1;
+      el.value = el.value.slice(0, imlec - 1) + (onceVirgul ? '' : ',') + el.value.slice(imlec);
+      if (onceVirgul) imlec--;
+    }
+    // Yalnız bir binlik noktası silindiyse (Backspace noktanın sağında / Delete
+    // solunda) rakam değişmez ve biçim noktayı geri koyar — kullanıcı takılır.
+    // Bunun yerine noktanın öbür yanındaki rakam silinir.
+    const onceki = el._binlikOnceki;
+    if (tip.indexOf('delete') === 0 && onceki !== undefined &&
+        el.value.replace(/\./g, '') === onceki.replace(/\./g, '') && el.value !== onceki) {
+      if (tip === 'deleteContentBackward' && imlec > 0) {
+        el.value = el.value.slice(0, imlec - 1) + el.value.slice(imlec); imlec--;
+      } else if (tip === 'deleteContentForward') {
+        el.value = el.value.slice(0, imlec) + el.value.slice(imlec + 1);
+      }
+    }
+    binlikYenidenYaz(el, imlec);
+  });
+  el.addEventListener('paste', (ev) => {
+    const cd = ev.clipboardData || window.clipboardData;
+    if (!cd) return;
+    ev.preventDefault();
+    const parca = binlikYapistirCoz(cd.getData('text'));
+    const bas = el.selectionStart == null ? el.value.length : el.selectionStart;
+    const son = el.selectionEnd == null ? bas : el.selectionEnd;
+    el.value = el.value.slice(0, bas) + parca + el.value.slice(son);
+    binlikYenidenYaz(el, bas + parca.length);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // Odak çıkınca sondaki yalın virgül atılır ("12," → "12"; sayı değişmez).
+  el.addEventListener('blur', () => {
+    if (/,$/.test(el.value)) el.value = el.value.slice(0, -1);
+  });
+}
 const eHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 // Cep telefonu — CANLI servise yalnız RAKAM gider. Kullanıcı "0532 123 45 67" ya da
 // "+90 532 ..." yazabilir; boşluk/tire/parantez temizlenir. (docx: karşı taraf GTB'de
@@ -3176,12 +3284,15 @@ function kunyeCiz() {
       const mInput = kap.querySelector(`input.miktar[data-i="${i}"]`);
       mInput.disabled = !cb.checked;
       cb.closest('.kunye').classList.toggle('secili', cb.checked);
-      if (cb.checked && !mInput.value) mInput.value = String(kunyeler[i].kalan).replace('.', ',');
+      if (cb.checked && !mInput.value) mInput.value = sayiBicimle(kunyeler[i].kalan);
       ozetGuncelle();
     };
   });
-  kap.querySelectorAll('input.miktar').forEach(inp => { inp.oninput = ozetGuncelle; });
+  kap.querySelectorAll('input.miktar').forEach(inp => { binlikGirisBagla(inp); inp.oninput = ozetGuncelle; });
 }
+
+// Statik kilo/fiyat kutuları — canlı binlik biçimi (künye satırları kunyeCiz'de bağlanır).
+['oMalMiktar', 'oMalFiyat', 'oPlanKilo', 'oPlanFiyat', 'oFiyat', 'hedefKilo'].forEach(id => binlikGirisBagla($(id)));
 
 $('btnDagit').onclick = () => {
   const hedef = trSayi($('hedefKilo').value);
@@ -3194,7 +3305,7 @@ $('btnDagit').onclick = () => {
     if (kalanHedef > 0 && k.kalan > 0) {
       const al = Math.min(k.kalan, kalanHedef);
       cb.checked = true; mInput.disabled = false;
-      mInput.value = String(al).replace('.', ',');
+      mInput.value = sayiBicimle(al);
       cb.closest('.kunye').classList.add('secili');
       kalanHedef = Math.round((kalanHedef - al) * 1000) / 1000;
     } else {
@@ -3717,7 +3828,7 @@ async function taslakDuzenle(t) {
         if (o.gidecekIsyeriId) $('sIsyeri').value = String(o.gidecekIsyeriId);
       }
     }
-    if (o.fiyatGonder && o.fiyat) $('oFiyat').value = String(o.fiyat).replace('.', ',');
+    if (o.fiyatGonder && o.fiyat) $('oFiyat').value = sayiBicimle(o.fiyat);
   } else {
     // Yurt dışı taslak: tik AÇIKÇA işaretlenir. Eskiden yalnız yurt içi dalda
     // false yapılıyor, hiç true'ya döndürülmüyordu — yurt içi bir taslağı
@@ -3726,7 +3837,7 @@ async function taslakDuzenle(t) {
     $('chkYurtDisi').checked = true;
     turDegisti();
     if (o.ulkeId) $('sUlke').value = String(o.ulkeId);
-    if (o.fiyat)  $('oFiyat').value = String(o.fiyat).replace('.', ',');
+    if (o.fiyat)  $('oFiyat').value = sayiBicimle(o.fiyat);
   }
 
   // REFERANSSIZ (Satın Alım + Üreticiden Sevk Alım): malın tam tanımı künye
@@ -3750,8 +3861,8 @@ async function taslakDuzenle(t) {
     if (o.uretimIlceId)  { $('sUretimIlce').value = String(o.uretimIlceId); await $('sUretimIlce').onchange(); }
     if (o.uretimBeldeId) $('sUretimBelde').value = String(o.uretimBeldeId);
     const ms = (t.satirlar || [])[0];
-    if (ms && ms.miktar) $('oMalMiktar').value = String(ms.miktar).replace('.', ',');
-    if (o.fiyat)         $('oMalFiyat').value = String(o.fiyat).replace('.', ',');
+    if (ms && ms.miktar) $('oMalMiktar').value = sayiBicimle(ms.miktar);
+    if (o.fiyat)         $('oMalFiyat').value = sayiBicimle(o.fiyat);
   }
 
   // PLAN TASLAĞI: künye listesi çekilmez (zaten seçim yapılmamıştı) — plan
@@ -3763,8 +3874,8 @@ async function taslakDuzenle(t) {
     if (ps.aySayisi)      $('sGun').value = String(ps.aySayisi);
     if (ps.isletmeTuruId) $('sKunyeIsyeriTuru').value = String(ps.isletmeTuruId);
     if (ps.sirala)        $('sKunyeSirala').value = ps.sirala;
-    $('oPlanKilo').value = String(o.planKg).replace('.', ',');
-    if (o.fiyat) $('oPlanFiyat').value = String(o.fiyat).replace('.', ',');
+    $('oPlanKilo').value = sayiBicimle(o.planKg);
+    if (o.fiyat) $('oPlanFiyat').value = sayiBicimle(o.fiyat);
     $('planBlok').classList.remove('gizli');
     $('btnPlanAc').textContent = '✖️ Taslak Oluşturmayı Kapat';
     $('planFiyatBlok').classList.toggle('gizli', sevkModuMu());
@@ -3786,7 +3897,7 @@ async function taslakDuzenle(t) {
       const mi = kap.querySelector(`input.miktar[data-i="${idx}"]`);
       if (cb && mi) {
         cb.checked = true; mi.disabled = false;
-        mi.value = String(s.miktar).replace('.', ',');
+        mi.value = sayiBicimle(s.miktar);
         cb.closest('.kunye').classList.add('secili');
       }
     });
