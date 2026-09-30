@@ -11,27 +11,6 @@ require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 if (!is_admin()) { forbidden('Bu sayfa yalnızca sistem yöneticilerine açıktır.'); }
 
-// ── Güvenlik köprüsü: normalize_text_v2 yoksa yerel tanım ──
-if (!function_exists('normalize_text_v2')) {
-    function normalize_text_v2(string $v): string {
-        $v = trim($v);
-        if ($v === '') return '';
-        $v = preg_replace('/\s+/u', ' ', $v);
-        $v = str_replace(['I', 'İ'], ['ı', 'i'], $v);
-        $v = mb_strtolower($v, 'UTF-8');
-        $words = explode(' ', $v);
-        $words = array_map(function(string $w): string {
-            if ($w === '') return '';
-            $first = mb_substr($w, 0, 1, 'UTF-8');
-            $rest  = mb_substr($w, 1, null, 'UTF-8');
-            if ($first === 'i') return 'İ' . $rest;
-            if ($first === 'ı') return 'I' . $rest;
-            return mb_strtoupper($first, 'UTF-8') . $rest;
-        }, $words);
-        return implode(' ', $words);
-    }
-}
-
 // ── Normalize malzeme anahtarı ──────────────────────────────
 // Amacı: "C-5 Siyah 30x40x14" = "C-5 SIYAH 30X40X14" = "C-5 SİYAH 30X40X14"
 function nmk(string $name): string {

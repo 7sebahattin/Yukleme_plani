@@ -15,13 +15,6 @@ if (!defined('APP_SURUM')) {
     define('APP_SURUM', 'v280');
 }
 
-// En yakın tam sayıya yuvarlama (0.5 ve üstü yukarı, altı aşağı)
-if (!function_exists('round_half')) {
-    function round_half(float $n): float {
-        return (float)round($n);
-    }
-}
-
 // --- HTML kaçışı ---
 function h($v): string {
     return htmlspecialchars((string)($v ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -1834,12 +1827,6 @@ function tr_upper(?string $value): string
     $value = preg_replace('/\s+/u', ' ', $value);
     $value = str_replace(['i', 'ı'], ['İ', 'I'], $value);
     return mb_strtoupper($value, 'UTF-8');
-}
-
-function tr_upper_or_null($value): ?string
-{
-    $v = tr_upper(is_null($value) ? null : (string)$value);
-    return $v === '' ? null : $v;
 }
 
 // ── Depo Rengi (Sprint Depo-02) ───────────────────────────

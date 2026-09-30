@@ -147,19 +147,6 @@ function tr_norm(string $s): string {
     $s = strtr($s, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
     return str_replace([' ', '-', '.', ','], '', $s);
 }
-function kasa_dara_for_label(string $needle, array $pallets, array $defs_by_id): float {
-    $sum = 0.0;
-    $needle_norm = tr_norm($needle);
-    foreach ($pallets as $p) {
-        if (!$p['kasa_cinsi_id']) continue;
-        $name = $defs_by_id[(int)$p['kasa_cinsi_id']]['name'] ?? '';
-        $name_norm = tr_norm($name);
-        if (strpos($name_norm, $needle_norm) !== false) {
-            $sum += (int)$p['kasa_adeti'] * (float)$defs_by_id[(int)$p['kasa_cinsi_id']]['unit_dara_kg'];
-        }
-    }
-    return $sum;
-}
 
 // Palet+Şapka+Köşebent dara toplamı
 $palet_sapka_kose_dara = 0.0;
@@ -239,9 +226,6 @@ function stok_satir_topla(array $stok_use, array $defs_by_id, array $allowed_typ
     }
     return ['adet' => $adet, 'kg' => $kg];
 }
-
-// Bottom-row özel kasa dara toplamları (artık kullanılmıyor, dinamik yapıya geçildi)
-// Eski statik hesaplamalar kaldırıldı
 
 // Dinamik kasa cinsi dara dağılımı — yazdırma alt bloku için
 $kasa_dara_breakdown = [];

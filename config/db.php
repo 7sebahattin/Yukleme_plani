@@ -315,37 +315,6 @@ function db(): PDO {
             try { $pdo->exec($_idx_sql); } catch (PDOException $_e) { /* var veya tablo yok */ }
         }
 
-        // ── Eski HKS modülü temizliği ────────────────────────────────────────────
-        // Eski "hks/" paneli kaldırıldı; yerine "halkayit/" SPA'sı geldi. Aşağıdaki
-        // eski tablolar ve dead permission'lar artık kullanılmıyor — kalıcı silinir.
-        // YENİ panelin tabloları (hks_firmalar / hks_taslaklar / hks_gonderilenler /
-        // hks_kv) BU LİSTEDE YOKTUR ve korunur; onları halkayit/db.php oluşturur.
-        try {
-            $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
-            foreach ([
-                'hks_notification_items',
-                'hks_notifications',
-                'hks_settings',
-                'hks_reference_cache',
-                'hks_stock',
-                'hks_queries',
-                'hks_service_logs',
-                'hks_mobile_contacts',
-                'hks_notification_tokens',
-            ] as $_eski_hks) {
-                try { $pdo->exec("DROP TABLE IF EXISTS `{$_eski_hks}`"); }
-                catch (PDOException $_e) { /* yoksa geç */ }
-            }
-            $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
-        } catch (PDOException $_hkse) { error_log('[HKS temizlik] ' . $_hkse->getMessage()); }
-
-        // Eski hks.* yetkileri artık kullanılmıyor (yeni panel records.write ile korunur).
-        try {
-            $pdo->exec("DELETE FROM role_permissions
-                        WHERE permission IN ('hks.read','hks.write','hks.settings','hks.send','hks.export')");
-        } catch (PDOException $_e) { /* role_permissions yoksa sessizce geç */ }
-        // ── Eski HKS temizliği sonu ──────────────────────────────────────────────
-
         // Maliyet-Yükleme-01: cost_sheets'e record_id + brut_kg + linked_at ekle (idempotent)
         // record_id: kaynak loading_records bağlantısı (UNIQUE değil — alternatif senaryo/revizyon serbest)
         // linked_at: yalnız ilk oluşturmada NOW() yazılır, asla UPDATE edilmez (bkz. config/cost_link.php)

@@ -481,13 +481,6 @@ function set_active_depot(string $depo): void {
     $_COOKIE[DEPOT_COOKIE_NAME] = $depo; // aynı istek içinde de geçerli olsun
 }
 
-function clear_active_depot(): void {
-    $opts = auth_cookie_options();
-    $opts['expires'] = time() - 3600;
-    setcookie(DEPOT_COOKIE_NAME, '', $opts);
-    unset($_COOKIE[DEPOT_COOKIE_NAME]);
-}
-
 // Aktif depo seçilmeden hiçbir sayfa açılmaz (zorunlu tek depo).
 // Depo seçim/giriş/çıkış sayfaları hariç. JSON isteklerde 403+JSON döner.
 function enforce_active_depot(): void {
@@ -522,10 +515,6 @@ function user_allowed_depots(?int $user_id = null): ?array {
         if ($act !== null) return [$act];
     }
     return user_assigned_depots($user_id);
-}
-
-function user_is_depot_restricted(): bool {
-    return user_allowed_depots() !== null;
 }
 
 // Depo adı karşılaştırma için TR-duyarsız katlama — MySQL utf8mb4_unicode_ci
@@ -626,17 +615,4 @@ function require_perm(string $permission): void {
     if (!can($permission)) {
         forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: {$permission})");
     }
-}
-
-function require_any_perm(array $permissions): void {
-    if (current_user() === null) {
-        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
-        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
-        exit;
-    }
-    enforce_active_depot();
-    foreach ($permissions as $p) {
-        if (can($p)) return;
-    }
-    forbidden();
 }

@@ -131,15 +131,6 @@ function ensure_max_pallet_column(): bool {
     } catch (Throwable $e) { return false; }
 }
 
-// Ekleme formu açıklaması
-function def_help(string $type): string {
-    return match ($type) {
-        'kasa_cinsi' => 'Kasa darası (kg) girilebilir.',
-        'palet_tipi' => 'Palet darası (kg) girilebilir.',
-        default      => 'Bu tür için dara gerekmez.',
-    };
-}
-
 // ── POST: create / update / toggle / delete ──────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
