@@ -239,8 +239,8 @@ ok('gunluk_puantaj_yazdir.php: pdks_gunluk_oturum_kartlari() REUSE ediyor (kendi
     str_contains($puantajYazdirSrc, 'pdks_gunluk_oturum_kartlari('));
 ok('gunluk_puantaj_yazdir.php: eksik çıkış UYDURULMUYOR — çıkış saati boşsa boş kalıyor, "Eksik Çıkış" AÇIKÇA yazılıyor',
     str_contains($puantajYazdirSrc, "'⚠️ Eksik Çıkış'") && (bool)preg_match('/\$k\[.cikis_saat.\] \? h\(date\(.H:i., strtotime\(\$k\[.cikis_saat.\]\)\)\) : .\s*./', $puantajYazdirSrc));
-ok('gunluk_puantaj_yazdir.php: imza alanları (Çavuş + Kontrol Eden) print-signatures içinde var',
-    substr_count($puantajYazdirSrc, 'print-sig-box') === 2 && str_contains($puantajYazdirSrc, 'Çavuş') && str_contains($puantajYazdirSrc, 'Kontrol Eden'));
+ok('gunluk_puantaj_yazdir.php: imza alanları KALDIRILDI (kullanıcı kararı — düzgün basılamıyordu)',
+    !str_contains($puantajYazdirSrc, 'print-sig-box') && !str_contains($puantajYazdirSrc, 'Kontrol Eden'));
 
 echo "\n=== FİNANSAL/HAKEDİŞ YAZDIRMA — İKİNCİ BİR HESAP YOK (görev madde 17/38) ===\n";
 foreach ([
