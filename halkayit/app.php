@@ -13,6 +13,8 @@ $auth_user = require_login();
 require_perm('records.write');
 
 header('Content-Type: text/html; charset=utf-8');
+// Sayfa CSRF token'ı taşır — tarayıcı/ara katman önbelleği eski token'ı sunmasın.
+header('Cache-Control: no-store');
 // CSRF: yeni yazma uçları (kisi_kaydet / kisi_sil) token ister. app.html statik
 // olduğu için token <meta name="csrf-token" content="__CSRF_TOKEN__"> yer
 // tutucusuna burada basılır; api() her istekte X-CSRF-Token başlığıyla yollar.

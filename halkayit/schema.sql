@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS hks_kisiler (
   ad VARCHAR(200) NOT NULL DEFAULT '',
   cep VARCHAR(20) NOT NULL DEFAULT '',     -- yalnız rakam
   dogum DATE NULL,
+  sifat_id INT NULL,                       -- karşı taraf sıfatı (HKS katalog id); v282 tablosuna ALTER ile eklenir
   kullanim_sayisi INT NOT NULL DEFAULT 0,  -- yalnız gerçek gönderimde artar
   son_kullanim DATETIME NULL,
   olusturma DATETIME NOT NULL,

@@ -7,10 +7,13 @@
 // oturum/JSON/exit yan etkileri taşır). Tablo DDL'i de lib'in kendi
 // hks_kisi_tablo_hazirla()'sından gelir; şema testte ayrı yazılmaz.
 //
-// Kapsam: doğrulama (TC algoritması, VKN, cep, gelecek doğum), yeni/güncelle/
+// Kapsam: doğrulama (TC algoritması, VKN, cep, gelecek doğum, ad kuralı:
+// VKN adsız OK / TC adsız 400, sıfat biçimi + katalog), yeni/güncelle/
 // 409 çakışma/404, sil, gönderim upsert'i (boş alan eskiyi silmez, sayaç
 // artar, geçersiz TC yazılmaz), tek seferlik içe aktarma (idempotent, bayrak,
-// eski kv silinmez), liste sırası, maskeleme/audit değerleri.
+// eski kv silinmez), liste sırası, maskeleme/audit değerleri, sıfat upsert'i
+// (son kullanılan kazanır; Üreticiden Sevk Alım'da yazılmaz), v282 tablosundan
+// sifat_id yükseltmesi (idempotent).
 //
 //   php scripts/hks_kisi_havuzu_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
@@ -71,7 +74,29 @@ ok('9 hane → hata', $h !== null);
 [, $h] = hks_kisi_dogrula(['tc' => '', 'ad' => 'X'], $BUGUN);
 ok('boş TC → hata', $h !== null);
 [, $h] = hks_kisi_dogrula(['tc' => $TC1, 'ad' => '   '], $BUGUN);
-ok('boş ad → hata', $h !== null);
+ok('TC + boş ad → hata', $h !== null);
+[$k, $h] = hks_kisi_dogrula(['tc' => $VKN, 'ad' => '   '], $BUGUN);
+ok('VKN + boş ad → kabul (ad yalnız takip için)', $h === null && ($k['ad'] ?? 'x') === '', (string)$h);
+
+echo "\n── Sıfat doğrulama ──\n";
+foreach ([null, '', 0, '0'] as $bos) {
+    [$k, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => $bos], $BUGUN);
+    ok('sifatId ' . var_export($bos, true) . ' → null', $h === null && $k['sifatId'] === null, (string)$h);
+}
+[$k, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => 5], $BUGUN);
+ok('sifatId 5 (int) kabul', $h === null && $k['sifatId'] === 5, (string)$h);
+[$k, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => '12'], $BUGUN);
+ok('sifatId "12" (metin) → 12', $h === null && $k['sifatId'] === 12, (string)$h);
+foreach ([-3, '-3', 'abc', '1.5', 1.5, '5x', true, [5], '99999999999'] as $kotu) {
+    [, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => $kotu], $BUGUN);
+    ok('sifatId ' . json_encode($kotu) . ' → 400 hatası', $h !== null);
+}
+[, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => 7], $BUGUN, [5, 6]);
+ok('katalogda olmayan sıfat → hata', $h !== null && strpos($h, 'katalogda yok') !== false, (string)$h);
+[$k, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => 6], $BUGUN, [5, 6]);
+ok('katalogdaki sıfat → kabul', $h === null && $k['sifatId'] === 6);
+[, $h] = hks_kisi_dogrula(['tc' => $VKN, 'sifatId' => 0], $BUGUN, [5, 6]);
+ok('katalog varken boş sıfat → kabul', $h === null);
 [, $h] = hks_kisi_dogrula(['tc' => $TC1, 'ad' => str_repeat('ş', 201)], $BUGUN);
 ok('201 karakter ad → hata', $h !== null);
 [, $h] = hks_kisi_dogrula(['tc' => $TC1, 'ad' => str_repeat('ş', 200)], $BUGUN);
@@ -104,7 +129,8 @@ $db = yeni_db();
 $r = hks_kisi_kaydet($db, ['tc' => $TC1, 'ad' => 'Birinci Üretici', 'cep' => '5320000000', 'dogum' => '1970-05-05'], 7, $BUGUN);
 ok('yeni kayıt 200 + create', $r['kod'] === 200 && $r['islem'] === 'create', json_encode($r, JSON_UNESCAPED_UNICODE));
 $id1 = $r['kisi']['id'];
-ok('API biçimi alanları', array_keys($r['kisi']) === ['id', 'tc', 'ad', 'cep', 'dogum', 'kullanimSayisi', 'sonKullanim']);
+ok('API biçimi alanları', array_keys($r['kisi']) === ['id', 'tc', 'ad', 'cep', 'dogum', 'sifatId', 'kullanimSayisi', 'sonKullanim']);
+ok('sifatId verilmediyse null', $r['kisi']['sifatId'] === null);
 ok('yeni: sayaç 0, sonKullanim boş', $r['kisi']['kullanimSayisi'] === 0 && $r['kisi']['sonKullanim'] === '');
 ok('olusturan_id yazıldı', (int)$r['satir']['olusturan_id'] === 7);
 $r = hks_kisi_kaydet($db, ['tc' => $TC2, 'ad' => 'İkinci Üretici'], 7, $BUGUN);
@@ -209,6 +235,123 @@ ok('bayraksız yeniden çalıştırma idempotent (yalnız eksik 1)', hks_kisi_ha
 ok('toplam kişi 3', (int)$db->query('SELECT COUNT(*) FROM hks_kisiler')->fetchColumn() === 3);
 $db2 = yeni_db();
 ok('boş kv: 0 aktarım + bayrak', hks_kisi_havuzu_ice_aktar($db2) === 0 && hks_kisi_havuzu_ice_aktar($db2) === null);
+
+echo "\n── Kaydet: VKN adsız / TC adsız / sıfat + katalog ──\n";
+$db = yeni_db();
+$r = hks_kisi_kaydet($db, ['tc' => $VKN, 'ad' => ''], 1, $BUGUN);
+ok('VKN adsız kayıt 200', $r['kod'] === 200 && $r['kisi']['ad'] === '', json_encode($r, JSON_UNESCAPED_UNICODE));
+$idV = $r['kisi']['id'];
+$r = hks_kisi_kaydet($db, ['tc' => $TC1, 'ad' => ''], 1, $BUGUN);
+ok('TC adsız kayıt 400', $r['kod'] === 400);
+$r = hks_kisi_kaydet($db, ['tc' => $VKN, 'ad' => 'Kopya'], 1, $BUGUN);
+ok('adsız kayda çakışma 409 "(ad girilmemiş)"', $r['kod'] === 409 && strpos($r['hata'], 'ad girilmemiş') !== false, (string)($r['hata'] ?? ''));
+$r = hks_kisi_kaydet($db, ['id' => $idV, 'tc' => $VKN, 'ad' => '', 'sifatId' => 9], 1, $BUGUN);
+ok('önbellek YOKKEN sıfat id kabul + yazılır', $r['kod'] === 200 && $r['kisi']['sifatId'] === 9, json_encode($r, JSON_UNESCAPED_UNICODE));
+ok('audit değerinde sifat_id', ($r['kisi']['sifatId'] ?? 0) === 9 && (hks_kisi_audit_degerleri($r['satir'])['sifat_id'] ?? 0) === 9);
+$db->prepare('INSERT INTO hks_kv (anahtar, deger) VALUES (?, ?)')->execute(['listeler_cache',
+    json_encode(['sifatlar' => [['id' => 3, 'ad' => 'Üretici'], ['id' => 9, 'ad' => 'Tüccar'], ['id' => '11', 'ad' => 'Komisyoncu']]], JSON_UNESCAPED_UNICODE)]);
+ok('katalog okunur (metin id int\'e)', hks_kisi_sifat_katalogu($db) === [3, 9, 11]);
+$r = hks_kisi_kaydet($db, ['id' => $idV, 'tc' => $VKN, 'sifatId' => 42], 1, $BUGUN);
+ok('katalogda olmayan sıfat → 400', $r['kod'] === 400 && strpos($r['hata'], 'katalogda yok') !== false);
+ok('400 sonrası kayıt değişmedi', (int)hks_kisi_getir($db, $idV)['sifat_id'] === 9);
+$r = hks_kisi_kaydet($db, ['id' => $idV, 'tc' => $VKN, 'sifatId' => 'x'], 1, $BUGUN);
+ok('biçimsiz sıfat → 400', $r['kod'] === 400);
+$r = hks_kisi_kaydet($db, ['id' => $idV, 'tc' => $VKN, 'sifatId' => '11'], 1, $BUGUN);
+ok('katalogdaki sıfat (metin) → 200, 11', $r['kod'] === 200 && $r['kisi']['sifatId'] === 11);
+$r = hks_kisi_kaydet($db, ['id' => $idV, 'tc' => $VKN, 'sifatId' => ''], 1, $BUGUN);
+ok('pencerede sıfat boşaltılır → NULL', $r['kod'] === 200 && $r['kisi']['sifatId'] === null && hks_kisi_getir($db, $idV)['sifat_id'] === null);
+$db->exec("UPDATE hks_kv SET deger = '{\"sifatlar\":[]}' WHERE anahtar = 'listeler_cache'");
+ok('boş sifatlar listesi = önbellek yok (denetimsiz)', hks_kisi_sifat_katalogu($db) === null);
+
+echo "\n── Upsert: sıfat yazımı / Üreticiden Sevk ──\n";
+$db = yeni_db();
+ok('upsert yeni kişi sifatId ile', hks_kisi_upsert($db, ['tc' => $TC1, 'ad' => 'S', 'sifatId' => '4'], 1, '2026-09-30 10:00:00'));
+ok('yeni kişi sifat_id = 4', (int)hks_kisi_tc_ile($db, $TC1)['sifat_id'] === 4);
+hks_kisi_upsert($db, ['tc' => $TC1, 'sifatId' => 8], 1, '2026-09-30 10:05:00');
+ok('son kullanılan sıfat kazanır (8)', (int)hks_kisi_tc_ile($db, $TC1)['sifat_id'] === 8);
+hks_kisi_upsert($db, ['tc' => $TC1, 'sifatId' => null], 1, '2026-09-30 10:06:00');
+hks_kisi_upsert($db, ['tc' => $TC1, 'sifatId' => 'bozuk'], 1, '2026-09-30 10:07:00');
+hks_kisi_upsert($db, ['tc' => $TC1], 1, '2026-09-30 10:08:00');
+$s = hks_kisi_tc_ile($db, $TC1);
+ok('boş/geçersiz/eksik sifatId eski sıfatı SİLMEZ', (int)$s['sifat_id'] === 8 && (int)$s['kullanim_sayisi'] === 5);
+$ortak = ['ikinciTc' => $TC1, 'ikinciAd' => 'Üretici Kişi', 'ikinciCep' => '', 'ikinciDogumTarihi' => '', 'ikinciSifatId' => 3];
+$k = hks_kisi_ortaktan($ortak, true);
+ok('ortaktan (üretici sevk): sifatId YOK', $k['sifatId'] === null && $k['tc'] === $TC1 && $k['ad'] === 'Üretici Kişi');
+hks_kisi_upsert($db, $k, 1, '2026-09-30 11:00:00');
+ok('Üreticiden Sevk Alım sıfatı yazmaz (8 korunur)', (int)hks_kisi_tc_ile($db, $TC1)['sifat_id'] === 8);
+$k = hks_kisi_ortaktan($ortak, false);
+ok('ortaktan (diğer türler): sifatId taşınır', $k['sifatId'] === 3);
+hks_kisi_upsert($db, $k, 1, '2026-09-30 11:05:00');
+ok('diğer türde sıfat yazılır (3)', (int)hks_kisi_tc_ile($db, $TC1)['sifat_id'] === 3);
+hks_kisi_upsert($db, hks_kisi_ortaktan(['ikinciTc' => $TC2, 'ikinciSifatId' => 3], true), 1);
+ok('üretici sevkte YENİ kişi sifat_id NULL', hks_kisi_tc_ile($db, $TC2)['sifat_id'] === null);
+ok('ortaktan: eksik alanlar boş', hks_kisi_ortaktan([], false) === ['tc' => '', 'ad' => '', 'cep' => '', 'dogum' => '', 'sifatId' => null]);
+
+echo "\n── Şema yükseltme (v282 → sifat_id) ──\n";
+$db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
+$db->exec('CREATE TABLE hks_kv (anahtar VARCHAR(60) PRIMARY KEY, deger MEDIUMTEXT)');
+// v282'deki tablo biçimi (sifat_id YOK) + mevcut veri
+$db->exec("CREATE TABLE hks_kisiler (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, tc VARCHAR(11) NOT NULL UNIQUE, ad VARCHAR(200) NOT NULL DEFAULT '',
+  cep VARCHAR(20) NOT NULL DEFAULT '', dogum DATE NULL, kullanim_sayisi INT NOT NULL DEFAULT 0,
+  son_kullanim DATETIME NULL, olusturma DATETIME NOT NULL, guncelleme DATETIME NULL, olusturan_id INT NULL)");
+$db->prepare('INSERT INTO hks_kisiler (tc, ad, olusturma) VALUES (?, ?, ?)')->execute([$TC1, 'Eski Kayıt', '2026-09-01 00:00:00']);
+ok('eski şemada kolon yok', hks_kisi_sifat_kolonu_var($db) === false);
+hks_kisi_tablo_hazirla($db);
+ok('yükseltme sonrası kolon var', hks_kisi_sifat_kolonu_var($db) === true);
+$istisna = null;
+try { hks_kisi_tablo_hazirla($db); hks_kisi_tablo_hazirla($db); hks_kisi_sifat_kolonu_hazirla($db); }
+catch (Throwable $e) { $istisna = $e->getMessage(); }
+ok('tekrar çağrı idempotent (istisna yok)', $istisna === null, (string)$istisna);
+$kolonlar = array_column($db->query('PRAGMA table_info(hks_kisiler)')->fetchAll(), 'name');
+ok('sifat_id tek kez eklendi', count(array_keys($kolonlar, 'sifat_id', true)) === 1, implode(',', $kolonlar));
+$e1 = hks_kisi_tc_ile($db, $TC1);
+ok('eski veri korunur, sifat_id NULL', $e1['ad'] === 'Eski Kayıt' && $e1['sifat_id'] === null);
+ok('eski satır API biçiminde sifatId null', hks_kisi_liste($db)[0]['sifatId'] === null);
+ok('yükseltilmiş tabloda upsert sıfat yazar', hks_kisi_upsert($db, ['tc' => $TC1, 'sifatId' => 5]) && (int)hks_kisi_tc_ile($db, $TC1)['sifat_id'] === 5);
+// Eşzamanlı ekleme: yoklama "yok" dedikten sonra başkası kolonu eklemiş → duplicate column yutulur
+$db2 = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$db2->exec("CREATE TABLE hks_kisiler (id INTEGER PRIMARY KEY, tc VARCHAR(11), sifat_id INT NULL)");
+$istisna = null;
+try { $db2->exec('ALTER TABLE hks_kisiler ADD COLUMN sifat_id INT NULL'); } catch (PDOException $e) { $istisna = $e; }
+ok('(ön koşul) ikinci ALTER SQLite\'ta hata verir', $istisna !== null);
+$istisna = null;
+try { hks_kisi_sifat_kolonu_hazirla($db2); } catch (Throwable $e) { $istisna = $e->getMessage(); }
+ok('kolon zaten varsa hazırla sessiz geçer', $istisna === null, (string)$istisna);
+
+echo "\n── api.php: CSRF girdisi + 'csrf' ucu + sıfat kararı (kaynak) ──\n";
+$api = (string)file_get_contents(__DIR__ . '/../halkayit/api.php');
+// hks_csrf_girdi() api.php'den ayıklanıp ayrı dosyada çalıştırılır (api.php
+// require edilemez: oturum/JSON/exit yan etkileri).
+if (preg_match('/^function hks_csrf_girdi\(.*?^\}/ms', $api, $m)) {
+    $tmp = tempnam(sys_get_temp_dir(), 'hkscsrf');
+    file_put_contents($tmp, "<?php\n" . $m[0] . "\n");
+    require $tmp;
+    @unlink($tmp);
+    $eskiSrv = $_SERVER;
+    unset($_SERVER['HTTP_X_CSRF_TOKEN']);
+    ok('csrf: başlık yok → gövde', hks_csrf_girdi(['csrf' => 'G']) === 'G');
+    ok('csrf: ikisi de yok → null', hks_csrf_girdi([]) === null);
+    $_SERVER['HTTP_X_CSRF_TOKEN'] = 'B';
+    ok('csrf: başlık önce gelir', hks_csrf_girdi(['csrf' => 'G']) === 'B');
+    $_SERVER['HTTP_X_CSRF_TOKEN'] = '';
+    ok('csrf: boş başlık yok sayılır → gövde', hks_csrf_girdi(['csrf' => 'G']) === 'G');
+    ok('csrf: dizi gövde değeri → null', hks_csrf_girdi(['csrf' => ['x']]) === null);
+    $_SERVER = $eskiSrv;
+} else {
+    ok('api.php hks_csrf_girdi() tanımlı', false);
+}
+ok("api.php 'csrf' ucu csrf_token() döner", (bool)preg_match("/case 'csrf':\s*\{[^}]*hks_json_cikti\(\['csrf' => csrf_token\(\)\]\)/s", $api));
+ok("'csrf' ucu records.write kapısından SONRA", strpos($api, "can('records.write')") !== false
+    && strpos($api, "can('records.write')") < strpos($api, "case 'csrf':"));
+ok('kisi_kaydet + kisi_sil hks_csrf_girdi() ile denetler', substr_count($api, 'csrf_check(hks_csrf_girdi($g))') === 2
+    && strpos($api, "csrf_check(\$_SERVER['HTTP_X_CSRF_TOKEN']") === false);
+ok('havuza işleme sıfat kararını hks_uret_sevk_mi() ile verir',
+    strpos($api, 'hks_kisi_ortaktan((array)$ortak, hks_uret_sevk_mi($ortak))') !== false);
+$lib = (string)file_get_contents(__DIR__ . '/../halkayit/kisi_havuzu_lib.php');
+ok('lib taslak_lib.php\'yi require ETMEZ (döngü yok)', !preg_match('/require[^;]*taslak_lib/', $lib));
+$sema = (string)file_get_contents(__DIR__ . '/../halkayit/schema.sql');
+ok('schema.sql hks_kisiler sifat_id içerir', (bool)preg_match('/CREATE TABLE IF NOT EXISTS hks_kisiler \([^;]*sifat_id INT NULL/s', $sema));
 
 echo "\n" . ($fail === 0 ? 'TÜM TESTLER GEÇTİ' : "$fail TEST BAŞARISIZ") . "\n";
 exit($fail === 0 ? 0 : 1);

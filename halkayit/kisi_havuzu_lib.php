@@ -44,12 +44,14 @@ function hks_kisi_tablo_hazirla(PDO $db): void {
       ad VARCHAR(200) NOT NULL DEFAULT '',
       cep VARCHAR(20) NOT NULL DEFAULT '',
       dogum DATE NULL,
+      sifat_id INT NULL,
       kullanim_sayisi INT NOT NULL DEFAULT 0,
       son_kullanim DATETIME NULL,
       olusturma DATETIME NOT NULL,
       guncelleme DATETIME NULL,
       olusturan_id INT NULL
     )");
+    hks_kisi_sifat_kolonu_hazirla($db);
     return;
   }
   $db->exec("CREATE TABLE IF NOT EXISTS {$t} (
@@ -58,6 +60,7 @@ function hks_kisi_tablo_hazirla(PDO $db): void {
     ad VARCHAR(200) NOT NULL DEFAULT '',
     cep VARCHAR(20) NOT NULL DEFAULT '',
     dogum DATE NULL,
+    sifat_id INT NULL,
     kullanim_sayisi INT NOT NULL DEFAULT 0,
     son_kullanim DATETIME NULL,
     olusturma DATETIME NOT NULL,
@@ -66,6 +69,34 @@ function hks_kisi_tablo_hazirla(PDO $db): void {
     UNIQUE KEY uq_kisi_tc (tc),
     KEY ix_kisi_son (son_kullanim)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  hks_kisi_sifat_kolonu_hazirla($db);
+}
+
+// v282 tablosunda sifat_id YOK → idempotent ekleme. hks_tablolari_hazirla() HER
+// API isteğinde çalıştığı için her seferinde ALTER denenip hatası yutulmaz:
+// önce ucuz bir yoklama (LIMIT 0 — satır okumaz, MDL-exclusive kilit almaz;
+// MySQL ve SQLite'ta aynı) yapılır, ALTER yalnız kolon YOKSA bir kez çalışır.
+// İki istek aynı anda ALTER ederse ikincisi "duplicate column" alır → yeniden
+// yoklanır; kolon varsa sessizce geçilir, yoksa asıl hata fırlar.
+function hks_kisi_sifat_kolonu_var(PDO $db): bool {
+  try {
+    $db->query('SELECT sifat_id FROM ' . hks_kisi_tablo() . ' LIMIT 0');
+    return true;
+  } catch (PDOException $e) {
+    return false;
+  }
+}
+function hks_kisi_sifat_kolonu_hazirla(PDO $db): void {
+  if (hks_kisi_sifat_kolonu_var($db)) return;
+  $t = hks_kisi_tablo();
+  $sql = $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+    ? "ALTER TABLE {$t} ADD COLUMN sifat_id INT NULL"
+    : "ALTER TABLE {$t} ADD COLUMN sifat_id INT NULL AFTER dogum";
+  try {
+    $db->exec($sql);
+  } catch (PDOException $e) {
+    if (!hks_kisi_sifat_kolonu_var($db)) throw $e;   // eşzamanlı ekleme değil — gerçek hata
+  }
 }
 
 // ── Normalizasyon / doğrulama (saf) ─────────────────────────────────────────
@@ -99,10 +130,41 @@ function hks_kisi_cep_normalize($deger): ?string {
   return ($n >= 10 && $n <= 13) ? $c : null;
 }
 
+// Sıfat id → pozitif tamsayı | 0 (boş: null/''/0/'0') | null (geçersiz).
+function hks_kisi_sifat_normalize($deger): ?int {
+  if ($deger === null || $deger === '' || $deger === 0 || $deger === '0' || $deger === false) return 0;
+  if (is_int($deger)) return $deger > 0 ? $deger : null;
+  if (is_string($deger) && preg_match('/^\s*[1-9]\d{0,9}\s*$/', $deger)) {
+    $n = (int)trim($deger);
+    return $n <= 2147483647 ? $n : null;
+  }
+  if (is_float($deger) && $deger > 0 && floor($deger) === $deger && $deger <= 2147483647) return (int)$deger;
+  return null;
+}
+
+// Sıfat kataloğu: hks_kv 'listeler_cache'.sifatlar içindeki id'ler (int).
+// Önbellek yoksa / sifatlar boşsa null → katalog denetimi YAPILMAZ (id kabul).
+function hks_kisi_sifat_katalogu(PDO $db): ?array {
+  $st = $db->prepare('SELECT deger FROM ' . hks_kisi_kv_tablo() . ' WHERE anahtar = ?');
+  $st->execute(['listeler_cache']);
+  $ham = $st->fetchColumn();
+  if ($ham === false) return null;
+  $c = json_decode((string)$ham, true);
+  if (!is_array($c) || empty($c['sifatlar']) || !is_array($c['sifatlar'])) return null;
+  $ids = [];
+  foreach ($c['sifatlar'] as $s) {
+    if (is_array($s) && isset($s['id']) && (int)$s['id'] > 0) $ids[] = (int)$s['id'];
+  }
+  return $ids;
+}
+
 // Pencereden gelen kişi girdisini doğrular. Sunucu OTORİTEDİR; app.html'deki
 // ayna yalnız kolaylıktır.
-// Dönüş: [['tc','ad','cep','dogum'(''|YYYY-MM-DD)], null] ya da [null, 'Türkçe hata'].
-function hks_kisi_dogrula(array $g, ?string $bugun = null): array {
+// Ad kuralı: 10 hane (VKN) → ad OPSİYONEL (yalnız takip içindir; kayıtlı
+// karşı tarafta HKS'e AdSoyad gönderilmez). 11 hane (TC) → ad ZORUNLU.
+// $sifatKatalogu: listeler_cache sıfat id'leri; null = önbellek yok → denetimsiz.
+// Dönüş: [['tc','ad','cep','dogum'(''|YYYY-MM-DD),'sifatId'(int|null)], null] ya da [null, 'Türkçe hata'].
+function hks_kisi_dogrula(array $g, ?string $bugun = null, ?array $sifatKatalogu = null): array {
   $tc = hks_tc_normalize($g['tc'] ?? '');
   if ($tc === '') return [null, 'TC/VKN zorunludur.'];
   if (strlen($tc) === 11) {
@@ -112,7 +174,7 @@ function hks_kisi_dogrula(array $g, ?string $bugun = null): array {
   }
 
   $ad = trim(preg_replace('/\s+/u', ' ', (string)($g['ad'] ?? '')));
-  if ($ad === '') return [null, 'Ad / Ünvan zorunludur.'];
+  if ($ad === '' && strlen($tc) === 11) return [null, 'Ad / Soyad zorunludur (TC Kimlik No ile kayıtta).'];
   if (mb_strlen($ad, 'UTF-8') > 200) return [null, 'Ad / Ünvan en çok 200 karakter olabilir.'];
 
   $cep = hks_kisi_cep_normalize($g['cep'] ?? '');
@@ -121,7 +183,13 @@ function hks_kisi_dogrula(array $g, ?string $bugun = null): array {
   $dogum = hks_kisi_dogum_normalize($g['dogum'] ?? '', $bugun);
   if ($dogum === null) return [null, 'Doğum tarihi geçersiz ya da ileri bir tarih.'];
 
-  return [['tc' => $tc, 'ad' => $ad, 'cep' => $cep, 'dogum' => $dogum], null];
+  $sifat = hks_kisi_sifat_normalize($g['sifatId'] ?? null);
+  if ($sifat === null) return [null, 'Sıfat geçersiz (pozitif tamsayı olmalı).'];
+  if ($sifat > 0 && $sifatKatalogu !== null && !in_array($sifat, $sifatKatalogu, true)) {
+    return [null, 'Sıfat katalogda yok — listeleri güncelleyip yeniden seçin.'];
+  }
+
+  return [['tc' => $tc, 'ad' => $ad, 'cep' => $cep, 'dogum' => $dogum, 'sifatId' => $sifat > 0 ? $sifat : null], null];
 }
 
 // Audit için: yalnız son 4 hane görünür ('*******1234'). Tam TC log'a yazılmaz.
@@ -132,10 +200,11 @@ function hks_kisi_tc_maskele($tc): string {
   return str_repeat('*', $n - 4) . substr($tc, -4);
 }
 
-// Audit değerleri: ad + maskeli TC. cep/doğum YAZILMAZ (kişisel veri) —
+// Audit değerleri: ad + maskeli TC (+ sifat_id — kişisel veri değil). cep/doğum YAZILMAZ (kişisel veri) —
 // güncellemede yalnız değişip değişmediği bool olarak eklenir.
 function hks_kisi_audit_degerleri(array $satir, ?array $eski = null): array {
   $v = ['ad' => (string)($satir['ad'] ?? ''), 'tc' => hks_kisi_tc_maskele($satir['tc'] ?? '')];
+  if (array_key_exists('sifat_id', $satir)) $v['sifat_id'] = $satir['sifat_id'] !== null ? (int)$satir['sifat_id'] : null;
   if ($eski !== null) {
     $v['cep_degisti']   = (string)($eski['cep'] ?? '') !== (string)($satir['cep'] ?? '');
     $v['dogum_degisti'] = (string)($eski['dogum'] ?? '') !== (string)($satir['dogum'] ?? '');
@@ -143,7 +212,7 @@ function hks_kisi_audit_degerleri(array $satir, ?array $eski = null): array {
   return $v;
 }
 
-// DB satırı → API biçimi (sözleşme: dogum/sonKullanim boşsa '').
+// DB satırı → API biçimi (sözleşme: dogum/sonKullanim boşsa '', sifatId int|null).
 function hks_kisi_disa(array $r): array {
   $dogum = (string)($r['dogum'] ?? '');
   return [
@@ -152,6 +221,7 @@ function hks_kisi_disa(array $r): array {
     'ad'             => (string)$r['ad'],
     'cep'            => (string)$r['cep'],
     'dogum'          => $dogum !== '' ? substr($dogum, 0, 10) : '',
+    'sifatId'        => (isset($r['sifat_id']) && (int)$r['sifat_id'] > 0) ? (int)$r['sifat_id'] : null,
     'kullanimSayisi' => (int)$r['kullanim_sayisi'],
     'sonKullanim'    => (string)($r['son_kullanim'] ?? ''),
   ];
@@ -184,7 +254,7 @@ function hks_kisi_liste(PDO $db, int $limit = HKS_KISI_LISTE_LIMIT): array {
 // ── Yazma (pencere: yeni / düzenle / sil) ───────────────────────────────────
 
 function hks_kisi_cakisma_mesaji(string $ad): string {
-  return 'Bu TC/VKN havuzda zaten kayıtlı: ' . ($ad !== '' ? $ad : '(adsız kayıt)');
+  return 'Bu TC/VKN havuzda zaten kayıtlı: ' . ($ad !== '' ? $ad : '(ad girilmemiş)');
 }
 
 // id yok = yeni, id var = güncelle. Pencere düzenlemesi kullanım sayacına ve
@@ -192,7 +262,7 @@ function hks_kisi_cakisma_mesaji(string $ad): string {
 // Dönüş: ['kod'=>200, 'kisi'=>API biçimi, 'satir'=>yeni satır, 'eski'=>eski satır|null, 'islem'=>'create'|'update']
 //        ya da ['kod'=>400|404|409, 'hata'=>'...'].
 function hks_kisi_kaydet(PDO $db, array $g, ?int $kullaniciId = null, ?string $bugun = null): array {
-  [$k, $hata] = hks_kisi_dogrula($g, $bugun);
+  [$k, $hata] = hks_kisi_dogrula($g, $bugun, hks_kisi_sifat_katalogu($db));
   if ($hata !== null) return ['kod' => 400, 'hata' => $hata];
 
   $t = hks_kisi_tablo();
@@ -210,12 +280,13 @@ function hks_kisi_kaydet(PDO $db, array $g, ?int $kullaniciId = null, ?string $b
   $dogum = $k['dogum'] !== '' ? $k['dogum'] : null;
   try {
     if ($eski) {
-      $db->prepare("UPDATE {$t} SET tc=?, ad=?, cep=?, dogum=?, guncelleme=? WHERE id=?")
-         ->execute([$k['tc'], $k['ad'], $k['cep'], $dogum, $simdi, $id]);
+      // Pencere formu OTORİTEDİR: boş bırakılan sıfat NULL'a çekilir (cep/doğum gibi).
+      $db->prepare("UPDATE {$t} SET tc=?, ad=?, cep=?, dogum=?, sifat_id=?, guncelleme=? WHERE id=?")
+         ->execute([$k['tc'], $k['ad'], $k['cep'], $dogum, $k['sifatId'], $simdi, $id]);
     } else {
-      $db->prepare("INSERT INTO {$t} (tc, ad, cep, dogum, kullanim_sayisi, son_kullanim, olusturma, guncelleme, olusturan_id)
-                    VALUES (?, ?, ?, ?, 0, NULL, ?, NULL, ?)")
-         ->execute([$k['tc'], $k['ad'], $k['cep'], $dogum, $simdi, $kullaniciId]);
+      $db->prepare("INSERT INTO {$t} (tc, ad, cep, dogum, sifat_id, kullanim_sayisi, son_kullanim, olusturma, guncelleme, olusturan_id)
+                    VALUES (?, ?, ?, ?, ?, 0, NULL, ?, NULL, ?)")
+         ->execute([$k['tc'], $k['ad'], $k['cep'], $dogum, $k['sifatId'], $simdi, $kullaniciId]);
       $id = (int)$db->lastInsertId();
     }
   } catch (PDOException $e) {
@@ -239,11 +310,14 @@ function hks_kisi_sil(PDO $db, int $id): array {
 }
 
 // ── Gönderim sonrası upsert (taslak_gonder) ─────────────────────────────────
-// $k: ['tc','ad','cep','dogum'] — ortak.ikinci* alanlarından.
+// $k: ['tc','ad','cep','dogum','sifatId'?] — ortak.ikinci* alanlarından
+// (hks_kisi_ortaktan() kurar; Üreticiden Sevk Alım'da sifatId gelmez).
 // Kurallar (sözleşme):
 //  • Algoritmayı geçmeyen 11 haneli TC / 10-11 dışı hane → YAZILMAZ (false).
 //  • ad/cep/dogum YALNIZ yeni değer DOLU ve GEÇERLİYSE üzerine yazılır — kayıtlı
 //    kişide HKS bu alanları istemez, boş gelir; o gönderim eski bilgiyi silmesin.
+//  • sifatId geçerli pozitif tamsayıysa sifat_id = o (son kullanılan kazanır);
+//    boş/geçersizse eski sıfata DOKUNULMAZ.
 //  • kullanim_sayisi + 1, son_kullanim = şimdi.
 // Hata YUTMAZ — yutmak çağıranın işidir (api.php); test hatayı görebilsin.
 // Dönüş: true = yazıldı, false = geçersiz TC nedeniyle atlandı.
@@ -255,15 +329,16 @@ function hks_kisi_upsert(PDO $db, array $k, ?int $kullaniciId = null, ?string $s
   if (mb_strlen($ad, 'UTF-8') > 200) $ad = mb_substr($ad, 0, 200, 'UTF-8');
   $cep   = hks_kisi_cep_normalize($k['cep'] ?? '') ?? '';        // geçersiz = boş say
   $dogum = hks_kisi_dogum_normalize($k['dogum'] ?? '') ?? '';    // geçersiz/gelecek = boş say
+  $sifat = hks_kisi_sifat_normalize($k['sifatId'] ?? null) ?? 0;  // geçersiz = boş say
   $simdi = $simdi ?? date('Y-m-d H:i:s');
   $t = hks_kisi_tablo();
 
   $mevcut = hks_kisi_tc_ile($db, $tc);
   if (!$mevcut) {
     try {
-      $db->prepare("INSERT INTO {$t} (tc, ad, cep, dogum, kullanim_sayisi, son_kullanim, olusturma, guncelleme, olusturan_id)
-                    VALUES (?, ?, ?, ?, 1, ?, ?, NULL, ?)")
-         ->execute([$tc, $ad, $cep, $dogum !== '' ? $dogum : null, $simdi, $simdi, $kullaniciId]);
+      $db->prepare("INSERT INTO {$t} (tc, ad, cep, dogum, sifat_id, kullanim_sayisi, son_kullanim, olusturma, guncelleme, olusturan_id)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL, ?)")
+         ->execute([$tc, $ad, $cep, $dogum !== '' ? $dogum : null, $sifat > 0 ? $sifat : null, $simdi, $simdi, $kullaniciId]);
       return true;
     } catch (PDOException $e) {
       // Eşzamanlı başka gönderim aynı TC'yi araya soktu → güncelleme dalına düş.
@@ -277,9 +352,25 @@ function hks_kisi_upsert(PDO $db, array $k, ?int $kullaniciId = null, ?string $s
   if ($ad !== '')    { $set[] = 'ad = ?';    $par[] = $ad; }
   if ($cep !== '')   { $set[] = 'cep = ?';   $par[] = $cep; }
   if ($dogum !== '') { $set[] = 'dogum = ?'; $par[] = $dogum; }
+  if ($sifat > 0)    { $set[] = 'sifat_id = ?'; $par[] = $sifat; }
   $par[] = (int)$mevcut['id'];
   $db->prepare("UPDATE {$t} SET " . implode(', ', $set) . ' WHERE id = ?')->execute($par);
   return true;
+}
+
+// Gönderilen taslağın ortak.ikinci* alanlarından upsert girdisi kurar.
+// $uretSevk: hks_uret_sevk_mi($ortak) — ÇAĞIRAN hesaplar (api.php; o fonksiyon
+// taslak_lib.php'dedir, bu kütüphane onu require ETMEZ → döngüsel bağımlılık yok).
+// Üreticiden Sevk Alım'da sıfat sabit "Üretici"dir (kişinin kendi sıfatı değil)
+// → sifatId YAZILMAZ, havuzdaki kayıtlı sıfat korunur.
+function hks_kisi_ortaktan(array $ortak, bool $uretSevk): array {
+  return [
+    'tc'      => $ortak['ikinciTc'] ?? '',
+    'ad'      => $ortak['ikinciAd'] ?? '',
+    'cep'     => $ortak['ikinciCep'] ?? '',
+    'dogum'   => $ortak['ikinciDogumTarihi'] ?? '',
+    'sifatId' => $uretSevk ? null : ($ortak['ikinciSifatId'] ?? null),
+  ];
 }
 
 // ── Tek seferlik içe aktarma (eski firma bazlı 'sonlar%'.karsiTaraflar) ──────

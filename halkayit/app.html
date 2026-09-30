@@ -383,6 +383,7 @@
     background:var(--soluk-bg); font-size:15px; cursor:pointer; }
   .kisi-form-govde { padding:4px 16px 12px; overflow-y:auto; flex:1 1 auto; min-height:0; }
   .kisi-form-govde label { margin-top:10px; }
+  .kisi-sifat { background:var(--cip-bg); color:var(--navy); margin-left:4px; }
   .kisi-not { color:var(--soluk); font-weight:400; font-size:12px; }
   @media (max-width:767px) {
     .kisi-ovl { padding:0; align-items:flex-end; }
@@ -999,8 +1000,10 @@
     <div class="kisi-form-govde">
       <label for="kfTc">TC / Vergi No</label>
       <input id="kfTc" inputmode="numeric" autocomplete="off" placeholder="10 hane VKN / 11 hane TC">
-      <label for="kfAd">Ad / Ünvan <span style="color:var(--hata-tx)">*</span></label>
+      <label for="kfAd" id="kfAdEtiket">Ad / Soyad <span style="color:var(--hata-tx)">*</span></label>
       <input id="kfAd" autocomplete="off" maxlength="200" placeholder="ad soyad / ünvan">
+      <label for="kfSifat">Sıfat <span class="kisi-not">(opsiyonel — kişi seçilince otomatik gelir)</span></label>
+      <select id="kfSifat"><option value="">— Seçilmedi —</option></select>
       <label for="kfCep">Cep Telefonu <span class="kisi-not">(opsiyonel)</span></label>
       <input id="kfCep" inputmode="numeric" autocomplete="off" placeholder="05xxxxxxxxx">
       <label for="kfDogum">Doğum Tarihi <span class="kisi-not">(opsiyonel — kayıtsız kişide HKS zorunlu tutar)</span></label>
@@ -1149,6 +1152,7 @@ const API_ROTA = {
   // Yurt içi (Sevk Etme) referans/doğrulama
   'POST /api/kayitli_kisi': 'kayitli_kisi',
   // Kişi havuzu (tüm firmalar ortak)
+  'POST /api/csrf': 'csrf',
   'GET /api/kisiler': 'kisiler',
   'POST /api/kisi_kaydet': 'kisi_kaydet',
   'POST /api/kisi_sil': 'kisi_sil',
@@ -1163,21 +1167,44 @@ const API_ROTA = {
   'POST /api/urun_listeleri': 'urun_listeleri',
   'POST /api/urun_cinsleri': 'urun_cinsleri',
 };
+// CSRF token: meta boşsa ya da '__CSRF_TOKEN__' yer tutucusu duruyorsa (eski
+// app.php önbellekten sunulmuş olabilir) /api/csrf'ten alınır ve bellekte tutulur.
+let csrfBellek = '';
 function csrfToken() {
+  if (csrfBellek) return csrfBellek;
   const m = document.querySelector('meta[name="csrf-token"]');
   const t = m ? m.getAttribute('content') : '';
   return t === '__CSRF_TOKEN__' ? '' : (t || '');
 }
-async function api(yol, metod, govde) {
+async function csrfTazele() {
+  const r = await fetch('api.php?action=csrf', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.csrf) throw new Error(j.hata || j.error || 'Güvenlik anahtarı alınamadı');
+  csrfBellek = String(j.csrf);
+  return csrfBellek;
+}
+// Gövdeye 'csrf' YALNIZ bu uçlarda eklenir (başka uçta taslak verisine sızabilir).
+const API_GOVDE_CSRF = { kisi_kaydet: 1, kisi_sil: 1 };
+async function api(yol, metod, govde, tekrar) {
   metod = metod || 'GET';
   const action = API_ROTA[metod + ' ' + yol];
   if (!action) throw new Error('Bilinmeyen istek: ' + metod + ' ' + yol);
+  if (action !== 'csrf' && !csrfToken()) { try { await csrfTazele(); } catch (e) { /* sunucu reddederse mesaj görünür */ } }
+  const tok = csrfToken();
+  const g = Object.assign({}, govde || {});
+  if (API_GOVDE_CSRF[action]) g.csrf = tok;
   const r = await fetch('api.php?action=' + action, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-    body: JSON.stringify(govde || {}),
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': tok },
+    body: JSON.stringify(g),
   });
   const j = await r.json();
+  // csrf_check() biçimi ({ok:false,error,code:403}): token'ı tazele, BİR KEZ tekrarla.
+  if (r.status === 403 && j.code === 403 && !tekrar && action !== 'csrf') {
+    try { await csrfTazele(); return await api(yol, metod, govde, true); } catch (e) { if (e && e.message && e.message !== 'Güvenlik anahtarı alınamadı') throw e; }
+  }
   // csrf_check() (config/helpers.php) 403'te 'hata' değil 'error' döner — onu da göster,
   // yoksa oturum/token sorunu kullanıcıya yalnız "HTTP 403" diye görünürdü.
   if (!r.ok || j.hata) throw new Error(j.hata || j.error || ('HTTP ' + r.status));
@@ -2734,6 +2761,12 @@ async function karsiTarafSec(k) {
     $('oIkDogum').value = k.dogum || '';
   }
   turDegisti();
+  // Kayıtlı sıfat önerisi: doğrulama (ikSifatlariDoldur) BİTTİKTEN sonra, kullanıcı
+  // değiştirebilir. Üreticiden Sevk Alım'da sıfat kilitli — dokunulmaz.
+  if (k.sifatId && ikDogrulandi && !uretSevkModuMu()) {
+    const sel = $('sIkSifat');
+    if ([...sel.options].some(o => o.value === String(k.sifatId))) sel.value = String(k.sifatId);
+  }
 }
 
 // ================= KİŞİ HAVUZU PENCERESİ =================
@@ -2753,6 +2786,7 @@ function kisiPencereAcikMi() { return $('kisiPencere').classList.contains('acik'
 function kisiFormAcikMi() { return $('kisiForm').classList.contains('acik'); }
 
 function kisiPencereAc() {
+  if (!listeler) listeleriHazirla().then(() => { if (kisiFormAcikMi()) kisiFormSifatDoldur($('kfSifat').value); if (kisiHavuz.length) kisiListeCiz(); });
   $('kisiPencereBaslik').textContent = (satinAlimModuMu() || uretSevkModuMu()) ? 'Satıcı Seç' : 'Alıcı Seç';
   $('kisiAra').value = '';
   $('kisiPencere').classList.add('acik');
@@ -2775,6 +2809,16 @@ async function kisiListeYukle() {
     kap.replaceChildren(kisiEl('div', 'kisi-durum hata', e.message || 'Liste alınamadı'));
   }
 }
+function kisiSifatAdi(id) {
+  const x = ((listeler && listeler.sifatlar) || []).find(s => String(s.id) === String(id));
+  return x ? x.ad : '';
+}
+function kisiFormEtiket() {
+  const n = tcRakam($('kfTc').value).length;
+  $('kfAdEtiket').innerHTML = n === 10
+    ? 'Ad / Ünvan <span class="kisi-not">(opsiyonel — yalnız takip için)</span>'
+    : 'Ad / Soyad <span style="color:var(--hata-tx)">*</span>';
+}
 function kisiListeCiz() {
   const kap = $('kisiListe');
   const q = trNorm($('kisiAra').value.trim());
@@ -2792,9 +2836,14 @@ function kisiListeCiz() {
     sat.setAttribute('role', 'button');
     sat.dataset.kisiId = String(k.id);
     const bilgi = kisiEl('div', 'kisi-bilgi');
-    bilgi.appendChild(kisiEl('div', 'kisi-ad', k.ad || '(adsız)'));
+    bilgi.appendChild(kisiEl('div', 'kisi-ad', k.ad || String(k.tc || '')));
     const alt = kisiEl('div', 'kisi-alt2');
     alt.appendChild(kisiEl('span', 'kisi-rozet', String(k.tc || '').length === 10 ? 'VKN' : 'TC'));
+    if (k.sifatId) {
+      const sf = kisiSifatAdi(k.sifatId);
+      if (sf) alt.appendChild(kisiEl('span', 'kisi-rozet kisi-sifat', sf));
+    }
+    if (!k.ad) alt.appendChild(kisiEl('span', 'kisi-not', ' ad girilmemiş'));
     alt.appendChild(document.createTextNode(String(k.tc || '') + (k.cep ? ' · ' + k.cep : '')));
     bilgi.appendChild(alt);
     const duz = kisiEl('button', 'kisi-ikon', '✏️');
@@ -2813,9 +2862,9 @@ function kisiListeCiz() {
 async function kisiSec(k) {
   kisiPencereKapat();
   const s = $('kisiSecili');
-  s.textContent = 'Seçili: ' + (k.ad || '') + ' — ' + k.tc;
+  s.textContent = 'Seçili: ' + (k.ad ? k.ad + ' — ' : '') + k.tc;
   s.classList.remove('gizli');
-  await karsiTarafSec({ tc: k.tc, ad: k.ad, cep: k.cep, dogum: k.dogum });
+  await karsiTarafSec({ tc: k.tc, ad: k.ad, cep: k.cep, dogum: k.dogum, sifatId: k.sifatId });
 }
 async function kisiSil(k) {
   if (!confirm('"' + (k.ad || k.tc) + '" havuzdan silinsin mi?')) return;
@@ -2833,10 +2882,21 @@ function kisiFormAc(k) {
   $('kfAd').value = k ? (k.ad || '') : '';
   $('kfCep').value = k ? (k.cep || '') : '';
   $('kfDogum').value = k ? (k.dogum || '') : '';
+  kisiFormSifatDoldur(k && k.sifatId ? String(k.sifatId) : '');
+  kisiFormEtiket();
   $('kisiFormMesaj').className = 'mesaj';
   $('kisiForm').classList.add('acik');
   setTimeout(() => $(k ? 'kfAd' : 'kfTc').focus(), 60);
 }
+function kisiFormSifatDoldur(deger) {
+  const sel = $('kfSifat');
+  const tum = (listeler && listeler.sifatlar) || [];
+  sel.replaceChildren(new Option('— Seçilmedi —', ''));
+  tum.forEach(x => sel.appendChild(new Option(x.ad, String(x.id))));
+  if (deger && !tum.some(x => String(x.id) === deger)) sel.appendChild(new Option('Sıfat #' + deger, deger));
+  sel.value = deger || '';
+}
+$('kfTc').addEventListener('input', kisiFormEtiket);
 function kisiFormKapat() {
   $('kisiForm').classList.remove('acik');
   if (kisiPencereAcikMi()) $('kisiAra').focus();
@@ -2847,13 +2907,13 @@ async function kisiFormKaydet() {
   const hata = (m) => mesajGoster('kisiFormMesaj', m, 'hata');
   if (tc.length !== 10 && tc.length !== 11) return hata('TC (11 hane) veya Vergi No (10 hane) girin.');
   if (tc.length === 11 && !tcAlgoritmaGecerli(tc)) return hata('Bu TC Kimlik No doğrulama algoritmasından geçmiyor — rakamları kontrol edin.');
-  if (!ad) return hata('Ad / Ünvan zorunlu.');
+  if (!ad && tc.length === 11) return hata('TC ile kayıtta Ad / Soyad zorunlu.');
   if (cep && !cepGecerli(cep)) return hata('Cep telefonu 10–13 haneli olmalı.');
   if (dogum && dogum > new Date().toISOString().slice(0, 10)) return hata('Doğum tarihi ileri bir tarih olamaz.');
   const btn = $('btnKisiFormKaydet');
   btn.disabled = true;
   try {
-    const govde = { tc, ad, cep, dogum };
+    const govde = { tc, ad, cep, dogum, sifatId: $('kfSifat').value ? Number($('kfSifat').value) : null };
     if (kisiDuzenlenenId) govde.id = kisiDuzenlenenId;
     const j = await api('/api/kisi_kaydet', 'POST', govde);
     kisiVurguId = j.kisi ? j.kisi.id : kisiDuzenlenenId;
