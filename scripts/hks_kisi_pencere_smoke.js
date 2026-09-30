@@ -66,6 +66,8 @@ const sunucu = http.createServer((q, s) => {
       case 'kisiler': return j({ kisiler: havuz });
       case 'kisi_kaydet': {
         if (g.tc === '1234567890' && !g.id) return j({ hata: 'Bu TC/VKN havuzda zaten kayıtlı: Ilgaz' }, 409);
+        // csrf_check() biçimi: 403 + {ok,error,code} ('hata' YOK)
+        if (g.ad === 'CSRF-DENEME') return j({ ok: false, error: 'Güvenlik doğrulaması başarısız.', code: 403 }, 403);
         let k;
         if (g.id) { k = havuz.find(x => x.id === g.id); Object.assign(k, { tc: g.tc, ad: g.ad, cep: g.cep, dogum: g.dogum }); }
         else { k = { id: ++sonId, tc: g.tc, ad: g.ad, cep: g.cep, dogum: g.dogum, kullanimSayisi: 0, sonKullanim: '' }; havuz.unshift(k); }
@@ -138,6 +140,12 @@ const sunucu = http.createServer((q, s) => {
   await sayfa.click('#btnKisiFormKaydet'); await sayfa.waitForTimeout(200);
   ok('sunucu hatası formda görünür, form kapanmaz',
      (await sayfa.textContent('#kisiFormMesaj')).includes('zaten kayıtlı') && await sayfa.isVisible('#kisiForm'));
+  // CSRF reddi (csrf_check JSON biçimi) formda anlaşılır metinle görünür
+  await sayfa.fill('#kfTc', TC_OK); await sayfa.fill('#kfAd', 'CSRF-DENEME');
+  await sayfa.click('#btnKisiFormKaydet'); await sayfa.waitForTimeout(200);
+  ok('CSRF 403: csrf_check mesajı formda (HTTP 403 değil)',
+     (await sayfa.textContent('#kisiFormMesaj')).includes('Güvenlik doğrulaması') && await sayfa.isVisible('#kisiForm'),
+     await sayfa.textContent('#kisiFormMesaj'));
   // Geçerli kayıt
   await sayfa.fill('#kfTc', TC_OK); await sayfa.fill('#kfAd', 'Yeni Müstahsil'); await sayfa.fill('#kfCep', '0532 111 22 33');
   await sayfa.fill('#kfDogum', '1990-05-06');

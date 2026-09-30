@@ -1178,7 +1178,9 @@ async function api(yol, metod, govde) {
     body: JSON.stringify(govde || {}),
   });
   const j = await r.json();
-  if (!r.ok || j.hata) throw new Error(j.hata || ('HTTP ' + r.status));
+  // csrf_check() (config/helpers.php) 403'te 'hata' değil 'error' döner — onu da göster,
+  // yoksa oturum/token sorunu kullanıcıya yalnız "HTTP 403" diye görünürdü.
+  if (!r.ok || j.hata) throw new Error(j.hata || j.error || ('HTTP ' + r.status));
   return j;
 }
 
