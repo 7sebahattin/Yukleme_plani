@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v284` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v285` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -805,6 +805,14 @@ firmalar aynı müstahsil/firma listesini görür.
   `textContent` ile basılır.
 - **Test:** `php scripts/hks_kisi_havuzu_smoke.php` (SQLite) ·
   `node scripts/hks_kisi_pencere_smoke.js` (Playwright; yoksa atlar).
+- **Bildirim ekranı görsel katmanı (v285):** yalnız CSS (`app.html` "BİLDİRİM
+  EKRANI — GÖRSEL KATMAN" bloğu). Kart rengi `.bk-ayar/.bk-sevk/.bk-mal/.bk-kunye`,
+  numara rozeti `h2[data-no]` (başlık metninde numara YOK — `kart1Baslik`/
+  `kart2Baslik`'ı JS'te yazarken numara EKLEME), alan ikonu `--bi-ikon` (id bazlı
+  liste; aranabilir select'in görünen kutusu `<id>Ara`). Yeni alan eklersen
+  ikon listesine ekle. Başlık `display:block` kalmalı — flex olursa firma adı
+  span'i ayrı sütuna kırılır. Geri düğmeleri tüm ekranlarda ok + "Geri"
+  (firma menüsünde "Firmalar").
 
 ---
 

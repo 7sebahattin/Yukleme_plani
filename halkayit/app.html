@@ -438,6 +438,134 @@
   }
   #ekranBildirim .kart h2 .kart1-firma { color:#dc2626; }
 
+  /* ================= BİLDİRİM EKRANI — GÖRSEL KATMAN (v285) =================
+     YALNIZ görünüm: alan id'leri, sıra ve JS davranışı DEĞİŞMEZ. Kart
+     başlığındaki numara rozeti h2[data-no]'dan, kart rengi .bk-* sınıfından,
+     alan ikonu --bi-ikon değişkeninden gelir (data URI — tema bağımsız gri).
+     Aranabilir select'in görünen kutusu JS'te <id>Ara olarak üretilir;
+     ikonu o id'ye de verilir. Yeni alan eklersen ikon listesine ekle
+     (eklemezsen alan ikonsuz ama çalışır). */
+  #ekranBildirim {
+    min-height:100vh;
+    background:
+      radial-gradient(1100px 480px at 8% -10%, rgba(120,160,255,.22) 0, transparent 60%),
+      radial-gradient(900px 480px at 108% 0, rgba(255,196,110,.20) 0, transparent 55%),
+      var(--bg);
+  }
+  #ekranBildirim .kart {
+    border-radius:20px; padding:0 18px 18px; overflow:hidden;
+    border:1px solid rgba(255,255,255,.7);
+    box-shadow:0 1px 2px rgba(20,30,60,.05), 0 10px 30px rgba(30,60,120,.10);
+  }
+  /* Başlık BLOK kalır (flex değil): kart1Baslik JS'te span + metin olarak
+     yazılıyor; flex olsaydı her parça ayrı sütuna kırılırdı. Rozet mutlak. */
+  #ekranBildirim .kart > h2 {
+    display:block; position:relative;
+    margin:0 -18px 12px; padding:20px 70px 18px 66px; min-height:66px;
+    background:var(--bk-bas, linear-gradient(135deg,#e8f0ff,#f6f9ff));
+  }
+  #ekranBildirim .kart > h2[data-no]::before {
+    content:attr(data-no); position:absolute; left:18px; top:50%; margin-top:-18px; width:36px; height:36px; border-radius:50%;
+    display:grid; place-items:center; color:#fff; font-size:16px; font-weight:800;
+    background:var(--bk-no, linear-gradient(145deg,#4b8dff,#1d5fe0));
+    box-shadow:0 4px 10px rgba(0,0,0,.18), inset 0 -3px 0 rgba(0,0,0,.12);
+  }
+  #ekranBildirim .kart > h2::after {
+    content:""; position:absolute; right:14px; top:50%; transform:translateY(-50%);
+    width:46px; height:46px; background:var(--bk-cizim) center/contain no-repeat;
+  }
+  #ekranBildirim .kart.bk-ayar  { --bk-bas:linear-gradient(135deg,#e8f0ff,#f6f9ff); --bk-no:linear-gradient(145deg,#4b8dff,#1d5fe0); --bk-cizim:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238fb7ff'/%3E%3Cstop offset='1' stop-color='%232d6ef0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23a)' d='M8 20l22-10v28L8 28z'/%3E%3Crect x='4' y='19' width='6' height='10' rx='2' fill='%235b8ef5'/%3E%3Cpath d='M36 17c3 2 3 12 0 14M40 13c5 4 5 18 0 22' stroke='%237aa6ff' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  #ekranBildirim .kart.bk-sevk  { --bk-bas:linear-gradient(135deg,#fff1dc,#fffaf2); --bk-no:linear-gradient(145deg,#ffb04a,#f07b12); --bk-cizim:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ffd08a'/%3E%3Cstop offset='1' stop-color='%23f08a1c'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='3' y='14' width='26' height='18' rx='3' fill='url(%23a)'/%3E%3Cpath d='M29 19h8l6 7v6H29z' fill='%23f5a53c'/%3E%3Crect x='32' y='21' width='5' height='5' rx='1' fill='%23fff3dd'/%3E%3Ccircle cx='12' cy='34' r='4.5' fill='%235a4a36'/%3E%3Ccircle cx='36' cy='34' r='4.5' fill='%235a4a36'/%3E%3Ccircle cx='12' cy='34' r='1.8' fill='%23ddd'/%3E%3Ccircle cx='36' cy='34' r='1.8' fill='%23ddd'/%3E%3C/svg%3E"); }
+  #ekranBildirim .kart.bk-mal   { --bk-bas:linear-gradient(135deg,#efe9ff,#f9f7ff); --bk-no:linear-gradient(145deg,#8b6bff,#5a3be0); --bk-cizim:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23c3b2ff'/%3E%3Cstop offset='1' stop-color='%236a47ea'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M24 5l17 8.5v21L24 43 7 34.5v-21z' fill='url(%23a)'/%3E%3Cpath d='M24 22 7 13.5M24 22l17-8.5M24 22v21' stroke='%23fff' stroke-opacity='.55' stroke-width='2'/%3E%3C/svg%3E"); }
+  #ekranBildirim .kart.bk-kunye { --bk-bas:linear-gradient(135deg,#e3f7ee,#f5fcf8); --bk-no:linear-gradient(145deg,#34c787,#12955b); --bk-cizim:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='a' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238ee6bd'/%3E%3Cstop offset='1' stop-color='%2312955b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='8' y='5' width='28' height='36' rx='4' fill='url(%23a)'/%3E%3Cpath d='M14 15h16M14 22h16M14 29h10' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='36' cy='36' r='8' fill='%23fff'/%3E%3Cpath d='m32 36 3 3 5-6' stroke='%2312955b' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  html[data-theme="dark"] #ekranBildirim .kart { border-color:rgba(255,255,255,.05); }
+  html[data-theme="dark"] #ekranBildirim .kart.bk-ayar  { --bk-bas:linear-gradient(135deg,rgba(77,141,255,.20),rgba(77,141,255,.05)); }
+  html[data-theme="dark"] #ekranBildirim .kart.bk-sevk  { --bk-bas:linear-gradient(135deg,rgba(255,166,60,.20),rgba(255,166,60,.05)); }
+  html[data-theme="dark"] #ekranBildirim .kart.bk-mal   { --bk-bas:linear-gradient(135deg,rgba(139,107,255,.22),rgba(139,107,255,.05)); }
+  html[data-theme="dark"] #ekranBildirim .kart.bk-kunye { --bk-bas:linear-gradient(135deg,rgba(52,199,135,.20),rgba(52,199,135,.05)); }
+
+  /* Alan ikonları: ikonu olan input/select soldan boşluk alır. */
+  #ekranBildirim input:not([type=checkbox]):not([type=radio]), #ekranBildirim select { border-radius:12px; min-height:46px; }
+  #ekranBildirim #oIkTc { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm5 3a2.2 2.2 0 1 0 0 4.4A2.2 2.2 0 0 0 8 8Zm-3.5 8h7c0-1.7-1.6-2.8-3.5-2.8S4.5 14.3 4.5 16ZM14 9v1.6h5V9h-5Zm0 3.4V14h4v-1.6h-4Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oIkAd { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Zm0 2c-4.4 0-8 2.2-8 5v1.5h16V19c0-2.8-3.6-5-8-5Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oIkCep { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 3v13h8V5H8Zm4 14.2a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oIkDogum { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M7 2h2v2h6V2h2v2h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3V2ZM5 9v10h14V9H5Zm2 2h3v3H7v-3Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oPlaka { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M5.5 6.5A2 2 0 0 1 7.4 5h9.2a2 2 0 0 1 1.9 1.5L20 11h.5a1.5 1.5 0 0 1 1.5 1.5V17a1 1 0 0 1-1 1h-1v1.5a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V18H7v1.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V18H3a1 1 0 0 1-1-1v-4.5A1.5 1.5 0 0 1 3.5 11H4l1.5-4.5ZM6.2 11h11.6l-1.1-3.5H7.3L6.2 11ZM6.5 13a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm11 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sUlke, #ekranBildirim #sUlkeAra, #ekranBildirim #sGelenUlke, #ekranBildirim #sGelenUlkeAra { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1.3 2.1A8 8 0 0 0 4.1 11H8c.1-2.6.9-5 2.7-6.9ZM13.3 4.1c1.8 1.9 2.6 4.3 2.7 6.9h3.9a8 8 0 0 0-6.6-6.9ZM10 11h4c-.1-2.3-.8-4.3-2-5.8-1.2 1.5-1.9 3.5-2 5.8Zm-5.9 2a8 8 0 0 0 6.6 6.9C8.9 18 8.1 15.6 8 13H4.1Zm5.9 0c.1 2.3.8 4.3 2 5.8 1.2-1.5 1.9-3.5 2-5.8h-4Zm6 0c-.1 2.6-.9 5-2.7 6.9a8 8 0 0 0 6.6-6.9H16Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sIsletmeTuru, #ekranBildirim #sIsyeri, #ekranBildirim #sKunyeIsyeriTuru { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M4 4h16l1.5 5a3 3 0 0 1-5.5 1.7A3 3 0 0 1 12 12a3 3 0 0 1-4-1.3A3 3 0 0 1 2.5 9L4 4Zm1 9.3V20h5v-4h4v4h5v-6.7a4.9 4.9 0 0 1-3-.6 5 5 0 0 1-4 .9 5 5 0 0 1-4-.9 4.9 4.9 0 0 1-3 .6Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sIlAra, #ekranBildirim #sIlceAra, #ekranBildirim #sUretimIlAra, #ekranBildirim #sUretimIlceAra, #ekranBildirim #sIl, #ekranBildirim #sIlce, #ekranBildirim #sUretimIl, #ekranBildirim #sUretimIlce { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 2a7 7 0 0 1 7 7c0 5.2-7 13-7 13S5 14.2 5 9a7 7 0 0 1 7-7Zm0 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sBeldeAra, #ekranBildirim #sUretimBeldeAra, #ekranBildirim #sBelde, #ekranBildirim #sUretimBelde { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='m9 4 6 2 5-2v15l-5 2-6-2-5 2V6l5-2Zm1 2.4v11.1l4 1.3V7.7l-4-1.3Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sBelgeTipi, #ekranBildirim #oBelgeNo { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M6 2h8l5 5v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm7 1.5V8h4.5L13 3.5ZM8 12v1.6h8V12H8Zm0 3.4V17h6v-1.6H8Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sUrun, #ekranBildirim #sUrunAra, #ekranBildirim #sMalUrun, #ekranBildirim #sMalUrunAra { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M10.5 3a7.5 7.5 0 0 1 6 12l4.3 4.3-1.4 1.4-4.3-4.3A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sMalCins, #ekranBildirim #sMalCinsAra { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M20 3S9 2 5.5 8.5C3 13 5 17 5 17l-2 3 1.6 1 1.9-2.8S10 21 14.5 18C21 13.5 20 3 20 3Zm-5 5.5c-3 1.5-5.5 4-7 7.5l-1.4-.6c1.6-3.8 4.3-6.6 7.7-8.3l.7 1.4Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oMalMiktar, #ekranBildirim #oPlanKilo { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='m12 2 9 4.5v11L12 22l-9-4.5v-11L12 2Zm0 2.2L5.9 7.3 12 10.4l6.1-3.1L12 4.2ZM5 9v7.3l6 3v-7.3L5 9Zm14 0-6 3v7.3l6-3V9Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #oMalFiyat, #ekranBildirim #oPlanFiyat { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 3c4.4 0 8 1.6 8 3.5S16.4 10 12 10 4 8.4 4 6.5 7.6 3 12 3Zm-8 6.2C5.6 10.9 8.6 12 12 12s6.4-1.1 8-2.8V12c0 1.9-3.6 3.5-8 3.5S4 13.9 4 12V9.2Zm0 5.5c1.6 1.7 4.6 2.8 8 2.8s6.4-1.1 8-2.8v2.8c0 1.9-3.6 3.5-8 3.5s-8-1.6-8-3.5v-2.8Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sMalNitelik, #ekranBildirim #sUretimSekli, #ekranBildirim #sMiktarBirim, #ekranBildirim #sIkSifat, #ekranBildirim #sSifat, #ekranBildirim #sTur { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M3 3h8l10 10-8 8L3 11V3Zm4.5 2.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sGun { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20Zm-1 4v6.4l5 3 1-1.7-4-2.4V6h-2Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim #sKunyeSirala { --bi-ikon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%237b86a0' d='M7 3 3 7.5h3V21h2V7.5h3L7 3Zm10 18 4-4.5h-3V3h-2v13.5h-3l4 4.5Z'/%3E%3C/svg%3E"); }
+  #ekranBildirim :is(input, select)[id] { background-repeat:no-repeat; }
+  #ekranBildirim input:not([type=checkbox]):not([type=radio])[id] {
+    background-image:var(--bi-ikon, none); background-position:12px center; background-size:18px 18px;
+  }
+  #ekranBildirim select {
+    -webkit-appearance:none; appearance:none;
+    background-image:var(--bi-ikon, none), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2356607a' d='M7 9.5 12 14.5 17 9.5 15.6 8.1 12 11.7 8.4 8.1Z'/%3E%3C/svg%3E");
+    background-repeat:no-repeat, no-repeat;
+    background-position:12px center, right 12px center;
+    background-size:18px 18px, 18px 18px;
+    padding-right:36px;
+  }
+  #ekranBildirim :is(input, select)[id]:not([type=checkbox]) { padding-left:var(--bi-sol, 12px); }
+  #ekranBildirim #oIkTc { --bi-sol:40px; }
+  #ekranBildirim #oIkAd { --bi-sol:40px; }
+  #ekranBildirim #oIkCep { --bi-sol:40px; }
+  #ekranBildirim #oIkDogum { --bi-sol:40px; }
+  #ekranBildirim #oPlaka { --bi-sol:40px; }
+  #ekranBildirim #sUlke, #ekranBildirim #sUlkeAra, #ekranBildirim #sGelenUlke, #ekranBildirim #sGelenUlkeAra { --bi-sol:40px; }
+  #ekranBildirim #sIsletmeTuru, #ekranBildirim #sIsyeri, #ekranBildirim #sKunyeIsyeriTuru { --bi-sol:40px; }
+  #ekranBildirim #sIlAra, #ekranBildirim #sIlceAra, #ekranBildirim #sUretimIlAra, #ekranBildirim #sUretimIlceAra, #ekranBildirim #sIl, #ekranBildirim #sIlce, #ekranBildirim #sUretimIl, #ekranBildirim #sUretimIlce { --bi-sol:40px; }
+  #ekranBildirim #sBeldeAra, #ekranBildirim #sUretimBeldeAra, #ekranBildirim #sBelde, #ekranBildirim #sUretimBelde { --bi-sol:40px; }
+  #ekranBildirim #sBelgeTipi, #ekranBildirim #oBelgeNo { --bi-sol:40px; }
+  #ekranBildirim #sUrun, #ekranBildirim #sUrunAra, #ekranBildirim #sMalUrun, #ekranBildirim #sMalUrunAra { --bi-sol:40px; }
+  #ekranBildirim #sMalCins, #ekranBildirim #sMalCinsAra { --bi-sol:40px; }
+  #ekranBildirim #oMalMiktar, #ekranBildirim #oPlanKilo { --bi-sol:40px; }
+  #ekranBildirim #oMalFiyat, #ekranBildirim #oPlanFiyat { --bi-sol:40px; }
+  #ekranBildirim #sMalNitelik, #ekranBildirim #sUretimSekli, #ekranBildirim #sMiktarBirim, #ekranBildirim #sIkSifat, #ekranBildirim #sSifat, #ekranBildirim #sTur { --bi-sol:40px; }
+  #ekranBildirim #sGun { --bi-sol:40px; }
+  #ekranBildirim #sKunyeSirala { --bi-sol:40px; }
+
+  /* Butonlar */
+  #ekranBildirim #btnIkDogrula, #ekranBildirim .btn-teal {
+    background:linear-gradient(180deg,#3d86ff,#1558e0); color:#fff;
+    box-shadow:0 6px 14px rgba(29,108,240,.32), inset 0 -2px 0 rgba(0,0,0,.15);
+  }
+  #ekranBildirim #btnKisiSec {
+    border:1.5px solid #c9d8fb; background:linear-gradient(180deg,#f4f8ff,#e6eeff);
+    color:#3b3fb5; font-weight:800; box-shadow:0 2px 6px rgba(40,80,200,.12);
+  }
+  html[data-theme="dark"] #ekranBildirim #btnKisiSec {
+    border-color:#31456b; background:linear-gradient(180deg,#1f2d4a,#1a2740); color:#a9b8ff;
+  }
+  #ekranBildirim .btn-amber {
+    padding:16px; border-radius:16px; font-size:16.5px; font-weight:800; color:#3a2600;
+    background:linear-gradient(180deg,#ffd54a,#f5b301);
+    box-shadow:0 8px 18px rgba(245,179,1,.38), inset 0 -3px 0 rgba(0,0,0,.12);
+  }
+  #ekranBildirim #karsiTarafBlok { border-top-style:dashed !important; }
+
+  /* Dar ekranda çizim başlığın üstüne binmesin */
+  @media (max-width:479px) {
+    #ekranBildirim .kart > h2 { padding-right:18px; font-size:17px; }
+    #ekranBildirim .kart > h2::after { display:none; }
+  }
+
+  /* Geri düğmesi — tüm ekranlarda ok + yazı, daha geniş dokunma alanı */
+  .ustbar .geri {
+    width:auto; min-width:86px; padding:0 14px 0 10px; display:inline-flex; align-items:center;
+    justify-content:center; gap:6px; font-size:15px; font-weight:800; height:42px;
+  }
+  .ustbar .geri svg { width:20px; height:20px; flex:none; }
+
   /* İki-kolonlu satırlarda kutu hizası: etiket boyu farklı olsa da kutular
      alt kenardan hizalanır (Ürün/Tarih vb. kayması giderilir) */
   .satir2 > div { display:flex; flex-direction:column; }
@@ -521,7 +649,7 @@
 <!-- ============ EKRAN: ANA MENÜ ============ -->
 <div id="ekranMenu" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnFirmaDegis" title="Firma değiştir">‹</button>
+    <button class="geri" id="btnFirmaDegis" title="Firma değiştir"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Firmalar</span></button>
     <div class="baslik" id="menuFirmaAd">—</div>
   </div>
   <main>
@@ -579,13 +707,13 @@
 <!-- ============ EKRAN: E BİLDİRİM ============ -->
 <div id="ekranBildirim" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnMenuyeDon">‹</button>
+    <button class="geri" id="btnMenuyeDon"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">e Bildirim</div>
     <button class="mini" id="btnListeler">🔄 Listeler</button>
   </div>
   <main>
-    <div class="kart">
-      <h2 id="kart1Baslik">1 · Bildirim Ayarları</h2>
+    <div class="kart bk-ayar">
+      <h2 id="kart1Baslik" data-no="1">Bildirim Ayarları</h2>
       <div class="satir2">
         <div>
           <label>Sıfat</label>
@@ -650,8 +778,8 @@
       <div class="mesaj" id="bildirimMesaj"></div>
     </div>
 
-    <div class="kart">
-      <h2 id="kart2Baslik">2 · Sevkiyat Bilgileri</h2>
+    <div class="kart bk-sevk">
+      <h2 id="kart2Baslik" data-no="2">Sevkiyat Bilgileri</h2>
       <label class="label-vurgu">Araç Plaka</label>
       <input id="oPlaka" class="input-turuncu" placeholder="Plaka giriniz.." style="text-transform:uppercase" autocomplete="off">
 
@@ -705,8 +833,8 @@
       </div>
     </div>
 
-    <div class="kart" id="kartUrunKunye">
-      <h2>3 · Ürün ve Künyeler</h2>
+    <div class="kart bk-mal" id="kartUrunKunye">
+      <h2 data-no="3">Ürün ve Künyeler</h2>
       <label>Son Kullanılan Ürünler</label>
       <div class="cipler" id="urunCipler"><span class="cip-bos">Henüz ürün geçmişi yok</span></div>
       <div class="satir2">
@@ -770,8 +898,8 @@
     </div>
 
     <!-- REFERANSSIZ (Satın Alım): malın tam tanımı. Künye seçimi YERİNE gelir. -->
-    <div class="kart gizli" id="kartMal">
-      <h2>3 · Mal Bilgileri <span style="color:var(--soluk);font-weight:400;font-size:13px">(referanssız)</span></h2>
+    <div class="kart bk-mal gizli" id="kartMal">
+      <h2 data-no="3">Mal Bilgileri <span style="color:var(--soluk);font-weight:400;font-size:13px">(referanssız)</span></h2>
       <div class="satir2">
         <div>
           <label class="label-vurgu">Malın Niteliği *</label>
@@ -813,7 +941,7 @@
         </div>
       </div>
       <input id="oMalFiyat" class="input-turuncu" inputmode="decimal" autocomplete="off"
-             placeholder="💰 Birim Fiyat *" aria-label="Birim fiyat (zorunlu)" style="margin-top:10px">
+             placeholder="Birim Fiyat *" aria-label="Birim fiyat (zorunlu)" style="margin-top:10px">
       <label style="display:flex;align-items:center;gap:9px;font-size:14px;color:var(--metin);font-weight:600;margin-top:12px">
         <input type="checkbox" id="chkAnaliz" style="width:20px;height:20px;accent-color:var(--teal)">
         Analize Gönder
@@ -822,8 +950,8 @@
       <div class="mesaj" id="malMesaj"></div>
     </div>
 
-    <div class="kart gizli" id="kartKunyeler">
-      <h2>4 · Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
+    <div class="kart bk-kunye gizli" id="kartKunyeler">
+      <h2 data-no="4">Künye Seçimi <span id="kunyeSayi" style="color:var(--soluk);font-weight:400"></span></h2>
       <!-- Toplam kilo + birim fiyat yan yana; altlarında iki işlem butonu yan yana -->
       <div class="satir2">
         <div>
@@ -853,7 +981,7 @@
 <!-- ============ EKRAN: TASLAKLAR ============ -->
 <div id="ekranTaslaklar" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnTaslakGeri">‹</button>
+    <button class="geri" id="btnTaslakGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">📝 Taslaklar</div>
   </div>
   <main>
@@ -864,7 +992,7 @@
 <!-- ============ EKRAN: GÖNDERİLENLER ============ -->
 <div id="ekranGonderilen" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnGonderilenGeri">‹</button>
+    <button class="geri" id="btnGonderilenGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">📚 Gönderilenler</div>
   </div>
   <main>
@@ -875,7 +1003,7 @@
 <!-- ============ EKRAN: ÇOKLU KÜNYE BASIM ============ -->
 <div id="ekranToplu" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnTopluGeri">‹</button>
+    <button class="geri" id="btnTopluGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">🖨️ Çoklu Künye Basım</div>
   </div>
   <main>
@@ -906,7 +1034,7 @@
 <!-- ============ EKRAN: BİLDİRİM SORGULAMA ============ -->
 <div id="ekranSorgu" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnSorguGeri">‹</button>
+    <button class="geri" id="btnSorguGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">🔍 Bildirim Sorgulama</div>
   </div>
   <main>
@@ -940,7 +1068,7 @@
 <!-- ============ EKRAN: BİLDİRİM ETİKET BASIM ============ -->
 <div id="ekranEtiket" class="gizli">
   <div class="ustbar">
-    <button class="geri" id="btnEtiketGeri">‹</button>
+    <button class="geri" id="btnEtiketGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
     <div class="baslik">🏷️ Bildirim Etiket Basım</div>
   </div>
   <main>
@@ -1352,7 +1480,7 @@ $('btnFirmaVazgec').onclick = () => $('modal').classList.remove('acik');
 // ================= MENÜ =================
 $('btnEBildirim').onclick = async () => {
   formuTemizle();
-  $('kart1Baslik').innerHTML = '1. <span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
+  $('kart1Baslik').innerHTML = '<span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 };
@@ -2281,7 +2409,7 @@ function turDegisti() {
   }
 
   // Kart 2 — ülke (yurt dışı) ↔ hedef (yurt içi)
-  $('kart2Baslik').textContent = yurtIci ? '2 · Sevkiyat / Hedef' : '2 · Sevkiyat Bilgileri';
+  $('kart2Baslik').textContent = yurtIci ? 'Sevkiyat / Hedef' : 'Sevkiyat Bilgileri';
   $('ulkeBlok').classList.toggle('gizli', yurtIci);
   $('hedefBlok').classList.toggle('gizli', !yurtIci);
   $('isyeriAltBlok').classList.toggle('gizli', !isyeriMod);
@@ -3552,7 +3680,7 @@ async function taslakEkraniAc() {
 async function taslakDuzenle(t) {
   formuTemizle();                 // duzenlenenTaslakId'yi de sıfırlar — sonra set
   duzenlenenTaslakId = t.id;
-  $('kart1Baslik').innerHTML = '1. <span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
+  $('kart1Baslik').innerHTML = '<span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span> Bildirim ayarları';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
 
