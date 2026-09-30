@@ -7,6 +7,7 @@
 // =============================================================================
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/kisi_havuzu_lib.php';   // hks_kisi_tablo_hazirla (Kişi Havuzu)
 
 // --- PDO bağlantısı (tekil) ---
 function hks_db() {
@@ -83,6 +84,11 @@ function hks_tablolari_hazirla() {
     anahtar VARCHAR(60) PRIMARY KEY,
     deger MEDIUMTEXT
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+  // Kişi Havuzu (karşı taraf kişileri — GLOBAL, firma bazlı değil). DDL
+  // kisi_havuzu_lib.php'de TEK yerde: test (SQLite) ve canlı (MySQL) aynı
+  // fonksiyondan geçsin, şema iki yerde ayrışmasın.
+  hks_kisi_tablo_hazirla($db);
 }
 
 // --- Anahtar-değer yardımcıları (sonlar, liste cache için) ---

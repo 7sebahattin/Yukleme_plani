@@ -48,3 +48,22 @@ CREATE TABLE IF NOT EXISTS hks_kv (
   anahtar VARCHAR(60) PRIMARY KEY,
   deger MEDIUMTEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Kişi Havuzu: karşı taraf kişileri (müstahsil / firma). GLOBALDİR — tüm firmalar
+-- aynı listeyi görür. Eski firma bazlı hks_kv 'sonlar_<firma>'.karsiTaraflar
+-- listesinin yerini alır (ilk açılışta bir kez içe aktarılır, eski veri silinmez).
+-- Otomatik kurulum: halkayit/kisi_havuzu_lib.php hks_kisi_tablo_hazirla().
+CREATE TABLE IF NOT EXISTS hks_kisiler (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tc VARCHAR(11) NOT NULL,                 -- yalnız rakam: 11 hane TC ya da 10 hane VKN
+  ad VARCHAR(200) NOT NULL DEFAULT '',
+  cep VARCHAR(20) NOT NULL DEFAULT '',     -- yalnız rakam
+  dogum DATE NULL,
+  kullanim_sayisi INT NOT NULL DEFAULT 0,  -- yalnız gerçek gönderimde artar
+  son_kullanim DATETIME NULL,
+  olusturma DATETIME NOT NULL,
+  guncelleme DATETIME NULL,
+  olusturan_id INT NULL,
+  UNIQUE KEY uq_kisi_tc (tc),
+  KEY ix_kisi_son (son_kullanim)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
