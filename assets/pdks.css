@@ -35,7 +35,6 @@
 .pdks-avatar-xl { width: 120px; height: 120px; font-size: 2.1rem; }
 
 /* ── Liste satırı (masaüstü tablo hücresi + mobil kart) ─── */
-.pdks-row-person { display: flex; align-items: center; gap: 10px; }
 .pdks-row-name { font-weight: 600; color: var(--text); }
 .pdks-row-sub { font-size: .82rem; color: var(--muted); }
 
@@ -85,7 +84,6 @@
     text-align: center; padding: 14px 10px; background: var(--primary-soft);
     border-radius: var(--radius); word-break: break-all;
 }
-.pdks-uid-hint { text-align: center; font-size: .8rem; color: var(--muted); margin-top: 4px; }
 
 /* ── USB tarama girişi ─────────────────────────────────── */
 .pdks-scan-box {
