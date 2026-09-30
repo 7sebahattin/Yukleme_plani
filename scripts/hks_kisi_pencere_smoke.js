@@ -176,6 +176,16 @@ const sunucu = http.createServer((q, s) => {
 
 
   // ---- Tur 2: ad kuralı, etiket, sıfat, adsız satır, CSRF ----
+  ok('VKN ad rengi koyu kırmızı (--plaka), TC ad rengi farklı', await sayfa.evaluate(() => {
+    const renk = (el) => getComputedStyle(el).color;
+    const v = [...document.querySelectorAll('#kisiListe .kisi-satir')].find(x => x.querySelector('.kisi-rozet').textContent === 'VKN');
+    const t = [...document.querySelectorAll('#kisiListe .kisi-satir')].find(x => x.querySelector('.kisi-rozet').textContent === 'TC');
+    if (!v || !t) return false;
+    const plaka = getComputedStyle(document.documentElement).getPropertyValue('--plaka').trim();
+    const probe = document.createElement('span'); probe.style.color = plaka; document.body.appendChild(probe);
+    const beklenen = renk(probe); probe.remove();
+    return renk(v.querySelector('.kisi-ad')) === beklenen && renk(t.querySelector('.kisi-ad')) !== beklenen;
+  }));
   ok('adsız satırda başlık numara + "ad girilmemiş" notu', await sayfa.evaluate(() => {
     const s = [...document.querySelectorAll('.kisi-satir')].find(e => e.dataset.kisiId === '31');
     return s && s.querySelector('.kisi-ad').textContent === '3333333333' && s.textContent.includes('ad girilmemiş') && !s.textContent.includes('(adsız)');

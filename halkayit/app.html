@@ -376,6 +376,8 @@
   .kisi-satir.vurgu { background:var(--cip-bg); box-shadow:inset 0 0 0 2px var(--teal); }
   .kisi-bilgi { flex:1 1 auto; min-width:0; }
   .kisi-ad { font-weight:700; font-size:14.5px; overflow-wrap:anywhere; }
+  /* VKN'li kayıtlar (firma/müstahsil tüzel kişi) listede koyu kırmızı; TC'liler varsayılan renkte. */
+  .kisi-ad.kisi-vkn { color:var(--plaka); }
   .kisi-alt2 { font-size:12.5px; color:var(--soluk); margin-top:2px; overflow-wrap:anywhere; }
   .kisi-rozet { display:inline-block; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px;
     background:var(--cip-bg); color:var(--teal); margin-right:6px; }
@@ -2836,7 +2838,7 @@ function kisiListeCiz() {
     sat.setAttribute('role', 'button');
     sat.dataset.kisiId = String(k.id);
     const bilgi = kisiEl('div', 'kisi-bilgi');
-    bilgi.appendChild(kisiEl('div', 'kisi-ad', k.ad || String(k.tc || '')));
+    bilgi.appendChild(kisiEl('div', 'kisi-ad' + (String(k.tc || '').length === 10 ? ' kisi-vkn' : ''), k.ad || String(k.tc || '')));
     const alt = kisiEl('div', 'kisi-alt2');
     alt.appendChild(kisiEl('span', 'kisi-rozet', String(k.tc || '').length === 10 ? 'VKN' : 'TC'));
     if (k.sifatId) {
