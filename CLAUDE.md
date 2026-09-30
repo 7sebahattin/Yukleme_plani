@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v282` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v283` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -764,7 +764,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 
 ---
 
-## Hal Kayıt — Kişi Havuzu (v282)
+## Hal Kayıt — Kişi Havuzu (v282, v283)
 
 Karşı taraf (Satın Alım'da satıcı, Satış/Sevk'te alıcı) artık firma bazlı
 "Son Kullanılanlar" açılır listesinden değil, **GLOBAL havuzdan** seçilir: tüm
@@ -779,8 +779,20 @@ firmalar aynı müstahsil/firma listesini görür.
   `app.html`'deki `__CSRF_TOKEN__` meta yer tutucusunu doldurur, `api()` her
   istekte `X-CSRF-Token` yollar. `app.html`'i `readfile` ile basmaya DÖNME.
 - **Doğrulama sunucuda** (`hks_kisi_dogrula`): 10 hane VKN / 11 hane TC
-  (algoritma zorunlu), ad zorunlu (pencereden), cep boş ya da 10–13 hane,
-  doğum boş ya da geçmiş tarih. Aynı TC → 409.
+  (algoritma zorunlu), cep boş ya da 10–13 hane, doğum boş ya da geçmiş tarih.
+  Aynı TC → 409. **Ad: VKN'de OPSİYONEL (yalnız takip), TC'de zorunlu** (v283) —
+  kayıtlı karşı tarafta HKS'e AdSoyad zaten GÖNDERİLMEZ (`hks_soap.php`, yalnız
+  doluysa; `karsiTarafSec()` adı yalnız KAYITSIZ sonuçta forma yazar).
+- **Sıfat** (`sifat_id`, v283): formda seçilir, kişi seçilince doğrulamadan SONRA
+  `#sIkSifat`'a uygulanır (Üreticiden Sevk Alım'da dokunulmaz). Gönderim upsert'inde
+  son kullanılan kazanır, Üreticiden Sevk Alım'da YAZILMAZ. Kolon eski tabloya
+  `hks_kisi_sifat_kolonu_hazirla()` ile eklenir (ucuz yoklama, ALTER yalnız bir kez).
+- **CSRF token ömrü ≠ giriş ömrü:** giriş `asya_session` (uzun), token PHP
+  oturumunda (varsayılan GC ~24 dk). Uzun açık kalan SPA eski token'la 403 alıyordu
+  (canlı, v282). Çözüm: `csrf` okuma ucu + `api()` 403'te token'ı tazeleyip BİR KEZ
+  tekrarlar; meta boş/`__CSRF_TOKEN__` ise önce uçtan alır. Sunucu token'ı
+  `hks_csrf_girdi()` ile başlık → gövde `csrf` sırasıyla okur; gövdeye `csrf`
+  YALNIZ `kisi_*` çağrılarında eklenir (taslak verisine sızmasın).
 - **Gönderim sonrası** `hks_kisi_havuzuna_isle()` upsert eder (boş gelen
   ad/cep/doğum eskiyi SİLMEZ; hata yutulur — künye zaten oluştu).
   `hks_son_guncelle()` artık `karsiTaraflar` YAZMAZ; eski `sonlar_*` kv verisi

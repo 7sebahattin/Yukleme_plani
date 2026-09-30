@@ -192,18 +192,29 @@ function hks_son_guncelle($ortak, $firmaId) {
 // gelindiyse HKS'te künye GERİ ALINAMAZ şekilde oluştu — havuz sorunu yüzünden
 // kullanıcıya hata dönmek (ve onu tekrar göndermeye itmek) mükerrer bildirim
 // riskidir.
+// Sıfat: ortak.ikinciSifatId yazılır (son kullanılan kazanır) — Üreticiden Sevk
+// Alım'da YAZILMAZ (orada sıfat sabit "Üretici"; kişinin kendi sıfatı değil).
+// Karar hks_uret_sevk_mi() (taslak_lib.php) ile BURADA verilir; lib onu require etmez.
 function hks_kisi_havuzuna_isle(PDO $db, $ortak, $kullaniciId) {
   if (empty($ortak['ikinciTc'])) return;
   try {
-    hks_kisi_upsert($db, [
-      'tc'    => $ortak['ikinciTc'],
-      'ad'    => $ortak['ikinciAd'] ?? '',
-      'cep'   => $ortak['ikinciCep'] ?? '',
-      'dogum' => $ortak['ikinciDogumTarihi'] ?? '',
-    ], $kullaniciId);
+    hks_kisi_upsert($db, hks_kisi_ortaktan((array)$ortak, hks_uret_sevk_mi($ortak)), $kullaniciId);
   } catch (Throwable $e) {
     error_log('[hks] kişi havuzu upsert hatası: ' . $e->getMessage());
   }
+}
+
+// CSRF token'ı: önce X-CSRF-Token başlığı, yoksa JSON gövdedeki 'csrf' alanı
+// (sözleşme sırası). BOŞ başlık "yok" sayılır — meta yer tutucusu boş token
+// üretirse gövdedeki geçerli token yine okunabilsin. Bazı proxy/sunucu
+// yapılandırmaları özel başlığı düşürebildiği için gövde yedeği kisi_kaydet /
+// kisi_sil'de istemci tarafından da gönderilir. csrf_check() paylaşılan
+// fonksiyondur (config/helpers.php) — burada yalnız girdisi seçilir.
+function hks_csrf_girdi(array $g): ?string {
+  $baslik = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+  if (is_string($baslik) && $baslik !== '') return $baslik;
+  $govde = $g['csrf'] ?? null;
+  return is_string($govde) && $govde !== '' ? $govde : null;
 }
 
 // =============================================================================
@@ -276,10 +287,24 @@ try {
       hks_json_cikti(['kisiler' => hks_kisi_liste($db)]);
     }
 
+    // ---- CSRF token tazeleme (okuma ucu — CSRF İSTEMEZ) ----
+    // Oturum (asya_session çerezi, DB) ile CSRF token'ı ($_SESSION, PHPSESSID)
+    // AYRI yaşar: PHP oturumu çöp toplamayla (varsayılan 24 dk boşta) ya da
+    // tarayıcı kapanınca düşer, giriş ise sürer → uzun açık kalan SPA'nın meta
+    // token'ı bayatlar ve yazma 403 "Güvenlik doğrulaması başarısız" alır.
+    // İstemci 403'te buradan taze token alıp isteği BİR KEZ tekrarlar; meta boş
+    // ya da '__CSRF_TOKEN__' yer tutucusu kaldıysa (opcache eski app.php) ilk
+    // yazmadan önce de çağırır. Yanıtı yalnız aynı köken okuyabilir (CORS yok),
+    // dosya başındaki oturum + records.write kapısının arkasındadır.
+    case 'csrf': {
+      header('Cache-Control: no-store, private');
+      hks_json_cikti(['csrf' => csrf_token()]);
+    }
+
     case 'kisi_kaydet': {
-      // Yeni yazma uçları CSRF ister (JSON-aware: 403 + JSON). Token app.php'nin
-      // app.html'e bastığı meta'dan X-CSRF-Token başlığıyla gelir.
-      csrf_check($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+      // Yeni yazma uçları CSRF ister (JSON-aware: 403 + JSON). Token başlıkta
+      // (X-CSRF-Token), yoksa gövdede ('csrf') — bkz. hks_csrf_girdi().
+      csrf_check(hks_csrf_girdi($g));
       $sonuc = hks_kisi_kaydet($db, $g, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
       if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
       audit_log_event($sonuc['islem'], 'hks_kisi', (int)$sonuc['satir']['id'],
@@ -289,7 +314,7 @@ try {
     }
 
     case 'kisi_sil': {
-      csrf_check($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+      csrf_check(hks_csrf_girdi($g));
       $sonuc = hks_kisi_sil($db, (int)($g['id'] ?? 0));
       if ($sonuc['kod'] !== 200) hks_json_cikti(['hata' => $sonuc['hata']], $sonuc['kod']);
       audit_log_event('delete', 'hks_kisi', (int)$sonuc['eski']['id'], hks_kisi_audit_degerleri($sonuc['eski']), null);
