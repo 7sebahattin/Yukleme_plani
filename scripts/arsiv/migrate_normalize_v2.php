@@ -1,11 +1,12 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 declare(strict_types=1);
 // ================================================================
-// scripts/migrate_normalize_v2.php
+// scripts/arsiv/migrate_normalize_v2.php
 // normalize_text_v2 Geçiş Dry-Run Analizi
 //
-// CLI:  php scripts/migrate_normalize_v2.php --dry-run
-//       php scripts/migrate_normalize_v2.php --dry-run --output-dir=/tmp
+// CLI:  php scripts/arsiv/migrate_normalize_v2.php --dry-run
+//       php scripts/arsiv/migrate_normalize_v2.php --dry-run --output-dir=/tmp
 //
 // Web:  Geliştirici görünümü. Üretimde .htaccess bloklar.
 //       ?csv=dry_run   → normalize_dry_run.csv indir

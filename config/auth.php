@@ -279,7 +279,7 @@ function permission_catalog(): array {
             'hesap.delete'  => 'Kendi kaydını sil (onaylanana kadar)',
             'hesap.approve' => 'Görebildiği kayıtları onayla / reddet (başkasının kaydını GÖSTERMEZ)',
             'hesap.pay'     => 'Görebildiği kayıtları ödendi işaretle (başkasının kaydını GÖSTERMEZ)',
-            'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, sahipsiz kayıt atar, ödenmiş kaydı açar',
+            'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, kayıt sahibini değiştirir, ödenmiş kaydı açar',
         ],
         'Personel Takibi' => [
             'attendance.read'               => 'Devam kayıtlarını görüntüle',
@@ -481,13 +481,6 @@ function set_active_depot(string $depo): void {
     $_COOKIE[DEPOT_COOKIE_NAME] = $depo; // aynı istek içinde de geçerli olsun
 }
 
-function clear_active_depot(): void {
-    $opts = auth_cookie_options();
-    $opts['expires'] = time() - 3600;
-    setcookie(DEPOT_COOKIE_NAME, '', $opts);
-    unset($_COOKIE[DEPOT_COOKIE_NAME]);
-}
-
 // Aktif depo seçilmeden hiçbir sayfa açılmaz (zorunlu tek depo).
 // Depo seçim/giriş/çıkış sayfaları hariç. JSON isteklerde 403+JSON döner.
 function enforce_active_depot(): void {
@@ -524,10 +517,6 @@ function user_allowed_depots(?int $user_id = null): ?array {
     return user_assigned_depots($user_id);
 }
 
-function user_is_depot_restricted(): bool {
-    return user_allowed_depots() !== null;
-}
-
 // Depo adı karşılaştırma için TR-duyarsız katlama — MySQL utf8mb4_unicode_ci
 // (liste sorguları) ile tekil sayfa PHP kontrollerini tutarlı kılar.
 // "KARAMAN CİHAT" == "Karaman Cihat" eşleşir.
@@ -561,7 +550,7 @@ function depot_visible_to_user(?string $depo): bool {
 // ── Atanmamış veri kuralı ─────────────────────────────────
 // Deposu BOŞ (henüz atanmamış) kayıtlar TÜM depolarda görünür ve erişilebilir
 // kalır — depo özelliği yüzünden hiçbir eski veri kaybolmaz/kilitlenmez.
-// Bir depoya atanınca (kayıt düzenleme veya Depo Taşıma) yalnız o depoda görünür.
+// Bir depoya atanınca (kayıt düzenleme) yalnız o depoda görünür.
 // Aşağıdaki filtreler bu nedenle "IN (aktif depo) VEYA depo boş" kurar.
 
 // loading_records'ı palet deposuna göre kapsayan WHERE parçası döndürür.
@@ -626,17 +615,4 @@ function require_perm(string $permission): void {
     if (!can($permission)) {
         forbidden("Bu sayfaya erişim yetkiniz yok. (Gerekli yetki: {$permission})");
     }
-}
-
-function require_any_perm(array $permissions): void {
-    if (current_user() === null) {
-        $next = urlencode($_SERVER['REQUEST_URI'] ?? '');
-        header('Location: ' . (function_exists('base_url') ? base_url() : '') . 'login.php' . ($next ? '?next=' . $next : ''));
-        exit;
-    }
-    enforce_active_depot();
-    foreach ($permissions as $p) {
-        if (can($p)) return;
-    }
-    forbidden();
 }

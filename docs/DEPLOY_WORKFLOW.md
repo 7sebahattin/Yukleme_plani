@@ -168,3 +168,8 @@ zip-slip koruması (`..` içeren girdi atlanır).
 **Tarihçe:** Bu dosya bir dönem "otomatik deploy YOK, kullanıcı SSH'dan elle çalıştırmalı"
 diyordu ve Claude her merge'den sonra kullanıcıya bunu boş yere hatırlatıyordu. Webhook
 o notun yazılmasından sonra kurulmuş, doküman güncellenmemişti. 2026-09-13'te düzeltildi.
+
+**Silinen dosyalar (v281):** Deploy repodan silinen dosyayı sunucudan SİLMEZ. Web'den erişilen bir PHP sayfasını
+kaldırırken dosyayı silme; içeriğini 410 tombstone ile değiştir (DB/oturum yok, ≤15 satır, kalıcı ekrana link).
+Taşınan belgelerin eski kopyaları sunucuda kalır — `docs/.htaccess` (v281) tüm `docs/` klasörünü web'e kapatır.
+Kökteki `SYSTEM_AUDIT_REPORT.md` bu yüzden 3 satırlık yer tutucudur.

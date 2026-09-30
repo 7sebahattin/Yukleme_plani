@@ -449,7 +449,6 @@ function ekranAlti() {
         const s = (Math.round(n * 1000) / 1000).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
         return s.replace('.', ',');
     }
-    function roundHalf(n) { return Math.round(n); }
     function parseNum(v) {
         if (v === null || v === undefined || v === '') return 0;
         if (typeof v === 'number') return isFinite(v) ? v : 0;

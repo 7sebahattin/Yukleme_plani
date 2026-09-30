@@ -13,7 +13,7 @@
 // iddiasında bulunmaz.
 //
 // Cihaz/Android/token/heartbeat/offline-kuyruk/vardiya/bordro/otomatik
-// yön tahmini YOK — bilerek. Bkz. docs/PDKS_GIRIS_CIKIS.md.
+// yön tahmini YOK — bilerek. Bkz. docs/arsiv/PDKS_GIRIS_CIKIS.md.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';

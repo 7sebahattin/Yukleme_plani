@@ -1,8 +1,9 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
-// repair_kasa_ids.php — Çıkma paletlerinde eksik kasa_cinsi_id / palet_tipi_id düzelt
+// import_cikmalar.php - Excel çıkma verilerini DB'ye aktar
 // WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:
-//   php scripts/repair_kasa_ids.php
+//   php scripts/arsiv/import_cikmalar.php
 // =========================================================
 declare(strict_types=1);
 
@@ -13,68 +14,7 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../config/db.php';
 
-$pdo = db();
-$log = [];
-
-// ── Kasa / palet tanımlarını bul veya ekle ──────────────────────────────────
-function ensure_material(PDO $pdo, string $type, string $name, float $unit): int {
-    $st = $pdo->prepare(
-        "SELECT id FROM material_definitions
-         WHERE type=:t AND UPPER(TRIM(name))=UPPER(TRIM(:n)) AND is_active=1
-         LIMIT 1"
-    );
-    $st->execute([':t' => $type, ':n' => $name]);
-    $id = $st->fetchColumn();
-    if ($id) return (int)$id;
-
-    $pdo->prepare(
-        "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active)
-         VALUES (:t, :n, :u, 1)"
-    )->execute([':t' => $type, ':n' => $name, ':u' => $unit]);
-    return (int)$pdo->lastInsertId();
-}
-
-function ensure_palet_by_unit(PDO $pdo, string $name, float $unit): int {
-    $st = $pdo->prepare(
-        "SELECT id FROM material_definitions
-         WHERE type='palet_tipi' AND ABS(unit_dara_kg - :u) < 0.01 AND is_active=1
-         LIMIT 1"
-    );
-    $st->execute([':u' => $unit]);
-    $id = $st->fetchColumn();
-    if ($id) return (int)$id;
-
-    $pdo->prepare(
-        "INSERT INTO material_definitions (type, name, unit_dara_kg, is_active)
-         VALUES ('palet_tipi', :n, :u, 1)"
-    )->execute([':n' => $name, ':u' => $unit]);
-    return (int)$pdo->lastInsertId();
-}
-
-$kasa_defs = [
-    'K-65'   => ['unit' => 2.00,  'label' => 'K-65'],
-    'C-10'   => ['unit' => 0.48,  'label' => 'C-10'],
-    'AYAKLI' => ['unit' => 0.50,  'label' => 'Ayaklı'],
-];
-$palet_defs = [
-    30 => 'Palet 30 kg',
-    18 => 'Palet 18 kg',
-];
-
-$kasa_ids  = [];
-$palet_ids = [];
-
-foreach ($kasa_defs as $key => $def) {
-    $id = ensure_material($pdo, 'kasa_cinsi', $def['label'], $def['unit']);
-    $kasa_ids[$key] = $id;
-    $log[] = "OK Kasa: {$def['label']} (ID=$id, birim={$def['unit']} kg/kasa)";
-}
-foreach ($palet_defs as $kg => $name) {
-    $id = ensure_palet_by_unit($pdo, $name, (float)$kg);
-    $palet_ids[$kg] = $id;
-    $log[] = "OK Palet: $name (ID=$id, {$kg} kg)";
-}
-
+// ── Ham Excel verisi (tarih, palet_desc, tur, kasa, brut, dara, net, cikma_tur) ──
 $excel_rows = [
     ['2026-05-03', '1 (30 kg)', 'K-65',   36, 1000.0,  102.0,   898.0,   'MEYSU'],
     ['2026-05-03', '1 (30 kg)', 'K-65',   36,  715.0,  102.0,   613.0,   'MEYSU'],
@@ -158,84 +98,106 @@ $excel_rows = [
     ['2026-05-15', '1 (18 kg)', 'AYAKLI',100, 1048.0,   68.0,   980.0,   'KÜÇÜK'],
 ];
 
-// ── Grupla ──────────────────────────────────────────────────────────────────
+$pdo = db();
+$log = [];
+$skipped = 0;
+$created_records = 0;
+$created_pallets = 0;
+
+// ── material_definitions önbelleği ──
+$kasa_map  = [];
+$palet_map = [];
+
+$kasa_rows = $pdo->query(
+    "SELECT id, name FROM material_definitions WHERE type = 'kasa_cinsi' AND is_active = 1"
+)->fetchAll(PDO::FETCH_ASSOC);
+foreach ($kasa_rows as $r) {
+    $kasa_map[strtoupper(trim($r['name']))] = (int)$r['id'];
+}
+
+$palet_rows = $pdo->query(
+    "SELECT id, name, unit_dara_kg FROM material_definitions WHERE type = 'palet_tipi' AND is_active = 1"
+)->fetchAll(PDO::FETCH_ASSOC);
+foreach ($palet_rows as $r) {
+    $kg = (int)round((float)$r['unit_dara_kg']);
+    if (!isset($palet_map[$kg])) $palet_map[$kg] = (int)$r['id'];
+}
+
+// ── Satırları (tarih, cikma_tur) gruplarına ayır ──
 $groups = [];
 foreach ($excel_rows as $row) {
-    [$tarih, $palet_desc, $tur, , , , , $cikma_tur] = $row;
+    [$tarih, $palet_desc, $tur, $kasa, $brut, $dara, $net, $cikma_tur] = $row;
     $key = $tarih . '|' . $cikma_tur;
     $groups[$key][] = $row;
 }
 
-function get_palet_id(string $desc, array $palet_ids): ?int {
-    if (preg_match('/\((\d+)\s*kg\)/i', $desc, $m)) {
-        $kg = (int)$m[1];
-        return $palet_ids[$kg] ?? null;
-    }
-    return null;
-}
-
-$find_rec = $pdo->prepare(
-    "SELECT id FROM loading_records
-     WHERE type='cikma' AND tarih=? AND firma=?"
-);
-$get_pallets = $pdo->prepare(
-    "SELECT id, kasa_cinsi_id, palet_tipi_id FROM loading_pallets
-     WHERE loading_record_id=? ORDER BY sira_no, id"
-);
-$upd_pal = $pdo->prepare(
-    "UPDATE loading_pallets SET kasa_cinsi_id=?, palet_tipi_id=? WHERE id=?"
+$chk_st = $pdo->prepare(
+    "SELECT COUNT(*) FROM loading_records
+     WHERE type = 'cikma' AND tarih = ? AND firma = ?"
 );
 
-$updated_records = 0;
-$updated_pallets = 0;
-$skipped_pallets = 0;
+$ins_rec = $pdo->prepare(
+    "INSERT INTO loading_records (type, tarih, firma, bolge, urun)
+     VALUES ('cikma', ?, ?, '', '')"
+);
+
+$ins_pal = $pdo->prepare(
+    "INSERT INTO loading_pallets
+     (loading_record_id, palet_no, kasa_adeti, size, brut_kg, dara_kg, net_kg,
+      kasa_cinsi_id, palet_tipi_id, urun_cinsi, depo, sira_no)
+     VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, '', '', ?)"
+);
 
 foreach ($groups as $key => $rows) {
     [$tarih, $cikma_tur] = explode('|', $key, 2);
 
-    $find_rec->execute([$tarih, $cikma_tur]);
-    $rec_id = $find_rec->fetchColumn();
-    if (!$rec_id) {
-        $log[] = "UYARI Kayıt bulunamadı: $tarih / $cikma_tur";
+    $chk_st->execute([$tarih, $cikma_tur]);
+    if ((int)$chk_st->fetchColumn() > 0) {
+        $log[] = "ATLANDI (zaten var): $tarih / $cikma_tur (" . count($rows) . " palet)";
+        $skipped++;
         continue;
     }
 
-    $get_pallets->execute([$rec_id]);
-    $db_pallets = $get_pallets->fetchAll();
+    try {
+        $pdo->beginTransaction();
 
-    if (count($db_pallets) !== count($rows)) {
-        $log[] = "UYARI Palet sayısı uyuşmuyor (Kayıt #$rec_id): Excel=" . count($rows) . ", DB=" . count($db_pallets);
-    }
+        $ins_rec->execute([$tarih, $cikma_tur]);
+        $rec_id = (int)$pdo->lastInsertId();
+        $created_records++;
 
-    $updated_this = 0;
-    foreach ($db_pallets as $i => $pal) {
-        if (!isset($rows[$i])) break;
-        [, $palet_desc, $tur] = $rows[$i];
+        $sira = 0;
+        foreach ($rows as $row) {
+            [$tarih2, $palet_desc, $tur, $kasa, $brut, $dara, $net, $cikma_tur2] = $row;
 
-        $new_kasa_id  = $kasa_ids[strtoupper(trim($tur))] ?? null;
-        $new_palet_id = get_palet_id($palet_desc, $palet_ids);
+            $kasa_id = $kasa_map[strtoupper(trim($tur))] ?? null;
 
-        $needs_update = ($pal['kasa_cinsi_id'] === null && $new_kasa_id !== null)
-                     || ($pal['palet_tipi_id'] === null && $new_palet_id !== null);
+            $palet_id = null;
+            if (preg_match('/\((\d+)\s*kg\)/i', $palet_desc, $m)) {
+                $palet_kg = (int)$m[1];
+                $palet_id = $palet_map[$palet_kg] ?? null;
+            }
 
-        if (!$needs_update) {
-            $skipped_pallets++;
-            continue;
+            $ins_pal->execute([
+                $rec_id,
+                $sira + 1,
+                $kasa,
+                $brut,
+                $dara,
+                $net,
+                $kasa_id,
+                $palet_id,
+                $sira,
+            ]);
+            $created_pallets++;
+            $sira++;
         }
 
-        $final_kasa  = $pal['kasa_cinsi_id'] ?? $new_kasa_id;
-        $final_palet = $pal['palet_tipi_id'] ?? $new_palet_id;
+        $pdo->commit();
+        $log[] = "OK Eklendi: $tarih / $cikma_tur → {$sira} palet (Kayıt #$rec_id)";
 
-        $upd_pal->execute([$final_kasa, $final_palet, $pal['id']]);
-        $updated_pallets++;
-        $updated_this++;
-    }
-
-    if ($updated_this > 0) {
-        $updated_records++;
-        $log[] = "OK Kayıt #$rec_id ($tarih / $cikma_tur): $updated_this palet güncellendi";
-    } else {
-        $log[] = "-- Kayıt #$rec_id ($tarih / $cikma_tur): güncelleme gerekmedi";
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $log[] = "HATA ($tarih / $cikma_tur): " . $e->getMessage();
     }
 }
 
@@ -243,5 +205,5 @@ foreach ($log as $line) {
     echo $line . PHP_EOL;
 }
 echo PHP_EOL;
-echo "Güncellenen kayıt: $updated_records | Güncellenen palet: $updated_pallets | Atlanan (zaten dolu): $skipped_pallets" . PHP_EOL;
+echo "Oluşturulan kayıt: $created_records | Oluşturulan palet: $created_pallets | Atlanan grup: $skipped" . PHP_EOL;
 echo 'Tamamlandı.' . PHP_EOL;

@@ -174,7 +174,7 @@ Panel tamamlandı, `bekliyor = 0`. Sırayla:
 ### Komut 1 — Migration planını üret
 
 ```bash
-php scripts/plan_normalize_migration.php
+php scripts/arsiv/plan_normalize_migration.php
 ```
 
 Beklenen çıktı son satırı:
@@ -194,13 +194,13 @@ Oluşan dosyaları not al:
 mysql -u root -e "CREATE DATABASE yukleme_plani_staging CHARACTER SET utf8mb4;"
 
 # Production'ı staging'e kopyala (ilk seferde):
-php scripts/test_staging_migration.php \
+php scripts/arsiv/test_staging_migration.php \
     --test-db yukleme_plani_staging \
     --clone \
     --yes
 
 # Test çalıştır:
-php scripts/test_staging_migration.php \
+php scripts/arsiv/test_staging_migration.php \
     --test-db yukleme_plani_staging
 ```
 
@@ -226,7 +226,7 @@ php scripts/test_staging_migration.php \
 │   görülmeden production migration uygulanmaz.        │
 │                                                      │
 │   Sonraki adım:                                      │
-│   docs/production_normalize_migration_runbook.md     │
+│   docs/arsiv/production_normalize_migration_runbook.md     │
 │   → Bölüm 9: Karar Kapısı → GO işaretle             │
 │   → Kullanıcı onayı ver                              │
 │                                                      │

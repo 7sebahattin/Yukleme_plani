@@ -15,7 +15,7 @@
 // karta çözüldüğünü doğruluyordu). Bu YANLIŞTI — iki farklı fiziksel kartın
 // kanonik UID'leri birbirinin bayt-tersi olabilir ve otomatik eşleme ikinci,
 // gerçek kartın kaydını reddederdi. Bkz. config/pdks.php "UID NORMALİZASYONU"
-// ve docs/PDKS_FAZ1_SEMA.md §6a.
+// ve docs/arsiv/PDKS_FAZ1_SEMA.md §6a.
 // =========================================================
 declare(strict_types=1);
 

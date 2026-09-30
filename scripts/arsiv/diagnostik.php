@@ -1,8 +1,9 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
 // diagnostik.php - Çıkma kayıt veritabanı durumu
 // WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:
-//   php scripts/diagnostik.php
+//   php scripts/arsiv/diagnostik.php
 // =========================================================
 declare(strict_types=1);
 

@@ -105,8 +105,8 @@ if (nav_ptak_gorunur()) {
 // Hesap modülü özet — KİŞİSEL: yalnız oturumdaki kullanıcının kayıtları (K3).
 // Eskiden şirketin tamamının bugünkü harcaması ve tüm bekleyen kayıt sayısı
 // herkese görünüyordu; TRY/USD/EUR da toplanıp "₺" yazılıyordu. Tutar yalnız TRY.
-// Yönetici (is_admin / hesap.admin) ek olarak onay bekleyen ve sahipsiz sayısını görür.
-$hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0; $hesap_sahipsiz = 0;
+// Yönetici (is_admin / hesap.admin) ek olarak onay bekleyen sayısını görür.
+$hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0;
 $hesap_yonetici = is_admin() || can('hesap.admin');
 if (can('hesap.read') || is_admin()) {
     try {
@@ -123,11 +123,9 @@ if (can('hesap.read') || is_admin()) {
         if ($hesap_yonetici) {
             $hesap_onay_bekleyen = (int)db()->query("SELECT COUNT(*) FROM account_transactions
                 WHERE status = 'submitted' AND user_id IS NOT NULL")->fetchColumn();
-            $hesap_sahipsiz = (int)db()->query("SELECT COUNT(*) FROM account_transactions
-                WHERE user_id IS NULL")->fetchColumn();
         }
     } catch (PDOException $e) {
-        $hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0; $hesap_sahipsiz = 0;
+        $hesap_bugun = 0.0; $hesap_bekleyen = 0; $hesap_onay_bekleyen = 0;
     }
 }
 
@@ -340,9 +338,6 @@ if (nav_ptak_gorunur()):
         <?php if ($hesap_yonetici && $hesap_onay_bekleyen > 0): ?>
         <div class="home-card-sub">Onay bekleyen: <?= $hesap_onay_bekleyen ?></div>
         <?php endif; ?>
-        <?php if ($hesap_yonetici && $hesap_sahipsiz > 0): ?>
-        <div class="home-card-sub">Sahipsiz: <?= $hesap_sahipsiz ?></div>
-        <?php endif; ?>
     </a>
 <?php endif; ?>
 
@@ -385,10 +380,9 @@ if (nav_ptak_gorunur()):
         <div class="home-card-title">Veritabanı Yedekleri</div>
         <div class="home-card-sub">Günlük otomatik</div>
     </a>
-    <!-- Şema Migrasyon / Depo Taşıma / Tedarikçi Eşleştirme: karttan kaldırıldı
-         (tek seferlik kurulum araçları) — dosyalar silinmedi, gerekirse
-         doğrudan URL ile (migrate.php, depo_tasima.php, firma_eslestirme.php)
-         admin erişebilir. -->
+    <!-- Şema Migrasyon: karttan kaldırıldı — doğrudan URL (migrate.php) ile
+         admin erişir. depo_tasima.php / firma_eslestirme.php v281'de 410
+         tombstone. -->
 <?php endif; ?>
 
 <?php endif; ?>

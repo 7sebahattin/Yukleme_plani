@@ -1,14 +1,15 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
-// scripts/clean_cikma_movements.php — Sprint 36B
+// scripts/arsiv/clean_cikma_movements.php — Sprint 36B
 // Çıkma kaynaklı ESKİ otomatik stok hareketlerini temizler.
 //   (Sprint 36 öncesi çıkma = stoğa 'giris' yazıyordu; artık yazmıyor.
 //    Bu hareketler source_type='loading' olduğu için Malzeme Stok
 //    ekranından SİLİNEMİYOR → 🔒. Bu script onları kaldırır.)
 //
 //   CLI-only.
-//   php scripts/clean_cikma_movements.php          → DRY-RUN (rapor)
-//   php scripts/clean_cikma_movements.php --apply    → uygula (sil)
+//   php scripts/arsiv/clean_cikma_movements.php          → DRY-RUN (rapor)
+//   php scripts/arsiv/clean_cikma_movements.php --apply    → uygula (sil)
 //
 // ⚠ Tek seferlik; çalıştıktan sonra silinmesi önerilir.
 // =========================================================
@@ -63,7 +64,7 @@ pr("Etkilenen çıkma kaydı: $recs");
 
 if (!$apply) {
     pr('');
-    pr('DRY-RUN bitti. Silmek için: php scripts/clean_cikma_movements.php --apply');
+    pr('DRY-RUN bitti. Silmek için: php scripts/arsiv/clean_cikma_movements.php --apply');
     exit;
 }
 

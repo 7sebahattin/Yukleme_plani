@@ -9,7 +9,6 @@
 | Görev | Notlar |
 |---|---|
 | Sidebar görünüm canlı doğrulama | ≥900px ekranda sidebar+topbar gizleme çalışıyor mu? Hard refresh gerekebilir. |
-| `migrate_normalize_v2.php` CLI-only'ye geçiş | Web erişimi kapalı değil — güvenlik riski |
 | DB credentials `.env`'e taşıma | `config/db.php` içinde hardcoded, teknik borç |
 | Kantar kilitleme / stok sayım onayı | Operasyonel ihtiyaç, sprint planı yok |
 | Hesap audit canlı doğrulama | Sprint 29B'de eklendi, DB'de gerçekten yazıyor mu? SQL ile kontrol: `SELECT * FROM audit_log WHERE module='hesap' ORDER BY id DESC LIMIT 5` |

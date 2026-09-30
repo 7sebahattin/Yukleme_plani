@@ -9,22 +9,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
 
-/**
- * Bir palet satırının dara, net ve diğer alanlarını hesaplar.
- *
- * @param array $row Form verisinden gelen ham satır:
- *   - palet_no, kasa_adeti, size, brut_kg
- *   - kasa_cinsi_id, palet_tipi_id
- *   - urun_cinsi, depo
- *   - materials: [['material_id'=>x, 'quantity'=>n], ...]
- * @return array Hesaplanmış satır + materials (her birinde total_dara_kg dolu)
- */
-if (!function_exists('round_half')) {
-    function round_half(float $n): float {
-        return (float)round($n);
-    }
-}
-
 // JS parseNum() ile BİREBİR aynı mantık. num()'dan farkı: tek nokta (".")
 // ondalık kabul edilir (binlik DEĞİL). Böylece DB DECIMAL "974.000" → 974,
 // "90.000" → 90 doğru çözülür (num() bunları 974000/90000 yapıyordu → bug).
@@ -49,6 +33,16 @@ if (!function_exists('parse_decimal')) {
     }
 }
 
+/**
+ * Bir palet satırının dara, net ve diğer alanlarını hesaplar.
+ *
+ * @param array $row Form verisinden gelen ham satır:
+ *   - palet_no, kasa_adeti, size, brut_kg
+ *   - kasa_cinsi_id, palet_tipi_id
+ *   - urun_cinsi, depo
+ *   - materials: [['material_id'=>x, 'quantity'=>n], ...]
+ * @return array Hesaplanmış satır + materials (her birinde total_dara_kg dolu)
+ */
 function compute_pallet_row(array $row): array {
     $kasa_adeti = intval_safe($row['kasa_adeti'] ?? 0);
     $brut       = parse_decimal($row['brut_kg'] ?? 0);

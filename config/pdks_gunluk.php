@@ -63,9 +63,6 @@ function pdks_gunluk_kart_durumlari(): array
     ];
 }
 
-/** Yalnız bu durumdaki kart yeni bir oturuma atanabilir (Faz 2 bunu kullanacak). */
-function pdks_gunluk_kart_kullanilabilir_mi(?string $durum): bool { return $durum === 'available'; }
-
 // =========================================================
 // ŞEMA
 // =========================================================

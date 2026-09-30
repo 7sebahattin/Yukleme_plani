@@ -46,10 +46,12 @@ Viewer yazamaz, Operator silemez, Muhasebe rapor/stok dışına erişemez.
 
 ## Web Root Korumaları
 
-- `hks/.htaccess` — `HksClient/HksRepository/HksConfig/helpers.php`'e HTTP erişim kapalı
+- `halkayit/.htaccess` — include-only PHP dosyalarına (taslak_lib, hks_soap, config, db) ve html/sql/md dosyalarına HTTP erişim kapalı
 - `.sql/.bak/.log` dosyalarına erişim kapalı
 - `setup_admin.php`, `database.sql`, `hks/migrate.sql` — silindi (Sprint 29A)
-- `scripts/` dizini: `deploy.php`, `diagnostik.php`, `migrate.php` — CLI-only guard var
+- `scripts/` (alt klasörler dahil), `tools/`, `docs/` (v281), `storage/`, `uploads/hesap/` — `.htaccess` ile web'e tamamen kapalı; scripts'te ayrıca CLI-only guard var
+- Biten tek seferlik araçlar `scripts/arsiv/` altındadır (çalıştırılmaz)
+- v281: kaldırılan web sayfaları (`hesap_sahipsiz`, `depo_tasima`, `firma_eslestirme`, `fix_brand`, `repair_xz_tables`, `faz8b_migrate`, `record_new`, `admin_db_backup_download`) 410 tombstone'dur — DB/oturum erişimi yok
 
 ## CLI-Only Scripts
 
@@ -66,6 +68,5 @@ if (PHP_SAPI !== 'cli') {
 |---|---|
 | DB credentials plaintext | Açık — `.env`'e taşıma planlandı |
 | Git history eski SQL dump | Kontrol edilmedi — `git log --all --name-only` ile taranabilir |
-| `migrate_normalize_v2.php` dual-mode | CLI-only'ye geçmedi, web erişimi var |
 | Audit log retention yok | 180 gün arşivleme planlandı, kod yok |
 | `record_view.php` N+1 sorgu | İncelenmedi |

@@ -34,8 +34,8 @@ Her madde tamamlandıktan sonra `[x]` ile işaretle.
 
 ### Sprint Bağımlılıkları
 
-- [ ] **Sprint 8 tamamlandı:** `scripts/plan_normalize_migration.php` çalıştırıldı, `forward_migration_*.sql` ve `rollback_migration_*.sql` dosyaları `scripts/` klasöründe mevcut.
-- [ ] **Sprint 9 tamamlandı:** `scripts/test_staging_migration.php` çalıştırıldı, terminal çıktısında `✓ PRODUCTION İÇİN HAZIR` yazıyor.
+- [ ] **Sprint 8 tamamlandı:** `scripts/arsiv/plan_normalize_migration.php` çalıştırıldı, `forward_migration_*.sql` ve `rollback_migration_*.sql` dosyaları `scripts/` klasöründe mevcut.
+- [ ] **Sprint 9 tamamlandı:** `scripts/arsiv/test_staging_migration.php` çalıştırıldı, terminal çıktısında `✓ PRODUCTION İÇİN HAZIR` yazıyor.
 - [ ] **Staging raporu saklandı:** `scripts/staging_report_yukleme_plani_staging_<ts>.txt` dosyası arşivlendi.
 
 ### Queue Durumu Kontrolü
@@ -267,7 +267,7 @@ Migration süresi lineerdir. Kaba tahmin:
 
 ```bash
 # Production sunucusunda scripts/ klasöründen
-php scripts/plan_normalize_migration.php \
+php scripts/arsiv/plan_normalize_migration.php \
     --output-dir scripts/
 
 # Çıktıyı kontrol et:
@@ -317,7 +317,7 @@ echo "Çıkış kodu: $?"
 > Adım 3 başarısız olursa Adım 4'e geçme → Rollback Planı'na git.
 
 ```bash
-php scripts/test_staging_migration.php \
+php scripts/arsiv/test_staging_migration.php \
     --test-db yukleme_plani \
     --skip-rollback \
     --yes \
@@ -643,9 +643,9 @@ SELECT 'msm_mat', COUNT(*) FROM material_stock_movements msm
 | Dosya | Açıklama |
 |---|---|
 | `audit.php` | Normalize Migration Review paneli (UI) |
-| `scripts/plan_normalize_migration.php` | Forward/rollback SQL üretici (Sprint 8) |
-| `scripts/test_staging_migration.php` | Staging test & validation (Sprint 9) |
+| `scripts/arsiv/plan_normalize_migration.php` | Forward/rollback SQL üretici (Sprint 8) |
+| `scripts/arsiv/test_staging_migration.php` | Staging test & validation (Sprint 9) |
 | `scripts/forward_migration_<ts>.sql` | Uygulanacak migration |
 | `scripts/rollback_migration_<ts>.sql` | Geri alma planı |
 | `config/helpers.php` | `normalize_text_v2()` tanımı |
-| `docs/production_normalize_migration_commands.md` | Hızlı komut listesi |
+| `docs/arsiv/production_normalize_migration_commands.md` | Hızlı komut listesi |

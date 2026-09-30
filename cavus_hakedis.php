@@ -93,7 +93,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 </div>
 
 <?php if (!$faz8bHazir): ?>
-<div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Hakediş ekranı eski güvenli davranışla devam ediyor. Yönetici <a href="faz8b_migrate.php">Faz 8B migrasyonunu</a> çalıştırabilir.</div>
+<div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Hakediş ekranı eski güvenli davranışla devam ediyor. Yönetici <a href="migrate.php">Şema Migrasyon</a> ekranından Faz 8B migrasyonunu çalıştırabilir.</div>
 <?php endif; ?>
 
 <form method="get" class="pdks-filter-bar">

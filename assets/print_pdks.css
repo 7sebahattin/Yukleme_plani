@@ -229,12 +229,6 @@ table.print-table .num {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
-table.print-table .num-strong {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    font-weight: 700;
-}
 
 /* Toplam satırı */
 table.print-table tfoot td {
@@ -266,9 +260,6 @@ table.print-table td.pr-empty {
     white-space: nowrap;
     color: var(--pr-muted);
 }
-.pr-tag-ok   { color: var(--pr-ok); }
-.pr-tag-warn { color: var(--pr-warn); }
-.pr-tag-bad  { color: var(--pr-bad); }
 
 /* Açıklama/dipnot */
 .print-sheet .pr-note {

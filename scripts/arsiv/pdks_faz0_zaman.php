@@ -1,11 +1,12 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
-// scripts/pdks_faz0_zaman.php — FAZ 0 · PHP ↔ MySQL saat dilimi ÖLÇÜMÜ
+// scripts/arsiv/pdks_faz0_zaman.php — FAZ 0 · PHP ↔ MySQL saat dilimi ÖLÇÜMÜ
 //
 // SADECE CLI. SALT OKUNUR: yalnız SELECT çalıştırır, hiçbir şey yazmaz,
 // hiçbir şema değiştirmez, hiçbir ayar değiştirmez.
 //
-//   php scripts/pdks_faz0_zaman.php
+//   php scripts/arsiv/pdks_faz0_zaman.php
 //
 // ⚠ config/db.php BİLEREK include EDİLMEZ.
 //    Sebep: config/db.php → helpers.php → dosya sonundaki IIFE → db() zinciri
@@ -14,7 +15,7 @@
 //    dosya hiç çalıştırılmaz ve bağlantı burada ayrıca açılır.
 //
 // Bu betiğe erişimi olmayan (SSH'sız) kurulumlarda AYNI ölçüm phpMyAdmin'den
-// tek SQL ile yapılabilir — bkz. docs/PDKS_NFC_FAZ0_DOGRULAMA.md §1.
+// tek SQL ile yapılabilir — bkz. docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md §1.
 // =========================================================
 declare(strict_types=1);
 
@@ -62,7 +63,7 @@ try {
 } catch (PDOException $e) {
     fwrite(STDERR, "\nMySQL'e bağlanılamadı: " . $e->getMessage() . "\n");
     fwrite(STDERR, "Bu ortamda canlı DB yoksa normaldir — ölçümü sunucuda çalıştırın\n");
-    fwrite(STDERR, "veya phpMyAdmin'den docs/PDKS_NFC_FAZ0_DOGRULAMA.md §1'deki SQL'i kullanın.\n\n");
+    fwrite(STDERR, "veya phpMyAdmin'den docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md §1'deki SQL'i kullanın.\n\n");
     exit(3);
 }
 
@@ -106,7 +107,7 @@ if (abs($sapma) <= 5) {
     printf("✗ SAPMA VAR: %+d saniye (≈ %+.1f saat).\n", $sapma, $sapma / 3600);
     echo "  MySQL NOW() ile PHP Europe/Istanbul AYNI anı göstermiyor.\n";
     echo "  KARAR: PDKS zaman damgaları NOW() ile yazılmamalı — bkz.\n";
-    echo "  docs/PDKS_NFC_FAZ0_DOGRULAMA.md §1.4 (Seçenek C).\n";
+    echo "  docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md §1.4 (Seçenek C).\n";
     echo "  ⚠ Bu sapma PDKS'e ÖZGÜ DEĞİLDİR: mevcut tüm modüller de etkilenir.\n";
     echo "    Global düzeltme (SET time_zone) AYRI bir iş olarak ele alınmalıdır.\n";
     $cikis = 1;

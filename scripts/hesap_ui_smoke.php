@@ -221,21 +221,22 @@ $PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay'];
 $d2 = renderPage('hesap.php', []);
 ok('muhasebe başkasının 1.500 kaydını GÖRMÜYOR', !str_contains($d2,'1.500,00'));
 ok('başlık "Hesabım"',                          str_contains($d2,'Hesabım'));
-ok('yönetici kartı yok (sahipsiz linki)',       !str_contains($d2,'hesap_sahipsiz.php') && !str_contains($d2,'hesap_personel.php'));
+ok('yönetici kartı yok (Tüm Personel linki)',       !str_contains($d2,'hesap_sahipsiz.php') && !str_contains($d2,'hesap_personel.php'));
 ok('onay kuyruğu linki var',                    str_contains($d2,'hesap_muhasebe.php'));
 $l2 = renderPage('hesap_liste.php', []);
 ok('listede başkasının kaydı YOK',             !str_contains($l2,'Otel / Konaklama'));
 $l2p = renderPage('hesap_liste.php', ['personel' => 'tum']);
 ok('?personel=tum yönetici değilse yok sayılır', !str_contains($l2p,'Otel / Konaklama') && !str_contains($l2p,'yönetici görünümü'));
 ok('yönetici ekranı yönetici değilse 403',      str_starts_with(renderPage('hesap_personel.php'), '__ERROR__'));
-ok('sahipsiz ekranı yönetici değilse 403',      str_starts_with(renderPage('hesap_sahipsiz.php'), '__ERROR__'));
+$ts = file_get_contents(dirname(__DIR__) . '/hesap_sahipsiz.php');
+ok('hesap_sahipsiz.php 410 tombstone (DB/oturum yok)', str_contains($ts, 'http_response_code(410)') && !preg_match('/require|include|db\(|session_/', $ts) && str_contains($ts, 'hesap.php'));
 
 echo "\n── Yönetici (hesap.admin) ──\n";
 $PERMS = ['hesap.read','hesap.write','hesap.approve','hesap.pay','hesap.admin','reports.export'];
 $d4 = renderPage('hesap.php', []);
 ok('Hesabım yine KENDİ bakiyesi (3.495,00)',    str_contains($d4,'3.495,00') && !str_contains($d4,'1.500,00'));
 ok('yönetici kartı: Tüm Personel',              str_contains($d4,'hesap_personel.php'));
-ok('yönetici kartı: Sahipsiz Kayıtlar sayacı',  (bool)preg_match('#hesap_sahipsiz\.php.*?Sahipsiz Kayıtlar: <b>0</b>#s', $d4));
+ok('yönetici kartında Sahipsiz linki/sayacı YOK', !str_contains($d4,'hesap_sahipsiz.php') && !str_contains($d4,'Sahipsiz Kayıtlar'));
 $d5 = renderPage('hesap.php', ['personel' => '2']);
 ok('başkasının hesabı: şerit',                  str_contains($d5,'yönetici görünümü') && str_contains($d5,'Ali'));
 ok('başkasının hesabı: üçüncü şahıs etiketi',   !str_contains($d5,'Şirket size borçlu') && !str_contains($d5,'Şirkete borçlusunuz'));
@@ -249,8 +250,8 @@ ok('yönetici kuyruğu: Personel Bakiyeleri',     str_contains($m4,'Personel Bak
 $p4 = renderPage('hesap_personel.php', []);
 ok('Tüm Personel ekranı render',                !str_starts_with($p4,'__ERROR__') && str_contains($p4,'Tüm Personel'));
 ok('Tüm Personel: iki kişi + USD ayrı',         str_contains($p4,'Ali') && str_contains($p4,'Test Personel') && str_contains($p4,'USD'));
-$s4 = renderPage('hesap_sahipsiz.php', []);
-ok('Sahipsiz ekranı render (boş)',              !str_starts_with($s4,'__ERROR__') && str_contains($s4,'Sahipsiz kayıt: <b>0</b>'));
+ok('Tüm Personel: sahipsiz linki YOK',           !str_contains($p4,'hesap_sahipsiz.php'));
+ok('hesap_sahipsiz_sayisi() kaldırıldı',        !function_exists('hesap_sahipsiz_sayisi'));
 
 echo "\n── Yetkisiz: yazma yetkisi olmayan ──\n";
 $PERMS = ['hesap.read'];

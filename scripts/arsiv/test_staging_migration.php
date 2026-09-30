@@ -1,13 +1,14 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =============================================================
-// scripts/test_staging_migration.php — Sprint 9
+// scripts/arsiv/test_staging_migration.php — Sprint 9
 // Normalize migration staging test:
 //   backup → forward → verify → rollback test → rapor
 //
 // CLI ONLY. Production DB'ye dokunmaz.
 //
 // Kullanım:
-//   php scripts/test_staging_migration.php \
+//   php scripts/arsiv/test_staging_migration.php \
 //       --test-db yukleme_plani_staging \
 //       [--forward  scripts/forward_migration_*.sql]  (yoksa otomatik bulur)
 //       [--rollback scripts/rollback_migration_*.sql] (yoksa otomatik bulur)
@@ -71,7 +72,7 @@ $test_db = $opts['test_db'];
 
 if ($test_db === '') {
     fwrite(STDERR, "Hata: --test-db <veritabanı_adı> gerekli.\n");
-    fwrite(STDERR, "Örnek: php scripts/test_staging_migration.php --test-db yukleme_plani_staging\n");
+    fwrite(STDERR, "Örnek: php scripts/arsiv/test_staging_migration.php --test-db yukleme_plani_staging\n");
     exit(1);
 }
 if ($test_db === $prod_db) {
@@ -189,7 +190,7 @@ rpt();
 
 if ($fwd_file === '' || !file_exists($fwd_file)) {
     rpt(fail("HATA: Forward migration SQL dosyası bulunamadı."));
-    rpt("Plan script'i çalıştırın: php scripts/plan_normalize_migration.php");
+    rpt("Plan script'i çalıştırın: php scripts/arsiv/plan_normalize_migration.php");
     exit(1);
 }
 

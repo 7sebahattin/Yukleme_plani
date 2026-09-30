@@ -63,34 +63,6 @@ function parse_stock_quantity(string $input, string $unit = ''): float {
     return round($v, 3);
 }
 
-// DB'den gelen float değeri düzenleme input'u için formatla.
-// adet → "1112" (nokta/sıfır yok), kg/m → "12.5" (gereksiz sıfırlar yok)
-// Sıfır/null → '' (input boş kalır).
-function format_stock_quantity_for_input(float $value, string $unit = ''): string {
-    if ($value == 0.0) return '';
-    if (ms_is_integer_unit($unit)) {
-        return (string)(int)round($value);
-    }
-    $s = number_format($value, 3, '.', '');
-    // Gereksiz sıfırları kaldır: "12.500" → "12.5", "12.000" → "12"
-    return rtrim(rtrim($s, '0'), '.');
-}
-
-// Görüntüleme için birime göre Türkçe format (Türkçe: ondalık virgül, binler nokta).
-// adet → "1.112" (tam sayı, binler nokta), kg → "12,5" (sıfır içeren → "12,500")
-function format_stock_quantity_for_display(float $value, string $unit = ''): string {
-    if (ms_is_integer_unit($unit)) {
-        return number_format((int)round($value), 0, ',', '.');
-    }
-    $s = number_format($value, 3, ',', '.');
-    // Gereksiz sıfırlar kaldır: "12,500" → "12,5" ama "0,000" → "0"
-    if (str_contains($s, ',')) {
-        $s = rtrim($s, '0');
-        $s = rtrim($s, ',');
-    }
-    return $s;
-}
-
 // ── Stok kategorileri (Kasa / Palet / Sarf / Diğer) ───────
 function ms_cat_labels(): array {
     return ['kasa' => 'Kasa', 'palet' => 'Palet', 'sarf' => 'Sarf', 'diger' => 'Diğer'];

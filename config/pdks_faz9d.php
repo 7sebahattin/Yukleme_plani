@@ -136,25 +136,6 @@ function pdks_faz9d_sema_hazir(?PDO $pdo = null): bool
     return true;
 }
 
-/** pdks_cari_sayfa_kapisi() ile AYNI desen. */
-function pdks_faz9d_sayfa_kapisi(?PDO $pdo = null): void
-{
-    $pdo = $pdo ?? db();
-    if (pdks_faz9d_sema_hazir($pdo)) return;
-
-    $mesaj = 'Hakediş düzeltme/mahsup modülü tabloları henüz oluşturulmamış. Bir yöneticinin '
-           . 'migrate.php sayfasından "Faz 9D Düzeltme Tablolarını Oluştur" demesi gerekiyor.';
-    if (function_exists('set_flash')) set_flash('error', $mesaj);
-    if (function_exists('render_header')) render_header('Hakediş Düzeltme');
-    if (function_exists('render_flash')) {
-        render_flash();
-    } elseif (function_exists('h')) {
-        echo '<div class="flash flash-error">' . h($mesaj) . '</div>';
-    }
-    if (function_exists('render_footer')) render_footer();
-    exit;
-}
-
 // =========================================================
 // DÜZELTME (foreman_entitlement_adjustments) — TEK YAZMA YOLU + TERS KAYIT
 //

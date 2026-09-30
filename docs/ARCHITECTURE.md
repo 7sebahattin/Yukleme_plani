@@ -54,7 +54,7 @@ users / roles / role_permissions       Auth
 audit_log    action, module, record_id, old_values(JSON), new_values(JSON)
 
 kantar_gruplar / kantar_kayitlar
-hks_notifications
+hks_firmalar / hks_taslaklar / hks_gonderilenler / hks_kv · beyan_hks_bildirim · hks_eslesme
 material_stock_movements
 ```
 

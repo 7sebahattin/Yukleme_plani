@@ -137,8 +137,7 @@ foreach ($pallets as $p) {
     }
 }
 
-// Kasa darası alt-toplamı (palet/şapka/köşe için sabit alan; isimde geçen "H-5", "H-9", "H-10" vs için
-// kasa cinsi adına göre eşleştirme yapıyoruz)
+// Türkçe harfleri sadeleştirip küçültür — stok satırlarını ad ile eşleştirmek için (stok_satir_topla)
 function tr_norm(string $s): string {
     $s = mb_strtolower($s, 'UTF-8');
     // Türkçe büyük İ → mb_strtolower ile "i̇" (i + combining dot above U+0307) olur, dot'u temizle
@@ -146,19 +145,6 @@ function tr_norm(string $s): string {
     // i ↔ ı, ş→s, ç→c, ğ→g, ü→u, ö→o farkını da yumuşat
     $s = strtr($s, ['ı'=>'i','ş'=>'s','ç'=>'c','ğ'=>'g','ü'=>'u','ö'=>'o']);
     return str_replace([' ', '-', '.', ','], '', $s);
-}
-function kasa_dara_for_label(string $needle, array $pallets, array $defs_by_id): float {
-    $sum = 0.0;
-    $needle_norm = tr_norm($needle);
-    foreach ($pallets as $p) {
-        if (!$p['kasa_cinsi_id']) continue;
-        $name = $defs_by_id[(int)$p['kasa_cinsi_id']]['name'] ?? '';
-        $name_norm = tr_norm($name);
-        if (strpos($name_norm, $needle_norm) !== false) {
-            $sum += (int)$p['kasa_adeti'] * (float)$defs_by_id[(int)$p['kasa_cinsi_id']]['unit_dara_kg'];
-        }
-    }
-    return $sum;
 }
 
 // Palet+Şapka+Köşebent dara toplamı
@@ -239,9 +225,6 @@ function stok_satir_topla(array $stok_use, array $defs_by_id, array $allowed_typ
     }
     return ['adet' => $adet, 'kg' => $kg];
 }
-
-// Bottom-row özel kasa dara toplamları (artık kullanılmıyor, dinamik yapıya geçildi)
-// Eski statik hesaplamalar kaldırıldı
 
 // Dinamik kasa cinsi dara dağılımı — yazdırma alt bloku için
 $kasa_dara_breakdown = [];

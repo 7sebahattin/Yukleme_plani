@@ -90,8 +90,7 @@ render_flash();
 <div class="empty">
     <p class="muted">Rapor arşiv tabloları henüz oluşturulmadı.</p>
     <?php if (function_exists('is_admin') && is_admin()): ?>
-    <p class="muted" style="font-size:.85rem">Onarım aracını çalıştırarak tabloları oluşturabilirsiniz.</p>
-    <a href="repair_xz_tables.php" class="btn btn-primary btn-sm">🔧 Onarım Aracını Aç</a>
+    <p class="muted" style="font-size:.85rem">Tablolar sayfa açılışında otomatik oluşturulur; sayfayı yenileyin. Sorun sürerse sunucu hata günlüğündeki [XZ MIGRATION] kaydına bakın.</p>
     <?php else: ?>
     <p class="muted" style="font-size:.85rem">Sayfayı yenileyip tekrar deneyin. Sorun devam ederse sistem yöneticisine bildirin.</p>
     <?php endif; ?>

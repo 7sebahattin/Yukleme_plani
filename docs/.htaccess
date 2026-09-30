@@ -1,0 +1,7 @@
+# docs/ — geliştirici belgeleri; web'den erişim kapalı (v281)
+Options -Indexes
+Require all denied
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

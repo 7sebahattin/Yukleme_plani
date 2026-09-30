@@ -112,9 +112,7 @@ $red_st = db()->prepare("SELECT * FROM account_transactions
                          ORDER BY reviewed_at DESC, id DESC LIMIT 5");
 $red_st->execute($sparams);
 $reddedilenler = $red_st->fetchAll();
-// Yöneticiye özel kart: sahipsiz kayıt sayısı (SQL yazmadan görülsün)
 $yonetici = hesap_sees_all();
-$sahipsiz = $yonetici ? hesap_sahipsiz_sayisi() : 0;
 
 render_header($baskasi ? $kapsam['ad'] . ' — Hesap' : 'Hesabım');
 hesap_assets();
@@ -197,9 +195,6 @@ render_flash();
         <nav class="hs-yonetici" aria-label="Yönetici">
             <a class="hs-yonetici-item" href="hesap_personel.php">
                 <span aria-hidden="true">👥</span><span>Tüm Personel</span>
-            </a>
-            <a class="hs-yonetici-item<?= $sahipsiz > 0 ? ' hs-yonetici-uyari' : '' ?>" href="hesap_sahipsiz.php">
-                <span aria-hidden="true">🗂</span><span>Sahipsiz Kayıtlar: <b><?= (int)$sahipsiz ?></b></span>
             </a>
         </nav>
         <?php endif; ?>

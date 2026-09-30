@@ -1,6 +1,7 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =============================================================
-// scripts/dry_run_free_text_normalize.php — Sprint 14
+// scripts/arsiv/dry_run_free_text_normalize.php — Sprint 14
 // Serbest metin alanları normalize_text_v2 dry-run analizi.
 // CLI ONLY. Hiçbir UPDATE/DELETE çalıştırmaz.
 // =============================================================

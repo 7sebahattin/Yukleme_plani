@@ -73,7 +73,7 @@ if ($durum_f === 'bekleyen') {
 }
 if ($tarih_b) { $where[] = "at.transaction_date>=?"; $params[] = $tarih_b; }
 if ($tarih_s) { $where[] = "at.transaction_date<=?"; $params[] = $tarih_s; }
-// Kişisel kapsam — sahipsiz kayıt kuyruğa girmez (önce hesap_sahipsiz.php'den atanır), depo yok
+// Kişisel kapsam — sahipsiz kayıt kuyruğa girmez (sahip ataması: hesap_kayit.php, yönetici), depo yok
 [$ksql, $kparams] = hesap_kapsam_sql($kapsam, 'at.user_id');
 $where[] = $ksql;
 $params  = array_merge($params, $kparams);

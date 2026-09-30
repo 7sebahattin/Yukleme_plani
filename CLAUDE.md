@@ -7,46 +7,35 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v280` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v281` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
-## Dosya Haritası (Kritik Dosyalar)
+## Dosya Haritası (modül bazlı)
 
-```
-/
-├── index.php              # Ana sayfa — kart grid
-├── records.php / cikmalar.php   # Yükleme / Çıkma listesi
-├── record_view.php        # Görüntüleme + yazdırma
-├── record_create/edit.php # Form sayfaları
-├── kantar.php / kantar_view.php / kantar_raporu.php
-├── stok.php / malzeme_stok.php
-├── reports.php / hesap.php
-├── definitions.php / users.php / audit.php
-├── logout.php
-├── sw.js / manifest.json  # PWA
-├── config/
-│   ├── db.php             # PDO + auto-migration
-│   ├── helpers.php        # render_header/footer, render_desktop_sidebar,
-│   │                      # csrf_check, audit_log_event, can(), is_admin()
-│   ├── auth.php           # require_login, session
-│   ├── xlsx_export.php    # XLSX üretimi + "⬇ Excel İndir ▾" menüsü (export_menu)
-│   └── calc.php           # Dara/net hesaplama
-├── assets/
-│   ├── style.css          # TEK CSS — tüm stiller + sidebar + breakpoints
-│   └── app.js             # TEK JS
-├── beyanlar.php / beyan_view.php / beyan_create.php / beyan_edit.php
-├── api_beyan_bildirim.php # Beyan → Hal Kayıt köprüsü (JSON)
-└── halkayit/              # Hal Kayıt (HKS) modülü
-    ├── index.php          # panel çerçevesi + app.php'yi iframe'e gömer
-    ├── app.php / app.html # SPA kabuğu + SPA (tek dosya)
-    ├── api.php            # JSON yönlendirici (action=...)
-    ├── taslak_lib.php     # TASLAK YAZMANIN TEK YOLU + bildirim doğrulama
-    ├── hks_soap.php / config.php / db.php
-    └── .htaccess          # include-only PHP dosyalarına web erişim kapalı
-```
+Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/bölünmez).
 
-**docs/ referans:** `@docs/ARCHITECTURE.md` · `@docs/SECURITY_NOTES.md` · `@docs/NEXT_TASKS.md` · `@docs/DEPLOY_WORKFLOW.md`
+| Modül | Sayfalar (kök) | Çekirdek (`config/`) | Varlıklar | Test (`scripts/`) |
+|---|---|---|---|---|
+| Çekirdek / altyapı | `index` · `login` · `logout` · `depo_sec` · `migrate` (admin şema paneli) · `sw.js` · `manifest.json` | `db` (PDO + auto-migration) · `auth` · `helpers` (render_header/footer, sidebar, bottomnav, csrf_check, audit_log_event, can) · `calc` · `calc_helper` · `print_helpers` · `xlsx_export` | `style.css` (TEK CSS) · `app.js` (TEK JS) · `nav-icons/` · `print_base.css` | `rol_kapilari_smoke` · `bottomnav_*` · `export_menu_*` · `suggest_list_smoke` |
+| Yükleme / Çıkma | `records` · `cikmalar` · `record_create/edit/view/delete/durum` · `cikma_create` · `_form` · `print_loading` · `records_bulk_print` · `record_excel_template` · `excel_ornek_palet` · `api_kalan` · `api_templates` · `api_etiket_foto` · `api_tanim_ekle` · `cikma_report_toggle` | `calc` · `material_stock_helpers` | `kalan.js` · `templates/excel/` | `record_excel_smoke` |
+| Günlük X/Z rapor | `daily_report_create/view/archive` · `print_daily` | — | — | — |
+| Kantar | `kantar` · `kantar_create/edit/view/delete/foto` · `_kantar_form` · `kantar_raporu` · `kantar_report_toggle` | — | — | — |
+| Stok / Malzeme | `stok` · `malzeme_stok` · `malzeme_stok_islem/import/rapor` · `malzeme_hareketleri` · `malzeme_stok_tehis` · `api_bulk_material` | `material_stock_helpers` | — | `test_material_stock_helpers` |
+| Beyan + HKS köprüsü | `beyanlar` · `beyan_view/create/edit/delete/parse/eslestir/bulk_save` · `_beyan_liste` · `api_beyan_bildirim` · `beyan_bildirim_tani` | `helpers` (`beyan_*`, `bb_*`) | — | `beyan_bildirim_smoke` · `beyan_ui_smoke` · `beyan_js_smoke.js` |
+| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` |
+| Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
+| Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
+| PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`) | `pdks.css` · `pdks.js` · `print_pdks.css` | `pdks_*_smoke` |
+| Raporlar | `reports` · `raporlar` · `rapor_malzeme` · `rapor_yazdir` · `kantar_raporu` | `xlsx_export` | — | `rapor_malzeme_xlsx_smoke` |
+| Yönetim | `definitions` · `users` · `roles` · `audit` · `admin_db_backups` | `db_backup_helpers` | — | `roles_ui_smoke` · `db_backup_smoke` · `roles_modal_*` |
+| **Kaldırılan / 410 tombstone** | `admin_db_backup_download` · `hesap_sahipsiz` · `depo_tasima` · `firma_eslestirme` · `fix_brand` · `repair_xz_tables` · `faz8b_migrate` · `record_new` | — | — | `rol_kapilari_smoke` (değişmezleri denetler) |
+| Klasörler | `scripts/` (testler + `create_admin_user`, `deploy*`, `db_backup_cron`) · `scripts/arsiv/` (biten tek seferlik araçlar; çalıştırılmaz) · `docs/` · `docs/arsiv/` (biten faz/sprint belgeleri) · `tools/arsiv/` · `templates/excel/` · `storage/` (yedekler) · `uploads/` · `vendor/` | | | |
+
+- **Tombstone politikası:** deploy dosya SİLMEZ. Web'den erişilen bir sayfayı kaldırırken dosyayı silme; içeriği 410 tombstone olur (DB/oturum/require YOK, ≤15 satır, kalıcı ekrana link). Tombstone'u SİLME, boş kalsın. Kök `SYSTEM_AUDIT_REPORT.md` de aynı sebeple 3 satırlık yer tutucudur (asıl rapor `docs/arsiv/`).
+- `scripts/`, `tools/`, `docs/`, `storage/` alt klasörleriyle `.htaccess` ile web'e kapalıdır.
+
+**docs/ referans:** `@docs/ARCHITECTURE.md` · `@docs/SECURITY_NOTES.md` · `@docs/NEXT_TASKS.md` · `@docs/DEPLOY_WORKFLOW.md` · `@docs/EXCEL_EXPORT_ANALIZ.md` — biten faz/sprint belgeleri `docs/arsiv/` altındadır (`docs/` web'e kapalı, v281).
 
 ---
 
@@ -62,6 +51,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 - **`yuklendi` durumu = kilitli** — yalnızca `records.unlock` açabilir, `revision_reason` zorunlu.
 - **KG ekranda tam sayı ve virgülsüz** — CSV decimal koruyabilir.
 - **Kişisel isim/e-posta örneklerde kullanma.**
+- **Kaldırılan web sayfası = 410 tombstone** (DB/oturum yok, ≤15 satır, kalıcı ekrana link; deploy dosya silmez) — `rol_kapilari_smoke` değişmezleri denetler; dosyayı `git rm` ETME.
 - **"Canlıya al" = PR açıp `main`'e merge et** — bkz. `@docs/DEPLOY_WORKFLOW.md`. Merge sunucuya **OTOMATİK yansır**: GitHub push webhook'ları `https://asya.scai.tr/deploy.php` (canlı) ve `https://nuverna.derspros.com.tr/deploy.php` (test) adreslerini tetikler — `main`'e merge İKİ siteye birden iner, dosyalar ~dakikalar içinde iner (doğrulandı 2026-09-13). **Kullanıcıdan SSH'dan bir şey çalıştırmasını İSTEME** — doküman uzun süre yanlışlıkla bunu söylüyordu. Doğrulama: hard refresh → sidebar'daki `APP_SURUM`. Webhook'un **Secret'ı boş**; kökteki `deploy.php` repoda değil ve deploy onu bilerek atlar (koruma listesi).
 
 ---
@@ -444,16 +434,16 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
 - **Yeni sorgu yazarken:** loading_records → `depo_sql_records[_in]`, depo kolonu olan tablo → `depo_sql_column`/`depo_sql_in`. UNUTMA!
 - **Damgalama:** Yeni kayıt formlarında depo varsayılanı = `active_depot()` (_form.php, kantar_create, malzeme_stok_islem).
 - **Tekil görüntüleme koruması:** record_view (palet depo kontrolü), kantar_view (`depot_visible_to_user`).
-- **Depo değiştirme:** topbar `.depo-badge` + sidebar `.sidebar-depo` → depo_sec.php. Audit: `depot_switch`.
+- **Depo değiştirme:** topbar `.brand-depot` + sidebar `.sidebar-depo` → depo_sec.php. Audit: `depot_switch`.
 - **Atanmamış veri kuralı:** Deposu BOŞ kayıt/fiş/hareket TÜM depolarda görünür ve erişilebilir (filtreler `IN(aktif depo) OR depo=''`). Depo özelliği hiçbir eski veriyi kaybetmez/kilitlemez. Tekil görüntüleme guard'ları da boş depoyu geçirir; yalnız GERÇEK başka depoya ait kayıt 403 verir (mesaj hangi depo olduğunu söyler).
 - **Bilinçli istisna — Hesap modülü:** kişisel cari depo filtresi KULLANMAZ
   (`depo_sql_in` / `depot_visible_to_user` yok); `depo` kolonu yalnız bilgi amaçlı
   damgadır. Bkz. "Hesap Modülü" bölümü.
-- **Eski depo'suz veri:** `depo_tasima.php` (yalnız admin, onaylı GO butonu) boş depolu satırları hedef depoya taşır — atanınca yalnız o depoda görünür.
+- **Eski depo'suz veri:** geçiş tamamlandı; `depo_tasima.php` v281'de 410 tombstone. Boş depolu satır yine "Atanmamış veri kuralı" ile tüm depolarda görünür.
 - **Depo listesi kaynağı:** `material_definitions type='depo'` (`depot_options()` = tanımlar ∩ `user_depolar` ataması).
 - **Harf-duyarsızlık:** Depo eşleşmeleri TR-duyarsız (`depo_fold`/`depo_in_allowed`/`depot_visible_to_user`). "KARAMAN CİHAT" == "Karaman Cihat" — liste (MySQL ci) ile tekil guard tutarlı.
-- **Depo adı yayılımı:** Depo tanımı adı değişince `sync_depot_name_in_data()` tüm depo kolonlarını (loading_pallets/kantar_fisleri/material_stock_movements/stock_counts/customs_declarations.exit_depot) yeni yazıma çeker (definitions.php update + audit `depot_rename_sync`). Mevcut uyumsuzluk için: `depo_tasima.php` → "🔤 Depo Adlarını Eşitle" butonu (audit `depot_sync_all`).
-- **Depo rengi (Sprint Depo-02):** `material_definitions.color` (VARCHAR7, nullable). `depot_color($name)` → admin renk seçtiyse onu, seçmediyse isimden türetilen sabit palet rengini döner (`depot_color_palette()`). `render_header()` aktif depo varsa `<body style="--depot-accent;--depot-accent-rgb;--depot-accent-text">` enjekte eder — sidebar sol şerit/marka alt çizgi/`.sidebar-depo`, topbar `.depo-badge` + alt şerit, mobil `.bottomnav` üst şerit hep bu değişkeni kullanır; depo değişince otomatik güncellenir. Renk seçici: `definitions.php` sol panelde depo türü seçiliyken görünür (`color_reset=1` → otomatik palete dön).
+- **Depo adı yayılımı:** Depo tanımı adı değişince `sync_depot_name_in_data()` tüm depo kolonlarını (loading_pallets/kantar_fisleri/material_stock_movements/stock_counts/customs_declarations.exit_depot) yeni yazıma çeker (definitions.php update + audit `depot_rename_sync`).
+- **Depo rengi (Sprint Depo-02):** `material_definitions.color` (VARCHAR7, nullable). `depot_color($name)` → admin renk seçtiyse onu, seçmediyse isimden türetilen sabit palet rengini döner (`depot_color_palette()`). `render_header()` aktif depo varsa `<body style="--depot-accent;--depot-accent-rgb;--depot-accent-text">` enjekte eder — sidebar sol şerit/marka alt çizgi/`.sidebar-depo`, topbar `.brand-depot` + alt şerit, mobil `.bottomnav` üst şerit hep bu değişkeni kullanır; depo değişince otomatik güncellenir. Renk seçici: `definitions.php` sol panelde depo türü seçiliyken görünür (`color_reset=1` → otomatik palete dön).
 
 ## Maliyet Hesabı Modülü (Sprint Maliyet-01)
 
@@ -831,8 +821,8 @@ ayrıştırma, durum makinesi, bakiye hesabı, yetki kapısı.
 **Sayfalar:** `hesap.php` ("Hesabım" — kişisel pano) · `hesap_liste.php` · `hesap_kayit.php` ·
 `hesap_muhasebe.php` (onay kuyruğu) · `hesap_durum.php` (geçiş JSON uç noktası) ·
 `hesap_yazdir.php` · `hesap_export.php` · `hesap_muhasebe_fis_pdf.php` · `hesap_sil.php` ·
-**yalnız yönetici:** `hesap_personel.php` ("Tüm Personel" — kişi × kur bakiye) ·
-`hesap_sahipsiz.php` ("Sahipsiz Kayıtlar" — sahip atama). Yeni hesap sayfası eklerken
+**yalnız yönetici:** `hesap_personel.php` ("Tüm Personel" — kişi × kur bakiye).
+(`hesap_sahipsiz.php` v281'de 410 tombstone.) Yeni hesap sayfası eklerken
 `nav_aktif_anahtar()` içindeki `$a_hes` listesine ekle.
 
 ### Arayüz (Faz 1-3)
@@ -901,12 +891,14 @@ draft ⇄ submitted → approved → pending_payment → paid
   "bekleyen" filtresi yalnız `submitted` (taslak onay beklemez).
 - **Kendi kaydını onaylama/ödeme SERBEST** (kullanıcı kararı). Sahip ≠ ben yasağı EKLEME.
 - **Sahipsiz (`user_id IS NULL`):** yalnız yönetici görür, HİÇ KİMSENİN bakiyesine girmez
-  (`hesap_balance_tum` dahil), sahibi yoktur (`hesap_is_owner` false). Sahip ataması
-  YALNIZ `hesap_sahipsiz.php` (tek/toplu, POST+CSRF, tek transaction, MySQL'de
-  `FOR UPDATE`, UPDATE her zaman `AND user_id IS NULL` korumalı, audit `owner_assign` +
-  `bulk_update`) ve `hesap_kayit.php` "Kayıt sahibi" alanı (yönetici, düzenleme modu,
-  audit `owner_change` — yanlış atamanın geri alındığı yol). **Otomatik geri dolum /
-  tahmin YOK** (eski satırlarda `created_by` da boş). Sayaç: `hesap_sahipsiz_sayisi()`.
+  (`hesap_balance_tum` dahil), sahibi yoktur (`hesap_is_owner` false). Eski sahipsiz
+  kayıtların tümü atandı (canlı 0, 2026-09-30); "Sahipsiz Kayıtlar" ekranı ve sayaçları
+  v281'de KALDIRILDI (`hesap_sahipsiz.php` = 410 tombstone). Sahip ataması/düzeltmesinin
+  TEK yolu `hesap_kayit.php` "Kayıt sahibi" alanıdır (yönetici, düzenleme modu, audit
+  `owner_change`): alan artık boş/"Sahipsiz" seçeneği SUNMAZ ve sahibi olan kaydın
+  sahibini boşaltmayı REDDEDER — `user_id NULL` kayıt `tum` kapsamında da görünmez
+  (`IS NOT NULL`). **Otomatik geri dolum / tahmin YOK.** NULL güvenlik kuralları
+  (`hesap_row_visible`, `hesap_balance*`, `hesap_kapsam_sql`) korunur.
 - **Depo YOK:** Hesap sorguları `depo_sql_in` / `depot_visible_to_user` kullanmaz — kişisel
   cari aktif depoya göre değişmemeli (DEPO2'de girilen masraf DEPO1'de kayboluyordu).
   `depo` kolonu yalnız bilgi amaçlı damgadır; `enforce_active_depot()` kapısı kalır.
@@ -931,7 +923,7 @@ draft ⇄ submitted → approved → pending_payment → paid
   `.htaccess` hem depoda hem `HESAP_UPLOAD_HTACCESS` ile yeniden üretilir); yalnız
   `hesap_dosya.php` (sahiplik kontrolüyle) sunar. Statik URL VERME.
 - **Ana sayfa kartı** (`index.php`) kişiseldir: bugün (yalnız TRY) + kendi bekleyen sayısı;
-  yönetici ek olarak onay bekleyen ve sahipsiz sayısını görür.
+  yönetici ek olarak onay bekleyen sayısını görür.
 - Test: `php scripts/hesap_smoke.php` (bellek içi SQLite, canlı DB'ye dokunmaz) ·
   `php scripts/hesap_izolasyon_smoke.php` — iki operator (A/B), muhasebe, izleyici,
   yönetici, süper admin ile gerçek sayfaları çalıştırır; her izolasyon bulgusu
@@ -1101,7 +1093,7 @@ canlı DB'ye ve `storage/backups/`'a dokunmaz). Yedeğe dokunduysan çalıştır
   da eski (`Require` içermeyen) `.htaccess`'i yeniden yazar.
 - **Deploy dosya SİLMEZ:** eski geçici araç `admin_db_backup_download.php`
   repodan silinseydi canlıda kalırdı; yerine yalnız 410 döndüren bir tombstone
-  kondu (DB/oturum/kabuk yok). Silme; boş kalsın.
+  kondu (DB/oturum/kabuk yok). Silme; boş kalsın. v281'de aynı politika 7 sayfaya daha uygulandı (bkz. Dosya Haritası → tombstone listesi).
 - **Cron (opsiyonel):** otomatik yedek admin girişine bağlıdır — hiçbir admin
   17:00 sonrası ana sayfayı açmazsa o gün yedek olmaz. cPanel "Cron Jobs"
   ekranından eklenebilir (kullanıcıdan SSH ile komut çalıştırmasını İSTEME):

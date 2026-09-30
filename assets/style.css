@@ -68,7 +68,6 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 .center { text-align: center; }
 .right  { text-align: right; }
 .num    { text-align: right; font-variant-numeric: tabular-nums; }
-.small-note { font-size: .82rem; margin: 0 0 10px; }
 
 /* ---------- Topbar ---------- */
 .topbar {
@@ -251,19 +250,6 @@ select.urun-sahibi-selected {
 }
 
 /* Sprint 34: Marka segmented seçim (ASYA / URAL / URAS) */
-.brand-seg { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
-.brand-seg-opt {
-    flex: 1 1 0; min-width: 64px; position: relative;
-    display: flex; align-items: center; justify-content: center;
-    padding: 9px 6px; border: 1px solid var(--border); border-radius: 8px;
-    cursor: pointer; font-weight: 700; font-size: .9rem; color: var(--muted);
-    background: var(--surface-2, #f8fafc); user-select: none;
-    transition: background .12s, border-color .12s, color .12s;
-}
-.brand-seg-opt input { position: absolute; opacity: 0; pointer-events: none; }
-.brand-seg-opt.active,
-.brand-seg-opt:has(input:checked) { background: #fff3cd; border-color: #d97706; color: #92400e; }
-.brand-seg-clear { flex: 0 0 auto; min-width: 44px; }
 .grid label.span-2 { grid-column: span 1; }
 .grid label, .form-foot {
     font-size: .85rem; color: var(--muted); font-weight: 500;
@@ -332,8 +318,6 @@ input:focus, select:focus, textarea:focus {
     .brand-text { display: none; }
     .brand-depot { flex: 1; max-width: none; }
     .brand-depot .brand-text { display: block; }
-    .depo-badge-name { display: none; }
-    .depo-badge { gap: 2px; padding: 6px 8px; }
     .topbar-inner { gap: 6px; padding: 8px 10px; }
 }
 input.error, select.error {
@@ -372,13 +356,6 @@ input.num, select.num { text-align: right; }
 }
 
 /* ---------- Ana Sayfa / Dashboard ---------- */
-.home-hero {
-    display: flex; align-items: center; gap: 16px;
-    margin-bottom: 28px;
-}
-.home-hero-icon { font-size: 2.6rem; line-height: 1; }
-.home-hero-title { font-size: 1.6rem; font-weight: 700; margin: 0; }
-.home-hero-sub   { margin: 2px 0 0; color: var(--muted); font-size: .92rem; }
 
 .home-grid {
     display: grid;
@@ -641,72 +618,6 @@ input.num, select.num { text-align: right; }
    Palet listesi (form)
    Mobil: kart, PC: tek satır tablo
    ========================================================= */
-.pallets-table-head {
-    display: none;
-    background: #f3f5fa;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    border: 1px solid var(--border);
-    border-bottom: none;
-    font-size: .78rem;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: .03em;
-}
-
-.pallet-list { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; }
-
-/* ---------- Mobil: kart ---------- */
-.pallet-row {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px;
-    box-shadow: var(--shadow);
-}
-.pallet-row-head {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 10px; padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-}
-.pallet-row-head .pallet-num {
-    font-weight: 700; color: var(--primary); font-size: 1rem;
-}
-.pallet-fields {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-.pallet-fields > label { font-size: .8rem; }
-.pallet-fields .span-2 { grid-column: span 2; }
-
-/* Mobilde dara/net özet — küçük etiketle göster */
-.pf-dara, .pf-net {
-    background: #f3f5fa;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    text-align: right;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    font-size: .9rem;
-    border: 1px solid var(--border);
-    position: relative;
-}
-.pf-dara::before, .pf-net::before {
-    content: attr(title);
-    display: block;
-    font-size: .68rem;
-    color: var(--muted);
-    font-weight: 500;
-    text-transform: uppercase;
-    text-align: left;
-    margin-bottom: 2px;
-    letter-spacing: .03em;
-}
-.pf-net { background: var(--success-soft); color: var(--success); }
-.pf-action { display: flex; align-items: center; justify-content: flex-end; }
-.pc-only-inline { display: none; }
 
 /* Materyaller */
 .materials-block { margin-top: 10px; }
@@ -714,7 +625,6 @@ input.num, select.num { text-align: right; }
     display: flex; justify-content: space-between; align-items: center;
     font-size: .85rem; color: var(--muted); margin-bottom: 6px;
 }
-.materials-list { display: flex; flex-direction: column; gap: 6px; }
 .material-row {
     display: grid;
     grid-template-columns: 1fr 100px auto;
@@ -759,15 +669,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 .pill.active-yuklendi { background: #10b981; color: #fff; border-color: #10b981; }
 .pill:hover { text-decoration: none; }
 
-.def-card {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px;
-    margin-bottom: 10px;
-}
-.def-card label { font-size: .8rem; color: var(--muted); display: block; margin-bottom: 8px; }
-
 .switch { display: inline-flex; align-items: center; gap: 8px; }
 .switch input[type="checkbox"] { width: 20px; height: 20px; }
 
@@ -791,9 +692,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     padding-bottom: 10px; margin-bottom: 14px; gap: 16px;
     flex-wrap: wrap;
 }
-.ph-title { font-size: 1.5rem; font-weight: 700; letter-spacing: .04em; }
-.ph-sub { color: var(--muted); }
-.ph-right { text-align: right; font-size: .9rem; }
 
 .info-grid {
     display: grid;
@@ -874,8 +772,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     letter-spacing: .02em;
 }
 .print-table .totals-row td { background: #fff7d6; font-weight: 700; }
-.print-table .subrow td { background: #fafbfd; font-size: .78rem; }
-.print-table .materials-cell { padding: 4px 10px; color: var(--muted); }
 
 /* Mobil view kartları */
 .view-card {
@@ -1013,42 +909,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
 }
 .view-hdr-meta span { font-weight: 600; color: var(--text); }
 
-.kasa-breakdown-block {
-    margin-top: 8px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 8px 12px;
-}
-.kasa-breakdown-title {
-    font-size: .72rem;
-    text-transform: uppercase;
-    letter-spacing: .03em;
-    color: var(--muted);
-    margin-bottom: 4px;
-    font-weight: 600;
-}
-.kasa-breakdown-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: .88rem;
-    padding: 3px 0;
-    border-bottom: 1px dashed var(--border);
-}
-.kasa-breakdown-row:last-child { border-bottom: none; }
-.kasa-breakdown-row strong { font-variant-numeric: tabular-nums; }
-
-.signatures {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 30px;
-    margin-top: 40px;
-}
-.signatures > div { text-align: center; }
-.signatures span { display: block; margin-bottom: 30px; color: var(--muted); }
-.signatures .line { border-top: 1px solid var(--text); height: 1px; }
-
 .print-actions { margin-bottom: 14px; display: flex; gap: 8px; }
 
 /* ---------- Görünürlük yardımcıları ---------- */
@@ -1063,11 +923,8 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     .grid label.span-2 { grid-column: span 2; }
     .info-grid { grid-template-columns: repeat(3, 1fr); }
     .totals { grid-template-columns: repeat(4, 1fr); }
-    .pallet-fields { grid-template-columns: repeat(4, 1fr); }
-    .pallet-fields .span-2 { grid-column: span 2; }
     .vc-grid { grid-template-columns: repeat(3, 1fr); }
     .vc-grid > .span-2 { grid-column: span 1; }
-    .signatures { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* =========================================================
@@ -1086,64 +943,6 @@ input.brut-kg    { background-color: #fff3e0 !important; }
     /* Görüntüleme: PC'de tablo, mobil kart yerine */
     .view-table-wrap { display: block !important; overflow-x: auto; }
     .view-cards { display: none; }
-
-    /* Palet tablosu — başlık */
-    .pallets-table-head {
-        display: grid;
-        grid-template-columns:
-            70px       /* palet no */
-            70px       /* kasa */
-            80px       /* size */
-            80px       /* brüt */
-            1fr        /* kasa cinsi */
-            1fr        /* palet tipi */
-            1fr        /* ürün cinsi */
-            120px      /* depo */
-            90px       /* dara */
-            90px       /* net */
-            38px;      /* aksiyon */
-        gap: 6px;
-    }
-    .pallets-table-head > div { padding: 0 4px; }
-
-    /* Palet satırı — başlık çubuğunu gizle, alanları tek satır */
-    .pallet-row { padding: 6px 8px; }
-    .pallet-row-head { display: none; }
-    .pallet-fields {
-        display: grid;
-        grid-template-columns:
-            70px 70px 80px 80px
-            1fr 1fr 1fr 120px
-            90px 90px 38px;
-        gap: 6px;
-        align-items: center;
-    }
-    .pallet-fields > label {
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-    }
-    .pallet-fields > label > span.lbl-text { display: none; }
-    .pallet-fields input, .pallet-fields select {
-        padding: 8px;
-        font-size: .9rem;
-        min-height: 38px;
-    }
-
-    /* PC'de pf-dara / pf-net etiketsiz, ince */
-    .pf-dara, .pf-net {
-        padding: 9px 8px;
-        font-size: .9rem;
-        text-align: right;
-    }
-    .pf-dara::before, .pf-net::before { display: none; }
-
-    .pf-action {
-        text-align: center;
-        padding: 0;
-    }
-    .pf-action .row-remove { display: none; }
-    .pc-only-inline { display: inline-flex !important; }
 
     /* Materyaller PC'de açılır blok olarak */
     .materials-block {
@@ -1257,9 +1056,7 @@ body.print-mode .topbar { display: none; }
     color: #0f2f5f;
     font-weight: 700;
 }
-.avans-th { border-left: 1px solid #ccc !important; }
 /* Sprint 37: nakliye bedeli + avans değer alanları daralmasın */
-.asya-info td.avans-td { width: auto; min-width: 90px; }
 .asya-info tr > td:first-of-type { min-width: 90px; }
 /* ai-emph: 2pt büyük (ekran: 10pt+2=12pt) */
 .asya-info td.ai-emph { font-size: 12pt; }
@@ -1270,11 +1067,6 @@ body.print-mode .topbar { display: none; }
     display: flex;
     flex-direction: column;
     border-left: 1px solid #ccc;
-}
-.asya-marka-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    border-bottom: 1px solid #ccc;
 }
 /* ALICI + ÜRÜN yan yana tek satır */
 .asya-alici-urun-row {
@@ -1291,7 +1083,7 @@ body.print-mode .topbar { display: none; }
     border-right: none;
 }
 
-.cell-pair, .marka-cell {
+.cell-pair {
     display: flex;
     flex-direction: column;
     padding: 3px 6px;
@@ -1300,14 +1092,13 @@ body.print-mode .topbar { display: none; }
 }
 .asya-alici-cell { border-right: 1px solid #ccc; }
 .asya-urun-cell  { border-right: none; }
-.marka-cell:last-child { border-right: none; }
-.cell-pair span, .marka-cell span {
+.cell-pair span {
     font-size: 7pt;
     color: #444;
     font-weight: 700;
     letter-spacing: .03em;
 }
-.cell-pair strong, .marka-cell strong {
+.cell-pair strong {
     font-size: 8.5pt;
     min-height: 14px;
     padding-top: 2px;
@@ -1325,26 +1116,7 @@ body.print-mode .topbar { display: none; }
     color: #c00000;
     font-weight: 700;
 }
-.marka-cell {
-    text-align: center;
-    align-items: center;
-    padding: 2px 4px;
-    background: #f0f0f0 !important;
-}
-.marka-cell strong { font-weight: 700; font-size: 7.5pt; }
 /* Sprint 34: seçili marka — koyu çerçeve + ✓ (printte de net görünür) */
-.marka-cell.marka-on {
-    background: #fff3cd !important;
-    border: 2px solid #000 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-}
-.marka-cell.marka-on span,
-.marka-cell.marka-on strong { font-weight: 800; }
-.marka-uyari {
-    text-align: center; font-size: 7pt; color: #b00020;
-    padding: 2px; font-weight: 700;
-}
 
 .asya-etiket {
     flex: 1 1 0;
@@ -1416,7 +1188,6 @@ body.print-mode .topbar { display: none; }
     display: flex; flex-direction: column;
 }
 
-/* ── Kantar fiş görseli ── */
 /* ── Kantar View sayfası ── */
 .kv-photo-card { padding: 0; overflow: hidden; }
 .kv-photo-wrap { width: 100%; background: #111; min-height: 200px; display: flex; align-items: center; justify-content: center; }
@@ -1605,7 +1376,6 @@ body.print-mode .topbar { display: none; }
     padding: 1px 3px;
     width: 32%;
 }
-.asya-stok tr.stok-filler td { height: 13px; padding: 0; }
 
 /* Genel toplam */
 .asya-totals {
@@ -1643,7 +1413,6 @@ body.print-mode .topbar { display: none; }
     box-sizing: border-box;
     letter-spacing: .03em;
 }
-.asya-totals .urun-banner-empty { /* aynı yükseklik, fazladan stil yok */ }
 
 /* ====== Alt blok ====== */
 .asya-bottom {
@@ -1667,7 +1436,6 @@ body.print-mode .topbar { display: none; }
     background: #fff !important;
     width: 60px;
 }
-.asya-bottom .bot-label-empty { background: #fff; }
 
 .asya-signatures {
     display: grid;
@@ -1722,7 +1490,7 @@ body.print-mode .asya-sheet {
         font-size: 8.5pt;
         padding: 2px;
     }
-    .marka-cell, .asya-totals .urun-banner, .asya-bottom th {
+    .asya-totals .urun-banner, .asya-bottom th {
         background: #f0f0f0 !important;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
@@ -1732,12 +1500,10 @@ body.print-mode .asya-sheet {
         color: #c00000; -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .asya-right-top { border-color: #000; }
-    .asya-marka-row { border-color: #000; }
     .asya-alici-urun-row { border-color: #000; border-bottom-color: #000; }
     .asya-alici-cell { border-right-color: #000; }
     .asya-alici-cell, .asya-urun-cell { border-color: #000; }
-    .cell-pair, .marka-cell { border-color: #000; }
-    .avans-th { border-color: #000 !important; }
+    .cell-pair { border-color: #000; }
     .asya-etiket { min-height: 0; overflow: hidden; }
     /* Foto varsa (src) yazdırmada da görünür; yoksa kırık ikon çıkmasın */
     .etiket-img[src] {
@@ -1773,12 +1539,9 @@ body.print-mode .asya-sheet {
     .asya-totals .urun-banner { font-size: 9.5pt; padding: 2px 0; font-weight: 800; height: 16px; min-height: 16px; box-sizing: border-box; }
     .asya-bottom th { font-size: 8pt; padding: 1px; }
     .asya-bottom td { height: 10px; padding: 0px 3px; font-size: 8pt; }
-    .asya-brand { font-size: 10pt; padding: 1px; }
-    .etiket-label { font-size: 12pt; padding: 8px 0; }
-    .etiket-content { font-size: 7pt; }
     .asya-etiket { min-height: 30px; padding: 2px; }
-    .cell-pair span, .marka-cell span { font-size: 6pt; }
-    .cell-pair strong, .marka-cell strong { font-size: 7pt; }
+    .cell-pair span { font-size: 6pt; }
+    .cell-pair strong { font-size: 7pt; }
     .asya-alici-cell strong, .asya-urun-cell strong { font-size: 11pt; font-weight: 800; }
     .asya-alici-cell strong {
         font-size: 12pt; color: #1a7a1a;
@@ -1788,7 +1551,6 @@ body.print-mode .asya-sheet {
         font-size: 12pt; color: #c00000; font-weight: 700;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
-    .marka-cell strong { font-size: 6.5pt; }
     .asya-signatures {
         margin-top: 2px;
         gap: 30px;
@@ -1963,8 +1725,6 @@ body.print-mode .asya-sheet {
     border: 1px solid var(--border-strong);
 }
 .kalan-btn-ghost:hover { background: var(--border); }
-.kalan-btn-success { background: var(--success); color: #fff; }
-.kalan-btn-success:hover { filter: brightness(.92); }
 
 /* Best plan card */
 .kalan-best-inner {
@@ -2474,7 +2234,6 @@ body.print-mode .asya-sheet {
 /* =========================================================
    Kantar Hesaplama
    ========================================================= */
-.kantar-hesapla-row { margin: 16px 0 24px; }
 
 /* Grup satırı */
 .kantar-grup-row {
@@ -2768,10 +2527,6 @@ body.print-mode .asya-sheet {
 .kantar-tartim-unit {
     font-size: .85rem; color: var(--muted); font-weight: 500; min-width: 20px;
 }
-.kantar-alibi {
-    flex: 1; max-width: 110px;
-    font-size: .85rem !important; color: var(--muted);
-}
 .kantar-net-satir {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 14px;
@@ -2785,15 +2540,6 @@ body.print-mode .asya-sheet {
 }
 .kantar-net-pozitif { color: var(--primary) !important; }
 
-/* Sonuçta fiş özet şeridi */
-.kantar-fis-ozet {
-    display: flex; flex-wrap: wrap; gap: 6px 18px;
-    background: var(--bg); border-radius: var(--radius-sm);
-    padding: 10px 14px; margin: 12px 0 6px;
-    font-size: .84rem; color: var(--muted);
-}
-.kantar-fis-ozet em { font-style: normal; font-weight: 600; color: var(--text); margin-right: 3px; }
-
 /* ── Hesaplama modal bölüm başlıkları ── */
 .kh-section { margin-bottom: 20px; }
 .kh-gruplar-header {
@@ -2803,44 +2549,6 @@ body.print-mode .asya-sheet {
     font-size: .78rem; font-weight: 700;
     color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
     margin-bottom: 10px;
-}
-.kh-divider { border: 0; border-top: 1px solid var(--border); margin: 20px 0 16px; }
-
-/* ── Sonuç kartları ── */
-.kh-result-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-.kh-result-card {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-}
-.kh-result-lbl {
-    font-size: .72rem; font-weight: 700;
-    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
-    margin-bottom: 4px;
-}
-.kh-result-val {
-    font-size: 1.2rem; font-weight: 700;
-    color: var(--text); font-variant-numeric: tabular-nums;
-    line-height: 1.2;
-}
-.kh-result-sub {
-    font-size: .75rem; color: var(--muted); margin-top: 3px; line-height: 1.3;
-}
-.kh-result-net {
-    grid-column: span 2;
-    background: var(--primary-soft);
-    border-color: var(--primary);
-}
-.kh-result-net .kh-result-val {
-    font-size: 1.7rem; color: var(--primary);
-}
-@media (min-width: 480px) {
-    .kh-result-net { grid-column: auto; }
 }
 
 /* ── Yazdırma: sadece hesaplama sonucu ── */
@@ -2866,7 +2574,6 @@ body.print-mode .asya-sheet {
     body.kh-print #kantarModalFooter,
     body.kh-print #kantarPrintFooter { display: none !important; }
     body.kh-print .pm-body { overflow: visible !important; padding: 24px !important; }
-    body.kh-print .kh-result-net { border: 2px solid var(--primary) !important; }
 }
 
 /* =========================================================
@@ -3233,65 +2940,6 @@ body.bn-yok { --bn-h: 0px; }
 .dr-type-x { background: #dbeafe; color: #1d4ed8; }
 .dr-type-z { background: #dcfce7; color: #15803d; }
 
-/* ── Definitions — tab navigation ── */
-.def-tabs {
-    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px;
-}
-.def-tab {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 7px 14px; border-radius: 20px; font-size: .85rem; font-weight: 500;
-    background: var(--card); border: 1px solid var(--border);
-    color: var(--text); text-decoration: none; white-space: nowrap;
-    transition: background .15s, border-color .15s;
-}
-.def-tab:hover { background: var(--bg); border-color: var(--primary); }
-.def-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-
-/* ── Definitions — category section rows ── */
-.def-cat-list { display: flex; flex-direction: column; }
-.def-cat-row {
-    display: flex; align-items: center; gap: 8px;
-    padding: 10px 14px; border-bottom: 1px solid var(--border);
-}
-.def-cat-row:last-child { border-bottom: none; }
-.def-row-inactive { opacity: .55; }
-.def-cat-form {
-    display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-}
-.def-cat-icon { font-size: 1.1rem; flex-shrink: 0; }
-.def-cat-name {
-    flex: 1; min-width: 0; padding: 6px 8px;
-    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-    font-size: .9rem; background: var(--bg); color: var(--text);
-}
-.def-cat-name:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
-.def-usage-chip {
-    display: inline-block; padding: 2px 7px; border-radius: 12px;
-    background: #e0f2fe; color: #0369a1; font-size: .75rem; font-weight: 600;
-    white-space: nowrap; flex-shrink: 0;
-}
-.def-row-switch { flex-shrink: 0; }
-.def-del-btn { flex-shrink: 0; }
-
-/* ── Definitions — add form row ── */
-.def-add-form { display: flex; flex-direction: column; gap: 0; }
-.def-add-row {
-    display: flex; gap: 8px; align-items: center;
-}
-.def-add-row input {
-    flex: 1; padding: 8px 12px;
-    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-    font-size: .95rem; background: var(--bg); color: var(--text);
-}
-.def-add-row input:focus { outline: 2px solid var(--primary); }
-
-@media (max-width: 767px) {
-    .def-cat-row { flex-wrap: wrap; gap: 6px; }
-    .def-cat-form { flex-wrap: wrap; }
-    .def-cat-name { font-size: 16px; }
-    .def-add-row input { font-size: 16px; }
-}
-
 /* ═══════════════════════════════════════════════════════
    Tanımlar v3 — sol sabit panel + sağ akordiyon liste (def3-*)
    ═══════════════════════════════════════════════════════ */
@@ -3389,7 +3037,6 @@ body.bn-yok { --bn-h: 0px; }
 .def3-sec.search-show { display: block; }
 .def3-sec.search-hide { display: none; }
 .def3-sec-body { padding: 8px 12px 12px; }
-.def3-sec-note { margin: 8px 2px 0; font-size: .8rem; }
 
 /* Tür grubu */
 .def3-tgroup { margin-top: 8px; }
@@ -3431,11 +3078,6 @@ body.bn-yok { --bn-h: 0px; }
 .def3-dot.on { background: #22c55e; }
 
 /* Operasyon salt-okunur çipler */
-.def3-readonly-chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
-.def3-ro-chip {
-    font-size: .8rem; padding: 5px 12px; border-radius: 999px;
-    background: #f1f5f9; border: 1px solid var(--border); color: var(--text);
-}
 .def3-noresult { text-align: center; padding: 24px; }
 
 /* Mobil / tablet: tek kolon, panel üstte */
@@ -3448,7 +3090,6 @@ body.bn-yok { --bn-h: 0px; }
     .def3-search input[type="search"] { font-size: 16px; }
 }
 
-
 /* ── Pallet form — bottom add button ── */
 .pallet-add-bottom {
     display: block; width: 100%; margin-top: 10px;
@@ -3459,174 +3100,10 @@ body.bn-yok { --bn-h: 0px; }
 /* ═══════════════════════════════════════════
    HESAP MODÜLÜ STİLLERİ
 ═══════════════════════════════════════════ */
-.hesap-stat-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 8px;
-    margin: 12px 0;
-}
-.hesap-stat {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 12px;
-    text-align: center;
-}
-.hesap-stat span { display: block; font-size: .72rem; color: var(--muted); margin-bottom: 4px; }
-.hesap-stat strong { font-size: .95rem; font-weight: 700; }
-.hesap-stat.green { border-color: #86efac; background: #f0fdf4; }
-.hesap-stat.green strong { color: #166534; }
-.hesap-stat.red { border-color: #fca5a5; background: #fef2f2; }
-.hesap-stat.red strong { color: #991b1b; }
-.hesap-stat.blue { border-color: #93c5fd; background: #eff6ff; }
-.hesap-stat.blue strong { color: #1e40af; }
-.hesap-stat.orange { border-color: #fdba74; background: #fff7ed; }
-.hesap-stat.orange strong { color: #9a3412; }
-.hesap-stat.gray { border-color: #cbd5e1; background: #f8fafc; }
-.hesap-stat.gray strong { color: #334155; }
-.hesap-stat small { display: block; font-size: .63rem; color: var(--muted); margin-top: 3px; line-height: 1.4; }
 
-.hesap-ay-nav {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 6px 0 4px;
-}
-.hesap-ay-label {
-    flex: 1;
-    text-align: center;
-    font-weight: 600;
-    font-size: .9rem;
-}
-.hesap-ay-arrow { padding: 4px 12px; font-size: 1.1rem; line-height: 1; }
-.hesap-ay-arrow.disabled { opacity: .3; pointer-events: none; }
-.hesap-ay-badge {
-    display: inline-block;
-    font-size: .65rem;
-    font-weight: 600;
-    background: #dbeafe;
-    color: #1e40af;
-    border-radius: 10px;
-    padding: 1px 7px;
-    margin-left: 4px;
-    vertical-align: middle;
-}
-
-.hesap-quick-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin: 12px 0;
-}
-.hesap-quick-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 12px 8px;
-    border-radius: var(--radius);
-    font-size: .8rem;
-    font-weight: 600;
-    text-decoration: none;
-    color: #fff;
-    min-height: 60px;
-}
-.hesap-quick-btn.green  { background: #22c55e; }
-.hesap-quick-btn.red    { background: #ef4444; }
-.hesap-quick-btn.blue   { background: #3b82f6; }
-.hesap-quick-btn.orange { background: #f97316; }
-.hesap-quick-btn:active { opacity: .85; }
-
-.hesap-nav-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 12px 0;
-}
-
-.hesap-list { display: flex; flex-direction: column; gap: 0; }
-.hesap-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-}
-.hesap-row-left { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
-.hesap-row-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.hesap-row-cat { font-weight: 600; font-size: .9rem; }
-.hesap-type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
 .hesap-type-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: .72rem; color: #fff; font-weight: 600; }
-.hesap-amount { font-weight: 700; font-size: .9rem; }
-.hesap-amount.positive { color: #166534; }
-.hesap-amount.negative { color: #991b1b; }
 .text-green { color: #166534; }
 .text-red   { color: #991b1b; }
-
-.hesap-upload-label { cursor: pointer; display: block; }
-.hesap-upload-area {
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    text-align: center;
-    color: var(--muted);
-    transition: border-color .2s;
-}
-.hesap-upload-area:hover { border-color: var(--primary); color: var(--primary); }
-.hesap-upload-area span { display: block; font-size: 1rem; font-weight: 600; margin-bottom: 4px; }
-.hesap-upload-area small { font-size: .75rem; }
-
-/* Hesap'a özel foto alanı — kantar foto sınıflarıyla çakışmaz */
-.hesap-photo-intro { font-size: .82rem; margin: 0 0 8px; }
-.hesap-photo-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.hesap-photo-actions .btn { cursor: pointer; }
-.hesap-photo-preview { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
-.hesap-photo-item {
-    position: relative; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 6px; width: 124px; display: flex; flex-direction: column; gap: 6px;
-}
-.hesap-photo-item .hesap-thumb { width: 110px; height: 110px; object-fit: cover; border-radius: 4px; cursor: zoom-in; display: block; }
-.hesap-photo-crop-btn { font-size: .7rem; padding: 4px 6px; white-space: nowrap; width: 100%; }
-.hesap-photo-fname { font-size: .7rem; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Hesap fiş kırpma modalı — kantar crop'tan bağımsız */
-.hesap-crop-modal {
-    position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 2000;
-    display: flex; align-items: center; justify-content: center; padding: 12px;
-}
-.hesap-crop-modal[hidden] { display: none; }
-.hesap-crop-dialog {
-    background: #fff; border-radius: 10px; max-width: 560px; width: 100%;
-    max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;
-}
-.hesap-crop-head { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
-.hesap-crop-head .muted { font-size: .78rem; }
-.hesap-crop-stage { flex: 1; overflow: auto; background: #222; display: flex; align-items: center; justify-content: center; padding: 10px; min-height: 200px; }
-.hesap-crop-imgwrap { position: relative; display: inline-block; line-height: 0; touch-action: none; }
-.hesap-crop-img { display: block; max-width: 100%; max-height: 68vh; user-select: none; -webkit-user-drag: none; }
-.hesap-crop-selection {
-    position: absolute; border: 2px solid #1d6cf0; box-sizing: border-box;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,.45); cursor: move; touch-action: none;
-}
-.hesap-crop-handle { position: absolute; width: 20px; height: 20px; background: #1d6cf0; border: 2px solid #fff; border-radius: 50%; touch-action: none; }
-.hesap-crop-handle[data-c="tl"] { left: -10px; top: -10px; cursor: nwse-resize; }
-.hesap-crop-handle[data-c="tr"] { right: -10px; top: -10px; cursor: nesw-resize; }
-.hesap-crop-handle[data-c="bl"] { left: -10px; bottom: -10px; cursor: nesw-resize; }
-.hesap-crop-handle[data-c="br"] { right: -10px; bottom: -10px; cursor: nwse-resize; }
-.hesap-crop-foot { padding: 10px 14px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-
-.hesap-file-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.hesap-file-item { position: relative; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px; }
-.hesap-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; cursor: zoom-in; display: block; }
-.hesap-file-icon { width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; font-size: 2rem; }
-.hesap-file-del {
-    position: absolute; top: -6px; right: -6px;
-    background: #ef4444; color: #fff; border: none; border-radius: 50%;
-    width: 20px; height: 20px; font-size: .7rem; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-}
 
 .record-card-firma { font-size: .82rem; color: var(--muted); }
 .record-card-tarih { font-size: .8em; font-weight: 400; color: var(--muted); }
@@ -3834,8 +3311,6 @@ body.bn-yok { --bn-h: 0px; }
 }
 
 @media (max-width: 767px) {
-    .hesap-quick-grid { grid-template-columns: repeat(3, 1fr); }
-    .hesap-stat-grid  { grid-template-columns: repeat(2, 1fr); }
     .pc-only  { display: none !important; }
 }
 @media (min-width: 1024px) {
@@ -3894,14 +3369,12 @@ body.bn-yok { --bn-h: 0px; }
 .stok-kart-sayim   { border-top: 3px solid #0891b2; }
 .stok-kart-fark    { border-top: 3px solid var(--muted); }
 /* legacy */
-.stok-kart-cikan   { border-top: 3px solid var(--danger); }
 
 .stok-kart-gelen   .stok-kart-val { color: var(--success); }
 .stok-kart-yukleme .stok-kart-val { color: var(--primary); }
 .stok-kart-fire    .stok-kart-val { color: #f97316; }
 .stok-kart-kalan   .stok-kart-val { color: #7c3aed; }
 .stok-kart-sayim   .stok-kart-val { color: #0891b2; }
-.stok-kart-cikan   .stok-kart-val { color: var(--danger); }
 
 .stok-negatif { color: var(--danger)  !important; }
 .stok-pozitif { color: var(--success) !important; }
@@ -3931,8 +3404,6 @@ body.bn-yok { --bn-h: 0px; }
     border-radius: var(--radius); padding: 10px 14px;
     margin-bottom: 12px;
 }
-.stok-uyari-detay { display: block; }
-.stok-uyari-row   { font-size: .84rem; color: #92400e; }
 
 .stok-info-box {
     background: #f0f7ff; border: 1px solid #bfdbfe;
@@ -4195,7 +3666,6 @@ body.bn-yok { --bn-h: 0px; }
 
 /* ── Malzeme Stok ────────────────────────────────────────── */
 .badge-duzeltme { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
-@media (min-width: 640px)  { .stok-ozet-grid-4 { grid-template-columns: repeat(4, 1fr); } }
 
 .ms-form-wrap { }
 .ms-form-tabs {
@@ -4293,39 +3763,12 @@ body.bn-yok { --bn-h: 0px; }
 }
 .ms-quick-detail span { display: inline-flex; gap: 4px; align-items: center; }
 
-/* ── Sprint 33: Stok Özeti mini filtre ── */
-.ms-ozet-filter {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
-    padding: 10px 16px; border-bottom: 1px solid var(--border);
-    background: var(--surface-2, #f8fafc);
-}
-.ms-ozet-fg { display: flex; flex-direction: column; gap: 3px; flex: 1 1 150px; min-width: 120px; }
-.ms-ozet-fg label { font-size: .72rem; font-weight: 600; color: var(--muted); }
-.ms-ozet-actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: flex-end; }
-@media (max-width: 599px) {
-    .ms-ozet-fg { flex: 1 1 100%; }
-    .ms-ozet-actions { flex: 1 1 100%; }
-    .ms-ozet-actions .btn { flex: 1; }
-}
-
 /* ── Sprint 33C: Stok kategorisi rozeti ── */
 .ms-cat-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
 .ms-cat-kasa  { background: #dbeafe; color: #1e40af; }
 .ms-cat-palet { background: #ede9fe; color: #6d28d9; }
 .ms-cat-sarf  { background: #dcfce7; color: #166534; }
 .ms-cat-diger { background: #f1f5f9; color: #475569; }
-
-/* ── Sprint 33D: Veri Kalite Kontrolü paneli ── */
-.ms-kalite-summary {
-    cursor: pointer; padding: 11px 16px; background: var(--card);
-    display: flex; align-items: center; gap: 10px; list-style: none;
-    user-select: none; font-weight: 600;
-}
-.ms-kalite-summary::-webkit-details-marker { display: none; }
-.ms-kalite-pill { font-size: .75rem; padding: 2px 10px; border-radius: 20px; font-weight: 700; margin-left: auto; }
-.ms-kalite-block { margin-bottom: 16px; }
-.ms-kalite-block:last-child { margin-bottom: 0; }
-.ms-kalite-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 
 /* ── Sprint 33: Hareket düzenle modalı ── */
 .ms-edit-btn {
@@ -4436,242 +3879,13 @@ body.bn-yok { --bn-h: 0px; }
 }
 .imp-nav .btn-primary { margin-left: auto; }
 
-/* =========================================================
-   HKS — Hal Kayıt Sistemi modülü
-   ========================================================= */
-.hks-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:.78rem; font-weight:600; white-space:nowrap; }
-.hks-badge-draft  { background:#f3f4f6; color:#374151; }
-.hks-badge-sent   { background:#d1fae5; color:#065f46; }
-.hks-badge-error  { background:#fee2e2; color:#991b1b; }
-
-.hks-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; }
-.hks-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px; }
-.hks-card-title { font-weight:600; font-size:.95rem; }
-.hks-card-meta  { font-size:.8rem; color:var(--muted); margin-top:3px; }
-.hks-card-foot  { display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid var(--border); padding-top:8px; }
-
-.hks-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; }
-@media (max-width:600px) { .hks-detail-grid { grid-template-columns:1fr; } }
-.hks-detail-item label { font-size:.78rem; color:var(--muted); display:block; margin-bottom:2px; }
-.hks-detail-item strong { font-size:.95rem; }
-
-.hks-xml-block { background:#1e1e1e; color:#d4d4d4; font-family:monospace; font-size:.72rem; padding:12px; border-radius:6px; overflow-x:auto; white-space:pre; max-height:300px; overflow-y:auto; margin-top:6px; }
-.hks-error-box { background:#fee2e2; border:1px solid #fca5a5; border-radius:8px; padding:12px 16px; color:#991b1b; margin-bottom:12px; }
-.hks-success-box { background:#d1fae5; border:1px solid #6ee7b7; border-radius:8px; padding:12px 16px; color:#065f46; margin-bottom:12px; }
-.hks-collapsible-head { cursor:pointer; user-select:none; display:flex; align-items:center; gap:6px; padding:8px 0; font-size:.88rem; font-weight:600; border-bottom:1px solid var(--border); }
-.hks-collapsible-body { display:none; }
-.hks-collapsible-body.open { display:block; }
-
-.hks-log-row { padding:6px 0; border-bottom:1px solid var(--border); font-size:.82rem; }
-.hks-log-row:last-child { border-bottom:none; }
-.hks-log-action { font-weight:600; color:var(--primary); }
-.hks-log-time   { color:var(--muted); font-size:.75rem; }
-
-.hks-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
-.hks-form-full  { grid-column:1 / -1; }
-@media (max-width:599px) {
-    .hks-form-grid { grid-template-columns:1fr; }
-    .hks-form-full { grid-column:1; }
-}
-@media (max-width:767px) {
-    .hks-form-grid input, .hks-form-grid select, .hks-form-grid textarea { font-size:16px; }
-}
-
-/* HKS page container + sekme navigasyonu */
-.hks-page { max-width:1100px; margin:0 auto; }
-.hks-tabs { display:flex; flex-wrap:nowrap; gap:0; padding:0; margin-bottom:0; border-bottom:2px solid var(--border); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; -ms-overflow-style:none; }
-.hks-tabs::-webkit-scrollbar { display:none; }
-.hks-tab  { display:flex; align-items:center; gap:5px; padding:10px 14px; border-radius:0; border-top:2px solid transparent; text-decoration:none; color:var(--muted); font-size:.88rem; white-space:nowrap; flex-shrink:0; border-bottom:none; transition:color .14s,border-color .14s,background .14s; }
-.hks-tab:hover  { background:var(--primary-soft); color:var(--primary); text-decoration:none; }
-.hks-tab.active { color:var(--primary); font-weight:600; border-top-color:var(--primary); background:var(--primary-soft); }
-.hks-tab-label  { display:none; }
-@media (min-width:600px) { .hks-tab-label { display:inline; } }
-
-/* HKS badge — tam set */
-.hks-badge-ready     { background:#dbeafe; color:#1e40af; }
-.hks-badge-checked   { background:#ede9fe; color:#5b21b6; }
-.hks-badge-pending   { background:#fef9c3; color:#854d0e; }
-.hks-badge-failed    { background:#fee2e2; color:#991b1b; }
-.hks-badge-cancelled { background:#f3f4f6; color:#6b7280; }
-
-/* HKS durum kutuları */
-.hks-statebox     { border-radius:8px; padding:12px 16px; margin-bottom:12px; font-size:.9rem; border:1px solid; }
-.hks-sb-draft     { background:#f9fafb; border-color:#d1d5db; color:#374151; }
-.hks-sb-ready     { background:#eff6ff; border-color:#93c5fd; color:#1e40af; }
-.hks-sb-checked   { background:#f5f3ff; border-color:#c4b5fd; color:#5b21b6; }
-.hks-sb-pending   { background:#fefce8; border-color:#fde047; color:#854d0e; }
-.hks-sb-sent      { background:#f0fdf4; border-color:var(--success); color:#065f46; }
-.hks-sb-failed    { background:#fef2f2; border-color:var(--danger); color:#991b1b; }
-.hks-sb-cancelled { background:#f3f4f6; border-color:#d1d5db; color:#6b7280; }
-
-/* HKS uyarı kutuları */
-.hks-warning-box { background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:12px 16px; font-size:.88rem; color:#92400e; margin-bottom:12px; }
-.hks-info-box    { background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:12px 16px; font-size:.88rem; color:#1e40af; margin-bottom:12px; }
-.hks-secret-status { display:inline-flex; align-items:center; gap:5px; font-size:.82rem; padding:2px 8px; border-radius:20px; font-weight:600; background:#d1fae5; color:#065f46; }
-.hks-secret-status.missing { background:#fef3c7; color:#92400e; }
-
-/* HKS kontrol tablosu */
-.hks-check-table { width:100%; border-collapse:collapse; font-size:.88rem; }
-.hks-check-table td { padding:6px 10px; border-bottom:1px solid var(--border); }
-.hks-check-table td:first-child { color:var(--muted); width:42%; }
-.hks-check-table td:last-child  { font-weight:600; }
-
-/* HKS gönderim paneli */
-.hks-send-panel   { background:var(--card); border:2px solid #c4b5fd; border-radius:10px; padding:18px 20px; margin:16px 0; }
-.hks-blocker-list { margin:8px 0 0; padding-left:20px; }
-.hks-blocker-list li { margin:3px 0; color:#991b1b; font-size:.88rem; }
-.hks-onay-row     { display:flex; align-items:flex-start; gap:8px; margin:14px 0; font-size:.9rem; }
-.hks-onay-row input { margin-top:3px; }
-
-/* HKS dashboard kart ızgarası */
-.hks-dashboard    { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:14px; margin-top:16px; }
-.hks-card-value   { font-size:2rem; font-weight:700; color:var(--text); line-height:1.1; }
-.hks-card-sub     { font-size:.82rem; color:var(--muted); margin-top:4px; }
-.hks-card-ok      { border-left:3px solid var(--success); }
-.hks-card-warn    { border-left:3px solid #f59e0b; }
-.hks-card-err     { border-left:3px solid var(--danger); }
-.hks-card-info    { border-left:3px solid var(--primary); }
-
-/* HKS liste tablosu */
-.hks-table    { width:100%; border-collapse:collapse; font-size:.88rem; }
-.hks-table th { background:var(--bg); text-align:left; padding:8px 10px; font-weight:600; border-bottom:2px solid var(--border); }
-.hks-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
-.hks-table tr:hover td { background:var(--bg); }
-
-/* HKS ayarlar formu */
-.hks-form .form-group       { margin-bottom:14px; }
-.hks-form .form-group label { display:block; font-weight:600; font-size:.85rem; margin-bottom:4px; }
-.hks-form .form-group input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-.hks-form .form-group select { width:100%; box-sizing:border-box; padding:9px 11px; border:1px solid var(--border); border-radius:7px; font-size:.95rem; background:#fff; }
-@media (max-width:767px) {
-    .hks-form .form-group input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-    .hks-form .form-group select { font-size:16px; }
-}
+/* Form bölümü kartı — maliyet_view.php / maliyet_form.php kullanır */
 .form-section       { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px 20px; margin-bottom:16px; }
 .form-section-title { font-size:.95rem; font-weight:700; margin-bottom:14px; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:8px; }
-
-/* HKS UX Sprint — şifre rozeti, accordion, hızlı eylemler, sihirbaz */
-.hks-secret-badge      { display:inline-flex; align-items:center; gap:3px; font-size:.75rem; padding:1px 7px; border-radius:20px; font-weight:700; white-space:nowrap; flex-shrink:0; margin-left:6px; vertical-align:middle; }
-.hks-badge-ok          { background:#d1fae5; color:#065f46; }
-.hks-badge-missing     { background:#fef3c7; color:#92400e; }
-
-.hks-advanced                  { background:var(--card); border:1px solid var(--border); border-radius:10px; margin-bottom:16px; overflow:hidden; }
-.hks-advanced summary          { padding:14px 18px; cursor:pointer; font-weight:600; font-size:.92rem; user-select:none; list-style:none; display:flex; align-items:center; justify-content:space-between; }
-.hks-advanced summary::after   { content:'▼'; font-size:.7rem; color:var(--muted); transition:transform .2s; }
-.hks-advanced[open] summary::after { transform:rotate(180deg); }
-.hks-advanced summary::-webkit-details-marker { display:none; }
-.hks-advanced-body             { padding:16px 18px; border-top:1px solid var(--border); }
-
-.hks-quick-actions      { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:12px; margin:8px 0 16px; }
-.hks-simple-card        { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 12px; text-align:center; text-decoration:none; color:var(--text); transition:box-shadow .15s,border-color .15s; display:flex; flex-direction:column; align-items:center; gap:6px; }
-.hks-simple-card:hover  { box-shadow:0 2px 8px rgba(0,0,0,.08); border-color:var(--primary); color:var(--primary); }
-.hks-simple-card-icon   { font-size:1.7rem; line-height:1; }
-.hks-simple-card-label  { font-size:.85rem; font-weight:600; }
-
-.hks-section-label { font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 8px; }
-
-/* Firma seçim kartları */
-.hks-company-card      { background:var(--card); border:2px solid var(--border); border-radius:12px; padding:18px 16px; transition:border-color .15s,box-shadow .15s; cursor:pointer; text-align:left; width:100%; }
-.hks-company-card:hover{ border-color:var(--primary); box-shadow:0 2px 10px rgba(0,0,0,.09); }
-.hks-company-card-warn { border-color:#f59e0b; }
-.hks-company-card-name { font-size:1.05rem; font-weight:700; margin-bottom:8px; }
-.hks-company-card-meta { display:flex; gap:14px; font-size:.82rem; color:var(--muted); flex-wrap:wrap; }
-.hks-company-card-action { margin-top:12px; font-size:.85rem; font-weight:600; color:var(--primary); }
-/* Firma bar (sekme üstü) */
-.hks-company-bar       { display:flex; align-items:center; justify-content:space-between; background:var(--bg-soft,#f8fafc); border:1px solid var(--border); border-radius:8px 8px 0 0; padding:7px 14px; font-size:.82rem; margin-bottom:-1px; }
-.hks-company-bar-name  { font-weight:700; }
-.hks-company-bar-switch{ color:var(--primary); text-decoration:none; font-size:.8rem; }
-.hks-stat-row    { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin:8px 0 16px; }
-.hks-stat        { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 14px; text-align:center; }
-.hks-stat a      { text-decoration:none; color:inherit; display:block; }
-.hks-stat-value  { font-size:1.8rem; font-weight:700; line-height:1; }
-.hks-stat-label  { font-size:.74rem; color:var(--muted); margin-top:4px; }
-
-.hks-stepper        { display:flex; align-items:center; margin:16px 0 20px; overflow-x:auto; padding-bottom:2px; }
-.hks-step           { display:flex; align-items:center; gap:7px; flex-shrink:0; }
-.hks-step-num       { width:28px; height:28px; border-radius:50%; background:var(--border); color:var(--muted); font-size:.8rem; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:.2s; }
-.hks-step.active .hks-step-num { background:var(--primary); color:#fff; }
-.hks-step.done   .hks-step-num { background:var(--success); color:#fff; }
-.hks-step-label     { font-size:.78rem; font-weight:600; color:var(--muted); white-space:nowrap; }
-.hks-step.active .hks-step-label { color:var(--primary); }
-.hks-step.done   .hks-step-label { color:var(--success); }
-.hks-step-line      { flex:1; min-width:14px; height:2px; background:var(--border); margin:0 4px; flex-shrink:1; }
-.hks-step-line.done { background:var(--success); }
-@media (max-width:500px) { .hks-step-label { display:none; } }
-
-.hks-wizard-step        { display:none; }
-.hks-wizard-step.active { display:block; }
-.hks-wizard-nav         { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; padding-top:16px; border-top:1px solid var(--border); align-items:center; }
-.hks-wizard-back        { margin-right:auto; }
 
 /* =========================================================
    Sprint 17 — Yükleme Kayıtları İyileştirme
    ========================================================= */
-
-/* Tarih filtresi */
-.date-filter-row {
-    display:flex; gap:8px; margin-bottom:8px;
-    flex-wrap:wrap; align-items:center;
-}
-.date-filter-lbl { font-size:.85rem; color:var(--muted); white-space:nowrap; }
-.date-sep { color:var(--muted); }
-.date-filter-row input[type="date"] {
-    padding:7px 10px;
-    border:1px solid var(--border-strong);
-    border-radius:var(--radius);
-    font-size:.9rem;
-    background:var(--card);
-    color:inherit;
-}
-
-/* ---- Tarih filtresi panel (yeni collapsible yapı) ---- */
-.date-filter-panel {
-    display: flex; gap: 8px; margin-bottom: 8px;
-    flex-wrap: wrap; align-items: center;
-}
-.date-filter-panel input[type="date"] {
-    padding: 7px 10px;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius);
-    font-size: .9rem;
-    background: var(--card);
-    color: inherit;
-}
-.date-pair { display: contents; }
-.rec-date-toggle { display: none; }
-
-@media (max-width: 767px) {
-    .rec-date-toggle {
-        display: flex; align-items: center; justify-content: space-between;
-        width: 100%; padding: 9px 14px; margin-bottom: 8px;
-        background: var(--card); border: 1px solid var(--border-strong);
-        border-radius: 20px; font-size: .85rem; color: var(--muted);
-        cursor: pointer; text-align: left;
-    }
-    .rec-date-toggle.has-filter {
-        border-color: var(--primary); color: var(--primary);
-        background: rgba(37,99,235,.06); font-weight: 600;
-    }
-    .rec-date-toggle-chev { transition: transform .2s; font-size: .75rem; flex-shrink: 0; }
-    .rec-date-toggle.panel-open .rec-date-toggle-chev { transform: rotate(180deg); }
-
-    .date-filter-panel {
-        display: none; flex-direction: column; gap: 8px;
-        margin-bottom: 10px; padding: 10px 12px;
-        background: var(--card); border: 1px solid var(--border);
-        border-radius: var(--radius);
-    }
-    .date-filter-panel.rec-open { display: flex; }
-    .date-filter-panel .date-filter-lbl { display: none; }
-    .date-filter-panel .date-sep { display: none; }
-    .date-pair {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-    }
-    .date-filter-panel input[type="date"] {
-        font-size: 16px; width: 100%; padding: 9px 10px;
-        background: var(--card);
-    }
-}
 
 /* Sayfalama */
 .rec-pagination {
@@ -4704,10 +3918,6 @@ body.bn-yok { --bn-h: 0px; }
 
 /* Filtre satırı ayraç */
 .pill-sep { width:1px; background:var(--border-strong); margin:0 2px; align-self:stretch; }
-
-@media (max-width:767px) {
-    .date-filter-row input[type="date"] { font-size:16px; }
-}
 
 /* =========================================================
    Sprint 18B — Ürün Stok Kullanılabilirlik
@@ -4761,10 +3971,6 @@ body.bn-yok { --bn-h: 0px; }
     margin-bottom:14px;
 }
 .ms-neg-uyari-head { font-weight:600; color:#7f1d1d; font-size:.9rem; margin-bottom:8px; }
-.ms-neg-table { width:100%; font-size:.82rem; border-collapse:collapse; }
-.ms-neg-table th { text-align:left; color:var(--muted); font-weight:500; padding:2px 8px; }
-.ms-neg-table td { padding:3px 8px; }
-.ms-neg-table .num { text-align:right; }
 .ms-row-negatif { background:rgba(239,68,68,.05); }
 .ms-row-negatif td { border-bottom-color:rgba(239,68,68,.15); }
 
@@ -4854,8 +4060,7 @@ body.bn-yok { --bn-h: 0px; }
     .topnav a { padding: 8px 16px; }
 
     /* — Özet/istatistik kartları aynı yükseklikte hizalansın — */
-    .stok-ozet-grid > *, .stok-ozet-grid-4 > *, .stok-ozet-grid-6 > *,
-    .hesap-stat-grid > * { height: 100%; }
+    .stok-ozet-grid > *, .stok-ozet-grid-6 > * { height: 100%; }
 }
 
 /* ---- Geniş masaüstü (≥1280px) ---- */
@@ -4886,18 +4091,6 @@ body.bn-yok { --bn-h: 0px; }
 
 /* ── 2. Desktop (≥900px): filtre formu yatay düzen ───────── */
 @media (min-width: 900px) {
-    /* Arama kutusu ve tarih filtresi tek satırda */
-    .rec-filter-form {
-        display: flex; flex-wrap: wrap;
-        gap: 10px; align-items: center;
-        margin-bottom: 14px;
-    }
-    .rec-filter-form .search-row {
-        margin-bottom: 0;
-        flex: 1; min-width: 260px;
-    }
-    .rec-filter-form .date-filter-panel { margin-bottom: 0; }
-
     /* Tablo durum satırları: hover'da daha belirgin ışıma */
     .data-table tr.tr-islendi:hover > td { background: rgba(245,158,11,.14); }
     .data-table tr.tr-yuklendi:hover > td { background: rgba(16,185,129,.13); }
@@ -5170,7 +4363,6 @@ body.print-mode .container { margin-left: 0 !important; max-width: none !importa
     border-top: 2px solid #9f1239;
     font-weight: 700;
 }
-.cikma-summary-section { margin-top: 10px; }
 .cikma-summary-table {
     border-collapse: collapse;
     min-width: 300px;
@@ -5594,7 +4786,6 @@ tr.row-link:hover > td { background: rgba(37, 99, 235, .06); }
 }
 @media print { .beyan-match-overlay { display: none !important; } }
 
-
 /* =========================================================
    HAL KAYIT BİLDİRİM MODALİ (Sprint Beyan-Bildirim-01)
    beyan_view.php — "🏛 Bildirim Yap" penceresi.
@@ -5873,7 +5064,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible,
     /* — Ana sayfa karoları: kabartma/derinlik token'ları (Sprint Dashboard-3D-01) —
        inset üst parıltı + inset alt gölge (yüzeyin kendi kabartması) + iki katman
        dış gölge (yakın temas + uzak yükselme). .home-card / .home-card-icon burada
-       tüketilir; record_new.php, reports.php, personel_takip.php aynı sınıfları
+       tüketilir; reports.php, personel_takip.php aynı sınıfları
        paylaştığı için otomatik faydalanır. */
     --tile-shadow:
         inset 0 1px 0 rgba(255,255,255,.75),
@@ -5958,26 +5149,6 @@ input:focus, select:focus, textarea:focus {
 /* Renk: --depot-accent* değişkenleri render_header()'da <body>'ye enjekte
    edilir (depot_color() — admin definitions.php'den seçebilir, yoksa
    isimden türetilen sabit palet rengi). Depo değişince otomatik güncellenir. */
-/* Topbar: aktif depo rengiyle dolu çip — tıklayınca depo_sec.php */
-.depo-badge {
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 12px; border-radius: 999px;
-    background: var(--depot-accent, rgba(255,255,255,0.14));
-    border: 1px solid rgba(255,255,255,0.35);
-    color: var(--depot-accent-text, #fff); font-weight: 700; font-size: .82rem;
-    white-space: nowrap; flex-shrink: 1; min-width: 0;
-    transition: background .2s, border-color .2s;
-}
-.depo-badge:hover { filter: brightness(1.1); text-decoration: none; }
-.depo-badge-icon { font-size: .95rem; }
-.depo-badge-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
-.depo-badge-caret { font-size: .65rem; opacity: .7; }
-
-@media (max-width: 767px) {
-    .depo-badge { padding: 5px 10px; font-size: .76rem; }
-    .depo-badge-name { max-width: 92px; }
-}
-
 /* Sidebar (≥900px): marka altında aktif depo kartı — depo rengiyle vurgulu */
 .sidebar-depo {
     display: flex; align-items: center; gap: 10px;
@@ -6102,7 +5273,7 @@ html[data-theme="dark"] {
     --icon-sheen: linear-gradient(150deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.06) 40%, rgba(255,255,255,0) 62%);
 }
 
-/* Modül ikon renkleri (index.php/record_new.php/reports.php'de inline
+/* Modül ikon renkleri (index.php/reports.php'de inline
    style="background:#hex") açık tema pasteli — koyu temada olduğu gibi
    parlarsa göz yorar. box-shadow'u (kabartma) ETKİLEMEMESİ için filter
    değil, ayrı bir karartma katmanı (::after, sheen'in ÜSTÜNDE) kullanılır —
@@ -6155,8 +5326,6 @@ html[data-theme="dark"] .data-table td { border-color: var(--border); }
 /* — Sık kullanılan hardcoded-açık yüzeyler — */
 html[data-theme="dark"] .empty,
 html[data-theme="dark"] .record-card,
-html[data-theme="dark"] .pallet-row,
-html[data-theme="dark"] .def-card,
 html[data-theme="dark"] .lock-banner { background: var(--card); }
 html[data-theme="dark"] .pill:not(.active):hover { background: #1b2432; }
 html[data-theme="dark"] .ms-sug-list { background: var(--card); border-color: var(--border); }
@@ -6167,8 +5336,7 @@ html[data-theme="dark"] .ms-sug-row.active { background: #1a2740; }
 /* — Modal / overlay kutuları — */
 html[data-theme="dark"] .ym-box,
 html[data-theme="dark"] .pm-dialog,
-html[data-theme="dark"] .ms-edit-modal,
-html[data-theme="dark"] .hesap-crop-dialog { background: var(--card); color: var(--text); }
+html[data-theme="dark"] .ms-edit-modal { background: var(--card); color: var(--text); }
 
 /* — Durum satırları (islendi/yuklendi): açık pastel yerine koyu ton — */
 html[data-theme="dark"] .record-card.durum-islendi { background: #2b2410; }
@@ -6239,7 +5407,6 @@ html[data-theme="dark"] .durum-opt-active.durum-opt-beklemede { background: #1d2
      @media print kuralları yazdırmada zaten beyaza zorlar) — */
 html[data-theme="dark"] .print-sheet { background: var(--card); }
 html[data-theme="dark"] .rv-materials-col { background: var(--card); }
-html[data-theme="dark"] .pf-dara { background: #1b2430; }
 
 /* — Rapor rozetleri: pastel → koyu ton — */
 html[data-theme="dark"] .rpt-badge.badge-islendi  { background: #3a2c0a; color: #fbbf24; }
@@ -6267,7 +5434,6 @@ html[data-theme="dark"] .badge-cikan    { background: #3a1616; color: #f87171; }
 html[data-theme="dark"] .badge-fire     { background: #3d2410; color: #fb923c; }
 html[data-theme="dark"] .badge-duzeltme { background: #332a0a; color: #fbbf24; border-color: #5c4a12; }
 html[data-theme="dark"] .stok-uyari-box { background: #332a0a; border-color: #5c4a12; }
-html[data-theme="dark"] .stok-uyari-row { color: #fbbf24; }
 html[data-theme="dark"] .stok-info-box  { background: #1a2740; border-color: #31456b; color: #93c5fd; }
 html[data-theme="dark"] .ms-edit-btn         { background: #1a2740; border-color: #31456b; }
 html[data-theme="dark"] .ms-edit-btn:hover   { background: #22345a; }
@@ -6281,10 +5447,6 @@ html[data-theme="dark"] .ms-edit-btn:hover   { background: #22345a; }
 /* — Form vurgulu girişler (kayıt formu) — */
 html[data-theme="dark"] body:not(.print-mode) input.kasa-adeti { background: #182740; }
 html[data-theme="dark"] body:not(.print-mode) input.brut-kg   { background: #2b2410; }
-html[data-theme="dark"] body:not(.print-mode) .brand-seg-opt.active,
-html[data-theme="dark"] body:not(.print-mode) .brand-seg-opt:has(input:checked) {
-    background: #1a2740; color: var(--text);
-}
 
 /* — Görüntüleme kartları / malzeme blokları — */
 html[data-theme="dark"] body:not(.print-mode) .view-card { background: var(--card); }
@@ -6311,12 +5473,9 @@ html[data-theme="dark"] body:not(.print-mode) .def3-tgroup-add:hover { backgroun
 html[data-theme="dark"] body:not(.print-mode) .def3-row { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .def3-row:hover { background: #1b2430; }
 html[data-theme="dark"] body:not(.print-mode) .def3-row.sel { background: #1a2740; }
-html[data-theme="dark"] body:not(.print-mode) .def3-chip,
-html[data-theme="dark"] body:not(.print-mode) .def3-ro-chip { background: #232d3c; }
+html[data-theme="dark"] body:not(.print-mode) .def3-chip { background: #232d3c; }
 
 /* — Hesap / Stok / Malzeme Stok — */
-html[data-theme="dark"] body:not(.print-mode) .hesap-stat { background: var(--card); }
-html[data-theme="dark"] body:not(.print-mode) .hesap-stat.blue { background: #16233a; }
 html[data-theme="dark"] body:not(.print-mode) .dkk-detail-group { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .dkk-detail-group-head { background: #1a2331; }
 html[data-theme="dark"] body:not(.print-mode) .hd-select,
@@ -6408,13 +5567,8 @@ html[data-theme="dark"] body:not(.print-mode) .kv-sapma-uyari { background: #342
 /* — İşlem Geçmişi (audit) — */
 html[data-theme="dark"] .au-risk { background: #2b2410; }
 html[data-theme="dark"] .au-fix { background: #16233a; }
-html[data-theme="dark"] .nmq-filters,
 html[data-theme="dark"] .al-filters,
-html[data-theme="dark"] .al-detail,
-html[data-theme="dark"] .nmq-sub summary { background: #1a2331; }
-html[data-theme="dark"] .nmq-btn { background: #1d2635; color: var(--text); }
-html[data-theme="dark"] .nmq-btn-ex:hover:not(:disabled),
-html[data-theme="dark"] .nmq-btn-rst:hover:not(:disabled) { background: #243044; }
+html[data-theme="dark"] .al-detail { background: #1a2331; }
 html[data-theme="dark"] tr[data-status=approved] { background: #122b20; }
 html[data-theme="dark"] tr[data-status=excluded] { background: #1a2331; }
 html[data-theme="dark"] .al-row-toggle:hover td { background: #1b2430; }
@@ -6450,10 +5604,8 @@ html[data-theme="dark"] .dsc-bos { background: #1a2331; }
 html[data-theme="dark"] .dsc-yeni-satir input { background: #101722; color: var(--text); }
 html[data-theme="dark"] .dsc-yeni-satir input:focus { background: #101722; }
 html[data-theme="dark"] .dsc-error, html[data-theme="dark"] .lc-error { background: #34201f; color: #f0938d; }
-html[data-theme="dark"] .lc-field input { background: #101722; color: var(--text); }
-html[data-theme="dark"] .lc-field input:focus { background: #101722; }
-html[data-theme="dark"] .lc-field label, html[data-theme="dark"] .dsc-yeni-baslik { color: var(--muted); }
-html[data-theme="dark"] .dsc-subtitle, html[data-theme="dark"] .lc-subtitle { color: var(--muted); }
+html[data-theme="dark"] .dsc-yeni-baslik { color: var(--muted); }
+html[data-theme="dark"] .dsc-subtitle { color: var(--muted); }
 
 } /* @media screen */
 
