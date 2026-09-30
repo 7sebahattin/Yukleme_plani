@@ -195,7 +195,7 @@ dogrula('BAŞKA personele aynı UID reddedildi', $rMuk['ok'], false);
 dogrula('kod: uid_kullanimda', $rMuk['kod'], 'uid_kullanimda');
 
 echo "\n=== 11. KART A (25A87ED7) ve KART B (D77EA825) AYNI ANDA VAR OLABİLİR ===\n";
-// Faz 1 düzeltmesinin (bkz. PDKS_FAZ1_SEMA.md §6a) bu üst katmandan da
+// Faz 1 düzeltmesinin (bkz. docs/arsiv/PDKS_FAZ1_SEMA.md §6a) bu üst katmandan da
 // REGRESYONU: pdks_kart_ata() da otomatik ters-alias mantığı YENİDEN
 // GETİRMEMELİ (Faz 1'in pdks_kart_olustur()'unu sarmaladığı için zaten
 // getirmiyor — burada UÇTAN UCA doğrulanıyor).

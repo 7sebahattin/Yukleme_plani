@@ -1,8 +1,9 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
-// scripts/fix_brand_column.php — Sprint 34 ACİL onarım
+// scripts/arsiv/fix_brand_column.php — Sprint 34 ACİL onarım
 // loading_records.brand kolonunu garanti eder (idempotent).
-// Erişim: CLI  →  php scripts/fix_brand_column.php
+// Erişim: CLI  →  php scripts/arsiv/fix_brand_column.php
 //         Web  →  yalnızca giriş yapmış admin
 // ⚠ Tek seferlik; çalıştıktan sonra silinmesi önerilir.
 // =========================================================

@@ -1,4 +1,5 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
 // migrate.php - Tek seferlik veritabanı güncelleme
 // WEB ERİŞİMİ KAPALI — sadece CLI ile çalıştırın:

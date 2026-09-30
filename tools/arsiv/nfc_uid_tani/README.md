@@ -22,7 +22,7 @@ Aynı fiziksel kart için:
 
 ## Derleme (Android Studio)
 
-1. Android Studio → **Open** → bu klasörü (`tools/nfc_uid_tani`) seç.
+1. Android Studio → **Open** → bu klasörü (`tools/arsiv/nfc_uid_tani`) seç.
 2. İlk açılışta Gradle wrapper'ı ve SDK bileşenlerini kendisi indirir
    (sürüm uyarısı çıkarsa "Upgrade"i kabul etmek güvenlidir — bu bir tek
    kullanımlık teşhis aracıdır).

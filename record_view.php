@@ -137,8 +137,7 @@ foreach ($pallets as $p) {
     }
 }
 
-// Kasa darası alt-toplamı (palet/şapka/köşe için sabit alan; isimde geçen "H-5", "H-9", "H-10" vs için
-// kasa cinsi adına göre eşleştirme yapıyoruz)
+// Türkçe harfleri sadeleştirip küçültür — stok satırlarını ad ile eşleştirmek için (stok_satir_topla)
 function tr_norm(string $s): string {
     $s = mb_strtolower($s, 'UTF-8');
     // Türkçe büyük İ → mb_strtolower ile "i̇" (i + combining dot above U+0307) olur, dot'u temizle

@@ -2,7 +2,7 @@
 
 **Durum:** Faz 0 tamamlandı · **Faz 1 BAŞLATILMADI** · Onay bekleniyor
 **Tarih:** 2026-09-14 · **Branch:** `claude/nfc-attendance-roadmap-z14alg`
-**Üst belge:** `docs/PDKS_NFC_YOL_HARITASI.md` (doğruluk kaynağı)
+**Üst belge:** `docs/arsiv/PDKS_NFC_YOL_HARITASI.md` (doğruluk kaynağı)
 
 > **Bu fazda yapılmayanlar:** migration yok · tablo yok · üretim kodu yok ·
 > canlı veri değişikliği yok · deploy yok · production davranışı değişmedi.
@@ -16,7 +16,7 @@
 | # | Test | Yöntem | Sonuç |
 |---|---|---|---|
 | 1 | UID normalizasyon algoritması | UID kanıt betiği — **bu ortamda çalıştırıldı** | ✅ **45/45 doğrulama geçti** *(Faz 1'de 57'ye çıkarıldı)* |
-| 2 | PHP saat dilimi | `scripts/pdks_faz0_zaman.php` — çalıştırıldı | ✅ `Europe/Istanbul`, `+03:00`, DST **yok** |
+| 2 | PHP saat dilimi | `scripts/arsiv/pdks_faz0_zaman.php` — çalıştırıldı | ✅ `Europe/Istanbul`, `+03:00`, DST **yok** |
 | 3 | MySQL saat dilimi | phpMyAdmin, canlı sunucu, 2026-09-14 15:18 | ✅ **SAPMA YOK** — `+03`, fark 10800 sn → Seçenek A (§1.3) |
 | 4 | `halkayit/api.php` auth deseni | Kaynak kod incelemesi | ✅ Analiz edildi — **kısmen** yeniden kullanılabilir (§2) |
 | 5 | Personel tablosu var mı | Tüm `CREATE TABLE` taraması | ✅ **YOK** — kesin (§3) |
@@ -35,7 +35,7 @@ Bu yüzden §1.3 ve §5 ölçümleri **sizin tarafınızdan** yapılacak; ikisi 
 
 ### 1.1 PHP tarafı — ÖLÇÜLDÜ ✅
 
-`scripts/pdks_faz0_zaman.php` çıktısı (bu ortam):
+`scripts/arsiv/pdks_faz0_zaman.php` çıktısı (bu ortam):
 
 ```
 PHP sürümü                         8.4.19
@@ -122,7 +122,7 @@ yetkisi yok ve hatalar sessizce yutuluyor.
 
 **Faz 1'e etkisi: YOK.** PDKS migrasyonu bilerek `config/db.php`'ye
 KONULMADI; `config/pdks.php` içinde durur ve `migrate.php`'den **elle**
-tetiklenir (bkz. `docs/PDKS_FAZ1_SEMA.md` §5). Yani bu belirsizlikten etkilenmez.
+tetiklenir (bkz. `docs/arsiv/PDKS_FAZ1_SEMA.md` §5). Yani bu belirsizlikten etkilenmez.
 
 **Sizden istenen 1 dakikalık kontrol:** Hosting dosya yöneticisinden
 `config/db.php`'yi açıp ilk 25 satırına bakın — `DB_NAME` gerçekten
@@ -322,7 +322,7 @@ veritabanı düzeyinde engellenir.
 ```
 $ php scripts/pdks_uid_smoke.php     # Faz 0'da pdks_faz0_uid_kanit.php idi
 SONUÇ: 57 test geçti, 0 hata.
-✓ docs/PDKS_NFC_YOL_HARITASI.md §C'deki UID iddialarının TAMAMI kanıtlandı.
+✓ docs/arsiv/PDKS_NFC_YOL_HARITASI.md §C'deki UID iddialarının TAMAMI kanıtlandı.
 ```
 
 Temel iddia, programatik olarak doğrulandı:
@@ -439,7 +439,7 @@ dolayısıyla APK **derlenemedi**. Kaynak kodu hazırlandı ve **derlenmemiş ol
 açıkça belirtiyorum** — Android Studio'nun ilk senkronizasyonunda sürüm uyarısı çıkabilir.
 
 ```
-tools/nfc_uid_tani/
+tools/arsiv/nfc_uid_tani/
 ├── README.md                    ← derleme + test adımları + beklenen ekran çıktısı
 ├── settings.gradle.kts
 ├── build.gradle.kts
@@ -475,7 +475,7 @@ Ayrıca uygulama **kararı kendisi yazar** — yorumlamanıza gerek yok:
 
 ### 5.3 Test adımları
 
-1. Android Studio → **Open** → `tools/nfc_uid_tani` → **Run ▶** (telefon USB ile bağlı).
+1. Android Studio → **Open** → `tools/arsiv/nfc_uid_tani` → **Run ▶** (telefon USB ile bağlı).
    *(Android Studio yoksa: yeni "Empty Views Activity" projesi açıp `MainActivity.kt` ve
    `AndroidManifest.xml` içeriklerini değiştirmek yeterli — `README.md`'de yazılı.)*
 2. Uygulamayı aç → **"⏳ Kart bekleniyor…"**
@@ -739,10 +739,10 @@ Talebiniz gereği **burada duruyorum**. Faz 1 başlatılmadı; migration, tablo,
 
 | Dosya | Tür | Web erişimi |
 |---|---|---|
-| `docs/PDKS_NFC_FAZ0_DOGRULAMA.md` | Bu rapor | — |
+| `docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md` | Bu rapor | — |
 | ~~`scripts/pdks_faz0_uid_kanit.php`~~ | CLI test — **çalıştırıldı, 45/45 geçti**. *Faz 1'de `scripts/pdks_uid_smoke.php` ile DEĞİŞTİRİLDİ*: algoritmanın kopyasını taşıyordu, Faz 1'de `config/pdks.php`'ye taşındı ve iki kopya bırakılmadı | ❌ kapalı |
-| `scripts/pdks_faz0_zaman.php` | CLI ölçüm — salt okunur, `config/db.php` include **etmez** | ❌ kapalı |
-| `tools/nfc_uid_tani/**` | Android teşhis kaynağı (derlenmedi) | ❌ `tools/.htaccess` eklendi |
+| `scripts/arsiv/pdks_faz0_zaman.php` | CLI ölçüm — salt okunur, `config/db.php` include **etmez** | ❌ kapalı |
+| `tools/arsiv/nfc_uid_tani/**` | Android teşhis kaynağı (derlenmedi) | ❌ `tools/.htaccess` eklendi |
 
 **Uygulamanın çalışan hiçbir dosyası değiştirilmedi.** `git status` ile doğrulanabilir:
 tüm değişiklikler yeni dosya eklemesidir.

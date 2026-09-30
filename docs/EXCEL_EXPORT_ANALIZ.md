@@ -138,7 +138,7 @@ Bu bir güvenlik açığı değil: ekranı gören kullanıcı zaten o veriyi gö
 (bkz. §7). XLSX dönüşümü yapılırken aynı dokunuşla eşitlenebilir.
 
 ### 3.6 Bağımlılık notu
-`docs/HESAP_MODERNIZASYON_PLANI.md` notuna göre `composer audit`, **phpoffice/phpspreadsheet** için
+`docs/arsiv/HESAP_MODERNIZASYON_PLANI.md` notuna göre `composer audit`, **phpoffice/phpspreadsheet** için
 üç yüksek önemli uyarı gösteriyor (CVE-2026-59931/59932/59933). Bu uyarılar, dışa aktarımı genişletmeden önce
 değerlendirilmeli. Yükseltme **X1 ve X2'yi doğrudan etkiler** (bkz. §5).
 İçe aktarma tarafında `_form.php` ve `malzeme_stok_import.php`, CDN'den SheetJS **0.18.5** yüklüyor.
@@ -177,7 +177,7 @@ PhpSpreadsheet her hücreyi bellekte nesne olarak tutar (kabaca hücre başına 
 Öneri: **(a).** Hem basit hem öngörülebilir.
 
 ### 4.2 CSV tamamen kaldırılmalı mı?
-**Hayır, önerilmez.** `docs/MALZEME_STOK_UX_ANALIZ.md` (madde 9), CSV biçiminin *"muhasebe tarafında
+**Hayır, önerilmez.** `docs/arsiv/MALZEME_STOK_UX_ANALIZ.md` (madde 9), CSV biçiminin *"muhasebe tarafında
 kullanılıyor olabileceğini, formatın korunması gerektiğini"* not ediyor. CSV başka bir yazılıma aktarılan
 tek çıktı olabilir. Güvenli yol: **XLSX'i birincil buton yapmak, CSV'yi ikincil butonda bayt bayt aynı bırakmak**
 (`rapor_malzeme.php` emsali). CSV'yi kaldırmak, kullanım doğrulandıktan sonra ayrıca verilecek bir karar olmalı.

@@ -13,7 +13,7 @@
 
 ## 1. NEDEN BU DÜZELTME GEREKTİ
 
-Önceki yol haritası (`PDKS_NFC_YOL_HARITASI.md` §8), güvenlik kapısındaki
+Önceki yol haritası (`docs/arsiv/PDKS_NFC_YOL_HARITASI.md` §8), güvenlik kapısındaki
 telefon için **ayrı bir native Android uygulaması** (Kotlin, APK, cihaz
 token'ı, heartbeat) öneriyordu. Bu, Web NFC'nin "kartlar NDEF değil,
 güvenilmez olabilir" **varsayımına** dayanıyordu — hiç ölçülmemişti.

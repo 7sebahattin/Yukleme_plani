@@ -6,9 +6,9 @@
 // Giriş/çıkış hareketleri, API, Android istemci ve arayüz ekranları FAZ 2'dedir.
 //
 // Referans belgeler:
-//   docs/PDKS_NFC_YOL_HARITASI.md        (mimari karar kaydı)
-//   docs/PDKS_NFC_FAZ0_DOGRULAMA.md      (ölçüm ve kanıtlar)
-//   docs/PDKS_FAZ1_SEMA.md               (bu dosyadaki şemanın belgesi)
+//   docs/arsiv/PDKS_NFC_YOL_HARITASI.md        (mimari karar kaydı)
+//   docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md      (ölçüm ve kanıtlar)
+//   docs/arsiv/PDKS_FAZ1_SEMA.md               (bu dosyadaki şemanın belgesi)
 //
 // ⚠ BU DOSYA config/db.php VEYA config/helpers.php TARAFINDAN YÜKLENMEZ.
 //    Yalnız PDKS kodu require eder. Sebep: buradaki bir hata uygulamanın
@@ -63,7 +63,7 @@ function pdks_kart_aktif_mi(?string $durum): bool { return $durum === 'aktif'; }
 // =========================================================
 // UID NORMALİZASYONU
 //
-// ⚠ FAZ 1 DÜZELTMESİ (bkz. docs/PDKS_FAZ1_SEMA.md §6a): İlk sürüm, bir kartın
+// ⚠ FAZ 1 DÜZELTMESİ (bkz. docs/arsiv/PDKS_FAZ1_SEMA.md §6a): İlk sürüm, bir kartın
 // kanonik UID'sinin BAYT-TERSİNİ otomatik olarak "aynı fiziksel kartın başka
 // bir gösterimi" sayıp ikinci bir alias olarak yazıyordu. BU YANLIŞTI: iki
 // FARKLI fiziksel kartın kanonik UID'leri birbirinin bayt-tersi OLABİLİR
@@ -107,10 +107,10 @@ function pdks_kart_aktif_mi(?string $durum): bool { return $durum === 'aktif'; }
  *
  * ⚠ BAYT SIRASI VARSAYIMI: Şu an Android `Tag.getId()`'nin USB okuyucuyla AYNI
  * bayt sırasında olduğunu varsayar (Faz 0 §5.4 "Durum A" beklentisi — HENÜZ
- * gerçek cihazda doğrulanmadı, bkz. tools/nfc_uid_tani/). Gerçek ölçüm "Durum B"
+ * gerçek cihazda doğrulanmadı, bkz. tools/arsiv/nfc_uid_tani/). Gerçek ölçüm "Durum B"
  * (ters sıra) çıkarsa, dönüşüm BURAYA (bu fonksiyona, tüm kartlar için tutarlı
  * biçimde) eklenir — bir kartın kaydında "belki tersi de odur" diye ikinci bir
- * aday ÜRETİLMEZ. Ölçüm sonucu docs/PDKS_NFC_FAZ0_DOGRULAMA.md §5'e işlenecek.
+ * aday ÜRETİLMEZ. Ölçüm sonucu docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md §5'e işlenecek.
  *
  * @return string|null Kanonik HEX veya geçersizse null.
  */
@@ -651,7 +651,7 @@ function pdks_uid_cakismasi(string $kanonik, ?int $haricCardId = null, ?PDO $pdo
  * olarak YAZMAZ. Sebep: D77EA825, 25A87ED7'nin "başka bir gösterimi" değil,
  * tamamen farklı bir fiziksel kartın olası kanonik kimliğidir — otomatik
  * ters-alias, o GERÇEK ikinci kartın kaydını reddederdi. Bkz. dosya başındaki
- * "UID NORMALİZASYONU" bölümü ve docs/PDKS_FAZ1_SEMA.md §6a.
+ * "UID NORMALİZASYONU" bölümü ve docs/arsiv/PDKS_FAZ1_SEMA.md §6a.
  *
  * @param string $kaynak 'usb_decimal' | 'nfc_hex' | 'web_nfc'
  * @return array{ok:bool, card_id?:int, uid_hex?:string, hata?:string, kod?:string}

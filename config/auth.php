@@ -550,7 +550,7 @@ function depot_visible_to_user(?string $depo): bool {
 // ── Atanmamış veri kuralı ─────────────────────────────────
 // Deposu BOŞ (henüz atanmamış) kayıtlar TÜM depolarda görünür ve erişilebilir
 // kalır — depo özelliği yüzünden hiçbir eski veri kaybolmaz/kilitlenmez.
-// Bir depoya atanınca (kayıt düzenleme veya Depo Taşıma) yalnız o depoda görünür.
+// Bir depoya atanınca (kayıt düzenleme) yalnız o depoda görünür.
 // Aşağıdaki filtreler bu nedenle "IN (aktif depo) VEYA depo boş" kurar.
 
 // loading_records'ı palet deposuna göre kapsayan WHERE parçası döndürür.

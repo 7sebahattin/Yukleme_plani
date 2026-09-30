@@ -1,9 +1,10 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =========================================================
-// scripts/repair_kosebent_unit.php — Sprint 36 (revize: Sprint 36C)
+// scripts/arsiv/repair_kosebent_unit.php — Sprint 36 (revize: Sprint 36C)
 // Köşebent TANI/RAPOR script'i. CLI-only. SADECE RAPOR — veri değiştirmez.
 //
-//   php scripts/repair_kosebent_unit.php
+//   php scripts/arsiv/repair_kosebent_unit.php
 //
 // NOT: Köşebent markaları (AgroNatural / Asya Fresh / Asya Fresh sarı /
 // Ural / Uras Energy ...) AYRI ürünlerdir; BİRLEŞTİRİLMEMELİDİR.
@@ -11,7 +12,7 @@
 //
 // - Sarf dara'ları config/db.php migration'ı zaten 0'lar.
 // - Çıkma kaynaklı takılı (silinemeyen) köşebent hareketleri için:
-//     scripts/clean_cikma_movements.php
+//     scripts/arsiv/clean_cikma_movements.php
 // =========================================================
 declare(strict_types=1);
 
@@ -70,5 +71,5 @@ foreach ($mv->fetchAll() as $r) {
 
 pr('');
 pr('— Manuel (source boş) hareketler Malzeme Stok ekranından ✕ ile silinebilir.');
-pr('— 🔒 loading kaynaklı çıkma hareketleri için: php scripts/clean_cikma_movements.php');
+pr('— 🔒 loading kaynaklı çıkma hareketleri için: php scripts/arsiv/clean_cikma_movements.php');
 pr('— Markalar ayrıdır; birleştirme YAPILMAZ.');

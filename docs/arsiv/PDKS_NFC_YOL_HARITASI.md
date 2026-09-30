@@ -11,7 +11,7 @@
 
 ## ⛳ FAZ 0 TAMAMLANDI — 2026-09-14
 
-**Doğrulama raporu: [`docs/PDKS_NFC_FAZ0_DOGRULAMA.md`](PDKS_NFC_FAZ0_DOGRULAMA.md)**
+**Doğrulama raporu: [`docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md`](PDKS_NFC_FAZ0_DOGRULAMA.md)**
 
 Faz 0'ın bu belgeyi değiştiren bulguları:
 
@@ -24,7 +24,7 @@ Faz 0'ın bu belgeyi değiştiren bulguları:
 | Personel ↔ kullanıcı ilişkisi karara bağlandı | **`employees.user_id` NULL + UNIQUE** — bağlantı tablosu değil (Faz 0 §3.3) |
 | 🔴 **YENİ BLOKER:** `api_pdks.php auth/login` hız sınırı | §F.2 #12'ye ek: bu **yeni açtığımız** yüzeydir, "sonra yapılır" değildir. Önlem yeni tablo gerektirmez — `audit_log` üzerinden COUNT (Faz 0 §7.3) |
 | Zaman otoritesi | ⏳ MySQL ölçümü bekliyor. **Faz 1'i engellemiyor** (Faz 1'de puantaj zaman damgası yok), **Faz 2'yi bağlıyor** (Faz 0 §1.6) |
-| Android `getId()` sırası | ⏳ Teşhis APK'sı hazır (`tools/nfc_uid_tani/`). **Şemayı etkilemiyor** — ölçüm sonucu tek bir kaynak adaptörüne (deterministik, tüm kartlar için aynı) işlenecek, bkz. aşağıdaki düzeltme banner'ı |
+| Android `getId()` sırası | ⏳ Teşhis APK'sı hazır (`tools/arsiv/nfc_uid_tani/`). **Şemayı etkilemiyor** — ölçüm sonucu tek bir kaynak adaptörüne (deterministik, tüm kartlar için aynı) işlenecek, bkz. aşağıdaki düzeltme banner'ı |
 
 **Faz 1 durumu: KOŞULLU HAZIR** — üç karar onayı bekliyor (Faz 0 §10.2):
 #2 tam TC saklansın mı · #1 kart devri 2 tablo mu · #11 `employees.user_id` yaklaşımı.
@@ -33,7 +33,7 @@ Faz 0'ın bu belgeyi değiştiren bulguları:
 
 ## ⛳ FAZ 1 UID MODELİ DÜZELTMESİ — 2026-09-14
 
-**Kayıt: [`docs/PDKS_FAZ1_SEMA.md`](PDKS_FAZ1_SEMA.md) §6a ("⚠ DÜZELTME — Otomatik bayt-tersi alias'ı KALDIRILDI")**
+**Kayıt: [`docs/arsiv/PDKS_FAZ1_SEMA.md`](PDKS_FAZ1_SEMA.md) §6a ("⚠ DÜZELTME — Otomatik bayt-tersi alias'ı KALDIRILDI")**
 
 Faz 1'in ilk teslimatı, §C.4'te aşağıda anlatılan iki-katmanlı alias modelini
 **fazla genelleştirmişti**: bir kartın kanonik UID'sinin **bayt-tersini** de
@@ -47,7 +47,7 @@ gösterim" örneği yalnız **tek bir kartın** `631799511` / `25A87ED7` gibi
 **yazım farklarını** (aynı baytlar, farklı gösterim) anlatır — `D7:7E:A8:25`
 gibi gerçekten **ters bayt sıralı** bir girdinin otomatik olarak aynı karta
 bağlanacağı iddiası artık **geçerli değildir**. Düzeltilmiş model,
-`docs/PDKS_FAZ1_SEMA.md` §6a'da tam olarak belgelenmiştir; kısaca:
+`docs/arsiv/PDKS_FAZ1_SEMA.md` §6a'da tam olarak belgelenmiştir; kısaca:
 
 - `employee_card_uids` artık yalnız kartın **kendi kanoniğini** yazar (1 satır/kart).
 - Bayt sırası belirsizliği (Android `getId()` ölçümü), kart bazında değil,
@@ -76,7 +76,7 @@ offline kuyruk — bunların HİÇBİRİ yapılmayacak. Tek gereksinim:
 varsayımdı, ölçüm değildi. Kullanıcı bunu tersine çevirdi: önce **gerçek**
 bir teşhis sayfasıyla (`pdks_nfc_test.php`, Faz 0'daki Android `getId()`
 teşhis APK'sinin web karşılığı) ölçülecek, sonuç olumluysa mimari buna göre
-kurulacak. `tools/nfc_uid_tani/` (Faz 0'ın Kotlin teşhis APK'si) bu yüzden
+kurulacak. `tools/arsiv/nfc_uid_tani/` (Faz 0'ın Kotlin teşhis APK'si) bu yüzden
 **üretime hiç girmeyecek** — yalnız bir ölçüm aracı olarak kod tabanında
 kalıyor, referans değeri hâlâ geçerli (USB↔Android bayt sırası sorusu farklı
 bir sorudur, ayrıca ölçülmüş olabilir).

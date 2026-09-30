@@ -1,12 +1,13 @@
 <?php
+// ARŞİV (v281): tek seferlik, tamamlandı — çalıştırmayın; yollar bir seviye kaydı.
 // =============================================================
-// scripts/plan_normalize_migration.php — Sprint 8
+// scripts/arsiv/plan_normalize_migration.php — Sprint 8
 // Onaylı kayıtlardan migration planı üretir.
 // HİÇBİR UPDATE/DELETE çalıştırılmaz — sadece plan çıktısı.
 //
 // Kullanım:
-//   php scripts/plan_normalize_migration.php
-//   php scripts/plan_normalize_migration.php --output-dir /tmp/plan
+//   php scripts/arsiv/plan_normalize_migration.php
+//   php scripts/arsiv/plan_normalize_migration.php --output-dir /tmp/plan
 // =============================================================
 
 declare(strict_types=1);

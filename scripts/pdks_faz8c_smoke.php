@@ -173,7 +173,7 @@ ok8c('eski toplam 1.200,00 TRY korunuyor', (bool)preg_match('/GENEL TOPLAM.*?1\.
 echo "\n=== 4. STATİK GÜVENLİK / KAPSAM ===\n";
 $printSrc = (string)file_get_contents($ROOT . '/cavus_hakedis_yazdir.php');
 $takipSrc = (string)file_get_contents($ROOT . '/personel_takip.php');
-$docSrc = (string)file_get_contents($ROOT . '/docs/PDKS_GUNLUK_FAZ8C.md');
+$docSrc = (string)file_get_contents($ROOT . '/docs/arsiv/PDKS_GUNLUK_FAZ8C.md');
 $printKod = preg_replace('/^\s*\/\/.*$/m', '', $printSrc);
 ok8c("yazdırma yetkisi entitlements_view olarak korunuyor", str_contains($printSrc, "require_pdks_hakedis('entitlements_view')"));
 ok8c('yazdırma sayfası INSERT/UPDATE/DELETE içermiyor', !preg_match('/\b(INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM)\b/i', $printKod));

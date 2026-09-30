@@ -76,7 +76,7 @@ mysql -u root yukleme_plani -e "
 ## PLAN TAZELE
 
 ```bash
-php scripts/plan_normalize_migration.php --output-dir scripts/
+php scripts/arsiv/plan_normalize_migration.php --output-dir scripts/
 
 # Beklenen çıktı son satırı:
 # "✓ Plan hazır. Henüz hiçbir veri değiştirilmedi."
@@ -195,7 +195,7 @@ mysql -u root yukleme_plani -e "
 
 ```bash
 # Staging DB'de forward + rollback testi (production öncesi)
-php scripts/test_staging_migration.php \
+php scripts/arsiv/test_staging_migration.php \
     --test-db yukleme_plani_staging \
     --yes
 

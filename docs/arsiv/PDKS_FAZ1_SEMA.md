@@ -36,11 +36,11 @@ ve 161 otomatik test (Faz 1 düzeltmesi dahil).
 | `config/pdks.php` | **YENİ** | Çekirdek: şema DDL + UID normalizasyonu + kart alan mantığı + yetki kapısı |
 | `scripts/pdks_uid_smoke.php` | **YENİ** | UID sözleşmesi testi (63 test) — Faz 0'daki kanıt betiğinin yerini alır |
 | `scripts/pdks_db_smoke.php` | **YENİ** | Şema kısıtları + alan mantığı testi (98 test), bellek içi SQLite |
-| `docs/PDKS_FAZ1_SEMA.md` | **YENİ** | Bu belge |
+| `docs/arsiv/PDKS_FAZ1_SEMA.md` | **YENİ** | Bu belge |
 | `config/helpers.php` | değişti | **Yalnız ekleme:** 9 yetki + `ik` rolü + rol→yetki haritası |
 | `migrate.php` | değişti | **Yalnız ekleme:** PDKS tablo migrasyon bölümü (admin) |
-| `docs/PDKS_NFC_FAZ0_DOGRULAMA.md` | değişti | Canlı MySQL saat dilimi ölçümü işlendi (§1.3) |
-| `docs/PDKS_NFC_YOL_HARITASI.md` | değişti | Referans güncellemesi |
+| `docs/arsiv/PDKS_NFC_FAZ0_DOGRULAMA.md` | değişti | Canlı MySQL saat dilimi ölçümü işlendi (§1.3) |
+| `docs/arsiv/PDKS_NFC_YOL_HARITASI.md` | değişti | Referans güncellemesi |
 | ~~`scripts/pdks_faz0_uid_kanit.php`~~ | **SİLİNDİ** | Algoritmanın ikinci kopyasıydı; `config/pdks.php`'ye taşındı, testi `pdks_uid_smoke.php`'ye devredildi |
 
 **Dokunulmayanlar:** `assets/style.css` · `assets/app.js` · `sw.js` · `index.php` ·
@@ -323,7 +323,7 @@ baytların** farklı yazımıdır.
 
 **Bayt SIRASI farkı bambaşka bir şeydir** ve kart bazında asla varsayılmaz.
 Android `getId()`'nin gerçekten USB'nin tersi bir sıra döndürdüğü Faz 0'ın
-teşhis APK'siyle (`tools/nfc_uid_tani/`) kanıtlanırsa, dönüşüm
+teşhis APK'siyle (`tools/arsiv/nfc_uid_tani/`) kanıtlanırsa, dönüşüm
 `pdks_uid_hex_normalize()`'ın (yani **NFC kaynak adaptörünün**) İÇİNE, tüm
 kartlar için aynı şekilde işleyecek biçimde eklenir — bir kartın kaydında
 "belki tersi de odur" diye ikinci bir aday üretilerek DEĞİL.
@@ -480,7 +480,7 @@ değişikliği gerekmesin diye) ama yalnız admin'e düşüyor.
 | # | Gereklilik | Kaynak |
 |---|---|---|
 | 1 | **Zaman kararının resmen dondurulması** → ölçüm **Seçenek A**'yı destekliyor (sapma yok, `+03`, 10800 sn). Onayınız gerekiyor | Karar #13 |
-| 2 | Android `getId()` bayt sırası ölçümü (`tools/nfc_uid_tani/`) | Faz 0 §5.3 |
+| 2 | Android `getId()` bayt sırası ölçümü (`tools/arsiv/nfc_uid_tani/`) | Faz 0 §5.3 |
 | 3 | **API login hız sınırı** — Faz 2'nin BLOKERİ | Faz 0 §7.3 |
 | 4 | DDL yetkisi kontrolü: `migrate.php` → PDKS kartı → butona basıldığında ne diyor | Faz 0 Ölçüm 2 |
 | 5 | USB okuyucu Enter/sıfır-dolgu davranışı (2 dakika) | Faz 0 §6.2 |
