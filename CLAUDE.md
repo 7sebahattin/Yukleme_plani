@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v287` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v288` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -432,6 +432,28 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
   katılım yazılabilirdi. **NORMAL çıkış yapmış kartın aynı gün yeniden kullanımı
   (Faz 8A "nötr kart") DEĞİŞMEDİ** — kullanıcı bunu açıkça korudu.
 - Test: `php scripts/pdks_gun_sonu_kapanis_smoke.php`.
+
+### Ortak Çıkış (v288)
+
+Çavuş listesinin üstündeki **"🚪 ORTAK ÇIKIŞ"** düğmesi: çavuş seçmeden tek
+ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
+
+- **İkinci yazma yolu DEĞİL.** `pdks_gunluk_ortak_cikis_kaydet()` kartın açık
+  mesaisini `pdks_gunluk_faz8a_kart_acik_donemi()` ile BULUR, yazmayı
+  değiştirilmemiş `pdks_gunluk_faz8a_cikis_kaydet()`'e devreder (o fonksiyon
+  kartı kilitleyip yeniden doğrular — arada mesai kapanırsa reddeder). Ortak
+  fonksiyona INSERT/UPDATE EKLEME; test bunu engelliyor.
+- Uç `?ajax=ortak_cikis` istemciden **session_id ALMAZ**. Sayaç ucu
+  `?ajax=ortak_mesailer` (salt okunur). İkisi de CSRF + `daily_scan`.
+- **Tarih sınırı YOK** (kullanıcı kararı): dünden açık mesaideki kart da çıkar
+  (gece vardiyası). **Depo sınırı VAR** (`pdks_gunluk_depo_kontrol`). Tanımsız
+  kart otomatik KAYDEDİLMEZ.
+- Sayaç **çavuş çavuş** (`pdks_gunluk_ortak_cikis_mesailer()`, tek gruplu
+  sorgu); çavuş listesinde "içeride N" rozeti. **Mesaiyi Kapat ortak modda
+  YOK** — kapatma çavuş bazında kalır.
+- Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
+  `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
+  `node scripts/pdks_ortak_cikis_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

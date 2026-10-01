@@ -1351,3 +1351,32 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVaz
 }
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:hover,
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVazgec:focus-visible { background: #eef4ff; border-color: #1d4ed8; }
+
+/* ── v288 — ORTAK ÇIKIŞ (gunluk_isci_giris_cikis.php) ─────────────────────
+   Çavuş listesinin üstündeki düğme, listede "içeride N" rozeti, tarama
+   ekranında çavuş çavuş sayaç ve sonuç kartındaki çavuş adı. Yalnız EKLEME. */
+.pdks-daily-kiosk .pdks-kiosk-ortak-btn {
+    max-width: 480px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.pdks-kiosk-ortak-alt { font-size: .78rem; font-weight: 600; opacity: .9; letter-spacing: 0; }
+.pdks-kiosk-cavus-sag { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.pdks-kiosk-cavus-icerde {
+    padding: 3px 9px; border-radius: 999px; font-size: .74rem; font-weight: 800;
+    background: var(--danger-soft); color: var(--danger); white-space: nowrap;
+}
+.pdks-daily-kiosk .pdks-kiosk-ortak-sayac { width: 100%; max-width: 100%; margin: 4px 0 0; text-align: left; box-sizing: border-box; }
+/* Ortak modda "Modu Değiştir" gizlenir — geri düğmesi tek başına tam genişlik. */
+.pdks-scan-actions.pdks-scan-actions-tek { grid-template-columns: minmax(0, 1fr); }
+.pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row { font-size: .88rem; align-items: baseline; }
+.pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row .n { white-space: nowrap; }
+.pdks-kiosk-ortak-tarih { font-size: .74rem; font-weight: 700; color: #f59e0b; }
+.pdks-kiosk-ortak-not { margin: 8px 0 0; font-size: .78rem; }
+/* Sonuç kartı her temada koyu zeminlidir — çavuş adı her zaman açık renk. */
+.pdks-result-cavus { font-size: 1.15rem; font-weight: 800; overflow-wrap: anywhere; color: #fff; text-align: center; }
+.pdks-daily-kiosk #giResult .pdks-result-cavus { align-self: center; }
+@media (max-width: 639px) {
+    .pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row { flex-direction: column; gap: 0; }
+}
+@media (min-width: 760px) {
+    .pdks-daily-kiosk .pdks-kiosk-ortak-sayac { max-width: 640px; }
+}
