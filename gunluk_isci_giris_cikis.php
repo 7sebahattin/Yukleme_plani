@@ -354,7 +354,7 @@ render_flash();
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis pdks-kiosk-ortak-btn" id="giOrtakCikisBtn">
             🚪 ORTAK ÇIKIŞ <span class="pdks-kiosk-ortak-alt">tüm çavuşlar — çavuş seçmeden</span>
         </button>
-        <div class="pdks-kiosk-ortak-ayrac" role="separator"><span>veya çavuş seçin</span></div>
+        <div class="pdks-kiosk-ortak-ayrac" role="separator"></div>
         <?php endif; ?>
         <?php if (count($cavuslar) > 10): ?>
         <input type="search" id="giCavusFiltre" class="pdks-kiosk-cavus-filter" placeholder="Çavuş adı ara…" autocomplete="off">
@@ -1054,27 +1054,24 @@ render_flash();
         var ikonHtml = (gunlukToplam != null)
             ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
             : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
-        // v289: ÇIKIŞ sonucunda daire yerine o mesaide hâlâ İÇERİDE kalanlar,
-        // Kadın ve Erkek ayrı. Kaynak ozet.eksik_tip (tipe göre açık dönem);
-        // yoksa giris - cikis (negatife düşmez). GİRİŞ sonucu DEĞİŞMEDİ.
+        // v290: ÇIKIŞ sonucunda AYNI daire (top + hareketli çemberler) korunur, yalnız
+        // içindeki RAKAM değişir: okutulan kartın cinsiyetinden o mesaide hâlâ İÇERİDE
+        // kalan kişi sayısı. Ayrı başlık/kutu YOK (kullanıcı kararı). Kaynak
+        // ozet.eksik_tip (tipe göre açık dönem); yoksa giris - cikis (negatife düşmez).
+        // Tip Kadın/Erkek değilse eski davranış (toplam giriş) korunur. GİRİŞ DEĞİŞMEDİ.
         if (d.event_type === 'CIKIS') {
-            var kalanSay = function (hedef) {
-                var n = null;
+            // ⚠ Hedef BÜYÜK harfle karşılaştırılır: 'kadin'.toLocaleUpperCase('tr-TR')
+            // 'KADİN' (noktalı İ) olur ve eşleşme sessizce 0 döner.
+            var tipUst = tip.toLocaleUpperCase('tr-TR');
+            if (tipUst === 'KADIN' || tipUst === 'ERKEK') {
                 var tara = function (obj) {
-                    var v = null;
-                    Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === hedef) v = (v || 0) + (parseInt(obj[k], 10) || 0); });
+                    var v = 0;
+                    Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === tipUst) v += (parseInt(obj[k], 10) || 0); });
                     return v;
                 };
-                if (ozet.eksik_tip) n = tara(ozet.eksik_tip) || 0;
-                else n = Math.max(0, (tara(ozet.giris) || 0) - (tara(ozet.cikis) || 0));
-                return n;
-            };
-            ikonHtml = '<div class="pdks-result-kalan" aria-label="Kalan">' +
-                '<div class="pdks-result-kalan-baslik">KALAN</div>' +
-                '<div class="pdks-result-kalan-kutular">' +
-                '<div class="pdks-result-kalan-kutu is-kadin" data-kalan="kadin"><span class="ad">Kadın</span><span class="n">' + escHtml(String(kalanSay('KADIN'))) + '</span></div>' +
-                '<div class="pdks-result-kalan-kutu is-erkek" data-kalan="erkek"><span class="ad">Erkek</span><span class="n">' + escHtml(String(kalanSay('ERKEK'))) + '</span></div>' +
-                '</div></div>';
+                var kalan = ozet.eksik_tip ? tara(ozet.eksik_tip) : Math.max(0, tara(ozet.giris) - tara(ozet.cikis));
+                ikonHtml = '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" data-sayi="kalan" aria-hidden="true"><span>' + escHtml(String(kalan)) + '</span></div>';
+            }
         }
         // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
         // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v289` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v290` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -452,12 +452,15 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
   Çavuş listesinde "içeride N" rozeti kalır (`pdks_gunluk_ortak_cikis_mesailer()`,
   tek gruplu sorgu); kaydet yanıtındaki `mesailer` ile ve çavuş listesine
   dönüşte `?ajax=ortak_mesailer` ile tazelenir. Düğme ile liste arasında
-  "veya çavuş seçin" ayraçı vardır. **Mesaiyi Kapat ortak modda YOK** —
+  düz çizgi ayraç (yazısız) vardır. **Mesaiyi Kapat ortak modda YOK** —
   kapatma çavuş bazında kalır.
-- v289: ÇIKIŞ sonuç kartında (normal + ortak) büyük daire yerine **KALAN**
-  bloğu: o mesaide içeride kalan Kadın ve Erkek AYRI (kaynak
-  `ozet.eksik_tip`; yoksa giris-cikis, negatife düşmez). GİRİŞ sonucu
-  (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ.
+- v290: ÇIKIŞ sonuç kartında (normal + ortak) daire (top + hareketli
+  çemberler) AYNEN korunur; içindeki rakam, okutulan kartın cinsiyetinden o
+  mesaide hâlâ İÇERİDE kalan kişi sayısıdır (`data-sayi="kalan"`). Ayrı
+  "KALAN" başlığı/kutu YOK (kullanıcı kararı). Kaynak `ozet.eksik_tip`; yoksa
+  giris-cikis, negatife düşmez. Tip Kadın/Erkek değilse eski davranış. GİRİŞ
+  sonucu (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ. Hedef tip BÜYÜK harfle
+  karşılaştırılır — `'kadin'.toLocaleUpperCase('tr-TR')` = `'KADİN'` (noktalı İ).
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
   `node scripts/pdks_ortak_cikis_smoke.js`.
