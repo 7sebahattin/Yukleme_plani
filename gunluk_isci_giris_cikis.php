@@ -1159,7 +1159,9 @@ render_flash();
         if (!ortakMod && tipSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
         }
-        fetch('gunluk_isci_giris_cikis.php?ajax=' + (ortakMod ? 'ortak_cikis' : 'kaydet'), {
+        // USB ve Web NFC İKİ modda da bu TEK fetch'ten geçer; ortak mod yalnız uç adını seçer.
+        var hedef = ortakMod ? 'gunluk_isci_giris_cikis.php?ajax=ortak_cikis' : 'gunluk_isci_giris_cikis.php?ajax=kaydet';
+        fetch(hedef, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(govde)

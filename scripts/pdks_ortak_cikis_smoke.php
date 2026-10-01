@@ -209,7 +209,7 @@ $fn = substr($lib, $a, strpos($lib, 'function pdks_gunluk_ortak_cikis_mesailer('
 ok('ortak çıkış kendi INSERT/UPDATE YAZMAZ (tek yazma yolu korunur)', !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $fn));
 ok('ortak çıkış yazmayı pdks_gunluk_faz8a_cikis_kaydet()\'e devreder', str_contains($fn, 'pdks_gunluk_faz8a_cikis_kaydet('));
 ok('açık dönem kuralı paylaşılan fonksiyondan (kart_acik_donemi)', str_contains($fn, 'pdks_gunluk_faz8a_kart_acik_donemi('));
-ok('JS: ortak modda istek ortak_cikis ucuna, session_id olmadan', str_contains($src, "? { csrf: csrf, ham_uid: deger, kaynak: kaynak }") && str_contains($src, "(ortakMod ? 'ortak_cikis' : 'kaydet')"));
+ok('JS: ortak modda istek ortak_cikis ucuna, session_id olmadan', str_contains($src, "? { csrf: csrf, ham_uid: deger, kaynak: kaynak }") && str_contains($src, "ortakMod ? 'gunluk_isci_giris_cikis.php?ajax=ortak_cikis' : 'gunluk_isci_giris_cikis.php?ajax=kaydet'"));
 
 echo "\n" . ($fail ? "$fail HATA, $gecen geçti\n" : "Tümü geçti ($gecen)\n");
 exit($fail ? 1 : 0);
