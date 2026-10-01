@@ -1364,19 +1364,30 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVaz
     padding: 3px 9px; border-radius: 999px; font-size: .74rem; font-weight: 800;
     background: var(--danger-soft); color: var(--danger); white-space: nowrap;
 }
-.pdks-daily-kiosk .pdks-kiosk-ortak-sayac { width: 100%; max-width: 100%; margin: 4px 0 0; text-align: left; box-sizing: border-box; }
 /* Ortak modda "Modu Değiştir" gizlenir — geri düğmesi tek başına tam genişlik. */
 .pdks-scan-actions.pdks-scan-actions-tek { grid-template-columns: minmax(0, 1fr); }
-.pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row { font-size: .88rem; align-items: baseline; }
-.pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row .n { white-space: nowrap; }
-.pdks-kiosk-ortak-tarih { font-size: .74rem; font-weight: 700; color: #f59e0b; }
-.pdks-kiosk-ortak-not { margin: 8px 0 0; font-size: .78rem; }
 /* Sonuç kartı her temada koyu zeminlidir — çavuş adı her zaman açık renk. */
 .pdks-result-cavus { font-size: 1.15rem; font-weight: 800; overflow-wrap: anywhere; color: #fff; text-align: center; }
 .pdks-daily-kiosk #giResult .pdks-result-cavus { align-self: center; }
-@media (max-width: 639px) {
-    .pdks-kiosk-ortak-sayac .pdks-kiosk-counter-row { flex-direction: column; gap: 0; }
+/* v289 — "ORTAK ÇIKIŞ" ile çavuş listesi arasındaki ayraç */
+.pdks-daily-kiosk .pdks-kiosk-ortak-ayrac {
+    display: flex; align-items: center; gap: 12px; width: 100%; max-width: 480px; margin: 18px auto 16px;
+    font-size: .8rem; font-weight: 600; opacity: .7;
 }
-@media (min-width: 760px) {
-    .pdks-daily-kiosk .pdks-kiosk-ortak-sayac { max-width: 640px; }
+.pdks-kiosk-ortak-ayrac::before, .pdks-kiosk-ortak-ayrac::after {
+    content: ""; flex: 1; height: 1px; background: currentColor; opacity: .35;
 }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #475569; opacity: 1; }
+html[data-theme="dark"] .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #cbd5e1; }
+/* v289 — çıkış sonucunda KALAN (Kadın / Erkek ayrı). Sonuç kartı koyu zeminli. */
+.pdks-result-kalan { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.pdks-result-kalan-baslik { font-size: .85rem; font-weight: 800; letter-spacing: .18em; color: #e2e8f0; }
+.pdks-result-kalan-kutular { display: flex; gap: 12px; justify-content: center; width: 100%; }
+.pdks-result-kalan-kutu {
+    flex: 1 1 0; min-width: 0; max-width: 150px; display: flex; flex-direction: column; align-items: center;
+    padding: 8px 10px; border-radius: 16px;
+}
+.pdks-result-kalan-kutu .ad { font-size: .85rem; font-weight: 800; }
+.pdks-result-kalan-kutu .n { font-size: 2.6rem; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.pdks-result-kalan-kutu.is-kadin { color: #e52384; background: linear-gradient(145deg, #ffd8ec, #f5b7d8); }
+.pdks-result-kalan-kutu.is-erkek { color: #176dd1; background: linear-gradient(145deg, #d9ebff, #a9d0ff); }

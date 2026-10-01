@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v288` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v289` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -433,7 +433,7 @@ okutma durur, yeniden açma yalnız admin) ve hakedişi kesinleştirilebilir kı
   (Faz 8A "nötr kart") DEĞİŞMEDİ** — kullanıcı bunu açıkça korudu.
 - Test: `php scripts/pdks_gun_sonu_kapanis_smoke.php`.
 
-### Ortak Çıkış (v288)
+### Ortak Çıkış (v288, v289)
 
 Çavuş listesinin üstündeki **"🚪 ORTAK ÇIKIŞ"** düğmesi: çavuş seçmeden tek
 ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
@@ -448,9 +448,16 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
 - **Tarih sınırı YOK** (kullanıcı kararı): dünden açık mesaideki kart da çıkar
   (gece vardiyası). **Depo sınırı VAR** (`pdks_gunluk_depo_kontrol`). Tanımsız
   kart otomatik KAYDEDİLMEZ.
-- Sayaç **çavuş çavuş** (`pdks_gunluk_ortak_cikis_mesailer()`, tek gruplu
-  sorgu); çavuş listesinde "içeride N" rozeti. **Mesaiyi Kapat ortak modda
-  YOK** — kapatma çavuş bazında kalır.
+- v289: tarama ekranındaki "çavuş çavuş açık mesailer" paneli KALDIRILDI.
+  Çavuş listesinde "içeride N" rozeti kalır (`pdks_gunluk_ortak_cikis_mesailer()`,
+  tek gruplu sorgu); kaydet yanıtındaki `mesailer` ile ve çavuş listesine
+  dönüşte `?ajax=ortak_mesailer` ile tazelenir. Düğme ile liste arasında
+  "veya çavuş seçin" ayraçı vardır. **Mesaiyi Kapat ortak modda YOK** —
+  kapatma çavuş bazında kalır.
+- v289: ÇIKIŞ sonuç kartında (normal + ortak) büyük daire yerine **KALAN**
+  bloğu: o mesaide içeride kalan Kadın ve Erkek AYRI (kaynak
+  `ozet.eksik_tip`; yoksa giris-cikis, negatife düşmez). GİRİŞ sonucu
+  (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ.
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
   `node scripts/pdks_ortak_cikis_smoke.js`.
