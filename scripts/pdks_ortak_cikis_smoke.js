@@ -116,9 +116,9 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
             const ay = document.querySelector('.pdks-kiosk-ortak-ayrac');
             const liste = document.getElementById('giCavusListe').getBoundingClientRect();
             const a = ay.getBoundingClientRect();
-            return { metin: ay.textContent.trim(), ustBosluk: a.top - btn.bottom, altBosluk: liste.top - a.bottom, arada: a.top >= btn.bottom && a.bottom <= liste.top, mesafe: liste.top - btn.bottom };
+            return { metin: ay.textContent.trim(), yukseklik: a.height, genislik: a.width, ustBosluk: a.top - btn.bottom, altBosluk: liste.top - a.bottom, arada: a.top >= btn.bottom && a.bottom <= liste.top, mesafe: liste.top - btn.bottom };
         });
-        ok('ayraç "veya çavuş seçin", düğme ile liste ARASINDA, mesafe ≥ 16px', /veya çavuş seçin/.test(r1b.metin) && r1b.arada && r1b.mesafe >= 16 && r1b.ustBosluk >= 8 && r1b.altBosluk >= 8, JSON.stringify(r1b));
+        ok('ayraç düz çizgi (yazı YOK), düğme ile liste ARASINDA, mesafe ≥ 16px', r1b.metin === '' && r1b.yukseklik <= 2 && r1b.genislik > 100 && r1b.arada && r1b.mesafe >= 16 && r1b.ustBosluk >= 8 && r1b.altBosluk >= 8, JSON.stringify(r1b));
         ok('içeride rozetleri: A=2, B=1, C gizli', r1.a === 'içeride 2' && r1.b === 'içeride 1' && r1.c === null, JSON.stringify(r1));
 
         // 2) Ortak moda gir
@@ -156,7 +156,7 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
             rozetB: (el => el.hidden ? null : el.textContent)(document.querySelector('[data-gi-icerde-cavus="2"]')),
         }));
         ok('sonuç: ÇIKIŞ KAYDEDİLDİ + "Çavuş: Çavuş B · 30.09.2026 mesaisi"', /ÇIKIŞ KAYDEDİLDİ/.test(r3.sonuc) && /Çavuş: Çavuş B · 30\.09\.2026 mesaisi/.test(r3.sonuc), r3.sonuc);
-        ok('ÇIKIŞ sonucu: "KALAN" + Kadın 3 / Erkek 2 ayrı, daire YOK', r3.baslik === 'KALAN' && r3.kalan.length === 2 && r3.kalan[0] === 'Kadın 3' && r3.kalan[1] === 'Erkek 2' && !r3.daire, JSON.stringify(r3));
+        ok('ÇIKIŞ sonucu (Kadın kartı): "KALAN" + YALNIZ Kadın 3, Erkek kutusu YOK, daire YOK', r3.baslik === 'KALAN' && r3.kalan.length === 1 && r3.kalan[0] === 'Kadın 3' && !r3.daire, JSON.stringify(r3));
         ok('çavuş listesindeki B rozeti gizlendi (içeride 0)', r3.rozetB === null, String(r3.rozetB));
         const sonucKutu = await page.evaluate(() => { const r = document.getElementById('giResult').getBoundingClientRect(); return { sol: r.left, sag: r.right, vw: innerWidth }; });
         ok('sonuç kartı ekran içinde', sonucKutu.sol >= -0.5 && sonucKutu.sag <= sonucKutu.vw + 0.5, JSON.stringify(sonucKutu));
@@ -202,7 +202,7 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
         const r6 = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('normal ÇIKIŞ, yalnız Kadın: Kadın 1 / Erkek 0', r6[0] === 'Kadın 1' && r6[1] === 'Erkek 0', JSON.stringify(r6));
+        ok('normal ÇIKIŞ, Kadın kartı: yalnız Kadın 1', r6.length === 1 && r6[0] === 'Kadın 1', JSON.stringify(r6));
         // eksik_tip yoksa yedek: giris - cikis
         kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:01:00', card: { card_no: 'K001', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00' },
                         ozet: { giris: { 'Kadın': 3, 'Erkek': 1 }, cikis: { 'Kadın': 1, 'Erkek': 2 } } };
@@ -212,7 +212,37 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
         const r6b = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('eksik_tip yok: yedek giriş-çıkış (Kadın 2, Erkek 0 — negatif yok)', r6b[0] === 'Kadın 2' && r6b[1] === 'Erkek 0', JSON.stringify(r6b));
+        ok('eksik_tip yok: yedek giriş-çıkış, yalnız Kadın 2', r6b.length === 1 && r6b[0] === 'Kadın 2', JSON.stringify(r6b));
+        // Erkek kartı → yalnız Erkek (yedek hesap negatife düşmez: giriş 1 − çıkış 2 → 0)
+        kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:02:00', card: { card_no: 'E001', worker_type_name: 'Erkek', entry_time: BUGUN + ' 08:00:00' },
+                        ozet: { giris: { 'Kadın': 3, 'Erkek': 1 }, cikis: { 'Kadın': 1, 'Erkek': 2 } } };
+        await page.waitForTimeout(100);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000002');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r6c = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
+        ok('Erkek kartı: yalnız Erkek 0 (Kadın kutusu YOK, negatif yok)', r6c.length === 1 && r6c[0] === 'Erkek 0', JSON.stringify(r6c));
+        // Erkek kartı, eksik_tip ile → yalnız Erkek 2
+        kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:03:00', card: { card_no: 'E001', worker_type_name: 'Erkek', entry_time: BUGUN + ' 08:00:00' },
+                        ozet: { giris: { 'Kadın': 4, 'Erkek': 3 }, cikis: { 'Kadın': 1, 'Erkek': 1 }, eksik_tip: { 'Kadın': 3, 'Erkek': 2 } } };
+        await page.waitForTimeout(100);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000002');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r6d = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
+        ok('Erkek kartı (eksik_tip): yalnız Erkek 2', r6d.length === 1 && r6d[0] === 'Erkek 2', JSON.stringify(r6d));
+        // Tanınmayan tip → ikisi birden (bilgi kaybolmaz)
+        kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:04:00', card: { card_no: 'X001', worker_type_name: 'Forklift', entry_time: BUGUN + ' 08:00:00' },
+                        ozet: { giris: { 'Kadın': 4, 'Erkek': 3 }, cikis: { 'Kadın': 1, 'Erkek': 1 }, eksik_tip: { 'Kadın': 3, 'Erkek': 2 } } };
+        await page.waitForTimeout(100);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000002');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r6e = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
+        ok('tanınmayan tip: yedek olarak Kadın 3 + Erkek 2 birlikte', r6e.length === 2 && r6e[0] === 'Kadın 3' && r6e[1] === 'Erkek 2', JSON.stringify(r6e));
         // GİRİŞ: daire = toplam giriş, KALAN yok
         await page.click('#giCavusDegistir2');
         await page.waitForTimeout(200);

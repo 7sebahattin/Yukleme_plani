@@ -354,7 +354,7 @@ render_flash();
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis pdks-kiosk-ortak-btn" id="giOrtakCikisBtn">
             🚪 ORTAK ÇIKIŞ <span class="pdks-kiosk-ortak-alt">tüm çavuşlar — çavuş seçmeden</span>
         </button>
-        <div class="pdks-kiosk-ortak-ayrac" role="separator"><span>veya çavuş seçin</span></div>
+        <div class="pdks-kiosk-ortak-ayrac" role="separator"></div>
         <?php endif; ?>
         <?php if (count($cavuslar) > 10): ?>
         <input type="search" id="giCavusFiltre" class="pdks-kiosk-cavus-filter" placeholder="Çavuş adı ara…" autocomplete="off">
@@ -1069,12 +1069,21 @@ render_flash();
                 else n = Math.max(0, (tara(ozet.giris) || 0) - (tara(ozet.cikis) || 0));
                 return n;
             };
+            // v290: yalnız OKUTULAN kartın cinsiyeti gösterilir (Kadın kartı → yalnız
+            // Kadın, Erkek kartı → yalnız Erkek — GİRİŞ dairesindeki gibi). Tip tanınmazsa
+            // (ör. eski/bilinmeyen tip adı) ikisi birden gösterilir, bilgi kaybolmaz.
+            var tipUst = tip.toLocaleUpperCase('tr-TR');
+            // ⚠ Hedef ad BÜYÜK harfle verilir: 'kadin'.toLocaleUpperCase('tr-TR') = 'KADİN' (noktalı İ)
+            // olur ve kalanSay() eşleşmesi sessizce 0 döner.
+            var kalanKutu = function (cins, hedef, ad, sinif) {
+                return '<div class="pdks-result-kalan-kutu ' + sinif + '" data-kalan="' + cins + '"><span class="ad">' + ad + '</span><span class="n">' + escHtml(String(kalanSay(hedef))) + '</span></div>';
+            };
+            var kalanKutular = tipUst === 'KADIN' ? kalanKutu('kadin', 'KADIN', 'Kadın', 'is-kadin')
+                : (tipUst === 'ERKEK' ? kalanKutu('erkek', 'ERKEK', 'Erkek', 'is-erkek')
+                : kalanKutu('kadin', 'KADIN', 'Kadın', 'is-kadin') + kalanKutu('erkek', 'ERKEK', 'Erkek', 'is-erkek'));
             ikonHtml = '<div class="pdks-result-kalan" aria-label="Kalan">' +
                 '<div class="pdks-result-kalan-baslik">KALAN</div>' +
-                '<div class="pdks-result-kalan-kutular">' +
-                '<div class="pdks-result-kalan-kutu is-kadin" data-kalan="kadin"><span class="ad">Kadın</span><span class="n">' + escHtml(String(kalanSay('KADIN'))) + '</span></div>' +
-                '<div class="pdks-result-kalan-kutu is-erkek" data-kalan="erkek"><span class="ad">Erkek</span><span class="n">' + escHtml(String(kalanSay('ERKEK'))) + '</span></div>' +
-                '</div></div>';
+                '<div class="pdks-result-kalan-kutular">' + kalanKutular + '</div></div>';
         }
         // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
         // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı

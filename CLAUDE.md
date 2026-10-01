@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v289` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v290` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -452,11 +452,12 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
   Çavuş listesinde "içeride N" rozeti kalır (`pdks_gunluk_ortak_cikis_mesailer()`,
   tek gruplu sorgu); kaydet yanıtındaki `mesailer` ile ve çavuş listesine
   dönüşte `?ajax=ortak_mesailer` ile tazelenir. Düğme ile liste arasında
-  "veya çavuş seçin" ayraçı vardır. **Mesaiyi Kapat ortak modda YOK** —
+  düz çizgi ayraç (yazısız) vardır. **Mesaiyi Kapat ortak modda YOK** —
   kapatma çavuş bazında kalır.
-- v289: ÇIKIŞ sonuç kartında (normal + ortak) büyük daire yerine **KALAN**
-  bloğu: o mesaide içeride kalan Kadın ve Erkek AYRI (kaynak
-  `ozet.eksik_tip`; yoksa giris-cikis, negatife düşmez). GİRİŞ sonucu
+- v289/v290: ÇIKIŞ sonuç kartında (normal + ortak) büyük daire yerine **KALAN**
+  bloğu: o mesaide içeride kalan, YALNIZ OKUTULAN kartın cinsiyeti için
+  (Kadın kartı → yalnız Kadın, Erkek kartı → yalnız Erkek; tip tanınmazsa
+  ikisi birden). Kaynak `ozet.eksik_tip`; yoksa giris-cikis, negatife düşmez). GİRİŞ sonucu
   (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ.
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
