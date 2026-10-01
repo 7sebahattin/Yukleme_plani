@@ -145,6 +145,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kaydet')
     exit;
 }
 
+// ⚠ v288 — ORTAK ÇIKIŞ: çavuş seçmeden çıkış. session_id istemciden
+// GELMEZ — kartın açık mesaisini sunucu bulur ve yazmayı değiştirilmemiş
+// pdks_gunluk_faz8a_cikis_kaydet()'e devreder (bkz. pdks_gunluk_ortak_cikis_kaydet).
+// Depo kontrolü o fonksiyonun içinde, BULUNAN mesai üzerinde yapılır.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'ortak_cikis') {
+    header('Content-Type: application/json; charset=utf-8');
+    $govde = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($govde)) $govde = [];
+    csrf_check($govde['csrf'] ?? null);
+    require_pdks_gunluk('daily_scan');
+
+    $sonuc = pdks_gunluk_ortak_cikis_kaydet(
+        trim((string)($govde['ham_uid'] ?? '')),
+        trim((string)($govde['kaynak'] ?? '')),
+        (int)$auth_user['id'],
+        $pdo
+    );
+    $sonuc['mesailer'] = pdks_gunluk_ortak_cikis_mesailer(null, $pdo);
+    echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// v288 — ortak çıkış ekranının çavuş çavuş sayaçları (SALT OKUNUR).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'ortak_mesailer') {
+    header('Content-Type: application/json; charset=utf-8');
+    $govde = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($govde)) $govde = [];
+    csrf_check($govde['csrf'] ?? null);
+    require_pdks_gunluk('daily_scan');
+    echo json_encode(['ok' => true, 'mesailer' => pdks_gunluk_ortak_cikis_mesailer(null, $pdo)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'kapat') {
     header('Content-Type: application/json; charset=utf-8');
     $govde = json_decode((string)file_get_contents('php://input'), true);
@@ -255,6 +288,17 @@ try {
     $suresiDolanlar = pdks_gunluk_suresi_dolan_oturumlar(null, $pdo);
 } catch (PDOException $e) { /* hatırlatma tarama akışını ASLA engellemez */ }
 
+// v288 — ortak çıkış: çavuş listesinde "içeride N" rozetleri (aktif depodaki
+// açık mesailer; aynı çavuşun dünden + bugünden iki açık mesaisi olabilir → toplanır).
+$icerdeCavus = [];
+if ($faz8aHazir) {
+    try {
+        foreach (pdks_gunluk_ortak_cikis_mesailer(null, $pdo) as $m) {
+            $icerdeCavus[$m['foreman_id']] = ($icerdeCavus[$m['foreman_id']] ?? 0) + $m['icerde'];
+        }
+    } catch (PDOException $e) { /* rozet yalnız bilgi — sayfayı ASLA engellemez */ }
+}
+
 render_header('Günlük İşçi Giriş / Çıkış');
 echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime(__DIR__ . '/assets/pdks.css') . '">';
 render_flash();
@@ -306,6 +350,11 @@ render_flash();
             <a href="cavus_form.php" class="btn btn-primary">+ Çavuş Ekle</a>
         </div>
         <?php else: ?>
+        <?php if ($faz8aHazir): ?>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis pdks-kiosk-ortak-btn" id="giOrtakCikisBtn">
+            🚪 ORTAK ÇIKIŞ <span class="pdks-kiosk-ortak-alt">tüm çavuşlar — çavuş seçmeden</span>
+        </button>
+        <?php endif; ?>
         <?php if (count($cavuslar) > 10): ?>
         <input type="search" id="giCavusFiltre" class="pdks-kiosk-cavus-filter" placeholder="Çavuş adı ara…" autocomplete="off">
         <?php endif; ?>
@@ -314,7 +363,10 @@ render_flash();
             <button type="button" class="pdks-kiosk-cavus-btn" data-gi-cavus-id="<?= (int)$c['id'] ?>"
                     data-gi-cavus-ad="<?= h($c['name']) ?>" data-gi-filtre="<?= h(mb_strtolower($c['name'], 'UTF-8')) ?>">
                 <span><?= h($c['name']) ?></span>
-                <span class="pdks-kiosk-cavus-kod"><?= h($c['code']) ?></span>
+                <span class="pdks-kiosk-cavus-sag">
+                    <span class="pdks-kiosk-cavus-icerde" data-gi-icerde-cavus="<?= (int)$c['id'] ?>"<?= empty($icerdeCavus[(int)$c['id']]) ? ' hidden' : '' ?>>içeride <?= (int)($icerdeCavus[(int)$c['id']] ?? 0) ?></span>
+                    <span class="pdks-kiosk-cavus-kod"><?= h($c['code']) ?></span>
+                </span>
             </button>
             <?php endforeach; ?>
         </div>
@@ -411,6 +463,14 @@ render_flash();
         <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
             <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
+        </div>
+
+        <!-- v288 — ORTAK ÇIKIŞ: açık mesailer çavuş çavuş (yalnız ortak modda görünür).
+             Mesaiyi Kapat burada YOK — kapatma çavuş bazında, çavuş listesinden yapılır. -->
+        <div class="pdks-kiosk-counters pdks-kiosk-ortak-sayac" id="giOrtakSayac" hidden>
+            <h3>Açık mesailer — çavuş çavuş</h3>
+            <div id="giOrtakSatirlar"></div>
+            <p class="muted pdks-kiosk-ortak-not">Çıkışlar bitince mesaiyi kapatmak için “Çavuş Seçimine Dön” → çavuş → 🔒 Mesaiyi Kapat.</p>
         </div>
 
         <!-- ── Sonuç overlay'i (başarı/hata) ────────────────── -->
@@ -598,6 +658,10 @@ render_flash();
     var seciliCavusAd  = null;
     var currentMode    = null;   // 'GIRIS' | 'CIKIS' — İSTEMCİDE ASLA otomatik seçilmez
     var currentSession = null;   // { id, ... } — sunucudan gelir, İCAT EDİLMEZ
+    // v288 — ORTAK ÇIKIŞ: true iken currentSession YOKTUR (null kalır); kartın
+    // mesaisini sunucu bulur (?ajax=ortak_cikis). Yalnız ÇIKIŞ — giriş her
+    // zaman çavuş + işçi tipi seçimiyle yapılır.
+    var ortakMod = false;
     var modeRequest = 0;
     var busy = false;
     var kayitBekci = null;   // bkz. kaydet() — askıda kalan isteğin kilidi kilitlemesini önler
@@ -658,6 +722,7 @@ render_flash();
     }
     document.querySelectorAll('[data-gi-cavus-id]').forEach(function (btn) {
         btn.addEventListener('click', function () {
+            ortakModKapat();
             seciliCavusId = parseInt(btn.getAttribute('data-gi-cavus-id'), 10);
             seciliCavusAd = btn.getAttribute('data-gi-cavus-ad');
             document.getElementById('giSeciliCavusAd').textContent = seciliCavusAd;
@@ -771,11 +836,88 @@ render_flash();
     });
     eskiListeCiz();
 
+    // ── v288) ORTAK ÇIKIŞ ─────────────────────────────────────
+    var ortakBtn       = document.getElementById('giOrtakCikisBtn');
+    var ortakSayac     = document.getElementById('giOrtakSayac');
+    var ortakSatirlar  = document.getElementById('giOrtakSatirlar');
+    var modDegistirBtn = document.getElementById('giModDegistir');
+    var cavusDegistir2 = document.getElementById('giCavusDegistir2');
+    var CAVUS_DEGISTIR_ETIKET = cavusDegistir2.textContent;
+    var ortakRequest = 0;
+
+    // Çavuş listesindeki "içeride N" rozetleri — aynı çavuşun dünden + bugünden
+    // iki açık mesaisi olabilir, toplanır.
+    function icerdeRozetleriGuncelle(mesailer) {
+        var top = {};
+        (mesailer || []).forEach(function (m) { top[m.foreman_id] = (top[m.foreman_id] || 0) + (m.icerde || 0); });
+        document.querySelectorAll('[data-gi-icerde-cavus]').forEach(function (el) {
+            var n = top[el.getAttribute('data-gi-icerde-cavus')] || 0;
+            el.hidden = n === 0;
+            el.textContent = 'içeride ' + n;
+        });
+    }
+    function ortakSayacCiz(mesailer) {
+        if (!ortakSatirlar) return;
+        var html = '';
+        (mesailer || []).forEach(function (m) {
+            html += '<div class="pdks-kiosk-counter-row' + (m.icerde === 0 ? ' muted' : '') + '"><span>' + escHtml(m.foreman_name) +
+                (m.onceki_gun ? ' <span class="pdks-kiosk-ortak-tarih">' + escHtml(tarihTr(m.work_date)) + '</span>' : '') +
+                '</span><span class="n">Giriş ' + m.giris + ' · Çıkış ' + m.cikis + ' · İçeride ' + m.icerde + '</span></div>';
+        });
+        if (html === '') html = '<div class="pdks-kiosk-counter-row muted"><span>Bu depoda açık mesai yok</span></div>';
+        ortakSatirlar.innerHTML = html;
+        icerdeRozetleriGuncelle(mesailer);
+    }
+    function ortakMesaileriYukle() {
+        var request = ++ortakRequest;
+        fetch('gunluk_isci_giris_cikis.php?ajax=ortak_mesailer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ csrf: csrf })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (request === ortakRequest && d && d.ok) ortakSayacCiz(d.mesailer); })
+            .catch(function () { /* sayaç yalnız bilgi — okutmayı ENGELLEMEZ */ });
+    }
+    function ortakModAc() {
+        modeRequest++;
+        seciliCavusId = null; seciliCavusAd = null;
+        seciliTipId = null; seciliTipAd = null;
+        currentMode = 'CIKIS'; currentSession = null;
+        ortakMod = true;
+        modeBadge.textContent = '🚪 ORTAK ÇIKIŞ MODU';
+        modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF.CIKIS;
+        tipBadge.hidden = true; tipBadge.textContent = '';
+        document.getElementById('giScanCavusAd').textContent = 'Tüm çavuşlar';
+        if (modDegistirBtn) modDegistirBtn.hidden = true;
+        cavusDegistir2.textContent = '↩ Çavuş Seçimine Dön';
+        cavusDegistir2.parentNode.classList.add('pdks-scan-actions-tek');
+        if (ortakSayac) ortakSayac.hidden = false;
+        ortakSayacCiz([]);
+        ortakMesaileriYukle();
+        scanInput.value = '';
+        resultBox.hidden = true;
+        ekranGoster(scanSec);
+        focusInput();
+    }
+    function ortakModKapat() {
+        if (!ortakMod) return;
+        ortakMod = false;
+        ortakRequest++;
+        currentMode = null; currentSession = null;
+        if (modDegistirBtn) modDegistirBtn.hidden = false;
+        cavusDegistir2.textContent = CAVUS_DEGISTIR_ETIKET;
+        cavusDegistir2.parentNode.classList.remove('pdks-scan-actions-tek');
+        if (ortakSayac) ortakSayac.hidden = true;
+    }
+    if (ortakBtn) ortakBtn.addEventListener('click', ortakModAc);
+
     function cavusDegistir() {
         // ⚠ Sunucudaki oturum KAPATILMAZ — yalnız istemci ekranı sıfırlanır
         // (kullanıcının açık talimatı: "changing screen/foreman must NOT
         // close the session. Sessions stay server-side until explicitly closed.")
         modeRequest++;
+        ortakModKapat();
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null;
         kapatKaynak = 'mod';
@@ -948,6 +1090,9 @@ render_flash();
             '<div class="pdks-result-time">' + escHtml(saatBilgi) + '</div>' +
             '<div class="pdks-kiosk-result-msg' + sonucSinif + '">' + baslik + '</div>' +
             '<div class="pdks-result-cardno">Kart No: ' + escHtml(kart.card_no || '') + '</div>' +
+            // v288: ortak çıkışta çıkışın HANGİ çavuşa yazıldığı (dünden açık mesaiyse tarihiyle).
+            (d.cavus ? '<div class="pdks-result-cavus">Çavuş: ' + escHtml(d.cavus.ad) +
+                (d.cavus.onceki_gun ? ' · ' + escHtml(tarihTr(d.cavus.work_date)) + ' mesaisi' : '') + '</div>' : '') +
             // v275: önceki (kapatılmış) mesaide çıkışsız kalan kart — giriş YAPILDI,
             // eski kayıt raporda eksik çıkış olarak kalır. Okunabilsin diye süre uzar.
             (d.uyari ? '<div class="pdks-result-uyari" role="alert">⚠️ ' + escHtml(d.uyari) + '</div>' : ''),
@@ -976,7 +1121,7 @@ render_flash();
     // ekranda sebebini söyler. Yeni bir erken çıkış eklersen AYNISINI yap.
     function kaydet(hamUid, kaynak) {
         if (busy) { nfcDebugYaz('kaydet atlandı: önceki istek hâlâ sürüyor'); return; }
-        if (!currentMode || !currentSession) {
+        if (!ortakMod && (!currentMode || !currentSession)) {
             nfcDebugYaz('kaydet atlandı: mod/mesai yok (mod=' + currentMode + ', mesai=' + (currentSession ? currentSession.id : 'yok') + ')');
             hataGoster('Mesai bağlantısı yok — "Modu Değiştir" ile GİRİŞ/ÇIKIŞ modunu yeniden seçin.');
             return;
@@ -1007,11 +1152,16 @@ render_flash();
             nfcDebugYaz('istek zaman aşımı — kilit açıldı (yanıt gelmedi)');
             hataGoster('Sunucu yanıt vermedi — kartı tekrar okutun.');
         }, 15000);
-        var govde = { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
-        if (tipSec && currentMode === 'GIRIS') {
+        // v288: ortak modda session_id GÖNDERİLMEZ — mesaiyi sunucu bulur.
+        var govde = ortakMod
+            ? { csrf: csrf, ham_uid: deger, kaynak: kaynak }
+            : { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
+        if (!ortakMod && tipSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
         }
-        fetch('gunluk_isci_giris_cikis.php?ajax=kaydet', {
+        // USB ve Web NFC İKİ modda da bu TEK fetch'ten geçer; ortak mod yalnız uç adını seçer.
+        var hedef = ortakMod ? 'gunluk_isci_giris_cikis.php?ajax=ortak_cikis' : 'gunluk_isci_giris_cikis.php?ajax=kaydet';
+        fetch(hedef, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: JSON.stringify(govde)
@@ -1020,7 +1170,10 @@ render_flash();
             .then(function (d) {
                 busy = false; clearTimeout(kayitBekci);
                 nfcDebugYaz('backend response: ' + ((d && d.ok) ? 'ok' : 'hata (' + ((d && d.kod) || '?') + ')'));
-                if (d && d.ok) { basariGoster(d); if (d.ozet) sayaclariGoster(d.ozet); }
+                if (ortakMod && d && d.mesailer) ortakSayacCiz(d.mesailer);
+                // Ortak modda d.ozet o kartın mesaisine aittir — çavuş ekranının
+                // sayaçlarına YAZILMAZ (başka çavuşun sayısı görünürdü).
+                if (d && d.ok) { basariGoster(d); if (d.ozet && !ortakMod) sayaclariGoster(d.ozet); }
                 else hataGoster(d && d.hata);
                 focusInput();
             })

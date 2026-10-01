@@ -3147,6 +3147,142 @@ function pdks_gunluk_faz8a_cikis_kaydet(string $hamUid, string $kaynak, int $ses
 }
 
 // =========================================================
+// ORTAK ÇIKIŞ (v288) — çavuş seçmeden, tek ekrandan çıkış
+// =========================================================
+// ⚠ İKİNCİ BİR YAZMA YOLU DEĞİLDİR. Bu fonksiyon yalnız kartın hangi açık
+// mesaide içeride olduğunu BULUR (pdks_gunluk_faz8a_kart_acik_donemi() —
+// giriş/çıkışın kullandığı AYNI kural) ve yazmayı DEĞİŞTİRİLMEMİŞ
+// pdks_gunluk_faz8a_cikis_kaydet()'e devreder. O fonksiyon kartı kilitleyip
+// açık dönemi YENİDEN okur ve oturum uyuşmazsa reddeder: bu okuma ile yazma
+// arasında mesai kapanır ya da kart başka mesaiye geçerse çıkış YAZILMAZ.
+// Yanlış çavuşa çıkış yazmak yapısal olarak mümkün değildir — çıkış her
+// zaman kartın GİRİŞ yaptığı mesaiye gider.
+//
+// Tarih SINIRI YOK (kullanıcı kararı): dünden açık kalmış mesaide içerideki
+// kart da çıkış yapar (gece yarısını geçen vardiya). Depo sınırı VAR: mesai
+// aktif depoya ait değilse yazılmaz (pdks_gunluk_depo_kontrol).
+// Tanımsız kart girişteki gibi otomatik KAYDEDİLMEZ (çıkışta yeni kart anlamsız).
+function pdks_gunluk_ortak_cikis_kaydet(string $hamUid, string $kaynak, int $recordedByUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!pdks_gunluk_faz8a_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'sema_hazir_degil', 'hata' => 'Ortak çıkış için Faz 8A şeması gerekir — çavuş seçerek çıkış yapın.'];
+    }
+    if (!defined('PDKS_UID_KAYNAKLARI') || !in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_kaynak', 'hata' => 'UID kaynağı bildirilmeli.'];
+    }
+    $hamUid = trim($hamUid);
+    if ($hamUid === '') return ['ok' => false, 'kod' => 'bos_uid', 'hata' => 'Kart okutulmadı.'];
+    if (!function_exists('pdks_uid_from_decimal')) {
+        return ['ok' => false, 'kod' => 'pdks_yuklu_degil', 'hata' => 'UID normalizasyon fonksiyonları yüklü değil.'];
+    }
+
+    $kanonik = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($hamUid),
+        'web_nfc'     => pdks_uid_from_web_nfc($hamUid),
+        default       => pdks_uid_hex_normalize($hamUid),
+    };
+    if ($kanonik === null) return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
+
+    $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+    if ($kart === null) {
+        $engel = pdks_gunluk_kalici_kart_engeli($hamUid, $kaynak, $pdo);
+        if ($engel !== null) return ['ok' => false] + $engel;
+        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
+    }
+
+    $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$kart['id']);
+    if ($acik === null) {
+        $eksikDonem = pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($pdo, (int)$kart['id']);
+        if ($eksikDonem) {
+            return ['ok' => false, 'kod' => 'acik_donem_yok',
+                    'hata' => pdks_gunluk_eksik_cikis_uyari_metni($eksikDonem) . ' Mesai kapatıldığı için çıkış yazılamaz.'];
+        }
+        return ['ok' => false, 'kod' => 'acik_donem_yok', 'hata' => 'Bu kart için açık bir mesai bulunamadı.'];
+    }
+
+    $acikDepo = trim((string)($acik['depo'] ?? ''));
+    if (pdks_gunluk_depo_kontrol($acikDepo) !== null) {
+        $cavus = trim((string)($acik['foreman_name'] ?? '')) ?: 'başka bir çavuş';
+        return ['ok' => false, 'kod' => 'yanlis_depo',
+                'hata' => $acikDepo !== ''
+                    ? 'Bu kart ' . $acikDepo . ' deposunda ' . $cavus . ' için açık görünüyor. Lütfen depo değişimi yapın.'
+                    : 'Önce bir depo seçmelisiniz.'];
+    }
+
+    $sonuc = pdks_gunluk_faz8a_cikis_kaydet($hamUid, $kaynak, (int)$acik['session_id'], $recordedByUserId, $pdo);
+    if (!empty($sonuc['ok'])) {
+        $stS = $pdo->prepare("SELECT work_date FROM daily_work_sessions WHERE id = ?");
+        $stS->execute([(int)$acik['session_id']]);
+        $workDate = (string)$stS->fetchColumn();
+        $sonuc['cavus'] = [
+            'id' => (int)$acik['foreman_id'],
+            'ad' => (string)$acik['foreman_name'],
+            'session_id' => (int)$acik['session_id'],
+            'work_date' => $workDate,
+            'onceki_gun' => $workDate !== '' && $workDate < date('Y-m-d'),
+        ];
+    }
+    return $sonuc;
+}
+
+/**
+ * Ortak çıkış ekranının çavuş çavuş sayaçları: aktif depodaki AÇIK mesailer
+ * (tarih sınırı yok — dünden açık kalan da listelenir, ortak çıkış onu da
+ * kapatabildiği için) ve her birinin giriş/çıkış/içeride sayısı. TEK sorguda
+ * gruplanır (her okutmada çağrıldığı için oturum başına özet ÇAĞIRILMAZ).
+ * Sayım kuralı pdks_gunluk_faz8a_oturum_ozet() ile AYNI (yalnız is_voided
+ * hariç). SALT OKUNUR.
+ *
+ * @return list<array{session_id:int, foreman_id:int, foreman_name:string, work_date:string, onceki_gun:bool, giris:int, cikis:int, icerde:int}>
+ */
+function pdks_gunluk_ortak_cikis_mesailer(?string $depo = null, ?PDO $pdo = null): array
+{
+    $pdo  = $pdo ?? db();
+    $depo = $depo ?? (function_exists('active_depot') ? (active_depot() ?? '') : '');
+    if (trim($depo) === '' || !pdks_gunluk_faz8a_sema_hazir($pdo)) return [];
+
+    $st = $pdo->prepare(
+        "SELECT s.id, s.foreman_id, s.work_date, s.depo, COALESCE(f.name, s.foreman_name_snapshot) AS foreman_name
+           FROM daily_work_sessions s
+           LEFT JOIN foremen f ON f.id = s.foreman_id
+          WHERE s.status = 'open'
+          ORDER BY s.work_date ASC, foreman_name ASC, s.id ASC"
+    );
+    $st->execute();
+    $mesailer = [];
+    foreach ($st->fetchAll() as $r) {
+        if (pdks_gunluk_depo_kontrol((string)$r['depo'], $depo) !== null) continue;
+        $mesailer[(int)$r['id']] = [
+            'session_id' => (int)$r['id'], 'foreman_id' => (int)$r['foreman_id'],
+            'foreman_name' => (string)$r['foreman_name'], 'work_date' => (string)$r['work_date'],
+            'onceki_gun' => (string)$r['work_date'] < date('Y-m-d'),
+            'giris' => 0, 'cikis' => 0, 'icerde' => 0,
+        ];
+    }
+    if (!$mesailer) return [];
+
+    $ids = array_keys($mesailer);
+    $stN = $pdo->prepare(
+        "SELECT session_id, COUNT(*) AS giris,
+                SUM(CASE WHEN exit_event_id IS NOT NULL THEN 1 ELSE 0 END) AS cikis
+           FROM daily_worker_work_periods
+          WHERE session_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")
+            AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . "
+          GROUP BY session_id"
+    );
+    $stN->execute($ids);
+    foreach ($stN->fetchAll() as $n) {
+        $sid = (int)$n['session_id'];
+        $mesailer[$sid]['giris']  = (int)$n['giris'];
+        $mesailer[$sid]['cikis']  = (int)$n['cikis'];
+        $mesailer[$sid]['icerde'] = (int)$n['giris'] - (int)$n['cikis'];
+    }
+    return array_values($mesailer);
+}
+
+// =========================================================
 // PERİYOT-TABANLI OKUMA — bu bölümün fonksiyonları aşağıdaki Faz 1-7
 // fonksiyonlarının İÇİNDEN, YALNIZ pdks_gunluk_faz8a_sema_hazir() true
 // döndüğünde çağrılır (dosyanın geri kalanındaki çağrı noktalarına bkz.):
