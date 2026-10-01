@@ -354,6 +354,7 @@ render_flash();
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis pdks-kiosk-ortak-btn" id="giOrtakCikisBtn">
             🚪 ORTAK ÇIKIŞ <span class="pdks-kiosk-ortak-alt">tüm çavuşlar — çavuş seçmeden</span>
         </button>
+        <div class="pdks-kiosk-ortak-ayrac" role="separator"><span>veya çavuş seçin</span></div>
         <?php endif; ?>
         <?php if (count($cavuslar) > 10): ?>
         <input type="search" id="giCavusFiltre" class="pdks-kiosk-cavus-filter" placeholder="Çavuş adı ara…" autocomplete="off">
@@ -463,14 +464,6 @@ render_flash();
         <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
             <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
-        </div>
-
-        <!-- v288 — ORTAK ÇIKIŞ: açık mesailer çavuş çavuş (yalnız ortak modda görünür).
-             Mesaiyi Kapat burada YOK — kapatma çavuş bazında, çavuş listesinden yapılır. -->
-        <div class="pdks-kiosk-counters pdks-kiosk-ortak-sayac" id="giOrtakSayac" hidden>
-            <h3>Açık mesailer — çavuş çavuş</h3>
-            <div id="giOrtakSatirlar"></div>
-            <p class="muted pdks-kiosk-ortak-not">Çıkışlar bitince mesaiyi kapatmak için “Çavuş Seçimine Dön” → çavuş → 🔒 Mesaiyi Kapat.</p>
         </div>
 
         <!-- ── Sonuç overlay'i (başarı/hata) ────────────────── -->
@@ -838,8 +831,6 @@ render_flash();
 
     // ── v288) ORTAK ÇIKIŞ ─────────────────────────────────────
     var ortakBtn       = document.getElementById('giOrtakCikisBtn');
-    var ortakSayac     = document.getElementById('giOrtakSayac');
-    var ortakSatirlar  = document.getElementById('giOrtakSatirlar');
     var modDegistirBtn = document.getElementById('giModDegistir');
     var cavusDegistir2 = document.getElementById('giCavusDegistir2');
     var CAVUS_DEGISTIR_ETIKET = cavusDegistir2.textContent;
@@ -856,19 +847,9 @@ render_flash();
             el.textContent = 'içeride ' + n;
         });
     }
-    function ortakSayacCiz(mesailer) {
-        if (!ortakSatirlar) return;
-        var html = '';
-        (mesailer || []).forEach(function (m) {
-            html += '<div class="pdks-kiosk-counter-row' + (m.icerde === 0 ? ' muted' : '') + '"><span>' + escHtml(m.foreman_name) +
-                (m.onceki_gun ? ' <span class="pdks-kiosk-ortak-tarih">' + escHtml(tarihTr(m.work_date)) + '</span>' : '') +
-                '</span><span class="n">Giriş ' + m.giris + ' · Çıkış ' + m.cikis + ' · İçeride ' + m.icerde + '</span></div>';
-        });
-        if (html === '') html = '<div class="pdks-kiosk-counter-row muted"><span>Bu depoda açık mesai yok</span></div>';
-        ortakSatirlar.innerHTML = html;
-        icerdeRozetleriGuncelle(mesailer);
-    }
+    // Çavuş listesine dönüşte rozetler sunucudan tazelenir (salt okunur uç).
     function ortakMesaileriYukle() {
+        if (!document.querySelector('[data-gi-icerde-cavus]')) return;
         var request = ++ortakRequest;
         fetch('gunluk_isci_giris_cikis.php?ajax=ortak_mesailer', {
             method: 'POST',
@@ -876,8 +857,8 @@ render_flash();
             body: JSON.stringify({ csrf: csrf })
         })
             .then(function (r) { return r.json(); })
-            .then(function (d) { if (request === ortakRequest && d && d.ok) ortakSayacCiz(d.mesailer); })
-            .catch(function () { /* sayaç yalnız bilgi — okutmayı ENGELLEMEZ */ });
+            .then(function (d) { if (request === ortakRequest && d && d.ok) icerdeRozetleriGuncelle(d.mesailer); })
+            .catch(function () { /* rozet yalnız bilgi */ });
     }
     function ortakModAc() {
         modeRequest++;
@@ -892,9 +873,6 @@ render_flash();
         if (modDegistirBtn) modDegistirBtn.hidden = true;
         cavusDegistir2.textContent = '↩ Çavuş Seçimine Dön';
         cavusDegistir2.parentNode.classList.add('pdks-scan-actions-tek');
-        if (ortakSayac) ortakSayac.hidden = false;
-        ortakSayacCiz([]);
-        ortakMesaileriYukle();
         scanInput.value = '';
         resultBox.hidden = true;
         ekranGoster(scanSec);
@@ -908,7 +886,6 @@ render_flash();
         if (modDegistirBtn) modDegistirBtn.hidden = false;
         cavusDegistir2.textContent = CAVUS_DEGISTIR_ETIKET;
         cavusDegistir2.parentNode.classList.remove('pdks-scan-actions-tek');
-        if (ortakSayac) ortakSayac.hidden = true;
     }
     if (ortakBtn) ortakBtn.addEventListener('click', ortakModAc);
 
@@ -923,6 +900,7 @@ render_flash();
         kapatKaynak = 'mod';
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
+        ortakMesaileriYukle();
     }
     document.getElementById('giCavusDegistir1').addEventListener('click', cavusDegistir);
     document.getElementById('giCavusDegistir2').addEventListener('click', cavusDegistir);
@@ -1076,6 +1054,28 @@ render_flash();
         var ikonHtml = (gunlukToplam != null)
             ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
             : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
+        // v289: ÇIKIŞ sonucunda daire yerine o mesaide hâlâ İÇERİDE kalanlar,
+        // Kadın ve Erkek ayrı. Kaynak ozet.eksik_tip (tipe göre açık dönem);
+        // yoksa giris - cikis (negatife düşmez). GİRİŞ sonucu DEĞİŞMEDİ.
+        if (d.event_type === 'CIKIS') {
+            var kalanSay = function (hedef) {
+                var n = null;
+                var tara = function (obj) {
+                    var v = null;
+                    Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === hedef) v = (v || 0) + (parseInt(obj[k], 10) || 0); });
+                    return v;
+                };
+                if (ozet.eksik_tip) n = tara(ozet.eksik_tip) || 0;
+                else n = Math.max(0, (tara(ozet.giris) || 0) - (tara(ozet.cikis) || 0));
+                return n;
+            };
+            ikonHtml = '<div class="pdks-result-kalan" aria-label="Kalan">' +
+                '<div class="pdks-result-kalan-baslik">KALAN</div>' +
+                '<div class="pdks-result-kalan-kutular">' +
+                '<div class="pdks-result-kalan-kutu is-kadin" data-kalan="kadin"><span class="ad">Kadın</span><span class="n">' + escHtml(String(kalanSay('KADIN'))) + '</span></div>' +
+                '<div class="pdks-result-kalan-kutu is-erkek" data-kalan="erkek"><span class="ad">Erkek</span><span class="n">' + escHtml(String(kalanSay('ERKEK'))) + '</span></div>' +
+                '</div></div>';
+        }
         // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
         // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı
         // render ediliyordu; SVG rengi kapsülün kendi --gender-ikon
@@ -1170,7 +1170,7 @@ render_flash();
             .then(function (d) {
                 busy = false; clearTimeout(kayitBekci);
                 nfcDebugYaz('backend response: ' + ((d && d.ok) ? 'ok' : 'hata (' + ((d && d.kod) || '?') + ')'));
-                if (ortakMod && d && d.mesailer) ortakSayacCiz(d.mesailer);
+                if (d && d.mesailer) icerdeRozetleriGuncelle(d.mesailer);
                 // Ortak modda d.ozet o kartın mesaisine aittir — çavuş ekranının
                 // sayaçlarına YAZILMAZ (başka çavuşun sayısı görünürdü).
                 if (d && d.ok) { basariGoster(d); if (d.ozet && !ortakMod) sayaclariGoster(d.ozet); }

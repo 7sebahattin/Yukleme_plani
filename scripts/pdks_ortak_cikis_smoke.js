@@ -74,6 +74,7 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         const page = await browser.newPage({ viewport: { width: ekran.width, height: ekran.height } });
         const istekler = [];
         let cikisSayisi = 0;
+        let kaydetYanit = null;
         await page.route('**/gunluk_isci_giris_cikis.php?ajax=*', async route => {
             const req = route.request();
             const uc = new URL(req.url()).searchParams.get('ajax');
@@ -87,13 +88,13 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
                 yanit = cikisSayisi === 1
                     ? { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 01:05:00',
                         card: { card_no: 'K003', worker_type_name: 'Kadın', entry_time: '2026-09-30 17:00:00' },
-                        ozet: { giris: { 'Kadın': 1 }, cikis: { 'Kadın': 1 }, giris_toplam: 1, cikis_toplam: 1 },
+                        ozet: { giris: { 'Kadın': 4, 'Erkek': 2 }, cikis: { 'Kadın': 1 }, eksik_tip: { 'Kadın': 3, 'Erkek': 2 } },
                         cavus: { id: 2, ad: 'Çavuş B', session_id: 12, work_date: '2026-09-30', onceki_gun: true },
                         mesailer: SONRA }
                     : { ok: false, kod: 'acik_donem_yok', hata: 'Bu kart için açık bir mesai bulunamadı.', mesailer: SONRA };
             }
             else if (uc === 'oturum') yanit = { ok: true, session: { id: 11, depo: 'Depo A', work_date: BUGUN, status: 'open' }, ozet: {} };
-            else if (uc === 'kaydet') yanit = { ok: false, kod: 'acik_donem_yok', hata: 'test' };
+            else if (uc === 'kaydet') yanit = kaydetYanit || { ok: false, kod: 'acik_donem_yok', hata: 'test' };
             else yanit = { ok: false };
             await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(yanit) });
         });
@@ -110,6 +111,14 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
                      a: rozet(1), b: rozet(2), c: rozet(3) };
         });
         ok('ortak çıkış düğmesi görünür, ekran içinde ve çavuş listesinin ÜSTÜNDE', r1.gorunur && r1.ekranda && !!r1.listeUstunde, JSON.stringify(r1));
+        const r1b = await page.evaluate(() => {
+            const btn = document.getElementById('giOrtakCikisBtn').getBoundingClientRect();
+            const ay = document.querySelector('.pdks-kiosk-ortak-ayrac');
+            const liste = document.getElementById('giCavusListe').getBoundingClientRect();
+            const a = ay.getBoundingClientRect();
+            return { metin: ay.textContent.trim(), ustBosluk: a.top - btn.bottom, altBosluk: liste.top - a.bottom, arada: a.top >= btn.bottom && a.bottom <= liste.top, mesafe: liste.top - btn.bottom };
+        });
+        ok('ayraç "veya çavuş seçin", düğme ile liste ARASINDA, mesafe ≥ 16px', /veya çavuş seçin/.test(r1b.metin) && r1b.arada && r1b.mesafe >= 16 && r1b.ustBosluk >= 8 && r1b.altBosluk >= 8, JSON.stringify(r1b));
         ok('içeride rozetleri: A=2, B=1, C gizli', r1.a === 'içeride 2' && r1.b === 'içeride 1' && r1.c === null, JSON.stringify(r1));
 
         // 2) Ortak moda gir
@@ -119,15 +128,14 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
             const gor = id => { const el = document.getElementById(id); if (!el) return false; const r = el.getBoundingClientRect(); return !el.hidden && getComputedStyle(el).display !== 'none' && r.width > 0 && r.height > 0; };
             return { tarama: gor('giScanSec'), rozet: document.getElementById('giModeBadge').textContent,
                      ad: document.getElementById('giScanCavusAd').textContent, modDegistir: gor('giModDegistir'),
-                     sayac: gor('giOrtakSayac'), geri: document.getElementById('giCavusDegistir2').textContent,
-                     satirlar: [...document.querySelectorAll('#giOrtakSatirlar .pdks-kiosk-counter-row')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+                     panelVar: !!document.getElementById('giOrtakSayac') || !!document.getElementById('giOrtakSatirlar'),
+                     geri: document.getElementById('giCavusDegistir2').textContent,
                      kapat: [...document.querySelectorAll('button')].some(b => /MESA[İI]Y[İI] KAPAT/i.test(b.textContent) && b.getBoundingClientRect().height > 0 && !b.closest('[hidden]')),
                      tasma: document.documentElement.scrollWidth > innerWidth };
         });
         ok('tarama ekranı açıldı, rozet "ORTAK ÇIKIŞ MODU", ad "Tüm çavuşlar"', r2.tarama && /ORTAK ÇIKIŞ/.test(r2.rozet) && r2.ad === 'Tüm çavuşlar', JSON.stringify(r2));
         ok('"Modu Değiştir" gizli, geri düğmesi "Çavuş Seçimine Dön"', !r2.modDegistir && /Çavuş Seçimine Dön/.test(r2.geri), JSON.stringify(r2));
-        ok('çavuş çavuş sayaç görünür: 2 satır (A içeride 2, B içeride 1)', r2.sayac && r2.satirlar.length === 2 && /Çavuş A.*İçeride 2/.test(r2.satirlar[0]) && /Çavuş B.*İçeride 1/.test(r2.satirlar[1]), JSON.stringify(r2.satirlar));
-        ok('dünden açık mesai tarihiyle işaretli (30.09.2026)', /30\.09\.2026/.test(r2.satirlar[1] || ''), JSON.stringify(r2.satirlar));
+        ok('"Açık mesailer — çavuş çavuş" paneli YOK (#giOrtakSayac DOM\'da yok)', !r2.panelVar, JSON.stringify(r2));
         ok('ortak modda "Mesaiyi Kapat" görünmüyor', !r2.kapat);
         ok('yatay taşma yok', !r2.tasma);
 
@@ -142,11 +150,13 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         ok('istek gövdesinde session_id YOK, ham_uid/kaynak/csrf VAR', !!ist && !('session_id' in ist.govde) && ist.govde.ham_uid === '100000003' && ist.govde.kaynak === 'usb_decimal' && !!ist.govde.csrf, JSON.stringify(ist && ist.govde));
         const r3 = await page.evaluate(() => ({
             sonuc: document.getElementById('giResult').hidden ? '' : document.getElementById('giResultInner').textContent.replace(/\s+/g, ' '),
-            satirlar: [...document.querySelectorAll('#giOrtakSatirlar .pdks-kiosk-counter-row')].map(e => e.textContent.replace(/\s+/g, ' ').trim()),
+            kalan: [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent),
+            daire: !!document.querySelector('#giResultInner .pdks-result-3d-icon-count'),
+            baslik: (document.querySelector('#giResultInner .pdks-result-kalan-baslik') || {}).textContent || '',
             rozetB: (el => el.hidden ? null : el.textContent)(document.querySelector('[data-gi-icerde-cavus="2"]')),
         }));
         ok('sonuç: ÇIKIŞ KAYDEDİLDİ + "Çavuş: Çavuş B · 30.09.2026 mesaisi"', /ÇIKIŞ KAYDEDİLDİ/.test(r3.sonuc) && /Çavuş: Çavuş B · 30\.09\.2026 mesaisi/.test(r3.sonuc), r3.sonuc);
-        ok('sayaç yanıttaki mesailerle güncellendi (B içeride 0)', /Çavuş B.*İçeride 0/.test(r3.satirlar[1] || ''), JSON.stringify(r3.satirlar));
+        ok('ÇIKIŞ sonucu: "KALAN" + Kadın 3 / Erkek 2 ayrı, daire YOK', r3.baslik === 'KALAN' && r3.kalan.length === 2 && r3.kalan[0] === 'Kadın 3' && r3.kalan[1] === 'Erkek 2' && !r3.daire, JSON.stringify(r3));
         ok('çavuş listesindeki B rozeti gizlendi (içeride 0)', r3.rozetB === null, String(r3.rozetB));
         const sonucKutu = await page.evaluate(() => { const r = document.getElementById('giResult').getBoundingClientRect(); return { sol: r.left, sag: r.right, vw: innerWidth }; });
         ok('sonuç kartı ekran içinde', sonucKutu.sol >= -0.5 && sonucKutu.sag <= sonucKutu.vw + 0.5, JSON.stringify(sonucKutu));
@@ -171,7 +181,7 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
             rozet: document.getElementById('giModeBadge').textContent,
             ad: document.getElementById('giScanCavusAd').textContent,
             modDegistir: !document.getElementById('giModDegistir').hidden,
-            sayac: !document.getElementById('giOrtakSayac').hidden,
+            sayac: !!document.getElementById('giOrtakSayac'),
             geri: document.getElementById('giCavusDegistir2').textContent,
         }));
         ok('normal ÇIKIŞ modu: rozet "ÇIKIŞ MODU", seçili çavuş adı', /^🚪 ÇIKIŞ MODU$/.test(r5.rozet) && r5.ad === 'Çavuş A', JSON.stringify(r5));
@@ -183,6 +193,45 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.waitForTimeout(400);
         const ist5 = istekler.find(i => i.uc === 'kaydet');
         ok('normal modda okutma kaydet ucuna, session_id + event_type ile', !!ist5 && ist5.govde.session_id === 11 && ist5.govde.event_type === 'CIKIS' && !istekler.some(i => i.uc === 'ortak_cikis'), JSON.stringify(istekler));
+        // 6) Normal mod ÇIKIŞ: yalnız Kadın içeren yanıt → Erkek 0
+        kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:00:00', card: { card_no: 'K001', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00' },
+                        ozet: { giris: { 'Kadın': 2 }, cikis: { 'Kadın': 1 }, eksik_tip: { 'Kadın': 1 } } };
+        await page.waitForTimeout(100);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000001');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r6 = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
+        ok('normal ÇIKIŞ, yalnız Kadın: Kadın 1 / Erkek 0', r6[0] === 'Kadın 1' && r6[1] === 'Erkek 0', JSON.stringify(r6));
+        // eksik_tip yoksa yedek: giris - cikis
+        kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:01:00', card: { card_no: 'K001', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00' },
+                        ozet: { giris: { 'Kadın': 3, 'Erkek': 1 }, cikis: { 'Kadın': 1, 'Erkek': 2 } } };
+        await page.waitForTimeout(100);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000001');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r6b = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
+        ok('eksik_tip yok: yedek giriş-çıkış (Kadın 2, Erkek 0 — negatif yok)', r6b[0] === 'Kadın 2' && r6b[1] === 'Erkek 0', JSON.stringify(r6b));
+        // GİRİŞ: daire = toplam giriş, KALAN yok
+        await page.click('#giCavusDegistir2');
+        await page.waitForTimeout(200);
+        await page.click('[data-gi-cavus-id="1"]');
+        await page.waitForTimeout(300);
+        await page.click('[data-gi-mode="GIRIS"]');
+        await page.waitForTimeout(300);
+        kaydetYanit = { ok: true, event_type: 'GIRIS', server_time: BUGUN + ' 08:00:00', card: { card_no: 'K001', worker_type_name: 'Kadın' },
+                        ozet: { giris: { 'Kadın': 5 }, cikis: {}, eksik_tip: { 'Kadın': 5 } } };
+        await page.click('[data-gi-tip-id]');
+        await page.waitForTimeout(300);
+        await page.focus('#giScanInput');
+        await page.keyboard.type('100000001');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(400);
+        const r7 = await page.evaluate(() => ({ daire: (document.querySelector('#giResultInner .pdks-result-3d-icon-count') || {}).textContent || null, kalan: !!document.querySelector('#giResultInner [data-kalan]') }));
+        ok('GİRİŞ sonucu: daire = toplam giriş (5), KALAN bloğu yok', r7.daire === '5' && !r7.kalan, JSON.stringify(r7));
+        const tas = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+        ok('yatay taşma yok (sonuç sonrası)', !tas);
         await page.close();
     }
 
