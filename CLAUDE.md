@@ -454,11 +454,13 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
   dönüşte `?ajax=ortak_mesailer` ile tazelenir. Düğme ile liste arasında
   düz çizgi ayraç (yazısız) vardır. **Mesaiyi Kapat ortak modda YOK** —
   kapatma çavuş bazında kalır.
-- v289/v290: ÇIKIŞ sonuç kartında (normal + ortak) büyük daire yerine **KALAN**
-  bloğu: o mesaide içeride kalan, YALNIZ OKUTULAN kartın cinsiyeti için
-  (Kadın kartı → yalnız Kadın, Erkek kartı → yalnız Erkek; tip tanınmazsa
-  ikisi birden). Kaynak `ozet.eksik_tip`; yoksa giris-cikis, negatife düşmez). GİRİŞ sonucu
-  (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ.
+- v290: ÇIKIŞ sonuç kartında (normal + ortak) daire (top + hareketli
+  çemberler) AYNEN korunur; içindeki rakam, okutulan kartın cinsiyetinden o
+  mesaide hâlâ İÇERİDE kalan kişi sayısıdır (`data-sayi="kalan"`). Ayrı
+  "KALAN" başlığı/kutu YOK (kullanıcı kararı). Kaynak `ozet.eksik_tip`; yoksa
+  giris-cikis, negatife düşmez. Tip Kadın/Erkek değilse eski davranış. GİRİŞ
+  sonucu (daire = o cinsiyetin toplam girişi) DEĞİŞMEDİ. Hedef tip BÜYÜK harfle
+  karşılaştırılır — `'kadin'.toLocaleUpperCase('tr-TR')` = `'KADİN'` (noktalı İ).
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
   `node scripts/pdks_ortak_cikis_smoke.js`.

@@ -1376,15 +1376,3 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVaz
 }
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #64748b; }
 html[data-theme="dark"] .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #cbd5e1; }
-/* v289 — çıkış sonucunda KALAN (Kadın / Erkek ayrı). Sonuç kartı koyu zeminli. */
-.pdks-result-kalan { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
-.pdks-result-kalan-baslik { font-size: .85rem; font-weight: 800; letter-spacing: .18em; color: #e2e8f0; }
-.pdks-result-kalan-kutular { display: flex; gap: 12px; justify-content: center; width: 100%; }
-.pdks-result-kalan-kutu {
-    flex: 1 1 0; min-width: 0; max-width: 150px; display: flex; flex-direction: column; align-items: center;
-    padding: 8px 10px; border-radius: 16px;
-}
-.pdks-result-kalan-kutu .ad { font-size: .85rem; font-weight: 800; }
-.pdks-result-kalan-kutu .n { font-size: 2.6rem; font-weight: 900; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.pdks-result-kalan-kutu.is-kadin { color: #e52384; background: linear-gradient(145deg, #ffd8ec, #f5b7d8); }
-.pdks-result-kalan-kutu.is-erkek { color: #176dd1; background: linear-gradient(145deg, #d9ebff, #a9d0ff); }

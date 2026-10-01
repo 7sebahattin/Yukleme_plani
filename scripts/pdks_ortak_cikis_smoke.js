@@ -150,13 +150,16 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         ok('istek gövdesinde session_id YOK, ham_uid/kaynak/csrf VAR', !!ist && !('session_id' in ist.govde) && ist.govde.ham_uid === '100000003' && ist.govde.kaynak === 'usb_decimal' && !!ist.govde.csrf, JSON.stringify(ist && ist.govde));
         const r3 = await page.evaluate(() => ({
             sonuc: document.getElementById('giResult').hidden ? '' : document.getElementById('giResultInner').textContent.replace(/\s+/g, ' '),
-            kalan: [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent),
+            daireSayi: (d => d ? d.textContent.trim() : null)(document.querySelector('#giResultInner .pdks-result-3d-icon-count')),
+            daireKalan: (d => !!d && d.getAttribute('data-sayi') === 'kalan')(document.querySelector('#giResultInner .pdks-result-3d-icon-count')),
+            halka: !!document.querySelector('#giResultInner .pdks-result-3d-icon'),
+            eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]'),
             daire: !!document.querySelector('#giResultInner .pdks-result-3d-icon-count'),
-            baslik: (document.querySelector('#giResultInner .pdks-result-kalan-baslik') || {}).textContent || '',
+            baslik: /KALAN/.test(document.getElementById('giResultInner').textContent),
             rozetB: (el => el.hidden ? null : el.textContent)(document.querySelector('[data-gi-icerde-cavus="2"]')),
         }));
         ok('sonuç: ÇIKIŞ KAYDEDİLDİ + "Çavuş: Çavuş B · 30.09.2026 mesaisi"', /ÇIKIŞ KAYDEDİLDİ/.test(r3.sonuc) && /Çavuş: Çavuş B · 30\.09\.2026 mesaisi/.test(r3.sonuc), r3.sonuc);
-        ok('ÇIKIŞ sonucu (Kadın kartı): "KALAN" + YALNIZ Kadın 3, Erkek kutusu YOK, daire YOK', r3.baslik === 'KALAN' && r3.kalan.length === 1 && r3.kalan[0] === 'Kadın 3' && !r3.daire, JSON.stringify(r3));
+        ok('ÇIKIŞ (Kadın kartı): AYNI daire, içinde içeride kalan Kadın = 3; "KALAN" yazısı/kutu YOK', r3.halka && r3.daireKalan && r3.daireSayi === '3' && !r3.baslik && !r3.eskiBlok, JSON.stringify(r3));
         ok('çavuş listesindeki B rozeti gizlendi (içeride 0)', r3.rozetB === null, String(r3.rozetB));
         const sonucKutu = await page.evaluate(() => { const r = document.getElementById('giResult').getBoundingClientRect(); return { sol: r.left, sag: r.right, vw: innerWidth }; });
         ok('sonuç kartı ekran içinde', sonucKutu.sol >= -0.5 && sonucKutu.sag <= sonucKutu.vw + 0.5, JSON.stringify(sonucKutu));
@@ -201,8 +204,8 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000001');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r6 = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('normal ÇIKIŞ, Kadın kartı: yalnız Kadın 1', r6.length === 1 && r6[0] === 'Kadın 1', JSON.stringify(r6));
+        const r6 = await page.evaluate((() => { const d = document.querySelector('#giResultInner .pdks-result-3d-icon-count'); return { sayi: d ? d.textContent.trim() : null, kalan: d ? d.getAttribute('data-sayi') === 'kalan' : false, eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]') }; }));
+        ok('normal ÇIKIŞ, Kadın kartı: daire = 1 (kalan Kadın)', r6.kalan && r6.sayi === '1' && !r6.eskiBlok, JSON.stringify(r6));
         // eksik_tip yoksa yedek: giris - cikis
         kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:01:00', card: { card_no: 'K001', worker_type_name: 'Kadın', entry_time: BUGUN + ' 08:00:00' },
                         ozet: { giris: { 'Kadın': 3, 'Erkek': 1 }, cikis: { 'Kadın': 1, 'Erkek': 2 } } };
@@ -211,8 +214,8 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000001');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r6b = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('eksik_tip yok: yedek giriş-çıkış, yalnız Kadın 2', r6b.length === 1 && r6b[0] === 'Kadın 2', JSON.stringify(r6b));
+        const r6b = await page.evaluate((() => { const d = document.querySelector('#giResultInner .pdks-result-3d-icon-count'); return { sayi: d ? d.textContent.trim() : null, kalan: d ? d.getAttribute('data-sayi') === 'kalan' : false, eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]') }; }));
+        ok('eksik_tip yok: yedek giriş−çıkış, daire = 2 (Kadın)', r6b.kalan && r6b.sayi === '2', JSON.stringify(r6b));
         // Erkek kartı → yalnız Erkek (yedek hesap negatife düşmez: giriş 1 − çıkış 2 → 0)
         kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:02:00', card: { card_no: 'E001', worker_type_name: 'Erkek', entry_time: BUGUN + ' 08:00:00' },
                         ozet: { giris: { 'Kadın': 3, 'Erkek': 1 }, cikis: { 'Kadın': 1, 'Erkek': 2 } } };
@@ -221,8 +224,8 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000002');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r6c = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('Erkek kartı: yalnız Erkek 0 (Kadın kutusu YOK, negatif yok)', r6c.length === 1 && r6c[0] === 'Erkek 0', JSON.stringify(r6c));
+        const r6c = await page.evaluate((() => { const d = document.querySelector('#giResultInner .pdks-result-3d-icon-count'); return { sayi: d ? d.textContent.trim() : null, kalan: d ? d.getAttribute('data-sayi') === 'kalan' : false, eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]') }; }));
+        ok('Erkek kartı, yedek hesap negatife düşmez: daire = 0', r6c.kalan && r6c.sayi === '0', JSON.stringify(r6c));
         // Erkek kartı, eksik_tip ile → yalnız Erkek 2
         kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:03:00', card: { card_no: 'E001', worker_type_name: 'Erkek', entry_time: BUGUN + ' 08:00:00' },
                         ozet: { giris: { 'Kadın': 4, 'Erkek': 3 }, cikis: { 'Kadın': 1, 'Erkek': 1 }, eksik_tip: { 'Kadın': 3, 'Erkek': 2 } } };
@@ -231,8 +234,8 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000002');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r6d = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('Erkek kartı (eksik_tip): yalnız Erkek 2', r6d.length === 1 && r6d[0] === 'Erkek 2', JSON.stringify(r6d));
+        const r6d = await page.evaluate((() => { const d = document.querySelector('#giResultInner .pdks-result-3d-icon-count'); return { sayi: d ? d.textContent.trim() : null, kalan: d ? d.getAttribute('data-sayi') === 'kalan' : false, eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]') }; }));
+        ok('Erkek kartı (eksik_tip): daire = 2 (kalan Erkek, Kadın 3 DEĞİL)', r6d.kalan && r6d.sayi === '2', JSON.stringify(r6d));
         // Tanınmayan tip → ikisi birden (bilgi kaybolmaz)
         kaydetYanit = { ok: true, event_type: 'CIKIS', server_time: BUGUN + ' 10:04:00', card: { card_no: 'X001', worker_type_name: 'Forklift', entry_time: BUGUN + ' 08:00:00' },
                         ozet: { giris: { 'Kadın': 4, 'Erkek': 3 }, cikis: { 'Kadın': 1, 'Erkek': 1 }, eksik_tip: { 'Kadın': 3, 'Erkek': 2 } } };
@@ -241,9 +244,9 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000002');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r6e = await page.evaluate(() => [...document.querySelectorAll('#giResultInner [data-kalan]')].map(e => e.querySelector('.ad').textContent + ' ' + e.querySelector('.n').textContent));
-        ok('tanınmayan tip: yedek olarak Kadın 3 + Erkek 2 birlikte', r6e.length === 2 && r6e[0] === 'Kadın 3' && r6e[1] === 'Erkek 2', JSON.stringify(r6e));
-        // GİRİŞ: daire = toplam giriş, KALAN yok
+        const r6e = await page.evaluate((() => { const d = document.querySelector('#giResultInner .pdks-result-3d-icon-count'); return { sayi: d ? d.textContent.trim() : null, kalan: d ? d.getAttribute('data-sayi') === 'kalan' : false, eskiBlok: !!document.querySelector('#giResultInner .pdks-result-kalan, #giResultInner [data-kalan]') }; }));
+        ok('tanınmayan tip: eski davranış (kalan sayısı değil), kutu/başlık yok', !r6e.kalan && !r6e.eskiBlok, JSON.stringify(r6e));
+        // GİRİŞ: daire = toplam giriş (kalan DEĞİL)
         await page.click('#giCavusDegistir2');
         await page.waitForTimeout(200);
         await page.click('[data-gi-cavus-id="1"]');
@@ -258,8 +261,8 @@ const SONRA = [MESAILER[0], Object.assign({}, MESAILER[1], { cikis: 1, icerde: 0
         await page.keyboard.type('100000001');
         await page.keyboard.press('Enter');
         await page.waitForTimeout(400);
-        const r7 = await page.evaluate(() => ({ daire: (document.querySelector('#giResultInner .pdks-result-3d-icon-count') || {}).textContent || null, kalan: !!document.querySelector('#giResultInner [data-kalan]') }));
-        ok('GİRİŞ sonucu: daire = toplam giriş (5), KALAN bloğu yok', r7.daire === '5' && !r7.kalan, JSON.stringify(r7));
+        const r7 = await page.evaluate(() => ({ daire: (document.querySelector('#giResultInner .pdks-result-3d-icon-count') || {}).textContent || null, kalan: (d => !!d && d.getAttribute('data-sayi') === 'kalan')(document.querySelector('#giResultInner .pdks-result-3d-icon-count')) }));
+        ok('GİRİŞ sonucu: daire = toplam giriş (5), kalan sayısı değil', r7.daire === '5' && !r7.kalan, JSON.stringify(r7));
         const tas = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
         ok('yatay taşma yok (sonuç sonrası)', !tas);
         await page.close();

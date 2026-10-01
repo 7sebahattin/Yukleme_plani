@@ -1054,36 +1054,24 @@ render_flash();
         var ikonHtml = (gunlukToplam != null)
             ? '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" aria-hidden="true"><span>' + escHtml(String(gunlukToplam)) + '</span></div>'
             : '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✓</span></div>';
-        // v289: ÇIKIŞ sonucunda daire yerine o mesaide hâlâ İÇERİDE kalanlar,
-        // Kadın ve Erkek ayrı. Kaynak ozet.eksik_tip (tipe göre açık dönem);
-        // yoksa giris - cikis (negatife düşmez). GİRİŞ sonucu DEĞİŞMEDİ.
+        // v290: ÇIKIŞ sonucunda AYNI daire (top + hareketli çemberler) korunur, yalnız
+        // içindeki RAKAM değişir: okutulan kartın cinsiyetinden o mesaide hâlâ İÇERİDE
+        // kalan kişi sayısı. Ayrı başlık/kutu YOK (kullanıcı kararı). Kaynak
+        // ozet.eksik_tip (tipe göre açık dönem); yoksa giris - cikis (negatife düşmez).
+        // Tip Kadın/Erkek değilse eski davranış (toplam giriş) korunur. GİRİŞ DEĞİŞMEDİ.
         if (d.event_type === 'CIKIS') {
-            var kalanSay = function (hedef) {
-                var n = null;
+            // ⚠ Hedef BÜYÜK harfle karşılaştırılır: 'kadin'.toLocaleUpperCase('tr-TR')
+            // 'KADİN' (noktalı İ) olur ve eşleşme sessizce 0 döner.
+            var tipUst = tip.toLocaleUpperCase('tr-TR');
+            if (tipUst === 'KADIN' || tipUst === 'ERKEK') {
                 var tara = function (obj) {
-                    var v = null;
-                    Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === hedef) v = (v || 0) + (parseInt(obj[k], 10) || 0); });
+                    var v = 0;
+                    Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === tipUst) v += (parseInt(obj[k], 10) || 0); });
                     return v;
                 };
-                if (ozet.eksik_tip) n = tara(ozet.eksik_tip) || 0;
-                else n = Math.max(0, (tara(ozet.giris) || 0) - (tara(ozet.cikis) || 0));
-                return n;
-            };
-            // v290: yalnız OKUTULAN kartın cinsiyeti gösterilir (Kadın kartı → yalnız
-            // Kadın, Erkek kartı → yalnız Erkek — GİRİŞ dairesindeki gibi). Tip tanınmazsa
-            // (ör. eski/bilinmeyen tip adı) ikisi birden gösterilir, bilgi kaybolmaz.
-            var tipUst = tip.toLocaleUpperCase('tr-TR');
-            // ⚠ Hedef ad BÜYÜK harfle verilir: 'kadin'.toLocaleUpperCase('tr-TR') = 'KADİN' (noktalı İ)
-            // olur ve kalanSay() eşleşmesi sessizce 0 döner.
-            var kalanKutu = function (cins, hedef, ad, sinif) {
-                return '<div class="pdks-result-kalan-kutu ' + sinif + '" data-kalan="' + cins + '"><span class="ad">' + ad + '</span><span class="n">' + escHtml(String(kalanSay(hedef))) + '</span></div>';
-            };
-            var kalanKutular = tipUst === 'KADIN' ? kalanKutu('kadin', 'KADIN', 'Kadın', 'is-kadin')
-                : (tipUst === 'ERKEK' ? kalanKutu('erkek', 'ERKEK', 'Erkek', 'is-erkek')
-                : kalanKutu('kadin', 'KADIN', 'Kadın', 'is-kadin') + kalanKutu('erkek', 'ERKEK', 'Erkek', 'is-erkek'));
-            ikonHtml = '<div class="pdks-result-kalan" aria-label="Kalan">' +
-                '<div class="pdks-result-kalan-baslik">KALAN</div>' +
-                '<div class="pdks-result-kalan-kutular">' + kalanKutular + '</div></div>';
+                var kalan = ozet.eksik_tip ? tara(ozet.eksik_tip) : Math.max(0, tara(ozet.giris) - tara(ozet.cikis));
+                ikonHtml = '<div class="pdks-result-3d-icon pdks-result-3d-icon-count" data-sayi="kalan" aria-hidden="true"><span>' + escHtml(String(kalan)) + '</span></div>';
+            }
         }
         // ⚠ v241 (referans tasarım): cinsiyet kapsülünde etiketin yanında kişi
         // ikonu. Emoji DEĞİL satır içi SVG — emoji cihaza göre gri/farklı
