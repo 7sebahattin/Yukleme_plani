@@ -1799,6 +1799,13 @@ body.print-mode .asya-sheet {
     box-shadow: 0 -6px 32px rgba(0,0,0,0.13);
     animation: pmSlideUp .22s cubic-bezier(.32,.72,0,1);
 }
+/* KRİTİK — SİLME. .pm-dialog native <dialog> öğesinde de kullanılıyor
+   (gunluk_isci_puantaj_detay.php Düzenle/İptal). Yukarıdaki display:flex
+   tarayıcının dialog:not([open]){display:none} varsayılanını EZER (yazar
+   stili her zaman tarayıcı varsayılanından önce gelir): KAPALI dialog'ların
+   hepsi sayfada üst üste görünür ve en üstteki form (son satırın İptal'i)
+   gerçekten gönderilebilir. Test: node scripts/pdks_puantaj_dialog_smoke.js */
+dialog.pm-dialog:not([open]) { display: none; }
 /* KRİTİK — dialog ile .pm-body arasında <form> sarmalayıcı varsa
    (users.php, personel_form.php, roles.php) flex zinciri kırılır: form
    normal blok olduğu için .pm-body'nin "flex:1 + overflow:auto" kuralının
