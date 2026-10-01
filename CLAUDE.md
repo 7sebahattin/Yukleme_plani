@@ -140,6 +140,13 @@ php scripts/roles_modal_render.php > _test_roles.html
 node scripts/roles_modal_smoke.js     # masaüstü + tablet + mobil ölçer
 ```
 
+**Native `<dialog class="pm-dialog">`** (yalnız `gunluk_isci_puantaj_detay.php`):
+`.pm-dialog{display:flex}` tarayıcının kapalı-dialog gizlemesini ezer — kapalı
+dialog'lar sayfada üst üste görünür ve formları gönderilebilir (v287).
+`dialog.pm-dialog:not([open]){display:none}` kuralını **SİLME**. Test:
+`php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` →
+`node scripts/pdks_puantaj_dialog_smoke.js`.
+
 Test; footer'ın ekran içinde olduğunu, gövdenin gerçekten kaydırıldığını, en
 alttaki kutunun görünüp **tıklanabildiğini** ve yatay taşma olmadığını doğrular.
 Ölçümden önce **400ms bekler** — açılış animasyonu (220ms) bitmeden alınan
