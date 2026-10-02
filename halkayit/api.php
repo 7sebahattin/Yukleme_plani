@@ -541,8 +541,9 @@ try {
       //     üreticiden yapılan sevkiyat işlemlerinde kullanılacak bildirim türü").
       // SATIN ALIM ARTIK BU DENETİMİN DIŞINDA: GTB 12.03.2025 duyurusundan sonra
       // kayıtsız kişiden Satın Alım yapılabiliyor (kişi TC+doğum tarihiyle KPS'ten
-      // doğrulanıyor; canlı sistemde künye üretildiği doğrulandı). Frontend bu
-      // türde `kayitZorunlu=false` gönderir, dolayısıyla sorgu hiç çalışmaz.
+      // doğrulanıyor). Frontend bu türde `kayitZorunlu=false` gönderir, dolayısıyla
+      // bu AYNA sorgusu çalışmaz; kayıtsız Satın Alım'ın kendi (engellemeyen)
+      // durum sorgusu aşağıda, gönderimden hemen önce yapılır.
       // P0: durum sorgusu tri-state (REGISTERED/NOT_REGISTERED/UNKNOWN).
       // UNKNOWN durumunda — kayıt durumu HANGİ yönde olursa olsun — gönderim
       // DURUR ve BildirimKaydet ÇAĞRILMAZ (eskiden "sorgu sonuçsuz → kayıtsız"
@@ -577,8 +578,63 @@ try {
       // gönderilip gönderilmediği de anlaşılamaz. Bu yüzden taslak GERİ KONUR
       // (istisna öncesi davranışla aynı) ama körlemesine tekrar göndermemesi
       // için AÇIKÇA uyarılır.
+      // ── KAYITSIZ KİŞİLİ SATIN ALIM: hazırlık (docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md §10)
+      // Doğum tarihi gönderilen, işyeri hedefli, referanssız yurt içi bildirim
+      // (= kayıtsız satıcıdan Satın Alım). Gönderimden hemen önce kişinin kayıt
+      // durumu sorulur — GÖNDERİMİ ENGELLEMEZ (Satın Alım kayıtlı kişi de kabul
+      // eder), yalnız şunları belirler:
+      //   • KAYITSIZ ise gidecek yer İl/İlçe/Belde işyerinin kaydından eklenir
+      //     (kılavuz 1189-1193; GTB'nin resmi 195 örneği de böyle).
+      //   • KAYITSIZ ise yöneticinin bu TC için kurduğu tek kullanımlık doğum
+      //     tarihi biçim deneyi uygulanır ve TÜKETİLİR.
+      //   • Künye KAYITSIZ kişiyle üretilirse kullanılan biçim öğrenilebilir.
+      // Deney kuruluysa ama kişi KAYITSIZ doğrulanamazsa gönderim DURUR: sonuç
+      // yorumlanamaz (kayıtlı kişide KPS hiç sorulmaz).
+      $__secenek = [];
+      $__dogumKaydi = null;
+      $__satinKayitsiz = !empty($ortak['yurtIci']) && !empty($ortak['referanssiz'])
+        && !$__uretSevk && empty($ortak['hedefAdres']) && !empty($ortak['gidecekIsyeriId'])
+        && !empty($ortak['ikinciTc'])
+        && hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '') !== '';
+      if ($__satinKayitsiz) {
+        // Taslak zaten sahiplenildi (silindi): aşağıdaki en çok 4 salt-okunur
+        // SOAP çağrısı PHP süre sınırına takılırsa taslak geri konamadan süreç
+        // ölür. Sınır baştan genişletilir (her çağrı kendi 60 sn timeout'unda).
+        @set_time_limit(300);
+        $__kdHam = null; $__kdDetay = null;
+        $__kd = hks_kayit_durumu($cfg, $ortak['ikinciTc'], $__kdHam, $__kdDetay);
+        $__deneyBicim = hks_dogum_deney_bu_tc($ortak['ikinciTc']);
+        if ($__deneyBicim !== null && $__kd !== HKS_DURUM_NOT_REGISTERED) {
+          $taslagiGeriKoy();
+          hks_json_cikti(['hata' => 'Doğum tarihi deneyi bu kişi için kurulu, ancak kişi şu an HKS\'te ' .
+            ($__kd === HKS_DURUM_REGISTERED ? 'KAYITLI görünüyor' : 'kayıt durumu doğrulanamadı') .
+            '. Kayıtlı kişide Mernis sorgusu yapılmadığı için deney sonucu yorumlanamaz — bildirim ' .
+            'gönderilmedi, taslak silinmedi. Deneyi "Doğum Tarihi Deneyi" ekranından iptal edip ' .
+            'normal gönderin ya da sitede hiç sorgulanmamış başka bir kişiyle deneyin.',
+            'taslakKorundu' => true], 409);
+        }
+        $__adres = null;
+        if ($__kd === HKS_DURUM_NOT_REGISTERED) {
+          $__secenek['kayitsizDogrulandi'] = true;
+          $__adres = hks_isyeri_adres_bul($cfg, $ortak['gidecekIsyeriId'], $cfg['vergiNo'] ?? '');
+          if ($__adres) $ortak['gidecekAdres'] = $__adres;
+          if ($__deneyBicim !== null) {
+            $__secenek['bicim'] = $__deneyBicim;
+            hks_dogum_deney_iptal();   // tek kullanımlık — gönderimden ÖNCE tüketilir
+          }
+        }
+        $__dogumKaydi = [
+          'firmaId' => (string)$t['firma_id'],
+          'tc' => hks_tc_son4($ortak['ikinciTc']),
+          'kayit' => $__kd,
+          'deney' => isset($__secenek['bicim']),
+          'adres' => (bool)$__adres,
+          'dogumSinifi' => hks_dogum_sinifi($ortak['ikinciDogumTarihi'] ?? ''),
+        ];
+      }
+
       try {
-        $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak);
+        $sonuc = hks_bildirim_kaydet($cfg, $satirlar, $ortak, $__secenek);
         // HKS'e GERÇEKTEN giden ikinci kişi kimliği — hata ekranında gösterilir.
         // "Mernis'te bulunamadı" hatasında operatörün karşılaştırabilmesi için
         // TC ile DOĞUM TARİHİ birlikte görünmelidir (KPS ikisini birlikte doğrular);
@@ -589,10 +645,26 @@ try {
           'cep'   => hks_cep_rakam($ortak['ikinciCep'] ?? ''),
           'dogum' => (string)($ortak['ikinciDogumTarihi'] ?? ''),
           'dogumGonderildi' => hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '') !== '',
+          'dogumTel' => (string)($sonuc['dogumTel'] ?? ''),
+          'gidecekAdresEklendi' => !empty($ortak['gidecekAdres']),
         ];
+        $sonuc['kayitsizSatinAlim'] = $__dogumKaydi !== null;
+        if ($__dogumKaydi !== null) {
+          $sonuc['kayitDurumuOnce'] = $__dogumKaydi['kayit'];
+          hks_dogum_deneme_kaydet($__dogumKaydi + [
+            'bicim' => (string)($sonuc['dogumVaryant']['bicim'] ?? ''),
+            'sonuc' => hks_dogum_sonuc_sinifi($sonuc),
+            'hataKodu' => (int)($sonuc['sonuclar'][0]['hataKodu'] ?? 0),
+            'ogrenildi' => !empty($sonuc['dogumOgrenildi']),
+          ]);
+        }
       } catch (Throwable $__e) {
         $taslagiGeriKoy();
         error_log('[hks] bildirim_kaydet istisna: ' . $__e->getMessage());
+        if ($__dogumKaydi !== null) {
+          hks_dogum_deneme_kaydet($__dogumKaydi + ['bicim' => hks_dogum_varyant_coz(isset($__secenek['bicim']) ? ['bicim' => $__secenek['bicim']] : null)['bicim'],
+            'sonuc' => 'belirsiz', 'hataKodu' => 0, 'ogrenildi' => false]);
+        }
         hks_json_cikti([
           'hata' => 'Bildirim gönderilirken bağlantı kesildi: ' . $__e->getMessage() .
             ' — HKS\'in bildirimi ALIP ALMADIĞI BİLİNMİYOR. Taslak silinmedi. ' .

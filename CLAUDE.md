@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v290` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v291` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -23,7 +23,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Kantar | `kantar` · `kantar_create/edit/view/delete/foto` · `_kantar_form` · `kantar_raporu` · `kantar_report_toggle` | — | — | — |
 | Stok / Malzeme | `stok` · `malzeme_stok` · `malzeme_stok_islem/import/rapor` · `malzeme_hareketleri` · `malzeme_stok_tehis` · `api_bulk_material` | `material_stock_helpers` | — | `test_material_stock_helpers` |
 | Beyan + HKS köprüsü | `beyanlar` · `beyan_view/create/edit/delete/parse/eslestir/bulk_save` · `_beyan_liste` · `api_beyan_bildirim` · `beyan_bildirim_tani` | `helpers` (`beyan_*`, `bb_*`) | — | `beyan_bildirim_smoke` · `beyan_ui_smoke` · `beyan_js_smoke.js` |
-| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_kisi_pencere_smoke.js` |
+| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `dogum_deney_lib.php` + `dogum_deney.php` (doğum tarihi biçim deneyi, admin) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_dogum_deney_smoke` · `hks_kisi_pencere_smoke.js` |
 | Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
 | PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`) | `pdks.css` · `pdks.js` · `print_pdks.css` | `pdks_*_smoke` |
@@ -803,6 +803,43 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 
 ---
 
+## Hal Kayıt — Kayıtsız Kişi Doğum Tarihi (v291)
+
+Kayıtsız satıcıdan **Satın Alım**'ın İLK bildiriminde HKS "Tc kimlik numarası
+Mernis sisteminde bulunamadı" (satır `HataKodu 21`, künye/rüsum YOK) döndürüyor;
+kişi sitede Sorgula'lanınca aynı istek geçiyor. Teşhis + plan:
+`docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` (§10 güncel plan).
+
+- **Kesin (canlı WSDL, eski + yeni uç aynı):** `IkinciKisiBilgileriDTO.DogumTarihi`
+  `xs:string`, Order'sız, **alfabetik** (CepTel < DogumTarihi < KisiSifat). Konum
+  sabittir; v291'de konum/biçim **merdiveni kaldırıldı** (otomatik yeniden gönderim YOK).
+  Yeni uç (`ws.gtb.gov.tr:8443`) aynı sözleşme — çözüm değil.
+- **Biçim beyaz listesi** `hks_dogum_bicimleri()`: `gtb` (varsayılan, GTB örneği
+  `GG.AA.YYYY 00:00:00`) · `gtb_oglen` · `gtb_tarih` · `iso` · `iso_oglen` · `iso_tarih`.
+  GTB örneği `01.01.1980` (gün = ay) gün/ay sırasını SINAMIYOR — en olası sebep
+  sunucunun metni ay-önce okuması.
+- **Gidecek yer adresi:** kayıtsız kişide kılavuz 1189-1193 İl/İlçe/Belde ister;
+  `api.php taslak_gonder` kişiyi gönderimden hemen önce `hks_kayit_durumu()` ile
+  sorar (ENGELLEMEZ) ve KAYITSIZ ise işyerinin adresini
+  (`hks_isyeri_adres_bul()`, salt-okunur Genel servis) `$ortak['gidecekAdres']`'e
+  koyar; `hks_bildirim_xml()` işyeriyle BİRLİKTE yazar (GTB 195 örneği gibi).
+  Kayıtlı/belirsizde eklenmez.
+- **Deney** (`halkayit/dogum_deney.php`, yalnız `is_admin()`, CSRF + audit
+  `hks_dogum_deney`): bir TC için TEK KULLANIMLIK biçim (24 sa). Yalnız gönderim
+  anında kişi KAYITSIZ ise uygulanır ve gönderimden ÖNCE tüketilir; kişi
+  kayıtlı/belirsizse gönderim 409 ile DURUR (sonuç yorumlanamaz). Ekran HKS'e
+  hiçbir şey göndermez.
+- **Öğrenme:** biçim YALNIZ gerçek künye + doğum tarihi gönderildi + kişi
+  önceden KAYITSIZ doğrulandı ise `hks_kv.dogum_varyant`'a `kanitli=true` ile
+  yazılır. Eski (kanıtsız, `konum='son'`) kayıtlar yok sayılır.
+- **Teşhis kaydı** `hks_kv.dogum_denemeleri` (son 200): TC yalnız `***son4`,
+  doğum tarihi yalnız SINIF (`gun>12`/`gun<=12`/`gun=ay`) — ad/tarih/cep YAZILMAZ.
+  Kütüphane `dogum_deney_lib.php` (include-only, `.htaccess`'te kapalı).
+- **Tek gönderim yolu** korunur: `hks_bildirim_kaydet()` → `hks_bildirim_kaydet_tek()`
+  (test başka çağıranı engeller). Başarıda da maskeli `hamIstek` döner (yalnız
+  ekranda; kalıcı kayda yazılmaz).
+- Test: `php scripts/hks_uretici_sevk_test.php` · `php scripts/hks_dogum_deney_smoke.php`.
+
 ## Hal Kayıt — Kişi Havuzu (v282, v283)
 
 Karşı taraf (Satın Alım'da satıcı, Satış/Sevk'te alıcı) artık firma bazlı
@@ -1260,5 +1297,5 @@ Yeni özellik eklerken:
 | Personel başkasının masrafını görüyor | `OR user_id IS NULL` ya da `hesap.approve`'u görünürlük sayma | `hesap_kapsam_coz()` + `hesap_kapsam_sql()`; görünürlük yalnız `hesap_sees_all()` |
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |
-| HKS "... doğum tarihi girilmelidir" | `DogumTarihi` XML'de var ama **beklenen konumda değil** → DataContract onu sessizce atlar | Otomatiktir: `hks_bildirim_kaydet()` merdiveni diğer konum/biçimleri dener ve çalışanı `hks_kv.dogum_varyant`'a **öğrenir**. Dördü de reddedilirse → yeni endpoint gerekir |
-| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" | Alan **ULAŞTI**, KPS eşleşmedi — sorun **değerde** | TC + doğum tarihini kimlik kartıyla karşılaştır. Bu hatada merdiven bilerek DURUR; başka konum denemek değeri düzeltmez |
+| HKS "... doğum tarihi girilmelidir" | `DogumTarihi` sunucuya ulaşmadı (boş ya da yanlış konumda → DataContract sessizce atlar) | Konum SABİT: alfabetik (CepTel < DogumTarihi < KisiSifat), canlı WSDL'de `xs:string`. Konumu değiştirme; merdiven v291'de kaldırıldı |
+| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" (satır HataKodu 21) | Kayıtsız kişinin İLK bildiriminde HKS, TC + **kendi anladığı** doğum tarihiyle kişiyi bulamadı. Veri çoğu zaman DOĞRU (site Sorgula buluyor); en olası sebep tarih metninin farklı yorumlanması | Künye/rüsum yok, taslak korunur. Geçici: sitede yalnız Sorgula → tekrar gönder. Kalıcı: `halkayit/dogum_deney.php` biçim deneyi (bkz. "Kayıtsız Kişi Doğum Tarihi") |

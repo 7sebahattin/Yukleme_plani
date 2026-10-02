@@ -257,12 +257,10 @@ ok('alfabetik sıra korunuyor: AdSoyad < CepTel < KisiSifat < TcKimlikVergiNo',
     $pAd !== false && $pCep !== false && $pSif !== false && $pTc !== false
     && $pAd < $pCep && $pCep < $pSif && $pSif < $pTc,
     'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
-// VARSAYILAN KONUM 'son' — ama bu bir KANIT DEĞİL, yalnız başlangıç tahminidir
-// (bkz. config.php). Doğru kombinasyon canlıda ÖĞRENİLİR; bu test yalnız
-// varsayılanın hâlâ 'son' olduğunu ve varyant verilmeyince onun kullanıldığını
-// kilitler.
-ok('varsayılan varyantta DogumTarihi EN SONDA (YurtDisiMi\'den sonra)',
-    $pDog !== false && $pDog > $pTc && $pDog > strpos($ikBlok, '<b:YurtDisiMi>'),
+// KONUM SABİT: canlı WSDL (eski + yeni uç) DogumTarihi'ni xs:string olarak
+// ALFABETİK konumda tanımlıyor; "sona koymak" alanı sunucuda sessizce düşürür.
+ok('DogumTarihi ALFABETİK konumda: CepTel < DogumTarihi < KisiSifat',
+    $pDog !== false && $pCep < $pDog && $pDog < $pSif,
     'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $ikBlok));
 
 // hks_dogum_tarihi_xml() — GERÇEK fonksiyon, biçim normalizasyonu
@@ -286,88 +284,91 @@ $__isoCikti = trim((string)shell_exec('php ' . escapeshellarg($__isoDosya) . ' 2
 ok("HKS_DOGUM_BICIMI='iso' → ISO 8601 üretir (geri dönüş yolu)",
     $__isoCikti === '1980-01-01T00:00:00', 'gelen: ' . $__isoCikti);
 
-echo "\n── Doğum tarihi TESLİM MERDİVENİ (konum + biçim varyantları) ──\n";
-// NEDEN: GTB'nin beklediği konum/biçim bizim kontrolümüz dışında değişebiliyor
-// (05.09.2026'da 'son' künye üretti, 07.09.2026'da aynı kod "doğum tarihi
-// girilmelidir" aldı). Kombinasyon artık sabit değil, öğrenilen bir değer;
-// merdiven yalnızca HKS'in HİÇBİR ŞEY oluşturmadığı kanıtlı durumda ilerler.
+echo "\n── Doğum tarihi BİÇİMLERİ (konum sabit, biçim beyaz listeden) ──\n";
+// docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md §10: DogumTarihi metin; HKS'in beklediği
+// biçim belgelenmemiş. Biçim tek kullanımlık yönetici deneyiyle değiştirilir.
+$__beklenen = [
+    'gtb'       => '11.02.1960 00:00:00',
+    'gtb_oglen' => '11.02.1960 12:00:00',
+    'gtb_tarih' => '11.02.1960',
+    'iso'       => '1960-02-11T00:00:00',
+    'iso_oglen' => '1960-02-11T12:00:00',
+    'iso_tarih' => '1960-02-11',
+];
+ok('beyaz liste tam olarak 6 biçim', array_keys(hks_dogum_bicimleri()) === array_keys($__beklenen),
+    implode(',', array_keys(hks_dogum_bicimleri())));
+foreach ($__beklenen as $__b => $__v) {
+    ok("biçim $__b → $__v", hks_dogum_tarihi_xml('1960-02-11', $__b) === $__v,
+        'gelen: ' . hks_dogum_tarihi_xml('1960-02-11', $__b));
+}
+ok('beyaz liste DIŞI biçim → gtb (sessiz düşüş yok, güvenli varsayılan)',
+    hks_dogum_tarihi_xml('1960-02-11', 'kotu<x>') === '11.02.1960 00:00:00');
+ok('GG.AA.YYYY girdisi her biçimde aynı tarihi verir',
+    hks_dogum_tarihi_xml('11.02.1960', 'iso_oglen') === '1960-02-11T12:00:00');
 
-// 1) Varyant XML'e gerçekten yansıyor mu?
-$__vAlfIso = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]], $ortakSatinKayitsizVar ?? $ortakUretici,
-    ['konum' => 'alfabetik', 'bicim' => 'iso']);
-preg_match('#<a:IkinciKisiBilgileri>(.*?)</a:IkinciKisiBilgileri>#s', $__vAlfIso, $__mv);
-$__blokAlf = $__mv[1] ?? '';
-ok('varyant alfabetik: DogumTarihi CepTel ile KisiSifat ARASINDA',
-    strpos($__blokAlf, '<b:DogumTarihi>') > strpos($__blokAlf, '<b:CepTel>')
-    && strpos($__blokAlf, '<b:DogumTarihi>') < strpos($__blokAlf, '<b:KisiSifat>'),
-    'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $__blokAlf));
-ok('varyant iso: ISO 8601 biçimi üretiliyor',
-    str_contains($__blokAlf, 'T00:00:00') && !str_contains($__blokAlf, ' 00:00:00'),
-    $__blokAlf);
+// Varyant çözümü: konum her zaman alfabetik; eski 'son' isteği yok sayılır.
+ok('varyant_coz(iso_oglen) → alfabetik/iso_oglen',
+    hks_dogum_varyant_coz(['bicim' => 'iso_oglen']) === ['konum' => 'alfabetik', 'bicim' => 'iso_oglen']);
+ok('varyant_coz(eski konum=son) → yine alfabetik',
+    hks_dogum_varyant_coz(['konum' => 'son', 'bicim' => 'gtb'])['konum'] === 'alfabetik');
+ok('varyant_coz(geçersiz biçim) → varsayılan (gtb)',
+    hks_dogum_varyant_coz(['bicim' => 'yok'])['bicim'] === 'gtb');
 
-$__vSonGtb = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]], $ortakUretici,
-    ['konum' => 'son', 'bicim' => 'gtb']);
-preg_match('#<a:IkinciKisiBilgileri>(.*?)</a:IkinciKisiBilgileri>#s', $__vSonGtb, $__mv2);
-$__blokSon = $__mv2[1] ?? '';
-ok('varyant son: DogumTarihi YurtDisiMi\'den SONRA',
-    strpos($__blokSon, '<b:DogumTarihi>') > strpos($__blokSon, '<b:YurtDisiMi>'));
-ok('varyant gtb: GG.AA.YYYY SS:DD:SS biçimi', str_contains($__blokSon, ' 00:00:00'));
+$__xmlEskiSon = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]], $ortakUretici,
+    ['konum' => 'son', 'bicim' => 'iso_oglen']);
+preg_match('#<a:IkinciKisiBilgileri>(.*?)</a:IkinciKisiBilgileri>#s', $__xmlEskiSon, $__mv);
+$__blok = $__mv[1] ?? '';
+ok('"son" istense de XML alfabetik: DogumTarihi CepTel ile KisiSifat ARASINDA',
+    strpos($__blok, '<b:DogumTarihi>') > strpos($__blok, '<b:CepTel>')
+    && strpos($__blok, '<b:DogumTarihi>') < strpos($__blok, '<b:KisiSifat>'),
+    'sıra: ' . preg_replace('/[^A-Za-z:<>]/', '', $__blok));
+ok('istenen biçim XML\'e yansıyor (iso_oglen)',
+    str_contains($__blok, '<b:DogumTarihi>1980-01-01T12:00:00</b:DogumTarihi>'), $__blok);
+ok('DogumTarihi YurtDisiMi\'den sonra ASLA yazılmıyor',
+    strpos($__blok, '<b:DogumTarihi>') < strpos($__blok, '<b:YurtDisiMi>'));
 
-// 2) Merdiven: yürürlükteki varyant HER ZAMAN ilk sırada (çalışan kurulum
-//    fazladan tek istek bile atmaz), dört kombinasyonun tamamı var, tekrar yok.
-$__merd = hks_dogum_merdiveni();
-$__varsayilan = hks_dogum_varyant_coz(null);
-ok('merdivenin ilk adımı yürürlükteki varyant',
-    $__merd[0] === $__varsayilan, json_encode($__merd[0]));
-ok('merdiven dört kombinasyonu da kapsıyor', count($__merd) === 4, (string)count($__merd));
-$__imza = array_map(fn($v) => $v['konum'] . '/' . $v['bicim'], $__merd);
-ok('merdivende tekrar yok', count(array_unique($__imza)) === 4, implode(' ', $__imza));
+// Doğum tarihi SINIFI (teşhis kaydı kişisel veri tutmadan bunu yazar).
+ok('sınıf: 11.02 → gun<=12', hks_dogum_sinifi('1960-02-11') === 'gun<=12');
+ok('sınıf: 28.09 → gun>12',  hks_dogum_sinifi('1985-09-28') === 'gun>12');
+ok('sınıf: 01.01 → gun=ay',  hks_dogum_sinifi('1980-01-01') === 'gun=ay');
+ok('sınıf: boş → ""',        hks_dogum_sinifi('') === '');
 
-// 3) GÜVENLİK KİLİDİ — merdiven ne zaman ilerler, ne zaman DURUR?
-//    Bu testler mükerrer bildirimi (ve rüsumu) önleyen kuralı kilitler.
+// hks_dogum_okunmadi_mi — teşhis sınıflandırması bunu kullanır.
 $__msgEksik  = '35710244512 T.C kimlik numaralı kişi/kişiler doğum tarihi girilmelidir.';
 $__msgMernis = 'Tc kimlik numarası Mernis sisteminde bulunamadı';
-ok('"doğum tarihi girilmelidir" + hiç satır cevabı yok → İLERLER',
+ok('"doğum tarihi girilmelidir" + satır yok → okunmadı',
     hks_dogum_okunmadi_mi(['genelHata' => $__msgEksik, 'sonuclar' => []]) === true);
-ok('AYNI hata ama satır cevabı VAR → DURUR (künye oluşmuş olabilir)',
+ok('aynı hata ama satır cevabı VAR → okunmadı DEĞİL (künye oluşmuş olabilir)',
     hks_dogum_okunmadi_mi(['genelHata' => $__msgEksik,
-        'sonuclar' => [['yeniKunyeNo' => '0', 'hataKodu' => 23]]]) === false,
-    'satır cevabı dönmüşse HKS isteği işlemiştir — tekrar göndermek MÜKERRER bildirimdir');
-ok('"Mernis\'te bulunamadı" → DURUR (alan ULAŞTI, DEĞER yanlış)',
-    hks_dogum_okunmadi_mi(['genelHata' => $__msgMernis, 'sonuclar' => []]) === false);
-ok('hatasız cevap → DURUR',
-    hks_dogum_okunmadi_mi(['genelHata' => null, 'sonuclar' => []]) === false);
-ok('alakasız hata → DURUR',
-    hks_dogum_okunmadi_mi(['genelHata' => 'İhracat Üreticiden Sevk Alım bildirimi yapamaz',
-        'sonuclar' => []]) === false);
-// Türkçe büyük harf tuzağı: "DOĞUM TARİHİ GİRİLMELİDİR" — mb_strtolower tek
-// başına İ→i yapmaz, eşleşme kaçarsa merdiven hiç çalışmaz.
+        'sonuclar' => [['yeniKunyeNo' => '0', 'hataKodu' => 23]]]) === false);
+ok('"Mernis" → okunmadı DEĞİL', hks_dogum_okunmadi_mi(['genelHata' => $__msgMernis, 'sonuclar' => []]) === false);
 ok('BÜYÜK HARFLİ mesaj da tanınıyor (İ/I tuzağı)',
     hks_dogum_okunmadi_mi(['genelHata' => 'DOĞUM TARİHİ GİRİLMELİDİR', 'sonuclar' => []]) === true);
 
-// 4) DB yokken (bu test dosyasında hks_kv_oku tanımlı değil) öğrenme sessizce
-//    atlanmalı — hks_soap.php DB'ye bağımlı hâle GELMEMELİ.
-ok('hks_kv yokken öğrenilen varyant null döner (çökmez)',
-    hks_dogum_varyant_ogrenilen() === null);
+// DB yokken (bu test dosyasında hks_kv_oku tanımlı değil) öğrenme sessizce
+// atlanmalı — hks_soap.php DB'ye bağımlı hâle GELMEMELİ.
+ok('hks_kv yokken öğrenilen biçim null döner (çökmez)', hks_dogum_varyant_ogrenilen() === null);
 
-// 5) TEK YAZMA YOLU: hks_bildirim_kaydet_tek() yalnız merdivenin İÇİNDEN
-//    çağrılmalı. İkinci bir çağıran, merdiveni ve öğrenmeyi atlayan paralel
-//    bir gönderim yolu demektir — iki yol ayrışır, ayrışan taraf sessizce
-//    hatalı bildirim gönderir.
+// TEK YAZMA YOLU: hks_bildirim_kaydet_tek() yalnız hks_bildirim_kaydet()'ten
+// çağrılmalı. İkinci bir çağıran, öğrenme kurallarını atlayan paralel bir
+// gönderim yolu demektir.
 $__kok = dirname(__DIR__);
 $__cagiranlar = [];
-foreach (['/halkayit/api.php', '/halkayit/taslak_lib.php', '/api_beyan_bildirim.php'] as $__f) {
+foreach (['/halkayit/api.php', '/halkayit/taslak_lib.php', '/halkayit/dogum_deney_lib.php',
+          '/halkayit/dogum_deney.php', '/api_beyan_bildirim.php'] as $__f) {
     $__src = @file_get_contents($__kok . $__f);
     if ($__src !== false && strpos($__src, 'hks_bildirim_kaydet_tek(') !== false) $__cagiranlar[] = $__f;
 }
 ok('hks_bildirim_kaydet_tek() dışarıdan çağrılmıyor',
     count($__cagiranlar) === 0, 'çağıran: ' . implode(', ', $__cagiranlar));
 $__soap = (string)file_get_contents($__kok . '/halkayit/hks_soap.php');
-// 'function hks_bildirim_kaydet_tek($cfg' TANIMDIR, çağrı değil — çağrı sayarken
-// atama biçimine bakılır.
-ok('hks_soap.php içinde tek çağrı var (merdiven)',
+ok('hks_soap.php içinde tek çağrı var (hks_bildirim_kaydet)',
     substr_count($__soap, '= hks_bildirim_kaydet_tek(') === 1,
     (string)substr_count($__soap, '= hks_bildirim_kaydet_tek('));
+ok('otomatik yeniden gönderim (merdiven) YOK',
+    !str_contains($__soap, 'function hks_dogum_merdiveni') && !str_contains($__soap, 'foreach ($merdiven'));
+ok('öğrenme yalnız künye + kayıtsız doğrulandı koşuluyla',
+    (bool)preg_match('/if \\(\\$kunyeVar && \\$dogumTel !== \'\' && !empty\\(\\$secenek\\[\'kayitsizDogrulandi\'\\]\\)\\)/', $__soap));
 
 echo "\n── Regresyon: DogumTarihi YOKSA alan hiç gönderilmiyor (mevcut akışlar korunur) ──\n";
 $ortakDogumsuz = $ortakUretici;
@@ -424,6 +425,27 @@ ok('kayıtsız satıcının DogumTarihi bilgisi gidiyor',
     str_contains($xmlSatinKayitsiz, '<b:DogumTarihi>15.06.1975 00:00:00</b:DogumTarihi>'));
 ok('referanssız (ReferansBildirimKunyeNo=0)',
     str_contains($xmlSatinKayitsiz, '<a:ReferansBildirimKunyeNo>0</a:ReferansBildirimKunyeNo>'));
+
+echo "\n── Satın Alım + KAYITSIZ: gidecek yer İl/İlçe/Belde (kılavuz 1189-1193, GTB 195 örneği) ──\n";
+// api.php, kişi gönderimden hemen önce KAYITSIZ doğrulanınca işyerinin kendi
+// adresini $ortak['gidecekAdres']'e koyar. Yoksa (kayıtlı / belirsiz) eklenmez.
+$__oAdres = $ortakSatinKayitsiz + ['gidecekAdres' => ['ilId' => 7, 'ilceId' => 70, 'beldeId' => 700]];
+$__xA = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]], $__oAdres);
+preg_match('#<a:MalinGidecekYerBilgileri>(.*?)</a:MalinGidecekYerBilgileri>#s', $__xA, $__mg);
+$__g = $__mg[1] ?? '';
+ok('işyeri KORUNUYOR (GidecekIsyeriId=42)', str_contains($__g, '<b:GidecekIsyeriId>42</b:GidecekIsyeriId>'));
+ok('GidecekYerIlId=7 / IlceId=70 / BeldeId=700 ekleniyor',
+    str_contains($__g, '<b:GidecekYerIlId>7</b:GidecekYerIlId>')
+    && str_contains($__g, '<b:GidecekYerIlceId>70</b:GidecekYerIlceId>')
+    && str_contains($__g, '<b:GidecekYerBeldeId>700</b:GidecekYerBeldeId>'), $__g);
+$__sira = ['AracPlakaNo', 'GidecekIsyeriId', 'GidecekYerBeldeId', 'GidecekYerIlId', 'GidecekYerIlceId', 'GidecekYerIsletmeTuruId'];
+$__poz = array_map(fn($e) => strpos($__g, '<b:' . $e . '>'), $__sira);
+$__sirali = !in_array(false, $__poz, true);
+for ($__i = 1; $__sirali && $__i < count($__poz); $__i++) if ($__poz[$__i] < $__poz[$__i - 1]) $__sirali = false;
+ok('WSDL sırası: Isyeri < Belde < Il < Ilce < IsletmeTuru', $__sirali, preg_replace('/[^A-Za-z:<>]/', '', $__g));
+$__xEksik = hks_bildirim_xml([['kunyeNo' => '0', 'miktar' => 75]],
+    $ortakSatinKayitsiz + ['gidecekAdres' => ['ilId' => 7, 'ilceId' => 70, 'beldeId' => 0]]);
+ok('eksik adres (belde 0) → hiç eklenmez (yarım adres gönderilmez)', !str_contains($__xEksik, 'GidecekYerIlId'));
 
 echo "\n── CANLI KISIT: İhracat sıfatı + Üreticiden Sevk Alım (api.php ile SENKRON KOPYA) ──\n";
 // HKS canlı yanıtı: GTBWSRV0000002 · "İhracat Üreticiden Sevk Alım bildirimi yapamaz".

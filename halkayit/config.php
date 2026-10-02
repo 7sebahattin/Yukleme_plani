@@ -47,41 +47,22 @@ define('HKS_YENI_ENDPOINT', false);
 define('HKS_ENDPOINT_ESKI', 'https://hks.hal.gov.tr/WebServices/%sService.svc');
 define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 
-// --- Kayıtsız ikinci kişide DogumTarihi: KONUM + BİÇİM ---
+// --- Kayıtsız ikinci kişide DogumTarihi: BİÇİM ---
 //
-// GTB, 12.03.2025 duyurusuyla kayıtsız kişi bildirimlerinde TC ile birlikte
-// `DogumTarihi` göndermeyi zorunlu kıldı ve alanı ~2016 tarihli bir WCF
-// sözleşmesine ekledi. Alanın XML'deki KONUMU ya da BİÇİMİ tutmazsa istek
-// SESSİZCE başarısız olur: `DataContractSerializer` beklediği konumda olmayan
-// elemanı hata vermeden ATLAR, sunucu alanı boş görür.
+// Canlı WSDL (eski ve yeni uç, 01/02.10.2026): DogumTarihi xs:STRING ve
+// ALFABETİK konumda (CepTel ile KisiSifat arası). Konum artık ayar DEĞİL —
+// hks_bildirim_xml() hep alfabetik yazar; "sona koymak" alanı sunucuda düşürür.
 //
-// BU DEĞERLER ARTIK "KANIT" DEĞİL, YALNIZCA BAŞLANGIÇ TAHMİNİDİR.
-// 05.09.2026'da 'son' + 'gtb' canlıda künye üretti; 07.09.2026'da AYNI kod,
-// AYNI kişi için "... doğum tarihi girilmelidir" aldı. Yani doğru kombinasyon
-// bizim kontrolümüz dışında değişebiliyor ve tek bir sabite yazmak kırılgan.
-// Bu yüzden çalışan kombinasyon ÖĞRENİLİR (hks_kv.dogum_varyant) ve teslim
-// edilemediğinde merdiven diğerlerini dener — bkz. hks_soap.php
-// hks_bildirim_kaydet(). Buradaki sabitler yalnız HENÜZ BİR ŞEY ÖĞRENİLMEDİYSE
-// kullanılır.
-//
-//   HKS_DOGUM_KONUM:  'son'       → ... KisiSifat, TcKimlikVergiNo, YurtDisiMi, DogumTarihi
-//                     'alfabetik' → AdSoyad, CepTel, DogumTarihi, KisiSifat, ...
-//   HKS_DOGUM_BICIMI: 'gtb'       → 01.01.1980 00:00:00   (GTB Ornek_Request.txt)
-//                     'iso'       → 1980-01-01T00:00:00
-define('HKS_DOGUM_KONUM', 'son');
+// Metni GTB kodu kendisi tarihe çevirir; beklediği biçim belgelenmemiş. GTB'nin
+// örneği 'gtb' biçimini kullanıyor ama tarihi 01.01.1980 (gün = ay) olduğu için
+// gün/ay sırasını sınamıyor. Bu değer yalnız BAŞLANGIÇ biçimidir:
+//   • Gerçek künye üreten ve öncesinde KAYITSIZ doğrulanmış bir gönderim başka
+//     bir biçimle yapıldıysa o biçim hks_kv.dogum_varyant'a öğrenilir ve bu
+//     sabitin önüne geçer.
+//   • Yönetici halkayit/tani.php'den tek kullanımlık "deney biçimi" kurabilir.
+// Beyaz liste: gtb · gtb_oglen · gtb_tarih · iso · iso_oglen · iso_tarih
+// (bkz. hks_soap.php hks_dogum_bicimleri). Ayrıntı: docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md
 define('HKS_DOGUM_BICIMI', 'gtb');
-
-// --- Doğum tarihi teslim merdiveni ---
-// true  → doğum tarihi gönderildiği hâlde HKS "girilmelidir" derse (istek TÜMDEN
-//         reddedilmiş, HİÇ künye oluşmamış, rüsum doğmamıştır) diğer konum/biçim
-//         kombinasyonları sırayla denenir ve teslim edileni ÖĞRENİLİR.
-// false → tek deneme; eski davranış.
-//
-// MÜKERRER GÖNDERİM RİSKİ YOK: merdiven yalnızca HKS'ten TEK BİR satır cevabı
-// bile dönmediğinde ilerler (hks_dogum_okunmadi_mi). Satır cevabı varsa künye
-// oluşmuş olabilir ve merdiven ORADA DURUR. Ayrıca "Mernis'te bulunamadı"
-// hatasında da durur — o hata alanın ULAŞTIĞINI, DEĞERİN yanlış olduğunu söyler.
-define('HKS_DOGUM_DENEME', true);
 
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;

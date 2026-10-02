@@ -3987,7 +3987,7 @@ $('btnOnay').onclick = async () => {
         '<b>taslağınız SİLİNMEDİ</b>. Aşağıdaki hatayı düzeltip (örn. karşı taraf sıfatı) ' +
         'Taslaklar\'dan "✏️ Düzenle" ile aynı formu tekrar gönderebilirsiniz.</div>';
     }
-    if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${j.genelHata}</div>`;
+    if (j.genelHata) html += `<div class="mesaj hata" style="display:block">${eHtml(j.genelHata)}</div>`;
     // HKS'e GERÇEKTEN giden karşı taraf kimliği. "Mernis'te bulunamadı" hatasında
     // KPS, TC ile doğum tarihini BİRLİKTE doğrular; eskiden ekranda yalnız HKS'in
     // mesajındaki TC görünüyor, hangi doğum tarihinin gittiği HİÇ görünmüyordu —
@@ -3999,65 +3999,49 @@ $('btnOnay').onclick = async () => {
         `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(_gk.tc || '—')}</b></div>` +
         `<div class="onay-satir"><span>Doğum Tarihi</span><b>${
           _gk.dogumGonderildi ? eHtml(_gk.dogum) : '⚠️ GÖNDERİLMEDİ'}</b></div>` +
+        // Teldeki METİN — HKS alanı metin olarak alıp kendisi tarihe çevirir;
+        // formdaki değerle aynı görünse de yazımı (gün/ay sırası) farklıdır.
+        (_gk.dogumTel ? `<div class="onay-satir"><span>HKS'e giden metin</span><b>${eHtml(_gk.dogumTel)}</b></div>` : '') +
+        (j.kayitDurumuOnce ? `<div class="onay-satir"><span>Gönderim öncesi kayıt durumu</span><b>${
+          eHtml(j.kayitDurumuOnce === 'NOT_REGISTERED' ? 'KAYITSIZ' : (j.kayitDurumuOnce === 'REGISTERED' ? 'KAYITLI' : 'belirsiz'))}</b></div>` : '') +
         `<div class="onay-satir"><span>Ad / Ünvan</span><b>${eHtml(_gk.ad || '—')}</b></div>` +
         `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(_gk.cep || '—')}</b></div>` +
-        '<div style="margin-top:6px">Bu iki satırı (TC + Doğum Tarihi) kişinin ' +
-        '<b>kimlik kartıyla</b> karşılaştırın — KPS ikisini birlikte doğrular.</div></div>';
+        '<div style="margin-top:6px">TC ve doğum tarihini kişinin kimliğiyle bir kez karşılaştırın.</div></div>';
     }
-    // DOĞUM TARİHİ TESLİM MERDİVENİ — sunucu "doğum tarihi girilmelidir" derse
-    // alan XML'de olduğu hâlde OKUNMAMIŞ demektir (DataContractSerializer
-    // beklemediği konumdaki elemanı sessizce atlar). Backend bu durumda diğer
-    // konum/biçim kombinasyonlarını dener; ne denendiği burada görünür, yoksa
-    // kullanıcı aynı hatayı tekrar tekrar alır ve neden olduğunu bilemez.
-    const _dd = j.dogumDenemeleri || [];
-    if (_dd.length) {
-      const _son = _dd[_dd.length - 1];
-      const _satirlar = _dd.map(d =>
-        `<div class="onay-satir"><span>konum: <b>${eHtml(d.konum)}</b> · biçim: <b>${eHtml(d.bicim)}</b></span>` +
-        `<b>${d.dogumOkundu ? '✓ okundu' : '✗ okunmadı'}</b></div>`).join('');
-      if (!_son.dogumOkundu) {
-        html += '<div class="mesaj hata" style="display:block;margin-top:8px">' +
-          '<b>⚠️ Doğum tarihi gönderildi ama HKS OKUMADI.</b>' +
-          '<div style="margin-top:6px">Alan istekte var (Teknik Detay\'da görebilirsiniz) ' +
-          'ama sunucu "girilmelidir" diyor — yani alanı beklediği yerde bulamıyor. ' +
-          'Denenen kombinasyonlar:</div>' + _satirlar +
-          '<div style="margin-top:6px">Hepsi reddedildi. <b>Hiçbir künye oluşmadı, rüsum doğmadı.</b> ' +
-          'Bu noktada sorun bizim gönderimimizde değil, sözleşmededir: HKS büyük olasılıkla ' +
-          'bu alanı YENİ endpoint\'te bekliyor (<code>ws.gtb.gov.tr:8443</code>). ' +
-          'Hosting tarafında o porta çıkış açıldıktan sonra ' +
-          '<code>config.php → HKS_YENI_ENDPOINT = true</code> yapılmalı.</div></div>';
-      } else if (_dd.length > 1) {
-        html += '<div class="mesaj tamam" style="display:block;margin-top:8px">' +
-          '✅ Doğum tarihi <b>konum: ' + eHtml(_son.konum) + ' · biçim: ' + eHtml(_son.bicim) +
-          '</b> ile teslim edildi. Bu kombinasyon <b>öğrenildi</b>; sonraki bildirimler ' +
-          'doğrudan bununla gider.</div>';
-      }
+    // Öğrenme bildirimi: yalnız GERÇEK künye üreten, öncesinde KAYITSIZ
+    // doğrulanmış gönderimde biçim kalıcı olur (sunucu karar verir).
+    if (j.dogumOgrenildi && j.dogumVaryant) {
+      html += '<div class="mesaj tamam" style="display:block;margin-top:8px">' +
+        '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> biçimiyle kabul edildi ve ' +
+        '<b>öğrenildi</b> — sonraki kayıtsız kişi bildirimleri bu biçimle gider.</div>';
     }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
       if (tamam) herhangiBasarili = true;
       html += `<div class="sonuc-satir">` +
         (tamam
-          ? `<span class="rozet rozet-yesil">✓ KAYDEDİLDİ</span> Yeni Künye: <b>${s.yeniKunyeNo}</b> · ${fmt(s.miktar)} KG` +
+          ? `<span class="rozet rozet-yesil">✓ KAYDEDİLDİ</span> Yeni Künye: <b>${eHtml(s.yeniKunyeNo)}</b> · ${fmt(s.miktar)} KG` +
             (s.rusum ? ` · Rüsum: ${fmt(s.rusum)} TL` : '')
-          : `<span class="rozet rozet-kirmizi">✗ HATA</span> ${s.mesaj || 'Bilinmeyen hata'}` +
-            // MERNİS hatası neredeyse her zaman TC ile doğum tarihinin
-            // uyuşmamasından gelir (KPS ikisini BİRLİKTE doğrular) — kullanıcı
-            // ham mesajdan bunu çıkaramıyor, yönlendirme ekleniyor.
+          : `<span class="rozet rozet-kirmizi">✗ HATA</span> ${eHtml(s.mesaj || 'Bilinmeyen hata')}` +
+            // MERNİS — bilinen sorun (docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md):
+            // kayıtsız kişinin İLK bildiriminde HKS'in web servisi, sitedeki
+            // Sorgula'nın bulduğu kişiyi bulamıyor. Veri çoğu zaman DOĞRUDUR;
+            // HKS doğum tarihi metnini farklı yorumluyor olabilir. Künye/rüsum yok.
             (/mernis/i.test(String(s.mesaj || ''))
               ? '<div class="mesaj hata" style="display:block;margin-top:6px">' +
-                '💡 KPS, <b>TC ile doğum tarihini BİRLİKTE</b> doğrular — ikisinden biri ' +
-                'yanlışsa bu hata gelir.<br>' +
-                '1️⃣ Yukarıdaki mesajda yazan TC, gerçekten <b>gönderilen</b> TC\'dir — ' +
-                'kişinin kimliğiyle rakam rakam karşılaştırın.<br>' +
-                '2️⃣ Doğru değilse "Kişi Seç" penceresindeki kayıttan seçmek yerine ' +
-                '<b>TC\'yi elle yazın</b> (elle yazınca ad/cep/doğum alanları da sıfırlanır), ' +
-                'sonra doğum tarihini nüfus kaydından girin.</div>'
+                '💡 <b>Bilinen sorun:</b> HKS sitesinde "Sorgula" bu kişiyi buluyorsa veriniz ' +
+                'doğrudur; HKS web servisi kayıtsız kişinin ilk bildiriminde doğum tarihini ' +
+                'farklı yorumluyor olabilir. <b>Künye ve rüsum oluşmadı.</b><br>' +
+                '• <b>Hemen çözüm:</b> hks.hal.gov.tr\'de bildirim ekranında TC + doğum tarihiyle ' +
+                'yalnız <b>Sorgula</b> yapın (bildirimi sitede tamamlamayın), sonra bu taslağı tekrar gönderin.<br>' +
+                '• <b>Kalıcı çözüm için</b> yönetici "Doğum Tarihi Deneyi" ekranından ' +
+                '(<code>halkayit/dogum_deney.php</code>) bu kişi için başka bir biçim kurup ' +
+                'taslağı siteye uğramadan tekrar gönderebilir.</div>'
               : '')) +
         `</div>`;
     });
     if (!html) html = '<div class="yukleniyor">Cevap boş döndü.</div>';
-    // TEŞHİS: hata varsa ham SOAP yanıtını daraltılabilir teknik detayda göster.
+    // TEŞHİS: gönderilen istek (başarıda da) + hata varsa ham SOAP yanıtı.
     if (j.ham || j.hamIstek) {
       html += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--hata-tx)">' +
         'Teknik Detay (gönderilen istek + ham yanıt)</summary>';

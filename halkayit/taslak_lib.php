@@ -20,6 +20,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/hks_soap.php';   // hks_tc_normalize / hks_tc_algoritma_gecerli / hks_dogum_tarihi_xml
+require_once __DIR__ . '/dogum_deney_lib.php';   // doğum tarihi biçim deneyi + teşhis kaydı
 
 // --- Firma yardımcıları ---
 function hks_firma_bul($id) {
