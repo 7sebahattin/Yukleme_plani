@@ -422,7 +422,7 @@ render_flash();
               // (yalnız KADIN/ERKEK) geliyor — burada İKİNCİ bir "code IN (...)"
               // filtresi TEKRARLANMAZ; politika TEK yerde yaşar. ?>
         <?php foreach ($isciTipleri as $t): ?>
-        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
         <?php endforeach; ?>
         <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>
     </div>
@@ -464,6 +464,9 @@ render_flash();
         <div class="pdks-scan-actions">
             <button type="button" class="btn btn-ghost" id="giCavusDegistir2">↩ Çavuşu Değiştir</button>
             <button type="button" class="btn" id="giModDegistir">🔁 Modu Değiştir</button>
+            <!-- v293: GİRİŞ modunda diğer cinsiyete tek dokunuşla geçiş (KADIN ⇄ ERKEK).
+                 Aynı ?ajax=oturum yolu — yalnız seçili işçi tipi değişir. -->
+            <button type="button" class="btn pdks-tip-gecis-btn" id="giTipGecis" hidden></button>
         </div>
 
         <!-- ── Sonuç overlay'i (başarı/hata) ────────────────── -->
@@ -472,11 +475,16 @@ render_flash();
         </div>
     </div>
 
-    <!-- ── 4) Kapatma onayı ─────────────────────────────────── -->
-    <div id="giCloseConfirmSec" class="pdks-kiosk-modesec" hidden>
-        <div class="pdks-kiosk-recon">
-            <h2>Mesaiyi Kapat?</h2>
-            <p><strong id="giCloseCavus"></strong> · <span id="giCloseTarih"></span></p>
+    <!-- ── 4) Kapatma onayı — PENCERE (v293) ──────────────────
+         "Mesaiyi Kapat" artık bulunduğu ekranın ÜSTÜNDE bir pencere açar:
+         mesai özeti + kontrol listesi, en altta "Onayla". Kapatma YİNE
+         ?ajax=kapat yolundan yapılır (ikinci kapatma yolu YOK). -->
+    <div id="giCloseConfirmSec" class="pdks-kapat-ovl" hidden>
+        <div class="pdks-kiosk-recon pdks-kapat-pencere" role="dialog" aria-modal="true" aria-labelledby="giCloseBaslik" tabindex="-1">
+            <h2 id="giCloseBaslik">🔒 Mesaiyi Kapat</h2>
+            <p class="pdks-kapat-kim"><strong id="giCloseCavus"></strong> · <span id="giCloseTarih"></span></p>
+            <h3 class="pdks-kapat-alt">Mesai Özeti</h3>
+            <div id="giCloseSatirlar"></div>
             <div class="pdks-kiosk-counters">
                 <div class="pdks-kiosk-counter-totals">
                     <div class="pdks-kiosk-counter-box"><div class="lbl">Giriş</div><div class="val" id="giCloseGiris"></div></div>
@@ -493,12 +501,10 @@ render_flash();
                 <div class="pdks-kiosk-counter-row"><span>FM onayı bekleyen</span><span class="n" id="gikkBekleyenFm">—</span></div>
                 <div class="pdks-kiosk-counter-row"><span>Hakediş durumu</span><span class="n" id="gikkHakedis">—</span></div>
             </div>
-            <p>Bu işlem çavuşun yukarıdaki tarihli mesaisini kapatacaktır.<br>
-               Mesai kapatıldıktan sonra normal giriş/çıkış kart okutma işlemi durur.<br>
-               <strong>Devam etmek istiyor musunuz?</strong></p>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <p class="pdks-kapat-not">Mesai kapatıldıktan sonra bu mesaiye kart okutulamaz. Onaylıyor musunuz?</p>
+            <div class="pdks-kapat-eylem">
                 <button type="button" class="btn btn-ghost" id="giCloseCancelBtn">Vazgeç</button>
-                <button type="button" class="btn btn-primary" id="giCloseConfirmBtn">Mesaiyi Kapat</button>
+                <button type="button" class="btn btn-primary" id="giCloseConfirmBtn">✅ Onayla</button>
             </div>
         </div>
     </div>
@@ -590,6 +596,7 @@ render_flash();
 
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
+    var seciliTipKod = null;   // v293: KADIN/ERKEK hızlı geçiş düğmesi için
     var seciliTipAd = null;
 
     // ── Basit ses geri bildirimi — Web Audio API, harici dosya/kütüphane
@@ -935,6 +942,32 @@ render_flash();
         document.getElementById('giSonCikis').textContent     = saatKisalt(ozet.son_cikis);
     }
 
+    // v293: GİRİŞ modunda KADIN ⇄ ERKEK tek dokunuş geçiş. Hedef tip, tip
+    // seçim ekranındaki düğmeden okunur (tip listesi TEK kaynak — sunucu).
+    var tipGecisBtn = document.getElementById('giTipGecis');
+    function tipGecisGuncelle() {
+        if (!tipGecisBtn) return;
+        var hedefKod = seciliTipKod === 'KADIN' ? 'ERKEK' : (seciliTipKod === 'ERKEK' ? 'KADIN' : null);
+        var hedef = (currentMode === 'GIRIS' && !ortakMod && tipSec && seciliTipId && hedefKod)
+            ? tipSec.querySelector('[data-gi-tip-kod="' + hedefKod + '"]') : null;
+        tipGecisBtn.hidden = !hedef;
+        tipGecisBtn.parentNode.classList.toggle('pdks-scan-actions-uc', !!hedef);
+        tipGecisBtn.classList.toggle('pdks-tip-gecis-erkek', !!hedef && hedefKod === 'ERKEK');
+        tipGecisBtn.classList.toggle('pdks-tip-gecis-kadin', !!hedef && hedefKod === 'KADIN');
+        if (!hedef) { tipGecisBtn.removeAttribute('data-hedef-id'); return; }
+        tipGecisBtn.setAttribute('data-hedef-id', hedef.getAttribute('data-gi-tip-id'));
+        tipGecisBtn.textContent = (hedefKod === 'ERKEK' ? '👨 ' : '👩 ') + hedef.textContent.trim() + ' GİRİŞ';
+    }
+    if (tipGecisBtn) tipGecisBtn.addEventListener('click', function () {
+        var hedefId = tipGecisBtn.getAttribute('data-hedef-id');
+        var hedef = hedefId && tipSec ? tipSec.querySelector('[data-gi-tip-id="' + hedefId + '"]') : null;
+        if (!hedef || currentMode !== 'GIRIS') return;
+        seciliTipId = parseInt(hedefId, 10);
+        seciliTipAd = hedef.getAttribute('data-gi-tip-ad');
+        seciliTipKod = hedef.getAttribute('data-gi-tip-kod');
+        modSec('GIRIS');
+    });
+
     function modSec(mod) {
         if (!seciliCavusId) return;
         if (mod === 'GIRIS' && tipSec && !seciliTipId) return;
@@ -973,6 +1006,7 @@ render_flash();
                 document.getElementById('giScanCavusAd').textContent = seciliCavusAd;
                 document.getElementById('giSayacDepo').textContent = currentSession.depo || '(depo yok)';
                 sayaclariGoster(d.ozet || {});
+                tipGecisGuncelle();
                 scanInput.value = '';
                 resultBox.hidden = true;
                 ekranGoster(scanSec);
@@ -1003,6 +1037,7 @@ render_flash();
         btn.addEventListener('click', function () {
             seciliTipId = parseInt(btn.getAttribute('data-gi-tip-id'), 10);
             seciliTipAd = btn.getAttribute('data-gi-tip-ad');
+            seciliTipKod = btn.getAttribute('data-gi-tip-kod');
             modSec('GIRIS');
         });
     });
@@ -1024,6 +1059,9 @@ render_flash();
         if (!scanSec.hidden && e.target !== nfcBtn) focusInput();
     });
 
+    // v293: başarılı okuma 3 sn, başarısız 5 sn ekranda kalır (kullanıcı kararı).
+    // Önceki mesaide eksik çıkış uyarısı taşıyan başarı okunabilsin diye 8 sn.
+    var SONUC_OK_MS = 3000, SONUC_HATA_MS = 5000;
     function gosterSonuc(html, sinif, sureMs) {
         clearTimeout(resultTimer);
         resultInner.innerHTML = html;
@@ -1093,7 +1131,7 @@ render_flash();
             // v275: önceki (kapatılmış) mesaide çıkışsız kalan kart — giriş YAPILDI,
             // eski kayıt raporda eksik çıkış olarak kalır. Okunabilsin diye süre uzar.
             (d.uyari ? '<div class="pdks-result-uyari" role="alert">⚠️ ' + escHtml(d.uyari) + '</div>' : ''),
-            'pdks-kiosk-result-ok', d.uyari ? 8000 : 5000
+            'pdks-kiosk-result-ok', d.uyari ? 8000 : SONUC_OK_MS
         );
     }
     function hataGoster(mesaj) {
@@ -1101,7 +1139,7 @@ render_flash();
         gosterSonuc(
             '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✕</span></div>' +
             '<div class="pdks-kiosk-result-msg">' + escHtml(mesaj || 'Kayıt yapılamadı.') + '</div>',
-            'pdks-kiosk-result-err', 5000
+            'pdks-kiosk-result-err', SONUC_HATA_MS
         );
     }
     function escHtml(s) {
@@ -1304,8 +1342,15 @@ render_flash();
         ekranGoster(reconSec);
     }
 
+    var kapatSuruyor = false;
     function kapat(not) {
-        if (!currentSession) return;
+        if (!currentSession || kapatSuruyor) return;
+        // v293: çift dokunmada ikinci istek gitmesin.
+        kapatSuruyor = true;
+        var onayBtn = document.getElementById('giCloseConfirmBtn');
+        var reconBtn = document.getElementById('giReconKapatBtn');
+        onayBtn.disabled = true; reconBtn.disabled = true;
+        var bitti = function () { kapatSuruyor = false; onayBtn.disabled = false; reconBtn.disabled = false; };
         fetch('gunluk_isci_giris_cikis.php?ajax=kapat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1313,6 +1358,7 @@ render_flash();
         })
             .then(function (r) { return r.json(); })
             .then(function (d) {
+                bitti();
                 if (d && d.ok) {
                     alert('Mesai kapatıldı.');
                     if (kapatKaynak === 'eski') {
@@ -1334,7 +1380,7 @@ render_flash();
                 }
                 alert((d && d.hata) || 'Mesai kapatılamadı.');
             })
-            .catch(function () { alert('Bağlantı hatası. Tekrar deneyin.'); });
+            .catch(function () { bitti(); alert('Bağlantı hatası. Tekrar deneyin.'); });
     }
     // ⚠ Faz 9E / B: hakediş durumu etiketleri — cavus_hakedis.php/detay'daki
     // AYNI durum sözlüğünün (draft/final/needs_recalculation) burada TEK
@@ -1371,8 +1417,13 @@ render_flash();
         document.getElementById('giCloseCikis').textContent = sayilar.cikis;
         document.getElementById('giCloseIceride').textContent = sayilar.icerde;
         document.getElementById('giCloseEksik').textContent = sayilar.eksik;
+        document.getElementById('giCloseSatirlar').innerHTML = sayilar.satirlar || '';
         kapanisKontroluGoster(currentSession.id);
-        ekranGoster(closeConfirmSec);
+        // v293: ekran DEĞİŞMEZ — pencere bulunulan ekranın üstünde açılır.
+        // Odak pencerenin kendisine verilir (düğmeye DEĞİL): USB okuyucunun
+        // gönderdiği Enter bir düğmeyi tetikleyip mesaiyi kapatmasın.
+        closeConfirmSec.hidden = false;
+        closeConfirmSec.querySelector('.pdks-kapat-pencere').focus();
     }
     document.getElementById('giKapatBtn').addEventListener('click', function () {
         if (!currentSession) return;
@@ -1381,7 +1432,8 @@ render_flash();
             giris: document.getElementById('giGirisToplam').textContent,
             cikis: document.getElementById('giCikisToplam').textContent,
             icerde: document.getElementById('giIcerdeToplam').textContent,
-            eksik: document.getElementById('giEksikToplam').textContent
+            eksik: document.getElementById('giEksikToplam').textContent,
+            satirlar: document.getElementById('giSayacSatirlar').innerHTML
         });
     });
     // v275: pencereden başlayan kapatmada vazgeçilince pencereye dönülür.
@@ -1401,6 +1453,9 @@ render_flash();
     // gösterirdi). Eksik çıkış varsa kullanıcı modeSec'ten ÇIKIŞ MODU'na tekrar
     // girip taramaya devam edebilir.
     document.getElementById('giCloseCancelBtn').addEventListener('click', kapatmadanVazgec);
+    // v293: pencere dışına dokunma ve Esc de vazgeçer (kapatma YAPMAZ).
+    closeConfirmSec.addEventListener('click', function (e) { if (e.target === closeConfirmSec) kapatmadanVazgec(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !closeConfirmSec.hidden) kapatmadanVazgec(); });
     document.getElementById('giCloseConfirmBtn').addEventListener('click', function () { kapat(''); });
     document.getElementById('giReconKapatBtn').addEventListener('click', function () {
         var not = document.getElementById('giReconNot').value.trim();
