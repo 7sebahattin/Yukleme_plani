@@ -125,6 +125,8 @@ const OZET = { giris: { 'Kadın': 4, 'Erkek': 2 }, cikis: { 'Kadın': 1 }, giris
         await page.evaluate(() => { const b = document.getElementById('giCloseConfirmBtn'); b.click(); b.click(); });
         await page.waitForTimeout(400);
         const kapatlar = istekler.filter(i => i.uc === 'kapat');
+        const iptalKilit = await page.evaluate(() => /kapatSuruyor\) return;/.test(document.documentElement.innerHTML));
+        ok('istek sürerken Vazgeç/Esc kapatmayı "iptal edilmiş" gibi göstermez (kapatSuruyor kilidi)', iptalKilit);
         ok('Onayla → TEK ?ajax=kapat (çift dokunma korumalı), session_id=11', kapatlar.length === 1 && kapatlar[0].govde.session_id === 11, JSON.stringify(kapatlar));
 
         // ── 2) KADIN girişi → ERKEK GİRİŞ düğmesi ──
@@ -165,8 +167,18 @@ const OZET = { giris: { 'Kadın': 4, 'Erkek': 2 }, cikis: { 'Kadın': 1 }, giris
         const okSure = Date.now() - t0;
         ok(`başarı sonucu ~3 sn ekranda (ölçülen ${okSure} ms)`, okSure >= 2700 && okSure <= 3800, String(okSure));
 
-        // ── ÇIKIŞ modunda geçiş düğmesi YOK ──
+        // ── GİRİŞ(KADIN) → Modu Değiştir → çavuş listesi → ORTAK ÇIKIŞ: eski düğme kalmamalı ──
         await page.click('#giModDegistir'); await page.waitForTimeout(300);
+        await page.click('[data-gi-mode="GIRIS"]'); await page.waitForTimeout(200);
+        await page.click('[data-gi-tip-kod="KADIN"]'); await page.waitForTimeout(400);
+        await page.click('#giCavusDegistir2'); await page.waitForTimeout(300);
+        await page.click('#giOrtakCikisBtn'); await page.waitForTimeout(400);
+        const o = await page.evaluate(() => ({ gizli: document.getElementById('giTipGecis').hidden, uc: document.getElementById('giTipGecis').parentNode.classList.contains('pdks-scan-actions-uc') }));
+        ok('ORTAK ÇIKIŞ modunda Kadın/Erkek geçiş düğmesi gizli (önceki GİRİŞ\'ten kalmaz)', o.gizli && !o.uc, JSON.stringify(o));
+        await page.click('#giCavusDegistir2'); await page.waitForTimeout(300);
+        await page.click('[data-gi-cavus-id="1"]'); await page.waitForTimeout(300);
+
+        // ── ÇIKIŞ modunda geçiş düğmesi YOK (mod ekranındayız) ──
         await page.click('[data-gi-mode="CIKIS"]'); await page.waitForTimeout(400);
         ok('ÇIKIŞ modunda tip geçiş düğmesi gizli', await page.evaluate(() => document.getElementById('giTipGecis').hidden));
         ok('JS hatası yok', jsHata.length === 0, jsHata.join(' | '));

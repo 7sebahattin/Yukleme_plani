@@ -597,7 +597,7 @@ render_flash();
     // ── FAZ 8A: giriş öncesi işçi tipi seçimi ──
     var seciliTipId = null;
     var seciliTipKod = null;   // v293: KADIN/ERKEK hızlı geçiş düğmesi için
-    var seciliTipAd = null;
+    var seciliTipAd = null; seciliTipKod = null;
 
     // ── Basit ses geri bildirimi — Web Audio API, harici dosya/kütüphane
     // YOK (görev talimatı §15). Ses BAŞARISIZ olursa kayda ASLA engel olmaz
@@ -729,7 +729,7 @@ render_flash();
             if (tipSec) document.getElementById('giTipCavusAd').textContent = seciliCavusAd;
             modeRequest++;
             currentMode = null; currentSession = null;
-            seciliTipId = null; seciliTipAd = null;
+            seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
             ekranGoster(modeSec);
             modeSecOzetYukle();
         });
@@ -870,7 +870,7 @@ render_flash();
     function ortakModAc() {
         modeRequest++;
         seciliCavusId = null; seciliCavusAd = null;
-        seciliTipId = null; seciliTipAd = null;
+        seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         currentMode = 'CIKIS'; currentSession = null;
         ortakMod = true;
         modeBadge.textContent = '🚪 ORTAK ÇIKIŞ MODU';
@@ -880,6 +880,7 @@ render_flash();
         if (modDegistirBtn) modDegistirBtn.hidden = true;
         cavusDegistir2.textContent = '↩ Çavuş Seçimine Dön';
         cavusDegistir2.parentNode.classList.add('pdks-scan-actions-tek');
+        tipGecisGuncelle();   // v293: önceki GİRİŞ'ten kalan Kadın/Erkek düğmesi ortak modda görünmesin
         scanInput.value = '';
         resultBox.hidden = true;
         ekranGoster(scanSec);
@@ -903,7 +904,7 @@ render_flash();
         modeRequest++;
         ortakModKapat();
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
-        seciliTipId = null; seciliTipAd = null;
+        seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         kapatKaynak = 'mod';
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
@@ -984,7 +985,7 @@ render_flash();
                 if (d && d.kod === 'onceki_mesai_acik') {
                     // v275: önceki gün kapatılmadan yeni gün açılmaz — pencereyi aç.
                     currentMode = null; currentSession = null;
-                    seciliTipId = null; seciliTipAd = null;
+                    seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
                     alert(d.hata);
                     eskiPencereAc(d.eski_oturumlar || []);
                     return;
@@ -1023,7 +1024,7 @@ render_flash();
     document.querySelectorAll('[data-gi-mode]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var mod = btn.getAttribute('data-gi-mode');
-            seciliTipId = null; seciliTipAd = null;
+            seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
             if (mod === 'GIRIS' && tipSec) {
                 ekranGoster(tipSec);
                 var ilkTip = tipSec.querySelector('[data-gi-tip-id]');
@@ -1042,14 +1043,14 @@ render_flash();
         });
     });
     if (tipSec) document.getElementById('giTipVazgec').addEventListener('click', function () {
-        seciliTipId = null; seciliTipAd = null;
+        seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         ekranGoster(modeSec);
         modeSecOzetYukle();
         modeSec.querySelector('[data-gi-mode="GIRIS"]').focus();
     });
     document.getElementById('giModDegistir').addEventListener('click', function () {
         currentMode = null; currentSession = null;
-        seciliTipId = null; seciliTipAd = null;
+        seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         ekranGoster(modeSec);
         modeSecOzetYukle();
     });
@@ -1349,8 +1350,9 @@ render_flash();
         kapatSuruyor = true;
         var onayBtn = document.getElementById('giCloseConfirmBtn');
         var reconBtn = document.getElementById('giReconKapatBtn');
-        onayBtn.disabled = true; reconBtn.disabled = true;
-        var bitti = function () { kapatSuruyor = false; onayBtn.disabled = false; reconBtn.disabled = false; };
+        var iptalBtn = document.getElementById('giCloseCancelBtn');
+        onayBtn.disabled = true; reconBtn.disabled = true; iptalBtn.disabled = true;
+        var bitti = function () { kapatSuruyor = false; onayBtn.disabled = false; reconBtn.disabled = false; iptalBtn.disabled = false; };
         fetch('gunluk_isci_giris_cikis.php?ajax=kapat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1438,6 +1440,7 @@ render_flash();
     });
     // v275: pencereden başlayan kapatmada vazgeçilince pencereye dönülür.
     function kapatmadanVazgec() {
+        if (kapatSuruyor) return;   // v293: istek gitti — sonucu beklenir, ekran "vazgeçildi" gibi davranmaz
         if (kapatKaynak === 'eski') {
             kapatKaynak = 'mod'; seciliCavusId = null; seciliCavusAd = null; currentSession = null;
             ekranGoster(eskiSec);

@@ -73,7 +73,7 @@ $mainClick = preg_match("/getElementById\('giKapatBtn'\)\.addEventListener\('cli
 // mesai penceresi de onu kullanır) — kural aynı: ilk tık yalnız onay açar.
 $onayFn = preg_match("/function kapatOnayiGoster\(sayilar\) \{(.*?)\n    \}/s",$page,$m2) ? $m2[1] : '';
 ok8h('İlk tık yalnız onay ekranını açar', str_contains($mainClick,'kapatOnayiGoster(') && !str_contains($mainClick,'kapat(')
-    && str_contains($onayFn,'ekranGoster(closeConfirmSec)') && !str_contains($onayFn,'kapat('));
+    && str_contains($onayFn,'closeConfirmSec.hidden = false') /* v293: ekran değil PENCERE */ && !str_contains($onayFn,'kapat('));
 // ⚠ v240: Kapat artık YALNIZ mod seçim ekranından (giModeSec) tetiklenir —
 // Vazgeç de oraya döner (scanSec'e değil, bkz. gunluk_isci_giris_cikis.php'deki
 // aynı isimli yorum). Değişmeyen asıl kural aynı: Vazgeç kapat() ÇAĞIRMAZ.
