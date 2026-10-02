@@ -6,7 +6,7 @@
 // ölçülür. Bu test LİSTE sayfasını (çavuş seçmeli) yönetici olarak gerçekten
 // render eder (scripts/pdks_puantaj_dialog_render.php, PUANTAJ_SAYFA=liste):
 //   • geçmiş gün  → düğme pencereyi açar; "?ekle=1" ile pencere kendiliğinden açılır
-//   • bugün       → düğme, dünün tarihli listesine ("?ekle=1") giden bağlantıdır
+//   • bugün       → (v294) düğme pencereyi DOĞRUDAN açar (eskiden dünün listesine bağlantıydı)
 //
 //   node scripts/pdks_gecmis_ekle_smoke.js     (php + Playwright gerekir; yoksa ATLAR)
 // =========================================================
@@ -99,11 +99,18 @@ const gorunen = page => page.evaluate(() => [...document.querySelectorAll('dialo
         await page.goto('file://' + BUGUN);
         await page.waitForTimeout(400);
         const bu = await page.evaluate(() => {
-            const a = [...document.querySelectorAll('a')].find(x => /Geçmişe Dönük Çalışma Ekle/.test(x.textContent));
-            const r = a ? a.getBoundingClientRect() : null;
-            return { href: a ? a.getAttribute('href') : null, gorunur: !!r && r.width > 0 && r.height > 0, dialog: !!document.getElementById('ekle'), dugme: [...document.querySelectorAll('button')].some(x => /Geçmişe Dönük Çalışma Ekle/.test(x.textContent)) };
+            const b = [...document.querySelectorAll('button')].find(x => /Çalışma Ekle/.test(x.textContent));
+            const r = b ? b.getBoundingClientRect() : null;
+            return { gorunur: !!r && r.width > 0 && r.height > 0, ekranda: !!r && r.left >= 0 && r.right <= innerWidth + 0.5, link: [...document.querySelectorAll('a')].some(x => /Çalışma Ekle/.test(x.textContent)), dialog: !!document.getElementById('ekle') };
         });
-        ok('bugün: düğme dünün listesine giden bağlantı (?tarih=dün&ekle=1), dialog YOK', bu.gorunur && bu.href === `gunluk_isci_puantaj.php?tarih=${dunYmd}&ekle=1` && !bu.dialog && !bu.dugme, JSON.stringify(bu));
+        ok('bugün: "Çalışma Ekle" DÜĞME (bağlantı DEĞİL), görünür ve ekran içinde; dialog sayfada', bu.gorunur && bu.ekranda && !bu.link && bu.dialog, JSON.stringify(bu));
+        await page.evaluate(() => [...document.querySelectorAll('button')].find(x => /Çalışma Ekle/.test(x.textContent)).click());
+        await page.waitForTimeout(400);
+        const buAcik = await gorunen(page);
+        ok('bugün: düğme pencereyi doğrudan açıyor (tek dialog: ekle)', buAcik.length === 1 && buAcik[0] === 'ekle', buAcik.join(','));
+        const buAlan = await page.evaluate(() => { const f = document.querySelector('#ekle form'); return { sabit: f.dataset.bugun, ec: f.elements['exit_clock'].required, cavus: f.elements['foreman_id'].tagName }; });
+        ok('bugün: ekle formu bugün modunda (kart seçilince çıkış opsiyonel), çavuş seçilir', buAlan.sabit === '1' && buAlan.cavus === 'SELECT', JSON.stringify(buAlan));
+        await page.evaluate(() => document.getElementById('ekle').close());
         ok('JS hatası / konsol hatası yok', hatalar.length === 0, hatalar.join(' | '));
         await page.close();
     }

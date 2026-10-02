@@ -48,16 +48,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yenid
 }
 
 $aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal', 'puantaj_ekle'], true)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal', 'puantaj_ekle', 'toplu_geri_al'], true)) {
     csrf_check($_POST['csrf'] ?? null);
+    if (($_POST['action'] ?? '') === 'toplu_geri_al') {
+        // v294: toplu işlemi geri al. Toplu kimlik BU mesaiye ait olmalı (başka mesaiyi bu sayfadan iptal ettirmeyi engeller).
+        $tpId = trim((string)($_POST['toplu_id'] ?? ''));
+        $tpKayit = function_exists('pdks_faz8j_toplu_bul') ? pdks_faz8j_toplu_bul($pdo, $tpId) : null;
+        if (!$tpKayit || (int)$tpKayit['record_id'] !== (int)$id) {
+            $sonuc = ['ok' => false, 'hata' => 'Toplu işlem bu mesaiye ait değil ya da bulunamadı.'];
+        } else {
+            $sonuc = pdks_faz8j_toplu_geri_al($tpId, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
+        }
+        set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? ((int)$sonuc['iptal_edilen'] . ' kayıt iptal edildi (toplu işlem ' . $tpId . ' geri alındı).' . ((int)$sonuc['atlanan'] > 0 ? ' ' . (int)$sonuc['atlanan'] . ' kayıt zaten iptaldi.' : '')) : $sonuc['hata']);
+        header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id); exit;
+    }
     if (($_POST['action'] ?? '') === 'puantaj_ekle') {
         // v291: geçmişe dönük çalışma ekle (yalnız yönetici — işlev kendisi de kontrol eder).
         // Çavuş/tarih/depo SUNUCU değerleridir (array_merge: istemci ezemez).
-        $sonuc = pdks_faz8j_gecmis_ekle(array_merge($_POST, [
+        // v294: kart alanı 'kartsiz' → kartsiz=1 (açık alan; (int) dönüşümüne güvenilmez).
+        $ekleGirdi = $_POST;
+        if (($ekleGirdi['worker_card_id'] ?? '') === 'kartsiz') { $ekleGirdi['kartsiz'] = 1; $ekleGirdi['worker_card_id'] = 0; } else { unset($ekleGirdi['kartsiz']); }
+        $sonuc = pdks_faz8j_gecmis_ekle(array_merge($ekleGirdi, [
             'foreman_id' => (int)$oturum['foreman_id'], 'work_date' => (string)$oturum['work_date'], 'depo' => $aktifDepo,
         ]), (int)$auth_user['id'], $pdo);
-        set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? 'Çalışma kaydı eklendi.' : $sonuc['hata']);
-        header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id); exit;
+        $ekleMesaj = 'Çalışma kaydı eklendi.';
+        if ($sonuc['ok']) {
+            if (!empty($sonuc['kartsiz'])) $ekleMesaj = 'Kartsız çalışma kaydı eklendi (' . $sonuc['card_no'] . ').';
+            elseif (!empty($sonuc['acik'])) $ekleMesaj = 'Çalışma kaydı eklendi; kişi içeride yazıldı, çıkışta kartını okutacak.';
+            if (!empty($sonuc['yeni_mesai'])) $ekleMesaj .= ' Bu gün için yeni mesai açıldı.';
+        }
+        set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? $ekleMesaj : $sonuc['hata']);
+        header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)($sonuc['ok'] ? $sonuc['session_id'] : $id)); exit;
     }
     if (($_POST['action'] ?? '') === 'puantaj_iptal') {
         $sonuc = pdks_faz8j_void((int)($_POST['period_id'] ?? 0), (int)$id, $aktifDepo, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
@@ -92,7 +113,7 @@ $manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('e
 $manuelCikisDepoUygun = $oturum['depo'] === $aktifDepo;
 // ⚠ Faz 9E / E: bu oturumun dönemlerine (period_id) DETERMİNİSTİK bağlı
 // iptal/düzeltme geçmişi — bkz. pdks_gunluk_puantaj_denetim_gecmisi() docblock.
-$denetimGecmisi = pdks_gunluk_puantaj_denetim_gecmisi(array_column($kartlar, 'period_id'), $pdo);
+$denetimGecmisi = pdks_gunluk_puantaj_denetim_gecmisi(array_column($kartlar, 'period_id'), $pdo, 20, (int)$id);   // v294: sessionId → toplu işlem satırları da gelir
 $iptaller = [];
 if ($faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo) {
     $stVoid = $pdo->prepare("SELECT p.*, w.card_no, u.display_name FROM daily_worker_work_periods p JOIN worker_cards w ON w.id=p.worker_card_id LEFT JOIN users u ON u.id=p.voided_by_user_id WHERE p.session_id=? AND p.is_voided=1 ORDER BY p.voided_at DESC");
@@ -107,6 +128,25 @@ $duzeltmeTipler = $faz8jHazir && is_admin() ? pdks_gunluk_desteklenen_tip_listel
 // v291: "Çalışma Ekle" — yalnız yönetici, bu mesai aktif depoda ve şema hazırken.
 $ekleGoster = $faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo && function_exists('pdks_faz8j_gecmis_ekle');
 $ekleKartlar = $ekleGoster ? pdks_faz8j_bos_kartlar((string)$oturum['work_date'], $pdo) : [];
+// v294: Toplu İşlem — boş kartlar işçi tipiyle birlikte (kartları tipine göre öne almak için), mesaiye ait toplu işlemler.
+$topluKartlar = [];
+if ($ekleKartlar) {
+    $stTk = $pdo->prepare('SELECT id, card_no, worker_type_id FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($ekleKartlar), '?')) . ') ORDER BY card_no');
+    $stTk->execute(array_map('intval', array_column($ekleKartlar, 'id')));
+    $topluKartlar = $stTk->fetchAll();
+}
+$topluListe = $ekleGoster && function_exists('pdks_faz8j_toplu_listele') ? pdks_faz8j_toplu_listele((int)$id, $pdo) : [];
+// v294: kartsız (sanal kartlı) dönemler — rozet + Düzenle'de kart kilidi.
+$kartsizKartIds = [];
+if ($kartlar && pdks_gunluk_kolon_var($pdo, 'worker_cards', 'enrolled_source')) {
+    $stKs = $pdo->prepare('SELECT id, enrolled_source FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($kartlar), '?')) . ')');
+    $stKs->execute(array_map('intval', array_column($kartlar, 'worker_card_id')));
+    foreach ($stKs->fetchAll() as $kr) if (function_exists('pdks_faz8j_kartsiz_mi') && pdks_faz8j_kartsiz_mi($kr)) $kartsizKartIds[(int)$kr['id']] = true;
+}
+// v294: Toplu İşlem JSON uçları (çıktıdan ÖNCE). Çavuş/gün/depo mesaiden gelir.
+$topluAjaxKapi = $ekleGoster && $oturum['work_date'] <= date('Y-m-d');
+$topluAjaxSabit = ['foreman_id' => (int)$oturum['foreman_id'], 'work_date' => (string)$oturum['work_date'], 'depo' => $aktifDepo];
+require __DIR__ . '/_puantaj_toplu_ajax.php';
 
 render_header('Mesai Detayı');
 $base = base_url();
@@ -188,7 +228,7 @@ render_flash();
 
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px">
     <h2 style="font-size:1.05rem;margin:0">Kart Hareketleri</h2>
-    <?php if ($ekleGoster): ?><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('ekle')">➕ Çalışma Ekle</button><?php endif; ?>
+    <?php if ($ekleGoster): ?><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('ekle')">➕ Çalışma Ekle</button><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button></div><?php endif; ?>
 </div>
 
 <?php if (is_admin() && !$faz8jHazir): ?><div class="flash flash-error">Puantaj düzeltme merkezi için Faz 8J migrasyonu henüz çalıştırılmadı.</div><?php endif; ?>
@@ -223,7 +263,7 @@ render_flash();
     $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
 ?>
 <tr>
-    <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></td>
+    <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></td>
     <td><?= h($k['tip']) ?></td>
     <td class="muted"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
@@ -251,7 +291,7 @@ render_flash();
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($k['card_no']) ?> · <?= h($k['tip']) ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></div>
+            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?= h($k['tip']) ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></div>
             <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
@@ -269,7 +309,7 @@ render_flash();
 <?php endif; ?>
 
 <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): foreach ($kartlar as $k): ?>
-<dialog id="edit<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Çalışma Dönemini Düzenle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_duzeltme"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><div class="pdks-form-grid"><label><span class="form-label">Kart</span><select name="worker_card_id"><?php foreach($duzeltmeKartlar as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===(int)$k['worker_card_id']?'selected':'' ?>><?=h($c['card_no'])?></option><?php endforeach;?></select></label><label><span class="form-label">İşçi tipi</span><select name="worker_type_id"><?php
+<dialog id="edit<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Çalışma Dönemini Düzenle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_duzeltme"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><div class="pdks-form-grid"><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): /* v294: kartsız dönem başka karta taşınamaz (sunucu da reddeder) — kart sabit metin + gizli alan */ ?><div><span class="form-label">Kart</span><div class="pdks-uid"><?=h($k['card_no'])?> <span class="pdks-badge pdks-badge-kartsiz">Kartsız</span></div><input type="hidden" name="worker_card_id" value="<?= (int)$k['worker_card_id'] ?>"></div><?php else: $mevcutKartVar = in_array((int)$k['worker_card_id'], array_map('intval', array_column($duzeltmeKartlar, 'id')), true); ?><label><span class="form-label">Kart</span><select name="worker_card_id"><?php if (!$mevcutKartVar): /* pasif kart listede yoksa mevcut kart yine de seçili kalsın */ ?><option value="<?= (int)$k['worker_card_id'] ?>" selected><?=h($k['card_no'])?> (pasif)</option><?php endif; ?><?php foreach($duzeltmeKartlar as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===(int)$k['worker_card_id']?'selected':'' ?>><?=h($c['card_no'])?></option><?php endforeach;?></select></label><?php endif; ?><label><span class="form-label">İşçi tipi</span><select name="worker_type_id"><?php
     // ⚠ Faz 9B / görev talimatı §7: bu dönemin GEÇERLİ (snapshot) tipi
     // artık desteklenen listede yoksa (tarihsel/başka kurulumdan gelen bir
     // satır — ör. Faz 9B öncesi bir "FORKLIFT" ataması), SESSİZCE listedeki
@@ -287,7 +327,26 @@ render_flash();
     $ekleTipler = $duzeltmeTipler;
     $ekleSabitCavus = ['id' => (int)$oturum['foreman_id'], 'name' => (string)$oturum['foreman_name_snapshot']];
     require __DIR__ . '/_puantaj_ekle.php';
-} ?>
+    // v294: Toplu İşlem penceresi (aynı çavuş + gün; uçlar bu sayfada)
+    $topluWorkDate = $ekleWorkDate; $topluTipler = $duzeltmeTipler; $topluSabitCavus = $ekleSabitCavus;
+    $topluUrlOnizle = 'gunluk_isci_puantaj_detay.php?id=' . (int)$id . '&ajax=toplu_onizle';
+    $topluUrlEkle   = 'gunluk_isci_puantaj_detay.php?id=' . (int)$id . '&ajax=toplu_ekle';
+    require __DIR__ . '/_puantaj_toplu.php';
+?>
+<?php if ($topluListe): ?>
+<dialog id="tpGeriAl" class="pm-dialog isk-card-modal">
+<div class="pm-header"><h2 class="pm-title">Toplu İşlemi Geri Al</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
+<form method="post" class="isk-card-modal-body">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="toplu_geri_al">
+    <input type="hidden" name="toplu_id" id="tpGeriAlId" value="">
+    <p style="margin:0 0 10px">Toplu işlem <strong id="tpGeriAlEtiket"></strong> ile eklenen ve hâlâ aktif olan tüm kayıtlar iptal edilir (puantajdan çıkar). Ham kart okutma geçmişi silinmez.</p>
+    <label><span class="form-label">Geri alma nedeni *</span><textarea name="reason" maxlength="500" required rows="3"></textarea></label>
+    <div class="isk-card-form-actions"><button class="btn btn-danger">↩ Geri Al</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+</form>
+</dialog>
+<?php endif; ?>
+<?php } ?>
 <script>
 // ⚠ Bu sayfadaki Düzenle/İptal dialog'ları native <dialog> — .pm-overlay
 // sarmalayıcısı YOK. Bir dialog açıkken diğerine tıklanırsa ikisi de
@@ -297,6 +356,46 @@ function pdksPuantajDialogAc(id) {
     document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
     document.getElementById(id).showModal();
 }
+</script>
+<?php endif; ?>
+
+<?php if ($topluListe): ?>
+<h2 style="font-size:1.05rem;margin-top:22px">Toplu İşlemler</h2>
+<div class="table-wrap pc-only" style="margin-bottom:18px">
+<table class="data-table tp-liste">
+<thead><tr><th>Tarih / Saat</th><th>Kullanıcı</th><th>Kayıt</th><th>Sebep</th><th class="actions-col">İşlem</th></tr></thead>
+<tbody>
+<?php foreach ($topluListe as $tp): ?>
+<tr>
+    <td><?= h(date('d.m.Y H:i', strtotime($tp['created_at']))) ?><div class="muted" style="font-size:.78rem"><?= h($tp['toplu_id']) ?></div></td>
+    <td><?= h($tp['kullanici']) ?></td>
+    <td><?= (int)$tp['kartli'] ?> kartlı + <?= (int)$tp['kartsiz'] ?> kartsız <span class="muted">· <?= (int)$tp['aktif'] ?> aktif<?= (int)$tp['iptal'] > 0 ? ', ' . (int)$tp['iptal'] . ' iptal' : '' ?></span></td>
+    <td><?= h($tp['reason']) ?><?= $tp['note'] !== '' ? '<div class="muted" style="font-size:.82rem">' . h($tp['note']) . '</div>' : '' ?></td>
+    <td class="actions-col"><?php if ((int)$tp['aktif'] > 0): ?><button type="button" class="btn btn-sm btn-danger" data-tp-geri="<?= h($tp['toplu_id']) ?>">↩ Geri Al</button><?php else: ?><span class="muted"><?= $tp['geri_alindi'] ? 'Geri alındı' : 'Tümü iptal' ?></span><?php endif; ?></td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+</div>
+<div class="pdks-cards mobile-only" style="margin-bottom:18px">
+<?php foreach ($topluListe as $tp): ?>
+<div class="pdks-card-item">
+    <div class="pdks-row-sub"><?= h(date('d.m.Y H:i', strtotime($tp['created_at']))) ?> · <?= h($tp['kullanici']) ?></div>
+    <div class="pdks-row-name" style="font-size:.95rem"><?= (int)$tp['kartli'] ?> kartlı + <?= (int)$tp['kartsiz'] ?> kartsız · <?= (int)$tp['aktif'] ?> aktif<?= (int)$tp['iptal'] > 0 ? ', ' . (int)$tp['iptal'] . ' iptal' : '' ?></div>
+    <div class="pdks-row-sub"><?= h($tp['reason']) ?></div>
+    <?php if ((int)$tp['aktif'] > 0): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm btn-danger" data-tp-geri="<?= h($tp['toplu_id']) ?>">↩ Geri Al</button></div><?php else: ?><div class="pdks-row-sub muted"><?= $tp['geri_alindi'] ? 'Geri alındı' : 'Tümü iptal' ?></div><?php endif; ?>
+</div>
+<?php endforeach; ?>
+</div>
+<script>
+document.querySelectorAll('[data-tp-geri]').forEach(function (b) {
+    b.addEventListener('click', function () {
+        var id = b.getAttribute('data-tp-geri');
+        document.getElementById('tpGeriAlId').value = id;
+        document.getElementById('tpGeriAlEtiket').textContent = id;
+        pdksPuantajDialogAc('tpGeriAl');
+    });
+});
 </script>
 <?php endif; ?>
 

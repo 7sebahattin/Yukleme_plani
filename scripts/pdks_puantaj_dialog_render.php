@@ -117,6 +117,22 @@ foreach (['321321321', '654654654'] as $i => $uid) {
 // v291: bir dönemi "elle eklendi" (source=manual) say — rozet testi için.
 db()->exec("UPDATE daily_worker_work_periods SET source = 'manual' WHERE id = 3");
 
+// v294: Toplu İşlem penceresi için o gün BOŞ 40 kart (yarısı KADIN, yarısı ERKEK — kaydırma gerekir).
+$erkek = (int)db()->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
+for ($i = 1; $i <= 40; $i++) {
+    $r = pdks_gunluk_kart_olustur(['card_no' => sprintf('F%03d', $i), 'ham_uid' => (string)(900000000 + $i), 'kaynak' => 'usb_decimal',
+                                   'worker_type_id' => $i <= 20 ? $kadin : $erkek], 1, db());
+    if (!($r['ok'] ?? false)) { fwrite(STDERR, 'kart F' . $i . ': ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+}
+db()->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, foreman_id INTEGER, status TEXT, needs_recalculation INTEGER DEFAULT 0, notes TEXT, updated_at TEXT, finalized_at TEXT, finalized_by_user_id INTEGER, total_amount TEXT)");
+// v294: GERÇEK toplu işlem (kartlı + kartsız) — kartsız rozet, kilitli düzenleme ve "Toplu İşlemler"
+// bölümü bu veriyle sınanır. Yazma yolu üretimdekiyle aynı (pdks_faz8j_toplu_ekle).
+$b1 = (int)db()->query("SELECT id FROM worker_cards WHERE card_no='B001'")->fetchColumn();
+$b2 = (int)db()->query("SELECT id FROM worker_cards WHERE card_no='B002'")->fetchColumn();
+$tp = pdks_faz8j_toplu_ekle(['foreman_id' => $cavus, 'work_date' => date('Y-m-d'), 'depo' => 'Depo A', 'reason' => 'Test toplu', 'note' => 'Render kurulumu',
+    'gruplar' => [['worker_type_id' => $kadin, 'entry_clock' => '00:00', 'exit_date' => date('Y-m-d'), 'exit_clock' => '00:01', 'kart_ids' => [$b1, $b2], 'kartsiz_adet' => 2]]], 1, db());
+if (!($tp['ok'] ?? false)) { fwrite(STDERR, 'toplu: ' . json_encode($tp, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 $sayfa = getenv('PUANTAJ_SAYFA') === 'liste' ? 'gunluk_isci_puantaj.php' : 'gunluk_isci_puantaj_detay.php';
