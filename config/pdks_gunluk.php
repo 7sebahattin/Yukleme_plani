@@ -424,12 +424,15 @@ function pdks_gunluk_migrate(?PDO $pdo = null): array
         try {
             $var = $pdo->prepare("SELECT 1 FROM worker_types WHERE code = ?");
             $ins = $pdo->prepare("INSERT INTO worker_types (code, name, sort_order) VALUES (?, ?, ?)");
-            foreach ([['KADIN', 'Kadın', 1], ['ERKEK', 'Erkek', 2]] as [$kod, $ad2, $sira]) {
+            // v295: KARISIK (Karışık) — yalnız kiosk GİRİŞ'i için geçici tip; Mesai
+            // Detayı'nda "Otomatik Ata" ile KADIN/ERKEK'e dağıtılır (bkz.
+            // pdks_gunluk_giris_tip_kodlari()). Fiyatlanmaz, düzeltme hedefi değildir.
+            foreach ([['KADIN', 'Kadın', 1], ['ERKEK', 'Erkek', 2], [PDKS_GUNLUK_KARISIK_KOD, PDKS_GUNLUK_KARISIK_AD, 3]] as [$kod, $ad2, $sira]) {
                 $var->execute([$kod]);
                 if ($var->fetchColumn()) continue;
                 try { $ins->execute([$kod, $ad2, $sira]); } catch (PDOException $e) { /* yarış koşulu — zaten var */ }
             }
-            $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'var', 'mesaj' => 'Başlangıç tipleri (Kadın/Erkek) garanti edildi.'];
+            $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'var', 'mesaj' => 'Başlangıç tipleri (Kadın/Erkek/Karışık) garanti edildi.'];
         } catch (PDOException $e) {
             error_log('[pdks_gunluk_migrate] worker_types.seed: ' . $e->getMessage());
             $rapor[] = ['tablo' => 'worker_types.seed', 'durum' => 'hata', 'mesaj' => $e->getMessage()];
@@ -787,6 +790,103 @@ function pdks_gunluk_desteklenen_tip_coz(int $workerTypeId, ?PDO $pdo = null): ?
     $st = $pdo->prepare("SELECT * FROM worker_types WHERE id = ? AND is_active = 1 AND code IN ($ph)");
     $st->execute(array_merge([$workerTypeId], $kodlar));
     return $st->fetch() ?: null;
+}
+
+// =========================================================
+// v295 — KARIŞIK GİRİŞ (yalnız kiosk GİRİŞ kapısı)
+//
+// KARISIK, operasyonel (fiyat/düzeltme/toplu/kartsız) politikaya
+// (pdks_gunluk_desteklenen_tip_kodlari()) BİLEREK EKLENMEZ. Yalnız kiosk
+// GİRİŞ'i (gunluk_isci_giris_cikis.php → ?ajax=kaydet → pdks_gunluk_faz8a_giris_kaydet)
+// ve oradaki tip düğmeleri bu AYRI kapıyı kullanır. Karışık dönemler Mesai
+// Detayı'nda "🎲 Otomatik Ata" ile (pdks_faz8j_karisik_ata) KADIN/ERKEK'e
+// dağıtılır; ödeme tarafı kapıları config/pdks_hakedis.php'de (pdks_hakedis_karisik_*).
+// =========================================================
+const PDKS_GUNLUK_KARISIK_KOD = 'KARISIK';
+const PDKS_GUNLUK_KARISIK_AD  = 'Karışık';
+
+/** Bu kod Karışık mı? */
+function pdks_gunluk_karisik_mi(?string $kod): bool
+{
+    return $kod !== null && $kod === PDKS_GUNLUK_KARISIK_KOD;
+}
+
+/**
+ * KARISIK worker_types satırını garanti eder (ucuz SELECT → yoksa INSERT,
+ * migrate'teki seed ile AYNI taşınabilir desen; yarışta UNIQUE korur).
+ * Var olan satırın aktifliğine DOKUNMAZ. Tablo yoksa null.
+ */
+function pdks_gunluk_karisik_tip_garanti(?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    try {
+        $st = $pdo->prepare('SELECT * FROM worker_types WHERE code = ?');
+        $st->execute([PDKS_GUNLUK_KARISIK_KOD]);
+        $r = $st->fetch();
+        if ($r) return $r;
+        try {
+            $pdo->prepare('INSERT INTO worker_types (code, name, sort_order) VALUES (?, ?, ?)')
+                ->execute([PDKS_GUNLUK_KARISIK_KOD, PDKS_GUNLUK_KARISIK_AD, 3]);
+        } catch (PDOException $e) { /* yarış koşulu — zaten var */ }
+        $st->execute([PDKS_GUNLUK_KARISIK_KOD]);
+        return $st->fetch() ?: null;
+    } catch (PDOException $e) {
+        error_log('[pdks_gunluk_karisik_tip_garanti] ' . $e->getMessage());
+        return null;
+    }
+}
+
+/** KARISIK satırının id'si (oluşturmadan; yoksa null). */
+function pdks_gunluk_karisik_tip_id(?PDO $pdo = null): ?int
+{
+    $pdo = $pdo ?? db();
+    try {
+        $st = $pdo->prepare('SELECT id FROM worker_types WHERE code = ?');
+        $st->execute([PDKS_GUNLUK_KARISIK_KOD]);
+        $id = $st->fetchColumn();
+        return $id !== false ? (int)$id : null;
+    } catch (PDOException $e) { return null; }
+}
+
+/** @return string[] Kiosk GİRİŞ'inde seçilebilen kodlar = desteklenen + KARISIK. */
+function pdks_gunluk_giris_tip_kodlari(): array
+{
+    return array_merge(pdks_gunluk_desteklenen_tip_kodlari(), [PDKS_GUNLUK_KARISIK_KOD]);
+}
+
+/**
+ * Kiosk GİRİŞ tip düğmeleri: desteklenen liste (pdks_gunluk_desteklenen_tip_listele())
+ * + aktif KARISIK satırı (gerekirse tembel oluşturulur). Sıra: Kadın, Erkek, Karışık.
+ */
+function pdks_gunluk_giris_tip_listele(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $liste = pdks_gunluk_desteklenen_tip_listele($pdo);
+    $k = pdks_gunluk_karisik_tip_garanti($pdo);
+    if ($k && (int)$k['is_active'] === 1) $liste[] = $k;
+    return $liste;
+}
+
+/** Kiosk GİRİŞ sunucu kapısı: aktif + (desteklenen ya da KARISIK) ise satır. */
+function pdks_gunluk_giris_tip_coz(int $workerTypeId, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    $tip = pdks_gunluk_desteklenen_tip_coz($workerTypeId, $pdo);
+    if ($tip) return $tip;
+    $st = $pdo->prepare('SELECT * FROM worker_types WHERE id = ? AND is_active = 1 AND code = ?');
+    $st->execute([$workerTypeId, PDKS_GUNLUK_KARISIK_KOD]);
+    return $st->fetch() ?: null;
+}
+
+/** Bir mesaide (iptal edilmemiş) hâlâ Karışık olan dönem sayısı. */
+function pdks_gunluk_karisik_kalan(int $sessionId, ?PDO $pdo = null): int
+{
+    $pdo = $pdo ?? db();
+    $kid = pdks_gunluk_karisik_tip_id($pdo);
+    if ($kid === null || !pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods')) return 0;
+    $st = $pdo->prepare('SELECT COUNT(*) FROM daily_worker_work_periods WHERE session_id = ? AND worker_type_id_snapshot = ? AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo));
+    $st->execute([$sessionId, $kid]);
+    return (int)$st->fetchColumn();
 }
 
 // =========================================================
@@ -2096,7 +2196,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         $par = $ids;
     }
     if ($sessionId !== null) {
-        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al'))";
+        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al', 'karisik_ata', 'karisik_geri_al'))";
         $par[] = $sessionId;
     }
     try {
@@ -2118,6 +2218,8 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         'puantaj_ekle'          => '➕ Geçmişe dönük çalışma eklendi',
         'puantaj_toplu_ekle'    => '📋 Toplu çalışma eklendi',
         'puantaj_toplu_geri_al' => '↩️ Toplu işlem geri alındı',
+        'karisik_ata'           => '🎲 Karışık kayıtlar otomatik atandı',
+        'karisik_geri_al'       => '↩️ Karışık ataması geri alındı',
         'update'                => '🧮 Mesai değerlendirmesi kaydedildi',
     ];
     foreach ($satirlar as &$r) {
@@ -2126,8 +2228,11 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         if ($r['action'] === 'puantaj_ekle' && !empty($yeni['kartsiz'])) $r['islem_etiket'] .= ' (kartsız)';
         $r['toplu_id'] = isset($yeni['toplu_id']) ? (string)$yeni['toplu_id'] : null;
         $sayi = $r['action'] === 'puantaj_toplu_ekle' ? (int)($yeni['eklenen'] ?? 0)
-              : ($r['action'] === 'puantaj_toplu_geri_al' ? (int)($yeni['iptal_edilen'] ?? 0) : 0);
-        $parcalar = array_filter([$sayi > 0 ? $sayi . ' kayıt' : '', trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
+              : ($r['action'] === 'puantaj_toplu_geri_al' ? (int)($yeni['iptal_edilen'] ?? 0)
+              : ($r['action'] === 'karisik_geri_al' ? (int)($yeni['geri_alinan'] ?? 0) : 0));
+        $karisikOzet = $r['action'] === 'karisik_ata'
+            ? (int)($yeni['kadin'] ?? 0) . ' Kadın, ' . (int)($yeni['erkek'] ?? 0) . ' Erkek (' . (string)($yeni['atama_id'] ?? '') . ')' : '';
+        $parcalar = array_filter([$karisikOzet, $sayi > 0 ? $sayi . ' kayıt' : '', trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
         $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
         $r['aktor'] = $r['actor_name'] ?: pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo);
     }
@@ -2912,7 +3017,8 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
     // satırı kabul edilirdi — UI yalnız KADIN/ERKEK sunsa bile crafted bir
     // POST başka bir aktif tipi (varsa) GİRİŞ'e sokabilirdi. Artık tek
     // paylaşılan politika kapısından geçer (bkz. o fonksiyonun docblock'u).
-    $tip = pdks_gunluk_desteklenen_tip_coz($workerTypeId, $pdo);
+    // v295: kiosk GİRİŞ kapısı = desteklenen + KARISIK (pdks_gunluk_giris_tip_coz).
+    $tip = pdks_gunluk_giris_tip_coz($workerTypeId, $pdo);
     if (!$tip) return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Seçilen işçi tipi bulunamadı, pasif veya günlük işçi girişinde desteklenmiyor.'];
 
     $kanonik = match ($kaynak) {

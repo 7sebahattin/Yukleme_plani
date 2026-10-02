@@ -180,7 +180,8 @@ $modeHtml = substr($s1, strpos($s1, 'id="giModeSec"'), strpos($s1, 'id="giTipSec
 $tipHtml = substr($s1, strpos($s1, 'id="giTipSec"'), strpos($s1, 'id="giScanSec"') - strpos($s1, 'id="giTipSec"'));
 $scanHtml = substr($s1, strpos($s1, 'id="giScanSec"'), strpos($s1, 'id="giReconSec"') - strpos($s1, 'id="giScanSec"'));
 ok('Ana mod ekranında yalnız iki büyük mod butonu, işçi tipi/mesai seçimi yok', substr_count($modeHtml, 'data-gi-mode=') === 2 && !str_contains($modeHtml, 'data-gi-tip-id=') && !str_contains($modeHtml, 'data-gi-mesai-kod='));
-ok('İşçi tipi penceresinde Kadın ve Erkek seçenekleri dinamik tip kimlikleriyle var', substr_count($tipHtml, 'data-gi-tip-id=') === 2 && str_contains($tipHtml, 'KADIN') && str_contains($tipHtml, 'ERKEK'));
+// v295: üçüncü düğme KARIŞIK (yalnız kiosk girişi — pdks_gunluk_giris_tip_listele()).
+ok('İşçi tipi penceresinde Kadın, Erkek ve Karışık seçenekleri dinamik tip kimlikleriyle var', substr_count($tipHtml, 'data-gi-tip-id=') === 3 && str_contains($tipHtml, 'KADIN') && str_contains($tipHtml, 'ERKEK') && str_contains($tipHtml, 'data-gi-tip-kod="KARISIK"'));
 ok('Tarama ekranında seçim butonları yerine kompakt mod ve tip rozetleri var', str_contains($scanHtml, 'id="giModeBadge"') && str_contains($scanHtml, 'id="giTipBadge"') && !str_contains($scanHtml, 'data-gi-tip-id='));
 // ⚠ v240 (kullanıcı isteği): günün özeti (giSayaclar) + Mesaiyi Kapat, kart
 // okutma ekranından TAMAMEN kaldırıldı — mod seçim ekranında (giModeSec),

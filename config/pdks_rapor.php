@@ -1265,11 +1265,13 @@ function pdks_rapor_cavus_toplu_dokum(
 
     // Kadın / Erkek master ID'lerini mevcut master tablodan al.
     // Toplam sayı yalnız bu iki tipe bağlı DEĞİLDİR; bütün katılımları sayar.
-    $tipIds = ['KADIN' => 0, 'ERKEK' => 0];
+    // v295: KARISIK (atanmamış Karışık giriş) AYRI sayılır — Kadın+Erkek+Karışık = toplam
+    // (Karışık eskiden hiçbir cinsiyet sütununa düşmüyordu, sessizce kayboluyordu).
+    $tipIds = ['KADIN' => 0, 'ERKEK' => 0, 'KARISIK' => 0];
     $stTip = $pdo->query(
         "SELECT id, code
            FROM worker_types
-          WHERE code IN ('KADIN','ERKEK')"
+          WHERE code IN ('KADIN','ERKEK','KARISIK')"
     );
     foreach ($stTip->fetchAll() as $t) {
         if (isset($tipIds[$t['code']])) {
@@ -1279,6 +1281,7 @@ function pdks_rapor_cavus_toplu_dokum(
 
     $kadinId = (int)$tipIds['KADIN'];
     $erkekId = (int)$tipIds['ERKEK'];
+    $karisikId = (int)$tipIds['KARISIK'];
 
     $where = ['s.work_date BETWEEN ? AND ?'];
     $params = [$start, $end];
@@ -1305,6 +1308,7 @@ function pdks_rapor_cavus_toplu_dokum(
             COUNT(p.id) AS toplam_isci,
             SUM(CASE WHEN p.worker_type_id_snapshot = {$kadinId} THEN 1 ELSE 0 END) AS kadin,
             SUM(CASE WHEN p.worker_type_id_snapshot = {$erkekId} THEN 1 ELSE 0 END) AS erkek,
+            SUM(CASE WHEN p.worker_type_id_snapshot = {$karisikId} THEN 1 ELSE 0 END) AS karisik,
             MIN(p.entry_time) AS ilk_giris,
             MAX(p.exit_time) AS son_cikis,
             SUM(
@@ -1337,6 +1341,7 @@ function pdks_rapor_cavus_toplu_dokum(
         $r['toplam_isci']  = (int)$r['toplam_isci'];
         $r['kadin']        = (int)$r['kadin'];
         $r['erkek']        = (int)$r['erkek'];
+        $r['karisik']      = (int)$r['karisik'];
         $r['eksik_cikis']  = (int)$r['eksik_cikis'];
         $r['hakedis']      = null;
     }

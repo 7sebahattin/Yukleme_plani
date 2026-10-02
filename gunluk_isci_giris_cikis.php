@@ -41,7 +41,10 @@ $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 // ⚠ Faz 9B / H-01 kapanışı: tek paylaşılan politikadan (config/pdks_gunluk.php)
 // gelir — bu artık zaten YALNIZ KADIN/ERKEK döner, aşağıdaki düğme döngüsünde
 // ayrıca bir "code IN (...)" filtresi TEKRARLANMAZ.
-$isciTipleri = $faz8aHazir ? pdks_gunluk_desteklenen_tip_listele($pdo) : [];
+// v295: kiosk GİRİŞ düğmeleri = pdks_gunluk_desteklenen_tip_listele() (KADIN/ERKEK)
+// + KARISIK — pdks_gunluk_giris_tip_listele() o listeyi SARAR ve KARISIK satırını
+// gerekirse tembel oluşturur. KARISIK yalnız BURADA (ve kaydet ucunun GİRİŞ kapısında) seçilir.
+$isciTipleri = $faz8aHazir ? pdks_gunluk_giris_tip_listele($pdo) : [];
 
 // ⚠ v241 — NFC TEŞHİS MODU: `?nfcdebug=1` ile açılır, VARSAYILAN GÖRÜNÜM
 // DEĞİŞMEZ. Teşhis panelinin (#giNfcDebug) kendisi zaten vardı ve her adımı
@@ -422,7 +425,7 @@ render_flash();
               // (yalnız KADIN/ERKEK) geliyor — burada İKİNCİ bir "code IN (...)"
               // filtresi TEKRARLANMAZ; politika TEK yerde yaşar. ?>
         <?php foreach ($isciTipleri as $t): ?>
-        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?><?= $t['code'] === PDKS_GUNLUK_KARISIK_KOD ? ' pdks-kiosk-typebtn-karisik' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
         <?php endforeach; ?>
         <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>
     </div>
@@ -1004,6 +1007,7 @@ render_flash();
                 tipBadge.textContent = tipBadge.hidden ? '' : seciliTipAd;
                 tipBadge.classList.toggle('pdks-kiosk-type-badge-kadin', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'KADIN');
                 tipBadge.classList.toggle('pdks-kiosk-type-badge-erkek', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'ERKEK');
+                tipBadge.classList.toggle('pdks-kiosk-type-badge-karisik', !tipBadge.hidden && seciliTipKod === 'KARISIK');
                 document.getElementById('giScanCavusAd').textContent = seciliCavusAd;
                 document.getElementById('giSayacDepo').textContent = currentSession.depo || '(depo yok)';
                 sayaclariGoster(d.ozet || {});
@@ -1078,7 +1082,8 @@ render_flash();
         var saat = ((d.server_time || '').split(' ')[1] || '').slice(0, 5);
         var tip = kart.worker_type_name || kart.declared_class_label || '';
         var tipSinif = tip.toLocaleUpperCase('tr-TR') === 'KADIN' ? ' is-kadin' :
-                       (tip.toLocaleUpperCase('tr-TR') === 'ERKEK' ? ' is-erkek' : '');
+                       (tip.toLocaleUpperCase('tr-TR') === 'ERKEK' ? ' is-erkek' :
+                       (tip.toLocaleUpperCase('tr-TR') === 'KARIŞIK' ? ' is-karisik' : ''));
         var saatBilgi = saat;
         if (d.event_type === 'CIKIS' && kart.entry_time) {
             var girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
@@ -1171,7 +1176,7 @@ render_flash();
         // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
         if (tipSec && currentMode === 'GIRIS' && !seciliTipId) {
             nfcDebugYaz('kaydet atlandı: işçi tipi seçili değil');
-            hataGoster('Önce İşçi Tipi (Kadın/Erkek) seçin.');
+            hataGoster('Önce İşçi Tipi (Kadın/Erkek/Karışık) seçin.');
             return;
         }
         busy = true;

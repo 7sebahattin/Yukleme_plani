@@ -272,8 +272,12 @@ $pdksCss = (string)file_get_contents($root . '/assets/pdks.css');
 ok9b('29b) pdks-kiosk-typebtn-kadin CSS TANIMI (pembe renk) hâlâ mevcut, DEĞİŞMEDİ', str_contains($pdksCss, '.pdks-kiosk-typebtn-kadin { background:#ec4899'));
 
 $correctionSrc = (string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php');
-ok9b('30) tarama VE düzeltme AYNI paylaşılan fonksiyonu (pdks_gunluk_desteklenen_tip_listele) ÇAĞIRIYOR — iki AYRI liste YOK',
-    str_contains($scanSrc, 'pdks_gunluk_desteklenen_tip_listele(') && str_contains($correctionSrc, 'pdks_gunluk_desteklenen_tip_listele('));
+// v295: tarama, desteklenen listeyi SARAN pdks_gunluk_giris_tip_listele()'yi (+ KARISIK) çağırır.
+$gunlukSrc = (string)file_get_contents($root . '/config/pdks_gunluk.php');
+$girisFn = preg_match('/function pdks_gunluk_giris_tip_listele\(.*?\n}\n/s', $gunlukSrc, $mm9) ? $mm9[0] : '';
+ok9b('30) tarama VE düzeltme AYNI paylaşılan fonksiyonu (pdks_gunluk_desteklenen_tip_listele) temel alıyor — iki AYRI liste YOK',
+    str_contains($scanSrc, 'pdks_gunluk_giris_tip_listele(') && str_contains($girisFn, 'pdks_gunluk_desteklenen_tip_listele(')
+    && str_contains($correctionSrc, 'pdks_gunluk_desteklenen_tip_listele('));
 ok9b('30b) davranışsal olarak da AYNI: iki çağrı AYNI iki id kümesini döner',
     array_column(pdks_gunluk_desteklenen_tip_listele($db), 'id') === array_column(pdks_gunluk_desteklenen_tip_listele($db), 'id'));
 

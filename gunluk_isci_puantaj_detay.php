@@ -48,6 +48,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yenid
 }
 
 $aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+
+// v295: KARIŞIK → Otomatik Ata / Geri Al (yalnız yönetici; işlevler yetki + depo +
+// kesin hakediş + istek_id kapılarını KENDİLERİ uygular). Mesai id'si SUNUCUDAN.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['karisik_ata', 'karisik_geri_al'], true)) {
+    csrf_check($_POST['csrf'] ?? null);
+    if (($_POST['action'] ?? '') === 'karisik_ata') {
+        $sonuc = pdks_faz8j_karisik_ata((int)$id, (int)($_POST['kadin'] ?? 0), (int)($_POST['erkek'] ?? 0),
+            (string)($_POST['reason'] ?? ''), (string)($_POST['istek_id'] ?? ''), (int)$auth_user['id'], $pdo);
+        $mesaj = $sonuc['ok'] ? ((int)$sonuc['kadin'] . ' Kadın, ' . (int)$sonuc['erkek'] . ' Erkek atandı (' . $sonuc['atama_id'] . ').'
+            . ((int)$sonuc['kalan'] > 0 ? ' ' . (int)$sonuc['kalan'] . ' kayıt Karışık kaldı.' : '')) : $sonuc['hata'];
+    } else {
+        $kaId = trim((string)($_POST['atama_id'] ?? ''));
+        $kaKayit = pdks_faz8j_karisik_atama_bul($pdo, $kaId);
+        // Atama BU mesaiye ait olmalı (başka mesaiyi bu sayfadan değiştirtmeyi engeller).
+        $sonuc = (!$kaKayit || (int)$kaKayit['record_id'] !== (int)$id)
+            ? ['ok' => false, 'hata' => 'Atama bu mesaiye ait değil ya da bulunamadı.']
+            : pdks_faz8j_karisik_geri_al($kaId, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
+        $mesaj = $sonuc['ok'] ? ((int)$sonuc['geri_alinan'] . ' kayıt yeniden Karışık yapıldı (atama ' . $kaId . ' geri alındı).'
+            . ((int)$sonuc['atlanan'] > 0 ? ' ' . (int)$sonuc['atlanan'] . ' kayıt değiştirildiği/iptal edildiği için atlandı.' : '')) : $sonuc['hata'];
+    }
+    set_flash($sonuc['ok'] ? 'success' : 'error', $mesaj);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id); exit;
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal', 'puantaj_ekle', 'toplu_geri_al'], true)) {
     csrf_check($_POST['csrf'] ?? null);
     if (($_POST['action'] ?? '') === 'toplu_geri_al') {
@@ -136,6 +159,11 @@ if ($ekleKartlar) {
     $topluKartlar = $stTk->fetchAll();
 }
 $topluListe = $ekleGoster && function_exists('pdks_faz8j_toplu_listele') ? pdks_faz8j_toplu_listele((int)$id, $pdo) : [];
+// v295: Karışık havuzu (herkese bilgi kartı; Otomatik Ata yalnız Toplu İşlem ile AYNI kapı: $ekleGoster).
+$karisikTipId = $ekleGoster ? (pdks_gunluk_karisik_tip_garanti($pdo)['id'] ?? null) : pdks_gunluk_karisik_tip_id($pdo);
+$karisikTipId = $karisikTipId !== null ? (int)$karisikTipId : null;
+$karisikOzet = function_exists('pdks_faz8j_karisik_ozet') ? pdks_faz8j_karisik_ozet((int)$id, $pdo) : ['karisik_kalan' => 0, 'acik' => 0, 'kapali' => 0];
+$karisikAtamalar = $ekleGoster && function_exists('pdks_faz8j_karisik_atamalar') ? pdks_faz8j_karisik_atamalar((int)$id, $pdo) : [];
 // v294: kartsız (sanal kartlı) dönemler — rozet + Düzenle'de kart kilidi.
 $kartsizKartIds = [];
 if ($kartlar && pdks_gunluk_kolon_var($pdo, 'worker_cards', 'enrolled_source')) {
@@ -192,6 +220,7 @@ render_flash();
     <div class="pdks-kiosk-counter-totals">
         <div class="pdks-kiosk-counter-box"><div class="lbl">Kadın</div><div class="val"><?= (int)($ozet['giris']['Kadın'] ?? 0) ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Erkek</div><div class="val"><?= (int)($ozet['giris']['Erkek'] ?? 0) ?></div></div>
+        <?php if ((int)($ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): ?><div class="pdks-kiosk-counter-box"><div class="lbl">Karışık</div><div class="val"><?= (int)$ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?></div></div><?php endif; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Giriş</div><div class="val"><?= (int)$ozet['giris_toplam'] ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Çıkış</div><div class="val"><?= (int)$ozet['cikis_toplam'] ?></div></div>
         <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val"><?= (int)$ozet['eksik_toplam'] ?></div></div>
@@ -225,6 +254,16 @@ render_flash();
     <?php endif; ?>
 </div>
 </div>
+
+<?php if ((int)$karisikOzet['karisik_kalan'] > 0): ?>
+<div class="pdks-karisik-uyari" id="karisikUyari" role="status">
+    <div>
+        <strong>🎲 <?= (int)$karisikOzet['karisik_kalan'] ?> Karışık kayıt atanmamış</strong>
+        <div class="muted"><?= (int)$karisikOzet['acik'] > 0 ? (int)$karisikOzet['acik'] . ' kişi içeride · ' : '' ?>Hakediş, Karışık kayıtlar Kadın/Erkek'e atanmadan hesaplanamaz.</div>
+    </div>
+    <?php if ($ekleGoster): ?><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('karisikAta')">🎲 Otomatik Ata</button><?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px">
     <h2 style="font-size:1.05rem;margin:0">Kart Hareketleri</h2>
@@ -264,7 +303,7 @@ render_flash();
 ?>
 <tr>
     <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></td>
-    <td><?= h($k['tip']) ?></td>
+    <td><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
     <td class="muted"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
     <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
@@ -291,7 +330,7 @@ render_flash();
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?= h($k['tip']) ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></div>
+            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></div>
             <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
@@ -319,7 +358,7 @@ render_flash();
     // başka bir şeye DÖNÜŞTÜRÜLMEZ.
     $mevcutDestekliMi = in_array((int)$k['worker_type_id_snapshot'], array_column($duzeltmeTipler, 'id'), true);
     if (!$mevcutDestekliMi):
-?><option value="<?= (int)$k['worker_type_id_snapshot'] ?>" selected disabled><?= h($k['tip'] ?? '') ?> (artık desteklenmiyor)</option><?php endif; ?><?php foreach($duzeltmeTipler as $t):?><option value="<?= (int)$t['id'] ?>" <?= (int)$t['id']===(int)$k['worker_type_id_snapshot']?'selected':'' ?>><?=h($t['name'])?></option><?php endforeach;?></select></label><label><span class="form-label">Giriş</span><input name="entry_date" type="date" value="<?=h(substr($k['giris_saat'],0,10))?>"><input name="entry_clock" type="time" value="<?=h(substr($k['giris_saat'],11,5))?>"></label><label><span class="form-label">Çıkış</span><input name="exit_date" type="date" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],0,10):'')?>"><input name="exit_clock" type="time" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],11,5):'')?>"></label><label class="span-2"><span class="form-label">Düzeltme nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label></div><div class="isk-card-form-actions"><button class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
+?><option value="<?= (int)$k['worker_type_id_snapshot'] ?>" selected disabled><?= h($k['tip'] ?? '') ?><?= ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId) ? ' (atanmamış — Kadın/Erkek seçin)' : ' (artık desteklenmiyor)' ?></option><?php endif; ?><?php foreach($duzeltmeTipler as $t):?><option value="<?= (int)$t['id'] ?>" <?= (int)$t['id']===(int)$k['worker_type_id_snapshot']?'selected':'' ?>><?=h($t['name'])?></option><?php endforeach;?></select></label><label><span class="form-label">Giriş</span><input name="entry_date" type="date" value="<?=h(substr($k['giris_saat'],0,10))?>"><input name="entry_clock" type="time" value="<?=h(substr($k['giris_saat'],11,5))?>"></label><label><span class="form-label">Çıkış</span><input name="exit_date" type="date" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],0,10):'')?>"><input name="exit_clock" type="time" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],11,5):'')?>"></label><label class="span-2"><span class="form-label">Düzeltme nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label></div><div class="isk-card-form-actions"><button class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
 <dialog id="void<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Kaydı İptal Et</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_iptal"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><p><?=h($k['card_no'])?> kartının <?=h($k['giris_saat'])?>–<?=h($k['cikis_saat']?:'çıkış yok')?> çalışma kaydı puantajdan çıkarılacaktır. Ham kart okutma geçmişi silinmeyecektir.</p><label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><div class="isk-card-form-actions"><button class="btn btn-danger">Kaydı İptal Et</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
 <?php endforeach; ?>
 <?php if ($ekleGoster) {
@@ -333,6 +372,60 @@ render_flash();
     $topluUrlEkle   = 'gunluk_isci_puantaj_detay.php?id=' . (int)$id . '&ajax=toplu_ekle';
     require __DIR__ . '/_puantaj_toplu.php';
 ?>
+<?php if ((int)$karisikOzet['karisik_kalan'] > 0): $kaN = (int)$karisikOzet['karisik_kalan']; ?>
+<dialog id="karisikAta" class="pm-dialog isk-card-modal isk-karisik" aria-labelledby="karisikAtaBaslik">
+<div class="pm-header"><h2 class="pm-title" id="karisikAtaBaslik">🎲 Otomatik Ata</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
+<form method="post" class="isk-card-modal-body" id="karisikAtaForm" data-havuz="<?= $kaN ?>">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="karisik_ata">
+    <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(16))) ?>"><?php /* tekrar gönderim koruması */ ?>
+    <p class="ka-havuz"><strong id="kaHavuz"><?= $kaN ?> Karışık atanmamış</strong><?= (int)$karisikOzet['acik'] > 0 ? ' <span class="muted">(' . (int)$karisikOzet['acik'] . ' kişi içeride)</span>' : '' ?><br>
+        <span class="muted" style="font-size:.85rem">Girilen sayılar kadar kayıt <b>rastgele</b> Kadın/Erkek'e atanır; kalanlar Karışık kalır. Tam/Yarım ve FM onayları korunur, ham kart okutmaları değişmez.</span></p>
+    <div class="ka-sayilar">
+        <label><span class="form-label">Kadın</span><input type="number" name="kadin" id="kaKadin" min="0" max="<?= $kaN ?>" step="1" value="0" inputmode="numeric" required></label>
+        <label><span class="form-label">Erkek</span><input type="number" name="erkek" id="kaErkek" min="0" max="<?= $kaN ?>" step="1" value="0" inputmode="numeric" required></label>
+    </div>
+    <div class="ka-toplam" id="kaToplam" aria-live="polite">Toplam 0 / <?= $kaN ?>, kalan <?= $kaN ?></div>
+    <label><span class="form-label">Atama nedeni *</span><textarea name="reason" id="kaSebep" maxlength="500" required rows="2"></textarea></label>
+    <div class="isk-card-form-actions"><button class="btn btn-primary" id="kaKaydet" disabled>🎲 Ata</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+</form>
+</dialog>
+<script>
+(function () {
+    var f = document.getElementById('karisikAtaForm'); if (!f) return;
+    var n = parseInt(f.getAttribute('data-havuz'), 10) || 0;
+    var k = document.getElementById('kaKadin'), e = document.getElementById('kaErkek');
+    var top = document.getElementById('kaToplam'), btn = document.getElementById('kaKaydet'), seb = document.getElementById('kaSebep');
+    function sayi(el) { var v = parseInt(el.value, 10); return isNaN(v) || v < 0 ? 0 : v; }
+    function guncelle() {
+        var t = sayi(k) + sayi(e), asim = t > n;
+        top.textContent = asim ? ('Toplam ' + t + ' / ' + n + ' — en fazla ' + n + ' atanabilir') : ('Toplam ' + t + ' / ' + n + ', kalan ' + (n - t));
+        top.classList.toggle('ka-asim', asim);
+        btn.disabled = asim || t < 1 || seb.value.trim() === '';
+    }
+    [k, e, seb].forEach(function (el) { el.addEventListener('input', guncelle); });
+    f.addEventListener('submit', function (ev) {
+        var t = sayi(k) + sayi(e);
+        if (t < 1 || t > n || seb.value.trim() === '') { ev.preventDefault(); guncelle(); return; }
+        btn.disabled = true;   // çift tıklama — sunucu istek_id ile ayrıca korur
+    });
+    guncelle();
+})();
+</script>
+<?php endif; ?>
+<?php if ($karisikAtamalar): ?>
+<dialog id="kaGeriAl" class="pm-dialog isk-card-modal">
+<div class="pm-header"><h2 class="pm-title">Karışık Atamasını Geri Al</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
+<form method="post" class="isk-card-modal-body">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="karisik_geri_al">
+    <input type="hidden" name="atama_id" id="kaGeriAlId" value="">
+    <p style="margin:0 0 10px">Atama <strong id="kaGeriAlEtiket"></strong> ile Kadın/Erkek yapılan kayıtlar yeniden Karışık olur. Sonradan elle değiştirilmiş ya da iptal edilmiş kayıtlar atlanır.</p>
+    <label><span class="form-label">Geri alma nedeni *</span><textarea name="reason" maxlength="500" required rows="3"></textarea></label>
+    <div class="isk-card-form-actions"><button class="btn btn-danger">↩ Geri Al</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+</form>
+</dialog>
+<?php endif; ?>
 <?php if ($topluListe): ?>
 <dialog id="tpGeriAl" class="pm-dialog isk-card-modal">
 <div class="pm-header"><h2 class="pm-title">Toplu İşlemi Geri Al</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
@@ -394,6 +487,31 @@ document.querySelectorAll('[data-tp-geri]').forEach(function (b) {
         document.getElementById('tpGeriAlId').value = id;
         document.getElementById('tpGeriAlEtiket').textContent = id;
         pdksPuantajDialogAc('tpGeriAl');
+    });
+});
+</script>
+<?php endif; ?>
+
+<?php if ($karisikAtamalar): ?>
+<h2 style="font-size:1.05rem;margin-top:22px">Karışık Atamaları</h2>
+<div class="pdks-cards" style="margin-bottom:18px">
+<?php foreach ($karisikAtamalar as $ka): ?>
+<div class="pdks-card-item">
+    <div class="pdks-row-sub"><?= h(date('d.m.Y H:i', strtotime($ka['created_at']))) ?> · <?= h($ka['kullanici']) ?> · <span class="muted"><?= h($ka['atama_id']) ?></span></div>
+    <div class="pdks-row-name" style="font-size:.95rem"><?= (int)$ka['kadin'] ?> Kadın, <?= (int)$ka['erkek'] ?> Erkek</div>
+    <div class="pdks-row-sub"><?= h($ka['reason']) ?></div>
+    <?php if (!$ka['geri_alindi'] && (int)$ka['geri_alinabilir'] > 0): ?><div class="isk-card-form-actions"><button type="button" class="btn btn-sm btn-danger" data-ka-geri="<?= h($ka['atama_id']) ?>">↩ Geri Al</button></div>
+    <?php else: ?><div class="pdks-row-sub muted"><?= $ka['geri_alindi'] ? 'Geri alındı' : 'Geri alınabilecek kayıt kalmadı' ?></div><?php endif; ?>
+</div>
+<?php endforeach; ?>
+</div>
+<script>
+document.querySelectorAll('[data-ka-geri]').forEach(function (b) {
+    b.addEventListener('click', function () {
+        var id = b.getAttribute('data-ka-geri');
+        document.getElementById('kaGeriAlId').value = id;
+        document.getElementById('kaGeriAlEtiket').textContent = id;
+        pdksPuantajDialogAc('kaGeriAl');
     });
 });
 </script>

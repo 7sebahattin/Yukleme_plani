@@ -212,6 +212,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <div class="pdks-kiosk-counter-box"><div class="lbl">Aktif Çavuş</div><div class="val"><?= (int)$gunOzeti['aktif_cavus'] ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Kadın İşçi</div><div class="val"><?= (int)($gunOzeti['giris']['Kadın'] ?? 0) ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Erkek İşçi</div><div class="val"><?= (int)($gunOzeti['giris']['Erkek'] ?? 0) ?></div></div>
+        <?php if ((int)($gunOzeti['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): ?><div class="pdks-kiosk-counter-box"><div class="lbl">Karışık (atanmamış)</div><div class="val"><?= (int)$gunOzeti['giris'][PDKS_GUNLUK_KARISIK_AD] ?></div></div><?php endif; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam İşçi</div><div class="val"><?= (int)$gunOzeti['giris_toplam'] ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Tam Çıkış</div><div class="val"><?= (int)$gunOzeti['tam_cikis'] ?></div></div>
         <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val"><?= (int)$gunOzeti['eksik_cikis'] ?></div></div>
@@ -247,7 +248,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <td class="muted"><?= h($s['depo'] ?: '—') ?></td>
     <td><?= (int)($row['giris']['Kadın'] ?? 0) ?></td>
     <td><?= (int)($row['giris']['Erkek'] ?? 0) ?></td>
-    <td><strong><?= (int)$row['giris_toplam'] ?></strong></td>
+    <td><strong><?= (int)$row['giris_toplam'] ?></strong><?php if ((int)($row['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): /* v295: atanmamış Karışık ipucu */ ?><br><span class="pdks-badge pdks-badge-karisik pdks-gp-karisik" title="Mesai Detayı → Otomatik Ata">🎲 <?= (int)$row['giris'][PDKS_GUNLUK_KARISIK_AD] ?> Karışık</span><?php endif; ?></td>
     <td><?= (int)$row['cikis_toplam'] ?></td>
     <td><?= $row['eksik_toplam'] > 0 ? '<span style="color:var(--warn);font-weight:700">' . (int)$row['eksik_toplam'] . '</span>' : '0' ?></td>
     <td class="muted"><?= $row['ilk_giris'] ? h(date('H:i', strtotime($row['ilk_giris']))) : '—' ?></td>
@@ -274,6 +275,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     </div>
     <div class="pdks-kiosk-counter-row"><span>Kadın</span><span class="n"><?= (int)($row['giris']['Kadın'] ?? 0) ?></span></div>
     <div class="pdks-kiosk-counter-row"><span>Erkek</span><span class="n"><?= (int)($row['giris']['Erkek'] ?? 0) ?></span></div>
+    <?php if ((int)($row['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): ?><div class="pdks-kiosk-counter-row"><span><span class="pdks-badge pdks-badge-karisik" style="margin-left:0">🎲 Karışık (atanmamış)</span></span><span class="n"><?= (int)$row['giris'][PDKS_GUNLUK_KARISIK_AD] ?></span></div><?php endif; ?>
     <div class="pdks-kiosk-counter-row"><span>Toplam</span><span class="n"><strong><?= (int)$row['giris_toplam'] ?></strong></span></div>
     <div class="pdks-kiosk-counter-row"><span>Eksik</span><span class="n"<?= $row['eksik_toplam'] > 0 ? ' style="color:var(--warn);font-weight:700"' : '' ?>><?= (int)$row['eksik_toplam'] ?></span></div>
     <div class="pdks-row-sub">İlk giriş: <?= $row['ilk_giris'] ? h(date('H:i', strtotime($row['ilk_giris']))) : '—' ?> · Son çıkış: <?= $row['son_cikis'] ? h(date('H:i', strtotime($row['son_cikis']))) : '—' ?></div>

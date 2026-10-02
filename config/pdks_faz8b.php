@@ -637,6 +637,11 @@ function pdks_faz8b_oran_ekle(
     $stT = $pdo->prepare("SELECT id FROM worker_types WHERE id = ?");
     $stT->execute([$workerTypeId]);
     if (!$stT->fetchColumn()) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];
+    // v295: KARISIK (Karışık) ASLA fiyatlanmaz — kiosk girişindeki geçici tiptir,
+    // Otomatik Ata ile KADIN/ERKEK'e dağıtılır (bkz. pdks_hakedis_karisik_oran_engeli()).
+    if (($tipEngel = pdks_hakedis_karisik_oran_engeli($pdo, $workerTypeId)) !== null) {
+        return ['ok' => false, 'hata' => $tipEngel];
+    }
 
     $stMevcut = $pdo->prepare(
         "SELECT * FROM foreman_worker_rates
@@ -1152,6 +1157,12 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
     $mevcut = $stE->fetch();
     if ($mevcut && ($mevcut['status'] ?? '') === 'final') {
         return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ.'];
+    }
+
+    // v295: atanmamış Karışık dönem varken hakediş HESAPLANMAZ — "geçerli fiyat
+    // yok" yerine açık mesaj; finalize da bu fonksiyondan geçtiği için kesinleşemez.
+    if (($karisikEngel = pdks_hakedis_karisik_engeli($sessionId, $pdo)) !== null) {
+        return $karisikEngel;
     }
 
     $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);

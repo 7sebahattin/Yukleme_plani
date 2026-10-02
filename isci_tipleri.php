@@ -106,6 +106,8 @@ render_flash();
     <td>
         <?php if ($destekli): ?>
         <span class="pdks-badge pdks-badge-aktif">Sistem Tipi (sabit)</span>
+        <?php elseif (pdks_gunluk_karisik_mi((string)$t['code'])): ?>
+        <span class="pdks-badge pdks-badge-karisik" style="margin-left:0">Yalnız kiosk girişi — Otomatik Ata ile Kadın/Erkek'e atanır</span>
         <?php else: ?>
         <span class="pdks-badge pdks-badge-pasif">Desteklenmiyor — yalnız geçmiş/görüntüleme</span>
         <?php endif; ?>
@@ -135,7 +137,7 @@ render_flash();
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($t['name']) ?></div>
-            <div class="pdks-row-sub"><?= h($t['code']) ?> · <?= $destekli ? 'Sistem Tipi (sabit)' : 'Desteklenmiyor' ?></div>
+            <div class="pdks-row-sub"><?= h($t['code']) ?> · <?= $destekli ? 'Sistem Tipi (sabit)' : (pdks_gunluk_karisik_mi((string)$t['code']) ? 'Yalnız kiosk girişi (Otomatik Ata)' : 'Desteklenmiyor') ?></div>
         </div>
         <span class="pdks-badge <?= $t['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $t['is_active'] ? 'Aktif' : 'Pasif' ?></span>
     </div>

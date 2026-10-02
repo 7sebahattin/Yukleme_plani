@@ -62,11 +62,13 @@ if ($cavusId !== null) {
 $toplamIsci = 0;
 $toplamKadin = 0;
 $toplamErkek = 0;
+$toplamKarisik = 0;   // v295: atanmamış Karışık — Kadın+Erkek+Karışık = Toplam
 $toplamEksik = 0;
 foreach ($satirlar as $r) {
     $toplamIsci  += (int)$r['toplam_isci'];
     $toplamKadin += (int)$r['kadin'];
     $toplamErkek += (int)$r['erkek'];
+    $toplamKarisik += (int)($r['karisik'] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
 }
 
@@ -105,6 +107,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Kadın</div><div class="psb-value"><?= $toplamKadin ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Erkek</div><div class="psb-value"><?= $toplamErkek ?></div></div>
+        <?php if ($toplamKarisik > 0): ?><div class="print-summary-box"><div class="psb-label">Karışık (atanmamış)</div><div class="psb-value"><?= $toplamKarisik ?></div></div><?php endif; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $toplamIsci ?></div></div>
         <div class="print-summary-box<?= $toplamEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Mesai Günü</div><div class="psb-value"><?= count($satirlar) ?></div></div>
@@ -132,7 +135,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
             <td class="num"><?= (int)$r['kadin'] ?></td>
             <td class="num"><?= (int)$r['erkek'] ?></td>
-            <td class="num"><?= (int)$r['toplam_isci'] ?></td>
+            <td class="num"><?= (int)$r['toplam_isci'] ?><?= (int)($r['karisik'] ?? 0) > 0 ? ' (' . (int)$r['karisik'] . ' Karışık)' : '' ?></td>
             <?php if ($finansalGosterilebilir): ?>
             <td><?php if ($hakedis === null): ?>Hesaplanmadı<?php else: ?><?= h(pdks_rapor_para_formatla($hakedis['total_amount'])) ?> <?= h($hakedis['currency']) ?> (<?= $hakedis['status'] === 'final' ? 'Kesin' : 'Taslak' ?>)<?php endif; ?></td>
             <?php endif; ?>
