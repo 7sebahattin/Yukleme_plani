@@ -361,6 +361,39 @@ function require_pdks_hakedis(string $eylem): void
 // FİYAT (foreman_worker_rates) — ETKİN TARİHLİ, TEK YAZMA YOLU
 // =========================================================
 
+
+// =========================================================
+// v295 — KARIŞIK (KARISIK) kapıları. Karışık giriş yalnız kiosk'ta seçilir ve
+// Mesai Detayı'nda Otomatik Ata ile KADIN/ERKEK'e dağıtılır (config/pdks_faz8j.php).
+// Karışık ASLA fiyatlanmaz; atanmamış Karışık varken hakediş hesaplanmaz.
+// pdks_gunluk.php yüklü olmasa da (tek başına Faz 4) DOĞRUDAN SQL ile çalışır.
+// =========================================================
+function pdks_hakedis_karisik_oran_engeli(PDO $pdo, int $workerTypeId): ?string
+{
+    $st = $pdo->prepare("SELECT 1 FROM worker_types WHERE id = ? AND code = 'KARISIK'");
+    $st->execute([$workerTypeId]);
+    return $st->fetchColumn()
+        ? 'Karışık tip için fiyat tanımlanamaz — Karışık kayıtlar önce Otomatik Ata ile Kadın/Erkek\'e atanır.' : null;
+}
+
+/** Atanmamış Karışık dönem varsa hakediş hata dizisi, yoksa null. */
+function pdks_hakedis_karisik_engeli(int $sessionId, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_hakedis_tablo_var($pdo, 'daily_worker_work_periods')) return null;
+    $voided = function_exists('pdks_gunluk_faz8j_etkin_kosul') ? pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') : '1=1';
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM daily_worker_work_periods p JOIN worker_types t ON t.id = p.worker_type_id_snapshot
+            WHERE p.session_id = ? AND t.code = 'KARISIK' AND $voided");
+        $st->execute([$sessionId]);
+        $n = (int)$st->fetchColumn();
+    } catch (PDOException $e) { return null; }
+    if ($n < 1) return null;
+    return ['ok' => false, 'kod' => 'karisik_atanmamis', 'karisik_kalan' => $n,
+            'hata' => $n . ' Karışık kayıt atanmamış — önce Mesai Detayı\'nda Otomatik Ata yapın.'];
+}
+
+
 /**
  * YENİ bir etkin dönem ekler — bu tablonun TEK yazma yoludur (UPDATE ile
  * eski ücreti YERİNDE değiştirme YOK, kullanıcının açık talimatı: "Do NOT
@@ -402,6 +435,9 @@ function pdks_hakedis_oran_ekle(int $foremanId, int $workerTypeId, string $gunlu
     $stTip = $pdo->prepare("SELECT id FROM worker_types WHERE id = ?");
     $stTip->execute([$workerTypeId]);
     if (!$stTip->fetchColumn()) return ['ok' => false, 'hata' => 'İşçi tipi bulunamadı.'];
+    // v295: KARISIK (Karışık) ASLA fiyatlanmaz — kiosk girişindeki geçici tiptir,
+    // Otomatik Ata ile KADIN/ERKEK'e dağıtılır (bkz. pdks_hakedis_karisik_oran_engeli()).
+    if (($tipEngel = pdks_hakedis_karisik_oran_engeli($pdo, $workerTypeId)) !== null) return ['ok' => false, 'hata' => $tipEngel];
 
     $stMevcut = $pdo->prepare(
         "SELECT * FROM foreman_worker_rates
@@ -515,6 +551,11 @@ function pdks_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = null): ar
     $mevcut = $stE->fetch();
     if ($mevcut && $mevcut['status'] === 'final') {
         return ['ok' => false, 'kod' => 'zaten_kesinlesmis', 'hata' => 'Bu mesainin hakedişi zaten KESİNLEŞMİŞ — otomatik yeniden hesaplanamaz.'];
+    }
+
+    // v295: atanmamış Karışık dönem varken hakediş HESAPLANMAZ (fail-closed, açık mesaj).
+    if (($karisikEngel = pdks_hakedis_karisik_engeli($sessionId, $pdo)) !== null) {
+        return $karisikEngel;
     }
 
     // ⚠ FAZ 8A MALİ GÜVENLİK KAPISI (görev talimatı §23 — "Do NOT allow the

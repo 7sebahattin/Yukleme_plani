@@ -872,3 +872,241 @@ function pdks_faz8j_toplu_geri_al(string $topluId, string $reason, int $user, ?P
         return ['ok' => false, 'hata' => ($x instanceof RuntimeException && !$x instanceof PDOException) ? $x->getMessage() : 'İşlem sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
     }
 }
+
+// =========================================================
+// v295 — KARIŞIK GİRİŞ → OTOMATİK ATA (yalnız yönetici)
+// =========================================================
+// Kiosk'ta "KARIŞIK" ile giren dönemler (worker_type = KARISIK) burada,
+// verilen Kadın/Erkek sayısı kadar RASTGELE KADIN/ERKEK'e atanır. KISMİ atama
+// serbesttir (kalan Karışık kalır). Açık (içeride) dönemler HAVUZA DAHİLDİR,
+// iptal edilmiş dönemler değildir. Yalnız dönemin worker_type_id_snapshot +
+// worker_type_name_snapshot alanları değişir — Tam/Yarım ve FM onayları
+// KORUNUR (pdks_faz8j_duzelt BİLEREK kullanılmaz: o onayları sıfırlar), ham
+// kart olay satırlarına DOKUNULMAZ. Atama kimliği 'KA' + Ymd + 8 hex; audit
+// `karisik_ata` (module daily_work_sessions, record_id = mesai id) her dönemin
+// eski→yeni tipini taşır; geri alma `karisik_geri_al` bu kayıttan okur.
+
+const PDKS_FAZ8J_KARISIK_TEKRAR_HATA = 'Bu atama zaten kaydedildi (tekrar gönderim).';
+
+/** Mesainin Karışık havuzu (salt okunur): karisik_kalan, acik (içeride), kapali. */
+function pdks_faz8j_karisik_ozet(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $bos = ['karisik_kalan' => 0, 'acik' => 0, 'kapali' => 0];
+    $kid = pdks_gunluk_karisik_tip_id($pdo);
+    if ($kid === null || !pdks_gunluk_tablo_var($pdo, 'daily_worker_work_periods')) return $bos;
+    $st = $pdo->prepare("SELECT SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS acik, COUNT(*) AS n
+        FROM daily_worker_work_periods WHERE session_id = ? AND worker_type_id_snapshot = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo));
+    $st->execute([$sessionId, $kid]);
+    $r = $st->fetch() ?: [];
+    $n = (int)($r['n'] ?? 0); $acik = (int)($r['acik'] ?? 0);
+    return ['karisik_kalan' => $n, 'acik' => $acik, 'kapali' => $n - $acik];
+}
+
+/** Bu istek_id ile karisik_ata yazıldı mı? */
+function pdks_faz8j_karisik_istek_kayitli(PDO $pdo, string $istekId): bool
+{
+    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE action = 'karisik_ata' AND new_values LIKE ? LIMIT 1");
+    $st->execute(['%"istek_id":"' . $istekId . '"%']);
+    return (bool)$st->fetchColumn();
+}
+
+/** Mesai satırını kilitler (MySQL FOR UPDATE; SQLite tek bağlantı) ve döner. */
+function pdks_faz8j_mesai_kilitle(PDO $pdo, int $sessionId): ?array
+{
+    $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+    $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE id = ?' . $lock);
+    $st->execute([$sessionId]);
+    return $st->fetch() ?: null;
+}
+
+/** Desteklenen KADIN/ERKEK satırı (aktif) — kod ile. */
+function pdks_faz8j_tip_kodla(PDO $pdo, string $kod): ?array
+{
+    foreach (pdks_gunluk_desteklenen_tip_listele($pdo) as $t) if ((string)$t['code'] === $kod) return $t;
+    return null;
+}
+
+/**
+ * Karışık dönemleri rastgele KADIN/ERKEK'e atar.
+ * @return array{ok:bool, hata?:string, tekrar?:bool, atama_id?:string, kadin?:int, erkek?:int, kalan?:int}
+ */
+function pdks_faz8j_karisik_ata(int $sessionId, int $kadin, int $erkek, string $reason, string $istekId, int $user, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if ($e = pdks_faz8j_yetki()) return ['ok' => false, 'hata' => $e];
+    if (!pdks_faz8j_sema_hazir($pdo)) return ['ok' => false, 'hata' => 'Puantaj düzeltme şeması henüz hazır değil.'];
+    $reason = trim($reason);
+    if ($reason === '' || mb_strlen($reason) > 500) return ['ok' => false, 'hata' => 'Atama nedeni zorunludur ve en fazla 500 karakter olabilir.'];
+    $ist = pdks_faz8j_istek_id($istekId);
+    if (!$ist['ok'] || $ist['istek_id'] === null) return ['ok' => false, 'hata' => 'Geçersiz ya da eksik istek anahtarı; pencereyi kapatıp yeniden açın.'];
+    $istekId = $ist['istek_id'];
+    if ($kadin < 0 || $erkek < 0 || $kadin + $erkek < 1) return ['ok' => false, 'hata' => 'Kadın + Erkek sayısı en az 1 olmalıdır.'];
+    $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE id = ?'); $st->execute([$sessionId]);
+    $oturum = $st->fetch();
+    if (!$oturum) return ['ok' => false, 'hata' => 'Mesai bulunamadı.'];
+    if ($e = pdks_faz8j_aktif_depo_kontrol((string)$oturum['depo'])) return ['ok' => false, 'hata' => $e];
+    $kid = pdks_gunluk_karisik_tip_id($pdo);
+    if ($kid === null) return ['ok' => false, 'hata' => 'Bu mesaide atanmamış Karışık kayıt yok.'];
+    $tKadin = $kadin > 0 ? pdks_faz8j_tip_kodla($pdo, 'KADIN') : null;
+    $tErkek = $erkek > 0 ? pdks_faz8j_tip_kodla($pdo, 'ERKEK') : null;
+    if (($kadin > 0 && !$tKadin) || ($erkek > 0 && !$tErkek)) return ['ok' => false, 'hata' => 'Kadın/Erkek işçi tipi bulunamadı veya pasif.'];
+    if (pdks_faz8j_karisik_istek_kayitli($pdo, $istekId)) return ['ok' => false, 'hata' => PDKS_FAZ8J_KARISIK_TEKRAR_HATA, 'tekrar' => true];
+
+    try {
+        $pdo->beginTransaction();
+        pdks_faz8j_mesai_kilitle($pdo, $sessionId);   // İLK sorgu — bkz. pdks_faz8j_oturum_kilitle docblock
+        if (pdks_faz8j_karisik_istek_kayitli($pdo, $istekId)) throw new RuntimeException(PDKS_FAZ8J_KARISIK_TEKRAR_HATA);
+        if (pdks_faz8j_entitlement($pdo, $sessionId) === 'final') {
+            throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
+        }
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+        $sp = $pdo->prepare('SELECT id, worker_type_id_snapshot, worker_type_name_snapshot FROM daily_worker_work_periods
+            WHERE session_id = ? AND worker_type_id_snapshot = ? AND ' . pdks_gunluk_faz8j_etkin_kosul($pdo) . ' ORDER BY id' . $lock);
+        $sp->execute([$sessionId, $kid]);
+        $havuz = $sp->fetchAll();
+        $n = count($havuz);
+        if ($n < 1) throw new RuntimeException('Bu mesaide atanmamış Karışık kayıt yok.');
+        if ($kadin + $erkek > $n) throw new RuntimeException('Kadın + Erkek (' . ($kadin + $erkek) . ') atanmamış Karışık kayıt sayısını (' . $n . ') aşıyor.');
+        // Fisher–Yates (random_int — kriptografik kaynak).
+        for ($i = $n - 1; $i > 0; $i--) { $j = random_int(0, $i); [$havuz[$i], $havuz[$j]] = [$havuz[$j], $havuz[$i]]; }
+        $upd = $pdo->prepare('UPDATE daily_worker_work_periods SET worker_type_id_snapshot = ?, worker_type_name_snapshot = ? WHERE id = ? AND worker_type_id_snapshot = ?');
+        $donemler = [];
+        foreach (array_slice($havuz, 0, $kadin + $erkek) as $i => $p) {
+            $hedef = $i < $kadin ? $tKadin : $tErkek;
+            $upd->execute([(int)$hedef['id'], (string)$hedef['name'], (int)$p['id'], $kid]);
+            if ($upd->rowCount() !== 1) throw new RuntimeException(PDKS_FAZ8J_ESZAMANLI_HATA);
+            $donemler[] = ['period_id' => (int)$p['id'],
+                'eski_tip_id' => (int)$p['worker_type_id_snapshot'], 'eski_tip' => (string)$p['worker_type_name_snapshot'],
+                'yeni_tip_id' => (int)$hedef['id'], 'yeni_tip' => (string)$hedef['name'], 'yeni_kod' => (string)$hedef['code']];
+        }
+        pdks_faz8j_yeniden_hesap_isaretle($pdo, $sessionId);
+        $atamaId = 'KA' . date('Ymd') . bin2hex(random_bytes(4));
+        $kalan = $n - $kadin - $erkek;
+        pdks_faz8j_audit($pdo, $user, 'karisik_ata', $sessionId, ['karisik_havuz' => $n], [
+            'session_id' => $sessionId, 'atama_id' => $atamaId, 'istek_id' => $istekId, 'reason' => $reason,
+            'kadin' => $kadin, 'erkek' => $erkek, 'havuz' => $n, 'kalan' => $kalan,
+            'donemler' => $donemler, 'assigned_at' => date('Y-m-d H:i:s'), 'user_id' => $user,
+        ], 'daily_work_sessions');
+        $pdo->commit();
+        return ['ok' => true, 'atama_id' => $atamaId, 'kadin' => $kadin, 'erkek' => $erkek, 'kalan' => $kalan];
+    } catch (Throwable $x) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ($x instanceof RuntimeException && !$x instanceof PDOException) {
+            return ['ok' => false, 'hata' => $x->getMessage()] + ($x->getMessage() === PDKS_FAZ8J_KARISIK_TEKRAR_HATA ? ['tekrar' => true] : []);
+        }
+        return ['ok' => false, 'hata' => pdks_faz8j_eszamanli_hata($x) ? PDKS_FAZ8J_ESZAMANLI_HATA : 'Atama sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
+    }
+}
+
+/** Bir atama kimliğinin audit satırı (karisik_ata) ya da null. */
+function pdks_faz8j_karisik_atama_bul(PDO $pdo, string $atamaId): ?array
+{
+    if (!preg_match('/^KA\d{8}[0-9a-f]{8}$/D', $atamaId)) return null;
+    $st = $pdo->prepare("SELECT id, record_id, user_id, new_values, created_at FROM audit_log WHERE module = 'daily_work_sessions' AND action = 'karisik_ata' AND new_values LIKE ? ORDER BY id DESC");
+    $st->execute(['%"atama_id":"' . $atamaId . '"%']);
+    foreach ($st->fetchAll() as $r) {
+        $nv = json_decode((string)$r['new_values'], true) ?: [];
+        if (($nv['atama_id'] ?? '') === $atamaId) { $r['veri'] = $nv; return $r; }
+    }
+    return null;
+}
+
+/** Atama zaten geri alındı mı? */
+function pdks_faz8j_karisik_geri_alindi_mi(PDO $pdo, string $atamaId): bool
+{
+    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE module = 'daily_work_sessions' AND action = 'karisik_geri_al' AND new_values LIKE ? LIMIT 1");
+    $st->execute(['%"atama_id":"' . $atamaId . '"%']);
+    return (bool)$st->fetchColumn();
+}
+
+/**
+ * Bir mesainin Karışık atamaları (audit'ten), en yeni önce.
+ * @return list<array{atama_id:string, created_at:string, user_id:?int, kullanici:string, kadin:int, erkek:int, reason:string, geri_alindi:bool, geri_alinabilir:int}>
+ */
+function pdks_faz8j_karisik_atamalar(int $sessionId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
+    $st = $pdo->prepare("SELECT action, user_id, new_values, created_at FROM audit_log WHERE module = 'daily_work_sessions' AND record_id = ? AND action IN ('karisik_ata', 'karisik_geri_al') ORDER BY id DESC");
+    $st->execute([$sessionId]);
+    $rows = $st->fetchAll(); $geri = [];
+    foreach ($rows as $r) if ($r['action'] === 'karisik_geri_al') { $nv = json_decode((string)$r['new_values'], true) ?: []; $geri[(string)($nv['atama_id'] ?? '')] = true; }
+    $kontrol = $pdo->prepare('SELECT worker_type_id_snapshot, ' . (pdks_gunluk_faz8j_kolon_var($pdo, 'daily_worker_work_periods', 'is_voided') ? 'is_voided' : '0 AS is_voided') . ' FROM daily_worker_work_periods WHERE id = ?');
+    $out = [];
+    foreach ($rows as $r) {
+        if ($r['action'] !== 'karisik_ata') continue;
+        $nv = json_decode((string)$r['new_values'], true) ?: [];
+        $aid = (string)($nv['atama_id'] ?? '');
+        $geriAlindi = isset($geri[$aid]);
+        $alinabilir = 0;
+        if (!$geriAlindi) {
+            foreach ((array)($nv['donemler'] ?? []) as $d) {
+                $kontrol->execute([(int)($d['period_id'] ?? 0)]);
+                $p = $kontrol->fetch();
+                if ($p && !(int)$p['is_voided'] && (int)$p['worker_type_id_snapshot'] === (int)($d['yeni_tip_id'] ?? 0)) $alinabilir++;
+            }
+        }
+        $out[] = [
+            'atama_id' => $aid, 'created_at' => (string)$r['created_at'],
+            'user_id' => $r['user_id'] !== null ? (int)$r['user_id'] : null,
+            'kullanici' => pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo),
+            'kadin' => (int)($nv['kadin'] ?? 0), 'erkek' => (int)($nv['erkek'] ?? 0),
+            'reason' => (string)($nv['reason'] ?? ''), 'geri_alindi' => $geriAlindi, 'geri_alinabilir' => $alinabilir,
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Bir Karışık atamasını geri alır: atamanın dönemleri, şu anki tipleri hâlâ
+ * atamanın verdiği tipse KARIŞIK'a döner; elle değiştirilmiş / iptal edilmiş
+ * dönemler atlanır ve sayılır. Kesinleşmiş hakediş engeller. Bir atama bir kez geri alınır.
+ * @return array{ok:bool, hata?:string, session_id?:int, atama_id?:string, geri_alinan?:int, atlanan?:int}
+ */
+function pdks_faz8j_karisik_geri_al(string $atamaId, string $reason, int $user, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if ($e = pdks_faz8j_yetki()) return ['ok' => false, 'hata' => $e];
+    if (!pdks_faz8j_sema_hazir($pdo)) return ['ok' => false, 'hata' => 'Puantaj düzeltme şeması henüz hazır değil.'];
+    $reason = trim($reason);
+    if ($reason === '' || mb_strlen($reason) > 500) return ['ok' => false, 'hata' => 'Geri alma nedeni zorunludur ve en fazla 500 karakter olabilir.'];
+    $atamaId = trim($atamaId);
+    $kayit = pdks_faz8j_karisik_atama_bul($pdo, $atamaId);
+    if (!$kayit) return ['ok' => false, 'hata' => 'Atama bulunamadı.'];
+    $sid = (int)$kayit['record_id'];
+    $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE id = ?'); $st->execute([$sid]);
+    $oturum = $st->fetch();
+    if (!$oturum) return ['ok' => false, 'hata' => 'Atamanın mesaisi bulunamadı.'];
+    if ($e = pdks_faz8j_aktif_depo_kontrol((string)$oturum['depo'])) return ['ok' => false, 'hata' => $e];
+    try {
+        $pdo->beginTransaction();
+        pdks_faz8j_mesai_kilitle($pdo, $sid);   // İLK sorgu
+        if (pdks_faz8j_karisik_geri_alindi_mi($pdo, $atamaId)) throw new RuntimeException('Bu atama zaten geri alınmış.');
+        if (pdks_faz8j_entitlement($pdo, $sid) === 'final') {
+            throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
+        }
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+        $sel = $pdo->prepare('SELECT id, worker_type_id_snapshot, is_voided FROM daily_worker_work_periods WHERE id = ? AND session_id = ?' . $lock);
+        $upd = $pdo->prepare('UPDATE daily_worker_work_periods SET worker_type_id_snapshot = ?, worker_type_name_snapshot = ? WHERE id = ? AND worker_type_id_snapshot = ?');
+        $geri = []; $atlanan = 0;
+        foreach ((array)($kayit['veri']['donemler'] ?? []) as $d) {
+            $pid = (int)($d['period_id'] ?? 0); $yeni = (int)($d['yeni_tip_id'] ?? 0);
+            $sel->execute([$pid, $sid]); $p = $sel->fetch();
+            if (!$p || (int)$p['is_voided'] || (int)$p['worker_type_id_snapshot'] !== $yeni) { $atlanan++; continue; }
+            $upd->execute([(int)$d['eski_tip_id'], (string)$d['eski_tip'], $pid, $yeni]);
+            if ($upd->rowCount() === 1) $geri[] = $pid; else $atlanan++;
+        }
+        if ($geri === []) throw new RuntimeException('Bu atamada geri alınabilecek kayıt kalmadı (hepsi değiştirilmiş ya da iptal edilmiş).');
+        pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);
+        pdks_faz8j_audit($pdo, $user, 'karisik_geri_al', $sid, [], [
+            'session_id' => $sid, 'atama_id' => $atamaId, 'period_ids' => $geri, 'geri_alinan' => count($geri),
+            'atlanan' => $atlanan, 'reason' => $reason, 'reverted_at' => date('Y-m-d H:i:s'), 'user_id' => $user,
+        ], 'daily_work_sessions');
+        $pdo->commit();
+        return ['ok' => true, 'session_id' => $sid, 'atama_id' => $atamaId, 'geri_alinan' => count($geri), 'atlanan' => $atlanan];
+    } catch (Throwable $x) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hata' => ($x instanceof RuntimeException && !$x instanceof PDOException) ? $x->getMessage() : 'İşlem sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
+    }
+}

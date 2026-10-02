@@ -63,12 +63,14 @@ $bKapanislar = ($finansalGosterilebilir && pdks_faz8b_cavus_ucret_b_sema_hazir($
 $toplamIsci = 0;
 $toplamKadin = 0;
 $toplamErkek = 0;
+$toplamKarisik = 0;   // v295: atanmamış Karışık — Kadın+Erkek+Karışık = Toplam
 $toplamEksik = 0;
 
 foreach ($satirlar as $r) {
     $toplamIsci += (int)$r['toplam_isci'];
     $toplamKadin += (int)$r['kadin'];
     $toplamErkek += (int)$r['erkek'];
+    $toplamKarisik += (int)($r['karisik'] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
 }
 
@@ -143,6 +145,12 @@ render_flash();
             <div class="lbl">Erkek</div>
             <div class="val"><?= $toplamErkek ?></div>
         </div>
+        <?php if ($toplamKarisik > 0): ?>
+        <div class="pdks-kiosk-counter-box">
+            <div class="lbl">Karışık (atanmamış)</div>
+            <div class="val"><?= $toplamKarisik ?></div>
+        </div>
+        <?php endif; ?>
         <div class="pdks-kiosk-counter-box">
             <div class="lbl">Toplam İşçi</div>
             <div class="val"><?= $toplamIsci ?></div>
@@ -200,7 +208,7 @@ render_flash();
         </td>
         <td><?= (int)$r['kadin'] ?></td>
         <td><?= (int)$r['erkek'] ?></td>
-        <td><strong><?= (int)$r['toplam_isci'] ?></strong></td>
+        <td><strong><?= (int)$r['toplam_isci'] ?></strong><?php if ((int)($r['karisik'] ?? 0) > 0): ?><div class="muted" style="font-size:.78rem"><?= (int)$r['karisik'] ?> Karışık</div><?php endif; ?></td>
 
         <td>
             <?php if (!$finansalGosterilebilir): ?>

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v294` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v295` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -537,6 +537,35 @@ YALNIZ admin, CSRF, audit. Migration YOK.
   `php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` →
   `node scripts/pdks_puantaj_dialog_smoke.js` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
   `node scripts/pdks_toplu_ekle_smoke.js`.
+
+### Karışık Giriş + Otomatik Ata (v295)
+
+Kiosk GİRİŞ tip ekranında **KADIN / ERKEK / KARIŞIK**. Karışık girenler sonra Mesai
+Detayı'nda **🎲 Otomatik Ata** ile rastgele Kadın/Erkek'e atanır.
+
+- **Tip satırı** `worker_types` KARISIK/"Karışık" (sahip GO verdi — YALNIZ veri satırı):
+  `pdks_gunluk_migrate()` seed'i + `pdks_gunluk_karisik_tip_garanti()` (tembel, idempotent;
+  pasifse yeniden AÇMAZ). Sabitler `PDKS_GUNLUK_KARISIK_KOD/_AD`.
+- **Politika listesine EKLENMEZ:** `pdks_gunluk_desteklenen_tip_kodlari()` (fiyat, düzelt,
+  tekli/toplu/kartsız ekleme) hâlâ yalnız KADIN/ERKEK. Kiosk GİRİŞ ayrı kapıdan geçer:
+  `pdks_gunluk_giris_tip_kodlari()` / `_listele()` / `_coz()`. ÇIKIŞ tipi açık dönemden kopyalar.
+- **Para kapısı (fail-closed):** `pdks_hakedis_karisik_engeli()` iki hakediş motorunda
+  (8B + Faz 4) ve dolayısıyla finalize'da — mesaide atanmamış Karışık varsa hesap DURUR
+  ("N Karışık kayıt atanmamış — önce Otomatik Ata"). `pdks_hakedis_karisik_oran_engeli()`
+  iki `oran_ekle`'de Karışık fiyatını REDDEDER. Kaldırma: fiyat tanımlansa sessizce ödenirdi.
+- **Atama** `pdks_faz8j_karisik_ata($sid,$kadin,$erkek,$reason,$istekId,$user)`: admin,
+  aktif depo, `istek_id` + mesai kilidi, kesin hakediş red. Havuz = iptal edilmemiş Karışık
+  dönemler (içeridekiler DAHİL); KISMİ serbest. `random_int` Fisher–Yates. YALNIZ dönemin
+  `worker_type_id_snapshot`/`_name_snapshot` değişir — `pdks_faz8j_duzelt()` KULLANMA
+  (Tam/Yarım + FM onayını sıfırlar); ham kart olayları DEĞİŞMEZ. Audit `karisik_ata`
+  (modül `daily_work_sessions`, record_id = mesai id, `atama_id` KA…).
+- **Geri Al** `pdks_faz8j_karisik_geri_al()`: yalnız hâlâ atandığı tipte olan dönemleri
+  Karışık'a döndürür (elle değişeni/iptali atlar), bir kez; audit `karisik_geri_al`.
+- Ekran: kiosk mor KARIŞIK düğmesi + rozet (Kadın⇄Erkek hızlı geçiş gizli), Mesai Detayı
+  bildirim kartı + Otomatik Ata/Geri Al pencereleri + `.pdks-badge-karisik`, Günlük
+  Puantaj'da "🎲 N Karışık" ipucu, toplu dökümde Karışık sayısı (Kadın+Erkek+Karışık=Toplam).
+  Günlük Puantaj CSV/XLSX'e sütun EKLENMEDİ (CSV kuralı).
+- Test: `php scripts/pdks_karisik_smoke.php` · `node scripts/pdks_karisik_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

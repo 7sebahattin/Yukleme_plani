@@ -133,6 +133,16 @@ $tp = pdks_faz8j_toplu_ekle(['foreman_id' => $cavus, 'work_date' => date('Y-m-d'
     'gruplar' => [['worker_type_id' => $kadin, 'entry_clock' => '00:00', 'exit_date' => date('Y-m-d'), 'exit_clock' => '00:01', 'kart_ids' => [$b1, $b2], 'kartsiz_adet' => 2]]], 1, db());
 if (!($tp['ok'] ?? false)) { fwrite(STDERR, 'toplu: ' . json_encode($tp, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
 
+// v295: KARIŞIK girişli 5 dönem (kiosk yolu; biri çıkışlı) — "🎲 Otomatik Ata" uyarı
+// kartı + penceresi ve Karışık rozeti bu veriyle sınanır (pdks_karisik_smoke.js).
+$karisik = (int)(pdks_gunluk_karisik_tip_garanti(db())['id'] ?? 0);
+foreach (['880000001', '880000002', '880000003', '880000004', '880000005'] as $i => $uid) {
+    pdks_gunluk_kart_olustur(['card_no' => 'Z00' . ($i + 1), 'ham_uid' => $uid, 'kaynak' => 'usb_decimal'], 1, db());
+    $r = pdks_gunluk_faz8a_giris_kaydet($uid, 'usb_decimal', $sid, $karisik, 'auto', 1, db());
+    if (!($r['ok'] ?? false)) { fwrite(STDERR, 'karışık giriş: ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+}
+pdks_gunluk_faz8a_cikis_kaydet('880000001', 'usb_decimal', $sid, 1, db());
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 $sayfa = getenv('PUANTAJ_SAYFA') === 'liste' ? 'gunluk_isci_puantaj.php' : 'gunluk_isci_puantaj_detay.php';
