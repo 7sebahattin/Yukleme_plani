@@ -44,6 +44,7 @@ if (!is_admin()) {
 </head>
 <body>
   <h1>HKS Yurt İçi Referans Teşhis</h1>
+  <p class="mut">🧪 Kayıtsız kişide "Mernis'te bulunamadı" için: <a href="dogum_deney.php" style="color:var(--acc)">Doğum Tarihi Biçim Deneyi</a></p>
   <p class="mut">Salt-okunur servisleri test eder — bildirim OLUŞTURMAZ. Amaç: doğru etiket/alan adlarını doğrulamak. Çıktı JSON'da <b>ham</b> alanı varsa liste boş dönmüş demektir; ham yanıtı bana ilet.</p>
 
   <div class="card">

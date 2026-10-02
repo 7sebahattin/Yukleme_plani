@@ -1,9 +1,11 @@
 # Hal Kayıt paneli — yalnızca index.php ve api.php doğrudan erişilebilir.
 # (taslak_lib.php include-only ortak kütüphanedir — Beyan modülü de kullanır;
-#  kisi_havuzu_lib.php Kişi Havuzu kütüphanesidir — api.php ve testler kullanır.)
+#  kisi_havuzu_lib.php Kişi Havuzu kütüphanesidir — api.php ve testler kullanır;
+#  dogum_deney_lib.php doğum tarihi biçim deneyi kütüphanesidir.)
+# dogum_deney.php yönetici ekranıdır (is_admin kapısı) — açık.
 # include-only PHP dosyaları, SPA kabuğu, şema ve kılavuz doğrudan çağrıya kapalı.
 
-<FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib)\.php$">
+<FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib)\.php$">
     Require all denied
 </FilesMatch>
 
@@ -13,7 +15,7 @@
 
 # Apache 2.2 geriye dönük uyumluluk
 <IfModule !mod_authz_core.c>
-    <FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib)\.php$">
+    <FilesMatch "^(config|db|hks_soap|taslak_lib|kisi_havuzu_lib|dogum_deney_lib)\.php$">
         Order allow,deny
         Deny from all
     </FilesMatch>

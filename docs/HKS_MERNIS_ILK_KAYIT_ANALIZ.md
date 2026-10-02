@@ -794,3 +794,20 @@ Tek gönderim yolu `hks_bildirim_kaydet()`, tek taslak yazma yolu `hks_taslak_ol
 - İşletme türü `6`'nın adı repoda yok; canlı katalogdan (`hks_kv.listeler_cache`) teyit edilmeli. "Yurt Dışı" ise `GidecekUlkeId` de gerekir (kılavuz 1190). Beklenen: bir depo/işyeri türü.
 - Diğer yazılımın `DogumTarihi`'ne yazdığı metin öğrenilirse D2'den önce o denenir.
 - GTB'ye başvuru metni (§7, 0.4) G15–G18 ile güncellenip D-deneylerinin sonucuyla birlikte gönderilmeli.
+
+### 10.7 Uygulama durumu (v291)
+
+Faz 1 ve deney altyapısı kodlandı; canlıya alınınca D1 kendiliğinden başlar (ilk kayıtsız kişili Satın Alım gönderimi).
+
+| Madde | Durum |
+|---|---|
+| Konum sabit alfabetik, otomatik konum/biçim merdiveni kaldırıldı | ✅ `hks_soap.php` |
+| Biçim beyaz listesi (6 biçim) | ✅ `hks_dogum_bicimleri()` |
+| Kayıtsız kişide gidecek yer İl/İlçe/Belde (işyeri kaydından, salt-okunur) — D1 | ✅ `api.php` + `hks_isyeri_adres_bul()` |
+| Gönderim öncesi kayıt durumu sorgusu (engellemez) | ✅ |
+| Tek kullanımlık yönetici deneyi (D2–D5) | ✅ `halkayit/dogum_deney.php` (tani.php'den bağlantı) |
+| Öğrenme yalnız künye + önceden KAYITSIZ; eski kanıtsız kayıt yok sayılır | ✅ |
+| Maskeli teşhis kaydı (TC son 4, doğum tarihi sınıfı) | ✅ `hks_kv.dogum_denemeleri` |
+| Sonuç ekranı: teldeki tarih metni, kayıt durumu, doğru Mernis yönlendirmesi, kaçışlı HTML | ✅ `app.html` |
+| Belgeler (README, config, CLAUDE.md) düzeltildi | ✅ |
+| Testler | ✅ `hks_uretici_sevk_test` · yeni `hks_dogum_deney_smoke` · beyan/rol/kişi havuzu/Playwright paketleri geçti |
