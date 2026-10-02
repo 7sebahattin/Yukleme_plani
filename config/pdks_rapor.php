@@ -354,7 +354,11 @@ function pdks_rapor_faz8a_operasyonel_kpi(string $start, string $end, ?string $d
     $stToplam->execute($params);
     $toplamKatilim = (int)$stToplam->fetchColumn();
 
-    $stFiziksel = $pdo->prepare("SELECT COUNT(DISTINCT p.worker_card_id) FROM daily_worker_work_periods p" . $join . " WHERE $whereSql");
+    // Kartsız mesai kayıtlarının SANAL kartları (enrolled_source='kartsiz',
+    // config/pdks_faz8j.php) fiziksel kart DEĞİLDİR — bu metrikte sayılmaz.
+    $kartsizHaric = pdks_gunluk_kolon_var($pdo, 'worker_cards', 'enrolled_source')
+        ? " AND NOT EXISTS (SELECT 1 FROM worker_cards wk WHERE wk.id = p.worker_card_id AND wk.enrolled_source = 'kartsiz')" : '';
+    $stFiziksel = $pdo->prepare("SELECT COUNT(DISTINCT p.worker_card_id) FROM daily_worker_work_periods p" . $join . " WHERE $whereSql" . $kartsizHaric);
     $stFiziksel->execute($params);
     $fizikselKart = (int)$stFiziksel->fetchColumn();
 

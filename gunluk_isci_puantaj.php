@@ -45,10 +45,19 @@ $manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('e
 $depoPost = function_exists('active_depot') ? (active_depot() ?? '') : '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'puantaj_ekle') {
     csrf_check($_POST['csrf'] ?? null);
+    // v294: kart alanı 'kartsiz' → kartsiz=1 (açık alan; (int) dönüşümüne güvenilmez).
+    $ekleGirdi = $_POST;
+    if (($ekleGirdi['worker_card_id'] ?? '') === 'kartsiz') { $ekleGirdi['kartsiz'] = 1; $ekleGirdi['worker_card_id'] = 0; } else { unset($ekleGirdi['kartsiz']); }
     $sonuc = function_exists('pdks_faz8j_gecmis_ekle')
-        ? pdks_faz8j_gecmis_ekle(array_merge($_POST, ['depo' => $depoPost]), (int)$auth_user['id'], $pdo)
+        ? pdks_faz8j_gecmis_ekle(array_merge($ekleGirdi, ['depo' => $depoPost]), (int)$auth_user['id'], $pdo)
         : ['ok' => false, 'hata' => 'Puantaj düzeltme şeması henüz hazır değil.'];
-    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? 'Çalışma kaydı eklendi.' : $sonuc['hata']);
+    $ekleMesaj = 'Çalışma kaydı eklendi.';
+    if ($sonuc['ok']) {
+        if (!empty($sonuc['kartsiz'])) $ekleMesaj = 'Kartsız çalışma kaydı eklendi (' . $sonuc['card_no'] . ').';
+        elseif (!empty($sonuc['acik'])) $ekleMesaj = 'Çalışma kaydı eklendi; kişi içeride yazıldı, çıkışta kartını okutacak.';
+        if (!empty($sonuc['yeni_mesai'])) $ekleMesaj .= ' Bu gün için yeni mesai açıldı.';
+    }
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? $ekleMesaj : $sonuc['hata']);
     if ($sonuc['ok']) { header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$sonuc['session_id']); exit; }
     $geri = preg_match('/^\d{4}-\d{2}-\d{2}$/D', (string)($_POST['work_date'] ?? '')) ? (string)$_POST['work_date'] : date('Y-m-d');
     header('Location: gunluk_isci_puantaj.php?tarih=' . $geri . '&ekle=1'); exit;
@@ -76,17 +85,25 @@ $gunOzeti  = pdks_gunluk_gun_ozeti($tarih, $depo, $pdo);
 $gunListesi = pdks_gunluk_gun_listesi($tarih, $depo, $cavusId, $durum_f !== '' ? $durum_f : null, $pdo);
 $eksikler   = pdks_gunluk_eksik_cikislar($tarih, $depo, $cavusId, $pdo);
 
-// ── v291: ekle penceresi verisi (yalnız yönetici; geçmiş gün, aktif depo, şema hazır) ──
-$ekleYetkili = function_exists('is_admin') && is_admin() && $depo !== ''
+// ── v291/v294: ekle + toplu işlem penceresi verisi (yalnız yönetici; bugün ya da geçmiş gün, aktif depo, şema hazır) ──
+$ekleYetkili = function_exists('is_admin') && is_admin() && $depo !== '' && $tarih <= date('Y-m-d')
     && function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo) && function_exists('pdks_faz8j_gecmis_ekle');
 $ekleGecmisGun = $tarih < date('Y-m-d');
-$ekleDunTarih  = date('Y-m-d', strtotime('-1 day'));
-$ekleKartlar = $ekleTipler = $ekleCavuslar = [];
-if ($ekleYetkili && $ekleGecmisGun) {
+$ekleKartlar = $ekleTipler = $ekleCavuslar = $topluKartlar = [];
+if ($ekleYetkili) {
     $ekleKartlar  = pdks_faz8j_bos_kartlar($tarih, $pdo);
     $ekleTipler   = pdks_gunluk_desteklenen_tip_listele($pdo);
     $ekleCavuslar = $cavuslar;
+    if ($ekleKartlar) {   // Toplu İşlem: boş kartlar işçi tipiyle (tipine uyanlar listede öne alınır)
+        $stTk = $pdo->prepare('SELECT id, card_no, worker_type_id FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($ekleKartlar), '?')) . ') ORDER BY card_no');
+        $stTk->execute(array_map('intval', array_column($ekleKartlar, 'id')));
+        $topluKartlar = $stTk->fetchAll();
+    }
 }
+// v294: Toplu İşlem JSON uçları (çıktıdan ÖNCE). Gün = filtredeki gün, depo = aktif depo; çavuş istemciden gelir (işlev doğrular).
+$topluAjaxKapi = $ekleYetkili;
+$topluAjaxSabit = ['foreman_id' => null, 'work_date' => $tarih, 'depo' => $depo];
+require __DIR__ . '/_puantaj_toplu_ajax.php';
 
 // ── CSV export — MEVCUT filtreyi yansıtır (görev talimatı madde 12) ──
 $gp_filtre = ['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f];
@@ -156,10 +173,9 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <h1>📅 Günlük Puantaj</h1>
     <div class="page-head-actions">
         <a href="<?= h('gunluk_puantaj_liste_yazdir.php?' . http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
-        <?php if ($ekleYetkili && $ekleGecmisGun): ?>
-        <button type="button" class="btn btn-primary" onclick="pdksPuantajDialogAc('ekle')">➕ Geçmişe Dönük Çalışma Ekle</button>
-        <?php elseif ($ekleYetkili): ?>
-        <a href="gunluk_isci_puantaj.php?tarih=<?= h($ekleDunTarih) ?>&amp;ekle=1" class="btn btn-primary" title="Dünün kayıtlarına çalışma ekleyin; başka gün için tarih filtresini değiştirin">➕ Geçmişe Dönük Çalışma Ekle</a>
+        <?php if ($ekleYetkili): ?>
+        <button type="button" class="btn btn-primary" onclick="pdksPuantajDialogAc('ekle')"><?= $ekleGecmisGun ? '➕ Geçmişe Dönük Çalışma Ekle' : '➕ Çalışma Ekle' ?></button>
+        <button type="button" class="btn" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button>
         <?php endif; ?>
         <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
@@ -359,9 +375,14 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
 
 <?php endif; ?>
 
-<?php if ($ekleYetkili && $ekleGecmisGun):
+<?php if ($ekleYetkili):
     $ekleWorkDate = $tarih;
     require __DIR__ . '/_puantaj_ekle.php';
+    // v294: Toplu İşlem penceresi (çavuş seçilir; gün = filtredeki gün)
+    $topluWorkDate = $tarih; $topluTipler = $ekleTipler; $topluCavuslar = $cavuslar; $topluSabitCavus = null;
+    $topluUrlOnizle = 'gunluk_isci_puantaj.php?tarih=' . $tarih . '&ajax=toplu_onizle';
+    $topluUrlEkle   = 'gunluk_isci_puantaj.php?tarih=' . $tarih . '&ajax=toplu_ekle';
+    require __DIR__ . '/_puantaj_toplu.php';
 ?>
 <script>
 // Native <dialog> (bkz. gunluk_isci_puantaj_detay.php notu): açık olanı kapatıp yenisini aç.
@@ -369,7 +390,7 @@ function pdksPuantajDialogAc(id) {
     document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
     document.getElementById(id).showModal();
 }
-// "?ekle=1" (dünün tarihine yönlendirme ya da hatalı gönderim sonrası) → pencereyi aç.
+// "?ekle=1" (hatalı gönderim sonrası geri dönüş) → pencereyi aç.
 if (/[?&]ekle=1(&|$)/.test(location.search)) pdksPuantajDialogAc('ekle');
 </script>
 <?php endif; ?>

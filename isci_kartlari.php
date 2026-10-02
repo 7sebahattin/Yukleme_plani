@@ -162,7 +162,8 @@ $tip_f = (int)($_GET['tip'] ?? 0);
 $durum_f = trim($_GET['durum'] ?? '');
 if ($durum_f !== '' && !array_key_exists($durum_f, pdks_gunluk_kart_durumlari())) $durum_f = '';
 
-$where = ['1=1']; $params = [];
+// Kartsız mesai kayıtlarının SANAL kartları (config/pdks_faz8j.php) havuzda gösterilmez.
+$where = ["w.enrolled_source <> 'kartsiz'"]; $params = [];
 if ($q !== '') {
     $where[] = "(w.card_no LIKE ? OR w.canonical_uid LIKE ?)";
     $params = array_merge($params, ["%$q%", "%$q%"]);

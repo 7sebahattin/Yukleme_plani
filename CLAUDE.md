@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v293` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v294` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -498,6 +498,45 @@ Unutulan girişi/çıkışı sonradan, raporda görünür biçimde eklemek. Mesa
 - Form partial'ı `_puantaj_ekle.php` (fonksiyon tanımlamaz). Migration YOK.
 - Test: `php scripts/pdks_gecmis_ekle_smoke.php` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
   `php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` → `node scripts/pdks_puantaj_dialog_smoke.js`.
+
+### Kartsız Mesai + Toplu İşlem (v294)
+
+Tekli "Çalışma Ekle"ye **Kartsız mesai** seçeneği; Mesai Detayı ve Günlük Puantaj'a
+**👥 Toplu İşlem** (Kadın/Erkek grupları: giriş/çıkış + boş kart seçimi + kartsız sayı).
+YALNIZ admin, CSRF, audit. Migration YOK.
+
+- **Kartsız = kayıt başına SANAL kart** (`pdks_faz8j_kartsiz_kart_olustur()`): `card_no`
+  `KARTSIZ-` + 6 haneli **satır id'si** (sıra sayacı YOK — eşzamanlılıkta çakışırdı),
+  okutulamaz `canonical_uid` (`KARTSIZ`+hex), `status='disabled'`, `enrolled_source='kartsiz'`
+  (`pdks_faz8j_kartsiz_mi()`). Puantaj/hakediş/cari/rapor onu normal dönem gibi sayar —
+  tüketicilere kartsız kodu EKLEME. Kart Havuzu'nda gizli, durum değiştirilemez,
+  "fiziksel kart" metriğine girmez, `pdks_faz8j_duzelt()` kartını değiştirmez. Çıkış zorunlu.
+- **Tek yazma yolu:** `pdks_faz8j_satir_kontrol()` (salt okunur) + `pdks_faz8j_satir_yaz()`
+  (olay/dönem INSERT'ünün TEK yeri); oturum `pdks_faz8j_oturum_coz()`. Tekli ve toplu ikisi de
+  bunları çağırır — kopya INSERT yazma.
+- **Bugün kuralı (tekli + toplu):** açık mesai kullanılır; kapalıysa red; yoksa kiosk yolu
+  `pdks_gunluk_oturum_ac_veya_getir()` ile AÇILIR (önceki gün açık mesai kuralı geçerli).
+  Bugün kartlı satırda çıkış boş bırakılabilir → AÇIK dönem (kiosk kart kuralları). Geçmiş
+  günde mesai yoksa KAPALI mesai yaratılır (pasif çavuş reddedilir).
+- **Toplu:** `pdks_faz8j_toplu_onizle()` YAN ETKİSİZ (mesai/sanal kart yaratmaz);
+  `pdks_faz8j_toplu_ekle()` HEP-YA-HİÇ, tek transaction, kartlar artan id sırasıyla kilitli,
+  sınır `PDKS_FAZ8J_TOPLU_LIMIT` (250). Kaydet yalnız hatasız önizlemeden sonra açılır,
+  girdi değişince kapanır. Önizlemedeki `uyarilar` (aynı saatlerde kartsız kayıt zaten var)
+  ENGEL DEĞİL.
+- **Çift gönderim koruması `istek_id`:** tekli form + toplu pencere tek kullanımlık anahtar
+  gönderir; yazma transaction'ı önce mesai satırını kilitler (MySQL), sonra audit'te aynı
+  `istek_id`'yi arar → varsa HİÇBİR ŞEY yazılmaz ("tekrar gönderim"). Kartlı satırı çakışma
+  kontrolü korur ama KARTSIZI yalnız bu anahtar korur — kaldırma.
+- **Toplu Geri Al:** `pdks_faz8j_toplu_listele()` / `pdks_faz8j_toplu_geri_al()` — batch
+  (`toplu_id`, audit `puantaj_toplu_ekle`, modül `daily_work_sessions`, record_id = mesai id)
+  içindeki aktif dönemleri tek seferde iptal eder (gerekçe zorunlu, kesin hakediş engeller).
+  Sanal kartlar ve açılan mesai yerinde kalır.
+- Dosyalar: `config/pdks_faz8j.php` · `_puantaj_ekle.php` · `_puantaj_toplu.php` ·
+  `_puantaj_toplu_ajax.php` (`?ajax=toplu_onizle|toplu_ekle`, include-only, doğrudan 404).
+- Test: `php scripts/pdks_toplu_ekle_smoke.php` · `php scripts/pdks_gecmis_ekle_smoke.php` ·
+  `php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` →
+  `node scripts/pdks_puantaj_dialog_smoke.js` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
+  `node scripts/pdks_toplu_ekle_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

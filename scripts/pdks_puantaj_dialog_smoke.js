@@ -134,7 +134,8 @@ function gorunenler(page) {
         await page.waitForTimeout(100);
         ok('ekle: kapatınca hiçbir dialog görünmüyor', (await gorunenler(page)).length === 0);
         const rozet = await page.evaluate(() => [...document.querySelectorAll('.pdks-badge-elle')].filter(e => e.getBoundingClientRect().width > 0).map(e => e.textContent.trim()));
-        ok('"✍ Elle eklendi" rozeti elle eklenen satırda görünüyor (yalnız o satır)', rozet.length === 1 && /Elle eklendi/.test(rozet[0]), JSON.stringify(rozet));
+        // v294: render kurulumunda gerçek bir toplu işlem de yazılır (4 elle eklenen kayıt) — rozet yalnız source=manual satırlarda.
+        ok('"✍ Elle eklendi" rozeti elle eklenen satırlarda görünüyor (1 tekil + 4 toplu)', rozet.length === 5 && rozet.every(r => /Elle eklendi/.test(r)), JSON.stringify(rozet));
 
         // İptal dialog'unda ✕ kapatma düğmesi (Düzenle ile tutarlı)
         const xVar = await page.evaluate(i => !!document.querySelector('#void' + i + ' .pm-close'), hedef);

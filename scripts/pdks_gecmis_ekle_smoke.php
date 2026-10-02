@@ -164,8 +164,15 @@ $ret('gelecek mesai tarihi → reddedilir', ['worker_card_id' => $kartlar['K003'
 $ret('geçersiz kart → reddedilir', ['worker_card_id' => 99999], 'bulunamadı');
 $ret('geçersiz işçi tipi → reddedilir', ['worker_card_id' => $kartlar['K003'], 'worker_type_id' => 99999], 'tip');
 $ret('olmayan çavuş (yeni mesai gerekir) → reddedilir', ['worker_card_id' => $kartlar['K003'], 'foreman_id' => 99999], 'Çavuş bulunamadı');
-$ret('bugün için mesai yok → reddedilir (kart okutarak açılır)', ['worker_card_id' => $kartlar['K003'], 'foreman_id' => $cavusB, 'work_date' => $bugun, 'entry_date' => $bugun, 'entry_clock' => '00:01', 'exit_date' => $bugun, 'exit_clock' => '00:02'], 'Bugün için mesai yok');
 ok('reddedilen denemeler mesai OLUŞTURMADI (yalnız 1 mesai)', (int)db()->query("SELECT COUNT(*) FROM daily_work_sessions")->fetchColumn() === 1);
+// ⚠ Bilinçli beklenti değişikliği (Toplu İşlem / bugün kuralı, onaylı): eskiden
+// "bugün için mesai yok → reddedilir" idi. Artık bugünün mesaisi yoksa KİOSK
+// yolu (pdks_gunluk_oturum_ac_veya_getir) ile AÇIK mesai açılır.
+if (date('H:i') > '00:00') {
+    $r = ekle(['worker_card_id' => $kartlar['K003'], 'foreman_id' => $cavusB, 'work_date' => $bugun, 'entry_date' => $bugun, 'entry_clock' => '00:00', 'exit_date' => $bugun, 'exit_clock' => date('H:i')]);
+    $sb = !empty($r['ok']) ? db()->query("SELECT status FROM daily_work_sessions WHERE id = " . (int)$r['session_id'])->fetchColumn() : null;
+    ok('bugün için mesai yok → kiosk yoluyla AÇIK mesai açılır ve kayıt eklenir', !empty($r['ok']) && $r['yeni_mesai'] === true && $sb === 'open', j($r));
+}
 
 echo "\n=== 5. Yetki, depo, kesinleşmiş hakediş ===\n";
 $ADMIN = false;
