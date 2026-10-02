@@ -26,7 +26,8 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
 <dialog id="toplu" class="pm-dialog isk-card-modal isk-toplu"
         data-csrf="<?= h(csrf_token()) ?>" data-work-date="<?= h($topluWorkDate) ?>" data-bugun="<?= $topluBugun ? '1' : '0' ?>"
         data-limit="<?= (int)$topluLimit ?>" data-url-onizle="<?= h($topluUrlOnizle) ?>" data-url-ekle="<?= h($topluUrlEkle) ?>"
-        data-cavus-sabit="<?= $topluSabitCavus ? (int)$topluSabitCavus['id'] : 0 ?>">
+        data-cavus-sabit="<?= $topluSabitCavus ? (int)$topluSabitCavus['id'] : 0 ?>"
+        data-istek-id="<?= h(bin2hex(random_bytes(16))) ?>">
 <div class="pm-header"><h2 class="pm-title">Toplu İşlem</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
 <form class="isk-card-modal-body" onsubmit="return false" autocomplete="off">
     <p class="muted" style="margin:0 0 12px;font-size:.88rem">
@@ -153,7 +154,8 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
             gr.push({ worker_type_id: parseInt(g.getAttribute('data-tip'), 10), entry_clock: alan(g, 'entry_clock').value,
                       exit_date: alan(g, 'exit_date').value, exit_clock: alan(g, 'exit_clock').value, kart_ids: ids, kartsiz_adet: m });
         });
-        return { csrf: dlg.getAttribute('data-csrf'), foreman_id: cavusSel ? (parseInt(cavusSel.value, 10) || 0) : sabitCavus,
+        // istek_id: sayfa/pencere çizilirken sunucuda üretilir; Kaydet tekrarlanırsa AYNI değer gider (tekrar gönderim koruması).
+        return { csrf: dlg.getAttribute('data-csrf'), istek_id: dlg.getAttribute('data-istek-id'), foreman_id: cavusSel ? (parseInt(cavusSel.value, 10) || 0) : sabitCavus,
                  work_date: gun, reason: document.getElementById('tpReason').value.trim(), note: document.getElementById('tpNote').value.trim(), gruplar: gr };
     }
     function istemciHatalari(v) {
@@ -196,6 +198,13 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
     function onizleCiz(y) {
         elOn.textContent = ''; elOn.classList.remove('tp-eski'); elOn.hidden = false;
         var satirlar = y.satirlar || [], hatalar = y.hatalar || [];
+        // Engellemeyen uyarılar (ör. aynı saatlerde kartsız kayıt zaten var) — sarı kutu, Kaydet'i kapatmaz.
+        if ((y.uyarilar || []).length) {
+            var uk = document.createElement('div'); uk.className = 'tp-uyari'; uk.setAttribute('role', 'status');
+            var uu = document.createElement('ul');
+            y.uyarilar.forEach(function (s) { var li = document.createElement('li'); li.textContent = s; uu.appendChild(li); });
+            uk.appendChild(uu); elOn.appendChild(uk);
+        }
         if (hatalar.length) {
             var kutu = document.createElement('div'); kutu.className = 'tp-genel-hata';
             var ul = document.createElement('ul');

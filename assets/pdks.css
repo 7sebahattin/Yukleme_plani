@@ -1439,6 +1439,10 @@ html[data-theme="dark"] .pdks-badge-kartsiz { background: #23264d; color: #b7c0f
 .isk-toplu .tp-mesaj, .isk-toplu .tp-genel-hata { margin: 12px 0 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--danger-soft); color: var(--danger); font-size: .9rem; }
 .isk-toplu .tp-mesaj[hidden], .isk-toplu .tp-onizle[hidden], .isk-toplu .tp-asim[hidden] { display: none; }
 .isk-toplu .tp-mesaj ul, .isk-toplu .tp-genel-hata ul { margin: 0; padding-left: 18px; }
+/* Engellemeyen uyarı (olası tekrar kartsız kayıt) — sarı, Kaydet'i kapatmaz */
+.isk-toplu .tp-uyari { margin: 0 0 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--warn-soft); color: #7a4f00; border: 1px solid var(--warn); font-size: .9rem; }
+.isk-toplu .tp-uyari ul { margin: 0; padding-left: 18px; }
+html[data-theme="dark"] .isk-toplu .tp-uyari { background: #3a2f12; color: #ffd27a; }
 .isk-toplu .tp-onizle { margin: 14px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); min-width: 0; }
 .isk-toplu .tp-onizle.tp-eski { opacity: .5; }
 .isk-toplu .tp-onizle.tp-eski::before { content: "Girdiler değişti — yeniden önizleyin"; display: block; margin-bottom: 8px; color: var(--warn); font-weight: 700; font-size: .85rem; }

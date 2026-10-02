@@ -194,6 +194,21 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         const ist = istekler.filter(i => i.uc === 'toplu_onizle').pop();
         ok('önizleme isteği JSON + csrf + grup verisi (kart_ids, kartsiz_adet, çıkış)', ist && /application\/json/.test(ist.ct) && ist.govde.csrf === 'testcsrf' && ist.govde.gruplar.length === 1
             && ist.govde.gruplar[0].kart_ids.length === 5 && ist.govde.gruplar[0].exit_clock === '00:05' && ist.govde.reason === 'Test sebebi', JSON.stringify(ist && ist.govde));
+        ok('önizleme isteği istek_id taşır (32 hex, sunucuda üretilmiş)', ist && /^[a-f0-9]{32}$/.test(ist.govde.istek_id || ''), JSON.stringify(ist && ist.govde.istek_id));
+        // Engellemeyen uyarı: sarı kutu tablonun üstünde, Kaydet AÇIK kalır
+        const temizYanit = onizleYanit;
+        onizleYanit = Object.assign({}, temizYanit, { uyarilar: ['Bu mesaide aynı saatlerde 1 kartsız KADIN kaydı zaten var — tekrar eklemediğinizden emin olun.'] });
+        await page.evaluate(() => document.getElementById('tpOnizleBtn').click());
+        await page.waitForTimeout(300);
+        const uy = await page.evaluate(() => { const u = document.querySelector('#tpOnizle .tp-uyari'); const t = document.querySelector('#tpOnizle table');
+            return { var: !!u, metin: u ? u.textContent : '', renk: u ? getComputedStyle(u).backgroundColor : '', ustte: !!(u && t && (u.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING)),
+                     gorunur: !!(u && u.getBoundingClientRect().width > 0), kaydet: document.getElementById('tpKaydetBtn').disabled }; });
+        const rgb = (uy.renk.match(/\d+/g) || []).map(Number);
+        ok('uyarı (uyarilar) SARI kutuda, tablonun üstünde; Kaydet PASİF DEĞİL', uy.var && uy.gorunur && uy.ustte && !uy.kaydet && /kartsız KADIN/.test(uy.metin)
+            && rgb.length >= 3 && rgb[0] >= 230 && rgb[1] >= 200 && rgb[2] <= rgb[1] - 10, JSON.stringify(uy));
+        onizleYanit = temizYanit;
+        await page.evaluate(() => document.getElementById('tpOnizleBtn').click());
+        await page.waitForTimeout(300);
         // Ekran görüntüleri (önizlemeli)
         await page.evaluate(() => document.getElementById('tpOnizle').scrollIntoView({ block: 'center' }));
         await page.waitForTimeout(150);
@@ -250,6 +265,8 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         await page.waitForTimeout(700);
         const ekleIst = istekler.filter(i => i.uc === 'toplu_ekle');
         ok('Kaydet → TEK ?ajax=toplu_ekle isteği (çift dokunma korumalı), başarıda yönlendirme', ekleIst.length === 1 && /kaydedildi=1/.test(page.url()), JSON.stringify([ekleIst.length, page.url()]));
+        const idler = [...new Set(istekler.map(i => i.govde.istek_id))];
+        ok('tüm önizleme/Kaydet istekleri AYNI istek_id\'yi taşır (tekrar gönderim anahtarı)', idler.length === 1 && /^[a-f0-9]{32}$/.test(idler[0] || '') && ekleIst[0].govde.istek_id === idler[0], JSON.stringify(idler));
 
         // ── Geri Al penceresi ──
         await page.goto(KOK); await page.waitForTimeout(300);

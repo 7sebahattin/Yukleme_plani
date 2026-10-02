@@ -141,7 +141,8 @@ $r0 = ekle();
 ok('kartlı kayıt (K001) dün eklendi', !empty($r0['ok']), j($r0));
 $sidA = (int)$r0['session_id'];
 $r1 = ekle(['kartsiz' => 1, 'worker_card_id' => 0, 'entry_clock' => '08:30', 'exit_clock' => '16:30']);
-ok('kartsız kayıt eklendi (aynı mesai, kartsiz=true, kart no KARTSIZ-000001)', !empty($r1['ok']) && (int)$r1['session_id'] === $sidA && $r1['kartsiz'] === true && $r1['card_no'] === 'KARTSIZ-000001', j($r1));
+$p1id = !empty($r1['ok']) ? (int)db()->query('SELECT worker_card_id FROM daily_worker_work_periods WHERE id = ' . (int)$r1['period_id'])->fetchColumn() : 0;
+ok('kartsız kayıt eklendi (aynı mesai, kartsiz=true, kart no = KARTSIZ- + 6 haneli satır id)', !empty($r1['ok']) && (int)$r1['session_id'] === $sidA && $r1['kartsiz'] === true && $r1['card_no'] === sprintf('KARTSIZ-%06d', $p1id), j($r1));
 $p1 = db()->query('SELECT * FROM daily_worker_work_periods WHERE id = ' . (int)$r1['period_id'])->fetch();
 $vk = db()->query('SELECT * FROM worker_cards WHERE id = ' . (int)$p1['worker_card_id'])->fetch();
 ok('sanal kart: enrolled_source=kartsiz, status=disabled, tip=Kadın', $vk['enrolled_source'] === 'kartsiz' && $vk['status'] === 'disabled' && (int)$vk['worker_type_id'] === $kadin, j($vk));
@@ -150,7 +151,10 @@ ok('sanal kart UID hiçbir okuyucu normalizasyonundan ÜRETİLEMEZ', pdks_uid_he
 ok('pdks_faz8j_kartsiz_mi(): sanal kart true, fiziksel kart false', pdks_faz8j_kartsiz_mi($vk) && !pdks_faz8j_kartsiz_mi(db()->query('SELECT * FROM worker_cards WHERE id = ' . $kartlar['K001'])->fetch()));
 ok('kartsız dönem kapalı, kaynak manual, tip Kadın', $p1['status'] === 'closed' && $p1['source'] === 'manual' && $p1['worker_type_name_snapshot'] === 'Kadın' && $p1['exit_time'] === "$dun 16:30:00", j($p1));
 $r2 = ekle(['kartsiz' => 1, 'worker_type_id' => $erkek, 'entry_clock' => '09:00', 'exit_clock' => '15:00']);
-ok('ikinci kartsız (Erkek) → KARTSIZ-000002, ayrı sanal kart', !empty($r2['ok']) && $r2['card_no'] === 'KARTSIZ-000002', j($r2));
+$p2id = !empty($r2['ok']) ? (int)db()->query('SELECT worker_card_id FROM daily_worker_work_periods WHERE id = ' . (int)$r2['period_id'])->fetchColumn() : 0;
+ok('ikinci kartsız (Erkek) → ayrı sanal kart, numarası id\'den (sıralı, tekil)', !empty($r2['ok']) && $p2id > $p1id && $r2['card_no'] === sprintf('KARTSIZ-%06d', $p2id) && $r2['card_no'] !== $r1['card_no'], j($r2));
+ok('geçici kart numarası (KARTSIZ-T…) kalmadı, kart no benzersiz', (int)db()->query("SELECT COUNT(*) FROM worker_cards WHERE card_no LIKE 'KARTSIZ-T%'")->fetchColumn() === 0
+    && (int)db()->query('SELECT COUNT(*) FROM worker_cards')->fetchColumn() === (int)db()->query('SELECT COUNT(DISTINCT card_no) FROM worker_cards')->fetchColumn());
 ok('kart no önerisi (K…) kartsız sıradan etkilenmez', pdks_gunluk_sonraki_kart_no($kadin, db()) === 'K013', pdks_gunluk_sonraki_kart_no($kadin, db()));
 $r = ekle(['kartsiz' => 1, 'exit_date' => '', 'exit_clock' => '']);
 ok('kartsız + çıkışsız → reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'Kartsız'), j($r));
@@ -241,6 +245,7 @@ function toplu(array $o = []): array {
     $t = $o['work_date'] ?? $dun2;
     return $o + [
         'foreman_id' => $cavus['D'], 'work_date' => $t, 'depo' => $AKTIF_DEPO, 'reason' => 'Toplu giriş unutuldu', 'note' => 'not',
+        'istek_id' => bin2hex(random_bytes(16)),
         'gruplar' => [
             ['worker_type_id' => $kadin, 'entry_clock' => '08:00', 'exit_date' => $t, 'exit_clock' => '17:00', 'kart_ids' => [$kartlar['K002'], $kartlar['K001']], 'kartsiz_adet' => 2],
             ['worker_type_id' => $erkek, 'entry_clock' => '07:30', 'exit_date' => $t, 'exit_clock' => '16:30', 'kart_ids' => [$kartlar['K005']], 'kartsiz_adet' => 1],
@@ -390,6 +395,55 @@ ok('ikinci geri al → hepsi zaten iptal, reddedilir', empty($r['ok']) && str_co
 $dgT = pdks_gunluk_puantaj_denetim_gecmisi([], db(), 20, (int)$tp['session_id']);
 ok('işlem geçmişi: "Toplu işlem geri alındı" etiketi', (bool)array_filter($dgT, fn($d) => str_contains($d['islem_etiket'], 'geri alındı')), j(array_column($dgT, 'islem_etiket')));
 
+
+echo "\n=== 7b. Tekrar gönderim (istek_id), uyarı, girdi sağlamlığı, pasif çavuş, kayıp kart ===\n";
+$dun4 = date('Y-m-d', strtotime('-4 day'));
+$ist = bin2hex(random_bytes(16));
+$tek = fn() => ekle(['foreman_id' => $cavus['H'], 'work_date' => $dun4, 'entry_date' => $dun4, 'exit_date' => $dun4, 'kartsiz' => 1, 'istek_id' => $ist]);
+$a1 = $tek(); $once = sayimlar(); $a2 = $tek();
+ok('tekil kartsız: aynı istek_id ikinci kez → "zaten kaydedildi", hiçbir şey yazılmadı', !empty($a1['ok']) && empty($a2['ok']) && !empty($a2['tekrar']) && str_contains((string)$a2['hata'], 'zaten kaydedildi') && sayimlar() === $once, j([$a1, $a2]));
+$r = ekle(['foreman_id' => $cavus['H'], 'work_date' => $dun4, 'entry_date' => $dun4, 'exit_date' => $dun4, 'kartsiz' => 1, 'istek_id' => 'XYZ']);
+ok('tekil: geçersiz istek_id biçimi → reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'istek'), j($r));
+$v = toplu(['foreman_id' => $cavus['H'], 'work_date' => $dun4]);
+$v['gruplar'] = [['worker_type_id' => $kadin, 'entry_clock' => '08:00', 'exit_date' => $dun4, 'exit_clock' => '17:00', 'kart_ids' => [], 'kartsiz_adet' => 3]];
+$on = pdks_faz8j_toplu_onizle($v, 1, db());
+ok('önizleme: aynı saatlerde kartsız KADIN zaten var → ENGELLEMEYEN uyarı', !empty($on['ok']) && count($on['uyarilar']) === 1 && str_contains($on['uyarilar'][0], '1 kartsız KADIN'), j($on['uyarilar'] ?? null));
+$v2 = $v; $v2['gruplar'][0]['entry_clock'] = '09:00';
+ok('farklı saat → uyarı yok', pdks_faz8j_toplu_onizle($v2, 1, db())['uyarilar'] === []);
+$b1 = pdks_faz8j_toplu_ekle($v, 1, db()); $once = sayimlar(); $b2 = pdks_faz8j_toplu_ekle($v, 1, db());
+ok('toplu (tamamı kartsız): aynı istek_id tekrar Kaydet → reddedilir, satır sayıları aynı', !empty($b1['ok']) && $b1['eklenen'] === 3 && empty($b2['ok']) && !empty($b2['tekrar']) && in_array('Bu işlem zaten kaydedildi (tekrar gönderim).', $b2['hatalar'], true) && sayimlar() === $once, j([$b1['ok'] ?? null, $b2['hatalar'] ?? null]));
+$v3 = $v; unset($v3['istek_id']);
+$r = pdks_faz8j_toplu_ekle($v3, 1, db());
+ok('toplu: istek_id yok → reddedilir (zorunlu)', empty($r['ok']) && str_contains(implode(' ', $r['hatalar']), 'istek'), j($r['hatalar']));
+ok('istek_id audit new_values içinde saklanır', (int)db()->query("SELECT COUNT(*) FROM audit_log WHERE action='puantaj_toplu_ekle' AND new_values LIKE '%\"istek_id\":\"" . $v['istek_id'] . "\"%'")->fetchColumn() === 1);
+// Bozuk (dizi) girdi — PHP uyarısı ÜRETMEMELİ
+$uyari = [];
+set_error_handler(function ($no, $str) use (&$uyari) { $uyari[] = $str; return true; });
+$vb = toplu(['foreman_id' => $cavus['H'], 'work_date' => $dun4, 'reason' => ['x'], 'note' => ['y'], 'istek_id' => ['z']]);
+$vb['gruplar'][0]['entry_clock'] = ['a']; $vb['gruplar'][0]['exit_date'] = ['b']; $vb['gruplar'][0]['exit_clock'] = ['c']; $vb['gruplar'][0]['kart_ids'] = [['d']]; $vb['gruplar'][0]['kartsiz_adet'] = ['e'];
+$rb1 = pdks_faz8j_toplu_onizle($vb, 1, db()); $rb2 = pdks_faz8j_toplu_ekle($vb, 1, db());
+$rb3 = ekle(['entry_clock' => ['x'], 'exit_clock' => ['y'], 'reason' => ['z'], 'worker_card_id' => ['w'], 'istek_id' => ['q'], 'kartsiz' => ['k']]);
+restore_error_handler();
+ok('dizi biçimli bozuk girdi: önizleme/ekleme/tekil reddedilir ve PHP uyarısı YOK', empty($rb1['ok']) && empty($rb2['ok']) && empty($rb3['ok']) && $uyari === [], j($uyari));
+$src = (string)file_get_contents($ROOT . '/_puantaj_toplu_ajax.php');
+ok('_puantaj_toplu_ajax.php skaler olmayan alanları güvenle çevirir (is_scalar) ve istek_id iletir', str_contains($src, 'is_scalar($x)') && str_contains($src, "'istek_id' =>"));
+// Pasif çavuş — geçmiş gün yeni mesai
+db()->exec("UPDATE foremen SET is_active = 0 WHERE id = {$cavus['G']}");
+$once = sayimlar();
+$r = ekle(['foreman_id' => $cavus['G'], 'work_date' => $dun4, 'entry_date' => $dun4, 'exit_date' => $dun4, 'worker_card_id' => $kartlar['K009']]);
+$vt = toplu(['foreman_id' => $cavus['G'], 'work_date' => $dun4]);
+$t1 = pdks_faz8j_toplu_onizle($vt, 1, db());
+ok('pasif çavuş, geçmiş gün (yeni mesai) → tekil ve toplu reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'pasif') && empty($t1['ok']) && str_contains(implode(' ', $t1['hatalar']), 'pasif') && sayimlar() === $once, j([$r, $t1['hatalar']]));
+db()->exec("UPDATE foremen SET is_active = 1 WHERE id = {$cavus['G']}");
+// Kayıp kart — çıkışlı (kapalı) satırda da reddedilir
+$r = ekle(['foreman_id' => $cavus['H'], 'work_date' => $dun4, 'entry_date' => $dun4, 'exit_date' => $dun4, 'worker_card_id' => $kartlar['K012']]);
+ok('KAYIP fiziksel kart, çıkışlı geçmiş gün satırı → reddedilir', empty($r['ok']) && str_contains((string)$r['hata'], 'KAYIP'), j($r));
+db()->exec("UPDATE worker_cards SET status='disabled' WHERE id = " . $kartlar['K011']);
+$vt = toplu(['foreman_id' => $cavus['H'], 'work_date' => $dun4]); $vt['gruplar'][0]['kart_ids'] = [$kartlar['K011']]; $vt['gruplar'][0]['kartsiz_adet'] = 0; $vt['gruplar'][1]['kart_ids'] = []; $vt['gruplar'][1]['kartsiz_adet'] = 1;
+$t2 = pdks_faz8j_toplu_onizle($vt, 1, db());
+ok('DEVRE DIŞI fiziksel kart toplu satırda → satır hatası', empty($t2['ok']) && str_contains(implode(' ', array_filter(array_column($t2['satirlar'], 'hata'))), 'DEVRE DIŞI'), j($t2['satirlar']));
+db()->exec("UPDATE worker_cards SET status='available' WHERE id = " . $kartlar['K011']);
+
 echo "\n=== 8. Kaynak kod kuralları (statik) ===\n";
 $src = (string)file_get_contents($ROOT . '/config/pdks_faz8j.php');
 ok('dönem INSERT tek yerde (pdks_faz8j_satir_yaz)', substr_count($src, 'INSERT INTO daily_worker_work_periods') === 1);
@@ -397,6 +451,8 @@ ok('olay INSERT tek yerde', substr_count($src, 'INSERT INTO daily_worker_card_ev
 ok('kart okutma yazma fonksiyonları çağrılmaz', !preg_match('/faz8a_giris_kaydet|faz8a_cikis_kaydet|oturum_kaydet\(/', $src));
 ok('bugün mesaisi kiosk yoluyla açılır', str_contains($src, 'pdks_gunluk_oturum_ac_veya_getir($foremanId, $user, $pdo)'));
 $on = substr($src, strpos($src, 'function pdks_faz8j_toplu_onizle('), 900);
+ok('yazma transaction\'ının İLK sorgusu mesai kilidi (tekil + toplu)', substr_count($src, "beginTransaction();\n        pdks_faz8j_oturum_kilitle(") === 2);
+ok('kartsız kart no satır id\'sinden (yeniden deneme döngüsü yok)', str_contains($src, "str_pad((string)\$id, 6, '0', STR_PAD_LEFT)") && !str_contains($src, '$deneme'));
 ok('önizleme transaction/yazma çağırmaz', !preg_match('/beginTransaction|_ekle\(|satir_yaz|kartsiz_kart_olustur/', substr($on, 0, strpos($on, "\n}") ?: 900)));
 
 echo "\n" . ($fail ? "$fail HATA, $gecen geçti\n" : "Tümü geçti ($gecen)\n");

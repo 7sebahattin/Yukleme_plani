@@ -129,7 +129,7 @@ db()->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY AUTO
 // bölümü bu veriyle sınanır. Yazma yolu üretimdekiyle aynı (pdks_faz8j_toplu_ekle).
 $b1 = (int)db()->query("SELECT id FROM worker_cards WHERE card_no='B001'")->fetchColumn();
 $b2 = (int)db()->query("SELECT id FROM worker_cards WHERE card_no='B002'")->fetchColumn();
-$tp = pdks_faz8j_toplu_ekle(['foreman_id' => $cavus, 'work_date' => date('Y-m-d'), 'depo' => 'Depo A', 'reason' => 'Test toplu', 'note' => 'Render kurulumu',
+$tp = pdks_faz8j_toplu_ekle(['foreman_id' => $cavus, 'work_date' => date('Y-m-d'), 'depo' => 'Depo A', 'reason' => 'Test toplu', 'note' => 'Render kurulumu', 'istek_id' => bin2hex(random_bytes(16)),
     'gruplar' => [['worker_type_id' => $kadin, 'entry_clock' => '00:00', 'exit_date' => date('Y-m-d'), 'exit_clock' => '00:01', 'kart_ids' => [$b1, $b2], 'kartsiz_adet' => 2]]], 1, db());
 if (!($tp['ok'] ?? false)) { fwrite(STDERR, 'toplu: ' . json_encode($tp, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
 

@@ -86,6 +86,14 @@ const gorunen = page => page.evaluate(() => [...document.querySelectorAll('dialo
         // Boş gönderim tarayıcı doğrulamasında takılır (sunucuya gitmeden)
         const gecerli = await page.evaluate(() => document.querySelector('#ekle form').checkValidity());
         ok('boş form GEÇERSİZ (tarayıcı zorunlu alan doğrulaması)', gecerli === false);
+        const ig = await page.evaluate(() => {
+            const f = document.querySelector('#ekle form'); const id = f.elements['istek_id'];
+            const e1 = new Event('submit', { cancelable: true }); f.dispatchEvent(e1);   // gerçek gönderim yok, yalnız işleyici
+            const b = f.querySelector('button.btn-primary');
+            const e2 = new Event('submit', { cancelable: true }); f.dispatchEvent(e2);
+            return { tip: id && id.type, deger: id && id.value, ilkEngel: e1.defaultPrevented, ikinciEngel: e2.defaultPrevented, btnPasif: b.disabled };
+        });
+        ok('gizli istek_id (32 hex); gönderimde Ekle düğmesi PASİF, ikinci gönderim engelleniyor', ig.tip === 'hidden' && /^[a-f0-9]{32}$/.test(ig.deger || '') && !ig.ilkEngel && ig.ikinciEngel && ig.btnPasif, JSON.stringify(ig));
         await page.evaluate(() => document.getElementById('ekle').close());
 
         // ── ?ekle=1 → kendiliğinden açılır ──

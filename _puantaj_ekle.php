@@ -28,6 +28,7 @@ $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
 <form method="post" class="isk-card-modal-body" data-bugun="<?= $ekleBugun ? '1' : '0' ?>">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="puantaj_ekle">
+    <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(16))) ?>"><?php /* tekrar gönderim (çift tıklama/F5) koruması */ ?>
     <input type="hidden" name="work_date" value="<?= h($ekleWorkDate) ?>">
     <input type="hidden" name="entry_date" value="<?= h($ekleWorkDate) ?>">
     <p class="muted" style="margin:0 0 12px;font-size:.88rem">
@@ -96,9 +97,13 @@ $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
                                     : 'Boş bırakılırsa kişi içeride yazılır, çıkışta kartını okutur.';
     }
     kart.addEventListener('change', guncelle);
-    f.addEventListener('submit', function () {
+    f.addEventListener('submit', function (e) {
+        // Çift tıklama: ikinci gönderim engellenir (sunucu istek_id ile ayrıca korur).
+        if (f.getAttribute('data-gonderildi') === '1') { e.preventDefault(); return; }
         // Çıkış saati boşsa (yalnız bugün + kartlı) varsayılan çıkış gününü de boşalt: tarih+saat birlikte gelmeli.
         if (!ec.required && !ec.value) ed.value = '';
+        f.setAttribute('data-gonderildi', '1');
+        var b = f.querySelector('button.btn-primary'); if (b) { b.disabled = true; b.textContent = 'Ekleniyor…'; }
     });
     guncelle();
 })();
