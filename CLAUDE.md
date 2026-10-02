@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v292` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v293` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -464,6 +464,22 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
   `node scripts/pdks_ortak_cikis_smoke.js`.
+
+### Kiosk düzeltmeleri (v293)
+
+- **Mesaiyi Kapat = PENCERE** (`#giCloseConfirmSec.pdks-kapat-ovl`, z 600): bulunulan
+  ekranın (mod ekranı / kapatılmamış mesai penceresi) ÜSTÜNDE açılır; mesai özeti +
+  kontrol listesi, en altta **✅ Onayla**. `ekranGoster()` ile AÇILMAZ (`hidden=false`);
+  ekran değişince yine kapanır. Odak düğmeye DEĞİL pencereye verilir — USB okuyucunun
+  Enter'ı mesaiyi kapatmasın. Esc/dış tık/Vazgeç = `kapatmadanVazgec()`; istek sürerken
+  (`kapatSuruyor`) vazgeç ve çift dokunma engelli. Kapatma yine yalnız `kapat()` → `?ajax=kapat`.
+- **Kadın ⇄ Erkek hızlı geçiş** (`#giTipGecis`): GİRİŞ taramasında seçili tip KADIN ise
+  "ERKEK GİRİŞ", ERKEK ise "KADIN GİRİŞ"; aynı `modSec('GIRIS')` yolu, yalnız tip değişir.
+  Tip butonları `data-gi-tip-kod` taşır. ÇIKIŞ ve ortak modda gizli (`tipGecisGuncelle()`).
+- **Sonuç süresi:** başarı 3 sn (`SONUC_OK_MS`), hata 5 sn (`SONUC_HATA_MS`), eksik-çıkış
+  uyarılı başarı 8 sn.
+- Test: `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
+  `node scripts/pdks_kiosk_v293_smoke.js`.
 
 ### Geçmişe Dönük Çalışma Ekle (v291)
 

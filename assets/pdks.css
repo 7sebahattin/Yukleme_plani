@@ -1380,3 +1380,36 @@ html[data-theme="dark"] .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #cbd5
 /* v291 — geçmişe dönük elle eklenen çalışma (Mesai Detayı → Kart No yanında) */
 .pdks-badge-elle { background: #fff7ed; color: #b45309; border: 1px solid #fcd9a8; margin-left: 6px; white-space: nowrap; font-weight: 700; }
 html[data-theme="dark"] .pdks-badge-elle { background: #3b2a12; color: #fbbf6a; border-color: #6b4a1c; }
+
+/* ── v293: Mesaiyi Kapat onay PENCERESİ (bulunulan ekranın üstünde) ───── */
+.pdks-kapat-ovl {
+    position: fixed; inset: 0; z-index: 600;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 16px calc(16px + var(--bn-h, 0px) + env(safe-area-inset-bottom, 0px));
+    background: rgba(5, 15, 28, .62);
+}
+.pdks-kapat-ovl[hidden] { display: none; }
+.pdks-kapat-pencere {
+    width: 100%; max-width: 520px; max-height: 100%; overflow-y: auto; box-sizing: border-box;
+    padding: 20px 18px; border-radius: 18px; background: #132740; color: #eaf2ff;
+    border: 1px solid #42627b; box-shadow: 0 18px 48px rgba(0, 0, 0, .35); outline: none;
+}
+html:not([data-theme="dark"]) .pdks-kapat-pencere { background: #ffffff; color: #18283a; border-color: #bcd1df; }
+.pdks-kapat-pencere h2 { margin: 0 0 4px; }
+.pdks-kapat-kim { margin: 0 0 12px; }
+.pdks-kapat-alt { margin: 0 0 6px; font-size: .95rem; }
+.pdks-kapat-pencere .pdks-kiosk-counters { margin: 8px 0 0; }
+.pdks-kapat-not { margin: 10px 0 12px; font-size: .9rem; }
+.pdks-kapat-eylem { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pdks-kapat-eylem .btn { min-height: 52px; font-size: 1.05rem; font-weight: 800; }
+
+/* ── v293: tarama ekranında KADIN ⇄ ERKEK hızlı geçiş düğmesi ─────────── */
+#giTipGecis[hidden] { display: none; }
+.pdks-scan-actions.pdks-scan-actions-uc { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#giTipGecis { font-weight: 800; border: none; }
+#giTipGecis.pdks-tip-gecis-erkek { background: #1f6feb; color: #fff; }
+#giTipGecis.pdks-tip-gecis-kadin { background: #d63384; color: #fff; }
+@media (max-width: 639px) {
+    .pdks-scan-actions.pdks-scan-actions-uc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pdks-scan-actions-uc #giTipGecis { grid-column: 1 / -1; }
+}

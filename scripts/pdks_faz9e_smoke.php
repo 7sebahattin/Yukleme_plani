@@ -100,7 +100,7 @@ foreach (['gikkAcikDonem', 'gikkBekleyenSinif', 'gikkBekleyenFm', 'gikkHakedis']
     ok9e("gunluk_isci_giris_cikis.php: #$id alanı HTML'de var", str_contains($giSrc, "id=\"$id\""));
 }
 ok9e('gunluk_isci_giris_cikis.php: giKapatBtn tıklanınca kapanis_kontrol ÇAĞRILIYOR (onay ekranı açılmadan önce)',
-    (bool)preg_match('/kapanisKontroluGoster\([^)]*\);\s*\n\s*ekranGoster\(closeConfirmSec\);/', $giSrc));
+    (bool)preg_match('/kapanisKontroluGoster\([^)]*\);[\s\S]{0,500}?closeConfirmSec\.hidden = false;/' /* v293: onay PENCERESİ */, $giSrc));
 ok9e('gunluk_isci_giris_cikis.php: config/pdks_faz8b.php + config/pdks_hakedis.php EKLENDİ (kapanış kontrolü İÇİN)',
     str_contains($giSrc, "require_once __DIR__ . '/config/pdks_faz8b.php';")
     && str_contains($giSrc, "require_once __DIR__ . '/config/pdks_hakedis.php';"));
