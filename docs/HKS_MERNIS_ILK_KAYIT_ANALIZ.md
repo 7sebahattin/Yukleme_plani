@@ -37,7 +37,7 @@
 - **Hemen yapılacak geçici çözüm (kod gerektirmez):** Yeni müstahsil için önce hks.hal.gov.tr'de TC ve doğum tarihiyle **Sorgula** yapın (bildirimi sitede tamamlamayın), sonra panelden gönderin.
 - **Kalıcı çözüm yolu:**
   1. **Faz 1:** Teşhis ve kod temizliği. Konum "alfabetik" olarak sabitlenir, başarısız istekten öğrenme kaldırılır, her deneme maskeli olarak kayda alınır.
-  2. **Faz 2 (asıl çözüm adımı):** Taze bir kişiyle 2–4 biçim denenir: `yyyy-AA-GGT12:00:00`, `GG.AA.YYYY`, `YYYY-AA-GG`. Mükerrer bildirim riski sıfırdır.
+  2. **Faz 2 (asıl çözüm adımı) — REVİZE, bkz. §10:** Önce GTB'nin resmi örneğine yapısal olarak hizalanmış istek (gidecek yere il/ilçe/belde eklenir), sonra sırayla `YYYY-AA-GGT12:00:00`, `GG.AA.YYYY 12:00:00`, `GG.AA.YYYY`, `YYYY-AA-GG` denenir. Mükerrer bildirim riski sıfırdır.
   3. **Faz 3:** GTB'den yazılı biçim teyidi. Yeni uca geçiş artık **kök çözüm değil**; eski uç kapatılabileceği için uzun vadeli bir uyum adımı.
 - **Önceki kayıtlar yanıltıcı:** README, `config.php`, `hks_soap.php` ve CLAUDE.md'deki "son+gtb kanıtlandı" ve "Mernis = değer yanlış" ifadeleri **yanlış ya da eksik**. Kayıtsız kişi için web servisten **temiz bir başarı hiç alınmadı**.
 
@@ -430,6 +430,8 @@ Aşağıdaki değişiklikler yapılır:
 
 ### Faz 2: Kontrollü biçim deneyi
 
+> **02.10:** Bu bölümün yerini **§10.4 Revize deney planı** aldı. Aşağısı tarihçe olarak duruyor.
+
 **2.0 Ön koşullar**
 
 - Faz 1 canlıda (deneme kaydı ve kayıt durumu kaydı çalışıyor).
@@ -692,3 +694,103 @@ Yanıtın özeti (maskeli):
 | **Bu rapor (sentez, Opus)** | Çelişkilerin çözümü (ISO kanıtının zayıflığı, 05.09'un iki okuması). H-B'nin B1/B2 olarak ayrılması. H-C için pasif ad testi (T3). 2. yapıştırmadaki "BildirimSorgu"nun yalnız mesaj adı olduğu. Elle deney modu (2a) önerisi. Sahte TC sondasının reddi. Faz planı ve karar ağacı. |
 
 > Sentez ajanı (Opus) raporu 01.10'da yazdı, ardından kullanım sınırına takılıp durdu. 02.10'daki iki yeni kanıt (G13, G14) ve ilgili bölüm güncellemeleri koordinatör tarafından işlendi.
+
+---
+
+## 10. Revizyon (02.10): GTB duyuruları, resmi örnek istek/yanıt, Kılavuz 0.1.14
+
+Kullanıcının paylaştığı yeni kaynaklar iki ajanla incelendi:
+- **Ajan 4 (Sonnet):** Kılavuz 0.1.14'ün kural çıkarımı.
+- **Ajan 5 (Opus):** GTB resmi örneği ile canlı isteğimizin alan alan karşılaştırması ve revize deney planı.
+
+### 10.1 Yeni kaynaklar
+
+| Kaynak | İçerik | Önemi |
+|---|---|---|
+| GTB duyurusu 07.03.2025 | 13.03'ten itibaren KPS'te TC + doğum tarihi zorunlu. Web servise `DogumTarihi` parametresi eklenir, "**zorunlu bir alan değildir**". Örnek istek/yanıt ekte. | Alan şemada isteğe bağlı. Zorunluluk sunucu kodunda ve yalnız kayıtsız kişide ("girilmelidir", 07.09). |
+| GTB duyurusu 12.03.2025 | Zorunluluk başladı. Yeni uçlar `ws.gtb.gov.tr:8443/HKS{Bildirim,Genel,Urun}Service`, eski uçla birlikte kullanım 27.03.2025'e kadar. | Yeni uçlar parametresiz GET'te "Servis Bulunamadi" dönüyor, `?wsdl` çalışıyor. Sözleşme eskiyle aynı (G13). |
+| GTB resmi örnek **istek** | **Satın Alım (195)**, ikinci kişi sıfatı 4, referanssız. İkinci kişi bilgileri: AdSoyad, CepTel, `DogumTarihi=01.01.1980 00:00:00`, Eposta, TC, YurtDisiMi. Gidecek yer: işyeri **+ il/ilçe/belde** + işletme türü + belge + plaka. | **Bizim senaryomuzun aynısı.** Doğum tarihi biçimimiz ve alan sırası örnekle aynı. |
+| GTB resmi örnek **yanıt** | 07.03.2025 tarihli, `GTBWSRV0000001`, satırda `HataKodu 0`, künye üretilmiş, rüsum 0. | Zorunluluktan **önce** alınmış. Şifresi `Tes****`, büyük olasılıkla test ortamı. Elle maskelenmiş. |
+| Kılavuz 0.1.14 (2016) | `DogumTarihi`, KPS, Mernis ve HataKodu 21 **hiç geçmiyor**. Tarih biçimi kuralı yok. | Doğum tarihi davranışı belgelenmemiş. Tek dayanak GTB örneği ve canlı gözlem. |
+
+### 10.2 Kesinleşen yeni gerçekler
+
+| # | Gerçek | Düzey |
+|---|---|---|
+| G15 | Doğum tarihi biçimimiz (`GG.AA.YYYY 00:00:00`) ve konumumuz GTB'nin resmi örneğiyle **aynı**. | KESİN |
+| G16 | GTB örneğindeki tarih `01.01.1980`. Gün = ay olduğu için örnek **gün/ay sırasını hiç sınamıyor**. Değer büyük olasılıkla yer tutucu. Biçim, .NET `DateTime.ToString()`'in tr-TR çıktısıyla aynı. | KESİN (gün = ay); ORTA (yer tutucu) |
+| G17 | Örnek yanıt zorunluluktan (13.03) önce alınmış ve büyük olasılıkla test ortamından. Üretimdeki KPS yolunun bu biçimle çalıştığını **kanıtlamaz**. | GÜÇLÜ |
+| G18 | **Kılavuz 1189-1193:** ikinci kişi kayıtlı değilse `GidecekYerIlId`, `GidecekYerIlceId`, `GidecekYerBeldeId` "0 (Boş) olamaz". GTB örneği bunları işyeri ile **birlikte** gönderiyor. **Bizim Satın Alım isteğimiz göndermiyor.** Gönderdiğimiz il/ilçe/belde `BildirimMalBilgileri` içindeki **üretim** yeri; gidecek yerinki değil (`hks_soap.php:575-582`, `isyeriMod` dalı). | KESİN |
+| G19 | Etkisiz farklar: bool `0`/`false` (ikisi de geçerli), `GelenUlkeId`/`GidecekUlkeId` göndermemek ile `0` göndermek (aynı sonuç), önekler, boş Header, UniqueId biçimi, BelgeNo/BelgeTipi (plaka var; kılavuz 1184). | KESİN (elendi) |
+| G20 | Kılavuz kendiyle çelişiyor. 1157 kayıtsız ikinci kişiye izin veriyor, 1161 "Satın Alım ... ikinci kişi kayıtlı olmalıdır" diyor. 2025 değişikliği bunu fiilen gevşetmiş (GTB'nin kendi 195 örneği tam ikinci kişi bilgisi taşıyor), ama yazılı değil. | KESİN (çelişki); ZAYIF (servisin desteklemediği) |
+| — | Eposta: kılavuz 0.1.8 ve 1157'ye göre kayıtsızda zorunlu değil. **Kullanıcı kararıyla kapsam dışı.** | — |
+
+### 10.3 Güncel hipotez sıralaması
+
+| Hipotez | Sıra | Düzey | Gerekçe |
+|---|---|---|---|
+| **H-A1** Sunucu tarih metnini en-US/Invariant kültürde (ay önce) ayrıştırıyor | 1 | **ORTA**, birinci aday | Biçimimiz GTB örneğiyle aynı (G15), ama örnek gün = ay (G16). Gün > 12'de ayrıştırma başarısız (`TryParse` → boş), gün ≤ 12'de sessiz takas. Bütün vakaları açıklıyor. |
+| **H-F** Gidecek yer il/ilçe/belde eksik (yeni) | 2 | Sebep olarak ZAYIF; Mernis aşılınca **sıradaki engel** olarak ORTA-GÜÇLÜ | Kılavuz kuralını ihlal ediyoruz (G18). Ama eksik adres normalde Mernis değil başka bir hata üretir. Sunucunun 07.09'da kişiyi "kayıtsız" bildiği de biliniyor. |
+| **H-B1** Web servis yolunun KPS çağrısı hatalı | 3 | ORTA-DÜŞÜK | Biçim aileleri tükenirse kalan açıklama. |
+| H-A2 Sunucu başka bir kesin kalıp bekliyor | 4 | ZAYIF-ORTA | Biçimimiz GTB örneğiyle aynı; yine de deneyde ucuza elenir. |
+| H-D Gece yarısı kayması | 5 | ZAYIF | Öğlen saatiyle ucuza elenir. |
+| H-B2 Eski uç farklı arka uç | — | ZAYIF | Sözleşme aynı (G13). |
+| H-C Ad tutmuyor | — | ZAYIF | Kişi-2'de elendi (G14). |
+| H-K Bildirimci sıfatı (örnek 1, biz 2) | — | ZAYIF | Firmanın yasal sıfatı; değiştirilemez, KPS ile ilişkisiz. |
+| H-M Servis Satın Alım'da kayıtsız kişiyi hiç desteklemiyor (1161) | — | ZAYIF | GTB'nin kendi 195 örneği aksini gösteriyor; site Sorgula sonrası da geçiyor. |
+
+**"Mernis'te bulunamadı" mesajının doğru okunuşu (GÜÇLÜ):** KPS "TC yok" ile "tarih tutmuyor" arasında ayrım yapmaz. Mesaj, "TC ile **sunucunun anladığı** doğum tarihi birlikte bulunamadı" demektir. TC'nin yanlış olduğunu söylemez.
+
+### 10.4 Revize deney planı (Faz 2'nin yerine geçer)
+
+**Güvenlik koşulları (her deneme):**
+- Tek satırlı, referanssız istek; her denemede yeni UniqueId.
+- Göndermeden hemen önce `KayitliKisiSorgu` → **kayıtsız**. Belirsizse gönderim durur.
+- Deneme yalnız şu yanıtla "başarısız ama güvenli" sayılır:
+  - Genel sonuç `GTBWSRV0000002`.
+  - Tek satır, UniqueId eşleşiyor.
+  - Satırda `HataKodu 21` + "Mernis", `YeniKunyeNo 0`, rüsum 0.
+- Başka her sonuçta (künye, farklı hata, zaman aşımı, ayrıştırılamayan yanıt) deney **durur**.
+- Deney biçimi yönetici panelinden seçilir, **tek kullanımlıktır**. Gönderimi operatör kendisi yapar; otomatik tekrar yok.
+- TC başına günde en çok 4 deneme. Başarısız deneme kişiyi kaydettirmiyor (01.10), bu yüzden aynı kişiyle sırayla denenebilir.
+
+**Kişiler:** Sitede **hiç sorgulanmamış** iki yeni müstahsil.
+- K1: doğum günü 12'den büyük.
+- K2: doğum günü 12 ya da küçük, gün ≠ ay.
+
+**Sıra (K1 ile):**
+
+| Deney | İstek | Geçerse | Mernis gelirse |
+|---|---|---|---|
+| **D1** | **GTB örneğine hizalı yapı** (gidecek yere il/ilçe/belde eklenir; değerler kendi işyerimizin kaydından, `hks_isyerleri()` yanıtında mevcut) + **bugünkü biçim** `GG.AA.YYYY 00:00:00` | H-F sebepmiş; yapı kalıcılaşır | Bütün yapısal farklar tek denemede elenir; biçime geçilir |
+| **D2** | Hizalı yapı + `YYYY-AA-GGT12:00:00` | H-A1 (ya da kayma); **kalıcı çözüm bulundu** | Kültür ve kayma elenir |
+| D3 | Hizalı yapı + `GG.AA.YYYY 12:00:00` | Kayma (H-D) | — |
+| D4 | Hizalı yapı + `GG.AA.YYYY` | Kesin kalıp (H-A2) | — |
+| D5 (ertesi gün) | Hizalı yapı + `YYYY-AA-GG` | Kesin kalıp (H-A2) | Biçim ailesi tükendi → H-B1: GTB'ye yazılı başvuru |
+
+- **İsteğe bağlı K2 adımı:** D2 K1'de geçtiyse K2'ye önce `GG.AA.YYYY 12:00:00` gönderilir. Mernis gelirse **gün/ay takası kesinleşir** (H-A1 KESİN); geçerse sorun kaymadır. Bu adım yalnız GTB'ye sunulacak kanıtın kesinliği içindir; kalıcı biçim her iki durumda da ISO öğlen olur.
+- **Her deneyden sonra** kişi hâlâ kayıtsızsa operatör sitede yalnız Sorgula yapar ve normal gönderimi tamamlar.
+- **Toplam:** En iyi durumda 1–2, en kötü durumda 5 deneme. En fazla bir künye oluşur; o da zaten yapılacak bildirimdir.
+
+### 10.5 Gereken minimum kod değişikliği (Faz 1 + deney altyapısı)
+
+Tek gönderim yolu `hks_bildirim_kaydet()`, tek taslak yazma yolu `hks_taslak_olustur()` olarak kalır. Yeni bir HKS yazma ucu açılmaz.
+
+| Dosya | Değişiklik |
+|---|---|
+| `halkayit/config.php` | `HKS_DOGUM_KONUM='alfabetik'`, `HKS_DOGUM_DENEME=false` (otomatik konum merdiveni kapanır). |
+| `halkayit/hks_soap.php` | `hks_dogum_tarihi_xml()`: beyaz listeli yeni biçimler (`iso_oglen`, `gtb_oglen`, `gtb_tarih`, `iso_tarih`). Konum her zaman alfabetik; öğrenilmiş `son` yok sayılır. `hks_bildirim_xml()`: Satın Alım + kayıtsız kişide işyeri dalına gidecek il/ilçe/belde (WSDL sırasıyla). Öğrenme yalnız **gerçek künyeden**, deneyde hiç. Teldeki tarih metni (`dogumTel`) ve maskeli ham istek başarıda da döner. |
+| `halkayit/api.php` | `taslak_gonder`: tek kullanımlık `hks_kv.dogum_deney` (TC son 4 hane + süre kontrolü) ve gönderim öncesi kayıt sorgusu. Yeni yönetici eylemi `dogum_deney`: CSRF, audit (yalnız TC son 4), HKS'e bir şey göndermez. |
+| `halkayit/taslak_lib.php` | `hks_bildirim_dogrula()`: Satın Alım + kayıtsızda gidecek il/ilçe/belde kabul edilir. D1 sonucuna göre zorunlu yapılır. |
+| `halkayit/app.html` | Satın Alım + kayıtsızda gidecek il/ilçe/belde, seçilen işyerinin adresiyle önceden dolar (hal içi işyerinde elle seçilir). Taslak kaydı/düzenleme bu alanları taşır. Teknik Detay teldeki tarih metnini gösterir. Yeşil "öğrenildi" kutusu yalnız künyede çıkar. Mernis ipucu metni düzeltilir. |
+| `halkayit/tani.php` | Deney ayarlama paneli + deneme kaydı tablosu (maskeli). |
+| `config/helpers.php` + `sw.js` | `APP_SURUM` / önbellek sürümü artırılır. |
+| Test | Biçim çıktıları, konumun hep alfabetik olması, adres alanlarının WSDL sırası, deneyin tek kullanımlık olması, başarısız istekten öğrenme yazılmaması (ağsız). |
+
+**Efor:** yaklaşık 1,5–2 gün kod + test. Deney süresi yeni müstahsil gelişine bağlı.
+
+### 10.6 Kalan açık noktalar
+
+- İşletme türü `6`'nın adı repoda yok; canlı katalogdan (`hks_kv.listeler_cache`) teyit edilmeli. "Yurt Dışı" ise `GidecekUlkeId` de gerekir (kılavuz 1190). Beklenen: bir depo/işyeri türü.
+- Diğer yazılımın `DogumTarihi`'ne yazdığı metin öğrenilirse D2'den önce o denenir.
+- GTB'ye başvuru metni (§7, 0.4) G15–G18 ile güncellenip D-deneylerinin sonucuyla birlikte gönderilmeli.
