@@ -110,9 +110,22 @@ foreach (['631799511', '111222333', '444555666', '777888999', '123123123', '4564
 }
 pdks_gunluk_faz8a_cikis_kaydet('631799511', 'usb_decimal', $sid, 1, db());
 
-$_GET = ['id' => (string)$sid]; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
-$_SERVER['REQUEST_URI'] = '/gunluk_isci_puantaj_detay.php';
-$src = file_get_contents($ROOT . '/gunluk_isci_puantaj_detay.php');
+// v291: ekle penceresinde seçilebilecek, o gün KULLANILMAMIŞ iki kart.
+foreach (['321321321', '654654654'] as $i => $uid) {
+    pdks_gunluk_kart_olustur(['card_no' => 'B00' . ($i + 1), 'ham_uid' => $uid, 'kaynak' => 'usb_decimal'], 1, db());
+}
+// v291: bir dönemi "elle eklendi" (source=manual) say — rozet testi için.
+db()->exec("UPDATE daily_worker_work_periods SET source = 'manual' WHERE id = 3");
+
+// Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
+// (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
+$sayfa = getenv('PUANTAJ_SAYFA') === 'liste' ? 'gunluk_isci_puantaj.php' : 'gunluk_isci_puantaj_detay.php';
+$_GET = $sayfa === 'gunluk_isci_puantaj.php'
+    ? ['tarih' => getenv('PUANTAJ_TARIH') === 'bugun' ? date('Y-m-d') : date('Y-m-d', strtotime('-1 day'))]
+    : ['id' => (string)$sid];
+$_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['REQUEST_URI'] = '/' . $sayfa;
+$src = file_get_contents($ROOT . '/' . $sayfa);
 $src = preg_replace('/^\s*require_once __DIR__ \. \'\/config\/(db|pdks_gunluk|pdks_faz8h|pdks_faz8j|pdks_hakedis|auth)\.php\';.*$/m', '', $src);
 $src = preg_replace('/^<\?php\s*$/m', '', $src, 1);
 $src = preg_replace('/^declare\(strict_types=1\);\s*$/m', '', $src);

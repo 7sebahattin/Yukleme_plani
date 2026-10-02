@@ -106,6 +106,36 @@ function gorunenler(page) {
             ok(`${tur}: kapatınca hiçbir dialog görünmüyor`, sonra.length === 0, `görünenler: ${sonra.join(', ')}`);
         }
 
+        // v291 — "➕ Çalışma Ekle" düğmesi + penceresi (geçmişe dönük ekleme)
+        const ekleDugme = await page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /Çalışma Ekle/.test(x.textContent)); if (!b) return null; const r = b.getBoundingClientRect(); return { gorunur: r.width > 0 && r.height > 0, ekranda: r.left >= 0 && r.right <= innerWidth + 0.5 }; });
+        ok('"➕ Çalışma Ekle" düğmesi görünür ve ekran içinde', !!ekleDugme && ekleDugme.gorunur && ekleDugme.ekranda, JSON.stringify(ekleDugme));
+        await page.evaluate(() => [...document.querySelectorAll('button')].find(x => /Çalışma Ekle/.test(x.textContent)).click());
+        await page.waitForTimeout(400);
+        const ekleAcik = await gorunenler(page);
+        ok('ekle: düğmeye basınca yalnız TEK dialog görünüyor (ekle)', ekleAcik.length === 1 && ekleAcik[0] === 'ekle', `görünenler: ${ekleAcik.join(', ')}`);
+        const em = await page.evaluate(() => {
+            const d = document.getElementById('ekle'); const r = d.getBoundingClientRect();
+            const f = d.querySelector('form'); const ad = n => !!f.querySelector('[name="' + n + '"]');
+            // Uzun form: gövde kaydırılır (roles_modal_smoke ile aynı kural) — en alta kaydırıp ölç.
+            const tasiyor = f.scrollHeight > f.clientHeight + 1;
+            f.scrollTop = f.scrollHeight;
+            const kaydi = !tasiyor || f.scrollTop > 0;
+            const btn = d.querySelector('form button:not([type="button"])'); const b = btn.getBoundingClientRect();
+            const ust = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            const gizli = n => { const e = f.querySelector('[name="' + n + '"]'); return e ? e.value : null; };
+            return { modal: d.matches(':modal'), sol: r.left, sag: r.right, ust: r.top, alt: r.bottom, vw: innerWidth, vh: innerHeight, btnAlt: b.bottom,
+                     tiklanir: btn === ust || btn.contains(ust), tasma: document.documentElement.scrollWidth > innerWidth, kaydi,
+                     alanlar: ['csrf', 'action', 'work_date', 'entry_date', 'foreman_id', 'worker_card_id', 'worker_type_id', 'entry_clock', 'exit_date', 'exit_clock', 'reason', 'note'].every(ad),
+                     eylem: gizli('action'), kartSecenek: f.querySelectorAll('[name="worker_card_id"] option').length, tipSecenek: f.querySelectorAll('[name="worker_type_id"] option').length };
+        });
+        ok('ekle: modal, ekran içinde, form kaydırılabiliyor, en altta gönder düğmesi görünür ve tıklanabilir, taşma yok', em.modal && em.kaydi && em.sol >= 0 && em.sag <= em.vw + 0.5 && em.ust >= 0 && em.alt <= em.vh + 0.5 && em.btnAlt <= em.vh && em.tiklanir && !em.tasma, JSON.stringify(em));
+        ok('ekle: tüm form alanları var, eylem=puantaj_ekle, kart ve tip seçenekleri dolu', em.alanlar && em.eylem === 'puantaj_ekle' && em.kartSecenek >= 2 && em.tipSecenek >= 2, JSON.stringify(em));
+        await page.evaluate(() => document.getElementById('ekle').close());
+        await page.waitForTimeout(100);
+        ok('ekle: kapatınca hiçbir dialog görünmüyor', (await gorunenler(page)).length === 0);
+        const rozet = await page.evaluate(() => [...document.querySelectorAll('.pdks-badge-elle')].filter(e => e.getBoundingClientRect().width > 0).map(e => e.textContent.trim()));
+        ok('"✍ Elle eklendi" rozeti elle eklenen satırda görünüyor (yalnız o satır)', rozet.length === 1 && /Elle eklendi/.test(rozet[0]), JSON.stringify(rozet));
+
         // İptal dialog'unda ✕ kapatma düğmesi (Düzenle ile tutarlı)
         const xVar = await page.evaluate(i => !!document.querySelector('#void' + i + ' .pm-close'), hedef);
         ok('İptal dialog\'unda ✕ kapatma düğmesi var', xVar);

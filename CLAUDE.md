@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v290` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v291` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -464,6 +464,24 @@ ekrandan çıkış. Giriş DEĞİŞMEDİ (çavuş + işçi tipi zorunlu).
 - Test: `php scripts/pdks_ortak_cikis_smoke.php` ·
   `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html` →
   `node scripts/pdks_ortak_cikis_smoke.js`.
+
+### Geçmişe Dönük Çalışma Ekle (v291)
+
+Unutulan girişi/çıkışı sonradan, raporda görünür biçimde eklemek. Mesai Detayı'nda
+"➕ Çalışma Ekle", Günlük Puantaj listesinde "➕ Geçmişe Dönük Çalışma Ekle"
+(bugünde dünün listesine `?ekle=1` bağlantısı).
+
+- **YALNIZ admin** (`pdks_faz8j_yetki()`), aktif depo kapısı, zorunlu sebep, audit `puantaj_ekle`.
+- **İkinci kart-okutma yolu DEĞİL:** `pdks_faz8j_gecmis_ekle()` (config/pdks_faz8j.php)
+  `kaydet`/`cikis_kaydet` fonksiyonlarını ÇAĞIRMAZ; GİRİŞ+ÇIKIŞ olaylarını `source='manual'`,
+  dönemi `status='closed'`, `source='manual'` yazar (raporda "✍ Elle eklendi"). Tek transaction.
+- Çavuşun o gün mesaisi yoksa YALNIZ geçmiş gün için doğrudan KAPALI mesai oluşturur;
+  bugün için oluşturmaz (kartı okutarak aç). Kesinleşmiş hakediş varsa reddeder (önce yeniden aç);
+  taslak hakedişe `needs_recalculation=1`. Çıkarma = mevcut "Kaydı İptal Et".
+- Kurallar: giriş günü = mesai günü, çıkış > giriş, ≤ 24 sa, gelecek yok, çakışan aktif dönem yok.
+- Form partial'ı `_puantaj_ekle.php` (fonksiyon tanımlamaz). Migration YOK.
+- Test: `php scripts/pdks_gecmis_ekle_smoke.php` · `node scripts/pdks_gecmis_ekle_smoke.js` ·
+  `php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_dialog.html` → `node scripts/pdks_puantaj_dialog_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 
