@@ -1083,6 +1083,9 @@ function pdks_gunluk_kart_duzenle(int $cardId, array $veri, ?int $updatedBy = nu
     $st->execute([$cardId]);
     $eski = $st->fetch();
     if (!$eski) return ['ok' => false, 'hata' => 'Kart bulunamadı.'];
+    if ((string)($eski['enrolled_source'] ?? '') === 'kartsiz') {
+        return ['ok' => false, 'hata' => 'Kartsız mesai kaydının sanal kartı düzenlenemez.'];
+    }
 
     $cardNo = trim((string)($veri['card_no'] ?? ''));
     if ($cardNo === '') return ['ok' => false, 'hata' => 'Kart numarası zorunludur.'];
@@ -1116,9 +1119,15 @@ function pdks_gunluk_kart_durum_degistir(int $cardId, string $durum, ?int $updat
     if (!array_key_exists($durum, pdks_gunluk_kart_durumlari())) {
         return ['ok' => false, 'hata' => 'Geçersiz durum.'];
     }
-    $st = $pdo->prepare("SELECT id FROM worker_cards WHERE id = ?");
+    $st = $pdo->prepare("SELECT * FROM worker_cards WHERE id = ?");
     $st->execute([$cardId]);
-    if (!$st->fetchColumn()) return ['ok' => false, 'hata' => 'Kart bulunamadı.'];
+    $kart = $st->fetch();
+    if (!$kart) return ['ok' => false, 'hata' => 'Kart bulunamadı.'];
+    // Kartsız mesainin SANAL kartı (config/pdks_faz8j.php) fiziksel kart değildir;
+    // durumu ('disabled') sabittir — açılırsa havuza/kiosk'a karışırdı.
+    if ((string)($kart['enrolled_source'] ?? '') === 'kartsiz') {
+        return ['ok' => false, 'hata' => 'Kartsız mesai kaydının sanal kartının durumu değiştirilemez.'];
+    }
 
     $upd = $pdo->prepare("UPDATE worker_cards SET status = ?, updated_by = ? WHERE id = ?");
     $upd->execute([$durum, $updatedBy, $cardId]);
@@ -2071,37 +2080,54 @@ function pdks_gunluk_kullanici_adi(?int $userId, ?PDO $pdo = null): string
  * listesinde görünür, burada TEKRAR edilmez. Manuel çıkış (Faz 8E) HENÜZ
  * audit_log'a yazmıyor — o yüzden burada da GÖRÜNMEZ (uydurma yok).
  */
-function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null, int $limit = 20): array
+function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null, int $limit = 20, ?int $sessionId = null): array
 {
     $pdo = $pdo ?? db();
     $ids = array_values(array_unique(array_filter(array_map('intval', $periodIds), fn($v) => $v > 0)));
-    if (empty($ids) || !pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
+    $sessionId = ($sessionId !== null && $sessionId > 0) ? $sessionId : null;
+    if ((empty($ids) && $sessionId === null) || !pdks_gunluk_tablo_var($pdo, 'audit_log')) return [];
     $limit = max(1, min(50, $limit));
-    $ph = implode(',', array_fill(0, count($ids), '?'));
+    // Dönem satırları (record_id = period id) + verilirse mesai düzeyindeki
+    // toplu işlem özetleri (module=daily_work_sessions, record_id = session id).
+    $kosul = []; $par = [];
+    if ($ids) {
+        $kosul[] = "(al.module = 'daily_worker_work_periods' AND al.record_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")
+                AND al.action IN ('puantaj_iptal', 'puantaj_duzeltme', 'puantaj_ekle', 'update'))";
+        $par = $ids;
+    }
+    if ($sessionId !== null) {
+        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al'))";
+        $par[] = $sessionId;
+    }
     try {
         $st = $pdo->prepare(
             "SELECT al.id, al.action, al.record_id, al.new_values, al.created_at, al.user_id,
                     COALESCE(u.display_name, u.username) AS actor_name
                FROM audit_log al LEFT JOIN users u ON u.id = al.user_id
-              WHERE al.module = 'daily_worker_work_periods' AND al.record_id IN ($ph)
-                AND al.action IN ('puantaj_iptal', 'puantaj_duzeltme', 'puantaj_ekle', 'update')
-              ORDER BY al.created_at DESC LIMIT $limit"
+              WHERE " . implode(' OR ', $kosul) . "
+              ORDER BY al.created_at DESC, al.id DESC LIMIT $limit"
         );
-        $st->execute($ids);
+        $st->execute($par);
     } catch (PDOException $e) {
         return [];
     }
     $satirlar = $st->fetchAll();
     $etiketler = [
-        'puantaj_iptal'    => '🗑️ Puantaj kaydı iptal edildi',
-        'puantaj_duzeltme' => '✏️ Puantaj kaydı düzeltildi',
-        'puantaj_ekle'     => '➕ Geçmişe dönük çalışma eklendi',
-        'update'           => '🧮 Mesai değerlendirmesi kaydedildi',
+        'puantaj_iptal'         => '🗑️ Puantaj kaydı iptal edildi',
+        'puantaj_duzeltme'      => '✏️ Puantaj kaydı düzeltildi',
+        'puantaj_ekle'          => '➕ Geçmişe dönük çalışma eklendi',
+        'puantaj_toplu_ekle'    => '📋 Toplu çalışma eklendi',
+        'puantaj_toplu_geri_al' => '↩️ Toplu işlem geri alındı',
+        'update'                => '🧮 Mesai değerlendirmesi kaydedildi',
     ];
     foreach ($satirlar as &$r) {
         $yeni = json_decode((string)$r['new_values'], true) ?: [];
         $r['islem_etiket'] = $etiketler[$r['action']] ?? $r['action'];
-        $parcalar = array_filter([trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
+        if ($r['action'] === 'puantaj_ekle' && !empty($yeni['kartsiz'])) $r['islem_etiket'] .= ' (kartsız)';
+        $r['toplu_id'] = isset($yeni['toplu_id']) ? (string)$yeni['toplu_id'] : null;
+        $sayi = $r['action'] === 'puantaj_toplu_ekle' ? (int)($yeni['eklenen'] ?? 0)
+              : ($r['action'] === 'puantaj_toplu_geri_al' ? (int)($yeni['iptal_edilen'] ?? 0) : 0);
+        $parcalar = array_filter([$sayi > 0 ? $sayi . ' kayıt' : '', trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
         $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
         $r['aktor'] = $r['actor_name'] ?: pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo);
     }
