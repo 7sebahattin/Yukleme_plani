@@ -26,6 +26,8 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 // the UI") DEĞİŞMEDİ, yalnız bağlantıyı göstermeden ÖNCE 403'e gideceğini
 // bilmek için pdks_hakedis_can() OKUNUR.
 require_once __DIR__ . '/config/pdks_hakedis.php';
+// v291: yalnız yönetici "Geçmişe Dönük Çalışma Ekle" (yazma işi config/pdks_faz8j.php'de)
+require_once __DIR__ . '/config/pdks_faz8j.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
@@ -36,6 +38,21 @@ if (isset($_GET['csv']) || isset($_GET['xlsx'])) { require_perm('reports.export'
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
+
+// ── v291: Geçmişe Dönük Çalışma Ekle (POST — yalnız yönetici) ──────────
+// Bu sayfa raporlama ekranıdır; tek yazma işlemi budur ve işlev kendi
+// kapılarını taşır (yönetici + aktif depo + kesinleşmiş hakediş + çakışma).
+$depoPost = function_exists('active_depot') ? (active_depot() ?? '') : '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'puantaj_ekle') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sonuc = function_exists('pdks_faz8j_gecmis_ekle')
+        ? pdks_faz8j_gecmis_ekle(array_merge($_POST, ['depo' => $depoPost]), (int)$auth_user['id'], $pdo)
+        : ['ok' => false, 'hata' => 'Puantaj düzeltme şeması henüz hazır değil.'];
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? 'Çalışma kaydı eklendi.' : $sonuc['hata']);
+    if ($sonuc['ok']) { header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$sonuc['session_id']); exit; }
+    $geri = preg_match('/^\d{4}-\d{2}-\d{2}$/D', (string)($_POST['work_date'] ?? '')) ? (string)$_POST['work_date'] : date('Y-m-d');
+    header('Location: gunluk_isci_puantaj.php?tarih=' . $geri . '&ekle=1'); exit;
+}
 
 // ── Filtreler ─────────────────────────────────────────────
 $tarih = trim($_GET['tarih'] ?? '');
@@ -58,6 +75,18 @@ try {
 $gunOzeti  = pdks_gunluk_gun_ozeti($tarih, $depo, $pdo);
 $gunListesi = pdks_gunluk_gun_listesi($tarih, $depo, $cavusId, $durum_f !== '' ? $durum_f : null, $pdo);
 $eksikler   = pdks_gunluk_eksik_cikislar($tarih, $depo, $cavusId, $pdo);
+
+// ── v291: ekle penceresi verisi (yalnız yönetici; geçmiş gün, aktif depo, şema hazır) ──
+$ekleYetkili = function_exists('is_admin') && is_admin() && $depo !== ''
+    && function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo) && function_exists('pdks_faz8j_gecmis_ekle');
+$ekleGecmisGun = $tarih < date('Y-m-d');
+$ekleDunTarih  = date('Y-m-d', strtotime('-1 day'));
+$ekleKartlar = $ekleTipler = $ekleCavuslar = [];
+if ($ekleYetkili && $ekleGecmisGun) {
+    $ekleKartlar  = pdks_faz8j_bos_kartlar($tarih, $pdo);
+    $ekleTipler   = pdks_gunluk_desteklenen_tip_listele($pdo);
+    $ekleCavuslar = $cavuslar;
+}
 
 // ── CSV export — MEVCUT filtreyi yansıtır (görev talimatı madde 12) ──
 $gp_filtre = ['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f];
@@ -127,6 +156,11 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <h1>📅 Günlük Puantaj</h1>
     <div class="page-head-actions">
         <a href="<?= h('gunluk_puantaj_liste_yazdir.php?' . http_build_query(array_filter(['tarih' => $tarih, 'cavus' => $cavusId, 'durum' => $durum_f], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
+        <?php if ($ekleYetkili && $ekleGecmisGun): ?>
+        <button type="button" class="btn btn-primary" onclick="pdksPuantajDialogAc('ekle')">➕ Geçmişe Dönük Çalışma Ekle</button>
+        <?php elseif ($ekleYetkili): ?>
+        <a href="gunluk_isci_puantaj.php?tarih=<?= h($ekleDunTarih) ?>&amp;ekle=1" class="btn btn-primary" title="Dünün kayıtlarına çalışma ekleyin; başka gün için tarih filtresini değiştirin">➕ Geçmişe Dönük Çalışma Ekle</a>
+        <?php endif; ?>
         <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
     </div>
 </div>
@@ -323,6 +357,21 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
 <?php endforeach; ?>
 </div>
 
+<?php endif; ?>
+
+<?php if ($ekleYetkili && $ekleGecmisGun):
+    $ekleWorkDate = $tarih;
+    require __DIR__ . '/_puantaj_ekle.php';
+?>
+<script>
+// Native <dialog> (bkz. gunluk_isci_puantaj_detay.php notu): açık olanı kapatıp yenisini aç.
+function pdksPuantajDialogAc(id) {
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+    document.getElementById(id).showModal();
+}
+// "?ekle=1" (dünün tarihine yönlendirme ya da hatalı gönderim sonrası) → pencereyi aç.
+if (/[?&]ekle=1(&|$)/.test(location.search)) pdksPuantajDialogAc('ekle');
+</script>
 <?php endif; ?>
 
 <?php render_footer(); ?>

@@ -2084,7 +2084,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
                     COALESCE(u.display_name, u.username) AS actor_name
                FROM audit_log al LEFT JOIN users u ON u.id = al.user_id
               WHERE al.module = 'daily_worker_work_periods' AND al.record_id IN ($ph)
-                AND al.action IN ('puantaj_iptal', 'puantaj_duzeltme', 'update')
+                AND al.action IN ('puantaj_iptal', 'puantaj_duzeltme', 'puantaj_ekle', 'update')
               ORDER BY al.created_at DESC LIMIT $limit"
         );
         $st->execute($ids);
@@ -2095,6 +2095,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
     $etiketler = [
         'puantaj_iptal'    => '🗑️ Puantaj kaydı iptal edildi',
         'puantaj_duzeltme' => '✏️ Puantaj kaydı düzeltildi',
+        'puantaj_ekle'     => '➕ Geçmişe dönük çalışma eklendi',
         'update'           => '🧮 Mesai değerlendirmesi kaydedildi',
     ];
     foreach ($satirlar as &$r) {

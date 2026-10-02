@@ -1376,3 +1376,7 @@ html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-type-popup #giTipVaz
 }
 html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #64748b; }
 html[data-theme="dark"] .pdks-daily-kiosk .pdks-kiosk-ortak-ayrac { color: #cbd5e1; }
+
+/* v291 — geçmişe dönük elle eklenen çalışma (Mesai Detayı → Kart No yanında) */
+.pdks-badge-elle { background: #fff7ed; color: #b45309; border: 1px solid #fcd9a8; margin-left: 6px; white-space: nowrap; font-weight: 700; }
+html[data-theme="dark"] .pdks-badge-elle { background: #3b2a12; color: #fbbf6a; border-color: #6b4a1c; }
