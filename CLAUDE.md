@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v296` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v297` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -586,6 +586,28 @@ Detayı'nda **🎲 Otomatik Ata** ile rastgele Kadın/Erkek'e atanır.
 - Test: `node scripts/pdks_oto_filtre_smoke.js` (önce `PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun php
   scripts/pdks_puantaj_dialog_render.php > _test_puantaj_liste.html` ve `PUANTAJ_SAYFA=toplu …
   > _test_toplu_dokum.html`) · `php scripts/pdks_v296b_smoke.php` · `node scripts/pdks_v296b_smoke.js`.
+
+### Görünüm + Değişken B Birimi (v297)
+
+- **Yöntem B birimi çavuş bazında** (sahip GO verdi — TEK şema değişikliği):
+  `foreman_rate_method_log.unit_size INT NULL` (NULL = 25, `PDKS_FAZ8B_CAVUS_B_BIRIM`).
+  `cavus_fiyatlari.php` Yöntem kutusunda "Kaç kişi-gün = 1 hakediş" (1–1000); kaydetmek yeni
+  zaman damgalı log satırı yazar (geriye dönük DEĞİL). Kapanış anındaki birim
+  (`pdks_faz8b_cavus_ucret_birim_anda()`) `foreman_period_closures.unit_size`'a DONAR; eski
+  kapanışlar değişmez, devir kişi-gün olarak kalır ve yeni birime bölünür. Kolon yoksa 25 dışı
+  değer reddedilir (`birim_kolonu_yok`). Ekstre metnine birim yalnız ≠25 ise eklenir.
+  Test: `php scripts/pdks_cavus_b_birim_smoke.php`.
+- **Çavuş Ücretleri sayfası** yeni kart tasarımı (`.cf2-*`, pdks.css v297-A); form adları değişmedi.
+  Test: `CAVUS_FIYAT_SENARYO=dolu|bos php scripts/pdks_cavus_fiyat_render.php > _test_cavus_fiyat[_bos].html`
+  → `node scripts/pdks_cavus_fiyat_smoke.js`.
+- **Toplu İşlem penceresi** yeni tasarım (`.toplu-v2`); kart listesi grup başına
+  "Kartlı giriş ekle" ile açılır (kapatınca seçim temizlenir). Payload değişmedi.
+- **Kiosk tip renkleri:** GİRİŞ taramasında `#giScanSec.pdks-tip-kadin|erkek|karisik` (pembe/mavi/mor
+  çemberler, `tipRenkAyarla()` — tip KODU ile); başarı sonucu `pdks-sonuc-*` aynı renkte (bilinmeyen
+  tip yeşil, hata kırmızı). Test: `node scripts/pdks_kiosk_renk_smoke.js`.
+- **Gerçek düğme görünümü:** `.btn-ghost` artık dolgulu+çerçeveli; geri bağlantıları `.btn-geri`
+  (mavi, sayfa başlıklarında). Zeminle aynı renkte düz yazı düğme YAZMA.
+  Test: `node scripts/buton_gorunum_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 

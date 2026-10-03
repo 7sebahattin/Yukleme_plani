@@ -1730,7 +1730,8 @@ html[data-theme="dark"] .cf2-kart.card { box-shadow: 0 1px 2px rgba(0,0,0,.35), 
     .cf2-uyari-hap { width: 100%; box-sizing: border-box; }
 }
 @media print {
-    .cf2-sec, .cf2 .btn.cf2-geri, .cf2-form, .cf2-yontem-form { display: none !important; }
+    .cf2-sec, .cf2 .btn.cf2-geri, .btn-geri, .cf2-form, .cf2-yontem-form { display: none !important; }
+}
 /* v297-B: Toplu İşlem + kiosk tip renkleri */
 
 /* ── 1) Kiosk: GİRİŞ tipine göre tarama görseli (KADIN pembe · ERKEK mavi · KARIŞIK mor) ──
