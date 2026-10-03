@@ -164,6 +164,23 @@ if (getenv('PUANTAJ_FAZ8B') === '1') {
     db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'CIKIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 19:00:00', $sid]);
 }
 
+// v299: PUANTAJ_SERVIS=1 → Servis Ücreti tabloları + çavuş fiyatı (Büyük 1500 / Küçük 800) +
+// 2 servis kaydı (biri iptal) — "🚌 Servis Ücreti" penceresi ve Servisler listesi
+// (pdks_servis_dialog_smoke.js). Varsayılan (env yok) davranış DEĞİŞMEZ (tablo yok → gizli).
+if (getenv('PUANTAJ_SERVIS') === '1') {
+    require_once $ROOT . '/config/pdks_servis.php';
+    foreach (pdks_servis_tablolar() as $svSql) { [$c, $ix] = pdks_ddl_sqlite($svSql); db()->exec($c); foreach ($ix as $x) db()->exec($x); }
+    $sv = pdks_servis_ucret_ekle($cavus, '1500', '800', date('Y-m-d', strtotime('-30 days')), 'TRY', 1, db());
+    $s1 = pdks_servis_ekle($sid, 2, 1, 'Sabah servisi', bin2hex(random_bytes(16)), 1, db());
+    $s2 = pdks_servis_ekle($sid, 1, 0, '', bin2hex(random_bytes(16)), 1, db());
+    $svIptalId = (int)db()->query("SELECT id FROM daily_session_services WHERE batch_id = " . db()->quote((string)($s2['batch_id'] ?? '')))->fetchColumn();
+    $s3 = pdks_servis_iptal($svIptalId, $sid, 'Yanlış girildi', 1, db());
+    if (!($sv['ok'] ?? false) || !($s1['ok'] ?? false) || !($s3['ok'] ?? false)) {
+        fwrite(STDERR, 'servis: ' . json_encode([$sv, $s1, $s2, $s3], JSON_UNESCAPED_UNICODE) . "
+"); exit(1);
+    }
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.

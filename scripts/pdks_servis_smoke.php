@@ -352,7 +352,7 @@ okcu('K7) fiyat sayfası: form=servis_ucret dalı CSRF + rates kapısı', (bool)
 $k8bc = file_get_contents($root . '/config/pdks_faz8b_cavus_b.php');
 okcu('K8) dedektörler kod = \'\' filtresi taşır (A + B)', str_contains($k8b, "AND l.worker_type_code_snapshot = ''") && str_contains($k8bc, "l2.worker_type_code_snapshot = ''"));
 $dp = is_file($root . '/_puantaj_servis.php') ? (string)file_get_contents($root . '/_puantaj_servis.php') : '';
-okcu('K9) partial fonksiyon TANIMLAMAZ, native dialog id=servis', $dp !== '' && !preg_match('/\bfunction\s+\w+\s*\(/', $dp) && str_contains($dp, '<dialog id="servis" class="pm-dialog'));
+okcu('K9) partial fonksiyon TANIMLAMAZ, native dialog id=servis', $dp !== '' && !preg_match('/\bfunction\s+\w+\s*\(/', preg_replace('#<script\b.*?</script>#s', '', $dp)) && str_contains($dp, '<dialog id="servis" class="pm-dialog'));
 
 echo "\nSONUÇ: {$pass} geçti, {$fail} hata\n";
 exit($fail === 0 ? 0 : 1);
