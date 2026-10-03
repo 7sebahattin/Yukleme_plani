@@ -182,8 +182,18 @@ h3 { font-size: 1rem; margin: 16px 0 8px; font-weight: 600; }
 .btn-danger:hover { background: #b53535; border-color: #b53535; }
 .btn-secondary { background: var(--success); color: #fff; border-color: var(--success); }
 .btn-secondary:hover { background: #17824c; border-color: #17824c; color: #fff; }
-.btn-ghost { background: transparent; border-color: transparent; }
-.btn-ghost:hover { background: rgba(0,0,0,0.04); }
+/* v297-C: "ghost" artık düz yazı DEĞİL — açık dolgulu, çerçeveli gerçek buton
+   (sayfa zeminiyle aynı renkte buton yok). */
+.btn-ghost { background: #fff; color: var(--text); border-color: var(--border-strong); }
+.btn-ghost:hover { background: var(--primary-soft); border-color: var(--primary); }
+.btn-geri {
+    background: linear-gradient(180deg, #2878f2, var(--primary));
+    color: #fff; font-weight: 700; border-color: var(--primary-dark);
+    border-radius: 14px; padding-left: 14px;
+    box-shadow: 0 2px 6px rgba(29,108,240,.32), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.btn-geri:hover { background: linear-gradient(180deg, var(--primary), var(--primary-dark)); color: #fff; border-color: var(--primary-dark); }
+.btn-geri:disabled:hover, .btn-geri[disabled]:hover { background: linear-gradient(180deg, #2878f2, var(--primary)); }
 .btn-sm { padding: 6px 10px; font-size: .85rem; min-height: 34px; }
 .btn-lg { padding: 12px 22px; font-size: 1rem; min-height: 48px; }
 .btn-block { display: flex; width: 100%; margin: 12px 0; }
@@ -5141,7 +5151,6 @@ input:focus, select:focus, textarea:focus {
 /* — 5. Butonlar: hafif derinlik + dokunsal basış — */
 .btn { box-shadow: var(--shadow-sm); }
 .btn:active { transform: translateY(1px); }
-.btn-ghost { box-shadow: none; }
 .btn-primary {
     background: linear-gradient(180deg, #2a78f5, var(--primary));
     box-shadow: 0 1px 2px rgba(16,24,40,.12), inset 0 1px 0 rgba(255,255,255,.12);
@@ -5399,12 +5408,19 @@ html[data-theme="dark"] .rpt-table .totals-row td,
 html[data-theme="dark"] .rpt-table tfoot td { background: #1a2331; }
 
 /* — Düz (beyaz) butonlar — renkli varyantlar hariç — */
-html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-ghost):not(.btn-durum-islendi):not(.btn-durum-yuklendi) {
+html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-geri):not(.btn-durum-islendi):not(.btn-durum-yuklendi) {
     background: #1d2635; color: var(--text); border-color: var(--border-strong);
 }
-html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-ghost):not(.btn-durum-islendi):not(.btn-durum-yuklendi):hover {
+html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(.btn-secondary):not(.btn-success):not(.btn-geri):not(.btn-durum-islendi):not(.btn-durum-yuklendi):hover {
     background: #243044;
 }
+
+/* v297-C: geri düğmesi koyu temada — beyaz yazı AA için koyu mavi zemin */
+html[data-theme="dark"] .btn-geri {
+    background: linear-gradient(180deg, #2f6fe0, #2459b8); color: #fff; border-color: #6ea1ff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.18);
+}
+html[data-theme="dark"] .btn-geri:hover { background: linear-gradient(180deg, #3a7bef, #2a63c9); }
 
 /* — Filtre hapları (Bugün / Bu hafta / İşlendi ...) — */
 html[data-theme="dark"] .pill { background: #1d2635; }

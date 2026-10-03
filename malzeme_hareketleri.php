@@ -455,7 +455,7 @@ render_flash();
         </p>
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <a href="malzeme_stok.php" class="btn btn-sm btn-secondary">← Stok Özeti</a>
+        <a href="malzeme_stok.php" class="btn btn-sm btn-geri">← Stok Özeti</a>
         <?= export_menu(mh_url(['csv' => '1', 'page' => '']), mh_url(['xlsx' => '1', 'page' => '']), 'Hareket Excel', 'btn btn-sm btn-ghost') ?>
     </div>
 </div>

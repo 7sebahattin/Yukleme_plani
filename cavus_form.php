@@ -114,7 +114,7 @@ render_flash();
 <div class="page-head">
     <h1><?= $id > 0 ? h($record['name']) : 'Yeni Çavuş' ?></h1>
     <div class="page-head-actions">
-        <a href="cavuslar.php" class="btn btn-ghost">← Çavuşlar</a>
+        <a href="cavuslar.php" class="btn btn-geri">← Çavuşlar</a>
     </div>
 </div>
 

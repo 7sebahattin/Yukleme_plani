@@ -162,7 +162,7 @@ render_flash();
         <p class="muted">Yeni hesap açılırken yüklenen hazır kalem setleri</p>
     </div>
     <div class="page-head-actions">
-        <a href="maliyet.php" class="btn">← Maliyet</a>
+        <a href="maliyet.php" class="btn btn-geri">← Maliyet</a>
     </div>
 </div>
 

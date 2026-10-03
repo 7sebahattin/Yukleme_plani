@@ -405,7 +405,7 @@ render_flash();
         <h1>⚙️ Tanımlar</h1>
         <p class="muted">Soldan ekle/düzenle · sağda listeden seç</p>
     </div>
-    <a href="index.php" class="btn btn-ghost">← Ana Sayfa</a>
+    <a href="index.php" class="btn btn-geri">← Ana Sayfa</a>
 </div>
 
 <div class="def3-layout">

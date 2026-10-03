@@ -488,7 +488,7 @@ $xlsx_url = 'rapor_malzeme.php?' . http_build_query(array_merge($persist_params,
 
 <div class="page-head rpt-head">
     <div class="rpt-title">
-        <a href="reports.php" class="btn btn-ghost btn-sm rpt-no-print">← Raporlar</a>
+        <a href="reports.php" class="btn btn-sm rpt-no-print btn-geri">← Raporlar</a>
         <h1>🧮 Malzeme Kullanım Raporu</h1>
         <p class="muted">Yükleme planlarında kullanılan kasa, palet ve ek malzemelerin firma, ürün sahibi ve tarihe göre dağılımını gösterir.</p>
     </div>

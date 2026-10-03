@@ -108,7 +108,7 @@ render_flash();
 <div class="page-head">
     <h1>📒 <?= h($cavus['name']) ?> — Ekstre</h1>
     <div class="page-head-actions">
-        <a href="cavus_cari.php" class="btn">← Çavuş Cari</a>
+        <a href="cavus_cari.php" class="btn btn-geri">← Çavuş Cari</a>
         <a href="<?= h('cavus_ekstre_yazdir.php?' . http_build_query(array_filter(['foreman_id' => $foremanId, 'baslangic' => $baslangic, 'bitis' => $bitis], fn($v) => $v !== ''))) ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>
 </div>

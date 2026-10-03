@@ -77,7 +77,7 @@ echo '<link rel="stylesheet" href="' . $base . 'assets/pdks.css?v=' . @filemtime
 ?>
 <div class="page-head">
     <h1>Manuel Çıkış Yap</h1>
-    <a class="btn btn-ghost" href="<?= h($geriUrl) ?>">← Kart Dökümüne Dön</a>
+    <a class="btn btn-geri" href="<?= h($geriUrl) ?>">← Kart Dökümüne Dön</a>
 </div>
 <?php foreach ($errors as $error): ?><div class="flash flash-error"><?= h($error) ?></div><?php endforeach; ?>
 <?php if (!$open): ?>

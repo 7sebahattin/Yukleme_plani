@@ -128,7 +128,7 @@ render_flash();
 <div class="page-head">
     <h1>🧾 <?= h($hakedis['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
-        <a href="cavus_hakedis.php" class="btn">← Hakediş Listesi</a>
+        <a href="cavus_hakedis.php" class="btn btn-geri">← Hakediş Listesi</a>
         <?php if ($faz8bHazir && pdks_hakedis_can('entitlements_finalize')): ?><a href="mesai_degerlendirme.php?session_id=<?= (int)$hakedis['session_id'] ?>" class="btn">🧮 Mesai Değerlendir</a><?php endif; ?>
         <a href="cavus_hakedis_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır</a>
     </div>

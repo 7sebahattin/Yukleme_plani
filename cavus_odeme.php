@@ -137,7 +137,7 @@ if ($uyariGet !== '') echo '<div class="flash flash-error" style="border-color:v
         <?php if ($seciliCavus): ?>
         <a href="cavus_odeme_yazdir.php?cavus=<?= (int)$seciliCavus['id'] ?>" class="btn btn-ghost">🖨️ Yazdır</a>
         <?php endif; ?>
-        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
     </div>
 </div>
 

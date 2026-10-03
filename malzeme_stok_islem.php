@@ -259,7 +259,7 @@ render_flash();
         <a href="<?= h(ms_hareket_url(['mat_id' => $la_mid > 0 ? $la_mid : '', 'depo' => $la_depo])) ?>"
            class="btn btn-sm btn-ghost">📜 Hareketleri gör</a>
         <a href="<?= h($la_ret !== '' ? $la_ret : 'malzeme_stok.php') ?>"
-           class="btn btn-sm btn-ghost">← Stoklara dön</a>
+           class="btn btn-sm btn-geri">← Stoklara dön</a>
     </div>
 </div>
 <?php endif; ?>

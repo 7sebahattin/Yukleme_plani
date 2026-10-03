@@ -181,7 +181,7 @@ render_header('Bildirim Ön Kontrol');
             · CSS/JS tazeliği: <?= h(date('d.m.Y H:i', (int)@filemtime(__DIR__ . '/assets/app.js'))) ?>
         </p>
     </div>
-    <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
+    <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
 </div>
 
 <!-- 1 -->

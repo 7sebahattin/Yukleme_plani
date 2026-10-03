@@ -222,7 +222,7 @@ render_flash();
 <div class="page-head">
     <h1><?= $id > 0 ? h($record['full_name']) : 'Yeni Personel' ?></h1>
     <div class="page-head-actions">
-        <a href="personel.php" class="btn btn-ghost">← Personeller</a>
+        <a href="personel.php" class="btn btn-geri">← Personeller</a>
     </div>
 </div>
 

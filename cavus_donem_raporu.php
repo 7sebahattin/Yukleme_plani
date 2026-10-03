@@ -129,7 +129,7 @@ render_flash();
 <div class="page-head">
     <h1>🧮 Çavuş Hakedişi — Dönem Raporu</h1>
     <div class="page-head-actions">
-        <a href="raporlar.php" class="btn btn-ghost">← Yönetim Raporları</a>
+        <a href="raporlar.php" class="btn btn-geri">← Yönetim Raporları</a>
     </div>
 </div>
 

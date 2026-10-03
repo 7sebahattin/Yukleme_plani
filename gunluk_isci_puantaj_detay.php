@@ -185,7 +185,7 @@ render_flash();
 <div class="page-head">
     <h1>📅 <?= h($oturum['foreman_name_snapshot']) ?></h1>
     <div class="page-head-actions">
-        <a href="gunluk_isci_puantaj.php" class="btn">← Günlük Puantaj</a>
+        <a href="gunluk_isci_puantaj.php" class="btn btn-geri">← Günlük Puantaj</a>
         <?php if (is_admin() && $oturum['status'] === 'open' && $oturum['work_date'] === date('Y-m-d') && $oturum['depo'] === $aktifDepo): ?>
         <a href="gunluk_isci_giris_cikis.php" class="btn btn-primary">Giriş / Çıkışa Dön</a>
         <?php endif; ?>

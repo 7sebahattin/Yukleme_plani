@@ -77,7 +77,7 @@ if (!$print_mode) render_flash();
         </p>
     </div>
     <div class="page-head-actions">
-        <a href="maliyet.php" class="btn">← Liste</a>
+        <a href="maliyet.php" class="btn btn-geri">← Liste</a>
         <?php if ($show_record_link): ?>
         <a href="record_view.php?id=<?= (int)$sheet['record_id'] ?>" class="btn no-print">📦 Kaynak Yükleme Planı</a>
         <?php endif; ?>

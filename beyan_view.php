@@ -127,7 +127,7 @@ render_flash();
         </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
+        <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
         <?php if (!$is_deleted && can_beyan('write')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>

@@ -220,7 +220,7 @@ render_flash();
             Son yedekler — otomatik (17:00 sonrası) ve manuel.
         </p>
     </div>
-    <a href="index.php" class="btn btn-sm btn-secondary">← Ana Sayfa</a>
+    <a href="index.php" class="btn btn-sm btn-geri">← Ana Sayfa</a>
 </div>
 
 <?php if (!$last_ok || $last_age > DB_BACKUP_STALE_SAAT || $crash_goster): ?>

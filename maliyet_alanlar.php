@@ -120,7 +120,7 @@ render_flash();
         <p class="muted">Maliyet sayfasına yeni alan ve hesaplama ekleyin</p>
     </div>
     <div class="page-head-actions">
-        <a href="maliyet.php" class="btn">← Maliyet</a>
+        <a href="maliyet.php" class="btn btn-geri">← Maliyet</a>
     </div>
 </div>
 

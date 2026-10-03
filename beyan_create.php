@@ -165,7 +165,7 @@ render_flash();
     <div>
         <h1>🧾 Yeni Beyan</h1>
     </div>
-    <a href="beyanlar.php" class="btn btn-ghost">← Beyanlar</a>
+    <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
 </div>
 
 <?php if ($errors): ?>
