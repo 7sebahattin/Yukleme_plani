@@ -310,7 +310,7 @@ render_flash();
 <div class="page-head" id="giPageHead">
     <h1>🚪 Günlük İşçi Giriş / Çıkış</h1>
     <div class="page-head-actions">
-        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
     </div>
 </div>
 
@@ -897,6 +897,7 @@ render_flash();
         if (modDegistirBtn) modDegistirBtn.hidden = false;
         cavusDegistir2.textContent = CAVUS_DEGISTIR_ETIKET;
         cavusDegistir2.parentNode.classList.remove('pdks-scan-actions-tek');
+        tipRenkAyarla();
     }
     if (ortakBtn) ortakBtn.addEventListener('click', ortakModAc);
 
@@ -909,6 +910,7 @@ render_flash();
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         kapatKaynak = 'mod';
+        tipRenkAyarla();
         if (cavusFiltre) { cavusFiltre.value = ''; document.querySelectorAll('[data-gi-cavus-id]').forEach(function (b) { b.hidden = false; }); }
         ekranGoster(cavusSec);
         ortakMesaileriYukle();
@@ -949,7 +951,27 @@ render_flash();
     // v293: GİRİŞ modunda KADIN ⇄ ERKEK tek dokunuş geçiş. Hedef tip, tip
     // seçim ekranındaki düğmeden okunur (tip listesi TEK kaynak — sunucu).
     var tipGecisBtn = document.getElementById('giTipGecis');
+    // v297: tarama görselinin (daire, halkalar, kart parıltısı) rengi seçili GİRİŞ tipine göre.
+    // Sınıf tip KODUNDAN gelir (data-gi-tip-kod) — ad değil: 'kadin'.toLocaleUpperCase('tr-TR') = 'KADİN'.
+    // ÇIKIŞ ve ORTAK ÇIKIŞ'ta sınıf yok → mevcut nötr/yeşil görünüm.
+    var TIP_RENK_SINIF = { KADIN: 'pdks-tip-kadin', ERKEK: 'pdks-tip-erkek', KARISIK: 'pdks-tip-karisik' };
+    function tipRenkAyarla() {
+        var s = document.getElementById('giScanSec');
+        if (!s) return;
+        var yeni = (currentMode === 'GIRIS' && !ortakMod && seciliTipId && TIP_RENK_SINIF[seciliTipKod]) || '';
+        Object.keys(TIP_RENK_SINIF).forEach(function (k) { s.classList.toggle(TIP_RENK_SINIF[k], TIP_RENK_SINIF[k] === yeni); });
+    }
+    // v297: sonuç ekranı rengi — sunucu yanıtında tip yalnız AD olarak gelir (worker_type_name):
+    // Türkçe büyük harf + ASCII'ye indirip kodla eşleştirir; tanınmayan tip → yeşil (sınıf yok).
+    function tipSonucSinif(ad) {
+        var u = String(ad || '').toLocaleUpperCase('tr-TR').replace(/İ/g, 'I').replace(/Ş/g, 'S');
+        if (u === 'KADIN') return ' pdks-sonuc-kadin';
+        if (u === 'ERKEK') return ' pdks-sonuc-erkek';
+        if (u === 'KARISIK') return ' pdks-sonuc-karisik';
+        return '';
+    }
     function tipGecisGuncelle() {
+        tipRenkAyarla();
         if (!tipGecisBtn) return;
         var hedefKod = seciliTipKod === 'KADIN' ? 'ERKEK' : (seciliTipKod === 'ERKEK' ? 'KADIN' : null);
         var hedef = (currentMode === 'GIRIS' && !ortakMod && tipSec && seciliTipId && hedefKod)
@@ -1137,7 +1159,7 @@ render_flash();
             // v275: önceki (kapatılmış) mesaide çıkışsız kalan kart — giriş YAPILDI,
             // eski kayıt raporda eksik çıkış olarak kalır. Okunabilsin diye süre uzar.
             (d.uyari ? '<div class="pdks-result-uyari" role="alert">⚠️ ' + escHtml(d.uyari) + '</div>' : ''),
-            'pdks-kiosk-result-ok', d.uyari ? 8000 : SONUC_OK_MS
+            'pdks-kiosk-result-ok' + tipSonucSinif(tip), d.uyari ? 8000 : SONUC_OK_MS
         );
     }
     function hataGoster(mesaj) {

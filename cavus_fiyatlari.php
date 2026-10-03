@@ -215,7 +215,7 @@ render_flash();
         <span class="cf2-tile cf2-tile--yesil"><?= $cfIk('cuzdan') ?></span>
         <h1>Çavuş Ücretleri</h1>
     </div>
-    <a href="personel_takip.php" class="btn cf2-geri">← Personel Takibi</a>
+    <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
 </div>
 
 <?php if ($basari !== ''): ?><div class="flash flash-success"><?= h($basari) ?></div><?php endif; ?>
