@@ -2106,4 +2106,44 @@ html[data-theme="dark"] .sv-uyari { background: #3a2a14; color: #ffcf8a; }
     .sv-sayac { display: flex; align-items: center; gap: 10px; }
     .sv-sayac-ust { flex: 1 1 auto; margin: 0; }
     .sv-kontrol { flex: 0 0 auto; width: 156px; }
+/* =====================================================================
+   v299 — Sıralama + Kapanış Notu
+   Başlık tıklama sıralaması (config/pdks_liste_ui.php) + mobil Sırala seçici
+   + kapanış notu düzenleme düğmesi/penceresi.
+   ===================================================================== */
+.pdks-sirala-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 0; padding: 2px 0; border: 0; background: none; border-radius: 4px;
+    font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+    text-align: left; cursor: pointer; white-space: nowrap;
+}
+.pdks-sirala-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+.pdks-sirala-btn:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+/* Ok: currentColor ile çizilen üçgenler — pasifken soluk çift ok, aktifken tek dolu ok. */
+.pdks-sirala-ok {
+    display: inline-block; position: relative; width: 8px; height: 12px; flex: none; opacity: .35;
+}
+.pdks-sirala-ok::before, .pdks-sirala-ok::after {
+    content: ""; position: absolute; left: 0; border-left: 4px solid transparent; border-right: 4px solid transparent;
+}
+.pdks-sirala-ok::before { top: 0; border-bottom: 5px solid currentColor; }
+.pdks-sirala-ok::after { bottom: 0; border-top: 5px solid currentColor; }
+th[aria-sort] .pdks-sirala-ok { opacity: 1; }
+th[aria-sort="ascending"] .pdks-sirala-ok::after,
+th[aria-sort="descending"] .pdks-sirala-ok::before { display: none; }
+th[aria-sort="ascending"] .pdks-sirala-ok,
+th[aria-sort="descending"] .pdks-sirala-ok { height: 7px; align-self: center; }
+th[aria-sort="ascending"] .pdks-sirala-ok::before { top: 1px; }
+th[aria-sort="descending"] .pdks-sirala-ok::after { bottom: 1px; }
+.pdks-sirala-durum { font-size: .8rem; color: var(--muted, #6b7280); }
+.pdks-sirala-durum:not(:empty) { margin: 0 0 6px; }
+.pdks-sirala-sec-satir { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+.pdks-sirala-sec-satir label { font-size: .85rem; color: var(--muted, #6b7280); }
+.pdks-sirala-sec { flex: 1 1 auto; min-width: 0; max-width: 100%; font-size: 16px; }
+@media (min-width: 1024px) { .pdks-sirala-sec-satir { display: none; } }
+.pdks-not-satir { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pdks-not-metin { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; }
+@media print {
+    .pdks-sirala-ok, .pdks-sirala-durum, .pdks-sirala-sec-satir, .pdks-not-duzenle { display: none !important; }
+    .pdks-sirala-btn { padding: 0; text-decoration: none; }
 }

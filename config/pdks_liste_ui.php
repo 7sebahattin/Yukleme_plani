@@ -32,6 +32,18 @@ declare(strict_types=1);
 //       gerçek bir <a href> taşır — onu KALDIRMA.
 //     Görünüm assets/pdks.css "Tıklanabilir satır" bloğu.
 //
+//  3) BAŞLIKLA SIRALAMA (v299) — <table data-pdks-sirala [data-sirala-varsayilan="etiket"]>
+//     · <th data-sirala="metin|sayi|zaman"> içinde GERÇEK <button type="button">
+//       (klavye: Enter/Boşluk). Hücre ham değeri `data-sirala-deger` taşır
+//       (zaman/sayı = epoch/saniye, metin = küçük harf); boş değer HER İKİ yönde SONA.
+//     · Metin sıralaması localeCompare('tr', numeric + base): K002 < K010.
+//     · Kararlı. Üç durum: artan → azalan → varsayılan (sunucu sırası).
+//     · Yalnız aktif <th> `aria-sort` taşır; durum metni `aria-live` satırında.
+//     · Mobil kart karşılığı: <select data-pdks-sirala-sec data-hedef="kapsayici-id">
+//       (option value "" = varsayılan, "anahtar:asc|desc"); kapsayıcı çocukları
+//       `data-sirala-oge` + `data-sd-<anahtar>` değerlerini taşır. AYNI karşılaştırıcı.
+//     Tercih SAKLANMAZ. Görünüm assets/pdks.css "v299 — Sıralama" bloğu.
+//
 // Kullanım (sayfa sonunda, render_footer()'dan önce):  pdks_liste_ui_js();
 // İki kez çağrılırsa ikinci çağrı hiçbir şey basmaz.
 // =========================================================
@@ -155,6 +167,110 @@ function pdks_liste_ui_js_kaynak(): string
         document.querySelectorAll('form[data-oto-filtre]').forEach(formuBagla);
     }
 
+    // ── 3) Başlıkla sıralama (v299) ───────────────────────
+    var KARSILASTIR = (typeof Intl !== 'undefined' && Intl.Collator)
+        ? new Intl.Collator('tr', { numeric: true, sensitivity: 'base' }).compare
+        : function (a, b) { return a.localeCompare(b, 'tr', { numeric: true, sensitivity: 'base' }); };
+
+    function sayiCoz(v) {
+        var n = parseFloat(String(v).replace(',', '.'));
+        return isNaN(n) ? null : n;
+    }
+    function bosDeger(tip, v) {
+        if (v === null || v === undefined) return true;
+        v = String(v).trim();
+        if (v === '' || v === '—') return true;
+        return tip !== 'metin' && sayiCoz(v) === null;
+    }
+    // ogeler: [{ilk, deger}] → yeni dizi. yon: 1 artan, -1 azalan. Boşlar her iki yönde sonda;
+    // eşitlikte ilk sıra korunur (kararlı).
+    function ogeSirala(ogeler, tip, yon) {
+        return ogeler.slice().sort(function (a, b) {
+            var ba = bosDeger(tip, a.deger), bb = bosDeger(tip, b.deger);
+            if (ba || bb) return ba && bb ? a.ilk - b.ilk : (ba ? 1 : -1);
+            var c = tip === 'metin'
+                ? KARSILASTIR(String(a.deger), String(b.deger))
+                : sayiCoz(a.deger) - sayiCoz(b.deger);
+            return c !== 0 ? c * yon : a.ilk - b.ilk;
+        });
+    }
+    function yerlestir(kap, siraliOgeler) {
+        var par = document.createDocumentFragment();
+        siraliOgeler.forEach(function (o) { par.appendChild(o.el); });
+        kap.appendChild(par);
+    }
+
+    function tabloSiralaBagla(tablo) {
+        if (tablo.__siralaBagli || !tablo.tBodies[0]) return;
+        tablo.__siralaBagli = true;
+        var govde = tablo.tBodies[0];
+        var satirlar = Array.prototype.map.call(govde.rows, function (tr, i) { return { el: tr, ilk: i }; });
+        var basliklar = Array.prototype.slice.call(tablo.querySelectorAll('thead th[data-sirala]'));
+        var varsayilan = tablo.getAttribute('data-sirala-varsayilan') || 'varsayılan sıra';
+        var durumEl = document.createElement('div');
+        durumEl.className = 'pdks-sirala-durum';
+        durumEl.setAttribute('role', 'status');
+        durumEl.setAttribute('aria-live', 'polite');
+        var kap = tablo.closest('.table-wrap') || tablo;
+        kap.parentNode.insertBefore(durumEl, kap);
+        durumEl.textContent = 'Sıralama: ' + varsayilan;
+        var durum = { th: null, yon: 0 };
+
+        function baslikMetni(th) {
+            var b = th.querySelector('button');
+            return ((b || th).textContent || '').replace(/\s+/g, ' ').trim();
+        }
+        function uygula() {
+            basliklar.forEach(function (th) { th.removeAttribute('aria-sort'); });
+            if (!durum.th) {
+                yerlestir(govde, satirlar.slice().sort(function (a, b) { return a.ilk - b.ilk; }));
+                durumEl.textContent = 'Sıralama: ' + varsayilan;
+                return;
+            }
+            var idx = durum.th.cellIndex, tip = durum.th.getAttribute('data-sirala');
+            var ogeler = satirlar.map(function (s) {
+                var td = s.el.cells[idx], d = td ? td.getAttribute('data-sirala-deger') : null;
+                if (d === null && td) d = td.textContent;
+                return { el: s.el, ilk: s.ilk, deger: d };
+            });
+            yerlestir(govde, ogeSirala(ogeler, tip, durum.yon));
+            durum.th.setAttribute('aria-sort', durum.yon > 0 ? 'ascending' : 'descending');
+            durumEl.textContent = 'Sıralama: ' + baslikMetni(durum.th) + (durum.yon > 0 ? ' (artan)' : ' (azalan)');
+        }
+        basliklar.forEach(function (th) {
+            var btn = th.querySelector('button');
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                if (durum.th !== th) { durum.th = th; durum.yon = 1; }
+                else if (durum.yon === 1) durum.yon = -1;
+                else { durum.th = null; durum.yon = 0; }
+                uygula();
+            });
+        });
+    }
+
+    function kartSiralaBagla(sec) {
+        if (sec.__siralaBagli) return;
+        var kap = document.getElementById(sec.getAttribute('data-hedef') || '');
+        if (!kap) return;
+        sec.__siralaBagli = true;
+        var ogeler = Array.prototype.map.call(kap.querySelectorAll(':scope > [data-sirala-oge]'), function (el, i) { return { el: el, ilk: i }; });
+        sec.addEventListener('change', function () {
+            var v = sec.value;
+            if (!v) { yerlestir(kap, ogeler.slice().sort(function (a, b) { return a.ilk - b.ilk; })); return; }
+            var p = v.split(':'), anahtar = p[0], yon = p[1] === 'desc' ? -1 : 1;
+            var opt = sec.options[sec.selectedIndex], tip = (opt && opt.getAttribute('data-tip')) || 'metin';
+            yerlestir(kap, ogeSirala(ogeler.map(function (o) {
+                return { el: o.el, ilk: o.ilk, deger: o.el.getAttribute('data-sd-' + anahtar) };
+            }), tip, yon));
+        });
+    }
+
+    function siralamalariBagla() {
+        document.querySelectorAll('table[data-pdks-sirala]').forEach(tabloSiralaBagla);
+        document.querySelectorAll('select[data-pdks-sirala-sec]').forEach(kartSiralaBagla);
+    }
+
     // Geri tuşuyla önbellekten dönülürse "gidiyor" durumu takılı kalmasın.
     window.addEventListener('pageshow', function (e) {
         if (!e.persisted) return;
@@ -210,8 +326,9 @@ function pdks_liste_ui_js_kaynak(): string
         ac(t, e.ctrlKey || e.metaKey);
     });
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', filtreleriBagla);
-    else filtreleriBagla();
+    function hepsiniBagla() { filtreleriBagla(); siralamalariBagla(); }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hepsiniBagla);
+    else hepsiniBagla();
 })();
 JS;
 }

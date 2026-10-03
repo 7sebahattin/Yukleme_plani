@@ -51,7 +51,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yenid
     exit;
 }
 
+// v299: Kapanış notu düzenleme (yalnız yönetici; yetki/depo/kapalı-mesai kapıları işlevin İÇİNDE).
+// Mesai id'si SUNUCUDAN ($id) — istemci mesai kimliği göndermez.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kapanis_notu') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sonuc = pdks_gunluk_oturum_not_guncelle((int)$id, (string)($_POST['kapanis_notu'] ?? ''), (int)$auth_user['id'], $pdo);
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? (!empty($sonuc['degisti']) ? 'Kapanış notu güncellendi.' : 'Kapanış notu zaten bu şekilde.') : $sonuc['hata']);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id);
+    exit;
+}
+
 $aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+// v299: "✏ Notu Düzenle" — yalnız yönetici, kapalı mesai, mesai aktif depoda (her tarih).
+$notDuzenleGoster = is_admin() && $oturum['status'] === 'closed' && $aktifDepo !== '' && $oturum['depo'] === $aktifDepo;
 
 // v295: KARIŞIK → Otomatik Ata / Geri Al (yalnız yönetici; işlevler yetki + depo +
 // kesin hakediş + istek_id kapılarını KENDİLERİ uygular). Mesai id'si SUNUCUDAN.
@@ -153,6 +165,12 @@ if ($yenidenAcGoster) {
 $ozet   = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum  = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);
 $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
+// v299: Kart Hareketleri varsayılan sırası = EN YENİ İŞLEM ÜSTTE (JS kapalıyken de). Son işlem
+// zamanı: çıkış varsa çıkış, yoksa giriş; beraberlikte dönem id'si büyük olan üstte. Sıralama
+// YALNIZ bu sayfada — paylaşılan pdks_gunluk_faz8a_oturum_donemleri() SQL'i (ASC) Çavuş Gün
+// Sonu Fişi ile ortaktır ve kronolojik KALIR.
+$sonIslemZamani = static fn(array $k): int => (int)(strtotime((string)(!empty($k['cikis_saat']) ? $k['cikis_saat'] : ($k['giris_saat'] ?? ''))) ?: 0);
+usort($kartlar, static fn(array $a, array $b): int => [$sonIslemZamani($b), (int)($b['period_id'] ?? 0)] <=> [$sonIslemZamani($a), (int)($a['period_id'] ?? 0)]);
 $faz8jHazir = function_exists('pdks_faz8j_sema_hazir') && pdks_faz8j_sema_hazir($pdo);
 $manuelCikisYetkisi = function_exists('pdks_hakedis_can') && pdks_hakedis_can('entitlements_finalize');
 $manuelCikisDepoUygun = $oturum['depo'] === $aktifDepo;
@@ -211,6 +229,25 @@ $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum
     $karisik = $karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId;
     $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
+};
+// v299: başlık sıralaması için hücre/kart HAM değerleri (zaman = epoch, süre = saniye, metin = küçük harf;
+// boş = sona). Görünen metni DEĞİŞTİRMEZ — yalnız data-sirala-deger / data-sd-* öznitelikleri.
+$sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $sonIslemZamani): array {
+    $g = strtotime((string)($k['giris_saat'] ?? ''));
+    $c = !empty($k['cikis_saat']) ? strtotime((string)$k['cikis_saat']) : false;
+    $tanim = $mesaiTanimGoster ? $mesaiTanimMetni($k) : '';
+    return [
+        'kart'   => mb_strtolower((string)($k['card_no'] ?? ''), 'UTF-8'),
+        'tip'    => mb_strtolower((string)($k['tip'] ?? ''), 'UTF-8'),
+        'mesai'  => mb_strtolower((string)($k['mesai_sinifi_etiket'] ?? ''), 'UTF-8'),
+        'giris'  => $g !== false ? (string)$g : '',
+        'cikis'  => $c !== false ? (string)$c : '',
+        'sure'   => ($g !== false && $c !== false && $c >= $g) ? (string)($c - $g) : '',
+        // Durum etiketi emoji ile başlar (✅/⚠️) — emoji sıralamayı bozmasın.
+        'durum'  => mb_strtolower((string)preg_replace('/^[^\p{L}\p{N}]+/u', '', (string)($k['durum']['etiket'] ?? '')), 'UTF-8'),
+        'tanim'  => ($tanim === '—') ? '' : mb_strtolower($tanim, 'UTF-8'),
+        'son'    => (string)$sonIslemZamani($k),
+    ];
 };
 // v294: Toplu İşlem JSON uçları (çıktıdan ÖNCE). Çavuş/gün/depo mesaiden gelir.
 $topluAjaxKapi = $ekleGoster && $oturum['work_date'] <= date('Y-m-d');
@@ -279,7 +316,7 @@ render_flash();
 <tr><th>Kapanış</th><td><?= $oturum['closed_at'] ? h(date('d.m.Y H:i', strtotime($oturum['closed_at']))) . ' — ' . h(pdks_gunluk_kullanici_adi($oturum['closed_by_user_id'] !== null ? (int)$oturum['closed_by_user_id'] : null, $pdo)) : '—' ?></td></tr>
 <tr><th>İlk Giriş</th><td><?= $ozet['ilk_giris'] ? h(date('H:i', strtotime($ozet['ilk_giris']))) : '—' ?></td></tr>
 <tr><th>Son Çıkış</th><td><?= $ozet['son_cikis'] ? h(date('H:i', strtotime($ozet['son_cikis']))) : '—' ?></td></tr>
-<tr><th>Kapanış Notu</th><td><?= h($oturum['notes'] ?: '—') ?></td></tr>
+<tr><th>Kapanış Notu</th><td><div class="pdks-not-satir"><span class="pdks-not-metin"><?= h($oturum['notes'] ?: '—') ?></span><?php if ($notDuzenleGoster): ?><button type="button" class="btn btn-sm pdks-not-duzenle" onclick="pdksPuantajDialogAc('kapanisNotu')">✏ Notu Düzenle</button><?php endif; ?></div></td></tr>
 </tbody>
 </table>
 </div>
@@ -291,11 +328,29 @@ render_flash();
     <?php if ($oturum['closed_at']): ?>
     <div class="pdks-row-sub">Kapanış: <?= h(date('d.m.Y H:i', strtotime($oturum['closed_at']))) ?> — <?= h(pdks_gunluk_kullanici_adi($oturum['closed_by_user_id'] !== null ? (int)$oturum['closed_by_user_id'] : null, $pdo)) ?></div>
     <?php endif; ?>
-    <?php if ($oturum['notes']): ?>
-    <div class="pdks-row-sub">Not: <?= h($oturum['notes']) ?></div>
+    <?php if ($oturum['notes'] || $notDuzenleGoster): ?>
+    <div class="pdks-row-sub pdks-not-satir"><span class="pdks-not-metin">Not: <?= h($oturum['notes'] ?: '—') ?></span><?php if ($notDuzenleGoster): ?><button type="button" class="btn btn-sm pdks-not-duzenle" onclick="pdksPuantajDialogAc('kapanisNotu')">✏ Notu Düzenle</button><?php endif; ?></div>
     <?php endif; ?>
 </div>
 </div>
+<?php if ($notDuzenleGoster): /* v299: kapanış notu penceresi — native <dialog> (Mesai Detayı deseni); opener bu sayfadaki pdksPuantajDialogAc ile AYNI gövde */ ?>
+<dialog id="kapanisNotu" class="pm-dialog isk-card-modal" aria-labelledby="kapanisNotuBaslik">
+<div class="pm-header"><h2 class="pm-title" id="kapanisNotuBaslik">✏ Kapanış Notunu Düzenle</h2><button type="button" class="pm-close" aria-label="Kapat" onclick="this.closest('dialog').close()">✕</button></div>
+<form method="post" class="isk-card-modal-body">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="kapanis_notu">
+    <p class="muted" style="margin:0 0 10px"><?= h($oturum['foreman_name_snapshot']) ?> · <?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?> mesaisinin kapanış notu. Boş bırakıp kaydetmek notu siler. Bu not yalnız bilgi amaçlıdır; hiçbir hesaplamada kullanılmaz.</p>
+    <label><span class="form-label">Kapanış notu</span><textarea name="kapanis_notu" rows="5" maxlength="<?= (int)PDKS_GUNLUK_KAPANIS_NOTU_MAX ?>"><?= h((string)$oturum['notes']) ?></textarea></label>
+    <div class="isk-card-form-actions"><button type="submit" class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+</form>
+</dialog>
+<script>
+function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o blok koşullu basılır; aynı ad, aynı iş)
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+    document.getElementById(id).showModal();
+}
+</script>
+<?php endif; ?>
 
 <?php if ((int)$karisikOzet['karisik_kalan'] > 0): ?>
 <div class="pdks-karisik-uyari" id="karisikUyari" role="status">
@@ -322,16 +377,13 @@ render_flash();
 <?php else: ?>
 
 <div class="table-wrap pc-only">
-<table class="data-table">
+<table class="data-table" data-pdks-sirala data-sirala-varsayilan="son işlem, yeni üstte">
 <thead><tr>
-    <th>Kart No</th>
-    <th>Tip</th>
-    <th>Mesai</th>
-    <th>Giriş Saati</th>
-    <th>Çıkış Saati</th>
-    <th>Süre</th>
-    <th>Durum</th>
-    <?php if ($mesaiTanimGoster): ?><th>Mesai Tanımı</th><?php endif; ?>
+    <?php /* v299: başlık tıklama sıralaması — config/pdks_liste_ui.php (TEK mekanizma). Manuel Çıkış / İşlem sıralanmaz. */
+    foreach (['Kart No' => 'metin', 'Tip' => 'metin', 'Mesai' => 'metin', 'Giriş Saati' => 'zaman', 'Çıkış Saati' => 'zaman', 'Süre' => 'sayi', 'Durum' => 'metin'] as $thEt => $thTip): ?>
+    <th data-sirala="<?= $thTip ?>"><button type="button" class="pdks-sirala-btn"><?= h($thEt) ?><span class="pdks-sirala-ok" aria-hidden="true"></span></button></th>
+    <?php endforeach; ?>
+    <?php if ($mesaiTanimGoster): ?><th data-sirala="metin"><button type="button" class="pdks-sirala-btn">Mesai Tanımı<span class="pdks-sirala-ok" aria-hidden="true"></span></button></th><?php endif; ?>
     <th>Manuel Çıkış</th>
     <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><th>İşlem</th><?php endif; ?>
 </tr></thead>
@@ -343,16 +395,17 @@ render_flash();
     // kontrolü) — burada YENİ bir kısıtlama İCAT EDİLMEZ, yalnız YETKİSİZ bir
     // kullanıcının 403'e giden bir bağlantı GÖRMESİ engellenir.
     $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
+    $sd = $sdDegerler($k);
 ?>
 <tr>
-    <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></td>
-    <td><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
-    <td class="muted"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
-    <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
-    <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
-    <td class="muted"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
-    <td><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
-    <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-mesai-tanim><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
+    <td class="pdks-uid" data-sirala-deger="<?= h($sd['kart']) ?>"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></td>
+    <td data-sirala-deger="<?= h($sd['tip']) ?>"><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
+    <td class="muted" data-sirala-deger="<?= h($sd['mesai']) ?>"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
+    <td data-sirala-deger="<?= h($sd['giris']) ?>"><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
+    <td class="muted" data-sirala-deger="<?= h($sd['cikis']) ?>"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
+    <td class="muted" data-sirala-deger="<?= h($sd['sure']) ?>"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
+    <td data-sirala-deger="<?= h($sd['durum']) ?>"><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
+    <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-sirala-deger="<?= h($sd['tanim']) ?>" data-mesai-tanim><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
     <td>
         <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
         <a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a>
@@ -367,11 +420,26 @@ render_flash();
 </table>
 </div>
 
-<div class="pdks-cards mobile-only">
+<div class="pdks-sirala-sec-satir mobile-only">
+    <label for="kartSiralaSec">Sırala</label>
+    <select id="kartSiralaSec" class="pdks-sirala-sec" data-pdks-sirala-sec data-hedef="kartKartlar">
+        <option value="">Son işlem (yeni üstte)</option>
+        <option value="giris:desc" data-tip="zaman">Giriş (yeni önce)</option>
+        <option value="giris:asc" data-tip="zaman">Giriş (eski önce)</option>
+        <option value="cikis:desc" data-tip="zaman">Çıkış (yeni önce)</option>
+        <option value="cikis:asc" data-tip="zaman">Çıkış (eski önce)</option>
+        <option value="kart:asc" data-tip="metin">Kart no (A → Z)</option>
+        <option value="tip:asc" data-tip="metin">Tip (A → Z)</option>
+        <option value="sure:desc" data-tip="sayi">Süre (uzun önce)</option>
+        <option value="sure:asc" data-tip="sayi">Süre (kısa önce)</option>
+    </select>
+</div>
+<div class="pdks-cards mobile-only" id="kartKartlar">
 <?php foreach ($kartlar as $k):
     $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
+    $sd = $sdDegerler($k);
 ?>
-<div class="pdks-card-item">
+<div class="pdks-card-item" data-sirala-oge<?php foreach (['kart', 'tip', 'giris', 'cikis', 'sure'] as $sdA): ?> data-sd-<?= $sdA ?>="<?= h($sd[$sdA]) ?>"<?php endforeach; ?>>
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></div>
@@ -389,6 +457,7 @@ render_flash();
 </div>
 <?php endforeach; ?>
 </div>
+<?php pdks_liste_ui_js(); /* v299: başlık/Sırala seçici davranışı — TEK ortak script (ikinci çağrı bir şey basmaz) */ ?>
 
 <?php endif; ?>
 

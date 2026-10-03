@@ -136,3 +136,84 @@ function pdks_gunluk_oturum_yeniden_ac(int $sessionId, string $sebep, int $userI
         return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Mesai yeniden açılamadı. Lütfen tekrar deneyin.'];
     }
 }
+
+/** v299: kapanış notu uzunluk sınırı (karakter). */
+const PDKS_GUNLUK_KAPANIS_NOTU_MAX = 1000;
+
+/**
+ * Kapalı bir mesaisinin KAPANIŞ NOTUNU (daily_work_sessions.notes) düzenler.
+ *
+ * Yalnız yönetici; mesai aktif depoya ait ve status='closed' olmalı (HER TARİH).
+ * Gerekçe istenmez; boş metin notu siler (NULL). Bu kolonu hakediş/cari OKUMAZ —
+ * hesap tazeleme bayrağı, hakediş satırı ya da ücret hiçbir şey yazılmaz (kesinleşmiş
+ * kayıtta da çalışır). Tek transaction + satır kilidi (MySQL); audit
+ * `daily_session_note_edit`. Metin değişmediyse hiçbir şey yazılmaz (`degisti=false`).
+ */
+function pdks_gunluk_oturum_not_guncelle(int $sessionId, string $not, int $userId, ?PDO $pdo = null): array
+{
+    if (!function_exists('is_admin') || !is_admin()
+        || $userId < 1
+        || (function_exists('current_user') && (int)(current_user()['id'] ?? 0) !== $userId)) {
+        return ['ok' => false, 'kod' => 'yetkisiz', 'hata' => 'Kapanış notunu yalnızca sistem yöneticisi düzenleyebilir.'];
+    }
+    $not = trim(str_replace(["\r\n", "\r"], "\n", $not));
+    if (mb_strlen($not, 'UTF-8') > PDKS_GUNLUK_KAPANIS_NOTU_MAX) {
+        return ['ok' => false, 'kod' => 'not_uzun', 'hata' => 'Kapanış notu en fazla ' . PDKS_GUNLUK_KAPANIS_NOTU_MAX . ' karakter olabilir.'];
+    }
+    $yeni = $not === '' ? null : $not;
+    $depo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+    if ($sessionId < 1 || $depo === '') {
+        return ['ok' => false, 'kod' => 'gecersiz_istek', 'hata' => 'Geçerli bir mesai ve aktif depo seçin.'];
+    }
+
+    $pdo = $pdo ?? db();
+    if ($pdo->inTransaction()) {
+        return ['ok' => false, 'kod' => 'islem_devam_ediyor', 'hata' => 'Kapanış notu ayrı bir işlem olmalıdır.'];
+    }
+    $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+    try {
+        $pdo->beginTransaction();
+        $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE id = ?' . $lock);
+        $st->execute([$sessionId]);
+        $oturum = $st->fetch();
+        if (!$oturum) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'oturum_yok', 'hata' => 'Mesai bulunamadı.'];
+        }
+        if ((string)$oturum['depo'] !== $depo) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'yanlis_depo', 'hata' => 'Bu mesai aktif depoya ait değil.'];
+        }
+        if ($oturum['status'] !== 'closed') {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'mesai_acik', 'hata' => 'Kapanış notu yalnız kapalı mesaide düzenlenebilir.'];
+        }
+        $eski = ($oturum['notes'] === null || $oturum['notes'] === '') ? null : (string)$oturum['notes'];
+        if ($eski === $yeni) {
+            $pdo->rollBack();
+            return ['ok' => true, 'session_id' => $sessionId, 'degisti' => false];
+        }
+
+        $upd = $pdo->prepare("UPDATE daily_work_sessions SET notes = ?, updated_at = ? WHERE id = ? AND status = 'closed'");
+        $upd->execute([$yeni, date('Y-m-d H:i:s'), $sessionId]);
+        if ($upd->rowCount() !== 1) {
+            $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'durum_degisti', 'hata' => 'Mesai durumu değişti. Sayfayı yenileyin.'];
+        }
+        $pdo->prepare(
+            'INSERT INTO audit_log (user_id, action, module, record_id, old_values, new_values, ip, user_agent)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        )->execute([
+            $userId, 'daily_session_note_edit', 'daily_work_sessions', $sessionId,
+            json_encode(['session_id' => $sessionId, 'notes' => $eski], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            json_encode(['session_id' => $sessionId, 'notes' => $yeni], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            $_SERVER['REMOTE_ADDR'] ?? null, substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255),
+        ]);
+        $pdo->commit();
+        return ['ok' => true, 'session_id' => $sessionId, 'degisti' => true];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('[pdks_gunluk_oturum_not_guncelle] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Kapanış notu kaydedilemedi. Lütfen tekrar deneyin.'];
+    }
+}
