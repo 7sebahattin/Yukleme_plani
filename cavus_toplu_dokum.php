@@ -276,7 +276,7 @@ render_flash();
     <td><?= h($k['foreman_name']) ?></td>
     <td><?= (int)$k['carry_in'] ?></td>
     <td><?= (int)$k['period_person_days'] ?></td>
-    <td><strong><?= (int)$k['earned_units'] ?></strong></td>
+    <td><strong><?= (int)$k['earned_units'] ?></strong> <span class="muted" style="font-size:.78rem">(<?= (int)($k['unit_size'] ?? 25) ?> kişi-gün = 1)</span></td>
     <td><?= h(number_format((float)$k['unit_rate'], 2, ',', '.')) ?> <?= h($k['currency']) ?></td>
     <td><strong><?= h(number_format((float)$k['amount'], 2, ',', '.')) ?> <?= h($k['currency']) ?></strong></td>
     <td><?= (int)$k['carry_out'] ?></td>

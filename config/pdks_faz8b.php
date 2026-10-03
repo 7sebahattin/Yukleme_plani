@@ -907,8 +907,9 @@ function pdks_faz8b_cavus_ucret_kardes_isaretle(int $sessionId, ?PDO $pdo = null
 // pdks_faz8b_sema_hazir()'e BİLEREK EKLENMEZ.
 //
 // Yöntem A (mevcut, varsayılan): günlük sabit ücret — yukarıdaki blok.
-// Yöntem B (YENİ): çavuşun altında çalışan kişi-gün toplamı her 25'te
-// (PDKS_FAZ8B_CAVUS_B_BIRIM) 1 hakediş kazandırır; dönem kapanışı ödeme
+// Yöntem B (YENİ): çavuşun altında çalışan kişi-gün toplamı her N'de
+// 1 hakediş kazandırır (N = ÇAVUŞ BAZINDA birim, v297: yöntem geçmişindeki
+// `unit_size`; NULL = PDKS_FAZ8B_CAVUS_B_BIRIM = 25); dönem kapanışı ödeme
 // kaydında OTOMATİK yapılır (bkz. config/pdks_faz8b_cavus_b.php). Yöntem
 // seçimi ÇAVUŞ BAZINDA, zaman damgalı bir GEÇMİŞ olarak tutulur
 // (foreman_rate_method_log) — hangi yöntemin hangi tarihten itibaren
@@ -916,6 +917,9 @@ function pdks_faz8b_cavus_ucret_kardes_isaretle(int $sessionId, ?PDO $pdo = null
 // =========================================================
 
 defined('PDKS_FAZ8B_CAVUS_B_BIRIM') || define('PDKS_FAZ8B_CAVUS_B_BIRIM', 25);
+// v297: çavuş bazında ayarlanabilir birim — geçerli aralık (sunucu doğrulaması).
+defined('PDKS_FAZ8B_CAVUS_B_BIRIM_MIN') || define('PDKS_FAZ8B_CAVUS_B_BIRIM_MIN', 1);
+defined('PDKS_FAZ8B_CAVUS_B_BIRIM_MAX') || define('PDKS_FAZ8B_CAVUS_B_BIRIM_MAX', 1000);
 
 function pdks_faz8b_cavus_ucret_b_tablolar(): array
 {
@@ -924,6 +928,7 @@ function pdks_faz8b_cavus_ucret_b_tablolar(): array
         `id`                 INT AUTO_INCREMENT PRIMARY KEY,
         `foreman_id`         INT          NOT NULL,
         `method`             VARCHAR(1)   NOT NULL,
+        `unit_size`          INT          NULL DEFAULT NULL,
         `effective_at`       DATETIME     NOT NULL,
         `created_by_user_id` INT          NULL DEFAULT NULL,
         `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1023,7 +1028,49 @@ function pdks_faz8b_cavus_ucret_b_migrate(?PDO $pdo = null): array
             $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => $e->getMessage()];
         }
     }
+    // v297: eski kurulumlarda yöntem geçmişine çavuş bazında birim kolonu
+    // (NULL = varsayılan 25). Kolon varsa dokunulmaz (idempotent).
+    if (pdks_faz8b_cavus_ucret_b_tablo_var($pdo, 'foreman_rate_method_log')) {
+        pdks_gunluk_kolon_onbellek_temizle($pdo, 'foreman_rate_method_log');
+        $k = pdks_faz8b_kolon_ekle($pdo, 'foreman_rate_method_log', 'unit_size', 'INT NULL DEFAULT NULL', 'method');
+        $rapor[] = ['tablo' => 'foreman_rate_method_log.unit_size', 'durum' => $k['durum'], 'mesaj' => $k['mesaj']];
+    }
     return $rapor;
+}
+
+/** v297: yöntem geçmişinde çavuş bazında birim kolonu var mı? (eski kurulum = yok) */
+function pdks_faz8b_cavus_ucret_b_birim_kolonu_var(PDO $pdo): bool
+{
+    return pdks_faz8b_cavus_ucret_b_tablo_var($pdo, 'foreman_rate_method_log')
+        && pdks_faz8b_kolon_var($pdo, 'foreman_rate_method_log', 'unit_size');
+}
+
+/**
+ * v297: "Kaç kişi-gün = 1 hakediş" girdisini doğrular. null/boş → varsayılan
+ * (25). Tam sayı değilse ya da 1–1000 dışındaysa null döner (çağıran reddeder).
+ */
+function pdks_faz8b_cavus_ucret_b_birim_dogrula($ham): ?int
+{
+    if ($ham === null) return PDKS_FAZ8B_CAVUS_B_BIRIM;
+    if (is_int($ham)) {
+        $n = $ham;
+    } else {
+        $t = trim((string)$ham);
+        if ($t === '') return PDKS_FAZ8B_CAVUS_B_BIRIM;
+        if (!preg_match('/^\d{1,6}$/', $t)) return null;
+        $n = (int)$t;
+    }
+    if ($n < PDKS_FAZ8B_CAVUS_B_BIRIM_MIN || $n > PDKS_FAZ8B_CAVUS_B_BIRIM_MAX) return null;
+    return $n;
+}
+
+/** v297: bir yöntem geçmişi satırının birimi (satır yok / NULL / bozuk → 25). */
+function pdks_faz8b_cavus_ucret_b_satir_birimi(?array $satir): int
+{
+    $v = $satir['unit_size'] ?? null;
+    if ($v === null || $v === '') return PDKS_FAZ8B_CAVUS_B_BIRIM;
+    $n = (int)$v;
+    return ($n >= PDKS_FAZ8B_CAVUS_B_BIRIM_MIN && $n <= PDKS_FAZ8B_CAVUS_B_BIRIM_MAX) ? $n : PDKS_FAZ8B_CAVUS_B_BIRIM;
 }
 
 function pdks_faz8b_cavus_ucret_b_sema_hazir(?PDO $pdo = null): bool
@@ -1041,8 +1088,9 @@ function pdks_faz8b_cavus_ucret_yontem_gecmisi(int $foremanId, ?PDO $pdo = null)
     $pdo = $pdo ?? db();
     if (!pdks_faz8b_cavus_ucret_b_tablo_var($pdo, 'foreman_rate_method_log')) return [];
     $st = $pdo->prepare(
-        "SELECT id, foreman_id, method, effective_at, created_by_user_id, created_at
-           FROM foreman_rate_method_log WHERE foreman_id = ? ORDER BY effective_at ASC, id ASC"
+        "SELECT id, foreman_id, method, effective_at, created_by_user_id, created_at"
+        . (pdks_faz8b_cavus_ucret_b_birim_kolonu_var($pdo) ? ", unit_size" : ", NULL AS unit_size")
+        . " FROM foreman_rate_method_log WHERE foreman_id = ? ORDER BY effective_at ASC, id ASC"
     );
     $st->execute([$foremanId]);
     return $st->fetchAll();
@@ -1068,6 +1116,43 @@ function pdks_faz8b_cavus_ucret_yontem_anda(array $gecmis, string $zaman): strin
     return $sonuc;
 }
 
+/**
+ * v297 — SAF: $zaman anında geçerli geçmiş satırı (yontem_anda() ile AYNI
+ * zaman kuralı: effective_at <= $zaman olan en son satır). Yoksa null.
+ */
+function pdks_faz8b_cavus_ucret_satir_anda(array $gecmis, string $zaman): ?array
+{
+    $kopya = $gecmis;
+    usort($kopya, function ($a, $b) {
+        $c = strcmp((string)$a['effective_at'], (string)$b['effective_at']);
+        return $c !== 0 ? $c : ((int)$a['id'] <=> (int)$b['id']);
+    });
+    $sonuc = null;
+    foreach ($kopya as $k) {
+        if ((string)$k['effective_at'] <= $zaman) $sonuc = $k;
+    }
+    return $sonuc;
+}
+
+/**
+ * v297 — SAF: $zaman anında geçerli Yöntem B birimi ("kaç kişi-gün = 1
+ * hakediş"). Geçerli satır yoksa / unit_size NULL ise varsayılan (25).
+ */
+function pdks_faz8b_cavus_ucret_birim_anda(array $gecmis, string $zaman): int
+{
+    return pdks_faz8b_cavus_ucret_b_satir_birimi(pdks_faz8b_cavus_ucret_satir_anda($gecmis, $zaman));
+}
+
+/** v297: çavuşun ŞU AN geçerli Yöntem B birimi (kapanış, önizleme, ekran). */
+function pdks_faz8b_cavus_ucret_birim(int $foremanId, ?PDO $pdo = null): int
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_cavus_ucret_b_birim_kolonu_var($pdo)) return PDKS_FAZ8B_CAVUS_B_BIRIM;
+    return pdks_faz8b_cavus_ucret_birim_anda(
+        pdks_faz8b_cavus_ucret_yontem_gecmisi($foremanId, $pdo), date('Y-m-d H:i:s')
+    );
+}
+
 function pdks_faz8b_cavus_ucret_yontem(int $foremanId, ?PDO $pdo = null): string
 {
     $pdo = $pdo ?? db();
@@ -1081,37 +1166,69 @@ function pdks_faz8b_cavus_ucret_yontem(int $foremanId, ?PDO $pdo = null): string
     return ($v === 'B') ? 'B' : 'A';
 }
 
-function pdks_faz8b_cavus_ucret_yontem_degistir(int $foremanId, string $yontem, int $userId, ?PDO $pdo = null): array
+/**
+ * v297: $birimHam yalnız Yöntem B'de anlamlıdır ("kaç kişi-gün = 1 hakediş",
+ * 1–1000; null/boş = varsayılan 25). B seçiliyken YALNIZ birimin değişmesi de
+ * YENİ, zaman damgalı bir geçmiş satırı yazar — geriye dönük DEĞİLDİR; mevcut
+ * kapanışlar (kendi unit_size'ları donmuş) hiç değişmez.
+ */
+function pdks_faz8b_cavus_ucret_yontem_degistir(int $foremanId, string $yontem, int $userId, ?PDO $pdo = null, $birimHam = null): array
 {
     $pdo = $pdo ?? db();
     $yontem = strtoupper(trim($yontem));
     if (!in_array($yontem, ['A', 'B'], true)) {
         return ['ok' => false, 'kod' => 'gecersiz_yontem', 'hata' => 'Geçersiz hesaplama yöntemi.'];
     }
+    $birim = null;
+    if ($yontem === 'B') {
+        $birim = pdks_faz8b_cavus_ucret_b_birim_dogrula($birimHam);
+        if ($birim === null) {
+            return ['ok' => false, 'kod' => 'gecersiz_birim', 'hata' => sprintf(
+                '"Kaç kişi-gün = 1 hakediş" %d ile %d arasında bir tam sayı olmalıdır.',
+                PDKS_FAZ8B_CAVUS_B_BIRIM_MIN, PDKS_FAZ8B_CAVUS_B_BIRIM_MAX
+            )];
+        }
+    }
     if (!pdks_faz8b_cavus_ucret_b_sema_hazir($pdo)) {
         return ['ok' => false, 'kod' => 'sema_yok', 'hata' => 'Yöntem B tabloları henüz oluşturulmamış.'];
+    }
+    $birimKolonu = pdks_faz8b_cavus_ucret_b_birim_kolonu_var($pdo);
+    if ($yontem === 'B' && !$birimKolonu && $birim !== PDKS_FAZ8B_CAVUS_B_BIRIM) {
+        return ['ok' => false, 'kod' => 'birim_kolonu_yok',
+            'hata' => 'Birim kolonu henüz oluşturulmamış — yönetici migrate.php → Yöntem B tablolarını çalıştırmalı.'];
     }
     $stC = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
     $stC->execute([$foremanId]);
     if (!$stC->fetchColumn()) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
 
     $eski = pdks_faz8b_cavus_ucret_yontem($foremanId, $pdo);
-    if ($eski === $yontem) {
-        return ['ok' => true, 'degisti' => false, 'yontem' => $yontem];
+    $eskiBirim = $eski === 'B' ? pdks_faz8b_cavus_ucret_birim($foremanId, $pdo) : null;
+    if ($eski === $yontem && ($yontem === 'A' || $eskiBirim === $birim)) {
+        return ['ok' => true, 'degisti' => false, 'yontem' => $yontem, 'birim' => $birim];
     }
 
     $kendiTx = !$pdo->inTransaction();
     if ($kendiTx) $pdo->beginTransaction();
     try {
         $simdi = date('Y-m-d H:i:s');
-        $ins = $pdo->prepare(
-            "INSERT INTO foreman_rate_method_log (foreman_id, method, effective_at, created_by_user_id, created_at)
-             VALUES (?,?,?,?,?)"
-        );
-        $ins->execute([$foremanId, $yontem, $simdi, $userId, $simdi]);
+        if ($birimKolonu) {
+            $ins = $pdo->prepare(
+                "INSERT INTO foreman_rate_method_log (foreman_id, method, unit_size, effective_at, created_by_user_id, created_at)
+                 VALUES (?,?,?,?,?,?)"
+            );
+            $ins->execute([$foremanId, $yontem, $birim, $simdi, $userId, $simdi]);
+        } else {
+            $ins = $pdo->prepare(
+                "INSERT INTO foreman_rate_method_log (foreman_id, method, effective_at, created_by_user_id, created_at)
+                 VALUES (?,?,?,?,?)"
+            );
+            $ins->execute([$foremanId, $yontem, $simdi, $userId, $simdi]);
+        }
         $id = (int)$pdo->lastInsertId();
 
-        if (pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'needs_recalculation')) {
+        // Yalnız birim değiştiyse (B→B) günlük hakediş satırları etkilenmez —
+        // yeniden hesap bayrağı yalnız YÖNTEM değiştiğinde konur.
+        if ($eski !== $yontem && pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'needs_recalculation')) {
             $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1 WHERE foreman_id = ? AND status = 'draft'")
                 ->execute([$foremanId]);
         }
@@ -1123,16 +1240,18 @@ function pdks_faz8b_cavus_ucret_yontem_degistir(int $foremanId, string $yontem, 
 
     if (function_exists('audit_log_event')) {
         audit_log_event('update', 'foreman_rate_method_log', $id,
-            ['foreman_id' => $foremanId, 'method' => $eski],
-            ['foreman_id' => $foremanId, 'method' => $yontem, 'effective_at' => $simdi]);
+            ['foreman_id' => $foremanId, 'method' => $eski, 'unit_size' => $eskiBirim],
+            ['foreman_id' => $foremanId, 'method' => $yontem, 'unit_size' => $birim, 'effective_at' => $simdi]);
     }
-    return ['ok' => true, 'degisti' => true, 'id' => $id, 'eski' => $eski, 'yontem' => $yontem];
+    return ['ok' => true, 'degisti' => true, 'id' => $id, 'eski' => $eski, 'eski_birim' => $eskiBirim,
+        'yontem' => $yontem, 'birim' => $birim];
 }
 
-function pdks_faz8b_cavus_ucret_yontem_etiketi(string $yontem): string
+/** $birim: Yöntem B'nin "kaç kişi-gün = 1 hakediş" değeri (null = varsayılan 25). */
+function pdks_faz8b_cavus_ucret_yontem_etiketi(string $yontem, ?int $birim = null): string
 {
     return $yontem === 'B'
-        ? 'Yöntem B — 25 kişi-gün = 1 hakediş'
+        ? 'Yöntem B — ' . ($birim ?? PDKS_FAZ8B_CAVUS_B_BIRIM) . ' kişi-gün = 1 hakediş'
         : 'Yöntem A — Günlük sabit ücret';
 }
 

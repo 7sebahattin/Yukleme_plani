@@ -104,7 +104,7 @@ if (isset($_GET['csv'])) {
 if (isset($_GET['xlsx'])) {
     $sayfa = [
         'ad' => 'Dönem Raporu', 'baslik' => 'Çavuş Hakedişi — Dönem Raporu',
-        'aciklama' => 'Yöntem B (25 kişi-gün = 1 hakediş) dönem kapanışları',
+        'aciklama' => 'Yöntem B (N kişi-gün = 1 hakediş; her kapanışın birimi kapanışta donar) dönem kapanışları',
         'sutunlar' => [
             ['baslik' => 'Kapanış No'], ['baslik' => 'Kapanış Tarihi', 'tip' => 'tarih'],
             ['baslik' => 'Çavuş Kodu'], ['baslik' => 'Çavuş'],
@@ -162,7 +162,7 @@ render_flash();
 <div class="pdks-kiosk-counters" style="margin:0 0 18px">
     <h3>Açık Dönem</h3>
     <div class="pdks-kiosk-counter-totals">
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Yöntem</div><div class="val"><?= h(pdks_faz8b_cavus_ucret_yontem_etiketi((string)$acikDonem['yontem'])) ?></div></div>
+        <div class="pdks-kiosk-counter-box"><div class="lbl">Yöntem</div><div class="val"><?= h(pdks_faz8b_cavus_ucret_yontem_etiketi((string)$acikDonem['yontem'], (int)($acikDonem['birim'] ?? 25))) ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Devreden</div><div class="val"><?= (int)$acikDonem['devir_giren'] ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Bekleyen Kişi-Gün</div><div class="val"><?= (int)$acikDonem['donem_kisi_gun'] ?></div></div>
         <?php if (($acikDonem['durum'] ?? '') === 'kapanacak'): ?>
@@ -191,7 +191,7 @@ render_flash();
     <td><?= (int)$k['carry_in'] ?></td>
     <td><?= (int)$k['period_person_days'] ?></td>
     <td><?= (int)$k['total_person_days'] ?></td>
-    <td><strong><?= (int)$k['earned_units'] ?></strong></td>
+    <td><strong><?= (int)$k['earned_units'] ?></strong> <span class="muted" style="font-size:.78rem">(<?= (int)($k['unit_size'] ?? 25) ?> kişi-gün = 1)</span></td>
     <td><?= h(number_format((float)$k['unit_rate'], 2, ',', '.')) ?> <?= h($k['currency']) ?></td>
     <td><strong><?= h(number_format((float)$k['amount'], 2, ',', '.')) ?> <?= h($k['currency']) ?></strong></td>
     <td><?= (int)$k['carry_out'] ?></td>
@@ -209,7 +209,7 @@ render_flash();
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($k['foreman_name']) ?></div>
-            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($k['closure_date']))) ?> · <?= (int)$k['earned_units'] ?> hakediş</div>
+            <div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($k['closure_date']))) ?> · <?= (int)$k['earned_units'] ?> hakediş (<?= (int)($k['unit_size'] ?? 25) ?> kişi-gün = 1)</div>
         </div>
         <span class="pdks-badge <?= $k['status'] === 'valid' ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= h(pdks_faz8b_cavus_ucret_b_durum_etiketi((string)$k['status'])) ?></span>
     </div>
