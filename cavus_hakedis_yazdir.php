@@ -87,7 +87,7 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
         <tr>
             <td><?= h($sl['worker_type_name_snapshot']) ?></td>
             <?php if ($faz8bHazir): ?>
-            <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : 'Tam Mesai') ?></td>
+            <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift Yevmiye' : 'Tam Mesai')) ?></td>
             <td>
                 <?php
                 $fmSaat = (int)($sl['overtime_hours'] ?? 0);

@@ -46,11 +46,12 @@ $donemler = pdks_faz8b_oturum_donemleri($sessionId, $pdo);
 $ozet = pdks_faz8b_oturum_ozeti($sessionId, $pdo);
 $normalDk = (int)($oturum['normal_work_minutes_snapshot'] ?? 540);
 
-$sayimTam = 0; $sayimYarim = 0; $sayimBekleyen = 0; $fmOnayToplam = 0;
+$sayimTam = 0; $sayimYarim = 0; $sayimCift = 0; $sayimBekleyen = 0; $fmOnayToplam = 0;
 foreach ($donemler as $d) {
     $f = $d['faz8b'];
     if ($f['sinif_onayi_gerekli'] && !$f['etkin_sinif']) $sayimBekleyen++;
     elseif (($f['etkin_sinif'] ?? '') === 'yarim') $sayimYarim++;
+    elseif (($f['etkin_sinif'] ?? '') === 'cift') $sayimCift++;   // v299
     else $sayimTam++;
     if ($f['fazla_mesai_onay_saat'] !== null) $fmOnayToplam += (int)$f['fazla_mesai_onay_saat'];
 }
@@ -81,6 +82,7 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
         <div class="print-summary-box"><div class="psb-label">Dönem</div><div class="psb-value"><?= count($donemler) ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Tam Mesai</div><div class="psb-value"><?= $sayimTam ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Yarım Mesai</div><div class="psb-value"><?= $sayimYarim ?></div></div>
+        <?php if ($sayimCift > 0): ?><div class="print-summary-box"><div class="psb-label">Çift Yevmiye</div><div class="psb-value"><?= $sayimCift ?></div></div><?php endif; ?>
         <div class="print-summary-box<?= $sayimBekleyen > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Karar Bekleyen</div><div class="psb-value"><?= $sayimBekleyen ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Onaylı Fazla Mesai</div><div class="psb-value"><?= $fmOnayToplam ?> sa</div></div>
         <div class="print-summary-box"><div class="psb-label">Normal Mesai</div><div class="psb-value"><?= h(sprintf('%ds %02ddk', intdiv($normalDk, 60), $normalDk % 60)) ?></div></div>
@@ -105,8 +107,9 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
             <td><?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></td>
             <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
             <td><?php
-                if ($f['sinif_kaynak'] === 'otomatik') echo 'Otomatik Tam';
-                elseif ($f['etkin_sinif']) echo 'Muhasebe: ' . h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam');
+                if ($f['cift']) echo 'Çift Yevmiye (çift sonrası FM ' . (int)$f['odenecek_fm_saat'] . ' saat)';
+                elseif ($f['sinif_kaynak'] === 'otomatik') echo 'Otomatik Tam';
+                elseif ($f['etkin_sinif']) echo 'Muhasebe: ' . h(pdks_faz8b_sinif_etiketi($f['etkin_sinif']));
                 else echo 'Karar bekliyor';
             ?></td>
             <td><?php
