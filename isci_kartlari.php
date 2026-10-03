@@ -30,10 +30,12 @@ require_pdks_gunluk('worker_cards');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $faz8aHazir = pdks_gunluk_faz8a_sema_hazir($pdo);
-// v298 — Tanımlı Giriş: kart → çavuş + tip (Kadın/Erkek) + depo. Tablo OPSİYONELDİR
+// v298 — Tanımlı Giriş: kart → çavuş + tip (Kadın/Erkek/Rampacı) + depo. Tablo OPSİYONELDİR
 // (worker_card_assignments, yalnız migrate.php'den kurulur); yoksa tanım arayüzü gizlenir.
 $tanimHazir = pdks_gunluk_kart_tanim_sema_hazir($pdo);
 $aktifDepo  = trim((string)(function_exists('active_depot') ? (active_depot() ?? '') : ''));
+// v299 — Seri Kart Tanımla: tanım tablosu + Faz 8A (yeni kartlar nötr yazılır) + aktif depo varsa; yoksa düğme/pencere GİZLİ.
+$seriHazir  = $tanimHazir && $faz8aHazir && $aktifDepo !== '';
 
 // ── Salt-okunur önizleme ucu — personel_kartlar.php'deki ajax=onizle İLE
 // AYNI JS'İ (assets/pdks.js) besler; burada AYRICA çapraz-sistem uyarısı da
@@ -91,6 +93,51 @@ if (($_GET['ajax'] ?? '') === 'sorgula') {
         exit;
     }
     echo json_encode(pdks_gunluk_faz8a_kart_sorgula($kanonik, $pdo), JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── v299 SERİ KART TANIMLA — salt okunur satır durumu. Okutulan UID için kanonik
+// UID / havuzda var mı / aktif tanım / çakışma bilgisini ve seçili çavuş + tipe
+// göre SINIFI (yeni · tanimlanacak · ayni · baska_cavus · hata) döner. Hiçbir
+// yazma YOK; depo = aktif depo (istemciden alınmaz). ──
+if (($_GET['ajax'] ?? '') === 'tanim_satir') {
+    header('Content-Type: application/json; charset=utf-8');
+    $cavusId = (int)($_GET['cavus'] ?? 0);
+    $tipId   = (int)($_GET['tip'] ?? 0);
+    $baslik  = $seriHazir ? pdks_gunluk_kart_tanim_toplu_baslik($pdo, $cavusId, $tipId, $aktifDepo) : 'Seri tanım için Tanımlı Kart tablosu ve Faz 8A şeması gerekir (migrate.php).';
+    if ($baslik !== null) {
+        echo json_encode(['ok' => false, 'hata' => $baslik], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $bilgi = pdks_gunluk_kart_tanim_satir_bilgi($pdo, trim((string)($_GET['uid'] ?? '')), trim((string)($_GET['kaynak'] ?? '')));
+    echo json_encode($bilgi + pdks_gunluk_kart_tanim_satir_sinifla($bilgi, $cavusId, $tipId, $aktifDepo), JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── v299 SERİ KART TANIMLA — HEP-YA-HİÇ kaydet (tek POST, JSON; csrf_check JSON-aware).
+// Tüm kural/yazma pdks_gunluk_kart_tanim_toplu_kaydet()'te; burada yalnız kapı + biçim. ──
+if (($_GET['ajax'] ?? '') === 'tanim_toplu_kaydet' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    $govde = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($govde)) $govde = [];
+    csrf_check($govde['csrf'] ?? null);
+    require_pdks_gunluk('worker_cards');   // savunma derinliği
+    if (!$seriHazir) {
+        echo json_encode(['ok' => false, 'hata' => 'Seri tanım için Tanımlı Kart tablosu ve Faz 8A şeması gerekir (migrate.php).'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $liste = is_array($govde['satirlar'] ?? null) ? array_slice($govde['satirlar'], 0, PDKS_GUNLUK_TOPLU_TANIM_LIMIT + 1) : [];
+    $satirlar = array_map(fn($s) => is_array($s) ? ['ham_uid' => $s['uid'] ?? '', 'kaynak' => $s['kaynak'] ?? ''] : ['ham_uid' => '', 'kaynak' => ''], $liste);
+    $sonuc = pdks_gunluk_kart_tanim_toplu_kaydet($satirlar, (int)($govde['cavus'] ?? 0), (int)($govde['tip'] ?? 0),
+        $aktifDepo, is_scalar($govde['istek_id'] ?? null) ? (string)$govde['istek_id'] : '', (int)$auth_user['id'], $pdo);
+    if (!empty($sonuc['ok'])) {
+        $mesaj = $sonuc['tanimlanan'] . ' kart tanımlandı: ' . $sonuc['yeni'] . ' yeni havuza eklendi, ' . $sonuc['ayni'] . ' zaten tanımlıydı.';
+        if (!empty($sonuc['uyarilar'])) {
+            $mesaj .= ' ⚠ ' . count($sonuc['uyarilar']) . ' kart şu an içeride (' . implode(', ', array_column($sonuc['uyarilar'], 'card_no')) . ') — açık dönem eski çavuşta kalır; çıkış Ortak Çıkış ile yapılır.';
+        }
+        $sonuc['mesaj'] = $mesaj;
+    }
+    echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -214,7 +261,7 @@ try {
     set_flash('error', 'Günlük İşçi tabloları henüz hazır değil. Bir yöneticinin migrate.php sayfasından "Günlük İşçi Tablolarını Oluştur" demesi gerekiyor.');
 }
 
-// v298: listedeki kartların aktif tanımları + tanım formu seçenekleri (yalnız AKTİF çavuşlar, KADIN/ERKEK).
+// v298: listedeki kartların aktif tanımları + tanım formu seçenekleri (yalnız AKTİF çavuşlar, KADIN/ERKEK/RAMPACI).
 $tanimlar = $tanimHazir ? pdks_gunluk_kart_tanim_listesi($pdo, array_column($kartlar, 'id')) : [];
 $tanimCavuslar = []; $tanimTipler = [];
 if ($tanimHazir) {
@@ -292,6 +339,15 @@ if ($basari !== ''): ?>
     </div>
     </details>
 </div>
+
+<?php if ($seriHazir): ?>
+<!-- ── v299: Seri Kart Tanımla — "Yeni Kart Tanımla"nın yanında; mevcut tekli kart
+     ekleme ve tanım modalı AYNEN kalır. Tablo/Faz 8A hazır değilse hiç çizilmez. -->
+<div class="isk-seri-bar">
+    <button type="button" class="btn btn-primary" id="iskSeriAc">⚡ Seri Kart Tanımla</button>
+    <span class="muted">Çavuş ve tipi seçin, kartları art arda okutun, listeyi kontrol edip tek seferde kaydedin.</span>
+</div>
+<?php endif; ?>
 
 <!-- ── Kart-önce tanımlama (enroll) ──────────────────────────
      assets/pdks.js'in data-pdks-scan / data-pdks-nfc-target deseni
@@ -484,7 +540,7 @@ if ($basari !== ''): ?>
 </div>
 
 <?php if ($tanimHazir): ?>
-<!-- ── v298: Tanımlı Giriş tanım modalı — karta çavuş + tip (Kadın/Erkek) + AKTİF depo.
+<!-- ── v298: Tanımlı Giriş tanım modalı — karta çavuş + tip (Kadın/Erkek/Rampacı) + AKTİF depo.
      Ayrı küçük modal (düzenleme modalına dokunulmadı); form .isk-card-modal-body İÇİNDE
      (gövde kayar — .pm-dialog > form zinciri kırılmaz). -->
 <div class="pm-overlay" id="iskTanimModal" hidden>
@@ -742,6 +798,319 @@ function iskKartModalAc(id, tipId, kartNo, not, durum) {
             });
         });
     }
+})();
+</script>
+<?php endif; ?>
+
+<?php if ($seriHazir): ?>
+<!-- ── v299: Seri Kart Tanımla penceresi ─────────────────────────────────────
+     Çavuş + tip seçilir (depo = aktif depo, yalnız bilgi), kartlar art arda okutulur
+     (USB Enter/250 ms + sürekli NFC), her okutma listeye bir satır ekler; "Kaydet"
+     HEP-YA-HİÇ tek POST'tur (?ajax=tanim_toplu_kaydet). Yapı: başlık / kayan gövde /
+     sabit alt çubuk — araya <form> SARILMAZ (.pm-dialog flex zinciri bozulmasın;
+     CLAUDE.md "Modal içinde form"). Kullanıcı verisi yalnız textContent ile basılır. -->
+<div class="pm-overlay" id="iskSeriModal" hidden data-csrf="<?= h(csrf_token()) ?>" data-limit="<?= (int)PDKS_GUNLUK_TOPLU_TANIM_LIMIT ?>">
+<div class="pm-dialog isk-card-modal isk-seri" role="dialog" aria-modal="true" aria-labelledby="iskSeriBaslik">
+    <div class="pm-header">
+        <h2 class="pm-title" id="iskSeriBaslik">⚡ Seri Kart Tanımla</h2>
+        <button type="button" class="pm-close" id="iskSeriKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="isk-card-modal-body isk-seri-body">
+        <p class="muted isk-seri-not">
+            Okutulan her kart seçilen çavuşun altına bu tiple tanımlanır; havuzda olmayan kartlar otomatik eklenir
+            (kart no sıradan). Başka çavuşa tanımlı kart <strong>engeldir</strong> — önce Kart Havuzu'ndan "Tanımı Kaldır".
+        </p>
+        <div class="pdks-form-grid">
+            <label>
+                <span class="form-label">Çavuş *</span>
+                <select id="iskSeriCavus">
+                    <option value="">— Çavuş seçin —</option>
+                    <?php foreach ($tanimCavuslar as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>"><?= h($c['name']) ?> (<?= h($c['code']) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>
+                <span class="form-label">Tip *</span>
+                <select id="iskSeriTip">
+                    <option value="">— Tip seçin —</option>
+                    <?php foreach ($tanimTipler as $t): ?>
+                    <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <div class="span-2 muted" style="font-size:.85rem">Depo: <strong><?= h($aktifDepo) ?></strong> (aktif depo)</div>
+        </div>
+        <div class="pdks-scan-box isk-seri-scan">
+            <label class="pdks-scan-label" for="iskSeriGiris">KARTLARI ART ARDA OKUTUN</label>
+            <input type="text" inputmode="numeric" id="iskSeriGiris" class="pdks-scan-input"
+                   placeholder="Önce çavuş ve tip seçin" autocomplete="off" disabled>
+            <div class="pdks-scan-status" id="iskSeriDurum" role="status" aria-live="polite"></div>
+            <button type="button" id="iskSeriNfc" class="btn btn-ghost" style="margin-top:8px" hidden>📡 NFC İLE OKU</button>
+        </div>
+        <div class="isk-seri-mesaj" id="iskSeriMesaj" role="alert" hidden></div>
+        <div class="isk-seri-liste-ust">
+            <strong>Liste</strong>
+            <span class="isk-seri-sayac" id="iskSeriSayac">0 kart</span>
+        </div>
+        <div class="isk-seri-liste" id="iskSeriListe"></div>
+        <p class="muted isk-seri-bos" id="iskSeriBos">Henüz kart okutulmadı.</p>
+    </div>
+    <div class="isk-seri-foot">
+        <button type="button" class="btn btn-ghost" id="iskSeriTemizle">Listeyi Temizle</button>
+        <span class="isk-seri-foot-bosluk"></span>
+        <button type="button" class="btn btn-ghost" id="iskSeriVazgec">Vazgeç</button>
+        <button type="button" class="btn btn-primary" id="iskSeriKaydet" disabled>Kaydet</button>
+    </div>
+</div>
+</div>
+<script>
+(function () {
+    'use strict';
+    var modal = document.getElementById('iskSeriModal');
+    var acBtn = document.getElementById('iskSeriAc');
+    var input = document.getElementById('iskSeriGiris');
+    if (!modal || !acBtn || !input) return;
+
+    var LIMIT     = parseInt(modal.getAttribute('data-limit'), 10) || 100;
+    var csrf      = modal.getAttribute('data-csrf') || '';
+    var cavusEl   = document.getElementById('iskSeriCavus');
+    var tipEl     = document.getElementById('iskSeriTip');
+    var durumEl   = document.getElementById('iskSeriDurum');
+    var mesajEl   = document.getElementById('iskSeriMesaj');
+    var listeEl   = document.getElementById('iskSeriListe');
+    var bosEl     = document.getElementById('iskSeriBos');
+    var sayacEl   = document.getElementById('iskSeriSayac');
+    var kaydetBtn = document.getElementById('iskSeriKaydet');
+    var nfcBtn    = document.getElementById('iskSeriNfc');
+
+    var ETIKET = { yeni: 'YENİ', tanimlanacak: 'TANIMLANACAK', ayni: 'ZATEN TANIMLI', baska_cavus: 'BAŞKA ÇAVUŞTA', hata: 'HATA', bekliyor: 'KONTROL…' };
+
+    var satirlar = [];          // {id, ham, kaynak, sinif, hata, cardNo, canonical, tanim}
+    var sayac = 0;
+    var kuyruk = Promise.resolve();   // sorgular sırayla — listede okutma sırası korunur
+    var surum = 0;              // seçim değiştikçe artar; eski yanıtlar yok sayılır
+    var gonderiyor = false;
+    var istekId = yeniIstek();
+    var timer = null;
+
+    function yeniIstek() {
+        var a = new Uint8Array(16), s = '';
+        try { (window.crypto || window.msCrypto).getRandomValues(a); }
+        catch (e) { for (var i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256); }
+        for (var j = 0; j < a.length; j++) s += ('0' + a[j].toString(16)).slice(-2);
+        return s;
+    }
+    function secimTamam() { return !!(cavusEl.value && tipEl.value); }
+    function mesaj(metin, tur) {
+        if (!metin) { mesajEl.hidden = true; mesajEl.textContent = ''; return; }
+        mesajEl.className = 'isk-seri-mesaj ' + (tur || 'hata');
+        mesajEl.textContent = metin;
+        mesajEl.hidden = false;
+    }
+    function durum(metin, sinif) { durumEl.textContent = metin || ''; durumEl.className = 'pdks-scan-status' + (sinif ? ' ' + sinif : ''); }
+
+    function engelli(s) { return s.sinif === 'hata' || s.sinif === 'baska_cavus'; }
+    function render() {
+        var n = { yeni: 0, tanimlanacak: 0, ayni: 0, hata: 0, bekliyor: 0 };
+        listeEl.textContent = '';
+        satirlar.forEach(function (s, i) {
+            var k = s.bekliyor ? 'bekliyor' : (engelli(s) ? 'hata' : s.sinif);
+            n[k] = (n[k] || 0) + 1;
+            var sat = document.createElement('div');
+            sat.className = 'isk-seri-satir isk-seri-s-' + (s.bekliyor ? 'bekliyor' : s.sinif);
+            sat.setAttribute('data-sid', s.id);
+            var no = document.createElement('span'); no.className = 'isk-seri-no'; no.textContent = String(i + 1);
+            var bilgi = document.createElement('div'); bilgi.className = 'isk-seri-bilgi';
+            var ust = document.createElement('div'); ust.className = 'isk-seri-ust';
+            var uid = document.createElement('span'); uid.className = 'pdks-uid';
+            uid.textContent = s.cardNo ? s.cardNo : (s.kaynak === 'web_nfc' ? (s.canonical || s.ham) : s.ham);
+            var rozet = document.createElement('span'); rozet.className = 'isk-seri-rozet';
+            rozet.textContent = ETIKET[s.bekliyor ? 'bekliyor' : s.sinif] || s.sinif;
+            ust.appendChild(uid); ust.appendChild(rozet);
+            bilgi.appendChild(ust);
+            var alt = '';
+            if (!s.bekliyor) {
+                if (s.sinif === 'yeni') alt = 'Havuzda yok — otomatik eklenecek (' + s.ham + ')';
+                else if (s.sinif === 'tanimlanacak') alt = s.tanim ? ('Tanım güncellenecek (şu an: ' + s.tanim.foreman_name + ' · ' + s.tanim.tip_adi + ')') : 'Havuzda var, tanımsız';
+                else if (s.sinif === 'ayni') alt = 'Zaten bu çavuş / tip / depoda — atlanır';
+                else alt = s.hata || '';
+            }
+            if (alt) { var a = document.createElement('div'); a.className = 'isk-seri-alt'; a.textContent = alt; bilgi.appendChild(a); }
+            var sil = document.createElement('button');
+            sil.type = 'button'; sil.className = 'isk-seri-sil'; sil.setAttribute('aria-label', 'Satırı sil'); sil.setAttribute('data-sil', s.id);
+            sil.textContent = '✕'; sil.disabled = gonderiyor;
+            sat.appendChild(no); sat.appendChild(bilgi); sat.appendChild(sil);
+            listeEl.appendChild(sat);
+        });
+        bosEl.hidden = satirlar.length > 0;
+        var parca = [satirlar.length + ' kart'];
+        if (n.yeni) parca.push(n.yeni + ' yeni');
+        if (n.tanimlanacak) parca.push(n.tanimlanacak + ' tanımlanacak');
+        if (n.ayni) parca.push(n.ayni + ' zaten tanımlı');
+        if (n.hata) parca.push(n.hata + ' hata');
+        if (n.bekliyor) parca.push(n.bekliyor + ' kontrol ediliyor');
+        sayacEl.textContent = parca.join(' · ');
+        sayacEl.className = 'isk-seri-sayac' + (n.hata ? ' hatali' : '');
+        kaydetBtn.disabled = gonderiyor || !secimTamam() || satirlar.length === 0 || n.hata > 0 || n.bekliyor > 0;
+        input.disabled = gonderiyor || !secimTamam();
+        input.placeholder = secimTamam() ? '631799511' : 'Önce çavuş ve tip seçin';
+    }
+
+    function vurgula(s) {
+        var el = listeEl.querySelector('[data-sid="' + s.id + '"]');
+        if (!el) return;
+        el.classList.add('isk-seri-vurgu');
+        try { el.scrollIntoView({ block: 'nearest' }); } catch (e) { /* eski tarayıcı */ }
+        setTimeout(function () { el.classList.remove('isk-seri-vurgu'); }, 1400);
+    }
+    function degisti() { istekId = yeniIstek(); }
+
+    function sorgula(s) {
+        var v = surum;
+        s.bekliyor = true;
+        return fetch('isci_kartlari.php?ajax=tanim_satir&kaynak=' + encodeURIComponent(s.kaynak) + '&uid=' + encodeURIComponent(s.ham)
+                + '&cavus=' + encodeURIComponent(cavusEl.value) + '&tip=' + encodeURIComponent(tipEl.value),
+                { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (v !== surum || satirlar.indexOf(s) < 0) return;   // seçim değişti ya da satır silindi
+                s.bekliyor = false;
+                if (!d.sinif) { s.sinif = 'hata'; s.hata = d.hata || 'Kontrol edilemedi.'; mesaj(d.hata || 'Kontrol edilemedi.'); render(); return; }
+                // Aynı kanonik UID zaten listede → yeni satır YOK, mevcut satır vurgulanır.
+                var var_ = d.canonical ? satirlar.filter(function (o) { return o !== s && !o.bekliyor && o.canonical === d.canonical; })[0] : null;
+                if (var_) {
+                    satirlar.splice(satirlar.indexOf(s), 1);
+                    render(); vurgula(var_);
+                    durum('Zaten listede: ' + (var_.cardNo || var_.ham), 'warn');
+                    return;
+                }
+                s.sinif = d.sinif; s.hata = d.hata || ''; s.cardNo = d.card_no || ''; s.canonical = d.canonical || ''; s.tanim = d.tanim || null;
+                render();
+            })
+            .catch(function () {
+                if (v !== surum || satirlar.indexOf(s) < 0) return;
+                s.bekliyor = false; s.sinif = 'hata'; s.hata = 'Kontrol edilemedi — bağlantıyı denetleyin; satırı silip yeniden okutun.';
+                render();
+            });
+    }
+    function sirala(s) { kuyruk = kuyruk.then(function () { return sorgula(s); }); }
+
+    function ekle(ham, kaynak) {
+        ham = String(ham || '').trim();
+        if (ham === '') return;
+        if (modal.hidden) return;
+        if (!secimTamam()) { mesaj('Önce çavuş ve tipi seçin.'); return; }
+        mesaj('');
+        var ayniOkuma = satirlar.filter(function (o) { return o.ham === ham && o.kaynak === kaynak; })[0];
+        if (ayniOkuma) { vurgula(ayniOkuma); durum('Zaten listede: ' + (ayniOkuma.cardNo || ayniOkuma.ham), 'warn'); return; }
+        if (satirlar.length >= LIMIT) { mesaj('Bir seferde en çok ' + LIMIT + ' kart tanımlanabilir — önce bu listeyi kaydedin.'); return; }
+        var s = { id: ++sayac, ham: ham, kaynak: kaynak, sinif: '', hata: '', cardNo: '', canonical: '', tanim: null, bekliyor: true };
+        satirlar.push(s);
+        degisti(); durum('');
+        render();
+        try { listeEl.lastElementChild.scrollIntoView({ block: 'nearest' }); } catch (e) { /* yoksay */ }
+        sirala(s);
+    }
+
+    function yenidenSinifla() {
+        surum++;
+        degisti(); mesaj('');
+        satirlar.forEach(function (s) { s.bekliyor = true; });
+        render();
+        satirlar.slice().forEach(sirala);
+    }
+
+    // ── USB (klavye tipi okuyucu): yalnız rakam; Enter ya da 250 ms durgunluk ──
+    input.addEventListener('input', function () {
+        var t = input.value.replace(/[^0-9]/g, '');
+        if (t !== input.value) input.value = t;
+        clearTimeout(timer);
+        if (t === '') return;
+        timer = setTimeout(function () { input.value = ''; ekle(t, 'usb_decimal'); input.focus(); }, 250);
+    });
+    input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        clearTimeout(timer);
+        var t = input.value.trim();
+        input.value = '';
+        if (t !== '') ekle(t, 'usb_decimal');
+    });
+
+    // ── Web NFC: paylaşılan PdksNfcOku (sürekli dinleme) — pencere kapalıyken okumalar yok sayılır ──
+    if (window.PdksNfcOku && window.PdksNfcOku.destekli()) {
+        nfcBtn.hidden = false;
+        var dinlemede = false;
+        nfcBtn.addEventListener('click', function () {
+            if (dinlemede) return;
+            window.PdksNfcOku.baslat({
+                onOkuma: function (ev) { if (!modal.hidden && ev.serialNumber != null) ekle(String(ev.serialNumber), 'web_nfc'); },
+                onOkumaHatasi: function () { durum('NFC okuma hatası — kartı tekrar yaklaştırın.', 'err'); },
+                onBasladi: function () { dinlemede = true; nfcBtn.textContent = '🟢 NFC DİNLENİYOR'; nfcBtn.disabled = true; },
+                onHata: function (ad, msj) { durum('NFC başlatılamadı: ' + msj, 'err'); }
+            });
+        });
+    }
+
+    // ── Satır sil / seçim değişimi / pencere ──
+    listeEl.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-sil]');
+        if (!b || gonderiyor) return;
+        var id = parseInt(b.getAttribute('data-sil'), 10);
+        satirlar = satirlar.filter(function (s) { return s.id !== id; });
+        degisti(); mesaj(''); render();
+    });
+    cavusEl.addEventListener('change', function () { yenidenSinifla(); if (secimTamam()) input.focus(); });
+    tipEl.addEventListener('change', function () { yenidenSinifla(); if (secimTamam()) input.focus(); });
+    document.getElementById('iskSeriTemizle').addEventListener('click', function () {
+        if (gonderiyor) return;
+        surum++; satirlar = []; degisti(); mesaj(''); durum(''); render();
+        if (!input.disabled) input.focus();
+    });
+    function kapat() { if (!gonderiyor) window.pdksCloseModal('iskSeriModal'); }
+    document.getElementById('iskSeriVazgec').addEventListener('click', kapat);
+    document.getElementById('iskSeriKapat').addEventListener('click', kapat);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) kapat(); });
+    acBtn.addEventListener('click', function () {
+        window.pdksOpenModal('iskSeriModal');
+        render();
+        setTimeout(function () { (secimTamam() ? input : cavusEl).focus(); }, 60);
+    });
+
+    // ── Kaydet: HEP-YA-HİÇ tek POST ──
+    kaydetBtn.addEventListener('click', function () {
+        if (gonderiyor || kaydetBtn.disabled) return;
+        gonderiyor = true; mesaj(''); durum('Kaydediliyor…'); render();
+        fetch('isci_kartlari.php?ajax=tanim_toplu_kaydet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({
+                csrf: csrf, cavus: parseInt(cavusEl.value, 10) || 0, tip: parseInt(tipEl.value, 10) || 0, istek_id: istekId,
+                satirlar: satirlar.map(function (s) { return { uid: s.ham, kaynak: s.kaynak }; })
+            })
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) { location.href = 'isci_kartlari.php?ok=' + encodeURIComponent(d.mesaj || 'Kartlar tanımlandı.'); return; }
+                gonderiyor = false; durum('');
+                if (d && d.satirlar) {   // sunucunun satır bazlı hataları — liste KORUNUR, hatalı satırlar kırmızı
+                    d.satirlar.forEach(function (r) {
+                        var s = satirlar[r.idx];
+                        if (!s) return;
+                        s.sinif = r.sinif; s.hata = r.hata || ''; s.cardNo = r.card_no || s.cardNo; s.tanim = r.tanim || s.tanim;
+                    });
+                }
+                mesaj((d && (d.hata || d.error)) || 'Kaydedilemedi.');
+                render();
+            })
+            .catch(function () {
+                gonderiyor = false; durum('');
+                mesaj('Bağlantı hatası — liste korundu. Kayıt yapılmış olabilir: sayfayı yenileyip kontrol edin ya da tekrar deneyin (çift kayıt oluşmaz).');
+                render();
+            });
+    });
+    render();
 })();
 </script>
 <?php endif; ?>

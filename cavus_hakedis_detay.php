@@ -170,24 +170,26 @@ render_flash();
 <h2 style="font-size:1.05rem">Hakediş Kalemleri</h2>
 <div class="table-wrap pc-only">
 <table class="data-table">
-<thead><tr><th>İşçi Tipi</th><?php if ($faz8bHazir): ?><th>Mesai</th><th>FM</th><?php endif; ?><th>Kişi</th><th>Temel Ücret</th><th>Tutar</th></tr></thead>
+<thead><tr><th>İşçi Tipi</th><?php if ($faz8bHazir): ?><th>Mesai</th><th>FM</th><?php endif; ?><th>Kişi / Adet</th><th>Temel Ücret</th><th>Tutar</th></tr></thead>
 <tbody>
 <?php foreach ($satirlar as $sl):
     // Çavuş Ücreti (Faz 8B eki) satırı: Mesai/FM kavramı yok — "—" göster.
     $cavusUcretSatiri = array_key_exists('worker_type_id', $sl) && $sl['worker_type_id'] === null
         && array_key_exists('work_period_id', $sl) && $sl['work_period_id'] === null;
+    // v299: servis satırı (SERVIS_*) — Mesai/FM yok, sayı KİŞİ değil ADET.
+    $servisSatiri = in_array((string)($sl['worker_type_code_snapshot'] ?? ''), ['SERVIS_BUYUK', 'SERVIS_KUCUK'], true);
 ?>
 <tr>
     <td class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></td>
     <?php if ($faz8bHazir): ?>
-    <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : 'Tam') ?></td>
+    <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift' : 'Tam')) ?></td>
     <td>
         <?php if (!$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?>
             <?= (int)$sl['overtime_hours'] ?> saat · <?= h(($sl['overtime_mode_snapshot'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik') ?> · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?>
         <?php else: ?>—<?php endif; ?>
     </td>
     <?php endif; ?>
-    <td><?= (int)$sl['worker_count'] ?></td>
+    <td><?= (int)$sl['worker_count'] ?><?= $servisSatiri ? ' adet' : '' ?></td>
     <td><?= h(number_format((float)$sl['unit_rate'], 2, ',', '.')) ?></td>
     <td><strong><?= h(number_format((float)$sl['line_total'], 2, ',', '.')) ?></strong></td>
 </tr>
@@ -201,9 +203,11 @@ render_flash();
 <?php foreach ($satirlar as $sl):
     $cavusUcretSatiri = array_key_exists('worker_type_id', $sl) && $sl['worker_type_id'] === null
         && array_key_exists('work_period_id', $sl) && $sl['work_period_id'] === null;
+    // v299: servis satırı (SERVIS_*) — Mesai/FM yok, sayı KİŞİ değil ADET.
+    $servisSatiri = in_array((string)($sl['worker_type_code_snapshot'] ?? ''), ['SERVIS_BUYUK', 'SERVIS_KUCUK'], true);
 ?>
 <div class="pdks-card-item">
-    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></div><div class="pdks-row-sub"><?= (int)$sl['worker_count'] ?> × <?= h(number_format((float)$sl['unit_rate'],2,',','.')) ?><?= $faz8bHazir ? ' · ' . ($cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : 'Tam')) : '' ?></div><?php if ($faz8bHazir && !$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?><div class="pdks-row-sub">FM: <?= (int)$sl['overtime_hours'] ?> saat · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?></div><?php endif; ?></div><strong><?= h(number_format((float)$sl['line_total'],2,',','.')) ?></strong></div>
+    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></div><div class="pdks-row-sub"><?= (int)$sl['worker_count'] ?><?= $servisSatiri ? ' adet' : '' ?> × <?= h(number_format((float)$sl['unit_rate'],2,',','.')) ?><?= $faz8bHazir ? ' · ' . ($cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift' : 'Tam'))) : '' ?></div><?php if ($faz8bHazir && !$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?><div class="pdks-row-sub">FM: <?= (int)$sl['overtime_hours'] ?> saat · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?></div><?php endif; ?></div><strong><?= h(number_format((float)$sl['line_total'],2,',','.')) ?></strong></div>
 </div>
 <?php endforeach; ?>
 <div class="pdks-card-item" style="font-weight:800"><div class="pdks-card-top"><span>TOPLAM</span><span><?= h(number_format((float)$hakedis['total_amount'],2,',','.')) ?> <?= h($hakedis['currency']) ?></span></div></div>

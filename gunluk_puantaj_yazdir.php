@@ -32,6 +32,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/print_helpers.php';
+// v299: servis ADETLERİ (fiyat basılmaz) — pdks_servis.php, pdks_faz8b.php üzerinden yüklenir.
+require_once __DIR__ . '/config/pdks_faz8b.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
 
@@ -57,6 +59,8 @@ if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
 $ozet = pdks_gunluk_oturum_ozet($id, $pdo);
 $durum = pdks_gunluk_oturum_durumu((string)$oturum['status'], (int)$ozet['eksik_toplam']);
 $kartlar = pdks_gunluk_oturum_kartlari($id, $pdo);
+// v299: iptal edilmemiş servis adetleri — tablo yoksa sıfır (bölüm basılmaz).
+$servisAdet = pdks_servis_toplamlar((int)$id, $pdo);
 
 // Tüm işçi tipi anahtarları — GİRİŞ VEYA ÇIKIŞ kırılımında (dinamik,
 // yalnız Kadın/Erkek HARDCODE edilmedi — görev talimatı madde 11).
@@ -121,6 +125,10 @@ render_print_page_start('Günlük İşçi Puantaj Fişi', 'daily', 'detail', 'po
         <?php endif; ?>
         </tbody>
     </table>
+
+    <?php if (array_sum($servisAdet) > 0): ?>
+    <p style="margin-top:10px;font-size:.85rem" class="pr-servis"><strong>Servis:</strong> <?= (int)$servisAdet['BUYUK'] ?> Büyük · <?= (int)$servisAdet['KUCUK'] ?> Küçük</p>
+    <?php endif; ?>
 
     <?php if ($oturum['notes']): ?>
     <p style="margin-top:10px;font-size:.85rem"><strong>Not / Açıklama:</strong> <?= h($oturum['notes']) ?></p>

@@ -75,7 +75,7 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
         <thead><tr>
             <th>İşçi Tipi</th>
             <?php if ($faz8bHazir): ?><th>Mesai</th><th>Fazla Mesai</th><?php endif; ?>
-            <th>Kişi Sayısı</th>
+            <th>Kişi / Adet</th>
             <th><?= $faz8bHazir ? 'Temel Ücret' : 'Birim Fiyat' ?></th>
             <th>Tutar</th>
         </tr></thead>
@@ -83,11 +83,13 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
         <?php foreach ($satirlar as $sl):
             $cavusUcretSatiri = array_key_exists('worker_type_id', $sl) && $sl['worker_type_id'] === null
         && array_key_exists('work_period_id', $sl) && $sl['work_period_id'] === null;
+    // v299: servis satırı (SERVIS_*) — Mesai/FM yok, sayı KİŞİ değil ADET.
+    $servisSatiri = in_array((string)($sl['worker_type_code_snapshot'] ?? ''), ['SERVIS_BUYUK', 'SERVIS_KUCUK'], true);
         ?>
         <tr>
             <td><?= h($sl['worker_type_name_snapshot']) ?></td>
             <?php if ($faz8bHazir): ?>
-            <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : 'Tam Mesai') ?></td>
+            <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım Mesai' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift Yevmiye' : 'Tam Mesai')) ?></td>
             <td>
                 <?php
                 $fmSaat = (int)($sl['overtime_hours'] ?? 0);
@@ -102,7 +104,7 @@ render_print_page_start('Çavuş Hakediş Dökümü', 'account', 'detail', 'port
                 <?php else: ?>—<?php endif; ?>
             </td>
             <?php endif; ?>
-            <td class="num"><?= (int)$sl['worker_count'] ?></td>
+            <td class="num"><?= (int)$sl['worker_count'] ?><?= $servisSatiri ? ' adet' : '' ?></td>
             <td class="num"><?= h(number_format((float)$sl['unit_rate'], 2, ',', '.')) ?></td>
             <td class="num"><?= h(number_format((float)$sl['line_total'], 2, ',', '.')) ?></td>
         </tr>

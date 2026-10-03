@@ -316,10 +316,38 @@ $sD = renderPage('gunluk_isci_puantaj_detay.php', ['id' => (string)$ayseSessionI
 ok('hata sızmadı', !str_starts_with($sD, '__ERROR__'), $sD);
 ok('PHP Warning/Notice yok', !str_contains($sD, 'Warning:') && !str_contains($sD, 'Notice:'));
 ok('Ayşe Çavuş başlıkta', str_contains($sD, 'Ayşe Çavuş'));
-ok('K001 satırı "✅ Tam" rozetiyle', (bool)preg_match('/K001.*?Tam/s', $sD));
+ok('K001 satırı "✅ Çıkış yapıldı" rozetiyle', (bool)preg_match('/K001.*?Çıkış yapıldı/su', $sD));
 ok('K002 satırı "⚠️ Çıkış Yok" rozetiyle', (bool)preg_match('/K002.*?Çıkış Yok/s', $sD));
 ok('Açılış eden kullanıcı adı görünüyor (Test Kullanıcı)', str_contains($sD, 'Test Kullanıcı'));
 ok('"Açık Mesai" rozeti başlıkta', str_contains($sD, 'Açık Mesai'));
+
+echo "\n=== 6b. Kart Hareketleri varsayılan sırası (v299) — en yeni işlem üstte ===\n";
+// Zamanları sabitle: K001 giriş 08:00 / çıkış 11:00, K002 giriş 10:00 (çıkışsız) → son işlem K001 (11:00) > K002 (10:00).
+$bugunS = date('Y-m-d');
+db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type='GIRIS' AND worker_card_id = ?")->execute(["$bugunS 08:00:00", $ayseSessionId, (int)db()->query("SELECT id FROM worker_cards WHERE card_no='K001'")->fetchColumn()]);
+db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type='CIKIS' AND worker_card_id = ?")->execute(["$bugunS 11:00:00", $ayseSessionId, (int)db()->query("SELECT id FROM worker_cards WHERE card_no='K001'")->fetchColumn()]);
+db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type='GIRIS' AND worker_card_id = ?")->execute(["$bugunS 10:00:00", $ayseSessionId, (int)db()->query("SELECT id FROM worker_cards WHERE card_no='K002'")->fetchColumn()]);
+$sSira = renderPage('gunluk_isci_puantaj_detay.php', ['id' => (string)$ayseSessionId]);
+$p1 = strpos($sSira, 'data-sirala-deger="k001"'); $p2 = strpos($sSira, 'data-sirala-deger="k002"');
+ok('çıkışı en geç olan K001 (11:00) çıkışsız K002 (giriş 10:00) satırının ÜSTÜNDE', $p1 !== false && $p2 !== false && $p1 < $p2);
+$m1 = strpos($sSira, 'data-sd-kart="k001"'); $m2 = strpos($sSira, 'data-sd-kart="k002"');
+ok('mobil kartlar da aynı sırayı alır', $m1 !== false && $m2 !== false && $m1 < $m2);
+db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type='GIRIS' AND worker_card_id = ?")->execute(["$bugunS 12:30:00", $ayseSessionId, (int)db()->query("SELECT id FROM worker_cards WHERE card_no='K002'")->fetchColumn()]);
+$sSira2 = renderPage('gunluk_isci_puantaj_detay.php', ['id' => (string)$ayseSessionId]);
+ok('K002 girişi 12:30 olunca (çıkış yok → giriş) K002 üste çıkar',
+    strpos($sSira2, 'data-sirala-deger="k002"') < strpos($sSira2, 'data-sirala-deger="k001"'));
+ok('tablo sıralanabilir (data-pdks-sirala) ve sıralanabilir başlıklar GERÇEK <button type="button">',
+    str_contains($sSira2, '<table class="data-table" data-pdks-sirala') && substr_count($sSira2, 'class="pdks-sirala-btn"') >= 7);
+ok('Manuel Çıkış / İşlem başlıkları sıralanmaz', !preg_match('/<th[^>]*data-sirala[^>]*>\s*<button[^>]*>\s*(Manuel|İşlem)/u', $sSira2));
+ok('Sırala seçici (mobil) sayfada; ortak script çağrısı TEK (pdks_liste_ui_js, statik — işlev tek-seferliktir)', str_contains($sSira2, 'data-pdks-sirala-sec') && substr_count(file_get_contents($ROOT . '/gunluk_isci_puantaj_detay.php'), 'pdks_liste_ui_js();') === 1 && substr_count(pdks_liste_ui_js_kaynak(), 'function tabloSiralaBagla') === 1);
+// Paylaşılan SQL (Çavuş Gün Sonu Fişi de kullanır) KRONOLOJİK kalır — sıralama yalnız detay sayfasında.
+$gunlukSrc = file_get_contents($ROOT . '/config/pdks_gunluk.php');
+preg_match('/function pdks_gunluk_faz8a_oturum_donemleri\(.*?\n}\n/s', $gunlukSrc, $mDonem);
+ok('paylaşılan pdks_gunluk_faz8a_oturum_donemleri() hâlâ ORDER BY p.entry_time ASC', str_contains($mDonem[0] ?? '', 'ORDER BY p.entry_time ASC') && !str_contains($mDonem[0] ?? '', 'DESC'));
+ok('legacy pdks_gunluk_oturum_kartlari() SQL sırası ASC kaldı', (bool)preg_match('/function pdks_gunluk_oturum_kartlari\(.*?ORDER BY g\.server_event_time ASC/s', $gunlukSrc));
+$fisSrc = file_get_contents($ROOT . '/gunluk_puantaj_yazdir.php');
+ok('Gün Sonu Fişi (gunluk_puantaj_yazdir.php) yeniden sıralama (usort) YAPMAZ', !str_contains($fisSrc, 'usort') && str_contains($fisSrc, 'pdks_gunluk_oturum_kartlari'));
+ok('sıralama (usort) yalnız detay sayfasında', str_contains(file_get_contents($ROOT . '/gunluk_isci_puantaj_detay.php'), 'usort($kartlar'));
 
 echo "\n=== 7. gunluk_isci_puantaj_detay.php — geçersiz id ===\n";
 // ⚠ Bu dal header('Location: ...') + exit() ÇAĞIRIYOR — pdks_gunluk_ui_smoke.php'nin

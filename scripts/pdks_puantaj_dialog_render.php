@@ -143,6 +143,68 @@ foreach (['880000001', '880000002', '880000003', '880000004', '880000005'] as $i
 }
 pdks_gunluk_faz8a_cikis_kaydet('880000001', 'usb_decimal', $sid, 1, db());
 
+// v299: PUANTAJ_FAZ8B=1 → Faz 8B + fiyat dönemi saatleri kurulur, KADIN fiyatı Tam 9 s /
+// Çift 12 s (2000) / FM saatlik 150; K001 dönemi 06:00–19:00 (13 s) ve FM 4 saat onaylı →
+// "Mesai Tanımı" = "Çift · FM 1 s". Varsayılan (env yok) davranış DEĞİŞMEZ.
+if (getenv('PUANTAJ_FAZ8B') === '1') {
+    require_once $ROOT . '/config/pdks_faz8b.php';
+    foreach (['foreman_worker_rates', 'foreman_daily_entitlement_lines'] as $ht) {
+        [$c, $ix] = pdks_ddl_sqlite(pdks_hakedis_tablolar()[$ht]); db()->exec($c); foreach ($ix as $x) db()->exec($x);
+    }
+    pdks_faz8b_migrate(db());
+    pdks_faz8b_saat_kolonlari_migrate(db());
+    $rr = pdks_faz8b_oran_ekle($cavus, $kadin, '1000', '600', 'hourly', '150', date('Y-m-d', strtotime('-30 days')), 'TRY', 1, db(),
+        ['full_day' => '9', 'double_day' => '12', 'double_day_rate' => '2000']);
+    if (!($rr['ok'] ?? false)) { fwrite(STDERR, 'oran: ' . json_encode($rr, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+    $gun = date('Y-m-d');
+    $stK = db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ?, exit_time = ?, overtime_approved_hours = 4
+                           WHERE session_id = ? AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')");
+    $stK->execute([$gun . ' 06:00:00', $gun . ' 19:00:00', $sid]);
+    db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'GIRIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 06:00:00', $sid]);
+    db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'CIKIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 19:00:00', $sid]);
+}
+
+// v299: PUANTAJ_SERVIS=1 → Servis Ücreti tabloları + çavuş fiyatı (Büyük 1500 / Küçük 800) +
+// 2 servis kaydı (biri iptal) — "🚌 Servis Ücreti" penceresi ve Servisler listesi
+// (pdks_servis_dialog_smoke.js). Varsayılan (env yok) davranış DEĞİŞMEZ (tablo yok → gizli).
+if (getenv('PUANTAJ_SERVIS') === '1') {
+    require_once $ROOT . '/config/pdks_servis.php';
+    foreach (pdks_servis_tablolar() as $svSql) { [$c, $ix] = pdks_ddl_sqlite($svSql); db()->exec($c); foreach ($ix as $x) db()->exec($x); }
+    $sv = pdks_servis_ucret_ekle($cavus, '1500', '800', date('Y-m-d', strtotime('-30 days')), 'TRY', 1, db());
+    $s1 = pdks_servis_ekle($sid, 2, 1, 'Sabah servisi', bin2hex(random_bytes(16)), 1, db());
+    $s2 = pdks_servis_ekle($sid, 1, 0, '', bin2hex(random_bytes(16)), 1, db());
+    $svIptalId = (int)db()->query("SELECT id FROM daily_session_services WHERE batch_id = " . db()->quote((string)($s2['batch_id'] ?? '')))->fetchColumn();
+    $s3 = pdks_servis_iptal($svIptalId, $sid, 'Yanlış girildi', 1, db());
+    if (!($sv['ok'] ?? false) || !($s1['ok'] ?? false) || !($s3['ok'] ?? false)) {
+        fwrite(STDERR, 'servis: ' . json_encode([$sv, $s1, $s2, $s3], JSON_UNESCAPED_UNICODE) . "
+"); exit(1);
+    }
+}
+
+// v299: PUANTAJ_SIRALA=1 → Kart Hareketleri sıralama testi için dönem saatleri BELİRGİN ve
+// birbirinden farklı yapılır (iki dönem hâlâ çıkışsız, biri en erken girişli ama en geç çıkışlı;
+// kart no'lardan ikisi "K2"/"K10" — doğal sıralama için). Varsayılan (env yok) davranış DEĞİŞMEZ.
+if (getenv('PUANTAJ_SIRALA') === '1') {
+    $gun = date('Y-m-d');
+    $dids = db()->query("SELECT id FROM daily_worker_work_periods WHERE session_id = " . (int)$sid . " AND COALESCE(is_voided,0) = 0 ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+    $stS = db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ?, exit_time = ?, status = ? WHERE id = ?");
+    foreach ($dids as $i => $did) {
+        $giris = strtotime($gun . ' 06:00:00') + $i * 600;
+        if ($i === 0) { $cikis = strtotime($gun . ' 21:30:00'); }
+        elseif ($i % 3 === 1) { $cikis = $giris + (30 + ($i * 37) % 200) * 60; }
+        else { $cikis = null; }
+        $stS->execute([date('Y-m-d H:i:s', $giris), $cikis ? date('Y-m-d H:i:s', $cikis) : null, $cikis ? 'closed' : 'open', $did]);
+    }
+    db()->exec("UPDATE worker_cards SET card_no = 'K2' WHERE card_no = 'K003'");
+    db()->exec("UPDATE worker_cards SET card_no = 'K10' WHERE card_no = 'K005'");
+}
+
+// v299: PUANTAJ_KAPALI=1 → mesai KAPALI + kapanış notu dolu (Kapanış Notu düzenleme penceresi testi).
+if (getenv('PUANTAJ_KAPALI') === '1') {
+    db()->prepare("UPDATE daily_work_sessions SET status = 'closed', closed_at = ?, closed_by_user_id = 1, notes = ? WHERE id = ?")
+        ->execute([date('Y-m-d H:i:s'), "Mesai eksik çıkışla kapatıldı.\n<b>kalın?</b> \"tırnak\"", $sid]);
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.

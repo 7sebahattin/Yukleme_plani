@@ -3,7 +3,8 @@
 // isci_tipleri.php — İşçi Tipleri (Günlük İşçi)
 //
 // ⚠ Faz 9B / H-01 kapanışı: iş kararı KESİNLEŞTİ — günlük işçi devam
-// sistemi TAM OLARAK iki sabit sistem tipi destekler: KADIN, ERKEK.
+// sistemi TAM OLARAK üç sabit sistem tipi destekler: KADIN, ERKEK, RAMPACI (v299).
+// KARISIK yalnız kiosk GİRİŞ'inde geçici tiptir (politika listesinde değil).
 // Eskiden bu sayfa "cinsiyet ENUM DEĞİL, serbest kod/ad" diyerek
 // FORKLIFT/USTA/PAKETLEME gibi rastgele kod EKLENMESİNE izin veriyordu —
 // bu, tarama/düzeltme/oran katmanlarının HER BİRİNİN kendi (ve BİRBİRİYLE
@@ -49,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? '');
 
     // ⚠ 'ekle' (rastgele yeni tip oluşturma) BİLEREK YOK — sistem artık
-    // yalnız KADIN/ERKEK'i tanır, üçüncü bir kod bu sayfadan ASLA
+    // yalnız KADIN/ERKEK/RAMPACI'yı tanır, dördüncü bir kod bu sayfadan ASLA
     // OLUŞTURULAMAZ (crafted bir POST dahi — action eşleşmediği için hiçbir
     // dal çalışmaz).
     if ($action === 'aktiflik') {
@@ -65,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 
+pdks_gunluk_rampaci_tip_garanti($pdo);   // v299: Rampacı satırı tembel/idempotent (pasifse AÇMAZ)
 $tipler = pdks_gunluk_tip_listele(false, $pdo);
 $desteklenenKodlar = pdks_gunluk_desteklenen_tip_kodlari();
 
@@ -88,7 +90,8 @@ render_flash();
     <h2 style="margin-top:0;font-size:1rem">Sabit Sistem Tipleri</h2>
     <p class="muted" style="margin-top:-6px;font-size:.85rem">
         Günlük işçi devam sistemi (giriş/çıkış tarama, puantaj düzeltme, çavuş fiyatlandırma)
-        şu an <b>tam olarak iki sabit tip</b> kullanır: <b>KADIN</b> ve <b>ERKEK</b>. Bu bir
+        şu an <b>tam olarak üç sabit sistem tipi</b> kullanır: <b>KADIN</b>, <b>ERKEK</b> ve <b>RAMPACI</b>
+        (<b>KARIŞIK</b> yalnız kiosk girişinde geçici bir tiptir; Mesai Detayı'nda Kadın/Erkek'e atanır). Bu bir
         eksiklik değil, bilinçli bir tasarım kararıdır — yeni, rastgele bir işçi tipi
         (ör. "Forklift", "Usta") buradan <b>oluşturulamaz</b>. İleride görev/pozisyon/kategori
         gibi bir ihtiyaç doğarsa, bu <b>işçi tipinden AYRI</b> bir kavram olarak tasarlanacaktır.
@@ -107,7 +110,7 @@ render_flash();
         <?php if ($destekli): ?>
         <span class="pdks-badge pdks-badge-aktif">Sistem Tipi (sabit)</span>
         <?php elseif (pdks_gunluk_karisik_mi((string)$t['code'])): ?>
-        <span class="pdks-badge pdks-badge-karisik" style="margin-left:0">Yalnız kiosk girişi — Otomatik Ata ile Kadın/Erkek'e atanır</span>
+        <span class="pdks-badge pdks-badge-karisik" style="margin-left:0">Yalnız kiosk girişi — Otomatik Ata ile Kadın/Erkek'e atanır (Rampacı'ya atanmaz)</span>
         <?php else: ?>
         <span class="pdks-badge pdks-badge-pasif">Desteklenmiyor — yalnız geçmiş/görüntüleme</span>
         <?php endif; ?>

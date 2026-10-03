@@ -158,7 +158,7 @@ render_flash();
             $normalDkGosterim = $id > 0 ? pdks_faz8b_cavus_normal_sure_dk($id, $pdo) : 540;
         ?>
         <label>
-            <span class="form-label">Normal Günlük Çalışma Süresi (saat)</span>
+            <span class="form-label">Normal Günlük Çalışma Süresi (saat) <small class="muted">(fiyat döneminde saat girilmemişse kullanılan varsayılan)</small></span>
             <input type="number" name="saat" min="1" max="24" step="0.25"
                    value="<?= h((string)round($normalDkGosterim / 60, 2)) ?>">
         </label>
@@ -168,7 +168,7 @@ render_flash();
     <p class="muted" style="font-size:.8rem;margin-top:8px">
         Sabit bir 08:00–17:00 vardiyası YOKTUR — işçi istediği saatte başlayabilir. Önemli olan,
         geçen sürenin bu ÇAVUŞA ait anlaşmalı normal süreyi tamamlamasıdır; tamamlanınca otomatik
-        Tam Mesai sayılır, sonrası (15 dk tolerans sonrası) fazla mesaidir. KADIN/ERKEK aynı
+        Tam Mesai sayılır, sonrası (15 dk tolerans sonrası) fazla mesaidir. KADIN/ERKEK/RAMPACI aynı
         çavuşta AYNI süreyi kullanır. Bu değeri değiştirmek YALNIZ BUNDAN SONRA açılacak
         oturumları etkiler — geçmiş mesailer ve kesinleşmiş hakedişler donmuş kendi süreleriyle kalır.
     </p>

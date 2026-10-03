@@ -1,7 +1,7 @@
 // =========================================================
 // scripts/pdks_karisik_smoke.js — v295 KARIŞIK giriş + "🎲 Otomatik Ata"
 // GERÇEK TARAYICI testi.
-//   A) Kiosk (gunluk_isci_giris_cikis.php): tip ekranında 3 düğme (Kadın/Erkek/
+//   A) Kiosk (gunluk_isci_giris_cikis.php): tip ekranında 4 düğme (Kadın/Erkek/Rampacı/
 //      Karışık), KARIŞIK → ?ajax=kaydet KARISIK tip id'siyle gider, rozet
 //      "Karışık", Kadın⇄Erkek hızlı geçiş düğmesi GİZLİ, sonuç kapsülü is-karisik,
 //      GİRİŞ dairesi Karışık toplamı; ÇIKIŞ (Karışık) eski davranış (toplam giriş).
@@ -101,7 +101,7 @@ async function sonucBekle(page) {
                      renkFarkli: !!k && getComputedStyle(k).backgroundImage !== getComputedStyle(bs[1]).backgroundImage,
                      tasma: document.documentElement.scrollWidth > innerWidth };
         });
-        ok('tip ekranında 3 düğme: KADIN, ERKEK, KARISIK', JSON.stringify(tip.kodlar) === '["KADIN","ERKEK","KARISIK"]', JSON.stringify(tip));
+        ok('tip ekranında 4 düğme: KADIN, ERKEK, RAMPACI, KARISIK', JSON.stringify(tip.kodlar) === '["KADIN","ERKEK","RAMPACI","KARISIK"]', JSON.stringify(tip));
         ok('KARIŞIK düğmesi: metin, kendi sınıfı/rengi, ekranda, tıklanabilir, taşma yok', tip.metin === 'KARIŞIK' && tip.sinif && tip.renkFarkli && tip.ekranda && tip.ust && !tip.tasma, JSON.stringify(tip));
         if (SHOT && ekran.kod === 'pc') await page.screenshot({ path: path.join(SHOT, 'v295_kiosk_tip_pc.png') });
         await page.click('[data-gi-tip-kod="KARISIK"]'); await page.waitForTimeout(400);

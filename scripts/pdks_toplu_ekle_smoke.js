@@ -143,14 +143,14 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
             const l = g.querySelector('.tp-kartli'); const t = g.querySelector('[data-tp="kartli"]');
             return { kapali: !t.checked, gizli: l.hidden && getComputedStyle(l).display === 'none', arac: !!g.querySelector('.tp-kart-arac'), tOlcu: (() => { const r = g.querySelector('.tv-toggle-kutu').getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth + 0.5; })() };
         }));
-        ok('kart listesi + "İlk N" satırı AÇILIŞTA gizli; "Kartlı giriş ekle" anahtarı görünür ve kapalı', gizli.length === 2 && gizli.every(x => x.kapali && x.gizli && x.arac && x.tOlcu), JSON.stringify(gizli));
+        ok('kart listesi + "İlk N" satırı AÇILIŞTA gizli; "Kartlı giriş ekle" anahtarı görünür ve kapalı', gizli.length === 3 && gizli.every(x => x.kapali && x.gizli && x.arac && x.tOlcu), JSON.stringify(gizli));
         await page.evaluate(() => document.querySelectorAll('#toplu .tp-grup').forEach(g => { const t = g.querySelector('[data-tp="kartli"]'); t.click(); }));
         await page.waitForTimeout(100);
         const ilk = await page.evaluate(() => ({ kaydet: document.getElementById('tpKaydetBtn').disabled, gruplar: document.querySelectorAll('#toplu .tp-grup').length,
             kutular: [...document.querySelectorAll('#toplu .tp-grup')].map(x => x.querySelectorAll('.tp-kartlar input').length),
             acik: [...document.querySelectorAll('#toplu .tp-kartli')].every(l => !l.hidden && l.getBoundingClientRect().height > 0),
             kutuKaydirilir: [...document.querySelectorAll('#toplu .tp-kartlar')].every(x => x.scrollHeight > x.clientHeight + 1 && x.clientHeight <= 160) }));
-        ok('Kaydet başlangıçta PASİF; iki grup (KADIN/ERKEK); anahtar açınca liste görünür, kutular sınırlı yükseklikte kaydırılıyor', ilk.kaydet && ilk.gruplar === 2 && ilk.kutular.every(n => n >= 38) && ilk.acik && ilk.kutuKaydirilir, JSON.stringify(ilk));
+        ok('Kaydet başlangıçta PASİF; üç grup (KADIN/ERKEK/RAMPACI); anahtar açınca liste görünür, kutular sınırlı yükseklikte kaydırılıyor', ilk.kaydet && ilk.gruplar === 3 && ilk.kutular.every(n => n >= 38) && ilk.acik && ilk.kutuKaydirilir, JSON.stringify(ilk));
         if (SHOT && (ekran.k === 'pc' || ekran.k === 'mob')) {
             await page.evaluate(k => { document.querySelectorAll('#toplu .tp-grup')[0].scrollIntoView({ block: k === 'pc' ? 'center' : 'start' }); document.querySelectorAll('#toplu .tp-grup')[0].querySelector('.tp-kartlar input').click(); }, ekran.k);
             await page.waitForTimeout(120);
