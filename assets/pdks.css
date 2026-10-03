@@ -2106,6 +2106,8 @@ html[data-theme="dark"] .sv-uyari { background: #3a2a14; color: #ffcf8a; }
     .sv-sayac { display: flex; align-items: center; gap: 10px; }
     .sv-sayac-ust { flex: 1 1 auto; margin: 0; }
     .sv-kontrol { flex: 0 0 auto; width: 156px; }
+}
+
 /* =====================================================================
    v299 — Sıralama + Kapanış Notu
    Başlık tıklama sıralaması (config/pdks_liste_ui.php) + mobil Sırala seçici
