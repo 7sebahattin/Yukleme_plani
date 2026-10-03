@@ -11,7 +11,7 @@ const gunler = ['15.09.2026', '15.09.2026', '16.09.2026', '17.09.2026', '17.09.2
 let sonG = null, no = 1;
 const satirlar = gunler.map((g, i) => {
   const yeni = g !== sonG; if (yeni) { no = 1 - no; sonG = g; }
-  return `<tr class="ctd-click-row ctd-g${no}${yeni ? ' ctd-gyeni' : ''}" tabindex="0"><td><strong>${g}</strong></td><td>Çavuş ${i}</td><td>3</td><td>2</td><td>5</td></tr>`;
+  return `<tr class="pdks-satir-link ctd-g${no}${yeni ? ' ctd-gyeni' : ''}" tabindex="0"><td><strong>${g}</strong></td><td>Çavuş ${i}</td><td>3</td><td>2</td><td>5</td></tr>`;
 }).join('');
 const html = (tema) => `<!doctype html><html lang="tr" ${tema ? 'data-theme="dark"' : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="file://${ROOT}/assets/style.css"><link rel="stylesheet" href="file://${ROOT}/assets/pdks.css"></head><body><main class="container"><h1>Çavuş Toplu Döküm</h1>

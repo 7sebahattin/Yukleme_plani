@@ -352,7 +352,7 @@ ok8d(
 ok8d(
     'Aylık satır kart detay sayfasına tıklanabilir (v296: ortak pdks-satir-link + data-href + birincil hücrede <a>)',
     str_contains($listeSrc, 'cavus_toplu_dokum_detay.php')
-        && str_contains($listeSrc, 'class="pdks-satir-link"')
+        && str_contains($listeSrc, 'class="pdks-satir-link ')
         && str_contains($listeSrc, 'data-href="<?= h($detayUrl) ?>"')
         && str_contains($listeSrc, '<a href="<?= h($detayUrl) ?>" class="pdks-satir-ana">')
         && str_contains($listeSrc, 'pdks_liste_ui_js()')

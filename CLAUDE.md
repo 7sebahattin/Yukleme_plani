@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v295` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v296` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -566,6 +566,26 @@ Detayı'nda **🎲 Otomatik Ata** ile rastgele Kadın/Erkek'e atanır.
   Puantaj'da "🎲 N Karışık" ipucu, toplu dökümde Karışık sayısı (Kadın+Erkek+Karışık=Toplam).
   Günlük Puantaj CSV/XLSX'e sütun EKLENMEDİ (CSV kuralı).
 - Test: `php scripts/pdks_karisik_smoke.php` · `node scripts/pdks_karisik_smoke.js`.
+
+### Liste Ergonomisi (v296)
+
+- **Otomatik filtre:** Personel Takibi sayfalarındaki GET filtre formları `data-oto-filtre`
+  taşır; seçim/tarih değişince kendiliğinden gönderilir (arama kutusu 400 ms gecikmeli /
+  Enter; klavyeyle yazılan tarih 900 ms ya da odak kaybı). "Filtrele" düğmesi yalnız
+  `<noscript>` içinde. POST formlarına uygulanmaz. Mekanizma TEK yerde:
+  `config/pdks_liste_ui.php` (`pdks_gunluk.php` yükler) → sayfa `render_footer()`'dan önce
+  `pdks_liste_ui_js()` çağırır. Yeni filtre formu eklerken `data-oto-filtre` ver, ayrı script YAZMA.
+  "Özel" dönem seçimi tarihleri bekler (`data-oto-filtre-bekle`).
+- **Tıklanabilir satır:** yalnız "Detay" içeren İşlem sütunu yerine `tr.pdks-satir-link[data-href]
+  tabindex="0"` (tık / Enter; Ctrl/Cmd/orta tık yeni sekme; iç bağlantı/düğmeler etkilenmez) +
+  birincil hücrede gerçek `<a>`. Başka eylemi olan satırlar (Düzenle, İptal…) düğmelerini korur.
+- **Toplu döküm gün tonları:** `ctd-g0/ctd-g1` (tarihe göre dönüşümlü) + `ctd-gyeni` (grup başı
+  kalın çizgi); yazdırmada `print_pdks.css`.
+- **Çalışma Ekle penceresi** yeni görünüm (`_puantaj_ekle.php` + `pdks.css` v296-B bloğu): alan
+  adları/id'ler/gizli alanlar DEĞİŞMEDİ.
+- Test: `node scripts/pdks_oto_filtre_smoke.js` (önce `PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun php
+  scripts/pdks_puantaj_dialog_render.php > _test_puantaj_liste.html` ve `PUANTAJ_SAYFA=toplu …
+  > _test_toplu_dokum.html`) · `php scripts/pdks_v296b_smoke.php` · `node scripts/pdks_v296b_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 
