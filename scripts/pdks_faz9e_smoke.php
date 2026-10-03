@@ -315,8 +315,11 @@ ok9e('manuel_cikis.php KENDİSİ bu fazda DEĞİŞMEDİ (mevcut Faz 8E akışı 
 // § G — Sürüm
 // =========================================================
 echo "\n=== G. Sürüm (APP_SURUM / CACHE_NAME) ===\n";
-ok9e('config/helpers.php: APP_SURUM v272', (bool)preg_match("/APP_SURUM['\"]?\\s*,?\\s*['\"]v272['\"]/", $helpersSrc) || str_contains($helpersSrc, "'v272'"));
-ok9e('sw.js: CACHE_NAME yukleme-plani-v272', str_contains(oku9e('sw.js'), 'yukleme-plani-v272'));
+// Sürüm her PR'da artar — sabit numara yerine iki dosyanın EŞİT olduğu denetlenir.
+$surumApp = preg_match("/define\\('APP_SURUM', '(v\\d+)'\\);/", $helpersSrc, $m9a) ? $m9a[1] : null;
+$surumSw  = preg_match("/yukleme-plani-(v\\d+)/", oku9e('sw.js'), $m9s) ? $m9s[1] : null;
+ok9e('config/helpers.php: APP_SURUM tanımlı (vNNN)', $surumApp !== null);
+ok9e('sw.js: CACHE_NAME sürümü APP_SURUM ile AYNI', $surumSw !== null && $surumSw === $surumApp);
 
 // =========================================================
 echo "\n=== SONUÇ ===\n";

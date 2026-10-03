@@ -2979,6 +2979,8 @@ function pdks_gunluk_faz8a_kart_sorgula(string $kanonik, PDO $pdo): array
             'entry_time' => $acik['entry_time'], 'depo' => $acik['depo'],
         ] : null,
         'gecmis' => $gecmis,
+        // v298: aktif tanım (salt okunur; tablo yoksa null).
+        'tanim' => ($t = pdks_gunluk_kart_tanim_aktif($pdo, (int)$kart['id'])) ? pdks_gunluk_kart_tanim_ozet($t) : null,
     ] + $cakisma;
 }
 
@@ -2995,13 +2997,24 @@ function pdks_gunluk_faz8a_kart_sorgula(string $kanonik, PDO $pdo): array
  *
  * @param int    $workerTypeId  taramayı yapan ekranda O AN seçili işçi tipi (kart DEĞİL — bkz. dosya başlığı)
  * @param string $declaredClass 'tam' | 'yarim' — pdks_gunluk_faz8a_mesai_siniflari()
+ * @param string $donemKaynak   v298: dönemin `source` değeri — 'scan' (çavuş+tip seçilen kiosk)
+ *                              | 'tanimli' (Tanımlı Giriş, pdks_gunluk_tanimli_giris_kaydet()).
+ *                              Yalnız köken bilgisidir; hakediş/cari/rapor buna göre DALLANMAZ.
+ *
+ * ⚠ v298 — TANIMLI KART KAPISI: kartın aktif tanımı (worker_card_assignments)
+ * varsa ve mesainin çavuşu / seçilen tip / mesainin deposu tanımla uyuşmuyorsa
+ * giriş `kart_baska_tanimli` ile REDDEDİLİR. Tanım kart KİLİDİ ALTINDA okunur
+ * (tanım yazma da aynı kilidi alır) — Tanımlı Giriş yolu da bu kapıdan geçer.
  */
-function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $sessionId, int $workerTypeId, string $declaredClass, int $recordedByUserId, ?PDO $pdo = null): array
+function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $sessionId, int $workerTypeId, string $declaredClass, int $recordedByUserId, ?PDO $pdo = null, string $donemKaynak = 'scan'): array
 {
     $pdo = $pdo ?? db();
 
     if (!defined('PDKS_UID_KAYNAKLARI') || !in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
         return ['ok' => false, 'kod' => 'gecersiz_kaynak', 'hata' => 'UID kaynağı bildirilmeli.'];
+    }
+    if (!in_array($donemKaynak, ['scan', 'tanimli'], true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_donem_kaynagi', 'hata' => 'Geçersiz giriş kaynağı.'];
     }
     if (!array_key_exists($declaredClass, pdks_gunluk_faz8a_mesai_siniflari())) {
         return ['ok' => false, 'kod' => 'gecersiz_mesai_sinifi', 'hata' => 'Tam Mesai / Yarım Mesai seçmelisiniz.'];
@@ -3065,6 +3078,13 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
     try {
         pdks_gunluk_faz8a_kart_kilitle($pdo, (int)$kart['id']);
 
+        // v298: tanımlı kart kapısı — tanım KİLİT ALTINDA okunur (tablo yoksa null).
+        $tanim = pdks_gunluk_kart_tanim_aktif($pdo, (int)$kart['id']);
+        if ($tanim !== null && ($tanimEngel = pdks_gunluk_kart_tanim_engeli($tanim, $session, (int)$tip['id'])) !== null) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false] + $tanimEngel;
+        }
+
         $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, (int)$kart['id']);
         if ($acik !== null) {
             if (!$disTx) $pdo->rollBack();
@@ -3115,11 +3135,11 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
                 (session_id, worker_card_id, worker_type_id_snapshot, worker_type_name_snapshot,
                  entry_event_id, entry_time, declared_attendance_class, work_date_snapshot, depo_snapshot,
                  status, source)
-             VALUES (?,?,?,?,?,?,?,?,?, 'open', 'scan')"
+             VALUES (?,?,?,?,?,?,?,?,?, 'open', ?)"
         );
         $insP->execute([
             $sessionId, $kart['id'], (int)$tip['id'], (string)$tip['name'],
-            $eventId, $simdi, $declaredClass, $session['work_date'], $session['depo'],
+            $eventId, $simdi, $declaredClass, $session['work_date'], $session['depo'], $donemKaynak,
         ]);
         $periodId = (int)$pdo->lastInsertId();
 
@@ -3136,6 +3156,7 @@ function pdks_gunluk_faz8a_giris_kaydet(string $hamUid, string $kaynak, int $ses
             'session_id' => $sessionId, 'worker_card_id' => $kart['id'], 'card_no' => $kart['card_no'],
             'worker_type_id' => $tip['id'], 'declared_attendance_class' => $declaredClass,
             'eksik_cikisli_donem_id' => $eksikDonem ? (int)$eksikDonem['id'] : null,
+            'donem_kaynak' => $donemKaynak, 'tanim_id' => $tanim !== null ? (int)$tanim['id'] : null,
         ]);
     }
 
@@ -3418,6 +3439,412 @@ function pdks_gunluk_ortak_cikis_mesailer(?string $depo = null, ?PDO $pdo = null
         $mesailer[$sid]['icerde'] = (int)$n['giris'] - (int)$n['cikis'];
     }
     return array_values($mesailer);
+}
+
+// =========================================================
+// v298 — TANIMLI GİRİŞ (kart → çavuş + tip + depo tanımı)
+// =========================================================
+// Kart Havuzu'nda (isci_kartlari.php) bir karta ÇAVUŞ + TİP (yalnız
+// KADIN/ERKEK) + DEPO tanımlanır; kioskta "🏷 TANIMLI GİRİŞ" modunda kart
+// okutulunca o çavuşun BUGÜNKÜ mesaisine o tiple GİRİŞ yazılır. Çıkış her
+// zamanki ORTAK ÇIKIŞ'tır (değişiklik yok).
+//
+// ⚠ Tablo OPSİYONELDİR (sahip GO verdi — YALNIZ yeni tablo, ALTER YOK):
+// pdks_gunluk_tablolar() / pdks_gunluk_sema_hazir() / pdks_gunluk_faz8a_sema_hazir()
+// içine BİLEREK EKLENMEZ (Çavuş Ücreti emsali) — eklenseydi tablo kurulmadan
+// TÜM Günlük İşçi sayfaları kilitlenirdi. Tablo yoksa: özellik GİZLİ, tanım
+// okuması null döner ("tanım yok") ve normal kiosk aynen çalışır. Yalnız
+// migrate.php'den kurulur; ekran açılışında migrate ÇAĞRILMAZ.
+//
+// ⚠ Kart başına TEK aktif tanım: `aktif_kart_id` (tanım aktifken = kart id,
+// bitince NULL) üzerinde UNIQUE — foreman_period_closures.chain_key deseni.
+// Geçmiş tanımlar SİLİNMEZ (valid_to + ended_by + end_reason).
+//
+// ⚠ İKİNCİ YAZMA YOLU YOK: pdks_gunluk_tanimli_giris_kaydet() yalnız tanımı
+// ve mesaiyi BULUR; yazmayı değiştirilmemiş pdks_gunluk_faz8a_giris_kaydet()'e
+// devreder (dönem source='tanimli'). O fonksiyon tanımı kart kilidi altında
+// YENİDEN okur — arada tanım değişirse giriş yazılmaz.
+
+/** @return array<string,string> Tanım tablosu DDL'i (kendi migrate/sema_hazir çifti). */
+function pdks_gunluk_kart_tanim_tablolar(): array
+{
+    $t = [];
+    $t['worker_card_assignments'] = "CREATE TABLE IF NOT EXISTS `worker_card_assignments` (
+        `id`                 INT AUTO_INCREMENT PRIMARY KEY,
+        `worker_card_id`     INT          NOT NULL,
+        `foreman_id`         INT          NOT NULL,
+        `worker_type_id`     INT          NOT NULL,
+        `depo`               VARCHAR(150) NOT NULL,
+        `aktif_kart_id`      INT          NULL DEFAULT NULL,
+        `valid_from`         DATETIME     NOT NULL,
+        `valid_to`           DATETIME     NULL DEFAULT NULL,
+        `created_by_user_id` INT          NULL DEFAULT NULL,
+        `ended_by_user_id`   INT          NULL DEFAULT NULL,
+        `end_reason`         VARCHAR(255) NULL DEFAULT NULL,
+        `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_wca_aktif_kart` (`aktif_kart_id`),
+        INDEX `idx_wca_card` (`worker_card_id`),
+        INDEX `idx_wca_foreman` (`foreman_id`),
+        CONSTRAINT `fk_wca_card` FOREIGN KEY (`worker_card_id`)
+            REFERENCES `worker_cards`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+        CONSTRAINT `fk_wca_foreman` FOREIGN KEY (`foreman_id`)
+            REFERENCES `foremen`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+        CONSTRAINT `fk_wca_type` FOREIGN KEY (`worker_type_id`)
+            REFERENCES `worker_types`(`id`) ON DELETE RESTRICT ON UPDATE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    return $t;
+}
+
+/**
+ * Tanım tablosu var mı — UCUZ ve istek içinde önbellekli. YALNIZ "var" sonucu
+ * önbelleğe alınır (tablo düşürülmez); "yok" her çağrıda yeniden sorulur ki
+ * migrate.php aynı istekte kurduğunda hemen görünsün.
+ */
+function pdks_gunluk_kart_tanim_sema_hazir(?PDO $pdo = null): bool
+{
+    static $var;
+    $pdo = $pdo ?? db();
+    $var ??= new WeakMap();
+    if (isset($var[$pdo])) return true;
+    if (!pdks_gunluk_tablo_var($pdo, 'worker_card_assignments')) return false;
+    $var[$pdo] = true;
+    return true;
+}
+
+/** İDEMPOTENT, yalnız CREATE TABLE. Önkoşul: Günlük İşçi çekirdek tabloları. migrate.php'den çağrılır. */
+function pdks_gunluk_kart_tanim_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+    if (!pdks_gunluk_sema_hazir($pdo)) {
+        return [['tablo' => 'worker_card_assignments', 'durum' => 'atlandi',
+                 'mesaj' => 'Önce Günlük İşçi tablolarını (worker_cards / foremen / worker_types) oluşturun.']];
+    }
+    foreach (pdks_gunluk_kart_tanim_tablolar() as $ad => $sql) {
+        if (pdks_gunluk_tablo_var($pdo, $ad)) {
+            $rapor[] = ['tablo' => $ad, 'durum' => 'var', 'mesaj' => 'Tablo zaten mevcut.'];
+            continue;
+        }
+        try {
+            $pdo->exec($sql);
+            $rapor[] = pdks_gunluk_tablo_var($pdo, $ad)
+                ? ['tablo' => $ad, 'durum' => 'olusturuldu', 'mesaj' => 'Tablo oluşturuldu.']
+                : ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'CREATE çalıştı ama tablo görünmüyor.'];
+        } catch (PDOException $e) {
+            error_log('[pdks_gunluk_kart_tanim_migrate] ' . $ad . ': ' . $e->getMessage());
+            $rapor[] = ['tablo' => $ad, 'durum' => 'hata', 'mesaj' => 'İşlem tamamlanamadı. Teknik ayrıntılar sunucu günlüğüne kaydedildi.'];
+        }
+    }
+    return $rapor;
+}
+
+/** Türkçe yönelme eki (ünlü uyumu): "Kadın" → "'a", "Erkek" → "'e", ünlüyle bitiyorsa "'ya"/"'ye". */
+function pdks_gunluk_yonelme_eki(string $s): string
+{
+    $kucuk = mb_strtolower(str_replace(['I', 'İ'], ['ı', 'i'], trim($s)), 'UTF-8');
+    if (!preg_match_all('/[aıoueiöü]/u', $kucuk, $m)) return "'a";
+    $son = end($m[0]);
+    $arka = in_array($son, ['a', 'ı', 'o', 'u'], true);
+    $unluyleBiter = (bool)preg_match('/[aıoueiöü]$/u', $kucuk);
+    return "'" . ($unluyleBiter ? 'y' : '') . ($arka ? 'a' : 'e');
+}
+
+/**
+ * Kartın AKTİF tanımı (çavuş/tip adlarıyla) ya da null. Tablo yoksa null —
+ * çağıranlar "tanım yok" gibi davranır. Yazma yolunda kart kilidi ALTINDA çağrılır.
+ */
+function pdks_gunluk_kart_tanim_aktif(PDO $pdo, int $kartId): ?array
+{
+    if ($kartId < 1 || !pdks_gunluk_kart_tanim_sema_hazir($pdo)) return null;
+    $st = $pdo->prepare(
+        "SELECT a.*, f.name AS foreman_name, f.code AS foreman_code, f.is_active AS foreman_aktif,
+                t.code AS tip_kodu, t.name AS tip_adi
+           FROM worker_card_assignments a
+           JOIN foremen f ON f.id = a.foreman_id
+           JOIN worker_types t ON t.id = a.worker_type_id
+          WHERE a.aktif_kart_id = ?"
+    );
+    $st->execute([$kartId]);
+    return $st->fetch() ?: null;
+}
+
+/** Birden çok kartın aktif tanımı: [kart_id => tanım]. Tablo yoksa boş. (Kart Havuzu listesi.) */
+function pdks_gunluk_kart_tanim_listesi(PDO $pdo, array $kartIdleri): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $kartIdleri), fn($i) => $i > 0)));
+    if (!$ids || !pdks_gunluk_kart_tanim_sema_hazir($pdo)) return [];
+    $out = [];
+    foreach (array_chunk($ids, 500) as $parca) {
+        $st = $pdo->prepare(
+            "SELECT a.*, f.name AS foreman_name, f.code AS foreman_code, f.is_active AS foreman_aktif,
+                    t.code AS tip_kodu, t.name AS tip_adi
+               FROM worker_card_assignments a
+               JOIN foremen f ON f.id = a.foreman_id
+               JOIN worker_types t ON t.id = a.worker_type_id
+              WHERE a.aktif_kart_id IN (" . implode(',', array_fill(0, count($parca), '?')) . ")"
+        );
+        $st->execute($parca);
+        foreach ($st->fetchAll() as $r) $out[(int)$r['aktif_kart_id']] = $r;
+    }
+    return $out;
+}
+
+/** Tanımın dışa verilen (JSON) özeti. */
+function pdks_gunluk_kart_tanim_ozet(array $t): array
+{
+    return [
+        'id' => (int)$t['id'], 'foreman_id' => (int)$t['foreman_id'], 'foreman_name' => (string)$t['foreman_name'],
+        'foreman_aktif' => (bool)(int)$t['foreman_aktif'], 'worker_type_id' => (int)$t['worker_type_id'],
+        'tip_kodu' => (string)$t['tip_kodu'], 'tip_adi' => (string)$t['tip_adi'], 'depo' => (string)$t['depo'],
+        'valid_from' => (string)$t['valid_from'],
+    ];
+}
+
+/** "Çavuş A / Kadın'a" — engel mesajlarının ortak parçası. */
+function pdks_gunluk_kart_tanim_kime(array $t): string
+{
+    $tip = (string)$t['tip_adi'];
+    return (string)$t['foreman_name'] . ' / ' . $tip . pdks_gunluk_yonelme_eki($tip);
+}
+
+/**
+ * NORMAL (çavuş + tip seçilen) kiosk GİRİŞ'inde tanımlı kart kapısı — SAF
+ * fonksiyon (DB yok). Mesainin çavuşu, seçilen tip ya da mesainin deposu
+ * tanımla uyuşmazsa ['kod' => 'kart_baska_tanimli', 'hata' => …]; uyuşursa null.
+ * Depo TR-duyarsız karşılaştırılır (pdks_gunluk_depo_fold).
+ */
+function pdks_gunluk_kart_tanim_engeli(array $tanim, array $session, int $workerTypeId): ?array
+{
+    $tDepo = trim((string)$tanim['depo']);
+    $sDepo = trim((string)($session['depo'] ?? ''));
+    $depoFarkli = pdks_gunluk_depo_fold($tDepo) !== pdks_gunluk_depo_fold($sDepo);
+    if (!$depoFarkli && (int)$tanim['foreman_id'] === (int)($session['foreman_id'] ?? 0)
+        && (int)$tanim['worker_type_id'] === $workerTypeId) {
+        return null;
+    }
+    $hata = $depoFarkli
+        ? 'Bu kart ' . $tDepo . ' deposunda ' . pdks_gunluk_kart_tanim_kime($tanim) . ' tanımlı.'
+        : 'Bu kart ' . pdks_gunluk_kart_tanim_kime($tanim) . ' tanımlı.';
+    return ['kod' => 'kart_baska_tanimli', 'hata' => $hata . ' Tanımlı Giriş ekranını kullanın.'];
+}
+
+/** UNIQUE (23000) ihlali mi — eşzamanlı tanım yazımı. */
+function pdks_gunluk_kart_tanim_eszamanli(Throwable $e): bool
+{
+    return $e instanceof PDOException
+        && ((string)$e->getCode() === '23000' || (string)($e->errorInfo[0] ?? '') === '23000');
+}
+
+/**
+ * Karta tanım yaz (varsa eski aktif tanımı kapatıp yenisini açar). TEK transaction,
+ * kart satırı kilitli (pdks_gunluk_faz8a_kart_kilitle — giriş yazımıyla AYNI kilit).
+ * Kart içerideyse ENGELLENMEZ, `uyari` döner (açık dönem eski çavuşta kalır).
+ * Yetki kapısı ÇAĞIRANDA (Kart Havuzu: attendance.worker_cards).
+ *
+ * @return array{ok:bool, kod?:string, hata?:string, tanim_id?:int, degisiklik_yok?:bool, uyari?:?string}
+ */
+function pdks_gunluk_kart_tanim_kaydet(int $kartId, int $foremanId, int $tipId, string $depo, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $depo = trim($depo);
+    if (!pdks_gunluk_kart_tanim_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'sema_hazir_degil', 'hata' => 'Tanımlı Kart tablosu henüz kurulmamış (migrate.php).'];
+    }
+    if ($depo === '') return ['ok' => false, 'kod' => 'depo_yok', 'hata' => 'Önce bir depo seçmelisiniz.'];
+    if (mb_strlen($depo) > 150) return ['ok' => false, 'kod' => 'depo_gecersiz', 'hata' => 'Depo adı geçersiz.'];
+
+    $stK = $pdo->prepare('SELECT * FROM worker_cards WHERE id = ?');
+    $stK->execute([$kartId]);
+    $kart = $stK->fetch();
+    if (!$kart) return ['ok' => false, 'kod' => 'kart_yok', 'hata' => 'Kart bulunamadı.'];
+    if ((string)($kart['enrolled_source'] ?? '') === 'kartsiz') {
+        return ['ok' => false, 'kod' => 'kartsiz_kart', 'hata' => 'Kartsız mesainin sanal kartına tanım yapılamaz.'];
+    }
+    $stF = $pdo->prepare('SELECT id, name, is_active FROM foremen WHERE id = ?');
+    $stF->execute([$foremanId]);
+    $cavus = $stF->fetch();
+    if (!$cavus) return ['ok' => false, 'kod' => 'cavus_yok', 'hata' => 'Çavuş bulunamadı.'];
+    if (!(int)$cavus['is_active']) return ['ok' => false, 'kod' => 'cavus_pasif', 'hata' => 'Pasif çavuşa kart tanımlanamaz.'];
+    $tip = pdks_gunluk_desteklenen_tip_coz($tipId, $pdo);
+    if (!$tip) return ['ok' => false, 'kod' => 'tip_desteklenmiyor', 'hata' => 'Tanım için yalnız Kadın / Erkek seçilebilir.'];
+
+    $simdi = date('Y-m-d H:i:s');
+    $eski = null; $yeniId = 0;
+    $disTx = $pdo->inTransaction();
+    try {
+        if (!$disTx) $pdo->beginTransaction();
+        pdks_gunluk_faz8a_kart_kilitle($pdo, $kartId);
+        $eski = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
+        if ($eski && (int)$eski['foreman_id'] === $foremanId && (int)$eski['worker_type_id'] === (int)$tip['id']
+            && pdks_gunluk_depo_fold((string)$eski['depo']) === pdks_gunluk_depo_fold($depo)) {
+            if (!$disTx) $pdo->commit();
+            return ['ok' => true, 'tanim_id' => (int)$eski['id'], 'degisiklik_yok' => true, 'uyari' => null];
+        }
+        if ($eski) {
+            $pdo->prepare("UPDATE worker_card_assignments SET valid_to = ?, aktif_kart_id = NULL, ended_by_user_id = ?, end_reason = ? WHERE id = ? AND aktif_kart_id = ?")
+                ->execute([$simdi, $userId, 'Yeni tanımla değiştirildi', (int)$eski['id'], $kartId]);
+        }
+        $pdo->prepare("INSERT INTO worker_card_assignments (worker_card_id, foreman_id, worker_type_id, depo, aktif_kart_id, valid_from, created_by_user_id) VALUES (?,?,?,?,?,?,?)")
+            ->execute([$kartId, $foremanId, (int)$tip['id'], $depo, $kartId, $simdi, $userId]);
+        $yeniId = (int)$pdo->lastInsertId();
+        if (!$disTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        if (pdks_gunluk_kart_tanim_eszamanli($e)) {
+            return ['ok' => false, 'kod' => 'eszamanli', 'hata' => 'Bu kart için eşzamanlı başka bir tanım işlemi yapıldı. Sayfayı yenileyip tekrar deneyin.'];
+        }
+        error_log('[pdks_gunluk_kart_tanim_kaydet] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Tanım kaydedilemedi. Lütfen tekrar deneyin.'];
+    }
+
+    if (function_exists('audit_log_event')) {
+        audit_log_event('kart_tanim', 'worker_cards', $kartId,
+            $eski ? ['tanim_id' => (int)$eski['id'], 'foreman_id' => (int)$eski['foreman_id'], 'worker_type_id' => (int)$eski['worker_type_id'], 'depo' => (string)$eski['depo']] : null,
+            ['tanim_id' => $yeniId, 'card_no' => (string)$kart['card_no'], 'foreman_id' => $foremanId,
+             'worker_type_id' => (int)$tip['id'], 'depo' => $depo]);
+    }
+
+    $uyari = null;
+    if (pdks_gunluk_faz8a_sema_hazir($pdo) && ($acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kartId))) {
+        $uyari = 'Kart şu an ' . $acik['foreman_name'] . ' mesaisinde içeride — açık dönem o mesaide kalır; çıkış Ortak Çıkış ile yapılır.';
+    }
+    return ['ok' => true, 'tanim_id' => $yeniId, 'degisiklik_yok' => false, 'uyari' => $uyari];
+}
+
+/** Kartın aktif tanımını bitirir (satır SİLİNMEZ: valid_to + aktif_kart_id=NULL). */
+function pdks_gunluk_kart_tanim_bitir(int $kartId, string $reason, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_gunluk_kart_tanim_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'sema_hazir_degil', 'hata' => 'Tanımlı Kart tablosu henüz kurulmamış (migrate.php).'];
+    }
+    $reason = trim($reason);
+    if ($reason === '') $reason = 'Tanım kaldırıldı';
+    $reason = mb_substr($reason, 0, 255);
+    $disTx = $pdo->inTransaction();
+    try {
+        if (!$disTx) $pdo->beginTransaction();
+        pdks_gunluk_faz8a_kart_kilitle($pdo, $kartId);
+        $eski = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
+        if (!$eski) {
+            if (!$disTx) $pdo->rollBack();
+            return ['ok' => false, 'kod' => 'tanim_yok', 'hata' => 'Bu kartın aktif bir tanımı yok.'];
+        }
+        $pdo->prepare("UPDATE worker_card_assignments SET valid_to = ?, aktif_kart_id = NULL, ended_by_user_id = ?, end_reason = ? WHERE id = ? AND aktif_kart_id = ?")
+            ->execute([date('Y-m-d H:i:s'), $userId, $reason, (int)$eski['id'], $kartId]);
+        if (!$disTx) $pdo->commit();
+    } catch (Throwable $e) {
+        if (!$disTx && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('[pdks_gunluk_kart_tanim_bitir] ' . $e->getMessage());
+        return ['ok' => false, 'kod' => 'yazma_hatasi', 'hata' => 'Tanım kaldırılamadı. Lütfen tekrar deneyin.'];
+    }
+    if (function_exists('audit_log_event')) {
+        audit_log_event('kart_tanim_bitir', 'worker_cards', $kartId,
+            ['tanim_id' => (int)$eski['id'], 'foreman_id' => (int)$eski['foreman_id'], 'worker_type_id' => (int)$eski['worker_type_id'], 'depo' => (string)$eski['depo']],
+            ['reason' => $reason]);
+    }
+    return ['ok' => true, 'tanim_id' => (int)$eski['id']];
+}
+
+/**
+ * TANIMLI GİRİŞ — kartın tanımındaki çavuşun BUGÜNKÜ mesaisine, tanımdaki tiple GİRİŞ.
+ *
+ * ⚠ İKİNCİ BİR YAZMA YOLU DEĞİLDİR — gövdede INSERT/UPDATE/DELETE YOK (test
+ * denetler). Sıra: şema → UID → kart (tanımsız kart OTOMATİK KAYDEDİLMEZ) →
+ * aktif tanım → depo → SALT OKUNUR ön kontroller (kart durumu, açık dönem,
+ * aynı gün eksik çıkış, tip) ki başarısız okutma çavuşa boş mesai AÇMASIN →
+ * pdks_gunluk_oturum_ac_veya_getir() (kiosk yolu; önceki gün açık mesai kuralı
+ * dahil) → pdks_gunluk_faz8a_giris_kaydet(..., 'tanimli') — o fonksiyon tanımı
+ * kart kilidi altında yeniden doğrular.
+ * İstemciden session_id / foreman_id / worker_type_id ALINMAZ.
+ */
+function pdks_gunluk_tanimli_giris_kaydet(string $hamUid, string $kaynak, int $recordedByUserId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+
+    if (!pdks_gunluk_faz8a_sema_hazir($pdo) || !pdks_gunluk_kart_tanim_sema_hazir($pdo)) {
+        return ['ok' => false, 'kod' => 'sema_hazir_degil', 'hata' => 'Tanımlı Giriş için Tanımlı Kart tablosu gerekir — çavuş seçerek giriş yapın.'];
+    }
+    if (!defined('PDKS_UID_KAYNAKLARI') || !in_array($kaynak, PDKS_UID_KAYNAKLARI, true)) {
+        return ['ok' => false, 'kod' => 'gecersiz_kaynak', 'hata' => 'UID kaynağı bildirilmeli.'];
+    }
+    $hamUid = trim($hamUid);
+    if ($hamUid === '') return ['ok' => false, 'kod' => 'bos_uid', 'hata' => 'Kart okutulmadı.'];
+    if (!function_exists('pdks_uid_from_decimal')) {
+        return ['ok' => false, 'kod' => 'pdks_yuklu_degil', 'hata' => 'UID normalizasyon fonksiyonları yüklü değil.'];
+    }
+    $kanonik = match ($kaynak) {
+        'usb_decimal' => pdks_uid_from_decimal($hamUid),
+        'web_nfc'     => pdks_uid_from_web_nfc($hamUid),
+        default       => pdks_uid_hex_normalize($hamUid),
+    };
+    if ($kanonik === null) return ['ok' => false, 'kod' => 'gecersiz_uid', 'hata' => 'Okunan UID geçersiz.'];
+
+    $kart = pdks_gunluk_faz8a_kart_coz($kanonik, $pdo);
+    if ($kart === null) {
+        $engel = pdks_gunluk_kalici_kart_engeli($hamUid, $kaynak, $pdo);
+        if ($engel !== null) return ['ok' => false] + $engel;
+        return ['ok' => false, 'kod' => 'kart_tanimsiz', 'hata' => 'Tanımsız kart — işçi havuzunda kayıtlı değil.'];
+    }
+    $kartId = (int)$kart['id'];
+    $tanim = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
+    if ($tanim === null) {
+        return ['ok' => false, 'kod' => 'kart_tanimli_degil',
+                'hata' => 'Bu kart (' . $kart['card_no'] . ') bir çavuşa tanımlı değil — çavuş seçerek giriş yapın.'];
+    }
+    $cavusBilgi = ['id' => (int)$tanim['foreman_id'], 'ad' => (string)$tanim['foreman_name']];
+    $cavusAd = (string)$tanim['foreman_name'];
+
+    $aktifDepo = trim((string)(function_exists('active_depot') ? (active_depot() ?? '') : ''));
+    if ($aktifDepo === '') return ['ok' => false, 'kod' => 'depo_yok', 'hata' => 'Önce bir depo seçmelisiniz.'];
+    if (pdks_gunluk_depo_fold((string)$tanim['depo']) !== pdks_gunluk_depo_fold($aktifDepo)) {
+        return ['ok' => false, 'kod' => 'tanim_baska_depo', 'hata' => 'Bu kart ' . trim((string)$tanim['depo']) . ' deposuna tanımlı.', 'cavus' => $cavusBilgi];
+    }
+
+    // ── Salt okunur ön kontroller (yazma yolu kilit altında YENİDEN doğrular) ──
+    if ($kart['status'] === 'lost')     return ['ok' => false, 'kod' => 'kart_kayip', 'hata' => 'Bu kart KAYIP olarak işaretli.', 'cavus' => $cavusBilgi];
+    if ($kart['status'] === 'disabled') return ['ok' => false, 'kod' => 'kart_devre_disi', 'hata' => 'Bu kart DEVRE DIŞI.', 'cavus' => $cavusBilgi];
+    if (!pdks_gunluk_desteklenen_tip_coz((int)$tanim['worker_type_id'], $pdo)) {
+        return ['ok' => false, 'kod' => 'tip_bulunamadi', 'hata' => 'Tanımdaki işçi tipi pasif ya da desteklenmiyor — Kart Havuzu\'ndan tanımı güncelleyin.', 'cavus' => $cavusBilgi];
+    }
+    $bugun = date('Y-m-d');
+    $stS = $pdo->prepare("SELECT id, status FROM daily_work_sessions WHERE foreman_id = ? AND work_date = ? AND depo = ?");
+    $stS->execute([(int)$tanim['foreman_id'], $bugun, $aktifDepo]);
+    $bugunkuMesai = $stS->fetch() ?: null;
+    $acik = pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kartId);
+    if ($acik !== null) {
+        if ($bugunkuMesai && (int)$acik['session_id'] === (int)$bugunkuMesai['id']) {
+            return ['ok' => false, 'kod' => 'mukerrer_giris', 'hata' => 'Bu kart zaten bu mesaide giriş yapmış.',
+                    'cavus' => $cavusBilgi + ['session_id' => (int)$bugunkuMesai['id']]];
+        }
+        $acikDepo = trim((string)($acik['depo'] ?? ''));
+        $hata = ($acikDepo !== '' && pdks_gunluk_depo_fold($acikDepo) !== pdks_gunluk_depo_fold($aktifDepo))
+            ? 'Bu kart ' . $acikDepo . ' deposunda ' . $acik['foreman_name'] . ' için açık görünüyor. Lütfen depo değişimi yapın.'
+            : 'Bu kart ' . $acik['foreman_name'] . ' mesaisinde açık görünüyor.';
+        return ['ok' => false, 'kod' => 'baska_cavusta_acik', 'hata' => $hata, 'cavus' => $cavusBilgi];
+    }
+    $eksik = pdks_gunluk_faz8a_kart_eksik_cikisli_donemi($pdo, $kartId);
+    if ($eksik && (string)$eksik['work_date'] === $bugun) {
+        return ['ok' => false, 'kod' => 'bugun_eksik_cikis',
+                'hata' => pdks_gunluk_eksik_cikis_uyari_metni($eksik) . ' Aynı gün başka mesaiye giriş yapılamaz.', 'cavus' => $cavusBilgi];
+    }
+
+    // ── Mesai: kiosk yolu (önceki gün açık mesai / kapalı mesai / pasif çavuş kuralları aynen) ──
+    $o = pdks_gunluk_oturum_ac_veya_getir((int)$tanim['foreman_id'], $recordedByUserId, $pdo);
+    if (empty($o['ok'])) {
+        $r = ['ok' => false, 'kod' => (string)($o['kod'] ?? 'hata'),
+              'hata' => $cavusAd . ': ' . (string)($o['hata'] ?? 'Mesai açılamadı.'), 'cavus' => $cavusBilgi];
+        if (!empty($o['eski_oturumlar'])) $r['eski_oturumlar'] = $o['eski_oturumlar'];
+        return $r;
+    }
+    $sid = (int)$o['session']['id'];
+
+    $sonuc = pdks_gunluk_faz8a_giris_kaydet($hamUid, $kaynak, $sid, (int)$tanim['worker_type_id'], 'auto', $recordedByUserId, $pdo, 'tanimli');
+    $sonuc['cavus'] = $cavusBilgi + [
+        'session_id' => $sid, 'work_date' => (string)$o['session']['work_date'], 'onceki_gun' => false,
+    ];
+    $sonuc['tanim'] = pdks_gunluk_kart_tanim_ozet($tanim);
+    return $sonuc;
 }
 
 // =========================================================

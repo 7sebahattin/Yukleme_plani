@@ -56,6 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'puant
         if (!empty($sonuc['kartsiz'])) $ekleMesaj = 'Kartsız çalışma kaydı eklendi (' . $sonuc['card_no'] . ').';
         elseif (!empty($sonuc['acik'])) $ekleMesaj = 'Çalışma kaydı eklendi; kişi içeride yazıldı, çıkışta kartını okutacak.';
         if (!empty($sonuc['yeni_mesai'])) $ekleMesaj .= ' Bu gün için yeni mesai açıldı.';
+        // v298: tanımlı kart başka çavuş/tip/depoya bağlıysa ENGEL DEĞİL, bilgi.
+        if (!empty($sonuc['uyarilar'])) $ekleMesaj .= ' ⚠ ' . implode(' ', $sonuc['uyarilar']);
     }
     set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? $ekleMesaj : $sonuc['hata']);
     if ($sonuc['ok']) { header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$sonuc['session_id']); exit; }

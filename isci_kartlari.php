@@ -30,6 +30,10 @@ require_pdks_gunluk('worker_cards');
 $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 $faz8aHazir = pdks_gunluk_faz8a_sema_hazir($pdo);
+// v298 — Tanımlı Giriş: kart → çavuş + tip (Kadın/Erkek) + depo. Tablo OPSİYONELDİR
+// (worker_card_assignments, yalnız migrate.php'den kurulur); yoksa tanım arayüzü gizlenir.
+$tanimHazir = pdks_gunluk_kart_tanim_sema_hazir($pdo);
+$aktifDepo  = trim((string)(function_exists('active_depot') ? (active_depot() ?? '') : ''));
 
 // ── Salt-okunur önizleme ucu — personel_kartlar.php'deki ajax=onizle İLE
 // AYNI JS'İ (assets/pdks.js) besler; burada AYRICA çapraz-sistem uyarısı da
@@ -145,6 +149,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $hata = $sonuc['hata'] ?? 'İşlem yapılamadı.';
+    } elseif ($action === 'kart_tanim') {
+        // v298: tanım deposu = AKTİF depo (istemciden alınmaz). Yetki = bu sayfanın kapısı.
+        $cardId = (int)($_POST['card_id'] ?? 0);
+        $sonuc = pdks_gunluk_kart_tanim_kaydet($cardId, (int)($_POST['tanim_foreman_id'] ?? 0),
+            (int)($_POST['tanim_worker_type_id'] ?? 0), $aktifDepo, (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            $mesaj = !empty($sonuc['degisiklik_yok']) ? 'Tanım zaten bu şekilde — değişiklik yapılmadı.' : 'Kart tanımı kaydedildi.';
+            if (!empty($sonuc['uyari'])) $mesaj .= ' ⚠ ' . $sonuc['uyari'];
+            header('Location: isci_kartlari.php?ok=' . urlencode($mesaj));
+            exit;
+        }
+        $hata = $sonuc['hata'] ?? 'Tanım kaydedilemedi.';
+    } elseif ($action === 'kart_tanim_bitir') {
+        $sonuc = pdks_gunluk_kart_tanim_bitir((int)($_POST['card_id'] ?? 0), trim((string)($_POST['tanim_reason'] ?? '')), (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            header('Location: isci_kartlari.php?ok=' . urlencode('Kart tanımı kaldırıldı.'));
+            exit;
+        }
+        $hata = $sonuc['hata'] ?? 'Tanım kaldırılamadı.';
     } else {
         $hata = 'Bilinmeyen işlem.';
     }
@@ -190,6 +213,34 @@ try {
 } catch (PDOException $e) {
     set_flash('error', 'Günlük İşçi tabloları henüz hazır değil. Bir yöneticinin migrate.php sayfasından "Günlük İşçi Tablolarını Oluştur" demesi gerekiyor.');
 }
+
+// v298: listedeki kartların aktif tanımları + tanım formu seçenekleri (yalnız AKTİF çavuşlar, KADIN/ERKEK).
+$tanimlar = $tanimHazir ? pdks_gunluk_kart_tanim_listesi($pdo, array_column($kartlar, 'id')) : [];
+$tanimCavuslar = []; $tanimTipler = [];
+if ($tanimHazir) {
+    try {
+        $tanimCavuslar = $pdo->query("SELECT id, code, name FROM foremen WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+        $tanimTipler = pdks_gunluk_desteklenen_tip_listele($pdo);
+    } catch (PDOException $e) { /* seçenek yoksa form boş kalır */ }
+}
+/** Liste satırı için tanım rozeti + uyarı rozetleri (HTML). */
+$tanimRozet = function (array $k) use ($tanimlar): string {
+    $t = $tanimlar[(int)$k['id']] ?? null;
+    if (!$t) return '';
+    $html = '<span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş: kart bu çavuşa / tipe / depoya girer">🏷 '
+          . h($t['foreman_name']) . ' · ' . h($t['tip_adi']) . ' · ' . h($t['depo']) . '</span>';
+    if (!(int)$t['foreman_aktif']) $html .= ' <span class="pdks-badge pdks-badge-kayip" title="Tanımlı çavuş pasif — kiosk girişi reddeder">çavuş pasif</span>';
+    if ($k['status'] !== 'available') $html .= ' <span class="pdks-badge pdks-badge-iptal" title="Kart kayıp/devre dışı — tanım çalışmaz (tanım kendiliğinden bitmez)">kart ' . h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) . '</span>';
+    return $html;
+};
+/** Tanım düğmesinin data-* öznitelikleri (JS değerleri buradan okur; satır içi JS argümanı YOK). */
+$tanimData = function (array $k) use ($tanimlar): string {
+    $t = $tanimlar[(int)$k['id']] ?? null;
+    return ' data-isk-tanim-kart="' . (int)$k['id'] . '" data-isk-tanim-no="' . h($k['card_no']) . '"'
+         . ' data-isk-tanim-cavus="' . ($t ? (int)$t['foreman_id'] : 0) . '" data-isk-tanim-tip="' . ($t ? (int)$t['worker_type_id'] : 0) . '"'
+         . ' data-isk-tanim-ozet="' . ($t ? h($t['foreman_name'] . ' · ' . $t['tip_adi'] . ' · ' . $t['depo']) : '') . '"'
+         . ' data-isk-tanim-pasif="' . ($t && !(int)$t['foreman_aktif'] ? '1' : '0') . '"';
+};
 
 render_header('Kart Havuzu');
 $base = base_url();
@@ -290,6 +341,10 @@ if ($basari !== ''): ?>
     </details>
 </div>
 
+<?php if (!$tanimHazir && function_exists('is_admin') && is_admin()): ?>
+<div class="flash flash-warning">🏷 Tanımlı Giriş (karta çavuş + tip tanımlama) için <a href="migrate.php">migrate.php</a> sayfasından "Tanımlı Kart Tablosunu Oluştur" adımını çalıştırın.</div>
+<?php endif; ?>
+
 <!-- ── Kart listesi ───────────────────────────────────────── -->
 <form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kart no veya UID ara…">
@@ -321,7 +376,8 @@ if ($basari !== ''): ?>
 <table class="data-table">
 <thead><tr>
     <th>Kart No</th>
-    <th>Tip (eski/kalıcı)</th>
+    <th>Tip (eski — tanım için kullanılmaz)</th>
+    <?php if ($tanimHazir): ?><th>Tanımlı Giriş</th><?php endif; ?>
     <th>UID (kanonik)</th>
     <th>Durum</th>
     <th>Tanımlandı</th>
@@ -332,12 +388,14 @@ if ($basari !== ''): ?>
 <tr>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
     <td class="muted"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) : '— (nötr)' ?></td>
+    <?php if ($tanimHazir): ?><td><?= $tanimRozet($k) ?: '<span class="muted">—</span>' ?></td><?php endif; ?>
     <td class="muted pdks-uid"><?= h($k['canonical_uid']) ?></td>
     <td><span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
         <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span></td>
     <td class="muted"><?= h(fmt_datetime($k['created_at'])) ?></td>
     <td class="actions-col">
         <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
+        <?php if ($tanimHazir && ($k['enrolled_source'] ?? '') !== 'kartsiz'): ?><button type="button" class="btn btn-sm"<?= $tanimData($k) ?>>🏷 Tanım</button><?php endif; ?>
     </td>
 </tr>
 <?php endforeach; ?>
@@ -352,12 +410,14 @@ if ($basari !== ''): ?>
         <div class="pdks-card-meta">
             <div class="pdks-uid"><?= h($k['card_no']) ?></div>
             <div class="pdks-row-sub"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) . ' · ' : '' ?><?= h($k['canonical_uid']) ?></div>
+            <?php if ($tanimHazir && ($tanimR = $tanimRozet($k)) !== ''): ?><div class="isk-tanim-satir"><?= $tanimR ?></div><?php endif; ?>
         </div>
         <span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
             <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span>
     </div>
     <div class="pdks-card-actions">
         <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
+        <?php if ($tanimHazir && ($k['enrolled_source'] ?? '') !== 'kartsiz'): ?><button type="button" class="btn btn-sm"<?= $tanimData($k) ?>>🏷 Tanım</button><?php endif; ?>
     </div>
 </div>
 <?php endforeach; ?>
@@ -383,7 +443,7 @@ if ($basari !== ''): ?>
                     <input type="text" name="card_no" id="iskCardNo" maxlength="30" required>
                 </label>
                 <label>
-                    <span class="form-label">Tip (eski/kalıcı — Faz 8A'da kullanılmaz)</span>
+                    <span class="form-label">Tip (eski — tanım için kullanılmaz; Tanımlı Giriş için "🏷 Tanım")</span>
                     <select name="worker_type_id" id="iskWorkerTypeId">
                         <option value="0" <?= !$faz8aHazir ? 'disabled' : '' ?>>— (nötr, tip yok) —</option>
                         <?php foreach ($tipler as $t): ?>
@@ -422,6 +482,98 @@ if ($basari !== ''): ?>
     </div>
 </div>
 </div>
+
+<?php if ($tanimHazir): ?>
+<!-- ── v298: Tanımlı Giriş tanım modalı — karta çavuş + tip (Kadın/Erkek) + AKTİF depo.
+     Ayrı küçük modal (düzenleme modalına dokunulmadı); form .isk-card-modal-body İÇİNDE
+     (gövde kayar — .pm-dialog > form zinciri kırılmaz). -->
+<div class="pm-overlay" id="iskTanimModal" hidden>
+<div class="pm-dialog isk-card-modal">
+    <div class="pm-header">
+        <h2 class="pm-title">🏷 Tanımlı Giriş — <span id="iskTanimKartNo"></span></h2>
+        <button type="button" class="pm-close" onclick="pdksCloseModal('iskTanimModal')">✕</button>
+    </div>
+    <div class="isk-card-modal-body">
+        <p class="muted" style="font-size:.85rem;margin-top:0">
+            Kioskta "🏷 TANIMLI GİRİŞ" ile okutulunca kart bu çavuşun bugünkü mesaisine bu tiple girer.
+            Çavuş seçilen normal girişte başka çavuş/tiple okutulursa reddedilir. Çıkış Ortak Çıkış ile yapılır.
+        </p>
+        <div class="isk-tanim-mevcut" id="iskTanimMevcut" hidden></div>
+        <?php if ($aktifDepo === ''): ?>
+        <div class="flash flash-warning">Tanım için önce bir depo seçin.</div>
+        <?php else: ?>
+        <form method="post">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="kart_tanim">
+            <input type="hidden" name="card_id" id="iskTanimCardId">
+            <div class="pdks-form-grid">
+                <label>
+                    <span class="form-label">Tanımlı Çavuş *</span>
+                    <select name="tanim_foreman_id" id="iskTanimCavus" required>
+                        <option value="">— Çavuş seçin —</option>
+                        <?php foreach ($tanimCavuslar as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>"><?= h($c['name']) ?> (<?= h($c['code']) ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label>
+                    <span class="form-label">Tanımlı Tip *</span>
+                    <select name="tanim_worker_type_id" id="iskTanimTip" required>
+                        <option value="">— Tip seçin —</option>
+                        <?php foreach ($tanimTipler as $t): ?>
+                        <option value="<?= (int)$t['id'] ?>"><?= h($t['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <div class="span-2 muted" style="font-size:.85rem">Depo: <strong><?= h($aktifDepo) ?></strong> (aktif depo)</div>
+            </div>
+            <div class="isk-card-form-actions">
+                <button type="submit" class="btn btn-primary">Tanımı Kaydet</button>
+                <button type="button" class="btn btn-ghost" onclick="pdksCloseModal('iskTanimModal')">Vazgeç</button>
+            </div>
+        </form>
+        <?php endif; ?>
+        <form method="post" id="iskTanimBitirForm" hidden>
+            <hr>
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="action" value="kart_tanim_bitir">
+            <input type="hidden" name="card_id" id="iskTanimBitirCardId">
+            <div class="pdks-form-grid">
+                <label class="span-2">
+                    <span class="form-label">Kaldırma notu (opsiyonel)</span>
+                    <input type="text" name="tanim_reason" maxlength="255">
+                </label>
+            </div>
+            <div class="isk-card-form-actions">
+                <button type="submit" class="btn">✖ Tanımı Kaldır</button>
+            </div>
+        </form>
+    </div>
+</div>
+</div>
+<script>
+document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-isk-tanim-kart]');
+    if (!b) return;
+    var id = b.getAttribute('data-isk-tanim-kart');
+    var ozet = b.getAttribute('data-isk-tanim-ozet') || '';
+    document.getElementById('iskTanimKartNo').textContent = b.getAttribute('data-isk-tanim-no') || '';
+    var idAlan = document.getElementById('iskTanimCardId');
+    if (idAlan) idAlan.value = id;
+    document.getElementById('iskTanimBitirCardId').value = id;
+    var cavus = document.getElementById('iskTanimCavus');
+    var tip = document.getElementById('iskTanimTip');
+    if (cavus) cavus.value = b.getAttribute('data-isk-tanim-cavus') !== '0' ? b.getAttribute('data-isk-tanim-cavus') : '';
+    if (cavus && cavus.selectedIndex < 0) cavus.value = '';   // pasif çavuş listede yok
+    if (tip) tip.value = b.getAttribute('data-isk-tanim-tip') !== '0' ? b.getAttribute('data-isk-tanim-tip') : '';
+    var mevcut = document.getElementById('iskTanimMevcut');
+    mevcut.hidden = ozet === '';
+    mevcut.textContent = ozet === '' ? '' : ('Mevcut tanım: ' + ozet + (b.getAttribute('data-isk-tanim-pasif') === '1' ? ' — çavuş pasif, kiosk girişi reddeder' : ''));
+    document.getElementById('iskTanimBitirForm').hidden = ozet === '';
+    window.pdksOpenModal('iskTanimModal');
+});
+</script>
+<?php endif; ?>
 
 <script>
 function iskKartModalAc(id, tipId, kartNo, not, durum) {
@@ -494,6 +646,12 @@ function iskKartModalAc(id, tipId, kartNo, not, durum) {
             html += '⚪ Şu an boşta — açık bir mesai dönemi yok';
         }
         html += '</div>';
+        // v298: aktif tanım (Tanımlı Giriş) — salt okunur bilgi.
+        if (d.tanim) {
+            html += '<div class="isk-tanim-satir" style="margin-top:8px"><span class="pdks-badge pdks-badge-tanimli">🏷 Tanımlı: '
+                + esc(d.tanim.foreman_name) + ' · ' + esc(d.tanim.tip_adi) + ' · ' + esc(d.tanim.depo) + '</span>'
+                + (d.tanim.foreman_aktif ? '' : ' <span class="pdks-badge pdks-badge-kayip">çavuş pasif</span>') + '</div>';
+        }
         html += '<h3 style="margin:16px 0 8px;font-size:.95rem">Son ' + d.gecmis.length + ' Dönem</h3>';
         if (d.gecmis.length === 0) {
             html += '<p class="muted">Bu kartla henüz hiç tarama yapılmamış.</p>';

@@ -45,6 +45,9 @@ $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 // + KARISIK — pdks_gunluk_giris_tip_listele() o listeyi SARAR ve KARISIK satırını
 // gerekirse tembel oluşturur. KARISIK yalnız BURADA (ve kaydet ucunun GİRİŞ kapısında) seçilir.
 $isciTipleri = $faz8aHazir ? pdks_gunluk_giris_tip_listele($pdo) : [];
+// v298 — Tanımlı Giriş: tanım tablosu (worker_card_assignments) OPSİYONELDİR —
+// yoksa düğme çizilmez, ekran AYNEN eski davranışla çalışır. Burada migrate ÇAĞRILMAZ.
+$tanimHazir = $faz8aHazir && pdks_gunluk_kart_tanim_sema_hazir($pdo);
 
 // ⚠ v241 — NFC TEŞHİS MODU: `?nfcdebug=1` ile açılır, VARSAYILAN GÖRÜNÜM
 // DEĞİŞMEZ. Teşhis panelinin (#giNfcDebug) kendisi zaten vardı ve her adımı
@@ -160,6 +163,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'ortak_ci
     require_pdks_gunluk('daily_scan');
 
     $sonuc = pdks_gunluk_ortak_cikis_kaydet(
+        trim((string)($govde['ham_uid'] ?? '')),
+        trim((string)($govde['kaynak'] ?? '')),
+        (int)$auth_user['id'],
+        $pdo
+    );
+    $sonuc['mesailer'] = pdks_gunluk_ortak_cikis_mesailer(null, $pdo);
+    echo json_encode($sonuc, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ⚠ v298 — TANIMLI GİRİŞ: kart, Kart Havuzu'nda tanımlandığı çavuşun bugünkü
+// mesaisine, tanımdaki tiple girer. İstemciden YALNIZ ham_uid + kaynak alınır —
+// session_id / foreman_id / worker_type_id ALINMAZ; tanımı ve mesaiyi sunucu
+// bulur, yazmayı pdks_gunluk_faz8a_giris_kaydet()'e devreder (bkz.
+// pdks_gunluk_tanimli_giris_kaydet). Depo kontrolü o fonksiyonun içinde.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_GET['ajax'] ?? '') === 'tanimli_giris') {
+    header('Content-Type: application/json; charset=utf-8');
+    $govde = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($govde)) $govde = [];
+    csrf_check($govde['csrf'] ?? null);
+    require_pdks_gunluk('daily_scan');
+
+    $sonuc = pdks_gunluk_tanimli_giris_kaydet(
         trim((string)($govde['ham_uid'] ?? '')),
         trim((string)($govde['kaynak'] ?? '')),
         (int)$auth_user['id'],
@@ -354,6 +380,12 @@ render_flash();
         </div>
         <?php else: ?>
         <?php if ($faz8aHazir): ?>
+        <?php if ($tanimHazir): ?>
+        <!-- v298: TANIMLI GİRİŞ — kart, Kart Havuzu'ndaki tanımına (çavuş + tip) göre girer. -->
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-giris pdks-kiosk-ortak-btn pdks-kiosk-tanimli-btn" id="giTanimliGirisBtn">
+            🏷 TANIMLI GİRİŞ <span class="pdks-kiosk-ortak-alt">kart tanımlı çavuşa girer — çavuş seçmeden</span>
+        </button>
+        <?php endif; ?>
         <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-modebtn-cikis pdks-kiosk-ortak-btn" id="giOrtakCikisBtn">
             🚪 ORTAK ÇIKIŞ <span class="pdks-kiosk-ortak-alt">tüm çavuşlar — çavuş seçmeden</span>
         </button>
@@ -665,6 +697,12 @@ render_flash();
     // mesaisini sunucu bulur (?ajax=ortak_cikis). Yalnız ÇIKIŞ — giriş her
     // zaman çavuş + işçi tipi seçimiyle yapılır.
     var ortakMod = false;
+    // v298 — TANIMLI GİRİŞ: true iken currentSession YOKTUR; kartın tanımlı
+    // çavuşunu/mesaisini/tipini sunucu bulur (?ajax=tanimli_giris). Yalnız GİRİŞ.
+    var tanimliMod = false;
+    var tanimliDonus = false;   // kapatılmamış mesai penceresinden sonra Tanımlı moda dön
+    var sonTanimliOkuma = { uid: '', zaman: 0 };   // aynı kartın ~3 sn içinde tekrar okunması yok sayılır
+    var TANIMLI_TEKRAR_MS = 3000;
     var modeRequest = 0;
     var busy = false;
     var kayitBekci = null;   // bkz. kaydet() — askıda kalan isteğin kilidi kilitlemesini önler
@@ -726,6 +764,7 @@ render_flash();
     document.querySelectorAll('[data-gi-cavus-id]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             ortakModKapat();
+            tanimliModKapat(); tanimliDonus = false;
             seciliCavusId = parseInt(btn.getAttribute('data-gi-cavus-id'), 10);
             seciliCavusAd = btn.getAttribute('data-gi-cavus-ad');
             document.getElementById('giSeciliCavusAd').textContent = seciliCavusAd;
@@ -829,7 +868,10 @@ render_flash();
         kapatOnayiGoster({ giris: oz.giris_toplam || 0, cikis: oz.cikis_toplam || 0,
                            icerde: oz.icerde_toplam || 0, eksik: oz.eksik_toplam || 0 });
     });
-    document.getElementById('giEskiSonra').addEventListener('click', function () { cavusDegistir(); });
+    document.getElementById('giEskiSonra').addEventListener('click', function () {
+        if (tanimliDonus) { tanimliModAc(); return; }   // v298: Tanımlı Giriş'ten gelindiyse oraya dön
+        cavusDegistir();
+    });
     if (eskiBanner) eskiBanner.addEventListener('click', function () { eskiPencereAc(null); });
     document.querySelectorAll('[data-gi-hatirlat-cavus]').forEach(function (b) {
         b.addEventListener('click', function () {
@@ -871,6 +913,7 @@ render_flash();
             .catch(function () { /* rozet yalnız bilgi */ });
     }
     function ortakModAc() {
+        tanimliModKapat(); tanimliDonus = false;
         modeRequest++;
         seciliCavusId = null; seciliCavusAd = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
@@ -901,12 +944,52 @@ render_flash();
     }
     if (ortakBtn) ortakBtn.addEventListener('click', ortakModAc);
 
+    // ── v298) TANIMLI GİRİŞ ───────────────────────────────────
+    // Ortak Çıkış'ın aynası: aynı tarama ekranı / sonuç penceresi / sesler /
+    // NFC-USB okuma döngüsü. Tip seçimi, Kadın⇄Erkek hızlı geçiş ve Mesaiyi
+    // Kapat bu modda YOK; çıkış her zaman ORTAK ÇIKIŞ ile yapılır.
+    var tanimliBtn = document.getElementById('giTanimliGirisBtn');
+    function tanimliModAc() {
+        ortakModKapat();
+        tanimliDonus = false;
+        modeRequest++;
+        seciliCavusId = null; seciliCavusAd = null;
+        seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
+        currentMode = 'GIRIS'; currentSession = null;
+        kapatKaynak = 'mod';
+        tanimliMod = true;
+        sonTanimliOkuma = { uid: '', zaman: 0 };
+        modeBadge.textContent = '🏷 TANIMLI GİRİŞ MODU';
+        modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF.GIRIS;
+        tipBadge.hidden = true; tipBadge.textContent = '';
+        document.getElementById('giScanCavusAd').textContent = 'Kartın tanımlı çavuşu';
+        if (modDegistirBtn) modDegistirBtn.hidden = true;
+        cavusDegistir2.textContent = '↩ Çavuş Seçimine Dön';
+        cavusDegistir2.parentNode.classList.add('pdks-scan-actions-tek');
+        tipGecisGuncelle();   // hızlı geçiş düğmesi bu modda görünmez
+        scanInput.value = '';
+        resultBox.hidden = true;
+        ekranGoster(scanSec);
+        focusInput();
+    }
+    function tanimliModKapat() {
+        if (!tanimliMod) return;
+        tanimliMod = false;
+        currentMode = null; currentSession = null;
+        if (modDegistirBtn) modDegistirBtn.hidden = false;
+        cavusDegistir2.textContent = CAVUS_DEGISTIR_ETIKET;
+        cavusDegistir2.parentNode.classList.remove('pdks-scan-actions-tek');
+        tipRenkAyarla();
+    }
+    if (tanimliBtn) tanimliBtn.addEventListener('click', tanimliModAc);
+
     function cavusDegistir() {
         // ⚠ Sunucudaki oturum KAPATILMAZ — yalnız istemci ekranı sıfırlanır
         // (kullanıcının açık talimatı: "changing screen/foreman must NOT
         // close the session. Sessions stay server-side until explicitly closed.")
         modeRequest++;
         ortakModKapat();
+        tanimliModKapat(); tanimliDonus = false;
         seciliCavusId = null; seciliCavusAd = null; currentMode = null; currentSession = null;
         seciliTipId = null; seciliTipAd = null; seciliTipKod = null;
         kapatKaynak = 'mod';
@@ -958,7 +1041,7 @@ render_flash();
     function tipRenkAyarla() {
         var s = document.getElementById('giScanSec');
         if (!s) return;
-        var yeni = (currentMode === 'GIRIS' && !ortakMod && seciliTipId && TIP_RENK_SINIF[seciliTipKod]) || '';
+        var yeni = (currentMode === 'GIRIS' && !ortakMod && !tanimliMod && seciliTipId && TIP_RENK_SINIF[seciliTipKod]) || '';
         Object.keys(TIP_RENK_SINIF).forEach(function (k) { s.classList.toggle(TIP_RENK_SINIF[k], TIP_RENK_SINIF[k] === yeni); });
     }
     // v297: sonuç ekranı rengi — sunucu yanıtında tip yalnız AD olarak gelir (worker_type_name):
@@ -974,7 +1057,7 @@ render_flash();
         tipRenkAyarla();
         if (!tipGecisBtn) return;
         var hedefKod = seciliTipKod === 'KADIN' ? 'ERKEK' : (seciliTipKod === 'ERKEK' ? 'KADIN' : null);
-        var hedef = (currentMode === 'GIRIS' && !ortakMod && tipSec && seciliTipId && hedefKod)
+        var hedef = (currentMode === 'GIRIS' && !ortakMod && !tanimliMod && tipSec && seciliTipId && hedefKod)
             ? tipSec.querySelector('[data-gi-tip-kod="' + hedefKod + '"]') : null;
         tipGecisBtn.hidden = !hedef;
         tipGecisBtn.parentNode.classList.toggle('pdks-scan-actions-uc', !!hedef);
@@ -1162,14 +1245,46 @@ render_flash();
             'pdks-kiosk-result-ok' + tipSonucSinif(tip), d.uyari ? 8000 : SONUC_OK_MS
         );
     }
-    function hataGoster(mesaj) {
+    function hataGoster(mesaj, ekHtml) {
         sesHata();
         gosterSonuc(
             '<div class="pdks-result-3d-icon" aria-hidden="true"><span>✕</span></div>' +
-            '<div class="pdks-kiosk-result-msg">' + escHtml(mesaj || 'Kayıt yapılamadı.') + '</div>',
-            'pdks-kiosk-result-err', SONUC_HATA_MS
+            '<div class="pdks-kiosk-result-msg">' + escHtml(mesaj || 'Kayıt yapılamadı.') + '</div>' +
+            (ekHtml || ''),   // v298: yalnız sabit işaretleme (ör. pencere düğmesi) — kullanıcı verisi escHtml'den geçer
+            'pdks-kiosk-result-err', ekHtml ? 10000 : SONUC_HATA_MS   // düğmeli hata dokunulabilsin diye uzun kalır
         );
     }
+    // v298: Tanımlı Giriş'te aynı mesaide zaten içerideki kart — kırmızı hata DEĞİL, bilgi.
+    function bilgiGoster(baslik, d) {
+        sesBasarili();
+        gosterSonuc(
+            '<div class="pdks-result-3d-icon" aria-hidden="true"><span>ℹ</span></div>' +
+            '<div class="pdks-kiosk-result-msg">' + escHtml(baslik) + '</div>' +
+            (d && d.cavus ? '<div class="pdks-result-cavus">Çavuş: ' + escHtml(d.cavus.ad) + '</div>' : ''),
+            'pdks-kiosk-result-ok pdks-kiosk-result-bilgi', SONUC_OK_MS
+        );
+    }
+    // v298: Tanımlı Giriş yanıtı — başarı / bilgi / hata (önceki gün açık mesai düğmeli).
+    function tanimliSonucGoster(d) {
+        if (d && d.ok) { basariGoster(d); return; }
+        if (d && d.kod === 'mukerrer_giris') { bilgiGoster('Zaten giriş yapıldı', d); return; }
+        if (d && d.kod === 'onceki_mesai_acik') {
+            tanimliEskiOturumlar = d.eski_oturumlar || [];
+            // Otomatik AÇILMAZ — kullanıcı düğmeyle açar; kapatma yine ?ajax=kapat yolundan.
+            hataGoster(d.hata, '<button type="button" class="btn btn-primary pdks-result-eski-btn" data-gi-tanimli-eski="1">🔒 Kapatılmamış mesaiyi aç</button>');
+            return;
+        }
+        hataGoster(d && d.hata);
+    }
+    var tanimliEskiOturumlar = [];
+    resultBox.addEventListener('click', function (e) {
+        if (!e.target.closest('[data-gi-tanimli-eski]')) return;
+        clearTimeout(resultTimer);
+        resultBox.hidden = true;
+        tanimliModKapat();
+        tanimliDonus = true;
+        eskiPencereAc(tanimliEskiOturumlar);
+    });
     function escHtml(s) {
         var d = document.createElement('div');
         d.textContent = String(s == null ? '' : s);
@@ -1184,7 +1299,7 @@ render_flash();
     // ekranda sebebini söyler. Yeni bir erken çıkış eklersen AYNISINI yap.
     function kaydet(hamUid, kaynak) {
         if (busy) { nfcDebugYaz('kaydet atlandı: önceki istek hâlâ sürüyor'); return; }
-        if (!ortakMod && (!currentMode || !currentSession)) {
+        if (!ortakMod && !tanimliMod && (!currentMode || !currentSession)) {
             nfcDebugYaz('kaydet atlandı: mod/mesai yok (mod=' + currentMode + ', mesai=' + (currentSession ? currentSession.id : 'yok') + ')');
             hataGoster('Mesai bağlantısı yok — "Modu Değiştir" ile GİRİŞ/ÇIKIŞ modunu yeniden seçin.');
             return;
@@ -1196,10 +1311,20 @@ render_flash();
             return;
         }
         // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
-        if (tipSec && currentMode === 'GIRIS' && !seciliTipId) {
+        if (tipSec && currentMode === 'GIRIS' && !tanimliMod && !seciliTipId) {
             nfcDebugYaz('kaydet atlandı: işçi tipi seçili değil');
             hataGoster('Önce İşçi Tipi (Kadın/Erkek/Karışık) seçin.');
             return;
+        }
+        // v298: Tanımlı modda aynı kartın ~3 sn içinde tekrar okunması (NFC/USB
+        // titremesi) yok sayılır — iz teşhis paneline yazılır (SESSİZ dönüş yok).
+        if (tanimliMod) {
+            var anahtar = kaynak + ':' + deger;
+            if (sonTanimliOkuma.uid === anahtar && (Date.now() - sonTanimliOkuma.zaman) < TANIMLI_TEKRAR_MS) {
+                nfcDebugYaz('tanımlı giriş: aynı kart ' + TANIMLI_TEKRAR_MS + ' ms içinde tekrar okundu — yok sayıldı');
+                return;
+            }
+            sonTanimliOkuma = { uid: anahtar, zaman: Date.now() };
         }
         busy = true;
         // ⚠ v241 — KİLİT BEKÇİSİ: `busy` yalnız yanıt/hata dönünce açılıyordu.
@@ -1216,14 +1341,16 @@ render_flash();
             hataGoster('Sunucu yanıt vermedi — kartı tekrar okutun.');
         }, 15000);
         // v288: ortak modda session_id GÖNDERİLMEZ — mesaiyi sunucu bulur.
-        var govde = ortakMod
+        // v298: tanımlı modda da session_id / çavuş / tip GÖNDERİLMEZ.
+        var govde = (ortakMod || tanimliMod)
             ? { csrf: csrf, ham_uid: deger, kaynak: kaynak }
             : { csrf: csrf, session_id: currentSession.id, ham_uid: deger, kaynak: kaynak, event_type: currentMode };
-        if (!ortakMod && tipSec && currentMode === 'GIRIS') {
+        if (!ortakMod && !tanimliMod && tipSec && currentMode === 'GIRIS') {
             govde.worker_type_id = seciliTipId;
         }
         // USB ve Web NFC İKİ modda da bu TEK fetch'ten geçer; ortak mod yalnız uç adını seçer.
-        var hedef = ortakMod ? 'gunluk_isci_giris_cikis.php?ajax=ortak_cikis' : 'gunluk_isci_giris_cikis.php?ajax=kaydet';
+        var hedef = tanimliMod ? 'gunluk_isci_giris_cikis.php?ajax=tanimli_giris'
+            : (ortakMod ? 'gunluk_isci_giris_cikis.php?ajax=ortak_cikis' : 'gunluk_isci_giris_cikis.php?ajax=kaydet');
         fetch(hedef, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1236,7 +1363,8 @@ render_flash();
                 if (d && d.mesailer) icerdeRozetleriGuncelle(d.mesailer);
                 // Ortak modda d.ozet o kartın mesaisine aittir — çavuş ekranının
                 // sayaçlarına YAZILMAZ (başka çavuşun sayısı görünürdü).
-                if (d && d.ok) { basariGoster(d); if (d.ozet && !ortakMod) sayaclariGoster(d.ozet); }
+                if (tanimliMod) { tanimliSonucGoster(d); }
+                else if (d && d.ok) { basariGoster(d); if (d.ozet && !ortakMod) sayaclariGoster(d.ozet); }
                 else hataGoster(d && d.hata);
                 focusInput();
             })
@@ -1400,6 +1528,7 @@ render_flash();
                             return;
                         }
                     }
+                    if (tanimliDonus) { tanimliModAc(); return; }   // v298: Tanımlı Giriş'e dön
                     cavusDegistir();
                     return;
                 }

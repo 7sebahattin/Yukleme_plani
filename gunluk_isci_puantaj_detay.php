@@ -99,6 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
             if (!empty($sonuc['kartsiz'])) $ekleMesaj = 'Kartsız çalışma kaydı eklendi (' . $sonuc['card_no'] . ').';
             elseif (!empty($sonuc['acik'])) $ekleMesaj = 'Çalışma kaydı eklendi; kişi içeride yazıldı, çıkışta kartını okutacak.';
             if (!empty($sonuc['yeni_mesai'])) $ekleMesaj .= ' Bu gün için yeni mesai açıldı.';
+            // v298: tanımlı kart başka çavuş/tip/depoya bağlıysa ENGEL DEĞİL, bilgi.
+            if (!empty($sonuc['uyarilar'])) $ekleMesaj .= ' ⚠ ' . implode(' ', $sonuc['uyarilar']);
         }
         set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? $ekleMesaj : $sonuc['hata']);
         header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)($sonuc['ok'] ? $sonuc['session_id'] : $id)); exit;
@@ -302,7 +304,7 @@ render_flash();
     $manuelUygun = empty($k['cikis_saat']) && in_array($k['durum']['kod'] ?? '', ['cikis_yok', 'legacy_unresolved'], true);
 ?>
 <tr>
-    <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></td>
+    <td class="pdks-uid"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></td>
     <td><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
     <td class="muted"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
@@ -330,7 +332,7 @@ render_flash();
 <div class="pdks-card-item">
     <div class="pdks-card-top">
         <div class="pdks-card-meta">
-            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?></div>
+            <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></div>
             <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>

@@ -19,10 +19,11 @@ $db->exec('CREATE TABLE worker_types (id INTEGER PRIMARY KEY, code TEXT, name TE
 $db->exec("INSERT INTO worker_types VALUES (1,'KADIN','Kadın',1,1),(2,'ERKEK','Erkek',1,2),(3,'DIGER','Diğer',1,3),(4,'KADIN','Pasif Kadın',0,4)");
 $db->exec('CREATE TABLE worker_cards (id INTEGER PRIMARY KEY, card_no TEXT, canonical_uid TEXT)');
 $db->exec("INSERT INTO worker_cards VALUES (1,'K001','UID-1'),(2,'K002','UID-2'),(3,'K003','UID-3')");
-$db->exec('CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, work_date TEXT, depo TEXT, foreman_id INTEGER)');
+// status + foreman_name_snapshot: gerçek DDL'de var; kart_acik_donemi() (v275) s.status='open' ister.
+$db->exec("CREATE TABLE daily_work_sessions (id INTEGER PRIMARY KEY, work_date TEXT, depo TEXT, foreman_id INTEGER, status TEXT NOT NULL DEFAULT 'open', foreman_name_snapshot TEXT NOT NULL DEFAULT '')");
 $day = date('Y-m-d', strtotime('-2 days'));
-$db->prepare('INSERT INTO daily_work_sessions VALUES (?,?,?,1)')->execute([1,$day,'Depo A']);
-$db->prepare('INSERT INTO daily_work_sessions VALUES (?,?,?,1)')->execute([2,$day,'Depo B']);
+$db->prepare('INSERT INTO daily_work_sessions (id, work_date, depo, foreman_id) VALUES (?,?,?,1)')->execute([1,$day,'Depo A']);
+$db->prepare('INSERT INTO daily_work_sessions (id, work_date, depo, foreman_id) VALUES (?,?,?,1)')->execute([2,$day,'Depo B']);
 $db->exec('CREATE TABLE foremen (id INTEGER PRIMARY KEY, name TEXT)'); $db->exec("INSERT INTO foremen VALUES (1,'Çavuş')");
 $db->exec('CREATE TABLE daily_worker_card_events (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, worker_card_id INTEGER, event_type TEXT, source TEXT, canonical_uid_snapshot TEXT, worker_type_id_snapshot INTEGER, worker_type_name_snapshot TEXT, work_date_snapshot TEXT, depo_snapshot TEXT, recorded_by_user_id INTEGER, server_event_time TEXT)');
 // Faz 9C / H-02: overtime_approved_hours EKLENDİ — eksikken pdks_faz8j_void()/
