@@ -164,6 +164,30 @@ if (getenv('PUANTAJ_FAZ8B') === '1') {
     db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'CIKIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 19:00:00', $sid]);
 }
 
+// v299: PUANTAJ_SIRALA=1 → Kart Hareketleri sıralama testi için dönem saatleri BELİRGİN ve
+// birbirinden farklı yapılır (iki dönem hâlâ çıkışsız, biri en erken girişli ama en geç çıkışlı;
+// kart no'lardan ikisi "K2"/"K10" — doğal sıralama için). Varsayılan (env yok) davranış DEĞİŞMEZ.
+if (getenv('PUANTAJ_SIRALA') === '1') {
+    $gun = date('Y-m-d');
+    $dids = db()->query("SELECT id FROM daily_worker_work_periods WHERE session_id = " . (int)$sid . " AND COALESCE(is_voided,0) = 0 ORDER BY id")->fetchAll(PDO::FETCH_COLUMN);
+    $stS = db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ?, exit_time = ?, status = ? WHERE id = ?");
+    foreach ($dids as $i => $did) {
+        $giris = strtotime($gun . ' 06:00:00') + $i * 600;
+        if ($i === 0) { $cikis = strtotime($gun . ' 21:30:00'); }
+        elseif ($i % 3 === 1) { $cikis = $giris + (30 + ($i * 37) % 200) * 60; }
+        else { $cikis = null; }
+        $stS->execute([date('Y-m-d H:i:s', $giris), $cikis ? date('Y-m-d H:i:s', $cikis) : null, $cikis ? 'closed' : 'open', $did]);
+    }
+    db()->exec("UPDATE worker_cards SET card_no = 'K2' WHERE card_no = 'K003'");
+    db()->exec("UPDATE worker_cards SET card_no = 'K10' WHERE card_no = 'K005'");
+}
+
+// v299: PUANTAJ_KAPALI=1 → mesai KAPALI + kapanış notu dolu (Kapanış Notu düzenleme penceresi testi).
+if (getenv('PUANTAJ_KAPALI') === '1') {
+    db()->prepare("UPDATE daily_work_sessions SET status = 'closed', closed_at = ?, closed_by_user_id = 1, notes = ? WHERE id = ?")
+        ->execute([date('Y-m-d H:i:s'), "Mesai eksik çıkışla kapatıldı.\n<b>kalın?</b> \"tırnak\"", $sid]);
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.
