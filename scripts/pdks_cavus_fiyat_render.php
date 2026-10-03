@@ -100,6 +100,7 @@ pdks_faz8b_migrate(db());
 ddl_kur(pdks_cari_tablolar());
 ddl_kur(pdks_faz8b_cavus_ucret_tablolar());
 ddl_kur(pdks_faz8b_cavus_ucret_b_tablolar());
+ddl_kur(pdks_servis_tablolar());   // v299 Servis Ücreti kartı
 
 $kadin = (int)db()->query("SELECT id FROM worker_types WHERE code='KADIN'")->fetchColumn();
 $erkek = (int)db()->query("SELECT id FROM worker_types WHERE code='ERKEK'")->fetchColumn();
@@ -115,6 +116,8 @@ if ($SENARYO === 'dolu') {
     if (!($rs['ok'] ?? false)) { fwrite(STDERR, 'HATA: ' . json_encode($rs, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
     pdks_faz8b_oran_ekle($a, $erkek, '1500', '900', 'fixed', '400', '2026-01-01', 'TRY', 1, db());
     pdks_faz8b_cavus_ucret_ekle($a, '2500', '2026-01-01', 'TRY', 1, db());
+    pdks_servis_ucret_ekle($a, '1000', '', '2026-01-01', 'TRY', 1, db());
+    pdks_servis_ucret_ekle($a, '1500', '800', '2026-03-01', 'TRY', 1, db());
     $r = pdks_faz8b_cavus_ucret_yontem_degistir($a, 'B', 1, db(), '30');
     if (!($r['ok'] ?? false)) { fwrite(STDERR, 'HATA: ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
     $cavus = $a;

@@ -17,6 +17,7 @@ require_once __DIR__ . '/config/pdks_hakedis.php';
 // v299: "Mesai Tanımı" sütunu — TEK sınıflandırıcı (pdks_faz8b_donem_siniflandir)
 // sayfa katmanında yüklenir; config/pdks_gunluk.php faz8b'yi require ETMEZ.
 require_once __DIR__ . '/config/pdks_faz8b.php';
+// v299 Servis Ücreti (pencere + liste; kurallar config/pdks_servis.php'de) — pdks_faz8b.php yükler.
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
@@ -73,6 +74,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     }
     set_flash($sonuc['ok'] ? 'success' : 'error', $mesaj);
     header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id); exit;
+}
+// v299: Servis Ücreti ekle / iptal (yalnız yönetici; işlevler yetki + depo + mesai kilidi +
+// kesin hakediş + istek_id kapılarını KENDİLERİ uygular). Mesai id'si SUNUCUDAN.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['servis_ekle', 'servis_iptal'], true)) {
+    csrf_check($_POST['csrf'] ?? null);
+    if (($_POST['action'] ?? '') === 'servis_ekle') {
+        $sonuc = pdks_servis_ekle((int)$id, (int)($_POST['buyuk'] ?? 0), (int)($_POST['kucuk'] ?? 0),
+            (string)($_POST['note'] ?? ''), (string)($_POST['istek_id'] ?? ''), (int)$auth_user['id'], $pdo);
+        $mesaj = $sonuc['ok'] ? 'Servis eklendi (' . trim(((int)$sonuc['buyuk'] > 0 ? (int)$sonuc['buyuk'] . ' Büyük ' : '')
+            . ((int)$sonuc['kucuk'] > 0 ? (int)$sonuc['kucuk'] . ' Küçük' : '')) . '). Taslak hakediş yeniden hesaplanmalıdır.' : $sonuc['hata'];
+    } else {
+        $sonuc = pdks_servis_iptal((int)($_POST['servis_id'] ?? 0), (int)$id, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
+        $mesaj = $sonuc['ok'] ? 'Servis kaydı iptal edildi. Taslak hakediş yeniden hesaplanmalıdır.' : $sonuc['hata'];
+    }
+    set_flash($sonuc['ok'] ? 'success' : 'error', $mesaj);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id . '#servisler'); exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['puantaj_duzeltme', 'puantaj_iptal', 'puantaj_ekle', 'toplu_geri_al'], true)) {
     csrf_check($_POST['csrf'] ?? null);
@@ -164,6 +181,14 @@ if ($ekleKartlar) {
     $topluKartlar = $stTk->fetchAll();
 }
 $topluListe = $ekleGoster && function_exists('pdks_faz8j_toplu_listele') ? pdks_faz8j_toplu_listele((int)$id, $pdo) : [];
+// v299: Servis Ücreti — pencere/iptal YALNIZ "Çalışma Ekle" ile AYNI kapı ($ekleGoster) + şema
+// + gelecek gün değil; liste herkese (salt okunur). Tablo yoksa özellik GİZLİ.
+$servisHazir = pdks_servis_sema_hazir($pdo);
+$servisGoster = $ekleGoster && $servisHazir && (string)$oturum['work_date'] <= date('Y-m-d');
+$servisListe = $servisHazir ? pdks_servis_listele((int)$id, $pdo) : [];
+$servisFiyat = $servisGoster ? pdks_servis_ucret_gecerli((int)$oturum['foreman_id'], (string)$oturum['work_date'], $pdo) : null;
+$servisKesin = $servisGoster && pdks_faz8j_entitlement($pdo, (int)$id) === 'final';
+$servisFiyatLink = function_exists('pdks_hakedis_can') && pdks_hakedis_can('rates');
 // v295: Karışık havuzu (herkese bilgi kartı; Otomatik Ata yalnız Toplu İşlem ile AYNI kapı: $ekleGoster).
 $karisikTipId = $ekleGoster ? (pdks_gunluk_karisik_tip_garanti($pdo)['id'] ?? null) : pdks_gunluk_karisik_tip_id($pdo);
 $karisikTipId = $karisikTipId !== null ? (int)$karisikTipId : null;
@@ -284,7 +309,7 @@ render_flash();
 
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px">
     <h2 style="font-size:1.05rem;margin:0">Kart Hareketleri</h2>
-    <?php if ($ekleGoster): ?><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('ekle')">➕ Çalışma Ekle</button><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button></div><?php endif; ?>
+    <?php if ($ekleGoster): ?><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('ekle')">➕ Çalışma Ekle</button><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button><?php if ($servisGoster): ?><button type="button" class="btn btn-sm" onclick="pdksPuantajDialogAc('servis')">🚌 Servis Ücreti</button><?php endif; ?></div><?php endif; ?>
 </div>
 
 <?php if (is_admin() && !$faz8jHazir): ?><div class="flash flash-error">Puantaj düzeltme merkezi için Faz 8J migrasyonu henüz çalıştırılmadı.</div><?php endif; ?>
@@ -471,6 +496,8 @@ function pdksPuantajDialogAc(id) {
 }
 </script>
 <?php endif; ?>
+
+<?php if ($servisGoster || $servisListe) require __DIR__ . '/_puantaj_servis.php';   // v299 Servis Ücreti ?>
 
 <?php if ($topluListe): ?>
 <h2 style="font-size:1.05rem;margin-top:22px">Toplu İşlemler</h2>

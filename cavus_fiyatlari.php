@@ -10,6 +10,8 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
+// v299 Servis Ücreti: config/pdks_servis.php, pdks_faz8b.php üzerinden yüklenir (ayrı require YOK —
+// sayfa render testleri yalnız bilinen require'ları ayıklar).
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_hakedis('rates');
@@ -36,6 +38,8 @@ if ($cavusUcretHazir && (!pdks_faz8b_cavus_ucret_b_sema_hazir($pdo) || !pdks_faz
     pdks_faz8b_cavus_ucret_b_migrate($pdo);
 }
 $cavusBHazir = pdks_faz8b_cavus_ucret_b_sema_hazir($pdo);
+// v299 Servis Ücreti: kendi 2 tablosu; sayfada migrate ÇAĞRILMAZ (kurulum yalnız migrate.php).
+$servisHazir = pdks_servis_sema_hazir($pdo);
 
 $paraBirimleri = [
     'TRY' => 'Türk Lirası (TRY)',
@@ -63,6 +67,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         $sonuc = pdks_faz8b_cavus_ucret_ekle($cavusId, $ucret, $vf, $ccy, (int)$auth_user['id'], $pdo);
         if ($sonuc['ok']) {
             header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Çavuş ücreti eklendi.'));
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'servis_ucret') {
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('rates');
+    $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $svCcy = strtoupper(trim((string)($_POST['servis_currency'] ?? 'TRY'))) ?: 'TRY';
+    if (!$cavusId) {
+        $errors[] = 'Çavuş seçilmedi.';
+    } elseif (!$servisHazir) {
+        $errors[] = 'Servis Ücreti tabloları kurulmamış — yönetici migrate.php\'den kurabilir.';
+    } elseif (!array_key_exists($svCcy, $paraBirimleri)) {
+        $errors[] = 'Geçersiz para birimi seçildi.';
+    } else {
+        $sonuc = pdks_servis_ucret_ekle($cavusId, (string)($_POST['servis_buyuk'] ?? ''), (string)($_POST['servis_kucuk'] ?? ''),
+            trim((string)($_POST['servis_valid_from'] ?? '')), $svCcy, (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Servis ücreti dönemi eklendi.') . '#cfServisUcreti');
             exit;
         }
         $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
@@ -175,6 +199,8 @@ if ($cavusId !== null) {
     if ($seciliCavus) $oranlar = pdks_hakedis_oran_gecmisi($cavusId, $pdo);
 }
 $cavusUcretGecmisi = ($seciliCavus && $cavusUcretHazir) ? pdks_faz8b_cavus_ucret_gecmisi($cavusId, $pdo) : [];
+$servisGecmisi = ($seciliCavus && $servisHazir) ? pdks_servis_ucret_gecmisi($cavusId, $pdo) : [];
+$servisHata = $errors && ($_POST['form'] ?? '') === 'servis_ucret';
 $cavusYontem = ($seciliCavus && $cavusBHazir) ? pdks_faz8b_cavus_ucret_yontem($cavusId, $pdo) : 'A';
 $cavusYontemGecmisi = ($seciliCavus && $cavusBHazir)
     ? array_reverse(pdks_faz8b_cavus_ucret_yontem_gecmisi($cavusId, $pdo))
@@ -218,6 +244,7 @@ $cfIk = function (string $ad): string {
         'gecmis'  => '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/>',
         'disli'   => '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
         'kare'    => '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+        'servis'  => '<rect x="3" y="5" width="18" height="12" rx="2.5"/><path d="M3 11h18M8 5v6M16 5v6"/><circle cx="7.5" cy="19" r="1.6"/><circle cx="16.5" cy="19" r="1.6"/>',
         'uyari'   => '<path d="M12 3.5 2.5 20h19L12 3.5z"/><path d="M12 10v4.5"/><path d="M12 17.3v.2"/>',
     ];
     return '<svg class="cf-ik" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
@@ -565,6 +592,86 @@ render_flash();
 <?php endif; ?>
     </div>
 </section>
+<?php endif; ?>
+
+<?php if ($servisHazir): $svSon = $servisGecmisi[0] ?? null; ?>
+<section class="card cf2-kart cf2-servis" id="cfServisUcreti">
+    <header class="cf2-kart-bas">
+        <span class="cf2-tile cf2-tile--turuncu"><?= $cfIk('servis') ?></span>
+        <div class="cf2-kart-bas-metin">
+            <h2>🚌 Servis Ücreti — <?= h($seciliCavus['name']) ?></h2>
+            <p class="cf2-alt">Mesai Detayı'nda eklenen BÜYÜK / KÜÇÜK servislerin birim fiyatı. Mesai tarihinde geçerli fiyat hakedişe adet × fiyat olarak yansır.</p>
+        </div>
+        <?php if (!$servisGecmisi): ?>
+        <p class="cf2-uyari-hap"><?= $cfIk('uyari') ?><span>Servis fiyatı tanımlı değil — tanımlanmadan mesaiye servis eklenemez.</span></p>
+        <?php endif; ?>
+    </header>
+    <form method="post" class="cf2-form">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="foreman_id" value="<?= (int)$seciliCavus['id'] ?>">
+        <input type="hidden" name="form" value="servis_ucret">
+        <div class="cf2-izgara">
+            <label class="cf2-alan">
+                <span class="cf2-etiket"><?= $cfIk('servis') ?>Büyük Servis Fiyatı</span>
+                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                <input type="text" name="servis_buyuk" id="cfServisBuyuk" inputmode="decimal" placeholder="ör. 1500 veya 1500,50" value="<?= $servisHata ? h(substr(trim((string)($_POST['servis_buyuk'] ?? '')), 0, 20)) : '' ?>"></span>
+            </label>
+            <label class="cf2-alan">
+                <span class="cf2-etiket"><?= $cfIk('servis') ?>Küçük Servis Fiyatı</span>
+                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                <input type="text" name="servis_kucuk" id="cfServisKucuk" inputmode="decimal" placeholder="ör. 800" value="<?= $servisHata ? h(substr(trim((string)($_POST['servis_kucuk'] ?? '')), 0, 20)) : '' ?>"></span>
+            </label>
+            <label class="cf2-alan">
+                <span class="cf2-etiket"><?= $cfIk('para') ?>Para Birimi <b class="cf2-zorunlu">*</b></span>
+                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                <select name="servis_currency" required>
+                    <?php foreach ($paraBirimleri as $kod => $etiket): ?>
+                    <option value="<?= h($kod) ?>"<?= $kod === 'TRY' ? ' selected' : '' ?>><?= h($etiket) ?></option>
+                    <?php endforeach; ?>
+                </select></span>
+            </label>
+            <label class="cf2-alan">
+                <span class="cf2-etiket"><?= $cfIk('takvim') ?>Geçerlilik Başlangıcı <b class="cf2-zorunlu">*</b></span>
+                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('takvim') ?></span>
+                <input type="date" name="servis_valid_from" required value="<?= h(date('Y-m-d')) ?>"></span>
+            </label>
+        </div>
+        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>En az biri girilmelidir; boş bırakılan türün fiyatı yoktur (o tür servis eklenemez). Yeni dönem eklenince önceki dönem bir gün öncesinde kapanır, eski fiyatlar silinmez. Para birimi işçi fiyatlarıyla aynı olmalıdır (farklıysa hakediş hesaplanmaz).</span></p>
+        <div class="cf2-eylem">
+            <button type="submit" class="btn btn-primary cf2-btn">+ Servis Fiyatı Dönemi Ekle</button>
+        </div>
+    </form>
+
+    <div class="cf2-blok cf2-blok--gecmis">
+        <div class="cf2-yontem-ust"><span class="cf2-blok-baslik">Servis Ücreti Geçmişi</span></div>
+<?php if ($servisGecmisi): ?>
+<div class="table-wrap pc-only">
+<table class="data-table">
+<thead><tr><th>Büyük</th><th>Küçük</th><th>Geçerlilik</th><th>Durum</th></tr></thead>
+<tbody>
+<?php foreach ($servisGecmisi as $sv): ?>
+<tr>
+    <td><strong><?= $sv['big_rate'] !== null ? h(number_format((float)$sv['big_rate'], 2, ',', '.') . ' ' . $sv['currency']) : '—' ?></strong></td>
+    <td><strong><?= $sv['small_rate'] !== null ? h(number_format((float)$sv['small_rate'], 2, ',', '.') . ' ' . $sv['currency']) : '—' ?></strong></td>
+    <td class="muted"><?= h(date('d.m.Y', strtotime($sv['valid_from']))) ?> → <?= $sv['valid_to'] ? h(date('d.m.Y', strtotime($sv['valid_to']))) : 'devam ediyor' ?></td>
+    <td><span class="pdks-badge <?= $sv['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $sv['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
+</tr>
+<?php endforeach; ?>
+</tbody></table></div>
+<div class="pdks-cards mobile-only">
+<?php foreach ($servisGecmisi as $sv): ?>
+<div class="pdks-card-item">
+    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name">Büyük <?= $sv['big_rate'] !== null ? h(number_format((float)$sv['big_rate'], 2, ',', '.')) : '—' ?> · Küçük <?= $sv['small_rate'] !== null ? h(number_format((float)$sv['small_rate'], 2, ',', '.')) : '—' ?> <?= h($sv['currency']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($sv['valid_from']))) ?> → <?= $sv['valid_to'] ? h(date('d.m.Y', strtotime($sv['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $sv['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $sv['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
+</div>
+<?php endforeach; ?>
+</div>
+<?php else: ?>
+        <p class="cf2-uyari-hap cf2-uyari-hap--blok"><?= $cfIk('uyari') ?><span>Bu çavuş için henüz servis fiyatı tanımlanmadı.</span></p>
+<?php endif; ?>
+    </div>
+</section>
+<?php elseif (function_exists('is_admin') && is_admin()): ?>
+<p class="cf2-bilgi cf2-bilgi--mavi" id="cfServisKurulum"><?= $cfIk('bilgi') ?><span>🚌 Servis Ücreti için yönetici <a href="migrate.php">migrate.php</a>'den "Servis Ücreti" tablolarını kurmalıdır.</span></p>
 <?php endif; ?>
 
 <?php endif; ?>
