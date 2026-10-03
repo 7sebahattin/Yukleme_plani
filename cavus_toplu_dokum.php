@@ -185,7 +185,11 @@ render_flash();
     </tr>
     </thead>
     <tbody>
-    <?php foreach ($satirlar as $r):
+    <?php $gSon = null; $gNo = 1; /* v296-B: gün grubu — aynı tarih aynı ton, tarih değişince ton ve üst çizgi değişir */
+    foreach ($satirlar as $r):
+        $gYeni = ($gSon !== $r['tarih']);
+        if ($gYeni) { $gNo = 1 - $gNo; $gSon = $r['tarih']; }
+        $gSinif = 'ctd-g' . $gNo . ($gYeni ? ' ctd-gyeni' : '');
         $detayUrl = 'cavus_toplu_dokum_detay.php?' . http_build_query([
             'session_id' => (int)$r['session_id'],
             'ay' => $ay,
@@ -195,7 +199,7 @@ render_flash();
         $hakedis = $r['hakedis'];
     ?>
     <tr
-        class="ctd-click-row"
+        class="ctd-click-row <?= $gSinif ?>"
         tabindex="0"
         data-href="<?= h($detayUrl) ?>"
         title="Kart dökümünü aç"

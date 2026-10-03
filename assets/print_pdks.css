@@ -329,3 +329,10 @@ table.print-table td.pr-empty {
         print-color-adjust: exact;
     }
 }
+
+/* v296-B: Çavuş Toplu Döküm — gün grupları (aynı tarih aynı hafif ton) */
+table.print-table tr.ctd-g1 > td { background: #f1f5fb; }
+table.print-table tr.ctd-gyeni > td { border-top: 2px solid #8a97ab; }
+@media print {
+    table.print-table tr.ctd-g1 > td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
