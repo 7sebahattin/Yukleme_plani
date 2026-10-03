@@ -9,7 +9,7 @@
 //   CAVUS_FIYAT_SENARYO=bos  php scripts/pdks_cavus_fiyat_render.php > _test_cavus_fiyat_bos.html
 //
 //   dolu: fiyatlı çavuş, Yöntem B (30 kişi-gün = 1 hakediş), çavuş ücreti var
-//   bos : fiyatsız çavuş, Yöntem A, hiç çavuş ücreti yok
+//   bos : fiyatsız çavuş, Yöntem A, hiç çavuş ücreti yok, v299 saat kolonları KURULU DEĞİL
 // =========================================================
 declare(strict_types=1);
 error_reporting(E_ALL & ~E_DEPRECATED);
@@ -107,7 +107,12 @@ $a = (int)pdks_gunluk_cavus_olustur(['code' => 'C001', 'name' => 'Çavuş A'], 1
 $b = (int)pdks_gunluk_cavus_olustur(['code' => 'C002', 'name' => 'Çavuş B'], 1, db())['id'];
 
 if ($SENARYO === 'dolu') {
-    pdks_faz8b_oran_ekle($a, $kadin, '1200', '700', 'hourly', '150', '2026-01-01', 'TRY', 1, db());
+    // v299: saat kolonları kurulu; KADIN dönemi saatli + Çift Yevmiyeli.
+    pdks_faz8b_saat_kolonlari_migrate(db());
+    $rs = pdks_faz8b_oran_ekle($a, $kadin, '1200', '700', 'hourly', '150', '2026-01-01', 'TRY', 1, db(), [
+        'full_day' => '9', 'half_day' => '5', 'overtime_start' => '9:30', 'double_day' => '12', 'double_day_rate' => '2000',
+    ]);
+    if (!($rs['ok'] ?? false)) { fwrite(STDERR, 'HATA: ' . json_encode($rs, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
     pdks_faz8b_oran_ekle($a, $erkek, '1500', '900', 'fixed', '400', '2026-01-01', 'TRY', 1, db());
     pdks_faz8b_cavus_ucret_ekle($a, '2500', '2026-01-01', 'TRY', 1, db());
     $r = pdks_faz8b_cavus_ucret_yontem_degistir($a, 'B', 1, db(), '30');

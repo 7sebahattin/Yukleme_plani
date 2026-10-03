@@ -103,6 +103,7 @@ $pdks_faz9d_results = []; $pdks_faz9d_ran = false;   // Faz 9D (hakediş düzelt
 $pdks_cavus_ucret_results = []; $pdks_cavus_ucret_ran = false;   // Çavuş Ücreti (Faz 8B eki)
 $pdks_cavus_b_results = []; $pdks_cavus_b_ran = false;   // Çavuş Ücreti Yöntem B (dönem kapanışı)
 $pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı Giriş (kart → çavuş + tip + depo)
+$pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -184,6 +185,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cavus_ucret', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_saat') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_saat_ran     = true;
+    $pdks_saat_results = pdks_faz8b_saat_kolonlari_migrate($pdo);
+    foreach ($pdks_saat_results as $pr) {
+        if ($pr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'pdks_saat', null, null,
+                ['operation' => 'add_column', 'column' => $pr['adim']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_kart_tanim') {
@@ -482,6 +493,50 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_faz8b_cavus_ucret_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Fiyat Dönemi Saatleri + Çift Yevmiye (v299)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>foreman_worker_rates</code>'e 5 nullable kolon ekler
+      (Tam saati, Yarım saati — bilgi, FM başlangıcı, Çift eşiği, Çift ücret). Değer girilmeyen fiyat
+      dönemlerinde davranış AYNEN sürer (Tam eşiği = mesainin normal süresi, çift yok).
+      Faz 8B'nin genel hazır-mı kontrolüne (<code>pdks_faz8b_sema_hazir()</code>) BİLEREK EKLENMEZ.
+      <?php if ($pdks_saat_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_saat_results as $psr): ?>
+        <br>&nbsp;&nbsp;<?= h($psr['adim']) ?>: <?= h($psr['durum']) ?> — <?= h($psr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Kolon</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php $psTablo = pdks_faz8b_tablo_var($pdo, 'foreman_worker_rates');
+        foreach (pdks_faz8b_saat_kolonlari() as [$psk, $pstanim]):
+          $pse = $psTablo && pdks_faz8b_kolon_var($pdo, 'foreman_worker_rates', $psk); ?>
+          <tr>
+            <td>foreman_worker_rates.<?= h($psk) ?> <small>(<?= h($pstanim) ?>)</small></td>
+            <td style="color:<?= $pse ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pse ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_saat">
+      <button type="submit" class="btn btn-primary">Saat / Çift Yevmiye Kolonlarını Ekle</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">ALTER TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_faz8b_saat_kolonlari() as [$psk, $pstanim]) { echo h("ALTER TABLE `foreman_worker_rates` ADD COLUMN `{$psk}` {$pstanim};") . "\n"; }
       ?></pre>
     </details>
   </div>

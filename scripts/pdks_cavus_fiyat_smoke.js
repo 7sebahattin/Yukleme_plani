@@ -100,6 +100,26 @@ const ALANLAR = {
                     }, [ayirici, adlar]);
                     ok(`form=${ayirici} var, POST, tüm alanlar orijinal adlarıyla`, varMi.form && varMi.method === 'post' && varMi.eksik.length === 0, JSON.stringify(varMi));
                 }
+                // v299: saat + Çift Yevmiye alanları (yalnız kolonlar kuruluyken)
+                const SAAT_ALAN = ['full_day_saat', 'half_day_saat', 'overtime_start_saat', 'double_day_saat', 'double_day_rate'];
+                const saatDurum = await page.evaluate((adlar) => {
+                    const f = document.querySelector('form input[type="hidden"][name="form"][value="oran"]').form;
+                    const kur = document.getElementById('cfSaatKurulum');
+                    return { var: adlar.filter(n => f.querySelector(`[name="${n}"]`)).length,
+                             tam: (f.querySelector('[name="full_day_saat"]') || {}).value || null,
+                             kurulum: !!(kur && kur.getBoundingClientRect().height > 0),
+                             gruplar: Array.from(f.querySelectorAll('[data-cf-grup]')).map(g => g.getAttribute('data-cf-grup')) };
+                }, SAAT_ALAN);
+                if (senaryo === 'dolu') {
+                    ok('v299: 5 saat/Çift alanı formda', saatDurum.var === 5, JSON.stringify(saatDurum));
+                    ok('v299: Tam saati çavuşun normal süresiyle (9) önceden dolu', saatDurum.tam === '9', String(saatDurum.tam));
+                    ok('v299: gruplar Tam / Yarım / FM / Çift sırasıyla', saatDurum.gruplar.join(',') === 'tam,yarim,fm,cift', saatDurum.gruplar.join(','));
+                    const gecmis = await page.locator('#cfFiyatGecmisi').innerText();
+                    ok('v299: fiyat geçmişinde saatler + çift ücret görünür', /Tam 9 saat/.test(gecmis) && /FM 9s 30dk/.test(gecmis) && /2\.000,00 TRY · 12 saat/.test(gecmis), gecmis.slice(0, 300));
+                } else {
+                    ok('v299: kolonlar yokken saat alanları YOK, kurulum notu görünür', saatDurum.var === 0 && saatDurum.kurulum, JSON.stringify(saatDurum));
+                }
+
                 const secForm = await page.evaluate(() => {
                     const s = document.querySelector('form[method="get"] select[name="cavus"]');
                     return !!(s && s.form.hasAttribute('data-oto-filtre'));

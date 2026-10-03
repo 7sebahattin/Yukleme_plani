@@ -914,6 +914,25 @@ function pdks_faz8b_oran_ekle(
     return ['ok' => true, 'id' => $id];
 }
 
+/** v299: fiyat geçmişi için kısa saat özeti — ['saatler' => 'Tam 9 saat · FM 10 saat · Yarım 5 saat', 'cift' => '2.000,00 TRY · 12 saat']. */
+function pdks_faz8b_oran_saat_ozeti(array $o): array
+{
+    $e = static function ($v): string {
+        return ($v === null || $v === '' || (int)$v <= 0) ? '' : pdks_faz8b_dakika_etiket((int)$v);
+    };
+    $p = [];
+    if (($t = $e($o['full_day_minutes'] ?? null)) !== '') $p[] = 'Tam ' . $t;
+    if (($t = $e($o['overtime_start_minutes'] ?? null)) !== '') $p[] = 'FM ' . $t;
+    if (($t = $e($o['half_day_max_minutes'] ?? null)) !== '') $p[] = 'Yarım ' . $t . ' (bilgi)';
+    $cift = '';
+    $cd = $e($o['double_day_minutes'] ?? null);
+    $cr = $o['double_day_rate'] ?? null;
+    if ($cd !== '' && $cr !== null && $cr !== '') {
+        $cift = number_format((float)$cr, 2, ',', '.') . ' ' . (string)($o['currency'] ?? '') . ' · ' . $cd;
+    }
+    return ['saatler' => implode(' · ', $p), 'cift' => $cift];
+}
+
 /**
  * v299 — fiyat dönemi saat girdilerini doğrular. $ham anahtarları:
  * full_day / half_day / overtime_start / double_day (saat "9" ya da "9:30")
