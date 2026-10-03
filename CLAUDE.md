@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v298` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v299` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -650,6 +650,73 @@ o tiple girer. Çavuş → tip → kart akışı AYNEN kalır. Çıkış = mevcu
 - Test: `php scripts/pdks_tanimli_giris_smoke.php` · `php scripts/pdks_tanimli_giris_render.php >
   _test_tanimli_giris.html` → `node scripts/pdks_tanimli_giris_smoke.js` · `php
   scripts/pdks_kart_tanim_render.php > _test_kart_tanim.html` → `node scripts/pdks_kart_tanim_modal_smoke.js`.
+
+### Seri Kart Tanımla (v299)
+Kart Havuzu "⚡ Seri Kart Tanımla": çavuş + tip (`pdks_gunluk_desteklenen_tip_listele`) seçilir, kartlar art arda okutulur (USB / sürekli NFC), liste kontrol edilip TEK Kaydet ile hepsi tanımlanır. Yeni kart otomatik havuza (nötr, kart no sıradan). Tablo/Faz 8A/aktif depo yoksa düğme GİZLİ. Yeni yetki YOK (kapı `worker_cards`), migration YOK.
+- **HEP-YA-HİÇ:** `pdks_gunluk_kart_tanim_toplu_kaydet()` tek tx; HATA satırı varsa hiçbir şey yazılmaz. Kilit altında `..._toplu_degerlendir()` yeniden çağrılır. Yazma yalnız MEVCUT `pdks_gunluk_kart_olustur()` + `pdks_gunluk_kart_tanim_kaydet()` — gövdede worker_cards/worker_card_assignments'a doğrudan INSERT/UPDATE YOK (test denetler); ikinci yazma yolu AÇMA.
+- **Sınıflar** (`..._satir_sinifla`, saf): yeni · tanimlanacak · ayni (atlanır) · baska_cavus (ENGEL — "önce Tanımı Kaldır") · hata (geçersiz UID, aktif kalıcı kart, kayıp/devre dışı, kartsız sanal kart, yinelenen). Aynı çavuş farklı tip/depo → tanım güncellenir. Parti sınırı 100 (sunucu da denetler).
+- **Uçlar:** GET `ajax=tanim_satir` (salt okunur, sınıf SUNUCUDAN döner, JS sınıflama kopyası YOK) · POST JSON `ajax=tanim_toplu_kaydet` (CSRF + `worker_cards`; depo aktif depodan, istemciden ALINMAZ).
+- **Tekrar gönderim:** `istek_id` özet audit `kart_tanim_toplu`'da aranır (JSON_THROW doğrudan INSERT; `audit_log_event` hata yutar). MySQL'de `GET_LOCK('pdks_kart_tanim_toplu')` tx'in ilk işi — kaldırma. Kart içerideyse engel değil, `uyarilar`.
+- **UI:** `#iskSeriModal` = başlık / kayan gövde / sabit alt çubuk, `<form>` SARILMAZ (`.pm-dialog > form` kuralı kalsın). pdks.css "v299" bloğu.
+- Test: `php scripts/pdks_kart_toplu_tanim_smoke.php` · `php scripts/pdks_kart_toplu_render.php > _test_kart_toplu.html` → `node scripts/pdks_kart_toplu_smoke.js`.
+
+### Saat Bazlı Yevmiye + Çift Yevmiye (v299)
+
+- **Şema** (sahip GO verdi — YALNIZ ADD COLUMN): `foreman_worker_rates` + `full_day_minutes` ·
+  `half_day_max_minutes` (yalnız bilgi) · `overtime_start_minutes` · `double_day_minutes` · `double_day_rate`,
+  hepsi NULL. Kendi çifti `pdks_faz8b_saat_kolonlari_migrate/_hazir` — `pdks_faz8b_sema_hazir()`'e BİLEREK
+  EKLENMEZ. Kurulum yalnız migrate.php kartı; `cavus_fiyatlari.php` migrate ÇAĞIRMAZ (kolon yoksa not gösterir).
+- **NULL = bugünkü davranış birebir:** Tam eşiği = mesainin `normal_work_minutes_snapshot`'ı, FM Tam'dan 15 dk
+  tolerans sonra, çift yok. `foremen.normal_work_minutes` kalır (formda Tam saatinin varsayılanı + kiosk uyarısı).
+- **TEK sınıflandırıcı `pdks_faz8b_donem_siniflandir($donem, $oran)`** — Mesai Değerlendirme, tekli/toplu
+  değerlendirme (`pdks_faz8b_donem_getir`), hakediş, Mesai Tanımı sütunu hepsi bunu kullanır. Süre/FM/çift
+  hesabını başka yerde YAZMA; `pdks_faz8b_sure_karari` yalnız oradan çağrılır (test denetler).
+- **Çift** (sahip kararı: çift Tam'ın YERİNE + sonrası FM; onay FM onayına bağlı): toplam ≥ çift eşiği VE onaylı
+  süre (FM başı + onaylı FM × 60) ≥ eşik → sınıf `cift`, temel = çift ücret, FM = eşikten SONRAKİ onaylı saat;
+  Tam–çift arası ayrıca ödenmez. Sabit FM'de çift gününe FM EKLENMEZ. FM red → Tam, bekliyor → hazır değil.
+  Eşik değişince onaylı FM adaya KIRPILIR. Ayrı onay/şema YOK.
+- Yarım saati sınıfı DEĞİŞTİRMEZ (sahip kararı: otomatik Yarım yok, karar muhasebede), yalnız ipucu. Satır
+  `attendance_class_snapshot='cift'`, `worker_count=1` (Yöntem B'de 1 kişi-gün). Faz 4 motoru çift bilmez.
+- **Mesai Detayı "Mesai Tanımı"** (DURUM'un yanında; MESAİ beyan sütunu KALIR): `pdks_faz8b_mesai_tanimi_etiketi()`
+  — Tam/Yarım/Çift + FM; faz8b şeması yoksa gizli. DURUM "✅ Çıkış yapıldı" (CSS kodu `tam` aynı).
+- Test: `php scripts/pdks_cift_yovmiye_smoke.php` · `PUANTAJ_FAZ8B=1 php scripts/pdks_puantaj_dialog_render.php
+  > _test_puantaj_dialog.html` → `node scripts/pdks_puantaj_dialog_smoke.js` · `CAVUS_FIYAT_SENARYO=dolu|bos php
+  scripts/pdks_cavus_fiyat_render.php > _test_cavus_fiyat[_bos].html` → `node scripts/pdks_cavus_fiyat_smoke.js`.
+
+### Servis Ücreti (v299)
+Mesai Detayı "🚌 Servis Ücreti" (Çalışma Ekle/Toplu İşlem yanında) → BÜYÜK/KÜÇÜK adet; fiyat çavuş bazında
+`cavus_fiyatlari.php` "🚌 Servis Ücreti" kartında (tarihli, geçmişli; önceki dönem bir gün önce kapanır).
+- **Tablolar** `foreman_service_rates` + `daily_session_services` (sahip GO — yalnız 2 yeni tablo, ALTER YOK); kendi
+  `pdks_servis_tablolar/_migrate/_sema_hazir` (config/pdks_servis.php), genel sema_hazir'lere EKLENMEZ, kurulum yalnız
+  migrate.php kartı. Tablo yoksa özellik GİZLİ, hesap servisi yok sayar. pdks_faz8b.php dosya sonunda yükler.
+- **Hakediş** (sahip kararı: çavuş hakedişine ek satır): `pdks_faz8b_hakedis_hesapla` Çavuş Ücreti bloğunun ALTINDA tür
+  başına 1 satır (worker_type_id/work_period_id NULL, kod `SERVIS_BUYUK|SERVIS_KUCUK`, worker_count=adet). Fiyat yoksa
+  eksik → hesap DURUR; para birimi karışık para kapısına katılır; Yöntem A/B fark etmez. Tüketicilere satır kodu EKLEME
+  (total_amount okurlar). Faz 4 motoru servisi bilmez.
+- **Dedektör tuzağı:** Çavuş Ücreti satırı = NULL/NULL **ve kod ''**. `baska_final_var_mi` ve B `aday_kalemler.cavus_satiri`
+  `worker_type_code_snapshot = ''` ister — kaldırma (servis A'da günlük ücreti engeller, B'de günü havuzdan düşürür).
+- **Yazma** `pdks_servis_ekle/_iptal`: yalnız admin, aktif depo = mesai deposu, mesai kilidi tx'in İLK sorgusu, kesin
+  hakediş red, taslağa needs_recalculation, istek_id (UNIQUE + ön kontrol), fiyat tanımsızsa giriş reddi, gelecek gün yok.
+  Düzenleme YOK; iptal soft + gerekçe. Audit `servis_ekle/servis_iptal` (modül daily_work_sessions, record_id=mesai).
+  Yalnız servisi olan (işçi dönemi olmayan) mesai hakediş hesaplanamaz (`kart_yok`, mevcut kural).
+- Partial `_puantaj_servis.php` (fonksiyon tanımlamaz, native dialog#servis). Gün Sonu Fişi yalnız ADET basar.
+- Test: `php scripts/pdks_servis_smoke.php` · `PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php >
+  _test_servis_dialog.html` → `node scripts/pdks_servis_dialog_smoke.js` · `pdks_cavus_fiyat_smoke.js`.
+
+### Rampacı İşçi Tipi (v299)
+Kadın/Erkek yanında 3. SABİT sistem tipi: `worker_types` RAMPACI/"Rampacı" (sahip GO verdi — yalnız veri satırı, kolon yok).
+- Politika `pdks_gunluk_desteklenen_tip_kodlari()` = KADIN, ERKEK, RAMPACI → fiyat, düzeltme, kartsız/toplu ekleme, tanımlı giriş, seri tanım, hakediş, Yöntem B havuzu (sahip kararı: sayılır) tip id ile OTOMATİK kapsar. Karışık politikada DEĞİL; Otomatik Ata yalnız Kadın/Erkek'e atar. Fiyatı olmayan çavuşta Rampacı'lı mesai hakedişi "geçerli fiyat yok" ile durur (fail-closed).
+- Satır: migrate seed (sort_order 4, mevcut satırlara dokunulmaz) + tembel idempotent `pdks_gunluk_rampaci_tip_garanti()` (pasifse yeniden AÇMAZ; `desteklenen_tip_listele()` ve isci_tipleri çağırır). Görüntü sırası kodda: Kadın, Erkek, Rampacı, Karışık.
+- TEK KAYIT: `pdks_gunluk_tip_kayit()` (kod → ad, kısa, sayaç etiketi, renk son eki kadin/erkek/rampaci/karisik, `sutun`, `sistem`). Ekran+yazdırma rapor sütunları/kutuları (`pdks_gunluk_tip_sistem_sutunlari()`), `pdks_rapor_cavus_toplu_dokum()` SQL sütunları ve kiosk renkleri (`TIP_KAYIT` JSON) bundan DÖNGÜYLE üretilir — elle 'Kadın'/'Erkek' sütunu YAZMA. Yeni tip = kayıt + CSS (`pdks-kiosk-typebtn-/pdks-tip-/pdks-sonuc-/pdks-kiosk-type-badge-/is-<renk>`, `tv-grup-<renk>`).
+- Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa. CSV/XLSX'e sütun EKLENMEZ (sahip kararı).
+- Kiosk: turuncu RAMPACI düğmesi/çember/sonuç/rozet; Kadın⇄Erkek hızlı geçiş Rampacı'da gizli; ÇIKIŞ "kalan" dairesi Karışık hariç tüm sistem tipleri için.
+- Test: `php scripts/pdks_rampaci_smoke.php` · `node scripts/pdks_kiosk_renk_smoke.js` (render: `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html`).
+
+### Kart Hareketleri Sıralaması + Kapanış Notu (v299)
+
+- **Sıralama:** Mesai Detayı "Kart Hareketleri" varsayılan sırası SUNUCUDA, yalnız `gunluk_isci_puantaj_detay.php`'de `usort`: son işlem (çıkış varsa çıkış, yoksa giriş) DESC, beraberlikte `period_id` DESC. Paylaşılan `pdks_gunluk_faz8a_oturum_donemleri()` SQL'i (ASC) Gün Sonu Fişi ile ortaktır, KRONOLOJİK kalır — ona sıralama ekleme.
+- **Başlık sıralaması TEK yerde:** `config/pdks_liste_ui.php`. `<table data-pdks-sirala>` + `<th data-sirala="metin|sayi|zaman">` içinde GERÇEK `<button>` + hücrede ham `data-sirala-deger`; artan → azalan → varsayılan, boşlar her iki yönde sonda, metin `tr` doğal (K2 < K10), aktif `th`'de `aria-sort`. Mobil karşılığı `select[data-pdks-sirala-sec]` + `data-sd-*`. Yeni tabloda ayrı script YAZMA. Test: `PUANTAJ_FAZ8B=1 PUANTAJ_SIRALA=1 php scripts/pdks_puantaj_dialog_render.php > _test_sirala.html` + `PUANTAJ_SIRALA=1 PUANTAJ_KAPALI=1 … > _test_kapanis_notu.html` → `node scripts/pdks_sirala_smoke.js`.
+- **Kapanış notu düzenleme:** `pdks_gunluk_oturum_not_guncelle()` (config/pdks_faz8h.php) — YALNIZ admin (sahip kararı), mesai aktif depoda, YALNIZ `status='closed'` (her tarih), gerekçe yok, boş → NULL, ≤1000 karakter, tek tx + `FOR UPDATE`, audit `daily_session_note_edit`. Hakediş/cari bu kolonu okumaz; hakediş tablolarına/`needs_recalculation`'a DOKUNMAZ (kesin hakedişte de çalışır) — gövdeye ekleme (test denetler). Ekran: kapalı mesaide "✏ Notu Düzenle" → native `<dialog id="kapanisNotu">`, POST `action=kapanis_notu` + CSRF, mesai id'si sunucudan. Test: `php scripts/pdks_kapanis_notu_smoke.php`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 
