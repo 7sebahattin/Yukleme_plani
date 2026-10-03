@@ -39,9 +39,9 @@ $base = base_url();
 // davranışını sergiler — kod deploy'u ile migrasyon arasında tarama BOZULMAZ.
 $faz8aHazir  = pdks_gunluk_faz8a_sema_hazir($pdo);
 // ⚠ Faz 9B / H-01 kapanışı: tek paylaşılan politikadan (config/pdks_gunluk.php)
-// gelir — bu artık zaten YALNIZ KADIN/ERKEK döner, aşağıdaki düğme döngüsünde
+// gelir — bu artık zaten YALNIZ KADIN/ERKEK/RAMPACI döner, aşağıdaki düğme döngüsünde
 // ayrıca bir "code IN (...)" filtresi TEKRARLANMAZ.
-// v295: kiosk GİRİŞ düğmeleri = pdks_gunluk_desteklenen_tip_listele() (KADIN/ERKEK)
+// v295: kiosk GİRİŞ düğmeleri = pdks_gunluk_desteklenen_tip_listele() (KADIN/ERKEK/RAMPACI)
 // + KARISIK — pdks_gunluk_giris_tip_listele() o listeyi SARAR ve KARISIK satırını
 // gerekirse tembel oluşturur. KARISIK yalnız BURADA (ve kaydet ucunun GİRİŞ kapısında) seçilir.
 $isciTipleri = $faz8aHazir ? pdks_gunluk_giris_tip_listele($pdo) : [];
@@ -454,10 +454,10 @@ render_flash();
         </div>
         <h2 id="giTipBaslik">İşçi Tipi Seçin</h2>
         <?php // ⚠ Faz 9B: $isciTipleri zaten pdks_gunluk_desteklenen_tip_listele()'den
-              // (yalnız KADIN/ERKEK) geliyor — burada İKİNCİ bir "code IN (...)"
+              // (yalnız KADIN/ERKEK/RAMPACI) geliyor — burada İKİNCİ bir "code IN (...)"
               // filtresi TEKRARLANMAZ; politika TEK yerde yaşar. ?>
         <?php foreach ($isciTipleri as $t): ?>
-        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?= $t['code'] === 'KADIN' ? ' pdks-kiosk-typebtn-kadin' : '' ?><?= $t['code'] === PDKS_GUNLUK_KARISIK_KOD ? ' pdks-kiosk-typebtn-karisik' : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
+        <button type="button" class="pdks-kiosk-modebtn pdks-kiosk-typebtn<?php /* v299: renk sınıfı tip kayıt defterinden (pdks_gunluk_tip_renk) */ $tRenk = pdks_gunluk_tip_renk((string)$t['code']); ?><?= $tRenk !== '' ? ' pdks-kiosk-typebtn-' . h($tRenk) : '' ?>" data-gi-tip-id="<?= (int)$t['id'] ?>" data-gi-tip-kod="<?= h($t['code']) ?>" data-gi-tip-ad="<?= h($t['name']) ?>"><?= h(mb_strtoupper($t['name'], 'UTF-8')) ?></button>
         <?php endforeach; ?>
         <button type="button" class="btn btn-ghost" id="giTipVazgec">↩ Mod Seçimine Dön</button>
     </div>
@@ -1037,7 +1037,23 @@ render_flash();
     // v297: tarama görselinin (daire, halkalar, kart parıltısı) rengi seçili GİRİŞ tipine göre.
     // Sınıf tip KODUNDAN gelir (data-gi-tip-kod) — ad değil: 'kadin'.toLocaleUpperCase('tr-TR') = 'KADİN'.
     // ÇIKIŞ ve ORTAK ÇIKIŞ'ta sınıf yok → mevcut nötr/yeşil görünüm.
-    var TIP_RENK_SINIF = { KADIN: 'pdks-tip-kadin', ERKEK: 'pdks-tip-erkek', KARISIK: 'pdks-tip-karisik' };
+    // v299: tip kayıt defteri SUNUCUDAN (pdks_gunluk_tip_kayit — tek kaynak): [{kod, ad, renk, sistem}].
+    var TIP_KAYIT = <?= json_encode(array_map(static fn($kod, $k) => ['kod' => $kod, 'ad' => $k['ad'], 'renk' => $k['renk'], 'sistem' => $k['sistem']], array_keys(pdks_gunluk_tip_kayit()), array_values(pdks_gunluk_tip_kayit())), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+    // Türkçe büyük harf + ASCII'ye indirgenmiş karşılaştırma ('Rampacı' → 'RAMPACI', 'Karışık' → 'KARISIK').
+    function tipKatla(x) {
+        return String(x || '').toLocaleUpperCase('tr-TR').replace(/İ/g, 'I').replace(/Ş/g, 'S').replace(/Ç/g, 'C')
+            .replace(/Ğ/g, 'G').replace(/Ö/g, 'O').replace(/Ü/g, 'U');
+    }
+    function tipKayitBul(adVeyaKod) {
+        var u = tipKatla(adVeyaKod);
+        if (!u) return null;
+        for (var i = 0; i < TIP_KAYIT.length; i++) {
+            if (u === tipKatla(TIP_KAYIT[i].kod) || u === tipKatla(TIP_KAYIT[i].ad)) return TIP_KAYIT[i];
+        }
+        return null;
+    }
+    var TIP_RENK_SINIF = {};
+    TIP_KAYIT.forEach(function (k) { TIP_RENK_SINIF[k.kod] = 'pdks-tip-' + k.renk; });
     function tipRenkAyarla() {
         var s = document.getElementById('giScanSec');
         if (!s) return;
@@ -1047,11 +1063,8 @@ render_flash();
     // v297: sonuç ekranı rengi — sunucu yanıtında tip yalnız AD olarak gelir (worker_type_name):
     // Türkçe büyük harf + ASCII'ye indirip kodla eşleştirir; tanınmayan tip → yeşil (sınıf yok).
     function tipSonucSinif(ad) {
-        var u = String(ad || '').toLocaleUpperCase('tr-TR').replace(/İ/g, 'I').replace(/Ş/g, 'S');
-        if (u === 'KADIN') return ' pdks-sonuc-kadin';
-        if (u === 'ERKEK') return ' pdks-sonuc-erkek';
-        if (u === 'KARISIK') return ' pdks-sonuc-karisik';
-        return '';
+        var k = tipKayitBul(ad);
+        return k ? ' pdks-sonuc-' + k.renk : '';
     }
     function tipGecisGuncelle() {
         tipRenkAyarla();
@@ -1110,9 +1123,9 @@ render_flash();
                 modeBadge.className = 'pdks-kiosk-mode-badge ' + MOD_SINIF[mod];
                 tipBadge.hidden = (mod !== 'GIRIS' || !seciliTipAd);
                 tipBadge.textContent = tipBadge.hidden ? '' : seciliTipAd;
-                tipBadge.classList.toggle('pdks-kiosk-type-badge-kadin', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'KADIN');
-                tipBadge.classList.toggle('pdks-kiosk-type-badge-erkek', !tipBadge.hidden && seciliTipAd.toLocaleUpperCase('tr-TR') === 'ERKEK');
-                tipBadge.classList.toggle('pdks-kiosk-type-badge-karisik', !tipBadge.hidden && seciliTipKod === 'KARISIK');
+                TIP_KAYIT.forEach(function (k) {
+                    tipBadge.classList.toggle('pdks-kiosk-type-badge-' + k.renk, !tipBadge.hidden && k.kod === seciliTipKod);
+                });
                 document.getElementById('giScanCavusAd').textContent = seciliCavusAd;
                 document.getElementById('giSayacDepo').textContent = currentSession.depo || '(depo yok)';
                 sayaclariGoster(d.ozet || {});
@@ -1186,9 +1199,8 @@ render_flash();
         var sonucSinif = girisMi ? ' is-giris' : ' is-cikis';
         var saat = ((d.server_time || '').split(' ')[1] || '').slice(0, 5);
         var tip = kart.worker_type_name || kart.declared_class_label || '';
-        var tipSinif = tip.toLocaleUpperCase('tr-TR') === 'KADIN' ? ' is-kadin' :
-                       (tip.toLocaleUpperCase('tr-TR') === 'ERKEK' ? ' is-erkek' :
-                       (tip.toLocaleUpperCase('tr-TR') === 'KARIŞIK' ? ' is-karisik' : ''));
+        var tipKayit = tipKayitBul(tip);
+        var tipSinif = tipKayit ? ' is-' + tipKayit.renk : '';
         var saatBilgi = saat;
         if (d.event_type === 'CIKIS' && kart.entry_time) {
             var girisSaat = (kart.entry_time.split(' ')[1] || kart.entry_time).slice(0, 5);
@@ -1207,12 +1219,13 @@ render_flash();
         // içindeki RAKAM değişir: okutulan kartın cinsiyetinden o mesaide hâlâ İÇERİDE
         // kalan kişi sayısı. Ayrı başlık/kutu YOK (kullanıcı kararı). Kaynak
         // ozet.eksik_tip (tipe göre açık dönem); yoksa giris - cikis (negatife düşmez).
-        // Tip Kadın/Erkek değilse eski davranış (toplam giriş) korunur. GİRİŞ DEĞİŞMEDİ.
+        // Tip sistem tipi (Kadın/Erkek/Rampacı) değilse (Karışık, tanınmayan) eski davranış (toplam giriş)
+        // korunur. GİRİŞ DEĞİŞMEDİ.
         if (d.event_type === 'CIKIS') {
             // ⚠ Hedef BÜYÜK harfle karşılaştırılır: 'kadin'.toLocaleUpperCase('tr-TR')
             // 'KADİN' (noktalı İ) olur ve eşleşme sessizce 0 döner.
             var tipUst = tip.toLocaleUpperCase('tr-TR');
-            if (tipUst === 'KADIN' || tipUst === 'ERKEK') {
+            if (tipKayit && tipKayit.sistem) {
                 var tara = function (obj) {
                     var v = 0;
                     Object.keys(obj || {}).forEach(function (k) { if (k.toLocaleUpperCase('tr-TR') === tipUst) v += (parseInt(obj[k], 10) || 0); });
@@ -1313,7 +1326,7 @@ render_flash();
         // GİRİŞ taraması, işçi tipi seçilmeden başlamaz; sunucu da doğrular.
         if (tipSec && currentMode === 'GIRIS' && !tanimliMod && !seciliTipId) {
             nfcDebugYaz('kaydet atlandı: işçi tipi seçili değil');
-            hataGoster('Önce İşçi Tipi (Kadın/Erkek/Karışık) seçin.');
+            hataGoster('Önce İşçi Tipi (Kadın/Erkek/Rampacı/Karışık) seçin.');
             return;
         }
         // v298: Tanımlı modda aynı kartın ~3 sn içinde tekrar okunması (NFC/USB

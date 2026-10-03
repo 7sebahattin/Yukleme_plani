@@ -137,7 +137,7 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
             if(pdks_faz8j_kart_kartsiz_mi_id($pdo,(int)$p['worker_card_id'])) throw new RuntimeException('Kartsız mesai kaydı başka bir karta taşınamaz.');
             if(pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesainin sanal kartı başka bir kayda bağlanamaz.');
         } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
-        if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK\'e yeniden atanarak düzeltilebilir.');
+        if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI\'ya yeniden atanarak düzeltilebilir.');
         $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
         $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
         $eventId=$p['exit_event_id'];
@@ -570,7 +570,7 @@ function pdks_faz8j_toplu_hazirla(PDO $pdo, array $v): array {
         $tip = pdks_faz8j_desteklenen_tip($pdo, (int)$m($g['worker_type_id'] ?? 0));
         $etiket = $tip ? (string)$tip['name'] : (($i + 1) . '. grup');
         $grupHata = null;
-        if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK).';
+        if (!$tip) $grupHata = 'İşçi tipi bulunamadı, pasif veya desteklenmiyor (yalnız KADIN/ERKEK/RAMPACI).';
         elseif (isset($tipGoruldu[(int)$tip['id']])) $grupHata = 'Aynı işçi tipi için birden fazla grup girilemez.';
         if ($tip) $tipGoruldu[(int)$tip['id']] = true;
         $entry = pdks_faz8j_zaman($wd, $m($g['entry_clock'] ?? ''));

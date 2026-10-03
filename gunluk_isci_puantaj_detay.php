@@ -220,8 +220,9 @@ render_flash();
     <h3><?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?><?= $oturum['depo'] ? ' — ' . h($oturum['depo']) : '' ?>
         · <span class="pdks-badge pdks-badge-<?= h($durum['kod']) ?>"><?= h($durum['etiket']) ?></span></h3>
     <div class="pdks-kiosk-counter-totals">
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Kadın</div><div class="val"><?= (int)($ozet['giris']['Kadın'] ?? 0) ?></div></div>
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Erkek</div><div class="val"><?= (int)($ozet['giris']['Erkek'] ?? 0) ?></div></div>
+        <?php foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc): /* v299: Kadın / Erkek / Rampacı — tip kayıt defterinden */ ?>
+        <div class="pdks-kiosk-counter-box"><div class="lbl"><?= h($tc['kisa']) ?></div><div class="val"><?= (int)($ozet['giris'][$tc['ad']] ?? 0) ?></div></div>
+        <?php endforeach; ?>
         <?php if ((int)($ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): ?><div class="pdks-kiosk-counter-box"><div class="lbl">Karışık</div><div class="val"><?= (int)$ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?></div></div><?php endif; ?>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Giriş</div><div class="val"><?= (int)$ozet['giris_toplam'] ?></div></div>
         <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Çıkış</div><div class="val"><?= (int)$ozet['cikis_toplam'] ?></div></div>

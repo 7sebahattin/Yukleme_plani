@@ -1263,25 +1263,29 @@ function pdks_rapor_cavus_toplu_dokum(
     if ($ts === false) return [];
     $end = date('Y-m-t', $ts);
 
-    // Kadın / Erkek master ID'lerini mevcut master tablodan al.
-    // Toplam sayı yalnız bu iki tipe bağlı DEĞİLDİR; bütün katılımları sayar.
+    // Tip sütunları master ID'lerini mevcut master tablodan al.
+    // Toplam sayı yalnız bu tiplere bağlı DEĞİLDİR; bütün katılımları sayar.
     // v295: KARISIK (atanmamış Karışık giriş) AYRI sayılır — Kadın+Erkek+Karışık = toplam
     // (Karışık eskiden hiçbir cinsiyet sütununa düşmüyordu, sessizce kayboluyordu).
-    $tipIds = ['KADIN' => 0, 'ERKEK' => 0, 'KARISIK' => 0];
-    $stTip = $pdo->query(
-        "SELECT id, code
-           FROM worker_types
-          WHERE code IN ('KADIN','ERKEK','KARISIK')"
-    );
-    foreach ($stTip->fetchAll() as $t) {
-        if (isset($tipIds[$t['code']])) {
-            $tipIds[$t['code']] = (int)$t['id'];
+    // v299: sütunlar TİP KAYIT DEFTERİNDEN (pdks_gunluk_tip_kayit — Kadın, Erkek, Rampacı, Karışık)
+    // döngüyle üretilir; satır anahtarı = kayıttaki 'sutun' (kadin/erkek/rampaci/karisik).
+    $tipKayit = function_exists('pdks_gunluk_tip_kayit') ? pdks_gunluk_tip_kayit() : [];
+    $tipIds = array_fill_keys(array_keys($tipKayit), 0);
+    if ($tipKayit) {
+        $kodPh = implode(',', array_fill(0, count($tipKayit), '?'));
+        $stTip = $pdo->prepare("SELECT id, code FROM worker_types WHERE code IN ($kodPh)");
+        $stTip->execute(array_keys($tipKayit));
+        foreach ($stTip->fetchAll() as $t) {
+            if (isset($tipIds[$t['code']])) {
+                $tipIds[$t['code']] = (int)$t['id'];
+            }
         }
     }
-
-    $kadinId = (int)$tipIds['KADIN'];
-    $erkekId = (int)$tipIds['ERKEK'];
-    $karisikId = (int)$tipIds['KARISIK'];
+    $tipSutunSql = '';
+    foreach ($tipKayit as $kod => $k) {
+        // id sistemde (int) → SQL'e güvenle gömülür; satır yoksa 0 hiçbir dönemle eşleşmez.
+        $tipSutunSql .= "SUM(CASE WHEN p.worker_type_id_snapshot = " . (int)$tipIds[$kod] . " THEN 1 ELSE 0 END) AS " . $k['sutun'] . ",\n            ";
+    }
 
     $where = ['s.work_date BETWEEN ? AND ?'];
     $params = [$start, $end];
@@ -1306,10 +1310,7 @@ function pdks_rapor_cavus_toplu_dokum(
             s.depo,
             s.status AS oturum_durumu,
             COUNT(p.id) AS toplam_isci,
-            SUM(CASE WHEN p.worker_type_id_snapshot = {$kadinId} THEN 1 ELSE 0 END) AS kadin,
-            SUM(CASE WHEN p.worker_type_id_snapshot = {$erkekId} THEN 1 ELSE 0 END) AS erkek,
-            SUM(CASE WHEN p.worker_type_id_snapshot = {$karisikId} THEN 1 ELSE 0 END) AS karisik,
-            MIN(p.entry_time) AS ilk_giris,
+            {$tipSutunSql}            MIN(p.entry_time) AS ilk_giris,
             MAX(p.exit_time) AS son_cikis,
             SUM(
                 CASE
@@ -1339,9 +1340,7 @@ function pdks_rapor_cavus_toplu_dokum(
         $r['session_id']   = (int)$r['session_id'];
         $r['foreman_id']   = (int)$r['foreman_id'];
         $r['toplam_isci']  = (int)$r['toplam_isci'];
-        $r['kadin']        = (int)$r['kadin'];
-        $r['erkek']        = (int)$r['erkek'];
-        $r['karisik']      = (int)$r['karisik'];
+        foreach ($tipKayit as $k) $r[$k['sutun']] = (int)($r[$k['sutun']] ?? 0);
         $r['eksik_cikis']  = (int)$r['eksik_cikis'];
         $r['hakedis']      = null;
     }

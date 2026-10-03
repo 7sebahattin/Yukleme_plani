@@ -39,6 +39,7 @@ $topluIk = function (string $ad): string {
         'kapat'       => '<path d="M6 6l12 12M18 6L6 18"/>',
         'kadin'       => '<circle cx="12" cy="5.5" r="3"/><path d="M12 9c-2.4 0-4 1.6-4.4 4l-1.1 5.5h3.1V22h4.8v-3.5h3.1L16.4 13C16 10.6 14.4 9 12 9z"/>',
         'erkek'       => '<circle cx="12" cy="5.5" r="3"/><path d="M7 21v-8c0-2.2 1.3-4 3.3-4h3.4c2 0 3.3 1.8 3.3 4v8M12 14v7"/>',
+        'rampaci'     => '<path d="M5 9.5a7 7 0 0 1 14 0M3.5 9.5h17M12 2.5v4"/><circle cx="12" cy="14.2" r="2.6"/><path d="M6.5 21.5c0-3 2.4-5 5.5-5s5.5 2 5.5 5"/>',
         'ara'         => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
         'kaydet'      => '<path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
         'cop'         => '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
@@ -88,12 +89,13 @@ $topluIk = function (string $ad): string {
         $esles = []; $digerleri = [];
         foreach ($topluKartlar as $k) { if ((int)($k['worker_type_id'] ?? 0) === $tid) $esles[] = $k; else $digerleri[] = $k; }
         $sirali = array_merge($esles, $digerleri);
-        // Renk/simge işçi tipinden (ad: Kadın/Erkek); tanınmazsa nötr. Başlık metni yalnız tanınan tipte sadeleşir.
-        $tRenk = preg_match('/^\s*kad[ıi]n/iu', (string)$t['name']) ? 'kadin' : (preg_match('/^\s*erkek/iu', (string)$t['name']) ? 'erkek' : 'diger');
-        $tBaslik = $tRenk === 'kadin' ? 'Kadın' : ($tRenk === 'erkek' ? 'Erkek' : (string)$t['name']);
+        // Renk/simge işçi tipinden — tip kayıt defteri (pdks_gunluk_tip_kayit; ad/kod TR-duyarsız); tanınmazsa nötr.
+        $tKod = pdks_gunluk_tip_kod_adindan((string)$t['name']) ?? pdks_gunluk_tip_kod_adindan((string)($t['code'] ?? ''));
+        $tRenk = $tKod !== null ? pdks_gunluk_tip_renk($tKod) : 'diger';
+        $tBaslik = $tKod !== null ? (pdks_gunluk_tip_kayit_ad($tKod) ?? (string)$t['name']) : (string)$t['name'];
     ?>
     <section class="tp-grup tv-grup tv-grup-<?= $tRenk ?>" data-tip="<?= $tid ?>" data-ad="<?= h($t['name']) ?>">
-        <h3 class="tp-grup-baslik tv-grup-bas"><span class="tv-grup-ikon"><?= $topluIk($tRenk === 'erkek' ? 'erkek' : 'kadin') ?></span><span class="tv-grup-ad"><?= h($tBaslik) ?></span> <span class="tp-sayac">0 kartlı + 0 kartsız = 0 kişi</span></h3>
+        <h3 class="tp-grup-baslik tv-grup-bas"><span class="tv-grup-ikon"><?= $topluIk(in_array($tRenk, ['erkek', 'rampaci'], true) ? $tRenk : 'kadin') ?></span><span class="tv-grup-ad"><?= h($tBaslik) ?></span> <span class="tp-sayac">0 kartlı + 0 kartsız = 0 kişi</span></h3>
         <div class="tv-grup-govde">
         <div class="pdks-form-grid tv-alanlar">
             <div><span class="form-label">Giriş günü</span><div class="tv-ro"><?= $topluIk('takvim') ?><span><?= h($topluTrTarih) ?></span></div></div>
