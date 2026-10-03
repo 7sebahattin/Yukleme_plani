@@ -39,6 +39,7 @@ require_once __DIR__ . '/config/pdks_cari.php';
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
 require_once __DIR__ . '/config/pdks_faz8j.php';
+require_once __DIR__ . '/config/pdks_servis.php';   // v299 Servis Ücreti
 // Faz 9D / H-03: hakediş düzeltme/mahsup (foreman_entitlement_adjustments)
 // tablosu da AYNI sebeple BURADAN elle tetiklenir. Faz 1-9C tablolarına
 // DOKUNMAZ — yalnız KENDİ tek yeni tablosunu additive olarak ekler.
@@ -104,6 +105,7 @@ $pdks_cavus_ucret_results = []; $pdks_cavus_ucret_ran = false;   // Çavuş Ücr
 $pdks_cavus_b_results = []; $pdks_cavus_b_ran = false;   // Çavuş Ücreti Yöntem B (dönem kapanışı)
 $pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı Giriş (kart → çavuş + tip + depo)
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
+$pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -184,6 +186,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_cavus_ucret_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cavus_ucret', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_servis') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_servis_ran     = true;
+    $pdks_servis_results = pdks_servis_migrate($pdo);
+    foreach ($pdks_servis_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_servis', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -493,6 +505,48 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_faz8b_cavus_ucret_tablolar() as $pcsql) { echo h($pcsql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Servis Ücreti (v299)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>foreman_service_rates</code> (çavuş bazında Büyük/Küçük servis
+      fiyatı, tarihli) ve <code>daily_session_services</code> (mesaiye eklenen servis adetleri) tablolarını
+      ekler. Mevcut tablolara ALTER YOK. Kurulmazsa Servis Ücreti özelliği gizli kalır, hakediş eskisi gibi çalışır.
+      <?php if ($pdks_servis_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_servis_results as $psr): ?>
+        <br>&nbsp;&nbsp;<?= h($psr['tablo']) ?>: <?= h($psr['durum']) ?> — <?= h($psr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_servis_tablolar()) as $pst):
+          $pse = pdks_servis_tablo_var($pdo, $pst); ?>
+          <tr>
+            <td><?= h($pst) ?></td>
+            <td style="color:<?= $pse ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pse ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_servis">
+      <button type="submit" class="btn btn-primary">Servis Ücreti Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_servis_tablolar() as $pssql) { echo h($pssql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>
