@@ -49,17 +49,18 @@ foreach ($servisListe as $sv) {
     <?php if ($servisKesin): ?>
     <p class="sv-uyari" role="alert">Bu mesainin kesinleşmiş hakedişi var — servis eklemek için önce hakedişi yeniden açın.</p>
     <?php elseif (!$svFiyatVar): ?>
-    <p class="sv-uyari" role="alert">Bu çavuş için <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?> tarihinde geçerli servis fiyatı yok — önce Çavuş Ücretleri'nden servis fiyatı tanımlayın.<?php if ($servisFiyatLink): ?> <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>#cfServisUcreti">Çavuş Ücretleri →</a><?php endif; ?></p>
+    <p class="sv-bilgi-kutu" role="status">Bu çavuş için <?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?> tarihinde servis fiyatı henüz tanımlı değil. Servis <b>yine de kaydedilir</b>; fiyat tanımlanınca hakedişte kendiliğinden hesaplanır (fiyat tanımlanana kadar bu mesainin hakedişi hesaplanamaz). Fiyatı tanımlarken <b>geçerlilik başlangıcını bu tarih ya da öncesi</b> girin.<?php if ($servisFiyatLink): ?> <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>#cfServisUcreti">Çavuş Ücretleri →</a><?php endif; ?></p>
     <?php endif; ?>
     <div class="sv-sayaclar">
     <?php foreach ($svTurler as $tur => $t):
         $svF = $servisFiyat ? ($servisFiyat[$t['kolon']] ?? null) : null;
-        $svAcik = !$servisKesin && $svF !== null && (float)$svF > 0;
-        $svKurus = $svAcik ? (int)round((float)$svF * 100) : 0; ?>
+        $svFiyatli = $svF !== null && (float)$svF > 0;
+        $svAcik = !$servisKesin;                       // v300: fiyat olmasa da servis girilebilir
+        $svKurus = ($svAcik && $svFiyatli) ? (int)round((float)$svF * 100) : 0; ?>
         <div class="sv-sayac<?= $svAcik ? '' : ' sv-kapali' ?>" data-sv-tur="<?= h($tur) ?>" data-fiyat-kurus="<?= $svKurus ?>">
             <div class="sv-sayac-ust">
                 <span class="sv-ad"><span aria-hidden="true"><?= $t['ik'] ?></span> <?= h($t['ad']) ?></span>
-                <span class="sv-fiyat"><?= $svAcik ? h(number_format((float)$svF, 2, ',', '.') . ' ' . $svPara) : 'fiyat tanımlı değil' ?></span>
+                <span class="sv-fiyat"><?= $svFiyatli ? h(number_format((float)$svF, 2, ',', '.') . ' ' . $svPara) : 'fiyat henüz yok' ?></span>
             </div>
             <div class="sv-kontrol">
                 <button type="button" class="btn sv-eksi" aria-label="<?= h($t['ad']) ?> azalt"<?= $svAcik ? '' : ' disabled' ?>>−</button>

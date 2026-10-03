@@ -206,7 +206,9 @@ echo "\n=== 12. FAZ 1-5 DOSYALARINA DOKUNULMADI (Faz 6'nın kendi izin ekleri HA
 // güncellenen AYNI, belgelenen deseni). Bu 3 satır AÇIKÇA allowlist'e
 // alınır; bunların DIŞINDA hiçbir satır silinmemiş olmalı.
 $helpersDiff = trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git diff -- config/helpers.php 2>&1'));
-$helpersSilinen = array_filter(explode("\n", $helpersDiff), fn($l) => preg_match('/^-(?!--)/', $l) === 1);
+// Sürüm artışı (APP_SURUM satırı) her sürümde değişir — bilinen/zararsız (pdks_faz1b_static_smoke ile aynı kural).
+$helpersSilinen = array_filter(explode("\n", $helpersDiff), fn($l) => preg_match('/^-(?!--)/', $l) === 1
+    && preg_match("/^-\\s+define\\('APP_SURUM', 'v\\d+'\\);\\s*$/", $l) !== 1);
 $helpersBeklenenEskiSatirlar = [
     "-    \$p_gunluk = (\$_fn && (can('attendance.foremen') || can('attendance.worker_cards') || can('attendance.daily_scan') || can('attendance.daily_reports') || can('attendance.foreman_rates') || can('attendance.entitlements') || can('attendance.foreman_accounts') || can('attendance.foreman_payments'))) || \$p_adm;",
     "-                       'attendance.foreman_accounts','attendance.foreman_payments'];",

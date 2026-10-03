@@ -2149,3 +2149,13 @@ th[aria-sort="descending"] .pdks-sirala-ok::after { bottom: 1px; }
     .pdks-sirala-ok, .pdks-sirala-durum, .pdks-sirala-sec-satir, .pdks-not-duzenle { display: none !important; }
     .pdks-sirala-btn { padding: 0; text-decoration: none; }
 }
+
+/* =====================================================================
+   v300 — Servis girişi fiyat yokken de açık: bilgi kutusu (sv-uyari yerine)
+   ===================================================================== */
+.sv-bilgi-kutu { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #eef5ff; color: #1d4a8a; font-size: .88rem; line-height: 1.45; overflow-wrap: anywhere; }
+.sv-bilgi-kutu a { color: inherit; font-weight: 600; }
+html[data-theme="dark"] .sv-bilgi-kutu { background: #14263f; color: #b9d4ff; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .sv-bilgi-kutu { background: #14263f; color: #b9d4ff; }
+}

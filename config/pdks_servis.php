@@ -196,6 +196,10 @@ function pdks_servis_ucret_ekle(
         return ['ok' => false, 'hata' => 'Servis fiyatı kaydedilemedi: ' . $e->getMessage()];
     }
 
+    // v300: bu fiyat dönemine düşen servisi olan TASLAK hakedişler yeniden hesaplama
+    // ister (fiyat yokken servis kaydedilebildiği için). Kesinleşmiş hakedişe dokunulmaz.
+    $isaretlenen = pdks_servis_taslaklari_isaretle($foremanId, $validFrom, $pdo);
+
     if (function_exists('audit_log_event')) {
         audit_log_event('create', 'foreman_service_rates', $id, null, [
             'foreman_id' => $foremanId,
@@ -204,7 +208,7 @@ function pdks_servis_ucret_ekle(
             'currency' => $currency, 'valid_from' => $validFrom,
         ]);
     }
-    return ['ok' => true, 'id' => $id];
+    return ['ok' => true, 'id' => $id, 'isaretlenen' => $isaretlenen];
 }
 
 function pdks_servis_ucret_gecerli(int $foremanId, string $tarih, ?PDO $pdo = null): ?array
@@ -228,6 +232,44 @@ function pdks_servis_ucret_gecmisi(int $foremanId, ?PDO $pdo = null): array
     $st = $pdo->prepare("SELECT * FROM foreman_service_rates WHERE foreman_id = ? ORDER BY valid_from DESC, id DESC");
     $st->execute([$foremanId]);
     return $st->fetchAll();
+}
+
+/**
+ * v300: çavuşun, `$tarihtenBeri` (dahil) tarihli iptal edilmemiş servisi olan mesailerinin
+ * TASLAK hakedişlerini needs_recalculation=1 yapar. Hakediş tablosu/kolonu ya da faz8j
+ * yoksa sessizce 0 döner (özellik opsiyonel). Kesin hakedişe DOKUNMAZ.
+ */
+function pdks_servis_taslaklari_isaretle(int $foremanId, string $tarihtenBeri, PDO $pdo): int
+{
+    if (!pdks_servis_tablo_var($pdo, 'daily_session_services')) return 0;
+    require_once __DIR__ . '/pdks_faz8j.php';
+    $st = $pdo->prepare("SELECT DISTINCT session_id FROM daily_session_services
+                          WHERE foreman_id = ? AND is_voided = 0 AND work_date >= ?");
+    $st->execute([$foremanId, $tarihtenBeri]);
+    $n = 0;
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+        try { pdks_faz8j_yeniden_hesap_isaretle($pdo, (int)$sid); $n++; } catch (Throwable $e) { /* hesap ekranı zaten durumu gösterir */ }
+    }
+    return $n;
+}
+
+/**
+ * v300: çavuşun fiyatı (geçerli dönemi) OLMAYAN iptal edilmemiş servislerinin en eski
+ * mesai tarihi (Y-m-d) ya da null. Fiyat formunda "geçerlilik başlangıcı" önerisi içindir.
+ */
+function pdks_servis_fiyatsiz_en_eski_tarih(int $foremanId, ?PDO $pdo = null): ?string
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_servis_tablo_var($pdo, 'daily_session_services')) return null;
+    $st = $pdo->prepare("SELECT work_date, service_type FROM daily_session_services
+                          WHERE foreman_id = ? AND is_voided = 0 GROUP BY work_date, service_type ORDER BY work_date ASC");
+    $st->execute([$foremanId]);
+    foreach ($st->fetchAll() as $r) {
+        $u = pdks_servis_ucret_gecerli($foremanId, (string)$r['work_date'], $pdo);
+        $kolonTur = ((string)$r['service_type'] === 'BUYUK') ? 'BUYUK' : 'KUCUK';
+        if (pdks_servis_birim_kurus($u, $kolonTur) === null) return (string)$r['work_date'];
+    }
+    return null;
 }
 
 /** Geçerli fiyat satırında bu türün fiyatı (kuruş) — yoksa null. */
@@ -296,7 +338,7 @@ function pdks_servis_hakedis_satirlari(array $oturum, PDO $pdo): array
         if ($n < 1) continue;
         $birim = pdks_servis_birim_kurus($ucret, $tur);
         if ($birim === null) {
-            $sonuc['eksikler'][] = $tanim['satir'] . ' — geçerli fiyat yok';
+            $sonuc['eksikler'][] = $tanim['satir'] . ' — geçerli fiyat yok';  // v300: Çavuş Ücretleri → Servis Ücreti'nden tanımlanınca hesaplanır
             continue;
         }
         $sonuc['para'] = trim((string)($ucret['currency'] ?? 'TRY')) ?: 'TRY';
@@ -337,7 +379,7 @@ function pdks_servis_istek_kayitli(PDO $pdo, string $istekId): bool
 /**
  * Mesaiye servis ekler (Büyük + Küçük tek gönderimde; tür başına 1 satır,
  * ortak batch_id; istek_id YALNIZ ilk satırda — UNIQUE çift gönderimi keser).
- * @return array{ok:bool, hata?:string, tekrar?:bool, batch_id?:string, buyuk?:int, kucuk?:int}
+ * @return array{ok:bool, hata?:string, tekrar?:bool, batch_id?:string, buyuk?:int, kucuk?:int, fiyatsiz?:string[]}
  */
 function pdks_servis_ekle(int $sessionId, int $buyuk, int $kucuk, string $note, string $istekId, int $user, ?PDO $pdo = null): array
 {
@@ -362,13 +404,14 @@ function pdks_servis_ekle(int $sessionId, int $buyuk, int $kucuk, string $note, 
     if ($e = pdks_faz8j_aktif_depo_kontrol((string)$oturum['depo'])) return ['ok' => false, 'hata' => $e];
     if ((string)$oturum['work_date'] > date('Y-m-d')) return ['ok' => false, 'hata' => 'Gelecek tarihli mesaiye servis eklenemez.'];
 
-    // Fiyat tanımsızken giriş ENGELLENİR (hesapta da eksik sayılırdı).
+    // v300 (sahip kararı): fiyat tanımsızken de giriş YAPILIR — servis fiilen kalkıyor,
+    // fiyat sonradan girilir. Hakediş fiyat yokken eksik sayar ve DURUR (fail-closed,
+    // işçi fiyatı olmayan mesai ile aynı kural); fiyat tanımlanınca hesaplanır.
     $ucret = pdks_servis_ucret_gecerli((int)$oturum['foreman_id'], (string)$oturum['work_date'], $pdo);
     $adetler = ['BUYUK' => $buyuk, 'KUCUK' => $kucuk];
+    $fiyatsiz = [];
     foreach (pdks_servis_turleri() as $tur => $tanim) {
-        if ($adetler[$tur] > 0 && pdks_servis_birim_kurus($ucret, $tur) === null) {
-            return ['ok' => false, 'kod' => 'fiyat_yok', 'hata' => 'Bu çavuş için ' . $tanim['ad'] . ' servis fiyatı tanımlı değil — önce Çavuş Ücretleri\'nden servis fiyatı tanımlayın.'];
-        }
+        if ($adetler[$tur] > 0 && pdks_servis_birim_kurus($ucret, $tur) === null) $fiyatsiz[] = $tanim['ad'];
     }
     if (pdks_servis_istek_kayitli($pdo, $istekId)) return ['ok' => false, 'hata' => PDKS_SERVIS_TEKRAR_HATA, 'tekrar' => true];
 
@@ -395,7 +438,7 @@ function pdks_servis_ekle(int $sessionId, int $buyuk, int $kucuk, string $note, 
             'buyuk' => $buyuk, 'kucuk' => $kucuk, 'note' => $note, 'servis_ids' => $ids,
         ], 'daily_work_sessions');
         $pdo->commit();
-        return ['ok' => true, 'batch_id' => $batchId, 'buyuk' => $buyuk, 'kucuk' => $kucuk];
+        return ['ok' => true, 'batch_id' => $batchId, 'buyuk' => $buyuk, 'kucuk' => $kucuk, 'fiyatsiz' => $fiyatsiz];
     } catch (Throwable $x) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         if ($x instanceof RuntimeException && !$x instanceof PDOException) {
@@ -406,6 +449,22 @@ function pdks_servis_ekle(int $sessionId, int $buyuk, int $kucuk, string $note, 
         }
         return ['ok' => false, 'hata' => pdks_faz8j_eszamanli_hata($x) ? PDKS_FAZ8J_ESZAMANLI_HATA : 'Servis kaydı sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
     }
+}
+
+/**
+ * v300: servis_ekle sonrası kullanıcıya gösterilecek özet mesaj. Metin burada durur çünkü
+ * Mesai Detayı sayfası para/fiyat sözcüğü taşımaz (pdks_gunluk_faz3_static_smoke).
+ * @param array $sonuc pdks_servis_ekle() başarı sonucu
+ */
+function pdks_servis_ekle_mesaji(array $sonuc): string
+{
+    $parca = trim(((int)$sonuc['buyuk'] > 0 ? (int)$sonuc['buyuk'] . ' Büyük ' : '') . ((int)$sonuc['kucuk'] > 0 ? (int)$sonuc['kucuk'] . ' Küçük' : ''));
+    $mesaj = 'Servis eklendi (' . $parca . '). ';
+    if (!empty($sonuc['fiyatsiz'])) {
+        return $mesaj . '⚠ ' . implode(' ve ', $sonuc['fiyatsiz']) . ' servis fiyatı tanımlı değil — kayıt tutuldu; fiyat Çavuş Ücretleri\'nden tanımlanınca '
+            . 'hakedişte hesaplanır (o zamana kadar bu mesainin hakedişi hesaplanamaz).';
+    }
+    return $mesaj . 'Taslak hakediş yeniden hesaplanmalıdır.';
 }
 
 /** Servis kaydını iptal eder (soft, gerekçe zorunlu). Kayıt BU mesaiye ait olmalı. */

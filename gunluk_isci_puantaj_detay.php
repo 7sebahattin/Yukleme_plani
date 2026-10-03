@@ -94,8 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     if (($_POST['action'] ?? '') === 'servis_ekle') {
         $sonuc = pdks_servis_ekle((int)$id, (int)($_POST['buyuk'] ?? 0), (int)($_POST['kucuk'] ?? 0),
             (string)($_POST['note'] ?? ''), (string)($_POST['istek_id'] ?? ''), (int)$auth_user['id'], $pdo);
-        $mesaj = $sonuc['ok'] ? 'Servis eklendi (' . trim(((int)$sonuc['buyuk'] > 0 ? (int)$sonuc['buyuk'] . ' Büyük ' : '')
-            . ((int)$sonuc['kucuk'] > 0 ? (int)$sonuc['kucuk'] . ' Küçük' : '')) . '). Taslak hakediş yeniden hesaplanmalıdır.' : $sonuc['hata'];
+        $mesaj = $sonuc['ok'] ? pdks_servis_ekle_mesaji($sonuc) : $sonuc['hata'];
     } else {
         $sonuc = pdks_servis_iptal((int)($_POST['servis_id'] ?? 0), (int)$id, (string)($_POST['reason'] ?? ''), (int)$auth_user['id'], $pdo);
         $mesaj = $sonuc['ok'] ? 'Servis kaydı iptal edildi. Taslak hakediş yeniden hesaplanmalıdır.' : $sonuc['hata'];
