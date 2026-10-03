@@ -3121,7 +3121,7 @@ function pdks_gunluk_faz8a_kart_sorgula(string $kanonik, PDO $pdo): array
  * @param string $declaredClass 'tam' | 'yarim' — pdks_gunluk_faz8a_mesai_siniflari()
  * @param string $donemKaynak   v298: dönemin `source` değeri — 'scan' (çavuş+tip seçilen kiosk)
  *                              | 'tanimli' (Tanımlı Giriş, pdks_gunluk_tanimli_giris_kaydet()).
- *                              Yalnız köken bilgisidir; hakediş/cari/rapor buna göre DALLANMAZ.
+ *                              Yalnız köken bilgisidir; para/rapor hesapları buna göre DALLANMAZ.
  *
  * ⚠ v298 — TANIMLI KART KAPISI: kartın aktif tanımı (worker_card_assignments)
  * varsa ve mesainin çavuşu / seçilen tip / mesainin deposu tanımla uyuşmuyorsa
