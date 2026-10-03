@@ -102,6 +102,7 @@ $pdks_faz8j_results = []; $pdks_faz8j_ran = false;
 $pdks_faz9d_results = []; $pdks_faz9d_ran = false;   // Faz 9D (hakediş düzeltme/mahsup)
 $pdks_cavus_ucret_results = []; $pdks_cavus_ucret_ran = false;   // Çavuş Ücreti (Faz 8B eki)
 $pdks_cavus_b_results = []; $pdks_cavus_b_ran = false;   // Çavuş Ücreti Yöntem B (dönem kapanışı)
+$pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı Giriş (kart → çavuş + tip + depo)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -182,6 +183,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     foreach ($pdks_cavus_ucret_results as $pr) {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cavus_ucret', null, null,
+                ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_kart_tanim') {
+    csrf_check($_POST['csrf'] ?? null);
+    $pdks_kart_tanim_ran     = true;
+    $pdks_kart_tanim_results = pdks_gunluk_kart_tanim_migrate($pdo);
+    foreach ($pdks_kart_tanim_results as $pr) {
+        if ($pr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'pdks_kart_tanim', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
         }
     }
@@ -344,6 +355,49 @@ render_header('Şema Migrasyon');
     <p>Yalnız ekleyici migrasyon: çalışma dönemlerine iptal metadatası ekler; ham NFC/USB olaylarını değiştirmez veya silmez.</p>
     <p><strong><?= pdks_faz8j_sema_hazir($pdo) ? '✓ Hazır' : '✗ Henüz çalıştırılmadı' ?></strong><?php if ($pdks_faz8j_ran): foreach($pdks_faz8j_results as $r): ?><br><?=h($r['adim'])?>: <?=h($r['durum'])?><?php endforeach; endif; ?></p>
     <form method="post"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="ne" value="pdks_gunluk_faz8j"><button class="btn btn-primary">Faz 8J Migrasyonunu Çalıştır</button></form>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Tanımlı Giriş — Kart Tanım Tablosu (v298)</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>worker_card_assignments</code> tablosunu ekler (mevcut tablolara ALTER YOK).
+      Kart Havuzu'nda bir karta çavuş + tip (Kadın/Erkek) + depo tanımlanır; kioskta "🏷 TANIMLI GİRİŞ" ile kart
+      okutulunca o çavuşun bugünkü mesaisine giriş yazılır. Günlük İşçi'nin genel hazır-mı kontrollerine BİLEREK
+      EKLENMEZ — tablo kurulmasa da Giriş/Çıkış ekranı AYNEN çalışır, yalnız Tanımlı Giriş gizli kalır.
+      <?php if ($pdks_kart_tanim_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($pdks_kart_tanim_results as $pkr): ?>
+        <br>&nbsp;&nbsp;<?= h($pkr['tablo']) ?>: <?= h($pkr['durum']) ?> — <?= h($pkr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(pdks_gunluk_kart_tanim_tablolar()) as $pkt):
+          $pke = pdks_gunluk_tablo_var($pdo, $pkt); ?>
+          <tr>
+            <td><?= h($pkt) ?></td>
+            <td style="color:<?= $pke ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pke ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="pdks_kart_tanim">
+      <button type="submit" class="btn btn-primary">Tanımlı Kart Tablosunu Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (pdks_gunluk_kart_tanim_tablolar() as $pksql) { echo h($pksql) . ";\n\n"; }
+      ?></pre>
+    </details>
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">

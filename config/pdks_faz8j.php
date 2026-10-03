@@ -504,8 +504,11 @@ function pdks_faz8j_gecmis_ekle(array $v, int $user, ?PDO $pdo = null): array {
         $pid = pdks_faz8j_satir_yaz($pdo, $oturum, $satir, $user, ['reason' => $reason, 'note' => $note, 'yeni_mesai' => $yeni, 'simdi' => $simdi, 'istek_id' => $istekId]);
         pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);
         $pdo->commit();
+        // v298: kart başka çavuş/tip/depoya tanımlıysa ENGEL DEĞİL, uyarı.
+        $uyarilar = $kartsiz ? [] : pdks_faz8j_tanim_uyarilari($pdo, (int)$oturum['foreman_id'], (string)$oturum['depo'], [$satir]);
         return ['ok' => true, 'session_id' => $sid, 'period_id' => $pid, 'yeni_mesai' => $yeni,
-                'kartsiz' => $kartsiz, 'card_no' => (string)$satir['kart']['card_no'], 'acik' => $exit === null];
+                'kartsiz' => $kartsiz, 'card_no' => (string)$satir['kart']['card_no'], 'acik' => $exit === null,
+                'uyarilar' => $uyarilar];
     } catch (Throwable $x) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         if ($x instanceof RuntimeException && !$x instanceof PDOException) return ['ok' => false, 'hata' => $x->getMessage()] + ($x->getMessage() === PDKS_FAZ8J_TEKRAR_HATA ? ['tekrar' => true] : []);
@@ -678,7 +681,10 @@ function pdks_faz8j_toplu_degerlendir(PDO $pdo, array $h, ?array $oturum, ?bool 
         'satirlar' => array_map('pdks_faz8j_toplu_satir_cikti', $specs),
         'ozet' => pdks_faz8j_toplu_ozet($specs),
         'hatalar' => array_values(array_unique($hatalar)),
-        'uyarilar' => $sid !== null ? pdks_faz8j_kartsiz_tekrar_uyarilari($pdo, $sid, $specs) : [],
+        'uyarilar' => array_merge(
+            $sid !== null ? pdks_faz8j_kartsiz_tekrar_uyarilari($pdo, $sid, $specs) : [],
+            pdks_faz8j_tanim_uyarilari($pdo, (int)$h['foreman_id'], (string)$h['depo'], $specs)
+        ),
         'yeni_mesai' => $yeniMesai, 'session_id' => $sid,
         '_specs' => $specs,
     ];
@@ -710,6 +716,31 @@ function pdks_faz8j_kartsiz_tekrar_uyarilari(PDO $pdo, int $sid, array $specs): 
         }
     }
     return $out;
+}
+
+/**
+ * v298 — ENGELLEMEYEN uyarı: kartlı satırın kartı (Kart Havuzu'nda) başka bir
+ * çavuş / tip / depoya TANIMLIYSA bildirir. Kiosk GİRİŞ'i bunu REDDEDER
+ * (kart_baska_tanimli); yöneticinin elle/toplu eklemesi ise ENGELLENMEZ
+ * (kullanıcı kararı) — yalnız `uyarilar`. Kural pdks_gunluk_kart_tanim_engeli()
+ * ile AYNI (kopya karar yok). Tanım tablosu yoksa boş.
+ */
+function pdks_faz8j_tanim_uyarilari(PDO $pdo, int $foremanId, string $depo, array $specs): array {
+    $kartIds = [];
+    foreach ($specs as $s) if (empty($s['kartsiz']) && !empty($s['kart']['id'])) $kartIds[] = (int)$s['kart']['id'];
+    $tanimlar = $kartIds && function_exists('pdks_gunluk_kart_tanim_listesi') ? pdks_gunluk_kart_tanim_listesi($pdo, $kartIds) : [];
+    if (!$tanimlar) return [];
+    $out = [];
+    foreach ($specs as $s) {
+        if (!empty($s['kartsiz']) || empty($s['kart']['id'])) continue;
+        $cid = (int)$s['kart']['id'];
+        $t = $tanimlar[$cid] ?? null;
+        if (!$t || isset($out[$cid])) continue;
+        if (pdks_gunluk_kart_tanim_engeli($t, ['foreman_id' => $foremanId, 'depo' => $depo], (int)($s['tip']['id'] ?? 0)) === null) continue;
+        $out[$cid] = (string)$s['kart']['card_no'] . ' kartı ' . trim((string)$t['depo']) . ' deposunda '
+                   . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — kayıt yine de eklenir.';
+    }
+    return array_values($out);
 }
 
 /**
