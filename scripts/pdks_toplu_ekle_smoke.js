@@ -138,10 +138,27 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         });
         let g = await geo();
         ok('toplu: modal, ekran içinde (yatay + dikey), yatay taşma yok', g.modal && g.sol >= 0 && g.sag <= g.vw + 0.5 && g.ust >= 0 && g.alt <= g.vh + 0.5 && !g.formTasma && !g.sayfaTasma, JSON.stringify(g));
+        // v297: kart listesi VARSAYILAN GİZLİ; "Kartlı giriş ekle" anahtarı açınca görünür.
+        const gizli = await page.evaluate(() => [...document.querySelectorAll('#toplu .tp-grup')].map(g => {
+            const l = g.querySelector('.tp-kartli'); const t = g.querySelector('[data-tp="kartli"]');
+            return { kapali: !t.checked, gizli: l.hidden && getComputedStyle(l).display === 'none', arac: !!g.querySelector('.tp-kart-arac'), tOlcu: (() => { const r = g.querySelector('.tv-toggle-kutu').getBoundingClientRect(); return r.width > 0 && r.right <= innerWidth + 0.5; })() };
+        }));
+        ok('kart listesi + "İlk N" satırı AÇILIŞTA gizli; "Kartlı giriş ekle" anahtarı görünür ve kapalı', gizli.length === 2 && gizli.every(x => x.kapali && x.gizli && x.arac && x.tOlcu), JSON.stringify(gizli));
+        await page.evaluate(() => document.querySelectorAll('#toplu .tp-grup').forEach(g => { const t = g.querySelector('[data-tp="kartli"]'); t.click(); }));
+        await page.waitForTimeout(100);
         const ilk = await page.evaluate(() => ({ kaydet: document.getElementById('tpKaydetBtn').disabled, gruplar: document.querySelectorAll('#toplu .tp-grup').length,
             kutular: [...document.querySelectorAll('#toplu .tp-grup')].map(x => x.querySelectorAll('.tp-kartlar input').length),
-            kutuKaydirilir: [...document.querySelectorAll('#toplu .tp-kartlar')].every(x => x.scrollHeight > x.clientHeight + 1 && x.clientHeight <= 200) }));
-        ok('Kaydet başlangıçta PASİF; iki grup (KADIN/ERKEK); kart kutuları sınırlı yükseklikte kaydırılıyor', ilk.kaydet && ilk.gruplar === 2 && ilk.kutular.every(n => n >= 38) && ilk.kutuKaydirilir, JSON.stringify(ilk));
+            acik: [...document.querySelectorAll('#toplu .tp-kartli')].every(l => !l.hidden && l.getBoundingClientRect().height > 0),
+            kutuKaydirilir: [...document.querySelectorAll('#toplu .tp-kartlar')].every(x => x.scrollHeight > x.clientHeight + 1 && x.clientHeight <= 160) }));
+        ok('Kaydet başlangıçta PASİF; iki grup (KADIN/ERKEK); anahtar açınca liste görünür, kutular sınırlı yükseklikte kaydırılıyor', ilk.kaydet && ilk.gruplar === 2 && ilk.kutular.every(n => n >= 38) && ilk.acik && ilk.kutuKaydirilir, JSON.stringify(ilk));
+        if (SHOT && (ekran.k === 'pc' || ekran.k === 'mob')) {
+            await page.evaluate(k => { document.querySelectorAll('#toplu .tp-grup')[0].scrollIntoView({ block: k === 'pc' ? 'center' : 'start' }); document.querySelectorAll('#toplu .tp-grup')[0].querySelector('.tp-kartlar input').click(); }, ekran.k);
+            await page.waitForTimeout(120);
+            await page.screenshot({ path: path.join(SHOT, 'v297_toplu_' + ekran.k + '.png') });
+            await page.evaluate(() => document.querySelectorAll('#toplu .tp-grup')[0].querySelector('.tp-kartlar input').click());
+        }
+        const sutun = await page.evaluate(() => getComputedStyle(document.querySelector('#toplu .tp-kartlar')).gridTemplateColumns.split(' ').length);
+        ok('kart sütunu: masaüstü 5, tablet 4, mobil 3', sutun === ({ pc: 5, tab: 4, mob: 3 })[ekran.k], String(sutun));
 
         // "İlk N boş kartı seç", sayaç, çapraz kilit
         const sec = await page.evaluate(() => {
@@ -165,6 +182,23 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         ok('"İlk 5 boş kartı seç" 5 kart işaretler; sayaç "5 kartlı + 0 kartsız = 5 kişi"', sec.a5 === 5 && sec.sayac1 === '5 kartlı + 0 kartsız = 5 kişi', JSON.stringify(sec));
         ok('A grubunda işaretli kart B grubunda PASİF (ve işaret kalkınca serbest)', sec.kilit && sec.serbest, JSON.stringify(sec));
         ok('B grubu "ilk 30" A\'nın kartlarını atlar (ortak kart yok); sayaç + genel toplam doğru', sec.b30 === 30 && sec.ortak === 0 && sec.sayac2 === '30 kartlı + 2 kartsız = 32 kişi' && sec.top === '37', JSON.stringify(sec));
+
+        // v297: anahtarı KAPATINCA o grubun seçili kartları temizlenir, sayaç düşer, liste gizlenir; geri açınca boş gelir
+        const kapat = await page.evaluate(() => {
+            const gs = [...document.querySelectorAll('#toplu .tp-grup')]; const [a, b] = gs;
+            const say = g => g.querySelectorAll('.tp-kartlar input:checked').length;
+            const onceB = say(b), onceA = say(a);
+            const ta = a.querySelector('[data-tp="kartli"]'); ta.click();
+            const r = { onceA, onceB, sonraA: say(a), sonraB: say(b), gizli: a.querySelector('.tp-kartli').hidden, sayac: a.querySelector('.tp-sayac').textContent, top: document.getElementById('tpToplam').textContent,
+                        serbest: !b.querySelector('.tp-kartlar input[value="' + (a.querySelector('.tp-kartlar input').value) + '"]').disabled };
+            ta.click();   // geri aç → boş gelir
+            r.acikBos = !a.querySelector('.tp-kartli').hidden && say(a) === 0;
+            a.querySelector('[data-f="ilkn"]').value = '5'; a.querySelector('[data-tp="sec"]').click();   // A'yı eski hâline getir (5 kart)
+            const kutu = a.querySelector('.tp-kartlar input:checked');
+            return Object.assign(r, { yeniden: say(a), kutu: !!kutu });
+        });
+        ok('anahtar KAPANINCA grubun kartları temizlenir (sayaç/toplam düşer, liste gizlenir, diğer grup etkilenmez, kart serbest kalır)',
+            kapat.onceA === 5 && kapat.sonraA === 0 && kapat.sonraB === kapat.onceB && kapat.gizli && /^0 kartlı/.test(kapat.sayac) && kapat.top === String(kapat.onceB + 2) && kapat.serbest && kapat.acikBos && kapat.yeniden === 5, JSON.stringify(kapat));
 
         // Önizleme kapısı — alanları doldur
         await page.evaluate(() => {
@@ -212,8 +246,8 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         // Ekran görüntüleri (önizlemeli)
         await page.evaluate(() => document.getElementById('tpOnizle').scrollIntoView({ block: 'center' }));
         await page.waitForTimeout(150);
-        if (SHOT && ekran.k === 'pc') await page.screenshot({ path: path.join(SHOT, 'v294_toplu_pc.png') });
-        if (SHOT && ekran.k === 'mob') await page.screenshot({ path: path.join(SHOT, 'v294_toplu_mob.png') });
+        if (SHOT && ekran.k === 'pc') await page.screenshot({ path: path.join(SHOT, 'v297_toplu_onizle_pc.png') });
+        if (SHOT && ekran.k === 'mob') await page.screenshot({ path: path.join(SHOT, 'v297_toplu_onizle_mob.png') });
         // Girdi değişince Kaydet tekrar pasif
         await page.evaluate(() => { const e = document.getElementById('tpNote'); e.value = 'x'; e.dispatchEvent(new Event('input', { bubbles: true })); });
         ok('önizlemeden sonra herhangi bir girdi değişince Kaydet tekrar PASİF', await page.evaluate(() => document.getElementById('tpKaydetBtn').disabled));
@@ -311,7 +345,7 @@ const satir = (tip, no, hata, kartsiz) => ({ tip, worker_type_id: 1, kart_id: ka
         const gmsg = await page.evaluate(() => document.getElementById('tpMesaj').textContent);
         ok('çavuş seçilmeden / sebep boşken önizleme istemcide reddedilir (sunucuya gitmez)', /Çavuş seçin/.test(gmsg) && /neden/i.test(gmsg) && govde === null, gmsg);
         await page.evaluate(() => { const s = document.getElementById('tpCavus'); s.value = s.options[1].value; s.dispatchEvent(new Event('change', { bubbles: true }));
-            const a = document.querySelector('#toplu .tp-grup'); a.querySelector('[data-tp="sec"]').click();
+            const a = document.querySelector('#toplu .tp-grup'); a.querySelector('[data-tp="kartli"]').click(); a.querySelector('[data-tp="sec"]').click();
             const set = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
             set(a.querySelector('[data-f="entry_clock"]'), '00:00'); set(document.getElementById('tpReason'), 'Sebep'); });
         await page.evaluate(() => document.getElementById('tpOnizleBtn').click());

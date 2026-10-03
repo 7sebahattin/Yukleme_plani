@@ -315,7 +315,7 @@ $filter_label = implode(' · ', $filter_parts) ?: 'Tüm kayıtlar';
         <?php endif; ?>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <a href="kantar.php" class="btn btn-ghost btn-sm">← Fişler</a>
+        <a href="kantar.php" class="btn btn-sm btn-geri">← Fişler</a>
         <?= export_menu('?' . http_build_query(array_filter($kr_filtre + ['csv' => '1'], fn($v) => $v !== '')),
                         '?' . http_build_query(array_filter($kr_filtre + ['xlsx' => '1'], fn($v) => $v !== '')), 'Excel İndir', 'btn btn-ghost btn-sm') ?>
         <?php if ($entries): ?>

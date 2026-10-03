@@ -103,7 +103,7 @@ render_flash();
 
 <div class="page-head">
     <h1 class="page-title">Excel Stok Aktarımı</h1>
-    <a href="malzeme_stok.php" class="btn btn-ghost btn-sm">← Geri</a>
+    <a href="malzeme_stok.php" class="btn btn-sm btn-geri">← Geri</a>
 </div>
 
 <!-- Adım göstergesi -->

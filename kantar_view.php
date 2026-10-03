@@ -278,7 +278,7 @@ render_flash();
         <h1>⚖️ Kantar Fişi <?= $fis['fis_no'] ? '· ' . h($fis['fis_no']) : '#' . $id ?></h1>
     </div>
     <div class="page-head-actions">
-        <a href="kantar.php" class="btn btn-ghost">← Liste</a>
+        <a href="kantar.php" class="btn btn-geri">← Liste</a>
         <a href="kantar_edit.php?id=<?= $id ?>" class="btn">Düzenle</a>
         <button onclick="window.print()" class="btn btn-primary">🖨 Yazdır</button>
     </div>

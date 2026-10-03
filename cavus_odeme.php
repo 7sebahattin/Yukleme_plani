@@ -65,7 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($kap !== null && !empty($kap['kapanis_id'])) {
                         $o = $kap['onizleme'];
                         $mesaj .= ' Çavuş Hakedişi dönemi kapandı (CVH-' . str_pad((string)$kap['kapanis_id'], 6, '0', STR_PAD_LEFT) . '): '
-                            . (int)$o['donem_kisi_gun'] . ' kişi-gün + ' . (int)$o['devir_giren'] . ' devir → ' . (int)$o['adet'] . ' hakediş = '
+                            . (int)$o['donem_kisi_gun'] . ' kişi-gün + ' . (int)$o['devir_giren'] . ' devir → ' . (int)$o['adet'] . ' hakediş ('
+                            . (int)($o['birim'] ?? 25) . ' kişi-gün = 1 hakediş) = '
                             . pdks_faz8b_cavus_ucret_b_para((int)$o['tutar_kurus']) . ' ' . $o['currency'] . ', devir ' . (int)$o['devir_cikan'] . '.';
                     } elseif ($kap !== null && ($kap['onizleme']['durum'] ?? '') === 'ucret_yok') {
                         $o = $kap['onizleme'];
@@ -137,7 +138,7 @@ if ($uyariGet !== '') echo '<div class="flash flash-error" style="border-color:v
         <?php if ($seciliCavus): ?>
         <a href="cavus_odeme_yazdir.php?cavus=<?= (int)$seciliCavus['id'] ?>" class="btn btn-ghost">🖨️ Yazdır</a>
         <?php endif; ?>
-        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
     </div>
 </div>
 
@@ -319,7 +320,7 @@ if ($bOnizlemeGoster):
         <span class="pdks-badge pdks-badge-aktif">Geçerli</span>
         <?php endif; ?>
         <?php $ok = $kapanisHaritasi[(int)$o['id']] ?? null; if ($ok): ?>
-        <div class="pdks-row-sub">Çavuş Hakedişi: CVH-<?= str_pad((string)$ok['id'], 6, '0', STR_PAD_LEFT) ?> — <?= (int)$ok['earned_units'] ?> hakediş, devir <?= (int)$ok['carry_out'] ?><?= $ok['status'] === 'cancelled' ? ' (geri alındı)' : '' ?></div>
+        <div class="pdks-row-sub">Çavuş Hakedişi: CVH-<?= str_pad((string)$ok['id'], 6, '0', STR_PAD_LEFT) ?> — <?= (int)$ok['earned_units'] ?> hakediş (<?= (int)($ok['unit_size'] ?? 25) ?> kişi-gün = 1), devir <?= (int)$ok['carry_out'] ?><?= $ok['status'] === 'cancelled' ? ' (geri alındı)' : '' ?></div>
         <?php endif; ?>
     </td>
     <td class="actions-col">
@@ -369,7 +370,7 @@ if ($bOnizlemeGoster):
         <?php endif; ?>
     </div>
     <?php $okM = $kapanisHaritasi[(int)$o['id']] ?? null; if ($okM): ?>
-    <div class="pdks-row-sub">Çavuş Hakedişi: CVH-<?= str_pad((string)$okM['id'], 6, '0', STR_PAD_LEFT) ?> — <?= (int)$okM['earned_units'] ?> hakediş, devir <?= (int)$okM['carry_out'] ?><?= $okM['status'] === 'cancelled' ? ' (geri alındı)' : '' ?></div>
+    <div class="pdks-row-sub">Çavuş Hakedişi: CVH-<?= str_pad((string)$okM['id'], 6, '0', STR_PAD_LEFT) ?> — <?= (int)$okM['earned_units'] ?> hakediş (<?= (int)($okM['unit_size'] ?? 25) ?> kişi-gün = 1), devir <?= (int)$okM['carry_out'] ?><?= $okM['status'] === 'cancelled' ? ' (geri alındı)' : '' ?></div>
     <?php endif; ?>
     <?php if ($o['status'] === 'cancelled'): ?>
     <div class="pdks-row-sub" style="color:var(--danger)">Gerekçe: <?= h($o['cancellation_reason']) ?></div>

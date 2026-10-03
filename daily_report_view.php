@@ -264,7 +264,7 @@ render_flash();
 <div class="page-head">
     <div>
         <?php if (!$print_mode): ?>
-        <a href="daily_report_archive.php" class="btn btn-ghost btn-sm drv-back-btn">← Arşiv</a>
+        <a href="daily_report_archive.php" class="btn btn-sm drv-back-btn btn-geri">← Arşiv</a>
         <?php endif; ?>
         <h1>
             <span class="dr-type-badge dr-type-<?= h(strtolower($report['report_type'])) ?>"><?= h($report['report_type']) ?></span>

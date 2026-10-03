@@ -177,7 +177,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <button type="button" class="btn btn-primary" onclick="pdksPuantajDialogAc('ekle')"><?= $ekleGecmisGun ? '➕ Geçmişe Dönük Çalışma Ekle' : '➕ Çalışma Ekle' ?></button>
         <button type="button" class="btn" onclick="pdksPuantajDialogAc('toplu')">👥 Toplu İşlem</button>
         <?php endif; ?>
-        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
     </div>
 </div>
 

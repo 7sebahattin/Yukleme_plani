@@ -59,7 +59,7 @@ render_flash();
     <div class="hs-actions">
         <a href="hesap_liste.php?<?= http_build_query(['personel' => 'tum'] + $donem_q) ?>" class="btn btn-ghost">📋 Tüm Kayıtlar</a>
         <a href="hesap_yazdir.php?<?= http_build_query(['personel' => 'tum'] + $pdf_q) ?>" class="btn btn-ghost" target="_blank" rel="noopener">📄 PDF</a>
-        <a href="hesap.php" class="btn btn-ghost">← Hesabım</a>
+        <a href="hesap.php" class="btn btn-geri">← Hesabım</a>
     </div>
 </div>
 

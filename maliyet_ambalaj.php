@@ -108,7 +108,7 @@ render_flash();
         <p class="muted">Maliyet kalemlerinin birim fiyat kaynağı · <?= count($rows) ?> kayıt</p>
     </div>
     <div class="page-head-actions">
-        <a href="maliyet.php" class="btn">← Maliyet</a>
+        <a href="maliyet.php" class="btn btn-geri">← Maliyet</a>
     </div>
 </div>
 

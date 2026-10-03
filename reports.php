@@ -1205,7 +1205,7 @@ render_flash();
         <h1>📊 Raporlar</h1>
         <p class="muted">Verilerinizi analiz edin ve dışa aktarın</p>
     </div>
-    <a href="index.php" class="btn btn-ghost">← Ana Sayfa</a>
+    <a href="index.php" class="btn btn-geri">← Ana Sayfa</a>
 </div>
 
 <div class="home-grid">
@@ -1399,7 +1399,7 @@ $_gl_pdf_title = sprintf('%02d',(int)date('j',$_gl_pdf_ts)).$_gl_tr_short[(int)d
 <!-- Sayfa başlığı (ekran) -->
 <div class="page-head rpt-head gl-no-print">
     <div class="rpt-title">
-        <a href="reports.php" class="btn btn-ghost btn-sm">← Raporlar</a>
+        <a href="reports.php" class="btn btn-sm btn-geri">← Raporlar</a>
         <h1>📅 Günlük Rapor</h1>
         <p class="muted">
             <?php if ($f_from !== '' || $f_to !== ''): ?>
@@ -1762,7 +1762,7 @@ $_mk_tot_net   = (float)array_sum(array_column($mk_rows,'toplam_net'));
 
 <div class="page-head rpt-head">
     <div class="rpt-title">
-        <a href="reports.php" class="btn btn-ghost btn-sm rpt-no-print">← Raporlar</a>
+        <a href="reports.php" class="btn btn-sm rpt-no-print btn-geri">← Raporlar</a>
         <h1><?= $meta['icon'] ?> <?= h($meta['label']) ?> Raporu</h1>
         <p class="muted"><?= count($rows) ?> kayıt</p>
     </div>

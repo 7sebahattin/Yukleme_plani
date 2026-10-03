@@ -49,7 +49,7 @@ render_flash();
     <h1>📒 Çavuş Cari Hesap</h1>
     <div class="page-head-actions">
         <a href="<?= h('cavus_cari_yazdir.php?' . http_build_query(array_filter(['q' => $q, 'durum' => $durum_f], fn($v) => $v !== null && $v !== ''))) ?>" class="btn" target="_blank" rel="noopener">🖨️ Yazdır</a>
-        <a href="personel_takip.php" class="btn btn-ghost">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
     </div>
 </div>
 

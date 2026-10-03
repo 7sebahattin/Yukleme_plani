@@ -59,7 +59,7 @@ render_flash();
 
 <div class="page-head">
     <div>
-        <a href="reports.php" class="btn btn-ghost btn-sm">← Raporlar</a>
+        <a href="reports.php" class="btn btn-sm btn-geri">← Raporlar</a>
         <h1>📁 Rapor Arşivi</h1>
         <p class="muted">Toplam <?= count($reports) ?> rapor</p>
     </div>

@@ -376,7 +376,7 @@ function pdks_cari_bakiye(int $foremanId, ?PDO $pdo = null): array
         }
     }
 
-    // Çavuş Ücreti Yöntem B (25 kişi-gün = 1 hakediş) dönem kapanışları —
+    // Çavuş Ücreti Yöntem B (N kişi-gün = 1 hakediş) dönem kapanışları —
     // TL olarak hakedişle AYNI yönde/kategoride cariye ALACAK yazılır
     // (bkz. config/pdks_faz8b_cavus_b.php). Tablo henüz migrate edilmemişse
     // (foreman_period_closures yok) bu blok SESSİZCE atlanır.
@@ -604,12 +604,19 @@ function pdks_cari_ekstre(int $foremanId, ?string $baslangic = null, ?string $bi
 // sözlük — iki ayrı çeviri kaynağı AÇILMADI.
 // =========================================================
 
-/** cavus_ekstre.php'nin ÇAVUŞ HAKEDİŞİ (Yöntem B) satırının açıklaması. */
+/**
+ * cavus_ekstre.php'nin ÇAVUŞ HAKEDİŞİ (Yöntem B) satırının açıklaması.
+ * v297: kapanışın DONMUŞ birimi (unit_size) varsayılandan (25) farklıysa
+ * sona " (N kişi-gün = 1 hakediş)" eklenir; 25'lik kapanışların metni
+ * bayt bayt AYNI kalır (CSV/ekstre biçimi sabit).
+ */
 function pdks_cari_cavus_hakedis_aciklama(array $k): string
 {
+    $birim = (int)($k['unit_size'] ?? 25);
     return 'Çavuş Hakedişi — ' . (int)$k['period_person_days'] . ' kişi-gün (+' . (int)$k['carry_in'] . ' devir) → '
         . (int)$k['earned_units'] . ' hakediş × ' . number_format(pdks_hakedis_tl_kurus((string)$k['unit_rate']) / 100, 2, ',', '.')
-        . ' ' . $k['currency'] . ', devir ' . (int)$k['carry_out'];
+        . ' ' . $k['currency'] . ', devir ' . (int)$k['carry_out']
+        . ($birim > 0 && $birim !== 25 ? ' (' . $birim . ' kişi-gün = 1 hakediş)' : '');
 }
 
 function pdks_cari_odeme_yontem_etiketi(string $yontem): string

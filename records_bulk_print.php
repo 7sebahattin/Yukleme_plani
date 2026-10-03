@@ -191,7 +191,7 @@ html, body { background: #fff !important; margin: 0; padding: 0; }
 
 <div class="bp-no-print">
     <button onclick="window.print()" class="btn btn-primary">🖨 Yazdır / PDF İndir</button>
-    <a href="javascript:history.back()" class="btn btn-ghost">← Geri</a>
+    <a href="javascript:history.back()" class="btn btn-geri">← Geri</a>
     <span style="margin-left:10px;color:#666;font-size:.85rem"><?= $total_recs ?> kayıt<?= $filter_label ? ' — '.$filter_label : '' ?></span>
 </div>
 
