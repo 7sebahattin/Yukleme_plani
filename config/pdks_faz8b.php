@@ -188,6 +188,114 @@ function pdks_faz8b_sayfa_kapisi(?PDO $pdo = null): void
 }
 
 // =========================================================
+// FİYAT DÖNEMİ SAATLERİ + ÇİFT YEVMİYE (v299)
+// foreman_worker_rates'e 5 nullable kolon. KENDİ migrate/hazır çifti —
+// pdks_faz8b_sema_hazir()'e BİLEREK EKLENMEZ (kolonlar yokken TÜM Faz 8B
+// kilitlenirdi). Kolon yoksa / değer NULL ise davranış BUGÜNKÜYLE BİREBİR
+// aynıdır: Tam eşiği = mesainin normal_work_minutes_snapshot'ı, FM tam
+// eşikten başlar, çift yevmiye YOK.
+// =========================================================
+
+/** [kolon, tanım] — yalnız ADD COLUMN, başka ALTER YOK. */
+function pdks_faz8b_saat_kolonlari(): array
+{
+    return [
+        ['full_day_minutes',       'INT NULL DEFAULT NULL'],            // Tam yevmiye saati
+        ['half_day_max_minutes',   'INT NULL DEFAULT NULL'],            // Yarım saati — YALNIZ BİLGİ
+        ['overtime_start_minutes', 'INT NULL DEFAULT NULL'],            // FM başlangıcı (NULL = Tam saati)
+        ['double_day_minutes',     'INT NULL DEFAULT NULL'],            // Çift eşiği
+        ['double_day_rate',        'DECIMAL(12,2) NULL DEFAULT NULL'],  // Çift ücret
+    ];
+}
+
+function pdks_faz8b_saat_kolonlari_migrate(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $rapor = [];
+    foreach (pdks_faz8b_saat_kolonlari() as [$kolon, $tanim]) {
+        $rapor[] = pdks_faz8b_kolon_ekle($pdo, 'foreman_worker_rates', $kolon, $tanim, null);
+    }
+    return $rapor;
+}
+
+function pdks_faz8b_saat_kolonlari_hazir(?PDO $pdo = null): bool
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_tablo_var($pdo, 'foreman_worker_rates')) return false;
+    foreach (pdks_faz8b_saat_kolonlari() as [$kolon]) {
+        if (!pdks_faz8b_kolon_var($pdo, 'foreman_worker_rates', $kolon)) return false;
+    }
+    return true;
+}
+
+/**
+ * Saat girdisi → dakika. "9" → 540, "9:30" / "09.30" → 570. Boş → null.
+ * Geçersiz → -1 (çağıran hata mesajı üretir). Aralık denetimi ÇAĞIRANDA.
+ */
+function pdks_faz8b_saat_girdi_dk($ham): ?int
+{
+    $s = trim((string)($ham ?? ''));
+    if ($s === '') return null;
+    if (preg_match('/^(\d{1,2})$/', $s, $m)) return (int)$m[1] * 60;
+    if (preg_match('/^(\d{1,2})[:.](\d{2})$/', $s, $m)) {
+        if ((int)$m[2] > 59) return -1;
+        return (int)$m[1] * 60 + (int)$m[2];
+    }
+    return -1;
+}
+
+/** Dakika → form değeri ("9" / "9:30"). */
+function pdks_faz8b_dk_girdi(?int $dk): string
+{
+    if ($dk === null || $dk <= 0) return '';
+    $s = intdiv($dk, 60);
+    $d = $dk % 60;
+    return $d === 0 ? (string)$s : sprintf('%d:%02d', $s, $d);
+}
+
+/**
+ * Bir dönemin eşikleri — $normalDk mesainin DONMUŞ snapshot'ı, $oran iş
+ * tarihinde geçerli fiyat dönemi (pdks_hakedis_oran_gecerli) ya da null.
+ * Çift YALNIZ eşik VE ücret ikisi de doluysa ve eşik FM başından büyükse etkin.
+ */
+function pdks_faz8b_esikler(int $normalDk, ?array $oran): array
+{
+    $dk = static function (string $k) use ($oran): ?int {
+        $v = $oran[$k] ?? null;
+        if ($v === null || $v === '') return null;
+        $v = (int)$v;
+        return $v > 0 ? $v : null;
+    };
+    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
+    $tamFiyat = $dk('full_day_minutes');
+    $tam = $tamFiyat ?? $normalDk;
+    $fmBas = $dk('overtime_start_minutes') ?? $tam;
+    if ($fmBas < $tam) $fmBas = $tam;   // savunma — doğrulama zaten engeller
+
+    $cift = $dk('double_day_minutes');
+    $ciftUcret = $oran['double_day_rate'] ?? null;
+    $ciftEtkin = $cift !== null && $ciftUcret !== null && $ciftUcret !== ''
+        && (float)$ciftUcret > 0 && $cift > $fmBas;
+
+    return [
+        'tam_dk' => $tam,
+        'tam_kaynak' => $tamFiyat !== null ? 'fiyat' : 'mesai',
+        'fm_bas_dk' => $fmBas,
+        'cift_dk' => $ciftEtkin ? $cift : null,
+        'cift_ucret' => $ciftEtkin ? (string)$ciftUcret : null,
+        'yarim_dk' => $dk('half_day_max_minutes'),
+        'fm_modu' => isset($oran['overtime_mode']) ? trim((string)$oran['overtime_mode']) : null,
+    ];
+}
+
+/** Eşiği aşan süreden FM saati: ilk 15 dk tolerans, sonra başlayan her saat. */
+function pdks_faz8b_fm_saat(int $fazlaDk): int
+{
+    if ($fazlaDk <= PDKS_FAZ8B_TOLERANS_DK) return 0;
+    return intdiv($fazlaDk - PDKS_FAZ8B_TOLERANS_DK + 59, 60);
+}
+
+// =========================================================
 // SÜRE / TOLERANS POLİTİKASI
 // =========================================================
 
@@ -211,11 +319,15 @@ function pdks_faz8b_sayfa_kapisi(?PDO $pdo = null): void
  * ÖZEL bir durum YOKTUR — giriş/çıkış DATETIME'ları zaten doğru günü taşır,
  * hesap yalnız ikisi arasındaki farka bakar.
  */
-function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = PDKS_FAZ8B_NORMAL_DK): array
+function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = PDKS_FAZ8B_NORMAL_DK, ?int $fmBasDk = null): array
 {
+    // v299: $fmBasDk = fiyat dönemindeki FM başlangıcı (NULL → $normalDk, yani
+    // bugünkü davranış). $normalDk burada "Tam eşiği"dir.
+    $fmBasDk = ($fmBasDk === null || $fmBasDk < $normalDk) ? $normalDk : $fmBasDk;
     $bos = [
         'toplam_dk' => null,
         'normal_dk' => $normalDk,
+        'fm_bas_dk' => $fmBasDk,
         'otomatik_sinif' => null,
         'sinif_onayi_gerekli' => true,
         'fazla_dk' => 0,
@@ -231,17 +343,14 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
     $toplamDk = intdiv($c - $g, 60);
     $otomatikTam = $toplamDk >= $normalDk;
 
-    $fazlaDk = $toplamDk > $normalDk ? ($toplamDk - $normalDk) : 0;
-    $fmSaat = 0;
-    if ($fazlaDk > PDKS_FAZ8B_TOLERANS_DK) {
-        // 15 dk toleransı çıkar; kalan her başlayan saat yukarı yuvarlanır.
-        $ucretDk = $fazlaDk - PDKS_FAZ8B_TOLERANS_DK;
-        $fmSaat = intdiv($ucretDk + 59, 60);
-    }
+    $fazlaDk = $toplamDk > $fmBasDk ? ($toplamDk - $fmBasDk) : 0;
+    // 15 dk toleransı çıkar; kalan her başlayan saat yukarı yuvarlanır.
+    $fmSaat = pdks_faz8b_fm_saat($fazlaDk);
 
     return [
         'toplam_dk' => $toplamDk,
         'normal_dk' => $normalDk,
+        'fm_bas_dk' => $fmBasDk,
         'otomatik_sinif' => $otomatikTam ? 'tam' : null,
         'sinif_onayi_gerekli' => !$otomatikTam,
         'fazla_dk' => $fazlaDk,
@@ -251,17 +360,30 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
 }
 
 /**
+ * v299 — TEK SINIFLANDIRICI. Mesai Değerlendirme ekranı, tekli/toplu
+ * değerlendirme kaydı, hakediş motoru ve Mesai Detayı "Mesai Tanımı" sütunu
+ * HEPSİ bunu kullanır; süre/sınıf/FM/çift hesabını başka yerde YAZMA.
+ *
  * $donem — daily_worker_work_periods satırı, TERCİHEN oturumun
  * normal_work_minutes_snapshot'ını da taşımalıdır (bkz.
- * pdks_faz8b_oturum_donemleri()'nin JOIN'i). Anahtar yoksa/boşsa (ör.
- * çağıran ham bir satır geçiyorsa) PDKS_FAZ8B_NORMAL_DK'ya (540 dk) düşülür
- * — eski davranışla AYNI son çare, hiçbir yerde HATA vermez.
+ * pdks_faz8b_oturum_donemleri()'nin JOIN'i). Anahtar yoksa/boşsa
+ * PDKS_FAZ8B_NORMAL_DK'ya (540 dk) düşülür — eski davranışla AYNI son çare.
+ * $oran — iş tarihinde geçerli fiyat dönemi (saat eşikleri + çift ücret +
+ * FM modu); null ise eşikler bugünküyle birebir aynıdır.
+ *
+ * ÇİFT YEVMİYE (sahip kararı — "çift Tam'ın yerine + sonrası FM"):
+ *   toplam ≥ çift eşiği (toleranssız) VE onaylı süre (FM başı + onaylanan FM
+ *   saati × 60) ≥ çift eşiği → sınıf 'cift', temel = çift ücret; ödenecek FM
+ *   = çift eşiğinden SONRAKİ onaylı saatler (aynı 15 dk tolerans). Tam ile çift
+ *   arasındaki saatler AYRICA ödenmez. Sabit (fixed) FM modunda çift gününe
+ *   FM EKLENMEZ (çift zaten ödüyor). FM reddi → Tam; FM bekliyor → hazır değil.
  */
-function pdks_faz8b_donem_finans_durumu(array $donem): array
+function pdks_faz8b_donem_siniflandir(array $donem, ?array $oran = null): array
 {
     $normalDk = (int)($donem['normal_work_minutes_snapshot'] ?? PDKS_FAZ8B_NORMAL_DK);
     if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
-    $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $normalDk);
+    $e = pdks_faz8b_esikler($normalDk, $oran);
+    $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $e['tam_dk'], $e['fm_bas_dk']);
 
     $onayliSinif = trim((string)($donem['approved_attendance_class'] ?? ''));
     $sinif = $sure['otomatik_sinif'];
@@ -272,49 +394,137 @@ function pdks_faz8b_donem_finans_durumu(array $donem): array
     }
 
     $fmSaat = (int)$sure['fazla_mesai_saat'];
-    // Faz 9C / UX-03: OTORİTER FM onayı artık SAAT SAYISIdır (yalnız
-    // onayla/reddet ikili bayrağı DEĞİL) — 0..$fmSaat aralığında, muhasebe
-    // hesaplanan adayın altına inebilir. Eski `overtime_approved` bayrağı
-    // yalnız GERİYE DÖNÜK/rozet amaçlı türetilir (0 saat => reddedildi,
-    // >0 saat => onaylı), OTORİTE bu satırda DEĞİL, overtime_approved_hours'ta.
+    // Faz 9C / UX-03: OTORİTER FM onayı SAAT SAYISIdır (overtime_approved_hours);
+    // eski `overtime_approved` bayrağı yalnız rozet amaçlı türetilir.
     $fmOnaySaatHam = $donem['overtime_approved_hours'] ?? null;
     $fmOnaySaat = ($fmOnaySaatHam === '' || $fmOnaySaatHam === null) ? null : (int)$fmOnaySaatHam;
+    // v299: eşik değişince onaylı saat adaydan büyük kalırsa adaya KIRPILIR
+    // (yeni değerlendirme istenmez).
+    $fmKirpildi = false;
+    if ($fmSaat > 0 && $fmOnaySaat !== null && $fmOnaySaat > $fmSaat) {
+        $fmOnaySaat = $fmSaat;
+        $fmKirpildi = true;
+    }
 
     $fmDurum = 'yok';
     if ($fmSaat > 0) {
         $fmDurum = $fmOnaySaat === null ? 'bekliyor' : ($fmOnaySaat > 0 ? 'onayli' : 'reddedildi');
     }
+    $odenecekFm = $fmDurum === 'onayli' ? (int)$fmOnaySaat : 0;
+
+    // Çift yevmiye
+    $toplamDk = $sure['toplam_dk'];
+    $ciftAday = $e['cift_dk'] !== null && $toplamDk !== null && $toplamDk >= $e['cift_dk'];
+    $cift = false;
+    $ciftFmAday = 0;
+    if ($ciftAday) {
+        $ciftFmAday = pdks_faz8b_fm_saat((int)$toplamDk - (int)$e['cift_dk']);
+        if ($fmDurum === 'onayli') {
+            $onayliSure = $e['fm_bas_dk'] + 60 * (int)$fmOnaySaat;
+            if ($onayliSure >= $e['cift_dk']) {
+                $cift = true;
+                $odenecekFm = min($ciftFmAday, intdiv($onayliSure - (int)$e['cift_dk'] + 59, 60));
+                if ($e['fm_modu'] === 'fixed') $odenecekFm = 0;   // sabit FM çift gününe eklenmez
+            }
+        }
+    }
+    if ($cift) {
+        $sinif = 'cift';
+        $sinifKaynak = 'fm_onayi';
+    }
 
     return $sure + [
+        'tam_dk' => $e['tam_dk'],
+        'tam_kaynak' => $e['tam_kaynak'],
+        'yarim_dk' => $e['yarim_dk'],
+        // YALNIZ BİLGİ — sınıflandırmayı DEĞİŞTİRMEZ (otomatik Yarım YOK).
+        'yarim_alti' => $e['yarim_dk'] !== null && $toplamDk !== null && $toplamDk < $e['yarim_dk'],
+        'cift_dk' => $e['cift_dk'],
+        'cift_ucret' => $e['cift_ucret'],
+        'cift_aday' => $ciftAday,
+        'cift' => $cift,
+        'cift_fm_aday' => $ciftFmAday,
+        'fm_modu' => $e['fm_modu'],
         'etkin_sinif' => $sinif,
         'sinif_kaynak' => $sinifKaynak,
         'fazla_mesai_durum' => $fmDurum,
         'fazla_mesai_onay_saat' => $fmOnaySaat,
+        'fazla_mesai_onay_kirpildi' => $fmKirpildi,
+        // Hakedişte ödenecek FM saati (Tam: onaylı saat; Çift: çift sonrası).
+        'odenecek_fm_saat' => $odenecekFm,
         'finans_hazir' => $sinif !== null && ($fmSaat === 0 || $fmOnaySaat !== null),
     ];
+}
+
+/**
+ * Geriye uyumlu sarmalayıcı. Satır `_faz8b_oran` taşıyorsa (bkz.
+ * pdks_faz8b_donem_orani_ekle) fiyat dönemi eşikleri uygulanır; taşımıyorsa
+ * bugünkü davranış.
+ */
+function pdks_faz8b_donem_finans_durumu(array $donem): array
+{
+    return pdks_faz8b_donem_siniflandir($donem, $donem['_faz8b_oran'] ?? null);
+}
+
+/**
+ * Dönem satırlarına iş tarihinde geçerli fiyat dönemini `_faz8b_oran` olarak
+ * ekler ve `faz8b` sınıflandırmasını hesaplar. Satırlar `_s_foreman_id` +
+ * `_s_work_date` taşımalıdır (oturum JOIN'i). Saat kolonları yoksa fiyat
+ * SORGULANMAZ (eşikler zaten NULL → bugünkü davranış).
+ */
+function pdks_faz8b_donemleri_siniflandir(array $rows, PDO $pdo): array
+{
+    $saatHazir = pdks_faz8b_saat_kolonlari_hazir($pdo);
+    $onbellek = [];
+    foreach ($rows as &$r) {
+        $oran = null;
+        $tip = $r['worker_type_id_snapshot'] ?? null;
+        if ($saatHazir && $tip !== null && $tip !== '' && !empty($r['_s_foreman_id']) && !empty($r['_s_work_date'])) {
+            $k = (int)$r['_s_foreman_id'] . ':' . (int)$tip . ':' . $r['_s_work_date'];
+            if (!array_key_exists($k, $onbellek)) {
+                $onbellek[$k] = pdks_hakedis_oran_gecerli((int)$r['_s_foreman_id'], (int)$tip, (string)$r['_s_work_date'], $pdo);
+            }
+            $oran = $onbellek[$k];
+        }
+        $r['_faz8b_oran'] = $oran;
+        $r['faz8b'] = pdks_faz8b_donem_siniflandir($r, $oran);
+    }
+    unset($r);
+    return $rows;
+}
+
+/** Dönem + oturum JOIN'i (TEK SQL kaynağı). $kosul pozisyonel `?` taşır. */
+function pdks_faz8b_donem_sorgu(PDO $pdo, string $kosul, array $param): array
+{
+    $st = $pdo->prepare(
+        "SELECT p.*, w.card_no, s.normal_work_minutes_snapshot,
+                s.foreman_id AS _s_foreman_id, s.work_date AS _s_work_date
+           FROM daily_worker_work_periods p
+           JOIN worker_cards w ON w.id = p.worker_card_id
+           JOIN daily_work_sessions s ON s.id = p.session_id
+          WHERE {$kosul} AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
+          ORDER BY p.entry_time ASC, p.id ASC"
+    );
+    $st->execute($param);
+    return pdks_faz8b_donemleri_siniflandir($st->fetchAll(), $pdo);
+}
+
+/** Tek dönem (+ isteğe bağlı oturum kısıtı — IDOR). Yoksa null. */
+function pdks_faz8b_donem_getir(int $periodId, ?PDO $pdo = null, ?int $sessionId = null): ?array
+{
+    $pdo = $pdo ?? db();
+    $rows = $sessionId === null
+        ? pdks_faz8b_donem_sorgu($pdo, 'p.id = ?', [$periodId])
+        : pdks_faz8b_donem_sorgu($pdo, 'p.id = ? AND p.session_id = ?', [$periodId, $sessionId]);
+    return $rows[0] ?? null;
 }
 
 function pdks_faz8b_oturum_donemleri(int $sessionId, ?PDO $pdo = null): array
 {
     $pdo = $pdo ?? db();
-    // ⚠ Faz 9C / H-02: s.normal_work_minutes_snapshot EKLENDİ — her dönem
-    // KENDİ oturumunun DONMUŞ normal süresiyle değerlendirilir (bkz.
-    // pdks_faz8b_donem_finans_durumu). p.* önce geldiği için s.'nin
-    // normal_work_minutes_snapshot'ı p tarafında aynı adlı bir kolon YOKSA
-    // (ki yok) çakışmaz.
-    $st = $pdo->prepare(
-        "SELECT p.*, w.card_no, s.normal_work_minutes_snapshot
-           FROM daily_worker_work_periods p
-           JOIN worker_cards w ON w.id = p.worker_card_id
-           JOIN daily_work_sessions s ON s.id = p.session_id
-          WHERE p.session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo, 'p') . "
-          ORDER BY p.entry_time ASC, p.id ASC"
-    );
-    $st->execute([$sessionId]);
-    $rows = $st->fetchAll();
-    foreach ($rows as &$r) $r['faz8b'] = pdks_faz8b_donem_finans_durumu($r);
-    unset($r);
-    return $rows;
+    // ⚠ Faz 9C / H-02: her dönem KENDİ oturumunun DONMUŞ normal süresiyle
+    // değerlendirilir; v299: + iş tarihindeki fiyat döneminin saat eşikleri.
+    return pdks_faz8b_donem_sorgu($pdo, 'p.session_id = ?', [$sessionId]);
 }
 
 function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
@@ -351,6 +561,35 @@ function pdks_faz8b_dakika_etiket(int $dk): string
     $kalanDk = $dk % 60;
     if ($kalanDk === 0) return $saat . ' saat';
     return $saat . 's ' . $kalanDk . 'dk';
+}
+
+/**
+ * v299: Mesai Detayı "Mesai Tanımı" sütunu metni — YALNIZ sınıflandırıcı
+ * çıktısını ($f = pdks_faz8b_donem_siniflandir) metne çevirir, hesap YAPMAZ.
+ * "Tam" / "Yarım" / "Çift" + "· FM N s" ("(bekliyor)" / "FM reddedildi");
+ * sınıf yoksa "Karar bekliyor"; mesai açıkken çıkışsız dönem "⏳ Sürüyor";
+ * Karışık tip ya da sınıflandırma yoksa "—".
+ */
+function pdks_faz8b_mesai_tanimi_etiketi(?array $f, bool $suruyor, bool $karisik): string
+{
+    if ($karisik || $f === null) return '—';
+    if ($suruyor) return '⏳ Sürüyor';
+    if (($f['etkin_sinif'] ?? null) === null) return 'Karar bekliyor';
+    $m = pdks_faz8b_sinif_etiketi((string)$f['etkin_sinif']);
+    $aday = (int)($f['fazla_mesai_saat'] ?? 0);
+    if ($aday > 0) {
+        $durum = (string)($f['fazla_mesai_durum'] ?? '');
+        if ($durum === 'bekliyor') $m .= ' · FM ' . $aday . ' s (bekliyor)';
+        elseif ($durum === 'reddedildi') $m .= ' · FM reddedildi';
+        elseif ((int)($f['odenecek_fm_saat'] ?? 0) > 0) $m .= ' · FM ' . (int)$f['odenecek_fm_saat'] . ' s';
+    }
+    return $m;
+}
+
+/** v299: sınıf kodu → ekran etiketi ('cift' → Çift). Bilinmeyen/boş → Tam. */
+function pdks_faz8b_sinif_etiketi(?string $sinif): string
+{
+    return $sinif === 'yarim' ? 'Yarım' : ($sinif === 'cift' ? 'Çift' : 'Tam');
 }
 
 /**
@@ -429,9 +668,9 @@ function pdks_faz8b_degerlendirme_kaydet(
         return ['ok' => false, 'hata' => 'Faz 8B şeması hazır değil.'];
     }
 
-    $st = $pdo->prepare("SELECT * FROM daily_worker_work_periods WHERE id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo));
-    $st->execute([$periodId]);
-    $p = $st->fetch();
+    // v299: dönem + sınıflandırma TEK kaynaktan (pdks_faz8b_donem_siniflandir);
+    // süre/FM burada YENİDEN HESAPLANMAZ.
+    $p = pdks_faz8b_donem_getir($periodId, $pdo);
     if (!$p) return ['ok' => false, 'hata' => 'Mesai dönemi bulunamadı.'];
 
     $stFinal = $pdo->prepare(
@@ -443,14 +682,9 @@ function pdks_faz8b_degerlendirme_kaydet(
         return ['ok' => false, 'hata' => 'Bu oturumun hakedişi KESİN. Önce yönetici kontrollü olarak hakedişi yeniden açmalıdır.'];
     }
 
-    // Faz 9C / H-02: bu dönemin OTORİTER normal süresi kendi oturumunun
-    // donmuş anlık görüntüsüdür — canlı çavuş ayarından DEĞİL.
-    $stSess = $pdo->prepare("SELECT normal_work_minutes_snapshot FROM daily_work_sessions WHERE id = ?");
-    $stSess->execute([(int)$p['session_id']]);
-    $normalDk = (int)($stSess->fetchColumn() ?: PDKS_FAZ8B_NORMAL_DK);
-    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
-
-    $sure = pdks_faz8b_sure_karari($p['entry_time'] ?? null, $p['exit_time'] ?? null, $normalDk);
+    // Faz 9C / H-02: normal süre oturumun donmuş snapshot'ı; v299: + fiyat
+    // döneminin saat eşikleri — ikisi de sınıflandırıcının içinde.
+    $sure = $p['faz8b'];
     $attendanceDecision = $attendanceDecision !== null ? trim($attendanceDecision) : null;
     $simdi = date('Y-m-d H:i:s');
 
@@ -554,11 +788,6 @@ function pdks_faz8b_toplu_degerlendirme_kaydet(
         return ['ok' => false, 'basarili' => 0, 'atlandi' => 0, 'hatalar' => ['Tam veya Yarım seçilmelidir.']];
     }
 
-    $stSess = $pdo->prepare("SELECT normal_work_minutes_snapshot FROM daily_work_sessions WHERE id = ?");
-    $stSess->execute([$sessionId]);
-    $normalDk = (int)($stSess->fetchColumn() ?: PDKS_FAZ8B_NORMAL_DK);
-    if ($normalDk <= 0) $normalDk = PDKS_FAZ8B_NORMAL_DK;
-
     $basarili = 0; $atlandi = 0; $hatalar = [];
     foreach (array_unique($periodIds) as $periodId) {
         $periodId = (int)$periodId;
@@ -566,16 +795,11 @@ function pdks_faz8b_toplu_degerlendirme_kaydet(
 
         // ⚠ session_id = ? SATIRDA — başka oturumun dönemi id tahmin edilerek
         // buraya karıştırılamaz (aynı IDOR ihtiyatı sayfanın kendisiyle AYNI).
-        $st = $pdo->prepare(
-            "SELECT entry_time, exit_time FROM daily_worker_work_periods
-              WHERE id = ? AND session_id = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo)
-        );
-        $st->execute([$periodId, $sessionId]);
-        $donem = $st->fetch();
+        $donem = pdks_faz8b_donem_getir($periodId, $pdo, $sessionId);
         if (!$donem) { $atlandi++; continue; }
 
-        $sure = pdks_faz8b_sure_karari($donem['entry_time'] ?? null, $donem['exit_time'] ?? null, $normalDk);
-        if (!$sure['sinif_onayi_gerekli']) { $atlandi++; continue; }   // zaten Otomatik Tam — üzerine YAZILMAZ
+        // v299: TEK sınıflandırıcı (pdks_faz8b_donem_siniflandir) — süre burada hesaplanmaz.
+        if (!$donem['faz8b']['sinif_onayi_gerekli']) { $atlandi++; continue; }   // zaten Otomatik Tam — üzerine YAZILMAZ
 
         $sonuc = pdks_faz8b_degerlendirme_kaydet($periodId, $attendanceDecision, null, $userId, $pdo);
         if ($sonuc['ok']) { $basarili++; }
@@ -599,7 +823,8 @@ function pdks_faz8b_oran_ekle(
     string $validFrom,
     ?string $currency,
     int $userId,
-    ?PDO $pdo = null
+    ?PDO $pdo = null,
+    ?array $saatler = null
 ): array {
     $pdo = $pdo ?? db();
     $currency = trim((string)$currency) ?: 'TRY';
@@ -622,6 +847,11 @@ function pdks_faz8b_oran_ekle(
     $stC = $pdo->prepare("SELECT id FROM foremen WHERE id = ?");
     $stC->execute([$foremanId]);
     if (!$stC->fetchColumn()) return ['ok' => false, 'hata' => 'Çavuş bulunamadı.'];
+
+    // v299: saat eşikleri + çift yevmiye (hepsi opsiyonel; boş = NULL = bugünkü davranış).
+    $saatSonuc = pdks_faz8b_saat_girdileri_dogrula($saatler ?? [], $foremanId, $pdo);
+    if (!$saatSonuc['ok']) return ['ok' => false, 'hata' => $saatSonuc['hata']];
+    $saatDeger = $saatSonuc['degerler'];   // [] ya da 5 kolonun tamamı
 
     // ⚠ Faz 9B / H-01: YENİ oran tanımlama açılır listesi (cavus_fiyatlari.php)
     // TEK paylaşılan politikayı (pdks_gunluk_desteklenen_tip_listele()) kullanır
@@ -663,14 +893,17 @@ function pdks_faz8b_oran_ekle(
                 ->execute([$bitis, (int)$mevcut['id']]);
         }
 
+        // v299: saat kolonları YALNIZ girildiyse yazılır (yoksa INSERT bugünküyle aynı).
+        $ekKolon = $saatDeger ? ', ' . implode(', ', array_keys($saatDeger)) : '';
+        $ekYer = $saatDeger ? str_repeat(',?', count($saatDeger)) : '';
         $ins = $pdo->prepare(
             "INSERT INTO foreman_worker_rates
                 (foreman_id, worker_type_id, daily_rate, half_day_rate,
                  overtime_mode, overtime_rate, currency, valid_from, valid_to,
-                 is_active, created_by_user_id)
-             VALUES (?,?,?,?,?,?,?,?,NULL,1,?)"
+                 is_active, created_by_user_id{$ekKolon})
+             VALUES (?,?,?,?,?,?,?,?,NULL,1,?{$ekYer})"
         );
-        $ins->execute([
+        $ins->execute(array_merge([
             $foremanId,
             $workerTypeId,
             pdks_hakedis_kurus_tl($tamKurus),
@@ -680,7 +913,7 @@ function pdks_faz8b_oran_ekle(
             $currency,
             $validFrom,
             $userId,
-        ]);
+        ], array_values($saatDeger)));
         $id = (int)$pdo->lastInsertId();
         $pdo->commit();
     } catch (Throwable $e) {
@@ -698,10 +931,88 @@ function pdks_faz8b_oran_ekle(
             'overtime_rate' => pdks_hakedis_kurus_tl($fmKurus),
             'currency' => $currency,
             'valid_from' => $validFrom,
-        ]);
+        ] + $saatDeger);
     }
 
     return ['ok' => true, 'id' => $id];
+}
+
+/** v299: fiyat geçmişi için kısa saat özeti — ['saatler' => 'Tam 9 saat · FM 10 saat · Yarım 5 saat', 'cift' => '2.000,00 TRY · 12 saat']. */
+function pdks_faz8b_oran_saat_ozeti(array $o): array
+{
+    $e = static function ($v): string {
+        return ($v === null || $v === '' || (int)$v <= 0) ? '' : pdks_faz8b_dakika_etiket((int)$v);
+    };
+    $p = [];
+    if (($t = $e($o['full_day_minutes'] ?? null)) !== '') $p[] = 'Tam ' . $t;
+    if (($t = $e($o['overtime_start_minutes'] ?? null)) !== '') $p[] = 'FM ' . $t;
+    if (($t = $e($o['half_day_max_minutes'] ?? null)) !== '') $p[] = 'Yarım ' . $t . ' (bilgi)';
+    $cift = '';
+    $cd = $e($o['double_day_minutes'] ?? null);
+    $cr = $o['double_day_rate'] ?? null;
+    if ($cd !== '' && $cr !== null && $cr !== '') {
+        $cift = number_format((float)$cr, 2, ',', '.') . ' ' . (string)($o['currency'] ?? '') . ' · ' . $cd;
+    }
+    return ['saatler' => implode(' · ', $p), 'cift' => $cift];
+}
+
+/**
+ * v299 — fiyat dönemi saat girdilerini doğrular. $ham anahtarları:
+ * full_day / half_day / overtime_start / double_day (saat "9" ya da "9:30")
+ * ve double_day_rate (ücret). Hepsi boşsa ['ok'=>true,'degerler'=>[]].
+ * Doluysa 5 kolonun tamamını (boşlar NULL) döner. Kural: saatler 60–1440 dk;
+ * çift eşiği + çift ücret birlikte; tam ≤ FM başı < çift; yarım < tam; çift
+ * ücret > 0. Tam boşsa karşılaştırma için çavuşun güncel normal süresi kullanılır.
+ */
+function pdks_faz8b_saat_girdileri_dogrula(array $ham, int $foremanId, PDO $pdo): array
+{
+    $alanlar = [
+        'full_day' => ['full_day_minutes', 'Tam yevmiye saati'],
+        'half_day' => ['half_day_max_minutes', 'Yarım yevmiye saati'],
+        'overtime_start' => ['overtime_start_minutes', 'Fazla mesai başlangıç saati'],
+        'double_day' => ['double_day_minutes', 'Çift yevmiye eşik saati'],
+    ];
+    $dk = [];
+    $herhangi = false;
+    foreach ($alanlar as $k => [$kolon, $etiket]) {
+        $v = pdks_faz8b_saat_girdi_dk($ham[$k] ?? null);
+        if ($v === -1) return ['ok' => false, 'hata' => $etiket . ' geçersiz — "9" ya da "9:30" biçiminde girin.'];
+        if ($v !== null) {
+            if ($v < PDKS_FAZ8B_SURE_MIN_DK || $v > PDKS_FAZ8B_SURE_MAX_DK) {
+                return ['ok' => false, 'hata' => $etiket . ' 1–24 saat aralığında olmalıdır.'];
+            }
+            $herhangi = true;
+        }
+        $dk[$kolon] = $v;
+    }
+    $ciftHam = trim((string)($ham['double_day_rate'] ?? ''));
+    $ciftKurus = null;
+    if ($ciftHam !== '') {
+        $ciftKurus = pdks_hakedis_girdi_kurus($ciftHam);
+        if ($ciftKurus === null || $ciftKurus <= 0) return ['ok' => false, 'hata' => 'Çift Yevmiye ücreti geçersiz.'];
+        $herhangi = true;
+    }
+    if (!$herhangi) return ['ok' => true, 'degerler' => []];
+
+    if (!pdks_faz8b_saat_kolonlari_hazir($pdo)) {
+        return ['ok' => false, 'hata' => 'Saat / Çift Yevmiye alanları için önce migrate.php\'den "Fiyat Dönemi Saatleri" kolonlarını kurun.'];
+    }
+    if (($dk['double_day_minutes'] === null) !== ($ciftKurus === null)) {
+        return ['ok' => false, 'hata' => 'Çift Yevmiye için eşik saati ve ücret birlikte girilmeli (ya da ikisi de boş bırakılmalı).'];
+    }
+    $refTam = $dk['full_day_minutes'] ?? pdks_faz8b_cavus_normal_sure_dk($foremanId, $pdo);
+    $refFm = $dk['overtime_start_minutes'] ?? $refTam;
+    if ($dk['overtime_start_minutes'] !== null && $refFm < $refTam) {
+        return ['ok' => false, 'hata' => 'Fazla mesai başlangıcı Tam yevmiye saatinden önce olamaz.'];
+    }
+    if ($dk['double_day_minutes'] !== null && $dk['double_day_minutes'] <= $refFm) {
+        return ['ok' => false, 'hata' => 'Çift Yevmiye eşiği fazla mesai başlangıcından (' . pdks_faz8b_dakika_etiket($refFm) . ') büyük olmalıdır.'];
+    }
+    if ($dk['half_day_max_minutes'] !== null && $dk['half_day_max_minutes'] >= $refTam) {
+        return ['ok' => false, 'hata' => 'Yarım yevmiye saati Tam yevmiye saatinden (' . pdks_faz8b_dakika_etiket($refTam) . ') küçük olmalıdır.'];
+    }
+    $dk['double_day_rate'] = $ciftKurus !== null ? pdks_hakedis_kurus_tl($ciftKurus) : null;
+    return ['ok' => true, 'degerler' => $dk];
 }
 
 // =========================================================
@@ -1319,10 +1630,14 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
             continue;
         }
 
+        // v299: sınıf + ödenecek FM TEK sınıflandırıcıdan (pdks_faz8b_donem_siniflandir);
+        // dönem satırı aynı fiyat dönemiyle sınıflandırıldı. 'cift' → çift ücret.
         $sinif = (string)$f['etkin_sinif'];
-        $baseRaw = $sinif === 'yarim' ? ($oran['half_day_rate'] ?? null) : ($oran['daily_rate'] ?? null);
+        $sinifEtiket = pdks_faz8b_sinif_etiketi($sinif);
+        $baseRaw = $sinif === 'yarim' ? ($oran['half_day_rate'] ?? null)
+            : ($sinif === 'cift' ? ($oran['double_day_rate'] ?? null) : ($oran['daily_rate'] ?? null));
         if ($baseRaw === null || $baseRaw === '') {
-            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — ' . ($sinif === 'yarim' ? 'Yarım' : 'Tam') . ' Mesai fiyatı yok';
+            $eksikler[] = (string)$d['worker_type_name_snapshot'] . ' — ' . $sinifEtiket . ' Mesai fiyatı yok';
             continue;
         }
         try {
@@ -1335,10 +1650,10 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         // Faz 9C / UX-03: hakediş OTORİTER olarak ONAYLANAN saati kullanır
         // (fazla_mesai_onay_saat), HESAPLANAN adayı (fazla_mesai_saat)
         // DEĞİL — muhasebe adayın altında kısmi onay vermiş olabilir.
-        $fmSaat = (int)$f['fazla_mesai_saat'];
-        $fmOnaySaat = $f['fazla_mesai_onay_saat'] ?? null;
-        $fmOnayli = $fmSaat > 0 && $fmOnaySaat !== null && (int)$fmOnaySaat > 0;
-        $fmOnaySaat = $fmOnayli ? (int)$fmOnaySaat : 0;
+        // v299: Tam'da = onaylı saat (adaya kırpılmış); Çift'te = çift eşiğinden
+        // SONRAKİ onaylı saat (sabit FM modunda 0 — çift zaten ödüyor).
+        $fmOnaySaat = (int)($f['odenecek_fm_saat'] ?? 0);
+        $fmOnayli = $fmOnaySaat > 0;
         $fmMode = null;
         $fmBirimKurus = 0;
         $fmToplamKurus = 0;

@@ -14,6 +14,9 @@ require_once __DIR__ . '/config/pdks_faz8j.php';
 // KENDİ yetkisiyle (entitlements_finalize) AYNI kapıyı burada da OKUR,
 // böylece yetkisi olmayan bir kullanıcı tıklayıp 403'e gitmez.
 require_once __DIR__ . '/config/pdks_hakedis.php';
+// v299: "Mesai Tanımı" sütunu — TEK sınıflandırıcı (pdks_faz8b_donem_siniflandir)
+// sayfa katmanında yüklenir; config/pdks_gunluk.php faz8b'yi require ETMEZ.
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
@@ -173,6 +176,17 @@ if ($kartlar && pdks_gunluk_kolon_var($pdo, 'worker_cards', 'enrolled_source')) 
     $stKs->execute(array_map('intval', array_column($kartlar, 'worker_card_id')));
     foreach ($stKs->fetchAll() as $kr) if (function_exists('pdks_faz8j_kartsiz_mi') && pdks_faz8j_kartsiz_mi($kr)) $kartsizKartIds[(int)$kr['id']] = true;
 }
+// v299: Mesai Tanımı — dönem id → sınıflandırma (faz8b şeması yoksa sütun gizli).
+$mesaiTanimGoster = function_exists('pdks_faz8b_sema_hazir') && pdks_faz8b_sema_hazir($pdo);
+$mesaiTanimF = [];
+if ($mesaiTanimGoster && $kartlar) {
+    foreach (pdks_faz8b_oturum_donemleri((int)$id, $pdo) as $mtD) $mesaiTanimF[(int)$mtD['id']] = $mtD['faz8b'];
+}
+$mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum): string {
+    $karisik = $karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId;
+    $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
+    return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
+};
 // v294: Toplu İşlem JSON uçları (çıktıdan ÖNCE). Çavuş/gün/depo mesaiden gelir.
 $topluAjaxKapi = $ekleGoster && $oturum['work_date'] <= date('Y-m-d');
 $topluAjaxSabit = ['foreman_id' => (int)$oturum['foreman_id'], 'work_date' => (string)$oturum['work_date'], 'depo' => $aktifDepo];
@@ -291,6 +305,7 @@ render_flash();
     <th>Çıkış Saati</th>
     <th>Süre</th>
     <th>Durum</th>
+    <?php if ($mesaiTanimGoster): ?><th>Mesai Tanımı</th><?php endif; ?>
     <th>Manuel Çıkış</th>
     <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): ?><th>İşlem</th><?php endif; ?>
 </tr></thead>
@@ -311,6 +326,7 @@ render_flash();
     <td class="muted"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
     <td class="muted"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
+    <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-mesai-tanim><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
     <td>
         <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
         <a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a>
@@ -337,6 +353,7 @@ render_flash();
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
     </div>
+    <?php if ($mesaiTanimGoster): ?><div class="pdks-row-sub pdks-mesai-tanim" data-mesai-tanim>Mesai Tanımı: <strong><?= h($mesaiTanimMetni($k)) ?></strong></div><?php endif; ?>
     <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
     <div style="margin-top:6px"><a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a></div>
     <?php elseif ($manuelUygun): ?>

@@ -276,7 +276,7 @@ $kartlarAyse = pdks_gunluk_oturum_kartlari($ayseSessionId, db());
 ok('Ayşe oturumunda 3 kart satırı (K001,K002,E001)', count($kartlarAyse) === 3, json_encode($kartlarAyse));
 $byCard = [];
 foreach ($kartlarAyse as $k) $byCard[$k['card_no']] = $k;
-ok('K001 durumu "tam" (giriş+çıkış)', $byCard['K001']['durum']['kod'] === 'tam' && $byCard['K001']['durum']['etiket'] === '✅ Tam');
+ok('K001 durumu "tam" (giriş+çıkış)', $byCard['K001']['durum']['kod'] === 'tam' && $byCard['K001']['durum']['etiket'] === '✅ Çıkış yapıldı');
 ok('K001 çıkış saati DOLU', $byCard['K001']['cikis_saat'] !== null);
 ok('K002 durumu "cikis_yok" (yalnız giriş)', $byCard['K002']['durum']['kod'] === 'cikis_yok' && $byCard['K002']['durum']['etiket'] === '⚠️ Çıkış Yok');
 ok('K002 çıkış saati NULL (UYDURMA zaman YOK)', $byCard['K002']['cikis_saat'] === null);

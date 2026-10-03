@@ -127,6 +127,19 @@ if ($normalDkGosterim <= 0) $normalDkGosterim = 540;
 // tıklanacak hiçbir şey olmayan bir çubuk göstermenin anlamı yok.
 $topluUygunSayisi = 0;
 foreach ($donemler as $d) { if ($d['faz8b']['sinif_onayi_gerekli']) $topluUygunSayisi++; }
+// v299: fiyat döneminden gelen saat eşikleri (işçi tipi bazında) — eşikler
+// sınıflandırıcının çıktısıdır, burada yeniden hesaplanmaz.
+$esikOzet = [];
+foreach ($donemler as $d) {
+    $f = $d['faz8b'];
+    $ozel = $f['tam_kaynak'] === 'fiyat' || $f['cift_dk'] !== null || (int)$f['fm_bas_dk'] !== (int)$f['tam_dk'] || $f['yarim_dk'] !== null;
+    if (!$ozel) continue;
+    $par = ['Tam ' . pdks_faz8b_dakika_etiket((int)$f['tam_dk'])];
+    if ((int)$f['fm_bas_dk'] !== (int)$f['tam_dk']) $par[] = 'FM başı ' . pdks_faz8b_dakika_etiket((int)$f['fm_bas_dk']);
+    if ($f['yarim_dk'] !== null) $par[] = 'Yarım ' . pdks_faz8b_dakika_etiket((int)$f['yarim_dk']) . ' (bilgi)';
+    if ($f['cift_dk'] !== null) $par[] = 'Çift ' . pdks_faz8b_dakika_etiket((int)$f['cift_dk']) . ' / ' . number_format((float)$f['cift_ucret'], 2, ',', '.');
+    $esikOzet[(string)$d['worker_type_name_snapshot']] = implode(' · ', $par);
+}
 
 render_header('Mesai Değerlendirme');
 $base = base_url();
@@ -152,6 +165,13 @@ render_flash();
         (bu oturum açılırken çavuşun ayarından donduruldu) · sabit bir başlangıç/bitiş SAATİ YOKTUR, yalnız GEÇEN SÜRE
         sayılır · süre tamamlanınca otomatik Tam · 15 dk tolerans sonrası her başlayan saat FM.
     </div>
+    <?php if ($esikOzet): ?>
+    <div class="pdks-row-sub" style="margin-top:6px" id="mdEsikler">
+        Fiyat dönemi saatleri (mesai süresinin yerine geçer):
+        <?php $i = 0; foreach ($esikOzet as $tipAd => $metin): ?><?= $i++ ? ' — ' : ' ' ?><strong><?= h($tipAd) ?>:</strong> <?= h($metin) ?><?php endforeach; ?>.
+        Çift yevmiye FM onayına bağlıdır: onaylı süre çift eşiğine ulaşırsa Tam yerine çift ücret, eşikten sonrası FM.
+    </div>
+    <?php endif; ?>
     <div class="pdks-row-sub" style="margin-top:6px">
         Hazır: <strong><?= (int)$ozet['hazir'] ?>/<?= (int)$ozet['toplam'] ?></strong>
         · Kısa/eksik mesai kararı bekleyen: <strong><?= (int)$ozet['bekleyen_sinif'] ?></strong>
@@ -205,13 +225,17 @@ render_flash();
     <td><?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></td>
     <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
     <td>
-        <?php if ($f['sinif_kaynak'] === 'otomatik'): ?>
+        <?php if ($f['cift']): ?>
+            <span class="pdks-badge pdks-badge-cift">Çift Yevmiye</span>
+        <?php elseif ($f['sinif_kaynak'] === 'otomatik'): ?>
             <span class="pdks-badge pdks-badge-tamamlandi">Otomatik Tam</span>
         <?php elseif ($f['etkin_sinif']): ?>
-            <span class="pdks-badge pdks-badge-acik">Muhasebe: <?= h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') ?></span>
+            <span class="pdks-badge pdks-badge-acik">Muhasebe: <?= h(pdks_faz8b_sinif_etiketi($f['etkin_sinif'])) ?></span>
         <?php else: ?>
             <span class="pdks-badge pdks-badge-eksik_cikis">Karar bekliyor</span>
         <?php endif; ?>
+        <?php if ($f['cift_aday'] && !$f['cift']): ?><div class="pdks-row-sub">Çift adayı (≥ <?= h(pdks_faz8b_dakika_etiket((int)$f['cift_dk'])) ?>) — FM onayına bağlı</div><?php endif; ?>
+        <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
     </td>
     <td>
         <?php if ((int)$f['fazla_mesai_saat'] <= 0): ?>—
@@ -224,6 +248,7 @@ render_flash();
             <?php else: ?>
                 · <strong>Onay bekliyor</strong>
             <?php endif; ?>
+            <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift sonrası ödenecek FM: <?= (int)$f['odenecek_fm_saat'] ?> saat<?= ($f['fm_modu'] ?? '') === 'fixed' ? ' (sabit FM çift gününe eklenmez)' : '' ?></div><?php endif; ?>
         <?php endif; ?>
     </td>
     <td>
@@ -274,7 +299,9 @@ render_flash();
     <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($d['entry_time']))) ?> · Çıkış <?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></div>
     <div class="pdks-row-sub">Süre: <?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></div>
     <div class="pdks-row-sub">Beyan: <?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></div>
-    <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h($f['etkin_sinif'] === 'yarim' ? 'Yarım' : 'Tam') : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
+    <div class="pdks-row-sub">Finans: <?= $f['etkin_sinif'] ? h(pdks_faz8b_sinif_etiketi($f['etkin_sinif'])) : 'Karar bekliyor' ?><?= (int)$f['fazla_mesai_saat'] > 0 ? ' · FM Hesaplanan ' . (int)$f['fazla_mesai_saat'] . ' saat' . ($f['fazla_mesai_onay_saat'] !== null ? ' / Onaylanan ' . (int)$f['fazla_mesai_onay_saat'] . ' saat / ' . h($f['fazla_mesai_durum']) : ' / Onay bekliyor') : '' ?></div>
+    <?php if ($f['cift']): ?><div class="pdks-row-sub">Çift Yevmiye · çift sonrası FM <?= (int)$f['odenecek_fm_saat'] ?> saat</div><?php elseif ($f['cift_aday']): ?><div class="pdks-row-sub">Çift adayı — FM onayına bağlı</div><?php endif; ?>
+    <?php if ($f['yarim_alti']): ?><div class="pdks-row-sub">Yarım saatinin (<?= h(pdks_faz8b_dakika_etiket((int)$f['yarim_dk'])) ?>) altında</div><?php endif; ?>
     <?php if ($topluUygunSayisi > 0 && $f['sinif_onayi_gerekli']): ?>
     <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:.85rem">
         <input type="checkbox" name="period_ids[]" value="<?= (int)$d['id'] ?>" form="topluForm" class="js-toplu-check"> Toplu işlem için seç

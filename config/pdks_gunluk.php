@@ -2102,7 +2102,7 @@ function pdks_gunluk_oturum_kartlari(int $sessionId, ?PDO $pdo = null): array
     $satirlar = $st->fetchAll();
     foreach ($satirlar as &$s) {
         $s['durum'] = $s['cikis_saat'] !== null
-            ? ['kod' => 'tam', 'etiket' => '✅ Tam']
+            ? ['kod' => 'tam', 'etiket' => '✅ Çıkış yapıldı']
             : ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'];
     }
     unset($s);
@@ -2280,7 +2280,7 @@ function pdks_gunluk_faz8a_donem_durumu(string $status): array
     // rozet rengi eklendi — canlı 'cikis_yok' (uyarı/turuncu) ile karışmasın.
     return match ($status) {
         'open'              => ['kod' => 'cikis_yok', 'etiket' => '⚠️ Çıkış Yok'],
-        'closed'            => ['kod' => 'tam', 'etiket' => '✅ Tam'],
+        'closed'            => ['kod' => 'tam', 'etiket' => '✅ Çıkış yapıldı'],
         'legacy_unresolved' => ['kod' => 'legacy_unresolved', 'etiket' => '📜 Geçmiş — Eksik Çıkış'],
         default             => ['kod' => 'bilinmiyor', 'etiket' => $status],
     };

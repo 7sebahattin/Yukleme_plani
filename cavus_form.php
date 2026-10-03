@@ -158,7 +158,7 @@ render_flash();
             $normalDkGosterim = $id > 0 ? pdks_faz8b_cavus_normal_sure_dk($id, $pdo) : 540;
         ?>
         <label>
-            <span class="form-label">Normal Günlük Çalışma Süresi (saat)</span>
+            <span class="form-label">Normal Günlük Çalışma Süresi (saat) <small class="muted">(fiyat döneminde saat girilmemişse kullanılan varsayılan)</small></span>
             <input type="number" name="saat" min="1" max="24" step="0.25"
                    value="<?= h((string)round($normalDkGosterim / 60, 2)) ?>">
         </label>

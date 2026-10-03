@@ -1998,3 +1998,23 @@ html[data-theme="dark"] .pdks-badge-tanimli { background: #142a4d; color: #9cc5f
     .isk-seri-sil { width: 2.75rem; height: 2.75rem; }
 }
 @media (prefers-reduced-motion: reduce) { .isk-seri-vurgu { animation: none; box-shadow: 0 0 0 3px var(--warn); } }
+
+/* v299: Fiyat dönemi saatleri + Çift Yevmiye (cavus_fiyatlari.php) + Mesai Tanımı sütunu */
+.cf2-grup { margin: 14px 0 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.cf2-grup .cf2-girdi { --cf2-girdi-bg: var(--card); }
+.cf2-grup-bas { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-weight: 700; font-size: .92rem; color: var(--text); }
+.cf2-grup-bas .cf-ik { width: 17px; height: 17px; color: var(--muted); }
+.cf2-grup .cf2-bilgi { margin-top: 12px; }
+.cf2-grup + .cf2-izgara { margin-top: 14px; }
+.cf2-ek { font-weight: 500; color: var(--muted); font-size: .78rem; }
+.cf2-saatler { font-size: .85rem; white-space: normal; }
+.pdks-badge-cift { background: #efe7ff; color: #5b2bb5; border: 1px solid #d9c8fb; }
+.pdks-mesai-tanim { font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
+.pdks-mesai-tanim small { color: var(--muted); }
+html[data-theme="dark"] .pdks-badge-cift { background: #261d3d; color: #cdb8ff; border-color: #3d2f66; }
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pdks-badge-cift { background: #261d3d; color: #cdb8ff; border-color: #3d2f66; }
+}
+@media (max-width: 767px) {
+    .cf2-grup { padding: 12px; }
+}

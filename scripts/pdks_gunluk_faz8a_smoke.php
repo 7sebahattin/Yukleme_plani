@@ -484,8 +484,8 @@ foreach ($eskiDonemler as $d) {
     if ($d['card_no'] === 'E001') $e001Satir = $d;
     if ($d['card_no'] === 'E002') $e002Satir = $d;
 }
-ok('Puantaj: E001 (closed) "tam" kod/"✅ Tam" etiketiyle görünüyor',
-    $e001Satir !== null && $e001Satir['durum']['kod'] === 'tam' && $e001Satir['durum']['etiket'] === '✅ Tam');
+ok('Puantaj: E001 (closed) "tam" kod/"✅ Çıkış yapıldı" etiketiyle görünüyor',
+    $e001Satir !== null && $e001Satir['durum']['kod'] === 'tam' && $e001Satir['durum']['etiket'] === '✅ Çıkış yapıldı');
 ok('Puantaj: E002 (legacy_unresolved) AYRI kod/etiketle görünüyor — canlı "açık" ile KARIŞMIYOR',
     $e002Satir !== null && $e002Satir['durum']['kod'] === 'legacy_unresolved'
     && $e002Satir['durum']['etiket'] === '📜 Geçmiş — Eksik Çıkış');

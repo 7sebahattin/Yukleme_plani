@@ -180,7 +180,7 @@ render_flash();
 <tr>
     <td class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></td>
     <?php if ($faz8bHazir): ?>
-    <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : 'Tam') ?></td>
+    <td><?= $cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift' : 'Tam')) ?></td>
     <td>
         <?php if (!$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?>
             <?= (int)$sl['overtime_hours'] ?> saat · <?= h(($sl['overtime_mode_snapshot'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik') ?> · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?>
@@ -203,7 +203,7 @@ render_flash();
         && array_key_exists('work_period_id', $sl) && $sl['work_period_id'] === null;
 ?>
 <div class="pdks-card-item">
-    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></div><div class="pdks-row-sub"><?= (int)$sl['worker_count'] ?> × <?= h(number_format((float)$sl['unit_rate'],2,',','.')) ?><?= $faz8bHazir ? ' · ' . ($cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : 'Tam')) : '' ?></div><?php if ($faz8bHazir && !$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?><div class="pdks-row-sub">FM: <?= (int)$sl['overtime_hours'] ?> saat · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?></div><?php endif; ?></div><strong><?= h(number_format((float)$sl['line_total'],2,',','.')) ?></strong></div>
+    <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($sl['worker_type_name_snapshot']) ?></div><div class="pdks-row-sub"><?= (int)$sl['worker_count'] ?> × <?= h(number_format((float)$sl['unit_rate'],2,',','.')) ?><?= $faz8bHazir ? ' · ' . ($cavusUcretSatiri ? '—' : h(($sl['attendance_class_snapshot'] ?? 'tam') === 'yarim' ? 'Yarım' : (($sl['attendance_class_snapshot'] ?? '') === 'cift' ? 'Çift' : 'Tam'))) : '' ?></div><?php if ($faz8bHazir && !$cavusUcretSatiri && (int)($sl['overtime_hours'] ?? 0) > 0): ?><div class="pdks-row-sub">FM: <?= (int)$sl['overtime_hours'] ?> saat · <?= h(number_format((float)($sl['overtime_total'] ?? 0),2,',','.')) ?></div><?php endif; ?></div><strong><?= h(number_format((float)$sl['line_total'],2,',','.')) ?></strong></div>
 </div>
 <?php endforeach; ?>
 <div class="pdks-card-item" style="font-weight:800"><div class="pdks-card-top"><span>TOPLAM</span><span><?= h(number_format((float)$hakedis['total_amount'],2,',','.')) ?> <?= h($hakedis['currency']) ?></span></div></div>

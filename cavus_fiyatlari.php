@@ -18,6 +18,9 @@ $pdo = db();
 pdks_gunluk_sayfa_kapisi($pdo);
 pdks_hakedis_sayfa_kapisi($pdo);
 $faz8bHazir = pdks_faz8b_sema_hazir($pdo);
+// v299: fiyat dönemi saatleri + Çift Yevmiye — kendi kolonları; sayfa açılışında
+// migrate ÇAĞRILMAZ (kurulum yalnız migrate.php kartı).
+$saatHazir = $faz8bHazir && pdks_faz8b_saat_kolonlari_hazir($pdo);
 
 // Çavuş Ücreti (Faz 8B eki): tablo yoksa BİR KEZ otomatik oluşturmayı dene
 // (idempotent migrasyon fonksiyonu) — başarısızsa aşağıda uyarı kartı gösterilir.
@@ -111,6 +114,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
             $yarimUcret = trim((string)($_POST['half_day_rate'] ?? ''));
             $fmMode = trim((string)($_POST['overtime_mode'] ?? ''));
             $fmUcret = trim((string)($_POST['overtime_rate'] ?? ''));
+            // v299: saat alanları (boş = NULL = bugünkü davranış); doğrulama sunucuda.
+            $saatler = [
+                'full_day' => (string)($_POST['full_day_saat'] ?? ''),
+                'half_day' => (string)($_POST['half_day_saat'] ?? ''),
+                'overtime_start' => (string)($_POST['overtime_start_saat'] ?? ''),
+                'double_day' => (string)($_POST['double_day_saat'] ?? ''),
+                'double_day_rate' => (string)($_POST['double_day_rate'] ?? ''),
+            ];
             $sonuc = pdks_faz8b_oran_ekle(
                 $cavusId,
                 $workerTypeId,
@@ -121,7 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
                 $validFrom,
                 $currency,
                 (int)$auth_user['id'],
-                $pdo
+                $pdo,
+                $saatler
             );
         } else {
             $sonuc = pdks_hakedis_oran_ekle(
@@ -176,6 +188,16 @@ if ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && isset($_POST['cavus_
 }
 $cavusYontemSecili = ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && in_array(($_POST['cavus_yontem'] ?? ''), ['A', 'B'], true))
     ? (string)$_POST['cavus_yontem'] : $cavusYontem;
+// v299: saat alanlarının varsayılanı = çavuşun normal günlük süresi (Tam saati);
+// hatalı POST'ta girilen değerler korunur.
+$oranHataPost = $errors && ($_POST['form'] ?? '') === 'oran';
+$saatForm = [
+    'full_day_saat' => $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '',
+    'half_day_saat' => '', 'overtime_start_saat' => '', 'double_day_saat' => '', 'double_day_rate' => '',
+];
+if ($oranHataPost) {
+    foreach (array_keys($saatForm) as $k) $saatForm[$k] = substr(trim((string)($_POST[$k] ?? '')), 0, 16);
+}
 $cavusYontemEtiket = pdks_faz8b_cavus_ucret_yontem_etiketi($cavusYontem, $cavusYontem === 'B' ? $cavusBirim : null);
 
 // Satır içi SVG simgeler (stroke = currentColor; CDN yok). Sayfa testte birden
@@ -261,31 +283,6 @@ render_flash();
                 </select></span>
             </label>
             <label class="cf2-alan">
-                <span class="cf2-etiket"><?= $cfIk('gunes') ?><?= $faz8bHazir ? 'Tam Mesai Ücreti' : 'Günlük Ücret' ?> <b class="cf2-zorunlu">*</b></span>
-                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
-                <input type="text" name="daily_rate" required inputmode="decimal" placeholder="ör. 1500 veya 1500,50"></span>
-            </label>
-            <?php if ($faz8bHazir): ?>
-            <label class="cf2-alan">
-                <span class="cf2-etiket"><?= $cfIk('yarim') ?>Yarım Mesai Ücreti <b class="cf2-zorunlu">*</b></span>
-                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
-                <input type="text" name="half_day_rate" required inputmode="decimal" placeholder="ör. 900"></span>
-            </label>
-            <label class="cf2-alan">
-                <span class="cf2-etiket"><?= $cfIk('saat') ?>Fazla Mesai Tipi <b class="cf2-zorunlu">*</b></span>
-                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
-                <select name="overtime_mode" required>
-                    <option value="hourly">Saatlik</option>
-                    <option value="fixed">Sabit Toplam</option>
-                </select></span>
-            </label>
-            <label class="cf2-alan">
-                <span class="cf2-etiket"><?= $cfIk('saat+') ?>Fazla Mesai Ücreti <b class="cf2-zorunlu">*</b></span>
-                <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
-                <input type="text" name="overtime_rate" required inputmode="decimal" placeholder="ör. 200"></span>
-            </label>
-            <?php endif; ?>
-            <label class="cf2-alan">
                 <span class="cf2-etiket"><?= $cfIk('para') ?>Para Birimi <b class="cf2-zorunlu">*</b></span>
                 <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
                 <select name="currency" required>
@@ -295,8 +292,89 @@ render_flash();
                 </select></span>
             </label>
         </div>
+
+        <div class="cf2-grup" data-cf-grup="tam">
+            <div class="cf2-grup-bas"><?= $cfIk('gunes') ?><span><?= $faz8bHazir ? 'Tam Yevmiye' : 'Günlük Ücret' ?></span></div>
+            <div class="cf2-izgara">
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('para') ?><?= $faz8bHazir ? 'Tam Mesai Ücreti' : 'Günlük Ücret' ?> <b class="cf2-zorunlu">*</b></span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                    <input type="text" name="daily_rate" required inputmode="decimal" placeholder="ör. 1500 veya 1500,50"></span>
+                </label>
+                <?php if ($saatHazir): ?>
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('saat') ?>Tam Yevmiye Saati</span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
+                    <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 9 ya da 9:30" value="<?= h($saatForm['full_day_saat']) ?>"></span>
+                </label>
+                <?php endif; ?>
+            </div>
+        </div>
         <?php if ($faz8bHazir): ?>
-        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>Saatlik: 15 dk tolerans sonrası başlayan her saat yukarı yuvarlanır. Sabit: onaylanan FM için bir kez uygulanır.</span></p>
+        <div class="cf2-grup" data-cf-grup="yarim">
+            <div class="cf2-grup-bas"><?= $cfIk('yarim') ?><span>Yarım Yevmiye</span></div>
+            <div class="cf2-izgara">
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('para') ?>Yarım Mesai Ücreti <b class="cf2-zorunlu">*</b></span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                    <input type="text" name="half_day_rate" required inputmode="decimal" placeholder="ör. 900"></span>
+                </label>
+                <?php if ($saatHazir): ?>
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('saat') ?>Yarım Yevmiye Saati <small class="cf2-ek">(bilgi)</small></span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
+                    <input type="text" name="half_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 5" value="<?= h($saatForm['half_day_saat']) ?>"></span>
+                </label>
+                <?php endif; ?>
+            </div>
+            <?php if ($saatHazir): ?><p class="cf2-not">Yarım saati yalnız bilgidir: Tam saatinin altındaki mesailerde karar yine muhasebede (otomatik Yarım yok).</p><?php endif; ?>
+        </div>
+        <div class="cf2-grup" data-cf-grup="fm">
+            <div class="cf2-grup-bas"><?= $cfIk('saat+') ?><span>Fazla Mesai</span></div>
+            <div class="cf2-izgara cf2-izgara--3">
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('saat') ?>Fazla Mesai Tipi <b class="cf2-zorunlu">*</b></span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
+                    <select name="overtime_mode" required>
+                        <option value="hourly">Saatlik</option>
+                        <option value="fixed">Sabit Toplam</option>
+                    </select></span>
+                </label>
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('para') ?>Fazla Mesai Ücreti <b class="cf2-zorunlu">*</b></span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                    <input type="text" name="overtime_rate" required inputmode="decimal" placeholder="ör. 200"></span>
+                </label>
+                <?php if ($saatHazir): ?>
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('saat') ?>FM Başlangıç Saati</span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
+                    <input type="text" name="overtime_start_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="boş = Tam saati" value="<?= h($saatForm['overtime_start_saat']) ?>"></span>
+                </label>
+                <?php endif; ?>
+            </div>
+            <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>Saatlik: 15 dk tolerans sonrası başlayan her saat yukarı yuvarlanır. Sabit: onaylanan FM için bir kez uygulanır.</span></p>
+        </div>
+        <?php if ($saatHazir): ?>
+        <div class="cf2-grup" data-cf-grup="cift">
+            <div class="cf2-grup-bas"><?= $cfIk('gunes') ?><span>Çift Yevmiye <small class="cf2-ek">(isteğe bağlı)</small></span></div>
+            <div class="cf2-izgara">
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('para') ?>Çift Yevmiye Ücreti</span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('para') ?></span>
+                    <input type="text" name="double_day_rate" inputmode="decimal" placeholder="ör. 2000" value="<?= h($saatForm['double_day_rate']) ?>"></span>
+                </label>
+                <label class="cf2-alan">
+                    <span class="cf2-etiket"><?= $cfIk('saat') ?>Çift Yevmiye Eşik Saati</span>
+                    <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
+                    <input type="text" name="double_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 12" value="<?= h($saatForm['double_day_saat']) ?>"></span>
+                </label>
+            </div>
+            <p class="cf2-bilgi cf2-bilgi--mor"><?= $cfIk('bilgi') ?><span>Eşik saati kadar çalışılıp FM onayı bunu kapsıyorsa Tam ücretin YERİNE çift ücret ödenir; eşikten sonraki süre FM olur (Tam ile çift arası ayrıca ödenmez). Sabit FM tipinde çift gününe FM eklenmez. İkisi birlikte girilir ya da boş bırakılır.</span></p>
+        </div>
+        <?php else: ?>
+        <p class="cf2-bilgi cf2-bilgi--mavi" id="cfSaatKurulum"><?= $cfIk('bilgi') ?><span>Tam / Yarım / FM saatleri ve Çift Yevmiye alanları için yönetici <a href="migrate.php">migrate.php</a>'den "Fiyat Dönemi Saatleri" kolonlarını kurmalıdır. Kurulana kadar Tam eşiği mesainin normal süresidir.</span></p>
+        <?php endif; ?>
         <?php endif; ?>
         <div class="cf2-izgara">
             <label class="cf2-alan">
@@ -326,7 +404,7 @@ render_flash();
 <?php if (!empty($oranlar)): ?>
 <div class="table-wrap pc-only">
 <table class="data-table">
-<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th></tr></thead>
+<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><?php if ($saatHazir): ?><th>Saatler</th><th>Çift Yevmiye</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th></tr></thead>
 <tbody>
 <?php foreach ($oranlar as $o): ?>
 <tr>
@@ -335,6 +413,10 @@ render_flash();
     <?php if ($faz8bHazir): ?>
     <td><?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'], 2, ',', '.') . ' ' . $o['currency']) : '—' ?></td>
     <td><?php if (($o['overtime_rate'] ?? null) !== null): ?><?= h(number_format((float)$o['overtime_rate'], 2, ',', '.') . ' ' . $o['currency']) ?> · <?= h(($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik') ?><?php else: ?>—<?php endif; ?></td>
+    <?php endif; ?>
+    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?>
+    <td class="cf2-saatler"><?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : '<span class="muted">mesai normal süresi</span>' ?></td>
+    <td><?= $oSaat['cift'] !== '' ? h($oSaat['cift']) : '—' ?></td>
     <?php endif; ?>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></td>
     <td><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
@@ -348,6 +430,7 @@ render_flash();
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($o['worker_type_name']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
     <div class="pdks-row-sub"><?= $faz8bHazir ? 'Tam' : 'Günlük' ?>: <strong><?= h(number_format((float)$o['daily_rate'],2,',','.')) ?> <?= h($o['currency']) ?></strong></div>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Yarım: <?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'],2,',','.') . ' ' . $o['currency']) : '—' ?></div><div class="pdks-row-sub">FM: <?= ($o['overtime_rate'] ?? null) !== null ? h(number_format((float)$o['overtime_rate'],2,',','.') . ' ' . $o['currency'] . ' · ' . (($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik')) : '—' ?></div><?php endif; ?>
+    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
