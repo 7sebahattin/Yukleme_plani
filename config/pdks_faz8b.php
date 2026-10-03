@@ -563,6 +563,29 @@ function pdks_faz8b_dakika_etiket(int $dk): string
     return $saat . 's ' . $kalanDk . 'dk';
 }
 
+/**
+ * v299: Mesai Detayı "Mesai Tanımı" sütunu metni — YALNIZ sınıflandırıcı
+ * çıktısını ($f = pdks_faz8b_donem_siniflandir) metne çevirir, hesap YAPMAZ.
+ * "Tam" / "Yarım" / "Çift" + "· FM N s" ("(bekliyor)" / "FM reddedildi");
+ * sınıf yoksa "Karar bekliyor"; mesai açıkken çıkışsız dönem "⏳ Sürüyor";
+ * Karışık tip ya da sınıflandırma yoksa "—".
+ */
+function pdks_faz8b_mesai_tanimi_etiketi(?array $f, bool $suruyor, bool $karisik): string
+{
+    if ($karisik || $f === null) return '—';
+    if ($suruyor) return '⏳ Sürüyor';
+    if (($f['etkin_sinif'] ?? null) === null) return 'Karar bekliyor';
+    $m = pdks_faz8b_sinif_etiketi((string)$f['etkin_sinif']);
+    $aday = (int)($f['fazla_mesai_saat'] ?? 0);
+    if ($aday > 0) {
+        $durum = (string)($f['fazla_mesai_durum'] ?? '');
+        if ($durum === 'bekliyor') $m .= ' · FM ' . $aday . ' s (bekliyor)';
+        elseif ($durum === 'reddedildi') $m .= ' · FM reddedildi';
+        elseif ((int)($f['odenecek_fm_saat'] ?? 0) > 0) $m .= ' · FM ' . (int)$f['odenecek_fm_saat'] . ' s';
+    }
+    return $m;
+}
+
 /** v299: sınıf kodu → ekran etiketi ('cift' → Çift). Bilinmeyen/boş → Tam. */
 function pdks_faz8b_sinif_etiketi(?string $sinif): string
 {

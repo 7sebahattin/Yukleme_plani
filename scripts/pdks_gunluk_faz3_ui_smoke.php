@@ -316,7 +316,7 @@ $sD = renderPage('gunluk_isci_puantaj_detay.php', ['id' => (string)$ayseSessionI
 ok('hata sızmadı', !str_starts_with($sD, '__ERROR__'), $sD);
 ok('PHP Warning/Notice yok', !str_contains($sD, 'Warning:') && !str_contains($sD, 'Notice:'));
 ok('Ayşe Çavuş başlıkta', str_contains($sD, 'Ayşe Çavuş'));
-ok('K001 satırı "✅ Tam" rozetiyle', (bool)preg_match('/K001.*?Tam/s', $sD));
+ok('K001 satırı "✅ Çıkış yapıldı" rozetiyle', (bool)preg_match('/K001.*?Çıkış yapıldı/su', $sD));
 ok('K002 satırı "⚠️ Çıkış Yok" rozetiyle', (bool)preg_match('/K002.*?Çıkış Yok/s', $sD));
 ok('Açılış eden kullanıcı adı görünüyor (Test Kullanıcı)', str_contains($sD, 'Test Kullanıcı'));
 ok('"Açık Mesai" rozeti başlıkta', str_contains($sD, 'Açık Mesai'));

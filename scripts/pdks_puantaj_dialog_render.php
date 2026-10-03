@@ -143,6 +143,27 @@ foreach (['880000001', '880000002', '880000003', '880000004', '880000005'] as $i
 }
 pdks_gunluk_faz8a_cikis_kaydet('880000001', 'usb_decimal', $sid, 1, db());
 
+// v299: PUANTAJ_FAZ8B=1 → Faz 8B + fiyat dönemi saatleri kurulur, KADIN fiyatı Tam 9 s /
+// Çift 12 s (2000) / FM saatlik 150; K001 dönemi 06:00–19:00 (13 s) ve FM 4 saat onaylı →
+// "Mesai Tanımı" = "Çift · FM 1 s". Varsayılan (env yok) davranış DEĞİŞMEZ.
+if (getenv('PUANTAJ_FAZ8B') === '1') {
+    require_once $ROOT . '/config/pdks_faz8b.php';
+    foreach (['foreman_worker_rates', 'foreman_daily_entitlement_lines'] as $ht) {
+        [$c, $ix] = pdks_ddl_sqlite(pdks_hakedis_tablolar()[$ht]); db()->exec($c); foreach ($ix as $x) db()->exec($x);
+    }
+    pdks_faz8b_migrate(db());
+    pdks_faz8b_saat_kolonlari_migrate(db());
+    $rr = pdks_faz8b_oran_ekle($cavus, $kadin, '1000', '600', 'hourly', '150', date('Y-m-d', strtotime('-30 days')), 'TRY', 1, db(),
+        ['full_day' => '9', 'double_day' => '12', 'double_day_rate' => '2000']);
+    if (!($rr['ok'] ?? false)) { fwrite(STDERR, 'oran: ' . json_encode($rr, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+    $gun = date('Y-m-d');
+    $stK = db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ?, exit_time = ?, overtime_approved_hours = 4
+                           WHERE session_id = ? AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')");
+    $stK->execute([$gun . ' 06:00:00', $gun . ' 19:00:00', $sid]);
+    db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'GIRIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 06:00:00', $sid]);
+    db()->prepare("UPDATE daily_worker_card_events SET server_event_time = ? WHERE session_id = ? AND event_type = 'CIKIS' AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K001')")->execute([$gun . ' 19:00:00', $sid]);
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.
