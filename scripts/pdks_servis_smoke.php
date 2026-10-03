@@ -162,13 +162,22 @@ okcu('C2) geçersiz fiyat reddedilir', pdks_servis_ucret_ekle(1, 'abc', '', '202
 okcu('C3) geçersiz tarih reddedilir', pdks_servis_ucret_ekle(1, '500', '', '01-01-2020', 'TRY', 1, $db)['ok'] === false);
 okcu('C4) bilinmeyen çavuş reddedilir', pdks_servis_ucret_ekle(999, '500', '', '2020-01-01', 'TRY', 1, $db)['ok'] === false);
 $r = pdks_servis_ekle(1, 1, 0, '', istek(), 1, $db);
-okcu('C5) fiyat tanımsızken giriş reddedilir', $r['ok'] === false && ($r['kod'] ?? '') === 'fiyat_yok' && str_contains($r['hata'], 'Çavuş Ücretleri'), json_encode($r, JSON_UNESCAPED_UNICODE));
+okcu('C5) v300: fiyat tanımsızken de giriş KABUL edilir, fiyatsız tür bilgi olarak döner', $r['ok'] === true && ($r['fiyatsiz'] ?? null) === ['Büyük'], json_encode($r, JSON_UNESCAPED_UNICODE));
+// Sonraki senaryoların sayımı bozulmasın: test kaydını doğrudan temizle (üretimde silme yok).
+if (!empty($r['ok'])) {
+    $db->exec("DELETE FROM daily_session_services WHERE batch_id = " . $db->quote((string)$r['batch_id']));
+    $db->exec("DELETE FROM audit_log WHERE action = 'servis_ekle'");
+}
 $AUDIT = [];
 $f1 = pdks_servis_ucret_ekle(1, '400', '', '2020-01-01', 'TRY', 1, $db);
 okcu('C6) yalnız Büyük fiyatlı dönem kabul', $f1['ok'] === true, json_encode($f1, JSON_UNESCAPED_UNICODE));
 okcu('C7) audit create/foreman_service_rates', count(array_filter($AUDIT, fn($a) => $a['action'] === 'create' && $a['module'] === 'foreman_service_rates')) === 1);
 $r = pdks_servis_ekle(1, 0, 2, '', istek(), 1, $db);
-okcu('C8) Küçük fiyatı yokken Küçük girişi reddedilir', $r['ok'] === false && ($r['kod'] ?? '') === 'fiyat_yok' && str_contains($r['hata'], 'Küçük'), json_encode($r, JSON_UNESCAPED_UNICODE));
+okcu('C8) v300: Küçük fiyatı yokken Küçük girişi KABUL edilir, fiyatsiz=[Küçük]', $r['ok'] === true && ($r['fiyatsiz'] ?? null) === ['Küçük'], json_encode($r, JSON_UNESCAPED_UNICODE));
+if (!empty($r['ok'])) {
+    $db->exec("DELETE FROM daily_session_services WHERE batch_id = " . $db->quote((string)$r['batch_id']));
+    $db->exec("DELETE FROM audit_log WHERE action = 'servis_ekle'");
+}
 okcu('C9) aynı/önceki başlangıç reddedilir', pdks_servis_ucret_ekle(1, '450', '250', '2020-01-01', 'TRY', 1, $db)['ok'] === false);
 $f2 = pdks_servis_ucret_ekle(1, '500', '250,50', '2021-01-01', 'TRY', 1, $db);
 okcu('C10) sonraki dönem kabul', $f2['ok'] === true);
@@ -332,6 +341,46 @@ $hK = pdks_faz8b_hakedis_hesapla(50, 1, $db);
 okcu('J4) servis USD ≠ işçi TRY → karisik_para_birimi', $hK['ok'] === false && ($hK['kod'] ?? '') === 'karisik_para_birimi', json_encode($hK, JSON_UNESCAPED_UNICODE));
 
 // =========================================================
+echo "\n=== L. v300: FİYATSIZ GİRİŞ → FİYAT SONRADAN → OTOMATİK HESAP ===\n";
+$db->exec("INSERT INTO foremen (id,code,name) VALUES (6,'C6','Çavuş 6')");
+pdks_faz8b_oran_ekle(6, $kadinId, '1500', '900', 'hourly', '200', '2020-01-01', 'TRY', 1, $db);
+mesaiEkle($db, 60, 6, $day, 'Depo A');
+donemEkle($db, 60, 60, $kadinId, $day);
+okcu('L1) fiyatsız çavuşta fiyatsız-tarih yok (henüz servis yok)', pdks_servis_fiyatsiz_en_eski_tarih(6, $db) === null);
+$rL = pdks_servis_ekle(60, 2, 1, 'fiyat yokken', istek(), 1, $db);
+okcu('L2) fiyat YOKKEN servis girişi kabul (Büyük+Küçük fiyatsız)', $rL['ok'] === true && ($rL['fiyatsiz'] ?? null) === ['Büyük', 'Küçük'], json_encode($rL, JSON_UNESCAPED_UNICODE));
+okcu('L3) kayıtlar yazıldı (2 satır)', (int)$db->query("SELECT COUNT(*) FROM daily_session_services WHERE session_id=60 AND is_voided=0")->fetchColumn() === 2);
+okcu('L4) fiyatsız en eski tarih = mesai günü', pdks_servis_fiyatsiz_en_eski_tarih(6, $db) === $day, (string)pdks_servis_fiyatsiz_en_eski_tarih(6, $db));
+$hL = pdks_faz8b_hakedis_hesapla(60, 1, $db);
+okcu('L5) fiyat yokken hakediş DURUR (fail-closed, Büyük+Küçük eksik)', $hL['ok'] === false
+    && in_array('Servis — Büyük — geçerli fiyat yok', $hL['eksikler'] ?? [], true)
+    && in_array('Servis — Küçük — geçerli fiyat yok', $hL['eksikler'] ?? [], true), json_encode($hL, JSON_UNESCAPED_UNICODE));
+okcu('L6) durdu: hiçbir hakediş satırı yazılmadı', (int)$db->query("SELECT COUNT(*) FROM foreman_daily_entitlements WHERE session_id=60")->fetchColumn() === 0);
+// Bir önceki (fiyatsız) hesaplama başarısız → taslak yok. Önce işçi-yalnız bir taslak oluşturup
+// fiyat eklenince "yeniden hesaplanmalı" işaretini sına: taslağı elle kur.
+$db->exec("INSERT INTO foreman_daily_entitlements (session_id,foreman_id,foreman_name_snapshot,foreman_code_snapshot,work_date,depo,status,currency,total_amount,needs_recalculation) VALUES (60,6,'Çavuş 6','C6','{$day}','Depo A','draft','TRY','1500.00',0)");
+$fL = pdks_servis_ucret_ekle(6, '400', '250', $day, 'TRY', 1, $db);
+okcu('L7) fiyat sonradan tanımlanır (geçerlilik = mesai günü)', $fL['ok'] === true, json_encode($fL, JSON_UNESCAPED_UNICODE));
+okcu('L8) servisi olan TASLAK hakediş yeniden hesaplamaya işaretlendi', ($fL['isaretlenen'] ?? 0) === 1
+    && (int)$db->query("SELECT needs_recalculation FROM foreman_daily_entitlements WHERE session_id=60")->fetchColumn() === 1, json_encode($fL, JSON_UNESCAPED_UNICODE));
+okcu('L9) fiyat gelince fiyatsız-tarih kalmadı', pdks_servis_fiyatsiz_en_eski_tarih(6, $db) === null);
+$db->exec("DELETE FROM foreman_daily_entitlements WHERE session_id=60");
+$hL2 = pdks_faz8b_hakedis_hesapla(60, 1, $db);
+okcu('L10) hesap otomatik geçer: 1500 işçi + 2×400 + 1×250 = 2550', $hL2['ok'] === true && $hL2['total_amount'] === '2550.00', json_encode($hL2, JSON_UNESCAPED_UNICODE));
+$satirKodlari = $db->query("SELECT worker_type_code_snapshot FROM foreman_daily_entitlement_lines l JOIN foreman_daily_entitlements e ON e.id=l.entitlement_id WHERE e.session_id=60 AND l.worker_type_code_snapshot LIKE 'SERVIS\_%' ESCAPE '\\' ORDER BY 1")->fetchAll(PDO::FETCH_COLUMN);
+okcu('L11) servis satırları SERVIS_BUYUK + SERVIS_KUCUK kodlu', $satirKodlari === ['SERVIS_BUYUK', 'SERVIS_KUCUK'], json_encode($satirKodlari));
+// kesin hakedişe fiyat eklemek onu işaretlemez/değiştirmez
+$db->exec("UPDATE foreman_daily_entitlements SET status='final', needs_recalculation=0 WHERE session_id=60");
+pdks_servis_ucret_ekle(6, '450', '260', date('Y-m-d', strtotime($day . ' +1 day')), 'TRY', 1, $db);
+okcu('L12) KESİN hakediş fiyat eklemesinden etkilenmez', (int)$db->query("SELECT needs_recalculation FROM foreman_daily_entitlements WHERE session_id=60")->fetchColumn() === 0
+    && $db->query("SELECT total_amount FROM foreman_daily_entitlements WHERE session_id=60")->fetchColumn() === '2550.00');
+
+$m1 = pdks_servis_ekle_mesaji(['buyuk' => 2, 'kucuk' => 1, 'fiyatsiz' => ['Büyük', 'Küçük']]);
+okcu('L13) fiyatsız kayıt mesajı: uyarı + "hakedişte hesaplanır"', str_contains($m1, '2 Büyük 1 Küçük') && str_contains($m1, 'Büyük ve Küçük servis fiyatı tanımlı değil') && str_contains($m1, 'hesaplanır'), $m1);
+$m2 = pdks_servis_ekle_mesaji(['buyuk' => 1, 'kucuk' => 0, 'fiyatsiz' => []]);
+okcu('L14) fiyatlı kayıt mesajı: yeniden hesaplanmalı, uyarı yok', str_contains($m2, '1 Büyük') && str_contains($m2, 'yeniden hesaplanmalıdır') && !str_contains($m2, '⚠'), $m2);
+
+// =========================================================
 echo "\n=== K. STATİK ===\n";
 $ks = file_get_contents($root . '/config/pdks_servis.php');
 preg_match('/function pdks_servis_ekle\(.*?\n\}\n/s', $ks, $mE);
@@ -353,6 +402,9 @@ $k8bc = file_get_contents($root . '/config/pdks_faz8b_cavus_b.php');
 okcu('K8) dedektörler kod = \'\' filtresi taşır (A + B)', str_contains($k8b, "AND l.worker_type_code_snapshot = ''") && str_contains($k8bc, "l2.worker_type_code_snapshot = ''"));
 $dp = is_file($root . '/_puantaj_servis.php') ? (string)file_get_contents($root . '/_puantaj_servis.php') : '';
 okcu('K9) partial fonksiyon TANIMLAMAZ, native dialog id=servis', $dp !== '' && !preg_match('/\bfunction\s+\w+\s*\(/', preg_replace('#<script\b.*?</script>#s', '', $dp)) && str_contains($dp, '<dialog id="servis" class="pm-dialog'));
+
+okcu('K10) v300: servis_ekle gövdesinde fiyat_yok ENGELİ yok', !str_contains($ks, "'kod' => 'fiyat_yok'"));
+okcu('K11) v300: pencere sayaçları fiyat yokken de açık (svAcik = !kesin)', str_contains($dp, '$svAcik = !$servisKesin;'));
 
 echo "\nSONUÇ: {$pass} geçti, {$fail} hata\n";
 exit($fail === 0 ? 0 : 1);

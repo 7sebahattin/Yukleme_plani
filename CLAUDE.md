@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v299` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v300` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -696,10 +696,20 @@ Mesai Detayı "🚌 Servis Ücreti" (Çalışma Ekle/Toplu İşlem yanında) →
 - **Dedektör tuzağı:** Çavuş Ücreti satırı = NULL/NULL **ve kod ''**. `baska_final_var_mi` ve B `aday_kalemler.cavus_satiri`
   `worker_type_code_snapshot = ''` ister — kaldırma (servis A'da günlük ücreti engeller, B'de günü havuzdan düşürür).
 - **Yazma** `pdks_servis_ekle/_iptal`: yalnız admin, aktif depo = mesai deposu, mesai kilidi tx'in İLK sorgusu, kesin
-  hakediş red, taslağa needs_recalculation, istek_id (UNIQUE + ön kontrol), fiyat tanımsızsa giriş reddi, gelecek gün yok.
+  hakediş red, taslağa needs_recalculation, istek_id (UNIQUE + ön kontrol), gelecek gün yok.
   Düzenleme YOK; iptal soft + gerekçe. Audit `servis_ekle/servis_iptal` (modül daily_work_sessions, record_id=mesai).
   Yalnız servisi olan (işçi dönemi olmayan) mesai hakediş hesaplanamaz (`kart_yok`, mevcut kural).
 - Partial `_puantaj_servis.php` (fonksiyon tanımlamaz, native dialog#servis). Gün Sonu Fişi yalnız ADET basar.
+- **Fiyat yokken de giriş YAPILIR (v300, sahip kararı: servis kalkıyor, fiyat sonradan girilir):** `pdks_servis_ekle()`
+  fiyat kapısı YOK, yanıtta `fiyatsiz` (tür adları) döner; pencerede sayaçlar açık + mavi `.sv-bilgi-kutu` (kırmızı engel
+  YOK). Hakediş KORUNUR: fiyat yoksa eksik → bu mesainin hakedişi hesaplanamaz (işçi fiyatı olmayan mesaiyle AYNI
+  fail-closed kural) — servis sessizce ödenmemiş kalmaz. Fiyat tanımlanınca hesap kendiliğinden geçer.
+  `pdks_servis_ucret_ekle()` o çavuşun, bu tarihten itibaren servisi olan TASLAK hakedişlerini
+  (`pdks_servis_taslaklari_isaretle`) yeniden hesaplamaya işaretler (kesin hakedişe dokunmaz; yanıtta `isaretlenen`).
+  Fiyat formunun "Geçerlilik Başlangıcı" varsayılanı = fiyatsız en eski servis günü (`pdks_servis_fiyatsiz_en_eski_tarih`);
+  fiyat servis gününü KAPSAMALI (`valid_from <= work_date`), yoksa o gün hâlâ fiyatsız sayılır.
+  Test: `php scripts/pdks_servis_smoke.php` (bölüm L) · `PUANTAJ_SERVIS=nofiyat php scripts/pdks_puantaj_dialog_render.php >
+  _test_servis_fiyatsiz.html` → `node scripts/pdks_servis_fiyatsiz_smoke.js`.
 - Test: `php scripts/pdks_servis_smoke.php` · `PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php >
   _test_servis_dialog.html` → `node scripts/pdks_servis_dialog_smoke.js` · `pdks_cavus_fiyat_smoke.js`.
 

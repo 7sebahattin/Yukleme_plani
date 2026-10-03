@@ -86,7 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         $sonuc = pdks_servis_ucret_ekle($cavusId, (string)($_POST['servis_buyuk'] ?? ''), (string)($_POST['servis_kucuk'] ?? ''),
             trim((string)($_POST['servis_valid_from'] ?? '')), $svCcy, (int)$auth_user['id'], $pdo);
         if ($sonuc['ok']) {
-            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode('Servis ücreti dönemi eklendi.') . '#cfServisUcreti');
+            $svOk = 'Servis ücreti dönemi eklendi.'
+                . (!empty($sonuc['isaretlenen']) ? ' Servisi olan ' . (int)$sonuc['isaretlenen'] . ' mesainin taslak hakedişi yeniden hesaplanmalıdır (Çavuş Hakedişleri).' : '');
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode($svOk) . '#cfServisUcreti');
             exit;
         }
         $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
@@ -200,6 +202,8 @@ if ($cavusId !== null) {
 }
 $cavusUcretGecmisi = ($seciliCavus && $cavusUcretHazir) ? pdks_faz8b_cavus_ucret_gecmisi($cavusId, $pdo) : [];
 $servisGecmisi = ($seciliCavus && $servisHazir) ? pdks_servis_ucret_gecmisi($cavusId, $pdo) : [];
+$svFiyatsizTarih = ($seciliCavus && $servisHazir) ? pdks_servis_fiyatsiz_en_eski_tarih($cavusId, $pdo) : null;
+$svOnerilenTarih = $svFiyatsizTarih;
 $servisHata = $errors && ($_POST['form'] ?? '') === 'servis_ucret';
 $cavusYontem = ($seciliCavus && $cavusBHazir) ? pdks_faz8b_cavus_ucret_yontem($cavusId, $pdo) : 'A';
 $cavusYontemGecmisi = ($seciliCavus && $cavusBHazir)
@@ -633,10 +637,13 @@ render_flash();
             <label class="cf2-alan">
                 <span class="cf2-etiket"><?= $cfIk('takvim') ?>Geçerlilik Başlangıcı <b class="cf2-zorunlu">*</b></span>
                 <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('takvim') ?></span>
-                <input type="date" name="servis_valid_from" required value="<?= h(date('Y-m-d')) ?>"></span>
+                <input type="date" name="servis_valid_from" required value="<?= h($svOnerilenTarih ?? date('Y-m-d')) ?>"></span>
             </label>
         </div>
-        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>En az biri girilmelidir; boş bırakılan türün fiyatı yoktur (o tür servis eklenemez). Yeni dönem eklenince önceki dönem bir gün öncesinde kapanır, eski fiyatlar silinmez. Para birimi işçi fiyatlarıyla aynı olmalıdır (farklıysa hakediş hesaplanmaz).</span></p>
+        <?php if (!empty($svFiyatsizTarih)): ?>
+        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span><b>Fiyatı henüz olmayan servis kaydı var</b> (en eskisi <?= h(date('d.m.Y', strtotime($svFiyatsizTarih))) ?>). Geçerlilik başlangıcı bu tarihe getirildi; fiyat kaydedilince bu servisler hakedişte kendiliğinden hesaplanır.</span></p>
+        <?php endif; ?>
+        <p class="cf2-bilgi cf2-bilgi--mavi"><?= $cfIk('bilgi') ?><span>En az biri girilmelidir; boş bırakılan türün fiyatı yoktur (o tür için servis girilebilir ama fiyat tanımlanana kadar hakedişte hesaplanmaz). Yeni dönem eklenince önceki dönem bir gün öncesinde kapanır, eski fiyatlar silinmez. Para birimi işçi fiyatlarıyla aynı olmalıdır (farklıysa hakediş hesaplanmaz).</span></p>
         <div class="cf2-eylem">
             <button type="submit" class="btn btn-primary cf2-btn">+ Servis Fiyatı Dönemi Ekle</button>
         </div>
