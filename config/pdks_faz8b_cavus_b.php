@@ -19,7 +19,8 @@
 //
 // ⚠ Bir hakediş B havuzuna girer ⇔ status='final' VE finalized_at NOT NULL
 //   VE finalized_at anında çavuşun yöntemi B'ydi (yontem_anda) VE hakedişte
-//   "Çavuş Ücreti" satırı (worker_type_id IS NULL AND work_period_id IS NULL)
+//   "Çavuş Ücreti" satırı (worker_type_id IS NULL AND work_period_id IS NULL
+//   AND worker_type_code_snapshot = '' — v299: servis satırları SERVIS_* kodlu, sayılmaz)
 //   YOK VE hiçbir GEÇERLİ kapanışın kalemi DEĞİL. Bu, A'dayken kesinleşmiş
 //   günlerin B'ye asla girmemesini (çift ödeme riski) ve B→A→B geçişinde
 //   "A arasında" kesinleşen günlerin de asla sayılmamasını garanti eder.
@@ -150,7 +151,7 @@ function pdks_faz8b_cavus_ucret_b_aday_kalemler(int $foremanId, array $gecmis, ?
     if ($ilkB === null) return [];
 
     $cavusExpr = pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlement_lines', 'work_period_id')
-        ? "(SELECT COUNT(*) FROM foreman_daily_entitlement_lines l2 WHERE l2.entitlement_id = e.id AND l2.worker_type_id IS NULL AND l2.work_period_id IS NULL)"
+        ? "(SELECT COUNT(*) FROM foreman_daily_entitlement_lines l2 WHERE l2.entitlement_id = e.id AND l2.worker_type_id IS NULL AND l2.work_period_id IS NULL AND l2.worker_type_code_snapshot = '')"
         : "0";
 
     $sql = "SELECT e.id AS entitlement_id, e.work_date, e.depo, e.finalized_at,

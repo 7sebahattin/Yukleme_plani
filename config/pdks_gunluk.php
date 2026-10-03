@@ -2201,7 +2201,7 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         $par = $ids;
     }
     if ($sessionId !== null) {
-        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al', 'karisik_ata', 'karisik_geri_al'))";
+        $kosul[] = "(al.module = 'daily_work_sessions' AND al.record_id = ? AND al.action IN ('puantaj_toplu_ekle', 'puantaj_toplu_geri_al', 'karisik_ata', 'karisik_geri_al', 'servis_ekle', 'servis_iptal'))";
         $par[] = $sessionId;
     }
     try {
@@ -2225,6 +2225,8 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
         'puantaj_toplu_geri_al' => '↩️ Toplu işlem geri alındı',
         'karisik_ata'           => '🎲 Karışık kayıtlar otomatik atandı',
         'karisik_geri_al'       => '↩️ Karışık ataması geri alındı',
+        'servis_ekle'           => '🚌 Servis eklendi',
+        'servis_iptal'          => '🚌 Servis iptal edildi',
         'update'                => '🧮 Mesai değerlendirmesi kaydedildi',
     ];
     foreach ($satirlar as &$r) {
@@ -2237,6 +2239,12 @@ function pdks_gunluk_puantaj_denetim_gecmisi(array $periodIds, ?PDO $pdo = null,
               : ($r['action'] === 'karisik_geri_al' ? (int)($yeni['geri_alinan'] ?? 0) : 0));
         $karisikOzet = $r['action'] === 'karisik_ata'
             ? (int)($yeni['kadin'] ?? 0) . ' Kadın, ' . (int)($yeni['erkek'] ?? 0) . ' Erkek (' . (string)($yeni['atama_id'] ?? '') . ')' : '';
+        // v299 Servis Ücreti: adetler (fiyat YOK — geçmiş parayla ilgili değil).
+        if ($r['action'] === 'servis_ekle') {
+            $karisikOzet = trim(((int)($yeni['buyuk'] ?? 0) > 0 ? (int)$yeni['buyuk'] . ' Büyük ' : '') . ((int)($yeni['kucuk'] ?? 0) > 0 ? (int)$yeni['kucuk'] . ' Küçük' : ''));
+        } elseif ($r['action'] === 'servis_iptal') {
+            $karisikOzet = (int)($yeni['quantity'] ?? 0) . ' ' . (($yeni['service_type'] ?? '') === 'KUCUK' ? 'Küçük' : 'Büyük');
+        }
         $parcalar = array_filter([$karisikOzet, $sayi > 0 ? $sayi . ' kayıt' : '', trim((string)($yeni['reason'] ?? '')), trim((string)($yeni['note'] ?? ''))]);
         $r['detay'] = $parcalar ? implode(' — ', $parcalar) : null;
         $r['aktor'] = $r['actor_name'] ?: pdks_gunluk_kullanici_adi($r['user_id'] !== null ? (int)$r['user_id'] : null, $pdo);

@@ -1164,6 +1164,7 @@ function pdks_faz8b_cavus_ucret_baska_final_var_mi(int $foremanId, string $workD
         "SELECT 1 FROM foreman_daily_entitlements e
            JOIN foreman_daily_entitlement_lines l ON l.entitlement_id = e.id
                 AND l.worker_type_id IS NULL AND l.work_period_id IS NULL
+                AND l.worker_type_code_snapshot = ''   -- v299: servis satırı (SERVIS_*) Çavuş Ücreti DEĞİL
           WHERE e.foreman_id = ? AND e.work_date = ? AND e.status = 'final' AND e.session_id <> ?
           LIMIT 1"
     );
@@ -1734,6 +1735,19 @@ function pdks_faz8b_hakedis_hesapla(int $sessionId, int $userId, ?PDO $pdo = nul
         }
     }
 
+    // v299 Servis Ücreti: mesainin iptal edilmemiş servisleri tür başına 1 satır
+    // (worker_type_id/work_period_id NULL, kod SERVIS_BUYUK|SERVIS_KUCUK — Çavuş
+    // Ücreti dedektörleri kod '' ister). Yöntem A/B fark etmez. Fiyat yoksa
+    // eksik → hesap DURUR; para birimi karışık para kapısına KATILIR.
+    // Tablo yoksa boş döner (özellik kurulmamış = eski davranış).
+    $servis = pdks_servis_hakedis_satirlari($oturum, $pdo);
+    foreach ($servis['eksikler'] as $se) $eksikler[] = $se;
+    if ($servis['satirlar']) {
+        $paraBirimleri[(string)$servis['para']] = true;
+        $toplamKurus += (int)$servis['toplam_kurus'];
+        foreach ($servis['satirlar'] as $ss) $satirlar[] = $ss;
+    }
+
     // Validate-first: hiçbir finansal satır değiştirilmeden önce tüm kararlar
     // ve fiyatlar tamam olmalıdır.
     if ($eksikler) {
@@ -1900,3 +1914,7 @@ function pdks_faz8b_hakedis_finalize(
         'total_amount' => $hesap['total_amount'],
     ];
 }
+
+// v299 Servis Ücreti — hakediş motoru pdks_servis_hakedis_satirlari()'nı çağırır.
+// pdks_servis.php bu dosyayı require_once eder (döngü güvenli: yalnız fonksiyon tanımları).
+require_once __DIR__ . '/pdks_servis.php';
