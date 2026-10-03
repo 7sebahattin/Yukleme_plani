@@ -598,6 +598,8 @@ $helpersTasindiMi = function (string $satir) use ($helpersGuncel): bool {
 $beklenmeyenSilinen = array_filter(
     $silinenHelpers,
     fn($l) => !in_array(trim($l), array_map('trim', $beklenenEskiSatirlar), true) && !$helpersTasindiMi($l)
+        // Rutin sürüm damgası (her PR'da artar — listeye tek tek eklemek bayatlıyordu).
+        && !preg_match("/^-\\s*define\\('APP_SURUM', 'v\\d+'\\);\\s*$/", $l)
 );
 ok('config/helpers.php: YALNIZ BİLİNEN/İNCELENMİŞ satırlar değişti (attendance.scan genişlemesi + Günlük İşçi izin ekleri), başka hiçbir satır silinmedi',
     count($beklenmeyenSilinen) === 0,

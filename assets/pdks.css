@@ -1901,3 +1901,38 @@ html[data-theme="dark"] .toplu-v2 .tv-kaydet:disabled { background: #232b38; bor
     .toplu-v2 .tp-aksiyon { margin: 14px -16px 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
     .toplu-v2 .tv-btn { padding: 0 10px; }
 }
+
+/* ── v298 — TANIMLI GİRİŞ (kart → çavuş + tip + depo) ─────────────────────
+   Kiosk: ORTAK ÇIKIŞ'ın üstündeki "🏷 TANIMLI GİRİŞ" düğmesi (mavi — GİRİŞ
+   MODU'nun yeşilinden ayrışsın), "Zaten giriş yapıldı" bilgi sonucu, önceki
+   gün açık mesai düğmesi. Kart Havuzu / Mesai Detayı: "🏷 Tanımlı" rozeti.
+   Yalnız EKLEME. */
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris.pdks-kiosk-tanimli-btn {
+    border-color: #8cc4ff;
+    background: linear-gradient(160deg, #4f9bff 0%, #1f6fe0 48%, #0b459e 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #0a347899, 0 11px 0 #0b3c86, 0 18px 26px #04204a77;
+    text-shadow: 0 2px 2px #0a2f66;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris.pdks-kiosk-tanimli-btn:hover,
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris.pdks-kiosk-tanimli-btn:focus-visible {
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #0a347899, 0 14px 0 #0b3c86, 0 24px 30px #04204a77;
+}
+.pdks-daily-kiosk .pdks-kiosk-modebtn-giris.pdks-kiosk-tanimli-btn:active {
+    box-shadow: inset 0 2px #ffffff55, inset 0 -2px #0a347899, 0 4px 0 #0b3c86, 0 8px 16px #04204a66;
+}
+/* Aynı mesaide zaten içeride — hata değil bilgi (mavi). */
+.pdks-daily-kiosk .pdks-kiosk-result-ok.pdks-kiosk-result-bilgi {
+    color: #7cc0ff;
+    background: radial-gradient(circle at 50% 32%, #164a86 0, #12305a 40%, #0d2140 78%);
+}
+.pdks-daily-kiosk #giResult .pdks-result-eski-btn { position: relative; z-index: 2; margin-top: 8px; }
+.pdks-badge-tanimli {
+    background: #eef4ff; color: #1d4ed8; border: 1px solid #bcd3fb;
+    white-space: normal; overflow-wrap: anywhere; font-weight: 700;
+}
+html[data-theme="dark"] .pdks-badge-tanimli { background: #142a4d; color: #9cc5ff; border-color: #2c4f86; }
+.isk-tanim-satir { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.isk-tanim-mevcut {
+    margin: 0 0 12px; padding: 10px 12px; border-radius: var(--radius);
+    background: var(--surface-2); font-size: .9rem; overflow-wrap: anywhere;
+}
