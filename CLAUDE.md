@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v297` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v298` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -608,6 +608,48 @@ Detayı'nda **🎲 Otomatik Ata** ile rastgele Kadın/Erkek'e atanır.
 - **Gerçek düğme görünümü:** `.btn-ghost` artık dolgulu+çerçeveli; geri bağlantıları `.btn-geri`
   (mavi, sayfa başlıklarında). Zeminle aynı renkte düz yazı düğme YAZMA.
   Test: `node scripts/buton_gorunum_smoke.js`.
+
+### Tanımlı Giriş (v298)
+
+Kart Havuzu'nda (`isci_kartlari.php`, "🏷 Tanım") karta ÇAVUŞ + TİP (yalnız KADIN/ERKEK,
+`pdks_gunluk_desteklenen_tip_coz`) + DEPO (= aktif depo, istemciden alınmaz) tanımlanır; kioskta
+ORTAK ÇIKIŞ'ın üstündeki **"🏷 TANIMLI GİRİŞ"** ile okutulan kart tanımlı çavuşun BUGÜNKÜ mesaisine
+o tiple girer. Çavuş → tip → kart akışı AYNEN kalır. Çıkış = mevcut ORTAK ÇIKIŞ (değişiklik yok).
+
+- **Tablo `worker_card_assignments`** (sahip GO verdi — YALNIZ yeni tablo, ALTER YOK). Kart başına
+  TEK aktif tanım: `aktif_kart_id` (aktifken = kart id, bitince NULL) üzerinde UNIQUE (chain_key
+  deseni); geçmiş SİLİNMEZ (`valid_to`/`ended_by_user_id`/`end_reason`). Kendi üçlüsü
+  `pdks_gunluk_kart_tanim_tablolar/_migrate/_sema_hazir` — `pdks_gunluk_tablolar()`'a,
+  `pdks_gunluk_sema_hazir()`'e, `pdks_gunluk_faz8a_sema_hazir()`'e BİLEREK EKLENMEZ (Çavuş Ücreti
+  emsali). Tablo yoksa özellik GİZLİ, tanım okuması null ("tanım yok"). Kurulum yalnız `migrate.php`
+  kartı; ekranlarda migrate ÇAĞRILMAZ.
+- **İkinci yazma yolu YOK:** `pdks_gunluk_tanimli_giris_kaydet()` (config/pdks_gunluk.php) tanımı +
+  mesaiyi BULUR — gövdesinde INSERT/UPDATE/DELETE yok (test denetler). Tanımsız kart otomatik
+  KAYDEDİLMEZ (`kart_tanimsiz`). Salt okunur ön kontroller (kart durumu, açık dönem, aynı gün eksik
+  çıkış, tip) başarısız okutmanın boş mesai açmasını engeller; sonra kiosk yolu
+  `pdks_gunluk_oturum_ac_veya_getir()` (önceki gün açık mesai / kapalı mesai / pasif çavuş kuralları
+  aynen) ve `pdks_gunluk_faz8a_giris_kaydet(..., 'tanimli')`. Dönem `source='tanimli'` (yalnız köken;
+  olay tablosu DEĞİŞMEZ) — hakediş/cari/rapor buna göre DALLANMAZ, dallanma EKLEME. Mesai Detayı'nda
+  "🏷 Tanımlı" rozeti; CSV/XLSX'e sütun YOK.
+- **Engel kuralı (normal ekran):** `pdks_gunluk_faz8a_giris_kaydet()` kart KİLİDİNDEN SONRA tanımı okur;
+  mesainin çavuşu / seçilen tip / mesainin deposu tanımla uyuşmazsa `kart_baska_tanimli` ("Bu kart
+  Çavuş A / Kadın'a tanımlı…"). Kural TEK yerde: `pdks_gunluk_kart_tanim_engeli()`. Admin'in elle/toplu
+  eklemesi (Faz 8J) ENGELLENMEZ — `pdks_faz8j_tanim_uyarilari()` yalnız `uyarilar`'a yazar.
+- **Depo:** tanımlı ekranda kart başka depoya tanımlıysa `tanim_baska_depo`. Karşılaştırma TR-duyarsız
+  (`pdks_gunluk_depo_fold`).
+- **Tanım yazma** `pdks_gunluk_kart_tanim_kaydet()` / `_bitir()`: transaction + `pdks_gunluk_faz8a_kart_kilitle()`
+  (girişle AYNI kilit), kartsız sanal kart / pasif çavuş / Karışık / boş depo reddi, UNIQUE 23000 →
+  "eşzamanlı işlem". Kart içerideyse ENGEL DEĞİL, `uyari` (açık dönem eski çavuşta kalır). Audit
+  `kart_tanim` / `kart_tanim_bitir` (modül `worker_cards`). Yeni yetki YOK: yazma = Kart Havuzu kapısı,
+  okutma = `attendance.daily_scan`. Kayıp/devre dışı kart ve pasifleşen çavuşun tanımı kendiliğinden
+  BİTMEZ — kiosk mevcut kodlarla reddeder, listede uyarı rozeti.
+- **Kiosk** `?ajax=tanimli_giris` (CSRF + `daily_scan`; istemciden YALNIZ `ham_uid` + `kaynak`).
+  `tanimliMod`: aynı UID 3 sn içinde istemcide yok sayılır, `mukerrer_giris` → "Zaten giriş yapıldı"
+  bilgisi, `onceki_mesai_acik` → düğmeyle mevcut `eskiPencereAc()` (otomatik açma yok; kapatma yine
+  `?ajax=kapat`), kapatınca/"Sonra" Tanımlı moda dönülür. Hızlı geçiş ve Mesaiyi Kapat bu modda yok.
+- Test: `php scripts/pdks_tanimli_giris_smoke.php` · `php scripts/pdks_tanimli_giris_render.php >
+  _test_tanimli_giris.html` → `node scripts/pdks_tanimli_giris_smoke.js` · `php
+  scripts/pdks_kart_tanim_render.php > _test_kart_tanim.html` → `node scripts/pdks_kart_tanim_modal_smoke.js`.
 
 ## Aktif Depo Sistemi (Sprint Depo-01)
 
