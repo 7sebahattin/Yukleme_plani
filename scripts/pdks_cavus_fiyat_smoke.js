@@ -57,6 +57,7 @@ const ALANLAR = {
     oran: ['csrf', 'foreman_id', 'form', 'worker_type_id', 'daily_rate', 'half_day_rate', 'overtime_mode', 'overtime_rate', 'currency', 'valid_from'],
     cavus_yontem: ['csrf', 'foreman_id', 'form', 'cavus_yontem', 'cavus_birim'],
     cavus_ucret: ['csrf', 'foreman_id', 'form', 'cavus_daily_rate', 'cavus_currency', 'cavus_valid_from'],
+    servis_ucret: ['csrf', 'foreman_id', 'form', 'servis_buyuk', 'servis_kucuk', 'servis_currency', 'servis_valid_from'],   // v299
 };
 
 (async () => {
@@ -118,6 +119,21 @@ const ALANLAR = {
                     ok('v299: fiyat geçmişinde saatler + çift ücret görünür', /Tam 9 saat/.test(gecmis) && /FM 9s 30dk/.test(gecmis) && /2\.000,00 TRY · 12 saat/.test(gecmis), gecmis.slice(0, 300));
                 } else {
                     ok('v299: kolonlar yokken saat alanları YOK, kurulum notu görünür', saatDurum.var === 0 && saatDurum.kurulum, JSON.stringify(saatDurum));
+                }
+
+                // v299: Servis Ücreti kartı (seçili çavuşun altında) + geçmiş
+                const servis = await page.evaluate(() => {
+                    const k = document.getElementById('cfServisUcreti');
+                    if (!k) return { kart: false };
+                    const sec = k.querySelector('select[name="servis_currency"]');
+                    return { kart: true, baslik: (k.querySelector('h2') || {}).textContent || '', para: sec ? sec.value : null,
+                             gecmis: k.querySelector('.cf2-blok--gecmis').innerText };
+                });
+                ok('v299: 🚌 Servis Ücreti kartı var, varsayılan para TRY', servis.kart && /Servis Ücreti/.test(servis.baslik) && servis.para === 'TRY', JSON.stringify(servis).slice(0, 200));
+                if (senaryo === 'dolu') {
+                    ok('v299: servis geçmişinde Büyük/Küçük fiyatlar (yeni + eski dönem)', /1\.500,00/.test(servis.gecmis) && /800,00/.test(servis.gecmis) && /1\.000,00/.test(servis.gecmis) && /devam ediyor/.test(servis.gecmis), servis.gecmis.slice(0, 300));
+                } else {
+                    ok('v299: servis fiyatı yokken uyarı', /henüz servis fiyatı tanımlanmadı/.test(servis.gecmis), servis.gecmis.slice(0, 200));
                 }
 
                 const secForm = await page.evaluate(() => {
