@@ -32,7 +32,8 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/print_helpers.php';
-require_once __DIR__ . '/config/pdks_servis.php';   // v299: servis ADETLERİ (fiyat basılmaz)
+// v299: servis ADETLERİ (fiyat basılmaz) — pdks_servis.php, pdks_faz8b.php üzerinden yüklenir.
+require_once __DIR__ . '/config/pdks_faz8b.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
 

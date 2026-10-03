@@ -10,7 +10,8 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/pdks_faz8b_cavus_b.php';
-require_once __DIR__ . '/config/pdks_servis.php';   // v299 Servis Ücreti
+// v299 Servis Ücreti: config/pdks_servis.php, pdks_faz8b.php üzerinden yüklenir (ayrı require YOK —
+// sayfa render testleri yalnız bilinen require'ları ayıklar).
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_hakedis('rates');

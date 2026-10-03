@@ -17,8 +17,7 @@ require_once __DIR__ . '/config/pdks_hakedis.php';
 // v299: "Mesai Tanımı" sütunu — TEK sınıflandırıcı (pdks_faz8b_donem_siniflandir)
 // sayfa katmanında yüklenir; config/pdks_gunluk.php faz8b'yi require ETMEZ.
 require_once __DIR__ . '/config/pdks_faz8b.php';
-// v299 Servis Ücreti (pencere + liste; kurallar config/pdks_servis.php'de).
-require_once __DIR__ . '/config/pdks_servis.php';
+// v299 Servis Ücreti (pencere + liste; kurallar config/pdks_servis.php'de) — pdks_faz8b.php yükler.
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
 require_pdks_gunluk('daily_reports');
