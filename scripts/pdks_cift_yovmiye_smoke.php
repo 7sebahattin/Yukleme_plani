@@ -305,7 +305,7 @@ okcy('K7) fiyat formu eski + yeni alan adları yerinde', true);
 okcy('K8) migrate.php saat kartı', str_contains(file_get_contents($root . '/migrate.php'), 'pdks_faz8b_saat_kolonlari_migrate('));
 okcy('K9) config/pdks_gunluk.php faz8b\'yi require ETMEZ', !preg_match('/require(_once)?[^;]*pdks_faz8b/', file_get_contents($root . '/config/pdks_gunluk.php')));
 $detay = file_get_contents($root . '/gunluk_isci_puantaj_detay.php');
-okcy('K10) Mesai Detayı Mesai Tanımı sütunu tek sınıflandırıcıdan', str_contains($detay, 'pdks_faz8b_oturum_donemleri(') && str_contains($detay, 'pdks_faz8b_mesai_tanimi_etiketi(') && str_contains($detay, '<th>Mesai Tanımı</th>'));
+okcy('K10) Mesai Detayı Mesai Tanımı sütunu tek sınıflandırıcıdan', str_contains($detay, 'pdks_faz8b_oturum_donemleri(') && str_contains($detay, 'pdks_faz8b_mesai_tanimi_etiketi(') && (bool)preg_match('#<th[^>]*>\s*<button[^>]*>Mesai Tanımı<#u', $detay));   // v299: başlık sıralama düğmesi içinde
 okcy('K11) Faz 4 motoru (pdks_hakedis.php) çift bilmez — dokunulmadı', !str_contains(file_get_contents($root . '/config/pdks_hakedis.php'), 'double_day'));
 okcy('K12) DURUM etiketi "✅ Çıkış yapıldı" (yanıltıcı "✅ Tam" yok)', pdks_gunluk_faz8a_donem_durumu('closed')['etiket'] === '✅ Çıkış yapıldı' && pdks_gunluk_faz8a_donem_durumu('closed')['kod'] === 'tam');
 foreach (['cavus_hakedis_detay.php', 'cavus_hakedis_yazdir.php'] as $sf) {
@@ -317,7 +317,7 @@ echo "\n=== L. Mesai Detayı render (PUANTAJ_FAZ8B=1) ===\n";
 $cmd = 'PUANTAJ_FAZ8B=1 ' . escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($root . '/scripts/pdks_puantaj_dialog_render.php') . ' 2>&1';
 $html = (string)shell_exec($cmd);
 okcy('L1) sayfa render edildi, PHP uyarısı yok', str_contains($html, 'Kart Hareketleri') && !preg_match('/(Warning|Notice|Deprecated|Fatal error):/', $html), substr($html, 0, 300));
-okcy('L2) "Mesai Tanımı" başlığı DURUM\'un yanında', (bool)preg_match('#<th>Durum</th>\s*<th>Mesai Tanımı</th>#u', $html));
+okcy('L2) "Mesai Tanımı" başlığı DURUM\'un yanında', (bool)preg_match('#<th[^>]*>\s*<button[^>]*>Durum<.*?</th>\s*<th[^>]*>\s*<button[^>]*>Mesai Tanımı<#us', $html));   // v299: başlıklar sıralama düğmesi içinde
 okcy('L3) K001 (13 s, FM 4 onaylı) → "Çift · FM 1 s"', str_contains($html, 'data-mesai-tanim>Çift · FM 1 s<'));
 okcy('L4) açık mesaide çıkışsız → "⏳ Sürüyor", Karışık → "—"', str_contains($html, 'data-mesai-tanim>⏳ Sürüyor<') && str_contains($html, 'data-mesai-tanim>—<'));
 okcy('L5) mobil kartta da Mesai Tanımı', str_contains($html, 'Mesai Tanımı: <strong>'));

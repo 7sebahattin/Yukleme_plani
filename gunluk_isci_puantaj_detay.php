@@ -314,7 +314,7 @@ render_flash();
 <form method="post" class="isk-card-modal-body">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="kapanis_notu">
-    <p class="muted" style="margin:0 0 10px"><?= h($oturum['foreman_name_snapshot']) ?> · <?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?> mesaisinin kapanış notu. Boş bırakıp kaydetmek notu siler. Hakediş ve ücret hesabı bu notu kullanmaz.</p>
+    <p class="muted" style="margin:0 0 10px"><?= h($oturum['foreman_name_snapshot']) ?> · <?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?> mesaisinin kapanış notu. Boş bırakıp kaydetmek notu siler. Bu not yalnız bilgi amaçlıdır; hiçbir hesaplamada kullanılmaz.</p>
     <label><span class="form-label">Kapanış notu</span><textarea name="kapanis_notu" rows="5" maxlength="<?= (int)PDKS_GUNLUK_KAPANIS_NOTU_MAX ?>"><?= h((string)$oturum['notes']) ?></textarea></label>
     <div class="isk-card-form-actions"><button type="submit" class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
 </form>
@@ -380,7 +380,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
     <td class="muted" data-sirala-deger="<?= h($sd['cikis']) ?>"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
     <td class="muted" data-sirala-deger="<?= h($sd['sure']) ?>"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
     <td data-sirala-deger="<?= h($sd['durum']) ?>"><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
-    <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-mesai-tanim data-sirala-deger="<?= h($sd['tanim']) ?>"><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
+    <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-sirala-deger="<?= h($sd['tanim']) ?>" data-mesai-tanim><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
     <td>
         <?php if ($manuelUygun && $manuelCikisYetkisi && $manuelCikisDepoUygun): ?>
         <a href="manuel_cikis.php?period_id=<?= (int)$k['period_id'] ?>&session_id=<?= (int)$id ?>" class="btn btn-sm">✍️ Manuel Çıkış Gir</a>
