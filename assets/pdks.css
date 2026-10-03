@@ -1514,3 +1514,17 @@ html[data-theme="dark"] .isk-karisik .ka-toplam.ka-asim { background: #3a1d1d; c
 .isk-karisik textarea { width: 100%; }
 .isk-karisik .isk-card-form-actions .btn:disabled { opacity: .5; cursor: not-allowed; }
 .pdks-gp-karisik { display: inline-block; margin-top: 4px; }
+
+/* ── v296: Otomatik filtre + tıklanabilir satır (config/pdks_liste_ui.php) ──
+   Satırın tamamı data-href'e gider; birincil hücredeki <a> erişilebilirlik /
+   JS kapalı yedeğidir. Hover rengi --primary-soft: açık/koyu temada kendisi
+   değişir. Seçici, style.css'teki html[data-theme="dark"] .data-table tr:hover td
+   kuralından güçlü olmalı (html + tbody ile). */
+html .data-table tbody tr.pdks-satir-link { cursor: pointer; }
+html .data-table tbody tr.pdks-satir-link:hover > td,
+html .data-table tbody tr.pdks-satir-link:focus-within > td { background: var(--primary-soft); }
+.pdks-satir-link:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pdks-satir-link .pdks-satir-ana { color: inherit; text-decoration: none; }
+.pdks-satir-link:hover .pdks-satir-ana,
+.pdks-satir-link .pdks-satir-ana:focus-visible { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+form[data-oto-filtre].pdks-oto-filtre-gidiyor { opacity: .6; pointer-events: none; transition: opacity .15s; }

@@ -291,7 +291,7 @@ if ($basari !== ''): ?>
 </div>
 
 <!-- ── Kart listesi ───────────────────────────────────────── -->
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kart no veya UID ara…">
     <select name="tip">
         <option value="">Tüm tipler</option>
@@ -305,7 +305,7 @@ if ($basari !== ''): ?>
         <option value="<?= h($k) ?>" <?= $durum_f === $k ? 'selected' : '' ?>><?= h($lbl) ?></option>
         <?php endforeach; ?>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?php if ($q !== '' || $tip_f > 0 || $durum_f !== ''): ?>
     <a href="isci_kartlari.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
@@ -589,4 +589,5 @@ function iskKartModalAc(id, tipId, kartNo, not, durum) {
 <?php endif; ?>
 
 <script src="<?= $base ?>assets/pdks.js?v=<?= @filemtime(__DIR__ . '/assets/pdks.js') ?>"></script>
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

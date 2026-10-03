@@ -96,7 +96,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Hakediş ekranı eski güvenli davranışla devam ediyor. Yönetici <a href="migrate.php">Şema Migrasyon</a> ekranından Faz 8B migrasyonunu çalıştırabilir.</div>
 <?php endif; ?>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="date" name="tarih" value="<?= h($tarih) ?>">
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
@@ -108,7 +108,7 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
     <select name="durum">
         <?php foreach ($durum_secenekleri as $val => $etiket): ?><option value="<?= h($val) ?>" <?= $durum_f === $val ? 'selected' : '' ?>><?= h($etiket) ?></option><?php endforeach; ?>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?php if ($cavusId !== null || $durum_f !== '' || $tarih !== date('Y-m-d')): ?><a href="cavus_hakedis.php" class="btn btn-ghost">Temizle</a><?php endif; ?>
 </form>
 
@@ -173,4 +173,5 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 </div>
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

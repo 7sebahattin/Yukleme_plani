@@ -181,7 +181,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="date" name="tarih" value="<?= h($tarih) ?>">
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
@@ -199,7 +199,7 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <option value="<?= h($val) ?>" <?= $durum_f === $val ? 'selected' : '' ?>><?= h($etiket) ?></option>
         <?php endforeach; ?>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?= export_menu('?' . http_build_query(array_filter($gp_filtre + ['csv' => '1'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($gp_filtre + ['xlsx' => '1'], fn($v) => $v !== null && $v !== '')), 'Excel İndir', 'btn btn-ghost') ?>
     <?php if ($cavusId !== null || $durum_f !== '' || $tarih !== date('Y-m-d')): ?>
     <a href="gunluk_isci_puantaj.php" class="btn btn-ghost">Temizle</a>
@@ -239,12 +239,11 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <th>İlk Giriş</th>
     <th>Son Çıkış</th>
     <th>Durum</th>
-    <th class="actions-col">İşlem</th>
 </tr></thead>
 <tbody>
-<?php foreach ($gunListesi as $row): $s = $row['session']; ?>
-<tr>
-    <td class="pdks-row-name"><?= h($s['foreman_name_snapshot']) ?></td>
+<?php foreach ($gunListesi as $row): $s = $row['session']; $detayUrl = 'gunluk_isci_puantaj_detay.php?id=' . (int)$s['id']; ?>
+<tr class="pdks-satir-link" data-href="<?= h($detayUrl) ?>" tabindex="0" title="Mesai detayını aç">
+    <td class="pdks-row-name"><a href="<?= h($detayUrl) ?>" class="pdks-satir-ana"><?= h($s['foreman_name_snapshot']) ?></a></td>
     <td class="muted"><?= h($s['depo'] ?: '—') ?></td>
     <td><?= (int)($row['giris']['Kadın'] ?? 0) ?></td>
     <td><?= (int)($row['giris']['Erkek'] ?? 0) ?></td>
@@ -254,9 +253,6 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
     <td class="muted"><?= $row['ilk_giris'] ? h(date('H:i', strtotime($row['ilk_giris']))) : '—' ?></td>
     <td class="muted"><?= $row['son_cikis'] ? h(date('H:i', strtotime($row['son_cikis']))) : '—' ?></td>
     <td><span class="pdks-badge pdks-badge-<?= h($row['durum']['kod']) ?>"><?= h($row['durum']['etiket']) ?></span></td>
-    <td class="actions-col">
-        <a href="gunluk_isci_puantaj_detay.php?id=<?= (int)$s['id'] ?>" class="btn btn-sm">Detay</a>
-    </td>
 </tr>
 <?php endforeach; ?>
 </tbody>
@@ -397,4 +393,5 @@ if (/[?&]ekle=1(&|$)/.test(location.search)) pdksPuantajDialogAc('ekle');
 </script>
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

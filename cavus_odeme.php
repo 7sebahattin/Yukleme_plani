@@ -141,8 +141,8 @@ if ($uyariGet !== '') echo '<div class="flash flash-error" style="border-color:v
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
-    <select name="cavus" onchange="this.form.submit()">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
+    <select name="cavus">
         <option value="">— Çavuş seçin —</option>
         <?php foreach ($cavuslar as $c): ?>
         <option value="<?= (int)$c['id'] ?>" <?= $cavusId === (int)$c['id'] ? 'selected' : '' ?>>
@@ -150,7 +150,7 @@ if ($uyariGet !== '') echo '<div class="flash flash-error" style="border-color:v
         </option>
         <?php endforeach; ?>
     </select>
-    <noscript><button type="submit" class="btn">Seç</button></noscript>
+    <?= pdks_oto_filtre_noscript('Seç') ?>
 </form>
 
 <?php if (!$seciliCavus): ?>
@@ -403,4 +403,5 @@ if ($bOnizlemeGoster):
 <?php endif; ?>
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

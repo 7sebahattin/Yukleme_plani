@@ -113,11 +113,11 @@ render_flash();
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="hidden" name="foreman_id" value="<?= (int)$foremanId ?>">
     <label class="muted" style="font-size:.82rem">Başlangıç<br><input type="date" name="baslangic" value="<?= h($baslangic) ?>"></label>
     <label class="muted" style="font-size:.82rem">Bitiş<br><input type="date" name="bitis" value="<?= h($bitis) ?>"></label>
-    <button type="submit" class="btn" style="align-self:flex-end">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?= export_menu('?' . http_build_query(array_filter($ce_filtre + ['csv' => '1'], fn($v) => $v !== '')), '?' . http_build_query(array_filter($ce_filtre + ['xlsx' => '1'], fn($v) => $v !== '')), 'Excel İndir', 'btn btn-ghost') ?>
     <?php if ($baslangic !== '' || $bitis !== ''): ?>
     <a href="cavus_ekstre.php?foreman_id=<?= (int)$foremanId ?>" class="btn btn-ghost" style="align-self:flex-end">Temizle</a>
@@ -187,4 +187,5 @@ render_flash();
 <?php endif; ?>
 <?php endforeach; endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

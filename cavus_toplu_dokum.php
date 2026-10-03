@@ -94,7 +94,7 @@ render_flash();
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <label>
         <span class="form-label">Ay</span>
         <input type="month" name="ay" value="<?= h($ay) ?>">
@@ -122,7 +122,7 @@ render_flash();
         </select>
     </label>
 
-    <button class="btn btn-primary" type="submit">Göster</button>
+    <?= pdks_oto_filtre_noscript('Göster') ?>
 </form>
 
 <?php if (!$faz8aHazir): ?>
@@ -195,13 +195,12 @@ render_flash();
         $hakedis = $r['hakedis'];
     ?>
     <tr
-        class="ctd-click-row"
+        class="pdks-satir-link"
         tabindex="0"
         data-href="<?= h($detayUrl) ?>"
         title="Kart dökümünü aç"
-        style="cursor:pointer"
     >
-        <td><strong><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></strong></td>
+        <td><a href="<?= h($detayUrl) ?>" class="pdks-satir-ana"><strong><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></strong></a></td>
         <td>
             <strong><?= h($r['cavus_adi']) ?></strong>
             <div class="muted" style="font-size:.78rem"><?= h($r['cavus_kodu']) ?></div>
@@ -257,24 +256,6 @@ render_flash();
     Satıra tıklayarak o günün kart dökümünü açabilirsiniz.
 </p>
 
-<script>
-(function () {
-    document.querySelectorAll('.ctd-click-row').forEach(function (row) {
-        function ac() {
-            var href = row.getAttribute('data-href');
-            if (href) window.location.href = href;
-        }
-
-        row.addEventListener('click', ac);
-        row.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                ac();
-            }
-        });
-    });
-})();
-</script>
 
 <?php endif; ?>
 
@@ -309,4 +290,5 @@ Toplam: <?= h(number_format($tp, 2, ',', '.')) ?> <?= h($cur) ?><br>
 
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

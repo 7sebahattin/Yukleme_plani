@@ -145,10 +145,17 @@ pdks_gunluk_faz8a_cikis_kaydet('880000001', 'usb_decimal', $sid, 1, db());
 
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
-$sayfa = getenv('PUANTAJ_SAYFA') === 'liste' ? 'gunluk_isci_puantaj.php' : 'gunluk_isci_puantaj_detay.php';
-$_GET = $sayfa === 'gunluk_isci_puantaj.php'
-    ? ['tarih' => getenv('PUANTAJ_TARIH') === 'bugun' ? date('Y-m-d') : date('Y-m-d', strtotime('-1 day'))]
-    : ['id' => (string)$sid];
+// v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.
+$sayfa = match (getenv('PUANTAJ_SAYFA')) {
+    'liste' => 'gunluk_isci_puantaj.php',
+    'toplu' => 'cavus_toplu_dokum.php',
+    default => 'gunluk_isci_puantaj_detay.php',
+};
+$_GET = match ($sayfa) {
+    'gunluk_isci_puantaj.php' => ['tarih' => getenv('PUANTAJ_TARIH') === 'bugun' ? date('Y-m-d') : date('Y-m-d', strtotime('-1 day'))],
+    'cavus_toplu_dokum.php'   => ['ay' => date('Y-m')],
+    default                   => ['id' => (string)$sid],
+};
 $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['REQUEST_URI'] = '/' . $sayfa;
 $src = file_get_contents($ROOT . '/' . $sayfa);

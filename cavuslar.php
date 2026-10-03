@@ -57,14 +57,14 @@ render_flash();
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kod, ad veya telefon ara…">
     <select name="durum">
         <option value="">Tüm durumlar</option>
         <option value="aktif" <?= $durum_f === 'aktif' ? 'selected' : '' ?>>Aktif</option>
         <option value="pasif" <?= $durum_f === 'pasif' ? 'selected' : '' ?>>Pasif</option>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?php if ($q !== '' || $durum_f !== ''): ?>
     <a href="cavuslar.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
@@ -123,4 +123,5 @@ render_flash();
 
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

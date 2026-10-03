@@ -53,7 +53,7 @@ render_flash();
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <input type="search" name="q" value="<?= h($q) ?>" placeholder="Çavuş adı/kodu ara…">
     <select name="durum">
         <option value="">Tüm bakiyeler</option>
@@ -61,7 +61,7 @@ render_flash();
         <option value="avans" <?= $durum_f === 'avans' ? 'selected' : '' ?>>Çavuş Avansı</option>
         <option value="kapali" <?= $durum_f === 'kapali' ? 'selected' : '' ?>>Hesap Kapalı</option>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?php if ($q !== '' || $durum_f !== ''): ?>
     <a href="cavus_cari.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
@@ -134,4 +134,5 @@ render_flash();
 
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

@@ -177,14 +177,14 @@ render_flash();
 <?php foreach ($errors as $e): ?><div class="flash flash-error"><?= h($e) ?></div><?php endforeach; ?>
 <?php if (!$faz8bHazir): ?><div class="flash flash-warning">Faz 8B şeması henüz çalıştırılmadı. Bu ekran mevcut tek Günlük Ücret modeliyle güvenli biçimde devam ediyor. Yönetici <a href="migrate.php">Şema Migrasyon</a> ekranından Faz 8B migrasyonunu çalıştırabilir.</div><?php endif; ?>
 
-<form method="get" class="pdks-filter-bar">
-    <select name="cavus" onchange="this.form.submit()">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
+    <select name="cavus">
         <option value="">— Çavuş seçin —</option>
         <?php foreach ($cavuslar as $c): ?>
         <option value="<?= (int)$c['id'] ?>" <?= $cavusId === (int)$c['id'] ? 'selected' : '' ?>><?= h($c['name']) ?> (<?= h($c['code']) ?>)<?= $c['is_active'] ? '' : ' — pasif' ?></option>
         <?php endforeach; ?>
     </select>
-    <noscript><button type="submit" class="btn">Seç</button></noscript>
+    <?= pdks_oto_filtre_noscript('Seç') ?>
 </form>
 
 <?php if (!$seciliCavus): ?>
@@ -365,4 +365,5 @@ render_flash();
 
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>
