@@ -60,21 +60,20 @@ if ($cavusId !== null) {
 }
 
 $toplamIsci = 0;
-$toplamKadin = 0;
-$toplamErkek = 0;
-$toplamKarisik = 0;   // v295: atanmamış Karışık — Kadın+Erkek+Karışık = Toplam
+$toplamTip = [];       // v299: tip kayıt defterinden — sutun anahtarı => toplam
+foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
 foreach ($satirlar as $r) {
     $toplamIsci  += (int)$r['toplam_isci'];
-    $toplamKadin += (int)$r['kadin'];
-    $toplamErkek += (int)$r['erkek'];
-    $toplamKarisik += (int)($r['karisik'] ?? 0);
+    foreach ($toplamTip as $sk => $_) $toplamTip[$sk] += (int)($r[$sk] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
 }
 
 // Hakediş kolonu yalnız yetkiliye çizilir; yetkisizde kolon hiç AÇILMAZ
 // (bir kolon dolusu "—" basmak kâğıtta yer kaybıdır).
-$kolonSayisi = $finansalGosterilebilir ? 9 : 8;
+// Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
+$tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
+$kolonSayisi = ($finansalGosterilebilir ? 7 : 6) + count($tipSut);
 $mode = 'summary';
 $orientation = print_orientation($mode, $kolonSayisi);
 
@@ -105,9 +104,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
 
     <h3 class="pr-section">Ay Özeti</h3>
     <div class="print-summary-row">
-        <div class="print-summary-box"><div class="psb-label">Kadın</div><div class="psb-value"><?= $toplamKadin ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Erkek</div><div class="psb-value"><?= $toplamErkek ?></div></div>
-        <?php if ($toplamKarisik > 0): ?><div class="print-summary-box"><div class="psb-label">Karışık (atanmamış)</div><div class="psb-value"><?= $toplamKarisik ?></div></div><?php endif; ?>
+        <?php foreach ($tipSut as $tc): ?><div class="print-summary-box"><div class="psb-label"><?= h($tc['sayac']) ?></div><div class="psb-value"><?= (int)$toplamTip[$tc['sutun']] ?></div></div><?php endforeach; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $toplamIsci ?></div></div>
         <div class="print-summary-box<?= $toplamEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $toplamEksik ?></div></div>
         <div class="print-summary-box"><div class="psb-label">Mesai Günü</div><div class="psb-value"><?= count($satirlar) ?></div></div>
@@ -119,8 +116,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         <tr>
             <th>Tarih</th>
             <th>Çavuş</th>
-            <th>Kadın</th>
-            <th>Erkek</th>
+            <?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
             <th>Toplam İşçi</th>
             <?php if ($finansalGosterilebilir): ?><th>Hakediş</th><?php endif; ?>
             <th>İlk Giriş</th>
@@ -134,9 +130,8 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         <tr class="ctd-g<?= $gNo ?><?= $gYeni ? ' ctd-gyeni' : '' ?>">
             <td><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></td>
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
-            <td class="num"><?= (int)$r['kadin'] ?></td>
-            <td class="num"><?= (int)$r['erkek'] ?></td>
-            <td class="num"><?= (int)$r['toplam_isci'] ?><?= (int)($r['karisik'] ?? 0) > 0 ? ' (' . (int)$r['karisik'] . ' Karışık)' : '' ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($r[$tc['sutun']] ?? 0) ?></td><?php endforeach; ?>
+            <td class="num"><?= (int)$r['toplam_isci'] ?></td>
             <?php if ($finansalGosterilebilir): ?>
             <td><?php if ($hakedis === null): ?>Hesaplanmadı<?php else: ?><?= h(pdks_rapor_para_formatla($hakedis['total_amount'])) ?> <?= h($hakedis['currency']) ?> (<?= $hakedis['status'] === 'final' ? 'Kesin' : 'Taslak' ?>)<?php endif; ?></td>
             <?php endif; ?>
@@ -153,8 +148,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         <tfoot>
         <tr>
             <td colspan="2">TOPLAM (<?= count($satirlar) ?> mesai günü)</td>
-            <td class="num"><?= $toplamKadin ?></td>
-            <td class="num"><?= $toplamErkek ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)$toplamTip[$tc['sutun']] ?></td><?php endforeach; ?>
             <td class="num"><?= $toplamIsci ?></td>
             <?php if ($finansalGosterilebilir): ?><td>—</td><?php endif; ?>
             <td>—</td>
