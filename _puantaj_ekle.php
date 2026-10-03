@@ -23,43 +23,72 @@ $ekleCavuslar   = $ekleCavuslar ?? [];
 $ekleTrTarih    = date('d.m.Y', strtotime($ekleWorkDate));
 $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
 ?>
-<dialog id="ekle" class="pm-dialog isk-card-modal">
-<div class="pm-header"><h2 class="pm-title">Çalışma Ekle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
-<form method="post" class="isk-card-modal-body" data-bugun="<?= $ekleBugun ? '1' : '0' ?>">
+<?php
+// v296-B: satır içi SVG simgeleri (stroke currentColor, harici varlık YOK). Fonksiyon tanımlamaz — kapanış.
+$ekleIk = function (string $ad): string {
+    static $y = [
+        'takvim-arti' => '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18M12 12.5v5M9.5 15h5"/>',
+        'takvim'      => '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18"/>',
+        'kart'        => '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>',
+        'kisiler'     => '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18.5 14.4c1.6.9 2.5 2.7 2.5 5.6"/>',
+        'kisi'        => '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/>',
+        'saat'        => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+        'belge'       => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+        'balon'       => '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5z"/>',
+        'bilgi'       => '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/>',
+        'kapat'       => '<path d="M6 6l12 12M18 6L6 18"/>',
+        'arti-daire'  => '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+    ];
+    return '<svg class="ekle-ik" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . ($y[$ad] ?? '') . '</svg>';
+};
+?>
+<dialog id="ekle" class="pm-dialog isk-card-modal ekle-v2" aria-labelledby="ekleBaslik">
+<div class="pm-header ekle-head">
+    <span class="ekle-rozet"><?= $ekleIk('takvim-arti') ?></span>
+    <h2 class="pm-title" id="ekleBaslik">Çalışma Ekle</h2>
+    <button type="button" class="pm-close ekle-kapat" aria-label="Kapat" onclick="this.closest('dialog').close()"><?= $ekleIk('kapat') ?></button>
+</div>
+<form method="post" class="ekle-form" data-bugun="<?= $ekleBugun ? '1' : '0' ?>">
+    <div class="ekle-body">
     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
     <input type="hidden" name="action" value="puantaj_ekle">
     <input type="hidden" name="istek_id" value="<?= h(bin2hex(random_bytes(16))) ?>"><?php /* tekrar gönderim (çift tıklama/F5) koruması */ ?>
     <input type="hidden" name="work_date" value="<?= h($ekleWorkDate) ?>">
     <input type="hidden" name="entry_date" value="<?= h($ekleWorkDate) ?>">
-    <p class="muted" style="margin:0 0 12px;font-size:.88rem">
-        Mesai günü: <strong><?= h($ekleTrTarih) ?></strong>. Kayıt, kart okutulmuş gibi puantaj, hakediş ve raporlarda sayılır;
-        listede <strong>✍ Elle eklendi</strong> olarak işaretlenir ve işlem geçmişine yazılır.
-        <?php if ($ekleBugun): ?>Bugün için çıkış saati boş bırakılabilir.<?php endif; ?>
-    </p>
-    <div class="pdks-form-grid">
+    <div class="ekle-bilgi">
+        <?= $ekleIk('bilgi') ?>
+        <p>
+            Mesai günü: <strong><?= h($ekleTrTarih) ?></strong>. Kayıt, kart okutulmuş gibi puantaj, hakediş ve raporlarda sayılır;
+            listede <strong>✍ Elle eklendi</strong> olarak işaretlenir ve işlem geçmişine yazılır.
+            <?php if ($ekleBugun): ?>Bugün için çıkış saati boş bırakılabilir.<?php endif; ?>
+        </p>
+    </div>
+    <div class="pdks-form-grid ekle-grid">
         <?php if ($ekleSabitCavus): ?>
         <input type="hidden" name="foreman_id" value="<?= (int)$ekleSabitCavus['id'] ?>">
-        <div class="span-2"><span class="form-label">Çavuş</span><div><strong><?= h($ekleSabitCavus['name']) ?></strong></div></div>
+        <div class="span-2 ekle-cavus"><span class="ekle-avatar"><?= $ekleIk('kisi') ?></span><div><span class="ekle-cavus-et">Çavuş</span><strong><?= h($ekleSabitCavus['name']) ?></strong></div></div>
         <?php else: ?>
-        <label class="span-2"><span class="form-label">Çavuş *</span>
+        <label class="span-2 ekle-cavus"><span class="ekle-avatar"><?= $ekleIk('kisi') ?></span>
+            <span class="ekle-cavus-kap"><span class="ekle-cavus-et">Çavuş <span class="ekle-gerekli">*</span></span>
             <select name="foreman_id" required>
                 <option value="">— Çavuş seçin —</option>
                 <?php foreach ($ekleCavuslar as $c): ?>
                 <option value="<?= (int)$c['id'] ?>"><?= h($c['name']) ?><?= empty($c['is_active']) ? ' (pasif)' : '' ?></option>
                 <?php endforeach; ?>
-            </select>
+            </select></span>
         </label>
         <?php endif; ?>
-        <label class="span-2"><span class="form-label">Kart *</span>
+        <label class="span-2"><span class="form-label"><?= $ekleIk('kart') ?>Kart <span class="ekle-gerekli">*</span></span>
+            <span class="ekle-sel"><?= $ekleIk('kart') ?>
             <select name="worker_card_id" required>
                 <option value="">— Boş kart seçin —</option>
                 <option value="kartsiz">— Kartsız mesai —</option>
                 <?php foreach ($ekleKartlar as $k): ?>
                 <option value="<?= (int)$k['id'] ?>"><?= h($k['card_no']) ?></option>
                 <?php endforeach; ?>
-            </select>
+            </select></span>
         </label>
-        <label class="span-2"><span class="form-label">İşçi tipi *</span>
+        <label class="span-2"><span class="form-label"><?= $ekleIk('kisiler') ?>İşçi tipi <span class="ekle-gerekli">*</span></span>
             <select name="worker_type_id" required>
                 <option value="">— Seçin —</option>
                 <?php foreach ($ekleTipler as $t): ?>
@@ -67,15 +96,16 @@ $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
                 <?php endforeach; ?>
             </select>
         </label>
-        <label><span class="form-label">Giriş saati *</span><input name="entry_clock" type="time" required></label>
-        <div><span class="form-label">Giriş günü</span><div class="muted" style="padding-top:8px"><?= h($ekleTrTarih) ?></div></div>
-        <label><span class="form-label">Çıkış günü <span class="ekle-zorunlu">*</span></span><input name="exit_date" type="date" value="<?= h($ekleWorkDate) ?>" required></label>
-        <label><span class="form-label">Çıkış saati <span class="ekle-zorunlu">*</span></span><input name="exit_clock" type="time" required></label>
-        <p class="span-2 muted ekle-cikis-ipucu" hidden style="margin:-6px 0 0;font-size:.82rem"></p>
-        <label class="span-2"><span class="form-label">Ekleme nedeni *</span><textarea name="reason" maxlength="500" required placeholder="Örn. Dün kartı okutmayı unuttu"></textarea></label>
-        <label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label>
+        <label><span class="form-label"><?= $ekleIk('saat') ?>Giriş saati <span class="ekle-gerekli">*</span></span><input name="entry_clock" type="time" required></label>
+        <label><span class="form-label"><?= $ekleIk('saat') ?>Çıkış saati <span class="ekle-gerekli ekle-zorunlu">*</span></span><input name="exit_clock" type="time" required></label>
+        <div><span class="form-label"><?= $ekleIk('takvim') ?>Giriş günü</span><div class="ekle-ro"><?= h($ekleTrTarih) ?></div></div>
+        <label><span class="form-label"><?= $ekleIk('takvim') ?>Çıkış günü <span class="ekle-gerekli ekle-zorunlu">*</span></span><input name="exit_date" type="date" value="<?= h($ekleWorkDate) ?>" required></label>
+        <div class="span-2 ekle-bilgi ekle-cikis-ipucu" hidden><?= $ekleIk('bilgi') ?><p></p></div>
+        <label class="span-2"><span class="form-label"><?= $ekleIk('belge') ?>Ekleme nedeni <span class="ekle-gerekli">*</span></span><textarea name="reason" maxlength="500" required rows="2" placeholder="Örn. Dün kartı okutmayı unuttu"></textarea></label>
+        <label class="span-2"><span class="form-label"><?= $ekleIk('balon') ?>Açıklama</span><textarea name="note" maxlength="1000" rows="2" placeholder="Varsa eklemek istediğiniz açıklama..."></textarea></label>
     </div>
-    <div class="isk-card-form-actions"><button class="btn btn-primary">Ekle</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+    </div>
+    <div class="ekle-foot"><button class="btn btn-primary ekle-btn-ekle" type="submit"><?= $ekleIk('arti-daire') ?><span>Ekle</span></button><button type="button" class="btn ekle-btn-vazgec" onclick="this.closest('dialog').close()"><?= $ekleIk('kapat') ?><span>Vazgeç</span></button></div>
 </form>
 <script>
 // v294: kart seçimine göre çıkış alanlarının zorunluluğu. Kartsız = çıkış ZORUNLU;
@@ -93,8 +123,8 @@ $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
         ed.required = ec.required = zorunlu;
         for (var i = 0; i < yildiz.length; i++) yildiz[i].hidden = !zorunlu;
         ipucu.hidden = !(kartsiz || bugun);
-        ipucu.textContent = kartsiz ? 'Kartsız mesaide çıkış tarihi ve saati zorunludur (kayıt kapalı yazılır).'
-                                    : 'Boş bırakılırsa kişi içeride yazılır, çıkışta kartını okutur.';
+        ipucu.lastElementChild.textContent = kartsiz ? 'Kartsız mesaide çıkış tarihi ve saati zorunludur (kayıt kapalı yazılır).'
+                                    : 'Çıkış saati boş bırakılırsa kişi içeride yazılır, çıkışta kartını okutur.';
     }
     kart.addEventListener('change', guncelle);
     f.addEventListener('submit', function (e) {
@@ -103,7 +133,7 @@ $ekleBugun      = ($ekleWorkDate === date('Y-m-d'));
         // Çıkış saati boşsa (yalnız bugün + kartlı) varsayılan çıkış gününü de boşalt: tarih+saat birlikte gelmeli.
         if (!ec.required && !ec.value) ed.value = '';
         f.setAttribute('data-gonderildi', '1');
-        var b = f.querySelector('button.btn-primary'); if (b) { b.disabled = true; b.textContent = 'Ekleniyor…'; }
+        var b = f.querySelector('button.btn-primary'); if (b) { b.disabled = true; var sp = b.querySelector('span'); (sp || b).textContent = 'Ekleniyor…'; }
     });
     guncelle();
 })();
