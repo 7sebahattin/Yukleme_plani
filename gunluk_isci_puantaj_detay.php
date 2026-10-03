@@ -50,7 +50,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yenid
     exit;
 }
 
+// v299: Kapanış notu düzenleme (yalnız yönetici; yetki/depo/kapalı-mesai kapıları işlevin İÇİNDE).
+// Mesai id'si SUNUCUDAN ($id) — istemci mesai kimliği göndermez.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'kapanis_notu') {
+    csrf_check($_POST['csrf'] ?? null);
+    $sonuc = pdks_gunluk_oturum_not_guncelle((int)$id, (string)($_POST['kapanis_notu'] ?? ''), (int)$auth_user['id'], $pdo);
+    set_flash($sonuc['ok'] ? 'success' : 'error', $sonuc['ok'] ? (!empty($sonuc['degisti']) ? 'Kapanış notu güncellendi.' : 'Kapanış notu zaten bu şekilde.') : $sonuc['hata']);
+    header('Location: gunluk_isci_puantaj_detay.php?id=' . (int)$id);
+    exit;
+}
+
 $aktifDepo = function_exists('active_depot') ? (active_depot() ?? '') : '';
+// v299: "✏ Notu Düzenle" — yalnız yönetici, kapalı mesai, mesai aktif depoda (her tarih).
+$notDuzenleGoster = is_admin() && $oturum['status'] === 'closed' && $aktifDepo !== '' && $oturum['depo'] === $aktifDepo;
 
 // v295: KARIŞIK → Otomatik Ata / Geri Al (yalnız yönetici; işlevler yetki + depo +
 // kesin hakediş + istek_id kapılarını KENDİLERİ uygular). Mesai id'si SUNUCUDAN.
@@ -279,7 +291,7 @@ render_flash();
 <tr><th>Kapanış</th><td><?= $oturum['closed_at'] ? h(date('d.m.Y H:i', strtotime($oturum['closed_at']))) . ' — ' . h(pdks_gunluk_kullanici_adi($oturum['closed_by_user_id'] !== null ? (int)$oturum['closed_by_user_id'] : null, $pdo)) : '—' ?></td></tr>
 <tr><th>İlk Giriş</th><td><?= $ozet['ilk_giris'] ? h(date('H:i', strtotime($ozet['ilk_giris']))) : '—' ?></td></tr>
 <tr><th>Son Çıkış</th><td><?= $ozet['son_cikis'] ? h(date('H:i', strtotime($ozet['son_cikis']))) : '—' ?></td></tr>
-<tr><th>Kapanış Notu</th><td><?= h($oturum['notes'] ?: '—') ?></td></tr>
+<tr><th>Kapanış Notu</th><td><div class="pdks-not-satir"><span class="pdks-not-metin"><?= h($oturum['notes'] ?: '—') ?></span><?php if ($notDuzenleGoster): ?><button type="button" class="btn btn-sm pdks-not-duzenle" onclick="pdksPuantajDialogAc('kapanisNotu')">✏ Notu Düzenle</button><?php endif; ?></div></td></tr>
 </tbody>
 </table>
 </div>
@@ -291,11 +303,29 @@ render_flash();
     <?php if ($oturum['closed_at']): ?>
     <div class="pdks-row-sub">Kapanış: <?= h(date('d.m.Y H:i', strtotime($oturum['closed_at']))) ?> — <?= h(pdks_gunluk_kullanici_adi($oturum['closed_by_user_id'] !== null ? (int)$oturum['closed_by_user_id'] : null, $pdo)) ?></div>
     <?php endif; ?>
-    <?php if ($oturum['notes']): ?>
-    <div class="pdks-row-sub">Not: <?= h($oturum['notes']) ?></div>
+    <?php if ($oturum['notes'] || $notDuzenleGoster): ?>
+    <div class="pdks-row-sub pdks-not-satir"><span class="pdks-not-metin">Not: <?= h($oturum['notes'] ?: '—') ?></span><?php if ($notDuzenleGoster): ?><button type="button" class="btn btn-sm pdks-not-duzenle" onclick="pdksPuantajDialogAc('kapanisNotu')">✏ Notu Düzenle</button><?php endif; ?></div>
     <?php endif; ?>
 </div>
 </div>
+<?php if ($notDuzenleGoster): /* v299: kapanış notu penceresi — native <dialog> (Mesai Detayı deseni); opener bu sayfadaki pdksPuantajDialogAc ile AYNI gövde */ ?>
+<dialog id="kapanisNotu" class="pm-dialog isk-card-modal" aria-labelledby="kapanisNotuBaslik">
+<div class="pm-header"><h2 class="pm-title" id="kapanisNotuBaslik">✏ Kapanış Notunu Düzenle</h2><button type="button" class="pm-close" aria-label="Kapat" onclick="this.closest('dialog').close()">✕</button></div>
+<form method="post" class="isk-card-modal-body">
+    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+    <input type="hidden" name="action" value="kapanis_notu">
+    <p class="muted" style="margin:0 0 10px"><?= h($oturum['foreman_name_snapshot']) ?> · <?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?> mesaisinin kapanış notu. Boş bırakıp kaydetmek notu siler. Hakediş ve ücret hesabı bu notu kullanmaz.</p>
+    <label><span class="form-label">Kapanış notu</span><textarea name="kapanis_notu" rows="5" maxlength="<?= (int)PDKS_GUNLUK_KAPANIS_NOTU_MAX ?>"><?= h((string)$oturum['notes']) ?></textarea></label>
+    <div class="isk-card-form-actions"><button type="submit" class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div>
+</form>
+</dialog>
+<script>
+function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o blok koşullu basılır; aynı ad, aynı iş)
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+    document.getElementById(id).showModal();
+}
+</script>
+<?php endif; ?>
 
 <?php if ((int)$karisikOzet['karisik_kalan'] > 0): ?>
 <div class="pdks-karisik-uyari" id="karisikUyari" role="status">
