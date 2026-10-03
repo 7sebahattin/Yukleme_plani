@@ -23,33 +23,64 @@ $topluTrTarih    = date('d.m.Y', strtotime($topluWorkDate));
 $topluBugun      = ($topluWorkDate === date('Y-m-d'));
 $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIMIT : 250;
 ?>
-<dialog id="toplu" class="pm-dialog isk-card-modal isk-toplu"
+<?php
+// v297-B: satır içi SVG simgeleri (stroke currentColor, harici varlık YOK). Fonksiyon TANIMLAMAZ — kapanış
+// (sayfa partial'ı iki kez include edebilir). Ayrı değişken: _puantaj_ekle.php'nin $ekleIk'ine bağımlı değil.
+$topluIk = function (string $ad): string {
+    static $y = [
+        'takvim-arti' => '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18M12 12.5v5M9.5 15h5"/>',
+        'takvim'      => '<rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18"/>',
+        'saat'        => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+        'kart'        => '<rect x="2.5" y="5" width="19" height="14" rx="3"/><path d="M2.5 10h19M6.5 15h4"/>',
+        'kisiler'     => '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M18.5 14.4c1.6.9 2.5 2.7 2.5 5.6"/>',
+        'belge'       => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+        'balon'       => '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4h0A2.5 2.5 0 0 1 4 13.5z"/>',
+        'bilgi'       => '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/>',
+        'kapat'       => '<path d="M6 6l12 12M18 6L6 18"/>',
+        'kadin'       => '<circle cx="12" cy="5.5" r="3"/><path d="M12 9c-2.4 0-4 1.6-4.4 4l-1.1 5.5h3.1V22h4.8v-3.5h3.1L16.4 13C16 10.6 14.4 9 12 9z"/>',
+        'erkek'       => '<circle cx="12" cy="5.5" r="3"/><path d="M7 21v-8c0-2.2 1.3-4 3.3-4h3.4c2 0 3.3 1.8 3.3 4v8M12 14v7"/>',
+        'ara'         => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+        'kaydet'      => '<path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
+        'cop'         => '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    ];
+    return '<svg class="tv-ik" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . ($y[$ad] ?? '') . '</svg>';
+};
+?>
+<dialog id="toplu" class="pm-dialog isk-card-modal isk-toplu toplu-v2" aria-labelledby="topluBaslik"
         data-csrf="<?= h(csrf_token()) ?>" data-work-date="<?= h($topluWorkDate) ?>" data-bugun="<?= $topluBugun ? '1' : '0' ?>"
         data-limit="<?= (int)$topluLimit ?>" data-url-onizle="<?= h($topluUrlOnizle) ?>" data-url-ekle="<?= h($topluUrlEkle) ?>"
         data-cavus-sabit="<?= $topluSabitCavus ? (int)$topluSabitCavus['id'] : 0 ?>"
         data-istek-id="<?= h(bin2hex(random_bytes(16))) ?>">
-<div class="pm-header"><h2 class="pm-title">Toplu İşlem</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div>
-<form class="isk-card-modal-body" onsubmit="return false" autocomplete="off">
-    <p class="muted" style="margin:0 0 12px;font-size:.88rem">
-        Mesai günü: <strong><?= h($topluTrTarih) ?></strong>. Kadın ve erkek için tek seferde kart seçerek ve/veya <strong>kartsız</strong> kişi sayısı girerek
-        kayıt ekleyin. Önce <strong>Önizle</strong>; hata yoksa <strong>Kaydet</strong> açılır. Tek satır bile hatalıysa hiçbir kayıt yazılmaz.
-        <?php if ($topluBugun): ?>Bugün için çıkış boş bırakılırsa kartlı kişiler içeride yazılır (kartsızda çıkış zorunludur).<?php endif; ?>
-    </p>
-    <div class="pdks-form-grid">
+<div class="pm-header tv-head">
+    <span class="tv-rozet"><?= $topluIk('takvim-arti') ?></span>
+    <h2 class="pm-title" id="topluBaslik">Toplu İşlem</h2>
+    <button type="button" class="pm-close tv-kapat" aria-label="Kapat" onclick="this.closest('dialog').close()"><?= $topluIk('kapat') ?></button>
+</div>
+<form class="isk-card-modal-body tv-form" onsubmit="return false" autocomplete="off">
+    <div class="tv-bilgi">
+        <?= $topluIk('bilgi') ?>
+        <p>
+            Mesai günü: <strong><?= h($topluTrTarih) ?></strong>. Kadın ve erkek için tek seferde kart seçerek ve/veya <strong>kartsız</strong> kişi sayısı girerek
+            kayıt ekleyin. Önce <strong>Önizle</strong>; hata yoksa <strong>Kaydet</strong> açılır. Tek satır bile hatalıysa hiçbir kayıt yazılmaz.
+            <?php if ($topluBugun): ?>Bugün için çıkış boş bırakılırsa kartlı kişiler içeride yazılır (kartsızda çıkış zorunludur).<?php endif; ?>
+        </p>
+    </div>
+    <div class="pdks-form-grid tv-ust">
         <?php if ($topluSabitCavus): ?>
-        <div class="span-2"><span class="form-label">Çavuş</span><div><strong><?= h($topluSabitCavus['name']) ?></strong></div></div>
+        <div class="span-2 tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span><div><span class="tv-cavus-et">Çavuş</span><strong><?= h($topluSabitCavus['name']) ?></strong></div></div>
         <?php else: ?>
-        <label class="span-2"><span class="form-label">Çavuş *</span>
+        <label class="span-2 tv-cavus"><span class="tv-avatar"><?= $topluIk('kisiler') ?></span>
+            <span class="tv-cavus-kap"><span class="tv-cavus-et">Çavuş <span class="tv-gerekli">*</span></span>
             <select id="tpCavus">
                 <option value="">— Çavuş seçin —</option>
                 <?php foreach ($topluCavuslar as $c): ?>
                 <option value="<?= (int)$c['id'] ?>"><?= h($c['name']) ?><?= empty($c['is_active']) ? ' (pasif)' : '' ?></option>
                 <?php endforeach; ?>
-            </select>
+            </select></span>
         </label>
         <?php endif; ?>
-        <label class="span-2"><span class="form-label">Ekleme nedeni *</span><textarea id="tpReason" maxlength="500" rows="2" placeholder="Örn. Kart okutma cihazı arızalıydı"></textarea></label>
-        <label class="span-2"><span class="form-label">Açıklama</span><textarea id="tpNote" maxlength="1000" rows="2"></textarea></label>
+        <label><span class="form-label"><?= $topluIk('belge') ?>Ekleme nedeni <span class="tv-gerekli">*</span></span><textarea id="tpReason" maxlength="500" rows="2" placeholder="Örn. Kart okutma cihazı arızalıydı"></textarea></label>
+        <label><span class="form-label"><?= $topluIk('balon') ?>Açıklama</span><textarea id="tpNote" maxlength="1000" rows="2" placeholder="Varsa eklemek istediğiniz açıklama..."></textarea></label>
     </div>
 
     <?php foreach ($topluTipler as $t):
@@ -57,29 +88,38 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
         $esles = []; $digerleri = [];
         foreach ($topluKartlar as $k) { if ((int)($k['worker_type_id'] ?? 0) === $tid) $esles[] = $k; else $digerleri[] = $k; }
         $sirali = array_merge($esles, $digerleri);
+        // Renk/simge işçi tipinden (ad: Kadın/Erkek); tanınmazsa nötr. Başlık metni yalnız tanınan tipte sadeleşir.
+        $tRenk = preg_match('/^\s*kad[ıi]n/iu', (string)$t['name']) ? 'kadin' : (preg_match('/^\s*erkek/iu', (string)$t['name']) ? 'erkek' : 'diger');
+        $tBaslik = $tRenk === 'kadin' ? 'Kadın' : ($tRenk === 'erkek' ? 'Erkek' : (string)$t['name']);
     ?>
-    <section class="tp-grup" data-tip="<?= $tid ?>" data-ad="<?= h($t['name']) ?>">
-        <h3 class="tp-grup-baslik"><span><?= h($t['name']) ?></span> <span class="tp-sayac">0 kartlı + 0 kartsız = 0 kişi</span></h3>
-        <div class="pdks-form-grid">
-            <label><span class="form-label">Giriş saati</span><input type="time" data-f="entry_clock"></label>
-            <label><span class="form-label">Kartsız kişi sayısı</span><input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" data-f="kartsiz_adet"></label>
-            <label><span class="form-label">Çıkış günü</span><input type="date" value="<?= h($topluWorkDate) ?>" data-f="exit_date"></label>
-            <label><span class="form-label">Çıkış saati</span><input type="time" data-f="exit_clock"></label>
+    <section class="tp-grup tv-grup tv-grup-<?= $tRenk ?>" data-tip="<?= $tid ?>" data-ad="<?= h($t['name']) ?>">
+        <h3 class="tp-grup-baslik tv-grup-bas"><span class="tv-grup-ikon"><?= $topluIk($tRenk === 'erkek' ? 'erkek' : 'kadin') ?></span><span class="tv-grup-ad"><?= h($tBaslik) ?></span> <span class="tp-sayac">0 kartlı + 0 kartsız = 0 kişi</span></h3>
+        <div class="tv-grup-govde">
+        <div class="pdks-form-grid tv-alanlar">
+            <div><span class="form-label">Giriş günü</span><div class="tv-ro"><?= $topluIk('takvim') ?><span><?= h($topluTrTarih) ?></span></div></div>
+            <label><span class="form-label">Çıkış günü</span><span class="tv-in"><?= $topluIk('takvim') ?><input type="date" value="<?= h($topluWorkDate) ?>" data-f="exit_date"></span></label>
+            <label><span class="form-label">Giriş saati</span><span class="tv-in"><?= $topluIk('saat') ?><input type="time" data-f="entry_clock"></span></label>
+            <label><span class="form-label">Çıkış saati</span><span class="tv-in"><?= $topluIk('saat') ?><input type="time" data-f="exit_clock"></span></label>
+            <label class="span-2"><span class="form-label">Kartsız kişi sayısı</span><span class="tv-in"><?= $topluIk('kisiler') ?><input type="number" min="0" max="<?= (int)$topluLimit ?>" step="1" inputmode="numeric" value="0" data-f="kartsiz_adet"></span></label>
         </div>
-        <div class="tp-kart-arac">
-            <label class="tp-ilkn">İlk <input type="number" min="1" max="<?= (int)$topluLimit ?>" value="10" inputmode="numeric" data-f="ilkn"> boş kartı seç</label>
-            <button type="button" class="btn btn-sm" data-tp="sec">Seç</button>
-            <button type="button" class="btn btn-sm btn-ghost" data-tp="temizle">Temizle</button>
+        <label class="tv-toggle"><input type="checkbox" data-tp="kartli"><span class="tv-toggle-kutu"><?= $topluIk('kart') ?><span>Kartlı giriş ekle</span></span></label>
+        <div class="tp-kartli" hidden>
+            <div class="tp-kart-arac">
+                <label class="tp-ilkn">İlk <input type="number" min="1" max="<?= (int)$topluLimit ?>" value="10" inputmode="numeric" data-f="ilkn"> boş kartı seç</label>
+                <button type="button" class="btn btn-sm tv-sec" data-tp="sec">Seç</button>
+                <button type="button" class="btn btn-sm btn-ghost tv-temizle" data-tp="temizle"><?= $topluIk('cop') ?>Temizle</button>
+            </div>
+            <?php if ($sirali): ?>
+            <div class="tp-kartlar" role="group" aria-label="<?= h($t['name']) ?> için boş kartlar">
+                <?php foreach ($sirali as $k): ?>
+                <label class="tp-kart<?= (int)($k['worker_type_id'] ?? 0) === $tid ? ' tp-kart-esles' : '' ?>"><input type="checkbox" value="<?= (int)$k['id'] ?>"><?= $topluIk('kart') ?><span><?= h($k['card_no']) ?></span></label>
+                <?php endforeach; ?>
+            </div>
+            <?php else: ?>
+            <p class="muted tp-bos">Bu gün için boş kart yok; yalnız kartsız kişi ekleyebilirsiniz.</p>
+            <?php endif; ?>
         </div>
-        <?php if ($sirali): ?>
-        <div class="tp-kartlar" role="group" aria-label="<?= h($t['name']) ?> için boş kartlar">
-            <?php foreach ($sirali as $k): ?>
-            <label class="tp-kart<?= (int)($k['worker_type_id'] ?? 0) === $tid ? ' tp-kart-esles' : '' ?>"><input type="checkbox" value="<?= (int)$k['id'] ?>"> <span><?= h($k['card_no']) ?></span></label>
-            <?php endforeach; ?>
         </div>
-        <?php else: ?>
-        <p class="muted tp-bos">Bu gün için boş kart yok; yalnız kartsız kişi ekleyebilirsiniz.</p>
-        <?php endif; ?>
     </section>
     <?php endforeach; ?>
 
@@ -87,10 +127,10 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
     <div class="tp-mesaj" id="tpMesaj" role="alert" hidden></div>
     <div class="tp-onizle" id="tpOnizle" hidden></div>
 
-    <div class="isk-card-form-actions tp-aksiyon">
-        <button type="button" class="btn" id="tpOnizleBtn">Önizle</button>
-        <button type="button" class="btn btn-primary" id="tpKaydetBtn" disabled>Kaydet</button>
-        <button type="button" class="btn btn-ghost" onclick="this.closest('dialog').close()">Vazgeç</button>
+    <div class="isk-card-form-actions tp-aksiyon tv-foot">
+        <button type="button" class="btn btn-primary tv-btn" id="tpOnizleBtn"><?= $topluIk('ara') ?><span class="tv-bt">Önizle</span></button>
+        <button type="button" class="btn tv-btn tv-kaydet" id="tpKaydetBtn" disabled><?= $topluIk('kaydet') ?><span class="tv-bt">Kaydet</span></button>
+        <button type="button" class="btn btn-ghost tv-btn tv-vazgec" onclick="this.closest('dialog').close()"><?= $topluIk('kapat') ?><span class="tv-bt">Vazgeç</span></button>
     </div>
 </form>
 <script>
@@ -110,6 +150,7 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
     var elTop = document.getElementById('tpToplam'), elAsim = document.getElementById('tpAsim');
     var onizlemeImza = null, kaydediyor = false, tumunuGoster = false, sonYanit = null;
 
+    function btnYaz(b, m) { var sp = b.querySelector('.tv-bt'); (sp || b).textContent = m; }
     function alan(g, f) { return g.querySelector('[data-f="' + f + '"]'); }
     function kutular(g) { return [].slice.call(g.querySelectorAll('.tp-kartlar input[type=checkbox]')); }
     function adet(g) { var n = parseInt(alan(g, 'kartsiz_adet').value, 10); return isFinite(n) && n > 0 ? n : 0; }
@@ -261,9 +302,9 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
         var v = temizVeri(), h = istemciHatalari(v);
         mesaj(h); gecersiz(); elOn.hidden = true;
         if (h.length) return;
-        btnOn.disabled = true; btnOn.textContent = 'Önizleniyor…';
+        btnOn.disabled = true; btnYaz(btnOn, 'Önizleniyor…');
         istek(dlg.getAttribute('data-url-onizle'), v).then(function (y) {
-            btnOn.textContent = 'Önizle'; sayaclar();
+            btnYaz(btnOn, 'Önizle'); sayaclar();
             if (y.error) { mesaj([y.error]); return; }
             sonYanit = y; onizleCiz(y);
             if (temizMi(y)) { onizlemeImza = JSON.stringify(v); btnKay.disabled = false; mesaj([]); }
@@ -275,10 +316,10 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
         if (kaydediyor || btnKay.disabled) return;
         var v = temizVeri();
         if (onizlemeImza === null || JSON.stringify(v) !== onizlemeImza) { gecersiz(); mesaj(['Girdiler değişti — önce yeniden önizleyin.']); return; }
-        kaydediyor = true; btnKay.disabled = true; btnOn.disabled = true; btnKay.textContent = 'Kaydediliyor…';
+        kaydediyor = true; btnKay.disabled = true; btnOn.disabled = true; btnYaz(btnKay, 'Kaydediliyor…');
         istek(dlg.getAttribute('data-url-ekle'), v).then(function (y) {
             if (y && y.ok === true && y.redirect) { location.href = y.redirect; return; }
-            kaydediyor = false; btnKay.textContent = 'Kaydet'; gecersiz(); sayaclar();
+            kaydediyor = false; btnYaz(btnKay, 'Kaydet'); gecersiz(); sayaclar();
             if (y && y.error) mesaj([y.error]); else { sonYanit = y || {}; if ((y.satirlar || []).length || (y.hatalar || []).length) onizleCiz(y); else mesaj(['Kayıt yapılamadı.']); }
         });
     });
@@ -286,6 +327,14 @@ $topluLimit      = defined('PDKS_FAZ8J_TOPLU_LIMIT') ? (int)PDKS_FAZ8J_TOPLU_LIM
     form.addEventListener('input', function (e) { if (e.target.getAttribute('data-f') === 'ilkn') return; kartKilitleri(); sayaclar(); gecersiz(); });
     form.addEventListener('change', function (e) { if (e.target.getAttribute('data-f') === 'ilkn') return; kartKilitleri(); sayaclar(); gecersiz(); });
     gruplar.forEach(function (g) {
+        // v297: kart listesi varsayılan GİZLİ. Kapatınca bu grubun seçili kartları temizlenir
+        // (change olayı form dinleyicisine de ulaşır: kilitler/sayaç/önizleme geçersizliği güncellenir).
+        var anahtar = g.querySelector('[data-tp="kartli"]'), kartli = g.querySelector('.tp-kartli');
+        anahtar.addEventListener('change', function () {
+            kartli.hidden = !anahtar.checked;
+            g.classList.toggle('tv-kartli-acik', anahtar.checked);
+            if (!anahtar.checked) kutular(g).forEach(function (c) { c.checked = false; });
+        });
         g.querySelector('[data-tp="sec"]').addEventListener('click', function () {
             var n = parseInt(alan(g, 'ilkn').value, 10) || 0;
             kutular(g).forEach(function (c) { if (!c.disabled) c.checked = false; });
