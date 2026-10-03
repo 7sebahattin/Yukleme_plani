@@ -1608,3 +1608,127 @@ html[data-theme="dark"] .ekle-v2 .ekle-gerekli { color: #ff7b72; }
     .ekle-v2 .ekle-sel select { padding-left: 38px; }
     .ekle-v2 .form-label { font-size: .82rem; }
 }
+
+/* v297-A: Çavuş Ücretleri */
+/* cavus_fiyatlari.php — açık, kart tabanlı görünüm. Yalnız .cf2 kapsamında;
+   form alan adları/gizli alanlar değişmedi. Koyu tema: html[data-theme="dark"]. */
+.cf2 { --cf2-mavi: #2563eb; --cf2-mavi-soft: #eaf1ff; --cf2-mor: #7c3aed; --cf2-mor-soft: #f2ecff;
+       --cf2-yesil: #16a34a; --cf2-yesil-soft: #e7f7ee; --cf2-turuncu: #ea7a0c; --cf2-turuncu-soft: #fff1e3;
+       --cf2-amber: #a15c00; --cf2-amber-soft: #fff6e0; --cf2-amber-kenar: #f5d48a;
+       --cf2-bilgi-mavi: #eef5ff; --cf2-bilgi-mavi-kenar: #cfe0fb; --cf2-bilgi-mavi-yazi: #1e3a6e;
+       --cf2-bilgi-mor: #f5f0ff; --cf2-bilgi-mor-kenar: #e2d6fb; --cf2-bilgi-mor-yazi: #44297a;
+       --cf2-girdi-bg: var(--card); max-width: 1120px; }
+.cf2 .cf-ik { display: block; flex: none; }
+.cf2-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
+.cf2-baslik { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cf2-baslik h1 { margin: 0; font-size: 1.45rem; font-weight: 750; letter-spacing: -.01em; color: var(--text); }
+.cf2-tile { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 12px; flex: none; }
+.cf2-tile .cf-ik { width: 22px; height: 22px; }
+.cf2-tile--yesil { background: var(--cf2-yesil-soft); color: var(--cf2-yesil); }
+.cf2-tile--mavi { background: var(--cf2-mavi-soft); color: var(--cf2-mavi); }
+.cf2-tile--mor { background: var(--cf2-mor-soft); color: var(--cf2-mor); }
+.cf2-tile--turuncu { background: var(--cf2-turuncu-soft); color: var(--cf2-turuncu); }
+.cf2 .btn.cf2-geri { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 10px;
+    background: var(--card); color: var(--text); border: 1px solid var(--border-strong); font-weight: 600; box-shadow: 0 1px 2px rgba(16,24,40,.06); text-decoration: none; }
+.cf2 .btn.cf2-geri:hover { background: var(--surface-2); border-color: var(--primary); color: var(--primary); }
+
+.cf2-sec.pdks-filter-bar { margin: 12px 0 16px; }
+.cf2-kontrol { position: relative; display: inline-flex; align-items: center; min-width: 0; }
+.cf2-kontrol--sec { width: 340px; max-width: 100%; }
+.cf2-kontrol-ik { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center; background: var(--cf2-mavi-soft); color: var(--cf2-mavi); pointer-events: none; }
+.cf2-kontrol-ik .cf-ik { width: 16px; height: 16px; }
+.cf2 .cf2-kontrol select { width: 100%; max-width: 100%; min-height: 46px; padding: 8px 12px 8px 46px; border-radius: 12px;
+    border: 1px solid var(--border-strong); background-color: var(--card); color: var(--text); font: inherit; font-weight: 600; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+
+.cf2-kart.card { padding: 20px 22px; margin: 0 0 18px; border-radius: 14px; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 6px 18px -10px rgba(16,24,40,.12); }
+.cf2-kart-bas { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 16px; flex-wrap: wrap; }
+.cf2-kart-bas-metin { flex: 1 1 240px; min-width: 0; }
+.cf2-kart-bas h2 { margin: 2px 0 2px; font-size: 1.06rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.cf2-alt { margin: 0; color: var(--muted); font-size: .86rem; line-height: 1.45; }
+
+.cf2-izgara { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+.cf2-izgara + .cf2-izgara, .cf2-bilgi + .cf2-izgara { margin-top: 14px; }
+.cf2-izgara--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cf2-alan { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; font-weight: 400; }
+.cf2-etiket { display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; font-weight: 600; color: var(--text); }
+.cf2-etiket .cf-ik { width: 15px; height: 15px; color: var(--muted); }
+.cf2-zorunlu { color: #dc2626; font-weight: 700; }
+.cf2-girdi { position: relative; display: flex; align-items: stretch; min-width: 0; border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--cf2-girdi-bg); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+.cf2-girdi:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(29,108,240,.16); }
+.cf2-girdi-ik { display: inline-flex; align-items: center; justify-content: center; width: 42px; flex: none; color: var(--muted);
+    background: var(--surface-2); border-right: 1px solid var(--border); }
+.cf2-girdi-ik .cf-ik { width: 17px; height: 17px; }
+.cf2 .cf2-girdi input, .cf2 .cf2-girdi select { flex: 1 1 auto; width: 100%; min-width: 0; max-width: none; min-height: 44px; margin: 0; padding: 9px 12px;
+    border: 0; border-radius: 0; background-color: transparent; color: var(--text); font: inherit; box-shadow: none; outline: none; }
+
+.cf2-bilgi { display: flex; align-items: flex-start; gap: 8px; margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; font-size: .85rem; line-height: 1.45; border: 1px solid; }
+.cf2-bilgi .cf-ik { width: 17px; height: 17px; margin-top: 1px; }
+.cf2-bilgi--mavi { background: var(--cf2-bilgi-mavi); border-color: var(--cf2-bilgi-mavi-kenar); color: var(--cf2-bilgi-mavi-yazi); }
+.cf2-bilgi--mor { background: var(--cf2-bilgi-mor); border-color: var(--cf2-bilgi-mor-kenar); color: var(--cf2-bilgi-mor-yazi); }
+
+.cf2-eylem { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.cf2 .btn.cf2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 20px; border-radius: 10px; font-weight: 650; }
+.cf2 .btn.btn-primary.cf2-btn { box-shadow: 0 1px 2px rgba(16,24,40,.1), 0 4px 10px -4px rgba(29,108,240,.5); }
+.cf2 .btn.cf2-btn--cizgi { background: var(--card); color: var(--primary); border: 1.5px solid var(--primary); }
+.cf2 .btn.cf2-btn--cizgi:hover { background: var(--primary-soft); }
+
+.cf2-uyari-hap { display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 0; padding: 8px 12px; border-radius: 10px; font-size: .84rem; font-weight: 600;
+    background: var(--cf2-amber-soft); color: var(--cf2-amber); border: 1px solid var(--cf2-amber-kenar); max-width: 100%; }
+.cf2-uyari-hap .cf-ik { width: 16px; height: 16px; }
+.cf2-uyari-hap--blok { margin: 4px 0 0; }
+
+.cf2-blok { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 0 0 14px; background: var(--surface-2); }
+.cf2-blok:last-child { margin-bottom: 0; }
+.cf2-blok .cf2-girdi { --cf2-girdi-bg: var(--card); }
+.cf2-yontem-ust { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.cf2-blok-baslik { font-weight: 700; font-size: .95rem; color: var(--text); }
+.cf2-hap { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 999px; font-size: .8rem; font-weight: 700; }
+.cf2-hap--b { background: var(--cf2-mor-soft); color: var(--cf2-mor); border: 1px solid var(--cf2-bilgi-mor-kenar); }
+.cf2-hap--a { background: var(--cf2-yesil-soft); color: var(--cf2-yesil); border: 1px solid #bfe6cf; }
+.cf2-secenekler { display: grid; gap: 10px; }
+.cf2-secenek { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 14px; border: 1.5px solid var(--border); border-radius: 10px;
+    background: var(--card); cursor: pointer; font-weight: 400; transition: border-color .15s, background .15s; }
+.cf2-secenek input[type="radio"] { width: 18px; height: 18px; margin: 2px 0 0; flex: none; accent-color: var(--primary); }
+.cf2-secenek-metin { font-size: .88rem; line-height: 1.45; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.cf2-secenek:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.cf2-birim { margin-top: 12px; max-width: 360px; }
+.cf2-birim[hidden] { display: none !important; }
+.cf2-not { margin: 6px 0 0; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+.cf2-eylem--sol { margin-top: 14px; }
+.cf2-blok > .cf2-not + .cf2-form { margin-top: 14px; }
+.cf2-son { color: var(--muted); font-size: .8rem; }
+.cf2-blok--gecmis .table-wrap { margin: 0; }
+.cf2-kart .table-wrap { margin-top: 0; }
+
+html[data-theme="dark"] .cf2 { --cf2-mavi: #7fb0ff; --cf2-mavi-soft: #1a2740; --cf2-mor: #b79bff; --cf2-mor-soft: #261d3d;
+    --cf2-yesil: #4fd18b; --cf2-yesil-soft: #14302a; --cf2-turuncu: #ffae5e; --cf2-turuncu-soft: #35240f;
+    --cf2-amber: #f3c46b; --cf2-amber-soft: #332916; --cf2-amber-kenar: #5a4522;
+    --cf2-bilgi-mavi: #152238; --cf2-bilgi-mavi-kenar: #26406a; --cf2-bilgi-mavi-yazi: #b9d0f5;
+    --cf2-bilgi-mor: #1f1932; --cf2-bilgi-mor-kenar: #3d2f66; --cf2-bilgi-mor-yazi: #d6c7ff; }
+html[data-theme="dark"] .cf2-hap--a { border-color: #24523f; }
+html[data-theme="dark"] .cf2-zorunlu { color: #ff7b72; }
+html[data-theme="dark"] .cf2-kart.card { box-shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 22px -12px rgba(0,0,0,.6); }
+
+@media (max-width: 899px) {
+    .cf2-izgara--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+    .cf2-baslik h1 { font-size: 1.2rem; }
+    .cf2-tile { width: 38px; height: 38px; border-radius: 11px; }
+    .cf2-head { align-items: flex-start; }
+    .cf2 .btn.cf2-geri { width: 100%; justify-content: center; }
+    .cf2-kontrol--sec { width: 100%; }
+    .cf2-sec.pdks-filter-bar > .cf2-kontrol { flex: 1 1 100%; }
+    .cf2-kart.card { padding: 16px 14px; border-radius: 12px; }
+    .cf2-izgara, .cf2-izgara--3 { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .cf2 .cf2-girdi input, .cf2 .cf2-girdi select, .cf2 .cf2-kontrol select { font-size: 16px; }
+    .cf2-eylem .btn.cf2-btn { width: 100%; }
+    .cf2-blok { padding: 12px; }
+    .cf2-birim { max-width: none; }
+    .cf2-uyari-hap { width: 100%; box-sizing: border-box; }
+}
+@media print {
+    .cf2-sec, .cf2 .btn.cf2-geri, .cf2-form, .cf2-yontem-form { display: none !important; }
+}

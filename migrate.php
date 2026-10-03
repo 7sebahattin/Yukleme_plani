@@ -193,6 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_cavus_b', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        } elseif ($pr['durum'] === 'eklendi') {
+            audit_log_event('migrate', 'pdks_cavus_b', null, null,
+                ['operation' => 'add_column', 'column' => $pr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -430,10 +433,11 @@ render_header('Şema Migrasyon');
   </div>
 
   <div class="card" style="margin:16px 0;padding:16px;">
-    <h2 style="margin-top:0;">Çavuş Ücreti Yöntem B — Dönem Kapanış Tabloları (25 kişi-gün = 1 hakediş)</h2>
+    <h2 style="margin-top:0;">Çavuş Ücreti Yöntem B — Dönem Kapanış Tabloları (N kişi-gün = 1 hakediş)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>foreman_rate_method_log</code>, <code>foreman_period_closures</code>,
-      <code>foreman_period_closure_items</code> tablolarını ekler. Önkoşul: Hakediş ve Cari Hesap
+      <code>foreman_period_closure_items</code> tablolarını ekler; eski kurulumda <code>foreman_rate_method_log.unit_size</code>
+      kolonunu (v297 — çavuş bazında "kaç kişi-gün = 1 hakediş", NULL = 25) ekler. Önkoşul: Hakediş ve Cari Hesap
       tabloları (foreman_daily_entitlements, foreman_payments) — bunlar yoksa hiçbir tablo oluşturulmaz.
       Faz 8B'nin genel hazır-mı kontrolüne (<code>pdks_faz8b_sema_hazir()</code>) BİLEREK EKLENMEZ.
       <?php if ($pdks_cavus_b_ran): ?>
@@ -456,6 +460,13 @@ render_header('Şema Migrasyon');
             </td>
           </tr>
         <?php endforeach; ?>
+        <?php $pbk = pdks_faz8b_cavus_ucret_b_birim_kolonu_var($pdo); ?>
+          <tr>
+            <td>foreman_rate_method_log.unit_size <small>(kolon, v297)</small></td>
+            <td style="color:<?= $pbk ? '#1f9d55' : '#c0392b' ?>;font-weight:600;">
+              <?= $pbk ? '✓ Var' : '✗ Eksik' ?>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>

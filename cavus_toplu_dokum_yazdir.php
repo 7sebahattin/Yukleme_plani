@@ -180,7 +180,7 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
             <td><?= h($k['foreman_name']) ?></td>
             <td class="num"><?= (int)$k['carry_in'] ?></td>
             <td class="num"><?= (int)$k['period_person_days'] ?></td>
-            <td class="num"><?= (int)$k['earned_units'] ?></td>
+            <td class="num"><?= (int)$k['earned_units'] ?> <small>(<?= (int)($k['unit_size'] ?? 25) ?> kişi-gün = 1)</small></td>
             <td><?= h(number_format((float)$k['unit_rate'], 2, ',', '.')) ?> <?= h($k['currency']) ?></td>
             <td><?= h(number_format((float)$k['amount'], 2, ',', '.')) ?> <?= h($k['currency']) ?></td>
             <td class="num"><?= (int)$k['carry_out'] ?></td>

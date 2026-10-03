@@ -1,14 +1,18 @@
 <?php
 // =========================================================
-// config/pdks_faz8b_cavus_b.php — ÇAVUŞ ÜCRETİ YÖNTEM B (25 kişi-gün = 1
-// hakediş) DÖNEM KAPANIŞ MOTORU.
+// config/pdks_faz8b_cavus_b.php — ÇAVUŞ ÜCRETİ YÖNTEM B (N kişi-gün = 1
+// hakediş; N çavuş bazında, varsayılan 25) DÖNEM KAPANIŞ MOTORU.
 //
 // İş kuralı (GEREKSINIMLER.md, onaylı — tek otorite): Yöntem B seçili bir
 // çavuşun altında çalışan işçilerin KESİNLEŞMİŞ (status='final') günlük
 // hakedişlerindeki kişi-gün toplamı (SUM(worker_count), yalnız
-// worker_type_id IS NOT NULL satırlar) her PDKS_FAZ8B_CAVUS_B_BIRIM
-// (25) kişi-günde 1 hakediş kazandırır. Dönem ÖDEMEDEN ÖDEMEYE sayılır —
-// kalan (25'e tamamlanmayan) kişi-gün bir sonraki döneme DEVREDER. Kapanış
+// worker_type_id IS NOT NULL satırlar) her N kişi-günde 1 hakediş
+// kazandırır. N (v297) = kapanış ANINDA geçerli yöntem geçmişi satırının
+// unit_size'ı (NULL → PDKS_FAZ8B_CAVUS_B_BIRIM = 25); kapanışın kendi
+// unit_size kolonuna DONDURULUR, sonradan birim değişse de o kapanış
+// değişmez. Dönem ÖDEMEDEN ÖDEMEYE sayılır — kalan (N'ye tamamlanmayan)
+// kişi-gün bir sonraki döneme KİŞİ-GÜN olarak DEVREDER (yeni birimle
+// bölünür). Kapanış
 // yalnız cavus_odeme.php'deki ödeme kaydıyla AYNI transaction'da,
 // pdks_faz8b_cavus_ucret_odeme_kaydet() üzerinden tetiklenir — ikinci bir
 // "kapanış yap" ekranı/yolu YOK.
@@ -93,10 +97,11 @@ function pdks_faz8b_cavus_ucret_b_onizleme_metni(array $o): string
         ? ' Not: ' . (int)$o['taslak_sayisi'] . ' hakediş henüz kesinleşmedi; kesinleşince sonraki kapanışa girer.'
         : '';
 
+    $birim = (int)($o['birim'] ?? PDKS_FAZ8B_CAVUS_B_BIRIM);
     if ($d === 'kapanacak') {
         return sprintf(
-            'Şu an kapanış yapılırsa: %d kişi-gün + %d devir → %d hakediş, %d devir, tutar %s %s (%d × %s %s).',
-            $donem, $devir, (int)$o['adet'], (int)$o['devir_cikan'],
+            'Şu an kapanış yapılırsa (%d kişi-gün = 1 hakediş): %d kişi-gün + %d devir → %d hakediş, %d devir, tutar %s %s (%d × %s %s).',
+            $birim, $donem, $devir, (int)$o['adet'], (int)$o['devir_cikan'],
             pdks_faz8b_cavus_ucret_b_para((int)$o['tutar_kurus']), $cur,
             (int)$o['adet'], pdks_faz8b_cavus_ucret_b_para((int)$o['birim_kurus']), $cur
         ) . $ek;
@@ -108,7 +113,7 @@ function pdks_faz8b_cavus_ucret_b_onizleme_metni(array $o): string
         );
     }
     if ($d === 'bos') {
-        return sprintf('Kapanışa girecek yeni kesinleşmiş gün yok (%d kişi-gün devirde). Bu ödemede kapanış yapılmaz.', $devir);
+        return sprintf('Kapanışa girecek yeni kesinleşmiş gün yok (%d kişi-gün devirde; %d kişi-gün = 1 hakediş). Bu ödemede kapanış yapılmaz.', $devir, $birim);
     }
     if ($d === 'yontem_a') {
         if ($donem > 0 || $devir > 0) {
@@ -187,7 +192,10 @@ function pdks_faz8b_cavus_ucret_b_onizle(int $foremanId, string $tarih, ?PDO $pd
     $kalemler = pdks_faz8b_cavus_ucret_b_havuz_sec(pdks_faz8b_cavus_ucret_b_aday_kalemler($foremanId, $gecmis, $pdo), $gecmis);
     $donem = 0;
     foreach ($kalemler as $k) $donem += (int)$k['kisi_gun'];
-    $h = pdks_faz8b_cavus_ucret_b_hesap($devir, $donem);
+    // v297: birim = kapanış (şu) ANINDA geçerli yöntem geçmişi satırının
+    // unit_size'ı (yontem_anda() ile aynı zaman kuralı); NULL → 25.
+    $birim = pdks_faz8b_cavus_ucret_birim_anda($gecmis, date('Y-m-d H:i:s'));
+    $h = pdks_faz8b_cavus_ucret_b_hesap($devir, $donem, $birim);
 
     $ucret = pdks_faz8b_cavus_ucret_gecerli($foremanId, $tarih, $pdo);
     $birimKurus = $ucret ? pdks_hakedis_tl_kurus((string)$ucret['daily_rate']) : null;
