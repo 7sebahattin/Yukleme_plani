@@ -324,7 +324,19 @@ $veli = pdks_gunluk_cavus_olustur(['code' => 'C003', 'name' => 'Veli Çavuş'], 
 $veliOturum = pdks_gunluk_oturum_ac_veya_getir((int)$veli['id'], 1, $db);
 $veliSid = (int)$veliOturum['session']['id'];
 $k6TekrarGiris = pdks_gunluk_faz8a_giris_kaydet('111000006', 'usb_decimal', $veliSid, $erkekId, 'tam', 1, $db);
-ok('K006 (Mehmet\'in KAPALI oturumunda hâlâ açık) YENİ bir çavuşun oturumunda GİRİŞ yapamıyor', $k6TekrarGiris['ok'] === false && $k6TekrarGiris['kod'] === 'baska_cavusta_acik');
+// ⚠ v275/v276 (kullanıcı kararı): eksik çıkışla KAPATILMIŞ mesaideki dönem
+// kartı KİLİTLEMEZ (kilit yalnız AÇIK mesaideki dönem) — ama Mehmet'in mesaisi
+// BUGÜNE ait olduğu için aynı gün başka mesaiye giriş `bugun_eksik_cikis` ile
+// reddedilir. (Önceki güne ait olsaydı giriş yapılır + `uyari` dönerdi — bkz.
+// pdks_gun_sonu_kapanis_smoke.php.)
+$mehmetGun = (string)$db->query("SELECT work_date FROM daily_work_sessions WHERE id = $mehmetSid")->fetchColumn();
+if ($mehmetGun === date('Y-m-d')) {
+    ok('K006 (Mehmet\'in BUGÜNKÜ kapalı oturumunda eksik çıkış) aynı gün YENİ çavuşta GİRİŞ yapamıyor (bugun_eksik_cikis)',
+        $k6TekrarGiris['ok'] === false && $k6TekrarGiris['kod'] === 'bugun_eksik_cikis', json_encode($k6TekrarGiris, JSON_UNESCAPED_UNICODE));
+} else {
+    ok('K006 (önceki günün kapalı oturumunda eksik çıkış) yeni çavuşta GİRİŞ yapar + uyarı alır',
+        $k6TekrarGiris['ok'] === true && !empty($k6TekrarGiris['uyari']), json_encode($k6TekrarGiris, JSON_UNESCAPED_UNICODE));
+}
 
 echo "\n=== 14B. AÇIK DÖNEM GÜN SINIRINI (GECE YARISINI) DA AŞAR — KİLİT KENDİLİĞİNDEN SIFIRLANMAZ ===\n";
 // Görev talimatı §2/§6-E: YENİ (Faz 8A) bir açık dönem yalnızca GEÇERLİ bir

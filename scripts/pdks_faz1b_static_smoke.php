@@ -202,9 +202,12 @@ ok('assets/style.css: YALNIZ EKLEME yapıldı (.sbi-personel ikon kuralları) �
 // bir checkout'ta (git diff boş döner, hiçbir şey KANITLAMAZ) aynı şekilde
 // anlamlı kalsın diye.
 $swSrc = oku('sw.js');
-ok('sw.js: CACHE_NAME ve APP_SURUM sürümü v272',
-    str_contains($swSrc, "const CACHE_NAME = 'yukleme-plani-v272';")
-    && str_contains(oku('config/helpers.php'), "define('APP_SURUM', 'v272');"));
+// Sürüm her PR'da artar — sabit bir numara yerine İKİ dosyanın AYNI sayıyı
+// taşıdığı denetlenir (CLAUDE.md: CACHE_NAME ile APP_SURUM aynı sayıda tutulur).
+$swSurum  = preg_match("/const CACHE_NAME = 'yukleme-plani-(v\\d+)';/", $swSrc, $mSw) ? $mSw[1] : null;
+$appSurum = preg_match("/define\\('APP_SURUM', '(v\\d+)'\\);/", oku('config/helpers.php'), $mApp) ? $mApp[1] : null;
+ok('sw.js: CACHE_NAME ve APP_SURUM sürümü EŞİT',
+    $swSurum !== null && $swSurum === $appSurum, 'sw=' . var_export($swSurum, true) . ' app=' . var_export($appSurum, true));
 ok('sw.js: SHELL önbellek listesi / network-first fetch stratejisi AYNI (yalnız sürüm sabiti değişti)',
     str_contains($swSrc, "'./assets/hesap.js'") && str_contains($swSrc, "fetch(e.request).then(function(response)"));
 
