@@ -117,22 +117,44 @@ function gorunenler(page) {
             const d = document.getElementById('ekle'); const r = d.getBoundingClientRect();
             const f = d.querySelector('form'); const ad = n => !!f.querySelector('[name="' + n + '"]');
             // Uzun form: gövde kaydırılır (roles_modal_smoke ile aynı kural) — en alta kaydırıp ölç.
-            const tasiyor = f.scrollHeight > f.clientHeight + 1;
-            f.scrollTop = f.scrollHeight;
-            const kaydi = !tasiyor || f.scrollTop > 0;
+            const gv = f.querySelector('.ekle-body');   // v296: gövde kayar, alt çubuk sabit
+            const tasiyor = gv.scrollHeight > gv.clientHeight + 1;
+            gv.scrollTop = gv.scrollHeight;
+            const kaydi = !tasiyor || gv.scrollTop > 0;
             const btn = d.querySelector('form button:not([type="button"])'); const b = btn.getBoundingClientRect();
+            const vz = d.querySelector('.ekle-btn-vazgec').getBoundingClientRect();
+            const vzUst = document.elementFromPoint(vz.left + vz.width / 2, vz.top + vz.height / 2);
+            const ikonsuz = [...f.querySelectorAll('.form-label')].filter(l => !l.querySelector('svg.ekle-ik')).map(l => l.textContent.trim());
+            const kap = d.querySelector('.ekle-kapat').getBoundingClientRect();
+            const bas = d.querySelector('.ekle-head');
             const ust = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
             const gizli = n => { const e = f.querySelector('[name="' + n + '"]'); return e ? e.value : null; };
             return { modal: d.matches(':modal'), sol: r.left, sag: r.right, ust: r.top, alt: r.bottom, vw: innerWidth, vh: innerHeight, btnAlt: b.bottom,
                      tiklanir: btn === ust || btn.contains(ust), tasma: document.documentElement.scrollWidth > innerWidth, kaydi,
                      alanlar: ['csrf', 'action', 'work_date', 'entry_date', 'foreman_id', 'worker_card_id', 'worker_type_id', 'entry_clock', 'exit_date', 'exit_clock', 'reason', 'note'].every(ad),
-                     eylem: gizli('action'), kartSecenek: f.querySelectorAll('[name="worker_card_id"] option').length, tipSecenek: f.querySelectorAll('[name="worker_type_id"] option').length };
+                     eylem: gizli('action'),
+                     v296: { rozet: !!bas.querySelector('.ekle-rozet svg'), baslik: bas.querySelector('.pm-title').textContent.trim() === 'Çalışma Ekle',
+                             yuvarlak: Math.abs(kap.width - kap.height) < 1 && getComputedStyle(d.querySelector('.ekle-kapat')).borderRadius.indexOf('50%') >= 0,
+                             ikonsuz, vazgecAlt: vz.bottom <= innerHeight, vazgecTikla: d.querySelector('.ekle-btn-vazgec').contains(vzUst),
+                             altSabit: Math.abs(d.querySelector('.ekle-foot').getBoundingClientRect().bottom - r.bottom) < 2,
+                             bilgi: !!d.querySelector('.ekle-bilgi svg'), alt: !!d.querySelector('.ekle-sel svg'),
+                             ekleSvg: !!btn.querySelector('svg'), pilot: ['Ekleme nedeni','Açıklama'].every(t => [...f.querySelectorAll('.form-label')].some(l => l.textContent.indexOf(t) === 0)) }, kartSecenek: f.querySelectorAll('[name="worker_card_id"] option').length, tipSecenek: f.querySelectorAll('[name="worker_type_id"] option').length };
         });
         ok('ekle: modal, ekran içinde, form kaydırılabiliyor, en altta gönder düğmesi görünür ve tıklanabilir, taşma yok', em.modal && em.kaydi && em.sol >= 0 && em.sag <= em.vw + 0.5 && em.ust >= 0 && em.alt <= em.vh + 0.5 && em.btnAlt <= em.vh && em.tiklanir && !em.tasma, JSON.stringify(em));
         ok('ekle: tüm form alanları var, eylem=puantaj_ekle, kart ve tip seçenekleri dolu', em.alanlar && em.eylem === 'puantaj_ekle' && em.kartSecenek >= 2 && em.tipSecenek >= 2, JSON.stringify(em));
+        const v = em.v296;
+        ok('v296: başlık ikon karosu + "Çalışma Ekle" başlığı + yuvarlak ✕ düğmesi', v.rozet && v.baslik && v.yuvarlak, JSON.stringify(v));
+        ok('v296: her alan etiketinin başında ikon var', v.ikonsuz.length === 0, JSON.stringify(v.ikonsuz));
+        ok('v296: bilgi kutusu ikonlu, Kart seçiminde içte kart ikonu, Ekle düğmesinde ikon', v.bilgi && v.alt && v.ekleSvg, JSON.stringify(v));
+        ok('v296: alt çubuk sabit (pencere altında) ve Vazgeç görünür+tıklanabilir', v.altSabit && v.vazgecAlt && v.vazgecTikla, JSON.stringify(v));
         await page.evaluate(() => document.getElementById('ekle').close());
         await page.waitForTimeout(100);
         ok('ekle: kapatınca hiçbir dialog görünmüyor', (await gorunenler(page)).length === 0);
+        if (ekran.width === 1280 || ekran.width === 390) {
+            await page.evaluate(() => pdksPuantajDialogAc('ekle')); await page.waitForTimeout(400);
+            if (process.env.SHOT_DIR) await page.screenshot({ path: path.join(process.env.SHOT_DIR, ekran.width === 1280 ? 'v296_ekle_pc.png' : 'v296_ekle_mob.png') });
+            await page.evaluate(() => document.getElementById('ekle').close());
+        }
         const rozet = await page.evaluate(() => [...document.querySelectorAll('.pdks-badge-elle')].filter(e => e.getBoundingClientRect().width > 0).map(e => e.textContent.trim()));
         // v294: render kurulumunda gerçek bir toplu işlem de yazılır (4 elle eklenen kayıt) — rozet yalnız source=manual satırlarda.
         ok('"✍ Elle eklendi" rozeti elle eklenen satırlarda görünüyor (1 tekil + 4 toplu)', rozet.length === 5 && rozet.every(r => /Elle eklendi/.test(r)), JSON.stringify(rozet));

@@ -191,8 +191,8 @@ render_flash();
     </div>
 </div>
 
-<form method="get" class="pdks-filter-bar">
-    <select name="donem" onchange="document.getElementById('rpOzelAlan').style.display = this.value==='ozel' ? 'inline-flex' : 'none'">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
+    <select name="donem" data-oto-filtre-bekle="ozel" onchange="document.getElementById('rpOzelAlan').style.display = this.value==='ozel' ? 'inline-flex' : 'none'">
         <?php foreach (pdks_rapor_presetler() as $val => $etiket): ?>
         <option value="<?= h($val) ?>" <?= $preset === $val ? 'selected' : '' ?>><?= h($etiket) ?></option>
         <?php endforeach; ?>
@@ -218,7 +218,7 @@ render_flash();
     <select name="depo" disabled title="Depo değiştirmek için üstteki/soldaki depo rozetini kullanın">
         <option><?= h($depo !== '' ? $depo : 'Depo seçilmemiş') ?></option>
     </select>
-    <button type="submit" class="btn">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?= export_menu('?' . http_build_query(array_filter($rp_filtre + ['csv' => 'gunluk'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($rp_filtre + ['xlsx' => 'gunluk'], fn($v) => $v !== null && $v !== '')), 'Günlük Excel', 'btn btn-ghost') ?>
     <?= export_menu('?' . http_build_query(array_filter($rp_filtre + ['csv' => 'cavus'], fn($v) => $v !== null && $v !== '')), '?' . http_build_query(array_filter($rp_filtre + ['xlsx' => 'cavus'], fn($v) => $v !== null && $v !== '')), 'Çavuş Excel', 'btn btn-ghost') ?>
     <?php if ($cavusId !== null || $tipId !== null || $preset !== 'bugun'): ?>
@@ -548,4 +548,5 @@ foreach ($karsilastirma['odeme_degisim'] as $cur => $d): ?>
 </div>
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

@@ -137,7 +137,7 @@ render_flash();
 <div class="pdks-empty"><p>Yöntem B tabloları henüz oluşturulmadı. Yönetici migrate.php sayfasından oluşturabilir.</p></div>
 <?php else: ?>
 
-<form method="get" class="pdks-filter-bar">
+<form method="get" class="pdks-filter-bar" data-oto-filtre>
     <select name="cavus">
         <option value="">Tüm çavuşlar</option>
         <?php foreach ($cavuslar as $c): ?>
@@ -151,7 +151,7 @@ render_flash();
         <option value="valid" <?= $durum === 'valid' ? 'selected' : '' ?>>Geçerli</option>
         <option value="cancelled" <?= $durum === 'cancelled' ? 'selected' : '' ?>>İptal (geri alındı)</option>
     </select>
-    <button type="submit" class="btn" style="align-self:flex-end">Filtrele</button>
+    <?= pdks_oto_filtre_noscript() ?>
     <?= export_menu('?' . http_build_query(array_filter($filtre + ['csv' => '1'], fn($v) => $v !== '' && $v !== null)), '?' . http_build_query(array_filter($filtre + ['xlsx' => '1'], fn($v) => $v !== '' && $v !== null)), 'Excel İndir', 'btn btn-ghost') ?>
     <?php if ($cavusId !== null || $baslangic !== '' || $bitis !== '' || $durum !== ''): ?>
     <a href="cavus_donem_raporu.php" class="btn btn-ghost" style="align-self:flex-end">Temizle</a>
@@ -246,4 +246,5 @@ render_flash();
 
 <?php endif; ?>
 
+<?php pdks_liste_ui_js(); ?>
 <?php render_footer(); ?>

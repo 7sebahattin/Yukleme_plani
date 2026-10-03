@@ -129,8 +129,9 @@ render_print_page_start('Çavuş Toplu Döküm', 'account', $mode, $orientation,
         </tr>
         </thead>
         <tbody>
-        <?php foreach ($satirlar as $r): $hakedis = $r['hakedis']; ?>
-        <tr>
+        <?php $gSon = null; $gNo = 1; foreach ($satirlar as $r): $hakedis = $r['hakedis'];
+            $gYeni = ($gSon !== $r['tarih']); if ($gYeni) { $gNo = 1 - $gNo; $gSon = $r['tarih']; } ?>
+        <tr class="ctd-g<?= $gNo ?><?= $gYeni ? ' ctd-gyeni' : '' ?>">
             <td><?= h(date('d.m.Y', strtotime($r['tarih']))) ?></td>
             <td><?= h($r['cavus_adi']) ?><?= $r['cavus_kodu'] !== '' ? ' (' . h($r['cavus_kodu']) . ')' : '' ?></td>
             <td class="num"><?= (int)$r['kadin'] ?></td>

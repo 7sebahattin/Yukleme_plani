@@ -39,6 +39,11 @@
 
 declare(strict_types=1);
 
+// v296: Personel Takibi liste ekranlarının ortak istemci davranışı (otomatik
+// filtre + tıklanabilir satır). Saf fonksiyon tanımları — DB/oturum/çıktı yok;
+// bu modülün her sayfası zaten bu dosyayı yüklediği için buradan bağlanır.
+require_once __DIR__ . '/pdks_liste_ui.php';
+
 // ── Yapılandırma ──────────────────────────────────────────
 defined('PDKS_GUNLUK_AKTIF') || define('PDKS_GUNLUK_AKTIF', true);
 
