@@ -74,6 +74,12 @@ foreach ($gunListesi as $row) {
     $faz8bOzet = $faz8bHazir ? pdks_faz8b_oturum_ozeti($sid, $pdo) : null;
     $satirlar[] = ['puantaj' => $row, 'hakedis' => $hk, 'hakedis_durum' => $hkDurum, 'faz8b' => $faz8bOzet];
 }
+// v299: tip sütunları tip kayıt defterinden — Kadın/Erkek/Rampacı HER ZAMAN (0 olsa da); atanmamış Karışık yalnız varsa.
+$tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static function ($c) use ($satirlar) {
+    if ($c['sistem']) return true;
+    foreach ($satirlar as $s) { if ((int)($s['puantaj']['giris'][$c['ad']] ?? 0) > 0) return true; }
+    return false;
+}));
 
 render_header('Çavuş Hakediş');
 $base = base_url();
@@ -118,14 +124,13 @@ $durumEtiket = ['hesaplanmadi' => ['Hesaplanmadı', 'pasif'], 'draft' => ['Tasla
 <div class="table-wrap pc-only">
 <table class="data-table">
 <thead><tr>
-    <th>Çavuş</th><th>Kadın</th><th>Erkek</th><th>Toplam</th><th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th><th>İşlem</th>
+    <th>Çavuş</th><?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?><th>Toplam</th><th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th><th>İşlem</th>
 </tr></thead>
 <tbody>
 <?php foreach ($satirlar as $s): $p=$s['puantaj']; $sess=$p['session']; $hk=$s['hakedis']; [$etkt,$ekod]=$durumEtiket[$s['hakedis_durum']]; $f8=$s['faz8b']; ?>
 <tr>
     <td class="pdks-row-name"><?= h($sess['foreman_name_snapshot']) ?></td>
-    <td><?= (int)($p['giris']['Kadın'] ?? 0) ?></td>
-    <td><?= (int)($p['giris']['Erkek'] ?? 0) ?></td>
+    <?php foreach ($tipSut as $tc): ?><td><?= (int)($p['giris'][$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
     <td><strong><?= (int)$p['giris_toplam'] ?></strong></td>
     <td>
         <?php if (!$faz8bHazir): ?>—

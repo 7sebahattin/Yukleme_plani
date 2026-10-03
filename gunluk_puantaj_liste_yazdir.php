@@ -52,10 +52,15 @@ $durumEtiketleri = ['acik' => 'Açık Mesai', 'kapali' => 'Kapalı Mesai', 'eksi
 // Listedeki (filtrelenmiş) satırların toplamı — üstteki gün özeti TÜM günü
 // gösterir, bu ise basılan tablonun kendi toplamıdır; ikisi filtre altında
 // bilerek farklı olabilir.
-$lKadin = 0; $lErkek = 0; $lGiris = 0; $lCikis = 0; $lEksik = 0;
+// v299: tip sütunları tip kayıt defterinden (Kadın/Erkek/Rampacı HER ZAMAN; atanmamış Karışık yalnız
+// varsa) — Kadın + Erkek + Rampacı + Karışık = Toplam Giriş.
+$lTipSay = [];
 foreach ($gunListesi as $row) {
-    $lKadin += (int)($row['giris']['Kadın'] ?? 0);
-    $lErkek += (int)($row['giris']['Erkek'] ?? 0);
+    foreach (pdks_gunluk_tip_sutunlari() as $tc) $lTipSay[$tc['ad']] = ($lTipSay[$tc['ad']] ?? 0) + (int)($row['giris'][$tc['ad']] ?? 0);
+}
+$tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($lTipSay[$c['ad']] ?? 0) > 0 || (int)($gunOzeti['giris'][$c['ad']] ?? 0) > 0));
+$lGiris = 0; $lCikis = 0; $lEksik = 0;
+foreach ($gunListesi as $row) {
     $lGiris += (int)$row['giris_toplam'];
     $lCikis += (int)$row['cikis_toplam'];
     $lEksik += (int)$row['eksik_toplam'];
@@ -88,8 +93,7 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
     <h3 class="pr-section">Gün Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Aktif Çavuş</div><div class="psb-value"><?= (int)$gunOzeti['aktif_cavus'] ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Kadın İşçi</div><div class="psb-value"><?= (int)($gunOzeti['giris']['Kadın'] ?? 0) ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Erkek İşçi</div><div class="psb-value"><?= (int)($gunOzeti['giris']['Erkek'] ?? 0) ?></div></div>
+        <?php foreach ($tipSut as $tc): ?><div class="print-summary-box"><div class="psb-label"><?= h($tc['sayac']) ?></div><div class="psb-value"><?= (int)($gunOzeti['giris'][$tc['ad']] ?? 0) ?></div></div><?php endforeach; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= (int)$gunOzeti['giris_toplam'] ?></div></div>
         <div class="print-summary-box psb-ok"><div class="psb-label">Tam Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['tam_cikis'] ?></div></div>
         <div class="print-summary-box<?= (int)$gunOzeti['eksik_cikis'] > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= (int)$gunOzeti['eksik_cikis'] ?></div></div>
@@ -102,7 +106,7 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
     <table class="print-table">
         <thead>
         <tr>
-            <th>Çavuş</th><th>Depo</th><th>Kadın</th><th>Erkek</th>
+            <th>Çavuş</th><th>Depo</th><?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
             <th>Toplam Giriş</th><th>Toplam Çıkış</th><th>Eksik</th>
             <th>İlk Giriş</th><th>Son Çıkış</th><th>Durum</th>
         </tr>
@@ -112,8 +116,7 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
         <tr>
             <td><?= h($s['foreman_name_snapshot']) ?></td>
             <td><?= h($s['depo'] ?: '—') ?></td>
-            <td class="num"><?= (int)($row['giris']['Kadın'] ?? 0) ?></td>
-            <td class="num"><?= (int)($row['giris']['Erkek'] ?? 0) ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($row['giris'][$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= (int)$row['giris_toplam'] ?></td>
             <td class="num"><?= (int)$row['cikis_toplam'] ?></td>
             <td class="num"><?= (int)$row['eksik_toplam'] ?></td>
@@ -123,15 +126,14 @@ render_print_page_start('Günlük Puantaj Listesi', 'daily', $mode, $orientation
         </tr>
         <?php endforeach; ?>
         <?php if (empty($gunListesi)): ?>
-        <tr><td colspan="10" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
+        <tr><td colspan="<?= 8 + count($tipSut) ?>" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
         <?php if (!empty($gunListesi)): ?>
         <tfoot>
         <tr>
             <td colspan="2">TOPLAM (<?= count($gunListesi) ?> mesai)</td>
-            <td class="num"><?= $lKadin ?></td>
-            <td class="num"><?= $lErkek ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($lTipSay[$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= $lGiris ?></td>
             <td class="num"><?= $lCikis ?></td>
             <td class="num"><?= $lEksik ?></td>

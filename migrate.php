@@ -372,7 +372,7 @@ render_header('Şema Migrasyon');
     <h2 style="margin-top:0;">Tanımlı Giriş — Kart Tanım Tablosu (v298)</h2>
     <p style="color:#555;font-size:.9em;">
       Yalnız ekleyici migrasyon: <code>worker_card_assignments</code> tablosunu ekler (mevcut tablolara ALTER YOK).
-      Kart Havuzu'nda bir karta çavuş + tip (Kadın/Erkek) + depo tanımlanır; kioskta "🏷 TANIMLI GİRİŞ" ile kart
+      Kart Havuzu'nda bir karta çavuş + tip (Kadın/Erkek/Rampacı) + depo tanımlanır; kioskta "🏷 TANIMLI GİRİŞ" ile kart
       okutulunca o çavuşun bugünkü mesaisine giriş yazılır. Günlük İşçi'nin genel hazır-mı kontrollerine BİLEREK
       EKLENMEZ — tablo kurulmasa da Giriş/Çıkış ekranı AYNEN çalışır, yalnız Tanımlı Giriş gizli kalır.
       <?php if ($pdks_kart_tanim_ran): ?>

@@ -61,18 +61,18 @@ $bKapanislar = ($finansalGosterilebilir && pdks_faz8b_cavus_ucret_b_sema_hazir($
     : [];
 
 $toplamIsci = 0;
-$toplamKadin = 0;
-$toplamErkek = 0;
-$toplamKarisik = 0;   // v295: atanmamış Karışık — Kadın+Erkek+Karışık = Toplam
+$toplamTip = [];       // v299: tip kayıt defterinden — sutun anahtarı => toplam (kadin/erkek/rampaci/karisik)
+foreach (pdks_gunluk_tip_sutunlari() as $tc) $toplamTip[$tc['sutun']] = 0;
 $toplamEksik = 0;
 
 foreach ($satirlar as $r) {
     $toplamIsci += (int)$r['toplam_isci'];
-    $toplamKadin += (int)$r['kadin'];
-    $toplamErkek += (int)$r['erkek'];
-    $toplamKarisik += (int)($r['karisik'] ?? 0);
+    foreach ($toplamTip as $sk => $_) $toplamTip[$sk] += (int)($r[$sk] ?? 0);
     $toplamEksik += (int)$r['eksik_cikis'];
 }
+
+// Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa.
+$tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($toplamTip[$c['sutun']] ?? 0) > 0));
 
 render_header('Çavuş Toplu Döküm');
 $base = base_url();
@@ -137,20 +137,12 @@ render_flash();
 <div class="pdks-kiosk-counters rapor-genis" style="margin-bottom:16px">
     <h3><?= h(date('m/Y', strtotime($ay . '-01'))) ?> Özeti</h3>
     <div class="pdks-kiosk-counter-totals">
+        <?php foreach ($tipSut as $tc): /* v299: Kadın + Erkek + Rampacı (+ atanmamış Karışık varsa) = Toplam */ ?>
         <div class="pdks-kiosk-counter-box">
-            <div class="lbl">Kadın</div>
-            <div class="val"><?= $toplamKadin ?></div>
+            <div class="lbl"><?= h($tc['sayac']) ?></div>
+            <div class="val"><?= (int)$toplamTip[$tc['sutun']] ?></div>
         </div>
-        <div class="pdks-kiosk-counter-box">
-            <div class="lbl">Erkek</div>
-            <div class="val"><?= $toplamErkek ?></div>
-        </div>
-        <?php if ($toplamKarisik > 0): ?>
-        <div class="pdks-kiosk-counter-box">
-            <div class="lbl">Karışık (atanmamış)</div>
-            <div class="val"><?= $toplamKarisik ?></div>
-        </div>
-        <?php endif; ?>
+        <?php endforeach; ?>
         <div class="pdks-kiosk-counter-box">
             <div class="lbl">Toplam İşçi</div>
             <div class="val"><?= $toplamIsci ?></div>
@@ -175,8 +167,7 @@ render_flash();
     <tr>
         <th>Tarih</th>
         <th>Çavuş</th>
-        <th>Kadın</th>
-        <th>Erkek</th>
+        <?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?>
         <th>Toplam İşçi</th>
         <th>Hakediş</th>
         <th>İlk Giriş</th>
@@ -209,8 +200,7 @@ render_flash();
             <strong><?= h($r['cavus_adi']) ?></strong>
             <div class="muted" style="font-size:.78rem"><?= h($r['cavus_kodu']) ?></div>
         </td>
-        <td><?= (int)$r['kadin'] ?></td>
-        <td><?= (int)$r['erkek'] ?></td>
+        <?php foreach ($tipSut as $tc): ?><td><?= (int)($r[$tc['sutun']] ?? 0) ?></td><?php endforeach; ?>
         <td><strong><?= (int)$r['toplam_isci'] ?></strong><?php if ((int)($r['karisik'] ?? 0) > 0): ?><div class="muted" style="font-size:.78rem"><?= (int)$r['karisik'] ?> Karışık</div><?php endif; ?></td>
 
         <td>

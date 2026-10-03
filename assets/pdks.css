@@ -2018,3 +2018,39 @@ html[data-theme="dark"] .pdks-badge-cift { background: #261d3d; color: #cdb8ff; 
 @media (max-width: 767px) {
     .cf2-grup { padding: 12px; }
 }
+/* ── v299: RAMPACI — 3. sabit sistem tipi (turuncu) ───────────────────────
+   Kiosk tip düğmesi (3B), tarama çemberi (pdks-tip-rampaci), başarı sonucu (pdks-sonuc-rampaci),
+   tip rozeti/kapsülü, Toplu İşlem grup başlığı. Sınıf son eki tip kayıt defterinden
+   (pdks_gunluk_tip_kayit()['renk']). */
+.pdks-daily-kiosk .pdks-kiosk-typebtn-rampaci {
+    border-color: #ffd29a;
+    background: linear-gradient(160deg, #ffb25b 0%, #f07d12 48%, #b3500a 100%);
+    box-shadow: inset 0 2px #ffffff77, inset 0 -4px #7a360699, 0 11px 0 #8a3f08, 0 18px 26px #4c200777;
+    text-shadow: 0 2px 2px #6b2f05;
+}
+.pdks-daily-kiosk .pdks-kiosk-typebtn-rampaci:hover,
+.pdks-daily-kiosk .pdks-kiosk-typebtn-rampaci:focus-visible {
+    background: linear-gradient(160deg, #ffc07a 0%, #f58a22 48%, #c05a10 100%);
+    box-shadow: inset 0 2px #ffffff99, inset 0 -4px #7a360699, 0 14px 0 #8a3f08, 0 24px 30px #4c200777;
+}
+.pdks-kiosk-type-badge.pdks-kiosk-type-badge-rampaci {
+    color: #d96a0a;
+    background: color-mix(in srgb, #f07d12 14%, transparent);
+}
+html[data-theme="dark"] .pdks-kiosk-type-badge.pdks-kiosk-type-badge-rampaci { color: #ffb067; }
+.pdks-result-gender.is-rampaci {
+    color: #fff;
+    background: linear-gradient(160deg, #ffb25b 0%, #f07d12 48%, #b3500a 100%);
+    border-color: #ffe2bf;
+    box-shadow: inset 0 3px 4px #ffffffa0, inset 0 -8px 12px #7a360688, 0 7px 0 #8a3f08, 0 13px 25px #4c200755, 0 0 28px #ffa04d70;
+    --gender-ikon: #fff1de;
+}
+.pdks-daily-kiosk .pdks-kiosk-scan.pdks-tip-rampaci { --tp-a: #f59e0b; --tp-b: #fcd34d; --tp-c: #b45309; }
+html:not([data-theme="dark"]) .pdks-daily-kiosk .pdks-kiosk-scan.pdks-tip-rampaci { --tp-a: #e8730a; --tp-b: #f59e0b; --tp-c: #9a3d05; }
+.pdks-daily-kiosk .pdks-kiosk-result-ok.pdks-sonuc-rampaci {
+    color: #ffa43d;
+    background: radial-gradient(circle at 50% 32%, #8a4a0c 0, #5a300f 36%, #34190a 76%);
+}
+.pdks-daily-kiosk #giResult.pdks-sonuc-rampaci .pdks-kiosk-result-msg.is-giris { text-shadow: 0 0 5px #ffc27a, 0 0 12px #f59b32, 0 0 24px #c9670e, 0 0 38px #8e4208; }
+.toplu-v2 .tv-grup-rampaci { --tv-ink: #c2620a; --tv-bant: #fff1e0; --tv-kenar: #f6cfa0; }
+html[data-theme="dark"] .toplu-v2 .tv-grup-rampaci { --tv-ink: #ffb067; --tv-bant: #3a2410; --tv-kenar: #6e4519; }

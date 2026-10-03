@@ -178,6 +178,10 @@ const OZET = { giris: { 'Kadın': 4, 'Erkek': 2 }, cikis: { 'Kadın': 1 }, giris
         await page.click('#giCavusDegistir2'); await page.waitForTimeout(300);
         await page.click('[data-gi-cavus-id="1"]'); await page.waitForTimeout(300);
 
+        // ── v299: RAMPACI düğmesi tip ekranında Erkek'ten sonra, Karışık'tan önce; hızlı geçiş gizli ──
+        const sira = await page.evaluate(() => [...document.querySelectorAll('#giTipSec [data-gi-tip-kod]')].map(b => b.getAttribute('data-gi-tip-kod')));
+        ok('tip düğmesi sırası KADIN, ERKEK, RAMPACI, KARISIK', JSON.stringify(sira) === JSON.stringify(['KADIN', 'ERKEK', 'RAMPACI', 'KARISIK']), JSON.stringify(sira));
+        ok('RAMPACI düğmesi turuncu sınıfı taşır', await page.evaluate(() => document.querySelector('[data-gi-tip-kod="RAMPACI"]').classList.contains('pdks-kiosk-typebtn-rampaci')));
         // ── ÇIKIŞ modunda geçiş düğmesi YOK (mod ekranındayız) ──
         await page.click('[data-gi-mode="CIKIS"]'); await page.waitForTimeout(400);
         ok('ÇIKIŞ modunda tip geçiş düğmesi gizli', await page.evaluate(() => document.getElementById('giTipGecis').hidden));

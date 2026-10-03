@@ -59,12 +59,12 @@ if ($cavusId !== null) {
     $cavusAdi = $stC->fetchColumn() ?: null;
 }
 
-$topKadin = 0; $topErkek = 0; $topIsci = 0; $topEksik = 0;
+// v299: tip sütunları tip kayıt defterinden (Kadın/Erkek/Rampacı HER ZAMAN; atanmamış Karışık yalnız varsa).
+$topTip = []; $topIsci = 0; $topEksik = 0;
 $hakedisParaBirimi = [];   // ⚠ para birimi BAŞINA ayrı — kurlar toplanmaz
 foreach ($satirlar as $s) {
     $p = $s['puantaj'];
-    $topKadin += (int)($p['giris']['Kadın'] ?? 0);
-    $topErkek += (int)($p['giris']['Erkek'] ?? 0);
+    foreach (pdks_gunluk_tip_sutunlari() as $tc) $topTip[$tc['ad']] = ($topTip[$tc['ad']] ?? 0) + (int)($p['giris'][$tc['ad']] ?? 0);
     $topIsci  += (int)$p['giris_toplam'];
     $topEksik += (int)$p['eksik_toplam'];
     if ($s['hakedis']) {
@@ -74,6 +74,7 @@ foreach ($satirlar as $s) {
         $hakedisParaBirimi[$cur]['adet']++;
     }
 }
+$tipSut = array_values(array_filter(pdks_gunluk_tip_sutunlari(), static fn($c) => $c['sistem'] || (int)($topTip[$c['ad']] ?? 0) > 0));
 
 $mode = 'summary';
 $orientation = print_orientation($mode, 8);
@@ -102,8 +103,7 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
     <h3 class="pr-section">Gün Özeti</h3>
     <div class="print-summary-row">
         <div class="print-summary-box"><div class="psb-label">Mesai</div><div class="psb-value"><?= count($satirlar) ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Kadın</div><div class="psb-value"><?= $topKadin ?></div></div>
-        <div class="print-summary-box"><div class="psb-label">Erkek</div><div class="psb-value"><?= $topErkek ?></div></div>
+        <?php foreach ($tipSut as $tc): ?><div class="print-summary-box"><div class="psb-label"><?= h($tc['kisa']) ?></div><div class="psb-value"><?= (int)($topTip[$tc['ad']] ?? 0) ?></div></div><?php endforeach; ?>
         <div class="print-summary-box"><div class="psb-label">Toplam İşçi</div><div class="psb-value"><?= $topIsci ?></div></div>
         <div class="print-summary-box<?= $topEksik > 0 ? ' psb-warn' : '' ?>"><div class="psb-label">Eksik Çıkış</div><div class="psb-value"><?= $topEksik ?></div></div>
     </div>
@@ -128,7 +128,7 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
     <table class="print-table">
         <thead>
         <tr>
-            <th>Çavuş</th><th>Kadın</th><th>Erkek</th><th>Toplam</th>
+            <th>Çavuş</th><?php foreach ($tipSut as $tc): ?><th><?= h($tc['kisa']) ?></th><?php endforeach; ?><th>Toplam</th>
             <th>Mesai Değ.</th><th>Hakediş</th><th>Durum</th><th>Uyarı</th>
         </tr>
         </thead>
@@ -138,8 +138,7 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
         ?>
         <tr>
             <td><?= h($sess['foreman_name_snapshot']) ?></td>
-            <td class="num"><?= (int)($p['giris']['Kadın'] ?? 0) ?></td>
-            <td class="num"><?= (int)($p['giris']['Erkek'] ?? 0) ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($p['giris'][$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= (int)$p['giris_toplam'] ?></td>
             <td><?php
                 if (!$faz8bHazir) echo '—';
@@ -157,15 +156,14 @@ render_print_page_start('Çavuş Hakediş Listesi', 'account', $mode, $orientati
         </tr>
         <?php endforeach; ?>
         <?php if (empty($satirlar)): ?>
-        <tr><td colspan="8" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
+        <tr><td colspan="<?= 5 + count($tipSut) ?>" class="pr-empty">Bu tarih/filtrelerde mesai kaydı bulunamadı.</td></tr>
         <?php endif; ?>
         </tbody>
         <?php if (!empty($satirlar)): ?>
         <tfoot>
         <tr>
             <td>TOPLAM (<?= count($satirlar) ?> mesai)</td>
-            <td class="num"><?= $topKadin ?></td>
-            <td class="num"><?= $topErkek ?></td>
+            <?php foreach ($tipSut as $tc): ?><td class="num"><?= (int)($topTip[$tc['ad']] ?? 0) ?></td><?php endforeach; ?>
             <td class="num"><?= $topIsci ?></td>
             <td>—</td><td>—</td><td>—</td>
             <td class="num"><?= $topEksik ?></td>
