@@ -187,7 +187,7 @@ render_flash();
     <h1>📊 Yönetim Raporları</h1>
     <div class="page-head-actions">
         <a href="<?= h('rapor_yazdir.php?' . http_build_query(array_filter(['donem' => $preset, 'baslangic' => $start, 'bitis' => $end, 'cavus' => $cavusId, 'tip' => $tipId], fn($v) => $v !== null && $v !== ''))) ?>" class="btn btn-ghost">🖨️ Yazdır</a>
-        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
 

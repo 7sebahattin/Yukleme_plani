@@ -303,7 +303,7 @@ if ($basari !== ''): ?>
     <h1>🪪 Kart Havuzu</h1>
     <div class="page-head-actions">
         <a href="isci_tipleri.php" class="btn btn-ghost">⚙️ İşçi Tipleri</a>
-        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
 

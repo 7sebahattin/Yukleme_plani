@@ -2159,3 +2159,12 @@ html[data-theme="dark"] .sv-bilgi-kutu { background: #14263f; color: #b9d4ff; }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .sv-bilgi-kutu { background: #14263f; color: #b9d4ff; }
 }
+
+/* =====================================================================
+   v301 — Filtre çubuğundaki tarih kutusu masaüstünde SABİT genişlik
+   (global `input[type=date]{width:100%}` kuralı Günlük Puantaj'da tarihi tüm satıra
+   yayıyordu). Mobilde (<768px) tam genişlik kalır.
+   ===================================================================== */
+@media (min-width: 768px) {
+    .pdks-filter-bar input[type="date"] { width: auto; flex: 0 0 auto; min-width: 150px; max-width: 200px; }
+}

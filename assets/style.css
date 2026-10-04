@@ -5422,6 +5422,21 @@ html[data-theme="dark"] .btn-geri {
 }
 html[data-theme="dark"] .btn-geri:hover { background: linear-gradient(180deg, #3a7bef, #2a63c9); }
 
+/* v301: "← Personel Takibi" geri düğmesi TÜM sayfalarda TURUNCU (sahip kararı). Diğer geri
+   düğmeleri mavi kalır; yalnız personel_takip.php'ye giden bağlantıya `btn-geri-ptak` verilir.
+   Beyaz yazı AA için koyu turuncu (#c2410c ≈ 5:1). */
+.btn-geri.btn-geri-ptak {
+    background: linear-gradient(180deg, #e8650f, #c2410c);
+    border-color: #9a3412;
+    box-shadow: 0 2px 6px rgba(194,65,12,.34), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.btn-geri.btn-geri-ptak:hover { background: linear-gradient(180deg, #c2410c, #9a3412); color: #fff; border-color: #7c2d12; }
+html[data-theme="dark"] .btn-geri.btn-geri-ptak {
+    background: linear-gradient(180deg, #d9631a, #a8420f); color: #fff; border-color: #ffb27a;
+    box-shadow: 0 2px 8px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.18);
+}
+html[data-theme="dark"] .btn-geri.btn-geri-ptak:hover { background: linear-gradient(180deg, #e8721f, #b84a12); }
+
 /* — Filtre hapları (Bugün / Bu hafta / İşlendi ...) — */
 html[data-theme="dark"] .pill { background: #1d2635; }
 html[data-theme="dark"] .durum-opt-active.durum-opt-beklemede { background: #1d2635; }
