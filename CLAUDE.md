@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v301` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v302` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -728,6 +728,27 @@ Kadın/Erkek yanında 3. SABİT sistem tipi: `worker_types` RAMPACI/"Rampacı" (
 - **"← Personel Takibi" geri düğmesi TURUNCU** (tüm sayfalar, sahip kararı): `personel_takip.php`'ye giden bağlantı `class="btn btn-geri btn-geri-ptak"` taşır (`style.css`, açık + koyu tema; beyaz yazı AA için #c2410c). Diğer geri düğmeleri (`.btn-geri`) MAVİ kalır — turuncu yalnız bu hedefe. Yeni sayfa eklerken bu bağlantıya `btn-geri-ptak` ver (statik test denetler).
 - **Filtre çubuğu tarih kutusu** (`.pdks-filter-bar input[type=date]`, pdks.css): ≥768px'te sabit genişlik (max 200px) — global `input[type=date]{width:100%}` Günlük Puantaj'da tarihi tüm satıra yayıyordu; mobilde tam genişlik kalır.
 - Test: `php scripts/pdks_geri_ptak_smoke.php` · `PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_liste.html` → `node scripts/pdks_geri_ptak_smoke.js`.
+
+### Kart Hareketleri — Seçerek Toplu Düzenle / İptal (v302)
+Mesai Detayı "Kart Hareketleri"nde satırlar seçilir (masaüstü: kutu **Kart No hücresinin İÇİNDE** — ayrı sütun
+DEĞİL, sıralama ve testleri `cells[0]` = Kart No'ya bağlı; mobil: kart başında) → "N seçili" çubuğu →
+**✏ Seçilenleri Düzenle** (Hepsine uygula satırı + satır satır Tip / Giriş / Çıkış listesi) ya da
+**🗑 Seçilenleri İptal Et**. Kapı tekil Düzenle ile AYNI: `is_admin() && $faz8jHazir && mesai deposu = aktif depo`
+(`$tdAjaxKapi`). Migration YOK, yeni yetki YOK.
+- **İkinci yazma yolu YOK:** tekil `pdks_faz8j_duzelt()` satır mantığı `pdks_faz8j_duzelt_satir()` çekirdeğine
+  çıkarıldı (dönem UPDATE'inin TEK yeri); `pdks_faz8j_toplu_duzelt()` onu, `pdks_faz8j_toplu_iptal()`
+  `pdks_faz8j_void_uygula()`'yı çağırır — toplu gövdelerde `UPDATE daily_worker_work_periods` YAZMA (test denetler).
+- HEP-YA-HİÇ tek tx, mesai kilidi İLK sorgu, `istek_id` (audit `puantaj_toplu_duzeltme`/`puantaj_toplu_iptal`,
+  modül `daily_work_sessions`, record_id = mesai; satır audit'i `toplu_id` taşır), kesin hakediş red, sınır
+  `PDKS_FAZ8J_TOPLU_LIMIT`. Tüm satırlar denetlenir, hatalar satır satır döner (`hatalar[{period_id,card_no,hata}]`),
+  biri bile hatalıysa hiçbir şey yazılmaz. Kart DEĞİŞMEZ; giriş günü = mesai günü (istemciden tarih alınmaz);
+  çıkış < giriş → `exit_date` = ertesi gün ("+1 gün"). **Değişmeyen satır ATLANIR** (dakika düzeyinde; saniye korunur)
+  — Tam/Yarım/FM onayları sıfırlanmaz. Hiç değişiklik yoksa `ok:false`.
+- Uçlar `?ajax=toplu_duzelt|toplu_iptal` (`_puantaj_toplu_duzelt_ajax.php`, include-only, mesai id'si sunucudan).
+  Pencereler `_puantaj_toplu_duzelt.php` (native dialog, fonksiyon tanımlamaz, kullanıcı verisi textContent),
+  pdks.css "v302" bloğu.
+- Test: `php scripts/pdks_toplu_duzelt_smoke.php` · `node scripts/pdks_toplu_duzelt_smoke.js` (kendi sayfasını
+  `PUANTAJ_TOPLU_DUZELT=1 php scripts/pdks_puantaj_dialog_render.php` ile basar).
 
 ### Kart Hareketleri Sıralaması + Kapanış Notu (v299)
 
