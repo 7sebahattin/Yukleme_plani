@@ -155,6 +155,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $hata = $sonuc['hata'] ?? 'Tanım kaldırılamadı.';
+    } elseif ($action === 'tanimsiz_sil') {
+        // v303: SEÇEREK silme — YALNIZ yönetici. Tüm kural/yazma pdks_gunluk_kart_tanimsiz_sil()'de
+        // (hep-ya-hiç, geçmişsiz kart silinir / geçmişli kart arşivlenir). Burada yalnız kapı + biçim + PRG.
+        if (!is_admin()) {
+            $hata = 'Kart silme yalnız yönetici içindir.';
+        } else {
+            $silIds = array_values(array_filter(array_map('intval', is_array($_POST['kart_ids'] ?? null) ? $_POST['kart_ids'] : []), fn($i) => $i > 0));
+            $sonuc = pdks_gunluk_kart_tanimsiz_sil($silIds, trim((string)($_POST['reason'] ?? '')),
+                trim((string)($_POST['istek_id'] ?? '')), (int)$auth_user['id'], $pdo);
+            if (!empty($sonuc['ok'])) {
+                $m = [];
+                if ((int)($sonuc['silinen'] ?? 0) > 0) $m[] = (int)$sonuc['silinen'] . ' kart kalıcı silindi';
+                if ((int)($sonuc['arsivlenen'] ?? 0) > 0) $m[] = (int)$sonuc['arsivlenen'] . ' kart arşivlendi (devre dışı — geçmişi korunur)';
+                header('Location: isci_kartlari.php?' . http_build_query(array_filter([
+                    'q' => $_GET['q'] ?? '', 'tanim' => $_GET['tanim'] ?? '', 'cavus' => $_GET['cavus'] ?? '',
+                    'ttip' => $_GET['ttip'] ?? '', 'durum' => $_GET['durum'] ?? '',
+                ], fn($v) => is_scalar($v) && (string)$v !== '' && (string)$v !== '0') + ['ok' => implode(', ', $m) . '.']));
+                exit;
+            }
+            if (!empty($sonuc['tekrar'])) {
+                header('Location: isci_kartlari.php?ok=' . urlencode('Bu silme isteği zaten uygulanmıştı — tekrar işlem yapılmadı.'));
+                exit;
+            }
+            $hata = (string)($sonuc['hata'] ?? 'Kartlar silinemedi.');
+            foreach (array_slice((array)($sonuc['hatalar'] ?? []), 0, 12) as $hs) {
+                $hata .= ' · ' . (is_array($hs) ? trim(($hs['card_no'] ?? '') . ': ' . ($hs['hata'] ?? '')) : (string)$hs);
+            }
+            if (count((array)($sonuc['hatalar'] ?? [])) > 12) $hata .= ' · …';
+            $hata .= ' Hiçbir kart değiştirilmedi.';
+        }
     } else {
         $hata = 'Bilinmeyen işlem.';
     }
@@ -163,11 +193,23 @@ if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 
 $tipler = pdks_gunluk_tip_listele(true, $pdo);
 
+// ── v303: sayaçlar + "kime ne tanımlandı" özeti (TEK kaynak: pdks_gunluk_kart_havuzu_ozet) ──
+$ozet = ['tanim_hazir' => false, 'toplam' => 0, 'tanimli' => 0, 'tanimsiz' => 0, 'arsiv' => 0, 'kayip' => 0, 'cavuslar' => []];
+try { $ozet = pdks_gunluk_kart_havuzu_ozet($pdo) + $ozet; }
+catch (PDOException $e) { /* tablolar yok — sayaçlar 0, aşağıdaki liste hatayı zaten bildirir */ }
+$ozetCavuslar = $tanimHazir ? (array)$ozet['cavuslar'] : [];
+
 // ── Kart listesi (filtre) ──────────────────────────────────
 $q = trim($_GET['q'] ?? '');
-$tip_f = (int)($_GET['tip'] ?? 0);
+$tanim_f = trim((string)($_GET['tanim'] ?? ''));
+if (!in_array($tanim_f, ['tanimli', 'tanimsiz'], true) || !$tanimHazir) $tanim_f = '';
+$cavus_f = $tanimHazir ? (int)($_GET['cavus'] ?? 0) : 0;
+$ttip_f = $tanimHazir ? (int)($_GET['ttip'] ?? 0) : 0;
+if ($cavus_f > 0 || $ttip_f > 0) $tanim_f = 'tanimli';   // çavuş / tanım tipi seçmek = tanımlı kartlara bakmak
 $durum_f = trim($_GET['durum'] ?? '');
-if ($durum_f !== '' && !array_key_exists($durum_f, pdks_gunluk_kart_durumlari())) $durum_f = '';
+// Listede gösterilen durum etiketleri (kart "Boşta" etiketi tanımlı kartta YANLIŞ olurdu → süzgeçte "Kullanılabilir").
+$durumEtiket = ['available' => 'Kullanılabilir', 'lost' => 'Kayıp', 'disabled' => 'Devre dışı / arşiv'];
+if ($durum_f !== '' && !isset($durumEtiket[$durum_f])) $durum_f = '';
 
 // Kartsız mesai kayıtlarının SANAL kartları (config/pdks_faz8j.php) havuzda gösterilmez.
 $where = ["w.enrolled_source <> 'kartsiz'"]; $params = [];
@@ -175,19 +217,28 @@ if ($q !== '') {
     $where[] = "(w.card_no LIKE ? OR w.canonical_uid LIKE ?)";
     $params = array_merge($params, ["%$q%", "%$q%"]);
 }
-if ($tip_f > 0) { $where[] = "w.worker_type_id = ?"; $params[] = $tip_f; }
+// Varsayılan liste ARŞİVİ (devre dışı) GİZLER; yalnız Durum = "Devre dışı / arşiv" ile görünür.
 if ($durum_f !== '') { $where[] = "w.status = ?"; $params[] = $durum_f; }
+else { $where[] = "w.status <> 'disabled'"; }
+if ($tanimHazir) {
+    if ($tanim_f === 'tanimli')  $where[] = "a.id IS NOT NULL";
+    if ($tanim_f === 'tanimsiz') $where[] = "a.id IS NULL";
+    if ($cavus_f > 0) { $where[] = "a.foreman_id = ?"; $params[] = $cavus_f; }
+    if ($ttip_f > 0)  { $where[] = "a.worker_type_id = ?"; $params[] = $ttip_f; }
+}
 $whereSql = implode(' AND ', $where);
+$filtreVar = ($q !== '' || $tanim_f !== '' || $durum_f !== '');
 
 $kartlar = [];
 try {
     // ⚠ FAZ 8A: LEFT JOIN — worker_type_id artık NULL olabilir (nötr kart).
-    // Eski INNER JOIN, worker_type_id'si NULL olan (Faz 8A'da yeni oluşturulan
-    // NORMAL) kartları listeden SESSİZCE DÜŞÜRÜRDÜ.
+    // v303: tanım tablosu varsa aktif tanıma LEFT JOIN (a.aktif_kart_id = w.id; kart başına en çok 1 satır — UNIQUE).
+    $join = $tanimHazir ? "LEFT JOIN worker_card_assignments a ON a.aktif_kart_id = w.id" : "";
     $st = $pdo->prepare(
         "SELECT w.*, t.name AS tip_adi, t.code AS tip_kodu
            FROM worker_cards w
            LEFT JOIN worker_types t ON t.id = w.worker_type_id
+           $join
           WHERE $whereSql
           ORDER BY w.created_at DESC, w.id DESC
           LIMIT 300"
@@ -207,6 +258,25 @@ if ($tanimHazir) {
         $tanimTipler = pdks_gunluk_desteklenen_tip_listele($pdo);
     } catch (PDOException $e) { /* seçenek yoksa form boş kalır */ }
 }
+// v303: silme seçimi YALNIZ yöneticide ve YALNIZ tanımsız kartta (tanımlı kart önce "Tanımı Kaldır" ister).
+$silYetki = is_admin();
+$silinebilir = function (array $k) use ($tanimlar, $silYetki): bool {
+    return $silYetki && !isset($tanimlar[(int)$k['id']]) && ($k['enrolled_source'] ?? '') !== 'kartsiz';
+};
+$silAdet = 0; foreach ($kartlar as $k) if ($silinebilir($k)) $silAdet++;
+/** Bağlantı kurucu: yalnız verilen filtreler (özet/sayaç bağlantıları). */
+$khUrl = function (array $p): string {
+    $p = array_filter($p, fn($v) => (string)$v !== '' && (string)$v !== '0');
+    return 'isci_kartlari.php' . ($p ? '?' . http_build_query($p) : '');
+};
+/** Durum rozeti: tanımlı + kullanılabilir kart "Boşta" DEĞİL → "🏷 Tanımlı". */
+$durumRozet = function (array $k) use ($tanimlar): string {
+    if ($k['status'] === 'available' && isset($tanimlar[(int)$k['id']])) {
+        return '<span class="pdks-badge pdks-badge-tanimli">🏷 Tanımlı</span>';
+    }
+    $sinif = $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal');
+    return '<span class="pdks-badge pdks-badge-' . $sinif . '">' . h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) . '</span>';
+};
 /** Liste satırı için tanım rozeti + uyarı rozetleri (HTML). */
 $tanimRozet = function (array $k) use ($tanimlar): string {
     $t = $tanimlar[(int)$k['id']] ?? null;
@@ -243,6 +313,50 @@ if ($basari !== ''): ?>
         <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
+
+<!-- ── v303: sayaçlar (Toplam · Tanımlı · Tanımsız) + "kime ne tanımlandı" özeti. Sayılar TEK kaynaktan
+     (pdks_gunluk_kart_havuzu_ozet — kartsız sanal kartlar hariç, arşiv ayrı). Her biri aynı sayfanın süzgeç bağlantısıdır. -->
+<nav class="kh-sayac" aria-label="Kart sayıları">
+    <a class="kh-sayac-kart<?= ($tanim_f === '' && $durum_f === '') ? ' kh-aktif' : '' ?>" href="<?= h($khUrl([])) ?>" id="khSayacToplam">
+        <span class="kh-sayac-ad">Toplam</span><strong class="kh-sayac-sayi"><?= (int)$ozet['toplam'] ?></strong>
+    </a>
+    <?php if ($tanimHazir): ?>
+    <a class="kh-sayac-kart kh-sayac-tanimli<?= $tanim_f === 'tanimli' ? ' kh-aktif' : '' ?>" href="<?= h($khUrl(['tanim' => 'tanimli'])) ?>" id="khSayacTanimli">
+        <span class="kh-sayac-ad">🏷 Tanımlı</span><strong class="kh-sayac-sayi"><?= (int)$ozet['tanimli'] ?></strong>
+    </a>
+    <a class="kh-sayac-kart<?= $tanim_f === 'tanimsiz' ? ' kh-aktif' : '' ?>" href="<?= h($khUrl(['tanim' => 'tanimsiz'])) ?>" id="khSayacTanimsiz">
+        <span class="kh-sayac-ad">Tanımsız</span><strong class="kh-sayac-sayi"><?= (int)$ozet['tanimsiz'] ?></strong>
+    </a>
+    <?php endif; ?>
+    <span class="kh-sayac-kucuk">
+        <a href="<?= h($khUrl(['durum' => 'disabled'])) ?>" id="khSayacArsiv" title="Devre dışı / arşivlenmiş kartlar (varsayılan listede görünmez)">Arşiv / devre dışı <strong><?= (int)$ozet['arsiv'] ?></strong></a>
+        <a href="<?= h($khUrl(['durum' => 'lost'])) ?>" id="khSayacKayip">Kayıp <strong><?= (int)$ozet['kayip'] ?></strong></a>
+    </span>
+</nav>
+
+<?php if ($tanimHazir && $ozetCavuslar): ?>
+<section class="card kh-ozet" id="khOzet" aria-labelledby="khOzetBaslik">
+    <h2 class="kh-ozet-baslik" id="khOzetBaslik">🏷 Tanımlı Kartlar <span class="muted">— kime ne tanımlandı</span></h2>
+    <ul class="kh-cavus-liste">
+    <?php foreach ($ozetCavuslar as $c): $cid = (int)$c['foreman_id']; ?>
+        <li class="kh-cavus<?= ($cavus_f === $cid) ? ' kh-aktif' : '' ?>" data-cavus="<?= $cid ?>">
+            <div class="kh-cavus-ust">
+                <a class="kh-cavus-ad" href="<?= h($khUrl(['tanim' => 'tanimli', 'cavus' => $cid])) ?>"><?= h($c['foreman_name']) ?></a>
+                <span class="kh-toplam" title="Bu çavuşa tanımlı kart sayısı"><?= (int)$c['toplam'] ?></span>
+                <?php if (empty($c['foreman_aktif'])): ?><span class="pdks-badge pdks-badge-kayip" title="Tanımlı çavuş pasif — kiosk girişi reddeder">çavuş pasif</span><?php endif; ?>
+                <?php if (!empty($c['depolar'])): ?><span class="kh-depo muted"><?= h(implode(' · ', (array)$c['depolar'])) ?></span><?php endif; ?>
+            </div>
+            <div class="kh-cipler">
+            <?php foreach ((array)$c['tipler'] as $t): $tid = (int)$t['worker_type_id']; ?>
+                <a class="kh-cip<?= ($cavus_f === $cid && $ttip_f === $tid) ? ' kh-aktif' : '' ?>"
+                   href="<?= h($khUrl(['tanim' => 'tanimli', 'cavus' => $cid, 'ttip' => $tid])) ?>"><?= h($t['tip_adi']) ?> <b><?= (int)$t['adet'] ?></b></a>
+            <?php endforeach; ?>
+            </div>
+        </li>
+    <?php endforeach; ?>
+    </ul>
+</section>
+<?php endif; ?>
 
 <!-- ── Kart Sorgula (Sprint Kart-Sorgula-01) — GİRİŞ/ÇIKIŞ YAPMADAN kartın
      şu anki durumunu + son 5 dönemini gösterir. Enroll kutusundan (aşağıda)
@@ -296,25 +410,59 @@ if ($basari !== ''): ?>
 <?php endif; ?>
 
 <!-- ── Kart listesi ───────────────────────────────────────── -->
-<form method="get" class="pdks-filter-bar" data-oto-filtre>
+<form method="get" class="pdks-filter-bar" data-oto-filtre id="khFiltre">
     <input type="search" name="q" value="<?= h($q) ?>" placeholder="Kart no veya UID ara…">
-    <select name="tip">
-        <option value="">Tüm tipler</option>
-        <?php foreach (pdks_gunluk_tip_listele(false, $pdo) as $t): ?>
-        <option value="<?= (int)$t['id'] ?>" <?= $tip_f === (int)$t['id'] ? 'selected' : '' ?>><?= h($t['name']) ?></option>
+    <?php if ($tanimHazir): ?>
+    <select name="tanim" id="khFTanim" aria-label="Tanım">
+        <option value="">Tanım: tümü</option>
+        <option value="tanimli" <?= $tanim_f === 'tanimli' ? 'selected' : '' ?>>🏷 Tanımlı</option>
+        <option value="tanimsiz" <?= $tanim_f === 'tanimsiz' ? 'selected' : '' ?>>Tanımsız</option>
+    </select>
+    <select name="cavus" id="khFCavus" aria-label="Çavuş">
+        <option value="">Çavuş: tümü</option>
+        <?php foreach ($ozetCavuslar as $c): ?>
+        <option value="<?= (int)$c['foreman_id'] ?>" <?= $cavus_f === (int)$c['foreman_id'] ? 'selected' : '' ?>><?= h($c['foreman_name']) ?> (<?= (int)$c['toplam'] ?>)</option>
         <?php endforeach; ?>
     </select>
+    <select name="ttip" id="khFTtip" aria-label="Tanımlı tip">
+        <option value="">Tip: tümü</option>
+        <?php foreach ($tanimTipler as $t): ?>
+        <option value="<?= (int)$t['id'] ?>" <?= $ttip_f === (int)$t['id'] ? 'selected' : '' ?>><?= h($t['name']) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <select name="durum">
-        <option value="">Tüm durumlar</option>
-        <?php foreach (pdks_gunluk_kart_durumlari() as $k => $lbl): ?>
+        <option value="">Durum: arşiv hariç</option>
+        <?php foreach ($durumEtiket as $k => $lbl): ?>
         <option value="<?= h($k) ?>" <?= $durum_f === $k ? 'selected' : '' ?>><?= h($lbl) ?></option>
         <?php endforeach; ?>
     </select>
     <?= pdks_oto_filtre_noscript() ?>
-    <?php if ($q !== '' || $tip_f > 0 || $durum_f !== ''): ?>
+    <?php if ($filtreVar || $cavus_f > 0 || $ttip_f > 0): ?>
     <a href="isci_kartlari.php" class="btn btn-ghost">Temizle</a>
     <?php endif; ?>
 </form>
+<?php if ($tanimHazir && ($cavus_f > 0 || $ttip_f > 0)): ?>
+<p class="muted kh-filtre-not" id="khFiltreNot">Gösterilen: yalnız tanımlı kartlar<?php
+    foreach ($ozetCavuslar as $c) if ((int)$c['foreman_id'] === $cavus_f) echo ' · çavuş ' . h($c['foreman_name']);
+    foreach ($tanimTipler as $t) if ((int)$t['id'] === $ttip_f) echo ' · tip ' . h($t['name']);
+?>.</p>
+<?php endif; ?>
+<?php if (count($kartlar) >= 300): ?>
+<p class="muted kh-filtre-not">İlk 300 kart gösteriliyor — aramayı ya da süzgeci daraltın. (Üstteki sayılar tüm havuzu gösterir.)</p>
+<?php endif; ?>
+
+<?php if ($silAdet > 0): /* v303: seçerek silme çubuğu — yalnız yönetici + tanımsız kart varsa */ ?>
+<div class="td-cubuk kh-cubuk" id="khCubuk" role="region" aria-label="Seçili kartlar">
+    <label class="td-cubuk-tumu"><input type="checkbox" class="kh-tumu" autocomplete="off"> Tümünü seç</label>
+    <span class="td-cubuk-sayi"><strong id="khSeciliSayi">0</strong> seçili</span>
+    <span class="td-cubuk-limit" id="khLimitNot" hidden>— bir seferde en fazla <?= (int)(defined('PDKS_FAZ8J_TOPLU_LIMIT') ? PDKS_FAZ8J_TOPLU_LIMIT : 250) ?> kart</span>
+    <span class="td-cubuk-btns">
+        <button type="button" class="btn btn-sm btn-danger" id="khSilBtn" disabled>🗑 Seçilenleri Sil</button>
+        <button type="button" class="btn btn-sm" id="khTemizleBtn" disabled>Seçimi temizle</button>
+    </span>
+</div>
+<?php endif; ?>
 
 <?php if (empty($kartlar)): ?>
 <div class="pdks-empty">
@@ -323,10 +471,10 @@ if ($basari !== ''): ?>
 </div>
 <?php else: ?>
 <div class="table-wrap pc-only">
-<table class="data-table">
+<table class="data-table kh-tablo">
 <thead><tr>
+    <?php if ($silAdet > 0): ?><th class="kh-sec-th"><label class="td-sec-kap"><input type="checkbox" class="kh-tumu" autocomplete="off" aria-label="Tümünü seç"></label></th><?php endif; ?>
     <th>Kart No</th>
-    <th>Tip (eski — tanım için kullanılmaz)</th>
     <?php if ($tanimHazir): ?><th>Tanımlı Giriş</th><?php endif; ?>
     <th>UID (kanonik)</th>
     <th>Durum</th>
@@ -334,14 +482,13 @@ if ($basari !== ''): ?>
     <th class="actions-col">İşlem</th>
 </tr></thead>
 <tbody>
-<?php foreach ($kartlar as $k): ?>
-<tr>
+<?php foreach ($kartlar as $k): $secilebilir = $silinebilir($k); ?>
+<tr<?= isset($tanimlar[(int)$k['id']]) ? ' data-tanimli="1"' : '' ?>>
+    <?php if ($silAdet > 0): ?><td class="kh-sec-td"><?php if ($secilebilir): ?><label class="td-sec-kap"><input type="checkbox" class="kh-sec" autocomplete="off" value="<?= (int)$k['id'] ?>" data-kart-no="<?= h($k['card_no']) ?>" aria-label="<?= h($k['card_no']) ?> seç"></label><?php endif; ?></td><?php endif; ?>
     <td class="pdks-uid"><?= h($k['card_no']) ?></td>
-    <td class="muted"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) : '— (nötr)' ?></td>
     <?php if ($tanimHazir): ?><td><?= $tanimRozet($k) ?: '<span class="muted">—</span>' ?></td><?php endif; ?>
     <td class="muted pdks-uid"><?= h($k['canonical_uid']) ?></td>
-    <td><span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
-        <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span></td>
+    <td><?= $durumRozet($k) ?></td>
     <td class="muted"><?= h(fmt_datetime($k['created_at'])) ?></td>
     <td class="actions-col">
         <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
@@ -354,16 +501,16 @@ if ($basari !== ''): ?>
 </div>
 
 <div class="pdks-cards mobile-only">
-<?php foreach ($kartlar as $k): ?>
-<div class="pdks-card-item">
+<?php foreach ($kartlar as $k): $secilebilir = $silinebilir($k); ?>
+<div class="pdks-card-item"<?= isset($tanimlar[(int)$k['id']]) ? ' data-tanimli="1"' : '' ?>>
     <div class="pdks-card-top">
+        <?php if ($secilebilir): ?><label class="td-sec-kap td-sec-mob"><input type="checkbox" class="kh-sec" autocomplete="off" value="<?= (int)$k['id'] ?>" data-kart-no="<?= h($k['card_no']) ?>" aria-label="<?= h($k['card_no']) ?> seç"></label><?php endif; ?>
         <div class="pdks-card-meta">
             <div class="pdks-uid"><?= h($k['card_no']) ?></div>
-            <div class="pdks-row-sub"><?= h($k['tip_adi'] ?? '') !== '' ? h($k['tip_adi']) . ' · ' : '' ?><?= h($k['canonical_uid']) ?></div>
+            <div class="pdks-row-sub"><?= h($k['canonical_uid']) ?></div>
             <?php if ($tanimHazir && ($tanimR = $tanimRozet($k)) !== ''): ?><div class="isk-tanim-satir"><?= $tanimR ?></div><?php endif; ?>
         </div>
-        <span class="pdks-badge pdks-badge-<?= $k['status'] === 'available' ? 'aktif' : ($k['status'] === 'lost' ? 'kayip' : 'iptal') ?>">
-            <?= h(pdks_gunluk_kart_durumlari()[$k['status']] ?? $k['status']) ?></span>
+        <?= $durumRozet($k) ?>
     </div>
     <div class="pdks-card-actions">
         <button type="button" class="btn btn-sm" onclick="iskKartModalAc(<?= (int)$k['id'] ?>,<?= $k['worker_type_id'] !== null ? (int)$k['worker_type_id'] : 0 ?>,'<?= h(addslashes($k['card_no'])) ?>','<?= h(addslashes($k['notes'] ?? '')) ?>','<?= h($k['status']) ?>')">Düzenle</button>
@@ -371,6 +518,41 @@ if ($basari !== ''): ?>
     </div>
 </div>
 <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<?php if ($silAdet > 0): ?>
+<!-- ── v303: Seçilen TANIMSIZ kartları silme penceresi. Yapı: başlık / kayan gövde / sabit alt çubuk;
+     <form> doğrudan .pm-dialog'un çocuğudur (style.css ".pm-dialog > form" flex zinciri — SİLME).
+     Kart no listesi ve kart_ids[] gizli alanları JS ile (textContent / value) kurulur. Gönderim = POST
+     action=tanimsiz_sil (CSRF); süzgeç parametreleri action URL'sinde kalır (PRG'de korunur). -->
+<div class="pm-overlay" id="iskSilModal" hidden>
+<div class="pm-dialog isk-card-modal kh-sil" role="dialog" aria-modal="true" aria-labelledby="khSilBaslik">
+    <div class="pm-header">
+        <h2 class="pm-title" id="khSilBaslik">🗑 Seçilen kartları sil <span class="td-baslik-sayi" id="khSilSayi"></span></h2>
+        <button type="button" class="pm-close" onclick="pdksCloseModal('iskSilModal')" aria-label="Kapat">✕</button>
+    </div>
+    <form method="post" id="khSilForm" action="<?= h($khUrl(['q' => $q, 'tanim' => $tanim_f, 'cavus' => $cavus_f, 'ttip' => $ttip_f, 'durum' => $durum_f])) ?>">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="action" value="tanimsiz_sil">
+        <input type="hidden" name="istek_id" id="khSilIstek" value="">
+        <div class="kh-sil-govde">
+            <p class="td-bilgi">Hiç kullanılmamış kartlar <strong>kalıcı silinir</strong>; geçmişi olan kartlar <strong>arşivlenir</strong>
+                (devre dışı kalır, listeden kalkar, raporlardaki geçmiş korunur). Tanımlı kart ya da şu an içeride olan kart silinemez.</p>
+            <ul class="td-iptal-liste kh-sil-liste" id="khSilListe"></ul>
+            <div id="khSilIdler"></div>
+            <label class="td-iptal-neden">
+                <span class="td-et">Gerekçe * <span class="muted">(zorunlu, en çok 500 karakter)</span></span>
+                <textarea name="reason" id="khSilNeden" rows="3" maxlength="500" required></textarea>
+            </label>
+        </div>
+        <div class="isk-seri-foot">
+            <span class="isk-seri-foot-bosluk"></span>
+            <button type="button" class="btn btn-ghost" onclick="pdksCloseModal('iskSilModal')">Vazgeç</button>
+            <button type="submit" class="btn btn-danger" id="khSilOnay">🗑 Sil / Arşivle</button>
+        </div>
+    </form>
+</div>
 </div>
 <?php endif; ?>
 
@@ -1008,6 +1190,93 @@ function iskKartModalAc(id, tipId, kartNo, not, durum) {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+/* v303 — Kart Havuzu: süzgeç tutarlılığı + seçerek silme. Kullanıcı verisi yalnız textContent / value ile. */
+(function () {
+    'use strict';
+    // Çavuş / tanım tipi seçmek = "Tanım: tanımlı"; Tanım'ı tanımlıdan başka yapmak çavuş + tipi temizler.
+    // (Hedef-aşama dinleyicisi: form-düzeyi otomatik gönderimden ÖNCE çalışır.)
+    var fT = document.getElementById('khFTanim'), fC = document.getElementById('khFCavus'), fP = document.getElementById('khFTtip');
+    if (fT && fC && fP) {
+        [fC, fP].forEach(function (el) { el.addEventListener('change', function () { if (el.value !== '') fT.value = 'tanimli'; }); });
+        fT.addEventListener('change', function () { if (fT.value !== 'tanimli') { fC.value = ''; fP.value = ''; } });
+    }
+
+    var cubuk = document.getElementById('khCubuk');
+    if (!cubuk) return;
+    var LIMIT = <?= (int)(defined('PDKS_FAZ8J_TOPLU_LIMIT') ? PDKS_FAZ8J_TOPLU_LIMIT : 250) ?>;
+    var elSayi = document.getElementById('khSeciliSayi'), elLimit = document.getElementById('khLimitNot');
+    var bSil = document.getElementById('khSilBtn'), bTem = document.getElementById('khTemizleBtn');
+    function kutular() { return [].slice.call(document.querySelectorAll('input.kh-sec')); }
+    function gorunur(el) { return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length); }
+    // Masaüstü tablo ve mobil kart AYNI kartı iki kez içerir: görünen görünüm esas, değere göre tekil.
+    function secili() {
+        var hepsi = kutular(), gor = hepsi.filter(gorunur), kaynak = gor.length ? gor : hepsi, g = {}, out = [];
+        kaynak.forEach(function (c) { if (c.checked && !g[c.value]) { g[c.value] = 1; out.push(c); } });
+        return out;
+    }
+    function tekil() { var s = {}; kutular().forEach(function (c) { s[c.value] = 1; }); return Object.keys(s).length; }
+    function guncelle() {
+        var n = secili().length, top = tekil(), asim = n > LIMIT;
+        elSayi.textContent = n;
+        cubuk.classList.toggle('td-var', n > 0);
+        bSil.disabled = n === 0 || asim;
+        bTem.disabled = n === 0;
+        elLimit.hidden = !asim;
+        document.querySelectorAll('input.kh-tumu').forEach(function (t) { t.checked = n > 0 && n === top; t.indeterminate = n > 0 && n < top; });
+    }
+    function isaretle(deger, durum) {
+        document.querySelectorAll('input.kh-sec').forEach(function (c) {
+            if (c.value !== deger) return;
+            c.checked = durum;
+            var kap = c.closest('tr, .pdks-card-item'); if (kap) kap.classList.toggle('td-secili', durum);
+        });
+    }
+    document.addEventListener('change', function (e) {
+        var t = e.target;
+        if (!t || !t.classList) return;
+        if (t.classList.contains('kh-sec')) { isaretle(t.value, t.checked); guncelle(); }
+        else if (t.classList.contains('kh-tumu')) { var d = t.checked; kutular().forEach(function (c) { isaretle(c.value, d); }); guncelle(); }
+    });
+    bTem.addEventListener('click', function () { kutular().forEach(function (c) { isaretle(c.value, false); }); guncelle(); });
+
+    function yeniIstek() {
+        var a = new Uint8Array(16), s = '';
+        try { (window.crypto || window.msCrypto).getRandomValues(a); }
+        catch (e) { for (var i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256); }
+        for (var j = 0; j < a.length; j++) s += ('0' + a[j].toString(16)).slice(-2);
+        return s;
+    }
+    var liste = document.getElementById('khSilListe'), idler = document.getElementById('khSilIdler');
+    var neden = document.getElementById('khSilNeden'), onay = document.getElementById('khSilOnay'), form = document.getElementById('khSilForm');
+    bSil.addEventListener('click', function () {
+        var s = secili();
+        if (!s.length || s.length > LIMIT) return;
+        liste.textContent = ''; idler.textContent = '';
+        s.forEach(function (c) {
+            var li = document.createElement('li'); li.className = 'td-iptal-oge';
+            var no = document.createElement('span'); no.className = 'pdks-uid'; no.textContent = c.getAttribute('data-kart-no') || '';
+            li.appendChild(no); liste.appendChild(li);
+            var h = document.createElement('input'); h.type = 'hidden'; h.name = 'kart_ids[]'; h.value = c.value; idler.appendChild(h);
+        });
+        document.getElementById('khSilSayi').textContent = '(' + s.length + ' kart)';
+        document.getElementById('khSilIstek').value = yeniIstek();   // pencere her açılışında yeni tek kullanımlık anahtar
+        neden.value = ''; onay.disabled = false;
+        window.pdksOpenModal('iskSilModal');
+    });
+    document.addEventListener('keydown', function (e) {
+        var ovl = document.getElementById('iskSilModal');
+        if (e.key === 'Escape' && ovl && !ovl.hidden && !onay.disabled) window.pdksCloseModal('iskSilModal');
+    });
+    form.addEventListener('submit', function (e) {
+        if (onay.disabled) { e.preventDefault(); return; }   // çift tıklama tek POST
+        if (neden.value.trim() === '') { e.preventDefault(); neden.focus(); return; }
+        onay.disabled = true;
+    });
+    guncelle();
+})();
+</script>
 
 <script src="<?= $base ?>assets/pdks.js?v=<?= @filemtime(__DIR__ . '/assets/pdks.js') ?>"></script>
 <?php pdks_liste_ui_js(); ?>

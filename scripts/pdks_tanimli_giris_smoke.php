@@ -7,7 +7,8 @@
 // Bu test: tanım yazma/geçmiş/tek aktif tanım (UNIQUE), ret kuralları,
 // pdks_gunluk_tanimli_giris_kaydet() (yazmayı giris_kaydet'e devreder,
 // dönem source='tanimli'), normal ekranda tanımlı kart kapısı
-// (kart_baska_tanimli), Faz 8J elle/toplu eklemede yalnız uyarı, hakediş
+// (kart_baska_tanimli), Faz 8J elle/toplu eklemede başka çavuş RED (v303) /
+// aynı çavuş farklı tip uyarı, hakediş
 // eşitliği, tablo yokken eski davranış ve kaynak sözleşmeleri.
 // Bellek içi SQLite — canlı DB'ye dokunmaz.
 //   php scripts/pdks_tanimli_giris_smoke.php   → çıkış kodu 0 = tüm testler geçti
@@ -299,14 +300,17 @@ $r = tanimYaz('K013', $cavus['B'], $kadin);
 ok('içerideki kartın tanımı değişti + uyarı (açık dönem eski çavuşta)', !empty($r['ok']) && str_contains((string)($r['uyari'] ?? ''), 'Çavuş A'), j($r));
 ok('açık dönem eski mesaide kaldı', (int)donem('K013')['session_id'] === $sA && donem('K013')['status'] === 'open');
 
-echo "\n=== 8. Faz 8J — elle / toplu ekleme yalnız UYARI ===\n";
+echo "\n=== 8. Faz 8J — elle / toplu ekleme: başka çavuş RED (v303), aynı çavuş farklı tip UYARI ===\n";
 tanimYaz('K017', $cavus['A'], $kadin);
-$r = pdks_faz8j_gecmis_ekle([
-    'foreman_id' => $cavus['H'], 'work_date' => $dun, 'worker_card_id' => kartId('K017'), 'worker_type_id' => $erkek,
+$ekleV = fn(int $cav, int $tip) => [
+    'foreman_id' => $cav, 'work_date' => $dun, 'worker_card_id' => kartId('K017'), 'worker_type_id' => $tip,
     'entry_date' => $dun, 'entry_clock' => '08:00', 'exit_date' => $dun, 'exit_clock' => '17:00',
     'reason' => 'unutuldu', 'note' => '', 'depo' => 'Depo A', 'istek_id' => bin2hex(random_bytes(16)),
-], 1, db());
-ok('başka çavuşa tanımlı kart elle eklenir (ENGEL DEĞİL)', !empty($r['ok']), j($r));
+];
+$r = pdks_faz8j_gecmis_ekle($ekleV($cavus['H'], $erkek), 1, db());
+ok('v303: başka çavuşa tanımlı kart elle eklenemez (RED)', empty($r['ok']) && str_contains((string)($r['hata'] ?? ''), "Çavuş A / Kadın'a tanımlı — yalnız o çavuşun mesaisine eklenebilir."), j($r));
+$r = pdks_faz8j_gecmis_ekle($ekleV($cavus['A'], $erkek), 1, db());
+ok('aynı çavuş, farklı tip → eklenir (ENGEL DEĞİL)', !empty($r['ok']), j($r));
 ok('… yanıtta tanım uyarısı', str_contains(implode(' ', $r['uyarilar'] ?? []), 'K017') && str_contains(implode(' ', $r['uyarilar'] ?? []), 'Çavuş A'), j($r['uyarilar'] ?? null));
 tanimYaz('K018', $cavus['A'], $kadin);
 $v = [
@@ -316,13 +320,18 @@ $v = [
                    'kart_ids' => [kartId('K018')], 'kartsiz_adet' => 0]],
 ];
 $on = pdks_faz8j_toplu_onizle($v, 1, db());
-ok('toplu önizleme ok=true (engel yok) + uyarilar içinde tanım uyarısı', !empty($on['ok']) && str_contains(implode(' ', $on['uyarilar']), 'K018'), j($on));
+ok('v303: toplu önizleme başka çavuşa tanımlı kart → satır HATA, ok=false', empty($on['ok']) && ($on['satirlar'][0]['durum'] ?? '') === 'hata' && str_contains((string)($on['satirlar'][0]['hata'] ?? ''), 'tanımlı — yalnız'), j($on));
 $te = pdks_faz8j_toplu_ekle($v, 1, db());
+ok('v303: toplu ekleme yazılmadı (hep-ya-hiç)', empty($te['ok']) && !isset($te['eklenen']), j($te));
+$vE = $v; $vE['foreman_id'] = $cavus['A']; $vE['gruplar'][0]['worker_type_id'] = $erkek; $vE['istek_id'] = bin2hex(random_bytes(16));
+$onE = pdks_faz8j_toplu_onizle($vE, 1, db());
+ok('aynı çavuş, farklı tip → toplu önizleme ok=true + tanım uyarısı', !empty($onE['ok']) && str_contains(implode(' ', $onE['uyarilar']), 'K018'), j($onE));
+$te = pdks_faz8j_toplu_ekle($vE, 1, db());
 ok('toplu ekleme yazıldı (uyarıya rağmen)', !empty($te['ok']) && (int)$te['eklenen'] === 1, j($te));
 $v2 = $v; $v2['foreman_id'] = $cavus['A']; $v2['work_date'] = date('Y-m-d', strtotime('-3 days')); $v2['istek_id'] = bin2hex(random_bytes(16));
 $v2['gruplar'][0]['exit_date'] = $v2['work_date'];
 $on2 = pdks_faz8j_toplu_onizle($v2, 1, db());
-ok('uyuşan çavuş/tip/depo → tanım uyarısı YOK', !empty($on2['ok']) && !str_contains(implode(' ', $on2['uyarilar']), 'K018'), j($on2));
+ok('uyuşan çavuş/tip/depo → sorunsuz, tanım uyarısı YOK', !empty($on2['ok']) && !str_contains(implode(' ', $on2['uyarilar']), 'K018'), j($on2));
 
 echo "\n=== 9. Hakediş — tanımlı dönem normal dönemle AYNI satırı üretir ===\n";
 $sH = (int)pdks_gunluk_oturum_ac_veya_getir($cavus['H'], 1, db())['session']['id'];

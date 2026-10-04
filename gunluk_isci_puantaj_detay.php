@@ -182,6 +182,16 @@ if ($faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo) {
     $stVoid->execute([$id]); $iptaller = $stVoid->fetchAll();
 }
 $duzeltmeKartlar = $faz8jHazir && is_admin() ? $pdo->query("SELECT id, card_no FROM worker_cards WHERE status <> 'disabled' ORDER BY card_no")->fetchAll() : [];
+// v303: Düzenle kart listesi = tanımsızlar + YALNIZ bu mesainin çavuşuna/deposuna tanımlı kartlar
+// (sunucu da reddeder: pdks_faz8j_tanim_kart_engeli). Dönemin MEVCUT kartı listede yoksa
+// şablon onu ayrı bir seçili seçenek olarak yine gösterir (aşağıda $duzeltmeKartDurum).
+if ($duzeltmeKartlar) $duzeltmeKartlar = pdks_faz8j_kart_tanim_suz($pdo, $duzeltmeKartlar, (int)$oturum['foreman_id'], (string)$oturum['depo']);
+$duzeltmeKartDurum = [];
+if ($faz8jHazir && is_admin() && ($donemKartIds = array_values(array_unique(array_map('intval', array_column($kartlar, 'worker_card_id')))))) {
+    $stKd = $pdo->prepare('SELECT id, status FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($donemKartIds), '?')) . ')');
+    $stKd->execute($donemKartIds);
+    foreach ($stKd->fetchAll() as $r) $duzeltmeKartDurum[(int)$r['id']] = (string)$r['status'];
+}
 // ⚠ Faz 9B / H-01 kapanışı: TEK paylaşılan politikadan (config/pdks_gunluk.php)
 // gelir — backend'in (pdks_faz8j_desteklenen_tip(), AYNI politikayı SARAR)
 // kabul ettiğiyle BİREBİR AYNI küme. UI'nin sunduğu bir tip backend'de
@@ -189,13 +199,17 @@ $duzeltmeKartlar = $faz8jHazir && is_admin() ? $pdo->query("SELECT id, card_no F
 $duzeltmeTipler = $faz8jHazir && is_admin() ? pdks_gunluk_desteklenen_tip_listele($pdo) : [];
 // v291: "Çalışma Ekle" — yalnız yönetici, bu mesai aktif depoda ve şema hazırken.
 $ekleGoster = $faz8jHazir && is_admin() && $oturum['depo'] === $aktifDepo && function_exists('pdks_faz8j_gecmis_ekle');
-$ekleKartlar = $ekleGoster ? pdks_faz8j_bos_kartlar((string)$oturum['work_date'], $pdo) : [];
+// v303: başka çavuşa / depoya TANIMLI kartlar bu mesaide listelenmez (sunucu da reddeder).
+$ekleKartlar = $ekleGoster ? pdks_faz8j_bos_kartlar((string)$oturum['work_date'], $pdo, (int)$oturum['foreman_id'], (string)$oturum['depo']) : [];
 // v294: Toplu İşlem — boş kartlar işçi tipiyle birlikte (kartları tipine göre öne almak için), mesaiye ait toplu işlemler.
 $topluKartlar = [];
 if ($ekleKartlar) {
     $stTk = $pdo->prepare('SELECT id, card_no, worker_type_id FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($ekleKartlar), '?')) . ') ORDER BY card_no');
     $stTk->execute(array_map('intval', array_column($ekleKartlar, 'id')));
     $topluKartlar = $stTk->fetchAll();
+    $ekleTanim = array_column($ekleKartlar, null, 'id');   // v303: tanım alanları (data-tanim-foreman, tip önceliği)
+    foreach ($topluKartlar as &$tk) $tk += array_diff_key($ekleTanim[(int)$tk['id']] ?? [], ['id' => 1, 'card_no' => 1]);
+    unset($tk);
 }
 $topluListe = $ekleGoster && function_exists('pdks_faz8j_toplu_listele') ? pdks_faz8j_toplu_listele((int)$id, $pdo) : [];
 // v299: Servis Ücreti — pencere/iptal YALNIZ "Çalışma Ekle" ile AYNI kapı ($ekleGoster) + şema
@@ -505,7 +519,7 @@ $tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTip
 <?php endif; ?>
 
 <?php if (is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo): foreach ($kartlar as $k): ?>
-<dialog id="edit<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Çalışma Dönemini Düzenle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_duzeltme"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><div class="pdks-form-grid"><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): /* v294: kartsız dönem başka karta taşınamaz (sunucu da reddeder) — kart sabit metin + gizli alan */ ?><div><span class="form-label">Kart</span><div class="pdks-uid"><?=h($k['card_no'])?> <span class="pdks-badge pdks-badge-kartsiz">Kartsız</span></div><input type="hidden" name="worker_card_id" value="<?= (int)$k['worker_card_id'] ?>"></div><?php else: $mevcutKartVar = in_array((int)$k['worker_card_id'], array_map('intval', array_column($duzeltmeKartlar, 'id')), true); ?><label><span class="form-label">Kart</span><select name="worker_card_id"><?php if (!$mevcutKartVar): /* pasif kart listede yoksa mevcut kart yine de seçili kalsın */ ?><option value="<?= (int)$k['worker_card_id'] ?>" selected><?=h($k['card_no'])?> (pasif)</option><?php endif; ?><?php foreach($duzeltmeKartlar as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===(int)$k['worker_card_id']?'selected':'' ?>><?=h($c['card_no'])?></option><?php endforeach;?></select></label><?php endif; ?><label><span class="form-label">İşçi tipi</span><select name="worker_type_id"><?php
+<dialog id="edit<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Çalışma Dönemini Düzenle</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_duzeltme"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><div class="pdks-form-grid"><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): /* v294: kartsız dönem başka karta taşınamaz (sunucu da reddeder) — kart sabit metin + gizli alan */ ?><div><span class="form-label">Kart</span><div class="pdks-uid"><?=h($k['card_no'])?> <span class="pdks-badge pdks-badge-kartsiz">Kartsız</span></div><input type="hidden" name="worker_card_id" value="<?= (int)$k['worker_card_id'] ?>"></div><?php else: $mevcutKartVar = in_array((int)$k['worker_card_id'], array_map('intval', array_column($duzeltmeKartlar, 'id')), true); ?><label><span class="form-label">Kart</span><select name="worker_card_id"><?php if (!$mevcutKartVar): /* pasif ya da (v303) başka çavuşa tanımlı kart listede yoksa mevcut kart yine de seçili kalsın */ ?><option value="<?= (int)$k['worker_card_id'] ?>" selected><?=h($k['card_no'])?> <?= ($duzeltmeKartDurum[(int)$k['worker_card_id']] ?? 'disabled') === 'disabled' ? '(pasif)' : '(mevcut)' ?></option><?php endif; ?><?php foreach($duzeltmeKartlar as $c):?><option value="<?= (int)$c['id'] ?>" <?= (int)$c['id']===(int)$k['worker_card_id']?'selected':'' ?>><?=h($c['card_no'])?></option><?php endforeach;?></select></label><?php endif; ?><label><span class="form-label">İşçi tipi</span><select name="worker_type_id"><?php
     // ⚠ Faz 9B / görev talimatı §7: bu dönemin GEÇERLİ (snapshot) tipi
     // artık desteklenen listede yoksa (tarihsel/başka kurulumdan gelen bir
     // satır — ör. Faz 9B öncesi bir "FORKLIFT" ataması), SESSİZCE listedeki

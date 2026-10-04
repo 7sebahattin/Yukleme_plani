@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v302` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v303` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -634,7 +634,8 @@ o tiple girer. Çavuş → tip → kart akışı AYNEN kalır. Çıkış = mevcu
 - **Engel kuralı (normal ekran):** `pdks_gunluk_faz8a_giris_kaydet()` kart KİLİDİNDEN SONRA tanımı okur;
   mesainin çavuşu / seçilen tip / mesainin deposu tanımla uyuşmazsa `kart_baska_tanimli` ("Bu kart
   Çavuş A / Kadın'a tanımlı…"). Kural TEK yerde: `pdks_gunluk_kart_tanim_engeli()`. Admin'in elle/toplu
-  eklemesi (Faz 8J) ENGELLENMEZ — `pdks_faz8j_tanim_uyarilari()` yalnız `uyarilar`'a yazar.
+  eklemesi (Faz 8J) v303'ten beri BAŞKA çavuşa/depoya tanımlı kartı REDDEDER (`pdks_faz8j_tanim_kart_engeli()`);
+  aynı çavuş farklı tip yalnız uyarı (`pdks_faz8j_tanim_uyarilari()`). Bkz. "Kart Havuzu (v303)".
 - **Depo:** tanımlı ekranda kart başka depoya tanımlıysa `tanim_baska_depo`. Karşılaştırma TR-duyarsız
   (`pdks_gunluk_depo_fold`).
 - **Tanım yazma** `pdks_gunluk_kart_tanim_kaydet()` / `_bitir()`: transaction + `pdks_gunluk_faz8a_kart_kilitle()`
@@ -660,6 +661,30 @@ Kart Havuzu "⚡ Seri Kart Tanımla": çavuş + tip (`pdks_gunluk_desteklenen_ti
 - **UI:** `#iskSeriModal` = başlık / kayan gövde / sabit alt çubuk, `<form>` SARILMAZ (`.pm-dialog > form` kuralı kalsın). pdks.css "v299" bloğu.
 - Test: `php scripts/pdks_kart_toplu_tanim_smoke.php` · `php scripts/pdks_kart_toplu_render.php > _test_kart_toplu.html` → `node scripts/pdks_kart_toplu_smoke.js`.
 - **v301 — tekli "Yeni Kart Tanımla" KALDIRILDI** (sahip kararı): kart ekleme/tanımlamanın TEK yolu Seri Kart Tanımla. Sayfadan `kart_ekle` POST dalı, `ajax=onizle` ucu ve `$onerilenKartNo` gitti; `pdks_gunluk_kart_olustur()` / `pdks_gunluk_sonraki_kart_no()` Seri Kart'ın toplu kaydı için KALIR, `assets/pdks.js` `data-pdks-scan` yardımcısı `personel_kartlar`/`personel_form` için KALIR — silme. `$seriHazir` false (tablo/Faz 8A/aktif depo yok) iken sayfa `#iskSeriYok` ile nedenini + migrate.php yönlendirmesini söyler; o durumda kart eklenemez. Düzenle/Durum/Tanım modalları ve Kart Sorgula DEĞİŞMEDİ. Testler bölümün YOKLUĞUNU denetler (kaynakta "Yeni Kart Tanımla" / `kart_ekle` geçmemeli — yorumda bile).
+
+### Kart Havuzu — Tanımlı/Tanımsız Ayrımı + Seçerek Silme (v303)
+Sahip kararları: normal kiosk girişi DEĞİŞMEDİ (tanımlı kart kendi çavuşu+tipiyle normal ekrandan girebilir);
+silme YALNIZ seçerek; geçmişsiz kart DELETE, geçmişli kart ARŞİV; elle eklemede tanımlı kart yalnız kendi çavuşunda.
+Migration YOK, yeni yetki YOK.
+- **Ekran** (`isci_kartlari.php`, pdks.css "v303"): Toplam · 🏷 Tanımlı · Tanımsız sayaçları (+ Arşiv, Kayıp) —
+  `pdks_gunluk_kart_havuzu_ozet()` (TEK sayım kaynağı; kartsız HARİÇ; toplam = disabled olmayanlar). "Tanımlı Kartlar"
+  özeti çavuş → tip → adet; çavuş adı `?tanim=tanimli&cavus=ID`, tip çipi `&ttip=TIPID`. Filtre: arama · tanim · cavus ·
+  ttip (TANIM tipi) · durum. Eski legacy `tip` filtresi ve "Tip (eski)" sütunu KALDIRILDI. Varsayılan liste arşivi
+  (`disabled`) GİZLER. Durum rozeti: tanımlı+available → "🏷 Tanımlı" ("Boşta" YALNIZ tanımsız kart).
+- **Seçerek silme** (yalnız `is_admin()`, yalnız tanımsız satırda kutu): POST `action=tanimsiz_sil` →
+  `pdks_gunluk_kart_tanimsiz_sil()`: HEP-YA-HİÇ tek tx, kartlar `pdks_gunluk_faz8a_kart_kilitle()` ile kilitli, istek_id
+  (audit `kart_toplu_sil`), sınır `PDKS_GUNLUK_KART_SIL_LIMIT`. Ret: tanımlı ("önce Tanımı Kaldır") · içeride · kartsız ·
+  yok. Geçmiş = `pdks_gunluk_kart_gecmis_tablolari()` (worker_cards'a FK veren TÜM tablolar — yeni FK eklersen BURAYA
+  ekle; unutulursa MySQL 1451 → tüm işlem geri alınır). Geçmişli → `status='disabled'` + notes'a "[Arşiv tarih] gerekçe";
+  geçmişsiz → DELETE. Sorgu hatası → arşiv (fail-closed). audit_log geçmiş SAYILMAZ. Audit `kart_sil`/`kart_arsiv`
+  tx içinde doğrudan INSERT. Arşivlenen fiziksel kart Seri Kart'ta "devre dışı" hatası verir — Düzenle'den Boşta'ya alınır.
+- **Elle ekleme kısıtı:** `pdks_faz8j_bos_kartlar($gun, $pdo, $foremanId, $depo)` satırlara `tanim_foreman_id`/`tanim_depo`
+  ekler; Mesai Detayı çavuş+depo ile süzer (`pdks_faz8j_kart_tanim_suz()`; Düzenle listesinde dönemin mevcut kartı her
+  zaman kalır), Günlük Puantaj listesi depo ile süzer ve `_puantaj_ekle.php`/`_puantaj_toplu.php` JS'i seçilen çavuşa göre
+  `data-tanim-foreman` ile gizler. Sunucu: `pdks_faz8j_satir_kontrol(..., $hedef)` ve `pdks_faz8j_duzelt_satir()` (yalnız
+  kart DEĞİŞİYORSA) → `pdks_faz8j_tanim_kart_engeli()` TEK kural. Toplu düzelt / saat-tip düzeltme engellenmez.
+- Test: `php scripts/pdks_kart_havuzu_smoke.php` · `node scripts/pdks_kart_havuzu_smoke.js` (render'ı kendisi çağırır;
+  `KH_QS`, `KH_NONADMIN=1`) · `php scripts/pdks_tanimli_giris_smoke.php` · `PUANTAJ_TANIM=1 php scripts/pdks_puantaj_dialog_render.php`.
 
 ### Saat Bazlı Yevmiye + Çift Yevmiye (v299)
 

@@ -4252,6 +4252,286 @@ function pdks_gunluk_kart_tanim_toplu_audit(PDO $pdo, int $userId, int $recordId
 }
 
 // =========================================================
+// v303 — KART HAVUZU: tanımlı / tanımsız özeti + TANIMSIZ kartları seçerek silme
+// =========================================================
+// "Tanımlı" = worker_card_assignments'ta AKTİF satır (aktif_kart_id = kart id).
+// Tanım tablosu yoksa her kart tanımsız sayılır (özet/ayrım gizli), silme yine
+// çalışır. Kartsız mesainin SANAL kartları (enrolled_source='kartsiz') her yerde
+// HARİÇ: sayılmaz, silinemez.
+//
+// Silme (pdks_gunluk_kart_tanimsiz_sil) — kullanıcı kararı:
+//   • GEÇMİŞSİZ kart kalıcı DELETE;
+//   • GEÇMİŞLİ kart ARŞİVLENİR = status 'disabled' + notes'a "[Arşiv <tarih>] <gerekçe>"
+//     (raporlardaki geçmiş korunur; Kart Havuzu varsayılan listesinden kalkar).
+//   • "Geçmiş" = worker_cards'a başvuran TÜM tablolardaki satırlar
+//     (pdks_gunluk_kart_gecmis_tablolari()). Emin olunamazsa (sorgu hatası) ARŞİV.
+//   • HEP-YA-HİÇ tek transaction; kartlar artan id ile girişle AYNI kilitle
+//     (pdks_gunluk_faz8a_kart_kilitle) kilitlenir; istek_id tekrarı tx içinde.
+//   • Yalnız seçerek: tek tuşla "hepsini sil" yolu YOK.
+
+const PDKS_GUNLUK_KART_SIL_LIMIT  = 250;
+const PDKS_GUNLUK_KART_SIL_TEKRAR = 'Bu silme işlemi zaten kaydedildi (tekrar gönderim) — sayfayı yenileyin.';
+
+/** Kartsız sanal kartları dışlayan SQL eki (" AND w.enrolled_source <> 'kartsiz'"); kolon yoksa boş. */
+function pdks_gunluk_kartsiz_haric_sql(PDO $pdo, string $alias = ''): string
+{
+    if (!pdks_gunluk_faz8j_kolon_var($pdo, 'worker_cards', 'enrolled_source')) return '';
+    return ' AND ' . ($alias !== '' ? $alias . '.' : '') . "enrolled_source <> 'kartsiz'";
+}
+
+/** Ad karşılaştırması (TR sırası; intl yoksa TR-duyarsız katlama). */
+function pdks_gunluk_ad_karsilastir(string $a, string $b): int
+{
+    static $col = false;
+    if ($col === false) $col = class_exists('Collator') ? (collator_create('tr_TR') ?: null) : null;
+    if ($col !== null) {
+        $c = $col->compare($a, $b);
+        if (is_int($c)) return $c;
+    }
+    $n = static fn(string $x): string => mb_strtolower(strtr($x, ['İ' => 'i', 'I' => 'ı']), 'UTF-8');
+    return strcmp($n($a), $n($b));
+}
+
+/**
+ * Kart Havuzu özeti. Sayımlar kartsız HARİÇ.
+ *   toplam  = tanimli + tanimsiz (status <> 'disabled'; arşiv ayrı sayılır)
+ *   arsiv   = status 'disabled'
+ *   kayip   = status 'lost' (tanımlı/tanımsız İÇİNDE de sayılır)
+ *   cavuslar= çavuş adına göre sıralı; tipler görüntü sırasında (pdks_gunluk_tip_kayit);
+ *             yalnız status <> 'disabled' kartların aktif tanımları.
+ */
+function pdks_gunluk_kart_havuzu_ozet(PDO $pdo): array
+{
+    $hazir = pdks_gunluk_kart_tanim_sema_hazir($pdo);
+    $kh = pdks_gunluk_kartsiz_haric_sql($pdo, 'w');
+    $out = ['tanim_hazir' => $hazir, 'toplam' => 0, 'tanimli' => 0, 'tanimsiz' => 0, 'arsiv' => 0, 'kayip' => 0, 'cavuslar' => []];
+    $r = $pdo->query("SELECT SUM(CASE WHEN w.status <> 'disabled' THEN 1 ELSE 0 END) AS aktif,
+                             SUM(CASE WHEN w.status = 'disabled' THEN 1 ELSE 0 END) AS arsiv,
+                             SUM(CASE WHEN w.status = 'lost' THEN 1 ELSE 0 END) AS kayip
+                        FROM worker_cards w WHERE 1=1" . $kh)->fetch() ?: [];
+    $out['toplam'] = (int)($r['aktif'] ?? 0);
+    $out['arsiv']  = (int)($r['arsiv'] ?? 0);
+    $out['kayip']  = (int)($r['kayip'] ?? 0);
+    if ($hazir) {
+        $rows = $pdo->query(
+            "SELECT a.foreman_id, f.name AS foreman_name, f.code AS foreman_code, f.is_active AS foreman_aktif,
+                    a.worker_type_id, t.name AS tip_adi, t.code AS tip_kodu, a.depo, COUNT(*) AS adet
+               FROM worker_card_assignments a
+               JOIN worker_cards w ON w.id = a.aktif_kart_id
+               JOIN foremen f ON f.id = a.foreman_id
+               JOIN worker_types t ON t.id = a.worker_type_id
+              WHERE w.status <> 'disabled'" . $kh . "
+              GROUP BY a.foreman_id, f.name, f.code, f.is_active, a.worker_type_id, t.name, t.code, a.depo"
+        )->fetchAll();
+        $sira = array_flip(array_keys(pdks_gunluk_tip_kayit()));
+        $cav = [];
+        foreach ($rows as $x) {
+            $fid = (int)$x['foreman_id']; $tid = (int)$x['worker_type_id']; $n = (int)$x['adet'];
+            $cav[$fid] ??= ['foreman_id' => $fid, 'foreman_name' => (string)$x['foreman_name'], 'foreman_code' => (string)$x['foreman_code'],
+                            'foreman_aktif' => (bool)(int)$x['foreman_aktif'], 'toplam' => 0, 'tipler' => [], 'depolar' => []];
+            $cav[$fid]['toplam'] += $n;
+            $cav[$fid]['tipler'][$tid] ??= ['worker_type_id' => $tid, 'tip_adi' => (string)$x['tip_adi'], 'tip_kodu' => (string)$x['tip_kodu'], 'adet' => 0];
+            $cav[$fid]['tipler'][$tid]['adet'] += $n;
+            $d = trim((string)$x['depo']);
+            if ($d !== '') $cav[$fid]['depolar'][pdks_gunluk_depo_fold($d)] ??= $d;
+            $out['tanimli'] += $n;
+        }
+        foreach ($cav as &$c) {
+            $tipler = array_values($c['tipler']);
+            usort($tipler, static fn($a, $b) => [($sira[$a['tip_kodu']] ?? 99), $a['tip_adi']] <=> [($sira[$b['tip_kodu']] ?? 99), $b['tip_adi']]);
+            $c['tipler'] = $tipler;
+            $depolar = array_values($c['depolar']);
+            usort($depolar, 'pdks_gunluk_ad_karsilastir');
+            $c['depolar'] = $depolar;
+        }
+        unset($c);
+        $cav = array_values($cav);
+        usort($cav, static fn($a, $b) => pdks_gunluk_ad_karsilastir($a['foreman_name'], $b['foreman_name']) ?: ($a['foreman_id'] <=> $b['foreman_id']));
+        $out['cavuslar'] = $cav;
+    }
+    $out['tanimsiz'] = max(0, $out['toplam'] - $out['tanimli']);
+    return $out;
+}
+
+/**
+ * worker_cards'a başvuran TÜM tablolar → kart kolonu (grep ile doğrulandı, v303):
+ * daily_worker_card_events (fk_dwce_card), daily_worker_work_periods (fk_dwwp_card),
+ * worker_card_assignments (fk_wca_card; BİTMİŞ tanım dahil). Kalıcı personel tabloları
+ * (employee_cards / attendance_events) worker_cards'a DEĞİL, employee_cards'a bağlıdır.
+ * Yeni bir tablo worker_cards'a bağlanırsa BURAYA ekle — yoksa DELETE FK'ye çarpar ve
+ * işlem tamamen geri alınır (fail-closed).
+ */
+function pdks_gunluk_kart_gecmis_tablolari(): array
+{
+    return [
+        'daily_worker_card_events'  => 'worker_card_id',
+        'daily_worker_work_periods' => 'worker_card_id',
+        'worker_card_assignments'   => 'worker_card_id',
+    ];
+}
+
+/**
+ * Kartın geçmişi var mı? $tablolar: mevcut tablolar (çağıran transaction'dan ÖNCE
+ * belirler). Sorgu hatası → true (emin değilsek arşivle, silme).
+ */
+function pdks_gunluk_kart_gecmisi_var(PDO $pdo, int $kartId, ?array $tablolar = null): bool
+{
+    $tablolar ??= array_filter(pdks_gunluk_kart_gecmis_tablolari(), static fn($k, $t) => pdks_gunluk_tablo_var($pdo, $t), ARRAY_FILTER_USE_BOTH);
+    foreach ($tablolar as $tablo => $kolon) {
+        try {
+            $st = $pdo->prepare("SELECT 1 FROM `{$tablo}` WHERE `{$kolon}` = ? LIMIT 1");
+            $st->execute([$kartId]);
+            if ($st->fetchColumn()) return true;
+        } catch (PDOException $e) {
+            error_log('[pdks_gunluk_kart_gecmisi_var] ' . $tablo . ': ' . $e->getMessage());
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Bu istek_id ile toplu kart silme daha önce yazıldı mı? */
+function pdks_gunluk_kart_sil_istek_kayitli(PDO $pdo, string $istekId): bool
+{
+    $st = $pdo->prepare("SELECT 1 FROM audit_log WHERE action = 'kart_toplu_sil' AND new_values LIKE ? LIMIT 1");
+    $st->execute(['%"istek_id":"' . $istekId . '"%']);
+    return (bool)$st->fetchColumn();
+}
+
+/** Transaction İÇİ audit satırı (JSON_THROW — yazılamazsa işlem geri alınır; audit_log_event hata yutar). */
+function pdks_gunluk_kart_audit_yaz(PDO $pdo, int $userId, string $action, int $recordId, ?array $old, array $new): void
+{
+    $pdo->prepare('INSERT INTO audit_log (user_id, action, module, record_id, old_values, new_values, ip, user_agent) VALUES (?,?,?,?,?,?,?,?)')
+        ->execute([$userId, $action, 'worker_cards', $recordId > 0 ? $recordId : null,
+                   $old !== null ? json_encode($old, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
+                   json_encode($new, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                   $_SERVER['REMOTE_ADDR'] ?? null, substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255)]);
+}
+
+/**
+ * Seçilen TANIMSIZ kartları siler (geçmişsiz → DELETE) ya da arşivler (geçmişli →
+ * status 'disabled' + arşiv notu). YALNIZ yönetici. HEP-YA-HİÇ: tek kartta sorun
+ * varsa hiçbir şey yazılmaz ve sorunlar satır satır döner.
+ *
+ * Satır hataları: kart yok · kartsız sanal kart · AKTİF TANIMI VAR · kart şu an içeride.
+ * Audit: kart başına 'kart_sil' / 'kart_arsiv' (eski değerlerle) + özet 'kart_toplu_sil'
+ * (istek_id; tekrar gönderim bununla yakalanır).
+ *
+ * @return array{ok:bool, silinen?:int, arsivlenen?:int, silinen_kartlar?:array, arsivlenen_kartlar?:array,
+ *               kod?:string, hata?:string, hatalar?:array, tekrar?:bool}
+ */
+function pdks_gunluk_kart_tanimsiz_sil(array $kartIds, string $reason, string $istekId, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $red = static fn(string $kod, string $hata, array $hatalar = []): array => ['ok' => false, 'kod' => $kod, 'hata' => $hata, 'hatalar' => $hatalar];
+    if (!function_exists('is_admin') || !is_admin()) return $red('yetki', 'Bu işlem yalnızca sistem yöneticileri içindir.');
+    $reason = trim($reason);
+    if ($reason === '') return $red('gerekce', 'Silme gerekçesi zorunludur.');
+    if (mb_strlen($reason) > 500) return $red('gerekce', 'Gerekçe en fazla 500 karakter olabilir.');
+    $istekId = trim($istekId);
+    if (!preg_match('/^[a-f0-9]{16,64}$/D', $istekId)) {
+        return $red('istek_gecersiz', 'Geçersiz ya da eksik istek anahtarı; pencereyi kapatıp yeniden açın.');
+    }
+    $ids = [];
+    foreach ($kartIds as $x) {
+        $s = is_int($x) ? (string)$x : (is_string($x) ? trim($x) : '');
+        if (!preg_match('/^[1-9]\d{0,9}$/D', $s)) return $red('gecersiz', 'Geçersiz kart seçimi.');
+        $ids[] = (int)$s;
+    }
+    if (!$ids) return $red('bos', 'Silinecek kart seçin.');
+    if (count($ids) > PDKS_GUNLUK_KART_SIL_LIMIT) {
+        return $red('limit', 'Bir seferde en çok ' . PDKS_GUNLUK_KART_SIL_LIMIT . ' kart silinebilir (seçilen: ' . count($ids) . ').');
+    }
+    if (count(array_unique($ids)) !== count($ids)) return $red('yinelenen', 'Aynı kart listede birden fazla kez seçilmiş.');
+    if ($pdo->inTransaction()) return $red('ic_ice_islem', 'Kart silme başka bir işlemin içinde çalıştırılamaz.');
+    if (pdks_gunluk_kart_sil_istek_kayitli($pdo, $istekId)) return ['tekrar' => true] + $red('tekrar', PDKS_GUNLUK_KART_SIL_TEKRAR);
+    sort($ids, SORT_NUMERIC);
+
+    // Şema kararları transaction'dan ÖNCE (tablo yoklaması tx içinde hata üretmesin).
+    $tanimHazir = pdks_gunluk_kart_tanim_sema_hazir($pdo);
+    $faz8a = pdks_gunluk_faz8a_sema_hazir($pdo);
+    $gecmisTablolar = array_filter(pdks_gunluk_kart_gecmis_tablolari(), static fn($k, $t) => pdks_gunluk_tablo_var($pdo, $t), ARRAY_FILTER_USE_BOTH);
+    $kartsizKolon = pdks_gunluk_faz8j_kolon_var($pdo, 'worker_cards', 'enrolled_source');
+
+    $silinen = []; $arsiv = [];
+    try {
+        $pdo->beginTransaction();
+        foreach ($ids as $kid) pdks_gunluk_faz8a_kart_kilitle($pdo, $kid);   // İLK iş — girişle AYNI kilit
+        if (pdks_gunluk_kart_sil_istek_kayitli($pdo, $istekId)) {
+            $pdo->rollBack();
+            return ['tekrar' => true] + $red('tekrar', PDKS_GUNLUK_KART_SIL_TEKRAR);
+        }
+        $stK = $pdo->prepare('SELECT * FROM worker_cards WHERE id = ?');
+        $hatalar = []; $plan = [];
+        foreach ($ids as $kid) {
+            $stK->execute([$kid]);
+            $k = $stK->fetch();
+            if (!$k) { $hatalar[] = ['kart_id' => $kid, 'card_no' => null, 'hata' => 'Kart bulunamadı.']; continue; }
+            $no = (string)$k['card_no'];
+            if ($kartsizKolon && (string)($k['enrolled_source'] ?? '') === 'kartsiz') {
+                $hatalar[] = ['kart_id' => $kid, 'card_no' => $no, 'hata' => 'Kartsız mesainin sanal kartı silinemez.']; continue;
+            }
+            if ($tanimHazir && ($t = pdks_gunluk_kart_tanim_aktif($pdo, $kid))) {
+                $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
+                              'hata' => 'Kart ' . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — önce Tanımı Kaldır.']; continue;
+            }
+            $ic = $faz8a ? pdks_gunluk_faz8a_kart_acik_donemi($pdo, $kid) : pdks_gunluk_kart_acik_girisi($kid, $pdo);
+            if ($ic) {
+                $hatalar[] = ['kart_id' => $kid, 'card_no' => $no,
+                              'hata' => 'Kart şu an ' . (string)($ic['foreman_name'] ?? '') . ' mesaisinde içeride — önce çıkış yapılmalı.']; continue;
+            }
+            $plan[] = ['kart' => $k, 'gecmis' => pdks_gunluk_kart_gecmisi_var($pdo, $kid, $gecmisTablolar)];
+        }
+        if ($hatalar) {
+            $pdo->rollBack();
+            return $red('hatali_satir', count($hatalar) . ' kartta sorun var — hiçbir kart silinmedi.', $hatalar);
+        }
+
+        $not = '[Arşiv ' . date('Y-m-d') . '] ' . $reason;
+        foreach ($plan as $p) {
+            $k = $p['kart']; $kid = (int)$k['id']; $no = (string)$k['card_no'];
+            $eski = ['card_no' => $no, 'status' => (string)$k['status'], 'notes' => $k['notes'] ?? null,
+                     'worker_type_id' => $k['worker_type_id'] ?? null, 'enrolled_source' => $k['enrolled_source'] ?? null,
+                     'created_at' => $k['created_at'] ?? null];
+            if ($p['gecmis']) {
+                $mevcut = trim((string)($k['notes'] ?? ''));
+                $yeniNot = $mevcut === '' ? $not : $mevcut . "\n" . $not;
+                $pdo->prepare("UPDATE worker_cards SET status = 'disabled', notes = ?, updated_by = ? WHERE id = ?")
+                    ->execute([$yeniNot, $userId, $kid]);
+                pdks_gunluk_kart_audit_yaz($pdo, $userId, 'kart_arsiv', $kid, $eski,
+                    ['status' => 'disabled', 'notes' => $yeniNot, 'reason' => $reason, 'istek_id' => $istekId]);
+                $arsiv[] = ['kart_id' => $kid, 'card_no' => $no];
+            } else {
+                $del = $pdo->prepare('DELETE FROM worker_cards WHERE id = ?');
+                $del->execute([$kid]);
+                if ($del->rowCount() !== 1) throw new RuntimeException('Kart silinemedi: ' . $no);
+                pdks_gunluk_kart_audit_yaz($pdo, $userId, 'kart_sil', $kid, $eski, ['silindi' => true, 'reason' => $reason, 'istek_id' => $istekId]);
+                $silinen[] = ['kart_id' => $kid, 'card_no' => $no];
+            }
+        }
+        pdks_gunluk_kart_audit_yaz($pdo, $userId, 'kart_toplu_sil', (int)$ids[0], null, [
+            'istek_id' => $istekId, 'reason' => $reason,
+            'silinen' => array_column($silinen, 'kart_id'), 'arsivlenen' => array_column($arsiv, 'kart_id'),
+            'silinen_kartlar' => array_column($silinen, 'card_no'), 'arsivlenen_kartlar' => array_column($arsiv, 'card_no'),
+        ]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('[pdks_gunluk_kart_tanimsiz_sil] ' . $e->getMessage());
+        // PDOException önce: FK ihlali (1451) = bilinmeyen bir tabloda geçmiş → fail-closed.
+        if ($e instanceof PDOException && (int)($e->errorInfo[1] ?? 0) === 1451) {
+            return $red('bagli_kayit', 'Kartlardan biri başka bir kayıtta kullanılıyor — hiçbir kart silinmedi.');
+        }
+        if ($e instanceof PDOException && pdks_gunluk_kart_tanim_eszamanli($e)) {
+            return $red('eszamanli', 'Aynı anda başka bir kart işlemi yapıldı — hiçbir kart silinmedi. Sayfayı yenileyip tekrar deneyin.');
+        }
+        return $red('yazma_hatasi', 'Kartlar silinemedi — hiçbir değişiklik yapılmadı. Lütfen tekrar deneyin.');
+    }
+    return ['ok' => true, 'silinen' => count($silinen), 'arsivlenen' => count($arsiv),
+            'silinen_kartlar' => array_column($silinen, 'card_no'), 'arsivlenen_kartlar' => array_column($arsiv, 'card_no')];
+}
+
+// =========================================================
 // PERİYOT-TABANLI OKUMA — bu bölümün fonksiyonları aşağıdaki Faz 1-7
 // fonksiyonlarının İÇİNDEN, YALNIZ pdks_gunluk_faz8a_sema_hazir() true
 // döndüğünde çağrılır (dosyanın geri kalanındaki çağrı noktalarına bkz.):

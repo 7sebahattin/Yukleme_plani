@@ -212,7 +212,7 @@ ok('PHP Warning/Notice yok', !preg_match('/Warning:|Notice:|Deprecated:/', $s2))
 $s2OncekiModal = explode('id="iskKartModal"', $s2)[0];   // yalnız düzenleme modalinden ÖNCEKİ (create formu içeren) kısım
 ok('Yeni kart formu İşçi Tipi seçici İÇERMİYOR (nötr oluşturma — düzenleme modalindeki opsiyonel alan HARİÇ)',
     !str_contains($s2OncekiModal, '<select name="worker_type_id"'));
-ok('Mevcut nötr kart (K001, tip yok) listede "— (nötr)" olarak görünüyor', str_contains($s2, '— (nötr)'));
+ok('v303: liste artık "Tip (eski)" sütunu taşımıyor (nötr kart yine listede — aşağıdaki K001 denetimi)', !str_contains($s2, 'Tip (eski — tanım için kullanılmaz)</th>'));
 ok('Kart no K001 listede görünüyor (LEFT JOIN kartı düşürmedi)', str_contains($s2, 'K001'));
 ok('Kart düzenleme modalı responsive sınıf kullanıyor',
     str_contains($s2, 'class="pm-dialog isk-card-modal"'));

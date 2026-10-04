@@ -10,7 +10,9 @@
 //
 // Beklenen değişkenler:
 //   $ekleWorkDate     — 'Y-m-d' mesai günü (sabit)
-//   $ekleKartlar      — [['id'=>,'card_no'=>], …] o gün BOŞ kartlar
+//   $ekleKartlar      — [['id'=>,'card_no'=>, 'tanim_foreman_id'=>?, 'tanim_tip_adi'=>?], …] o gün BOŞ kartlar
+//                       (v303: tanımlı kart YALNIZ kendi çavuşu seçiliyken görünür — data-tanim-foreman;
+//                        sunucu pdks_faz8j_tanim_kart_engeli() ile ayrıca reddeder)
 //   $ekleTipler       — [['id'=>,'name'=>], …] KADIN/ERKEK (tek politika)
 //   $ekleSabitCavus   — ['id'=>,'name'=>] (detay) YA DA null
 //   $ekleCavuslar     — [['id'=>,'name'=>,'is_active'=>], …] ($ekleSabitCavus null iken)
@@ -83,8 +85,8 @@ $ekleIk = function (string $ad): string {
             <select name="worker_card_id" required>
                 <option value="">— Boş kart seçin —</option>
                 <option value="kartsiz">— Kartsız mesai —</option>
-                <?php foreach ($ekleKartlar as $k): ?>
-                <option value="<?= (int)$k['id'] ?>"><?= h($k['card_no']) ?></option>
+                <?php foreach ($ekleKartlar as $k): $kTf = (int)($k['tanim_foreman_id'] ?? 0); ?>
+                <option value="<?= (int)$k['id'] ?>"<?= $kTf > 0 ? ' data-tanim-foreman="' . $kTf . '"' : '' ?>><?= h($k['card_no']) ?><?= $kTf > 0 ? ' 🏷 ' . h((string)($k['tanim_tip_adi'] ?? '')) : '' ?></option>
                 <?php endforeach; ?>
             </select></span>
         </label>
@@ -127,6 +129,21 @@ $ekleIk = function (string $ad): string {
                                     : 'Çıkış saati boş bırakılırsa kişi içeride yazılır, çıkışta kartını okutur.';
     }
     kart.addEventListener('change', guncelle);
+    // v303: tanımlı kart yalnız tanımlı olduğu çavuş seçiliyken listelenir (çavuş yoksa gizli).
+    var cavus = f.elements['foreman_id'];
+    function tanimSuz() {
+        var fid = cavus ? String(cavus.value || '') : '';
+        for (var i = 0; i < kart.options.length; i++) {
+            var o = kart.options[i], t = o.getAttribute('data-tanim-foreman');
+            if (t === null) continue;
+            var gizli = t !== fid;
+            o.hidden = o.disabled = gizli;
+            if (gizli && o.selected) { kart.value = ''; }
+        }
+        guncelle();
+    }
+    if (cavus && cavus.tagName === 'SELECT') cavus.addEventListener('change', tanimSuz);
+    tanimSuz();
     f.addEventListener('submit', function (e) {
         // Çift tıklama: ikinci gönderim engellenir (sunucu istek_id ile ayrıca korur).
         if (f.getAttribute('data-gonderildi') === '1') { e.preventDefault(); return; }
