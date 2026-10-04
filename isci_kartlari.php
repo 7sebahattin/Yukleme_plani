@@ -7,17 +7,11 @@
 // pdks_gunluk.php başlığı: kart kişi değil, yeniden kullanılabilir bir
 // oturum birimidir).
 //
-// ⚠ NFC/USB OKUMA: kullanıcının açık talimatı — "reuse the proven NFC/USB
-// enrollment patterns already in the project... Do NOT invent another NFC
-// lifecycle." Burada YENİ bir NFC kodu YOK: assets/pdks.js'teki
-// data-pdks-scan / data-pdks-nfc-target / pdksnfcread deseni AYNEN
-// kullanılır (personel_kartlar.php ile BİREBİR aynı JS, farklı sadece
-// hedef form alanları). Bu, giris_cikis.php'nin PdksNfcOku okuma-döngüsü
-// (Sprint NFC-Fix-01) İLE AYNI ŞEY DEĞİLDİR — o, tekrarlı "aç ve arka arkaya
-// kartları oku" akışı içindir; assets/pdks.js'in deseni TEK KART tanımlama
-// (enroll) içindir ve zaten bu iki sayfada (personel_kartlar.php,
-// personel_form.php) ÇALIŞIYOR. İkisi de "proven" — burada olan doğru olan
-// enrollment deseni REUSE edilir.
+// ⚠ NFC/USB OKUMA: bu sayfada YENİ bir NFC kodu YOK — Kart Sorgula ve Seri
+// Kart Tanımla, config/pdks.php'nin ortak PdksNfcOku okuma-döngüsünü kullanır.
+// v300: tekli kart ekleme formu (assets/pdks.js tek-kart tarama deseni + tekli POST
+// ve önizleme ucu) KALDIRILDI — kart ekleme yolu "Seri Kart Tanımla"dır. O desen
+// assets/pdks.js'te personel_kartlar.php / personel_form.php için durur.
 // =========================================================
 declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
@@ -37,41 +31,8 @@ $aktifDepo  = trim((string)(function_exists('active_depot') ? (active_depot() ??
 // v299 — Seri Kart Tanımla: tanım tablosu + Faz 8A (yeni kartlar nötr yazılır) + aktif depo varsa; yoksa düğme/pencere GİZLİ.
 $seriHazir  = $tanimHazir && $faz8aHazir && $aktifDepo !== '';
 
-// ── Salt-okunur önizleme ucu — personel_kartlar.php'deki ajax=onizle İLE
-// AYNI JS'İ (assets/pdks.js) besler; burada AYRICA çapraz-sistem uyarısı da
-// döner (kalıcı personel kartıyla çakışıyor mu) — hiçbir yazma yapmaz. ──
-if (($_GET['ajax'] ?? '') === 'onizle') {
-    header('Content-Type: application/json; charset=utf-8');
-    $ham = trim($_GET['uid'] ?? '');
-    $kaynak = trim($_GET['kaynak'] ?? '');
-    if ($ham === '' || !in_array($kaynak, ['usb_decimal', 'web_nfc'], true)) {
-        echo json_encode(['ok' => false, 'hata' => 'Geçersiz istek.']);
-        exit;
-    }
-    $kanonik = ($kaynak === 'usb_decimal') ? pdks_uid_from_decimal($ham) : pdks_uid_from_web_nfc($ham);
-    if ($kanonik === null) {
-        echo json_encode(['ok' => false, 'hata' => $kaynak === 'usb_decimal'
-            ? 'Geçersiz UID — yalnız rakam kabul edilir.'
-            : 'Geçersiz NFC okuması.']);
-        exit;
-    }
-    $havuz  = pdks_gunluk_uid_gecici_kartta_mi($kanonik, null, $pdo);
-    $kalici = pdks_gunluk_uid_kalici_kartta_mi($kanonik, $pdo);
-    echo json_encode([
-        'ok'              => true,
-        'canonical'       => $kanonik,
-        'exists'          => $havuz !== null,
-        'card_no'         => $havuz['card_no'] ?? null,
-        'kalici_cakisma'  => $kalici !== null,
-        'kalici_isim'     => $kalici['full_name'] ?? null,
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
 // ── Salt-okunur SORGU ucu (Sprint Kart-Sorgula-01) — GİRİŞ/ÇIKIŞ YAPMAZ,
-// yalnız kartın şu anki durumunu + son 5 dönemini döner. ajax=onizle'den
-// AYRI: onizle "bu UID boşta mı" der (enroll formu için), bu ise kartın
-// KİMLİĞİNİ ve GEÇMİŞİNİ gösterir. daily_worker_work_periods Faz 8A'ya
+// yalnız kartın şu anki durumunu + son 5 dönemini (KİMLİĞİNİ ve GEÇMİŞİNİ) döner. daily_worker_work_periods Faz 8A'ya
 // özgü olduğu için şema hazır değilse fail-closed döner. ──
 if (($_GET['ajax'] ?? '') === 'sorgula') {
     header('Content-Type: application/json; charset=utf-8');
@@ -148,29 +109,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_pdks_gunluk('worker_cards');   // savunma derinliği
     $action = trim($_POST['action'] ?? '');
 
-    if ($action === 'kart_ekle' && !$faz8aHazir) {
-        // Kod deploy edilmiş fakat Faz 8A migrasyonu henüz tamamlanmamış olabilir.
-        // Bu pencerede worker_cards.worker_type_id üretimde hâlâ NOT NULL olabilir;
-        // nötr kartı NULL ile yazmayı denemek yerine kayıt güvenli biçimde durdurulur.
-        $hata = 'Yeni nötr kart tanımlamak için önce yönetici Faz 8A migrasyonunu tamamlamalıdır. Mevcut kartlarla giriş/çıkış çalışmaya devam eder.';
-    } elseif ($action === 'kart_ekle') {
-        $veri = [
-            'card_no'        => trim($_POST['card_no'] ?? ''),
-            'worker_type_id' => (int)($_POST['worker_type_id'] ?? 0),
-            'ham_uid'        => trim($_POST['ham_uid'] ?? ''),
-            'kaynak'         => trim($_POST['kaynak'] ?? 'usb_decimal'),
-            'notes'          => trim($_POST['notes'] ?? ''),
-        ];
-        $sonuc = pdks_gunluk_kart_olustur($veri, (int)$auth_user['id'], $pdo);
-        if ($sonuc['ok']) {
-            header('Location: isci_kartlari.php?ok=' . urlencode('Kart tanımlandı: ' . $sonuc['card_no']));
-            exit;
-        }
-        // PDO/SQL ayrıntıları operatöre gösterilmez; teknik detay sunucu logunda kalır.
-        $hata = (($sonuc['kod'] ?? '') === 'yazma_hatasi')
-            ? 'Kart kaydedilemedi. Lütfen bilgileri kontrol edip yeniden deneyin; sorun sürerse yöneticinize başvurun.'
-            : ($sonuc['hata'] ?? 'Kart tanımlanamadı.');
-    } elseif ($action === 'kart_duzenle' && !$faz8aHazir && (int)($_POST['worker_type_id'] ?? 0) <= 0) {
+    // v300: tekli kart ekleme POST dalı KALDIRILDI — kart ekleme yolu Seri Kart Tanımla (ajax=tanim_toplu_kaydet).
+    if ($action === 'kart_duzenle' && !$faz8aHazir && (int)($_POST['worker_type_id'] ?? 0) <= 0) {
         // Pre-migration üretim şemasında worker_type_id hâlâ NOT NULL olabilir.
         // Nötrleştirme yalnız Faz 8A şeması tamamen hazır olduğunda güvenlidir.
         $hata = 'Kartı nötr hale getirmek için önce yönetici Faz 8A migrasyonunu tamamlamalıdır. Mevcut işçi tipi korunarak diğer bilgiler düzenlenebilir.';
@@ -222,9 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($hata === '' && isset($_GET['ok'])) $basari = trim($_GET['ok']);
 
 $tipler = pdks_gunluk_tip_listele(true, $pdo);
-// ⚠ FAZ 8A: kart artık NÖTR oluşturulur (tip taramada seçilir, bkz.
-// gunluk_isci_giris_cikis.php) — öneri numarası tipten BAĞIMSIZ 'K' önekiyle üretilir.
-$onerilenKartNo = pdks_gunluk_sonraki_kart_no(0, $pdo);
 
 // ── Kart listesi (filtre) ──────────────────────────────────
 $q = trim($_GET['q'] ?? '');
@@ -303,7 +240,7 @@ if ($basari !== ''): ?>
     <h1>🪪 Kart Havuzu</h1>
     <div class="page-head-actions">
         <a href="isci_tipleri.php" class="btn btn-ghost">⚙️ İşçi Tipleri</a>
-        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
 
@@ -341,61 +278,18 @@ if ($basari !== ''): ?>
 </div>
 
 <?php if ($seriHazir): ?>
-<!-- ── v299: Seri Kart Tanımla — "Yeni Kart Tanımla"nın yanında; mevcut tekli kart
-     ekleme ve tanım modalı AYNEN kalır. Tablo/Faz 8A hazır değilse hiç çizilmez. -->
+<!-- ── Seri Kart Tanımla — kart ekleme/tanımlamanın TEK yolu (v300: tekli ekleme formu
+     kaldırıldı). Tablo/Faz 8A/aktif depo hazır değilse hiç çizilmez. -->
 <div class="isk-seri-bar">
     <button type="button" class="btn btn-primary" id="iskSeriAc">⚡ Seri Kart Tanımla</button>
     <span class="muted">Çavuş ve tipi seçin, kartları art arda okutun, listeyi kontrol edip tek seferde kaydedin.</span>
 </div>
+<?php else: ?>
+<div class="flash flash-warning" id="iskSeriYok">Yeni kart eklemek için <strong>Seri Kart Tanımla</strong> gerekir
+    <?php if (!$tanimHazir): ?>— Tanımlı Kart tablosu kurulmalı: <a href="migrate.php">migrate.php</a>.
+    <?php elseif (!$faz8aHazir): ?>— Faz 8A migrasyonu tamamlanmalı: <a href="migrate.php">migrate.php</a>.
+    <?php else: ?>— önce üstteki menüden bir depo seçin.<?php endif; ?></div>
 <?php endif; ?>
-
-<!-- ── Kart-önce tanımlama (enroll) ──────────────────────────
-     assets/pdks.js'in data-pdks-scan / data-pdks-nfc-target deseni
-     personel_kartlar.php İLE BİREBİR AYNI — burada TEKRARLANMADI. -->
-<div class="card" style="padding:0;margin-bottom:20px">
-    <details class="pdks-collapse">
-    <summary>Yeni Kart Tanımla</summary>
-    <div class="pdks-collapse-body">
-    <p class="muted" style="font-size:.85rem">
-        Kart artık NÖTR bir jetondur — işçi tipi ve mesai (Tam/Yarım) burada DEĞİL,
-        her taramada <a href="gunluk_isci_giris_cikis.php">Giriş / Çıkış</a> ekranında seçilir.
-        Aynı fiziksel kart farklı günlerde/çavuşlarda farklı işçi tipleri için kullanılabilir.
-    </p>
-    <?php if (!$faz8aHazir): ?>
-    <div class="flash flash-warning" style="margin-bottom:12px">
-        Yeni nötr kart tanımlama, Faz 8A migrasyonu tamamlanana kadar güvenlik nedeniyle kapalıdır. Mevcut kartlarla tarama çalışmaya devam eder.
-    </div>
-    <?php endif; ?>
-    <form method="post">
-        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-        <input type="hidden" name="action" value="kart_ekle">
-        <input type="hidden" name="kaynak" id="ikScanKaynak" value="usb_decimal">
-        <div class="pdks-scan-box">
-            <label class="pdks-scan-label" for="ikScanInput">KARTI USB OKUYUCUYA OKUTUN</label>
-            <input type="text" inputmode="numeric" id="ikScanInput" name="ham_uid" class="pdks-scan-input"
-                   data-pdks-scan data-pdks-preview="#ikScanOnizle" data-pdks-status="#ikScanDurum"
-                   data-pdks-kaynak-field="#ikScanKaynak" data-pdks-onizle-url="isci_kartlari.php"
-                   placeholder="631799511" autocomplete="off" required>
-            <div class="pdks-uid-lg" id="ikScanOnizle" style="margin-top:12px;min-height:1.4em"></div>
-            <div class="pdks-scan-status" id="ikScanDurum"></div>
-            <button type="button" id="ikScanNfcBtn" class="btn btn-ghost" style="margin-top:10px"
-                    data-pdks-nfc-target="#ikScanInput" hidden>📡 NFC İLE OKU</button>
-        </div>
-        <div class="pdks-form-grid" style="margin-top:14px">
-            <label>
-                <span class="form-label">Kart No *</span>
-                <input type="text" name="card_no" maxlength="30" required value="<?= h($onerilenKartNo) ?>">
-            </label>
-            <label class="span-2">
-                <span class="form-label">Not (opsiyonel)</span>
-                <input type="text" name="notes" maxlength="200">
-            </label>
-        </div>
-        <button type="submit" class="btn btn-primary" style="margin-top:14px" <?= !$faz8aHazir ? 'disabled' : '' ?>>KARTI HAVUZA EKLE</button>
-    </form>
-    </div>
-    </details>
-</div>
 
 <?php if (!$tanimHazir && function_exists('is_admin') && is_admin()): ?>
 <div class="flash flash-warning">🏷 Tanımlı Giriş (karta çavuş + tip tanımlama) için <a href="migrate.php">migrate.php</a> sayfasından "Tanımlı Kart Tablosunu Oluştur" adımını çalıştırın.</div>
@@ -425,7 +319,7 @@ if ($basari !== ''): ?>
 <?php if (empty($kartlar)): ?>
 <div class="pdks-empty">
     <span class="pdks-empty-icon" aria-hidden="true">🪪</span>
-    <p>Bu filtrelerle kart bulunamadı.</p>
+    <p>Bu filtrelerle kart bulunamadı.<?= $seriHazir ? ' Kart eklemek için <strong>Seri Kart Tanımla</strong>\'yı kullanın.' : '' ?></p>
 </div>
 <?php else: ?>
 <div class="table-wrap pc-only">

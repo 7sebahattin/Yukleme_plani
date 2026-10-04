@@ -141,15 +141,13 @@ $iskSrc = oku('isci_kartlari.php');
 ok('isci_kartlari.php KENDİ `new NDEFReader()`ını AÇMIYOR', !str_contains(kodSadece($iskSrc), 'new NDEFReader()'));
 ok('isci_kartlari.php assets/pdks.js\'i YÜKLÜYOR (mevcut enrollment JS\'i REUSE)',
     (bool)preg_match('/assets\/pdks\.js/', $iskSrc));
-ok('isci_kartlari.php data-pdks-scan desenini KULLANIYOR (personel_kartlar.php ile AYNI)',
-    str_contains($iskSrc, 'data-pdks-scan'));
-ok('isci_kartlari.php data-pdks-nfc-target desenini KULLANIYOR', str_contains($iskSrc, 'data-pdks-nfc-target'));
-ok('isci_kartlari.php data-pdks-kaynak-field desenini KULLANIYOR (kaynak alanı senkronu)',
-    str_contains($iskSrc, 'data-pdks-kaynak-field'));
+ok('isci_kartlari.php: tekli kart ekleme formu KALDIRILDI (data-pdks-scan / data-pdks-nfc-target / data-pdks-kaynak-field YOK — v300)',
+    !str_contains($iskSrc, 'data-pdks-scan') && !str_contains($iskSrc, 'data-pdks-nfc-target') && !str_contains($iskSrc, 'data-pdks-kaynak-field'));
+ok('isci_kartlari.php: ortak PdksNfcOku KULLANIYOR (Kart Sorgula + Seri Kart Tanımla)', str_contains($iskSrc, 'PdksNfcOku'));
 ok('isci_kartlari.php genel modal aç/kapa için window.pdksOpenModal/pdksCloseModal KULLANIYOR (yeni bir modal mekanizması İCAT ETMEDİ)',
     str_contains($iskSrc, 'window.pdksOpenModal') && str_contains($iskSrc, "pdksCloseModal("));
-ok('isci_kartlari.php\'nin ajax=onizle ucu personel_kartlar.php ile AYNI iki kaynağı kabul ediyor (usb_decimal, web_nfc)',
-    (bool)preg_match("/in_array\(\\\$kaynak,\s*\['usb_decimal',\s*'web_nfc'\]/", $iskSrc));
+ok('isci_kartlari.php: ajax=onizle ucu KALDIRILDI (yalnız tekli form kullanıyordu — v300)',
+    !str_contains($iskSrc, "'onizle'"));
 ok('assets/pdks.js BU GÖREVDE değiştirilmedi (git status temiz)',
     trim((string)shell_exec('cd ' . escapeshellarg($KOK) . ' && git status --porcelain -- assets/pdks.js 2>&1')) === '');
 ok('giris_cikis.php / pdks_nfc_test.php / config/pdks.php\'nin PdksNfcOku okuma-döngüsü BU GÖREVDE değiştirilmedi',

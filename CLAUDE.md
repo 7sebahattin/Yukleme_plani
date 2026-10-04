@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v300` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v301` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -659,6 +659,7 @@ Kart Havuzu "⚡ Seri Kart Tanımla": çavuş + tip (`pdks_gunluk_desteklenen_ti
 - **Tekrar gönderim:** `istek_id` özet audit `kart_tanim_toplu`'da aranır (JSON_THROW doğrudan INSERT; `audit_log_event` hata yutar). MySQL'de `GET_LOCK('pdks_kart_tanim_toplu')` tx'in ilk işi — kaldırma. Kart içerideyse engel değil, `uyarilar`.
 - **UI:** `#iskSeriModal` = başlık / kayan gövde / sabit alt çubuk, `<form>` SARILMAZ (`.pm-dialog > form` kuralı kalsın). pdks.css "v299" bloğu.
 - Test: `php scripts/pdks_kart_toplu_tanim_smoke.php` · `php scripts/pdks_kart_toplu_render.php > _test_kart_toplu.html` → `node scripts/pdks_kart_toplu_smoke.js`.
+- **v301 — tekli "Yeni Kart Tanımla" KALDIRILDI** (sahip kararı): kart ekleme/tanımlamanın TEK yolu Seri Kart Tanımla. Sayfadan `kart_ekle` POST dalı, `ajax=onizle` ucu ve `$onerilenKartNo` gitti; `pdks_gunluk_kart_olustur()` / `pdks_gunluk_sonraki_kart_no()` Seri Kart'ın toplu kaydı için KALIR, `assets/pdks.js` `data-pdks-scan` yardımcısı `personel_kartlar`/`personel_form` için KALIR — silme. `$seriHazir` false (tablo/Faz 8A/aktif depo yok) iken sayfa `#iskSeriYok` ile nedenini + migrate.php yönlendirmesini söyler; o durumda kart eklenemez. Düzenle/Durum/Tanım modalları ve Kart Sorgula DEĞİŞMEDİ. Testler bölümün YOKLUĞUNU denetler (kaynakta "Yeni Kart Tanımla" / `kart_ekle` geçmemeli — yorumda bile).
 
 ### Saat Bazlı Yevmiye + Çift Yevmiye (v299)
 
@@ -721,6 +722,12 @@ Kadın/Erkek yanında 3. SABİT sistem tipi: `worker_types` RAMPACI/"Rampacı" (
 - Rampacı sütunu 0 olsa da görünür; Karışık yalnız atanmamış kayıt varsa. CSV/XLSX'e sütun EKLENMEZ (sahip kararı).
 - Kiosk: turuncu RAMPACI düğmesi/çember/sonuç/rozet; Kadın⇄Erkek hızlı geçiş Rampacı'da gizli; ÇIKIŞ "kalan" dairesi Karışık hariç tüm sistem tipleri için.
 - Test: `php scripts/pdks_rampaci_smoke.php` · `node scripts/pdks_kiosk_renk_smoke.js` (render: `php scripts/pdks_ortak_cikis_render.php > _test_ortak_cikis.html`).
+
+### Görünüm (v301)
+
+- **"← Personel Takibi" geri düğmesi TURUNCU** (tüm sayfalar, sahip kararı): `personel_takip.php`'ye giden bağlantı `class="btn btn-geri btn-geri-ptak"` taşır (`style.css`, açık + koyu tema; beyaz yazı AA için #c2410c). Diğer geri düğmeleri (`.btn-geri`) MAVİ kalır — turuncu yalnız bu hedefe. Yeni sayfa eklerken bu bağlantıya `btn-geri-ptak` ver (statik test denetler).
+- **Filtre çubuğu tarih kutusu** (`.pdks-filter-bar input[type=date]`, pdks.css): ≥768px'te sabit genişlik (max 200px) — global `input[type=date]{width:100%}` Günlük Puantaj'da tarihi tüm satıra yayıyordu; mobilde tam genişlik kalır.
+- Test: `php scripts/pdks_geri_ptak_smoke.php` · `PUANTAJ_SAYFA=liste PUANTAJ_TARIH=bugun php scripts/pdks_puantaj_dialog_render.php > _test_puantaj_liste.html` → `node scripts/pdks_geri_ptak_smoke.js`.
 
 ### Kart Hareketleri Sıralaması + Kapanış Notu (v299)
 

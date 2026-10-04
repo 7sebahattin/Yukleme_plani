@@ -53,7 +53,7 @@ render_flash();
         <?php if (pdks_gunluk_can('foremen')): ?>
         <a href="cavus_form.php" class="btn btn-primary">+ Yeni Çavuş</a>
         <?php endif; ?>
-        <a href="personel_takip.php" class="btn btn-geri">← Personel Takibi</a>
+        <a href="personel_takip.php" class="btn btn-geri btn-geri-ptak">← Personel Takibi</a>
     </div>
 </div>
 
