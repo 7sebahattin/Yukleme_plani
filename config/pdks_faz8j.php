@@ -113,6 +113,49 @@ function pdks_faz8j_void(int $periodId, int $sessionId, string $depo, string $re
         $pdo->commit(); return ['ok'=>true];
     } catch(Throwable $x) { if($pdo->inTransaction())$pdo->rollBack(); return ['ok'=>false,'hata'=>$x->getMessage()]; }
 }
+/**
+ * Düzeltmenin SATIR çekirdeği (v302) — tekil pdks_faz8j_duzelt() ve toplu
+ * pdks_faz8j_toplu_duzelt() İKİSİ DE bunu çağırır; dönem UPDATE'inin TEK yeri.
+ * Transaction AÇMAZ, yetki/depo/kesin hakediş kontrolü YAPMAZ: çağıran kendi
+ * transaction'ında dönemi pdks_faz8j_donem() ile kilitleyip $p olarak verir.
+ * Kurallar (zaman, kart, kartsız, tip, çakışma) → RuntimeException; yazma
+ * kuralların HEPSİ geçtikten sonra başlar. $auditEk: satır audit'ine ek alanlar (toplu_id).
+ */
+function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int $card, int $type, string $entry, ?string $exit, string $reason, string $note, int $user, array $auditEk = []): void {
+    $pid=(int)$p['id'];
+    if(substr($entry,0,10)!==(string)$p['work_date']||$entry>date('Y-m-d H:i:s')||($exit!==null&&($exit<$entry||strtotime($exit)>strtotime($entry)+86400||$exit>date('Y-m-d H:i:s')))) throw new RuntimeException('Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.');
+    $c=$pdo->prepare('SELECT card_no FROM worker_cards WHERE id=?'); $c->execute([$card]); $cardNo=$c->fetchColumn(); $tip=pdks_faz8j_desteklenen_tip($pdo,$type); $typeName=$tip['name']??null;
+    // Faz 9B / görev talimatı §7: ayrı, AÇIK mesajlar — "kart yok" ile
+    // "tip artık desteklenmiyor" (ör. tarihsel/başka kurulumdan gelen bir
+    // satır) FARKLI durumlardır ve SESSİZCE aynı jenerik hataya
+    // düşürülmemeli; hiçbiri SESSİZCE farklı bir tipe DÖNÜŞTÜRÜLMEZ.
+    if(!$cardNo) throw new RuntimeException('Seçilen kart bulunamadı.');
+    // Kartsız mesai: sanal kart YALNIZ kendi dönemine aittir — dönem başka
+    // karta taşınamaz, sanal kart başka döneme verilemez, çıkışı silinemez.
+    if($card!==(int)$p['worker_card_id']) {
+        if(pdks_faz8j_kart_kartsiz_mi_id($pdo,(int)$p['worker_card_id'])) throw new RuntimeException('Kartsız mesai kaydı başka bir karta taşınamaz.');
+        if(pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesainin sanal kartı başka bir kayda bağlanamaz.');
+    } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
+    if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI\'ya yeniden atanarak düzeltilebilir.');
+    $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
+    $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
+    $eventId=$p['exit_event_id'];
+    if($p['exit_time']===null && $exit!==null) {
+        $manualPeriod=$p; $manualPeriod['worker_card_id']=$card; $manualPeriod['worker_type_id_snapshot']=$type; $manualPeriod['worker_type_name_snapshot']=$typeName;
+        $eventId=pdks_faz8e_manuel_cikis_olayi_ekle($pdo,$manualPeriod,$card,$depo,$exit,$user);
+    }
+    if($exit===null) $eventId=null;
+    $status=$exit!==null?'closed':((string)$p['status']==='open'&&$p['work_date']===date('Y-m-d')?'open':'legacy_unresolved');
+    $old=['worker_card_id'=>$p['worker_card_id'],'card_no'=>$p['card_no'],'worker_type_id_snapshot'=>$p['worker_type_id_snapshot'],'worker_type_name_snapshot'=>$p['worker_type_name_snapshot'],'entry_time'=>$p['entry_time'],'exit_time'=>$p['exit_time'],'status'=>$p['status']];
+    // Faz 9C / H-02: entry/exit veya işçi tipi DEĞİŞTİĞİNDE geçen süre
+    // (ve dolayısıyla Tam/FM adayı) DEĞİŞMİŞ olabilir — overtime_approved_hours
+    // eski overtime_approved bayrağıyla BİRLİKTE sıfırlanır, eski bir
+    // onaylı FM saati YENİ süreye SESSİZCE taşınmaz.
+    $fmSaatSifirla = pdks_gunluk_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved_hours') ? ',overtime_approved_hours=NULL' : '';
+    $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL' . $fmSaatSifirla . ',overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
+    pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);   // + Çavuş Ücreti (Faz 8B eki): kardeş oturum
+    pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user] + $auditEk);
+}
 function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
     $pdo=$pdo??db(); if($e=pdks_faz8j_yetki()) return ['ok'=>false,'hata'=>$e];
     $pid=(int)($v['period_id']??0); $sid=(int)($v['session_id']??0); $depo=(string)($v['depo']??''); $reason=trim((string)($v['reason']??'')); $note=trim((string)($v['note']??''));
@@ -124,38 +167,7 @@ function pdks_faz8j_duzelt(array $v, int $user, ?PDO $pdo=null): array {
         $pdo->beginTransaction(); $p=pdks_faz8j_donem($pdo,$pid,$sid,$depo);
         if(!$p||(int)$p['is_voided']) throw new RuntimeException('Mesai dönemi bulunamadı veya iptal edilmiş.');
         if(pdks_faz8j_entitlement($pdo,$sid)==='final') throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
-        if(substr($entry,0,10)!==(string)$p['work_date']||$entry>date('Y-m-d H:i:s')||($exit!==null&&($exit<$entry||strtotime($exit)>strtotime($entry)+86400||$exit>date('Y-m-d H:i:s')))) throw new RuntimeException('Giriş/çıkış zamanı mesai tarihi, 24 saat ve gelecek kurallarına uymuyor.');
-        $c=$pdo->prepare('SELECT card_no FROM worker_cards WHERE id=?'); $c->execute([$card]); $cardNo=$c->fetchColumn(); $tip=pdks_faz8j_desteklenen_tip($pdo,$type); $typeName=$tip['name']??null;
-        // Faz 9B / görev talimatı §7: ayrı, AÇIK mesajlar — "kart yok" ile
-        // "tip artık desteklenmiyor" (ör. tarihsel/başka kurulumdan gelen bir
-        // satır) FARKLI durumlardır ve SESSİZCE aynı jenerik hataya
-        // düşürülmemeli; hiçbiri SESSİZCE farklı bir tipe DÖNÜŞTÜRÜLMEZ.
-        if(!$cardNo) throw new RuntimeException('Seçilen kart bulunamadı.');
-        // Kartsız mesai: sanal kart YALNIZ kendi dönemine aittir — dönem başka
-        // karta taşınamaz, sanal kart başka döneme verilemez, çıkışı silinemez.
-        if($card!==(int)$p['worker_card_id']) {
-            if(pdks_faz8j_kart_kartsiz_mi_id($pdo,(int)$p['worker_card_id'])) throw new RuntimeException('Kartsız mesai kaydı başka bir karta taşınamaz.');
-            if(pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesainin sanal kartı başka bir kayda bağlanamaz.');
-        } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
-        if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI\'ya yeniden atanarak düzeltilebilir.');
-        $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
-        $ov->execute([$card,$pid,$exit,$entry]); if($ov->fetchColumn()) throw new RuntimeException('Seçilen kartın çakışan aktif bir çalışma dönemi var.');
-        $eventId=$p['exit_event_id'];
-        if($p['exit_time']===null && $exit!==null) {
-            $manualPeriod=$p; $manualPeriod['worker_card_id']=$card; $manualPeriod['worker_type_id_snapshot']=$type; $manualPeriod['worker_type_name_snapshot']=$typeName;
-            $eventId=pdks_faz8e_manuel_cikis_olayi_ekle($pdo,$manualPeriod,$card,$depo,$exit,$user);
-        }
-        if($exit===null) $eventId=null;
-        $status=$exit!==null?'closed':((string)$p['status']==='open'&&$p['work_date']===date('Y-m-d')?'open':'legacy_unresolved');
-        $old=['worker_card_id'=>$p['worker_card_id'],'card_no'=>$p['card_no'],'worker_type_id_snapshot'=>$p['worker_type_id_snapshot'],'worker_type_name_snapshot'=>$p['worker_type_name_snapshot'],'entry_time'=>$p['entry_time'],'exit_time'=>$p['exit_time'],'status'=>$p['status']];
-        // Faz 9C / H-02: entry/exit veya işçi tipi DEĞİŞTİĞİNDE geçen süre
-        // (ve dolayısıyla Tam/FM adayı) DEĞİŞMİŞ olabilir — overtime_approved_hours
-        // eski overtime_approved bayrağıyla BİRLİKTE sıfırlanır, eski bir
-        // onaylı FM saati YENİ süreye SESSİZCE taşınmaz.
-        $fmSaatSifirla = pdks_gunluk_kolon_var($pdo, 'daily_worker_work_periods', 'overtime_approved_hours') ? ',overtime_approved_hours=NULL' : '';
-        $pdo->prepare('UPDATE daily_worker_work_periods SET worker_card_id=?,worker_type_id_snapshot=?,worker_type_name_snapshot=?,entry_time=?,exit_time=?,status=?,exit_event_id=?,approved_attendance_class=NULL,approved_by_user_id=NULL,approved_at=NULL,overtime_approved=NULL' . $fmSaatSifirla . ',overtime_approved_by_user_id=NULL,overtime_approved_at=NULL WHERE id=?')->execute([$card,$type,$typeName,$entry,$exit,$status,$eventId,$pid]);
-        pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);   // + Çavuş Ücreti (Faz 8B eki): kardeş oturum
-        pdks_faz8j_audit($pdo,$user,'puantaj_duzeltme',$pid,$old,['session_id'=>$sid,'period_id'=>$pid,'worker_card_id'=>$card,'card_no'=>$cardNo,'worker_type_id_snapshot'=>$type,'worker_type_name_snapshot'=>$typeName,'entry_time'=>$entry,'exit_time'=>$exit,'status'=>$status,'reason'=>$reason,'note'=>$note,'corrected_at'=>date('Y-m-d H:i:s'),'user_id'=>$user]);
+        pdks_faz8j_duzelt_satir($pdo,$p,$sid,$depo,$card,$type,$entry,$exit,$reason,$note,$user);
         $pdo->commit(); return ['ok'=>true];
     } catch(Throwable $x) { if($pdo->inTransaction())$pdo->rollBack(); return ['ok'=>false,'hata'=>$x->getMessage()]; }
 }
@@ -1139,5 +1151,191 @@ function pdks_faz8j_karisik_geri_al(string $atamaId, string $reason, int $user, 
     } catch (Throwable $x) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         return ['ok' => false, 'hata' => ($x instanceof RuntimeException && !$x instanceof PDOException) ? $x->getMessage() : 'İşlem sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.'];
+    }
+}
+
+// =========================================================
+// v302 — TOPLU DÜZENLE / TOPLU İPTAL (Kart Hareketleri, yalnız yönetici)
+// =========================================================
+// Mesai Detayı'nda SEÇİLEN dönemlerin tipi / giriş / çıkış saati tek seferde
+// düzeltilir ya da iptal edilir. İKİNCİ YAZMA YOLU YOK:
+//   düzeltme → pdks_faz8j_duzelt_satir() (tekil Düzenle ile AYNI çekirdek)
+//   iptal    → pdks_faz8j_void_uygula()  (tekil İptal ile AYNI çekirdek)
+// Kurallar: HEP-YA-HİÇ tek transaction; mesai kilidi tx'in İLK sorgusu;
+// istek_id (tekrar gönderim) zorunlu; kesin hakediş → ret; kart DEĞİŞMEZ;
+// giriş günü = mesainin work_date'i (istemciden tarih alınmaz); DEĞİŞMEYEN
+// satır (tip + giriş + çıkış dakika düzeyinde aynı) ATLANIR — yazılmaz,
+// Tam/Yarım/FM onayları sıfırlanmaz. Satır hataları toplanır; biri bile
+// hatalıysa rollback, hiçbir şey yazılmaz.
+
+const PDKS_FAZ8J_TOPLU_DUZELT_TEKRAR_HATA = 'Bu toplu işlem zaten kaydedildi (tekrar gönderim).';
+
+/** Bu istek_id ile verilen audit eylemlerinden biri yazıldı mı? (eylem bazlı tekrar gönderim yardımcısı) */
+function pdks_faz8j_istek_kayitli_eylem(PDO $pdo, string $istekId, array $eylemler): bool {
+    if ($eylemler === []) return false;
+    $st = $pdo->prepare('SELECT 1 FROM audit_log WHERE action IN (' . implode(',', array_fill(0, count($eylemler), '?')) . ') AND new_values LIKE ? LIMIT 1');
+    $st->execute(array_merge(array_values($eylemler), ['%"istek_id":"' . $istekId . '"%']));
+    return (bool)$st->fetchColumn();
+}
+
+/**
+ * Toplu düzenle/iptal ortak giriş kapısı (salt okunur). Başarıda mesai satırı + istek_id döner.
+ * @return array{hata:?string, oturum?:array, istek_id?:string, tekrar?:bool}
+ */
+function pdks_faz8j_toplu_secim_kapi(PDO $pdo, int $sessionId, array $periodIds, string $reason, string $istekId, string $nedenEtiketi = 'Düzeltme'): array {
+    if ($e = pdks_faz8j_yetki()) return ['hata' => $e];
+    if (!pdks_faz8j_sema_hazir($pdo)) return ['hata' => 'Faz 8J şeması henüz hazır değil.'];
+    if ($reason === '' || mb_strlen($reason) > 500) return ['hata' => $nedenEtiketi . ' nedeni zorunludur ve en fazla 500 karakter olabilir.'];
+    $ist = pdks_faz8j_istek_id($istekId);
+    if (!$ist['ok'] || $ist['istek_id'] === null) return ['hata' => 'Geçersiz ya da eksik istek anahtarı; pencereyi kapatıp yeniden açın.'];
+    if ($periodIds === []) return ['hata' => 'En az bir kayıt seçin.'];
+    if (count($periodIds) > PDKS_FAZ8J_TOPLU_LIMIT) return ['hata' => 'Tek seferde en fazla ' . PDKS_FAZ8J_TOPLU_LIMIT . ' kayıt işlenebilir.'];
+    foreach ($periodIds as $pid) if ($pid <= 0) return ['hata' => 'Geçersiz kayıt seçimi.'];
+    if (count(array_unique($periodIds)) !== count($periodIds)) return ['hata' => 'Aynı kayıt birden fazla kez seçilmiş.'];
+    $st = $pdo->prepare('SELECT * FROM daily_work_sessions WHERE id = ?'); $st->execute([$sessionId]);
+    $oturum = $st->fetch();
+    if (!$oturum) return ['hata' => 'Mesai bulunamadı.'];
+    if ($e = pdks_faz8j_aktif_depo_kontrol((string)$oturum['depo'])) return ['hata' => $e];
+    if (pdks_faz8j_istek_kayitli_eylem($pdo, $ist['istek_id'], ['puantaj_toplu_duzeltme', 'puantaj_toplu_iptal'])) {
+        return ['hata' => PDKS_FAZ8J_TOPLU_DUZELT_TEKRAR_HATA, 'tekrar' => true];
+    }
+    return ['hata' => null, 'oturum' => $oturum, 'istek_id' => $ist['istek_id']];
+}
+
+/** Toplu düzenle/iptal hata dönüşü (Throwable → kullanıcı mesajı). */
+function pdks_faz8j_toplu_secim_hata(Throwable $x): array {
+    if ($x instanceof RuntimeException && !$x instanceof PDOException) {
+        return ['ok' => false, 'hata' => $x->getMessage(), 'hatalar' => []] + ($x->getMessage() === PDKS_FAZ8J_TOPLU_DUZELT_TEKRAR_HATA ? ['tekrar' => true] : []);
+    }
+    return ['ok' => false, 'hata' => pdks_faz8j_eszamanli_hata($x) ? PDKS_FAZ8J_ESZAMANLI_HATA : 'İşlem sırasında teknik bir hata oluştu. Lütfen tekrar deneyin.', 'hatalar' => []];
+}
+
+/**
+ * Seçilen dönemleri toplu düzeltir (tip + giriş/çıkış saati; kart DEĞİŞMEZ).
+ * $satirlar: [['period_id'=>int,'worker_type_id'=>int,'entry_clock'=>'HH:MM','exit_date'=>'YYYY-MM-DD'|'','exit_clock'=>'HH:MM'|''], …]
+ * @return array{ok:bool, guncellenen?:int, atlanan?:int, toplu_id?:string, period_ids?:int[], hata?:string, hatalar?:array, tekrar?:bool}
+ */
+function pdks_faz8j_toplu_duzelt(int $sessionId, array $satirlar, string $reason, string $note, string $istekId, int $user, ?PDO $pdo = null): array {
+    $pdo = $pdo ?? db();
+    $reason = trim($reason); $note = trim($note);
+    $norm = [];
+    foreach ($satirlar as $s) {
+        $s = is_array($s) ? $s : [];
+        $norm[] = [
+            'period_id' => is_scalar($s['period_id'] ?? null) ? (int)$s['period_id'] : 0,
+            'worker_type_id' => is_scalar($s['worker_type_id'] ?? null) ? (int)$s['worker_type_id'] : 0,
+            'entry_clock' => pdks_faz8j_metin($s['entry_clock'] ?? ''),
+            'exit_date' => pdks_faz8j_metin($s['exit_date'] ?? ''), 'exit_clock' => pdks_faz8j_metin($s['exit_clock'] ?? ''),
+        ];
+    }
+    $kapi = pdks_faz8j_toplu_secim_kapi($pdo, $sessionId, array_column($norm, 'period_id'), $reason, $istekId);
+    if ($kapi['hata'] !== null) return ['ok' => false, 'hata' => $kapi['hata'], 'hatalar' => []] + (!empty($kapi['tekrar']) ? ['tekrar' => true] : []);
+    if (mb_strlen($note) > 1000) return ['ok' => false, 'hata' => 'Açıklama en fazla 1000 karakter olabilir.', 'hatalar' => []];
+    $istekId = $kapi['istek_id']; $depo = (string)$kapi['oturum']['depo'];
+    // Dönem kilitleri ARTAN id sırasıyla alınır (eşzamanlı işlemlerde deadlock önlemi).
+    usort($norm, fn($a, $b) => $a['period_id'] <=> $b['period_id']);
+    try {
+        $pdo->beginTransaction();
+        $oturum = pdks_faz8j_mesai_kilitle($pdo, $sessionId);   // İLK sorgu — bkz. pdks_faz8j_oturum_kilitle docblock
+        if (!$oturum) throw new RuntimeException('Mesai bulunamadı.');
+        if (pdks_faz8j_istek_kayitli_eylem($pdo, $istekId, ['puantaj_toplu_duzeltme', 'puantaj_toplu_iptal'])) throw new RuntimeException(PDKS_FAZ8J_TOPLU_DUZELT_TEKRAR_HATA);
+        if (pdks_faz8j_entitlement($pdo, $sessionId) === 'final') {
+            throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
+        }
+        $workDate = (string)$oturum['work_date'];
+        $topluId = 'TD' . date('Ymd') . bin2hex(random_bytes(4));
+        $hatalar = []; $guncellenen = []; $atlanan = 0;
+        foreach ($norm as $s) {
+            $pid = $s['period_id'];
+            $p = pdks_faz8j_donem($pdo, $pid, $sessionId, $depo);
+            $satirHata = static fn(string $m) => ['period_id' => $pid, 'card_no' => (string)($p['card_no'] ?? ''), 'hata' => $m];
+            if (!$p || (int)$p['is_voided']) { $hatalar[] = $satirHata('Mesai dönemi bu mesaide bulunamadı veya iptal edilmiş.'); continue; }
+            $entry = pdks_faz8j_zaman($workDate, $s['entry_clock']);
+            if ($entry === null) { $hatalar[] = $satirHata('Geçerli bir giriş saati girin.'); continue; }
+            $cikis = pdks_faz8j_cikis_zamani($s);
+            if (!$cikis['ok']) { $hatalar[] = $satirHata((string)$cikis['hata']); continue; }
+            $exit = $cikis['exit'];
+            if ($s['worker_type_id'] <= 0) { $hatalar[] = $satirHata('İşçi tipi seçin.'); continue; }
+            // Dakika düzeyinde aynı olan zaman ESKİ değeriyle (saniyesiyle) korunur —
+            // yalnız tip değişen satırda kiosk saniyesi kırpılmaz.
+            $eskiEntry = (string)$p['entry_time']; $eskiExit = $p['exit_time'] !== null ? (string)$p['exit_time'] : null;
+            if (substr($eskiEntry, 0, 16) === substr($entry, 0, 16)) $entry = $eskiEntry;
+            if ($exit !== null && $eskiExit !== null && substr($eskiExit, 0, 16) === substr($exit, 0, 16)) $exit = $eskiExit;
+            if ($s['worker_type_id'] === (int)$p['worker_type_id_snapshot'] && $entry === $eskiEntry && $exit === $eskiExit) { $atlanan++; continue; }
+            // Önceki bir satır hatalı olsa da bu satır çekirdekten geçirilir: hatası da
+            // raporlansın diye (yazdığı her şey sonda rollback ile geri alınır).
+            try {
+                pdks_faz8j_duzelt_satir($pdo, $p, $sessionId, $depo, (int)$p['worker_card_id'], $s['worker_type_id'], $entry, $exit,
+                    $reason, $note, $user, ['toplu_id' => $topluId]);
+                $guncellenen[] = $pid;
+            } catch (PDOException $x) {
+                throw $x;
+            } catch (RuntimeException $x) {
+                $hatalar[] = $satirHata($x->getMessage());
+            }
+        }
+        if ($hatalar !== []) {
+            $pdo->rollBack();
+            return ['ok' => false, 'hata' => count($hatalar) . ' satırda hata var; hiçbir değişiklik kaydedilmedi.', 'hatalar' => $hatalar];
+        }
+        if ($guncellenen === []) throw new RuntimeException('Seçilen kayıtlarda değişiklik yok.');
+        pdks_faz8j_audit($pdo, $user, 'puantaj_toplu_duzeltme', $sessionId, [], [
+            'session_id' => $sessionId, 'toplu_id' => $topluId, 'istek_id' => $istekId, 'period_ids' => $guncellenen,
+            'guncellenen' => count($guncellenen), 'atlanan' => $atlanan, 'reason' => $reason, 'note' => $note,
+            'corrected_at' => date('Y-m-d H:i:s'), 'user_id' => $user,
+        ], 'daily_work_sessions');
+        $pdo->commit();
+        return ['ok' => true, 'guncellenen' => count($guncellenen), 'atlanan' => $atlanan, 'toplu_id' => $topluId, 'period_ids' => $guncellenen];
+    } catch (Throwable $x) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return pdks_faz8j_toplu_secim_hata($x);
+    }
+}
+
+/**
+ * Seçilen dönemleri toplu iptal eder (pdks_faz8j_void_uygula — tekil iptalle AYNI çekirdek).
+ * Zaten iptal edilmiş dönem atlanır ve sayılır; bu mesaide olmayan dönem satır hatasıdır.
+ * @return array{ok:bool, iptal_edilen?:int, atlanan?:int, toplu_id?:string, period_ids?:int[], hata?:string, hatalar?:array, tekrar?:bool}
+ */
+function pdks_faz8j_toplu_iptal(int $sessionId, array $periodIds, string $reason, string $istekId, int $user, ?PDO $pdo = null): array {
+    $pdo = $pdo ?? db();
+    $reason = trim($reason);
+    $ids = array_map(static fn($x) => is_scalar($x) ? (int)$x : 0, array_values($periodIds));
+    $kapi = pdks_faz8j_toplu_secim_kapi($pdo, $sessionId, $ids, $reason, $istekId, 'İptal');
+    if ($kapi['hata'] !== null) return ['ok' => false, 'hata' => $kapi['hata'], 'hatalar' => []] + (!empty($kapi['tekrar']) ? ['tekrar' => true] : []);
+    $istekId = $kapi['istek_id']; $depo = (string)$kapi['oturum']['depo'];
+    sort($ids, SORT_NUMERIC);
+    try {
+        $pdo->beginTransaction();
+        if (!pdks_faz8j_mesai_kilitle($pdo, $sessionId)) throw new RuntimeException('Mesai bulunamadı.');   // İLK sorgu
+        if (pdks_faz8j_istek_kayitli_eylem($pdo, $istekId, ['puantaj_toplu_duzeltme', 'puantaj_toplu_iptal'])) throw new RuntimeException(PDKS_FAZ8J_TOPLU_DUZELT_TEKRAR_HATA);
+        if (pdks_faz8j_entitlement($pdo, $sessionId) === 'final') {
+            throw new RuntimeException('Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.');
+        }
+        $topluId = 'TI' . date('Ymd') . bin2hex(random_bytes(4));
+        $hatalar = []; $iptal = []; $atlanan = 0;
+        foreach ($ids as $pid) {
+            $p = pdks_faz8j_donem($pdo, $pid, $sessionId, $depo);
+            if (!$p) { $hatalar[] = ['period_id' => $pid, 'card_no' => '', 'hata' => 'Mesai dönemi bu mesaide bulunamadı.']; continue; }
+            if ((int)$p['is_voided']) { $atlanan++; continue; }
+            if ($hatalar !== []) continue;   // hata varsa yazma boşunadır (rollback) — yalnız diğer satırlar denetlenir
+            pdks_faz8j_void_uygula($pdo, $p, $pid, $sessionId, $reason, $user, ['toplu_id' => $topluId]);
+            $iptal[] = $pid;
+        }
+        if ($hatalar !== []) {
+            $pdo->rollBack();
+            return ['ok' => false, 'hata' => count($hatalar) . ' satırda hata var; hiçbir kayıt iptal edilmedi.', 'hatalar' => $hatalar];
+        }
+        if ($iptal === []) throw new RuntimeException('Seçilen kayıtların hepsi zaten iptal edilmiş.');
+        pdks_faz8j_audit($pdo, $user, 'puantaj_toplu_iptal', $sessionId, [], [
+            'session_id' => $sessionId, 'toplu_id' => $topluId, 'istek_id' => $istekId, 'period_ids' => $iptal,
+            'iptal_edilen' => count($iptal), 'atlanan' => $atlanan, 'reason' => $reason,
+            'voided_at' => date('Y-m-d H:i:s'), 'user_id' => $user,
+        ], 'daily_work_sessions');
+        $pdo->commit();
+        return ['ok' => true, 'iptal_edilen' => count($iptal), 'atlanan' => $atlanan, 'toplu_id' => $topluId, 'period_ids' => $iptal];
+    } catch (Throwable $x) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return pdks_faz8j_toplu_secim_hata($x);
     }
 }
