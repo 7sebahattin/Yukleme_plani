@@ -10,7 +10,9 @@
 //
 // Beklenen değişkenler:
 //   $topluWorkDate   — 'Y-m-d' mesai günü
-//   $topluKartlar    — [['id'=>,'card_no'=>,'worker_type_id'=>], …] o gün BOŞ kartlar
+//   $topluKartlar    — [['id'=>,'card_no'=>,'worker_type_id'=>, 'tanim_foreman_id'=>?, 'tanim_worker_type_id'=>?], …]
+//                      o gün BOŞ kartlar (v303: tanımlı kart YALNIZ kendi çavuşu seçiliyken görünür —
+//                      data-tanim-foreman; tanım tipi grubunda öne alınır; sunucu ayrıca reddeder)
 //   $topluTipler     — [['id'=>,'name'=>], …] KADIN/ERKEK (tek politika)
 //   $topluSabitCavus — ['id'=>,'name'=>] (detay) YA DA null
 //   $topluCavuslar   — [['id'=>,'name'=>,'is_active'=>], …] ($topluSabitCavus null iken)
@@ -87,7 +89,9 @@ $topluIk = function (string $ad): string {
     <?php foreach ($topluTipler as $t):
         $tid = (int)$t['id'];
         $esles = []; $digerleri = [];
-        foreach ($topluKartlar as $k) { if ((int)($k['worker_type_id'] ?? 0) === $tid) $esles[] = $k; else $digerleri[] = $k; }
+        // v303: tanımlı kartta öne alma ölçütü TANIM tipi (yoksa kartın eski tipi).
+        $kTipi = static fn(array $k): int => (int)(($k['tanim_worker_type_id'] ?? null) ?: ($k['worker_type_id'] ?? 0));
+        foreach ($topluKartlar as $k) { if ($kTipi($k) === $tid) $esles[] = $k; else $digerleri[] = $k; }
         $sirali = array_merge($esles, $digerleri);
         // Renk/simge işçi tipinden — tip kayıt defteri (pdks_gunluk_tip_kayit; ad/kod TR-duyarsız); tanınmazsa nötr.
         $tKod = pdks_gunluk_tip_kod_adindan((string)$t['name']) ?? pdks_gunluk_tip_kod_adindan((string)($t['code'] ?? ''));
@@ -114,7 +118,8 @@ $topluIk = function (string $ad): string {
             <?php if ($sirali): ?>
             <div class="tp-kartlar" role="group" aria-label="<?= h($t['name']) ?> için boş kartlar">
                 <?php foreach ($sirali as $k): ?>
-                <label class="tp-kart<?= (int)($k['worker_type_id'] ?? 0) === $tid ? ' tp-kart-esles' : '' ?>"><input type="checkbox" value="<?= (int)$k['id'] ?>"><?= $topluIk('kart') ?><span><?= h($k['card_no']) ?></span></label>
+                <?php $kTf = (int)($k['tanim_foreman_id'] ?? 0); ?>
+                <label class="tp-kart<?= $kTipi($k) === $tid ? ' tp-kart-esles' : '' ?>"<?= $kTf > 0 ? ' data-tanim-foreman="' . $kTf . '"' : '' ?>><input type="checkbox" value="<?= (int)$k['id'] ?>"><?= $topluIk('kart') ?><span><?= h($k['card_no']) ?><?= $kTf > 0 ? ' 🏷' : '' ?></span></label>
                 <?php endforeach; ?>
             </div>
             <?php else: ?>
@@ -159,14 +164,21 @@ $topluIk = function (string $ad): string {
     function secili(g) { return kutular(g).filter(function (c) { return c.checked; }); }
     function toplamKisi() { return gruplar.reduce(function (t, g) { return t + secili(g).length + adet(g); }, 0); }
 
+    // v303: tanımlı kart (label[data-tanim-foreman]) yalnız tanımlı olduğu çavuş seçiliyken görünür;
+    // başka çavuşta gizlenir, seçimi kalkar ve "İlk N" seçimine girmez. Sunucu ayrıca reddeder.
+    function cavusId() { return String(cavusSel ? (parseInt(cavusSel.value, 10) || 0) : sabitCavus); }
+    function tanimGizli(c) { var t = c.parentNode.getAttribute('data-tanim-foreman'); return t !== null && t !== cavusId(); }
     // Bir kart yalnız TEK grupta seçilebilir: başka grupta işaretliyse bu grupta pasif.
     function kartKilitleri() {
         var alinan = {};
+        gruplar.forEach(function (g) { kutular(g).forEach(function (c) { if (tanimGizli(c)) c.checked = false; }); });
         gruplar.forEach(function (g, i) { secili(g).forEach(function (c) { alinan[c.value] = i; }); });
         gruplar.forEach(function (g, i) {
             kutular(g).forEach(function (c) {
+                var gizli = tanimGizli(c);
                 var baska = alinan.hasOwnProperty(c.value) && alinan[c.value] !== i;
-                c.disabled = baska;
+                c.disabled = baska || gizli;
+                c.parentNode.hidden = gizli; c.parentNode.style.display = gizli ? 'none' : '';   // CSS display kuralı [hidden]'ı ezebilir
                 c.parentNode.classList.toggle('tp-kart-pasif', baska);
             });
         });

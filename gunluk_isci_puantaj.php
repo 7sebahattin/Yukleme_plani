@@ -93,13 +93,18 @@ $ekleYetkili = function_exists('is_admin') && is_admin() && $depo !== '' && $tar
 $ekleGecmisGun = $tarih < date('Y-m-d');
 $ekleKartlar = $ekleTipler = $ekleCavuslar = $topluKartlar = [];
 if ($ekleYetkili) {
-    $ekleKartlar  = pdks_faz8j_bos_kartlar($tarih, $pdo);
+    // v303: çavuş formda seçilir → yalnız aktif depo süzülür; başka çavuşa tanımlı kartlar
+    // pencerede seçilen çavuşa göre JS ile gizlenir (data-tanim-foreman) ve sunucu reddeder.
+    $ekleKartlar  = pdks_faz8j_bos_kartlar($tarih, $pdo, null, $depo);
     $ekleTipler   = pdks_gunluk_desteklenen_tip_listele($pdo);
     $ekleCavuslar = $cavuslar;
     if ($ekleKartlar) {   // Toplu İşlem: boş kartlar işçi tipiyle (tipine uyanlar listede öne alınır)
         $stTk = $pdo->prepare('SELECT id, card_no, worker_type_id FROM worker_cards WHERE id IN (' . implode(',', array_fill(0, count($ekleKartlar), '?')) . ') ORDER BY card_no');
         $stTk->execute(array_map('intval', array_column($ekleKartlar, 'id')));
         $topluKartlar = $stTk->fetchAll();
+        $ekleTanim = array_column($ekleKartlar, null, 'id');   // v303: tanım alanları
+        foreach ($topluKartlar as &$tk) $tk += array_diff_key($ekleTanim[(int)$tk['id']] ?? [], ['id' => 1, 'card_no' => 1]);
+        unset($tk);
     }
 }
 // v294: Toplu İşlem JSON uçları (çıktıdan ÖNCE). Gün = filtredeki gün, depo = aktif depo; çavuş istemciden gelir (işlev doğrular).

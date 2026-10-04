@@ -135,6 +135,11 @@ function pdks_faz8j_duzelt_satir(PDO $pdo, array $p, int $sid, string $depo, int
     if($card!==(int)$p['worker_card_id']) {
         if(pdks_faz8j_kart_kartsiz_mi_id($pdo,(int)$p['worker_card_id'])) throw new RuntimeException('Kartsız mesai kaydı başka bir karta taşınamaz.');
         if(pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesainin sanal kartı başka bir kayda bağlanamaz.');
+        // v303: yeni kart başka çavuşa / depoya TANIMLIYSA taşıma reddedilir (kart kilidi altında okunur).
+        pdks_gunluk_faz8a_kart_kilitle($pdo,$card);
+        $so=$pdo->prepare('SELECT foreman_id, depo FROM daily_work_sessions WHERE id=?'); $so->execute([$sid]); $sr=$so->fetch();
+        if(!$sr) throw new RuntimeException('Mesai bulunamadı.');
+        if($e=pdks_faz8j_tanim_kart_engeli($pdo,$card,(int)$sr['foreman_id'],(string)$sr['depo'])) throw new RuntimeException($e);
     } elseif($exit===null && pdks_faz8j_kart_kartsiz_mi_id($pdo,$card)) throw new RuntimeException('Kartsız mesai kaydında çıkış zamanı zorunludur.');
     if(!$typeName) throw new RuntimeException('Seçilen işçi tipi artık desteklenmiyor veya pasif — bu dönem yalnız KADIN/ERKEK/RAMPACI\'ya yeniden atanarak düzeltilebilir.');
     $ov=$pdo->prepare("SELECT id FROM daily_worker_work_periods WHERE worker_card_id=? AND id<>? AND is_voided=0 AND entry_time < COALESCE(?, '9999-12-31 23:59:59') AND COALESCE(exit_time,'9999-12-31 23:59:59') > ? LIMIT 1");
@@ -260,15 +265,64 @@ function pdks_faz8j_kart_kartsiz_mi_id(PDO $pdo, int $cardId): bool {
     return (string)($st->fetchColumn() ?: '') === PDKS_FAZ8J_KARTSIZ_KAYNAK;
 }
 
-/** Bu tarihte (iptal edilmemiş) çalışma dönemi OLMAYAN, kullanılabilir kartlar (sanal kartsız kartlar HARİÇ). */
-function pdks_faz8j_bos_kartlar(string $workDate, ?PDO $pdo = null): array {
+/**
+ * Bu tarihte (iptal edilmemiş) çalışma dönemi OLMAYAN, kullanılabilir kartlar (sanal kartsız kartlar HARİÇ).
+ * v303: her satır 'tanim_foreman_id' (null = tanımsız), 'tanim_depo', 'tanim_worker_type_id',
+ * 'tanim_tip_adi', 'tanim_foreman_name' taşır (pdks_faz8j_kart_tanim_suz). $foremanId verilirse
+ * başka çavuşa tanımlı kartlar DÖNMEZ; $depo verilirse başka depoya tanımlı kartlar DÖNMEZ.
+ * Liste yalnız kolaylıktır — kural sunucuda pdks_faz8j_tanim_kart_engeli()'dedir.
+ */
+function pdks_faz8j_bos_kartlar(string $workDate, ?PDO $pdo = null, ?int $foremanId = null, ?string $depo = null): array {
     $pdo = $pdo ?? db();
     $kartsizHaric = pdks_gunluk_kolon_var($pdo, 'worker_cards', 'enrolled_source') ? " AND enrolled_source <> '" . PDKS_FAZ8J_KARTSIZ_KAYNAK . "'" : '';
     $st = $pdo->prepare("SELECT id, card_no FROM worker_cards WHERE status <> 'disabled'" . $kartsizHaric . "
         AND id NOT IN (SELECT worker_card_id FROM daily_worker_work_periods WHERE work_date_snapshot = ? AND " . pdks_gunluk_faz8j_etkin_kosul($pdo) . ")
         ORDER BY card_no");
     $st->execute([$workDate]);
-    return $st->fetchAll();
+    return pdks_faz8j_kart_tanim_suz($pdo, $st->fetchAll(), $foremanId, $depo);
+}
+
+/**
+ * v303 — kart listesine aktif tanım alanlarını ekler ve süzer (SALT OKUNUR, TEK yer).
+ * $foremanId verilirse başka çavuşa tanımlı kart çıkar; $depo verilirse başka depoya
+ * (TR-duyarsız) tanımlı kart çıkar. $herZaman: süzülse bile KALACAK kart id'leri
+ * (Düzenle'de dönemin mevcut kartı). Tanım tablosu yoksa alanlar null, süzme yok.
+ */
+function pdks_faz8j_kart_tanim_suz(PDO $pdo, array $kartlar, ?int $foremanId = null, ?string $depo = null, array $herZaman = []): array {
+    $tanimlar = $kartlar ? pdks_gunluk_kart_tanim_listesi($pdo, array_column($kartlar, 'id')) : [];
+    $herZaman = array_flip(array_map('intval', $herZaman));
+    $depoFold = $depo !== null ? pdks_gunluk_depo_fold(trim($depo)) : null;
+    $out = [];
+    foreach ($kartlar as $k) {
+        $t = $tanimlar[(int)$k['id']] ?? null;
+        $k['tanim_foreman_id']     = $t ? (int)$t['foreman_id'] : null;
+        $k['tanim_foreman_name']   = $t ? (string)$t['foreman_name'] : null;
+        $k['tanim_depo']           = $t ? (string)$t['depo'] : null;
+        $k['tanim_worker_type_id'] = $t ? (int)$t['worker_type_id'] : null;
+        $k['tanim_tip_adi']        = $t ? (string)$t['tip_adi'] : null;
+        if ($t && !isset($herZaman[(int)$k['id']])) {
+            if ($foremanId !== null && (int)$t['foreman_id'] !== $foremanId) continue;
+            if ($depoFold !== null && pdks_gunluk_depo_fold(trim((string)$t['depo'])) !== $depoFold) continue;
+        }
+        $out[] = $k;
+    }
+    return $out;
+}
+
+/**
+ * v303 — ELLE EKLEME / KART DEĞİŞTİREN DÜZELTME kapısı (TEK yardımcı): kart başka
+ * bir çavuşa ya da başka bir depoya TANIMLIYSA ret metni, değilse null. Aynı çavuş +
+ * aynı depo, farklı tip → ENGEL DEĞİL (pdks_faz8j_tanim_uyarilari uyarır).
+ * Normal kiosk kapısı (pdks_gunluk_kart_tanim_engeli) DEĞİŞMEDİ — o tip uyuşmazlığını da reddeder.
+ * Tanım tablosu yoksa null. Yazma yolunda kart kilidi ALTINDA çağrılır.
+ */
+function pdks_faz8j_tanim_kart_engeli(PDO $pdo, int $kartId, int $foremanId, string $depo): ?string {
+    $t = pdks_gunluk_kart_tanim_aktif($pdo, $kartId);
+    if (!$t) return null;
+    $depoFarkli = pdks_gunluk_depo_fold(trim((string)$t['depo'])) !== pdks_gunluk_depo_fold(trim($depo));
+    if (!$depoFarkli && (int)$t['foreman_id'] === $foremanId) return null;
+    return 'Bu kart ' . ($depoFarkli ? trim((string)$t['depo']) . ' deposunda ' : '') . pdks_gunluk_kart_tanim_kime($t)
+         . ' tanımlı — yalnız o çavuşun mesaisine eklenebilir.';
 }
 
 /** Giriş/çıkış zaman kuralı (TEK yer). $exit null = açık dönem (çağıran izin vermiş olmalı). */
@@ -358,8 +412,11 @@ function pdks_faz8j_oturum_coz(PDO $pdo, int $foremanId, string $workDate, strin
  * $satir: ['kartsiz'=>bool, 'kart'=>?array (worker_cards satırı), 'entry'=>string, 'exit'=>?string]
  * $sessionId: hedef mesai (henüz oluşturulmadıysa null). Yazma yolunda kart
  * kilitlendikten SONRA çağrılır.
+ * v303 $hedef: ['foreman_id' => int, 'depo' => string] — hedef mesainin çavuşu/deposu
+ * (tanımlı kart kapısı). Verilmezse $sessionId'den okunur; ikisi de yoksa tanımlı
+ * kart REDDEDİLİR (fail-closed).
  */
-function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, array $satir): ?string {
+function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, array $satir, ?array $hedef = null): ?string {
     $entry = (string)$satir['entry']; $exit = $satir['exit'] ?? null;
     if (!empty($satir['kartsiz'])) {
         return $exit === null ? 'Kartsız mesaide çıkış tarihi ve saati zorunludur.' : null;
@@ -371,6 +428,16 @@ function pdks_faz8j_satir_kontrol(PDO $pdo, ?int $sessionId, string $workDate, a
     // Kayıp / devre dışı fiziksel kart hiçbir satırda kullanılamaz (kiosk kuralı).
     if ((string)$kart['status'] === 'lost') return 'Bu kart KAYIP olarak işaretli.';
     if ((string)$kart['status'] === 'disabled') return 'Bu kart DEVRE DIŞI.';
+    // v303: başka çavuşa / depoya TANIMLI kart bu mesaiye eklenemez.
+    if ($hedef === null && $sessionId !== null) {
+        $so = $pdo->prepare('SELECT foreman_id, depo FROM daily_work_sessions WHERE id = ?'); $so->execute([$sessionId]);
+        $hedef = $so->fetch() ?: null;
+    }
+    if ($hedef === null) {
+        if (pdks_gunluk_kart_tanim_aktif($pdo, $cardId)) return 'Tanımlı kart için hedef mesai belirlenemedi.';
+    } elseif ($e = pdks_faz8j_tanim_kart_engeli($pdo, $cardId, (int)$hedef['foreman_id'], (string)$hedef['depo'])) {
+        return $e;
+    }
     if ($exit === null) {
         // Bugün, çıkışsız → AÇIK dönem: kiosk girişinin kart kuralları.
         if ($workDate !== date('Y-m-d')) return 'Geçmişe dönük eklemede çıkış tarihi ve saati zorunludur.';
@@ -511,7 +578,7 @@ function pdks_faz8j_gecmis_ekle(array $v, int $user, ?PDO $pdo = null): array {
 
         if (!$kartsiz) pdks_gunluk_faz8a_kart_kilitle($pdo, $card);
         $satir = ['kartsiz' => $kartsiz, 'kart' => $kart, 'tip' => $tip, 'entry' => $entry, 'exit' => $exit];
-        if ($h = pdks_faz8j_satir_kontrol($pdo, $sid, (string)$oturum['work_date'], $satir)) throw new RuntimeException($h);
+        if ($h = pdks_faz8j_satir_kontrol($pdo, $sid, (string)$oturum['work_date'], $satir, ['foreman_id' => (int)$oturum['foreman_id'], 'depo' => (string)$oturum['depo']])) throw new RuntimeException($h);
         if ($kartsiz) $satir['kart'] = pdks_faz8j_kartsiz_kart_olustur($pdo, (int)$tip['id'], $user);
         $pid = pdks_faz8j_satir_yaz($pdo, $oturum, $satir, $user, ['reason' => $reason, 'note' => $note, 'yeni_mesai' => $yeni, 'simdi' => $simdi, 'istek_id' => $istekId]);
         pdks_faz8j_yeniden_hesap_isaretle($pdo, $sid);
@@ -682,8 +749,10 @@ function pdks_faz8j_toplu_degerlendir(PDO $pdo, array $h, ?array $oturum, ?bool 
         $hatalar[] = 'Bu mesainin kesinleşmiş hakedişi bulunmaktadır. Önce hakedişi yönetici tarafından yeniden açın.';
     }
     $specs = $h['satirlar'];
+    $hedef = $oturum ? ['foreman_id' => (int)$oturum['foreman_id'], 'depo' => (string)$oturum['depo']]
+                     : ['foreman_id' => (int)$h['foreman_id'], 'depo' => (string)$h['depo']];
     foreach ($specs as &$s) {
-        if ($s['hata'] === null) $s['hata'] = pdks_faz8j_satir_kontrol($pdo, $sid, $h['work_date'], $s);
+        if ($s['hata'] === null) $s['hata'] = pdks_faz8j_satir_kontrol($pdo, $sid, $h['work_date'], $s, $hedef);
     }
     unset($s);
     $satirHatasi = count(array_filter($specs, fn($s) => $s['hata'] !== null));
@@ -731,11 +800,11 @@ function pdks_faz8j_kartsiz_tekrar_uyarilari(PDO $pdo, int $sid, array $specs): 
 }
 
 /**
- * v298 — ENGELLEMEYEN uyarı: kartlı satırın kartı (Kart Havuzu'nda) başka bir
- * çavuş / tip / depoya TANIMLIYSA bildirir. Kiosk GİRİŞ'i bunu REDDEDER
- * (kart_baska_tanimli); yöneticinin elle/toplu eklemesi ise ENGELLENMEZ
- * (kullanıcı kararı) — yalnız `uyarilar`. Kural pdks_gunluk_kart_tanim_engeli()
- * ile AYNI (kopya karar yok). Tanım tablosu yoksa boş.
+ * v298 — ENGELLEMEYEN uyarı: kartlı satırın kartı (Kart Havuzu'nda) AYNI çavuş +
+ * AYNI depoda FARKLI bir tipe tanımlıysa bildirir (kiosk bunu reddeder; yönetici
+ * eklemesi engellenmez — yalnız `uyarilar`). v303: başka çavuş / başka depo artık
+ * ENGELDİR (pdks_faz8j_tanim_kart_engeli, satir_kontrol içinde) — uyarı üretmez.
+ * Tanım tablosu yoksa boş.
  */
 function pdks_faz8j_tanim_uyarilari(PDO $pdo, int $foremanId, string $depo, array $specs): array {
     $kartIds = [];
@@ -749,6 +818,8 @@ function pdks_faz8j_tanim_uyarilari(PDO $pdo, int $foremanId, string $depo, arra
         $t = $tanimlar[$cid] ?? null;
         if (!$t || isset($out[$cid])) continue;
         if (pdks_gunluk_kart_tanim_engeli($t, ['foreman_id' => $foremanId, 'depo' => $depo], (int)($s['tip']['id'] ?? 0)) === null) continue;
+        // v303: başka çavuş / depo artık ENGEL (pdks_faz8j_tanim_kart_engeli) — uyarı yalnız aynı çavuşta farklı tip.
+        if ((int)$t['foreman_id'] !== $foremanId || pdks_gunluk_depo_fold(trim((string)$t['depo'])) !== pdks_gunluk_depo_fold(trim($depo))) continue;
         $out[$cid] = (string)$s['kart']['card_no'] . ' kartı ' . trim((string)$t['depo']) . ' deposunda '
                    . pdks_gunluk_kart_tanim_kime($t) . ' tanımlı — kayıt yine de eklenir.';
     }

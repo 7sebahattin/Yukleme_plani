@@ -225,6 +225,19 @@ if (getenv('PUANTAJ_KAPALI') === '1') {
         ->execute([date('Y-m-d H:i:s'), "Mesai eksik çıkışla kapatıldı.\n<b>kalın?</b> \"tırnak\"", $sid]);
 }
 
+// v303: PUANTAJ_TANIM=1 → Tanımlı Kart tablosu + tanımlar (elle ekleme listelerinde tanım süzmesi):
+// F001 → Test Çavuş (Depo A), F002 → Diğer Çavuş (Depo A), F003 → Test Çavuş (Depo B). Varsayılan DEĞİŞMEZ.
+if (getenv('PUANTAJ_TANIM') === '1') {
+    [$c, $ix] = pdks_ddl_sqlite(pdks_gunluk_kart_tanim_tablolar()['worker_card_assignments']);
+    db()->exec($c); foreach ($ix as $x) db()->exec($x);
+    $diger = (int)pdks_gunluk_cavus_olustur(['code' => 'C002', 'name' => 'Diğer Çavuş'], 1, db())['id'];
+    $fid = fn(string $no) => (int)db()->query("SELECT id FROM worker_cards WHERE card_no = '$no'")->fetchColumn();
+    foreach ([['F001', $cavus, 'Depo A'], ['F002', $diger, 'Depo A'], ['F003', $cavus, 'Depo B']] as [$no, $cv, $dp]) {
+        $r = pdks_gunluk_kart_tanim_kaydet($fid($no), $cv, $kadin, $dp, 1, db());
+        if (!($r['ok'] ?? false)) { fwrite(STDERR, 'tanım ' . $no . ': ' . json_encode($r, JSON_UNESCAPED_UNICODE) . "\n"); exit(1); }
+    }
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.
