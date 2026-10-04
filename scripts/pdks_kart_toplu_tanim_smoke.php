@@ -282,6 +282,13 @@ $uc2 = $a === false ? '' : substr($isk, $a, strpos($isk, "exit;\n}", $a) - $a);
 ok('ajax=tanim_toplu_kaydet ucu var: POST + CSRF + sayfa kapısı', $uc2 !== '' && str_contains($uc2, "REQUEST_METHOD'] === 'POST'") && str_contains($uc2, 'csrf_check(') && str_contains($uc2, "require_pdks_gunluk('worker_cards')"));
 ok('uç: depo istemciden ALINMAZ ($aktifDepo), yazma yalnız pdks_gunluk_kart_tanim_toplu_kaydet()', str_contains($uc2, '$aktifDepo') && str_contains($uc2, 'pdks_gunluk_kart_tanim_toplu_kaydet(') && !preg_match('/govde\[.depo|INSERT|UPDATE|DELETE/i', $uc2));
 ok('ekranda migrate ÇAĞRILMAZ', !str_contains($isk, 'pdks_gunluk_kart_tanim_migrate('));
+// v300: tekli "Yeni Kart Tanımla" KALDIRILDI — Seri Kart Tanımla kart eklemenin tek yolu.
+ok('v300: "Yeni Kart Tanımla" bölümü, kart_ekle POST dalı, KARTI HAVUZA EKLE, ajax=onizle YOK',
+    !str_contains($isk, 'Yeni Kart Tanımla') && !str_contains($isk, 'kart_ekle') && !str_contains($isk, 'KARTI HAVUZA EKLE') && !str_contains($isk, "=== 'onizle'"));
+ok('v300: Seri Kart düğmesi (#iskSeriAc) + hazır-değil gerekçe uyarısı (#iskSeriYok) VAR', str_contains($isk, 'id="iskSeriAc"') && str_contains($isk, 'id="iskSeriYok"'));
+ok('v300: Seri Kart ve Kart Sorgula uçları + Düzenle/Durum/Tanım POST dalları korundu',
+    str_contains($isk, "=== 'sorgula'") && str_contains($isk, "'kart_duzenle'") && str_contains($isk, "'kart_durum'") && str_contains($isk, "'kart_tanim'") && str_contains($isk, "'kart_tanim_bitir'"));
+ok('v300: pdks_gunluk_kart_olustur() KORUNDU (toplu kaydın çağırdığı yazma yolu)', function_exists('pdks_gunluk_kart_olustur') && str_contains($fnGovde($lib, 'pdks_gunluk_kart_tanim_toplu_kaydet'), 'pdks_gunluk_kart_olustur('));
 
 echo "\n" . ($fail ? "$fail HATA, $gecen geçti\n" : "Tümü geçti ($gecen)\n");
 exit($fail ? 1 : 0);
