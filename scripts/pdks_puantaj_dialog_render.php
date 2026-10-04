@@ -185,6 +185,22 @@ if (getenv('PUANTAJ_SERVIS') === '1') {
     }
 }
 
+// v302: PUANTAJ_TOPLU_DUZELT=1 → seçerek toplu düzenle/iptal testi için BELİRGİN saatler
+// (pdks_toplu_duzelt_smoke.js). Veride zaten: kartsız (KARTSIZ-…), açık/çıkışsız (K002…),
+// Karışık (Z00x) dönemler var; burada saatleri sabitlenir ve Z001 gece vardiyası yapılır
+// (çıkış ertesi gün → "+1 gün"). Varsayılan (env yok) davranış DEĞİŞMEZ.
+if (getenv('PUANTAJ_TOPLU_DUZELT') === '1') {
+    $gun = date('Y-m-d'); $yarin = date('Y-m-d', strtotime('+1 day'));
+    $stTd = db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ?, exit_time = ?
+                            WHERE session_id = ? AND worker_card_id IN (SELECT id FROM worker_cards WHERE card_no LIKE ?)");
+    $stTd->execute([$gun . ' 07:00:00', $gun . ' 17:30:00', $sid, 'K001']);
+    $stTd->execute([$gun . ' 06:30:00', $gun . ' 15:00:00', $sid, 'B00%']);
+    $stTd->execute([$gun . ' 06:00:00', $gun . ' 14:00:00', $sid, 'KARTSIZ-%']);
+    $stTd->execute([$gun . ' 22:00:00', $yarin . ' 02:00:00', $sid, 'Z001']);
+    db()->prepare("UPDATE daily_worker_work_periods SET entry_time = ? WHERE session_id = ? AND worker_card_id = (SELECT id FROM worker_cards WHERE card_no = 'K002')")
+        ->execute([$gun . ' 08:15:00', $sid]);
+}
+
 // v299: PUANTAJ_SIRALA=1 → Kart Hareketleri sıralama testi için dönem saatleri BELİRGİN ve
 // birbirinden farklı yapılır (iki dönem hâlâ çıkışsız, biri en erken girişli ama en geç çıkışlı;
 // kart no'lardan ikisi "K2"/"K10" — doğal sıralama için). Varsayılan (env yok) davranış DEĞİŞMEZ.

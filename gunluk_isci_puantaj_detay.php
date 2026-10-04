@@ -252,6 +252,10 @@ $sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $son
 $topluAjaxKapi = $ekleGoster && $oturum['work_date'] <= date('Y-m-d');
 $topluAjaxSabit = ['foreman_id' => (int)$oturum['foreman_id'], 'work_date' => (string)$oturum['work_date'], 'depo' => $aktifDepo];
 require __DIR__ . '/_puantaj_toplu_ajax.php';
+// v302: Kart Hareketleri SEÇEREK toplu düzenle / toplu iptal — JSON uçları (çıktıdan ÖNCE).
+// Kapı tekil "Düzenle" düğmesiyle AYNI; mesai id'si SUNUCUDAN ($id), istemciden alınmaz.
+$tdAjaxKapi = is_admin() && $faz8jHazir && $oturum['depo'] === $aktifDepo;
+require __DIR__ . '/_puantaj_toplu_duzelt_ajax.php';
 
 render_header('Mesai Detayı');
 $base = base_url();
@@ -375,12 +379,51 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
 </div>
 <?php else: ?>
 
+<?php if ($tdAjaxKapi): /* v302: seçim çubuğu — seçim yokken düğmeler pasif; davranış _puantaj_toplu_duzelt.php */ ?>
+<div class="td-cubuk" id="tdCubuk" role="region" aria-label="Seçili kart hareketleri">
+    <label class="td-cubuk-tumu"><input type="checkbox" class="td-tumu" autocomplete="off"> Tümünü seç</label>
+    <span class="td-cubuk-sayi"><strong id="tdSeciliSayi">0</strong> seçili</span>
+    <span class="td-cubuk-limit" id="tdLimitNot" hidden>— bir seferde en fazla <?= (int)(defined('PDKS_FAZ8J_TOPLU_LIMIT') ? PDKS_FAZ8J_TOPLU_LIMIT : 250) ?> kayıt</span>
+    <span class="td-cubuk-btns">
+        <button type="button" class="btn btn-sm btn-primary" id="tdDuzenleBtn" disabled>✏ Seçilenleri Düzenle</button>
+        <button type="button" class="btn btn-sm btn-danger" id="tdIptalBtn" disabled>🗑 Seçilenleri İptal Et</button>
+        <button type="button" class="btn btn-sm" id="tdTemizleBtn" disabled>Seçimi temizle</button>
+    </span>
+</div>
+<?php endif; ?>
+<?php
+// v302: seçim kutusunun satır verisi (sunucu basar; JS yalnız okur). Seçim kutusu AYRI SÜTUN DEĞİL,
+// "Kart No" hücresinin içindedir — sıralama (config/pdks_liste_ui.php) ve testleri hücre
+// indekslerine bağlıdır (cells[0] = Kart No); ayrı sütun bunları kaydırırdı.
+$tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTipId): string {
+    $g = (string)($k['giris_saat'] ?? ''); $c = (string)($k['cikis_saat'] ?? '');
+    $tipAd = ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId) ? 'Karışık' : (string)($k['tip'] ?? '');
+    $at = [
+        'value' => (string)(int)$k['period_id'],
+        'data-td-gorunum' => $gorunum,
+        'data-td-kart' => (string)$k['card_no'],
+        'data-td-tip' => (string)(int)($k['worker_type_id_snapshot'] ?? 0),
+        'data-td-tip-ad' => $tipAd,
+        'data-td-giris-tarih' => $g !== '' ? substr($g, 0, 10) : '',
+        'data-td-giris' => $g !== '' ? substr($g, 11, 5) : '',
+        'data-td-cikis-tarih' => $c !== '' ? substr($c, 0, 10) : '',
+        'data-td-cikis' => $c !== '' ? substr($c, 11, 5) : '',
+        'data-td-kartsiz' => !empty($kartsizKartIds[(int)$k['worker_card_id']]) ? '1' : '0',
+        'aria-label' => (string)$k['card_no'] . ' seç',
+    ];
+    $s = '';
+    foreach ($at as $a => $v) $s .= ' ' . $a . '="' . h($v) . '"';
+    return '<label class="td-sec-kap td-sec-' . $gorunum . '"><input type="checkbox" class="td-sec" autocomplete="off"' . $s . '></label>';
+};
+?>
+
 <div class="table-wrap pc-only">
-<table class="data-table" data-pdks-sirala data-sirala-varsayilan="son işlem, yeni üstte">
+<table class="data-table<?= $tdAjaxKapi ? ' td-tablo' : '' ?>" data-pdks-sirala data-sirala-varsayilan="son işlem, yeni üstte">
 <thead><tr>
-    <?php /* v299: başlık tıklama sıralaması — config/pdks_liste_ui.php (TEK mekanizma). Manuel Çıkış / İşlem sıralanmaz. */
+    <?php /* v299: başlık tıklama sıralaması — config/pdks_liste_ui.php (TEK mekanizma). Manuel Çıkış / İşlem sıralanmaz.
+             v302: "tümünü seç" kutusu Kart No başlığının İÇİNDE (ayrı sütun yok — bkz. $tdKutu); sıralama düğmesi ayrı kalır. */
     foreach (['Kart No' => 'metin', 'Tip' => 'metin', 'Mesai' => 'metin', 'Giriş Saati' => 'zaman', 'Çıkış Saati' => 'zaman', 'Süre' => 'sayi', 'Durum' => 'metin'] as $thEt => $thTip): ?>
-    <th data-sirala="<?= $thTip ?>"><button type="button" class="pdks-sirala-btn"><?= h($thEt) ?><span class="pdks-sirala-ok" aria-hidden="true"></span></button></th>
+    <th data-sirala="<?= $thTip ?>"><?php if ($tdAjaxKapi && $thEt === 'Kart No'): ?><label class="td-sec-kap td-sec-th"><input type="checkbox" class="td-tumu" autocomplete="off" aria-label="Tümünü seç"></label><?php endif; ?><button type="button" class="pdks-sirala-btn"><?= h($thEt) ?><span class="pdks-sirala-ok" aria-hidden="true"></span></button></th>
     <?php endforeach; ?>
     <?php if ($mesaiTanimGoster): ?><th data-sirala="metin"><button type="button" class="pdks-sirala-btn">Mesai Tanımı<span class="pdks-sirala-ok" aria-hidden="true"></span></button></th><?php endif; ?>
     <th>Manuel Çıkış</th>
@@ -397,7 +440,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
     $sd = $sdDegerler($k);
 ?>
 <tr>
-    <td class="pdks-uid" data-sirala-deger="<?= h($sd['kart']) ?>"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></td>
+    <td class="pdks-uid" data-sirala-deger="<?= h($sd['kart']) ?>"><?= $tdAjaxKapi ? $tdKutu($k, 'pc') : '' ?><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></td>
     <td data-sirala-deger="<?= h($sd['tip']) ?>"><?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik" title="Karışık giriş — Otomatik Ata ile Kadın/Erkek'e atanır">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?></td>
     <td class="muted" data-sirala-deger="<?= h($sd['mesai']) ?>"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td data-sirala-deger="<?= h($sd['giris']) ?>"><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
@@ -440,6 +483,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
 ?>
 <div class="pdks-card-item" data-sirala-oge<?php foreach (['kart', 'tip', 'giris', 'cikis', 'sure'] as $sdA): ?> data-sd-<?= $sdA ?>="<?= h($sd[$sdA]) ?>"<?php endforeach; ?>>
     <div class="pdks-card-top">
+        <?= $tdAjaxKapi ? $tdKutu($k, 'mob') : '' ?>
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></div>
             <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
@@ -474,6 +518,13 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
 ?><option value="<?= (int)$k['worker_type_id_snapshot'] ?>" selected disabled><?= h($k['tip'] ?? '') ?><?= ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId) ? ' (atanmamış — Kadın/Erkek seçin)' : ' (artık desteklenmiyor)' ?></option><?php endif; ?><?php foreach($duzeltmeTipler as $t):?><option value="<?= (int)$t['id'] ?>" <?= (int)$t['id']===(int)$k['worker_type_id_snapshot']?'selected':'' ?>><?=h($t['name'])?></option><?php endforeach;?></select></label><label><span class="form-label">Giriş</span><input name="entry_date" type="date" value="<?=h(substr($k['giris_saat'],0,10))?>"><input name="entry_clock" type="time" value="<?=h(substr($k['giris_saat'],11,5))?>"></label><label><span class="form-label">Çıkış</span><input name="exit_date" type="date" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],0,10):'')?>"><input name="exit_clock" type="time" value="<?=h($k['cikis_saat']?substr($k['cikis_saat'],11,5):'')?>"></label><label class="span-2"><span class="form-label">Düzeltme nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><label class="span-2"><span class="form-label">Açıklama</span><textarea name="note" maxlength="1000"></textarea></label></div><div class="isk-card-form-actions"><button class="btn btn-primary">Kaydet</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
 <dialog id="void<?= (int)$k['period_id'] ?>" class="pm-dialog isk-card-modal"><div class="pm-header"><h2 class="pm-title">Kaydı İptal Et</h2><button type="button" class="pm-close" onclick="this.closest('dialog').close()">✕</button></div><form method="post" class="isk-card-modal-body"><input type="hidden" name="csrf" value="<?=h(csrf_token())?>"><input type="hidden" name="action" value="puantaj_iptal"><input type="hidden" name="period_id" value="<?= (int)$k['period_id'] ?>"><p><?=h($k['card_no'])?> kartının <?=h($k['giris_saat'])?>–<?=h($k['cikis_saat']?:'çıkış yok')?> çalışma kaydı puantajdan çıkarılacaktır. Ham kart okutma geçmişi silinmeyecektir.</p><label><span class="form-label">İptal nedeni *</span><textarea name="reason" maxlength="500" required></textarea></label><div class="isk-card-form-actions"><button class="btn btn-danger">Kaydı İptal Et</button><button type="button" class="btn" onclick="this.closest('dialog').close()">Vazgeç</button></div></form></dialog>
 <?php endforeach; ?>
+<?php if ($tdAjaxKapi && $kartlar) {
+    // v302: Seçilenleri Düzenle / İptal Et pencereleri (+ seçim davranışı). Uçlar bu sayfada.
+    $tdWorkDate = (string)$oturum['work_date']; $tdTipler = $duzeltmeTipler;
+    $tdUrlDuzelt = 'gunluk_isci_puantaj_detay.php?id=' . (int)$id . '&ajax=toplu_duzelt';
+    $tdUrlIptal  = 'gunluk_isci_puantaj_detay.php?id=' . (int)$id . '&ajax=toplu_iptal';
+    require __DIR__ . '/_puantaj_toplu_duzelt.php';
+} ?>
 <?php if ($ekleGoster) {
     $ekleWorkDate = (string)$oturum['work_date'];
     $ekleTipler = $duzeltmeTipler;
