@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_pdks_gunluk('worker_cards');   // savunma derinliği
     $action = trim($_POST['action'] ?? '');
 
-    // v300: 'kart_ekle' (tekli kart ekleme) KALDIRILDI — kart ekleme yolu Seri Kart Tanımla (ajax=tanim_toplu_kaydet).
+    // v300: tekli kart ekleme POST dalı KALDIRILDI — kart ekleme yolu Seri Kart Tanımla (ajax=tanim_toplu_kaydet).
     if ($action === 'kart_duzenle' && !$faz8aHazir && (int)($_POST['worker_type_id'] ?? 0) <= 0) {
         // Pre-migration üretim şemasında worker_type_id hâlâ NOT NULL olabilir.
         // Nötrleştirme yalnız Faz 8A şeması tamamen hazır olduğunda güvenlidir.
@@ -278,8 +278,8 @@ if ($basari !== ''): ?>
 </div>
 
 <?php if ($seriHazir): ?>
-<!-- ── Seri Kart Tanımla — kart ekleme/tanımlamanın TEK yolu (v300: tekli "Yeni Kart
-     Tanımla" formu kaldırıldı). Tablo/Faz 8A/aktif depo hazır değilse hiç çizilmez. -->
+<!-- ── Seri Kart Tanımla — kart ekleme/tanımlamanın TEK yolu (v300: tekli ekleme formu
+     kaldırıldı). Tablo/Faz 8A/aktif depo hazır değilse hiç çizilmez. -->
 <div class="isk-seri-bar">
     <button type="button" class="btn btn-primary" id="iskSeriAc">⚡ Seri Kart Tanımla</button>
     <span class="muted">Çavuş ve tipi seçin, kartları art arda okutun, listeyi kontrol edip tek seferde kaydedin.</span>
