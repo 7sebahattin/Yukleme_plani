@@ -105,8 +105,12 @@ echo "\n=== 4. NÖTR KART (görev talimatı §7) ===\n";
 ok('worker_cards.worker_type_id base DDL\'de NULL DEFAULT NULL', (bool)preg_match('/`worker_type_id`\s+INT\s+NULL DEFAULT NULL/', $gunlukSrc));
 ok('pdks_gunluk_faz8a_migrate() worker_cards.worker_type_id için MODIFY COLUMN ... NULL içeriyor (üretim geçişi)',
     str_contains($gunlukSrc, 'MODIFY COLUMN `worker_type_id` INT NULL'));
-ok('isci_kartlari.php: kart oluşturma formunda ARTIK zorunlu bir worker_type_id SEÇİCİSİ YOK (name="worker_type_id" create formunda YOK)',
-    !preg_match('/name="action" value="kart_ekle">.*?name="worker_type_id".*?KARTI HAVUZA EKLE/s', oku('isci_kartlari.php')));
+ok('isci_kartlari.php: "Yeni Kart Tanımla" bölümü + kart_ekle POST dalı + KARTI HAVUZA EKLE YOK (v300: ekleme yolu Seri Kart Tanımla)',
+    !str_contains(oku('isci_kartlari.php'), 'Yeni Kart Tanımla') && !str_contains(oku('isci_kartlari.php'), 'kart_ekle')
+    && !str_contains(oku('isci_kartlari.php'), 'KARTI HAVUZA EKLE') && !str_contains(oku('isci_kartlari.php'), 'pdks_gunluk_sonraki_kart_no'));
+ok('isci_kartlari.php: Seri Kart Tanımla uçları duruyor (tanim_satir + tanim_toplu_kaydet) ve kart_duzenle/kart_durum/kart_tanim POST dalları korunuyor',
+    str_contains(oku('isci_kartlari.php'), "'tanim_toplu_kaydet'") && str_contains(oku('isci_kartlari.php'), "'tanim_satir'")
+    && str_contains(oku('isci_kartlari.php'), "'kart_duzenle'") && str_contains(oku('isci_kartlari.php'), "'kart_durum'") && str_contains(oku('isci_kartlari.php'), "'kart_tanim'"));
 ok('isci_kartlari.php: liste sorgusu LEFT JOIN kullanıyor (nötr kartlar listeden düşmüyor)',
     (bool)preg_match('/LEFT JOIN worker_types/', oku('isci_kartlari.php')));
 

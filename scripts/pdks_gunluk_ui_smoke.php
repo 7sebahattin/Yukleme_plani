@@ -219,13 +219,14 @@ ok('hata sızmadı', !str_starts_with($sIk, '__ERROR__'), $sIk);
 ok('PHP Warning/Notice yok', !str_contains($sIk, 'Warning:') && !str_contains($sIk, 'Notice:'));
 ok('K001 kartı listede', str_contains($sIk, 'K001'));
 ok('kanonik UID listede (25A87ED7)', str_contains($sIk, '25A87ED7'));
-ok('USB tarama kutusu var (data-pdks-scan REUSE)', str_contains($sIk, 'data-pdks-scan'));
-ok('NFC buton hedefi var (data-pdks-nfc-target REUSE)', str_contains($sIk, 'data-pdks-nfc-target'));
+ok('tekli kart ekleme formu YOK: data-pdks-scan / data-pdks-nfc-target (v300)', !str_contains($sIk, 'data-pdks-scan') && !str_contains($sIk, 'data-pdks-nfc-target'));
+ok('"Yeni Kart Tanımla" bölümü YOK', !str_contains($sIk, 'Yeni Kart Tanımla'));
+ok('kart_ekle formu / KARTI HAVUZA EKLE YOK', !str_contains($sIk, 'value="kart_ekle"') && !str_contains($sIk, 'KARTI HAVUZA EKLE'));
+ok('tablo/şema/depo koşulu yokken "Seri Kart Tanımla" gerekçe uyarısı VAR (kart ekleme yolu kalmadı)', str_contains($sIk, 'id="iskSeriYok"') && str_contains($sIk, 'Seri Kart Tanımla'));
 ok('assets/pdks.js yükleniyor', str_contains($sIk, 'assets/pdks.js'));
 ok('Kadın işçi tipi seçeneği var', str_contains($sIk, 'Kadın'));
-ok('sonraki kart no önerisi K003 (K001+K002 sonrası)', (bool)preg_match('/value="K003"/', $sIk));
 ok('Düzenle modalı DOM\'da var', str_contains($sIk, 'iskKartModal'));
-ok('kart_no alanı TEK enroll formunda', substr_count($sIk, 'name="card_no"') >= 1);
+ok('kart_no alanı yalnız Düzenle modalında (tek)', substr_count($sIk, 'name="card_no"') === 1);
 
 echo "\n--- 6a. DÜZELTME (kullanıcının açık talimatı): 'in_use' HİÇBİR YERDE render edilmiyor ---\n";
 ok('K002 (lost) kartı listede', str_contains($sIk, 'K002'));

@@ -143,6 +143,9 @@ async function olc(page) {
 
         // ── A. Açılış ──
         ok('"⚡ Seri Kart Tanımla" düğmesi sayfada görünür', await page.isVisible('#iskSeriAc'));
+        ok('v300: "Yeni Kart Tanımla" bölümü / kart_ekle formu YOK; hazır-değil uyarısı çizilmez',
+            !/Yeni Kart Tanımla|KARTI HAVUZA EKLE/.test(await page.content()) && (await page.locator('input[name="action"][value="kart_ekle"]').count()) === 0
+            && (await page.locator('#iskSeriYok').count()) === 0);
         await page.click('#iskSeriAc');
         await page.waitForTimeout(400);
         let m = await olc(page);
