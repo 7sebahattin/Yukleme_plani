@@ -8,6 +8,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/mail_core.php';
+require_once __DIR__ . '/config/mail_imap.php';
+require_once __DIR__ . '/config/mail_mime.php';
+require_once __DIR__ . '/config/mail_sync.php';
 $auth_user = require_login();
 require_mail('admin');
 
@@ -44,6 +47,11 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $hatalar = $r['hatalar'];
         }
+    } elseif ($islem === 'test' && $id !== null) {
+        // Salt okunur: bağlan + giriş + klasörü aç (EXAMINE). Sunucuda hiçbir şey değişmez.
+        $t = mail_imap_test($pdo, $id);
+        audit_log_event('mail_account_test', 'mail_accounts', $id, null, ['sonuc' => $t['ok'] ? 'ok' : 'hata']);
+        if ($t['ok']) $basari = $t['mesaj']; else $hatalar[] = 'IMAP testi başarısız: ' . $t['mesaj'];
     } elseif ($islem === 'durum' && $id !== null) {
         $pdo->prepare('UPDATE mail_accounts SET is_active = 1 - is_active, updated_at = ? WHERE id = ?')
             ->execute([date('Y-m-d H:i:s'), $id]);
@@ -94,6 +102,12 @@ render_header('Mail Hesapları');
                     <td><?= (int)$a['is_active'] === 1 ? 'Aktif' : 'Pasif' ?></td>
                     <td>
                         <a class="btn" href="mail_hesaplar.php?duzenle=<?= (int)$a['id'] ?>">Düzenle</a>
+                        <form method="post" style="display:inline">
+                            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                            <input type="hidden" name="islem" value="test">
+                            <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
+                            <button class="btn" type="submit">Bağlantıyı Test Et</button>
+                        </form>
                         <form method="post" style="display:inline">
                             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                             <input type="hidden" name="islem" value="durum">

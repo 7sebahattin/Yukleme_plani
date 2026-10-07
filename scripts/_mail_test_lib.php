@@ -9,6 +9,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit(1);
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
+date_default_timezone_set('Europe/Istanbul');   // config/db.php ile aynı
 
 $ROOT = dirname(__DIR__);
 ini_set('log_errors', '1');

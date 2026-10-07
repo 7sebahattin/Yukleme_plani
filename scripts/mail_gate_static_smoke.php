@@ -70,6 +70,29 @@ ok('error_log çağrıları mail_redact() ile', preg_match_all('/error_log\(([^;
     json_encode($m[1] ?? []));
 ok('şifre alanı forma value= ile geri basılmıyor', !preg_match('/name="(?:imap|smtp)_pass"[^>]*value="<\?=/', oku('mail_hesaplar.php')));
 
+echo "\n=== M2: yeni dosyalar ===\n";
+foreach (glob($ROOT . '/config/mail_*.php') as $f) {
+    $ad = basename($f); $k = (string)file_get_contents($f);
+    preg_match_all('/error_log\(([^;]*)\);/', $k, $mm);
+    $kotu = array_filter($mm[1], fn($a) => !str_contains($a, 'mail_redact(') && !preg_match("/^'[^']*'$/", trim($a)));
+    ok("$ad: error_log çağrıları redakte ya da sabit metin", $kotu === [], json_encode(array_values($kotu)));
+    ok("$ad: eval()/exec/shell_exec/system/passthru/unserialize YOK", !preg_match('/\b(eval|shell_exec|system|passthru|proc_open|popen|unserialize)\s*\(/', $k) && !preg_match('/\bexec\s*\(/', preg_replace('/\$pdo->exec\(|\$db->exec\(/', '', $k)));
+    ok("$ad: LIBXML_NOENT / allow_self_signed=true / verify_peer=false YOK", !str_contains($k, 'LIBXML_NOENT') && !preg_match("/allow_self_signed'\s*=>\s*true|verify_peer'\s*=>\s*false|verify_peer_name'\s*=>\s*false/", $k));
+}
+$imap = oku('config/mail_imap.php');
+ok('IMAP: TLS doğrulaması zorunlu (verify_peer + verify_peer_name true)', str_contains($imap, "'verify_peer' => true, 'verify_peer_name' => true"));
+ok('IMAP: yalnız ssl/starttls kabul ediliyor (düz metin reddi)', str_contains($imap, "if (!in_array(\$guvenlik, ['ssl', 'starttls'], true))"));
+$imapKod = php_strip_whitespace($ROOT . '/config/mail_imap.php');
+ok('IMAP: yalnız EXAMINE (SELECT/STORE/DELETE/EXPUNGE/APPEND/COPY/MOVE komutu üretilmiyor)', !preg_match('/komut\(\s*[\'"](SELECT|STORE|DELETE|EXPUNGE|APPEND|COPY|MOVE)/i', $imapKod) && !preg_match('/UID (STORE|EXPUNGE|COPY|MOVE)/i', $imapKod));
+ok('IMAP: UNSEEN yok', !preg_match('/UNSEEN/i', $imapKod));
+preg_match_all('/UID FETCH [^"\']*/', $imapKod, $fm);
+ok('IMAP: tüm UID FETCH komutları BODY.PEEK (BODY[ ile \\Seen\'i DEĞİŞTİRMEZ)', count($fm[0]) >= 3 && !array_filter($fm[0], fn($l) => str_contains($l, 'BODY[')), 'bulunan komut sayısı: ' . count($fm[0]));
+$sync = oku('config/mail_sync.php');
+ok('senkron: UNSEEN kullanmıyor (yorumlar hariç)', !preg_match('/UNSEEN/i', php_strip_whitespace($ROOT . '/config/mail_sync.php')));
+ok('senkron: mail_messages DELETE/UPDATE ile veri silmiyor (yalnız uid eşleme güncellemesi)', !preg_match('/DELETE FROM mail_messages/i', $sync));
+ok('cron betiği mail_cron_calistir kullanıyor', str_contains(oku('scripts/mail_sync_cron.php'), 'mail_cron_calistir('));
+ok('Bağlantıyı Test Et: POST + csrf + audit', str_contains(oku('mail_hesaplar.php'), "\$islem === 'test'") && str_contains(oku('mail_hesaplar.php'), "audit_log_event('mail_account_test'"));
+
 echo "\n=== Service Worker + sürüm ===\n";
 ok('sw.js mail yollarını bypass ediyor', str_contains($sw, "/\\/mail(_[a-z]+)?\\.php$/.test(u.pathname)) return;"));
 ok('sw.js mail.svg SHELL\'de', str_contains($sw, "'./assets/nav-icons/mail.svg'"));

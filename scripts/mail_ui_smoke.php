@@ -7,6 +7,9 @@
 //   php scripts/mail_ui_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
 require_once __DIR__ . '/_mail_test_lib.php';
+require_once $ROOT . '/config/mail_imap.php';
+require_once $ROOT . '/config/mail_mime.php';
+require_once $ROOT . '/config/mail_sync.php';
 
 $db = db();
 mail_test_diger_tablolar($db);
@@ -15,7 +18,7 @@ mail_test_anahtar_kur();
 function sayfa_render(string $dosya, array $get = [], array $post = []): string {
     global $ROOT;
     $src = (string)file_get_contents($ROOT . '/' . $dosya);
-    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core)\.php';\s*$/m", '', $src);
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $tmp = sys_get_temp_dir() . '/mail_ui_' . getmypid() . '_' . basename($dosya);
     file_put_contents($tmp, $src);
