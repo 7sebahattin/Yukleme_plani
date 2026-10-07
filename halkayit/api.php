@@ -58,6 +58,9 @@ function hks_govde() {
 // Bu fonksiyonlar halkayit/taslak_lib.php'ye TAŞINDI; Beyan ekranındaki
 // "Bildirim Yap" akışı da aynı doğrulamayı kullansın diye. Davranış aynıdır.
 require_once __DIR__ . '/taslak_lib.php';
+// "Tekrar gönder": gönderimde taslağın beyaz listeli kopyası + Gönderilenler'den
+// forma dolu tohum (salt okunur; taslak yazmanın tek yolu yine hks_taslak_olustur).
+require_once __DIR__ . '/tekrar_gonder_lib.php';
 
 
 // =============================================================================
@@ -498,6 +501,11 @@ try {
         hks_json_cikti(['hata' => 'Taslağın firması artık kayıtlı değil.'], 400);
       }
       $veri = json_decode($t['veri'], true);
+      // "Tekrar gönder" kopyası — plan çözümünden ve gidecekAdres eklenmesinden
+      // ÖNCE: kullanıcının kaydettiği taslağın kendisi saklanır (plan taslağı plan
+      // olarak kalır). Kişisel veri ve beyan bağı (kaynak) beyaz listede YOK.
+      // Hata yutan saf fonksiyondur; null dönerse gönderim yine aynen sürer.
+      $__kopya = hks_gonderim_kopyasi(is_array($veri) ? $veri : []);
       $satirlar = $veri['satirlar'];
       $ortak = $veri['ortak'];
 
@@ -655,7 +663,7 @@ try {
             'bicim' => (string)($sonuc['dogumVaryant']['bicim'] ?? ''),
             'sonuc' => hks_dogum_sonuc_sinifi($sonuc),
             'hataKodu' => (int)($sonuc['sonuclar'][0]['hataKodu'] ?? 0),
-            'ogrenildi' => !empty($sonuc['dogumOgrenildi']),
+            'ogrenildi' => !empty($sonuc['dogumDeneyGecti']),
           ]);
         }
       } catch (Throwable $__e) {
@@ -701,7 +709,7 @@ try {
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
         count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
-        json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar']], JSON_UNESCAPED_UNICODE)]);
+        json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya], JSON_UNESCAPED_UNICODE)]);
 
       // BEYAN KÖPRÜSÜ: taslak Beyan ekranından açıldıysa bağ kaydını sonuçlandır.
       // Hata yutan yardımcıdır — köprü sorunu bu geri alınamaz akışı kesmez.
@@ -742,9 +750,36 @@ try {
           'hataSayisi' => (int)$r['hata_sayisi'], 'genelHata' => $r['genel_hata'],
           'bildirimTuru' => $r['bildirim_turu'] ?? null,   // P3 — NULL: legacy kayıt (backfill yapılmadı)
           'yeniKunyeler' => $veri['yeniKunyeler'] ?? [],
+          // Kopyanın KENDİSİ listede dönmez (500 satır şişmesin) — yalnız var mı.
+          // Tohum ayrıca 'gonderilen_tohum' ucundan istenir.
+          'kopyaVar' => !empty($veri['kopya']),
         ];
       }, $rows);
       hks_json_cikti(['gonderilenler' => $liste]);
+    }
+
+    // ---- GÖNDERİLEN → FORMA DOLU TOHUM ("↻ Tekrar gönder") ----
+    // SALT OKUNUR: tabloya yazmaz, taslak oluşturmaz, HKS'e bağlanmaz. Tohum
+    // yalnız formu doldurur; kullanıcı "Taslağa Kaydet" deyince yazma yine TEK
+    // yoldan (taslak_kaydet → hks_taslak_olustur) ve tam doğrulamayla yapılır.
+    // Firma izolasyonu 'gonderilenler' listesiyle BİREBİR aynı: firma_id'si
+    // olmayan eski kayıt yalnız aynı firma ADIYLA açılır.
+    case 'gonderilen_tohum': {
+      $fid = trim((string)($g['firmaId'] ?? ''));
+      $fad = trim((string)($g['firmaAd'] ?? ''));
+      $gid = trim((string)($g['id'] ?? ''));
+      if ($fid === '') hks_json_cikti(['hata' => 'Firma seçilmedi.'], 400);
+      $st = $db->prepare('SELECT * FROM ' . hks_tablo('gonderilenler') . '
+        WHERE id = ? AND (firma_id = ? OR (COALESCE(firma_id, \'\') = \'\' AND firma_ad = ?))');
+      $st->execute([$gid, $fid, $fad]);
+      $row = $st->fetch();
+      if (!$row) hks_json_cikti(['hata' => 'Gönderim bulunamadı (veya bu firmaya ait değil).'], 404);
+      // Hedef firma (opsiyonel): aktif firmadan farklıysa kayıtlı olmalı — tohumda
+      // firmaya özgü alanlar (sıfat, işyeri) boşaltılır, istemci firmayı değiştirir.
+      $hedef = trim((string)($g['hedefFirmaId'] ?? ''));
+      $firmaDegisti = $hedef !== '' && $hedef !== $fid;
+      if ($firmaDegisti && !hks_firma_bul($hedef)) hks_json_cikti(['hata' => 'Hedef firma bulunamadı.'], 400);
+      hks_json_cikti(hks_gonderim_tohumu($db, $row, $hedef !== '' ? $hedef : null, $firmaDegisti));
     }
 
     // ---- ÜRÜN REFERANSLARI (referanssız bildirim / Satın Alım için) ----

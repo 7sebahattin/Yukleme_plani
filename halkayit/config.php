@@ -53,16 +53,18 @@ define('HKS_ENDPOINT_YENI', 'https://ws.gtb.gov.tr:8443/HKS%sService');
 // ALFABETİK konumda (CepTel ile KisiSifat arası). Konum artık ayar DEĞİL —
 // hks_bildirim_xml() hep alfabetik yazar; "sona koymak" alanı sunucuda düşürür.
 //
-// Metni GTB kodu kendisi tarihe çevirir; beklediği biçim belgelenmemiş. GTB'nin
-// örneği 'gtb' biçimini kullanıyor ama tarihi 01.01.1980 (gün = ay) olduğu için
-// gün/ay sırasını sınamıyor. Bu değer yalnız BAŞLANGIÇ biçimidir:
-//   • Gerçek künye üreten ve öncesinde KAYITSIZ doğrulanmış bir gönderim başka
-//     bir biçimle yapıldıysa o biçim hks_kv.dogum_varyant'a öğrenilir ve bu
-//     sabitin önüne geçer.
-//   • Yönetici halkayit/tani.php'den tek kullanımlık "deney biçimi" kurabilir.
+// KESİN SONUÇ (05.10.2026, canlı deneme): HKS tarihi SAATSİZ "GG.AA.YYYY"
+// (örn. 11.02.1959) bekliyor. GTB'nin örneğindeki "01.01.1980 00:00:00" biçimi
+// ile "00:00:00"/"12:00:00" ekli ve ISO biçimler kayıtsız kişide Mernis
+// "bulunamadı" (HataKodu 21) verdi; yalnız gtb_tarih künye üretti. Aynı kişi
+// beş biçimle üç dakika içinde denendi (docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md §11).
+// Sitedeki Sorgula, tarihi saatsiz gönderdiği için bıraktığı geçici sonuç
+// "00:00:00"lı gönderimi de geçirip yanıltıyordu.
+// Yönetici halkayit/dogum_deney.php'den tek kullanımlık deney kurabilir ya da
+// bir biçimi "kalıcı" yapabilir (otomatik öğrenme YOK).
 // Beyaz liste: gtb · gtb_oglen · gtb_tarih · iso · iso_oglen · iso_tarih
-// (bkz. hks_soap.php hks_dogum_bicimleri). Ayrıntı: docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md
-define('HKS_DOGUM_BICIMI', 'gtb');
+// (bkz. hks_soap.php hks_dogum_bicimleri).
+define('HKS_DOGUM_BICIMI', 'gtb_tarih');
 
 // --- Panel giriş koruması ---
 // Ana panel oturumu (asya_session) api.php ve index.php başında kontrol edilir;

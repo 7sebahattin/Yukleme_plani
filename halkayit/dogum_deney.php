@@ -44,6 +44,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         hks_dogum_deney_iptal();
         audit_log_event('update', 'hks_dogum_deney', null, null, ['islem' => 'iptal']);
         $mesaj = 'Deney iptal edildi.';
+    } elseif ($islem === 'kalici') {
+        $bicim = (string)($_POST['bicim'] ?? '');
+        if (!hks_dogum_bicim_gecerli($bicim)) {
+            $hata = 'Geçersiz biçim.';
+        } else {
+            hks_dogum_bicim_ogren($bicim, 'elle: ' . (string)($auth_user['username'] ?? ''));
+            audit_log_event('update', 'hks_dogum_deney', null, null, ['islem' => 'kalici', 'bicim' => $bicim]);
+            $mesaj = 'Biçim kalıcı yapıldı: ' . (hks_dogum_bicimleri()[$bicim] ?? $bicim);
+        }
     } elseif ($islem === 'sifirla') {
         hks_kv_yaz('dogum_varyant', null);
         audit_log_event('update', 'hks_dogum_deney', null, null, ['islem' => 'ogrenilen_sifirla']);
@@ -89,9 +98,22 @@ render_header('Doğum Tarihi Deneyi');
         <button class="btn" name="islem" value="sifirla">Öğrenileni sıfırla</button>
       </form>
     <?php endif; ?>
+    <form method="post" style="margin-top:10px">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <div class="form-group">
+        <label for="ddKalici">Kalıcı biçimi elle seç</label>
+        <select id="ddKalici" name="bicim">
+          <?php foreach ($bicimler as $k => $ad): ?>
+            <option value="<?= h($k) ?>" <?= $k === $yururluk['bicim'] ? 'selected' : '' ?>><?= h($ad) ?> — <?= h($ornek($k)) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <button class="btn" name="islem" value="kalici">Kalıcı yap</button>
+    </form>
     <p style="margin:8px 0 0;font-size:13px;color:var(--text-muted,#64748b)">
-      Bir biçim ancak <b>gerçek künye</b> üretir ve kişi gönderimden hemen önce <b>KAYITSIZ</b>
-      doğrulanmışsa öğrenilir; sonraki bütün gönderimler onunla gider.
+      Biçim <b>otomatik öğrenilmez</b>: sitede yeni Sorgula yapılmış kişi yanlış biçimle de geçer.
+      Doğru biçimi yalnız siteye uğramamış kişiyle bulup buradan elle kalıcı yapın.
+      Doğrulanmış biçim: <code>GG.AA.YYYY</code> (saatsiz).
     </p>
   </div>
 

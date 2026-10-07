@@ -280,12 +280,14 @@
   /* Masaüstünde (≥900px) kartlar 2 kolon — geniş ekranda satırlar aşırı uzamasın.
      Mobil düzen (tek kolon) DEĞİŞMEZ. */
   @media (min-width:900px) {
-    /* Taslaklar ve Gönderilenler AYNI ızgarayı kullanır: tek geniş kolonda
-       etiket ile değer arası aşırı açılıyor, göz satırı takip edemiyordu. */
+    /* Taslak kartları 2 kolon ızgarada: tek geniş kolonda etiket ile değer
+       arası aşırı açılıyor, göz satırı takip edemiyordu. */
     /* NOT: `.gonderilen-liste { display:flex }` temel kuralı bu blokTAN SONRA
        tanımlı olduğu için sınıf seçici burada kaybediyordu (aynı özgüllük,
        sonraki kural kazanır) — id seçici kullanılır. */
-    #taslakListe, #gonderilenListe {
+    /* Gönderilenler (#gonderilenListe) BU KURALA GİRMEZ: masaüstünde kompakt
+       TABLO çizilir (aşağıda "Gönderilenler — masaüstü tablo" bloğu). */
+    #taslakListe {
       display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
       gap:16px; align-items:start;
     }
@@ -327,6 +329,110 @@
     display:inline-block; background:var(--cip-bg); color:var(--navy); border:1.5px solid var(--cip-kenar);
     padding:5px 10px; border-radius:16px; font-size:11.5px; font-weight:700; margin:0 6px 6px 0;
   }
+
+  /* ── Gönderilenler — masaüstü (≥900px) kompakt tablo + "Tekrar gönder" (v305) ──
+     <900px'te tablo ÇİZİLMEZ (JS matchMedia ile kip seçer) — kartlar aynen kalır.
+     Satır tıklanınca hemen altında bugünkü kart açılır (.g-kart-gomulu). */
+  .g-tablo-sarma { background:var(--kart); border-radius:var(--radius); box-shadow:var(--golge);
+    overflow-x:auto; }
+  .g-tablo { width:100%; min-width:820px; border-collapse:collapse; font-size:13.5px;
+    font-variant-numeric:tabular-nums; }
+  .g-tablo th, .g-tablo td { padding:9px 10px; text-align:left; vertical-align:middle; white-space:nowrap; }
+  .g-tablo thead th { background:var(--navy); color:#fff; font-weight:700; font-size:12.5px; }
+  .g-tablo .sag { text-align:right; }
+  /* Esneyen sütunlar: max-width:0 ile içerik genişliği değil yüzde belirler,
+     taşan metin "…" ile kısalır (tam metin title'da). Dar sütunlar içeriğine uyar. */
+  .g-tablo .g-c-kisa { width:1px; }
+  .g-tablo .g-c-firma { width:26%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .g-tablo .g-c-ulke  { width:48%; max-width:0; }
+  .g-tablo .g-c-urun  { width:26%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .g-tablo tbody { border-top:1px solid var(--cizgi); }
+  .g-tablo tbody:nth-of-type(even) > .g-satir { background:var(--satir-cift); }
+  .g-tablo tbody > .g-satir { cursor:pointer; }
+  .g-tablo tbody > .g-satir:hover, .g-tablo tbody > .g-satir.acik { background:var(--cip-bg); }
+  .g-tablo tbody > .g-satir:focus-visible { outline:2px solid var(--teal); outline-offset:-2px; }
+  .g-tablo .g-ok { display:inline-block; color:var(--soluk); margin-right:6px; transition:transform .2s; }
+  .g-tablo .g-satir.acik .g-ok { transform:rotate(180deg); }
+  .g-tarih-kap { display:inline-block; vertical-align:middle; }
+  .g-t-saat { color:var(--soluk); }
+  .g-durum { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px;
+    font-size:11.5px; font-weight:800; }
+  .g-durum-ok { background:var(--tamam-bg); color:var(--tamam-tx); }
+  .g-durum-hata { background:var(--hata-bg); color:var(--hata-tx); }
+  .g-plaka { font-weight:800; color:var(--plaka); letter-spacing:.3px; }
+  .g-kilo { font-weight:700; color:var(--teal); }
+  .g-ucret { font-weight:600; }
+  .g-ulke-kap { display:flex; align-items:center; gap:7px; min-width:0; }
+  .g-ulke-ad { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .g-tag { flex:0 0 auto; font-size:10.5px; font-weight:800; padding:1px 7px; border-radius:8px;
+    background:var(--cip-bg); color:var(--teal); }
+  .g-tag-alim { background:rgba(245,179,1,.18); color:#8a6100; }
+  .g-tag-ic { background:var(--soluk-bg); color:var(--metin); }
+  html[data-theme="dark"] .g-tag-alim { color:#e6a93c; }
+  html[data-theme="dark"] .g-tablo thead th { background:#1a2331; color:var(--soluk); }
+  .g-tablo .g-c-eylem { text-align:right; }
+  .g-eylem-kap { display:flex; gap:6px; justify-content:flex-end; }
+  .g-tablo .g-yazdir-btn-ust, .g-tablo .g-btn-tekrar {
+    padding:6px 10px; font-size:12px; font-weight:700; border-radius:10px; cursor:pointer;
+    white-space:nowrap; font-family:inherit; background:var(--kart); }
+  .g-tablo .g-btn-tekrar { border:1.5px solid var(--teal); color:var(--teal); }
+  .g-tablo .g-btn-tekrar:hover, .g-tablo .g-yazdir-btn-ust:hover { background:var(--cip-bg); }
+  .g-tablo .g-btn-tekrar[aria-expanded="true"] { background:var(--cip-bg); }
+  .g-tablo .g-detay-tr > td { padding:2px 14px 14px 30px; white-space:normal; background:var(--satir-cift); }
+  .g-detay-tr[hidden] { display:none; }
+  /* Satırın altında açılan kart: bugünkü kartın aynı içeriği, geniş alanda 2 kolon. */
+  .g-kart-gomulu { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); max-width:920px;
+    box-shadow:none; border:1px solid var(--cizgi); border-radius:12px; }
+  .g-kart-gomulu > .g-kart-head, .g-kart-gomulu > .g-kart-detay { grid-column:1 / -1; }
+  .g-kart-gomulu > .g-kart-head { cursor:default; }
+  .g-kart-gomulu > .g-kart-head .g-kart-head-sol { cursor:default; }
+  .g-kart-gomulu > .tk-satir { background:transparent; }
+  .g-kart-gomulu > .tk-satir:nth-child(even) { border-right:1px solid var(--cizgi); }
+  /* Menüdeki "↻ Tekrar gönder" mobil kartın açılan detayında; masaüstü satırında zaten var. */
+  .g-detay-eylem .btn { margin-top:12px; padding:12px; font-size:14px; }
+  /* Tohum istenirken çift tıklamayı engelle */
+  .gonderilen-liste.g-mesgul { opacity:.6; pointer-events:none; }
+
+  /* position:fixed açılır menü (overflow:auto sarmalayıcı kesmesin — bkz. CLAUDE.md). z ≥ 600 */
+  .g-tekrar-menu { position:fixed; z-index:620; display:none; min-width:240px; max-width:calc(100vw - 16px);
+    background:var(--kart); color:var(--metin); border:1px solid var(--cizgi); border-radius:14px;
+    box-shadow:0 12px 32px rgba(10,35,52,.28); padding:6px; }
+  .g-tekrar-menu.acik { display:block; }
+  .g-tekrar-menu button { display:block; width:100%; text-align:left; background:none; border:0;
+    padding:11px 12px; border-radius:10px; font:inherit; font-size:14px; font-weight:700;
+    color:var(--metin); cursor:pointer; }
+  .g-tekrar-menu button:hover, .g-tekrar-menu button:focus-visible { background:var(--cip-bg); outline:none; }
+  .g-tekrar-menu .g-menu-alt { display:block; margin-top:2px; font-size:11.5px; font-weight:400;
+    color:var(--soluk); overflow-wrap:anywhere; }
+
+  /* Firma seçim penceresi (Firma değiştir…) — kişi penceresiyle aynı kabuk, z 600 */
+  #firmaSecPencere .kisi-dlg { height:auto; max-width:480px; }
+  .firma-sec-ozet { padding:0 16px 8px; font-size:12.5px; color:var(--soluk); overflow-wrap:anywhere; }
+  .firma-sec-izgara { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; padding:4px 0 6px; }
+  .firma-sec-izgara .firma-kart { min-height:84px; width:100%; font-family:inherit; }
+  .firma-sec-izgara .firma-kart .ad { overflow-wrap:anywhere; }
+  @media (max-width:767px) {
+    #firmaSecPencere .kisi-dlg { height:auto; max-height:94dvh; }
+  }
+  @media (min-width:900px) {
+    /* Geniş ekranda tablo 1180px'te kalmasın (ana kural: main max-width 1180) */
+    #ekranGonderilen main { max-width:1560px; }
+  }
+  @media (min-width:900px) and (max-width:1199px) {
+    /* Dar iframe: eylem düğmeleri yalnız simge (tam metin title/aria-label'da),
+       saat tarihin altına iner, hücre boşlukları daralır — Firma/Ülke/Ürün'e yer açılır */
+    .g-tablo .g-btn-yazi { display:none; }
+    .g-tablo th, .g-tablo td { padding-left:6px; padding-right:6px; }
+    .g-tablo .g-t-saat { display:block; font-size:11.5px; line-height:1.15; }
+    .g-tablo .g-satir td { padding-top:7px; padding-bottom:7px; }
+  }
+
+  /* "Tekrar gönder" ile yüklenen formun üstündeki bilgi kutusu (metin textContent ile) */
+  .kopya-not { margin:0 0 12px; padding:12px 14px; border-radius:12px; font-size:13px; line-height:1.45;
+    background:rgba(245,179,1,.14); border:1.5px solid rgba(245,179,1,.55); color:var(--metin); }
+  .kopya-not b { color:var(--navy); }
+  .kopya-not ul { margin:6px 0 0 18px; }
+  .kopya-not li { margin-top:2px; }
 
   /* Alt çubuk */
   .ozet {
@@ -719,6 +825,8 @@
   <main>
     <div class="kart bk-ayar">
       <h2 id="kart1Baslik" data-no="1"><span class="kart1-alt">Bildirim ayarları</span></h2>
+      <!-- "Tekrar gönder" ile açılan formda sunucunun uyarıları (textContent ile doldurulur) -->
+      <div class="kopya-not gizli" id="kopyaNotlar" role="status" aria-live="polite"></div>
       <div class="satir2">
         <div>
           <label>Sıfat</label>
@@ -1188,6 +1296,23 @@
   </div>
 </div>
 
+<!-- Gönderilenler: "Tekrar gönder" açılır menüsü (position:fixed, z 620) -->
+<div id="gTekrarMenu" class="g-tekrar-menu" role="menu" aria-label="Tekrar gönder">
+  <button type="button" role="menuitem" data-sec="ayni">Aynı firma ile taslağa al<span class="g-menu-alt" id="gTekrarMenuAyniAlt"></span></button>
+  <button type="button" role="menuitem" data-sec="firma">Firma değiştir…<span class="g-menu-alt">Başka bir firmayı seç</span></button>
+</div>
+<!-- Gönderilenler: "Firma değiştir…" firma seçim penceresi (z 600) -->
+<div id="firmaSecPencere" class="kisi-ovl">
+  <div class="kisi-dlg" role="dialog" aria-modal="true" aria-labelledby="firmaSecBaslik">
+    <div class="kisi-bas">
+      <h3 id="firmaSecBaslik">Hangi firma ile taslağa alınsın?</h3>
+      <button type="button" class="kisi-x" id="btnFirmaSecKapat" aria-label="Kapat">✕</button>
+    </div>
+    <div class="firma-sec-ozet" id="firmaSecOzet"></div>
+    <div class="kisi-govde" id="firmaSecListe"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="qrcode.js"></script>
@@ -1207,7 +1332,7 @@ const URETICI_SEVK_GIZLE = true;
 // olup olmadığını gözle doğrulamak içindir: ekranda görünen değer buradakiyle
 // aynı değilse tarayıcı/sunucu ESKİ app.html'i sunuyor demektir.
 // app.html'de anlamlı bir değişiklik yapıldığında BU DEĞERİ ARTIRIN.
-const PANEL_SURUM = '2026-08-29 · 21';
+const PANEL_SURUM = '2026-10-07 · 22';
 
 let firmalar = [];
 let aktifFirma = null;
@@ -1390,6 +1515,8 @@ const API_ROTA = {
   'POST /api/taslaklar/sil': 'taslak_sil',
   'POST /api/taslaklar/gonder': 'taslak_gonder',
   'GET /api/gonderilenler': 'gonderilenler',
+  // "Tekrar gönder": önceki gönderimden form tohumu (SALT OKUNUR — hiçbir şey yazmaz)
+  'GET /api/gonderilen_tohum': 'gonderilen_tohum',
   // Yurt içi (Sevk Etme) referans/doğrulama
   'POST /api/kayitli_kisi': 'kayitli_kisi',
   // Kişi havuzu (tüm firmalar ortak)
@@ -2105,6 +2232,7 @@ function formuTemizle() {
   $('kartKunyeler').classList.add('gizli');
   $('kunyeSayi').textContent = '';
   ['bildirimMesaj', 'kunyeMesaj', 'dagitMesaj', 'ikDurum', 'isyeriMesaj', 'adresMesaj'].forEach(id => { $(id).className = 'mesaj'; });
+  kopyaNotlariniGoster(null);       // "Tekrar gönder" uyarı kutusu yeni formda görünmesin
   $('ikCokluSifatUyari').classList.add('gizli');
   if (listeler) listeleriDoldur(); // sıfat/tür varsayılanlarına döner + turDegisti()
   // EN SONDA: yukarıdaki tüm select sıfırlamaları ve listeleriDoldur() bittikten
@@ -3788,9 +3916,19 @@ async function taslakEkraniAc() {
 // Taslağı forma geri yükle (düzenleme). Künyeler GÜNCEL sorgudan çekilir
 // (gerçek kalan görünür); taslak satırları listede işaretlenip miktarları yazılır.
 // Yeni "Taslağa Kaydet" başarılı olunca ESKİ taslak silinir (kopya kalmaz).
-async function taslakDuzenle(t) {
+//
+// secenek.kopya (Gönderilenler → "↻ Tekrar gönder"): `t` bir taslak DEĞİL,
+// önceki gönderimden kurulmuş TOHUMdur (id'si yok). Bu kipte duzenlenenTaslakId
+// HEP null kalır — böylece kayıtta eskiTaslakId GİTMEZ ve hiçbir taslak
+// SİLİNMEZ (silinecek bir taslak zaten yok; beyan bağı da taşınmaz). Yazma yolu
+// yine normal "Taslağa Kaydet"tir; burada sunucuya HİÇBİR ŞEY yazılmaz.
+// secenek.notlar: sunucunun kullanıcıya söylediği uyarılar (formun üstünde görünür).
+const KOPYA_TOAST = '↻ Önceki gönderim forma yüklendi — plaka/kilo kontrol edip Taslağa Kaydet';
+async function taslakDuzenle(t, secenek) {
+  const kopya = !!(secenek && secenek.kopya);
   formuTemizle();                 // duzenlenenTaslakId'yi de sıfırlar — sonra set
-  duzenlenenTaslakId = t.id;
+  duzenlenenTaslakId = kopya ? null : t.id;
+  if (kopya) kopyaNotlariniGoster(secenek.notlar);
   $('kart1Baslik').innerHTML = '<span class="kart1-firma">' + eHtml(aktifFirma ? aktifFirma.ad : '') + '</span><span class="kart1-alt">Bildirim ayarları</span>';
   ekranGoster('ekranBildirim');
   await Promise.all([listeleriHazirla(), sonlariYukle()]);
@@ -3880,7 +4018,7 @@ async function taslakDuzenle(t) {
     $('btnPlanAc').textContent = '✖️ Taslak Oluşturmayı Kapat';
     $('planFiyatBlok').classList.toggle('gizli', sevkModuMu());
     aramaliSelectleriSenkronla();
-    toast('✏️ Plan taslağı forma yüklendi — düzenleyip tekrar Taslağı Kaydet');
+    toast(kopya ? KOPYA_TOAST : '✏️ Plan taslağı forma yüklendi — düzenleyip tekrar Taslağı Kaydet');
     return;
   }
 
@@ -3911,7 +4049,24 @@ async function taslakDuzenle(t) {
   // Aramalı alanların görünen metni en sonda, tek seferde eşitlenir — aksi
   // hâlde taslak yüklenince kutular boş görünür ama değer seçili olurdu.
   aramaliSelectleriSenkronla();
-  toast('✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
+  toast(kopya ? KOPYA_TOAST : '✏️ Taslak forma yüklendi — düzenleyip tekrar Taslağa Kaydet');
+}
+
+// "Tekrar gönder" bilgi kutusu: sunucunun uyarıları formun ÜSTÜNDE görünür.
+// Metinler yalnız textContent ile yazılır (sunucu cevabı yine de HTML sayılmaz).
+// notlar boş/null → kutu gizlenir (formuTemizle de bunu çağırır).
+function kopyaNotlariniGoster(notlar) {
+  const kutu = $('kopyaNotlar');
+  kutu.textContent = '';
+  const liste = (Array.isArray(notlar) ? notlar : []).map(n => String(n == null ? '' : n).trim()).filter(Boolean);
+  if (!liste.length) { kutu.classList.add('gizli'); return; }
+  const baslik = document.createElement('b');
+  baslik.textContent = '↻ Önceki gönderimden yüklendi — kontrol edin:';
+  const ul = document.createElement('ul');
+  liste.forEach(n => { const li = document.createElement('li'); li.textContent = n; ul.appendChild(li); });
+  kutu.appendChild(baslik);
+  kutu.appendChild(ul);
+  kutu.classList.remove('gizli');
 }
 
 function taslakOnayAc(t) {
@@ -4008,12 +4163,14 @@ $('btnOnay').onclick = async () => {
         `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(_gk.cep || '—')}</b></div>` +
         '<div style="margin-top:6px">TC ve doğum tarihini kişinin kimliğiyle bir kez karşılaştırın.</div></div>';
     }
-    // Öğrenme bildirimi: yalnız GERÇEK künye üreten, öncesinde KAYITSIZ
-    // doğrulanmış gönderimde biçim kalıcı olur (sunucu karar verir).
-    if (j.dogumOgrenildi && j.dogumVaryant) {
+    // Deney biçimiyle künye çıktıysa bilgi ver. Biçim OTOMATİK kalıcı olmaz
+    // (sitede yeni Sorgula'lanmış kişi yanlış biçimle de geçer); kalıcı yapmak
+    // yönetici ekranından elle yapılır.
+    if (j.dogumDeneyGecti && j.dogumVaryant) {
       html += '<div class="mesaj tamam" style="display:block;margin-top:8px">' +
-        '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> biçimiyle kabul edildi ve ' +
-        '<b>öğrenildi</b> — sonraki kayıtsız kişi bildirimleri bu biçimle gider.</div>';
+        '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> deney biçimiyle kabul edildi. ' +
+        'Kişi sitede hiç sorgulanmadıysa bu biçim doğrudur; kalıcı yapmak için yönetici ' +
+        '"Doğum Tarihi Deneyi" ekranını kullanın.</div>';
     }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
@@ -4085,12 +4242,139 @@ $('btnOnay').onclick = async () => {
   $('btnOnay').textContent = 'Evet, Gönder';
 };
 
-// ================= GÖNDERİLENLER EKRANI (kart + genişleyen detay) =================
+// ================= GÖNDERİLENLER EKRANI =================
+// ≥900px: kompakt TABLO (satıra tıklayınca altında bugünkü kart açılır).
+// <900px: bugünkü genişleyen KARTLAR (görünüm/davranış değişmedi; açılan detaya
+// yalnız "↻ Tekrar gönder" eklendi). Kip matchMedia ile seçilir ve eşik geçilince
+// (pencere yeniden boyutlanınca) veri yeniden istenmeden yeniden çizilir.
 let gonderilenVeri = [];
+const G_MASAUSTU = window.matchMedia('(min-width:900px)');
+let gonderilenMasaustu = null;     // en son hangi kipte çizildi
+
+// Ülke sütunu önekleri (taslak kaydında ulkeAd böyle yazılır: bkz. ortakTopla / üreticiden sevk alım).
+const G_ONEKLER = [
+  ['Üreticiden Sevk Alım ← ', 'uretici'],
+  ['Satın Alım ← ', 'alim'],
+  ['Yurt içi → ', 'yurtici'],
+];
+// Önek atılır, adı kalır; türü küçük etiketle gösterilir (tam metin title'da).
+function gonderilenUlkeParcala(g) {
+  const tam = String(g.ulkeAd || '');
+  for (const [onek, tur] of G_ONEKLER) {
+    if (tam.startsWith(onek)) {
+      let etiket = 'Yurt içi', sinif = 'g-tag-ic';
+      if (tur === 'uretici') { etiket = 'Üretici sevk'; sinif = 'g-tag-alim'; }
+      else if (tur === 'alim') { etiket = 'Satın alım'; sinif = 'g-tag-alim'; }
+      else if (g.bildirimTuru === 'SEVK_ETME') etiket = 'Sevk etme';
+      else if (g.bildirimTuru === 'SATIS') etiket = 'Yurt içi satış';
+      return { ad: tam.slice(onek.length), etiket, sinif, tam };
+    }
+  }
+  return { ad: tam, etiket: tam ? 'İhracat' : '', sinif: '', tam };
+}
+
+// Kart içeriği — mobilde kartın kendisi, masaüstünde satırın altında açılan kart.
+// gomulu=true: başlıkta yalnız durum+tarih (Yazdır/Tekrar gönder zaten satırda),
+// "↻ Tekrar gönder" düğmesi çizilmez.
+function gonderilenKartIcerik(g, i, gomulu) {
+  const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const durumRozet = (g.hataSayisi > 0 || g.genelHata)
+    ? `<span class="rozet rozet-kirmizi">✗ ${g.hataSayisi || ''} hata</span>`
+    : `<span class="rozet rozet-yesil">✓ tamam</span>`;
+  const kunyeChips = (g.yeniKunyeler || []).length
+    ? g.yeniKunyeler.map(k => `<span class="g-kunye-cip">${eHtml(k)}</span>`).join('')
+    : '<span class="cip-bos">Bu gönderide yeni künye oluşmadı.</span>';
+  // Taslak kartıyla AYNI satır düzeni (ortak .tk-satir stilleri). Fark:
+  // burada ölçüler normal — plaka/kilo büyütülmez, yalnız renkleri ortaktır.
+  // Firma artık başlıkta değil, ilk satırda; başlık şeridinde durum rozeti
+  // ve tarih durur (rozet eskiden bilgi satırının EN SONUNDA kayboluyordu).
+  const _gs = (sinif, etiket, deger) =>
+    `<div class="tk-satir${sinif ? ' ' + sinif : ''}"><span class="e">${etiket}</span>` +
+    `<span class="d">${deger}</span></div>`;
+  return `<div class="g-kart-head">` +
+    `<div class="g-kart-head-sol">` +
+    `<div class="g-kart-baslik">${durumRozet}</div>` +
+    `<div class="g-kart-tarih">${tarih}</div>` +
+    `</div>` +
+    (gomulu ? '' :
+      `<div class="g-kart-head-sag">` +
+      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula">🖨️ Yazdır</button>` +
+      `<span class="g-kart-ok">▾</span>` +
+      `</div>`) +
+    `</div>` +
+    _gs('', '🏢 Firma', eHtml(g.firmaAd || '—')) +
+    _gs('tk-plaka', '🚛 Plaka', eHtml(g.plaka || g.belgeNo || '—')) +
+    _gs('', '🌍 Ülke', eHtml(g.ulkeAd || '—')) +
+    _gs('', (g.urunAd ? urunIkonu(g.urunAd) : '🍎') + ' Ürün', eHtml(g.urunAd || '—')) +
+    _gs('tk-kilo', '⚖️ Kilo', `${fmt(g.toplamKg)} KG`) +
+    _gs('', '📦 Künye', `${g.adet} adet`) +
+    _gs('', '💰 Fiyat', `${fmt(g.fiyat)} TL`) +
+    _gs('', '🧾 Rüsum', g.rusum ? `${fmt(g.rusum)} TL` : '—') +
+    `<div class="g-kart-detay">` +
+    `<div class="g-detay-baslik">Künye Numaraları</div>` +
+    `<div class="cipler">${kunyeChips}</div>` +
+    (gomulu ? '' :
+      `<div class="g-detay-eylem">` +
+      `<button type="button" class="btn btn-soluk g-btn-tekrar" data-i="${i}" aria-haspopup="menu" aria-expanded="false">↻ Tekrar gönder ▾</button>` +
+      `</div>`) +
+    `</div>`;
+}
+
+// Masaüstü tablo satırı (tek gönderim = tek <tbody>: satır + açılınca altında detay satırı).
+function gonderilenSatirHtml(g, i) {
+  const d = new Date(g.zaman);
+  const gecerli = !isNaN(d);
+  const gun = gecerli ? d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
+  const saat = gecerli ? d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const hatali = g.hataSayisi > 0 || g.genelHata;
+  const durum = hatali
+    ? `<span class="g-durum g-durum-hata" title="${eHtml(g.hataSayisi ? g.hataSayisi + ' hata' : 'Hata')}">✗${g.hataSayisi || ''}</span>`
+    : `<span class="g-durum g-durum-ok" title="Tamam">✓</span>`;
+  const plaka = g.plaka || g.belgeNo || '—';
+  const u = gonderilenUlkeParcala(g);
+  const kilo = Math.round(Number(g.toplamKg) || 0).toLocaleString('tr-TR') + ' KG';
+  const fiyat = Number(g.fiyat) || 0;
+  const ucret = fiyat > 0 ? `${fmt(fiyat)} TL/KG` : '—';
+  const urun = g.urunAd ? `${urunIkonu(g.urunAd)} ${eHtml(g.urunAd)}` : '—';
+  return `<tbody class="g-grup">` +
+    `<tr class="g-satir" data-i="${i}" tabindex="0" aria-expanded="false">` +
+    `<td class="g-c-kisa"><span class="g-ok" aria-hidden="true">▾</span><span class="g-tarih-kap">${gun} <span class="g-t-saat">${saat}</span></span>${durum}</td>` +
+    `<td class="g-c-firma" title="${eHtml(g.firmaAd || '')}">${eHtml(g.firmaAd || '—')}</td>` +
+    `<td class="g-c-kisa"><span class="g-plaka">${eHtml(plaka)}</span></td>` +
+    `<td class="g-c-ulke" title="${eHtml(u.tam)}"><div class="g-ulke-kap">` +
+      (u.etiket ? `<span class="g-tag ${u.sinif}">${eHtml(u.etiket)}</span>` : '') +
+      `<span class="g-ulke-ad">${eHtml(u.ad || '—')}</span></div></td>` +
+    `<td class="g-c-urun" title="${eHtml(g.urunAd || '')}">${urun}</td>` +
+    `<td class="g-c-kisa sag g-kilo">${kilo}</td>` +
+    `<td class="g-c-kisa sag g-ucret">${ucret}</td>` +
+    `<td class="g-c-kisa g-c-eylem"><div class="g-eylem-kap">` +
+      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula" aria-label="Yazdır">🖨 <span class="g-btn-yazi">Yazdır</span></button>` +
+      `<button type="button" class="g-btn-tekrar" data-i="${i}" title="Tekrar gönder" aria-label="Tekrar gönder" aria-haspopup="menu" aria-expanded="false">↻ <span class="g-btn-yazi">Tekrar gönder</span> ▾</button>` +
+    `</div></td>` +
+    `</tr></tbody>`;
+}
+
+function gonderilenCiz() {
+  const kap = $('gonderilenListe');
+  tekrarMenuKapat();
+  gonderilenMasaustu = G_MASAUSTU.matches;
+  if (gonderilenMasaustu) {
+    kap.innerHTML = '<div class="g-tablo-sarma"><table class="g-tablo"><thead><tr>' +
+      '<th class="g-c-kisa">Tarih</th><th class="g-c-firma">Firma</th><th class="g-c-kisa">Plaka</th>' +
+      '<th class="g-c-ulke">Ülke / Müstahsil</th><th class="g-c-urun">Ürün</th>' +
+      '<th class="g-c-kisa sag">Kilo</th><th class="g-c-kisa sag" title="Birim fiyat">Ücret</th>' +
+      '<th class="g-c-kisa g-c-eylem">İşlem</th></tr></thead>' +
+      gonderilenVeri.map(gonderilenSatirHtml).join('') + '</table></div>';
+  } else {
+    kap.innerHTML = gonderilenVeri.map((g, i) =>
+      `<div class="g-kart" data-i="${i}">${gonderilenKartIcerik(g, i, false)}</div>`).join('');
+  }
+}
 
 async function gonderilenEkraniAc() {
   ekranGoster('ekranGonderilen');
   const kap = $('gonderilenListe');
+  gonderilenVeri = [];
   kap.innerHTML = '<div class="yukleniyor">Yükleniyor...</div>';
   try {
     const j = await api('/api/gonderilenler', 'GET', {
@@ -4101,68 +4385,264 @@ async function gonderilenEkraniAc() {
       kap.innerHTML = '<div class="yukleniyor">Henüz gönderim yapılmadı.</div>';
       return;
     }
-    kap.innerHTML = '';
-    gonderilenVeri.forEach((g, i) => {
-      const div = document.createElement('div');
-      div.className = 'g-kart';
-      div.dataset.i = i;
-      const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      const durumRozet = (g.hataSayisi > 0 || g.genelHata)
-        ? `<span class="rozet rozet-kirmizi">✗ ${g.hataSayisi || ''} hata</span>`
-        : `<span class="rozet rozet-yesil">✓ tamam</span>`;
-      const kunyeChips = (g.yeniKunyeler || []).length
-        ? g.yeniKunyeler.map(k => `<span class="g-kunye-cip">${eHtml(k)}</span>`).join('')
-        : '<span class="cip-bos">Bu gönderide yeni künye oluşmadı.</span>';
-      // Taslak kartıyla AYNI satır düzeni (ortak .tk-satir stilleri). Fark:
-      // burada ölçüler normal — plaka/kilo büyütülmez, yalnız renkleri ortaktır.
-      // Firma artık başlıkta değil, ilk satırda; başlık şeridinde durum rozeti
-      // ve tarih durur (rozet eskiden bilgi satırının EN SONUNDA kayboluyordu).
-      const _gs = (sinif, etiket, deger) =>
-        `<div class="tk-satir${sinif ? ' ' + sinif : ''}"><span class="e">${etiket}</span>` +
-        `<span class="d">${deger}</span></div>`;
-      div.innerHTML =
-        `<div class="g-kart-head">` +
-        `<div class="g-kart-head-sol">` +
-        `<div class="g-kart-baslik">${durumRozet}</div>` +
-        `<div class="g-kart-tarih">${tarih}</div>` +
-        `</div>` +
-        `<div class="g-kart-head-sag">` +
-        `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula">🖨️ Yazdır</button>` +
-        `<span class="g-kart-ok">▾</span>` +
-        `</div>` +
-        `</div>` +
-        _gs('', '🏢 Firma', eHtml(g.firmaAd || '—')) +
-        _gs('tk-plaka', '🚛 Plaka', eHtml(g.plaka || g.belgeNo || '—')) +
-        _gs('', '🌍 Ülke', eHtml(g.ulkeAd || '—')) +
-        _gs('', (g.urunAd ? urunIkonu(g.urunAd) : '🍎') + ' Ürün', eHtml(g.urunAd || '—')) +
-        _gs('tk-kilo', '⚖️ Kilo', `${fmt(g.toplamKg)} KG`) +
-        _gs('', '📦 Künye', `${g.adet} adet`) +
-        _gs('', '💰 Fiyat', `${fmt(g.fiyat)} TL`) +
-        _gs('', '🧾 Rüsum', g.rusum ? `${fmt(g.rusum)} TL` : '—') +
-        `<div class="g-kart-detay">` +
-        `<div class="g-detay-baslik">Künye Numaraları</div>` +
-        `<div class="cipler">${kunyeChips}</div>` +
-        `</div>`;
-      const acKapa = () => div.classList.toggle('acik');
-      div.querySelector('.g-kart-head-sol').onclick = acKapa;
-      div.querySelector('.g-kart-ok').onclick = acKapa;
-      kap.appendChild(div);
-    });
-    kap.querySelectorAll('.g-yazdir-btn-ust').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const g = gonderilenVeri[+btn.dataset.i];
-        // Yalnızca yönlendirme: Çoklu Künye ekranını aç, alanları doldur, Sorgula'ya bas.
-        // Liste zaten aktif firmaya filtreli olduğu için sorgu aktif firmayla yapılır.
-        // g.zaman ISO-8601 offset'li ('c' formatı) — baştaki 10 karakter YYYY-MM-DD.
-        const tarihStr = String(g.zaman).slice(0, 10);
-        topluKunyeEkraniAc(g.plaka || '', g.belgeNo || '', tarihStr);
-        $('btnTopluSorgula').click();
-      };
-    });
+    gonderilenCiz();
   } catch (e) {
     kap.innerHTML = `<div class="mesaj hata" style="display:block;margin:10px">${eHtml(e.message)}</div>`;
   }
+}
+
+// Yalnızca yönlendirme: Çoklu Künye ekranını aç, alanları doldur, Sorgula'ya bas.
+// Liste zaten aktif firmaya filtreli olduğu için sorgu aktif firmayla yapılır.
+// g.zaman ISO-8601 offset'li ('c' formatı) — baştaki 10 karakter YYYY-MM-DD.
+function gonderilenYazdir(g) {
+  const tarihStr = String(g.zaman).slice(0, 10);
+  topluKunyeEkraniAc(g.plaka || '', g.belgeNo || '', tarihStr);
+  $('btnTopluSorgula').click();
+}
+
+// Masaüstü satırı: altında bugünkü kartı aç/kapat. Detay satırı İLK açılışta kurulur
+// (500 satırın hepsi için kart üretilmez).
+function gonderilenSatirAcKapa(tr) {
+  const g = gonderilenVeri[+tr.dataset.i];
+  if (!g) return;
+  const tb = tr.parentNode;
+  let det = tb.querySelector('.g-detay-tr');
+  if (!det) {
+    det = document.createElement('tr');
+    det.className = 'g-detay-tr';
+    det.hidden = true;
+    const td = document.createElement('td');
+    td.colSpan = 8;
+    const kart = document.createElement('div');
+    kart.className = 'g-kart g-kart-gomulu acik';
+    kart.innerHTML = gonderilenKartIcerik(g, +tr.dataset.i, true);
+    td.appendChild(kart);
+    det.appendChild(td);
+    tb.appendChild(det);
+  }
+  const ac = det.hidden;                    // şu an kapalıysa aç
+  det.hidden = !ac;
+  tr.classList.toggle('acik', ac);
+  tr.setAttribute('aria-expanded', ac ? 'true' : 'false');
+}
+
+// TEK dinleyici (liste yeniden çizilince bağlanacak bir şey kalmaz).
+$('gonderilenListe').addEventListener('click', (e) => {
+  const yaz = e.target.closest('.g-yazdir-btn-ust');
+  if (yaz) {
+    e.stopPropagation();                   // satır/kart açılıp kapanmasın
+    const g = gonderilenVeri[+yaz.dataset.i];
+    if (g) gonderilenYazdir(g);
+    return;
+  }
+  const tek = e.target.closest('.g-btn-tekrar');
+  if (tek) {
+    e.stopPropagation();
+    tekrarMenuAc(tek, +tek.dataset.i);
+    return;
+  }
+  const satir = e.target.closest('tr.g-satir');
+  if (satir) { gonderilenSatirAcKapa(satir); return; }
+  // Mobil kart başlığı: aç/kapa (satırın altındaki gömülü kart her zaman açıktır)
+  const bas = e.target.closest('.g-kart-head-sol, .g-kart-ok');
+  if (bas) {
+    const kart = bas.closest('.g-kart');
+    if (kart && !kart.classList.contains('g-kart-gomulu')) kart.classList.toggle('acik');
+  }
+});
+$('gonderilenListe').addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('g-satir')) {
+    e.preventDefault();                    // Boşluk sayfayı kaydırmasın
+    gonderilenSatirAcKapa(e.target);
+  }
+});
+// Eşik (900px) geçilince veri yeniden istenmeden diğer kipte çiz.
+function gonderilenKipDegisti() {
+  if (!gonderilenVeri.length || $('ekranGonderilen').classList.contains('gizli')) return;
+  if (G_MASAUSTU.matches !== gonderilenMasaustu) gonderilenCiz();
+}
+if (G_MASAUSTU.addEventListener) G_MASAUSTU.addEventListener('change', gonderilenKipDegisti);
+else if (G_MASAUSTU.addListener) G_MASAUSTU.addListener(gonderilenKipDegisti);
+
+// ── "↻ Tekrar gönder" açılır menüsü ──────────────────────────────────────────
+// position:fixed + getBoundingClientRect: tablo sarmalayıcısı (overflow-x:auto) ve
+// mobil kart (overflow:hidden) menüyü KESMESİN. Dışarı tık / Esc / kaydırma /
+// yeniden boyutlama kapatır.
+let tekrarMenuTetik = null;
+let tekrarMenuIdx = -1;
+let tekrarYukleniyor = false;
+
+function tekrarMenuKonumla(btn) {
+  const m = $('gTekrarMenu');
+  m.style.visibility = 'hidden';
+  m.style.left = '0px'; m.style.top = '0px';
+  m.classList.add('acik');
+  const r = btn.getBoundingClientRect();
+  const w = m.offsetWidth, h = m.offsetHeight;
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  // Sağ kenarı düğmeyle hizala (düğme sağda), ekran dışına taşırma
+  const left = Math.max(8, Math.min(r.right - w, vw - w - 8));
+  let top = r.bottom + 6;
+  if (top + h > vh - 8) {
+    // Altta yer yoksa yukarı aç; yukarıda da yoksa ekrana sığdır
+    top = (r.top - 6 - h >= 8) ? r.top - 6 - h : Math.max(8, vh - h - 8);
+  }
+  m.style.left = left + 'px';
+  m.style.top = top + 'px';
+  m.style.visibility = '';
+}
+function tekrarMenuDisTik(e) {
+  if ($('gTekrarMenu').contains(e.target)) return;
+  if (tekrarMenuTetik && tekrarMenuTetik.contains(e.target)) return;   // aç/kapa click'te
+  tekrarMenuKapat();
+}
+function tekrarMenuKaydirma(e) {
+  if (e.target && e.target.nodeType === 1 && $('gTekrarMenu').contains(e.target)) return;
+  tekrarMenuKapat();
+}
+function tekrarMenuTus(e) {
+  const m = $('gTekrarMenu');
+  if (e.key === 'Escape') {
+    e.stopPropagation(); e.preventDefault();
+    const t = tekrarMenuTetik;
+    tekrarMenuKapat();
+    if (t && document.contains(t)) t.focus();
+    return;
+  }
+  if (e.key === 'Tab') { tekrarMenuKapat(); return; }
+  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+    const oge = [...m.querySelectorAll('button')];
+    const i = oge.indexOf(document.activeElement);
+    let n = i;
+    if (e.key === 'ArrowDown') n = i < 0 ? 0 : (i + 1) % oge.length;
+    else if (e.key === 'ArrowUp') n = i <= 0 ? oge.length - 1 : i - 1;
+    else n = e.key === 'Home' ? 0 : oge.length - 1;
+    e.preventDefault();
+    oge[n].focus({ preventScroll: true });
+  }
+}
+function tekrarMenuAc(btn, idx) {
+  if (tekrarYukleniyor) return;
+  if (tekrarMenuTetik === btn) { tekrarMenuKapat(); return; }   // aynı düğme: kapat
+  tekrarMenuKapat();
+  tekrarMenuTetik = btn;
+  tekrarMenuIdx = idx;
+  btn.setAttribute('aria-expanded', 'true');
+  $('gTekrarMenuAyniAlt').textContent = aktifFirma ? aktifFirma.ad : '';
+  tekrarMenuKonumla(btn);
+  document.addEventListener('pointerdown', tekrarMenuDisTik, true);
+  document.addEventListener('keydown', tekrarMenuTus, true);
+  window.addEventListener('scroll', tekrarMenuKaydirma, true);
+  window.addEventListener('resize', tekrarMenuKapat);
+  $('gTekrarMenu').querySelector('button').focus({ preventScroll: true });
+}
+function tekrarMenuKapat() {
+  const m = $('gTekrarMenu');
+  if (tekrarMenuTetik) tekrarMenuTetik.setAttribute('aria-expanded', 'false');
+  tekrarMenuTetik = null;
+  m.classList.remove('acik');
+  document.removeEventListener('pointerdown', tekrarMenuDisTik, true);
+  document.removeEventListener('keydown', tekrarMenuTus, true);
+  window.removeEventListener('scroll', tekrarMenuKaydirma, true);
+  window.removeEventListener('resize', tekrarMenuKapat);
+}
+$('gTekrarMenu').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-sec]');
+  if (!b) return;
+  const idx = tekrarMenuIdx, tetik = tekrarMenuTetik;
+  tekrarMenuKapat();
+  const g = gonderilenVeri[idx];
+  if (!g) return;
+  if (b.dataset.sec === 'ayni') gonderilenTekrar(g, null);
+  else firmaSecPencereAc(g, tetik);
+});
+
+// ── Firma seçim penceresi ("Firma değiştir…") ───────────────────────────────
+let firmaSecGonderim = null;
+let firmaSecTetik = null;
+function firmaSecAcikMi() { return $('firmaSecPencere').classList.contains('acik'); }
+function firmaSecPencereAc(g, tetik) {
+  firmaSecGonderim = g;
+  firmaSecTetik = tetik || null;
+  const ozet = [g.plaka || g.belgeNo, g.urunAd, Math.round(Number(g.toplamKg) || 0).toLocaleString('tr-TR') + ' KG']
+    .filter(Boolean).join(' · ');
+  $('firmaSecOzet').textContent = 'Önceki gönderim: ' + ozet;
+  const kap = $('firmaSecListe');
+  kap.textContent = '';
+  // Aktif firma listede YOK: "Firma değiştir" başka bir firmaya geçmektir.
+  const digerleri = firmalar.filter(f => !aktifFirma || String(f.id) !== String(aktifFirma.id));
+  if (!digerleri.length) {
+    const bos = document.createElement('div');
+    bos.className = 'kisi-durum';
+    bos.id = 'firmaSecBos';
+    bos.textContent = 'Başka firma tanımlı değil. Önce firma seçim ekranından “Yeni Firma” ekleyin.';
+    kap.appendChild(bos);
+  } else {
+    const izgara = document.createElement('div');
+    izgara.className = 'firma-sec-izgara';
+    digerleri.forEach(f => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'firma-kart r-' + (/^[a-z]+$/.test(f.renk || '') ? f.renk : 'teal');
+      b.dataset.firmaId = String(f.id);
+      const ad = document.createElement('div'); ad.className = 'ad'; ad.textContent = f.ad || '';
+      const no = document.createElement('div'); no.className = 'no'; no.textContent = f.vergiNo || '';
+      b.appendChild(ad); b.appendChild(no);
+      b.onclick = () => {
+        const gg = firmaSecGonderim;
+        firmaSecPencereKapat(false);
+        gonderilenTekrar(gg, f);
+      };
+      izgara.appendChild(b);
+    });
+    kap.appendChild(izgara);
+  }
+  $('firmaSecPencere').classList.add('acik');
+  const ilk = kap.querySelector('button');
+  setTimeout(() => { if (firmaSecAcikMi() && ilk) ilk.focus(); }, 60);
+}
+function firmaSecPencereKapat(odakDon) {
+  $('firmaSecPencere').classList.remove('acik');
+  const t = firmaSecTetik;
+  firmaSecTetik = null;
+  if (odakDon !== false && t && document.contains(t)) t.focus();
+}
+$('btnFirmaSecKapat').onclick = () => firmaSecPencereKapat();
+$('firmaSecPencere').addEventListener('pointerdown', (e) => { if (e.target === $('firmaSecPencere')) firmaSecPencereKapat(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && firmaSecAcikMi()) { e.stopPropagation(); firmaSecPencereKapat(); }
+});
+
+// ── Tohumu al → (gerekirse firma değiştir) → formu doldur ───────────────────
+// SIRA ÖNEMLİ: tohum ÖNCE mevcut (aktif) firmayla istenir — kayıt o firmaya aittir
+// (sunucu firma izolasyonu). Firma değişimi yalnız tohum başarıyla gelince yapılır;
+// hata olursa firma DEĞİŞMEZ. Sunucu hiçbir şey yazmaz; taslak yalnız kullanıcı
+// formu kontrol edip "Taslağa Kaydet" derse, mevcut tek yoldan oluşur.
+async function gonderilenTekrar(g, hedef) {
+  if (tekrarYukleniyor || !g) return;       // çift tık koruması
+  if (!aktifFirma) { alert('Önce bir firma seçin.'); return; }
+  tekrarYukleniyor = true;
+  const liste = $('gonderilenListe');
+  liste.classList.add('g-mesgul');
+  liste.setAttribute('aria-busy', 'true');
+  let tohumGeldi = null;
+  try {
+    const govde = { id: g.id, firmaId: aktifFirma.id, firmaAd: aktifFirma.ad };
+    if (hedef && String(hedef.id) !== String(aktifFirma.id)) govde.hedefFirmaId = hedef.id;
+    const j = await api('/api/gonderilen_tohum', 'GET', govde);
+    if (!j || !j.tohum) throw new Error('Sunucudan geçerli bir yanıt alınamadı.');
+    if ('hedefFirmaId' in govde) firmaSec(hedef);
+    tohumGeldi = j;
+  } catch (e) {
+    alert('HATA: ' + e.message);
+  }
+  tekrarYukleniyor = false;
+  liste.classList.remove('g-mesgul');
+  liste.removeAttribute('aria-busy');
+  if (!tohumGeldi) return;
+  try {
+    await taslakDuzenle(tohumGeldi.tohum, { kopya: true, notlar: Array.isArray(tohumGeldi.notlar) ? tohumGeldi.notlar : [] });
+  } catch (e) { alert('HATA: ' + e.message); }
 }
 
 // ================= AÇILIŞ =================

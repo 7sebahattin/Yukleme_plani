@@ -677,12 +677,13 @@ function hks_bildirim_kaydet_tek($cfg, $satirlar, $ortak, $varyant = null) {
 // $secenek:
 //   'bicim'          → bu gönderim için DogumTarihi biçimi (beyaz liste). Yoksa
 //                      yürürlükteki biçim (öğrenilen → config).
-//   'kayitsizDogrulandi' → kişi gönderimden hemen önce KayitliKisiSorgu ile
-//                      KAYITSIZ bulundu. Biçim YALNIZ bu durumda ve gerçek künye
-//                      üretildiğinde öğrenilir (kayıtlı kişide KPS sorulmaz;
-//                      künye biçimi kanıtlamaz).
+//   'kayitsizDogrulandi' → (bilgi) kişi gönderimden hemen önce KAYITSIZ bulundu;
+//                      yalnız teşhis kaydı için. Biçim OTOMATİK ÖĞRENİLMEZ: sitede
+//                      yeni Sorgula'lanmış kişide yanlış biçim de künye üretir ve
+//                      kalıcı yanlış ayar yazardı. Kalıcı yapmak yöneticinin elle
+//                      işlemidir (halkayit/dogum_deney.php → hks_dogum_bicim_ogren).
 // Dönüşe teşhis alanları eklenir: dogumVaryant, dogumTel (teldeki metin),
-// dogumOgrenildi.
+// dogumDeneyGecti (deney biçimiyle künye çıktı).
 function hks_bildirim_kaydet($cfg, $satirlar, $ortak, $secenek = []) {
   $v = hks_dogum_varyant_coz(isset($secenek['bicim']) ? ['bicim' => $secenek['bicim']] : null);
   $dogumTel = hks_dogum_tarihi_xml($ortak['ikinciDogumTarihi'] ?? '', $v['bicim']);
@@ -694,20 +695,11 @@ function hks_bildirim_kaydet($cfg, $satirlar, $ortak, $secenek = []) {
   foreach ($sonuc['sonuclar'] as $r) {
     if ((string)$r['yeniKunyeNo'] !== '' && (string)$r['yeniKunyeNo'] !== '0' && !(int)$r['hataKodu']) { $kunyeVar = true; break; }
   }
-  $ogrenildi = false;
-  if ($kunyeVar && $dogumTel !== '' && !empty($secenek['kayitsizDogrulandi'])) {
-    $mevcut = hks_dogum_varyant_ogrenilen();
-    if (!$mevcut || $mevcut['bicim'] !== $v['bicim']) {
-      $kunye = '';
-      foreach ($sonuc['sonuclar'] as $r) { if ((string)$r['yeniKunyeNo'] !== '0') { $kunye = (string)$r['yeniKunyeNo']; break; } }
-      hks_dogum_bicim_ogren($v['bicim'], 'kunye ' . $kunye);
-      $ogrenildi = true;
-    }
-  }
+  $deneyGecti = $kunyeVar && $dogumTel !== '' && isset($secenek['bicim']);
 
   $sonuc['dogumVaryant'] = $v;
   $sonuc['dogumTel'] = $dogumTel;
-  $sonuc['dogumOgrenildi'] = $ogrenildi;
+  $sonuc['dogumDeneyGecti'] = $deneyGecti;
   return $sonuc;
 }
 
