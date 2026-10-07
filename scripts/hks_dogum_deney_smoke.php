@@ -107,7 +107,8 @@ ok('belirsiz sonuç (istisna) da kayda düşüyor', str_contains($api, "'sonuc' 
 $ekran = (string)file_get_contents("$KOK/halkayit/dogum_deney.php");
 ok('deney ekranı yalnız yöneticiye', str_contains($ekran, 'if (!is_admin())'));
 ok('deney ekranı POST\'ta CSRF denetliyor', str_contains($ekran, 'csrf_check($_POST[\'csrf\'] ?? null);'));
-ok('deney ekranı audit yazıyor', substr_count($ekran, "audit_log_event('update', 'hks_dogum_deney'") === 3);
+ok('deney ekranı audit yazıyor', substr_count($ekran, "audit_log_event('update', 'hks_dogum_deney'") === 4);
+ok('deney ekranında elle "kalıcı yap" var, geçersiz biçim reddediliyor', str_contains($ekran, '$islem === \'kalici\'') && str_contains($ekran, 'hks_dogum_bicim_gecerli($bicim)'));
 ok('deney ekranı HKS\'e gönderim yapmıyor', !preg_match('/=\s*hks_bildirim_kaydet(_tek)?\(|hks_soap_cagir\(/', $ekran));
 $ht = (string)file_get_contents("$KOK/halkayit/.htaccess");
 ok('.htaccess dogum_deney_lib.php\'yi kapatıyor (iki sözdizimi)', substr_count($ht, 'dogum_deney_lib') >= 2);

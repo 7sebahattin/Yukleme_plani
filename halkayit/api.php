@@ -655,7 +655,7 @@ try {
             'bicim' => (string)($sonuc['dogumVaryant']['bicim'] ?? ''),
             'sonuc' => hks_dogum_sonuc_sinifi($sonuc),
             'hataKodu' => (int)($sonuc['sonuclar'][0]['hataKodu'] ?? 0),
-            'ogrenildi' => !empty($sonuc['dogumOgrenildi']),
+            'ogrenildi' => !empty($sonuc['dogumDeneyGecti']),
           ]);
         }
       } catch (Throwable $__e) {

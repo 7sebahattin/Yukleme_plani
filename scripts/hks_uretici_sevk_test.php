@@ -367,8 +367,10 @@ ok('hks_soap.php içinde tek çağrı var (hks_bildirim_kaydet)',
     (string)substr_count($__soap, '= hks_bildirim_kaydet_tek('));
 ok('otomatik yeniden gönderim (merdiven) YOK',
     !str_contains($__soap, 'function hks_dogum_merdiveni') && !str_contains($__soap, 'foreach ($merdiven'));
-ok('öğrenme yalnız künye + kayıtsız doğrulandı koşuluyla',
-    (bool)preg_match('/if \\(\\$kunyeVar && \\$dogumTel !== \'\' && !empty\\(\\$secenek\\[\'kayitsizDogrulandi\'\\]\\)\\)/', $__soap));
+ok('biçim OTOMATİK öğrenilmiyor (hks_bildirim_kaydet içinde öğrenme çağrısı yok)',
+    !preg_match('/function hks_bildirim_kaydet\\(.*?\\n}\\n/s', $__soap, $__fn) || !str_contains($__fn[0], 'hks_dogum_bicim_ogren('));
+ok('varsayılan biçim gtb_tarih (saatsiz GG.AA.YYYY, canlıda doğrulandı)',
+    str_contains((string)file_get_contents($__kok . '/halkayit/config.php'), "define('HKS_DOGUM_BICIMI', 'gtb_tarih');"));
 
 echo "\n── Regresyon: DogumTarihi YOKSA alan hiç gönderilmiyor (mevcut akışlar korunur) ──\n";
 $ortakDogumsuz = $ortakUretici;

@@ -4008,12 +4008,14 @@ $('btnOnay').onclick = async () => {
         `<div class="onay-satir"><span>Cep Telefonu</span><b>${eHtml(_gk.cep || '—')}</b></div>` +
         '<div style="margin-top:6px">TC ve doğum tarihini kişinin kimliğiyle bir kez karşılaştırın.</div></div>';
     }
-    // Öğrenme bildirimi: yalnız GERÇEK künye üreten, öncesinde KAYITSIZ
-    // doğrulanmış gönderimde biçim kalıcı olur (sunucu karar verir).
-    if (j.dogumOgrenildi && j.dogumVaryant) {
+    // Deney biçimiyle künye çıktıysa bilgi ver. Biçim OTOMATİK kalıcı olmaz
+    // (sitede yeni Sorgula'lanmış kişi yanlış biçimle de geçer); kalıcı yapmak
+    // yönetici ekranından elle yapılır.
+    if (j.dogumDeneyGecti && j.dogumVaryant) {
       html += '<div class="mesaj tamam" style="display:block;margin-top:8px">' +
-        '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> biçimiyle kabul edildi ve ' +
-        '<b>öğrenildi</b> — sonraki kayıtsız kişi bildirimleri bu biçimle gider.</div>';
+        '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> deney biçimiyle kabul edildi. ' +
+        'Kişi sitede hiç sorgulanmadıysa bu biçim doğrudur; kalıcı yapmak için yönetici ' +
+        '"Doğum Tarihi Deneyi" ekranını kullanın.</div>';
     }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;

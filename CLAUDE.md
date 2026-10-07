@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v303` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v304` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1119,41 +1119,40 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 
 ---
 
-## Hal Kayıt — Kayıtsız Kişi Doğum Tarihi (v291)
+## Hal Kayıt — Kayıtsız Kişi Doğum Tarihi (v291, kesinleşti v304)
 
 Kayıtsız satıcıdan **Satın Alım**'ın İLK bildiriminde HKS "Tc kimlik numarası
-Mernis sisteminde bulunamadı" (satır `HataKodu 21`, künye/rüsum YOK) döndürüyor;
-kişi sitede Sorgula'lanınca aynı istek geçiyor. Teşhis + plan:
-`docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` (§10 güncel plan).
+Mernis sisteminde bulunamadı" (satır `HataKodu 21`, künye/rüsum YOK) döndürüyordu.
+**KÖK NEDEN (canlı deneyle KESİN, 05.10.2026):** HKS `DogumTarihi` metnini
+**SAATSİZ `GG.AA.YYYY`** (örn. `11.02.1959`) bekliyor. Aynı kişi (kayıtsız,
+gün≤12) beş biçimle denendi: `GG.AA.YYYY 00:00:00` (GTB örneği!), `GG.AA.YYYY 12:00:00`,
+`YYYY-AA-GGT12:00:00`, `YYYY-AA-GG` → Mernis; yalnız **`GG.AA.YYYY` → künye**.
+GTB örneğindeki `00:00:00` ekli biçim yanıltıcıydı. Sitedeki Sorgula saatsiz
+gönderdiği ve geçici bir Mernis sonucu bıraktığı için "sitede sorgula → geçer"
+gözlemi de buydu. Rapor: `docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` (§11).
 
-- **Kesin (canlı WSDL, eski + yeni uç aynı):** `IkinciKisiBilgileriDTO.DogumTarihi`
-  `xs:string`, Order'sız, **alfabetik** (CepTel < DogumTarihi < KisiSifat). Konum
-  sabittir; v291'de konum/biçim **merdiveni kaldırıldı** (otomatik yeniden gönderim YOK).
-  Yeni uç (`ws.gtb.gov.tr:8443`) aynı sözleşme — çözüm değil.
-- **Biçim beyaz listesi** `hks_dogum_bicimleri()`: `gtb` (varsayılan, GTB örneği
-  `GG.AA.YYYY 00:00:00`) · `gtb_oglen` · `gtb_tarih` · `iso` · `iso_oglen` · `iso_tarih`.
-  GTB örneği `01.01.1980` (gün = ay) gün/ay sırasını SINAMIYOR — en olası sebep
-  sunucunun metni ay-önce okuması.
+- **Varsayılan biçim `gtb_tarih`** (`halkayit/config.php` `HKS_DOGUM_BICIMI`).
+  Konum sabit alfabetik (CepTel < DogumTarihi < KisiSifat; canlı WSDL `xs:string`).
+  Merdiven/otomatik yeniden gönderim YOK. Yeni uç (`ws.gtb.gov.tr:8443`) aynı sözleşme.
+- **Biçim beyaz listesi** `hks_dogum_bicimleri()`: `gtb` · `gtb_oglen` · `gtb_tarih` ·
+  `iso` · `iso_oglen` · `iso_tarih`. **`gtb` (00:00:00 ekli) ve ISO'yu varsayılan yapma.**
+- **OTOMATİK ÖĞRENME YOK (v304).** Sitede yeni Sorgula'lanmış kişi yanlış biçimle de
+  geçer; eski otomatik öğrenme bu yüzden yanlış biçimi kalıcı yazabiliyordu.
+  Kalıcı değişiklik yalnız yöneticinin elle işlemidir (`dogum_deney.php` → "Kalıcı yap",
+  `hks_kv.dogum_varyant`, `kanitli=true`). Eski kanıtsız kayıtlar (`konum='son'`) yok sayılır.
 - **Gidecek yer adresi:** kayıtsız kişide kılavuz 1189-1193 İl/İlçe/Belde ister;
-  `api.php taslak_gonder` kişiyi gönderimden hemen önce `hks_kayit_durumu()` ile
-  sorar (ENGELLEMEZ) ve KAYITSIZ ise işyerinin adresini
-  (`hks_isyeri_adres_bul()`, salt-okunur Genel servis) `$ortak['gidecekAdres']`'e
+  `api.php taslak_gonder` kişiyi gönderimden hemen önce `hks_kayit_durumu()` ile sorar
+  (ENGELLEMEZ), KAYITSIZ ise işyeri adresini (`hks_isyeri_adres_bul()`) `$ortak['gidecekAdres']`'e
   koyar; `hks_bildirim_xml()` işyeriyle BİRLİKTE yazar (GTB 195 örneği gibi).
-  Kayıtlı/belirsizde eklenmez.
 - **Deney** (`halkayit/dogum_deney.php`, yalnız `is_admin()`, CSRF + audit
-  `hks_dogum_deney`): bir TC için TEK KULLANIMLIK biçim (24 sa). Yalnız gönderim
-  anında kişi KAYITSIZ ise uygulanır ve gönderimden ÖNCE tüketilir; kişi
-  kayıtlı/belirsizse gönderim 409 ile DURUR (sonuç yorumlanamaz). Ekran HKS'e
-  hiçbir şey göndermez.
-- **Öğrenme:** biçim YALNIZ gerçek künye + doğum tarihi gönderildi + kişi
-  önceden KAYITSIZ doğrulandı ise `hks_kv.dogum_varyant`'a `kanitli=true` ile
-  yazılır. Eski (kanıtsız, `konum='son'`) kayıtlar yok sayılır.
-- **Teşhis kaydı** `hks_kv.dogum_denemeleri` (son 200): TC yalnız `***son4`,
-  doğum tarihi yalnız SINIF (`gun>12`/`gun<=12`/`gun=ay`) — ad/tarih/cep YAZILMAZ.
-  Kütüphane `dogum_deney_lib.php` (include-only, `.htaccess`'te kapalı).
-- **Tek gönderim yolu** korunur: `hks_bildirim_kaydet()` → `hks_bildirim_kaydet_tek()`
-  (test başka çağıranı engeller). Başarıda da maskeli `hamIstek` döner (yalnız
-  ekranda; kalıcı kayda yazılmaz).
+  `hks_dogum_deney`): bir TC için TEK KULLANIMLIK biçim (24 sa), yalnız kişi gönderim
+  anında KAYITSIZ ise uygulanır ve gönderimden ÖNCE tüketilir; kayıtlı/belirsizse
+  gönderim 409 ile DURUR. Ekran HKS'e hiçbir şey göndermez. **Deneyi sitede o gün
+  Sorgula'lanmış kişiyle yapma** — geçici sonuç sonucu bozar.
+- **Teşhis kaydı** `hks_kv.dogum_denemeleri` (son 200): TC yalnız `***son4`, doğum
+  tarihi yalnız SINIF (`gun>12`/`gun<=12`/`gun=ay`). Kütüphane `dogum_deney_lib.php`
+  (include-only, `.htaccess`'te kapalı).
+- **Tek gönderim yolu** korunur: `hks_bildirim_kaydet()` → `hks_bildirim_kaydet_tek()`.
 - Test: `php scripts/hks_uretici_sevk_test.php` · `php scripts/hks_dogum_deney_smoke.php`.
 
 ## Hal Kayıt — Kişi Havuzu (v282, v283)
@@ -1615,4 +1614,4 @@ Yeni özellik eklerken:
 | Sidebar görünmüyor | SW eski CSS'i cache'den sunuyor | Hard refresh (Ctrl+Shift+R) + SW versiyonu artır |
 | CSRF JSON endpoint 400 dönüyor | Eski `csrf_check` plain-text die() | Güncel `csrf_check()` JSON-aware — 403+JSON döner |
 | HKS "... doğum tarihi girilmelidir" | `DogumTarihi` sunucuya ulaşmadı (boş ya da yanlış konumda → DataContract sessizce atlar) | Konum SABİT: alfabetik (CepTel < DogumTarihi < KisiSifat), canlı WSDL'de `xs:string`. Konumu değiştirme; merdiven v291'de kaldırıldı |
-| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" (satır HataKodu 21) | Kayıtsız kişinin İLK bildiriminde HKS, TC + **kendi anladığı** doğum tarihiyle kişiyi bulamadı. Veri çoğu zaman DOĞRU (site Sorgula buluyor); en olası sebep tarih metninin farklı yorumlanması | Künye/rüsum yok, taslak korunur. Geçici: sitede yalnız Sorgula → tekrar gönder. Kalıcı: `halkayit/dogum_deney.php` biçim deneyi (bkz. "Kayıtsız Kişi Doğum Tarihi") |
+| HKS "Tc kimlik numarası Mernis sisteminde bulunamadı" (satır HataKodu 21) | DogumTarihi saatli (`00:00:00`) ya da ISO gönderildi; HKS saatsiz `GG.AA.YYYY` bekliyor (kesinleşti 05.10.2026). Veri doğru olabilir | Varsayılan `gtb_tarih` olmalı (`HKS_DOGUM_BICIMI`, `dogum_deney.php`'de "yürürlükteki biçim" kontrol et). Künye/rüsum yok, taslak korunur |

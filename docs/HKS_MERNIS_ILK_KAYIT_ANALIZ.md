@@ -811,3 +811,31 @@ Faz 1 ve deney altyapısı kodlandı; canlıya alınınca D1 kendiliğinden baş
 | Sonuç ekranı: teldeki tarih metni, kayıt durumu, doğru Mernis yönlendirmesi, kaçışlı HTML | ✅ `app.html` |
 | Belgeler (README, config, CLAUDE.md) düzeltildi | ✅ |
 | Testler | ✅ `hks_uretici_sevk_test` · yeni `hks_dogum_deney_smoke` · beyan/rol/kişi havuzu/Playwright paketleri geçti |
+
+---
+
+## 11. SONUÇ (05–07.10.2026): kök neden bulundu
+
+Kayıtsız kişi (aynı kişi, gün ≤ 12, sitede o gün sorgulanmamış), beş biçim, üç dakika içinde yönetici deney ekranıyla denendi (§10.4):
+
+| Biçim | HKS'e giden metin (kurgusal tarih) | Sonuç |
+|---|---|---|
+| `gtb` (GTB örneği) | `11.02.1959 00:00:00` | ✗ Mernis (21) |
+| `gtb_oglen` | `11.02.1959 12:00:00` | ✗ Mernis (21) |
+| `iso_oglen` | `1959-02-11T12:00:00` | ✗ Mernis (21) |
+| `iso_tarih` | `1959-02-11` | ✗ Mernis (21) |
+| **`gtb_tarih`** | **`11.02.1959`** | **✅ Künye** |
+
+Sonraki gerçek müstahsil de sitede Sorgula yapılmadan, yeni varsayılanla sorunsuz geçti (kullanıcı teyidi, 07.10).
+
+**Kök neden (KESİN):** HKS `DogumTarihi` metnini **saatsiz `GG.AA.YYYY`** bekliyor; saat eki (`00:00:00`, `12:00:00`) ve ISO biçimler ayrıştırılamıyor ve kişi Mernis'te "bulunamadı" sayılıyor. Büyük olasılıkla metin noktalardan bölünüp gün/ay/yıl sayıya çevriliyor (`1959 00:00:00` sayı olamaz). GTB'nin örnek isteğindeki `00:00:00`'lı biçim yanıltıcıydı.
+
+**Önceki hipotezler:**
+- H-A1 (ay-önce okuma): elendi — `11.02` ve gün > 12 tarihlerin hepsi saatli biçimde başarısız, saatsizde geçti.
+- H-F (gidecek il/ilçe/belde eksikliği): sebep değildi (D1'de adresle de hata); yine de kılavuz gereği ekleniyor.
+- H-C (ad), H-D (saat dilimi), H-B (uç/arka uç): elendi.
+- "Siteden Sorgula sonrası geçiyor": site tarihi saatsiz gönderdiği ve geçici Mernis sonucu bıraktığı için aynı gönderim geçiyordu; etki geçiciydi (ertesi gün yine hata).
+
+**Uygulanan (v304):** varsayılan biçim `gtb_tarih`; otomatik öğrenme kaldırıldı (siteden yeni Sorgula'lanmış kişide yanlış biçim de geçip kalıcı yanlış ayar yazabiliyordu); kalıcı biçim yalnız yönetici ekranından elle; belgeler düzeltildi.
+
+**GTB'ye bildirim (isteğe bağlı, bilgi amaçlı):** örnek isteğin `DogumTarihi` değeri `11.02.1959` biçiminde (saatsiz) olmalı; `00:00:00` ekli örnek hatalı sonuç veriyor.

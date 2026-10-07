@@ -214,28 +214,15 @@ kimlik numarası ile birlikte Doğum Tarihi bilgisi zorunlu hale getirilmiştir.
 Sistemde kayıtlı olmayan kişi bildirimleri için T.C. kimlik numarası ve doğum tarihi
 bilgilerinin girilmesi gerekmektedir."*
 
-> ### KONUM SABİT, BİÇİM DENEYLE BELİRLENİR (v291)
+> ### KONUM SABİT, BİÇİM SAATSİZ `GG.AA.YYYY` (kesinleşti 05.10.2026)
 >
-> **Kesin (canlı WSDL, eski ve yeni uç birebir aynı — 01/02.10.2026):**
-> `IkinciKisiBilgileriDTO` = AdSoyad, CepTel, **DogumTarihi (`xs:string`)**,
-> Eposta, KisiSifat, TcKimlikVergiNo, YurtDisiMi — Order'sız, alfabetik.
-> Konum bu yüzden sabittir; "sona koymak" alanı sunucuda sessizce düşürür
-> (07.09'daki "doğum tarihi girilmelidir" buydu). v291'de otomatik konum/biçim
-> merdiveni **kaldırıldı**.
->
-> **Bu README'nin eski iddiaları YANLIŞTI:** 05.09'daki "son + gtb künye üretti"
-> sonucu doğum tarihi sunucuda atlanarak alındı — kişi o sırada siteden zaten
-> tanınıyordu. Kayıtsız kişi için web servisten temiz bir başarı hiç alınmadı.
-> "Mernis'te bulunamadı = değer yanlış" da eksik: HKS metni kendisi tarihe
-> çevirir; site aynı kişiyi bulurken servis bulamıyorsa en olası sebep
-> **metnin yorumlanması** (GTB örneği `01.01.1980` gün = ay, gün/ay sırasını
-> sınamıyor).
->
-> **Bugünkü düzen:** biçim beyaz listeden (`hks_dogum_bicimleri()`), varsayılan
-> `gtb`. Yönetici `dogum_deney.php`'den bir TC için tek kullanımlık deney biçimi
-> kurar; kayıtsız kişiyle gerçek künye üreten biçim öğrenilir. Kayıtsız kişide
-> gidecek yer İl/İlçe/Belde işyeri kaydından otomatik eklenir (kılavuz
-> 1189-1193). Tam teşhis ve plan: `docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` §10.
+> Canlı WSDL (eski ve yeni uç aynı): `DogumTarihi` `xs:string`, alfabetik konum
+> (CepTel < DogumTarihi < KisiSifat). **Biçim:** HKS `11.02.1959` gibi SAATSİZ
+> tarih bekler. GTB örneğindeki `01.01.1980 00:00:00` biçimi, `12:00:00` ekli ve ISO
+> biçimler kayıtsız kişide "Mernis'te bulunamadı" verdi; yalnız `gtb_tarih` künye
+> üretti (aynı kişi, beş biçim, üç dakika). Varsayılan `gtb_tarih`; biçim OTOMATİK
+> öğrenilmez (sitede Sorgula'lanmış kişi yanlış biçimle de geçer), kalıcı değişiklik
+> yönetici ekranından elle. Ayrıntı: `docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` §11.
 
 - **Yalnız dolu olduğunda gönderilir** (`hks_dogum_tarihi_xml()` boş dize dönerse alan
   hiç eklenmez) — böylece kayıtlı ikinci kişili ve yurt dışı akışlar birebir eskisi gibi
