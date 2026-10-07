@@ -75,7 +75,7 @@ $v = static fn(string $k) => h((string)($f[$k] ?? ''));
 
 render_header('Mail Hesapları');
 ?>
-<div class="container">
+<div class="mail-kap">
     <p><a class="btn btn-geri" href="mail.php">← Mail Merkezi</a></p>
     <h1 style="margin:0 0 12px">Mail Hesapları</h1>
 

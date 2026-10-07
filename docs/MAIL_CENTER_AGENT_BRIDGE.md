@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M2 tamam (IMAP + MIME + senkron + cron, Opus güvenlik incelemesi uygulandı) → M3 (UI) sırada** |
+| Current milestone | **M3 tamam (Mail Merkezi UI + ek indirme) → M4 (çeviri) — sağlayıcı/veri çıkışı kararı bekleniyor** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -192,7 +192,8 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 |---|---|---|
 | M0 — Analiz + mimari + tehdit modeli | `ea7f413` | ✅ |
 | M1 — DB/config/permission temel yapısı | `6c1abdf` | ✅ (aşağıda) |
-| M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | `5c59a7c` | ✅ (aşağıda) |
+| M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -222,6 +223,23 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
   `mail_imap_test()` ("Bağlantıyı Test Et" — `mail_hesaplar.php`), `mail_cron_calistir()`.
 - `scripts/mail_sync_cron.php`: CLI-only cron girişi (cPanel: `*/5 * * * * php …/scripts/mail_sync_cron.php`).
 - Şema eki: `mail_sync_state.rescan_from_epoch` (M1'in DDL'ine eklendi — henüz hiçbir DB'de kurulmadığı için ALTER gerekmedi).
+
+**M3 içeriği**
+- `mail.php`: sunucuda çizilen gelen kutusu + okuyucu. Mobil (<768) tek panel (liste YA DA mesaj, "← Liste", sabit "Cevapla" çubuğu alt çubuğun ÜSTÜNDE),
+  ≥768 liste+mesaj yan yana, ≥1180 sol sütunda hesap/klasörler. Filtreler: Gelen · Okunmamış · Cevap Bekleyen · Taslak/Bekleyen · Gönderilen · Hatalı
+  (giden kutusu M5'te dolacak; arayüz hazır). Arama (LIKE jokerleri kaçırılır), sayfalama (30), hesap çipleri + okunmamış rozeti, son senkron durumu,
+  yöneticiye "⟳ Şimdi senkronla" (POST+CSRF, 20 sn bütçe), Türkçe/Orijinal sekmeleri (çeviri M4'te dolacak; yokken durum + Orijinal'e yönlendirme),
+  thread listesi, okundu/okunmadı, "cevaplandı/cevap bekliyor say" (mail.reply).
+- **HTML mail = sandbox'lı iframe** (`sandbox="allow-popups allow-popups-to-escape-sandbox"` — script YOK, same-origin YOK, form YOK) + CSP meta
+  (`default-src 'none'; img-src data:`); uzak görseller varsayılan engelli, "Görselleri göster" yalnız o görüntüleme (`?img=1`). Düz metin `h()` ile.
+- **GET yan etkisizdir**: mesaj açmak okundu işaretlemez; `assets/mail.js` kısa beklemeden sonra POST+CSRF ile işaretler (JS kapalıyken düğme var).
+- `mail_ek.php` + `config/mail_attach.php`: ek gövdesi diske YAZILMAZ; mesaj→hesap→ACL, parça no mesajın kendi ek listesinde (beyaz liste),
+  **UIDVALIDITY değişmişse indirme reddedilir (409)**, her zaman `attachment` + `nosniff` + `no-store` + `CSP sandbox`, riskli/bilinmeyen türler
+  `application/octet-stream`'e zorlanır (HTML/SVG eki asla `text/html` servis edilmez), 15 MB sınırı, RTL (U+202E) dosya adı hilesi temizlenir, audit.
+- `config/mail_view.php`: tüm sorgular görünür-hesap listesiyle sınırlı; `mail_post_isle()` (exit'siz, test edilebilir).
+- `assets/mail.css` + `assets/mail.js` (kendi dosyaları; `style.css`/`app.js`'e dokunulmadı).
+- **Bulunup düzeltilen gerçek hata:** `mail.php`/`mail_hesaplar.php` `render_header()`'ın zaten açtığı `<main class="container">`'ın içine ikinci `container`
+  koyuyordu (sidebar kenar boşluğu iki kez uygulanıyor, masaüstünde okuyucu 2 px'e eziliyordu) — Playwright ölçümü yakaladı, düzeltildi ve statik testle kilitlendi.
 
 **Bağımsız Opus güvenlik incelemesi (M2) — bulgular ve düzeltmeler** (hepsi `scripts/mail_review_smoke.php`'de regresyon testli;
 düzeltmeler geri alınınca testler düşüyor — mutasyon kontrolü yapıldı):
@@ -254,6 +272,10 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 | `mail_sync_smoke.php` (çiftleme yok, okunmuş mail kaçmıyor, kopma/devam, hesap yalıtımı, UIDVALIDITY, thread, sızıntı yok, limitler) | 61/61 ✅ |
 | `mail_cron_smoke.php` (CLI-only, global kilit/BUSY, kısmi hata, günlük bakımı) | 19/19 ✅ |
 | `mail_review_smoke.php` (Opus bulguları H1…L5 regresyonları; MySQL strict mod SQLite'ta taklit) | 39/39 ✅ |
+| `mail_view_smoke.php` (M3: sorgular, filtreler, LIKE kaçışı, sayfalama, ACL/IDOR, durum değişiklikleri, ek indirme: ACL, parça beyaz listesi, UIDVALIDITY 409, octet-stream zorlaması, boyut, hata) | 46/46 ✅ |
+| `mail_ui_smoke.php` (M1 + M3: sayfa render, GET yan etkisiz, IDOR, iframe sandbox, POST işlemleri) | 56/56 ✅ |
+| `mail_ui_render.php` + `mail_ui_smoke.js` (**Playwright/Chromium**: 360/390/767/768/1024/1280/1440 — yatay taşma, panel düzeni, sabit Cevapla çubuğu, dokunma hedefleri, 16px input, kontrast açık/koyu, **saklı XSS iframe içinde çalışmıyor**, konsol hatası) | 200/200 ✅ |
+| `bottomnav_render.php` + `bottomnav_smoke.js` (alt çubuk, mail girdisiyle) | (A) 1828 · (B) 1011 ✅ |
 | Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
 Henüz test edilmeyenler (ağ/kimlik bilgisi gerektirir → sahip tarafında): gerçek Gmail/Outlook/Dovecot IMAP davranışı, gerçek TLS/STARTTLS el sıkışması,
@@ -281,8 +303,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M3: Mail Merkezi UI (`mail.php` gelen kutusu, `mail_api.php` JSON, `mail_ek.php` ek indirme, `assets/mail.css/js`): 3 panel / mobil liste→detay,
-  Türkçe/Orijinal sekmeleri, sandbox'lı iframe render, uzak görsel kapalı + "Görselleri göster", filtreler, okundu işaretleme, Playwright testi.
+- M4: çeviri (`TranslationProviderInterface` + sağlayıcılar, yerel dil tespiti, `pending/translated/failed` kuyruğu, cron'a entegrasyon, UI'da Türkçe sekmesi dolar). **Sağlayıcı + veri çıkışı kararı gerekli.**
 - Sonra M3…M8 (görev metnindeki sıra).
 
 ## Needs ChatGPT Review

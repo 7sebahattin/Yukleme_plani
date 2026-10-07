@@ -196,6 +196,8 @@ function mail_mime_idler(string $v): array
 function mail_mime_gonder_adi(?string $ad): string
 {
     $ad = mail_mime_temiz((string)$ad);
+    // Sağdan-sola geçersiz kılma (U+202E "fdp.exe" hilesi) ve benzeri çift yönlü / sıfır genişlikli karakterler atılır.
+    $ad = (string)preg_replace('/[\x{200b}-\x{200f}\x{202a}-\x{202e}\x{2066}-\x{2069}\x{feff}]/u', '', $ad);
     $ad = str_replace(['/', '\\', "\0"], '_', $ad);
     $ad = trim((string)preg_replace('/\s+/u', ' ', $ad));
     return mb_substr($ad, 0, 180);
@@ -328,6 +330,7 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
             'part'     => $y['parca'],
             'filename' => mail_mime_gonder_adi($ad !== '' ? $ad : ('ek-' . $y['parca'])),
             'mime'     => $ct,
+            'cte'      => $y['cte'],
             'size'     => $boyut,
             'inline'   => $y['disp'] === 'inline' || ($cid !== null && $y['disp'] !== 'attachment'),
             'cid'      => $cid,
