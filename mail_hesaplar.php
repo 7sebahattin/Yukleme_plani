@@ -15,6 +15,7 @@ require_once __DIR__ . '/config/mail_view.php';
 require_once __DIR__ . '/config/mail_translate.php';
 $auth_user = require_login();
 require_mail('admin');
+mail_no_store();
 
 $pdo   = db();
 $uid   = (int)$auth_user['id'];
@@ -163,7 +164,7 @@ render_header('Mail Hesapları');
             <p style="color:#666;font-size:.9em"><strong>Sağlayıcı (sunucu ayarı):</strong> <?= h(mail_ceviri_yapilandirma_ozeti()) ?>
                 <?php $cd = mail_ceviri_durum_oku(); if ($cd): ?><br>Son kuyruk çalışması: <?= h((string)$cd['zaman']) ?> — durum: <?= h((string)$cd['durum']) ?><?= !empty($cd['mesaj']) ? ' (' . h((string)$cd['mesaj']) . ')' : '' ?><?php endif; ?>
                 <br>Sağlayıcı <code>config/local.php</code> içinden seçilir (bkz. docs/MAIL_CENTER_AGENT_BRIDGE.md); anahtar buraya yazılmaz.</p>
-            <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesap için otomatik çeviri (sağlayıcı ayrıca açılmalı)</label></div>
+            <div class="form-group"><label><input type="checkbox" name="translate_enabled" value="1"<?= !empty($f['translate_enabled']) ? ' checked' : '' ?>> Bu hesap için otomatik çeviri — AÇILIRSA mail metni (adres/başlık/ek hariç) üçüncü taraf çeviri servisine gönderilir; sağlayıcı ayrıca sunucu ayarından açılmalıdır</label></div>
             <div class="form-group"><label>Hedef dil</label><input type="text" name="target_lang" maxlength="10" value="<?= $v('target_lang') ?>"></div>
 
             <h3>Erişebilecek kullanıcılar</h3>

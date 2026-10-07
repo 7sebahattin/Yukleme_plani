@@ -93,6 +93,19 @@ ok('senkron: mail_messages DELETE/UPDATE ile veri silmiyor (yalnız uid eşleme 
 ok('cron betiği mail_cron_calistir kullanıyor', str_contains(oku('scripts/mail_sync_cron.php'), 'mail_cron_calistir('));
 ok('Bağlantıyı Test Et: POST + csrf + audit', str_contains(oku('mail_hesaplar.php'), "\$islem === 'test'") && str_contains(oku('mail_hesaplar.php'), "audit_log_event('mail_account_test'"));
 
+echo "\n=== M4/ChatGPT direktifleri: no-store + üçüncü taraf bildirimi ===\n";
+foreach (['mail.php', 'mail_hesaplar.php', 'mail_ek.php'] as $f) {
+    ok("$f: mail_no_store() / Cache-Control: no-store gönderiyor", str_contains(oku($f), 'mail_no_store();') || str_contains(oku($f), "Cache-Control: no-store"));
+}
+ok('mail_no_store(): no-store + private + Pragma + Expires', str_contains($core, "'Cache-Control: no-store, no-cache, must-revalidate, private'") && str_contains($core, "header('Pragma: no-cache')"));
+ok('mail_no_store() çıktıdan ÖNCE (require_mail hemen ardından)', (bool)preg_match("/require_mail\('(?:read|admin)'\);\s*mail_no_store\(\);/", oku('mail.php') . oku('mail_hesaplar.php')));
+$mailPhp = oku('mail.php');
+ok('UI: çeviri düğmesinin yanında GÖRÜNÜR "ÜÇÜNCÜ TARAF" uyarısı (yalnız title değil)', str_contains($mailPhp, 'ÜÇÜNCÜ TARAF çeviri servisine gönderilir'));
+ok('UI: çevrilmiş mailde sağlayıcı + üçüncü taraf notu', str_contains($mailPhp, 'üçüncü taraf servis') && str_contains($mailPhp, 'mail metni bu servise gönderildi'));
+ok('hesap formu: çeviri onay kutusunda üçüncü taraf uyarısı', str_contains(oku('mail_hesaplar.php'), 'üçüncü taraf çeviri servisine gönderilir'));
+ok('çeviri sağlayıcısı varsayılan KAPALI (sabit yoksa none)', str_contains(oku('config/mail_translate.php'), "(string)MAIL_TRANSLATE_PROVIDER : 'none'") && !preg_match("/define\(\s*'MAIL_TRANSLATE_PROVIDER'/", php_strip_whitespace($ROOT . '/config/mail_translate.php')));
+ok('gizli Google/resmi olmayan uç yok (yalnız deepl/libretranslate/mymemory)', !preg_match('/translate\.googleapis|translate\.google\.com|clients5|gtx|bing\.com\/translator/i', oku('config/mail_translate.php')));
+
 echo "\n=== Service Worker + sürüm ===\n";
 ok('sw.js mail yollarını bypass ediyor', str_contains($sw, "/\\/mail(_[a-z]+)?\\.php$/.test(u.pathname)) return;"));
 ok('sw.js mail.svg SHELL\'de', str_contains($sw, "'./assets/nav-icons/mail.svg'"));

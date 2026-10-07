@@ -14,6 +14,7 @@ require_once __DIR__ . '/config/mail_view.php';
 require_once __DIR__ . '/config/mail_attach.php';
 $auth_user = require_login();
 require_mail('read');
+mail_no_store();
 
 $uid = (int)$auth_user['id'];
 $pdo = db();

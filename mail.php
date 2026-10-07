@@ -20,6 +20,7 @@ require_once __DIR__ . '/config/mail_view.php';
 require_once __DIR__ . '/config/mail_translate.php';
 $auth_user = require_login();
 require_mail('read');
+mail_no_store();
 
 $pdo      = db();
 $uid      = (int)$auth_user['id'];
@@ -267,12 +268,14 @@ mail_assets();
 
             <?php if ($aktif === 'tr'): ?>
                 <?php if ($trVar): ?>
+                <?php if ($ceviriHazir): ?><div class="mail-ceviri-not">Çeviri <?= h(mail_ceviri_saglayici()->ad()) ?> (üçüncü taraf servis) ile üretildi — mail metni bu servise gönderildi.</div><?php endif; ?>
                 <div class="mail-metin"><?php if (trim((string)$m['subject_tr']) !== ''): ?><strong><?= h($m['subject_tr']) ?></strong><br><br><?php endif; ?><?= nl2br(h($m['body_tr'])) ?></div>
                 <?php else: ?>
                 <div class="mail-bilgi"><?= h(mail_ceviri_durum_etiketi((string)$m['tr_status'])) ?>.
                     <?php if ($m['tr_status'] === 'failed' && $m['tr_error']): ?><span class="mail-hata-metin"><?= h($m['tr_error']) ?></span><?php endif; ?>
                     Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.
                     <?php if ($ceviriHazir && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
+                    <span class="mail-uclu-taraf">⚠ Çevirirseniz mail metni (adres/başlık/ek hariç) <strong><?= h(mail_ceviri_saglayici()->ad()) ?></strong> adlı ÜÇÜNCÜ TARAF çeviri servisine gönderilir.</span>
                     <form method="post" class="mail-satir-form">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
                         <input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">

@@ -16,6 +16,8 @@
 .mail-satir-form { display: inline-flex; gap: 6px; flex-wrap: wrap; margin: 0; }
 .mail-uyari { padding: 10px 12px; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius-sm); color: var(--text); }
 .mail-bilgi { padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-sm); margin: 8px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mail-ceviri-not { font-size: .8rem; color: var(--muted); margin: 0 0 8px; }
+.mail-uclu-taraf { flex: 1 1 100%; font-size: .85rem; color: var(--text); }
 .mail-senkron-not { font-size: .82rem; color: var(--muted); }
 .mail-hata-metin { color: var(--danger); }
 

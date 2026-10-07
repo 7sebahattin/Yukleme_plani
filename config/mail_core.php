@@ -338,7 +338,16 @@ function mail_coz(?string $blob, string $aad): ?string
     return $duz;
 }
 
-// ── SAYFA KAPISI ────────────────────────────────────────────────────────
+// ── SAYFA KAPISI ──
+
+/** Posta içeriği taşıyan her yanıt tarayıcı/ara katman önbelleğine YAZILMAZ (sw.js de mail yollarını atlar). */
+function mail_no_store(): void
+{
+    if (headers_sent()) return;
+    header('Cache-Control: no-store, no-cache, must-revalidate, private');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
 
 /**
  * Mail sayfası/AJAX kapısı: oturum → aktif depo → can_mail($perm). Başarısızsa
