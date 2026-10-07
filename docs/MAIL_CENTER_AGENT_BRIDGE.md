@@ -195,7 +195,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | `5c59a7c` | ✅ (aşağıda) |
 | M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | `5356234` | ✅ (aşağıda) |
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
-| M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | `6445274` | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
