@@ -132,6 +132,9 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   const D = durumYarat();
   const sayfa = await sayfaKur(ctx, D, hatalar);
   await sayfa.click('.firma-kart:not(.firma-ekle)');           // Test Firma A (id 7)
+  ok('ana menüde "panel sürümü" yazısı YOK (v306: kaldırıldı; tek sürüm kaynağı sidebar APP_SURUM)',
+    await sayfa.locator('#panelSurum').count() === 0
+    && !(await sayfa.evaluate(() => /panel sürümü/i.test(document.body.innerText))));
   await gonderilenleriAc(sayfa);
 
   ok('masaüstü: TABLO çizildi, kart yok', await gor(sayfa, '.g-tablo') && await sayfa.locator('#gonderilenListe .g-kart').count() === 0);

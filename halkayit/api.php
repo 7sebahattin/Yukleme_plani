@@ -405,8 +405,16 @@ try {
       $st = $db->prepare('SELECT * FROM ' . hks_tablo('taslaklar') . ' WHERE firma_id = ? ORDER BY zaman DESC');
       $st->execute([$fid]);
       $rows = $st->fetchAll();
-      $taslaklar = array_map(function ($r) {
+      // Gönderilenler listesiyle AYNI: ülke metnindeki çıplak TC/VKN yerine havuzdaki
+      // ad gösterilir. YALNIZ yanıt kopyası — DB'deki taslak, düzenleme ve gönderim
+      // (taslak_gonder DB'den okur) bu çıktıyı kullanmaz.
+      $__adlar = hks_gonderilen_adlari($db, array_map(
+        fn($r) => (json_decode($r['veri'], true)['ortak']['ulkeAd'] ?? ''), $rows));
+      $taslaklar = array_map(function ($r) use ($__adlar) {
         $veri = json_decode($r['veri'], true);
+        if (isset($veri['ortak']['ulkeAd'])) {
+          $veri['ortak']['ulkeAd'] = hks_gonderilen_ulke_isimle($veri['ortak']['ulkeAd'], $__adlar);
+        }
         return [
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
           'firmaId' => $r['firma_id'], 'firmaAd' => $r['firma_ad'],
@@ -739,13 +747,16 @@ try {
         ORDER BY zaman DESC LIMIT 500');
       $st->execute([$fid, $fad]);
       $rows = $st->fetchAll();
-      $liste = array_map(function ($r) {
+      // Kayıtlı karşı tarafta ülke metnine ad yerine TC/VKN düşmüş olabilir —
+      // adı Kişi Havuzu'ndan göster (yalnız görüntü; saklı kayıt değişmez).
+      $__adlar = hks_gonderilen_adlari($db, array_column($rows, 'ulke_ad'));
+      $liste = array_map(function ($r) use ($__adlar) {
         $veri = json_decode($r['veri'], true) ?: [];
         return [
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
           'firmaId' => $r['firma_id'] ?? '', 'firmaAd' => $r['firma_ad'],
           'plaka' => $r['plaka'], 'belgeNo' => $r['belge_no'],
-          'ulkeAd' => $r['ulke_ad'], 'urunAd' => $r['urun_ad'], 'adet' => (int)$r['adet'],
+          'ulkeAd' => hks_gonderilen_ulke_isimle($r['ulke_ad'], $__adlar), 'urunAd' => $r['urun_ad'], 'adet' => (int)$r['adet'],
           'toplamKg' => (float)$r['toplam_kg'], 'fiyat' => (float)$r['fiyat'], 'rusum' => (float)$r['rusum'],
           'hataSayisi' => (int)$r['hata_sayisi'], 'genelHata' => $r['genel_hata'],
           'bildirimTuru' => $r['bildirim_turu'] ?? null,   // P3 — NULL: legacy kayıt (backfill yapılmadı)
