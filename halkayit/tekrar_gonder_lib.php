@@ -10,6 +10,11 @@
 //      (app.html) biçiminde bir "tohum" kurar: kopya varsa ondan, yoksa (ESKİ
 //      kayıt) kolonlardan + referans kataloğundan + Kişi Havuzu'ndan.
 //
+// Ek (v306): hks_gonderilen_adlari() / hks_gonderilen_ulke_isimle() — Gönderilenler
+// ve Taslaklar LİSTESİNDE "Ülke" metnine ad yerine TC/VKN yazılmış kayıtlarda
+// (kayıtlı karşı tarafta form adı doldurmaz) adı Kişi Havuzu'ndan gösterir.
+// Yalnız GÖRÜNTÜ: saklı kayıt değişmez, tohum/gönderim bu çıktıyı OKUMAZ.
+//
 // BU DOSYA HİÇBİR ŞEY YAZMAZ: taslak yazmanın TEK yolu hâlâ
 // hks_taslak_olustur()'dur (taslak_lib.php → taslak_kaydet ucu). Tohum yalnız
 // formu doldurur; kullanıcı plaka/kiloyu düzeltip "Taslağa Kaydet" der ve
@@ -185,6 +190,55 @@ function hks_eski_tur_coz(array $row): array {
 // Satış'ta app.html ulkeAd'a ekler. Yalnız "/" içeren parantez atılır.
 function hks_eski_adres_eki_at(string $s): string {
   return trim((string)preg_replace('#\s*\([^()/]*/[^()]*\)\s*$#u', '', $s));
+}
+
+// ── Listede karşı taraf adı (v306) ──────────────────────────────────────────
+
+// app.html ulkeAd'ı şöyle yazar: '<önek>' + (ad || TC/VKN) [+ ' (İl/İlçe)'].
+// Kayıtlı karşı tarafta ad boş kaldığından metne YALNIZ 10/11 haneli numara
+// düşer. Kalıp tam o durumu yakalar: önek + numara + ops. parantezli adres eki.
+const HKS_ULKE_AD_KALIBI = '/^(Üreticiden Sevk Alım ← |Satın Alım ← |Yurt içi → )(\d{10,11})(\s*\([^()]*\))?$/u';
+
+// Metindeki karşı taraf numarası (yalnız numara düşmüşse), yoksa null.
+function hks_gonderilen_ulke_tc($ulkeAd): ?string {
+  return preg_match(HKS_ULKE_AD_KALIBI, trim((string)$ulkeAd), $m) ? $m[2] : null;
+}
+
+// Numara yerine adı koyar: önek ve adres eki AYNEN korunur. Havuzda adı yoksa
+// (ya da metin zaten ad taşıyorsa) metin DEĞİŞMEZ. $tcAd = [tc => ad].
+function hks_gonderilen_ulke_isimle($ulkeAd, array $tcAd): string {
+  $ham = (string)$ulkeAd;
+  if (!preg_match(HKS_ULKE_AD_KALIBI, trim($ham), $m)) return $ham;
+  $ad = trim((string)preg_replace('/\s+/u', ' ', (string)($tcAd[$m[2]] ?? '')));
+  if ($ad === '') return $ham;
+  return $m[1] . $ad . ($m[3] ?? '');
+}
+
+// Verilen ulkeAd metinlerindeki numaralar için Kişi Havuzu'ndan [tc => ad]
+// haritası (adı boş olanlar yok). TEK sorgu, parça parça; hata YUTULUR — liste
+// adsız da çizilebilir, adlandırma yüzünden liste ucu hiçbir zaman çökmez.
+function hks_gonderilen_adlari(PDO $db, array $ulkeAdlari): array {
+  $tcler = [];
+  foreach ($ulkeAdlari as $u) {
+    $tc = hks_gonderilen_ulke_tc($u);
+    if ($tc !== null) $tcler[$tc] = true;
+  }
+  if (!$tcler) return [];
+  $harita = [];
+  try {
+    // Anahtarlar sayısal diziyse PHP int'e çevirir — sorguya HEP metin olarak ver
+    // (tc kolonu metindir; başı sıfırlı numara sayısal karşılaştırmayla yanlış eşleşirdi).
+    $liste = array_map('strval', array_keys($tcler));
+    foreach (array_chunk($liste, 200) as $parca) {
+      $yer = implode(',', array_fill(0, count($parca), '?'));
+      $st = $db->prepare('SELECT tc, ad FROM ' . hks_kisi_tablo() . " WHERE ad <> '' AND tc IN ($yer)");
+      $st->execute($parca);
+      foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) $harita[(string)$r['tc']] = (string)$r['ad'];
+    }
+  } catch (Throwable $e) {
+    return [];
+  }
+  return $harita;
 }
 
 // ── Tohum ───────────────────────────────────────────────────────────────────

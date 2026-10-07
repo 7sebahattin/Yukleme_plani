@@ -17,6 +17,9 @@
 // yok → boş, yurt dışı ülke + plan, NULL tür önekten), firma değişince firmaya
 // özgü alanlar boşalır; api.php: INSERT'te kopya, sıra, salt okunur uç, izolasyon.
 //
+// v306: listelerde (Gönderilenler + Taslaklar) kayıtlı karşı tarafta ülke metnine düşen çıplak TC/VKN
+// yerine Kişi Havuzu adı (hks_gonderilen_adlari / _ulke_isimle) — yalnız görüntü.
+//
 //   php scripts/hks_tekrar_gonder_smoke.php   → çıkış kodu 0 = tüm testler geçti
 // =========================================================
 declare(strict_types=1);
@@ -380,6 +383,48 @@ ok('katalog yok → yine de karşı taraf havuzdan', ($o['ikinciTc'] ?? '') === 
 ok('katalog yok notu', not_var($t, 'Referans listeleri yüklü değil'));
 hks_kv_yaz('listeler_cache', $KATALOG);
 
+echo "\n── Listede karşı taraf adı (v306): TC/VKN yerine havuzdaki ad ──\n";
+$VKN_FIRMA = '8330514103';   // sentetik 10 haneli vergi no (havuzda ADLI kayıt)
+$TC_ADSIZ = tc_uret('567891234');
+$TC_BASI0 = '01234567890';   // başı sıfırlı: sayısal karşılaştırmaya kaçmamalı
+hks_kisi_upsert($db, ['tc' => $VKN_FIRMA, 'ad' => 'Örnek  Firma   A.Ş.', 'cep' => '', 'dogum' => '']);   // çift boşluk: sadeleşir
+hks_kisi_upsert($db, ['tc' => $TC_ADSIZ, 'ad' => '', 'cep' => '05001112233', 'dogum' => '1970-03-15']);   // adı boş
+$db->exec("INSERT INTO " . hks_kisi_tablo() . " (tc, ad, cep, olusturma) VALUES ('$TC_BASI0', 'Başı Sıfırlı Kişi', '', '2026-01-01 00:00:00')");
+
+ok('kalıp: yalnız numara düşmüşse yakalanır', hks_gonderilen_ulke_tc("Yurt içi → $VKN_FIRMA") === $VKN_FIRMA);
+ok('kalıp: Satın Alım öneki', hks_gonderilen_ulke_tc("Satın Alım ← $TC_A") === $TC_A);
+ok('kalıp: adres ekli Üreticiden Sevk Alım', hks_gonderilen_ulke_tc("Üreticiden Sevk Alım ← $TC_A (Mersin/Silifke)") === $TC_A);
+ok('kalıp: ad zaten yazılıysa YAKALAMAZ', hks_gonderilen_ulke_tc('Satın Alım ← Örnek Müstahsil Bir') === null);
+ok('kalıp: yurt dışı ülke adı yakalanmaz', hks_gonderilen_ulke_tc('Rusya') === null);
+ok('kalıp: 9/12 haneli sayı yakalanmaz', hks_gonderilen_ulke_tc('Yurt içi → 123456789') === null && hks_gonderilen_ulke_tc('Yurt içi → 123456789012') === null);
+ok('kalıp: numaranın yanında başka metin varsa yakalanmaz', hks_gonderilen_ulke_tc("Yurt içi → $VKN_FIRMA Ltd") === null);
+ok('kalıp: önek yoksa yakalanmaz', hks_gonderilen_ulke_tc($VKN_FIRMA) === null);
+ok('kalıp: null/boş güvenli', hks_gonderilen_ulke_tc(null) === null && hks_gonderilen_ulke_tc('') === null);
+
+$ulkeler = ["Yurt içi → $VKN_FIRMA", "Satın Alım ← $TC_A", "Üreticiden Sevk Alım ← $TC_A (Mersin/Silifke)", "Yurt içi → $TC_YOK",
+            "Yurt içi → $TC_ADSIZ", "Satın Alım ← $TC_BASI0", 'Rusya', 'Satın Alım ← Örnek Müstahsil Bir', null];
+$harita = hks_gonderilen_adlari($db, $ulkeler);
+ok('harita: havuzdaki adlı kayıtlar gelir', ($harita[$VKN_FIRMA] ?? '') === 'Örnek Firma A.Ş.' || ($harita[$VKN_FIRMA] ?? '') === 'Örnek  Firma   A.Ş.', json_encode($harita, JSON_UNESCAPED_UNICODE));
+ok('harita: başı sıfırlı numara metin olarak eşleşir', ($harita[$TC_BASI0] ?? '') === 'Başı Sıfırlı Kişi');
+ok('harita: havuzda olmayan ve adı BOŞ olan yer almaz', !array_key_exists($TC_YOK, $harita) && !array_key_exists($TC_ADSIZ, $harita));
+ok('harita: numara taşımayan metinler sorguya girmez', count($harita) === 3, (string)count($harita));
+ok('harita: numara yoksa boş döner (sorgu açılmaz)', hks_gonderilen_adlari($db, ['Rusya', null, '']) === []);
+
+ok('Yurt içi → VKN: ad gösterilir, önek korunur', hks_gonderilen_ulke_isimle("Yurt içi → $VKN_FIRMA", $harita) === 'Yurt içi → Örnek Firma A.Ş.');
+ok('Satın Alım ← TC: ad gösterilir', hks_gonderilen_ulke_isimle("Satın Alım ← $TC_A", $harita) === 'Satın Alım ← Örnek Müstahsil Bir');
+ok('adres eki AYNEN korunur', hks_gonderilen_ulke_isimle("Üreticiden Sevk Alım ← $TC_A (Mersin/Silifke)", $harita)
+    === 'Üreticiden Sevk Alım ← Örnek Müstahsil Bir (Mersin/Silifke)');
+ok('havuzda yoksa metin DEĞİŞMEZ (TC görünür kalır)', hks_gonderilen_ulke_isimle("Yurt içi → $TC_YOK", $harita) === "Yurt içi → $TC_YOK");
+ok('havuzda adı boşsa metin DEĞİŞMEZ', hks_gonderilen_ulke_isimle("Yurt içi → $TC_ADSIZ", $harita) === "Yurt içi → $TC_ADSIZ");
+ok('ad zaten varsa / ülke adıysa DOKUNULMAZ', hks_gonderilen_ulke_isimle('Rusya', $harita) === 'Rusya'
+    && hks_gonderilen_ulke_isimle('Satın Alım ← Örnek Müstahsil Bir', $harita) === 'Satın Alım ← Örnek Müstahsil Bir');
+ok('null güvenli (boş metin)', hks_gonderilen_ulke_isimle(null, $harita) === '');
+ok('harita boşsa her metin aynen döner', hks_gonderilen_ulke_isimle("Yurt içi → $VKN_FIRMA", []) === "Yurt içi → $VKN_FIRMA");
+$sorgusuz = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);   // kişi tablosu YOK
+ok('havuz okunamazsa hata YUTULUR, boş harita (liste çökmez)', hks_gonderilen_adlari($sorgusuz, ["Yurt içi → $VKN_FIRMA"]) === []);
+$cok = []; for ($i = 0; $i < 450; $i++) $cok[] = 'Yurt içi → ' . str_pad((string)(1000000000 + $i), 10, '0', STR_PAD_LEFT);
+ok('450 farklı numara (parçalı sorgu) sorunsuz', is_array(hks_gonderilen_adlari($db, $cok)));
+
 echo "\n── api.php / .htaccess (kaynak denetimi) ──\n";
 $api = (string)file_get_contents("$KOK/halkayit/api.php");
 $pTaslakLib = strpos($api, "require_once __DIR__ . '/taslak_lib.php';");
@@ -424,6 +469,22 @@ ok('bulunamazsa 404 + sözleşme mesajı', strpos($tohum,
 ok('hedef firma hks_firma_bul ile doğrulanır (yoksa 400)', (bool)preg_match(
     "/if \(\\\$firmaDegisti && !hks_firma_bul\(\\\$hedef\)\) hks_json_cikti\(\[[^\]]*\], 400\);/", $tohum));
 ok('tohum ucu hks_gonderim_tohumu çağırır', strpos($tohum, 'hks_json_cikti(hks_gonderim_tohumu($db, $row,') !== false);
+
+// v306 — listelerde ad çözümü (yalnız görüntü)
+ok("liste ucu ülke metnini havuz adıyla çözer (tek sorgu + isimle)", strpos($liste, 'hks_gonderilen_adlari($db, array_column($rows, \'ulke_ad\'))') !== false
+    && strpos($liste, "'ulkeAd' => hks_gonderilen_ulke_isimle(\$r['ulke_ad'], \$__adlar)") !== false);
+$pTL = strpos($api, "case 'taslaklar':");
+$pTLSon = $pTL !== false ? strpos($api, "case 'taslak_kaydet':", $pTL) : false;
+$taslaklarUc = ($pTL !== false && $pTLSon !== false) ? substr($api, $pTL, $pTLSon - $pTL) : '';
+ok("taslaklar ucu ülke metnini aynı yardımcıyla çözer", $taslaklarUc !== ''
+    && strpos($taslaklarUc, 'hks_gonderilen_adlari($db,') !== false
+    && strpos($taslaklarUc, "hks_gonderilen_ulke_isimle(\$veri['ortak']['ulkeAd'], \$__adlar)") !== false);
+ok("taslaklar ucu yine YAZMAZ (yalnız yanıt kopyası değişir)", $taslaklarUc !== '' && !preg_match('/\b(INSERT|UPDATE|DELETE|REPLACE)\b/', $taslaklarUc));
+$pGond = strpos($api, "case 'taslak_gonder':");
+$pGondSon = $pGond !== false ? strpos($api, "case 'gonderilenler':", $pGond) : false;
+$gonderUc = ($pGond !== false && $pGondSon !== false) ? substr($api, $pGond, $pGondSon - $pGond) : '';
+ok("gönderim/tohum DB satırından okur — çözülmüş listeyi KULLANMAZ", $gonderUc !== '' && strpos($gonderUc, 'hks_gonderilen_') === false
+    && strpos($tohum, 'hks_gonderilen_ulke_isimle') === false && strpos($tohum, 'hks_gonderilen_adlari') === false);
 
 // Lib denetimi YORUMSUZ kod üzerinde yapılır (yorumlar kuralı anlatırken bu
 // adları anıyor — "taslak yazmanın TEK yolu hks_taslak_olustur" gibi).

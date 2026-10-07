@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v305` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v306` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1242,6 +1242,13 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
   ürün/ülke/tür katalogda (`listeler_cache`) yalnız TAM ad (`hks_tr_normalize`) ve TEK eşleşme; karşı
   taraf Kişi Havuzu'nda AD ile TAM ve TEK eşleşme (`hks_kisi_ad_ile_tek()`) — yoksa/birden çoksa BOŞ.
   id ASLA uydurulmaz; eksikler `notlar` ile formun üstünde (`#kopyaNotlar`, textContent) söylenir.
+- **Listede karşı taraf adı (v306):** kayıtlı karşı tarafta form adı doldurmaz, `ulkeAd`'a yalnız TC/VKN düşer
+  (`Yurt içi → 8330514103`). `gonderilenler` VE `taslaklar` uçları yanıtta bu numarayı Kişi Havuzu adıyla değiştirir
+  (`hks_gonderilen_adlari()` tek sorgu + `hks_gonderilen_ulke_isimle()`; önek ve " (İl/İlçe)" eki korunur, havuzda
+  yoksa/adı boşsa metin DEĞİŞMEZ). **Yalnız yanıt kopyası:** saklı kayıt değişmez; `taslak_gonder` ve `gonderilen_tohum`
+  DB satırından okur, bu çıktıyı KULLANMAZ (test denetler). Hata yutulur — liste adsız da çizilir.
+- **"Panel sürümü" damgası KALDIRILDI (v306):** ana menü altındaki `panel sürümü: …` yazısı ve `PANEL_SURUM` sabiti
+  gitti; tek sürüm kaynağı sidebar'daki `APP_SURUM`. Geri ekleme (test ana menüde yazının YOKLUĞUNU denetler).
 - **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
   değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
   `duzenlenenTaslakId = null`: `eskiTaslakId` GİTMEZ, hiçbir taslak SİLİNMEZ. Karşı taraf yine
