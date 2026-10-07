@@ -196,7 +196,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | `5356234` | ✅ (aşağıda) |
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 | M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | `6445274` | ✅ (aşağıda) |
-| M6 — Sertleştirme: indeks uzunluğu, geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük ekranı | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M6 — Sertleştirme: indeks uzunluğu, geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük ekranı | `d212f1e` | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
