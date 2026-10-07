@@ -24,9 +24,13 @@ final class MailSmtpException extends RuntimeException
     }
 }
 
+/** Bir SMTP oturumunun (bağlantı + giriş + gönderim) TOPLAM üst süresi — yavaş-damla / asılı sunucuya karşı. */
+const MAIL_SMTP_TOTAL_SN = 300;
+
 final class MailSmtpClient
 {
     private float $bitis = 0.0;
+    private float $toplamBitis = 0.0;
     private bool $kapali = false;
     /** DATA gövdesi yazılmaya başlandıktan sonra true: bundan sonraki her belirsizlik 'unknown' (kabul edilmiş olabilir). */
     public bool $dataFazi = false;
@@ -38,7 +42,15 @@ final class MailSmtpClient
 
     public function __construct(private MailStream $s, array $opts = [])
     {
-        $this->o = $opts + ['max_satir' => 4096, 'max_satir_sayisi' => 200, 'sure' => 60.0, 'max_boyut' => 25 * 1048576];
+        $this->o = $opts + ['max_satir' => 4096, 'max_satir_sayisi' => 200, 'sure' => 60.0, 'max_boyut' => 25 * 1048576, 'toplam_sn' => (float)MAIL_SMTP_TOTAL_SN];
+        $this->toplamBitis = microtime(true) + (float)$this->o['toplam_sn'];
+        if (method_exists($s, 'sureSinirla')) $s->sureSinirla($this->toplamBitis);
+    }
+
+    /** Komut/yanıt süre sınırı: işlem sınırı ile toplam oturum sınırından KÜÇÜĞÜ. */
+    private function sinir(float $sure): float
+    {
+        return min(microtime(true) + $sure, $this->toplamBitis);
     }
 
     private function log(string $s): void
@@ -56,7 +68,8 @@ final class MailSmtpClient
             $satir = $this->s->readLine($this->o['max_satir']);
             if ($satir === null) throw new MailSmtpException($this->dataFazi ? 'unknown' : 'connect', 'SMTP bağlantısı kesildi ya da yanıt vermedi.', !$this->dataFazi);
             if (++$n > $this->o['max_satir_sayisi']) { $this->kapat(); throw new MailSmtpException('limit', 'SMTP yanıtı çok uzun.'); }
-            if (!preg_match('/^(\d{3})([ -])(.*)$/s', $satir, $m)) { $this->kapat(); throw new MailSmtpException('protocol', 'SMTP yanıtı çözülemedi.'); }
+            if (!preg_match('/^(\d{3})(?:([ -])(.*))?$/s', $satir, $m)) { $this->kapat(); throw new MailSmtpException('protocol', 'SMTP yanıtı çözülemedi.'); }
+            $m[2] = $m[2] ?? ' '; $m[3] = $m[3] ?? '';   // "250" (boşluk/metin yok) RFC 5321'e göre geçerli son satırdır
             if ($kod !== 0 && (int)$m[1] !== $kod) { $this->kapat(); throw new MailSmtpException('protocol', 'SMTP çok satırlı yanıt tutarsız.'); }
             $kod = (int)$m[1]; $metin[] = $m[3];
             if ($m[2] === ' ') return [$kod, implode("\n", $metin)];
@@ -67,7 +80,7 @@ final class MailSmtpClient
     {
         if ($this->kapali) throw new MailSmtpException('connect', 'SMTP bağlantısı kapalı.');
         if (preg_match('/[\r\n\0]/', $cmd)) throw new MailSmtpException('protocol', 'Komutta geçersiz karakter.');
-        $this->bitis = microtime(true) + $sure;
+        $this->bitis = $this->sinir($sure);
         $this->log('> ' . ($gunluk ?? $cmd));
         $this->s->write($cmd . "\r\n");
         $r = $this->yanit();
@@ -79,7 +92,7 @@ final class MailSmtpClient
 
     public function baslat(string $istemciAdi, bool $starttls): void
     {
-        $this->bitis = microtime(true) + 30.0;
+        $this->bitis = $this->sinir(30.0);
         [$kod] = $this->yanit();
         if ($kod !== 220) { $this->kapat(); throw new MailSmtpException('connect', 'SMTP selamlaması beklenmedik (' . $kod . ').'); }
         $this->ehlo($istemciAdi);
@@ -147,7 +160,7 @@ final class MailSmtpClient
         $govde = preg_replace('/\r\n|\r|\n/', "\r\n", $ham) ?? $ham;
         $govde = preg_replace('/^\./m', '..', $govde) ?? $govde;
         if (!str_ends_with($govde, "\r\n")) $govde .= "\r\n";
-        $this->bitis = microtime(true) + 120.0;
+        $this->bitis = $this->sinir(120.0);
         $this->dataFazi = true;   // bu satırdan sonra HER belirsizlik "kabul edilmiş olabilir" demektir
         $this->log('> [DATA ' . strlen($govde) . ' bayt]');
         try {
@@ -163,7 +176,11 @@ final class MailSmtpClient
         }
         $this->log('< ' . $k . ' ' . mb_substr($m, 0, 80));
         if ($k >= 200 && $k < 300) return ['kabul' => $kabul, 'red' => $red, 'yanit' => mb_substr($m, 0, 200)];
-        throw new MailSmtpException('data_reject', 'Sunucu mesajı reddetti (' . $k . '): ' . mb_substr(mail_redact($m), 0, 120));   // açık 4xx/5xx = kabul EDİLMEDİ
+        if ($k >= 400 && $k < 600) {
+            throw new MailSmtpException('data_reject', 'Sunucu mesajı reddetti (' . $k . '): ' . mb_substr(mail_redact($m), 0, 120));   // açık 4xx/5xx = kabul EDİLMEDİ
+        }
+        // 1xx/3xx gibi beklenmedik bir "son" yanıt ne kabul ne ret demektir → belirsiz (otomatik tekrar YOK).
+        throw new MailSmtpException('unknown', 'Sunucu son "." için beklenmedik yanıt verdi (' . $k . '); mesaj kabul edilmiş olabilir.', false);
     }
 
     public function cikis(): void
@@ -204,7 +221,8 @@ function mail_baslik_guvenli(string $v): string
 function mail_baslik_kodla(string $v): string
 {
     $v = mail_baslik_guvenli($v);
-    if (!preg_match('/[^\x20-\x7e]/', $v)) return $v;
+    // "=?" içeren düz ASCII metin alıcıda encoded-word sanılıp çözülebilir (başlık sahteciliği) → o da kodlanır.
+    if (!preg_match('/[^\x20-\x7e]/', $v) && !str_contains($v, '=?')) return $v;
     $parcalar = []; $cur = '';
     foreach (preg_split('//u', $v, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $ch) {
         if (strlen($cur . $ch) > 42) { $parcalar[] = $cur; $cur = ''; }   // 42 bayt → ~56 base64 + sarmalayıcı < 75

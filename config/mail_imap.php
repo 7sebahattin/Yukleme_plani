@@ -67,41 +67,78 @@ final class MailSocketStream implements MailStream
         return new self($fp, $host, $timeout);
     }
 
+    /** Okuma/yazma bir MUTLAK süre sınırına bağlanır (0 = yalnız işlem başına süre). Yavaş-damla (slow-drip) sunucuya karşı. */
+    public function sureSinirla(float $bitis): void { $this->genelBitis = $bitis; }
+
+    private string $rbuf = '';
+    private float $genelBitis = 0.0;
+
+    /** Bu işlem için mutlak bitiş: genel sınır varsa onu, yoksa $varsayilan sn sonrasını geçemez. */
+    private function bitisHesapla(float $varsayilan): float
+    {
+        $b = microtime(true) + $varsayilan;
+        return $this->genelBitis > 0 ? min($b, $this->genelBitis) : $b;
+    }
+
+    /** Tamponu doldurur (engellemeyen okuma + kısa select; OpenSSL'de bekleyen veri select'i kaçırsa da takılmaz). false = süre doldu / EOF. */
+    private function doldur(float $bitis): bool
+    {
+        if (!$this->fp) return false;
+        $parca = @fread($this->fp, 8192);
+        if ($parca !== false && $parca !== '') { $this->rbuf .= $parca; return true; }
+        if (feof($this->fp)) return false;
+        $kalan = $bitis - microtime(true);
+        if ($kalan <= 0) return false;
+        $r = [$this->fp]; $w = null; $e = null;
+        $bek = min($kalan, 0.2);
+        @stream_select($r, $w, $e, (int)$bek, (int)(($bek - (int)$bek) * 1000000));
+        return true;
+    }
+
     public function readLine(int $max): ?string
     {
         if (!$this->fp) return null;
-        $line = fgets($this->fp, $max + 3);
-        if ($line === false) return null;
-        if (!str_ends_with($line, "\n")) {
-            // $max'tan uzun satır: kalanını AT ve limit hatası ver (üst katman bağlantıyı kapatır).
-            throw new MailImapException('limit', 'Sunucu satırı çok uzun.');
+        $bitis = $this->bitisHesapla($this->timeout);
+        stream_set_blocking($this->fp, false);
+        while (true) {
+            $p = strpos($this->rbuf, "\n");
+            if ($p !== false) {
+                $line = substr($this->rbuf, 0, $p + 1); $this->rbuf = (string)substr($this->rbuf, $p + 1);
+                if (strlen($line) > $max + 2) throw new MailImapException('limit', 'Sunucu satırı çok uzun.');
+                return rtrim($line, "\r\n");
+            }
+            if (strlen($this->rbuf) > $max + 2) { $this->rbuf = ''; throw new MailImapException('limit', 'Sunucu satırı çok uzun.'); }
+            if (microtime(true) > $bitis || !$this->doldur($bitis)) return null;
         }
-        return rtrim($line, "\r\n");
     }
 
     public function readBytes(int $n): ?string
     {
         if (!$this->fp) return null;
-        $buf = '';
-        while (strlen($buf) < $n) {
-            $parca = fread($this->fp, min(65536, $n - strlen($buf)));
-            if ($parca === false || $parca === '') {
-                $meta = stream_get_meta_data($this->fp);
-                if (!empty($meta['timed_out']) || feof($this->fp)) return null;
-                continue;
-            }
-            $buf .= $parca;
+        $bitis = $this->bitisHesapla($this->timeout + $n / 20000.0);
+        stream_set_blocking($this->fp, false);
+        while (strlen($this->rbuf) < $n) {
+            if (microtime(true) > $bitis || !$this->doldur($bitis)) return null;
         }
-        return $buf;
+        $out = substr($this->rbuf, 0, $n); $this->rbuf = (string)substr($this->rbuf, $n);
+        return $out;
     }
 
     public function write(string $data): void
     {
         if (!$this->fp) throw new MailImapException('connect', 'Bağlantı kapalı.');
+        $bitis = $this->bitisHesapla($this->timeout + strlen($data) / 20000.0);
+        stream_set_blocking($this->fp, false);
         $kalan = $data;
         while ($kalan !== '') {
             $n = @fwrite($this->fp, $kalan);
-            if ($n === false || $n === 0) throw new MailImapException('connect', 'Sunucuya yazılamadı.');
+            if ($n === false) throw new MailImapException('connect', 'Sunucuya yazılamadı.');
+            if ($n === 0) {
+                if (microtime(true) > $bitis) throw new MailImapException('connect', 'Sunucuya yazma süresi doldu.');
+                $r = null; $w = [$this->fp]; $e = null;
+                @stream_select($r, $w, $e, 0, 200000);
+                continue;
+            }
             $kalan = substr($kalan, $n);
         }
     }
@@ -112,7 +149,8 @@ final class MailSocketStream implements MailStream
         // STARTTLS enjeksiyonu: "A002 OK"tan sonra aynı pakette gelen DÜZ METİN baytlar PHP okuma tamponunda kalır ve
         // TLS'ten sonra sanki güvenli sunucudan geliyormuş gibi okunur. Tamponda artık bayt varsa TLS'e GEÇME.
         $meta = stream_get_meta_data($this->fp);
-        if ((int)($meta['unread_bytes'] ?? 0) > 0) return false;
+        if ((int)($meta['unread_bytes'] ?? 0) > 0 || $this->rbuf !== '') return false;
+        stream_set_blocking($this->fp, true);   // el sıkışma engelleyen modda
         $ok = @stream_socket_enable_crypto($this->fp, true,
             STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | (defined('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT') ? STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT : 0));
         return $ok === true;
@@ -275,7 +313,7 @@ final class MailImapClient
         $tag = 'A' . str_pad((string)(++$this->tagSayac), 3, '0', STR_PAD_LEFT);
         $this->log($tag . ' ' . ($gunlukMetni ?? $cmd));
         $this->s->write($tag . ' ' . $cmd . "\r\n");
-        $untagged = [];
+        $untagged = []; $devamSay = 0;
         while (true) {
             if (microtime(true) > $this->bitis) { $this->kapat(); throw new MailImapException('timeout', 'Komut zaman aşımına uğradı.'); }
             [$satir, $lits] = $this->mantiksalOku();
@@ -293,7 +331,8 @@ final class MailImapClient
                 throw new MailImapException('protocol', 'Beklenmeyen etiketli yanıt (protokol ihlali).');
             }
             if ($satir !== '' && $satir[0] === '+') {
-                if ($devam === null) throw new MailImapException('protocol', 'Beklenmeyen devam isteği.');
+                // TEK SEFERLİK: ikinci "+" gelirse APPEND gövdesi (mesaj kopyası) ikinci kez yazılmaz — bağlantı kesilir.
+                if ($devam === null || ++$devamSay > 1) { $this->kapat(); throw new MailImapException('protocol', 'Beklenmeyen devam isteği.'); }
                 $g = $devam();
                 if ($g !== null) $this->s->write($g . "\r\n");
                 continue;

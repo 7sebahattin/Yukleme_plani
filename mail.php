@@ -235,6 +235,8 @@ mail_assets();
             $os = (string)$oPanel['status']; $ebeveyn = $oPanel['in_reply_to_msg_id'] ? mail_mesaj_getir($pdo, (int)$oPanel['in_reply_to_msg_id'], $hesapIds) : null;
             $dilAd = mail_diller()[(string)$oPanel['target_lang']] ?? strtoupper((string)$oPanel['target_lang']);
             $duzenlenebilir = in_array($os, ['draft', 'translated'], true);
+            $gKimlik = mail_outbox_hesap_kimligi($pdo, (int)$oPanel['account_id']);
+            $rtFarkli = $ebeveyn && trim((string)$ebeveyn['reply_to_addr']) !== '' && strcasecmp(trim((string)$ebeveyn['reply_to_addr']), trim((string)$ebeveyn['from_addr'])) !== 0 && strcasecmp(trim((string)$oPanel['to_addr']), trim((string)$ebeveyn['reply_to_addr'])) === 0;
             $ortakAlan = static function (int $oid) use ($aSecili, $filtre): string {
                 return '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '"><input type="hidden" name="o" value="' . $oid . '"><input type="hidden" name="a" value="' . $aSecili . '"><input type="hidden" name="f" value="' . h($filtre) . '">';
             };
@@ -244,10 +246,12 @@ mail_assets();
             <h2 class="mail-okuyucu-konu">Cevap: <?= h($oPanel['subject']) ?></h2>
             <p><span class="mail-durum mail-durum--<?= h($os) ?>"><?= h($durumEtiket[$os] ?? $os) ?></span></p>
             <dl class="mail-meta">
+                <dt>Gönderen</dt><dd><?= h(trim(($gKimlik['display_name'] !== '' ? $gKimlik['display_name'] . ' ' : '') . '<' . $gKimlik['email'] . '>')) ?></dd>
                 <dt>Alıcı</dt><dd><?= h($oPanel['to_addr']) ?></dd>
                 <dt>Hedef dil</dt><dd><?= h($dilAd) ?><?php if ($oPanel['tr_provider']): ?> · çeviri: <?= h($oPanel['tr_provider'] === 'manual' ? 'elle girildi' : ($oPanel['tr_provider'] === 'none' ? 'çeviri yok' : $oPanel['tr_provider'] . ' (üçüncü taraf servis)')) ?><?php endif; ?></dd>
                 <?php if ($oPanel['out_message_id'] && in_array($os, ['sent', 'unknown', 'sending', 'approved'], true)): ?><dt>Message-ID</dt><dd><code><?= h($oPanel['out_message_id']) ?></code></dd><?php endif; ?>
             </dl>
+            <?php if ($rtFarkli): ?><div class="mail-uyari"><strong>Dikkat — Reply-To farklı:</strong> müşterinin mesajı <code><?= h($ebeveyn['from_addr']) ?></code> adresinden geldi ama <code>Reply-To</code> başlığı <code><?= h($ebeveyn['reply_to_addr']) ?></code> gösteriyor; cevap <strong><?= h($oPanel['to_addr']) ?></strong> adresine gidecek. Göndermeden önce adresin doğru kişiye ait olduğundan emin olun.</div><?php endif; ?>
             <?php if (!empty($oPanel['last_error']) && $os !== 'translated'): ?><div class="mail-uyari"><?= h($oPanel['last_error']) ?></div><?php endif; ?>
 
             <div class="mail-onay-kutular">
@@ -255,7 +259,7 @@ mail_assets();
                 <div class="mail-onay-kutu mail-onay-kutu--cikis"><h3>GÖNDERİLECEK ÇEVİRİ (<?= h($dilAd) ?>)</h3>
                     <?php if (trim((string)$oPanel['body_out']) !== ''): ?>
                     <div class="mail-metin mail-onay-metin" lang="<?= h($oPanel['target_lang']) ?>"><?= nl2br(h((string)$oPanel['body_out'])) ?></div>
-                    <?php if ($oPanel['quote_text']): ?><details class="mail-thread"><summary>Altına eklenecek alıntı (müşterinin orijinal yazısı)</summary><pre class="mail-metin mail-metin--ham"><?= h((string)$oPanel['quote_text']) ?></pre></details><?php endif; ?>
+                    <?php if ($oPanel['quote_text']): ?><details class="mail-thread" <?= $os === 'translated' ? 'open' : '' ?>><summary>Altına eklenecek alıntı (müşterinin orijinal yazısı)</summary><pre class="mail-metin mail-metin--ham"><?= h((string)$oPanel['quote_text']) ?></pre></details><?php endif; ?>
                     <?php else: ?><p class="mail-bos">Henüz çeviri yok.</p><?php endif; ?>
                 </div>
             </div>

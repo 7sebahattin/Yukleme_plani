@@ -43,7 +43,7 @@ ok('dosya adı yol ayracı temizlenir', mail_mime_gonder_adi('../../etc/passwd')
 echo "\n=== A4. Gövde / multipart ===\n";
 $m = mail_mime_mesaj(mail_test_raw(['subject' => '=?UTF-8?B?w4dhbMSxxZ9rYW4=?=', 'body' => "Merhaba\r\nDünya"]));
 ok('basit mesaj alanları', $m['subject'] === 'Çalışkan' && $m['from_addr'] === 'ahmet@musteri.com' && $m['from_name'] === 'Ahmet' && str_contains($m['body_text'], 'Dünya'));
-ok('Message-ID normalize + hash', $m['message_id'] !== null && $m['message_id_hash'] === sha1('id:' . $m['message_id']));
+ok('Message-ID normalize + hash', $m['message_id'] !== null && $m['message_id_hash'] === mail_mime_id_hash($m['message_id']));
 $m = mail_mime_mesaj(mail_test_raw(['msgid' => null, 'subject' => 'X']));
 ok('Message-ID yoksa başlıktan hash', $m['message_id'] === null && str_starts_with($m['message_id_hash'], sha1('noid:') ? '' : '') && strlen($m['message_id_hash']) === 40);
 $m1 = mail_mime_mesaj(mail_test_raw(['msgid' => null, 'subject' => 'A'])); $m2 = mail_mime_mesaj(mail_test_raw(['msgid' => null, 'subject' => 'B']));
@@ -84,7 +84,7 @@ $m = mail_mime_mesaj("From: a@x.com\r\n" . $cok);
 ok('600 parça: 200 parça sınırı', is_array($m) && substr_count($m['body_text'], 'x') <= 210);
 ok('bozuk/boş girdi çökmez', is_array(mail_mime_mesaj('')) && is_array(mail_mime_mesaj("\x00\xff\xfe garbage")) && is_array(mail_mime_mesaj("Content-Type: multipart/mixed\r\n\r\nx")));
 $m = mail_mime_mesaj(mail_test_raw(['extra' => ['In-Reply-To: <Parent@X.com>', 'References: <root@x.com> <Parent@X.com>']]));
-ok('In-Reply-To / References normalize (küçük harf)', $m['in_reply_to'] === 'parent@x.com' && $m['references'] === ['root@x.com', 'parent@x.com']);
+ok('In-Reply-To / References: yazım KORUNUR (yalnız hash harf-duyarsız)', $m['in_reply_to'] === 'Parent@X.com' && $m['references'] === ['root@x.com', 'Parent@X.com'] && mail_mime_id_hash('Parent@X.com') === mail_mime_id_hash('parent@x.com'));
 $m = mail_mime_mesaj(mail_test_raw(['date' => 'Mon, 05 Oct 2026 10:00:00 +0300']));
 ok('Date çözülür', $m['date'] === '2026-10-05 10:00:00');
 ok('geçersiz Date null', mail_mime_mesaj(mail_test_raw(['date' => 'yok']))['date'] === null);

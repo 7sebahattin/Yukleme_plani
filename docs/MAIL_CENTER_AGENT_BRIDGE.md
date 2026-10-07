@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M4 tamam (çeviri katmanı; sağlayıcı varsayılan KAPALI) → M5 (cevap onayı + SMTP) sırada** |
+| Current milestone | **M5 tamam (cevap onayı + SMTP, Opus incelemesi uygulandı) → M6 (cron/retry/log/güvenlik sertleştirme) sırada** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -195,6 +195,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | `5c59a7c` | ✅ (aşağıda) |
 | M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | `5356234` | ✅ (aşağıda) |
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -258,6 +259,40 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
   "Şimdi çevir" / "Tekrar dene" (POST+CSRF, ACL, audit `mail_translate_manual`); yönetici ekranı sağlayıcı durumunu + son kuyruk çalışmasını gösterir.
 - **Henüz yok:** giden (Türkçe → hedef dil) çeviri M5'te aynı sağlayıcı arayüzüyle gelecek.
 
+**M5 içeriği** (`config/mail_smtp.php`, `config/mail_outbox.php`, `mail.php` cevap akışı)
+- **Akış:** Türkçe cevap → taslak (`draft`) → önizleme: sağlayıcı ile hedef dile çeviri (`translated`) → ekranda **"TÜRKÇE ORİJİNAL CEVAP" ve
+  "GÖNDERİLECEK ÇEVİRİ" yan yana** + gönderen kimliği + alıcı + (varsa) alıntı + Reply-To uyarısı → **"✅ Onayla ve Gönder"** (`mail.send`) → SMTP.
+  "Onayla"ya basılmadan SMTP'ye HİÇ bağlanılmaz (taslak/önizleme/iptal testlerinde bağlantı sayacı 0). İptal her aşamada var.
+  Sağlayıcı kapalı/arızalıysa Türkçe metin kaybolmaz; çeviri elle girilebilir (`tr_provider = manual`).
+- **SMTP (saf PHP):** doğrulamalı TLS (ssl:// ya da STARTTLS; düz metin yok), AUTH PLAIN/LOGIN, kimlik bilgisi günlükte maskeli, toplam oturum üst sınırı 300 sn,
+  yanıt sınıflaması: DATA öncesi hata / açık 4xx-5xx → `failed` (güvenle tekrar denenebilir); son "." sonrası kopma/yanıt yok/beklenmedik 1xx-3xx → **`unknown`** (otomatik tekrar YOK).
+- **Thread başlıkları:** `Message-ID` onayda üretilir ve saklanır, `In-Reply-To` = orijinal (yazımı AYNEN korunur), `References` = zincir (kök + son 19), `Reply-To` hesaptan,
+  `Re:/AW:/SV:/Ответ:` normalizasyonu, RFC 2047 (ASCII `=?` içeren konu da kodlanır), CRLF enjeksiyonu reddedilir. Giden cevap sync motoruna gelince orijinal thread'e katılır (testli).
+- **At-most-once (AD-7) — sertleştirilmiş hâl:**
+  1. Onay UPDATE'i `status='translated' AND content_hash=<ekrandaki hash>` koşullu; `approved_hash` + `dedupe_key` yazar.
+  2. `UNIQUE dedupe_key` (hesap + ebeveyn + onaylı içerik) → aynı cevabın iki satırı **yapısal olarak** iki kez onaylanamaz (ön kontrol yalnız dostça mesaj için).
+  3. Sahiplenme: `status='approved' ∧ approved_by ∧ Message-ID ∧ approved_hash ∧ content_hash = approved_hash ∧ hesap aktif`; ardından token ile yeniden okuma, kayıp → ABORT + audit.
+  4. Gönderilen bayt'lar `approved_hash`'in baytlarıdır: hash **gönderen kimliğini** (hesap adresi, görünen ad, Reply-To) da kapsar → onaydan sonra hesap değişirse gönderilmez (`failed`/bütünlük).
+  5. Sonuç yazımı yalnız kendi token'ıyla; süpürme gönderim sürerken satırı `unknown` yapsa bile mesaj gittiyse `sent` yazılır; sahiplik başkasına geçmişse sesli uyarı (audit + log + ekran).
+  6. Süpürme: `sending` > 20 dk → `unknown` (SMTP üst sınırı 5 dk'nın çok üstünde), `approved` > 30 dk → onay geri alınır (`translated`).
+  7. `unknown` yalnız insan kararıyla çözülür ("Gönderildi (doğruladım)" / "Gönderilmedi — tekrar denemeye izin ver", `mail.send`, audit); sonra tekrar gönderim aynı Message-ID'yi kullanır.
+- **Gönderilen kopya:** hesapta açıksa IMAP APPEND (best-effort; hata gönderimi etkilemez; sunucu ikinci `+` gönderirse gövde ikinci kez yazılmaz).
+- **Ağ katmanı:** `MailSocketStream` artık kendi tamponu + engellemeyen okuma/yazma + MUTLAK süre sınırı (yavaş-damla koruması) kullanır; STARTTLS'te tamponda bayt kalmışsa TLS'e geçilmez.
+- **Message-ID yazımı korunur** (RFC 5322: sol kısım harf-duyarlı); eşleştirme hash'i `mail_mime_id_hash()` ile harf-duyarsız (mevcut satırların hash'i değişmez).
+- Audit: yalnız id/durum/sayı (`mail_reply_draft/preview`, `mail_send_approve`, `mail_send`, `mail_send_failed`, `mail_send_unknown`, `mail_send_resolve`, `mail_send_sahiplik_kaybi`, `mail_approval_expired`, `mail_reply_cancel`); gövde/konu/adres/şifre yazılmaz.
+- Şema eki (M1 DDL'ine, henüz hiçbir DB'de kurulu olmadığı için ALTER yok): `mail_outbox.quote_text`, `approved_hash`, `dedupe_key` (+ `UNIQUE uq_mo_dedupe`), `mail_sync_state.rescan_from_epoch`.
+
+**Bağımsız Opus güvenlik incelemesi (M5) — bulgular ve düzeltmeler** (hepsi `scripts/mail_outbox_review_smoke.php`'de regresyon testli; 6 kritik düzeltme için mutasyon kontrolü yapıldı — düzeltme geri alınınca test düşüyor):
+| # | Bulgu | Düzeltme |
+|---|---|---|
+| B1 | Önizleme ile onay yarışı: onaylanmış/gönderilmiş satırın içeriği, eski sürümü okuyan bir önizleme isteğiyle ezilebiliyordu; onay hash'i "ekrandaki" ile "onaylanan" arasında kopuktu | tüm yazımlar koşullu (`status` + okunan `content_hash`); `mail_outbox_yaz()` koşulsuz çağrıda `LogicException`; onay UPDATE'i hash'e bağlı |
+| B2 | Aynı cevabın iki ayrı satırı yarışta ikisi de onaylanıp gönderilebiliyordu (ön kontrol yarışa açık) | `approved_hash` + `UNIQUE dedupe_key`; 23000 → "çift gönderim engellendi" |
+| B3 | Süpürme 10 dk'da uçuştaki gönderimi `unknown` yapıp sonra `sent` yazımını engelliyordu; eşikler SMTP süresinden kısaydı | eşik 20 dk, SMTP oturumu ≤ 5 dk; sonuç yazımı `sending`/`unknown` + kendi token'ı; sahiplik kaybı sesli |
+| B4 | Onaydan sonra hesap kimliği (Reply-To, görünen ad, adres) değişirse eski onayla yeni kimlikle gider; pasif hesaptan gönderim | hash gönderen kimliğini kapsar; sahiplenmede hesap aktif şartı; bütünlük denetimi `approved_hash`'e karşı |
+| B5 | SMTP: çıplak `250` yanıtı protokol hatası sayılıyordu (kabul edilmiş mesaj `failed` olup tekrar gönderilebilirdi); 1xx/3xx son yanıt açık ret sanılıyordu; toplam süre sınırı yoktu | regex `^(\d{3})(?:([ -])(.*))?$`; yalnız 4xx/5xx açık ret, diğerleri `unknown`; `MAIL_SMTP_TOTAL_SN = 300` + soket mutlak süre sınırı |
+| B6 | Message-ID küçük harfe çevriliyordu (In-Reply-To müşteri sistemindeki kimlikle eşleşmeyebilir); `=?` içeren ASCII konu encoded-word sahteciliği; Reply-To ≠ From görünmüyordu | yazım korunur + harf-duyarsız hash; konu kodlanır; onay panelinde uyarı + gönderen kimliği + alıntı açık |
+| B7 | IMAP APPEND devam isteği her `+` için tekrar çalışıyordu (kötü sunucu gövdeyi çoklu yazdırabilir); audit boşlukları (kimlik/oluşturma hataları) | devam isteği tek seferlik, ikincisinde bağlantı kesilir; her sonlandırma yolu audit'li |
+
 **Bağımsız Opus güvenlik incelemesi (M2) — bulgular ve düzeltmeler** (hepsi `scripts/mail_review_smoke.php`'de regresyon testli;
 düzeltmeler geri alınınca testler düşüyor — mutasyon kontrolü yapıldı):
 
@@ -283,20 +318,25 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 |---|---|
 | `mail_core_smoke.php` (M1) | 85/85 ✅ |
 | `mail_ui_smoke.php` (M1) | 33/33 ✅ |
-| `mail_gate_static_smoke.php` (M1 + M2 statik: TLS doğrulama, yalnız EXAMINE/BODY.PEEK, UNSEEN yok, error_log redakte, eval/exec yok) | 61/61 ✅ |
+| `mail_gate_static_smoke.php` (M1 + M2 + M5 statik: TLS doğrulama, yalnız EXAMINE/BODY.PEEK, UNSEEN yok, error_log redakte, eval/exec yok, SMTP tek kapı) | 99/99 ✅ |
 | `mail_imap_smoke.php` (sahte IMAP sunucusu: oturum, "UID n:*" tuzağı, literal, kopma, limit, BYE, UTF-7, belirteçleyici) | 45/45 ✅ |
 | `mail_mime_smoke.php` (başlık/adres/RFC2231/multipart + **57'lik XSS korpusu** + kararlılık sanitize(sanitize(x))=sanitize(x) + srcdoc/CSP) | 120/120 ✅ |
 | `mail_sync_smoke.php` (çiftleme yok, okunmuş mail kaçmıyor, kopma/devam, hesap yalıtımı, UIDVALIDITY, thread, sızıntı yok, limitler) | 61/61 ✅ |
 | `mail_cron_smoke.php` (CLI-only, global kilit/BUSY, kısmi hata, günlük bakımı) | 19/19 ✅ |
 | `mail_review_smoke.php` (Opus bulguları H1…L5 regresyonları; MySQL strict mod SQLite'ta taklit) | 39/39 ✅ |
 | `mail_view_smoke.php` (M3: sorgular, filtreler, LIKE kaçışı, sayfalama, ACL/IDOR, durum değişiklikleri, ek indirme: ACL, parça beyaz listesi, UIDVALIDITY 409, octet-stream zorlaması, boyut, hata) | 46/46 ✅ |
-| `mail_ui_smoke.php` (M1 + M3: sayfa render, GET yan etkisiz, IDOR, iframe sandbox, POST işlemleri) | 56/56 ✅ |
+| `mail_ui_smoke.php` (M1 + M3 + M5: sayfa render, GET yan etkisiz, IDOR, iframe sandbox, POST işlemleri, onay ekranı) | 84/84 ✅ |
 | `mail_ui_render.php` + `mail_ui_smoke.js` (**Playwright/Chromium**: 360/390/767/768/1024/1280/1440 — yatay taşma, panel düzeni, sabit Cevapla çubuğu, dokunma hedefleri, 16px input, kontrast açık/koyu, **saklı XSS iframe içinde çalışmıyor**, konsol hatası) | 200/200 ✅ |
 | `mail_translate_smoke.php` (M4: 17 dil tespiti, alıntı kırpma, parçalama, DeepL/Libre/MyMemory sahte HTTP, hata türleri, geri çekilme, kota, yapılandırma hatası, **veri çıkışı denetimi**, ACL, cron, sızıntı) | 107/107 ✅ |
 | `bottomnav_render.php` + `bottomnav_smoke.js` (alt çubuk, mail girdisiyle) | (A) 1828 · (B) 1011 ✅ |
+| `mail_smtp_smoke.php` (M5: sahte SMTP — oturum, AUTH, DATA sınıflaması, başlık oluşturucu, CRLF/başlık enjeksiyonu, thread başlıkları, sızıntı) | 62/62 ✅ |
+| `mail_outbox_smoke.php` (M5: taslak→önizleme→onay→gönderim durum makinesi, onaysız SMTP yok, çift gönderim yok, unknown/insan çözümü, APPEND, iptal, ACL) | 109/109 ✅ |
+| `mail_outbox_review_smoke.php` (M5 Opus bulguları B1…B7 regresyonları; yarışlar `_kanca_*` ile zorlanır) | 34/34 ✅ |
+| `mail_stream_smoke.php` (gerçek soket çifti: satır/bayt okuma, mutlak süre, yavaş-damla, büyük yazma, yazma kilitlenmesi) | 9/9 ✅ |
+| `mail_ui_smoke.js` (Playwright, M5 onay ekranı dahil) | 505/505 ✅ |
 | Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
-Henüz test edilmeyenler (ağ/kimlik bilgisi gerektirir → sahip tarafında): gerçek Gmail/Outlook/Dovecot IMAP davranışı, gerçek TLS/STARTTLS el sıkışması,
+Henüz test edilmeyenler (ağ/kimlik bilgisi gerektirir → sahip tarafında): gerçek Gmail/Outlook/Dovecot IMAP ve SMTP davranışı (587/465, Gmail/Outlook uygulama şifresi, gönderilen kopya APPEND'i), gerçek TLS/STARTTLS el sıkışması,
 canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.php`, `mail_ui_smoke.js` (Playwright).
 
 ## Security Notes
@@ -321,8 +361,8 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M5: cevap onayı + SMTP (`config/mail_smtp.php` saf PHP istemci, `mail_outbox` durum makinesi, TR→hedef dil çeviri önizleme, `content_hash` onayı, idempotency, at-most-once gönderim, thread başlıkları, Sent'e APPEND). **Gerçek SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak.**
-- Sonra M3…M8 (görev metnindeki sıra).
+- M6: cron/retry/log/güvenlik sertleştirme (MySQL indeks uzunluğu denetimi, master-key rotasyon + `local.php` izin dokümanı, art arda senkron hatalarında geri çekilme, senkron günlüğü görüntüleyici).
+- M7: tam test/regresyon/UI incelemesi · M8: son entegrasyon incelemesi. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
 
 ## Needs ChatGPT Review
 
@@ -334,3 +374,6 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 4. **AD-4:** AES-256-GCM+AAD, `local.php` anahtarı; HKS'teki sabit yedek anahtar deseni
    BİLEREK tekrarlanmadı — kabul mü?
 5. Dal adı sapması (üstteki ¹ notu).
+6. **M5 / AD-7:** gönderim kimliği (From adresi + görünen ad + Reply-To) onay hash'ine dahil — onaydan sonra hesap ayarı değişirse gönderim `failed`'e düşer. Kabul mü?
+7. **M5:** `approved` > 30 dk gönderilmemiş onay otomatik geri alınır (yeniden onay gerekir); `sending` > 20 dk → `unknown`. Eşikler kabul mü?
+8. **M5:** gerçek SMTP (Gmail/Outlook/cPanel) testi sahip credential'ı olmadan yapılamadı; migration (yeni 7 tablo) çalıştırılmadı.

@@ -63,7 +63,7 @@ function mail_thread_coz(PDO $pdo, int $hesapId, array $m, string $alindi): int
     foreach (array_reverse((array)$m['references']) as $r) $adaylar[] = $r;
     $adaylar = array_values(array_unique($adaylar));
     if ($adaylar) {
-        $hash = array_map(static fn($id) => sha1('id:' . $id), array_slice($adaylar, 0, 31));
+        $hash = array_map('mail_mime_id_hash', array_slice($adaylar, 0, 31));
         $in = implode(',', array_fill(0, count($hash), '?'));
         $st = $pdo->prepare("SELECT thread_id FROM mail_messages WHERE account_id = ? AND thread_id IS NOT NULL AND message_id_hash IN ($in) ORDER BY id LIMIT 1");
         $st->execute(array_merge([$hesapId], $hash));
@@ -71,7 +71,7 @@ function mail_thread_coz(PDO $pdo, int $hesapId, array $m, string $alindi): int
         if ($t !== false) return (int)$t;
     }
     $kok = ((array)$m['references'])[0] ?? ($m['in_reply_to'] ?? ($m['message_id'] ?? null));
-    $anahtar = sha1($kok !== null ? 'id:' . $kok : 'hash:' . $m['message_id_hash']);
+    $anahtar = $kok !== null ? mail_mime_id_hash((string)$kok) : sha1('hash:' . $m['message_id_hash']);
     $st = $pdo->prepare('SELECT id FROM mail_threads WHERE account_id = ? AND thread_key = ?');
     $st->execute([$hesapId, $anahtar]);
     $t = $st->fetchColumn();

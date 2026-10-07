@@ -74,7 +74,7 @@ echo "\n=== M2: yeni dosyalar ===\n";
 foreach (glob($ROOT . '/config/mail_*.php') as $f) {
     $ad = basename($f); $k = (string)file_get_contents($f);
     preg_match_all('/error_log\(([^;]*)\);/', $k, $mm);
-    $kotu = array_filter($mm[1], fn($a) => !str_contains($a, 'mail_redact(') && !preg_match("/^'[^']*'$/", trim($a)));
+    $kotu = array_filter($mm[1], fn($a) => !str_contains($a, 'mail_redact(') && !preg_match("/^'[^']*'(?: \. \(int\)\\$\w+)?$/", trim($a)));
     ok("$ad: error_log çağrıları redakte ya da sabit metin", $kotu === [], json_encode(array_values($kotu)));
     ok("$ad: eval()/exec/shell_exec/system/passthru/unserialize YOK", !preg_match('/\b(eval|shell_exec|system|passthru|proc_open|popen|unserialize)\s*\(/', $k) && !preg_match('/\bexec\s*\(/', preg_replace('/\$pdo->exec\(|\$db->exec\(/', '', $k)));
     ok("$ad: LIBXML_NOENT / allow_self_signed=true / verify_peer=false YOK", !str_contains($k, 'LIBXML_NOENT') && !preg_match("/allow_self_signed'\s*=>\s*true|verify_peer'\s*=>\s*false|verify_peer_name'\s*=>\s*false/", $k));
@@ -103,7 +103,7 @@ foreach (['mail.php', 'mail_hesaplar.php', 'mail_ek.php', 'migrate.php', 'index.
 ok('mail_smtp_baglan() çağrısı yalnız mail_outbox_gonder() içinde (+ tanım)', substr_count($tum, 'mail_smtp_baglan(') === 2 && str_contains($gonder, 'mail_smtp_baglan('), (string)substr_count($tum, 'mail_smtp_baglan('));
 ok('SMTP ->gonder() çağrısı yalnız mail_outbox_gonder() içinde', preg_match_all('/->gonder\(/', $tum) === 1 && str_contains($gonder, '->gonder('));
 ok('MailSmtpClient yalnız mail_smtp.php + mail_outbox_gonder (kurucu)', preg_match_all('/new MailSmtpClient/', preg_replace('#/\*FILE:mail_smtp\.php\*/.*?(?=/\*FILE:|$)#s', '', $tum)) === 0);
-ok('mail_outbox_gonder: atomik sahiplenme koşulu (approved ∧ approved_by ∧ Message-ID ∧ hash)', str_contains($gonder, "status = 'approved' AND approved_by IS NOT NULL AND out_message_id IS NOT NULL AND content_hash IS NOT NULL") && str_contains($gonder, "rowCount() !== 1"));
+ok('mail_outbox_gonder: atomik sahiplenme koşulu (approved ∧ approved_by ∧ Message-ID ∧ hash)', str_contains($gonder, "status = 'approved' AND approved_by IS NOT NULL AND out_message_id IS NOT NULL AND approved_hash IS NOT NULL AND content_hash = approved_hash") && str_contains($gonder, "rowCount() !== 1"));
 ok('mail_outbox_gonder: sahiplenmeden SONRA bütünlük (hash) doğrulaması', strpos($gonder, 'mail_outbox_hash') !== false && strpos($gonder, 'rowCount()') < strpos($gonder, 'mail_outbox_hash'));
 ok('mail_outbox_onayla: send yetkisi + hash_equals + bütünlük + ikiz kontrolü', (bool)preg_match('/function mail_outbox_onayla\(.*?sendYetkisi.*?hash_equals.*?mail_outbox_hash.*?mail_outbox_ikiz_var/s', $outbox));
 ok('belirsizlikte (unknown) otomatik yeniden gönderim yolu YOK: unknown → yalnız insan kararı', !preg_match("/'unknown'[^;]*mail_outbox_gonder\(|status = 'unknown'[^;]*status = 'approved'/", $outbox));

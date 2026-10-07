@@ -79,11 +79,12 @@ echo "\n=== M1: STARTTLS tampon enjeksiyonu + yanlış etiket ===\n";
 fwrite($y, "A002 OK Begin TLS\r\n* CAPABILITY IMAP4rev1 INJECTED-BY-MITM\r\nA002 OK injected\r\n");
 $ref = new ReflectionClass(MailSocketStream::class);
 $ms = $ref->newInstanceWithoutConstructor();
-$fp = $ref->getProperty('fp'); $fp->setAccessible(true); $fp->setValue($ms, $x);
+$ct = $ref->getConstructor(); $ct->setAccessible(true); $ct->invoke($ms, $x, 'x', 5.0);
 $ilk = $ms->readLine(65536);
 ok('ilk satır okundu', $ilk === 'A002 OK Begin TLS');
 $meta = stream_get_meta_data($x);
-ok('PHP tamponunda düz metin bayt kaldı (saldırı koşulu gerçek)', ($meta['unread_bytes'] ?? 0) > 0, json_encode($meta['unread_bytes'] ?? null));
+$rb = $ref->getProperty('rbuf'); $rb->setAccessible(true);
+ok('okuma tamponunda düz metin bayt kaldı (saldırı koşulu gerçek)', ($meta['unread_bytes'] ?? 0) > 0 || (string)$rb->getValue($ms) !== '', json_encode($meta['unread_bytes'] ?? null));
 ok('tamponda bayt varken startTls() REDDEDİYOR (TLS\'e geçilmiyor)', $ms->startTls() === false);
 $c = new MailImapClient((new FakeMailStream(['caps' => ['IMAP4rev1', 'STARTTLS'], 'inject_tag' => true])));
 $e = null; try { $c->baslat(false); } catch (MailImapException $ex) { $e = $ex; }

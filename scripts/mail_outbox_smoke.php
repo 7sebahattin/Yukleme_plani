@@ -139,7 +139,7 @@ ok('yanlış hash (ekrandaki içerik değişmiş) → reddedilir, gönderilmez',
 $eskiHash = satir($tg['id'])['content_hash'];
 $db->exec("UPDATE mail_outbox SET body_out = 'EN: KURCALANMIŞ — hesap no değişti' WHERE id = {$tg['id']}");
 $r = mail_outbox_onayla($db, $tg['id'], $H, $UID, true, $eskiHash, ['smtp' => $smtpFab, 'simdi' => $NOW]);
-ok('DB\'de içerik kurcalanmış (hash tutuyor ama içerik değişmiş) → bütünlük reddi, GÖNDERİLMEZ', !$r['ok'] && str_contains($r['mesaj'], 'bütünlük') && $BAGLANTI === 0 && $SMTP->mesajlar === []);
+ok('DB\'de içerik kurcalanmış (hash tutuyor ama içerik değişmiş) → bütünlük reddi, GÖNDERİLMEZ', !$r['ok'] && str_contains($r['mesaj'], 'değişmiş') && $BAGLANTI === 0 && $SMTP->mesajlar === []);
 $db->exec("UPDATE mail_outbox SET body_out = 'EN: Gönderim kapısı testi' WHERE id = {$tg['id']}");
 mail_outbox_onizle($db, $tg['id'], $H, $UID, $sag, ['target_lang' => 'en', 'quote' => 1]);
 ok('yabancı hesap kullanıcısı onaylayamaz', !mail_outbox_onayla($db, $tg['id'], [$B], $UID, true, satir($tg['id'])['content_hash'], ['smtp' => $smtpFab])['ok'] && $BAGLANTI === 0);
@@ -239,8 +239,8 @@ $SMTP = new FakeSmtpStream(['user' => 'ceviri@asya.com', 'pass' => 'smtp-SIR-2']
 $k = yeniCevap('Süreç öldü');
 $db->exec("UPDATE mail_outbox SET status = 'sending', approved_by = 5, approved_at = '2026-10-06 11:00:00', out_message_id = '<olu@asya.com>', send_token = 'tok', send_started_at = '" . date('Y-m-d H:i:s', $NOW - 100) . "' WHERE id = $k");
 ok('yeni başlamış gönderim (100 sn) DOKUNULMAZ', mail_outbox_takili_isaretle($db, $NOW) === 0 && satir($k)['status'] === 'sending');
-ok('10 dk\'dan uzun takılı sending → unknown (otomatik tekrar YOK)', mail_outbox_takili_isaretle($db, $NOW + 700) >= 1 && satir($k)['status'] === 'unknown' && str_contains(satir($k)['last_error'], 'süreç kesildi'));
-ok('takılı satır sonra da gönderilmez', !mail_outbox_gonder($db, $k, ['smtp' => $smtpFab, 'simdi' => $NOW + 800])['ok'] && $SMTP->mesajlar === []);
+ok('20 dk\'dan uzun takılı sending → unknown (otomatik tekrar YOK)', mail_outbox_takili_isaretle($db, $NOW + 1300) >= 1 && satir($k)['status'] === 'unknown' && str_contains(satir($k)['last_error'], 'belirsiz'));
+ok('takılı satır sonra da gönderilmez', !mail_outbox_gonder($db, $k, ['smtp' => $smtpFab, 'simdi' => $NOW + 1400])['ok'] && $SMTP->mesajlar === []);
 
 echo "\n=== 7. Açık yeniden deneme + belirsizlik çözümü (insan kararı) ===\n";
 $SMTP = new FakeSmtpStream(['user' => 'ceviri@asya.com', 'pass' => 'smtp-SIR-2']);
@@ -270,7 +270,7 @@ ok('bağlanılamadı (DATA öncesi) → failed (güvenli)', $r['durum'] === 'fai
 $SMTP = new FakeSmtpStream(['user' => 'ceviri@asya.com', 'pass' => 'smtp-SIR-2']);
 $id = yeniCevap('Bozuk alıcı');
 $db->exec("UPDATE mail_outbox SET to_addr = 'bozuk' WHERE id = $id");
-$db->prepare("UPDATE mail_outbox SET content_hash = ? WHERE id = ?")->execute([mail_outbox_hash(satir($id)), $id]);
+$db->prepare("UPDATE mail_outbox SET content_hash = ? WHERE id = ?")->execute([mail_outbox_hash(satir($id), mail_outbox_hesap_kimligi($db, $A)), $id]);
 $r = onayla($id);
 ok('mesaj oluşturulamazsa (geçersiz alıcı) → failed, SMTP\'ye gidilmez', $r['durum'] === 'failed' && $SMTP->mesajlar === [] && $SMTP->komutlar === []);
 

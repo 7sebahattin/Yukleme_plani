@@ -190,7 +190,13 @@ function mail_mime_baslik_coz_adres(string $v): string
 function mail_mime_idler(string $v): array
 {
     preg_match_all('/<([^<>\s]{1,500})>/', mail_mime_temiz($v), $m);   // geçerli UTF-8 + kontrol karakteri yok
-    return array_values(array_unique(array_map(static fn($x) => mb_strtolower($x, 'UTF-8'), $m[1])));
+    return array_values(array_unique($m[1]));   // BÜYÜK/küçük harf KORUNUR (RFC 5322: sol kısım büyük/küçük harfe duyarlıdır; cevapta aynen geri verilir)
+}
+
+/** Message-ID karşılaştırma/dedupe anahtarı: harf-duyarsız (yalnız eşleştirme için — başlıkta orijinal yazım kalır). */
+function mail_mime_id_hash(string $id): string
+{
+    return sha1('id:' . mb_strtolower($id, 'UTF-8'));
 }
 
 function mail_mime_gonder_adi(?string $ad): string
@@ -347,7 +353,7 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
     if (strlen($guvenli) > MAIL_HTML_MAX) { $guvenli = ''; $kesildi = true; }   // yarım HTML GÖSTERME (etiket dengesi bozulur)
 
     $hamBaslik = substr($ham, 0, (int)(preg_match('/\r?\n\r?\n/', $ham, $mm, PREG_OFFSET_CAPTURE) ? $mm[0][1] : min(strlen($ham), 8192)));
-    $hash = sha1($mid !== null ? 'id:' . $mid : 'noid:' . $hamBaslik);
+    $hash = $mid !== null ? mail_mime_id_hash($mid) : sha1('noid:' . $hamBaslik);
 
     return [
         'message_id'      => $mid,

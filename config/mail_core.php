@@ -146,6 +146,8 @@ function mail_tablolar(): array
         `tr_provider`         VARCHAR(30)  NULL DEFAULT NULL,
         `quote_original`      TINYINT(1)   NOT NULL DEFAULT 1,
         `content_hash`        CHAR(64)     NULL DEFAULT NULL,
+        `approved_hash`       CHAR(64)     NULL DEFAULT NULL,
+        `dedupe_key`          VARCHAR(80)  NULL DEFAULT NULL,
         `out_message_id`      VARCHAR(255) NULL DEFAULT NULL,
         `hdr_in_reply_to`     VARCHAR(500) NULL DEFAULT NULL,
         `hdr_references`      TEXT         NULL,
@@ -161,6 +163,7 @@ function mail_tablolar(): array
         `updated_at`          DATETIME     NULL DEFAULT NULL,
         UNIQUE KEY `uq_mo_idem` (`account_id`, `idempotency_key`),
         UNIQUE KEY `uq_mo_msgid` (`out_message_id`),
+        UNIQUE KEY `uq_mo_dedupe` (`dedupe_key`),
         INDEX `idx_mo_status` (`status`),
         INDEX `idx_mo_reply` (`in_reply_to_msg_id`),
         CONSTRAINT `fk_mo_account` FOREIGN KEY (`account_id`)

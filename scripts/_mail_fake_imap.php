@@ -131,7 +131,7 @@ final class FakeMailStream implements MailStream
                 $this->uidKomutu($tag, $arg);
                 break;
             case 'APPEND':
-                if (preg_match('/^"([^"]*)"\s+\(([^)]*)\)\s+\{(\d+)\}$/', $arg, $mm)) { $this->appendBekle = ['tag' => $tag, 'klasor' => $mm[1], 'bayrak' => $mm[2], 'n' => (int)$mm[3]]; $this->cevap("+ Ready for literal data\r\n"); }
+                if (preg_match('/^"([^"]*)"\s+\(([^)]*)\)\s+\{(\d+)\}$/', $arg, $mm)) { $this->appendBekle = ['tag' => $tag, 'klasor' => $mm[1], 'bayrak' => $mm[2], 'n' => (int)$mm[3]]; $this->cevap("+ Ready for literal data\r\n"); if (!empty($this->cfg['double_continuation'])) $this->cevap("+ Ready again\r\n"); }
                 else $this->cevap("$tag BAD APPEND syntax\r\n");
                 break;
             case 'LOGOUT':
