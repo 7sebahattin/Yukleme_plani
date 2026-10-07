@@ -28,6 +28,18 @@
         }, 1200);
     }
 
+    // Çift tık / çift gönderim: gönderim formlarında ilk gönderimden sonra düğmeleri kilitle (SADECE kolaylık —
+    // asıl koruma sunucudadır: idempotency_key + atomik sahiplenme). setTimeout: veri kümesi oluştuktan SONRA devre dışı bırak.
+    document.addEventListener('submit', function (e) {
+        var f = e.target;
+        if (!f || !f.hasAttribute || !f.hasAttribute('data-tek-gonderim')) return;
+        if (f.getAttribute('data-gonderildi') === '1') { e.preventDefault(); return; }
+        f.setAttribute('data-gonderildi', '1');
+        setTimeout(function () {
+            f.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (b) { b.disabled = true; });
+        }, 0);
+    });
+
     // Riskli ek türleri: indirmeden önce onay.
     document.addEventListener('click', function (e) {
         var a = e.target.closest ? e.target.closest('a[data-tehlikeli]') : null;

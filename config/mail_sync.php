@@ -209,7 +209,7 @@ function mail_sync_imlec_yaz(PDO $pdo, int $hesapId, string $klasor, int $uidval
 /** Hata metnini DB/log için güvenli ve kısa tutar. */
 function mail_hata_metni(Throwable $e): string
 {
-    $kind = $e instanceof MailImapException ? $e->kind : (get_class($e) === 'RuntimeException' ? 'runtime' : 'diger');
+    $kind = ($e instanceof MailImapException || $e instanceof MailSmtpException) ? $e->kind : (get_class($e) === 'RuntimeException' ? 'runtime' : 'diger');
     if ($e instanceof PDOException) return 'Veritabanı hatası (ayrıntı sunucu günlüğünde).';
     return mb_substr(mail_redact($kind . ': ' . $e->getMessage()), 0, 250);
 }
@@ -427,6 +427,10 @@ function mail_cron_calistir(PDO $pdo, array $opt = []): array
         }
         if (!$sonuc) $satirlar[] = 'OK aktif hesap yok';
         if ($ceviriSatiri !== null) $satirlar[] = $ceviriSatiri;
+        // 'sending'de takılı kalan (süreç ölümü) giden cevaplar → 'unknown'. ASLA otomatik yeniden gönderilmez.
+        if (function_exists('mail_outbox_takili_isaretle')) {
+            try { $tk = mail_outbox_takili_isaretle($pdo, $opt['simdi'] ?? null); if ($tk > 0) $satirlar[] = "UYARI belirsiz_gonderim=$tk (elle doğrulayın)"; } catch (Throwable $e) { /* bakım hatası senkronu bozmasın */ }
+        }
         try {   // günlük bakımı: eski senkron günlüğü silinir (hesap verisine dokunmaz)
             $pdo->prepare('DELETE FROM mail_sync_log WHERE started_at < ?')
                 ->execute([date('Y-m-d H:i:s', time() - ((int)($opt['log_gun'] ?? 30)) * 86400)]);

@@ -175,6 +175,69 @@ const MOBIL = (w) => w < 768;
         }
     }
 
+    // ── M5: cevap yazma + onay ekranları ──
+    for (const sayfa of ['cevap_yaz', 'onay_translated', 'onay_yetkisiz', 'onay_unknown', 'onay_failed', 'onay_sent', 'onay_draft']) {
+        for (const [w, h] of [[360, 740], [390, 844], [768, 900], [1024, 800], [1440, 900]]) {
+            const mobil = MOBIL(w);
+            const { ctx, page, hatalar } = await ac(sayfa, w, h);
+            const t = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            ok(`${sayfa}@${w}: yatay taşma yok`, t <= 0, 'taşma=' + t);
+            ok(`${sayfa}@${w}: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+            ok(`${sayfa}@${w}: bu ekranda sabit "Cevapla" çubuğu YOK (düzenleme/onay akışını örtmez)`, (await page.$('.mail-cevapbar')) === null);
+            ok(`${sayfa}@${w}: zararlı görünümlü metin ÇALIŞMADI (window.__p tanımsız)`, await page.evaluate(() => window.__p) === undefined);
+            const icT = await page.$$eval('.mail-okuyucu *', es => es.filter(e => e.scrollWidth - e.clientWidth > 2 && getComputedStyle(e).overflowX === 'visible' && e.getBoundingClientRect().right > window.innerWidth + 1).length);
+            ok(`${sayfa}@${w}: hiçbir öğe ekran dışına taşmıyor (uzun e-posta/kelime)`, icT === 0, 'taşan=' + icT);
+            if (sayfa === 'cevap_yaz') {
+                const ta = await rect(page, '#mail-tr');
+                ok(`${sayfa}@${w}: metin alanı görünür ve ≥ 120px, mobilde 16px`, ta && ta.gorunur && ta.h >= 120 && (!mobil || parseFloat(ta.fs) >= 16), ta && ta.h + '/' + ta.fs);
+                const dil = await rect(page, '#mail-dil');
+                ok(`${sayfa}@${w}: dil seçimi mobilde 16px`, dil && (!mobil || parseFloat(dil.fs) >= 16));
+                const b = await rect(page, 'form.mail-yaz button[type=submit]');
+                ok(`${sayfa}@${w}: "Çeviriyi Önizle" ≥ 40px`, b && b.h >= 39.5, b && b.h + '');
+                ok(`${sayfa}@${w}: "onaylamadan gönderilmez" uyarısı görünür`, (await page.textContent('.mail-okuyucu')).includes('onaylamadan hiçbir şey gönderilmez'));
+            }
+            if (sayfa === 'onay_translated' || sayfa === 'onay_yetkisiz' || sayfa === 'onay_draft') {
+                const k = await page.$$eval('.mail-onay-kutu', es => es.map(e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, r: r.right, b: r.bottom, w: r.width }; }));
+                ok(`${sayfa}@${w}: iki kutu var (Türkçe orijinal + gönderilecek çeviri)`, k.length === 2);
+                if (k.length === 2) {
+                    if (mobil) ok(`${sayfa}@${w}: mobilde kutular ALT ALTA`, k[1].y >= k[0].b - 1, JSON.stringify(k));
+                    else ok(`${sayfa}@${w}: ≥768'de kutular YAN YANA`, k[1].x >= k[0].r - 1 && Math.abs(k[0].y - k[1].y) < 4, JSON.stringify(k));
+                }
+                ok(`${sayfa}@${w}: başlıklar TÜRKÇE ORİJİNAL CEVAP / GÖNDERİLECEK ÇEVİRİ`, (await page.textContent('.mail-onay-kutular')).includes('TÜRKÇE ORİJİNAL CEVAP') && (await page.textContent('.mail-onay-kutular')).includes('GÖNDERİLECEK ÇEVİRİ'));
+                const txt = await page.textContent('.mail-onay-kutular');
+                ok(`${sayfa}@${w}: <img/<script> metni olarak gösterilir, öğe olarak değil`, txt.includes('<script>window.__p=2</script>') && (await page.$$('.mail-onay-kutular img, .mail-onay-kutular script')).length === 0);
+            }
+            if (sayfa === 'onay_translated') {
+                const b = await rect(page, '.mail-onayla');
+                ok(`${sayfa}@${w}: "✅ Onayla ve Gönder" görünür, ≥ 44px`, b && b.gorunur && b.h >= 43.5, b && b.h + '');
+                await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+                await page.waitForTimeout(200);
+                const b2 = await rect(page, '.mail-onayla'); const dock = await rect(page, '.bottomnav .bn-dock') || await rect(page, '.bottomnav');
+                ok(`${sayfa}@${w}: sayfa sonunda onay düğmesi alt çubuğun ARKASINDA kalmıyor`, !mobil || (b2 && dock && b2.b <= dock.y + 2), `btn.b=${b2 && b2.b} dock.y=${dock && dock.y}`);
+                ok(`${sayfa}@${w}: gizli hash alanı + tek-gönderim kancası`, (await page.$eval('form.mail-onay-form input[name=hash]', e => e.value)).length === 64 && (await page.$('form[data-tek-gonderim]')) !== null);
+                ok(`${sayfa}@${w}: üçüncü taraf çeviri notu görünür`, (await page.textContent('.mail-meta')).includes('üçüncü taraf servis'));
+                // Çift tık: ikinci gönderim engellenir (JS kolaylığı) — gerçek koruma sunucudadır (outbox testleri)
+                const gonderimler = await page.evaluate(() => new Promise(res => { const f = document.querySelector('form.mail-onay-form'); let n = 0;
+                    window.addEventListener('submit', e => { if (!e.defaultPrevented) n++; e.preventDefault(); });   // mail.js (document) önce çalışır; yalnız ENGELLENMEMİŞ gönderimler sayılır
+                    const btn = f.querySelector('button'); btn.click(); btn.click(); setTimeout(() => res({ n, kilitli: btn.disabled }), 80); }));
+                ok(`${sayfa}@${w}: çift tıkta tek gönderim + düğme kilitlenir`, gonderimler.n === 1 && gonderimler.kilitli, JSON.stringify(gonderimler));
+            }
+            if (sayfa === 'onay_yetkisiz') {
+                ok(`${sayfa}@${w}: mail.send yoksa Onayla düğmesi YOK`, (await page.$('.mail-onayla')) === null && (await page.textContent('.mail-okuyucu')).includes('mail.send'));
+            }
+            if (sayfa === 'onay_unknown') {
+                const txt = await page.textContent('.mail-okuyucu');
+                ok(`${sayfa}@${w}: belirsiz uyarısı + iki çözüm düğmesi (≥40px), Onayla YOK`, txt.includes('OTOMATİK TEKRAR GÖNDERMEZ') && (await page.$$('button[value="cevap_belirsiz_gonderildi"], button[value="cevap_belirsiz_gonderilmedi"]')).length === 2 && (await page.$('.mail-onayla')) === null);
+                const hs = await page.$$eval('.mail-okuyucu .mail-satir-form button', es => es.map(e => e.getBoundingClientRect().height));
+                ok(`${sayfa}@${w}: çözüm düğmeleri ≥ 40px`, hs.every(x => x >= 39.5), hs.join(','));
+            }
+            if (sayfa === 'onay_failed') ok(`${sayfa}@${w}: "Tekrar dene" var, Onayla YOK`, (await page.$('button[type=submit]:text("Tekrar dene")')) !== null && (await page.$('.mail-onayla')) === null);
+            if (sayfa === 'onay_sent') ok(`${sayfa}@${w}: gönderilmiş kayıtta HİÇBİR gönderim/onay düğmesi yok`, (await page.$$('button[value="cevap_onayla"], button[value="cevap_tekrar"], button[value="cevap_gonder_onayli"], .mail-onayla')).length === 0);
+            if (w === 390 || w === 1440) await page.screenshot({ path: path.join(SHOTS, `${w}_${sayfa}.png`) });
+            await ctx.close();
+        }
+    }
+
     // ── Koyu tema kontrast ──
     {
         const lum = (c) => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };

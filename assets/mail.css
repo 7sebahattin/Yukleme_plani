@@ -84,6 +84,19 @@ a.mail-oge:hover { background: var(--surface-2); }
 .mail-thread ul { margin: 6px 0 0; padding-left: 18px; }
 .mail-cevapbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mail-cevapbar-not { font-size: .8rem; color: var(--muted); }
+.mail-yaz { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mail-yaz label { font-weight: 600; font-size: .9rem; }
+.mail-yaz textarea, .mail-yaz select { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font: inherit; box-sizing: border-box; }
+.mail-yaz textarea { min-height: 140px; resize: vertical; }
+.mail-onay-secenek { display: flex; gap: 8px; align-items: center; font-weight: 400 !important; }
+.mail-onay-kutular { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 10px 0; }
+.mail-onay-kutu { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface-2); min-width: 0; }
+.mail-onay-kutu--cikis { border-color: var(--primary); background: var(--primary-soft); }
+.mail-onay-kutu h3 { margin: 0 0 6px; font-size: .78rem; letter-spacing: .04em; color: var(--muted); }
+.mail-onay-metin { font-size: .95rem; }
+.mail-onay-form { margin: 12px 0; padding: 12px; border: 2px solid var(--primary); border-radius: var(--radius-sm); }
+.mail-onay-not { margin: 0 0 10px; font-size: .88rem; }
+.mail-onayla { min-height: 48px; width: 100%; font-size: 1rem; }
 .mail-cevapla[disabled] { opacity: .6; cursor: not-allowed; }
 
 /* ───── Mobil (<768): tek panel ───── */
@@ -102,6 +115,8 @@ a.mail-oge:hover { background: var(--surface-2); }
 
 /* ───── Tablet+ (≥768): liste + mesaj yan yana ───── */
 @media (min-width: 768px) {
+    .mail-onay-kutular { grid-template-columns: 1fr 1fr; }
+    .mail-onayla { width: auto; min-width: 260px; }
     .mail-geri { display: none; }
     .mail-panes { display: grid; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr); gap: 12px; align-items: start; }
     .mail-liste { max-height: calc(100vh - 230px); overflow-y: auto; position: sticky; top: 8px; }

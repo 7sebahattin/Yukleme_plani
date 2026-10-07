@@ -18,6 +18,8 @@ require_once __DIR__ . '/config/mail_mime.php';
 require_once __DIR__ . '/config/mail_sync.php';
 require_once __DIR__ . '/config/mail_view.php';
 require_once __DIR__ . '/config/mail_translate.php';
+require_once __DIR__ . '/config/mail_smtp.php';
+require_once __DIR__ . '/config/mail_outbox.php';
 $auth_user = require_login();
 require_mail('read');
 mail_no_store();
@@ -27,6 +29,7 @@ $uid      = (int)$auth_user['id'];
 $hazir    = mail_sema_hazir($pdo);
 $yonetici = can_mail('admin');
 $cevapYetki = can_mail('reply');
+$sendYetki = can_mail('send');
 $hesapIds = $hazir ? mail_gorunur_hesap_idleri($uid, $pdo) : [];
 $ceviriHazir = mail_ceviri_saglayici() !== null;   // sağlayıcı yapılandırılmış mı (kapalıysa hiçbir şey dışarı gitmez)
 
@@ -38,11 +41,13 @@ $filtre  = mail_filtre_gecerli((string)($_GET['f'] ?? $_POST['f'] ?? 'gelen'));
 $q       = mb_substr(trim((string)($_GET['q'] ?? '')), 0, 100);
 $sayfa   = max(1, (int)($_GET['p'] ?? 1));
 $mId     = (int)($_GET['m'] ?? $_POST['m'] ?? 0);
+$oId     = (int)($_GET['o'] ?? $_POST['o'] ?? 0);   // giden kaydı (cevap taslağı/durumu)
+$cevapMod = $cevapYetki && ($_GET['cevap'] ?? '') === '1';
 $sekme   = ($_GET['v'] ?? '') === 'orj' ? 'orj' : (($_GET['v'] ?? '') === 'tr' ? 'tr' : '');
 $uzakGorsel = ($_GET['img'] ?? '') === '1';
 
-$url = static function (array $ek = []) use ($aSecili, $filtre, $q, $sayfa, $mId): string {
-    $p = array_merge(['a' => $aSecili ?: null, 'f' => $filtre !== 'gelen' ? $filtre : null, 'q' => $q !== '' ? $q : null, 'p' => $sayfa > 1 ? $sayfa : null, 'm' => $mId ?: null], $ek);
+$url = static function (array $ek = []) use ($aSecili, $filtre, $q, $sayfa, $mId, $oId): string {
+    $p = array_merge(['a' => $aSecili ?: null, 'f' => $filtre !== 'gelen' ? $filtre : null, 'q' => $q !== '' ? $q : null, 'p' => $sayfa > 1 ? $sayfa : null, 'm' => $mId ?: null, 'o' => $oId ?: null], $ek);
     $p = array_filter($p, static fn($v) => $v !== null && $v !== '' && $v !== 0);
     return 'mail.php' . ($p ? '?' . http_build_query($p) : '');
 };
@@ -52,7 +57,8 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     $islem = (string)($_POST['islem'] ?? '');
     $ajax  = ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
-    $sn = mail_post_isle($pdo, $uid, $islem, $mId, $aSecili, $hesapIds, $yonetici, $cevapYetki);
+    $sn = mail_post_isle($pdo, ['uid' => $uid, 'hesapIds' => $hesapIds, 'yonetici' => $yonetici, 'cevap' => $cevapYetki, 'send' => $sendYetki,
+        'a' => $aSecili, 'm' => $mId, 'o' => $oId], $islem, $_POST);
     if ($sn['yasak'] !== null) forbidden($sn['yasak']);
     $ok = $sn['ok']; $mesaj = $sn['mesaj'];
     if ($ajax) {
@@ -61,13 +67,13 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     if ($mesaj !== '') set_flash($ok ? 'success' : 'error', $mesaj);
-    header('Location: ' . $url());
+    header('Location: ' . $url($sn['o'] ? ['o' => $sn['o'], 'cevap' => null] : ['o' => null, 'cevap' => null]));
     exit;
 }
 
 // ── Veri ──
 $liste = ['satirlar' => [], 'toplam' => 0]; $hataliMesajlar = []; $sayilar = array_fill_keys(array_keys(mail_filtreler()), 0);
-$hesapSatirlari = []; $okunmamis = []; $durumlar = []; $m = null; $thread = [];
+$hesapSatirlari = []; $okunmamis = []; $durumlar = []; $m = null; $thread = []; $oPanel = null;
 if ($hazir && $hesapIds) {
     $in = implode(',', array_fill(0, count($hesapIds), '?'));
     $st = $pdo->prepare("SELECT id, label, email, is_active FROM mail_accounts WHERE id IN ($in) ORDER BY label");
@@ -86,20 +92,23 @@ if ($hazir && $hesapIds) {
         $m = mail_mesaj_getir($pdo, $mId, $hesapIds);   // ACL: görünür değilse null
         if ($m) $thread = mail_thread_mesajlari($pdo, $m);
     }
+    if ($oId > 0) {
+        mail_outbox_takili_isaretle($pdo);               // 'sending'de takılı kalanlar → 'unknown' (otomatik tekrar YOK)
+        $oPanel = mail_outbox_getir($pdo, $oId, $hesapIds);   // ACL: görünür hesap değilse null
+    }
 }
 $etiketler = [];
 foreach ($hesapSatirlari as $h) $etiketler[(int)$h['id']] = $h['label'];
 $sayfaSayisi = max(1, (int)ceil($liste['toplam'] / MAIL_SAYFA_BOYUTU));
 $outboxModu = mail_filtre_outbox_mu($filtre);
-$durumEtiket = ['draft' => 'Taslak', 'translated' => 'Çeviri hazır — onay bekliyor', 'approved' => 'Onaylandı', 'sending' => 'Gönderiliyor',
-    'sent' => 'Gönderildi', 'failed' => 'Gönderilemedi', 'unknown' => 'Belirsiz — kontrol edin', 'cancelled' => 'İptal'];
+$durumEtiket = mail_outbox_durumlari();
 
 render_header('Mail Merkezi');
 mail_assets();
 ?>
 <div class="mail-kap">
 <?php render_flash(); ?>
-<div class="mail <?= $m ? 'mail--detay' : 'mail--liste' ?>" data-mail>
+<div class="mail <?= ($m || $oPanel) ? 'mail--detay' : 'mail--liste' ?>" data-mail>
 
 <?php if (!$hazir): ?>
     <div class="card" style="padding:16px">
@@ -176,13 +185,13 @@ mail_assets();
         <section class="mail-liste" aria-label="Mesajlar">
         <?php if ($outboxModu): ?>
             <?php foreach ($liste['satirlar'] as $o): ?>
-            <div class="mail-oge mail-oge--giden">
+            <a class="mail-oge mail-oge--giden<?= $oPanel && (int)$oPanel['id'] === (int)$o['id'] ? ' secili' : '' ?>" href="<?= h($url(['o' => (int)$o['id'], 'm' => null, 'cevap' => null])) ?>">
                 <div class="mail-oge-ust"><span class="mail-kim">→ <?= h($o['to_addr']) ?></span><span class="mail-zaman"><?= h(mail_zaman_fmt($o['zaman'])) ?></span></div>
                 <div class="mail-konu"><?= h($o['subject']) ?></div>
                 <div class="mail-oz"><span class="mail-durum mail-durum--<?= h($o['status']) ?>"><?= h($durumEtiket[$o['status']] ?? $o['status']) ?></span>
                     <?php if (!empty($o['last_error'])): ?> <span class="mail-hata-metin"><?= h($o['last_error']) ?></span><?php endif; ?>
                     <?php if (count($etiketler) > 1): ?> · <?= h($etiketler[(int)$o['account_id']] ?? '') ?><?php endif; ?></div>
-            </div>
+            </a>
             <?php endforeach; ?>
             <?php if ($filtre === 'hatali' && $hataliMesajlar): ?>
             <h3 class="mail-alt-baslik">Çevirisi başarısız gelen mailler</h3>
@@ -220,8 +229,103 @@ mail_assets();
         <?php endif; ?>
         </section>
 
-        <section class="mail-okuyucu" aria-label="Mesaj" <?= $m && (int)$m['is_read'] === 0 ? 'data-okundu-gonder="' . (int)$m['id'] . '"' : '' ?>>
-        <?php if (!$m): ?>
+        <section class="mail-okuyucu" aria-label="Mesaj" <?= $m && !$oPanel && !$cevapMod && (int)$m['is_read'] === 0 ? 'data-okundu-gonder="' . (int)$m['id'] . '"' : '' ?>>
+        <?php if ($oPanel): ?>
+            <?php
+            $os = (string)$oPanel['status']; $ebeveyn = $oPanel['in_reply_to_msg_id'] ? mail_mesaj_getir($pdo, (int)$oPanel['in_reply_to_msg_id'], $hesapIds) : null;
+            $dilAd = mail_diller()[(string)$oPanel['target_lang']] ?? strtoupper((string)$oPanel['target_lang']);
+            $duzenlenebilir = in_array($os, ['draft', 'translated'], true);
+            $ortakAlan = static function (int $oid) use ($aSecili, $filtre): string {
+                return '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '"><input type="hidden" name="o" value="' . $oid . '"><input type="hidden" name="a" value="' . $aSecili . '"><input type="hidden" name="f" value="' . h($filtre) . '">';
+            };
+            ?>
+            <div class="mail-okuyucu-arac"><a class="btn btn-geri mail-geri" href="<?= h($url(['o' => null, 'm' => null])) ?>">← Liste</a>
+                <?php if ($ebeveyn): ?><a class="btn" href="<?= h($url(['o' => null, 'm' => (int)$ebeveyn['id'], 'cevap' => null])) ?>">Cevaplanan maili aç</a><?php endif; ?></div>
+            <h2 class="mail-okuyucu-konu">Cevap: <?= h($oPanel['subject']) ?></h2>
+            <p><span class="mail-durum mail-durum--<?= h($os) ?>"><?= h($durumEtiket[$os] ?? $os) ?></span></p>
+            <dl class="mail-meta">
+                <dt>Alıcı</dt><dd><?= h($oPanel['to_addr']) ?></dd>
+                <dt>Hedef dil</dt><dd><?= h($dilAd) ?><?php if ($oPanel['tr_provider']): ?> · çeviri: <?= h($oPanel['tr_provider'] === 'manual' ? 'elle girildi' : ($oPanel['tr_provider'] === 'none' ? 'çeviri yok' : $oPanel['tr_provider'] . ' (üçüncü taraf servis)')) ?><?php endif; ?></dd>
+                <?php if ($oPanel['out_message_id'] && in_array($os, ['sent', 'unknown', 'sending', 'approved'], true)): ?><dt>Message-ID</dt><dd><code><?= h($oPanel['out_message_id']) ?></code></dd><?php endif; ?>
+            </dl>
+            <?php if (!empty($oPanel['last_error']) && $os !== 'translated'): ?><div class="mail-uyari"><?= h($oPanel['last_error']) ?></div><?php endif; ?>
+
+            <div class="mail-onay-kutular">
+                <div class="mail-onay-kutu"><h3>TÜRKÇE ORİJİNAL CEVAP</h3><div class="mail-metin mail-onay-metin"><?= nl2br(h((string)$oPanel['body_tr'])) ?></div></div>
+                <div class="mail-onay-kutu mail-onay-kutu--cikis"><h3>GÖNDERİLECEK ÇEVİRİ (<?= h($dilAd) ?>)</h3>
+                    <?php if (trim((string)$oPanel['body_out']) !== ''): ?>
+                    <div class="mail-metin mail-onay-metin" lang="<?= h($oPanel['target_lang']) ?>"><?= nl2br(h((string)$oPanel['body_out'])) ?></div>
+                    <?php if ($oPanel['quote_text']): ?><details class="mail-thread"><summary>Altına eklenecek alıntı (müşterinin orijinal yazısı)</summary><pre class="mail-metin mail-metin--ham"><?= h((string)$oPanel['quote_text']) ?></pre></details><?php endif; ?>
+                    <?php else: ?><p class="mail-bos">Henüz çeviri yok.</p><?php endif; ?>
+                </div>
+            </div>
+
+            <?php if ($os === 'translated'): ?>
+                <?php if ($sendYetki): ?>
+                <form method="post" class="mail-onay-form" data-tek-gonderim>
+                    <?= $ortakAlan((int)$oPanel['id']) ?><input type="hidden" name="hash" value="<?= h((string)$oPanel['content_hash']) ?>">
+                    <p class="mail-onay-not">Onayladığınızda yukarıdaki <strong>GÖNDERİLECEK ÇEVİRİ</strong>, <strong><?= h($oPanel['to_addr']) ?></strong> adresine hesabın kendi adresinden gönderilir. Bu işlem geri alınamaz.</p>
+                    <input type="hidden" name="islem" value="cevap_onayla">
+                    <button class="btn btn-primary mail-onayla" type="submit">✅ Onayla ve Gönder</button>
+                </form>
+                <?php else: ?>
+                <div class="mail-bilgi">Göndermek için <code>mail.send</code> yetkisi gerekir. Bu taslak <strong>Taslak / Bekleyen</strong> klasöründe yetkili birinin onayını bekler.</div>
+                <?php endif; ?>
+            <?php elseif ($os === 'approved' && $sendYetki): ?>
+                <form method="post" class="mail-satir-form" data-tek-gonderim><?= $ortakAlan((int)$oPanel['id']) ?>
+                    <p class="mail-onay-not">Onaylanmış ama gönderim tamamlanmamış. Gönder'e basmak güvenlidir (kayıt atomik sahiplenilir, en fazla bir kez gider).</p>
+                    <input type="hidden" name="islem" value="cevap_gonder_onayli"><button class="btn btn-primary" type="submit">Gönder</button></form>
+            <?php elseif ($os === 'failed' && $sendYetki): ?>
+                <form method="post" class="mail-satir-form" data-tek-gonderim><?= $ortakAlan((int)$oPanel['id']) ?>
+                    <p class="mail-onay-not">Mesaj sunucu tarafından kabul EDİLMEDİ; aynı onaylı içerik ve aynı Message-ID ile yeniden denenebilir.</p>
+                    <input type="hidden" name="islem" value="cevap_tekrar"><button class="btn btn-primary" type="submit">Tekrar dene</button></form>
+            <?php elseif ($os === 'unknown'): ?>
+                <div class="mail-uyari"><strong>Belirsiz durum:</strong> mesaj sunucuya iletilmiş olabilir. Sistem OTOMATİK TEKRAR GÖNDERMEZ. Gönderilenler klasörünü ya da müşteriyi kontrol edip karar verin.</div>
+                <?php if ($sendYetki): ?>
+                <form method="post" class="mail-satir-form"><?= $ortakAlan((int)$oPanel['id']) ?>
+                    <button class="btn" name="islem" value="cevap_belirsiz_gonderildi" type="submit">Gönderildi (doğruladım)</button>
+                    <button class="btn" name="islem" value="cevap_belirsiz_gonderilmedi" type="submit">Gönderilmedi — tekrar denemeye izin ver</button></form>
+                <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($duzenlenebilir && $cevapYetki): ?>
+            <details class="mail-thread" <?= $os === 'draft' ? 'open' : '' ?>><summary>Metni düzenle / çeviriyi yeniden üret</summary>
+                <form method="post" class="mail-yaz">
+                    <?= $ortakAlan((int)$oPanel['id']) ?><input type="hidden" name="quote" value="0">
+                    <label for="mail-tr-duzenle">Türkçe cevap</label>
+                    <textarea id="mail-tr-duzenle" name="body_tr" rows="6" maxlength="<?= MAIL_CEVAP_MAX ?>" required><?= h((string)$oPanel['body_tr']) ?></textarea>
+                    <label for="mail-dil-duzenle">Hedef dil</label>
+                    <select id="mail-dil-duzenle" name="target_lang"><?php foreach (mail_diller() as $kd => $ad): ?><option value="<?= h($kd) ?>"<?= $kd === $oPanel['target_lang'] ? ' selected' : '' ?>><?= h($ad) ?></option><?php endforeach; ?></select>
+                    <label for="mail-cikis-duzenle">Gönderilecek çeviri (elle düzeltmek isterseniz yazın)</label>
+                    <textarea id="mail-cikis-duzenle" name="body_out_manual" rows="6" maxlength="<?= MAIL_CEVAP_MAX ?>"><?= h((string)$oPanel['body_out']) ?></textarea>
+                    <label class="mail-onay-secenek"><input type="checkbox" name="quote" value="1"<?= (int)$oPanel['quote_original'] === 1 ? ' checked' : '' ?>> Müşterinin orijinal yazısını altına alıntı olarak ekle</label>
+                    <input type="hidden" name="islem" value="cevap_onizle">
+                    <div class="mail-satir-form">
+                        <button class="btn" name="mod" value="ceviri" type="submit">Çeviriyi yeniden üret</button>
+                        <button class="btn" name="mod" value="manuel" type="submit">Düzenlediğim çeviriyi kullan</button>
+                    </div>
+                </form>
+            </details>
+            <?php endif; ?>
+            <?php if (in_array($os, ['draft', 'translated', 'approved', 'failed'], true) && ($cevapYetki || $sendYetki)): ?>
+            <form method="post" class="mail-satir-form" style="margin-top:10px"><?= $ortakAlan((int)$oPanel['id']) ?><button class="btn" name="islem" value="cevap_iptal" type="submit">Cevabı iptal et</button></form>
+            <?php endif; ?>
+        <?php elseif ($m && $cevapMod): ?>
+            <div class="mail-okuyucu-arac"><a class="btn btn-geri" href="<?= h($url(['cevap' => null])) ?>">← Mesaja dön</a></div>
+            <h2 class="mail-okuyucu-konu">Cevap yaz: <?= h(mail_yanit_konusu((string)$m['subject'])) ?></h2>
+            <p class="mail-bilgi">Cevabınızı <strong>Türkçe</strong> yazın. Bir sonraki adımda çeviriyi görüp onaylayacaksınız; <strong>onaylamadan hiçbir şey gönderilmez</strong>. Alıcı: <?= h($m['reply_to_addr'] ?: $m['from_addr']) ?></p>
+            <form method="post" class="mail-yaz" data-tek-gonderim>
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>"><input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
+                <input type="hidden" name="idem" value="<?= h(bin2hex(random_bytes(16))) ?>"><input type="hidden" name="quote" value="0">
+                <label for="mail-tr">Türkçe cevap</label>
+                <textarea id="mail-tr" name="body_tr" rows="8" maxlength="<?= MAIL_CEVAP_MAX ?>" required autofocus></textarea>
+                <label for="mail-dil">Hedef dil</label>
+                <select id="mail-dil" name="target_lang"><?php $vd = ($m['lang'] && isset(mail_diller()[$m['lang']])) ? $m['lang'] : 'en'; foreach (mail_diller() as $kd => $ad): ?><option value="<?= h($kd) ?>"<?= $kd === $vd ? ' selected' : '' ?>><?= h($ad) ?></option><?php endforeach; ?></select>
+                <label class="mail-onay-secenek"><input type="checkbox" name="quote" value="1" checked> Müşterinin orijinal yazısını altına alıntı olarak ekle</label>
+                <input type="hidden" name="islem" value="cevap_onizle">
+                <button class="btn btn-primary" type="submit">Çeviriyi Önizle</button>
+            </form>
+        <?php elseif (!$m): ?>
             <div class="mail-okuyucu-bos"><p>Okumak için soldan bir mail seçin.</p></div>
         <?php else:
             $trVar = $m['tr_status'] === 'translated' && trim((string)$m['body_tr']) !== '';
@@ -307,8 +411,8 @@ mail_assets();
 
             <div class="mail-cevapbar">
                 <?php if ($cevapYetki): ?>
-                <button class="btn btn-primary mail-cevapla" type="button" disabled title="Cevap yazma bir sonraki sürümde etkinleşecek">✍ Cevapla</button>
-                <span class="mail-cevapbar-not">Türkçe yaz → çeviriyi onayla → gönder (yakında)</span>
+                <a class="btn btn-primary mail-cevapla" href="<?= h($url(['cevap' => 1, 'o' => null])) ?>">✍ Cevapla</a>
+                <span class="mail-cevapbar-not">Türkçe yaz → çeviriyi görüp onayla → gönder</span>
                 <?php else: ?>
                 <span class="mail-cevapbar-not">Cevap yazmak için mail.reply yetkisi gerekir.</span>
                 <?php endif; ?>

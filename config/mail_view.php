@@ -187,6 +187,14 @@ function mail_senkron_durumlari(PDO $pdo, array $hesapIds): array
     return $o;
 }
 
+/** Cevap hedef dilleri (kod → Türkçe ad). */
+function mail_diller(): array
+{
+    return ['en' => 'İngilizce', 'ru' => 'Rusça', 'de' => 'Almanca', 'fr' => 'Fransızca', 'es' => 'İspanyolca', 'it' => 'İtalyanca', 'ar' => 'Arapça',
+        'nl' => 'Felemenkçe', 'pl' => 'Lehçe', 'uk' => 'Ukraynaca', 'pt' => 'Portekizce', 'el' => 'Yunanca', 'fa' => 'Farsça', 'zh' => 'Çince',
+        'ja' => 'Japonca', 'ko' => 'Korece', 'he' => 'İbranice', 'tr' => 'Türkçe (çeviri yok)'];
+}
+
 /** Liste zamanı: bugün → "14:05", bu yıl → "05.10 14:05", eski → "05.10.2025". */
 function mail_zaman_fmt(?string $z): string
 {
@@ -223,28 +231,67 @@ function mail_scripts(): void
 
 /**
  * mail.php POST işlemleri (CSRF mail.php'de ÖNCEDEN doğrulanır). exit/header YOK → testte doğrudan çağrılır.
- * @param list<int> $hesapIds
- * @return array{ok:bool,mesaj:string,yasak:?string} yasak doluysa çağıran forbidden() verir
+ * @param array{uid:int,hesapIds:list<int>,yonetici:bool,cevap:bool,send:bool,a:int,m:int,o:int} $c bağlam
+ * @param array $g POST girdisi (güvenilmez; her alan ilgili fonksiyonda doğrulanır)
+ * @param array $opt sagl (çeviri sağlayıcısı), smtp/imap (test enjeksiyonu), simdi
+ * @return array{ok:bool,mesaj:string,yasak:?string,o:?int} yasak doluysa çağıran forbidden() verir; o doluysa o giden kaydına yönlendir
  */
-function mail_post_isle(PDO $pdo, int $uid, string $islem, int $mId, int $aSecili, array $hesapIds, bool $yonetici, bool $cevapYetki, array $opt = []): array
+function mail_post_isle(PDO $pdo, array $c, string $islem, array $g = [], array $opt = []): array
 {
-    $ok = false; $mesaj = '';
+    $uid = (int)$c['uid']; $hesapIds = $c['hesapIds']; $mId = (int)($c['m'] ?? 0); $oId = (int)($c['o'] ?? 0); $aSecili = (int)($c['a'] ?? 0);
+    $ok = false; $mesaj = ''; $yonlendirO = null;
+    $yasak = static fn(string $m): array => ['ok' => false, 'mesaj' => '', 'yasak' => $m, 'o' => null];
+    $sagl = static fn() => array_key_exists('sagl', $opt) ? $opt['sagl'] : (function_exists('mail_ceviri_saglayici') ? mail_ceviri_saglayici() : null);
+
     if ($islem === 'oku' || $islem === 'okunmadi') {
         $ok = mail_okundu_yaz($pdo, $mId, $uid, $islem === 'oku', $hesapIds);
         $mesaj = $ok ? ($islem === 'oku' ? 'Okundu olarak işaretlendi.' : 'Okunmadı olarak işaretlendi.') : 'Mesaj bulunamadı.';
     } elseif ($islem === 'cevap_bekliyor' || $islem === 'cevaplandi') {
-        if (!$cevapYetki) return ['ok' => false, 'mesaj' => '', 'yasak' => 'Bu işlem için mail.reply yetkisi gerekir.'];
+        if (!$c['cevap']) return $yasak('Bu işlem için mail.reply yetkisi gerekir.');
         $ok = mail_cevap_durumu_yaz($pdo, $mId, $islem === 'cevap_bekliyor', $hesapIds);
         $mesaj = $ok ? ($islem === 'cevap_bekliyor' ? 'Cevap bekleyen olarak işaretlendi.' : 'Cevaplandı olarak işaretlendi.') : 'Mesaj bulunamadı.';
     } elseif ($islem === 'ceviri_simdi') {
-        $sag = array_key_exists('saglayici', $opt) ? $opt['saglayici'] : (function_exists('mail_ceviri_saglayici') ? mail_ceviri_saglayici() : null);
-        $r = mail_ceviri_simdi($pdo, $sag, $mId, $hesapIds);
+        $r = mail_ceviri_simdi($pdo, $sagl(), $mId, $hesapIds);
         $ok = $r['ok']; $mesaj = $r['mesaj'];
         if ($ok) audit_log_event('mail_translate_manual', 'mail_messages', $mId, null, ['sonuc' => 'ok']);
+    } elseif ($islem === 'cevap_onizle') {
+        // Türkçe taslak → (gerekirse) kaydet → çeviri önizle. SMTP'ye DOKUNMAZ.
+        if (!$c['cevap']) return $yasak('Cevap yazmak için mail.reply yetkisi gerekir.');
+        $id = $oId;
+        if (($g['mod'] ?? '') !== 'manuel') unset($g['body_out_manual']);   // "çeviriyi yeniden üret" düğmesi elle metni YOK SAYAR
+        if ($id <= 0) {
+            $t = mail_outbox_taslak($pdo, $mId, $hesapIds, $uid, (string)($g['idem'] ?? ''), $g);
+            if (!$t['ok']) return ['ok' => false, 'mesaj' => $t['mesaj'], 'yasak' => null, 'o' => null];
+            $id = $t['id'];
+        }
+        $r = mail_outbox_onizle($pdo, $id, $hesapIds, $uid, $sagl(), $g);
+        $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $id;
+    } elseif ($islem === 'cevap_onayla') {
+        if (!$c['send']) return $yasak('Göndermek için mail.send yetkisi gerekir.');
+        $r = mail_outbox_onayla($pdo, $oId, $hesapIds, $uid, true, (string)($g['hash'] ?? ''), $opt);
+        $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $oId;
+    } elseif ($islem === 'cevap_gonder_onayli') {
+        // Onaylanmış ama gönderim başlamamış (süreç kesilmiş) kaydı gönder — atomik sahiplenme yine uygulanır.
+        if (!$c['send']) return $yasak('Göndermek için mail.send yetkisi gerekir.');
+        if (mail_outbox_getir($pdo, $oId, $hesapIds) === null) return ['ok' => false, 'mesaj' => 'Kayıt bulunamadı.', 'yasak' => null, 'o' => null];
+        $r = mail_outbox_gonder($pdo, $oId, $opt);
+        $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $oId;
+    } elseif ($islem === 'cevap_tekrar') {
+        if (!$c['send']) return $yasak('Göndermek için mail.send yetkisi gerekir.');
+        $r = mail_outbox_tekrar($pdo, $oId, $hesapIds, $uid, true, $opt);
+        $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $oId;
+    } elseif ($islem === 'cevap_belirsiz_gonderildi' || $islem === 'cevap_belirsiz_gonderilmedi') {
+        if (!$c['send']) return $yasak('Bu karar için mail.send yetkisi gerekir.');
+        $r = mail_outbox_belirsiz_coz($pdo, $oId, $hesapIds, $uid, true, $islem === 'cevap_belirsiz_gonderildi' ? 'gonderildi' : 'gonderilmedi');
+        $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $oId;
+    } elseif ($islem === 'cevap_iptal') {
+        if (!$c['cevap'] && !$c['send']) return $yasak('Bu işlem için mail.reply veya mail.send yetkisi gerekir.');
+        $r = mail_outbox_iptal($pdo, $oId, $hesapIds, $uid);
+        $ok = $r['ok']; $mesaj = $r['mesaj'];
     } elseif ($islem === 'senkron') {
-        if (!$yonetici) return ['ok' => false, 'mesaj' => '', 'yasak' => 'Bu işlem için mail.admin yetkisi gerekir.'];
+        if (!$c['yonetici']) return $yasak('Bu işlem için mail.admin yetkisi gerekir.');
         if ($aSecili && in_array($aSecili, $hesapIds, true) && mail_crypto_hazir()) {
-            $r = mail_sync_hesap($pdo, $aSecili, ['sure' => 20.0, 'limit' => 100] + $opt);
+            $r = mail_sync_hesap($pdo, $aSecili, ['sure' => 20.0, 'limit' => 100] + array_intersect_key($opt, ['istemci' => 1, 'kilit_dizin' => 1, 'simdi' => 1]));
             $ok = $r['ok'];
             $mesaj = $r['busy'] ? 'Bu hesap şu an başka bir süreç tarafından senkronlanıyor.'
                 : ($r['ok'] ? "Senkron tamam: {$r['inserted']} yeni mail." . ($r['kalan'] > 0 ? " ({$r['kalan']} mail sonraki turda)" : '') : 'Senkron başarısız: ' . ($r['error'] ?? '?'));
@@ -253,5 +300,5 @@ function mail_post_isle(PDO $pdo, int $uid, string $islem, int $mId, int $aSecil
             $mesaj = $aSecili ? 'MAIL_MASTER_KEY tanımlı değil.' : 'Önce bir hesap seçin.';
         }
     }
-    return ['ok' => $ok, 'mesaj' => $mesaj, 'yasak' => null];
+    return ['ok' => $ok, 'mesaj' => $mesaj, 'yasak' => null, 'o' => $yonlendirO];
 }

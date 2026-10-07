@@ -141,6 +141,7 @@ function mail_tablolar(): array
         `subject`             VARCHAR(500) NOT NULL,
         `body_tr`             MEDIUMTEXT   NULL,
         `body_out`            MEDIUMTEXT   NULL,
+        `quote_text`          MEDIUMTEXT   NULL,
         `target_lang`         VARCHAR(10)  NULL DEFAULT NULL,
         `tr_provider`         VARCHAR(30)  NULL DEFAULT NULL,
         `quote_original`      TINYINT(1)   NOT NULL DEFAULT 1,

@@ -31,6 +31,8 @@ require_once __DIR__ . '/../config/mail_mime.php';
 require_once __DIR__ . '/../config/mail_sync.php';
 require_once __DIR__ . '/../config/mail_view.php';
 require_once __DIR__ . '/../config/mail_translate.php';
+require_once __DIR__ . '/../config/mail_smtp.php';
+require_once __DIR__ . '/../config/mail_outbox.php';
 
 set_time_limit(280);
 $r = mail_cron_calistir(db());

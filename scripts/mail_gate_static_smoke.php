@@ -83,7 +83,8 @@ $imap = oku('config/mail_imap.php');
 ok('IMAP: TLS doğrulaması zorunlu (verify_peer + verify_peer_name true)', str_contains($imap, "'verify_peer' => true, 'verify_peer_name' => true"));
 ok('IMAP: yalnız ssl/starttls kabul ediliyor (düz metin reddi)', str_contains($imap, "if (!in_array(\$guvenlik, ['ssl', 'starttls'], true))"));
 $imapKod = php_strip_whitespace($ROOT . '/config/mail_imap.php');
-ok('IMAP: yalnız EXAMINE (SELECT/STORE/DELETE/EXPUNGE/APPEND/COPY/MOVE komutu üretilmiyor)', !preg_match('/komut\(\s*[\'"](SELECT|STORE|DELETE|EXPUNGE|APPEND|COPY|MOVE)/i', $imapKod) && !preg_match('/UID (STORE|EXPUNGE|COPY|MOVE)/i', $imapKod));
+ok('IMAP: yalnız EXAMINE (SELECT/STORE/DELETE/EXPUNGE/COPY/MOVE komutu üretilmiyor)', !preg_match('/komut\(\s*[\'"](SELECT|STORE|DELETE|EXPUNGE|COPY|MOVE)/i', $imapKod) && !preg_match('/UID (STORE|EXPUNGE|COPY|MOVE)/i', $imapKod));
+ok('IMAP: sunucuya yazan TEK komut APPEND (ekle() içinde, 1 adet)', preg_match_all('/komut\(\s*[\'"]APPEND/i', $imapKod) === 1 && preg_match('/function ekle\(.*?komut\(\s*[\'"]APPEND/s', $imapKod) === 1);
 ok('IMAP: UNSEEN yok', !preg_match('/UNSEEN/i', $imapKod));
 preg_match_all('/UID FETCH [^"\']*/', $imapKod, $fm);
 ok('IMAP: tüm UID FETCH komutları BODY.PEEK (BODY[ ile \\Seen\'i DEĞİŞTİRMEZ)', count($fm[0]) >= 3 && !array_filter($fm[0], fn($l) => str_contains($l, 'BODY[')), 'bulunan komut sayısı: ' . count($fm[0]));
@@ -92,6 +93,25 @@ ok('senkron: UNSEEN kullanmıyor (yorumlar hariç)', !preg_match('/UNSEEN/i', ph
 ok('senkron: mail_messages DELETE/UPDATE ile veri silmiyor (yalnız uid eşleme güncellemesi)', !preg_match('/DELETE FROM mail_messages/i', $sync));
 ok('cron betiği mail_cron_calistir kullanıyor', str_contains(oku('scripts/mail_sync_cron.php'), 'mail_cron_calistir('));
 ok('Bağlantıyı Test Et: POST + csrf + audit', str_contains(oku('mail_hesaplar.php'), "\$islem === 'test'") && str_contains(oku('mail_hesaplar.php'), "audit_log_event('mail_account_test'"));
+
+echo "\n=== M5: gönderim yolu TEK ve onay kapılı ===\n";
+$outbox = oku('config/mail_outbox.php'); $smtpSrc = oku('config/mail_smtp.php');
+preg_match('/function mail_outbox_gonder\(.*?\n}\n/s', $outbox, $gm); $gonder = $gm[0] ?? '';
+$tum = '';
+foreach (glob($ROOT . '/config/*.php') as $f) $tum .= "\n/*FILE:" . basename($f) . "*/" . php_strip_whitespace($f);
+foreach (['mail.php', 'mail_hesaplar.php', 'mail_ek.php', 'migrate.php', 'index.php'] as $f) $tum .= "\n/*FILE:$f*/" . php_strip_whitespace($ROOT . '/' . $f);
+ok('mail_smtp_baglan() çağrısı yalnız mail_outbox_gonder() içinde (+ tanım)', substr_count($tum, 'mail_smtp_baglan(') === 2 && str_contains($gonder, 'mail_smtp_baglan('), (string)substr_count($tum, 'mail_smtp_baglan('));
+ok('SMTP ->gonder() çağrısı yalnız mail_outbox_gonder() içinde', preg_match_all('/->gonder\(/', $tum) === 1 && str_contains($gonder, '->gonder('));
+ok('MailSmtpClient yalnız mail_smtp.php + mail_outbox_gonder (kurucu)', preg_match_all('/new MailSmtpClient/', preg_replace('#/\*FILE:mail_smtp\.php\*/.*?(?=/\*FILE:|$)#s', '', $tum)) === 0);
+ok('mail_outbox_gonder: atomik sahiplenme koşulu (approved ∧ approved_by ∧ Message-ID ∧ hash)', str_contains($gonder, "status = 'approved' AND approved_by IS NOT NULL AND out_message_id IS NOT NULL AND content_hash IS NOT NULL") && str_contains($gonder, "rowCount() !== 1"));
+ok('mail_outbox_gonder: sahiplenmeden SONRA bütünlük (hash) doğrulaması', strpos($gonder, 'mail_outbox_hash') !== false && strpos($gonder, 'rowCount()') < strpos($gonder, 'mail_outbox_hash'));
+ok('mail_outbox_onayla: send yetkisi + hash_equals + bütünlük + ikiz kontrolü', (bool)preg_match('/function mail_outbox_onayla\(.*?sendYetkisi.*?hash_equals.*?mail_outbox_hash.*?mail_outbox_ikiz_var/s', $outbox));
+ok('belirsizlikte (unknown) otomatik yeniden gönderim yolu YOK: unknown → yalnız insan kararı', !preg_match("/'unknown'[^;]*mail_outbox_gonder\(|status = 'unknown'[^;]*status = 'approved'/", $outbox));
+ok('kimlik bilgisi kontrolü: gönderim yalnız mail_hesap_cred_oku ile', str_contains($gonder, 'mail_hesap_cred_oku('));
+ok('cron / senkron SMTP gönderimi YAPMIYOR (yalnız takılı işaretleme)', !str_contains(php_strip_whitespace($ROOT . '/scripts/mail_sync_cron.php'), 'mail_outbox_gonder') && !str_contains(php_strip_whitespace($ROOT . '/config/mail_sync.php'), 'mail_outbox_gonder('));
+ok('SMTP: TLS doğrulamalı taşıma (MailSocketStream) + düz metin yok', str_contains($smtpSrc, 'MailSocketStream::baglan(') && !preg_match("/stream_socket_client|fsockopen/", $smtpSrc));
+ok('mail.php POST: cevap işlemleri mail_post_isle üzerinden, CSRF öncesi', strpos(oku('mail.php'), 'csrf_check(') < strpos(oku('mail.php'), 'mail_post_isle('));
+ok('onay formu: tek-gönderim işareti + gizli hash + islem alanı', str_contains(oku('mail.php'), 'data-tek-gonderim') && str_contains(oku('mail.php'), 'name="hash"') && str_contains(oku('mail.php'), 'value="cevap_onayla"'));
 
 echo "\n=== M4/ChatGPT direktifleri: no-store + üçüncü taraf bildirimi ===\n";
 foreach (['mail.php', 'mail_hesaplar.php', 'mail_ek.php'] as $f) {

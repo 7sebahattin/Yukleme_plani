@@ -238,7 +238,7 @@ $say = count($sag->cagrilar); mail_ceviri_simdi($db, $sag, $my, [$X], $NOW);
 ok('yetkisiz denemede sağlayıcıya yeni istek gitmedi', count($sag->cagrilar) === $say);
 ok('sağlayıcı kapalıyken elle çeviri reddedilir', mail_ceviri_simdi($db, null, $mx, [$X])['ok'] === false);
 ok('elle çeviri hata verirse mail bozulmaz', (function () use ($db, $my, $Y) { $s = new SahteSaglayici(fn() => throw new MailTranslateException('temp', 'x')); $r = mail_ceviri_simdi($db, $s, $my, [$Y], strtotime('2026-10-06 12:00:00')); return !$r['ok'] && satir($my)['body_text'] !== ''; })());
-$r = mail_post_isle($db, 2, 'ceviri_simdi', $mx, 0, [$X], false, true, ['saglayici' => $sag]);
+$r = mail_post_isle($db, ['uid' => 2, 'hesapIds' => [$X], 'yonetici' => false, 'cevap' => true, 'send' => false, 'a' => 0, 'm' => $mx, 'o' => 0], 'ceviri_simdi', [], ['sagl' => $sag]);
 ok('mail_post_isle ceviri_simdi (zaten çevrilmiş → ok)', $r['ok'] && $r['yasak'] === null);
 
 echo "\n=== 10. Senkron entegrasyonu: dil + durum ===\n";

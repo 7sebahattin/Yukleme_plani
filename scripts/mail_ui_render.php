@@ -12,6 +12,8 @@ require_once $ROOT . '/config/mail_mime.php';
 require_once $ROOT . '/config/mail_sync.php';
 require_once $ROOT . '/config/mail_view.php';
 require_once $ROOT . '/config/mail_translate.php';
+require_once $ROOT . '/config/mail_smtp.php';
+require_once $ROOT . '/config/mail_outbox.php';
 
 $OUT = getenv('MAIL_UI_OUT') ?: (sys_get_temp_dir() . '/mail-ui-test');
 @mkdir($OUT, 0777, true);
@@ -56,16 +58,31 @@ $ID_TR = ekle(['subject' => 'Order confirmation', 'body' => "Hello,\nthe order i
 $ID_XSS = ekle(['subject' => 'SAKLI XSS DENEMESİ', 'html' => '<p>zararlı</p><script>window.__pwned=1</script><img src=x onerror="window.__pwned=2"><a id="jslink" href="javascript:window.__pwned=3">tıkla</a><iframe srcdoc="<script>parent.__pwned=4</script>"></iframe><form action="https://evil.example/" method="post"><button id="f">gönder</button></form>', 'body' => 'x']);
 $ID_UZUN = ekle(['subject' => str_repeat('Çok uzun konu satırı ', 12), 'from' => 'Maria Gonzalez-Fernandez-De-La-Cruz-Y-Fernandez', 'body' => str_repeat('uzunkelime', 30) . "\n" . str_repeat('Satır satır metin. ', 80), 'trunc' => 1]);
 
+// Giden kayıtları (cevap taslağı/durumları) — onay ekranı ölçümleri için; uzun metin + zararlı görünümlü metin.
+function giden(string $durum, array $o = []): int {
+    global $db, $ID_HTML;
+    static $n = 0; $n++;
+    $o += ['to' => 'ivan.petrov@musteri-firma-with-a-very-long-domain-name.example.ru', 'subject' => 'Re: HTML mail — remote image blocked', 'body_tr' => "Merhaba Ivan,\n\nSiparişiniz 12 palet olarak pazartesi günü yola çıkıyor. Ödeme onayı için teşekkür ederiz.\n<img src=x onerror=\"window.__p=1\"> <script>window.__p=2</script>\n" . str_repeat('Uzun satır uzunkelime ', 20),
+        'body_out' => "Hello Ivan,\n\nYour order of 12 pallets leaves on Monday. Thank you for the payment confirmation.\n<img src=x onerror=\"window.__p=3\"> " . str_repeat('LongLongLongLongWord ', 15), 'lang' => 'en'];
+    $db->prepare("INSERT INTO mail_outbox (account_id, in_reply_to_msg_id, idempotency_key, status, to_addr, subject, body_tr, body_out, quote_text, quote_original, target_lang, tr_provider, content_hash, out_message_id, approved_by, last_error, created_at, updated_at, sent_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'deepl', ?, ?, ?, ?, '2026-10-06 10:00:00', '2026-10-06 10:05:00', ?)")
+        ->execute([$ID_HTML, 'k' . str_pad((string)$n, 20, '0'), $durum, $o['to'], $o['subject'], $o['body_tr'], $o['body_out'], "On Mon, 05 Oct 2026 10:00, Ivan <ivan@musteri.ru> wrote:\n> Where is my order?\n> Please confirm.", $o['lang'], hash('sha256', "h$n"),
+            in_array($durum, ['approved', 'sending', 'sent', 'unknown', 'failed'], true) ? "<abc.$n@asya.com>" : null, in_array($durum, ['approved', 'sending', 'sent', 'unknown', 'failed'], true) ? 5 : null,
+            $durum === 'failed' ? 'SMTP kimlik doğrulama başarısız' : ($durum === 'unknown' ? 'Mesaj gönderildi ancak sunucunun son yanıtı alınamadı' : null), $durum === 'sent' ? '2026-10-06 10:04:00' : null]);
+    return (int)$db->lastInsertId();
+}
+$G_TR = giden('translated'); $G_UNK = giden('unknown'); $G_FAIL = giden('failed'); $G_SENT = giden('sent'); $G_DRAFT = giden('draft', ['body_out' => '']);
+
 $PERMS = ['mail.read', 'mail.reply']; $UID = 2;
 $cssBase = file_get_contents($ROOT . '/assets/style.css');
 $cssMail = file_get_contents($ROOT . '/assets/mail.css');
 $fileRoot = 'file://' . $ROOT . '/';
 
-function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply'], int $uid = 2): string {
+function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply', 'mail.send'], int $uid = 2): string {
     global $ROOT, $cssBase, $cssMail, $fileRoot, $PERMS, $IS_ADMIN, $UID;
     $PERMS = $perms; $IS_ADMIN = $yonetici; $UID = $uid;
     $src = (string)file_get_contents($ROOT . '/mail.php');
-    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate)\.php';\s*$/m", '', $src);
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate|mail_smtp|mail_outbox)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $tmp = sys_get_temp_dir() . '/mail_ui_render_' . getmypid() . '.php';
     file_put_contents($tmp, $src);
@@ -91,10 +108,17 @@ $sayfalar = [
     'detay_xss'    => [['m' => $ID_XSS, 'v' => 'orj'], true],
     'detay_uzun'   => [['m' => $ID_UZUN, 'v' => 'orj'], true],
     'liste_hesapsiz' => [[], false, ['mail.read'], 3],
+    'cevap_yaz'    => [['m' => $ID_HTML, 'cevap' => '1'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_translated' => [['o' => $G_TR, 'f' => 'taslak'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_yetkisiz' => [['o' => $G_TR, 'f' => 'taslak'], false, ['mail.read', 'mail.reply']],
+    'onay_unknown' => [['o' => $G_UNK, 'f' => 'hatali'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_failed'  => [['o' => $G_FAIL, 'f' => 'hatali'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_sent'    => [['o' => $G_SENT, 'f' => 'gonderilen'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'onay_draft'   => [['o' => $G_DRAFT, 'f' => 'taslak'], false, ['mail.read', 'mail.reply', 'mail.send']],
 ];
 $manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS]];
 foreach ($sayfalar as $ad => $s) {
-    $html = basla_sayfa($s[0], $ad, $s[1] ?? false, $s[2] ?? ['mail.read', 'mail.reply'], $s[3] ?? 2);
+    $html = basla_sayfa($s[0], $ad, $s[1] ?? false, $s[2] ?? ['mail.read', 'mail.reply', 'mail.send'], $s[3] ?? 2);
     file_put_contents("$OUT/$ad.html", $html);
     $manifest['sayfalar'][] = $ad;
 }

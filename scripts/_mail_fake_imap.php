@@ -13,7 +13,10 @@ declare(strict_types=1);
 final class FakeMailStream implements MailStream
 {
     public array $received = [];
-    public ?FakeMailStream $kok = null;   // şablon sunucu: her bağlantının komutları buraya da yazılır
+    public ?FakeMailStream $kok = null;
+    /** APPEND ile alınan mesajlar: [['klasor'=>, 'bayrak'=>, 'ham'=>]] */
+    public array $eklenen = [];
+    private ?array $appendBekle = null;   // şablon sunucu: her bağlantının komutları buraya da yazılır
     public bool $kapandi = false;
     private string $in = '';
     private string $out = '';
@@ -54,6 +57,16 @@ final class FakeMailStream implements MailStream
     public function write(string $data): void
     {
         $this->in .= $data;
+        if ($this->appendBekle !== null) {   // APPEND literal'i: n bayt + CRLF
+            $n = $this->appendBekle['n'];
+            if (strlen($this->in) < $n + 2) return;
+            $ham = substr($this->in, 0, $n); $this->in = substr($this->in, $n + 2);
+            $kayit = ['klasor' => $this->appendBekle['klasor'], 'bayrak' => $this->appendBekle['bayrak'], 'ham' => $ham];
+            $this->eklenen[] = $kayit; if ($this->kok) $this->kok->eklenen[] = $kayit;
+            $tag = $this->appendBekle['tag']; $this->appendBekle = null;
+            $this->cevap("$tag OK [APPENDUID 1 1] APPEND completed\r\n");
+            return;
+        }
         while (($p = strpos($this->in, "\r\n")) !== false) {
             $satir = substr($this->in, 0, $p);
             $this->in = substr($this->in, $p + 2);
@@ -116,6 +129,10 @@ final class FakeMailStream implements MailStream
                 break;
             case 'UID':
                 $this->uidKomutu($tag, $arg);
+                break;
+            case 'APPEND':
+                if (preg_match('/^"([^"]*)"\s+\(([^)]*)\)\s+\{(\d+)\}$/', $arg, $mm)) { $this->appendBekle = ['tag' => $tag, 'klasor' => $mm[1], 'bayrak' => $mm[2], 'n' => (int)$mm[3]]; $this->cevap("+ Ready for literal data\r\n"); }
+                else $this->cevap("$tag BAD APPEND syntax\r\n");
                 break;
             case 'LOGOUT':
                 $this->cevap("* BYE bye\r\n$tag OK logged out\r\n");

@@ -517,6 +517,19 @@ final class MailImapClient
         return $f;
     }
 
+    /**
+     * Gönderilen kopyayı bir klasöre ekler (IMAP APPEND) — Mail Merkezi'nin sunucuya YAZDIĞI TEK komut.
+     * Yalnız giden mesajın kendi kopyası ve yalnız hesapta "Gönderilenler'e yaz" açıkken kullanılır; mevcut mesajlara dokunmaz.
+     * @param string $ham tam RFC 5322 mesajı (CRLF'li)
+     */
+    public function ekle(string $klasor, string $ham, string $bayrak = '\\Seen'): void
+    {
+        if ($klasor === '' || preg_match('/[\r\n\0]/', $klasor) || !preg_match('/^\\\\?[A-Za-z]*$/', $bayrak)) throw new MailImapException('bad', 'Geçersiz klasör ya da bayrak.');
+        $n = strlen($ham);
+        if ($n > 26214400) throw new MailImapException('limit', 'Mesaj APPEND için çok büyük.');
+        $this->komut('APPEND ' . $this->astring(mail_imap_utf7_encode($klasor)) . ' (' . $bayrak . ') {' . $n . '}', static fn() => $ham, 'APPEND "' . mb_substr($klasor, 0, 40) . '" ' . $n . ' bayt');
+    }
+
     public function cikis(): void
     {
         if ($this->kapali) return;
