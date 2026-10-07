@@ -281,6 +281,12 @@ function permission_catalog(): array {
             'hesap.pay'     => 'Görebildiği kayıtları ödendi işaretle (başkasının kaydını GÖSTERMEZ)',
             'hesap.admin'   => 'Hesap yöneticisi — TÜM personelin hesabını görür, onaylar/öder, kayıt sahibini değiştirir, ödenmiş kaydı açar',
         ],
+        'Mail Merkezi' => [
+            'mail.read'  => 'Mail — atandığı hesapların gelen kutusunu ve çevirileri görüntüle',
+            'mail.reply' => 'Mail — Türkçe cevap taslağı yaz ve çeviri önizle (göndermez)',
+            'mail.send'  => 'Mail — çeviriyi onayla ve GÖNDER',
+            'mail.admin' => 'Mail yöneticisi — hesap, şifre, kullanıcı atama, senkron günlüğü (tüm hesapları görür)',
+        ],
         'Personel Takibi' => [
             'attendance.read'               => 'Devam kayıtlarını görüntüle',
             'attendance.scan'               => 'Kapı / kart okuyucu ile tarama yap',

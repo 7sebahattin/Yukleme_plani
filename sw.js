@@ -1,5 +1,5 @@
 // sw.js — Yükleme Planı PWA Service Worker
-const CACHE_NAME = 'yukleme-plani-v307';
+const CACHE_NAME = 'yukleme-plani-v308';
 
 // Uygulama kabuğunu önbellekle
 const SHELL = [
@@ -24,6 +24,7 @@ const SHELL = [
   './assets/nav-icons/rapor.svg',
   './assets/nav-icons/mstok.svg',
   './assets/nav-icons/hesap.svg',
+  './assets/nav-icons/mail.svg',
   './assets/nav-icons/ptak.svg',
   './assets/nav-icons/defs.svg',
   './assets/nav-icons/users.svg',
@@ -61,6 +62,8 @@ self.addEventListener('fetch', function(e) {
   // aksi hâlde tam DB dökümü CacheStorage'a kalıcı yazılıyordu (DB-Backup-02).
   var u = new URL(e.request.url);
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
+  // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
+  if (/\/mail(_[a-z]+)?\.php$/.test(u.pathname)) return;
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.

@@ -131,6 +131,16 @@ if (can('hesap.read') || is_admin()) {
 
 // Stok özet artık index'te kullanılmıyor (kartlar reports.php'ye taşındı)
 
+// Mail Merkezi özeti — kartın kapısı mail.php'nin kapısıyla AYNI (can_mail). Tablo kurulu
+// değilse kart yine görünür (sayfa kurulum durumunu anlatır), yalnız rozet yok.
+$mail_okunmamis = 0;
+if (can_mail('read')) {
+    try {
+        require_once __DIR__ . '/config/mail_core.php';
+        $mail_okunmamis = array_sum(mail_okunmamis_sayilari((int)$auth_user['id']));
+    } catch (Throwable $e) { $mail_okunmamis = 0; }
+}
+
 // Kullanıcı sayısı — sadece users.admin yetkisiyle hesapla
 $kullanici_aktif = 0;
 if (can('users.admin')) {
@@ -147,7 +157,7 @@ if (is_admin()) {
 // nav_ptak_gorunur(): Personel Takibi kartı bu bölümün içinde — yalnız PDKS
 // izni olan kullanıcı (ör. yalnız attendance.foremen) bölüm kapalı olduğu
 // için kartı hiç göremiyordu, oysa sayfa açılıyor ve sidebar gösteriyordu.
-$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur();
+$_ops_show  = can('records.read') || can('kantar.read') || can('reports.read') || nav_ptak_gorunur() || can_mail('read');
 $_ynt_show  = can('defs.read') || can('users.admin') || is_admin();
 
 render_header('Ana Sayfa');
@@ -337,6 +347,17 @@ if (nav_ptak_gorunur()):
         <?php endif; ?>
         <?php if ($hesap_yonetici && $hesap_onay_bekleyen > 0): ?>
         <div class="home-card-sub">Onay bekleyen: <?= $hesap_onay_bekleyen ?></div>
+        <?php endif; ?>
+    </a>
+<?php endif; ?>
+
+<?php if (can_mail('read')): ?>
+    <a href="mail.php" class="home-card">
+        <div class="home-card-icon" style="background:#e0f4f9">📧</div>
+        <div class="home-card-title">Mail Merkezi</div>
+        <?php if ($mail_okunmamis > 0): ?>
+        <div class="home-card-badge" style="background:var(--warn)"><?= (int)$mail_okunmamis ?></div>
+        <div class="home-card-sub">Okunmamış: <?= (int)$mail_okunmamis ?></div>
         <?php endif; ?>
     </a>
 <?php endif; ?>

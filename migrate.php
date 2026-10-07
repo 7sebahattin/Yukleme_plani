@@ -21,6 +21,8 @@ require_once __DIR__ . '/config/pdks.php';
 // Sprint Günlük-İşçi-01: çavuş/işçi-kart-havuzu tabloları da aynı sebeple
 // (kendiliğinden yüklenmez) BURADAN elle tetiklenir.
 require_once __DIR__ . '/config/pdks_gunluk.php';
+// Mail Merkezi: tablolar YALNIZ buradan (admin, CSRF, audit) kurulur; sayfalar şema değiştirmez.
+require_once __DIR__ . '/config/mail_core.php';
 // Sprint Günlük-İşçi-05, Faz 4: hakediş (çavuş fiyat + hakediş) tabloları
 // da AYNI sebeple BURADAN elle tetiklenir. Faz 1-3 tablolarına DOKUNMAZ —
 // yalnız KENDİ üç yeni tablosunu additive olarak ekler.
@@ -106,6 +108,7 @@ $pdks_cavus_b_results = []; $pdks_cavus_b_ran = false;   // Çavuş Ücreti Yön
 $pdks_kart_tanim_results = []; $pdks_kart_tanim_ran = false;   // v298 Tanımlı Giriş (kart → çavuş + tip + depo)
 $pdks_saat_results = []; $pdks_saat_ran = false;   // v299 Fiyat dönemi saatleri + Çift Yevmiye
 $pdks_servis_results = []; $pdks_servis_ran = false;   // v299 Servis Ücreti (2 yeni tablo)
+$mail_results = []; $mail_ran = false;   // Mail Merkezi (7 yeni tablo)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
     csrf_check($_POST['csrf'] ?? null);
@@ -217,6 +220,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks') {
         if ($pr['durum'] === 'olusturuldu') {
             audit_log_event('migrate', 'pdks_kart_tanim', null, null,
                 ['operation' => 'create_table', 'table' => $pr['tablo']]);
+        }
+    }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'mail') {
+    csrf_check($_POST['csrf'] ?? null);
+    $mail_ran     = true;
+    $mail_results = mail_migrate($pdo);
+    foreach ($mail_results as $mr) {
+        if ($mr['durum'] === 'olusturuldu') {
+            audit_log_event('migrate', 'mail', null, null,
+                ['operation' => 'create_table', 'table' => $mr['tablo']]);
         }
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ne'] ?? '') === 'pdks_cavus_b') {
@@ -419,6 +432,48 @@ render_header('Şema Migrasyon');
       <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
       <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
         foreach (pdks_gunluk_kart_tanim_tablolar() as $pksql) { echo h($pksql) . ";\n\n"; }
+      ?></pre>
+    </details>
+  </div>
+
+  <div class="card" style="margin:16px 0;padding:16px;">
+    <h2 style="margin-top:0;">Mail Merkezi — Tablolar</h2>
+    <p style="color:#555;font-size:.9em;">
+      Yalnız ekleyici migrasyon: <code>mail_accounts</code>, <code>mail_account_users</code>, <code>mail_threads</code>,
+      <code>mail_messages</code>, <code>mail_outbox</code>, <code>mail_sync_state</code>, <code>mail_sync_log</code> tablolarını ekler
+      (mevcut tablolara ALTER YOK). Kurulmazsa Mail Merkezi kurulum uyarısı gösterir, diğer modüller etkilenmez.
+      Posta şifreleri için ayrıca <code>config/local.php</code> içinde <code>MAIL_MASTER_KEY</code> tanımlanmalıdır
+      (şifreleme anahtarı: <strong><?= mail_crypto_hazir() ? '✓ tanımlı' : '✗ tanımlı değil' ?></strong>).
+      <?php if ($mail_ran): ?>
+      <br><strong>Son çalıştırma sonucu:</strong>
+        <?php foreach ($mail_results as $mr): ?>
+        <br>&nbsp;&nbsp;<?= h($mr['tablo']) ?>: <?= h($mr['durum']) ?> — <?= h($mr['mesaj']) ?>
+        <?php endforeach; ?>
+      <?php endif; ?>
+    </p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Tablo</th><th>Durum</th></tr></thead>
+        <tbody>
+        <?php foreach (array_keys(mail_tablolar()) as $mt):
+          $mte = mail_tablo_var($pdo, $mt); ?>
+          <tr>
+            <td><?= h($mt) ?></td>
+            <td style="color:<?= $mte ? '#1f9d55' : '#c0392b' ?>;font-weight:600;"><?= $mte ? '✓ Var' : '✗ Eksik' ?></td>
+          </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" style="margin-top:16px;">
+      <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+      <input type="hidden" name="ne" value="mail">
+      <button type="submit" class="btn btn-primary">Mail Tablolarını Oluştur</button>
+    </form>
+    <details style="margin-top:12px;">
+      <summary style="cursor:pointer;color:#555;">CREATE TABLE SQL'lerini göster (phpMyAdmin için)</summary>
+      <pre style="white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;overflow:auto;"><?php
+        foreach (mail_tablolar() as $msql) { echo h($msql) . ";\n\n"; }
       ?></pre>
     </details>
   </div>
