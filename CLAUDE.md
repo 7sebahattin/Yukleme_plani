@@ -23,7 +23,7 @@ Kök `*.php` = sayfa; `config/` = çekirdek; URL'ler sabittir (sayfa taşınmaz/
 | Kantar | `kantar` · `kantar_create/edit/view/delete/foto` · `_kantar_form` · `kantar_raporu` · `kantar_report_toggle` | — | — | — |
 | Stok / Malzeme | `stok` · `malzeme_stok` · `malzeme_stok_islem/import/rapor` · `malzeme_hareketleri` · `malzeme_stok_tehis` · `api_bulk_material` | `material_stock_helpers` | — | `test_material_stock_helpers` |
 | Beyan + HKS köprüsü | `beyanlar` · `beyan_view/create/edit/delete/parse/eslestir/bulk_save` · `_beyan_liste` · `api_beyan_bildirim` · `beyan_bildirim_tani` | `helpers` (`beyan_*`, `bb_*`) | — | `beyan_bildirim_smoke` · `beyan_ui_smoke` · `beyan_js_smoke.js` |
-| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `dogum_deney_lib.php` + `dogum_deney.php` (doğum tarihi biçim deneyi, admin) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_dogum_deney_smoke` · `hks_kisi_pencere_smoke.js` |
+| Hal Kayıt (HKS) | `halkayit/index.php` (panel, iframe) · `app.php`/`app.html` (SPA) · `api.php` (JSON) · `taslak_lib.php` (TASLAK YAZMANIN TEK YOLU) · `kisi_havuzu_lib.php` (karşı taraf havuzu) · `dogum_deney_lib.php` + `dogum_deney.php` (doğum tarihi biçim deneyi, admin) · `tekrar_gonder_lib.php` (Gönderilenler → Tekrar gönder, salt okunur) · `hks_soap.php` · `config.php` · `db.php` · teşhis: `tani.php` · `opcache_reset.php` · `endpoint_test.php` · `.htaccess` (include-only PHP kapalı) | — | `halkayit/*.js` (qrcode/jspdf/html2canvas) | `hks_*_test.php` · `hks_kisi_havuzu_smoke` · `hks_dogum_deney_smoke` · `hks_tekrar_gonder_smoke` · `hks_kisi_pencere_smoke.js` · `hks_gonderilenler_smoke.js` |
 | Hesap | `hesap` · `hesap_liste/kayit/durum/muhasebe/personel/yazdir/export/sil/dosya/dosya_sil` · `hesap_muhasebe_fis_pdf` · `hesap_config` | `hesap_calc` · `hesap_pdf` | `hesap.css` · `hesap.js` | `hesap_smoke` · `hesap_ui_smoke` · `hesap_izolasyon_smoke` · `hesap_pdf_smoke` |
 | Maliyet | `maliyet` · `maliyet_form/view/sil/alanlar/sablon/ambalaj` · `_maliyet_row` · `api_maliyet_link` | `cost_calc` · `cost_link` | `maliyet.css` · `maliyet.js` | `cost_link_smoke` |
 | PDKS / Personel / Çavuş | `personel*` · `isci_kartlari` · `isci_tipleri` · `gunluk_*` · `cavus*` · `mesai_*` · `manuel_cikis` · `giris_cikis` · `pdks_nfc_test` | `pdks*.php` (`pdks`, `pdks_gunluk`, `pdks_hakedis`, `pdks_cari`, `pdks_rapor`, `pdks_faz8*`, `pdks_faz9d`) | `pdks.css` · `pdks.js` · `print_pdks.css` | `pdks_*_smoke` |
@@ -1213,6 +1213,42 @@ firmalar aynı müstahsil/firma listesini görür.
   Test: `node scripts/hks_binlik_smoke.js`.
 
 ---
+
+## Hal Kayıt — Gönderilenler Tablosu + Tekrar Gönder (v305)
+
+Gönderilenler ekranı masaüstünde (iframe ≥900px) kompakt TABLO: Tarih+durum · Firma · Plaka ·
+Ülke/Müstahsil (yön öneki atılır, tür etiketi + `title` tam metin) · Ürün · Kilo (tam sayı) ·
+Ücret (BİRİM fiyat `TL/KG`, 0 → —) · 🖨 Yazdır · ↻ Tekrar gönder ▾. Satıra tık/Enter/Boşluk →
+altında bugünkü kart (`.g-kart-gomulu`, ilk açılışta kurulur). <900px kartlar AYNEN; yalnız açılan
+detayda "↻ Tekrar gönder". Kip `matchMedia('(min-width:900px)')` (`gonderilenCiz()`), eşik geçilince
+veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üzerinde.
+
+- **Amaç:** önceki gönderimi forma DOLU açmak (kullanıcı kararı: taslak doğrudan YAZILMAZ). Kullanıcı
+  plaka/kilo düzeltip "Taslağa Kaydet" der → yazma yine TEK yol `taslak_kaydet` → `hks_taslak_olustur()`.
+  **İkinci yazma yolu AÇMA.**
+- **Kopya** (`hks_gonderim_kopyasi()`, `halkayit/tekrar_gonder_lib.php`): `taslak_gonder`'de
+  `$veri` çözülür çözülmez (plan çözümünden ve `gidecekAdres`'ten ÖNCE) alınır, `hks_gonderilenler.veri.kopya`
+  olarak saklanır (migration YOK). `ortak` BEYAZ LİSTE (`hks_kopya_ortak_anahtarlari()`); DIŞARIDA:
+  `kaynak` (beyan bağı — kopyadan açılan taslak beyana bağlanmasın), `gidecekAdres`, `eskiTaslakId`,
+  `ikinciDogumTarihi`/`ikinciCep` (kişisel veri). Hata yutar, null dönebilir — gönderimi asla bozmaz.
+  Liste ucu yalnız `kopyaVar` döner (kopyanın kendisi DÖNMEZ).
+- **Tohum** — salt okunur uç `gonderilen_tohum` (`id`, `firmaId`, `firmaAd`, ops. `hedefFirmaId`):
+  firma izolasyonu `gonderilenler` ile BİREBİR; INSERT/UPDATE/DELETE/SOAP YOK (test denetler).
+  `hks_gonderim_tohumu()` → `{tohum:{satirlar,ortak}, kaynak:'kopya'|'eski', plana, notlar[]}`.
+  Referanslı + künye satırlı kopya → PLAN taslağı (`planKg` = Σmiktar, künyeler gönderimde stoktan;
+  kullanılmış künyeler kopyalanmaz). Doğum/cep TC ile Kişi Havuzu'ndan. Firma değişince `sifatId`,
+  `gidecekIsyeriId`, `gidecekIsyeriAd` SİLİNİR (firmaya özgü).
+- **Eski kayıt (kopya yok):** kolonlardan kısmi kurulum; tür `bildirim_turu` (NULL ise `ulke_ad` öneki),
+  ürün/ülke/tür katalogda (`listeler_cache`) yalnız TAM ad (`hks_tr_normalize`) ve TEK eşleşme; karşı
+  taraf Kişi Havuzu'nda AD ile TAM ve TEK eşleşme (`hks_kisi_ad_ile_tek()`) — yoksa/birden çoksa BOŞ.
+  id ASLA uydurulmaz; eksikler `notlar` ile formun üstünde (`#kopyaNotlar`, textContent) söylenir.
+- **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
+  değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
+  `duzenlenenTaslakId = null`: `eskiTaslakId` GİTMEZ, hiçbir taslak SİLİNMEZ. Karşı taraf yine
+  "Doğrula"dan geçer. Menü `#gTekrarMenu` (position:fixed, z 620), firma penceresi `#firmaSecPencere` (z 600,
+  aktif firma hariç). Lib `taslak_lib.php`'yi require ETMEZ (test edilebilirlik; api.php yükler).
+- Test: `php scripts/hks_tekrar_gonder_smoke.php` · `node scripts/hks_gonderilenler_smoke.js`
+  (`GSHOT=<klasör>` ekran görüntüsü kaydeder).
 
 ## Excel İndir — CSV + XLSX (Sprint Excel-01)
 
