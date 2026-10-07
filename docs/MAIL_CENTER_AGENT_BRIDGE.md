@@ -16,9 +16,9 @@
 |---|---|
 | Base (`main`) SHA (başlangıçta doğrulandı) | `8c4165d320799f1ed3054e150a5413b96ed6cbdc` (PR #677 merge) |
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
-| Current HEAD | _her milestone commit'inde güncellenir_ (bkz. Completed Work tablosu) |
-| Draft PR | _(açılınca doldurulur)_ |
-| Current milestone | **M0 tamam → M1 başlıyor** |
+| Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
+| Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
+| Current milestone | **M1 tamam → M2 (IMAP) bekliyor / başlıyor** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -190,18 +190,40 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 
 | Milestone | Commit | Durum |
 |---|---|---|
-| M0 — Analiz + mimari + tehdit modeli | _(ilk commit)_ | ✅ bu belge |
+| M0 — Analiz + mimari + tehdit modeli | `ea7f413` | ✅ |
+| M1 — DB/config/permission temel yapısı | `6c1abdf` | ✅ (aşağıda) |
+
+**M1 içeriği**
+- `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
+  (YALNIZ `migrate.php` "Mail Merkezi — Tablolar" kartından çağrılır; statik test garanti eder),
+  AES-256-GCM+AAD şifreleme (`mail_sifrele/mail_coz`, `MAIL_MASTER_KEY`), `mail_redact()`,
+  hesap doğrulama/CRUD (`mail_hesap_kaydet`, `mail_hesap_cred_oku`, `mail_hesap_goster`),
+  hesap ACL (`mail_gorunur_hesap_idleri` — fail-closed), okunmamış sayaç, `require_mail()`.
+- `config/helpers.php`: **`can_mail()` tek kapı** (read/reply/send/admin; `is_admin()` + `mail.admin` her şeyi açar,
+  `can()` yoksa fail-closed). Sidebar, `nav_alt_izinler`, `first_allowed_page`, index kartı bunu çağırır.
+  `can_mail()` bilerek `nav_ptak_sayfalari()` ile `first_allowed_page()` arasında durur: `rol_kapilari_smoke.php`
+  o aralığı `eval` ediyor ve `first_allowed_page()` artık `can_mail()` çağırıyor (test dosyası değişmedi).
+- `config/auth.php`: "Mail Merkezi" yetki grubu. `helpers.php` admin seed listesine 4 yetki.
+- `mail.php` (iskelet: kurulum durumu + görünür hesaplar), `mail_hesaplar.php` (hesap + kullanıcı ataması; şifreler
+  forma geri basılmaz), `migrate.php` kartı, `index.php` kartı + okunmamış rozeti.
+- `sw.js`: `/mail*.php` yolları SW'ye hiç girmez; `mail.svg` SHELL'de; `APP_SURUM`/`CACHE_NAME` **v308**.
+- `assets/nav-icons/mail.svg`; `scripts/bottomnav_render.php` bağımsız kapı tablosuna `mail.php` satırı eklendi
+  (alt çubuk testi hâlâ bağımsız doğrulama yapıyor).
 
 ## Tests
 
-_(M0: kod yok — test yok.)_
+| Test | Sonuç |
+|---|---|
+| `php scripts/mail_core_smoke.php` (şema, anahtar yokken fail-closed, AES-GCM+AAD, AAD satır-değiştirme saldırısı, maskeleme, doğrulama/CRLF, hesap deposu, can_mail matrisi, ACL fail-closed) | 85/85 ✅ |
+| `php scripts/mail_ui_smoke.php` (mail.php + mail_hesaplar.php render, sidebar=alt çubuk=sayfa kapısı, IDOR, XSS kaçışı, yanıtta şifre yok, audit'te şifre yok) | 33/33 ✅ |
+| `php scripts/mail_gate_static_smoke.php` (kapı tek kaynak, migrate yalnız migrate.php, sır/anahtar repoda yok, SW bypass, sürüm eşitliği) | 40/40 ✅ |
+| Regresyon: tüm `scripts/*_smoke.php` (PHP) | ✅ (3 test `git diff`/eval tabanlıydı → düzeltildi/commit sonrası geçiyor) |
+| `bottomnav_render.php` + `bottomnav_smoke.js` (Playwright) | (A) 1828 OK / (B) 1011 OK, 0 hata ✅ |
 
-Planlanan test dosyaları (`scripts/`): `mail_crypto_smoke.php` · `mail_mime_smoke.php` (XSS korpusu) ·
-`mail_imap_smoke.php` (sahte sunucu) · `mail_sync_smoke.php` (dedupe / UIDVALIDITY / hesap izolasyonu) ·
-`mail_smtp_smoke.php` · `mail_outbox_smoke.php` (onay kapısı / çift gönderim / thread başlıkları) ·
-`mail_gate_static_smoke.php` (sidebar/bottomnav/index/first_allowed_page/sayfa kapısı aynı kaynak;
-sırsızlık taraması) · `mail_ui_smoke.php` + `mail_ui_smoke.js` (Playwright, mobil/masaüstü) ·
-`mail_cron_smoke.php`.
+Planlanan sonraki testler (`scripts/`): `mail_mime_smoke.php` (XSS korpusu) · `mail_imap_smoke.php` (sahte sunucu) ·
+`mail_sync_smoke.php` (dedupe / UIDVALIDITY / hesap izolasyonu) · `mail_smtp_smoke.php` ·
+`mail_outbox_smoke.php` (onay kapısı / çift gönderim / thread başlıkları) · `mail_cron_smoke.php` ·
+`mail_ui_smoke.js` (Playwright, mobil/masaüstü).
 
 ## Security Notes
 
@@ -225,10 +247,8 @@ sırsızlık taraması) · `mail_ui_smoke.php` + `mail_ui_smoke.js` (Playwright,
 
 ## Next Planned Actions
 
-- M1: şema (`config/mail_core.php`) + migrate.php kartı + `can_mail()` + yetki kataloğu +
-  nav/sidebar/bottomnav/index/first_allowed_page bağlama + AES-GCM kimlik bilgisi katmanı +
-  hesap depo fonksiyonları + iskelet `mail.php` + testler. (APP_SURUM v308.)
-- M2: IMAP istemcisi + MIME ayrıştırıcı + senkron motoru.
+- M2: IMAP istemcisi (`config/mail_imap.php`, `MailStream` arayüzü + sahte sunucu) + MIME ayrıştırıcı/HTML
+  temizleyici (`config/mail_mime.php`) + senkron motoru (`config/mail_sync.php`) + "Bağlantıyı Test Et".
 - Sonra M3…M8 (görev metnindeki sıra).
 
 ## Needs ChatGPT Review
