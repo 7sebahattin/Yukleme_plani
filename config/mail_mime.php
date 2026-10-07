@@ -573,3 +573,55 @@ function mail_html_iframe_srcdoc(string $guvenliHtml, bool $uzakGorsel = false):
         . 'img{max-width:100%;height:auto}table{max-width:100%}blockquote{margin:6px 0 6px 6px;padding-left:10px;border-left:3px solid #c9d2de;color:#4a5668}'
         . 'img[data-blocked-src]{display:none}</style></head><body>' . $guvenliHtml . '</body></html>';
 }
+
+// ── Yerel dil tespiti (sunucudan ÇIKMAZ; çeviri sağlayıcısına gitmeden önce) ─────────────────
+
+/**
+ * Metnin dilini yerelde tahmin eder: önce yazı sistemi (Kiril/Arapça/İbranice/Yunanca/CJK/Hangul), sonra
+ * Latin diller için ayırt edici karakter + sık sözcük puanı. Emin değilse null (çağıran sağlayıcıya sorabilir
+ * ya da kaynak dili "otomatik" bırakır). @return string|null ISO 639-1 (tr, en, ru, de, fr, es, it, pt, nl, pl, uk, ar, fa, he, el, zh, ja, ko)
+ */
+function mail_dil_tespit(string $metin): ?string
+{
+    $m = mb_substr(trim($metin), 0, 4000);
+    if (mb_strlen($m) < 8) return null;
+    $say = static fn(string $re): int => (int)preg_match_all($re, $m);
+    $harf = max(1, $say('/\p{L}/u'));
+    $kir = $say('/\p{Cyrillic}/u'); $ara = $say('/\p{Arabic}/u'); $ibr = $say('/\p{Hebrew}/u'); $yun = $say('/\p{Greek}/u');
+    $han = $say('/\p{Han}/u'); $kana = $say('/[\p{Hiragana}\p{Katakana}]/u'); $hang = $say('/\p{Hangul}/u');
+    if ($kana / $harf > 0.15) return 'ja';
+    if ($hang / $harf > 0.3) return 'ko';
+    if ($han / $harf > 0.3) return 'zh';
+    if ($kir / $harf > 0.5) return $say('/[іїєґ]/iu') >= 2 ? 'uk' : 'ru';
+    if ($ara / $harf > 0.5) return $say('/[پچژگ]/u') >= 2 ? 'fa' : 'ar';
+    if ($ibr / $harf > 0.5) return 'he';
+    if ($yun / $harf > 0.5) return 'el';
+    if (($kir + $ara + $ibr + $yun + $han + $hang) / $harf > 0.5) return null;   // karışık/belirsiz
+
+    static $sozluk = [
+        'en' => ['the', 'and', 'you', 'for', 'with', 'this', 'that', 'please', 'are', 'have', 'will', 'not', 'your', 'from', 'best', 'regards', 'dear', 'thank', 'thanks', 'order', 'payment', 'attached'],
+        'tr' => ['ve', 'bir', 'için', 'bu', 'ile', 'çok', 'değil', 'ama', 'sayın', 'teşekkür', 'merhaba', 'lütfen', 'olarak', 'gibi', 'daha', 'sipariş', 'ödeme', 'saygılar', 'iyi', 'günler', 'yüklenmiştir', 'ekte'],
+        'de' => ['und', 'der', 'die', 'das', 'nicht', 'ist', 'ich', 'sie', 'mit', 'für', 'bitte', 'danke', 'sehr', 'geehrte', 'freundliche', 'grüße', 'bestellung', 'zahlung', 'anbei', 'wir', 'auf'],
+        'fr' => ['le', 'la', 'les', 'des', 'est', 'pour', 'avec', 'vous', 'nous', 'une', 'bonjour', 'merci', 'cordialement', 'commande', 'paiement', 'ci-joint', 'dans', 'pas', 'que'],
+        'es' => ['el', 'los', 'las', 'para', 'con', 'una', 'por', 'que', 'estimado', 'gracias', 'saludos', 'pedido', 'pago', 'adjunto', 'favor', 'usted', 'nuestro', 'está'],
+        'it' => ['il', 'che', 'per', 'con', 'una', 'sono', 'non', 'gentile', 'grazie', 'cordiali', 'saluti', 'ordine', 'pagamento', 'allegato', 'buongiorno', 'della', 'nel', 'vi'],
+        'pt' => ['que', 'para', 'com', 'uma', 'não', 'você', 'obrigado', 'atenciosamente', 'pedido', 'pagamento', 'anexo', 'prezado', 'bom', 'dia', 'nosso', 'está'],
+        'nl' => ['het', 'een', 'van', 'niet', 'voor', 'met', 'dank', 'bedankt', 'groeten', 'bestelling', 'betaling', 'bijlage', 'geachte', 'wij', 'zijn', 'uw'],
+        'pl' => ['nie', 'jest', 'dla', 'oraz', 'bardzo', 'dziękuję', 'pozdrawiam', 'zamówienie', 'płatność', 'załączniku', 'szanowni', 'proszę', 'się', 'jak', 'przez'],
+    ];
+    $ozel = ['tr' => '/[ığşİĞŞ]/u', 'de' => '/[äöüßÄÖÜ]/u', 'fr' => '/[àâçèéêëîïôùûœÀÂÇÈÉÊ]/u', 'es' => '/[ñ¿¡áíóúÑ]/u', 'pt' => '/[ãõçÃÕ]/u', 'pl' => '/[ąćęłńśźżĄĆĘŁŃŚŹŻ]/u', 'it' => '/[àèéìòù]/u'];
+    $kelimeler = preg_split('/[^\p{L}\'-]+/u', mb_strtolower($m), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    if (count($kelimeler) < 3) return null;
+    $sayim = array_count_values($kelimeler);
+    $puan = [];
+    foreach ($sozluk as $dil => $liste) {
+        $p = 0;
+        foreach ($liste as $k) if (isset($sayim[$k])) $p += min(3, $sayim[$k]);
+        if (isset($ozel[$dil])) $p += min(6, 2 * $say($ozel[$dil]));
+        $puan[$dil] = $p;
+    }
+    arsort($puan);
+    $d = array_keys($puan); $p = array_values($puan);
+    if ($p[0] < 3 || $p[0] < $p[1] * 1.4 + 1) return null;   // yeterince emin değil
+    return $d[0];
+}

@@ -149,6 +149,10 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
     }
 
     $alindi = mail_ic_tarih($meta['date'] ?? null) ?? ($m['date'] ?? null) ?? $simdi;
+    // Dil YEREL tespit edilir (sunucudan çıkmaz). Mail zaten hedef dildeyse çeviri kuyruğuna hiç girmez.
+    $dil = mail_dil_tespit((string)$m['body_text']);
+    $hedefDil = (string)($hesap['target_lang'] ?? 'tr');
+    $trDurum = empty($hesap['translate_enabled']) || ($dil !== null && $dil === $hedefDil) ? 'skipped' : 'pending';
     $seen = in_array('\\Seen', (array)($meta['flags'] ?? []), true) ? 1 : 0;
     $kendi = $m['from_addr'] !== '' && strtolower($m['from_addr']) === strtolower((string)$hesap['email']);
     $own = !$pdo->inTransaction();
@@ -158,9 +162,9 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
         $pdo->prepare('INSERT INTO mail_messages
             (account_id, thread_id, folder, uidvalidity, uid, message_id, message_id_hash, in_reply_to, references_hdr,
              from_addr, from_name, reply_to_addr, to_addrs, cc_addrs, subject, date_header, received_at,
-             body_text, body_html_safe, body_truncated, tr_status, attachments_json, has_attachments, size_bytes,
+             body_text, body_html_safe, body_truncated, tr_status, lang, attachments_json, has_attachments, size_bytes,
              imap_seen, is_read, needs_reply)
-            VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?)')
+            VALUES (?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?, ?,?,?)')
             ->execute([
                 $hid, $thread, $klasor, $uidvalidity, $uid,
                 $m['message_id'] !== null ? mb_substr($m['message_id'], 0, 500) : null, $m['message_id_hash'],
@@ -169,7 +173,7 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
                 mail_adres_json($m['to']), mail_adres_json($m['cc']),
                 $m['subject'], $m['date'], $alindi,
                 $m['body_text'], $m['body_html_safe'] !== '' ? $m['body_html_safe'] : null, (int)$m['body_truncated'],
-                !empty($hesap['translate_enabled']) ? 'pending' : 'skipped',
+                $trDurum, $dil,
                 $m['attachments'] ? (json_encode($m['attachments'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: null) : null, $m['attachments'] ? 1 : 0, (int)$m['size'],
                 $seen, $ilkTarama ? $seen : 0, $kendi ? 0 : 1,
             ]);
@@ -405,12 +409,24 @@ function mail_cron_calistir(PDO $pdo, array $opt = []): array
         if (!mail_crypto_hazir()) return ['kod' => 1, 'satirlar' => ['FAIL MAIL_MASTER_KEY tanımlı/geçerli değil']];
         $sonuc = mail_sync_tum($pdo, $opt);
         $satirlar = []; $basarili = 0; $hatali = 0;
+        // Çeviri kuyruğu (varsa): hata/kapalı durumu senkronu ve çıkış kodunu ETKİLEMEZ.
+        $ceviriSatiri = null;
+        if (function_exists('mail_ceviri_isle')) {
+            try {
+                $cs = mail_ceviri_isle($pdo, array_key_exists('ceviri_saglayici', $opt) ? $opt['ceviri_saglayici'] : mail_ceviri_saglayici(), ['dizin' => $opt['kilit_dizin'] ?? null, 'simdi' => $opt['simdi'] ?? null, 'sure' => 60.0]);
+                if ($cs['durum'] !== 'kapali') {
+                    $ceviriSatiri = "CEVIRI durum={$cs['durum']} ceviri={$cs['ceviri']} atlandi={$cs['atlandi']} hata={$cs['hata']} beklemede={$cs['beklemede']}"
+                        . ($cs['mesaj'] ? ' mesaj=' . mb_substr(mail_redact((string)$cs['mesaj']), 0, 120) : '');
+                }
+            } catch (Throwable $e) { $ceviriSatiri = 'CEVIRI durum=hata mesaj=' . mb_substr(mail_redact($e->getMessage()), 0, 120); }
+        }
         foreach ($sonuc as $id => $r) {
             if ($r['busy']) { $satirlar[] = "BUSY hesap=$id"; continue; }
             if ($r['ok']) { $basarili++; $satirlar[] = "OK hesap=$id fetched={$r['fetched']} inserted={$r['inserted']} skipped={$r['skipped']} kalan={$r['kalan']}"; }
             else { $hatali++; $satirlar[] = "FAIL hesap=$id error=" . ($r['error'] ?? '?'); }
         }
         if (!$sonuc) $satirlar[] = 'OK aktif hesap yok';
+        if ($ceviriSatiri !== null) $satirlar[] = $ceviriSatiri;
         try {   // günlük bakımı: eski senkron günlüğü silinir (hesap verisine dokunmaz)
             $pdo->prepare('DELETE FROM mail_sync_log WHERE started_at < ?')
                 ->execute([date('Y-m-d H:i:s', time() - ((int)($opt['log_gun'] ?? 30)) * 86400)]);

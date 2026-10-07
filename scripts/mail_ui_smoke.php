@@ -11,6 +11,7 @@ require_once $ROOT . '/config/mail_imap.php';
 require_once $ROOT . '/config/mail_mime.php';
 require_once $ROOT . '/config/mail_sync.php';
 require_once $ROOT . '/config/mail_view.php';
+require_once $ROOT . '/config/mail_translate.php';
 
 $db = db();
 mail_test_diger_tablolar($db);
@@ -19,7 +20,7 @@ mail_test_anahtar_kur();
 function sayfa_render(string $dosya, array $get = [], array $post = []): string {
     global $ROOT;
     $src = (string)file_get_contents($ROOT . '/' . $dosya);
-    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view)\.php';\s*$/m", '', $src);
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $tmp = sys_get_temp_dir() . '/mail_ui_' . getmypid() . '_' . basename($dosya);
     file_put_contents($tmp, $src);
@@ -168,6 +169,15 @@ $h = sayfa_render('mail.php', ['f' => 'taslak']);
 ok('outbox filtresi çalışır (boş klasör mesajı)', str_contains($h, 'Bu klasörde kayıt yok'));
 $h = sayfa_render('mail.php', ['f' => "okunmamis' OR 1=1 --"]);
 ok('geçersiz filtre → gelen (enjeksiyon etkisiz)', str_contains($h, 'Kalın'));
+$h = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
+ok('çeviri sağlayıcısı KAPALIYKEN "Şimdi çevir" düğmesi YOK (veri çıkış yolu görünmez)', !str_contains($h, 'ceviri_simdi') && str_contains($h, 'Çeviri bekleniyor'));
+$IS_ADMIN = true; $PERMS = [];
+ok('hesap ekranı sağlayıcıyı KAPALI gösteriyor', str_contains(sayfa_render('mail_hesaplar.php'), 'KAPALI — mail içeriği hiçbir dış servise gönderilmiyor'));
+define('MAIL_TRANSLATE_PROVIDER', 'mymemory');   // bu noktadan sonra sağlayıcı açık (sabit süreç boyunca kalır)
+$h = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
+ok('sağlayıcı AÇIKKEN "Şimdi çevir" POST formu (CSRF + islem=ceviri_simdi) görünür', str_contains($h, 'value="ceviri_simdi"') && str_contains($h, 'Mail metni yapılandırılmış çeviri servisine gönderilir'));
+ok('hesap ekranı sağlayıcıyı AÇIK gösteriyor', str_contains(sayfa_render('mail_hesaplar.php'), 'AÇIK — sağlayıcı: mymemory'));
+$IS_ADMIN = false; $PERMS = ['mail.read', 'mail.reply'];
 $IS_ADMIN = false; $PERMS = ['mail.read'];
 $h = sayfa_render('mail.php', ['m' => (string)$mid]);
 ok('mail.reply yetkisi yoksa durum düğmesi + yetki notu', str_contains($h, 'mail.reply yetkisi gerekir') && !str_contains($h, 'Cevaplandı say'));

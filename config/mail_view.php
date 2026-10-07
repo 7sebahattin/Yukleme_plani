@@ -236,6 +236,11 @@ function mail_post_isle(PDO $pdo, int $uid, string $islem, int $mId, int $aSecil
         if (!$cevapYetki) return ['ok' => false, 'mesaj' => '', 'yasak' => 'Bu işlem için mail.reply yetkisi gerekir.'];
         $ok = mail_cevap_durumu_yaz($pdo, $mId, $islem === 'cevap_bekliyor', $hesapIds);
         $mesaj = $ok ? ($islem === 'cevap_bekliyor' ? 'Cevap bekleyen olarak işaretlendi.' : 'Cevaplandı olarak işaretlendi.') : 'Mesaj bulunamadı.';
+    } elseif ($islem === 'ceviri_simdi') {
+        $sag = array_key_exists('saglayici', $opt) ? $opt['saglayici'] : (function_exists('mail_ceviri_saglayici') ? mail_ceviri_saglayici() : null);
+        $r = mail_ceviri_simdi($pdo, $sag, $mId, $hesapIds);
+        $ok = $r['ok']; $mesaj = $r['mesaj'];
+        if ($ok) audit_log_event('mail_translate_manual', 'mail_messages', $mId, null, ['sonuc' => 'ok']);
     } elseif ($islem === 'senkron') {
         if (!$yonetici) return ['ok' => false, 'mesaj' => '', 'yasak' => 'Bu işlem için mail.admin yetkisi gerekir.'];
         if ($aSecili && in_array($aSecili, $hesapIds, true) && mail_crypto_hazir()) {

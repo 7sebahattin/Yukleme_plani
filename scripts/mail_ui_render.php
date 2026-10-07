@@ -11,6 +11,7 @@ require_once $ROOT . '/config/mail_imap.php';
 require_once $ROOT . '/config/mail_mime.php';
 require_once $ROOT . '/config/mail_sync.php';
 require_once $ROOT . '/config/mail_view.php';
+require_once $ROOT . '/config/mail_translate.php';
 
 $OUT = getenv('MAIL_UI_OUT') ?: (sys_get_temp_dir() . '/mail-ui-test');
 @mkdir($OUT, 0777, true);
@@ -64,7 +65,7 @@ function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perm
     global $ROOT, $cssBase, $cssMail, $fileRoot, $PERMS, $IS_ADMIN, $UID;
     $PERMS = $perms; $IS_ADMIN = $yonetici; $UID = $uid;
     $src = (string)file_get_contents($ROOT . '/mail.php');
-    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view)\.php';\s*$/m", '', $src);
+    $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $tmp = sys_get_temp_dir() . '/mail_ui_render_' . getmypid() . '.php';
     file_put_contents($tmp, $src);

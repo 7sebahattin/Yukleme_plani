@@ -17,6 +17,7 @@ require_once __DIR__ . '/config/mail_imap.php';
 require_once __DIR__ . '/config/mail_mime.php';
 require_once __DIR__ . '/config/mail_sync.php';
 require_once __DIR__ . '/config/mail_view.php';
+require_once __DIR__ . '/config/mail_translate.php';
 $auth_user = require_login();
 require_mail('read');
 
@@ -26,6 +27,7 @@ $hazir    = mail_sema_hazir($pdo);
 $yonetici = can_mail('admin');
 $cevapYetki = can_mail('reply');
 $hesapIds = $hazir ? mail_gorunur_hesap_idleri($uid, $pdo) : [];
+$ceviriHazir = mail_ceviri_saglayici() !== null;   // sağlayıcı yapılandırılmış mı (kapalıysa hiçbir şey dışarı gitmez)
 
 // ── Parametreler (hepsi doğrulanır; yabancı hesap id'si SESSİZCE yok sayılır) ──
 $aSecili = (int)($_GET['a'] ?? $_POST['a'] ?? 0);
@@ -269,7 +271,14 @@ mail_assets();
                 <?php else: ?>
                 <div class="mail-bilgi"><?= h(mail_ceviri_durum_etiketi((string)$m['tr_status'])) ?>.
                     <?php if ($m['tr_status'] === 'failed' && $m['tr_error']): ?><span class="mail-hata-metin"><?= h($m['tr_error']) ?></span><?php endif; ?>
-                    Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.</div>
+                    Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.
+                    <?php if ($ceviriHazir && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
+                    <form method="post" class="mail-satir-form">
+                        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
+                        <input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
+                        <button class="btn" name="islem" value="ceviri_simdi" type="submit" title="Mail metni yapılandırılmış çeviri servisine gönderilir"><?= $m['tr_status'] === 'failed' ? 'Tekrar dene' : 'Şimdi çevir' ?></button>
+                    </form>
+                    <?php endif; ?></div>
                 <?php endif; ?>
             <?php else: ?>
                 <?php if ($m['body_html_safe'] !== null && $m['body_html_safe'] !== ''): ?>

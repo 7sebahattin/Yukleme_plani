@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M3 tamam (Mail Merkezi UI + ek indirme) → M4 (çeviri) — sağlayıcı/veri çıkışı kararı bekleniyor** |
+| Current milestone | **M4 tamam (çeviri katmanı; sağlayıcı varsayılan KAPALI) → M5 (cevap onayı + SMTP) sırada** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -193,7 +193,8 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M0 — Analiz + mimari + tehdit modeli | `ea7f413` | ✅ |
 | M1 — DB/config/permission temel yapısı | `6c1abdf` | ✅ (aşağıda) |
 | M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | `5c59a7c` | ✅ (aşağıda) |
-| M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | `5356234` | ✅ (aşağıda) |
+| M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -241,6 +242,22 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - **Bulunup düzeltilen gerçek hata:** `mail.php`/`mail_hesaplar.php` `render_header()`'ın zaten açtığı `<main class="container">`'ın içine ikinci `container`
   koyuyordu (sidebar kenar boşluğu iki kez uygulanıyor, masaüstünde okuyucu 2 px'e eziliyordu) — Playwright ölçümü yakaladı, düzeltildi ve statik testle kilitlendi.
 
+**M4 içeriği** (`config/mail_translate.php`, `mail_dil_tespit()` mail_mime.php'de)
+- `MailTranslationProviderInterface` (`ad()`, `parcaLimiti()`, `cevir($metin,$kaynak,$hedef)`) — iş mantığı sağlayıcıyı bilmez. Sağlayıcılar: **DeepL**
+  (Free planı: ayda 500 000 karakter, anahtar gerekir), **LibreTranslate** (https adres + isteğe bağlı anahtar), **MyMemory** (anahtarsız, kota çok düşük), `none`.
+  Seçim yalnız `config/local.php` sabitleriyle (`MAIL_TRANSLATE_PROVIDER/KEY/URL/EMAIL`); **varsayılan `none` = hiçbir şey dışarı gitmez**. Anahtar DB'ye/ekrana yazılmaz.
+- **Veri çıkışı minimizasyonu:** sağlayıcıya yalnız gövde METNİ (alıntı satırları ve "… wrote:" / Original Message sonrası kırpılır, ≤ 12 000 karakter) + konu gider;
+  gönderen/alıcı adresi, başlık, ek, hesap bilgisi ASLA. Testle sabit (sahte sağlayıcıya giden her bayt denetlenir).
+- **Yerel dil tespiti** (sunucudan çıkmaz): yazı sistemi + sözcük puanı (tr/en/de/fr/es/it/pt/nl/pl/ru/uk/ar/fa/he/el/zh/ja/ko; emin değilse null). Senkronda `lang` yazılır;
+  zaten hedef dildeki mail çeviri kuyruğuna hiç girmez (`skipped`) → kota + veri çıkışı korunur.
+- **Durum makinesi** `pending → translated | failed | skipped` ayrı alanlarda; **çeviri hatası maili asla etkilemez** (yalnız `tr_*`). Geçici hata → 5 / 15 dk / 1 sa / 4 sa
+  geri çekilme, 5. denemede `failed`; kalıcı hata (4xx) → hemen `failed`; kimlik/yapılandırma hatası (401/403) → kuyruk DURUR, mailler `pending` kalır, deneme hakkı yenmez;
+  kota (456/429-kota) → 6 saat duraklatma. 7 günden eski bekleyenler çevrilmez.
+- **HTTP:** yalnız https, yönlendirme takip edilmez, `CURLPROTO_HTTPS`, TLS doğrulamalı, 1 MB yanıt sınırı, zaman aşımı; hata metinleri `mail_redact()`'ten geçer.
+- Cron: senkrondan sonra çeviri kuyruğu (`CEVIRI durum=… ceviri=… hata=…` satırı; senkron çıkış kodunu etkilemez). UI: Türkçe sekmesi dolar; sağlayıcı AÇIKSA
+  "Şimdi çevir" / "Tekrar dene" (POST+CSRF, ACL, audit `mail_translate_manual`); yönetici ekranı sağlayıcı durumunu + son kuyruk çalışmasını gösterir.
+- **Henüz yok:** giden (Türkçe → hedef dil) çeviri M5'te aynı sağlayıcı arayüzüyle gelecek.
+
 **Bağımsız Opus güvenlik incelemesi (M2) — bulgular ve düzeltmeler** (hepsi `scripts/mail_review_smoke.php`'de regresyon testli;
 düzeltmeler geri alınınca testler düşüyor — mutasyon kontrolü yapıldı):
 
@@ -275,6 +292,7 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 | `mail_view_smoke.php` (M3: sorgular, filtreler, LIKE kaçışı, sayfalama, ACL/IDOR, durum değişiklikleri, ek indirme: ACL, parça beyaz listesi, UIDVALIDITY 409, octet-stream zorlaması, boyut, hata) | 46/46 ✅ |
 | `mail_ui_smoke.php` (M1 + M3: sayfa render, GET yan etkisiz, IDOR, iframe sandbox, POST işlemleri) | 56/56 ✅ |
 | `mail_ui_render.php` + `mail_ui_smoke.js` (**Playwright/Chromium**: 360/390/767/768/1024/1280/1440 — yatay taşma, panel düzeni, sabit Cevapla çubuğu, dokunma hedefleri, 16px input, kontrast açık/koyu, **saklı XSS iframe içinde çalışmıyor**, konsol hatası) | 200/200 ✅ |
+| `mail_translate_smoke.php` (M4: 17 dil tespiti, alıntı kırpma, parçalama, DeepL/Libre/MyMemory sahte HTTP, hata türleri, geri çekilme, kota, yapılandırma hatası, **veri çıkışı denetimi**, ACL, cron, sızıntı) | 107/107 ✅ |
 | `bottomnav_render.php` + `bottomnav_smoke.js` (alt çubuk, mail girdisiyle) | (A) 1828 · (B) 1011 ✅ |
 | Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
@@ -303,7 +321,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M4: çeviri (`TranslationProviderInterface` + sağlayıcılar, yerel dil tespiti, `pending/translated/failed` kuyruğu, cron'a entegrasyon, UI'da Türkçe sekmesi dolar). **Sağlayıcı + veri çıkışı kararı gerekli.**
+- M5: cevap onayı + SMTP (`config/mail_smtp.php` saf PHP istemci, `mail_outbox` durum makinesi, TR→hedef dil çeviri önizleme, `content_hash` onayı, idempotency, at-most-once gönderim, thread başlıkları, Sent'e APPEND). **Gerçek SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak.**
 - Sonra M3…M8 (görev metnindeki sıra).
 
 ## Needs ChatGPT Review
