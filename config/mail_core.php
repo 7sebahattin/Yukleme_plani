@@ -176,6 +176,7 @@ function mail_tablolar(): array
         `last_ok_at`           DATETIME     NULL DEFAULT NULL,
         `last_error`           VARCHAR(255) NULL DEFAULT NULL,
         `consecutive_failures` INT          NOT NULL DEFAULT 0,
+        `rescan_from_epoch`    BIGINT       NULL DEFAULT NULL,
         UNIQUE KEY `uq_mss_folder` (`account_id`, `folder`),
         CONSTRAINT `fk_mss_account` FOREIGN KEY (`account_id`)
             REFERENCES `mail_accounts`(`id`) ON DELETE CASCADE ON UPDATE RESTRICT

@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M1 tamam → M2 (IMAP) bekliyor / başlıyor** |
+| Current milestone | **M2 tamam (IMAP + MIME + senkron + cron, Opus güvenlik incelemesi uygulandı) → M3 (UI) sırada** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -192,6 +192,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 |---|---|---|
 | M0 — Analiz + mimari + tehdit modeli | `ea7f413` | ✅ |
 | M1 — DB/config/permission temel yapısı | `6c1abdf` | ✅ (aşağıda) |
+| M2 — IMAP istemcisi + MIME/HTML temizleyici + senkron motoru + cron | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -210,20 +211,53 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - `assets/nav-icons/mail.svg`; `scripts/bottomnav_render.php` bağımsız kapı tablosuna `mail.php` satırı eklendi
   (alt çubuk testi hâlâ bağımsız doğrulama yapıyor).
 
+**M2 içeriği**
+- `config/mail_imap.php`: saf PHP IMAP (ext-imap YOK). `MailStream` arayüzü (`MailSocketStream` gerçek, testte `FakeMailStream`),
+  doğrulamalı TLS (düz metin seçeneği yok), AUTHENTICATE PLAIN / LOGIN, **EXAMINE** (salt okunur), `UID SEARCH`, `UID FETCH` (**yalnız BODY.PEEK**),
+  literal/satır/toplam bayt/süre sınırları, modified UTF-7 klasör adları, kimlik bilgisi içermeyen komut günlüğü.
+- `config/mail_mime.php`: RFC 2047/2231, charset→UTF-8, RFC 2046 multipart (IMAP parça numaralarıyla uyumlu), ek metadata'sı;
+  **HTML temizleyici = DOM üzerinden izin listesiyle YENİDEN ÜRETİM** (script/style/iframe/svg/form… düşer, on* yok, `javascript:`/`data:` URL yok,
+  uzak görsel `data-blocked-src` ile ENGELLİ, CSS izin listesi), sandbox'lı `iframe srcdoc` + CSP üretici.
+- `config/mail_sync.php`: UID/UIDVALIDITY senkronu (UNSEEN YOK), çiftleme, thread çözümü (başlık tabanlı), hesap başına + global `flock`, hesap yalıtımı,
+  `mail_imap_test()` ("Bağlantıyı Test Et" — `mail_hesaplar.php`), `mail_cron_calistir()`.
+- `scripts/mail_sync_cron.php`: CLI-only cron girişi (cPanel: `*/5 * * * * php …/scripts/mail_sync_cron.php`).
+- Şema eki: `mail_sync_state.rescan_from_epoch` (M1'in DDL'ine eklendi — henüz hiçbir DB'de kurulmadığı için ALTER gerekmedi).
+
+**Bağımsız Opus güvenlik incelemesi (M2) — bulgular ve düzeltmeler** (hepsi `scripts/mail_review_smoke.php`'de regresyon testli;
+düzeltmeler geri alınınca testler düşüyor — mutasyon kontrolü yapıldı):
+
+| # | Bulgu | Düzeltme |
+|---|---|---|
+| H1 | Dışarıdan tek zehirli mail (9999 tarihi, geçersiz UTF-8 References, dev alıcı JSON'u) MySQL strict modda INSERT'i reddettirip hesabı **kalıcı** durdurur | tarih 1970–9999'a sıkıştırılır; tüm başlık türevleri `mb_scrub`; to/cc JSON ≤ 60 KB; **karantina**: kayıt reddedilirse yer tutucu satır + imleç ilerler; yer tutucu da yazılamıyorsa (DB sorunu) imleç ilerlemez → mail kaybolmaz |
+| M1 | STARTTLS sonrası düz metin tampon enjeksiyonu (MITM sahte CAPABILITY/UIDVALIDITY/FETCH) | tamponda bayt varsa TLS'e geçilmez; yanlış etiketli yanıt = protokol hatası |
+| M2 | libxml `<meta charset>`'ı UTF-8'e çevrilmiş içeriğe tekrar uyguluyor (Türkçe Outlook HTML bozuluyor; `utf-7` ile `<b>` üretiliyor) | `<meta>` atılır + girdi saf ASCII (sayısal varlık) → charset yorumu yok |
+| M3 | Message-ID dedupe sonsuza dek açık: yeni mail eski satırın UID'sini ele geçirebilir (ek indirmede yanlış parça) | dedupe yalnız geri tarama sürerken (`rescan_from_epoch`, kalıcı bayrak) ve yalnız önceki dönem satırlarına; eşleşen satır taşınır |
+| M4 | Dönem değişimi + uzun kesinti: yalnız `initial_days` taranır, arada gelen mailler kaybolur | SINCE = min(pencere, `last_ok_at` − 1 gün) |
+| L1 | Multipart RFC 2046 uyumsuzluğu (epilog gösteriliyor, başlıksız parça kayıp, boş parça numarayı kaydırıyor) | ayraç tabanlı bölme, kapanışta dur, her parça sayılır |
+| L2 | Ham 8-bit + encoded-word karışık başlık siliniyor (gönderen kaybolur) | ham baytlar önce UTF-8'e çevrilir |
+| L3 | Sonsuz `{0}` literal akışı; `foo[` bayrağı satırı yutar | literal sayı/süre sınırı; `[…]` yalnız BODY/BINARY sonrası |
+| L4 | Sanitizer sınırı sessizce içerik düşürüyor | yürüyüş durur + `body_truncated` işaretlenir |
+| L5 | Bozuk Content-ID ek listesini siliyor | cid temizlenir + `JSON_INVALID_UTF8_SUBSTITUTE` |
+
+Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'da yeniden ayrıştırılıp sıfır izinsiz etiket/nitelik/şema doğrulandı;
+`data-blocked-src` yeniden etkinleştirme yolu sahtelenemiyor; IMAP komut enjeksiyonu korumaları; AES-GCM/AAD kullanımı; ACL fail-closed.
+
 ## Tests
 
 | Test | Sonuç |
 |---|---|
-| `php scripts/mail_core_smoke.php` (şema, anahtar yokken fail-closed, AES-GCM+AAD, AAD satır-değiştirme saldırısı, maskeleme, doğrulama/CRLF, hesap deposu, can_mail matrisi, ACL fail-closed) | 85/85 ✅ |
-| `php scripts/mail_ui_smoke.php` (mail.php + mail_hesaplar.php render, sidebar=alt çubuk=sayfa kapısı, IDOR, XSS kaçışı, yanıtta şifre yok, audit'te şifre yok) | 33/33 ✅ |
-| `php scripts/mail_gate_static_smoke.php` (kapı tek kaynak, migrate yalnız migrate.php, sır/anahtar repoda yok, SW bypass, sürüm eşitliği) | 40/40 ✅ |
-| Regresyon: tüm `scripts/*_smoke.php` (PHP) | ✅ (3 test `git diff`/eval tabanlıydı → düzeltildi/commit sonrası geçiyor) |
-| `bottomnav_render.php` + `bottomnav_smoke.js` (Playwright) | (A) 1828 OK / (B) 1011 OK, 0 hata ✅ |
+| `mail_core_smoke.php` (M1) | 85/85 ✅ |
+| `mail_ui_smoke.php` (M1) | 33/33 ✅ |
+| `mail_gate_static_smoke.php` (M1 + M2 statik: TLS doğrulama, yalnız EXAMINE/BODY.PEEK, UNSEEN yok, error_log redakte, eval/exec yok) | 61/61 ✅ |
+| `mail_imap_smoke.php` (sahte IMAP sunucusu: oturum, "UID n:*" tuzağı, literal, kopma, limit, BYE, UTF-7, belirteçleyici) | 45/45 ✅ |
+| `mail_mime_smoke.php` (başlık/adres/RFC2231/multipart + **57'lik XSS korpusu** + kararlılık sanitize(sanitize(x))=sanitize(x) + srcdoc/CSP) | 120/120 ✅ |
+| `mail_sync_smoke.php` (çiftleme yok, okunmuş mail kaçmıyor, kopma/devam, hesap yalıtımı, UIDVALIDITY, thread, sızıntı yok, limitler) | 61/61 ✅ |
+| `mail_cron_smoke.php` (CLI-only, global kilit/BUSY, kısmi hata, günlük bakımı) | 19/19 ✅ |
+| `mail_review_smoke.php` (Opus bulguları H1…L5 regresyonları; MySQL strict mod SQLite'ta taklit) | 39/39 ✅ |
+| Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
-Planlanan sonraki testler (`scripts/`): `mail_mime_smoke.php` (XSS korpusu) · `mail_imap_smoke.php` (sahte sunucu) ·
-`mail_sync_smoke.php` (dedupe / UIDVALIDITY / hesap izolasyonu) · `mail_smtp_smoke.php` ·
-`mail_outbox_smoke.php` (onay kapısı / çift gönderim / thread başlıkları) · `mail_cron_smoke.php` ·
-`mail_ui_smoke.js` (Playwright, mobil/masaüstü).
+Henüz test edilmeyenler (ağ/kimlik bilgisi gerektirir → sahip tarafında): gerçek Gmail/Outlook/Dovecot IMAP davranışı, gerçek TLS/STARTTLS el sıkışması,
+canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.php`, `mail_ui_smoke.js` (Playwright).
 
 ## Security Notes
 
@@ -237,7 +271,7 @@ Planlanan sonraki testler (`scripts/`): `mail_mime_smoke.php` (XSS korpusu) · `
 
 1. Paylaşımlı hostun IMAP/SMTP **çıkış portu** kısıtı (993/465/587) — canlıda doğrulanmadı.
 2. Çeviri sağlayıcısı seçimi ve **veri çıkışı** (T11) — sahip kararı gerekir.
-3. Aynı hesapta farklı sağlayıcıların `UIDVALIDITY`/UID davranış farkları (Gmail IMAP'ta
+3. Aynı hesapta farklı sağlayıcıların `UIDVALIDITY`/UID davranış farkları (+ ilk taramada `SINCE` INTERNALDATE'e göredir) (Gmail IMAP'ta
    etiket=klasör; yalnız INBOX hedeflenir).
 4. Konu-bazlı thread tahmini bilerek yok → başlıksız yanıtlar ayrı thread olabilir.
 5. Saf PHP IMAP: yalnız kullanılan komut alt kümesi test edildi; gerçek sunucu (Gmail/Outlook/
@@ -247,8 +281,8 @@ Planlanan sonraki testler (`scripts/`): `mail_mime_smoke.php` (XSS korpusu) · `
 
 ## Next Planned Actions
 
-- M2: IMAP istemcisi (`config/mail_imap.php`, `MailStream` arayüzü + sahte sunucu) + MIME ayrıştırıcı/HTML
-  temizleyici (`config/mail_mime.php`) + senkron motoru (`config/mail_sync.php`) + "Bağlantıyı Test Et".
+- M3: Mail Merkezi UI (`mail.php` gelen kutusu, `mail_api.php` JSON, `mail_ek.php` ek indirme, `assets/mail.css/js`): 3 panel / mobil liste→detay,
+  Türkçe/Orijinal sekmeleri, sandbox'lı iframe render, uzak görsel kapalı + "Görselleri göster", filtreler, okundu işaretleme, Playwright testi.
 - Sonra M3…M8 (görev metnindeki sıra).
 
 ## Needs ChatGPT Review

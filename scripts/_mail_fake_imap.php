@@ -61,7 +61,11 @@ final class FakeMailStream implements MailStream
         }
     }
 
-    private function cevap(string $s): void { $this->out .= $s; }
+    private function cevap(string $s): void
+    {
+        if (!empty($this->cfg['inject_tag'])) $s = "A999 OK injected\r\n" . $s;   // araya sahte etiketli satır sokan kötü sunucu
+        $this->out .= $s;
+    }
     private function kaydet(string $s): void { $this->received[] = $s; if ($this->kok) $this->kok->received[] = $s; }
 
     /** Yeni bağlantı: aynı posta kutusu ve ayarlar, TAZE oturum (selamlama, sayaçlar). */

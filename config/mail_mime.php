@@ -47,6 +47,7 @@ function mail_mime_utf8(string $s, string $charset = 'utf-8'): string
 /** Kontrol karakterlerini (sekme/satır sonu hariç) temizler. */
 function mail_mime_temiz(string $s): string
 {
+    $s = mb_scrub($s, 'UTF-8');   // geçersiz UTF-8 → '?' (MySQL strict 1366 ve /u regex'inin null dönmesi önlenir)
     return (string)preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u', '', $s);
 }
 
@@ -55,9 +56,11 @@ function mail_mime_temiz(string $s): string
 /** RFC 2047 encoded-word çözer; bitişik kelimeler arası boşluk atılır. */
 function mail_mime_baslik_coz(string $v): string
 {
-    $v = (string)preg_replace('/\r?\n[ \t]+/', ' ', $v);
+    // Ham 8-bit baytlar (encoded-word OLMAYAN kısımlar) ÖNCE geçerli UTF-8'e çevrilir: encoded-word sözdizimi
+    // ASCII olduğundan güvenlidir; aksi hâlde karışık başlıkta /u regex'i null döner ve başlık (gönderen!) silinirdi.
+    $v = mail_mime_utf8((string)preg_replace('/\r?\n[ \t]+/', ' ', $v), 'utf-8');
     if (!str_contains($v, '=?')) {
-        return mail_mime_temiz(mail_mime_utf8($v, 'utf-8'));
+        return mail_mime_temiz($v);
     }
     $v = (string)preg_replace('/(\?=)\s+(?==\?)/', '$1', $v);   // bitişik encoded-word'ler
     $out = (string)preg_replace_callback('/=\?([^?\s]+)\?([BbQq])\?([^?]*)\?=/', static function ($m) {
@@ -70,7 +73,7 @@ function mail_mime_baslik_coz(string $v): string
         }
         return mail_mime_utf8($ham, (string)$cs);
     }, $v);
-    return mail_mime_temiz($out);
+    return mail_mime_temiz(mb_scrub($out, 'UTF-8'));
 }
 
 /**
@@ -186,8 +189,8 @@ function mail_mime_baslik_coz_adres(string $v): string
 /** <id> belirteçlerini döndürür (normalize: küçük harf, <> yok). @return list<string> */
 function mail_mime_idler(string $v): array
 {
-    preg_match_all('/<([^<>\s]{1,500})>/', $v, $m);
-    return array_values(array_unique(array_map('strtolower', $m[1])));
+    preg_match_all('/<([^<>\s]{1,500})>/', mail_mime_temiz($v), $m);   // geçerli UTF-8 + kontrol karakteri yok
+    return array_values(array_unique(array_map(static fn($x) => mb_strtolower($x, 'UTF-8'), $m[1])));
 }
 
 function mail_mime_gonder_adi(?string $ad): string
@@ -222,9 +225,13 @@ function mail_mime_govde_coz(string $govde, string $cte): string
 function mail_mime_ayristir(string $ham, int $derinlik = 0, string $parcaNo = '1', array &$durum = ['parca' => 0]): array
 {
     $durum['parca']++;
-    $p = preg_match('/\r?\n\r?\n/', $ham, $mm, PREG_OFFSET_CAPTURE) ? $mm[0][1] : strlen($ham);
-    $blok = substr($ham, 0, $p);
-    $govde = $p < strlen($ham) ? substr($ham, $p + strlen($mm[0][0])) : '';
+    if (preg_match('/^\r?\n/', $ham, $m0)) {          // başlıksız parça: ilk satır boş → hepsi gövde
+        $blok = ''; $govde = substr($ham, strlen($m0[0]));
+    } else {
+        $p = preg_match('/\r?\n\r?\n/', $ham, $mm, PREG_OFFSET_CAPTURE) ? $mm[0][1] : strlen($ham);
+        $blok = substr($ham, 0, $p);
+        $govde = $p < strlen($ham) ? substr($ham, $p + strlen($mm[0][0])) : '';
+    }
     $h = mail_mime_basliklar($blok);
     $ct = mail_mime_param_coz($h['content-type'][0] ?? 'text/plain; charset=us-ascii');
     if (!preg_match('#^[a-z0-9.+-]+/[a-z0-9.+-]+$#', $ct['deger'])) $ct['deger'] = 'text/plain';
@@ -233,19 +240,21 @@ function mail_mime_ayristir(string $ham, int $derinlik = 0, string $parcaNo = '1
         'disp' => $cd['deger'], 'dparams' => $cd['params'], 'headers' => $h, 'govde' => '', 'cocuklar' => [], 'parca' => $parcaNo];
 
     if (str_starts_with($ct['deger'], 'multipart/') && $derinlik < MAIL_MIME_MAX_DERINLIK && !empty($ct['params']['boundary'])) {
+        // RFC 2046: ayraç satırları ("--b"); ilk "--b--" kapanışta HER ŞEYİ bitirir (epilog parça DEĞİLDİR);
+        // ayracın kendi satır sonu parçaya dahil değildir; HER parça (boş olsa da) IMAP numarasında sayılır.
         $b = preg_quote($ct['params']['boundary'], '/');
-        $parcalar = preg_split('/\r?\n--' . $b . '(?:--)?[ \t]*(?=\r?\n|$)/', "\n" . $govde) ?: [];
-        array_shift($parcalar);   // önsöz
-        $i = 0;
-        foreach ($parcalar as $pc) {
+        preg_match_all('/\r?\n--' . $b . '(--)?[ \t]*(?=\r?\n|$)/', "\n" . $govde, $dm, PREG_OFFSET_CAPTURE | PREG_SET_ORDER);
+        $tam = "\n" . $govde; $i = 0;
+        foreach ($dm as $k => $d) {
+            if (($d[1][1] ?? -1) >= 0 && ($d[1][0] ?? '') === '--') break;   // kapanış ayracı
             if ($durum['parca'] >= MAIL_MIME_MAX_PARCA) break;
-            $pc = ltrim($pc, "\r\n");
-            if (trim($pc) === '' ) continue;
+            $bas = $d[0][1] + strlen($d[0][0]);
+            $son = isset($dm[$k + 1]) ? $dm[$k + 1][0][1] : strlen($tam);
+            $pc = substr($tam, $bas, max(0, $son - $bas));
+            $pc = (string)preg_replace('/^\r?\n/', '', $pc, 1);            // ayraç satırının sonu
             $i++;
             $dugum['cocuklar'][] = mail_mime_ayristir($pc, $derinlik + 1, $parcaNo === '1' && $derinlik === 0 ? (string)$i : $parcaNo . '.' . $i, $durum);
         }
-        // Üst düzey multipart'ta çocuk numaraları 1,2,3…; iç içe olanlarda "2.1". Kök için parcaNo '1' yerine
-        // çocuklar doğrudan 1..n alır (yukarıdaki koşul).
     } else {
         $dugum['govde'] = $govde;
     }
@@ -268,6 +277,13 @@ function mail_mime_yaprak_metin(array $y): string
 {
     $ham = mail_mime_govde_coz($y['govde'], $y['cte']);
     return mail_mime_utf8($ham, $y['params']['charset'] ?? 'utf-8');
+}
+
+/** strtotime sonucunu MySQL DATETIME aralığına (1970–9999) sıkıştırır; dışı null (strict mod INSERT hatasını önler). */
+function mail_mime_tarih($ts): ?string
+{
+    if ($ts === false || $ts === null || $ts < 86400 || $ts > 253402214400) return null;
+    return date('Y-m-d H:i:s', (int)$ts);
 }
 
 // ── Tam mesaj ───────────────────────────────────────────────────────────
@@ -320,9 +336,10 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
     }
     $metin = trim(implode("\n\n", $metinler));
     $htmlHam = trim(implode("\n", $htmller));
-    $guvenli = $htmlHam !== '' ? mail_html_sanitize($htmlHam) : '';
+    $htmlKesik = false;
+    $guvenli = $htmlHam !== '' ? mail_html_sanitize($htmlHam, $htmlKesik) : '';
     if ($metin === '' && $htmlHam !== '') $metin = mail_html_to_text($htmlHam);
-    $kesildi = $kesik;
+    $kesildi = $kesik || $htmlKesik;
     if (strlen($metin) > MAIL_METIN_MAX) { $metin = mb_strcut($metin, 0, MAIL_METIN_MAX, 'UTF-8'); $kesildi = true; }
     if (strlen($guvenli) > MAIL_HTML_MAX) { $guvenli = ''; $kesildi = true; }   // yarım HTML GÖSTERME (etiket dengesi bozulur)
 
@@ -340,7 +357,7 @@ function mail_mime_mesaj(string $ham, bool $kesik = false): array
         'to'              => $to,
         'cc'              => $cc,
         'subject'         => mb_substr($konu, 0, 500),
-        'date'            => $ts !== false && $ts > 0 ? date('Y-m-d H:i:s', $ts) : null,
+        'date'            => mail_mime_tarih($ts),
         'body_text'       => mail_mime_temiz($metin),
         'body_html_safe'  => $guvenli,
         'body_truncated'  => $kesildi ? 1 : 0,
@@ -411,17 +428,30 @@ function mail_html_renk(string $v): ?string
 }
 
 /**
+ * libxml'e verilecek HTML'yi hazırlar: <meta> etiketleri atılır (belgedeki charset bildirimi, MIME katmanının ZATEN
+ * UTF-8'e çevirdiği içeriği ikinci kez çözer / utf-7'yi etkinleştirirdi) ve 0x80+ her karakter sayısal varlığa
+ * çevrilir → girdi saf ASCII; hiçbir charset yorumu sonucu değiştiremez.
+ */
+function mail_html_hazirla(string $html): string
+{
+    $html = mail_mime_temiz($html);
+    $html = (string)preg_replace('/<meta\b[^>]*>/i', '', $html);
+    return mb_encode_numericentity($html, [0x80, 0x10FFFF, 0, 0x1FFFFF], 'UTF-8');
+}
+
+/**
  * Güvenilmeyen HTML → güvenli HTML parçası. Uzak görseller ENGELLİ: src yerine data-blocked-src.
  * Her çağrıda sıfırdan ve izin listesiyle üretildiği için sanitize(sanitize(x)) === sanitize(x).
  */
-function mail_html_sanitize(string $html): string
+function mail_html_sanitize(string $html, ?bool &$kesildi = null): string
 {
+    $kesildi = false;
     if (trim($html) === '') return '';
-    $html = mail_mime_temiz(mb_scrub($html, 'UTF-8'));
-    if (strlen($html) > 4 * MAIL_HTML_MAX) $html = mb_strcut($html, 0, 4 * MAIL_HTML_MAX, 'UTF-8');
+    $html = mail_mime_temiz($html);
+    if (strlen($html) > 4 * MAIL_HTML_MAX) { $html = mb_strcut($html, 0, 4 * MAIL_HTML_MAX, 'UTF-8'); $kesildi = true; }
     $doc = new DOMDocument();
     $onceki = libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8"?><!DOCTYPE html><html><body>' . $html . '</body></html>',
+    $doc->loadHTML('<?xml encoding="UTF-8"?><!DOCTYPE html><html><body>' . mail_html_hazirla($html) . '</body></html>',
         LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_COMPACT);
     libxml_clear_errors();
     libxml_use_internal_errors($onceki);
@@ -431,10 +461,13 @@ function mail_html_sanitize(string $html): string
     $izinli = array_flip(mail_html_izinli());
     $sayac = 0;
 
-    $yaz = function (DOMNode $n, int $d) use (&$yaz, $dusen, $izinli, &$sayac): string {
-        if ($d > 60 || ++$sayac > 20000) return '';
+    $yaz = function (DOMNode $n, int $d) use (&$yaz, $dusen, $izinli, &$sayac, &$kesildi): string {
+        if ($kesildi) return '';
+        if ($d > 60) { $kesildi = true; return ''; }
         $o = '';
         foreach ($n->childNodes as $c) {
+            if ($kesildi) break;
+            if (++$sayac > 20000) { $kesildi = true; break; }   // tüm yürüyüş durur; çağıran body_truncated işaretler
             if ($c instanceof DOMText) {
                 $o .= htmlspecialchars((string)$c->nodeValue, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
                 continue;
@@ -493,7 +526,7 @@ function mail_html_to_text(string $html): string
     if (trim($html) === '') return '';
     $doc = new DOMDocument();
     $onceki = libxml_use_internal_errors(true);
-    $doc->loadHTML('<?xml encoding="UTF-8"?><html><body>' . mb_scrub($html, 'UTF-8') . '</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+    $doc->loadHTML('<?xml encoding="UTF-8"?><html><body>' . mail_html_hazirla($html) . '</body></html>', LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
     libxml_clear_errors(); libxml_use_internal_errors($onceki);
     $body = $doc->getElementsByTagName('body')->item(0);
     if (!$body) return '';
@@ -501,9 +534,10 @@ function mail_html_to_text(string $html): string
     $blok = array_flip(['p', 'div', 'br', 'tr', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'table', 'hr', 'ul', 'ol']);
     $sayac = 0;
     $yaz = function (DOMNode $n, int $d) use (&$yaz, $dusen, $blok, &$sayac): string {
-        if ($d > 60 || ++$sayac > 20000) return '';
+        if ($d > 60 || $sayac > 20000) return '';
         $o = '';
         foreach ($n->childNodes as $c) {
+            if (++$sayac > 20000) break;
             if ($c instanceof DOMText) { $o .= preg_replace('/[ \t\r\n]+/', ' ', (string)$c->nodeValue); continue; }
             if (!($c instanceof DOMElement)) continue;
             $t = strtolower($c->localName ?? '');

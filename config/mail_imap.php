@@ -109,6 +109,10 @@ final class MailSocketStream implements MailStream
     public function startTls(): bool
     {
         if (!$this->fp) return false;
+        // STARTTLS enjeksiyonu: "A002 OK"tan sonra aynı pakette gelen DÜZ METİN baytlar PHP okuma tamponunda kalır ve
+        // TLS'ten sonra sanki güvenli sunucudan geliyormuş gibi okunur. Tamponda artık bayt varsa TLS'e GEÇME.
+        $meta = stream_get_meta_data($this->fp);
+        if ((int)($meta['unread_bytes'] ?? 0) > 0) return false;
         $ok = @stream_socket_enable_crypto($this->fp, true,
             STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | (defined('STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT') ? STREAM_CRYPTO_METHOD_TLSv1_3_CLIENT : 0));
         return $ok === true;
@@ -193,7 +197,11 @@ final class MailImapClient
         $satir = $this->s->readLine($this->o['max_satir']);
         if ($satir === null) throw new MailImapException('timeout', 'Sunucu yanıt vermedi ya da bağlantı kesildi.');
         $lits = [];
-        while (preg_match('/\{(\d+)\+?\}$/', $satir, $m)) {
+        while (preg_match('/\{(\d{1,10})\+?\}$/', $satir, $m)) {
+            if (count($lits) >= 5000 || microtime(true) > $this->bitis) {   // sonsuz "{0}" akışı: sayı + süre sınırı
+                $this->kapat();
+                throw new MailImapException('limit', 'Sunucu yanıtı çok fazla parça içeriyor.');
+            }
             $n = (int)$m[1];
             if ($n > $this->o['max_literal'] || $this->toplamBayt + $n > $this->o['max_toplam']) {
                 $this->kapat();
@@ -241,7 +249,7 @@ final class MailImapClient
                 }
                 $b = '';
                 while ($i < $n && !in_array($satir[$i], [' ', '(', ')'], true)) {
-                    if ($satir[$i] === '[') {          // BODY[HEADER.FIELDS (A B)] gibi köşeli bölge tek atom
+                    if ($satir[$i] === '[' && preg_match('/^(?:BODY(?:\.PEEK)?|BINARY(?:\.PEEK|\.SIZE)?)$/i', $b)) {   // BODY[HEADER.FIELDS (A B)] tek atom; "foo[" anahtar kelimesi DEĞİL
                         $k = strpos($satir, ']', $i);
                         if ($k === false) { $b .= substr($satir, $i); $i = $n; break; }
                         $b .= substr($satir, $i, $k - $i + 1); $i = $k + 1; continue;
@@ -279,6 +287,10 @@ final class MailImapClient
                     throw new MailImapException($d === 'NO' ? 'no' : 'bad', 'Sunucu komutu reddetti: ' . mb_substr(mail_redact($m[2]), 0, 160));
                 }
                 throw new MailImapException('protocol', 'Beklenmeyen sonuç satırı.');
+            }
+            if (preg_match('/^A\d{3} /', $satir)) {   // bizim etiketimiz değil: enjekte/bozuk yanıt → güvenilmez
+                $this->kapat();
+                throw new MailImapException('protocol', 'Beklenmeyen etiketli yanıt (protokol ihlali).');
             }
             if ($satir !== '' && $satir[0] === '+') {
                 if ($devam === null) throw new MailImapException('protocol', 'Beklenmeyen devam isteği.');

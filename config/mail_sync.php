@@ -94,36 +94,58 @@ function mail_konu_norm(string $s): string
     return trim($s);
 }
 
-// ── Kayıt ───────────────────────────────────────────────────────────────
+// ── Kayıt ──
+
+/** Adres listesini TEXT (65 535 bayt) sınırı içinde JSON'a çevirir: önce 60 kayıt, sığmazsa isimler atılır. */
+function mail_adres_json(array $liste): string
+{
+    $liste = array_slice($liste, 0, 60);
+    $j = json_encode($liste, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    if ($j !== false && strlen($j) <= 60000) return $j;
+    $j = json_encode(array_map(static fn($a) => ['name' => '', 'email' => $a['email'] ?? ''], $liste), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    return ($j !== false && strlen($j) <= 60000) ? $j : '[]';
+}
+
+/** Ayrıştırılamayan / kaydedilemeyen mesaj için görünür yer tutucu (zehirli mail hesabı durduramaz). */
+function mail_mesaj_stub(int $hesapId, string $klasor, int $uidv, int $uid, int $boyut, string $konu, string $ek = ''): array
+{
+    return ['message_id' => null, 'message_id_hash' => sha1('stub:' . $ek . ':' . $hesapId . ':' . $klasor . ':' . $uidv . ':' . $uid),
+        'in_reply_to' => null, 'references' => [], 'from_addr' => '', 'from_name' => '', 'reply_to_addr' => '', 'to' => [], 'cc' => [],
+        'subject' => $konu, 'date' => null, 'body_text' => '', 'body_html_safe' => '', 'body_truncated' => 1,
+        'attachments' => [], 'size' => $boyut];
+}
 
 /** INTERNALDATE ("01-Oct-2026 10:00:00 +0000") → yerel 'Y-m-d H:i:s' ya da null. */
 function mail_ic_tarih(?string $s): ?string
 {
     if ($s === null || $s === '') return null;
-    $t = strtotime($s);
-    return $t === false ? null : date('Y-m-d H:i:s', $t);
+    return mail_mime_tarih(strtotime($s));
 }
 
 /**
  * Tek mesajı yazar. @return 'eklendi'|'tekrar'
  * @param array $hesap hesap satırı (id, email, translate_enabled …)
  */
-function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalidity, int $uid, array $m, array $meta, bool $ilkTarama, string $simdi): string
+function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalidity, int $uid, array $m, array $meta, bool $ilkTarama, string $simdi, ?int $oncekiEpoch = null): string
 {
     $hid = (int)$hesap['id'];
     $st = $pdo->prepare('SELECT id FROM mail_messages WHERE account_id = ? AND folder = ? AND uidvalidity = ? AND uid = ?');
     $st->execute([$hid, $klasor, $uidvalidity, $uid]);
     if ($st->fetchColumn() !== false) return 'tekrar';
 
-    // YALNIZ ESKİ UIDVALIDITY dönemindeki satırlara bakılır: aynı dönemde aynı Message-ID'yi taşıyan farklı UID'li
-    // mesajlar sunucuda gerçekten AYRI mesajlardır (bozuk gönderici betikleri sabit Message-ID basar) — sessizce
-    // atılmamalı. Dönem sıfırlanmasında ise aynı mesaj yeni UID'le geri gelir; çiftleme burada engellenir.
-    $st = $pdo->prepare('SELECT id FROM mail_messages WHERE account_id = ? AND folder = ? AND message_id_hash = ? AND uidvalidity <> ? ORDER BY id LIMIT 1');
-    $st->execute([$hid, $klasor, $m['message_id_hash'], $uidvalidity]);
-    $var = $st->fetchColumn();
-    if ($var !== false) {
-        $pdo->prepare('UPDATE mail_messages SET uidvalidity = ?, uid = ? WHERE id = ?')->execute([$uidvalidity, $uid, (int)$var]);
-        return 'tekrar';
+    // Dönem (UIDVALIDITY) sıfırlanması: aynı mesaj yeni UID'le geri gelir. Çiftleme YALNIZ bir geri tarama sürerken
+    // ($oncekiEpoch dolu) ve YALNIZ bir önceki dönemin satırlarına karşı yapılır; eşleşen satır yeni (uidvalidity,uid)'e
+    // TAŞINIR → aynı satır bir daha eşleşemez. Normal çalışmada hiçbir Message-ID dedupe'u YOKTUR: aynı dönemde aynı
+    // Message-ID'yi taşıyan farklı UID'li mesajlar sunucuda AYRI mesajlardır ve sessizce atılmamalı (bozuk gönderici
+    // betikleri sabit Message-ID basar; yeni mailin eski satırın UID'sini ele geçirmesi de engellenir).
+    if ($oncekiEpoch !== null) {
+        $st = $pdo->prepare('SELECT id FROM mail_messages WHERE account_id = ? AND folder = ? AND message_id_hash = ? AND uidvalidity = ? ORDER BY id LIMIT 1');
+        $st->execute([$hid, $klasor, $m['message_id_hash'], $oncekiEpoch]);
+        $var = $st->fetchColumn();
+        if ($var !== false) {
+            $pdo->prepare('UPDATE mail_messages SET uidvalidity = ?, uid = ? WHERE id = ?')->execute([$uidvalidity, $uid, (int)$var]);
+            return 'tekrar';
+        }
     }
 
     $alindi = mail_ic_tarih($meta['date'] ?? null) ?? ($m['date'] ?? null) ?? $simdi;
@@ -144,11 +166,11 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
                 $m['message_id'] !== null ? mb_substr($m['message_id'], 0, 500) : null, $m['message_id_hash'],
                 $m['in_reply_to'] !== null ? mb_substr($m['in_reply_to'], 0, 500) : null, implode(' ', (array)$m['references']),
                 mb_substr($m['from_addr'], 0, 255), mb_substr($m['from_name'], 0, 255), mb_substr($m['reply_to_addr'], 0, 255),
-                json_encode($m['to'], JSON_UNESCAPED_UNICODE), json_encode($m['cc'], JSON_UNESCAPED_UNICODE),
+                mail_adres_json($m['to']), mail_adres_json($m['cc']),
                 $m['subject'], $m['date'], $alindi,
                 $m['body_text'], $m['body_html_safe'] !== '' ? $m['body_html_safe'] : null, (int)$m['body_truncated'],
                 !empty($hesap['translate_enabled']) ? 'pending' : 'skipped',
-                $m['attachments'] ? json_encode($m['attachments'], JSON_UNESCAPED_UNICODE) : null, $m['attachments'] ? 1 : 0, (int)$m['size'],
+                $m['attachments'] ? (json_encode($m['attachments'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: null) : null, $m['attachments'] ? 1 : 0, (int)$m['size'],
                 $seen, $ilkTarama ? $seen : 0, $kendi ? 0 : 1,
             ]);
         $pdo->prepare('UPDATE mail_threads SET message_count = message_count + 1,
@@ -226,12 +248,24 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
         $durum = mail_sync_durum_oku($pdo, $hesapId, $klasor);
         $yeniEpoch = $durum['uidvalidity'] !== null && (int)$durum['uidvalidity'] !== $uidv;
         $sonUid = $yeniEpoch ? 0 : (int)$durum['last_uid'];
-        if ($yeniEpoch) $s['notlar'][] = 'UIDVALIDITY değişti: eski kayıtlar korundu, klasör yeniden tarandı (Message-ID ile çiftleme engellendi).';
+        // Geri tarama bayrağı KALICIDIR (state.rescan_from_epoch): tarama birkaç çalıştırmaya yayılsa da, bitene kadar
+        // yalnız önceki dönemin satırlarına karşı çiftleme yapılır; tarama tamamlanınca temizlenir.
+        $oncekiEpoch = $yeniEpoch ? (int)$durum['uidvalidity'] : (isset($durum['rescan_from_epoch']) && $durum['rescan_from_epoch'] !== null ? (int)$durum['rescan_from_epoch'] : null);
+        if ($yeniEpoch) {
+            $s['notlar'][] = 'UIDVALIDITY değişti: eski kayıtlar korundu, klasör yeniden tarandı (Message-ID ile çiftleme engellendi).';
+            $pdo->prepare('UPDATE mail_sync_state SET rescan_from_epoch = ? WHERE account_id = ? AND folder = ?')->execute([$oncekiEpoch, $hesapId, $klasor]);
+        }
         $ilkTarama = $sonUid === 0;
         $imlec = $sonUid;
 
         if ($ilkTarama) {
-            $uids = $istemci->uidAra('SINCE ' . mail_imap_tarih($simdiTs - ((int)$h['initial_days']) * 86400));
+            $pencere = $simdiTs - ((int)$h['initial_days']) * 86400;
+            // Dönem değişimi kesinti sonrasına denk gelebilir (süresi dolan şifre + sunucu taşıma): son BAŞARILI
+            // senkrondan 1 gün öncesine kadar geri git, yoksa aradaki mailler kalıcı kaybolur.
+            if ($yeniEpoch && !empty($durum['last_ok_at']) && ($okTs = strtotime((string)$durum['last_ok_at'])) !== false) {
+                $pencere = min($pencere, $okTs - 86400);
+            }
+            $uids = $istemci->uidAra('SINCE ' . mail_imap_tarih($pencere));
         } elseif ($k['uidnext'] > 0 && $k['uidnext'] - 1 <= $sonUid) {
             $uids = [];   // sunucuda yeni UID yok
         } else {
@@ -254,12 +288,21 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
                     $m = mail_mime_mesaj($r['raw'], $r['truncated']);
                 } catch (Throwable $e) {
                     error_log('[mail_sync] ayrıştırma hatası uid=' . $uid . ': ' . mail_redact($e->getMessage()));
-                    $m = ['message_id' => null, 'message_id_hash' => sha1('parse-error:' . $hesapId . ':' . $klasor . ':' . $uidv . ':' . $uid),
-                        'in_reply_to' => null, 'references' => [], 'from_addr' => '', 'from_name' => '', 'reply_to_addr' => '', 'to' => [], 'cc' => [],
-                        'subject' => '(ayrıştırılamadı)', 'date' => null, 'body_text' => '', 'body_html_safe' => '', 'body_truncated' => 1,
-                        'attachments' => [], 'size' => strlen($r['raw'])];
+                    $m = mail_mesaj_stub($hesapId, $klasor, $uidv, $uid, strlen($r['raw']), '(ayrıştırılamadı)', 'parse');
                 }
-                $sonuc = mail_mesaj_kaydet($pdo, $h, $klasor, $uidv, $uid, $m, $ms, $ilkTarama, $simdi);
+                try {
+                    $sonuc = mail_mesaj_kaydet($pdo, $h, $klasor, $uidv, $uid, $m, $ms, $ilkTarama, $simdi, $oncekiEpoch);
+                } catch (PDOException $e) {
+                    // ZEHİRLİ MAİL KORUMASI: tek bir mesajın kaydı reddedilirse (strict mod aralık/kodlama hatası) hesap
+                    // SONSUZA DEK takılmasın. Yer tutucu satır yazılabiliyorsa DB sağlıklıdır → sorun mesajın verisindedir,
+                    // imleç ilerler. Yer tutucu da yazılamıyorsa DB sorunudur → istisna yukarı çıkar, imleç İLERLEMEZ.
+                    error_log('[mail_sync] kayıt reddedildi uid=' . $uid . ': ' . mail_redact($e->getMessage()));
+                    if ($pdo->inTransaction()) $pdo->rollBack();
+                    $stub = mail_mesaj_stub($hesapId, $klasor, $uidv, $uid, (int)$ms['size'], '(kaydedilemedi — veri uyumsuz)', 'save');
+                    mail_mesaj_kaydet($pdo, $h, $klasor, $uidv, $uid, $stub, $ms, $ilkTarama, $simdi, null);
+                    $s['notlar'][] = 'uid ' . $uid . ' kaydedilemedi, yer tutucu yazıldı.';
+                    $sonuc = 'tekrar';
+                }
                 $sonuc === 'eklendi' ? $s['inserted']++ : $s['skipped']++;
                 $imlec = max($imlec, $uid);
             }
@@ -271,6 +314,9 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
 
         $pdo->prepare('UPDATE mail_sync_state SET last_ok_at = ?, last_error = NULL, consecutive_failures = 0 WHERE account_id = ? AND folder = ?')
             ->execute([$simdi, $hesapId, $klasor]);
+        if ($oncekiEpoch !== null && $s['kalan'] === 0) {   // geri tarama bitti → epoch çiftlemesi kapanır
+            $pdo->prepare('UPDATE mail_sync_state SET rescan_from_epoch = NULL WHERE account_id = ? AND folder = ?')->execute([$hesapId, $klasor]);
+        }
         $s['ok'] = true;
     } catch (MailSyncAtla $e) {
         // pasif hesap: hata değil
