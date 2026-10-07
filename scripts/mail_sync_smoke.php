@@ -48,7 +48,7 @@ function msg(string $id, string $subj, string $date, array $f = [], array $raw =
 }
 function senk(int $hid, array $ek = []): array {
     global $db, $KILIT;
-    return mail_sync_hesap($db, $hid, array_merge(['istemci' => fabrika(), 'kilit_dizin' => $KILIT, 'simdi' => strtotime('2026-10-06 12:00:00')], $ek));
+    return mail_sync_hesap($db, $hid, array_merge(['istemci' => fabrika(), 'kilit_dizin' => $KILIT, 'simdi' => strtotime('2026-10-06 12:00:00'), 'zorla' => true], $ek));
 }
 function sayi(string $tablo = 'mail_messages', string $where = '1=1'): int { global $db; return (int)$db->query("SELECT COUNT(*) FROM $tablo WHERE $where")->fetchColumn(); }
 

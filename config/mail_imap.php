@@ -218,7 +218,18 @@ final class MailImapClient
             'max_literal'   => 26214400,   // 25 MB — tek literal
             'max_toplam'    => 157286400,  // 150 MB — bağlantı başına
             'sure'          => 120.0,      // tek komut için duvar saati bütçesi (sn)
+            'toplam_sn'     => 900.0,      // TÜM oturum (bağlantı + giriş + komutlar) mutlak üst sınırı — asılı/yavaş-damla sunucuya karşı
         ];
+        $this->toplamBitis = microtime(true) + (float)$this->o['toplam_sn'];
+        if (method_exists($s, 'sureSinirla')) $s->sureSinirla($this->toplamBitis);
+    }
+
+    private float $toplamBitis = 0.0;
+
+    /** Komut bütçesi: tek komut süresi ile toplam oturum sınırından KÜÇÜĞÜ. */
+    private function komutBitisi(): float
+    {
+        return min(microtime(true) + (float)$this->o['sure'], $this->toplamBitis);
     }
 
     private function log(string $s): void
@@ -309,7 +320,7 @@ final class MailImapClient
     private function komut(string $cmd, ?callable $devam = null, ?string $gunlukMetni = null): array
     {
         if ($this->kapali) throw new MailImapException('connect', 'Bağlantı kapalı.');
-        $this->bitis = microtime(true) + (float)$this->o['sure'];
+        $this->bitis = $this->komutBitisi();
         $tag = 'A' . str_pad((string)(++$this->tagSayac), 3, '0', STR_PAD_LEFT);
         $this->log($tag . ' ' . ($gunlukMetni ?? $cmd));
         $this->s->write($tag . ' ' . $cmd . "\r\n");
@@ -378,7 +389,7 @@ final class MailImapClient
     /** Selamlama + (gerekirse STARTTLS) + yetenekler. */
     public function baslat(bool $starttls): void
     {
-        $this->bitis = microtime(true) + (float)$this->o['sure'];
+        $this->bitis = $this->komutBitisi();
         [$satir] = $this->mantiksalOku();
         if (!preg_match('/^\*\s+(OK|PREAUTH)\b/i', $satir)) {
             throw new MailImapException('protocol', 'Sunucu selamlaması beklenmedik: ' . mb_substr(mail_redact($satir), 0, 80));

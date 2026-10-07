@@ -148,7 +148,7 @@ function mail_tablolar(): array
         `content_hash`        CHAR(64)     NULL DEFAULT NULL,
         `approved_hash`       CHAR(64)     NULL DEFAULT NULL,
         `dedupe_key`          VARCHAR(80)  NULL DEFAULT NULL,
-        `out_message_id`      VARCHAR(255) NULL DEFAULT NULL,
+        `out_message_id`      VARCHAR(190) NULL DEFAULT NULL,
         `hdr_in_reply_to`     VARCHAR(500) NULL DEFAULT NULL,
         `hdr_references`      TEXT         NULL,
         `approved_by`         INT          NULL DEFAULT NULL,
@@ -314,9 +314,9 @@ function mail_aad(int $hesapId, string $alan): string
 }
 
 /** @return string 'v1:<kid>:<b64(nonce‖tag‖ct)>' — anahtar yoksa RuntimeException. */
-function mail_sifrele(string $duz, string $aad): string
+function mail_sifrele(string $duz, string $aad, ?string $anahtar = null): string
 {
-    $key = mail_master_key();
+    $key = $anahtar ?? mail_master_key();
     if ($key === null) throw new RuntimeException('MAIL_MASTER_KEY tanımlı değil.');
     $nonce = random_bytes(12);
     $tag = '';
@@ -326,10 +326,10 @@ function mail_sifrele(string $duz, string $aad): string
 }
 
 /** @return string|null çözülen düz metin; anahtar/AAD/blob uyuşmazsa null (asla istisna sızdırmaz). */
-function mail_coz(?string $blob, string $aad): ?string
+function mail_coz(?string $blob, string $aad, ?string $anahtar = null): ?string
 {
     if ($blob === null || $blob === '') return null;
-    $key = mail_master_key();
+    $key = $anahtar ?? mail_master_key();
     if ($key === null) return null;
     $p = explode(':', $blob, 3);
     if (count($p) !== 3 || $p[0] !== MAIL_BLOB_SURUM || !hash_equals(mail_anahtar_kimligi($key), $p[1])) return null;
@@ -340,6 +340,55 @@ function mail_coz(?string $blob, string $aad): ?string
     if ($duz === false) return null;
     mail_redact_sirlar($duz);
     return $duz;
+}
+
+/** Base64 biçimindeki 32 baytlık anahtarı ham bayta çevirir; geçersizse null. */
+function mail_anahtar_coz_b64(string $b64): ?string
+{
+    $ham = base64_decode(trim($b64), true);
+    return ($ham !== false && strlen($ham) === 32) ? $ham : null;
+}
+
+/**
+ * MASTER KEY ROTASYONU: tüm hesap şifre blob'larını ESKİ anahtarla çözüp YENİ anahtarla yeniden şifreler.
+ * Tek transaction, hep-ya-hiç: herhangi bir blob eski anahtarla çözülemezse HİÇBİR şey yazılmaz.
+ * Yazmadan önce her yeni blob geri çözülüp doğrulanır. $uygula=false → yalnız denetim (kuru çalıştırma).
+ * Anahtarlar parametre olarak gelir (komut satırı argümanına DEĞİL, ortam değişkenine konur — süreç listesinde görünmesin).
+ * @return array{ok:bool,hesap:int,alan:int,mesaj:string}
+ */
+function mail_anahtar_donustur(PDO $pdo, string $eskiB64, string $yeniB64, bool $uygula = false): array
+{
+    $eski = mail_anahtar_coz_b64($eskiB64); $yeni = mail_anahtar_coz_b64($yeniB64);
+    if ($eski === null || $yeni === null) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Anahtarlardan biri geçerli değil (32 bayt, base64).'];
+    if (hash_equals($eski, $yeni)) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Eski ve yeni anahtar aynı.'];
+    if (!mail_tablo_var($pdo, 'mail_accounts')) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Mail tabloları kurulu değil.'];
+    $satirlar = $pdo->query('SELECT id, imap_pass_enc, smtp_pass_enc FROM mail_accounts ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
+    $plan = []; $alan = 0;
+    foreach ($satirlar as $r) {
+        $yeniBlob = [];
+        foreach (MAIL_SIFRE_ALANLARI as $f) {
+            $blob = $r[$f . '_enc'];
+            if ($blob === null || $blob === '') { $yeniBlob[$f] = null; continue; }
+            $aad = mail_aad((int)$r['id'], $f);
+            $duz = mail_coz($blob, $aad, $eski);
+            if ($duz === null) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Hesap #' . (int)$r['id'] . ' (' . $f . ') ESKİ anahtarla çözülemedi — yanlış eski anahtar ya da bozuk kayıt. HİÇBİR ŞEY değiştirilmedi.'];
+            $nb = mail_sifrele($duz, $aad, $yeni);
+            if (mail_coz($nb, $aad, $yeni) !== $duz) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Yeniden şifreleme doğrulanamadı. HİÇBİR ŞEY değiştirilmedi.'];
+            $yeniBlob[$f] = $nb; $alan++;
+        }
+        $plan[(int)$r['id']] = $yeniBlob;
+    }
+    if (!$uygula) return ['ok' => true, 'hesap' => count($plan), 'alan' => $alan, 'mesaj' => 'Kuru çalıştırma: tüm blob\'lar eski anahtarla çözüldü; yazılmadı.'];
+    $pdo->beginTransaction();
+    try {
+        $up = $pdo->prepare('UPDATE mail_accounts SET imap_pass_enc = ?, smtp_pass_enc = ?, updated_at = ? WHERE id = ?');
+        foreach ($plan as $id => $b) $up->execute([$b['imap_pass'], $b['smtp_pass'], date('Y-m-d H:i:s'), $id]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Yazma başarısız, geri alındı: ' . mail_redact($e->getMessage())];
+    }
+    return ['ok' => true, 'hesap' => count($plan), 'alan' => $alan, 'mesaj' => 'Yeniden şifrelendi. ŞİMDİ config/local.php içindeki MAIL_MASTER_KEY değerini YENİ anahtarla değiştirin.'];
 }
 
 // ── SAYFA KAPISI ──

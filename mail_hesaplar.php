@@ -83,6 +83,31 @@ render_header('Mail Hesapları');
     <h1 style="margin:0 0 12px">Mail Hesapları</h1>
 
     <?php if (!$hazir): ?>
+    <?php $sg = mail_sync_gunluk_getir($pdo, 20); ?>
+    <details class="card" style="padding:12px 16px;margin-bottom:16px" id="mail-sync-gunluk">
+        <summary><strong>Senkron durumu ve günlüğü</strong>
+            <?php $sorunlu = count(array_filter($sg['durum'], fn($d) => (int)$d['is_active'] === 1 && (int)($d['consecutive_failures'] ?? 0) > 0)); ?>
+            <?php if ($sorunlu > 0): ?><span class="mail-durum mail-durum--failed"><?= $sorunlu ?> hesapta hata</span><?php endif; ?></summary>
+        <div class="table-wrap" style="margin-top:10px"><table class="table">
+            <thead><tr><th>Hesap</th><th>Son başarılı</th><th>Art arda hata</th><th>Sonraki deneme</th><th>Son hata</th></tr></thead><tbody>
+            <?php foreach ($sg['durum'] as $d): $n = (int)($d['consecutive_failures'] ?? 0); ?>
+                <tr><td><?= h($d['label']) ?></td><td><?= h($d['last_ok_at'] ?? '—') ?></td><td><?= $n ?></td>
+                    <td><?= $n >= 3 && $d['last_sync_at'] ? h(date('Y-m-d H:i', strtotime((string)$d['last_sync_at']) + (int)$d['bekleme_sn'])) : '—' ?></td>
+                    <td><?= h($d['last_error'] ?? '—') ?></td></tr>
+            <?php endforeach; ?>
+            <?php if (!$sg['durum']): ?><tr><td colspan="5">Hesap yok.</td></tr><?php endif; ?>
+            </tbody></table></div>
+        <div class="table-wrap" style="margin-top:10px"><table class="table">
+            <thead><tr><th>Başlangıç</th><th>Hesap</th><th>Durum</th><th>Çekilen</th><th>Eklenen</th><th>Atlanan</th><th>Hata</th></tr></thead><tbody>
+            <?php foreach ($sg['gunluk'] as $g): ?>
+                <tr><td><?= h($g['started_at']) ?></td><td><?= h($g['label'] ?? '—') ?></td><td><?= h($g['status']) ?></td>
+                    <td><?= (int)$g['fetched'] ?></td><td><?= (int)$g['inserted'] ?></td><td><?= (int)$g['skipped'] ?></td><td><?= h($g['error'] ?? '') ?></td></tr>
+            <?php endforeach; ?>
+            <?php if (!$sg['gunluk']): ?><tr><td colspan="7">Henüz senkron çalışmadı.</td></tr><?php endif; ?>
+            </tbody></table></div>
+        <p class="mail-bilgi" style="margin:8px 0 0">Art arda 3+ hatada otomatik geri çekilme uygulanır (5 dk → en çok 6 sa); "Şimdi senkronla" bunu atlar. Günlük 30 gün saklanır.</p>
+    </details>
+
     <div class="card" style="padding:16px"><p>Önce <a href="migrate.php">migrate.php</a> üzerinden Mail tablolarını kurun.</p></div>
     <?php else: ?>
     <?php if (!mail_crypto_hazir()): ?>
@@ -92,6 +117,9 @@ render_header('Mail Hesapları');
         <code>define('MAIL_MASTER_KEY', '…');</code> olarak yazın. Anahtar git'e girmez.
     </div>
     <?php endif; ?>
+    <?php foreach (mail_yapilandirma_uyarilari($pdo) as $uy): if ($uy['mesaj'] === '' || ($uy['seviye'] === 'hata' && !mail_crypto_hazir())) continue; ?>
+    <div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid <?= $uy['seviye'] === 'hata' ? '#dc2626' : ($uy['seviye'] === 'uyari' ? '#d97706' : '#2563eb') ?>"><?= h($uy['mesaj']) ?></div>
+    <?php endforeach; ?>
     <?php if ($basari): ?><div class="card" style="padding:10px;margin-bottom:12px;border-left:4px solid #16a34a"><?= h($basari) ?></div><?php endif; ?>
     <?php foreach ($hatalar as $e): ?><div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid #dc2626"><?= h($e) ?></div><?php endforeach; ?>
 

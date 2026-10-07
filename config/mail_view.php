@@ -291,7 +291,7 @@ function mail_post_isle(PDO $pdo, array $c, string $islem, array $g = [], array 
     } elseif ($islem === 'senkron') {
         if (!$c['yonetici']) return $yasak('Bu işlem için mail.admin yetkisi gerekir.');
         if ($aSecili && in_array($aSecili, $hesapIds, true) && mail_crypto_hazir()) {
-            $r = mail_sync_hesap($pdo, $aSecili, ['sure' => 20.0, 'limit' => 100] + array_intersect_key($opt, ['istemci' => 1, 'kilit_dizin' => 1, 'simdi' => 1]));
+            $r = mail_sync_hesap($pdo, $aSecili, ['sure' => 20.0, 'limit' => 100, 'zorla' => true] + array_intersect_key($opt, ['istemci' => 1, 'kilit_dizin' => 1, 'simdi' => 1]));
             $ok = $r['ok'];
             $mesaj = $r['busy'] ? 'Bu hesap şu an başka bir süreç tarafından senkronlanıyor.'
                 : ($r['ok'] ? "Senkron tamam: {$r['inserted']} yeni mail." . ($r['kalan'] > 0 ? " ({$r['kalan']} mail sonraki turda)" : '') : 'Senkron başarısız: ' . ($r['error'] ?? '?'));

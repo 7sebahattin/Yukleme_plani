@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M5 tamam (cevap onayı + SMTP, Opus incelemesi uygulandı) → M6 (cron/retry/log/güvenlik sertleştirme) sırada** |
+| Current milestone | **M6 tamam (sertleştirme) → M7 (tam test/regresyon/UI incelemesi) sırada** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -196,6 +196,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M3 — Mail Merkezi UI (gelen kutusu/okuyucu) + ek indirme | `5356234` | ✅ (aşağıda) |
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 | M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | `6445274` | ✅ (aşağıda) |
+| M6 — Sertleştirme: indeks uzunluğu, geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük ekranı | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -282,6 +283,20 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - Audit: yalnız id/durum/sayı (`mail_reply_draft/preview`, `mail_send_approve`, `mail_send`, `mail_send_failed`, `mail_send_unknown`, `mail_send_resolve`, `mail_send_sahiplik_kaybi`, `mail_approval_expired`, `mail_reply_cancel`); gövde/konu/adres/şifre yazılmaz.
 - Şema eki (M1 DDL'ine, henüz hiçbir DB'de kurulu olmadığı için ALTER yok): `mail_outbox.quote_text`, `approved_hash`, `dedupe_key` (+ `UNIQUE uq_mo_dedupe`), `mail_sync_state.rescan_from_epoch`.
 
+**M6 içeriği** (sertleştirme; yeni kod yüzeyi küçük, hepsi testli — `scripts/mail_hardening_smoke.php`, `mail_schema_static_smoke.php`)
+- **MySQL indeks uzunluğu (gerçek hata bulundu):** `mail_outbox.out_message_id VARCHAR(255) UNIQUE` utf8mb4'te 1020 bayt → MySQL 5.6 / COMPACT satır biçiminde
+  `1071 Specified key was too long` (767 bayt sınırı) ile kurulum patlardı. `VARCHAR(190)` (760 bayt) yapıldı, üretilen Message-ID alan adı ≤ 100 karakter
+  (toplam ≤ 150). Yeni statik test (`mail_schema_static_smoke.php`) tüm 17 indeksi en kötü durum (767 bayt) için hesaplar; eski sütun genişliğiyle düştüğü doğrulandı.
+- **Art arda senkron hatası geri çekilmesi:** `mail_sync_bekleme_sn()` — 3. ardışık hatadan sonra 5 dk × 2^(n−3), üst sınır 6 sa. Cron bekleme süresindeki hesabı atlar
+  (`BEKLE hesap=…`, IMAP'a bağlanmaz, günlük satırı üretmez, çıkış kodunu etkilemez); yönetici "Şimdi senkronla" (`zorla`) atlar; başarı sayacı sıfırlar.
+  Gerekçe: yanlış/iptal parolayla 5 dk'da bir giriş denemesi sağlayıcıda hesabı kilitletir.
+- **IMAP toplam oturum süresi:** `toplam_sn` (900) — tek komut bütçesi ile toplam süreden küçüğü geçerli; gerçek soket akışına mutlak sınır iletilir (SMTP'deki 300 sn ile simetrik).
+- **Master-key rotasyonu:** `mail_anahtar_donustur()` + `scripts/mail_rotate_key.php` (CLI-only, anahtarlar ortam değişkeninden, varsayılan kuru çalıştırma, `--uygula` tek transaction
+  hep-ya-hiç, yazmadan önce her blob geri çözülüp doğrulanır, bozuk/yanlış anahtar → hiçbir şey yazılmaz). **Çalıştırmak sahibin kararıdır;** adımlar `docs/MAIL_OPERATIONS.md`.
+- **İşletme uyarıları** (`mail_yapilandirma_uyarilari()`, Mail Hesapları ekranı): `config/local.php` o+r, `storage/mail` diğerlerine açık, cron canlılığı (son senkron > 30 dk / hiç çalışmadı), çeviri sağlayıcısı açıksa veri çıkışı bilgisi.
+- **Senkron günlüğü ekranı** (`mail_sync_gunluk_getir()`, yalnız `mail.admin` sayfasında): hesap başına son başarılı / ardışık hata / sonraki deneme + son 20 çalıştırma; hata metinleri yeniden redakte edilir.
+- `docs/MAIL_OPERATIONS.md`: kurulum sırası, ağ gereksinimleri, rotasyon, bakım, sorun giderme tablosu.
+
 **Bağımsız Opus güvenlik incelemesi (M5) — bulgular ve düzeltmeler** (hepsi `scripts/mail_outbox_review_smoke.php`'de regresyon testli; 6 kritik düzeltme için mutasyon kontrolü yapıldı — düzeltme geri alınınca test düşüyor):
 | # | Bulgu | Düzeltme |
 |---|---|---|
@@ -333,6 +348,8 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 | `mail_outbox_smoke.php` (M5: taslak→önizleme→onay→gönderim durum makinesi, onaysız SMTP yok, çift gönderim yok, unknown/insan çözümü, APPEND, iptal, ACL) | 109/109 ✅ |
 | `mail_outbox_review_smoke.php` (M5 Opus bulguları B1…B7 regresyonları; yarışlar `_kanca_*` ile zorlanır) | 34/34 ✅ |
 | `mail_stream_smoke.php` (gerçek soket çifti: satır/bayt okuma, mutlak süre, yavaş-damla, büyük yazma, yazma kilitlenmesi) | 9/9 ✅ |
+| `mail_hardening_smoke.php` (M6: geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük verisi; 5 mutasyon yakalandı) | 35/35 ✅ |
+| `mail_schema_static_smoke.php` (M6: 17 indeks ≤ 767 bayt utf8mb4, Message-ID uzunluğu) | 4/4 ✅ |
 | `mail_ui_smoke.js` (Playwright, M5 onay ekranı dahil) | 505/505 ✅ |
 | Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
@@ -345,7 +362,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 - `MAIL_MASTER_KEY` üretimi sahibe aittir: `php -r 'echo base64_encode(random_bytes(32)),"\n";'`
   → `config/local.php` içine `define('MAIL_MASTER_KEY', '…');`. **Ben gerçek anahtar/şifre istemem
   ve üretmem.** Anahtar kaybolursa kayıtlı posta şifreleri çözülemez (yeniden girilir).
-- Master key rotasyonu ve `local.php` izinleri (0600) M6'da dokümante edilir.
+- Master key rotasyonu: `scripts/mail_rotate_key.php` + `docs/MAIL_OPERATIONS.md` (M6). `local.php` izni 0600 önerilir; ekran gevşekse uyarır.
 
 ## Open Risks
 
@@ -361,8 +378,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M6: cron/retry/log/güvenlik sertleştirme (MySQL indeks uzunluğu denetimi, master-key rotasyon + `local.php` izin dokümanı, art arda senkron hatalarında geri çekilme, senkron günlüğü görüntüleyici).
-- M7: tam test/regresyon/UI incelemesi · M8: son entegrasyon incelemesi. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
+- M7: tam test/regresyon/UI incelemesi (mobil/masaüstü ekran görüntüleri, erişilebilirlik, yük/uç durumlar) · M8: son entegrasyon incelemesi. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
 
 ## Needs ChatGPT Review
 
@@ -377,3 +393,5 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 6. **M5 / AD-7:** gönderim kimliği (From adresi + görünen ad + Reply-To) onay hash'ine dahil — onaydan sonra hesap ayarı değişirse gönderim `failed`'e düşer. Kabul mü?
 7. **M5:** `approved` > 30 dk gönderilmemiş onay otomatik geri alınır (yeniden onay gerekir); `sending` > 20 dk → `unknown`. Eşikler kabul mü?
 8. **M5:** gerçek SMTP (Gmail/Outlook/cPanel) testi sahip credential'ı olmadan yapılamadı; migration (yeni 7 tablo) çalıştırılmadı.
+9. **M6:** art arda 3+ hatadan sonra otomatik geri çekilme (5 dk → 6 sa) politikası kabul mü? Master-key rotasyon betiği (çalıştırma sahibe ait) uygun mu?
+10. **M6:** `out_message_id` sütunu 255→190 (MySQL indeks sınırı) — şema henüz hiçbir DB'de kurulu olmadığı için ALTER gerekmedi.

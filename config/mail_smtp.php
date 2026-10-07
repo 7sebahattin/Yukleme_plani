@@ -279,7 +279,7 @@ function mail_references_zinciri(array $ebeveynRefs, string $ebeveynId): array
 function mail_yeni_message_id(string $hesapEmail): string
 {
     $alan = strtolower((string)substr(strrchr($hesapEmail, '@') ?: '@localhost', 1));
-    if (!preg_match('/^[a-z0-9.-]{1,190}$/', $alan)) $alan = 'localhost';
+    if (!preg_match('/^[a-z0-9.-]{1,100}$/', $alan)) $alan = 'localhost';   // toplam ≤ 150 karakter: out_message_id VARCHAR(190) UNIQUE (utf8mb4 indeks sınırı)
     return '<' . bin2hex(random_bytes(16)) . '.' . time() . '@' . $alan . '>';
 }
 

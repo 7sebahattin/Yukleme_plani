@@ -221,9 +221,19 @@ function mail_hata_metni(Throwable $e): string
  * @param array $opt istemci: callable(array $hesapCred): MailImapClient · kilit_dizin · sure (sn) · simdi (ts) · limit
  * @return array{ok:bool,busy:bool,fetched:int,inserted:int,skipped:int,kalan:int,error:?string,notlar:list<string>}
  */
+/**
+ * Art arda hata sonrası bekleme (sn): ilk 2 hatada yok (cron zaten 5 dk'da bir), sonra 5 dk × 2^(n-3), en çok 6 sa.
+ * Neden: yanlış/iptal edilmiş şifreyle her 5 dakikada giriş denemek sağlayıcıda hesabı kilitletir ve sunucuyu boşuna yorar.
+ */
+function mail_sync_bekleme_sn(int $ardisikHata): int
+{
+    if ($ardisikHata < 3) return 0;
+    return (int)min(6 * 3600, 300 * (2 ** min(10, $ardisikHata - 3)));
+}
+
 function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
 {
-    $s = ['ok' => false, 'busy' => false, 'fetched' => 0, 'inserted' => 0, 'skipped' => 0, 'kalan' => 0, 'error' => null, 'notlar' => []];
+    $s = ['ok' => false, 'busy' => false, 'bekle' => false, 'fetched' => 0, 'inserted' => 0, 'skipped' => 0, 'kalan' => 0, 'error' => null, 'notlar' => []];
     $simdiTs = (int)($opt['simdi'] ?? time());
     $simdi = date('Y-m-d H:i:s', $simdiTs);
     $kilit = mail_kilit_al('account_' . $hesapId, $opt['kilit_dizin'] ?? null);
@@ -231,6 +241,21 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
 
     $logId = 0; $istemci = null; $klasor = 'INBOX'; $uidv = 0; $imlec = null;
     try {
+        if (empty($opt['zorla'])) {   // elle "Şimdi senkronla" geri çekilmeyi atlar; cron uyar
+            try {
+                $bs = $pdo->prepare('SELECT consecutive_failures, last_sync_at FROM mail_sync_state WHERE account_id = ? ORDER BY consecutive_failures DESC LIMIT 1');
+                $bs->execute([$hesapId]);
+                $bd = $bs->fetch(PDO::FETCH_ASSOC);
+                if ($bd && $bd['last_sync_at'] !== null) {
+                    $kalan = strtotime((string)$bd['last_sync_at']) + mail_sync_bekleme_sn((int)$bd['consecutive_failures']) - $simdiTs;
+                    if ($kalan > 0) {
+                        $s['bekle'] = true; $s['ok'] = true;
+                        $s['notlar'][] = 'Art arda ' . (int)$bd['consecutive_failures'] . ' hata: geri çekilme, ' . (int)ceil($kalan / 60) . ' dk sonra yeniden denenecek.';
+                        throw new MailSyncAtla();
+                    }
+                }
+            } catch (MailSyncAtla $e) { throw $e; } catch (Throwable $e) { /* durum okunamadıysa normal akış */ }
+        }
         $pdo->prepare('INSERT INTO mail_sync_log (account_id, started_at, status) VALUES (?, ?, ?)')->execute([$hesapId, $simdi, 'running']);
         $logId = (int)$pdo->lastInsertId();
 
@@ -350,6 +375,65 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
 final class MailSyncAtla extends RuntimeException {}
 
 /**
+ * Yönetici için işletme uyarıları (salt okunur, ağa çıkmaz): anahtar, dosya izinleri, cron canlılığı, çeviri veri çıkışı.
+ * @param array $opt local_php (yol) · depo (dizin) · simdi (ts)
+ * @return list<array{seviye:string,mesaj:string}> seviye: hata|uyari|bilgi
+ */
+function mail_yapilandirma_uyarilari(PDO $pdo, array $opt = []): array
+{
+    $u = [];
+    if (!mail_crypto_hazir()) $u[] = ['seviye' => 'hata', 'mesaj' => 'MAIL_MASTER_KEY tanımlı/geçerli değil — senkron, gönderim ve hesap kaydı çalışmaz.'];
+    $lp = $opt['local_php'] ?? dirname(__DIR__) . '/config/local.php';
+    if (is_file($lp)) {
+        $perm = @fileperms($lp);
+        if ($perm !== false && ($perm & 0004)) $u[] = ['seviye' => 'uyari', 'mesaj' => 'config/local.php herkes tarafından okunabilir (o+r). Posta anahtarını korumak için izni 0600 (ya da 0640) yapın.'];
+    }
+    $depo = $opt['depo'] ?? mail_depo_dizini();
+    if (is_dir($depo)) {
+        $perm = @fileperms($depo);
+        if ($perm !== false && ($perm & 0005)) $u[] = ['seviye' => 'uyari', 'mesaj' => 'storage/mail dizini diğer kullanıcılara açık. İzni 0750 ya da 0700 yapın.'];
+    }
+    try {
+        $aktif = (int)$pdo->query('SELECT COUNT(*) FROM mail_accounts WHERE is_active = 1')->fetchColumn();
+        if ($aktif > 0) {
+            $son = $pdo->query('SELECT MAX(started_at) FROM mail_sync_log')->fetchColumn();
+            $simdi = (int)($opt['simdi'] ?? time());
+            if (!$son) $u[] = ['seviye' => 'uyari', 'mesaj' => 'Senkron henüz hiç çalışmadı. cPanel Cron Jobs ile scripts/mail_sync_cron.php zamanlanmalı (docs/MAIL_OPERATIONS.md).'];
+            elseif ($simdi - strtotime((string)$son) > 1800) $u[] = ['seviye' => 'uyari', 'mesaj' => 'Son senkron ' . (int)(($simdi - strtotime((string)$son)) / 60) . ' dakika önce çalıştı — cron durmuş olabilir.'];
+        }
+    } catch (Throwable $e) { /* tablo yoksa ekran zaten kurulum uyarısı verir */ }
+    if (function_exists('mail_ceviri_saglayici')) {
+        try {
+            $p = mail_ceviri_saglayici();
+            if ($p !== null && $p->ad() !== 'none') $u[] = ['seviye' => 'bilgi', 'mesaj' => 'Çeviri sağlayıcısı AÇIK (' . $p->ad() . '): mail metni (adres/başlık/ek hariç) üçüncü taraf servise gönderilir.'];
+        } catch (Throwable $e) { /* yapılandırma hatası ayrıca gösteriliyor */ }
+    }
+    return $u;
+}
+
+/**
+ * Yönetici ekranı için senkron durumu + son günlük satırları (salt okunur; gövde/konu/şifre içermez — hata metinleri yazım anında redakte edilmiştir).
+ * @return array{durum:list<array>,gunluk:list<array>}
+ */
+function mail_sync_gunluk_getir(PDO $pdo, int $limit = 20): array
+{
+    $limit = max(1, min(100, $limit));
+    if (!mail_tablo_var($pdo, 'mail_sync_log')) return ['durum' => [], 'gunluk' => []];
+    $durum = $pdo->query('SELECT a.id, a.label, a.email, a.is_active, s.last_ok_at, s.last_sync_at, s.consecutive_failures, s.last_error
+        FROM mail_accounts a LEFT JOIN mail_sync_state s ON s.account_id = a.id AND s.folder = a.sync_folder ORDER BY a.label')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($durum as &$d) {
+        $d['bekleme_sn'] = mail_sync_bekleme_sn((int)($d['consecutive_failures'] ?? 0));
+        $d['last_error'] = $d['last_error'] !== null ? mb_substr(mail_redact((string)$d['last_error']), 0, 255) : null;
+    }
+    unset($d);
+    $g = $pdo->query('SELECT l.id, l.account_id, a.label, l.started_at, l.finished_at, l.status, l.fetched, l.inserted, l.skipped, l.error
+        FROM mail_sync_log l LEFT JOIN mail_accounts a ON a.id = l.account_id ORDER BY l.id DESC LIMIT ' . $limit)->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($g as &$r) $r['error'] = $r['error'] !== null ? mb_substr(mail_redact((string)$r['error']), 0, 255) : null;
+    unset($r);
+    return ['durum' => $durum, 'gunluk' => $g];
+}
+
+/**
  * Tüm AKTİF hesapları sırayla senkronlar; biri patlarsa diğerleri devam eder.
  * @return array<int,array> hesapId => mail_sync_hesap() sonucu
  */
@@ -422,6 +506,7 @@ function mail_cron_calistir(PDO $pdo, array $opt = []): array
         }
         foreach ($sonuc as $id => $r) {
             if ($r['busy']) { $satirlar[] = "BUSY hesap=$id"; continue; }
+            if (!empty($r['bekle'])) { $satirlar[] = "BEKLE hesap=$id " . ($r['notlar'][0] ?? ''); continue; }
             if ($r['ok']) { $basarili++; $satirlar[] = "OK hesap=$id fetched={$r['fetched']} inserted={$r['inserted']} skipped={$r['skipped']} kalan={$r['kalan']}"; }
             else { $hatali++; $satirlar[] = "FAIL hesap=$id error=" . ($r['error'] ?? '?'); }
         }
