@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v306` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v307` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1219,8 +1219,9 @@ firmalar aynı müstahsil/firma listesini görür.
 Gönderilenler ekranı masaüstünde (iframe ≥900px) kompakt TABLO: Tarih+durum · Firma · Plaka ·
 Ülke/Müstahsil (yön öneki atılır, tür etiketi + `title` tam metin) · Ürün · Kilo (tam sayı) ·
 Ücret (BİRİM fiyat `TL/KG`, 0 → —) · 🖨 Yazdır · ↻ Tekrar gönder ▾. Satıra tık/Enter/Boşluk →
-altında bugünkü kart (`.g-kart-gomulu`, ilk açılışta kurulur). <900px kartlar AYNEN; yalnız açılan
-detayda "↻ Tekrar gönder". Kip `matchMedia('(min-width:900px)')` (`gonderilenCiz()`), eşik geçilince
+altında bugünkü kart (`.g-kart-gomulu`, ilk açılışta kurulur). <900px kartlar AYNEN; bilgi satırlarının
+altına tam genişlik "↻ Tekrar gönder" düğmesi eklendi (`.g-kart-eylem`, v307) — künye detayının DIŞINDA,
+kart kapalıyken de görünür; gömülü masaüstü kartında çizilmez (satırın kendi düğmesi var). Kip `matchMedia('(min-width:900px)')` (`gonderilenCiz()`), eşik geçilince
 veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üzerinde.
 
 - **Amaç:** önceki gönderimi forma DOLU açmak (kullanıcı kararı: taslak doğrudan YAZILMAZ). Kullanıcı

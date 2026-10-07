@@ -442,12 +442,29 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
      await sayfaM.locator('.g-kart .g-yazdir-btn-ust').count() === 5 && await sayfaM.locator('.g-kart').first().locator('.tk-satir').count() === 8);
   ok('mobil: kart içeriği DEĞİŞMEDİ (kilo 2 ondalık biçimli "24.500,4 KG", fiyat "25 TL")',
      (await sayfaM.locator('.g-kart').first().innerText()).includes('24.500,4 KG') && (await sayfaM.locator('.g-kart').first().innerText()).includes('25 TL'));
-  ok('mobil: başta detay kapalı, Tekrar gönder görünmez', !(await sayfaM.locator('.g-kart').first().locator('.g-btn-tekrar').isVisible()));
+  ok('mobil: başta künye detayı KAPALI', !(await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik'))));
+  const mtekrar = sayfaM.locator('.g-kart').first().locator('.g-btn-tekrar');
+  ok('mobil: "↻ Tekrar gönder" kart KAPALIYKEN de görünür (her kartta bir tane)',
+     await mtekrar.isVisible() && (await mtekrar.innerText()).includes('Tekrar gönder') && await sayfaM.locator('.g-kart .g-btn-tekrar').count() === 5);
+  const mkonum = await sayfaM.evaluate(() => {
+    const k = document.querySelector('.g-kart'); const b = k.querySelector('.g-btn-tekrar').getBoundingClientRect();
+    const son = k.querySelectorAll('.tk-satir'); const sonS = son[son.length - 1].getBoundingClientRect();
+    const detay = k.querySelector('.g-kart-detay'); const kr = k.getBoundingClientRect();
+    return { altinda: b.top >= sonS.bottom - 1, detayDisinda: !detay.contains(k.querySelector('.g-btn-tekrar')),
+             tamGenislik: b.width >= kr.width - 40, ekranda: b.left >= 0 && b.right <= innerWidth, yukseklik: b.height };
+  });
+  ok('mobil: düğme bilgi satırlarının ALTINDA, künye detayının DIŞINDA, tam genişlik, parmakla basılır boy (≥40px)',
+     mkonum.altinda && mkonum.detayDisinda && mkonum.tamGenislik && mkonum.ekranda && mkonum.yukseklik >= 40, JSON.stringify(mkonum));
+  await foto(sayfaM, '09a_mobil_kapali');
+  await mtekrar.tap();
+  ok('mobil: düğmeye dokunmak kartı AÇMAZ (yalnız menüyü açar)', !(await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik'))) && await sayfaM.isVisible('#gTekrarMenu'));
+  await foto(sayfaM, '09b_mobil_kapali_menu');
+  await sayfaM.keyboard.press('Escape');
+  ok('mobil: Esc menüyü kapatır', !(await sayfaM.isVisible('#gTekrarMenu')));
   ok('mobil: yatay taşma yok', !(await yatayTasma(sayfaM)));
   await sayfaM.locator('.g-kart').first().locator('.g-kart-head-sol').tap();
   ok('mobil: kart başlığına dokununca detay açılır (künye çipleri)', await sayfaM.locator('.g-kart').first().evaluate(e => e.classList.contains('acik')) && await sayfaM.locator('.g-kart').first().locator('.g-kunye-cip').first().isVisible());
-  const mtekrar = sayfaM.locator('.g-kart').first().locator('.g-btn-tekrar');
-  ok('mobil: açılan detayda "↻ Tekrar gönder" düğmesi var', await mtekrar.isVisible() && (await mtekrar.innerText()).includes('Tekrar gönder'));
+  ok('mobil: detay açıkken de düğme aynı yerde görünür', await mtekrar.isVisible());
   await foto(sayfaM, '09_mobil_acik');
   await mtekrar.tap();
   const mm = await sayfaM.evaluate(() => { const m = document.getElementById('gTekrarMenu'); const r = m.getBoundingClientRect(); const cs = getComputedStyle(m);

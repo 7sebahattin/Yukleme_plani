@@ -388,8 +388,14 @@
   .g-kart-gomulu > .g-kart-head .g-kart-head-sol { cursor:default; }
   .g-kart-gomulu > .tk-satir { background:transparent; }
   .g-kart-gomulu > .tk-satir:nth-child(even) { border-right:1px solid var(--cizgi); }
-  /* Menüdeki "↻ Tekrar gönder" mobil kartın açılan detayında; masaüstü satırında zaten var. */
-  .g-detay-eylem .btn { margin-top:12px; padding:12px; font-size:14px; }
+  /* Mobil kartta "↻ Tekrar gönder" bilgi satırlarının hemen altında, HER ZAMAN görünür
+     (künye detayı kapalıyken de) — tam genişlik, parmakla rahat basılır. Masaüstü satırında
+     ve gömülü kartta çizilmez (satırın kendi düğmesi var). */
+  .g-kart-eylem { padding:10px 16px 12px; border-top:1px solid var(--cizgi); }
+  .g-kart-eylem .g-btn-tekrar { display:block; width:100%; margin:0; padding:12px; font-size:14px; font-weight:700;
+    font-family:inherit; border:1.5px solid var(--teal); color:var(--teal); background:var(--kart);
+    border-radius:12px; cursor:pointer; }
+  .g-kart-eylem .g-btn-tekrar:active, .g-kart-eylem .g-btn-tekrar[aria-expanded="true"] { background:var(--cip-bg); }
   /* Tohum istenirken çift tıklamayı engelle */
   .gonderilen-liste.g-mesgul { opacity:.6; pointer-events:none; }
 
@@ -4262,7 +4268,8 @@ function gonderilenUlkeParcala(g) {
 
 // Kart içeriği — mobilde kartın kendisi, masaüstünde satırın altında açılan kart.
 // gomulu=true: başlıkta yalnız durum+tarih (Yazdır/Tekrar gönder zaten satırda),
-// "↻ Tekrar gönder" düğmesi çizilmez.
+// "↻ Tekrar gönder" düğmesi çizilmez. Mobilde düğme bilgi satırlarının altında,
+// künye detayından BAĞIMSIZ olarak (kart kapalıyken de) görünür.
 function gonderilenKartIcerik(g, i, gomulu) {
   const tarih = new Date(g.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   const durumRozet = (g.hataSayisi > 0 || g.genelHata)
@@ -4297,13 +4304,13 @@ function gonderilenKartIcerik(g, i, gomulu) {
     _gs('', '📦 Künye', `${g.adet} adet`) +
     _gs('', '💰 Fiyat', `${fmt(g.fiyat)} TL`) +
     _gs('', '🧾 Rüsum', g.rusum ? `${fmt(g.rusum)} TL` : '—') +
+    (gomulu ? '' :
+      `<div class="g-kart-eylem">` +
+      `<button type="button" class="g-btn-tekrar" data-i="${i}" aria-haspopup="menu" aria-expanded="false">↻ Tekrar gönder ▾</button>` +
+      `</div>`) +
     `<div class="g-kart-detay">` +
     `<div class="g-detay-baslik">Künye Numaraları</div>` +
     `<div class="cipler">${kunyeChips}</div>` +
-    (gomulu ? '' :
-      `<div class="g-detay-eylem">` +
-      `<button type="button" class="btn btn-soluk g-btn-tekrar" data-i="${i}" aria-haspopup="menu" aria-expanded="false">↻ Tekrar gönder ▾</button>` +
-      `</div>`) +
     `</div>`;
 }
 
