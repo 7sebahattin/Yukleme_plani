@@ -45,7 +45,7 @@ ok('arama konuda', array_column(mail_mesaj_listele($db, [$A], 'gelen', 'Sipariş
 ok('arama LIKE jokerlerini KAÇIRIYOR (% ve _ düz karakter)', mail_mesaj_listele($db, [$A], 'gelen', '%', 1)['toplam'] === 1 && mail_mesaj_listele($db, [$A], 'gelen', '_', 1)['toplam'] === 1 && mail_mesaj_listele($db, [$A], 'gelen', 'x%y', 1)['toplam'] === 0);
 ok('arama enjeksiyonu: tırnak/kaçış zararsız', mail_mesaj_listele($db, [$A], 'gelen', "' OR 1=1 --", 1)['toplam'] === 0);
 ok('arama gönderende', mail_mesaj_listele($db, [$A], 'gelen', 'ahmet@x', 1)['toplam'] === 3);
-for ($i = 10; $i < 75; $i++) ekle($A, $i, ['tarih' => '2026-09-' . str_pad((string)($i - 9), 2, '0', STR_PAD_LEFT) . ' 10:00:00']);
+for ($i = 10; $i < 75; $i++) ekle($A, $i, ['tarih' => date('Y-m-d', strtotime('2026-08-01') + ($i - 9) * 86400) . ' 10:00:00']);   // geçerli tarihler (MySQL strict '09-31'i reddeder)
 $p1 = mail_mesaj_listele($db, [$A], 'gelen', '', 1); $p3 = mail_mesaj_listele($db, [$A], 'gelen', '', 3);
 ok('sayfalama: 30/sayfa, toplam doğru', count($p1['satirlar']) === 30 && $p1['toplam'] === 68 && count($p3['satirlar']) === 8, count($p3['satirlar']) . '/' . $p1['toplam']);
 ok('ozet alanı kısaltılıyor (≤300 karakter, SUBSTR)', strlen($p1['satirlar'][0]['ozet']) <= 300);

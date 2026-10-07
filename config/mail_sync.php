@@ -77,9 +77,21 @@ function mail_thread_coz(PDO $pdo, int $hesapId, array $m, string $alindi): int
     $t = $st->fetchColumn();
     if ($t !== false) return (int)$t;
     $konuNorm = mb_substr(mail_konu_norm((string)$m['subject']), 0, 255);
-    $pdo->prepare('INSERT INTO mail_threads (account_id, thread_key, subject_norm, last_message_at, message_count) VALUES (?, ?, ?, ?, 0)')
-        ->execute([$hesapId, $anahtar, $konuNorm, $alindi]);
-    return (int)$pdo->lastInsertId();
+    try {
+        $pdo->prepare('INSERT INTO mail_threads (account_id, thread_key, subject_norm, last_message_at, message_count) VALUES (?, ?, ?, ?, 0)')
+            ->execute([$hesapId, $anahtar, $konuNorm, $alindi]);
+        return (int)$pdo->lastInsertId();
+    } catch (PDOException $e) {
+        // Aynı thread'i başka süreç AZ ÖNCE açtı (kontrol-sonra-ekle yarışı): onu kullan. REPEATABLE READ anlık görüntüsü
+        // yeni satırı görmez → MySQL'de KİLİTLİ okuma (en güncel işlenmiş sürümü okur) şart.
+        if (!((int)($e->errorInfo[1] ?? 0) === 1062 || str_contains($e->getMessage(), 'UNIQUE constraint failed'))) throw $e;
+        $kilitli = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' FOR UPDATE' : '';
+        $st = $pdo->prepare('SELECT id FROM mail_threads WHERE account_id = ? AND thread_key = ?' . $kilitli);
+        $st->execute([$hesapId, $anahtar]);
+        $t = $st->fetchColumn();
+        if ($t === false) throw $e;
+        return (int)$t;
+    }
 }
 
 /** "Re: Fwd: AW: SV: Ответ: Konu" → "Konu" (yalnız görüntü/arama; thread kararına KATILMAZ). */
@@ -156,6 +168,7 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
     $seen = in_array('\\Seen', (array)($meta['flags'] ?? []), true) ? 1 : 0;
     $kendi = $m['from_addr'] !== '' && strtolower($m['from_addr']) === strtolower((string)$hesap['email']);
     $own = !$pdo->inTransaction();
+    for ($deneme = 0; ; $deneme++) {   // kilitlenme (MySQL 1213/1205) güvenle TEKRAR denenir; işlem baştan
     if ($own) $pdo->beginTransaction();
     try {
         $thread = mail_thread_coz($pdo, $hid, $m, $alindi);
@@ -181,11 +194,16 @@ function mail_mesaj_kaydet(PDO $pdo, array $hesap, string $klasor, int $uidvalid
             last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END WHERE id = ?')
             ->execute([$alindi, $alindi, $thread]);
         if ($own) $pdo->commit();
+        return 'eklendi';
     } catch (Throwable $e) {
         if ($own && $pdo->inTransaction()) $pdo->rollBack();
+        if ($own && $deneme < 3 && $e instanceof PDOException && in_array((int)($e->errorInfo[1] ?? 0), [1213, 1205], true)) { usleep(random_int(20000, 90000)); continue; }
+        // Aynı (hesap, klasör, uidvalidity, uid) başka bir süreç tarafından AZ ÖNCE eklenmiş (kontrol-sonra-ekle yarışı): hata değil, "zaten var".
+        // Yabancı anahtar / başka kısıt ihlali (23000 ama kopya değil) gerçek hatadır → yükselir.
+        if ($e instanceof PDOException && ((int)($e->errorInfo[1] ?? 0) === 1062 || str_contains($e->getMessage(), 'UNIQUE constraint failed')) && str_contains($e->getMessage(), 'uid')) return 'tekrar';
         throw $e;
     }
-    return 'eklendi';
+    }
 }
 
 // ── Durum + günlük ──────────────────────────────────────────────────────

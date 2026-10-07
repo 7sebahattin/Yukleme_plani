@@ -15,10 +15,26 @@ $ROOT = dirname(__DIR__);
 ini_set('log_errors', '1');
 ini_set('error_log', sys_get_temp_dir() . '/mail_test_' . getmypid() . '.log');
 
-$PDO_TEST = new PDO('sqlite::memory:');
-$PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-$PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-$PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
+// MAIL_TEST_MYSQL_DSN verilirse (örn. 'mysql:host=127.0.0.1;dbname=mailtest;charset=utf8mb4' + MAIL_TEST_MYSQL_USER/PASS) testler GERÇEK
+// MySQL/MariaDB üzerinde koşar (tablolar her çalıştırmada SİLİNİP yeniden kurulur — YALNIZ boş bir test veritabanı verin!).
+// Verilmezse bellek içi SQLite (varsayılan; CI'da ağ/DB gerekmez).
+// MySQL kipinde desteklenenler: mail_outbox · mail_outbox_review · mail_sync · mail_translate · mail_smtp · mail_cron · mail_hardening · mail_imap · mail_view.
+// SQLite'a özgü kurgusu olanlar (mail_core: migrate/DDL çevirisi, mail_review: strict-mod tetikleyicisi, mail_ui: tablo-yok senaryoları) yalnız SQLite'ta koşar.
+$MAIL_TEST_MYSQL = (string)(getenv('MAIL_TEST_MYSQL_DSN') ?: '');
+if ($MAIL_TEST_MYSQL !== '') {
+    if (!preg_match('/dbname=[a-z0-9_]*test[a-z0-9_]*/i', $MAIL_TEST_MYSQL)) { fwrite(STDERR, "Güvenlik: MAIL_TEST_MYSQL_DSN veritabanı adı 'test' içermeli.\n"); exit(2); }
+    $PDO_TEST = new PDO($MAIL_TEST_MYSQL, (string)getenv('MAIL_TEST_MYSQL_USER'), (string)getenv('MAIL_TEST_MYSQL_PASS'));
+    $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $PDO_TEST->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);   // üretimle (config/db.php) aynı
+    $PDO_TEST->exec("SET SESSION sql_mode='STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
+} else {
+    $PDO_TEST = new PDO('sqlite::memory:');
+    $PDO_TEST->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $PDO_TEST->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
+}
+function mail_test_mysql(): bool { global $MAIL_TEST_MYSQL; return $MAIL_TEST_MYSQL !== ''; }
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = []; $IS_ADMIN = false; $UID = 1;
@@ -83,6 +99,13 @@ function mail_ddl_sqlite(string $mysql): array
 /** mail_migrate() gerçek akışını SQLite'ta çalıştırmak için: DDL'i çevirip uygular. */
 function mail_test_sema_kur(PDO $db): void
 {
+    if (mail_test_mysql()) {   // gerçek DDL, olduğu gibi (FK'ler dahil)
+        $db->exec('SET FOREIGN_KEY_CHECKS=0');
+        foreach (array_reverse(array_keys(mail_tablolar())) as $t) $db->exec("DROP TABLE IF EXISTS `$t`");
+        $db->exec('SET FOREIGN_KEY_CHECKS=1');
+        foreach (mail_tablolar() as $sql) $db->exec($sql);
+        return;
+    }
     foreach (mail_tablolar() as $sql) {
         [$create, $ix] = mail_ddl_sqlite($sql);
         $db->exec($create);
@@ -91,6 +114,13 @@ function mail_test_sema_kur(PDO $db): void
 }
 function mail_test_diger_tablolar(PDO $db): void
 {
+    if (mail_test_mysql()) {
+        foreach (['audit_log', 'users'] as $t) $db->exec("DROP TABLE IF EXISTS `$t`");
+        $db->exec("CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(100), display_name VARCHAR(150), is_active TINYINT(1) DEFAULT 1) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("INSERT INTO users (username, display_name) VALUES ('u1','Kullanıcı 1'),('u2','Kullanıcı 2'),('u3','Kullanıcı 3')");
+        $db->exec("CREATE TABLE audit_log (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, action VARCHAR(100), module VARCHAR(100), record_id INT, old_values MEDIUMTEXT, new_values MEDIUMTEXT, ip VARCHAR(64), user_agent VARCHAR(255), created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        return;
+    }
     $db->exec("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, display_name TEXT, is_active INT DEFAULT 1)");
     $db->exec("INSERT INTO users (username, display_name) VALUES ('u1','Kullanıcı 1'),('u2','Kullanıcı 2'),('u3','Kullanıcı 3')");
     $db->exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INT, action TEXT, module TEXT, record_id INT, old_values TEXT, new_values TEXT, ip TEXT, user_agent TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");

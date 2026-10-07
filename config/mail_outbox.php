@@ -99,7 +99,26 @@ function mail_outbox_yaz(PDO $pdo, int $id, array $set, array $kosul): bool
         if ($kosul['content_hash'] === null) $sql .= ' AND content_hash IS NULL'; else { $sql .= ' AND content_hash = ?'; $par[] = $kosul['content_hash']; }
     }
     $st = $pdo->prepare($sql); $st->execute($par);
-    return $st->rowCount() === 1;
+    if ($st->rowCount() === 1) return true;
+    // MySQL rowCount() = DEĞİŞEN satır sayısıdır (bulunan değil): aynı değerlerle yazım 0 döner. Koşullar hâlâ sağlanıyor ve
+    // yazılacak her değer zaten satırdaysa bu bir ÇAKIŞMA değil, no-op başarıdır (SQLite bulunan satırı sayar — iki motor aynı davransın).
+    if ($st->rowCount() !== 0) return false;
+    $sel = 'SELECT ' . implode(', ', array_keys($set)) . ' FROM mail_outbox WHERE id = ?'; $sp = [$id];
+    if (array_key_exists('status', $kosul)) {
+        $d = (array)$kosul['status'];
+        $sel .= ' AND status IN (' . implode(',', array_fill(0, count($d), '?')) . ')'; $sp = array_merge($sp, $d);
+    }
+    if (array_key_exists('send_token', $kosul)) { $sel .= ' AND send_token = ?'; $sp[] = $kosul['send_token']; }
+    if (array_key_exists('content_hash', $kosul)) {
+        if ($kosul['content_hash'] === null) $sel .= ' AND content_hash IS NULL'; else { $sel .= ' AND content_hash = ?'; $sp[] = $kosul['content_hash']; }
+    }
+    $q = $pdo->prepare($sel); $q->execute($sp);
+    $mevcut = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$mevcut) return false;   // koşullar artık sağlanmıyor → gerçek çakışma
+    foreach ($set as $k => $v) {
+        if (($mevcut[$k] === null) !== ($v === null) || ($v !== null && (string)$mevcut[$k] !== (string)$v)) return false;
+    }
+    return true;
 }
 
 /**

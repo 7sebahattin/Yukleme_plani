@@ -36,6 +36,8 @@ foreach (mail_tablolar() as $ad => $ddl) {
 }
 ok("tüm indeks/anahtarlar ($kontrol adet) ≤ $LIMIT bayt (utf8mb4, en kötü satır biçimi)", $kotu === [], implode(' | ', $kotu));
 ok('indeks ayrıştırıcı gerçekten indeks buldu (testin kendisi boş geçmesin)', $kontrol >= 15, (string)$kontrol);
+$dinamik = true; foreach (mail_tablolar() as $ad => $ddl) if (!str_contains($ddl, 'ROW_FORMAT=DYNAMIC')) $dinamik = false;
+ok('her tablo açıkça ROW_FORMAT=DYNAMIC (COMPACT varsayılanlı sunucuda 1118 "Row size too large" önlenir)', $dinamik);
 // Hesap e-postası ile Message-ID alanı: üretilen kimlik sütuna sığmalı
 require_once $ROOT . '/config/mail_smtp.php';
 $en = mail_yeni_message_id('a@' . str_repeat('x', 96) . '.com');

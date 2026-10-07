@@ -26,7 +26,8 @@ const MAIL_SIFRE_ALANLARI = ['imap_pass', 'smtp_pass'];
 function mail_tablolar(): array
 {
     $t = [];
-    $son = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+    // ROW_FORMAT=DYNAMIC AÇIKÇA: geniş VARCHAR/TEXT sütunlu tablolar COMPACT satır biçiminde "1118 Row size too large" ile kurulamaz (MySQL 5.6 / innodb_default_row_format=compact).
+    $son = " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC";
 
     $t['mail_accounts'] = "CREATE TABLE IF NOT EXISTS `mail_accounts` (
         `id`               INT AUTO_INCREMENT PRIMARY KEY,

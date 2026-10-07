@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M6 tamam (sertleştirme) → M7 (tam test/regresyon/UI incelemesi) sırada** |
+| Current milestone | **M7 tamam (gerçek MySQL doğrulaması + regresyon) → M8 (son entegrasyon incelemesi) sırada** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -197,6 +197,7 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 | M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | `6445274` | ✅ (aşağıda) |
 | M6 — Sertleştirme: indeks uzunluğu, geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük ekranı | `d212f1e` | ✅ (aşağıda) |
+| M7 — Gerçek MySQL doğrulaması (4 gerçek hata), yarış testleri, güvenlik taraması, tam regresyon | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -283,6 +284,23 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - Audit: yalnız id/durum/sayı (`mail_reply_draft/preview`, `mail_send_approve`, `mail_send`, `mail_send_failed`, `mail_send_unknown`, `mail_send_resolve`, `mail_send_sahiplik_kaybi`, `mail_approval_expired`, `mail_reply_cancel`); gövde/konu/adres/şifre yazılmaz.
 - Şema eki (M1 DDL'ine, henüz hiçbir DB'de kurulu olmadığı için ALTER yok): `mail_outbox.quote_text`, `approved_hash`, `dedupe_key` (+ `UNIQUE uq_mo_dedupe`), `mail_sync_state.rescan_from_epoch`.
 
+**M7 içeriği** (gerçek MySQL/MariaDB doğrulaması + tam regresyon + güvenlik taraması)
+- **Gerçek veritabanı kipi:** test harness'i `MAIL_TEST_MYSQL_DSN` ile (boş bir `*test*` veritabanı) GERÇEK MariaDB 10.11'de koşar — katı sql_mode, native prepared statements (üretimle aynı),
+  `innodb_default_row_format=compact` (en kötü durum). `mail_outbox`, `outbox_review`, `sync`, `translate`, `smtp`, `cron`, `hardening`, `imap`, `view` paketleri MySQL'de de geçer.
+  SQLite'a özgü olanlar (`core` DDL çevirisi, `review` strict-mod tetikleyicisi, `ui` tablo-yok senaryoları) yalnız SQLite'ta koşar. **Bu, SQLite'ın gizlediği 4 gerçek hatayı yakaladı:**
+  | # | Hata (yalnız gerçek MySQL'de) | Düzeltme |
+  |---|---|---|
+  | R1 | COMPACT satır biçiminde `mail_messages`/`mail_outbox` `1118 Row size too large` ile KURULAMAZ (geniş VARCHAR + çok TEXT) | tüm tablolara açık `ROW_FORMAT=DYNAMIC` (MySQL ≥ 5.7 / MariaDB ≥ 10.2; statik test denetler) |
+  | R2 | MySQL `rowCount()` DEĞİŞEN satırı sayar: aynı değerle koşullu yazım (`mail_outbox_yaz`) 0 döner → "başka istekle değiştirildi" yalancı çakışması (sağlayıcı kapalıyken ikinci önizleme) | 0 satırda koşullar + değerler yeniden doğrulanır: koşul sağlanıyor ve değerler zaten aynıysa no-op BAŞARI; gerçek çakışma yine false |
+  | R3 | Aynı UID'li mesajı eşzamanlı ekleyen süreçler `1062 Duplicate entry` istisnası fırlatıyor (kontrol-sonra-ekle yarışı) | `mail_mesaj_kaydet` kopya anahtarda `'tekrar'` döner (FK ihlali gibi diğer 23000'ler yükselir) |
+  | R4 | Aynı thread'i eşzamanlı açan süreçler `uq_mt_key` kopyası + InnoDB **deadlock (1213)** | thread kopyasında kilitli okuma (`FOR UPDATE`, REPEATABLE READ anlık görüntüsü yeni satırı görmez) + kilitlenmede işlem baştan en çok 3 deneme |
+  (Üretimde hesap başına `flock` bu yarışları zaten engeller; düzeltmeler ikinci savunma hattıdır.)
+- **Çok-süreçli yarış testi** (`mail_race_mysql_smoke.php`, gerçek `pcntl_fork` + ayrı bağlantılar, MySQL kipinde): 8 süreç aynı onaylı satırı AYNI ANDA `gonder()` → SMTP'ye **tek** mesaj;
+  6 ikiz satır aynı anda onay → **tek** gönderim; 8 süreç aynı UID'yi ekler → tek satır, istisna sızmaz; gerçek `mail_migrate()` (7 tablo, idempotent, Dynamic). 8/8 ardışık koşuda kararlı.
+- **Güvenlik taraması:** tüm POST uçları `csrf_check` öncesi işlem yapmıyor (mail.php, mail_hesaplar.php, migrate kartı; `mail_ek.php` yalnız GET); mail dosyalarında `eval/exec/system/passthru/proc_open/unserialize` yok
+  (yalnız `PDO::exec` DDL); depoda gerçek sır/anahtar yok (base64-32B, PEM, `api_key=` taraması temiz); `config/local.php` izlenmiyor; `storage/mail/.htaccess` mevcut.
+- **Tam regresyon:** tüm `scripts/*_smoke.php` (mail olmayanlar dahil) temiz; Playwright mail UI 505/505; bottomnav (A) 1828 / (B) 1011.
+
 **M6 içeriği** (sertleştirme; yeni kod yüzeyi küçük, hepsi testli — `scripts/mail_hardening_smoke.php`, `mail_schema_static_smoke.php`)
 - **MySQL indeks uzunluğu (gerçek hata bulundu):** `mail_outbox.out_message_id VARCHAR(255) UNIQUE` utf8mb4'te 1020 bayt → MySQL 5.6 / COMPACT satır biçiminde
   `1071 Specified key was too long` (767 bayt sınırı) ile kurulum patlardı. `VARCHAR(190)` (760 bayt) yapıldı, üretilen Message-ID alan adı ≤ 100 karakter
@@ -349,7 +367,9 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 | `mail_outbox_review_smoke.php` (M5 Opus bulguları B1…B7 regresyonları; yarışlar `_kanca_*` ile zorlanır) | 34/34 ✅ |
 | `mail_stream_smoke.php` (gerçek soket çifti: satır/bayt okuma, mutlak süre, yavaş-damla, büyük yazma, yazma kilitlenmesi) | 9/9 ✅ |
 | `mail_hardening_smoke.php` (M6: geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük verisi; 5 mutasyon yakalandı) | 35/35 ✅ |
-| `mail_schema_static_smoke.php` (M6: 17 indeks ≤ 767 bayt utf8mb4, Message-ID uzunluğu) | 4/4 ✅ |
+| `mail_schema_static_smoke.php` (M6/M7: 17 indeks ≤ 767 bayt utf8mb4, Message-ID uzunluğu, ROW_FORMAT=DYNAMIC) | 5/5 ✅ |
+| `mail_race_mysql_smoke.php` (M7: **gerçek MariaDB**, çok-süreçli yarış + gerçek migrate; SQLite'ta atlanır) | 10/10 ✅ (8 ardışık koşu) |
+| Aynı paketler `MAIL_TEST_MYSQL_DSN` ile **gerçek MariaDB 10.11** (katı mod, native prepares, COMPACT varsayılan): outbox 109 · outbox_review 37 · sync 61 · translate 107 · smtp 62 · cron 19 · hardening 35 · imap 45 · view 46 | ✅ |
 | `mail_ui_smoke.js` (Playwright, M5 onay ekranı dahil) | 505/505 ✅ |
 | Tüm mevcut `scripts/*_smoke.php` | ✅ regresyon yok |
 
@@ -366,6 +386,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Open Risks
 
+0. Üretim MySQL'i ≥ 5.7 / MariaDB ≥ 10.2 olmalı (açık `ROW_FORMAT=DYNAMIC`); eski 5.6 Antelope'ta kurulum `1478` verir — `migrate.php` hata satırı gösterir, veri etkilenmez.
 1. Paylaşımlı hostun IMAP/SMTP **çıkış portu** kısıtı (993/465/587) — canlıda doğrulanmadı.
 2. Çeviri sağlayıcısı seçimi ve **veri çıkışı** (T11) — sahip kararı gerekir.
 3. Aynı hesapta farklı sağlayıcıların `UIDVALIDITY`/UID davranış farkları (+ ilk taramada `SINCE` INTERNALDATE'e göredir) (Gmail IMAP'ta
@@ -378,7 +399,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M7: tam test/regresyon/UI incelemesi (mobil/masaüstü ekran görüntüleri, erişilebilirlik, yük/uç durumlar) · M8: son entegrasyon incelemesi. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
+- M8: son entegrasyon incelemesi (bağımsız Opus: tüm modülün sınır-geçişleri — gönderim yolu, yetki zinciri, HTML güvenliği, kimlik bilgisi yaşam döngüsü) + ChatGPT son raporu. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
 
 ## Needs ChatGPT Review
 

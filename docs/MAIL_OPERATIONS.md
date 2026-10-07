@@ -20,6 +20,8 @@ Mimari kararlar: `docs/MAIL_CENTER_AGENT_BRIDGE.md`.
 7. **Çeviri (isteğe bağlı, varsayılan KAPALI):** `config/local.php`'de `MAIL_TRANSLATE_PROVIDER` (`deepl|libretranslate|mymemory`) + gerekli anahtar/adres sabitleri.
    Açıldığında mail metni (adres/başlık/ek hariç) üçüncü taraf servise gider — KVKK/ticari sır açısından karar sahibindedir. Hesap bazında ayrıca "otomatik çeviri" işaretlenir.
 
+**Veritabanı gereksinimi:** MySQL ≥ 5.7 ya da MariaDB ≥ 10.2 (tablolar açık `ROW_FORMAT=DYNAMIC` ile kurulur; geniş sütunlar için gerekli). Eski sürümde `migrate.php` kartı ilgili tabloda hata satırı gösterir, mevcut verilere dokunulmaz.
+
 ## 2. Ağ gereksinimleri
 
 Sunucudan **çıkış** portları: IMAP 993 (SSL) / 143 (STARTTLS), SMTP 465 (SSL) / 587 (STARTTLS). Paylaşımlı hostlar bunları kapatabilir;

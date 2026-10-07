@@ -72,6 +72,12 @@ mail_outbox_onizle($db, $id2, $H, $UID, $sag, ['body_tr' => 'Metin B', 'target_l
 ok('yaz(): okunan sürümün hash\'i değişmişse 0 satır (kayıp güncelleme yok)', mail_outbox_yaz($db, $id2, ['body_out' => 'EZİLDİ'], ['status' => ['draft', 'translated'], 'content_hash' => $eskiHash]) === false && satir($id2)['body_out'] !== 'EZİLDİ');
 try { mail_outbox_yaz($db, $id2, ['body_out' => 'x'], []); $lg = false; } catch (LogicException $e) { $lg = true; }
 ok('yaz(): koşulsuz çağrı programlama hatası (LogicException)', $lg);
+// MySQL rowCount() değişen satırı sayar: aynı değerlerle koşullu yazım no-op BAŞARIdır (çakışma değil); gerçek çakışma yine false
+$idn = hazir(gelen($A, 'b1n@musteri.ru'), 'No-op yazım');
+$sn = satir($idn);
+ok('aynı değerlerle yazım (no-op) başarı sayılır (MySQL/SQLite aynı)', mail_outbox_yaz($db, $idn, ['body_tr' => $sn['body_tr'], 'target_lang' => $sn['target_lang']], ['status' => ['draft', 'translated'], 'content_hash' => $sn['content_hash']]) === true);
+ok('no-op yazım: koşullar artık sağlanmıyorsa (durum değişmiş) false', mail_outbox_yaz($db, $idn, ['body_tr' => $sn['body_tr']], ['status' => ['sent'], 'content_hash' => $sn['content_hash']]) === false);
+ok('farklı değerle + hash uyuşmuyor → false (ezilmez)', mail_outbox_yaz($db, $idn, ['body_tr' => 'FARKLI'], ['status' => ['translated'], 'content_hash' => str_repeat('b', 64)]) === false && satir($idn)['body_tr'] === $sn['body_tr']);
 // onay yazımı: hash değişmişse onay verilemez
 $id3 = hazir(gelen($A, 'b1c@musteri.ru'), 'Onay öncesi');
 $eski3 = satir($id3)['content_hash'];
