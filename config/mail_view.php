@@ -274,6 +274,7 @@ function mail_post_isle(PDO $pdo, array $c, string $islem, array $g = [], array 
         // Onaylanmış ama gönderim başlamamış (süreç kesilmiş) kaydı gönder — atomik sahiplenme yine uygulanır.
         if (!$c['send']) return $yasak('Göndermek için mail.send yetkisi gerekir.');
         if (mail_outbox_getir($pdo, $oId, $hesapIds) === null) return ['ok' => false, 'mesaj' => 'Kayıt bulunamadı.', 'yasak' => null, 'o' => null];
+        mail_outbox_takili_isaretle($pdo, isset($opt['simdi']) ? (int)$opt['simdi'] : null);   // bayat onay (30 dk) önce geri alınır: eski formla gönderilemez
         $r = mail_outbox_gonder($pdo, $oId, $opt);
         $ok = $r['ok']; $mesaj = $r['mesaj']; $yonlendirO = $oId;
     } elseif ($islem === 'cevap_tekrar') {

@@ -108,13 +108,52 @@ $u = mail_yapilandirma_uyarilari($db, ['local_php' => $lp, 'depo' => $depo, 'sim
 ok('hiç senkron yoksa cron kurulumu hatırlatılır', str_contains($mesajlar($u), 'hiç çalışmadı'));
 @unlink($lp); @rmdir($depo);
 
+echo "\n=== 6. M8 bulguları ===\n";
+// 1) Sunucu/kullanıcı değişince parola yeniden girilmeli (mail.admin delegasyonu ile parola sızdırma)
+$S1 = hesap('guv@asya.com', 'GERCEK-IMAP-SIFRE');
+$baz = ['label' => 'g', 'email' => 'guv@asya.com', 'imap_host' => 'i.t.com', 'imap_port' => 993, 'imap_security' => 'ssl', 'imap_user' => 'guv@asya.com', 'smtp_host' => 's.t.com', 'smtp_port' => 465, 'smtp_security' => 'ssl', 'smtp_user' => 'guv@asya.com', 'imap_pass' => '', 'smtp_pass' => ''];
+$r = mail_hesap_kaydet(array_merge($baz, ['imap_host' => 'evil.example.net']), $S1, 1, $db);
+ok('IMAP host değişti + parola boş → REDDEDİLİR (kayıtlı parola yeni sunucuya gitmez)', !$r['ok'] && str_contains(implode(' ', $r['hatalar']), 'yeniden girin') && mail_hesap_cred_oku($S1, $db)['imap_host'] === 'i.t.com');
+$r = mail_hesap_kaydet(array_merge($baz, ['smtp_user' => 'baska@asya.com']), $S1, 1, $db);
+ok('SMTP kullanıcı adı değişti + parola boş → reddedilir', !$r['ok']);
+$r = mail_hesap_kaydet(array_merge($baz, ['imap_port' => 143, 'imap_security' => 'starttls']), $S1, 1, $db);
+ok('port/güvenlik değişti + parola boş → reddedilir', !$r['ok']);
+$r = mail_hesap_kaydet(array_merge($baz, ['imap_host' => 'evil.example.net', 'imap_pass' => 'YENI-PAROLA']), $S1, 1, $db);
+ok('sunucu değişti + YENİ parola girildi → kabul', $r['ok'] && mail_hesap_cred_oku($S1, $db)['imap_pass'] === 'YENI-PAROLA');
+$r = mail_hesap_kaydet(array_merge($baz, ['imap_host' => 'evil.example.net', 'label' => 'yeni etiket', 'display_name' => 'Ad']), $S1, 1, $db);
+ok('sunucu/kullanıcı AYNI kalınca boş parola = değiştirme (etiket vb. düzenlenebilir)', $r['ok'] && mail_hesap_cred_oku($S1, $db)['imap_pass'] === 'YENI-PAROLA');
+ok('host büyük/küçük harf farkı değişiklik sayılmaz', mail_hesap_kaydet(array_merge($baz, ['imap_host' => 'EVIL.example.NET']), $S1, 1, $db)['ok']);
+// 5) kilit dosyası açılamıyor ≠ BUSY
+$cr = mail_cron_calistir($db, ['kilit_dizin' => '/proc/yok/dizin', 'simdi' => $T0]);
+ok('kilit dosyası açılamazsa cron FAIL + kod 1 (BUSY/0 DEĞİL — sessiz durma yok)', $cr['kod'] === 1 && str_starts_with($cr['satirlar'][0], 'FAIL') && !str_contains($cr['satirlar'][0], 'BUSY'), json_encode($cr));
+$sr = mail_sync_hesap($db, $S1, ['kilit_dizin' => '/proc/yok/dizin', 'simdi' => $T0, 'zorla' => true]);
+ok('hesap senkronu: kilit açılamazsa busy DEĞİL, hata mesajlı', $sr['busy'] === false && $sr['ok'] === false && str_contains((string)$sr['error'], 'Kilit dosyası'));
+// 7) rotasyon: okuma transaction içinde ve kilitli
+$ks = (string)file_get_contents($ROOT . '/config/mail_core.php');
+$a0 = strpos($ks, 'function mail_anahtar_donustur');
+$govde = substr($ks, $a0, 4000);
+ok('rotasyon: SELECT ... FOR UPDATE, transaction İÇİNDE (okuma-yazma arası kaydedilen parola ezilmez)', strpos($govde, 'beginTransaction') < strpos($govde, 'SELECT id, imap_pass_enc') && str_contains($govde, "' FOR UPDATE'"));
+// 4) yönlendirilmiş mail başlık bloğu sağlayıcıya GİTMEZ
+$fw = mail_ceviri_hazirla("---------- Forwarded message ---------\nFrom: Alice Buyer <alice.buyer@customer-corp.com>\nDate: Mon, 5 Oct 2026\nSubject: Offer\nTo: Bob <bob.internal@asya.com>, cfo@asya.com\n\nPlease find the price list attached.");
+ok('yönlendirme: gövde çevrilir ama From/To/Date/Subject başlık satırları (adresler) ASLA', str_contains($fw['metin'], 'price list') && !str_contains($fw['metin'], '@') && !str_contains($fw['metin'], 'Alice'), $fw['metin']);
+// 2) hesapta çeviri kapalıyken "Şimdi çevir" sağlayıcıya gitmez
+class SagKayit implements MailTranslationProviderInterface { public array $c = []; public function ad(): string { return 'sahte'; } public function parcaLimiti(): int { return 4000; } public function cevir(string $m, ?string $k, string $h): array { $this->c[] = $m; return ['metin' => 'X', 'tespit' => 'en']; } }
+$db->exec("UPDATE mail_accounts SET translate_enabled = 0 WHERE id = $S1");
+$db->prepare("INSERT INTO mail_messages (account_id, folder, uidvalidity, uid, message_id_hash, subject, from_addr, received_at, body_text, lang, tr_status, to_addrs, cc_addrs) VALUES (?, 'INBOX', 1, 1, 'h1', 'Gizli', 'x@y.com', '2026-10-05 10:00:00', 'Confidential amount 1.2M EUR', 'en', 'skipped', '[]', '[]')")->execute([$S1]);
+$mid = (int)$db->lastInsertId(); $sg = new SagKayit();
+$r = mail_ceviri_simdi($db, $sg, $mid, [$S1]);
+ok('hesapta çeviri KAPALI: "Şimdi çevir" reddedilir, sağlayıcıya HİÇBİR ŞEY gitmez', !$r['ok'] && $sg->c === [] && str_contains($r['mesaj'], 'kapalı'), json_encode($r));
+$db->exec("UPDATE mail_accounts SET translate_enabled = 1 WHERE id = $S1");
+$r = mail_ceviri_simdi($db, $sg, $mid, [$S1]);
+ok('hesapta çeviri AÇIK: aynı istek çalışır', $r['ok'] && count($sg->c) >= 1, json_encode($r));
+
 echo "\n=== 5. Senkron günlüğü ekranı verisi ===\n";
 mail_redact_sirlar('SIR-DEGER-XYZ');
 $db->prepare("INSERT INTO mail_sync_log (account_id, started_at, finished_at, status, fetched, inserted, skipped, error) VALUES (?, '2026-10-06 12:00:00', '2026-10-06 12:00:03', 'error', 0, 0, 0, ?)")->execute([$A, 'Giriş başarısız parola=SIR-DEGER-XYZ']);
 for ($i = 0; $i < 30; $i++) $db->prepare("INSERT INTO mail_sync_log (account_id, started_at, status) VALUES (?, ?, 'ok')")->execute([$A, date('Y-m-d H:i:s', $T0 + $i)]);
 $g = mail_sync_gunluk_getir($db, 20);
 ok('en çok 20 satır, en yeni önce', count($g['gunluk']) === 20 && $g['gunluk'][0]['id'] > $g['gunluk'][19]['id']);
-ok('hesap durum satırları + bekleme alanı var', count($g['durum']) === 2 && array_key_exists('bekleme_sn', $g['durum'][0]));
+ok('hesap durum satırları + bekleme alanı var', count($g['durum']) >= 2 && array_key_exists('bekleme_sn', $g['durum'][0]));
 $g2 = mail_sync_gunluk_getir($db, 100000);
 ok('limit sınırlı (≤100)', count($g2['gunluk']) <= 100);
 $tum = json_encode(mail_sync_gunluk_getir($db, 100));

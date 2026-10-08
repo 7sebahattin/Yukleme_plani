@@ -236,7 +236,13 @@ function mail_ceviri_hazirla(string $t): array
         $o[] = $s;
     }
     $t = trim((string)preg_replace("/\n{3,}/", "\n\n", implode("\n", $o)));
-    if ($t === '') { $t = trim(implode("\n", array_filter($satirlar, static fn($x) => trim((string)preg_replace('/^[>\s]+/', '', $x)) !== ''))); $kirpildi = false; }
+    if ($t === '') {
+        // Yalnız alıntı/yönlendirme başlığı varsa (ör. "Forwarded message" ile başlayan mail): içeriği yine çevir ama başlık bloğunu
+        // (From/To/Cc/Date/Subject… satırları = ADRES içerir) ASLA sağlayıcıya verme.
+        $baslikSatiri = '/^\s*(?:-{2,}.*|_{5,}|(?:from|to|cc|bcc|reply-to|date|sent|subject|von|an|betreff|datum|de|à|objet|para|asunto|от|кому|тема|дата|kimden|kime|konu|tarih|gönderen|alıcı)\s*:.*)$/iu';
+        $t = trim(implode("\n", array_filter(array_map(static fn($x) => preg_replace('/^[>\s]+/', '', $x), $satirlar), static fn($x) => trim((string)$x) !== '' && !preg_match($baslikSatiri, (string)$x))));
+        $kirpildi = false;
+    }
     if (mb_strlen($t) > MAIL_CEVIRI_MAX_KARAKTER) { $t = mb_substr($t, 0, MAIL_CEVIRI_MAX_KARAKTER); $kirpildi = true; }
     return ['metin' => $t, 'kirpildi' => $kirpildi];
 }
@@ -412,6 +418,13 @@ function mail_ceviri_isle(PDO $pdo, ?MailTranslationProviderInterface $p, array 
     return $s;
 }
 
+/** Hesapta çeviri açık mı (ekranda "Şimdi çevir" düğmesi yalnız açıksa görünür; sunucu kapısı mail_ceviri_simdi'de). */
+function mail_hesap_ceviri_acik(PDO $pdo, int $hesapId): bool
+{
+    $a = $pdo->prepare('SELECT translate_enabled FROM mail_accounts WHERE id = ?'); $a->execute([$hesapId]);
+    return (int)$a->fetchColumn() === 1;
+}
+
 /**
  * Kullanıcı isteğiyle tek mesajı HEMEN çevirir ("Şimdi çevir" / "Tekrar dene"). ACL: yalnız görünür hesap.
  * @return array{ok:bool,mesaj:string}
@@ -422,8 +435,11 @@ function mail_ceviri_simdi(PDO $pdo, ?MailTranslationProviderInterface $p, int $
     $m = mail_mesaj_getir($pdo, $msgId, $hesapIds);
     if ($m === null) return ['ok' => false, 'mesaj' => 'Mesaj bulunamadı.'];
     if ($m['tr_status'] === 'translated') return ['ok' => true, 'mesaj' => 'Zaten çevrilmiş.'];
-    $a = $pdo->prepare('SELECT target_lang FROM mail_accounts WHERE id = ?'); $a->execute([(int)$m['account_id']]);
-    $m['target_lang'] = (string)($a->fetchColumn() ?: 'tr');
+    $a = $pdo->prepare('SELECT target_lang, translate_enabled FROM mail_accounts WHERE id = ?'); $a->execute([(int)$m['account_id']]);
+    $ah = $a->fetch(PDO::FETCH_ASSOC) ?: ['target_lang' => 'tr', 'translate_enabled' => 0];
+    // Hesap sahibi çeviriyi KAPATMIŞSA (veri çıkışı kararı) salt okuma yetkisi bunu delemez.
+    if ((int)$ah['translate_enabled'] !== 1) return ['ok' => false, 'mesaj' => 'Bu hesapta çeviri kapalı (yönetici açmalı); mail metni dışarı gönderilmedi.'];
+    $m['target_lang'] = (string)($ah['target_lang'] ?: 'tr');
     $m['tr_attempts'] = 0;
     $pdo->prepare("UPDATE mail_messages SET tr_status = 'pending', tr_attempts = 0, tr_next_at = NULL, tr_error = NULL WHERE id = ?")->execute([$msgId]);
     $r = mail_ceviri_mesaj($pdo, $p, $m, $simdi ?? time());

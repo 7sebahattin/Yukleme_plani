@@ -32,13 +32,16 @@ function mail_depo_dizini(): string
     return $d;
 }
 
-/** @return resource|null alınamazsa (başka süreç tutuyor) null */
+final class MailKilitHatasi extends RuntimeException {}
+
+/** @return resource|null alınamazsa (başka süreç tutuyor) null; dosya açılamazsa MailKilitHatasi */
 function mail_kilit_al(string $ad, ?string $dizin = null)
 {
     if (!preg_match('/^[a-z0-9_]+$/', $ad)) return null;
     $dizin = $dizin ?? mail_depo_dizini();
     $fh = @fopen($dizin . '/.' . $ad . '.lock', 'c');
-    if (!$fh) return null;
+    // Dosya AÇILAMADI (izin/dizin yok) "başka süreç tutuyor" DEĞİLDİR: sessizce BUSY sanılırsa cron hiç çalışmaz ve kimse fark etmez.
+    if (!$fh) throw new MailKilitHatasi('Kilit dosyası açılamadı (storage/mail yazılabilir mi? cron ile web aynı kullanıcı mı?).');
     if (!@flock($fh, LOCK_EX | LOCK_NB)) { fclose($fh); return null; }
     return $fh;
 }
@@ -254,7 +257,8 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
     $s = ['ok' => false, 'busy' => false, 'bekle' => false, 'fetched' => 0, 'inserted' => 0, 'skipped' => 0, 'kalan' => 0, 'error' => null, 'notlar' => []];
     $simdiTs = (int)($opt['simdi'] ?? time());
     $simdi = date('Y-m-d H:i:s', $simdiTs);
-    $kilit = mail_kilit_al('account_' . $hesapId, $opt['kilit_dizin'] ?? null);
+    try { $kilit = mail_kilit_al('account_' . $hesapId, $opt['kilit_dizin'] ?? null); }
+    catch (MailKilitHatasi $e) { $s['error'] = $e->getMessage(); error_log('[mail_sync] kilit dosyasi acilamadi hesap=' . (int)$hesapId); return $s; }
     if ($kilit === null) { $s['busy'] = true; $s['ok'] = true; return $s; }
 
     $logId = 0; $istemci = null; $klasor = 'INBOX'; $uidv = 0; $imlec = null;
@@ -340,6 +344,10 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
                 try {
                     $sonuc = mail_mesaj_kaydet($pdo, $h, $klasor, $uidv, $uid, $m, $ms, $ilkTarama, $simdi, $oncekiEpoch);
                 } catch (PDOException $e) {
+                    // YALNIZ VERİ SINIFI hatalar yer tutucuya düşer. Geçici/altyapı hataları (kilit zaman aşımı 1205, deadlock 1213,
+                    // bağlantı kopması 2006/2013, FK…) mesajın kendisinde bir sorun DEĞİLDİR: yer tutucu yazmak gerçek maili kalıcı
+                    // kaybettirirdi (imleç ilerler, mail tekrar çekilmez) → hata yükselir, imleç ilerlemez, bir sonraki çalıştırma tekrar dener.
+                    if (!mail_sync_veri_hatasi_mi($e)) throw $e;
                     // ZEHİRLİ MAİL KORUMASI: tek bir mesajın kaydı reddedilirse (strict mod aralık/kodlama hatası) hesap
                     // SONSUZA DEK takılmasın. Yer tutucu satır yazılabiliyorsa DB sağlıklıdır → sorun mesajın verisindedir,
                     // imleç ilerler. Yer tutucu da yazılamıyorsa DB sorunudur → istisna yukarı çıkar, imleç İLERLEMEZ.
@@ -391,6 +399,21 @@ function mail_sync_hesap(PDO $pdo, int $hesapId, array $opt = []): array
 }
 
 final class MailSyncAtla extends RuntimeException {}
+
+/**
+ * Kayıt hatası MESAJIN VERİSİNDEN mi kaynaklanıyor (aralık/kodlama/uzunluk)? Evet → zehirli mail (yer tutucu + devam).
+ * Hayır (kilit, deadlock, bağlantı, FK, bilinmeyen) → altyapı sorunu: mail kaybolmasın diye hata yükselir.
+ */
+function mail_sync_veri_hatasi_mi(PDOException $e): bool
+{
+    $kod = (int)($e->errorInfo[1] ?? 0);
+    $sqlstate = (string)($e->errorInfo[0] ?? $e->getCode());
+    if (in_array($kod, [1048, 1253, 1264, 1265, 1292, 1366, 1367, 1406, 1441, 3819], true)) return true;   // MySQL/MariaDB veri sınıfı
+    if (str_starts_with($sqlstate, '22')) return true;                                                      // SQLSTATE veri istisnası
+    if (in_array($kod, [1205, 1213, 1452, 2006, 2013], true)) return false;
+    // Sürücü/kod bilgisi gelmediyse (SQLite testi) ileti metninden: MySQL strict mod veri hatası ifadeleri
+    return (bool)preg_match('/Incorrect (?:datetime|date|string|integer|decimal) value|Data too long|Out of range value|Data truncated/i', $e->getMessage());
+}
 
 /**
  * Yönetici için işletme uyarıları (salt okunur, ağa çıkmaz): anahtar, dosya izinleri, cron canlılığı, çeviri veri çıkışı.
@@ -504,7 +527,8 @@ function mail_imap_test(PDO $pdo, int $hesapId, array $opt = []): array
  */
 function mail_cron_calistir(PDO $pdo, array $opt = []): array
 {
-    $kilit = mail_kilit_al('sync_all', $opt['kilit_dizin'] ?? null);
+    try { $kilit = mail_kilit_al('sync_all', $opt['kilit_dizin'] ?? null); }
+    catch (MailKilitHatasi $e) { error_log('[mail_cron] kilit dosyası açılamadı'); return ['kod' => 1, 'satirlar' => ['FAIL ' . $e->getMessage()]]; }
     if ($kilit === null) return ['kod' => 0, 'satirlar' => ['BUSY başka bir senkron çalışıyor']];
     try {
         if (!mail_sema_hazir($pdo)) return ['kod' => 1, 'satirlar' => ['FAIL mail tabloları kurulu değil (migrate.php)']];

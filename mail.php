@@ -247,6 +247,7 @@ mail_assets();
             <p><span class="mail-durum mail-durum--<?= h($os) ?>"><?= h($durumEtiket[$os] ?? $os) ?></span></p>
             <dl class="mail-meta">
                 <dt>Gönderen</dt><dd><?= h(trim(($gKimlik['display_name'] !== '' ? $gKimlik['display_name'] . ' ' : '') . '<' . $gKimlik['email'] . '>')) ?></dd>
+                <?php if (trim((string)$gKimlik['reply_to']) !== ''): ?><dt>Reply-To</dt><dd><?= h($gKimlik['reply_to']) ?> <span class="mail-bilgi">(müşterinin yanıtı bu adrese gelir)</span></dd><?php endif; ?>
                 <dt>Alıcı</dt><dd><?= h($oPanel['to_addr']) ?></dd>
                 <dt>Hedef dil</dt><dd><?= h($dilAd) ?><?php if ($oPanel['tr_provider']): ?> · çeviri: <?= h($oPanel['tr_provider'] === 'manual' ? 'elle girildi' : ($oPanel['tr_provider'] === 'none' ? 'çeviri yok' : $oPanel['tr_provider'] . ' (üçüncü taraf servis)')) ?><?php endif; ?></dd>
                 <?php if ($oPanel['out_message_id'] && in_array($os, ['sent', 'unknown', 'sending', 'approved'], true)): ?><dt>Message-ID</dt><dd><code><?= h($oPanel['out_message_id']) ?></code></dd><?php endif; ?>
@@ -382,7 +383,7 @@ mail_assets();
                 <div class="mail-bilgi"><?= h(mail_ceviri_durum_etiketi((string)$m['tr_status'])) ?>.
                     <?php if ($m['tr_status'] === 'failed' && $m['tr_error']): ?><span class="mail-hata-metin"><?= h($m['tr_error']) ?></span><?php endif; ?>
                     Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.
-                    <?php if ($ceviriHazir && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
+                    <?php if ($ceviriHazir && mail_hesap_ceviri_acik($pdo, (int)$m['account_id']) && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
                     <span class="mail-uclu-taraf">⚠ Çevirirseniz mail metni (adres/başlık/ek hariç) <strong><?= h(mail_ceviri_saglayici()->ad()) ?></strong> adlı ÜÇÜNCÜ TARAF çeviri servisine gönderilir.</span>
                     <form method="post" class="mail-satir-form">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">

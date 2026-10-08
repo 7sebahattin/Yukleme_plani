@@ -175,7 +175,12 @@ $h = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
 ok('çeviri sağlayıcısı KAPALIYKEN "Şimdi çevir" düğmesi YOK (veri çıkış yolu görünmez)', !str_contains($h, 'ceviri_simdi') && str_contains($h, 'Çeviri bekleniyor'));
 $IS_ADMIN = true; $PERMS = [];
 ok('hesap ekranı sağlayıcıyı KAPALI gösteriyor', str_contains(sayfa_render('mail_hesaplar.php'), 'KAPALI — mail içeriği hiçbir dış servise gönderilmiyor'));
+$hh = sayfa_render('mail_hesaplar.php');
+ok('M8: kurulu sistemde senkron durumu/günlüğü paneli GÖRÜNÜR (hesap formuyla birlikte)', str_contains($hh, 'id="mail-sync-gunluk"') && str_contains($hh, 'name="islem" value="kaydet"'));
 define('MAIL_TRANSLATE_PROVIDER', 'mymemory');   // bu noktadan sonra sağlayıcı açık (sabit süreç boyunca kalır)
+$h = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
+ok('sağlayıcı açık ama HESAPTA çeviri kapalıyken "Şimdi çevir" düğmesi YOK (M8 bulgu 2)', !str_contains($h, 'value="ceviri_simdi"'));
+$db->exec('UPDATE mail_accounts SET translate_enabled = 1');
 $h = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
 ok('sağlayıcı AÇIKKEN "Şimdi çevir" POST formu (CSRF + islem=ceviri_simdi) görünür', str_contains($h, 'value="ceviri_simdi"') && str_contains($h, 'Mail metni yapılandırılmış çeviri servisine gönderilir'));
 ok('hesap ekranı sağlayıcıyı AÇIK gösteriyor', str_contains(sayfa_render('mail_hesaplar.php'), 'AÇIK — sağlayıcı: mymemory'));

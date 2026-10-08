@@ -363,31 +363,38 @@ function mail_anahtar_donustur(PDO $pdo, string $eskiB64, string $yeniB64, bool 
     if ($eski === null || $yeni === null) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Anahtarlardan biri geçerli değil (32 bayt, base64).'];
     if (hash_equals($eski, $yeni)) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Eski ve yeni anahtar aynı.'];
     if (!mail_tablo_var($pdo, 'mail_accounts')) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Mail tabloları kurulu değil.'];
-    $satirlar = $pdo->query('SELECT id, imap_pass_enc, smtp_pass_enc FROM mail_accounts ORDER BY id')->fetchAll(PDO::FETCH_ASSOC);
-    $plan = []; $alan = 0;
-    foreach ($satirlar as $r) {
-        $yeniBlob = [];
-        foreach (MAIL_SIFRE_ALANLARI as $f) {
-            $blob = $r[$f . '_enc'];
-            if ($blob === null || $blob === '') { $yeniBlob[$f] = null; continue; }
-            $aad = mail_aad((int)$r['id'], $f);
-            $duz = mail_coz($blob, $aad, $eski);
-            if ($duz === null) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Hesap #' . (int)$r['id'] . ' (' . $f . ') ESKİ anahtarla çözülemedi — yanlış eski anahtar ya da bozuk kayıt. HİÇBİR ŞEY değiştirilmedi.'];
-            $nb = mail_sifrele($duz, $aad, $yeni);
-            if (mail_coz($nb, $aad, $yeni) !== $duz) return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Yeniden şifreleme doğrulanamadı. HİÇBİR ŞEY değiştirilmedi.'];
-            $yeniBlob[$f] = $nb; $alan++;
-        }
-        $plan[(int)$r['id']] = $yeniBlob;
-    }
-    if (!$uygula) return ['ok' => true, 'hesap' => count($plan), 'alan' => $alan, 'mesaj' => 'Kuru çalıştırma: tüm blob\'lar eski anahtarla çözüldü; yazılmadı.'];
-    $pdo->beginTransaction();
+    // Uygulama kipinde OKUMA da transaction içinde ve kilitli (FOR UPDATE): okuma ile yazma arasında kaydedilen yeni parola ezilmez,
+    // araya eklenen hesap atlanmaz (MySQL'de eklemeyi de bekletir). Kuru çalıştırma yazmadığı için kilitsiz okur.
+    $tx = $uygula;
+    $hata = function (string $mesaj) use ($pdo, $tx): array {
+        if ($tx && $pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => $mesaj];
+    };
+    if ($tx) $pdo->beginTransaction();
     try {
+        $kilit = ($tx && $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') ? ' FOR UPDATE' : '';
+        $satirlar = $pdo->query('SELECT id, imap_pass_enc, smtp_pass_enc FROM mail_accounts ORDER BY id' . $kilit)->fetchAll(PDO::FETCH_ASSOC);
+        $plan = []; $alan = 0;
+        foreach ($satirlar as $r) {
+            $yeniBlob = [];
+            foreach (MAIL_SIFRE_ALANLARI as $f) {
+                $blob = $r[$f . '_enc'];
+                if ($blob === null || $blob === '') { $yeniBlob[$f] = null; continue; }
+                $aad = mail_aad((int)$r['id'], $f);
+                $duz = mail_coz($blob, $aad, $eski);
+                if ($duz === null) return $hata('Hesap #' . (int)$r['id'] . ' (' . $f . ') ESKİ anahtarla çözülemedi — yanlış eski anahtar ya da bozuk kayıt. HİÇBİR ŞEY değiştirilmedi.');
+                $nb = mail_sifrele($duz, $aad, $yeni);
+                if (mail_coz($nb, $aad, $yeni) !== $duz) return $hata('Yeniden şifreleme doğrulanamadı. HİÇBİR ŞEY değiştirilmedi.');
+                $yeniBlob[$f] = $nb; $alan++;
+            }
+            $plan[(int)$r['id']] = $yeniBlob;
+        }
+        if (!$uygula) return ['ok' => true, 'hesap' => count($plan), 'alan' => $alan, 'mesaj' => 'Kuru çalıştırma: tüm blob\'lar eski anahtarla çözüldü; yazılmadı.'];
         $up = $pdo->prepare('UPDATE mail_accounts SET imap_pass_enc = ?, smtp_pass_enc = ?, updated_at = ? WHERE id = ?');
         foreach ($plan as $id => $b) $up->execute([$b['imap_pass'], $b['smtp_pass'], date('Y-m-d H:i:s'), $id]);
         $pdo->commit();
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
-        return ['ok' => false, 'hesap' => 0, 'alan' => 0, 'mesaj' => 'Yazma başarısız, geri alındı: ' . mail_redact($e->getMessage())];
+        return $hata('Yazma başarısız, geri alındı: ' . mail_redact($e->getMessage()));
     }
     return ['ok' => true, 'hesap' => count($plan), 'alan' => $alan, 'mesaj' => 'Yeniden şifrelendi. ŞİMDİ config/local.php içindeki MAIL_MASTER_KEY değerini YENİ anahtarla değiştirin.'];
 }
@@ -527,6 +534,23 @@ function mail_hesap_kaydet(array $in, ?int $id, ?int $userId, ?PDO $pdo = null):
         'smtp_host','smtp_port','smtp_security','smtp_user','reply_to','sync_folder','sent_folder',
         'append_sent','initial_days','translate_enabled','target_lang'];
     $nullable = ['display_name','reply_to','sent_folder'];
+
+    // Kayıtlı parola YALNIZ aynı sunucu/kullanıcıyla kullanılabilir: host/port/güvenlik/kullanıcı değişirse parola yeniden girilmeli.
+    // Aksi hâlde delege edilmiş bir mail.admin, sunucuyu kendi kontrolündeki bir adrese çevirip "Bağlantıyı Test Et" ile düz parolayı alabilirdi.
+    if ($id !== null) {
+        $eski = $pdo->prepare('SELECT imap_host, imap_port, imap_security, imap_user, imap_pass_enc, smtp_host, smtp_port, smtp_security, smtp_user, smtp_pass_enc FROM mail_accounts WHERE id = ?');
+        $eski->execute([$id]);
+        $e0 = $eski->fetch(PDO::FETCH_ASSOC);
+        if ($e0) {
+            foreach (['imap' => 'IMAP', 'smtp' => 'SMTP'] as $on => $ad) {
+                $degisti = strcasecmp((string)$e0[$on . '_host'], (string)$v[$on . '_host']) !== 0 || (int)$e0[$on . '_port'] !== (int)$v[$on . '_port']
+                    || (string)$e0[$on . '_security'] !== (string)$v[$on . '_security'] || (string)$e0[$on . '_user'] !== (string)$v[$on . '_user'];
+                if ($degisti && $v[$on . '_pass'] === '' && ($e0[$on . '_pass_enc'] ?? '') !== '') {
+                    return ['ok' => false, 'id' => 0, 'hatalar' => [$ad . ' sunucu/kullanıcı bilgisi değişti: güvenlik gereği ' . $ad . ' parolasını yeniden girin.']];
+                }
+            }
+        }
+    }
 
     try {
         $pdo->beginTransaction();

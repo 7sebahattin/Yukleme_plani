@@ -63,7 +63,7 @@ self.addEventListener('fetch', function(e) {
   var u = new URL(e.request.url);
   if (u.pathname.indexOf('admin_db_backup') !== -1 || u.searchParams.get('action') === 'download') return;
   // Mail Merkezi: posta içeriği (sayfa, JSON, ek) cihazın CacheStorage'ına HİÇ yazılmaz.
-  if (/\/mail(_[a-z]+)?\.php$/.test(u.pathname)) return;
+  if (/\/mail(_[a-z]+)?\.php(\/|$)/.test(u.pathname)) return;   // PATH_INFO ('/mail.php/x') da atlanır
   e.respondWith(
     fetch(e.request).then(function(response) {
       // Dosya eki (attachment) ve başarısız aynı-köken yanıtı önbelleğe YAZILMAZ.

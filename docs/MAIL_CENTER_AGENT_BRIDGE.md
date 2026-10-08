@@ -18,7 +18,7 @@
 | Feature branch | `ccr-cfeb15cc-xrykgj` — ¹ |
 | Current HEAD | M1 commit `6c1abdf` (+ bu belge güncellemesi) — bkz. Completed Work |
 | Draft PR | **#678** — https://github.com/7sebahattin/Yukleme_plani/pull/678 |
-| Current milestone | **M7 tamam (gerçek MySQL doğrulaması + regresyon) → M8 (son entegrasyon incelemesi) sırada** |
+| Current milestone | **M8 tamam (son entegrasyon incelemesi uygulandı) → ChatGPT final incelemesi / `APPROVED_FOR_MERGE` bekleniyor** |
 | Status | 🟡 Draft — merge/deploy YOK. `APPROVED_FOR_MERGE` (ChatGPT) beklenmiyor henüz. |
 
 ¹ Görev metni `feat/mail-center` adını istedi; bu oturumun çalışma ortamı geliştirmeyi
@@ -197,7 +197,8 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 | M4 — Çeviri sağlayıcı soyutlaması + kuyruk + yerel dil tespiti | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 | M5 — Cevap onayı + SMTP + at-most-once gönderim (+ bağımsız Opus incelemesi düzeltmeleri) | `6445274` | ✅ (aşağıda) |
 | M6 — Sertleştirme: indeks uzunluğu, geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük ekranı | `d212f1e` | ✅ (aşağıda) |
-| M7 — Gerçek MySQL doğrulaması (4 gerçek hata), yarış testleri, güvenlik taraması, tam regresyon | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
+| M7 — Gerçek MySQL doğrulaması (4 gerçek hata), yarış testleri, güvenlik taraması, tam regresyon | `d395616` | ✅ (aşağıda) |
+| M8 — Bağımsız Opus son entegrasyon incelemesi (7 bulgu + 3 bilgi düzeltildi) | bkz. PR yorumu (commit SHA) | ✅ (aşağıda) |
 
 **M1 içeriği**
 - `config/mail_core.php`: 7 tablo DDL (`mail_tablolar()`), `mail_migrate()` / `mail_sema_hazir()`
@@ -315,6 +316,21 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - **Senkron günlüğü ekranı** (`mail_sync_gunluk_getir()`, yalnız `mail.admin` sayfasında): hesap başına son başarılı / ardışık hata / sonraki deneme + son 20 çalıştırma; hata metinleri yeniden redakte edilir.
 - `docs/MAIL_OPERATIONS.md`: kurulum sırası, ağ gereksinimleri, rotasyon, bakım, sorun giderme tablosu.
 
+**Bağımsız Opus son entegrasyon incelemesi (M8) — bulgular ve düzeltmeler** (PoC'ler yeniden üretildi; hepsi `mail_hardening_smoke.php` / `mail_review_smoke.php` / `mail_ui_smoke.php`'de regresyon testli, 5 kritik düzeltme için mutasyon kontrolü yapıldı):
+| # | Önem | Bulgu | Düzeltme |
+|---|---|---|---|
+| 1 | Orta | Devredilebilir `mail.admin` rolü, hesabı düzenlerken sunucu adresini kendi kontrolündeki bir host'a çevirip parolayı boş bırakarak "Bağlantıyı Test Et" ile kayıtlı parolayı düz metin alabiliyordu (AD-4 ihlali) | host/port/güvenlik/kullanıcı değişirse ilgili parola yeniden girilmeden kayıt REDDEDİLİR (IMAP ve SMTP ayrı) |
+| 2 | Orta* | Salt-okuma kullanıcısı, hesapta çeviri KAPALI olsa da "Şimdi çevir" ile mail metnini üçüncü taraf sağlayıcıya gönderebiliyordu (*yalnız sağlayıcı yapılandırılmışsa) | `mail_ceviri_simdi()` hesapta `translate_enabled=1` ister; düğme de yalnız o zaman görünür |
+| 3 | Orta | Geçici DB hatası (kilit zaman aşımı/deadlock) "zehirli mail" sayılıp gerçek mailin yerine KALICI yer tutucu yazılıyordu (imleç ilerler, mail bir daha çekilmez) | yer tutucu yalnız VERİ sınıfı hatalarda (`mail_sync_veri_hatasi_mi`: 1048/1264/1265/1292/1366/1367/1406, SQLSTATE 22xxx, strict-mod iletileri); diğerlerinde hata yükselir, imleç ilerlemez |
+| 4 | Düşük* | Yönlendirilmiş (Forwarded) mailde başlık bloğu (From/To/Date adresleri) çeviri sağlayıcısına gidiyordu (T11 iddiasıyla çelişki) | geri-dönüş yolunda başlık satırları süzülür; adres içeren satır sağlayıcıya GİTMEZ |
+| 5 | Düşük | Senkron durumu/günlüğü paneli yanlışlıkla `if (!$hazir)` bloğunun içindeydi → kurulu sistemde hiç görünmüyordu | kurulu dalın içine taşındı + render testi |
+| 6 | Düşük | Kilit dosyası AÇILAMAMASI (izin) "BUSY" + çıkış kodu 0 gibi görünüyordu → cron sessizce hiç çalışmaz | `MailKilitHatasi`: cron `FAIL` + kod 1, hesap senkronu hata mesajlı |
+| 7 | Düşük | Anahtar rotasyonunda okuma transaction dışındaydı: araya kaydedilen yeni parola eski parolayla ezilebilirdi | okuma transaction içinde `FOR UPDATE` |
+| i1 | Bilgi | `sw.js` bypass regex'i PATH_INFO (`/mail.php/x`) yolunu kaçırıyordu | `(\/|$)` ile genişletildi |
+| i2 | Bilgi | Onay panelinde hesabın Reply-To değeri görünmüyordu (hash'e dahil) · bütünlük hatasından sonraki mesaj imkânsız eylemi ("önizlemeyi yenileyin") öneriyordu · `cevap_gonder_onayli` bayat onay süpürmesini atlıyordu | panel Reply-To gösterir · mesaj "iptal edip yeniden hazırlayın" der · süpürme önce çalışır |
+Kabul edilen/bilinçli: `mail_ek.php` GET'tir (IMAP'tan okur + audit; yalnız `mail.read`+ACL, salt okunur, çapraz-site gezinmeyle yalnız indirme tetiklenir) · cron'da global duvar-saati bütçesi yok (hesap başına 100 sn / oturum 900 sn sınırları + `flock`; `set_time_limit` Linux'ta CPU süresidir) ·
+AAD biçimi `mail_accounts:<id>:<alan>`; anahtar kimliği blob başlığında denetlenir (AD-4 metni bu hâliyle doğru).
+
 **Bağımsız Opus güvenlik incelemesi (M5) — bulgular ve düzeltmeler** (hepsi `scripts/mail_outbox_review_smoke.php`'de regresyon testli; 6 kritik düzeltme için mutasyon kontrolü yapıldı — düzeltme geri alınınca test düşüyor):
 | # | Bulgu | Düzeltme |
 |---|---|---|
@@ -366,7 +382,7 @@ Reviewer'ın "sağlam" bulduklarından öne çıkanlar: 57 XSS yükü Chromium'd
 | `mail_outbox_smoke.php` (M5: taslak→önizleme→onay→gönderim durum makinesi, onaysız SMTP yok, çift gönderim yok, unknown/insan çözümü, APPEND, iptal, ACL) | 109/109 ✅ |
 | `mail_outbox_review_smoke.php` (M5 Opus bulguları B1…B7 regresyonları; yarışlar `_kanca_*` ile zorlanır) | 34/34 ✅ |
 | `mail_stream_smoke.php` (gerçek soket çifti: satır/bayt okuma, mutlak süre, yavaş-damla, büyük yazma, yazma kilitlenmesi) | 9/9 ✅ |
-| `mail_hardening_smoke.php` (M6: geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük verisi; 5 mutasyon yakalandı) | 35/35 ✅ |
+| `mail_hardening_smoke.php` (M6 + M8: geri çekilme, toplam süre, anahtar rotasyonu, işletme uyarıları, günlük verisi, parola yeniden girişi, çeviri kapısı, kilit hatası, yönlendirme başlığı) | 47/47 ✅ |
 | `mail_schema_static_smoke.php` (M6/M7: 17 indeks ≤ 767 bayt utf8mb4, Message-ID uzunluğu, ROW_FORMAT=DYNAMIC) | 5/5 ✅ |
 | `mail_race_mysql_smoke.php` (M7: **gerçek MariaDB**, çok-süreçli yarış + gerçek migrate; SQLite'ta atlanır) | 10/10 ✅ (8 ardışık koşu) |
 | Aynı paketler `MAIL_TEST_MYSQL_DSN` ile **gerçek MariaDB 10.11** (katı mod, native prepares, COMPACT varsayılan): outbox 109 · outbox_review 37 · sync 61 · translate 107 · smtp 62 · cron 19 · hardening 35 · imap 45 · view 46 | ✅ |
@@ -399,7 +415,7 @@ canlı MySQL strict mod. Planlanan: `mail_smtp_smoke.php`, `mail_outbox_smoke.ph
 
 ## Next Planned Actions
 
-- M8: son entegrasyon incelemesi (bağımsız Opus: tüm modülün sınır-geçişleri — gönderim yolu, yetki zinciri, HTML güvenliği, kimlik bilgisi yaşam döngüsü) + ChatGPT son raporu. **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
+- ChatGPT final incelemesi → (varsa) düzeltmeler → `APPROVED_FOR_MERGE` gelmeden merge/deploy YOK. Sonra sahip: DB yedeği → `migrate.php` Mail kartı (açık GO) → anahtar + hesap + cron kurulumu (`docs/MAIL_OPERATIONS.md`). **Gerçek IMAP/SMTP/çeviri sağlayıcısı sahibin credential'ıyla canlıda doğrulanacak; migration `migrate.php` kartıyla yalnız açık GO'dan sonra.**
 
 ## Needs ChatGPT Review
 

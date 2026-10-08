@@ -19,7 +19,8 @@ $db->exec("CREATE TRIGGER strict_mod BEFORE INSERT ON mail_messages BEGIN
     WHEN new.date_header IS NOT NULL AND (length(new.date_header) > 19 OR new.date_header > '9999-12-31 23:59:59') THEN RAISE(ABORT, 'Incorrect datetime value')
     WHEN length(new.to_addrs) > 65535 OR length(new.cc_addrs) > 65535 THEN RAISE(ABORT, 'Data too long for column')
     WHEN gecerli_utf8(new.references_hdr) = 0 OR gecerli_utf8(new.message_id) = 0 OR gecerli_utf8(new.in_reply_to) = 0 OR gecerli_utf8(new.subject) = 0 OR gecerli_utf8(new.from_name) = 0 OR gecerli_utf8(new.attachments_json) = 0 THEN RAISE(ABORT, 'Incorrect string value')
-    WHEN new.subject = 'POISON' THEN RAISE(ABORT, 'poison')
+    WHEN new.subject = 'TRANSIENT' THEN RAISE(ABORT, 'Lock wait timeout exceeded; try restarting transaction')
+    WHEN new.subject = 'POISON' THEN RAISE(ABORT, 'Incorrect string value poison')
     WHEN new.subject LIKE '(kaydedilemedi%' AND (SELECT COUNT(*) FROM mail_messages WHERE subject = 'DBDOWN') >= 0 AND new.account_id = (SELECT id FROM mail_accounts WHERE email = 'dbdown@asya.com') THEN RAISE(ABORT, 'db down')
   END;
 END");
@@ -65,6 +66,16 @@ $t = $db->query("SELECT to_addrs, cc_addrs FROM mail_messages WHERE account_id =
 ok('100 emojili alıcı: JSON ≤ 60 000 bayt, geçerli', strlen($t['to_addrs']) <= 60000 && strlen($t['cc_addrs']) <= 60000 && is_array(json_decode($t['to_addrs'], true)));
 $r = senk($a); $r = senk($a);
 ok('tekrar çalıştırmalar yer tutucuyu/postayı çoğaltmıyor', n("account_id = $a") === 5);
+// M8: GEÇİCİ altyapı hatası (kilit zaman aşımı/deadlock) zehirli mail DEĞİLDİR → yer tutucu YAZILMAZ, imleç ilerlemez, sonra gerçek mail gelir
+$tr = hesap('transient@asya.com');
+srv($tr, [1 => M(mail_test_raw(['msgid' => '<t1@x>'])), 2 => M(mail_test_raw(['msgid' => '<t2@x>', 'subject' => 'TRANSIENT'])), 3 => M(mail_test_raw(['msgid' => '<t3@x>']))]);
+$r = senk($tr);
+ok('geçici DB hatası: yer tutucu YAZILMAZ (gerçek mail kalıcı kaybolmaz)', $r['ok'] === false && n("account_id = $tr AND subject LIKE '(kaydedilemedi%'") === 0 && n("account_id = $tr") === 1, json_encode($r));
+ok('geçici DB hatası: imleç hatalı UID\'in ÖNÜNDE kaldı', (int)$db->query("SELECT last_uid FROM mail_sync_state WHERE account_id = $tr")->fetchColumn() === 1);
+ok('veri-sınıfı sınıflayıcı: kilit/deadlock/bağlantı → false, veri hataları → true', mail_sync_veri_hatasi_mi(new PDOException('Incorrect string value')) === true && mail_sync_veri_hatasi_mi(new PDOException('Lock wait timeout exceeded')) === false && mail_sync_veri_hatasi_mi(new PDOException('MySQL server has gone away')) === false);
+$e1213 = new PDOException('Deadlock found'); $e1213->errorInfo = ['40001', 1213, 'Deadlock found'];
+$e1366 = new PDOException('x'); $e1366->errorInfo = ['HY000', 1366, 'Incorrect string value'];
+ok('MySQL hata kodları: 1213 → altyapı, 1366 → veri', mail_sync_veri_hatasi_mi($e1213) === false && mail_sync_veri_hatasi_mi($e1366) === true);
 // DB gerçekten çalışmıyorsa (yer tutucu da yazılamıyor) imleç İLERLEMEMELİ → mail kaybolmaz
 $b = hesap('dbdown@asya.com');
 srv($b, [1 => M(mail_test_raw(['msgid' => '<ok1@x>'])), 2 => M(mail_test_raw(['msgid' => '<x2@x>', 'subject' => 'POISON'])), 3 => M(mail_test_raw(['msgid' => '<ok3@x>']))]);

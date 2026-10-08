@@ -127,7 +127,7 @@ ok('çeviri sağlayıcısı varsayılan KAPALI (sabit yoksa none)', str_contains
 ok('gizli Google/resmi olmayan uç yok (yalnız deepl/libretranslate/mymemory)', !preg_match('/translate\.googleapis|translate\.google\.com|clients5|gtx|bing\.com\/translator/i', oku('config/mail_translate.php')));
 
 echo "\n=== Service Worker + sürüm ===\n";
-ok('sw.js mail yollarını bypass ediyor', str_contains($sw, "/\\/mail(_[a-z]+)?\\.php$/.test(u.pathname)) return;"));
+ok('sw.js mail yollarını bypass ediyor (PATH_INFO dahil)', str_contains($sw, "/\\/mail(_[a-z]+)?\\.php(\\/|$)/.test(u.pathname)) return;"));
 ok('sw.js mail.svg SHELL\'de', str_contains($sw, "'./assets/nav-icons/mail.svg'"));
 preg_match("/define\('APP_SURUM', '(v\d+)'\)/", $helpers, $a); preg_match("/CACHE_NAME = 'yukleme-plani-(v\d+)'/", $sw, $b);
 ok('APP_SURUM == sw.js CACHE_NAME', ($a[1] ?? 'x') === ($b[1] ?? 'y'), ($a[1] ?? '?') . ' vs ' . ($b[1] ?? '?'));

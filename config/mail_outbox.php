@@ -309,7 +309,7 @@ function mail_outbox_gonder(PDO $pdo, int $id, array $opt = []): array
     // Gönderilecek bayt'lar = ONAYLANAN hash'in baytları (kayıt kurcalanmışsa / hesap kimliği değişmişse HİÇ gönderme).
     if (!hash_equals(mail_outbox_hash($o, $kimlik), (string)$o['approved_hash'])) {
         audit_log_event('mail_send_failed', 'mail_outbox', $id, null, ['neden' => 'butunluk']);
-        return $sonlandir('failed', 'Gönderilmedi: içerik ya da gönderen kimliği onaylanandan farklı (bütünlük).', 'İçerik/gönderen kimliği onaydan sonra değişmiş (bütünlük).');
+        return $sonlandir('failed', 'Gönderilmedi: içerik ya da gönderen kimliği onaylanandan farklı (bütünlük). Bu cevabı iptal edip yeniden hazırlayın.', 'İçerik/gönderen kimliği onaydan sonra değişmiş (bütünlük).');
     }
     $h = mail_hesap_cred_oku((int)$o['account_id'], $pdo);
     if ($h === null) {
