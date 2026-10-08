@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v308` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v309` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1248,7 +1248,7 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
   (`hks_gonderilen_adlari()` tek sorgu + `hks_gonderilen_ulke_isimle()`; önek ve " (İl/İlçe)" eki korunur, havuzda
   yoksa/adı boşsa metin DEĞİŞMEZ). **Yalnız yanıt kopyası:** saklı kayıt değişmez; `taslak_gonder` ve `gonderilen_tohum`
   DB satırından okur, bu çıktıyı KULLANMAZ (test denetler). Hata yutulur — liste adsız da çizilir.
-- **Toplam kilo/adet yalnız BAŞARILI satırlardan (v308):** `hks_gonderilenler.toplam_kg`/`adet` eskiden gönderilen TÜM
+- **Toplam kilo/adet yalnız BAŞARILI satırlardan (v309):** `hks_gonderilenler.toplam_kg`/`adet` eskiden gönderilen TÜM
   satırları topluyordu → 3 künyeden 1'i hatalıysa liste 19.500 yerine hatalıyı da içeren toplamı gösteriyordu.
   Yeni kayıtta `taslak_gonder` `hks_basarili_ozet()` ile yalnız künyesi oluşan satırları yazar; ESKİ kayıtlar listede
   `hks_gonderilen_gercek_toplam()` ile `veri.sonuclar`'dan yeniden hesaplanır (yalnız hatalı satır varsa; DB değişmez,
