@@ -424,7 +424,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
         <div class="pdks-mo-kart pdks-mo-genis">
             <h4>Mesai Tanımı <span class="muted">· fazla mesai: <?= h(count($mo['fm_bas_dk']) === 1 ? pdks_faz8b_dakika_etiket((int)$mo['fm_bas_dk'][0]) : 'çavuş mesai süresi') ?> üzeri, 15 dk tolerans</span></h4>
             <?php /* v320: eşiğin KAYNAĞI — "10 saat" nereden geliyor, ekranda görünsün (sahip şikâyeti: 11 sa → 1 FM). */
-            $moKaynakAd = ['fm_fiyat' => 'Çavuş Ücretleri › fiyat döneminde "Fazla mesai başlangıç saati"', 'tam_fiyat' => 'Çavuş Ücretleri › fiyat döneminde "Tam yevmiye saati"', 'mesai' => 'çavuşun normal günlük çalışma süresi'];
+            $moKaynakAd = ['fm_fiyat' => 'Çavuş Ücretleri › dönem ayarı "Fazla mesai başlangıç saati"', 'tam_fiyat' => 'Çavuş Ücretleri › dönem ayarı "Tam yevmiye saati"', 'mesai' => 'çavuşun normal günlük çalışma süresi'];
             $moKaynak = array_map(fn($k) => $moKaynakAd[$k] ?? $k, $mo['fm_kaynak']); ?>
             <?php if ($moKaynak): ?><p class="pdks-mo-kaynak">Eşik kaynağı: <?= h(implode(' · ', $moKaynak)) ?><?php if (!empty($servisFiyatLink)): ?> — <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>">Çavuş Ücretleri'nde aç</a><?php endif; ?></p><?php endif; ?>
             <div class="table-wrap"><table class="data-table pdks-mo-tablo">
