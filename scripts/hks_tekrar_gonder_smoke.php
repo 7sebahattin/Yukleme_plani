@@ -425,6 +425,34 @@ ok('havuz okunamazsa hata YUTULUR, boş harita (liste çökmez)', hks_gonderilen
 $cok = []; for ($i = 0; $i < 450; $i++) $cok[] = 'Yurt içi → ' . str_pad((string)(1000000000 + $i), 10, '0', STR_PAD_LEFT);
 ok('450 farklı numara (parçalı sorgu) sorunsuz', is_array(hks_gonderilen_adlari($db, $cok)));
 
+echo "\n── Toplam kilo/adet yalnız BAŞARILI satırlardan (v308) ──\n";
+$S_OK1 = ['yeniKunyeNo' => '1204159260026943082', 'hataKodu' => 0, 'miktar' => 9873.0];
+$S_OK2 = ['yeniKunyeNo' => '1204159260026943084', 'hataKodu' => 0, 'miktar' => 9627.0];
+$S_HATA = ['yeniKunyeNo' => '0', 'hataKodu' => 21, 'miktar' => 5000.0];
+$SATIR3 = [['kunyeNo' => 'a', 'miktar' => 9873], ['kunyeNo' => 'b', 'miktar' => 5000], ['kunyeNo' => 'c', 'miktar' => 9627]];
+ok('hatalı satır başarılı sayılmaz (künye 0 / hata kodu)', hks_sonuc_basarili_mi($S_OK1) && !hks_sonuc_basarili_mi($S_HATA)
+    && !hks_sonuc_basarili_mi(['yeniKunyeNo' => '123', 'hataKodu' => 5]) && !hks_sonuc_basarili_mi(['yeniKunyeNo' => '']) && !hks_sonuc_basarili_mi(null));
+[$kg, $adet] = hks_basarili_ozet([$S_OK1, $S_HATA, $S_OK2], $SATIR3);
+ok('yeni kayıt: 3 satırdan 1 hatalı → yalnız 2 başarılının kg\'ı ve adedi', $kg === 19500.0 && $adet === 2, "$kg / $adet");
+[$kg, $adet] = hks_basarili_ozet([array_merge($S_OK1, ["miktar" => 0]), ['yeniKunyeNo' => '9', 'hataKodu' => 0, 'miktar' => 0], $S_HATA], $SATIR3);
+ok('sonucun miktarı yoksa aynı sıradaki gönderilen satırdan (sayılar eşitse)', $kg === 14873.0 || $kg === 9873.0 + 5000.0, (string)$kg);
+[$kg, $adet] = hks_basarili_ozet([$S_HATA], [['kunyeNo' => 'x', 'miktar' => 5000]]);
+ok('hiç başarılı yoksa kg null (kayıtlı değere düşülür), adet 0', $kg === null && $adet === 0);
+// LİSTE (eski kayıtlar): kayıtlı değer hatalıyı da içeriyor
+[$kg, $adet] = hks_gonderilen_gercek_toplam(['sonuclar' => [$S_OK1, $S_HATA, $S_OK2]], 24500.0, 3);
+ok('eski kayıt, hatalı satır var → listede yalnız başarılılar', $kg === 19500.0 && $adet === 2, "$kg / $adet");
+[$kg, $adet] = hks_gonderilen_gercek_toplam(['sonuclar' => [$S_OK1, $S_OK2]], 19500.0, 2);
+ok('hata yoksa kayıtlı değer AYNEN', $kg === 19500.0 && $adet === 2);
+[$kg, $adet] = hks_gonderilen_gercek_toplam([], 777.0, 4);
+ok('sonuç verisi yoksa kayıtlı değer AYNEN', $kg === 777.0 && $adet === 4);
+[$kg, $adet] = hks_gonderilen_gercek_toplam(['sonuclar' => [array_merge($S_OK1, ["miktar" => 0]), $S_HATA]], 5000.0, 2);
+ok('başarılı kg çıkmıyorsa kayıtlı değer korunur (yanlış 0 yazılmaz)', $kg === 5000.0 && $adet === 2);
+// eski kayıttan tohum: planlanan kg hatalıyı içermemeli
+$eskiSatir = ['id' => 'g1', 'plaka' => '61AKZ567', 'belge_no' => '', 'ulke_ad' => 'Rusya', 'urun_ad' => 'DOMATES', 'adet' => 3,
+    'toplam_kg' => 24500.0, 'fiyat' => 45.0, 'bildirim_turu' => 'SATIS', 'veri' => json_encode(['sonuclar' => [$S_OK1, $S_HATA, $S_OK2]])];
+$t = hks_gonderim_tohumu($db, $eskiSatir);
+ok('eski kayıttan tohum: planKg yalnız başarılı kg (19.500)', (float)($t['tohum']['ortak']['planKg'] ?? 0) === 19500.0, json_encode($t['tohum']['ortak']['planKg'] ?? null));
+
 echo "\n── api.php / .htaccess (kaynak denetimi) ──\n";
 $api = (string)file_get_contents("$KOK/halkayit/api.php");
 $pTaslakLib = strpos($api, "require_once __DIR__ . '/taslak_lib.php';");
@@ -485,6 +513,11 @@ $pGondSon = $pGond !== false ? strpos($api, "case 'gonderilenler':", $pGond) : f
 $gonderUc = ($pGond !== false && $pGondSon !== false) ? substr($api, $pGond, $pGondSon - $pGond) : '';
 ok("gönderim/tohum DB satırından okur — çözülmüş listeyi KULLANMAZ", $gonderUc !== '' && strpos($gonderUc, 'hks_gonderilen_') === false
     && strpos($tohum, 'hks_gonderilen_ulke_isimle') === false && strpos($tohum, 'hks_gonderilen_adlari') === false);
+
+ok('INSERT toplam kg/adet başarılı satırlardan (hks_basarili_ozet)', strpos($api, 'hks_basarili_ozet($sonuc[\'sonuclar\'], $satirlar)') !== false
+    && strpos($api, '$__badet > 0 ? $__badet : count($satirlar), $toplamKg') !== false);
+ok('liste ucu hatalı eski kayıtları hks_gonderilen_gercek_toplam ile düzeltir', strpos($liste, 'hks_gonderilen_gercek_toplam($veri,') !== false
+    && strpos($liste, "'toplamKg' => \$__ozet[0]") !== false);
 
 // Lib denetimi YORUMSUZ kod üzerinde yapılır (yorumlar kuralı anlatırken bu
 // adları anıyor — "taslak yazmanın TEK yolu hks_taslak_olustur" gibi).
