@@ -113,7 +113,10 @@ const ALANLAR = {
                 }, SAAT_ALAN);
                 if (senaryo === 'dolu') {
                     ok('v299: 5 saat/Çift alanı formda', saatDurum.var === 5, JSON.stringify(saatDurum));
-                    ok('v299: Tam saati çavuşun normal süresiyle (9) önceden dolu', saatDurum.tam === '9', String(saatDurum.tam));
+                    // v320: Tam saati artık ÖN-DOLDURULMAZ (her kayıtta kalıcı yazılıyordu); boş = çavuş süresi, placeholder'da görünür.
+                    ok('v320: Tam saati BOŞ gelir (ön-doldurma yok)', saatDurum.tam === null, String(saatDurum.tam));
+                    const tamPh = await page.evaluate(() => (document.querySelector('[name="full_day_saat"]') || {}).placeholder || '');
+                    ok('v320: placeholder çavuş süresini söyler (boş = çavuş süresi (9 sa))', tamPh.includes('çavuş süresi (9 sa)'), tamPh);
                     ok('v299: gruplar Tam / Yarım / FM / Çift sırasıyla', saatDurum.gruplar.join(',') === 'tam,yarim,fm,cift', saatDurum.gruplar.join(','));
                     const gecmis = await page.locator('#cfFiyatGecmisi').innerText();
                     ok('v299: fiyat geçmişinde saatler + çift ücret görünür', /Tam 9 saat/.test(gecmis) && /FM 9s 30dk/.test(gecmis) && /2\.000,00 TRY · 12 saat/.test(gecmis), gecmis.slice(0, 300));

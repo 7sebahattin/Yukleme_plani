@@ -2420,3 +2420,4 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 .pdks-gun-nav-tarih { font-weight: 800; font-variant-numeric: tabular-nums; flex: 1 1 auto; text-align: center; }
 .pdks-gun-nav-pasif { opacity: .45; pointer-events: none; cursor: default; }
 @media (max-width: 767px) { .pdks-gun-nav .btn { flex: 1 1 40%; text-align: center; } .pdks-gun-nav-tarih { order: -1; flex: 1 1 100%; } }
+.pdks-mo-kaynak { margin: -2px 0 8px; font-size: .8rem; color: var(--muted); }

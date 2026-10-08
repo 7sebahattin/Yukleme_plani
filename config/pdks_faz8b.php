@@ -237,6 +237,9 @@ function pdks_faz8b_saat_girdi_dk($ham): ?int
     $s = trim((string)($ham ?? ''));
     if ($s === '') return null;
     if (preg_match('/^(\d{1,2})$/', $s, $m)) return (int)$m[1] * 60;
+    // v320: tek haneli ondalık = ondalık saat ("9,5" / "9.5" → 9 sa 30 dk, "10.0" → 10 sa);
+    // iki haneli ayraç (9:30 / 9.30) eskisi gibi dakika.
+    if (preg_match('/^(\d{1,2})[.,](\d)$/', $s, $m)) return (int)$m[1] * 60 + (int)$m[2] * 6;
     if (preg_match('/^(\d{1,2})[:.](\d{2})$/', $s, $m)) {
         if ((int)$m[2] > 59) return -1;
         return (int)$m[1] * 60 + (int)$m[2];
@@ -605,6 +608,8 @@ if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);
  *  fm_saat      — toplam fazla mesai saati (= Σ fm dağılımı)   fm_onayli / fm_bekleyen / fm_red
  *  sureli_kisi  — süresi hesaplanan (çıkışı olan, Karışık olmayan) dönem sayısı
  *  fm_bas_dk    — kullanılan FM başlangıç eşikleri (dk, benzersiz, artan; ör. [540])
+ *  fm_kaynak    — eşiğin kaynağı (benzersiz): 'fm_fiyat' (fiyat döneminde "Fazla mesai başlangıç saati"),
+ *                 'tam_fiyat' (fiyat döneminde "Tam yevmiye saati"), 'mesai' (çavuşun normal çalışma süresi)
  *  servis       — ['BUYUK' => n, 'KUCUK' => n]
  * Şema hazır değilse null.
  */
@@ -621,7 +626,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
     }
     $o = [
         'tanim' => $tanim, 'karisik' => 0, 'diger' => 0,
-        'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0, 'fm_bas_dk' => [],
+        'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0, 'fm_bas_dk' => [], 'fm_kaynak' => [],
         'fm_saat' => 0, 'fm_onayli' => 0, 'fm_bekleyen' => 0, 'fm_red' => 0,
         'servis' => array_fill_keys(array_keys(pdks_servis_turleri()), 0),
     ];
@@ -647,6 +652,8 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
 
         $o['sureli_kisi']++;
         $o['fm_bas_dk'][(int)$f['fm_bas_dk']] = (int)$f['fm_bas_dk'];
+        $kay = (int)$f['fm_bas_dk'] > (int)$f['tam_dk'] ? 'fm_fiyat' : (($f['tam_kaynak'] ?? '') === 'fiyat' ? 'tam_fiyat' : 'mesai');
+        $o['fm_kaynak'][$kay] = $kay;
         $o['ham_dk'] += (int)($f['ham_dk'] ?? $f['toplam_dk']);
         $o['calisma_dk'] += min((int)$f['toplam_dk'], (int)$f['fm_bas_dk']) + $fm * 60;
         $o['fm_saat'] += $fmGoster;
@@ -659,6 +666,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
     }
     ksort($o['fm_bas_dk']);
     $o['fm_bas_dk'] = array_values($o['fm_bas_dk']);
+    $o['fm_kaynak'] = array_values($o['fm_kaynak']);
     $o['servis'] = pdks_servis_toplamlar_toplu($sessionIds, $pdo);
     return $o;
 }

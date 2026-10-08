@@ -356,5 +356,7 @@ okmo('9c) açık + kapalı mesai birlikte: içeride 1 + eksik 1 ayrı sayılır'
 okmo('9d) sayfada eski sayaç kartı YOK, tabloda Eksik Çıkış sütunu VAR',
     !str_contains((string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php'), 'pdks-kiosk-counters')
     && str_contains((string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php'), '<th>Eksik Çıkış</th>'));
+okmo('9e) v320: eşik kaynağı döner (fiyat dönemi saatsiz → mesai)', ($oa['fm_kaynak'] ?? null) === ['mesai'], json_encode($oa['fm_kaynak'] ?? null));
+okmo('9f) v320: kapalı mesaide çıkışsız satır "Eksik çıkış" etiketi alır', str_contains((string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php'), "return 'Eksik çıkış';"));
 echo "\nSONUÇ: {$pass} PASS, {$fail} FAIL\n";
 exit($fail > 0 ? 1 : 0);

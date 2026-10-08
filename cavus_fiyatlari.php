@@ -218,11 +218,14 @@ if ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && isset($_POST['cavus_
 }
 $cavusYontemSecili = ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && in_array(($_POST['cavus_yontem'] ?? ''), ['A', 'B'], true))
     ? (string)$_POST['cavus_yontem'] : $cavusYontem;
-// v299: saat alanlarının varsayılanı = çavuşun normal günlük süresi (Tam saati);
-// hatalı POST'ta girilen değerler korunur.
+// v320: saat alanları BOŞ gelir (eskiden Tam saati çavuşun o anki süresiyle ön-dolduruluyordu ve
+// her fiyat kaydında fark edilmeden kalıcı yazılıyordu — "FM 10 saat üzeri" şikâyetinin kaynağı).
+// Boş = NULL = mesainin kendi süresi (çavuş normal süresi); süre placeholder'da görünür.
+// Hatalı POST'ta girilen değerler korunur.
 $oranHataPost = $errors && ($_POST['form'] ?? '') === 'oran';
+$cavusNormalEtiket = $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '';
 $saatForm = [
-    'full_day_saat' => $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '',
+    'full_day_saat' => '',
     'half_day_saat' => '', 'overtime_start_saat' => '', 'double_day_saat' => '', 'double_day_rate' => '',
 ];
 if ($oranHataPost) {
@@ -336,7 +339,7 @@ render_flash();
                 <label class="cf2-alan">
                     <span class="cf2-etiket"><?= $cfIk('saat') ?>Tam Yevmiye Saati</span>
                     <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
-                    <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 9 ya da 9:30" value="<?= h($saatForm['full_day_saat']) ?>"></span>
+                    <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="<?= h($cavusNormalEtiket !== '' ? 'boş = çavuş süresi (' . $cavusNormalEtiket . ' sa)' : 'ör. 9 ya da 9:30') ?>" value="<?= h($saatForm['full_day_saat']) ?>"></span>
                 </label>
                 <?php endif; ?>
             </div>

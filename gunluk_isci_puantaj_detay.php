@@ -255,6 +255,8 @@ if ($mesaiTanimGoster && $kartlar) {
 $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum): string {
     $karisik = $karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId;
     $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
+    // v320: mesai KAPALI ve çıkış yok → özetteki "Eksik Çıkış" ile aynı ad (eskiden "Karar bekliyor").
+    if (empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'closed' && !$karisik) return 'Eksik çıkış';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
 };
 // v315/v317: Süre sütunu = HESAPLANAN süre (saat başı ±15 dk: 07:57/08:14 → 08:00, 16:46/17:13 → 17:00 —
@@ -421,6 +423,10 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
     <div class="pdks-mo-grid">
         <div class="pdks-mo-kart pdks-mo-genis">
             <h4>Mesai Tanımı <span class="muted">· fazla mesai: <?= h(count($mo['fm_bas_dk']) === 1 ? pdks_faz8b_dakika_etiket((int)$mo['fm_bas_dk'][0]) : 'çavuş mesai süresi') ?> üzeri, 15 dk tolerans</span></h4>
+            <?php /* v320: eşiğin KAYNAĞI — "10 saat" nereden geliyor, ekranda görünsün (sahip şikâyeti: 11 sa → 1 FM). */
+            $moKaynakAd = ['fm_fiyat' => 'Çavuş Ücretleri › fiyat döneminde "Fazla mesai başlangıç saati"', 'tam_fiyat' => 'Çavuş Ücretleri › fiyat döneminde "Tam yevmiye saati"', 'mesai' => 'çavuşun normal günlük çalışma süresi'];
+            $moKaynak = array_map(fn($k) => $moKaynakAd[$k] ?? $k, $mo['fm_kaynak']); ?>
+            <?php if ($moKaynak): ?><p class="pdks-mo-kaynak">Eşik kaynağı: <?= h(implode(' · ', $moKaynak)) ?><?php if (!empty($servisFiyatLink)): ?> — <a href="cavus_fiyatlari.php?cavus=<?= (int)$oturum['foreman_id'] ?>">Çavuş Ücretleri'nde aç</a><?php endif; ?></p><?php endif; ?>
             <div class="table-wrap"><table class="data-table pdks-mo-tablo">
                 <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Eksik Çıkış</th><th>Toplam</th></tr></thead>
                 <tbody>
@@ -428,7 +434,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
                 </tbody>
                 <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
             </table></div>
-            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Giriş ve çıkış tam saate 15 dk yakınsa o saat sayılır (07:57 / 08:14 → 08:00, 16:46 / 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
+            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır<?php if (count($mo['fm_bas_dk']) === 1): $moE = (int)$mo['fm_bas_dk'][0]; /* v320: örnek, uygulanan eşikten üretilir */ ?> (ör. <?= h(pdks_faz8b_dakika_etiket($moE + 71)) ?> → 1. Saat; <?= h(pdks_faz8b_dakika_etiket($moE + 180)) ?> → 3. Saat)<?php endif; ?>. Giriş ve çıkış tam saate 15 dk yakınsa o saat sayılır (07:57 / 08:14 → 08:00, 16:46 / 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
         </div>
         <div class="pdks-mo-kart">
             <h4>Servis</h4>

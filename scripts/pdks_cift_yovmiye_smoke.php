@@ -262,8 +262,8 @@ okcy('I13) "9:30" / "12.30" / "2000,50" kabul, dakikaya çevrildi', $r['ok'] ===
     && (int)$o6['overtime_start_minutes'] === 600 && (int)$o6['double_day_minutes'] === 750 && (float)$o6['double_day_rate'] === 2000.5, json_encode([$r, $o6], JSON_UNESCAPED_UNICODE));
 $r = pdks_faz8b_oran_ekle(6, $karisik, '1000', '600', 'hourly', '150', '2022-01-01', 'TRY', 1, $db, ['full_day' => '9']);
 okcy('I14) Karışık tipe fiyat (saatli de olsa) REDDEDİLİR', $r['ok'] === false && str_contains((string)$r['hata'], 'Karışık'), json_encode($r, JSON_UNESCAPED_UNICODE));
-okcy('I15) saat girdisi ayrıştırıcı', pdks_faz8b_saat_girdi_dk('9') === 540 && pdks_faz8b_saat_girdi_dk(' 9:30 ') === 570
-    && pdks_faz8b_saat_girdi_dk('') === null && pdks_faz8b_saat_girdi_dk('9,5') === -1 && pdks_faz8b_dk_girdi(570) === '9:30' && pdks_faz8b_dk_girdi(540) === '9');
+okcy('I15) saat girdisi ayrıştırıcı (v320: tek haneli ondalık = ondalık saat)', pdks_faz8b_saat_girdi_dk('9') === 540 && pdks_faz8b_saat_girdi_dk(' 9:30 ') === 570
+    && pdks_faz8b_saat_girdi_dk('') === null && pdks_faz8b_saat_girdi_dk('9,5') === 570 && pdks_faz8b_saat_girdi_dk('10.0') === 600 && pdks_faz8b_saat_girdi_dk('9.30') === 570 && pdks_faz8b_saat_girdi_dk('10,25') === -1 && pdks_faz8b_dk_girdi(570) === '9:30' && pdks_faz8b_dk_girdi(540) === '9');
 
 // =========================================================
 echo "\n=== J. Yöntem B kişi-gün + Mesai Tanımı özel durumlar ===\n";
