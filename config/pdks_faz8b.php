@@ -300,9 +300,31 @@ function pdks_faz8b_fm_saat(int $fazlaDk): int
 // =========================================================
 
 /**
+ * v315 — SAAT BAŞI TOLERANSI (sahip kararı): süre hesabından ÖNCE giriş/çıkış saat başına
+ * çekilir. Saat KİLİDİ değildir (08-17, 09-18, 12-21 hepsi aynı çalışır); yalnız tam saate
+ * PDKS_FAZ8B_TOLERANS_DK (15) dk yakın olan uç yuvarlanır:
+ *   giriş: tam saatten en çok 15 dk ÖNCE → o tam saat   (07:57 → 08:00; 07:40 değişmez)
+ *   çıkış: tam saatten en çok 15 dk SONRA → o tam saat  (17:13 → 17:00; 17:16 değişmez)
+ * Geç giriş / erken çıkış YUVARLANMAZ (işçi lehine uydurma yok). Ham kayıtlar DEĞİŞMEZ;
+ * yalnız hesap bu etkin saatleri kullanır. Döner: [etkin giriş ts, etkin çıkış ts].
+ */
+function pdks_faz8b_etkin_saatler(int $g, int $c): array
+{
+    $tol = PDKS_FAZ8B_TOLERANS_DK * 60;
+    $gSaatKalan = (3600 - ((int)date('i', $g) * 60 + (int)date('s', $g))) % 3600;   // sonraki tam saate kalan sn
+    if ($gSaatKalan > 0 && $gSaatKalan <= $tol) $g += $gSaatKalan;
+    $cSaatGecen = (int)date('i', $c) * 60 + (int)date('s', $c);                     // tam saatten geçen sn
+    if ($cSaatGecen > 0 && $cSaatGecen <= $tol) $c -= $cSaatGecen;
+    return [$g, max($g, $c)];
+}
+
+/**
  * Faz 9C / H-02: SÜRE-TABANLI karar — saat-kilidi (clock-of-day boundary)
  * YOKTUR. Yalnız GEÇEN SÜRE (dk), çağıranın verdiği $normalDk (oturumun
  * normal_work_minutes_snapshot'ı) ile karşılaştırılır.
+ *
+ * v315: "geçen süre" = saat başı toleranslı ETKİN süre (pdks_faz8b_etkin_saatler —
+ * 07:57 giriş 08:00, 17:13 çıkış 17:00 sayılır); ham süre `ham_dk` olarak ayrıca döner.
  *
  * Otomatik Tam: geçen süre (dk) >= $normalDk. 08:00–17:00, 09:00–18:00,
  * 10:00–19:00 (9 saatlik anlaşma) HEPSİ Tam — SAAT değil SÜRE eşleşiyor
@@ -326,6 +348,9 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
     $fmBasDk = ($fmBasDk === null || $fmBasDk < $normalDk) ? $normalDk : $fmBasDk;
     $bos = [
         'toplam_dk' => null,
+        'ham_dk' => null,
+        'giris_etkin' => null,
+        'cikis_etkin' => null,
         'normal_dk' => $normalDk,
         'fm_bas_dk' => $fmBasDk,
         'otomatik_sinif' => null,
@@ -340,7 +365,10 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
     $c = strtotime($cikis);
     if ($g === false || $c === false || $c < $g) return $bos;
 
-    $toplamDk = intdiv($c - $g, 60);
+    // v315: süre saat başı toleransıyla (07:57 giriş → 08:00, 17:13 çıkış → 17:00).
+    $hamDk = intdiv($c - $g, 60);
+    [$gE, $cE] = pdks_faz8b_etkin_saatler($g, $c);
+    $toplamDk = intdiv($cE - $gE, 60);
     $otomatikTam = $toplamDk >= $normalDk;
 
     $fazlaDk = $toplamDk > $fmBasDk ? ($toplamDk - $fmBasDk) : 0;
@@ -349,6 +377,9 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
 
     return [
         'toplam_dk' => $toplamDk,
+        'ham_dk' => $hamDk,
+        'giris_etkin' => date('Y-m-d H:i:s', $gE),
+        'cikis_etkin' => date('Y-m-d H:i:s', $cE),
         'normal_dk' => $normalDk,
         'fm_bas_dk' => $fmBasDk,
         'otomatik_sinif' => $otomatikTam ? 'tam' : null,
@@ -610,7 +641,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
 
         $o['sureli_kisi']++;
         $o['fm_bas_dk'][(int)$f['fm_bas_dk']] = (int)$f['fm_bas_dk'];
-        $o['ham_dk'] += (int)$f['toplam_dk'];
+        $o['ham_dk'] += (int)($f['ham_dk'] ?? $f['toplam_dk']);
         $o['calisma_dk'] += min((int)$f['toplam_dk'], (int)$f['fm_bas_dk']) + $fm * 60;
         $o['fm_saat'] += $fmGoster;
         if ($fm > 0) {
@@ -661,6 +692,19 @@ function pdks_faz8b_mesai_tanimi_etiketi(?array $f, bool $suruyor, bool $karisik
         elseif ((int)($f['odenecek_fm_saat'] ?? 0) > 0) $m .= ' · FM ' . (int)$f['odenecek_fm_saat'] . ' s';
     }
     return $m;
+}
+
+/**
+ * v315: sınıflandırıcı çıktısındaki süre metni — HESAPLANAN süre (saat başı toleransı
+ * uygulanmış) "9s 00dk"; ham süre farklıysa " (ham 9s 16dk)" eklenir. Düz metin (h() ile bas).
+ */
+function pdks_faz8b_sure_metni(?array $f): string
+{
+    if ($f === null || ($f['toplam_dk'] ?? null) === null) return '—';
+    $m = fn(int $dk): string => sprintf('%ds %02ddk', intdiv($dk, 60), $dk % 60);
+    $t = $m((int)$f['toplam_dk']);
+    $ham = $f['ham_dk'] ?? null;
+    return ($ham !== null && (int)$ham !== (int)$f['toplam_dk']) ? $t . ' (ham ' . $m((int)$ham) . ')' : $t;
 }
 
 /** v299: sınıf kodu → ekran etiketi ('cift' → Çift). Bilinmeyen/boş → Tam. */

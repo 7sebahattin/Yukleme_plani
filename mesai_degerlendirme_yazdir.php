@@ -104,7 +104,7 @@ render_print_page_start('Mesai Değerlendirme Dökümü', 'daily', $mode, $orien
             <td><?= h($d['worker_type_name_snapshot']) ?></td>
             <td><?= h(date('H:i', strtotime($d['entry_time']))) ?></td>
             <td><?= $d['exit_time'] ? h(date('H:i', strtotime($d['exit_time']))) : '—' ?></td>
-            <td><?= $f['toplam_dk'] === null ? '—' : h(sprintf('%ds %02ddk', intdiv((int)$f['toplam_dk'], 60), (int)$f['toplam_dk'] % 60)) ?></td>
+            <td><?= h(pdks_faz8b_sure_metni($f)) ?></td>
             <td><?= h(match (($d['declared_attendance_class'] ?? '')) { 'auto' => 'Otomatik', 'yarim' => 'Yarım', default => 'Tam' }) ?></td>
             <td><?php
                 if ($f['cift']) echo 'Çift Yevmiye (çift sonrası FM ' . (int)$f['odenecek_fm_saat'] . ' saat)';

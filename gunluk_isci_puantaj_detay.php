@@ -243,12 +243,29 @@ $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum
     $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
 };
+// v315: Süre sütunu = HESAPLANAN süre (saat başı toleransı: 07:57 → 08:00, 17:13 → 17:00 —
+// pdks_faz8b_etkin_saatler). Ham süre farklıysa altında küçük not; faz8b yoksa ham süre.
+$sureBilgi = function (array $k) use ($mesaiTanimF): ?array {
+    if (empty($k['cikis_saat'])) return null;
+    $f = $mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null;
+    $ham = pdks_gunluk_sure_etiketi((string)$k['giris_saat'], (string)$k['cikis_saat']);
+    if ($f === null || $f['toplam_dk'] === null) return ['metin' => $ham, 'ham' => null, 'sn' => null];
+    $dk = (int)$f['toplam_dk'];
+    $metin = sprintf('%ds %02ddk', intdiv($dk, 60), $dk % 60);
+    return ['metin' => $metin, 'ham' => $metin !== $ham ? $ham : null, 'sn' => $dk * 60];
+};
+$sureHtml = function (array $k) use ($sureBilgi): string {
+    $b = $sureBilgi($k);
+    if ($b === null) return '—';
+    return h($b['metin']) . ($b['ham'] !== null ? ' <span class="pdks-sure-ham" title="Kart okutma saatlerine göre ham süre">(ham ' . h($b['ham']) . ')</span>' : '');
+};
 // v314: Mesai Özeti (bu çavuşun bu mesaisi) — hesap pdks_faz8b_gun_mesai_ozeti()'de (TEK sınıflandırıcı), burada YOK.
 $mesaiOzeti = $mesaiTanimGoster && function_exists('pdks_faz8b_gun_mesai_ozeti') ? pdks_faz8b_gun_mesai_ozeti([(int)$id], $pdo) : null;
 $ozetSaat = fn(int $dk): string => intdiv($dk, 60) . ' sa' . ($dk % 60 ? ' ' . ($dk % 60) . ' dk' : '');
 // v299: başlık sıralaması için hücre/kart HAM değerleri (zaman = epoch, süre = saniye, metin = küçük harf;
 // boş = sona). Görünen metni DEĞİŞTİRMEZ — yalnız data-sirala-deger / data-sd-* öznitelikleri.
-$sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $sonIslemZamani): array {
+$sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $sonIslemZamani, $sureBilgi): array {
+    $sb = $sureBilgi($k);
     $g = strtotime((string)($k['giris_saat'] ?? ''));
     $c = !empty($k['cikis_saat']) ? strtotime((string)$k['cikis_saat']) : false;
     $tanim = $mesaiTanimGoster ? $mesaiTanimMetni($k) : '';
@@ -258,7 +275,7 @@ $sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $son
         'mesai'  => mb_strtolower((string)($k['mesai_sinifi_etiket'] ?? ''), 'UTF-8'),
         'giris'  => $g !== false ? (string)$g : '',
         'cikis'  => $c !== false ? (string)$c : '',
-        'sure'   => ($g !== false && $c !== false && $c >= $g) ? (string)($c - $g) : '',
+        'sure'   => ($sb !== null && $sb['sn'] !== null) ? (string)$sb['sn'] : (($g !== false && $c !== false && $c >= $g) ? (string)($c - $g) : ''),
         // Durum etiketi emoji ile başlar (✅/⚠️) — emoji sıralamayı bozmasın.
         'durum'  => mb_strtolower((string)preg_replace('/^[^\p{L}\p{N}]+/u', '', (string)($k['durum']['etiket'] ?? '')), 'UTF-8'),
         'tanim'  => ($tanim === '—') ? '' : mb_strtolower($tanim, 'UTF-8'),
@@ -403,7 +420,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
                 </tbody>
                 <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
             </table></div>
-            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
+            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Saat başına 15 dk kala giriş ve 15 dk geçe çıkış tam saat sayılır (07:57 → 08:00, 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
         </div>
         <div class="pdks-mo-kart">
             <h4>Servis</h4>
@@ -505,7 +522,7 @@ $tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTip
     <td class="muted" data-sirala-deger="<?= h($sd['mesai']) ?>"><?= isset($k['mesai_sinifi_etiket']) ? h($k['mesai_sinifi_etiket']) : '—' ?></td>
     <td data-sirala-deger="<?= h($sd['giris']) ?>"><?= h(date('H:i', strtotime($k['giris_saat']))) ?></td>
     <td class="muted" data-sirala-deger="<?= h($sd['cikis']) ?>"><?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?></td>
-    <td class="muted" data-sirala-deger="<?= h($sd['sure']) ?>"><?= $k['cikis_saat'] ? h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '—' ?></td>
+    <td class="muted" data-sirala-deger="<?= h($sd['sure']) ?>"><?= $sureHtml($k) ?></td>
     <td data-sirala-deger="<?= h($sd['durum']) ?>"><span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span></td>
     <?php if ($mesaiTanimGoster): ?><td class="pdks-mesai-tanim" data-sirala-deger="<?= h($sd['tanim']) ?>" data-mesai-tanim><?= h($mesaiTanimMetni($k)) ?></td><?php endif; ?>
     <td>
@@ -546,7 +563,7 @@ $tdKutu = function (array $k, string $gorunum) use ($kartsizKartIds, $karisikTip
         <?= $tdAjaxKapi ? $tdKutu($k, 'mob') : '' ?>
         <div class="pdks-card-meta">
             <div class="pdks-row-name"><?= h($k['card_no']) ?><?php if (!empty($kartsizKartIds[(int)$k['worker_card_id']])): ?> <span class="pdks-badge pdks-badge-kartsiz" title="Kartsız mesai (sanal kart)">Kartsız</span><?php endif; ?> · <?php if ($karisikTipId !== null && (int)($k['worker_type_id_snapshot'] ?? 0) === $karisikTipId): ?><span class="pdks-badge pdks-badge-karisik">Karışık</span><?php else: ?><?= h($k['tip']) ?><?php endif; ?><?= isset($k['mesai_sinifi_etiket']) ? ' · ' . h($k['mesai_sinifi_etiket']) : '' ?><?php if (($k['kaynak'] ?? '') === 'manual'): ?> <span class="pdks-badge pdks-badge-elle" title="Geçmişe dönük elle eklendi">✍ Elle eklendi</span><?php endif; ?><?php if (($k['kaynak'] ?? '') === 'tanimli'): ?> <span class="pdks-badge pdks-badge-tanimli" title="Tanımlı Giriş ile (kartın tanımlı çavuşuna) girildi">🏷 Tanımlı</span><?php endif; ?></div>
-            <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . h(pdks_gunluk_sure_etiketi($k['giris_saat'], $k['cikis_saat'])) : '' ?></div>
+            <div class="pdks-row-sub">Giriş <?= h(date('H:i', strtotime($k['giris_saat']))) ?> · Çıkış <?= $k['cikis_saat'] ? h(date('H:i', strtotime($k['cikis_saat']))) : '—' ?><?= $k['cikis_saat'] ? ' · ' . $sureHtml($k) : '' ?></div>
         </div>
         <span class="pdks-badge pdks-badge-<?= h($k['durum']['kod']) ?>"><?= h($k['durum']['etiket']) ?></span>
     </div>
