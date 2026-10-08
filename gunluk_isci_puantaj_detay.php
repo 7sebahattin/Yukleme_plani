@@ -43,6 +43,20 @@ if ($depoHata = pdks_gunluk_depo_kontrol((string)$oturum['depo'])) {
     forbidden($depoHata);
 }
 
+// v319: aynı çavuşun aynı depodaki önceki / sonraki mesai günü (salt okunur; yalnız bağlantı üretir —
+// başka mesaiye gidince o sayfanın KENDİ kapıları (depo, yetki) yine çalışır).
+$gunKomsu = ['onceki' => null, 'sonraki' => null];
+foreach (['onceki' => ['<', 'DESC'], 'sonraki' => ['>', 'ASC']] as $yon => [$op, $sira]) {
+    $stK = $pdo->prepare("SELECT id, work_date FROM daily_work_sessions WHERE foreman_id = ? AND depo = ? AND work_date $op ? ORDER BY work_date $sira LIMIT 1");
+    $stK->execute([(int)$oturum['foreman_id'], (string)$oturum['depo'], (string)$oturum['work_date']]);
+    $gunKomsu[$yon] = $stK->fetch() ?: null;
+}
+$gunEtiket = function (?array $k, string $ad) use ($oturum): string {
+    if ($k === null) return $ad;
+    $fark = (int)round((strtotime((string)$k['work_date']) - strtotime((string)$oturum['work_date'])) / 86400);
+    return $ad . ' · ' . date('d.m', strtotime((string)$k['work_date'])) . (abs($fark) > 1 ? ' (' . abs($fark) . ' gün ' . ($fark < 0 ? 'önce' : 'sonra') . ')' : '');
+};
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'yeniden_ac') {
     csrf_check($_POST['csrf'] ?? null);
     $sonuc = pdks_gunluk_oturum_yeniden_ac((int)$id, (string)($_POST['sebep'] ?? ''), (int)$auth_user['id'], $pdo);
@@ -307,6 +321,14 @@ render_flash();
         <a href="gunluk_puantaj_yazdir.php?id=<?= (int)$id ?>" class="btn btn-ghost">🖨️ Yazdır — Çavuş Gün Sonu Fişi</a>
     </div>
 </div>
+
+<nav class="pdks-gun-nav" aria-label="Çavuşun mesai günleri">
+    <?php if ($gunKomsu['onceki']): ?><a class="btn" href="gunluk_isci_puantaj_detay.php?id=<?= (int)$gunKomsu['onceki']['id'] ?>" rel="prev">◀ <?= h($gunEtiket($gunKomsu['onceki'], 'Bir gün geri')) ?></a>
+    <?php else: ?><span class="btn pdks-gun-nav-pasif" aria-disabled="true" title="Bu çavuşun bu depoda daha eski mesaisi yok">◀ Bir gün geri</span><?php endif; ?>
+    <span class="pdks-gun-nav-tarih"><?= h(date('d.m.Y', strtotime((string)$oturum['work_date']))) ?></span>
+    <?php if ($gunKomsu['sonraki']): ?><a class="btn" href="gunluk_isci_puantaj_detay.php?id=<?= (int)$gunKomsu['sonraki']['id'] ?>" rel="next"><?= h($gunEtiket($gunKomsu['sonraki'], 'Bir gün ileri')) ?> ▶</a>
+    <?php else: ?><span class="btn pdks-gun-nav-pasif" aria-disabled="true" title="Bu çavuşun bu depoda daha yeni mesaisi yok">Bir gün ileri ▶</span><?php endif; ?>
+</nav>
 
 <?php if ($yenidenAcGoster): ?>
 <div class="card" style="padding:18px 20px;margin-bottom:18px">
