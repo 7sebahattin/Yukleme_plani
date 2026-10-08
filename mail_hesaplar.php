@@ -92,6 +92,7 @@ if ($hatalar && ($_POST['islem'] ?? '') === 'kaydet') {
 $v = static fn(string $k) => h((string)($f[$k] ?? ''));
 
 render_header('Mail Hesapları');
+mail_assets();   // mail.css: hesap satırı mobil kart düzeni, durum rozetleri (.mail-durum) ve bilgi kutuları
 ?>
 <div class="mail-kap">
     <p><a class="btn btn-geri" href="mail.php">← Mail Merkezi</a></p>
@@ -109,34 +110,34 @@ render_header('Mail Hesapları');
     </div>
     <?php endif; ?>
     <?php foreach (mail_yapilandirma_uyarilari($pdo) as $uy): if ($uy['mesaj'] === '' || ($uy['seviye'] === 'hata' && !mail_crypto_hazir())) continue; ?>
-    <div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid <?= $uy['seviye'] === 'hata' ? '#dc2626' : ($uy['seviye'] === 'uyari' ? '#d97706' : '#2563eb') ?>"><?= h($uy['mesaj']) ?></div>
+    <div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid <?= $uy['seviye'] === 'hata' ? '#dc2626' : ($uy['seviye'] === 'uyari' ? '#d97706' : '#2563eb') ?>;overflow-wrap:anywhere"><?= h($uy['mesaj']) ?><?php if (!empty($uy['komut'])): ?><code class="mail-komut"><?= h($uy['komut']) ?></code><?php endif; ?></div>
     <?php endforeach; ?>
     <?php if ($basari): ?><div class="card" style="padding:10px;margin-bottom:12px;border-left:4px solid #16a34a"><?= h($basari) ?></div><?php endif; ?>
     <?php foreach ($hatalar as $e): ?><div class="card" style="padding:10px;margin-bottom:8px;border-left:4px solid #dc2626"><?= h($e) ?></div><?php endforeach; ?>
 
     <div class="table-wrap" style="margin-bottom:16px">
-        <table class="table">
+        <table class="table mail-hesap-tablo">
             <thead><tr><th>Etiket</th><th>Adres</th><th>Durum</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($liste as $a): ?>
                 <tr>
                     <td><?= h($a['label']) ?></td><td><?= h($a['email']) ?></td>
                     <td><?= (int)$a['is_active'] === 1 ? 'Aktif' : 'Pasif' ?></td>
-                    <td>
+                    <td><div class="mail-hesap-eylem">
                         <a class="btn" href="mail_hesaplar.php?duzenle=<?= (int)$a['id'] ?>">Düzenle</a>
-                        <form method="post" style="display:inline">
+                        <form method="post">
                             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                             <input type="hidden" name="islem" value="test">
                             <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
                             <button class="btn" type="submit">Bağlantıyı Test Et</button>
                         </form>
-                        <form method="post" style="display:inline">
+                        <form method="post">
                             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                             <input type="hidden" name="islem" value="durum">
                             <input type="hidden" name="id" value="<?= (int)$a['id'] ?>">
                             <button class="btn" type="submit"><?= (int)$a['is_active'] === 1 ? 'Pasifleştir' : 'Aktifleştir' ?></button>
                         </form>
-                    </td>
+                    </div></td>
                 </tr>
             <?php endforeach; ?>
             <?php if (!$liste): ?><tr><td colspan="4">Henüz hesap yok.</td></tr><?php endif; ?>

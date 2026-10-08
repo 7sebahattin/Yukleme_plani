@@ -19,3 +19,7 @@ config/local.php
 
 # Tarayıcı testinin geçici çıktısı (scripts/roles_modal_render.php)
 _test_*.html
+
+# Mail Merkezi çalışma dosyaları (kilitler, cron kalp atışı, çeviri durumu) — sunucuda üretilir, depoya girmez
+storage/mail/*
+!storage/mail/.htaccess

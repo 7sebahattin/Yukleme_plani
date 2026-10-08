@@ -259,6 +259,25 @@ const MOBIL = (w) => w < 768;
         }
     }
 
+    // ── Mail Hesapları (yönetici): hesap satırı düğmeleri hiçbir genişlikte kesilmez; cron komutu kutuya sığar ──
+    if (M.sayfalar.includes('hesaplar')) for (const [w, h] of EKRANLAR) {
+        const { ctx, page, hatalar } = await ac('hesaplar', w, h);
+        const r = await page.evaluate(() => {
+            const tw = document.querySelector('.mail-hesap-tablo')?.closest('.table-wrap');
+            const btn = [...document.querySelectorAll('.mail-hesap-tablo .btn')].map(e => { const b = e.getBoundingClientRect(); return { r: b.right, l: b.left, h: b.height }; });
+            const kom = document.querySelector('.mail-komut'); const kart = kom?.parentElement.getBoundingClientRect(); const kr = kom?.getBoundingClientRect();
+            return { tasma: document.documentElement.scrollWidth - innerWidth, ic: tw ? tw.scrollWidth - tw.clientWidth : -1, twR: tw?.getBoundingClientRect().right, btn,
+                komutSigar: kom ? kr.right <= kart.right + 0.5 && kom.scrollWidth <= kom.clientWidth + 1 : null };
+        });
+        ok(`[${w}] hesaplar: yatay taşma yok (sayfa + tablo kutusu)`, r.tasma <= 0 && r.ic <= 0, JSON.stringify({ t: r.tasma, ic: r.ic }));
+        ok(`[${w}] hesaplar: hesap düğmeleri kutunun İÇİNDE (kesilmiyor)`, r.btn.length >= 3 && r.btn.every(b => b.r <= r.twR + 0.5 && b.l >= 0), JSON.stringify(r.btn.slice(0, 3)));
+        if (MOBIL(w)) ok(`[${w}] hesaplar: mobilde düğmeler ≥ 44px dokunma hedefi`, r.btn.every(b => b.h >= 43.5), Math.min(...r.btn.map(b => b.h)) + '');
+        ok(`[${w}] hesaplar: cron komutu kartın içinde kırılarak görünür`, r.komutSigar === true, String(r.komutSigar));
+        ok(`[${w}] hesaplar: konsol hatası yok`, hatalar.length === 0, hatalar.join(' | '));
+        if (w === 390 || w === 1280) await page.screenshot({ path: path.join(SHOTS, `${w}_hesaplar.png`), fullPage: false });
+        await ctx.close();
+    }
+
     await browser.close();
     console.log(`\n${pass} geçti, ${fail} kaldı  (ekran görüntüleri: ${SHOTS})`);
     process.exit(fail > 0 ? 1 : 0);

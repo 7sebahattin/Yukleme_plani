@@ -27,7 +27,11 @@ function mail_mime_utf8(string $s, string $charset = 'utf-8'): string
     $cs = strtolower(trim($charset, " \t\"'"));
     $alias = ['utf8' => 'utf-8', 'us-ascii' => 'utf-8', 'ascii' => 'utf-8', 'ansi_x3.4-1968' => 'utf-8', '' => 'utf-8',
         'gb2312' => 'gb18030', 'gbk' => 'gb18030', 'ks_c_5601-1987' => 'uhc', 'x-sjis' => 'sjis', 'shift_jis' => 'sjis',
-        'iso-8859-8-i' => 'iso-8859-8', 'windows-874' => 'cp874', 'x-mac-roman' => 'macroman', 'unicode-1-1-utf-7' => 'utf-7'];
+        'iso-8859-8-i' => 'iso-8859-8', 'windows-874' => 'cp874', 'x-mac-roman' => 'macroman', 'unicode-1-1-utf-7' => 'utf-7',
+        // WHATWG / tüm tarayıcı ve posta istemcileri: "ISO-8859-1" etiketi Windows-1252 olarak okunur (0x80–0x9F typografik
+        // karakterlerdir, C1 kontrol değil). Ayrıca yanlış etiketli UTF-8'de ğ (C4 9F) / ş (C5 9F) baytları ancak böyle
+        // onarılabilir mojibake'e dönüşür; ISO-8859-1 ile 0x9F kontrol karakterine düşüp KAYBOLUYORDU ("Birliği" → "BirliÄ").
+        'iso-8859-1' => 'windows-1252', 'iso8859-1' => 'windows-1252', 'latin1' => 'windows-1252', 'l1' => 'windows-1252', 'cp819' => 'windows-1252'];
     $cs = $alias[$cs] ?? $cs;
     if ($cs === 'utf-7') return mb_scrub($s, 'UTF-8');   // UTF-7 XSS vektörü: çevirme, olduğu gibi (zararsız) metin say
     if ($cs === 'utf-8') {
@@ -56,6 +60,13 @@ function mail_mime_mojibake_duzelt(string $s): string
     if (!function_exists('iconv') || !preg_match('/(?:Ã|Ä|Å)./u', $s)) return $s;
     return preg_replace_callback('/(?:Ã|Ä|Å)./u', static function (array $m): string {
         $baytlar = @iconv('UTF-8', 'Windows-1252', $m[0]);
+        if ($baytlar === false) {
+            // Eski kayıtlar: ISO-8859-1 ile çözülmüş ğ (C4 9F) / ş (C5 9F) → "Ä"/"Å" + C1 kontrol karakteri (U+0080–U+009F).
+            // Windows-1252'de karşılığı olmadığı için iconv başarısız olur; C1 kod noktası doğrudan bayt değeridir.
+            $ilk = @iconv('UTF-8', 'Windows-1252', mb_substr($m[0], 0, 1));
+            $kp = mb_ord(mb_substr($m[0], 1, 1), 'UTF-8');
+            $baytlar = ($ilk !== false && $kp >= 0x80 && $kp <= 0x9F) ? $ilk . chr($kp) : false;
+        }
         return $baytlar !== false && preg_match('//u', $baytlar) === 1 ? $baytlar : $m[0];
     }, $s) ?? $s;
 }

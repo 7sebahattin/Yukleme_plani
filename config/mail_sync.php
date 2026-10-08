@@ -416,6 +416,40 @@ function mail_sync_veri_hatasi_mi(PDOException $e): bool
 }
 
 /**
+ * Cron canlılığı: kalp atışı (cron gerçekten çalıştı mı, sonucu ne) + son senkron günlüğü birlikte yorumlanır.
+ * "Cron hiç çalışmıyor", "çalışıyor ama hata veriyor" ve "çalışıyor, hesap art arda hata yüzünden bekletiliyor"
+ * durumları AYRI mesaj alır — eskiden üçü de "cron durmuş olabilir" görünüyordu.
+ * @param array $opt depo (kalp dizini) · simdi (ts)
+ * @return list<array{seviye:string,mesaj:string,komut?:string}>
+ */
+function mail_cron_durum_uyarilari(PDO $pdo, array $opt = []): array
+{
+    $simdi = (int)($opt['simdi'] ?? time());
+    $kalp = mail_cron_kalp_oku($opt['depo'] ?? null);
+    $son = $pdo->query('SELECT MAX(started_at) FROM mail_sync_log')->fetchColumn();
+    $komut = mail_cron_komutu();
+    $dk = static fn(int $sn): int => intdiv(max(0, $sn), 60);
+    if ($kalp === null) {
+        if (!$son) return [['seviye' => 'uyari', 'mesaj' => 'Senkron henüz hiç çalışmadı ve cron\'un çalıştığına dair kayıt yok. cPanel → Cron Jobs komutu:', 'komut' => $komut]];
+        if ($simdi - strtotime((string)$son) > 1800) {
+            return [['seviye' => 'uyari', 'mesaj' => 'Son senkron ' . $dk($simdi - strtotime((string)$son)) . ' dakika önce; cron\'un çalıştığına dair kayıt yok (cron kurulu değil ya da komut/yol yanlış). cPanel → Cron Jobs komutu:', 'komut' => $komut]];
+        }
+        return [];
+    }
+    $yas = $simdi - $kalp['zaman'];
+    if ($yas > 1800) {
+        return [['seviye' => 'uyari', 'mesaj' => 'Cron ' . $dk($yas) . ' dakikadır çalışmıyor (son çalışma: ' . date('d.m H:i', $kalp['zaman']) . ', sonuç: '
+            . mb_substr($kalp['satirlar'][0] ?? '?', 0, 120) . '). cPanel → Cron Jobs komutu:', 'komut' => $komut]];
+    }
+    $u = [];
+    $fail = array_values(array_filter($kalp['satirlar'], static fn($l) => str_starts_with($l, 'FAIL')));
+    $bekle = array_values(array_filter($kalp['satirlar'], static fn($l) => str_starts_with($l, 'BEKLE')));
+    if ($fail) $u[] = ['seviye' => 'hata', 'mesaj' => 'Cron çalışıyor (son: ' . $dk($yas) . ' dk önce) ama hata veriyor: ' . mb_substr(implode(' · ', $fail), 0, 300) . ' — ayrıntı: "Senkron durumu ve günlüğü".'];
+    if ($bekle) $u[] = ['seviye' => 'uyari', 'mesaj' => 'Cron çalışıyor; ' . count($bekle) . ' hesap art arda hata nedeniyle bekletiliyor (' . mb_substr(implode(' · ', $bekle), 0, 240) . '). Son hatayı "Senkron durumu ve günlüğü" bölümünde görün; düzelttikten sonra "Şimdi senkronla" beklemeyi atlar.'];
+    return $u;
+}
+
+/**
  * Yönetici için işletme uyarıları (salt okunur, ağa çıkmaz): anahtar, dosya izinleri, cron canlılığı, çeviri veri çıkışı.
  * @param array $opt local_php (yol) · depo (dizin) · simdi (ts)
  * @return list<array{seviye:string,mesaj:string}> seviye: hata|uyari|bilgi
@@ -437,10 +471,7 @@ function mail_yapilandirma_uyarilari(PDO $pdo, array $opt = []): array
     try {
         $aktif = (int)$pdo->query('SELECT COUNT(*) FROM mail_accounts WHERE is_active = 1')->fetchColumn();
         if ($aktif > 0) {
-            $son = $pdo->query('SELECT MAX(started_at) FROM mail_sync_log')->fetchColumn();
-            $simdi = (int)($opt['simdi'] ?? time());
-            if (!$son) $u[] = ['seviye' => 'uyari', 'mesaj' => 'Senkron henüz hiç çalışmadı. cPanel Cron Jobs ile scripts/mail_sync_cron.php zamanlanmalı (docs/MAIL_OPERATIONS.md).'];
-            elseif ($simdi - strtotime((string)$son) > 1800) $u[] = ['seviye' => 'uyari', 'mesaj' => 'Son senkron ' . (int)(($simdi - strtotime((string)$son)) / 60) . ' dakika önce çalıştı — cron durmuş olabilir.'];
+            foreach (mail_cron_durum_uyarilari($pdo, $opt) as $x) $u[] = $x;
         }
     } catch (Throwable $e) { /* tablo yoksa ekran zaten kurulum uyarısı verir */ }
     if (function_exists('mail_ceviri_saglayici')) {
@@ -526,6 +557,52 @@ function mail_imap_test(PDO $pdo, int $hesapId, array $opt = []): array
  * @return array{kod:int,satirlar:list<string>}
  */
 function mail_cron_calistir(PDO $pdo, array $opt = []): array
+{
+    $r = mail_cron_calistir_ic($pdo, $opt);
+    // Kalp atışı: cron çıktısı genelde /dev/null'a gider. Yönetici ekranı "cron hiç çalışmıyor" ile "çalışıyor ama
+    // hata veriyor / hesap beklemede" durumlarını yalnız bu dosyadan ayırt edebilir. Hata yutulur (cron sonucu bozulmaz).
+    mail_cron_kalp_yaz($r, $opt['kilit_dizin'] ?? null, isset($opt['simdi']) ? (int)$opt['simdi'] : null);
+    return $r;
+}
+
+const MAIL_CRON_KALP = '.cron_kalp.json';
+
+/** Son cron çalışmasını kaydeder (zaman, sonuç kodu, PHP SAPI/sürüm, redakte edilmiş çıktı satırları). */
+function mail_cron_kalp_yaz(array $r, ?string $dizin = null, ?int $simdi = null): void
+{
+    try {
+        $dizin = $dizin ?? mail_depo_dizini();
+        $satirlar = array_map(static fn($l) => mb_substr(mail_redact((string)$l), 0, 200), array_slice((array)($r['satirlar'] ?? []), 0, 30));
+        $veri = json_encode(['zaman' => $simdi ?? time(), 'kod' => (int)($r['kod'] ?? 1), 'sapi' => PHP_SAPI, 'php' => PHP_VERSION, 'satirlar' => $satirlar],
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($veri === false) return;
+        $hedef = $dizin . '/' . MAIL_CRON_KALP; $gecici = $hedef . '.' . getmypid() . '.tmp';
+        if (@file_put_contents($gecici, $veri) === false) return;
+        @chmod($gecici, 0600);
+        if (!@rename($gecici, $hedef)) @unlink($gecici);
+    } catch (Throwable $e) { /* kalp atışı yazılamadı: cron sonucu etkilenmez */ }
+}
+
+/** @return array{zaman:int,kod:int,sapi:string,php:string,satirlar:list<string>}|null */
+function mail_cron_kalp_oku(?string $dizin = null): ?array
+{
+    $f = ($dizin ?? mail_depo_dizini()) . '/' . MAIL_CRON_KALP;
+    if (!is_file($f)) return null;
+    $j = json_decode((string)@file_get_contents($f, false, null, 0, 65536), true);
+    if (!is_array($j) || !isset($j['zaman'])) return null;
+    return ['zaman' => (int)$j['zaman'], 'kod' => (int)($j['kod'] ?? 1), 'sapi' => (string)($j['sapi'] ?? '?'), 'php' => (string)($j['php'] ?? '?'),
+        'satirlar' => array_values(array_map('strval', (array)($j['satirlar'] ?? [])))];
+}
+
+/** cPanel → Cron Jobs'a yazılacak komut (bu kurulumun gerçek yoluyla). */
+function mail_cron_komutu(): string
+{
+    $betik = (string)(realpath(dirname(__DIR__) . '/scripts/mail_sync_cron.php') ?: dirname(__DIR__) . '/scripts/mail_sync_cron.php');
+    return '*/5 * * * * php ' . $betik . ' >/dev/null 2>&1';
+}
+
+/** @internal mail_cron_calistir() gövdesi (kalp atışı sarmalayıcıda yazılır). */
+function mail_cron_calistir_ic(PDO $pdo, array $opt = []): array
 {
     try { $kilit = mail_kilit_al('sync_all', $opt['kilit_dizin'] ?? null); }
     catch (MailKilitHatasi $e) { error_log('[mail_cron] kilit dosyası açılamadı'); return ['kod' => 1, 'satirlar' => ['FAIL ' . $e->getMessage()]]; }

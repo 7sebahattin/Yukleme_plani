@@ -27,6 +27,12 @@ ok('mojibake Türkçe karakterler onarılıyor', mail_mime_mojibake_duzelt($bozu
 ok('DB öncesi düz başlıkta onarım', mail_mime_baslik_coz($bozuk) === $dogru);
 $yanlisMime = '=?ISO-8859-1?B?' . base64_encode($dogru) . '?=';
 ok('hatalı ISO-8859-1 etiketi altında UTF-8 encoded-word', mail_mime_baslik_coz($yanlisMime) === $dogru);
+ok('ISO-8859-1 etiketli UTF-8: ğ ve ş (0x9F baytı) KAYBOLMAZ', mail_mime_baslik_coz('=?ISO-8859-1?B?' . base64_encode('Şükrü Ağaoğlu işçi') . '?=') === 'Şükrü Ağaoğlu işçi' && mail_mime_baslik_coz('=?iso-8859-1?B?' . base64_encode('Ğğ Şş Iı İi') . '?=') === 'Ğğ Şş Iı İi');
+ok('gerçek ISO-8859-1/1252 içerik: 0x80–0x9F typografik karakter olarak çözülür (€ “ ” – kontrol karakteri DEĞİL)', mail_mime_baslik_coz('=?ISO-8859-1?Q?Caf=E9_=93ok=94_=80_=96?=') === 'Café “ok” € –');
+ok('gövde de aynı kural: latin1 etiketli 1252 baytları', mail_mime_utf8("Fiyat \x80 12 \x96 \x93net\x94", 'latin1') === 'Fiyat € 12 – “net”');
+$eskiKayit = mb_convert_encoding('Ağaoğlu Birliği işçi', 'UTF-8', 'ISO-8859-1');   // DB'deki eski bozuk biçim: Ä + U+009F
+ok('eski kayıt onarımı: "Ä/Å + C1 kontrol" (ğ/ş) ekranda düzelir', mail_mime_mojibake_duzelt($eskiKayit) === 'Ağaoğlu Birliği işçi', bin2hex($eskiKayit));
+ok('onarım sağlam metne ve Kiril/Arapça metne dokunmaz', mail_mime_mojibake_duzelt('Ağaoğlu Привет مرحبا Ä') === 'Ağaoğlu Привет مرحبا Ä');
 ok('düzgün Türkçe + Kiril + Alman özel harfleri korunur',
     mail_mime_mojibake_duzelt('İşçi Привет Änderung Ångström') === 'İşçi Привет Änderung Ångström');
 ok('zaten düzeltilmiş içerik tekrar değiştirilmez',
