@@ -33,8 +33,9 @@ ok8b('09:00-18:00 @9h (kaymış saat, AYNI süre) otomatik Tam', $k['otomatik_si
 $k = karar8b('10:00', '19:00');
 ok8b('10:00-19:00 @9h (kaymış saat, AYNI süre) otomatik Tam', $k['otomatik_sinif'] === 'tam' && $k['fazla_mesai_saat'] === 0);
 
-$k = karar8b('08:00', '16:59');
-ok8b('08:00-16:59 @9h (1 dk eksik) muhasebe kararı bekler', $k['otomatik_sinif'] === null && $k['sinif_onayi_gerekli'] === true);
+// v317: 16:46–17:14 arası çıkış 17:00 sayılır; 16 dk eksik kalan karar bekler.
+$k = karar8b('08:00', '16:44');
+ok8b('08:00-16:44 @9h (16 dk eksik) muhasebe kararı bekler', $k['otomatik_sinif'] === null && $k['sinif_onayi_gerekli'] === true);
 
 $k = karar8b('09:00', '17:00', 480);
 ok8b('09:00-17:00 @8h otomatik Tam', $k['otomatik_sinif'] === 'tam');

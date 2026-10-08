@@ -153,10 +153,11 @@ foreach ($SENARYO_DK as $ad => $dk) {
         okcy('D7) Mesai Tanımı "Tam · FM 2 s"', pdks_faz8b_mesai_tanimi_etiketi($f, false, false) === 'Tam · FM 2 s');
     }
 }
-// 11 s 50 dk: FM aday 3 (onaylı süre 12 s) ama toplam < 12 s → Tam + 3 FM.
-[$pid, $sid] = mesaiKur(2, 710);
+// 11 s 44 dk: FM aday 3 (onaylı süre 12 s) ama toplam < 12 s → Tam + 3 FM.
+// (v317: 11 s 50 dk artık 17:50 → 18:00 saat başına çekilip 12 s olur; sınır 16 dk dışında kalsın.)
+[$pid, $sid] = mesaiKur(2, 704);
 [$f, $h] = hesapla($pid, $sid);
-okcy('D8) 11 s 50 dk → Tam + 3 FM = 1450 (çalışılan süre çift eşiğine ulaşmadı)', tutar($h) === '1450.00' && $f['cift'] === false, tutar($h));
+okcy('D8) 11 s 44 dk → Tam + 3 FM = 1450 (çalışılan süre çift eşiğine ulaşmadı)', tutar($h) === '1450.00' && $f['cift'] === false, tutar($h));
 
 // =========================================================
 echo "\n=== E. FM onay durumları (13 s) ===\n";

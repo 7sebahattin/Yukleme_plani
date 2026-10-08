@@ -243,7 +243,7 @@ $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum
     $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
 };
-// v315: Süre sütunu = HESAPLANAN süre (saat başı toleransı: 07:57 → 08:00, 17:13 → 17:00 —
+// v315/v317: Süre sütunu = HESAPLANAN süre (saat başı ±15 dk: 07:57/08:14 → 08:00, 16:46/17:13 → 17:00 —
 // pdks_faz8b_etkin_saatler). Ham süre farklıysa altında küçük not; faz8b yoksa ham süre.
 $sureBilgi = function (array $k) use ($mesaiTanimF): ?array {
     if (empty($k['cikis_saat'])) return null;
@@ -420,7 +420,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
                 </tbody>
                 <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
             </table></div>
-            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Saat başına 15 dk kala giriş ve 15 dk geçe çıkış tam saat sayılır (07:57 → 08:00, 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
+            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Giriş ve çıkış tam saate 15 dk yakınsa o saat sayılır (07:57 / 08:14 → 08:00, 16:46 / 17:13 → 17:00). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
         </div>
         <div class="pdks-mo-kart">
             <h4>Servis</h4>
