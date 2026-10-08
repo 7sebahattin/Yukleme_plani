@@ -112,8 +112,62 @@ foreach ([['quotaFinished' => true, 'responseData' => ['translatedText' => 'x'],
 }
 ok('MyMemory: parça limiti 450 bayt (API sınırı)', (new MailTranslateMyMemory())->parcaLimiti() === 450);
 
+// DeepSeek: ayrı Chat Completions adaptörü; dış ağ yerine sahte HTTP ile sözleşme testi.
+$KAYIT = [];
+$sirDeepseek = 'sk-test-private-do-not-print';
+$ds = new MailTranslateDeepSeek($sirDeepseek, $sahte(['kod' => 200, 'govde' => json_encode([
+    'choices' => [['finish_reason' => 'stop', 'message' => ['content' => 'Merhaba, siparişiniz onaylandı.']]],
+])])); 
+$r = $ds->cevir('Hello, your order was approved.', 'en', 'tr');
+$k = $KAYIT[0]; $json = json_decode((string)$k['govde'], true);
+ok('DeepSeek: Chat Completions / bearer / POST JSON', $k['metod'] === 'POST'
+    && $k['url'] === 'https://api.deepseek.com/chat/completions'
+    && in_array('Authorization: Bearer ' . $sirDeepseek, $k['baslik'], true)
+    && $json['model'] === 'deepseek-flash'
+    && ($json['thinking']['type'] ?? '') === 'disabled'
+    && ($json['stream'] ?? true) === false);
+ok('DeepSeek: gelen İngilizce→Türkçe, yalnız metin yanıtı',
+    $r === ['metin' => 'Merhaba, siparişiniz onaylandı.', 'tespit' => null]
+    && str_contains($json['messages'][1]['content'], 'Target language: Turkish')
+    && str_contains($json['messages'][1]['content'], 'Source language: English'));
+$KAYIT = []; $ds->cevir('Sipariş onaylandı.', 'tr', 'ru');
+$json = json_decode((string)$KAYIT[0]['govde'], true);
+ok('DeepSeek: giden Türkçe→Rusça seçilen dil; adres/ek/kimlik metadata alanı YOK',
+    str_contains($json['messages'][1]['content'], 'Source language: Turkish')
+    && str_contains($json['messages'][1]['content'], 'Target language: Russian')
+    && !isset($json['user_id'], $json['attachments'])
+    && !str_contains($KAYIT[0]['govde'], 'imap_pass')
+    && !str_contains($KAYIT[0]['govde'], 'smtp_pass'));
+$KAYIT = []; $ds->cevir('Hello!', null, 'tr');
+ok('DeepSeek: kaynak dil bilinmiyorsa auto-detect', str_contains((string)$KAYIT[0]['govde'], 'Source language: auto-detect'));
+ok('DeepSeek: parça limiti 3500 bayt', $ds->parcaLimiti() === 3500);
+foreach ([401=>'config', 403=>'config', 402=>'quota', 429=>'temp', 500=>'temp', 400=>'config', 422=>'config'] as $kod=>$kind) {
+    $e = null;
+    try { (new MailTranslateDeepSeek('sk-test', $sahte(['kod' => $kod, 'govde' => 'failed'])))->cevir('Hi', 'en', 'tr'); }
+    catch (MailTranslateException $ex) { $e = $ex; }
+    ok("DeepSeek: HTTP $kod → $kind", $e && $e->kind === $kind);
+}
+foreach ([
+    '{"choices":[]}' => 'eksik içerik',
+    '{"choices":[{"finish_reason":"length","message":{"content":"Kısmi"}}]}' => 'kesilmiş çıktı',
+    'bozuk-json' => 'JSON hatası',
+] as $cevap=>$ad) {
+    $e = null;
+    try { (new MailTranslateDeepSeek('sk-test', $sahte(['kod' => 200, 'govde' => $cevap])))->cevir('Hi', 'en', 'tr'); }
+    catch (MailTranslateException $ex) { $e = $ex; }
+    ok("DeepSeek: $ad fail-closed", $e && $e->kind === 'temp');
+}
+$e = null;
+try { (new MailTranslateDeepSeek('sk-test', $sahte(['kod' => 200, 'govde' => '{"choices":[]}'])))->cevir('a', 'en', 'unsupported'); }
+catch (MailTranslateException $ex) { $e = $ex; }
+ok('DeepSeek: desteklenmeyen hedef reddedildi', $e && $e->kind === 'config');
+$e = null;
+try { new MailTranslateDeepSeek(' '); } catch (MailTranslateException $ex) { $e = $ex; }
+ok('DeepSeek: boş key reddedilir', $e && $e->kind === 'config');
+
 echo "\n=== 5. Sağlayıcı fabrikası + HTTP güvenliği ===\n";
 ok('varsayılan/boş/bilinmeyen → null (KAPALI, veri çıkmaz)', mail_ceviri_saglayici(['provider' => 'none']) === null && mail_ceviri_saglayici(['provider' => '']) === null && mail_ceviri_saglayici(['provider' => 'google-x']) === null);
+ok('deepseek anahtarsız → null; anahtarla deepseek provider', mail_ceviri_saglayici(['provider' => 'deepseek', 'key' => '']) === null && mail_ceviri_saglayici(['provider' => 'deepseek', 'key' => 'sk-test'])?->ad() === 'deepseek');
 ok('deepl anahtarsız → null', mail_ceviri_saglayici(['provider' => 'deepl', 'key' => '']) === null);
 ok('deepl anahtarla → sağlayıcı', mail_ceviri_saglayici(['provider' => 'DeepL', 'key' => 'k:fx'])?->ad() === 'deepl');
 ok('libretranslate http:// (düz metin) REDDEDİLİR', mail_ceviri_saglayici(['provider' => 'libretranslate', 'url' => 'http://lt.local']) === null && mail_ceviri_saglayici(['provider' => 'libretranslate', 'url' => 'https://lt.local'])?->ad() === 'libretranslate');
