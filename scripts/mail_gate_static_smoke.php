@@ -120,7 +120,9 @@ foreach (['mail.php', 'mail_hesaplar.php', 'mail_ek.php'] as $f) {
 ok('mail_no_store(): no-store + private + Pragma + Expires', str_contains($core, "'Cache-Control: no-store, no-cache, must-revalidate, private'") && str_contains($core, "header('Pragma: no-cache')"));
 ok('mail_no_store() çıktıdan ÖNCE (require_mail hemen ardından)', (bool)preg_match("/require_mail\('(?:read|admin)'\);\s*mail_no_store\(\);/", oku('mail.php') . oku('mail_hesaplar.php')));
 $mailPhp = oku('mail.php');
-ok('UI: çeviri düğmesinin yanında GÖRÜNÜR "ÜÇÜNCÜ TARAF" uyarısı (yalnız title değil)', str_contains($mailPhp, 'ÜÇÜNCÜ TARAF çeviri servisine gönderilir'));
+// Sahip kararı (2026-10-08): düğmenin yanındaki "⚠ … ÜÇÜNCÜ TARAF …" uyarısı gereksiz tedirginlik → KALDIRILDI. Veri çıkışı yine KONTROLLÜ:
+// sağlayıcı yalnız config/local.php'den açılır, hesap bazlı translate_enabled şart, "Şimdi çevir" açık bir tıklama ister; düğmenin title'ı bilgi verir.
+ok('UI: çeviri düğmesi yalnız sağlayıcı AÇIK + hesapta çeviri AÇIKKEN görünür; görünür "ÜÇÜNCÜ TARAF" uyarısı yok (sahip kararı)', str_contains($mailPhp, 'mail_hesap_ceviri_acik($pdo') && !str_contains($mailPhp, 'ÜÇÜNCÜ TARAF çeviri servisine gönderilir'));
 ok('UI: çevrilmiş mailde sağlayıcı + üçüncü taraf notu', str_contains($mailPhp, 'üçüncü taraf servis') && str_contains($mailPhp, 'mail metni bu servise gönderildi'));
 ok('hesap formu: çeviri onay kutusunda üçüncü taraf uyarısı', str_contains(oku('mail_hesaplar.php'), 'üçüncü taraf çeviri servisine gönderilir'));
 ok('çeviri sağlayıcısı varsayılan KAPALI (sabit yoksa none)', str_contains(oku('config/mail_translate.php'), "(string)MAIL_TRANSLATE_PROVIDER : 'none'") && !preg_match("/define\(\s*'MAIL_TRANSLATE_PROVIDER'/", php_strip_whitespace($ROOT . '/config/mail_translate.php')));

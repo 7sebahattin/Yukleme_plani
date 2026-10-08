@@ -214,6 +214,8 @@ $IS_ADMIN = false; $PERMS = ['mail.read', 'mail.reply', 'mail.send']; $UID = 2;
 $h = sayfa_render('mail.php', ['m' => (string)$mid]);
 ok('Cevapla artık BAĞLANTI (cevap=1) — yetkili kullanıcıda', (bool)preg_match('/<a class="btn btn-primary mail-cevapla" href="mail\.php\?[^"]*cevap=1/', $h));
 $h = sayfa_render('mail.php', ['m' => (string)$mid, 'cevap' => '1']);
+$hOkuma = sayfa_render('mail.php', ['m' => (string)$mid, 'v' => 'tr']);
+ok('okuma ekranında "Çevirirseniz … ÜÇÜNCÜ TARAF" uyarısı YOK; "Şimdi çevir" düğmesi kalır (kullanıcı kararı)', !str_contains($hOkuma, 'Çevirirseniz') && !str_contains($hOkuma, 'ÜÇÜNCÜ TARAF') && str_contains($hOkuma, 'value="ceviri_simdi"'));
 ok('cevap formunda gereksiz "üçüncü taraf servise gönderilir" uyarısı YOK (sağlayıcı açıkken de; kullanıcı kararı)', !str_contains($h, 'üçüncü taraf servise çeviri için') && !str_contains($h, 'Çeviriyi Önizle dediğinizde'));
 ok('cevap yazma formu: Türkçe metin, hedef dil, tek kullanımlık anahtar, CSRF, "onaylamadan gönderilmez" uyarısı', str_contains($h, 'name="body_tr"') && str_contains($h, 'name="target_lang"') && (bool)preg_match('/name="idem" value="[0-9a-f]{32}"/', $h) && str_contains($h, 'name="csrf"') && str_contains($h, 'onaylamadan hiçbir şey gönderilmez') && str_contains($h, 'value="cevap_onizle"'));
 ok('form tek-gönderim korumalı (JS kolaylığı) + 20000 sınırı', str_contains($h, 'data-tek-gonderim') && str_contains($h, 'maxlength="' . MAIL_CEVAP_MAX . '"'));
