@@ -60,6 +60,21 @@ if ($hazir && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([date('Y-m-d H:i:s'), $id]);
         audit_log_event('mail_account_toggle', 'mail_accounts', $id);
         $basari = 'Hesap durumu değiştirildi.';
+    } elseif ($islem === 'deepseek_test') {
+        // Yalnız mail.admin + CSRF. GERÇEK MÜŞTERİ VERİSİ gönderilmez; sabit örnek.
+        $p = mail_ceviri_saglayici();
+        if ($p === null || $p->ad() !== 'deepseek') {
+            $hatalar[] = 'DeepSeek anahtarı/sağlayıcısı henüz yapılandırılmamış.';
+        } else {
+            try {
+                $r = $p->cevir('Good morning.', 'en', 'tr');
+                $basari = 'DeepSeek bağlantısı başarılı. Örnek çeviri: ' . mb_substr(mail_redact((string)$r['metin']), 0, 120);
+                audit_log_event('mail_translation_test', 'mail_translate', null, null, ['saglayici' => 'deepseek', 'sonuc' => 'ok']);
+            } catch (MailTranslateException $e) {
+                $hatalar[] = 'DeepSeek testi başarısız: ' . mb_substr(mail_redact($e->getMessage()), 0, 180);
+                audit_log_event('mail_translation_test', 'mail_translate', null, null, ['saglayici' => 'deepseek', 'sonuc' => 'hata', 'tur' => $e->kind]);
+            }
+        }
     }
 }
 
@@ -128,6 +143,18 @@ render_header('Mail Hesapları');
             </tbody>
         </table>
     </div>
+
+    <?php if (mail_ceviri_saglayici()?->ad() === 'deepseek'): ?>
+    <div class="card" style="padding:12px 16px;margin-bottom:16px">
+        <strong>DeepSeek Çeviri Bağlantı Testi</strong>
+        <p class="mail-bilgi" style="margin:8px 0">Yalnız "Good morning." adlı örnek metin DeepSeek'e gönderilir; gerçek mail içeriği veya şifre gönderilmez. Küçük miktarda API token ücreti oluşabilir.</p>
+        <form method="post">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <input type="hidden" name="islem" value="deepseek_test">
+            <button class="btn" type="submit">DeepSeek Bağlantısını Test Et</button>
+        </form>
+    </div>
+    <?php endif; ?>
 
     <?php $sg = mail_sync_gunluk_getir($pdo, 20); ?>
     <details class="card" style="padding:12px 16px;margin-bottom:16px" id="mail-sync-gunluk">
