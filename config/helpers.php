@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v307');
+    define('APP_SURUM', 'v308');
 }
 
 // --- HTML kaçışı ---
@@ -261,6 +261,34 @@ function nav_ptak_sayfalari(): array {
 }
 
 /**
+ * Mail Merkezi yetki kapısı — TEK KAYNAK. Sidebar, mobil alt çubuk
+ * (nav_alt_izinler), first_allowed_page(), index.php kartı ve mail_* sayfa /
+ * AJAX kapılarının HEPSİ bunu çağırır ("kart görünüyor, sayfa 403" olmasın).
+ *
+ *  read  : mail.read              (gelen kutusu + çeviriyi okuma)
+ *  reply : mail.reply  + read     (Türkçe cevap taslağı + çeviri önizleme)
+ *  send  : mail.send   + read     (taslağı onayla ve gönder — taslağı yazan olması şart değil)
+ *  admin : mail.admin             (hesap / kimlik bilgisi / kullanıcı ACL / log)
+ *
+ * is_admin() ve mail.admin her şeyi açar (admin rolüne seed uygulanmadığı için
+ * can_beyan() ile aynı kilitlenme önlemi). can() yoksa FAIL-CLOSED (can_beyan'ın
+ * tersine: mail içeriği hassas veri). Hesap bazlı kapsam ayrıca
+ * mail_gorunur_hesap_idleri() ile (config/mail_core.php) denetlenir.
+ */
+function can_mail(string $perm): bool {
+    if (!function_exists('can')) return false;
+    $adm = (function_exists('is_admin') && is_admin()) || can('mail.admin');
+    if ($adm) return in_array($perm, ['read', 'reply', 'send', 'admin'], true);
+    $oku = can('mail.read');
+    return match ($perm) {
+        'read'  => $oku,
+        'reply' => $oku && can('mail.reply'),
+        'send'  => $oku && can('mail.send'),
+        default => false,
+    };
+}
+
+/**
  * Personel Takibi girişi bu kullanıcıya gösterilsin mi?
  *
  * ⚠ TEK kaynak (sidebar + bottomnav). personel_takip.php'nin KENDİ kapı
@@ -306,6 +334,7 @@ function first_allowed_page(): ?string {
         'reports.php'        => can('reports.read'),                    // require_perm('reports.read')
         'malzeme_stok.php'   => can('stok.read'),                       // require_perm('stok.read')
         'hesap.php'          => can('hesap.read') || $adm,              // hesap_can('read')
+        'mail.php'           => can_mail('read'),                       // mail.php: can_mail('read')
         'maliyet.php'        => can('maliyet.read') || $adm,            // can_maliyet('read')
         // ⚠ Sidebar/bottomnav ile AYNI kapı (nav_ptak_gorunur) — izin listesi
         // TEK yerde durur, üçüncü bir kopya ayrışma riski doğururdu.
@@ -347,6 +376,7 @@ function nav_aktif_anahtar(): ?string {
     $a_hes   = in_array($cur, ['hesap.php','hesap_liste.php','hesap_kayit.php','hesap_muhasebe.php',
                                'hesap_sil.php','hesap_muhasebe_fis_pdf.php',
                                'hesap_personel.php'], true);
+    $a_mail  = in_array($cur, ['mail.php', 'mail_hesaplar.php', 'mail_ek.php', 'mail_api.php'], true);
     $a_mal   = in_array($cur, ['maliyet.php','maliyet_form.php','maliyet_view.php',
                                'maliyet_sablon.php','maliyet_alanlar.php','maliyet_ambalaj.php'], true);
     // Maliyet'in KENDİ sidebar girişi yok (Sprint Navigasyon-03) — modüle
@@ -383,7 +413,7 @@ function nav_aktif_anahtar(): ?string {
     foreach ([
         'home' => $a_home, 'records' => $a_yuk, 'cikma' => $a_cik, 'beyan' => $a_beyan,
         'kantar' => $a_kant, 'hks' => $a_hks, 'rapor' => $a_rep, 'mstok' => $a_mstok,
-        'hesap' => $a_hes, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
+        'hesap' => $a_hes, 'mail' => $a_mail, 'ptak' => $a_ptak, 'defs' => $a_def, 'users' => $a_usr,
         'roles' => $a_rol, 'audit' => $a_aud, 'backup' => $a_bkp,
     ] as $anahtar => $aktif) {
         if ($aktif) return $anahtar;
@@ -407,6 +437,7 @@ function render_desktop_sidebar(string $base): void {
     // (hesap_can() ile birlikte, Sprint Rol-02) — yoksa yalnız rapor yetkisi olan
     // rol menüde Hesap'ı görüp tıklayınca 403 yiyordu.
     $p_hes   = !$_fn || can('hesap.read') || $p_adm;
+    $p_mail  = can_mail('read');   // TEK kaynak — mail.php'nin kapısıyla birebir
     // PDKS (Personel/Kart) — Sprint PDKS-01 Faz 1B. can() üzerinden DOĞRUDAN
     // kontrol edilir (pdks_can() DEĞİL): config/pdks.php yalnız kendi
     // sayfalarında yüklenir, ama sidebar HER sayfada render_header() ile
@@ -430,6 +461,7 @@ function render_desktop_sidebar(string $base): void {
     $a_beyan = $ak === 'beyan';
     $a_mstok = $ak === 'mstok';
     $a_hes   = $ak === 'hesap';
+    $a_mail  = $ak === 'mail';
     $a_rep   = $ak === 'rapor';
     $a_ptak  = $ak === 'ptak';
     $a_def   = $ak === 'defs';
@@ -477,6 +509,7 @@ function render_desktop_sidebar(string $base): void {
         <?php if ($p_rep)  $lnk('reports.php', '📊', 'Raporlar', $a_rep); ?>
         <?php if ($p_stok) $lnk('malzeme_stok.php', '📦', 'Malzeme Stok', $a_mstok); ?>
         <?php if ($p_hes)  $lnk('hesap.php',   '🏦', 'Hesap',    $a_hes); ?>
+        <?php if ($p_mail) $lnk('mail.php',    '📧', 'Mail Merkezi', $a_mail); ?>
 <?php   // ⚠ Maliyet girişi BİLEREK burada YOK (Sprint Navigasyon-03, kullanıcı
         // isteği): modüle tek giriş noktası Raporlar sayfasındaki karttır.
         // Aktif-sayfa vurgusu $a_mal ile Raporlar linkine devredilir — kullanıcı
@@ -562,6 +595,7 @@ function nav_alt_sayfalar(): array {
         'rapor'   => ['href' => 'reports.php',          'etiket' => 'Raporlar',             'kisa' => 'Raporlar',   'dar' => null,      'renk' => '#132a66', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/rapor.svg'],
         'mstok'   => ['href' => 'malzeme_stok.php',     'etiket' => 'Malzeme Stok',         'kisa' => 'Malzeme',    'dar' => null,      'renk' => '#0c7f73', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mstok.svg'],
         'hesap'   => ['href' => 'hesap.php',            'etiket' => 'Hesap',                'kisa' => 'Hesap',      'dar' => null,      'renk' => '#d8336f', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/hesap.svg'],
+        'mail'    => ['href' => 'mail.php',             'etiket' => 'Mail Merkezi',         'kisa' => 'Mail',       'dar' => null,      'renk' => '#0e7490', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/mail.svg'],
         'ptak'    => ['href' => 'personel_takip.php',   'etiket' => 'Personel Takibi',      'kisa' => 'Personel',   'dar' => null,      'renk' => '#0b5c34', 'grup' => 'Operasyon', 'ikon' => 'assets/nav-icons/ptak.svg'],
         'defs'    => ['href' => 'definitions.php',      'etiket' => 'Tanımlar',             'kisa' => 'Tanımlar',   'dar' => null,      'renk' => '#c77d08', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/defs.svg'],
         'users'   => ['href' => 'users.php',            'etiket' => 'Kullanıcılar',         'kisa' => 'Kullanıcı',  'dar' => null,      'renk' => '#3d49b5', 'grup' => 'Yönetim',   'ikon' => 'assets/nav-icons/users.svg'],
@@ -604,6 +638,7 @@ function nav_alt_izinler(): array {
         'rapor'   => $c('reports.read'),            // reports.php: require_perm('reports.read')
         'mstok'   => $c('stok.read'),               // malzeme_stok.php: require_perm('stok.read')
         'hesap'   => $c('hesap.read') || $adm,      // hesap.php: require_hesap('read')
+        'mail'    => $fn && can_mail('read'),       // mail.php: can_mail('read') — TEK kaynak
         'ptak'    => $fn && nav_ptak_gorunur(),     // personel_takip.php — TEK kaynak
         'defs'    => $c('defs.read'),               // definitions.php: require_perm('defs.read')
         'users'   => $c('users.admin'),             // users.php: require_perm('users.admin')
@@ -1475,7 +1510,7 @@ endif;
                        'attendance.daily_reports','attendance.foreman_rates','attendance.entitlements',
                        'attendance.foreman_accounts','attendance.foreman_payments',
                        'attendance.management_reports'];
-            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin'], $pdks_p);
+            $all_p = array_merge(['dashboard.read','records.read','records.write','records.delete','records.lock','records.unlock','kantar.read','kantar.write','kantar.delete','stok.read','stok.write','defs.read','defs.write','defs.admin','reports.read','reports.export','users.read','users.write','users.admin','beyan.read','beyan.write','beyan.delete','maliyet.read','maliyet.write','maliyet.delete','maliyet.unlock','maliyet.admin','hesap.read','hesap.write','hesap.delete','hesap.approve','hesap.pay','hesap.admin','mail.read','mail.reply','mail.send','mail.admin'], $pdks_p);
             $rp_map = [
                 'admin'    => $all_p,
                 // Sprint Günlük-İşçi-03 düzeltmesi #2 (kullanıcının açık

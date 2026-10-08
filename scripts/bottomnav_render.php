@@ -197,6 +197,7 @@ $GATES = [
     'malzeme_stok.php'      => ['malzeme_stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
     'stok.php'              => ['stok.php', "require_perm('stok.read');", fn() => can('stok.read'), 'stok.read'],
     'hesap.php'             => ['hesap.php', "require_hesap('read');", fn() => can('hesap.read') || is_admin(), 'hesap_can(read) = is_admin() || hesap.read'],
+    'mail.php'              => ['mail.php', "require_mail('read');", fn() => can('mail.read') || can('mail.admin') || is_admin(), 'can_mail(read) = mail.read || mail.admin || is_admin()'],
     'maliyet.php'           => ['maliyet.php', "require_maliyet('read');", fn() => can('maliyet.read') || is_admin(), 'can_maliyet(read) = maliyet.read || is_admin()'],
     'definitions.php'       => ['definitions.php', "require_perm('defs.read');", fn() => can('defs.read'), 'defs.read'],
     'users.php'             => ['users.php', "require_perm('users.admin');", fn() => can('users.admin'), 'users.admin'],
@@ -213,12 +214,12 @@ $GATES = [
 $ANAHTAR_SAYFA = [
     'records' => 'records.php', 'cikma' => 'cikmalar.php', 'beyan' => 'beyanlar.php',
     'kantar' => 'kantar.php', 'hks' => 'halkayit/index.php', 'rapor' => 'reports.php',
-    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'ptak' => 'personel_takip.php',
+    'mstok' => 'malzeme_stok.php', 'hesap' => 'hesap.php', 'mail' => 'mail.php', 'ptak' => 'personel_takip.php',
     'defs' => 'definitions.php', 'users' => 'users.php', 'roles' => 'roles.php',
     'audit' => 'audit.php', 'backup' => 'admin_db_backups.php',
 ];
 // Soğuk başlangıç önceliği: Yüklemeler, Bildirim, Personel, Raporlar, sonra sidebar sırası
-$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'defs', 'users', 'roles', 'audit', 'backup'];
+$SOGUK = ['records', 'hks', 'ptak', 'rapor', 'cikma', 'beyan', 'kantar', 'mstok', 'hesap', 'mail', 'defs', 'users', 'roles', 'audit', 'backup'];
 foreach ($ANAHTAR_SAYFA as $k => $hedef) {
     if (!isset($GATES[$hedef])) { fwrite(STDERR, "Aday '$k' → $hedef kapı tablosunda YOK\n"); exit(1); }
 }

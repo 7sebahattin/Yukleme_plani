@@ -1,0 +1,138 @@
+/* =========================================================
+   assets/mail.css — Mail Merkezi (yalnız mail*.php sayfalarında yüklenir)
+   assets/style.css'e HİÇ dokunmaz → diğer sayfaların mobil düzeni etkilenmez (hesap.css / maliyet.css emsali).
+   Mobil öncelikli: <768 tek panel (liste YA DA mesaj), ≥768 iki panel, ≥1180 üç panel (klasörler sol).
+   Renkler style.css tokenlarından (açık/koyu tema otomatik). Dokunma hedefi ≥ 40px, mobil input 16px.
+   Alt çubuk payı --bn-h ile (sabit px YOK); sabit "Cevapla" çubuğu z-index 450 (< bottomnav 500).
+   ========================================================= */
+[hidden] { display: none !important; }
+
+.mail-kap { min-width: 0; }
+.mail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.mail > .card { margin: 0; }
+.mail-ust { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mail-baslik { font-size: 1.25rem; margin: 0; }
+.mail-ust-eylem { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.mail-satir-form { display: inline-flex; gap: 6px; flex-wrap: wrap; margin: 0; }
+.mail-uyari { padding: 10px 12px; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: var(--radius-sm); color: var(--text); }
+.mail-bilgi { padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-sm); margin: 8px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.mail-ceviri-not { font-size: .8rem; color: var(--muted); margin: 0 0 8px; }
+.mail-uclu-taraf { flex: 1 1 100%; font-size: .85rem; color: var(--text); }
+.mail-senkron-not { font-size: .82rem; color: var(--muted); }
+.mail-hata-metin { color: var(--danger); }
+
+/* Sol sütun sarmalayıcısı: dar ekranda görünmez (çocukları doğrudan akışa katılır), ≥1180'de gerçek sütun */
+.mail-sol { display: contents; }
+
+/* Çipler (hesap + klasör): yatay kayan şerit — SAYFA yatay taşmaz, şerit kendi içinde kayar */
+.mail-hesaplar, .mail-filtreler { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.mail-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--border);
+    border-radius: 999px; background: var(--card); color: var(--text); text-decoration: none; font-size: .9rem; white-space: nowrap; }
+.mail-chip:hover { border-color: var(--primary); }
+.mail-chip.aktif { background: var(--primary); border-color: var(--primary); color: #fff; }
+.mail-chip.pasif { opacity: .6; }
+.mail-rozet, .mail-say { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 999px; font-size: .75rem; font-weight: 700; text-align: center; line-height: 1.5; }
+.mail-rozet { background: var(--danger); color: #fff; }
+.mail-say { background: var(--primary-soft); color: var(--primary-dark); }
+.mail-chip.aktif .mail-say { background: rgba(255,255,255,.25); color: #fff; }
+.mail-hata-nokta { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: var(--danger); color: #fff; font-size: .72rem; font-weight: 700; }
+
+.mail-ara { display: flex; gap: 6px; }
+.mail-ara input[type=search] { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); }
+
+/* Paneller */
+.mail-panes { display: block; min-width: 0; }
+.mail-liste { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.mail-oge { display: block; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; min-width: 0; }
+.mail-oge:last-child { border-bottom: 0; }
+a.mail-oge:hover { background: var(--surface-2); }
+.mail-oge.secili { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); }
+.mail-oge-ust { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.mail-kim { font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mail-oge.okunmamis .mail-kim, .mail-oge.okunmamis .mail-konu { font-weight: 700; }
+.mail-nokta { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); margin-right: 6px; vertical-align: middle; }
+.mail-zaman { font-size: .78rem; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+.mail-konu { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-oz { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-hesap-etiket { margin-left: 6px; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; font-size: .72rem; }
+.mail-durum { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; font-size: .72rem; background: var(--surface-2); border: 1px solid var(--border); }
+.mail-durum--failed, .mail-durum--unknown { background: var(--danger-soft); border-color: var(--danger); color: var(--danger); }
+.mail-durum--pending, .mail-durum--draft, .mail-durum--translated, .mail-durum--approved, .mail-durum--sending { background: var(--warn-soft); border-color: var(--warn); }
+.mail-durum--sent { background: var(--success-soft); border-color: var(--success); }
+.mail-bos { padding: 24px 14px; text-align: center; color: var(--muted); margin: 0; }
+.mail-alt-baslik { margin: 0; padding: 10px 14px; font-size: .85rem; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.mail-sayfalar { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 10px; border-top: 1px solid var(--border); }
+
+/* Okuyucu */
+.mail-okuyucu { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; min-width: 0; }
+.mail-okuyucu-bos { color: var(--muted); text-align: center; padding: 40px 10px; }
+.mail-okuyucu-arac { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.mail-okuyucu-konu { font-size: 1.15rem; margin: 4px 0 8px; overflow-wrap: anywhere; }
+.mail-meta { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 10px; font-size: .86rem; }
+.mail-meta dt { color: var(--muted); }
+.mail-meta dd { margin: 0; overflow-wrap: anywhere; }
+.mail-ekler { list-style: none; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-size: .88rem; }
+.mail-ekler li { padding: 3px 0; overflow-wrap: anywhere; }
+.mail-ek-boyut { color: var(--muted); font-size: .8rem; margin-left: 4px; }
+.mail-sekmeler { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin: 6px 0 10px; }
+.mail-sekmeler a { padding: 9px 14px; min-height: 40px; color: var(--muted); text-decoration: none; border-bottom: 3px solid transparent; margin-bottom: -2px; font-weight: 600; }
+.mail-sekmeler a.aktif { color: var(--primary); border-bottom-color: var(--primary); }
+.mail-metin { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.mail-metin--ham { white-space: pre-wrap; font-family: inherit; margin: 0; }
+.mail-govde { display: block; width: 100%; height: 62vh; min-height: 280px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; }
+.mail-thread { margin-top: 12px; font-size: .88rem; }
+.mail-thread ul { margin: 6px 0 0; padding-left: 18px; }
+.mail-cevapbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mail-cevapbar-not { font-size: .8rem; color: var(--muted); }
+.mail-yaz { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.mail-yaz label { font-weight: 600; font-size: .9rem; }
+.mail-yaz textarea, .mail-yaz select { width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--text); font: inherit; box-sizing: border-box; }
+.mail-yaz textarea { min-height: 140px; resize: vertical; }
+.mail-onay-secenek { display: flex; gap: 8px; align-items: center; font-weight: 400 !important; }
+.mail-onay-kutular { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 10px 0; }
+.mail-onay-kutu { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface-2); min-width: 0; }
+.mail-onay-kutu--cikis { border-color: var(--primary); background: var(--primary-soft); }
+.mail-onay-kutu h3 { margin: 0 0 6px; font-size: .78rem; letter-spacing: .04em; color: var(--muted); }
+.mail-onay-metin { font-size: .95rem; }
+.mail-onay-form { margin: 12px 0; padding: 12px; border: 2px solid var(--primary); border-radius: var(--radius-sm); }
+.mail-onay-not { margin: 0 0 10px; font-size: .88rem; }
+.mail-onayla { min-height: 48px; width: 100%; font-size: 1rem; }
+.mail-cevapla[disabled] { opacity: .6; cursor: not-allowed; }
+
+/* ───── Mobil (<768): tek panel ───── */
+@media (max-width: 767px) {
+    .mail input, .mail select, .mail textarea { font-size: 16px; }   /* iOS zoom önleme */
+    .mail--detay .mail-liste, .mail--detay .mail-hesaplar, .mail--detay .mail-filtreler, .mail--detay .mail-ara,
+    .mail--detay .mail-ust, .mail--detay .mail-senkron-not { display: none; }
+    .mail--liste .mail-okuyucu { display: none; }
+    .mail--detay .mail-okuyucu { padding-bottom: 76px; }   /* sabit Cevapla çubuğunun altında kalmasın */
+    .mail-cevapbar { position: fixed; left: 0; right: 0; z-index: 450; padding: 10px 16px; background: var(--card); border-top: 1px solid var(--border);
+        bottom: calc(var(--bn-h) + env(safe-area-inset-bottom, 0px)); }
+    .mail-cevapbar .btn { flex: 1 1 auto; min-height: 44px; }
+    .mail-cevapbar-not { display: none; }
+    .mail-ust-eylem .btn { min-height: 40px; }
+}
+
+/* ───── Tablet+ (≥768): liste + mesaj yan yana ───── */
+@media (min-width: 768px) {
+    .mail-onay-kutular { grid-template-columns: 1fr 1fr; }
+    .mail-onayla { width: auto; min-width: 260px; }
+    .mail-geri { display: none; }
+    .mail-panes { display: grid; grid-template-columns: minmax(250px, 330px) minmax(0, 1fr); gap: 12px; align-items: start; }
+    .mail-liste { max-height: calc(100vh - 230px); overflow-y: auto; position: sticky; top: 8px; }
+    .mail-okuyucu { min-height: 300px; }
+    .mail-cevapbar { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+}
+
+/* ───── Geniş (≥1180): klasörler sol sütun ───── */
+@media (min-width: 1180px) {
+    .mail { display: grid; grid-template-columns: 210px minmax(0, 1fr); column-gap: 14px; row-gap: 10px; align-items: start; }
+    .mail > .card, .mail-ust, .mail-uyari { grid-column: 1 / -1; }
+    .mail-sol { display: flex; flex-direction: column; gap: 10px; grid-column: 1; grid-row: 2 / span 2; min-width: 0; }
+    .mail-hesaplar, .mail-filtreler { flex-direction: column; overflow: visible; }
+    .mail-ara { grid-column: 2; grid-row: 2; }
+    .mail-panes { grid-column: 2; grid-row: 3; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
+    .mail-chip { justify-content: space-between; border-radius: var(--radius-sm); }
+}
+
+@media (prefers-reduced-motion: no-preference) { .mail-chip, .mail-oge { transition: background-color .12s, border-color .12s; } }
