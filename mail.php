@@ -322,9 +322,6 @@ mail_assets();
             <form method="post" class="mail-yaz" data-tek-gonderim>
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>"><input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
                 <input type="hidden" name="idem" value="<?= h(bin2hex(random_bytes(16))) ?>"><input type="hidden" name="quote" value="0">
-                <?php if ($ceviriHazir): ?>
-                <p class="mail-ceviri-not">Çeviriyi Önizle dediğinizde Türkçe cevap metniniz <strong><?= h(mail_ceviri_saglayici()->ad()) ?></strong> adlı üçüncü taraf servise çeviri için gönderilir; müşteriye e-posta yalnız ayrıca onaylarsanız gönderilir.</p>
-                <?php endif; ?>
                 <label for="mail-tr">Türkçe cevap</label>
                 <textarea id="mail-tr" name="body_tr" rows="8" maxlength="<?= MAIL_CEVAP_MAX ?>" required autofocus></textarea>
                 <label for="mail-dil">Hedef dil</label>
