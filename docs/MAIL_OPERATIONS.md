@@ -17,8 +17,15 @@ Mimari kararlar: `docs/MAIL_CENTER_AGENT_BRIDGE.md`.
    `*/5 * * * * php /home/<hesap>/<site-klasoru>/scripts/mail_sync_cron.php >> /dev/null 2>&1`
    Çıktı satırları: `OK` / `FAIL` / `BUSY` / `BEKLE` / `CEVIRI` / `UYARI`. Çıkış kodu 1 yalnız hiçbir hesap başarılı değilse.
    Cron durursa Mail Hesapları ekranı "cron durmuş olabilir" uyarısı gösterir (son senkron > 30 dk).
-7. **Çeviri (isteğe bağlı, varsayılan KAPALI):** `config/local.php`'de `MAIL_TRANSLATE_PROVIDER` (`deepl|libretranslate|mymemory`) + gerekli anahtar/adres sabitleri.
-   Açıldığında mail metni (adres/başlık/ek hariç) üçüncü taraf servise gider — KVKK/ticari sır açısından karar sahibindedir. Hesap bazında ayrıca "otomatik çeviri" işaretlenir.
+7. **Çeviri (isteğe bağlı, varsayılan KAPALI):** `config/local.php`'de `MAIL_TRANSLATE_PROVIDER` (`deepseek|deepl|libretranslate|mymemory`) + gerekli anahtar/adres sabitleri.
+   Açıldığında mail metni (hesabın kimliği/alıcı-gönderen başlıkları/ekler hariç) üçüncü taraf servise gider — KVKK/ticari sır açısından karar sahibindedir. Hesap bazında ayrıca "otomatik çeviri" işaretlenir.
+   **DeepSeek:** `config/local.php` dosyasına (mevcut `MAIL_MASTER_KEY` tanımını SİLMEDEN) şunları ekleyin:
+   ```php
+   define('MAIL_TRANSLATE_PROVIDER', 'deepseek');
+   define('MAIL_TRANSLATE_KEY', 'BURAYA_DEEPSEEK_API_ANAHTARINIZ');
+   ```
+   Anahtarı ChatGPT/Claude/GitHub/ekran görüntüsü ile paylaşmayın; yalnız sunucudaki gitignore'lu yerel dosyaya yazın. `MAIL_TRANSLATE_KEY` başka sağlayıcı için tanımlıysa ikinci kez `define` kullanmayın; mevcut tanımı güncelleyin. DeepSeek Flash (`deepseek-flash`) düşük maliyetli *non-thinking* kipte `https://api.deepseek.com/chat/completions` üzerinden çalışır; **ücretsiz değildir**, token kullanımı için API bakiyesi gerekir. SMTP/IMAP şifreleri ve ekler gönderilmez; fakat e-posta gövdesindeki ticari/sözleşmesel bilgiler DeepSeek'e gönderilir (yurt dışına veri aktarımı riskini değerlendirin). Dış servis çalışmasa bile orijinal mail okunabilir, taslak korunur; gönderimde insan onayı zorunludur.
+   **Başlatma:** Mail → Mail Hesapları → hesaba `Düzenle` → `Bu hesap için otomatik çeviri` kutusunu işaretle, `Hedef dil: tr` bırak ve kaydet. Ardından 5 dakikalık cron turunu bekle veya ilgili mailde `Şimdi çevir` kullan. 7 günden eski pending kayıtlar otomatik sıradan çıkar; ilgili mailde elle çevirme yapılabilir. Başlangıçta tek hesapla dene, sonra diğer hesaplarda aç.
 
 **Veritabanı gereksinimi:** MySQL ≥ 5.7 ya da MariaDB ≥ 10.2 (tablolar açık `ROW_FORMAT=DYNAMIC` ile kurulur; geniş sütunlar için gerekli). Eski sürümde `migrate.php` kartı ilgili tabloda hata satırı gösterir, mevcut verilere dokunulmaz.
 
