@@ -2409,3 +2409,5 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 .pdks-mo-tablo tfoot tr th, .pdks-mo-tablo tfoot tr td { font-weight: 800; border-top: 2px solid var(--border, rgba(127,127,127,.35)); }
 @media (min-width: 900px) { .pdks-mo-grid { grid-template-columns: 1fr 1fr; } .pdks-mo-genis { grid-column: 1 / -1; } }
 @media print { .pdks-mo { break-inside: avoid; } }
+/* v315 — Süre sütununda ham süre notu (hesaplanan süre saat başı toleranslı) */
+.pdks-sure-ham { display: inline-block; font-size: .78em; color: var(--muted); white-space: nowrap; }
