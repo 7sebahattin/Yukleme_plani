@@ -241,6 +241,48 @@ function hks_gonderilen_adlari(PDO $db, array $ulkeAdlari): array {
   return $harita;
 }
 
+// ── Gönderilen toplamı: yalnız BAŞARILI satırlar (v308) ─────────────────────
+
+// Bir sonuç satırı başarılı mı? api.php taslak_gonder'deki ölçütle AYNI:
+// künye no dolu, '0' değil, hata kodu yok.
+function hks_sonuc_basarili_mi($s): bool {
+  if (!is_array($s)) return false;
+  $no = (string)($s['yeniKunyeNo'] ?? '');
+  return $no !== '' && $no !== '0' && empty($s['hataKodu']);
+}
+
+// Başarılı satırların [kg, adet]'i. Kg, sonucun kendi miktarından; o yoksa (0)
+// ve sonuç sayısı gönderilen satır sayısına eşitse aynı sıradaki gönderilen
+// satırdan. Hiç başarılı satır yoksa ya da kg bulunamazsa kg = null (çağıran
+// kayıtlı değerle devam eder) — hatalı satırlar toplama ASLA girmez.
+function hks_basarili_ozet(array $sonuclar, array $satirlar = []): array {
+  $kg = 0.0; $adet = 0;
+  $esit = count($sonuclar) === count($satirlar);
+  foreach (array_values($sonuclar) as $i => $s) {
+    if (!hks_sonuc_basarili_mi($s)) continue;
+    $adet++;
+    $m = (float)($s['miktar'] ?? 0);
+    if ($m <= 0 && $esit) $m = (float)($satirlar[$i]['miktar'] ?? 0);
+    $kg += $m;
+  }
+  return [$kg > 0 ? round($kg, 3) : null, $adet];
+}
+
+// LİSTE için: kayıtlı toplam/adet, hatalı satır içeren ESKİ kayıtlarda da doğru
+// görünsün (kayıtlar tüm satırları topluyordu). Hata yoksa kayıt AYNEN döner;
+// veri/ sonuç yoksa ya da başarılı kg çıkmıyorsa kayıtlı değerler korunur.
+// Yalnız görüntü — DB'deki satır değişmez.
+function hks_gonderilen_gercek_toplam(array $veri, float $kayitliKg, int $kayitliAdet): array {
+  $sonuclar = is_array($veri['sonuclar'] ?? null) ? $veri['sonuclar'] : [];
+  if (!$sonuclar) return [$kayitliKg, $kayitliAdet];
+  $hataVar = false;
+  foreach ($sonuclar as $s) if (!hks_sonuc_basarili_mi($s)) { $hataVar = true; break; }
+  if (!$hataVar) return [$kayitliKg, $kayitliAdet];
+  [$kg, $adet] = hks_basarili_ozet($sonuclar);
+  if ($kg === null) return [$kayitliKg, $kayitliAdet];
+  return [$kg, $adet];
+}
+
 // ── Tohum ───────────────────────────────────────────────────────────────────
 
 // Bir hks_gonderilenler satırından taslakDuzenle() biçiminde tohum kurar.
@@ -329,7 +371,11 @@ function hks_eski_tohum_kur(PDO $db, array $row): array {
 
   $tur = hks_eski_tur_coz($row);
   $fiyat = (float)($row['fiyat'] ?? 0);
-  $kg = round((float)($row['toplam_kg'] ?? 0), 3);
+  // Hatalı satır içeren eski kayıtta kayıtlı toplam hatalıyı da içerir — yalnız
+  // başarılı kg alınır (tekrar gönderimde yanlış kilo planlanmasın).
+  $__v = json_decode((string)($row['veri'] ?? ''), true);
+  [$kg] = hks_gonderilen_gercek_toplam(is_array($__v) ? $__v : [], (float)($row['toplam_kg'] ?? 0), (int)($row['adet'] ?? 0));
+  $kg = round((float)$kg, 3);
   $urunAd = trim((string)($row['urun_ad'] ?? ''));
 
   $ortak = [

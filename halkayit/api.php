@@ -707,7 +707,9 @@ try {
       hks_son_guncelle($ortak, $t['firma_id']);
       hks_kisi_havuzuna_isle($db, $ortak, isset($__hks_user['id']) ? (int)$__hks_user['id'] : null);
       $gid = 'g' . round(microtime(true) * 1000);
-      $toplamKg = array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
+      // Toplam kg / adet YALNIZ başarılı satırlardan (hatalı satır "gönderildi" sayılmaz).
+      [$__bkg, $__badet] = hks_basarili_ozet($sonuc['sonuclar'], $satirlar);
+      $toplamKg = $__bkg ?? array_sum(array_map(fn($s) => (float)$s['miktar'], $satirlar));
       $rusum = array_sum(array_map(fn($s) => (float)$s['rusum'], $sonuc['sonuclar']));
       $yeniKunyeler = array_values(array_map(fn($s) => $s['yeniKunyeNo'], $basarili));
       $st = $db->prepare('INSERT INTO ' . hks_tablo('gonderilenler') . '
@@ -715,7 +717,7 @@ try {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
       $st->execute([$gid, date('Y-m-d H:i:s'), $t['firma_id'], $t['firma_ad'],
         $ortak['plaka'] ?? '', $ortak['belgeNo'] ?? '', $ortak['ulkeAd'] ?? '', $ortak['urunAd'] ?? '',
-        count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
+        $__badet > 0 ? $__badet : count($satirlar), $toplamKg, $ortak['fiyat'] ?? 0, $rusum,
         count($sonuc['sonuclar']) - count($basarili), $sonuc['genelHata'], hks_bildirim_turu_kodu($ortak),
         json_encode(['yeniKunyeler' => $yeniKunyeler, 'sonuclar' => $sonuc['sonuclar'], 'kopya' => $__kopya], JSON_UNESCAPED_UNICODE)]);
 
@@ -752,12 +754,13 @@ try {
       $__adlar = hks_gonderilen_adlari($db, array_column($rows, 'ulke_ad'));
       $liste = array_map(function ($r) use ($__adlar) {
         $veri = json_decode($r['veri'], true) ?: [];
+        $__ozet = hks_gonderilen_gercek_toplam($veri, (float)$r['toplam_kg'], (int)$r['adet']);
         return [
           'id' => $r['id'], 'zaman' => (new DateTime($r['zaman']))->format('c'),
           'firmaId' => $r['firma_id'] ?? '', 'firmaAd' => $r['firma_ad'],
           'plaka' => $r['plaka'], 'belgeNo' => $r['belge_no'],
-          'ulkeAd' => hks_gonderilen_ulke_isimle($r['ulke_ad'], $__adlar), 'urunAd' => $r['urun_ad'], 'adet' => (int)$r['adet'],
-          'toplamKg' => (float)$r['toplam_kg'], 'fiyat' => (float)$r['fiyat'], 'rusum' => (float)$r['rusum'],
+          'ulkeAd' => hks_gonderilen_ulke_isimle($r['ulke_ad'], $__adlar), 'urunAd' => $r['urun_ad'], 'adet' => $__ozet[1],
+          'toplamKg' => $__ozet[0], 'fiyat' => (float)$r['fiyat'], 'rusum' => (float)$r['rusum'],
           'hataSayisi' => (int)$r['hata_sayisi'], 'genelHata' => $r['genel_hata'],
           'bildirimTuru' => $r['bildirim_turu'] ?? null,   // P3 — NULL: legacy kayıt (backfill yapılmadı)
           'yeniKunyeler' => $veri['yeniKunyeler'] ?? [],
