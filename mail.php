@@ -384,7 +384,6 @@ mail_assets();
                     <?php if ($m['tr_status'] === 'failed' && $m['tr_error']): ?><span class="mail-hata-metin"><?= h($m['tr_error']) ?></span><?php endif; ?>
                     Orijinal metin <a href="<?= h($url(['v' => 'orj'])) ?>">Orijinal</a> sekmesinde okunabilir.
                     <?php if ($ceviriHazir && mail_hesap_ceviri_acik($pdo, (int)$m['account_id']) && in_array($m['tr_status'], ['skipped', 'failed', 'pending'], true)): ?>
-                    <span class="mail-uclu-taraf">⚠ Çevirirseniz mail metni (adres/başlık/ek hariç) <strong><?= h(mail_ceviri_saglayici()->ad()) ?></strong> adlı ÜÇÜNCÜ TARAF çeviri servisine gönderilir.</span>
                     <form method="post" class="mail-satir-form">
                         <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>"><input type="hidden" name="m" value="<?= (int)$m['id'] ?>">
                         <input type="hidden" name="a" value="<?= $aSecili ?>"><input type="hidden" name="f" value="<?= h($filtre) ?>">
