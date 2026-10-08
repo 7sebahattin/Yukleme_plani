@@ -271,6 +271,12 @@ final class MailTranslateMyMemory implements MailTranslationProviderInterface
  */
 function mail_ceviri_saglayici(?array $cfg = null): ?MailTranslationProviderInterface
 {
+    // Üretimde config/db.php sunucuya özgüdür ve local.php yüklemesi eski olabilir.
+    // Gerçek yapılandırma okunmadan önce local.php'yi modülün kendisi de güvenle yüklesin.
+    // Test enjekte edilmiş ayarlarda bu dosyaya dokunulmaz.
+    if ($cfg === null && !defined('MAIL_TRANSLATE_PROVIDER') && is_file(__DIR__ . '/local.php')) {
+        require_once __DIR__ . '/local.php';
+    }
     $c = $cfg ?? [
         'provider' => defined('MAIL_TRANSLATE_PROVIDER') ? (string)MAIL_TRANSLATE_PROVIDER : 'none',
         'key'      => defined('MAIL_TRANSLATE_KEY') ? (string)MAIL_TRANSLATE_KEY : '',
@@ -296,9 +302,10 @@ function mail_ceviri_saglayici(?array $cfg = null): ?MailTranslationProviderInte
 /** Yönetici ekranı için okunur durum. */
 function mail_ceviri_yapilandirma_ozeti(): string
 {
+    $saglayici = mail_ceviri_saglayici();   // aynı bootstrap, eksik local.php hatası yok
     $p = defined('MAIL_TRANSLATE_PROVIDER') ? strtolower((string)MAIL_TRANSLATE_PROVIDER) : 'none';
     if ($p === '' || $p === 'none') return 'KAPALI — mail içeriği hiçbir dış servise gönderilmiyor.';
-    if (mail_ceviri_saglayici() === null) return "Sağlayıcı \"$p\" seçili ama yapılandırma eksik/geçersiz (anahtar veya https adres) — çeviri çalışmıyor.";
+    if ($saglayici === null) return "Sağlayıcı \"$p\" seçili ama yapılandırma eksik/geçersiz (anahtar veya https adres) — çeviri çalışmıyor.";
     return "AÇIK — sağlayıcı: $p. Yalnız gövde metni ve konu gönderilir (adres/başlık/ek gönderilmez).";
 }
 
@@ -438,7 +445,9 @@ function mail_ceviri_mesaj(PDO $pdo, MailTranslationProviderInterface $p, array 
     }
     try {
         $govde = $h['metin'] !== '' ? mail_ceviri_cevir($p, $h['metin'], $kaynak, $hedef) : ['metin' => '', 'tespit' => null];
-        $konu = trim((string)$m['subject']) !== '' ? mail_ceviri_cevir($p, mb_substr((string)$m['subject'], 0, 300), $kaynak ?? $govde['tespit'], $hedef) : ['metin' => '', 'tespit' => null];
+        $konuMetni = (string)$m['subject'];
+        if (function_exists('mail_mime_mojibake_duzelt')) $konuMetni = mail_mime_mojibake_duzelt($konuMetni);
+        $konu = trim($konuMetni) !== '' ? mail_ceviri_cevir($p, mb_substr($konuMetni, 0, 300), $kaynak ?? $govde['tespit'], $hedef) : ['metin' => '', 'tespit' => null];
     } catch (MailTranslateException $e) {
         $hata = mb_substr(mail_redact($e->getMessage()), 0, 250);
         if ($e->kind === 'config') return ['durum' => 'config', 'hata' => $hata];          // mesaj pending kalır, kuyruk durur
