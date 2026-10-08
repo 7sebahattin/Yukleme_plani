@@ -1072,6 +1072,69 @@ function pdks_faz8b_oran_ekle(
     return ['ok' => true, 'id' => $id];
 }
 
+/**
+ * v320 — GEÇMİŞ fiyat döneminin SAAT ayarlarını düzeltir (Tam / Yarım / FM başlangıcı / Çift eşiği + ücreti).
+ * Sahip şikâyeti: 10 saat girilmiş dönem, sonradan 9 girilince yeni dönem yalnız İLERİYE geçerli olduğu için
+ * eski günler 10 saatle hesaplanmaya devam ediyordu ve düzeltme yolu yoktu.
+ * KAPILAR: saat kolonları kurulu · dönem var · gerekçe zorunlu (≤500) · dönemin tarih aralığında bu çavuşun
+ * KESİNLEŞMİŞ (final) hakedişi varsa RED (önce yeniden açılmalı — kesin hakediş asla sessizce değişmez).
+ * Doğrulama oran_ekle ile AYNI (`pdks_faz8b_saat_girdileri_dogrula`); boş alan = NULL (= mesainin kendi süresi).
+ * Etki: tek UPDATE (yalnız 5 saat kolonu, ücretlere dokunmaz) + aralıktaki TASLAK hakedişler
+ * `needs_recalculation` · audit `saat_duzelt` (eski/yeni + gerekçe). Tek transaction.
+ */
+function pdks_faz8b_oran_saat_duzelt(int $rateId, array $saatler, string $gerekce, int $userId, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_saat_kolonlari_hazir($pdo)) return ['ok' => false, 'hata' => 'Saat kolonları kurulu değil (migrate.php).'];
+    $gerekce = trim($gerekce);
+    if ($gerekce === '' || mb_strlen($gerekce) > 500) return ['ok' => false, 'hata' => 'Düzeltme gerekçesi zorunludur (en fazla 500 karakter).'];
+    $st = $pdo->prepare("SELECT * FROM foreman_worker_rates WHERE id = ?");
+    $st->execute([$rateId]);
+    $o = $st->fetch();
+    if (!$o) return ['ok' => false, 'hata' => 'Fiyat dönemi bulunamadı.'];
+    $foremanId = (int)$o['foreman_id'];
+
+    $v = pdks_faz8b_saat_girdileri_dogrula($saatler, $foremanId, $pdo);
+    if (!$v['ok']) return ['ok' => false, 'hata' => $v['hata']];
+    $kolonlar = ['full_day_minutes', 'half_day_max_minutes', 'overtime_start_minutes', 'double_day_minutes', 'double_day_rate'];
+    $yeni = array_fill_keys($kolonlar, null);
+    foreach ($v['degerler'] as $k => $d) if (array_key_exists($k, $yeni)) $yeni[$k] = $d;
+    $eski = array_intersect_key($o, $yeni);
+
+    $tarihKosul = 's.foreman_id = ? AND s.work_date >= ?' . (!empty($o['valid_to']) ? ' AND s.work_date <= ?' : '');
+    $tarihPar = array_merge([$foremanId, (string)$o['valid_from']], !empty($o['valid_to']) ? [(string)$o['valid_to']] : []);
+    $hakVar = pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'status');
+    try {
+        $pdo->beginTransaction();
+        if ($hakVar) {
+            $stF = $pdo->prepare("SELECT COUNT(*) FROM foreman_daily_entitlements e JOIN daily_work_sessions s ON s.id = e.session_id
+                                   WHERE $tarihKosul AND e.status = 'final'");
+            $stF->execute($tarihPar);
+            if ((int)$stF->fetchColumn() > 0) {
+                $pdo->rollBack();
+                return ['ok' => false, 'hata' => 'Bu dönemde kesinleşmiş hakediş var — önce o günlerin hakedişini yeniden açın, sonra saatleri düzeltin.'];
+            }
+        }
+        $set = implode(', ', array_map(fn($k) => "$k = ?", $kolonlar));
+        $pdo->prepare("UPDATE foreman_worker_rates SET $set WHERE id = ?")->execute(array_merge(array_values($yeni), [$rateId]));
+        $isaret = 0;
+        if ($hakVar && pdks_faz8b_kolon_var($pdo, 'foreman_daily_entitlements', 'needs_recalculation')) {
+            $stD = $pdo->prepare("UPDATE foreman_daily_entitlements SET needs_recalculation = 1
+                                   WHERE status = 'draft' AND session_id IN (SELECT s.id FROM daily_work_sessions s WHERE $tarihKosul)");
+            $stD->execute($tarihPar);
+            $isaret = $stD->rowCount();
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return ['ok' => false, 'hata' => 'Saatler düzeltilemedi: ' . $e->getMessage()];
+    }
+    if (function_exists('audit_log_event')) {
+        audit_log_event('saat_duzelt', 'foreman_worker_rates', $rateId, $eski, $yeni + ['gerekce' => $gerekce, 'isaretlenen_taslak' => $isaret]);
+    }
+    return ['ok' => true, 'isaretlenen' => $isaret];
+}
+
 /** v299: fiyat geçmişi için kısa saat özeti — ['saatler' => 'Tam 9 saat · FM 10 saat · Yarım 5 saat', 'cift' => '2.000,00 TRY · 12 saat']. */
 function pdks_faz8b_oran_saat_ozeti(array $o): array
 {
