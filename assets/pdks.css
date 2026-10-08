@@ -2420,3 +2420,18 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 .pdks-gun-nav-tarih { font-weight: 800; font-variant-numeric: tabular-nums; flex: 1 1 auto; text-align: center; }
 .pdks-gun-nav-pasif { opacity: .45; pointer-events: none; cursor: default; }
 @media (max-width: 767px) { .pdks-gun-nav .btn { flex: 1 1 40%; text-align: center; } .pdks-gun-nav-tarih { order: -1; flex: 1 1 100%; } }
+.pdks-mo-kaynak { margin: -2px 0 8px; font-size: .8rem; color: var(--muted); }
+/* v320 — Çavuş Ücretleri › Fiyat Geçmişi "Saatleri Düzelt" (native dialog#cfSaatDuzelt) */
+dialog.cf-sd { width: min(480px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: 90vh; border: 0; padding: 0; border-radius: 16px; background: var(--card); color: var(--text); box-shadow: 0 24px 60px rgba(15,23,42,.28); }
+dialog.cf-sd::backdrop { background: rgba(15,23,42,.45); }
+dialog.cf-sd[open] > form { display: flex; flex-direction: column; max-height: 90vh; min-height: 0; }
+.cf-sd-bas { padding: 16px 18px 8px; border-bottom: 1px solid var(--border); }
+.cf-sd-bas h2 { margin: 0; font-size: 1.1rem; }
+.cf-sd-alt { margin: 4px 0 0; color: var(--muted); font-size: .85rem; }
+.cf-sd-govde { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 18px; display: grid; gap: 10px; }
+.cf-sd-govde .cf2-alan { display: grid; gap: 4px; }
+.cf-sd-govde input, .cf-sd-govde textarea { width: 100%; }
+.cf-sd-alt-cubuk { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+.cf-sd-mobil { margin-top: 8px; }
+.cf-sd-mobil .btn { min-height: 40px; width: 100%; }
+@media (max-width: 767px) { dialog.cf-sd { width: calc(100vw - 24px); max-width: calc(100vw - 24px); } }

@@ -122,6 +122,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'cavus_u
         }
         $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
     }
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form'] ?? '') === 'saat_duzelt') {
+    // v320: mevcut (geçmiş) fiyat döneminin SAATLERİNİ düzeltir — ücretlere
+    // dokunmaz. Kesin hakediş varsa reddedilir; taslaklar yeniden hesaba işaretlenir.
+    csrf_check($_POST['csrf'] ?? null);
+    require_pdks_hakedis('rates');
+    $cavusId = filter_var($_POST['foreman_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $rateId = filter_var($_POST['rate_id'] ?? '', FILTER_VALIDATE_INT) ?: null;
+    $saatler = [
+        'full_day' => (string)($_POST['full_day_saat'] ?? ''),
+        'half_day' => (string)($_POST['half_day_saat'] ?? ''),
+        'overtime_start' => (string)($_POST['overtime_start_saat'] ?? ''),
+        'double_day' => (string)($_POST['double_day_saat'] ?? ''),
+        'double_day_rate' => (string)($_POST['double_day_rate'] ?? ''),
+    ];
+    $stR = $pdo->prepare("SELECT foreman_id FROM foreman_worker_rates WHERE id = ?");
+    $stR->execute([(int)$rateId]);
+    $rateCavus = $stR->fetchColumn();
+    if (!$cavusId || !$rateId || $rateCavus === false || (int)$rateCavus !== $cavusId) {
+        $errors[] = 'Fiyat dönemi bulunamadı.';
+    } elseif (!$saatHazir) {
+        $errors[] = 'Saat kolonları kurulu değil (migrate.php).';
+    } else {
+        $sonuc = pdks_faz8b_oran_saat_duzelt($rateId, $saatler, (string)($_POST['gerekce'] ?? ''), (int)$auth_user['id'], $pdo);
+        if ($sonuc['ok']) {
+            $msg = 'Fiyat döneminin saatleri düzeltildi.';
+            if ((int)$sonuc['isaretlenen'] > 0) $msg .= ' ' . (int)$sonuc['isaretlenen'] . ' taslak hakediş yeniden hesaplanmak üzere işaretlendi.';
+            header('Location: cavus_fiyatlari.php?cavus=' . $cavusId . '&ok=' . urlencode($msg) . '#cfFiyatGecmisi');
+            exit;
+        }
+        $errors[] = $sonuc['hata'] ?? 'Kaydedilemedi.';
+    }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
     require_pdks_hakedis('rates');
@@ -218,11 +249,14 @@ if ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && isset($_POST['cavus_
 }
 $cavusYontemSecili = ($errors && ($_POST['form'] ?? '') === 'cavus_yontem' && in_array(($_POST['cavus_yontem'] ?? ''), ['A', 'B'], true))
     ? (string)$_POST['cavus_yontem'] : $cavusYontem;
-// v299: saat alanlarının varsayılanı = çavuşun normal günlük süresi (Tam saati);
-// hatalı POST'ta girilen değerler korunur.
+// v320: saat alanları BOŞ gelir (eskiden Tam saati çavuşun o anki süresiyle ön-dolduruluyordu ve
+// her fiyat kaydında fark edilmeden kalıcı yazılıyordu — "FM 10 saat üzeri" şikâyetinin kaynağı).
+// Boş = NULL = mesainin kendi süresi (çavuş normal süresi); süre placeholder'da görünür.
+// Hatalı POST'ta girilen değerler korunur.
 $oranHataPost = $errors && ($_POST['form'] ?? '') === 'oran';
+$cavusNormalEtiket = $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '';
 $saatForm = [
-    'full_day_saat' => $seciliCavus ? pdks_faz8b_dk_girdi(pdks_faz8b_cavus_normal_sure_dk((int)$seciliCavus['id'], $pdo)) : '',
+    'full_day_saat' => '',
     'half_day_saat' => '', 'overtime_start_saat' => '', 'double_day_saat' => '', 'double_day_rate' => '',
 ];
 if ($oranHataPost) {
@@ -336,7 +370,7 @@ render_flash();
                 <label class="cf2-alan">
                     <span class="cf2-etiket"><?= $cfIk('saat') ?>Tam Yevmiye Saati</span>
                     <span class="cf2-girdi"><span class="cf2-girdi-ik"><?= $cfIk('saat') ?></span>
-                    <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 9 ya da 9:30" value="<?= h($saatForm['full_day_saat']) ?>"></span>
+                    <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="<?= h($cavusNormalEtiket !== '' ? 'boş = çavuş süresi (' . $cavusNormalEtiket . ' sa)' : 'ör. 9 ya da 9:30') ?>" value="<?= h($saatForm['full_day_saat']) ?>"></span>
                 </label>
                 <?php endif; ?>
             </div>
@@ -421,6 +455,23 @@ render_flash();
     </form>
 </section>
 
+<?php
+// v320: geçmiş fiyat döneminin saatlerini düzeltme düğmesi (ücretlere dokunmaz).
+$cfSaatDuzeltBtn = static function (array $o): string {
+    $dkG = static fn($v) => ($v === null || $v === '' || (int)$v <= 0) ? '' : pdks_faz8b_dk_girdi((int)$v);
+    $cr = $o['double_day_rate'] ?? null;
+    $aralik = date('d.m.Y', strtotime((string)$o['valid_from'])) . ' → ' . (!empty($o['valid_to']) ? date('d.m.Y', strtotime((string)$o['valid_to'])) : 'devam ediyor');
+    return '<button type="button" class="btn btn-sm" data-cf-saat-duzelt'
+        . ' data-rate="' . (int)$o['id'] . '"'
+        . ' data-baslik="' . h($o['worker_type_name'] . ' · ' . $aralik) . '"'
+        . ' data-tam="' . h($dkG($o['full_day_minutes'] ?? null)) . '"'
+        . ' data-yarim="' . h($dkG($o['half_day_max_minutes'] ?? null)) . '"'
+        . ' data-fm="' . h($dkG($o['overtime_start_minutes'] ?? null)) . '"'
+        . ' data-cift="' . h($dkG($o['double_day_minutes'] ?? null)) . '"'
+        . ' data-cift-ucret="' . h(($cr === null || $cr === '') ? '' : str_replace('.', ',', rtrim(rtrim(number_format((float)$cr, 2, '.', ''), '0'), '.'))) . '"'
+        . '>✏ Saatleri Düzelt</button>';
+};
+?>
 <section class="card cf2-kart" id="cfFiyatGecmisi">
     <header class="cf2-kart-bas">
         <span class="cf2-tile cf2-tile--turuncu"><?= $cfIk('gecmis') ?></span>
@@ -435,7 +486,7 @@ render_flash();
 <?php if (!empty($oranlar)): ?>
 <div class="table-wrap pc-only">
 <table class="data-table">
-<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><?php if ($saatHazir): ?><th>Saatler</th><th>Çift Yevmiye</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th></tr></thead>
+<thead><tr><th>İşçi Tipi</th><th><?= $faz8bHazir ? 'Tam' : 'Günlük Ücret' ?></th><?php if ($faz8bHazir): ?><th>Yarım</th><th>Fazla Mesai</th><?php endif; ?><?php if ($saatHazir): ?><th>Saatler</th><th>Çift Yevmiye</th><?php endif; ?><th>Geçerlilik</th><th>Durum</th><?php if ($saatHazir): ?><th></th><?php endif; ?></tr></thead>
 <tbody>
 <?php foreach ($oranlar as $o): ?>
 <tr>
@@ -451,6 +502,7 @@ render_flash();
     <?php endif; ?>
     <td class="muted"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></td>
     <td><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></td>
+    <?php if ($saatHazir): ?><td><?= $cfSaatDuzeltBtn($o) ?></td><?php endif; ?>
 </tr>
 <?php endforeach; ?>
 </tbody></table></div>
@@ -461,12 +513,65 @@ render_flash();
     <div class="pdks-card-top"><div class="pdks-card-meta"><div class="pdks-row-name"><?= h($o['worker_type_name']) ?></div><div class="pdks-row-sub"><?= h(date('d.m.Y', strtotime($o['valid_from']))) ?> → <?= $o['valid_to'] ? h(date('d.m.Y', strtotime($o['valid_to']))) : 'devam ediyor' ?></div></div><span class="pdks-badge <?= $o['is_active'] ? 'pdks-badge-aktif' : 'pdks-badge-pasif' ?>"><?= $o['is_active'] ? 'Aktif' : 'Pasif' ?></span></div>
     <div class="pdks-row-sub"><?= $faz8bHazir ? 'Tam' : 'Günlük' ?>: <strong><?= h(number_format((float)$o['daily_rate'],2,',','.')) ?> <?= h($o['currency']) ?></strong></div>
     <?php if ($faz8bHazir): ?><div class="pdks-row-sub">Yarım: <?= ($o['half_day_rate'] ?? null) !== null ? h(number_format((float)$o['half_day_rate'],2,',','.') . ' ' . $o['currency']) : '—' ?></div><div class="pdks-row-sub">FM: <?= ($o['overtime_rate'] ?? null) !== null ? h(number_format((float)$o['overtime_rate'],2,',','.') . ' ' . $o['currency'] . ' · ' . (($o['overtime_mode'] ?? '') === 'fixed' ? 'Sabit' : 'Saatlik')) : '—' ?></div><?php endif; ?>
-    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><?php endif; ?>
+    <?php if ($saatHazir): $oSaat = pdks_faz8b_oran_saat_ozeti($o); ?><div class="pdks-row-sub">Saatler: <?= $oSaat['saatler'] !== '' ? h($oSaat['saatler']) : 'mesai normal süresi' ?></div><?php if ($oSaat['cift'] !== ''): ?><div class="pdks-row-sub">Çift: <?= h($oSaat['cift']) ?></div><?php endif; ?><div class="cf-sd-mobil"><?= $cfSaatDuzeltBtn($o) ?></div><?php endif; ?>
 </div>
 <?php endforeach; ?>
 </div>
 <?php endif; ?>
 </section>
+
+<?php if ($saatHazir && !empty($oranlar)): ?>
+<dialog id="cfSaatDuzelt" class="cf-sd" aria-labelledby="cfSdBaslik">
+    <form method="post" action="cavus_fiyatlari.php?cavus=<?= (int)$cavusId ?>">
+        <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+        <input type="hidden" name="form" value="saat_duzelt">
+        <input type="hidden" name="foreman_id" value="<?= (int)$cavusId ?>">
+        <input type="hidden" name="rate_id" value="">
+        <header class="cf-sd-bas">
+            <h2 id="cfSdBaslik">Saatleri Düzelt</h2>
+            <p class="cf-sd-alt" data-cf-sd-baslik></p>
+        </header>
+        <div class="cf-sd-govde">
+            <p class="cf2-bilgi cf2-bilgi--mavi"><span>Yalnız bu dönemin SAATLERİ değişir, ücretler değişmez. Boş = çavuşun mesai süresi<?= $cavusNormalEtiket !== '' ? ' (' . h($cavusNormalEtiket) . ' sa)' : '' ?>. Kesinleşmiş hakediş varsa düzeltme yapılmaz; taslak hakedişler yeniden hesaplanır.</span></p>
+            <label class="cf2-alan"><span class="cf2-etiket">Tam Yevmiye Saati</span>
+                <input type="text" name="full_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="<?= h($cavusNormalEtiket !== '' ? 'boş = çavuş süresi (' . $cavusNormalEtiket . ' sa)' : 'ör. 9 ya da 9:30') ?>"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">Yarım Yevmiye Saati (bilgi)</span>
+                <input type="text" name="half_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="ör. 5"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">FM Başlangıç Saati</span>
+                <input type="text" name="overtime_start_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="boş = Tam saati"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">Çift Yevmiye Eşiği (saat)</span>
+                <input type="text" name="double_day_saat" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="boş = çift yok"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">Çift Yevmiye Ücreti</span>
+                <input type="text" name="double_day_rate" inputmode="decimal" autocomplete="off" placeholder="boş = çift yok"></label>
+            <label class="cf2-alan"><span class="cf2-etiket">Düzeltme Gerekçesi <b class="cf2-zorunlu">*</b></span>
+                <textarea name="gerekce" required maxlength="500" rows="2" placeholder="ör. Tam saati yanlış girilmişti"></textarea></label>
+        </div>
+        <footer class="cf-sd-alt-cubuk">
+            <button type="button" class="btn" data-cf-sd-kapat>Vazgeç</button>
+            <button type="submit" class="btn btn-primary">Kaydet</button>
+        </footer>
+    </form>
+</dialog>
+<script>
+(function () {
+    var dlg = document.getElementById('cfSaatDuzelt');
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    var f = dlg.querySelector('form');
+    var alanlar = { full_day_saat: 'tam', half_day_saat: 'yarim', overtime_start_saat: 'fm', double_day_saat: 'cift', double_day_rate: 'ciftUcret' };
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-cf-saat-duzelt]');
+        if (!b) return;
+        f.elements.rate_id.value = b.dataset.rate || '';
+        Object.keys(alanlar).forEach(function (ad) { f.elements[ad].value = b.dataset[alanlar[ad]] || ''; });
+        f.elements.gerekce.value = '';
+        dlg.querySelector('[data-cf-sd-baslik]').textContent = b.dataset.baslik || '';
+        dlg.showModal();
+        f.elements.full_day_saat.focus();
+    });
+    dlg.querySelector('[data-cf-sd-kapat]').addEventListener('click', function () { dlg.close(); });
+})();
+</script>
+<?php endif; ?>
 
 <?php if (!$cavusUcretHazir): ?>
 <div class="flash flash-warning">Çavuş Ücreti tablosu henüz oluşturulamadı. Yönetici <a href="migrate.php">migrate.php</a>'den oluşturabilir.</div>
