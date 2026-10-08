@@ -2391,3 +2391,17 @@ html[data-theme="dark"] .kh-cavus.kh-aktif, html[data-theme="dark"] .kh-sayac-ka
 html[data-theme="dark"] .kh-cip { background: #1a2433; }
 html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 @media print { .kh-cubuk, .kh-sec-th, .kh-sec-td, .kh-sayac, .kh-ozet { display: none !important; } }
+
+/* v313 — Günlük Puantaj "Mesai Özeti" */
+.pdks-mo { margin: 0 0 18px; }
+.pdks-mo > h3 { margin: 0 0 10px; font-size: 1.05rem; }
+.pdks-mo-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.pdks-mo-kart { background: var(--card); border: 1px solid var(--border, rgba(127,127,127,.25)); border-radius: var(--radius); padding: 12px; min-width: 0; }
+.pdks-mo-kart h4 { margin: 0 0 8px; font-size: .9rem; }
+.pdks-mo-kart .pdks-kiosk-counter-totals { margin-top: 0; }
+.pdks-mo-kart .pdks-kiosk-counter-box { background: transparent; border: 1px solid var(--border, rgba(127,127,127,.25)); }
+.pdks-mo-tablo th, .pdks-mo-tablo td { text-align: center; white-space: nowrap; }
+.pdks-mo-tablo tbody th { text-align: left; font-weight: 700; }
+.pdks-mo-not { margin: 8px 0 0; font-size: .78rem; color: var(--muted); }
+@media (min-width: 900px) { .pdks-mo-grid { grid-template-columns: 2fr 1fr; } .pdks-mo-genis { grid-column: 1 / -1; } }
+@media print { .pdks-mo { break-inside: avoid; } }

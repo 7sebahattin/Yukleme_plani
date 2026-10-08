@@ -549,6 +549,69 @@ function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
     ];
 }
 
+/**
+ * v313 — Günlük Puantaj "Mesai Özeti": verilen mesailerin (oturum id'leri) toplu özeti.
+ * SALT OKUNUR; süre/sınıf/FM hesabını YAPMAZ — her dönem için TEK sınıflandırıcıyı
+ * (pdks_faz8b_donem_siniflandir) kullanır. Servis adetleri pdks_servis_toplamlar_toplu().
+ *
+ *  tanim[tip adı] = [tam, yarim, cift, bekliyor (sınıf kararı yok), suruyor (çıkışsız), toplam]
+ *      — yalnız sistem tipleri (Kadın/Erkek/Rampacı); sıfır olsa da satır vardır.
+ *  karisik   — atanmamış Karışık dönem sayısı (sınıfsız, süreye KATILMAZ)
+ *  calisma_dk   — TOLERANSLI toplam çalışma: Σ [min(süre, FM başlangıcı) + FM saati × 60]
+ *                 (FM = 15 dk tolerans sonrası, başlayan saat yukarı; bkz. pdks_faz8b_fm_saat)
+ *  ham_dk       — Σ gerçek (çıkış − giriş) süre, toleranssız
+ *  fm_saat      — toplam fazla mesai adayı (toleranslı)   fm_onayli / fm_bekleyen / fm_red
+ *  sureli_kisi  — süresi hesaplanan (çıkışı olan, Karışık olmayan) dönem sayısı
+ *  servis       — ['BUYUK' => n, 'KUCUK' => n]
+ * Şema hazır değilse null.
+ */
+function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
+{
+    $pdo = $pdo ?? db();
+    if (!pdks_faz8b_sema_hazir($pdo)) return null;
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+
+    $tanim = [];
+    foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc) {
+        $tanim[$tc['ad']] = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
+    }
+    $o = [
+        'tanim' => $tanim, 'karisik' => 0, 'diger' => 0,
+        'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0,
+        'fm_saat' => 0, 'fm_onayli' => 0, 'fm_bekleyen' => 0, 'fm_red' => 0,
+        'servis' => array_fill_keys(array_keys(pdks_servis_turleri()), 0),
+    ];
+    if (!$sessionIds) return $o;
+
+    $ph = implode(',', array_fill(0, count($sessionIds), '?'));
+    foreach (pdks_faz8b_donem_sorgu($pdo, "p.session_id IN ($ph)", $sessionIds) as $d) {
+        $ad = (string)($d['worker_type_name_snapshot'] ?? '');
+        if ($ad === PDKS_GUNLUK_KARISIK_AD) { $o['karisik']++; continue; }
+        if (!isset($o['tanim'][$ad])) { $o['diger']++; continue; }
+        $f = $d['faz8b'];
+        $t = &$o['tanim'][$ad];
+        $t['toplam']++;
+        if ($f['toplam_dk'] === null) { $t['suruyor']++; unset($t); continue; }
+        $sinif = $f['etkin_sinif'];
+        if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
+        unset($t);
+
+        $fm = (int)$f['fazla_mesai_saat'];
+        $o['sureli_kisi']++;
+        $o['ham_dk'] += (int)$f['toplam_dk'];
+        $o['calisma_dk'] += min((int)$f['toplam_dk'], (int)$f['fm_bas_dk']) + $fm * 60;
+        $o['fm_saat'] += $fm;
+        if ($fm > 0) {
+            $durum = (string)$f['fazla_mesai_durum'];
+            if ($durum === 'onayli') $o['fm_onayli'] += (int)$f['odenecek_fm_saat'];
+            elseif ($durum === 'bekliyor') $o['fm_bekleyen'] += $fm;
+            elseif ($durum === 'reddedildi') $o['fm_red'] += $fm;
+        }
+    }
+    $o['servis'] = pdks_servis_toplamlar_toplu($sessionIds, $pdo);
+    return $o;
+}
+
 // =========================================================
 // ÇAVUŞ — NORMAL GÜNLÜK ÇALIŞMA SÜRESİ (Faz 9C / H-02)
 // =========================================================

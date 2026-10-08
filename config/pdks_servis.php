@@ -302,6 +302,22 @@ function pdks_servis_toplamlar(int $sessionId, ?PDO $pdo = null): array
     return $t;
 }
 
+/** v313: birden çok mesainin iptal edilmemiş servis adetleri toplamı (tek sorgu). */
+function pdks_servis_toplamlar_toplu(array $sessionIds, ?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? db();
+    $t = array_fill_keys(array_keys(pdks_servis_turleri()), 0);
+    $sessionIds = array_values(array_unique(array_filter(array_map('intval', $sessionIds), static fn($i) => $i > 0)));
+    if (!$sessionIds || !pdks_servis_tablo_var($pdo, 'daily_session_services')) return $t;
+    $st = $pdo->prepare("SELECT service_type, COALESCE(SUM(quantity),0) AS n FROM daily_session_services
+                          WHERE is_voided = 0 AND session_id IN (" . implode(',', array_fill(0, count($sessionIds), '?')) . ") GROUP BY service_type");
+    $st->execute($sessionIds);
+    foreach ($st->fetchAll() as $r) {
+        if (isset($t[(string)$r['service_type']])) $t[(string)$r['service_type']] = (int)$r['n'];
+    }
+    return $t;
+}
+
 /** Mesai Detayı listesi (iptaller dahil, yeniden eskiye). */
 function pdks_servis_listele(int $sessionId, ?PDO $pdo = null): array
 {
