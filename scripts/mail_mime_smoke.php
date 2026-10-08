@@ -20,6 +20,18 @@ ok('bozuk base64 çökmez', is_string(mail_mime_baslik_coz('=?UTF-8?B?!!!?=')));
 ok('geçersiz UTF-8 başlık Türkçe yedeğiyle okunur', mail_mime_baslik_coz("G\xF6nder") === 'Gönder');
 ok('kontrol karakterleri temizlenir', mail_mime_baslik_coz("a\x00b\x07c") === 'abc');
 
+// Yanlış charset bildirimi / UTF-8'in Windows-1252 olarak çözülmesi (saha örneği).
+$bozuk = 'BatÄ± Akdeniz Ä°hracatÃ§Ä±lar BirliÄŸi';
+$dogru = 'Batı Akdeniz İhracatçılar Birliği';
+ok('mojibake Türkçe karakterler onarılıyor', mail_mime_mojibake_duzelt($bozuk) === $dogru);
+ok('DB öncesi düz başlıkta onarım', mail_mime_baslik_coz($bozuk) === $dogru);
+$yanlisMime = '=?ISO-8859-1?B?' . base64_encode($dogru) . '?=';
+ok('hatalı ISO-8859-1 etiketi altında UTF-8 encoded-word', mail_mime_baslik_coz($yanlisMime) === $dogru);
+ok('düzgün Türkçe + Kiril + Alman özel harfleri korunur',
+    mail_mime_mojibake_duzelt('İşçi Привет Änderung Ångström') === 'İşçi Привет Änderung Ångström');
+ok('zaten düzeltilmiş içerik tekrar değiştirilmez',
+    mail_mime_mojibake_duzelt(mail_mime_mojibake_duzelt($bozuk)) === $dogru);
+
 echo "\n=== A2. Adresler ===\n";
 $a = mail_mime_adresler('"Yılmaz, Ahmet" <AHMET@Musteri.com>, ali@x.com (Ali Veli), Grup: a@b.com, c@d.com;, kotu@, =?UTF-8?B?w4dhxJ9sYXI=?= <cagla@x.com>');
 ok('tırnaklı virgül', $a[0] === ['name' => 'Yılmaz, Ahmet', 'email' => 'ahmet@musteri.com']);
