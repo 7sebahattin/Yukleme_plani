@@ -126,8 +126,9 @@ $k = karar9c('09:00', '18:00', 540, $day);
 ok9c('8) 09:00-18:00 @9h => TAM', $k['otomatik_sinif'] === 'tam');
 $k = karar9c('10:00', '19:00', 540, $day);
 ok9c('9) 10:00-19:00 @9h => TAM', $k['otomatik_sinif'] === 'tam');
-$k = karar9c('08:00', '16:59', 540, $day);
-ok9c('10) 08:00-16:59 @9h => karar gerekli', $k['otomatik_sinif'] === null && $k['sinif_onayi_gerekli'] === true);
+// v317: 16:46–17:14 arası çıkış 17:00 sayılır (saat başı ±15 dk); 16 dk eksik kalan karar ister.
+$k = karar9c('08:00', '16:44', 540, $day);
+ok9c('10) 08:00-16:44 @9h => karar gerekli', $k['otomatik_sinif'] === null && $k['sinif_onayi_gerekli'] === true);
 $k = karar9c('09:00', '17:00', 480, $day);
 ok9c('11) 09:00-17:00 @8h => TAM', $k['otomatik_sinif'] === 'tam');
 $k = karar9c('09:00', '19:00', 600, $day);

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v316` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v317` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -782,14 +782,13 @@ DEĞİL, sıralama ve testleri `cells[0]` = Kart No'ya bağlı; mobil: kart baş
 - **Hesap TEK yerde:** `pdks_faz8b_gun_mesai_ozeti()` (config/pdks_faz8b.php) her dönemi `pdks_faz8b_donem_siniflandir()`'dan geçirir — sayfada kendi süre/FM hesabı YAZMA. Servis: `pdks_servis_toplamlar_toplu()`. Faz 8B şeması yoksa özet gizli. Çıkışsız (içeride) ve atanmamış Karışık süre/FM'ye KATILMAZ.
 - CSV/XLSX'e eklenmedi. Test: `php scripts/pdks_mesai_ozeti_smoke.php` · `PUANTAJ_FAZ8B=1 PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php`.
 
-### Saat Başı Toleransı (v315)
-Sahip kararı: erken giriş / hafif geç çıkış fazla mesai SAYILMAZ. `pdks_faz8b_sure_karari()` süreyi ham değil
-**etkin** saatlerle hesaplar (`pdks_faz8b_etkin_saatler()`): giriş tam saatten ≤15 dk ÖNCEYSE o saate (07:57 → 08:00),
-çıkış tam saatten ≤15 dk SONRAYSA o saate (17:13 → 17:00) çekilir. 07:57–17:13 = 9 sa, FM 0; 07:57–17:16 = 9 sa 16 dk,
-FM 1. Saat KİLİDİ DEĞİL (08-17/09-18/12-21 aynı çalışır). Geç giriş ve erken çıkış YUVARLANMAZ (işçi lehine uydurma
-yok). **v316 (sahip şikâyeti):** çıkış yuvarlaması yalnız FM kırıntısını siler, tam günü ASLA kısaltmaz — yuvarlanmış süre
-mesai süresinin altına düşerse çıkış = etkin giriş + mesai süresi (ham çıkışı aşmadan): 08:06–17:07 = 9 sa Tam (eskiden
-8 sa 54 dk "karar bekliyor" oluyordu); 08:20–17:10 gerçekten 8 sa 50 dk → karar bekler. Ham kart kayıtları DEĞİŞMEZ.
+### Saat Başı Toleransı (v315 → v317)
+Sahip kararı (v317 kesin kural): `pdks_faz8b_sure_karari()` süreyi ham değil **etkin** saatlerle hesaplar
+(`pdks_faz8b_saat_basi()` / `pdks_faz8b_etkin_saatler()`): giriş VE çıkış tam saate **±15 dk** (önce de sonra da) yakınsa
+o tam saate çekilir — **07:57 → 08:00 · 08:14 → 08:00 · 16:46 → 17:00 · 17:13 → 17:00**; 15 dk'dan uzaksa (07:44, 08:16,
+16:44, 17:16) dokunulmaz. 08:02–17:00 = 9 sa Tam; 07:57–17:16 = 9 sa 16 dk → FM 1; 08:16–16:44 = 8 sa 28 dk → karar bekler.
+Saat KİLİDİ DEĞİL (08-17/09-18/12-21 aynı çalışır). Ham kart kayıtları DEĞİŞMEZ. (v315 yalnız erken giriş/geç çıkışı,
+v316 ek bir kısaltma koruması yuvarlıyordu — v317'de ikisi de bu simetrik kurala indirildi, GERİ EKLEME.)
 - TEK yer sınıflandırıcı olduğu için Tam/FM/Çift, hakediş, Mesai Değerlendirme, Mesai Tanımı, Mesai Özeti hepsi
   kendiliğinden etkilenir. `toplam_dk` = etkin süre; `ham_dk`, `giris_etkin`, `cikis_etkin` ayrıca döner. Kesin
   (final) hakedişler donmuştur, değişmez; taslaklar yeniden hesaplanınca yeni kuralı alır.
