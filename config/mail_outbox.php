@@ -14,7 +14,7 @@
 //     İstemci hash'i, saklı hash'i ve DB'deki içeriğin yeniden hesaplanmış hash'i eşit olmalı (TOCTOU/kurcalama yok).
 //  3. Çift gönderim yok: UNIQUE(hesap, idempotency_key) + atomik sahiplenme + aynı içerik için ikinci onay reddi.
 //  4. Belirsizlikte (son "." sonrası yanıt yok / süreç ölümü) satır 'unknown' olur; Message-ID ve send_token korunur;
-//     ASLA otomatik yeniden gönderilmez. 'sending'de takılı kalan satır 10 dk sonra 'unknown' sayılır.
+//     ASLA otomatik yeniden gönderilmez. 'sending'de takılı kalan satır 20 dk sonra 'unknown' sayılır.
 //  5. Çeviri sağlayıcısı arızası taslağı SİLMEZ/GİZLEMEZ; kullanıcı çeviriyi elle girebilir.
 //  6. Audit'e yalnız id/durum/sayı yazılır (gövde, adres, şifre YOK).
 //  7. 'approved' ve sonrası satır ÖNİZLEMEYLE yeniden yazılamaz (her yazma status+content_hash koşulludur); talep, ONAYLANAN
