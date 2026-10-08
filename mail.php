@@ -377,7 +377,8 @@ mail_assets();
 
             <?php if ($aktif === 'tr'): ?>
                 <?php if ($trVar): ?>
-                <?php if ($ceviriHazir): ?><div class="mail-ceviri-not">Çeviri <?= h(mail_ceviri_saglayici()->ad()) ?> (üçüncü taraf servis) ile üretildi — mail metni bu servise gönderildi.</div><?php endif; ?>
+                <?php $kaynakDil = trim((string)($m['lang'] ?? '')); $kaynakDilAd = $kaynakDil !== '' ? (preg_replace('/\s*\(.*$/u', '', mail_diller()[strtolower($kaynakDil)] ?? strtoupper($kaynakDil))) : 'Orijinal dil'; ?>
+                <div class="mail-ceviri-not"><?= h($kaynakDilAd) ?> → Türkçe</div>
                 <div class="mail-metin"><?php if (trim((string)$m['subject_tr']) !== ''): ?><strong><?= h($m['subject_tr']) ?></strong><br><br><?php endif; ?><?= nl2br(h($m['body_tr'])) ?></div>
                 <?php else: ?>
                 <div class="mail-bilgi"><?= h(mail_ceviri_durum_etiketi((string)$m['tr_status'])) ?>.
