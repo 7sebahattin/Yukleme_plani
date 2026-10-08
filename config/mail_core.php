@@ -289,6 +289,12 @@ function mail_redact(string $s): string
 /** 32 baytlık ham master key ya da null. Yedek/sabit anahtar YOK. */
 function mail_master_key(): ?string
 {
+    // Canlı dağıtımda config/db.php sunucuya özeldir; eski sürümleri local.php'yi
+    // otomatik yüklemeyebilir. Anahtarı mail modülü kendi içinde de yükler.
+    // require_once nedeniyle db.php zaten yüklediyse tekrar çalışmaz.
+    if (!defined('MAIL_MASTER_KEY') && is_file(__DIR__ . '/local.php')) {
+        require_once __DIR__ . '/local.php';
+    }
     $b64 = defined('MAIL_MASTER_KEY') ? (string)MAIL_MASTER_KEY : (string)(getenv('MAIL_MASTER_KEY') ?: '');
     $b64 = trim($b64);
     if ($b64 === '') return null;
