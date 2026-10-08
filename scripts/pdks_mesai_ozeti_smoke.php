@@ -84,14 +84,14 @@ $db->exec("CREATE TABLE daily_worker_work_periods (id INTEGER PRIMARY KEY AUTOIN
 $db->exec("CREATE TABLE foreman_worker_rates (id INTEGER PRIMARY KEY AUTOINCREMENT, is_active INTEGER DEFAULT 1, foreman_id INTEGER, worker_type_id INTEGER, daily_rate TEXT, half_day_rate TEXT, overtime_mode TEXT, overtime_rate TEXT, currency TEXT, valid_from TEXT, valid_to TEXT, created_by_user_id INTEGER)");
 $db->exec("CREATE TABLE foreman_daily_entitlements (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER, foreman_id INTEGER, foreman_name_snapshot TEXT, foreman_code_snapshot TEXT, work_date TEXT, depo TEXT, status TEXT, currency TEXT, total_amount TEXT, needs_recalculation INTEGER DEFAULT 0, calculated_at TEXT, calculated_by_user_id INTEGER, finalized_at TEXT, finalized_by_user_id INTEGER, missing_exit_ack INTEGER, notes TEXT, updated_at TEXT)");
 $db->exec("CREATE TABLE foreman_daily_entitlement_lines (id INTEGER PRIMARY KEY AUTOINCREMENT, entitlement_id INTEGER, work_period_id INTEGER, worker_type_id INTEGER, worker_type_code_snapshot TEXT, worker_type_name_snapshot TEXT, attendance_class_snapshot TEXT, worker_count INTEGER, unit_rate TEXT, overtime_hours INTEGER, overtime_mode_snapshot TEXT, overtime_unit_rate TEXT, overtime_total TEXT, line_total TEXT)");
-$db->exec("INSERT INTO foremen (id,code,name) VALUES (1,'C1','Çavuş 1')");
+$db->exec("INSERT INTO foremen (id,code,name) VALUES (1,'C1','Çavuş 1'), (2,'C2','Çavuş 2')");
 
 $day = date('Y-m-d', strtotime('-3 days'));
 
-function moSession(int $snap = 540): int {
+function moSession(int $snap = 540, int $foreman = 1): int {
     global $db, $day;
-    $db->prepare("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status) VALUES (1,'Çavuş 1','C1',?,?,'Depo A','closed')")
-       ->execute([$snap, $day]);
+    $db->prepare("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status) VALUES (?,?,?,?,?,'Depo A','closed')")
+       ->execute([$foreman, 'Çavuş ' . $foreman, 'C' . $foreman, $snap, $day]);
     return (int)$db->lastInsertId();
 }
 /** Dönem ekler. $dk null → çıkışsız (açık) dönem. $fm = onaylı FM saati (null = onaysız). */
@@ -139,7 +139,7 @@ okmo('6b) sayaçların hepsi 0', $hepsiSifir, json_encode($o, JSON_UNESCAPED_UNI
 okmo('6c) servis sıfırlı', ($o['servis'] ?? null) === ['BUYUK' => 0, 'KUCUK' => 0], json_encode($o['servis'] ?? null));
 okmo('6d) Kadın/Erkek satırları sıfır olsa da var',
     isset($o['tanim']['Kadın'], $o['tanim']['Erkek'])
-    && $o['tanim']['Kadın'] === ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0],
+    && $o['tanim']['Kadın'] === ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0], 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0],
     json_encode($o['tanim'] ?? null, JSON_UNESCAPED_UNICODE));
 $o2 = pdks_faz8b_gun_mesai_ozeti([0, -5], $db);
 okmo('6e) geçersiz id\'ler (0, -5) → aynı iskelet', $o2 === $o);
@@ -162,7 +162,7 @@ okmo('1d) Kadın: toplam 5, yarim/cift 0', ($k['toplam'] ?? -1) === 5 && $k['yar
 okmo('1e) Erkek: tam 1 / toplam 1', ($o['tanim']['Erkek']['tam'] ?? -1) === 1 && ($o['tanim']['Erkek']['toplam'] ?? -1) === 1);
 okmo('1f) fm_bekleyen 2 (onaysız 10s20dk)', $o['fm_bekleyen'] === 2, (string)$o['fm_bekleyen']);
 okmo('1g) fm_onayli 2 (onaylı 10s20dk)', $o['fm_onayli'] === 2, (string)$o['fm_onayli']);
-okmo('1h) fm_red 0, fm_saat 4', $o['fm_red'] === 0 && $o['fm_saat'] === 4, json_encode([$o['fm_red'], $o['fm_saat']]));
+okmo('1h) fm_red 0, fm_saat 4 (Σ gösterilen FM)', $o['fm_red'] === 0 && $o['fm_saat'] === 4, json_encode([$o['fm_red'], $o['fm_saat']]));
 okmo('1i) sureli_kisi 5 (çıkışsız hariç)', $o['sureli_kisi'] === 5, (string)$o['sureli_kisi']);
 okmo('1j) ham_dk = 540+480+620+620+540 = 2800 (çıkışsız süreye katılmaz)', $o['ham_dk'] === 2800, (string)$o['ham_dk']);
 okmo('1k) calisma_dk = 480+540*4+4*60 = 2880', $o['calisma_dk'] === 2880, (string)$o['calisma_dk']);
@@ -172,7 +172,7 @@ okmo('1l) karisik 0, diger 0', $o['karisik'] === 0 && $o['diger'] === 0);
 $s1b = moSession();
 moDonem($s1b, $kadin, 620, 0);
 $ob = moOzet([$s1b]);
-okmo('1m) FM reddedildi (0 saat) → fm_red 2, onaylı/bekleyen 0', $ob['fm_red'] === 2 && $ob['fm_onayli'] === 0 && $ob['fm_bekleyen'] === 0, json_encode($ob, JSON_UNESCAPED_UNICODE));
+okmo('1m) FM reddedildi (0 saat) → fm_red 2, onaylı/bekleyen 0, fm_saat 0 (reddedilen gösterilmez)', $ob['fm_red'] === 2 && $ob['fm_onayli'] === 0 && $ob['fm_bekleyen'] === 0 && $ob['fm_saat'] === 0, json_encode($ob, JSON_UNESCAPED_UNICODE));
 
 // Muhasebe kararıyla yarım
 $s1c = moSession();
@@ -182,8 +182,9 @@ okmo('1n) onaylı Yarım karar → yarim 1, bekliyor 0', ($oc['tanim']['Kadın']
 
 // Çok mesai birlikte toplanır (s1 + s1b)
 $ok2 = moOzet([$s1, $s1b, $s1]);
-okmo('1o) iki mesai (tekrarlı id tekilleşir) → sureli_kisi 6, fm_red 2, fm_saat 6',
-    $ok2['sureli_kisi'] === 6 && $ok2['fm_red'] === 2 && $ok2['fm_saat'] === 6, json_encode($ok2, JSON_UNESCAPED_UNICODE));
+okmo('1p) Kadın fm dağılımı: iki işçi 2 saatlik FM → fm[2]=2, diğerleri 0', ($o['tanim']['Kadın']['fm'] ?? null) === [1 => 0, 2 => 2, 3 => 0, 4 => 0, 5 => 0], json_encode($o['tanim']['Kadın']['fm'] ?? null));
+okmo('1o) iki mesai (tekrarlı id tekilleşir) → sureli_kisi 6, fm_red 2, fm_saat 4 (reddedilen hariç)',
+    $ok2['sureli_kisi'] === 6 && $ok2['fm_red'] === 2 && $ok2['fm_saat'] === 4, json_encode($ok2, JSON_UNESCAPED_UNICODE));
 
 // =========================================================
 echo "\n=== 2. 15 dk tolerans sınırı ===\n";
@@ -253,6 +254,81 @@ okmo('5e) yalnız iptal edilmiş servis → sıfır', (function () use ($db) {
 $o5 = moOzet([$s5a, $s5b]);
 okmo('5f) mesai özetinin servis alanı toplamlarla aynı', ($o5['servis'] ?? null) === ['BUYUK' => 6, 'KUCUK' => 5], json_encode($o5['servis'] ?? null));
 okmo('5g) boş liste / geçersiz id → sıfır', pdks_servis_toplamlar_toplu([], $db) === ['BUYUK' => 0, 'KUCUK' => 0] && pdks_servis_toplamlar_toplu([0], $db) === ['BUYUK' => 0, 'KUCUK' => 0]);
+
+
+// =========================================================
+echo "\n=== 8. FM dağılımı (fm[1..5]) ===\n";
+$fz = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0];
+function fmBeklenen(int $n, int $c): array { $a = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0]; $a[$n] = $c; return $a; }
+function fmDagilim(array $o, string $tip = 'Kadın'): array { return $o['tanim'][$tip]['fm'] ?? ['__yok']; }
+function fmTek(int $dk, int $snap = 540, ?int $onay = null): array {
+    global $kadin;
+    $s = moSession($snap); moDonem($s, $kadin, $dk, $onay);
+    return moOzet([$s]);
+}
+$z = fmTek(611);
+okmo('8a) 9 sa mesai, 10s11dk → Tam + fm[1]=1, fm_saat 1', $z['tanim']['Kadın']['tam'] === 1 && fmDagilim($z) === fmBeklenen(1, 1) && $z['fm_saat'] === 1, json_encode($z['tanim']['Kadın']));
+$z = fmTek(720);
+okmo('8b) 12s00dk → fm[3]=1, fm_saat 3', fmDagilim($z) === fmBeklenen(3, 1) && $z['fm_saat'] === 3, json_encode(fmDagilim($z)));
+$z = fmTek(555);
+okmo('8c) 9s15dk → FM yok (dağılım sıfır, fm_saat 0)', fmDagilim($z) === $fz && $z['fm_saat'] === 0 && $z['tanim']['Kadın']['tam'] === 1, json_encode(fmDagilim($z)));
+$z = fmTek(556);
+okmo('8d) 9s16dk → fm[1]', fmDagilim($z) === fmBeklenen(1, 1), json_encode(fmDagilim($z)));
+$z = fmTek(736);
+okmo('8e) 12s16dk → fm[4]', fmDagilim($z) === fmBeklenen(4, 1) && $z['fm_saat'] === 4, json_encode(fmDagilim($z)));
+$z = fmTek(840);
+okmo('8f) 14 sa → 5 saat FM → fm[5]', fmDagilim($z) === fmBeklenen(5, 1) && $z['fm_saat'] === 5, json_encode(fmDagilim($z)));
+$z = fmTek(900);
+okmo('8g) 15 sa → 6 saat FM → fm[5] (5 ve üzeri), fm_saat 6', fmDagilim($z) === fmBeklenen(5, 1) && $z['fm_saat'] === 6, json_encode([fmDagilim($z), $z['fm_saat']]));
+$z = fmTek(551, 480);
+okmo('8h) snapshot 480: 9s11dk → fm[1]', fmDagilim($z) === fmBeklenen(1, 1) && $z['tanim']['Kadın']['tam'] === 1, json_encode(fmDagilim($z)));
+$z = fmTek(620, 540, 0);
+okmo('8i) reddedilen FM (0 saat) → dağılıma/fm_saat\'e girmez ama Tam sayılır',
+    fmDagilim($z) === $fz && $z['fm_saat'] === 0 && $z['tanim']['Kadın']['tam'] === 1 && $z['fm_red'] === 2, json_encode($z));
+$z = fmTek(620, 540, 2);
+okmo('8j) onaylı FM → dağılıma girer (fm[2])', fmDagilim($z) === fmBeklenen(2, 1) && $z['fm_onayli'] === 2);
+
+// Kadın / Erkek ayrı satırlar; çıkışsız ve Karışık dağılıma girmez
+$s8 = moSession();
+moDonem($s8, $kadin, 611);
+moDonem($s8, $erkek, 720);
+moDonem($s8, $erkek, 720);
+moDonem($s8, $kadin, null);
+moDonem($s8, $karisik, 720);
+moDonem($s8, $karisik, null);
+$z = moOzet([$s8]);
+okmo('8k) Kadın fm[1]=1, Erkek fm[3]=2 (ayrı satırlar)', fmDagilim($z, 'Kadın') === fmBeklenen(1, 1) && fmDagilim($z, 'Erkek') === fmBeklenen(3, 2), json_encode([fmDagilim($z, 'Kadın'), fmDagilim($z, 'Erkek')]));
+okmo('8l) çıkışsız + Karışık dağılıma girmez; fm_saat = 1 + 3 + 3 = 7', $z['karisik'] === 2 && $z['tanim']['Kadın']['suruyor'] === 1 && fmDagilim($z, 'Rampacı') === $fz && $z['fm_saat'] === 7, json_encode($z, JSON_UNESCAPED_UNICODE));
+okmo('8m) Σ fm dağılımı (saat ağırlıklı, 5+ için ≥) ile fm_saat uyumlu (üst sınır yok)', array_sum(array_map(fn($t) => array_sum(array_map(fn($n, $c) => $n * $c, array_keys($t['fm']), $t['fm'])), $z['tanim'])) === $z['fm_saat']);
+
+// ── Çift yevmiye (foreman 2: Tam 9 sa, Çift 12 sa / 2000, saatlik FM) ──
+echo "\n=== 9. Çift yevmiye ===\n";
+pdks_faz8b_saat_kolonlari_migrate($db);
+$r = pdks_faz8b_oran_ekle(2, $kadin, '1000', '600', 'hourly', '150', '2020-01-01', 'TRY', 1, $db,
+    ['full_day' => '9', 'double_day' => '12', 'double_day_rate' => '2000']);
+okmo('9a) çift fiyat dönemi eklendi', ($r['ok'] ?? false) === true, json_encode($r, JSON_UNESCAPED_UNICODE));
+$sc = moSession(540, 2); moDonem($sc, $kadin, 780, 4);
+$z = moOzet([$sc]);
+okmo('9b) 13 sa, FM onaylı 4 → Çift; ödenecek FM 1 → fm[1]=1, fm_saat 1 (aday 4 DEĞİL)',
+    $z['tanim']['Kadın']['cift'] === 1 && $z['tanim']['Kadın']['tam'] === 0 && fmDagilim($z) === fmBeklenen(1, 1) && $z['fm_saat'] === 1, json_encode($z['tanim']['Kadın']));
+$sc2 = moSession(540, 2); moDonem($sc2, $kadin, 780, 3);
+$z = moOzet([$sc2]);
+okmo('9c) 13 sa, FM onaylı 3 (çift eşiği = onaylı 12 sa) → Çift, ödenecek FM 0 → dağılım boş, fm_saat 0',
+    $z['tanim']['Kadın']['cift'] === 1 && fmDagilim($z) === $fz && $z['fm_saat'] === 0, json_encode($z['tanim']['Kadın']));
+$sc3 = moSession(540, 2); moDonem($sc3, $kadin, 780, 0);
+$z = moOzet([$sc3]);
+okmo('9d) 13 sa, FM reddedildi → Tam, dağılım boş, fm_saat 0', $z['tanim']['Kadın']['tam'] === 1 && $z['tanim']['Kadın']['cift'] === 0 && fmDagilim($z) === $fz && $z['fm_saat'] === 0, json_encode($z['tanim']['Kadın']));
+
+
+// ── fm_bas_dk: kullanılan FM başlangıç eşikleri ──
+echo "\n=== 10. fm_bas_dk ===\n";
+okmo('10a) boş liste → fm_bas_dk []', (pdks_faz8b_gun_mesai_ozeti([], $db)['fm_bas_dk'] ?? null) === []);
+$sa = moSession(540); moDonem($sa, $kadin, 611); moDonem($sa, $kadin, 540); moDonem($sa, $erkek, null);
+okmo('10b) 9 sa mesai → [540]', (moOzet([$sa])['fm_bas_dk'] ?? null) === [540], json_encode(moOzet([$sa])['fm_bas_dk'] ?? null));
+$sb = moSession(480); moDonem($sb, $kadin, 551);
+okmo('10c) 8 sa + 9 sa mesai karışınca [480,540] (artan, benzersiz)', (moOzet([$sa, $sb])['fm_bas_dk'] ?? null) === [480, 540], json_encode(moOzet([$sa, $sb])['fm_bas_dk'] ?? null));
+$sc4 = moSession(480); moDonem($sc4, $kadin, null);
+okmo('10d) yalnız çıkışsız dönem → []', (moOzet([$sc4])['fm_bas_dk'] ?? null) === []);
 
 // =========================================================
 echo "\n=== 7. Statik denetim ===\n";
