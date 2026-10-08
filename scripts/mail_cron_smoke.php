@@ -14,7 +14,11 @@ $KILIT = sys_get_temp_dir() . '/mail_cron_kilit_' . getmypid(); @mkdir($KILIT, 0
 
 echo "=== Kaynak (statik) ===\n";
 $src = (string)file_get_contents($ROOT . '/scripts/mail_sync_cron.php');
-ok('CLI-only guard (PHP_SAPI !== cli → 403 + exit)', (bool)preg_match("/if \(PHP_SAPI !== 'cli'\) \{\s*http_response_code\(403\);\s*exit\(/", $src));
+ok('web guard: CLI ya da web isteği OLMAYAN CGI (cPanel cron) kabul; REQUEST_METHOD varsa 403 + exit', str_contains($src, "if (PHP_SAPI !== 'cli' && (!str_starts_with(PHP_SAPI, 'cgi') || isset(\$_SERVER['REQUEST_METHOD']))) {") && (bool)preg_match("/isset\(\\\$_SERVER\['REQUEST_METHOD'\]\)\)\) \{\s*http_response_code\(403\);\s*exit\(/", $src));
+// Guard mantığının kendisi (betiği çalıştırmadan, aynı ifade): CLI ✓ · CGI+istek yok ✓ · CGI+istek ✗ · fpm ✗ · apache2handler ✗
+$kapi = fn(string $sapi, bool $istek) => !($sapi !== 'cli' && (!str_starts_with($sapi, 'cgi') || $istek));
+ok('guard tablosu: cli ✓, cgi-fcgi (cron) ✓, cgi-fcgi+web ✗, fpm-fcgi ✗, apache2handler ✗', $kapi('cli', false) && $kapi('cli', true) && $kapi('cgi-fcgi', false) && !$kapi('cgi-fcgi', true) && !$kapi('fpm-fcgi', true) && !$kapi('fpm-fcgi', false) && !$kapi('apache2handler', true));
+ok('yarıda kesilme kalp atışına da yazılır', str_contains($src, "mail_cron_kalp_yaz(['kod' => 1"));
 ok('guard require\'lardan ÖNCE', strpos($src, "PHP_SAPI !== 'cli'") < strpos($src, 'require_once'));
 ok('yarıda kesilmeyi başarı sanmıyor (shutdown → exit 1)', str_contains($src, 'register_shutdown_function') && str_contains($src, 'exit(1)'));
 ok('çıkış kodu mail_cron_calistir() sonucundan', str_contains($src, "exit(\$r['kod']);"));

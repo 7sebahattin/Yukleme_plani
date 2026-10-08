@@ -316,6 +316,17 @@ Yeni mail rozeti (okunmamış sayısı) sidebar/bottomnav/index'te.
 - **Senkron günlüğü ekranı** (`mail_sync_gunluk_getir()`, yalnız `mail.admin` sayfasında): hesap başına son başarılı / ardışık hata / sonraki deneme + son 20 çalıştırma; hata metinleri yeniden redakte edilir.
 - `docs/MAIL_OPERATIONS.md`: kurulum sırası, ağ gereksinimleri, rotasyon, bakım, sorun giderme tablosu.
 
+**Canlı geri bildirimi (M9, 2026-10-08)** — canlı ekran: DeepSeek testi başarılı, ama "Son senkron 87 dakika önce — cron durmuş olabilir".
+- **Kök sorun (teşhis edilemezlik):** uyarı yalnız `mail_sync_log`'a bakıyordu; cron'un hiç çalışmaması, başta FAIL vermesi ve hesabın art arda hata
+  geri çekilmesinde (günlük satırı yazmaz) olması AYNI uyarıyı veriyordu; cron çıktısı `/dev/null`'da. → **Cron kalp atışı**
+  (`storage/mail/.cron_kalp.json`, 0600, redakte satırlar; DB bağlantı hatasında bile sabit metinli yedek) + `mail_cron_durum_uyarilari()` dört durumu ayrı
+  söyler ve gerçek cron komutunu kopyalanabilir kutuda gösterir.
+- **cPanel CGI:** cron'daki `php` çoğu hostta CGI ikilisidir → eski `PHP_SAPI !== 'cli'` kapısı sessizce 403 ile çıkıyordu. Artık web isteği olmayan (`REQUEST_METHOD` yok) CGI kabul.
+- **Mobil:** Mail Hesapları'nda uzun adresli hesapta düğmeler 360/390px'te tablo kenarında kesiliyordu (canlıda yeniden üretildi: tablo 111–141px taşıyor) →
+  sayfa artık `mail.css`'i yüklüyor, hesap satırı mobilde kart + tam genişlik 44px düğmeler. Playwright'a `hesaplar` sayfası eklendi (7 genişlik).
+- **Charset (PR #680'den kalan kırmızı test):** `ISO-8859-1` etiketli UTF-8'de ğ (C4 9F) / ş (C5 9F) kayboluyordu → ISO-8859-1 etiketi Windows-1252 okunur (WHATWG);
+  eski kayıtlardaki `Ä/Å + C1` ekranda onarılır.
+
 **Bağımsız Opus son entegrasyon incelemesi (M8) — bulgular ve düzeltmeler** (PoC'ler yeniden üretildi; hepsi `mail_hardening_smoke.php` / `mail_review_smoke.php` / `mail_ui_smoke.php`'de regresyon testli, 5 kritik düzeltme için mutasyon kontrolü yapıldı):
 | # | Önem | Bulgu | Düzeltme |
 |---|---|---|---|

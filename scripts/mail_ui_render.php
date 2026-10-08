@@ -78,15 +78,15 @@ $cssBase = file_get_contents($ROOT . '/assets/style.css');
 $cssMail = file_get_contents($ROOT . '/assets/mail.css');
 $fileRoot = 'file://' . $ROOT . '/';
 
-function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply', 'mail.send'], int $uid = 2): string {
+function basla_sayfa(array $get, string $ad, bool $yonetici = false, array $perms = ['mail.read', 'mail.reply', 'mail.send'], int $uid = 2, string $dosya = 'mail.php'): string {
     global $ROOT, $cssBase, $cssMail, $fileRoot, $PERMS, $IS_ADMIN, $UID;
     $PERMS = $perms; $IS_ADMIN = $yonetici; $UID = $uid;
-    $src = (string)file_get_contents($ROOT . '/mail.php');
+    $src = (string)file_get_contents($ROOT . '/' . $dosya);
     $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth|mail_core|mail_imap|mail_mime|mail_sync|mail_view|mail_translate|mail_smtp|mail_outbox)\.php';\s*$/m", '', $src);
     $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
     $tmp = sys_get_temp_dir() . '/mail_ui_render_' . getmypid() . '.php';
     file_put_contents($tmp, $src);
-    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['PHP_SELF'] = '/mail.php';
+    $_GET = $get; $_POST = []; $_SERVER['REQUEST_METHOD'] = 'GET'; $_SERVER['PHP_SELF'] = '/' . $dosya;
     ob_start();
     try { include $tmp; } catch (Throwable $e) { ob_end_clean(); throw $e; } finally { @unlink($tmp); }
     $html = (string)ob_get_clean();
@@ -115,10 +115,16 @@ $sayfalar = [
     'onay_failed'  => [['o' => $G_FAIL, 'f' => 'hatali'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_sent'    => [['o' => $G_SENT, 'f' => 'gonderilen'], false, ['mail.read', 'mail.reply', 'mail.send']],
     'onay_draft'   => [['o' => $G_DRAFT, 'f' => 'taslak'], false, ['mail.read', 'mail.reply', 'mail.send']],
+    'hesaplar'     => [[], true, [], 1, 'mail_hesaplar.php'],   // yönetici: hesap tablosu (mobil kart), uyarılar, senkron günlüğü
 ];
 $manifest = ['sayfalar' => [], 'id' => ['html' => $ID_HTML, 'tr' => $ID_TR, 'xss' => $ID_XSS]];
 foreach ($sayfalar as $ad => $s) {
-    $html = basla_sayfa($s[0], $ad, $s[1] ?? false, $s[2] ?? ['mail.read', 'mail.reply', 'mail.send'], $s[3] ?? 2);
+    if ($ad === 'hesaplar') {   // canlıdaki gibi uzun etiket + adres: dar ekranda tablo genişler, düğmeler kesiliyordu (yalnız bu sayfa için; son sayfa)
+        mail_hesap_kaydet(['label' => 'Asya EXPORT Uluslararası', 'email' => 'export.department@asyafresh-international.com', 'imap_host' => 'i.test.com',
+            'imap_user' => 'export.department@asyafresh-international.com', 'imap_pass' => 'p-imap-1', 'smtp_host' => 's.test.com',
+            'smtp_user' => 'export.department@asyafresh-international.com', 'smtp_pass' => 'p-smtp-1'], null, 1, $db);
+    }
+    $html = basla_sayfa($s[0], $ad, $s[1] ?? false, $s[2] ?? ['mail.read', 'mail.reply', 'mail.send'], $s[3] ?? 2, $s[4] ?? 'mail.php');
     file_put_contents("$OUT/$ad.html", $html);
     $manifest['sayfalar'][] = $ad;
 }

@@ -135,4 +135,20 @@ a.mail-oge:hover { background: var(--surface-2); }
     .mail-chip { justify-content: space-between; border-radius: var(--radius-sm); }
 }
 
+/* Mail Hesapları: hesap satırının düğmeleri — masaüstünde yan yana sarar; mobilde satır KART olur, düğmeler tam genişlik
+   (eskiden 390px'te "Bağlantıyı Test Et"/"Pasifleştir" tablo kenarında kesiliyordu). */
+.mail-komut { display: block; margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2, rgba(127,127,127,.12)); font-size: .85rem; overflow-wrap: anywhere; white-space: pre-wrap; user-select: all; }
+.mail-hesap-eylem { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.mail-hesap-eylem form { margin: 0; }
+@media (max-width: 767px) {
+    .mail-hesap-tablo thead { display: none; }
+    .mail-hesap-tablo, .mail-hesap-tablo tbody, .mail-hesap-tablo tr, .mail-hesap-tablo td { display: block; width: 100%; box-sizing: border-box; }
+    .mail-hesap-tablo tr { padding: 10px 12px; border-bottom: 1px solid var(--border, #e2e8f0); }
+    .mail-hesap-tablo tr:last-child { border-bottom: 0; }
+    .mail-hesap-tablo td { padding: 2px 0; border: 0; overflow-wrap: anywhere; }
+    .mail-hesap-tablo td:first-child { font-weight: 600; }
+    .mail-hesap-eylem { margin-top: 8px; }
+    .mail-hesap-eylem > a, .mail-hesap-eylem > form { flex: 1 1 100%; }
+    .mail-hesap-eylem .btn { width: 100%; min-height: 44px; }
+}
 @media (prefers-reduced-motion: no-preference) { .mail-chip, .mail-oge { transition: background-color .12s, border-color .12s; } }

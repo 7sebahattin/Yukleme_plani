@@ -100,12 +100,39 @@ $u = mail_yapilandirma_uyarilari($db, ['local_php' => $lp, 'depo' => $depo, 'sim
 ok('izinler sıkıysa izin uyarısı yok', !str_contains($mesajlar($u), 'local.php') && !str_contains($mesajlar($u), 'storage/mail'), $mesajlar($u));
 $sonLog = (string)$db->query('SELECT MAX(started_at) FROM mail_sync_log')->fetchColumn();
 $u = mail_yapilandirma_uyarilari($db, ['local_php' => $lp, 'depo' => $depo, 'simdi' => strtotime($sonLog) + 7200]);
-ok('2 saattir senkron çalışmadıysa "cron durmuş olabilir" uyarısı', str_contains($mesajlar($u), 'cron durmuş'));
+ok('kalp atışı YOK + 2 saattir senkron yok → "cron çalıştığına dair kayıt yok" + gerçek komut', str_contains($mesajlar($u), 'kayıt yok') && (bool)array_filter($u, fn($x) => str_contains($x['komut'] ?? '', 'scripts/mail_sync_cron.php')));
 $u = mail_yapilandirma_uyarilari($db, ['local_php' => $lp, 'depo' => $depo, 'simdi' => strtotime($sonLog) + 120]);
 ok('taze senkronda cron uyarısı yok', !str_contains($mesajlar($u), 'cron'));
+
+echo "\n=== 4b. Cron kalp atışı (M9: \"cron durmuş olabilir\" yanlış alarmı) ===\n";
+$kd = sys_get_temp_dir() . '/mail_kalp_' . getmypid(); @mkdir($kd, 0700, true);
+mail_redact_sirlar('KALP-SIR-DEGER');
+$cr = mail_cron_calistir($db, ['istemci' => $kotu, 'kilit_dizin' => $kd, 'simdi' => $T0 + 200000, 'ceviri_saglayici' => null]);
+$k = mail_cron_kalp_oku($kd);
+ok('cron her çalışmada kalp atışı yazar (zaman, kod, SAPI, PHP sürümü, satırlar)', $k !== null && $k['zaman'] === $T0 + 200000 && $k['kod'] === $cr['kod'] && $k['sapi'] === PHP_SAPI && $k['php'] === PHP_VERSION && $k['satirlar'] === array_map(fn($l) => mb_substr($l, 0, 200), $cr['satirlar']), json_encode($k));
+ok('kalp dosyası izinleri 0600', (fileperms($kd . '/' . MAIL_CRON_KALP) & 0777) === 0600);
+mail_cron_kalp_yaz(['kod' => 1, 'satirlar' => ['FAIL hesap=1 error=parola KALP-SIR-DEGER yanlış']], $kd, $T0);
+ok('kalp atışında sır MASKELİ', !str_contains((string)file_get_contents($kd . '/' . MAIL_CRON_KALP), 'KALP-SIR-DEGER'));
+// Senaryolar: kalp taze + BEKLE → "bekletiliyor" (cron durmuş DEĞİL)
+$db->exec("INSERT INTO mail_sync_log (account_id, started_at, status) VALUES (1, '" . date('Y-m-d H:i:s', $T0 - 6000) . "', 'error')");
+mail_cron_kalp_yaz(['kod' => 0, 'satirlar' => ['BEKLE hesap=1 Art arda 7 hata: geri çekilme, 60 dk sonra yeniden denenecek.']], $kd, $T0 - 60);
+$u = mail_cron_durum_uyarilari($db, ['depo' => $kd, 'simdi' => $T0]);
+ok('cron çalışıyor + hesap geri çekilmede → "bekletiliyor" (87 dk\'lık eski senkron "cron durmuş" SAYILMAZ)', str_contains($mesajlar($u), 'bekletiliyor') && !str_contains($mesajlar($u), 'çalışmıyor') && !str_contains($mesajlar($u), 'kayıt yok'), $mesajlar($u));
+mail_cron_kalp_yaz(['kod' => 1, 'satirlar' => ['FAIL MAIL_MASTER_KEY tanımlı/geçerli değil']], $kd, $T0 - 60);
+$u = mail_cron_durum_uyarilari($db, ['depo' => $kd, 'simdi' => $T0]);
+ok('cron çalışıyor ama FAIL → hata seviyesinde, nedeniyle birlikte', count($u) === 1 && $u[0]['seviye'] === 'hata' && str_contains($u[0]['mesaj'], 'MAIL_MASTER_KEY'), $mesajlar($u));
+mail_cron_kalp_yaz(['kod' => 0, 'satirlar' => ['OK hesap=1 fetched=0']], $kd, $T0 - 3 * 3600);
+$u = mail_cron_durum_uyarilari($db, ['depo' => $kd, 'simdi' => $T0]);
+ok('kalp 3 saat eski → "180 dakikadır çalışmıyor" + son sonuç + komut', str_contains($mesajlar($u), '180 dakikadır çalışmıyor') && str_contains($mesajlar($u), 'OK hesap=1') && !empty($u[0]['komut']), $mesajlar($u));
+mail_cron_kalp_yaz(['kod' => 0, 'satirlar' => ['OK hesap=1 fetched=2 inserted=2']], $kd, $T0 - 120);
+ok('kalp taze + OK → uyarı YOK (eski senkron günlüğü olsa bile)', mail_cron_durum_uyarilari($db, ['depo' => $kd, 'simdi' => $T0]) === []);
+file_put_contents($kd . '/' . MAIL_CRON_KALP, '{bozuk');
+ok('bozuk kalp dosyası çökertmez (kalp yok sayılır)', mail_cron_kalp_oku($kd) === null);
+ok('cron komutu bu kurulumun gerçek yolunu içerir', str_contains(mail_cron_komutu(), realpath($ROOT . '/scripts/mail_sync_cron.php')) && str_starts_with(mail_cron_komutu(), '*/5 * * * * php '));
+array_map('unlink', array_merge(glob($kd . '/*') ?: [], glob($kd . '/.[!.]*') ?: [])); @rmdir($kd);
 $db->exec('DELETE FROM mail_sync_log');
 $u = mail_yapilandirma_uyarilari($db, ['local_php' => $lp, 'depo' => $depo, 'simdi' => $T0]);
-ok('hiç senkron yoksa cron kurulumu hatırlatılır', str_contains($mesajlar($u), 'hiç çalışmadı'));
+ok('hiç senkron + kalp yoksa cron kurulumu hatırlatılır (komutla)', str_contains($mesajlar($u), 'hiç çalışmadı') && (bool)array_filter($u, fn($x) => !empty($x['komut'])));
 @unlink($lp); @rmdir($depo);
 
 echo "\n=== 6. M8 bulguları ===\n";

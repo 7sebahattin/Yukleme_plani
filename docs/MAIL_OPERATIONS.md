@@ -16,7 +16,15 @@ Mimari kararlar: `docs/MAIL_CENTER_AGENT_BRIDGE.md`.
 6. **Cron (cPanel → Cron Jobs; SSH gerekmez):**
    `*/5 * * * * php /home/<hesap>/<site-klasoru>/scripts/mail_sync_cron.php >> /dev/null 2>&1`
    Çıktı satırları: `OK` / `FAIL` / `BUSY` / `BEKLE` / `CEVIRI` / `UYARI`. Çıkış kodu 1 yalnız hiçbir hesap başarılı değilse.
-   Cron durursa Mail Hesapları ekranı "cron durmuş olabilir" uyarısı gösterir (son senkron > 30 dk).
+   Doğru komutun tam yolu Mail Hesapları ekranındaki cron uyarısında hazır yazılı gelir (kopyalanabilir kutu).
+   cPanel'de `php` komutu CGI ikilisi olabilir (`PHP_SAPI = cgi-fcgi`); betik bunu da kabul eder (yalnız web isteği reddedilir).
+   **Kalp atışı:** her cron çalışması `storage/mail/.cron_kalp.json`'a zaman + sonuç satırlarını yazar (0600, sır içermez;
+   DB'ye bağlanamasa bile). Çıktı `/dev/null`'a gitse de Mail Hesapları ekranı durumu buradan okur:
+   - *"cron'un çalıştığına dair kayıt yok"* → cron hiç çalışmıyor: cron kurulu değil, yol/komut yanlış.
+   - *"Cron N dakikadır çalışmıyor"* → cron eskiden çalışıyordu, durdu (son sonuç satırı gösterilir).
+   - *"Cron çalışıyor ama hata veriyor: FAIL …"* → cron çalışıyor; neden mesajda (DB, anahtar, tablolar, kilit izni).
+   - *"Cron çalışıyor; hesap … bekletiliyor"* → bir hesap art arda hata verdiği için geri çekilmede (5 dk → 6 sa);
+     son hata "Senkron durumu ve günlüğü" bölümünde. Düzeltince "⟳ Şimdi senkronla" beklemeyi atlar.
 7. **Çeviri (isteğe bağlı, varsayılan KAPALI):** `config/local.php`'de `MAIL_TRANSLATE_PROVIDER` (`deepseek|deepl|libretranslate|mymemory`) + gerekli anahtar/adres sabitleri.
    Açıldığında mail metni (hesabın kimliği/alıcı-gönderen başlıkları/ekler hariç) üçüncü taraf servise gider — KVKK/ticari sır açısından karar sahibindedir. Hesap bazında ayrıca "otomatik çeviri" işaretlenir.
    **DeepSeek:** `config/local.php` dosyasına (mevcut `MAIL_MASTER_KEY` tanımını SİLMEDEN) şunları ekleyin:
@@ -67,6 +75,7 @@ Not: şifre blob'u biçimi `v1:<anahtar kimliği>:<base64>`; anahtar kimliği ya
 | Senkron `Kimlik doğrulama başarısız` | Parola/uygulama şifresi yanlış, IMAP kapalı | Hesabı düzenle; sağlayıcıda IMAP'ı aç |
 | `Sunucuya bağlanılamadı` | Çıkış portu kapalı / host adı yanlış | Bölüm 2 |
 | `TLS el sıkışması başarısız` | Sertifika doğrulanamıyor (süresi dolmuş/yanlış host adı) | Sağlayıcının doğru host adını kullan; doğrulamayı kapatma |
-| Mailler gelmiyor ama hata yok | Cron çalışmıyor | Ekrandaki uyarı; cron yolunu kontrol et |
+| Mailler gelmiyor ama hata yok | Cron çalışmıyor ya da hesap geri çekilmede | Mail Hesapları üstündeki cron uyarısı hangisi olduğunu söyler (kalp atışı); komut orada hazır |
+| "cron durmuş olabilir" (eski sürüm) ama cron kurulu | Eski uyarı yalnız senkron günlüğüne bakıyordu; hesap geri çekilmedeyken günlük satırı yazılmaz | Güncel sürümde kalp atışı ile ayrılır |
 | Çeviri "beklemede" kalıyor | Sağlayıcı kapalı ya da kota doldu | Bölüm 1/7; kota 6 sa duraklatılır |
 | "Çift gönderim engellendi" | Aynı cevap zaten onaylanmış/gönderilmiş | Beklenen davranış |
