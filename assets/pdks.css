@@ -2414,3 +2414,9 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 /* v318 — Mesai Özeti: eksik çıkış hücresi */
 .pdks-mo-tablo td.pdks-mo-eksik { color: var(--warn); font-weight: 800; }
 .pdks-mo-tablo th, .pdks-mo-tablo td { padding-left: 6px; padding-right: 6px; }
+/* v319 — Mesai Detayı: aynı çavuşta önceki / sonraki gün */
+.pdks-gun-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.pdks-gun-nav .btn { flex: 0 1 auto; }
+.pdks-gun-nav-tarih { font-weight: 800; font-variant-numeric: tabular-nums; flex: 1 1 auto; text-align: center; }
+.pdks-gun-nav-pasif { opacity: .45; pointer-events: none; cursor: default; }
+@media (max-width: 767px) { .pdks-gun-nav .btn { flex: 1 1 40%; text-align: center; } .pdks-gun-nav-tarih { order: -1; flex: 1 1 100%; } }

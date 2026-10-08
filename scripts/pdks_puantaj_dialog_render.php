@@ -238,6 +238,23 @@ if (getenv('PUANTAJ_TANIM') === '1') {
     }
 }
 
+// v319: PUANTAJ_GUN_NAV=1 → aynı çavuşta bugünün öncesi/sonrası mesailer + ayrım (başka çavuş, başka depo).
+// Beklenen: geri = dünkü (id'si çıktıda), ileri = +3 gün sonraki (aradaki günlerde mesai yok).
+if (getenv('PUANTAJ_GUN_NAV') === '1') {
+    $bugun = (string)db()->query("SELECT work_date FROM daily_work_sessions WHERE id = " . (int)$sid)->fetchColumn();
+    $diger2 = (int)pdks_gunluk_cavus_olustur(['code' => 'C777', 'name' => 'Başka Çavuş'], 1, db())['id'];
+    $yaz = function (int $cv, string $gun, string $depo) {
+        db()->prepare("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status,opened_at) VALUES (?,?,?,540,?,?,'closed',?)")
+            ->execute([$cv, 'Çavuş ' . $cv, 'C' . $cv, $gun, $depo, $gun . ' 08:00:00']);
+        return (int)db()->lastInsertId();
+    };
+    $oncekiId = $yaz($cavus, date('Y-m-d', strtotime($bugun . ' -1 day')), 'Depo A');
+    $yaz($cavus, date('Y-m-d', strtotime($bugun . ' -1 day')), 'Depo B');        // başka depo → sayılmaz
+    $yaz($diger2, date('Y-m-d', strtotime($bugun . ' +1 day')), 'Depo A');       // başka çavuş → sayılmaz
+    $sonrakiId = $yaz($cavus, date('Y-m-d', strtotime($bugun . ' +3 day')), 'Depo A');
+    fwrite(STDERR, "GUN_NAV onceki=$oncekiId sonraki=$sonrakiId\n");
+}
+
 // Sayfa seçimi: varsayılan = mesai detayı. PUANTAJ_SAYFA=liste → Günlük Puantaj listesi
 // (PUANTAJ_TARIH=bugun|dun). Liste sayfası geçmiş gün + yönetici iken "ekle" penceresini basar.
 // v296: PUANTAJ_SAYFA=toplu → Çavuş Toplu Döküm (bu ay) — pdks_oto_filtre_smoke.js girdisi.

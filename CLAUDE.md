@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v318` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v319` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -779,6 +779,7 @@ DEĞİL, sıralama ve testleri `cells[0]` = Kart No'ya bağlı; mobil: kart baş
 Çavuşun kendi mesai sayfası **Mesai Detayı** (`gunluk_isci_puantaj_detay.php`), Kart Hareketleri'nin üstünde **📊 Mesai Özeti** (v313'te yanlışlıkla Günlük Puantaj listesine konmuştu; v314'te oradan KALDIRILDI — geri ekleme). Migration YOK, yeni yetki YOK.
 - **Mesai Tanımı tablosu** sütunları SABİT (sahip kararı): İşçi · Tam · Yarım · Çift · 1. Saat · 2. Saat · 3. Saat · 4. Saat · 5+ Saat · Bekliyor · İçeride · Toplam; satırlar sistem tipleri (Kadın/Erkek/Rampacı) + Toplam. "N. Saat" = o kadar saat fazla mesai yapan İŞÇİ SAYISI (`PDKS_FAZ8B_OZET_FM_SUTUN`=5, son sütun 5 ve üzeri). Ayrıca Servis (Büyük/Küçük adet) ve Çalışma Saatleri (toleranslı toplam çalışma + toplam FM).
 - **v318 — sayaç kartı KALDIRILDI** (sahip kararı): Mesai Detayı'ndaki Kadın/Erkek/Rampacı/Toplam Giriş/Toplam Çıkış/Eksik Çıkış kutuları gitti (geri ekleme); yerine tabloya **Eksik Çıkış** sütunu geldi (sıra: … Bekliyor · İçeride · Eksik Çıkış · Toplam). Çıkışsız dönem: mesai AÇIK → "İçeride", mesai KAPALI → "Eksik Çıkış" (`_s_status`). Durum rozeti (Açık Mesai/Tamamlandı) sayfa başlığında.
+- **v319 — Bir gün geri / ileri** (Mesai Detayı, başlığın altı `.pdks-gun-nav`): AYNI çavuş + AYNI depodaki önceki/sonraki mesai günü (başka çavuş/depo sayılmaz). Aradaki günde mesai yoksa en yakın mesaiye gider, etikette "(3 gün sonra)" yazar; yoksa düğme pasif. Salt okunur bağlantı — hedef sayfa kendi depo/yetki kapılarını uygular. Test: `php scripts/pdks_gun_nav_smoke.php` (render: `PUANTAJ_GUN_NAV=1`).
 - **FM kuralı:** (v315 saat başı toleransıyla etkin süre) çavuşun mesai süresi (ör. 9 sa; fiyat döneminde FM başlangıcı varsa o) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı — 10:11 → Tam + 1 sa, 12:00 → 3 sa, 9:15 → 0. Reddedilen FM sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat. Tam/Yarım/Çift sınıfı hakedişle AYNI kuraldır (Tam ≥ mesai süresi; alttan tolerans YOK).
 - **Hesap TEK yerde:** `pdks_faz8b_gun_mesai_ozeti()` (config/pdks_faz8b.php) her dönemi `pdks_faz8b_donem_siniflandir()`'dan geçirir — sayfada kendi süre/FM hesabı YAZMA. Servis: `pdks_servis_toplamlar_toplu()`. Faz 8B şeması yoksa özet gizli. Çıkışsız (içeride) ve atanmamış Karışık süre/FM'ye KATILMAZ.
 - CSV/XLSX'e eklenmedi. Test: `php scripts/pdks_mesai_ozeti_smoke.php` · `PUANTAJ_FAZ8B=1 PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php`.
