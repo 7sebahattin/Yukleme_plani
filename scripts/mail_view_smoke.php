@@ -116,4 +116,21 @@ $db->exec("UPDATE mail_messages SET attachments_json = '" . json_encode([['part'
 ok('dev ek (> 15 MB) reddedilir → 413', mail_ek_hazirla($db, $ekMsg, '2', [$A], ['istemci' => $fab])['kod'] === 413);
 $src = file_get_contents($ROOT . '/mail_ek.php');
 ok('mail_ek.php: require_mail(read) + ACL + attachment + nosniff + no-store + sandbox CSP + audit', str_contains($src, "require_mail('read')") && str_contains($src, 'mail_gorunur_hesap_idleri') && str_contains($src, 'Content-Disposition: attachment') && str_contains($src, 'X-Content-Type-Options: nosniff') && str_contains($src, 'Cache-Control: no-store') && str_contains($src, "Content-Security-Policy: sandbox") && str_contains($src, 'mail_attachment_download') && str_contains($src, 'session_write_close()'));
+echo "\n=== Eski DB kayıtlarında Türkçe mojibake görünüm onarımı ===\n";
+$bozukBaslik = 'BatÄ± Akdeniz Ä°hracatÃ§Ä±lar BirliÄŸi';
+$dogruBaslik = 'Batı Akdeniz İhracatçılar Birliği';
+$db->prepare('UPDATE mail_messages SET subject = ?, from_name = ?, body_text = ?, body_html_safe = ? WHERE id = ?')
+   ->execute([$bozukBaslik, 'Ä°hracat BirliÄŸi', 'GÃ¼naydÄ±n', '<p>GÃ¼naydÄ±n</p>', $a2]);
+$l = mail_mesaj_listele($db, [$A], 'gelen', '', 1);
+$eski = array_values(array_filter($l['satirlar'], static fn($r) => (int)$r['id'] === $a2))[0] ?? null;
+ok('eski mailin liste konusu/göndericisi/gövde özeti düzelir',
+    $eski !== null && $eski['subject'] === $dogruBaslik &&
+    $eski['from_name'] === 'İhracat Birliği' && $eski['ozet'] === 'Günaydın');
+$mEski = mail_mesaj_getir($db, $a2, [$A]);
+ok('eski mailin detay konusu, düz metni, güvenli HTML düzelir',
+    $mEski !== null && $mEski['subject'] === $dogruBaslik &&
+    $mEski['body_text'] === 'Günaydın' && $mEski['body_html_safe'] === '<p>Günaydın</p>');
+$hamEski = $db->query('SELECT subject FROM mail_messages WHERE id = ' . $a2)->fetchColumn();
+ok('görünüm onarımı veritabanındaki asıl kaydı DEĞİŞTİRMEZ', $hamEski === $bozukBaslik);
+
 mail_test_bitir();

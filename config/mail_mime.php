@@ -44,6 +44,22 @@ function mail_mime_utf8(string $s, string $charset = 'utf-8'): string
     return mb_check_encoding($s, 'UTF-8') ? $s : mb_convert_encoding($s, 'UTF-8', 'Windows-1254');
 }
 
+/**
+ * Hatalı charset bildirimi / önceden mojibake olmuş UTF-8 posta başlıklarında
+ * Türkçe metin "BatÄ±", "Ä°hracat", "Ã§", "ÄŸ" olarak görünebilir.
+ * YALNIZ geçerli bir UTF-8 karakterine dönüşebilen Windows-1252 iki-karakter
+ * dizilerini yerinde düzeltir; sağlam UTF-8 ve diğer alfabelere dokunmaz.
+ * Depodaki eski kayıtlar için aynı fonksiyon görüntüleme katmanında da kullanılır.
+ */
+function mail_mime_mojibake_duzelt(string $s): string
+{
+    if (!function_exists('iconv') || !preg_match('/(?:Ã|Ä|Å)./u', $s)) return $s;
+    return preg_replace_callback('/(?:Ã|Ä|Å)./u', static function (array $m): string {
+        $baytlar = @iconv('UTF-8', 'Windows-1252', $m[0]);
+        return $baytlar !== false && preg_match('//u', $baytlar) === 1 ? $baytlar : $m[0];
+    }, $s) ?? $s;
+}
+
 /** Kontrol karakterlerini (sekme/satır sonu hariç) temizler. */
 function mail_mime_temiz(string $s): string
 {
@@ -60,7 +76,7 @@ function mail_mime_baslik_coz(string $v): string
     // ASCII olduğundan güvenlidir; aksi hâlde karışık başlıkta /u regex'i null döner ve başlık (gönderen!) silinirdi.
     $v = mail_mime_utf8((string)preg_replace('/\r?\n[ \t]+/', ' ', $v), 'utf-8');
     if (!str_contains($v, '=?')) {
-        return mail_mime_temiz($v);
+        return mail_mime_temiz(mail_mime_mojibake_duzelt($v));
     }
     $v = (string)preg_replace('/(\?=)\s+(?==\?)/', '$1', $v);   // bitişik encoded-word'ler
     $out = (string)preg_replace_callback('/=\?([^?\s]+)\?([BbQq])\?([^?]*)\?=/', static function ($m) {
@@ -73,7 +89,7 @@ function mail_mime_baslik_coz(string $v): string
         }
         return mail_mime_utf8($ham, (string)$cs);
     }, $v);
-    return mail_mime_temiz(mb_scrub($out, 'UTF-8'));
+    return mail_mime_temiz(mail_mime_mojibake_duzelt(mb_scrub($out, 'UTF-8')));
 }
 
 /**
@@ -131,7 +147,7 @@ function mail_mime_param_coz(string $v): array
         }
         $kodluVar = false;
         foreach ($segs as [$kodlu]) if ($kodlu) $kodluVar = true;
-        $params[$ad] = mail_mime_temiz($kodluVar ? mail_mime_utf8($metin, $cs) : mail_mime_baslik_coz($metin));
+        $params[$ad] = mail_mime_temiz($kodluVar ? mail_mime_mojibake_duzelt(mail_mime_utf8($metin, $cs)) : mail_mime_baslik_coz($metin));
     }
     return ['deger' => $deger, 'params' => $params];
 }
@@ -284,7 +300,7 @@ function mail_mime_yapraklar(array $d): array
 function mail_mime_yaprak_metin(array $y): string
 {
     $ham = mail_mime_govde_coz($y['govde'], $y['cte']);
-    return mail_mime_utf8($ham, $y['params']['charset'] ?? 'utf-8');
+    return mail_mime_mojibake_duzelt(mail_mime_utf8($ham, $y['params']['charset'] ?? 'utf-8'));
 }
 
 /** strtotime sonucunu MySQL DATETIME aralığına (1970–9999) sıkıştırır; dışı null (strict mod INSERT hatasını önler). */

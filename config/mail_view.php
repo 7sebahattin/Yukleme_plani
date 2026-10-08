@@ -25,6 +25,20 @@ function mail_filtre_gecerli(string $f): string { return array_key_exists($f, ma
 /** LIKE joker karakterlerini kaçırır (kaçış karakteri '!'). */
 function mail_like(string $q): string { return '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q) . '%'; }
 
+/**
+ * Önceden senkron edilmiş kayıtları DB'de değiştirmeden ekranda UTF-8 düzeltmesiyle göster.
+ * MIME çözücüdeki aynı dar kapsamlı onarım; hesap ACL/filtre/UID alanları etkilenmez.
+ */
+function mail_gorunum_charset_duzelt(array $satir, array $alanlar): array
+{
+    foreach ($alanlar as $alan) {
+        if (isset($satir[$alan]) && is_string($satir[$alan])) {
+            $satir[$alan] = mail_mime_mojibake_duzelt($satir[$alan]);
+        }
+    }
+    return $satir;
+}
+
 /** Gövde özeti: tek satır, kısaltılmış. */
 function mail_oz(?string $metin, int $n = 110): string
 {
@@ -74,7 +88,7 @@ function mail_mesaj_listele(PDO $pdo, array $hesapIds, string $filtre, string $q
             needs_reply, replied_at, SUBSTR(body_text, 1, 300) AS ozet
         FROM mail_messages WHERE $w ORDER BY received_at DESC, id DESC LIMIT " . (int)$limit . ' OFFSET ' . (int)$off);
     $st->execute($p);
-    return ['satirlar' => $st->fetchAll(PDO::FETCH_ASSOC), 'toplam' => $toplam];
+    return ['satirlar' => array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'from_name', 'ozet']), $st->fetchAll(PDO::FETCH_ASSOC)), 'toplam' => $toplam];
 }
 
 /** Giden kutusu listesi. @return array{satirlar:list<array>,toplam:int} */
@@ -104,7 +118,7 @@ function mail_ceviri_hatalilari(PDO $pdo, array $hesapIds, int $limit = 20): arr
     $st = $pdo->prepare("SELECT id, account_id, from_name, from_addr, subject, received_at, tr_error FROM mail_messages
         WHERE account_id IN ($in) AND tr_status = 'failed' ORDER BY received_at DESC, id DESC LIMIT " . (int)$limit);
     $st->execute(array_map('intval', $hesapIds));
-    return $st->fetchAll(PDO::FETCH_ASSOC);
+    return array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'from_name']), $st->fetchAll(PDO::FETCH_ASSOC));
 }
 
 /** Filtre rozet sayıları. @return array<string,int> */
@@ -138,6 +152,7 @@ function mail_mesaj_getir(PDO $pdo, int $id, array $hesapIds): ?array
     $st->execute([$id]);
     $m = $st->fetch(PDO::FETCH_ASSOC);
     if (!$m || !in_array((int)$m['account_id'], array_map('intval', $hesapIds), true)) return null;
+    $m = mail_gorunum_charset_duzelt($m, ['subject', 'from_name', 'body_text', 'body_html_safe', 'subject_tr', 'body_tr']);
     $m['to_list'] = json_decode((string)$m['to_addrs'], true) ?: [];
     $m['cc_list'] = json_decode((string)$m['cc_addrs'], true) ?: [];
     $m['ekler']   = json_decode((string)$m['attachments_json'], true) ?: [];
@@ -151,7 +166,7 @@ function mail_thread_mesajlari(PDO $pdo, array $m, int $limit = 25): array
     $st = $pdo->prepare('SELECT id, from_name, from_addr, subject, received_at FROM mail_messages
         WHERE account_id = ? AND thread_id = ? AND id <> ? ORDER BY received_at DESC, id DESC LIMIT ' . (int)$limit);
     $st->execute([(int)$m['account_id'], (int)$m['thread_id'], (int)$m['id']]);
-    return $st->fetchAll(PDO::FETCH_ASSOC);
+    return array_map(static fn(array $r): array => mail_gorunum_charset_duzelt($r, ['subject', 'from_name']), $st->fetchAll(PDO::FETCH_ASSOC));
 }
 
 /** Okundu/okunmadı. Yalnız görünür hesaptaki mesaj; etkilenen satır sayısı döner. */
