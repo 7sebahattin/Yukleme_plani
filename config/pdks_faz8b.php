@@ -549,19 +549,25 @@ function pdks_faz8b_oturum_ozeti(int $sessionId, ?PDO $pdo = null): array
     ];
 }
 
+if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);   // son sütun = 5 ve üzeri
+
 /**
- * v313 — Günlük Puantaj "Mesai Özeti": verilen mesailerin (oturum id'leri) toplu özeti.
+ * v313/v314 — Mesai Detayı "Mesai Özeti": verilen mesailerin (oturum id'leri) toplu özeti.
  * SALT OKUNUR; süre/sınıf/FM hesabını YAPMAZ — her dönem için TEK sınıflandırıcıyı
  * (pdks_faz8b_donem_siniflandir) kullanır. Servis adetleri pdks_servis_toplamlar_toplu().
  *
- *  tanim[tip adı] = [tam, yarim, cift, bekliyor (sınıf kararı yok), suruyor (çıkışsız), toplam]
+ *  tanim[tip adı] = [tam, yarim, cift, fm => [1..5], bekliyor (sınıf kararı yok), suruyor (çıkışsız), toplam]
  *      — yalnız sistem tipleri (Kadın/Erkek/Rampacı); sıfır olsa da satır vardır.
+ *      fm[n] = fazla mesaisi n saat olan işçi sayısı (5 = 5 ve üzeri). Saat = çavuşun mesai
+ *      süresi (ör. 9 sa) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı: 10:11 → 1,
+ *      12:00 → 3. Reddedilen FM sayılmaz; Çift günde çift eşiğinden SONRAKİ onaylı saat.
  *  karisik   — atanmamış Karışık dönem sayısı (sınıfsız, süreye KATILMAZ)
  *  calisma_dk   — TOLERANSLI toplam çalışma: Σ [min(süre, FM başlangıcı) + FM saati × 60]
  *                 (FM = 15 dk tolerans sonrası, başlayan saat yukarı; bkz. pdks_faz8b_fm_saat)
  *  ham_dk       — Σ gerçek (çıkış − giriş) süre, toleranssız
- *  fm_saat      — toplam fazla mesai adayı (toleranslı)   fm_onayli / fm_bekleyen / fm_red
+ *  fm_saat      — toplam fazla mesai saati (= Σ fm dağılımı)   fm_onayli / fm_bekleyen / fm_red
  *  sureli_kisi  — süresi hesaplanan (çıkışı olan, Karışık olmayan) dönem sayısı
+ *  fm_bas_dk    — kullanılan FM başlangıç eşikleri (dk, benzersiz, artan; ör. [540])
  *  servis       — ['BUYUK' => n, 'KUCUK' => n]
  * Şema hazır değilse null.
  */
@@ -573,11 +579,12 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
 
     $tanim = [];
     foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc) {
-        $tanim[$tc['ad']] = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
+        $tanim[$tc['ad']] = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0),
+                             'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
     }
     $o = [
         'tanim' => $tanim, 'karisik' => 0, 'diger' => 0,
-        'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0,
+        'calisma_dk' => 0, 'ham_dk' => 0, 'sureli_kisi' => 0, 'fm_bas_dk' => [],
         'fm_saat' => 0, 'fm_onayli' => 0, 'fm_bekleyen' => 0, 'fm_red' => 0,
         'servis' => array_fill_keys(array_keys(pdks_servis_turleri()), 0),
     ];
@@ -594,13 +601,18 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
         if ($f['toplam_dk'] === null) { $t['suruyor']++; unset($t); continue; }
         $sinif = $f['etkin_sinif'];
         if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
-        unset($t);
 
         $fm = (int)$f['fazla_mesai_saat'];
+        // Gösterilen FM: reddedilen sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat.
+        $fmGoster = $sinif === 'cift' ? (int)$f['odenecek_fm_saat'] : ($f['fazla_mesai_durum'] === 'reddedildi' ? 0 : $fm);
+        if ($fmGoster > 0) $t['fm'][min($fmGoster, PDKS_FAZ8B_OZET_FM_SUTUN)]++;
+        unset($t);
+
         $o['sureli_kisi']++;
+        $o['fm_bas_dk'][(int)$f['fm_bas_dk']] = (int)$f['fm_bas_dk'];
         $o['ham_dk'] += (int)$f['toplam_dk'];
         $o['calisma_dk'] += min((int)$f['toplam_dk'], (int)$f['fm_bas_dk']) + $fm * 60;
-        $o['fm_saat'] += $fm;
+        $o['fm_saat'] += $fmGoster;
         if ($fm > 0) {
             $durum = (string)$f['fazla_mesai_durum'];
             if ($durum === 'onayli') $o['fm_onayli'] += (int)$f['odenecek_fm_saat'];
@@ -608,6 +620,8 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
             elseif ($durum === 'reddedildi') $o['fm_red'] += $fm;
         }
     }
+    ksort($o['fm_bas_dk']);
+    $o['fm_bas_dk'] = array_values($o['fm_bas_dk']);
     $o['servis'] = pdks_servis_toplamlar_toplu($sessionIds, $pdo);
     return $o;
 }

@@ -2392,7 +2392,7 @@ html[data-theme="dark"] .kh-cip { background: #1a2433; }
 html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 @media print { .kh-cubuk, .kh-sec-th, .kh-sec-td, .kh-sayac, .kh-ozet { display: none !important; } }
 
-/* v313 — Günlük Puantaj "Mesai Özeti" */
+/* v313/v314 — Mesai Detayı "Mesai Özeti" */
 .pdks-mo { margin: 0 0 18px; }
 .pdks-mo > h3 { margin: 0 0 10px; font-size: 1.05rem; }
 .pdks-mo-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
@@ -2402,6 +2402,10 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 .pdks-mo-kart .pdks-kiosk-counter-box { background: transparent; border: 1px solid var(--border, rgba(127,127,127,.25)); }
 .pdks-mo-tablo th, .pdks-mo-tablo td { text-align: center; white-space: nowrap; }
 .pdks-mo-tablo tbody th { text-align: left; font-weight: 700; }
+.pdks-mo-tablo tr > :first-child { position: sticky; left: 0; z-index: 1; background: var(--card); text-align: left; }
 .pdks-mo-not { margin: 8px 0 0; font-size: .78rem; color: var(--muted); }
-@media (min-width: 900px) { .pdks-mo-grid { grid-template-columns: 2fr 1fr; } .pdks-mo-genis { grid-column: 1 / -1; } }
+.pdks-mo-tablo td.pdks-mo-sifir { color: var(--muted); opacity: .55; }
+.pdks-mo-tablo th.pdks-mo-fm { color: var(--warn); }
+.pdks-mo-tablo tfoot tr th, .pdks-mo-tablo tfoot tr td { font-weight: 800; border-top: 2px solid var(--border, rgba(127,127,127,.35)); }
+@media (min-width: 900px) { .pdks-mo-grid { grid-template-columns: 1fr 1fr; } .pdks-mo-genis { grid-column: 1 / -1; } }
 @media print { .pdks-mo { break-inside: avoid; } }

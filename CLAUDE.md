@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v313` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v314` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -775,11 +775,12 @@ DEĞİL, sıralama ve testleri `cells[0]` = Kart No'ya bağlı; mobil: kart baş
 - Test: `php scripts/pdks_toplu_duzelt_smoke.php` · `node scripts/pdks_toplu_duzelt_smoke.js` (kendi sayfasını
   `PUANTAJ_TOPLU_DUZELT=1 php scripts/pdks_puantaj_dialog_render.php` ile basar).
 
-### Mesai Özeti (v313)
-Günlük Puantaj (`gunluk_isci_puantaj.php`) listesinin üstünde **📊 Mesai Özeti**: Mesai Tanımı (işçi tipi × Tam/Yarım/Çift/Karar bekliyor/İçeride), Servis (Büyük/Küçük adet), Çalışma Saatleri (toplam çalışma + toplam/onaylı/bekleyen fazla mesai). Listeyle AYNI mesailer (çavuş/durum filtresi dahil). Migration YOK, yeni yetki YOK.
-- **Hesap TEK yerde:** `pdks_faz8b_gun_mesai_ozeti()` (config/pdks_faz8b.php) her dönemi `pdks_faz8b_donem_siniflandir()`'dan geçirir — sayfada/özette kendi süre/FM hesabı YAZMA. Servis: `pdks_servis_toplamlar_toplu()` (iptal edilmemiş). Şema hazır değilse özet gizli.
-- **Toleranslı çalışma** = Σ [min(süre, FM başlangıcı) + FM saati × 60]; FM = 15 dk tolerans sonrası başlayan saat yukarı (`pdks_faz8b_fm_saat`). Ham süre toplamı ayrıca dipnotta. Çıkışsız (içeride) dönemler ve atanmamış Karışık süreye KATILMAZ.
-- CSV/XLSX'e eklenmedi (CSV kuralı). Test: `php scripts/pdks_mesai_ozeti_smoke.php`.
+### Mesai Özeti (v313 → v314 taşındı)
+Çavuşun kendi mesai sayfası **Mesai Detayı** (`gunluk_isci_puantaj_detay.php`), Kart Hareketleri'nin üstünde **📊 Mesai Özeti** (v313'te yanlışlıkla Günlük Puantaj listesine konmuştu; v314'te oradan KALDIRILDI — geri ekleme). Migration YOK, yeni yetki YOK.
+- **Mesai Tanımı tablosu** sütunları SABİT (sahip kararı): İşçi · Tam · Yarım · Çift · 1. Saat · 2. Saat · 3. Saat · 4. Saat · 5+ Saat · Bekliyor · İçeride · Toplam; satırlar sistem tipleri (Kadın/Erkek/Rampacı) + Toplam. "N. Saat" = o kadar saat fazla mesai yapan İŞÇİ SAYISI (`PDKS_FAZ8B_OZET_FM_SUTUN`=5, son sütun 5 ve üzeri). Ayrıca Servis (Büyük/Küçük adet) ve Çalışma Saatleri (toleranslı toplam çalışma + toplam FM).
+- **FM kuralı:** çavuşun mesai süresi (ör. 9 sa; fiyat döneminde FM başlangıcı varsa o) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı — 10:11 → Tam + 1 sa, 12:00 → 3 sa, 9:15 → 0. Reddedilen FM sayılmaz; Çift günde çift eşiğinden sonraki onaylı saat. Tam/Yarım/Çift sınıfı hakedişle AYNI kuraldır (Tam ≥ mesai süresi; alttan tolerans YOK).
+- **Hesap TEK yerde:** `pdks_faz8b_gun_mesai_ozeti()` (config/pdks_faz8b.php) her dönemi `pdks_faz8b_donem_siniflandir()`'dan geçirir — sayfada kendi süre/FM hesabı YAZMA. Servis: `pdks_servis_toplamlar_toplu()`. Faz 8B şeması yoksa özet gizli. Çıkışsız (içeride) ve atanmamış Karışık süre/FM'ye KATILMAZ.
+- CSV/XLSX'e eklenmedi. Test: `php scripts/pdks_mesai_ozeti_smoke.php` · `PUANTAJ_FAZ8B=1 PUANTAJ_SERVIS=1 php scripts/pdks_puantaj_dialog_render.php`.
 
 ### Kart Hareketleri Sıralaması + Kapanış Notu (v299)
 

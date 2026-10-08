@@ -243,6 +243,9 @@ $mesaiTanimMetni = function (array $k) use ($mesaiTanimF, $karisikTipId, $oturum
     $suruyor = empty($k['cikis_saat']) && ($oturum['status'] ?? '') === 'open';
     return pdks_faz8b_mesai_tanimi_etiketi($mesaiTanimF[(int)($k['period_id'] ?? 0)] ?? null, $suruyor, $karisik);
 };
+// v314: Mesai Özeti (bu çavuşun bu mesaisi) — hesap pdks_faz8b_gun_mesai_ozeti()'de (TEK sınıflandırıcı), burada YOK.
+$mesaiOzeti = $mesaiTanimGoster && function_exists('pdks_faz8b_gun_mesai_ozeti') ? pdks_faz8b_gun_mesai_ozeti([(int)$id], $pdo) : null;
+$ozetSaat = fn(int $dk): string => intdiv($dk, 60) . ' sa' . ($dk % 60 ? ' ' . ($dk % 60) . ' dk' : '');
 // v299: başlık sıralaması için hücre/kart HAM değerleri (zaman = epoch, süre = saniye, metin = küçük harf;
 // boş = sona). Görünen metni DEĞİŞTİRMEZ — yalnız data-sirala-deger / data-sd-* öznitelikleri.
 $sdDegerler = function (array $k) use ($mesaiTanimMetni, $mesaiTanimGoster, $sonIslemZamani): array {
@@ -377,6 +380,49 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
     </div>
     <?php if ($ekleGoster): ?><button type="button" class="btn btn-primary btn-sm" onclick="pdksPuantajDialogAc('karisikAta')">🎲 Otomatik Ata</button><?php endif; ?>
 </div>
+<?php endif; ?>
+
+<?php if ($mesaiOzeti !== null): $mo = $mesaiOzeti; $moSut = pdks_gunluk_tip_sistem_sutunlari(); $moFm = range(1, PDKS_FAZ8B_OZET_FM_SUTUN);
+    $moTop = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0), 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
+    foreach ($mo['tanim'] as $t) { foreach (['tam', 'yarim', 'cift', 'bekliyor', 'suruyor', 'toplam'] as $k) $moTop[$k] += (int)$t[$k]; foreach ($moFm as $n) $moTop['fm'][$n] += (int)$t['fm'][$n]; }
+    $moSatir = function (string $ad, array $t, bool $toplam) use ($moFm): string {
+        $td = fn(int $v): string => '<td' . ($v === 0 ? ' class="pdks-mo-sifir"' : '') . '>' . $v . '</td>';
+        $h = '<tr' . ($toplam ? ' class="pdks-mo-toplam"' : '') . '><th scope="row">' . h($ad) . '</th>' . $td((int)$t['tam']) . $td((int)$t['yarim']) . $td((int)$t['cift']);
+        foreach ($moFm as $n) $h .= $td((int)$t['fm'][$n]);
+        return $h . $td((int)$t['bekliyor']) . $td((int)$t['suruyor']) . '<td><strong>' . (int)$t['toplam'] . '</strong></td></tr>';
+    }; ?>
+<section class="pdks-mo" aria-label="Mesai özeti">
+    <h3>📊 Mesai Özeti</h3>
+    <div class="pdks-mo-grid">
+        <div class="pdks-mo-kart pdks-mo-genis">
+            <h4>Mesai Tanımı <span class="muted">· fazla mesai: <?= h(count($mo['fm_bas_dk']) === 1 ? pdks_faz8b_dakika_etiket((int)$mo['fm_bas_dk'][0]) : 'çavuş mesai süresi') ?> üzeri, 15 dk tolerans</span></h4>
+            <div class="table-wrap"><table class="data-table pdks-mo-tablo">
+                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Toplam</th></tr></thead>
+                <tbody>
+                <?php foreach ($moSut as $tc) echo $moSatir($tc['kisa'], $mo['tanim'][$tc['ad']], false); ?>
+                </tbody>
+                <tfoot><?= $moSatir('Toplam', $moTop, true) ?></tfoot>
+            </table></div>
+            <p class="pdks-mo-not">Saat sütunları o kadar saat fazla mesai yapan işçi sayısıdır (ör. 10 sa 11 dk → Tam + 1. Saat; 12 sa → 3. Saat). Reddedilen fazla mesai sayılmaz.<?php if ($mo['karisik'] > 0): ?> 🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — tabloya girmez.<?php endif; ?></p>
+        </div>
+        <div class="pdks-mo-kart">
+            <h4>Servis</h4>
+            <div class="pdks-kiosk-counter-totals">
+                <?php foreach (pdks_servis_turleri() as $sk => $st): ?>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">🚌 <?= h($st['ad']) ?></div><div class="val"><?= (int)($mo['servis'][$sk] ?? 0) ?></div></div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <div class="pdks-mo-kart">
+            <h4>Çalışma Saatleri <span class="muted">(15 dk tolerans)</span></h4>
+            <div class="pdks-kiosk-counter-totals">
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam çalışma (<?= (int)$mo['sureli_kisi'] ?> işçi)</div><div class="val"><?= h($ozetSaat((int)$mo['calisma_dk'])) ?></div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam fazla mesai</div><div class="val"><?= (int)$mo['fm_saat'] ?> sa</div></div>
+            </div>
+            <p class="pdks-mo-not">Onaylı <?= (int)$mo['fm_onayli'] ?> sa · onay bekleyen <?= (int)$mo['fm_bekleyen'] ?> sa. Ham süre <?= h($ozetSaat((int)$mo['ham_dk'])) ?>; içeride olanlar süreye katılmaz.</p>
+        </div>
+    </div>
+</section>
 <?php endif; ?>
 
 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 8px">
