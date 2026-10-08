@@ -28,6 +28,8 @@ require_once __DIR__ . '/config/pdks_gunluk.php';
 require_once __DIR__ . '/config/pdks_hakedis.php';
 // v291: yalnız yönetici "Geçmişe Dönük Çalışma Ekle" (yazma işi config/pdks_faz8j.php'de)
 require_once __DIR__ . '/config/pdks_faz8j.php';
+// v313: Mesai Özeti — tek sınıflandırıcı (süre/FM/Tam-Yarım-Çift) + servis adetleri
+require_once __DIR__ . '/config/pdks_faz8b.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/xlsx_export.php';
 $auth_user = require_login();
@@ -86,6 +88,9 @@ try {
 $gunOzeti  = pdks_gunluk_gun_ozeti($tarih, $depo, $pdo);
 $gunListesi = pdks_gunluk_gun_listesi($tarih, $depo, $cavusId, $durum_f !== '' ? $durum_f : null, $pdo);
 $eksikler   = pdks_gunluk_eksik_cikislar($tarih, $depo, $cavusId, $pdo);
+// v313: Mesai Özeti — listeyle AYNI mesailer (çavuş/durum filtresi dahil); hesap pdks_faz8b'de, burada YOK.
+$mesaiOzeti = $gunListesi ? pdks_faz8b_gun_mesai_ozeti(array_map(fn($r) => (int)$r['session']['id'], $gunListesi), $pdo) : null;
+$ozetSaat = fn(int $dk): string => intdiv($dk, 60) . ' sa' . ($dk % 60 ? ' ' . ($dk % 60) . ' dk' : '');
 
 // ── v291/v294: ekle + toplu işlem penceresi verisi (yalnız yönetici; bugün ya da geçmiş gün, aktif depo, şema hazır) ──
 $ekleYetkili = function_exists('is_admin') && is_admin() && $depo !== '' && $tarih <= date('Y-m-d')
@@ -226,6 +231,44 @@ $durum_secenekleri = ['' => 'Tümü', 'acik' => 'Açık', 'kapali' => 'Kapalı',
         <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val"><?= (int)$gunOzeti['eksik_cikis'] ?></div></div>
     </div>
 </div>
+
+<?php if ($mesaiOzeti !== null): $mo = $mesaiOzeti; $moSut = pdks_gunluk_tip_sistem_sutunlari(); ?>
+<section class="pdks-mo" aria-label="Mesai özeti">
+    <h3>📊 Mesai Özeti</h3>
+    <div class="pdks-mo-grid">
+        <div class="pdks-mo-kart">
+            <h4>Mesai Tanımı</h4>
+            <div class="table-wrap"><table class="data-table pdks-mo-tablo">
+                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><th>Karar bekliyor</th><th>İçeride</th><th>Toplam</th></tr></thead>
+                <tbody>
+                <?php foreach ($moSut as $tc): $t = $mo['tanim'][$tc['ad']]; ?>
+                <tr><th scope="row"><?= h($tc['kisa']) ?></th><td><?= (int)$t['tam'] ?></td><td><?= (int)$t['yarim'] ?></td><td><?= (int)$t['cift'] ?></td><td><?= (int)$t['bekliyor'] ?></td><td><?= (int)$t['suruyor'] ?></td><td><strong><?= (int)$t['toplam'] ?></strong></td></tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table></div>
+            <?php if ($mo['karisik'] > 0): ?><p class="pdks-mo-not">🎲 <?= (int)$mo['karisik'] ?> Karışık kayıt atanmamış — sınıfsız, süreye katılmaz.</p><?php endif; ?>
+        </div>
+        <div class="pdks-mo-kart">
+            <h4>Servis</h4>
+            <div class="pdks-kiosk-counter-totals">
+                <?php foreach (pdks_servis_turleri() as $sk => $st): ?>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">🚌 <?= h($st['ad']) ?></div><div class="val"><?= (int)($mo['servis'][$sk] ?? 0) ?></div></div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <div class="pdks-mo-kart pdks-mo-genis">
+            <h4>Çalışma Saatleri <span class="muted">(15 dk tolerans)</span></h4>
+            <div class="pdks-kiosk-counter-totals">
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam çalışma (<?= (int)$mo['sureli_kisi'] ?> işçi)</div><div class="val"><?= h($ozetSaat((int)$mo['calisma_dk'])) ?></div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam fazla mesai</div><div class="val"><?= (int)$mo['fm_saat'] ?> sa</div></div>
+                <div class="pdks-kiosk-counter-box"><div class="lbl">FM onaylı</div><div class="val"><?= (int)$mo['fm_onayli'] ?> sa</div></div>
+                <div class="pdks-kiosk-counter-box <?= $mo['fm_bekleyen'] > 0 ? 'eksik' : '' ?>"><div class="lbl">FM onay bekleyen</div><div class="val"><?= (int)$mo['fm_bekleyen'] ?> sa</div></div>
+            </div>
+            <p class="pdks-mo-not">Çalışma = her işçi için normal süre + tolerans sonrası başlayan her saat (yukarı yuvarlanır); ham süre toplamı <?= h($ozetSaat((int)$mo['ham_dk'])) ?>. İçeride olan (çıkışsız) işçiler süreye katılmaz.</p>
+        </div>
+    </div>
+</section>
+<?php endif; ?>
 
 <?php if (empty($gunListesi)): ?>
 <div class="pdks-empty">
