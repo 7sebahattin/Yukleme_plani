@@ -33,6 +33,12 @@ $vakalar = [
     ['08:57', '18:14', 540, 540, 'tam', 0, '09:00', '18:00'],   // kaymış vardiya
     ['23:50', '09:05+', 540, 540, 'tam', 0, '00:00', '09:00'],  // gün ötesi
     ['08:50', '17:10', 480, 480, 'tam', 0, '09:00', '17:00'],   // 8 saatlik çavuş
+    // v316: çıkış yuvarlaması tam günü kısaltmaz
+    ['08:06', '17:07', 540, 540, 'tam', 0, '08:06', '17:06'],   // sahibin ekranı: ham 9 sa 01 dk → Tam
+    ['08:05', '17:10', 540, 540, 'tam', 0, '08:05', '17:05'],
+    ['08:14', '17:15', 540, 540, 'tam', 0, '08:14', '17:14'],
+    ['08:20', '17:10', 540, 530, null, 0, '08:20', '17:10'],   // gerçekten kısa → karar
+    ['08:06', '17:21', 540, 555, 'tam', 0, '08:06', '17:21'],   // 15+ dk geçe çıkış yuvarlanmaz, FM toleransta
 ];
 foreach ($vakalar as [$g, $c, $n, $dk, $sinif, $fm, $ge, $ce]) {
     $k = kst($g, $c, $n);
@@ -46,7 +52,7 @@ $k = kst('07:57', '17:13');
 okst('ham_dk ayrıca döner (556)', $k['ham_dk'] === 556);
 okst('süre metni ham notlu', pdks_faz8b_sure_metni($k) === '9s 00dk (ham 9s 16dk)', pdks_faz8b_sure_metni($k));
 okst('süre metni ham=etkin ise notsuz', pdks_faz8b_sure_metni(kst('08:00', '17:00')) === '9s 00dk');
-okst('çok kısa dönem negatife düşmez', kst('07:50', '08:10')['toplam_dk'] === 0);
+okst('çok kısa dönem: çıkış kırpılmaz, 10 dk (negatif yok)', kst('07:50', '08:10')['toplam_dk'] === 10);
 okst('çıkışsız → null', pdks_faz8b_sure_karari('2026-10-08 07:57:00', null)['toplam_dk'] === null);
 $f = pdks_faz8b_donem_siniflandir(['entry_time' => '2026-10-08 07:57:00', 'exit_time' => '2026-10-08 17:13:00', 'normal_work_minutes_snapshot' => 540]);
 okst('sınıflandırıcı da etkin süreyi kullanır (Tam, FM 0)', $f['etkin_sinif'] === 'tam' && $f['fazla_mesai_saat'] === 0 && $f['toplam_dk'] === 540);

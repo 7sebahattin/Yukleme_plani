@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v315` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v316` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -787,7 +787,9 @@ Sahip kararı: erken giriş / hafif geç çıkış fazla mesai SAYILMAZ. `pdks_f
 **etkin** saatlerle hesaplar (`pdks_faz8b_etkin_saatler()`): giriş tam saatten ≤15 dk ÖNCEYSE o saate (07:57 → 08:00),
 çıkış tam saatten ≤15 dk SONRAYSA o saate (17:13 → 17:00) çekilir. 07:57–17:13 = 9 sa, FM 0; 07:57–17:16 = 9 sa 16 dk,
 FM 1. Saat KİLİDİ DEĞİL (08-17/09-18/12-21 aynı çalışır). Geç giriş ve erken çıkış YUVARLANMAZ (işçi lehine uydurma
-yok) — bu yüzden 08:05–17:10 = 8 sa 55 dk → Tam değil, muhasebe kararı bekler. Ham kart kayıtları DEĞİŞMEZ.
+yok). **v316 (sahip şikâyeti):** çıkış yuvarlaması yalnız FM kırıntısını siler, tam günü ASLA kısaltmaz — yuvarlanmış süre
+mesai süresinin altına düşerse çıkış = etkin giriş + mesai süresi (ham çıkışı aşmadan): 08:06–17:07 = 9 sa Tam (eskiden
+8 sa 54 dk "karar bekliyor" oluyordu); 08:20–17:10 gerçekten 8 sa 50 dk → karar bekler. Ham kart kayıtları DEĞİŞMEZ.
 - TEK yer sınıflandırıcı olduğu için Tam/FM/Çift, hakediş, Mesai Değerlendirme, Mesai Tanımı, Mesai Özeti hepsi
   kendiliğinden etkilenir. `toplam_dk` = etkin süre; `ham_dk`, `giris_etkin`, `cikis_etkin` ayrıca döner. Kesin
   (final) hakedişler donmuştur, değişmez; taslaklar yeniden hesaplanınca yeni kuralı alır.

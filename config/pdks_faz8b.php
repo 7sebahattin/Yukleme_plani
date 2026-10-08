@@ -307,14 +307,22 @@ function pdks_faz8b_fm_saat(int $fazlaDk): int
  *   çıkış: tam saatten en çok 15 dk SONRA → o tam saat  (17:13 → 17:00; 17:16 değişmez)
  * Geç giriş / erken çıkış YUVARLANMAZ (işçi lehine uydurma yok). Ham kayıtlar DEĞİŞMEZ;
  * yalnız hesap bu etkin saatleri kullanır. Döner: [etkin giriş ts, etkin çıkış ts].
+ *
+ * v316: çıkış yuvarlaması yalnız FAZLA MESAİ kırıntısını siler, TAM GÜNÜ ASLA KISALTMAZ:
+ * yuvarlanmış süre $tamDk'nın altına düşerse çıkış "etkin giriş + $tamDk" alınır (ham çıkışı
+ * aşmadan). 08:06–17:07 → 08:06–17:06 = 9 sa (Tam); 08:20–17:10 → ham 8 sa 50 dk (Tam değil).
  */
-function pdks_faz8b_etkin_saatler(int $g, int $c): array
+function pdks_faz8b_etkin_saatler(int $g, int $c, ?int $tamDk = null): array
 {
     $tol = PDKS_FAZ8B_TOLERANS_DK * 60;
     $gSaatKalan = (3600 - ((int)date('i', $g) * 60 + (int)date('s', $g))) % 3600;   // sonraki tam saate kalan sn
     if ($gSaatKalan > 0 && $gSaatKalan <= $tol) $g += $gSaatKalan;
     $cSaatGecen = (int)date('i', $c) * 60 + (int)date('s', $c);                     // tam saatten geçen sn
-    if ($cSaatGecen > 0 && $cSaatGecen <= $tol) $c -= $cSaatGecen;
+    if ($cSaatGecen > 0 && $cSaatGecen <= $tol) {
+        $yuvarli = $c - $cSaatGecen;
+        if ($tamDk !== null && $yuvarli < $g + $tamDk * 60) $yuvarli = min($c, $g + $tamDk * 60);
+        $c = $yuvarli;
+    }
     return [$g, max($g, $c)];
 }
 
@@ -367,7 +375,7 @@ function pdks_faz8b_sure_karari(?string $giris, ?string $cikis, int $normalDk = 
 
     // v315: süre saat başı toleransıyla (07:57 giriş → 08:00, 17:13 çıkış → 17:00).
     $hamDk = intdiv($c - $g, 60);
-    [$gE, $cE] = pdks_faz8b_etkin_saatler($g, $c);
+    [$gE, $cE] = pdks_faz8b_etkin_saatler($g, $c, $normalDk);
     $toplamDk = intdiv($cE - $gE, 60);
     $otomatikTam = $toplamDk >= $normalDk;
 
