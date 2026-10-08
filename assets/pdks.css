@@ -2411,3 +2411,6 @@ html[data-theme="dark"] .kh-cip.kh-aktif { background: var(--primary); }
 @media print { .pdks-mo { break-inside: avoid; } }
 /* v315 — Süre sütununda ham süre notu (hesaplanan süre saat başı toleranslı) */
 .pdks-sure-ham { display: inline-block; font-size: .78em; color: var(--muted); white-space: nowrap; }
+/* v318 — Mesai Özeti: eksik çıkış hücresi */
+.pdks-mo-tablo td.pdks-mo-eksik { color: var(--warn); font-weight: 800; }
+.pdks-mo-tablo th, .pdks-mo-tablo td { padding-left: 6px; padding-right: 6px; }

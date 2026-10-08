@@ -88,10 +88,10 @@ $db->exec("INSERT INTO foremen (id,code,name) VALUES (1,'C1','Çavuş 1'), (2,'C
 
 $day = date('Y-m-d', strtotime('-3 days'));
 
-function moSession(int $snap = 540, int $foreman = 1): int {
+function moSession(int $snap = 540, int $foreman = 1, string $durum = 'closed'): int {
     global $db, $day;
-    $db->prepare("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status) VALUES (?,?,?,?,?,'Depo A','closed')")
-       ->execute([$foreman, 'Çavuş ' . $foreman, 'C' . $foreman, $snap, $day]);
+    $db->prepare("INSERT INTO daily_work_sessions (foreman_id,foreman_name_snapshot,foreman_code_snapshot,normal_work_minutes_snapshot,work_date,depo,status) VALUES (?,?,?,?,?,'Depo A',?)")
+       ->execute([$foreman, 'Çavuş ' . $foreman, 'C' . $foreman, $snap, $day, $durum]);
     return (int)$db->lastInsertId();
 }
 /** Dönem ekler. $dk null → çıkışsız (açık) dönem. $fm = onaylı FM saati (null = onaysız). */
@@ -139,7 +139,7 @@ okmo('6b) sayaçların hepsi 0', $hepsiSifir, json_encode($o, JSON_UNESCAPED_UNI
 okmo('6c) servis sıfırlı', ($o['servis'] ?? null) === ['BUYUK' => 0, 'KUCUK' => 0], json_encode($o['servis'] ?? null));
 okmo('6d) Kadın/Erkek satırları sıfır olsa da var',
     isset($o['tanim']['Kadın'], $o['tanim']['Erkek'])
-    && $o['tanim']['Kadın'] === ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0], 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0],
+    && $o['tanim']['Kadın'] === ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0], 'bekliyor' => 0, 'suruyor' => 0, 'eksik' => 0, 'toplam' => 0],
     json_encode($o['tanim'] ?? null, JSON_UNESCAPED_UNICODE));
 $o2 = pdks_faz8b_gun_mesai_ozeti([0, -5], $db);
 okmo('6e) geçersiz id\'ler (0, -5) → aynı iskelet', $o2 === $o);
@@ -157,7 +157,7 @@ $o = moOzet([$s1]);
 $k = $o['tanim']['Kadın'] ?? [];
 okmo('1a) Kadın: tam 3 (540 + iki 620)', ($k['tam'] ?? -1) === 3, json_encode($k));
 okmo('1b) Kadın: 8 saatlik → bekliyor 1', ($k['bekliyor'] ?? -1) === 1, json_encode($k));
-okmo('1c) Kadın: çıkışsız → suruyor 1', ($k['suruyor'] ?? -1) === 1, json_encode($k));
+okmo('1c) Kadın: çıkışsız + mesai KAPALI → eksik çıkış 1 (içeride 0)', ($k['eksik'] ?? -1) === 1 && ($k['suruyor'] ?? -1) === 0, json_encode($k));
 okmo('1d) Kadın: toplam 5, yarim/cift 0', ($k['toplam'] ?? -1) === 5 && $k['yarim'] === 0 && $k['cift'] === 0, json_encode($k));
 okmo('1e) Erkek: tam 1 / toplam 1', ($o['tanim']['Erkek']['tam'] ?? -1) === 1 && ($o['tanim']['Erkek']['toplam'] ?? -1) === 1);
 okmo('1f) fm_bekleyen 2 (onaysız 10s20dk)', $o['fm_bekleyen'] === 2, (string)$o['fm_bekleyen']);
@@ -298,7 +298,7 @@ moDonem($s8, $karisik, 720);
 moDonem($s8, $karisik, null);
 $z = moOzet([$s8]);
 okmo('8k) Kadın fm[1]=1, Erkek fm[3]=2 (ayrı satırlar)', fmDagilim($z, 'Kadın') === fmBeklenen(1, 1) && fmDagilim($z, 'Erkek') === fmBeklenen(3, 2), json_encode([fmDagilim($z, 'Kadın'), fmDagilim($z, 'Erkek')]));
-okmo('8l) çıkışsız + Karışık dağılıma girmez; fm_saat = 1 + 3 + 3 = 7', $z['karisik'] === 2 && $z['tanim']['Kadın']['suruyor'] === 1 && fmDagilim($z, 'Rampacı') === $fz && $z['fm_saat'] === 7, json_encode($z, JSON_UNESCAPED_UNICODE));
+okmo('8l) çıkışsız + Karışık dağılıma girmez; fm_saat = 1 + 3 + 3 = 7', $z['karisik'] === 2 && $z['tanim']['Kadın']['eksik'] === 1 && fmDagilim($z, 'Rampacı') === $fz && $z['fm_saat'] === 7, json_encode($z, JSON_UNESCAPED_UNICODE));
 okmo('8m) Σ fm dağılımı (saat ağırlıklı, 5+ için ≥) ile fm_saat uyumlu (üst sınır yok)', array_sum(array_map(fn($t) => array_sum(array_map(fn($n, $c) => $n * $c, array_keys($t['fm']), $t['fm'])), $z['tanim'])) === $z['fm_saat']);
 
 // ── Çift yevmiye (foreman 2: Tam 9 sa, Çift 12 sa / 2000, saatlik FM) ──
@@ -341,5 +341,20 @@ okmo('7d) gövde pdks_faz8b_donem_sorgu( kullanıyor', str_contains($govde, 'pdk
 okmo('7e) gövde servisi pdks_servis_toplamlar_toplu( ile alıyor', str_contains($govde, 'pdks_servis_toplamlar_toplu('));
 okmo('7f) gövdede yazma (INSERT/UPDATE/DELETE) YOK', !preg_match('/\b(INSERT|UPDATE|DELETE)\b/', $govde));
 
+// v318: mesai AÇIK iken çıkışsız = içeride; KAPALI iken eksik çıkış. Toplam ikisini de içerir.
+$sAcik = moSession(540, 1, 'open');
+moDonem($sAcik, $kadin, null);
+moDonem($sAcik, $erkek, null);
+moDonem($sAcik, $erkek, 540);
+$oa = moOzet([$sAcik]);
+okmo('9a) açık mesai: çıkışsız → içeride, eksik 0', $oa['tanim']['Kadın']['suruyor'] === 1 && $oa['tanim']['Kadın']['eksik'] === 0 && $oa['tanim']['Erkek']['suruyor'] === 1, json_encode($oa['tanim']['Erkek']));
+okmo('9b) açık mesai: toplam içeridekini de sayar', $oa['tanim']['Erkek']['toplam'] === 2 && $oa['tanim']['Erkek']['tam'] === 1);
+$sKapali = moSession(540, 1, 'closed');
+moDonem($sKapali, $erkek, null);
+$ok2 = moOzet([$sAcik, $sKapali]);
+okmo('9c) açık + kapalı mesai birlikte: içeride 1 + eksik 1 ayrı sayılır', $ok2['tanim']['Erkek']['suruyor'] === 1 && $ok2['tanim']['Erkek']['eksik'] === 1 && $ok2['tanim']['Erkek']['toplam'] === 3, json_encode($ok2['tanim']['Erkek']));
+okmo('9d) sayfada eski sayaç kartı YOK, tabloda Eksik Çıkış sütunu VAR',
+    !str_contains((string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php'), 'pdks-kiosk-counters')
+    && str_contains((string)file_get_contents($root . '/gunluk_isci_puantaj_detay.php'), '<th>Eksik Çıkış</th>'));
 echo "\nSONUÇ: {$pass} PASS, {$fail} FAIL\n";
 exit($fail > 0 ? 1 : 0);

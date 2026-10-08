@@ -298,7 +298,7 @@ render_flash();
 ?>
 
 <div class="page-head">
-    <h1>📅 <?= h($oturum['foreman_name_snapshot']) ?></h1>
+    <h1>📅 <?= h($oturum['foreman_name_snapshot']) ?> <span class="pdks-badge pdks-badge-<?= h($durum['kod']) ?>" style="font-size:.5em;vertical-align:middle"><?= h($durum['etiket']) ?></span></h1>
     <div class="page-head-actions">
         <a href="gunluk_isci_puantaj.php" class="btn btn-geri">← Günlük Puantaj</a>
         <?php if (is_admin() && $oturum['status'] === 'open' && $oturum['work_date'] === date('Y-m-d') && $oturum['depo'] === $aktifDepo): ?>
@@ -328,20 +328,6 @@ render_flash();
     <?php endif; ?>
 </div>
 <?php endif; ?>
-
-<div class="pdks-kiosk-counters" style="margin:0 0 18px">
-    <h3><?= h(date('d.m.Y', strtotime($oturum['work_date']))) ?><?= $oturum['depo'] ? ' — ' . h($oturum['depo']) : '' ?>
-        · <span class="pdks-badge pdks-badge-<?= h($durum['kod']) ?>"><?= h($durum['etiket']) ?></span></h3>
-    <div class="pdks-kiosk-counter-totals">
-        <?php foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc): /* v299: Kadın / Erkek / Rampacı — tip kayıt defterinden */ ?>
-        <div class="pdks-kiosk-counter-box"><div class="lbl"><?= h($tc['kisa']) ?></div><div class="val"><?= (int)($ozet['giris'][$tc['ad']] ?? 0) ?></div></div>
-        <?php endforeach; ?>
-        <?php if ((int)($ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?? 0) > 0): ?><div class="pdks-kiosk-counter-box"><div class="lbl">Karışık</div><div class="val"><?= (int)$ozet['giris'][PDKS_GUNLUK_KARISIK_AD] ?></div></div><?php endif; ?>
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Giriş</div><div class="val"><?= (int)$ozet['giris_toplam'] ?></div></div>
-        <div class="pdks-kiosk-counter-box"><div class="lbl">Toplam Çıkış</div><div class="val"><?= (int)$ozet['cikis_toplam'] ?></div></div>
-        <div class="pdks-kiosk-counter-box eksik"><div class="lbl">Eksik Çıkış</div><div class="val"><?= (int)$ozet['eksik_toplam'] ?></div></div>
-    </div>
-</div>
 
 <div class="table-wrap pc-only" style="margin-bottom:18px">
 <table class="data-table">
@@ -400,13 +386,13 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
 <?php endif; ?>
 
 <?php if ($mesaiOzeti !== null): $mo = $mesaiOzeti; $moSut = pdks_gunluk_tip_sistem_sutunlari(); $moFm = range(1, PDKS_FAZ8B_OZET_FM_SUTUN);
-    $moTop = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0), 'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
-    foreach ($mo['tanim'] as $t) { foreach (['tam', 'yarim', 'cift', 'bekliyor', 'suruyor', 'toplam'] as $k) $moTop[$k] += (int)$t[$k]; foreach ($moFm as $n) $moTop['fm'][$n] += (int)$t['fm'][$n]; }
+    $moTop = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0), 'bekliyor' => 0, 'suruyor' => 0, 'eksik' => 0, 'toplam' => 0];
+    foreach ($mo['tanim'] as $t) { foreach (['tam', 'yarim', 'cift', 'bekliyor', 'suruyor', 'eksik', 'toplam'] as $k) $moTop[$k] += (int)$t[$k]; foreach ($moFm as $n) $moTop['fm'][$n] += (int)$t['fm'][$n]; }
     $moSatir = function (string $ad, array $t, bool $toplam) use ($moFm): string {
         $td = fn(int $v): string => '<td' . ($v === 0 ? ' class="pdks-mo-sifir"' : '') . '>' . $v . '</td>';
         $h = '<tr' . ($toplam ? ' class="pdks-mo-toplam"' : '') . '><th scope="row">' . h($ad) . '</th>' . $td((int)$t['tam']) . $td((int)$t['yarim']) . $td((int)$t['cift']);
         foreach ($moFm as $n) $h .= $td((int)$t['fm'][$n]);
-        return $h . $td((int)$t['bekliyor']) . $td((int)$t['suruyor']) . '<td><strong>' . (int)$t['toplam'] . '</strong></td></tr>';
+        return $h . $td((int)$t['bekliyor']) . $td((int)$t['suruyor']) . ((int)$t['eksik'] > 0 ? '<td class="pdks-mo-eksik">' . (int)$t['eksik'] . '</td>' : $td(0)) . '<td><strong>' . (int)$t['toplam'] . '</strong></td></tr>';
     }; ?>
 <section class="pdks-mo" aria-label="Mesai özeti">
     <h3>📊 Mesai Özeti</h3>
@@ -414,7 +400,7 @@ function pdksPuantajDialogAc(id) {   // Mesai Detayı'ndaki ile aynı gövde (o 
         <div class="pdks-mo-kart pdks-mo-genis">
             <h4>Mesai Tanımı <span class="muted">· fazla mesai: <?= h(count($mo['fm_bas_dk']) === 1 ? pdks_faz8b_dakika_etiket((int)$mo['fm_bas_dk'][0]) : 'çavuş mesai süresi') ?> üzeri, 15 dk tolerans</span></h4>
             <div class="table-wrap"><table class="data-table pdks-mo-tablo">
-                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Toplam</th></tr></thead>
+                <thead><tr><th>İşçi</th><th>Tam</th><th>Yarım</th><th>Çift</th><?php foreach ($moFm as $n): ?><th class="pdks-mo-fm"><?= $n === PDKS_FAZ8B_OZET_FM_SUTUN ? $n . '+ Saat' : $n . '. Saat' ?></th><?php endforeach; ?><th>Bekliyor</th><th>İçeride</th><th>Eksik Çıkış</th><th>Toplam</th></tr></thead>
                 <tbody>
                 <?php foreach ($moSut as $tc) echo $moSatir($tc['kisa'], $mo['tanim'][$tc['ad']], false); ?>
                 </tbody>
