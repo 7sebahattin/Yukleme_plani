@@ -535,7 +535,7 @@ function pdks_faz8b_donem_sorgu(PDO $pdo, string $kosul, array $param): array
 {
     $st = $pdo->prepare(
         "SELECT p.*, w.card_no, s.normal_work_minutes_snapshot,
-                s.foreman_id AS _s_foreman_id, s.work_date AS _s_work_date
+                s.foreman_id AS _s_foreman_id, s.work_date AS _s_work_date, s.status AS _s_status
            FROM daily_worker_work_periods p
            JOIN worker_cards w ON w.id = p.worker_card_id
            JOIN daily_work_sessions s ON s.id = p.session_id
@@ -593,7 +593,7 @@ if (!defined('PDKS_FAZ8B_OZET_FM_SUTUN')) define('PDKS_FAZ8B_OZET_FM_SUTUN', 5);
  * SALT OKUNUR; süre/sınıf/FM hesabını YAPMAZ — her dönem için TEK sınıflandırıcıyı
  * (pdks_faz8b_donem_siniflandir) kullanır. Servis adetleri pdks_servis_toplamlar_toplu().
  *
- *  tanim[tip adı] = [tam, yarim, cift, fm => [1..5], bekliyor (sınıf kararı yok), suruyor (çıkışsız), toplam]
+ *  tanim[tip adı] = [tam, yarim, cift, fm => [1..5], bekliyor (sınıf kararı yok), suruyor (çıkışsız, mesai AÇIK = içeride), eksik (çıkışsız, mesai KAPALI = eksik çıkış), toplam]
  *      — yalnız sistem tipleri (Kadın/Erkek/Rampacı); sıfır olsa da satır vardır.
  *      fm[n] = fazla mesaisi n saat olan işçi sayısı (5 = 5 ve üzeri). Saat = çavuşun mesai
  *      süresi (ör. 9 sa) aşıldıktan sonra 15 dk tolerans, başlayan her saat yukarı: 10:11 → 1,
@@ -617,7 +617,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
     $tanim = [];
     foreach (pdks_gunluk_tip_sistem_sutunlari() as $tc) {
         $tanim[$tc['ad']] = ['tam' => 0, 'yarim' => 0, 'cift' => 0, 'fm' => array_fill(1, PDKS_FAZ8B_OZET_FM_SUTUN, 0),
-                             'bekliyor' => 0, 'suruyor' => 0, 'toplam' => 0];
+                             'bekliyor' => 0, 'suruyor' => 0, 'eksik' => 0, 'toplam' => 0];
     }
     $o = [
         'tanim' => $tanim, 'karisik' => 0, 'diger' => 0,
@@ -635,7 +635,7 @@ function pdks_faz8b_gun_mesai_ozeti(array $sessionIds, ?PDO $pdo = null): ?array
         $f = $d['faz8b'];
         $t = &$o['tanim'][$ad];
         $t['toplam']++;
-        if ($f['toplam_dk'] === null) { $t['suruyor']++; unset($t); continue; }
+        if ($f['toplam_dk'] === null) { $t[(($d['_s_status'] ?? '') === 'closed') ? 'eksik' : 'suruyor']++; unset($t); continue; }
         $sinif = $f['etkin_sinif'];
         if ($sinif === 'tam' || $sinif === 'yarim' || $sinif === 'cift') $t[$sinif]++; else $t['bekliyor']++;
 
