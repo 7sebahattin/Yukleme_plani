@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v320` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v321` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1277,6 +1277,8 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
   Yeni kayıtta `taslak_gonder` `hks_basarili_ozet()` ile yalnız künyesi oluşan satırları yazar; ESKİ kayıtlar listede
   `hks_gonderilen_gercek_toplam()` ile `veri.sonuclar`'dan yeniden hesaplanır (yalnız hatalı satır varsa; DB değişmez,
   migration yok). Eski kayıttan "Tekrar gönder" tohumu da aynı kg'ı kullanır. Başarılı ölçüt `hks_sonuc_basarili_mi()`.
+- **Arama süzgeci (v321):** Gönderilenler'de `#gonderilenAra` (liste DIŞINDA; ✕ + "N / M gönderim" sayacı, 150 ms debounce). `gonderilenVeri` HER ZAMAN tam liste; çizim `gonderilenGorunen` = `[{g, i}]` kullanır ve `data-i` / `gonderilenSatirHtml(g,i)` / `gonderilenKartIcerik(g,i)` **özgün indeksi** `i` taşır — süzülmüş dizinin sırasını (`map` indeksi) ASLA yazma, yoksa Yazdır / Tekrar gönder yanlış kaydı açar. Eşleşme `gAraNorm` (trNorm + ı→i), tüm sözcükler AND; alanlar plaka (alfasayısal biçimiyle de), ürün, gönderilen taraf (`gonderilenUlkeParcala().ad`) + tam `ulkeAd`, firma, belge no. Girdi DOM'a basılmaz; ekran her açılışta sıfırlanır; kip değişimi (`gonderilenKipDegisti`) süzgeci korur. Test: `node scripts/hks_gonderilenler_smoke.js` ("filtre:" satırları, 1280 + 390).
+- **Künye + fiyat TEK render (v321):** `btnKunyeler.onclick` `/api/kunyeler` ve `/api/kunye_detay`'ı `Promise.allSettled` ile PARALEL ister, fiyat haritasını işleyip TEK `kunyeCiz()` çağırır (eski `kunyeFiyatlariEnjekte` + "fiyatlar yükleniyor…" ikinci çizimi KALDIRILDI — ikinci çizim taslaktan geri yüklenen seçimi silerdi). `kunye_detay` hata verirse künyeler fiyatsız basılır, `#kunyeSayi`'ya "fiyatlar alınamadı" yazılır. Sorgu kimliği `kunyeSorguNo` + istek anındaki firma id'si: eski cevap atılır; `formuTemizle()` de sayacı artırır. `taslakDuzenle`'nin `await onclick()`'i artık fiyatlı tam veriyi bekler. Test: `node scripts/hks_binlik_smoke.js`.
 - **"Panel sürümü" damgası KALDIRILDI (v306):** ana menü altındaki `panel sürümü: …` yazısı ve `PANEL_SURUM` sabiti
   gitti; tek sürüm kaynağı sidebar'daki `APP_SURUM`. Geri ekleme (test ana menüde yazının YOKLUĞUNU denetler).
 - **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma

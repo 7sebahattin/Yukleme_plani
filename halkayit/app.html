@@ -237,7 +237,7 @@
   /* Kalan kilo + birim fiyat sağda dikey öbek — fiyat kilonun HEMEN ALTINDA/yanında */
   .kunye .kalan-blok { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; }
   .kunye .kalan { font-weight:800; color:var(--navy); font-size:13px; white-space:nowrap; }
-  /* Fiyat — künye listesiyle birlikte otomatik gelir (bkz. kunyeFiyatlariEnjekte) */
+  /* Fiyat — künye listesiyle birlikte otomatik gelir (bkz. $('btnKunyeler').onclick — künye + fiyat tek render) */
   .kunye .kalan-fiyat { font-size:11px; color:var(--tamam-tx); font-weight:700; white-space:nowrap; margin-top:1px; }
   .kunye input.miktar { width:88px; padding:9px; font-size:14px; flex-shrink:0; border-radius:10px; }
 
@@ -398,6 +398,16 @@
   .g-kart-eylem .g-btn-tekrar:active, .g-kart-eylem .g-btn-tekrar[aria-expanded="true"] { background:var(--cip-bg); }
   /* Tohum istenirken çift tıklamayı engelle */
   .gonderilen-liste.g-mesgul { opacity:.6; pointer-events:none; }
+  /* Gönderilenler arama çubuğu (liste DIŞINDA — liste yeniden çizilince kutu kaybolmaz) */
+  .g-ara-kap { display:flex; align-items:center; gap:10px; margin:0 0 10px; }
+  .g-ara-kap[hidden] { display:none; }
+  .g-ara-kutu { position:relative; flex:1 1 auto; min-width:0; }
+  .g-ara-kutu input { margin:0; font-size:16px; padding-right:44px; }
+  .g-ara-x { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:36px; height:36px; margin:0; padding:0;
+    border:0; border-radius:10px; background:var(--soluk-bg); color:var(--metin); font-size:15px; cursor:pointer; }
+  .g-ara-x[hidden] { display:none; }
+  .g-ara-say { flex:0 0 auto; font-size:12px; font-weight:600; color:var(--soluk); white-space:nowrap; }
+  @media (max-width:420px) { .g-ara-kap { flex-wrap:wrap; gap:4px; } .g-ara-kutu { flex-basis:100%; } }
 
   /* position:fixed açılır menü (overflow:auto sarmalayıcı kesmesin — bkz. CLAUDE.md). z ≥ 600 */
   .g-tekrar-menu { position:fixed; z-index:620; display:none; min-width:240px; max-width:calc(100vw - 16px);
@@ -1083,7 +1093,7 @@
       <div class="mesaj" id="dagitMesaj"></div>
       <!-- Künyenin HKS'e KAYITLI (bize yapılan bildirimdeki) birim fiyatı —
            yukarıdaki "Birim Fiyat" (YENİ satışın fiyatı) ile KARIŞTIRILMASIN.
-           Künye listesiyle birlikte OTOMATİK gelir (bkz. kunyeFiyatlariEnjekte),
+           Künye listesiyle AYNI ANDA gelir (btnKunyeler.onclick: paralel istek, tek çizim),
            ayrı bir buton/tıklama gerektirmez. Opsiyonel/hataya dayanıklı: fiyat
            alınamazsa künye seçimi (kalan miktar, checkbox) etkilenmez. -->
       <div id="kunyeListe" style="margin-top:12px"></div>
@@ -1109,6 +1119,14 @@
     <div class="baslik">📚 Gönderilenler</div>
   </div>
   <main>
+    <div class="g-ara-kap" id="gonderilenAraKap">
+      <div class="g-ara-kutu">
+        <input id="gonderilenAra" type="search" autocomplete="off" enterkeyhint="search"
+          placeholder="Plaka, ürün, gönderilen veya firma ara…" aria-label="Gönderilenlerde ara">
+        <button type="button" class="g-ara-x" id="btnGonderilenAraTemizle" aria-label="Aramayı temizle" hidden>✕</button>
+      </div>
+      <div class="g-ara-say" id="gonderilenAraSay" aria-live="polite"></div>
+    </div>
     <div class="gonderilen-liste" id="gonderilenListe"></div>
   </main>
 </div>
@@ -2220,6 +2238,8 @@ function formuTemizle() {
   $('sBelde').innerHTML = '<option value="">— önce ilçe —</option>';
   ikDogrulandi = null;
   duzenlenenTaslakId = null;
+  kunyeSorguNo++;                 // uçuştaki künye sorgusunun cevabı formu doldurmasın
+  kunyeButonuSifirla();
   kunyeler = [];
   $('kunyeListe').innerHTML = '';
   $('kartKunyeler').classList.add('gizli');
@@ -3318,64 +3338,68 @@ function cipCiz(kapId, dizi, etiketFn, tikla, bosMetin) {
 }
 
 // ================= KÜNYELER =================
+let kunyeSorguNo = 0;   // artan sorgu kimliği: eski cevap (çift tık / firma değişimi) atılır
+function kunyeButonuSifirla() {
+  $('btnKunyeler').disabled = false;
+  $('btnKunyeler').textContent = '🔍 Künyeleri Getir';
+}
+// Künye listesi + birim fiyatlar PARALEL istenir; ikisi bitince fiyat haritası
+// künyelere işlenir ve liste TEK kez çizilir (fiyat ikinci aşamada gelmez).
+// kunye_detay opsiyoneldir: hata verirse künyeler fiyatsız basılır.
 $('btnKunyeler').onclick = async () => {
   if (!$('sUrun').value) {
     mesajGoster('kunyeMesaj', 'Lütfen ürün seçin — HKS servisi ürün seçilmeden künye sorgusuna izin vermiyor.', 'hata');
     return;
   }
+  const no = ++kunyeSorguNo;
+  const firmaId = aktifFirma.id;
+  const aySayisi = parseInt($('sGun').value, 10);
   $('btnKunyeler').disabled = true;
-  $('btnKunyeler').textContent = '⏳ Sorgulanıyor...';
+  $('btnKunyeler').textContent = '⏳ Künye ve fiyatlar sorgulanıyor...';
   $('kunyeMesaj').className = 'mesaj';
   try {
-    const j = await api('/api/kunyeler', 'POST', {
-      firmaId: aktifFirma.id,
-      urunId: $('sUrun').value || 0,
-      aySayisi: parseInt($('sGun').value, 10),
-      // İşyeri türü filtresi + sıralama sunucuda yanıt üzerinden uygulanır
-      // (HKS istek şemasında bu alanlar yok — künyenin GidecekYerTuruId'si süzülür).
-      isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
-      sirala: $('sKunyeSirala').value,
-    });
-    kunyeler = j.kunyeler || [];
+    const [kr, dr] = await Promise.allSettled([
+      api('/api/kunyeler', 'POST', {
+        firmaId,
+        urunId: $('sUrun').value || 0,
+        aySayisi,
+        // İşyeri türü filtresi + sıralama sunucuda yanıt üzerinden uygulanır
+        // (HKS istek şemasında bu alanlar yok — künyenin GidecekYerTuruId'si süzülür).
+        isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
+        sirala: $('sKunyeSirala').value,
+      }),
+      api('/api/kunye_detay', 'POST', { firmaId, aySayisi }),
+    ]);
+    // Bu arada yeni sorgu başladı ya da firma değişti → sonucu at
+    if (no !== kunyeSorguNo || !aktifFirma || aktifFirma.id !== firmaId) return;
+    if (kr.status === 'rejected') throw kr.reason;
+    kunyeler = kr.value.kunyeler || [];
+    let fiyatsiz = false;
+    if (dr.status === 'fulfilled') {
+      const harita = (dr.value && dr.value.detaylar) || {};
+      kunyeler.forEach(k => {
+        const d = harita[String(k.kunyeNo)];
+        if (d) Object.assign(k, d);
+      });
+    } else {
+      fiyatsiz = true;   // künyeler fiyatsız basılır
+    }
     kunyeCiz();
     $('kartKunyeler').classList.remove('gizli');
-    $('kunyeSayi').textContent = `(${kunyeler.length} künye, kalan ${fmt(kunyeler.reduce((t, k) => t + k.kalan, 0))} KG)`;
+    $('kunyeSayi').textContent = `(${kunyeler.length} künye, kalan ${fmt(kunyeler.reduce((t, k) => t + k.kalan, 0))} KG)` +
+      (fiyatsiz && kunyeler.length ? ' · fiyatlar alınamadı' : '');
     if (kunyeler.length === 0) {
       mesajGoster('kunyeMesaj', 'Kriterlere uygun künye bulunamadı.' +
         ($('sKunyeIsyeriTuru').value ? ' İşyeri türü filtresini "— Tümü —" yapıp tekrar deneyin.' : ''), 'hata');
     } else {
       $('kartKunyeler').scrollIntoView({ behavior: 'smooth' });
-      kunyeFiyatlariEnjekte();  // arka planda, ayrı bir tıklama gerektirmeden
     }
-  } catch (e) { mesajGoster('kunyeMesaj', e.message, 'hata'); }
-  $('btnKunyeler').disabled = false;
-  $('btnKunyeler').textContent = '🔍 Künyeleri Getir';
+  } catch (e) {
+    if (no === kunyeSorguNo) mesajGoster('kunyeMesaj', e.message, 'hata');
+  } finally {
+    if (no === kunyeSorguNo) kunyeButonuSifirla();
+  }
 };
-
-// Künye listesi yüklenir yüklenmez, ayrı bir tıklama gerektirmeden fiyatları
-// arka planda getirir ve satırlara işler. Opsiyonel/hataya dayanıklı: başarısız
-// olursa künye seçimi (kalan miktar, checkbox, miktar girişi) etkilenmez —
-// yalnız fiyat satırı boş kalır. Uzun "Kapsam" aralıklarında (üstteki 3 · Ürün
-// ve Künye kartı) birkaç saniye sürebilir; bu yüzden künye listesini BEKLETMEZ,
-// liste hemen görünür, fiyatlar geldikçe kunyeCiz() ile üzerine yazılır.
-async function kunyeFiyatlariEnjekte() {
-  if (!kunyeler.length) return;
-  const eskiMetin = $('kunyeSayi').textContent;
-  $('kunyeSayi').textContent = eskiMetin + ' · fiyatlar yükleniyor…';
-  try {
-    const j = await api('/api/kunye_detay', 'POST', {
-      firmaId: aktifFirma.id,
-      aySayisi: parseInt($('sGun').value, 10),
-    });
-    const harita = j.detaylar || {};
-    kunyeler.forEach(k => {
-      const d = harita[String(k.kunyeNo)];
-      if (d) Object.assign(k, d);
-    });
-    kunyeCiz();
-  } catch (e) { /* opsiyonel zenginleştirme — künye seçimi zaten çalışıyor, sessizce geç */ }
-  $('kunyeSayi').textContent = eskiMetin;
-}
 
 function kunyeCiz() {
   const kap = $('kunyeListe');
@@ -3384,7 +3408,7 @@ function kunyeCiz() {
     const div = document.createElement('div');
     div.className = 'kunye';
     // Birim fiyat — künye listesiyle birlikte arka planda otomatik gelir
-    // (bkz. kunyeFiyatlariEnjekte). k.fiyat undefined ise henüz gelmemiştir,
+    // (btnKunyeler.onclick, künyelerle aynı anda). k.fiyat undefined ise fiyat alınamamıştır,
     // satır hiç basılmaz. Kalan kilonun HEMEN ALTINDA gösterilir — kullanıcı
     // isteğiyle "Miktar: X Kg" (orijinal/bildirilen miktar) satırı kaldırıldı,
     // yalnızca bildirilebilecek (kalan) kilo gösterilir.
@@ -4241,6 +4265,7 @@ $('btnOnay').onclick = async () => {
 // yalnız "↻ Tekrar gönder" eklendi). Kip matchMedia ile seçilir ve eşik geçilince
 // (pencere yeniden boyutlanınca) veri yeniden istenmeden yeniden çizilir.
 let gonderilenVeri = [];
+let gonderilenGorunen = [];    // süzülmüş görünüm: [{g, i}] — i = gonderilenVeri'deki ÖZGÜN indeks
 const G_MASAUSTU = window.matchMedia('(min-width:900px)');
 let gonderilenMasaustu = null;     // en son hangi kipte çizildi
 
@@ -4348,27 +4373,80 @@ function gonderilenSatirHtml(g, i) {
     `</tr></tbody>`;
 }
 
+// ── Arama süzgeci ───────────────────────────────────────────────────────────
+// gonderilenVeri HER ZAMAN tam listedir; süzgeç yalnız çizimi daraltır. Satır/kart
+// ve düğmelerdeki data-i, gonderilenVeri'deki ÖZGÜN indekstir (Yazdır / Tekrar
+// gönder yanlış kaydı açmasın) — süzülmüş dizinin sırası ASLA data-i olmaz.
+// Türkçe duyarlı: trNorm + ı→i (ISPANAK ⇄ ıspanak ⇄ ispanak hepsi eşleşir).
+const gAraNorm = (s) => trNorm(String(s == null ? '' : s)).replace(/ı/g, 'i');
+const gAraAlnum = (s) => gAraNorm(s).replace(/[^0-9a-z]/g, '');   // plaka: boşluk/tire yok
+function gonderilenAramaSamanlik(g) {
+  const u = gonderilenUlkeParcala(g);
+  const plaka = String(g.plaka || '');
+  return gAraNorm([plaka, g.urunAd, u.ad, g.ulkeAd, g.firmaAd, g.belgeNo].join(' ')) + ' ' + gAraAlnum(plaka);
+}
+function gonderilenSuz() {
+  const ham = gAraNorm($('gonderilenAra').value).split(/\s+/).filter(Boolean);
+  gonderilenGorunen = [];
+  gonderilenVeri.forEach((g, i) => {
+    if (ham.length) {
+      const saman = gonderilenAramaSamanlik(g);
+      // Her sözcük ya düz metinde ya da (boşluksuz plaka yazımı için) alfasayısal biçimde aranır
+      if (!ham.every(w => saman.includes(w) || saman.includes(w.replace(/[^0-9a-z]/g, '') || '\u0000'))) return;
+    }
+    gonderilenGorunen.push({ g, i });
+  });
+}
+function gonderilenAraSayac() {
+  const N = gonderilenGorunen.length, M = gonderilenVeri.length;
+  $('gonderilenAraSay').textContent = M ? `${N} / ${M} gönderim` : '';
+  $('btnGonderilenAraTemizle').hidden = !$('gonderilenAra').value;
+}
+
 function gonderilenCiz() {
   const kap = $('gonderilenListe');
   tekrarMenuKapat();
   gonderilenMasaustu = G_MASAUSTU.matches;
+  gonderilenSuz();
+  gonderilenAraSayac();
+  if (gonderilenVeri.length && gonderilenGorunen.length === 0) {
+    kap.innerHTML = '<div class="yukleniyor g-ara-bos">Aramaya uyan gönderim yok.</div>';
+    return;
+  }
   if (gonderilenMasaustu) {
     kap.innerHTML = '<div class="g-tablo-sarma"><table class="g-tablo"><thead><tr>' +
       '<th class="g-c-kisa">Tarih</th><th class="g-c-firma">Firma</th><th class="g-c-kisa">Plaka</th>' +
       '<th class="g-c-ulke">Ülke / Müstahsil</th><th class="g-c-urun">Ürün</th>' +
       '<th class="g-c-kisa sag">Kilo</th><th class="g-c-kisa sag" title="Birim fiyat">Ücret</th>' +
       '<th class="g-c-kisa g-c-eylem">İşlem</th></tr></thead>' +
-      gonderilenVeri.map(gonderilenSatirHtml).join('') + '</table></div>';
+      gonderilenGorunen.map(x => gonderilenSatirHtml(x.g, x.i)).join('') + '</table></div>';
   } else {
-    kap.innerHTML = gonderilenVeri.map((g, i) =>
-      `<div class="g-kart" data-i="${i}">${gonderilenKartIcerik(g, i, false)}</div>`).join('');
+    kap.innerHTML = gonderilenGorunen.map(x =>
+      `<div class="g-kart" data-i="${x.i}">${gonderilenKartIcerik(x.g, x.i, false)}</div>`).join('');
   }
 }
+
+let gonderilenAraZaman = null;
+$('gonderilenAra').addEventListener('input', () => {
+  gonderilenAraSayac();                       // ✕ düğmesi hemen görünsün
+  clearTimeout(gonderilenAraZaman);
+  gonderilenAraZaman = setTimeout(() => { if (gonderilenVeri.length) gonderilenCiz(); }, 150);
+});
+$('btnGonderilenAraTemizle').addEventListener('click', () => {
+  clearTimeout(gonderilenAraZaman);
+  $('gonderilenAra').value = '';
+  if (gonderilenVeri.length) gonderilenCiz(); else gonderilenAraSayac();
+  $('gonderilenAra').focus();
+});
 
 async function gonderilenEkraniAc() {
   ekranGoster('ekranGonderilen');
   const kap = $('gonderilenListe');
   gonderilenVeri = [];
+  gonderilenGorunen = [];
+  clearTimeout(gonderilenAraZaman);
+  $('gonderilenAra').value = '';              // süzgeç her açılışta sıfırlanır
+  gonderilenAraSayac();
   kap.innerHTML = '<div class="yukleniyor">Yükleniyor...</div>';
   try {
     const j = await api('/api/gonderilenler', 'GET', {
@@ -4376,6 +4454,7 @@ async function gonderilenEkraniAc() {
     });
     gonderilenVeri = j.gonderilenler || [];
     if (gonderilenVeri.length === 0) {
+      gonderilenAraSayac();
       kap.innerHTML = '<div class="yukleniyor">Henüz gönderim yapılmadı.</div>';
       return;
     }
