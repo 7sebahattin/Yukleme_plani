@@ -488,6 +488,95 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   await foto(sayfaM, '12_mobil_form');
   await ctxM.close();
 
+  // ================= GÖNDERİLENLER ARAMA SÜZGECİ (v321) — masaüstü 1280 + mobil 390 =================
+  for (const mobil of [false, true]) {
+    const et = mobil ? 'mobil' : 'masaüstü';
+    const c = await tarayici.newContext(mobil ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } : { viewport: { width: 1280, height: 800 } });
+    const DF = durumYarat();
+    const p = await sayfaKur(c, DF, hatalar);
+    const tik = (sel) => mobil ? p.tap(sel) : p.click(sel);
+    await tik('.firma-kart:not(.firma-ekle)');
+    await tik('#btnGonderilenler');
+    await p.waitForSelector(mobil ? '#gonderilenListe .g-kart' : '#gonderilenListe .g-tablo');
+    const birim = mobil ? '#gonderilenListe .g-kart' : '#gonderilenListe tr.g-satir';
+    const say = () => p.locator(birim).count();
+    const sayac = () => p.textContent('#gonderilenAraSay');
+    const ara = async (m) => { await p.fill('#gonderilenAra', m); await p.waitForTimeout(350); };
+    const idler = () => p.$$eval(birim, a => a.map(e => e.dataset.i));
+    const plakalar = () => p.$$eval(birim, (a, mob) => a.map(e => e.querySelector(mob ? '.tk-plaka .d' : '.g-plaka').textContent), mobil);
+
+    ok(et + ' filtre: arama kutusu liste DIŞINDA, 16px, görünür', await p.evaluate(() => {
+      const k = document.getElementById('gonderilenAra'); return !document.getElementById('gonderilenListe').contains(k) && getComputedStyle(k).fontSize === '16px' && k.offsetParent !== null; }));
+    ok(et + ' filtre: başlangıçta 5 / 5 gönderim', (await say()) === 5 && (await sayac()).trim() === '5 / 5 gönderim', await sayac());
+    ok(et + ' filtre: ✕ düğmesi boşken gizli', !(await p.isVisible('#btnGonderilenAraTemizle')));
+
+    await ara('31aje'); ok(et + ' filtre: plaka "31aje" → 1', (await say()) === 1 && (await sayac()).trim() === '1 / 5 gönderim', await sayac());
+    ok(et + ' filtre: ✕ görünür', await p.isVisible('#btnGonderilenAraTemizle'));
+    await ara('06 abc 123'); ok(et + ' filtre: boşluklu plaka "06 abc 123" → g1003', JSON.stringify(await idler()) === '["2"]', JSON.stringify(await idler()));
+    await ara('06abc-123'); ok(et + ' filtre: tireli plaka "06abc-123" → g1003', JSON.stringify(await idler()) === '["2"]', JSON.stringify(await idler()));
+    await ara('KİRAZ'); ok(et + ' filtre: ürün "KİRAZ" → g1002', JSON.stringify(await idler()) === '["1"]', JSON.stringify(await idler()));
+    await ara('silifke'); ok(et + ' filtre: gönderilen taraf "silifke" → g1004', JSON.stringify(await idler()) === '["3"]', JSON.stringify(await idler()));
+    await ara('komisyoncu'); ok(et + ' filtre: gönderilen "komisyoncu" → g1003', JSON.stringify(await idler()) === '["2"]', JSON.stringify(await idler()));
+    await ara('rusya'); ok(et + ' filtre: ülke "rusya" → g1001', JSON.stringify(await idler()) === '["0"]', JSON.stringify(await idler()));
+    await ara('test firma'); ok(et + ' filtre: firma "test firma" → 4', (await say()) === 4 && (await sayac()).trim() === '4 / 5 gönderim', await sayac());
+    await ara('şubesi'); ok(et + ' filtre: uzun firma "şubesi" → g1005', JSON.stringify(await idler()) === '["4"]', JSON.stringify(await idler()));
+    await ara('b-77'); ok(et + ' filtre: belge no "b-77" → g1002', JSON.stringify(await idler()) === '["1"]', JSON.stringify(await idler()));
+    await ara('kayısı 31aje'); ok(et + ' filtre: çoklu sözcük (AND) "kayısı 31aje" → 1', JSON.stringify(await idler()) === '["0"]', JSON.stringify(await idler()));
+    await ara('kayısı test firma'); ok(et + ' filtre: "kayısı test firma" → g1001,g1003,g1004', JSON.stringify(await idler()) === '["0","2","3"]', JSON.stringify(await idler()));
+    await ara('SATIN ALIM'); ok(et + ' filtre: Türkçe I/ı "SATIN ALIM" → g1002+g1005', JSON.stringify(await idler()) === '["1","4"]', JSON.stringify(await idler()));
+    await ara('satin alim'); ok(et + ' filtre: ASCII "satin alim" da eşleşir', JSON.stringify(await idler()) === '["1","4"]', JSON.stringify(await idler()));
+    await ara('HAL KOMİSYONCU'); ok(et + ' filtre: İ "HAL KOMİSYONCU" → g1003', JSON.stringify(await idler()) === '["2"]', JSON.stringify(await idler()));
+
+    await ara('kayısı kiraz');
+    ok(et + ' filtre: sonuç yok → mesaj + 0 / 5', (await p.textContent('#gonderilenListe')).includes('Aramaya uyan gönderim yok.') && (await sayac()).trim() === '0 / 5 gönderim' && (await say()) === 0, await sayac());
+    ok(et + ' filtre: boş-sonuç mesajı "Henüz gönderim yapılmadı" DEĞİL', !(await p.textContent('#gonderilenListe')).includes('Henüz gönderim yapılmadı'));
+    ok(et + ' filtre: boş sonuçta yatay taşma yok', !(await yatayTasma(p)));
+
+    await ara('<img src=x onerror="window.__xss=1">');
+    ok(et + ' filtre: HTML girdisi DOM\'a basılmaz', (await p.locator('#gonderilenListe img, #gonderilenAraSay img').count()) === 0 && !(await p.evaluate(() => window.__xss)));
+
+    await p.click('#btnGonderilenAraTemizle');
+    await p.waitForTimeout(100);
+    ok(et + ' filtre: ✕ temizler → 5 / 5, kutu boş, ✕ gizli', (await say()) === 5 && (await p.inputValue('#gonderilenAra')) === '' && !(await p.isVisible('#btnGonderilenAraTemizle')) && (await sayac()).trim() === '5 / 5 gönderim');
+
+    // --- Özgün indeks: süzülmüş satırda Yazdır DOĞRU kaydı açar ---
+    await ara('33xyz');
+    ok(et + ' filtre: süzülmüş satırın data-i ÖZGÜN indeks (3), sıra 0 değil', JSON.stringify(await idler()) === '["3"]' && JSON.stringify(await plakalar()) === '["33XYZ99"]', JSON.stringify(await idler()));
+    ok(et + ' filtre: butonlar da özgün indeksi taşır', await p.$$eval('#gonderilenListe .g-yazdir-btn-ust, #gonderilenListe .g-btn-tekrar', a => a.length > 0 && a.every(e => e.dataset.i === '3')));
+    DF.istekler.length = 0;
+    await tik(birim + ' .g-yazdir-btn-ust');
+    await p.waitForTimeout(300);
+    const tkF = DF.istekler.find(i => i.action === 'toplu_kunye');
+    ok(et + ' filtre: filtreliyken Yazdır → g1004 (plaka 33XYZ99, 2026-10-02)', !!tkF && tkF.govde.plaka === '33XYZ99' && tkF.govde.tarih === '2026-10-02', JSON.stringify(tkF && tkF.govde));
+    await tik('#btnTopluGeri');
+    await tik('#btnGonderilenler');
+    await p.waitForSelector(birim);
+    await p.waitForTimeout(150);
+    ok(et + ' filtre: ekran yeniden açılınca süzgeç SIFIRLANIR (5 / 5, kutu boş)', (await say()) === 5 && (await p.inputValue('#gonderilenAra')) === '' && (await sayac()).trim() === '5 / 5 gönderim');
+
+    // --- kip değişimi süzgeci korur ---
+    await ara('kayısı 06abc');
+    const kipSonra = mobil ? { width: 1280, height: 800 } : { width: 390, height: 844 };
+    await p.setViewportSize(kipSonra);
+    await p.waitForTimeout(400);
+    const birim2 = mobil ? '#gonderilenListe tr.g-satir' : '#gonderilenListe .g-kart';
+    ok(et + ' filtre: kip değişince süzgeç korunur (1 sonuç, g1003)', (await p.locator(birim2).count()) === 1 && (await p.$eval(birim2, e => e.dataset.i)) === '2' && (await p.inputValue('#gonderilenAra')) === 'kayısı 06abc' && (await sayac()).trim() === '1 / 5 gönderim');
+    await p.setViewportSize(mobil ? { width: 390, height: 844 } : { width: 1280, height: 800 });
+    await p.waitForTimeout(400);
+
+    // --- Özgün indeks: süzülmüş satırda Tekrar gönder DOĞRU kaydı açar ---
+    await ara('kiraz');
+    DF.istekler.length = 0;
+    await tik(birim + ' .g-btn-tekrar');
+    await tik('#gTekrarMenu button[data-sec="ayni"]');
+    await p.waitForSelector('#ekranBildirim:not(.gizli)');
+    await p.waitForTimeout(400);
+    const thF = DF.istekler.find(i => i.action === 'gonderilen_tohum');
+    ok(et + ' filtre: filtreliyken Tekrar gönder → g1002 (özgün indeks 1)', !!thF && thF.govde.id === 'g1002', JSON.stringify(thF && thF.govde));
+    ok(et + ' filtre: forma g1002 verisi (belge B-77) geldi', (await p.inputValue('#oBelgeNo')) === 'B-77' && (await p.inputValue('#oPlaka')) === '');
+    await c.close();
+  }
+
   ok('sayfa JS hatası yok', hatalar.length === 0, hatalar.join(' | '));
   await tarayici.close(); sunucu.close();
   console.log(fail ? '\n' + fail + ' TEST BASARISIZ' : '\nTUMU GECTI');

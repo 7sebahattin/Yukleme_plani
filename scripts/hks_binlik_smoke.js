@@ -34,6 +34,7 @@ const TASLAKLAR = [
   { id: 'kny1', firmaId: 7, satirlar: [{ kunyeNo: '1001', miktar: 1500.5 }, { kunyeNo: '1002', miktar: 2500 }], ortak: Object.assign({}, ORTAK, { fiyat: 12345.67 }) },
 ];
 let istekler = [];
+const DETAY = { hata: false, gecikme: 0 };   // kunye_detay sahte sunucu durumu
 
 const sunucu = http.createServer((q, s) => {
   if (q.url.startsWith('/app.html')) {
@@ -56,7 +57,7 @@ const sunucu = http.createServer((q, s) => {
     const r = route.request();
     const action = new URL(r.url()).searchParams.get('action');
     let g = {}; try { g = JSON.parse(r.postData() || '{}'); } catch (e) {}
-    istekler.push({ action, govde: g, ham: r.postData() || '' });
+    istekler.push({ action, govde: g, ham: r.postData() || '', t: Date.now() });
     const j = (o, st) => route.fulfill({ status: st || 200, contentType: 'application/json', body: JSON.stringify(o) });
     switch (action) {
       case 'firmalar': return j({ firmalar: [{ id: 7, ad: 'Test Firma', vergiNo: '1111111111', renk: 'teal' }] });
@@ -65,9 +66,12 @@ const sunucu = http.createServer((q, s) => {
       case 'taslaklar': return j({ taslaklar: TASLAKLAR });
       case 'gonderilenler': return j({ gonderilenler: [] });
       case 'kunyeler': return j({ kunyeler: KUNYELER.map(k => Object.assign({}, k)) });
-      // Fiyat zenginleştirmesi başarısız döner: başarılı olsaydı kunyeCiz() listeyi
-      // yeniden çizip taslaktan geri yüklenen seçimleri silerdi (ayrı, bilinen yarış).
-      case 'kunye_detay': return j({ hata: 'test' }, 500);
+      // Fiyat haritası /api/kunyeler ile PARALEL istenir; ikisi bitince tek kunyeCiz().
+      // DETAY.hata=true → kunye_detay 500 (künyeler fiyatsız basılmalı).
+      case 'kunye_detay':
+        if (DETAY.gecikme) await new Promise(r2 => setTimeout(r2, DETAY.gecikme));
+        if (DETAY.hata) return j({ hata: 'test' }, 500);
+        return j({ detaylar: { '1001': { fiyat: 12.5, birim: 'KG' }, '1002': { fiyat: 0, birim: 'KG' } } });
       case 'csrf': return j({ csrf: 'taze456' });
       case 'taslak_kaydet': return j({ tamam: true, id: 'yeni' });
       default: return j({});
@@ -78,6 +82,9 @@ const sunucu = http.createServer((q, s) => {
   await sayfa.click('.firma-kart:not(.firma-ekle)');
   await sayfa.click('#btnEBildirim');
   await sayfa.waitForSelector('#sUrun option:nth-child(2)', { state: 'attached' });
+
+  // kunyeCiz çağrı sayacı (fiyat ikinci aşamada ayrıca çizilmemeli)
+  await sayfa.evaluate(() => { window.__kc = 0; const o = kunyeCiz; kunyeCiz = function () { window.__kc++; return o.apply(this, arguments); }; });
 
   // ---- Saf yardımcılar (sayfa bağlamında) ----
   const saf = await sayfa.evaluate(() => {
@@ -203,13 +210,52 @@ const sunucu = http.createServer((q, s) => {
   ok('plan taslağı: #oPlanFiyat "1.234,5"', await deger('#oPlanFiyat') === '1.234,5', await deger('#oPlanFiyat'));
   await sayfa.evaluate(() => taslakEkraniAc());
   await sayfa.waitForSelector('[data-duzenle="kny1"]');
-  await sayfa.click('[data-duzenle="kny1"]'); await sayfa.waitForTimeout(700);
+  istekler = [];
+  await sayfa.evaluate(() => { window.__kc = 0; });
+  DETAY.gecikme = 400;
+  await sayfa.click('[data-duzenle="kny1"]'); await sayfa.waitForTimeout(1200);
+  DETAY.gecikme = 0;
+  const kq = istekler.find(i => i.action === 'kunyeler'), dq = istekler.find(i => i.action === 'kunye_detay');
+  ok('künye+fiyat istekleri PARALEL başladı (aralık < 250 ms, detay 400 ms gecikmeli)', !!kq && !!dq && Math.abs(dq.t - kq.t) < 250, JSON.stringify([kq && kq.t, dq && dq.t]));
+  ok('kunye_detay gövdesi korundu {firmaId, aySayisi}, urunId YOK', !!dq && dq.govde.firmaId === 7 && 'aySayisi' in dq.govde && !('urunId' in dq.govde), JSON.stringify(dq && dq.govde));
+  ok('taslak geri yükleme: kunyeCiz TEK sefer (fiyat ikinci çizim değil)', await sayfa.evaluate(() => window.__kc) === 1, String(await sayfa.evaluate(() => window.__kc)));
+  ok('taslak geri yükleme: checkbox\'lar işaretli + miktar kutuları açık', await sayfa.$$eval('#kunyeListe .kunye', a => a.length === 2 && a.every(d => d.querySelector('input[type=checkbox]').checked && !d.querySelector('input.miktar').disabled)));
+  ok('taslak geri yükleme: fiyat aynı ilk render\'da ("12,5 TL/KG", "fiyat yok")', JSON.stringify(await sayfa.$$eval('#kunyeListe .kalan-fiyat', a => a.map(e => e.textContent))) === JSON.stringify(['12,5 TL/KG', 'fiyat yok']), JSON.stringify(await sayfa.$$eval('#kunyeListe .kalan-fiyat', a => a.map(e => e.textContent))));
+  ok('"fiyatlar yükleniyor" ikinci aşaması YOK, sayı metni temiz', !(await sayfa.textContent('#kunyeSayi')).includes('yükleniyor') && !(await sayfa.textContent('#kunyeSayi')).includes('alınamadı'), await sayfa.textContent('#kunyeSayi'));
+  ok('buton tekrar açık', await sayfa.isEnabled('#btnKunyeler') && (await sayfa.textContent('#btnKunyeler')).includes('Künyeleri Getir'));
   ok('künye taslağı: miktarlar ["1.500,5","2.500"]', JSON.stringify(await m()) === JSON.stringify(['1.500,5', '2.500']), JSON.stringify(await m()));
   ok('künye taslağı: #oFiyat "12.345,67"', await deger('#oFiyat') === '12.345,67', await deger('#oFiyat'));
   // Tikle seçim: kalan biçimli dolar
   await sayfa.click('#btnSecimKaldir');
   await sayfa.check('#kunyeListe input[type=checkbox][data-i="0"]');
   ok('tik ile seçim: kalan "1.500,5" yazılır', (await m())[0] === '1.500,5', JSON.stringify(await m()));
+
+  // ---- kunye_detay HATA verirse: künyeler yine fiyatsız gelir ----
+  DETAY.hata = true;
+  await sayfa.evaluate(async () => { window.__kc = 0; await document.getElementById('btnKunyeler').onclick(); });
+  ok('detay hatası: künyeler yine basıldı (2 satır), fiyat satırı yok', await sayfa.locator('#kunyeListe .kunye').count() === 2 && await sayfa.locator('#kunyeListe .kalan-fiyat').count() === 0);
+  ok('detay hatası: "fiyatlar alınamadı" bilgisi görünür', (await sayfa.textContent('#kunyeSayi')).includes('fiyatlar alınamadı'), await sayfa.textContent('#kunyeSayi'));
+  ok('detay hatası: tek kunyeCiz, buton açık', await sayfa.evaluate(() => window.__kc) === 1 && await sayfa.isEnabled('#btnKunyeler'));
+  DETAY.hata = false;
+
+  // ---- Yarış: çift tık → eski cevap atılır, tek çizim ----
+  DETAY.gecikme = 300;
+  const yaris = await sayfa.evaluate(async () => {
+    window.__kc = 0; const b = document.getElementById('btnKunyeler');
+    const p1 = b.onclick(); const p2 = b.onclick(); await Promise.all([p1, p2]);
+    return { kc: window.__kc, dis: b.disabled, satir: document.querySelectorAll('#kunyeListe .kunye').length };
+  });
+  DETAY.gecikme = 0;
+  ok('çift sorgu: yalnız sonuncusu çizer (kunyeCiz 1), buton açık, 2 satır', yaris.kc === 1 && !yaris.dis && yaris.satir === 2, JSON.stringify(yaris));
+  // Firma değişimi/form temizliği uçuştaki sorguyu geçersiz kılar
+  DETAY.gecikme = 300;
+  const iptal = await sayfa.evaluate(async () => {
+    window.__kc = 0; const b = document.getElementById('btnKunyeler');
+    const p1 = b.onclick(); formuTemizle(); await p1;
+    return { kc: window.__kc, satir: document.querySelectorAll('#kunyeListe .kunye').length, dis: b.disabled };
+  });
+  DETAY.gecikme = 0;
+  ok('uçuşta formuTemizle: eski cevap atıldı (çizim 0, liste boş, buton açık)', iptal.kc === 0 && iptal.satir === 0 && !iptal.dis, JSON.stringify(iptal));
 
   // ---- Statik kutuların hepsi bağlı ----
   ok('altı statik kutu + künye satırları bağlı', await sayfa.evaluate(() =>
