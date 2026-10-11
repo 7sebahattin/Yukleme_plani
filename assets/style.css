@@ -6195,6 +6195,12 @@ html[data-theme="dark"] body:not(.print-mode) .bv .bk-hucre.bk-eksik { backgroun
     border-radius: 12px;
     background: var(--bf-zemin);
 }
+.bv .bv-yanyana { display: block; }
+.bv .bv-yanyana > .beyan-section { min-width: 0; }
+@media (min-width: 900px) {
+    .bv .bv-yanyana-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 16px; align-items: start; }
+    .bv .bv-yanyana-2 > .beyan-section { margin-top: 0; }
+}
 .bv .bv-not-baslik { font-size: .74rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 .bv .bv-durum { padding-top: 14px; border-top: 1px dashed rgba(var(--bf-acc-rgb),.3); }
 .bv .bv-durum-ipucu { font-size: .82rem; margin-bottom: 8px; }
@@ -6430,6 +6436,7 @@ html[data-theme="dark"] .bl-eksik { color: #fbbf24; }
 .beyan-dirty { font-size: .8rem; }
 .beyan-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .beyan-workspace-main, .beyan-workspace-hks { min-width: 0; }
+.beyan-workspace-hks { max-width: 640px; }
 .beyan-workspace-tabs {
     display: flex;
     gap: 6px;
@@ -6469,9 +6476,6 @@ body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-s
 .beyan-parse-compare-row { padding: 10px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .beyan-parse-compare-row:last-child { border-bottom: 0; }
 .beyan-workspace :is([data-beyan-panel], input, select, textarea) { scroll-margin-top: 145px; }
-@media (min-width: 1100px) {
-    .beyan-workspace-grid { grid-template-columns: minmax(0, 1fr) 300px; }
-}
 @media (max-width: 899px) {
     .beyan-workspace-head { top: 60px; }
 }

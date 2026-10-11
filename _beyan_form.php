@@ -48,7 +48,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
         <div class="beyan-workspace-main">
             <!-- JS yokken bütün bölümler erişilebilir. JS sekmeleri etkinleştirir. -->
             <div class="beyan-workspace-tabs" data-beyan-tabs role="tablist" aria-label="Beyan bölümleri" hidden>
-                <?php foreach (['beyan' => 'Beyan', 'analiz' => 'Analiz', 'kaynak' => 'Kaynak metin'] as $key => $label): ?>
+                <?php foreach (['beyan' => 'Beyan', 'analiz' => 'Analiz', 'hks' => 'Hal Bildirim', 'kaynak' => 'Kaynak metin'] as $key => $label): ?>
                 <button type="button" class="btn btn-ghost" id="beyanTab_<?= h($key) ?>" role="tab"
                         aria-controls="beyanPanel_<?= h($key) ?>" aria-selected="<?= $key === 'beyan' ? 'true' : 'false' ?>"
                         data-beyan-tab="<?= h($key) ?>"<?= $key !== 'beyan' ? ' tabindex="-1"' : '' ?>><?= h($label) ?></button>
@@ -150,6 +150,12 @@ $field = static function (string $name, string $label, string $icon, string $mod
                 </section>
             </div>
 
+            <div id="beyanPanel_hks" data-beyan-panel="hks" role="tabpanel" aria-labelledby="beyanTab_hks">
+                <div class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
+                    <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null); ?>
+                </div>
+            </div>
+
             <div id="beyanPanel_kaynak" data-beyan-panel="kaynak" role="tabpanel" aria-labelledby="beyanTab_kaynak">
                 <section class="beyan-section" data-bf="wa">
                     <h2 class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni<small class="bf-alt">Mesajı yapıştırıp ayrıştırın; bulunan bilgileri kaydetmeden önce kontrol edin.</small></h2>
@@ -173,9 +179,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
             </div>
         </div>
 
-        <aside class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
-            <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null); ?>
-        </aside>
     </div>
 
     <?php if ($is_edit && can_beyan('delete')): ?>

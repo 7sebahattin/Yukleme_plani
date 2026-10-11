@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v335` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v336` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1022,6 +1022,11 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   GÖNDERİLEN alanı işler (net ≤ brüt); `beyan_edit` gönderilmeyen numuneyi korur. WhatsApp metni (`beyan_whatsapp_numune()`) ÖNCE
   bu kolonlara bakar (tarih/başka alan gerekmez), hepsi boşsa eski ham-metin ayrıştırması yedek kalır. Kopyala (Taslak Oluştur)
   numuneyi KOPYALAMAZ (o sevkiyata özel).
+- **Form sekmeleri + önizleme yerleşimi (v336):** Beyan formunda sekmeler **Beyan · Analiz · Hal Bildirim · Kaynak metin**.
+  HKS bölümü (`beyan_hks_form_bolumu()`: firma/ürün/ülke/plaka) artık sağ `<aside>` DEĞİL, kendi sekme panelindedir
+  (`#beyanPanel_hks`, `.beyan-workspace-hks` kabı, max 640px) — HKS verisinin girileceği TEK yer. Beyan veren (Beyan/Analiz/Kaynak)
+  ile bildirim yapan (Hal Bildirim) alanları ayrı sekmelerde. Önizlemede Numune kartı Analiz / Durum kartının YANINDA
+  (`.bv-yanyana`, numune doluysa `-2` ile ≥900px iki kolon; mobilde alt alta).
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
