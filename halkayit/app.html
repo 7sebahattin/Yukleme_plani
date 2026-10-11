@@ -2579,6 +2579,15 @@ function bildirimciSifatAdi() {
 function ihracatUretSevkCakismasi() {
   return uretSevkModuMu() && trNorm(bildirimciSifatAdi()).includes('ihracat');
 }
+// HKS (HataKodu 263): karşı taraf sıfatı "Üretici" iken üreticinin GSM numarası
+// KAYITLI kişide/firmada bile zorunlu. Cep yalnız bu durumda (kayıtlı) gösterilir
+// ve gönderilir; ad/doğum gönderilmez (sunucu kısmi kimliği reddeder).
+const URETICI_CEP_UYARI = 'Karşı taraf sıfatı "Üretici": HKS üreticinin cep telefonunu zorunlu istiyor (kişi kayıtlı olsa da). Cep telefonu girin — en az 10 rakam.';
+function ureticiCepGerekli() {
+  if (!yurtIciMi() || !ikDogrulandi || !kayitliMi()) return false;
+  const u = ureticiSifati();
+  return !!(u && String($('sIkSifat').value) === String(u.id));
+}
 function ikSifatUreticiSabitle() {
   const u = ureticiSifati();
   const sel = $('sIkSifat');
@@ -2633,9 +2642,13 @@ function turDegisti() {
   // Ad/Ünvan + Cep + Doğum Tarihi yalnız KAYITSIZ karşı tarafta (kayıtlıda HKS
   // kendi kaydından doldurur). Doğum tarihi: GTB 12.03.2025 duyurusu.
   $('adBlok').classList.toggle('gizli', !adCepMod);
-  $('cepTelBlok').classList.toggle('gizli', !adCepMod);
+  const ureticiCep = !adCepMod && ureticiCepGerekli();
+  $('cepTelBlok').classList.toggle('gizli', !(adCepMod || ureticiCep));
   $('dogumTarihiBlok').classList.toggle('gizli', !adCepMod);
-  $('cepTelNot').textContent = '';   // zorunluluk notu kaldırıldı (kullanıcı kararı)
+  // Kayıtsızda zorunluluk notu yok (kullanıcı kararı); yalnız Üretici sıfatı
+  // + kayıtlı kişide neden sorulduğu kısaca yazılır.
+  $('cepTelNot').textContent = ureticiCep ? ' — Üretici sıfatında HKS zorunlu tutar' : '';
+  $('cepTelNot').hidden = !ureticiCep;
 
   // Sıfat × tür çakışması — CANLI HKS bu kombinasyonu reddediyor (bkz.
   // ihracatUretSevkCakismasi). Kullanıcı formu doldurup geri alınamaz gönderimde
@@ -3011,6 +3024,8 @@ $('oIkCep').onblur = () => { $('oIkCep').value = cepRakam($('oIkCep').value); };
 $('oIkTc').onblur = () => { const t = tcRakam($('oIkTc').value);
   if ($('oIkTc').value !== t) $('oIkTc').value = t; };
 $('sTur').onchange = turDegisti;
+// Sıfat "Üretici" ↔ başka: kayıtlı kişide cep alanının görünürlüğü değişir.
+$('sIkSifat').addEventListener('change', turDegisti);
 $('chkYurtDisi').onchange = turDegisti;
 
 // İşletme türü seçilince işyerlerini getir. Kimin işyeri?
@@ -3138,6 +3153,9 @@ async function karsiTarafSec(k) {
     $('oIkAd').value    = k.ad ? k.ad : '';
     $('oIkCep').value   = k.cep ? cepRakam(k.cep) : '';
     $('oIkDogum').value = k.dogum || '';
+  } else if (ikDogrulandi && ikDogrulandi.kayitliMi) {
+    // Kayıtlı kişi: ad/doğum boş kalır; yalnız cep (sıfat "Üretici" ise HKS ister).
+    $('oIkCep').value = k.cep ? cepRakam(k.cep) : '';
   }
   turDegisti();
   // Kayıtlı sıfat önerisi: doğrulama (ikSifatlariDoldur) BİTTİKTEN sonra, kullanıcı
@@ -3146,6 +3164,7 @@ async function karsiTarafSec(k) {
     const sel = $('sIkSifat');
     if ([...sel.options].some(o => o.value === String(k.sifatId))) sel.value = String(k.sifatId);
   }
+  turDegisti();   // sıfat atandıktan sonra cep alanı görünürlüğünü yeniden değerlendir
 }
 
 // ================= KİŞİ HAVUZU PENCERESİ =================
@@ -3591,6 +3610,9 @@ $('btnMalTaslak').onclick = async () => {
         alert('Kayıtsız satıcı için Doğum Tarihi zorunludur (GTB 12.03.2025 duyurusu).');
         $('oIkDogum').focus(); return;
       }
+    } else if (ureticiCepGerekli() && !cepGecerli($('oIkCep').value)) {
+      alert(URETICI_CEP_UYARI);
+      $('oIkCep').focus(); return;
     }
     if (!$('sIsletmeTuru').value) { alert('İşletme türü seçiniz.'); return; }
     if (!$('sIsyeri').value)      { alert('İşyeri / depo seçiniz.'); return; }
@@ -3617,7 +3639,7 @@ $('btnMalTaslak').onclick = async () => {
     gidecekIsyeriId: $('sIsyeri').value,
     gidecekIsyeriAd: ad('sIsyeri'),
     ulkeAd: 'Satın Alım ← ' + ($('oIkAd').value.trim() || tc),
-  }, kayitliMi() ? {} : {
+  }, kayitliMi() ? (ureticiCepGerekli() ? { ikinciCep: cepRakam($('oIkCep').value) } : {}) : {
     // Kayıtsız satıcı: kimlik bilgileri gönderilir (GTB 12.03.2025).
     ikinciCep: cepRakam($('oIkCep').value),
     ikinciDogumTarihi: $('oIkDogum').value,
@@ -3753,6 +3775,10 @@ function ortakTopla(fiyatId) {
       });
     } else {
       if (!$('sIsyeri').value) { alert((satin ? 'İşyeri / depo' : 'Gidecek işyeri') + ' seçiniz.'); return null; }
+      if (ureticiCepGerekli()) {
+        if (!cepGecerli($('oIkCep').value)) { alert(URETICI_CEP_UYARI); $('oIkCep').focus(); return null; }
+        ortak.ikinciCep = cepRakam($('oIkCep').value);   // ad/doğum EKLENMEZ (kayıtlı kişi)
+      }
       Object.assign(ortak, {
         gidecekIsyeriId: $('sIsyeri').value,
         gidecekIsyeriAd: $('sIsyeri').selectedOptions[0].textContent,
@@ -3971,6 +3997,7 @@ async function taslakDuzenle(t, secenek) {
     // sürümde başka bir sıfatla kaydedilmiş olabilir — geri yüklerken tekrar kilitle,
     // yoksa yukarıdaki atama kilidi ezip yanlış KisiSifat'ı forma geri getirirdi.
     if (uretSevkModuMu()) ikSifatUreticiSabitle();
+    turDegisti();   // sıfat geri yüklendi → Üretici + kayıtlı kişide cep alanı görünür
     if (o.isletmeTuruId) {
       $('sIsletmeTuru').value = String(o.isletmeTuruId);
       if (o.hedefAdres) {
@@ -4170,7 +4197,8 @@ $('btnOnay').onclick = async () => {
         '<b>Bu bildirimde HKS\'e gönderilen karşı taraf bilgisi:</b>' +
         `<div class="onay-satir"><span>TC / Vergi No</span><b>${eHtml(_gk.tc || '—')}</b></div>` +
         `<div class="onay-satir"><span>Doğum Tarihi</span><b>${
-          _gk.dogumGonderildi ? eHtml(_gk.dogum) : '⚠️ GÖNDERİLMEDİ'}</b></div>` +
+          _gk.dogumGonderildi ? eHtml(_gk.dogum)
+          : (j.kayitsizSatinAlim ? '⚠️ GÖNDERİLMEDİ' : '— (kayıtlı kişide gerekmez)')}</b></div>` +
         // Teldeki METİN — HKS alanı metin olarak alıp kendisi tarihe çevirir;
         // formdaki değerle aynı görünse de yazımı (gün/ay sırası) farklıdır.
         (_gk.dogumTel ? `<div class="onay-satir"><span>HKS'e giden metin</span><b>${eHtml(_gk.dogumTel)}</b></div>` : '') +
@@ -4211,6 +4239,13 @@ $('btnOnay').onclick = async () => {
                 '• <b>Kalıcı çözüm için</b> yönetici "Doğum Tarihi Deneyi" ekranından ' +
                 '(<code>halkayit/dogum_deney.php</code>) bu kişi için başka bir biçim kurup ' +
                 'taslağı siteye uğramadan tekrar gönderebilir.</div>'
+              : '') +
+            // HKS 263: sıfat "Üretici" iken GSM, kayıtlı kişide de zorunlu.
+            ((String(s.hataKodu) === '263' || /gsm/i.test(String(s.mesaj || '')))
+              ? '<div class="mesaj hata" style="display:block;margin-top:6px">' +
+                '📱 Karşı taraf sıfatı "Üretici" iken HKS cep telefonunu zorunlu istiyor ' +
+                '(kayıtlı kişi/firma olsa da). Taslağı "Düzenle" ile açıp Cep Telefonu alanını ' +
+                'doldurun veya Kişi Havuzu\'ndaki kişiye cep ekleyin.</div>'
               : '')) +
         `</div>`;
     });
