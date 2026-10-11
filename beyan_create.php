@@ -38,6 +38,7 @@ $f = [
     'sample_taken_at'   => '',
     'analysis_result_at'=> '',
     'analysis_note'     => '',
+    'note'              => '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -59,6 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $checked = beyan_veri_dogrula($f);
     $errors = $checked['errors'];
+    if (mb_strlen($f['note'], 'UTF-8') > 2000) $errors[] = 'Not: en fazla 2000 karakter olabilir.';
     $gross_kg = $checked['values']['gross_kg'];
     $net_kg = $checked['values']['net_kg'];
     $pallet_ct = $checked['values']['pallet_count'];
@@ -80,14 +82,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              transport_type, vehicle_plate, line_type, party_no, pallet_count, product_name, product_variety,
              gross_kg, net_kg, crate_count, crate_type, exit_depot, contact_person,
              buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
-             hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad,
+             hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad, note,
              created_by, updated_by, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?,
              ?, ?, NOW(), NOW())");
 
         $st->execute([
@@ -120,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hks['urun_ad'],
             $hks['ulke_id'],
             $hks['ulke_ad'],
+            $f['note'] ?: null,
             $user_id,
             $user_id,
         ]);

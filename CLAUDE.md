@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v331` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v332` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1004,6 +1004,11 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   (`created_at >=`), zaman damgasız eski KV tanımları (`added_at` yoksa gizli; `+ekle` yeniden ekleyince
   damgalanır) ve genel tanım havuzu (`material_definitions`) KULLANILMAZ. HKS ürün KATALOĞU kalır (ürün adı →
   HKS id eşlemesi ona dayanır). Tarihi ileri almak = yeni temiz başlangıç; geri ALMA.
+- **Not alanı (v332, sahip GO verdi — TEK şema değişikliği):** `customs_declarations.note TEXT NULL`
+  (auto-migration `config/helpers.php`, yalnız ADD COLUMN). Beyan formunun "Beyan" sekmesinde en altta
+  "Not" bölümü (`name="note"`, ≤2000 karakter); önizlemede yalnız doluysa 📝 Not kartı. Büyük harfe
+  ÇEVRİLMEZ (serbest metin), öneri havuzuna girmez, **Kopyala'da kopyalanmaz** (o sevkiyata özel). Düzenle
+  POST'unda `note` gönderilmezse eski değer korunur.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

@@ -419,6 +419,14 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
 </div>
 
+<!-- Not (v332) -->
+<?php if (trim((string)($beyan['note'] ?? '')) !== ''): ?>
+<div class="beyan-section" data-bf="uyari">
+    <div class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</div>
+    <div class="bv-not" style="white-space:pre-wrap"><?= h((string)$beyan['note']) ?></div>
+</div>
+<?php endif; ?>
+
 <!-- 5. WhatsApp Ham Metni (collapsible) -->
 <?php if ($beyan['raw_text']): ?>
 <div class="beyan-section bv-katla" data-bf="wa">

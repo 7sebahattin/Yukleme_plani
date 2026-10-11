@@ -105,6 +105,14 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <textarea id="bf_company_address" name="company_address" rows="2" class="form-control" data-uppercase="tr" data-suggest="company_address" data-suggest-label="Gümrük Adresi" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"><?= h($f['company_address']) ?></textarea>
                     </div>
                 </section>
+
+                <section class="beyan-section" data-bf="uyari" data-beyan-single-section>
+                    <h2 class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</h2>
+                    <div class="form-group" data-ic="metin">
+                        <label class="form-label" for="bf_note">Not <span class="muted">(isteğe bağlı, en fazla 2000 karakter)</span></label>
+                        <textarea id="bf_note" name="note" rows="3" maxlength="2000" class="form-control" placeholder="Bu beyanla ilgili hatırlatma veya açıklama…"><?= h($f['note'] ?? '') ?></textarea>
+                    </div>
+                </section>
             </div>
 
             <div id="beyanPanel_analiz" data-beyan-panel="analiz" role="tabpanel" aria-labelledby="beyanTab_analiz">

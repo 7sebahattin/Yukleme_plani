@@ -61,7 +61,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -801,6 +801,15 @@ $h_sil = render_beyan($B2);
 ok('[bag] silinmis taslakta Bildirim Yap pasif ve sebep yaziyor',
    buton_pasif($h_sil) === true && mb_strpos($h_sil, 'Tekrar Aktif Et') !== false);
 $f_sil = render_form($B2);
+// Not alanı (v332): formun altında textarea; önizlemede yalnız doluyken görünür.
+ok('[not] formda Not alanı (textarea name=note, 2000 sınırlı) var',
+   preg_match('/<textarea[^>]*name="note"[^>]*maxlength="2000"/', $f_sil) === 1);
+$B_NOT = beyan_ekle(['party_no' => 'NOT-1']);
+db()->prepare("UPDATE customs_declarations SET note = ? WHERE id = ?")->execute(["İlk satır\nİKİ <b>x</b>", $B_NOT]);
+$h_not = render_beyan($B_NOT);
+ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk satır') !== false && strpos($h_not, '&lt;b&gt;x&lt;/b&gt;') !== false);
+ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), '📝') === false);
+ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',
    strpos($f_sil, '>Gümrük Adı</label>') !== false
