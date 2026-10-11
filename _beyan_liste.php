@@ -87,10 +87,10 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             <?php if ($kopyala_yetki): ?>
             <td class="bl-kop-col">
                 <form method="post" action="beyan_kopyala.php" class="bl-kop-form"
-                      onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
+                      onsubmit="return confirm('Bu beyandan yeni bir TASLAK oluşturulacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                     <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                    <button type="submit" class="bl-kop-btn" title="TASLAK olarak kopyala" aria-label="Kopyala">⧉</button>
+                    <button type="submit" class="bl-kop-btn" title="Taslak Oluştur" aria-label="Taslak Oluştur">📝</button>
                 </form>
             </td>
             <?php endif; ?>
@@ -175,10 +175,10 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             <?php if (can_beyan('write')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
             <form method="post" action="beyan_kopyala.php" style="display:inline"
-                  onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
+                  onsubmit="return confirm('Bu beyandan yeni bir TASLAK oluşturulacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-                <button type="submit" class="btn btn-sm btn-ghost" title="TASLAK olarak kopyala">⧉ Kopyala</button>
+                <button type="submit" class="btn btn-sm btn-ghost" title="Taslak Oluştur">📝 Taslak Oluştur</button>
             </form>
             <?php endif; ?>
         </div>

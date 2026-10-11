@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v332` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v333` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1009,6 +1009,13 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   "Not" bölümü (`name="note"`, ≤2000 karakter); önizlemede yalnız doluysa 📝 Not kartı. Büyük harfe
   ÇEVRİLMEZ (serbest metin), öneri havuzuna girmez, **Kopyala'da kopyalanmaz** (o sevkiyata özel). Düzenle
   POST'unda `note` gönderilmezse eski değer korunur.
+- **WhatsApp metni + Kopyala (v333):** Önizleme (`beyan_view.php`) üst çubuğundaki **⧉ Kopyala** artık beyan
+  verisinden üretilen WhatsApp metnini panoya kopyalar (`beyan_whatsapp_metin()` — config/helpers.php, saf, DB yok;
+  `*kalın*` + simgeler; boş alan/bölüm atlanır; değerlerdeki `* _ ~ \`` temizlenir). Metin `<script type="application/json"
+  id="waMetin">` içinde, kopyalama `navigator.clipboard` + `execCommand` yedeği. Giriş ayrıştırıcısı (`beyan_parse.php`) DEĞİŞMEDİ.
+  Numune ayrı kolon değil: ham/eşleşmeyen metinde "NUMUNE" satırından sonra aranır (`beyan_whatsapp_numune()`); Önemli Not = `note`.
+  TASLAK oluşturan eski "Kopyala" **"Taslak Oluştur"** adını aldı (📝) ve YALNIZ `beyanlar.php` listesindedir (`beyan_kopyala.php`
+  dosyası/URL'si aynı). İkisini karıştırma: önizlemede taslak formu YOK. Test: `php scripts/beyan_whatsapp_smoke.php`.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

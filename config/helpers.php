@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v332');
+    define('APP_SURUM', 'v333');
 }
 
 // --- HTML kaçışı ---
@@ -3700,4 +3700,118 @@ function beyan_suggest_save(PDO $pdo, string $field, string $raw, string $compan
         $pdo->commit();
         return $result;
     } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
+}
+
+// ── Beyan → WhatsApp metni (v333) ────────────────────────
+// Sisteme girilen beyan verisini WhatsApp'ta yapıştırılacak biçime çevirir
+// (*kalın* + simgeler). Saf fonksiyon: DB/oturum YOK. Boş alan/bölüm atlanır.
+// Ayrıştırıcının (beyan_parse.php) giriş biçimi DEĞİŞMEDİ; bu onun çıkış karşılığıdır.
+function beyan_whatsapp_ayrac(): string { return '━━━━━━━━━━━━━━━━'; }
+
+function beyan_whatsapp_temizle($v): string {
+    // WhatsApp biçim karakterleri değerin içinde yazımı bozmasın.
+    $v = str_replace(['*', '_', '~', '`'], ['', ' ', '', ''], (string)$v);
+    return trim((string)preg_replace('/\s+/u', ' ', $v));
+}
+
+// Ham metinden numune bilgisi: "NUMUNE" satırından sonraki ~4 satırda
+// "N tahta kasa", "X kg brüt", "Y kg net". Bulunamazsa null.
+function beyan_whatsapp_numune(array $b): ?array {
+    $metin = (string)($b['unmatched_text'] ?? '') . "\n" . (string)($b['raw_text'] ?? '');
+    $satirlar = preg_split('/\R/u', $metin) ?: [];
+    $n = count($satirlar);
+    for ($i = 0; $i < $n; $i++) {
+        if (!preg_match('/numune/iu', $satirlar[$i])) continue;
+        $blok = implode("\n", array_slice($satirlar, $i, 5));
+        $kasa = $brut = $net = null;
+        if (preg_match('/(\d+)\s*(?:adet\s*)?(?:tahta\s*)?kasa/iu', $blok, $m)) $kasa = (int)$m[1];
+        if (preg_match('/(\d[\d.,]*)[ \t]*kg[ \t]*br[uü]t/iu', $blok, $m) || preg_match('/br[uü]t[ \t]*[:\-]?[ \t]*(\d[\d.,]*)/iu', $blok, $m)) $brut = $m[1];
+        if (preg_match('/(\d[\d.,]*)[ \t]*kg[ \t]*net/iu', $blok, $m) || preg_match('/\bnet[ \t]*[:\-]?[ \t]*(\d[\d.,]*)/iu', $blok, $m)) $net = $m[1];
+        if ($kasa === null && !$brut && !$net) continue;
+        return ['kasa' => $kasa, 'brut' => $brut ?: null, 'net' => $net ?: null];
+    }
+    return null;
+}
+
+function beyan_whatsapp_metin(array $b): string {
+    $t = 'beyan_whatsapp_temizle';
+    $bol = [];   // bölümler; aralarına ayraç konur
+
+    // 1) Firma + adres
+    $s = [];
+    $firma = $t($b['company_name'] ?? '');
+    if ($firma !== '') $s[] = '🏢 *' . $firma . '*';
+    $adres = trim((string)($b['company_address'] ?? ''));
+    $tin = '';
+    if ($adres !== '') {
+        if (preg_match('/\bTIN\s*\/\s*KPP\s*[:\-]?\s*([\d\/]+)/iu', $adres, $m)) {
+            $tin = $m[1];
+            $adres = trim((string)preg_replace('/\bTIN\s*\/\s*KPP\s*[:\-]?\s*[\d\/]+/iu', '', $adres));
+        }
+        $adres = trim((string)preg_replace('/\s+/u', ' ', str_replace(["\r", "\n"], ' ', $adres)), " ,;");
+        $baslik = 'ADRES';
+        if (preg_match('/^([^:\d]{2,40}):\s*(.+)$/u', $adres, $m)) { $baslik = $t($m[1]); $adres = $m[2]; }
+        $parca = array_values(array_filter(array_map($t, explode(',', $adres)), fn($x) => $x !== ''));
+        if ($parca) {
+            if ($s) $s[] = '';
+            $s[] = '📍 *' . tr_upper($baslik) . '*';
+            $satir = array_map(fn($c) => implode(', ', $c), array_chunk($parca, 2));
+            $son = count($satir) - 1;
+            foreach ($satir as $i => $ln) $s[] = $ln . ($i < $son ? ',' : '');
+        }
+    }
+    if ($tin !== '') { if ($s) $s[] = ''; $s[] = '📑 *TIN/KPP:* ' . $t($tin); }
+    if ($s) $bol[] = implode("\n", $s);
+
+    // 2) Taşıma + başlık
+    $s = [];
+    if (($v = $t($b['transport_type'] ?? '')) !== '') $s[] = '🚛 *' . $v . '*';
+    if (($v = $t($b['line_type'] ?? '')) !== '') $s[] = '🌿 *' . $v . '*';
+    if ($s) $s[] = '';
+    $s[] = '📝 *YENİ BEYAN*';
+    $bol[] = implode("\n", $s);
+
+    // 3) Parti / ürün / yük
+    $s = [];
+    if (($v = $t($b['party_no'] ?? '')) !== '') { $s[] = '📦 *PARTİ NO:* ' . $v; $s[] = ''; }
+    $urun = trim($t($b['product_name'] ?? '') . ' ' . $t($b['product_variety'] ?? ''));
+    if ($urun !== '') $s[] = '🍎 *ÜRÜN:* ' . $urun;
+    if (($b['pallet_count'] ?? null) !== null && (int)$b['pallet_count'] > 0) $s[] = '🚚 *MİKTAR:* ' . (int)$b['pallet_count'] . ' PALET';
+    $y = [];
+    if (($b['gross_kg'] ?? null) !== null && (float)$b['gross_kg'] > 0) $y[] = '▪️ *BRÜT:* ' . fmt_kg($b['gross_kg']) . ' KG';
+    if (($b['net_kg'] ?? null) !== null && (float)$b['net_kg'] > 0) $y[] = '▪️ *NET:* ' . fmt_kg($b['net_kg']) . ' KG';
+    if (($b['crate_count'] ?? null) !== null && (int)$b['crate_count'] > 0) {
+        $kt = $t($b['crate_type'] ?? '');
+        $y[] = '▪️ *' . ($kt !== '' ? tr_upper($kt) : 'KASA') . ':* ' . number_format((int)$b['crate_count'], 0, '', '.') . ' ADET';
+    }
+    if ($y) { if ($s) $s[] = ''; $s[] = '⚖️ *YÜK BİLGİLERİ*'; array_push($s, ...$y); }
+    if ($s) $bol[] = implode("\n", $s);
+
+    // 4) Numune (ham metinden; ayrı kolon yok)
+    if ($nu = beyan_whatsapp_numune($b)) {
+        $s = ['🧪 *NUMUNE*'];
+        if ($nu['kasa'] !== null) $s[] = '📦 ' . $nu['kasa'] . ' Tahta Kasa';
+        if ($nu['brut']) $s[] = '⚖️ Brüt: ' . $t($nu['brut']) . ' KG';
+        if ($nu['net'])  $s[] = '⚖️ Net: ' . $t($nu['net']) . ' KG';
+        $bol[] = implode("\n", $s);
+    }
+
+    // 5) Çıkış / ilgili / alıcı / marka
+    $s = [];
+    foreach ([['exit_depot', '🏭', 'ÇIKIŞ'], ['contact_person', '👤', 'İLGİLİ'], ['buyer_name', '🤝', 'ALICI'], ['brand', '🏷️', 'MARKA']] as [$k, $ic, $et]) {
+        if (($v = $t($b[$k] ?? '')) !== '') $s[] = $ic . ' *' . $et . ':* ' . tr_upper($v);
+    }
+    if ($s) $bol[] = implode("\n", $s);
+
+    // 6) Önemli not
+    $not = trim((string)($b['note'] ?? ''));
+    if ($not !== '') {
+        $s = ['🚨 *ÖNEMLİ NOT* 🚨', ''];
+        foreach (preg_split('/\R/u', $not) as $ln) {
+            if (($ln = $t($ln)) !== '') $s[] = '⚠️ *' . tr_upper($ln) . '*';
+        }
+        if (count($s) > 2) $bol[] = implode("\n", $s);
+    }
+
+    return implode("\n\n" . beyan_whatsapp_ayrac() . "\n\n", $bol);
 }
