@@ -6364,6 +6364,11 @@ html[data-theme="dark"] .bl-bilgi-kapali { color: #6ee7b7; background: rgba(5,15
 }
 html[data-theme="dark"] .beyan-blok .data-table thead th { background: rgba(255,255,255,.05); }
 .beyan-blok .data-table td { vertical-align: middle; }
+/* Sütun sayısı arttı: yatay boşluk daraltılır, tarih/parti/plaka sarmaz */
+.beyan-blok .data-table th, .beyan-blok .data-table td { padding-left: 8px; padding-right: 8px; }
+.beyan-blok .data-table th { white-space: nowrap; }
+.beyan-blok .data-table td:nth-child(2), .beyan-blok .data-table td:nth-child(3) { white-space: nowrap; }
+.bn-parti { white-space: nowrap; }
 
 /* — 3B parti no rozeti — */
 .bn-parti {
