@@ -31,42 +31,43 @@ if (!empty($beyan['loading_record_id'])) {
 // ── Eşleştirme: yüklendi olmayan yükleme planları (modal için) ──
 // Buton yalnızca düzenleme yetkisi olan, silinmemiş ve henüz yüklenmemiş
 // beyanlarda aktif olur.
-$can_match     = !$is_deleted && can_beyan('write') && $cur_status !== 'yuklendi'
+$can_match     = !$is_deleted && can_beyan('write') && (can('records.write') || is_admin())
                  && empty($beyan['loading_record_id']);
 $match_records = [];
+$match_q = trim((string)($_GET['match_q'] ?? ''));
+$match_page = max(1, (int)($_GET['match_page'] ?? 1));
+$match_pages = 1;
+$match_total = 0;
 if ($can_match) {
-    // Son 90 gün + tarihi olmayanlar; yalnızca yuklendi olmayan ve kilitsiz kayıtlar.
-    $since = date('Y-m-d', strtotime('-90 days'));
+    // Arama tüm tarihlerde, kullanıcının erişebildiği kilitsiz planlarda yapılır.
+    [$match_depo_sql, $match_params] = depo_sql_records('r');
+    $match_where = "WHERE r.type = 'yukleme' AND COALESCE(r.durum, '') <> 'yuklendi' AND r.locked_at IS NULL" . $match_depo_sql;
+    if ($match_q !== '') {
+        $match_search = [];
+        foreach (['r.firma','r.urun','r.parti_no','r.alici','us.name'] as $si => $sc) {
+            $match_search[] = "$sc LIKE :mq$si";
+            $match_params[':mq' . $si] = '%' . $match_q . '%';
+        }
+        $match_where .= ' AND (' . implode(' OR ', $match_search) . ')';
+    }
+    $match_from = "FROM loading_records r LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma' ";
+    $mc = db()->prepare("SELECT COUNT(*) $match_from $match_where");
+    $mc->execute($match_params);
+    $match_total = (int)$mc->fetchColumn();
+    $match_pages = max(1, (int)ceil($match_total / 50));
+    $match_page = min($match_page, $match_pages);
     $ms = db()->prepare(
         "SELECT r.id, r.tarih, r.firma, r.parti_no, r.alici, r.ulasim, r.gumruk,
                 r.urun, r.durum, us.name AS urun_sahibi_adi
-         FROM loading_records r
-         LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma'
-         WHERE r.type = 'yukleme'
-           AND COALESCE(r.durum, '') <> 'yuklendi'
-           AND r.locked_at IS NULL
-           AND (r.tarih IS NULL OR r.tarih >= ?)
+         $match_from $match_where
          ORDER BY COALESCE(r.tarih, '0000-00-00') DESC, r.id DESC
-         LIMIT 200"
+         LIMIT :mlim OFFSET :moff"
     );
-    $ms->execute([$since]);
+    foreach ($match_params as $mk => $mv) $ms->bindValue($mk, $mv);
+    $ms->bindValue(':mlim', 50, PDO::PARAM_INT);
+    $ms->bindValue(':moff', ($match_page - 1) * 50, PDO::PARAM_INT);
+    $ms->execute();
     $match_records = $ms->fetchAll();
-    // Veri azsa (90 günde hiç yoksa) tüm yüklendi olmayanları getir
-    if (empty($match_records)) {
-        $ms2 = db()->prepare(
-            "SELECT r.id, r.tarih, r.firma, r.parti_no, r.alici, r.ulasim, r.gumruk,
-                    r.urun, r.durum, us.name AS urun_sahibi_adi
-             FROM loading_records r
-             LEFT JOIN material_definitions us ON us.id = r.urun_sahibi_id AND us.type = 'firma'
-             WHERE r.type = 'yukleme'
-               AND COALESCE(r.durum, '') <> 'yuklendi'
-               AND r.locked_at IS NULL
-             ORDER BY COALESCE(r.tarih, '0000-00-00') DESC, r.id DESC
-             LIMIT 200"
-        );
-        $ms2->execute();
-        $match_records = $ms2->fetchAll();
-    }
 }
 
 // ── Hal Kayıt (HKS) bildirimi — buton kapısı (Sprint Beyan-Bildirim-01) ──
@@ -182,15 +183,17 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php if ($hks_yetki && !$is_deleted): ?>
     <div class="bk-alt">
         <?php if ($hks_acik): ?>
-        <button type="button" class="btn btn-primary" id="hksOpenBtn">🏛 Bildirim Yap</button>
+        <button type="button" class="btn btn-primary" id="hksOpenBtn">🏛 HKS Taslağı Oluştur</button>
         <?php else: ?>
-        <button type="button" class="btn" disabled>🏛 Bildirim Yap</button>
+        <button type="button" class="btn" disabled>🏛 HKS Taslağı Oluştur</button>
         <span class="bk-engel"><?= h((string)$hks_engel) ?></span>
         <?php endif; ?>
     </div>
     <?php endif; ?>
 
     <?php if (!empty($hks_gecmis)): ?>
+    <details class="beyan-history">
+    <summary>Bildirim geçmişi (<?= count($hks_gecmis) ?>)</summary>
     <div class="table-wrap" style="margin-top:12px">
         <table class="beyan-match-table">
             <thead>
@@ -220,6 +223,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         Taslaklar <a href="halkayit/index.php?ekran=taslaklar">Hal Kayıt panelinden</a> gönderilir —
         bu ekran HKS'e bildirim <strong>göndermez</strong>.
     </p>
+    </details>
     <?php endif; ?>
 </div>
 
@@ -350,8 +354,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     // ara durumlara tek tek tıklamak gerekiyordu (ve terminal durumda şerit
     // hiç çıkmadığı için geri dönüş yolu yoktu). Artık dokuz durumun hepsi
     // duruyor, seçili olan ÇERÇEVE ile işaretli ve doğrudan sonuca gidilebilir.
-    // Sunucu tarafı bunu zaten kabul ediyor: beyan_edit.php'nin tam güncelleme
-    // dalı durumu yalnız beyan_statuses() anahtarlarına karşı doğrular.
+    // Sunucu status_only dalında güncel satırın durum/not alanlarını değiştirir.
     $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
     if (!$is_deleted && can_beyan('write')):
     ?>
@@ -366,26 +369,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
              gelirse hangisinin kazandığı belirsiz olurdu. -->
         <form method="post" action="beyan_edit.php?id=<?= $id ?>" class="beyan-durum-form">
             <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <?php
-            // Tam güncelleme dalına gidiyoruz: mevcut alanların HEPSİ gizli
-            // olarak gönderilmeli, yoksa durum değişiminde silinirler.
-            // YENİ KOLON EKLERSEN BU LİSTEYE DE EKLE.
-            foreach (['raw_text','unmatched_text','declaration_title','company_name','company_address',
-                      'transport_type','vehicle_plate','line_type','party_no','pallet_count','product_name','product_variety',
-                      'gross_kg','net_kg','crate_count','crate_type','exit_depot','contact_person',
-                      'buyer_name','brand','analysis_note','sample_taken_at','analysis_result_at',
-                      'hks_firma_id','hks_urun_id','hks_ulke_id'] as $hf):
-                $hval = '';
-                if ($hf === 'pallet_count') $hval = $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '';
-                elseif ($hf === 'crate_count') $hval = $beyan['crate_count'] !== null ? (string)(int)$beyan['crate_count'] : '';
-                elseif ($hf === 'gross_kg') $hval = fmt_edit_num($beyan['gross_kg'], 0);
-                elseif ($hf === 'net_kg')   $hval = fmt_edit_num($beyan['net_kg'],   0);
-                elseif ($hf === 'sample_taken_at')    $hval = $beyan['sample_taken_at']    ? date('Y-m-d\TH:i', strtotime($beyan['sample_taken_at']))    : '';
-                elseif ($hf === 'analysis_result_at') $hval = $beyan['analysis_result_at'] ? date('Y-m-d\TH:i', strtotime($beyan['analysis_result_at'])) : '';
-                else   $hval = (string)($beyan[$hf] ?? '');
-            ?>
-            <input type="hidden" name="<?= h($hf) ?>" value="<?= h($hval) ?>">
-            <?php endforeach; ?>
+            <input type="hidden" name="status_only" value="1">
+            <input type="hidden" name="return_to" value="view">
 
             <div class="beyan-next-status-wrap">
                 <?php foreach (beyan_durum_akis_sirasi() as $ns):
@@ -449,8 +434,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
     <?php if ($can_match): ?>
     <button type="button" class="btn" id="beyanMatchOpenBtn">🔗 Yükleme Planı ile Eşleştir</button>
-    <?php elseif (!$is_deleted && can_beyan('write') && $cur_status === 'yuklendi' && !$linked_record): ?>
-    <p class="muted" style="font-size:.82rem">Bu beyan zaten yüklendi.</p>
+    <?php elseif (!$is_deleted && can_beyan('write') && !$linked_record): ?>
+    <p class="muted" style="font-size:.82rem">Planla eşleştirmek için yükleme kayıtlarını düzenleme yetkisi gerekir.</p>
     <?php endif; ?>
 </div>
 
@@ -489,7 +474,13 @@ function prompt_note(btn) {
     var form = btn.closest('form');
     if (!form) return true;
     var noteInput = form.querySelector('input[name="analysis_note"]');
-    if (noteInput) noteInput.value = note.trim();
+    if (!noteInput) {
+        noteInput = document.createElement('input');
+        noteInput.type = 'hidden';
+        noteInput.name = 'analysis_note';
+        form.appendChild(noteInput);
+    }
+    noteInput.value = note.trim();
     return true;
 }
 </script>
@@ -513,10 +504,15 @@ function prompt_note(btn) {
         Yüklendi olmayan yükleme planlarından birini seçin. Beyan bilgileri seçilen
         yükleme planına aktarılacaktır.
       </p>
-      <div class="beyan-match-search">
-        <input type="text" id="beyanMatchSearch" class="form-control"
-               placeholder="Firma, ürün, parti no, alıcı ara…">
-      </div>
+      <form method="get" class="beyan-match-search" style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="hidden" name="id" value="<?= $id ?>">
+        <input type="hidden" name="match_open" value="1">
+        <label class="form-label" for="beyanMatchSearch">Tüm tarihlerde plan ara</label>
+        <input type="search" name="match_q" id="beyanMatchSearch" class="form-control"
+               value="<?= h($match_q) ?>" placeholder="Firma, ürün, parti no, alıcı ara…">
+        <button class="btn">Ara</button>
+      </form>
+      <p class="muted"><?= $match_total ?> uygun plan · Sayfa <?= $match_page ?> / <?= $match_pages ?></p>
 
       <div class="beyan-match-table-wrap">
         <table class="beyan-match-table">
@@ -570,6 +566,12 @@ function prompt_note(btn) {
         </table>
       </div>
 
+      <?php if ($match_pages > 1): ?>
+      <nav class="beyan-match-footer" aria-label="Yükleme planı sayfaları">
+        <?php if ($match_page > 1): ?><a class="btn btn-sm" href="<?= h('beyan_view.php?' . http_build_query(['id' => $id, 'match_open' => 1, 'match_q' => $match_q, 'match_page' => $match_page - 1])) ?>">← Önceki</a><?php endif; ?>
+        <?php if ($match_page < $match_pages): ?><a class="btn btn-sm" href="<?= h('beyan_view.php?' . http_build_query(['id' => $id, 'match_open' => 1, 'match_q' => $match_q, 'match_page' => $match_page + 1])) ?>">Sonraki →</a><?php endif; ?>
+      </nav>
+      <?php endif; ?>
       <div class="beyan-match-footer">
         <button type="button" class="btn btn-ghost" id="beyanMatchCancel1">Vazgeç</button>
         <button type="button" class="btn btn-primary" id="beyanMatchCompare" disabled>Eşleşme Yap</button>
@@ -646,6 +648,7 @@ function prompt_note(btn) {
     function showStep2() { step1.hidden = true;  step2.hidden = false; }
 
     openBtn.addEventListener('click', openModal);
+    <?php if (!empty($_GET['match_open'])): ?>openModal();<?php endif; ?>
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
     if (cancel1)  cancel1.addEventListener('click', closeModal);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
@@ -653,16 +656,7 @@ function prompt_note(btn) {
         if (e.key === 'Escape' && !overlay.hidden) closeModal();
     });
 
-    // Arama filtresi
-    if (search) {
-        search.addEventListener('input', function () {
-            var q = this.value.trim().toLowerCase();
-            rows.forEach(function (tr) {
-                var hay = tr.getAttribute('data-search') || '';
-                tr.style.display = (q === '' || hay.indexOf(q) !== -1) ? '' : 'none';
-            });
-        });
-    }
+    // Arama GET formuyla sunucuda yapılır; yalnız görünür sayfayı süzmez.
 
     // Radyo seçimi
     radios.forEach(function (rb) {

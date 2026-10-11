@@ -96,9 +96,10 @@ ok('hks_taslaklar\'a yazan dosyalar beklenen ikili',
 // ── 5) Plaka, durum geçişinde silinmiyor ──────────────────────────────────
 $view = oku("$KOK/beyan_view.php");
 preg_match("/foreach \(\['raw_text'.*?\] as \\\$hf\)/s", $view, $mm);
-ok('beyan_view hizli durum gecisi vehicle_plate gonderiyor',
-   isset($mm[0]) && strpos($mm[0], "'vehicle_plate'") !== false,
-   'hidden listesinde yok — her durum degisikligi plakayi NULL yapar');
+ok('beyan_view durum işlemi eski plaka kopyası göndermiyor',
+   strpos($view, 'name="status_only" value="1"') !== false
+   && strpos($view, "'gross_kg','net_kg'") === false,
+   'durum değişimi genel düzenleme üzerinden veri ezebilir');
 
 // ── 6) beyan_create INSERT tutarlılığı ────────────────────────────────────
 $cre = oku("$KOK/beyan_create.php");
@@ -287,9 +288,9 @@ ok('gövdeden gelen sifat/tur katalogda dogrulaniyor',
 // Yeni kolonlar da hizli durum gecisinde silinmemeli (vehicle_plate ile ayni tuzak).
 preg_match("/foreach \(\['raw_text'.*?\] as \\\$hf\)/s", $view, $mh);
 foreach (['hks_firma_id', 'hks_urun_id', 'hks_ulke_id'] as $kol) {
-    ok("hizli durum gecisi $kol gonderiyor",
-       isset($mh[0]) && strpos($mh[0], "'$kol'") !== false,
-       'hidden listesinde yok — her durum degisikligi bu alani NULL yapar');
+    ok("hizli durum gecisi $kol eski kopyasını göndermiyor",
+       strpos($view, 'name="status_only" value="1"') !== false && !isset($mh[0]),
+       'durum formu eşleşmeleri yeniden yazmamalı');
 }
 
 // beyan_edit UPDATE tutarliligi (kolon eklendi — sayilar kaymamali)

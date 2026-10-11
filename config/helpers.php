@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v325');
+    define('APP_SURUM', 'v326');
 }
 
 // --- HTML kaçışı ---
@@ -2502,19 +2502,137 @@ function can_beyan(string $perm): bool {
 //    "." round-trip'inde num() tarafından binlik sanılıp bozulmasın). ──
 function beyan_num_or_null($v): ?float {
     if ($v === null || $v === '') return null;
-    if (is_int($v) || is_float($v)) return (float)$v;     // parser/JSON sayısı — olduğu gibi
-    return num((string)$v);                                // elle girilen Türkçe format
+    if (is_int($v) || is_float($v)) {
+        $n = (float)$v;
+    } else {
+        $s = trim((string)$v);
+        if ($s === '') return null;
+        // Virgül açık ondalıktır; nokta yalnız üçlü gruplarda binliktir.
+        // Parser JSON sayıları bu biçim yorumundan geçmez.
+        if (preg_match('/^\d{1,3}(?:\.\d{3})+(?:,\d{1,3})?$/D', $s)) {
+            $s = str_replace('.', '', $s);
+        } elseif (!preg_match('/^\d+(?:[.,]\d{1,3})?$/D', $s)) {
+            throw new InvalidArgumentException('Pozitif sayı girin; KG için en fazla 3 ondalık kullanın.');
+        }
+        $n = (float)str_replace(',', '.', $s);
+    }
+    if (!is_finite($n) || $n < 0 || $n > 999999999.999 || abs($n - round($n, 3)) > 0.0000001) {
+        throw new InvalidArgumentException('Sayı 0–999999999,999 arasında ve en fazla 3 ondalıklı olmalıdır.');
+    }
+    return round($n, 3);
 }
 function beyan_int_or_null($v): ?int {
-    if ($v === null || $v === '') return null;
-    if (is_int($v))   return $v;
-    if (is_float($v)) return (int)$v;
-    return (int)num((string)$v);
+    $n = beyan_num_or_null($v);
+    if ($n === null) return null;
+    if ($n !== floor($n)) throw new InvalidArgumentException('Adet tam sayı olmalıdır.');
+    return (int)$n;
+}
+
+function beyan_edit_kg($v): string {
+    return $v === null || $v === '' ? '' : number_format((float)$v, 3, ',', '.');
+}
+
+// Tekli ve toplu kaydın ortak sayı/tarih ve çapraz alan kontrolleri.
+function beyan_veri_dogrula(array $data): array {
+    $values = [];
+    $errors = [];
+    foreach (['gross_kg' => 'Brüt KG', 'net_kg' => 'Net KG', 'pallet_count' => 'Palet adedi', 'crate_count' => 'Kasa adedi'] as $k => $label) {
+        try {
+            $values[$k] = in_array($k, ['pallet_count', 'crate_count'], true)
+                ? beyan_int_or_null($data[$k] ?? null) : beyan_num_or_null($data[$k] ?? null);
+        } catch (InvalidArgumentException $e) {
+            $values[$k] = null;
+            $errors[] = $label . ': ' . $e->getMessage();
+        }
+    }
+    foreach (['sample_taken_at' => 'Numune tarihi', 'analysis_result_at' => 'Analiz sonucu tarihi'] as $k => $label) {
+        $s = trim((string)($data[$k] ?? ''));
+        $values[$k] = null;
+        if ($s === '') continue;
+        $normalized = str_replace('T', ' ', $s);
+        if (strlen($normalized) === 16) $normalized .= ':00';
+        $dt = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $normalized);
+        if (!$dt || $dt->format('Y-m-d H:i:s') !== $normalized) {
+            $errors[] = $label . ': geçerli bir tarih ve saat girin.';
+        } else {
+            $values[$k] = $normalized;
+        }
+    }
+    $status = (string)($data['status'] ?? 'beyan_acildi');
+    if (in_array($status, ['temiz', 'red'], true) && $values['analysis_result_at'] === null && trim((string)($data['analysis_result_at'] ?? '')) === '') {
+        $values['analysis_result_at'] = date('Y-m-d H:i:s');
+    }
+    if ($values['net_kg'] !== null && $values['gross_kg'] !== null && $values['net_kg'] > $values['gross_kg']) {
+        $errors[] = 'Net KG, Brüt KG değerinden büyük olamaz.';
+    }
+    if ($values['sample_taken_at'] !== null && $values['analysis_result_at'] !== null && $values['analysis_result_at'] < $values['sample_taken_at']) {
+        $errors[] = 'Analiz sonucu tarihi numune tarihinden önce olamaz.';
+    }
+    if (!array_key_exists($status, beyan_statuses())) $errors[] = 'Geçerli bir beyan durumu seçin.';
+    if ($status === 'red' && trim((string)($data['analysis_note'] ?? '')) === '') $errors[] = '"Red" durumu için analiz notu zorunludur.';
+    if (trim((string)($data['raw_text'] ?? '')) === '' && trim((string)($data['party_no'] ?? '')) === '' && trim((string)($data['product_name'] ?? '')) === '') {
+        $errors[] = 'En az bir alan dolu olmalıdır: WhatsApp metni, Parti No veya Ürün Adı.';
+    }
+    return ['values' => $values, 'errors' => $errors];
+}
+
+// updated_at saniye hassasiyetinde olduğundan tüm satırın özeti de gerekir.
+// Kayıt kilit altında tekrar okunarak kontrol edilir; migration gerektirmez.
+function beyan_edit_token(array $row): string {
+    ksort($row);
+    return hash('sha256', json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+}
+
+function beyan_duzenleme_kilitle(PDO $pdo, int $id, string $token): array {
+    $pdo->beginTransaction();
+    try {
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? '' : ' FOR UPDATE';
+        $st = $pdo->prepare('SELECT * FROM customs_declarations WHERE id = ? AND deleted_at IS NULL' . $lock);
+        $st->execute([$id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row || $token === '' || !hash_equals(beyan_edit_token($row), $token)) {
+            throw new InvalidArgumentException('Bu beyan başka bir işlemle değiştirildi. Değişikliklerinizi kopyalayıp sayfayı yenileyin; güncel kayıt üzerine yeniden uygulayın.');
+        }
+        return $row;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+// Liste/detay durum işlemi güncel satırı kilitler ve yalnız bu dört alanı yazar.
+function beyan_durum_kaydet(PDO $pdo, int $id, string $status, array $post, int $user_id): array {
+    $pdo->beginTransaction();
+    try {
+        $lock = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? '' : ' FOR UPDATE';
+        $st = $pdo->prepare('SELECT * FROM customs_declarations WHERE id = ? AND deleted_at IS NULL' . $lock);
+        $st->execute([$id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$row) throw new InvalidArgumentException('Beyan bulunamadı veya silinmiş.');
+        $new = ['status' => $status, 'product_name' => 'durum'];
+        foreach (['analysis_note', 'sample_taken_at', 'analysis_result_at'] as $key) {
+            $new[$key] = array_key_exists($key, $post) ? trim((string)$post[$key]) : ($row[$key] ?? null);
+        }
+        $checked = beyan_veri_dogrula($new);
+        if ($checked['errors']) throw new InvalidArgumentException(implode(' ', $checked['errors']));
+        unset($new['product_name']);
+        $new['sample_taken_at'] = $checked['values']['sample_taken_at'];
+        $new['analysis_result_at'] = $checked['values']['analysis_result_at'];
+        $st = $pdo->prepare('UPDATE customs_declarations SET status = ?, analysis_note = ?, sample_taken_at = ?, analysis_result_at = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL');
+        $st->execute([$status, $new['analysis_note'] ?: null, $new['sample_taken_at'], $new['analysis_result_at'], $user_id, $id]);
+        $pdo->commit();
+        return ['old' => array_intersect_key($row, $new), 'new' => $new];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
 }
 
 // ── Tek bir beyanı DB'ye ekler, yeni id döner (toplu içe aktarma için ortak yol). ──
-// $data: parser/JSON alanları (string ya da sayı). Numune/analiz tarihleri set edilmez.
+// $data: parser/JSON veya düzenlenmiş önizleme alanları (string ya da sayı).
 function beyan_insert(array $data, int $user_id): int {
+    $checked = beyan_veri_dogrula($data);
+    if ($checked['errors']) throw new InvalidArgumentException(implode(' ', $checked['errors']));
     $str_fields = [
         'raw_text', 'unmatched_text', 'declaration_title', 'company_name', 'company_address',
         'transport_type', 'line_type', 'party_no', 'product_name', 'product_variety',
@@ -2530,25 +2648,25 @@ function beyan_insert(array $data, int $user_id): int {
         if ($f[$k] !== '') $f[$k] = tr_upper($f[$k]);
     }
 
-    $gross_kg  = beyan_num_or_null($data['gross_kg']     ?? null);
-    $net_kg    = beyan_num_or_null($data['net_kg']       ?? null);
-    $pallet_ct = beyan_int_or_null($data['pallet_count'] ?? null);
-    $crate_ct  = beyan_int_or_null($data['crate_count']  ?? null);
+    $gross_kg  = $checked['values']['gross_kg'];
+    $net_kg    = $checked['values']['net_kg'];
+    $pallet_ct = $checked['values']['pallet_count'];
+    $crate_ct  = $checked['values']['crate_count'];
 
     $status = (string)($data['status'] ?? 'beyan_acildi');
     if (!in_array($status, array_keys(beyan_statuses()), true)) $status = 'beyan_acildi';
 
     $st = db()->prepare("INSERT INTO customs_declarations
         (raw_text, unmatched_text, declaration_title, company_name, company_address,
-         transport_type, line_type, party_no, pallet_count, product_name, product_variety,
+         transport_type, vehicle_plate, line_type, party_no, pallet_count, product_name, product_variety,
          gross_kg, net_kg, crate_count, crate_type, exit_depot, contact_person,
-         buyer_name, brand, status, analysis_note,
+         buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
          created_by, updated_by, created_at, updated_at)
         VALUES
         (?, ?, ?, ?, ?,
+         ?, ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
          ?, ?, ?, ?, ?, ?,
-         ?, ?, ?, ?,
          ?, ?, NOW(), NOW())");
 
     $st->execute([
@@ -2558,6 +2676,7 @@ function beyan_insert(array $data, int $user_id): int {
         $f['company_name']      ?: null,
         $f['company_address']   ?: null,
         $f['transport_type']    ?: null,
+        beyan_plaka_normalize((string)($data['vehicle_plate'] ?? '')) ?: null,
         $f['line_type']         ?: null,
         $f['party_no']          ?: null,
         $pallet_ct,
@@ -2573,6 +2692,8 @@ function beyan_insert(array $data, int $user_id): int {
         $f['brand']             ?: null,
         $status,
         $f['analysis_note']     ?: null,
+        $checked['values']['sample_taken_at'],
+        $checked['values']['analysis_result_at'] ?? (in_array($status, ['temiz', 'red'], true) ? date('Y-m-d H:i:s') : null),
         $user_id,
         $user_id,
     ]);
@@ -3277,17 +3398,22 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
         echo '</label><select name="' . h($ad) . '" class="form-control"'
            . ($aramali ? ' data-aramali="' . h($aramaIpucu) . '"' : '') . '>';
         echo '<option value="">— seçilmedi —</option>';
+        $has_selected = $secili === '';
         foreach ($liste as $x) {
+            if ((string)$x['id'] === $secili) $has_selected = true;
             echo '<option value="' . h((string)$x['id']) . '"'
                . ((string)$x['id'] === $secili ? ' selected' : '') . '>'
                . h((string)$x['ad']) . '</option>';
+        }
+        if (!$has_selected) {
+            echo '<option value="' . h($secili) . '" selected>Mevcut seçim (katalogda bulunamadı): ' . h($secili) . '</option>';
         }
         echo '</select></div>';
     };
 
     echo '<p class="muted" style="font-size:.85rem;margin-top:0">'
-       . 'Bildirim için gereken <strong>tüm</strong> alanlar burada. Biri bile boşsa '
-       . '<strong>"Bildirim Yap"</strong> açılmaz. Bildirim ekranında yalnız birim fiyat sorulur.</p>';
+       . 'HKS hazırlığı için firma, ürün, ülke ve plaka burada. Net KG beyan bölümünden alınır. '
+       . 'Taslak oluştururken eksikler kontrol edilir; birim fiyat ayrıca sorulur.</p>';
     echo '<div class="beyan-form-grid">';
     $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '',
          'Firma yazın veya listeden seçin', 'bina');
@@ -3300,31 +3426,37 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
 }
 
 // Form POST'undan eşleştirme alanlarını okur; id'leri KATALOĞA karşı doğrular
-// ve adlarını çözer. Katalogda olmayan bir id sessizce boşa düşer — uydurma
-// değer beyana yazılmaz.
+// ve adlarını çözer. Katalog kesintisinde mevcut değerler korunur;
+// doğrulanamayan yeni seçim anlaşılır bir hata verir.
 // Dönüş: ['firma_id','urun_id','urun_ad','ulke_id','ulke_ad']
-function beyan_hks_form_oku(array $post): array {
-    $bos = ['firma_id' => null, 'urun_id' => null, 'urun_ad' => null,
-            'ulke_id'  => null, 'ulke_ad'  => null];
-    $katalog = bb_katalog();
-    if (!$katalog) return $bos;
+function beyan_hks_form_oku(array $post, array $existing = []): array {
+    return beyan_hks_secimleri_coz($post, $existing, bb_katalog());
+}
 
-    $ad = function (array $liste, string $id): string {
-        foreach ($liste as $x) if ((string)$x['id'] === $id) return (string)$x['ad'];
-        return '';
-    };
-    $urunId = trim((string)($post['hks_urun_id'] ?? ''));
-    $ulkeId = trim((string)($post['hks_ulke_id'] ?? ''));
-    $urunAd = $urunId !== '' ? $ad($katalog['urunler'], $urunId) : '';
-    $ulkeAd = $ulkeId !== '' ? $ad($katalog['ulkeler'], $ulkeId) : '';
-
-    return [
-        'firma_id' => trim((string)($post['hks_firma_id'] ?? '')) ?: null,
-        'urun_id'  => $urunAd !== '' ? $urunId : null,
-        'urun_ad'  => $urunAd ?: null,
-        'ulke_id'  => $ulkeAd !== '' ? $ulkeId : null,
-        'ulke_ad'  => $ulkeAd ?: null,
-    ];
+// Gönderilmeyen alan korunur; gönderilen boş değer bilinçli temizlemedir.
+function beyan_hks_secimleri_coz(array $post, array $existing, array $katalog): array {
+    $result = [];
+    foreach (['firma', 'urun', 'ulke'] as $tip) {
+        $key = 'hks_' . $tip . '_id';
+        $old = (string)($existing[$key] ?? '');
+        $id = array_key_exists($key, $post) ? trim((string)$post[$key]) : $old;
+        $result[$tip . '_id'] = $id !== '' ? $id : null;
+        if ($tip === 'firma') continue;
+        $name = (string)($existing['hks_' . $tip . '_ad'] ?? '');
+        if ($id === '') {
+            $name = '';
+        } else {
+            $found = false;
+            foreach (($katalog[$tip === 'urun' ? 'urunler' : 'ulkeler'] ?? []) as $row) {
+                if ((string)$row['id'] === $id) { $name = (string)$row['ad']; $found = true; break; }
+            }
+            if (!$found && $id !== $old) {
+                throw new InvalidArgumentException('HKS ' . ($tip === 'urun' ? 'ürün' : 'ülke') . ' seçimi doğrulanamadı. Katalogları güncelleyip yeniden seçin.');
+            }
+        }
+        $result[$tip . '_ad'] = $name !== '' ? $name : null;
+    }
+    return $result;
 }
 
 // Eşleştirme tamam mı? Bildirim butonunun kapılarından biri.

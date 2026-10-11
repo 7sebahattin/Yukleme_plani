@@ -59,7 +59,7 @@ const SAYFA = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><style
     fs.writeFileSync(path.join(dizin, 'sayfa.html'), SAYFA);
     fs.copyFileSync(path.join(KOK, 'assets', 'app.js'), path.join(dizin, 'app.js'));
 
-    const tarayici = await chromium.launch();
+    const tarayici = await chromium.launch(process.env.PW_CHANNEL ? {channel: process.env.PW_CHANNEL} : {});
     const sayfa = await tarayici.newPage();
     const hatalar = [];
     sayfa.on('pageerror', e => hatalar.push('PAGEERROR: ' + e.message));
