@@ -442,14 +442,17 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        preg_match('/name="vehicle_plate"[^>]*data-nospace/s', $form) === 1,
        'data-nospace yok — "34 ABC 123" boslukla kaydedilir');
 
-    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS sağ panelde.
+    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS ayrı sekmede.
     $iw = mb_strpos($form, 'WhatsApp Metni');
     $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
     $it = mb_strpos($form, 'Beyan / Sevkiyat');
-    ok('[form] beyan bilgileri kaynak metinden önce, HKS yan panelde',
+    $pa = strpos($form, 'id="beyanPanel_analiz"'); $ph = strpos($form, 'id="beyanPanel_hks"'); $pk = strpos($form, 'id="beyanPanel_kaynak"');
+    ok('[form] beyan bilgileri kaynak metinden önce, Hal Bildirim AYRI sekme (Analiz ile Kaynak arasında)',
        $iw !== false && $ih !== false && $it !== false && $it < $iw
-       && strpos($form, 'class="beyan-workspace-hks"') !== false,
-       "konumlar: whatsapp=$iw hks=$ih temel=$it");
+       && strpos($form, 'class="beyan-workspace-hks"') !== false
+       && $pa !== false && $pa < $ph && $ph < $pk && strpos($form, 'data-beyan-tab="hks"') !== false
+       && strpos($form, "<aside class=\"beyan-workspace-hks\"") === false && ($bh = strpos($form, "Hal Bildirim Bilgileri")) > $ph && $bh < $pk,
+       "konumlar: whatsapp=$iw hks=$ih temel=$it pa=$pa ph=$ph pk=$pk aside=" . var_export(strpos($form, "<aside"), true));
 
     // Uzun katalog listesi YAZARAK ARANABİLİR olmalı; kısa liste olmamalı.
     // (Test kataloğunda 2 ürün / 1 ülke var → eşiğin altında, aramasız.)
@@ -818,6 +821,9 @@ ok('[numune] boşken önizlemede numune kartı yok', strpos(render_beyan($ID_BOS
 $B_NM = beyan_ekle(['party_no' => 'NM-1']);
 db()->prepare("UPDATE customs_declarations SET sample_gross_kg=5, sample_net_kg=4, sample_crate_type='TAHTA KASA', sample_crate_count=1 WHERE id=?")->execute([$B_NM]);
 $h_nm = render_beyan($B_NM);
+file_put_contents(sys_get_temp_dir() . '/beyan_view_nm.html', $h_nm);
+ok('[numune] önizlemede numune kartı Analiz kartıyla aynı yanyana kabında', preg_match('/bv-yanyana bv-yanyana-2.*Analiz \/ Durum.*Numune/s', $h_nm) === 1
+   && preg_match('/class="bv-yanyana"/', render_beyan($ID_BOS)) === 1);
 ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</span> Numune') !== false
    && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
 file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));

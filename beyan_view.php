@@ -345,6 +345,14 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 </div>
 
+<?php
+$nm_kasa = ($beyan['sample_crate_count'] ?? null) !== null && (int)$beyan['sample_crate_count'] > 0 ? number_format((int)$beyan['sample_crate_count'], 0, ',', '.') : '';
+$nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
+$nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_unit_kg($beyan['sample_gross_kg']) . ' KG' : '';
+$nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_unit_kg($beyan['sample_net_kg']) . ' KG' : '';
+$nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Brüt: ' . $nm_brut : '', $nm_net !== '' ? 'Net: ' . $nm_net : '']);
+?>
+<div class="bv-yanyana<?= $nm_parca ? ' bv-yanyana-2' : '' ?>">
 <!-- 4. Analiz / Durum -->
 <div class="beyan-section" data-bf="durum">
     <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
@@ -415,20 +423,14 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
 </div>
 
-<!-- Numune (v334): yalnız doluysa -->
-<?php
-$nm_kasa = ($beyan['sample_crate_count'] ?? null) !== null && (int)$beyan['sample_crate_count'] > 0 ? number_format((int)$beyan['sample_crate_count'], 0, ',', '.') : '';
-$nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
-$nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_unit_kg($beyan['sample_gross_kg']) . ' KG' : '';
-$nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_unit_kg($beyan['sample_net_kg']) . ' KG' : '';
-$nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Brüt: ' . $nm_brut : '', $nm_net !== '' ? 'Net: ' . $nm_net : '']);
-?>
+<!-- Numune (v334): Analiz kartının yanında, yalnız doluysa -->
 <?php if ($nm_parca): ?>
 <div class="beyan-section" data-bf="urun">
     <div class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</div>
-    <div class="bv-not"><?= h(implode(' · ', $nm_parca)) ?></div>
+    <div class="bv-not"><?= implode('<br>', array_map('h', $nm_parca)) ?></div>
 </div>
 <?php endif; ?>
+</div>
 
 <!-- Not (v332) -->
 <?php if (trim((string)($beyan['note'] ?? '')) !== ''): ?>
