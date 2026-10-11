@@ -464,7 +464,10 @@
   /* Modal */
   #modal { position:fixed; inset:0; background:rgba(10,35,52,.5); z-index:20; display:none; align-items:center; justify-content:center; padding:16px; }
   #modal.acik { display:flex; }
-  #modal .kutu { background:var(--kart); border-radius:20px; padding:20px; max-width:440px; width:100%; max-height:82vh; overflow-y:auto; }
+  #modal .modal-x { position:absolute; top:8px; right:8px; width:34px; height:34px; border-radius:50%; border:1px solid var(--cizgi, #d1d5db); background:var(--kart); color:inherit; font-size:16px; line-height:1; cursor:pointer; z-index:1; }
+  #modal .modal-x.gizli { display:none; }
+  #modal #modalOnayKutu h3 { padding-right:36px; }
+  #modal .kutu { position:relative; background:var(--kart); border-radius:20px; padding:20px; max-width:440px; width:100%; max-height:82vh; overflow-y:auto; }
   #modal h3 { color:var(--navy); font-size:16px; margin-bottom:12px; }
   .onay-satir { font-size:13px; padding:6px 0; border-bottom:1px solid var(--cizgi); display:flex; justify-content:space-between; gap:10px; }
 
@@ -1281,6 +1284,7 @@
 <!-- Modallar -->
 <div id="modal">
   <div class="kutu" id="modalOnayKutu">
+    <button type="button" class="modal-x gizli" id="btnModalX" aria-label="Kapat" title="Kapat">✕</button>
     <h3 id="modalBaslik">⚠️ Gönderim Onayı — CANLI SİSTEM</h3>
     <div id="modalIcerik"></div>
     <button class="btn btn-amber" id="btnOnay">Evet, Gönder</button>
@@ -1693,6 +1697,7 @@ function firmaFormAc(id) {
   renkSec(f ? (f.renk || 'teal') : 'teal');
   $('btnFirmaSil').classList.toggle('gizli', !f);
   delete $('modal').dataset.sonuc;
+  $('btnModalX').classList.add('gizli');
   $('modalOnayKutu').classList.add('gizli');
   $('modalFirmaKutu').classList.remove('gizli');
   $('modal').classList.add('acik');
@@ -4168,16 +4173,26 @@ function taslakOnayAc(t) {
   $('btnOnay').classList.remove('gizli');
   $('btnVazgec').textContent = 'Vazgeç';
   delete $('modal').dataset.sonuc;
+  $('btnModalX').classList.add('gizli');
   $('modalFirmaKutu').classList.add('gizli');
   $('modalOnayKutu').classList.remove('gizli');
   $('modal').classList.add('acik');
 }
 
 $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
-// Gönderim Sonucu penceresi: boşluğa (kutunun dışına) tıklamak Kapat/Gönderilenlere Git ile aynıdır.
-// CANLI onay penceresinde geçerli DEĞİL (yanlışlıkla kapanmasın).
+// Gönderim Sonucu penceresi: köşedeki ✕ ve boşluğa tıklamak YALNIZ kapatır (bulunulan ekranda kalınır);
+// Gönderilenlere git / Taslağa dön yalnız alttaki düğmeyle. CANLI onay penceresinde geçerli DEĞİL.
+function sonucKapat() {
+  $('modal').classList.remove('acik');
+  delete $('modal').dataset.sonuc;
+  $('btnModalX').classList.add('gizli');
+  $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
+  // gönderilen taslak sunucuda silindi — taslak listesi açıksa tazele
+  if (!$('ekranTaslaklar').classList.contains('gizli')) taslakEkraniAc();
+}
+$('btnModalX').onclick = sonucKapat;
 $('modal').addEventListener('click', (e) => {
-  if (e.target === $('modal') && $('modal').dataset.sonuc === '1') $('btnVazgec').click();
+  if (e.target === $('modal') && $('modal').dataset.sonuc === '1') sonucKapat();
 });
 
 $('btnOnay').onclick = async () => {
@@ -4281,7 +4296,8 @@ $('btnOnay').onclick = async () => {
     $('btnOnay').classList.add('gizli');
     // Başarılı gönderimde modal kapanınca DOĞRUDAN Gönderilenler'e geçilir — liste
     // orada her açılışta taze fetch ile çekildiği için son gönderim garanti görünür.
-    $('modal').dataset.sonuc = '1'; // boşluğa tıklayınca kapanma yalnız sonuç ekranında
+    $('modal').dataset.sonuc = '1'; // ✕ / boşluk tıklaması yalnız sonuç ekranında kapatır
+    $('btnModalX').classList.remove('gizli');
     $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : (j.taslakKorundu ? 'Taslağa Dön' : 'Kapat');
     $('btnVazgec').onclick = () => {
       $('modal').classList.remove('acik');
