@@ -232,7 +232,13 @@ foreach ($senaryolar as $ad => [$id, $pasifBekleniyor, $engelMetni]) {
     ok("[$ad] HTML etiket dengesi", empty($bozuk), implode(' | ', $bozuk));
 
     $pasif = buton_pasif($html);
-    ok("[$ad] Bildirim Yap butonu var", $pasif !== null, 'buton hic render edilmemis');
+    // Eşleştirme eksikse HKS Taslağı düğmesinin YERİNE "Eşleştir" düğmesi çıkar (v330).
+    $esl = strpos($html, 'id="hksEslestirBtn"') !== false;
+    ok("[$ad] Bildirim Yap / Eşleştir butonu var", $pasif !== null || $esl, 'buton hic render edilmemis');
+    if ($esl) {
+        ok("[$ad] eşleştir modunda HKS Taslağı düğmesi YOK", $pasif === null && strpos($html, 'id="hksOpenBtn"') === false,
+           'iki düğme birden — değişimli çalışmalı');
+    }
     if ($pasif !== null) {
         ok("[$ad] buton durumu " . ($pasifBekleniyor ? 'PASİF' : 'AKTİF'), $pasif === $pasifBekleniyor,
            $pasif ? 'pasif ama aktif olmaliydi' : 'AKTIF gorunuyor ama olmamali — kullanici tiklar, calismaz');
@@ -247,7 +253,7 @@ foreach ($senaryolar as $ad => [$id, $pasifBekleniyor, $engelMetni]) {
        substr_count($html, 'Hal Kayıt Bildirimi') === (strpos($html, 'hksOverlay') !== false ? 2 : 1),
        'ayni bilgi birden fazla yerde (kart + modal basligi disinda)');
     // Kart dort alani da gostermeli
-    ok("[$ad] kartta 4 alan var", substr_count($html, 'class="bk-hucre') === 4,
+    ok("[$ad] kartta 5 alan var", substr_count($html, 'class="bk-hucre') === 5,
        'kart alan sayisi: ' . substr_count($html, 'class="bk-hucre'));
 }
 
@@ -861,7 +867,7 @@ ok('[liste] 200 kayıt sınırının gerisindeki beyan erişilebilir',
    strpos($son_sayfa, 'beyan_view.php?id=' . $ID_BOS . '"') !== false);
 $eski_ara = render_liste(['bek_q' => 'SAYFA-0']);
 ok('[liste] bekleyen araması eski kaydı buluyor',
-   strpos($eski_ara, '>SAYFA-0</strong>') !== false && strpos($eski_ara, '>SAYFA-204</strong>') === false);
+   strpos($eski_ara, '>SAYFA-0</a>') !== false && strpos($eski_ara, '>SAYFA-204</a>') === false);
 ok('[liste] bekleyen sayfalama bağlantısı var',
    strpos($son_sayfa, 'bek_page=') !== false);
 ok('[liste] kapanan başlığı red ve iptali yüklenmiş diye adlandırmıyor',

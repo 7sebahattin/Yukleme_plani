@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v329');
+    define('APP_SURUM', 'v330');
 }
 
 // --- HTML kaçışı ---
@@ -3465,6 +3465,63 @@ function beyan_hks_secimleri_coz(array $post, array $existing, array $katalog): 
         $result[$tip . '_ad'] = $name !== '' ? $name : null;
     }
     return $result;
+}
+
+// HKS firma id → ad haritası (tek sorgu). Tablo yoksa/firma silinmişse eksik
+// kalır; çağıran id'yi ya da boşu gösterir. Liste + önizleme ortak kullanır.
+function beyan_hks_firma_adlari(array $ids): array {
+    $ids = array_values(array_unique(array_filter(array_map('strval', $ids), fn($x) => $x !== '')));
+    if (!$ids) return [];
+    $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    $out = [];
+    try {
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $st = db()->prepare("SELECT id, ad FROM `{$on}firmalar` WHERE id IN ($ph)");
+        $st->execute($ids);
+        foreach ($st->fetchAll() as $r) $out[(string)$r['id']] = (string)$r['ad'];
+    } catch (PDOException $e) {}
+    return $out;
+}
+
+// Eksik HKS eşleştirmesini (firma / ürün / ülke) beyan verisinden TAHMİN eder.
+// YALNIZ BOŞ alanları doldurur — kullanıcının seçtiği değer ASLA ezilmez.
+// Kaynaklar formdaki ön-doldurmayla aynıdır (bb_tahmin / bb_ulke_tahmin /
+// bb_son_firma); bulunamayan alan boş kalır, id UYDURULMAZ. Yazmaz — çağıran
+// sonucu kaydeder. Dönüş: değerler + `eksik` (hâlâ boş olanların etiketleri).
+function beyan_hks_otomatik_eslestir(array $beyan): array {
+    $katalog = bb_katalog();
+    $r = [
+        'firma_id' => trim((string)($beyan['hks_firma_id'] ?? '')),
+        'urun_id'  => trim((string)($beyan['hks_urun_id']  ?? '')),
+        'urun_ad'  => trim((string)($beyan['hks_urun_ad']  ?? '')),
+        'ulke_id'  => trim((string)($beyan['hks_ulke_id']  ?? '')),
+        'ulke_ad'  => trim((string)($beyan['hks_ulke_ad']  ?? '')),
+        'eksik'    => [], 'katalogYok' => !$katalog, 'degisen' => [],
+    ];
+    if ($katalog) {
+        if ($r['urun_id'] === '') {
+            $t = bb_tahmin('urun', (string)($beyan['product_name'] ?? ''), $katalog['urunler']);
+            if ($t['id'] !== '') { $r['urun_id'] = $t['id']; $r['urun_ad'] = $t['ad']; $r['degisen'][] = 'Ürün'; }
+        }
+        if ($r['ulke_id'] === '') {
+            $t = bb_ulke_tahmin(bb_ulke_adaylari($beyan, bb_bagli_plan($beyan)), $katalog['ulkeler']);
+            if ($t['id'] !== '') { $r['ulke_id'] = $t['id']; $r['ulke_ad'] = $t['ad']; $r['degisen'][] = 'Ülke'; }
+        }
+    }
+    if ($r['firma_id'] === '') {
+        $on = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+        $firmalar = [];
+        try { foreach (db()->query("SELECT id FROM `{$on}firmalar`") as $x) $firmalar[] = (string)$x['id']; }
+        catch (PDOException $e) {}
+        $son = bb_son_firma();
+        if ($son !== '' && in_array($son, $firmalar, true)) $r['firma_id'] = $son;
+        elseif (count($firmalar) === 1) $r['firma_id'] = $firmalar[0];
+        if ($r['firma_id'] !== '') $r['degisen'][] = 'Firma';
+    }
+    if ($r['firma_id'] === '') $r['eksik'][] = 'HKS firması';
+    if ($r['urun_id']  === '') $r['eksik'][] = 'HKS ürünü';
+    if ($r['ulke_id']  === '') $r['eksik'][] = 'ülke';
+    return $r;
 }
 
 // Eşleştirme tamam mı? Bildirim butonunun kapılarından biri.

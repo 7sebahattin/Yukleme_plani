@@ -392,6 +392,38 @@ case 'taslak_olustur': {
     ]);
 }
 
+// ── ESLESTIR: eksik HKS eşleştirmesini beyan verisinden doldurur ──────────
+// Yalnız BOŞ alanlar tahminle doldurulur (beyan_hks_otomatik_eslestir); kayıtlı
+// değer ezilmez. HKS'e hiçbir şey gönderilmez. Hâlâ eksik kalan varsa yanıt
+// söyler — kullanıcı beyanı düzenleyip elle seçer.
+case 'eslestir': {
+    csrf_check($govde['csrf'] ?? null);
+    $oto = beyan_hks_otomatik_eslestir($beyan);
+    if (!empty($oto['katalogYok']) && $oto['firma_id'] === '') {
+        bb_cikti(['hata' => 'HKS katalog listeleri henüz indirilmemiş. Hal Kayıt panelini açıp ' .
+                            'bir firma seçin ve "Listeleri Güncelle"ye basın.', 'katalogYok' => true], 409);
+    }
+    if ($oto['degisen']) {
+        $up = db()->prepare("UPDATE customs_declarations
+            SET hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
+                updated_by = ?, updated_at = NOW() WHERE id = ?");
+        $up->execute([$oto['firma_id'] ?: null, $oto['urun_id'] ?: null, $oto['urun_ad'] ?: null,
+                      $oto['ulke_id'] ?: null, $oto['ulke_ad'] ?: null,
+                      (int)($auth_user['id'] ?? 0), $beyan_id]);
+        audit_log_event('beyan_hks_eslestir', 'declarations', $beyan_id, null, [
+            'doldurulan' => $oto['degisen'], 'eksik' => $oto['eksik'],
+        ]);
+    }
+    bb_cikti([
+        'tamam' => true,
+        'tam'   => !$oto['eksik'],
+        'eksik' => $oto['eksik'],
+        'mesaj' => $oto['eksik']
+            ? 'Eşleştirilemeyen: ' . implode(', ', $oto['eksik']) . '. Beyanı düzenleyip elle seçin.'
+            : 'HKS eşleştirmesi tamamlandı.',
+    ]);
+}
+
 // ── TOPLU HAZIRLA: seçilen beyanların önizlemesi ─────────────────────────
 // Her satır kendi uygunluğunu ve fiyat önerisini taşır; uygun OLMAYANLAR da
 // döner (sebebiyle birlikte) — sessizce listeden düşürmek, kullanıcının neyi

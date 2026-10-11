@@ -6255,7 +6255,7 @@ body:not(.print-mode) .bv .beyan-section.bv-katla[data-bf] { padding: 12px 14px;
     body:not(.print-mode) .bv .beyan-section[data-bf] > .beyan-section-title { grid-template-columns: 36px minmax(0,1fr); column-gap: 12px; font-size: .84rem; }
     .bv .beyan-section-title::before, .bv .beyan-section-title::after { width: 36px; height: 36px; border-radius: 11px; }
     .bv .beyan-section-title::after { -webkit-mask-size: 18px 18px; mask-size: 18px 18px; }
-    .bv .bk-grid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+    .bv .bk-grid { grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
     .bv .bk-hucre { padding: 9px 11px; grid-template-columns: 32px minmax(0,1fr); }
     .bv .bk-hucre[data-ic]::before, .bv .bk-hucre[data-ic]::after { width: 32px; height: 32px; }
     .bv .bk-deger { font-size: 1rem; }
@@ -6284,6 +6284,126 @@ body:not(.print-mode) .bv .beyan-section.bv-katla[data-bf] { padding: 12px 14px;
 @media print {
     .bv .beyan-section[data-bf] { box-shadow: none !important; background: none !important; }
 }
+
+/* =========================================================
+   BEYAN ÖNİZLEME + LİSTE — v330
+   - Önizleme: bölüm başlık bandı bir ton koyu (kartlar birbirine karışmasın),
+     bildirim kartı 5 hücre (HKS Firma · Ülke · Ürün · Net KG · Plaka).
+   - Liste (beyanlar.php): blok başlığı simge karosu, 3B parti no rozeti,
+     plaka/HKS firma/ülke sütunları, kopyala düğmesi.
+   `.bl-*` / `.bn-parti` yalnız beyan listesinde kullanılır.
+   ========================================================= */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* — Önizleme: koyu başlık bandı — */
+body:not(.print-mode) .bv .beyan-section[data-bf]:not(.bv-katla) > .beyan-section-title {
+    margin: -14px -18px 2px;
+    padding: 11px 18px;
+    border-radius: 17px 17px 0 0;
+    background: linear-gradient(180deg, rgba(var(--bf-acc-rgb), .17), rgba(var(--bf-acc-rgb), .11));
+    border-bottom: 1px solid rgba(var(--bf-acc-rgb), .22);
+}
+html[data-theme="dark"] body:not(.print-mode) .bv .beyan-section[data-bf]:not(.bv-katla) > .beyan-section-title {
+    background: linear-gradient(180deg, rgba(var(--bf-acc-rgb), .26), rgba(var(--bf-acc-rgb), .16));
+    border-bottom-color: rgba(var(--bf-acc-rgb), .3);
+}
+@media (max-width: 767px) {
+    body:not(.print-mode) .bv .beyan-section[data-bf]:not(.bv-katla) > .beyan-section-title {
+        margin: -14px -14px 2px; padding: 10px 14px; border-radius: 15px 15px 0 0;
+    }
+    .bv .bk-grid > .bk-hucre:nth-child(5):nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (min-width: 600px) and (max-width: 899px) {
+    .bv .bk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* — Liste: blok kartı + başlık — */
+.beyan-blok { border-radius: 18px; box-shadow: 0 1px 2px rgba(30,27,75,.04), 0 12px 30px -18px rgba(76,64,160,.25); }
+.beyan-blok-head {
+    display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center;
+    gap: 4px 14px; border-bottom: 0; padding-bottom: 4px;
+}
+.bl-baslik-kap { min-width: 0; }
+.bl-baslik-kap .beyan-blok-baslik { font-size: 1.05rem; }
+.bl-baslik-kap .beyan-blok-not { display: block; margin-top: 2px; }
+.bl-ikon {
+    width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center;
+    font-size: 1.35rem; line-height: 1;
+    background: var(--icon-sheen), linear-gradient(145deg, var(--bl-a), var(--bl-b));
+    box-shadow: var(--icon-tile-shadow), 0 8px 18px -8px var(--bl-b);
+}
+.bl-ikon-acik   { --bl-a: #fdba74; --bl-b: #ea580c; }
+.bl-ikon-kapali { --bl-a: #6ee7b7; --bl-b: #059669; }
+.bl-bilgi {
+    font-size: .76rem; padding: 6px 12px; border-radius: 999px; max-width: 360px; line-height: 1.35;
+    border: 1px solid transparent;
+}
+.bl-bilgi-acik   { background: rgba(234,88,12,.09);  color: #c2410c; border-color: rgba(234,88,12,.2); }
+.bl-bilgi-kapali { background: rgba(5,150,105,.09);  color: #047857; border-color: rgba(5,150,105,.2); }
+html[data-theme="dark"] .bl-bilgi-acik   { color: #fdba74; background: rgba(234,88,12,.16); }
+html[data-theme="dark"] .bl-bilgi-kapali { color: #6ee7b7; background: rgba(5,150,105,.16); }
+@media (max-width: 767px) {
+    .beyan-blok-head { grid-template-columns: auto minmax(0,1fr); }
+    .bl-ikon { width: 38px; height: 38px; border-radius: 11px; font-size: 1.15rem; }
+    .bl-bilgi { grid-column: 1 / -1; max-width: none; border-radius: 12px; }
+}
+
+/* — Liste: arama kutusu (büyüteç simgeli) — */
+.beyan-blok .bl-arama input[type="search"],
+.beyan-blok .beyan-filter-form .bff-main input[type="search"] {
+    padding-left: 38px; min-height: 42px; border-radius: 12px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: 12px center;
+}
+.beyan-blok .bl-arama .btn, .beyan-blok .beyan-filter-form .bff-main > .btn:not(.btn-ghost) { min-height: 42px; border-radius: 12px; }
+
+/* — Liste: tablo başlığı + satır — */
+.beyan-blok .data-table thead th {
+    font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    background: rgba(99,88,190,.06); white-space: nowrap;
+}
+html[data-theme="dark"] .beyan-blok .data-table thead th { background: rgba(255,255,255,.05); }
+.beyan-blok .data-table td { vertical-align: middle; }
+
+/* — 3B parti no rozeti — */
+.bn-parti {
+    display: inline-block; min-width: 62px; text-align: center; padding: 5px 13px; border-radius: 11px;
+    font-weight: 800; font-size: .86rem; letter-spacing: .02em; color: #1d4ed8; text-decoration: none;
+    background: linear-gradient(180deg, #ffffff 0%, #dbeafe 100%);
+    border: 1px solid #bfdbfe;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 2px 0 #93c5fd, 0 6px 12px -4px rgba(37,99,235,.38);
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+a.bn-parti:hover, tr.row-link:hover .bn-parti { text-decoration: none; transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 3px 0 #93c5fd, 0 9px 14px -4px rgba(37,99,235,.45); }
+a.bn-parti:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 0 0 #93c5fd, 0 2px 6px -2px rgba(37,99,235,.4); }
+html[data-theme="dark"] .bn-parti {
+    color: #bfdbfe; background: linear-gradient(180deg, #2b3b63 0%, #1e2a4a 100%); border-color: #3b4f87;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 0 #121b33, 0 6px 12px -4px rgba(0,0,0,.6);
+}
+.beyan-card-parti .bn-parti { font-size: .95rem; }
+@media (prefers-reduced-motion: reduce) { .bn-parti { transition: none; } a.bn-parti:hover, tr.row-link:hover .bn-parti { transform: none; } }
+
+/* — Plaka / HKS sütunları — */
+.bl-plaka {
+    display: inline-block; padding: 2px 8px; border-radius: 6px; font-weight: 700; font-size: .8rem; letter-spacing: .04em;
+    background: #f1f5f9; border: 1px solid #cbd5e1; color: #0f172a; white-space: nowrap;
+}
+html[data-theme="dark"] .bl-plaka { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+.bl-eksik { color: #b45309; font-style: italic; font-size: .82rem; }
+html[data-theme="dark"] .bl-eksik { color: #fbbf24; }
+.bl-hks-satir { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: .82rem; }
+.bl-hks-oge b { color: var(--muted); font-weight: 600; font-size: .72rem; margin-right: 4px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* — Kopyala düğmesi (satır sonu) — */
+.bl-kop-col { width: 44px; text-align: center; }
+.bl-kop-form { margin: 0; }
+.bl-kop-btn {
+    width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 1rem; line-height: 1;
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+}
+.bl-kop-btn:hover, .bl-kop-btn:focus-visible { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+@media print { .bl-kop-col, .bl-bilgi { display: none !important; } }
 
 /* Beyan çalışma alanı — mevcut bf renkleri, maskeleri ve düğmeleri korunur. */
 .beyan-workspace { min-width: 0; }
