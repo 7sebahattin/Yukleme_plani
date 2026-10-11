@@ -100,6 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     foreach (array_keys($f) as $k) {
+        // Formdan kaldırılan eski başlığı sıradan düzenlemede silme.
+        if ($k === 'declaration_title' && !array_key_exists($k, $_POST)) continue;
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
@@ -108,6 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
               'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
+    }
+    foreach (beyan_suggest_fields() as $_tf => $_meta) {
+        $f[$_tf] = beyan_suggest_normalize($_tf, $f[$_tf]);
     }
 
     $checked = beyan_veri_dogrula($f);
@@ -226,7 +231,7 @@ render_header('Beyan Düzenle');
 render_flash();
 require __DIR__ . '/_beyan_form.php';
 ?>
-<details class="beyan-workspace-bag">
+<details class="beyan-workspace-bag" hidden>
     <summary>Hal Bildirim Durumu / Bağlantı düzeltme</summary>
 <?php if ($hks_bag_yetki): ?>
 <!-- Hal Bildirim Durumu — ANA FORMUN DIŞINDA kendi formu (iç içe form geçersiz).

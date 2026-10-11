@@ -109,6 +109,46 @@ function ok(condition, label) { if (!condition) throw Error(label); count++; con
         // Full batch source already exists: transfer remains explicit via conflict review.
         await page.locator('[data-beyan-tab=kaynak]').click();
         ok((await page.locator('#beyanParseCompare').textContent()).includes('two'), 'single transfer offers exact row source for review');
+        await page.setContent(`<meta name="csrf-token" content="test"><script id="suggestData" type="application/json">{"company_name":["GÜMRÜK A","GÜMRÜK B"],"company_address":["ADRES A","ADRES B"],"product_name":["DOMATES"]}</script>
+            <script id="beyanSuggestMeta" type="application/json">{"companies":{"GÜMRÜK A":"ADRES A","GÜMRÜK B":"ADRES B"},"products":{"DOMATES":{"urun_id":"7"}}}</script>
+            <input name="company_name" value="GÜMRÜK A" data-uppercase="tr" data-suggest="company_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><textarea name="company_address" data-uppercase="tr" data-suggest="company_address" data-suggest-endpoint="api_beyan_tanim_ekle.php">ADRES A</textarea>
+            <input name="product_name" data-uppercase="tr" data-suggest="product_name" data-suggest-endpoint="api_beyan_tanim_ekle.php"><select name="hks_urun_id"><option value="">Seçiniz</option><option value="7">DOMATES</option></select>`);
+        await page.evaluate(() => {
+            window.definitionRequests = [];
+            window.fetch = async (url, options) => {
+                const body = JSON.parse(options.body); window.definitionRequests.push({url, body});
+                return {json: async () => ({ok: true, name: body.name.toLocaleUpperCase('tr-TR'), address: body.company_address})};
+            };
+        });
+        await page.addScriptTag({content: app});
+        await page.locator('[name=company_name]').fill('gümrük b');
+        await page.locator('[name=company_name]').dispatchEvent('change');
+        ok(await page.locator('[name=company_address]').inputValue() === 'ADRES B', 'editing existing linked customs updates its address when customs changes');
+        await page.locator('[name=company_name]').fill('gümrük a');
+        await page.locator('[name=company_name]').dispatchEvent('change');
+        ok(await page.locator('[name=company_address]').inputValue() === 'ADRES A', 'customs selection fills linked address');
+        await page.locator('[name=company_address]').fill('elle adres');
+        await page.locator('[name=company_name]').fill('GÜMRÜK B');
+        await page.locator('[name=company_name]').dispatchEvent('change');
+        ok(await page.locator('[name=company_address]').inputValue() === 'ELLE ADRES', 'customs selection preserves manually entered uppercase address');
+        await page.locator('[name=company_name]').fill('yeni gümrük');
+        ok(await page.evaluate(() => window.definitionRequests.length) === 0, 'typing does not persist definition');
+        await page.locator('.ms-sug-add').filter({hasText: 'YENİ GÜMRÜK'}).dispatchEvent('mousedown');
+        await page.waitForTimeout(30);
+        const learned = await page.evaluate(() => window.definitionRequests[0]);
+        ok(learned.url === 'api_beyan_tanim_ekle.php' && learned.body.company_address === 'ELLE ADRES', 'explicit add uses declaration endpoint and links customs address');
+        await page.locator('[name=company_name]').fill('GÜMRÜK B');
+        await page.locator('[name=company_address]').fill('ADRES A');
+        await page.locator('[name=company_address]').locator('..').locator('.ms-sug-add').dispatchEvent('mousedown');
+        await page.waitForTimeout(30);
+        const linkedAddress = await page.evaluate(() => window.definitionRequests[1]);
+        ok(linkedAddress.body.field === 'company_address' && linkedAddress.body.name === 'ADRES A' && linkedAddress.body.company_name === 'GÜMRÜK B', 'existing address can explicitly link to a different customs');
+        await page.locator('[name=product_name]').fill('domates');
+        await page.locator('[name=product_name]').dispatchEvent('change');
+        ok(await page.locator('[name=hks_urun_id]').inputValue() === '7', 'canonical catalog product selects matching HKS ID');
+        await page.locator('[name=product_name]').fill('başka ürün');
+        await page.locator('[name=product_name]').dispatchEvent('change');
+        ok(await page.locator('[name=hks_urun_id]').inputValue() === '', 'manual product clears stale HKS ID');
         ok(errors.length === 0, 'no browser errors: ' + errors.join('; '));
         console.log(count + ' workspace/parser/bulk checks passed.');
     } finally { await browser.close(); }

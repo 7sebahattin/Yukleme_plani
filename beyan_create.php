@@ -53,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
+    foreach (beyan_suggest_fields() as $_tf => $_meta) {
+        $f[$_tf] = beyan_suggest_normalize($_tf, $f[$_tf]);
+    }
 
     $checked = beyan_veri_dogrula($f);
     $errors = $checked['errors'];

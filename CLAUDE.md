@@ -991,6 +991,14 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   gerektirir — bir metin parçası kendiliğinden ülkeye dönüşemez. ⑥ adayları
   için `bb_tahmin(..., $ogrenilenAra=false)` çağrılır: onlarca metin parçası
   için `hks_eslesme` sorgusu açılmaz.
+- **Beyan öğrenilebilir alanlar (v327):** oluşturma/düzenlemede öneri ve açık
+  `+ ekle` işlemi kullanılır; kayıt kaydetmek otomatik tanım oluşturmaz.
+  `beyan.write` ve CSRF ile ayrı beyan tanım havuzu, mevcut HKS ürün kataloğu
+  ve geçmiş kayıt önerileri kullanılır. Yeni DB şeması yoktur. Gümrük Adı /
+  Adresi mevcut `company_name` / `company_address` kolonlarında korunur;
+  ad seçimi bağlı adresi doldurur. Gümrük ve iletişim bölümü sürekli görünür.
+  Başlık/Beyan Tipi formdan kaldırılmıştır; eski değer sıradan düzenlemede
+  silinmez. Bağlantı düzeltme alanı kullanıcı kararıyla gizlidir.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
