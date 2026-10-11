@@ -117,6 +117,35 @@ const sunucu = http.createServer((q, s) => {
   ok('boş sonuç mesajı', (await sayfa.textContent('#kisiListe')).includes('uyan kişi yok'));
   await sayfa.fill('#kisiAra', '');
 
+  // Tür filtresi: Tümü / Firma (VKN) / Müstahsil (TC)
+  const say = () => sayfa.locator('.kisi-satir').count();
+  const aktifBtn = () => sayfa.evaluate(() => [...document.querySelectorAll('#kisiFiltre .kisi-fbtn.aktif')].map(b => b.textContent.trim()).join(','));
+  ok('filtre: 3 buton, varsayılan Tümü aktif', await sayfa.locator('#kisiFiltre .kisi-fbtn').count() === 3 && await aktifBtn() === 'Tümü');
+  await sayfa.click('#kisiFiltre [data-kisi-tur="firma"]');
+  ok('filtre Firma → 29 satır, hepsi VKN', await say() === 29 && await sayfa.evaluate(() => [...document.querySelectorAll('.kisi-rozet:not(.kisi-sifat)')].every(r => r.textContent === 'VKN')));
+  ok('filtre: Firma düğmesi aktif', await aktifBtn() === 'Firma');
+  await sayfa.click('#kisiFiltre [data-kisi-tur="mustahsil"]');
+  ok('filtre Müstahsil → 1 satır (TC)', await say() === 1 && (await sayfa.locator('.kisi-satir').textContent()).includes('TC'));
+  await sayfa.fill('#kisiAra', 'Ilgaz');
+  ok('Müstahsil + arama "Ilgaz" → boş mesaj', await say() === 0 && (await sayfa.textContent('#kisiListe')).includes('uyan kişi yok'));
+  await sayfa.click('#kisiFiltre [data-kisi-tur="firma"]');
+  ok('Firma + arama "Ilgaz" → 1 (AND)', await say() === 1);
+  await sayfa.fill('#kisiAra', 'İSMAİL');
+  ok('Firma + arama "İSMAİL" → 0', await say() === 0);
+  await sayfa.click('#kisiFiltre [data-kisi-tur=""]');
+  ok('Tümü + arama "İSMAİL" → 1', await say() === 1 && await aktifBtn() === 'Tümü');
+  await sayfa.fill('#kisiAra', '');
+  await sayfa.click('#kisiFiltre [data-kisi-tur="firma"]');
+  await sayfa.keyboard.press('Escape'); await bekle();
+  await sayfa.click('#btnKisiSec'); await bekle();
+  ok('yeniden açınca Tümü\'ne döner (30 satır)', await aktifBtn() === 'Tümü' && await say() === 30);
+  ok('filtre düğmeleri 390px tek satır', await (async () => {
+    await sayfa.setViewportSize({ width: 390, height: 780 }); await sayfa.waitForTimeout(150);
+    const r = await sayfa.evaluate(() => { const t = [...document.querySelectorAll('#kisiFiltre .kisi-fbtn')].map(b => b.getBoundingClientRect()); return { tek: t.every(x => Math.abs(x.top - t[0].top) < 1), sig: t.every(x => x.right <= innerWidth) }; });
+    await sayfa.setViewportSize({ width: 1280, height: 800 }); await sayfa.waitForTimeout(150);
+    return r.tek && r.sig;
+  })());
+
   // Masaüstü taşma
   ok('1280px yatay taşma yok', !(await tasma()));
 
