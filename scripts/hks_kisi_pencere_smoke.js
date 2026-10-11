@@ -103,8 +103,13 @@ const sunucu = http.createServer((q, s) => {
   ok('arama kutusuna odak', await sayfa.evaluate(() => document.activeElement.id) === 'kisiAra');
   ok('kisiler isteği gitti', istekler.some(i => i.action === 'kisiler'));
   ok('liste çizildi (30 satır)', await sayfa.locator('.kisi-satir').count() === 30);
-  ok('VKN/TC rozetleri', (await sayfa.locator('.kisi-satir').nth(0).textContent()).includes('TC') &&
-     (await sayfa.locator('.kisi-satir').nth(1).textContent()).includes('VKN'));
+  ok('VKN/TC rozetleri', (await sayfa.locator('.kisi-satir').nth(0).textContent()).includes('VKN') &&
+     (await sayfa.locator('.kisi-satir').nth(1).textContent()).includes('TC'));
+  { const adlar = await sayfa.locator('.kisi-satir .kisi-ad').allTextContents();
+    const dolu = adlar.slice(0, -1);
+    const kol = new Intl.Collator('tr', { sensitivity: 'base', numeric: true });
+    ok('liste A→Z sıralı (Türkçe), adsız en sonda', dolu.every((x, i) => i === 0 || kol.compare(dolu[i - 1], x) <= 0) &&
+       adlar[0].startsWith('Ilgaz') && /^3333333333$/.test(adlar[adlar.length - 1]), adlar.slice(0, 4).join(' | ')); }
 
   // Arama (Türkçe İ/ı)
   await sayfa.fill('#kisiAra', 'ILGAZ');
@@ -151,7 +156,7 @@ const sunucu = http.createServer((q, s) => {
 
   // Seç
   istekler.length = 0;
-  await sayfa.locator('.kisi-satir').nth(1).click(); await bekle();
+  await sayfa.locator('.kisi-satir').nth(0).click(); await bekle();   // A→Z: ilk satır Ilgaz (VKN)
   ok('satır tıklanınca pencere kapanır', !(await sayfa.isVisible('#kisiPencere')));
   ok('#oIkTc doldu', (await sayfa.inputValue('#oIkTc')) === '1234567890');
   ok('kayitli_kisi isteği gitti', istekler.some(i => i.action === 'kayitli_kisi' && i.govde.tcVkn === '1234567890'));
@@ -273,7 +278,7 @@ const sunucu = http.createServer((q, s) => {
   await sayfa.click('#btnKisiSec'); await bekle(); await sayfa.fill('#kisiAra', '');
 
   // Esc sırası
-  await sayfa.locator('.kisi-satir').first().locator('.kisi-ikon').first().click(); await bekle();
+  await sayfa.locator('.kisi-satir').filter({ hasText: 'İSMAİL' }).first().locator('.kisi-ikon').first().click(); await bekle();
   await sayfa.keyboard.press('Escape'); await bekle();
   ok('Esc önce formu kapatır, pencere açık', !(await sayfa.isVisible('#kisiForm')) && await sayfa.isVisible('#kisiPencere'));
   await sayfa.keyboard.press('Escape'); await bekle();

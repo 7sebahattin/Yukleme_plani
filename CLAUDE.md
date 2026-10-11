@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v324` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v325` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1299,6 +1299,7 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
   gitti; tek sürüm kaynağı sidebar'daki `APP_SURUM`. Geri ekleme (test ana menüde yazının YOKLUĞUNU denetler).
 - **v324 görünüm:** Gönderilenler başlığı (Geri + ikon + başlık/alt yazı + illüstrasyon + `#gonderilenAraSay` sayaç hapı), büyük arama kutusu (Ctrl/⌘+K odaklar), lacivert başlık bandı, hap rozetler (tür renkleri), ürün emojisi `gonderilenUrunEmoji()` (kartlarda `urunIkonu()` kalır), split görünümlü "Tekrar gönder" (TEK düğme, iki yarım aynı menüyü açar). Harici görsel/font YOK (inline SVG + emoji). Özgün indeks `i` kuralı aynen geçerli.
 - **Kişi Havuzu filtresi (v324):** `#kisiFiltre` Tümü/Firma(VKN)/Müstahsil(TC), `kisiVknMu(k)` tek ayrım kaynağı, arama ile AND, pencere her açılışta Tümü. Test: `hks_kisi_pencere_smoke.js`.
+- **Kişi listesi sırası (v325):** `kisiListeCiz()` listeyi İSTEMCİDE A→Z sıralar (`KISI_SIRA` = `Intl.Collator('tr')`, adsız kişi sonda); sunucunun 'son kullanılan' sırası kullanılmaz. Test: `hks_kisi_pencere_smoke.js`.
 - **Satın Alım birim varsayılanı (v324):** `miktarBirimKgVarsayilan()` — Satın Alım/Üreticiden Sevk Alım'da `#sMiktarBirim` BOŞSA listeden ADA göre "Kg" seçer (id uydurmaz; elle/taslak değeri ezmez). Test: `node scripts/hks_kg_varsayilan_smoke.js`.
 - **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
   değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
