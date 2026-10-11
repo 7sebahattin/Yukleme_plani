@@ -3413,11 +3413,14 @@ function kisiFormEtiket() {
     ? 'Ad / Ünvan <span class="kisi-not">(opsiyonel — yalnız takip için)</span>'
     : 'Ad / Soyad <span style="color:var(--hata-tx)">*</span>';
 }
+const KISI_SIRA = new Intl.Collator('tr', { sensitivity: 'base', numeric: true });
 function kisiListeCiz() {
   const kap = $('kisiListe');
   const q = trNorm($('kisiAra').value.trim());
   const qRakam = q.replace(/\D/g, '');
   const liste = kisiHavuz.filter(k => (!kisiTurFiltre || (kisiTurFiltre === 'firma') === kisiVknMu(k)) && (!q || trNorm(k.ad).includes(q) || (qRakam && String(k.tc || '').includes(qRakam))));
+  // A→Z (Türkçe sıralama); adı boş olanlar sonda. Sunucunun 'son kullanılan' sırası kullanılmaz.
+  liste.sort((a, b) => (!a.ad - !b.ad) || KISI_SIRA.compare(String(a.ad || ''), String(b.ad || '')) || (a.id - b.id));
   if (!liste.length) {
     kap.replaceChildren(kisiEl('div', 'kisi-durum',
       kisiHavuz.length ? 'Aramaya uyan kişi yok.' : 'Havuzda henüz kişi yok — ➕ Yeni Ekle'));
