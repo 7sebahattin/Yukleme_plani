@@ -995,14 +995,15 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
   alanı açma** — aynı `name` ile iki alan POST'ta çakışır.
-  Bölüm **WhatsApp Metni'nin hemen altındadır** (iki formda da aynı sıra).
+  Bölüm geniş ekranda sağ panelde, küçük ekranda sekmelerin altındadır.
+  İki form `_beyan_form.php` ortak şablonunu kullanır.
 - **Yeni Beyan görsel katmanı** (`form.bf` — style.css "YENİ BEYAN FORMU" bloğu):
-  yalnız `beyan_create.php`'ye uygulanır; Düzenle formu ve `beyan_view` eski
-  görünümde kalır. Kancalar: bölümde `data-bf="wa|hks|temel|urun|lojistik|durum"`
+  oluşturma ve düzenleme formuna uygulanır; `beyan_view` ayrı görünümünü korur.
+  Kancalar: bölümde `data-bf="wa|hks|temel|urun|lojistik|durum"`
   (renk), başlıkta ve her `.form-group`'ta `data-ic="<simge>"` (CSS mask — rengi
   temadan gelir; simge adları blok sonundaki listede). Başlık emojisi
   `.bf-emoji` içinde durur ve bu formda gizlenir — `beyan_hks_form_bolumu()`
-  ortak olduğu için Düzenle'de emoji aynen görünür. **Yeni alan eklerken
+  ortak olduğu için form dışında emoji yedeği korunur. **Yeni alan eklerken
   `.form-group`'a `data-ic` ver**, yoksa sol karo çizilmez (alan yine çalışır).
   Metni Ayrıştır etiketi JS'te sabit değildir, butonun kendi metninden geri yazılır.
 - **Yazarak aranabilir select** (`data-aramali="ipucu"` — app.js): Hal Kayıt
@@ -1073,14 +1074,14 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   metin kutusunda Enter silme başlatırdı.
 - **Listede silme YOK** — bilinçli; silme detay ve düzenle ekranlarından yapılır.
 - **Beyan listesi İKİ BÖLÜM** (`beyanlar.php`, Sprint Beyan-Liste-02): **ÜSTTE
-  "⏳ Yüklenmeyen Beyanlar"** (`.beyan-blok-acik`), **ALTTA "✅ Yüklenen
+  "⏳ İşlem Bekleyen Beyanlar"** (`.beyan-blok-acik`), **ALTTA "✅ Kapanan
   Beyanlar" + filtre şeridi** (`.beyan-blok-kapanmis`). Bölümü DURUM belirler:
   `beyan_kapali_durumlar()` (`yuklendi`/`iptal`/`red`) alta, geri kalan HER
   durum üste. Yeni bir durum eklersen o listeyi gözden geçir — listede
   olmayan durum ÜST bölüme düşer (güvenli varsayılan: gözden kaçmaz).
-  - **Üst bölüm filtreden ve sayfalamadan BAĞIMSIZ.** Orası işlem bekleyenlerin
-    TAM listesi; bir arama ya da sayfa geçişi onu eksiltirse kullanıcı yapılacak
-    işi göremez. Filtreye bağlama.
+  - **Bölümlerin araması ve sayfalaması bağımsızdır.** Üst bölüm `bek_q` /
+    `bek_page`, alt bölüm `q` / `page` kullanır. Diğer bölümün parametreleri
+    geçişlerde korunur; eski bekleyen kayıtlar da aranabilir.
   - **Filtre + sayfalama ALT bölümün içinde yaşar** (`$w_kapali` / `$p_kapali`).
     Durum pilleri yalnız **kapalı** durumları listeler; bekleyen bir durum pili
     seçilse arşiv sebepsiz boş görünürdü. Eski yer imi (`?status=taslak`)
@@ -1094,8 +1095,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
     işaretlenmesin); mobil kart eşleri değere göre eşitlenir.
   - Uygunluk kapısı (`$bildirim_uygun`) ve toplu bildirim **bölümden bağımsız** —
     `$rows` iki bölümün birleşimidir, aktif bağ sorgusu tek sorguda kalır.
-  - Üst bölümün emniyet supabı `BEYAN_BEKLEYEN_LIMIT` (200); aşılırsa ekrana not
-    düşer. Alt bölüm `BEYAN_PER_PAGE` ile sayfalanır.
+  - İki bölüm de `BEYAN_PER_PAGE` (50) ile sayfalanır; 200 kayıt kesme sınırı yoktur.
 - **Filtre şeridi tek satır** (`beyanlar.php`): `[arama] [Ara] [▾ Filtre] [Temizle]`.
   Detay paneli **her genişlikte katlanır** — eskiden `.beyan-filter-toggle`
   yalnız `<768px`'de görünürdü, masaüstünde panel kalıcı açık kalıyor ve on
@@ -1123,11 +1123,10 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
     taşıyordu; dokuz durumla bu 230+ gizli alan demekti. **`status` için AYRI
     bir hidden alan AÇMA** — aynı `name` iki yerden gelirse hangisinin
     kazandığı belirsizdir; değeri butonun kendi `value`'su taşır.
-  - **`status_only` KULLANMA.** Şerit `beyan_edit.php`'nin **tam güncelleme**
-    dalına POST eder; oradaki doğrulama yalnız `beyan_statuses()` anahtarlarına
-    bakar, dolayısıyla doğrudan geçiş kabul edilir. `status_only` dalında
-    `beyan_next_statuses()` kapısı var (liste ekranının "Yüklendi" butonu onu
-    kullanır) ve doğrudan geçişleri reddeder. O dala kapı EKLEME.
+  - **Şerit `status_only=1` kullanır.** Sunucu güncel satırı kilitleyip yalnız
+    durum/not/analiz tarihlerini değiştirir; gönderilmeyen alanları korur.
+    Serbest geçişler sürer. Tam düzenleme `edit_token` ile eşzamanlı değişikliği
+    reddeder. Gizli tam satır kopyasını yeniden gönderme.
   - Görsel sıra `beyan_durum_akis_sirasi()` (helpers.php): ana akış soldan sağa,
     **red/iptal en sonda** (`beyan_statuses()` sırası değil — orada `iptal`
     akışın ortasında). Listede olmayan durum SONA eklenir, kaybolmaz.

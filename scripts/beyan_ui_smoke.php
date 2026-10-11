@@ -138,7 +138,7 @@ $ID_NETKG   = beyan_ekle($TAM + [] ); db()->exec("UPDATE customs_declarations SE
 // Sayfayı require'ları sıyırarak çalıştır (hesap_ui_smoke.php ile aynı desen):
 // config/db.php ve config/auth.php burada zaten stub'lanmış durumda, yeniden
 // yüklenirlerse db()/can() çakışır.
-function render_beyan(int $id): string {
+function render_beyan(int $id, array $get = []): string {
     global $ROOT;
     static $tmp = null;
     if ($tmp === null) {
@@ -148,7 +148,7 @@ function render_beyan(int $id): string {
         $tmp = sys_get_temp_dir() . '/beyan_view_smoke.php';
         file_put_contents($tmp, $src);
     }
-    $_GET = ['id' => (string)$id];
+    $_GET = array_merge($get, ['id' => (string)$id]);
     ob_start();
     try { include $tmp; }
     catch (Throwable $e) { ob_end_clean(); return '__HATA__' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(); }
@@ -161,6 +161,7 @@ function render_beyan(int $id): string {
 // Sayfa iki kez include edildigi icin ust seviye bildirimler korunur.
 function render_liste(array $get): string {
     global $ROOT;
+    global $q, $f_status, $f_urun, $f_marka, $f_depo, $tarih_bas, $tarih_bit, $page, $bek_q, $bek_page;
     static $tmp = null;
     if ($tmp === null) {
         $src = (string)file_get_contents($ROOT . '/beyanlar.php');
@@ -169,8 +170,6 @@ function render_liste(array $get): string {
         // const + fonksiyonlar tek blokta: ikinci include'da yeniden tanimlanmasin.
         $src = str_replace('const BEYAN_PER_PAGE = 50;',
                            "defined('BEYAN_PER_PAGE') || define('BEYAN_PER_PAGE', 50);", $src);
-        $src = str_replace('const BEYAN_BEKLEYEN_LIMIT = 200;',
-                           "defined('BEYAN_BEKLEYEN_LIMIT') || define('BEYAN_BEKLEYEN_LIMIT', 200);", $src);
         // Gecici kopya /tmp'te durdugu icin __DIR__ proje kokunu gostermez;
         // partial include'lari gercek koke sabitle.
         $src = str_replace("__DIR__ . '/_beyan_liste.php'",
@@ -197,7 +196,7 @@ function ok(string $ad, bool $c, string $ipucu = ''): void {
 }
 // "Bildirim Yap" butonu pasif mi? (aktif = disabled özniteliği YOK)
 function buton_pasif(string $html): ?bool {
-    if (!preg_match('/<button[^>]*>\s*🏛 Bildirim Yap\s*<\/button>/u', $html, $m)) return null;
+    if (!preg_match('/<button[^>]*>\s*🏛 HKS Taslağı Oluştur\s*<\/button>/u', $html, $m)) return null;
     return strpos($m[0], 'disabled') !== false;
 }
 function etiket_dengesi(string $html): array {
@@ -309,11 +308,13 @@ foreach (['beyan_acildi' => $ID_TAM, 'yuklendi' => $ID_TAM, 'iptal' => $ID_TAM] 
        preg_match('/<input type="hidden" name="status"/', $hd) !== 1,
        'hidden status alani butonun value\'su ile cakisir');
 
-    // Hizli serit TAM guncelleme dalina gider (status_only DEGIL): oradaki
-    // beyan_next_statuses kapisi dogrudan gecisleri reddederdi.
-    ok("[durum:$dur] serit status_only kullanmiyor",
-       preg_match('/class="beyan-durum-form".*?name="status_only"/s', $hd) !== 1,
-       'status_only ile gonderim beyan_next_statuses kapisina takilir');
+    // Durum işlemi diğer alanların eski kopyasını yeniden yazmamalı.
+    preg_match('/<form[^>]*class="beyan-durum-form".*?<\/form>/s', $hd, $status_form);
+    ok("[durum:$dur] serit yalnız durum işlemini kullanıyor",
+       strpos($status_form[0] ?? '', 'name="status_only"') !== false
+       && strpos($status_form[0] ?? '', 'name="vehicle_plate"') === false
+       && strpos($status_form[0] ?? '', 'name="net_kg"') === false,
+       'durum formu eski alan kopyalarını yazabilir');
 }
 // Terminal durumda da serit cizilmeli: geri donus yolu olsun.
 db()->exec("UPDATE customs_declarations SET status='yuklendi' WHERE id=$ID_TAM");
@@ -347,13 +348,10 @@ db()->exec("UPDATE customs_declarations SET status='beyan_acildi' WHERE id=$ID_T
 // beyan_edit.php'nin TAM guncelleme dali dogrudan gecisi kabul etmeli:
 // serit oraya POST eder, next_statuses kapisi YALNIZ status_only dalinda olmali.
 $edit_src = (string)file_get_contents($ROOT . '/beyan_edit.php');
-$so_dal   = strpos($edit_src, "if (!empty(\$_POST['status_only']))");
-$tam_dal  = strpos($edit_src, '$valid_statuses = array_keys(beyan_statuses());', $so_dal ?: 0);
-$tam_dal2 = strpos($edit_src, '$valid_statuses = array_keys(beyan_statuses());', $tam_dal + 10);
-ok('[durum] tam guncelleme dalinda next_statuses kapisi yok',
-   $tam_dal2 !== false
-   && strpos(substr($edit_src, $tam_dal2, 400), 'beyan_next_statuses') === false,
-   'tam dala next_statuses kapisi eklenmis — dogrudan gecisler sessizce reddedilir');
+ok('[durum] geçiş doğrulaması ortak durum kümesini kullanıyor',
+   strpos($edit_src, 'beyan_statuses()') !== false
+   && strpos($edit_src, "\$_POST['status_only']") !== false,
+   'durum işlemi bulunamadı');
 
 // Yetkisiz kullanıcı: buton HİÇ olmamalı
 $PERMS = ['beyan.read'];
@@ -370,6 +368,7 @@ function render_form(int $id): string {
         $src = (string)file_get_contents($ROOT . '/beyan_edit.php');
         $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
         $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
+        $src = str_replace("__DIR__ . '/_beyan_form.php'", var_export($ROOT . '/_beyan_form.php', true), $src);
         $tmp = sys_get_temp_dir() . '/beyan_edit_smoke.php';
         file_put_contents($tmp, $src);
     }
@@ -394,7 +393,7 @@ if (strncmp($form_t, '__HATA__', 8) === 0) {
     ok('[form:terminal] render edildi', false, substr($form_t, 8));
 } else {
     $sel = '';
-    if (preg_match('/<select name="status".*?<\/select>/s', $form_t, $ms)) $sel = $ms[0];
+    if (preg_match('/<select[^>]*name="status".*?<\/select>/s', $form_t, $ms)) $sel = $ms[0];
     $eksik = [];
     foreach (array_keys(beyan_statuses()) as $d)
         if (strpos($sel, 'value="' . $d . '"') === false) $eksik[] = $d;
@@ -437,12 +436,13 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        preg_match('/name="vehicle_plate"[^>]*data-nospace/s', $form) === 1,
        'data-nospace yok — "34 ABC 123" boslukla kaydedilir');
 
-    // Bölüm sırası: WhatsApp Metni → Hal Bildirim Bilgileri → Temel Bilgiler
+    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS sağ panelde.
     $iw = mb_strpos($form, 'WhatsApp Metni');
     $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
-    $it = mb_strpos($form, 'Temel Bilgiler');
-    ok('[form] Hal Bildirim bölümü WhatsApp metninin ALTINDA',
-       $iw !== false && $ih !== false && $it !== false && $iw < $ih && $ih < $it,
+    $it = mb_strpos($form, 'Beyan / Sevkiyat');
+    ok('[form] beyan bilgileri kaynak metinden önce, HKS yan panelde',
+       $iw !== false && $ih !== false && $it !== false && $it < $iw
+       && strpos($form, 'class="beyan-workspace-hks"') !== false,
        "konumlar: whatsapp=$iw hks=$ih temel=$it");
 
     // Uzun katalog listesi YAZARAK ARANABİLİR olmalı; kısa liste olmamalı.
@@ -620,7 +620,7 @@ foreach (['beyan_edit.php', 'beyan_view.php', 'beyanlar.php'] as $ff) {
        preg_match('/<a[^>]+href="beyan_delete\.php/', $fs) !== 1,
        'GET ile silme sessizce basarisiz olur — POST kullan');
 }
-$ed = file_get_contents(dirname(__DIR__) . '/beyan_edit.php');
+$ed = file_get_contents(dirname(__DIR__) . '/beyan_edit.php') . file_get_contents(dirname(__DIR__) . '/_beyan_form.php');
 ok('[duzenle] Sil butonu POST ediyor',
    preg_match('/formaction="beyan_delete\.php"[^>]*formmethod="post"/s', $ed) === 1,
    'Sil hala POST etmiyor');
@@ -843,6 +843,31 @@ ok('[bag] api: taslak_kaydet eskiTaslakId ile bagi tasiyor',
 ok('[bag] api: taslak silme bagi silindi yapiyor (iptal degil)',
    preg_match("/taslak_isaretle\(\(string\)\(\\\$g\['id'\] \?\? ''\), 'silindi'/", $api) === 1);
 ok('[bag] SPA: iki kayit yolu da eskiTaslakId gonderiyor', substr_count($spa, 'eskiTaslakId') >= 2);
+
+// Büyük bekleyen listesi: ilk kayda sayfa ve arama yoluyla erişilebilmeli.
+for ($i = 0; $i < 205; $i++) beyan_ekle(['party_no' => 'SAYFA-' . $i]);
+$son_sayfa = render_liste(['bek_page' => '999']);
+ok('[liste] 200 kayıt sınırının gerisindeki beyan erişilebilir',
+   strpos($son_sayfa, 'beyan_view.php?id=' . $ID_BOS . '"') !== false);
+$eski_ara = render_liste(['bek_q' => 'SAYFA-0']);
+ok('[liste] bekleyen araması eski kaydı buluyor',
+   strpos($eski_ara, '>SAYFA-0</strong>') !== false && strpos($eski_ara, '>SAYFA-204</strong>') === false);
+ok('[liste] bekleyen sayfalama bağlantısı var',
+   strpos($son_sayfa, 'bek_page=') !== false);
+ok('[liste] kapanan başlığı red ve iptali yüklenmiş diye adlandırmıyor',
+   strpos($son_sayfa, 'Kapanan Beyanlar') !== false);
+
+// Plan araması son 90 gün/200 satırla sınırlanmamalı.
+db()->exec("INSERT INTO loading_records (tarih,firma,parti_no,urun,durum) VALUES ('2020-01-01','ESKİ PLAN','ESKI-PLAN-1','KAYISI','yeni')");
+for ($i = 0; $i < 55; $i++) db()->exec("INSERT INTO loading_records (tarih,firma,parti_no,urun,durum) VALUES ('2026-07-01','PLAN','YENI-$i','KAYISI','yeni')");
+$eski_plan = render_beyan($ID_BOS, ['match_q' => 'ESKI-PLAN-1', 'match_open' => '1']);
+ok('[eşleştirme] eski plan tüm tarihlerde bulunuyor',
+   strpos($eski_plan, 'data-parti="ESKI-PLAN-1"') !== false && strpos($eski_plan, 'data-parti="YENI-54"') === false);
+db()->exec("UPDATE customs_declarations SET status='yuklendi' WHERE id=$ID_BOS");
+$yuklu_bagsiz = render_beyan($ID_BOS);
+ok('[eşleştirme] yüklendi işaretli bağlantısız beyan eşleştirilebilir', strpos($yuklu_bagsiz, 'id="beyanMatchOpenBtn"') !== false);
+$PERMS = ['beyan.read', 'beyan.write'];
+ok('[eşleştirme] plan düzenleme yetkisi olmadan eşleştirme açılmaz', strpos(render_beyan($ID_BOS), 'id="beyanMatchOpenBtn"') === false);
 
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

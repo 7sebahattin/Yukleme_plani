@@ -14,7 +14,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
-if (!can_beyan('write')) {
+if (!can_beyan('write') || !(can('records.write') || is_admin())) {
     forbidden('Eşleştirme için yetkiniz yok.');
 }
 
@@ -72,13 +72,7 @@ try {
         exit;
     }
 
-    // Beyan zaten yüklendi / bir yüklemeye bağlı mı?
-    if ((string)($beyan['status'] ?? '') === 'yuklendi') {
-        $pdo->rollBack();
-        set_flash('error', 'Bu beyan zaten yüklendi olarak işaretlenmiş.');
-        header('Location: ' . $redirect);
-        exit;
-    }
+    // Yüklendi işaretlenmiş fakat bağlantısız beyan sonradan eşleştirilebilir.
     if (!empty($beyan['loading_record_id']) && (int)$beyan['loading_record_id'] !== $loading_id) {
         $pdo->rollBack();
         set_flash('error', 'Bu beyan zaten başka bir yükleme planıyla eşleştirilmiş.');
@@ -87,8 +81,10 @@ try {
     }
 
     // 2) Yükleme planını kilitle
-    $ls = $pdo->prepare("SELECT * FROM loading_records WHERE id = ? AND type = 'yukleme' FOR UPDATE");
-    $ls->execute([$loading_id]);
+    [$match_depo_sql, $match_depo_params] = depo_sql_records_in('loading_records');
+    $ls = $pdo->prepare("SELECT * FROM loading_records WHERE id = ? AND type = 'yukleme'"
+        . ($match_depo_sql !== '' ? ' AND ' . $match_depo_sql : '') . ' FOR UPDATE');
+    $ls->execute(array_merge([$loading_id], $match_depo_params));
     $rec = $ls->fetch();
     if (!$rec) {
         $pdo->rollBack();

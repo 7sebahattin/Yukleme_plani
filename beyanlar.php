@@ -13,7 +13,7 @@ function valid_date_beyan(string $d): bool {
 }
 
 function beyan_url(array $override = []): string {
-    global $q, $f_status, $f_urun, $f_marka, $f_depo, $tarih_bas, $tarih_bit, $page;
+    global $q, $f_status, $f_urun, $f_marka, $f_depo, $tarih_bas, $tarih_bit, $page, $bek_q, $bek_page;
     $p = [
         'q'         => $q,
         'status'    => $f_status,
@@ -23,6 +23,8 @@ function beyan_url(array $override = []): string {
         'tarih_bas' => $tarih_bas,
         'tarih_bit' => $tarih_bit,
         'page'      => $page > 1 ? (string)$page : '',
+        'bek_q'     => $bek_q,
+        'bek_page'  => $bek_page > 1 ? (string)$bek_page : '',
     ];
     foreach ($override as $k => $v) $p[$k] = $v;
     $p = array_filter($p, fn($v) => $v !== '' && $v !== null);
@@ -30,8 +32,6 @@ function beyan_url(array $override = []): string {
 }
 
 const BEYAN_PER_PAGE = 50;
-// Üst (bekleyen) bölüm sayfalanmaz; filtre kazasına karşı üst sınır.
-const BEYAN_BEKLEYEN_LIMIT = 200;
 
 $q         = trim((string)($_GET['q']         ?? ''));
 $f_status  = trim((string)($_GET['status']    ?? ''));
@@ -41,6 +41,8 @@ $f_depo    = trim((string)($_GET['depo']      ?? ''));
 $tarih_bas = trim((string)($_GET['tarih_bas'] ?? ''));
 $tarih_bit = trim((string)($_GET['tarih_bit'] ?? ''));
 $page      = max(1, (int)($_GET['page'] ?? 1));
+$bek_q     = trim((string)($_GET['bek_q'] ?? ''));
+$bek_page  = max(1, (int)($_GET['bek_page'] ?? 1));
 
 // Durum filtresi ALT (arşiv) bölümünün özelliğidir; o bölümde yalnız kapalı
 // durumlar bulunur. Bekleyen bir durum gelirse (eski yer imi) filtre olarak
@@ -55,10 +57,12 @@ $where  = "WHERE deleted_at IS NULL";
 $params = [];
 
 if ($q !== '') {
-    $where .= " AND (party_no LIKE :q OR product_name LIKE :q OR product_variety LIKE :q
-                OR buyer_name LIKE :q OR brand LIKE :q OR exit_depot LIKE :q
-                OR company_name LIKE :q OR contact_person LIKE :q)";
-    $params[':q'] = '%' . $q . '%';
+    $search_parts = [];
+    foreach (['party_no','product_name','product_variety','buyer_name','brand','exit_depot','company_name','contact_person'] as $si => $sc) {
+        $search_parts[] = "$sc LIKE :q$si";
+        $params[':q' . $si] = '%' . $q . '%';
+    }
+    $where .= ' AND (' . implode(' OR ', $search_parts) . ')';
 }
 if ($f_status !== '') {
     $where .= " AND status = :status";
@@ -98,23 +102,35 @@ $kapali_ph       = implode(',', array_map(fn($i) => ':kd' . $i, array_keys($kapa
 $kapali_params   = [];
 foreach ($kapali_durumlar as $i => $kd) $kapali_params[':kd' . $i] = $kd;
 
-// ÜST bölüm — yalnız silinmemiş + kapanmamış. Filtre uygulanmaz.
+// Bekleyenlerin kendi araması/sayfası var; arşiv filtreleri burayı etkilemez.
 $st_bek_c = db()->prepare("SELECT COUNT(*) FROM customs_declarations
                            WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)");
 $st_bek_c->execute($kapali_params);
 $bekleyen_total = (int)$st_bek_c->fetchColumn();
 
-// Üst sınır yalnız bir emniyet supabı: normalde bekleyen sayısı bunun altında.
-$st_bek = db()->prepare("SELECT * FROM customs_declarations
-                         WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)
-                         ORDER BY id DESC LIMIT :lim");
-foreach ($kapali_params as $k => $v) $st_bek->bindValue($k, $v);
-$st_bek->bindValue(':lim', BEYAN_BEKLEYEN_LIMIT, PDO::PARAM_INT);
+$bek_where = "WHERE deleted_at IS NULL AND status NOT IN ($kapali_ph)";
+$bek_params = $kapali_params;
+if ($bek_q !== '') {
+    $bek_parts = [];
+    foreach (['party_no','product_name','product_variety','buyer_name','brand','exit_depot','vehicle_plate'] as $si => $sc) {
+        $bek_parts[] = "$sc LIKE :bq$si";
+        $bek_params[':bq' . $si] = '%' . $bek_q . '%';
+    }
+    $bek_where .= ' AND (' . implode(' OR ', $bek_parts) . ')';
+}
+$bek_count_st = db()->prepare("SELECT COUNT(*) FROM customs_declarations $bek_where");
+$bek_count_st->execute($bek_params);
+$bek_result_total = (int)$bek_count_st->fetchColumn();
+$bek_total_pages = max(1, (int)ceil($bek_result_total / BEYAN_PER_PAGE));
+$bek_page = min($bek_page, $bek_total_pages);
+$st_bek = db()->prepare("SELECT * FROM customs_declarations $bek_where ORDER BY id DESC LIMIT :lim OFFSET :off");
+foreach ($bek_params as $k => $v) $st_bek->bindValue($k, $v);
+$st_bek->bindValue(':lim', BEYAN_PER_PAGE, PDO::PARAM_INT);
+$st_bek->bindValue(':off', ($bek_page - 1) * BEYAN_PER_PAGE, PDO::PARAM_INT);
 $st_bek->execute();
 $bekleyen_rows   = $st_bek->fetchAll();
-$bekleyen_kirpik = $bekleyen_total > count($bekleyen_rows);
 
-// ALT bölüm — yüklenen/kapanan arşiv. Filtre ve sayfalama BURADA yaşar.
+// ALT bölüm — kapanan arşiv; kendi filtreleri ve sayfalaması vardır.
 $w_kapali = $where . " AND status IN ($kapali_ph)";
 $p_kapali = $params + $kapali_params;
 
@@ -132,7 +148,7 @@ $st->bindValue(':off', $offset,        PDO::PARAM_INT);
 $st->execute();
 $kapali_rows = $st->fetchAll();
 
-$total = $bekleyen_total + $kapali_total;
+$total = (int)db()->query("SELECT COUNT(*) FROM customs_declarations WHERE deleted_at IS NULL")->fetchColumn();
 // Toplu bildirim uygunluk sorgusu ve seçim JS'i İKİ bölümün satırlarını
 // birlikte görür — uygunluk kapısı bölümden bağımsızdır.
 $rows = array_merge($bekleyen_rows, $kapali_rows);
@@ -203,15 +219,30 @@ render_flash();
      bir iş listesidir, arama ya da sayfa geçişi onu eksiltmez. -->
 <section class="beyan-blok beyan-blok-acik">
     <div class="beyan-blok-head">
-        <h2 class="beyan-blok-baslik">⏳ Yüklenmeyen Beyanlar
+        <h2 class="beyan-blok-baslik">⏳ İşlem Bekleyen Beyanlar
             <span class="beyan-blok-sayi"><?= $bekleyen_total ?></span>
         </h2>
-        <span class="muted beyan-blok-not">İşlem bekliyor — yüklendi olarak işaretlenene kadar burada kalır</span>
+        <span class="muted beyan-blok-not">Açık işler · <?= $bek_result_total ?> sonuç · Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?></span>
     </div>
+
+    <form method="get" class="beyan-pending-search">
+        <?php foreach (['q' => $q, 'status' => $f_status, 'urun' => $f_urun, 'marka' => $f_marka, 'depo' => $f_depo,
+                        'tarih_bas' => $tarih_bas, 'tarih_bit' => $tarih_bit, 'page' => $page > 1 ? (string)$page : ''] as $fk => $fv):
+            if ($fv === '') continue; ?>
+        <input type="hidden" name="<?= h($fk) ?>" value="<?= h($fv) ?>">
+        <?php endforeach; ?>
+        <label class="form-label" for="bekleyenSearch">Bekleyenlerde ara</label>
+        <div class="bff-main" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <input type="search" id="bekleyenSearch" name="bek_q" class="form-control" style="flex:1;min-width:160px"
+                   value="<?= h($bek_q) ?>" placeholder="Parti no, ürün, alıcı, plaka…">
+            <button class="btn">Ara</button>
+            <?php if ($bek_q !== ''): ?><a class="btn btn-ghost" href="<?= h(beyan_url(['bek_q' => '', 'bek_page' => ''])) ?>">Temizle</a><?php endif; ?>
+        </div>
+    </form>
 
     <?php if (empty($bekleyen_rows)): ?>
     <div class="beyan-blok-bos">
-        ✅ İşlem bekleyen beyan yok — hepsi yüklendi ya da kapandı.
+        <?= $bek_q !== '' ? 'Aramanızla eşleşen bekleyen beyan yok.' : '✅ İşlem bekleyen beyan yok — hepsi yüklendi ya da kapandı.' ?>
         <?php if (can_beyan('write')): ?>
         <a href="beyan_create.php" class="btn btn-sm">+ Yeni Beyan</a>
         <?php endif; ?>
@@ -222,10 +253,12 @@ render_flash();
         $sec_secim = (bool)$uygun_sayisi;
         include __DIR__ . '/_beyan_liste.php';
     ?>
-    <?php if ($bekleyen_kirpik): ?>
-    <p class="muted" style="margin-top:8px;font-size:.82rem">
-        ⚠️ <?= $bekleyen_total ?> bekleyen beyanın ilk <?= count($bekleyen_rows) ?> tanesi gösteriliyor.
-    </p>
+    <?php if ($bek_total_pages > 1): ?>
+    <nav class="pagination" aria-label="Bekleyen beyan sayfaları" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <?php if ($bek_page > 1): ?><a class="btn btn-sm btn-ghost" href="<?= h(beyan_url(['bek_page' => (string)($bek_page - 1)])) ?>">← Önceki</a><?php endif; ?>
+        <span class="muted">Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?> · <?= $bek_result_total ?> sonuç</span>
+        <?php if ($bek_page < $bek_total_pages): ?><a class="btn btn-sm btn-ghost" href="<?= h(beyan_url(['bek_page' => (string)($bek_page + 1)])) ?>">Sonraki →</a><?php endif; ?>
+    </nav>
     <?php endif; ?>
     <?php endif; ?>
 </section>
@@ -235,7 +268,7 @@ render_flash();
      bu bölüme aittir; üst bölümü etkilemez. -->
 <section class="beyan-blok beyan-blok-kapanmis">
     <div class="beyan-blok-head">
-        <h2 class="beyan-blok-baslik">✅ Yüklenen Beyanlar
+        <h2 class="beyan-blok-baslik">✅ Kapanan Beyanlar
             <span class="beyan-blok-sayi"><?= $kapali_total ?></span>
         </h2>
         <span class="muted beyan-blok-not">
@@ -246,6 +279,8 @@ render_flash();
 
     <!-- ── Filtre formu — yalnız bu bölümü süzer ── -->
     <form method="get" class="beyan-filter-form" id="beyanFilterForm">
+        <?php if ($bek_q !== ''): ?><input type="hidden" name="bek_q" value="<?= h($bek_q) ?>"><?php endif; ?>
+        <?php if ($bek_page > 1): ?><input type="hidden" name="bek_page" value="<?= $bek_page ?>"><?php endif; ?>
         <div class="bff-main">
             <input type="search" name="q" value="<?= h($q) ?>"
                    placeholder="Parti no, ürün, alıcı, marka, depo..." autocomplete="off">

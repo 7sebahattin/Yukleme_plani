@@ -17,6 +17,8 @@ $beyan = $st->fetch();
 if (!$beyan) { set_flash('error', 'Beyan bulunamadı veya silinmiş.'); header('Location: beyanlar.php'); exit; }
 
 $errors = [];
+$edit_token = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? (string)($_POST['edit_token'] ?? '') : beyan_edit_token($beyan);
 
 // Formu DB değerleri ile önceden doldur
 $f = [
@@ -35,8 +37,8 @@ $f = [
     'pallet_count'       => $beyan['pallet_count'] !== null ? (string)(int)$beyan['pallet_count'] : '',
     'product_name'       => (string)($beyan['product_name']       ?? ''),
     'product_variety'    => (string)($beyan['product_variety']    ?? ''),
-    'gross_kg'           => fmt_edit_num($beyan['gross_kg'], 0),
-    'net_kg'             => fmt_edit_num($beyan['net_kg'],   0),
+    'gross_kg'           => beyan_edit_kg($beyan['gross_kg']),
+    'net_kg'             => beyan_edit_kg($beyan['net_kg']),
     'crate_count'        => $beyan['crate_count'] !== null ? (string)(int)$beyan['crate_count'] : '',
     'crate_type'         => (string)($beyan['crate_type']         ?? ''),
     'exit_depot'         => (string)($beyan['exit_depot']         ?? ''),
@@ -81,21 +83,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_POST['status_only'])) {
         $new_status     = (string)($_POST['status'] ?? '');
         $valid_statuses = array_keys(beyan_statuses());
-        $allowed        = is_admin()
-            ? $valid_statuses
-            : array_merge([$old_status], beyan_next_statuses($old_status));
-        if (!in_array($new_status, $valid_statuses, true) || !in_array($new_status, $allowed, true)) {
+        $return_url = ($_POST['return_to'] ?? '') === 'view' ? 'beyan_view.php?id=' . $id : 'beyanlar.php';
+        if (!in_array($new_status, $valid_statuses, true)) {
             set_flash('error', 'Geçersiz durum geçişi.');
-            header('Location: beyanlar.php'); exit;
+            header('Location: ' . $return_url); exit;
         }
-        db()->prepare("UPDATE customs_declarations SET status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?")
-            ->execute([$new_status, (int)($auth_user['id'] ?? 0), $id]);
-        if ($old_status !== $new_status) {
+        try {
+            $change = beyan_durum_kaydet(db(), $id, $new_status, $_POST, (int)($auth_user['id'] ?? 0));
             audit_log_event('beyan_status_change', 'declarations', $id,
-                ['status' => $old_status], ['status' => $new_status]);
+                $change['old'], $change['new']);
+            set_flash('success', 'Durum güncellendi: ' . (beyan_statuses()[$new_status]['label'] ?? $new_status));
+        } catch (InvalidArgumentException $e) {
+            set_flash('error', $e->getMessage());
         }
-        set_flash('success', 'Durum güncellendi: ' . (beyan_statuses()[$new_status]['label'] ?? $new_status));
-        header('Location: beyanlar.php'); exit;
+        header('Location: ' . $return_url); exit;
     }
 
     foreach (array_keys($f) as $k) {
@@ -109,29 +110,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
 
-    // Validasyon
-    if ($f['raw_text'] === '' && $f['party_no'] === '' && $f['product_name'] === '') {
-        $errors[] = 'En az bir alan dolu olmalıdır: WhatsApp metni, Parti No veya Ürün Adı.';
-    }
-
-    $valid_statuses = array_keys(beyan_statuses());
-    if (!in_array($f['status'], $valid_statuses, true)) {
-        $f['status'] = $old_status;
-    }
-
-    // Red → analysis_note zorunlu
-    if ($f['status'] === 'red' && trim($f['analysis_note']) === '') {
-        $errors[] = '"Red" durumu için analiz notu zorunludur.';
-    }
-
-    // Sayı normalize
-    $gross_kg  = $f['gross_kg']    !== '' ? num($f['gross_kg'])    : null;
-    $net_kg    = $f['net_kg']      !== '' ? num($f['net_kg'])      : null;
-    $pallet_ct = $f['pallet_count'] !== '' ? (int)num($f['pallet_count']) : null;
-    $crate_ct  = $f['crate_count']  !== '' ? (int)num($f['crate_count'])  : null;
-
-    $sample_at = ($f['sample_taken_at']    !== '' && strtotime($f['sample_taken_at']))    ? $f['sample_taken_at']    : null;
-    $result_at = ($f['analysis_result_at'] !== '' && strtotime($f['analysis_result_at'])) ? $f['analysis_result_at'] : null;
+    $checked = beyan_veri_dogrula($f);
+    $errors = $checked['errors'];
+    $gross_kg = $checked['values']['gross_kg'];
+    $net_kg = $checked['values']['net_kg'];
+    $pallet_ct = $checked['values']['pallet_count'];
+    $crate_ct = $checked['values']['crate_count'];
+    $sample_at = $checked['values']['sample_taken_at'];
+    $result_at = $checked['values']['analysis_result_at'];
+    try { $hks = beyan_hks_form_oku($_POST, $beyan); }
+    catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
 
     // temiz/red geçişinde analysis_result_at yoksa otomatik set
     if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) {
@@ -140,8 +128,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        try { $beyan = beyan_duzenleme_kilitle(db(), $id, $edit_token); }
+        catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
+    }
+
+    if (empty($errors)) {
         $user_id = (int)($auth_user['id'] ?? 0);
-        $hks     = beyan_hks_form_oku($_POST);
         // Plaka boşluksuz + büyük harf — HKS böyle bekler (tek doğruluk kaynağı
         // sunucu; istemcideki data-nospace yalnız kolaylıktır).
         $f['vehicle_plate'] = beyan_plaka_normalize($f['vehicle_plate']);
@@ -191,6 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user_id,
             $id,
         ]);
+        db()->commit();
 
         // Durum değişti ise ayrı audit
         if ($old_status !== $f['status']) {
@@ -231,233 +224,10 @@ $next_states = beyan_next_statuses($cur_status);
 
 render_header('Beyan Düzenle');
 render_flash();
+require __DIR__ . '/_beyan_form.php';
 ?>
-
-<div class="page-head">
-    <div>
-        <h1>✏️ Beyan Düzenle</h1>
-        <p class="muted">
-            <?= h($beyan['party_no'] ?: '(parti no yok)') ?>
-            <?= beyan_badge_html($cur_status) ?>
-        </p>
-    </div>
-    <a href="beyan_view.php?id=<?= $id ?>" class="btn btn-ghost">← Görüntüle</a>
-</div>
-
-<?php if ($errors): ?>
-<div class="flash flash-error">
-    <?php foreach ($errors as $e): ?>
-    <div><?= h($e) ?></div>
-    <?php endforeach; ?>
-</div>
-<?php endif; ?>
-
-<form method="post" action="beyan_edit.php?id=<?= $id ?>" data-beyan-form>
-<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-<!-- beyan_delete.php id'yi POST gövdesinden okur; düzenleme formu id'yi
-     yalnızca adres çubuğunda taşıyordu. beyan_edit.php bu alanı kullanmaz
-     ($id her zaman $_GET'ten gelir), yalnız silme yolu için vardır. -->
-<input type="hidden" name="id" value="<?= $id ?>">
-
-<!-- 1. WhatsApp Ham Metni -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📱 WhatsApp Metni</div>
-    <div class="form-group">
-        <label class="form-label">Ham Metin</label>
-        <textarea name="raw_text" rows="8" class="form-control"
-                  style="font-size:14px;font-family:monospace"><?= h($f['raw_text']) ?></textarea>
-    </div>
-    <div style="margin-top:8px">
-        <button type="button" class="btn btn-secondary"
-                data-beyan-parse-btn
-                data-base-url="<?= h(base_url()) ?>">🔍 Metni Ayrıştır</button>
-    </div>
-    <div id="beyanParseStatus" hidden></div>
-    <div class="form-group" style="margin-top:12px">
-        <label class="form-label">Eşleşmeyen / Dikkat Edilecek Satırlar</label>
-        <textarea name="unmatched_text" rows="3" class="form-control"
-                  style="font-size:13px;font-family:monospace"><?= h($f['unmatched_text']) ?></textarea>
-    </div>
-</div>
-
-<?php beyan_hks_form_bolumu($f, $beyan); ?>
-
-<!-- 2. Temel Bilgiler -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📋 Temel Bilgiler</div>
-    <div class="beyan-form-grid">
-        <div class="form-group">
-            <label class="form-label">Başlık / Beyan Tipi</label>
-            <input type="text" name="declaration_title" class="form-control"
-                   value="<?= h($f['declaration_title']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Parti No</label>
-            <input type="text" name="party_no" class="form-control"
-                   value="<?= h($f['party_no']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Nakliye Türü</label>
-            <input type="text" name="transport_type" class="form-control"
-                   value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Hat / Güzergah</label>
-            <input type="text" name="line_type" class="form-control"
-                   value="<?= h($f['line_type']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-    <div class="form-group">
-        <label class="form-label">Şirket Adı</label>
-        <input type="text" name="company_name" class="form-control" value="<?= h($f['company_name']) ?>" data-uppercase="tr">
-    </div>
-    <div class="form-group">
-        <label class="form-label">Şirket Adresi</label>
-        <textarea name="company_address" rows="2" class="form-control" data-uppercase="tr"><?= h($f['company_address']) ?></textarea>
-    </div>
-</div>
-
-<!-- 3. Ürün Bilgileri -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🍎 Ürün Bilgileri</div>
-    <div class="beyan-form-grid">
-        <div class="form-group">
-            <label class="form-label">Ürün Adı</label>
-            <input type="text" name="product_name" class="form-control" value="<?= h($f['product_name']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Ürün Çeşidi</label>
-            <input type="text" name="product_variety" class="form-control" value="<?= h($f['product_variety']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Palet Adedi</label>
-            <input type="text" name="pallet_count" class="form-control"
-                   inputmode="numeric" value="<?= h($f['pallet_count']) ?>">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Brüt KG</label>
-            <input type="text" name="gross_kg" class="form-control"
-                   inputmode="decimal" value="<?= h($f['gross_kg']) ?>">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Net KG</label>
-            <input type="text" name="net_kg" class="form-control"
-                   inputmode="decimal" value="<?= h($f['net_kg']) ?>">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Kasa Adedi</label>
-            <input type="text" name="crate_count" class="form-control"
-                   inputmode="numeric" value="<?= h($f['crate_count']) ?>">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Kasa Cinsi</label>
-            <input type="text" name="crate_type" class="form-control" value="<?= h($f['crate_type']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-</div>
-
-<!-- 4. Lojistik / Alıcı -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🚚 Lojistik / Alıcı</div>
-    <div class="beyan-form-grid">
-        <div class="form-group">
-            <label class="form-label">Çıkış Depo</label>
-            <input type="text" name="exit_depot" class="form-control" value="<?= h($f['exit_depot']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Alıcı</label>
-            <input type="text" name="buyer_name" class="form-control" value="<?= h($f['buyer_name']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">İlgili Kişi</label>
-            <input type="text" name="contact_person" class="form-control" value="<?= h($f['contact_person']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Marka</label>
-            <input type="text" name="brand" class="form-control" value="<?= h($f['brand']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-</div>
-
-<!-- 5. Durum / Analiz -->
-
-
-<div class="beyan-section">
-    <div class="beyan-section-title">📊 Durum / Analiz</div>
-
-    <!-- Durum listesi TÜM durumları taşır — beyan_view.php'deki durum şeridiyle
-         AYNI kural. Eskiden liste sonraki durumlarla sınırlıydı ve terminal
-         durumda "değiştirilemez" yazıyordu; oysa sunucu (tam güncelleme dalı)
-         durumu yalnız beyan_statuses() anahtarlarına karşı doğruluyor, yani
-         kısıt görseldi ve şeritten zaten aşılıyordu. İki ekran ayrışmasın:
-         kuralı değiştirecekseniz İKİSİNİ BİRDEN güncelleyin. -->
-    <div class="form-group">
-        <label class="form-label">Durum</label>
-        <select name="status" class="form-control">
-            <?php foreach (beyan_durum_akis_sirasi() as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
-            <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>>
-                <?= h($sv['label']) ?>
-            </option>
-            <?php endforeach; ?>
-        </select>
-        <?php if (!empty($next_states)): ?>
-        <!-- Öneri, kapı değil: her durum seçilebilir. -->
-        <div class="form-hint">Akıştaki sıradaki durum:
-            <?php foreach ($next_states as $ns): ?>
-            <strong><?= h($statuses[$ns]['label'] ?? $ns) ?></strong>
-            <?php if ($ns !== end($next_states)): ?>, <?php endif; ?>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-    </div>
-
-    <div class="beyan-form-grid" style="margin-top:10px">
-        <div class="form-group">
-            <label class="form-label">Numune Alındı Tarihi</label>
-            <input type="datetime-local" name="sample_taken_at" class="form-control"
-                   value="<?= h($f['sample_taken_at']) ?>">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Analiz Sonuç Tarihi</label>
-            <input type="datetime-local" name="analysis_result_at" class="form-control"
-                   value="<?= h($f['analysis_result_at']) ?>">
-            <div class="form-hint">Temiz/Red seçilince boşsa otomatik doldurulur.</div>
-        </div>
-    </div>
-
-    <div class="form-group">
-        <label class="form-label">
-            Analiz Notu <span class="muted" id="noteRequired">(Red durumunda zorunlu)</span>
-        </label>
-        <textarea name="analysis_note" rows="3" class="form-control"
-                  id="analysisNote"><?= h($f['analysis_note']) ?></textarea>
-    </div>
-</div>
-
-<!-- DOM SIRASI ÖNEMLİ: bir metin kutusunda Enter'a basınca tarayıcı formun
-     İLK submit butonunu tetikler. Sil önce gelseydi Enter SİLMEYİ başlatırdı.
-     Bu yüzden Güncelle DOM'da önce durur, görsel sıra `order` ile korunur:
-     İptal (1) · Sil (2) · Güncelle (3). -->
-<div style="display:flex;gap:10px;justify-content:flex-end;padding:8px 0 24px">
-    <a href="beyan_view.php?id=<?= $id ?>" class="btn btn-ghost" style="order:1">İptal</a>
-    <button type="submit" class="btn btn-primary" style="order:3">Güncelle</button>
-    <?php if (can_beyan('delete')): ?>
-    <!-- Silme POST olmalı: beyan_delete.php GET'i bilerek reddeder (GET veri
-         DEĞİŞTİRMEZ — tarayıcı ön-getirmesi ya da bir link taraması beyanı
-         silebilirdi). Eskiden burası <a href> idi; tıklayınca GET gidiyor,
-         beyan_delete sessizce listeye geri atıyor ve HİÇBİR ŞEY OLMUYORDU.
-         `formaction`/`formmethod` ile bu buton, içinde bulunduğu formu
-         beyan_delete.php'ye POST eder — ayrı bir form açmak gerekmez (iç içe
-         form geçersizdir, tarayıcı içtekini düşürür).
-         `formnovalidate`: silme, formun doğrulamasına takılmamalı. -->
-    <button type="submit" class="btn btn-ghost" style="color:var(--danger);order:2"
-            formaction="beyan_delete.php" formmethod="post" formnovalidate
-            onclick="return confirm('Bu beyan arşivden gizlenecek. Devam edilsin mi?')">Sil</button>
-    <?php endif; ?>
-</div>
-
-</form>
-
+<details class="beyan-workspace-bag">
+    <summary>Hal Bildirim Durumu / Bağlantı düzeltme</summary>
 <?php if ($hks_bag_yetki): ?>
 <!-- Hal Bildirim Durumu — ANA FORMUN DIŞINDA kendi formu (iç içe form geçersiz).
      Taslağı Hal Kayıt'ta düzenlenip gönderilmiş ama bağı kopmuş beyanlar
@@ -494,23 +264,5 @@ render_flash();
 </div>
 <?php endif; ?>
 
-<script>
-(function () {
-    var statusSel  = document.querySelector('select[name="status"]');
-    var noteReq    = document.getElementById('noteRequired');
-    var analysisNt = document.getElementById('analysisNote');
-    if (!statusSel || !noteReq) return;
-
-    function checkStatus() {
-        var isRed = statusSel.value === 'red';
-        noteReq.style.color = isRed ? 'var(--danger)' : '';
-        noteReq.textContent  = isRed ? '(Red durumu — ZORUNLU)' : '(Red durumunda zorunlu)';
-        if (analysisNt) analysisNt.style.borderColor = isRed && analysisNt.value.trim() === '' ? 'var(--danger)' : '';
-    }
-
-    statusSel.addEventListener('change', checkStatus);
-    checkStatus();
-})();
-</script>
-
+</details>
 <?php render_footer(); ?>

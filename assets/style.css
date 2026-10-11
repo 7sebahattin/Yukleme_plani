@@ -6009,3 +6009,89 @@ form.bf [data-ic="kalem"] { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://w
 form.bf [data-ic="sihir"] { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72'/%3E%3Cpath d='m14 7 3 3'/%3E%3Cpath d='M5 6v4'/%3E%3Cpath d='M19 14v4'/%3E%3Cpath d='M10 2v2'/%3E%3Cpath d='M7 8H3'/%3E%3Cpath d='M21 16h-4'/%3E%3Cpath d='M11 3H9'/%3E%3C/svg%3E"); }
 form.bf [data-ic="kaydet"] { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z'/%3E%3Cpath d='M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7'/%3E%3Cpath d='M7 3v4a1 1 0 0 0 1 1h7'/%3E%3C/svg%3E"); }
 form.bf [data-ic="carpi"] { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E"); }
+
+/* Beyan çalışma alanı — mevcut bf renkleri, maskeleri ve düğmeleri korunur. */
+.beyan-workspace { min-width: 0; }
+.beyan-workspace [hidden] { display: none !important; }
+.beyan-workspace-head {
+    position: sticky;
+    top: 0;
+    z-index: 90;
+    padding: 12px 0;
+    margin-bottom: 12px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+}
+.beyan-workspace-heading { min-width: 0; }
+.beyan-workspace-heading h1 { font-size: 1.35rem; }
+.beyan-workspace-heading p { margin: 3px 0 0; }
+.beyan-workspace-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.beyan-dirty { font-size: .8rem; }
+.beyan-workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.beyan-workspace-main, .beyan-workspace-hks { min-width: 0; }
+.beyan-workspace-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 6px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+}
+.beyan-workspace-tabs .btn { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; }
+.beyan-workspace-tabs [aria-selected="true"] { background: var(--primary-soft); color: var(--primary); box-shadow: inset 0 -2px var(--primary); }
+.beyan-workspace :is([role="tab"], summary):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] { padding: 16px; gap: 14px; margin-bottom: 12px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] > .beyan-section-title { grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; letter-spacing: 0; }
+form.beyan-workspace-form .beyan-section-title::before,
+form.beyan-workspace-form .beyan-section-title::after { width: 36px; height: 36px; border-radius: 11px; }
+form.beyan-workspace-form .beyan-section-title::after { -webkit-mask-size: 21px 21px; mask-size: 21px 21px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .form-group[data-ic] { grid-template-columns: 28px minmax(0, 1fr); column-gap: 7px; row-gap: 5px; }
+form.beyan-workspace-form .form-group[data-ic]::before,
+form.beyan-workspace-form .form-group[data-ic]::after { width: 28px; height: 32px; border-radius: 8px; margin-top: 6px; }
+form.beyan-workspace-form .form-group[data-ic]::after { -webkit-mask-size: 17px 17px; mask-size: 17px 17px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-form-grid { gap: 12px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-workspace-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-workspace-quantities { grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr)); }
+body:not(.print-mode) form.beyan-workspace-form .beyan-workspace-hks .beyan-form-grid { grid-template-columns: minmax(0, 1fr); }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] > .beyan-section-title + p.muted { margin: 0 !important; }
+body:not(.print-mode) form.beyan-workspace-form details.beyan-section { display: block; }
+.beyan-workspace summary, .beyan-workspace-bag > summary { cursor: pointer; min-height: 44px; padding: 10px 0; font-weight: 600; overflow-wrap: anywhere; }
+.beyan-workspace summary .muted { font-weight: 400; }
+.beyan-workspace-details[open] > :not(summary), .beyan-unmatched[open] > :not(summary) { margin-top: 12px; }
+body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-source-text { min-height: 180px; }
+.beyan-workspace-delete, .beyan-workspace-bag { margin: 10px 0 16px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.beyan-workspace-delete .btn { margin-bottom: 14px; color: var(--danger); }
+.beyan-workspace-bag > .beyan-section { margin-top: 8px; }
+.beyan-bulk-edit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 12px; }
+.beyan-parse-comparison { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.beyan-parse-compare-row { padding: 10px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.beyan-parse-compare-row:last-child { border-bottom: 0; }
+.beyan-workspace :is([data-beyan-panel], input, select, textarea) { scroll-margin-top: 145px; }
+@media (min-width: 1100px) {
+    .beyan-workspace-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+@media (max-width: 899px) {
+    .beyan-workspace-head { top: 60px; }
+}
+@media (max-width: 767px) {
+    .beyan-workspace-head { align-items: stretch; flex-direction: column; padding: 8px 0; gap: 6px; }
+    .beyan-workspace-heading p { display: none; }
+    .beyan-workspace-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+    .beyan-workspace-actions .beyan-dirty { overflow-wrap: anywhere; }
+    body:not(.print-mode) form.beyan-workspace-form :is(.bf-kaydet, .bf-iptal) { min-height: 44px; padding: 0 12px; }
+    .beyan-workspace-tabs { gap: 3px; padding: 4px; }
+    .beyan-workspace-tabs .btn { font-size: .9rem; padding: 8px 4px; }
+    body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] { padding: 12px; }
+    body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-workspace-fields { grid-template-columns: minmax(0, 1fr); }
+    body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-workspace-quantities { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    body:not(.print-mode) form.beyan-workspace-form .beyan-workspace-quantities .form-group[data-ic] { grid-template-columns: 22px minmax(0, 1fr); column-gap: 5px; }
+    form.beyan-workspace-form .beyan-workspace-quantities .form-group[data-ic]::before,
+    form.beyan-workspace-form .beyan-workspace-quantities .form-group[data-ic]::after { width: 22px; }
+    body:not(.print-mode) form.beyan-workspace-form .beyan-workspace-quantities input { padding: 10px 7px; }
+}
+@media print {
+    .beyan-workspace-tabs, .beyan-workspace-head, .beyan-workspace-delete { display: none !important; }
+    .beyan-workspace-grid { display: block; }
+}

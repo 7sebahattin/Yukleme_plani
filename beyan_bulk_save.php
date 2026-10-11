@@ -23,7 +23,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$body = json_decode(file_get_contents('php://input'), true) ?? [];
+$body = json_decode(file_get_contents('php://input'), true);
+if (!is_array($body)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Geçerli bir JSON nesnesi gönderin.']);
+    exit;
+}
 csrf_check($body['csrf'] ?? null);
 
 $declarations = $body['declarations'] ?? [];
@@ -36,6 +41,37 @@ if (count($declarations) > 100) {
     exit;
 }
 
+// PHP oturum kilidi aynı isteğin paralel tekrarlarını seri hale getirir.
+// Yanıt kaybolursa aynı kimlik/payload yeniden gönderilir; ikinci INSERT yok.
+$request_id = (string)($body['request_id'] ?? '');
+if (!preg_match('/^[A-Za-z0-9_-]{16,100}$/D', $request_id)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'Geçerli bir toplu kayıt istek kimliği gerekli.']);
+    exit;
+}
+$payload_hash = hash('sha256', json_encode($declarations, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+$history = $_SESSION['beyan_bulk_requests'] ?? [];
+if (isset($history[$request_id])) {
+    if (!hash_equals($history[$request_id]['hash'], $payload_hash)) {
+        http_response_code(409);
+        echo json_encode(['ok' => false, 'error' => 'Bu istek kimliği farklı beyanlar için kullanılmış. Önizlemeyi yeniden açın.']);
+    } else {
+        echo json_encode($history[$request_id]['response']);
+    }
+    exit;
+}
+
+$row_errors = [];
+foreach (array_values($declarations) as $i => $d) {
+    $errors = is_array($d) ? beyan_veri_dogrula($d)['errors'] : ['Geçerli bir beyan satırı gerekli.'];
+    if ($errors) $row_errors[] = ['row' => $i + 1, 'errors' => $errors];
+}
+if ($row_errors) {
+    http_response_code(422);
+    echo json_encode(['ok' => false, 'error' => 'Hatalı satırları düzeltin veya seçimden çıkarın.', 'rows' => $row_errors], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $user_id = (int)($auth_user['id'] ?? 0);
 $pdo     = db();
 $ids     = [];
@@ -43,18 +79,14 @@ $ids     = [];
 $pdo->beginTransaction();
 try {
     foreach ($declarations as $d) {
-        if (!is_array($d)) continue;
-        // En az bir anlamlı alan olmalı (boş satırları atla)
-        $has = trim((string)($d['party_no']     ?? '')) !== ''
-            || trim((string)($d['product_name'] ?? '')) !== ''
-            || trim((string)($d['raw_text']     ?? '')) !== '';
-        if (!$has) continue;
         $ids[] = beyan_insert($d, $user_id);
     }
     $pdo->commit();
 } catch (Throwable $e) {
     if ($pdo->inTransaction()) $pdo->rollBack();
-    echo json_encode(['ok' => false, 'error' => 'Kayıt hatası: ' . $e->getMessage()]);
+    http_response_code(500);
+    error_log('Beyan toplu kayıt: ' . $e->getMessage());
+    echo json_encode(['ok' => false, 'error' => 'Beyanlar kaydedilemedi. Aynı isteği yeniden deneyebilirsiniz.']);
     exit;
 }
 
@@ -63,9 +95,13 @@ if (empty($ids)) {
     exit;
 }
 
+$response = ['ok' => true, 'created' => count($ids), 'ids' => $ids];
+$history[$request_id] = ['hash' => $payload_hash, 'response' => $response];
+$_SESSION['beyan_bulk_requests'] = array_slice($history, -20, null, true);
+
 audit_log_event('beyan_bulk_create', 'declarations', null, null, [
     'created' => count($ids),
     'ids'     => $ids,
 ]);
 
-echo json_encode(['ok' => true, 'created' => count($ids), 'ids' => $ids]);
+echo json_encode($response);

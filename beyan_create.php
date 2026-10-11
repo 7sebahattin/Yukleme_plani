@@ -54,34 +54,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
 
-    // Validasyon
-    if ($f['raw_text'] === '' && $f['party_no'] === '' && $f['product_name'] === '') {
-        $errors[] = 'En az bir alan dolu olmalıdır: WhatsApp metni, Parti No veya Ürün Adı.';
-    }
-
-    $valid_statuses = array_keys(beyan_statuses());
-    if (!in_array($f['status'], $valid_statuses, true)) {
-        $f['status'] = 'beyan_acildi';
-    }
-
-    // Sayı normalize (Türkçe binlik nokta → tam sayı)
-    $gross_kg  = $f['gross_kg']  !== '' ? num($f['gross_kg'])  : null;
-    $net_kg    = $f['net_kg']    !== '' ? num($f['net_kg'])    : null;
-    $pallet_ct = $f['pallet_count'] !== '' ? (int)num($f['pallet_count']) : null;
-    $crate_ct  = $f['crate_count']  !== '' ? (int)num($f['crate_count'])  : null;
-
-    // Tarih alanları
-    $sample_at  = ($f['sample_taken_at']    !== '' && strtotime($f['sample_taken_at']))    ? $f['sample_taken_at']    : null;
-    $result_at  = ($f['analysis_result_at'] !== '' && strtotime($f['analysis_result_at'])) ? $f['analysis_result_at'] : null;
-
-    // Red durumunda analysis_note zorunlu
-    if ($f['status'] === 'red' && trim($f['analysis_note']) === '') {
-        $errors[] = '"Red" durumu için analiz notu zorunludur.';
-    }
+    $checked = beyan_veri_dogrula($f);
+    $errors = $checked['errors'];
+    $gross_kg = $checked['values']['gross_kg'];
+    $net_kg = $checked['values']['net_kg'];
+    $pallet_ct = $checked['values']['pallet_count'];
+    $crate_ct = $checked['values']['crate_count'];
+    $sample_at = $checked['values']['sample_taken_at'];
+    $result_at = $checked['values']['analysis_result_at'];
+    if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) $result_at = date('Y-m-d H:i:s');
+    try { $hks = beyan_hks_form_oku($_POST); }
+    catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
 
     if (empty($errors)) {
         $user_id = (int)($auth_user['id'] ?? 0);
-        $hks     = beyan_hks_form_oku($_POST);
         // Plaka boşluksuz + büyük harf — HKS böyle bekler (tek doğruluk kaynağı
         // sunucu; istemcideki data-nospace yalnız kolaylıktır).
         $f['vehicle_plate'] = beyan_plaka_normalize($f['vehicle_plate']);
@@ -159,200 +145,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statuses = beyan_statuses();
 render_header('Yeni Beyan');
 render_flash();
-?>
-
-<div class="page-head">
-    <div>
-        <h1>🧾 Yeni Beyan</h1>
-    </div>
-    <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
-</div>
-
-<?php if ($errors): ?>
-<div class="flash flash-error">
-    <?php foreach ($errors as $e): ?>
-    <div><?= h($e) ?></div>
-    <?php endforeach; ?>
-</div>
-<?php endif; ?>
-
-<form method="post" action="beyan_create.php" class="bf" data-beyan-form>
-<input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-
-<!-- 1. WhatsApp Ham Metni -->
-<div class="beyan-section" data-bf="wa">
-    <div class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni<small class="bf-alt">WhatsApp beyan mesaj(lar)ını buraya yapıştırıp "Metni Ayrıştır"a basın. Birden fazla beyan otomatik algılanır.</small></div>
-    <div class="bf-wa-satir">
-        <div class="form-group" data-ic="metin">
-            <label class="form-label">Ham Metin</label>
-            <textarea name="raw_text" rows="8" class="form-control bf-ham"
-                      placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırıp 'Metni Ayrıştır'a basın. Birden fazla beyan otomatik algılanır."><?= h($f['raw_text']) ?></textarea>
-        </div>
-        <div class="bf-wa-btn">
-            <button type="button" class="btn btn-secondary bf-ayristir" data-ic="sihir"
-                    data-beyan-parse-btn
-                    data-base-url="<?= h(base_url()) ?>">Metni Ayrıştır</button>
-        </div>
-    </div>
-    <div id="beyanParseStatus" hidden></div>
-    <!-- Toplu beyan önizleme + "Hepsini Kaydet" (JS doldurur) -->
-    <div id="beyanBulkPreview" hidden></div>
-    <div class="form-group" data-ic="uyari">
-        <label class="form-label">Eşleşmeyen / Dikkat Edilecek Satırlar</label>
-        <textarea name="unmatched_text" rows="3" class="form-control"
-                  placeholder="Eşleşmeyen veya sonradan kontrol edilecek satırlar..."><?= h($f['unmatched_text']) ?></textarea>
-    </div>
-</div>
-
-<?php beyan_hks_form_bolumu($f, null); ?>
-
-<!-- 2. Temel Bilgiler -->
-<div class="beyan-section" data-bf="temel">
-    <div class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
-    <div class="beyan-form-grid">
-        <div class="form-group" data-ic="belge">
-            <label class="form-label">Başlık / Beyan Tipi</label>
-            <input type="text" name="declaration_title" class="form-control"
-                   value="<?= h($f['declaration_title']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="diyez">
-            <label class="form-label">Parti No</label>
-            <input type="text" name="party_no" class="form-control"
-                   value="<?= h($f['party_no']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="tir">
-            <label class="form-label">Nakliye Türü</label>
-            <input type="text" name="transport_type" class="form-control"
-                   value="<?= h($f['transport_type']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="rota">
-            <label class="form-label">Hat / Güzergah</label>
-            <input type="text" name="line_type" class="form-control"
-                   value="<?= h($f['line_type']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-    <div class="form-group" data-ic="bina">
-        <label class="form-label">Şirket Adı</label>
-        <input type="text" name="company_name" class="form-control"
-               value="<?= h($f['company_name']) ?>" data-uppercase="tr">
-    </div>
-    <div class="form-group" data-ic="konum">
-        <label class="form-label">Şirket Adresi</label>
-        <textarea name="company_address" rows="2" class="form-control" data-uppercase="tr"><?= h($f['company_address']) ?></textarea>
-    </div>
-</div>
-
-<!-- 3. Ürün Bilgileri -->
-<div class="beyan-section" data-bf="urun">
-    <div class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
-    <div class="beyan-form-grid">
-        <div class="form-group" data-ic="elma">
-            <label class="form-label">Ürün Adı</label>
-            <input type="text" name="product_name" class="form-control"
-                   value="<?= h($f['product_name']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="etiket">
-            <label class="form-label">Ürün Çeşidi</label>
-            <input type="text" name="product_variety" class="form-control"
-                   value="<?= h($f['product_variety']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="katman">
-            <label class="form-label">Palet Adedi</label>
-            <input type="text" name="pallet_count" class="form-control"
-                   inputmode="numeric" value="<?= h($f['pallet_count']) ?>">
-        </div>
-        <div class="form-group" data-ic="agirlik">
-            <label class="form-label">Brüt KG</label>
-            <input type="text" name="gross_kg" class="form-control"
-                   inputmode="decimal" value="<?= h($f['gross_kg']) ?>">
-        </div>
-        <div class="form-group" data-ic="terazi">
-            <label class="form-label">Net KG</label>
-            <input type="text" name="net_kg" class="form-control"
-                   inputmode="decimal" value="<?= h($f['net_kg']) ?>">
-        </div>
-        <div class="form-group" data-ic="kutu">
-            <label class="form-label">Kasa Adedi</label>
-            <input type="text" name="crate_count" class="form-control"
-                   inputmode="numeric" value="<?= h($f['crate_count']) ?>">
-        </div>
-        <div class="form-group" data-ic="kasa">
-            <label class="form-label">Kasa Cinsi</label>
-            <input type="text" name="crate_type" class="form-control"
-                   value="<?= h($f['crate_type']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-</div>
-
-<!-- 4. Lojistik / Alıcı -->
-<div class="beyan-section" data-bf="lojistik">
-    <div class="beyan-section-title" data-ic="tir"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
-    <div class="beyan-form-grid">
-        <div class="form-group" data-ic="depo">
-            <label class="form-label">Çıkış Depo</label>
-            <input type="text" name="exit_depot" class="form-control"
-                   value="<?= h($f['exit_depot']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="kisi">
-            <label class="form-label">Alıcı</label>
-            <input type="text" name="buyer_name" class="form-control"
-                   value="<?= h($f['buyer_name']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="rehber">
-            <label class="form-label">İlgili Kişi</label>
-            <input type="text" name="contact_person" class="form-control"
-                   value="<?= h($f['contact_person']) ?>" data-uppercase="tr">
-        </div>
-        <div class="form-group" data-ic="rozet">
-            <label class="form-label">Marka</label>
-            <input type="text" name="brand" class="form-control"
-                   value="<?= h($f['brand']) ?>" data-uppercase="tr">
-        </div>
-    </div>
-</div>
-
-<!-- 5. Durum / Analiz -->
-
-
-<div class="beyan-section" data-bf="durum">
-    <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Durum / Analiz</div>
-    <div class="beyan-form-grid">
-        <div class="form-group" data-ic="liste">
-            <label class="form-label">Durum</label>
-            <select name="status" class="form-control">
-                <?php foreach ($statuses as $sk => $sv): ?>
-                <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>>
-                    <?= h($sv['label']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <!-- Yeni beyanda henüz numune/analiz aşaması yok — pasif + gizli
-             (kullanıcı isteği). Alanlar Düzenle formunda aynen aktif kalır;
-             burada `disabled` olduğu için POST'a da girmezler. -->
-        <div class="form-group" data-ic="tup" hidden>
-            <label class="form-label">Numune Alındı Tarihi</label>
-            <input type="datetime-local" name="sample_taken_at" class="form-control" disabled
-                   value="<?= h($f['sample_taken_at']) ?>">
-        </div>
-        <div class="form-group" data-ic="takvim" hidden>
-            <label class="form-label">Analiz Sonuç Tarihi</label>
-            <input type="datetime-local" name="analysis_result_at" class="form-control" disabled
-                   value="<?= h($f['analysis_result_at']) ?>">
-        </div>
-    </div>
-    <div class="form-group" data-ic="kalem">
-        <label class="form-label">Analiz Notu <span class="muted">(Red durumunda zorunlu)</span></label>
-        <textarea name="analysis_note" rows="3" class="form-control"
-                  placeholder="Analiz sonucu veya açıklama..."><?= h($f['analysis_note']) ?></textarea>
-    </div>
-</div>
-
-<div id="beyanSingleActions" class="bf-eylem">
-    <a href="beyanlar.php" class="btn btn-ghost bf-iptal" data-ic="carpi">İptal</a>
-    <button type="submit" class="btn btn-primary btn-lg bf-kaydet" data-ic="kaydet">Kaydet</button>
-</div>
-
-</form>
-
-<?php render_footer(); ?>
+require __DIR__ . '/_beyan_form.php';
+render_footer();

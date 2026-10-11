@@ -203,203 +203,304 @@ function ekranAlti() {
     // Close on scroll (fixed dropdowns stay in place otherwise)
     window.addEventListener('scroll', closeAllDropdowns, true);
 
-    /* ── Beyan WhatsApp metin ayrıştırıcı (tekli + toplu otomatik algılama) ── */
+
+    /* Progressive enhancement: without JS every section stays accessible. */
+    (function () {
+        var workspace = document.querySelector('[data-beyan-workspace]');
+        var form = document.querySelector('[data-beyan-form]');
+        if (!workspace || !form) return;
+        var tabs = Array.from(workspace.querySelectorAll('[data-beyan-tab]'));
+        var panels = Array.from(workspace.querySelectorAll('[data-beyan-panel]'));
+        var tablist = workspace.querySelector('[data-beyan-tabs]');
+        if (!tabs.length || !panels.length || !tablist) return;
+        tablist.hidden = false;
+        tablist.setAttribute('role', 'tablist');
+        workspace.classList.add('beyan-workspace-ready');
+        function activate(name, focus) {
+            tabs.forEach(function (tab) {
+                var active = tab.dataset.beyanTab === name;
+                tab.setAttribute('role', 'tab');
+                tab.setAttribute('aria-selected', String(active));
+                tab.tabIndex = active ? 0 : -1;
+                if (active && focus) tab.focus();
+            });
+            panels.forEach(function (panel) { panel.hidden = panel.dataset.beyanPanel !== name; });
+        }
+        panels.forEach(function (panel) {
+            panel.id = panel.id || 'beyan-panel-' + panel.dataset.beyanPanel;
+            panel.setAttribute('role', 'tabpanel');
+            var tab = tabs.find(function (item) { return item.dataset.beyanTab === panel.dataset.beyanPanel; });
+            if (tab) {
+                tab.id = tab.id || 'beyan-tab-' + panel.dataset.beyanPanel;
+                tab.setAttribute('aria-controls', panel.id);
+                panel.setAttribute('aria-labelledby', tab.id);
+            }
+        });
+        tabs.forEach(function (tab, index) {
+            tab.addEventListener('click', function () { activate(tab.dataset.beyanTab); });
+            tab.addEventListener('keydown', function (event) {
+                var next = index;
+                if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+                else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = tabs.length - 1;
+                else return;
+                event.preventDefault();
+                activate(tabs[next].dataset.beyanTab, true);
+            });
+        });
+        workspace.addEventListener('beyan:activate', function (event) { activate(event.detail || 'beyan'); });
+        activate('beyan');
+        var statusField = form.querySelector('[name="status"]');
+        var analysisNote = form.querySelector('[name="analysis_note"]');
+        function syncAnalysisNote() {
+            if (statusField && analysisNote) analysisNote.required = statusField.value === 'red';
+        }
+        if (statusField) statusField.addEventListener('change', syncAnalysisNote);
+        syncAnalysisNote();
+        function reveal(target) {
+            var panel = target.closest('[data-beyan-panel]');
+            if (panel) activate(panel.dataset.beyanPanel);
+            var ancestor = target.parentElement;
+            while (ancestor && ancestor !== form) {
+                if (ancestor.tagName === 'DETAILS') { ancestor.hidden = false; ancestor.open = true; }
+                ancestor = ancestor.parentElement;
+            }
+        }
+        var invalidPending = false;
+        form.addEventListener('invalid', function (event) {
+            reveal(event.target);
+            if (invalidPending) return;
+            invalidPending = true;
+            setTimeout(function () {
+                invalidPending = false;
+                var first = form.querySelector(':invalid');
+                if (first) { reveal(first); first.focus(); }
+            }, 0);
+        }, true);
+        var dirty = false, submitting = false, baseline;
+        var label = workspace.querySelector('[data-beyan-dirty]');
+        function snapshot() {
+            return JSON.stringify(Array.from(form.elements).filter(function (el) {
+                return el.name && !['hidden', 'submit', 'button'].includes(el.type);
+            }).map(function (el) { return [el.name, ['checkbox', 'radio'].includes(el.type) ? el.checked : el.value]; }));
+        }
+        function markDirty() {
+            dirty = snapshot() !== baseline;
+            if (label) { label.hidden = !dirty; label.textContent = 'Kaydedilmemiş değişiklikler'; }
+        }
+        baseline = snapshot();
+        document.addEventListener('DOMContentLoaded', function () { baseline = snapshot(); });
+        form.addEventListener('input', markDirty);
+        form.addEventListener('change', markDirty);
+        form.addEventListener('submit', function (event) { if (!event.defaultPrevented) submitting = true; });
+        workspace.addEventListener('beyan:saved', function () { submitting = true; });
+        window.addEventListener('beforeunload', function (event) {
+            if (dirty && !submitting) { event.preventDefault(); event.returnValue = ''; }
+        });
+        function unmatchedVisibility() {
+            var details = workspace.querySelector('[data-beyan-unmatched]');
+            var field = form.querySelector('[name="unmatched_text"]');
+            if (details && field) details.hidden = !field.value.trim();
+        }
+        form.addEventListener('input', unmatchedVisibility);
+        unmatchedVisibility();
+    })();
+
+    /* WhatsApp parse review and selectable bulk import. */
     (function () {
         var parseBtn = document.querySelector('[data-beyan-parse-btn]');
         if (!parseBtn) return;
-
-        var beyanForm   = document.querySelector('[data-beyan-form]');
-        var statusDiv   = document.getElementById('beyanParseStatus');
-        var bulkBox     = document.getElementById('beyanBulkPreview'); // yalnız create sayfasında
-        var baseUrl     = parseBtn.dataset.baseUrl || '';
-        // Butonun kendi etiketi geri yazılır (Yeni Beyan'da emojisiz, simge CSS'ten).
-        var parseEtiket = parseBtn.textContent.trim();
-
-        var FIELDS = [
-            'declaration_title', 'party_no', 'transport_type', 'line_type',
-            'company_name', 'company_address', 'product_name', 'product_variety',
-            'pallet_count', 'gross_kg', 'net_kg', 'crate_count', 'crate_type',
-            'exit_depot', 'buyer_name', 'contact_person', 'brand'
-        ];
-
-        function showParseStatus(type, msg) {
-            if (!statusDiv) return;
-            statusDiv.className = 'beyan-parse-alert beyan-parse-alert-' + type;
-            statusDiv.textContent = msg;
-            statusDiv.hidden = false;
+        var form = document.querySelector('[data-beyan-form]');
+        var workspace = document.querySelector('[data-beyan-workspace]');
+        var status = document.getElementById('beyanParseStatus');
+        var bulk = document.getElementById('beyanBulkPreview');
+        var baseUrl = parseBtn.dataset.baseUrl || '';
+        var parseLabel = parseBtn.textContent.trim();
+        var FIELDS = ['declaration_title', 'party_no', 'transport_type', 'line_type', 'company_name',
+            'company_address', 'product_name', 'product_variety', 'pallet_count', 'gross_kg', 'net_kg',
+            'crate_count', 'crate_type', 'exit_depot', 'buyer_name', 'contact_person', 'brand'];
+        var LABELS = { declaration_title: 'Beyan başlığı', party_no: 'Parti no', transport_type: 'Taşıma türü',
+            line_type: 'Hat', company_name: 'Şirket', company_address: 'Adres', product_name: 'Ürün',
+            product_variety: 'Çeşit', pallet_count: 'Palet', gross_kg: 'Brüt KG', net_kg: 'Net KG',
+            crate_count: 'Kasa', crate_type: 'Kasa tipi', exit_depot: 'Çıkış deposu', buyer_name: 'Alıcı',
+            contact_person: 'İlgili kişi', brand: 'Marka', raw_text: 'Kaynak metin', unmatched_text: 'Eşleşmeyen metin' };
+        function activate(name) { if (workspace) workspace.dispatchEvent(new CustomEvent('beyan:activate', { detail: name })); }
+        function show(type, text) {
+            if (!status) return;
+            status.className = 'beyan-parse-alert beyan-parse-alert-' + type;
+            status.textContent = text;
+            status.hidden = false;
         }
-
-        function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-
-        function fillField(name, value) {
-            if (value === null || value === undefined || value === '') return;
-            var el = beyanForm ? beyanForm.querySelector('[name="' + name + '"]') : null;
-            if (!el || el.tagName === 'SELECT') return;
-            if (el.value.trim() === '' || el.value === '0') {
-                el.value = String(value);
+        function esc(value) { var el = document.createElement('div'); el.textContent = value == null ? '' : String(value); return el.innerHTML.replace(/"/g, '&quot;'); }
+        function field(name) { return form ? form.querySelector('[name="' + name + '"]') : null; }
+        function display(name, value) {
+            if (['gross_kg', 'net_kg'].includes(name) && typeof value === 'number') {
+                return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
             }
+            return value == null ? '' : String(value);
         }
-
-        // Tekli: parse sonucunu forma doldur
-        function fillSingle(decl) {
-            var p = (decl && decl.parsed) || {};
-            FIELDS.forEach(function (f) { fillField(f, p[f]); });
-            if (decl && decl.unmatched) {
-                var unmEl = beyanForm ? beyanForm.querySelector('[name="unmatched_text"]') : null;
-                if (unmEl && unmEl.value.trim() === '') unmEl.value = decl.unmatched;
+        function comparable(name, value) {
+            value = String(value).trim();
+            if (['gross_kg', 'net_kg'].includes(name)) return Number(value.replace(/\./g, '').replace(',', '.'));
+            return value;
+        }
+        function apply(name, value) {
+            var el = field(name);
+            if (!el || el.tagName === 'SELECT') return false;
+            el.value = value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }
+        function clearComparison() { var old = document.getElementById('beyanParseCompare'); if (old) old.remove(); }
+        function fillSingle(decl, includeSource) {
+            clearComparison();
+            var values = Object.assign({}, (decl && decl.parsed) || {}), found = 0, applied = 0, conflicts = [];
+            if (decl && decl.unmatched) values.unmatched_text = decl.unmatched;
+            if (includeSource && decl && decl.raw_text) values.raw_text = decl.raw_text;
+            FIELDS.concat(['unmatched_text', 'raw_text']).forEach(function (name) {
+                if (values[name] === null || values[name] === undefined || values[name] === '') return;
+                var el = field(name);
+                if (!el || el.tagName === 'SELECT') return;
+                var next = display(name, values[name]);
+                found++;
+                if (!el.value.trim()) { if (apply(name, next)) applied++; }
+                else if (comparable(name, el.value) !== comparable(name, next)) conflicts.push({ name: name, current: el.value, next: next });
+            });
+            var message = found + ' alan bulundu; ' + applied + ' alan uygulandı; ' + conflicts.length + ' alan mevcut değerden farklı.';
+            show(found ? 'ok' : 'warn', message);
+            activate('beyan');
+            var summary = workspace && workspace.querySelector('[data-beyan-parse-summary]');
+            if (!summary && workspace) {
+                summary = document.createElement('p'); summary.dataset.beyanParseSummary = '';
+                summary.className = 'beyan-parse-alert beyan-parse-alert-warn';
+                workspace.querySelector('[data-beyan-panel="beyan"]').prepend(summary);
             }
-            var mc = (decl && decl.matched_count) || 0;
-            var msg = mc > 0 ? (mc + ' alan dolduruldu') : 'Eşleşen alan bulunamadı — metni kontrol edin.';
-            if (decl && decl.unmatched) {
-                var ul = decl.unmatched.split('\n').filter(function (s) { return s.trim(); });
-                if (ul.length) msg += ' (' + ul.length + ' satır eşleşmedi)';
-            }
-            showParseStatus(mc > 0 ? 'ok' : 'warn', msg);
-        }
-
-        // Toplu modda elle düzenleme bölümlerini gizle/göster
-        function manualSections() {
-            return Array.prototype.slice.call(document.querySelectorAll('.beyan-section')).slice(1);
-        }
-        function setSingleUI(visible) {
-            manualSections().forEach(function (s) { s.style.display = visible ? '' : 'none'; });
-            var acts = document.getElementById('beyanSingleActions');
-            if (acts) acts.style.display = visible ? '' : 'none';
-        }
-        function restoreSingle() {
-            if (bulkBox) { bulkBox.hidden = true; bulkBox.innerHTML = ''; }
-            setSingleUI(true);
-        }
-
-        // Çoklu: önizleme listesi + "Hepsini Kaydet"
-        function renderBulk(declarations, csrf) {
-            if (!bulkBox) return;
-            setSingleUI(false);
-
-            var rowsHtml = declarations.map(function (d, idx) {
-                var p = d.parsed || {};
-                var bits = [];
-                if (p.product_name)  bits.push(esc(p.product_name) + (p.product_variety ? ' ' + esc(p.product_variety) : ''));
-                if (p.pallet_count)  bits.push(esc(p.pallet_count) + ' palet');
-                if (p.net_kg)        bits.push('NET ' + esc(p.net_kg));
-                if (p.buyer_name)    bits.push('Alıcı: ' + esc(p.buyer_name));
-                if (p.brand)         bits.push(esc(p.brand));
-                var unm = (d.unmatched || '').split('\n').filter(function (s) { return s.trim(); }).length;
-                return '' +
-                    '<div class="beyan-bulk-item">' +
-                      '<div class="beyan-bulk-item-head">' +
-                        '<span class="beyan-bulk-no">#' + (idx + 1) + '</span>' +
-                        '<span class="beyan-bulk-parti">' + esc(p.party_no || '(parti no yok)') + '</span>' +
-                        '<span class="beyan-bulk-count">' + (d.matched_count || 0) + ' alan' +
-                          (unm ? ' · ' + unm + ' satır ?' : '') + '</span>' +
-                      '</div>' +
-                      '<div class="beyan-bulk-item-body">' + (bits.join(' · ') || '<em>tanınan alan yok</em>') + '</div>' +
-                    '</div>';
-            }).join('');
-
-            bulkBox.innerHTML = '' +
-                '<div class="beyan-bulk-head">' +
-                  '<div><strong>' + declarations.length + ' beyan algılandı</strong>' +
-                  '<span class="muted"> — toplu ekleme</span></div>' +
-                  '<button type="button" class="btn btn-sm btn-ghost" data-beyan-bulk-cancel>✏️ Tekli düzenle</button>' +
-                '</div>' +
-                '<div class="beyan-bulk-list">' + rowsHtml + '</div>' +
-                '<div class="beyan-bulk-actions">' +
-                  '<button type="button" class="btn btn-primary btn-lg" data-beyan-bulk-save>' +
-                    '✅ Hepsini Kaydet (' + declarations.length + ')</button>' +
-                '</div>' +
-                '<div class="beyan-bulk-status" hidden></div>';
-            bulkBox.hidden = false;
-            bulkBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-            var cancelBtn = bulkBox.querySelector('[data-beyan-bulk-cancel]');
-            if (cancelBtn) cancelBtn.addEventListener('click', restoreSingle);
-
-            var saveBtn  = bulkBox.querySelector('[data-beyan-bulk-save]');
-            var bulkStat = bulkBox.querySelector('.beyan-bulk-status');
-            if (saveBtn) saveBtn.addEventListener('click', function () {
-                var payload = declarations.map(function (d) {
-                    var rec = Object.assign({}, d.parsed || {});
-                    rec.raw_text       = d.raw_text || '';
-                    rec.unmatched_text = d.unmatched || '';
-                    return rec;
+            if (summary) { summary.hidden = false; summary.textContent = message + (conflicts.length ? ' Kaynak metin sekmesinde karşılaştırabilirsiniz.' : ''); }
+            if (!conflicts.length) return;
+            var compare = document.createElement('div');
+            compare.id = 'beyanParseCompare'; compare.className = 'beyan-parse-comparison';
+            compare.innerHTML = '<strong>Mevcut değerleri karşılaştırın</strong><p>Yalnız işaretlediğiniz alanlar değiştirilecek.</p>' +
+                conflicts.map(function (item, index) {
+                    return '<label class="beyan-parse-compare-row"><input type="checkbox" data-beyan-compare="' + index + '"> <strong>' + LABELS[item.name] + '</strong><span>Mevcut: ' + esc(item.current) + '</span><span>Metinden: ' + esc(item.next) + '</span></label>';
+                }).join('') + '<button type="button" class="btn btn-secondary" data-beyan-apply>Seçili alanları uygula</button>';
+            (document.querySelector('[data-beyan-panel="kaynak"]') || status.parentNode).appendChild(compare);
+            compare.querySelector('[data-beyan-apply]').addEventListener('click', function () {
+                var count = 0;
+                compare.querySelectorAll('[data-beyan-compare]:checked').forEach(function (checkbox) {
+                    var item = conflicts[Number(checkbox.dataset.beyanCompare)];
+                    if (apply(item.name, item.next)) count++;
                 });
-                saveBtn.disabled = true;
-                saveBtn.textContent = 'Kaydediliyor…';
-                if (bulkStat) { bulkStat.hidden = false; bulkStat.textContent = ''; bulkStat.className = 'beyan-bulk-status'; }
-
-                fetch(baseUrl + 'beyan_bulk_save.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ csrf: csrf, declarations: payload })
-                })
-                    .then(function (r) { return r.json(); })
-                    .then(function (res) {
-                        if (res.ok) {
-                            if (bulkStat) { bulkStat.className = 'beyan-bulk-status ok'; bulkStat.textContent = '✓ ' + res.created + ' beyan eklendi, yönlendiriliyor…'; }
-                            window.location.href = baseUrl + 'beyanlar.php';
-                        } else {
-                            saveBtn.disabled = false;
-                            saveBtn.textContent = '✅ Hepsini Kaydet (' + declarations.length + ')';
-                            if (bulkStat) { bulkStat.className = 'beyan-bulk-status err'; bulkStat.textContent = 'Hata: ' + (res.error || 'bilinmeyen'); }
-                        }
-                    })
-                    .catch(function (err) {
-                        saveBtn.disabled = false;
-                        saveBtn.textContent = '✅ Hepsini Kaydet (' + declarations.length + ')';
-                        if (bulkStat) { bulkStat.className = 'beyan-bulk-status err'; bulkStat.textContent = 'Bağlantı hatası: ' + err.message; }
-                    });
+                var result = found + ' alan bulundu; ' + (applied + count) + ' alan uygulandı; ' + (conflicts.length - count) + ' farklı alan korundu.';
+                show('ok', result); if (summary) summary.textContent = result;
+                compare.remove(); activate('beyan');
             });
         }
-
-        parseBtn.addEventListener('click', function (e) {
-            e.preventDefault();
-            var rawEl = beyanForm ? beyanForm.querySelector('[name="raw_text"]') : null;
-            if (!rawEl || rawEl.value.trim() === '') {
-                showParseStatus('warn', 'Lütfen önce WhatsApp metnini girin.');
+        function manualSections() {
+            var explicit = document.querySelectorAll('[data-beyan-single-section]');
+            if (explicit.length) return Array.from(explicit);
+            return Array.from(document.querySelectorAll('.beyan-section')).filter(function (section) { return !section.contains(parseBtn); });
+        }
+        function setSingleUI(visible) {
+            if (workspace) {
+                var singleSave = document.querySelector('#beyanSingleActions button[type=submit]');
+                if (singleSave) singleSave.disabled = !visible;
                 return;
             }
-            var csrfEl = beyanForm ? beyanForm.querySelector('[name="csrf"]') : null;
-            var csrf   = csrfEl ? csrfEl.value : '';
-
-            parseBtn.disabled = true;
-            parseBtn.textContent = 'Ayrıştırılıyor…';
-            if (statusDiv) statusDiv.hidden = true;
-            if (bulkBox) { bulkBox.hidden = true; bulkBox.innerHTML = ''; }
-            setSingleUI(true); // her ayrıştırmada tekli düzene dön; toplu ise renderBulk gizler
-
-            var fd = new FormData();
-            if (csrf) fd.append('csrf', csrf);
-            fd.append('text', rawEl.value);
-
-            fetch(baseUrl + 'beyan_parse.php', { method: 'POST', body: fd })
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    parseBtn.disabled = false;
-                    parseBtn.textContent = parseEtiket;
-
-                    if (!data.ok) {
-                        showParseStatus('error', data.error || 'Ayrıştırma başarısız.');
-                        return;
+            manualSections().forEach(function (section) { section.style.display = visible ? '' : 'none'; });
+            var actions = document.getElementById('beyanSingleActions');
+            if (actions) actions.style.display = visible ? '' : 'none';
+        }
+        function restoreSingle() { if (bulk) { bulk.hidden = true; bulk.innerHTML = ''; } setSingleUI(true); }
+        function requestId() {
+            if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+            return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + '-' + Math.random().toString(36).slice(2);
+        }
+        function renderBulk(declarations, csrf) {
+            if (!bulk) return;
+            clearComparison(); setSingleUI(false); activate('kaynak');
+            bulk.innerHTML = '<div class="beyan-bulk-head"><strong>' + declarations.length + ' beyan algılandı</strong>' +
+                '<button type="button" class="btn btn-sm btn-ghost" data-beyan-bulk-cancel>Önizlemeyi kapat</button></div>' +
+                '<p class="muted">Kaydedilecek satırları seçin. Ayrıntıları açarak bilgileri düzeltebilirsiniz.</p><div class="beyan-bulk-list">' +
+                declarations.map(function (decl, index) {
+                    var parsed = decl.parsed || {};
+                    var edits = FIELDS.map(function (name) {
+                        return '<label class="form-group">' + LABELS[name] + '<input class="form-control" data-bulk-field="' + name + '" value="' + esc(display(name, parsed[name])) + '"></label>';
+                    }).join('');
+                    return '<div class="beyan-bulk-item" data-bulk-row="' + index + '"><div class="beyan-bulk-item-head"><label>' +
+                        '<input type="checkbox" data-bulk-selected checked> #' + (index + 1) + ' ' + esc(parsed.party_no || '(parti no yok)') + '</label><span>' +
+                        esc(parsed.product_name || '') + '</span></div><details><summary>Ayrıntılar ve düzeltme</summary><div class="beyan-form-grid beyan-bulk-edit-grid">' + edits + '</div>' +
+                        '<label class="form-group">Eşleşmeyen metin<textarea class="form-control" data-bulk-field="unmatched_text">' + esc(decl.unmatched || '') + '</textarea></label>' +
+                        '<details><summary>Kaynak metin</summary><pre>' + esc(decl.raw_text || '') + '</pre></details>' +
+                        '<button type="button" class="btn btn-sm btn-secondary" data-bulk-single>Bu beyanı tekli düzenle</button></details></div>';
+                }).join('') + '</div><div class="beyan-bulk-actions"><button type="button" class="btn btn-primary" data-beyan-bulk-save></button></div>' +
+                '<div class="beyan-bulk-status" role="status" hidden></div>';
+            bulk.hidden = false; bulk.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            var rows = Array.from(bulk.querySelectorAll('[data-bulk-row]'));
+            var save = bulk.querySelector('[data-beyan-bulk-save]'), result = bulk.querySelector('.beyan-bulk-status');
+            var frozenPayload = null, id = requestId(), locked = false;
+            function record(row) {
+                var decl = declarations[Number(row.dataset.bulkRow)], rec = Object.assign({}, decl.parsed || {});
+                row.querySelectorAll('[data-bulk-field]').forEach(function (input) { rec[input.dataset.bulkField] = input.value; });
+                rec.raw_text = decl.raw_text || ''; return rec;
+            }
+            function selected() { return rows.filter(function (row) { return row.querySelector('[data-bulk-selected]').checked; }); }
+            function updateCount() { save.textContent = 'Seçilenleri kaydet (' + selected().length + ')'; save.disabled = !selected().length; }
+            bulk.onchange = updateCount; updateCount();
+            bulk.querySelector('[data-beyan-bulk-cancel]').addEventListener('click', restoreSingle);
+            rows.forEach(function (row) { row.querySelector('[data-bulk-single]').addEventListener('click', function () {
+                if (locked) return;
+                var rec = record(row); restoreSingle(); fillSingle({ parsed: rec, raw_text: rec.raw_text, unmatched: rec.unmatched_text }, true);
+            }); });
+            save.addEventListener('click', function () {
+                if (!selected().length) return;
+                if (!frozenPayload) frozenPayload = selected().map(record);
+                locked = true;
+                bulk.querySelectorAll('input, textarea, button').forEach(function (el) { el.disabled = true; });
+                parseBtn.disabled = true;
+                save.textContent = 'Kaydediliyor…'; result.hidden = false; result.className = 'beyan-bulk-status'; result.textContent = '';
+                fetch(baseUrl + 'beyan_bulk_save.php', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ csrf: csrf, declarations: frozenPayload, request_id: id })
+                }).then(function (response) { return response.json(); }).then(function (res) {
+                    if (res.ok) {
+                        if (workspace) workspace.dispatchEvent(new Event('beyan:saved'));
+                        result.className = 'beyan-bulk-status ok'; result.textContent = res.created + ' beyan eklendi, yönlendiriliyor…';
+                        window.location.href = baseUrl + 'beyanlar.php';
+                    } else {
+                        locked = false; frozenPayload = null; id = requestId(); parseBtn.disabled = false;
+                        bulk.querySelectorAll('input, textarea, button').forEach(function (el) { el.disabled = false; });
+                        updateCount(); result.className = 'beyan-bulk-status err';
+                        result.textContent = 'Hata: ' + (res.error || 'Kayıt başarısız.');
+                        (res.rows || []).forEach(function (item) {
+                            var row = selected()[item.row - 1];
+                            if (row) { row.querySelector('details').open = true; var error = document.createElement('p');
+                                error.className = 'beyan-parse-alert beyan-parse-alert-error'; error.textContent = (item.errors || []).join(' '); row.appendChild(error); }
+                        });
                     }
-
-                    var decls = data.declarations || [];
-                    // Toplu: 2+ beyan VE create sayfasındaysak önizleme göster
-                    if (bulkBox && decls.length > 1) {
-                        showParseStatus('ok', decls.length + ' beyan algılandı — aşağıdan toplu kaydedin.');
-                        renderBulk(decls, csrf);
-                        return;
-                    }
-                    // Tekli: forma doldur
-                    setSingleUI(true);
-                    var first = decls[0] || { parsed: data.parsed, unmatched: data.unmatched, matched_count: data.matched_count };
-                    fillSingle(first);
-                })
-                .catch(function (err) {
-                    parseBtn.disabled = false;
-                    parseBtn.textContent = parseEtiket;
-                    showParseStatus('error', 'Bağlantı hatası: ' + err.message);
+                }).catch(function () {
+                    // Retry the identical payload/id after an uncertain transport failure.
+                    save.disabled = false; save.textContent = 'Aynı kaydı yeniden dene'; result.className = 'beyan-bulk-status err';
+                    result.textContent = 'Yanıt alınamadı. Aynı işlem kimliğiyle güvenli yeniden deneyebilirsiniz.';
                 });
+            });
+        }
+        parseBtn.addEventListener('click', function (event) {
+            event.preventDefault(); var raw = field('raw_text');
+            if (!raw || !raw.value.trim()) { show('warn', 'Lütfen önce WhatsApp metnini girin.'); return; }
+            var csrf = field('csrf'); parseBtn.disabled = true; parseBtn.textContent = 'Ayrıştırılıyor…';
+            if (status) status.hidden = true;
+            restoreSingle(); clearComparison(); var body = new FormData();
+            if (csrf) body.append('csrf', csrf.value); body.append('text', raw.value);
+            fetch(baseUrl + 'beyan_parse.php', { method: 'POST', body: body }).then(function (response) { return response.json(); }).then(function (data) {
+                if (!data.ok) { show('error', data.error || 'Ayrıştırma başarısız.'); return; }
+                var declarations = data.declarations || [];
+                if (bulk && declarations.length > 1) {
+                    show('ok', declarations.length + ' beyan algılandı — seçerek toplu kaydedin.'); renderBulk(declarations, csrf ? csrf.value : '');
+                } else { fillSingle(declarations[0] || { parsed: data.parsed, unmatched: data.unmatched }); }
+            }).catch(function (error) { show('error', 'Bağlantı hatası: ' + error.message); }).then(function () {
+                parseBtn.disabled = false; parseBtn.textContent = parseLabel;
+            });
         });
     })();
 
