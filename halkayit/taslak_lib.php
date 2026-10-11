@@ -97,6 +97,15 @@ function hks_uretici_sifat_id() {
   return null;
 }
 
+// Yurt içi bildirimde karşı taraf sıfatı katalogdaki TAM "Üretici" mi? O zaman
+// HKS cep telefonunu ZORUNLU ister (HataKodu 263), kayıt durumundan bağımsız.
+// Katalog yoksa false (bilinmeyen durumda yeni engel koyulmaz; HKS yine söyler).
+function hks_uretici_cep_gerekli($o) {
+  if (empty($o['yurtIci']) || empty($o['ikinciSifatId'])) return false;
+  $uid = hks_uretici_sifat_id();
+  return $uid !== null && (int)$o['ikinciSifatId'] === $uid;
+}
+
 // Künye detay zenginleştirmesinde id → ad çözümü (bildirim türü / belge tipi).
 // hks_sifat_adi ile AYNI desen: liste yoksa/eşleşmezse null döner, arayüz id'yi
 // ham gösterir — asla hata fırlatmaz (zenginleştirme opsiyonel).
@@ -171,7 +180,10 @@ function hks_bildirim_dogrula($g, $planMi = false) {
     // atlar; o zaman KPS yalnız TC ile sorgulanır ve "Tc kimlik numarası Mernis
     // sisteminde bulunamadı" döner — üstelik sebebi ekranda görünmez. Bu yüzden
     // kısmi kimlik, geri alınamaz gönderimden ÖNCE burada durdurulur.
-    if ((!empty($o['ikinciAd']) || !empty($o['ikinciCep']))
+    // Kayıtlı karşı tarafta (Üretici sıfatı) YALNIZ Cep gider — KPS sorgulanmaz,
+    // doğum tarihi gerekmez. Bu yüzden "yalnız Cep" kuralı yalnız KAYITSIZ kişide.
+    $__kayitsiz = $uret || !empty($o['hedefAdres']) || !empty($o['ikinciKayitsiz']);
+    if ((!empty($o['ikinciAd']) || (!empty($o['ikinciCep']) && $__kayitsiz))
         && hks_dogum_tarihi_xml($o['ikinciDogumTarihi'] ?? '') === '') {
       return 'Karşı taraf için Ad/Ünvan veya Cep gönderiliyor ama Doğum Tarihi yok/geçersiz. ' .
              'KPS, TC ile doğum tarihini BİRLİKTE doğrular; eksik kimlikle gönderilen ' .
@@ -278,6 +290,17 @@ function hks_bildirim_dogrula($g, $planMi = false) {
       }
       if (hks_dogum_tarihi_xml($o['ikinciDogumTarihi']) === '') {
         return 'Doğum tarihi geçersiz — GG.AA.YYYY biçiminde geçerli bir tarih girin.';
+      }
+    }
+
+    // ÜRETİCİ SIFATI → CEP ZORUNLU (canlı HKS, HataKodu 263: "Lütfen üreticinin GSM
+    // numarasını doğru giriniz"). KAYITLI kişi/firma olsa da HKS üreticinin cep
+    // telefonunu istiyor; eskiden kayıtlı karşı tarafa cep hiç gönderilmiyordu.
+    if (hks_uretici_cep_gerekli($o)) {
+      $cep = hks_cep_rakam($o['ikinciCep'] ?? '');
+      if ($cep === '' || strlen($cep) < 10 || strlen($cep) > 13) {
+        return 'Karşı taraf sıfatı "Üretici": HKS üreticinin cep telefonunu zorunlu istiyor ' .
+               '(kişi kayıtlı olsa da). Geçerli bir cep telefonu girin — en az 10 rakam.';
       }
     }
 
