@@ -1192,6 +1192,7 @@ sıfatıyla Satın Alım). Eskiden kayıtlı karşı tarafa cep hiç gönderilmi
 - Arayüz: `ureticiCepGerekli()` → kayıtlı + Üretici sıfatında `#cepTelBlok` görünür (not: "Üretici sıfatında HKS zorunlu
   tutar"), havuz seçiminde cep dolar, kayıtta zorunlu; sonuç ekranında 263 ipucu; kayıtlı kişide "Doğum: GÖNDERİLMEDİ"
   uyarısı yerine "gerekmez".
+- **Gönderim Sonucu penceresi:** kutunun dışına (boşluğa) tıklamak "Gönderilenlere Git/Kapat" ile aynıdır (`#modal.dataset.sonuc='1'`, yalnız sonuç ekranında). CANLI "Gönderim Onayı" ve firma penceresinde geçerli DEĞİL (yanlışlıkla kapanmasın).
 - Test: `php scripts/hks_uretici_cep_test.php` · `node scripts/hks_uretici_cep_smoke.js`.
 
 ## Hal Kayıt — Kişi Havuzu (v282, v283)

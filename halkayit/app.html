@@ -1692,6 +1692,7 @@ function firmaFormAc(id) {
   $('fSrvNot').textContent = f ? '(boş bırakılırsa değişmez)' : '';
   renkSec(f ? (f.renk || 'teal') : 'teal');
   $('btnFirmaSil').classList.toggle('gizli', !f);
+  delete $('modal').dataset.sonuc;
   $('modalOnayKutu').classList.add('gizli');
   $('modalFirmaKutu').classList.remove('gizli');
   $('modal').classList.add('acik');
@@ -4166,12 +4167,18 @@ function taslakOnayAc(t) {
   $('modalIcerik').innerHTML = html;
   $('btnOnay').classList.remove('gizli');
   $('btnVazgec').textContent = 'Vazgeç';
+  delete $('modal').dataset.sonuc;
   $('modalFirmaKutu').classList.add('gizli');
   $('modalOnayKutu').classList.remove('gizli');
   $('modal').classList.add('acik');
 }
 
 $('btnVazgec').onclick = () => $('modal').classList.remove('acik');
+// Gönderim Sonucu penceresi: boşluğa (kutunun dışına) tıklamak Kapat/Gönderilenlere Git ile aynıdır.
+// CANLI onay penceresinde geçerli DEĞİL (yanlışlıkla kapanmasın).
+$('modal').addEventListener('click', (e) => {
+  if (e.target === $('modal') && $('modal').dataset.sonuc === '1') $('btnVazgec').click();
+});
 
 $('btnOnay').onclick = async () => {
   $('btnOnay').disabled = true;
@@ -4274,6 +4281,7 @@ $('btnOnay').onclick = async () => {
     $('btnOnay').classList.add('gizli');
     // Başarılı gönderimde modal kapanınca DOĞRUDAN Gönderilenler'e geçilir — liste
     // orada her açılışta taze fetch ile çekildiği için son gönderim garanti görünür.
+    $('modal').dataset.sonuc = '1'; // boşluğa tıklayınca kapanma yalnız sonuç ekranında
     $('btnVazgec').textContent = herhangiBasarili ? 'Gönderilenlere Git' : (j.taslakKorundu ? 'Taslağa Dön' : 'Kapat');
     $('btnVazgec').onclick = () => {
       $('modal').classList.remove('acik');
