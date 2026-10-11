@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v331');
+    define('APP_SURUM', 'v332');
 }
 
 // --- HTML kaçışı ---
@@ -1691,6 +1691,12 @@ endif;
             if (!in_array('hks_durum', $cd_cols, true)) {
                 $pdo->exec("ALTER TABLE `customs_declarations`
                             ADD COLUMN `hks_durum` VARCHAR(20) NULL DEFAULT NULL");
+            }
+
+            // Serbest NOT (v332, sahip GO verdi): formun altındaki "Not" alanı.
+            // Tek nullable TEXT kolon — mevcut veriye dokunmaz.
+            if (!in_array('note', $cd_cols, true)) {
+                $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `note` TEXT NULL DEFAULT NULL");
             }
 
             // KALICI EŞLEŞTİRME ALANLARI (beyan formunda doldurulur).
