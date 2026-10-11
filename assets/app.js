@@ -317,11 +317,11 @@ function ekranAlti() {
         var bulk = document.getElementById('beyanBulkPreview');
         var baseUrl = parseBtn.dataset.baseUrl || '';
         var parseLabel = parseBtn.textContent.trim();
-        var FIELDS = ['declaration_title', 'party_no', 'transport_type', 'line_type', 'company_name',
+        var FIELDS = ['party_no', 'transport_type', 'line_type', 'company_name',
             'company_address', 'product_name', 'product_variety', 'pallet_count', 'gross_kg', 'net_kg',
             'crate_count', 'crate_type', 'exit_depot', 'buyer_name', 'contact_person', 'brand'];
-        var LABELS = { declaration_title: 'Beyan başlığı', party_no: 'Parti no', transport_type: 'Taşıma türü',
-            line_type: 'Hat', company_name: 'Şirket', company_address: 'Adres', product_name: 'Ürün',
+        var LABELS = { party_no: 'Parti no', transport_type: 'Taşıma türü',
+            line_type: 'Hat', company_name: 'Gümrük Adı', company_address: 'Gümrük Adresi', product_name: 'Ürün',
             product_variety: 'Çeşit', pallet_count: 'Palet', gross_kg: 'Brüt KG', net_kg: 'Net KG',
             crate_count: 'Kasa', crate_type: 'Kasa tipi', exit_depot: 'Çıkış deposu', buyer_name: 'Alıcı',
             contact_person: 'İlgili kişi', brand: 'Marka', raw_text: 'Kaynak metin', unmatched_text: 'Eşleşmeyen metin' };
@@ -2013,6 +2013,11 @@ function ekranAlti() {
     if (!POOL || typeof POOL !== 'object') return;
 
     var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var metaEl = document.getElementById('beyanSuggestMeta');
+    var beyanMeta = {companies: {}, products: {}};
+    if (metaEl) {
+        try { beyanMeta = JSON.parse(metaEl.textContent || '{}'); } catch (_) {}
+    }
 
     /* TR-duyarsız katlama — malzeme_stok_islem ve depo_fold ile aynı kurallar */
     function fold(s) {
@@ -2025,6 +2030,10 @@ function ekranAlti() {
     }
     /* En az bir harf/rakam — sunucudaki suggest_value_is_meaningful ile aynı kural */
     function anlamli(v) { return /[0-9A-Za-zÇĞİIÖŞÜçğıiöşü]/.test(String(v || '')); }
+    function lookup(map, name) {
+        var keys = Object.keys(map || {}).filter(function (key) { return fold(key) === fold(name); });
+        return keys.length === 1 ? map[keys[0]] : null;
+    }
 
     function attach(input) {
         var field = input.dataset.suggest;
@@ -2113,10 +2122,17 @@ function ekranAlti() {
             row.dataset.busy = '1';
             row.classList.add('busy');
             row.textContent = '⏳ Ekleniyor…';
-            fetch('api_tanim_ekle.php', {
+            var payload = {csrf: csrf, field: field, name: name};
+            if (input.dataset.suggestEndpoint) {
+                var company = document.querySelector('[name="company_name"]');
+                var address = document.querySelector('[name="company_address"]');
+                payload.company_name = company ? company.value : '';
+                payload.company_address = address ? address.value : '';
+            }
+            fetch(input.dataset.suggestEndpoint || 'api_tanim_ekle.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: JSON.stringify({ csrf: csrf, field: field, name: name })
+                body: JSON.stringify(payload)
             }).then(function (r) { return r.json(); }).then(function (j) {
                 if (!j || !j.ok) {
                     row.textContent = '⚠ ' + ((j && j.error) || 'Eklenemedi');
@@ -2127,6 +2143,13 @@ function ekranAlti() {
                 if (!hasExact(j.name)) items.push(j.name);
                 if (Array.isArray(POOL[field]) && POOL[field].indexOf(j.name) === -1) {
                     POOL[field].push(j.name);          // aynı alanın diğer örnekleri de görsün
+                }
+                if (metaEl && typeof j.address === 'string') {
+                    var companyName = field === 'company_name' ? j.name : payload.company_name;
+                    beyanMeta.companies[companyName] = j.address;
+                }
+                if (metaEl && field === 'product_name' && j.urun_id) {
+                    beyanMeta.products[j.name] = {urun_id: j.urun_id};
                 }
                 pick(j.name);
             }).catch(function () {
@@ -2154,6 +2177,7 @@ function ekranAlti() {
         function render() {
             if (suppress) return;
             var v = input.value.trim();
+            if (input.dataset.uppercase === 'tr') v = v.toLocaleUpperCase('tr-TR');
             var q = fold(v);
             var matches = items.filter(function (s) {
                 return q === '' || fold(s).indexOf(q) !== -1;
@@ -2168,7 +2192,13 @@ function ekranAlti() {
                 list.appendChild(row);
             });
             // Birebir eşleşme yoksa "+ ekle" satırı — boş/anlamsız değerde gösterme
-            if (v !== '' && anlamli(v) && !hasExact(v)) {
+            var needsAddressLink = false;
+            if (metaEl && field === 'company_address') {
+                var company = document.querySelector('[name="company_name"]');
+                var linked = company ? lookup(beyanMeta.companies, company.value) : '';
+                needsAddressLink = !!(company && company.value.trim()) && fold(linked) !== fold(v);
+            }
+            if (v !== '' && anlamli(v) && (!hasExact(v) || needsAddressLink)) {
                 var add = document.createElement('div');
                 add.className = 'ms-sug-row ms-sug-add';
                 add.textContent = '➕ "' + v + '" ' + label + ' olarak ekle';
@@ -2207,13 +2237,51 @@ function ekranAlti() {
     // durur — bir alanın kurulumu (ör. üretimdeki eski/beklenmedik veri)
     // patlarsa, DOM sırasında ONDAN SONRAKİ TÜM alanlar (Ulaşım genelde en
     // sonda) sessizce hiç kurulmamış olurdu. try/catch bunu izole eder.
-    document.querySelectorAll('input[data-suggest]').forEach(function (input) {
+    document.querySelectorAll('input[data-suggest], textarea[data-suggest]').forEach(function (input) {
         try {
             attach(input);
         } catch (err) {
             console.error('[öneri kutusu] "' + (input.name || input.dataset.suggest) + '" alanı kurulamadı:', err);
         }
     });
+
+    // Gümrük adresi yalnız boşken veya önceki otomatik değerken değişir.
+    // Elle düzeltilmiş bir adres başka gümrük seçildiğinde sessizce ezilmez.
+    if (metaEl) {
+        var companyInput = document.querySelector('[name="company_name"]');
+        var addressInput = document.querySelector('[name="company_address"]');
+        var productInput = document.querySelector('[name="product_name"]');
+        var productSelect = document.querySelector('[name="hks_urun_id"]');
+        var lastAutoAddress = null;
+        if (companyInput && addressInput && fold(addressInput.value) === fold(lookup(beyanMeta.companies, companyInput.value))) {
+            lastAutoAddress = addressInput.value;
+        }
+        if (companyInput && addressInput) {
+            companyInput.addEventListener('change', function () {
+                var address = lookup(beyanMeta.companies, companyInput.value);
+                if (addressInput.value.trim() !== '' && addressInput.value !== lastAutoAddress) return;
+                addressInput.value = address || '';
+                lastAutoAddress = addressInput.value;
+                addressInput.dispatchEvent(new Event('input', {bubbles: true}));
+                addressInput.dispatchEvent(new Event('change', {bubbles: true}));
+            });
+            addressInput.addEventListener('input', function () {
+                if (addressInput.value !== lastAutoAddress) lastAutoAddress = null;
+            });
+        }
+        if (productInput && productSelect) {
+            productInput.addEventListener('change', function () {
+                var match = lookup(beyanMeta.products, productInput.value);
+                // Katalogda olmayan/çok anlamlı ürün HKS kimliği uydurmaz.
+                var wanted = match && match.urun_id ? String(match.urun_id) : '';
+                if (wanted && !Array.prototype.some.call(productSelect.options, function (option) { return option.value === wanted; })) wanted = '';
+                if (productSelect.value !== wanted) {
+                    productSelect.value = wanted;
+                    productSelect.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            });
+        }
+    }
 
     /* ── Şoför → Telefon otomatik doldurma ──
        Şoför adı bilinen bir şoföre eşitlenince telefon kutusu dolar.

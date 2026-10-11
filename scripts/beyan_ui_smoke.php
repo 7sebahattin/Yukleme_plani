@@ -795,6 +795,16 @@ $h_sil = render_beyan($B2);
 ok('[bag] silinmis taslakta Bildirim Yap pasif ve sebep yaziyor',
    buton_pasif($h_sil) === true && mb_strpos($h_sil, 'Tekrar Aktif Et') !== false);
 $f_sil = render_form($B2);
+ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
+ok('[form] gümrük adı/adresi görünür ve önerili',
+   strpos($f_sil, '>Gümrük Adı</label>') !== false
+   && strpos($f_sil, '>Gümrük Adresi</label>') !== false
+   && strpos($f_sil, '<summary>Şirket ve iletişim') === false
+   && strpos($f_sil, 'data-suggest="company_address"') !== false);
+ok('[form] analiz tarihini kaydıran açıklama kaldırılmış',
+   strpos($f_sil, 'Temiz/Red seçilince boşsa otomatik doldurulur.') === false);
+ok('[bag] bağlantı düzeltme alanı kullanıcı isteğiyle gizli',
+   (bool)preg_match('/<details[^>]*class="beyan-workspace-bag"[^>]*\bhidden\b/', $f_sil));
 ok('[bag] duzenle ekraninda Tekrar Aktif Et var',
    strpos($f_sil, 'value="tekrar_aktif"') !== false && strpos($f_sil, 'value="gonderildi_isaretle"') === false);
 ok('[bag] duzenle ekrani HTML dengesi', empty(etiket_dengesi($f_sil)), implode(' | ', etiket_dengesi($f_sil)));

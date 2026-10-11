@@ -3,13 +3,14 @@
 $is_edit = isset($beyan) && is_array($beyan);
 $form_action = $is_edit ? 'beyan_edit.php?id=' . (int)$id : 'beyan_create.php';
 $return_url = $is_edit ? 'beyan_view.php?id=' . (int)$id : 'beyanlar.php';
+$suggest_data = beyan_suggest_form_data();
 $field = static function (string $name, string $label, string $icon, string $mode = '') use ($f): void {
     $field_id = 'bf_' . $name;
     ?>
     <div class="form-group" data-ic="<?= h($icon) ?>">
         <label class="form-label" for="<?= h($field_id) ?>"><?= h($label) ?></label>
         <input type="text" id="<?= h($field_id) ?>" name="<?= h($name) ?>" class="form-control"
-               value="<?= h((string)($f[$name] ?? '')) ?>"<?= $mode !== '' ? ' inputmode="' . h($mode) . '"' : ' data-uppercase="tr"' ?>>
+               value="<?= h((string)($f[$name] ?? '')) ?>"<?= $mode !== '' ? ' inputmode="' . h($mode) . '"' : ' data-uppercase="tr"' ?><?php if (isset(beyan_suggest_fields()[$name])): ?> data-suggest="<?= h($name) ?>" data-suggest-label="<?= h($label) ?>" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"<?php endif; ?>>
     </div>
     <?php
 };
@@ -61,7 +62,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php $field('party_no', 'Parti No', 'diyez'); ?>
                         <?php $field('buyer_name', 'Alıcı', 'kisi'); ?>
                         <?php $field('exit_depot', 'Çıkış Depo', 'depo'); ?>
-                        <?php $field('declaration_title', 'Başlık / Beyan Tipi', 'belge'); ?>
                         <?php $field('transport_type', 'Nakliye Türü', 'tir'); ?>
                         <?php $field('line_type', 'Hat / Güzergah', 'rota'); ?>
                     </div>
@@ -94,17 +94,17 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     </div>
                 </section>
 
-                <details class="beyan-section beyan-workspace-details" data-bf="lojistik" data-beyan-single-section>
-                    <summary>Şirket ve iletişim <span class="muted"><?= ($f['company_name'] !== '' || $f['contact_person'] !== '' || $f['company_address'] !== '') ? '— kayıtlı ayrıntılar var' : '— isteğe bağlı' ?></span></summary>
+                <section class="beyan-section" data-bf="lojistik" data-beyan-single-section>
+                    <h2 class="beyan-section-title" data-ic="bina"><span class="bf-emoji" aria-hidden="true">🏢</span> Gümrük ve İletişim</h2>
                     <div class="beyan-form-grid">
-                        <?php $field('company_name', 'Şirket Adı', 'bina'); ?>
+                        <?php $field('company_name', 'Gümrük Adı', 'bina'); ?>
                         <?php $field('contact_person', 'İlgili Kişi', 'rehber'); ?>
                     </div>
                     <div class="form-group" data-ic="konum">
-                        <label class="form-label" for="bf_company_address">Şirket Adresi</label>
-                        <textarea id="bf_company_address" name="company_address" rows="2" class="form-control" data-uppercase="tr"><?= h($f['company_address']) ?></textarea>
+                        <label class="form-label" for="bf_company_address">Gümrük Adresi</label>
+                        <textarea id="bf_company_address" name="company_address" rows="2" class="form-control" data-uppercase="tr" data-suggest="company_address" data-suggest-label="Gümrük Adresi" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"><?= h($f['company_address']) ?></textarea>
                     </div>
-                </details>
+                </section>
             </div>
 
             <div id="beyanPanel_analiz" data-beyan-panel="analiz" role="tabpanel" aria-labelledby="beyanTab_analiz">
@@ -119,7 +119,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <div class="form-group" data-ic="takvim">
                             <label class="form-label" for="bf_analysis_result_at">Analiz Sonuç Tarihi</label>
                             <input type="datetime-local" id="bf_analysis_result_at" name="analysis_result_at" class="form-control" value="<?= h($f['analysis_result_at']) ?>">
-                            <div class="form-hint">Temiz/Red seçilince boşsa otomatik doldurulur.</div>
                         </div>
                     </div>
                     <?php else: ?>
@@ -170,3 +169,5 @@ $field = static function (string $name, string $label, string $icon, string $mod
     <?php endif; ?>
 </form>
 </div>
+<script type="application/json" id="suggestData"><?= json_encode($suggest_data['values'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
+<script type="application/json" id="beyanSuggestMeta"><?= json_encode(['companies' => $suggest_data['companies'], 'products' => $suggest_data['products']], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>

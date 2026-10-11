@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v326');
+    define('APP_SURUM', 'v327');
 }
 
 // --- HTML kaçışı ---
@@ -2536,6 +2536,13 @@ function beyan_edit_kg($v): string {
 function beyan_veri_dogrula(array $data): array {
     $values = [];
     $errors = [];
+    foreach (beyan_suggest_fields() as $field => $meta) {
+        if (!array_key_exists($field, $data)) continue;
+        $values[$field] = beyan_suggest_normalize($field, (string)$data[$field]);
+        if (mb_strlen($values[$field], 'UTF-8') > $meta['max']) {
+            $errors[] = $meta['label'] . ': en fazla ' . $meta['max'] . ' karakter olabilir.';
+        }
+    }
     foreach (['gross_kg' => 'Brüt KG', 'net_kg' => 'Net KG', 'pallet_count' => 'Palet adedi', 'crate_count' => 'Kasa adedi'] as $k => $label) {
         try {
             $values[$k] = in_array($k, ['pallet_count', 'crate_count'], true)
@@ -2640,6 +2647,7 @@ function beyan_insert(array $data, int $user_id): int {
     ];
     $f = [];
     foreach ($str_fields as $k) $f[$k] = trim((string)($data[$k] ?? ''));
+    foreach (beyan_suggest_fields() as $k => $meta) $f[$k] = $checked['values'][$k] ?? '';
 
     // Büyük harf — seçili metin alanları (raw_text / unmatched / not hariç)
     foreach (['declaration_title', 'company_name', 'company_address', 'transport_type',
@@ -3489,4 +3497,140 @@ function bb_yurtdisi_isletme_turu(array $katalog): string {
         }
     }
     return '';
+}
+
+// Beyan önerileri: mevcut KV üzerinde ayrı ad alanı. DDL / HKS servisi yok.
+function beyan_suggest_fields(): array {
+    return [
+        'buyer_name' => ['type'=>'alici','label'=>'Alıcı','max'=>150],
+        'exit_depot' => ['type'=>'depo','label'=>'Çıkış Depo','max'=>150],
+        'transport_type' => ['type'=>'ulasim','label'=>'Nakliye Türü','max'=>100],
+        'line_type' => ['type'=>'','label'=>'Hat / Güzergah','max'=>100],
+        'product_name' => ['type'=>'urun','label'=>'Ürün Adı','max'=>150],
+        'product_variety' => ['type'=>'','label'=>'Ürün Çeşidi','max'=>150],
+        'brand' => ['type'=>'marka','label'=>'Marka','max'=>50],
+        'crate_type' => ['type'=>'kasa_cinsi','label'=>'Kasa Cinsi','max'=>100],
+        'company_name' => ['type'=>'gumruk','label'=>'Gümrük Adı','max'=>255],
+        'company_address' => ['type'=>'','label'=>'Gümrük Adresi','max'=>2000],
+        'contact_person' => ['type'=>'','label'=>'İlgili Kişi','max'=>150],
+    ];
+}
+function beyan_suggest_normalize(string $field, string $raw): string {
+    if (!isset(beyan_suggest_fields()[$field])) return '';
+    return tr_upper(trim((string)preg_replace('/\s+/u', ' ', str_replace("\xc2\xa0", ' ', $raw))));
+}
+function beyan_suggest_key(string $raw): string {
+    $v = tr_upper(trim((string)preg_replace('/\s+/u', ' ', $raw)));
+    return strtr($v, ['İ'=>'I','Ç'=>'C','Ğ'=>'G','Ö'=>'O','Ş'=>'S','Ü'=>'U','Â'=>'A','Î'=>'I','Û'=>'U']);
+}
+function beyan_suggest_kv_table(): string {
+    $prefix = defined('HKS_TABLO_ON') ? HKS_TABLO_ON : 'hks_';
+    if (!preg_match('/^[a-zA-Z0-9_]+$/D', $prefix)) throw new RuntimeException('Geçersiz KV tablo adı.');
+    return $prefix . 'kv';
+}
+function beyan_suggest_read(PDO $pdo, string $field): array {
+    $st = $pdo->prepare('SELECT deger FROM `' . beyan_suggest_kv_table() . '` WHERE anahtar = ?');
+    $st->execute(['beyan_defs_' . $field]);
+    $rows = json_decode((string)$st->fetchColumn(), true);
+    return is_array($rows) ? $rows : [];
+}
+function beyan_suggest_form_data(): array {
+    $fields = beyan_suggest_fields();
+    $sets = array_fill_keys(array_keys($fields), []);
+    $companies = [];
+    $products = [];
+    $add = static function(string $field, string $name) use (&$sets, $fields): string {
+        $name = beyan_suggest_normalize($field, $name);
+        if ($name === '' || mb_strlen($name, 'UTF-8') > $fields[$field]['max']) return '';
+        $key = beyan_suggest_key($name);
+        if (!isset($sets[$field][$key])) $sets[$field][$key] = $name;
+        return $sets[$field][$key];
+    };
+    // Katalog öncelikli; belirsiz (aynı ad, farklı ID) ürün otomatik bağlanmaz.
+    try {
+        $ids = [];
+        foreach ((bb_katalog()['urunler'] ?? []) as $row) {
+            $name = $add('product_name', (string)($row['ad'] ?? ''));
+            if ($name !== '' && (string)($row['id'] ?? '') !== '') $ids[$name][(string)$row['id']] = true;
+        }
+        foreach ($ids as $name => $set) if (count($set) === 1) $products[$name] = ['urun_id'=>(string)array_key_first($set)];
+    } catch (Throwable $e) { /* Yerel katalog eksik: serbest metin çalışır. */ }
+    try {
+        foreach (db()->query('SELECT type, name FROM material_definitions WHERE is_active = 1')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            foreach ($fields as $field => $meta) if ($meta['type'] !== '' && $meta['type'] === $row['type']) $add($field, (string)$row['name']);
+        }
+    } catch (Throwable $e) { /* Tanım tablosu olmadan manuel giriş. */ }
+    try {
+        $cols = implode(', ', array_keys($fields));
+        $history = db()->query("SELECT $cols FROM customs_declarations WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
+        foreach (array_reverse($history) as $row) {
+            foreach ($fields as $field => $meta) $add($field, (string)($row[$field] ?? ''));
+            $name = $add('company_name', (string)($row['company_name'] ?? ''));
+            $address = beyan_suggest_normalize('company_address', (string)($row['company_address'] ?? ''));
+            if ($name !== '' && $address !== '' && mb_strlen($address, 'UTF-8') <= 2000) $companies[$name] = $address;
+        }
+    } catch (Throwable $e) { /* Eski/eksik kurulum: diğer kaynaklar kullanılabilir. */ }
+    foreach ($fields as $field => $meta) {
+        try {
+            foreach (beyan_suggest_read(db(), $field) as $row) {
+                if (!is_array($row)) continue;
+                $name = $add($field, (string)($row['name'] ?? ''));
+                if ($field === 'company_name' && $name !== '' && !empty($row['address'])) $companies[$name] = (string)$row['address'];
+            }
+        } catch (Throwable $e) { /* KV yoksa öneri ve kayıt formu yine açılır. */ }
+    }
+    $values = [];
+    foreach ($sets as $field => $set) { $values[$field] = array_values($set); sort($values[$field], SORT_NATURAL); }
+    return ['values'=>$values, 'companies'=>$companies, 'products'=>$products];
+}
+// Yalnız açık +ekle isteğinde çağrılır; form kaydetmek tanım oluşturmaz.
+function beyan_suggest_save(PDO $pdo, string $field, string $raw, string $company = '', string $address = ''): array {
+    $meta = beyan_suggest_fields()[$field] ?? null;
+    if (!$meta) throw new InvalidArgumentException('Bu alan için tanım eklenemez.');
+    $name = beyan_suggest_normalize($field, $raw);
+    if (!preg_match('/[\p{L}\p{N}]/u', $name)) throw new InvalidArgumentException('Geçerli bir ' . $meta['label'] . ' girin.');
+    if (mb_strlen($name, 'UTF-8') > $meta['max']) throw new InvalidArgumentException('En fazla ' . $meta['max'] . ' karakter olabilir.');
+    $company = beyan_suggest_normalize('company_name', $company);
+    $address = beyan_suggest_normalize('company_address', $address);
+    if (mb_strlen($company, 'UTF-8') > 255 || mb_strlen($address, 'UTF-8') > 2000) throw new InvalidArgumentException('Gümrük adı veya adresi çok uzun.');
+    if ($field === 'company_address' && $company === '') throw new InvalidArgumentException('Önce Gümrük Adı girin.');
+    $data = beyan_suggest_form_data();
+    foreach ($data['values'][$field] as $known) {
+        if (beyan_suggest_key($known) === beyan_suggest_key($name)) { $name = $known; break; }
+    }
+    foreach ($data['values']['company_name'] as $known) {
+        if (beyan_suggest_key($known) === beyan_suggest_key($company)) { $company = $known; break; }
+    }
+    if ($field === 'product_name' && isset($data['products'][$name])) {
+        return ['ok'=>true, 'name'=>$name, 'urun_id'=>$data['products'][$name]['urun_id']];
+    }
+    $pdo->beginTransaction();
+    try {
+        // Ortak sabit satır kilidi, aynı anda eklenen normalize eşlerin yarışını önler.
+        $table = beyan_suggest_kv_table();
+        $sqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+        $sql = $sqlite ? "INSERT OR IGNORE INTO `$table` (anahtar,deger) VALUES ('beyan_defs_lock','{}')"
+            : "INSERT IGNORE INTO `$table` (anahtar,deger) VALUES ('beyan_defs_lock','{}')";
+        $pdo->exec($sql);
+        $pdo->query("SELECT deger FROM `$table` WHERE anahtar='beyan_defs_lock'" . ($sqlite ? '' : ' FOR UPDATE'))->fetchColumn();
+        $write = static function(string $f, string $n, ?string $a = null) use ($pdo, $table): string {
+            $rows = beyan_suggest_read($pdo, $f);
+            $key = beyan_suggest_key($n);
+            $entry = $rows[$key] ?? ['name'=>$n];
+            if ($a !== null && $a !== '') $entry['address'] = $a;
+            $rows[$key] = $entry;
+            $pdo->prepare("REPLACE INTO `$table` (anahtar, deger) VALUES (?, ?)")->execute(['beyan_defs_' . $f, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
+            return (string)$entry['name'];
+        };
+        $name = $write($field, $name, $field === 'company_name' ? $address : null);
+        if ($field === 'company_address') $write('company_name', $company, $name);
+        $result = ['ok'=>true, 'name'=>$name];
+        if ($field === 'company_address') $result['address'] = $name;
+        if ($field === 'company_name') {
+            $saved = beyan_suggest_read($pdo, 'company_name');
+            $result['address'] = (string)($saved[beyan_suggest_key($name)]['address'] ?? '');
+        }
+        $pdo->commit();
+        return $result;
+    } catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
 }

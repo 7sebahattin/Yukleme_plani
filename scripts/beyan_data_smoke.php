@@ -4,7 +4,7 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 // helpers.php üst düzeyde auto-migration içerir; include etmek yerine yalnız
 // test edilen gerçek fonksiyonları tokenizer ile yükle. Migration ASLA çalışmaz.
-$wanted = array_flip(['tr_upper', 'beyan_statuses', 'beyan_num_or_null', 'beyan_int_or_null', 'beyan_edit_kg', 'beyan_veri_dogrula', 'beyan_edit_token', 'beyan_duzenleme_kilitle', 'beyan_durum_kaydet', 'beyan_insert', 'beyan_hks_secimleri_coz', 'beyan_plaka_normalize']);
+$wanted = array_flip(['beyan_suggest_fields', 'beyan_suggest_normalize', 'tr_upper', 'beyan_statuses', 'beyan_num_or_null', 'beyan_int_or_null', 'beyan_edit_kg', 'beyan_veri_dogrula', 'beyan_edit_token', 'beyan_duzenleme_kilitle', 'beyan_durum_kaydet', 'beyan_insert', 'beyan_hks_secimleri_coz', 'beyan_plaka_normalize']);
 $tokens = token_get_all((string)file_get_contents(dirname(__DIR__) . '/config/helpers.php'));
 for ($i = 0, $n = count($tokens); $i < $n; $i++) {
     if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_FUNCTION) continue;

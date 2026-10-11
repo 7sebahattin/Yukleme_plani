@@ -59,7 +59,7 @@ function ok(ad, kosul, ayrinti) {
     const chromePath = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
                         '/opt/pw-browsers/chromium/chrome-linux/chrome']
                        .find(p => fs.existsSync(p));
-    const browser = await chromium.launch(chromePath ? { executablePath: chromePath } : {});
+    const browser = await chromium.launch(process.env.PW_CHANNEL ? {channel: process.env.PW_CHANNEL} : (chromePath ? { executablePath: chromePath } : {}));
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sug-'));
 
     const senaryolar = [

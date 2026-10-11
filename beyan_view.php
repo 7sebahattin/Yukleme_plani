@@ -236,10 +236,6 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
             <span class="val"><?= h($beyan['party_no'] ?: '—') ?></span>
         </div>
         <div class="beyan-view-row">
-            <span class="lbl">Başlık / Beyan Tipi</span>
-            <span class="val"><?= h($beyan['declaration_title'] ?: '—') ?></span>
-        </div>
-        <div class="beyan-view-row">
             <span class="lbl">Nakliye Türü</span>
             <span class="val"><?= h($beyan['transport_type'] ?: '—') ?></span>
         </div>
@@ -253,13 +249,13 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         </div>
         <?php if ($beyan['company_name']): ?>
         <div class="beyan-view-row" style="grid-column:1/-1">
-            <span class="lbl">Şirket Adı</span>
+            <span class="lbl">Gümrük Adı</span>
             <span class="val"><?= h($beyan['company_name']) ?></span>
         </div>
         <?php endif; ?>
         <?php if ($beyan['company_address']): ?>
         <div class="beyan-view-row" style="grid-column:1/-1">
-            <span class="lbl">Şirket Adresi</span>
+            <span class="lbl">Gümrük Adresi</span>
             <span class="val" style="white-space:pre-wrap"><?= h($beyan['company_address']) ?></span>
         </div>
         <?php endif; ?>
@@ -685,7 +681,7 @@ function prompt_note(btn) {
             ['Alıcı',    BEYAN.alici,    row.getAttribute('data-alici') || '', ''],
             ['Ulaşım',   BEYAN.ulasim,   row.getAttribute('data-ulasim') || '', ''],
             ['Gümrük',   BEYAN.gumruk,   row.getAttribute('data-gumruk') || '',
-             'Beyandaki Şirket Adı, yükleme planında Gümrük alanına aktarılır.']
+             'Beyandaki Gümrük Adı, yükleme planının Gümrük alanına aktarılır.']
         ];
         var html = '';
         defs.forEach(function (d) {
