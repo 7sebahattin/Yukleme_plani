@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v321` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v322` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1178,6 +1178,21 @@ gözlemi de buydu. Rapor: `docs/HKS_MERNIS_ILK_KAYIT_ANALIZ.md` (§11).
   (include-only, `.htaccess`'te kapalı).
 - **Tek gönderim yolu** korunur: `hks_bildirim_kaydet()` → `hks_bildirim_kaydet_tek()`.
 - Test: `php scripts/hks_uretici_sevk_test.php` · `php scripts/hks_dogum_deney_smoke.php`.
+
+## Hal Kayıt — Karşı Taraf "Üretici" → Cep Zorunlu (v322)
+
+Canlı HKS, ikinci kişi sıfatı TAM "Üretici" iken — kişi/firma GTB'de KAYITLI olsa da — `CepTel` yoksa satırı
+**HataKodu 263** ("Lütfen üreticinin GSM numarasını doğru giriniz") ile reddeder (örn. kendi bahçesinden İhracat
+sıfatıyla Satın Alım). Eskiden kayıtlı karşı tarafa cep hiç gönderilmiyordu.
+- Kural TEK yerde: `hks_uretici_cep_gerekli($o)` (taslak_lib.php; yurt içi + sıfat = `hks_uretici_sifat_id()`;
+  katalog yoksa false). `hks_bildirim_dogrula()` cep yoksa/geçersizse reddeder.
+- Kayıtlı kişide YALNIZ `ikinciCep` gider (AdSoyad/DogumTarihi YOK); "ad/cep varsa doğum şart" kimlik bütünlüğü
+  kuralı artık yalnız cep için KAYITSIZ kişide uygulanır (ad için her zaman).
+- `taslak_gonder` yeniden doğrulamadan ÖNCE cep boşsa Kişi Havuzu'ndan TC ile tamamlar (eski taslaklar).
+- Arayüz: `ureticiCepGerekli()` → kayıtlı + Üretici sıfatında `#cepTelBlok` görünür (not: "Üretici sıfatında HKS zorunlu
+  tutar"), havuz seçiminde cep dolar, kayıtta zorunlu; sonuç ekranında 263 ipucu; kayıtlı kişide "Doğum: GÖNDERİLMEDİ"
+  uyarısı yerine "gerekmez".
+- Test: `php scripts/hks_uretici_cep_test.php` · `node scripts/hks_uretici_cep_smoke.js`.
 
 ## Hal Kayıt — Kişi Havuzu (v282, v283)
 
