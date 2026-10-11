@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v323` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v324` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1297,6 +1297,9 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
 - **Künye + fiyat TEK render (v321):** `btnKunyeler.onclick` `/api/kunyeler` ve `/api/kunye_detay`'ı `Promise.allSettled` ile PARALEL ister, fiyat haritasını işleyip TEK `kunyeCiz()` çağırır (eski `kunyeFiyatlariEnjekte` + "fiyatlar yükleniyor…" ikinci çizimi KALDIRILDI — ikinci çizim taslaktan geri yüklenen seçimi silerdi). `kunye_detay` hata verirse künyeler fiyatsız basılır, `#kunyeSayi`'ya "fiyatlar alınamadı" yazılır. Sorgu kimliği `kunyeSorguNo` + istek anındaki firma id'si: eski cevap atılır; `formuTemizle()` de sayacı artırır. `taslakDuzenle`'nin `await onclick()`'i artık fiyatlı tam veriyi bekler. Test: `node scripts/hks_binlik_smoke.js`.
 - **"Panel sürümü" damgası KALDIRILDI (v306):** ana menü altındaki `panel sürümü: …` yazısı ve `PANEL_SURUM` sabiti
   gitti; tek sürüm kaynağı sidebar'daki `APP_SURUM`. Geri ekleme (test ana menüde yazının YOKLUĞUNU denetler).
+- **v324 görünüm:** Gönderilenler başlığı (Geri + ikon + başlık/alt yazı + illüstrasyon + `#gonderilenAraSay` sayaç hapı), büyük arama kutusu (Ctrl/⌘+K odaklar), lacivert başlık bandı, hap rozetler (tür renkleri), ürün emojisi `gonderilenUrunEmoji()` (kartlarda `urunIkonu()` kalır), split görünümlü "Tekrar gönder" (TEK düğme, iki yarım aynı menüyü açar). Harici görsel/font YOK (inline SVG + emoji). Özgün indeks `i` kuralı aynen geçerli.
+- **Kişi Havuzu filtresi (v324):** `#kisiFiltre` Tümü/Firma(VKN)/Müstahsil(TC), `kisiVknMu(k)` tek ayrım kaynağı, arama ile AND, pencere her açılışta Tümü. Test: `hks_kisi_pencere_smoke.js`.
+- **Satın Alım birim varsayılanı (v324):** `miktarBirimKgVarsayilan()` — Satın Alım/Üreticiden Sevk Alım'da `#sMiktarBirim` BOŞSA listeden ADA göre "Kg" seçer (id uydurmaz; elle/taslak değeri ezmez). Test: `node scripts/hks_kg_varsayilan_smoke.js`.
 - **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
   değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
   `duzenlenenTaslakId = null`: `eskiTaslakId` GİTMEZ, hiçbir taslak SİLİNMEZ. Karşı taraf yine
