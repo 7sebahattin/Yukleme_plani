@@ -57,6 +57,6 @@ audit_log_event('beyan_kopyala', 'declarations', $new_id, null, [
     'kaynak_id' => $id, 'kaynak_parti_no' => $src['party_no'], 'status' => 'taslak',
 ]);
 
-set_flash('success', 'Beyan TASLAK olarak kopyalandı. Parti no ve araç plakasını girip diğer alanları düzenleyin, sonra kaydedin.');
+set_flash('success', 'Beyandan yeni TASLAK oluşturuldu. Parti no ve araç plakasını girip diğer alanları düzenleyin, sonra kaydedin.');
 header('Location: beyan_edit.php?id=' . $new_id);
 exit;

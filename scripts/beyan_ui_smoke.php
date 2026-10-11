@@ -808,7 +808,7 @@ $B_NOT = beyan_ekle(['party_no' => 'NOT-1']);
 db()->prepare("UPDATE customs_declarations SET note = ? WHERE id = ?")->execute(["İlk satır\nİKİ <b>x</b>", $B_NOT]);
 $h_not = render_beyan($B_NOT);
 ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk satır') !== false && strpos($h_not, '&lt;b&gt;x&lt;/b&gt;') !== false);
-ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), '📝') === false);
+ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), 'bf-emoji" aria-hidden="true">📝</span> Not') === false);
 ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',

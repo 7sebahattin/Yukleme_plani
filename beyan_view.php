@@ -146,13 +146,9 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
+        <button type="button" class="btn" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
+        <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
         <?php if (!$is_deleted && can_beyan('write')): ?>
-        <form method="post" action="beyan_kopyala.php" style="display:inline"
-              onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
-            <input type="hidden" name="id"   value="<?= $id ?>">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <button type="submit" class="btn" title="Bu beyanın TASLAK kopyasını oluştur">⧉ Kopyala</button>
-        </form>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('delete')): ?>
@@ -1023,5 +1019,36 @@ function prompt_note(btn) {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var btn = document.getElementById('waKopyalaBtn');
+    var kaynak = document.getElementById('waMetin');
+    if (!btn || !kaynak) return;
+    var metin = JSON.parse(kaynak.textContent);
+    var etiket = btn.textContent;
+    function bildir(ok) {
+        btn.textContent = ok ? '✓ Kopyalandı' : '✗ Kopyalanamadı';
+        setTimeout(function () { btn.textContent = etiket; }, 1800);
+    }
+    function yedek() {
+        var ta = document.createElement('textarea');
+        ta.value = metin; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;font-size:16px';
+        document.body.appendChild(ta); ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        return ok;
+    }
+    btn.addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(metin).then(function () { bildir(true); }, function () { bildir(yedek()); });
+        } else {
+            bildir(yedek());
+        }
+    });
+})();
+</script>
 
 <?php render_footer(); ?>
