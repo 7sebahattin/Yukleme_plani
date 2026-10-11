@@ -489,6 +489,11 @@
     background:var(--soluk-bg); color:var(--metin); font-size:18px; cursor:pointer; }
   .kisi-ara { padding:0 16px 10px; flex:0 0 auto; }
   .kisi-ara input, .kisi-form-govde input { font-size:16px; }
+  .kisi-filtre { display:flex; flex-wrap:nowrap; gap:6px; margin-top:8px; }
+  .kisi-fbtn { flex:1 1 0; min-width:0; margin:0; padding:8px 6px; border:1.5px solid var(--cizgi); border-radius:10px;
+    background:var(--soluk-bg); color:var(--metin); font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .kisi-fbtn.aktif { background:var(--teal); border-color:var(--teal); color:#fff; font-weight:800; }
   .kisi-govde { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:4px 16px 12px; }
   .kisi-alt { flex:0 0 auto; display:flex; gap:10px; padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
     border-top:1px solid var(--cizgi); }
@@ -1248,6 +1253,11 @@
     </div>
     <div class="kisi-ara">
       <input id="kisiAra" type="search" autocomplete="off" placeholder="Ad veya TC/VKN ara" aria-label="Kişi ara" style="margin:0">
+      <div class="kisi-filtre" id="kisiFiltre" role="group" aria-label="Kişi türü">
+        <button type="button" class="kisi-fbtn aktif" data-kisi-tur="" aria-pressed="true">Tümü</button>
+        <button type="button" class="kisi-fbtn" data-kisi-tur="firma" aria-pressed="false">Firma</button>
+        <button type="button" class="kisi-fbtn" data-kisi-tur="mustahsil" aria-pressed="false">Müstahsil</button>
+      </div>
     </div>
     <div class="kisi-govde" id="kisiListe"></div>
     <div class="kisi-alt">
@@ -3179,12 +3189,22 @@ async function karsiTarafSec(k) {
 let kisiHavuz = [];
 let kisiDuzenlenenId = null;
 let kisiVurguId = null;
+let kisiTurFiltre = '';   // '' = Tümü | 'firma' (VKN, 10 hane) | 'mustahsil' (TC)
 
 function kisiEl(tag, sinif, metin) {
   const e = document.createElement(tag);
   if (sinif) e.className = sinif;
   if (metin != null) e.textContent = metin;
   return e;
+}
+function kisiVknMu(k) { return String(k.tc || '').length === 10; }
+function kisiTurSec(tur) {
+  kisiTurFiltre = tur || '';
+  document.querySelectorAll('#kisiFiltre .kisi-fbtn').forEach(b => {
+    const a = b.dataset.kisiTur === kisiTurFiltre;
+    b.classList.toggle('aktif', a);
+    b.setAttribute('aria-pressed', a ? 'true' : 'false');
+  });
 }
 function kisiPencereAcikMi() { return $('kisiPencere').classList.contains('acik'); }
 function kisiFormAcikMi() { return $('kisiForm').classList.contains('acik'); }
@@ -3193,6 +3213,7 @@ function kisiPencereAc() {
   if (!listeler) listeleriHazirla().then(() => { if (kisiFormAcikMi()) kisiFormSifatDoldur($('kfSifat').value); if (kisiHavuz.length) kisiListeCiz(); });
   $('kisiPencereBaslik').textContent = (satinAlimModuMu() || uretSevkModuMu()) ? 'Satıcı Seç' : 'Alıcı Seç';
   $('kisiAra').value = '';
+  kisiTurSec('');
   $('kisiPencere').classList.add('acik');
   kisiListeYukle();
   setTimeout(() => $('kisiAra').focus(), 60);
@@ -3227,7 +3248,7 @@ function kisiListeCiz() {
   const kap = $('kisiListe');
   const q = trNorm($('kisiAra').value.trim());
   const qRakam = q.replace(/\D/g, '');
-  const liste = kisiHavuz.filter(k => !q || trNorm(k.ad).includes(q) || (qRakam && String(k.tc || '').includes(qRakam)));
+  const liste = kisiHavuz.filter(k => (!kisiTurFiltre || (kisiTurFiltre === 'firma') === kisiVknMu(k)) && (!q || trNorm(k.ad).includes(q) || (qRakam && String(k.tc || '').includes(qRakam))));
   if (!liste.length) {
     kap.replaceChildren(kisiEl('div', 'kisi-durum',
       kisiHavuz.length ? 'Aramaya uyan kişi yok.' : 'Havuzda henüz kişi yok — ➕ Yeni Ekle'));
@@ -3240,9 +3261,9 @@ function kisiListeCiz() {
     sat.setAttribute('role', 'button');
     sat.dataset.kisiId = String(k.id);
     const bilgi = kisiEl('div', 'kisi-bilgi');
-    bilgi.appendChild(kisiEl('div', 'kisi-ad' + (String(k.tc || '').length === 10 ? ' kisi-vkn' : ''), k.ad || String(k.tc || '')));
+    bilgi.appendChild(kisiEl('div', 'kisi-ad' + (kisiVknMu(k) ? ' kisi-vkn' : ''), k.ad || String(k.tc || '')));
     const alt = kisiEl('div', 'kisi-alt2');
-    alt.appendChild(kisiEl('span', 'kisi-rozet', String(k.tc || '').length === 10 ? 'VKN' : 'TC'));
+    alt.appendChild(kisiEl('span', 'kisi-rozet', kisiVknMu(k) ? 'VKN' : 'TC'));
     if (k.sifatId) {
       const sf = kisiSifatAdi(k.sifatId);
       if (sf) alt.appendChild(kisiEl('span', 'kisi-rozet kisi-sifat', sf));
@@ -3336,6 +3357,12 @@ $('btnKisiFormKapat').onclick = kisiFormKapat;
 $('btnKisiFormIptal').onclick = kisiFormKapat;
 $('btnKisiFormKaydet').onclick = kisiFormKaydet;
 $('kisiAra').oninput = kisiListeCiz;
+$('kisiFiltre').addEventListener('click', (e) => {
+  const b = e.target.closest('.kisi-fbtn');
+  if (!b) return;
+  kisiTurSec(b.dataset.kisiTur);
+  kisiListeCiz();
+});
 $('kfTc').onblur = () => { $('kfTc').value = tcRakam($('kfTc').value); };
 $('kfCep').onblur = () => { $('kfCep').value = cepRakam($('kfCep').value); };
 $('kisiPencere').addEventListener('mousedown', (e) => { if (e.target === $('kisiPencere')) kisiPencereKapat(); });
