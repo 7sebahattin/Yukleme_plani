@@ -50,6 +50,10 @@ $f = [
     'analysis_result_at' => $beyan['analysis_result_at'] ? date('Y-m-d\TH:i', strtotime($beyan['analysis_result_at'])) : '',
     'analysis_note'      => (string)($beyan['analysis_note']      ?? ''),
     'note'               => (string)($beyan['note']               ?? ''),
+    'sample_gross_kg'    => beyan_edit_kg($beyan['sample_gross_kg'] ?? null),
+    'sample_net_kg'      => beyan_edit_kg($beyan['sample_net_kg'] ?? null),
+    'sample_crate_type'  => (string)($beyan['sample_crate_type'] ?? ''),
+    'sample_crate_count' => ($beyan['sample_crate_count'] ?? null) !== null ? (string)(int)$beyan['sample_crate_count'] : '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -102,13 +106,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     foreach (array_keys($f) as $k) {
         // Formdan kaldırılan eski başlığı sıradan düzenlemede silme.
-        if (in_array($k, ['declaration_title', 'note'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
+        if (in_array($k, ['declaration_title', 'note', 'sample_gross_kg', 'sample_net_kg', 'sample_crate_type', 'sample_crate_count'], true) && !array_key_exists($k, $_POST)) continue;   // gönderilmeyen alan korunur
         $f[$k] = trim((string)($_POST[$k] ?? ''));
     }
 
     // Büyük harf — seçili metin alanları
     foreach (['declaration_title', 'company_name', 'company_address', 'transport_type', 'vehicle_plate',
-              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
+              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type', 'sample_crate_type',
               'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
@@ -155,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             status = ?, analysis_note = ?, sample_taken_at = ?, analysis_result_at = ?,
             hks_firma_id = ?, hks_urun_id = ?, hks_urun_ad = ?, hks_ulke_id = ?, hks_ulke_ad = ?,
             note = ?,
+            sample_gross_kg = ?, sample_net_kg = ?, sample_crate_type = ?, sample_crate_count = ?,
             updated_by = ?, updated_at = NOW()
             WHERE id = ?");
 
@@ -189,6 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hks['ulke_id'],
             $hks['ulke_ad'],
             $f['note'] ?: null,
+            $checked['values']['sample_gross_kg'] ?? null,
+            $checked['values']['sample_net_kg'] ?? null,
+            $f['sample_crate_type'] ?: null,
+            $checked['values']['sample_crate_count'] ?? null,
             $user_id,
             $id,
         ]);

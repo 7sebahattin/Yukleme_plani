@@ -106,6 +106,17 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     </div>
                 </section>
 
+                <section class="beyan-section" data-bf="urun" data-beyan-single-section>
+                    <h2 class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</h2>
+                    <div class="beyan-form-grid beyan-workspace-quantities">
+                        <?php $field('sample_crate_count', 'Numune Kasa Adedi', 'kutu', 'numeric'); ?>
+                        <?php $field('sample_crate_type', 'Numune Kasa Cinsi', 'kasa'); ?>
+                        <?php $field('sample_gross_kg', 'Numune Brüt KG', 'agirlik', 'decimal'); ?>
+                        <?php $field('sample_net_kg', 'Numune Net KG', 'terazi', 'decimal'); ?>
+                    </div>
+                    <div class="form-hint">İsteğe bağlı. Dolu alanlar WhatsApp metnindeki NUMUNE bölümüne eklenir.</div>
+                </section>
+
                 <section class="beyan-section" data-bf="uyari" data-beyan-single-section>
                     <h2 class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</h2>
                     <div class="form-group" data-ic="metin">

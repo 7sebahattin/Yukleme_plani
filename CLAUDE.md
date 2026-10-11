@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v333` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v334` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1016,6 +1016,12 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   Numune ayrı kolon değil: ham/eşleşmeyen metinde "NUMUNE" satırından sonra aranır (`beyan_whatsapp_numune()`); Önemli Not = `note`.
   TASLAK oluşturan eski "Kopyala" **"Taslak Oluştur"** adını aldı (📝) ve YALNIZ `beyanlar.php` listesindedir (`beyan_kopyala.php`
   dosyası/URL'si aynı). İkisini karıştırma: önizlemede taslak formu YOK. Test: `php scripts/beyan_whatsapp_smoke.php`.
+- **Numune alanları (v334, sahip GO verdi — 4 nullable ADD COLUMN):** `customs_declarations.sample_gross_kg` / `sample_net_kg`
+  (DECIMAL 12,3) · `sample_crate_type` (VARCHAR 100) · `sample_crate_count` (INT); auto-migration `config/helpers.php`. Formda
+  Not'un ÜSTÜNDE "🧪 Numune" bölümü (`_beyan_form.php`), önizlemede yalnız doluysa kart. Kayıtta `beyan_veri_dogrula()` yalnız
+  GÖNDERİLEN alanı işler (net ≤ brüt); `beyan_edit` gönderilmeyen numuneyi korur. WhatsApp metni (`beyan_whatsapp_numune()`) ÖNCE
+  bu kolonlara bakar (tarih/başka alan gerekmez), hepsi boşsa eski ham-metin ayrıştırması yedek kalır. Kopyala (Taslak Oluştur)
+  numuneyi KOPYALAMAZ (o sevkiyata özel).
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
