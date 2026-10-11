@@ -161,8 +161,48 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
      await sayfa.evaluate(() => { const td = document.querySelectorAll('tr.g-satir')[4].querySelector('td.g-c-firma'); return td.scrollWidth > td.clientWidth; }));
   ok('1280: sayfada yatay taşma yok', !(await yatayTasma(sayfa)));
   ok('1280: tablo sarmalayıcıda kaydırma gerekmiyor', await sayfa.evaluate(() => { const s = document.querySelector('.g-tablo-sarma'); return s.scrollWidth <= s.clientWidth + 1; }));
-  ok('her satırda 🖨 Yazdır + ↻ Tekrar gönder ▾',
-     (await sayfa.locator('tr.g-satir .g-yazdir-btn-ust').count()) === 5 && (await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText()).replace(/\s+/g, ' ').trim() === '↻ Tekrar gönder ▾');
+  ok('her satırda Yazdır + split "Tekrar gönder | ▾" (v324: simge SVG, ▾ ayrı bölme)',
+     (await sayfa.locator('tr.g-satir .g-yazdir-btn-ust').count()) === 5 &&
+     /^Tekrar gönder\s*▾$/.test((await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText()).replace(/\s+/g, ' ').trim()) &&
+     (await sayfa.locator('tr.g-satir').first().locator('.g-btn-tekrar .g-tk-ok').count()) === 1 &&
+     (await sayfa.locator('tr.g-satir').first().locator('.g-yazdir-btn-ust').innerText()).trim() === 'Yazdır',
+     await sayfa.locator('tr.g-satir .g-btn-tekrar').first().innerText());
+  // --- v324 görsel katman: başlık, sayaç hapı, arama ipucu, rozetler (işlev değil, yapı) ---
+  const v324 = await sayfa.evaluate(() => {
+    const q = (s) => document.querySelector(s);
+    const satir = (n) => document.querySelectorAll('tr.g-satir')[n];
+    const th = q('.g-tablo thead th'), cs = getComputedStyle(th);
+    return {
+      baslik: q('#ekranGonderilen .g-ust-baslik').textContent.trim(),
+      aciklama: q('#ekranGonderilen .g-ust-aciklama').textContent.trim(),
+      sayacBaslikta: !!q('#ekranGonderilen .g-ust #gonderilenAraSay'),
+      resim: getComputedStyle(q('#ekranGonderilen .g-ust-resim')).display !== 'none',
+      kbd: getComputedStyle(q('#gonderilenAraKbd')).display !== 'none',
+      placeholder: q('#gonderilenAra').placeholder,
+      thRadius: parseFloat(cs.borderTopLeftRadius) > 0,
+      etiketler: [0, 1, 2, 3].map(n => satir(n).querySelector('.g-tag').className),
+      urunEmoji: satir(0).querySelector('.g-urun-emoji').textContent,
+      okSvg: !!satir(0).querySelector('.g-ok svg'),
+      ikonlar: ['.g-ik-saat', '.g-ik-bina', '.g-kilo svg', '.g-ucret svg', '.g-tag svg'].every(s => !!satir(0).querySelector(s)),
+      durumOk: getComputedStyle(satir(0).querySelector('.g-durum-ok')).borderRadius,
+    };
+  });
+  ok('v324: başlık "Gönderilenler" + açıklama, sayaç hapı başlıkta, illüstrasyon 1280\'de görünür',
+     v324.baslik === 'Gönderilenler' && v324.aciklama.startsWith('Gönderdiğiniz plaka, ürün ve firmalara') && v324.sayacBaslikta && v324.resim, JSON.stringify(v324));
+  ok('v324: arama placeholder + kısayol ipucu (boşken görünür), başlık bandı yuvarlak',
+     v324.placeholder === 'Plaka, ürün, gönderilen veya firma ara...' && v324.kbd && v324.thRadius, JSON.stringify(v324));
+  ok('v324: tür hapları renk sınıfı (İhracat mavi, Satın alım turuncu, Sevk etme mavi, Üretici turuncu)',
+     JSON.stringify(v324.etiketler) === JSON.stringify(['g-tag ', 'g-tag g-tag-alim', 'g-tag g-tag-sevk', 'g-tag g-tag-alim']), JSON.stringify(v324.etiketler));
+  ok('v324: ürün hapı emojisi (Kayısı → 🍑), satır simgeleri SVG, aç oku SVG', v324.urunEmoji === '🍑' && v324.ikonlar && v324.okSvg, JSON.stringify(v324));
+  ok('v324: ürün emojisi eşlemesi (NAR → 🍎, KABAK → 🥒, bilinmeyen → 📦)', await sayfa.evaluate(() =>
+     gonderilenUrunEmoji('NAR') === '🍎' && gonderilenUrunEmoji('Kabak (Sakız)') === '🥒' && gonderilenUrunEmoji('ISPANAK') === '🥬' && gonderilenUrunEmoji('Zzz') === '📦'));
+  await sayfa.locator('.g-tablo').click({ position: { x: 5, y: 5 } }).catch(() => {});
+  await sayfa.keyboard.press('Control+k');
+  ok('v324: Ctrl+K aramaya odaklanır', await sayfa.evaluate(() => document.activeElement && document.activeElement.id === 'gonderilenAra'));
+  await sayfa.fill('#gonderilenAra', 'x'); await sayfa.waitForTimeout(50);
+  ok('v324: yazı varken kısayol ipucu gizli, ✕ görünür', !(await sayfa.isVisible('#gonderilenAraKbd')) && await sayfa.isVisible('#btnGonderilenAraTemizle'));
+  await sayfa.click('#btnGonderilenAraTemizle'); await sayfa.waitForTimeout(100);
+  await sayfa.evaluate(() => document.activeElement && document.activeElement.blur());
   ok('satırlar klavyeyle odaklanır (tabindex=0, aria-expanded=false)',
      await sayfa.evaluate(() => [...document.querySelectorAll('tr.g-satir')].every(t => t.tabIndex === 0 && t.getAttribute('aria-expanded') === 'false')));
   await foto(sayfa, '01_masaustu_1280');
@@ -438,6 +478,14 @@ async function foto(sayfa, ad) { if (SHOT) await sayfa.screenshot({ path: path.j
   await sayfaM.tap('#btnGonderilenler');
   await sayfaM.waitForSelector('#gonderilenListe .g-kart');
   ok('mobil: kartlar çizildi, TABLO yok', await sayfaM.locator('#gonderilenListe .g-kart').count() === 5 && await sayfaM.locator('.g-tablo').count() === 0);
+  const mUst = await sayfaM.evaluate(() => {
+    const u = document.querySelector('#ekranGonderilen .g-ust'), b = u.querySelector('.baslik').getBoundingClientRect();
+    const s = u.querySelector('.g-ust-sayac').getBoundingClientRect();
+    return { baslikGen: b.width, sayacEkranda: s.left >= 0 && s.right <= innerWidth, tasma: u.scrollWidth > u.clientWidth + 1,
+      resimGizli: getComputedStyle(u.querySelector('.g-ust-resim')).display === 'none', kbdGizli: getComputedStyle(document.getElementById('gonderilenAraKbd')).display === 'none' };
+  });
+  ok('mobil v324: başlık sıkışmaz (≥160px), sayaç hapı ekranda, illüstrasyon + kısayol ipucu gizli, taşma yok',
+     mUst.baslikGen >= 160 && mUst.sayacEkranda && !mUst.tasma && mUst.resimGizli && mUst.kbdGizli, JSON.stringify(mUst));
   ok('mobil: kart başlığında Yazdır var, her kartta 8 bilgi satırı',
      await sayfaM.locator('.g-kart .g-yazdir-btn-ust').count() === 5 && await sayfaM.locator('.g-kart').first().locator('.tk-satir').count() === 8);
   ok('mobil: kart içeriği DEĞİŞMEDİ (kilo 2 ondalık biçimli "24.500,4 KG", fiyat "25 TL")',

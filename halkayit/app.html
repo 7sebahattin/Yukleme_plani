@@ -333,51 +333,99 @@
   /* ── Gönderilenler — masaüstü (≥900px) kompakt tablo + "Tekrar gönder" (v305) ──
      <900px'te tablo ÇİZİLMEZ (JS matchMedia ile kip seçer) — kartlar aynen kalır.
      Satır tıklanınca hemen altında bugünkü kart açılır (.g-kart-gomulu). */
-  .g-tablo-sarma { background:var(--kart); border-radius:var(--radius); box-shadow:var(--golge);
-    overflow-x:auto; }
-  .g-tablo { width:100%; min-width:820px; border-collapse:collapse; font-size:13.5px;
+  /* v324 görsel katman (referans tasarım): koyu lacivert yuvarlatılmış başlık bandı,
+     ikonlu hücreler (inline SVG, gradyanlar #ekranGonderilen içindeki .g-svg-defs'te),
+     renkli hap rozetler, split görünümlü "Tekrar gönder". Hücre METİNLERİ değişmedi
+     (simgeler metinsiz SVG) — testler innerText ile denetler. */
+  .g-svg-defs { position:absolute; width:0; height:0; overflow:hidden; }
+  .g-tablo-sarma { background:var(--kart); border-radius:20px; box-shadow:var(--golge), 0 10px 30px rgba(29,95,224,.06);
+    overflow-x:auto; padding:0 0 8px; border:1px solid var(--cizgi); }
+  .g-tablo { width:100%; min-width:820px; border-collapse:separate; border-spacing:0; font-size:13.5px;
     font-variant-numeric:tabular-nums; }
   .g-tablo th, .g-tablo td { padding:9px 10px; text-align:left; vertical-align:middle; white-space:nowrap; }
-  .g-tablo thead th { background:var(--navy); color:#fff; font-weight:700; font-size:12.5px; }
+  .g-tablo thead th { background-color:#1b2b4b; color:#fff; font-weight:800; font-size:12.5px; letter-spacing:.2px;
+    padding-top:13px; padding-bottom:13px; box-shadow:inset 0 1px 0 rgba(255,255,255,.08); }
+  .g-tablo thead th:first-child { border-top-left-radius:19px; padding-left:52px; }
+  .g-tablo thead th:last-child  { border-top-right-radius:19px; }
   .g-tablo .sag { text-align:right; }
   /* Esneyen sütunlar: max-width:0 ile içerik genişliği değil yüzde belirler,
      taşan metin "…" ile kısalır (tam metin title'da). Dar sütunlar içeriğine uyar. */
   .g-tablo .g-c-kisa { width:1px; }
-  .g-tablo .g-c-firma { width:26%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
-  .g-tablo .g-c-ulke  { width:48%; max-width:0; }
-  .g-tablo .g-c-urun  { width:26%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
-  .g-tablo tbody { border-top:1px solid var(--cizgi); }
+  .g-tablo .g-c-firma { width:22%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .g-tablo .g-c-ulke  { width:50%; max-width:0; }
+  .g-tablo .g-c-urun  { width:28%; max-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .g-tablo tbody > .g-satir > td { border-bottom:1px solid var(--cizgi); }
   .g-tablo tbody:nth-of-type(even) > .g-satir { background:var(--satir-cift); }
-  .g-tablo tbody > .g-satir { cursor:pointer; }
+  .g-tablo tbody > .g-satir { cursor:pointer; transition:background-color .12s; }
   .g-tablo tbody > .g-satir:hover, .g-tablo tbody > .g-satir.acik { background:var(--cip-bg); }
   .g-tablo tbody > .g-satir:focus-visible { outline:2px solid var(--teal); outline-offset:-2px; }
-  .g-tablo .g-ok { display:inline-block; color:var(--soluk); margin-right:6px; transition:transform .2s; }
+  /* Satır aç/kapa oku: küçük yuvarlak düğme görünümü (satırın tamamı tıklanır) */
+  .g-tablo .g-ok { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    margin-right:10px; border-radius:50%; vertical-align:middle; color:var(--metin);
+    background:linear-gradient(180deg,var(--kart),var(--satir-cift)); border:1px solid var(--cizgi);
+    box-shadow:0 1px 2px rgba(20,30,60,.08), inset 0 1px 0 rgba(255,255,255,.7); transition:transform .2s; }
+  .g-tablo .g-ok svg { width:14px; height:14px; }
   .g-tablo .g-satir.acik .g-ok { transform:rotate(180deg); }
-  .g-tarih-kap { display:inline-block; vertical-align:middle; }
+  .g-tarih-kap { display:inline-flex; align-items:center; gap:6px; vertical-align:middle; color:var(--metin); font-size:13px; }
+  .g-ik-saat { width:15px; height:15px; color:var(--soluk); flex:none; }
   .g-t-saat { color:var(--soluk); }
-  .g-durum { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px;
-    font-size:11.5px; font-weight:800; }
-  .g-durum-ok { background:var(--tamam-bg); color:var(--tamam-tx); }
-  .g-durum-hata { background:var(--hata-bg); color:var(--hata-tx); }
-  .g-plaka { font-weight:800; color:var(--plaka); letter-spacing:.3px; }
-  .g-kilo { font-weight:700; color:var(--teal); }
+  .g-durum { display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; margin-left:10px;
+    min-width:20px; height:20px; padding:0 6px; border-radius:10px; font-size:11.5px; font-weight:900; line-height:1; }
+  .g-durum-ok { width:20px; padding:0; color:#fff; background:linear-gradient(180deg,#5fe0a0,#14a35f);
+    box-shadow:0 2px 5px rgba(20,163,95,.35), inset 0 1px 0 rgba(255,255,255,.55); }
+  .g-durum-hata { color:#d42a2a; background:#fde4e4; border:1px solid #f7c2c2; }
+  html[data-theme="dark"] .g-durum-hata { color:var(--hata-tx); background:var(--hata-bg); border-color:#5a2d2b; }
+  .g-ik-bina { width:17px; height:17px; vertical-align:-3px; margin-right:7px; }
+  .g-plaka { display:inline-block; font-weight:900; color:#d61f2c; letter-spacing:.3px; font-size:13.5px;
+    padding:4px 11px; border-radius:9px; background:linear-gradient(180deg,#fff1f1,#ffe0e0); border:1px solid #ffcfd2;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.8); }
+  html[data-theme="dark"] .g-plaka { color:var(--plaka); background:rgba(255,120,120,.12); border-color:rgba(255,120,120,.28); box-shadow:none; }
+  .g-kilo { font-weight:900; color:var(--teal); }
   .g-ucret { font-weight:600; }
-  .g-ulke-kap { display:flex; align-items:center; gap:7px; min-width:0; }
+  .g-ik-sol { width:17px; height:17px; vertical-align:-3px; margin-right:7px; }
+  .g-ulke-kap { display:flex; align-items:center; gap:10px; min-width:0; }
   .g-ulke-ad { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .g-tag { flex:0 0 auto; font-size:10.5px; font-weight:800; padding:1px 7px; border-radius:8px;
-    background:var(--cip-bg); color:var(--teal); }
-  .g-tag-alim { background:rgba(245,179,1,.18); color:#8a6100; }
-  .g-tag-ic { background:var(--soluk-bg); color:var(--metin); }
-  html[data-theme="dark"] .g-tag-alim { color:#e6a93c; }
+  .g-tag { flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:800;
+    padding:4px 10px 4px 5px; border-radius:999px; background:#e3eeff; color:#1a56c9;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(29,95,224,.10); }
+  .g-tag svg { width:16px; height:16px; flex:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.18)); }
+  .g-tag-sevk { background:#e3eeff; color:#1a56c9; }
+  .g-tag-alim { background:#fff0d6; color:#a35a00; box-shadow:inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(239,138,18,.12); }
+  .g-tag-ic { background:#eceff4; color:#3b4456; box-shadow:inset 0 1px 0 rgba(255,255,255,.75), 0 1px 2px rgba(20,30,60,.08); }
+  html[data-theme="dark"] .g-tag { background:rgba(77,141,255,.16); color:#9cc0ff; box-shadow:none; }
+  html[data-theme="dark"] .g-tag-alim { background:rgba(239,158,40,.16); color:#e6a93c; }
+  html[data-theme="dark"] .g-tag-ic { background:var(--soluk-bg); color:var(--metin); }
   html[data-theme="dark"] .g-tablo thead th { background:#1a2331; color:var(--soluk); }
+  /* Ürün hapı: 3B emoji + ad */
+  .g-urun { display:inline-flex; align-items:center; gap:7px; max-width:100%; padding:3px 12px 3px 4px; border-radius:999px;
+    background:linear-gradient(180deg,var(--kart),var(--satir-cift)); border:1px solid var(--cizgi);
+    box-shadow:0 1px 2px rgba(20,30,60,.06); font-weight:700; font-size:12.5px; color:var(--metin); vertical-align:middle; }
+  .g-urun-emoji { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%;
+    font-size:16px; line-height:1; background:radial-gradient(circle at 35% 30%,#fff,#eef2f8 70%); flex:none;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.15)); }
+  html[data-theme="dark"] .g-urun-emoji { background:radial-gradient(circle at 35% 30%,#3a475c,#232d3c 70%); }
+  .g-urun-ad { min-width:0; overflow:hidden; text-overflow:ellipsis; }
   .g-tablo .g-c-eylem { text-align:right; }
-  .g-eylem-kap { display:flex; gap:6px; justify-content:flex-end; }
+  .g-eylem-kap { display:flex; gap:8px; justify-content:flex-end; align-items:center; }
   .g-tablo .g-yazdir-btn-ust, .g-tablo .g-btn-tekrar {
-    padding:6px 10px; font-size:12px; font-weight:700; border-radius:10px; cursor:pointer;
-    white-space:nowrap; font-family:inherit; background:var(--kart); }
-  .g-tablo .g-btn-tekrar { border:1.5px solid var(--teal); color:var(--teal); }
-  .g-tablo .g-btn-tekrar:hover, .g-tablo .g-yazdir-btn-ust:hover { background:var(--cip-bg); }
-  .g-tablo .g-btn-tekrar[aria-expanded="true"] { background:var(--cip-bg); }
+    display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; font-size:12.5px; font-weight:800;
+    border-radius:10px; cursor:pointer; white-space:nowrap; font-family:inherit; }
+  .g-tablo .g-yazdir-btn-ust { background:var(--kart); color:var(--metin); border:1px solid var(--giris-kenar);
+    box-shadow:0 1px 2px rgba(20,30,60,.08), inset 0 1px 0 rgba(255,255,255,.8); }
+  .g-tablo .g-yazdir-btn-ust svg { width:16px; height:16px; flex:none; }
+  .g-tablo .g-yazdir-btn-ust:hover { background:var(--cip-bg); }
+  /* Tekrar gönder: TEK düğme, split görünümü (sol: simge + yazı, sağ: ▾ ayrı bölme).
+     İkisi de aynı menüyü açar — menüde iki seçenek vardır. */
+  .g-tablo .g-btn-tekrar { padding:0; gap:0; overflow:hidden; color:#fff; border:1px solid #1652cf;
+    background:linear-gradient(180deg,#4f8dff 0%,#2a6cf2 55%,#1d5fe0 100%);
+    box-shadow:0 3px 8px rgba(29,95,224,.30), inset 0 1px 0 rgba(255,255,255,.35); }
+  .g-tablo .g-btn-tekrar .g-tk-ana { display:inline-flex; align-items:center; gap:7px; padding:0 12px 0 11px; height:100%; }
+  .g-tablo .g-btn-tekrar .g-tk-ana svg { width:15px; height:15px; flex:none; }
+  .g-tablo .g-btn-tekrar .g-tk-ok { display:inline-flex; align-items:center; justify-content:center; width:26px; height:100%;
+    border-left:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.10); font-size:11px; }
+  .g-tablo .g-btn-tekrar:hover { filter:brightness(1.06); }
+  .g-tablo .g-btn-tekrar[aria-expanded="true"] { filter:brightness(.94); box-shadow:inset 0 2px 4px rgba(0,0,0,.18); }
+  .g-tablo .g-btn-tekrar:focus-visible, .g-tablo .g-yazdir-btn-ust:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
   .g-tablo .g-detay-tr > td { padding:2px 14px 14px 30px; white-space:normal; background:var(--satir-cift); }
   .g-detay-tr[hidden] { display:none; }
   /* Satırın altında açılan kart: bugünkü kartın aynı içeriği, geniş alanda 2 kolon. */
@@ -398,16 +446,56 @@
   .g-kart-eylem .g-btn-tekrar:active, .g-kart-eylem .g-btn-tekrar[aria-expanded="true"] { background:var(--cip-bg); }
   /* Tohum istenirken çift tıklamayı engelle */
   .gonderilen-liste.g-mesgul { opacity:.6; pointer-events:none; }
-  /* Gönderilenler arama çubuğu (liste DIŞINDA — liste yeniden çizilince kutu kaybolmaz) */
-  .g-ara-kap { display:flex; align-items:center; gap:10px; margin:0 0 10px; }
+  /* Gönderilenler arama çubuğu (liste DIŞINDA — liste yeniden çizilince kutu kaybolmaz).
+     v324: büyük yuvarlak kutu, solda büyüteç, sağda ⌘K / Ctrl K ipucu (değer varken ✕). */
+  .g-ara-kap { display:flex; align-items:center; gap:10px; margin:0 0 14px; padding:8px;
+    background:var(--kart); border-radius:20px; border:1px solid var(--cizgi);
+    box-shadow:var(--golge), 0 8px 24px rgba(29,95,224,.05); }
   .g-ara-kap[hidden] { display:none; }
   .g-ara-kutu { position:relative; flex:1 1 auto; min-width:0; }
-  .g-ara-kutu input { margin:0; font-size:16px; padding-right:44px; }
-  .g-ara-x { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:36px; height:36px; margin:0; padding:0;
+  .g-ara-kutu input { margin:0; font-size:16px; height:48px; padding:0 64px 0 46px; border-radius:14px;
+    border:1px solid transparent; background:var(--satir-cift); }
+  .g-ara-kutu input:focus { border-color:var(--teal); background:var(--kart); }
+  .g-ara-kutu input::-webkit-search-cancel-button { -webkit-appearance:none; appearance:none; }
+  .g-ara-ikon { position:absolute; left:14px; top:50%; transform:translateY(-50%); width:21px; height:21px;
+    color:var(--teal); pointer-events:none; }
+  .g-ara-kbd { position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none;
+    font:700 11.5px/1 -apple-system,'Segoe UI',Roboto,Arial,sans-serif; color:var(--soluk); padding:6px 8px;
+    border-radius:8px; background:var(--kart); border:1px solid var(--cizgi); box-shadow:0 1px 0 var(--cizgi); }
+  .g-ara-kbd[hidden] { display:none; }
+  .g-ara-x { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:36px; height:36px; margin:0; padding:0;
     border:0; border-radius:10px; background:var(--soluk-bg); color:var(--metin); font-size:15px; cursor:pointer; }
   .g-ara-x[hidden] { display:none; }
-  .g-ara-say { flex:0 0 auto; font-size:12px; font-weight:600; color:var(--soluk); white-space:nowrap; }
-  @media (max-width:420px) { .g-ara-kap { flex-wrap:wrap; gap:4px; } .g-ara-kutu { flex-basis:100%; } }
+  .g-ara-say { font-size:13px; font-weight:800; color:var(--metin); white-space:nowrap; }
+  @media (hover:none), (max-width:899px) { .g-ara-kbd { display:none; } .g-ara-kutu input { padding-right:46px; } }
+
+  /* Başlık şeridi (yalnız Gönderilenler): Geri · simge · başlık/açıklama · illüstrasyon · sayaç */
+  .ustbar.g-ust { flex-wrap:wrap; align-items:center; gap:10px 12px; }
+  .g-ust .g-ust-ikon { width:40px; height:40px; flex:none; filter:drop-shadow(0 3px 5px rgba(29,95,224,.22)); }
+  .g-ust .baslik { flex:1 1 0; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .g-ust .g-ust-baslik { font-size:22px; font-weight:900; color:var(--navy); line-height:1.15; letter-spacing:-.2px; }
+  .g-ust .g-ust-aciklama { font-size:12.5px; font-weight:500; color:var(--soluk); line-height:1.35; }
+  .g-ust .g-ust-resim { display:none; width:150px; height:80px; flex:none; margin:-14px 0 -10px; }
+  .g-ust-sayac { display:inline-flex; align-items:center; gap:8px; flex:none; padding:9px 14px; border-radius:14px;
+    background:var(--kart); border:1px solid var(--cizgi); box-shadow:var(--golge); }
+  .g-ust-sayac svg { width:18px; height:18px; flex:none; }
+  .g-ust-sayac:has(.g-ara-say:empty) { display:none; }
+  @media (max-width:599px) {
+    /* Dar ekran: sayaç başlığın altına, sağa yaslanır; illüstrasyon yok */
+    .g-ust .g-ust-ikon { width:34px; height:34px; }
+    .g-ust .g-ust-baslik { font-size:19px; }
+    .g-ust .g-ust-aciklama { font-size:12px; }
+    .g-ust .baslik { flex:1 1 170px; }
+    .g-ust-sayac { margin-left:auto; padding:7px 12px; }
+  }
+  @media (min-width:900px) {
+    /* Başlık main ile aynı hizada ve genişlikte (main ≥900px'te sola yaslı) */
+    #ekranGonderilen .ustbar.g-ust { max-width:1560px; margin:0; padding:22px 24px 4px; flex-wrap:nowrap; gap:16px; }
+    #ekranGonderilen .g-ust .g-ust-ikon { width:52px; height:52px; }
+    #ekranGonderilen .g-ust .g-ust-baslik { font-size:28px; }
+    #ekranGonderilen .g-ust .g-ust-aciklama { font-size:13.5px; }
+    #ekranGonderilen .g-ust .g-ust-resim { display:block; }
+  }
 
   /* position:fixed açılır menü (overflow:auto sarmalayıcı kesmesin — bkz. CLAUDE.md). z ≥ 600 */
   .g-tekrar-menu { position:fixed; z-index:620; display:none; min-width:240px; max-width:calc(100vw - 16px);
@@ -439,8 +527,15 @@
        saat tarihin altına iner, hücre boşlukları daralır — Firma/Ülke/Ürün'e yer açılır */
     .g-tablo .g-btn-yazi { display:none; }
     .g-tablo th, .g-tablo td { padding-left:6px; padding-right:6px; }
+    .g-tablo .g-tarih-kap { display:inline-grid; grid-template-columns:auto auto; column-gap:5px; align-items:center; }
+    .g-tablo .g-ik-saat { grid-row:span 2; }
     .g-tablo .g-t-saat { display:block; font-size:11.5px; line-height:1.15; }
     .g-tablo .g-satir td { padding-top:7px; padding-bottom:7px; }
+    .g-tablo .g-ok { margin-right:6px; }
+    .g-tablo thead th:first-child { padding-left:38px; }
+    .g-tablo .g-yazdir-btn-ust { padding:0 9px; }
+    .g-tablo .g-btn-tekrar .g-tk-ana { padding:0 9px; }
+    .g-tablo .g-ik-bina, .g-tablo .g-ik-sol { margin-right:4px; }
   }
 
   /* "Tekrar gönder" ile yüklenen formun üstündeki bilgi kutusu (metin textContent ile) */
@@ -1122,18 +1217,79 @@
 
 <!-- ============ EKRAN: GÖNDERİLENLER ============ -->
 <div id="ekranGonderilen" class="gizli">
-  <div class="ustbar">
+  <!-- Başlık (v324 görsel katman): Geri · simge · başlık + açıklama · illüstrasyon · sayaç hapı.
+       Sayaç (#gonderilenAraSay) yalnız YER değiştirdi — metni yine gonderilenAraSayac() yazar. -->
+  <!-- Satır simgelerinin ortak gradyanları (bir kez tanımlanır; display:none OLMAMALI —
+       gizli <svg> içindeki gradyanlar bazı tarayıcılarda boyanmaz). -->
+  <svg class="g-svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="gGrMavi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fb0ff"/><stop offset="1" stop-color="#1d5fe0"/></linearGradient>
+      <linearGradient id="gGrYesil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fe0a0"/><stop offset="1" stop-color="#14a35f"/></linearGradient>
+      <linearGradient id="gGrAltin" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#e3a018"/></linearGradient>
+      <linearGradient id="gGrTuruncu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc56b"/><stop offset="1" stop-color="#ef8a12"/></linearGradient>
+      <linearGradient id="gGrGri" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa6ba"/><stop offset="1" stop-color="#5b6678"/></linearGradient>
+      <linearGradient id="gGrBina" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c9d6ee"/><stop offset="1" stop-color="#7f93b8"/></linearGradient>
+    </defs>
+  </svg>
+  <div class="ustbar g-ust">
     <button class="geri" id="btnGonderilenGeri"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14.7 5.3 8 12l6.7 6.7 1.4-1.4L10.8 12l5.3-5.3z"/></svg><span>Geri</span></button>
-    <div class="baslik">📚 Gönderilenler</div>
+    <svg class="g-ust-ikon" viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <linearGradient id="gUiA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fb8ff"/><stop offset="1" stop-color="#3d72e8"/></linearGradient>
+        <linearGradient id="gUiB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dfe9fb"/></linearGradient>
+      </defs>
+      <rect x="15" y="4" width="26" height="32" rx="4" fill="url(#gUiA)" opacity=".55"/>
+      <rect x="10" y="8" width="26" height="32" rx="4" fill="url(#gUiB)" stroke="#9dbbef" stroke-width="1.2"/>
+      <path d="M15 16h16M15 21h16M15 26h11" stroke="#6f95db" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M4 30l9-4 9 4v12l-9 4-9-4z" fill="url(#gUiA)"/>
+      <path d="M4 30l9 4 9-4M13 34v12" stroke="#ffffff" stroke-opacity=".7" stroke-width="1.2" fill="none"/>
+    </svg>
+    <div class="baslik">
+      <span class="g-ust-baslik">Gönderilenler</span>
+      <span class="g-ust-aciklama">Gönderdiğiniz plaka, ürün ve firmalara ait tüm kayıtları görüntüleyin.</span>
+    </div>
+    <svg class="g-ust-resim" viewBox="0 0 150 80" aria-hidden="true">
+      <defs>
+        <radialGradient id="gUrHale" cx=".5" cy=".55" r=".5"><stop offset="0" stop-color="#cfe0ff"/><stop offset="1" stop-color="#cfe0ff" stop-opacity="0"/></radialGradient>
+        <linearGradient id="gUrKutu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3cf9c"/><stop offset="1" stop-color="#d79c58"/></linearGradient>
+        <linearGradient id="gUrKutuY" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c88947"/><stop offset="1" stop-color="#e7b37a"/></linearGradient>
+        <linearGradient id="gUrKagit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e3ecfb"/></linearGradient>
+        <linearGradient id="gUrUcak" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7fb0ff"/><stop offset="1" stop-color="#1d5fe0"/></linearGradient>
+      </defs>
+      <ellipse cx="78" cy="44" rx="70" ry="36" fill="url(#gUrHale)"/>
+      <rect x="22" y="44" width="30" height="26" rx="3" fill="url(#gUrKutu)"/>
+      <rect x="22" y="44" width="30" height="5" rx="2" fill="#f7dcb4"/>
+      <rect x="34" y="44" width="6" height="26" fill="#c98a49" opacity=".45"/>
+      <rect x="38" y="24" width="26" height="22" rx="3" fill="url(#gUrKutuY)"/>
+      <rect x="38" y="24" width="26" height="4.5" rx="2" fill="#f7dcb4"/>
+      <rect x="48" y="24" width="6" height="22" fill="#b97a3c" opacity=".4"/>
+      <rect x="52" y="48" width="24" height="22" rx="3" fill="url(#gUrKutu)"/>
+      <rect x="62" y="48" width="5" height="22" fill="#c98a49" opacity=".45"/>
+      <g transform="rotate(8 98 38)">
+        <rect x="78" y="10" width="38" height="50" rx="5" fill="url(#gUrKagit)" stroke="#a9c3ee" stroke-width="1.3"/>
+        <rect x="90" y="6" width="14" height="8" rx="3" fill="#6f95db"/>
+        <circle cx="86" cy="24" r="2.4" fill="#4d82e8"/><path d="M92 24h18" stroke="#9db8e8" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="86" cy="33" r="2.4" fill="#4d82e8"/><path d="M92 33h18" stroke="#9db8e8" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="86" cy="42" r="2.4" fill="#4d82e8"/><path d="M92 42h13" stroke="#9db8e8" stroke-width="2.4" stroke-linecap="round"/>
+      </g>
+      <path d="M104 52l40-18-14 38-9-12z" fill="url(#gUrUcak)"/>
+      <path d="M121 60l23-26-26 22z" fill="#0f47b8" opacity=".55"/>
+      <path d="M104 52l40-18" stroke="#ffffff" stroke-opacity=".6" stroke-width="1.2"/>
+    </svg>
+    <div class="g-ust-sayac">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="10" width="4" height="8" rx="1.2" fill="#8fb4f5"/><rect x="8" y="6" width="4" height="12" rx="1.2" fill="#4d82e8"/><rect x="14" y="2" width="4" height="16" rx="1.2" fill="#1d5fe0"/></svg>
+      <span class="g-ara-say" id="gonderilenAraSay" aria-live="polite"></span>
+    </div>
   </div>
   <main>
     <div class="g-ara-kap" id="gonderilenAraKap">
       <div class="g-ara-kutu">
+        <svg class="g-ara-ikon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5l5 5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
         <input id="gonderilenAra" type="search" autocomplete="off" enterkeyhint="search"
-          placeholder="Plaka, ürün, gönderilen veya firma ara…" aria-label="Gönderilenlerde ara">
+          placeholder="Plaka, ürün, gönderilen veya firma ara..." aria-label="Gönderilenlerde ara" aria-keyshortcuts="Control+K Meta+K">
+        <kbd class="g-ara-kbd" id="gonderilenAraKbd" aria-hidden="true">⌘ K</kbd>
         <button type="button" class="g-ara-x" id="btnGonderilenAraTemizle" aria-label="Aramayı temizle" hidden>✕</button>
       </div>
-      <div class="g-ara-say" id="gonderilenAraSay" aria-live="polite"></div>
     </div>
     <div class="gonderilen-liste" id="gonderilenListe"></div>
   </main>
@@ -4382,7 +4538,7 @@ function gonderilenUlkeParcala(g) {
       let etiket = 'Yurt içi', sinif = 'g-tag-ic';
       if (tur === 'uretici') { etiket = 'Üretici sevk'; sinif = 'g-tag-alim'; }
       else if (tur === 'alim') { etiket = 'Satın alım'; sinif = 'g-tag-alim'; }
-      else if (g.bildirimTuru === 'SEVK_ETME') etiket = 'Sevk etme';
+      else if (g.bildirimTuru === 'SEVK_ETME') { etiket = 'Sevk etme'; sinif = 'g-tag-sevk'; }
       else if (g.bildirimTuru === 'SATIS') etiket = 'Yurt içi satış';
       return { ad: tam.slice(onek.length), etiket, sinif, tam };
     }
@@ -4438,7 +4594,43 @@ function gonderilenKartIcerik(g, i, gomulu) {
     `</div>`;
 }
 
+// ── Masaüstü tablo simgeleri (v324) — metinsiz inline SVG; gradyanlar .g-svg-defs'te.
+// Hücre METNİNE hiçbir şey eklemez (innerText aynı kalır: "24.500 KG", "25 TL/KG", "✓").
+const G_SVG = {
+  ok: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.2 8 10l4-3.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  saat: '<svg class="g-ik-saat" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.4 1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  bina: '<svg class="g-ik-bina" viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="7" width="7" height="11" rx="1" fill="url(#gGrBina)"/><rect x="8" y="2" width="10" height="16" rx="1.2" fill="url(#gGrBina)" stroke="#6f84ab" stroke-width=".6"/><path d="M10.5 5h1.6M14 5h1.6M10.5 8h1.6M14 8h1.6M10.5 11h1.6M14 11h1.6M4 10h2M4 13h2" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><rect x="12" y="14" width="2.4" height="4" fill="#fff" opacity=".85"/></svg>',
+  agirlik: '<svg class="g-ik-sol" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 6.5a3 3 0 1 1 6 0" fill="none" stroke="url(#gGrMavi)" stroke-width="2.2"/><path d="M5.2 6.5h9.6l2.6 11H2.6z" fill="url(#gGrMavi)"/><path d="M6 8.3h8" stroke="#fff" stroke-opacity=".55" stroke-width="1.2" stroke-linecap="round"/></svg>',
+  para: '<svg class="g-ik-sol" viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="15" rx="7.5" ry="2.8" fill="#c98a12"/><rect x="2.5" y="9" width="15" height="6" fill="url(#gGrAltin)"/><ellipse cx="10" cy="9" rx="7.5" ry="2.8" fill="#ffe7a3" stroke="#e3a018" stroke-width=".8"/><path d="M5 11.6v2.2M8 12.1v2.2M12 12.1v2.2M15 11.6v2.2" stroke="#b8790c" stroke-opacity=".55" stroke-width=".9"/></svg>',
+  yazici: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.5" y="2.5" width="9" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="15" height="7.5" rx="2" fill="currentColor"/><rect x="5.5" y="11.5" width="9" height="6" rx="1" fill="var(--kart)" stroke="currentColor" stroke-width="1.6"/><circle cx="14.5" cy="9.6" r=".9" fill="var(--kart)"/></svg>',
+  gonder: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 9.4 18 2.5l-4.6 15-3.3-5.6z" fill="#fff"/><path d="m10.1 11.9 7.9-9.4" stroke="#1d5fe0" stroke-opacity=".45" stroke-width="1.2"/></svg>',
+};
+// Ülke / Müstahsil hap rozetinin simgesi (sinif → renk): İhracat mavi yıldız,
+// Sevk etme mavi ok, Satın alım / Üretici sevk turuncu para, Yurt içi satış gri dükkân.
+function gonderilenTagIkon(sinif) {
+  const daire = (gr) => `<circle cx="8" cy="8" r="7.5" fill="url(#${gr})"/>`;
+  if (sinif === 'g-tag-alim') return `<svg viewBox="0 0 16 16" aria-hidden="true">${daire('gGrTuruncu')}<circle cx="8" cy="8" r="4.2" fill="none" stroke="#fff" stroke-width="1.4"/><path d="M8 5.8v4.4" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+  if (sinif === 'g-tag-ic') return `<svg viewBox="0 0 16 16" aria-hidden="true">${daire('gGrGri')}<path d="M4.3 7h7.4l-.8-2.4H5.1zM5 7.6v3.8h6V7.6" fill="none" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+  if (sinif === 'g-tag-sevk') return `<svg viewBox="0 0 16 16" aria-hidden="true">${daire('gGrMavi')}<path d="M4.2 7.6 11.8 4.6 9.6 11.6 8.1 9z" fill="#fff"/></svg>`;
+  return `<svg viewBox="0 0 16 16" aria-hidden="true">${daire('gGrMavi')}<path d="m8 3.6 1.3 2.8 3 .3-2.3 2 .7 3L8 10.2l-2.7 1.5.7-3-2.3-2 3-.3z" fill="#fff"/></svg>`;
+}
+// Ürün hapı emojisi (yalnız masaüstü tablo; kart/form urunIkonu()'yu kullanmaya devam eder).
+const G_URUN_EMOJI = [
+  ['nar', '🍎'], ['kabak', '🥒'], ['salatalik', '🥒'], ['hiyar', '🥒'], ['kayisi', '🍑'], ['seftali', '🍑'],
+  ['kiraz', '🍒'], ['visne', '🍒'], ['domates', '🍅'], ['portakal', '🍊'], ['mandalin', '🍊'], ['limon', '🍋'],
+  ['greyfurt', '🍊'], ['elma', '🍏'], ['armut', '🍐'], ['uzum', '🍇'], ['cilek', '🍓'], ['karpuz', '🍉'],
+  ['kavun', '🍈'], ['muz', '🍌'], ['ananas', '🍍'], ['avokado', '🥑'], ['biber', '🫑'], ['patlican', '🍆'],
+  ['patates', '🥔'], ['sogan', '🧅'], ['sarimsak', '🧄'], ['havuc', '🥕'], ['marul', '🥬'], ['ispanak', '🥬'],
+  ['lahana', '🥬'], ['brokoli', '🥦'], ['misir', '🌽'], ['mantar', '🍄'], ['erik', '🫐'], ['incir', '🫐'],
+];
+function gonderilenUrunEmoji(ad) {
+  const u = gAraNorm(ad).replace(/[şçğüö]/g, (c) => ({ 'ş': 's', 'ç': 'c', 'ğ': 'g', 'ü': 'u', 'ö': 'o' }[c]));
+  for (const [k, e] of G_URUN_EMOJI) if (u.includes(k)) return e;
+  return '📦';
+}
+
 // Masaüstü tablo satırı (tek gönderim = tek <tbody>: satır + açılınca altında detay satırı).
+// i = gonderilenVeri'deki ÖZGÜN indeks (süzgeçten bağımsız) — data-i'ye yalnız o yazılır.
 function gonderilenSatirHtml(g, i) {
   const d = new Date(g.zaman);
   const gecerli = !isNaN(d);
@@ -4453,21 +4645,24 @@ function gonderilenSatirHtml(g, i) {
   const kilo = Math.round(Number(g.toplamKg) || 0).toLocaleString('tr-TR') + ' KG';
   const fiyat = Number(g.fiyat) || 0;
   const ucret = fiyat > 0 ? `${fmt(fiyat)} TL/KG` : '—';
-  const urun = g.urunAd ? `${urunIkonu(g.urunAd)} ${eHtml(g.urunAd)}` : '—';
+  const urun = g.urunAd
+    ? `<span class="g-urun"><span class="g-urun-emoji" aria-hidden="true">${gonderilenUrunEmoji(g.urunAd)}</span><span class="g-urun-ad">${eHtml(g.urunAd)}</span></span>`
+    : '—';
   return `<tbody class="g-grup">` +
     `<tr class="g-satir" data-i="${i}" tabindex="0" aria-expanded="false">` +
-    `<td class="g-c-kisa"><span class="g-ok" aria-hidden="true">▾</span><span class="g-tarih-kap">${gun} <span class="g-t-saat">${saat}</span></span>${durum}</td>` +
-    `<td class="g-c-firma" title="${eHtml(g.firmaAd || '')}">${eHtml(g.firmaAd || '—')}</td>` +
+    `<td class="g-c-kisa"><span class="g-ok" aria-hidden="true">${G_SVG.ok}</span><span class="g-tarih-kap">${G_SVG.saat}<span>${gun}</span> <span class="g-t-saat">${saat}</span></span>${durum}</td>` +
+    `<td class="g-c-firma" title="${eHtml(g.firmaAd || '')}">${G_SVG.bina}${eHtml(g.firmaAd || '—')}</td>` +
     `<td class="g-c-kisa"><span class="g-plaka">${eHtml(plaka)}</span></td>` +
     `<td class="g-c-ulke" title="${eHtml(u.tam)}"><div class="g-ulke-kap">` +
-      (u.etiket ? `<span class="g-tag ${u.sinif}">${eHtml(u.etiket)}</span>` : '') +
+      (u.etiket ? `<span class="g-tag ${u.sinif}">${gonderilenTagIkon(u.sinif)}${eHtml(u.etiket)}</span>` : '') +
       `<span class="g-ulke-ad">${eHtml(u.ad || '—')}</span></div></td>` +
     `<td class="g-c-urun" title="${eHtml(g.urunAd || '')}">${urun}</td>` +
-    `<td class="g-c-kisa sag g-kilo">${kilo}</td>` +
-    `<td class="g-c-kisa sag g-ucret">${ucret}</td>` +
+    `<td class="g-c-kisa g-kilo">${G_SVG.agirlik}${kilo}</td>` +
+    `<td class="g-c-kisa g-ucret">${G_SVG.para}${ucret}</td>` +
     `<td class="g-c-kisa g-c-eylem"><div class="g-eylem-kap">` +
-      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula" aria-label="Yazdır">🖨 <span class="g-btn-yazi">Yazdır</span></button>` +
-      `<button type="button" class="g-btn-tekrar" data-i="${i}" title="Tekrar gönder" aria-label="Tekrar gönder" aria-haspopup="menu" aria-expanded="false">↻ <span class="g-btn-yazi">Tekrar gönder</span> ▾</button>` +
+      `<button type="button" class="g-yazdir-btn-ust" data-i="${i}" title="Çoklu Künye Basım'da sorgula" aria-label="Yazdır">${G_SVG.yazici}<span class="g-btn-yazi">Yazdır</span></button>` +
+      `<button type="button" class="g-btn-tekrar" data-i="${i}" title="Tekrar gönder" aria-label="Tekrar gönder" aria-haspopup="menu" aria-expanded="false">` +
+        `<span class="g-tk-ana">${G_SVG.gonder}<span class="g-btn-yazi">Tekrar gönder</span></span><span class="g-tk-ok" aria-hidden="true">▾</span></button>` +
     `</div></td>` +
     `</tr></tbody>`;
 }
@@ -4500,6 +4695,7 @@ function gonderilenAraSayac() {
   const N = gonderilenGorunen.length, M = gonderilenVeri.length;
   $('gonderilenAraSay').textContent = M ? `${N} / ${M} gönderim` : '';
   $('btnGonderilenAraTemizle').hidden = !$('gonderilenAra').value;
+  $('gonderilenAraKbd').hidden = !!$('gonderilenAra').value;   // ✕ ile aynı yere düşer
 }
 
 function gonderilenCiz() {
@@ -4516,7 +4712,7 @@ function gonderilenCiz() {
     kap.innerHTML = '<div class="g-tablo-sarma"><table class="g-tablo"><thead><tr>' +
       '<th class="g-c-kisa">Tarih</th><th class="g-c-firma">Firma</th><th class="g-c-kisa">Plaka</th>' +
       '<th class="g-c-ulke">Ülke / Müstahsil</th><th class="g-c-urun">Ürün</th>' +
-      '<th class="g-c-kisa sag">Kilo</th><th class="g-c-kisa sag" title="Birim fiyat">Ücret</th>' +
+      '<th class="g-c-kisa">Kilo</th><th class="g-c-kisa" title="Birim fiyat">Ücret</th>' +
       '<th class="g-c-kisa g-c-eylem">İşlem</th></tr></thead>' +
       gonderilenGorunen.map(x => gonderilenSatirHtml(x.g, x.i)).join('') + '</table></div>';
   } else {
@@ -4536,6 +4732,16 @@ $('btnGonderilenAraTemizle').addEventListener('click', () => {
   $('gonderilenAra').value = '';
   if (gonderilenVeri.length) gonderilenCiz(); else gonderilenAraSayac();
   $('gonderilenAra').focus();
+});
+// Ctrl+K / ⌘K: Gönderilenler açıkken aramaya odaklan (ipucu platforma göre yazılır).
+$('gonderilenAraKbd').textContent = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '') ? '⌘ K' : 'Ctrl K';
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || String(e.key).toLowerCase() !== 'k') return;
+  if ($('ekranGonderilen').classList.contains('gizli')) return;
+  e.preventDefault();
+  const k = $('gonderilenAra');
+  k.focus();
+  k.select();
 });
 
 async function gonderilenEkraniAc() {
