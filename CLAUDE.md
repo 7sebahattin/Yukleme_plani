@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v330` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v331` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -999,6 +999,11 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   ad seçimi bağlı adresi doldurur. Gümrük ve iletişim bölümü sürekli görünür.
   Başlık/Beyan Tipi formdan kaldırılmıştır; eski değer sıradan düzenlemede
   silinmez. Bağlantı düzeltme alanı kullanıcı kararıyla gizlidir.
+- **Öneri listeleri TEMİZ BAŞLANGIÇ (v331, sahip kararı):** beyan formu önerileri (`beyan_suggest_form_data()`)
+  `BEYAN_ONERI_BASLANGIC` (helpers.php, `2026-10-12 00:00:00`) ÖNCESİ veriyi göstermez: geçmiş beyanlar
+  (`created_at >=`), zaman damgasız eski KV tanımları (`added_at` yoksa gizli; `+ekle` yeniden ekleyince
+  damgalanır) ve genel tanım havuzu (`material_definitions`) KULLANILMAZ. HKS ürün KATALOĞU kalır (ürün adı →
+  HKS id eşlemesi ona dayanır). Tarihi ileri almak = yeni temiz başlangıç; geri ALMA.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
