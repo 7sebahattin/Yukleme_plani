@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v334');
+    define('APP_SURUM', 'v335');
 }
 
 // --- HTML kaçışı ---
