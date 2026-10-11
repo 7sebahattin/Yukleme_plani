@@ -149,6 +149,8 @@ render_flash();
 </div>
 <?php endif; ?>
 
+<div class="bv">
+
 <!-- ── BİLDİRİM KARTI ──────────────────────────────────────────────────────
      HKS bildirimi için gereken DÖRT bilgi tek bakışta: Ülke · Ürün · Net KG ·
      Plaka. Eksik olan alan sessiz bir "—" ile geçiştirilmez, işaretlenir —
@@ -160,23 +162,23 @@ $bk_ulke  = trim((string)($beyan['hks_ulke_ad'] ?? ''));
 $bk_urun  = trim((string)($beyan['hks_urun_ad'] ?? '')) ?: trim((string)($beyan['product_name'] ?? ''));
 $bk_hks   = trim((string)($beyan['hks_urun_ad'] ?? '')) !== '';   // HKS karşılığı seçilmiş mi
 $bk_kg    = $beyan['net_kg'] !== null && (float)$beyan['net_kg'] > 0;
-$bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''): void { ?>
-    <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>">
+$bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = '', string $ic = ''): void { ?>
+    <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>"<?= $ic !== '' ? ' data-ic="' . h($ic) . '"' : '' ?>>
         <div class="bk-etiket"><?= h($etiket) ?></div>
         <div class="bk-deger"><?= $deger !== '' ? h($deger) : 'eksik' ?></div>
         <?php if ($not !== ''): ?><div class="bk-not"><?= h($not) ?></div><?php endif; ?>
     </div>
 <?php };
 ?>
-<div class="beyan-section bk-kart">
-    <div class="beyan-section-title">🏛 Hal Kayıt Bildirimi</div>
+<div class="beyan-section bk-kart" data-bf="hks">
+    <div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Kayıt Bildirimi</div>
     <div class="bk-grid">
         <?php
-        $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '');
+        $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '', '', 'kure');
         $bk_hucre('Ürün',   $bk_urun, $bk_urun !== '' && $bk_hks,
-                  $bk_urun !== '' && !$bk_hks ? 'HKS karşılığı seçilmedi' : '');
-        $bk_hucre('Net KG', $bk_kg ? fmt_kg($beyan['net_kg']) : '', $bk_kg);
-        $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '');
+                  $bk_urun !== '' && !$bk_hks ? 'HKS karşılığı seçilmedi' : '', 'kutu');
+        $bk_hucre('Net KG', $bk_kg ? fmt_kg($beyan['net_kg']) : '', $bk_kg, '', 'terazi');
+        $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '', '', 'arac');
         ?>
     </div>
 
@@ -228,33 +230,33 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 1. Temel Bilgiler -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📋 Temel Bilgiler</div>
+<div class="beyan-section" data-bf="temel">
+    <div class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
     <div class="beyan-view-grid">
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="diyez">
             <span class="lbl">Parti No</span>
             <span class="val"><?= h($beyan['party_no'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="tir">
             <span class="lbl">Nakliye Türü</span>
             <span class="val"><?= h($beyan['transport_type'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="arac">
             <span class="lbl">Araç Plakası</span>
             <span class="val"><?= h(($beyan['vehicle_plate'] ?? '') ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="rota">
             <span class="lbl">Hat / Güzergah</span>
             <span class="val"><?= h($beyan['line_type'] ?: '—') ?></span>
         </div>
         <?php if ($beyan['company_name']): ?>
-        <div class="beyan-view-row" style="grid-column:1/-1">
+        <div class="beyan-view-row" style="grid-column:1/-1" data-ic="bina">
             <span class="lbl">Gümrük Adı</span>
             <span class="val"><?= h($beyan['company_name']) ?></span>
         </div>
         <?php endif; ?>
         <?php if ($beyan['company_address']): ?>
-        <div class="beyan-view-row" style="grid-column:1/-1">
+        <div class="beyan-view-row" style="grid-column:1/-1" data-ic="konum">
             <span class="lbl">Gümrük Adresi</span>
             <span class="val" style="white-space:pre-wrap"><?= h($beyan['company_address']) ?></span>
         </div>
@@ -263,34 +265,34 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 2. Ürün Bilgileri -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🍎 Ürün Bilgileri</div>
+<div class="beyan-section" data-bf="urun">
+    <div class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
     <div class="beyan-view-grid">
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="elma">
             <span class="lbl">Ürün Adı</span>
             <span class="val"><?= h($beyan['product_name'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="etiket">
             <span class="lbl">Ürün Çeşidi</span>
             <span class="val"><?= h($beyan['product_variety'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="katman">
             <span class="lbl">Palet Adedi</span>
             <span class="val"><?= $beyan['pallet_count'] !== null ? (int)$beyan['pallet_count'] : '—' ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="agirlik">
             <span class="lbl">Brüt KG</span>
             <span class="val"><?= $beyan['gross_kg'] !== null ? fmt_kg($beyan['gross_kg']) : '—' ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="terazi">
             <span class="lbl">Net KG</span>
             <span class="val strong"><?= $beyan['net_kg'] !== null ? fmt_kg($beyan['net_kg']) : '—' ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="kutu">
             <span class="lbl">Kasa Adedi</span>
             <span class="val"><?= $beyan['crate_count'] !== null ? number_format((int)$beyan['crate_count'], 0, ',', '.') : '—' ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="kasa">
             <span class="lbl">Kasa Cinsi</span>
             <span class="val"><?= h($beyan['crate_type'] ?: '—') ?></span>
         </div>
@@ -298,22 +300,22 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 3. Lojistik / Alıcı -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🚚 Lojistik / Alıcı</div>
+<div class="beyan-section" data-bf="lojistik">
+    <div class="beyan-section-title" data-ic="bina"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
     <div class="beyan-view-grid">
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="depo">
             <span class="lbl">Çıkış Depo</span>
             <span class="val"><?= h($beyan['exit_depot'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="kisi">
             <span class="lbl">Alıcı</span>
             <span class="val"><?= h($beyan['buyer_name'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="rehber">
             <span class="lbl">İlgili Kişi</span>
             <span class="val"><?= h($beyan['contact_person'] ?: '—') ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="rozet">
             <span class="lbl">Marka</span>
             <span class="val"><?= h($beyan['brand'] ?: '—') ?></span>
         </div>
@@ -321,25 +323,25 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 4. Analiz / Durum -->
-<div class="beyan-section">
-    <div class="beyan-section-title">📊 Analiz / Durum</div>
+<div class="beyan-section" data-bf="durum">
+    <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
     <div class="beyan-view-grid">
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="tup">
             <span class="lbl">Durum</span>
             <span class="val"><?= beyan_badge_html($cur_status) ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="takvim">
             <span class="lbl">Numune Alındı</span>
             <span class="val"><?= $beyan['sample_taken_at'] ? h(fmt_datetime($beyan['sample_taken_at'])) : '—' ?></span>
         </div>
-        <div class="beyan-view-row">
+        <div class="beyan-view-row" data-ic="takvim">
             <span class="lbl">Analiz Sonuç Tarihi</span>
             <span class="val"><?= $beyan['analysis_result_at'] ? h(fmt_datetime($beyan['analysis_result_at'])) : '—' ?></span>
         </div>
     </div>
     <?php if ($beyan['analysis_note']): ?>
-    <div style="margin-top:10px;padding:10px;background:#f8fafc;border:1px solid var(--border);border-radius:var(--radius-sm)">
-        <div class="muted" style="font-size:.78rem;margin-bottom:4px">Analiz Notu</div>
+    <div class="bv-not">
+        <div class="bv-not-baslik">Analiz Notu</div>
         <div style="white-space:pre-wrap"><?= h($beyan['analysis_note']) ?></div>
     </div>
     <?php endif; ?>
@@ -354,8 +356,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
     if (!$is_deleted && can_beyan('write')):
     ?>
-    <div style="margin-top:10px">
-        <div class="muted" style="font-size:.82rem;margin-bottom:6px">
+    <div class="bv-durum">
+        <div class="muted bv-durum-ipucu">
             Durum Değiştir: <span style="font-size:.92em">herhangi bir duruma doğrudan geçebilirsiniz</span>
         </div>
         <!-- TEK form. Her durum bir submit butonu (`name="status"`) — buton
@@ -392,8 +394,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 
 <!-- 5. WhatsApp Ham Metni (collapsible) -->
 <?php if ($beyan['raw_text']): ?>
-<div class="beyan-section">
-    <button type="button" class="beyan-collapsible-toggle" onclick="toggleCollapsible(this)">
+<div class="beyan-section bv-katla" data-bf="wa">
+    <button type="button" class="beyan-collapsible-toggle" data-ic="mesaj" onclick="toggleCollapsible(this)">
         📱 WhatsApp Ham Metni <span>▶</span>
     </button>
     <div class="beyan-collapsible-body" style="display:none">
@@ -404,8 +406,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 
 <!-- 6. Eşleşmeyen Satırlar (collapsible) -->
 <?php if ($beyan['unmatched_text']): ?>
-<div class="beyan-section">
-    <button type="button" class="beyan-collapsible-toggle" onclick="toggleCollapsible(this)">
+<div class="beyan-section bv-katla" data-bf="uyari">
+    <button type="button" class="beyan-collapsible-toggle" data-ic="uyari" onclick="toggleCollapsible(this)">
         ⚠️ Eşleşmeyen / Kontrol Edilecek Satırlar <span>▶</span>
     </button>
     <div class="beyan-collapsible-body" style="display:none">
@@ -417,8 +419,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 <?php endif; ?>
 
 <!-- 7. Yükleme Planı Bağlantısı -->
-<div class="beyan-section">
-    <div class="beyan-section-title">🔗 Yükleme Planı Bağlantısı</div>
+<div class="beyan-section" data-bf="baglanti">
+    <div class="beyan-section-title" data-ic="baglanti"><span class="bf-emoji" aria-hidden="true">🔗</span> Yükleme Planı Bağlantısı</div>
     <?php if ($linked_record): ?>
     <p>
         <a href="record_view.php?id=<?= (int)$linked_record['id'] ?>" class="btn btn-sm btn-ghost">
@@ -434,6 +436,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <p class="muted" style="font-size:.82rem">Planla eşleştirmek için yükleme kayıtlarını düzenleme yetkisi gerekir.</p>
     <?php endif; ?>
 </div>
+
+</div><!-- /.bv -->
 
 <!-- Sistem bilgisi -->
 <div class="muted" style="font-size:.8rem;margin:12px 0 24px;text-align:right">

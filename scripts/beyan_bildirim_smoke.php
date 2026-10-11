@@ -477,7 +477,7 @@ ok('Eslestir butonu yukleme plani bolumunun icinde',
 
 // TEK bildirim bolumu olmali — ust kart ile alt bolum ayni veriyi gosteriyordu.
 ok('bildirim bolumu sayfada TEK',
-   substr_count($view, 'beyan-section-title">🏛 Hal Kayıt Bildirimi') === 1,
+   preg_match_all('/beyan-section-title"[^>]*>(?:<span[^>]*>🏛<\/span>|🏛) Hal Kayıt Bildirimi/u', $view) === 1,
    'ayni bilgi iki yerde — kullanici hangisinin gecerli oldugunu bilemez');
 ok('HKS urun/ulke alt bolumde TEKRARLANMIYOR',
    strpos($view, '<span class="lbl">HKS Ürünü</span>') === false,
