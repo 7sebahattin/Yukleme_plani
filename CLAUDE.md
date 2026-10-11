@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v322` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v323` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1192,7 +1192,7 @@ sıfatıyla Satın Alım). Eskiden kayıtlı karşı tarafa cep hiç gönderilmi
 - Arayüz: `ureticiCepGerekli()` → kayıtlı + Üretici sıfatında `#cepTelBlok` görünür (not: "Üretici sıfatında HKS zorunlu
   tutar"), havuz seçiminde cep dolar, kayıtta zorunlu; sonuç ekranında 263 ipucu; kayıtlı kişide "Doğum: GÖNDERİLMEDİ"
   uyarısı yerine "gerekmez".
-- **Gönderim Sonucu penceresi:** kutunun dışına (boşluğa) tıklamak "Gönderilenlere Git/Kapat" ile aynıdır (`#modal.dataset.sonuc='1'`, yalnız sonuç ekranında). CANLI "Gönderim Onayı" ve firma penceresinde geçerli DEĞİL (yanlışlıkla kapanmasın).
+- **Gönderim Sonucu penceresi (v323):** köşedeki ✕ (`#btnModalX`) ve kutunun dışına (boşluğa) tıklamak YALNIZ kapatır (`sonucKapat()`, bulunulan ekranda kalır; taslak listesi açıksa tazelenir). Gönderilenler'e geçiş/Taslağa dönüş yalnız alttaki "Gönderilenlere Git"/"Taslağa Dön" düğmesiyle. CANLI "Gönderim Onayı" ve firma penceresinde ✕/boşluk kapatması YOK (`#modal.dataset.sonuc='1'` yalnız sonuç ekranında).
 - Test: `php scripts/hks_uretici_cep_test.php` · `node scripts/hks_uretici_cep_smoke.js`.
 
 ## Hal Kayıt — Kişi Havuzu (v282, v283)

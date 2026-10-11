@@ -150,14 +150,23 @@ const sunucu = http.createServer((q, s) => {
   ok('kayıtsız: ad + cep + doğum gönderildi', !!o3 && o3.ikinciAd === 'Deneme Kisi' &&
      o3.ikinciCep === '05321112233' && o3.ikinciDogumTarihi === '1980-02-11', JSON.stringify(o3));
 
-  // ---- Modal: boşluğa tıklama yalnız SONUÇ ekranında kapatır ----
+  // ---- Modal: ✕ ve boşluk tıklaması yalnız KAPATIR (yönlendirmez), yalnız sonuç ekranında ----
   const modalAcik = () => sayfa.evaluate(() => document.getElementById('modal').classList.contains('acik'));
+  const xGorunur = () => sayfa.evaluate(() => !document.getElementById('btnModalX').classList.contains('gizli'));
   await sayfa.evaluate(() => { const m = document.getElementById('modal'); delete m.dataset.sonuc; m.classList.add('acik'); });
   await sayfa.mouse.click(5, 5); await sayfa.waitForTimeout(100);
   ok('modal(onay): boşluğa tıklayınca KAPANMAZ', await modalAcik());
-  await sayfa.evaluate(() => { document.getElementById('modal').dataset.sonuc = '1'; });
+  ok('modal(onay): ✕ görünmez', !(await xGorunur()));
+  await sayfa.evaluate(() => { document.getElementById('modal').dataset.sonuc = '1'; document.getElementById('btnModalX').classList.remove('gizli'); });
+  ok('modal(sonuç): ✕ görünür', await xGorunur());
+  await sayfa.evaluate(() => { window.__gitti = 0; window.gonderilenEkraniAc = () => { window.__gitti++; }; });
   await sayfa.mouse.click(5, 5); await sayfa.waitForTimeout(100);
-  ok('modal(sonuç): boşluğa tıklayınca kapanır', !(await modalAcik()));
+  ok('modal(sonuç): boşluk tıklaması kapatır', !(await modalAcik()));
+  ok('modal(sonuç): boşluk tıklaması Gönderilenler\'e GİTMEZ', (await sayfa.evaluate(() => window.__gitti)) === 0);
+  await sayfa.evaluate(() => { const m = document.getElementById('modal'); m.dataset.sonuc = '1'; m.classList.add('acik'); document.getElementById('btnModalX').classList.remove('gizli'); });
+  await sayfa.click('#btnModalX'); await sayfa.waitForTimeout(100);
+  ok('modal(sonuç): ✕ kapatır', !(await modalAcik()));
+  ok('modal(sonuç): ✕ sonrası ✕ gizli', !(await xGorunur()));
 
   ok('sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   await tarayici.close(); sunucu.close();
