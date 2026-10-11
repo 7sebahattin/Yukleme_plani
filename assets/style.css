@@ -6108,7 +6108,11 @@ body:not(.print-mode) .bv .beyan-section[data-bf] > .beyan-section-title {
 }
 
 /* — Bildirim kartı hücreleri: simge karosu + etiket/değer — */
-.bv .bk-grid { gap: 10px; background: none; border-radius: 0; overflow: visible; }
+.bv .bk-grid,
+html[data-theme="dark"] body:not(.print-mode) .bv .bk-grid { gap: 10px; background: none; border-radius: 0; overflow: visible; }
+html[data-theme="dark"] body:not(.print-mode) .bv .bk-hucre { background: var(--bf-zemin); }
+html[data-theme="dark"] body:not(.print-mode) .bv .bk-hucre.bk-eksik { background: rgba(217,119,6,.12); }
+.bv .bk-kart .bk-grid { border-radius: 0; overflow: visible; }
 .bv .bk-hucre {
     display: grid;
     grid-template-columns: 38px minmax(0,1fr);
@@ -6244,6 +6248,7 @@ body:not(.print-mode) .bv .beyan-section.bv-katla[data-bf] { padding: 12px 14px;
     .bv .beyan-collapsible-toggle[data-ic] { grid-template-columns: 38px minmax(0,1fr) auto; column-gap: 12px; font-size: .84rem; }
     .bv .bk-alt { flex-direction: column; align-items: stretch; }
     .bv .bk-alt .btn { width: 100%; min-height: 46px; }
+    .bv .bk-alt .bk-engel { flex: 0 0 auto; }
     .bv .beyan-section[data-bf="baglanti"] > .btn,
     .bv .beyan-section[data-bf="baglanti"] > p .btn { width: 100%; align-self: stretch; }
 }

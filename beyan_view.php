@@ -170,8 +170,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 <?php };
 ?>
-<div class="beyan-section bk-kart">
-    <div class="beyan-section-title" data-ic="hal" data-bf="hks"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Kayıt Bildirimi</div>
+<div class="beyan-section bk-kart" data-bf="hks">
+    <div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Kayıt Bildirimi</div>
     <div class="bk-grid">
         <?php
         $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '', '', 'kure');
@@ -230,8 +230,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 1. Temel Bilgiler -->
-<div class="beyan-section">
-    <div class="beyan-section-title" data-ic="pano" data-bf="temel"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
+<div class="beyan-section" data-bf="temel">
+    <div class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
     <div class="beyan-view-grid">
         <div class="beyan-view-row" data-ic="diyez">
             <span class="lbl">Parti No</span>
@@ -265,8 +265,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 2. Ürün Bilgileri -->
-<div class="beyan-section">
-    <div class="beyan-section-title" data-ic="paket" data-bf="urun"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
+<div class="beyan-section" data-bf="urun">
+    <div class="beyan-section-title" data-ic="paket"><span class="bf-emoji" aria-hidden="true">🍎</span> Ürün Bilgileri</div>
     <div class="beyan-view-grid">
         <div class="beyan-view-row" data-ic="elma">
             <span class="lbl">Ürün Adı</span>
@@ -300,8 +300,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 3. Lojistik / Alıcı -->
-<div class="beyan-section">
-    <div class="beyan-section-title" data-ic="bina" data-bf="lojistik"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
+<div class="beyan-section" data-bf="lojistik">
+    <div class="beyan-section-title" data-ic="bina"><span class="bf-emoji" aria-hidden="true">🚚</span> Lojistik / Alıcı</div>
     <div class="beyan-view-grid">
         <div class="beyan-view-row" data-ic="depo">
             <span class="lbl">Çıkış Depo</span>
@@ -323,8 +323,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 </div>
 
 <!-- 4. Analiz / Durum -->
-<div class="beyan-section">
-    <div class="beyan-section-title" data-ic="grafik" data-bf="durum"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
+<div class="beyan-section" data-bf="durum">
+    <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
     <div class="beyan-view-grid">
         <div class="beyan-view-row" data-ic="tup">
             <span class="lbl">Durum</span>
@@ -419,8 +419,8 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 <?php endif; ?>
 
 <!-- 7. Yükleme Planı Bağlantısı -->
-<div class="beyan-section">
-    <div class="beyan-section-title" data-ic="baglanti" data-bf="baglanti"><span class="bf-emoji" aria-hidden="true">🔗</span> Yükleme Planı Bağlantısı</div>
+<div class="beyan-section" data-bf="baglanti">
+    <div class="beyan-section-title" data-ic="baglanti"><span class="bf-emoji" aria-hidden="true">🔗</span> Yükleme Planı Bağlantısı</div>
     <?php if ($linked_record): ?>
     <p>
         <a href="record_view.php?id=<?= (int)$linked_record['id'] ?>" class="btn btn-sm btn-ghost">
