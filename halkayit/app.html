@@ -2726,7 +2726,19 @@ function turDegisti() {
     $('kartKunyeler').classList.add('gizli');
     $('ozet').classList.add('gizli');
     malListeleriHazirla();
+    miktarBirimKgVarsayilan();   // liste zaten yüklüyse hemen; değilse yüklenince (malListeleriHazirlaIc)
   }
+}
+
+// Satın Alım + Üreticiden Sevk Alım: Miktar birimi henüz seçilmediyse "Kg" gelir.
+// Birim id'si UYDURULMAZ: listeden ADA göre ("kg") bulunur; bulunamazsa dokunulmaz.
+// Seçili bir değer (kullanıcı seçimi ya da taslaktan yüklenen birim) ASLA ezilmez.
+function miktarBirimKgVarsayilan() {
+  if (!(satinAlimModuMu() || uretSevkModuMu())) return;
+  const sel = $('sMiktarBirim');
+  if (!sel || sel.value) return;
+  const kg = ((malListeler && malListeler.birimler) || []).find(x => trNorm(x.ad).trim() === 'kg');
+  if (kg && [...sel.options].some(o => o.value === String(kg.id))) sel.value = String(kg.id);
 }
 
 // ===== REFERANSSIZ MAL BİLGİLERİ (Satın Alım + Üreticiden Sevk Alım) =====
@@ -2772,6 +2784,7 @@ async function malListeleriHazirlaIc() {
     doldurSel('sMalNitelik', j.nitelikler, '— Seçiniz —');
     doldurSel('sUretimSekli', j.uretimSekli, '— Seçiniz —');
     doldurSel('sMiktarBirim', j.birimler, '— Seçiniz —');
+    miktarBirimKgVarsayilan();
   } catch (e) { mesajGoster('malMesaj', 'Ürün referansları alınamadı: ' + e.message, 'hata'); }
 }
 
