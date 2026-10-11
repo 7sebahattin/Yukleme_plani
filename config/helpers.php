@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v333');
+    define('APP_SURUM', 'v334');
 }
 
 // --- HTML kaçışı ---
@@ -1699,6 +1699,15 @@ endif;
                 $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `note` TEXT NULL DEFAULT NULL");
             }
 
+            // NUMUNE (v334, sahip GO verdi): Not'un üstündeki Numune bölümü; WhatsApp metnine girer.
+            // Yalnız nullable ADD COLUMN — mevcut veriye dokunmaz.
+            foreach (['sample_gross_kg' => 'DECIMAL(12,3)', 'sample_net_kg' => 'DECIMAL(12,3)',
+                      'sample_crate_type' => 'VARCHAR(100)', 'sample_crate_count' => 'INT'] as $_sc => $_st) {
+                if (!in_array($_sc, $cd_cols, true)) {
+                    $pdo->exec("ALTER TABLE `customs_declarations` ADD COLUMN `$_sc` $_st NULL DEFAULT NULL");
+                }
+            }
+
             // KALICI EŞLEŞTİRME ALANLARI (beyan formunda doldurulur).
             // Bunlar beyanın DEĞİŞMEYEN kimlik bilgileridir: hangi HKS firması,
             // HKS kataloğundaki hangi ürün, hangi ülke. Her bildirimde yeniden
@@ -2557,6 +2566,21 @@ function beyan_veri_dogrula(array $data): array {
             $values[$k] = null;
             $errors[] = $label . ': ' . $e->getMessage();
         }
+    }
+    // Numune yükü (v334): yalnız alan gönderildiyse işlenir (toplu kayıt/durum şeridi etkilenmez).
+    foreach (['sample_gross_kg' => 'Numune brüt KG', 'sample_net_kg' => 'Numune net KG', 'sample_crate_count' => 'Numune kasa adedi'] as $k => $label) {
+        if (!array_key_exists($k, $data)) continue;
+        try {
+            $values[$k] = $k === 'sample_crate_count'
+                ? beyan_int_or_null($data[$k]) : beyan_num_or_null($data[$k]);
+        } catch (InvalidArgumentException $e) {
+            $values[$k] = null;
+            $errors[] = $label . ': ' . $e->getMessage();
+        }
+    }
+    if (($values['sample_net_kg'] ?? null) !== null && ($values['sample_gross_kg'] ?? null) !== null
+        && $values['sample_net_kg'] > $values['sample_gross_kg']) {
+        $errors[] = 'Numune net KG, numune brüt KG değerinden büyük olamaz.';
     }
     foreach (['sample_taken_at' => 'Numune tarihi', 'analysis_result_at' => 'Analiz sonucu tarihi'] as $k => $label) {
         $s = trim((string)($data[$k] ?? ''));
@@ -3717,6 +3741,14 @@ function beyan_whatsapp_temizle($v): string {
 // Ham metinden numune bilgisi: "NUMUNE" satırından sonraki ~4 satırda
 // "N tahta kasa", "X kg brüt", "Y kg net". Bulunamazsa null.
 function beyan_whatsapp_numune(array $b): ?array {
+    // Önce formdaki Numune alanları (v334); hiçbiri doluysa ham metin aranmaz.
+    $kolon = ['kasa' => ($b['sample_crate_count'] ?? null) !== null && (int)$b['sample_crate_count'] > 0 ? (int)$b['sample_crate_count'] : null,
+              'cins' => trim((string)($b['sample_crate_type'] ?? '')),
+              'brut' => ($b['sample_gross_kg'] ?? null) !== null && (float)$b['sample_gross_kg'] > 0 ? fmt_unit_kg($b['sample_gross_kg']) : null,
+              'net'  => ($b['sample_net_kg'] ?? null) !== null && (float)$b['sample_net_kg'] > 0 ? fmt_unit_kg($b['sample_net_kg']) : null];
+    if ($kolon['kasa'] !== null || $kolon['cins'] !== '' || $kolon['brut'] !== null || $kolon['net'] !== null) {
+        return $kolon;
+    }
     $metin = (string)($b['unmatched_text'] ?? '') . "\n" . (string)($b['raw_text'] ?? '');
     $satirlar = preg_split('/\R/u', $metin) ?: [];
     $n = count($satirlar);
@@ -3728,9 +3760,23 @@ function beyan_whatsapp_numune(array $b): ?array {
         if (preg_match('/(\d[\d.,]*)[ \t]*kg[ \t]*br[uü]t/iu', $blok, $m) || preg_match('/br[uü]t[ \t]*[:\-]?[ \t]*(\d[\d.,]*)/iu', $blok, $m)) $brut = $m[1];
         if (preg_match('/(\d[\d.,]*)[ \t]*kg[ \t]*net/iu', $blok, $m) || preg_match('/\bnet[ \t]*[:\-]?[ \t]*(\d[\d.,]*)/iu', $blok, $m)) $net = $m[1];
         if ($kasa === null && !$brut && !$net) continue;
-        return ['kasa' => $kasa, 'brut' => $brut ?: null, 'net' => $net ?: null];
+        return ['kasa' => $kasa, 'cins' => 'Tahta Kasa', 'brut' => $brut ?: null, 'net' => $net ?: null];
     }
     return null;
+}
+
+// "TAHTA KASA" → "Tahta Kasa" (Türkçe i/ı kurallı).
+function beyan_whatsapp_baslik_yazim(string $v): string {
+    if ($v === '') return '';
+    $v = str_replace(['İ', 'I'], ['i', 'ı'], $v);
+    $out = [];
+    foreach (explode(' ', mb_strtolower($v, 'UTF-8')) as $w) {
+        if ($w === '') continue;
+        $ilk = mb_substr($w, 0, 1, 'UTF-8');
+        $ilk = $ilk === 'i' ? 'İ' : ($ilk === 'ı' ? 'I' : mb_strtoupper($ilk, 'UTF-8'));
+        $out[] = $ilk . mb_substr($w, 1, null, 'UTF-8');
+    }
+    return implode(' ', $out);
 }
 
 function beyan_whatsapp_metin(array $b): string {
@@ -3790,7 +3836,8 @@ function beyan_whatsapp_metin(array $b): string {
     // 4) Numune (ham metinden; ayrı kolon yok)
     if ($nu = beyan_whatsapp_numune($b)) {
         $s = ['🧪 *NUMUNE*'];
-        if ($nu['kasa'] !== null) $s[] = '📦 ' . $nu['kasa'] . ' Tahta Kasa';
+        $cins = beyan_whatsapp_baslik_yazim($t($nu['cins'] ?? ''));
+        if ($nu['kasa'] !== null || $cins !== '') $s[] = trim('📦 ' . ($nu['kasa'] !== null ? $nu['kasa'] . ' ' : '') . $cins);
         if ($nu['brut']) $s[] = '⚖️ Brüt: ' . $t($nu['brut']) . ' KG';
         if ($nu['net'])  $s[] = '⚖️ Net: ' . $t($nu['net']) . ' KG';
         $bol[] = implode("\n", $s);

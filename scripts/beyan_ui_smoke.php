@@ -61,7 +61,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -810,6 +810,18 @@ $h_not = render_beyan($B_NOT);
 ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk satır') !== false && strpos($h_not, '&lt;b&gt;x&lt;/b&gt;') !== false);
 ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), 'bf-emoji" aria-hidden="true">📝</span> Not') === false);
 ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
+// Numune (v334)
+ok('[numune] formda 4 numune alanı Not bölümünden ÖNCE', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
+   && strpos($f_sil, 'name="sample_crate_type"') !== false && strpos($f_sil, 'name="sample_gross_kg"') !== false
+   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn < strpos($f_sil, 'name="note"'));
+ok('[numune] boşken önizlemede numune kartı yok', strpos(render_beyan($ID_BOS), '🧪</span> Numune') === false);
+$B_NM = beyan_ekle(['party_no' => 'NM-1']);
+db()->prepare("UPDATE customs_declarations SET sample_gross_kg=5, sample_net_kg=4, sample_crate_type='TAHTA KASA', sample_crate_count=1 WHERE id=?")->execute([$B_NM]);
+$h_nm = render_beyan($B_NM);
+ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</span> Numune') !== false
+   && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
+file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));
+ok('[numune] düzenleme formu kayıtlı numuneyi dolduruyor', strpos(render_form($B_NM), 'value="TAHTA KASA"') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',
    strpos($f_sil, '>Gümrük Adı</label>') !== false

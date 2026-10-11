@@ -3,9 +3,10 @@
 declare(strict_types=1);
 $src = file_get_contents(__DIR__ . '/../config/helpers.php');
 preg_match('/function fmt_kg.*?\n}\n/s', $src, $a);
+preg_match('/function fmt_unit_kg.*?\n}\n/s', $src, $u2);
 preg_match('/function tr_upper.*?\n}\n/s', $src, $b);
 preg_match('/function beyan_whatsapp_ayrac.*/s', $src, $c);
-eval($a[0] . $b[0] . $c[0]);
+eval($a[0] . $u2[0] . $b[0] . $c[0]);
 
 $f = 0; $n = 0;
 function ok(string $ad, bool $d): void { global $f, $n; $n++; if (!$d) $f++; printf("%-70s %s\n", $ad, $d ? 'OK' : '*** FAIL'); }
@@ -83,5 +84,10 @@ ok('başlıksız adres: 📍 *ADRES* + TIN ayrı satır', strpos($m, '📍 *ADRE
 $m = beyan_whatsapp_metin(['raw_text' => "x\nNUMUNE\n2 kasa\nBrüt: 10\nNet: 8"]);
 ok('numune ham metinden (etiket: değer biçimi)', strpos($m, '📦 2 Tahta Kasa') !== false && strpos($m, 'Brüt: 10 KG') !== false && strpos($m, 'Net: 8 KG') !== false);
 ok('numune kelimesi yoksa bölüm yok', strpos(beyan_whatsapp_metin(['raw_text' => "1 kasa 5 kg brüt"]), 'NUMUNE') === false);
+$m = beyan_whatsapp_metin(['sample_crate_count' => 2, 'sample_crate_type' => 'TAHTA KASA', 'sample_gross_kg' => '10.5', 'sample_net_kg' => 8]);
+ok('numune alanları (tarih/ham metin olmadan) metne girer', strpos($m, "🧪 *NUMUNE*\n📦 2 Tahta Kasa\n⚖️ Brüt: 10,5 KG\n⚖️ Net: 8 KG") !== false);
+$m = beyan_whatsapp_metin(['sample_net_kg' => 4, 'raw_text' => "NUMUNE\n9 kasa"]);
+ok('numune kolonu doluysa ham metin yok sayılır', strpos($m, '⚖️ Net: 4 KG') !== false && strpos($m, '9 ') === false);
+ok('numune kolonları boşsa bölüm yok', strpos(beyan_whatsapp_metin(['sample_net_kg' => 0, 'sample_crate_count' => 0]), 'NUMUNE') === false);
 printf("\n%d test, %d başarısız\n", $n, $f);
 exit($f ? 1 : 0);
