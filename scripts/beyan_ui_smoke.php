@@ -811,9 +811,9 @@ ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk 
 ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), 'bf-emoji" aria-hidden="true">📝</span> Not') === false);
 ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
 // Numune (v334)
-ok('[numune] formda 4 numune alanı Not bölümünden ÖNCE', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
+ok('[numune] formda 4 numune alanı Analiz sekmesinde (Not bölümünden SONRA, Kaynak sekmesinden ÖNCE)', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
    && strpos($f_sil, 'name="sample_crate_type"') !== false && strpos($f_sil, 'name="sample_gross_kg"') !== false
-   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn < strpos($f_sil, 'name="note"'));
+   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn > strpos($f_sil, 'id="beyanPanel_analiz"') && $pn < strpos($f_sil, 'id="beyanPanel_kaynak"') && $pn > strpos($f_sil, 'name="note"'));
 ok('[numune] boşken önizlemede numune kartı yok', strpos(render_beyan($ID_BOS), '🧪</span> Numune') === false);
 $B_NM = beyan_ekle(['party_no' => 'NM-1']);
 db()->prepare("UPDATE customs_declarations SET sample_gross_kg=5, sample_net_kg=4, sample_crate_type='TAHTA KASA', sample_crate_count=1 WHERE id=?")->execute([$B_NM]);
