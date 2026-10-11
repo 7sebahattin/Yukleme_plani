@@ -540,6 +540,15 @@ try {
       // fonksiyon). Eskiden bu adım yalnız taslak_kaydet'te çalışıyordu; DB'de
       // duran eski/bozuk bir taslak doğrudan hks_bildirim_kaydet()'e (CANLI,
       // geri alınamaz) gidebiliyordu.
+      // ÜRETİCİ SIFATI + CEP YOK (eski taslak / kayıtlı kişi): cep Kişi Havuzu'ndan
+      // TC ile tamamlanır — HKS bunsuz HataKodu 263 ile reddediyor. Havuzda da yoksa
+      // aşağıdaki doğrulama gönderimi durdurur (taslak korunur).
+      if (hks_uretici_cep_gerekli($ortak) && hks_cep_rakam($ortak['ikinciCep'] ?? '') === '') {
+        try {
+          $__k = hks_kisi_tc_ile($db, hks_tc_normalize($ortak['ikinciTc'] ?? ''));
+          if ($__k && hks_cep_rakam($__k['cep'] ?? '') !== '') $ortak['ikinciCep'] = hks_cep_rakam($__k['cep']);
+        } catch (Throwable $e) { /* havuz okunamadı — doğrulama durdurur */ }
+      }
       $__revalHata = hks_bildirim_dogrula(['satirlar' => $satirlar, 'ortak' => $ortak]);
       if ($__revalHata) {
         $taslagiGeriKoy();
