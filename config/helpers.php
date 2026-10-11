@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v330');
+    define('APP_SURUM', 'v331');
 }
 
 // --- HTML kaçışı ---
@@ -3557,6 +3557,12 @@ function bb_yurtdisi_isletme_turu(array $katalog): string {
 }
 
 // Beyan önerileri: mevcut KV üzerinde ayrı ad alanı. DDL / HKS servisi yok.
+// TEMİZ BAŞLANGIÇ (v331, sahip kararı): öneri listeleri bu tarihten ÖNCE
+// oluşan veriyi göstermez — geçmiş beyanlar, eski +ekle tanımları ve genel
+// tanım havuzu (material_definitions) dışarıda. Yalnız bu andan sonra
+// girilen beyanlar/tanımlar önerilir. HKS ürün KATALOĞU (resmî liste) kalır:
+// ürün adı → HKS ürün id eşlemesi ona dayanır. Tarihi değiştirmek tek satır.
+const BEYAN_ONERI_BASLANGIC = '2026-10-12 00:00:00';
 function beyan_suggest_fields(): array {
     return [
         'buyer_name' => ['type'=>'alici','label'=>'Alıcı','max'=>150],
@@ -3613,13 +3619,8 @@ function beyan_suggest_form_data(): array {
         foreach ($ids as $name => $set) if (count($set) === 1) $products[$name] = ['urun_id'=>(string)array_key_first($set)];
     } catch (Throwable $e) { /* Yerel katalog eksik: serbest metin çalışır. */ }
     try {
-        foreach (db()->query('SELECT type, name FROM material_definitions WHERE is_active = 1')->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            foreach ($fields as $field => $meta) if ($meta['type'] !== '' && $meta['type'] === $row['type']) $add($field, (string)$row['name']);
-        }
-    } catch (Throwable $e) { /* Tanım tablosu olmadan manuel giriş. */ }
-    try {
         $cols = implode(', ', array_keys($fields));
-        $history = db()->query("SELECT $cols FROM customs_declarations WHERE deleted_at IS NULL ORDER BY id DESC LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
+        $history = db()->query("SELECT $cols FROM customs_declarations WHERE deleted_at IS NULL AND created_at >= " . db()->quote(BEYAN_ONERI_BASLANGIC) . " ORDER BY id DESC LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
         foreach (array_reverse($history) as $row) {
             foreach ($fields as $field => $meta) $add($field, (string)($row[$field] ?? ''));
             $name = $add('company_name', (string)($row['company_name'] ?? ''));
@@ -3631,6 +3632,8 @@ function beyan_suggest_form_data(): array {
         try {
             foreach (beyan_suggest_read(db(), $field) as $row) {
                 if (!is_array($row)) continue;
+                // Zaman damgasız (eski) tanımlar temiz başlangıçta görünmez.
+                if ((string)($row['added_at'] ?? '') < BEYAN_ONERI_BASLANGIC) continue;
                 $name = $add($field, (string)($row['name'] ?? ''));
                 if ($field === 'company_name' && $name !== '' && !empty($row['address'])) $companies[$name] = (string)$row['address'];
             }
@@ -3674,6 +3677,7 @@ function beyan_suggest_save(PDO $pdo, string $field, string $raw, string $compan
             $rows = beyan_suggest_read($pdo, $f);
             $key = beyan_suggest_key($n);
             $entry = $rows[$key] ?? ['name'=>$n];
+            if (empty($entry['added_at']) || (string)$entry['added_at'] < BEYAN_ONERI_BASLANGIC) $entry['added_at'] = date('Y-m-d H:i:s');
             if ($a !== null && $a !== '') $entry['address'] = $a;
             $rows[$key] = $entry;
             $pdo->prepare("REPLACE INTO `$table` (anahtar, deger) VALUES (?, ?)")->execute(['beyan_defs_' . $f, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]);
