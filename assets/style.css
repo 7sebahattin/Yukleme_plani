@@ -6239,6 +6239,30 @@ body:not(.print-mode) .bv .beyan-section.bv-katla[data-bf] { padding: 12px 14px;
             mask: var(--ic) center / contain no-repeat;
 }
 
+/* — Masaüstü (≥900px): kart içindeki alanlar TEK satırda, kompakt (v329).
+   Sığmazsa kendiliğinden bir alt satıra sarar; tam genişlik satırlar
+   (Gümrük Adı / Adresi) ayrı satırda kalır. Mobil/tablet düzeni değişmez. */
+@media (min-width: 900px) {
+    .bv .beyan-view-grid { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: flex-start; }
+    .bv .beyan-view-grid > .beyan-view-row { flex: 1 1 108px; min-width: 0; }
+    .bv .beyan-view-grid > .beyan-view-row[style*="grid-column"] { flex: 1 1 100%; }
+    .bv .beyan-view-row[data-ic] { grid-template-columns: 32px minmax(0,1fr); column-gap: 10px; }
+    .bv .beyan-view-row[data-ic]::before, .bv .beyan-view-row[data-ic]::after { width: 32px; height: 32px; border-radius: 9px; }
+    .bv .beyan-view-row[data-ic]::after { -webkit-mask-size: 16px 16px; mask-size: 16px 16px; }
+    .bv .beyan-view-row .lbl { font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bv .beyan-view-row .val { font-size: .9rem; }
+    body:not(.print-mode) .bv .beyan-section[data-bf] { padding: 14px 18px 16px; gap: 12px; margin-bottom: 12px; }
+    body:not(.print-mode) .bv .beyan-section[data-bf] > .beyan-section-title { grid-template-columns: 36px minmax(0,1fr); column-gap: 12px; font-size: .84rem; }
+    .bv .beyan-section-title::before, .bv .beyan-section-title::after { width: 36px; height: 36px; border-radius: 11px; }
+    .bv .beyan-section-title::after { -webkit-mask-size: 18px 18px; mask-size: 18px 18px; }
+    .bv .bk-grid { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+    .bv .bk-hucre { padding: 9px 11px; grid-template-columns: 32px minmax(0,1fr); }
+    .bv .bk-hucre[data-ic]::before, .bv .bk-hucre[data-ic]::after { width: 32px; height: 32px; }
+    .bv .bk-deger { font-size: 1rem; }
+    .bv .bk-alt { padding-top: 10px; }
+    .bv .bv-durum { padding-top: 10px; }
+}
+
 /* — Dar ekran — */
 @media (max-width: 767px) {
     body:not(.print-mode) .bv .beyan-section[data-bf] { padding: 14px 14px 16px; border-radius: 16px; gap: 14px; }
