@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v329` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v330` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1056,6 +1056,16 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
 - **"Yurt Dışı" işletme türü** (`bb_yurtdisi_isletme_turu` — helpers.php) taslağın
   zorunlu alanıdır ve katalogdan ADA göre bulunur. Bulunamazsa taslak
   OLUŞTURULAMAZ (409) — id uydurulmaz. Kural TEK yerdedir; kopyalama.
+- **v330 — Beyan listesi + önizleme:** Liste (`beyanlar.php` + `_beyan_liste.php`) Plaka · HKS Firma · Ülke
+  sütunlarını taşır (firma adı `beyan_hks_firma_adlari()` tek sorgu), parti no 3B rozet (`.bn-parti`),
+  satır sonunda ⧉ Kopyala. **Kopyala** = `beyan_kopyala.php` (POST+CSRF+`beyan.write`): TASLAK kopya açar,
+  `beyan_edit.php`'ye yönlendirir; parti no / plaka / ham metin / analiz / plan bağı / HKS bildirim izi
+  KOPYALANMAZ (eski plakanın yeni beyanda kalması yanlış bildirimdir), HKS eşleştirmesi kopyalanır.
+  **Eşleştir ↔ HKS Taslağı Oluştur DEĞİŞİMLİ düğme:** firma/ürün/ülke eksikse `#hksEslestirBtn`
+  (`api_beyan_bildirim.php?action=eslestir` → `beyan_hks_otomatik_eslestir()`: YALNIZ boş alanları tahminle
+  doldurur, kayıtlıyı ezmez, id uydurmaz), tamsa `#hksOpenBtn`. Taslak oluşunca doğrudan
+  `halkayit/index.php?ekran=taslaklar`'a gidilir. Önizleme bildirim kartı 5 hücre: **HKS Firma · Ülke ·
+  Ürün · Net KG · Plaka**; bölüm başlık bandı bir ton koyu (`.bv … > .beyan-section-title`).
 - **Bildirim kartı** (`beyan_view.php`, `.bk-*`): sırası **Ülke · Ürün · Net KG ·
   Plaka** — HKS bildiriminin dört zorunlu bilgisi, tek bakışta "hazır mı"
   cevabı. Eksik alan sessiz `—` değil, **işaretli**. Net KG bilerek iki yerde

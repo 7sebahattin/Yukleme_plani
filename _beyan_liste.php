@@ -10,10 +10,18 @@
 //   $sec_rows        — satırlar
 //   $sec_secim       — toplu bildirim seçim kolonu çizilsin mi (bool)
 //   $bildirim_uygun  — closure(array $r): bool
+//   $firma_adlari    — HKS firma id → ad (ops.)
+//   $kopyala_yetki   — Kopyala düğmesi çizilsin mi (bool, ops.)
 //
 // Fonksiyon TANIMLAMAZ: sayfa testte iki kez include edilir.
 // =========================================================
 if (!isset($sec_rows)) return;
+$firma_adlari  = $firma_adlari  ?? [];
+$kopyala_yetki = $kopyala_yetki ?? false;
+$firma_ad = function (array $r) use ($firma_adlari): string {
+    $fid = (string)($r['hks_firma_id'] ?? '');
+    return $fid === '' ? '' : ($firma_adlari[$fid] ?? '');
+};
 ?>
 <!-- PC: tablo -->
 <div class="table-wrap pc-only">
@@ -34,7 +42,11 @@ if (!isset($sec_rows)) return;
             <th>Alıcı</th>
             <th>Marka</th>
             <th>Çıkış Depo</th>
+            <th>Plaka</th>
+            <th>HKS Firma</th>
+            <th>Ülke</th>
             <th>Durum</th>
+            <?php if ($kopyala_yetki): ?><th class="bl-kop-col"><span class="sr-only">İşlem</span></th><?php endif; ?>
         </tr>
         </thead>
         <tbody>
@@ -51,7 +63,7 @@ if (!isset($sec_rows)) return;
             </td>
             <?php endif; ?>
             <td class="muted" style="font-size:.82rem"><?= h(fmt_datetime($r['created_at'])) ?></td>
-            <td><a class="row-link-a" href="beyan_view.php?id=<?= (int)$r['id'] ?>"><strong><?= h($r['party_no'] ?: '—') ?></strong></a></td>
+            <td><a class="row-link-a bn-parti" href="beyan_view.php?id=<?= (int)$r['id'] ?>"><?= h($r['party_no'] ?: '—') ?></a></td>
             <td>
                 <?= h($r['product_name'] ?: '—') ?>
                 <?php if ($r['product_variety']): ?>
@@ -65,10 +77,23 @@ if (!isset($sec_rows)) return;
             <td><?= h($r['buyer_name'] ?: '—') ?></td>
             <td><?= h($r['brand'] ?: '—') ?></td>
             <td><?= h($r['exit_depot'] ?: '—') ?></td>
+            <td><?php if (trim((string)($r['vehicle_plate'] ?? '')) !== ''): ?><span class="bl-plaka"><?= h($r['vehicle_plate']) ?></span><?php else: ?><span class="bl-eksik">eksik</span><?php endif; ?></td>
+            <td><?php $fa = $firma_ad($r); echo $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>'; ?></td>
+            <td><?= h(($r['hks_ulke_ad'] ?? '') ?: '—') ?></td>
             <td><?= beyan_badge_html($r['status']) ?><?php
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
                 if ($hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?></td>
+            <?php if ($kopyala_yetki): ?>
+            <td class="bl-kop-col">
+                <form method="post" action="beyan_kopyala.php" class="bl-kop-form"
+                      onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
+                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                    <button type="submit" class="bl-kop-btn" title="TASLAK olarak kopyala" aria-label="Kopyala">⧉</button>
+                </form>
+            </td>
+            <?php endif; ?>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -86,7 +111,7 @@ if (!isset($sec_rows)) return;
                     <input type="checkbox" class="bb-sec" value="<?= (int)$r['id'] ?>"
                            title="Toplu bildirim için seç" style="margin-right:6px;vertical-align:middle">
                     <?php endif; ?>
-                    <?= h($r['party_no'] ?: '(parti no yok)') ?>
+                    <span class="bn-parti"><?= h($r['party_no'] ?: '(parti no yok)') ?></span>
                 </div>
                 <div class="beyan-card-urun">
                     <?= h($r['product_name'] ?: '—') ?>
@@ -125,6 +150,12 @@ if (!isset($sec_rows)) return;
         <?php if ($r['buyer_name']): ?>
         <div class="beyan-card-alici muted">Alıcı: <?= h($r['buyer_name']) ?></div>
         <?php endif; ?>
+        <?php $fa = $firma_ad($r); $pl = trim((string)($r['vehicle_plate'] ?? '')); $ul = trim((string)($r['hks_ulke_ad'] ?? '')); ?>
+        <div class="bl-hks-satir">
+            <span class="bl-hks-oge"><b>Plaka</b> <?php if ($pl !== ''): ?><span class="bl-plaka"><?= h($pl) ?></span><?php else: ?><span class="bl-eksik">eksik</span><?php endif; ?></span>
+            <span class="bl-hks-oge"><b>HKS Firma</b> <?= $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>' ?></span>
+            <?php if ($ul !== ''): ?><span class="bl-hks-oge"><b>Ülke</b> <?= h($ul) ?></span><?php endif; ?>
+        </div>
 
         <div class="muted" style="font-size:.75rem;margin-top:4px">
             <?= h(fmt_datetime($r['created_at'])) ?>
@@ -143,6 +174,12 @@ if (!isset($sec_rows)) return;
             <?php endif; ?>
             <?php if (can_beyan('write')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+            <form method="post" action="beyan_kopyala.php" style="display:inline"
+                  onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
+                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+                <button type="submit" class="btn btn-sm btn-ghost" title="TASLAK olarak kopyala">⧉ Kopyala</button>
+            </form>
             <?php endif; ?>
         </div>
     </div>

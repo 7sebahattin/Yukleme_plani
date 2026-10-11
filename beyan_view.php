@@ -103,6 +103,23 @@ elseif ($hks_aktif)              $hks_engel = [
                                     ][$hks_aktif['durum']] ?? 'Bu beyan için bekleyen bir HKS taslağı var.';
 $hks_acik = ($hks_engel === null);
 
+// Eşleştirme eksikse HKS Taslağı düğmesinin YERİNE "Eşleştir" düğmesi çıkar:
+// tek tıkla firma/ürün/ülke beyan verisinden doldurulur (yalnız boş alanlar,
+// api_beyan_bildirim.php?action=eslestir). Tam olunca sayfa yenilenir ve düğme
+// "HKS Taslağı Oluştur"a döner. Plaka eksikliği eşleştirmeyle çözülmez; sebep
+// yanında yazılır.
+$hks_eslestir = $hks_yetki && !$is_deleted && $hks_durum_ok && !$hks_aktif
+                && !beyan_hks_eslesme_tam($beyan);
+if ($hks_eslestir) {
+    $hks_acik  = false;
+    $hks_engel = 'Hal Bildirim bilgileri eksik (HKS firması / ürünü / ülke) — Eşleştir\'e basın, beyan verisinden doldurulur.'
+               . ($hks_plaka === '' ? ' Araç plakası da girilmeli: beyanı düzenleyip plakayı girin.' : '')
+               . ($hks_net_kg <= 0 ? ' Net KG de girilmeli.' : '');
+}
+$hks_firma_adi = trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
+    ? (beyan_hks_firma_adlari([(string)$beyan['hks_firma_id']])[(string)$beyan['hks_firma_id']] ?? ('#' . $beyan['hks_firma_id']))
+    : '';
+
 // Beyan tarafındaki (aktarılacak) değerler — önizleme + JS için
 // Not: Beyandaki "Şirket Adı" (company_name) → yükleme planı "Gümrük" (gumruk)
 $beyan_match = [
@@ -130,6 +147,12 @@ render_flash();
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
         <?php if (!$is_deleted && can_beyan('write')): ?>
+        <form method="post" action="beyan_kopyala.php" style="display:inline"
+              onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
+            <input type="hidden" name="id"   value="<?= $id ?>">
+            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+            <button type="submit" class="btn" title="Bu beyanın TASLAK kopyasını oluştur">⧉ Kopyala</button>
+        </form>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('delete')): ?>
@@ -174,6 +197,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Kayıt Bildirimi</div>
     <div class="bk-grid">
         <?php
+        $bk_hucre('HKS Firma', $hks_firma_adi, $hks_firma_adi !== '', '', 'bina');
         $bk_hucre('Ülke',   $bk_ulke, $bk_ulke !== '', '', 'kure');
         $bk_hucre('Ürün',   $bk_urun, $bk_urun !== '' && $bk_hks,
                   $bk_urun !== '' && !$bk_hks ? 'HKS karşılığı seçilmedi' : '', 'kutu');
@@ -184,7 +208,10 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
 
     <?php if ($hks_yetki && !$is_deleted): ?>
     <div class="bk-alt">
-        <?php if ($hks_acik): ?>
+        <?php if ($hks_eslestir): ?>
+        <button type="button" class="btn btn-primary" id="hksEslestirBtn">🔗 HKS Bilgilerini Eşleştir</button>
+        <span class="bk-engel"><?= h((string)$hks_engel) ?></span>
+        <?php elseif ($hks_acik): ?>
         <button type="button" class="btn btn-primary" id="hksOpenBtn">🏛 HKS Taslağı Oluştur</button>
         <?php else: ?>
         <button type="button" class="btn" disabled>🏛 HKS Taslağı Oluştur</button>
@@ -727,6 +754,39 @@ function prompt_note(btn) {
 </script>
 <?php endif; ?>
 
+<?php if ($hks_eslestir): ?>
+<script>
+(function () {
+    var btn = document.getElementById('hksEslestirBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        var onceki = btn.textContent;
+        btn.textContent = 'Eşleştiriliyor…';
+        fetch('api_beyan_bildirim.php?action=eslestir', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beyan_id: <?= (int)$id ?>, csrf: <?= json_encode(csrf_token()) ?> })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                alert('HATA: ' + (res.j.hata || 'Eşleştirilemedi.'));
+                btn.disabled = false; btn.textContent = onceki;
+                return;
+            }
+            if (!res.j.tam) alert(res.j.mesaj);
+            location.reload();
+        })
+        .catch(function (e) {
+            alert('Bağlantı hatası: ' + e.message);
+            btn.disabled = false; btn.textContent = onceki;
+        });
+    });
+})();
+</script>
+<?php endif; ?>
+
 <?php if ($hks_acik): ?>
 <!-- ══ HAL KAYIT BİLDİRİM MODALİ (Sprint Beyan-Bildirim-01) ══════════════ -->
 <!-- z-index 600 (.beyan-hks-overlay) — CLAUDE.md modal katman kuralı.      -->
@@ -943,8 +1003,8 @@ function prompt_note(btn) {
                 el('hksSave').textContent = 'Taslağa Kaydet';
                 return;
             }
-            alert('✅ ' + res.j.mesaj);
-            location.reload();
+            // Taslak hazır — doğrudan Hal Kayıt taslaklar ekranına git.
+            location.href = 'halkayit/index.php?ekran=taslaklar';
         })
         .catch(function (e) {
             alert('Bağlantı hatası: ' + e.message);

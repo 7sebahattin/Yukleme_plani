@@ -178,6 +178,10 @@ $bildirim_uygun = function (array $r) use ($toplu_yetki, $aktif_bagli): bool {
 };
 $uygun_sayisi = count(array_filter($rows, $bildirim_uygun));
 
+// HKS firma adları (tek sorgu) — listede firma + plaka görünsün diye.
+$firma_adlari = beyan_hks_firma_adlari(array_map(fn($r) => (string)($r['hks_firma_id'] ?? ''), $rows));
+$kopyala_yetki = can_beyan('write');
+
 $statuses  = beyan_statuses();
 $today     = date('Y-m-d');
 $has_filter = $q !== '' || $f_status !== '' || $f_urun !== '' || $f_marka !== '' || $f_depo !== '' || $tarih_bas !== '' || $tarih_bit !== '';
@@ -219,10 +223,14 @@ render_flash();
      bir iş listesidir, arama ya da sayfa geçişi onu eksiltmez. -->
 <section class="beyan-blok beyan-blok-acik">
     <div class="beyan-blok-head">
-        <h2 class="beyan-blok-baslik">⏳ İşlem Bekleyen Beyanlar
-            <span class="beyan-blok-sayi"><?= $bekleyen_total ?></span>
-        </h2>
-        <span class="muted beyan-blok-not">Açık işler · <?= $bek_result_total ?> sonuç · Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?></span>
+        <span class="bl-ikon bl-ikon-acik" aria-hidden="true">⏳</span>
+        <div class="bl-baslik-kap">
+            <h2 class="beyan-blok-baslik">İşlem Bekleyen Beyanlar
+                <span class="beyan-blok-sayi"><?= $bekleyen_total ?></span>
+            </h2>
+            <span class="muted beyan-blok-not">Açık işler · <?= $bek_result_total ?> sonuç · Sayfa <?= $bek_page ?> / <?= $bek_total_pages ?></span>
+        </div>
+        <span class="bl-bilgi bl-bilgi-acik">Onay ve yükleme bekleyen beyan kayıtlarıdır.</span>
     </div>
 
     <form method="get" class="beyan-pending-search">
@@ -232,7 +240,7 @@ render_flash();
         <input type="hidden" name="<?= h($fk) ?>" value="<?= h($fv) ?>">
         <?php endforeach; ?>
         <label class="form-label" for="bekleyenSearch">Bekleyenlerde ara</label>
-        <div class="bff-main" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="bff-main bl-arama" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
             <input type="search" id="bekleyenSearch" name="bek_q" class="form-control" style="flex:1;min-width:160px"
                    value="<?= h($bek_q) ?>" placeholder="Parti no, ürün, alıcı, plaka…">
             <button class="btn">Ara</button>
@@ -268,13 +276,17 @@ render_flash();
      bu bölüme aittir; üst bölümü etkilemez. -->
 <section class="beyan-blok beyan-blok-kapanmis">
     <div class="beyan-blok-head">
-        <h2 class="beyan-blok-baslik">✅ Kapanan Beyanlar
-            <span class="beyan-blok-sayi"><?= $kapali_total ?></span>
-        </h2>
-        <span class="muted beyan-blok-not">
-            Tamamlanan kayıtlar (yüklendi · iptal · red)
-            <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
-        </span>
+        <span class="bl-ikon bl-ikon-kapali" aria-hidden="true">✅</span>
+        <div class="bl-baslik-kap">
+            <h2 class="beyan-blok-baslik">Kapanan Beyanlar
+                <span class="beyan-blok-sayi"><?= $kapali_total ?></span>
+            </h2>
+            <span class="muted beyan-blok-not">
+                Tamamlanan kayıtlar (yüklendi · iptal · red)
+                <?php if ($total_pages > 1): ?> · Sayfa <?= $page ?> / <?= $total_pages ?><?php endif; ?>
+            </span>
+        </div>
+        <span class="bl-bilgi bl-bilgi-kapali">Yükleme tamamlanan, iptal veya reddedilen kayıtlardır.</span>
     </div>
 
     <!-- ── Filtre formu — yalnız bu bölümü süzer ── -->

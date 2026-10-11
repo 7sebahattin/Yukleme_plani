@@ -443,8 +443,8 @@ ok('bildirim karti var', strpos($view, 'class="beyan-section bk-kart"') !== fals
 
 // Kart sirasi kullanicinin istedigi gibi: Ulke → Urun → Net KG → Plaka.
 preg_match_all("/\\\$bk_hucre\('([^']+)'/u", $view, $mc);
-ok('kart alan sirasi: Ulke, Urun, Net KG, Plaka',
-   ($mc[1] ?? []) === ['Ülke', 'Ürün', 'Net KG', 'Plaka'],
+ok('kart alan sirasi: HKS Firma, Ulke, Urun, Net KG, Plaka',
+   ($mc[1] ?? []) === ['HKS Firma', 'Ülke', 'Ürün', 'Net KG', 'Plaka'],
    'gelen sira: ' . implode(' > ', $mc[1] ?? []));
 
 // Net KG bilerek IKI yerde: kartta ve Urun Bilgileri bolumunde.
