@@ -4683,8 +4683,59 @@ tr.row-link:hover > td { background: rgba(37, 99, 235, .06); }
     cursor: default;
 }
 
+/* Detay başlığındaki kopyalama: parti numarasının hemen altında. */
+.beyan-page-heading .btn-whatsapp {
+    margin-top: 8px;
+    background: #25d366;
+    border-color: #159947;
+    color: #063c22;
+    font-weight: 700;
+}
+.beyan-page-heading .btn-whatsapp:hover { background: #20bd5a; border-color: #117c39; color: #063c22; }
+.beyan-page-heading .btn-whatsapp:focus-visible { outline: 3px solid #075e54; outline-offset: 3px; }
+
+/* JS yoksa ve mobilde bütün durumlar mevcut şeritte erişilebilir kalır. */
+.beyan-durum-toggle { display: none; }
+@media (min-width: 1024px) {
+    .beyan-durum-picker.is-enhanced { position: relative; display: inline-block; padding: 4px; }
+    .beyan-durum-picker.is-enhanced .beyan-durum-toggle {
+        display: inline-flex;
+        min-height: 40px;
+        cursor: pointer;
+        gap: 10px;
+    }
+    .beyan-durum-toggle:focus-visible { outline: 3px solid var(--primary); outline-offset: 6px; }
+    .beyan-durum-chevron { transition: transform .15s; }
+    .beyan-durum-picker.is-open .beyan-durum-chevron { transform: rotate(180deg); }
+    .bv .beyan-durum-picker.is-enhanced .beyan-next-status-wrap {
+        display: none;
+        position: absolute;
+        left: 0;
+        top: 100%;
+        z-index: 200;
+        min-width: 190px;
+        width: max-content;
+        max-width: min(300px, calc(100vw - 48px));
+        max-height: 360px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 10px;
+        margin: 0;
+        gap: 6px;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        background: var(--card, #fff);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(15,23,42,.18);
+    }
+    .bv .beyan-durum-picker.is-enhanced.is-open .beyan-next-status-wrap { display: flex; }
+    .beyan-durum-picker.is-enhanced .beyan-next-status-wrap > .beyan-durum-secili { display: none; }
+    .beyan-durum-picker.is-enhanced .beyan-durum-btn { min-height: 40px; justify-content: flex-start; flex-shrink: 0; }
+}
+
 @media print {
-    .beyan-card-actions, .beyan-next-status-wrap { display: none; }
+    .beyan-card-actions, .beyan-next-status-wrap, .beyan-durum-picker, .btn-whatsapp { display: none !important; }
 }
 
 /* ── Beyan parse alert (Sprint Beyan-02) ── */

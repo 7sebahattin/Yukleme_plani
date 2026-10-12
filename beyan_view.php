@@ -136,8 +136,10 @@ render_flash();
 ?>
 
 <div class="page-head">
-    <div>
+    <div class="beyan-page-heading">
         <h1>🧾 <?= h($beyan['party_no'] ?: 'Beyan #' . $id) ?></h1>
+        <button type="button" class="btn btn-whatsapp" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
+        <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
             <?= beyan_badge_html($cur_status) ?>
             <?php if ($is_deleted): ?>
@@ -148,8 +150,6 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
-        <button type="button" class="btn" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
-        <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
         <?php if (!$is_deleted && can_beyan('edit')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
@@ -405,7 +405,14 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
             <input type="hidden" name="status_only" value="1">
             <input type="hidden" name="return_to" value="view">
 
-            <div class="beyan-next-status-wrap">
+            <?php $current_sv = $statuses[$cur_status] ?? ['label' => $cur_status, 'css' => 'taslak']; ?>
+            <div class="beyan-durum-picker" data-beyan-status-picker>
+                <button type="button" class="beyan-badge beyan-badge-<?= h($current_sv['css']) ?> beyan-durum-secili beyan-durum-toggle"
+                        data-status-trigger aria-expanded="false" aria-controls="beyanDurumSecenekleri"
+                        aria-label="Şu anki durum: <?= h($current_sv['label']) ?>. Durumu değiştir">
+                    ✓ <?= h($current_sv['label']) ?> <span class="beyan-durum-chevron" aria-hidden="true">▾</span>
+                </button>
+            <div class="beyan-next-status-wrap" id="beyanDurumSecenekleri" data-status-menu role="group" aria-label="Durum seçenekleri">
                 <?php foreach (beyan_durum_akis_sirasi() as $ns):
                     $sv = $statuses[$ns] ?? ['label' => $ns, 'css' => 'taslak'];
                 ?>
@@ -421,6 +428,7 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
                         <?= ($ns === 'red') ? 'onclick="return prompt_note(this)"' : '' ?>><?= h($sv['label']) ?></button>
                 <?php endif; ?>
                 <?php endforeach; ?>
+            </div>
             </div>
         </form>
     </div>
@@ -1040,6 +1048,66 @@ function prompt_note(btn) {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var picker = document.querySelector('[data-beyan-status-picker]');
+    if (!picker) return;
+    var trigger = picker.querySelector('[data-status-trigger]');
+    var options = picker.querySelector('[data-status-menu]');
+    var desktop = window.matchMedia('(min-width: 1024px)');
+    var buttons = options.querySelectorAll('button[name="status"]');
+    var pinned = false;
+    function setOpen(open) {
+        open = open && desktop.matches;
+        picker.classList.toggle('is-open', open);
+        trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) fitOptions();
+    }
+    function fitOptions() {
+        if (!desktop.matches) return;
+        var bottom = trigger.getBoundingClientRect().bottom;
+        options.style.maxHeight = Math.max(48, Math.min(360, window.innerHeight - bottom - 20)) + 'px';
+    }
+    picker.classList.add('is-enhanced');
+    picker.addEventListener('mouseenter', function () { setOpen(true); });
+    picker.addEventListener('mouseleave', function () {
+        if (!pinned && !picker.contains(document.activeElement)) setOpen(false);
+    });
+    trigger.addEventListener('click', function () {
+        // Hover already opens it; the first click keeps it open for touch/mouse.
+        pinned = !pinned;
+        setOpen(pinned);
+    });
+    picker.addEventListener('focusin', function () { setOpen(true); });
+    picker.addEventListener('focusout', function (event) {
+        if (!picker.contains(event.relatedTarget)) { pinned = false; setOpen(false); }
+    });
+    picker.addEventListener('keydown', function (event) {
+        if (!desktop.matches) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            pinned = false;
+            trigger.focus();
+            setOpen(false);
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+            var index = Array.prototype.indexOf.call(buttons, document.activeElement);
+            index = event.key === 'ArrowDown' ? (index + 1) % buttons.length : (index <= 0 ? buttons.length : index) - 1;
+            if (buttons[index]) buttons[index].focus();
+        }
+    });
+    document.addEventListener('click', function (event) {
+        if (!picker.contains(event.target)) { pinned = false; setOpen(false); }
+    });
+    function reset() { pinned = false; setOpen(false); options.style.maxHeight = ''; }
+    if (desktop.addEventListener) desktop.addEventListener('change', reset);
+    else desktop.addListener(reset);
+    window.addEventListener('resize', fitOptions);
+    window.addEventListener('scroll', fitOptions, { passive: true });
+})();
+</script>
 
 <script>
 (function () {
