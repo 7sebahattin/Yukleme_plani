@@ -145,14 +145,33 @@ function render_beyan(int $id, array $get = []): string {
         $src = (string)file_get_contents($ROOT . '/beyan_view.php');
         $src = preg_replace("/^\s*require_once __DIR__ \. '\/config\/(db|auth)\.php';\s*$/m", '', $src);
         $src = preg_replace('/^\s*\$auth_user = require_login\(\);\s*$/m', '$auth_user = current_user();', $src);
-        $tmp = sys_get_temp_dir() . '/beyan_view_smoke.php';
+        // Unique per process: PHP and browser smoke checks can run concurrently.
+        $tmp = sys_get_temp_dir() . '/beyan_view_smoke_' . getmypid() . '.php';
         file_put_contents($tmp, $src);
+        register_shutdown_function(static function () use ($tmp): void { if (is_file($tmp)) unlink($tmp); });
     }
     $_GET = array_merge($get, ['id' => (string)$id]);
     ob_start();
     try { include $tmp; }
     catch (Throwable $e) { ob_end_clean(); return '__HATA__' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine(); }
     return (string)ob_get_clean();
+}
+
+// Browser regression fixture: reuse this in-memory schema and real detail render.
+// php scripts/beyan_ui_smoke.php --render-status OUTPUT_PATH [status] [restricted|deleted]
+if (PHP_SAPI === 'cli' && ($argv[1] ?? '') === '--render-status') {
+    $fixtureStatus = $argv[3] ?? 'beyan_acildi';
+    if (empty($argv[2]) || !array_key_exists($fixtureStatus, beyan_statuses())) {
+        fwrite(STDERR, "Usage: --render-status OUTPUT_PATH [valid status] [restricted|deleted]\n");
+        exit(1);
+    }
+    db()->prepare('UPDATE customs_declarations SET status=? WHERE id=?')->execute([$fixtureStatus, $ID_TAM]);
+    if (($argv[4] ?? '') === 'restricted') $PERMS = ['beyan.read', 'beyan.permissions.detailed'];
+    if (($argv[4] ?? '') === 'deleted') db()->prepare('UPDATE customs_declarations SET deleted_at=? WHERE id=?')->execute(['2026-10-12 12:00:00', $ID_TAM]);
+    $fixtureHtml = render_beyan($ID_TAM);
+    if (str_starts_with($fixtureHtml, '__HATA__')) { fwrite(STDERR, $fixtureHtml); exit(1); }
+    file_put_contents($argv[2], $fixtureHtml);
+    exit(0);
 }
 
 // beyanlar.php'yi de GERCEKTEN render et. Kaynak taramasi filtre serigi
