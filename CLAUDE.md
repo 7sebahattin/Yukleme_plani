@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v337` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v338` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1345,6 +1345,8 @@ veri yeniden istenmeden çizilir. Tek delegeli dinleyici `#gonderilenListe` üze
 - **v324 görünüm:** Gönderilenler başlığı (Geri + ikon + başlık/alt yazı + illüstrasyon + `#gonderilenAraSay` sayaç hapı), büyük arama kutusu (Ctrl/⌘+K odaklar), lacivert başlık bandı, hap rozetler (tür renkleri), ürün emojisi `gonderilenUrunEmoji()` (kartlarda `urunIkonu()` kalır), split görünümlü "Tekrar gönder" (TEK düğme, iki yarım aynı menüyü açar). Harici görsel/font YOK (inline SVG + emoji). Özgün indeks `i` kuralı aynen geçerli.
 - **Kişi Havuzu filtresi (v324):** `#kisiFiltre` Tümü/Firma(VKN)/Müstahsil(TC), `kisiVknMu(k)` tek ayrım kaynağı, arama ile AND, pencere her açılışta Tümü. Test: `hks_kisi_pencere_smoke.js`.
 - **Kişi listesi sırası (v325):** `kisiListeCiz()` listeyi İSTEMCİDE A→Z sıralar (`KISI_SIRA` = `Intl.Collator('tr')`, adsız kişi sonda); sunucunun 'son kullanılan' sırası kullanılmaz. Test: `hks_kisi_pencere_smoke.js`.
+- **Künye seçim kuralları (v338, kullanıcı kararı):** otomatik seçim (istemci `kunyeOncelikSirasi()` + sunucu `hks_kunye_sirala()` — `halkayit/kunye_secim_lib.php`, İKİSİ BİRLİKTE DEĞİŞİR) sıra anahtarı: [satış fiyatına |alış fiyatı farkı| (2 ondalık; fiyatsız künye sonda) → en eski tarih → en küçük kalan → künyeNo]. Alış fiyatı = künyeyi doğuran bildirimin `MalinSatisFiyati` (`hks_kunye_detaylari_getir`, best-effort; alınamazsa tarih→kalan). Plan taslağı çözümü (`hks_plan_kunye_coz`) aynı sırayı kullanır; `sirala` ayarı yalnız sorguya etki eder.
+- **Künye × sıfat uyumsuzluğu (v338):** `taslak_gonder` sonrası künyeye özgü sıfat hatası (hataKodu≠0 + mesajda "sıfat" + [mesajda künye no VEYA aynı gönderimde başarılı satır VEYA tek satır]) `hks_kv` `kunye_sifat_uyumsuz_<firmaId>` içine {künye:{sıfat:tarih}} yazılır (30 gün TTL, firma başına 2000). Sonraki plan çözümü o künyeyi o sıfatla DIŞLAR; `/api/kunyeler` (+`sifatId`) her künyeye `sifatUyumsuz` ekler (rozet; elle seçilebilir, otomatik dağıtıma girmez). Yanıt `sifatUyumsuzKunyeler`. Gönderim yolu DEĞİŞMEDİ (tek SOAP, yeniden deneme YOK). Risk: sıfatın kendisi yanlışsa tek satırlık denemeler künyeleri tek tek işaretleyebilir (30 gün sonra düşer). Test: `php scripts/hks_kunye_secim_test.php` · `node scripts/hks_kunye_secim_smoke.js`.
 - **Satın Alım birim varsayılanı (v324):** `miktarBirimKgVarsayilan()` — Satın Alım/Üreticiden Sevk Alım'da `#sMiktarBirim` BOŞSA listeden ADA göre "Kg" seçer (id uydurmaz; elle/taslak değeri ezmez). Test: `node scripts/hks_kg_varsayilan_smoke.js`.
 - **İstemci akışı** (`gonderilenTekrar()`): tohum ÖNCE aktif firmayla istenir → başarılıysa ve firma
   değişiyorsa `firmaSec(hedef)` → `taslakDuzenle(tohum, {kopya:true, notlar})`. Kopya kipinde
