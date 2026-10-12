@@ -464,7 +464,7 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
     // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS ayrı sekmede.
     $iw = mb_strpos($form, 'WhatsApp Metni');
     $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
-    $it = mb_strpos($form, 'Beyan / Sevkiyat');
+    $it = mb_strpos($form, 'Parti/Sevkiyat');
     $pa = strpos($form, 'id="beyanPanel_analiz"'); $ph = strpos($form, 'id="beyanPanel_hks"'); $pk = strpos($form, 'id="beyanPanel_kaynak"');
     ok('[form] beyan bilgileri kaynak metinden önce, Hal Bildirim AYRI sekme (Analiz ile Kaynak arasında)',
        $iw !== false && $ih !== false && $it !== false && $it < $iw

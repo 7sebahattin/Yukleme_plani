@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v341');
+    define('APP_SURUM', 'v342');
 }
 
 // --- HTML kaçışı ---
@@ -484,6 +484,8 @@ function render_desktop_sidebar(string $base): void {
             <span class="sidebar-brand-sub">Operasyon Paneli</span>
         </span>
     </a>
+    <button type="button" class="tema-dongu sidebar-tema" onclick="asyaTemaDondur()"
+            title="Tema değiştir (Açık / Koyu / Sistem)" aria-label="Tema değiştir">🖥️</button>
 
     <?php if (function_exists('active_depot') && ($__sdp = active_depot()) !== null): ?>
     <a href="<?= $base ?>depo_sec.php?next=<?= urlencode($_SERVER['REQUEST_URI'] ?? '/') ?>"
@@ -884,8 +886,9 @@ function render_header(string $title, bool $print_mode = false): void {
             document.querySelectorAll('[data-tema]').forEach(function (b) {
                 b.classList.toggle('aktif', b.getAttribute('data-tema') === t);
             });
-            var d = document.getElementById('temaDongu');
-            if (d) d.textContent = t === 'acik' ? '☀️' : (t === 'koyu' ? '🌙' : '🖥️');
+            document.querySelectorAll('.tema-dongu').forEach(function (d) {
+                d.textContent = t === 'acik' ? '☀️' : (t === 'koyu' ? '🌙' : '🖥️');
+            });
         }
         window.asyaTemaSec = function (t) {
             try { localStorage.setItem('asya_tema', t); } catch (e) {}
