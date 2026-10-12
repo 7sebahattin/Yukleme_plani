@@ -63,7 +63,7 @@ try {
 // plaka dolu + eşleştirme tam + net KG > 0 + durum uygun + aktif bağ yok.
 // Kapı mantığı iki yerde; birini değiştirirken diğerini de güncelle.
 $beyan_bildirim_bekleyen = 0;
-if (can('beyan.read') && (can('records.write') || is_admin())) {
+if (can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin())) {
     try {
         $__bd = implode(',', array_fill(0, count(beyan_hks_uygun_durumlar()), '?'));
         $__st = db()->prepare(

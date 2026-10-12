@@ -6,6 +6,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/beyan_permissions.php';
+
 const SESSION_DURATION_HOURS = 24;
 const AUTH_COOKIE_NAME       = 'asya_session';
 
@@ -151,13 +153,17 @@ function user_permissions(int $user_id): array {
     if (isset($cache[$user_id])) return $cache[$user_id];
     try {
         $st = db()->prepare("
-            SELECT DISTINCT rp.permission
+            SELECT rp.role_id, rp.permission
             FROM user_roles ur
             JOIN role_permissions rp ON rp.role_id = ur.role_id
             WHERE ur.user_id = ?
         ");
         $st->execute([$user_id]);
-        $cache[$user_id] = $st->fetchAll(PDO::FETCH_COLUMN);
+        $roles = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) $roles[(int)$row['role_id']][] = $row['permission'];
+        $effective = [];
+        foreach ($roles as $permissions) $effective = array_merge($effective, beyan_expand_role_permissions($permissions));
+        $cache[$user_id] = array_values(array_unique($effective));
     } catch (PDOException $e) {
         $cache[$user_id] = [];
     }
@@ -252,6 +258,20 @@ function permission_catalog(): array {
             'beyan.read'   => 'Beyanları görüntüle',
             'beyan.write'  => 'Beyan oluştur / düzenle / bildirim yap',
             'beyan.delete' => 'Beyan sil',
+            'beyan.permissions.detailed' => 'Ayrıntılı yetkilendirme (eski toplu yazma yetkisini sınırlar)',
+            'beyan.create' => 'Beyan oluştur / kopyala / toplu içe aktar',
+            'beyan.edit' => 'Temel beyan bilgilerini düzenle',
+            'beyan.status' => 'Beyan durumunu değiştir',
+            'beyan.match' => 'Yükleme planıyla eşleştir (yükleme düzenleme yetkisi gerekir)',
+            'beyan.notify' => 'Hal bildirim taslağı / bağını yönet (yükleme düzenleme yetkisi gerekir)',
+            'beyan.analysis.read' => 'Analiz ve numune bilgilerini gör',
+            'beyan.analysis.write' => 'Analiz ve numune bilgilerini düzenle',
+            'beyan.contact.read' => 'Adres, ilgili kişi ve alıcıyı gör',
+            'beyan.contact.write' => 'Adres, ilgili kişi ve alıcıyı düzenle',
+            'beyan.hks.read' => 'HKS eşleştirme ve bildirim bilgilerini gör',
+            'beyan.hks.write' => 'HKS eşleştirme bilgilerini düzenle',
+            'beyan.source.read' => 'Ham metni gör (tüm kaynak bilgilerini içerir)',
+            'beyan.source.write' => 'Ham metni düzenle / ayrıştır',
         ],
         'Kantar' => [
             'kantar.read'   => 'Kantar kayıtlarını görüntüle',

@@ -347,7 +347,7 @@ function ekranAlti() {
         }
         function apply(name, value) {
             var el = field(name);
-            if (!el || el.tagName === 'SELECT') return false;
+            if (!el || el.matches(':disabled') || el.tagName === 'SELECT') return false;
             el.value = value;
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));

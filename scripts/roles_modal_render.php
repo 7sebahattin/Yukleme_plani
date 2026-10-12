@@ -35,6 +35,7 @@ function render_footer(bool $p=false): void { echo "</main></body></html>"; }
 // GERÇEK yetki kataloğu + korumalı roller (auth.php'den al — 51 yetkinin
 // tamamı basılmalı ki gerçek yükseklik ölçülsün)
 $asrc = file_get_contents($ROOT . '/config/auth.php');
+require_once $ROOT . '/config/beyan_permissions.php';
 foreach (['permission_catalog', 'protected_role_slugs'] as $fn) {
     $a = strpos($asrc, "function $fn(): array {");
     $b = strpos($asrc, "\n}\n", $a);
@@ -52,6 +53,8 @@ $insR->execute([137629, 'ik', 'İnsan Kaynakları']);   // canlıdaki gibi 6 han
 $insP = db()->prepare("INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)");
 foreach (array_keys(array_merge(...array_values(permission_catalog()))) as $p) $insP->execute([1, $p]);
 $insP->execute([2, 'records.read']);
+$insP->execute([2, 'beyan.read']);
+$insP->execute([2, 'beyan.write']);
 
 $_POST = []; $_GET = [];
 $_SERVER['REQUEST_METHOD'] = 'GET';

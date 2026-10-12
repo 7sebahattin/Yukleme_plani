@@ -20,6 +20,8 @@ $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+if (getenv('BEYAN_TEST_PROFILE') === 'restricted') $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+if (getenv('BEYAN_TEST_PROFILE') === 'readonly') $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed', 'beyan.contact.read', 'beyan.analysis.read', 'beyan.hks.read', 'beyan.source.read'];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test']; }
 function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
 function is_admin(): bool { return false; }

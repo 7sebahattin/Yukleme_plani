@@ -17,7 +17,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (!can_beyan('write')) forbidden();
+if (!can_beyan('create')) forbidden();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: beyanlar.php');
@@ -35,6 +35,7 @@ if (!$src || !empty($src['deleted_at'])) {
     exit;
 }
 
+$src = beyan_protect_input($src);
 $user_id = (int)($auth_user['id'] ?? 0);
 $ins = db()->prepare("INSERT INTO customs_declarations
     (company_name, company_address, transport_type, line_type, pallet_count,
@@ -58,5 +59,5 @@ audit_log_event('beyan_kopyala', 'declarations', $new_id, null, [
 ]);
 
 set_flash('success', 'Beyan TASLAK olarak kopyalandı. Parti no ve araç plakasını girip diğer alanları düzenleyin, sonra kaydedin.');
-header('Location: beyan_edit.php?id=' . $new_id);
+header('Location: ' . (can_beyan('edit') ? 'beyan_edit.php' : 'beyan_view.php') . '?id=' . $new_id);
 exit;

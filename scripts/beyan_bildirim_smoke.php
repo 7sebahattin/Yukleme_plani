@@ -128,8 +128,8 @@ ok('api_beyan_bildirim HKS\'e gonderim yapmiyor',
    'Bu uc yalnizca TASLAK yazmalidir — gonderim geri alinamaz ve rusum dogurur');
 ok('api_beyan_bildirim CSRF kontrolu yapiyor',
    strpos($uc, 'csrf_check(') !== false, 'yazma ucunda csrf_check yok');
-ok('api_beyan_bildirim cift yetki kapisi (beyan.write + records.write)',
-   strpos($uc, "can_beyan('write')") !== false && strpos($uc, "can('records.write')") !== false,
+ok('api_beyan_bildirim cift yetki kapisi (beyan.notify + records.write)',
+   strpos($uc, "can_beyan('notify')") !== false && strpos($uc, "can('records.write')") !== false,
    'tek yetkiyle bildirim uretilebilir');
 
 // ── 8) Ön-seçim kuralları (Adım 1) ────────────────────────────────────────

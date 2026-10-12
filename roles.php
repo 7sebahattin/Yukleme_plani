@@ -66,24 +66,45 @@ function role_slug_from_label(PDO $pdo, string $label): string {
 
 // Yetki checkbox grid'ini basar — hem Yeni Rol hem Düzenle modalinde kullanılır.
 function render_permission_grid(array $catalog, array $checked, string $prefix): void {
+    echo '<div class="rol-editor"><div class="rol-editor-tools"><label>Modül veya yetki ara<input type="search" class="form-control rol-search" placeholder="Ör. Beyan, iletişim, sil"></label><label class="rol-selected-filter"><input type="checkbox" class="rol-only-selected"> Yalnız seçilenler</label><strong class="rol-total" aria-live="polite"></strong></div>';
+    echo '<details class="rol-help"><summary>Yetkiler nasıl çalışır?</summary><p>Önce sayfayı açın, sonra işlemleri ve alanları seçin. Standart seçim; silme, gönderme, ödeme, kilit açma ve yönetici yetkilerini içermez. Birden fazla rolün izinleri birleşir.</p></details>';
+    if (isset($catalog['Beyanlar']['beyan.permissions.detailed'])) {
+        echo '<input type="hidden" name="permissions[]" value="beyan.permissions.detailed">';
+    }
     foreach ($catalog as $group => $perms) {
         echo '<div class="rol-perm-group">';
         echo '<div class="rol-perm-group-head">';
-        echo '<span class="rol-perm-group-title">' . h($group) . '</span>';
+        echo '<span class="rol-perm-group-title">' . h($group) . ' <small class="rol-group-count"></small></span>';
         echo '<span class="rol-perm-group-actions">'
-           . '<button type="button" class="rol-perm-toggle" data-mode="all">Tümü</button>'
+           . '<button type="button" class="rol-perm-toggle" data-mode="read">Görüntüleme</button>'
+           . '<button type="button" class="rol-perm-toggle" data-mode="all">Standart</button>'
            . '<button type="button" class="rol-perm-toggle" data-mode="none">Hiçbiri</button>'
            . '</span></div>';
+        if ($group === 'Beyanlar') echo '<details class="rol-help"><summary>Beyan alan izinleri hakkında</summary><p>Bölümü düzenlemek için görüntüleme iznini de seçin. Oluşturma/düzenleme yetkisi olmadan bölüm yazma izni tek başına kayıt değiştirmez.</p></details>';
         echo '<div class="rol-perm-grid">';
+        $last_kind = '';
+        uksort($perms, static function ($a, $b) {
+            $rank = static fn($p) => substr_count($p, '.') > 1 ? 2 : (str_ends_with($p, '.read') ? 0 : 1);
+            return $rank($a) <=> $rank($b);
+        });
         foreach ($perms as $perm => $label) {
+            if (in_array($perm, ['beyan.write', 'beyan.permissions.detailed'], true)) continue;
+            $is_field = substr_count($perm, '.') > 1;
+            $is_read = str_ends_with($perm, '.read');
+            $risk = (bool)preg_match('/\.(admin|delete|unlock|send|notify|pay|approve|foreman_payments)$/', $perm);
+            $kind = $is_field ? 'Alanlar ve bölümler' : ($is_read ? 'Sayfa erişimi' : 'İşlemler');
+            if ($kind !== $last_kind) echo '<div class="rol-perm-kind">' . h($kind) . '</div>';
+            $last_kind = $kind;
+            if (in_array($perm, ['users.read', 'users.write'], true)) $label .= ' — Uyumluluk: tek başına erişim vermez; kullanıcı yönetimi yetkisi gerekir';
             $cid = $prefix . '_' . str_replace('.', '_', $perm);
             $is_checked = in_array($perm, $checked, true) ? 'checked' : '';
-            echo '<label class="usr-role-check" for="' . h($cid) . '">'
-               . '<input type="checkbox" id="' . h($cid) . '" name="permissions[]" value="' . h($perm) . '" ' . $is_checked . '>'
-               . h($label) . '</label>';
+            echo '<label class="usr-role-check rol-permission' . ($risk ? ' rol-sensitive' : '') . '" for="' . h($cid) . '">'
+               . '<input type="checkbox" data-read="' . (int)$is_read . '" data-risk="' . (int)$risk . '" id="' . h($cid) . '" name="permissions[]" value="' . h($perm) . '" ' . $is_checked . '>'
+               . '<span>' . h($label) . ($risk ? '<small>Özel yetki · tek tek seçilir</small>' : '') . '</span></label>';
         }
         echo '</div></div>';
     }
+    echo '<p class="rol-empty" hidden>Aramayla eşleşen yetki bulunamadı.</p></div>';
 }
 
 // ── POST Handler ──────────────────────────────────────────────────────────
@@ -251,8 +272,17 @@ $role_perm_map = [];
 foreach ($pdo->query("SELECT role_id, permission FROM role_permissions")->fetchAll() as $rp) {
     $role_perm_map[(int)$rp['role_id']][] = $rp['permission'];
 }
+// Önce eski rolün etkin izinlerini görünür yap; ayrıntılı kayıtta örtük izin kalmasın.
+if (function_exists('beyan_expand_role_permissions')) {
+    foreach ($role_perm_map as &$role_permissions) $role_permissions = beyan_expand_role_permissions($role_permissions);
+    unset($role_permissions);
+}
+foreach ($role_perm_map as &$role_permissions) {
+    $role_permissions = array_values(array_filter($role_permissions, static fn($p) => !in_array($p, ['beyan.write', 'beyan.permissions.detailed'], true)));
+}
+unset($role_permissions);
 
-$total_perm_count = count($flat_permissions);
+$total_perm_count = count(array_diff_key($flat_permissions, array_flip(['beyan.write', 'beyan.permissions.detailed'])));
 // Sabit 5 yerine GERÇEKTEN var olan sistem rolünü say — eksik kurulumda
 // "Özel Rol" sayısı eksiye düşüyordu.
 $sistem_rol_sayisi = count(array_filter($roles, fn($r) => in_array($r['slug'], $protected_slugs, true)));
@@ -452,7 +482,7 @@ render_header('Roller');
 
 <!-- ── Yeni Rol Modal ──────────────────────────────────────────────────── -->
 <div id="rolCreateModal" class="pm-overlay" hidden>
-<div class="pm-dialog" style="max-width:640px">
+<div class="pm-dialog rol-dialog" role="dialog" aria-modal="true" aria-label="Yeni rol">
     <div class="pm-header">
         <h2 class="pm-title">Yeni Rol</h2>
         <button type="button" class="pm-close" onclick="rolCloseCreate()">✕</button>
@@ -467,12 +497,6 @@ render_header('Roller');
                 required maxlength="80" placeholder="ör. Depo Sorumlusu"
                 value="<?= $action === 'create_role' ? h(trim($_POST['label'] ?? '')) : '' ?>">
         </div>
-        <div class="form-label" style="margin-bottom:6px">Yetkiler</div>
-        <p class="rol-ipucu">
-            <strong>Ana sayfayı görüntüle</strong> yetkisi önerilir: kullanıcı girişten sonra
-            ana sayfaya düşer. Bu yetki olmadan da sistem çalışır — kullanıcı doğrudan
-            erişebildiği ilk sayfaya yönlendirilir.
-        </p>
         <?php
         // Yeni rol VARSAYILANI: ana sayfa. POST hatasından sonra kullanıcının
         // kendi seçimi korunur (varsayılana geri dönmez).
@@ -492,7 +516,7 @@ render_header('Roller');
 
 <!-- ── Rol Düzenle Modal ───────────────────────────────────────────────── -->
 <div id="rolEditModal" class="pm-overlay" hidden>
-<div class="pm-dialog" style="max-width:640px">
+<div class="pm-dialog rol-dialog" role="dialog" aria-modal="true" aria-label="Rolü düzenle">
     <div class="pm-header">
         <h2 class="pm-title">Rolü Düzenle</h2>
         <button type="button" class="pm-close" onclick="rolCloseEdit()">✕</button>
@@ -509,7 +533,6 @@ render_header('Roller');
                 Sistem kimliği: <span id="e_role_slug" class="rol-badge-slug"></span> (değiştirilemez)
             </p>
         </div>
-        <div class="form-label" style="margin-bottom:6px">Yetkiler</div>
         <div id="e_perm_wrap">
         <?php render_permission_grid($catalog, [], 'e'); ?>
         </div>
@@ -524,13 +547,18 @@ render_header('Roller');
 
 <script>
 (function () {
+    var modalOpener = null;
     function openModal(id) {
+        modalOpener = document.activeElement;
         document.getElementById(id).removeAttribute('hidden');
         document.body.style.overflow = 'hidden';
+        document.querySelector('#' + id + ' input[name="label"]').focus();
+        refreshEditor(document.querySelector('#' + id + ' .rol-editor'));
     }
     function closeModal(id) {
         document.getElementById(id).setAttribute('hidden', '');
         document.body.style.overflow = '';
+        if (modalOpener && modalOpener.focus) modalOpener.focus();
     }
 
     ['rolCreateModal', 'rolEditModal'].forEach(function (id) {
@@ -539,17 +567,55 @@ render_header('Roller');
         el.addEventListener('click', function (e) {
             if (e.target === this) closeModal(id);
         });
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); closeModal(id); return; }
+            if (e.key !== 'Tab') return;
+            var items = Array.from(el.querySelectorAll('button,input,select,a[href]')).filter(function (item) {
+                return !item.disabled && item.getClientRects().length > 0;
+            });
+            var first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        });
     });
 
-    // Grup içi "Tümü / Hiçbiri" kısayolları — her iki modalde de çalışır.
+    function refreshEditor(editor) {
+        if (!editor) return;
+        var query = editor.querySelector('.rol-search').value.toLocaleLowerCase('tr').trim();
+        var selectedOnly = editor.querySelector('.rol-only-selected').checked;
+        var total = 0, visibleGroups = 0;
+        editor.querySelectorAll('.rol-perm-group').forEach(function (group) {
+            var selected = 0, visible = 0;
+            var groupName = group.querySelector('.rol-perm-group-title').firstChild.textContent.toLocaleLowerCase('tr');
+            group.querySelectorAll('.rol-permission').forEach(function (label) {
+                var cb = label.querySelector('input');
+                if (cb.checked) selected++;
+                label.hidden = (selectedOnly && !cb.checked) || !(groupName + ' ' + label.textContent.toLocaleLowerCase('tr') + ' ' + cb.value).includes(query);
+                if (!label.hidden) visible++;
+            });
+            group.querySelector('.rol-group-count').textContent = selected + ' seçili';
+            group.hidden = visible === 0;
+            if (visible) visibleGroups++;
+            total += selected;
+        });
+        editor.querySelector('.rol-total').textContent = total + ' yetki seçili';
+        editor.querySelector('.rol-empty').hidden = visibleGroups !== 0;
+    }
+    document.querySelectorAll('.rol-editor').forEach(function (editor) {
+        editor.addEventListener('input', function () { refreshEditor(editor); });
+        editor.addEventListener('change', function () { refreshEditor(editor); });
+        refreshEditor(editor);
+    });
+    // Grup kısayolları kritik yetkileri hiçbir zaman topluca vermez.
     document.querySelectorAll('.rol-perm-toggle').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var group = btn.closest('.rol-perm-group');
             if (!group) return;
-            var checked = btn.dataset.mode === 'all';
             group.querySelectorAll('input[type=checkbox]').forEach(function (cb) {
-                cb.checked = checked;
+                cb.checked = btn.dataset.mode !== 'none' && cb.dataset.risk !== '1'
+                    && (btn.dataset.mode === 'all' || cb.dataset.read === '1');
             });
+            refreshEditor(btn.closest('.rol-editor'));
         });
     });
 

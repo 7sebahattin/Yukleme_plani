@@ -46,8 +46,8 @@ if ($auth_user === null) bb_cikti(['hata' => 'Oturum gerekli. Lütfen tekrar gir
 // rüsum doğuran bir zincirin ilk halkasıdır; Hal Kayıt panelinin kapısı olan
 // records.write da aranır. (Aksi hâlde yalnız beyan.read+write olan bir rol
 // bildirim üretebilirdi.)
-if (!(can_beyan('write') && (can('records.write') || is_admin()))) {
-    bb_cikti(['hata' => 'Bu işlem için yetkiniz yok (beyan.write + records.write gerekli).'], 403);
+if (!(can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin()))) {
+    bb_cikti(['hata' => 'Bu işlem için yetkiniz yok (beyan.notify + beyan.hks.write + records.write gerekli).'], 403);
 }
 
 $govde = json_decode((string)file_get_contents('php://input'), true);

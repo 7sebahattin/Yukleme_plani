@@ -11,7 +11,7 @@ require_once __DIR__ . '/config/auth.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $auth_user = require_login();
-if (!can_beyan('write')) {
+if (!can_beyan('create')) {
     http_response_code(403);
     echo json_encode(['ok' => false, 'error' => 'Yetersiz yetki.']);
     exit;
@@ -61,6 +61,7 @@ if (isset($history[$request_id])) {
     exit;
 }
 
+$declarations = array_map(static fn($d) => is_array($d) ? beyan_protect_input($d) : $d, $declarations);
 $row_errors = [];
 foreach (array_values($declarations) as $i => $d) {
     $errors = is_array($d) ? beyan_veri_dogrula($d)['errors'] : ['Geçerli bir beyan satırı gerekli.'];

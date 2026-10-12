@@ -7,7 +7,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (!can_beyan('write')) forbidden();
+if (!can_beyan('create')) forbidden();
 
 $errors = [];
 $f = [
@@ -42,6 +42,7 @@ $f = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
+    $_POST = beyan_protect_input($_POST);
 
     foreach (array_keys($f) as $k) {
         $f[$k] = trim((string)($_POST[$k] ?? ''));
@@ -129,9 +130,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
         // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
-        if ($hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
-        beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
-        if ($hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
+        if (can_beyan('hks.write') && $hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
+        if (can_beyan('hks.write')) beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
+        if (can_beyan('hks.write') && $hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
 
         audit_log_event('beyan_create', 'declarations', $new_id, null, [
             'party_no'     => $f['party_no'],
