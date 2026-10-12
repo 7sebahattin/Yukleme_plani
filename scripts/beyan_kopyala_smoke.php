@@ -111,7 +111,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -508,36 +508,33 @@ ok('[E] eşleştirme tam: hksOpenBtn VAR, hksEslestirBtn YOK',
 ok('[E] eşleştirme tam: modal basılır', strpos($h, 'id="hksOverlay"') !== false);
 ok('[E] modal kaydı sonrası halkayit/index.php?ekran=taslaklar yönlendirmesi',
    preg_match("/location\.href\s*=\s*'halkayit\/index\.php\?ekran=taslaklar'/", $h) === 1);
-// Kopyala formu
+// Önizlemede "Kopyala" = WhatsApp metni (v333); taslak formu YALNIZ listede ("Taslak Oluştur")
 foreach ([$V_BOS, $V_TAM] as $vid) {
     $h = render_beyan($vid);
-    ok("[E] #$vid üstte beyan_kopyala.php POST formu (id + csrf)",
-       preg_match('/<form[^>]*method="post"[^>]*action="beyan_kopyala\.php"/', $h) === 1
-       && strpos($h, '<input type="hidden" name="id"   value="' . $vid . '">') !== false
-       && preg_match('/name="csrf" value="[0-9a-f]{20,}"/', $h) === 1);
-    // Kopyala formu, Düzenle bağlantısından önce ve bildirim kartından önce
-    ok("[E] #$vid kopyala formu sayfa başında (bildirim kartından önce)",
-       strpos($h, 'beyan_kopyala.php') < strpos($h, 'bk-hucre'), '');
+    ok("[E] #$vid önizlemede beyan_kopyala.php formu YOK (taslak oluşturma listede)", strpos($h, 'beyan_kopyala.php') === false);
+    ok("[E] #$vid WhatsApp Kopyala düğmesi + JSON metin var",
+       strpos($h, 'id="waKopyalaBtn"') !== false && strpos($h, 'id="waMetin"') !== false
+       && strpos($h, 'waKopyalaBtn') < strpos($h, 'bk-hucre'));
+    preg_match('/<script type="application\/json" id="waMetin">(.*?)<\/script>/s', $h, $mj);
+    $wa = isset($mj[1]) ? json_decode($mj[1], true) : null;
+    ok("[E] #$vid WhatsApp metni geçerli JSON ve YENİ BEYAN başlığı içeriyor", is_string($wa) && strpos($wa, '📝 *YENİ BEYAN*') !== false);
 }
-// Kopyala formu iç içe değil
 $h = render_beyan($V_TAM);
 preg_match_all('/<form\b|<\/form>/', $h, $mf);
 $d = 0; $ic = false; foreach ($mf[0] as $t) { if ($t === '</form>') $d--; else { $d++; if ($d > 1) $ic = true; } }
 ok('[E] iç içe <form> yok', !$ic);
-// Silinmiş beyanda kopyala yok
 $h = render_beyan($V_SILI);
-ok('[E] silinmiş (arşiv) beyanda Kopyala formu YOK', temiz($h) && strpos($h, 'beyan_kopyala.php') === false);
-// Yetki
+ok('[E] silinmiş (arşiv) beyanda taslak formu YOK', temiz($h) && strpos($h, 'beyan_kopyala.php') === false);
 global $PERMS;
 $PERMS_ESKI = $PERMS;
 $PERMS = ['beyan.read'];
 $h = render_beyan($V_BOS);
-ok('[E] beyan.write yoksa Kopyala formu + Eşleştir düğmesi YOK',
-   strpos($h, 'beyan_kopyala.php') === false && strpos($h, 'hksEslestirBtn') === false);
-$PERMS = ['beyan.read', 'beyan.write'];   // records.write yok → HKS düğmeleri yok, kopyala var
+ok('[E] beyan.write yoksa Eşleştir düğmesi YOK ama WhatsApp Kopyala VAR (salt okunur)',
+   strpos($h, 'hksEslestirBtn') === false && strpos($h, 'waKopyalaBtn') !== false);
+$PERMS = ['beyan.read', 'beyan.write'];
 $h = render_beyan($V_BOS);
-ok('[E] records.write yoksa Eşleştir düğmesi YOK ama Kopyala VAR',
-   strpos($h, 'hksEslestirBtn') === false && strpos($h, 'beyan_kopyala.php') !== false);
+ok('[E] records.write yoksa Eşleştir düğmesi YOK ama WhatsApp Kopyala VAR',
+   strpos($h, 'hksEslestirBtn') === false && strpos($h, 'waKopyalaBtn') !== false);
 $PERMS = $PERMS_ESKI;
 // Zaten aktif bildirimi olan beyanda eşleştir çıkmaz
 $V_BAG = beyan_ekle(['vehicle_plate' => '34XYZ1']);
@@ -582,7 +579,8 @@ if (preg_match('/<thead>(.*?)<\/thead>/s', $h, $mt) && preg_match('/<tbody>.*?<t
 } else ok('[D] ilk tablo bulunamadı', false, 'thead/tbody regex');
 
 // Real restricted edit: forged section values must not replace stored data.
-$limited_id = beyan_ekle($TAM + ['status' => 'temiz', 'analysis_result_at' => '2026-07-03 12:34:56']);
+$limited_id = beyan_ekle($TAM + ['status' => 'temiz', 'analysis_result_at' => '2026-07-03 12:34:56',
+    'sample_gross_kg' => 5.5, 'sample_net_kg' => 4.5, 'sample_crate_type' => 'KASA', 'sample_crate_count' => 1]);
 $before = satir($limited_id);
 $forged = $before;
 $forged['csrf'] = 'TOKEN-OK';

@@ -28,7 +28,7 @@ function ok(value, label) { if (!value) throw Error(label); count++; console.log
         ok(await page.locator('[data-beyan-tab]').count() === 1, 'only authorized tab rendered');
       }
       if (profile === 'readonly') {
-        for (const field of ['buyer_name', 'company_address', 'analysis_note', 'raw_text']) {
+        for (const field of ['buyer_name', 'company_address', 'analysis_note', 'raw_text', 'sample_crate_count', 'sample_crate_type', 'sample_gross_kg', 'sample_net_kg']) {
           ok(await page.locator('[name="'+field+'"]').isDisabled(), field + ' read-only');
         }
         ok(await page.evaluate(() => !new FormData(document.querySelector('#beyanForm')).has('buyer_name')), 'disabled values not submitted');

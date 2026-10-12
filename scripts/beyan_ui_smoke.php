@@ -61,7 +61,7 @@ db()->exec("CREATE TABLE customs_declarations (
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
-  hks_ulke_id TEXT, hks_ulke_ad TEXT,
+  hks_ulke_id TEXT, hks_ulke_ad TEXT, note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',
   updated_at TEXT, deleted_at TEXT)");
 db()->exec("CREATE TABLE beyan_hks_bildirim (
@@ -442,14 +442,17 @@ if (strncmp($form, '__HATA__', 8) !== 0) {
        preg_match('/name="vehicle_plate"[^>]*data-nospace/s', $form) === 1,
        'data-nospace yok — "34 ABC 123" boslukla kaydedilir');
 
-    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS sağ panelde.
+    // Bölümlü yapı: ana bilgiler önce, kaynak ayrı panelde, HKS ayrı sekmede.
     $iw = mb_strpos($form, 'WhatsApp Metni');
     $ih = mb_strpos($form, 'Hal Bildirim Bilgileri');
     $it = mb_strpos($form, 'Beyan / Sevkiyat');
-    ok('[form] beyan bilgileri kaynak metinden önce, HKS yan panelde',
+    $pa = strpos($form, 'id="beyanPanel_analiz"'); $ph = strpos($form, 'id="beyanPanel_hks"'); $pk = strpos($form, 'id="beyanPanel_kaynak"');
+    ok('[form] beyan bilgileri kaynak metinden önce, Hal Bildirim AYRI sekme (Analiz ile Kaynak arasında)',
        $iw !== false && $ih !== false && $it !== false && $it < $iw
-       && strpos($form, 'class="beyan-workspace-hks"') !== false,
-       "konumlar: whatsapp=$iw hks=$ih temel=$it");
+       && strpos($form, 'class="beyan-workspace-hks"') !== false
+       && $pa !== false && $pa < $ph && $ph < $pk && strpos($form, 'data-beyan-tab="hks"') !== false
+       && strpos($form, "<aside class=\"beyan-workspace-hks\"") === false && ($bh = strpos($form, "Hal Bildirim Bilgileri")) > $ph && $bh < $pk,
+       "konumlar: whatsapp=$iw hks=$ih temel=$it pa=$pa ph=$ph pk=$pk aside=" . var_export(strpos($form, "<aside"), true));
 
     // Uzun katalog listesi YAZARAK ARANABİLİR olmalı; kısa liste olmamalı.
     // (Test kataloğunda 2 ürün / 1 ülke var → eşiğin altında, aramasız.)
@@ -801,6 +804,30 @@ $h_sil = render_beyan($B2);
 ok('[bag] silinmis taslakta Bildirim Yap pasif ve sebep yaziyor',
    buton_pasif($h_sil) === true && mb_strpos($h_sil, 'Tekrar Aktif Et') !== false);
 $f_sil = render_form($B2);
+// Not alanı (v332): formun altında textarea; önizlemede yalnız doluyken görünür.
+ok('[not] formda Not alanı (textarea name=note, 2000 sınırlı) var',
+   preg_match('/<textarea[^>]*name="note"[^>]*maxlength="2000"/', $f_sil) === 1);
+$B_NOT = beyan_ekle(['party_no' => 'NOT-1']);
+db()->prepare("UPDATE customs_declarations SET note = ? WHERE id = ?")->execute(["İlk satır\nİKİ <b>x</b>", $B_NOT]);
+$h_not = render_beyan($B_NOT);
+ok('[not] önizlemede not görünüyor ve kaçışlı', mb_strpos($h_not, 'İlk satır') !== false && strpos($h_not, '&lt;b&gt;x&lt;/b&gt;') !== false);
+ok('[not] boş notta bölüm çizilmiyor', strpos(render_beyan($ID_BOS), 'bf-emoji" aria-hidden="true">📝</span> Not') === false);
+ok('[not] düzenleme formu kayıtlı notu dolduruyor', mb_strpos(render_form($B_NOT), 'İlk satır') !== false);
+// Numune (v334)
+ok('[numune] formda 4 numune alanı Analiz sekmesinde (Not bölümünden SONRA, Kaynak sekmesinden ÖNCE)', ($pn = strpos($f_sil, 'name="sample_crate_count"')) !== false
+   && strpos($f_sil, 'name="sample_crate_type"') !== false && strpos($f_sil, 'name="sample_gross_kg"') !== false
+   && strpos($f_sil, 'name="sample_net_kg"') !== false && $pn > strpos($f_sil, 'id="beyanPanel_analiz"') && $pn < strpos($f_sil, 'id="beyanPanel_kaynak"') && $pn > strpos($f_sil, 'name="note"'));
+ok('[numune] boşken önizlemede numune kartı yok', strpos(render_beyan($ID_BOS), '🧪</span> Numune') === false);
+$B_NM = beyan_ekle(['party_no' => 'NM-1']);
+db()->prepare("UPDATE customs_declarations SET sample_gross_kg=5, sample_net_kg=4, sample_crate_type='TAHTA KASA', sample_crate_count=1 WHERE id=?")->execute([$B_NM]);
+$h_nm = render_beyan($B_NM);
+file_put_contents(sys_get_temp_dir() . '/beyan_view_nm.html', $h_nm);
+ok('[numune] önizlemede numune kartı Analiz kartıyla aynı yanyana kabında', preg_match('/bv-yanyana bv-yanyana-2.*Analiz \/ Durum.*Numune/s', $h_nm) === 1
+   && preg_match('/class="bv-yanyana"/', render_beyan($ID_BOS)) === 1);
+ok('[numune] doluyken önizlemede kart + WhatsApp metni', strpos($h_nm, '🧪</span> Numune') !== false
+   && strpos($h_nm, 'Net: 4 KG') !== false && strpos($h_nm, '\ud83e\uddea') === false && strpos($h_nm, '🧪 *NUMUNE*') !== false);
+file_put_contents(sys_get_temp_dir() . '/beyan_form_ciktisi.html', render_form($B_NM));
+ok('[numune] düzenleme formu kayıtlı numuneyi dolduruyor', strpos(render_form($B_NM), 'value="TAHTA KASA"') !== false);
 ok('[form] kaldırılan başlık alanı çizilmiyor', strpos($f_sil, 'name="declaration_title"') === false);
 ok('[form] gümrük adı/adresi görünür ve önerili',
    strpos($f_sil, '>Gümrük Adı</label>') !== false
@@ -888,9 +915,10 @@ ok('[eşleştirme] plan düzenleme yetkisi olmadan eşleştirme açılmaz', strp
 // Detailed roles: protected content must never reach HTML or inline scripts.
 db()->exec("UPDATE customs_declarations SET buyer_name='CONTACT_SECRET_942', company_address='ADDRESS_SECRET_942', contact_person='PERSON_SECRET_942', analysis_note='ANALYSIS_SECRET_942', raw_text='SOURCE_SECRET_942', unmatched_text='UNMATCHED_SECRET_942', hks_ulke_ad='COUNTRY_SECRET_942' WHERE id=$ID_BOS");
 $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+db()->exec("UPDATE customs_declarations SET sample_crate_type='SAMPLE_SECRET_942', sample_gross_kg=9, sample_net_kg=8, sample_crate_count=2 WHERE id=$ID_BOS");
 $restricted_detail = render_beyan($ID_BOS);
 $restricted_list = render_liste([]);
-foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942'] as $secret) {
+foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942'] as $secret) {
     ok('[yetki] gizli veri HTML/JS içinde yok: ' . $secret, !str_contains($restricted_detail . $restricted_list, $secret));
 }
 ok('[yetki] HKS kartı ve tablo başlığı gizli', !str_contains($restricted_detail, 'bk-kart') && !str_contains($restricted_list, '<th>HKS Firma</th>'));

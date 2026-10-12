@@ -12,6 +12,7 @@ if (!can_beyan('hks.read')) $suggest_data['products'] = [];
 $f = beyan_redact_fields($f);
 $tabs = ['beyan' => 'Beyan'];
 if (can_beyan('analysis.read')) $tabs['analiz'] = 'Analiz';
+if (can_beyan('hks.read')) $tabs['hks'] = 'Hal Bildirim';
 if (can_beyan('source.read')) $tabs['kaynak'] = 'Kaynak metin';
 $field = static function (string $name, string $label, string $icon, string $mode = '') use ($f): void {
     $section = null;
@@ -123,6 +124,14 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     </div>
                     <?php endif; ?>
                 </section>
+
+                <section class="beyan-section" data-bf="uyari" data-beyan-single-section>
+                    <h2 class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</h2>
+                    <div class="form-group" data-ic="metin">
+                        <label class="form-label" for="bf_note">Not <span class="muted">(isteğe bağlı, en fazla 2000 karakter)</span></label>
+                        <textarea id="bf_note" name="note" rows="3" maxlength="2000" class="form-control" placeholder="Bu beyanla ilgili hatırlatma veya açıklama…"><?= h($f['note'] ?? '') ?></textarea>
+                    </div>
+                </section>
             </div>
 
             <?php if (can_beyan('analysis.read')): ?>
@@ -148,6 +157,27 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <textarea name="analysis_note" id="analysisNote" rows="3" class="form-control"<?= $f['status'] === 'red' ? ' required' : '' ?>><?= h((string)$f['analysis_note']) ?></textarea>
                     </div>
                 </fieldset>
+
+                <section class="beyan-section" data-bf="durum" data-beyan-single-section>
+                    <h2 class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</h2>
+                    <div class="beyan-form-grid beyan-workspace-quantities">
+                        <?php $field('sample_crate_count', 'Numune Kasa Adedi', 'kutu', 'numeric'); ?>
+                        <?php $field('sample_crate_type', 'Numune Kasa Cinsi', 'kasa'); ?>
+                        <?php $field('sample_gross_kg', 'Numune Brüt KG', 'agirlik', 'decimal'); ?>
+                        <?php $field('sample_net_kg', 'Numune Net KG', 'terazi', 'decimal'); ?>
+                    </div>
+                    <div class="form-hint">İsteğe bağlı. Dolu alanlar WhatsApp metnindeki NUMUNE bölümüne eklenir (tarih girilmese de).</div>
+                </section>
+            </div>
+
+            <?php endif; ?>
+            <?php if (can_beyan('hks.read')): ?>
+            <div id="beyanPanel_hks" data-beyan-panel="hks" role="tabpanel" aria-labelledby="beyanTab_hks">
+                <div class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
+                    <fieldset class="beyan-permission-fieldset"<?= !can_beyan('hks.write') ? ' disabled' : '' ?>>
+                    <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, can_beyan('hks.write')); ?>
+                    </fieldset>
+                </div>
             </div>
             <?php endif; ?>
 
@@ -176,13 +206,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
             <?php endif; ?>
         </div>
 
-        <?php if (can_beyan('hks.read')): ?>
-        <aside class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
-            <fieldset class="beyan-permission-fieldset"<?= !can_beyan('hks.write') ? ' disabled' : '' ?>>
-            <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, can_beyan('hks.write')); ?>
-            </fieldset>
-        </aside>
-        <?php endif; ?>
     </div>
 
     <?php if ($is_edit && can_beyan('delete')): ?>

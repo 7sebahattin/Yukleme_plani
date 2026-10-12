@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v331` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v337` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -999,6 +999,34 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   ad seçimi bağlı adresi doldurur. Gümrük ve iletişim bölümü sürekli görünür.
   Başlık/Beyan Tipi formdan kaldırılmıştır; eski değer sıradan düzenlemede
   silinmez. Bağlantı düzeltme alanı kullanıcı kararıyla gizlidir.
+- **Öneri listeleri TEMİZ BAŞLANGIÇ (v331, sahip kararı):** beyan formu önerileri (`beyan_suggest_form_data()`)
+  `BEYAN_ONERI_BASLANGIC` (helpers.php, `2026-10-12 00:00:00`) ÖNCESİ veriyi göstermez: geçmiş beyanlar
+  (`created_at >=`), zaman damgasız eski KV tanımları (`added_at` yoksa gizli; `+ekle` yeniden ekleyince
+  damgalanır) ve genel tanım havuzu (`material_definitions`) KULLANILMAZ. HKS ürün KATALOĞU kalır (ürün adı →
+  HKS id eşlemesi ona dayanır). Tarihi ileri almak = yeni temiz başlangıç; geri ALMA.
+- **Not alanı (v332, sahip GO verdi — TEK şema değişikliği):** `customs_declarations.note TEXT NULL`
+  (auto-migration `config/helpers.php`, yalnız ADD COLUMN). Beyan formunun "Beyan" sekmesinde en altta
+  "Not" bölümü (`name="note"`, ≤2000 karakter); önizlemede yalnız doluysa 📝 Not kartı. Büyük harfe
+  ÇEVRİLMEZ (serbest metin), öneri havuzuna girmez, **Kopyala'da kopyalanmaz** (o sevkiyata özel). Düzenle
+  POST'unda `note` gönderilmezse eski değer korunur.
+- **WhatsApp metni + Kopyala (v333):** Önizleme (`beyan_view.php`) üst çubuğundaki **⧉ Kopyala** artık beyan
+  verisinden üretilen WhatsApp metnini panoya kopyalar (`beyan_whatsapp_metin()` — config/helpers.php, saf, DB yok;
+  `*kalın*` + simgeler; boş alan/bölüm atlanır; değerlerdeki `* _ ~ \`` temizlenir). Metin `<script type="application/json"
+  id="waMetin">` içinde, kopyalama `navigator.clipboard` + `execCommand` yedeği. Giriş ayrıştırıcısı (`beyan_parse.php`) DEĞİŞMEDİ.
+  Numune ayrı kolon değil: ham/eşleşmeyen metinde "NUMUNE" satırından sonra aranır (`beyan_whatsapp_numune()`); Önemli Not = `note`.
+  TASLAK oluşturan eski "Kopyala" **"Taslak Oluştur"** adını aldı (📝) ve YALNIZ `beyanlar.php` listesindedir (`beyan_kopyala.php`
+  dosyası/URL'si aynı). İkisini karıştırma: önizlemede taslak formu YOK. Test: `php scripts/beyan_whatsapp_smoke.php`.
+- **Numune alanları (v334, sahip GO verdi — 4 nullable ADD COLUMN):** `customs_declarations.sample_gross_kg` / `sample_net_kg`
+  (DECIMAL 12,3) · `sample_crate_type` (VARCHAR 100) · `sample_crate_count` (INT); auto-migration `config/helpers.php`. Formda
+  **Analiz sekmesinde** "🧪 Numune" bölümü (`_beyan_form.php`, Analiz Bilgileri'nin altı), önizlemede yalnız doluysa kart. Kayıtta `beyan_veri_dogrula()` yalnız
+  GÖNDERİLEN alanı işler (net ≤ brüt); `beyan_edit` gönderilmeyen numuneyi korur. WhatsApp metni (`beyan_whatsapp_numune()`) ÖNCE
+  bu kolonlara bakar (tarih/başka alan gerekmez), hepsi boşsa eski ham-metin ayrıştırması yedek kalır. Kopyala (Taslak Oluştur)
+  numuneyi KOPYALAMAZ (o sevkiyata özel).
+- **Form sekmeleri + önizleme yerleşimi (v336):** Beyan formunda sekmeler **Beyan · Analiz · Hal Bildirim · Kaynak metin**.
+  HKS bölümü (`beyan_hks_form_bolumu()`: firma/ürün/ülke/plaka) artık sağ `<aside>` DEĞİL, kendi sekme panelindedir
+  (`#beyanPanel_hks`, `.beyan-workspace-hks` kabı, max 640px) — HKS verisinin girileceği TEK yer. Beyan veren (Beyan/Analiz/Kaynak)
+  ile bildirim yapan (Hal Bildirim) alanları ayrı sekmelerde. Önizlemede Numune kartı Analiz / Durum kartının YANINDA
+  (`.bv-yanyana`, numune doluysa `-2` ile ≥900px iki kolon; mobilde alt alta).
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`

@@ -25,7 +25,7 @@ Diğer modüllerin mevcut işlem yetkileri aynı editörde düzenlenir. Bu deği
 
 [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html): her istekte sunucu tarafında yetki doğrulama ve açık yetki bulunmadığında erişimi reddetme ilkeleri uygulamanın temelidir.
 
-## Uygulanan sonuç — v331
+## Uygulanan sonuç — v337
 
 - Roller editöründe sayfa erişimi, işlem ve bölüm izinleri ayrıldı; arama, yalnız seçilenler filtresi ve kritik yetkileri vermeyen hazır seçimler eklendi. Mobil açıklamalar kapalı ayrıntılara alındı; sabit alt eylemler ve klavye erişimi doğrulandı.
 - Kullanıcı formuna seçilen rollerin birleşik izin önizlemesi eklendi.

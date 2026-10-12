@@ -2,6 +2,7 @@
 // SQLite gerçek helper ve endpoint kontrol akışı; canlı DB/HKS yüklenmez.
 declare(strict_types=1);
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
+define('BEYAN_ONERI_BASLANGIC', '2026-01-01 00:00:00');   // test sabiti (gerçek saatten önce olmalı; helpers.php'deki değerle ayrı)
 $tokens = token_get_all((string)file_get_contents(dirname(__DIR__) . '/config/helpers.php'));
 for ($i=0,$n=count($tokens);$i<$n;$i++) {
     if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_FUNCTION) continue;
@@ -22,9 +23,11 @@ function bb_katalog(): array { global $catalog; return $catalog; }
 $pdo->exec('CREATE TABLE hks_kv (anahtar TEXT PRIMARY KEY, deger TEXT)');
 $pdo->exec('CREATE TABLE material_definitions (type TEXT,name TEXT,is_active INTEGER)');
 $cols=implode(' TEXT, ',array_keys(beyan_suggest_fields())) . ' TEXT';
-$pdo->exec("CREATE TABLE customs_declarations (id INTEGER PRIMARY KEY, deleted_at TEXT, $cols)");
+$pdo->exec("CREATE TABLE customs_declarations (id INTEGER PRIMARY KEY, deleted_at TEXT, created_at TEXT, $cols)");
 $pdo->exec("INSERT INTO material_definitions VALUES ('urun','seftali',1), ('alici','ÖRNEK ALICI',1)");
-$pdo->exec("INSERT INTO customs_declarations (company_name,company_address,buyer_name) VALUES ('GÜMRÜK A','ADRES A','Geçmiş Alıcı')");
+$pdo->exec("INSERT INTO customs_declarations (created_at,company_name,company_address,buyer_name) VALUES ('2026-03-13 10:00:00','GÜMRÜK A','ADRES A','Geçmiş Alıcı')");
+// Temiz başlangıçtan ÖNCEki beyan — öneride görünmemeli.
+$pdo->exec("INSERT INTO customs_declarations (created_at,company_name,company_address,buyer_name,brand) VALUES ('2025-10-01 10:00:00','ESKİ GÜMRÜK','ESKİ ADRES','ESKİ ALICI','ESKİ MARKA')");
 if (($argv[1] ?? '') === '--endpoint') {
     function require_login(): array { return ['id'=>1]; }
     function can_beyan(string $perm): bool { return getenv('BEYAN_TEST_DENY') !== '1'; }
@@ -49,6 +52,17 @@ ck('single id safe',$d['products']['ŞEFTALİ']['urun_id']==='1');
 ck('ambiguous no automatic HKS',!isset($d['products']['ELMA']));
 ck('history suggestions',in_array('GEÇMİŞ ALICI',$d['values']['buyer_name'],true));
 ck('history address',$d['companies']['GÜMRÜK A']==='ADRES A');
+ck('temiz başlangıç: eski beyan alıcısı YOK',!in_array('ESKİ ALICI',$d['values']['buyer_name'],true));
+ck('temiz başlangıç: eski beyan markası YOK',!in_array('ESKİ MARKA',$d['values']['brand'],true));
+ck('temiz başlangıç: eski gümrük/adres YOK',!isset($d['companies']['ESKİ GÜMRÜK']));
+ck('temiz başlangıç: tanım havuzu (material_definitions) kullanılmıyor',!in_array('ÖRNEK ALICI',$d['values']['buyer_name'],true));
+// Zaman damgasız (eski) KV tanımı görünmez; +ekle ile yeniden eklenince görünür.
+$pdo->exec("INSERT INTO hks_kv (anahtar,deger) VALUES ('beyan_defs_brand','{\"ESKI TANIM\":{\"name\":\"ESKİ TANIM\"}}')");
+ck('temiz başlangıç: damgasız eski KV tanımı YOK',!in_array('ESKİ TANIM',beyan_suggest_form_data()['values']['brand'],true));
+beyan_suggest_save($pdo,'brand','eski tanım');
+ck('+ekle sonrası tanım görünür (added_at damgalı)',in_array('ESKİ TANIM',beyan_suggest_form_data()['values']['brand'],true)
+   && !empty(beyan_suggest_read($pdo,'brand')['ESKI TANIM']['added_at']));
+$pdo->exec("DELETE FROM hks_kv");
 $r=beyan_suggest_save($pdo,'product_name','seftali');
 ck('catalog canonical id',$r['name']==='ŞEFTALİ' && $r['urun_id']==='1');
 ck('catalog no manual duplicate',(int)$pdo->query("SELECT count(*) FROM hks_kv")->fetchColumn()===0);
@@ -71,7 +85,7 @@ ck('name and address add',beyan_suggest_form_data()['companies']['DİĞER GÜMR�
 $catalog=[];
 ck('catalog missing manual fallback',beyan_suggest_save($pdo,'product_name','yeni ürün')['name']==='YENİ ÜRÜN');
 $pdo->exec('DROP TABLE hks_kv');
-ck('KV missing form works',in_array('ÖRNEK ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
+ck('KV missing form works',in_array('GEÇMİŞ ALICI',beyan_suggest_form_data()['values']['buyer_name'],true));
 try { beyan_suggest_save($pdo,'brand','ASYATEST');$failed=false; } catch (PDOException $e) {$failed=true;}
 ck('KV missing honest error and rollback',$failed && !$pdo->inTransaction());
 function endpoint(array $payload,array $env=[]): array {

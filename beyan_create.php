@@ -38,6 +38,11 @@ $f = [
     'sample_taken_at'   => '',
     'analysis_result_at'=> '',
     'analysis_note'     => '',
+    'note'              => '',
+    'sample_gross_kg'   => '',
+    'sample_net_kg'     => '',
+    'sample_crate_type' => '',
+    'sample_crate_count'=> '',
 ];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -50,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Büyük harf — seçili metin alanları
     foreach (['declaration_title', 'company_name', 'company_address', 'transport_type', 'vehicle_plate',
-              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type',
+              'line_type', 'party_no', 'product_name', 'product_variety', 'crate_type', 'sample_crate_type',
               'exit_depot', 'contact_person', 'buyer_name', 'brand'] as $_tf) {
         if ($f[$_tf] !== '') $f[$_tf] = tr_upper($f[$_tf]);
     }
@@ -60,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $checked = beyan_veri_dogrula($f);
     $errors = $checked['errors'];
+    if (mb_strlen($f['note'], 'UTF-8') > 2000) $errors[] = 'Not: en fazla 2000 karakter olabilir.';
     $gross_kg = $checked['values']['gross_kg'];
     $net_kg = $checked['values']['net_kg'];
     $pallet_ct = $checked['values']['pallet_count'];
@@ -81,15 +87,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              transport_type, vehicle_plate, line_type, party_no, pallet_count, product_name, product_variety,
              gross_kg, net_kg, crate_count, crate_type, exit_depot, contact_person,
              buyer_name, brand, status, analysis_note, sample_taken_at, analysis_result_at,
-             hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad,
+             hks_firma_id, hks_urun_id, hks_urun_ad, hks_ulke_id, hks_ulke_ad, note,
+             sample_gross_kg, sample_net_kg, sample_crate_type, sample_crate_count,
              created_by, updated_by, created_at, updated_at)
             VALUES
             (?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
              ?, ?, ?, ?, ?, ?,
-             ?, ?, ?, ?, ?,
-             ?, ?, NOW(), NOW())");
+             ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, NOW(), NOW())");
 
         $st->execute([
             $f['raw_text']          ?: null,
@@ -121,6 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $hks['urun_ad'],
             $hks['ulke_id'],
             $hks['ulke_ad'],
+            $f['note'] ?: null,
+            $checked['values']['sample_gross_kg'] ?? null,
+            $checked['values']['sample_net_kg'] ?? null,
+            $f['sample_crate_type'] ?: null,
+            $checked['values']['sample_crate_count'] ?? null,
             $user_id,
             $user_id,
         ]);

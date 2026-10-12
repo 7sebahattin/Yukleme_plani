@@ -148,14 +148,8 @@ render_flash();
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
-        <?php if (!$is_deleted && can_beyan('create')): ?>
-        <form method="post" action="beyan_kopyala.php" style="display:inline"
-              onsubmit="return confirm('Bu beyan TASLAK olarak kopyalanacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
-            <input type="hidden" name="id"   value="<?= $id ?>">
-            <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
-            <button type="submit" class="btn" title="Bu beyanın TASLAK kopyasını oluştur">⧉ Kopyala</button>
-        </form>
-        <?php endif; ?>
+        <button type="button" class="btn" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
+        <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
         <?php if (!$is_deleted && can_beyan('edit')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
@@ -355,6 +349,14 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 </div>
 
+<?php
+$nm_kasa = ($beyan['sample_crate_count'] ?? null) !== null && (int)$beyan['sample_crate_count'] > 0 ? number_format((int)$beyan['sample_crate_count'], 0, ',', '.') : '';
+$nm_cins = trim((string)($beyan['sample_crate_type'] ?? ''));
+$nm_brut = ($beyan['sample_gross_kg'] ?? null) !== null && (float)$beyan['sample_gross_kg'] > 0 ? fmt_unit_kg($beyan['sample_gross_kg']) . ' KG' : '';
+$nm_net  = ($beyan['sample_net_kg'] ?? null) !== null && (float)$beyan['sample_net_kg'] > 0 ? fmt_unit_kg($beyan['sample_net_kg']) . ' KG' : '';
+$nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Brüt: ' . $nm_brut : '', $nm_net !== '' ? 'Net: ' . $nm_net : '']);
+?>
+<div class="bv-yanyana<?= $nm_parca ? ' bv-yanyana-2' : '' ?>">
 <!-- 4. Analiz / Durum -->
 <div class="beyan-section" data-bf="durum">
     <div class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz / Durum</div>
@@ -424,6 +426,23 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
     <?php endif; ?>
 </div>
+
+<!-- Numune (v334): Analiz kartının yanında, yalnız doluysa -->
+<?php if ($nm_parca): ?>
+<div class="beyan-section" data-bf="urun">
+    <div class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</div>
+    <div class="bv-not"><?= implode('<br>', array_map('h', $nm_parca)) ?></div>
+</div>
+<?php endif; ?>
+</div>
+
+<!-- Not (v332) -->
+<?php if (trim((string)($beyan['note'] ?? '')) !== ''): ?>
+<div class="beyan-section" data-bf="uyari">
+    <div class="beyan-section-title" data-ic="kalem"><span class="bf-emoji" aria-hidden="true">📝</span> Not</div>
+    <div class="bv-not" style="white-space:pre-wrap"><?= h((string)$beyan['note']) ?></div>
+</div>
+<?php endif; ?>
 
 <!-- 5. WhatsApp Ham Metni (collapsible) -->
 <?php if ($beyan['raw_text']): ?>
@@ -1021,5 +1040,36 @@ function prompt_note(btn) {
 })();
 </script>
 <?php endif; ?>
+
+<script>
+(function () {
+    var btn = document.getElementById('waKopyalaBtn');
+    var kaynak = document.getElementById('waMetin');
+    if (!btn || !kaynak) return;
+    var metin = JSON.parse(kaynak.textContent);
+    var etiket = btn.textContent;
+    function bildir(ok) {
+        btn.textContent = ok ? '✓ Kopyalandı' : '✗ Kopyalanamadı';
+        setTimeout(function () { btn.textContent = etiket; }, 1800);
+    }
+    function yedek() {
+        var ta = document.createElement('textarea');
+        ta.value = metin; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;font-size:16px';
+        document.body.appendChild(ta); ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        return ok;
+    }
+    btn.addEventListener('click', function () {
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(metin).then(function () { bildir(true); }, function () { bildir(yedek()); });
+        } else {
+            bildir(yedek());
+        }
+    });
+})();
+</script>
 
 <?php render_footer(); ?>
