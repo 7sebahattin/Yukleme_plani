@@ -89,7 +89,7 @@ $hks_engel = null;
 if (!$hks_yetki)                 $hks_engel = 'Bildirim için beyan.write + records.write yetkisi gerekir.';
 elseif ($is_deleted)             $hks_engel = 'Arşivlenmiş beyan için bildirim yapılamaz.';
 elseif (!$hks_durum_ok)          $hks_engel = 'Bu beyan durumunda bildirim yapılamaz.';
-elseif ($hks_plaka === '')       $hks_engel = 'Araç plakası girilmeden bildirim yapılamaz — beyanı düzenleyip plakayı girin.';
+elseif ($hks_plaka === '')       $hks_engel = 'Araç plakası girilmeden bildirim yapılamaz.';
 elseif ($hks_net_kg <= 0)        $hks_engel = 'Net KG girilmeden bildirim yapılamaz.';
 // Plaka DOLU olsa bile eşleştirme eksikse geçilmez: hangi HKS firması, hangi
 // katalog ürünü ve hangi ülke olduğu beyanda tanımlı olmadan bildirim
@@ -115,7 +115,7 @@ $hks_eslestir = $hks_yetki && !$is_deleted && $hks_durum_ok && !$hks_aktif
 if ($hks_eslestir) {
     $hks_acik  = false;
     $hks_engel = 'Hal Bildirim bilgileri eksik (HKS firması / ürünü / ülke) — Eşleştir\'e basın, beyan verisinden doldurulur.'
-               . ($hks_plaka === '' ? ' Araç plakası da girilmeli: beyanı düzenleyip plakayı girin.' : '')
+               . ($hks_plaka === '' ? ' Araç plakası da girilmeli.' : '')
                . ($hks_net_kg <= 0 ? ' Net KG de girilmeli.' : '');
 }
 $hks_firma_adi = trim((string)($beyan['hks_firma_id'] ?? '')) !== ''
@@ -183,6 +183,7 @@ $bk_ulke  = trim((string)($beyan['hks_ulke_ad'] ?? ''));
 $bk_urun  = trim((string)($beyan['hks_urun_ad'] ?? '')) ?: trim((string)($beyan['product_name'] ?? ''));
 $bk_hks   = trim((string)($beyan['hks_urun_ad'] ?? '')) !== '';   // HKS karşılığı seçilmiş mi
 $bk_kg    = $beyan['net_kg'] !== null && (float)$beyan['net_kg'] > 0;
+$bk_plaka_hizli = !$is_deleted && can_beyan('write') && can_beyan('hks.write');   // v340: hızlı plaka girişi
 $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = '', string $ic = ''): void { ?>
     <div class="bk-hucre<?= $tam ? '' : ' bk-eksik' ?>"<?= $ic !== '' ? ' data-ic="' . h($ic) . '"' : '' ?>>
         <div class="bk-etiket"><?= h($etiket) ?></div>
@@ -201,7 +202,12 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
         $bk_hucre('Ürün',   $bk_urun, $bk_urun !== '' && $bk_hks,
                   $bk_urun !== '' && !$bk_hks ? 'HKS karşılığı seçilmedi' : '', 'kutu');
         $bk_hucre('Net KG', $bk_kg ? fmt_kg($beyan['net_kg']) : '', $bk_kg, '', 'terazi');
-        $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '', '', 'arac');
+        if ($hks_plaka === '' && $bk_plaka_hizli): ?>
+        <button type="button" class="bk-hucre bk-eksik bk-tikla" id="plakaHizliBtn" data-ic="arac" title="Plakayı hızlıca gir">
+            <div class="bk-etiket">Plaka</div>
+            <div class="bk-deger">girmek için dokunun</div>
+        </button>
+        <?php else: $bk_hucre('Plaka',  $hks_plaka, $hks_plaka !== '', '', 'arac'); endif;
         ?>
     </div>
 
@@ -255,6 +261,55 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
 </div>
 
+<?php endif; ?>
+<?php if ($bk_plaka_hizli && $hks_plaka === ''): ?>
+<dialog id="plakaHizliDlg" class="plaka-hizli" aria-labelledby="plakaHizliBaslik">
+    <form method="dialog" id="plakaHizliForm" autocomplete="off">
+        <h3 id="plakaHizliBaslik">Araç Plakası</h3>
+        <input type="text" id="plakaHizliInput" class="form-control" maxlength="20" inputmode="latin"
+               autocapitalize="characters" spellcheck="false" aria-label="Araç plakası">
+        <div id="plakaHizliHata" class="plaka-hizli-hata" role="alert" hidden></div>
+        <div class="plaka-hizli-btn">
+            <button type="button" class="btn" id="plakaHizliIptal">Vazgeç</button>
+            <button type="submit" class="btn btn-primary" id="plakaHizliKaydet">Kaydet</button>
+        </div>
+    </form>
+</dialog>
+<script>
+(function () {
+    var btn = document.getElementById('plakaHizliBtn'), dlg = document.getElementById('plakaHizliDlg');
+    if (!btn || !dlg || typeof dlg.showModal !== 'function') { if (btn) btn.hidden = true; return; }
+    var form = document.getElementById('plakaHizliForm'), inp = document.getElementById('plakaHizliInput'),
+        hata = document.getElementById('plakaHizliHata'), kaydet = document.getElementById('plakaHizliKaydet');
+    var BEYAN_ID = <?= (int)$id ?>, CSRF = <?= json_encode(csrf_token()) ?>;
+    function norm(v) { return v.replace(/\s+/g, '').toLocaleUpperCase('tr-TR'); }
+    btn.addEventListener('click', function () { hata.hidden = true; inp.value = ''; dlg.showModal(); inp.focus(); });
+    document.getElementById('plakaHizliIptal').addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+    inp.addEventListener('input', function () {
+        var p = inp.selectionStart, n = norm(inp.value);
+        if (n !== inp.value) { inp.value = n; try { inp.setSelectionRange(p, p); } catch (x) {} }
+    });
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var v = norm(inp.value);
+        if (v === '') { hata.textContent = 'Plaka girin.'; hata.hidden = false; return; }
+        kaydet.disabled = true; kaydet.textContent = 'Kaydediliyor…';
+        fetch('api_beyan_plaka.php', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: BEYAN_ID, plaka: v, csrf: CSRF }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+            if (!res.ok || !res.j.ok) throw new Error((res.j && res.j.error) || 'Plaka kaydedilemedi.');
+            location.reload();
+        })
+        .catch(function (err) {
+            hata.textContent = err.message; hata.hidden = false;
+            kaydet.disabled = false; kaydet.textContent = 'Kaydet';
+        });
+    });
+})();
+</script>
 <?php endif; ?>
 <!-- 1. Temel Bilgiler -->
 <div class="beyan-section" data-bf="temel">

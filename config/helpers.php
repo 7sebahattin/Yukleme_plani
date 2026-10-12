@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v339');
+    define('APP_SURUM', 'v340');
 }
 
 // --- HTML kaçışı ---
@@ -3461,15 +3461,12 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate 
         echo '</select></div>';
     };
 
-    echo '<p class="muted" style="font-size:.85rem;margin-top:0">'
-       . 'HKS hazırlığı için firma, ürün, ülke ve plaka burada. Net KG beyan bölümünden alınır. '
-       . 'Taslak oluştururken eksikler kontrol edilir; birim fiyat ayrıca sorulur.</p>';
     echo '<div class="beyan-form-grid">';
     $sec('hks_firma_id', 'HKS Firması', $firmalar,            $firma_sec, '',
          'Firma yazın veya listeden seçin', 'bina');
-    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  $urun_not,
+    $sec('hks_urun_id',  'HKS Ürünü',   $katalog['urunler'],  $urun_sec,  '',
          'Ürün yazın veya listeden seçin', 'paket');
-    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  $ulke_not,
+    $sec('hks_ulke_id',  'Ülke',        $katalog['ulkeler'],  $ulke_sec,  '',
          'Ülke yazın veya listeden seçin', 'kure');
     $plaka_alani($f);
     echo '</div></div>';
