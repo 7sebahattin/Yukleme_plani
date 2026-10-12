@@ -1060,9 +1060,12 @@ function prompt_note(btn) {
     var pinned = false;
     function setOpen(open) {
         open = open && desktop.matches;
+        var wasOpen = picker.classList.contains('is-open');
         picker.classList.toggle('is-open', open);
         trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-        if (open) fitOptions();
+        // Focusing a scrolled option must not resize/reposition it between
+        // pointerdown and pointerup, otherwise its click misses the button.
+        if (open && !wasOpen) fitOptions();
     }
     function fitOptions() {
         if (!desktop.matches) return;

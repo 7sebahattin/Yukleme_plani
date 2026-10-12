@@ -66,9 +66,9 @@ function render(status = 'beyan_acildi', profile = '') {
     ok((await trigger.textContent()).includes('NUMUNE') && await menu.isHidden() && await menu.locator('[value=beyan_acildi]').count() === 1, 'server re-render promotes selected state and restores old state as alternative');
     await trigger.hover();
     await page.evaluate(() => {window.promptCalls = 0; window.prompt = () => {window.promptCalls++; return '  Uygun olmayan numune  ';};});
-    await menu.locator('[value=red]').press('Enter');
+    await menu.locator('[value=red]').click();
     await page.waitForFunction(() => statusPosts.length === 1);
-    ok(await page.evaluate(() => Object.fromEntries(statusPosts[0]).analysis_note === 'Uygun olmayan numune'), 'Red retains mandatory trimmed note in existing request');
+    ok(await page.evaluate(() => promptCalls === 1 && Object.fromEntries(statusPosts[0]).analysis_note === 'Uygun olmayan numune'), 'mouse click on scrolled Red option submits mandatory trimmed note');
     await setup();
     ok(await page.locator('#waKopyalaBtn').count() === 1 && await page.locator('#waMetin').count() === 1, 'one copy control and one text source');
     const heading = await page.locator('h1').boundingBox(), copy = await page.locator('#waKopyalaBtn').boundingBox();
