@@ -16,6 +16,8 @@ $st->execute([$id]);
 $beyan = $st->fetch();
 if (!$beyan) { set_flash('error', 'Beyan bulunamadı.'); header('Location: beyanlar.php'); exit; }
 
+$beyan = beyan_redact_fields($beyan);
+
 $is_deleted = !empty($beyan['deleted_at']);
 $statuses   = beyan_statuses();
 $cur_status = (string)($beyan['status'] ?? 'beyan_acildi');
@@ -31,7 +33,7 @@ if (!empty($beyan['loading_record_id'])) {
 // ── Eşleştirme: yüklendi olmayan yükleme planları (modal için) ──
 // Buton yalnızca düzenleme yetkisi olan, silinmemiş ve henüz yüklenmemiş
 // beyanlarda aktif olur.
-$can_match     = !$is_deleted && can_beyan('write') && (can('records.write') || is_admin())
+$can_match     = !$is_deleted && can_beyan('match') && (can('records.write') || is_admin())
                  && empty($beyan['loading_record_id']);
 $match_records = [];
 $match_q = trim((string)($_GET['match_q'] ?? ''));
@@ -76,11 +78,11 @@ if ($can_match) {
 // beyan.write TEK BAŞINA yetmez — HKS'te rüsum doğuran zincirin ilk halkası
 // olduğu için Hal Kayıt panelinin kapısı olan records.write de aranır.
 $hks_plaka     = trim((string)($beyan['vehicle_plate'] ?? ''));
-$hks_yetki     = can_beyan('write') && (can('records.write') || is_admin());
+$hks_yetki     = can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin());
 $hks_durum_ok  = in_array($cur_status, beyan_hks_uygun_durumlar(), true);
 $hks_net_kg    = (float)($beyan['net_kg'] ?? 0);
 $hks_aktif     = beyan_hks_aktif($id);
-$hks_gecmis    = beyan_hks_gecmis($id);
+$hks_gecmis    = can_beyan('hks.read') ? beyan_hks_gecmis($id) : [];
 
 // Buton neden kapalı? Tek tek söylenir — "pasif buton" sessiz kalmaz.
 $hks_engel = null;
@@ -148,7 +150,7 @@ render_flash();
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
         <button type="button" class="btn" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
         <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
-        <?php if (!$is_deleted && can_beyan('write')): ?>
+        <?php if (!$is_deleted && can_beyan('edit')): ?>
         <a href="beyan_edit.php?id=<?= $id ?>" class="btn btn-primary">Düzenle</a>
         <?php endif; ?>
         <?php if (!$is_deleted && can_beyan('delete')): ?>
@@ -189,6 +191,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     </div>
 <?php };
 ?>
+<?php if (can_beyan('hks.read')): ?>
 <div class="beyan-section bk-kart" data-bf="hks">
     <div class="beyan-section-title" data-ic="hal"><span class="bf-emoji" aria-hidden="true">🏛</span> Hal Kayıt Bildirimi</div>
     <div class="bk-grid">
@@ -252,6 +255,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
     <?php endif; ?>
 </div>
 
+<?php endif; ?>
 <!-- 1. Temel Bilgiler -->
 <div class="beyan-section" data-bf="temel">
     <div class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Temel Bilgiler</div>
@@ -385,7 +389,7 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
     // duruyor, seçili olan ÇERÇEVE ile işaretli ve doğrudan sonuca gidilebilir.
     // Sunucu status_only dalında güncel satırın durum/not alanlarını değiştirir.
     $next_states = beyan_next_statuses($cur_status);   // yalnız "önerilen" işareti
-    if (!$is_deleted && can_beyan('write')):
+    if (!$is_deleted && can_beyan('status')):
     ?>
     <div class="bv-durum">
         <div class="muted bv-durum-ipucu">
@@ -480,7 +484,7 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
     <?php endif; ?>
     <?php if ($can_match): ?>
     <button type="button" class="btn" id="beyanMatchOpenBtn">🔗 Yükleme Planı ile Eşleştir</button>
-    <?php elseif (!$is_deleted && can_beyan('write') && !$linked_record): ?>
+    <?php elseif (!$is_deleted && can_beyan('match') && !$linked_record): ?>
     <p class="muted" style="font-size:.82rem">Planla eşleştirmek için yükleme kayıtlarını düzenleme yetkisi gerekir.</p>
     <?php endif; ?>
 </div>

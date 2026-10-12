@@ -20,6 +20,8 @@ $PDO_TEST->sqliteCreateFunction('NOW', fn() => date('Y-m-d H:i:s'), 0);
 function db(): PDO { global $PDO_TEST; return $PDO_TEST; }
 
 $PERMS = ['beyan.read', 'beyan.write', 'beyan.delete', 'records.write', 'maliyet.read'];
+if (getenv('BEYAN_TEST_PROFILE') === 'restricted') $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+if (getenv('BEYAN_TEST_PROFILE') === 'readonly') $PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed', 'beyan.contact.read', 'beyan.analysis.read', 'beyan.hks.read', 'beyan.source.read'];
 function current_user(): ?array { return ['id' => 1, 'username' => 'test', 'display_name' => 'Test']; }
 function can(string $p): bool { global $PERMS; return in_array($p, $PERMS, true); }
 function is_admin(): bool { return false; }
@@ -48,6 +50,7 @@ db()->exec("CREATE TABLE customs_declarations (
   exit_depot TEXT, contact_person TEXT, buyer_name TEXT, brand TEXT,
   status TEXT DEFAULT 'beyan_acildi', analysis_note TEXT,
   sample_taken_at TEXT, analysis_result_at TEXT, loading_record_id INT,
+  note TEXT, sample_gross_kg REAL, sample_net_kg REAL, sample_crate_type TEXT, sample_crate_count INTEGER,
   hks_durum TEXT, hks_firma_id TEXT, hks_urun_id TEXT, hks_urun_ad TEXT,
   hks_ulke_id TEXT, hks_ulke_ad TEXT,
   created_by INT, updated_by INT, created_at TEXT DEFAULT '2026-07-01 10:00',

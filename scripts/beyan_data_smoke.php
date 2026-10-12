@@ -1,6 +1,7 @@
 <?php
 // CLI, bellek içi/geçici SQLite ve izole test oturumu. Gerçek DB/HKS yoktur.
 declare(strict_types=1);
+require_once dirname(__DIR__) . '/config/beyan_permissions.php';
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 // helpers.php üst düzeyde auto-migration içerir; include etmek yerine yalnız
 // test edilen gerçek fonksiyonları tokenizer ile yükle. Migration ASLA çalışmaz.

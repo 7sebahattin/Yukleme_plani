@@ -196,7 +196,8 @@ function calistir(array $cfg): array {
     $cfg += ['perms' => $PERMS, 'method' => 'POST', 'post' => [], 'get' => []];
     $f = sys_get_temp_dir() . '/kop_cfg_' . getmypid() . '.json';
     file_put_contents($f, json_encode($cfg, JSON_UNESCAPED_UNICODE));
-    $cmd = 'KOP_DB=' . escapeshellarg($DB_DOSYA) . ' ' . escapeshellarg(PHP_BINARY) . ' '
+    putenv('KOP_DB=' . $DB_DOSYA);
+    $cmd = escapeshellarg(PHP_BINARY) . ' '
          . escapeshellarg(__FILE__) . ' --child ' . escapeshellarg($f) . ' 2>&1';
     $out = (string)shell_exec($cmd);
     @unlink($f);
@@ -577,17 +578,42 @@ if (preg_match('/<thead>(.*?)<\/thead>/s', $h, $mt) && preg_match('/<tbody>.*?<t
     ok('[D] ilk tablo: başlık sütun sayısı = hücre sayısı', $nth === $ntd, "th=$nth td=$ntd");
 } else ok('[D] ilk tablo bulunamadı', false, 'thead/tbody regex');
 
+// Real restricted edit: forged section values must not replace stored data.
+$limited_id = beyan_ekle($TAM + ['status' => 'temiz', 'analysis_result_at' => '2026-07-03 12:34:56',
+    'sample_gross_kg' => 5.5, 'sample_net_kg' => 4.5, 'sample_crate_type' => 'KASA', 'sample_crate_count' => 1]);
+$before = satir($limited_id);
+$forged = $before;
+$forged['csrf'] = 'TOKEN-OK';
+$forged['edit_token'] = beyan_edit_token($before);
+$forged['party_no'] = 'UPDATED-42';
+$forged['vehicle_plate'] = '34ABC123';
+$forged['status'] = 'red';
+foreach (beyan_permission_fields() as $fields) foreach ($fields as $field) $forged[$field] = 'FORGED';
+$r = calistir(['script' => 'beyan_edit.php', 'get' => ['id' => $limited_id], 'post' => $forged,
+    'perms' => ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed']]);
+ok('[E] restricted edit succeeds without hidden-section catalog access', hatasiz($r) && konum($r) === 'beyan_view.php?id=' . $limited_id, json_encode($r));
+$after = satir($limited_id);
+ok('[E] restricted edit updates allowed base field', $after['party_no'] === 'UPDATED-42');
+ok('[E] restricted edit preserves submitted base plate', $after['vehicle_plate'] === '34ABC123');
+ok('[E] restricted edit cannot forge status', $after['status'] === $before['status']);
+foreach (beyan_permission_fields() as $fields) foreach ($fields as $field) {
+    ok('[E] restricted edit preserves ' . $field, $after[$field] === $before[$field]);
+}
+$r = kopyala(['id' => (string)$limited_id, 'csrf' => 'TOKEN-OK'],
+    ['perms' => ['beyan.read', 'beyan.create', 'beyan.permissions.detailed']]);
+ok('[E] create-only copy opens accessible detail page', hatasiz($r) && str_starts_with(konum($r), 'beyan_view.php?id='));
+
 // ══ F) Statik kontroller ══════════════════════════════════════════════════
 echo "── F) statik ──\n";
 $kop = (string)file_get_contents($ROOT . '/beyan_kopyala.php');
-ok('[F] beyan_kopyala: POST kapısı, csrf_check, can_beyan(write)',
-   strpos($kop, "REQUEST_METHOD'] !== 'POST'") !== false && strpos($kop, 'csrf_check(') !== false && strpos($kop, "can_beyan('write')") !== false);
+ok('[F] beyan_kopyala: POST kapısı, csrf_check, can_beyan(create)',
+   strpos($kop, "REQUEST_METHOD'] !== 'POST'") !== false && strpos($kop, 'csrf_check(') !== false && strpos($kop, "can_beyan('create')") !== false);
 ok('[F] beyan_kopyala: parti/plaka/ham metin INSERT\'te yok',
    preg_match('/INSERT INTO customs_declarations\s*\(([^)]*)\)/s', $kop, $mi) === 1
    && !preg_match('/party_no|vehicle_plate|raw_text|unmatched_text|loading_record_id|hks_durum|analysis_note|sample_taken_at|analysis_result_at/', $mi[1]));
 ok('[F] beyan_kopyala: CSRF yetki kontrolünden SONRA, POST kapısından SONRA ve yazmadan ÖNCE',
-   strpos($kop, 'csrf_check(') < strpos($kop, 'INSERT INTO customs_declarations') && strpos($kop, "can_beyan('write')") < strpos($kop, 'csrf_check('));
-ok('[F] sw.js/APP_SURUM v330 senkron', (function () use ($ROOT) {
+   strpos($kop, 'csrf_check(') < strpos($kop, 'INSERT INTO customs_declarations') && strpos($kop, "can_beyan('create')") < strpos($kop, 'csrf_check('));
+ok('[F] sw.js/APP_SURUM senkron', (function () use ($ROOT) {
     preg_match("/APP_SURUM',\s*'v(\d+)/", (string)file_get_contents($ROOT . '/config/helpers.php'), $a);
     preg_match("/yukleme-plani-v(\d+)/", (string)file_get_contents($ROOT . '/sw.js'), $b);
     return isset($a[1], $b[1]) && $a[1] === $b[1];

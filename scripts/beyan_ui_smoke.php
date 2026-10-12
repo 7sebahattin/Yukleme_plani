@@ -912,5 +912,25 @@ ok('[eşleştirme] yüklendi işaretli bağlantısız beyan eşleştirilebilir',
 $PERMS = ['beyan.read', 'beyan.write'];
 ok('[eşleştirme] plan düzenleme yetkisi olmadan eşleştirme açılmaz', strpos(render_beyan($ID_BOS), 'id="beyanMatchOpenBtn"') === false);
 
+// Detailed roles: protected content must never reach HTML or inline scripts.
+db()->exec("UPDATE customs_declarations SET buyer_name='CONTACT_SECRET_942', company_address='ADDRESS_SECRET_942', contact_person='PERSON_SECRET_942', analysis_note='ANALYSIS_SECRET_942', raw_text='SOURCE_SECRET_942', unmatched_text='UNMATCHED_SECRET_942', hks_ulke_ad='COUNTRY_SECRET_942' WHERE id=$ID_BOS");
+$PERMS = ['beyan.read', 'beyan.edit', 'beyan.permissions.detailed'];
+db()->exec("UPDATE customs_declarations SET sample_crate_type='SAMPLE_SECRET_942', sample_gross_kg=9, sample_net_kg=8, sample_crate_count=2 WHERE id=$ID_BOS");
+$restricted_detail = render_beyan($ID_BOS);
+$restricted_list = render_liste([]);
+foreach (['CONTACT_SECRET_942','ADDRESS_SECRET_942','PERSON_SECRET_942','ANALYSIS_SECRET_942','SOURCE_SECRET_942','UNMATCHED_SECRET_942','COUNTRY_SECRET_942','SAMPLE_SECRET_942'] as $secret) {
+    ok('[yetki] gizli veri HTML/JS içinde yok: ' . $secret, !str_contains($restricted_detail . $restricted_list, $secret));
+}
+ok('[yetki] HKS kartı ve tablo başlığı gizli', !str_contains($restricted_detail, 'bk-kart') && !str_contains($restricted_list, '<th>HKS Firma</th>'));
+ok('[yetki] durum, eşleştirme ve bildirim işlemleri kapalı', !str_contains($restricted_detail, 'class="beyan-durum-form"') && !str_contains($restricted_detail, 'id="beyanMatchOpenBtn"') && !str_contains($restricted_detail, 'id="hksOpenBtn"'));
+ok('[yetki] genel düzenleme izni kopyalama izni vermez', !str_contains($restricted_detail . $restricted_list, 'action="beyan_kopyala.php"'));
+
+$PERMS = ['beyan.read', 'beyan.status', 'beyan.permissions.detailed'];
+$status_role = render_beyan($ID_BOS);
+ok('[yetki] sadece durum yetkisi durum formunu açar', str_contains($status_role, 'class="beyan-durum-form"') && !str_contains($status_role, 'id="beyanMatchOpenBtn"'));
+$PERMS = ['beyan.read', 'beyan.match', 'records.write', 'beyan.permissions.detailed'];
+$match_role = render_beyan($ID_BOS);
+ok('[yetki] sadece eşleştirme yetkisi durum formunu açmaz', !str_contains($match_role, 'class="beyan-durum-form"') && str_contains($match_role, 'id="beyanMatchOpenBtn"'));
+
 echo "\n" . ($fail === 0 ? "TUM TESTLER GECTI\n" : "$fail TEST BASARISIZ\n");
 exit($fail === 0 ? 0 : 1);

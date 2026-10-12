@@ -12,7 +12,7 @@ declare(strict_types=1);
 // gözle doğrulamak). sw.js'teki CACHE_NAME sayısıyla EŞLENİR — anlamlı bir
 // değişiklik yapıp SW cache'i artırdığınızda BU DEĞERİ DE aynı sayıya çekin.
 if (!defined('APP_SURUM')) {
-    define('APP_SURUM', 'v336');
+    define('APP_SURUM', 'v337');
 }
 
 // --- HTML kaçışı ---
@@ -2508,9 +2508,19 @@ function beyan_next_statuses(string $current): array {
     return $map[$current] ?? [];
 }
 
+require_once __DIR__ . '/beyan_permissions.php';
 function can_beyan(string $perm): bool {
-    if (!function_exists('can')) return true;
-    return can('beyan.' . $perm) || (function_exists('is_admin') && is_admin());
+    if (!function_exists('can')) return false;
+    if (function_exists('is_admin') && is_admin()) return true;
+    if (!can('beyan.read')) return false;
+    if (str_ends_with($perm, '.write') && !can_beyan(substr($perm, 0, -6) . '.read')) return false;
+    if (can('beyan.' . $perm)) return true;
+    // Isolated callers that stub can() still retain legacy behavior.
+    if (!function_exists('user_permissions') && !can('beyan.permissions.detailed')) {
+        $expanded = beyan_expand_role_permissions(array_filter(['beyan.read', 'beyan.write'], 'can'));
+        return in_array('beyan.' . $perm, $expanded, true);
+    }
+    return false;
 }
 
 // ── Sayı normalize: zaten sayı ise dokunma (parser JSON'undan gelen float
@@ -3352,7 +3362,7 @@ function bb_ulke_tahmin(array $adaylar, array $ulkeler): array {
 //
 // $f: form değerleri (hks_firma_id / hks_urun_id / hks_ulke_id)
 // $beyan: mevcut beyan satırı (yeni kayıtta null) — ön-doldurma ipuçları için
-function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
+function beyan_hks_form_bolumu(array $f, ?array $beyan = null, bool $show_plate = true): void {
     $katalog = bb_katalog();
 
     // data-bf / data-ic / .bf-emoji: yalnız Yeni Beyan formunun (form.bf) görsel
@@ -3364,7 +3374,9 @@ function beyan_hks_form_bolumu(array $f, ?array $beyan = null): void {
     // girilebilmeli, bu yüzden aşağıdaki fail-closed dönüşünden ÖNCE çizilir.
     // (Beyanın tek plaka alanı budur; "Temel Bilgiler"de ikinci bir kopya
     //  OLUŞTURMAYIN — aynı `name` ile iki alan POST'ta çakışır.)
-    $plaka_alani = function (array $f): void { ?>
+    $plaka_alani = function (array $f) use ($show_plate): void {
+        if (!$show_plate) return;
+        ?>
         <div class="form-group" data-ic="arac">
             <label class="form-label">Araç Plakası</label>
             <input type="text" name="vehicle_plate" class="form-control"

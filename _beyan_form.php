@@ -4,13 +4,26 @@ $is_edit = isset($beyan) && is_array($beyan);
 $form_action = $is_edit ? 'beyan_edit.php?id=' . (int)$id : 'beyan_create.php';
 $return_url = $is_edit ? 'beyan_view.php?id=' . (int)$id : 'beyanlar.php';
 $suggest_data = beyan_suggest_form_data();
+foreach (beyan_permission_fields() as $section => $names) {
+    if (!can_beyan($section . '.read')) foreach ($names as $name) unset($suggest_data['values'][$name]);
+}
+if (!can_beyan('contact.read')) $suggest_data['companies'] = [];
+if (!can_beyan('hks.read')) $suggest_data['products'] = [];
+$f = beyan_redact_fields($f);
+$tabs = ['beyan' => 'Beyan'];
+if (can_beyan('analysis.read')) $tabs['analiz'] = 'Analiz';
+if (can_beyan('hks.read')) $tabs['hks'] = 'Hal Bildirim';
+if (can_beyan('source.read')) $tabs['kaynak'] = 'Kaynak metin';
 $field = static function (string $name, string $label, string $icon, string $mode = '') use ($f): void {
+    $section = null;
+    foreach (beyan_permission_fields() as $key => $names) if (in_array($name, $names, true)) $section = $key;
+    if ($section !== null && !can_beyan($section . '.read')) return;
     $field_id = 'bf_' . $name;
     ?>
     <div class="form-group" data-ic="<?= h($icon) ?>">
         <label class="form-label" for="<?= h($field_id) ?>"><?= h($label) ?></label>
         <input type="text" id="<?= h($field_id) ?>" name="<?= h($name) ?>" class="form-control"
-               value="<?= h((string)($f[$name] ?? '')) ?>"<?= $mode !== '' ? ' inputmode="' . h($mode) . '"' : ' data-uppercase="tr"' ?><?php if (isset(beyan_suggest_fields()[$name])): ?> data-suggest="<?= h($name) ?>" data-suggest-label="<?= h($label) ?>" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"<?php endif; ?>>
+               value="<?= h((string)($f[$name] ?? '')) ?>"<?= $section !== null && !can_beyan($section . '.write') ? ' disabled' : '' ?><?= $mode !== '' ? ' inputmode="' . h($mode) . '"' : ' data-uppercase="tr"' ?><?= $name === 'vehicle_plate' ? ' data-nospace autocomplete="off"' : '' ?><?php if (isset(beyan_suggest_fields()[$name])): ?> data-suggest="<?= h($name) ?>" data-suggest-label="<?= h($label) ?>" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"<?php endif; ?>>
     </div>
     <?php
 };
@@ -44,11 +57,14 @@ $field = static function (string $name, string $label, string $icon, string $mod
     </div>
     <?php endif; ?>
 
+    <?php if (!can_beyan('analysis.write') || !can_beyan('contact.write') || !can_beyan('hks.write') || !can_beyan('source.write')): ?>
+    <p class="beyan-permission-note">Yalnız yetkili olduğunuz alanları düzenleyebilirsiniz. Soluk alanlar salt okunurdur; kayıtta korunur.</p>
+    <?php endif; ?>
     <div class="beyan-workspace-grid">
         <div class="beyan-workspace-main">
             <!-- JS yokken bütün bölümler erişilebilir. JS sekmeleri etkinleştirir. -->
             <div class="beyan-workspace-tabs" data-beyan-tabs role="tablist" aria-label="Beyan bölümleri" hidden>
-                <?php foreach (['beyan' => 'Beyan', 'analiz' => 'Analiz', 'hks' => 'Hal Bildirim', 'kaynak' => 'Kaynak metin'] as $key => $label): ?>
+                <?php foreach ($tabs as $key => $label): ?>
                 <button type="button" class="btn btn-ghost" id="beyanTab_<?= h($key) ?>" role="tab"
                         aria-controls="beyanPanel_<?= h($key) ?>" aria-selected="<?= $key === 'beyan' ? 'true' : 'false' ?>"
                         data-beyan-tab="<?= h($key) ?>"<?= $key !== 'beyan' ? ' tabindex="-1"' : '' ?>><?= h($label) ?></button>
@@ -64,10 +80,11 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php $field('exit_depot', 'Çıkış Depo', 'depo'); ?>
                         <?php $field('transport_type', 'Nakliye Türü', 'tir'); ?>
                         <?php $field('line_type', 'Hat / Güzergah', 'rota'); ?>
+                        <?php if (!can_beyan('hks.write')) $field('vehicle_plate', 'Araç Plakası', 'arac'); ?>
                     </div>
                     <div class="form-group" data-ic="liste">
                         <label class="form-label" for="bf_status">Durum</label>
-                        <select id="bf_status" name="status" class="form-control">
+                        <select id="bf_status" name="status" class="form-control"<?= !can_beyan('status') ? ' disabled' : '' ?>>
                             <?php foreach (beyan_durum_akis_sirasi() as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
                             <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>><?= h($sv['label']) ?></option>
                             <?php endforeach; ?>
@@ -100,10 +117,12 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php $field('company_name', 'Gümrük Adı', 'bina'); ?>
                         <?php $field('contact_person', 'İlgili Kişi', 'rehber'); ?>
                     </div>
+                    <?php if (can_beyan('contact.read')): ?>
                     <div class="form-group" data-ic="konum">
                         <label class="form-label" for="bf_company_address">Gümrük Adresi</label>
-                        <textarea id="bf_company_address" name="company_address" rows="2" class="form-control" data-uppercase="tr" data-suggest="company_address" data-suggest-label="Gümrük Adresi" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"><?= h($f['company_address']) ?></textarea>
+                        <textarea id="bf_company_address"<?= !can_beyan('contact.write') ? ' disabled' : '' ?> name="company_address" rows="2" class="form-control" data-uppercase="tr" data-suggest="company_address" data-suggest-label="Gümrük Adresi" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"><?= h((string)$f['company_address']) ?></textarea>
                     </div>
+                    <?php endif; ?>
                 </section>
 
                 <section class="beyan-section" data-bf="uyari" data-beyan-single-section>
@@ -115,8 +134,9 @@ $field = static function (string $name, string $label, string $icon, string $mod
                 </section>
             </div>
 
+            <?php if (can_beyan('analysis.read')): ?>
             <div id="beyanPanel_analiz" data-beyan-panel="analiz" role="tabpanel" aria-labelledby="beyanTab_analiz">
-                <section class="beyan-section" data-bf="durum" data-beyan-single-section>
+                <fieldset <?= !can_beyan('analysis.write') ? 'disabled' : '' ?> class="beyan-section" data-bf="durum" data-beyan-single-section>
                     <h2 class="beyan-section-title" data-ic="grafik"><span class="bf-emoji" aria-hidden="true">📊</span> Analiz Bilgileri</h2>
                     <?php if ($is_edit): ?>
                     <div class="beyan-form-grid">
@@ -134,9 +154,9 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     <?php endif; ?>
                     <div class="form-group" data-ic="kalem">
                         <label class="form-label" for="analysisNote">Analiz Notu <span class="muted" id="noteRequired">(Red durumunda zorunlu)</span></label>
-                        <textarea name="analysis_note" id="analysisNote" rows="3" class="form-control"<?= $f['status'] === 'red' ? ' required' : '' ?>><?= h($f['analysis_note']) ?></textarea>
+                        <textarea name="analysis_note" id="analysisNote" rows="3" class="form-control"<?= $f['status'] === 'red' ? ' required' : '' ?>><?= h((string)$f['analysis_note']) ?></textarea>
                     </div>
-                </section>
+                </fieldset>
 
                 <section class="beyan-section" data-bf="durum" data-beyan-single-section>
                     <h2 class="beyan-section-title" data-ic="tup"><span class="bf-emoji" aria-hidden="true">🧪</span> Numune</h2>
@@ -150,33 +170,40 @@ $field = static function (string $name, string $label, string $icon, string $mod
                 </section>
             </div>
 
+            <?php endif; ?>
+            <?php if (can_beyan('hks.read')): ?>
             <div id="beyanPanel_hks" data-beyan-panel="hks" role="tabpanel" aria-labelledby="beyanTab_hks">
                 <div class="beyan-workspace-hks" aria-label="HKS hazırlık bilgileri" data-beyan-single-section>
-                    <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null); ?>
+                    <fieldset class="beyan-permission-fieldset"<?= !can_beyan('hks.write') ? ' disabled' : '' ?>>
+                    <?php beyan_hks_form_bolumu($f, $is_edit ? $beyan : null, can_beyan('hks.write')); ?>
+                    </fieldset>
                 </div>
             </div>
+            <?php endif; ?>
 
+            <?php if (can_beyan('source.read')): ?>
             <div id="beyanPanel_kaynak" data-beyan-panel="kaynak" role="tabpanel" aria-labelledby="beyanTab_kaynak">
-                <section class="beyan-section" data-bf="wa">
+                <fieldset <?= !can_beyan('source.write') ? 'disabled' : '' ?> class="beyan-section" data-bf="wa">
                     <h2 class="beyan-section-title" data-ic="mesaj"><span class="bf-emoji" aria-hidden="true">📱</span> WhatsApp Metni<small class="bf-alt">Mesajı yapıştırıp ayrıştırın; bulunan bilgileri kaydetmeden önce kontrol edin.</small></h2>
                     <div class="form-group" data-ic="metin">
                         <label class="form-label" for="bf_raw_text">Kaynak metin</label>
-                        <textarea id="bf_raw_text" name="raw_text" rows="6" class="form-control beyan-source-text" placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırın."><?= h($f['raw_text']) ?></textarea>
+                        <textarea id="bf_raw_text" name="raw_text" rows="6" class="form-control beyan-source-text" placeholder="WhatsApp beyan mesaj(lar)ını buraya yapıştırın."><?= h((string)$f['raw_text']) ?></textarea>
                     </div>
                     <div>
                         <button type="button" class="btn btn-secondary bf-ayristir" data-ic="sihir" data-beyan-parse-btn data-base-url="<?= h(base_url()) ?>">Metni Ayrıştır</button>
                     </div>
                     <div id="beyanParseStatus" aria-live="polite" hidden></div>
                     <?php if (!$is_edit): ?><div id="beyanBulkPreview" hidden></div><?php endif; ?>
-                    <details class="beyan-unmatched" data-beyan-unmatched<?= trim($f['unmatched_text']) === '' ? ' hidden' : '' ?>>
+                    <details class="beyan-unmatched" data-beyan-unmatched<?= trim((string)$f['unmatched_text']) === '' ? ' hidden' : '' ?>>
                         <summary>Eşleşmeyen / Dikkat Edilecek Satırlar</summary>
                         <div class="form-group" data-ic="uyari">
                             <label class="form-label" for="bf_unmatched_text">Kontrol edilecek metin</label>
-                            <textarea id="bf_unmatched_text" name="unmatched_text" rows="3" class="form-control"><?= h($f['unmatched_text']) ?></textarea>
+                            <textarea id="bf_unmatched_text" name="unmatched_text" rows="3" class="form-control"><?= h((string)$f['unmatched_text']) ?></textarea>
                         </div>
                     </details>
-                </section>
+                </fieldset>
             </div>
+            <?php endif; ?>
         </div>
 
     </div>

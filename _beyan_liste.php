@@ -16,6 +16,7 @@
 // Fonksiyon TANIMLAMAZ: sayfa testte iki kez include edilir.
 // =========================================================
 if (!isset($sec_rows)) return;
+$sec_rows = array_map('beyan_redact_fields', $sec_rows);
 $firma_adlari  = $firma_adlari  ?? [];
 $kopyala_yetki = $kopyala_yetki ?? false;
 $firma_ad = function (array $r) use ($firma_adlari): string {
@@ -39,12 +40,11 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             <th class="num">Kasa</th>
             <th class="num">Brüt KG</th>
             <th class="num">Net KG</th>
-            <th>Alıcı</th>
+            <?php if (can_beyan('contact.read')): ?><th>Alıcı</th><?php endif; ?>
             <th>Marka</th>
             <th>Çıkış Depo</th>
             <th>Plaka</th>
-            <th>HKS Firma</th>
-            <th>Ülke</th>
+            <?php if (can_beyan('hks.read')): ?><th>HKS Firma</th><th>Ülke</th><?php endif; ?>
             <th>Durum</th>
             <?php if ($kopyala_yetki): ?><th class="bl-kop-col"><span class="sr-only">İşlem</span></th><?php endif; ?>
         </tr>
@@ -74,15 +74,15 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             <td class="num"><?= $r['crate_count'] !== null ? number_format((int)$r['crate_count'], 0, ',', '.') : '—' ?></td>
             <td class="num"><?= $r['gross_kg'] !== null ? fmt_kg($r['gross_kg']) : '—' ?></td>
             <td class="num strong"><?= $r['net_kg'] !== null ? fmt_kg($r['net_kg']) : '—' ?></td>
-            <td><?= h($r['buyer_name'] ?: '—') ?></td>
+            <?php if (can_beyan('contact.read')): ?><td><?= h($r['buyer_name'] ?: '—') ?></td><?php endif; ?>
             <td><?= h($r['brand'] ?: '—') ?></td>
             <td><?= h($r['exit_depot'] ?: '—') ?></td>
             <td><?php if (trim((string)($r['vehicle_plate'] ?? '')) !== ''): ?><span class="bl-plaka"><?= h($r['vehicle_plate']) ?></span><?php else: ?><span class="bl-eksik">eksik</span><?php endif; ?></td>
-            <td><?php $fa = $firma_ad($r); echo $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>'; ?></td>
-            <td><?= h(($r['hks_ulke_ad'] ?? '') ?: '—') ?></td>
+            <?php if (can_beyan('hks.read')): ?><td><?php $fa = $firma_ad($r); echo $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>'; ?></td>
+            <td><?= h(($r['hks_ulke_ad'] ?? '') ?: '—') ?></td><?php endif; ?>
             <td><?= beyan_badge_html($r['status']) ?><?php
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+                if (can_beyan('hks.read') && $hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?></td>
             <?php if ($kopyala_yetki): ?>
             <td class="bl-kop-col">
@@ -122,7 +122,7 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
             </div>
             <?= beyan_badge_html($r['status']) ?><?php
                 $hd = beyan_hks_durum_etiket($r['hks_durum'] ?? null);
-                if ($hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
+                if (can_beyan('hks.read') && $hd !== '') echo ' <span class="beyan-badge beyan-hks-' . h((string)$r['hks_durum']) . '" title="Hal Kayıt bildirimi">' . h($hd) . '</span>';
             ?>
         </div>
 
@@ -153,8 +153,9 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
         <?php $fa = $firma_ad($r); $pl = trim((string)($r['vehicle_plate'] ?? '')); $ul = trim((string)($r['hks_ulke_ad'] ?? '')); ?>
         <div class="bl-hks-satir">
             <span class="bl-hks-oge"><b>Plaka</b> <?php if ($pl !== ''): ?><span class="bl-plaka"><?= h($pl) ?></span><?php else: ?><span class="bl-eksik">eksik</span><?php endif; ?></span>
-            <span class="bl-hks-oge"><b>HKS Firma</b> <?= $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>' ?></span>
-            <?php if ($ul !== ''): ?><span class="bl-hks-oge"><b>Ülke</b> <?= h($ul) ?></span><?php endif; ?>
+            <?php if (can_beyan('hks.read')): ?><span class="bl-hks-oge"><b>HKS Firma</b> <?= $fa !== '' ? h($fa) : '<span class="bl-eksik">—</span>' ?></span>
+            <?php endif; ?>
+            <?php if (can_beyan('hks.read') && $ul !== ''): ?><span class="bl-hks-oge"><b>Ülke</b> <?= h($ul) ?></span><?php endif; ?>
         </div>
 
         <div class="muted" style="font-size:.75rem;margin-top:4px">
@@ -163,7 +164,7 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
 
         <div class="beyan-card-actions">
             <a class="btn btn-sm" href="beyan_view.php?id=<?= (int)$r['id'] ?>">Görüntüle</a>
-            <?php if (can_beyan('write') && $r['status'] === 'yukleme_olustu'): ?>
+            <?php if (can_beyan('status') && $r['status'] === 'yukleme_olustu'): ?>
             <form method="post" action="beyan_edit.php?id=<?= (int)$r['id'] ?>" style="display:inline">
                 <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
                 <input type="hidden" name="status" value="yuklendi">
@@ -172,8 +173,10 @@ $firma_ad = function (array $r) use ($firma_adlari): string {
                         onclick="return confirm('Bu beyanı YÜKLENDİ olarak işaretle?')">Yüklendi</button>
             </form>
             <?php endif; ?>
-            <?php if (can_beyan('write')): ?>
+            <?php if (can_beyan('edit')): ?>
             <a class="btn btn-sm btn-ghost" href="beyan_edit.php?id=<?= (int)$r['id'] ?>">Düzenle</a>
+            <?php endif; ?>
+            <?php if ($kopyala_yetki): ?>
             <form method="post" action="beyan_kopyala.php" style="display:inline"
                   onsubmit="return confirm('Bu beyandan yeni bir TASLAK oluşturulacak (parti no ve plaka boş gelir). Devam edilsin mi?')">
                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">

@@ -6499,3 +6499,50 @@ body:not(.print-mode) form.beyan-workspace-form .beyan-section[data-bf] .beyan-s
     .beyan-workspace-tabs, .beyan-workspace-head, .beyan-workspace-delete { display: none !important; }
     .beyan-workspace-grid { display: block; }
 }
+
+/* Beyan section permissions: hidden HKS yields its width to the form. */
+.beyan-permission-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset.beyan-section { min-width: 0; margin-inline: 0; }
+.beyan-workspace-grid:not(:has(.beyan-workspace-hks)) { grid-template-columns: minmax(0, 1fr); }
+.beyan-workspace fieldset[disabled] .beyan-section-title::after { opacity: .65; }
+.beyan-workspace :disabled { opacity: .8; cursor: default; }
+.beyan-permission-note { font-size: .8rem; color: var(--muted); margin: 0 0 8px; }
+/* Role editor: page access, operations and field permissions. */
+.rol-dialog { width: min(1120px, 96vw); max-width: 1120px; }
+.rol-editor-tools { display:flex; align-items:end; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
+.rol-editor-tools > label:first-child { flex:1 1 260px; font-weight:600; font-size:.85rem; }
+.rol-selected-filter { display:flex; align-items:center; gap:8px; font-size:.85rem; padding:10px 0; }
+.rol-total { color:var(--primary); padding:10px 0; font-size:.85rem; }
+.rol-editor .rol-perm-group { padding:16px; }
+.rol-editor .rol-perm-group-head { flex-wrap:wrap; }
+.rol-editor .rol-perm-group-title { font-size:1rem; }
+.rol-group-count { font-weight:400; color:var(--muted); margin-left:8px; white-space:nowrap; }
+.rol-editor .rol-perm-group-actions { flex-wrap:wrap; gap:8px; }
+.rol-editor .rol-perm-toggle { min-height:36px; padding:5px 9px; border:1px solid var(--border); border-radius:6px; text-decoration:none; }
+.rol-editor .rol-perm-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.rol-perm-kind { grid-column:1/-1; font-size:.75rem; font-weight:700; color:var(--muted); margin:8px 0 2px; }
+.rol-editor .rol-permission { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--border); border-radius:8px; padding:12px; min-width:0; cursor:pointer; }
+.rol-permission input { flex:0 0 auto; width:18px; height:18px; margin:2px 0; accent-color:var(--primary); }
+.rol-permission span { overflow-wrap:anywhere; }
+.rol-permission small { display:block; font-size:.7rem; color:var(--muted); margin-top:4px; }
+.rol-permission:has(input:checked) { background:var(--primary-soft); border-color:var(--primary); }
+.rol-editor [hidden] { display:none !important; }
+.usr-permission-preview { font-size:.82rem; padding:12px; margin-top:10px; border:1px solid var(--border); border-radius:8px; line-height:1.6; }
+.usr-permission-preview ul { max-height:180px; overflow:auto; padding-left:20px; }
+@media(max-width:767px) {
+ .rol-dialog { width:100%; max-width:100%; }
+ .rol-editor .rol-perm-grid { grid-template-columns:minmax(0,1fr); }
+ .rol-editor .rol-perm-group { padding:10px; }
+ .rol-editor .rol-perm-toggle { min-height:44px; }
+ .rol-editor-tools { gap:4px 12px; }
+}
+.rol-help { margin:4px 0 12px; font-size:.8rem; color:var(--muted); }
+.rol-help summary { cursor:pointer; padding:4px 0; }
+.rol-help p { margin:6px 0; line-height:1.5; }
+@media(max-width:767px) {
+ .rol-dialog .pm-body { padding:12px; }
+ .rol-dialog .rol-form-label-row { margin-bottom:8px; }
+ .rol-editor-tools { margin-bottom:4px; }
+ .rol-selected-filter, .rol-total { padding:4px 0; }
+ .rol-editor .rol-perm-group-head { gap:4px; margin-bottom:2px; }
+}

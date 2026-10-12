@@ -2,9 +2,9 @@
 // beyan_whatsapp_metin() — saf biçimleyici testi (DB yok). php scripts/beyan_whatsapp_smoke.php
 declare(strict_types=1);
 $src = file_get_contents(__DIR__ . '/../config/helpers.php');
-preg_match('/function fmt_kg.*?\n}\n/s', $src, $a);
-preg_match('/function fmt_unit_kg.*?\n}\n/s', $src, $u2);
-preg_match('/function tr_upper.*?\n}\n/s', $src, $b);
+preg_match('/function fmt_kg.*?\r?\n}\r?\n/s', $src, $a);
+preg_match('/function fmt_unit_kg.*?\r?\n}\r?\n/s', $src, $u2);
+preg_match('/function tr_upper.*?\r?\n}\r?\n/s', $src, $b);
 preg_match('/function beyan_whatsapp_ayrac.*/s', $src, $c);
 eval($a[0] . $u2[0] . $b[0] . $c[0]);
 

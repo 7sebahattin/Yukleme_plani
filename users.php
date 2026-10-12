@@ -65,6 +65,16 @@ function valid_username(string $u): bool {
 
 // ── Roller ─────────────────────────────────────────────────────────────────
 $all_roles  = $pdo->query("SELECT id, slug, label FROM roles ORDER BY id")->fetchAll();
+$role_permission_preview = [];
+$permission_labels = array_merge(...array_values(permission_catalog()));
+foreach ($pdo->query('SELECT role_id, permission FROM role_permissions')->fetchAll() as $rp) {
+    $role_permission_preview[(int)$rp['role_id']][] = $rp['permission'];
+}
+foreach ($role_permission_preview as &$preview_permissions) {
+    if (function_exists('beyan_expand_role_permissions')) $preview_permissions = beyan_expand_role_permissions($preview_permissions);
+    $preview_permissions = array_values(array_filter($preview_permissions, static fn($p) => !in_array($p, ['beyan.write', 'beyan.permissions.detailed'], true)));
+}
+unset($preview_permissions);
 $admin_role = array_values(array_filter($all_roles, fn($r) => $r['slug'] === 'admin'))[0] ?? null;
 $admin_rid  = $admin_role ? (int)$admin_role['id'] : 0;
 // KRİTİK: PDO id'leri string döndürebilir; strict in_array için int'e zorla.
@@ -652,6 +662,7 @@ render_header('Kullanıcı Yönetimi');
         </div>
         <div style="margin-top:14px">
             <div class="form-label">Roller *</div>
+            <p class="usr-depo-note">Seçilen rollerin yetkileri birleşir. Bir roldeki eksik izin, başka rolün verdiği izni kaldırmaz. <a href="roles.php">Rol yetkilerini düzenle</a></p>
             <div class="usr-roles-grid">
             <?php
             $c_roles_post = ($action === 'create_user') ? array_map('intval', (array)($_POST['roles'] ?? [])) : [];
@@ -665,6 +676,7 @@ render_header('Kullanıcı Yönetimi');
             <?php endforeach; ?>
             </div>
         </div>
+        <div class="usr-permission-preview" aria-live="polite"></div>
         <?php if (!empty($all_depots)): ?>
         <div style="margin-top:14px">
             <div class="form-label">Depo Sorumluluğu</div>
@@ -729,6 +741,7 @@ render_header('Kullanıcı Yönetimi');
         </div>
         <div style="margin-top:14px">
             <div class="form-label">Roller *</div>
+            <p class="usr-depo-note">Seçilen rollerin yetkileri birleşir. Bir roldeki eksik izin, başka rolün verdiği izni kaldırmaz. <a href="roles.php">Rol yetkilerini düzenle</a></p>
             <div class="usr-roles-grid" id="e_roles_wrap">
             <?php foreach ($all_roles as $r): ?>
                 <label class="usr-role-check">
@@ -738,6 +751,7 @@ render_header('Kullanıcı Yönetimi');
             <?php endforeach; ?>
             </div>
         </div>
+        <div class="usr-permission-preview" aria-live="polite"></div>
         <?php if (!empty($all_depots)): ?>
         <div style="margin-top:14px">
             <div class="form-label">Depo Sorumluluğu</div>
@@ -824,7 +838,37 @@ render_header('Kullanıcı Yönetimi');
         });
     });
 
-    window.usrOpenCreate  = function () { openModal('usrCreateModal'); };
+    var rolePermissions = <?= json_encode($role_permission_preview, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var permissionLabels = <?= json_encode($permission_labels, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    function refreshRolePreview(modal) {
+        if (!modal) return;
+        var preview = modal.querySelector('.usr-permission-preview');
+        if (!preview) return;
+        var permissions = new Set();
+        modal.querySelectorAll('input[name="roles[]"]:checked').forEach(function (cb) {
+            (rolePermissions[cb.value] || []).forEach(function (p) { permissions.add(p); });
+        });
+        preview.replaceChildren();
+        var summary = document.createElement('strong');
+        summary.textContent = 'Birleşik yetkiler: ' + permissions.size + ' izin';
+        preview.appendChild(summary);
+        var note = document.createElement('p');
+        note.textContent = 'Depo kapsamı, kayıt sahipliği ve işlem kilitleri ayrıca uygulanır. Yönetici rolü bazı alanlarda ek erişim sağlar.';
+        preview.appendChild(note);
+        if (permissions.size) {
+            var details = document.createElement('details');
+            var heading = document.createElement('summary'); heading.textContent = 'Yetki listesini göster'; details.appendChild(heading);
+            var list = document.createElement('ul');
+            Array.from(permissions).sort().forEach(function (p) { var li = document.createElement('li'); li.textContent = permissionLabels[p] || p; list.appendChild(li); });
+            details.appendChild(list); preview.appendChild(details);
+        }
+    }
+    ['usrCreateModal', 'usrEditModal'].forEach(function (id) {
+        var modal = document.getElementById(id);
+        modal.addEventListener('change', function () { refreshRolePreview(modal); });
+        refreshRolePreview(modal);
+    });
+    window.usrOpenCreate  = function () { openModal('usrCreateModal'); refreshRolePreview(document.getElementById('usrCreateModal')); };
     window.usrCloseCreate = function () { closeModal('usrCreateModal'); };
 
     window.usrOpenEdit = function (data) {
@@ -848,6 +892,7 @@ render_header('Kullanıcı Yönetimi');
             cb.checked = depots.indexOf(cb.dataset.depo) !== -1;
         });
 
+        refreshRolePreview(document.getElementById('usrEditModal'));
         openModal('usrEditModal');
         document.getElementById('e_username').focus();
     };

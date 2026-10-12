@@ -14,7 +14,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 
 $auth_user = require_login();
-if (!can_beyan('write') || !(can('records.write') || is_admin())) {
+if (!can_beyan('match') || !(can('records.write') || is_admin())) {
     forbidden('Eşleştirme için yetkiniz yok.');
 }
 

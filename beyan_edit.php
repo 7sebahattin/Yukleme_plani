@@ -6,7 +6,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 $auth_user = require_login();
-if (!can_beyan('write')) forbidden();
+$beyan_action = $_SERVER['REQUEST_METHOD'] === 'POST'
+    ? (isset($_POST['hks_bag_islem']) ? 'notify' : (!empty($_POST['status_only']) ? 'status' : 'edit')) : 'edit';
+if (!can_beyan($beyan_action)) forbidden();
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) { set_flash('error', 'Geçersiz beyan.'); header('Location: beyanlar.php'); exit; }
@@ -60,12 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check($_POST['csrf'] ?? null);
 
     $old_status = $beyan['status'];
+    $_POST = beyan_protect_input($_POST, $f);
 
     // Hal Bildirim bağı düzeltmesi — ayrı form (sayfa altındaki "Hal Bildirim
     // Durumu" kutusu). Beyan alanlarına DOKUNMAZ. Kapı "Bildirim Yap" ile
     // aynıdır: beyan.write + records.write.
     if (isset($_POST['hks_bag_islem'])) {
-        if (!(can('records.write') || is_admin())) forbidden();
+        if (!can_beyan('hks.write') || !(can('records.write') || is_admin())) forbidden();
         $islem = (string)$_POST['hks_bag_islem'];
         $once  = beyan_hks_aktif($id);
         $hata  = beyan_hks_bag_duzelt($id, $islem, (int)($auth_user['id'] ?? 0));
@@ -86,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Yalnızca durum geçişi (liste ekranındaki hızlı butonlar) — diğer alanlara dokunma
     if (!empty($_POST['status_only'])) {
+        if (!can_beyan('analysis.write')) foreach (beyan_permission_fields()['analysis'] as $field) unset($_POST[$field]);
         $new_status     = (string)($_POST['status'] ?? '');
         $valid_statuses = array_keys(beyan_statuses());
         $return_url = ($_POST['return_to'] ?? '') === 'view' ? 'beyan_view.php?id=' . $id : 'beyanlar.php';
@@ -129,11 +133,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $crate_ct = $checked['values']['crate_count'];
     $sample_at = $checked['values']['sample_taken_at'];
     $result_at = $checked['values']['analysis_result_at'];
-    try { $hks = beyan_hks_form_oku($_POST, $beyan); }
+    try {
+        if (can_beyan('hks.write')) $hks = beyan_hks_form_oku($_POST, $beyan);
+        else {
+            $hks = [];
+            foreach (['firma_id','urun_id','urun_ad','ulke_id','ulke_ad'] as $key) $hks[$key] = $beyan['hks_' . $key] ?? null;
+        }
+    }
     catch (InvalidArgumentException $e) { $errors[] = $e->getMessage(); }
 
+    // Preserve exact stored values, including timestamp seconds, in protected sections.
+    $f = beyan_protect_input($f, $beyan);
+    if (!can_beyan('analysis.write')) {
+        $sample_at = $beyan['sample_taken_at'];
+        $result_at = $beyan['analysis_result_at'];
+    }
+
     // temiz/red geçişinde analysis_result_at yoksa otomatik set
-    if (in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) {
+    if (can_beyan('analysis.write') && in_array($f['status'], ['temiz', 'red'], true) && $result_at === null) {
         $result_at = date('Y-m-d H:i:s');
         $f['analysis_result_at'] = date('Y-m-d\TH:i');
     }
@@ -213,9 +230,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Eşleştirme seçimlerini ÖĞREN — sonraki beyanlarda alan hazır gelsin.
             // Öneri üretir, karar vermez: kullanıcı formda her zaman değiştirebilir.
-            if ($hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
-            beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
-            if ($hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
+            if (can_beyan('hks.write') && $hks['urun_id']) hks_eslesme_yaz('urun', $f['product_name'], (string)$hks['urun_id'], (string)$hks['urun_ad']);
+            if (can_beyan('hks.write')) beyan_hks_ulke_ogren($f, (string)$hks['ulke_id'], (string)$hks['ulke_ad']);
+            if (can_beyan('hks.write') && $hks['firma_id']) bb_son_firma_yaz((string)$hks['firma_id']);
 
             audit_log_event('beyan_update', 'declarations', $id, null, [
                 'party_no'     => $f['party_no'],
@@ -233,7 +250,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $statuses    = beyan_statuses();
 $cur_status  = $beyan['status'];
 // Hal Bildirim Durumu kutusu — elle bağ düzeltmesi (beyan_hks_bag_duzelt).
-$hks_bag_yetki = can('records.write') || is_admin();
+$hks_bag_yetki = can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin());
 $hks_bag_aktif = beyan_hks_aktif($id);
 $hks_bag_son   = beyan_hks_gecmis($id)[0] ?? null;
 // Yalnız "akıştaki sıradaki durum" ipucu için — kapı DEĞİL. Durum listesi

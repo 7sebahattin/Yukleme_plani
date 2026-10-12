@@ -59,6 +59,7 @@ $params = [];
 if ($q !== '') {
     $search_parts = [];
     foreach (['party_no','product_name','product_variety','buyer_name','brand','exit_depot','company_name','contact_person'] as $si => $sc) {
+        if (!can_beyan('contact.read') && in_array($sc, ['buyer_name', 'contact_person'], true)) continue;
         $search_parts[] = "$sc LIKE :q$si";
         $params[':q' . $si] = '%' . $q . '%';
     }
@@ -113,6 +114,7 @@ $bek_params = $kapali_params;
 if ($bek_q !== '') {
     $bek_parts = [];
     foreach (['party_no','product_name','product_variety','buyer_name','brand','exit_depot','vehicle_plate'] as $si => $sc) {
+        if (!can_beyan('contact.read') && $sc === 'buyer_name') continue;
         $bek_parts[] = "$sc LIKE :bq$si";
         $bek_params[':bq' . $si] = '%' . $bek_q . '%';
     }
@@ -128,7 +130,7 @@ foreach ($bek_params as $k => $v) $st_bek->bindValue($k, $v);
 $st_bek->bindValue(':lim', BEYAN_PER_PAGE, PDO::PARAM_INT);
 $st_bek->bindValue(':off', ($bek_page - 1) * BEYAN_PER_PAGE, PDO::PARAM_INT);
 $st_bek->execute();
-$bekleyen_rows   = $st_bek->fetchAll();
+$bekleyen_rows   = array_map('beyan_redact_fields', $st_bek->fetchAll());
 
 // ALT bölüm — kapanan arşiv; kendi filtreleri ve sayfalaması vardır.
 $w_kapali = $where . " AND status IN ($kapali_ph)";
@@ -146,7 +148,7 @@ foreach ($p_kapali as $k => $v) $st->bindValue($k, $v);
 $st->bindValue(':lim', BEYAN_PER_PAGE, PDO::PARAM_INT);
 $st->bindValue(':off', $offset,        PDO::PARAM_INT);
 $st->execute();
-$kapali_rows = $st->fetchAll();
+$kapali_rows = array_map('beyan_redact_fields', $st->fetchAll());
 
 $total = (int)db()->query("SELECT COUNT(*) FROM customs_declarations WHERE deleted_at IS NULL")->fetchColumn();
 // Toplu bildirim uygunluk sorgusu ve seçim JS'i İKİ bölümün satırlarını
@@ -156,7 +158,7 @@ $rows = array_merge($bekleyen_rows, $kapali_rows);
 // ── Toplu bildirim: hangi satırlar uygun? ─────────────────────────────────
 // beyan_view'daki buton kapısının aynısı. Aktif bağlar TEK sorguda çekilir
 // (satır başına sorgu, 50 satırlık sayfada 50 sorgu demekti).
-$toplu_yetki = can_beyan('write') && (can('records.write') || is_admin());
+$toplu_yetki = can_beyan('notify') && can_beyan('hks.write') && (can('records.write') || is_admin());
 $aktif_bagli = [];
 if ($toplu_yetki && $rows) {
     try {
@@ -180,7 +182,7 @@ $uygun_sayisi = count(array_filter($rows, $bildirim_uygun));
 
 // HKS firma adları (tek sorgu) — listede firma + plaka görünsün diye.
 $firma_adlari = beyan_hks_firma_adlari(array_map(fn($r) => (string)($r['hks_firma_id'] ?? ''), $rows));
-$kopyala_yetki = can_beyan('write');
+$kopyala_yetki = can_beyan('create');
 
 $statuses  = beyan_statuses();
 $today     = date('Y-m-d');
@@ -212,7 +214,7 @@ render_flash();
         <a href="beyan_bildirim_tani.php" class="btn btn-ghost btn-sm"
            title="Bildirim köprüsü ön kontrolü (salt-okunur)">🩺 Bildirim Ön Kontrol</a>
         <?php endif; ?>
-        <?php if (can_beyan('write')): ?>
+        <?php if (can_beyan('create')): ?>
         <a href="beyan_create.php" class="btn btn-primary btn-lg">+ Yeni Beyan</a>
         <?php endif; ?>
     </div>
@@ -251,7 +253,7 @@ render_flash();
     <?php if (empty($bekleyen_rows)): ?>
     <div class="beyan-blok-bos">
         <?= $bek_q !== '' ? 'Aramanızla eşleşen bekleyen beyan yok.' : '✅ İşlem bekleyen beyan yok — hepsi yüklendi ya da kapandı.' ?>
-        <?php if (can_beyan('write')): ?>
+        <?php if (can_beyan('create')): ?>
         <a href="beyan_create.php" class="btn btn-sm">+ Yeni Beyan</a>
         <?php endif; ?>
     </div>
