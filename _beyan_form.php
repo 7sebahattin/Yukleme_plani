@@ -71,7 +71,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
 
             <div id="beyanPanel_beyan" data-beyan-panel="beyan" role="tabpanel" aria-labelledby="beyanTab_beyan">
                 <section class="beyan-section" data-bf="temel" data-beyan-single-section>
-                    <h2 class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Beyan / Sevkiyat</h2>
+                    <h2 class="beyan-section-title" data-ic="pano"><span class="bf-emoji" aria-hidden="true">📋</span> Parti/Sevkiyat</h2>
                     <div class="beyan-form-grid beyan-workspace-fields">
                         <?php $field('party_no', 'Parti No', 'diyez'); ?>
                         <?php $field('buyer_name', 'Alıcı', 'kisi'); ?>
@@ -80,14 +80,6 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <?php $field('line_type', 'Hat / Güzergah', 'rota'); ?>
                         <?php if (!can_beyan('hks.write')) $field('vehicle_plate', 'Araç Plakası', 'arac'); ?>
                     </div>
-                    <div class="form-group" data-ic="liste">
-                        <label class="form-label" for="bf_status">Durum</label>
-                        <select id="bf_status" name="status" class="form-control"<?= !can_beyan('status') ? ' disabled' : '' ?>>
-                            <?php foreach (beyan_durum_akis_sirasi() as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
-                            <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>><?= h($sv['label']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
                 </section>
 
                 <section class="beyan-section" data-bf="urun" data-beyan-single-section>
@@ -95,7 +87,7 @@ $field = static function (string $name, string $label, string $icon, string $mod
                     <div class="beyan-form-grid beyan-workspace-fields">
                         <?php $field('product_name', 'Ürün Adı', 'elma'); ?>
                         <?php $field('product_variety', 'Ürün Çeşidi', 'etiket'); ?>
-                        <?php $field('brand', 'Marka', 'rozet'); ?>
+                        <?php $field('brand', 'Ambalaj Marka', 'rozet'); ?>
                     </div>
                     <div class="beyan-form-grid beyan-workspace-quantities">
                         <?php $field('pallet_count', 'Palet Adedi', 'katman', 'numeric'); ?>
@@ -118,6 +110,14 @@ $field = static function (string $name, string $label, string $icon, string $mod
                         <textarea id="bf_company_address"<?= !can_beyan('contact.write') ? ' disabled' : '' ?> name="company_address" rows="2" class="form-control" data-uppercase="tr" data-suggest="company_address" data-suggest-label="Gümrük Adresi" data-suggest-endpoint="api_beyan_tanim_ekle.php" autocomplete="off"><?= h((string)$f['company_address']) ?></textarea>
                     </div>
                     <?php endif; ?>
+                    <div class="form-group" data-ic="liste">
+                        <label class="form-label" for="bf_status">Durum</label>
+                        <select id="bf_status" name="status" class="form-control"<?= !can_beyan('status') ? ' disabled' : '' ?>>
+                            <?php foreach (beyan_durum_akis_sirasi() as $sk): $sv = $statuses[$sk] ?? null; if (!$sv) continue; ?>
+                            <option value="<?= h($sk) ?>"<?= $f['status'] === $sk ? ' selected' : '' ?>><?= h($sv['label']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                 </section>
 
                 <section class="beyan-section" data-bf="uyari" data-beyan-single-section>

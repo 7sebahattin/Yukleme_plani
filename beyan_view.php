@@ -396,7 +396,7 @@ $bk_hucre = function (string $etiket, string $deger, bool $tam, string $not = ''
             <span class="val"><?= h($beyan['contact_person'] ?: '—') ?></span>
         </div>
         <div class="beyan-view-row" data-ic="rozet">
-            <span class="lbl">Marka</span>
+            <span class="lbl">Ambalaj Marka</span>
             <span class="val"><?= h($beyan['brand'] ?: '—') ?></span>
         </div>
     </div>

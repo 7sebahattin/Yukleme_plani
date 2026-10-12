@@ -4163,6 +4163,7 @@ body.bn-yok { --bn-h: 0px; }
         transition: border-bottom-color .2s ease;
     }
     .sidebar-brand:hover { text-decoration: none; }
+    .sidebar-tema { position: absolute; top: 17px; right: 14px; width: 32px; height: 32px; z-index: 2; }
     .sidebar-brand-logo { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
     .sidebar-brand-txt { display: flex; flex-direction: column; line-height: 1.2; }
     .sidebar-brand-name { font-weight: 700; font-size: 1rem; }
@@ -5000,7 +5001,7 @@ html[data-theme="dark"] body:not(.print-mode) .ara-sec-bos { background: #2a1616
     font-size: .8rem; font-weight: 700; line-height: 1.5;
     background: var(--surface-2); color: var(--muted);
 }
-.beyan-blok-acik .beyan-blok-sayi     { background: var(--warn);    color: #fff; }
+.beyan-blok-acik .beyan-blok-sayi     { background: var(--warn);    color: #1c1917; }
 .beyan-blok-kapanmis .beyan-blok-sayi { background: var(--success); color: #fff; }
 .beyan-blok-not { font-size: .78rem; }
 .beyan-blok-bos {
@@ -5292,6 +5293,11 @@ input:focus, select:focus, textarea:focus {
 }
 .ms-sug-add:hover, .ms-sug-add.active { background: #dcfce7; }
 .ms-sug-add.busy { opacity: .7; cursor: wait; }
+
+/* Öneri kutusu "+ ekle" satırı — koyu tema (açık yeşil zemin + açık yazı okunmuyordu) */
+html[data-theme="dark"] .ms-sug-add { color: #86efac; background: rgba(22,163,74,.14); border-top-color: rgba(74,222,128,.5); }
+html[data-theme="dark"] .ms-sug-add:hover,
+html[data-theme="dark"] .ms-sug-add.active { background: rgba(22,163,74,.26); color: #bbf7d0; }
 
 /* ---------- Depo Tema Tonu (Sprint Depo-02b) ---------- */
 /* İçerik arka planına aktif depo renginin ÇOK hafif tonu (%4.5) verilir.
@@ -5627,7 +5633,7 @@ html[data-theme="dark"] body:not(.print-mode) .beyan-hks-oneri-btn:hover { borde
 html[data-theme="dark"] body:not(.print-mode) .beyan-blok { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .beyan-blok-sayi { background: #1a2331; }
 html[data-theme="dark"] body:not(.print-mode) .beyan-blok-acik .beyan-blok-sayi { background: var(--warn); color: #1c2230; }
-html[data-theme="dark"] body:not(.print-mode) .beyan-blok-kapanmis .beyan-blok-sayi { background: var(--success); color: #fff; }
+html[data-theme="dark"] body:not(.print-mode) .beyan-blok-kapanmis .beyan-blok-sayi { background: var(--success); color: #052e16; }
 html[data-theme="dark"] body:not(.print-mode) .bb-bar { background: var(--card); }
 html[data-theme="dark"] body:not(.print-mode) .bb-engel td { background: #2b2410; }
 html[data-theme="dark"] body:not(.print-mode) .bk-hucre { background: var(--card); }

@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v341` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v342` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1035,6 +1035,11 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   düz kalır. Tam düzenleme gerekmez. Beyan oluştur/düzenle formundaki parantez içi ipuçları ve alt metinler (isteğe bağlı/zorunlu
   notları, HKS giriş paragrafı, "katalogdan eşleşti" etiketleri, durum ipucu, silme notu, "Değişiklik yok" vb.) KALDIRILDI — geri
   ekleme (görüntü kirliliği, sahip kararı). Test: `beyan_ui_smoke.php` `[plaka]`/`[temiz]` satırları.
+- **Form düzeni + koyu tema (v342):** Beyan formunda ilk kart **"Parti/Sevkiyat"** (eski Beyan / Sevkiyat); **Durum seçimi
+  "Gümrük ve İletişim" kartının sonunda**; "Marka" etiketi **"Ambalaj Marka"** (form + önizleme). Masaüstü kenar çubuğunun
+  logo satırında tema düğmesi (`.tema-dongu.sidebar-tema`, `asyaTemaDondur()`; tema JS'i `.tema-dongu` sınıfıyla TÜM düğmeleri
+  günceller — id'ye bağlama). Koyu tema düzeltmeleri: öneri kutusu "+ ekle" satırı (`.ms-sug-add` koyu kuralı), beyan liste
+  sayaç rozeti kontrastı. Yeni açık renkli yüzey/rozet eklerken `html[data-theme="dark"]` karşılığını DA yaz.
 - **Beyan formunda plaka `beyan_hks_form_bolumu()` İÇİNDEDİR**, "Temel
   Bilgiler"de değil — bildirim için gereken dört alan tek yerde. Katalog boş
   olsa bile çizilir (plaka katalogdan bağımsız). **İkinci bir `vehicle_plate`
