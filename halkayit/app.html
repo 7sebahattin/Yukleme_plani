@@ -238,6 +238,7 @@
   .kunye .kalan-blok { display:flex; flex-direction:column; align-items:flex-end; flex-shrink:0; }
   .kunye .kalan { font-weight:800; color:var(--navy); font-size:13px; white-space:nowrap; }
   /* Fiyat — künye listesiyle birlikte otomatik gelir (bkz. $('btnKunyeler').onclick — künye + fiyat tek render) */
+  .kunye .sifat-uyumsuz { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:99px; font-size:10.5px; font-weight:800; background:var(--hata-bg,#fde8e8); color:var(--hata-tx,#b42318); white-space:nowrap; }
   .kunye .kalan-fiyat { font-size:11px; color:var(--tamam-tx); font-weight:700; white-space:nowrap; margin-top:1px; }
   .kunye input.miktar { width:88px; padding:9px; font-size:14px; flex-shrink:0; border-radius:10px; }
 
@@ -3591,6 +3592,9 @@ $('btnKunyeler').onclick = async () => {
         // (HKS istek şemasında bu alanlar yok — künyenin GidecekYerTuruId'si süzülür).
         isletmeTuruId: $('sKunyeIsyeriTuru').value || 0,
         sirala: $('sKunyeSirala').value,
+        // Bildirimci sıfat: sunucu bu sıfatla uyumsuz çıkmış künyeleri işaretler (sifatUyumsuz).
+        // Sıfat sonradan değişirse işaretler bir sonraki Künyeleri Getir'de güncellenir.
+        sifatId: $('sSifat').value || 0,
       }),
       api('/api/kunye_detay', 'POST', { firmaId, aySayisi }),
     ]);
@@ -3642,7 +3646,9 @@ function kunyeCiz() {
     div.innerHTML =
       `<input type="checkbox" data-i="${i}">` +
       `<div class="bilgi"><div class="no">${k.kunyeNo}</div>` +
-      `<div class="detay">${k.tarih} · ${k.urun || ''} ${k.cins ? '· ' + k.cins : ''}</div></div>` +
+      `<div class="detay">${eHtml(k.tarih)} · ${eHtml(k.urun || '')} ${k.cins ? '· ' + eHtml(k.cins) : ''}` +
+      (k.sifatUyumsuz === true ? '<span class="sifat-uyumsuz" title="Bu künye seçilen bildirimci sıfatıyla uyumsuz çıktı; otomatik dağıtıma girmez (elle seçebilirsiniz).">sıfat uyumsuz</span>' : '') +
+      `</div></div>` +
       `<div class="kalan-blok"><div class="kalan">${fmt(k.kalan)} ${k.birim || 'KG'}</div>${fiyatSatiri}</div>` +
       `<input class="miktar" data-i="${i}" inputmode="decimal" placeholder="miktar" disabled>`;
     kap.appendChild(div);
@@ -3663,32 +3669,79 @@ function kunyeCiz() {
 // Statik kilo/fiyat kutuları — canlı binlik biçimi (künye satırları kunyeCiz'de bağlanır).
 ['oMalMiktar', 'oMalFiyat', 'oPlanKilo', 'oPlanFiyat', 'oFiyat', 'hedefKilo'].forEach(id => binlikGirisBagla($(id)));
 
+// KÜNYE ÖNCELİK SIRASI — SUNUCUDAKİ algoritmanın JS aynası (ikisi BİRLİKTE değişir).
+// Aday: kalan > 0 ve sifatUyumsuz !== true. Artan anahtar: [fiyatFarki, tarih, kalan, kunyeNo].
+// fiyatFarki: satış fiyatı > 0 iken künye fiyatı varsa |alış − satış| (2 ondalık); fiyatsız künye
+// en sonda (sabit çok büyük); satış fiyatı yoksa hepsi 0. Boş tarih sonda.
+const KUNYE_FIYATSIZ_FARK = 1e15;
+function kunyeTarihAnahtar(t) {
+  t = String(t || '').trim();
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = t.match(/^(\d{2})[.\/](\d{2})[.\/](\d{4})/);   // GG.AA.YYYY → ISO
+  return m ? m[3] + '-' + m[2] + '-' + m[1] : '';
+}
+function kunyeOncelikSirasi(liste, satisFiyat) {
+  const adaylar = [];
+  liste.forEach((k, i) => {
+    if (!(k.kalan > 0) || k.sifatUyumsuz === true) return;
+    let fark = 0;
+    if (satisFiyat > 0) {
+      fark = (k.fiyat > 0) ? Math.round(Math.abs(k.fiyat - satisFiyat) * 100) / 100 : KUNYE_FIYATSIZ_FARK;
+    }
+    adaylar.push({ i, fark, tarih: kunyeTarihAnahtar(k.tarih), kalan: k.kalan, no: String(k.kunyeNo) });
+  });
+  adaylar.sort((x, y) => {
+    if (x.fark !== y.fark) return x.fark - y.fark;
+    if (x.tarih !== y.tarih) {
+      if (!x.tarih) return 1;
+      if (!y.tarih) return -1;
+      return x.tarih < y.tarih ? -1 : 1;
+    }
+    if (x.kalan !== y.kalan) return x.kalan - y.kalan;
+    return x.no < y.no ? -1 : (x.no > y.no ? 1 : 0);
+  });
+  return adaylar.map(a => a.i);
+}
+
 $('btnDagit').onclick = () => {
   const hedef = trSayi($('hedefKilo').value);
   let kalanHedef = hedef;
   if (kalanHedef <= 0) return;
+  const satisFiyat = trSayi($('oFiyat').value) || 0;
   const kap = $('kunyeListe');
+  const secilen = new Map();   // künye indeksi → miktar
+  kunyeOncelikSirasi(kunyeler, satisFiyat).forEach(i => {
+    if (kalanHedef <= 0) return;
+    const al = Math.min(kunyeler[i].kalan, kalanHedef);
+    secilen.set(i, al);
+    kalanHedef = Math.round((kalanHedef - al) * 1000) / 1000;
+  });
   kunyeler.forEach((k, i) => {
     const cb = kap.querySelector(`input[type=checkbox][data-i="${i}"]`);
     const mInput = kap.querySelector(`input.miktar[data-i="${i}"]`);
-    if (kalanHedef > 0 && k.kalan > 0) {
-      const al = Math.min(k.kalan, kalanHedef);
+    if (secilen.has(i)) {
       cb.checked = true; mInput.disabled = false;
-      mInput.value = sayiBicimle(al);
+      mInput.value = sayiBicimle(secilen.get(i));
       cb.closest('.kunye').classList.add('secili');
-      kalanHedef = Math.round((kalanHedef - al) * 1000) / 1000;
     } else {
       cb.checked = false; mInput.disabled = true; mInput.value = '';
       cb.closest('.kunye').classList.remove('secili');
     }
   });
+  const atlanan = kunyeler.filter(k => k.kalan > 0 && k.sifatUyumsuz === true).length;
+  const nedenNot = (satisFiyat > 0
+      ? 'fiyata en yakın + en eski + küçük kalanlı künyeler seçildi'
+      : 'fiyat girilmediği için en eski + küçük kalanlı künyeler seçildi') +
+    ` (${secilen.size} künye)` +
+    (atlanan ? ` · ${atlanan} künye sıfat uyumsuz olduğu için atlandı` : '');
   if (kalanHedef > 0) {
     mesajGoster('dagitMesaj',
       `⚠️ DİKKAT: Hedefin ${fmt(kalanHedef)} KG'lık kısmı KARŞILANAMADI! ` +
       `Künyelerin toplam kalanı (${fmt(hedef - kalanHedef)} KG) yetersiz. ` +
-      `Aralığı genişletip tekrar sorgulayın.`, 'hata');
+      `Aralığı genişletip tekrar sorgulayın.` + (atlanan ? ` ${atlanan} künye sıfat uyumsuz olduğu için atlandı.` : ''), 'hata');
   } else {
-    mesajGoster('dagitMesaj', `✓ Hedefin tamamı (${fmt(hedef)} KG) künyelere dağıtıldı.`, 'tamam');
+    mesajGoster('dagitMesaj', `✓ Hedefin tamamı (${fmt(hedef)} KG) künyelere dağıtıldı · ${nedenNot}`, 'tamam');
   }
   ozetGuncelle();
 };
@@ -4437,6 +4490,12 @@ $('btnOnay').onclick = async () => {
         '✅ Doğum tarihi <b>' + eHtml(j.dogumVaryant.bicim) + '</b> deney biçimiyle kabul edildi. ' +
         'Kişi sitede hiç sorgulanmadıysa bu biçim doğrudur; kalıcı yapmak için yönetici ' +
         '"Doğum Tarihi Deneyi" ekranını kullanın.</div>';
+    }
+    if (Array.isArray(j.sifatUyumsuzKunyeler) && j.sifatUyumsuzKunyeler.length) {
+      html += '<div class="mesaj hata" id="sifatUyumsuzBilgi" style="display:block;margin-top:8px">' +
+        'Şu künyeler seçilen sıfatla uyumsuz bulundu ve kaydedildi: <b>' +
+        eHtml(j.sifatUyumsuzKunyeler.join(', ')) +
+        '</b>. Sonraki denemede bu künyeler otomatik atlanır.</div>';
     }
     (j.sonuclar || []).forEach(s => {
       const tamam = s.yeniKunyeNo && s.yeniKunyeNo !== '0' && !s.hataKodu;
