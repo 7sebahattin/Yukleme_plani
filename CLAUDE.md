@@ -7,7 +7,7 @@ PHP 8 + MySQL tarım ihracat operasyon yönetim sistemi. Mobil öncelikli, PWA k
 
 **Canlı:** `asya.scai.tr` (2026-09-27'den beri) · **Test:** `nuverna.derspros.com.tr` (ayrı DB; `derspros.com.tr` 25.12.2026'da bitiyor, yenilenmeyecek)  
 **Branch:** `claude/fix-records-print-mobile-WuKdT`  
-**SW Cache:** `yukleme-plani-v340` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
+**SW Cache:** `yukleme-plani-v341` (sw.js — değişiklikte artır; `config/helpers.php`'deki `APP_SURUM` ile aynı sayıda tut)
 
 ---
 
@@ -1027,7 +1027,7 @@ Kural KOPYALAMAZ, uygulamanın kendi fonksiyonlarını çağırır — "TAMAM" d
   (`#beyanPanel_hks`, `.beyan-workspace-hks` kabı, max 640px) — HKS verisinin girileceği TEK yer. Beyan veren (Beyan/Analiz/Kaynak)
   ile bildirim yapan (Hal Bildirim) alanları ayrı sekmelerde. Önizlemede Numune kartı Analiz / Durum kartının YANINDA
   (`.bv-yanyana`, numune doluysa `-2` ile ≥900px iki kolon; mobilde alt alta).
-- **Beyan detay eylemleri (v339):** Masaüstünde (≥1024px) seçili durum üstte, diğer durumlar altında açılan menüde gösterilir; fare, tıklama ve klavye ile açılır. Mobilde mevcut durum şeridi sürer. Seçim tek `status_only` formuyla sunucuya gider; RED notu, CSRF ve yetki kontrolleri korunur. WhatsApp kopyalama düğmesi parti numarasının altında, yeşil renktedir. Başlangıç sürümü v338 / PR #711 künye değişikliklerini içerir.
+- **Beyan detay eylemleri (v341):** Masaüstünde (≥1024px) seçili durumun sağında seçenekler kartlar gibi animasyonla yayılır; fare ayrıldıktan 3 saniye sonra animasyonla kapanır, geri gelince kapanma iptal edilir. Tıklama ve klavye erişimi desteklenir; mobilde mevcut durum şeridi sürer. Seçim tek `status_only` formuyla sunucuya gider; RED notu, CSRF ve yetki kontrolleri korunur. WhatsApp kopyalama düğmesi parti numarasının altında, yeşil renktedir; altındaki tekrar durum rozeti ve kayıt numarası kaldırılmıştır. Başlangıç sürümü v340 / PR #713 hızlı plaka girişini içerir.
 - **Hızlı plaka girişi + form sadeleştirme (v340):** Önizlemedeki Hal Kayıt Bildirimi kartında plaka EKSİKSE hücre tıklanabilir
   (`#plakaHizliBtn`, turuncu) ve küçük native `<dialog id="plakaHizliDlg">` açar; kayıt `api_beyan_plaka.php` (POST JSON + CSRF,
   kapı `beyan.write` + `hks.write`, yalnız `vehicle_plate` UPDATE'i, `beyan_plaka_normalize()`, 3-20 harf/rakam/tire, audit
