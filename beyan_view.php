@@ -140,13 +140,11 @@ render_flash();
         <h1>🧾 <?= h($beyan['party_no'] ?: 'Beyan #' . $id) ?></h1>
         <button type="button" class="btn btn-whatsapp" id="waKopyalaBtn" title="WhatsApp'ta yapıştırılacak metni kopyala">⧉ Kopyala</button>
         <script type="application/json" id="waMetin"><?= json_encode(beyan_whatsapp_metin($beyan), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px">
-            <?= beyan_badge_html($cur_status) ?>
-            <?php if ($is_deleted): ?>
+        <?php if ($is_deleted): ?>
+        <div style="margin-top:4px">
             <span class="beyan-badge" style="background:#fef3c7;color:#92400e">ARŞİVLENDİ</span>
-            <?php endif; ?>
-            <span class="muted" style="font-size:.82rem">#<?= $id ?></span>
         </div>
+        <?php endif; ?>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <a href="beyanlar.php" class="btn btn-geri">← Beyanlar</a>
@@ -465,7 +463,7 @@ $nm_parca = array_filter([trim($nm_kasa . ' ' . $nm_cins), $nm_brut !== '' ? 'Br
                 <button type="button" class="beyan-badge beyan-badge-<?= h($current_sv['css']) ?> beyan-durum-secili beyan-durum-toggle"
                         data-status-trigger aria-expanded="false" aria-controls="beyanDurumSecenekleri"
                         aria-label="Şu anki durum: <?= h($current_sv['label']) ?>. Durumu değiştir">
-                    ✓ <?= h($current_sv['label']) ?> <span class="beyan-durum-chevron" aria-hidden="true">▾</span>
+                    ✓ <?= h($current_sv['label']) ?> <span class="beyan-durum-chevron" aria-hidden="true">›</span>
                 </button>
             <div class="beyan-next-status-wrap" id="beyanDurumSecenekleri" data-status-menu role="group" aria-label="Durum seçenekleri">
                 <?php foreach (beyan_durum_akis_sirasi() as $ns):
@@ -1112,54 +1110,76 @@ function prompt_note(btn) {
     var options = picker.querySelector('[data-status-menu]');
     var desktop = window.matchMedia('(min-width: 1024px)');
     var buttons = options.querySelectorAll('button[name="status"]');
-    var pinned = false;
+    var closeTimer = null;
+    var keyboardFocus = false;
+    Array.prototype.forEach.call(buttons, function (button, index) {
+        button.style.setProperty('--card-order', index);
+    });
+    function cancelClose() {
+        window.clearTimeout(closeTimer);
+        closeTimer = null;
+    }
     function setOpen(open) {
+        cancelClose();
         open = open && desktop.matches;
         var wasOpen = picker.classList.contains('is-open');
         picker.classList.toggle('is-open', open);
         trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        options.inert = desktop.matches && !open;
+        if (desktop.matches) options.setAttribute('aria-hidden', open ? 'false' : 'true');
+        else options.removeAttribute('aria-hidden');
         // Focusing a scrolled option must not resize/reposition it between
         // pointerdown and pointerup, otherwise its click misses the button.
         if (open && !wasOpen) fitOptions();
     }
     function fitOptions() {
         if (!desktop.matches) return;
-        var bottom = trigger.getBoundingClientRect().bottom;
-        options.style.maxHeight = Math.max(48, Math.min(360, window.innerHeight - bottom - 20)) + 'px';
+        var bounds = picker.getBoundingClientRect();
+        var triggerBounds = trigger.getBoundingClientRect();
+        var left = triggerBounds.right - bounds.left;
+        options.style.left = left + 'px';
+        options.style.width = Math.max(0, Math.min(bounds.right, window.innerWidth - 20) - triggerBounds.right) + 'px';
+    }
+    function scheduleClose() {
+        cancelClose();
+        if (!desktop.matches || picker.matches(':hover') || (keyboardFocus && picker.contains(document.activeElement))) return;
+        closeTimer = window.setTimeout(function () { setOpen(false); }, 3000);
     }
     picker.classList.add('is-enhanced');
-    picker.addEventListener('mouseenter', function () { setOpen(true); });
-    picker.addEventListener('mouseleave', function () {
-        if (!pinned && !picker.contains(document.activeElement)) setOpen(false);
+    setOpen(false);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Tab') keyboardFocus = true;
     });
+    document.addEventListener('pointerdown', function () { keyboardFocus = false; });
+    picker.addEventListener('mouseenter', function () { setOpen(true); });
+    picker.addEventListener('mouseleave', scheduleClose);
+    picker.addEventListener('pointerdown', function () { keyboardFocus = false; });
     trigger.addEventListener('click', function () {
-        // Hover already opens it; the first click keeps it open for touch/mouse.
-        pinned = !pinned;
-        setOpen(pinned);
+        setOpen(true);
     });
     picker.addEventListener('focusin', function () { setOpen(true); });
     picker.addEventListener('focusout', function (event) {
-        if (!picker.contains(event.relatedTarget)) { pinned = false; setOpen(false); }
+        if (!picker.contains(event.relatedTarget)) { keyboardFocus = false; scheduleClose(); }
     });
     picker.addEventListener('keydown', function (event) {
         if (!desktop.matches) return;
+        keyboardFocus = true;
         if (event.key === 'Escape') {
             event.preventDefault();
-            pinned = false;
             trigger.focus();
             setOpen(false);
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        } else if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].indexOf(event.key) !== -1) {
             event.preventDefault();
             setOpen(true);
             var index = Array.prototype.indexOf.call(buttons, document.activeElement);
-            index = event.key === 'ArrowDown' ? (index + 1) % buttons.length : (index <= 0 ? buttons.length : index) - 1;
+            index = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? (index + 1) % buttons.length : (index <= 0 ? buttons.length : index) - 1;
             if (buttons[index]) buttons[index].focus();
         }
     });
     document.addEventListener('click', function (event) {
-        if (!picker.contains(event.target)) { pinned = false; setOpen(false); }
+        if (!picker.contains(event.target)) { keyboardFocus = false; setOpen(false); }
     });
-    function reset() { pinned = false; setOpen(false); options.style.maxHeight = ''; }
+    function reset() { keyboardFocus = false; setOpen(false); options.style.left = ''; options.style.width = ''; }
     if (desktop.addEventListener) desktop.addEventListener('change', reset);
     else desktop.addListener(reset);
     window.addEventListener('resize', fitOptions);

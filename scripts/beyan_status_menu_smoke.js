@@ -36,20 +36,39 @@ function render(status = 'beyan_acildi', profile = '') {
     }
     await setup();
     const trigger = page.locator('.beyan-durum-toggle'), menu = page.locator('#beyanDurumSecenekleri');
-    ok((await trigger.textContent()).includes('AÇILDI') && await menu.isHidden(), 'desktop shows current state and starts collapsed');
+    const expanded = async () => await trigger.getAttribute('aria-expanded') === 'true';
+    ok((await trigger.textContent()).includes('AÇILDI') && !await expanded(), 'desktop shows current state and starts collapsed');
     await trigger.hover();
     ok(await menu.isVisible() && await trigger.getAttribute('aria-expanded') === 'true', 'hover expands alternatives and accessibility state');
+    ok(await menu.locator('button').first().evaluate(el => {
+      const style = getComputedStyle(el);
+      return style.transitionProperty.includes('transform') && style.transitionDuration.split(',').some(duration => parseFloat(duration) > 0);
+    }), 'cards animate their transforms instead of appearing instantly');
+    await page.waitForTimeout(800);
     const boxes = await menu.locator('button[name=status]').evaluateAll(buttons => buttons.map(button => {const r=button.getBoundingClientRect();return {x:r.x,y:r.y};}));
-    ok(boxes.length === 8 && boxes.every((box,i) => !i || (box.y > boxes[i-1].y && Math.abs(box.x-boxes[0].x)<2)), 'all eight alternatives stack vertically');
-    await page.mouse.move(0,0); await page.waitForTimeout(250);
-    ok(await menu.isHidden(), 'leaving picker collapses alternatives');
+    const triggerBox = await trigger.boundingBox();
+    ok(boxes.length === 8 && boxes.every((box,i) => box.x >= triggerBox.x + triggerBox.width - 2 && Math.abs(box.y-boxes[0].y)<3 && (!i || box.x > boxes[i-1].x)), 'all eight cards spread rightward on one horizontal row');
+    await menu.locator('button').last().hover();
+    ok(await expanded(), 'pointer can reach the last spread card');
+    await page.mouse.move(0,0); await page.waitForTimeout(2200);
+    ok(await expanded() && await menu.isVisible(), 'leaving keeps cards open during the three-second grace period');
+    await trigger.hover(); await page.waitForTimeout(1100);
+    ok(await expanded(), 'reentering cancels the pending close');
+    await page.mouse.move(0,0); await page.waitForTimeout(2800);
+    ok(await expanded(), 'a fresh leave restarts the full three-second delay');
+    await page.waitForTimeout(350);
+    ok(!await expanded() && await menu.isVisible(), 'closing animation remains visible briefly after the delay expires');
+    await page.waitForTimeout(800);
+    ok(!await expanded() && await menu.isHidden(), 'cards animate closed after the three-second delay');
     await trigger.focus();
     ok(await menu.isVisible(), 'keyboard focus exposes options');
     await page.keyboard.press('Escape');
+    await menu.waitFor({state:'hidden'});
     ok(await menu.isHidden() && await trigger.evaluate(el => el === document.activeElement), 'Escape collapses and returns focus to current state');
     await page.keyboard.press('ArrowDown');
     ok(await menu.isVisible() && await menu.locator('button').first().evaluate(el => el === document.activeElement), 'ArrowDown moves to first alternative');
     await page.locator('h1').click();
+    await menu.waitFor({state:'hidden'});
     ok(await menu.isHidden(), 'outside click collapses menu');
     await trigger.click();
     ok(await menu.isVisible(), 'click supports desktop users without hover');
@@ -68,9 +87,10 @@ function render(status = 'beyan_acildi', profile = '') {
     await page.evaluate(() => {window.promptCalls = 0; window.prompt = () => {window.promptCalls++; return '  Uygun olmayan numune  ';};});
     await menu.locator('[value=red]').click();
     await page.waitForFunction(() => statusPosts.length === 1);
-    ok(await page.evaluate(() => promptCalls === 1 && Object.fromEntries(statusPosts[0]).analysis_note === 'Uygun olmayan numune'), 'mouse click on scrolled Red option submits mandatory trimmed note');
+    ok(await page.evaluate(() => promptCalls === 1 && Object.fromEntries(statusPosts[0]).analysis_note === 'Uygun olmayan numune'), 'mouse click on Red card submits mandatory trimmed note');
     await setup();
     ok(await page.locator('#waKopyalaBtn').count() === 1 && await page.locator('#waMetin').count() === 1, 'one copy control and one text source');
+    ok(await page.locator('.beyan-page-heading .beyan-badge').count() === 0 && !/#\d+/.test(await page.locator('.beyan-page-heading').textContent()), 'header no longer duplicates current status or numeric record ID');
     const heading = await page.locator('h1').boundingBox(), copy = await page.locator('#waKopyalaBtn').boundingBox();
     ok(copy.y >= heading.y + heading.height && Math.abs(copy.x-heading.x) < 3, 'copy control sits left immediately below party heading');
     ok(await page.locator('#waKopyalaBtn').evaluate(el => getComputedStyle(el).backgroundColor === 'rgb(37, 211, 102)'), 'copy control uses WhatsApp green');
@@ -78,6 +98,7 @@ function render(status = 'beyan_acildi', profile = '') {
     ok(await page.evaluate(() => copiedText === JSON.parse(document.getElementById('waMetin').textContent)) && (await page.locator('#waKopyalaBtn').textContent()).includes('Kopyalandı'), 'copy writes complete server-provided text and reports success');
     for (const width of [360,390,900,1024]) {
       await page.setViewportSize({width,height:1000});
+      if (width >= 1024) { await trigger.hover(); await page.waitForTimeout(800); }
       ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth+1), 'no horizontal page overflow at '+width);
       if (width < 1024) ok(await trigger.isHidden() && await menu.isVisible() && await menu.locator('button[value=temiz]').isVisible(), 'mobile/tablet keeps direct status strip at '+width);
     }
@@ -85,6 +106,7 @@ function render(status = 'beyan_acildi', profile = '') {
     for (const profile of ['restricted','deleted']) {
       await setup('beyan_acildi',profile);
       ok(await page.locator('.beyan-durum-form').count() === 0, profile+' cannot display status actions');
+      if (profile === 'deleted') ok((await page.locator('.beyan-page-heading').textContent()).includes('ARŞİVLENDİ') && await page.locator('.flash-error').count() > 0, 'archived record retains its warning and archive indication');
     }
     const fallback = await browser.newPage({javaScriptEnabled:false,viewport:{width:1440,height:1000}});
     html = render(); await fallback.route('**/*', route => route.fulfill({contentType:'text/html',body:html}));
